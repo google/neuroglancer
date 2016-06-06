@@ -1,0 +1,767 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <title>Code coverage report for sliceview/compressed_segmentation/encode_common.ts</title>
+    <meta charset="utf-8" />
+    <link rel="stylesheet" href="../../prettify.css" />
+    <link rel="stylesheet" href="../../base.css" />
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <style type='text/css'>
+        .coverage-summary .sorter {
+            background-image: url(../../sort-arrow-sprite.png);
+        }
+    </style>
+</head>
+<body>
+<div class='wrapper'>
+  <div class='pad1'>
+    <h1>
+      <a href="../../index.html">all files</a> / <a href="index.html">sliceview/compressed_segmentation/</a> encode_common.ts
+    </h1>
+    <div class='clearfix'>
+      <div class='fl pad1y space-right2'>
+        <span class="strong">86.5% </span>
+        <span class="quiet">Statements</span>
+        <span class='fraction'>141/163</span>
+      </div>
+      <div class='fl pad1y space-right2'>
+        <span class="strong">78.57% </span>
+        <span class="quiet">Branches</span>
+        <span class='fraction'>11/14</span>
+      </div>
+      <div class='fl pad1y space-right2'>
+        <span class="strong">100% </span>
+        <span class="quiet">Functions</span>
+        <span class='fraction'>5/5</span>
+      </div>
+      <div class='fl pad1y space-right2'>
+        <span class="strong">86.5% </span>
+        <span class="quiet">Lines</span>
+        <span class='fraction'>141/163</span>
+      </div>
+    </div>
+  </div>
+  <div class='status-line high'></div>
+<pre><table class="coverage">
+<tr><td class="line-count quiet">1
+2
+3
+4
+5
+6
+7
+8
+9
+10
+11
+12
+13
+14
+15
+16
+17
+18
+19
+20
+21
+22
+23
+24
+25
+26
+27
+28
+29
+30
+31
+32
+33
+34
+35
+36
+37
+38
+39
+40
+41
+42
+43
+44
+45
+46
+47
+48
+49
+50
+51
+52
+53
+54
+55
+56
+57
+58
+59
+60
+61
+62
+63
+64
+65
+66
+67
+68
+69
+70
+71
+72
+73
+74
+75
+76
+77
+78
+79
+80
+81
+82
+83
+84
+85
+86
+87
+88
+89
+90
+91
+92
+93
+94
+95
+96
+97
+98
+99
+100
+101
+102
+103
+104
+105
+106
+107
+108
+109
+110
+111
+112
+113
+114
+115
+116
+117
+118
+119
+120
+121
+122
+123
+124
+125
+126
+127
+128
+129
+130
+131
+132
+133
+134
+135
+136
+137
+138
+139
+140
+141
+142
+143
+144
+145
+146
+147
+148
+149
+150
+151
+152
+153
+154
+155
+156
+157
+158
+159
+160
+161
+162
+163
+164
+165
+166
+167
+168
+169
+170
+171
+172
+173
+174
+175
+176
+177
+178
+179
+180
+181
+182
+183
+184
+185
+186
+187
+188
+189
+190
+191
+192
+193
+194
+195
+196
+197
+198
+199
+200
+201
+202
+203
+204
+205
+206
+207
+208
+209
+210
+211
+212
+213
+214
+215
+216
+217
+218
+219
+220
+221
+222
+223
+224
+225
+226
+227
+228
+229
+230
+231
+232
+233
+234
+235</td><td class="line-coverage quiet"><span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-yes">1×</span>
+<span class="cline-any cline-yes">1×</span>
+<span class="cline-any cline-yes">46×</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-yes">1×</span>
+<span class="cline-any cline-yes">1×</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-yes">148×</span>
+<span class="cline-any cline-yes">132×</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-yes">19×</span>
+<span class="cline-any cline-yes">19×</span>
+<span class="cline-any cline-yes">19×</span>
+<span class="cline-any cline-yes">19×</span>
+<span class="cline-any cline-yes">19×</span>
+<span class="cline-any cline-yes">19×</span>
+<span class="cline-any cline-yes">19×</span>
+<span class="cline-any cline-yes">19×</span>
+<span class="cline-any cline-yes">19×</span>
+<span class="cline-any cline-yes">19×</span>
+<span class="cline-any cline-yes">19×</span>
+<span class="cline-any cline-yes">19×</span>
+<span class="cline-any cline-yes">19×</span>
+<span class="cline-any cline-yes">19×</span>
+<span class="cline-any cline-yes">19×</span>
+<span class="cline-any cline-yes">19×</span>
+<span class="cline-any cline-yes">19×</span>
+<span class="cline-any cline-yes">19×</span>
+<span class="cline-any cline-yes">19×</span>
+<span class="cline-any cline-yes">19×</span>
+<span class="cline-any cline-yes">19×</span>
+<span class="cline-any cline-yes">19×</span>
+<span class="cline-any cline-yes">19×</span>
+<span class="cline-any cline-yes">19×</span>
+<span class="cline-any cline-yes">19×</span>
+<span class="cline-any cline-yes">19×</span>
+<span class="cline-any cline-yes">19×</span>
+<span class="cline-any cline-yes">19×</span>
+<span class="cline-any cline-yes">19×</span>
+<span class="cline-any cline-yes">19×</span>
+<span class="cline-any cline-yes">19×</span>
+<span class="cline-any cline-yes">19×</span>
+<span class="cline-any cline-yes">19×</span>
+<span class="cline-any cline-yes">19×</span>
+<span class="cline-any cline-yes">19×</span>
+<span class="cline-any cline-yes">19×</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-yes">19×</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-yes">39×</span>
+<span class="cline-any cline-yes">39×</span>
+<span class="cline-any cline-yes">39×</span>
+<span class="cline-any cline-yes">39×</span>
+<span class="cline-any cline-yes">39×</span>
+<span class="cline-any cline-yes">39×</span>
+<span class="cline-any cline-yes">39×</span>
+<span class="cline-any cline-yes">39×</span>
+<span class="cline-any cline-yes">39×</span>
+<span class="cline-any cline-yes">39×</span>
+<span class="cline-any cline-yes">39×</span>
+<span class="cline-any cline-yes">39×</span>
+<span class="cline-any cline-yes">39×</span>
+<span class="cline-any cline-yes">39×</span>
+<span class="cline-any cline-yes">39×</span>
+<span class="cline-any cline-yes">39×</span>
+<span class="cline-any cline-yes">39×</span>
+<span class="cline-any cline-yes">39×</span>
+<span class="cline-any cline-yes">39×</span>
+<span class="cline-any cline-yes">39×</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-yes">39×</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-yes">74×</span>
+<span class="cline-any cline-yes">74×</span>
+<span class="cline-any cline-yes">74×</span>
+<span class="cline-any cline-yes">74×</span>
+<span class="cline-any cline-yes">74×</span>
+<span class="cline-any cline-yes">74×</span>
+<span class="cline-any cline-yes">74×</span>
+<span class="cline-any cline-yes">74×</span>
+<span class="cline-any cline-yes">74×</span>
+<span class="cline-any cline-yes">74×</span>
+<span class="cline-any cline-yes">74×</span>
+<span class="cline-any cline-yes">74×</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-yes">74×</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-yes">1×</span>
+<span class="cline-any cline-yes">148×</span>
+<span class="cline-any cline-yes">148×</span>
+<span class="cline-any cline-yes">16×</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-yes">132×</span>
+<span class="cline-any cline-yes">132×</span>
+<span class="cline-any cline-yes">187×</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-yes">148×</span>
+<span class="cline-any cline-yes">148×</span>
+<span class="cline-any cline-yes">148×</span>
+<span class="cline-any cline-yes">148×</span>
+<span class="cline-any cline-yes">148×</span>
+<span class="cline-any cline-yes">148×</span>
+<span class="cline-any cline-yes">148×</span>
+<span class="cline-any cline-yes">140×</span>
+<span class="cline-any cline-yes">140×</span>
+<span class="cline-any cline-yes">140×</span>
+<span class="cline-any cline-yes">140×</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-yes">148×</span>
+<span class="cline-any cline-yes">148×</span>
+<span class="cline-any cline-yes">148×</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-yes">148×</span>
+<span class="cline-any cline-yes">140×</span>
+<span class="cline-any cline-yes">140×</span>
+<span class="cline-any cline-yes">972×</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-yes">148×</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-yes">1×</span>
+<span class="cline-any cline-yes">1×</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-yes">36×</span>
+<span class="cline-any cline-yes">36×</span>
+<span class="cline-any cline-yes">36×</span>
+<span class="cline-any cline-yes">36×</span>
+<span class="cline-any cline-yes">108×</span>
+<span class="cline-any cline-yes">108×</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-yes">36×</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-yes">36×</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-yes">36×</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-yes">36×</span>
+<span class="cline-any cline-yes">36×</span>
+<span class="cline-any cline-yes">36×</span>
+<span class="cline-any cline-yes">36×</span>
+<span class="cline-any cline-yes">36×</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-yes">36×</span>
+<span class="cline-any cline-yes">66×</span>
+<span class="cline-any cline-yes">66×</span>
+<span class="cline-any cline-yes">90×</span>
+<span class="cline-any cline-yes">90×</span>
+<span class="cline-any cline-yes">138×</span>
+<span class="cline-any cline-yes">138×</span>
+<span class="cline-any cline-yes">138×</span>
+<span class="cline-any cline-yes">138×</span>
+<span class="cline-any cline-yes">138×</span>
+<span class="cline-any cline-yes">138×</span>
+<span class="cline-any cline-yes">138×</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-yes">1×</span>
+<span class="cline-any cline-yes">1×</span>
+<span class="cline-any cline-yes">12×</span>
+<span class="cline-any cline-yes">12×</span>
+<span class="cline-any cline-yes">12×</span>
+<span class="cline-any cline-yes">12×</span>
+<span class="cline-any cline-yes">24×</span>
+<span class="cline-any cline-yes">24×</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-yes">1×</span>
+<span class="cline-any cline-neutral">&nbsp;</span></td><td class="text"><pre class="prettyprint lang-js">/**
+ * @license
+ * Copyright 2016 Google Inc.
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+"use strict";
+&nbsp;
+exports.BLOCK_HEADER_SIZE = 2;
+function newCache() {
+    return new Map();
+}
+exports.newCache = newCache;
+function writeEncodedRepresentation(outputData, outputOffset, encodingBuffer, indexBuffer, encodedBits, encodedSize32Bits) {
+    // Write encoded representation.
+    if (encodedBits &gt; 0) {
+        switch (encodedBits) {
+            case 1:
+                {
+                    for (var wordIndex = 0, elementIndex = 0; wordIndex &lt; encodedSize32Bits; ++wordIndex) {
+                        var word = 0;
+                        word |= indexBuffer[encodingBuffer[elementIndex + 0]] &lt;&lt; 0;
+                        word |= indexBuffer[encodingBuffer[elementIndex + 1]] &lt;&lt; 1;
+                        word |= indexBuffer[encodingBuffer[elementIndex + 2]] &lt;&lt; 2;
+                        word |= indexBuffer[encodingBuffer[elementIndex + 3]] &lt;&lt; 3;
+                        word |= indexBuffer[encodingBuffer[elementIndex + 4]] &lt;&lt; 4;
+                        word |= indexBuffer[encodingBuffer[elementIndex + 5]] &lt;&lt; 5;
+                        word |= indexBuffer[encodingBuffer[elementIndex + 6]] &lt;&lt; 6;
+                        word |= indexBuffer[encodingBuffer[elementIndex + 7]] &lt;&lt; 7;
+                        word |= indexBuffer[encodingBuffer[elementIndex + 8]] &lt;&lt; 8;
+                        word |= indexBuffer[encodingBuffer[elementIndex + 9]] &lt;&lt; 9;
+                        word |= indexBuffer[encodingBuffer[elementIndex + 10]] &lt;&lt; 10;
+                        word |= indexBuffer[encodingBuffer[elementIndex + 11]] &lt;&lt; 11;
+                        word |= indexBuffer[encodingBuffer[elementIndex + 12]] &lt;&lt; 12;
+                        word |= indexBuffer[encodingBuffer[elementIndex + 13]] &lt;&lt; 13;
+                        word |= indexBuffer[encodingBuffer[elementIndex + 14]] &lt;&lt; 14;
+                        word |= indexBuffer[encodingBuffer[elementIndex + 15]] &lt;&lt; 15;
+                        word |= indexBuffer[encodingBuffer[elementIndex + 16]] &lt;&lt; 16;
+                        word |= indexBuffer[encodingBuffer[elementIndex + 17]] &lt;&lt; 17;
+                        word |= indexBuffer[encodingBuffer[elementIndex + 18]] &lt;&lt; 18;
+                        word |= indexBuffer[encodingBuffer[elementIndex + 19]] &lt;&lt; 19;
+                        word |= indexBuffer[encodingBuffer[elementIndex + 20]] &lt;&lt; 20;
+                        word |= indexBuffer[encodingBuffer[elementIndex + 21]] &lt;&lt; 21;
+                        word |= indexBuffer[encodingBuffer[elementIndex + 22]] &lt;&lt; 22;
+                        word |= indexBuffer[encodingBuffer[elementIndex + 23]] &lt;&lt; 23;
+                        word |= indexBuffer[encodingBuffer[elementIndex + 24]] &lt;&lt; 24;
+                        word |= indexBuffer[encodingBuffer[elementIndex + 25]] &lt;&lt; 25;
+                        word |= indexBuffer[encodingBuffer[elementIndex + 26]] &lt;&lt; 26;
+                        word |= indexBuffer[encodingBuffer[elementIndex + 27]] &lt;&lt; 27;
+                        word |= indexBuffer[encodingBuffer[elementIndex + 28]] &lt;&lt; 28;
+                        word |= indexBuffer[encodingBuffer[elementIndex + 29]] &lt;&lt; 29;
+                        word |= indexBuffer[encodingBuffer[elementIndex + 30]] &lt;&lt; 30;
+                        word |= indexBuffer[encodingBuffer[elementIndex + 31]] &lt;&lt; 31;
+                        outputData[outputOffset + wordIndex] = word;
+                        elementIndex += 32;
+                    }
+                }
+                break;
+            case 2:
+                {
+                    for (var _wordIndex = 0, _elementIndex = 0; _wordIndex &lt; encodedSize32Bits; ++_wordIndex) {
+                        var _word = 0;
+                        _word |= indexBuffer[encodingBuffer[_elementIndex + 0]] &lt;&lt; 0;
+                        _word |= indexBuffer[encodingBuffer[_elementIndex + 1]] &lt;&lt; 2;
+                        _word |= indexBuffer[encodingBuffer[_elementIndex + 2]] &lt;&lt; 4;
+                        _word |= indexBuffer[encodingBuffer[_elementIndex + 3]] &lt;&lt; 6;
+                        _word |= indexBuffer[encodingBuffer[_elementIndex + 4]] &lt;&lt; 8;
+                        _word |= indexBuffer[encodingBuffer[_elementIndex + 5]] &lt;&lt; 10;
+                        _word |= indexBuffer[encodingBuffer[_elementIndex + 6]] &lt;&lt; 12;
+                        _word |= indexBuffer[encodingBuffer[_elementIndex + 7]] &lt;&lt; 14;
+                        _word |= indexBuffer[encodingBuffer[_elementIndex + 8]] &lt;&lt; 16;
+                        _word |= indexBuffer[encodingBuffer[_elementIndex + 9]] &lt;&lt; 18;
+                        _word |= indexBuffer[encodingBuffer[_elementIndex + 10]] &lt;&lt; 20;
+                        _word |= indexBuffer[encodingBuffer[_elementIndex + 11]] &lt;&lt; 22;
+                        _word |= indexBuffer[encodingBuffer[_elementIndex + 12]] &lt;&lt; 24;
+                        _word |= indexBuffer[encodingBuffer[_elementIndex + 13]] &lt;&lt; 26;
+                        _word |= indexBuffer[encodingBuffer[_elementIndex + 14]] &lt;&lt; 28;
+                        _word |= indexBuffer[encodingBuffer[_elementIndex + 15]] &lt;&lt; 30;
+                        outputData[outputOffset + _wordIndex] = _word;
+                        _elementIndex += 16;
+                    }
+                }
+                break;
+            case 4:
+                {
+                    for (var _wordIndex2 = 0, _elementIndex2 = 0; _wordIndex2 &lt; encodedSize32Bits; ++_wordIndex2) {
+                        var _word2 = 0;
+                        _word2 |= indexBuffer[encodingBuffer[_elementIndex2 + 0]] &lt;&lt; 0;
+                        _word2 |= indexBuffer[encodingBuffer[_elementIndex2 + 1]] &lt;&lt; 4;
+                        _word2 |= indexBuffer[encodingBuffer[_elementIndex2 + 2]] &lt;&lt; 8;
+                        _word2 |= indexBuffer[encodingBuffer[_elementIndex2 + 3]] &lt;&lt; 12;
+                        _word2 |= indexBuffer[encodingBuffer[_elementIndex2 + 4]] &lt;&lt; 16;
+                        _word2 |= indexBuffer[encodingBuffer[_elementIndex2 + 5]] &lt;&lt; 20;
+                        _word2 |= indexBuffer[encodingBuffer[_elementIndex2 + 6]] &lt;&lt; 24;
+                        _word2 |= indexBuffer[encodingBuffer[_elementIndex2 + 7]] &lt;&lt; 28;
+                        outputData[outputOffset + _wordIndex2] = _word2;
+                        _elementIndex2 += 8;
+                    }
+                }
+                break;
+<span class="branch-3 cbranch-no" title="branch not covered" >            case 8:</span>
+                {
+<span class="cstat-no" title="statement not covered" >                    for (var _wordIndex3 = 0, _elementIndex3 = 0; _wordIndex3 &lt; encodedSize32Bits; ++_wordIndex3) {</span>
+<span class="cstat-no" title="statement not covered" >                        var _word3 = 0;</span>
+<span class="cstat-no" title="statement not covered" >                        _word3 |= indexBuffer[encodingBuffer[_elementIndex3 + 0]] &lt;&lt; 0;</span>
+<span class="cstat-no" title="statement not covered" >                        _word3 |= indexBuffer[encodingBuffer[_elementIndex3 + 1]] &lt;&lt; 8;</span>
+<span class="cstat-no" title="statement not covered" >                        _word3 |= indexBuffer[encodingBuffer[_elementIndex3 + 2]] &lt;&lt; 16;</span>
+<span class="cstat-no" title="statement not covered" >                        _word3 |= indexBuffer[encodingBuffer[_elementIndex3 + 3]] &lt;&lt; 24;</span>
+<span class="cstat-no" title="statement not covered" >                        outputData[outputOffset + _wordIndex3] = _word3;</span>
+<span class="cstat-no" title="statement not covered" >                        _elementIndex3 += 4;</span>
+                    }
+                }
+<span class="cstat-no" title="statement not covered" >                break;</span>
+<span class="branch-4 cbranch-no" title="branch not covered" >            case 16:</span>
+                {
+<span class="cstat-no" title="statement not covered" >                    for (var _wordIndex4 = 0, _elementIndex4 = 0; _wordIndex4 &lt; encodedSize32Bits; ++_wordIndex4) {</span>
+<span class="cstat-no" title="statement not covered" >                        var _word4 = 0;</span>
+<span class="cstat-no" title="statement not covered" >                        _word4 |= indexBuffer[encodingBuffer[_elementIndex4 + 0]] &lt;&lt; 0;</span>
+<span class="cstat-no" title="statement not covered" >                        _word4 |= indexBuffer[encodingBuffer[_elementIndex4 + 1]] &lt;&lt; 16;</span>
+<span class="cstat-no" title="statement not covered" >                        outputData[outputOffset + _wordIndex4] = _word4;</span>
+<span class="cstat-no" title="statement not covered" >                        _elementIndex4 += 2;</span>
+                    }
+                }
+<span class="cstat-no" title="statement not covered" >                break;</span>
+<span class="branch-5 cbranch-no" title="branch not covered" >            case 32:</span>
+                {
+<span class="cstat-no" title="statement not covered" >                    for (var _wordIndex5 = 0, _elementIndex5 = 0; _wordIndex5 &lt; encodedSize32Bits; ++_wordIndex5) {</span>
+<span class="cstat-no" title="statement not covered" >                        var _word5 = 0;</span>
+<span class="cstat-no" title="statement not covered" >                        _word5 |= indexBuffer[encodingBuffer[_elementIndex5 + 0]] &lt;&lt; 0;</span>
+<span class="cstat-no" title="statement not covered" >                        outputData[outputOffset + _wordIndex5] = _word5;</span>
+<span class="cstat-no" title="statement not covered" >                        _elementIndex5 += 1;</span>
+                    }
+                }
+<span class="cstat-no" title="statement not covered" >                break;</span>
+        }
+    }
+}
+function writeBlock(output, baseOffset, cache, numBlockElements, numUniqueValues, valuesBuffer2, encodingBuffer, indexBuffer2, uint32sPerElement) {
+    var encodedBits = void 0;
+    if (numUniqueValues === 1) {
+        encodedBits = 0;
+    } else {
+        encodedBits = 1;
+        while (1 &lt;&lt; encodedBits &lt; numUniqueValues) {
+            encodedBits *= 2;
+        }
+    }
+    var encodedSize32bits = Math.ceil(encodedBits * numBlockElements / 32);
+    var encodedValueBaseOffset = output.length;
+    var elementsToWrite = encodedSize32bits;
+    var writeTable = false;
+    var key = Array.prototype.join.call(valuesBuffer2.subarray(0, numUniqueValues * uint32sPerElement), ',');
+    var tableOffset = cache.get(key);
+    if (tableOffset === undefined) {
+        writeTable = true;
+        elementsToWrite += numUniqueValues * uint32sPerElement;
+        tableOffset = encodedValueBaseOffset + encodedSize32bits - baseOffset;
+        cache.set(key, tableOffset);
+    }
+    output.resize(encodedValueBaseOffset + elementsToWrite);
+    var outputData = output.data;
+    writeEncodedRepresentation(outputData, encodedValueBaseOffset, encodingBuffer, indexBuffer2, encodedBits, encodedSize32bits);
+    // Write table
+    if (writeTable) {
+        var curOutputOff = encodedValueBaseOffset + encodedSize32bits;
+        for (var i = 0, length = numUniqueValues * uint32sPerElement; i &lt; length; ++i) {
+            outputData[curOutputOff++] = valuesBuffer2[i];
+        }
+    }
+    return [encodedBits, tableOffset];
+}
+exports.writeBlock = writeBlock;
+function encodeChannel(output, blockSize, rawData, volumeSize, baseInputOffset, inputStrides, encodeBlock) {
+    // Maps a sorted list of table entries in the form &lt;low&gt;,&lt;high&gt;,&lt;low&gt;,&lt;high&gt;,... to the table
+    // offset relative to baseOffset.
+    var cache = newCache();
+    var gridSize = new Array(3);
+    var blockIndexSize = exports.BLOCK_HEADER_SIZE;
+    for (var i = 0; i &lt; 3; ++i) {
+        var curGridSize = gridSize[i] = Math.ceil(volumeSize[i] / blockSize[i]);
+        blockIndexSize *= curGridSize;
+    }
+    var gx = gridSize[0],
+        gy = gridSize[1],
+        gz = gridSize[2];
+    var xSize = volumeSize[0],
+        ySize = volumeSize[1],
+        zSize = volumeSize[2];
+    var xBlockSize = blockSize[0],
+        yBlockSize = blockSize[1],
+        zBlockSize = blockSize[2];
+    var baseOffset = output.length;
+    var headerOffset = baseOffset;
+    var actualSize = [0, 0, 0];
+    output.resize(baseOffset + blockIndexSize);
+    var sx = inputStrides[0],
+        sy = inputStrides[1],
+        sz = inputStrides[2];
+    for (var bz = 0; bz &lt; gz; ++bz) {
+        actualSize[2] = Math.min(zBlockSize, zSize - bz * zBlockSize);
+        for (var by = 0; by &lt; gy; ++by) {
+            actualSize[1] = Math.min(yBlockSize, ySize - by * yBlockSize);
+            for (var bx = 0; bx &lt; gx; ++bx) {
+                actualSize[0] = Math.min(xBlockSize, xSize - bx * xBlockSize);
+                var inputOffset = bz * zBlockSize * sz + by * yBlockSize * sy + bx * xBlockSize * sx;
+                var encodedValueBaseOffset = output.length - baseOffset;
+                var [encodedBits, tableOffset] = encodeBlock(rawData, baseInputOffset + inputOffset, inputStrides, blockSize, actualSize, baseOffset, cache, output);
+                var outputData = output.data;
+                outputData[headerOffset++] = tableOffset | encodedBits &lt;&lt; 24;
+                outputData[headerOffset++] = encodedValueBaseOffset;
+            }
+        }
+    }
+}
+exports.encodeChannel = encodeChannel;
+function encodeChannels(output, blockSize, rawData, volumeSize, baseInputOffset, inputStrides, encodeBlock) {
+    var channelOffsetOutputBase = output.length;
+    var numChannels = volumeSize[3];
+    output.resize(channelOffsetOutputBase + numChannels);
+    for (var channel = 0; channel &lt; numChannels; ++channel) {
+        output.data[channelOffsetOutputBase + channel] = output.length;
+        encodeChannel(output, blockSize, rawData, volumeSize, baseInputOffset + inputStrides[3] * channel, inputStrides, encodeBlock);
+    }
+}
+exports.encodeChannels = encodeChannels;
+&nbsp;</pre></td></tr>
+</table></pre>
+<div class='push'></div><!-- for sticky footer -->
+</div><!-- /wrapper -->
+<div class='footer quiet pad2 space-top1 center small'>
+  Code coverage
+  generated by <a href="http://istanbul-js.org/" target="_blank">istanbul</a> at Sun Jun 05 2016 16:54:42 GMT-0700 (PDT)
+</div>
+</div>
+<script src="../../prettify.js"></script>
+<script>
+window.onload = function () {
+        if (typeof prettyPrint === 'function') {
+            prettyPrint();
+        }
+};
+</script>
+<script src="../../sorter.js"></script>
+</body>
+</html>

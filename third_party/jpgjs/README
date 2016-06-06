@@ -1,0 +1,6 @@
+This file has been copied from jpgjs
+(https://github.com/notmasteryet/jpgjs.git) commit
+f1d30922fda93417669246f5a25cf2393dd9c108.
+
+The patch webpack-fix.diff has been applied in order to make it work
+with webpack.

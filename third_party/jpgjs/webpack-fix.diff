@@ -1,0 +1,34 @@
+--- jpg.js	2016-06-05 17:28:21.246042976 -0700
++++ node_modules/jpgjs/jpg.js	2016-05-17 08:35:21.563113476 -0700
+@@ -99,15 +99,6 @@
+     return JpegImage;
+ }();
+ 
+-if (typeof exports === "function") {
+-    module.exports = {
+-        JpegImage: JpegImage,
+-        JpegDecoder: JpegDecoder,
+-        JpxDecoder: JpxDecoder,
+-        Jbig2Decoder: Jbig2Decoder
+-    };
+-}
+-
+ var PDFJS;
+ 
+ (function(PDFJS) {
+@@ -4277,4 +4268,13 @@
+ 
+ var JpxDecoder = PDFJS.JpxImage;
+ 
+-var Jbig2Decoder = PDFJS.Jbig2Image;
+\ No newline at end of file
++var Jbig2Decoder = PDFJS.Jbig2Image;
++
++if (typeof exports !== "undefined") {
++    module.exports = {
++        JpegImage: JpegImage,
++        JpegDecoder: JpegDecoder,
++        JpxDecoder: JpxDecoder,
++        Jbig2Decoder: Jbig2Decoder
++    };
++}

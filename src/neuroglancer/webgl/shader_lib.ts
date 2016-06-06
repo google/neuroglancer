@@ -1,0 +1,171 @@
+/**
+ * @license
+ * Copyright 2016 Google Inc.
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+/**
+ * GLSL function for converting a float in [0,1) to 32-bit little endian fixed point representation
+ * (encoded as a vector of four floats in [0,1]).  This is fast but may not be completely accurate.
+ * For a slower function that handles the full floating point finite range, use glsl_packFloat.
+ */
+export var glsl_packFloat01ToFixedPoint = `
+vec4 packFloat01ToFixedPoint(const float value) {
+  const vec4 shift = vec4(256.0 * 256.0 * 256.0, 256.0 * 256.0, 256.0, 1.0);
+  const vec4 mask = vec4(0.0, 1.0 / 256.0, 1.0 / 256.0, 1.0 / 256.0);
+  vec4 result = fract(value * shift);
+  result -= result.xxyz * mask;
+  return result * 256.0 / 255.0;
+}
+`;
+
+export function unpackFloat01FromFixedPoint(data: Uint8Array) {
+  return (data[3] + data[2] * (1.0 / 256.0) + data[1] * (1.0 / 65536.0) +
+          data[0] * (1.0 / 16777216.0)) /
+      256.0;
+}
+
+// Hue, saturation, and value are in [0, 1] range.
+export var glsl_hsvToRgb = `
+vec3 hueToRgb(float hue) {
+  float hue6 = hue * 6.0;
+  float r = abs(hue6 - 3.0) - 1.0;
+  float g = 2.0 - abs(hue6 - 2.0);
+  float b = 2.0 - abs(hue6 - 4.0);
+  return clamp(vec3(r, g, b), 0.0, 1.0);
+}
+vec3 hsvToRgb(vec3 c) {
+  vec3 hueRgb = hueToRgb(c.x);
+  return c.z * ((hueRgb - 1.0) * c.y + 1.0);
+}
+`;
+
+export var glsl_uint64 = `
+struct uint64_t {
+  vec4 low, high;
+};
+`;
+
+export var glsl_getSubscriptsFromNormalized = `
+vec3 getSubscriptsFromNormalized(vec3 normalizedPosition, vec3 size) {
+  return floor(min(normalizedPosition * size, size - 1.0));
+}
+`;
+
+export var glsl_getFortranOrderIndex = `
+float getFortranOrderIndex(vec3 subscripts, vec3 size) {
+  return subscripts.x + size.x * (subscripts.y + size.y * subscripts.z);
+}
+`;
+
+export var glsl_getFortranOrderIndexFromNormalized = [
+  glsl_getSubscriptsFromNormalized,
+  glsl_getFortranOrderIndex, `
+float getFortranOrderIndexFromNormalized(vec3 normalizedPosition, vec3 size) {
+  return getFortranOrderIndex(getSubscriptsFromNormalized(normalizedPosition, size), size);
+}
+`];
+
+export var glsl_imod = `
+float imod(float x, float y) {
+  return x - y * floor(x / y);
+}
+`;
+
+// Chrome 49 on NVIDIA Quadro K600 gives inexact results when using the built-in dot function.
+export var glsl_exactDot = `
+float exactDot(vec4 a, vec4 b) {
+  return a[0] * b[0] + a[1] * b[1] + a[2] * b[2] + a[3] * b[3];
+}
+float exactDot(vec3 a, vec3 b) {
+  return a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
+}
+`;
+
+export function fract(x: number) {
+  return x - Math.floor(x);
+}
+
+export function step(edge: number, x: number) {
+  return x < edge ? 0 : 1;
+}
+
+export function mod(x: number, y: number) {
+  return x % y;
+}
+
+export function exp2(x: number) {
+  return Math.pow(2, x);
+}
+
+
+/* WebGL 1.0 does not provide a convenient way to directly output float values from fragment
+ * shaders; only 4-channel uint8 values (represented as floats in the range [0,1]) are supported.
+ * Obtaining float values is particularly useful for debugging and unit testing.  This GLSL function
+ * encodes a floating point value into a vector of 4 floats in the range [0,1] such that the
+ * corresponding uint8 representation is the little endian IEEE 754 32-bit floating point format.
+ *
+ * Infinity and NaN values are not supported.  This function is not particularly efficient; it is
+ * intended to be used only for debugging and testing.
+ *
+ * The GLSL function packFloatIntoVec4 is based on code posted to StackOverflow by user hrehfeld at
+ * http://stackoverflow.com/a/14729074 and user Arjan at http://stackoverflow.com/a/11158534
+ * licensed under CC BY-SA 3.0 ( http://creativecommons.org/licenses/by-sa/3.0/ ).
+ */
+export var glsl_packFloat = `
+vec4 packFloatIntoVec4(float f) {
+  float magnitude = abs(f); 
+  if (magnitude == 0.0) {
+     return vec4(0,0,0,0);
+  }
+  float sign =  step(0.0, -f);
+  float exponent = floor(log2(magnitude)); 
+  float mantissa = magnitude / exp2(exponent); 
+  // Denormalized values if all exponent bits are zero
+  if (mantissa < 1.0) {
+     exponent -= 1.0;
+  }
+
+  exponent +=  127.0;
+
+  vec4 result;
+  result[3] = 128.0 * sign + floor(exponent / 2.0);
+  result[2] = 128.0 * mod(exponent, 2.0) +  mod(floor(mantissa * float(128.0)),128.0);
+  result[1] = floor( mod(floor(mantissa* exp2(float(23.0 - 8.0))), exp2(8.0)));
+  result[0] = floor( exp2(23.0)* mod(mantissa, exp2(-15.0)));
+  return result / 255.0;
+}
+`;
+
+export var glsl_debugFunctions = [glsl_packFloat];
+
+export function encodeBytesToFloat32(x: ArrayBufferView) {
+  let xBytes = new Uint8Array(x.buffer, x.byteOffset, x.byteLength);
+  let length = xBytes.length;
+  let result = new Float32Array(length);
+  for (let i = 0; i < length; ++i) {
+    result[i] = xBytes[i] / 255;
+  }
+  return result;
+}
+
+export function setVec4FromUint32(out: Float32Array, x: number) {
+  for (let j = 0; j < 4; ++j) {
+    out[j] = ((x >> (j * 8)) & 0xFF) / 255.0;
+  }
+  return out;
+}
+
+export function getUint32FromVec4(v: Float32Array): number {
+  return v[0] * 255 + v[1] * 255 * 256 + v[2] * 255 * 256 * 256 + v[3] * 255 * 256 * 256 * 256;
+}

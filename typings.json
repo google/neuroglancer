@@ -1,0 +1,16 @@
+{
+  "resolution": "third_party/installed_typings",
+  "globalDevDependencies": {
+    "js-signals": "registry:dt/js-signals#0.0.0+20160316155526",
+    "webpack-env": "registry:dt/webpack-env#1.12.2+20160316155526"
+  },
+  "globalDependencies": {
+    "jasmine": "registry:dt/jasmine#2.2.0+20160505161446",
+    "lodash": "github:DefinitelyTyped/DefinitelyTyped/lodash/lodash.d.ts#d456e7ccb07a53c47bdd63957e8785402c19c579",
+    "pako": "registry:dt/pako#0.0.0+20160317120654",
+    "text-encoding": "registry:dt/text-encoding#0.0.0+20160317120654"
+  },
+  "devDependencies": {
+    "gl-matrix": "file:third_party/typings_sources/gl-matrix.d.ts"
+  }
+}

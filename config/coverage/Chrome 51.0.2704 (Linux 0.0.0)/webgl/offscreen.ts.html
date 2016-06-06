@@ -1,0 +1,722 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <title>Code coverage report for webgl/offscreen.ts</title>
+    <meta charset="utf-8" />
+    <link rel="stylesheet" href="../prettify.css" />
+    <link rel="stylesheet" href="../base.css" />
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <style type='text/css'>
+        .coverage-summary .sorter {
+            background-image: url(../sort-arrow-sprite.png);
+        }
+    </style>
+</head>
+<body>
+<div class='wrapper'>
+  <div class='pad1'>
+    <h1>
+      <a href="../index.html">all files</a> / <a href="index.html">webgl/</a> offscreen.ts
+    </h1>
+    <div class='clearfix'>
+      <div class='fl pad1y space-right2'>
+        <span class="strong">70.29% </span>
+        <span class="quiet">Statements</span>
+        <span class='fraction'>97/138</span>
+      </div>
+      <div class='fl pad1y space-right2'>
+        <span class="strong">57.14% </span>
+        <span class="quiet">Branches</span>
+        <span class='fraction'>28/49</span>
+      </div>
+      <div class='fl pad1y space-right2'>
+        <span class="strong">76.19% </span>
+        <span class="quiet">Functions</span>
+        <span class='fraction'>16/21</span>
+      </div>
+      <div class='fl pad1y space-right2'>
+        <span class="strong">66.67% </span>
+        <span class="quiet">Lines</span>
+        <span class='fraction'>76/114</span>
+      </div>
+    </div>
+  </div>
+  <div class='status-line medium'></div>
+<pre><table class="coverage">
+<tr><td class="line-count quiet">1
+2
+3
+4
+5
+6
+7
+8
+9
+10
+11
+12
+13
+14
+15
+16
+17
+18
+19
+20
+21
+22
+23
+24
+25
+26
+27
+28
+29
+30
+31
+32
+33
+34
+35
+36
+37
+38
+39
+40
+41
+42
+43
+44
+45
+46
+47
+48
+49
+50
+51
+52
+53
+54
+55
+56
+57
+58
+59
+60
+61
+62
+63
+64
+65
+66
+67
+68
+69
+70
+71
+72
+73
+74
+75
+76
+77
+78
+79
+80
+81
+82
+83
+84
+85
+86
+87
+88
+89
+90
+91
+92
+93
+94
+95
+96
+97
+98
+99
+100
+101
+102
+103
+104
+105
+106
+107
+108
+109
+110
+111
+112
+113
+114
+115
+116
+117
+118
+119
+120
+121
+122
+123
+124
+125
+126
+127
+128
+129
+130
+131
+132
+133
+134
+135
+136
+137
+138
+139
+140
+141
+142
+143
+144
+145
+146
+147
+148
+149
+150
+151
+152
+153
+154
+155
+156
+157
+158
+159
+160
+161
+162
+163
+164
+165
+166
+167
+168
+169
+170
+171
+172
+173
+174
+175
+176
+177
+178
+179
+180
+181
+182
+183
+184
+185
+186
+187
+188
+189
+190
+191
+192
+193
+194
+195
+196
+197
+198
+199
+200
+201
+202
+203
+204
+205
+206
+207
+208
+209
+210
+211
+212
+213
+214
+215
+216
+217
+218
+219
+220</td><td class="line-coverage quiet"><span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-yes">11×</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-yes">6×</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-yes">6×</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-yes">2×</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-yes">1×</span>
+<span class="cline-any cline-yes">1×</span>
+<span class="cline-any cline-yes">1×</span>
+<span class="cline-any cline-yes">1×</span>
+<span class="cline-any cline-yes">1×</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-yes">1×</span>
+<span class="cline-any cline-yes">1×</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-yes">1×</span>
+<span class="cline-any cline-yes">6×</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-yes">6×</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-yes">6×</span>
+<span class="cline-any cline-yes">6×</span>
+<span class="cline-any cline-yes">6×</span>
+<span class="cline-any cline-yes">6×</span>
+<span class="cline-any cline-yes">6×</span>
+<span class="cline-any cline-yes">6×</span>
+<span class="cline-any cline-yes">6×</span>
+<span class="cline-any cline-yes">6×</span>
+<span class="cline-any cline-yes">6×</span>
+<span class="cline-any cline-yes">6×</span>
+<span class="cline-any cline-yes">6×</span>
+<span class="cline-any cline-yes">6×</span>
+<span class="cline-any cline-yes">22×</span>
+<span class="cline-any cline-yes">22×</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-yes">6×</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-yes">6×</span>
+<span class="cline-any cline-yes">6×</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-yes">1×</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-yes">2518×</span>
+<span class="cline-any cline-yes">2512×</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-yes">6×</span>
+<span class="cline-any cline-yes">6×</span>
+<span class="cline-any cline-yes">6×</span>
+<span class="cline-any cline-yes">6×</span>
+<span class="cline-any cline-yes">22×</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-yes">6×</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-yes">2518×</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-yes">2518×</span>
+<span class="cline-any cline-yes">2518×</span>
+<span class="cline-any cline-yes">2518×</span>
+<span class="cline-any cline-yes">2518×</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-yes">2518×</span>
+<span class="cline-any cline-yes">14218×</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-yes">2518×</span>
+<span class="cline-any cline-yes">2518×</span>
+<span class="cline-any cline-yes">2518×</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-yes">2518×</span>
+<span class="cline-any cline-yes">2518×</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-yes">14218×</span>
+<span class="cline-any cline-yes">14218×</span>
+<span class="cline-any cline-yes">14218×</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-yes">14218×</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-yes">14218×</span>
+<span class="cline-any cline-yes">14218×</span>
+<span class="cline-any cline-yes">14218×</span>
+<span class="cline-any cline-yes">14218×</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-yes">14218×</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-yes">14218×</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-yes">2518×</span>
+<span class="cline-any cline-yes">2512×</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-yes">6×</span>
+<span class="cline-any cline-yes">6×</span>
+<span class="cline-any cline-yes">6×</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-yes">6×</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-yes">1×</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-yes">1×</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-yes">1×</span>
+<span class="cline-any cline-yes">1×</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-yes">1×</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-yes">1×</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-yes">1×</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-yes">1×</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span></td><td class="text"><pre class="prettyprint lang-js">/**
+ * @license
+ * Copyright 2016 Google Inc.
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+"use strict";
+&nbsp;
+var _createClass = function () { function defineProperties(target, props) { for (var i = 0; i &lt; props.length; i++) { var descriptor = props[i]; descriptor.enumerable = descriptor.enumerable || false; descriptor.configurable = true; <span class="missing-if-branch" title="else path not taken" >E</span>if ("value" in descriptor) descriptor.writable = true; Object.defineProperty(target, descriptor.key, descriptor); } } return function (Constructor, protoProps, staticProps) { <span class="missing-if-branch" title="else path not taken" >E</span>if (protoProps) defineProperties(Constructor.prototype, protoProps); if (staticProps) defineProperties(Constructor, staticProps); return Constructor; }; }();
+&nbsp;
+function _classCallCheck(instance, Constructor) { <span class="missing-if-branch" title="if path not taken" >I</span>if (!(instance instanceof Constructor)) { <span class="cstat-no" title="statement not covered" >throw new TypeError("Cannot call a class as a function"); </span>} }
+&nbsp;
+function _possibleConstructorReturn(self, call) { <span class="missing-if-branch" title="if path not taken" >I</span>if (!self) { <span class="cstat-no" title="statement not covered" >throw new ReferenceError("this hasn't been initialised - super() hasn't been called"); </span>} return call &amp;&amp; (<span class="branch-1 cbranch-no" title="branch not covered" >typeof call === "object" </span>|| <span class="branch-2 cbranch-no" title="branch not covered" >typeof call === "function")</span> ? <span class="branch-0 cbranch-no" title="branch not covered" >call </span>: self; }
+&nbsp;
+function _inherits(subClass, superClass) { <span class="missing-if-branch" title="if path not taken" >I</span>if (typeof superClass !== "function" &amp;&amp; <span class="branch-1 cbranch-no" title="branch not covered" >superClass !== null)</span> { <span class="cstat-no" title="statement not covered" >throw new TypeError("Super expression must either be null or a function, not " + typeof superClass); </span>} subClass.prototype = Object.create(superClass &amp;&amp; superClass.prototype, { constructor: { value: subClass, enumerable: false, writable: true, configurable: true } }); <span class="missing-if-branch" title="else path not taken" >E</span>if (superClass) Object.setPrototypeOf ? Object.setPrototypeOf(subClass, superClass) : <span class="branch-1 cbranch-no" title="branch not covered" >subClass.__proto__ = superClass;</span> }
+&nbsp;
+var disposable_1 = require('neuroglancer/util/disposable');
+var texture_1 = require('neuroglancer/webgl/texture');
+var trivial_shaders_1 = require('neuroglancer/webgl/trivial_shaders');
+var buffer_1 = require('neuroglancer/webgl/buffer');
+var geom_1 = require('neuroglancer/util/geom');
+&nbsp;
+var OffscreenFramebuffer = function (_disposable_1$RefCoun) {
+    _inherits(OffscreenFramebuffer, _disposable_1$RefCoun);
+&nbsp;
+    function OffscreenFramebuffer(gl, { numDataBuffers = 1, depthBuffer = false, stencilBuffer = false } = {}) {
+        _classCallCheck(this, OffscreenFramebuffer);
+&nbsp;
+        var _this = _possibleConstructorReturn(this, Object.getPrototypeOf(OffscreenFramebuffer).call(this));
+&nbsp;
+        _this.gl = gl;
+        _this.width = null;
+        _this.height = null;
+        _this.framebuffer = _this.gl.createFramebuffer();
+        _this.depthBuffer = null;
+        _this.dataTextures = new Array();
+        _this.attachmentVerified = false;
+        _this.tempPixel = new Uint8Array(4);
+        _this.fullAttachmentList = new Array();
+        _this.singleAttachmentList = [_this.gl.WEBGL_draw_buffers.COLOR_ATTACHMENT0_WEBGL];
+        var { dataTextures, fullAttachmentList } = _this;
+        for (var i = 0; i &lt; numDataBuffers; ++i) {
+            dataTextures[i] = gl.createTexture();
+            fullAttachmentList[i] = gl.WEBGL_draw_buffers.COLOR_ATTACHMENT0_WEBGL + i;
+        }
+        <span class="missing-if-branch" title="if path not taken" >I</span>if (depthBuffer || stencilBuffer) {
+<span class="cstat-no" title="statement not covered" >            _this.depthBuffer = gl.createRenderbuffer();</span>
+        }
+        _this.useStencilBuffer = stencilBuffer;
+        return _this;
+    }
+&nbsp;
+    _createClass(OffscreenFramebuffer, [{
+        key: 'disposed',
+        value: <span class="fstat-no" title="function not covered" >function disposed() {</span>
+<span class="cstat-no" title="statement not covered" >            var { gl, depthBuffer } = this;</span>
+<span class="cstat-no" title="statement not covered" >            gl.deleteFramebuffer(this.framebuffer);</span>
+<span class="cstat-no" title="statement not covered" >            if (depthBuffer != null) {</span>
+<span class="cstat-no" title="statement not covered" >                gl.deleteRenderbuffer(depthBuffer);</span>
+            }
+<span class="cstat-no" title="statement not covered" >            for (var dataTexture of this.dataTextures) {</span>
+<span class="cstat-no" title="statement not covered" >                gl.deleteTexture(dataTexture);</span>
+            }
+        }
+    }, {
+        key: 'resize',
+        value: function resize(width, height) {
+            if (this.hasSize(width, height)) {
+                return;
+            }
+            this.width = width;
+            this.height = height;
+            var { gl, useStencilBuffer, depthBuffer } = this;
+            for (var dataTexture of this.dataTextures) {
+                texture_1.resizeTexture(gl, dataTexture, width, height);
+            }
+            <span class="missing-if-branch" title="if path not taken" >I</span>if (depthBuffer) {
+<span class="cstat-no" title="statement not covered" >                gl.bindRenderbuffer(gl.RENDERBUFFER, depthBuffer);</span>
+<span class="cstat-no" title="statement not covered" >                gl.renderbufferStorage(gl.RENDERBUFFER, useStencilBuffer ? gl.DEPTH_STENCIL : gl.DEPTH_COMPONENT16, width, height);</span>
+<span class="cstat-no" title="statement not covered" >                gl.bindRenderbuffer(gl.RENDERBUFFER, null);</span>
+            }
+        }
+    }, {
+        key: 'hasSize',
+        value: function hasSize(width, height) {
+            return this.width === width &amp;&amp; this.height === height;
+        }
+    }, {
+        key: 'bind',
+        value: function bind(width, height) {
+            this.resize(width, height);
+            var { gl, useStencilBuffer, depthBuffer } = this;
+            gl.bindFramebuffer(gl.FRAMEBUFFER, this.framebuffer);
+            <span class="missing-if-branch" title="if path not taken" >I</span>if (depthBuffer) {
+<span class="cstat-no" title="statement not covered" >                gl.framebufferRenderbuffer(gl.FRAMEBUFFER, useStencilBuffer ? gl.DEPTH_STENCIL_ATTACHMENT : gl.DEPTH_ATTACHMENT, gl.RENDERBUFFER, depthBuffer);</span>
+            }
+            this.dataTextures.forEach((dataTexture, i) =&gt; {
+                gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.WEBGL_draw_buffers.COLOR_ATTACHMENT0_WEBGL + i, gl.TEXTURE_2D, dataTexture,
+                /*level=*/0);
+            });
+            gl.WEBGL_draw_buffers.drawBuffersWEBGL(this.fullAttachmentList);
+            this.verifyAttachment();
+            gl.viewport(0, 0, width, height);
+        }
+    }, {
+        key: 'unbind',
+        value: function unbind() {
+            var { gl } = this;
+            gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+        }
+    }, {
+        key: 'bindSingle',
+        value: function bindSingle(textureIndex) {
+            var { gl } = this;
+            gl.bindFramebuffer(gl.FRAMEBUFFER, this.framebuffer);
+            gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, this.dataTextures[textureIndex],
+            /*level=*/0);
+            gl.WEBGL_draw_buffers.drawBuffersWEBGL(this.singleAttachmentList);
+        }
+    }, {
+        key: 'readPixel',
+        value: function readPixel(textureIndex, glWindowX, glWindowY) {
+            var { gl, tempPixel } = this;
+            try {
+                this.bindSingle(textureIndex);
+                gl.readPixels(glWindowX, glWindowY, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, tempPixel);
+            } finally {
+                gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+            }
+            return tempPixel;
+        }
+        /**
+         * Calls readPixel, but interprets the RGBA result as a little-endian uint32 value.
+         */
+&nbsp;
+    }, {
+        key: 'readPixelAsUint32',
+        value: <span class="fstat-no" title="function not covered" >function readPixelAsUint32(textureIndex, glWindowX, glWindowY) {</span>
+<span class="cstat-no" title="statement not covered" >            var result = this.readPixel(textureIndex, glWindowX, glWindowY);</span>
+<span class="cstat-no" title="statement not covered" >            return result[0] + (result[1] &lt;&lt; 8) + (result[2] &lt;&lt; 16) + (result[3] &lt;&lt; 24);</span>
+        }
+    }, {
+        key: 'verifyAttachment',
+        value: function verifyAttachment() {
+            if (this.attachmentVerified) {
+                return;
+            }
+            var { gl } = this;
+            var framebufferStatus = gl.checkFramebufferStatus(gl.FRAMEBUFFER);
+            <span class="missing-if-branch" title="if path not taken" >I</span>if (framebufferStatus !== gl.FRAMEBUFFER_COMPLETE) {
+<span class="cstat-no" title="statement not covered" >                throw new Error('Framebuffer configuration not supported');</span>
+            }
+            this.attachmentVerified = true;
+        }
+    }]);
+&nbsp;
+    return OffscreenFramebuffer;
+}(disposable_1.RefCounted);
+&nbsp;
+exports.OffscreenFramebuffer = OffscreenFramebuffer;
+;
+&nbsp;
+var OffscreenCopyHelper = function (_disposable_1$RefCoun2) {
+    _inherits(OffscreenCopyHelper, _disposable_1$RefCoun2);
+&nbsp;
+<span class="fstat-no" title="function not covered" >    function OffscreenCopyHelper(gl) {</span>
+<span class="cstat-no" title="statement not covered" >        _classCallCheck(this, OffscreenCopyHelper);</span>
+&nbsp;
+<span class="cstat-no" title="statement not covered" >        var _this2 = _possibleConstructorReturn(this, Object.getPrototypeOf(OffscreenCopyHelper).call(this));</span>
+&nbsp;
+<span class="cstat-no" title="statement not covered" >        _this2.gl = gl;</span>
+<span class="cstat-no" title="statement not covered" >        _this2.copyVertexPositionsBuffer = _this2.registerDisposer(buffer_1.Buffer.fromData(_this2.gl, new Float32Array([-1, -1, 0, 1, -1, +1, 0, 1, +1, +1, 0, 1, +1, -1, 0, 1]), _this2.gl.ARRAY_BUFFER, _this2.gl.STATIC_DRAW));</span>
+<span class="cstat-no" title="statement not covered" >        _this2.copyTexCoordsBuffer = _this2.registerDisposer(buffer_1.Buffer.fromData(_this2.gl, new Float32Array([0, 0, 0, 1, 1, 1, 1, 0]), _this2.gl.ARRAY_BUFFER, _this2.gl.STATIC_DRAW));</span>
+<span class="cstat-no" title="statement not covered" >        _this2.trivialTextureShader = _this2.registerDisposer(trivial_shaders_1.trivialTextureShader(_this2.gl));</span>
+<span class="cstat-no" title="statement not covered" >        return _this2;</span>
+    }
+&nbsp;
+    _createClass(OffscreenCopyHelper, [{
+        key: 'draw',
+        value: <span class="fstat-no" title="function not covered" >function draw(texture) {</span>
+<span class="cstat-no" title="statement not covered" >            var { gl } = this;</span>
+<span class="cstat-no" title="statement not covered" >            var shader = this.trivialTextureShader;</span>
+<span class="cstat-no" title="statement not covered" >            shader.bind();</span>
+<span class="cstat-no" title="statement not covered" >            gl.activeTexture(gl.TEXTURE0);</span>
+<span class="cstat-no" title="statement not covered" >            gl.bindTexture(gl.TEXTURE_2D, texture);</span>
+<span class="cstat-no" title="statement not covered" >            gl.uniform1i(shader.uniform('uSampler'), 0);</span>
+<span class="cstat-no" title="statement not covered" >            gl.uniformMatrix4fv(shader.uniform('uProjectionMatrix'), false, geom_1.identityMat4);</span>
+<span class="cstat-no" title="statement not covered" >            var aVertexPosition = shader.attribute('aVertexPosition');</span>
+<span class="cstat-no" title="statement not covered" >            this.copyVertexPositionsBuffer.bindToVertexAttrib(aVertexPosition, 4);</span>
+<span class="cstat-no" title="statement not covered" >            var aTexCoord = shader.attribute('aTexCoord');</span>
+<span class="cstat-no" title="statement not covered" >            this.copyTexCoordsBuffer.bindToVertexAttrib(aTexCoord, 2);</span>
+<span class="cstat-no" title="statement not covered" >            gl.drawArrays(gl.TRIANGLE_FAN, 0, 4);</span>
+<span class="cstat-no" title="statement not covered" >            gl.disableVertexAttribArray(aVertexPosition);</span>
+<span class="cstat-no" title="statement not covered" >            gl.disableVertexAttribArray(aTexCoord);</span>
+<span class="cstat-no" title="statement not covered" >            gl.bindTexture(gl.TEXTURE_2D, null);</span>
+        }
+    }], [{
+        key: 'get',
+        value: <span class="fstat-no" title="function not covered" >function get(gl) {</span>
+<span class="cstat-no" title="statement not covered" >            return gl.memoize.get('OffscreenCopyHelper', () =&gt; {</span>
+<span class="cstat-no" title="statement not covered" >                return new OffscreenCopyHelper(gl);</span>
+            });
+        }
+    }]);
+&nbsp;
+    return OffscreenCopyHelper;
+}(disposable_1.RefCounted);
+&nbsp;
+exports.OffscreenCopyHelper = OffscreenCopyHelper;
+;
+&nbsp;</pre></td></tr>
+</table></pre>
+<div class='push'></div><!-- for sticky footer -->
+</div><!-- /wrapper -->
+<div class='footer quiet pad2 space-top1 center small'>
+  Code coverage
+  generated by <a href="http://istanbul-js.org/" target="_blank">istanbul</a> at Sun Jun 05 2016 16:54:42 GMT-0700 (PDT)
+</div>
+</div>
+<script src="../prettify.js"></script>
+<script>
+window.onload = function () {
+        if (typeof prettyPrint === 'function') {
+            prettyPrint();
+        }
+};
+</script>
+<script src="../sorter.js"></script>
+</body>
+</html>

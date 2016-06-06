@@ -1,0 +1,29 @@
+{
+  "compilerOptions": {
+    "noImplicitAny": true,
+    "noImplicitReturns": true,
+    "noImplicitThis": true,
+    "preserveConstEnums": true,
+    "strictNullChecks": false,
+    "sourceMap": true,
+    "module": "commonjs",
+    "target": "ES2015",
+    "newLine": "LF",
+    "baseUrl": ".",
+    "paths": {
+      "*": ["*"],
+      "neuroglancer/*": ["src/neuroglancer/*"]
+    }
+  },
+  "exclude": [
+    "node_modules",
+    "dist",
+    "third_party/typings_sources",
+    "src/neuroglancer/util/typedarray_builder.template.ts",
+    "src/neuroglancer/util/linked_list.template.ts",
+    "src/neuroglancer/util/pairing_heap.template.ts",
+    "src/neuroglancer/sliceview/compressed_segmentation/encode_common.template.ts",
+    "src/neuroglancer/sliceview/compressed_segmentation/encode.template.ts",
+    "src/neuroglancer/sliceview/compressed_segmentation/decode.template.ts"
+  ]
+}

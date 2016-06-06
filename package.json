@@ -1,0 +1,64 @@
+{
+  "name": "neuroglancer",
+  "description": "Visualization tool for 3-D volumetric data.",
+  "license": "Apache-2.0",
+  "version": "0.0.0-beta.0",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/google/neuroglancer.git"
+  },
+  "engines": {
+    "node": ">=5.9.0"
+  },
+  "scripts": {
+    "generate-code": "node ./config/generate_code.js",
+    "build-min": "webpack --config ./config/webpack.min.js",
+    "build": "webpack --config ./config/webpack.config.js",
+    "build-key_name_logger": "webpack --config ./config/webpack.key_name_logger.js",
+    "build:watch": "webpack --config ./config/webpack.config.js --watch",
+    "dev-server": "webpack-dev-server --config ./config/webpack.config.js",
+    "test": "karma start ./config/karma.conf.js --single-run",
+    "test:watch": "karma start ./config/karma.conf.js --no-single-run",
+    "benchmark": "karma start ./config/karma.benchmark.js --single-run",
+    "benchmark:watch": "karma start ./config/karma.benchmark.js --no-single-run"
+  },
+  "devDependencies": {
+    "istanbul": "github:gotwarlost/istanbul#master",
+    "istanbul-instrumenter-loader": "^0.2.0",
+    "jasmine-core": "^2.4.1",
+    "karma": "^0.13.22",
+    "karma-benchmark": "^0.4.0",
+    "karma-benchmark-reporter": "^0.1.1",
+    "karma-chrome-launcher": "^0.2.3",
+    "karma-coverage": "^0.5.5",
+    "karma-firefox-launcher": "^0.1.7",
+    "karma-jasmine": "^0.3.8",
+    "karma-mocha-reporter": "^2.0.0",
+    "karma-sourcemap-loader": "^0.3.7",
+    "karma-webpack": "^1.7.0",
+    "nunjucks": "^2.4.2",
+    "tslint-eslint-rules": "^1.2.0",
+    "webpack-dev-server": "^1.14.1"
+  },
+  "dependencies": {
+    "babel-core": "^6.7.4",
+    "babel-loader": "^6.2.4",
+    "babel-plugin-transform-es2015-block-scoping": "^6.9.0",
+    "babel-plugin-transform-es2015-classes": "^6.9.0",
+    "babel-plugin-transform-es2015-destructuring": "^6.9.0",
+    "babel-plugin-transform-es2015-parameters": "^6.9.0",
+    "css-loader": "^0.23.1",
+    "extract-text-webpack-plugin": "^1.0.1",
+    "html-webpack-plugin": "^2.10.0",
+    "style-loader": "^0.13.0",
+    "lodash": "^4.13.1",
+    "sortablejs": "^1.4.2",
+    "gl-matrix": "^2.3.2",
+    "pako": "^1.0.1",
+    "signals": "^1.0.0",
+    "ts-loader": "^0.8.2",
+    "webpack": "^1.13.1",
+    "webpack-closure-compiler": "^2.0.2",
+    "typescript": "^1.9.0-dev.20160504"
+  }
+}
