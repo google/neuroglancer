@@ -22,6 +22,7 @@ import {positionDropdown} from 'neuroglancer/util/dropdown';
 import {KeyboardShortcutHandler, KeySequenceMap} from 'neuroglancer/util/keyboard_shortcut_handler';
 import {longestCommonPrefix} from 'neuroglancer/util/longest_common_prefix';
 import {cancelPromise, CancellablePromise} from 'neuroglancer/util/promise';
+import {scrollIntoViewIfNeeded} from 'neuroglancer/util/scroll_into_view';
 import {associateLabelWithElement} from 'neuroglancer/widget/associate_label';
 import {Signal} from 'signals';
 
@@ -302,8 +303,9 @@ export class AutocompleteTextInput extends RefCounted {
   private updateDropdown() {
     if (this.shouldShowDropdown()) {
       let {dropdownElement} = this;
+      let {activeIndex} = this;
       if (this.dropdownContentsStale) {
-        let {activeIndex, completionResult} = this;
+        let {completionResult} = this;
         let {makeElement = makeDefaultCompletionElement} = completionResult;
         this.completionElements = completionResult.completions.map((completion, index) => {
           let completionElement = makeElement.call(completionResult, completion);
@@ -323,6 +325,10 @@ export class AutocompleteTextInput extends RefCounted {
       if (!this.completionsVisible) {
         dropdownElement.style.display = 'block';
         this.completionsVisible = true;
+      }
+      if (activeIndex !== -1) {
+        let completionElement = this.completionElements[activeIndex];
+        scrollIntoViewIfNeeded(completionElement);
       }
     } else if (this.completionsVisible) {
       this.dropdownElement.style.display = 'none';
@@ -398,7 +404,9 @@ export class AutocompleteTextInput extends RefCounted {
         this.completionElements[activeIndex].classList.remove(ACTIVE_COMPLETION_CLASS_NAME);
       }
       if (index !== -1) {
-        this.completionElements[index].classList.add(ACTIVE_COMPLETION_CLASS_NAME);
+        let completionElement = this.completionElements[index];
+        completionElement.classList.add(ACTIVE_COMPLETION_CLASS_NAME);
+        scrollIntoViewIfNeeded(completionElement);
       }
     }
     if (index !== -1) {
