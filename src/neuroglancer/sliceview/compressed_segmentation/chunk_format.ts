@@ -131,7 +131,7 @@ uint64_t getDataValue () {
 `;
     } else {
       fragmentCode += `
-  value.high = 0;
+  value.high = vec4(0.0, 0.0, 0.0, 0.0);
 `;
     }
     fragmentCode += `
