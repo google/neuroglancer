@@ -4,7 +4,7 @@ This is not an official Google product.
 
 # Examples
 
-A live demo is hosted at <https://neuroglancer-demo.appspot.com>.  Use the viewer links below to open the demo preloaded with an example dataset.
+A live demo is hosted at <https://neuroglancer-demo.appspot.com>.  (The prior link opens the viewer without any preloaded dataset.)  Use the viewer links below to open the viewer preloaded with an example dataset.
 
 The four-pane view consists of 3 orthogonal cross-sectional views as well as a 3-D view (with independent orientation) that displays 3-D models (if available) for the selected objects.  All four views maintain the same center position.  The orientation of the 3 cross-sectional views can also be adjusted, although they maintain a fixed orientation relative to each other.  (Try holding the shift key and either dragging with the left mouse button or pressing an arrow key.)
 
