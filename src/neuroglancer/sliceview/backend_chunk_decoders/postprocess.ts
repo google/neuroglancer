@@ -33,10 +33,10 @@ export function postProcessRawData(chunk: VolumeChunk, data: ArrayBufferView) {
     tempBuffer.clear();
     switch (dataType) {
     case DataType.UINT32:
-      encodeChannelUint32(tempBuffer, spec.compressedSegmentationBlockSize, <Uint32Array>data, spec.chunkDataSize);
+      encodeChannelUint32(tempBuffer, spec.compressedSegmentationBlockSize, <Uint32Array>data, chunk.chunkDataSize);
       break;
     case DataType.UINT64:
-      encodeChannelUint64(tempBuffer, spec.compressedSegmentationBlockSize, <Uint32Array>data, spec.chunkDataSize);
+      encodeChannelUint64(tempBuffer, spec.compressedSegmentationBlockSize, <Uint32Array>data, chunk.chunkDataSize);
       break;
     default:
       throw new Error(`Unsupported data type for compressed segmentation: ${DataType[dataType]}`);
