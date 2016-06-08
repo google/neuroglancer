@@ -136,10 +136,9 @@ export class MultiscaleVolumeChunkSource implements GenericMultiscaleVolumeChunk
 
   getSources(chunkManager: ChunkManager) {
     let encoding = VolumeChunkEncoding.RAW;
-    // if (this.volumeType === VolumeType.SEGMENTATION) {
-    //   encoding = VolumeChunkEncoding.COMPRESSED_SEGMENTATION;
-    // } else
-    if (this.volumeType === VolumeType.IMAGE && this.dataType === DataType.UINT8) {
+    if (this.volumeType === VolumeType.SEGMENTATION) {
+      encoding = VolumeChunkEncoding.COMPRESSED_SEGMENTATION;
+    } else if (this.volumeType === VolumeType.IMAGE && this.dataType === DataType.UINT8) {
       encoding = VolumeChunkEncoding.JPEG;
     }
 

@@ -28,15 +28,7 @@ import {decodeRawChunk} from 'neuroglancer/sliceview/backend_chunk_decoders/raw'
 import {Endianness} from 'neuroglancer/util/endian';
 import {vec3Key} from 'neuroglancer/util/geom';
 import {RPC, registerSharedObject} from 'neuroglancer/worker_rpc';
-
-const CHUNK_DECODERS = new Map<VolumeChunkEncoding, ChunkDecoder>();
-CHUNK_DECODERS.set(VolumeChunkEncoding.RAW, decodeRawChunk);
-CHUNK_DECODERS.set(VolumeChunkEncoding.JPEG, decodeJpegChunk);
-CHUNK_DECODERS.set(VolumeChunkEncoding.COMPRESSED_SEGMENTATION, decodeCompressedSegmentationChunk);
-
-const ENCOODING_NAMES = new Map<VolumeChunkEncoding, string>();
-ENCOODING_NAMES.set(VolumeChunkEncoding.RAW, 'subvolumeFormat=raw');
-ENCOODING_NAMES.set(VolumeChunkEncoding.JPEG, 'subvolumeFormat=single_image/imageFormat=jpeg');
+import {inflate} from 'pako';
 
 class VolumeChunkSource extends GenericVolumeChunkSource {
   parameters: VolumeSourceParameters;
@@ -46,8 +38,27 @@ class VolumeChunkSource extends GenericVolumeChunkSource {
   constructor(rpc: RPC, options: any) {
     super(rpc, options);
     let parameters = this.parameters = options['parameters'];
-    this.chunkDecoder = CHUNK_DECODERS.get(parameters['encoding']);
-    this.encodingParams = ENCOODING_NAMES.get(parameters['encoding']);
+    const compression_suffix = `/image_format_options.gzip_compression_level=6`;
+    switch (parameters['encoding']) {
+      case VolumeChunkEncoding.RAW:
+        this.chunkDecoder = (chunk, response) => {
+          decodeRawChunk(chunk, inflate(new Uint8Array(response)).buffer);
+        };
+        this.encodingParams = `/subvolume_format=RAW${compression_suffix}`;
+        break;
+      case VolumeChunkEncoding.JPEG:
+        this.chunkDecoder = decodeJpegChunk;
+        this.encodingParams =
+            '/subvolume_format=SINGLE_IMAGE/image_format_options.image_format=JPEG';
+        break;
+      case VolumeChunkEncoding.COMPRESSED_SEGMENTATION:
+        this.chunkDecoder = (chunk, response) => {
+          decodeCompressedSegmentationChunk(chunk, inflate(new Uint8Array(response)).buffer);
+        };
+        this.encodingParams =
+            `/subvolume_format=RAW/image_format_options.compressed_segmentation_block_size=${vec3Key(this.spec.compressedSegmentationBlockSize)}${compression_suffix}`;
+        break;
+    }
   }
 
   download(chunk: VolumeChunk) {
@@ -58,7 +69,8 @@ class VolumeChunkSource extends GenericVolumeChunkSource {
       // computeChunkBounds.
       let chunkPosition = this.computeChunkBounds(chunk);
       let {chunkDataSize} = chunk;
-      path = `/v1beta2/volumes/${parameters['volume_id']}/binary/subvolume/corner=${vec3Key(chunkPosition)}/size=${vec3Key(chunkDataSize)}/scale=${parameters['scaleIndex']}/changeStackId=/${this.encodingParams}?alt=media`;
+      path =
+          `/v1beta2/binary/volumes/binary/volumes/subvolume/header.volume_id=${parameters['volume_id']}/geometry.corner=${vec3Key(chunkPosition)}/geometry.size=${vec3Key(chunkDataSize)}/geometry.scale=${parameters['scaleIndex']}${this.encodingParams}?alt=media`;
     }
     handleChunkDownloadPromise(
         chunk, makeRequest(parameters['instance'], 'GET', path, 'arraybuffer'), this.chunkDecoder);
