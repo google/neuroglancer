@@ -29,11 +29,11 @@ Neuroglancer itself is purely a client-side program, but it depends on data bein
 - Chrome >= 51
 - Firefox >= 46
 
-# Key bindings:
+# Key bindings
 
 See [src/main.ts](/src/main.ts).
 
-# Mouse bindings:
+# Mouse bindings
 
 - Click on a layer name to toggle its visibility.
 
@@ -82,9 +82,17 @@ See [src/main.ts](/src/main.ts).
   
   - Accessing an `http://` resource from a Neuroglancer client hosted at an `https://` URL
     
-    As a security measure, recent versions of Chrome and Firefox prohibit webpages hosted at `https://` URLs from issuing requests to `http://` URLs.  As a workaround, you can use a Neuroglancer client hosted at a `http://` URL (possibly one running on localhost).  Alternatively, you can start Chrome with the `--disable-web-security` flag, but that should be done only with extreme caution.  (Make sure to use a separate profile, and do not access any untrusted webpages when running with that flag enabled.)
+    As a security measure, recent versions of Chrome and Firefox prohibit webpages hosted at `https://` URLs from issuing requests to `http://` URLs.  As a workaround, you can use a Neuroglancer client hosted at a `http://` URL, e.g. the demo client running at http://neuroglancer-demo.appspot.com, or one running on localhost.  Alternatively, you can start Chrome with the `--disable-web-security` flag, but that should be done only with extreme caution.  (Make sure to use a separate profile, and do not access any untrusted webpages when running with that flag enabled.)
+    
+# Multi-threaded architecture
 
-# Building:
+In order to maintain a responsive UI and data display even during rapid navigation, work is split between the main UI thread (referred to as the "frontend") and a separate WebWorker thread (referred to as the "backend").  This introduces some complexity due to the fact that current browsers:
+ - do not support any form of **shared** memory or standard synchronization mechanism (although they do support relative efficient **transfers** of typed arrays between threads);
+ - require that all manipulation of the DOM and the WebGL context happens on the main UI thread.
+
+The "frontend" UI thread handles user actions and rendering, while the "backend" WebWorker thread handle all queuing, downloading, and preprocessing of data needed for rendering.
+
+# Building
 
 node.js is required to build the viewer.
 
