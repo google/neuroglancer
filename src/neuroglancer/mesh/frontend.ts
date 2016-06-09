@@ -161,47 +161,10 @@ export class MeshLayer extends PerspectiveViewRenderLayer {
   }
 };
 
-function makeNormals(positions: Float32Array, indices: Uint32Array) {
-  let faceNormal = vec3.create();
-  let v1v0 = vec3.create();
-  let v2v1 = vec3.create();
-  let vertexNormals = new Float32Array(positions.length);
-  let vertexFaceCount = new Float32Array(positions.length / 3);
-  let numIndices = indices.length;
-  for (let i = 0; i < numIndices; i += 3) {
-    for (let j = 0; j < 3; ++j) {
-      vertexFaceCount[indices[i + j]] += 1;
-    }
-  }
-  for (let i = 0; i < numIndices; i += 3) {
-    let i0 = indices[i] * 3, i1 = indices[i + 1] * 3, i2 = indices[i + 2] * 3;
-    for (let j = 0; j < 3; ++j) {
-      v1v0[j] = positions[i1 + j] - positions[i0 + j];
-      v2v1[j] = positions[i2 + j] - positions[i1 + j];
-    }
-    vec3.cross(faceNormal, v1v0, v2v1);
-    vec3.normalize(faceNormal, faceNormal);
-
-    for (let k = 0; k < 3; ++k) {
-      let index = indices[i + k];
-      let scalar = 1.0 / vertexFaceCount[index];
-      let offset = index * 3;
-      for (let j = 0; j < 3; ++j) {
-        vertexNormals[offset + j] += scalar * faceNormal[j];
-      }
-    }
-  }
-  // Normalize all vertex normals.
-  let numVertices = vertexNormals.length;
-  for (let i = 0; i < numVertices; i += 3) {
-    let vec = vertexNormals.subarray(i, 3);
-    vec3.normalize(vec, vec);
-  }
-  return vertexNormals;
-}
-
 export class FragmentChunk extends Chunk {
-  data: Uint8Array;
+  vertexPositions: Float32Array;
+  indices: Uint32Array;
+  vertexNormals: Float32Array;
   objectKey: string;
   source: FragmentSource;
   vertexBuffer: Buffer;
@@ -212,28 +175,17 @@ export class FragmentChunk extends Chunk {
   constructor(source: FragmentSource, x: any) {
     super(source);
     this.objectKey = x['objectKey'];
-    this.data = x['data'];
+    this.vertexPositions = x['vertexPositions'];
+    let indices = this.indices = x['indices'];
+    this.numIndices = indices.length;
+    this.vertexNormals = x['vertexNormals'];
   }
 
   copyToGPU(gl: GL) {
     super.copyToGPU(gl);
-    let {data} = this;
-    let dv = new DataView(data.buffer);
-
-    let numVertices = dv.getInt32(0, true);
-    let positions = new Float32Array(data.buffer, 4, numVertices * 3);
-    // 4 * 3 bytes per vertex position + 4 byte offset due to numVertices.
-    let indices = new Uint32Array(data.buffer, 4 + 12 * numVertices);
-    this.vertexBuffer = Buffer.fromData(gl, positions, gl.ARRAY_BUFFER, gl.STATIC_DRAW);
-
-    this.indexBuffer = Buffer.fromData(gl, indices, gl.ELEMENT_ARRAY_BUFFER, gl.STATIC_DRAW);
-    this.numIndices = indices.length;
-
-    // console.log('positions', positions);
-    // console.log('indices', indices);
-
-    let normals = makeNormals(positions, indices);
-    this.normalBuffer = Buffer.fromData(gl, normals, gl.ARRAY_BUFFER, gl.STATIC_DRAW);
+    this.vertexBuffer = Buffer.fromData(gl, this.vertexPositions, gl.ARRAY_BUFFER, gl.STATIC_DRAW);
+    this.indexBuffer = Buffer.fromData(gl, this.indices, gl.ELEMENT_ARRAY_BUFFER, gl.STATIC_DRAW);
+    this.normalBuffer = Buffer.fromData(gl, this.vertexNormals, gl.ARRAY_BUFFER, gl.STATIC_DRAW);
   }
 
   freeGPUMemory(gl: GL) {

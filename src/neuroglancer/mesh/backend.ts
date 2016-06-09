@@ -14,22 +14,28 @@
  * limitations under the License.
  */
 
-import {ChunkPriorityTier, ChunkState} from 'neuroglancer/chunk_manager/base';
-import {Chunk, ChunkManager, ChunkSource} from 'neuroglancer/chunk_manager/backend';
-import {Uint64} from 'neuroglancer/util/uint64';
-import {RPC, registerSharedObject, SharedObjectCounterpart} from 'neuroglancer/worker_rpc';
-import {Uint64Set} from 'neuroglancer/uint64_set';
 import 'neuroglancer/uint64_set'; // Import for side effects.
+
+import {Chunk, ChunkManager, ChunkSource} from 'neuroglancer/chunk_manager/backend';
+import {ChunkPriorityTier, ChunkState} from 'neuroglancer/chunk_manager/base';
+import {Uint64Set} from 'neuroglancer/uint64_set';
+import {vec3} from 'neuroglancer/util/geom';
+import {verifyObject, verifyObjectProperty} from 'neuroglancer/util/json';
+import {Uint64} from 'neuroglancer/util/uint64';
+import {convertEndian32, Endianness} from 'neuroglancer/util/endian';
+import {RPC, registerSharedObject, SharedObjectCounterpart} from 'neuroglancer/worker_rpc';
 
 
 const MESH_OBJECT_MANIFEST_CHUNK_PRIORITY = 100;
 const MESH_OBJECT_FRAGMENT_CHUNK_PRIORITY = 50;
 
+export type FragmentId = string;
+
 // Chunk that contains the list of fragments that make up a single object.
 export class ManifestChunk extends Chunk {
   backendOnly = true;
   objectId = new Uint64();
-  data: any;
+  fragmentIds: FragmentId[]|null;
 
   constructor () {
     super();
@@ -42,7 +48,7 @@ export class ManifestChunk extends Chunk {
   }
 
   freeSystemMemory () {
-    this.data = null;
+    this.fragmentIds = null;
   }
 
   downloadSucceeded () {
@@ -59,15 +65,15 @@ export class ManifestChunk extends Chunk {
   }
 };
 
-export type FragmentId = string;
-
 /**
  * Chunk that contains the mesh for a single fragment of a single object.
  */
 export class FragmentChunk extends Chunk {
   manifestChunk: ManifestChunk = null;
   fragmentId: FragmentId = null;
-  data: Uint8Array = null;
+  vertexPositions: Float32Array|null = null;
+  indices: Uint32Array|null = null;
+  vertexNormals: Float32Array|null = null;
   constructor () {
     super();
   }
@@ -78,38 +84,142 @@ export class FragmentChunk extends Chunk {
   }
   freeSystemMemory () {
     this.manifestChunk = null;
-    this.data = null;
+    this.vertexPositions = this.indices = this.vertexNormals = null;
     this.fragmentId = null;
   }
   serialize (msg: any, transfers: any[]) {
     super.serialize(msg, transfers);
     msg['objectKey'] = this.manifestChunk.key;
-    let data = msg['data'] = this.data;
-    transfers.push(data.buffer);
-    this.data = null;
+    let {vertexPositions, indices, vertexNormals} = this;
+    msg['vertexPositions'] = vertexPositions;
+    msg['indices'] = indices;
+    msg['vertexNormals'] = vertexNormals;
+    let vertexPositionsBuffer = vertexPositions.buffer;
+    transfers.push(vertexPositionsBuffer);
+    let indicesBuffer = indices.buffer;
+    if (indicesBuffer !== vertexPositionsBuffer) {
+      transfers.push(indicesBuffer);
+    }
+    let vertexNormalsBuffer = vertexNormals.buffer;
+    if (vertexNormalsBuffer !== vertexPositionsBuffer && vertexNormalsBuffer !== indicesBuffer) {
+      transfers.push(vertexNormalsBuffer);
+    }
+    this.vertexPositions = this.indices = this.vertexNormals = null;
   }
   downloadSucceeded () {
-    this.systemMemoryBytes = this.gpuMemoryBytes = this.data.byteLength;
+    let {vertexPositions, indices, vertexNormals} = this;
+    this.systemMemoryBytes = this.gpuMemoryBytes =
+        vertexPositions.byteLength + indices.byteLength + vertexNormals.byteLength;
     super.downloadSucceeded();
   }
 };
 
 /**
- * Assigns chunk.data based on the received JSON manifest response.
+ * Assigns chunk.fragmentKeys to response[keysPropertyName].
  *
- * Currently just directly stores the JSON response.
+ * Verifies that response[keysPropertyName] is an array of strings.
  */
-export function decodeManifestChunk(chunk: ManifestChunk, response: any) {
-  chunk.data = response;
+export function decodeJsonManifestChunk(chunk: ManifestChunk, response: any, keysPropertyName: string) {
+  verifyObject(response);
+  chunk.fragmentIds = verifyObjectProperty(response, keysPropertyName, fragmentKeys => {
+    if (!Array.isArray(fragmentKeys)) {
+      throw new Error(`Expected array, received: ${JSON.stringify(fragmentKeys)}.`);
+    }
+    for (let x of fragmentKeys) {
+      if (typeof x !== 'string') {
+        throw new Error(`Expected string fragment key, received: ${JSON.stringify(x)}.`);
+      }
+    }
+    return <string[]>fragmentKeys;
+  });
 }
 
 /**
- * Assigns chunk.data based on the received mesh fragment.
+ * Computes normal vectors for each vertex of a triangular mesh.
  *
- * Currently just directly stores the fragment data as a Uint8Array.
+ * The normal vector for each triangle with vertices (v0, v1, v2) is computed as the (normalized)
+ * cross product of (v1 - v0, v2 - v1).  The normal vector for each vertex is obtained by averaging
+ * the normal vector of each of the triangles that contains it.
+ *
+ * @param positions The vertex positions in [x0, y0, z0, x1, y1, z1, ...] format.
+ * @param indices The indices of the triangle vertices.  Each triplet of consecutive values
+ *     specifies a triangle.
  */
-export function decodeFragmentChunk(chunk: FragmentChunk, response: any) {
-  chunk.data = new Uint8Array(response);
+export function computeVertexNormals(positions: Float32Array, indices: Uint32Array) {
+  const faceNormal = vec3.create();
+  const v1v0 = vec3.create();
+  const v2v1 = vec3.create();
+  let vertexNormals = new Float32Array(positions.length);
+  let vertexFaceCount = new Float32Array(positions.length / 3);
+  let numIndices = indices.length;
+  for (let i = 0; i < numIndices; i += 3) {
+    for (let j = 0; j < 3; ++j) {
+      vertexFaceCount[indices[i + j]] += 1;
+    }
+  }
+  for (let i = 0; i < numIndices; i += 3) {
+    let i0 = indices[i] * 3, i1 = indices[i + 1] * 3, i2 = indices[i + 2] * 3;
+    for (let j = 0; j < 3; ++j) {
+      v1v0[j] = positions[i1 + j] - positions[i0 + j];
+      v2v1[j] = positions[i2 + j] - positions[i1 + j];
+    }
+    vec3.cross(faceNormal, v1v0, v2v1);
+    vec3.normalize(faceNormal, faceNormal);
+
+    for (let k = 0; k < 3; ++k) {
+      let index = indices[i + k];
+      let scalar = 1.0 / vertexFaceCount[index];
+      let offset = index * 3;
+      for (let j = 0; j < 3; ++j) {
+        vertexNormals[offset + j] += scalar * faceNormal[j];
+      }
+    }
+  }
+  // Normalize all vertex normals.
+  let numVertices = vertexNormals.length;
+  for (let i = 0; i < numVertices; i += 3) {
+    let vec = vertexNormals.subarray(i, 3);
+    vec3.normalize(vec, vec);
+  }
+  return vertexNormals;
+}
+
+/**
+ * Extracts vertex positions and triangle vertex indices of the specified endianness from `data'.
+ *
+ * Vertex normals are computed.
+ *
+ * The vertexByteOffset specifies the byte offset into `data' of the start of the vertex position
+ * data.  The vertex data must consist of 3 * numVertices 32-bit float values.
+ *
+ * If indexByteOffset is not specified, it defaults to the end of the vertex position data.  If
+ * numTriangles is not specified, it is assumed that the index data continues until the end of the
+ * array.
+ */
+export function decodeVertexPositionsAndIndices(
+    chunk: FragmentChunk, data: ArrayBuffer, endianness: Endianness, vertexByteOffset: number,
+    numVertices: number, indexByteOffset?: number, numTriangles?: number) {
+  let vertexPositions = new Float32Array(data, vertexByteOffset, numVertices * 3);
+  convertEndian32(vertexPositions, endianness);
+
+  if (indexByteOffset === undefined) {
+    indexByteOffset = vertexByteOffset + 12 * numVertices;
+  }
+
+  let numIndices: number|undefined;
+  if (numTriangles !== undefined) {
+    numIndices = numTriangles * 3;
+  }
+
+  let indices = new Uint32Array(data, indexByteOffset, numIndices);
+  if (indices.length % 3 !== 0) {
+    throw new Error(`Number of indices is not a multiple of 3: ${indices.length}.`);
+  }
+  convertEndian32(indices, endianness);
+
+  chunk.vertexPositions = vertexPositions;
+  chunk.indices = indices;
+  chunk.vertexNormals = computeVertexNormals(vertexPositions, indices);
 }
 
 export abstract class MeshSource extends ChunkSource {
@@ -183,7 +293,7 @@ class MeshLayer extends SharedObjectCounterpart {
       chunkManager.requestChunk(manifestChunk, ChunkPriorityTier.VISIBLE,
                                 MESH_OBJECT_MANIFEST_CHUNK_PRIORITY);
       if (manifestChunk.state === ChunkState.SYSTEM_MEMORY_WORKER) {
-        for (let fragmentId of manifestChunk.data['fragments']) {
+        for (let fragmentId of manifestChunk.fragmentIds) {
           let fragmentChunk = source.getFragmentChunk(manifestChunk, fragmentId);
           chunkManager.requestChunk(fragmentChunk, ChunkPriorityTier.VISIBLE,
                                     MESH_OBJECT_FRAGMENT_CHUNK_PRIORITY);

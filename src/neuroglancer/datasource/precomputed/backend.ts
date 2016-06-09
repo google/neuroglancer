@@ -16,12 +16,13 @@
 
 import {handleChunkDownloadPromise} from 'neuroglancer/chunk_manager/backend';
 import {VolumeChunkEncoding} from 'neuroglancer/datasource/precomputed/base';
-import {ManifestChunk, FragmentChunk, MeshSource as GenericMeshSource, decodeManifestChunk, decodeFragmentChunk} from 'neuroglancer/mesh/backend';
+import {ManifestChunk, FragmentChunk, MeshSource as GenericMeshSource, decodeJsonManifestChunk, decodeVertexPositionsAndIndices} from 'neuroglancer/mesh/backend';
 import {VolumeChunk, VolumeChunkSource as GenericVolumeChunkSource} from 'neuroglancer/sliceview/backend';
 import {ChunkDecoder} from 'neuroglancer/sliceview/backend_chunk_decoders';
 import {decodeCompressedSegmentationChunk} from 'neuroglancer/sliceview/backend_chunk_decoders/compressed_segmentation';
 import {decodeJpegChunk} from 'neuroglancer/sliceview/backend_chunk_decoders/jpeg';
 import {decodeRawChunk} from 'neuroglancer/sliceview/backend_chunk_decoders/raw';
+import {Endianness} from 'neuroglancer/util/endian';
 import {openShardedHttpRequest, sendHttpRequest} from 'neuroglancer/util/http_request';
 import {RPC, registerSharedObject} from 'neuroglancer/worker_rpc';
 
@@ -64,6 +65,16 @@ class VolumeChunkSource extends GenericVolumeChunkSource {
 };
 registerSharedObject('precomputed/VolumeChunkSource', VolumeChunkSource);
 
+export function decodeManifestChunk(chunk: ManifestChunk, response: any) {
+  return decodeJsonManifestChunk(chunk, response, 'fragments');
+}
+
+export function decodeFragmentChunk(chunk: FragmentChunk, response: ArrayBuffer) {
+  let dv = new DataView(response);
+  let numVertices = dv.getUint32(0, true);
+  decodeVertexPositionsAndIndices(
+      chunk, response, Endianness.LITTLE, /*vertexByteOffset=*/4, numVertices);
+}
 
 export class MeshSource extends GenericMeshSource {
   baseUrls: string[];
