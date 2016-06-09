@@ -17,6 +17,7 @@
 'use strict';
 
 let webpack_helpers = require('./webpack_helpers');
+const path = require('path');
 
 module.exports = function(config) {
 
@@ -48,7 +49,7 @@ module.exports = function(config) {
     colors: true,
     reporters: ['mocha', 'coverage'],
     coverageReporter: {
-      dir: 'coverage/',
+      dir: path.resolve(__dirname, '../coverage/'),
       reporters: [{type: 'text-summary'}, {type: 'json'}, {type: 'html'}]
     },
     // logLevel: config.LOG_DEBUG,
