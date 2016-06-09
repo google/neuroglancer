@@ -32,6 +32,10 @@ const instanceHostname: string[] = [];
 
 export const INSTANCE_IDENTIFIERS: string[] = [];
 
+export function brainmapsInstanceKey(instance: BrainmapsInstance) {
+  return INSTANCE_IDENTIFIERS[instance];
+}
+
 export function setupBrainmapsInstance(instance: BrainmapsInstance, hostname: string, identifier: string, name: string) {
   INSTANCE_IDENTIFIERS[instance] = identifier;
   INSTANCE_NAMES[instance] = name;

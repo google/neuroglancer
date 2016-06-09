@@ -18,14 +18,15 @@ import 'neuroglancer/datasource/brainmaps/api_frontend';
 
 import {ChunkManager} from 'neuroglancer/chunk_manager/frontend';
 import {makeRequest, INSTANCE_NAMES, INSTANCE_IDENTIFIERS, PRODUCTION_INSTANCE, BrainmapsInstance} from 'neuroglancer/datasource/brainmaps/api';
-import {VolumeChunkEncoding} from 'neuroglancer/datasource/brainmaps/base';
+import {VolumeChunkEncoding, VolumeSourceParameters, volumeSourceToString, MeshSourceParameters, meshSourceToString} from 'neuroglancer/datasource/brainmaps/base';
 import {registerDataSourceFactory} from 'neuroglancer/datasource/factory';
 import {DataType, VolumeType, VolumeChunkSpecification} from 'neuroglancer/sliceview/base';
 import {VolumeChunkSource as GenericVolumeChunkSource, MultiscaleVolumeChunkSource as GenericMultiscaleVolumeChunkSource} from 'neuroglancer/sliceview/frontend';
 import {getPrefixMatches} from 'neuroglancer/util/completion';
 import {StatusMessage} from 'neuroglancer/status';
 import {Vec3, vec3} from 'neuroglancer/util/geom';
-import {verifyObject, verifyString, verifyPositiveInt, verifyMapKey, verifyFinitePositiveFloat, parseXYZ, parseArray, stableStringify} from 'neuroglancer/util/json';
+import {verifyObject, verifyString, verifyPositiveInt, verifyMapKey, verifyFinitePositiveFloat, parseXYZ, parseArray, stableStringify, verifyObjectProperty} from 'neuroglancer/util/json';
+import {MeshSource as GenericMeshSource} from 'neuroglancer/mesh/frontend';
 
 const SERVER_DATA_TYPES = new Map<string, DataType>();
 SERVER_DATA_TYPES.set('UINT8', DataType.UINT8);
@@ -53,19 +54,23 @@ export class VolumeInfo {
 export class VolumeChunkSource extends GenericVolumeChunkSource {
   constructor(
       chunkManager: ChunkManager, spec: VolumeChunkSpecification,
-      public instance: BrainmapsInstance, public key: string, scaleIndex: number,
-      public encoding: VolumeChunkEncoding) {
+      public parameters: VolumeSourceParameters) {
     super(chunkManager, spec);
-    this.initializeCounterpart(chunkManager.rpc, {
-      'type': 'brainmaps/VolumeChunkSource',
-      'instance': instance,
-      'key': key,
-      'scaleIndex': scaleIndex,
-      'encoding': encoding,
-    });
+    this.initializeCounterpart(
+        chunkManager.rpc, {'type': 'brainmaps/VolumeChunkSource', 'parameters': parameters});
   }
 
-  toString() { return `brainmaps-${INSTANCE_IDENTIFIERS[this.instance]}:volume:${this.key}`; }
+  toString() { return volumeSourceToString(this.parameters); }
+};
+
+export class MeshInfo {
+  name: string;
+  type: string;
+  constructor(obj: any) {
+    verifyObject(obj);
+    this.name = verifyObjectProperty(obj, 'name', verifyString);
+    this.type = verifyObjectProperty(obj, 'type', verifyString);
+  }
 };
 
 export class MultiscaleVolumeChunkSource implements GenericMultiscaleVolumeChunkSource {
@@ -73,10 +78,14 @@ export class MultiscaleVolumeChunkSource implements GenericMultiscaleVolumeChunk
   scales: VolumeInfo[];
   dataType: DataType;
   numChannels: number;
-  constructor(public instance: BrainmapsInstance, public key: string, obj: any) {
+  meshes: MeshInfo[];
+  constructor(
+      public instance: BrainmapsInstance, public volume_id: string, volumeInfoResponse: any,
+      meshesResponse: any) {
     try {
-      verifyObject(obj);
-      let scales = this.scales = parseArray(obj['geometry'], x => new VolumeInfo(x));
+      verifyObject(volumeInfoResponse);
+      let scales = this.scales = verifyObjectProperty(
+          volumeInfoResponse, 'geometry', y => parseArray(y, x => new VolumeInfo(x)));
       if (scales.length === 0) {
         throw new Error('Expected at least one scale.');
       }
@@ -109,9 +118,19 @@ export class MultiscaleVolumeChunkSource implements GenericMultiscaleVolumeChunk
         }
       }
       this.volumeType = volumeType;
-
     } catch (parseError) {
       throw new Error(`Failed to parse BrainMaps multiscale volume specification: ${parseError.message}`);
+    }
+    try {
+      verifyObject(meshesResponse);
+      this.meshes = verifyObjectProperty(meshesResponse, 'meshes', y => {
+        if (y === undefined) {
+          return [];
+        }
+        return parseArray(y, x => new MeshInfo(x));
+      });
+    } catch (parseError) {
+      throw new Error(`Failed to parse BrainMaps meshes specification: ${parseError.message}`);
     }
   }
 
@@ -137,24 +156,40 @@ export class MultiscaleVolumeChunkSource implements GenericMultiscaleVolumeChunk
                 }))
                 .map(spec => {
 
-                  let cacheKey = stableStringify({
+                  let parameters: VolumeSourceParameters = {
                     'instance': this.instance,
-                    'key': this.key,
-                    'scale': scaleIndex,
+                    'volume_id': this.volume_id,
+                    'scaleIndex': scaleIndex,
                     'encoding': encoding
-                  });
+                  };
                   return chunkManager.getChunkSource(
-                      VolumeChunkSource, cacheKey,
-                      () => new VolumeChunkSource(
-                          chunkManager, spec, this.instance, this.key, scaleIndex, encoding));
+                      VolumeChunkSource, stableStringify(parameters),
+                      () => new VolumeChunkSource(chunkManager, spec, parameters));
                 }));
   }
 
-  /**
-   * Meshes are not supported.
-   */
-  getMeshSource(chunkManager: ChunkManager): null { return null; }
+  getMeshSource(chunkManager: ChunkManager): MeshSource|null {
+    let validMesh = this.meshes.find(x => x.type === 'TRIANGLES');
+    if (validMesh === undefined) {
+      return null;
+    }
+    return getMeshSource(chunkManager, {'instance': this.instance, 'volume_id': this.volume_id, 'mesh_name': validMesh.name});
+  }
 };
+
+export class MeshSource extends GenericMeshSource {
+  constructor(chunkManager: ChunkManager, public parameters: MeshSourceParameters) {
+    super(chunkManager);
+    this.initializeCounterpart(
+        this.chunkManager.rpc, {'type': 'brainmaps/MeshSource', 'parameters': parameters});
+  }
+  toString() { return meshSourceToString(this.parameters); }
+};
+
+export function getMeshSource(chunkManager: ChunkManager, parameters: MeshSourceParameters) {
+  return chunkManager.getChunkSource(
+      MeshSource, stableStringify(parameters), () => new MeshSource(chunkManager, parameters));
+}
 
 let existingVolumes = new Map<string, Promise<MultiscaleVolumeChunkSource>>();
 
@@ -164,9 +199,14 @@ export function getVolume(instance: BrainmapsInstance, key: string) {
   if (existingResult !== undefined) {
     return existingResult;
   }
-  let promise =
-    makeRequest(instance, 'GET', `/v1beta2/volumes/${key}`, 'json')
-    .then(response => new MultiscaleVolumeChunkSource(instance, key, response));
+  let promise = Promise
+                    .all([
+                      makeRequest(instance, 'GET', `/v1beta2/volumes/${key}`, 'json'),
+                      makeRequest(instance, 'GET', `/v1beta2/objects/${key}/meshes`, 'json'),
+                    ])
+                    .then(
+                        ([volumeInfoResponse, meshesResponse]) => new MultiscaleVolumeChunkSource(
+                            instance, key, volumeInfoResponse, meshesResponse));
   existingVolumes.set(cacheKey, promise);
   return promise;
 }

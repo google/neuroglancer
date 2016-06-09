@@ -14,8 +14,31 @@
  * limitations under the License.
  */
 
+import {BrainmapsInstance, brainmapsInstanceKey} from 'neuroglancer/datasource/brainmaps/api';
+
 export enum VolumeChunkEncoding {
   RAW,
   JPEG,
   COMPRESSED_SEGMENTATION
+}
+
+export interface VolumeSourceParameters {
+  instance: BrainmapsInstance;
+  volume_id: string;
+  scaleIndex: number;
+  encoding: VolumeChunkEncoding;
+}
+
+export function volumeSourceToString(p: VolumeSourceParameters) {
+  return `brainmaps-${brainmapsInstanceKey(p['instance'])}:volume/${p['volume_id']}/${p['scaleIndex']}/${VolumeChunkEncoding[p['encoding']]}`;
+}
+
+export interface MeshSourceParameters {
+  instance: BrainmapsInstance;
+  volume_id: string;
+  mesh_name: string;
+}
+
+export function meshSourceToString(p: MeshSourceParameters) {
+  return `brainmaps:${brainmapsInstanceKey(p['instance'])}:mesh/${p['volume_id']}/${p['mesh_name']}`;
 }
