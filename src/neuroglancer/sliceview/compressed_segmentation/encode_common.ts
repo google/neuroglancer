@@ -1,3 +1,4 @@
+// DO NOT EDIT.  Generated from templates/neuroglancer/sliceview/compressed_segmentation/encode_common.template.ts.
 /**
  * @license
  * Copyright 2016 Google Inc.

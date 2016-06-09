@@ -1,3 +1,4 @@
+// DO NOT EDIT.  Generated from templates/neuroglancer/util/typedarray_builder.template.ts.
 /**
  * @license
  * Copyright 2016 Google Inc.
