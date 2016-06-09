@@ -1,0 +1,17 @@
+{
+  "name": "my-neuroglancer-project",
+  "description": "Example project that depends on neuroglancer.",
+  "scripts": {
+    "build-min": "webpack --config ./config/webpack.min.js",
+    "build": "webpack --config ./config/webpack.config.js",
+    "dev-server": "webpack-dev-server --config ./config/webpack.config.js"
+  },
+  "dependencies": {
+    "neuroglancer": "^0.0.0-beta.0",
+    "webpack": "^1.13.1"
+  },
+  "devDependencies": {
+    "tslint-eslint-rules": "^1.2.0",
+    "webpack-dev-server": "^1.14.1"
+  }
+}

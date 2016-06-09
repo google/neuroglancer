@@ -12,14 +12,12 @@
     "baseUrl": ".",
     "paths": {
       "*": ["*"],
-      "neuroglancer/*": ["src/neuroglancer/*"]
+      "neuroglancer/*": ["third_party/neuroglancer/*"],
+      "my-neuroglancer-project/*": ["src/my-neuroglancer-project/*"]
     }
   },
   "exclude": [
     "node_modules",
-    "dist",
-    "third_party/typings_sources",
-    "templates",
-    "examples"
+    "dist"
   ]
 }

@@ -126,6 +126,10 @@ node.js is required to build the viewer.
    
 6. See [package.json](/package.json) for other commands available.
 
+# Creating a dependent project
+
+See [examples/dependent-project](/examples/dependent-project).
+
 # License
 
 Copyright 2016 Google Inc.
