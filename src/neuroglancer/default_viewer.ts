@@ -14,10 +14,14 @@
  * limitations under the License.
  */
 
-import {makeDefaultViewer} from 'neuroglancer/default_viewer';
-import {makeDefaultKeyBindings} from 'neuroglancer/default_key_bindings';
+require('./default_viewer.css');
 
-window.addEventListener('DOMContentLoaded', () => {
-  let viewer = (<any>window)['viewer'] = makeDefaultViewer();
-  makeDefaultKeyBindings(viewer.keyMap);
-});
+import 'neuroglancer/sliceview/chunk_format_handlers';
+
+import {DisplayContext} from 'neuroglancer/display_context';
+import {Viewer} from 'neuroglancer/viewer';
+
+export function makeDefaultViewer() {
+  let display = new DisplayContext(document.getElementById('container'));
+  return new Viewer(display);
+}

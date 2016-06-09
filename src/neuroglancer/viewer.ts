@@ -38,6 +38,7 @@ import {RPC} from 'neuroglancer/worker_rpc';
 import {Signal} from 'signals';
 
 require('./viewer.css');
+require('neuroglancer/noselect.css');
 
 export class Viewer extends RefCounted implements ViewerState {
   navigationState = this.registerDisposer(new NavigationState());

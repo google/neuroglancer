@@ -19,6 +19,7 @@ import {RefCounted} from 'neuroglancer/util/disposable';
 import {Uint64} from 'neuroglancer/util/uint64';
 import {Signal} from 'signals';
 
+require('neuroglancer/noselect.css');
 require('./uint64_entry_widget.css');
 
 export class Uint64EntryWidget extends RefCounted {

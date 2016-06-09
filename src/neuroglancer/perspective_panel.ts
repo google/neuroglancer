@@ -30,6 +30,8 @@ import {ShaderBuilder} from 'neuroglancer/webgl/shader';
 import {TrackableBoolean, TrackableBooleanCheckbox} from 'neuroglancer/trackable_boolean';
 import {startRelativeMouseDrag} from 'neuroglancer/util/mouse_drag';
 
+require('neuroglancer/noselect.css');
+
 export interface PerspectiveViewRenderContext {
   dataToDevice: Mat4;
   lightDirection: Vec3;

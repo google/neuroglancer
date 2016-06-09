@@ -14,10 +14,18 @@
  * limitations under the License.
  */
 
-import {makeDefaultViewer} from 'neuroglancer/default_viewer';
-import {makeDefaultKeyBindings} from 'neuroglancer/default_key_bindings';
+html, body {
+  margin: 0px;
+  padding: 0px;
+  overflow: hidden;
+  width: 100vw;
+  height: 100vh;
+  background-color: black;
+  color: white;
+}
 
-window.addEventListener('DOMContentLoaded', () => {
-  let viewer = (<any>window)['viewer'] = makeDefaultViewer();
-  makeDefaultKeyBindings(viewer.keyMap);
-});
+body {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+}

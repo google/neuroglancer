@@ -22,6 +22,7 @@ import {positionDropdown} from 'neuroglancer/util/dropdown';
 import {Sortable} from 'neuroglancer/util/sortablejs_es6';
 import {LayerDialog} from 'neuroglancer/layer_dialog';
 
+require('neuroglancer/noselect.css');
 require('./layer_panel.css');
 
 class LayerWidget extends RefCounted {
