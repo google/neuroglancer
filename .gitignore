@@ -1,5 +1,4 @@
 /node_modules/
 /dist/
-/dist-min/
-/dist-key_name_logger/
 /coverage/
+/npm-debug.log

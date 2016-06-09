@@ -22,18 +22,22 @@ const ExtractTextPlugin = require('extract-text-webpack-plugin');
 const webpack = require('webpack');
 const ClosureCompilerPlugin = require('webpack-closure-compiler');
 
+// Note: We use require.resolve below to ensure the plugins are resolved
+// relative to this configuration file, rather than relative to the source
+// files, in case this configuration is being used from a dependent project that
+// doesn't have all of these plugins as direct dependencies.
 const DEFAULT_BABEL_PLUGINS = exports.DEFAULT_BABEL_PLUGINS = [
   // Needed until Firefox implements proper handling of default values in
   // destructuring expressions.
-  'transform-es2015-destructuring',
-  'transform-es2015-parameters',
+  require.resolve('babel-plugin-transform-es2015-destructuring'),
+  require.resolve('babel-plugin-transform-es2015-parameters'),
 
   // Needed until Firefox implements proper for loop scoping of let, which is
   // not fixed as of Firefox 46.
-  'transform-es2015-block-scoping',
+  require.resolve('babel-plugin-transform-es2015-block-scoping'),
 
   // This is needed in order to avoid transform-es2015-block-scoping generating invalid code.
-  'transform-es2015-classes',
+  require.resolve('babel-plugin-transform-es2015-classes'),
 ];
 
 const DEFAULT_DATA_SOURCES = exports.DEFAULT_DATA_SOURCES = [
@@ -44,6 +48,12 @@ const DEFAULT_DATA_SOURCES = exports.DEFAULT_DATA_SOURCES = [
   'neuroglancer/datasource/precomputed',
 ];
 
+/**
+ * Returns a loader specification for TypeScript files.
+ *
+ * @param {boolean=} options.useBabel Use Babel.
+ * @param {string[]=} options.babelPlugins Babel plugins to use in place of DEFAULT_BABEL_PLUGINS.
+ */
 function getTypescriptLoaderEntry(options) {
   if (options === undefined) {
     options = {};
@@ -61,31 +71,68 @@ function getTypescriptLoaderEntry(options) {
 }
 
 /**
- * Returns an array containing the main and worker bundle configurations.
+ * Returns a base webpack configuration.
+ *
+ * @param {object} options In addition to the options of getTypescriptLoaderEntry, the following
+ *     options are also valid.
+ * @param {string=} options.tsconfigPath Alternative path to tsconfig.json to use, e.g. in order to
+ *     specify additional path aliases.  Any path aliases specified in tsconfig will automatically be added as webpack resolve aliases.
+ * @param {Object.<string,string>} options.resolveAliases Additional module aliases for webpack.
+ * @param {Object.<string,string>} options.resolveLoaderAliases Additional loader aliases for webpack.
+ * @param {string[]} options.resolveLoaderRoots Additional root directories for finding webpack
+ *     loaders.  You may want to include the path to the 'node_modules' directory of your project.
+ * @param {boolean=} options.noOutput If true, no output section is added to the configuration.
+ * @param {string=} options.output Specifies the directory where output will be generated.  Must be
+ *     specified unless noOutput === true.
  */
 function getBaseConfig(options) {
   options = options || {};
   let tsconfigPath = options.tsconfigPath || path.resolve(__dirname, '../tsconfig.json');
+  let tsconfig = require(tsconfigPath);
+  let extraResolveAliases = {};
+  if (tsconfig.compilerOptions && tsconfig.compilerOptions.paths) {
+    for (let key of Object.keys(tsconfig.compilerOptions.paths)) {
+      let value = tsconfig.compilerOptions.paths[key];
+      if (!key.endsWith('/*') || !Array.isArray(value) || value.length !== 1 ||
+          !value[0].endsWith('/*')) {
+        // Silently skip.
+        console.log(`Skipping ${JSON.stringify(key)} -> ${JSON.stringify(value)}`);
+        continue;
+      }
+      extraResolveAliases[key.substring(0, key.length - 2)] = path.resolve(
+          path.dirname(tsconfigPath),
+          value[0].substring(0, value[0].length - 2));
+    }
+  }
+  console.log(extraResolveAliases);
   let baseConfig = {
-    resolveLoader: {
-      alias: {
-        'raw-data$': path.resolve(__dirname, 'raw-data-loader.js'),
-      },
-    },
     resolve: {
       extensions: ['', '.ts', '.js'],
-      alias: {
-        'neuroglancer': path.resolve(__dirname, '../src/neuroglancer'),
-        'neuroglancer-testdata': path.resolve(__dirname, '../testdata'),
+      alias: Object.assign(
+          {
+            'neuroglancer-testdata': path.resolve(__dirname, '../testdata'),
 
-        // Patched version of jpgjs.
-        'jpgjs': path.resolve(__dirname, '../third_party/jpgjs/jpg.js'),
-      }
+            // Patched version of jpgjs.
+            'jpgjs': path.resolve(__dirname, '../third_party/jpgjs/jpg.js'),
+          },
+          extraResolveAliases,
+          options.resolveAliases || {}),
+    },
+    resolveLoader: {
+      alias: Object.assign(
+          {
+            'raw-data$': path.resolve(__dirname, 'raw-data-loader.js'),
+          },
+          options.resolveLoaderAliases || []),
+      root: [
+        ...(options.resolveLoaderRoots || []),
+        path.resolve(__dirname, '../node_modules'),
+      ],
     },
     devtool: 'source-map',
     module: {
       loaders: [
-        getTypescriptLoaderEntry(options.typescriptLoaderOptions),
+        getTypescriptLoaderEntry(options),
         {
           test: /\.css$/,
           loader: ExtractTextPlugin.extract('style-loader', 'css-loader')
@@ -111,6 +158,36 @@ function getBaseConfig(options) {
   return baseConfig;
 }
 
+/**
+ * Returns an array containing the webpack configuration objects for the main and worker bundles.
+ *
+ * @param {object} options Configuration options.  In addition to the options of getBaseConfig and
+ *     getTypescriptLoaderEntry, the following options may also be specified.
+ * @param {boolean=} [options.minify=false] Specifies whether to produce minified output (using the
+ *     SIMPLE mode of Google Closure Compiler).
+ * @param {function(object)=} options.modifyBaseConfig Function that is invoked on the result of
+ *     getBaseConfig, and is allowed to modify it before it is used to generate the main and worker
+ *     bundles.
+ * @param {Object.<string,string>=} options.defines Additional defines to pass to
+ *     webpack.DefinePlugin.  You can use this to override the BRAINMAPS_CLIENT_ID, for example.  To
+ *     insert a string literal, be sure to JSON.stringify.
+ * @param {string[]} [options.dataSources=DEFAULT_DATA_SOURCES] Array of data source to include,
+ *     specified as directories containing a 'frontend.ts' and 'backend.ts' file to be included in
+ *     the frontend and backend bundles, respectively.  Note that if you wish for the default data
+ *     sources to be included, you must include them in the array that you pass.
+ * @param {string[]=} options.chunkWorkerModules Array of additional modules to include in the chunk
+ *     worker.
+ * @param {object[]=} options.commonPlugins Array of additional plugins to include in both the main
+ *     and worker configurations.
+ * @param {object[]=} options.chunkWorkerPlugins Array of additional plugins to include in the
+ *     worker configuration.
+ * @param {object[]=} options.frontendPlugins Array of additional plugins to include in the main
+ *     configuration.
+ * @param {string[]=} options.frontendModules Array of modules to include in the frontend bundle.
+ *     If specified, '../src/main.ts' will not be included automatically.
+ * @param options.cssPlugin If specified, overrides the default CSS plugin for the frontend.
+ * @param options.htmlPlugin If specified, overrides the default HTML plugin for the frontend.
+ */
 function getViewerConfig(options) {
   options = options || {};
   let minify = options.minify;
@@ -167,13 +244,13 @@ function getViewerConfig(options) {
     ...backendDataSourceModules,
     ...extraChunkWorkerModules,
   ];
-  let frontendMain = options.frontendMain || path.resolve(srcDir, 'main.ts');
+  let frontendModules = options.frontendModules || [path.resolve(srcDir, 'main.ts')];
   let htmlPlugin = options.htmlPlugin || new HtmlWebpackPlugin({template: path.resolve(srcDir, 'index.html')});
   let cssPlugin = options.cssPlugin || new ExtractTextPlugin('styles.css', {allChunks: true});
   return [
     Object.assign(
         {
-          entry: {'main': [...frontendDataSourceModules, frontendMain]},
+          entry: {'main': [...frontendDataSourceModules, ...frontendModules]},
           plugins: [
             htmlPlugin,
             cssPlugin,
