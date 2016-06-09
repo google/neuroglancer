@@ -28,20 +28,20 @@ export type Token = any;
 
 export class Implementation {
   getNewTokenPromise: (invalidToken: Token) => Promise<Token>;
-  promise: Promise<Token> = null;
-  token: Token = null;
 }
-
 export var implementation = new Implementation();
 
+let promise: Promise<Token> = null;
+let token: Token = null;
+
 export function getToken(invalidToken?: Token) {
-  let {promise, token} = implementation;
   if (promise !== null && (token === null || invalidToken == null ||
                            invalidToken['generationId'] !== token['generationId'])) {
     // Either we already have a valid token, or we are already obtaining one.
     return promise;
   }
-  implementation.token = null;
-  promise = implementation.promise = implementation.getNewTokenPromise(invalidToken);
+  token = null;
+  promise = implementation.getNewTokenPromise(invalidToken);
+  promise.then((t: Token) => { token = t; });
   return promise;
 }

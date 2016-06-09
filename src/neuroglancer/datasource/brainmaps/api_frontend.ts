@@ -73,6 +73,3 @@ registerRPC('brainmaps.requestToken', function(x) {
     rpc.invoke('brainmaps.receiveToken', {'authResult': authResult});
   });
 });
-
-implementation.token = null;
-implementation.promise = null;

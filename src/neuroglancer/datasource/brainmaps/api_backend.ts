@@ -37,6 +37,5 @@ implementation.getNewTokenPromise = function(invalidToken) {
 };
 
 registerRPC('brainmaps.receiveToken', function(x) {
-  let token = implementation.token = x['authResult'];
-  resolvePromise(token);
+  resolvePromise(x['authResult']);
 });
