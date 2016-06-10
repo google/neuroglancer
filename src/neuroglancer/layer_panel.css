@@ -60,6 +60,10 @@
   padding: 5px;
   border: 1px solid white;
   box-sizing: border-box;
+  /**
+   * Ensure it is on top of most things, including the status messages.
+   */
+  z-index: 200;
 }
 
 .layer-item-parent {
@@ -68,7 +72,10 @@
 }
 
 .layer-item-parent:not(.sortable-chosen) {
-  /* Setting position: relative; prevents the item being dragged from being displayed properly. */
+  /* Setting position: relative; results in an ugly display artifact
+   * while dragging in Chrome.  It is only needed to position the
+   * dropdown menu properly, which is hidden while dragging anyway.
+   */
   position: relative;
 }
 

@@ -62,6 +62,20 @@ class LayerWidget extends RefCounted {
     widgetElement.appendChild(closeElement);
     this.registerEventListener(
       widgetElement, 'click', (event: MouseEvent) => { layer.setVisible(!layer.visible); });
+
+    // Hide the dropdown menu while dragging.  We can't wait until the onStart handler from
+    // Sortablejs fires because it occurs too late to affect what is shown while dragging.
+    this.registerEventListener(element, 'mousedown', (event: MouseEvent) => {
+      if (event.button === 0) {
+        this.panel.setDragging(true);
+      }
+    });
+    this.registerEventListener(element, 'mouseup', (event: MouseEvent) => {
+      if (event.button === 0) {
+        this.panel.setDragging(false);
+      }
+    });
+
     this.registerEventListener(widgetElement, 'dblclick', (event: MouseEvent) => {
       if (layer instanceof ManagedUserLayerWithSpecification) {
         new LayerDialog(this.panel.manager, layer);
@@ -77,11 +91,11 @@ class LayerWidget extends RefCounted {
     this.registerSignalBinding(layer.layerChanged.add(this.handleLayerChanged, this));
     element.appendChild(dropdownElement);
 
-    this.registerEventListener(element, 'mouseover', () => {
+    this.registerEventListener(element, 'mouseenter', () => {
       this.hovering = true;
       this.updateDropdownState();
     });
-    this.registerEventListener(element, 'mouseout', () => {
+    this.registerEventListener(element, 'mouseleave', (event: MouseEvent) => {
       this.hovering = false;
       this.updateDropdownState();
     });
@@ -157,11 +171,11 @@ export class LayerPanel extends RefCounted {
     let sortable = new Sortable(this.element, {
       draggable: '.layer-item-parent',
       onStart: (evt) => {
-        this.dragging = true;
+        this.setDragging(true);
         this.element.classList.add('sorting-in-progress');
       },
       onEnd: (evt) => {
-        this.dragging = false;
+        this.setDragging(false);
         this.element.classList.remove('sorting-in-progress');
         this.layerManager.reorderManagedLayer(evt.oldIndex, evt.newIndex);
       },

@@ -231,6 +231,9 @@ export class SliceViewPanel extends RenderedDataPanel {
   }
 
   onMousedown(e: MouseEvent) {
+    if (event.target !== this.element) {
+      return;
+    }
     super.onMousedown(e);
     if (!this.sliceView.hasValidViewport) {
       return;

@@ -97,11 +97,11 @@ export class SegmentSetWidget extends RefCounted implements SegmentationDisplayS
       temp.parseString(this.textContent);
       widget.visibleSegments.delete(temp);
     });
-    itemElement.addEventListener('mouseover', function(this: ItemElement) {
+    itemElement.addEventListener('mouseenter', function(this: ItemElement) {
       temp.parseString(this.textContent);
       widget.segmentSelectionState.set(temp);
     });
-    itemElement.addEventListener('mouseout', function(this: ItemElement) {
+    itemElement.addEventListener('mouseleave', function(this: ItemElement) {
       temp.parseString(this.textContent);
       widget.segmentSelectionState.set(null);
     });

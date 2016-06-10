@@ -23,7 +23,7 @@ export abstract class RenderedPanel extends RefCounted {
   constructor(public context: DisplayContext, public element: HTMLElement) {
     super();
     this.gl = context.gl;
-    this.registerEventListener(element, 'mouseover', (event: MouseEvent) => {
+    this.registerEventListener(element, 'mouseenter', (event: MouseEvent) => {
       this.context.setActivePanel(this);
     });
     context.addPanel(this);

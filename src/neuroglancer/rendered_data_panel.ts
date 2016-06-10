@@ -33,7 +33,7 @@ export abstract class RenderedDataPanel extends RenderedPanel {
     super(context, element);
 
     this.registerEventListener(element, 'mousemove', this.onMousemove.bind(this));
-    this.registerEventListener(element, 'mouseout', this.onMouseout.bind(this));
+    this.registerEventListener(element, 'mouseleave', this.onMouseout.bind(this));
     this.registerEventListener(element, 'mousedown', this.onMousedown.bind(this), false);
     this.registerEventListener(element, 'wheel', this.onMousewheel.bind(this), false);
     this.registerEventListener(
@@ -48,6 +48,9 @@ export abstract class RenderedDataPanel extends RenderedPanel {
 
   onMousemove(event: MouseEvent) {
     let {element} = this;
+    if (event.target !== element) {
+      return;
+    }
     this.mouseX = event.offsetX - element.clientLeft;
     this.mouseY = event.offsetY - element.clientTop;
     let {mouseState} = this.viewer;
@@ -59,6 +62,9 @@ export abstract class RenderedDataPanel extends RenderedPanel {
     e.preventDefault();
   }
   onMousedown(e: MouseEvent) {
+    if (event.target !== this.element) {
+      return;
+    }
     this.onMousemove(e);
     if (e.button === 2) {
       let {mouseState} = this.viewer;

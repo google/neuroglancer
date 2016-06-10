@@ -31,6 +31,7 @@ import {TrackableBoolean, TrackableBooleanCheckbox} from 'neuroglancer/trackable
 import {startRelativeMouseDrag} from 'neuroglancer/util/mouse_drag';
 
 require('neuroglancer/noselect.css');
+require('./perspective_panel.css');
 
 export interface PerspectiveViewRenderContext {
   dataToDevice: Mat4;
@@ -153,7 +154,7 @@ export class PerspectivePanel extends RenderedDataPanel {
     let showSliceViewsCheckbox = this.registerDisposer(new TrackableBooleanCheckbox(viewer.showSliceViews));
     showSliceViewsCheckbox.element.className = 'perspective-panel-show-slice-views noselect';
     let showSliceViewsLabel = document.createElement('label');
-    showSliceViewsLabel.className = 'noselect';
+    showSliceViewsLabel.className = 'perspective-panel-show-slice-views noselect';
     showSliceViewsLabel.appendChild(document.createTextNode('Slices'));
     showSliceViewsLabel.appendChild(showSliceViewsCheckbox.element);
     this.element.appendChild(showSliceViewsLabel);
@@ -205,6 +206,9 @@ export class PerspectivePanel extends RenderedDataPanel {
   }
 
   onMousedown(e: MouseEvent) {
+    if (event.target !== this.element) {
+      return;
+    }
     super.onMousedown(e);
     if (!this.navigationState.valid) {
       return;
