@@ -14,23 +14,32 @@
  * limitations under the License.
  */
 
-.overlay {
-  height: 100%;
-  width: 100%;
-  position: fixed;
-  z-index: 99;
-  top: 0;
-  left: 0;
-  background-color: rgba(0, 0, 0, 0.8);
+.describe-key-bindings {
+  overflow-x: hidden;
 }
 
-.overlay-content {
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  transform: translate(-50%, -50%);
-  background-color: white;
-  z-index: 100;
-  color: black;
-  padding: 1em;
+.describe-key-bindings .dl {
+  overflow-y: scroll;
+  max-height: 80vh;
+  overflow-x: hidden;
+}
+
+.describe-key-bindings .definition-outer-container {
+  display: block;
+}
+
+.describe-key-bindings .definition-container {
+  display: inline-block;
+  white-space: nowrap;
+}
+
+.describe-key-bindings .dt {
+  font-family: monospace;
+  font-weight: bold;
+  display: inline-block;
+  width: 20ch;
+}
+
+.describe-key-bindings .dd {
+  display: inline-block;
 }

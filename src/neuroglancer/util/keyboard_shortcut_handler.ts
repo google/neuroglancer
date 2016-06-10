@@ -230,6 +230,18 @@ interface Bindings {
   [keySequenceSpec: string]: string;
 }
 
+function* keySequenceMapEntries(
+              map: Map<string, any>, prefix: string[] = []): IterableIterator<[string[], string]> {
+  for (let [key, value] of map) {
+    let newPrefix = [...prefix, key];
+    if (typeof value === 'string') {
+      yield[newPrefix, value];
+    } else {
+      yield* keySequenceMapEntries(value, newPrefix);
+    }
+  }
+}
+
 export class KeySequenceMap {
   root = new Map<string, any>();
   constructor (bindings: Bindings = null) {
@@ -267,6 +279,10 @@ export class KeySequenceMap {
     for (let key of Object.keys(bindings)) {
       this.bind(key, bindings[key]);
     }
+  }
+
+  entries () {
+    return keySequenceMapEntries(this.root);
   }
 };
 

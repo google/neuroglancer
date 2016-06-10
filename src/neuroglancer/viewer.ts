@@ -17,6 +17,7 @@
 import {AvailableCapacity} from 'neuroglancer/chunk_manager/base';
 import {ChunkQueueManager, ChunkManager} from 'neuroglancer/chunk_manager/frontend';
 import {DisplayContext} from 'neuroglancer/display_context';
+import {KeyBindingHelpDialog} from 'neuroglancer/help/key_bindings';
 import {MouseSelectionState, LayerManager, LayerSelectedValues} from 'neuroglancer/layer';
 import {LayerDialog} from 'neuroglancer/layer_dialog';
 import {LayerPanel} from 'neuroglancer/layer_panel';
@@ -59,8 +60,9 @@ export class Viewer extends RefCounted implements ViewerState {
   chunkManager = new ChunkManager(this.chunkQueueManager);
   keyMap = new KeySequenceMap();
   keyCommands = new Map<string, (this: Viewer) => void>();
-  layerSpecification = new LayerListSpecification(this.layerManager, this.chunkManager, this.worker, this.layerSelectedValues,
-                                                 this.navigationState.voxelSize);
+  layerSpecification = new LayerListSpecification(
+      this.layerManager, this.chunkManager, this.worker, this.layerSelectedValues,
+      this.navigationState.voxelSize);
 
   constructor(public display: DisplayContext) {
     super();
@@ -82,7 +84,7 @@ export class Viewer extends RefCounted implements ViewerState {
 
 
     this.registerSignalBinding(
-      this.navigationState.changed.add(this.handleNavigationStateChanged, this));
+        this.navigationState.changed.add(this.handleNavigationStateChanged, this));
 
     this.layerManager.initializePosition(this.navigationState.position);
     this.layerManager.layersChanged.add(() => {
@@ -105,11 +107,16 @@ export class Viewer extends RefCounted implements ViewerState {
 
     this.addFourPanelLayout();
 
-    this.registerDisposer(new GlobalKeyboardShortcutHandler(this.keyMap, this.onKeyCommand.bind(this)));
+    this.registerDisposer(
+        new GlobalKeyboardShortcutHandler(this.keyMap, this.onKeyCommand.bind(this)));
 
     let {keyCommands} = this;
     keyCommands.set('snap', function() { this.navigationState.pose.snap(); });
-    keyCommands.set('add-layer', function () { this.layerPanel.addLayerMenu(); return true; });
+    keyCommands.set('add-layer', function() {
+      this.layerPanel.addLayerMenu();
+      return true;
+    });
+    keyCommands.set('help', this.showHelpDialog);
 
     for (let i = 1; i <= 9; ++i) {
       keyCommands.set('toggle-layer-' + i, function() {
@@ -136,6 +143,10 @@ export class Viewer extends RefCounted implements ViewerState {
     }
   }
 
+  showHelpDialog() {
+    new KeyBindingHelpDialog(this.keyMap);
+  }
+
   get gl() { return this.display.gl; }
 
   onUpdateDisplay() {
@@ -145,7 +156,7 @@ export class Viewer extends RefCounted implements ViewerState {
 
   onUpdateDisplayFinished() { this.mouseState.updateIfStale(); }
 
-  private onKeyCommand (action: string) {
+  private onKeyCommand(action: string) {
     let command = this.keyCommands.get(action);
     if (command && command.call(this)) {
       return true;
@@ -198,13 +209,13 @@ export class Viewer extends RefCounted implements ViewerState {
       perspectiveViewerState.navigationState.resetZoom();
     });
     registerTrackable(
-      'perspectiveOrientation', perspectiveViewerState.navigationState.pose.orientation);
+        'perspectiveOrientation', perspectiveViewerState.navigationState.pose.orientation);
     registerTrackable(
-      'perspectiveZoom', new TrackableZoomState(perspectiveViewerState.navigationState));
+        'perspectiveZoom', new TrackableZoomState(perspectiveViewerState.navigationState));
     registerTrackable('showSlices', perspectiveViewerState.showSliceViews);
 
     this.keyCommands.set(
-      'toggle-show-slices', function() { perspectiveViewerState.showSliceViews.toggle(); });
+        'toggle-show-slices', function() { perspectiveViewerState.showSliceViews.toggle(); });
 
     let gridContainer = document.createElement('div');
     gridContainer.setAttribute('class', 'gllayoutcontainer noselect');
@@ -239,10 +250,18 @@ export class Viewer extends RefCounted implements ViewerState {
       ]))
     ];
     L.box('column', [
-      element => new PositionStatusPanel(element, this),
-      element => {
-        this.layerPanel = new LayerPanel(element, this.layerSpecification);
-      },
+      L.box('row', [
+        L.withFlex(1, element => new PositionStatusPanel(element, this)),
+        element => {
+          let button = document.createElement('button');
+          button.className = 'help-button';
+          button.textContent = '?';
+          button.title = 'Help';
+          element.appendChild(button);
+          this.registerEventListener(button, 'click', () => { this.showHelpDialog(); });
+        },
+      ]),
+      element => { this.layerPanel = new LayerPanel(element, this.layerSpecification); },
       L.withFlex(1, L.box('row', mainDisplayContents))
     ])(gridContainer);
     this.display.onResize();

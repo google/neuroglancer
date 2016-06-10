@@ -57,3 +57,7 @@
 .gllayoutcell[isActivePanel=true] {
   border-color: white;
 }
+
+.help-button {
+  text-weight: bold;
+}
