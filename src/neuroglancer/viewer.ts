@@ -46,6 +46,7 @@ export class Viewer extends RefCounted implements ViewerState {
   mouseState = new MouseSelectionState();
   layerManager = this.registerDisposer(new LayerManager());
   showAxisLines = new TrackableBoolean(true, true);
+  showScaleBar = new TrackableBoolean(true, true);
   layerPanel: LayerPanel;
   layerSelectedValues =
       this.registerDisposer(new LayerSelectedValues(this.layerManager, this.mouseState));
@@ -81,7 +82,7 @@ export class Viewer extends RefCounted implements ViewerState {
     registerTrackable('layers', this.layerSpecification);
     registerTrackable('navigation', this.navigationState);
     registerTrackable('showAxisLines', this.showAxisLines);
-
+    registerTrackable('showScaleBar', this.showScaleBar);
 
     this.registerSignalBinding(
         this.navigationState.changed.add(this.handleNavigationStateChanged, this));
@@ -134,6 +135,7 @@ export class Viewer extends RefCounted implements ViewerState {
     }
 
     keyCommands.set('toggle-axis-lines', function() { this.showAxisLines.toggle(); });
+    keyCommands.set('toggle-scale-bar', function() { this.showScaleBar.toggle(); });
 
 
     // This needs to happen after the global keyboard shortcut handler for the viewer has been
@@ -204,6 +206,23 @@ export class Viewer extends RefCounted implements ViewerState {
       showSliceViews: new TrackableBoolean(true, true),
       showAxisLines: this.showAxisLines,
     };
+
+    let sliceViewerState = {
+      mouseState: this.mouseState,
+      layerManager: this.layerManager,
+      navigationState: this.navigationState,
+      showAxisLines: this.showAxisLines,
+      showScaleBar: this.showScaleBar,
+    };
+
+    let sliceViewerStateWithoutScaleBar = {
+      mouseState: this.mouseState,
+      layerManager: this.layerManager,
+      navigationState: this.navigationState,
+      showAxisLines: this.showAxisLines,
+      showScaleBar: new TrackableBoolean(false, false),
+    };
+
     this.resetInitiated.add(() => {
       perspectiveViewerState.navigationState.pose.orientation.reset();
       perspectiveViewerState.navigationState.resetZoom();
@@ -226,11 +245,11 @@ export class Viewer extends RefCounted implements ViewerState {
         L.withFlex(1, L.box('row', [
           L.withFlex(1, element => {
             element.className = 'gllayoutcell noselect';
-            display.panels.add(new SliceViewPanel(display, element, sliceViews[0], this));
+            display.panels.add(new SliceViewPanel(display, element, sliceViews[0], sliceViewerState));
           }),
           L.withFlex(1, element => {
             element.className = 'gllayoutcell noselect';
-            display.panels.add(new SliceViewPanel(display, element, sliceViews[1], this));
+            display.panels.add(new SliceViewPanel(display, element, sliceViews[1], sliceViewerStateWithoutScaleBar));
           })
         ])),
         L.withFlex(1, L.box('row', [
@@ -244,7 +263,7 @@ export class Viewer extends RefCounted implements ViewerState {
           }),
           L.withFlex(1, element => {
             element.className = 'gllayoutcell noselect';
-            display.panels.add(new SliceViewPanel(display, element, sliceViews[2], this));
+            display.panels.add(new SliceViewPanel(display, element, sliceViews[2], sliceViewerStateWithoutScaleBar));
           })
         ])),
       ]))

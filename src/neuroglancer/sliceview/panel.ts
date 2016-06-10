@@ -17,15 +17,19 @@
 import {AxesLineHelper} from 'neuroglancer/axes_lines';
 import {DisplayContext} from 'neuroglancer/display_context';
 import {MouseSelectionState, VisibleRenderLayerTracker, RenderLayer} from 'neuroglancer/layer';
-import {RenderedDataPanel} from 'neuroglancer/rendered_data_panel';
 import {PickIDManager} from 'neuroglancer/object_picking';
+import {RenderedDataPanel} from 'neuroglancer/rendered_data_panel';
 import {SliceView, SliceViewRenderHelper} from 'neuroglancer/sliceview/frontend';
+import {TrackableBoolean, ElementVisibilityFromTrackableBoolean} from 'neuroglancer/trackable_boolean';
 import {mat4, vec3, vec4, Mat4, AXES_NAMES, identityMat4} from 'neuroglancer/util/geom';
 import {startRelativeMouseDrag} from 'neuroglancer/util/mouse_drag';
 import {ViewerState} from 'neuroglancer/viewer_state';
 import {OffscreenFramebuffer, OffscreenCopyHelper} from 'neuroglancer/webgl/offscreen';
 import {ShaderBuilder} from 'neuroglancer/webgl/shader';
+import {ScaleBarWidget} from 'neuroglancer/widget/scale_bar';
 import {Signal} from 'signals';
+
+export interface SliceViewerState extends ViewerState { showScaleBar: TrackableBoolean; }
 
 const keyCommands = new Map<string, (this: SliceViewPanel) => void>();
 
@@ -121,13 +125,21 @@ export class SliceViewPanel extends RenderedDataPanel {
 
   private offscreenCopyHelper = OffscreenCopyHelper.get(this.gl);
 
+  private scaleBarWidget = this.registerDisposer(new ScaleBarWidget());
+
   constructor(
       context: DisplayContext, element: HTMLElement, public sliceView: SliceView,
-      viewer: ViewerState) {
+      viewer: SliceViewerState) {
     super(context, element, viewer);
 
     this.registerSignalBinding(sliceView.viewChanged.add(context.scheduleRedraw, context));
     this.registerSignalBinding(viewer.showAxisLines.changed.add(() => { this.scheduleRedraw(); }));
+
+    {
+      let scaleBar = this.scaleBarWidget.element;
+      this.registerDisposer(new ElementVisibilityFromTrackableBoolean(viewer.showScaleBar, scaleBar));
+      this.element.appendChild(scaleBar);
+    }
   }
 
   onKeyCommand(action: string) {
@@ -200,6 +212,15 @@ export class SliceViewPanel extends RenderedDataPanel {
     // Draw the texture over the whole viewport.
     this.setGLViewport();
     this.offscreenCopyHelper.draw(this.offscreenFramebuffer.dataTextures[OffscreenTextures.COLOR]);
+
+    // Update the scale bar if needed.
+    {
+      let {scaleBarWidget} = this;
+      let {dimensions} = scaleBarWidget;
+      dimensions.targetLengthInPixels = Math.min(width / 4, 100);
+      dimensions.nanometersPerPixel = sliceView.pixelSize;
+      scaleBarWidget.update();
+    }
   }
 
   onResize() {

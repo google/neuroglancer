@@ -72,3 +72,14 @@ export class TrackableBooleanCheckbox extends RefCounted {
   }
 };
 
+export class ElementVisibilityFromTrackableBoolean extends RefCounted {
+  constructor (public model: TrackableBoolean, public element: HTMLElement) {
+    super();
+    this.updateVisibility();
+    this.registerSignalBinding(model.changed.add(() => { this.updateVisibility(); }));
+  }
+
+  updateVisibility() {
+    this.element.style.display = this.model.value ? '' : 'none';
+  }
+};

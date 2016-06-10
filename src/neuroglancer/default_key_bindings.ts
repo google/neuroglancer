@@ -39,6 +39,7 @@ export function makeDefaultKeyBindings(keyMap: KeySequenceMap) {
   keyMap.bind('keyl', 'recolor');
   keyMap.bind('keyx', 'clear-segments');
   keyMap.bind('keys', 'toggle-show-slices');
+  keyMap.bind('keyb', 'toggle-scale-bar');
   keyMap.bind('keya', 'toggle-axis-lines');
 
   for (let i = 1; i <= 9; ++i) {
