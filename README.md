@@ -31,7 +31,7 @@ Neuroglancer itself is purely a client-side program, but it depends on data bein
 
 # Key bindings
 
-See [src/main.ts](/src/main.ts).
+See [src/neuroglancer/default_key_bindings.ts](src/neuroglancer/default_key_bindings.ts).
 
 # Mouse bindings
 
@@ -124,11 +124,11 @@ node.js is required to build the viewer.
 
    `npm test`
    
-6. See [package.json](/package.json) for other commands available.
+6. See [package.json](package.json) for other commands available.
 
 # Creating a dependent project
 
-See [examples/dependent-project](/examples/dependent-project).
+See [examples/dependent-project](examples/dependent-project).
 
 # License
 
