@@ -22,6 +22,10 @@ export type RpcId = number;
 
 const IS_WORKER = WORKER;
 
+const DEBUG = false;
+
+const DEBUG_MESSAGES = false;
+
 var handlers = new Map<string, RPCHandler>();
 
 export function registerRPC (key: string, handler: RPCHandler) {
@@ -39,9 +43,14 @@ export class RPC {
   constructor (public target: RPCTarget) {
     target.onmessage = (e) => {
       let data = e.data;
+      if (DEBUG_MESSAGES) {
+        console.log('Received message', data);
+      }
       handlers.get(data.functionName).call(this, data);
     };
   }
+
+  get numObjects() { return this.objects.size; }
 
   set(id: RpcId, value: any) {
     this.objects.set(id, value);
@@ -62,6 +71,9 @@ export class RPC {
   }
   invoke (name: string, x: any, transfers?: any[]) {
     x.functionName = name;
+    if (DEBUG_MESSAGES) {
+      console.trace('Sending message', x);
+    }
     this.target.postMessage(x, transfers);
   }
   newId () {
@@ -92,14 +104,8 @@ export class SharedObject extends RefCounted {
     rpc.invoke('SharedObject.new', options);
   }
 
-  disposed () {
-    let {rpc} = this;
-    if (rpc != null) {
-      this.rpc = null;
-      let {rpcId} = this;
-      rpc.delete(rpcId);
-      rpc.invoke('SharedObject.dispose', {'id': rpcId});
-    }
+  dispose () {
+    super.dispose();
   }
 
   /**
@@ -125,8 +131,11 @@ export class SharedObject extends RefCounted {
    * Precondition: this.isOwner === true.
    */
   protected ownerDispose () {
-    super.refCountReachedZero();
+    if (DEBUG) {
+      console.log(`[${IS_WORKER}] #rpc object = ${this.rpc.numObjects}`);
+    }
     let {rpc, rpcId} = this;
+    super.refCountReachedZero();
     rpc.delete(rpcId);
     rpc.invoke('SharedObject.dispose', {'id': rpcId});
   }
@@ -163,7 +172,13 @@ export interface SharedObjectConstructor {
 
 registerRPC('SharedObject.dispose', function(x) {
   let obj = <SharedObject>this.get(x['id']);
-  obj.dispose();
+  if (obj.refCount !== 0) {
+    throw new Error(`Attempted to dispose object with non-zero reference count.`);
+  }
+  if (DEBUG) {
+    console.log(`[${IS_WORKER}] #rpc objects: ${this.numObjects}`);
+  }
+  obj.disposed();
   this.delete(obj.rpcId);
   obj.rpcId = null;
   obj.rpc = null;

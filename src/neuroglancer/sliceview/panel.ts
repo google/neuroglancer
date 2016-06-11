@@ -132,6 +132,7 @@ export class SliceViewPanel extends RenderedDataPanel {
       viewer: SliceViewerState) {
     super(context, element, viewer);
 
+    this.registerDisposer(sliceView);
     this.registerSignalBinding(sliceView.viewChanged.add(context.scheduleRedraw, context));
     this.registerSignalBinding(viewer.showAxisLines.changed.add(() => { this.scheduleRedraw(); }));
 

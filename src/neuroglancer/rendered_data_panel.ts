@@ -20,6 +20,8 @@ import {getWheelZoomAmount} from 'neuroglancer/util/wheel_zoom';
 import {ViewerState} from 'neuroglancer/viewer_state';
 import {vec3} from 'neuroglancer/util/geom';
 
+require('./rendered_data_panel.css');
+
 export abstract class RenderedDataPanel extends RenderedPanel {
   // Last mouse position within the panel.
   mouseX = 0;
@@ -31,6 +33,8 @@ export abstract class RenderedDataPanel extends RenderedPanel {
 
   constructor(context: DisplayContext, element: HTMLElement, public viewer: ViewerState) {
     super(context, element);
+
+    element.classList.add('rendered-data-panel');
 
     this.registerEventListener(element, 'mousemove', this.onMousemove.bind(this));
     this.registerEventListener(element, 'mouseleave', this.onMouseout.bind(this));

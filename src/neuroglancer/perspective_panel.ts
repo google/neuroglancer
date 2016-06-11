@@ -178,6 +178,13 @@ export class PerspectivePanel extends RenderedDataPanel {
     this.context.scheduleRedraw();
   }
 
+  disposed () {
+    for (let sliceView of this.sliceViews) {
+      sliceView.dispose();
+    }
+    this.sliceViews.clear();
+  }
+
   updateMouseState(mouseState: MouseSelectionState): boolean {
     mouseState.pickedRenderLayer = null;
     if (!this.navigationState.valid) {

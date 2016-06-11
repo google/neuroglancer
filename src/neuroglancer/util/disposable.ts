@@ -48,7 +48,7 @@ export class RefCounted implements Disposable {
       this.disposers = null;
     }
   }
-  protected disposed() {}
+  disposed() {}
   registerDisposer<T extends Disposer>(f: T): T {
     let {disposers} = this;
     if (disposers == null) {

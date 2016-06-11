@@ -30,8 +30,10 @@ import {PositionStatusPanel} from 'neuroglancer/position_status_panel';
 import {SliceView} from 'neuroglancer/sliceview/frontend';
 import {SliceViewPanel} from 'neuroglancer/sliceview/panel';
 import {TrackableBoolean} from 'neuroglancer/trackable_boolean';
+import {TrackableValue} from 'neuroglancer/trackable_value';
 import {delayHashUpdate, registerTrackable} from 'neuroglancer/url_hash_state';
 import {RefCounted} from 'neuroglancer/util/disposable';
+import {removeChildren} from 'neuroglancer/util/dom';
 import {mat4, Mat4} from 'neuroglancer/util/geom';
 import {GlobalKeyboardShortcutHandler, KeySequenceMap} from 'neuroglancer/util/keyboard_shortcut_handler';
 import {ViewerState} from 'neuroglancer/viewer_state';
@@ -41,12 +43,129 @@ import {Signal} from 'signals';
 require('./viewer.css');
 require('neuroglancer/noselect.css');
 
+export class FourPanelLayout extends RefCounted {
+  constructor (public rootElement: HTMLElement, public viewer: Viewer) {
+    super();
+
+    let sliceViews = viewer.makeOrthogonalSliceViews();
+    let {display} = viewer;
+
+    let perspectiveViewerState = {
+      mouseState: viewer.mouseState,
+      layerManager: viewer.layerManager,
+      navigationState: viewer.perspectiveNavigationState,
+      showSliceViews: viewer.showPerspectiveSliceViews,
+      showAxisLines: viewer.showAxisLines,
+    };
+
+    let sliceViewerState = {
+      mouseState: viewer.mouseState,
+      layerManager: viewer.layerManager,
+      navigationState: viewer.navigationState,
+      showAxisLines: viewer.showAxisLines,
+      showScaleBar: viewer.showScaleBar,
+    };
+
+    let sliceViewerStateWithoutScaleBar = {
+      mouseState: viewer.mouseState,
+      layerManager: viewer.layerManager,
+      navigationState: viewer.navigationState,
+      showAxisLines: viewer.showAxisLines,
+      showScaleBar: new TrackableBoolean(false, false),
+    };
+    let mainDisplayContents = [
+      L.withFlex(1, L.box('column', [
+        L.withFlex(1, L.box('row', [
+          L.withFlex(1, element => {
+            element.className = 'gllayoutcell noselect';
+            this.registerDisposer(new SliceViewPanel(display, element, sliceViews[0], sliceViewerState));
+          }),
+          L.withFlex(1, element => {
+            element.className = 'gllayoutcell noselect';
+            this.registerDisposer(new SliceViewPanel(display, element, sliceViews[1], sliceViewerStateWithoutScaleBar));
+          })
+        ])),
+        L.withFlex(1, L.box('row', [
+          L.withFlex(1, element => {
+            element.className = 'gllayoutcell noselect';
+            let perspectivePanel = this.registerDisposer(
+                new PerspectivePanel(display, element, perspectiveViewerState));
+            for (let sliceView of sliceViews) {
+              perspectivePanel.sliceViews.add(sliceView.addRef());
+            }
+          }),
+          L.withFlex(1, element => {
+            element.className = 'gllayoutcell noselect';
+            this.registerDisposer(new SliceViewPanel(display, element, sliceViews[2], sliceViewerStateWithoutScaleBar));
+          })
+        ])),
+      ]))
+    ];
+    L.box('row', mainDisplayContents)(rootElement);
+    display.onResize();
+  }
+
+  disposed () {
+    removeChildren(this.rootElement);
+  }
+};
+
+export class SinglePanelLayout extends RefCounted {
+  constructor (public rootElement: HTMLElement, public viewer: Viewer) {
+    super();
+    let sliceView = viewer.makeSliceView();
+    let sliceViewerState = {
+      mouseState: viewer.mouseState,
+      layerManager: viewer.layerManager,
+      navigationState: viewer.navigationState,
+      showAxisLines: viewer.showAxisLines,
+      showScaleBar: viewer.showScaleBar,
+    };
+
+    L.box('row', [L.withFlex(1, element => {
+      this.registerDisposer(
+          new SliceViewPanel(viewer.display, element, sliceView, sliceViewerState));
+    })])(rootElement);
+    viewer.display.onResize();
+  }
+
+  disposed () {
+    removeChildren(this.rootElement);
+  }
+};
+
+interface DataDisplayLayout extends RefCounted {
+  rootElement: HTMLElement;
+};
+
+export const LAYOUTS: [string, (element: HTMLElement, viewer: Viewer) => DataDisplayLayout][] = [
+  ['4panel', (element, viewer) => new FourPanelLayout(element, viewer)],
+  ['xy', (element, viewer) => new SinglePanelLayout(element, viewer)],
+];
+
+export function getLayoutByName(obj: any) {
+  let layout = LAYOUTS.find(x => x[0] === obj);
+  if (layout === undefined) {
+    throw new Error(`Invalid layout name: ${JSON.stringify(obj)}.`);
+  }
+  return layout;
+}
+
+export function validateLayoutName(obj: any) {
+  let layout = getLayoutByName(obj);
+  return layout[0];
+}
+
 export class Viewer extends RefCounted implements ViewerState {
   navigationState = this.registerDisposer(new NavigationState());
+  perspectiveNavigationState = new NavigationState(new Pose(this.navigationState.position), 1);
   mouseState = new MouseSelectionState();
   layerManager = this.registerDisposer(new LayerManager());
   showAxisLines = new TrackableBoolean(true, true);
+  dataDisplayLayout: DataDisplayLayout;
   showScaleBar = new TrackableBoolean(true, true);
+  showPerspectiveSliceViews = new TrackableBoolean(true, true);
+
   layerPanel: LayerPanel;
   layerSelectedValues =
       this.registerDisposer(new LayerSelectedValues(this.layerManager, this.mouseState));
@@ -63,7 +182,8 @@ export class Viewer extends RefCounted implements ViewerState {
   keyCommands = new Map<string, (this: Viewer) => void>();
   layerSpecification = new LayerListSpecification(
       this.layerManager, this.chunkManager, this.worker, this.layerSelectedValues,
-      this.navigationState.voxelSize);
+    this.navigationState.voxelSize);
+  layoutName = new TrackableValue<string>(LAYOUTS[0][0], validateLayoutName, LAYOUTS[0][0]);
 
   constructor(public display: DisplayContext) {
     super();
@@ -79,10 +199,18 @@ export class Viewer extends RefCounted implements ViewerState {
       return false;
     });
 
+
     registerTrackable('layers', this.layerSpecification);
     registerTrackable('navigation', this.navigationState);
     registerTrackable('showAxisLines', this.showAxisLines);
     registerTrackable('showScaleBar', this.showScaleBar);
+
+    registerTrackable(
+        'perspectiveOrientation', this.perspectiveNavigationState.pose.orientation);
+    registerTrackable(
+        'perspectiveZoom', new TrackableZoomState(this.perspectiveNavigationState));
+    registerTrackable('showSlices', this.showPerspectiveSliceViews);
+    registerTrackable('layout', this.layoutName);
 
     this.registerSignalBinding(
         this.navigationState.changed.add(this.handleNavigationStateChanged, this));
@@ -93,6 +221,8 @@ export class Viewer extends RefCounted implements ViewerState {
         // No layers, reset state.
         this.navigationState.voxelSize.reset();
         this.navigationState.reset();
+        this.perspectiveNavigationState.pose.orientation.reset();
+        this.perspectiveNavigationState.resetZoom();
         this.resetInitiated.dispatch();
         this.layerManager.initializePosition(this.navigationState.position);
         if (!overlaysOpen) {
@@ -106,12 +236,21 @@ export class Viewer extends RefCounted implements ViewerState {
 
     this.chunkQueueManager.visibleChunksChanged.add(display.scheduleRedraw, display);
 
-    this.addFourPanelLayout();
+    this.makeUI();
 
     this.registerDisposer(
-        new GlobalKeyboardShortcutHandler(this.keyMap, this.onKeyCommand.bind(this)));
+      new GlobalKeyboardShortcutHandler(this.keyMap, this.onKeyCommand.bind(this)));
+
+    this.layoutName.changed.add(() => {
+      if (this.dataDisplayLayout !== undefined) {
+        let element = this.dataDisplayLayout.rootElement;
+        this.dataDisplayLayout.dispose();
+        this.createDataDisplayLayout(element);
+      }
+    });
 
     let {keyCommands} = this;
+    keyCommands.set('toggle-layout', function() { this.toggleLayout(); });
     keyCommands.set('snap', function() { this.navigationState.pose.snap(); });
     keyCommands.set('add-layer', function() {
       this.layerPanel.addLayerMenu();
@@ -136,13 +275,51 @@ export class Viewer extends RefCounted implements ViewerState {
 
     keyCommands.set('toggle-axis-lines', function() { this.showAxisLines.toggle(); });
     keyCommands.set('toggle-scale-bar', function() { this.showScaleBar.toggle(); });
-
+    this.keyCommands.set(
+        'toggle-show-slices', function() { this.showPerspectiveSliceViews.toggle(); });
 
     // This needs to happen after the global keyboard shortcut handler for the viewer has been
     // registered, so that it has priority.
     if (this.layerManager.managedLayers.length === 0) {
       new LayerDialog(this.layerSpecification);
     }
+  }
+
+  private makeUI () {
+    let {display} = this;
+    let gridContainer = document.createElement('div');
+    gridContainer.setAttribute('class', 'gllayoutcontainer noselect');
+    let {container} = display;
+    container.appendChild(gridContainer);
+
+    L.box('column', [
+      L.box('row', [
+        L.withFlex(1, element => new PositionStatusPanel(element, this)),
+        element => {
+          let button = document.createElement('button');
+          button.className = 'help-button';
+          button.textContent = '?';
+          button.title = 'Help';
+          element.appendChild(button);
+          this.registerEventListener(button, 'click', () => { this.showHelpDialog(); });
+        },
+      ]),
+      element => { this.layerPanel = new LayerPanel(element, this.layerSpecification); },
+      L.withFlex(1, element => { this.createDataDisplayLayout(element); }),
+    ])(gridContainer);
+    this.display.onResize();
+  }
+
+  createDataDisplayLayout(element: HTMLElement) {
+    let layoutCreator = getLayoutByName(this.layoutName.value)[1];
+    this.dataDisplayLayout = layoutCreator(element, this);
+  }
+
+  toggleLayout() {
+    let existingLayout = getLayoutByName(this.layoutName.value);
+    let layoutIndex = LAYOUTS.indexOf(existingLayout);
+    let newLayout = LAYOUTS[(layoutIndex + 1) % LAYOUTS.length];
+    this.layoutName.value = newLayout[0];
   }
 
   showHelpDialog() {
@@ -170,13 +347,17 @@ export class Viewer extends RefCounted implements ViewerState {
     return false;
   }
 
+  makeSliceView(mat?: Mat4) {
+    let sliceView = new SliceView(this.gl, this.chunkManager, this.layerManager);
+    sliceView.fixRelativeTo(this.navigationState, mat);
+    return sliceView;
+  }
+
   makeOrthogonalSliceViews() {
     let {gl, layerManager} = this;
     let sliceViews = new Array<SliceView>();
     let addSliceView = (mat?: Mat4) => {
-      let sliceView = new SliceView(gl, this.chunkManager, layerManager);
-      sliceViews.push(sliceView);
-      sliceView.fixRelativeTo(this.navigationState, mat);
+      sliceViews.push(this.makeSliceView(mat));
     };
     addSliceView();
     {
@@ -193,97 +374,6 @@ export class Viewer extends RefCounted implements ViewerState {
       addSliceView(mat);
     }
     return sliceViews;
-  }
-
-  addFourPanelLayout() {
-    let sliceViews = this.makeOrthogonalSliceViews();
-    let {display} = this;
-
-    let perspectiveViewerState = {
-      mouseState: this.mouseState,
-      layerManager: this.layerManager,
-      navigationState: new NavigationState(new Pose(this.navigationState.position), 1),
-      showSliceViews: new TrackableBoolean(true, true),
-      showAxisLines: this.showAxisLines,
-    };
-
-    let sliceViewerState = {
-      mouseState: this.mouseState,
-      layerManager: this.layerManager,
-      navigationState: this.navigationState,
-      showAxisLines: this.showAxisLines,
-      showScaleBar: this.showScaleBar,
-    };
-
-    let sliceViewerStateWithoutScaleBar = {
-      mouseState: this.mouseState,
-      layerManager: this.layerManager,
-      navigationState: this.navigationState,
-      showAxisLines: this.showAxisLines,
-      showScaleBar: new TrackableBoolean(false, false),
-    };
-
-    this.resetInitiated.add(() => {
-      perspectiveViewerState.navigationState.pose.orientation.reset();
-      perspectiveViewerState.navigationState.resetZoom();
-    });
-    registerTrackable(
-        'perspectiveOrientation', perspectiveViewerState.navigationState.pose.orientation);
-    registerTrackable(
-        'perspectiveZoom', new TrackableZoomState(perspectiveViewerState.navigationState));
-    registerTrackable('showSlices', perspectiveViewerState.showSliceViews);
-
-    this.keyCommands.set(
-        'toggle-show-slices', function() { perspectiveViewerState.showSliceViews.toggle(); });
-
-    let gridContainer = document.createElement('div');
-    gridContainer.setAttribute('class', 'gllayoutcontainer noselect');
-    let {container} = display;
-    container.appendChild(gridContainer);
-    let mainDisplayContents = [
-      L.withFlex(1, L.box('column', [
-        L.withFlex(1, L.box('row', [
-          L.withFlex(1, element => {
-            element.className = 'gllayoutcell noselect';
-            display.panels.add(new SliceViewPanel(display, element, sliceViews[0], sliceViewerState));
-          }),
-          L.withFlex(1, element => {
-            element.className = 'gllayoutcell noselect';
-            display.panels.add(new SliceViewPanel(display, element, sliceViews[1], sliceViewerStateWithoutScaleBar));
-          })
-        ])),
-        L.withFlex(1, L.box('row', [
-          L.withFlex(1, element => {
-            element.className = 'gllayoutcell noselect';
-            let perspectivePanel = new PerspectivePanel(display, element, perspectiveViewerState);
-            for (let sliceView of sliceViews) {
-              perspectivePanel.sliceViews.add(sliceView);
-            }
-            display.panels.add(perspectivePanel);
-          }),
-          L.withFlex(1, element => {
-            element.className = 'gllayoutcell noselect';
-            display.panels.add(new SliceViewPanel(display, element, sliceViews[2], sliceViewerStateWithoutScaleBar));
-          })
-        ])),
-      ]))
-    ];
-    L.box('column', [
-      L.box('row', [
-        L.withFlex(1, element => new PositionStatusPanel(element, this)),
-        element => {
-          let button = document.createElement('button');
-          button.className = 'help-button';
-          button.textContent = '?';
-          button.title = 'Help';
-          element.appendChild(button);
-          this.registerEventListener(button, 'click', () => { this.showHelpDialog(); });
-        },
-      ]),
-      element => { this.layerPanel = new LayerPanel(element, this.layerSpecification); },
-      L.withFlex(1, L.box('row', mainDisplayContents))
-    ])(gridContainer);
-    this.display.onResize();
   }
 
   private handleNavigationStateChanged() {
