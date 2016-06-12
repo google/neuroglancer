@@ -38,8 +38,8 @@ for (let axis = 0; axis < 3; ++axis) {
       offset[0] = 0;
       offset[1] = 0;
       offset[2] = 0;
-      offset[axis] = navigationState.position.voxelSize.size[axis] * sign;
-      navigationState.pose.translateRelative(offset);
+      offset[axis] = sign;
+      navigationState.pose.translateVoxelsRelative(offset);
     });
   }
 }
@@ -112,8 +112,8 @@ export abstract class RenderedDataPanel extends RenderedPanel {
       let offset = tempVec3;
       offset[0] = 0;
       offset[1] = 0;
-      offset[2] = navigationState.position.voxelSize.size[2] * (e.wheelDelta > 0 ? 1 : -1) * (e.shiftKey ? 10 : 1);
-      navigationState.pose.translateRelative(offset);
+      offset[2] = (e.wheelDelta > 0 ? 1 : -1) * (e.shiftKey ? 10 : 1);
+      navigationState.pose.translateVoxelsRelative(offset);
     }
     e.preventDefault();
   }

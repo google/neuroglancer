@@ -393,6 +393,16 @@ export class Pose extends RefCounted {
     vec3.add(this.position.spatialCoordinates, this.position.spatialCoordinates, temp);
     this.position.changed.dispatch();
   }
+  translateVoxelsRelative(translation: Vec3) {
+    if (!this.valid) {
+      return;
+    }
+    var temp = vec3.create();
+    vec3.transformQuat(temp, translation, this.orientation.orientation);
+    vec3.multiply(temp, temp, this.position.voxelSize.size);
+    vec3.add(this.position.spatialCoordinates, this.position.spatialCoordinates, temp);
+    this.position.changed.dispatch();
+  }
   rotateRelative(axis: Vec3, angle: number) {
     var temp = quat.create();
     quat.setAxisAngle(temp, axis, angle);
