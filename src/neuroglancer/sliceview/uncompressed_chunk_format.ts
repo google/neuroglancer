@@ -91,6 +91,13 @@ class ChunkFormat extends SingleTextureChunkFormat<TextureLayout> {
         this.arrayElementsPerTexel = 1;
         this.arrayConstructor = Uint8Array;
         break;
+      case DataType.UINT16:
+        this.texelsPerElement = 1;
+        this.textureFormat = gl.LUMINANCE_ALPHA;
+        this.texelType = gl.UNSIGNED_BYTE;
+        this.arrayElementsPerTexel = 2;
+        this.arrayConstructor = Uint8Array;
+        break;
       case DataType.UINT64:
         this.texelsPerElement = 2;
         this.textureFormat = gl.RGBA;
@@ -133,6 +140,18 @@ vec2 getDataTextureCoords () {
         builder.addFragmentCode(`
 float getDataValue () {
   return texture2D(uVolumeChunkSampler, getDataTextureCoords()).x;
+}
+`);
+        break;
+      case DataType.UINT16:
+        builder.addFragmentCode(glsl_uint64);
+        builder.addFragmentCode(`
+uint64_t getDataValue () {
+  uint64_t value;
+  vec2 texCoords = getDataTextureCoords();
+  value.low = vec4(texture2D(uVolumeChunkSampler, texCoords).xw, 0.0, 0.0);
+  value.high = vec4(0, 0, 0, 0);
+  return value;
 }
 `);
         break;
@@ -223,6 +242,7 @@ export class UncompressedVolumeChunk extends SingleTextureVolumeChunk<Uint8Array
     let data = this.data;
     switch (dataType) {
       case DataType.UINT8:
+      case DataType.UINT16:
       case DataType.UINT32:
         return data[index];
       case DataType.UINT64: {

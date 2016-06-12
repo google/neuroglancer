@@ -551,9 +551,10 @@ export class SliceViewBase extends SharedObject {
  */
 export enum DataType {
   UINT8 = 0,
-  FLOAT32 = 1,
-  UINT64 = 2,
-  UINT32 = 3,
+  UINT16 = 1,
+  UINT32 = 2,
+  UINT64 = 3,
+  FLOAT32 = 4,
 }
 
 interface DataTypeBytes {
@@ -562,9 +563,10 @@ interface DataTypeBytes {
 
 export const DATA_TYPE_BYTES: DataTypeBytes = [];
 DATA_TYPE_BYTES[DataType.UINT8] = 1;
+DATA_TYPE_BYTES[DataType.UINT16] = 2;
 DATA_TYPE_BYTES[DataType.UINT32] = 4;
-DATA_TYPE_BYTES[DataType.FLOAT32] = 4;
 DATA_TYPE_BYTES[DataType.UINT64] = 8;
+DATA_TYPE_BYTES[DataType.FLOAT32] = 4;
 
 /**
  * Specifies the interpretation of volumetric data.

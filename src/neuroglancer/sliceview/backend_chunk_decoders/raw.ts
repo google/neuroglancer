@@ -33,12 +33,15 @@ export function decodeRawChunk(chunk: VolumeChunk, response: ArrayBuffer) {
   case DataType.UINT8:
     data = new Uint8Array(response);
     break;
-  case DataType.FLOAT32:
-    data = new Float32Array(response);
+  case DataType.UINT16:
+    data = new Uint16Array(response);
     break;
   case DataType.UINT32:
   case DataType.UINT64:
     data = new Uint32Array(response);
+    break;
+  case DataType.FLOAT32:
+    data = new Float32Array(response);
     break;
   }
   postProcessRawData(chunk, data);
