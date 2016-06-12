@@ -14,11 +14,10 @@
  * limitations under the License.
  */
 
-import {Signal} from 'signals';
-
 import {RefCounted} from 'neuroglancer/util/disposable';
 import {Vec3, Quat, Mat4, mat3, vec3, quat, mat4} from 'neuroglancer/util/geom';
 import {parseFiniteVec} from 'neuroglancer/util/json';
+import {Signal} from 'signals';
 
 export class VoxelSize extends RefCounted {
   size: Vec3;
@@ -230,9 +229,10 @@ function quaternionIsIdentity(quat: Quat) {
   return quat[0] === 0 && quat[1] === 0 && quat[2] === 0 && quat[3] === 1;
 }
 
-class OrientationState extends RefCounted {
+export class OrientationState extends RefCounted {
   orientation: Quat;
   changed = new Signal();
+
   constructor(orientation?: Quat) {
     super();
     if (orientation == null) {
@@ -287,6 +287,35 @@ class OrientationState extends RefCounted {
     // console.log(mat);
     quat.fromMat3(this.orientation, mat);
     this.changed.dispatch();
+  }
+
+  /**
+   * Returns a new OrientationState with orientation fixed to peerToSelf * peer.orientation.  Any
+   * changes to the returned OrientationState will cause a corresponding change in peer, and vice
+   * versa.
+   */
+  static makeRelative(peer: OrientationState, peerToSelf: Quat) {
+    let self = new OrientationState(quat.multiply(quat.create(), peer.orientation, peerToSelf));
+    let updatingPeer = false;
+    self.registerSignalBinding(peer.changed.add(() => {
+      if (!updatingPeer) {
+        updatingSelf = true;
+        quat.multiply(self.orientation, peer.orientation, peerToSelf);
+        self.changed.dispatch();
+        updatingSelf = false;
+      }
+    }));
+    let updatingSelf = false;
+    const selfToPeer = quat.invert(quat.create(), peerToSelf);
+    self.registerSignalBinding(self.changed.add(() => {
+      if (!updatingSelf) {
+        updatingPeer = true;
+        quat.multiply(peer.orientation, self.orientation, selfToPeer);
+        peer.changed.dispatch();
+        updatingPeer = false;
+      }
+    }));
+    return self;
   }
 };
 
@@ -380,25 +409,62 @@ export class Pose extends RefCounted {
   }
 };
 
-export class NavigationState extends RefCounted {
-  pose: Pose;
-  zoomFactor: number;
+export class TrackableZoomState {
+  constructor(private value_ = Number.NaN) {}
+  get value() { return this.value_; }
+  set value(newValue: number) {
+    if (newValue !== this.value_) {
+      this.value_ = newValue;
+      this.changed.dispatch();
+    }
+  }
   changed = new Signal();
-  constructor(pose?: Pose, zoomFactor?: number) {
-    super();
-    if (pose === undefined) {
-      pose = new Pose();
-    }
-    this.pose = pose;
 
-    if (zoomFactor === undefined) {
-      zoomFactor = Number.NaN;
+  toJSON () {
+    let {value_} = this;
+    if (Number.isNaN(value_)) {
+      return undefined;
     }
-    this.zoomFactor = zoomFactor;
+    return value_;
+  }
+
+  restoreState(obj: any) {
+    if (typeof obj === 'number' && Number.isFinite(obj) && obj > 0) {
+      this.value = obj;
+    } else {
+      this.value = Number.NaN;
+    }
+  }
+
+  reset() {
+    this.value = Number.NaN;
+  }
+
+  zoomBy(factor: number) {
+    let {value_} = this;
+    if (Number.isNaN(value_)) {
+      return;
+    }
+    this.value = value_ * factor;
+  }
+};
+
+export class NavigationState extends RefCounted {
+  changed = new Signal();
+  zoomFactor: TrackableZoomState;
+
+  constructor(public pose = new Pose(), zoomFactor: number|TrackableZoomState = Number.NaN) {
+    super();
+    if (typeof zoomFactor === 'number') {
+      this.zoomFactor = new TrackableZoomState(zoomFactor);
+    } else {
+      this.zoomFactor = zoomFactor;
+    }
     this.registerDisposer(pose);
-    this.registerSignalBinding(this.pose.changed.add(this.changed.dispatch, this.changed));
-    this.registerSignalBinding(this.voxelSize.changed.add(this.handleVoxelSizeChanged, this));
-    this.setZoomFactorFromVoxelSize();
+    this.registerSignalBinding(this.pose.changed.add(() => { this.changed.dispatch(); }));
+    this.registerSignalBinding(this.zoomFactor.changed.add(() => { this.changed.dispatch(); }));
+    this.registerSignalBinding(this.voxelSize.changed.add(() => { this.handleVoxelSizeChanged(); }));
+    this.handleVoxelSizeChanged();
   }
   get voxelSize() { return this.pose.position.voxelSize; }
 
@@ -407,46 +473,36 @@ export class NavigationState extends RefCounted {
    */
   reset() {
     this.pose.reset();
-    this.resetZoom();
-  }
-
-  resetZoom() {
-    this.zoomFactor = Number.NaN;
-    this.changed.dispatch();
+    this.zoomFactor.reset();
   }
 
   private setZoomFactorFromVoxelSize() {
     let {voxelSize} = this;
     if (voxelSize.valid) {
-      this.zoomFactor = Math.min.apply(null, this.voxelSize.size);
-      this.changed.dispatch();
+      this.zoomFactor.value = Math.min.apply(null, this.voxelSize.size);
     }
   }
 
+  /**
+   * Sets the zoomFactor to the minimum voxelSize if it is not already set.
+   */
   private handleVoxelSizeChanged() {
-    if (Number.isNaN(this.zoomFactor)) {
+    if (Number.isNaN(this.zoomFactor.value)) {
       this.setZoomFactorFromVoxelSize();
     }
   }
   get position() { return this.pose.position; }
   toMat4(mat: Mat4) {
     this.pose.toMat4(mat);
-    mat4.scale(mat, mat, vec3.fromValues(this.zoomFactor, this.zoomFactor, this.zoomFactor));
+    let zoom = this.zoomFactor.value;
+    mat4.scale(mat, mat, vec3.fromValues(zoom, zoom, zoom));
   };
-  zoomBy(factor: number) {
-    if (Number.isNaN(this.zoomFactor)) {
-      return;
-    }
-    this.zoomFactor *= factor;
-    this.changed.dispatch();
-  }
 
   get valid() { return this.pose.valid; }
 
   toJSON() {
-    let {zoomFactor} = this;
     let poseJson = this.pose.toJSON();
-    let zoomFactorJson = zoomFactor == null || Number.isNaN(zoomFactor) ? undefined : zoomFactor;
+    let zoomFactorJson = this.zoomFactor.toJSON();
     if (poseJson === undefined && zoomFactorJson === undefined) {
       return undefined;
     }
@@ -458,35 +514,12 @@ export class NavigationState extends RefCounted {
       return;
     }
     this.pose.restoreState(obj['pose']);
-    let zoomFactor = parseFloat(obj['zoomFactor']);
-    if (Number.isFinite(zoomFactor)) {
-      this.zoomFactor = zoomFactor;
-    } else {
-      this.zoomFactor = Number.NaN;
-    }
+    this.zoomFactor.restoreState(obj['zoomFactor']);
     this.handleVoxelSizeChanged();
     this.changed.dispatch();
   }
-};
 
-export class TrackableZoomState {
-  constructor(public navigationState: NavigationState) {}
-  get changed() { return this.navigationState.changed; }
-  restoreState(obj: any) {
-    if (typeof obj !== 'number') {
-      return;
-    }
-    let zoomFactor = parseFloat('' + obj);
-    if (Number.isFinite(zoomFactor)) {
-      let {navigationState} = this;
-      navigationState.zoomFactor = zoomFactor;
-      navigationState.changed.dispatch();
-    }
-  }
-  toJSON() {
-    if (!this.navigationState.valid) {
-      return undefined;
-    }
-    return this.navigationState.zoomFactor;
+  zoomBy(factor: number) {
+    this.zoomFactor.zoomBy(factor);
   }
 };

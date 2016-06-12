@@ -25,7 +25,6 @@ export type Mat4 = Float32Array;
 export type Quat = Float32Array;
 
 export const identityMat4 = mat4.create();
-mat4.identity(identityMat4);
 
 export const AXES_NAMES = ['x', 'y', 'z'];
 

@@ -21,7 +21,7 @@ import {PickIDManager} from 'neuroglancer/object_picking';
 import {RenderedDataPanel} from 'neuroglancer/rendered_data_panel';
 import {SliceView, SliceViewRenderHelper} from 'neuroglancer/sliceview/frontend';
 import {TrackableBoolean, ElementVisibilityFromTrackableBoolean} from 'neuroglancer/trackable_boolean';
-import {mat4, vec3, vec4, Mat4, AXES_NAMES, identityMat4} from 'neuroglancer/util/geom';
+import {mat4, vec3, vec4, Mat4, identityMat4} from 'neuroglancer/util/geom';
 import {startRelativeMouseDrag} from 'neuroglancer/util/mouse_drag';
 import {ViewerState} from 'neuroglancer/viewer_state';
 import {OffscreenFramebuffer, OffscreenCopyHelper} from 'neuroglancer/webgl/offscreen';
@@ -30,47 +30,6 @@ import {ScaleBarWidget} from 'neuroglancer/widget/scale_bar';
 import {Signal} from 'signals';
 
 export interface SliceViewerState extends ViewerState { showScaleBar: TrackableBoolean; }
-
-const keyCommands = new Map<string, (this: SliceViewPanel) => void>();
-
-for (let axis = 0; axis < 3; ++axis) {
-  let axisName = AXES_NAMES[axis];
-  for (let sign of [-1, +1]) {
-    let signStr = (sign < 0) ? '-' : '+';
-    keyCommands.set(`rotate-relative-${axisName}${signStr}`, function() {
-      let panel: SliceViewPanel = this;
-      let {sliceView} = panel;
-      if (!sliceView.hasViewportToData) {
-        return;
-      }
-      let {navigationState} = panel.viewer;
-      navigationState.pose.rotateAbsolute(sliceView.viewportAxes[axis], sign * 0.1);
-    });
-    let tempOffset = vec3.create();
-    keyCommands.set(`${axisName}${signStr}`, function() {
-      let panel: SliceViewPanel = this;
-      let {sliceView} = panel;
-      if (!sliceView.hasViewportToData) {
-        return;
-      }
-      let {navigationState} = panel.viewer;
-      let offset = tempOffset;
-      vec3.multiply(offset, navigationState.voxelSize.size, sliceView.viewportAxes[axis]);
-      vec3.scale(offset, offset, sign);
-      navigationState.pose.translateAbsolute(offset);
-    });
-  }
-}
-keyCommands.set('zoom-in', function() {
-  let panel: SliceViewPanel = this;
-  let {navigationState} = panel.viewer;
-  navigationState.zoomBy(0.5);
-});
-keyCommands.set('zoom-out', function() {
-  let panel: SliceViewPanel = this;
-  let {navigationState} = panel.viewer;
-  navigationState.zoomBy(2.0);
-});
 
 export enum OffscreenTextures {
   COLOR,
@@ -127,6 +86,10 @@ export class SliceViewPanel extends RenderedDataPanel {
 
   private scaleBarWidget = this.registerDisposer(new ScaleBarWidget());
 
+  get navigationState() {
+    return this.sliceView.navigationState;
+  }
+
   constructor(
       context: DisplayContext, element: HTMLElement, public sliceView: SliceView,
       viewer: SliceViewerState) {
@@ -141,15 +104,6 @@ export class SliceViewPanel extends RenderedDataPanel {
       this.registerDisposer(new ElementVisibilityFromTrackableBoolean(viewer.showScaleBar, scaleBar));
       this.element.appendChild(scaleBar);
     }
-  }
-
-  onKeyCommand(action: string) {
-    let command = keyCommands.get(action);
-    if (command) {
-      command.call(this);
-      return true;
-    }
-    return false;
   }
 
   draw() {

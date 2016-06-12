@@ -14,25 +14,27 @@
  * limitations under the License.
  */
 
-import {DataType, VolumeType, SliceViewBase, VolumeChunkSource as VolumeChunkSourceInterface, VolumeChunkSpecification} from 'neuroglancer/sliceview/base';
-import {vec3, mat4, Vec3, Vec4, Mat4, vec3Key} from 'neuroglancer/util/geom';
-import {RefCounted} from 'neuroglancer/util/disposable';
-import {Buffer} from 'neuroglancer/webgl/buffer';
-import {ShaderProgram, ShaderBuilder, ShaderModule} from 'neuroglancer/webgl/shader';
-import {GL} from 'neuroglancer/webgl/context';
 import {ChunkState} from 'neuroglancer/chunk_manager/base';
-import {Disposable} from 'neuroglancer/util/disposable';
-import {LayerManager} from 'neuroglancer/layer';
-import {ChunkLayout} from 'neuroglancer/sliceview/chunk_layout';
-import {Signal} from 'signals';
-import {NavigationState} from 'neuroglancer/navigation_state';
-import {RenderLayer} from 'neuroglancer/sliceview/renderlayer';
 import {Chunk, ChunkManager, ChunkSource} from 'neuroglancer/chunk_manager/frontend';
-import {OffscreenFramebuffer} from 'neuroglancer/webgl/offscreen';
-import {RPC} from 'neuroglancer/worker_rpc';
+import {LayerManager} from 'neuroglancer/layer';
 import {MeshSource} from 'neuroglancer/mesh/frontend';
+import {NavigationState} from 'neuroglancer/navigation_state';
+import {DataType, VolumeType, SliceViewBase, VolumeChunkSource as VolumeChunkSourceInterface, VolumeChunkSpecification} from 'neuroglancer/sliceview/base';
+import {ChunkLayout} from 'neuroglancer/sliceview/chunk_layout';
+import {RenderLayer} from 'neuroglancer/sliceview/renderlayer';
+import {RefCounted} from 'neuroglancer/util/disposable';
+import {Disposable} from 'neuroglancer/util/disposable';
+import {vec3, mat4, Vec3, Vec4, Mat4, vec3Key} from 'neuroglancer/util/geom';
+import {Buffer} from 'neuroglancer/webgl/buffer';
+import {GL} from 'neuroglancer/webgl/context';
+import {OffscreenFramebuffer} from 'neuroglancer/webgl/offscreen';
+import {ShaderProgram, ShaderBuilder, ShaderModule} from 'neuroglancer/webgl/shader';
+import {RPC} from 'neuroglancer/worker_rpc';
+import {Signal} from 'signals';
 
 export type VolumeChunkKey = string;
+
+const tempMat = mat4.create();
 
 export class SliceView extends SliceViewBase {
   dataToViewport = mat4.create();
@@ -63,11 +65,18 @@ export class SliceView extends SliceViewBase {
   offscreenFramebuffer = new OffscreenFramebuffer(
       this.gl, {numDataBuffers: 1, depthBuffer: false, stencilBuffer: true});
 
-  constructor(public gl: GL, public chunkManager: ChunkManager, public layerManager: LayerManager) {
+  constructor(
+      public gl: GL, public chunkManager: ChunkManager, public layerManager: LayerManager,
+      public navigationState: NavigationState) {
     super();
     mat4.identity(this.dataToViewport);
-    this.initializeCounterpart(this.chunkManager.rpc, {'type': 'SliceView', 'chunkManager': chunkManager.rpcId});
+    this.initializeCounterpart(
+        this.chunkManager.rpc, {'type': 'SliceView', 'chunkManager': chunkManager.rpcId});
     this.updateVisibleLayers();
+
+    this.registerSignalBinding(
+        navigationState.changed.add(() => { this.updateViewportFromNavigationState(); }));
+    this.updateViewportFromNavigationState();
 
     this.registerSignalBinding(layerManager.layersChanged.add(() => {
       if (!this.visibleLayersStale) {
@@ -81,6 +90,15 @@ export class SliceView extends SliceViewBase {
     this.viewChanged.add(() => { this.renderingStale = true; });
     this.registerSignalBinding(chunkManager.chunkQueueManager.visibleChunksChanged.add(
         this.viewChanged.dispatch, this.viewChanged));
+  }
+
+  private updateViewportFromNavigationState() {
+    let {navigationState} = this;
+    if (!navigationState.valid) {
+      return;
+    }
+    navigationState.toMat4(tempMat);
+    this.setViewportToDataMatrix(tempMat);
   }
 
   updateVisibleLayers() {
@@ -128,23 +146,6 @@ export class SliceView extends SliceViewBase {
     return changed;
   }
 
-  fixRelativeTo(navigationState: NavigationState, relativeMat?: Mat4) {
-    if (relativeMat === undefined) {
-      relativeMat = mat4.create();
-      mat4.identity(relativeMat);
-    }
-    let tempMat = mat4.create();
-    let updateViewport = () => {
-      if (!navigationState.valid) {
-        return;
-      }
-      navigationState.toMat4(tempMat);
-      mat4.multiply(tempMat, tempMat, relativeMat);
-      this.setViewportToDataMatrix(tempMat);
-    };
-    this.registerSignalBinding(navigationState.changed.add(updateViewport));
-    updateViewport();
-  }
   onViewportChanged() {
     var {width, height, viewportToDevice, dataToViewport, dataToDevice} = this;
     mat4.ortho(viewportToDevice, -width / 2, width / 2, height / 2, -height / 2, -1, 1);
@@ -363,7 +364,7 @@ export interface MultiscaleVolumeChunkSource {
    *
    * This only makes sense if volumeType === VolumeType.SEGMENTATION.
    */
-  getMeshSource: (chunkManager: ChunkManager) => MeshSource|null;
+  getMeshSource: (chunkManager: ChunkManager) => MeshSource | null;
 }
 
 /**
@@ -417,7 +418,9 @@ gl_Position = uProjectionMatrix * aVertexPosition;
     this.shader = this.registerDisposer(builder.build());
   }
 
-  draw(texture: WebGLTexture, projectionMatrix: Mat4, colorFactor: Vec4, backgroundColor: Vec4, xStart: number, yStart: number, xEnd: number, yEnd: number) {
+  draw(
+      texture: WebGLTexture, projectionMatrix: Mat4, colorFactor: Vec4, backgroundColor: Vec4,
+      xStart: number, yStart: number, xEnd: number, yEnd: number) {
     let {gl, shader, textureCoordinateAdjustment} = this;
     textureCoordinateAdjustment[0] = xStart;
     textureCoordinateAdjustment[1] = yStart;

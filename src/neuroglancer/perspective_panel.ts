@@ -19,7 +19,7 @@ import {Signal} from 'signals';
 import {DisplayContext} from 'neuroglancer/display_context';
 import {RenderedDataPanel} from 'neuroglancer/rendered_data_panel';
 import {SliceView, SliceViewRenderHelper} from 'neuroglancer/sliceview/frontend';
-import {vec3, vec4, mat4, Vec3, Mat4, kAxes, AXES_NAMES} from 'neuroglancer/util/geom';
+import {vec3, vec4, mat4, Vec3, Mat4, kAxes} from 'neuroglancer/util/geom';
 import {glsl_packFloat01ToFixedPoint, unpackFloat01FromFixedPoint} from 'neuroglancer/webgl/shader_lib';
 import {ViewerState} from 'neuroglancer/viewer_state';
 import {AxesLineHelper} from 'neuroglancer/axes_lines';
@@ -55,43 +55,6 @@ export class PerspectiveViewRenderLayer extends RenderLayer {
 export interface PerspectiveViewerState extends ViewerState {
   showSliceViews: TrackableBoolean;
 }
-
-const keyCommands = new Map<string, (this: PerspectivePanel) => void>();
-
-for (let axis = 0; axis < 3; ++axis) {
-  let axisName = AXES_NAMES[axis];
-  for (let sign of [-1, +1]) {
-    let signStr = (sign < 0) ? '-' : '+';
-    keyCommands.set(`rotate-relative-${axisName}${signStr}`, function() {
-      let panel: PerspectivePanel = this;
-      let {navigationState} = panel.viewer;
-      navigationState.pose.rotateRelative(kAxes[axis], sign * 0.1);
-    });
-    let tempOffset = vec3.create();
-    keyCommands.set(`${axisName}${signStr}`, function() {
-      let panel: PerspectivePanel = this;
-      let {navigationState} = panel.viewer;
-      let offset = tempOffset;
-      offset[0] = 0;
-      offset[1] = 0;
-      offset[2] = 0;
-      offset[axis] = this.navigationState.position.voxelSize.size[axis] * sign;
-      navigationState.pose.translateRelative(offset);
-    });
-  }
-}
-keyCommands.set('snap', function() { this.navigationState.pose.snap(); });
-
-keyCommands.set('zoom-in', function() {
-  let panel: PerspectivePanel = this;
-  let {navigationState} = panel.viewer;
-  navigationState.zoomBy(0.5);
-});
-keyCommands.set('zoom-out', function() {
-  let panel: PerspectivePanel = this;
-  let {navigationState} = panel.viewer;
-  navigationState.zoomBy(2.0);
-});
 
 export enum OffscreenTextures {
   COLOR,
@@ -162,15 +125,6 @@ export class PerspectivePanel extends RenderedDataPanel {
     this.registerSignalBinding(viewer.showAxisLines.changed.add(this.scheduleRedraw, this));
   }
   get navigationState() { return this.viewer.navigationState; }
-
-  onKeyCommand (action: string) {
-    let command = keyCommands.get(action);
-    if (command) {
-      command.call(this);
-      return true;
-    }
-    return false;
-  }
 
   onResize() {
     this.width = this.element.clientWidth;
