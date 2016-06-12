@@ -17,7 +17,7 @@
 import {DisplayContext, RenderedPanel} from 'neuroglancer/display_context';
 import {MouseSelectionState} from 'neuroglancer/layer';
 import {NavigationState} from 'neuroglancer/navigation_state';
-import {vec3, kAxes, AXES_NAMES} from 'neuroglancer/util/geom';
+import {vec3, vec4, mat2, kAxes, AXES_NAMES, Vec2, Vec3, Mat4} from 'neuroglancer/util/geom';
 import {getWheelZoomAmount} from 'neuroglancer/util/wheel_zoom';
 import {ViewerState} from 'neuroglancer/viewer_state';
 
@@ -48,6 +48,7 @@ KEY_COMMANDS.set('snap', function() { this.navigationState.pose.snap(); });
 KEY_COMMANDS.set('zoom-in', function() { this.navigationState.zoomBy(0.5); });
 KEY_COMMANDS.set('zoom-out', function() { this.navigationState.zoomBy(2.0); });
 
+const tempVec3 = vec3.create();
 
 export abstract class RenderedDataPanel extends RenderedPanel {
   // Last mouse position within the panel.
@@ -99,8 +100,21 @@ export abstract class RenderedDataPanel extends RenderedPanel {
     mouseState.updater = this.mouseStateUpdater;
     mouseState.triggerUpdate();
   }
+
+  abstract zoomByMouse(factor: number): void;
+
   onMousewheel(e: WheelEvent) {
-    this.navigationState.zoomBy(getWheelZoomAmount(e));
+    if (e.ctrlKey) {
+      this.onMousemove(e);
+      this.zoomByMouse(getWheelZoomAmount(e));
+    } else {
+      let {navigationState} = this;
+      let offset = tempVec3;
+      offset[0] = 0;
+      offset[1] = 0;
+      offset[2] = navigationState.position.voxelSize.size[2] * (e.wheelDelta > 0 ? 1 : -1) * (e.shiftKey ? 10 : 1);
+      navigationState.pose.translateRelative(offset);
+    }
     e.preventDefault();
   }
   onMousedown(e: MouseEvent) {

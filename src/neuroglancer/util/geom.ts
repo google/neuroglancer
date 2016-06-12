@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-export {vec2, vec3, vec4, mat3, mat4, quat} from 'gl-matrix';
+export {vec2, vec3, vec4, mat2, mat3, mat4, quat} from 'gl-matrix';
 import {vec3, vec4, mat4} from 'gl-matrix';
 
 export type Vec2 = Float32Array;

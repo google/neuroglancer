@@ -79,6 +79,7 @@ export class VoxelSize extends RefCounted {
 };
 
 const tempVec3 = vec3.create();
+const tempQuat = quat.create();
 
 export class SpatialPosition extends RefCounted {
   voxelSize: VoxelSize;
@@ -400,11 +401,35 @@ export class Pose extends RefCounted {
     this.orientation.changed.dispatch();
   }
 
-  rotateAbsolute(axis: Vec3, angle: number) {
+  rotateAbsolute(axis: Vec3, angle: number, fixedPoint?: Vec3) {
     var temp = quat.create();
     quat.setAxisAngle(temp, axis, angle);
     var orientation = this.orientation.orientation;
-    quat.multiply(orientation, temp, orientation);
+    if (fixedPoint !== undefined) {
+      // We want the coordinates in the transformed coordinate frame of the fixed point to remain
+      // the same after the rotation.
+
+      // We have the invariants:
+      // oldOrienation * fixedPointLocal + oldPosition == fixedPoint.
+      // newOrientation * fixedPointLocal + newPosition == fixedPoint.
+
+      // Therefore, we compute fixedPointLocal by:
+      // fixedPointLocal == inverse(oldOrientation) * (fixedPoint - oldPosition).
+      let {spatialCoordinates} = this.position;
+      let fixedPointLocal = vec3.subtract(tempVec3, fixedPoint, spatialCoordinates);
+      let invOrientation = quat.invert(tempQuat, orientation);
+      vec3.transformQuat(fixedPointLocal, fixedPointLocal, invOrientation);
+
+      // We then compute the newPosition by:
+      // newPosition := fixedPoint - newOrientation * fixedPointLocal.
+      quat.multiply(orientation, temp, orientation);
+      vec3.transformQuat(spatialCoordinates, fixedPointLocal, orientation);
+      vec3.subtract(spatialCoordinates, fixedPoint, spatialCoordinates);
+
+      this.position.changed.dispatch();
+    } else {
+      quat.multiply(orientation, temp, orientation);
+    }
     this.orientation.changed.dispatch();
   }
 };

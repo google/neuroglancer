@@ -215,21 +215,58 @@ export class SliceViewPanel extends RenderedDataPanel {
       return;
     }
     if (e.button === 0) {
-      startRelativeMouseDrag(e, (event, deltaX, deltaY) => {
-        let {position} = this.viewer.navigationState;
-        if (event.shiftKey) {
-          let {viewportAxes} = this.sliceView;
-          this.viewer.navigationState.pose.rotateAbsolute(
-              viewportAxes[1], deltaX / 4.0 * Math.PI / 180.0);
-          this.viewer.navigationState.pose.rotateAbsolute(
-              viewportAxes[0], deltaY / 4.0 * Math.PI / 180.0);
-        } else {
-          let pos = position.spatialCoordinates;
-          vec3.set(pos, deltaX, deltaY, 0);
-          vec3.transformMat4(pos, pos, this.sliceView.viewportToData);
-          position.changed.dispatch();
-        }
-      });
+      let {mouseState} = this.viewer;
+      if (mouseState.updateUnconditionally()) {
+        let initialPosition = vec3.clone(this.viewer.mouseState.position);
+        startRelativeMouseDrag(e, (event, deltaX, deltaY) => {
+          let {position} = this.viewer.navigationState;
+          if (event.shiftKey) {
+            let {viewportAxes} = this.sliceView;
+            this.viewer.navigationState.pose.rotateAbsolute(
+              viewportAxes[1], deltaX / 4.0 * Math.PI / 180.0, initialPosition);
+            this.viewer.navigationState.pose.rotateAbsolute(
+              viewportAxes[0], deltaY / 4.0 * Math.PI / 180.0, initialPosition);
+          } else {
+            let pos = position.spatialCoordinates;
+            vec3.set(pos, deltaX, deltaY, 0);
+            vec3.transformMat4(pos, pos, this.sliceView.viewportToData);
+            position.changed.dispatch();
+          }
+        });
+      }
     }
+  }
+
+  /**
+   * Zooms by the specified factor, maintaining the data position that projects to the current mouse position.
+   */
+  zoomByMouse(factor: number) {
+    let {navigationState} = this;
+    if (!navigationState.valid) {
+      return;
+    }
+    let {sliceView} = this;
+    let {width, height} = sliceView;
+    let {mouseX, mouseY} = this;
+    mouseX -= width / 2;
+    mouseY -= height / 2;
+    let oldZoom = this.navigationState.zoomFactor.value;
+    // oldPosition + (mouseX * viewportAxes[0] + mouseY * viewportAxes[1]) * oldZoom
+    //     === newPosition + (mouseX * viewportAxes[0] + mouseY * viewportAxes[1]) * newZoom
+
+    // Therefore, we compute newPosition by:
+    // newPosition = oldPosition + (viewportAxes[0] * mouseX +
+    //                              viewportAxes[1] * mouseY) * (oldZoom - newZoom).
+    navigationState.zoomBy(factor);
+    let newZoom = navigationState.zoomFactor.value;
+
+    let {spatialCoordinates} = navigationState.position;
+    vec3.scaleAndAdd(
+        spatialCoordinates, spatialCoordinates, sliceView.viewportAxes[0],
+        mouseX * (oldZoom - newZoom));
+    vec3.scaleAndAdd(
+        spatialCoordinates, spatialCoordinates, sliceView.viewportAxes[1],
+        mouseY * (oldZoom - newZoom));
+    navigationState.position.changed.dispatch();
   }
 };
