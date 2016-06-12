@@ -424,3 +424,27 @@ export function verifyFloat01(obj: any): number {
   }
   return obj;
 }
+
+/**
+ * The query string parameters may either be specified in the usual
+ * 'name=value&otherName=otherValue' form or as (optionally urlSafe) JSON: '{"name":"value"}`.
+ */
+export function parseQueryStringParameters(queryString: string) {
+  if (queryString === '') {
+    return {};
+  }
+  if (queryString.startsWith('{')) {
+    return urlSafeParse(queryString);
+  } else {
+    let result: any = {};
+    let parts = queryString.split(/[&;]/);
+    for (let part of parts) {
+      let m = part.match(/^([^=&;]+)=([^&;]*)$/);
+      if (m === null) {
+        throw new Error(`Invalid query string part: ${JSON.stringify(part)}.`);
+      }
+      result[m[1]] = m[2];
+    }
+    return result;
+  }
+}

@@ -27,17 +27,20 @@ import {StatusMessage} from 'neuroglancer/status';
 import {applyCompletionOffset, getPrefixMatches, getPrefixMatchesWithDescriptions} from 'neuroglancer/util/completion';
 import {vec3} from 'neuroglancer/util/geom';
 import {openShardedHttpRequest, sendHttpRequest} from 'neuroglancer/util/http_request';
-import {verifyObject, verifyString, parseArray, parseFiniteVec, parseIntVec, stableStringify} from 'neuroglancer/util/json';
+import {verifyObject, verifyOptionalString, verifyString, parseArray, parseFiniteVec, parseIntVec, stableStringify, parseQueryStringParameters} from 'neuroglancer/util/json';
 import {cancellableThen, CancellablePromise} from 'neuroglancer/util/promise';
 
 let serverDataTypes = new Map<string, DataType>();
 serverDataTypes.set('uint8', DataType.UINT8);
+serverDataTypes.set('uint16', DataType.UINT16);
 serverDataTypes.set('uint32', DataType.UINT32);
 serverDataTypes.set('uint64', DataType.UINT64);
 
 let serverVolumeTypes = new Map<string, VolumeType>();
 serverVolumeTypes.set('image', VolumeType.IMAGE);
 serverVolumeTypes.set('annotation', VolumeType.SEGMENTATION);
+
+const VALID_ENCODINGS = new Set<string>(['npz', 'raw', 'jpeg']);
 
 export class VolumeChunkSource extends GenericVolumeChunkSource {
   constructor(
@@ -70,7 +73,9 @@ export class MultiscaleVolumeChunkSource implements GenericMultiscaleVolumeChunk
    */
   channel: string;
 
-  constructor(public hostnames: string[], public key: string, public response: any, channel?: string) {
+  constructor(
+      public hostnames: string[], public key: string, public response: any, channel: string|undefined,
+      public parameters: {[index: string]: any}) {
     let channelsObject = response['channels'];
     let channelNames = Object.keys(channelsObject);
     if (channel === undefined) {
@@ -101,7 +106,14 @@ export class MultiscaleVolumeChunkSource implements GenericMultiscaleVolumeChunk
     let sources: VolumeChunkSource[][] = [];
     const {response, volumeType} = this;
     const datasetObject = response['dataset'];
-    const encoding = volumeType === VolumeType.IMAGE ? 'jpeg' : 'npz';
+    let encoding = verifyOptionalString(this.parameters['encoding']);
+    if (encoding === undefined) {
+      encoding = volumeType === VolumeType.IMAGE ? 'jpeg' : 'npz';
+    } else {
+      if (!VALID_ENCODINGS.has(encoding)) {
+        throw new Error(`Invalid encoding: ${JSON.stringify(encoding)}.`);
+      }
+    }
     for (let resolution of Object.keys(datasetObject['neariso_imagesize'])) {
       let imageSize = parseIntVec(vec3.create(), datasetObject['neariso_imagesize'][resolution]);
       let voxelSize = parseFiniteVec(vec3.create(), datasetObject['neariso_voxelres'][resolution]);
@@ -140,7 +152,7 @@ export class MultiscaleVolumeChunkSource implements GenericMultiscaleVolumeChunk
   getMeshSource(chunkManager: ChunkManager): null { return null; }
 };
 
-const pathPattern = /^([^\/]+)(?:\/([^\/]+))?$/;
+const pathPattern = /^([^\/?]+)(?:\/([^\/?]+))?(?:\?(.*))?$/;
 
 let existingVolumeResponses = new Map<string, Promise<any>>();
 export function getVolumeInfo(hostnames: string[], token: string) {
@@ -168,14 +180,16 @@ export function getShardedVolume(hostnames: string[], path: string) {
   }
   let key = match[1];
   let channel = match[2];
-  let promise =
-      getVolumeInfo(hostnames, key)
-    .then(response => new MultiscaleVolumeChunkSource(hostnames, key, response, channel));
+  let parameters = parseQueryStringParameters(match[3] || '');
+  let promise = getVolumeInfo(hostnames, key)
+                    .then(
+                        response => new MultiscaleVolumeChunkSource(
+                            hostnames, key, response, channel, parameters));
   existingVolumes.set(fullKey, promise);
   return promise;
 }
 
-const urlPattern = /^((?:http|https):\/\/[^\/]+)\/(.*)$/;
+const urlPattern = /^((?:http|https):\/\/[^\/?]+)\/(.*)$/;
 
 export function getVolume(path: string) {
   let match = path.match(urlPattern);
