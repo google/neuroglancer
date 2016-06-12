@@ -18,6 +18,7 @@
 
 const path = require('path');
 const original_webpack_helpers = require('neuroglancer/config/webpack_helpers');
+const resolveReal = original_webpack_helpers.resolveReal;
 
 function modifyViewerOptions(options) {
   options = options || {};
@@ -26,16 +27,16 @@ function modifyViewerOptions(options) {
 
     // Allow loader modules to be resolved from node_modules directory of this
     // project in addition to the node_modules directory of neuroglancer.
-    path.resolve(__dirname, '../node_modules')
+    resolveReal(__dirname, '../node_modules')
   ];
 
   // This references the tsconfig.json file of this project, rather than of
   // neuroglancer.
-  options.tsconfigPath = path.resolve(__dirname, '../tsconfig.json');
+  options.tsconfigPath = resolveReal(__dirname, '../tsconfig.json');
 
   // This references the main.ts of this project, rather than of
   // neuroglancer.
-  options.frontendModules = [path.resolve(__dirname, '../src/main.ts')];
+  options.frontendModules = [resolveReal(__dirname, '../src/main.ts')];
   return options;
 }
 

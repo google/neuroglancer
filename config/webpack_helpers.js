@@ -21,11 +21,25 @@ const HtmlWebpackPlugin = require('html-webpack-plugin');
 const ExtractTextPlugin = require('extract-text-webpack-plugin');
 const webpack = require('webpack');
 const ClosureCompilerPlugin = require('webpack-closure-compiler');
+const fs = require('fs');
+
+/**
+ * Resolve a path to an absolute path, expanding all symbolic links.  This is
+ * used to ensure that the same file is not seen under multiple paths by the
+ * TypeScript compiler, leading to the same file being compiled more than once,
+ * which can result in various errors.
+ */
+function resolveReal() {
+  return fs.realpathSync(path.resolve.apply(undefined, arguments));
+}
+exports.resolveReal = resolveReal;
 
 // Note: We use require.resolve below to ensure the plugins are resolved
 // relative to this configuration file, rather than relative to the source
 // files, in case this configuration is being used from a dependent project that
 // doesn't have all of these plugins as direct dependencies.
+//
+// require.resolve resolves all symlinks.
 const DEFAULT_BABEL_PLUGINS = exports.DEFAULT_BABEL_PLUGINS = [
   // Needed until Firefox implements proper handling of default values in
   // destructuring expressions.
@@ -87,21 +101,25 @@ function getTypescriptLoaderEntry(options) {
  */
 function getBaseConfig(options) {
   options = options || {};
-  let tsconfigPath = options.tsconfigPath || path.resolve(__dirname, '../tsconfig.json');
+  let tsconfigPath = options.tsconfigPath || resolveReal(__dirname, '../tsconfig.json');
   let tsconfig = require(tsconfigPath);
   let extraResolveAliases = {};
+  let newCompilerPaths = {};
   if (tsconfig.compilerOptions && tsconfig.compilerOptions.paths) {
     for (let key of Object.keys(tsconfig.compilerOptions.paths)) {
       let value = tsconfig.compilerOptions.paths[key];
+      newCompilerPaths[key] = value;
       if (!key.endsWith('/*') || !Array.isArray(value) || value.length !== 1 ||
           !value[0].endsWith('/*')) {
         // Silently skip.
         console.log(`Skipping ${JSON.stringify(key)} -> ${JSON.stringify(value)}`);
         continue;
       }
-      extraResolveAliases[key.substring(0, key.length - 2)] = path.resolve(
+      const resolvedTarget = resolveReal(
           path.dirname(tsconfigPath),
           value[0].substring(0, value[0].length - 2));
+      extraResolveAliases[key.substring(0, key.length - 2)] = resolvedTarget;
+      newCompilerPaths[key] = [resolvedTarget + '/*'];
     }
   }
   console.log(extraResolveAliases);
@@ -110,10 +128,10 @@ function getBaseConfig(options) {
       extensions: ['', '.ts', '.js'],
       alias: Object.assign(
           {
-            'neuroglancer-testdata': path.resolve(__dirname, '../testdata'),
+            'neuroglancer-testdata': resolveReal(__dirname, '../testdata'),
 
             // Patched version of jpgjs.
-            'jpgjs': path.resolve(__dirname, '../third_party/jpgjs/jpg.js'),
+            'jpgjs': resolveReal(__dirname, '../third_party/jpgjs/jpg.js'),
           },
           extraResolveAliases,
           options.resolveAliases || {}),
@@ -121,12 +139,12 @@ function getBaseConfig(options) {
     resolveLoader: {
       alias: Object.assign(
           {
-            'raw-data$': path.resolve(__dirname, 'raw-data-loader.js'),
+            'raw-data$': resolveReal(__dirname, 'raw-data-loader.js'),
           },
           options.resolveLoaderAliases || []),
       root: [
         ...(options.resolveLoaderRoots || []),
-        path.resolve(__dirname, '../node_modules'),
+        resolveReal(__dirname, '../node_modules'),
       ],
     },
     devtool: 'source-map',
@@ -141,7 +159,9 @@ function getBaseConfig(options) {
     },
     node: {'Buffer': false},
     ts: {
+      compiler: resolveReal(__dirname, 'typescript_compiler_shim.js'),
       configFileName: tsconfigPath,
+      compilerOptions: {paths: newCompilerPaths},
       instance: 'main',
     },
   };
@@ -222,7 +242,7 @@ function getViewerConfig(options) {
         '639403125587-4k5hgdfumtrvur8v48e3pr7oo91d765k.apps.googleusercontent.com'),
   };
   let extraDefines = options.defines || {};
-  let srcDir = path.resolve(__dirname, '../src');
+  let srcDir = resolveReal(__dirname, '../src');
   let commonPlugins = [];
   if (minify) {
     commonPlugins.push(new ClosureCompilerPlugin({
@@ -244,8 +264,8 @@ function getViewerConfig(options) {
     ...backendDataSourceModules,
     ...extraChunkWorkerModules,
   ];
-  let frontendModules = options.frontendModules || [path.resolve(srcDir, 'main.ts')];
-  let htmlPlugin = options.htmlPlugin || new HtmlWebpackPlugin({template: path.resolve(srcDir, 'index.html')});
+  let frontendModules = options.frontendModules || [resolveReal(srcDir, 'main.ts')];
+  let htmlPlugin = options.htmlPlugin || new HtmlWebpackPlugin({template: resolveReal(srcDir, 'index.html')});
   let cssPlugin = options.cssPlugin || new ExtractTextPlugin('styles.css', {allChunks: true});
   return [
     Object.assign(
