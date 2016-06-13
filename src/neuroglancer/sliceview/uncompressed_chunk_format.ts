@@ -30,20 +30,22 @@ class TextureLayout extends RefCounted {
   textureHeight: number;
   textureAccessCoefficients: Float32Array;
 
-  constructor(gl: GL, public chunkDataSize: Vec3, texelsPerElement: number) {
+  constructor(gl: GL, public chunkDataSize: Vec3, texelsPerElement: number, numChannels: number) {
     super();
     let {maxTextureSize} = gl;
 
-    let numDataPoints = chunkDataSize[0] * chunkDataSize[1] * chunkDataSize[2];
+    let numDataPoints = chunkDataSize[0] * chunkDataSize[1] * chunkDataSize[2] * numChannels;
     let dataWidth: number;
 
     this.chunkDataSize = chunkDataSize;
 
     if (texelsPerElement * chunkDataSize[0] <= maxTextureSize &&
-        chunkDataSize[1] * chunkDataSize[2] <= maxTextureSize) {
+        chunkDataSize[1] * chunkDataSize[2] * numChannels <= maxTextureSize) {
       // [X, YZ]
       dataWidth = chunkDataSize[0];
-    } else if (texelsPerElement * chunkDataSize[0] * chunkDataSize[1] <= maxTextureSize) {
+    } else if (
+        texelsPerElement * chunkDataSize[0] * chunkDataSize[1] <= maxTextureSize &&
+        chunkDataSize[2] * numChannels <= maxTextureSize) {
       // [XY, Z]
       dataWidth = chunkDataSize[0] * chunkDataSize[1];
     } else {
@@ -62,10 +64,10 @@ class TextureLayout extends RefCounted {
         Float32Array.of(1.0 / dataWidth, 1.0 / (dataWidth * dataHeight));
   }
 
-  static get(gl: GL, chunkDataSize: Vec3, texelsPerElement: number) {
+  static get(gl: GL, chunkDataSize: Vec3, texelsPerElement: number, numChannels: number) {
     return gl.memoize.get(
-        `sliceview.UncompressedTextureLayout:${vec3Key(chunkDataSize)},${texelsPerElement}`,
-        () => new TextureLayout(gl, chunkDataSize, texelsPerElement));
+        `sliceview.UncompressedTextureLayout:${vec3Key(chunkDataSize)},${texelsPerElement},${numChannels}`,
+        () => new TextureLayout(gl, chunkDataSize, texelsPerElement, numChannels));
   }
 };
 
@@ -76,12 +78,12 @@ class ChunkFormat extends SingleTextureChunkFormat<TextureLayout> {
   arrayElementsPerTexel: number;
   arrayConstructor: TypedArrayConstructor;
 
-  static get(gl: GL, dataType: DataType) {
-    let key = `sliceview.UncompressedChunkFormat:${dataType}`;
-    return gl.memoize.get(key, () => new ChunkFormat(gl, dataType, key));
+  static get(gl: GL, dataType: DataType, numChannels: number) {
+    let key = `sliceview.UncompressedChunkFormat:${dataType}:${numChannels}`;
+    return gl.memoize.get(key, () => new ChunkFormat(gl, dataType, numChannels, key));
   }
 
-  constructor(gl: GL, public dataType: DataType, key: string) {
+  constructor(gl: GL, public dataType: DataType, public numChannels: number, key: string) {
     super(key);
     switch (dataType) {
       case DataType.UINT8:
@@ -200,7 +202,7 @@ uint64_t getDataValue () {
   }
 
   getTextureLayout(gl: GL, chunkDataSize: Vec3) {
-    return TextureLayout.get(gl, chunkDataSize, this.texelsPerElement);
+    return TextureLayout.get(gl, chunkDataSize, this.texelsPerElement, this.numChannels);
   }
 };
 
@@ -268,7 +270,7 @@ export class UncompressedChunkFormatHandler extends RefCounted implements ChunkF
 
   constructor(gl: GL, spec: VolumeChunkSpecification) {
     super();
-    this.chunkFormat = this.registerDisposer(ChunkFormat.get(gl, spec.dataType));
+    this.chunkFormat = this.registerDisposer(ChunkFormat.get(gl, spec.dataType, spec.numChannels));
     this.textureLayout =
         this.registerDisposer(this.chunkFormat.getTextureLayout(gl, spec.chunkDataSize));
   }
