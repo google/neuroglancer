@@ -41,7 +41,11 @@ See [src/neuroglancer/default_key_bindings.ts](src/neuroglancer/default_key_bind
 
 - Left-drag within a slice view to move within that plane.
 
-- Shift-left-drag within a slice view to change the orientation of the slice views.
+- Shift-left-drag within a slice view to change the orientation of the slice views.  The projection of the point where the drag started will remain fixed.
+
+- Rotate the mouse wheel to move forward or backward in the local z axis of the 3-d or cross-sectional view under the mouse pointer.  Hold down shift to move 10x faster.
+
+- Control-mouse wheel zooms in or out.  When used in the cross-sectional view, the projection of the point under the mouse pointer will remain fixed.
 
 - Left-drag within the 3-d view to change the orientation.
 
