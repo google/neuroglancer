@@ -104,13 +104,20 @@ class ChunkFormat extends SingleTextureChunkFormat<TextureLayout> {
         this.texelType = gl.UNSIGNED_BYTE;
         this.arrayElementsPerTexel = 4;
         this.arrayConstructor = Uint8Array;
-      break;
+        break;
       case DataType.UINT32:
         this.texelsPerElement = 1;
         this.textureFormat = gl.RGBA;
         this.texelType = gl.UNSIGNED_BYTE;
         this.arrayElementsPerTexel = 4;
         this.arrayConstructor = Uint8Array;
+        break;
+      case DataType.FLOAT32:
+        this.texelsPerElement = 1;
+        this.textureFormat = gl.LUMINANCE;
+        this.texelType = gl.FLOAT;
+        this.arrayElementsPerTexel = 1;
+        this.arrayConstructor = Float32Array;
         break;
       default:
         throw new Error('Unsupported dataType: ' + dataType);
@@ -242,6 +249,7 @@ export class UncompressedVolumeChunk extends SingleTextureVolumeChunk<Uint8Array
     let data = this.data;
     switch (dataType) {
       case DataType.UINT8:
+      case DataType.FLOAT32:
       case DataType.UINT16:
       case DataType.UINT32:
         return data[index];
