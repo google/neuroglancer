@@ -445,7 +445,7 @@ export class Pose extends RefCounted {
 };
 
 export class TrackableZoomState {
-  constructor(private value_ = Number.NaN) {}
+  constructor(private value_ = Number.NaN, public defaultValue = value_) {}
   get value() { return this.value_; }
   set value(newValue: number) {
     if (newValue !== this.value_) {
@@ -456,8 +456,8 @@ export class TrackableZoomState {
   changed = new Signal();
 
   toJSON () {
-    let {value_} = this;
-    if (Number.isNaN(value_)) {
+    let {value_, defaultValue} = this;
+    if (Number.isNaN(value_) === Number.isNaN(defaultValue) || value_ === defaultValue) {
       return undefined;
     }
     return value_;
@@ -467,12 +467,12 @@ export class TrackableZoomState {
     if (typeof obj === 'number' && Number.isFinite(obj) && obj > 0) {
       this.value = obj;
     } else {
-      this.value = Number.NaN;
+      this.value = this.defaultValue;
     }
   }
 
   reset() {
-    this.value = Number.NaN;
+    this.value = this.defaultValue;
   }
 
   zoomBy(factor: number) {
