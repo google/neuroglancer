@@ -23,10 +23,12 @@
 import {pythonLiteralParse} from 'neuroglancer/util/json';
 import {DataType} from 'neuroglancer/sliceview/base';
 import {TypedArrayConstructor} from 'neuroglancer/util/array';
+import {Endianness, convertEndian16, convertEndian32} from 'neuroglancer/util/endian';
 
 interface SupportedDataType {
   arrayConstructor: TypedArrayConstructor;
   dataType: DataType;
+  fixEndianness: (array: ArrayBufferView) => void;
   elementBytes: number;
   javascriptElementsPerArrayElement: number;
 }
@@ -34,17 +36,43 @@ interface SupportedDataType {
 const supportedDataTypes = new Map<string, SupportedDataType>();
 supportedDataTypes.set('|u1', {
   arrayConstructor: Uint8Array,
-  elementBytes: 1,
+  fixEndianness: array => {},
   javascriptElementsPerArrayElement: 1,
+  elementBytes: 1,
   dataType: DataType.UINT8,
 });
-
-supportedDataTypes.set('<u4', {
-  arrayConstructor: Uint32Array,
-  elementBytes: 4,
-  javascriptElementsPerArrayElement: 1,
-  dataType: DataType.UINT32,
-});
+for (let [endiannessChar, endianness] of <[string, Endianness][]>[
+         ['<', Endianness.LITTLE], ['>', Endianness.BIG]]) {
+  supportedDataTypes.set(`${endiannessChar}u2`, {
+    arrayConstructor: Uint16Array,
+    elementBytes: 2,
+    fixEndianness: array => { convertEndian16(array, endianness); },
+    javascriptElementsPerArrayElement: 1,
+    dataType: DataType.UINT16,
+  });
+  supportedDataTypes.set(`${endiannessChar}u4`, {
+    arrayConstructor: Uint32Array,
+    elementBytes: 4,
+    fixEndianness: array => { convertEndian32(array, endianness); },
+    javascriptElementsPerArrayElement: 1,
+    dataType: DataType.UINT32,
+  });
+  supportedDataTypes.set(`${endiannessChar}u8`, {
+    arrayConstructor: Uint32Array,
+    elementBytes: 8,
+    // We still maintain the low 32-bit value first.
+    fixEndianness: array => { convertEndian32(array, endianness); },
+    javascriptElementsPerArrayElement: 1,
+    dataType: DataType.UINT64,
+  });
+  supportedDataTypes.set(`${endiannessChar}f4`, {
+    arrayConstructor: Float32Array,
+    elementBytes: 4,
+    fixEndianness: array => { convertEndian32(array, endianness); },
+    javascriptElementsPerArrayElement: 1,
+    dataType: DataType.FLOAT32,
+  });
+}
 
 export class NumpyArray {
   constructor(public data: ArrayBufferView, public shape: number[], public dataType: SupportedDataType, public fortranOrder: boolean) {}
@@ -92,5 +120,6 @@ export function parseNpy(x: Uint8Array) {
   const data = new (supportedDataType.arrayConstructor)(
       x.buffer, x.byteOffset + dataOffset,
       numElements * supportedDataType.javascriptElementsPerArrayElement);
+  supportedDataType.fixEndianness(data);
   return new NumpyArray(data, shape, supportedDataType, headerObject['fortran_order'] === true);
 }
