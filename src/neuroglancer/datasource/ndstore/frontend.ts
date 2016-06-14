@@ -117,6 +117,7 @@ export class MultiscaleVolumeChunkSource implements GenericMultiscaleVolumeChunk
     for (let resolution of Object.keys(datasetObject['neariso_imagesize'])) {
       let imageSize = parseIntVec(vec3.create(), datasetObject['neariso_imagesize'][resolution]);
       let voxelSize = parseFiniteVec(vec3.create(), datasetObject['neariso_voxelres'][resolution]);
+      let chunkSize = parseIntVec(vec3.create(), datasetObject['cube_dimension'][resolution]);
       let alternatives: VolumeChunkSource[] = [];
       sources.push(alternatives);
       // The returned offset for downsampled resolutions can have non-integer components.  It
@@ -133,7 +134,8 @@ export class MultiscaleVolumeChunkSource implements GenericMultiscaleVolumeChunk
       for (let spec of VolumeChunkSpecification.getDefaults({
              volumeType,
              voxelSize,
-             dataType: this.dataType, lowerVoxelBound, upperVoxelBound
+             dataType: this.dataType, lowerVoxelBound, upperVoxelBound,
+             chunkDataSizes: [ chunkSize ]
            })) {
         let cacheKey = stableStringify(
             {'spec': spec, key: this.key, channel: this.channel, resolution: resolution});
