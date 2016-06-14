@@ -134,6 +134,11 @@ node.js is required to build the viewer.
 
 See [examples/dependent-project](examples/dependent-project).
 
+# Discussion Group
+
+There is a Google Group/mailing list for discussion related to Neuroglancer:
+<https://groups.google.com/forum/#!forum/neuroglancer>.
+
 # License
 
 Copyright 2016 Google Inc.
