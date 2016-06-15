@@ -457,7 +457,7 @@ export class TrackableZoomState {
 
   toJSON () {
     let {value_, defaultValue} = this;
-    if (Number.isNaN(value_) === Number.isNaN(defaultValue) || value_ === defaultValue) {
+    if (Number.isNaN(value_) && Number.isNaN(defaultValue) || value_ === defaultValue) {
       return undefined;
     }
     return value_;
