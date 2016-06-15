@@ -14,13 +14,13 @@
  * limitations under the License.
  */
 
-import {Signal} from 'signals';
-import {Disposable, RefCounted} from 'neuroglancer/util/disposable';
-import {Uint64} from 'neuroglancer/util/uint64';
+import * as throttle from 'lodash/throttle';
 import {SpatialPosition} from 'neuroglancer/navigation_state';
+import {RefCounted} from 'neuroglancer/util/disposable';
 import {Vec3, vec3, BoundingBox} from 'neuroglancer/util/geom';
 import {addSignalBinding, removeSignalBinding, SignalBindingUpdater} from 'neuroglancer/util/signal_binding_updater';
-import * as throttle from 'lodash/throttle';
+import {Uint64} from 'neuroglancer/util/uint64';
+import {Signal} from 'signals';
 
 export class RenderLayer extends RefCounted {
   ready = false;
@@ -42,6 +42,11 @@ export class RenderLayer extends RefCounted {
   boundingBox: BoundingBox = null;
 };
 
+export class UserLayerDropdown extends RefCounted {
+  onShow() {}
+  onHide() {}
+}
+
 export class UserLayer extends RefCounted {
   layersChanged = new Signal();
   readyStateChanged = new Signal();
@@ -58,7 +63,7 @@ export class UserLayer extends RefCounted {
     this.registerDisposer(layer);
     this.registerSignalBinding(layer.layerChanged.add(layersChanged.dispatch, layersChanged));
     this.registerSignalBinding(
-      layer.readyStateChanged.add(readyStateChanged.dispatch, readyStateChanged));
+        layer.readyStateChanged.add(readyStateChanged.dispatch, readyStateChanged));
     layersChanged.dispatch();
   }
 
@@ -80,11 +85,9 @@ export class UserLayer extends RefCounted {
     return result;
   }
 
-  toJSON (): any {
-    return null;
-  }
+  toJSON(): any { return null; }
 
-  makeDropdown(element: HTMLDivElement): Disposable|null { return null; }
+  makeDropdown(element: HTMLDivElement): UserLayerDropdown|undefined { return undefined; }
 
   handleAction(action: string): void {}
 };
@@ -100,7 +103,8 @@ export class ManagedUserLayer extends RefCounted {
   private updateSignalBindings(layer: UserLayer, callback: SignalBindingUpdater) {
     callback(layer.layersChanged, this.handleLayerChanged, this);
     callback(layer.readyStateChanged, this.readyStateChanged.dispatch, this.readyStateChanged);
-    callback(layer.specificationChanged, this.specificationChanged.dispatch, this.specificationChanged);
+    callback(
+        layer.specificationChanged, this.specificationChanged.dispatch, this.specificationChanged);
   }
 
   set layer(layer: UserLayer) {
@@ -131,9 +135,7 @@ export class ManagedUserLayer extends RefCounted {
     }
   }
 
-  disposed () {
-    this.wasDisposed = true;
-  }
+  disposed() { this.wasDisposed = true; }
 };
 
 export class LayerManager extends RefCounted {
@@ -146,7 +148,8 @@ export class LayerManager extends RefCounted {
   private updateSignalBindings(layer: ManagedUserLayer, callback: SignalBindingUpdater) {
     callback(layer.layerChanged, this.layersChanged.dispatch, this.layersChanged);
     callback(layer.readyStateChanged, this.readyStateChanged.dispatch, this.readyStateChanged);
-    callback(layer.specificationChanged, this.specificationChanged.dispatch, this.specificationChanged);
+    callback(
+        layer.specificationChanged, this.specificationChanged.dispatch, this.specificationChanged);
   }
 
   /**
@@ -186,7 +189,7 @@ export class LayerManager extends RefCounted {
     managedLayer.dispose();
   }
 
-  clear () {
+  clear() {
     for (let managedLayer of this.managedLayers) {
       this.unbindManagedLayer(managedLayer);
     }
@@ -206,7 +209,8 @@ export class LayerManager extends RefCounted {
 
   reorderManagedLayer(oldIndex: number, newIndex: number) {
     const numLayers = this.managedLayers.length;
-    if (oldIndex === newIndex || oldIndex < 0 || oldIndex >= numLayers || newIndex < 0 || newIndex >= numLayers) {
+    if (oldIndex === newIndex || oldIndex < 0 || oldIndex >= numLayers || newIndex < 0 ||
+        newIndex >= numLayers) {
       // Don't do anything.
       return;
     }
@@ -215,13 +219,9 @@ export class LayerManager extends RefCounted {
     this.layersChanged.dispatch();
   }
 
-  disposed() {
-    this.clear();
-  }
+  disposed() { this.clear(); }
 
-  getLayerByName(name: string) {
-    return this.managedLayers.find(x => x.name === name);
-  }
+  getLayerByName(name: string) { return this.managedLayers.find(x => x.name === name); }
 
   /**
    * Asynchronously initialize the voxelSize and position based on the managed
@@ -432,14 +432,14 @@ export class LayerSelectedValues extends RefCounted {
 };
 
 export class VisibleRenderLayerTracker<RenderLayerType extends RenderLayer> extends RefCounted {
-
   private visibleLayers = new Set<RenderLayerType>();
   private newVisibleLayers = new Set<RenderLayerType>();
   private updatePending: number|null = null;
 
-  constructor(public layerManager: LayerManager, public renderLayerType: any,
-              private layerAdded: (layer: RenderLayerType) => void,
-              private layerRemoved: (layer: RenderLayerType) => void) {
+  constructor(
+      public layerManager: LayerManager, public renderLayerType: any,
+      private layerAdded: (layer: RenderLayerType) => void,
+      private layerRemoved: (layer: RenderLayerType) => void) {
     super();
     this.registerSignalBinding(layerManager.layersChanged.add(this.handleLayersChanged, this));
     this.updateVisibleLayers();
@@ -454,13 +454,13 @@ export class VisibleRenderLayerTracker<RenderLayerType extends RenderLayer> exte
     }
   }
 
-  disposed () {
+  disposed() {
     this.cancelUpdate();
     this.visibleLayers.forEach(this.layerRemoved);
     this.visibleLayers.clear();
   }
 
-  private cancelUpdate () {
+  private cancelUpdate() {
     let {updatePending} = this;
     if (updatePending !== null) {
       clearTimeout(updatePending);
@@ -468,7 +468,7 @@ export class VisibleRenderLayerTracker<RenderLayerType extends RenderLayer> exte
     }
   }
 
-  private updateVisibleLayers () {
+  private updateVisibleLayers() {
     let {visibleLayers, newVisibleLayers, renderLayerType, layerAdded, layerRemoved} = this;
     for (let renderLayer of this.layerManager.readyRenderLayers()) {
       if (renderLayer instanceof renderLayerType) {
@@ -489,7 +489,7 @@ export class VisibleRenderLayerTracker<RenderLayerType extends RenderLayer> exte
     newVisibleLayers.clear();
   }
 
-  getVisibleLayers () {
+  getVisibleLayers() {
     if (this.updatePending !== null) {
       this.cancelUpdate();
       this.updateVisibleLayers();

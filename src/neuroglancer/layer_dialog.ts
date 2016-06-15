@@ -14,24 +14,19 @@
  * limitations under the License.
  */
 
-import {Overlay} from 'neuroglancer/overlay';
 import {getVolume, volumeCompleter, suggestLayerName, findSourceGroup} from 'neuroglancer/datasource/factory';
 import {LayerListSpecification, ManagedUserLayerWithSpecification} from 'neuroglancer/layer_specification';
+import {Overlay} from 'neuroglancer/overlay';
 import {DataType, VolumeType} from 'neuroglancer/sliceview/base';
 import {MultiscaleVolumeChunkSource} from 'neuroglancer/sliceview/frontend';
-import {KeySequenceMap} from 'neuroglancer/util/keyboard_shortcut_handler';
 import {CANCELLED, cancellableThen, cancelPromise} from 'neuroglancer/util/promise';
-import {AutocompleteTextInput, makeCompletionElementWithDescription} from 'neuroglancer/widget/autocomplete';
 import {associateLabelWithElement} from 'neuroglancer/widget/associate_label';
+import {AutocompleteTextInput, makeCompletionElementWithDescription} from 'neuroglancer/widget/autocomplete';
 import {makeHiddenSubmitButton} from 'neuroglancer/widget/hidden_submit_button';
 
 require('./layer_dialog.css');
 
-let KEY_MAP = new KeySequenceMap();
-KEY_MAP.bind('escape', 'close');
-
 export class LayerDialog extends Overlay {
-
   /**
    * Used for displaying status information.
    */
@@ -45,9 +40,10 @@ export class LayerDialog extends Overlay {
   sourceValid: boolean = false;
   nameValid: boolean = true;
 
-  constructor (public manager: LayerListSpecification,
-               public existingLayer?: ManagedUserLayerWithSpecification) {
-    super(KEY_MAP);
+  constructor(
+      public manager: LayerListSpecification,
+      public existingLayer?: ManagedUserLayerWithSpecification) {
+    super();
     let dialogElement = this.content;
     dialogElement.classList.add('add-layer-overlay');
 
@@ -57,7 +53,7 @@ export class LayerDialog extends Overlay {
                                                   makeElement: makeCompletionElementWithDescription,
                                                   offset: originalResult.offset,
                                                   showSingleResult: true,
-        }));
+                                                }));
     let sourceForm = document.createElement('form');
     sourceForm.className = 'source-form';
     this.registerEventListener(sourceForm, 'submit', (event: Event) => {
@@ -68,11 +64,10 @@ export class LayerDialog extends Overlay {
     let sourcePrompt = document.createElement('label');
     sourcePrompt.textContent = 'Source:';
     let sourceInput = this.sourceInput =
-      this.registerDisposer(new AutocompleteTextInput({completer: sourceCompleter, delay: 0}));
+        this.registerDisposer(new AutocompleteTextInput({completer: sourceCompleter, delay: 0}));
     sourceInput.element.classList.add('add-layer-source');
-    sourceInput.inputElement.addEventListener('blur', event => {
-      this.validateSource(/*focusName=*/false);
-    });
+    sourceInput.inputElement.addEventListener(
+        'blur', event => { this.validateSource(/*focusName=*/false); });
     this.submitElement.disabled = true;
     sourceInput.inputChanged.add(() => {
       cancelPromise(this.volumePromise);
@@ -101,9 +96,7 @@ export class LayerDialog extends Overlay {
 
     nameInputElement.type = 'text';
 
-    this.registerEventListener(nameInputElement, 'input', () => {
-      this.validateName();
-    });
+    this.registerEventListener(nameInputElement, 'input', () => { this.validateName(); });
 
     submitElement.type = 'submit';
 
@@ -186,9 +179,7 @@ export class LayerDialog extends Overlay {
     this.validityChanged();
   }
 
-  validityChanged() {
-    this.submitElement.disabled = !(this.nameValid && this.sourceValid);
-  }
+  validityChanged() { this.submitElement.disabled = !(this.nameValid && this.sourceValid); }
 
   validateSource(focusName: boolean = false) {
     let url = this.sourceInput.value;
@@ -217,11 +208,12 @@ export class LayerDialog extends Overlay {
     }
 
     this.setInfo('Validating volume source...');
-    let volumePromise = new Promise<MultiscaleVolumeChunkSource>(
-      resolve => { resolve(getVolume(url)); });
+    let volumePromise =
+        new Promise<MultiscaleVolumeChunkSource>(resolve => { resolve(getVolume(url)); });
     this.volumePromise = cancellableThen(volumePromise, source => {
       this.sourceValid = true;
-      this.setInfo(`${VolumeType[source.volumeType].toLowerCase()}: ${source.numChannels}-channel ${DataType[source.dataType].toLowerCase()}`);
+      this.setInfo(
+          `${VolumeType[source.volumeType].toLowerCase()}: ${source.numChannels}-channel ${DataType[source.dataType].toLowerCase()}`);
       this.validityChanged();
     });
     volumePromise.catch((reason: Error) => {

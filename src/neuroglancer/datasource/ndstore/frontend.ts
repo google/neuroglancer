@@ -23,11 +23,10 @@ import {ChunkManager} from 'neuroglancer/chunk_manager/frontend';
 import {registerDataSourceFactory, CompletionResult, Completion} from 'neuroglancer/datasource/factory';
 import {DataType, VolumeType, VolumeChunkSpecification} from 'neuroglancer/sliceview/base';
 import {VolumeChunkSource as GenericVolumeChunkSource, MultiscaleVolumeChunkSource as GenericMultiscaleVolumeChunkSource} from 'neuroglancer/sliceview/frontend';
-import {StatusMessage} from 'neuroglancer/status';
-import {applyCompletionOffset, getPrefixMatches, getPrefixMatchesWithDescriptions} from 'neuroglancer/util/completion';
+import {applyCompletionOffset, getPrefixMatchesWithDescriptions} from 'neuroglancer/util/completion';
 import {vec3} from 'neuroglancer/util/geom';
 import {openShardedHttpRequest, sendHttpRequest} from 'neuroglancer/util/http_request';
-import {verifyObject, verifyOptionalString, verifyString, parseArray, parseFiniteVec, parseIntVec, stableStringify, parseQueryStringParameters} from 'neuroglancer/util/json';
+import {verifyOptionalString, verifyString, parseArray, parseFiniteVec, parseIntVec, stableStringify, parseQueryStringParameters} from 'neuroglancer/util/json';
 import {cancellableThen, CancellablePromise} from 'neuroglancer/util/promise';
 
 let serverDataTypes = new Map<string, DataType>();

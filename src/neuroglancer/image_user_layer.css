@@ -14,45 +14,31 @@
  * limitations under the License.
  */
 
-#container .gl-canvas {
-  position: absolute;
-  top: 0px;
-  left: 0px;
-  width: 100%;
-  height: 100%;
-  /* Canvas is in back. */
-  z-index: 0;
+.image-dropdown .CodeMirror {
+  height: 6em;
+  width: 60ch;
+  border: 1px solid transparent;
 }
 
-#container {
-  width: 100vw;
-  flex: 1;
-  position: relative;
+.image-dropdown .CodeMirror.invalid-input {
+  border: 1px solid red;
 }
 
-.gllayoutcontainer {
-  display: flex;
-  flex-direction: column;
-  position: absolute;
-  top: 0px;
-  left: 0pt;
-  width: 100%;
-  height: 100%;
-  z-index: 2;
+.image-dropdown .CodeMirror.valid-input {
+  border: 1px solid green;
 }
 
-.gllayoutrow {
-  flex: 1;
+.image-dropdown-top-row {
   display: flex;
   flex-direction: row;
-}
-.gllayoutcell {
-  border-style: solid;
-  border-color: black;
-  border-width: 2px;
-  flex: 1;
+  align-items: center;
 }
 
-.gllayoutcell[isActivePanel=true] {
-  border-color: white;
+/* .image-dropdown-top-row .range-slider {
+  flex: 1;
+} */
+
+.image-layer-shader-overlay .CodeMirror {
+  width: 80vw;
+  height: 80vh;
 }

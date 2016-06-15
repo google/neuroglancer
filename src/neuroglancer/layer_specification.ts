@@ -27,7 +27,7 @@ import {SegmentationUserLayer} from 'neuroglancer/segmentation_user_layer';
 import {ImageUserLayer} from 'neuroglancer/image_user_layer';
 import {VoxelSize} from 'neuroglancer/navigation_state';
 import {StatusMessage} from 'neuroglancer/status';
-import {verifyObject, verifyObjectProperty, verifyString, verifyOptionalString} from 'neuroglancer/util/json';
+import {verifyObject, verifyObjectProperty, verifyOptionalString} from 'neuroglancer/util/json';
 
 export function getVolumeWithStatusMessage(x: string): Promise<MultiscaleVolumeChunkSource> {
   return StatusMessage.forPromise(new Promise(function(resolve) { resolve(getVolume(x)); }), {

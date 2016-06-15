@@ -23,6 +23,8 @@
     "benchmark:watch": "karma start ./config/karma.benchmark.js --no-single-run"
   },
   "devDependencies": {
+    "codemirror": "^5.15.2",
+    "glsl-editor": "^1.0.0",
     "istanbul": "github:gotwarlost/istanbul#master",
     "istanbul-instrumenter-loader": "^0.2.0",
     "jasmine-core": "^2.4.1",
@@ -49,16 +51,17 @@
     "babel-plugin-transform-es2015-parameters": "^6.9.0",
     "css-loader": "^0.23.1",
     "extract-text-webpack-plugin": "^1.0.1",
-    "html-webpack-plugin": "^2.10.0",
-    "style-loader": "^0.13.0",
-    "lodash": "^4.13.1",
-    "sortablejs": "^1.4.2",
     "gl-matrix": "^2.3.2",
+    "html-webpack-plugin": "^2.10.0",
+    "lodash": "^4.13.1",
     "pako": "^1.0.1",
+    "raw-loader": "^0.5.1",
     "signals": "^1.0.0",
+    "sortablejs": "^1.4.2",
+    "style-loader": "^0.13.0",
     "ts-loader": "^0.8.2",
+    "typescript": "^1.9.0-dev.20160504",
     "webpack": "^1.13.1",
-    "webpack-closure-compiler": "^2.0.2",
-    "typescript": "^1.9.0-dev.20160504"
+    "webpack-closure-compiler": "^2.0.2"
   }
 }

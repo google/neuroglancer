@@ -18,6 +18,10 @@ import {RefCounted} from 'neuroglancer/util/disposable';
 
 export class Memoize<Key, Value extends RefCounted> {
   private map = new Map<Key, Value>();
+
+  /**
+   * If getter throws an exception, no value is added.
+   */
   get<T extends Value>(key: Key, getter: () => T): T {
     let {map} = this;
     let obj = <T>map.get(key);

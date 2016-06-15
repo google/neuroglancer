@@ -17,6 +17,5 @@
 import {VolumeChunk} from 'neuroglancer/sliceview/backend';
 
 export function decodeCompressedSegmentationChunk(chunk: VolumeChunk, response: ArrayBuffer) {
-  // TODO: Handle multiple channels.
-  chunk.data = new Uint32Array(response, 4 /* skip offset of first channel */);
+  chunk.data = new Uint32Array(response);
 }

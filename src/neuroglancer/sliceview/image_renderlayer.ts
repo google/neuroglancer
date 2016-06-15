@@ -14,19 +14,65 @@
  * limitations under the License.
  */
 
-import { RenderLayer } from 'neuroglancer/sliceview/renderlayer';
-import { ShaderBuilder } from 'neuroglancer/webgl/shader';
+import {ChunkManager} from 'neuroglancer/chunk_manager/frontend';
+import {SliceView, MultiscaleVolumeChunkSource} from 'neuroglancer/sliceview/frontend';
+import {RenderLayer, trackableAlphaValue} from 'neuroglancer/sliceview/renderlayer';
+import {TrackableValue} from 'neuroglancer/trackable_value';
+import {verifyString} from 'neuroglancer/util/json';
+import {ShaderBuilder} from 'neuroglancer/webgl/shader';
+
+export const FRAGMENT_MAIN_START = '//NEUROGLANCER_IMAGE_RENDERLAYER_FRAGMENT_MAIN_START';
+
+const DEFAULT_FRAGMENT_MAIN = `void main() {
+  emitGrayscale(toNormalized(getDataValue()));
+}
+`;
+
+const glsl_COLORMAPS = require<string>('neuroglancer/webgl/colormaps.glsl');
+
+export function getTrackableFragmentMain(value = DEFAULT_FRAGMENT_MAIN) {
+  return new TrackableValue<string>(value, verifyString);
+}
 
 export class ImageRenderLayer extends RenderLayer {
-  getShaderKey() {
-    return 'sliceview.ImageRenderLayer';
+  constructor(
+      chunkManager: ChunkManager, multiscaleSourcePromise: Promise<MultiscaleVolumeChunkSource>,
+      public opacity = trackableAlphaValue(0.5), public fragmentMain = getTrackableFragmentMain()) {
+    super(chunkManager, multiscaleSourcePromise);
+    this.registerSignalBinding(opacity.changed.add(() => { this.redrawNeeded.dispatch(); }));
+    this.registerSignalBinding(fragmentMain.changed.add(() => {
+      this.shaderUpdated = true;
+      this.redrawNeeded.dispatch();
+    }));
   }
 
-  defineShader (builder: ShaderBuilder) {
+  getShaderKey() { return `sliceview.ImageRenderLayer:${JSON.stringify(this.fragmentMain.value)}`; }
+
+  defineShader(builder: ShaderBuilder) {
     super.defineShader(builder);
-    builder.setFragmentMain(`
-float value = getDataValue();
-emit(vec4(value, value, value, 0.7));
+    builder.addUniform('highp float', 'uOpacity');
+    builder.addFragmentCode(`
+void emitRGBA(vec4 rgba) {
+  emit(vec4(rgba.rgb, rgba.a * uOpacity));
+}
+void emitRGB(vec3 rgb) {
+  emit(vec4(rgb, uOpacity));
+}
+void emitGrayscale(float value) {
+  emit(vec4(value, value, value, uOpacity));
+}
+void emitTransparent() {
+  emit(vec4(0.0, 0.0, 0.0, 0.0));
+}
 `);
+    builder.addFragmentCode(glsl_COLORMAPS);
+    builder.setFragmentMainFunction(FRAGMENT_MAIN_START + '\n' + this.fragmentMain.value);
+  }
+
+  beginSlice(sliceView: SliceView) {
+    let shader = super.beginSlice(sliceView);
+    let {gl} = this;
+    gl.uniform1f(shader.uniform('uOpacity'), this.opacity.value);
+    return shader;
   }
 };

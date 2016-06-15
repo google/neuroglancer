@@ -14,23 +14,23 @@
  * limitations under the License.
  */
 
-import {UserLayer} from 'neuroglancer/layer';
-import {SegmentColorHash} from 'neuroglancer/segment_color';
-import {SegmentSetWidget} from 'neuroglancer/widget/segment_set_widget';
-import {SegmentSelectionState, SegmentationDisplayState} from 'neuroglancer/segmentation_display_state';
-import {Uint64Set} from 'neuroglancer/uint64_set';
-import {Uint64} from 'neuroglancer/util/uint64';
-import {LayerListSpecification} from 'neuroglancer/layer_specification';
-import {SegmentationRenderLayer, trackableAlphaValue} from 'neuroglancer/sliceview/segmentation_renderlayer';
-import {MeshSource} from 'neuroglancer/mesh/frontend';
 import {getMeshSource, getSkeletonSource} from 'neuroglancer/datasource/factory';
-import {MeshLayer} from 'neuroglancer/mesh/frontend';
-import {SkeletonLayer, PerspectiveViewSkeletonLayer, SliceViewPanelSkeletonLayer} from 'neuroglancer/skeleton/frontend';
-import {RefCounted} from 'neuroglancer/util/disposable';
-import {Uint64EntryWidget} from 'neuroglancer/widget/uint64_entry_widget';
+import {UserLayer, UserLayerDropdown} from 'neuroglancer/layer';
+import {LayerListSpecification} from 'neuroglancer/layer_specification';
 import {getVolumeWithStatusMessage} from 'neuroglancer/layer_specification';
-import {RangeWidget} from 'neuroglancer/widget/range';
+import {MeshSource} from 'neuroglancer/mesh/frontend';
+import {MeshLayer} from 'neuroglancer/mesh/frontend';
+import {SegmentColorHash} from 'neuroglancer/segment_color';
+import {SegmentSelectionState, SegmentationDisplayState} from 'neuroglancer/segmentation_display_state';
+import {SkeletonLayer, PerspectiveViewSkeletonLayer, SliceViewPanelSkeletonLayer} from 'neuroglancer/skeleton/frontend';
+import {trackableAlphaValue} from 'neuroglancer/sliceview/renderlayer';
+import {SegmentationRenderLayer} from 'neuroglancer/sliceview/segmentation_renderlayer';
+import {Uint64Set} from 'neuroglancer/uint64_set';
 import {verifyOptionalString, parseArray, verifyObjectProperty} from 'neuroglancer/util/json';
+import {Uint64} from 'neuroglancer/util/uint64';
+import {RangeWidget} from 'neuroglancer/widget/range';
+import {SegmentSetWidget} from 'neuroglancer/widget/segment_set_widget';
+import {Uint64EntryWidget} from 'neuroglancer/widget/uint64_entry_widget';
 
 require('./segmentation_user_layer.css');
 
@@ -103,17 +103,17 @@ export class SegmentationUserLayer extends UserLayer implements SegmentationDisp
     });
   }
 
-  disposed () {
+  disposed() {
     super.disposed();
     this.wasDisposed = true;
   }
 
-  addMesh (meshSource: MeshSource) {
+  addMesh(meshSource: MeshSource) {
     this.meshLayer = new MeshLayer(this.manager.chunkManager, meshSource, this);
     this.addRenderLayer(this.meshLayer);
   }
 
-  toJSON () {
+  toJSON() {
     let x: any = {'type': 'segmentation'};
     x['source'] = this.volumePath;
     x['mesh'] = this.meshPath;
@@ -131,9 +131,7 @@ export class SegmentationUserLayer extends UserLayer implements SegmentationDisp
     return x;
   }
 
-  makeDropdown(element: HTMLDivElement) {
-    return new SegmentationDropdown(element, this);
-  }
+  makeDropdown(element: HTMLDivElement) { return new SegmentationDropdown(element, this); }
 
   handleAction(action: string) {
     switch (action) {
@@ -162,7 +160,7 @@ export class SegmentationUserLayer extends UserLayer implements SegmentationDisp
   }
 };
 
-class SegmentationDropdown extends RefCounted {
+class SegmentationDropdown extends UserLayerDropdown {
   visibleSegmentWidget = this.registerDisposer(new SegmentSetWidget(this.layer));
   addSegmentWidget = this.registerDisposer(new Uint64EntryWidget());
   selectedAlphaWidget = this.registerDisposer(new RangeWidget(this.layer.selectedAlpha));
@@ -172,8 +170,6 @@ class SegmentationDropdown extends RefCounted {
     element.classList.add('segmentation-dropdown');
     let {selectedAlphaWidget, notSelectedAlphaWidget} = this;
     selectedAlphaWidget.promptElement.textContent = 'Opacity (on)';
-    selectedAlphaWidget.inputElement.min = '0';
-    selectedAlphaWidget.inputElement.max = '1';
     notSelectedAlphaWidget.promptElement.textContent = 'Opacity (off)';
 
     element.appendChild(this.selectedAlphaWidget.element);
@@ -181,9 +177,8 @@ class SegmentationDropdown extends RefCounted {
     this.addSegmentWidget.element.classList.add('add-segment');
     this.addSegmentWidget.element.title = 'Add segment ID';
     element.appendChild(this.registerDisposer(this.addSegmentWidget).element);
-    this.registerSignalBinding(this.addSegmentWidget.valueEntered.add((value: Uint64) => {
-      this.layer.visibleSegments.add(value);
-    }));
+    this.registerSignalBinding(this.addSegmentWidget.valueEntered.add(
+        (value: Uint64) => { this.layer.visibleSegments.add(value); }));
     element.appendChild(this.registerDisposer(this.visibleSegmentWidget).element);
   }
 };

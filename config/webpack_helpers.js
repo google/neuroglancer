@@ -50,7 +50,8 @@ const DEFAULT_BABEL_PLUGINS = exports.DEFAULT_BABEL_PLUGINS = [
   // not fixed as of Firefox 46.
   require.resolve('babel-plugin-transform-es2015-block-scoping'),
 
-  // This is needed in order to avoid transform-es2015-block-scoping generating invalid code.
+  // This is needed in order to avoid transform-es2015-block-scoping generating
+  // invalid code.
   require.resolve('babel-plugin-transform-es2015-classes'),
 ];
 
@@ -155,6 +156,10 @@ function getBaseConfig(options) {
           test: /\.css$/,
           loader: ExtractTextPlugin.extract('style-loader', 'css-loader')
         },
+        {
+          test: /\.glsl$/,
+          loader: require.resolve('raw-loader'),
+        }
       ],
     },
     node: {'Buffer': false},

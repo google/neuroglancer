@@ -20,13 +20,13 @@ import {ChunkManager} from 'neuroglancer/chunk_manager/frontend';
 import {makeRequest, INSTANCE_NAMES, INSTANCE_IDENTIFIERS, PRODUCTION_INSTANCE, BrainmapsInstance} from 'neuroglancer/datasource/brainmaps/api';
 import {VolumeChunkEncoding, VolumeSourceParameters, volumeSourceToString, MeshSourceParameters, meshSourceToString} from 'neuroglancer/datasource/brainmaps/base';
 import {registerDataSourceFactory} from 'neuroglancer/datasource/factory';
+import {MeshSource as GenericMeshSource} from 'neuroglancer/mesh/frontend';
 import {DataType, VolumeType, VolumeChunkSpecification} from 'neuroglancer/sliceview/base';
 import {VolumeChunkSource as GenericVolumeChunkSource, MultiscaleVolumeChunkSource as GenericMultiscaleVolumeChunkSource} from 'neuroglancer/sliceview/frontend';
-import {getPrefixMatches} from 'neuroglancer/util/completion';
 import {StatusMessage} from 'neuroglancer/status';
+import {getPrefixMatches} from 'neuroglancer/util/completion';
 import {Vec3, vec3} from 'neuroglancer/util/geom';
 import {verifyObject, verifyString, verifyPositiveInt, verifyMapKey, verifyFinitePositiveFloat, parseXYZ, parseArray, stableStringify, verifyObjectProperty} from 'neuroglancer/util/json';
-import {MeshSource as GenericMeshSource} from 'neuroglancer/mesh/frontend';
 
 const SERVER_DATA_TYPES = new Map<string, DataType>();
 SERVER_DATA_TYPES.set('UINT8', DataType.UINT8);
@@ -105,21 +105,18 @@ export class MultiscaleVolumeChunkSource implements GenericMultiscaleVolumeChunk
       }
 
       // Infer the VolumeType from the data type and number of channels.
-      let volumeType = VolumeType.UNKNOWN;
+      let volumeType = VolumeType.IMAGE;
       if (numChannels === 1) {
         switch (dataType) {
           case DataType.UINT64:
             volumeType = VolumeType.SEGMENTATION;
             break;
-          case DataType.UINT8:
-          case DataType.FLOAT32:
-            volumeType = VolumeType.IMAGE;
-            break;
         }
       }
       this.volumeType = volumeType;
     } catch (parseError) {
-      throw new Error(`Failed to parse BrainMaps multiscale volume specification: ${parseError.message}`);
+      throw new Error(
+          `Failed to parse BrainMaps multiscale volume specification: ${parseError.message}`);
     }
     try {
       verifyObject(meshesResponse);
@@ -172,7 +169,9 @@ export class MultiscaleVolumeChunkSource implements GenericMultiscaleVolumeChunk
     if (validMesh === undefined) {
       return null;
     }
-    return getMeshSource(chunkManager, {'instance': this.instance, 'volume_id': this.volume_id, 'mesh_name': validMesh.name});
+    return getMeshSource(
+        chunkManager,
+        {'instance': this.instance, 'volume_id': this.volume_id, 'mesh_name': validMesh.name});
   }
 };
 
@@ -213,7 +212,7 @@ export function getVolume(instance: BrainmapsInstance, key: string) {
 export class VolumeList {
   volumeIds: string[];
   hierarchicalVolumeIds = new Map<string, string[]>();
-  constructor (response: any) {
+  constructor(response: any) {
     try {
       verifyObject(response);
       let volumeIds = this.volumeIds = parseArray(response['volumeId'], verifyString);

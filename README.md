@@ -96,6 +96,12 @@ In order to maintain a responsive UI and data display even during rapid navigati
 
 The "frontend" UI thread handles user actions and rendering, while the "backend" WebWorker thread handle all queuing, downloading, and preprocessing of data needed for rendering.
 
+# Documentation Index
+
+- [Image Layer Rendering](src/neuroglancer/sliceview/image_layer_rendering.md)
+- [Cross-sectional view implementation architecture](src/neuroglancer/sliceview/README.md)
+- [Compressed segmentation format](src/neuroglancer/sliceview/compressed_segmentation/README.md)
+
 # Building
 
 node.js is required to build the viewer.

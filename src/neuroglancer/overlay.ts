@@ -21,11 +21,14 @@ require('./overlay.css');
 
 export let overlaysOpen = 0;
 
+let KEY_MAP = new KeySequenceMap();
+KEY_MAP.bind('escape', 'close');
+
 export class Overlay extends RefCounted {
   container: HTMLDivElement;
   keyboardShortcutHandler: GlobalKeyboardShortcutHandler;
   content: HTMLDivElement;
-  constructor(public keySequenceMap: KeySequenceMap) {
+  constructor(public keySequenceMap: KeySequenceMap = KEY_MAP) {
     super();
     ++overlaysOpen;
     let container = this.container = document.createElement('div');

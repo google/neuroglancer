@@ -31,7 +31,7 @@ export interface WritableArrayLike<T> {
  */
 export function partitionArray<T>(
     array: T[], start: number, end: number, predicate: (x: T) => boolean): number {
-  for (; start < end;) {
+  while (start < end) {
     let x = array[start];
     if (predicate(x)) {
       ++start;

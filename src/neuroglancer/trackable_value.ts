@@ -14,10 +14,10 @@
  * limitations under the License.
  */
 
-import {Signal} from 'signals';
 import {Trackable} from 'neuroglancer/url_hash_state';
+import {Signal} from 'signals';
 
-export class TrackableValue<T> implements Trackable {
+export class WatchableValue<T> {
   get value() { return this.value_; }
   set value(newValue: T) {
     if (newValue !== this.value_) {
@@ -26,7 +26,13 @@ export class TrackableValue<T> implements Trackable {
     }
   }
   changed = new Signal();
-  constructor(private value_: T, public validator: (value: any) => T, public defaultValue?: T) {}
+  constructor(protected value_: T) {}
+};
+
+export class TrackableValue<T> extends WatchableValue<T> implements Trackable {
+  constructor(value: T, public validator: (value: any) => T, public defaultValue = value) {
+    super(value);
+  }
   toJSON() {
     let {value_} = this;
     if (value_ === this.defaultValue) {

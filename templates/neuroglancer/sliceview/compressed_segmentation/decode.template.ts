@@ -42,7 +42,7 @@ export function readSingleChannelValue(
   data: Uint32Array, baseOffset: number, chunkDataSize: ArrayLike<number>,
   blockSize: ArrayLike<number>, dataPosition: ArrayLike<number>) {
   let outputValueOffset = decodeValueOffset(data, baseOffset, chunkDataSize, blockSize, dataPosition,
-                                           /*@ strideMultiplier @*/);
+                                           /*@ strideMultiplier @*/) + baseOffset;
   /*% if dataType == 'uint64' %*/
   out.low = data[outputValueOffset];
   out.high = data[outputValueOffset + 1];
@@ -63,7 +63,7 @@ export function readValue(
   out: Uint64,
   /*% endif %*/
   data: Uint32Array, baseOffset: number, chunkDataSize: ArrayLike<number>,
-    blockSize: ArrayLike<number>, dataPosition: ArrayLike<number>) {
+  blockSize: ArrayLike<number>, dataPosition: ArrayLike<number>) {
   return readSingleChannelValue(
     /*% if dataType == 'uint64' %*/
     out,
@@ -94,11 +94,13 @@ export function decodeChannel(
       dataPosition[1] = y;
       for (let x = 0; x < vx; ++x) {
         dataPosition[0] = x;
-        let outputValueOffset = decodeValueOffset(data, baseOffset, chunkDataSize, blockSize, dataPosition,
-                                                  /*@ strideMultiplier @*/);
-        out[outputOffset++] = data[baseOffset + outputValueOffset];
+        let outputValueOffset = decodeValueOffset(
+                                    data, baseOffset, chunkDataSize, blockSize, dataPosition,
+                                    /*@ strideMultiplier @*/) +
+            baseOffset;
+        out[outputOffset++] = data[outputValueOffset];
         /*% if dataType == 'uint64' %*/
-        out[outputOffset++] = data[baseOffset + outputValueOffset + 1];
+        out[outputOffset++] = data[outputValueOffset + 1];
         /*% endif %*/
       }
     }
