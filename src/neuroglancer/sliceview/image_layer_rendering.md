@@ -110,6 +110,13 @@ void main () {
 }
 ```
 
+Outputting a single-channel volume using the Jet colormap:
+```glsl
+void main () {
+  emitRGB(colormapJet(toNormalized(getDataValue())));
+}
+```
+
 Thresholding a single-channel volume:
 ```glsl
 void main () {
