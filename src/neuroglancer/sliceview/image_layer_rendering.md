@@ -84,3 +84,35 @@ void emitTransparent();
 
 You can map values in the range [0,1] to an RGB color using one of the color maps defined in
 [colormaps.glsl](../webgl/colormaps.glsl).
+
+### Examples
+
+The default shader, that displays the first channel as a grayscale intensity:
+```glsl
+void main () {
+  emitGrayscale(toNormalized(getDataValue()));
+}
+```
+
+Outputting a 3-channel volume as RGB:
+```glsl
+void main () {
+  emitRGB(vec3(toNormalized(getDataValue(0)),
+               toNormalized(getDataValue(1)),
+               toNormalized(getDataValue(2))));
+}
+```
+
+Outputting a single-channel volume as a solid red mask with varying alpha (e.g. to overlay a probability map over raw image data):
+```glsl
+void main () {
+  emitRGBA(vec4(1, 0, 0, toNormalized(getDataValue())));
+}
+```
+
+Thresholding a single-channel volume:
+```glsl
+void main () {
+  emitGrayscale(step(0.5, toNormalized(getDataValue())));
+}
+```
