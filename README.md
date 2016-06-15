@@ -53,7 +53,9 @@ See [src/neuroglancer/default_key_bindings.ts](src/neuroglancer/default_key_bind
 
 - Double click to toggle showing the object under the mouse pointer.
 
-- Hover over a segmentation layer name to see the current list of objects shown.
+- Hover over a segmentation layer name to see the current list of objects shown and to access the opacity sliders.
+
+- Hover over an image layer name to access the opacity slider and the text editor for modifying the [rendering code](src/neuroglancer/sliceview/image_layer_rendering.md).
 
 # Troubleshooting
 
