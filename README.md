@@ -93,7 +93,7 @@ See [src/neuroglancer/default_key_bindings.ts](src/neuroglancer/default_key_bind
 # Multi-threaded architecture
 
 In order to maintain a responsive UI and data display even during rapid navigation, work is split between the main UI thread (referred to as the "frontend") and a separate WebWorker thread (referred to as the "backend").  This introduces some complexity due to the fact that current browsers:
- - do not support any form of **shared** memory or standard synchronization mechanism (although they do support relative efficient **transfers** of typed arrays between threads);
+ - do not support any form of *shared* memory or standard synchronization mechanism (although they do support relatively efficient *transfers* of typed arrays between threads);
  - require that all manipulation of the DOM and the WebGL context happens on the main UI thread.
 
 The "frontend" UI thread handles user actions and rendering, while the "backend" WebWorker thread handle all queuing, downloading, and preprocessing of data needed for rendering.
