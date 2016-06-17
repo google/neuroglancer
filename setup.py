@@ -16,9 +16,9 @@ class build_nodejs(build):
 
             this_dir = os.path.abspath(os.path.dirname(__file__))
 
-            project_dir = os.path.join(this_dir, '..')
-            build_dir = os.path.join(this_dir, '../dist/min')
-            static_dir = os.path.join(this_dir, 'neuroglancer/static')
+            project_dir = this_dir
+            build_dir = os.path.join(this_dir, 'dist/min')
+            static_dir = os.path.join(this_dir, 'python/neuroglancer/static')
 
             print "Project dir " + project_dir
             print "Build dir " + build_dir
@@ -57,6 +57,9 @@ setup(
     author = 'Jeremy Maitin-Shepard, Jan Funke',
     author_email = 'jbms@google.com, jfunke@iri.upc.edu',
     packages = ['neuroglancer', 'neuroglancer.static'],
+    package_dir = {
+        '': 'python',
+    },
     include_package_data = True,
     package_data = {
         'neuroglancer.static': static_files,
