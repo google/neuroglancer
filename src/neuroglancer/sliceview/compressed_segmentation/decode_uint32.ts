@@ -39,7 +39,7 @@ export function readSingleChannelValue(
   data: Uint32Array, baseOffset: number, chunkDataSize: ArrayLike<number>,
   blockSize: ArrayLike<number>, dataPosition: ArrayLike<number>) {
   let outputValueOffset = decodeValueOffset(data, baseOffset, chunkDataSize, blockSize, dataPosition,
-                                           1);
+                                           1) + baseOffset;
   
   return data[outputValueOffset];
   
@@ -54,7 +54,7 @@ export function readSingleChannelValue(
 export function readValue(
   
   data: Uint32Array, baseOffset: number, chunkDataSize: ArrayLike<number>,
-    blockSize: ArrayLike<number>, dataPosition: ArrayLike<number>) {
+  blockSize: ArrayLike<number>, dataPosition: ArrayLike<number>) {
   return readSingleChannelValue(
     
     data, baseOffset + data[dataPosition[3]], chunkDataSize, blockSize, dataPosition);
@@ -83,9 +83,11 @@ export function decodeChannel(
       dataPosition[1] = y;
       for (let x = 0; x < vx; ++x) {
         dataPosition[0] = x;
-        let outputValueOffset = decodeValueOffset(data, baseOffset, chunkDataSize, blockSize, dataPosition,
-                                                  1);
-        out[outputOffset++] = data[baseOffset + outputValueOffset];
+        let outputValueOffset = decodeValueOffset(
+                                    data, baseOffset, chunkDataSize, blockSize, dataPosition,
+                                    1) +
+            baseOffset;
+        out[outputOffset++] = data[outputValueOffset];
         
       }
     }

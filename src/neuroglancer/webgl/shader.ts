@@ -15,15 +15,86 @@
  */
 
 import {RefCounted} from 'neuroglancer/util/disposable';
+import {GL_VERTEX_SHADER, GL_FRAGMENT_SHADER} from 'neuroglancer/webgl/constants';
 
-export function getShader(gl: WebGLRenderingContext, source: string, shaderType: number) {
+export enum ShaderType {
+  VERTEX = GL_VERTEX_SHADER,
+  FRAGMENT = GL_FRAGMENT_SHADER
+}
+
+export interface ShaderErrorMessage {
+  file?: number;
+  line?: number;
+  message: string;
+}
+;
+
+/**
+ * Parses the output of getShaderInfoLog into a list of messages.
+ */
+export function parseShaderErrors(log: string) {
+  log = log.replace('\0', '');
+  let result: ShaderErrorMessage[] = [];
+  for (let line of log.split('\n')) {
+    let m = line.match(/^ERROR:\s*(\d+):(\d+)\s*(.+)$/);
+    if (m !== null) {
+      result.push({message: m[3].trim(), file: parseInt(m[1], 10), line: parseInt(m[2], 10)});
+    } else {
+      m = line.match(/^ERROR:\s*(.+)$/);
+      if (m !== null) {
+        result.push({message: m[1]});
+      } else {
+        line = line.trim();
+        if (line) {
+          result.push({message: line});
+        }
+      }
+    }
+  }
+  return result;
+}
+
+export class ShaderCompilationError extends Error {
+  shaderType: ShaderType;
+  source: string;
+  log: string;
+  errorMessages: ShaderErrorMessage[];
+  constructor(
+      shaderType: ShaderType, source: string, log: string, errorMessages: ShaderErrorMessage[]) {
+    const message = `Error compiling ${ShaderType[shaderType].toLowerCase()} shader: ${log}`;
+    super(message);
+    this.name = 'ShaderCompilationError';
+    this.log = log;
+    this.message = message;
+    this.shaderType = shaderType;
+    this.source = source;
+    this.errorMessages = errorMessages;
+  }
+};
+
+export class ShaderLinkError extends Error {
+  vertexSource: string;
+  fragmentSource: string;
+  log: string;
+  constructor(vertexSource: string, fragmentSource: string, log: string) {
+    const message = `Error linking shader: ${log}`;
+    super(message);
+    this.name = 'ShaderLinkError';
+    this.log = log;
+    this.message = message;
+    this.vertexSource = vertexSource;
+    this.fragmentSource = fragmentSource;
+  }
+};
+
+export function getShader(gl: WebGLRenderingContext, source: string, shaderType: ShaderType) {
   var shader = gl.createShader(shaderType);
   gl.shaderSource(shader, source);
   gl.compileShader(shader);
 
   if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
-    let msg = gl.getShaderInfoLog(shader);
-    throw new Error('Error creating shader: ' + msg);
+    let log = gl.getShaderInfoLog(shader);
+    throw new ShaderCompilationError(shaderType, source, log, parseShaderErrors(log));
   }
 
   return shader;
@@ -60,10 +131,8 @@ export class ShaderProgram extends RefCounted {
     gl.attachShader(shaderProgram, fragmentShader);
     gl.linkProgram(shaderProgram);
     if (!gl.getProgramParameter(shaderProgram, gl.LINK_STATUS)) {
-      let msg = gl.getProgramInfoLog(shaderProgram);
-      // console.log(msg);
-      // alert("Could not initialize shaders: " + msg);
-      throw new Error('Could not initialize shaders: ' + msg);
+      let log = gl.getProgramInfoLog(shaderProgram);
+      throw new ShaderLinkError(vertexSource, fragmentSource, log);
     }
 
     let {uniforms, attributes} = this;
@@ -224,7 +293,13 @@ export class ShaderBuilder {
 
   setVertexMain(code: string) { this.vertexMain = code; }
 
-  setFragmentMain(code: string) { this.fragmentMain = code; }
+  setFragmentMain(code: string) {
+    this.fragmentMain = `void main() {
+${code}
+}
+`;
+  }
+  setFragmentMainFunction(code: string) { this.fragmentMain = code; }
 
   addInitializer(f: ShaderInitializer) { this.initializers.push(f); }
 
@@ -253,9 +328,7 @@ precision highp float;
 ${this.uniformsCode}
 ${this.varyingsCode}
 ${this.fragmentCode}
-void main() {
 ${this.fragmentMain}
-}
 `;
     let shader =
         new ShaderProgram(this.gl, vertexSource, fragmentSource, this.uniforms, this.attributes);

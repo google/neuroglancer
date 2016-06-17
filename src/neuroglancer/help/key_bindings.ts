@@ -19,9 +19,6 @@ import {KeySequenceMap} from 'neuroglancer/util/keyboard_shortcut_handler';
 
 require('./key_bindings.css');
 
-let KEY_MAP = new KeySequenceMap();
-KEY_MAP.bind('escape', 'close');
-
 export function formatKeyName(name: string) {
   if (name.startsWith('key')) {
     return name.substring(3);
@@ -45,7 +42,7 @@ export class KeyBindingHelpDialog extends Overlay {
    * @param keyMap Key map to list.
    */
   constructor(keyMap: KeySequenceMap) {
-    super(KEY_MAP);
+    super();
 
     let {content} = this;
     content.classList.add('describe-key-bindings');

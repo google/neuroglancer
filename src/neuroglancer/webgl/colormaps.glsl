@@ -14,45 +14,10 @@
  * limitations under the License.
  */
 
-#container .gl-canvas {
-  position: absolute;
-  top: 0px;
-  left: 0px;
-  width: 100%;
-  height: 100%;
-  /* Canvas is in back. */
-  z-index: 0;
-}
-
-#container {
-  width: 100vw;
-  flex: 1;
-  position: relative;
-}
-
-.gllayoutcontainer {
-  display: flex;
-  flex-direction: column;
-  position: absolute;
-  top: 0px;
-  left: 0pt;
-  width: 100%;
-  height: 100%;
-  z-index: 2;
-}
-
-.gllayoutrow {
-  flex: 1;
-  display: flex;
-  flex-direction: row;
-}
-.gllayoutcell {
-  border-style: solid;
-  border-color: black;
-  border-width: 2px;
-  flex: 1;
-}
-
-.gllayoutcell[isActivePanel=true] {
-  border-color: white;
+vec3 colormapJet(float x) {
+  vec3 result;
+  result.r = x < 0.89 ? ((x - 0.35) / 0.31) : (1.0 - (x - 0.89) / 0.11 * 0.5);
+  result.g = x < 0.64 ? ((x - 0.125) * 4.0) : (1.0 - (x - 0.64) / 0.27);
+  result.b = x < 0.34 ? (0.5 + x * 0.5 / 0.11) : (1.0 - (x - 0.34) / 0.31);
+  return clamp(result, 0.0, 1.0);
 }

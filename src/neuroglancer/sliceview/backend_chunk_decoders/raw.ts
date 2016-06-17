@@ -24,7 +24,7 @@ export function decodeRawChunk(chunk: VolumeChunk, response: ArrayBuffer) {
   let {dataType} = spec;
   let numElements = prod3(chunk.chunkDataSize);
   let bytesPerElement = DATA_TYPE_BYTES[dataType];
-  let expectedBytes = numElements * bytesPerElement;
+  let expectedBytes = numElements * bytesPerElement * spec.numChannels;
   if (expectedBytes !== response.byteLength) {
     throw new Error(`Raw-format chunk is ${response.byteLength} bytes, but ${numElements} * ${bytesPerElement} = ${expectedBytes} bytes are expected.`);
   }

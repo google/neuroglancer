@@ -150,6 +150,7 @@ class AuthHandler {
     state?: string,
     origin?: string,
     loginHint?: string,
+    authUser?: number,
     immediate?: boolean
   }) {
     let url = `${AUTH_SERVER}?client_id=${encodeURIComponent(options.clientId)}`;
@@ -172,6 +173,9 @@ class AuthHandler {
     if (options.immediate) {
       url += `&immediate=true`;
     }
+    if (options.authUser !== undefined) {
+      url += `&authuser=${options.authUser}`;
+    }
     return url;
   }
 };
@@ -188,7 +192,11 @@ function authHandler() {
 
 export function authenticateGoogleOAuth2(options: {
   clientId: string,
-  scopes: string[], approvalPrompt?: 'force' | 'auto', loginHint?: string, immediate?: boolean
+  scopes: string[],
+  approvalPrompt?: 'force' | 'auto',
+  loginHint?: string,
+  immediate?: boolean,
+  authUser?: number,
 }) {
   const state = getRandomHexString();
   const handler = authHandler();
@@ -199,6 +207,7 @@ export function authenticateGoogleOAuth2(options: {
     approvalPrompt: options.approvalPrompt,
     loginHint: options.loginHint,
     immediate: options.immediate,
+    authUser: options.authUser,
   });
   let promise = handler.getAuthPromise(state);
 

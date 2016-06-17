@@ -50,10 +50,60 @@ vec3 hsvToRgb(vec3 c) {
 }
 `;
 
-export var glsl_uint64 = `
+export const glsl_uint64 = `
 struct uint64_t {
   vec4 low, high;
 };
+uint64_t toUint64(uint64_t x) { return x; }
+`;
+
+export const glsl_uint8 = [
+  glsl_uint64, `
+struct uint8_t {
+  float value;
+};
+float toRaw(uint8_t x) { return x.value * 255.0; }
+float toNormalized(uint8_t x) { return x.value; }
+uint64_t toUint64(uint8_t x) {
+  uint64_t result;
+  result.low = vec4(x.value, 0.0, 0.0, 0.0);
+  result.high = vec4(0.0, 0.0, 0.0, 0.0);
+  return result;
+}
+`
+];
+
+export const glsl_float = `
+float toRaw(float x) { return x; }
+float toNormalized(float x) { return x; }
+`;
+
+export const glsl_uint16 = [
+  glsl_uint64, `
+struct uint16_t {
+  vec2 value;
+};
+float toRaw(uint16_t x) { return x.value.x * 255.0 + x.value.y * 65280.0; }
+float toNormalized(uint16_t x) { return toRaw(x) / 65535.0; }
+uint64_t toUint64(uint16_t x) {
+  uint64_t result;
+  result.low = vec4(x.value, 0.0, 0.0);
+  result.high = vec4(0.0, 0.0, 0.0, 0.0);
+  return result;
+}
+`
+];
+
+export const glsl_uint32 = `
+struct uint32_t {
+  vec4 value;
+};
+uint32_t toUint64(uint32_t x) {
+  uint64_t result;
+  result.low = x.value;
+  result.high = vec4(0.0, 0.0, 0.0, 0.0);
+  return result;
+}
 `;
 
 export var glsl_getSubscriptsFromNormalized = `
@@ -69,12 +119,12 @@ float getFortranOrderIndex(vec3 subscripts, vec3 size) {
 `;
 
 export var glsl_getFortranOrderIndexFromNormalized = [
-  glsl_getSubscriptsFromNormalized,
-  glsl_getFortranOrderIndex, `
+  glsl_getSubscriptsFromNormalized, glsl_getFortranOrderIndex, `
 float getFortranOrderIndexFromNormalized(vec3 normalizedPosition, vec3 size) {
   return getFortranOrderIndex(getSubscriptsFromNormalized(normalizedPosition, size), size);
 }
-`];
+`
+];
 
 export var glsl_imod = `
 float imod(float x, float y) {

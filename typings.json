@@ -5,6 +5,7 @@
     "webpack-env": "registry:dt/webpack-env#1.12.2+20160316155526"
   },
   "globalDependencies": {
+    "codemirror": "registry:dt/codemirror#0.0.0+20160608063737",
     "jasmine": "registry:dt/jasmine#2.2.0+20160505161446",
     "lodash": "github:DefinitelyTyped/DefinitelyTyped/lodash/lodash.d.ts#d456e7ccb07a53c47bdd63957e8785402c19c579",
     "pako": "registry:dt/pako#0.0.0+20160317120654",

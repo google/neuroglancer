@@ -47,18 +47,24 @@ implementation.getNewTokenPromise = function() {
         cancelPromise(authPromise);
       }
       writeLoginStatus('Waiting for Brain Maps authorization...', 'Retry');
-      authPromise = authenticateGoogleOAuth2(
-          {clientId: BRAINMAPS_CLIENT_ID, scopes: [BRAINMAPS_SCOPE], immediate: immediate});
-      authPromise.then(token => {
-        token['generationId'] = nextGenerationId++;
-        resolve(token);
-      }, reason => {
-        if (immediate) {
-          writeLoginStatus();
-        } else {
-          writeLoginStatus(`Brain Maps authorization failed: ${reason}.`, 'Retry');
-        }
+      authPromise = authenticateGoogleOAuth2({
+        clientId: BRAINMAPS_CLIENT_ID,
+        scopes: [BRAINMAPS_SCOPE],
+        immediate: immediate,
+        authUser: 0,
       });
+      authPromise.then(
+          token => {
+            token['generationId'] = nextGenerationId++;
+            resolve(token);
+          },
+          reason => {
+            if (immediate) {
+              writeLoginStatus();
+            } else {
+              writeLoginStatus(`Brain Maps authorization failed: ${reason}.`, 'Retry');
+            }
+          });
       callFinally(authPromise, () => { authPromise = undefined; });
     }
     login(/*immediate=*/true);

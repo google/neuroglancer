@@ -22,17 +22,32 @@
 // VMV 2005.
 // http://www.cg.informatik.uni-siegen.de/data/Publications/2005/rezksalamaVMV2005.pdf
 
-import {Buffer} from 'neuroglancer/webgl/buffer';
-import {GL} from 'neuroglancer/webgl/context';
-import {ShaderBuilder, ShaderProgram} from 'neuroglancer/webgl/shader';
-import {RefCounted} from 'neuroglancer/util/disposable';
-import {vec3, vec4, Vec3, Mat4, BoundingBox} from 'neuroglancer/util/geom';
-import {RenderLayer as GenericRenderLayer} from 'neuroglancer/layer';
 import {ChunkState} from 'neuroglancer/chunk_manager/base';
 import {ChunkManager} from 'neuroglancer/chunk_manager/frontend';
+import {RenderLayer as GenericRenderLayer} from 'neuroglancer/layer';
+import {DataType} from 'neuroglancer/sliceview/base';
 import {SliceView, VolumeChunkSource, MultiscaleVolumeChunkSource} from 'neuroglancer/sliceview/frontend';
-import {Signal} from 'signals';
+import {TrackableValue, WatchableValue} from 'neuroglancer/trackable_value';
+import {RefCounted} from 'neuroglancer/util/disposable';
+import {vec3, vec4, Vec3, Mat4, BoundingBox} from 'neuroglancer/util/geom';
+import {verifyFloat01} from 'neuroglancer/util/json';
+import {Buffer} from 'neuroglancer/webgl/buffer';
+import {GL} from 'neuroglancer/webgl/context';
+import {ShaderBuilder, ShaderProgram, ShaderCompilationError, ShaderLinkError} from 'neuroglancer/webgl/shader';
 import {RpcId, SharedObject} from 'neuroglancer/worker_rpc';
+import {Signal} from 'signals';
+
+export const GLSL_TYPE_FOR_DATA_TYPE = new Map<DataType, string>([
+  [DataType.UINT8, 'uint8_t'],
+  [DataType.FLOAT32, 'float'],
+  [DataType.UINT16, 'uint16_t'],
+  [DataType.UINT32, 'uint32_t'],
+  [DataType.UINT64, 'uint64_t'],
+]);
+
+export function trackableAlphaValue(initialValue = 0.5) {
+  return new TrackableValue<number>(initialValue, verifyFloat01);
+}
 
 const DEBUG_VERTICES = false;
 
@@ -299,13 +314,14 @@ for (int e = 0; e < 4; ++e) {
 
 export class RenderLayer extends GenericRenderLayer {
   sources: VolumeChunkSource[][] = null;
-  shader: ShaderProgram = null;
+  shader: ShaderProgram = undefined;
   shaderUpdated = true;
   redrawNeeded = new Signal();
   voxelSize: Vec3 = null;
   boundingBox: BoundingBox = null;
   vertexComputationManager: VolumeSliceVertexComputationManager;
   rpcId: RpcId = null;
+  shaderError = new WatchableValue<ShaderCompilationError|ShaderLinkError|undefined>(undefined);
   constructor(
       public chunkManager: ChunkManager,
       multiscaleSourcePromise: Promise<MultiscaleVolumeChunkSource>) {
@@ -338,14 +354,21 @@ export class RenderLayer extends GenericRenderLayer {
 
   get chunkFormat() { return this.sources[0][0].chunkFormat; }
 
+  get dataType() { return this.sources[0][0].spec.dataType; }
+
   initializeShader() {
     if (!this.shaderUpdated) {
       return;
     }
     this.shaderUpdated = false;
-    let newShader = this.getShader();
-    this.disposeShader();
-    this.shader = newShader;
+    try {
+      let newShader = this.getShader();
+      this.disposeShader();
+      this.shader = newShader;
+      this.shaderError.value = undefined;
+    } catch (shaderError) {
+      this.shaderError.value = shaderError;
+    }
   }
 
   disposeShader() {
@@ -390,6 +413,9 @@ void emit(vec4 color) {
 }
 `);
     this.chunkFormat.defineShader(builder);
+    builder.addFragmentCode(`
+${GLSL_TYPE_FOR_DATA_TYPE.get(this.dataType)} getDataValue() { return getDataValue(0); }
+`);
   }
 
   beginSlice(sliceView: SliceView) {
@@ -414,6 +440,9 @@ void emit(vec4 color) {
     }
 
     this.initializeShader();
+    if (this.shader === undefined) {
+      return;
+    }
 
     let gl = this.gl;
 

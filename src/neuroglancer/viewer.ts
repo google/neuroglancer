@@ -34,13 +34,14 @@ import {TrackableValue} from 'neuroglancer/trackable_value';
 import {delayHashUpdate, registerTrackable} from 'neuroglancer/url_hash_state';
 import {RefCounted} from 'neuroglancer/util/disposable';
 import {removeChildren} from 'neuroglancer/util/dom';
-import {mat4, Mat4, Quat, quat, kAxes} from 'neuroglancer/util/geom';
+import {Mat4, Quat, quat} from 'neuroglancer/util/geom';
 import {GlobalKeyboardShortcutHandler, KeySequenceMap} from 'neuroglancer/util/keyboard_shortcut_handler';
 import {ViewerState} from 'neuroglancer/viewer_state';
 import {RPC} from 'neuroglancer/worker_rpc';
 import {Signal} from 'signals';
 
 require('./viewer.css');
+require('./help_button.css');
 require('neuroglancer/noselect.css');
 
 export class FourPanelLayout extends RefCounted {
@@ -180,7 +181,7 @@ export class Viewer extends RefCounted implements ViewerState {
   layerSpecification = new LayerListSpecification(
       this.layerManager, this.chunkManager, this.worker, this.layerSelectedValues,
       this.navigationState.voxelSize);
-  layoutName = new TrackableValue<string>(LAYOUTS[0][0], validateLayoutName, LAYOUTS[0][0]);
+  layoutName = new TrackableValue<string>(LAYOUTS[0][0], validateLayoutName);
 
   constructor(public display: DisplayContext) {
     super();

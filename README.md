@@ -53,7 +53,9 @@ See [src/neuroglancer/default_key_bindings.ts](src/neuroglancer/default_key_bind
 
 - Double click to toggle showing the object under the mouse pointer.
 
-- Hover over a segmentation layer name to see the current list of objects shown.
+- Hover over a segmentation layer name to see the current list of objects shown and to access the opacity sliders.
+
+- Hover over an image layer name to access the opacity slider and the text editor for modifying the [rendering code](src/neuroglancer/sliceview/image_layer_rendering.md).
 
 # Troubleshooting
 
@@ -91,10 +93,16 @@ See [src/neuroglancer/default_key_bindings.ts](src/neuroglancer/default_key_bind
 # Multi-threaded architecture
 
 In order to maintain a responsive UI and data display even during rapid navigation, work is split between the main UI thread (referred to as the "frontend") and a separate WebWorker thread (referred to as the "backend").  This introduces some complexity due to the fact that current browsers:
- - do not support any form of **shared** memory or standard synchronization mechanism (although they do support relative efficient **transfers** of typed arrays between threads);
+ - do not support any form of *shared* memory or standard synchronization mechanism (although they do support relatively efficient *transfers* of typed arrays between threads);
  - require that all manipulation of the DOM and the WebGL context happens on the main UI thread.
 
 The "frontend" UI thread handles user actions and rendering, while the "backend" WebWorker thread handle all queuing, downloading, and preprocessing of data needed for rendering.
+
+# Documentation Index
+
+- [Image Layer Rendering](src/neuroglancer/sliceview/image_layer_rendering.md)
+- [Cross-sectional view implementation architecture](src/neuroglancer/sliceview/README.md)
+- [Compressed segmentation format](src/neuroglancer/sliceview/compressed_segmentation/README.md)
 
 # Building
 
@@ -133,6 +141,11 @@ node.js is required to build the viewer.
 # Creating a dependent project
 
 See [examples/dependent-project](examples/dependent-project).
+
+# Discussion Group
+
+There is a Google Group/mailing list for discussion related to Neuroglancer:
+<https://groups.google.com/forum/#!forum/neuroglancer>.
 
 # License
 

@@ -21,7 +21,6 @@ import {vec3, Vec3, vec3Key} from 'neuroglancer/util/geom';
 import {ChunkLayout} from 'neuroglancer/sliceview/chunk_layout';
 import {ChunkPriorityTier} from 'neuroglancer/chunk_manager/base';
 import {Signal} from 'signals';
-import {CancellablePromise} from 'neuroglancer/util/promise';
 
 const SCALE_PRIORITY_MULTIPLIER = 1e5;
 

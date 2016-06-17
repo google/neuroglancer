@@ -1,3 +1,4 @@
+/// <reference path="globals/codemirror/index.d.ts" />
 /// <reference path="globals/jasmine/index.d.ts" />
 /// <reference path="globals/js-signals/index.d.ts" />
 /// <reference path="globals/lodash/index.d.ts" />

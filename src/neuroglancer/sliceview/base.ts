@@ -477,7 +477,8 @@ export class SliceViewBase extends SharedObject {
         }
 
         if (DEBUG_CHUNK_INTERSECTIONS) {
-          console.log('Within bounds: [' + vec3.str(lowerBound) + ", " + vec3.str(upperBound) + "]");
+          console.log(
+              'Within bounds: [' + vec3.str(lowerBound) + ', ' + vec3.str(upperBound) + ']');
         }
 
         if (volume === 1) {

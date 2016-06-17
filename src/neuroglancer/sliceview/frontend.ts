@@ -25,6 +25,7 @@ import {RenderLayer} from 'neuroglancer/sliceview/renderlayer';
 import {RefCounted} from 'neuroglancer/util/disposable';
 import {Disposable} from 'neuroglancer/util/disposable';
 import {vec3, mat4, Vec3, Vec4, Mat4, vec3Key} from 'neuroglancer/util/geom';
+import {Uint64} from 'neuroglancer/util/uint64';
 import {Buffer} from 'neuroglancer/webgl/buffer';
 import {GL} from 'neuroglancer/webgl/context';
 import {OffscreenFramebuffer} from 'neuroglancer/webgl/offscreen';
@@ -326,7 +327,16 @@ export abstract class VolumeChunkSource extends ChunkSource implements VolumeChu
         return undefined;
       }
     }
-    return chunk.getValueAt(dataPosition);
+    let {numChannels} = spec;
+    if (numChannels === 1) {
+      return chunk.getChannelValueAt(dataPosition, 0);
+    } else {
+      let result = new Array<number|Uint64>(numChannels);
+      for (let i = 0; i < numChannels; ++i) {
+        result[i] = chunk.getChannelValueAt(dataPosition, i);
+      }
+      return result;
+    }
   }
 
   getChunk(x: any) { return this.chunkFormatHandler.getChunk(this, x); }
@@ -345,7 +355,7 @@ export abstract class VolumeChunk extends Chunk {
     this.chunkDataSize = x['chunkDataSize'] || source.spec.chunkDataSize;
     this.state = ChunkState.SYSTEM_MEMORY;
   }
-  abstract getValueAt(dataPosition: Vec3): any;
+  abstract getChannelValueAt(dataPosition: Vec3, channel: number): any;
 };
 
 export interface MultiscaleVolumeChunkSource {

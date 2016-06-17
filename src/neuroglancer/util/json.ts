@@ -201,7 +201,6 @@ const SINGLE_OR_DOUBLE_QUOTE_STRING_PATTERN =
     new RegExp(`${SINGLE_QUOTE_STRING_PATTERN.source}|${DOUBLE_QUOTE_STRING_PATTERN.source}`);
 const DOUBLE_OR_SINGLE_QUOTE_STRING_PATTERN =
     new RegExp(`${DOUBLE_QUOTE_STRING_PATTERN.source}|${SINGLE_QUOTE_STRING_PATTERN.source}`);
-//const stringLiteralPattern = /('(?:[^'\\]|(?:\\.))*')|("(?:[^"\\]|(?:\\.))*")/;
 
 const DOUBLE_QUOTE_PATTERN = /^((?:[^"'\\]|(?:\\.))*)"/;
 const SINGLE_QUOTE_PATTERN = /^((?:[^"'\\]|(?:\\.))*)'/;
