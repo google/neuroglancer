@@ -28,9 +28,10 @@ class build_nodejs(build):
             os.chdir(project_dir)
 
             try:
+                call(['npm', 'i'])
                 res = call(['npm', 'run', 'build-min'])
             except:
-                raise RuntimeError('Could not run \'npm run build-min\'. Make sure node.js is installed and in your path.')
+                raise RuntimeError('Could not run \'npm run build-min\'. Make sure node.js >= v5.9.0 is installed and in your path.')
 
             if res != 0:
                 raise RuntimeError('failed to bundle neuroglancer node.js project')
