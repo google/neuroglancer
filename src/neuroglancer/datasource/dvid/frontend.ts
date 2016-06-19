@@ -128,12 +128,13 @@ export class TileLevelInfo {
 /**
  * Dimensions for which tiles are computed.
  *
- * FIXME: DVID does not seem to properly indicate which dimensions are available.
+ * DVID does not indicate which dimensions are available but it
+ * provides blank tiles if the dimension asked for is not there.
  */
 const TILE_DIMS = [
   [0, 1],
-  // [0, 2],
-  // [1, 2],
+  [0, 2],
+  [1, 2],
 ];
 
 export class TileChunkSource extends GenericVolumeChunkSource {
@@ -199,10 +200,12 @@ export class TileDataInstanceInfo extends DataInstanceInfo {
       let alternatives = TILE_DIMS.map(dims => {
         let voxelSize = vec3.clone(this.voxelSize);
         let chunkDataSize = vec3.fromValues(1, 1, 1);
-        for (let dim of dims) {
+        // tiles are always NxMx1
+        for (let i = 0; i < 2; ++i) {
           voxelSize[dim] = levelInfo.resolution[dim];
           chunkDataSize[dim] = levelInfo.tileSize[dim];
         }
+
         let chunkLayout = ChunkLayout.get(vec3.multiply(vec3.create(), voxelSize, chunkDataSize));
         let lowerVoxelBound = vec3.create(), upperVoxelBound = vec3.create();
         for (let i = 0; i < 3; ++i) {
