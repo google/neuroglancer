@@ -6,9 +6,41 @@ This package provides a python interface to the [neuroglancer project](https://g
 Usage
 =====
 
+The only method you need to call is `neuroglancer.server`, which you give a
+dictionary of names to `numpy` arrays. `neuroglancer.serve` will run a local
+HTTP server (by default on port 8888). It returns the URL under which you can
+access the neuroglancer viewer.
+
+Example:
 ```python
-to be written
+#!/usr/bin/env python
+
+import neuroglancer
+import numpy as np
+import signal
+import sys
+
+def stop(signal, frame):
+    neuroglancer.stop()
+    sys.exit(0)
+
+a = np.ones((100,100,100), dtype=np.uint8)*255
+b = np.random.randint(0, 100, (100,1000,1000), dtype=np.uint64)
+
+layers = [
+    ('first', a),
+    ('second', b)
+]
+
+print neuroglancer.serve(layers, server_args = { 'bind_address': '127.0.0.1' })
+
+signal.signal(signal.SIGINT, stop)
+print('Server started, press Ctrl+C to stop')
+signal.pause()
 ```
+
+To start the server on a different port, provide an additional `'bind_port'`
+argument in `server_args`.
 
 Development
 ===========
