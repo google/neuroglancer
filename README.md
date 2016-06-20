@@ -147,6 +147,10 @@ See [examples/dependent-project](examples/dependent-project).
 There is a Google Group/mailing list for discussion related to Neuroglancer:
 <https://groups.google.com/forum/#!forum/neuroglancer>.
 
+# Contributing
+
+Want to contribute?  Great!  First, read [CONTRIBUTING.md](CONTRIBUTING.md).
+
 # License
 
 Copyright 2016 Google Inc.
