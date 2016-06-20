@@ -45,5 +45,5 @@ python setup.py bundle_nodejs sdist upload -r pypi
 ```
 
 The command `bundle_nodejs` requires that you have `node.js` installed (see
-[..](top level README) for how to install it). It will bundle the javascript
-and CSS files and place them in the `neuroglancer/static` directory.
+[top level README](../README.md) for how to install it). It will bundle the
+javascript and CSS files and place them in the `neuroglancer/static` directory.
