@@ -138,16 +138,14 @@ class NDStoreCompatibleRequestHandler(BaseHTTPRequestHandler):
       self.send_error(404)
     if path == '':
       path = 'index.html'
-    static_path = os.path.join(self.server.static_file_path, path)
     try:
-      with self.server.static_file_open(static_path) as f:
-        mime_type = guess_mime_type_from_path(path)
-        data = f.read()
-        self.send_response(200)
-        self.send_header('Content-type', mime_type)
-        self.send_header('Content-length', len(data))
-        self.end_headers()
-        self.wfile.write(data)
+      mime_type = guess_mime_type_from_path(path)
+      data = content[path]
+      self.send_response(200)
+      self.send_header('Content-type', mime_type)
+      self.send_header('Content-length', len(data))
+      self.end_headers()
+      self.wfile.write(data)
     except Exception as e:
       self.send_error(404)
 

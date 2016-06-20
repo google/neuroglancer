@@ -6,7 +6,7 @@ from subprocess import call
 import os
 import shutil
 
-static_files = [ 'main.bundle.js', 'chunk_worker.bundle.js', 'styles.css' ]
+static_files = [ 'main.bundle.js', 'chunk_worker.bundle.js', 'styles.css', 'index.html' ]
 
 class bundle_nodejs(build):
 
