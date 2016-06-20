@@ -15,7 +15,7 @@
  */
 
 import {ChunkManager} from 'neuroglancer/chunk_manager/frontend';
-import {SliceView, MultiscaleVolumeChunkSource} from 'neuroglancer/sliceview/frontend';
+import {MultiscaleVolumeChunkSource, SliceView} from 'neuroglancer/sliceview/frontend';
 import {RenderLayer, trackableAlphaValue} from 'neuroglancer/sliceview/renderlayer';
 import {TrackableValue} from 'neuroglancer/trackable_value';
 import {verifyString} from 'neuroglancer/util/json';

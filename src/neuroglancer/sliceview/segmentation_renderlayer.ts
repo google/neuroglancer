@@ -18,7 +18,7 @@ import {ChunkManager} from 'neuroglancer/chunk_manager/frontend';
 import {GPUHashTable, HashTableShaderManager} from 'neuroglancer/gpu_hash/shader';
 import {SegmentColorShaderManager} from 'neuroglancer/segment_color';
 import {SegmentationDisplayState} from 'neuroglancer/segmentation_display_state';
-import {SliceView, MultiscaleVolumeChunkSource} from 'neuroglancer/sliceview/frontend';
+import {MultiscaleVolumeChunkSource, SliceView} from 'neuroglancer/sliceview/frontend';
 import {RenderLayer, trackableAlphaValue} from 'neuroglancer/sliceview/renderlayer';
 import {ShaderBuilder, ShaderProgram} from 'neuroglancer/webgl/shader';
 

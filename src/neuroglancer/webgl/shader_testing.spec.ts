@@ -14,9 +14,9 @@
  * limitations under the License.
  */
 
-import {fragmentShaderTest} from 'neuroglancer/webgl/shader_testing';
 import {vec4} from 'neuroglancer/util/geom';
 import {glsl_packFloat, glsl_packFloat01ToFixedPoint, unpackFloat01FromFixedPoint} from 'neuroglancer/webgl/shader_lib';
+import {fragmentShaderTest} from 'neuroglancer/webgl/shader_testing';
 
 describe('FragmentShaderTester', () => {
   it('value passthrough', () => {
@@ -94,7 +94,8 @@ describe('FragmentShaderTester', () => {
         let bytes = tester.readBytes();
         let outputValue = unpackFloat01FromFixedPoint(bytes);
         let absDiff = Math.abs(outputValue - x);
-        expect(absDiff).toBeLessThan(Math.pow(2, -23), `x = ${x}, outputValue = ${outputValue}, difference = ${absDiff}`);
+        expect(absDiff).toBeLessThan(
+            Math.pow(2, -23), `x = ${x}, outputValue = ${outputValue}, difference = ${absDiff}`);
       }
     });
   });

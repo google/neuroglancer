@@ -14,8 +14,8 @@
  * limitations under the License.
  */
 
-import {removeFromParent} from 'neuroglancer/util/dom';
 import {RefCounted} from 'neuroglancer/util/disposable';
+import {removeFromParent} from 'neuroglancer/util/dom';
 import {Uint64} from 'neuroglancer/util/uint64';
 import {Signal} from 'signals';
 
@@ -29,7 +29,7 @@ export class Uint64EntryWidget extends RefCounted {
   value = new Uint64();
   valueEntered = new Signal();
 
-  constructor () {
+  constructor() {
     super();
     let {element, label, input} = this;
     element.className = 'uint64-entry noselect';
@@ -56,11 +56,7 @@ export class Uint64EntryWidget extends RefCounted {
     });
   }
 
-  validateInput () {
-    return this.value.parseString(this.input.value);
-  }
+  validateInput() { return this.value.parseString(this.input.value); }
 
-  disposed () {
-    removeFromParent(this.element);
-  }
+  disposed() { removeFromParent(this.element); }
 };

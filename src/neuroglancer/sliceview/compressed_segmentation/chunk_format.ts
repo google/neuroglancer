@@ -17,12 +17,12 @@
 import {DataType, VolumeChunkSpecification} from 'neuroglancer/sliceview/base';
 import {readSingleChannelValue as readSingleChannelValueUint32} from 'neuroglancer/sliceview/compressed_segmentation/decode_uint32';
 import {readSingleChannelValue as readSingleChannelValueUint64} from 'neuroglancer/sliceview/compressed_segmentation/decode_uint64';
-import {VolumeChunkSource, ChunkFormatHandler, registerChunkFormatHandler} from 'neuroglancer/sliceview/frontend';
+import {ChunkFormatHandler, VolumeChunkSource, registerChunkFormatHandler} from 'neuroglancer/sliceview/frontend';
 import {GLSL_TYPE_FOR_DATA_TYPE} from 'neuroglancer/sliceview/renderlayer';
 import {SingleTextureChunkFormat, SingleTextureVolumeChunk} from 'neuroglancer/sliceview/single_texture_chunk_format';
 import {maybePadArray} from 'neuroglancer/util/array';
 import {RefCounted} from 'neuroglancer/util/disposable';
-import {vec3, Vec3, vec3Key} from 'neuroglancer/util/geom';
+import {Vec3, vec3, vec3Key} from 'neuroglancer/util/geom';
 import {Uint64} from 'neuroglancer/util/uint64';
 import {GL} from 'neuroglancer/webgl/context';
 import {ShaderBuilder, ShaderProgram} from 'neuroglancer/webgl/shader';
@@ -210,7 +210,7 @@ export class CompressedSegmentationVolumeChunk extends
       let result = new Uint64();
       readSingleChannelValueUint64(
           result, data, /*baseOffset=*/offset, chunkDataSize, chunkFormat.subchunkSize,
-        dataPosition);
+          dataPosition);
       return result;
     } else {
       return readSingleChannelValueUint32(

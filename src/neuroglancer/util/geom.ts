@@ -14,8 +14,9 @@
  * limitations under the License.
  */
 
-export {vec2, vec3, vec4, mat2, mat3, mat4, quat} from 'gl-matrix';
-import {vec3, vec4, mat4} from 'gl-matrix';
+import {mat4, vec3, vec4} from 'gl-matrix';
+
+export {mat2, mat3, mat4, quat, vec2, vec3, vec4} from 'gl-matrix';
 
 export type Vec2 = Float32Array;
 export type Vec3 = Float32Array;
@@ -32,10 +33,8 @@ export class BoundingBox {
   constructor(public lower: Vec3, public upper: Vec3) {}
 };
 
-export const kAxes = [
-  vec4.fromValues(1, 0, 0, 0), vec4.fromValues(0, 1, 0, 0),
-  vec4.fromValues(0, 0, 1, 0)
-];
+export const kAxes =
+    [vec4.fromValues(1, 0, 0, 0), vec4.fromValues(0, 1, 0, 0), vec4.fromValues(0, 0, 1, 0)];
 export const kZeroVec = vec3.fromValues(0, 0, 0);
 
 export function prod3(x: ArrayLike<number>) {

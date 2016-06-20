@@ -28,7 +28,7 @@ declare module 'jpgjs' {
   }
 
   interface JpegDecoderConstructor {
-    new(): JpegDecoder;
+    new (): JpegDecoder;
   }
 
   const JpegDecoder: JpegDecoderConstructor;

@@ -15,11 +15,11 @@
  */
 
 import {RefCounted} from 'neuroglancer/util/disposable';
-import {resizeTexture} from 'neuroglancer/webgl/texture';
-import {GL} from 'neuroglancer/webgl/context';
-import {trivialTextureShader} from 'neuroglancer/webgl/trivial_shaders';
-import {Buffer} from 'neuroglancer/webgl/buffer';
 import {identityMat4} from 'neuroglancer/util/geom';
+import {Buffer} from 'neuroglancer/webgl/buffer';
+import {GL} from 'neuroglancer/webgl/context';
+import {resizeTexture} from 'neuroglancer/webgl/texture';
+import {trivialTextureShader} from 'neuroglancer/webgl/trivial_shaders';
 
 export class OffscreenFramebuffer extends RefCounted {
   width: number = null;
@@ -147,9 +147,7 @@ export class OffscreenFramebuffer extends RefCounted {
 
 
 export class OffscreenCopyHelper extends RefCounted {
-  constructor (public gl: GL) {
-    super();
-  }
+  constructor(public gl: GL) { super(); }
   private copyVertexPositionsBuffer = this.registerDisposer(Buffer.fromData(
       this.gl, new Float32Array([
         -1, -1, 0, 1,  //
@@ -165,7 +163,7 @@ export class OffscreenCopyHelper extends RefCounted {
         1, 1,  //
         1, 0,  //
       ]),
-    this.gl.ARRAY_BUFFER, this.gl.STATIC_DRAW));
+      this.gl.ARRAY_BUFFER, this.gl.STATIC_DRAW));
 
   private trivialTextureShader = this.registerDisposer(trivialTextureShader(this.gl));
 
@@ -193,8 +191,7 @@ export class OffscreenCopyHelper extends RefCounted {
     gl.bindTexture(gl.TEXTURE_2D, null);
   }
 
-  static get (gl: GL) {
-    return gl.memoize.get(
-        'OffscreenCopyHelper', () => { return new OffscreenCopyHelper(gl); });
+  static get(gl: GL) {
+    return gl.memoize.get('OffscreenCopyHelper', () => { return new OffscreenCopyHelper(gl); });
   }
 };

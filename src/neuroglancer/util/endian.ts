@@ -66,7 +66,8 @@ export function swapEndian32(array: ArrayBufferView) {
  *
  * This does nothing if source === target.
  */
-export function convertEndian16(array: ArrayBufferView, source: Endianness, target: Endianness = ENDIANNESS) {
+export function convertEndian16(
+    array: ArrayBufferView, source: Endianness, target: Endianness = ENDIANNESS) {
   if (source !== target) {
     swapEndian16(array);
   }
@@ -89,7 +90,8 @@ export function nativeToLittle16(array: ArrayBufferView) {
  *
  * This does nothing if source === target.
  */
-export function convertEndian32(array: ArrayBufferView, source: Endianness, target: Endianness = ENDIANNESS) {
+export function convertEndian32(
+    array: ArrayBufferView, source: Endianness, target: Endianness = ENDIANNESS) {
   if (source !== target) {
     swapEndian32(array);
   }

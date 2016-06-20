@@ -23,7 +23,7 @@ const resolveReal = original_webpack_helpers.resolveReal;
 function modifyViewerOptions(options) {
   options = options || {};
   options.resolveLoaderRoots = [
-      ...(options.resolveLoaderRoots || []),
+    ...(options.resolveLoaderRoots || []),
 
     // Allow loader modules to be resolved from node_modules directory of this
     // project in addition to the node_modules directory of neuroglancer.
@@ -40,6 +40,6 @@ function modifyViewerOptions(options) {
   return options;
 }
 
-exports.getViewerConfig = function (options) {
+exports.getViewerConfig = function(options) {
   return original_webpack_helpers.getViewerConfig(modifyViewerOptions(options));
 };

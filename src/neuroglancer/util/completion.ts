@@ -14,20 +14,17 @@
  * limitations under the License.
  */
 
-export interface Completion {
-  value: string;
-}
+export interface Completion { value: string; }
 
-export interface CompletionWithDescription extends Completion {
-  description?: string;
-}
+export interface CompletionWithDescription extends Completion { description?: string; }
 
 export interface BasicCompletionResult {
   completions: Completion[];
   offset: number;
 }
 
-export function applyCompletionOffset<T extends {offset: number}>(offset: number, completionResult: T) {
+export function applyCompletionOffset<T extends{offset: number}>(
+    offset: number, completionResult: T) {
   completionResult.offset += offset;
   return completionResult;
 }

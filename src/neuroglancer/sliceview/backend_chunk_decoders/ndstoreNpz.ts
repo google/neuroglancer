@@ -22,12 +22,12 @@
  * (each corresponding to a different variable) in NPY binary format.
  */
 
-import {DataType} from 'neuroglancer/sliceview/base';
 import {VolumeChunk} from 'neuroglancer/sliceview/backend';
+import {postProcessRawData} from 'neuroglancer/sliceview/backend_chunk_decoders/postprocess';
+import {DataType} from 'neuroglancer/sliceview/base';
+import {vec3Key} from 'neuroglancer/util/geom';
 import {parseNpy} from 'neuroglancer/util/npy';
 import {inflate} from 'pako';
-import {vec3Key} from 'neuroglancer/util/geom';
-import {postProcessRawData} from 'neuroglancer/sliceview/backend_chunk_decoders/postprocess';
 
 export function decodeNdstoreNpzChunk(chunk: VolumeChunk, response: ArrayBuffer) {
   let parseResult = parseNpy(inflate(new Uint8Array(response)));

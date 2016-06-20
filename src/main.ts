@@ -14,8 +14,8 @@
  * limitations under the License.
  */
 
-import {makeDefaultViewer} from 'neuroglancer/default_viewer';
 import {makeDefaultKeyBindings} from 'neuroglancer/default_key_bindings';
+import {makeDefaultViewer} from 'neuroglancer/default_viewer';
 
 window.addEventListener('DOMContentLoaded', () => {
   let viewer = (<any>window)['viewer'] = makeDefaultViewer();

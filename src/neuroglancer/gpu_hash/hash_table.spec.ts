@@ -14,8 +14,8 @@
  * limitations under the License.
  */
 
-import {Uint64} from 'neuroglancer/util/uint64';
 import {HashTable} from 'neuroglancer/gpu_hash/hash_table';
+import {Uint64} from 'neuroglancer/util/uint64';
 
 describe('gpu_hash/hash_table', () => {
   it('test', () => {
@@ -75,7 +75,8 @@ describe('gpu_hash/hash_table', () => {
         }
       }
       map.set(s, k);
-      expect(ht.has(k.low, k.high)).toBe(false, `Unexpected positive has result for ${[k.low, k.high]}`);
+      expect(ht.has(k.low, k.high))
+          .toBe(false, `Unexpected positive has result for ${[k.low, k.high]}`);
       ht.add(k.low, k.high);
       compare();
     }

@@ -24,7 +24,4 @@ export function addSignalBinding(signal: Signal, handler: () => void, context: a
   signal.add(handler, context);
 }
 
-export interface SignalBindingUpdater {
-  (signal: Signal, handler: () => void, context: any): void;
-}
-
+export interface SignalBindingUpdater { (signal: Signal, handler: () => void, context: any): void; }

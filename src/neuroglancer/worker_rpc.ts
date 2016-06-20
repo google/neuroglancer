@@ -28,7 +28,7 @@ const DEBUG_MESSAGES = false;
 
 var handlers = new Map<string, RPCHandler>();
 
-export function registerRPC (key: string, handler: RPCHandler) {
+export function registerRPC(key: string, handler: RPCHandler) {
   handlers.set(key, handler);
 };
 
@@ -39,8 +39,8 @@ interface RPCTarget {
 
 export class RPC {
   private objects = new Map<RpcId, any>();
-  private nextId: RpcId = IS_WORKER ? -1 : 0;
-  constructor (public target: RPCTarget) {
+  private nextId: RpcId = IS_WORKER? -1: 0;
+  constructor(public target: RPCTarget) {
     target.onmessage = (e) => {
       let data = e.data;
       if (DEBUG_MESSAGES) {
@@ -52,33 +52,25 @@ export class RPC {
 
   get numObjects() { return this.objects.size; }
 
-  set(id: RpcId, value: any) {
-    this.objects.set(id, value);
-  }
+  set(id: RpcId, value: any) { this.objects.set(id, value); }
 
-  delete(id: RpcId) {
-    this.objects.delete(id);
-  }
-  get (id: RpcId) {
-    return this.objects.get(id);
-  }
-  getRef<T extends SharedObject> (x: {'id': RpcId, 'gen': number}) {
+  delete (id: RpcId) { this.objects.delete(id); }
+  get(id: RpcId) { return this.objects.get(id); }
+  getRef<T extends SharedObject>(x: {'id': RpcId, 'gen': number}) {
     let rpcId = x['id'];
     let obj = <T>this.get(rpcId);
     obj.referencedGeneration = x['gen'];
     obj.addRef();
     return obj;
   }
-  invoke (name: string, x: any, transfers?: any[]) {
+  invoke(name: string, x: any, transfers?: any[]) {
     x.functionName = name;
     if (DEBUG_MESSAGES) {
       console.trace('Sending message', x);
     }
     this.target.postMessage(x, transfers);
   }
-  newId () {
-    return IS_WORKER ? this.nextId-- : this.nextId++;
-  }
+  newId() { return IS_WORKER ? this.nextId-- : this.nextId++; }
 };
 
 export class SharedObject extends RefCounted {
@@ -88,14 +80,14 @@ export class SharedObject extends RefCounted {
   unreferencedGeneration: number|undefined;
   referencedGeneration: number|undefined;
 
-  initializeSharedObject (rpc: RPC, rpcId = rpc.newId()) {
+  initializeSharedObject(rpc: RPC, rpcId = rpc.newId()) {
     this.rpc = rpc;
     this.rpcId = rpcId;
     this.isOwner = false;
     rpc.set(rpcId, this);
   }
 
-  initializeCounterpart (rpc: RPC, options: any = {}) {
+  initializeCounterpart(rpc: RPC, options: any = {}) {
     this.initializeSharedObject(rpc);
     this.unreferencedGeneration = 0;
     this.referencedGeneration = 0;
@@ -104,24 +96,21 @@ export class SharedObject extends RefCounted {
     rpc.invoke('SharedObject.new', options);
   }
 
-  dispose () {
-    super.dispose();
-  }
+  dispose() { super.dispose(); }
 
   /**
    * Precondition: this.isOwner === true.
    */
-  addCounterpartRef () {
-    return {'id': this.rpcId, 'gen': ++this.referencedGeneration};
-  }
+  addCounterpartRef() { return {'id': this.rpcId, 'gen': ++this.referencedGeneration}; }
 
-  protected refCountReachedZero () {
+  protected refCountReachedZero() {
     if (this.isOwner === true) {
       if (this.referencedGeneration === this.unreferencedGeneration) {
         this.ownerDispose();
       }
     } else if (this.isOwner === false) {
-      this.rpc.invoke('SharedObject.refCountReachedZero', {'id': this.rpcId, 'gen': this.referencedGeneration});
+      this.rpc.invoke(
+          'SharedObject.refCountReachedZero', {'id': this.rpcId, 'gen': this.referencedGeneration});
     } else {
       super.refCountReachedZero();
     }
@@ -130,7 +119,7 @@ export class SharedObject extends RefCounted {
   /**
    * Precondition: this.isOwner === true.
    */
-  protected ownerDispose () {
+  protected ownerDispose() {
     if (DEBUG) {
       console.log(`[${IS_WORKER}] #rpc object = ${this.rpc.numObjects}`);
     }
@@ -145,7 +134,7 @@ export class SharedObject extends RefCounted {
    *
    * This should be called when the counterpart's refCount is decremented and reaches zero.
    */
-  counterpartRefCountReachedZero (generation: number) {
+  counterpartRefCountReachedZero(generation: number) {
     this.unreferencedGeneration = generation;
     if (this.refCount === 0 && generation === this.referencedGeneration) {
       this.ownerDispose();
@@ -166,9 +155,7 @@ export class SharedObjectCounterpart extends SharedObject {
 };
 
 
-export interface SharedObjectConstructor {
-  new (rpc: RPC, options: any): SharedObjectCounterpart;
-}
+export interface SharedObjectConstructor { new (rpc: RPC, options: any): SharedObjectCounterpart; }
 
 registerRPC('SharedObject.dispose', function(x) {
   let obj = <SharedObject>this.get(x['id']);

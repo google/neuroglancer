@@ -20,14 +20,14 @@
  */
 
 import {ChunkManager} from 'neuroglancer/chunk_manager/frontend';
-import {registerDataSourceFactory, CompletionResult, Completion} from 'neuroglancer/datasource/factory';
-import {DataType, VolumeType, VolumeChunkSpecification} from 'neuroglancer/sliceview/base';
-import {VolumeChunkSource as GenericVolumeChunkSource, MultiscaleVolumeChunkSource as GenericMultiscaleVolumeChunkSource} from 'neuroglancer/sliceview/frontend';
+import {Completion, CompletionResult, registerDataSourceFactory} from 'neuroglancer/datasource/factory';
+import {DataType, VolumeChunkSpecification, VolumeType} from 'neuroglancer/sliceview/base';
+import {MultiscaleVolumeChunkSource as GenericMultiscaleVolumeChunkSource, VolumeChunkSource as GenericVolumeChunkSource} from 'neuroglancer/sliceview/frontend';
 import {applyCompletionOffset, getPrefixMatchesWithDescriptions} from 'neuroglancer/util/completion';
 import {vec3} from 'neuroglancer/util/geom';
 import {openShardedHttpRequest, sendHttpRequest} from 'neuroglancer/util/http_request';
-import {verifyOptionalString, verifyString, parseArray, parseFiniteVec, parseIntVec, stableStringify, parseQueryStringParameters} from 'neuroglancer/util/json';
-import {cancellableThen, CancellablePromise} from 'neuroglancer/util/promise';
+import {parseArray, parseFiniteVec, parseIntVec, parseQueryStringParameters, stableStringify, verifyOptionalString, verifyString} from 'neuroglancer/util/json';
+import {CancellablePromise, cancellableThen} from 'neuroglancer/util/promise';
 
 let serverDataTypes = new Map<string, DataType>();
 serverDataTypes.set('uint8', DataType.UINT8);
@@ -56,7 +56,7 @@ export class VolumeChunkSource extends GenericVolumeChunkSource {
       'encoding': encoding,
     });
   }
-  toString () {
+  toString() {
     return `ndstore:volume:${this.hostnames[0]}/${this.key}/${this.channel}/${this.resolution}/${this.encoding}`;
   }
 };
@@ -73,8 +73,8 @@ export class MultiscaleVolumeChunkSource implements GenericMultiscaleVolumeChunk
   channel: string;
 
   constructor(
-      public hostnames: string[], public key: string, public response: any, channel: string|undefined,
-      public parameters: {[index: string]: any}) {
+      public hostnames: string[], public key: string, public response: any,
+      channel: string|undefined, public parameters: {[index: string]: any}) {
     let channelsObject = response['channels'];
     let channelNames = Object.keys(channelsObject);
     if (channel === undefined) {
@@ -160,7 +160,8 @@ export function getVolumeInfo(hostnames: string[], token: string) {
   if (result !== undefined) {
     return result;
   }
-  let promise = sendHttpRequest(openShardedHttpRequest(hostnames, `/ocp/ca/${token}/info/`), 'json');
+  let promise =
+      sendHttpRequest(openShardedHttpRequest(hostnames, `/ocp/ca/${token}/info/`), 'json');
   existingVolumeResponses.set(fullKey, promise);
   return promise;
 }
@@ -212,7 +213,8 @@ export function getPublicTokens(hostnames: string[]) {
   return newResult;
 }
 
-export function tokenAndChannelCompleter(hostnames: string[], path: string): CancellablePromise<CompletionResult> {
+export function tokenAndChannelCompleter(
+    hostnames: string[], path: string): CancellablePromise<CompletionResult> {
   let channelMatch = path.match(/^(?:([^\/]+)(?:\/([^\/]*))?)?$/);
   if (channelMatch === null) {
     // URL has incorrect format, don't return any results.
@@ -236,12 +238,11 @@ export function tokenAndChannelCompleter(hostnames: string[], path: string): Can
       if (typeof channelsObject === 'object' && channelsObject !== null &&
           !Array.isArray(channelsObject)) {
         let channelNames = Object.keys(channelsObject);
-        completions =
-            getPrefixMatchesWithDescriptions(channelMatch[2], channelNames, x => x, x => {
-              let channelObject = channelsObject[x];
-              return `${channelObject['channel_type']} (${channelObject['datatype']})`;
+        completions = getPrefixMatchesWithDescriptions(channelMatch[2], channelNames, x => x, x => {
+          let channelObject = channelsObject[x];
+          return `${channelObject['channel_type']} (${channelObject['datatype']})`;
 
-            });
+        });
       }
     }
     return {offset: channelMatch[1].length + 1, completions};

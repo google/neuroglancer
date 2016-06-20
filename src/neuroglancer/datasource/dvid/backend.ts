@@ -42,7 +42,6 @@ class VolumeChunkSource extends GenericVolumeChunkSource {
       // computeChunkBounds.
       let chunkPosition = this.computeChunkBounds(chunk);
       let {chunkDataSize} = chunk;
-
       path =
           `/api/node/${params['nodeKey']}/${params['dataInstanceKey']}/raw/0_1_2/${chunkDataSize[0]}_${chunkDataSize[1]}_${chunkDataSize[2]}/${chunkPosition[0]}_${chunkPosition[1]}_${chunkPosition[2]}/nd`;
     }

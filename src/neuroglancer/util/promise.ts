@@ -31,7 +31,10 @@ export class CancellationError {
  */
 export const CANCELLED = new CancellationError();
 
-export function makeCancellablePromise<T>(executor: (resolve: (value: T | PromiseLike<T>) => void, reject: (reason: any) => void, onCancel: (callback: () => void) => void) => void) {
+export function makeCancellablePromise<T>(
+    executor: (
+        resolve: (value: T | PromiseLike<T>) => void, reject: (reason: any) => void,
+        onCancel: (callback: () => void) => void) => void) {
   let finished = false;
   let cancelHandler: () => void;
   let cancelFunction: () => void;
@@ -83,7 +86,7 @@ export function makeCancellablePromise<T>(executor: (resolve: (value: T | Promis
   return promise;
 }
 
-export function cancelPromise<T>(promise: CancellablePromise<T>|null|undefined) {
+export function cancelPromise<T>(promise: CancellablePromise<T>| null | undefined) {
   if (promise != null) {
     let {cancel} = promise;
     if (cancel !== undefined) {
@@ -100,20 +103,24 @@ export function cancelPromise<T>(promise: CancellablePromise<T>|null|undefined) 
  * If the returned promise is cancelled before the inputPromise is finished, the inputPromise is
  * cancelled.
  */
-export function callFinally<T>(inputPromise: CancellablePromise<T>, handler: (onCancel: (newCancelHandler: () => void) => void) => void|PromiseLike<void>) {
+export function callFinally<T>(
+    inputPromise: CancellablePromise<T>,
+    handler: (onCancel: (newCancelHandler: () => void) => void) => void|PromiseLike<void>) {
   return makeCancellablePromise<T>((resolve, reject, onCancel) => {
     onCancel(() => { cancelPromise(inputPromise); });
-    inputPromise.then(value => {
-      onCancel(undefined);
-      Promise.resolve(handler(onCancel)).then(() => { resolve(value); });
-    }, reason => {
-      onCancel(undefined);
-      try {
-        Promise.resolve(handler(onCancel)).then(() => { reject(reason); }, reject);
-      } catch (otherError) {
-        reject(otherError);
-      }
-    });
+    inputPromise.then(
+        value => {
+          onCancel(undefined);
+          Promise.resolve(handler(onCancel)).then(() => { resolve(value); });
+        },
+        reason => {
+          onCancel(undefined);
+          try {
+            Promise.resolve(handler(onCancel)).then(() => { reject(reason); }, reject);
+          } catch (otherError) {
+            reject(otherError);
+          }
+        });
   });
 }
 
@@ -124,7 +131,10 @@ export function callFinally<T>(inputPromise: CancellablePromise<T>, handler: (on
  * inputPromise is fulfilled.  If the returned promise is cancelled before inputPromise is
  * fulfilled, inputPromise is cancelled if it supports it.
  */
-export function cancellableThen<T, TResult>(inputPromise: CancellablePromise<T>, onFulfilled: (value: T, onCancel: (newCancelHandler: () => void) => void) => TResult | PromiseLike<TResult>): CancellablePromise<TResult> {
+export function cancellableThen<T, TResult>(
+    inputPromise: CancellablePromise<T>,
+    onFulfilled: (value: T, onCancel: (newCancelHandler: () => void) => void) =>
+        TResult | PromiseLike<TResult>): CancellablePromise<TResult> {
   return makeCancellablePromise<TResult>((resolve, reject, onCancel) => {
     let cancelled = false;
     onCancel(() => {

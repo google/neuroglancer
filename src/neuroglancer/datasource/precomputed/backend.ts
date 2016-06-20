@@ -16,7 +16,7 @@
 
 import {handleChunkDownloadPromise} from 'neuroglancer/chunk_manager/backend';
 import {VolumeChunkEncoding} from 'neuroglancer/datasource/precomputed/base';
-import {ManifestChunk, FragmentChunk, MeshSource as GenericMeshSource, decodeJsonManifestChunk, decodeVertexPositionsAndIndices} from 'neuroglancer/mesh/backend';
+import {FragmentChunk, ManifestChunk, MeshSource as GenericMeshSource, decodeJsonManifestChunk, decodeVertexPositionsAndIndices} from 'neuroglancer/mesh/backend';
 import {VolumeChunk, VolumeChunkSource as GenericVolumeChunkSource} from 'neuroglancer/sliceview/backend';
 import {ChunkDecoder} from 'neuroglancer/sliceview/backend_chunk_decoders';
 import {decodeCompressedSegmentationChunk} from 'neuroglancer/sliceview/backend_chunk_decoders/compressed_segmentation';
@@ -59,9 +59,7 @@ class VolumeChunkSource extends GenericVolumeChunkSource {
         chunk, sendHttpRequest(openShardedHttpRequest(this.baseUrls, path), 'arraybuffer'),
         this.chunkDecoder);
   }
-  toString () {
-    return `precomputed:volume:${this.baseUrls[0]}/${this.path}`;
-  }
+  toString() { return `precomputed:volume:${this.baseUrls[0]}/${this.path}`; }
 };
 registerSharedObject('precomputed/VolumeChunkSource', VolumeChunkSource);
 
@@ -101,8 +99,6 @@ export class MeshSource extends GenericMeshSource {
         chunk, sendHttpRequest(openShardedHttpRequest(this.baseUrls, requestPath), 'arraybuffer'),
         decodeFragmentChunk);
   }
-  toString () {
-    return `precomputed:mesh:${this.baseUrls[0]}/${this.path}`;
-  }
+  toString() { return `precomputed:mesh:${this.baseUrls[0]}/${this.path}`; }
 };
 registerSharedObject('precomputed/MeshSource', MeshSource);

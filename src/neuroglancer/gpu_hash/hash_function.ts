@@ -17,7 +17,8 @@
 export const PRIME_MODULUS = 4093;
 
 export class HashFunction {
-  constructor(public a0: Float32Array, public a1: Float32Array, public b: number, public c: number) {}
+  constructor(
+      public a0: Float32Array, public a1: Float32Array, public b: number, public c: number) {}
 
   computeDotProduct(low: number, high: number) {
     let {a0, a1} = this;

@@ -1,4 +1,5 @@
-// DO NOT EDIT.  Generated from templates/neuroglancer/sliceview/compressed_segmentation/decode.template.ts.
+// DO NOT EDIT.  Generated from
+// templates/neuroglancer/sliceview/compressed_segmentation/decode.template.ts.
 /**
  * @license
  * Copyright 2016 Google Inc.
@@ -27,22 +28,23 @@ import {decodeValueOffset} from 'neuroglancer/sliceview/compressed_segmentation/
 /**
  * Reads the single value at the specified dataPosition in a single-channel compressed segmentation.
  *
- * @param baseOffset The base offset into `data' at which the compressed data for this channel starts.
- * @param chunkDataSize A 3-element array specifying the size of the volume, 
+ * @param baseOffset The base offset into `data' at which the compressed data for this channel
+ * starts.
+ * @param chunkDataSize A 3-element array specifying the size of the volume,
  * @param blockSize A 3-element array specifying the block size ued for compression.
- * @param dataPosition A 3-element array specifying the position within the volume from which to read.
+ * @param dataPosition A 3-element array specifying the position within the volume from which to
+ * read.
  *
  * Stores the result in `out'.
  */
 export function readSingleChannelValue(
-  
-  data: Uint32Array, baseOffset: number, chunkDataSize: ArrayLike<number>,
-  blockSize: ArrayLike<number>, dataPosition: ArrayLike<number>) {
-  let outputValueOffset = decodeValueOffset(data, baseOffset, chunkDataSize, blockSize, dataPosition,
-                                           1) + baseOffset;
-  
+
+    data: Uint32Array, baseOffset: number, chunkDataSize: ArrayLike<number>,
+    blockSize: ArrayLike<number>, dataPosition: ArrayLike<number>) {
+  let outputValueOffset =
+      decodeValueOffset(data, baseOffset, chunkDataSize, blockSize, dataPosition, 1) + baseOffset;
+
   return data[outputValueOffset];
-  
 }
 
 /**
@@ -52,12 +54,12 @@ export function readSingleChannelValue(
  * @param dataPosition A 4-element [x, y, z, channel] array specifying the position to read.
  */
 export function readValue(
-  
-  data: Uint32Array, baseOffset: number, chunkDataSize: ArrayLike<number>,
-  blockSize: ArrayLike<number>, dataPosition: ArrayLike<number>) {
+
+    data: Uint32Array, baseOffset: number, chunkDataSize: ArrayLike<number>,
+    blockSize: ArrayLike<number>, dataPosition: ArrayLike<number>) {
   return readSingleChannelValue(
-    
-    data, baseOffset + data[dataPosition[3]], chunkDataSize, blockSize, dataPosition);
+
+      data, baseOffset + data[dataPosition[3]], chunkDataSize, blockSize, dataPosition);
 }
 
 /**
@@ -66,11 +68,12 @@ export function readValue(
  * This is not particularly efficient, because it is intended for testing purposes only.
  */
 export function decodeChannel(
-  out: Uint32Array,
-  data: Uint32Array, baseOffset: number, chunkDataSize: ArrayLike<number>, blockSize: ArrayLike<number>) {
+    out: Uint32Array, data: Uint32Array, baseOffset: number, chunkDataSize: ArrayLike<number>,
+    blockSize: ArrayLike<number>) {
   const expectedLength = chunkDataSize[0] * chunkDataSize[1] * chunkDataSize[2] * 1;
   if (expectedLength !== out.length) {
-    throw new Error(`Output length ${out.length} is not equal to expected length ${expectedLength}.`);
+    throw new Error(
+        `Output length ${out.length} is not equal to expected length ${expectedLength}.`);
   }
   let vx = chunkDataSize[0];
   let vy = chunkDataSize[1];
@@ -83,12 +86,10 @@ export function decodeChannel(
       dataPosition[1] = y;
       for (let x = 0; x < vx; ++x) {
         dataPosition[0] = x;
-        let outputValueOffset = decodeValueOffset(
-                                    data, baseOffset, chunkDataSize, blockSize, dataPosition,
-                                    1) +
+        let outputValueOffset =
+            decodeValueOffset(data, baseOffset, chunkDataSize, blockSize, dataPosition, 1) +
             baseOffset;
         out[outputOffset++] = data[outputValueOffset];
-        
       }
     }
   }
@@ -101,17 +102,19 @@ export function decodeChannel(
  * This is not particularly efficient, because it is intended for testing purposes only.
  */
 export function decodeChannels(
-  out: Uint32Array,
-  data: Uint32Array, baseOffset: number, chunkDataSize: ArrayLike<number>, blockSize: ArrayLike<number>) {
+    out: Uint32Array, data: Uint32Array, baseOffset: number, chunkDataSize: ArrayLike<number>,
+    blockSize: ArrayLike<number>) {
   const channelOutputLength = chunkDataSize[0] * chunkDataSize[1] * chunkDataSize[2] * 1;
   const expectedLength = channelOutputLength * chunkDataSize[3];
   if (expectedLength !== out.length) {
-    throw new Error(`Output length ${out.length} is not equal to expected length ${expectedLength}.`);
+    throw new Error(
+        `Output length ${out.length} is not equal to expected length ${expectedLength}.`);
   }
   const numChannels = chunkDataSize[3];
   for (let channel = 0; channel < numChannels; ++channel) {
-    decodeChannel(out.subarray(channelOutputLength * channel, channelOutputLength * (channel + 1)),
-                      data, baseOffset + data[channel], chunkDataSize, blockSize);    
+    decodeChannel(
+        out.subarray(channelOutputLength * channel, channelOutputLength * (channel + 1)), data,
+        baseOffset + data[channel], chunkDataSize, blockSize);
   }
   return out;
 }

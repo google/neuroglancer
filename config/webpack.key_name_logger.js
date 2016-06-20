@@ -20,7 +20,8 @@ const HtmlWebpackPlugin = require('html-webpack-plugin');
 const path = require('path');
 const webpack_helpers = require('./webpack_helpers');
 
-let baseConfig = webpack_helpers.getBaseConfig({outputPath: path.resolve(__dirname, '../dist/key_name_logger')});
+let baseConfig =
+    webpack_helpers.getBaseConfig({outputPath: path.resolve(__dirname, '../dist/key_name_logger')});
 module.exports = Object.assign(
     {
       entry: {'key_name_logger': path.resolve(__dirname, '../src/key_name_logger')},

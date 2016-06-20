@@ -14,11 +14,11 @@
  * limitations under the License.
  */
 
-import {Uint32ArrayBuilder} from 'neuroglancer/util/uint32array_builder.ts';
-import {encodeBlock, newCache, encodeChannel, encodeChannels} from 'neuroglancer/sliceview/compressed_segmentation/encode_uint64';
 import {decodeChannel, decodeChannels} from 'neuroglancer/sliceview/compressed_segmentation/decode_uint64';
-import {prod3, prod4, vec3Key} from 'neuroglancer/util/geom';
+import {encodeBlock, encodeChannel, encodeChannels, newCache} from 'neuroglancer/sliceview/compressed_segmentation/encode_uint64';
 import {makeRandomUint64Array} from 'neuroglancer/sliceview/compressed_segmentation/test_util';
+import {prod3, prod4, vec3Key} from 'neuroglancer/util/geom';
+import {Uint32ArrayBuilder} from 'neuroglancer/util/uint32array_builder.ts';
 
 describe('compressed_segmentation uint64', () => {
   describe('encodeBlock', () => {
@@ -119,12 +119,12 @@ describe('compressed_segmentation uint64', () => {
       encodeChannel(output, blockSize, input, volumeSize);
       expect(output.view)
           .toEqual(Uint32Array.of(
-            1, 2, 3, //
-            5 | (2 << 24), 4, //
-            12 | (1 << 24), 11, //
-            0b01100001, 3, 0, 4, 0, 5, 0, //
-            0b1110, 1, 0, 3, 0 //
-          ));
+              1, 2, 3,                       //
+              5 | (2 << 24), 4,              //
+              12 | (1 << 24), 11,            //
+              0b01100001, 3, 0, 4, 0, 5, 0,  //
+              0b1110, 1, 0, 3, 0             //
+              ));
     });
 
     it('basic cached 0-bit', () => {
@@ -173,7 +173,7 @@ describe('compressed_segmentation uint64', () => {
               0b01100001, 3, 0, 4, 0, 5, 0,  //
               0b1110, 1, 0, 3, 0,            //
               0b00000001,                    //
-              0b01001010                    //
+              0b01001010                     //
               ));
     });
 
@@ -200,8 +200,8 @@ describe('compressed_segmentation uint64', () => {
     it('basic 1-channel 1-block', () => {
       const blockSize = [2, 2, 1];
       const input = Uint32Array.of(
-        4, 0, 4, 0, 4, 0, 4, 0 //
-      );
+          4, 0, 4, 0, 4, 0, 4, 0  //
+          );
       const volumeSize = [2, 2, 1, 1];
       const output = new Uint32ArrayBuilder();
       encodeChannels(output, blockSize, input, volumeSize);
@@ -213,11 +213,11 @@ describe('compressed_segmentation uint64', () => {
     });
 
     for (let volumeSize of [  //
-      [1, 2, 1, 1],       //
-      [1, 2, 1, 3],       //
-      [2, 2, 2, 1],       //
-      [2, 2, 2, 3],       //
-      [4, 4, 5, 3],       //
+             [1, 2, 1, 1],    //
+             [1, 2, 1, 3],    //
+             [2, 2, 2, 1],    //
+             [2, 2, 2, 3],    //
+             [4, 4, 5, 3],    //
     ]) {
       it(`round trip ${volumeSize.join(',')}`, () => {
         const numPossibleValues = 15;

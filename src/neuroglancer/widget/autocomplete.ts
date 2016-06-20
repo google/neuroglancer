@@ -15,13 +15,13 @@
  */
 
 import * as debounce from 'lodash/debounce';
-import {Completion, CompletionWithDescription, BasicCompletionResult} from 'neuroglancer/util/completion';
+import {BasicCompletionResult, Completion, CompletionWithDescription} from 'neuroglancer/util/completion';
 import {RefCounted} from 'neuroglancer/util/disposable';
-import {removeFromParent, removeChildren} from 'neuroglancer/util/dom';
+import {removeChildren, removeFromParent} from 'neuroglancer/util/dom';
 import {positionDropdown} from 'neuroglancer/util/dropdown';
-import {KeyboardShortcutHandler, KeySequenceMap} from 'neuroglancer/util/keyboard_shortcut_handler';
+import {KeySequenceMap, KeyboardShortcutHandler} from 'neuroglancer/util/keyboard_shortcut_handler';
 import {longestCommonPrefix} from 'neuroglancer/util/longest_common_prefix';
-import {cancelPromise, CancellablePromise} from 'neuroglancer/util/promise';
+import {CancellablePromise, cancelPromise} from 'neuroglancer/util/promise';
 import {scrollIntoViewIfNeeded} from 'neuroglancer/util/scroll_into_view';
 import {associateLabelWithElement} from 'neuroglancer/widget/associate_label';
 import {Signal} from 'signals';
@@ -200,22 +200,20 @@ export class AutocompleteTextInput extends RefCounted {
         element.ownerDocument.defaultView, 'scroll', () => { this.dropdownStyleStale = true; });
 
     this.registerEventListener(
-      this.dropdownElement, 'mousedown', this.handleDropdownMousedown.bind(this));
+        this.dropdownElement, 'mousedown', this.handleDropdownMousedown.bind(this));
 
-    this.registerEventListener(
-      this.inputElement, 'keydown', () => {
-        // User may have used a keyboard shortcut to scroll the input.
+    this.registerEventListener(this.inputElement, 'keydown', () => {
+      // User may have used a keyboard shortcut to scroll the input.
+      this.hintScrollPositionMayBeStale();
+    });
+
+    this.registerEventListener(this.inputElement, 'mousemove', (event: MouseEvent) => {
+      if (event.buttons !== 0) {
+        // May be dragging the text, which could cause scrolling.  This is not perfect, because we
+        // don't detect mouse movements outside of the input box.
         this.hintScrollPositionMayBeStale();
-      });
-
-    this.registerEventListener(
-      this.inputElement, 'mousemove', (event: MouseEvent) => {
-        if (event.buttons !== 0) {
-          // May be dragging the text, which could cause scrolling.  This is not perfect, because we
-          // don't detect mouse movements outside of the input box.
-          this.hintScrollPositionMayBeStale();
-        }
-      });
+      }
+    });
 
     let keyboardHandler = this.keyboardHandler = this.registerDisposer(
         new KeyboardShortcutHandler(inputElement, KEY_MAP, this.handleKeyCommand.bind(this)));
@@ -228,13 +226,9 @@ export class AutocompleteTextInput extends RefCounted {
     }
   }
 
-  get disabled () {
-    return this.inputElement.disabled;
-  }
+  get disabled() { return this.inputElement.disabled; }
 
-  set disabled(value: boolean) {
-    this.inputElement.disabled = value;
-  }
+  set disabled(value: boolean) { this.inputElement.disabled = value; }
 
   private handleDropdownMousedown(event: MouseEvent) {
     this.inputElement.focus();
@@ -295,8 +289,7 @@ export class AutocompleteTextInput extends RefCounted {
 
   private updateDropdownStyle() {
     let {element, dropdownElement, inputElement} = this;
-    positionDropdown(dropdownElement, inputElement,
-                     {horizontal: false});
+    positionDropdown(dropdownElement, inputElement, {horizontal: false});
     this.dropdownStyleStale = false;
   }
 

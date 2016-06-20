@@ -19,11 +19,11 @@ import 'neuroglancer/uint64_set'; // Import for side effects.
 import {Chunk, ChunkManager, ChunkSource} from 'neuroglancer/chunk_manager/backend';
 import {ChunkPriorityTier, ChunkState} from 'neuroglancer/chunk_manager/base';
 import {Uint64Set} from 'neuroglancer/uint64_set';
+import {Endianness, convertEndian32} from 'neuroglancer/util/endian';
 import {vec3} from 'neuroglancer/util/geom';
 import {verifyObject, verifyObjectProperty} from 'neuroglancer/util/json';
 import {Uint64} from 'neuroglancer/util/uint64';
-import {convertEndian32, Endianness} from 'neuroglancer/util/endian';
-import {RPC, registerSharedObject, SharedObjectCounterpart} from 'neuroglancer/worker_rpc';
+import {RPC, SharedObjectCounterpart, registerSharedObject} from 'neuroglancer/worker_rpc';
 
 
 const MESH_OBJECT_MANIFEST_CHUNK_PRIORITY = 100;
@@ -37,22 +37,19 @@ export class ManifestChunk extends Chunk {
   objectId = new Uint64();
   fragmentIds: FragmentId[]|null;
 
-  constructor () {
-    super();
-  }
+  constructor() { super(); }
   // We can't save a reference to objectId, because it may be a temporary
   // object.
-  initializeManifestChunk (key: string, objectId: Uint64) {
+  initializeManifestChunk(key: string, objectId: Uint64) {
     super.initialize(key);
     this.objectId.assign(objectId);
   }
 
-  freeSystemMemory () {
-    this.fragmentIds = null;
-  }
+  freeSystemMemory() { this.fragmentIds = null; }
 
-  downloadSucceeded () {
-    // We can't easily determine the memory usage of the JSON manifest.  Just use 100 bytes as a default value.
+  downloadSucceeded() {
+    // We can't easily determine the memory usage of the JSON manifest.  Just use 100 bytes as a
+    // default value.
     this.systemMemoryBytes = 100;
     super.downloadSucceeded();
     if (this.priorityTier === ChunkPriorityTier.VISIBLE) {
@@ -60,9 +57,7 @@ export class ManifestChunk extends Chunk {
     }
   }
 
-  toString () {
-    return this.objectId.toString();
-  }
+  toString() { return this.objectId.toString(); }
 };
 
 /**
@@ -74,20 +69,18 @@ export class FragmentChunk extends Chunk {
   vertexPositions: Float32Array|null = null;
   indices: Uint32Array|null = null;
   vertexNormals: Float32Array|null = null;
-  constructor () {
-    super();
-  }
-  initializeFragmentChunk (key: string, manifestChunk: ManifestChunk, fragmentId: FragmentId) {
+  constructor() { super(); }
+  initializeFragmentChunk(key: string, manifestChunk: ManifestChunk, fragmentId: FragmentId) {
     super.initialize(key);
     this.manifestChunk = manifestChunk;
     this.fragmentId = fragmentId;
   }
-  freeSystemMemory () {
+  freeSystemMemory() {
     this.manifestChunk = null;
     this.vertexPositions = this.indices = this.vertexNormals = null;
     this.fragmentId = null;
   }
-  serialize (msg: any, transfers: any[]) {
+  serialize(msg: any, transfers: any[]) {
     super.serialize(msg, transfers);
     msg['objectKey'] = this.manifestChunk.key;
     let {vertexPositions, indices, vertexNormals} = this;
@@ -106,7 +99,7 @@ export class FragmentChunk extends Chunk {
     }
     this.vertexPositions = this.indices = this.vertexNormals = null;
   }
-  downloadSucceeded () {
+  downloadSucceeded() {
     let {vertexPositions, indices, vertexNormals} = this;
     this.systemMemoryBytes = this.gpuMemoryBytes =
         vertexPositions.byteLength + indices.byteLength + vertexNormals.byteLength;
@@ -119,7 +112,8 @@ export class FragmentChunk extends Chunk {
  *
  * Verifies that response[keysPropertyName] is an array of strings.
  */
-export function decodeJsonManifestChunk(chunk: ManifestChunk, response: any, keysPropertyName: string) {
+export function decodeJsonManifestChunk(
+    chunk: ManifestChunk, response: any, keysPropertyName: string) {
   verifyObject(response);
   chunk.fragmentIds = verifyObjectProperty(response, keysPropertyName, fragmentKeys => {
     if (!Array.isArray(fragmentKeys)) {
@@ -225,14 +219,14 @@ export function decodeVertexPositionsAndIndices(
 export abstract class MeshSource extends ChunkSource {
   fragmentSource: FragmentSource;
 
-  constructor (rpc: RPC, options: any) {
-    super (rpc, options);
+  constructor(rpc: RPC, options: any) {
+    super(rpc, options);
     let fragmentSource = this.fragmentSource =
         this.registerDisposer(rpc.getRef<FragmentSource>(options['fragmentSource']));
     fragmentSource.meshSource = this;
   }
 
-  getChunk (objectId: Uint64) {
+  getChunk(objectId: Uint64) {
     let key = `${objectId.low}:${objectId.high}`;
     let chunk = <ManifestChunk>this.chunks.get(key);
     if (chunk === undefined) {
@@ -243,7 +237,7 @@ export abstract class MeshSource extends ChunkSource {
     return chunk;
   }
 
-  getFragmentChunk (manifestChunk: ManifestChunk, fragmentId: FragmentId) {
+  getFragmentChunk(manifestChunk: ManifestChunk, fragmentId: FragmentId) {
     let key = `${manifestChunk.key}/${fragmentId}`;
     let fragmentSource = this.fragmentSource;
     let chunk = <FragmentChunk>fragmentSource.chunks.get(key);
@@ -260,9 +254,7 @@ export abstract class MeshSource extends ChunkSource {
 
 export class FragmentSource extends ChunkSource {
   meshSource: MeshSource = null;
-  download (chunk: FragmentChunk) {
-    this.meshSource.downloadFragment(chunk);
-  }
+  download(chunk: FragmentChunk) { this.meshSource.downloadFragment(chunk); }
 };
 registerSharedObject('mesh/FragmentSource', FragmentSource);
 
@@ -271,32 +263,32 @@ class MeshLayer extends SharedObjectCounterpart {
   source: MeshSource;
   visibleSegmentSet: Uint64Set;
 
-  constructor (rpc: RPC, options: any) {
+  constructor(rpc: RPC, options: any) {
     super(rpc, options);
     // No need to increase reference count of chunkManager and visibleSegmentSet since our owner
     // counterpart will hold a reference to the owner counterparts of them.
     this.chunkManager = <ChunkManager>rpc.get(options['chunkManager']);
     this.visibleSegmentSet = <Uint64Set>rpc.get(options['visibleSegmentSet']);
     this.source = this.registerDisposer(rpc.getRef<MeshSource>(options['source']));
-    this.registerSignalBinding(this.chunkManager.recomputeChunkPriorities.add(this.updateChunkPriorities, this));
-    this.registerSignalBinding(this.visibleSegmentSet.changed.add(this.handleVisibleSegmentSetChanged, this));
+    this.registerSignalBinding(
+        this.chunkManager.recomputeChunkPriorities.add(this.updateChunkPriorities, this));
+    this.registerSignalBinding(
+        this.visibleSegmentSet.changed.add(this.handleVisibleSegmentSetChanged, this));
   }
 
-  private handleVisibleSegmentSetChanged () {
-    this.chunkManager.scheduleUpdateChunkPriorities();
-  }
+  private handleVisibleSegmentSetChanged() { this.chunkManager.scheduleUpdateChunkPriorities(); }
 
-  private updateChunkPriorities () {
+  private updateChunkPriorities() {
     let {source, chunkManager} = this;
     for (let segment of this.visibleSegmentSet) {
       let manifestChunk = source.getChunk(segment);
-      chunkManager.requestChunk(manifestChunk, ChunkPriorityTier.VISIBLE,
-                                MESH_OBJECT_MANIFEST_CHUNK_PRIORITY);
+      chunkManager.requestChunk(
+          manifestChunk, ChunkPriorityTier.VISIBLE, MESH_OBJECT_MANIFEST_CHUNK_PRIORITY);
       if (manifestChunk.state === ChunkState.SYSTEM_MEMORY_WORKER) {
         for (let fragmentId of manifestChunk.fragmentIds) {
           let fragmentChunk = source.getFragmentChunk(manifestChunk, fragmentId);
-          chunkManager.requestChunk(fragmentChunk, ChunkPriorityTier.VISIBLE,
-                                    MESH_OBJECT_FRAGMENT_CHUNK_PRIORITY);
+          chunkManager.requestChunk(
+              fragmentChunk, ChunkPriorityTier.VISIBLE, MESH_OBJECT_FRAGMENT_CHUNK_PRIORITY);
         }
         // console.log("FIXME: updatefragment chunk priority");
         // console.log(manifestChunk.data);

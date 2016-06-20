@@ -14,8 +14,8 @@
  * limitations under the License.
  */
 
-import {NavigationState} from 'neuroglancer/navigation_state';
 import {LayerManager, MouseSelectionState} from 'neuroglancer/layer';
+import {NavigationState} from 'neuroglancer/navigation_state';
 import {TrackableBoolean} from 'neuroglancer/trackable_boolean';
 
 export interface ViewerPositionState {

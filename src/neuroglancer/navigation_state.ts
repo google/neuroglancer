@@ -15,7 +15,7 @@
  */
 
 import {RefCounted} from 'neuroglancer/util/disposable';
-import {Vec3, Quat, Mat4, mat3, vec3, quat, mat4} from 'neuroglancer/util/geom';
+import {Mat4, Quat, Vec3, mat3, mat4, quat, vec3} from 'neuroglancer/util/geom';
 import {parseFiniteVec} from 'neuroglancer/util/json';
 import {Signal} from 'signals';
 

@@ -56,9 +56,10 @@ describe('uint64', () => {
   });
 
   it('parseString toString round trip', () => {
-    function check (s: string, base: number) {
+    function check(s: string, base: number) {
       let x = Uint64.parseString(s, base);
-      expect(x.valid()).toBe(true, `low=${x.low}, high=${x.high}, toString(${base}) = ${x.toString(base)}, s=${s}`);
+      expect(x.valid()).toBe(
+          true, `low=${x.low}, high=${x.high}, toString(${base}) = ${x.toString(base)}, s=${s}`);
       expect(x.toString(base)).toEqual(s);
     }
     check('0', 10);
@@ -69,7 +70,7 @@ describe('uint64', () => {
   });
 
   it('toString parseString round trip', () => {
-    function check (x: Uint64, base: number) {
+    function check(x: Uint64, base: number) {
       let s = x.toString(base);
       let y = Uint64.parseString(s, base);
       expect(y.low).toBe(x.low);

@@ -26,14 +26,14 @@ import {ChunkState} from 'neuroglancer/chunk_manager/base';
 import {ChunkManager} from 'neuroglancer/chunk_manager/frontend';
 import {RenderLayer as GenericRenderLayer} from 'neuroglancer/layer';
 import {DataType} from 'neuroglancer/sliceview/base';
-import {SliceView, VolumeChunkSource, MultiscaleVolumeChunkSource} from 'neuroglancer/sliceview/frontend';
+import {MultiscaleVolumeChunkSource, SliceView, VolumeChunkSource} from 'neuroglancer/sliceview/frontend';
 import {TrackableValue, WatchableValue} from 'neuroglancer/trackable_value';
 import {RefCounted} from 'neuroglancer/util/disposable';
-import {vec3, vec4, Vec3, Mat4, BoundingBox} from 'neuroglancer/util/geom';
+import {BoundingBox, Mat4, Vec3, vec3, vec4} from 'neuroglancer/util/geom';
 import {verifyFloat01} from 'neuroglancer/util/json';
 import {Buffer} from 'neuroglancer/webgl/buffer';
 import {GL} from 'neuroglancer/webgl/context';
-import {ShaderBuilder, ShaderProgram, ShaderCompilationError, ShaderLinkError} from 'neuroglancer/webgl/shader';
+import {ShaderBuilder, ShaderCompilationError, ShaderLinkError, ShaderProgram} from 'neuroglancer/webgl/shader';
 import {RpcId, SharedObject} from 'neuroglancer/worker_rpc';
 import {Signal} from 'signals';
 

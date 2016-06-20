@@ -14,10 +14,10 @@
  * limitations under the License.
  */
 
-import {makeDefaultViewer} from 'neuroglancer/default_viewer';
-import {makeDefaultKeyBindings} from 'neuroglancer/default_key_bindings';
-import {navigateToOrigin} from 'my-neuroglancer-project/navigate_to_origin';
 import {makeExtraKeyBindings} from 'my-neuroglancer-project/extra_key_bindings';
+import {navigateToOrigin} from 'my-neuroglancer-project/navigate_to_origin';
+import {makeDefaultKeyBindings} from 'neuroglancer/default_key_bindings';
+import {makeDefaultViewer} from 'neuroglancer/default_viewer';
 
 window.addEventListener('DOMContentLoaded', () => {
   let viewer = (<any>window)['viewer'] = makeDefaultViewer();

@@ -19,8 +19,7 @@
 let webpack_helpers = require('./webpack_helpers');
 
 module.exports = function(config) {
-  let webpackConfig =
-      webpack_helpers.getBaseConfig({useBabel: false, noOutput: true});
+  let webpackConfig = webpack_helpers.getBaseConfig({useBabel: false, noOutput: true});
   webpackConfig.devtool = 'inline-source-map';
 
   config.set({

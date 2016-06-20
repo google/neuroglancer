@@ -19,11 +19,11 @@
  * This implements the authentication API based on neuroglancer/util/google_auth2.
  */
 
-import {getToken, Token, implementation} from 'neuroglancer/datasource/brainmaps/api_implementation';
+import {Token, getToken, implementation} from 'neuroglancer/datasource/brainmaps/api_implementation';
 import {StatusMessage} from 'neuroglancer/status';
-import {cancelPromise, callFinally} from 'neuroglancer/util/promise';
-import {RPC, registerRPC} from 'neuroglancer/worker_rpc';
 import {authenticateGoogleOAuth2} from 'neuroglancer/util/google_oauth2';
+import {callFinally, cancelPromise} from 'neuroglancer/util/promise';
+import {RPC, registerRPC} from 'neuroglancer/worker_rpc';
 
 declare var BRAINMAPS_CLIENT_ID: string;
 const BRAINMAPS_SCOPE = 'https://www.googleapis.com/auth/brainmaps';
@@ -34,7 +34,8 @@ implementation.getNewTokenPromise = function() {
   let status = new StatusMessage(/*delay=*/true);
   let authPromise: Promise<Token>|undefined|null;
   let tokenPromise = new Promise(function(resolve) {
-    function writeLoginStatus(msg = 'Brain Maps authorization required.', linkMessage = 'Request authorization.') {
+    function writeLoginStatus(
+        msg = 'Brain Maps authorization required.', linkMessage = 'Request authorization.') {
       status.setText(msg + '  ');
       let button = document.createElement('button');
       button.textContent = linkMessage;

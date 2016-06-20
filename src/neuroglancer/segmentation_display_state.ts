@@ -14,12 +14,12 @@
  * limitations under the License.
  */
 
+import {LayerSelectedValues, UserLayer} from 'neuroglancer/layer';
+import {SegmentColorHash} from 'neuroglancer/segment_color';
+import {Uint64Set} from 'neuroglancer/uint64_set';
 import {RefCounted} from 'neuroglancer/util/disposable';
 import {Uint64} from 'neuroglancer/util/uint64';
 import {Signal} from 'signals';
-import {LayerSelectedValues, UserLayer} from 'neuroglancer/layer';
-import {Uint64Set} from 'neuroglancer/uint64_set';
-import {SegmentColorHash} from 'neuroglancer/segment_color';
 
 
 export class SegmentSelectionState extends RefCounted {

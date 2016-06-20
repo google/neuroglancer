@@ -26,9 +26,7 @@
 
 export type Token = any;
 
-export class Implementation {
-  getNewTokenPromise: (invalidToken: Token) => Promise<Token>;
-}
+export class Implementation { getNewTokenPromise: (invalidToken: Token) => Promise<Token>; }
 export var implementation = new Implementation();
 
 let promise: Promise<Token> = null;

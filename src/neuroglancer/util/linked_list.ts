@@ -23,4 +23,4 @@ export interface LinkedListOperations {
   iterator: <T>(head: T) => Iterator<T>;
   reverseIterator: <T>(head: T) => Iterator<T>;
   initializeHead: <T>(head: T) => void;
-};
+}

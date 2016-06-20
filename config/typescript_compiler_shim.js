@@ -33,8 +33,7 @@ function postprocessConfigFile(result) {
 }
 
 function parseJsonConfigFileContent() {
-  return postprocessConfigFile(
-      typescript.parseJsonConfigFileContent.apply(typescript, arguments));
+  return postprocessConfigFile(typescript.parseJsonConfigFileContent.apply(typescript, arguments));
 }
-module.exports = Object.assign(
-    {}, typescript, {parseJsonConfigFileContent: parseJsonConfigFileContent});
+module.exports =
+    Object.assign({}, typescript, {parseJsonConfigFileContent: parseJsonConfigFileContent});

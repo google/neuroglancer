@@ -14,9 +14,9 @@
  * limitations under the License.
  */
 
-import {Signal} from 'signals';
-import {RefCounted} from 'neuroglancer/util/disposable';
 import {Trackable} from 'neuroglancer/url_hash_state';
+import {RefCounted} from 'neuroglancer/util/disposable';
+import {Signal} from 'signals';
 
 export class TrackableBoolean implements Trackable {
   get value() { return this.value_; }
@@ -26,9 +26,7 @@ export class TrackableBoolean implements Trackable {
       this.changed.dispatch();
     }
   }
-  toggle () {
-    this.value = !this.value;
-  }
+  toggle() { this.value = !this.value; }
   changed = new Signal();
   constructor(private value_: boolean, public defaultValue?: boolean) {}
   toJSON() {
@@ -50,20 +48,20 @@ export class TrackableBoolean implements Trackable {
 
 export class TrackableBooleanCheckbox extends RefCounted {
   element = document.createElement('input');
-  constructor (public model: TrackableBoolean) {
+  constructor(public model: TrackableBoolean) {
     super();
     let {element} = this;
     element.type = 'checkbox';
     this.registerSignalBinding(model.changed.add(this.updateCheckbox, this));
     this.updateCheckbox();
-    this.registerEventListener(element, 'change', function (this: typeof element, e: Event) {
+    this.registerEventListener(element, 'change', function(this: typeof element, e: Event) {
       model.value = this.checked;
     });
   }
 
   updateCheckbox() { this.element.checked = this.model.value; }
 
-  disposed () {
+  disposed() {
     let {element} = this;
     let {parentElement} = element;
     if (parentElement) {
@@ -73,13 +71,11 @@ export class TrackableBooleanCheckbox extends RefCounted {
 };
 
 export class ElementVisibilityFromTrackableBoolean extends RefCounted {
-  constructor (public model: TrackableBoolean, public element: HTMLElement) {
+  constructor(public model: TrackableBoolean, public element: HTMLElement) {
     super();
     this.updateVisibility();
     this.registerSignalBinding(model.changed.add(() => { this.updateVisibility(); }));
   }
 
-  updateVisibility() {
-    this.element.style.display = this.model.value ? '' : 'none';
-  }
+  updateVisibility() { this.element.style.display = this.model.value ? '' : 'none'; }
 };

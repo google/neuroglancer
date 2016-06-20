@@ -14,12 +14,12 @@
  * limitations under the License.
  */
 
-import {SliceViewBase, VolumeChunkSource as VolumeChunkSourceInterface, VolumeChunkSpecification, RenderLayer as RenderLayerInterface} from 'neuroglancer/sliceview/base';
-import {RPC, SharedObjectCounterpart, registerSharedObject, registerRPC} from 'neuroglancer/worker_rpc';
-import {ChunkManager, ChunkSource, Chunk} from 'neuroglancer/chunk_manager/backend';
-import {vec3, Vec3, vec3Key} from 'neuroglancer/util/geom';
-import {ChunkLayout} from 'neuroglancer/sliceview/chunk_layout';
+import {Chunk, ChunkManager, ChunkSource} from 'neuroglancer/chunk_manager/backend';
 import {ChunkPriorityTier} from 'neuroglancer/chunk_manager/base';
+import {RenderLayer as RenderLayerInterface, SliceViewBase, VolumeChunkSource as VolumeChunkSourceInterface, VolumeChunkSpecification} from 'neuroglancer/sliceview/base';
+import {ChunkLayout} from 'neuroglancer/sliceview/chunk_layout';
+import {Vec3, vec3, vec3Key} from 'neuroglancer/util/geom';
+import {RPC, SharedObjectCounterpart, registerRPC, registerSharedObject} from 'neuroglancer/worker_rpc';
 import {Signal} from 'signals';
 
 const SCALE_PRIORITY_MULTIPLIER = 1e5;
@@ -36,9 +36,10 @@ export class SliceView extends SliceViewBase {
   constructor(rpc: RPC, options: any) {
     super();
     this.initializeSharedObject(rpc, options['id']);
-    this.chunkManager = this.registerDisposer((<ChunkManager>rpc.get(options['chunkManager'])).addRef());
+    this.chunkManager =
+        this.registerDisposer((<ChunkManager>rpc.get(options['chunkManager'])).addRef());
     this.registerSignalBinding(
-      this.chunkManager.recomputeChunkPriorities.add(this.updateVisibleChunks, this));
+        this.chunkManager.recomputeChunkPriorities.add(this.updateVisibleChunks, this));
   }
 
   onViewportChanged() { this.chunkManager.scheduleUpdateChunkPriorities(); }
@@ -81,7 +82,7 @@ export class SliceView extends SliceViewBase {
     }
   }
 
-  disposed () {
+  disposed() {
     for (let layer of this.visibleLayers.keys()) {
       this.removeVisibleLayer(layer);
     }
@@ -154,7 +155,7 @@ export class VolumeChunk extends Chunk {
     // chunkDataSize = ${this.chunkDataSize}`);
   }
 
-  downloadSucceeded () {
+  downloadSucceeded() {
     this.systemMemoryBytes = this.gpuMemoryBytes = this.data.byteLength;
     super.downloadSucceeded();
   }
@@ -259,7 +260,7 @@ export class RenderLayer extends SharedObjectCounterpart implements RenderLayerI
 };
 registerSharedObject('sliceview/RenderLayer', RenderLayer);
 
-registerRPC('sliceview/RenderLayer:updateEquivalences', function (x) {
+registerRPC('sliceview/RenderLayer:updateEquivalences', function(x) {
   let obj = <RenderLayer>this.get(x['id']);
   let newValue = x['equivalences'];
   if (newValue !== obj.equivalences) {

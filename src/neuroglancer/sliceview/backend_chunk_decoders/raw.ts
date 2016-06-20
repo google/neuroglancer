@@ -15,9 +15,9 @@
  */
 
 import {VolumeChunk} from 'neuroglancer/sliceview/backend';
-import {DataType, DATA_TYPE_BYTES} from 'neuroglancer/sliceview/base';
-import {prod3} from 'neuroglancer/util/geom';
 import {postProcessRawData} from 'neuroglancer/sliceview/backend_chunk_decoders/postprocess';
+import {DATA_TYPE_BYTES, DataType} from 'neuroglancer/sliceview/base';
+import {prod3} from 'neuroglancer/util/geom';
 
 export function decodeRawChunk(chunk: VolumeChunk, response: ArrayBuffer) {
   let {spec} = chunk.source;
@@ -26,23 +26,24 @@ export function decodeRawChunk(chunk: VolumeChunk, response: ArrayBuffer) {
   let bytesPerElement = DATA_TYPE_BYTES[dataType];
   let expectedBytes = numElements * bytesPerElement * spec.numChannels;
   if (expectedBytes !== response.byteLength) {
-    throw new Error(`Raw-format chunk is ${response.byteLength} bytes, but ${numElements} * ${bytesPerElement} = ${expectedBytes} bytes are expected.`);
+    throw new Error(
+        `Raw-format chunk is ${response.byteLength} bytes, but ${numElements} * ${bytesPerElement} = ${expectedBytes} bytes are expected.`);
   }
   let data: ArrayBufferView;
   switch (dataType) {
-  case DataType.UINT8:
-    data = new Uint8Array(response);
-    break;
-  case DataType.UINT16:
-    data = new Uint16Array(response);
-    break;
-  case DataType.UINT32:
-  case DataType.UINT64:
-    data = new Uint32Array(response);
-    break;
-  case DataType.FLOAT32:
-    data = new Float32Array(response);
-    break;
+    case DataType.UINT8:
+      data = new Uint8Array(response);
+      break;
+    case DataType.UINT16:
+      data = new Uint16Array(response);
+      break;
+    case DataType.UINT32:
+    case DataType.UINT64:
+      data = new Uint32Array(response);
+      break;
+    case DataType.FLOAT32:
+      data = new Float32Array(response);
+      break;
   }
   postProcessRawData(chunk, data);
 }

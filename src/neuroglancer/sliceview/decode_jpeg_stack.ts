@@ -15,7 +15,7 @@
  */
 
 import {JpegDecoder} from 'jpgjs';
-import {vec3, Vec3} from 'neuroglancer/util/geom';
+import {Vec3, vec3} from 'neuroglancer/util/geom';
 
 export function decodeJpegStack(data: Uint8Array, chunkDataSize: Vec3) {
   let parser = new JpegDecoder();
@@ -26,7 +26,8 @@ export function decodeJpegStack(data: Uint8Array, chunkDataSize: Vec3) {
 
   // Just check that the total number pixels matches the expected value.
   if (parser.width * parser.height !== chunkDataSize[0] * chunkDataSize[1] * chunkDataSize[2]) {
-    throw new Error(`JPEG data does not have the expected dimensions: width=${parser.width}, height=${parser.height}, chunkDataSize=${vec3.str(chunkDataSize)}`);
+    throw new Error(
+        `JPEG data does not have the expected dimensions: width=${parser.width}, height=${parser.height}, chunkDataSize=${vec3.str(chunkDataSize)}`);
   }
   return parser.getData(parser.width, parser.height, /*forceRGBOutput=*/false);
 }

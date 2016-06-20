@@ -18,9 +18,9 @@
 import {PairingHeapOperations} from 'neuroglancer/util/pairing_heap';
 
 interface Node<T> {
-  child0: T | null;
-  next0: T | null;
-  prev0: T | null;
+  child0: T|null;
+  next0: T|null;
+  prev0: T|null;
 }
 
 /**
@@ -30,14 +30,13 @@ interface Node<T> {
  *
  * @final
  */
-export default class Implementation<T extends Node<T>> implements
-    PairingHeapOperations<T> {
+export default class Implementation<T extends Node<T>> implements PairingHeapOperations<T> {
   /**
    * @param compare Returns true iff a < b.
    */
   constructor(public compare: (a: T, b: T) => boolean) {}
 
-  meld(a: T | null, b: T | null) {
+  meld(a: T|null, b: T|null) {
     if (b === null) {
       return a;
     }
@@ -138,7 +137,7 @@ export default class Implementation<T extends Node<T>> implements
       yield root;
       while (child !== null) {
         let next = child.next0;
-        yield * this.entries(child);
+        yield* this.entries(child);
         child = next;
       }
     }
@@ -160,7 +159,7 @@ export default class Implementation<T extends Node<T>> implements
         child.child0 = null;
         child.next0 = null;
         child.prev0 = null;
-        yield * this.entries(child);
+        yield* this.entries(child);
         child = next;
       }
     }

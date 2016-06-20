@@ -15,7 +15,7 @@
  */
 
 import {DataType, VolumeChunkSpecification} from 'neuroglancer/sliceview/base';
-import {VolumeChunkSource, ChunkFormatHandler, registerChunkFormatHandler} from 'neuroglancer/sliceview/frontend';
+import {ChunkFormatHandler, VolumeChunkSource, registerChunkFormatHandler} from 'neuroglancer/sliceview/frontend';
 import {SingleTextureChunkFormat, SingleTextureVolumeChunk} from 'neuroglancer/sliceview/single_texture_chunk_format';
 import {TypedArray, TypedArrayConstructor, maybePadArray} from 'neuroglancer/util/array';
 import {RefCounted} from 'neuroglancer/util/disposable';
@@ -23,7 +23,7 @@ import {Vec3, vec3Key} from 'neuroglancer/util/geom';
 import {Uint64} from 'neuroglancer/util/uint64';
 import {GL} from 'neuroglancer/webgl/context';
 import {ShaderBuilder, ShaderProgram} from 'neuroglancer/webgl/shader';
-import {glsl_uint8, glsl_float, glsl_uint16, glsl_uint32, glsl_uint64} from 'neuroglancer/webgl/shader_lib';
+import {glsl_float, glsl_uint16, glsl_uint32, glsl_uint64, glsl_uint8} from 'neuroglancer/webgl/shader_lib';
 
 class TextureLayout extends RefCounted {
   textureWidth: number;

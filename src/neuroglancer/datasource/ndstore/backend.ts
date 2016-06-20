@@ -17,9 +17,9 @@
 import {handleChunkDownloadPromise} from 'neuroglancer/chunk_manager/backend';
 import {VolumeChunk, VolumeChunkSource as GenericVolumeChunkSource} from 'neuroglancer/sliceview/backend';
 import {ChunkDecoder} from 'neuroglancer/sliceview/backend_chunk_decoders';
-import {decodeRawChunk} from 'neuroglancer/sliceview/backend_chunk_decoders/raw';
 import {decodeJpegChunk} from 'neuroglancer/sliceview/backend_chunk_decoders/jpeg';
 import {decodeNdstoreNpzChunk} from 'neuroglancer/sliceview/backend_chunk_decoders/ndstoreNpz';
+import {decodeRawChunk} from 'neuroglancer/sliceview/backend_chunk_decoders/raw';
 import {openShardedHttpRequest, sendHttpRequest} from 'neuroglancer/util/http_request';
 import {RPC, registerSharedObject} from 'neuroglancer/worker_rpc';
 

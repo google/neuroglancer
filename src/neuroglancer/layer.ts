@@ -17,8 +17,8 @@
 import * as throttle from 'lodash/throttle';
 import {SpatialPosition} from 'neuroglancer/navigation_state';
 import {RefCounted} from 'neuroglancer/util/disposable';
-import {Vec3, vec3, BoundingBox} from 'neuroglancer/util/geom';
-import {addSignalBinding, removeSignalBinding, SignalBindingUpdater} from 'neuroglancer/util/signal_binding_updater';
+import {BoundingBox, Vec3, vec3} from 'neuroglancer/util/geom';
+import {SignalBindingUpdater, addSignalBinding, removeSignalBinding} from 'neuroglancer/util/signal_binding_updater';
 import {Uint64} from 'neuroglancer/util/uint64';
 import {Signal} from 'signals';
 

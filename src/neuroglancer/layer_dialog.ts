@@ -14,12 +14,12 @@
  * limitations under the License.
  */
 
-import {getVolume, volumeCompleter, suggestLayerName, findSourceGroup} from 'neuroglancer/datasource/factory';
+import {findSourceGroup, getVolume, suggestLayerName, volumeCompleter} from 'neuroglancer/datasource/factory';
 import {LayerListSpecification, ManagedUserLayerWithSpecification} from 'neuroglancer/layer_specification';
 import {Overlay} from 'neuroglancer/overlay';
 import {DataType, VolumeType} from 'neuroglancer/sliceview/base';
 import {MultiscaleVolumeChunkSource} from 'neuroglancer/sliceview/frontend';
-import {CANCELLED, cancellableThen, cancelPromise} from 'neuroglancer/util/promise';
+import {CANCELLED, cancelPromise, cancellableThen} from 'neuroglancer/util/promise';
 import {associateLabelWithElement} from 'neuroglancer/widget/associate_label';
 import {AutocompleteTextInput, makeCompletionElementWithDescription} from 'neuroglancer/widget/autocomplete';
 import {makeHiddenSubmitButton} from 'neuroglancer/widget/hidden_submit_button';

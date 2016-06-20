@@ -14,15 +14,15 @@
  * limitations under the License.
  */
 
-import {VolumeChunkEncoding} from 'neuroglancer/datasource/precomputed/base';
-import {DataType, VolumeType, VolumeChunkSpecification} from 'neuroglancer/sliceview/base';
-import {VolumeChunkSource as GenericVolumeChunkSource, MultiscaleVolumeChunkSource as GenericMultiscaleVolumeChunkSource} from 'neuroglancer/sliceview/frontend';
-import {MeshSource as GenericMeshSource} from 'neuroglancer/mesh/frontend';
 import {ChunkManager} from 'neuroglancer/chunk_manager/frontend';
 import {registerDataSourceFactory} from 'neuroglancer/datasource/factory';
-import {vec3, Vec3} from 'neuroglancer/util/geom';
-import {parseFiniteVec, parseIntVec, parseArray, stableStringify} from 'neuroglancer/util/json';
-import {openShardedHttpRequest, sendHttpRequest, parseSpecialUrl} from 'neuroglancer/util/http_request';
+import {VolumeChunkEncoding} from 'neuroglancer/datasource/precomputed/base';
+import {MeshSource as GenericMeshSource} from 'neuroglancer/mesh/frontend';
+import {DataType, VolumeChunkSpecification, VolumeType} from 'neuroglancer/sliceview/base';
+import {MultiscaleVolumeChunkSource as GenericMultiscaleVolumeChunkSource, VolumeChunkSource as GenericVolumeChunkSource} from 'neuroglancer/sliceview/frontend';
+import {Vec3, vec3} from 'neuroglancer/util/geom';
+import {openShardedHttpRequest, parseSpecialUrl, sendHttpRequest} from 'neuroglancer/util/http_request';
+import {parseArray, parseFiniteVec, parseIntVec, stableStringify} from 'neuroglancer/util/json';
 
 let serverDataTypes = new Map<string, DataType>();
 serverDataTypes.set('uint8', DataType.UINT8);
@@ -40,8 +40,8 @@ serverChunkEncodings.set('compressed_segmentation', VolumeChunkEncoding.COMPRESS
 
 export class VolumeChunkSource extends GenericVolumeChunkSource {
   constructor(
-    chunkManager: ChunkManager, spec: VolumeChunkSpecification, public baseUrls: string[]|string, public path: string,
-    public encoding: VolumeChunkEncoding) {
+      chunkManager: ChunkManager, spec: VolumeChunkSpecification, public baseUrls: string[]|string,
+      public path: string, public encoding: VolumeChunkEncoding) {
     super(chunkManager, spec);
     this.initializeCounterpart(chunkManager.rpc, {
       'type': 'precomputed/VolumeChunkSource',
@@ -51,9 +51,7 @@ export class VolumeChunkSource extends GenericVolumeChunkSource {
     });
   }
 
-  toString () {
-    return `precomputed:volume:${this.baseUrls[0]}/${this.path}`;
-  }
+  toString() { return `precomputed:volume:${this.baseUrls[0]}/${this.path}`; }
 };
 
 class ScaleInfo {
@@ -64,7 +62,7 @@ class ScaleInfo {
   size: Vec3;
   chunkSizes: Vec3[];
   compressedSegmentationBlockSize: Vec3|undefined;
-  constructor (response: any) {
+  constructor(response: any) {
     if (typeof response !== 'object' || Array.isArray(response)) {
       throw new Error('Failed to parse volume metadata.');
     }
@@ -82,7 +80,8 @@ class ScaleInfo {
     }
     this.encoding = encoding;
     if (encoding === VolumeChunkEncoding.COMPRESSED_SEGMENTATION) {
-      this.compressedSegmentationBlockSize = parseIntVec(vec3.create(), response['compressed_segmentation_block_size']);
+      this.compressedSegmentationBlockSize =
+          parseIntVec(vec3.create(), response['compressed_segmentation_block_size']);
     }
     this.key = response['key'];
     if (typeof this.key !== 'string') {
@@ -98,7 +97,7 @@ export class MultiscaleVolumeChunkSource implements GenericMultiscaleVolumeChunk
   mesh: string|undefined;
   scales: ScaleInfo[];
 
-  getMeshSource (chunkManager: ChunkManager) {
+  getMeshSource(chunkManager: ChunkManager) {
     let {mesh} = this;
     if (mesh === undefined) {
       return null;
@@ -167,21 +166,22 @@ export class MultiscaleVolumeChunkSource implements GenericMultiscaleVolumeChunk
 };
 
 export class MeshSource extends GenericMeshSource {
-  constructor(chunkManager: ChunkManager, public baseUrls: string|string[], public path: string, public lod: number) {
+  constructor(
+      chunkManager: ChunkManager, public baseUrls: string|string[], public path: string,
+      public lod: number) {
     super(chunkManager);
     this.initializeCounterpart(
         this.chunkManager.rpc,
         {'type': 'precomputed/MeshSource', 'baseUrls': baseUrls, 'path': path, 'lod': lod});
   }
-  toString () {
-    return `precomputed:mesh:${this.baseUrls[0]}/${this.path}`;
-  }
+  toString() { return `precomputed:mesh:${this.baseUrls[0]}/${this.path}`; }
 };
 
-export function getShardedMeshSource(chunkManager: ChunkManager, baseUrls: string[], path: string, lod: number) {
+export function getShardedMeshSource(
+    chunkManager: ChunkManager, baseUrls: string[], path: string, lod: number) {
   return chunkManager.getChunkSource(
       MeshSource, JSON.stringify({'baseUrls': baseUrls, 'path': path, 'lod': lod}),
-    () => new MeshSource(chunkManager, baseUrls, path, lod));
+      () => new MeshSource(chunkManager, baseUrls, path, lod));
 }
 
 export function getMeshSource(chunkManager: ChunkManager, url: string, lod: number) {

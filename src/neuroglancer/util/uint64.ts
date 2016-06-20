@@ -140,7 +140,7 @@ export class Uint64 {
     return x;
   }
 
-  valid () {
+  valid() {
     let {low, high} = this;
     return ((low >>> 0) === low) && ((high >>> 0) === high);
   }

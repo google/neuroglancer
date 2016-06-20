@@ -15,11 +15,11 @@
  */
 
 import {ChunkLayout} from 'neuroglancer/sliceview/chunk_layout';
-import {prod3, Vec3, vec3, vec4, mat4, Mat4} from 'neuroglancer/util/geom';
-import {approxEqual} from 'neuroglancer/util/compare';
 import {partitionArray} from 'neuroglancer/util/array';
+import {approxEqual} from 'neuroglancer/util/compare';
+import {Mat4, Vec3, mat4, prod3, vec3, vec4} from 'neuroglancer/util/geom';
+import {kAxes, kZeroVec} from 'neuroglancer/util/geom';
 import {SharedObject} from 'neuroglancer/worker_rpc';
-import {kZeroVec, kAxes} from 'neuroglancer/util/geom';
 
 const DEBUG_CHUNK_INTERSECTIONS = false;
 
@@ -72,8 +72,7 @@ enum BoundsComparisonResult {
 }
 
 function compareBoundsSingleDimension(
-    needleLower: number, needleUpper: number, haystackLower: number,
-    haystackUpper: number) {
+    needleLower: number, needleUpper: number, haystackLower: number, haystackUpper: number) {
   if (needleLower >= haystackUpper || needleUpper <= haystackLower) {
     return BoundsComparisonResult.FULLY_OUTSIDE;
   }
@@ -89,8 +88,7 @@ function compareBounds(
   let curResult = BoundsComparisonResult.FULLY_INSIDE;
   for (let i = 0; i < 3; ++i) {
     let newResult = compareBoundsSingleDimension(
-        needleLowerBound[i], needleUpperBound[i], haystackLowerBound[i],
-        haystackUpperBound[i]);
+        needleLowerBound[i], needleUpperBound[i], haystackLowerBound[i], haystackUpperBound[i]);
     switch (newResult) {
       case BoundsComparisonResult.FULLY_OUTSIDE:
         return newResult;
@@ -102,9 +100,7 @@ function compareBounds(
   return curResult;
 }
 
-export interface RenderLayer {
-  sources: VolumeChunkSource[][];
-};
+export interface RenderLayer { sources: VolumeChunkSource[][]; }
 
 function pickBestAlternativeSource(xAxis: Vec3, yAxis: Vec3, alternatives: VolumeChunkSource[]) {
   let numAlternatives = alternatives.length;
@@ -235,8 +231,7 @@ export class SliceViewBase extends SharedObject {
     }
 
     // Compute viewport plane distance to origin.
-    this.viewportPlaneDistanceToOrigin =
-      vec3.dot(this.centerDataPosition, this.viewportAxes[2]);
+    this.viewportPlaneDistanceToOrigin = vec3.dot(this.centerDataPosition, this.viewportAxes[2]);
     this.onViewportToDataMatrixChanged();
     this.maybeSetHasValidViewport();
     return true;
@@ -373,13 +368,16 @@ export class SliceViewBase extends SharedObject {
 
       computeSourcesChunkBounds(lowerBound, upperBound, visibleSources.keys());
       if (DEBUG_CHUNK_INTERSECTIONS) {
-        console.log(`Initial sources chunk bounds: ${vec3.str(lowerBound)}, ${vec3.str(upperBound)}, data bounds: ${vec3.str(dataLowerBound)}, ${vec3.str(dataUpperBound)}, offset = ${vec3.str(offset)}, chunkSize = ${vec3.str(chunkSize)}`);
+        console.log(
+            `Initial sources chunk bounds: ${vec3.str(lowerBound)}, ${vec3.str(upperBound)}, data bounds: ${vec3.str(dataLowerBound)}, ${vec3.str(dataUpperBound)}, offset = ${vec3.str(offset)}, chunkSize = ${vec3.str(chunkSize)}`);
       }
 
       for (let i = 0; i < 3; ++i) {
-        lowerBound[i] = Math.max(lowerBound[i], Math.floor((dataLowerBound[i] - offset[i]) / chunkSize[i]));
-        // 
-        upperBound[i] = Math.min(upperBound[i], Math.floor((dataUpperBound[i] - offset[i]) / chunkSize[i] + 1));
+        lowerBound[i] =
+            Math.max(lowerBound[i], Math.floor((dataLowerBound[i] - offset[i]) / chunkSize[i]));
+        //
+        upperBound[i] =
+            Math.min(upperBound[i], Math.floor((dataUpperBound[i] - offset[i]) / chunkSize[i] + 1));
       }
 
       // console.log('chunkBounds', lowerBound, upperBound);
@@ -409,8 +407,8 @@ export class SliceViewBase extends SharedObject {
           //     positiveVertexDistanceToOrigin, negativeVertexDistanceToOrigin);
           positiveVertexDistanceToOrigin +=
               normalValue * chunkSizeValue * (lowerValue + positiveOffset);
-          negativeVertexDistanceToOrigin += normalValue * chunkSizeValue *
-              (lowerValue + diff - positiveOffset);
+          negativeVertexDistanceToOrigin +=
+              normalValue * chunkSizeValue * (lowerValue + diff - positiveOffset);
         }
         // console.log("{positive,negative}VertexDistanceToOrigin: ",
         // positiveVertexDistanceToOrigin, negativeVertexDistanceToOrigin,
@@ -428,10 +426,12 @@ export class SliceViewBase extends SharedObject {
       partiallyVisibleSources.length = 0;
       for (let source of visibleSources.keys()) {
         let spec = source.spec;
-        let result = compareBounds(
-          lowerBound, upperBound, spec.lowerChunkBound, spec.upperChunkBound);
+        let result =
+            compareBounds(lowerBound, upperBound, spec.lowerChunkBound, spec.upperChunkBound);
         if (DEBUG_CHUNK_INTERSECTIONS) {
-          console.log(`Comparing source bounds lowerBound=${vec3.str(lowerBound)}, upperBound=${vec3.str(upperBound)}, lowerChunkBound=${vec3.str(spec.lowerChunkBound)}, upperChunkBound=${vec3.str(spec.upperChunkBound)}, got ${BoundsComparisonResult[result]}`, spec, source);
+          console.log(
+              `Comparing source bounds lowerBound=${vec3.str(lowerBound)}, upperBound=${vec3.str(upperBound)}, lowerChunkBound=${vec3.str(spec.lowerChunkBound)}, upperChunkBound=${vec3.str(spec.upperChunkBound)}, got ${BoundsComparisonResult[result]}`,
+              spec, source);
         }
         switch (result) {
           case BoundsComparisonResult.FULLY_INSIDE:
@@ -446,7 +446,7 @@ export class SliceViewBase extends SharedObject {
 
       // Mutates lowerBound and upperBound while running, but leaves them the
       // same once finished.
-      function checkBounds (nextSplitDim: number) {
+      function checkBounds(nextSplitDim: number) {
         if (fullyVisibleSources.length === 0 && partiallyVisibleSourcesLength === 0) {
           if (DEBUG_CHUNK_INTERSECTIONS) {
             console.log('  no visible sources');
@@ -507,13 +507,11 @@ export class SliceViewBase extends SharedObject {
         let oldPartiallyVisibleSourcesLength = partiallyVisibleSourcesLength;
         function adjustSources() {
           partiallyVisibleSourcesLength = partitionArray(
-              partiallyVisibleSources, 0, oldPartiallyVisibleSourcesLength,
-              source => {
+              partiallyVisibleSources, 0, oldPartiallyVisibleSourcesLength, source => {
                 let spec = source.spec;
                 let result = compareBoundsSingleDimension(
                     lowerBound[nextSplitDim], upperBound[nextSplitDim],
-                    spec.lowerChunkBound[nextSplitDim],
-                    spec.upperChunkBound[nextSplitDim]);
+                    spec.lowerChunkBound[nextSplitDim], spec.upperChunkBound[nextSplitDim]);
                 switch (result) {
                   case BoundsComparisonResult.PARTIALLY_INSIDE:
                     return true;
@@ -579,9 +577,7 @@ export enum VolumeType {
 }
 
 
-export const DEFAULT_CHUNK_DATA_SIZES  = [
-  vec3.fromValues(64, 64, 64)
-];
+export const DEFAULT_CHUNK_DATA_SIZES = [vec3.fromValues(64, 64, 64)];
 
 /**
  * Specifies a chunk layout and voxel size.
@@ -595,12 +591,10 @@ export class VolumeChunkSpecification {
   upperChunkBound: Vec3;
 
   constructor(
-      public chunkLayout: ChunkLayout, public chunkDataSize: Vec3,
-      public numChannels: number, public dataType: DataType,
-      public lowerVoxelBound: Vec3, public upperVoxelBound: Vec3,
+      public chunkLayout: ChunkLayout, public chunkDataSize: Vec3, public numChannels: number,
+      public dataType: DataType, public lowerVoxelBound: Vec3, public upperVoxelBound: Vec3,
       public compressedSegmentationBlockSize?: Vec3|undefined) {
-    this.chunkBytes =
-        prod3(chunkDataSize) * DATA_TYPE_BYTES[dataType] * numChannels;
+    this.chunkBytes = prod3(chunkDataSize) * DATA_TYPE_BYTES[dataType] * numChannels;
     let voxelSize = this.voxelSize =
         vec3.divide(vec3.create(), this.chunkLayout.size, this.chunkDataSize);
     let lowerChunkBound = this.lowerChunkBound = vec3.create();
@@ -608,21 +602,20 @@ export class VolumeChunkSpecification {
     let chunkSize = chunkLayout.size;
     let chunkOffset = chunkLayout.offset;
     for (let i = 0; i < 3; ++i) {
-      lowerChunkBound[i] = Math.floor(
-          (lowerVoxelBound[i] * voxelSize[i] - chunkOffset[i]) / chunkSize[i]);
-      upperChunkBound[i] = Math.floor(
-          ((upperVoxelBound[i] - 1) * voxelSize[i] - chunkOffset[i]) /
-              chunkSize[i] +
-          1);
+      lowerChunkBound[i] =
+          Math.floor((lowerVoxelBound[i] * voxelSize[i] - chunkOffset[i]) / chunkSize[i]);
+      upperChunkBound[i] =
+          Math.floor(((upperVoxelBound[i] - 1) * voxelSize[i] - chunkOffset[i]) / chunkSize[i] + 1);
     }
-    // console.log(`voxelBound = [${vec3.str(lowerVoxelBound)},${vec3.str(upperVoxelBound)}), chunkBound = [${vec3.str(lowerChunkBound)},${vec3.str(upperChunkBound)}]`);
+    // console.log(`voxelBound = [${vec3.str(lowerVoxelBound)},${vec3.str(upperVoxelBound)}),
+    // chunkBound = [${vec3.str(lowerChunkBound)},${vec3.str(upperChunkBound)}]`);
     this.compressedSegmentationBlockSize = compressedSegmentationBlockSize;
   }
   static fromObject(msg: any) {
     return new VolumeChunkSpecification(
-        ChunkLayout.fromObject(msg['chunkLayout']), msg['chunkDataSize'],
-        msg['numChannels'], msg['dataType'], msg['lowerVoxelBound'],
-        msg['upperVoxelBound'], msg['compressedSegmentationBlockSize']);
+        ChunkLayout.fromObject(msg['chunkLayout']), msg['chunkDataSize'], msg['numChannels'],
+        msg['dataType'], msg['lowerVoxelBound'], msg['upperVoxelBound'],
+        msg['compressedSegmentationBlockSize']);
   }
   toObject(msg: any) {
     this.chunkLayout.toObject(msg['chunkLayout'] = {});
@@ -631,8 +624,7 @@ export class VolumeChunkSpecification {
     msg['dataType'] = this.dataType;
     msg['lowerVoxelBound'] = this.lowerVoxelBound;
     msg['upperVoxelBound'] = this.upperVoxelBound;
-    msg['compressedSegmentationBlockSize'] =
-        this.compressedSegmentationBlockSize;
+    msg['compressedSegmentationBlockSize'] = this.compressedSegmentationBlockSize;
   }
 
   static getDefaults(options: {

@@ -14,6 +14,6 @@
  * limitations under the License.
  */
 
-import { RPC } from 'neuroglancer/worker_rpc';
+import {RPC} from 'neuroglancer/worker_rpc';
 
 export var rpc = new RPC(self);

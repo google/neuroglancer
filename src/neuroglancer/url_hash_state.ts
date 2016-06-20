@@ -16,8 +16,9 @@
 
 // Facility for storing global state in the url hash.
 
+import {urlSafeParse, urlSafeStringify} from 'neuroglancer/util/json';
 import {Signal} from 'signals';
-import {urlSafeStringify, urlSafeParse} from 'neuroglancer/util/json';
+
 
 // Maps keys to objects.
 let trackedKeys = new Map<string, Trackable>();

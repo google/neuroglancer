@@ -1,4 +1,5 @@
-// DO NOT EDIT.  Generated from templates/neuroglancer/sliceview/compressed_segmentation/encode_common.template.ts.
+// DO NOT EDIT.  Generated from
+// templates/neuroglancer/sliceview/compressed_segmentation/encode_common.template.ts.
 /**
  * @license
  * Copyright 2016 Google Inc.
@@ -19,7 +20,7 @@ import {Uint32ArrayBuilder} from 'neuroglancer/util/uint32array_builder.ts';
 
 export const BLOCK_HEADER_SIZE = 2;
 
-export function newCache () {
+export function newCache() {
   return new Map<string, number>();
 }
 
@@ -29,187 +30,185 @@ function writeEncodedRepresentation(
   // Write encoded representation.
   if (encodedBits > 0) {
     switch (encodedBits) {
-      
       case 1: {
         for (let wordIndex = 0, elementIndex = 0; wordIndex < encodedSize32Bits; ++wordIndex) {
           let word = 0;
-          
+
           word |= (indexBuffer[encodingBuffer[elementIndex + 0]] << 0);
-          
+
           word |= (indexBuffer[encodingBuffer[elementIndex + 1]] << 1);
-          
+
           word |= (indexBuffer[encodingBuffer[elementIndex + 2]] << 2);
-          
+
           word |= (indexBuffer[encodingBuffer[elementIndex + 3]] << 3);
-          
+
           word |= (indexBuffer[encodingBuffer[elementIndex + 4]] << 4);
-          
+
           word |= (indexBuffer[encodingBuffer[elementIndex + 5]] << 5);
-          
+
           word |= (indexBuffer[encodingBuffer[elementIndex + 6]] << 6);
-          
+
           word |= (indexBuffer[encodingBuffer[elementIndex + 7]] << 7);
-          
+
           word |= (indexBuffer[encodingBuffer[elementIndex + 8]] << 8);
-          
+
           word |= (indexBuffer[encodingBuffer[elementIndex + 9]] << 9);
-          
+
           word |= (indexBuffer[encodingBuffer[elementIndex + 10]] << 10);
-          
+
           word |= (indexBuffer[encodingBuffer[elementIndex + 11]] << 11);
-          
+
           word |= (indexBuffer[encodingBuffer[elementIndex + 12]] << 12);
-          
+
           word |= (indexBuffer[encodingBuffer[elementIndex + 13]] << 13);
-          
+
           word |= (indexBuffer[encodingBuffer[elementIndex + 14]] << 14);
-          
+
           word |= (indexBuffer[encodingBuffer[elementIndex + 15]] << 15);
-          
+
           word |= (indexBuffer[encodingBuffer[elementIndex + 16]] << 16);
-          
+
           word |= (indexBuffer[encodingBuffer[elementIndex + 17]] << 17);
-          
+
           word |= (indexBuffer[encodingBuffer[elementIndex + 18]] << 18);
-          
+
           word |= (indexBuffer[encodingBuffer[elementIndex + 19]] << 19);
-          
+
           word |= (indexBuffer[encodingBuffer[elementIndex + 20]] << 20);
-          
+
           word |= (indexBuffer[encodingBuffer[elementIndex + 21]] << 21);
-          
+
           word |= (indexBuffer[encodingBuffer[elementIndex + 22]] << 22);
-          
+
           word |= (indexBuffer[encodingBuffer[elementIndex + 23]] << 23);
-          
+
           word |= (indexBuffer[encodingBuffer[elementIndex + 24]] << 24);
-          
+
           word |= (indexBuffer[encodingBuffer[elementIndex + 25]] << 25);
-          
+
           word |= (indexBuffer[encodingBuffer[elementIndex + 26]] << 26);
-          
+
           word |= (indexBuffer[encodingBuffer[elementIndex + 27]] << 27);
-          
+
           word |= (indexBuffer[encodingBuffer[elementIndex + 28]] << 28);
-          
+
           word |= (indexBuffer[encodingBuffer[elementIndex + 29]] << 29);
-          
+
           word |= (indexBuffer[encodingBuffer[elementIndex + 30]] << 30);
-          
+
           word |= (indexBuffer[encodingBuffer[elementIndex + 31]] << 31);
-          
+
           outputData[outputOffset + wordIndex] = word;
           elementIndex += 32;
         }
       } break;
-      
+
       case 2: {
         for (let wordIndex = 0, elementIndex = 0; wordIndex < encodedSize32Bits; ++wordIndex) {
           let word = 0;
-          
+
           word |= (indexBuffer[encodingBuffer[elementIndex + 0]] << 0);
-          
+
           word |= (indexBuffer[encodingBuffer[elementIndex + 1]] << 2);
-          
+
           word |= (indexBuffer[encodingBuffer[elementIndex + 2]] << 4);
-          
+
           word |= (indexBuffer[encodingBuffer[elementIndex + 3]] << 6);
-          
+
           word |= (indexBuffer[encodingBuffer[elementIndex + 4]] << 8);
-          
+
           word |= (indexBuffer[encodingBuffer[elementIndex + 5]] << 10);
-          
+
           word |= (indexBuffer[encodingBuffer[elementIndex + 6]] << 12);
-          
+
           word |= (indexBuffer[encodingBuffer[elementIndex + 7]] << 14);
-          
+
           word |= (indexBuffer[encodingBuffer[elementIndex + 8]] << 16);
-          
+
           word |= (indexBuffer[encodingBuffer[elementIndex + 9]] << 18);
-          
+
           word |= (indexBuffer[encodingBuffer[elementIndex + 10]] << 20);
-          
+
           word |= (indexBuffer[encodingBuffer[elementIndex + 11]] << 22);
-          
+
           word |= (indexBuffer[encodingBuffer[elementIndex + 12]] << 24);
-          
+
           word |= (indexBuffer[encodingBuffer[elementIndex + 13]] << 26);
-          
+
           word |= (indexBuffer[encodingBuffer[elementIndex + 14]] << 28);
-          
+
           word |= (indexBuffer[encodingBuffer[elementIndex + 15]] << 30);
-          
+
           outputData[outputOffset + wordIndex] = word;
           elementIndex += 16;
         }
       } break;
-      
+
       case 4: {
         for (let wordIndex = 0, elementIndex = 0; wordIndex < encodedSize32Bits; ++wordIndex) {
           let word = 0;
-          
+
           word |= (indexBuffer[encodingBuffer[elementIndex + 0]] << 0);
-          
+
           word |= (indexBuffer[encodingBuffer[elementIndex + 1]] << 4);
-          
+
           word |= (indexBuffer[encodingBuffer[elementIndex + 2]] << 8);
-          
+
           word |= (indexBuffer[encodingBuffer[elementIndex + 3]] << 12);
-          
+
           word |= (indexBuffer[encodingBuffer[elementIndex + 4]] << 16);
-          
+
           word |= (indexBuffer[encodingBuffer[elementIndex + 5]] << 20);
-          
+
           word |= (indexBuffer[encodingBuffer[elementIndex + 6]] << 24);
-          
+
           word |= (indexBuffer[encodingBuffer[elementIndex + 7]] << 28);
-          
+
           outputData[outputOffset + wordIndex] = word;
           elementIndex += 8;
         }
       } break;
-      
+
       case 8: {
         for (let wordIndex = 0, elementIndex = 0; wordIndex < encodedSize32Bits; ++wordIndex) {
           let word = 0;
-          
+
           word |= (indexBuffer[encodingBuffer[elementIndex + 0]] << 0);
-          
+
           word |= (indexBuffer[encodingBuffer[elementIndex + 1]] << 8);
-          
+
           word |= (indexBuffer[encodingBuffer[elementIndex + 2]] << 16);
-          
+
           word |= (indexBuffer[encodingBuffer[elementIndex + 3]] << 24);
-          
+
           outputData[outputOffset + wordIndex] = word;
           elementIndex += 4;
         }
       } break;
-      
+
       case 16: {
         for (let wordIndex = 0, elementIndex = 0; wordIndex < encodedSize32Bits; ++wordIndex) {
           let word = 0;
-          
+
           word |= (indexBuffer[encodingBuffer[elementIndex + 0]] << 0);
-          
+
           word |= (indexBuffer[encodingBuffer[elementIndex + 1]] << 16);
-          
+
           outputData[outputOffset + wordIndex] = word;
           elementIndex += 2;
         }
       } break;
-      
+
       case 32: {
         for (let wordIndex = 0, elementIndex = 0; wordIndex < encodedSize32Bits; ++wordIndex) {
           let word = 0;
-          
+
           word |= (indexBuffer[encodingBuffer[elementIndex + 0]] << 0);
-          
+
           outputData[outputOffset + wordIndex] = word;
           elementIndex += 1;
         }
       } break;
-      
     }
   }
 }
@@ -266,9 +265,9 @@ export function writeBlock(
 }
 
 type EncodeBlockFunction =
-    (rawData: Uint32Array, inputOffset: number, inputStrides: ArrayLike<number>, blockSize: ArrayLike<number>,
-     actualSize: ArrayLike<number>, baseOffset: number, cache: ValueTableCache,
-     output: Uint32ArrayBuilder) => [number, number];
+    (rawData: Uint32Array, inputOffset: number, inputStrides: ArrayLike<number>,
+     blockSize: ArrayLike<number>, actualSize: ArrayLike<number>, baseOffset: number,
+     cache: ValueTableCache, output: Uint32ArrayBuilder) => [number, number];
 
 export function encodeChannel(
     output: Uint32ArrayBuilder, blockSize: ArrayLike<number>, rawData: Uint32Array,
@@ -300,7 +299,8 @@ export function encodeChannel(
         let inputOffset = bz * zBlockSize * sz + by * yBlockSize * sy + bx * xBlockSize * sx;
         let encodedValueBaseOffset = output.length - baseOffset;
         let [encodedBits, tableOffset] = encodeBlock(
-          rawData, baseInputOffset + inputOffset, inputStrides, blockSize, actualSize, baseOffset, cache, output);
+            rawData, baseInputOffset + inputOffset, inputStrides, blockSize, actualSize, baseOffset,
+            cache, output);
         let outputData = output.data;
         outputData[headerOffset++] = tableOffset | (encodedBits << 24);
         outputData[headerOffset++] = encodedValueBaseOffset;
@@ -318,6 +318,8 @@ export function encodeChannels(
   output.resize(channelOffsetOutputBase + numChannels);
   for (let channel = 0; channel < numChannels; ++channel) {
     output.data[channelOffsetOutputBase + channel] = output.length;
-    encodeChannel(output, blockSize, rawData, volumeSize, baseInputOffset + inputStrides[3] * channel, inputStrides, encodeBlock);
+    encodeChannel(
+        output, blockSize, rawData, volumeSize, baseInputOffset + inputStrides[3] * channel,
+        inputStrides, encodeBlock);
   }
 }

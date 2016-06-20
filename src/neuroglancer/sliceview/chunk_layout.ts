@@ -14,7 +14,8 @@
  * limitations under the License.
  */
 
-import { Vec3, vec3, kZeroVec, vec3Key } from 'neuroglancer/util/geom';
+import {Vec3, kZeroVec, vec3, vec3Key} from 'neuroglancer/util/geom';
+
 
 /**
  * @param size Size of each chunk in nanometers.
@@ -33,7 +34,7 @@ export class ChunkLayout {
     }
   }
   static cache = new Map<string, ChunkLayout>();
-  toObject (msg: any) {
+  toObject(msg: any) {
     msg['size'] = this.size;
     msg['offset'] = this.offset;
   }
@@ -48,7 +49,5 @@ export class ChunkLayout {
     }
     return obj;
   }
-  static fromObject (msg: any) {
-    return ChunkLayout.get(msg['size'], msg['offset']);
-  }
+  static fromObject(msg: any) { return ChunkLayout.get(msg['size'], msg['offset']); }
 };

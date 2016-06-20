@@ -43,28 +43,25 @@ function writeGenerated(sourcePath, outputPath, contents) {
 
 function renderTemplate(sourcePath, outputPath, context) {
   writeGenerated(
-      sourcePath, outputPath,
-      env.render(path.resolve(templatesDir, sourcePath), context));
+      sourcePath, outputPath, env.render(path.resolve(templatesDir, sourcePath), context));
 }
 
 function writeSegmentationCompression() {
   let baseDir = 'neuroglancer/sliceview/compressed_segmentation';
-  renderTemplate(path.join(baseDir, 'encode_common.template.ts'),
-                 path.join(baseDir, 'encode_common.ts'),
-                 {});
+  renderTemplate(
+      path.join(baseDir, 'encode_common.template.ts'), path.join(baseDir, 'encode_common.ts'), {});
   for (let dataType of ['uint64', 'uint32']) {
     let context = {dataType, strideMultiplier: dataType === 'uint64' ? 2 : 1};
     for (let op of ['encode', 'decode']) {
       renderTemplate(
-          path.join(baseDir, `${op}.template.ts`),
-          path.join(baseDir, `${op}_${dataType}.ts`), context);
+          path.join(baseDir, `${op}.template.ts`), path.join(baseDir, `${op}_${dataType}.ts`),
+          context);
     }
   }
 }
 
 function makeSubstitutions(inputPath, outputPath, replacements) {
-  let inputContents = fs.readFileSync(
-      path.resolve(templatesDir, inputPath), {encoding: 'utf-8'});
+  let inputContents = fs.readFileSync(path.resolve(templatesDir, inputPath), {encoding: 'utf-8'});
   for (let patternAndReplacement of replacements) {
     inputContents = inputContents.replace(patternAndReplacement[0], patternAndReplacement[1]);
   }
@@ -74,12 +71,11 @@ function makeSubstitutions(inputPath, outputPath, replacements) {
 function writeDataStructures() {
   const baseDir = 'neuroglancer/util';
   for (let arrayType
-           of ['Uint8Array', 'Uint16Array', 'Float32Array', 'Uint32Array',
-               'Float64Array', 'Int8Array', 'Int16Array', 'Int32Array']) {
+           of ['Uint8Array', 'Uint16Array', 'Float32Array', 'Uint32Array', 'Float64Array',
+               'Int8Array', 'Int16Array', 'Int32Array']) {
     makeSubstitutions(
         path.join(baseDir, 'typedarray_builder.template.ts'),
-        path.join(baseDir, `${arrayType.toLowerCase()}_builder.ts`),
-        [[/\$TYPE\$/g, arrayType]]);
+        path.join(baseDir, `${arrayType.toLowerCase()}_builder.ts`), [[/\$TYPE\$/g, arrayType]]);
   }
   for (let i = 0; i < 2; ++i) {
     const nextPrevReplacements = [
@@ -87,13 +83,11 @@ function writeDataStructures() {
       [/PREV_PROPERTY/g, `prev${i}`],
     ];
     makeSubstitutions(
-        path.join(baseDir, 'linked_list.template.ts'),
-        path.join(baseDir, `linked_list.${i}.ts`),
+        path.join(baseDir, 'linked_list.template.ts'), path.join(baseDir, `linked_list.${i}.ts`),
         nextPrevReplacements);
 
     makeSubstitutions(
-        path.join(baseDir, 'pairing_heap.template.ts'),
-        path.join(baseDir, `pairing_heap.${i}.ts`),
+        path.join(baseDir, 'pairing_heap.template.ts'), path.join(baseDir, `pairing_heap.${i}.ts`),
         [[/CHILD_PROPERTY/g, `child${i}`], ...nextPrevReplacements]);
   }
 }

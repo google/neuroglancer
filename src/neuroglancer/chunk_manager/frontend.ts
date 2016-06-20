@@ -14,11 +14,11 @@
  * limitations under the License.
  */
 
-import {ChunkState, AvailableCapacity} from 'neuroglancer/chunk_manager/base';
-import {RPC, registerRPC, SharedObject} from 'neuroglancer/worker_rpc';
-import {Signal} from 'signals';
-import {GL} from 'neuroglancer/webgl/context';
+import {AvailableCapacity, ChunkState} from 'neuroglancer/chunk_manager/base';
 import {Memoize} from 'neuroglancer/util/memoize';
+import {GL} from 'neuroglancer/webgl/context';
+import {RPC, SharedObject, registerRPC} from 'neuroglancer/worker_rpc';
+import {Signal} from 'signals';
 
 const DEBUG_CHUNK_UPDATES = false;
 
@@ -78,8 +78,7 @@ export class ChunkQueueManager extends SharedObject {
     let deadline = this.chunkUpdateDeadline;
     if (deadline !== null && Date.now() > deadline) {
       // No time to perform chunk update now, we will wait some more.
-      setTimeout(
-          this.processPendingChunkUpdates.bind(this), this.chunkUpdateDelay);
+      setTimeout(this.processPendingChunkUpdates.bind(this), this.chunkUpdateDelay);
       return;
     }
     let update = this.pendingChunkUpdates;
@@ -114,8 +113,7 @@ export class ChunkQueueManager extends SharedObject {
             chunk.freeGPUMemory(this.gl);
             break;
           default:
-            throw new Error(
-                `INTERNAL ERROR: Invalid chunk state: ${ChunkState[newState]}`);
+            throw new Error(`INTERNAL ERROR: Invalid chunk state: ${ChunkState[newState]}`);
         }
       }
     }
@@ -147,7 +145,8 @@ registerRPC('Chunk.update', function(x) {
 });
 
 export class ChunkManager extends SharedObject {
-  chunkSourceCache: Map<any, Memoize<string, ChunkSource>> = new Map<any, Memoize<string, ChunkSource>>();
+  chunkSourceCache: Map<any, Memoize<string, ChunkSource>> =
+      new Map<any, Memoize<string, ChunkSource>>();
 
   constructor(public chunkQueueManager: ChunkQueueManager) {
     super();
@@ -157,7 +156,7 @@ export class ChunkManager extends SharedObject {
         {'type': 'ChunkManager', 'chunkQueueManager': chunkQueueManager.rpcId});
   }
 
-  getChunkSource<T extends ChunkSource> (constructor: any, key: string, getter: () => T) {
+  getChunkSource<T extends ChunkSource>(constructor: any, key: string, getter: () => T) {
     let {chunkSourceCache} = this;
     let sources = chunkSourceCache.get(constructor);
     if (sources === undefined) {

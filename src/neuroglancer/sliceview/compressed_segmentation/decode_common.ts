@@ -23,10 +23,12 @@
  * Determines the offset of the value at the specified dataPosition in a single-channel compressed
  * segmentation.
  *
- * @param baseOffset The base offset into `data' at which the compressed data for this channel starts.
- * @param chunkDataSize A 3-element array specifying the size of the volume, 
+ * @param baseOffset The base offset into `data' at which the compressed data for this channel
+ * starts.
+ * @param chunkDataSize A 3-element array specifying the size of the volume,
  * @param blockSize A 3-element array specifying the block size ued for compression.
- * @param dataPosition A 3-element array specifying the position within the volume from which to read.
+ * @param dataPosition A 3-element array specifying the position within the volume from which to
+ * read.
  * @returns The offset into `data', relative to baseOffset, at which the value is located.
  */
 export function decodeValueOffset(

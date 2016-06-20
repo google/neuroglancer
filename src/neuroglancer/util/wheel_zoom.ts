@@ -19,7 +19,7 @@ const DOM_DELTA_LINE = 1;
 const DOM_DELTA_PAGE = 2;
 
 export function getWheelZoomAmount(event: WheelEvent) {
-  let multiplier = 1 / 200.0; // For DOM_DELTA_PIXEL.
+  let multiplier = 1 / 200.0;  // For DOM_DELTA_PIXEL.
   let {deltaMode} = event;
   if (deltaMode === DOM_DELTA_LINE) {
     multiplier = 1 / 10.0;

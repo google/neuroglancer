@@ -15,13 +15,13 @@
  */
 
 import {HashFunction, PRIME_MODULUS} from 'neuroglancer/gpu_hash/hash_function';
-import {ShaderBuilder, ShaderProgram} from 'neuroglancer/webgl/shader';
-import {GL} from 'neuroglancer/webgl/context';
-import {glsl_uint64, glsl_hsvToRgb} from 'neuroglancer/webgl/shader_lib';
 import {glsl_hashFunction} from 'neuroglancer/gpu_hash/shader';
-import {Signal} from 'signals';
-import {Uint64} from 'neuroglancer/util/uint64';
 import {hsvToRgb} from 'neuroglancer/util/colorspace';
+import {Uint64} from 'neuroglancer/util/uint64';
+import {GL} from 'neuroglancer/webgl/context';
+import {ShaderBuilder, ShaderProgram} from 'neuroglancer/webgl/shader';
+import {glsl_hsvToRgb, glsl_uint64} from 'neuroglancer/webgl/shader_lib';
+import {Signal} from 'signals';
 
 const NUM_COMPONENTS = 2;
 

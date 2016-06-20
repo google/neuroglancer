@@ -21,10 +21,10 @@ export interface PairingHeapOperationsConstructor<T> {
 }
 
 export interface PairingHeapOperations<T> {
-  meld: (a: T | null, b: T | null) => T | null;
+  meld: (a: T|null, b: T|null) => T | null;
   compare: ComparisonFunction<T>;
   removeMin: (root: T) => T | null;
   remove: (root: T, node: T) => T | null;
-  entries: (root: T | null) => Iterator<T>;
-  removedEntries: (root: T | null) => Iterator<T>;
+  entries: (root: T|null) => Iterator<T>;
+  removedEntries: (root: T|null) => Iterator<T>;
 }

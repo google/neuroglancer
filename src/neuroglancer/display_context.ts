@@ -14,18 +14,17 @@
  * limitations under the License.
  */
 
+import {RefCounted} from 'neuroglancer/util/disposable';
 import {GL, initializeWebGL} from 'neuroglancer/webgl/context';
 import {Signal} from 'signals';
-import {RefCounted} from 'neuroglancer/util/disposable';
 
 export abstract class RenderedPanel extends RefCounted {
   gl: GL;
   constructor(public context: DisplayContext, public element: HTMLElement) {
     super();
     this.gl = context.gl;
-    this.registerEventListener(element, 'mouseenter', (event: MouseEvent) => {
-      this.context.setActivePanel(this);
-    });
+    this.registerEventListener(
+        element, 'mouseenter', (event: MouseEvent) => { this.context.setActivePanel(this); });
     context.addPanel(this);
   }
 
@@ -47,15 +46,11 @@ export abstract class RenderedPanel extends RefCounted {
 
   abstract onResize(): void;
 
-  onKeyCommand (action: string) {
-    return false;
-  }
+  onKeyCommand(action: string) { return false; }
 
   abstract draw(): void;
 
-  disposed () {
-    this.context.removePanel(this);
-  }
+  disposed() { this.context.removePanel(this); }
 };
 
 export class DisplayContext extends RefCounted {

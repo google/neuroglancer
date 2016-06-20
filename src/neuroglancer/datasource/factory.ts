@@ -14,12 +14,12 @@
  * limitations under the License.
  */
 
-import {MultiscaleVolumeChunkSource} from 'neuroglancer/sliceview/frontend';
+import {ChunkManager} from 'neuroglancer/chunk_manager/frontend';
 import {MeshSource} from 'neuroglancer/mesh/frontend';
 import {SkeletonSource} from 'neuroglancer/skeleton/frontend';
-import {ChunkManager} from 'neuroglancer/chunk_manager/frontend';
-import {cancellableThen, CancellablePromise} from 'neuroglancer/util/promise';
+import {MultiscaleVolumeChunkSource} from 'neuroglancer/sliceview/frontend';
 import {CompletionWithDescription, applyCompletionOffset} from 'neuroglancer/util/completion';
+import {CancellablePromise, cancellableThen} from 'neuroglancer/util/promise';
 
 export type Completion = CompletionWithDescription;
 

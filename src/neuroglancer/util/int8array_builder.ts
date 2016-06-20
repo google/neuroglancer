@@ -19,9 +19,7 @@ export class Int8ArrayBuilder {
   length = 0;
   data: Int8Array;
 
-  constructor (initialCapacity: number = 16) {
-    this.data = new Int8Array(initialCapacity);
-  }
+  constructor(initialCapacity: number = 16) { this.data = new Int8Array(initialCapacity); }
 
   resize(newLength: number) {
     let {data} = this;
@@ -33,20 +31,16 @@ export class Int8ArrayBuilder {
     this.length = newLength;
   }
 
-  get view () {
+  get view() {
     let {data} = this;
     return new Int8Array(data.buffer, data.byteOffset, this.length);
   }
 
-  shrinkToFit () {
-    this.data = new Int8Array(this.view);
-  }
+  shrinkToFit() { this.data = new Int8Array(this.view); }
 
-  clear () {
-    this.length = 0;
-  }
+  clear() { this.length = 0; }
 
-  appendArray (other: ArrayLike<number>) {
+  appendArray(other: ArrayLike<number>) {
     let {length} = this;
     this.resize(length + other.length);
     this.data.set(other, length);

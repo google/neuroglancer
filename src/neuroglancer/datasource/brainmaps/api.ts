@@ -14,9 +14,10 @@
  * limitations under the License.
  */
 
-import {getToken, Token} from 'neuroglancer/datasource/brainmaps/api_implementation';
-import {openShardedHttpRequest, HttpError} from 'neuroglancer/util/http_request';
-import {makeCancellablePromise, CancellablePromise} from 'neuroglancer/util/promise';
+import {Token, getToken} from 'neuroglancer/datasource/brainmaps/api_implementation';
+import {HttpError, openShardedHttpRequest} from 'neuroglancer/util/http_request';
+import {CancellablePromise, makeCancellablePromise} from 'neuroglancer/util/promise';
+
 export var numPendingRequests = 0;
 
 export type BrainmapsInstance = number;
@@ -36,7 +37,8 @@ export function brainmapsInstanceKey(instance: BrainmapsInstance) {
   return INSTANCE_IDENTIFIERS[instance];
 }
 
-export function setupBrainmapsInstance(instance: BrainmapsInstance, hostname: string, identifier: string, name: string) {
+export function setupBrainmapsInstance(
+    instance: BrainmapsInstance, hostname: string, identifier: string, name: string) {
   INSTANCE_IDENTIFIERS[instance] = identifier;
   INSTANCE_NAMES[instance] = name;
   instanceHostname[instance] = hostname;

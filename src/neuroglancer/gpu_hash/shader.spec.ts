@@ -14,12 +14,12 @@
  * limitations under the License.
  */
 
-import {fragmentShaderTest} from 'neuroglancer/webgl/shader_testing';
-import {glsl_exactDot, encodeBytesToFloat32} from 'neuroglancer/webgl/shader_lib';
-import {HashTableShaderManager, GPUHashTable} from 'neuroglancer/gpu_hash/shader';
-import {HashTable, NUM_ALTERNATIVES} from 'neuroglancer/gpu_hash/hash_table';
 import {PRIME_MODULUS} from 'neuroglancer/gpu_hash/hash_function';
+import {HashTable, NUM_ALTERNATIVES} from 'neuroglancer/gpu_hash/hash_table';
+import {GPUHashTable, HashTableShaderManager} from 'neuroglancer/gpu_hash/shader';
 import {Uint64} from 'neuroglancer/util/uint64';
+import {encodeBytesToFloat32, glsl_exactDot} from 'neuroglancer/webgl/shader_lib';
+import {fragmentShaderTest} from 'neuroglancer/webgl/shader_testing';
 
 const COUNT = 100;
 
@@ -238,15 +238,20 @@ float highOffset = ${bName}[${numAlternatives * 4 + 2}];
           let h = hashTable.getHash(alt, x.low, x.high);
           let expectedValueLow = hashTable.tables[alt][h];
           let expectedValueHigh = hashTable.tables[alt][h + 1];
-          expect(valueLow).toEqual(expectedValueLow, `curIndex = ${curIndex}, x = ${[x.low, x.high]}, alt = ${alt}`);
-          expect(valueHigh).toEqual(expectedValueHigh, `curIndex = ${curIndex}, x = ${[x.low, x.high]}, alt = ${alt}`);
+          expect(valueLow).toEqual(
+              expectedValueLow, `curIndex = ${curIndex}, x = ${[x.low, x.high]}, alt = ${alt}`);
+          expect(valueHigh).toEqual(
+              expectedValueHigh, `curIndex = ${curIndex}, x = ${[x.low, x.high]}, alt = ${alt}`);
         }
         let resultBytes = tester.readBytes();
         return resultBytes[0] === 255;
       }
       testValues.forEach((x, i) => {
         expect(hashTable.has(x.low, x.high)).toBe(true, `cpu: i = ${i}, x = ${x}`);
-        expect(checkPresent(x)).toBe(true, `gpu: i = ${i}, x = ${x}, index = ${hashTable.hasWithTableIndex(x.low, x.high)}`);
+        expect(checkPresent(x))
+            .toBe(
+                true,
+                `gpu: i = ${i}, x = ${x}, index = ${hashTable.hasWithTableIndex(x.low, x.high)}`);
       });
       notPresentValues.forEach((x, i) => {
         expect(hashTable.has(x.low, x.high)).toBe(false, `cpu: i = ${i}, x = ${x}`);

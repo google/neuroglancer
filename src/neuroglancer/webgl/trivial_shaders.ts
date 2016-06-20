@@ -14,8 +14,8 @@
  * limitations under the License.
  */
 
-import {ShaderProgram, ShaderBuilder} from 'neuroglancer/webgl/shader';
 import {GL} from 'neuroglancer/webgl/context';
+import {ShaderBuilder, ShaderProgram} from 'neuroglancer/webgl/shader';
 
 export function trivialTextureShader(gl: GL): ShaderProgram {
   return gl.memoize.get('trivialTextureShader', () => {

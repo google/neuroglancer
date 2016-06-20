@@ -17,7 +17,7 @@
 import {DisplayContext, RenderedPanel} from 'neuroglancer/display_context';
 import {MouseSelectionState} from 'neuroglancer/layer';
 import {NavigationState} from 'neuroglancer/navigation_state';
-import {vec3, kAxes, AXES_NAMES} from 'neuroglancer/util/geom';
+import {AXES_NAMES, kAxes, vec3} from 'neuroglancer/util/geom';
 import {getWheelZoomAmount} from 'neuroglancer/util/wheel_zoom';
 import {ViewerState} from 'neuroglancer/viewer_state';
 

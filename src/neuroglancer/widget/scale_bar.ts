@@ -35,7 +35,12 @@ require('./scale_bar.css');
  * Default set of allowed significand values.  1 is implicitly part of the set.
  */
 const DEFAULT_ALLOWED_SIGNIFICANDS = [
-  1.5, 2, 3, 5, 7.5, 10,
+  1.5,
+  2,
+  3,
+  5,
+  7.5,
+  10,
 ];
 
 interface LengthUnit {
@@ -59,7 +64,7 @@ export class ScaleBarDimensions {
   allowedSignificands = DEFAULT_ALLOWED_SIGNIFICANDS;
 
   /**
-   * The target length in pixels.  The closest 
+   * The target length in pixels.  The closest
    */
   targetLengthInPixels: number;
 
@@ -90,9 +95,10 @@ export class ScaleBarDimensions {
    *
    * @returns true if the scale bar has changed, false if it is unchanged.
    */
-  update () {
+  update() {
     let {nanometersPerPixel, targetLengthInPixels} = this;
-    if (this.prevNanometersPerPixel === nanometersPerPixel && this.prevTargetLengthInPixels === targetLengthInPixels) {
+    if (this.prevNanometersPerPixel === nanometersPerPixel &&
+        this.prevTargetLengthInPixels === targetLengthInPixels) {
       return false;
     }
     this.prevNanometersPerPixel = nanometersPerPixel;
@@ -106,7 +112,8 @@ export class ScaleBarDimensions {
     let bestSignificand = 1;
     let {allowedSignificands} = this;
     for (let allowedSignificand of this.allowedSignificands) {
-      if (Math.abs(allowedSignificand - targetSignificand) < Math.abs(bestSignificand - targetSignificand)) {
+      if (Math.abs(allowedSignificand - targetSignificand) <
+          Math.abs(bestSignificand - targetSignificand)) {
         bestSignificand = allowedSignificand;
       } else {
         // If distance did not decrease, then it can only increase from here.
@@ -136,7 +143,7 @@ export class ScaleBarWidget extends RefCounted {
   element = document.createElement('div');
   textNode = document.createTextNode('');
   barElement = document.createElement('div');
-  constructor (public dimensions = new ScaleBarDimensions()) {
+  constructor(public dimensions = new ScaleBarDimensions()) {
     super();
     let {element, textNode, barElement} = this;
     element.className = 'scale-bar-container';
@@ -145,7 +152,7 @@ export class ScaleBarWidget extends RefCounted {
     barElement.className = 'scale-bar';
   }
 
-  update () {
+  update() {
     let {dimensions} = this;
     if (dimensions.update()) {
       this.textNode.textContent = `${dimensions.physicalLength} ${dimensions.physicalUnit}`;
@@ -153,7 +160,5 @@ export class ScaleBarWidget extends RefCounted {
     }
   }
 
-  disposed () {
-    removeFromParent(this.element);
-  }
+  disposed() { removeFromParent(this.element); }
 };

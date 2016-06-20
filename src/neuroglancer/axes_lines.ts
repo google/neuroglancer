@@ -15,11 +15,11 @@
  */
 
 import {RefCounted} from 'neuroglancer/util/disposable';
+import {Mat4} from 'neuroglancer/util/geom';
+import {Buffer} from 'neuroglancer/webgl/buffer';
 import {GL} from 'neuroglancer/webgl/context';
 import {ShaderProgram} from 'neuroglancer/webgl/shader';
-import {Buffer} from 'neuroglancer/webgl/buffer';
 import {trivialColorShader} from 'neuroglancer/webgl/trivial_shaders';
-import {Mat4} from 'neuroglancer/util/geom';
 
 export class AxesLineHelper extends RefCounted {
   vertexBuffer: Buffer;
@@ -54,8 +54,7 @@ export class AxesLineHelper extends RefCounted {
   }
 
   static get(gl: GL) {
-    return gl.memoize.get(
-        'SliceViewPanel:AxesLineHelper', () => new AxesLineHelper(gl));
+    return gl.memoize.get('SliceViewPanel:AxesLineHelper', () => new AxesLineHelper(gl));
   }
 
   draw(mat: Mat4, blend = true) {

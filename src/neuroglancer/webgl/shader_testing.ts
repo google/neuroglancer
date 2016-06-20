@@ -14,13 +14,13 @@
  * limitations under the License.
  */
 
-import {GL} from 'neuroglancer/webgl/context';
-import {ShaderBuilder, ShaderProgram} from 'neuroglancer/webgl/shader';
 import {RefCounted} from 'neuroglancer/util/disposable';
-import {Buffer} from 'neuroglancer/webgl/buffer';
-import {OffscreenFramebuffer} from 'neuroglancer/webgl/offscreen';
-import {glsl_debugFunctions} from 'neuroglancer/webgl/shader_lib';
 import {vec4} from 'neuroglancer/util/geom';
+import {Buffer} from 'neuroglancer/webgl/buffer';
+import {GL} from 'neuroglancer/webgl/context';
+import {OffscreenFramebuffer} from 'neuroglancer/webgl/offscreen';
+import {ShaderBuilder, ShaderProgram} from 'neuroglancer/webgl/shader';
+import {glsl_debugFunctions} from 'neuroglancer/webgl/shader_lib';
 import {webglTest} from 'neuroglancer/webgl/testing';
 
 export class FragmentShaderTester extends RefCounted {

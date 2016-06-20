@@ -14,15 +14,15 @@
  * limitations under the License.
  */
 
-import {ShaderBuilder, ShaderProgram} from 'neuroglancer/webgl/shader';
-import {vec3, vec4, mat4, Vec3, Mat4} from 'neuroglancer/util/geom';
-import {PerspectiveViewRenderLayer, PerspectiveViewRenderContext, perspectivePanelEmit} from 'neuroglancer/perspective_panel';
-import {GL} from 'neuroglancer/webgl/context';
-import {setVec4FromUint32} from 'neuroglancer/webgl/shader_lib';
-import {ChunkManager, Chunk, ChunkSource} from 'neuroglancer/chunk_manager/frontend';
-import {SegmentationDisplayState} from 'neuroglancer/segmentation_display_state';
 import {ChunkState} from 'neuroglancer/chunk_manager/base';
+import {Chunk, ChunkManager, ChunkSource} from 'neuroglancer/chunk_manager/frontend';
+import {PerspectiveViewRenderContext, PerspectiveViewRenderLayer, perspectivePanelEmit} from 'neuroglancer/perspective_panel';
+import {SegmentationDisplayState} from 'neuroglancer/segmentation_display_state';
+import {Mat4, Vec3, mat4, vec3, vec4} from 'neuroglancer/util/geom';
 import {Buffer} from 'neuroglancer/webgl/buffer';
+import {GL} from 'neuroglancer/webgl/context';
+import {ShaderBuilder, ShaderProgram} from 'neuroglancer/webgl/shader';
+import {setVec4FromUint32} from 'neuroglancer/webgl/shader_lib';
 import {RPC, SharedObject} from 'neuroglancer/worker_rpc';
 
 export class MeshShaderManager {

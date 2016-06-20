@@ -14,8 +14,8 @@
  * limitations under the License.
  */
 
-import {Memoize} from 'neuroglancer/util/memoize';
 import {RefCounted} from 'neuroglancer/util/disposable';
+import {Memoize} from 'neuroglancer/util/memoize';
 
 export interface GL extends WebGLRenderingContext {
   memoize: Memoize<any, RefCounted>;
@@ -38,9 +38,8 @@ export function initializeWebGL(canvas: HTMLCanvasElement) {
     console.log('DEBUGGING via preserveDrawingBuffer');
     options['preserveDrawingBuffer'] = true;
   }
-  gl = <GL>(
-      canvas.getContext('webgl', options) ||
-      canvas.getContext('experimental-webgl', options));
+  gl =
+      <GL>(canvas.getContext('webgl', options) || canvas.getContext('experimental-webgl', options));
   gl.memoize = new Memoize<any, RefCounted>();
   gl.maxTextureSize = gl.getParameter(gl.MAX_TEXTURE_SIZE);
   gl.maxTextureImageUnits = gl.getParameter(gl.MAX_TEXTURE_IMAGE_UNITS);

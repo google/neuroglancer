@@ -16,8 +16,8 @@
  */
 
 interface Node<T> {
-  next1: T | null;
-  prev1: T | null;
+  next1: T|null;
+  prev1: T|null;
 }
 
 export default class {
@@ -68,7 +68,5 @@ export default class {
       yield x;
     }
   }
-  static initializeHead<T extends Node<T>>(head: T) {
-    head.next1 = head.prev1 = head;
-  }
+  static initializeHead<T extends Node<T>>(head: T) { head.next1 = head.prev1 = head; }
 };

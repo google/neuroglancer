@@ -27,8 +27,10 @@ export function scrollIntoViewIfNeeded(element: HTMLElement) {
   const viewportTop = parent.scrollTop;
   const viewportBottom = viewportTop + parentHeight;
 
-  const scrollLeftDelta = Math.max(0.0, elementRight - viewportRight) || Math.min(0.0, elementLeft - viewportLeft);
-  const scrollTopDelta = Math.max(0.0, elementBottom - viewportBottom) || Math.min(0.0, elementTop - viewportTop);
+  const scrollLeftDelta =
+      Math.max(0.0, elementRight - viewportRight) || Math.min(0.0, elementLeft - viewportLeft);
+  const scrollTopDelta =
+      Math.max(0.0, elementBottom - viewportBottom) || Math.min(0.0, elementTop - viewportTop);
 
   parent.scrollLeft += scrollLeftDelta;
   parent.scrollTop += scrollTopDelta;

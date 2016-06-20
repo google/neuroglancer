@@ -15,7 +15,7 @@
  */
 
 import {RefCounted} from 'neuroglancer/util/disposable';
-import {GL_VERTEX_SHADER, GL_FRAGMENT_SHADER} from 'neuroglancer/webgl/constants';
+import {GL_FRAGMENT_SHADER, GL_VERTEX_SHADER} from 'neuroglancer/webgl/constants';
 
 export enum ShaderType {
   VERTEX = GL_VERTEX_SHADER,
@@ -27,7 +27,6 @@ export interface ShaderErrorMessage {
   line?: number;
   message: string;
 }
-;
 
 /**
  * Parses the output of getShaderInfoLog into a list of messages.

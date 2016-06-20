@@ -15,15 +15,15 @@
  */
 
 import {AvailableCapacity} from 'neuroglancer/chunk_manager/base';
-import {ChunkQueueManager, ChunkManager} from 'neuroglancer/chunk_manager/frontend';
+import {ChunkManager, ChunkQueueManager} from 'neuroglancer/chunk_manager/frontend';
 import {DisplayContext} from 'neuroglancer/display_context';
 import {KeyBindingHelpDialog} from 'neuroglancer/help/key_bindings';
-import {MouseSelectionState, LayerManager, LayerSelectedValues} from 'neuroglancer/layer';
+import {LayerManager, LayerSelectedValues, MouseSelectionState} from 'neuroglancer/layer';
 import {LayerDialog} from 'neuroglancer/layer_dialog';
 import {LayerPanel} from 'neuroglancer/layer_panel';
 import {LayerListSpecification} from 'neuroglancer/layer_specification';
 import * as L from 'neuroglancer/layout';
-import {NavigationState, Pose, OrientationState} from 'neuroglancer/navigation_state';
+import {NavigationState, OrientationState, Pose} from 'neuroglancer/navigation_state';
 import {overlaysOpen} from 'neuroglancer/overlay';
 import {PerspectivePanel} from 'neuroglancer/perspective_panel';
 import {PositionStatusPanel} from 'neuroglancer/position_status_panel';
@@ -134,7 +134,6 @@ export class SinglePanelLayout extends RefCounted {
 interface DataDisplayLayout extends RefCounted {
   rootElement: HTMLElement;
 }
-;
 
 export const LAYOUTS: [string, (element: HTMLElement, viewer: Viewer) => DataDisplayLayout][] = [
   ['4panel', (element, viewer) => new FourPanelLayout(element, viewer)],

@@ -15,8 +15,8 @@
  */
 
 import {removeFromParent} from 'neuroglancer/util/dom';
-import {verifyObject, verifyString, parseArray} from 'neuroglancer/util/json';
-import {makeCancellablePromise, callFinally} from 'neuroglancer/util/promise';
+import {parseArray, verifyObject, verifyString} from 'neuroglancer/util/json';
+import {callFinally, makeCancellablePromise} from 'neuroglancer/util/promise';
 import {getRandomHexString} from 'neuroglancer/util/random';
 
 export const AUTH_SERVER = 'https://accounts.google.com/o/oauth2/auth';
@@ -38,7 +38,6 @@ interface PromiseCallbacks<T> {
   resolve: (x: T) => void;
   reject: (x: string) => void;
 }
-;
 
 export interface Token {
   accessToken: string;
@@ -46,7 +45,6 @@ export interface Token {
   tokenType: string;
   scope: string;
 }
-;
 
 class AuthHandler {
   proxyName = `postmessageRelay${getRandomHexString()}`;

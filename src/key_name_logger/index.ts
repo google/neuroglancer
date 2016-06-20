@@ -16,7 +16,7 @@
 
 import {getEventStrokeIdentifier} from 'neuroglancer/util/keyboard_shortcut_handler';
 
-addEventListener('DOMContentLoaded', function () {
+addEventListener('DOMContentLoaded', function() {
   window.addEventListener('keydown', event => {
     let s = getEventStrokeIdentifier(event);
     console.log(`Stroke = ${s}`, event);

@@ -14,9 +14,9 @@
  * limitations under the License.
  */
 
+import {SegmentationDisplayState} from 'neuroglancer/segmentation_display_state';
 import {RefCounted} from 'neuroglancer/util/disposable';
 import {Uint64} from 'neuroglancer/util/uint64';
-import {SegmentationDisplayState} from 'neuroglancer/segmentation_display_state';
 
 require('neuroglancer/noselect.css');
 require('./segment_set_widget.css');
@@ -35,8 +35,7 @@ export class SegmentSetWidget extends RefCounted implements SegmentationDisplayS
   get segmentColorHash() { return this.displayState.segmentColorHash; }
   get segmentSelectionState() { return this.displayState.segmentSelectionState; }
 
-  constructor(
-    public displayState: SegmentationDisplayState) {
+  constructor(public displayState: SegmentationDisplayState) {
     super();
     let {element, clearButton, itemContainer} = this;
     element.className = 'segment-set-widget noselect';
@@ -49,8 +48,10 @@ export class SegmentSetWidget extends RefCounted implements SegmentationDisplayS
 
     itemContainer.appendChild(clearButton);
 
-    this.registerSignalBinding(displayState.visibleSegments.changed.add(this.handleSetChanged, this));
-    this.registerSignalBinding(displayState.segmentColorHash.changed.add(this.handleColorChanged, this));
+    this.registerSignalBinding(
+        displayState.visibleSegments.changed.add(this.handleSetChanged, this));
+    this.registerSignalBinding(
+        displayState.segmentColorHash.changed.add(this.handleColorChanged, this));
 
     for (let x of displayState.visibleSegments) {
       this.addElement(x.toString());

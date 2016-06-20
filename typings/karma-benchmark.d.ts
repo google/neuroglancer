@@ -18,4 +18,4 @@
  * Typings for karma-benchmark.
  */
 declare function suite(name: string, f: () => void): void;
-declare function benchmark(name: string, f: () => void): void;
+    declare function benchmark(name: string, f: () => void): void;

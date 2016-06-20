@@ -14,10 +14,10 @@
  * limitations under the License.
  */
 
-import {RPC, SharedObjectCounterpart, registerSharedObject, registerRPC} from 'neuroglancer/worker_rpc';
 import {HashTable} from 'neuroglancer/gpu_hash/hash_table';
-import {Signal} from 'signals';
 import {Uint64} from 'neuroglancer/util/uint64';
+import {RPC, SharedObjectCounterpart, registerRPC, registerSharedObject} from 'neuroglancer/worker_rpc';
+import {Signal} from 'signals';
 
 export class Uint64Set extends SharedObjectCounterpart {
   hashTable = new HashTable();
@@ -34,17 +34,15 @@ export class Uint64Set extends SharedObjectCounterpart {
     return obj;
   }
 
-  disposed () {
+  disposed() {
     super.disposed();
     this.hashTable = null;
     this.changed = null;
   }
 
-  add_(x: Uint64) {
-    return this.hashTable.add(x.low, x.high);
-  }
+  add_(x: Uint64) { return this.hashTable.add(x.low, x.high); }
 
-  add (x: Uint64) {
+  add(x: Uint64) {
     if (this.add_(x)) {
       let {rpc} = this;
       if (rpc) {
@@ -54,11 +52,9 @@ export class Uint64Set extends SharedObjectCounterpart {
     }
   }
 
-  has (x: Uint64) {
-    return this.hashTable.has(x.low, x.high);
-  }
+  has(x: Uint64) { return this.hashTable.has(x.low, x.high); }
 
-  *[Symbol.iterator]() {
+  * [Symbol.iterator]() {
     let temp = new Uint64();
     for (let x of this.hashTable[Symbol.iterator]()) {
       temp.low = x[0];
@@ -67,11 +63,9 @@ export class Uint64Set extends SharedObjectCounterpart {
     }
   }
 
-  delete_(x: Uint64) {
-    return this.hashTable.delete(x.low, x.high);
-  }
+  delete_(x: Uint64) { return this.hashTable.delete(x.low, x.high); }
 
-  delete(x: Uint64) {
+  delete (x: Uint64) {
     if (this.delete_(x)) {
       let {rpc} = this;
       if (rpc) {
@@ -81,9 +75,7 @@ export class Uint64Set extends SharedObjectCounterpart {
     }
   }
 
-  get size () {
-    return this.hashTable.size;
-  }
+  get size() { return this.hashTable.size; }
 
   clear() {
     if (this.hashTable.clear()) {
@@ -96,21 +88,21 @@ export class Uint64Set extends SharedObjectCounterpart {
   }
 };
 
-registerRPC('Uint64Set.add', function (x) {
+registerRPC('Uint64Set.add', function(x) {
   let obj = this.get(x['id']);
   if (obj.add_(x['value'])) {
     obj.changed.dispatch();
   }
 });
 
-registerRPC('Uint64Set.delete', function (x) {
+registerRPC('Uint64Set.delete', function(x) {
   let obj = this.get(x['id']);
   if (obj.delete_(x['value'])) {
     obj.changed.dispatch();
   }
 });
 
-registerRPC('Uint64Set.clear', function (x) {
+registerRPC('Uint64Set.clear', function(x) {
   let obj = this.get(x['id']);
   if (obj.hashTable.clear()) {
     obj.changed.dispatch();

@@ -15,7 +15,7 @@
  */
 
 import {simpleStringHash} from 'neuroglancer/util/hash';
-import {makeCancellablePromise, CancellablePromise} from 'neuroglancer/util/promise';
+import {CancellablePromise, makeCancellablePromise} from 'neuroglancer/util/promise';
 
 export type RequestModifier = (request: XMLHttpRequest) => void;
 
@@ -28,7 +28,7 @@ export class HttpError extends Error {
   code: number;
   statusMessage: string;
 
-  constructor (method: string, url: string, code: number, statusMessage: string) {
+  constructor(method: string, url: string, code: number, statusMessage: string) {
     let message = `${method} ${JSON.stringify(url)} resulted in HTTP error ${code}`;
     if (statusMessage) {
       message += `: ${statusMessage}`;
@@ -44,7 +44,8 @@ export class HttpError extends Error {
   }
 
   static fromXhr(xhr: XMLHttpRequest) {
-    return new HttpError((<any>xhr)[METHOD_SYMBOL], (<any>xhr)[URL_SYMBOL], xhr.status, xhr.statusText);
+    return new HttpError(
+        (<any>xhr)[METHOD_SYMBOL], (<any>xhr)[URL_SYMBOL], xhr.status, xhr.statusText);
   }
 };
 
@@ -56,7 +57,7 @@ export function openHttpRequest(url: string, method = 'GET') {
   return xhr;
 }
 
-export function pickShard(baseUrls: string|string[], path: string) {
+export function pickShard(baseUrls: string | string[], path: string) {
   if (Array.isArray(baseUrls)) {
     let numShards = baseUrls.length;
     let shard = numShards === 1 ? 0 : Math.abs(simpleStringHash(path)) % numShards;
@@ -65,7 +66,7 @@ export function pickShard(baseUrls: string|string[], path: string) {
   return baseUrls + path;
 }
 
-export function openShardedHttpRequest(baseUrls: string|string[], path: string, method = 'GET') {
+export function openShardedHttpRequest(baseUrls: string | string[], path: string, method = 'GET') {
   let xhr = new XMLHttpRequest();
   const url = pickShard(baseUrls, path);
   (<any>xhr)[METHOD_SYMBOL] = method;
@@ -74,7 +75,8 @@ export function openShardedHttpRequest(baseUrls: string|string[], path: string, 
   return xhr;
 }
 
-export function sendHttpRequest(xhr: XMLHttpRequest, responseType: 'arraybuffer'): CancellablePromise<ArrayBuffer>;
+export function sendHttpRequest(
+    xhr: XMLHttpRequest, responseType: 'arraybuffer'): CancellablePromise<ArrayBuffer>;
 export function sendHttpRequest(xhr: XMLHttpRequest, responseType: 'json'): CancellablePromise<any>;
 export function sendHttpRequest(xhr: XMLHttpRequest, responseType: string): any;
 

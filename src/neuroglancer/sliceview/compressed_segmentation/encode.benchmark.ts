@@ -14,13 +14,16 @@
  * limitations under the License.
  */
 
-import {prod4, vec3Key} from 'neuroglancer/util/geom';
-import {makeRandomUint64Array} from 'neuroglancer/sliceview/compressed_segmentation/test_util';
-import {Uint32ArrayBuilder} from 'neuroglancer/util/uint32array_builder.ts';
-import {encodeChannels as encodeChannelsUint64} from 'neuroglancer/sliceview/compressed_segmentation/encode_uint64';
 import {encodeChannels as encodeChannelsUint32} from 'neuroglancer/sliceview/compressed_segmentation/encode_uint32';
+import {encodeChannels as encodeChannelsUint64} from 'neuroglancer/sliceview/compressed_segmentation/encode_uint64';
+import {makeRandomUint64Array} from 'neuroglancer/sliceview/compressed_segmentation/test_util';
+import {prod4, vec3Key} from 'neuroglancer/util/geom';
+import {Uint32ArrayBuilder} from 'neuroglancer/util/uint32array_builder.ts';
 
-const exampleChunkData64 = new Uint32Array((<Uint8Array><any>require('raw-data!neuroglancer-testdata/64x64x64-raw-uint64-segmentation.dat')).buffer);
+const exampleChunkData64 =
+    new Uint32Array((<Uint8Array><any>require(
+                         'raw-data!neuroglancer-testdata/64x64x64-raw-uint64-segmentation.dat'))
+                        .buffer);
 
 const exampleChunkData32 =
     exampleChunkData64.filter((element, index) => { return index % 2 === 0; });
@@ -46,7 +49,7 @@ suite('compressed_segmentation', () => {
   const output = new Uint32ArrayBuilder(1000000);
   for (let volumeSize of [   //
            [16, 16, 16, 1],  //
-           // [64, 64, 64, 1],  //
+                             // [64, 64, 64, 1],  //
   ]) {
     const numPossibleValues = 15;
     const input = makeRandomUint64Array(prod4(volumeSize), numPossibleValues);

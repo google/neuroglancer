@@ -22,10 +22,11 @@ type Handler = (action: string) => boolean;
 
 const MAX_KEY_SEQUENCE_DELAY = 1500;  // 1.5 sec
 
-const globalKeys = new Set(['f1', 'f2', 'f3', 'f4', 'f5', 'f6', 'f7', 'f8', 'f9', 'f10', 'f11', 'f12', 'escape', 'pause']);
+const globalKeys = new Set(
+    ['f1', 'f2', 'f3', 'f4', 'f5', 'f6', 'f7', 'f8', 'f9', 'f10', 'f11', 'f12', 'escape', 'pause']);
 const DEFAULT_TEXT_INPUTS = new Set([
-  'color', 'date', 'datetime', 'datetime-local', 'email', 'month', 'number',
-  'password', 'search', 'tel', 'text', 'time', 'url', 'week'
+  'color', 'date', 'datetime', 'datetime-local', 'email', 'month', 'number', 'password', 'search',
+  'tel', 'text', 'time', 'url', 'week'
 ]);
 
 export class KeyboardShortcutHandler extends RefCounted {
@@ -34,10 +35,12 @@ export class KeyboardShortcutHandler extends RefCounted {
   modifierShortcutsAreGlobal = true;
   allShortcutsAreGlobal = false;
   allowSpaceKeyOnButtons = false;
-  constructor(public target: EventTarget, public keySequenceMap: KeySequenceMap, public handler: Handler) {
+  constructor(
+      public target: EventTarget, public keySequenceMap: KeySequenceMap, public handler: Handler) {
     super();
     this.reset();
-    this.registerEventListener(target, 'keydown', this.handleKeyDown.bind(this), /*useCapture=*/true);
+    this.registerEventListener(
+        target, 'keydown', this.handleKeyDown.bind(this), /*useCapture=*/true);
   }
 
   private reset() {
@@ -45,7 +48,7 @@ export class KeyboardShortcutHandler extends RefCounted {
     this.lastStrokeTime = Number.NEGATIVE_INFINITY;
   }
 
-  setKeySequenceMap (keySequenceMap: KeySequenceMap) {
+  setKeySequenceMap(keySequenceMap: KeySequenceMap) {
     this.keySequenceMap = keySequenceMap;
     this.reset();
   }
@@ -109,7 +112,8 @@ export class KeyboardShortcutHandler extends RefCounted {
     let {currentNode} = this;
     let value = currentNode.get(stroke);
     let now = Date.now();
-    if (currentNode !== root && (value === undefined || now > this.lastStrokeTime + MAX_KEY_SEQUENCE_DELAY)) {
+    if (currentNode !== root &&
+        (value === undefined || now > this.lastStrokeTime + MAX_KEY_SEQUENCE_DELAY)) {
       this.currentNode = root;
       value = currentNode.get(stroke);
     }
@@ -145,7 +149,7 @@ const enum Modifiers {
   ALT = 2,
   META = 4,
   SHIFT = 8,
-};
+}
 
 type ModifierMask = number;
 
@@ -183,24 +187,24 @@ export function parseKeyStroke(strokeIdentifier: string) {
   let modifiers = 0;
   for (let part of parts) {
     switch (part) {
-    case 'control':
-      modifiers |= Modifiers.CONTROL;
-      break;
-    case 'alt':
-      modifiers |= Modifiers.ALT;
-      break;
-    case 'meta':
-      modifiers |= Modifiers.META;
-      break;
-    case 'shift':
-      modifiers |= Modifiers.SHIFT;
-      break;
-    default:
-      if (keyName === undefined) {
-        keyName = part;
-      } else {
-        keyName = null;
-      }
+      case 'control':
+        modifiers |= Modifiers.CONTROL;
+        break;
+      case 'alt':
+        modifiers |= Modifiers.ALT;
+        break;
+      case 'meta':
+        modifiers |= Modifiers.META;
+        break;
+      case 'shift':
+        modifiers |= Modifiers.SHIFT;
+        break;
+      default:
+        if (keyName === undefined) {
+          keyName = part;
+        } else {
+          keyName = null;
+        }
     }
   }
   if (keyName == null) {
@@ -244,13 +248,13 @@ function* keySequenceMapEntries(
 
 export class KeySequenceMap {
   root = new Map<string, any>();
-  constructor (bindings: Bindings = null) {
+  constructor(bindings: Bindings = null) {
     if (bindings != null) {
       this.bindMultiple(bindings);
     }
   }
 
-  bind (keySequenceSpec: KeySequence, action: string) {
+  bind(keySequenceSpec: KeySequence, action: string) {
     let keySequence = parseKeySequence(keySequenceSpec);
     let currentNode = this.root;
     let prefixEnd = keySequence.length - 1;
@@ -270,7 +274,8 @@ export class KeySequenceMap {
     let stroke = keySequence[prefixEnd];
     let existingValue = currentNode.get(stroke);
     if (existingValue !== undefined) {
-      throw new Error(`Key sequence ${formatKeySequence(keySequence)} is already bound to action ${JSON.stringify(existingValue)}`);
+      throw new Error(
+          `Key sequence ${formatKeySequence(keySequence)} is already bound to action ${JSON.stringify(existingValue)}`);
     }
     currentNode.set(stroke, action);
   }
@@ -281,20 +286,21 @@ export class KeySequenceMap {
     }
   }
 
-  entries () {
-    return keySequenceMapEntries(this.root);
-  }
+  entries() { return keySequenceMapEntries(this.root); }
 };
 
 let globalKeyboardHandler: KeyboardShortcutHandler;
 let globalKeyboardHandlerStack = new Array<[KeySequenceMap, Handler, any]>();
 let globalKeyboardState: any;
 
-export function pushGlobalKeyboardHandler(keySequenceMap: KeySequenceMap, handler: Handler, identifier: any) {
+export function pushGlobalKeyboardHandler(
+    keySequenceMap: KeySequenceMap, handler: Handler, identifier: any) {
   if (globalKeyboardHandler === undefined) {
-    globalKeyboardHandler = new KeyboardShortcutHandler(window, new KeySequenceMap(), () => { return false; });
+    globalKeyboardHandler =
+        new KeyboardShortcutHandler(window, new KeySequenceMap(), () => { return false; });
   }
-  globalKeyboardHandlerStack.push([globalKeyboardHandler.keySequenceMap, globalKeyboardHandler.handler, globalKeyboardState]);
+  globalKeyboardHandlerStack.push(
+      [globalKeyboardHandler.keySequenceMap, globalKeyboardHandler.handler, globalKeyboardState]);
   globalKeyboardHandler.setKeySequenceMap(keySequenceMap);
   globalKeyboardHandler.handler = handler;
   globalKeyboardState = identifier;
@@ -312,7 +318,7 @@ export class GlobalKeyboardShortcutHandler extends RefCounted {
     super();
     pushGlobalKeyboardHandler(keySequenceMap, handler, this);
   }
-  disposed () {
+  disposed() {
     if (globalKeyboardState === this) {
       popGlobalKeyboardHandler();
     } else {

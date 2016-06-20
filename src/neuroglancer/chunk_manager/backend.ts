@@ -14,12 +14,13 @@
  * limitations under the License.
  */
 
-import {ChunkState, ChunkPriorityTier, AvailableCapacity} from 'neuroglancer/chunk_manager/base';
-import {RPC, SharedObjectCounterpart, registerSharedObject} from 'neuroglancer/worker_rpc';
+import {AvailableCapacity, ChunkPriorityTier, ChunkState} from 'neuroglancer/chunk_manager/base';
 import {Disposable} from 'neuroglancer/util/disposable';
-import {Signal} from 'signals';
 import {LinkedListOperations} from 'neuroglancer/util/linked_list';
-import {PairingHeapOperations, ComparisonFunction} from 'neuroglancer/util/pairing_heap';
+import {ComparisonFunction, PairingHeapOperations} from 'neuroglancer/util/pairing_heap';
+import {RPC, SharedObjectCounterpart, registerSharedObject} from 'neuroglancer/worker_rpc';
+import {Signal} from 'signals';
+
 import PairingHeap0 from 'neuroglancer/util/pairing_heap.0';
 import PairingHeap1 from 'neuroglancer/util/pairing_heap.1';
 import LinkedList0 from 'neuroglancer/util/linked_list.0';
@@ -31,16 +32,16 @@ const DEBUG_CHUNK_UPDATES = false;
 
 export class Chunk implements Disposable {
   // Node properties used for eviction/promotion heaps and LRU linked lists.
-  child0: Chunk | null = null;
-  next0: Chunk | null = null;
-  prev0: Chunk | null = null;
-  child1: Chunk | null = null;
-  next1: Chunk | null = null;
-  prev1: Chunk | null = null;
+  child0: Chunk|null = null;
+  next0: Chunk|null = null;
+  prev0: Chunk|null = null;
+  child1: Chunk|null = null;
+  next1: Chunk|null = null;
+  prev1: Chunk|null = null;
 
-  source: ChunkSource | null = null;
+  source: ChunkSource|null = null;
 
-  key: string | null = null;
+  key: string|null = null;
   state = ChunkState.NEW;
 
   /**
@@ -221,7 +222,7 @@ class ChunkPriorityQueue {
   /**
    * Heap roots for VISIBLE and PREFETCH priority tiers.
    */
-  private heapRoots: (Chunk | null)[] = [null, null];
+  private heapRoots: (Chunk|null)[] = [null, null];
 
   /**
    * Head node for RECENT linked list.
@@ -370,7 +371,7 @@ export class ChunkQueueManager extends SharedObjectCounterpart {
    */
   private gpuMemoryEvictionQueue = makeChunkPriorityQueue1(Chunk.priorityLess);
 
-  private updatePending: number | null = null;
+  private updatePending: number|null = null;
 
   private numQueued = 0;
   private numFailed = 0;
@@ -471,7 +472,8 @@ export class ChunkQueueManager extends SharedObjectCounterpart {
       return;
     }
     if (DEBUG_CHUNK_UPDATES) {
-      console.log(`${chunk}: changed priority ${chunk.priorityTier}:${chunk.priority} -> ${chunk.newPriorityTier}:${chunk.newPriority}`);
+      console.log(
+          `${chunk}: changed priority ${chunk.priorityTier}:${chunk.priority} -> ${chunk.newPriorityTier}:${chunk.newPriority}`);
     }
     this.removeChunkFromQueues_(chunk);
     chunk.updatePriorityProperties();

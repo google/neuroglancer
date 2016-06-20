@@ -20,10 +20,10 @@
  * See http://docs.scipy.org/doc/numpy-dev/neps/npy-format.html
  */
 
-import {pythonLiteralParse} from 'neuroglancer/util/json';
 import {DataType} from 'neuroglancer/sliceview/base';
 import {TypedArrayConstructor} from 'neuroglancer/util/array';
 import {Endianness, convertEndian16, convertEndian32} from 'neuroglancer/util/endian';
+import {pythonLiteralParse} from 'neuroglancer/util/json';
 
 interface SupportedDataType {
   arrayConstructor: TypedArrayConstructor;
@@ -75,7 +75,9 @@ for (let [endiannessChar, endianness] of <[string, Endianness][]>[
 }
 
 export class NumpyArray {
-  constructor(public data: ArrayBufferView, public shape: number[], public dataType: SupportedDataType, public fortranOrder: boolean) {}
+  constructor(
+      public data: ArrayBufferView, public shape: number[], public dataType: SupportedDataType,
+      public fortranOrder: boolean) {}
 };
 
 export function parseNpy(x: Uint8Array) {

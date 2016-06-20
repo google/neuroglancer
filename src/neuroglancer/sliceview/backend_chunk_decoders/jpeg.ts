@@ -15,8 +15,8 @@
  */
 
 import {VolumeChunk} from 'neuroglancer/sliceview/backend';
-import {decodeJpegStack} from 'neuroglancer/sliceview/decode_jpeg_stack';
 import {postProcessRawData} from 'neuroglancer/sliceview/backend_chunk_decoders/postprocess';
+import {decodeJpegStack} from 'neuroglancer/sliceview/decode_jpeg_stack';
 
 export function decodeJpegChunk(chunk: VolumeChunk, response: ArrayBuffer) {
   postProcessRawData(chunk, decodeJpegStack(new Uint8Array(response), chunk.chunkDataSize));

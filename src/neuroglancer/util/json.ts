@@ -205,7 +205,8 @@ const DOUBLE_OR_SINGLE_QUOTE_STRING_PATTERN =
 const DOUBLE_QUOTE_PATTERN = /^((?:[^"'\\]|(?:\\.))*)"/;
 const SINGLE_QUOTE_PATTERN = /^((?:[^"'\\]|(?:\\.))*)'/;
 
-function convertStringLiteral(x: string, quoteInitial: string, quoteReplace: string, quoteSearch: RegExp) {
+function convertStringLiteral(
+    x: string, quoteInitial: string, quoteReplace: string, quoteSearch: RegExp) {
   if (x.length >= 2 && x.charAt(0) === quoteInitial && x.charAt(x.length - 1) === quoteInitial) {
     let inner = x.substr(1, x.length - 2);
     let s = quoteReplace;
@@ -233,7 +234,6 @@ function convertStringLiteral(x: string, quoteInitial: string, quoteReplace: str
 export function normalizeStringLiteral(x: string) {
   return convertStringLiteral(x, '\'', '"', DOUBLE_QUOTE_PATTERN);
 }
-
 
 
 
@@ -266,7 +266,8 @@ function convertJsonHelper(x: string, desiredCommaChar: string, desiredQuoteChar
       x = x.substr(m.index + m[0].length);
       let originalString = m[1];
       if (originalString !== undefined) {
-        replacement = convertStringLiteral(originalString, quoteInitial, desiredQuoteChar, quoteSearch);
+        replacement =
+            convertStringLiteral(originalString, quoteInitial, desiredQuoteChar, quoteSearch);
       } else {
         replacement = m[2];
       }
@@ -419,7 +420,8 @@ export function verifyObjectAsMap<T>(obj: any, validator: (value: any) => T): Ma
 
 export function verifyFloat01(obj: any): number {
   if (typeof obj !== 'number' || !Number.isFinite(obj) || obj < 0 || obj > 1) {
-    throw new Error(`Expected floating point number in [0,1], but received: ${JSON.stringify(obj)}.`);
+    throw new Error(
+        `Expected floating point number in [0,1], but received: ${JSON.stringify(obj)}.`);
   }
   return obj;
 }

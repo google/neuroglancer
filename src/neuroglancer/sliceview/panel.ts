@@ -16,15 +16,15 @@
 
 import {AxesLineHelper} from 'neuroglancer/axes_lines';
 import {DisplayContext} from 'neuroglancer/display_context';
-import {MouseSelectionState, VisibleRenderLayerTracker, RenderLayer} from 'neuroglancer/layer';
+import {MouseSelectionState, RenderLayer, VisibleRenderLayerTracker} from 'neuroglancer/layer';
 import {PickIDManager} from 'neuroglancer/object_picking';
 import {RenderedDataPanel} from 'neuroglancer/rendered_data_panel';
 import {SliceView, SliceViewRenderHelper} from 'neuroglancer/sliceview/frontend';
-import {TrackableBoolean, ElementVisibilityFromTrackableBoolean} from 'neuroglancer/trackable_boolean';
-import {mat4, vec3, vec4, Mat4, identityMat4} from 'neuroglancer/util/geom';
+import {ElementVisibilityFromTrackableBoolean, TrackableBoolean} from 'neuroglancer/trackable_boolean';
+import {Mat4, identityMat4, mat4, vec3, vec4} from 'neuroglancer/util/geom';
 import {startRelativeMouseDrag} from 'neuroglancer/util/mouse_drag';
 import {ViewerState} from 'neuroglancer/viewer_state';
-import {OffscreenFramebuffer, OffscreenCopyHelper} from 'neuroglancer/webgl/offscreen';
+import {OffscreenCopyHelper, OffscreenFramebuffer} from 'neuroglancer/webgl/offscreen';
 import {ShaderBuilder} from 'neuroglancer/webgl/shader';
 import {ScaleBarWidget} from 'neuroglancer/widget/scale_bar';
 import {Signal} from 'signals';
@@ -86,9 +86,7 @@ export class SliceViewPanel extends RenderedDataPanel {
 
   private scaleBarWidget = this.registerDisposer(new ScaleBarWidget());
 
-  get navigationState() {
-    return this.sliceView.navigationState;
-  }
+  get navigationState() { return this.sliceView.navigationState; }
 
   constructor(
       context: DisplayContext, element: HTMLElement, public sliceView: SliceView,
@@ -101,7 +99,8 @@ export class SliceViewPanel extends RenderedDataPanel {
 
     {
       let scaleBar = this.scaleBarWidget.element;
-      this.registerDisposer(new ElementVisibilityFromTrackableBoolean(viewer.showScaleBar, scaleBar));
+      this.registerDisposer(
+          new ElementVisibilityFromTrackableBoolean(viewer.showScaleBar, scaleBar));
       this.element.appendChild(scaleBar);
     }
   }
@@ -223,9 +222,9 @@ export class SliceViewPanel extends RenderedDataPanel {
           if (event.shiftKey) {
             let {viewportAxes} = this.sliceView;
             this.viewer.navigationState.pose.rotateAbsolute(
-              viewportAxes[1], deltaX / 4.0 * Math.PI / 180.0, initialPosition);
+                viewportAxes[1], deltaX / 4.0 * Math.PI / 180.0, initialPosition);
             this.viewer.navigationState.pose.rotateAbsolute(
-              viewportAxes[0], deltaY / 4.0 * Math.PI / 180.0, initialPosition);
+                viewportAxes[0], deltaY / 4.0 * Math.PI / 180.0, initialPosition);
           } else {
             let pos = position.spatialCoordinates;
             vec3.set(pos, deltaX, deltaY, 0);
@@ -238,7 +237,8 @@ export class SliceViewPanel extends RenderedDataPanel {
   }
 
   /**
-   * Zooms by the specified factor, maintaining the data position that projects to the current mouse position.
+   * Zooms by the specified factor, maintaining the data position that projects to the current mouse
+   * position.
    */
   zoomByMouse(factor: number) {
     let {navigationState} = this;

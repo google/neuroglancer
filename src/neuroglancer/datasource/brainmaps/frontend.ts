@@ -17,16 +17,16 @@
 import 'neuroglancer/datasource/brainmaps/api_frontend';
 
 import {ChunkManager} from 'neuroglancer/chunk_manager/frontend';
-import {makeRequest, INSTANCE_NAMES, INSTANCE_IDENTIFIERS, PRODUCTION_INSTANCE, BrainmapsInstance} from 'neuroglancer/datasource/brainmaps/api';
-import {VolumeChunkEncoding, VolumeSourceParameters, volumeSourceToString, MeshSourceParameters, meshSourceToString} from 'neuroglancer/datasource/brainmaps/base';
+import {BrainmapsInstance, INSTANCE_IDENTIFIERS, INSTANCE_NAMES, PRODUCTION_INSTANCE, makeRequest} from 'neuroglancer/datasource/brainmaps/api';
+import {MeshSourceParameters, VolumeChunkEncoding, VolumeSourceParameters, meshSourceToString, volumeSourceToString} from 'neuroglancer/datasource/brainmaps/base';
 import {registerDataSourceFactory} from 'neuroglancer/datasource/factory';
 import {MeshSource as GenericMeshSource} from 'neuroglancer/mesh/frontend';
-import {DataType, VolumeType, VolumeChunkSpecification} from 'neuroglancer/sliceview/base';
-import {VolumeChunkSource as GenericVolumeChunkSource, MultiscaleVolumeChunkSource as GenericMultiscaleVolumeChunkSource} from 'neuroglancer/sliceview/frontend';
+import {DataType, VolumeChunkSpecification, VolumeType} from 'neuroglancer/sliceview/base';
+import {MultiscaleVolumeChunkSource as GenericMultiscaleVolumeChunkSource, VolumeChunkSource as GenericVolumeChunkSource} from 'neuroglancer/sliceview/frontend';
 import {StatusMessage} from 'neuroglancer/status';
 import {getPrefixMatches} from 'neuroglancer/util/completion';
 import {Vec3, vec3} from 'neuroglancer/util/geom';
-import {verifyObject, verifyString, verifyPositiveInt, verifyMapKey, verifyFinitePositiveFloat, parseXYZ, parseArray, stableStringify, verifyObjectProperty} from 'neuroglancer/util/json';
+import {parseArray, parseXYZ, stableStringify, verifyFinitePositiveFloat, verifyMapKey, verifyObject, verifyObjectProperty, verifyPositiveInt, verifyString} from 'neuroglancer/util/json';
 
 const SERVER_DATA_TYPES = new Map<string, DataType>();
 SERVER_DATA_TYPES.set('UINT8', DataType.UINT8);

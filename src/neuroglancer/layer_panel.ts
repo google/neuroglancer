@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-import {ManagedUserLayer, UserLayerDropdown, UserLayer} from 'neuroglancer/layer';
+import {ManagedUserLayer, UserLayer, UserLayerDropdown} from 'neuroglancer/layer';
 import {LayerDialog} from 'neuroglancer/layer_dialog';
 import {LayerListSpecification, ManagedUserLayerWithSpecification} from 'neuroglancer/layer_specification';
 import {RefCounted} from 'neuroglancer/util/disposable';

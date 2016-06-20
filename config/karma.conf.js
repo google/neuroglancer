@@ -21,8 +21,7 @@ const path = require('path');
 
 module.exports = function(config) {
 
-  let webpackConfig =
-      webpack_helpers.getBaseConfig({useBabel: false, noOutput: true});
+  let webpackConfig = webpack_helpers.getBaseConfig({useBabel: false, noOutput: true});
   webpackConfig.devtool = 'inline-source-map';
   webpackConfig.module.postLoaders = [{
     test: /\.ts$/,
@@ -53,6 +52,6 @@ module.exports = function(config) {
       reporters: [{type: 'text-summary'}, {type: 'json'}, {type: 'html'}]
     },
     // logLevel: config.LOG_DEBUG,
-    //singleRun: true,
+    // singleRun: true,
   });
 };

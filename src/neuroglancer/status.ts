@@ -85,9 +85,7 @@ export class StatusMessage {
       status.element.textContent = errorPrefix + msg + '  ';
       let button = document.createElement('button');
       button.textContent = 'Dismiss';
-      button.addEventListener('click', () => {
-        status.dispose();
-      });
+      button.addEventListener('click', () => { status.dispose(); });
       status.element.appendChild(button);
       status.setVisible(true);
     });

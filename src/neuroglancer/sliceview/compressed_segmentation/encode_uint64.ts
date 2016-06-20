@@ -1,4 +1,5 @@
-// DO NOT EDIT.  Generated from templates/neuroglancer/sliceview/compressed_segmentation/encode.template.ts.
+// DO NOT EDIT.  Generated from
+// templates/neuroglancer/sliceview/compressed_segmentation/encode.template.ts.
 /**
  * @license
  * Copyright 2016 Google Inc.
@@ -20,7 +21,7 @@
  * Support for compressing uint32/uint64 segment label chunks.
  */
 
-import {writeBlock, newCache, encodeChannel as encodeChannelCommon, encodeChannels as encodeChannelsCommon} from 'neuroglancer/sliceview/compressed_segmentation/encode_common.ts';
+import {encodeChannel as encodeChannelCommon, encodeChannels as encodeChannelsCommon, newCache, writeBlock} from 'neuroglancer/sliceview/compressed_segmentation/encode_common.ts';
 import {getFortranOrderStrides} from 'neuroglancer/util/array';
 import {Uint32ArrayBuilder} from 'neuroglancer/util/uint32array_builder.ts';
 
@@ -47,7 +48,7 @@ export function encodeBlock(
     return [0, 0];
   }
 
-  let numBlockElements = bx * by * bz + 31; // Add padding elements.
+  let numBlockElements = bx * by * bz + 31;  // Add padding elements.
   if (tempEncodingBuffer === undefined || tempEncodingBuffer.length < numBlockElements) {
     tempEncodingBuffer = new Uint32Array(numBlockElements);
     tempValuesBuffer1 = new Uint32Array(numBlockElements * uint32sPerElement);
@@ -66,9 +67,9 @@ export function encodeBlock(
   let noAdjacentDuplicateIndex = 0;
   {
     let prevLow = ((rawData[inputOffset] + 1) >>> 0);
-    
+
     let prevHigh = 0;
-    
+
     let curInputOff = inputOffset;
     let blockElementIndex = 0;
     let bsy = bx - ax;
@@ -77,18 +78,18 @@ export function encodeBlock(
       for (let y = 0; y < ay; ++y, curInputOff += sy, blockElementIndex += bsy) {
         for (let x = 0; x < ax; ++x, curInputOff += sx) {
           let valueLow = rawData[curInputOff];
-          
+
           let valueHigh = rawData[curInputOff + 1];
-          
+
           if (valueLow !== prevLow
-              
+
               || valueHigh !== prevHigh
-              
-             ) {
+
+              ) {
             prevLow = valuesBuffer1[noAdjacentDuplicateIndex * 2] = valueLow;
-            
+
             prevHigh = valuesBuffer1[noAdjacentDuplicateIndex * 2 + 1] = valueHigh;
-            
+
             indexBuffer1[noAdjacentDuplicateIndex] = noAdjacentDuplicateIndex++;
           }
           encodingBuffer[blockElementIndex++] = noAdjacentDuplicateIndex;
@@ -98,54 +99,55 @@ export function encodeBlock(
   }
 
   indexBuffer1.subarray(0, noAdjacentDuplicateIndex).sort((a, b) => {
-    
+
     let aHigh = valuesBuffer1[2 * a + 1];
     let bHigh = valuesBuffer1[2 * b + 1];
     let aLow = valuesBuffer1[2 * a];
     let bLow = valuesBuffer1[2 * b];
     return (aHigh - bHigh) || (aLow - bLow);
-    
+
   });
 
   let numUniqueValues = -1;
   {
     let prevLow = (valuesBuffer1[indexBuffer1[0] * uint32sPerElement] + 1) >>> 0;
-    
+
     let prevHigh = 0;
-    
+
     for (let i = 0; i < noAdjacentDuplicateIndex; ++i) {
       let index = indexBuffer1[i];
       let valueIndex = index * uint32sPerElement;
       let valueLow = valuesBuffer1[valueIndex];
-      
+
       let valueHigh = valuesBuffer1[valueIndex + 1];
-      
+
       if (valueLow !== prevLow
-          
+
           || valueHigh !== prevHigh
-          
-         ) {
+
+          ) {
         ++numUniqueValues;
         let outputIndex2 = numUniqueValues * uint32sPerElement;
         prevLow = valuesBuffer2[outputIndex2] = valueLow;
-        
+
         prevHigh = valuesBuffer2[outputIndex2 + 1] = valueHigh;
-        
       }
       indexBuffer2[index + 1] = numUniqueValues;
     }
     ++numUniqueValues;
   }
 
-  return writeBlock(output, baseOffset, cache, bx * by * bz, numUniqueValues, valuesBuffer2, encodingBuffer,
-                    indexBuffer2, uint32sPerElement);
+  return writeBlock(
+      output, baseOffset, cache, bx * by * bz, numUniqueValues, valuesBuffer2, encodingBuffer,
+      indexBuffer2, uint32sPerElement);
 }
 
 export function encodeChannel(
-  output: Uint32ArrayBuilder, blockSize: ArrayLike<number>,
-  rawData: Uint32Array, volumeSize: ArrayLike<number>,
-  baseInputOffset: number = 0, inputStrides = getFortranOrderStrides(volumeSize, 2)) {
-  return encodeChannelCommon(output, blockSize, rawData, volumeSize, baseInputOffset, inputStrides, encodeBlock);
+    output: Uint32ArrayBuilder, blockSize: ArrayLike<number>, rawData: Uint32Array,
+    volumeSize: ArrayLike<number>, baseInputOffset: number = 0,
+    inputStrides = getFortranOrderStrides(volumeSize, 2)) {
+  return encodeChannelCommon(
+      output, blockSize, rawData, volumeSize, baseInputOffset, inputStrides, encodeBlock);
 }
 
 export function encodeChannels(

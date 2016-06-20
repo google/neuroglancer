@@ -18,8 +18,8 @@ import 'neuroglancer/datasource/brainmaps/api_backend';
 
 import {handleChunkDownloadPromise} from 'neuroglancer/chunk_manager/backend';
 import {makeRequest} from 'neuroglancer/datasource/brainmaps/api';
-import {VolumeChunkEncoding, VolumeSourceParameters, volumeSourceToString, MeshSourceParameters, meshSourceToString} from 'neuroglancer/datasource/brainmaps/base';
-import {ManifestChunk, FragmentChunk, MeshSource as GenericMeshSource, decodeJsonManifestChunk, decodeVertexPositionsAndIndices} from 'neuroglancer/mesh/backend';
+import {MeshSourceParameters, VolumeChunkEncoding, VolumeSourceParameters, meshSourceToString, volumeSourceToString} from 'neuroglancer/datasource/brainmaps/base';
+import {FragmentChunk, ManifestChunk, MeshSource as GenericMeshSource, decodeJsonManifestChunk, decodeVertexPositionsAndIndices} from 'neuroglancer/mesh/backend';
 import {VolumeChunk, VolumeChunkSource as GenericVolumeChunkSource} from 'neuroglancer/sliceview/backend';
 import {ChunkDecoder} from 'neuroglancer/sliceview/backend_chunk_decoders';
 import {decodeCompressedSegmentationChunk} from 'neuroglancer/sliceview/backend_chunk_decoders/compressed_segmentation';
@@ -96,14 +96,15 @@ function decodeFragmentChunk(chunk: FragmentChunk, response: ArrayBuffer) {
 
 class MeshSource extends GenericMeshSource {
   parameters: MeshSourceParameters;
-  constructor (rpc: RPC, options: any) {
+  constructor(rpc: RPC, options: any) {
     super(rpc, options);
     this.parameters = options['parameters'];
   }
 
   download(chunk: ManifestChunk) {
     let {parameters} = this;
-    const path = `/v1beta2/objects/${parameters['volume_id']}/meshes/${parameters['mesh_name']}:listfragments?object_id=${chunk.objectId}`;
+    const path =
+        `/v1beta2/objects/${parameters['volume_id']}/meshes/${parameters['mesh_name']}:listfragments?object_id=${chunk.objectId}`;
     handleChunkDownloadPromise(
         chunk, makeRequest(parameters['instance'], 'GET', path, 'json'), decodeManifestChunk);
   }

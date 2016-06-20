@@ -14,20 +14,20 @@
  * limitations under the License.
  */
 
-import {Trackable} from 'neuroglancer/url_hash_state';
+import {ChunkManager} from 'neuroglancer/chunk_manager/frontend';
+import {getVolume} from 'neuroglancer/datasource/factory';
+import {ImageUserLayer} from 'neuroglancer/image_user_layer';
+import {LayerManager, LayerSelectedValues, ManagedUserLayer} from 'neuroglancer/layer';
+import {VoxelSize} from 'neuroglancer/navigation_state';
+import {SegmentationUserLayer} from 'neuroglancer/segmentation_user_layer';
 import {VolumeType} from 'neuroglancer/sliceview/base';
 import {MultiscaleVolumeChunkSource} from 'neuroglancer/sliceview/frontend';
-import {Signal} from 'signals';
-import {ManagedUserLayer, LayerManager, LayerSelectedValues} from 'neuroglancer/layer';
-import {getVolume} from 'neuroglancer/datasource/factory';
-import {RPC} from 'neuroglancer/worker_rpc';
-import {RefCounted} from 'neuroglancer/util/disposable';
-import {ChunkManager} from 'neuroglancer/chunk_manager/frontend';
-import {SegmentationUserLayer} from 'neuroglancer/segmentation_user_layer';
-import {ImageUserLayer} from 'neuroglancer/image_user_layer';
-import {VoxelSize} from 'neuroglancer/navigation_state';
 import {StatusMessage} from 'neuroglancer/status';
+import {Trackable} from 'neuroglancer/url_hash_state';
+import {RefCounted} from 'neuroglancer/util/disposable';
 import {verifyObject, verifyObjectProperty, verifyOptionalString} from 'neuroglancer/util/json';
+import {RPC} from 'neuroglancer/worker_rpc';
+import {Signal} from 'signals';
 
 export function getVolumeWithStatusMessage(x: string): Promise<MultiscaleVolumeChunkSource> {
   return StatusMessage.forPromise(new Promise(function(resolve) { resolve(getVolume(x)); }), {
@@ -40,11 +40,12 @@ export function getVolumeWithStatusMessage(x: string): Promise<MultiscaleVolumeC
 export class ManagedUserLayerWithSpecification extends ManagedUserLayer {
   sourceUrl: string;
 
-  constructor(name: string, public initialSpecification: any, public manager: LayerListSpecification) {
+  constructor(
+      name: string, public initialSpecification: any, public manager: LayerListSpecification) {
     super(name);
   }
 
-  toJSON () {
+  toJSON() {
     let userLayer = this.layer;
     if (!userLayer) {
       return this.initialSpecification;
@@ -64,7 +65,8 @@ export class LayerListSpecification extends RefCounted implements Trackable {
       public layerSelectedValues: LayerSelectedValues, public voxelSize: VoxelSize) {
     super();
     this.registerSignalBinding(layerManager.layersChanged.add(this.changed.dispatch, this.changed));
-    this.registerSignalBinding(layerManager.specificationChanged.add(this.changed.dispatch, this.changed));
+    this.registerSignalBinding(
+        layerManager.specificationChanged.add(this.changed.dispatch, this.changed));
   }
 
   restoreState(x: any) {
@@ -91,7 +93,8 @@ export class LayerListSpecification extends RefCounted implements Trackable {
       }
       throw new Error(`Expected boolean, but received: ${JSON.stringify(x)}.`);
     });
-    let sourceUrl = managedLayer.sourceUrl = verifyObjectProperty(spec, 'source', verifyOptionalString);
+    let sourceUrl = managedLayer.sourceUrl =
+        verifyObjectProperty(spec, 'source', verifyOptionalString);
     if (layerType === undefined) {
       if (sourceUrl === undefined) {
         throw new Error(`Either layer 'type' or 'source' URL must be specified.`);
@@ -127,7 +130,7 @@ export class LayerListSpecification extends RefCounted implements Trackable {
     return managedLayer;
   }
 
-  toJSON () {
+  toJSON() {
     let result: any = {};
     let numResults = 0;
     for (let managedLayer of this.layerManager.managedLayers) {
