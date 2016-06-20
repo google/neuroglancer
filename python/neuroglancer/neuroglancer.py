@@ -78,9 +78,10 @@ def guess_mime_type_from_path(path):
 class NDStoreCompatibleServer(ThreadingMixIn, HTTPServer):
   def __init__(self,
                bind_address='127.0.0.1',
+               bind_port=8888,
                static_file_open=open,
                static_file_path=None):
-    HTTPServer.__init__(self, (bind_address, 0), NDStoreCompatibleRequestHandler)
+    HTTPServer.__init__(self, (bind_address, bind_port), NDStoreCompatibleRequestHandler)
     self.daemon_threads = True
     if static_file_path is None:
       static_file_path = os.path.join(os.path.dirname(__file__), '../dist/dev')
