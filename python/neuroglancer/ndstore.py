@@ -31,38 +31,19 @@ import os
 import collections
 import json
 import posixpath
-import binascii
-import numpy as np
 import io
-import zlib
 import time
 import shutil
-
-from PIL import Image
+from volume import ServedVolume
+from chunks import encode_jpeg, encode_npz, encode_raw
+from token import make_random_token
+from static import content
 
 info_path_regex = re.compile(r'^/ocp/ca/([^/]+)/info/$')
 
 data_path_regex = re.compile(r'^/ocp/ca/([^/]+)/channel/([^/]+)/0/([0-9]+),([0-9]+)/([0-9]+),([0-9]+)/([0-9]+),([0-9]+)/neariso/')
 
 static_path_regex = re.compile(r'/static/([^/]+)/((?:[a-zA-Z0-9_\-][a-zA-Z0-9_\-.]*)?)$')
-
-def encode_jpeg(subvol):
-  shape = subvol.shape
-  reshaped = subvol.reshape(shape[0] * shape[1], shape[2])
-  img = Image.fromarray(reshaped)
-  f = io.BytesIO()
-  img.save(f, "JPEG")
-  return f.getvalue()
-def encode_npz(subvol):
-  fileobj = io.BytesIO()
-  np.save(fileobj, subvol.reshape((1,) + subvol.shape))
-  cdz = zlib.compress(fileobj.getvalue())
-  return cdz
-def encode_raw(subvol):
-  return subvol.tostring('C')
-
-def make_random_token():
-  return binascii.hexlify(os.urandom(20))
 
 mime_type_map = {
     '.css': 'text/css',
@@ -89,19 +70,6 @@ class NDStoreCompatibleServer(ThreadingMixIn, HTTPServer):
     self.static_file_open = static_file_open
     self.volumes = dict()
     self.token = make_random_token()
-
-class ServedVolume(object):
-  def __init__(self, data, offset=(0,0,0), channel_type=None, voxel_size=(1,1,1)):
-    self.token = make_random_token()
-    self.data = data
-    self.voxel_size = voxel_size
-    self.offset = offset
-    self.shape = data.shape[::-1]
-    self.data_type = data.dtype.name
-    if self.data_type == 'uint8':
-      self.channel_type = 'image'
-    else:
-      self.channel_type = 'annotation'
 
 num_requests = 0
 
