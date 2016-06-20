@@ -284,7 +284,16 @@ export class RepositoryInfo {
   errors: string[] = [];
   dataInstances = new Map<string, DataInstanceInfo>();
   uuid: string;
+  vnodes = new Set<string>();
   constructor (obj: any) {
+    if (obj instanceof RepositoryInfo) {
+      this.alias = obj.alias;
+      this.description = obj.description;
+      // just copy references
+      this.errors = obj.errors;
+      this.dataInstances = obj.dataInstances; 
+      return;  
+    } 
     verifyObject(obj);
     this.alias = verifyObjectProperty(obj, 'Alias', verifyString);
     this.description = verifyObjectProperty(obj, 'Description', verifyString);
@@ -298,16 +307,36 @@ export class RepositoryInfo {
         this.errors.push(message);
       }
     }
+
+    let dagObj = verifyObjectProperty(obj, 'DAG', verifyObject);
+    let nodeObjs = verifyObjectProperty(dagObj, 'Nodes', verifyObject);
+    for (let key of Object.keys(nodeObjs)) {
+        this.vnodes.add(key);
+    }
   }
 };
 
 export function parseRepositoriesInfo(obj: any) {
   try {
     let result = verifyObjectAsMap(obj, x => new RepositoryInfo(x));
+    
+    // make all versions available for viewing
+    let allVersions = new Map<string, RepositoryInfo>();
     for (let [key, info] of result) {
+      allVersions.set(key, info);
+      for (let key2 of info.vnodes) {
+        if (key2 != key) {
+          // create new repo 
+          let rep = new RepositoryInfo(info);
+          allVersions.set(key2, rep);
+        }
+      }
+    }
+    
+    for (let [key, info] of allVersions) {
       info.uuid = key;
     }
-    return result;
+    return allVersions;
   } catch (parseError) {
     throw new Error(`Failed to parse DVID repositories info: ${parseError.message}`);
   }
