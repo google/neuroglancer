@@ -635,12 +635,14 @@ export class VolumeChunkSpecification {
         this.compressedSegmentationBlockSize;
   }
 
-  static * getDefaults(options: {
+  static getDefaults(options: {
     voxelSize: Vec3,
     lowerVoxelBound: Vec3,
     upperVoxelBound: Vec3,
     volumeType: VolumeType,
-    dataType: DataType, numChannels?: number, chunkDataSizes?: Vec3[],
+    dataType: DataType,
+    numChannels?: number,
+    chunkDataSizes?: Vec3[],
     compressedSegmentationBlockSize?: Vec3|null
   }) {
     let {voxelSize,       dataType,
@@ -652,14 +654,14 @@ export class VolumeChunkSpecification {
         (dataType === DataType.UINT32 || dataType === DataType.UINT64)) {
       compressedSegmentationBlockSize = vec3.fromValues(8, 8, 8);
     }
-    for (let chunkDataSize of chunkDataSizes) {
+    return chunkDataSizes.map(chunkDataSize => {
       let chunkSize = vec3.create();
       vec3.multiply(chunkSize, voxelSize, chunkDataSize);
       let chunkLayout = ChunkLayout.get(chunkSize, chunkOffset);
-      yield new VolumeChunkSpecification(
+      return new VolumeChunkSpecification(
           chunkLayout, chunkDataSize, numChannels, dataType, lowerVoxelBound,
           options.upperVoxelBound, compressedSegmentationBlockSize);
-    }
+    });
   }
 };
 

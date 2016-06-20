@@ -138,8 +138,8 @@ export class MultiscaleVolumeChunkSource implements GenericMultiscaleVolumeChunk
 
   getSources(chunkManager: ChunkManager) {
     return this.scales.map(scaleInfo => {
-      return Array
-          .from(VolumeChunkSpecification.getDefaults({
+      return VolumeChunkSpecification
+          .getDefaults({
             voxelSize: scaleInfo.resolution,
             dataType: this.dataType,
             numChannels: this.numChannels,
@@ -148,7 +148,7 @@ export class MultiscaleVolumeChunkSource implements GenericMultiscaleVolumeChunk
             volumeType: this.volumeType,
             chunkDataSizes: scaleInfo.chunkSizes,
             compressedSegmentationBlockSize: scaleInfo.compressedSegmentationBlockSize
-          }))
+          })
           .map(spec => {
             let path = `${this.path}/${scaleInfo.key}`;
             let cacheKey = stableStringify({
