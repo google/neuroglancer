@@ -16,7 +16,7 @@
 
 require('./status.css');
 
-let statusContainer: HTMLElement = null;
+let statusContainer: HTMLElement|null = null;
 
 export var DEFAULT_STATUS_DELAY = 200;
 
@@ -24,7 +24,7 @@ export type Delay = boolean | number;
 
 export class StatusMessage {
   element: HTMLElement;
-  private timer: number;
+  private timer: number|null;
   constructor(delay: Delay = false) {
     if (statusContainer === null) {
       statusContainer = document.createElement('ul');
@@ -45,8 +45,8 @@ export class StatusMessage {
     statusContainer.appendChild(element);
   }
   dispose() {
-    statusContainer.removeChild(this.element);
-    this.element = null;
+    statusContainer!.removeChild(this.element);
+    this.element = <any>undefined;
     if (this.timer !== null) {
       clearTimeout(this.timer);
     }

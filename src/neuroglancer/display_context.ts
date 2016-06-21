@@ -59,8 +59,8 @@ export class DisplayContext extends RefCounted {
   updateStarted = new Signal();
   updateFinished = new Signal();
   panels = new Set<RenderedPanel>();
-  activePanel: RenderedPanel = null;
-  private updatePending: number = null;
+  activePanel: RenderedPanel|null = null;
+  private updatePending: number|null = null;
   private needsRedraw = false;
 
   constructor(public container: HTMLElement) {
@@ -86,7 +86,7 @@ export class DisplayContext extends RefCounted {
     }
   }
 
-  setActivePanel(panel: RenderedPanel) {
+  setActivePanel(panel: RenderedPanel|null) {
     let existingPanel = this.activePanel;
     if (existingPanel != null) {
       existingPanel.element.attributes.removeNamedItem('isActivePanel');

@@ -41,7 +41,7 @@ class VolumeChunkSource extends GenericVolumeChunkSource {
       // chunkPosition must not be captured, since it will be invalidated by the next call to
       // computeChunkBounds.
       let chunkPosition = this.computeChunkBounds(chunk);
-      let {chunkDataSize} = chunk;
+      let chunkDataSize = chunk.chunkDataSize!;
       path =
           `/api/node/${params['nodeKey']}/${params['dataInstanceKey']}/raw/0_1_2/${chunkDataSize[0]}_${chunkDataSize[1]}_${chunkDataSize[2]}/${chunkPosition[0]}_${chunkPosition[1]}_${chunkPosition[2]}/nd`;
     }
@@ -59,7 +59,7 @@ class TileChunkSource extends GenericVolumeChunkSource {
   constructor(rpc: RPC, options: any) {
     super(rpc, options);
     this.parameters = options['parameters'];
-    this.chunkDecoder = TILE_CHUNK_DECODERS.get(this.parameters['encoding']);
+    this.chunkDecoder = TILE_CHUNK_DECODERS.get(this.parameters['encoding'])!;
   }
 
   download(chunk: VolumeChunk) {

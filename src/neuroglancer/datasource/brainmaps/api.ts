@@ -66,7 +66,7 @@ export function makeRequest(
    * undefined means request not yet attempted.  null means request
    * cancelled.
    */
-  let xhr: XMLHttpRequest = undefined;
+  let xhr: XMLHttpRequest|undefined|null = undefined;
   return makeCancellablePromise<any>((resolve, reject, onCancel) => {
     function start(token: Token) {
       if (xhr === null) {

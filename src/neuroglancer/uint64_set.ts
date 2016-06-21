@@ -36,8 +36,8 @@ export class Uint64Set extends SharedObjectCounterpart {
 
   disposed() {
     super.disposed();
-    this.hashTable = null;
-    this.changed = null;
+    this.hashTable = <any>undefined;
+    this.changed = <any>undefined;
   }
 
   add_(x: Uint64) { return this.hashTable.add(x.low, x.high); }

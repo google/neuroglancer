@@ -27,8 +27,8 @@ export class HashTable {
   tables: Uint32Array[];
   growFactor = 1.2;
   maxWidth = 4096;
-  width: number = null;
-  height: number = null;
+  width: number;
+  height: number;
   maxHeight = 8192;
   emptyLow = 4294967295;
   emptyHigh = 4294967295;

@@ -45,7 +45,7 @@ export class RefCounted implements Disposable {
           (<() => void>disposer).call(this);
         }
       }
-      this.disposers = null;
+      this.disposers = <any>undefined;
     }
   }
   disposed() {}

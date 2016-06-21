@@ -56,7 +56,7 @@ class VolumeChunkSource extends GenericVolumeChunkSource {
           decodeCompressedSegmentationChunk(chunk, inflate(new Uint8Array(response)).buffer);
         };
         this.encodingParams =
-            `/subvolume_format=RAW/image_format_options.compressed_segmentation_block_size=${vec3Key(this.spec.compressedSegmentationBlockSize)}${compression_suffix}`;
+            `/subvolume_format=RAW/image_format_options.compressed_segmentation_block_size=${vec3Key(this.spec.compressedSegmentationBlockSize!)}${compression_suffix}`;
         break;
     }
   }
@@ -68,7 +68,7 @@ class VolumeChunkSource extends GenericVolumeChunkSource {
       // chunkPosition must not be captured, since it will be invalidated by the next call to
       // computeChunkBounds.
       let chunkPosition = this.computeChunkBounds(chunk);
-      let {chunkDataSize} = chunk;
+      let chunkDataSize = chunk.chunkDataSize!;
       path =
           `/v1beta2/binary/volumes/binary/volumes/subvolume/header.volume_id=${parameters['volume_id']}/geometry.corner=${vec3Key(chunkPosition)}/geometry.size=${vec3Key(chunkDataSize)}/geometry.scale=${parameters['scaleIndex']}${this.encodingParams}?alt=media`;
     }
@@ -112,7 +112,7 @@ class MeshSource extends GenericMeshSource {
   downloadFragment(chunk: FragmentChunk) {
     let {parameters} = this;
     const path =
-        `/v1beta2/binary/objects/binary/objects/fragment/header.volume_id=${parameters['volume_id']}/mesh_name=${parameters['mesh_name']}/fragment_key=${chunk.fragmentId}/object_id=${chunk.manifestChunk.objectId}?alt=media`;
+        `/v1beta2/binary/objects/binary/objects/fragment/header.volume_id=${parameters['volume_id']}/mesh_name=${parameters['mesh_name']}/fragment_key=${chunk.fragmentId}/object_id=${chunk.manifestChunk!.objectId}?alt=media`;
     handleChunkDownloadPromise(
         chunk, makeRequest(parameters['instance'], 'GET', path, 'arraybuffer'),
         decodeFragmentChunk);

@@ -46,7 +46,7 @@ export class ChunkQueueManager extends SharedObject {
    * If non-null, deadline in milliseconds since epoch after which
    * chunk copies to the GPU may not start (until the next frame).
    */
-  chunkUpdateDeadline: number = null;
+  chunkUpdateDeadline: number|null = null;
 
   chunkUpdateDelay: number = 30;
 
@@ -83,7 +83,7 @@ export class ChunkQueueManager extends SharedObject {
     }
     let update = this.pendingChunkUpdates;
     let {rpc} = this;
-    let source = rpc.get(update['source']);
+    let source = rpc!.get(update['source']);
     if (DEBUG_CHUNK_UPDATES) {
       console.log(
           `${Date.now()} Chunk.update processed: ${source.rpcId} ${update['id']} ${update['state']}`);
@@ -152,7 +152,7 @@ export class ChunkManager extends SharedObject {
     super();
     this.registerDisposer(chunkQueueManager.addRef());
     this.initializeCounterpart(
-        chunkQueueManager.rpc,
+        chunkQueueManager.rpc!,
         {'type': 'ChunkManager', 'chunkQueueManager': chunkQueueManager.rpcId});
   }
 
@@ -189,5 +189,5 @@ export abstract class ChunkSource extends SharedObject {
   /**
    * Default implementation for use with backendOnly chunk sources.
    */
-  getChunk(x: any): Chunk { return null; }
+  getChunk(x: any): Chunk { throw new Error('Not implemented.'); }
 };

@@ -28,8 +28,7 @@ export class SegmentSelectionState extends RefCounted {
   changed = new Signal();
 
   set(value: Uint64|null|undefined) {
-    let hasSelectedSegment = (value != null);
-    if (!hasSelectedSegment) {
+    if (value == null) {
       if (this.hasSelectedSegment) {
         this.hasSelectedSegment = false;
         this.changed.dispatch();

@@ -14,7 +14,8 @@
  * limitations under the License.
  */
 
-// We use the approach described in the following paper to determine the intersection between the
+// We use the approach described in the following paper to determine the
+// intersection between the
 // viewport plane and a given 3-D chunk inside of a WebGL vertex shader:
 //
 // A Vertex Program for Efficient Box-Plane Intersection
@@ -312,14 +313,12 @@ for (int e = 0; e < 4; ++e) {
 };
 
 export class RenderLayer extends GenericRenderLayer {
-  sources: VolumeChunkSource[][] = null;
-  shader: ShaderProgram = undefined;
+  sources: VolumeChunkSource[][]|null = null;
+  shader: ShaderProgram|undefined = undefined;
   shaderUpdated = true;
   redrawNeeded = new Signal();
-  voxelSize: Vec3 = null;
-  boundingBox: BoundingBox = null;
   vertexComputationManager: VolumeSliceVertexComputationManager;
-  rpcId: RpcId = null;
+  rpcId: RpcId|null = null;
   shaderError = new WatchableValue<ShaderCompilationError|ShaderLinkError|undefined>(undefined);
   constructor(
       public chunkManager: ChunkManager,
@@ -335,12 +334,12 @@ export class RenderLayer extends GenericRenderLayer {
         let alternativeIds: number[] = [];
         sourceIds.push(alternativeIds);
         for (let source of alternatives) {
-          alternativeIds.push(source.rpcId);
+          alternativeIds.push(source.rpcId!);
         }
       }
       let sharedObject = this.registerDisposer(new SharedObject());
       sharedObject.initializeCounterpart(
-          chunkManager.rpc, {'type': 'sliceview/RenderLayer', 'sources': sourceIds});
+          chunkManager.rpc!, {'type': 'sliceview/RenderLayer', 'sources': sourceIds});
       this.rpcId = sharedObject.rpcId;
       let spec = this.sources[0][0].spec;
       this.voxelSize = spec.voxelSize;
@@ -351,9 +350,9 @@ export class RenderLayer extends GenericRenderLayer {
 
   get gl() { return this.chunkManager.chunkQueueManager.gl; }
 
-  get chunkFormat() { return this.sources[0][0].chunkFormat; }
+  get chunkFormat() { return this.sources![0][0].chunkFormat; }
 
-  get dataType() { return this.sources[0][0].spec.dataType; }
+  get dataType() { return this.sources![0][0].spec.dataType; }
 
   initializeShader() {
     if (!this.shaderUpdated) {
@@ -373,14 +372,14 @@ export class RenderLayer extends GenericRenderLayer {
   disposeShader() {
     if (this.shader) {
       this.shader.dispose();
-      this.shader = null;
+      this.shader = undefined;
     }
   }
 
   dispose() { this.disposeShader(); }
 
   getValueAt(position: Vec3) {
-    for (let alternatives of this.sources) {
+    for (let alternatives of this.sources!) {
       for (let source of alternatives) {
         let result = source.getValueAt(position);
         if (result != null) {
@@ -421,7 +420,7 @@ ${GLSL_TYPE_FOR_DATA_TYPE.get(this.dataType)} getDataValue() { return getDataVal
     let {dataToDevice} = sliceView;
     let gl = this.gl;
 
-    let shader = this.shader;
+    let shader = this.shader!;
     shader.bind();
     this.vertexComputationManager.beginSlice(gl, shader, dataToDevice, sliceView);
     return shader;
@@ -433,7 +432,7 @@ ${GLSL_TYPE_FOR_DATA_TYPE.get(this.dataType)} getDataValue() { return getDataVal
   }
 
   draw(sliceView: SliceView) {
-    let visibleSources = sliceView.visibleLayers.get(this);
+    let visibleSources = sliceView.visibleLayers.get(this)!;
     if (visibleSources.length === 0) {
       return;
     }
@@ -462,7 +461,7 @@ ${GLSL_TYPE_FOR_DATA_TYPE.get(this.dataType)} getDataValue() { return getDataVal
 
       let originalChunkSize = chunkLayout.size;
 
-      let chunkDataSize: Vec3 = null;
+      let chunkDataSize: Vec3|undefined;
       let visibleChunks = sliceView.visibleChunks.get(chunkLayout);
       if (!visibleChunks) {
         continue;

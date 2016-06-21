@@ -210,7 +210,8 @@ export function authenticateGoogleOAuth2(options: {
   let promise = handler.getAuthPromise(state);
 
   if (options.immediate) {
-    // For immediate mode auth, we can wait until the relay is ready, since we aren't opening a new
+    // For immediate mode auth, we can wait until the relay is ready, since we
+    // aren't opening a new
     // window.
     handler.relayReadyPromise.then(() => {
       let iframe = document.createElement('iframe');

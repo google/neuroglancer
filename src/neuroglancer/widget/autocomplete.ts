@@ -264,7 +264,7 @@ export class AutocompleteTextInput extends RefCounted {
     this.setActiveIndex(activeIndex);
   }
 
-  private handleKeyCommand(action: string) { return KEY_COMMANDS.get(action).call(this); }
+  private handleKeyCommand(action: string) { return KEY_COMMANDS.get(action)!.call(this); }
 
   private registerInputHandler() {
     const handler = (event: Event) => {
@@ -298,7 +298,7 @@ export class AutocompleteTextInput extends RefCounted {
       let {dropdownElement} = this;
       let {activeIndex} = this;
       if (this.dropdownContentsStale) {
-        let {completionResult} = this;
+        let completionResult = this.completionResult!;
         let {makeElement = makeDefaultCompletionElement} = completionResult;
         this.completionElements = completionResult.completions.map((completion, index) => {
           let completionElement = makeElement.call(completionResult, completion);
@@ -320,7 +320,7 @@ export class AutocompleteTextInput extends RefCounted {
         this.completionsVisible = true;
       }
       if (activeIndex !== -1) {
-        let completionElement = this.completionElements[activeIndex];
+        let completionElement = this.completionElements![activeIndex];
         scrollIntoViewIfNeeded(completionElement);
       }
     } else if (this.completionsVisible) {
@@ -390,14 +390,14 @@ export class AutocompleteTextInput extends RefCounted {
    * This sets the active completion, which causes it to be highlighted and displayed as the hint.
    * Additionally, if the user hits tab then it is chosen.
    */
-  private setActiveIndex(index?: number) {
+  private setActiveIndex(index: number) {
     if (!this.dropdownContentsStale) {
       let {activeIndex} = this;
       if (activeIndex !== -1) {
-        this.completionElements[activeIndex].classList.remove(ACTIVE_COMPLETION_CLASS_NAME);
+        this.completionElements![activeIndex].classList.remove(ACTIVE_COMPLETION_CLASS_NAME);
       }
       if (index !== -1) {
-        let completionElement = this.completionElements[index];
+        let completionElement = this.completionElements![index];
         completionElement.classList.add(ACTIVE_COMPLETION_CLASS_NAME);
         scrollIntoViewIfNeeded(completionElement);
       }
@@ -409,11 +409,11 @@ export class AutocompleteTextInput extends RefCounted {
   }
 
   private getCompletedValueByIndex(index: number) {
-    return this.getCompletedValue(this.completionResult.completions[index].value);
+    return this.getCompletedValue(this.completionResult!.completions[index].value);
   }
 
   private getCompletedValue(completionValue: string) {
-    let {completionResult} = this;
+    let completionResult = this.completionResult!;
     let value = this.prevInputValue;
     return value.substring(0, completionResult.offset) + completionValue;
   }

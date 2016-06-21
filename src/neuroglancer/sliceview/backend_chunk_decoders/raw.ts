@@ -20,9 +20,9 @@ import {DATA_TYPE_BYTES, DataType} from 'neuroglancer/sliceview/base';
 import {prod3} from 'neuroglancer/util/geom';
 
 export function decodeRawChunk(chunk: VolumeChunk, response: ArrayBuffer) {
-  let {spec} = chunk.source;
+  let {spec} = chunk.source!;
   let {dataType} = spec;
-  let numElements = prod3(chunk.chunkDataSize);
+  let numElements = prod3(chunk.chunkDataSize!);
   let bytesPerElement = DATA_TYPE_BYTES[dataType];
   let expectedBytes = numElements * bytesPerElement * spec.numChannels;
   if (expectedBytes !== response.byteLength) {
@@ -44,6 +44,8 @@ export function decodeRawChunk(chunk: VolumeChunk, response: ArrayBuffer) {
     case DataType.FLOAT32:
       data = new Float32Array(response);
       break;
+    default:
+      throw new Error(`Unexpected data type: ${dataType}.`);
   }
   postProcessRawData(chunk, data);
 }

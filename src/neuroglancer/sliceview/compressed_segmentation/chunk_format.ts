@@ -229,8 +229,8 @@ export class CompressedSegmentationChunkFormatHandler extends RefCounted impleme
     if (dataType !== DataType.UINT64 && dataType !== DataType.UINT32) {
       throw new Error(`Unsupported compressed segmentation data type: ${DataType[dataType]}`);
     }
-    this.chunkFormat = this.registerDisposer(
-        ChunkFormat.get(gl, spec.dataType, spec.compressedSegmentationBlockSize, spec.numChannels));
+    this.chunkFormat = this.registerDisposer(ChunkFormat.get(
+        gl, spec.dataType, spec.compressedSegmentationBlockSize!, spec.numChannels));
   }
 
   getChunk(source: VolumeChunkSource, x: any) {

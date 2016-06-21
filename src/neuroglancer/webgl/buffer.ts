@@ -15,19 +15,18 @@
  */
 
 import {Disposable} from 'neuroglancer/util/disposable';
+import {GL_ARRAY_BUFFER} from 'neuroglancer/webgl/constants';
 import {AttributeIndex} from 'neuroglancer/webgl/shader';
 
 export type BufferType = number;
 export type WebGLDataType = number;
 export type WebGLBufferUsage = number;
 export class Buffer implements Disposable {
-  buffer: WebGLBuffer;
-  constructor(public gl: WebGLRenderingContext, public bufferType?: BufferType) {
+  buffer: WebGLBuffer|null;
+  constructor(public gl: WebGLRenderingContext, public bufferType: BufferType = GL_ARRAY_BUFFER) {
     this.gl = gl;
+    // This should never return null.
     this.buffer = gl.createBuffer();
-    if (this.bufferType === undefined) {
-      this.bufferType = gl.ARRAY_BUFFER;
-    }
   }
 
   bind() { this.gl.bindBuffer(this.bufferType, this.buffer); }
@@ -52,8 +51,8 @@ export class Buffer implements Disposable {
 
   dispose() {
     this.gl.deleteBuffer(this.buffer);
-    this.buffer = null;
-    this.gl = null;
+    this.buffer = <any>undefined;
+    this.gl = <any>undefined;
   }
 
   static fromData(

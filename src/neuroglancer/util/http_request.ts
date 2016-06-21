@@ -57,7 +57,7 @@ export function openHttpRequest(url: string, method = 'GET') {
   return xhr;
 }
 
-export function pickShard(baseUrls: string | string[], path: string) {
+export function pickShard(baseUrls: string|string[], path: string) {
   if (Array.isArray(baseUrls)) {
     let numShards = baseUrls.length;
     let shard = numShards === 1 ? 0 : Math.abs(simpleStringHash(path)) % numShards;
@@ -66,7 +66,7 @@ export function pickShard(baseUrls: string | string[], path: string) {
   return baseUrls + path;
 }
 
-export function openShardedHttpRequest(baseUrls: string | string[], path: string, method = 'GET') {
+export function openShardedHttpRequest(baseUrls: string|string[], path: string, method = 'GET') {
   let xhr = new XMLHttpRequest();
   const url = pickShard(baseUrls, path);
   (<any>xhr)[METHOD_SYMBOL] = method;

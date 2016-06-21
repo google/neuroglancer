@@ -44,7 +44,7 @@ class VolumeChunkSource extends GenericVolumeChunkSource {
     this.resolution = options['resolution'];
     this.encoding = options['encoding'];
 
-    this.chunkDecoder = chunkDecoders.get(this.encoding);
+    this.chunkDecoder = chunkDecoders.get(this.encoding)!;
   }
 
   download(chunk: VolumeChunk) {
@@ -53,7 +53,7 @@ class VolumeChunkSource extends GenericVolumeChunkSource {
       // chunkPosition must not be captured, since it will be invalidated by the next call to
       // computeChunkBounds.
       let chunkPosition = this.computeChunkBounds(chunk);
-      let {chunkDataSize} = chunk;
+      let chunkDataSize = chunk.chunkDataSize!;
       for (let i = 0; i < 3; ++i) {
         path += `/${chunkPosition[i]},${chunkPosition[i] + chunkDataSize[i]}`;
       }

@@ -100,7 +100,7 @@ function compareBounds(
   return curResult;
 }
 
-export interface RenderLayer { sources: VolumeChunkSource[][]; }
+export interface RenderLayer { sources: VolumeChunkSource[][]|null; }
 
 function pickBestAlternativeSource(xAxis: Vec3, yAxis: Vec3, alternatives: VolumeChunkSource[]) {
   let numAlternatives = alternatives.length;
@@ -123,8 +123,8 @@ function pickBestAlternativeSource(xAxis: Vec3, yAxis: Vec3, alternatives: Volum
 }
 
 export class SliceViewBase extends SharedObject {
-  width: number|null = null;
-  height: number|null = null;
+  width = -1;
+  height = -1;
   hasViewportToData = false;
   /**
    * Specifies whether width, height, and viewportToData are valid.
@@ -148,7 +148,7 @@ export class SliceViewBase extends SharedObject {
 
   centerDataPosition = vec3.create();
 
-  viewportPlaneDistanceToOrigin: number = null;
+  viewportPlaneDistanceToOrigin: number = 0;
 
   /**
    * For each visible ChunkLayout, maps each visible VolumeChunkSource to its priority index.
@@ -159,7 +159,7 @@ export class SliceViewBase extends SharedObject {
 
   visibleSourcesStale = true;
 
-  pixelSize: number = null;
+  pixelSize: number = 0;
 
   constructor() {
     super();
@@ -172,7 +172,7 @@ export class SliceViewBase extends SharedObject {
    */
   onViewportChanged() {}
   maybeSetHasValidViewport() {
-    if (!this.hasValidViewport && this.width !== null && this.height !== null &&
+    if (!this.hasValidViewport && this.width !== -1 && this.height !== -1 &&
         this.hasViewportToData) {
       this.hasValidViewport = true;
       this.onHasValidViewport();
@@ -201,7 +201,8 @@ export class SliceViewBase extends SharedObject {
     mat4.copy(this.viewportToData, mat);
     vec3.transformMat4(this.centerDataPosition, kZeroVec, mat);
 
-    let newPixelSize: number;
+    // Initialize to zero to avoid confusing TypeScript compiler.
+    let newPixelSize = 0;
 
     // Swap previousViewportAxes with viewportAxes.
     let viewportAxes = this.viewportAxes;
@@ -259,7 +260,7 @@ export class SliceViewBase extends SharedObject {
     visibleChunkLayouts.clear();
     for (let [renderLayer, visibleSources] of visibleLayers) {
       visibleSources.length = 0;
-      let sources = renderLayer.sources;
+      let sources = renderLayer.sources!;
       let numSources = sources.length;
       let scaleIndex: number;
 
@@ -593,7 +594,7 @@ export class VolumeChunkSpecification {
   constructor(
       public chunkLayout: ChunkLayout, public chunkDataSize: Vec3, public numChannels: number,
       public dataType: DataType, public lowerVoxelBound: Vec3, public upperVoxelBound: Vec3,
-      public compressedSegmentationBlockSize?: Vec3|undefined) {
+      public compressedSegmentationBlockSize?: Vec3) {
     this.chunkBytes = prod3(chunkDataSize) * DATA_TYPE_BYTES[dataType] * numChannels;
     let voxelSize = this.voxelSize =
         vec3.divide(vec3.create(), this.chunkLayout.size, this.chunkDataSize);
@@ -635,7 +636,7 @@ export class VolumeChunkSpecification {
     dataType: DataType,
     numChannels?: number,
     chunkDataSizes?: Vec3[],
-    compressedSegmentationBlockSize?: Vec3|null
+    compressedSegmentationBlockSize?: Vec3|undefined
   }) {
     let {voxelSize,       dataType,
          lowerVoxelBound, chunkDataSizes = DEFAULT_CHUNK_DATA_SIZES,

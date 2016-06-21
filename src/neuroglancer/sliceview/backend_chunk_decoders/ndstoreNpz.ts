@@ -31,8 +31,8 @@ import {inflate} from 'pako';
 
 export function decodeNdstoreNpzChunk(chunk: VolumeChunk, response: ArrayBuffer) {
   let parseResult = parseNpy(inflate(new Uint8Array(response)));
-  let {chunkDataSize} = chunk;
-  let {source} = chunk;
+  let chunkDataSize = chunk.chunkDataSize!;
+  let source = chunk.source!;
   let {shape} = parseResult;
   if (shape.length !== 4 || shape[0] !== 1 || shape[1] !== chunkDataSize[2] ||
       shape[2] !== chunkDataSize[1] || shape[3] !== chunkDataSize[0]) {

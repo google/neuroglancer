@@ -117,9 +117,9 @@ registerRPC('SliceView.removeVisibleLayer', function(x) {
 
 export class VolumeChunk extends Chunk {
   chunkGridPosition: Vec3;
-  source: VolumeChunkSource = null;
-  chunkDataSize: Vec3;
-  data: ArrayBufferView;
+  source: VolumeChunkSource|null = null;
+  chunkDataSize: Vec3|null;
+  data: ArrayBufferView|null;
   constructor() {
     super();
     this.chunkGridPosition = vec3.create();
@@ -134,8 +134,8 @@ export class VolumeChunk extends Chunk {
      * Grid position within chunk layout (coordinates are in units of chunks).
      */
     vec3.copy(this.chunkGridPosition, chunkGridPosition);
-    this.systemMemoryBytes = source.spec.chunkBytes;
-    this.gpuMemoryBytes = source.spec.chunkBytes;
+    this.systemMemoryBytes = source!.spec.chunkBytes;
+    this.gpuMemoryBytes = source!.spec.chunkBytes;
 
     this.chunkDataSize = null;
     this.data = null;
@@ -143,9 +143,9 @@ export class VolumeChunk extends Chunk {
 
   serialize(msg: any, transfers: any[]) {
     super.serialize(msg, transfers);
-    let data = msg['data'] = this.data;
+    let data = msg['data'] = this.data!;
     let chunkDataSize = this.chunkDataSize;
-    if (chunkDataSize !== this.source.spec.chunkDataSize) {
+    if (chunkDataSize !== this.source!.spec.chunkDataSize) {
       msg['chunkDataSize'] = chunkDataSize;
     }
     msg['chunkGridPosition'] = this.chunkGridPosition;
@@ -156,12 +156,12 @@ export class VolumeChunk extends Chunk {
   }
 
   downloadSucceeded() {
-    this.systemMemoryBytes = this.gpuMemoryBytes = this.data.byteLength;
+    this.systemMemoryBytes = this.gpuMemoryBytes = this.data!.byteLength;
     super.downloadSucceeded();
   }
 
   freeSystemMemory() { this.data = null; }
-  toString() { return this.source.toString() + ':' + vec3Key(this.chunkGridPosition); }
+  toString() { return this.source!.toString() + ':' + vec3Key(this.chunkGridPosition); }
 };
 
 export class VolumeChunkSource extends ChunkSource implements VolumeChunkSourceInterface {

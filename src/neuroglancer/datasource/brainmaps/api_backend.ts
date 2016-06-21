@@ -23,7 +23,7 @@ import {Token, implementation} from 'neuroglancer/datasource/brainmaps/api_imple
 import {registerRPC} from 'neuroglancer/worker_rpc';
 import {rpc} from 'neuroglancer/worker_rpc_context';
 
-let resolvePromise: (token: Token) => void = null;
+let resolvePromise: ((token: Token) => void)|null = null;
 
 implementation.getNewTokenPromise = function(invalidToken) {
   let msg: any = {};
@@ -35,4 +35,4 @@ implementation.getNewTokenPromise = function(invalidToken) {
   return promise;
 };
 
-registerRPC('brainmaps.receiveToken', function(x) { resolvePromise(x['authResult']); });
+registerRPC('brainmaps.receiveToken', function(x) { resolvePromise!(x['authResult']); });

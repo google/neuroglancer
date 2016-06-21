@@ -38,8 +38,8 @@ export class RenderLayer extends RefCounted {
 
   getValueAt(x: Float32Array): any { return undefined; }
 
-  voxelSize: Vec3 = null;
-  boundingBox: BoundingBox = null;
+  voxelSize: Vec3|null = null;
+  boundingBox: BoundingBox|null = null;
 };
 
 export class UserLayerDropdown extends RefCounted {
@@ -67,10 +67,10 @@ export class UserLayer extends RefCounted {
     layersChanged.dispatch();
   }
 
-  getValueAt(position: Float32Array, pickedRenderLayer: RenderLayer, pickedObject: Uint64) {
+  getValueAt(position: Float32Array, pickedRenderLayer: RenderLayer|null, pickedObject: Uint64) {
     let result: any;
     let {renderLayers} = this;
-    if (renderLayers.indexOf(pickedRenderLayer) !== -1) {
+    if (pickedRenderLayer !== null && renderLayers.indexOf(pickedRenderLayer) !== -1) {
       return pickedObject;
     }
     for (let layer of renderLayers) {
@@ -97,7 +97,7 @@ export class ManagedUserLayer extends RefCounted {
   layerChanged = new Signal();
   specificationChanged = new Signal();
   wasDisposed = false;
-  private layer_: UserLayer = null;
+  private layer_: UserLayer|null = null;
   get layer() { return this.layer_; }
 
   private updateSignalBindings(layer: UserLayer, callback: SignalBindingUpdater) {
@@ -107,7 +107,7 @@ export class ManagedUserLayer extends RefCounted {
         layer.specificationChanged, this.specificationChanged.dispatch, this.specificationChanged);
   }
 
-  set layer(layer: UserLayer) {
+  set layer(layer: UserLayer|null) {
     let oldLayer = this.layer_;
     if (oldLayer != null) {
       this.updateSignalBindings(oldLayer, removeSignalBinding);
@@ -119,7 +119,7 @@ export class ManagedUserLayer extends RefCounted {
       this.handleLayerChanged();
     }
   }
-  constructor(public name: string, layer: UserLayer = null, public visible: boolean = true) {
+  constructor(public name: string, layer: UserLayer|null = null, public visible: boolean = true) {
     super();
     this.layer = layer;
   }
@@ -291,6 +291,9 @@ export class LayerManager extends RefCounted {
     return {
       * [Symbol.iterator]() {
           for (let managedLayer of layerManager.managedLayers) {
+            if (managedLayer.layer === null) {
+              continue;
+            }
             for (let renderLayer of managedLayer.layer.renderLayers) {
               yield renderLayer;
             }
@@ -304,7 +307,7 @@ export class LayerManager extends RefCounted {
     return {
       * [Symbol.iterator]() {
           for (let managedLayer of layerManager.managedLayers) {
-            if (!managedLayer.visible) {
+            if (managedLayer.layer === null || !managedLayer.visible) {
               continue;
             }
             for (let renderLayer of managedLayer.layer.renderLayers) {
@@ -317,7 +320,7 @@ export class LayerManager extends RefCounted {
 
   invokeAction(action: string) {
     for (let managedLayer of this.managedLayers) {
-      if (!managedLayer.visible) {
+      if (managedLayer.layer === null || !managedLayer.visible) {
         continue;
       }
       let userLayer = managedLayer.layer;
@@ -338,10 +341,10 @@ export class MouseSelectionState {
   changed = new Signal();
   position = vec3.create();
   active = false;
-  pickedRenderLayer: RenderLayer = null;
+  pickedRenderLayer: RenderLayer|null = null;
   pickedValue = new Uint64(0, 0);
 
-  updater: (mouseState: MouseSelectionState) => boolean;
+  updater: ((mouseState: MouseSelectionState) => boolean)|undefined = undefined;
 
   stale = false;
 

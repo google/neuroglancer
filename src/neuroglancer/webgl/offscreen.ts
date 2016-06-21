@@ -22,11 +22,11 @@ import {resizeTexture} from 'neuroglancer/webgl/texture';
 import {trivialTextureShader} from 'neuroglancer/webgl/trivial_shaders';
 
 export class OffscreenFramebuffer extends RefCounted {
-  width: number = null;
-  height: number = null;
+  width = Number.NaN;
+  height = Number.NaN;
   framebuffer = this.gl.createFramebuffer();
-  depthBuffer: WebGLRenderbuffer = null;
-  dataTextures = new Array<WebGLRenderbuffer>();
+  depthBuffer: WebGLRenderbuffer|null = null;
+  dataTextures = new Array<WebGLTexture|null>();
   useStencilBuffer: boolean;
   private attachmentVerified = false;
   private tempPixel = new Uint8Array(4);
@@ -167,7 +167,7 @@ export class OffscreenCopyHelper extends RefCounted {
 
   private trivialTextureShader = this.registerDisposer(trivialTextureShader(this.gl));
 
-  draw(texture: WebGLTexture) {
+  draw(texture: WebGLTexture|null) {
     let {gl} = this;
     let shader = this.trivialTextureShader;
     shader.bind();

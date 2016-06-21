@@ -57,7 +57,7 @@ export class VolumeChunkSource extends GenericVolumeChunkSource {
       public parameters: VolumeSourceParameters) {
     super(chunkManager, spec);
     this.initializeCounterpart(
-        chunkManager.rpc, {'type': 'brainmaps/VolumeChunkSource', 'parameters': parameters});
+        chunkManager.rpc!, {'type': 'brainmaps/VolumeChunkSource', 'parameters': parameters});
   }
 
   toString() { return volumeSourceToString(this.parameters); }
@@ -181,7 +181,7 @@ export class MeshSource extends GenericMeshSource {
   constructor(chunkManager: ChunkManager, public parameters: MeshSourceParameters) {
     super(chunkManager);
     this.initializeCounterpart(
-        this.chunkManager.rpc, {'type': 'brainmaps/MeshSource', 'parameters': parameters});
+        this.chunkManager.rpc!, {'type': 'brainmaps/MeshSource', 'parameters': parameters});
   }
   toString() { return meshSourceToString(this.parameters); }
 };
@@ -223,7 +223,7 @@ export class VolumeList {
       for (let volumeId of volumeIds) {
         let componentStart = 0;
         while (true) {
-          let nextColon = volumeId.indexOf(':', componentStart);
+          let nextColon: number|undefined = volumeId.indexOf(':', componentStart);
           if (nextColon === -1) {
             nextColon = undefined;
           } else {

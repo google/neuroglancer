@@ -62,7 +62,7 @@ export abstract class SingleTextureChunkFormat<TextureLayout extends Disposable>
    */
   bindChunk<Data>(
       gl: GL, shader: ShaderProgram, chunk: SingleTextureVolumeChunk<Data, TextureLayout>) {
-    let {textureLayout} = chunk;
+    let textureLayout = chunk.textureLayout!;
     let existingTextureLayout = (<any>shader)[textureLayoutSymbol];
     if (existingTextureLayout !== textureLayout) {
       (<any>shader)[textureLayoutSymbol] = textureLayout;
@@ -74,9 +74,9 @@ export abstract class SingleTextureChunkFormat<TextureLayout extends Disposable>
 
 export abstract class SingleTextureVolumeChunk<Data, TextureLayout extends Disposable> extends
     VolumeChunk {
-  texture: WebGLTexture = null;
+  texture: WebGLTexture|null = null;
   data: Data;
-  textureLayout: TextureLayout;
+  textureLayout: TextureLayout|null;
 
   constructor(source: VolumeChunkSource, x: any) {
     super(source, x);
@@ -99,7 +99,7 @@ export abstract class SingleTextureVolumeChunk<Data, TextureLayout extends Dispo
     super.freeGPUMemory(gl);
     gl.deleteTexture(this.texture);
     this.texture = null;
-    this.textureLayout.dispose();
+    this.textureLayout!.dispose();
     this.textureLayout = null;
   }
 };

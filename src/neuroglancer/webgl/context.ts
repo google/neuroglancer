@@ -28,8 +28,6 @@ export interface GL extends WebGLRenderingContext {
 export const DEBUG_SHADERS = false;
 
 export function initializeWebGL(canvas: HTMLCanvasElement) {
-  let gl: GL = null;
-
   let options: any = {
     'antialias': false,
     'stencil': true,
@@ -38,7 +36,7 @@ export function initializeWebGL(canvas: HTMLCanvasElement) {
     console.log('DEBUGGING via preserveDrawingBuffer');
     options['preserveDrawingBuffer'] = true;
   }
-  gl =
+  let gl =
       <GL>(canvas.getContext('webgl', options) || canvas.getContext('experimental-webgl', options));
   gl.memoize = new Memoize<any, RefCounted>();
   gl.maxTextureSize = gl.getParameter(gl.MAX_TEXTURE_SIZE);

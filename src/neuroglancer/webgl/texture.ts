@@ -32,7 +32,7 @@ export function setRawTextureParameters(gl: WebGLRenderingContext) {
 }
 
 export function resizeTexture(
-    gl: GL, texture: WebGLTexture, width: number, height: number, format: number = gl.RGBA,
+    gl: GL, texture: WebGLTexture|null, width: number, height: number, format: number = gl.RGBA,
     dataType: number = gl.UNSIGNED_BYTE) {
   gl.activeTexture(gl.TEXTURE0 + gl.tempTextureUnit);
   gl.bindTexture(gl.TEXTURE_2D, texture);
@@ -43,6 +43,6 @@ export function resizeTexture(
       /*width=*/width,
       /*height=*/height,
       /*border=*/0,
-      /*format=*/format, dataType, null);
+      /*format=*/format, dataType, <any>null);
   gl.bindTexture(gl.TEXTURE_2D, null);
 }

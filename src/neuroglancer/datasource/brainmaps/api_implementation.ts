@@ -29,8 +29,8 @@ export type Token = any;
 export class Implementation { getNewTokenPromise: (invalidToken: Token) => Promise<Token>; }
 export var implementation = new Implementation();
 
-let promise: Promise<Token> = null;
-let token: Token = null;
+let promise: Promise<Token>|null = null;
+let token: Token|null = null;
 
 export function getToken(invalidToken?: Token) {
   if (promise !== null && (token === null || invalidToken == null ||

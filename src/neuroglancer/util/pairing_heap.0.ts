@@ -66,16 +66,16 @@ export default class Implementation<T extends Node<T>> implements PairingHeapOpe
     // While in this function, we will use the nextProperty to create a
     // singly-linked list of pairwise-merged nodes that still need to be
     // merged together.
-    let head: T = null;
+    let head: T|null = null;
     while (true) {
-      let curNext = cur.next0;
-      let next: T, m: T;
+      let curNext: T|null = cur.next0;
+      let next: T|null, m: T;
       if (curNext === null) {
         next = null;
         m = cur;
       } else {
         next = curNext.next0;
-        m = this.meld(cur, curNext);
+        m = this.meld(cur, curNext)!;
       }
       m.next0 = head;
       head = m;
@@ -91,8 +91,8 @@ export default class Implementation<T extends Node<T>> implements PairingHeapOpe
       if (head === null) {
         break;
       }
-      let next = head.next0;
-      root = this.meld(root, head);
+      let next: T|null = head.next0;
+      root = this.meld(root, head)!;
       head = next;
     }
     root.prev0 = null;
@@ -111,8 +111,8 @@ export default class Implementation<T extends Node<T>> implements PairingHeapOpe
     if (root === node) {
       return this.removeMin(root);
     }
-    var prev = node.prev0;
-    var next = node.next0;
+    var prev = node.prev0!;
+    var next = node.next0!;
     if (prev.child0 === node) {
       prev.child0 = next;
     } else {
@@ -121,11 +121,11 @@ export default class Implementation<T extends Node<T>> implements PairingHeapOpe
     if (next !== null) {
       next.prev0 = prev;
     }
-    root = this.meld(root, this.combineChildren(node));
+    let newRoot = this.meld(root, this.combineChildren(node));
     node.next0 = null;
     node.prev0 = null;
     node.child0 = null;
-    return root;
+    return newRoot;
   }
 
   /**
@@ -136,7 +136,7 @@ export default class Implementation<T extends Node<T>> implements PairingHeapOpe
       let child = root.child0;
       yield root;
       while (child !== null) {
-        let next = child.next0;
+        let next: T|null = child.next0;
         yield* this.entries(child);
         child = next;
       }
@@ -155,7 +155,7 @@ export default class Implementation<T extends Node<T>> implements PairingHeapOpe
       root.prev0 = null;
       yield root;
       while (child !== null) {
-        let next = child.next0;
+        let next: T|null = child.next0;
         child.child0 = null;
         child.next0 = null;
         child.prev0 = null;

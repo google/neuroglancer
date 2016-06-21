@@ -17,9 +17,9 @@
 import {PairingHeapOperations} from 'neuroglancer/util/pairing_heap';
 
 interface Node<T> {
-  CHILD_PROPERTY: T | null;
-  NEXT_PROPERTY: T | null;
-  PREV_PROPERTY: T | null;
+  CHILD_PROPERTY: T|null;
+  NEXT_PROPERTY: T|null;
+  PREV_PROPERTY: T|null;
 }
 
 /**
@@ -29,14 +29,13 @@ interface Node<T> {
  *
  * @final
  */
-export default class Implementation<T extends Node<T>> implements
-    PairingHeapOperations<T> {
+export default class Implementation<T extends Node<T>> implements PairingHeapOperations<T> {
   /**
    * @param compare Returns true iff a < b.
    */
   constructor(public compare: (a: T, b: T) => boolean) {}
 
-  meld(a: T | null, b: T | null) {
+  meld(a: T|null, b: T|null) {
     if (b === null) {
       return a;
     }
@@ -66,16 +65,16 @@ export default class Implementation<T extends Node<T>> implements
     // While in this function, we will use the nextProperty to create a
     // singly-linked list of pairwise-merged nodes that still need to be
     // merged together.
-    let head: T = null;
+    let head: T|null = null;
     while (true) {
-      let curNext = cur.NEXT_PROPERTY;
-      let next: T, m: T;
+      let curNext: T|null = cur.NEXT_PROPERTY;
+      let next: T|null, m: T;
       if (curNext === null) {
         next = null;
         m = cur;
       } else {
         next = curNext.NEXT_PROPERTY;
-        m = this.meld(cur, curNext);
+        m = this.meld(cur, curNext)!;
       }
       m.NEXT_PROPERTY = head;
       head = m;
@@ -91,8 +90,8 @@ export default class Implementation<T extends Node<T>> implements
       if (head === null) {
         break;
       }
-      let next = head.NEXT_PROPERTY;
-      root = this.meld(root, head);
+      let next: T|null = head.NEXT_PROPERTY;
+      root = this.meld(root, head)!;
       head = next;
     }
     root.PREV_PROPERTY = null;
@@ -111,8 +110,8 @@ export default class Implementation<T extends Node<T>> implements
     if (root === node) {
       return this.removeMin(root);
     }
-    var prev = node.PREV_PROPERTY;
-    var next = node.NEXT_PROPERTY;
+    var prev = node.PREV_PROPERTY!;
+    var next = node.NEXT_PROPERTY!;
     if (prev.CHILD_PROPERTY === node) {
       prev.CHILD_PROPERTY = next;
     } else {
@@ -121,11 +120,11 @@ export default class Implementation<T extends Node<T>> implements
     if (next !== null) {
       next.PREV_PROPERTY = prev;
     }
-    root = this.meld(root, this.combineChildren(node));
+    let newRoot = this.meld(root, this.combineChildren(node));
     node.NEXT_PROPERTY = null;
     node.PREV_PROPERTY = null;
     node.CHILD_PROPERTY = null;
-    return root;
+    return newRoot;
   }
 
   /**
@@ -136,8 +135,8 @@ export default class Implementation<T extends Node<T>> implements
       let child = root.CHILD_PROPERTY;
       yield root;
       while (child !== null) {
-        let next = child.NEXT_PROPERTY;
-        yield * this.entries(child);
+        let next: T|null = child.NEXT_PROPERTY;
+        yield* this.entries(child);
         child = next;
       }
     }
@@ -155,11 +154,11 @@ export default class Implementation<T extends Node<T>> implements
       root.PREV_PROPERTY = null;
       yield root;
       while (child !== null) {
-        let next = child.NEXT_PROPERTY;
+        let next: T|null = child.NEXT_PROPERTY;
         child.CHILD_PROPERTY = null;
         child.NEXT_PROPERTY = null;
         child.PREV_PROPERTY = null;
-        yield * this.entries(child);
+        yield* this.entries(child);
         child = next;
       }
     }

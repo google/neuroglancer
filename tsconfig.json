@@ -4,7 +4,7 @@
     "noImplicitReturns": true,
     "noImplicitThis": true,
     "preserveConstEnums": true,
-    "strictNullChecks": false,
+    "strictNullChecks": true,
     "sourceMap": true,
     "module": "commonjs",
     "target": "ES2015",

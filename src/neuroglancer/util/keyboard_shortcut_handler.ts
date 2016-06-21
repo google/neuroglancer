@@ -183,7 +183,7 @@ export function getEventKeyName(event: KeyboardEvent): string {
 export function parseKeyStroke(strokeIdentifier: string) {
   strokeIdentifier = strokeIdentifier.toLowerCase().replace(' ', '');
   let parts = strokeIdentifier.split('+');
-  let keyName: string = undefined;
+  let keyName: string|null|undefined;
   let modifiers = 0;
   for (let part of parts) {
     switch (part) {
@@ -248,8 +248,8 @@ function* keySequenceMapEntries(
 
 export class KeySequenceMap {
   root = new Map<string, any>();
-  constructor(bindings: Bindings = null) {
-    if (bindings != null) {
+  constructor(bindings?: Bindings) {
+    if (bindings !== undefined) {
       this.bindMultiple(bindings);
     }
   }
@@ -307,7 +307,7 @@ export function pushGlobalKeyboardHandler(
 }
 
 export function popGlobalKeyboardHandler() {
-  let [keySequenceMap, handler, identifier] = globalKeyboardHandlerStack.pop();
+  let [keySequenceMap, handler, identifier] = globalKeyboardHandlerStack.pop()!;
   globalKeyboardHandler.setKeySequenceMap(keySequenceMap);
   globalKeyboardHandler.handler = handler;
   globalKeyboardState = identifier;
@@ -322,7 +322,7 @@ export class GlobalKeyboardShortcutHandler extends RefCounted {
     if (globalKeyboardState === this) {
       popGlobalKeyboardHandler();
     } else {
-      let index = globalKeyboardHandlerStack.findIndex(stackEntry => stackEntry[2] === this);
+      let index = globalKeyboardHandlerStack.findIndex(stackEntry => stackEntry[2] === this)!;
       globalKeyboardHandlerStack.splice(index, 1);
     }
   }

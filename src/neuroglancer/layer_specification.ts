@@ -38,7 +38,7 @@ export function getVolumeWithStatusMessage(x: string): Promise<MultiscaleVolumeC
 }
 
 export class ManagedUserLayerWithSpecification extends ManagedUserLayer {
-  sourceUrl: string;
+  sourceUrl: string|undefined;
 
   constructor(
       name: string, public initialSpecification: any, public manager: LayerListSpecification) {

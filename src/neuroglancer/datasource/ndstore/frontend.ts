@@ -47,7 +47,7 @@ export class VolumeChunkSource extends GenericVolumeChunkSource {
       public key: string, public channel: string, public resolution: string,
       public encoding: string) {
     super(chunkManager, spec);
-    this.initializeCounterpart(chunkManager.rpc, {
+    this.initializeCounterpart(chunkManager.rpc!, {
       'type': 'ndstore/VolumeChunkSource',
       'hostnames': hostnames,
       'key': key,
@@ -94,10 +94,11 @@ export class MultiscaleVolumeChunkSource implements GenericMultiscaleVolumeChunk
     }
     this.volumeType = volumeType;
     let dataTypeStr = channelObject['datatype'];
-    let dataType = this.dataType = serverDataTypes.get(dataTypeStr);
+    let dataType = serverDataTypes.get(dataTypeStr);
     if (dataType === undefined) {
       throw new Error(`Unsupported data type ${JSON.stringify(dataTypeStr)}`);
     }
+    this.dataType = dataType;
     this.numChannels = 1;
   }
 
@@ -137,9 +138,9 @@ export class MultiscaleVolumeChunkSource implements GenericMultiscaleVolumeChunk
         let cacheKey = stableStringify(
             {'spec': spec, key: this.key, channel: this.channel, resolution: resolution});
         alternatives.push(chunkManager.getChunkSource(
-            VolumeChunkSource, cacheKey,
-            () => new VolumeChunkSource(
-                chunkManager, spec, this.hostnames, this.key, this.channel, resolution, encoding)));
+            VolumeChunkSource, cacheKey, () => new VolumeChunkSource(
+                                             chunkManager, spec, this.hostnames, this.key,
+                                             this.channel, resolution, encoding!)));
       }
     }
     return sources;
@@ -238,14 +239,15 @@ export function tokenAndChannelCompleter(
       if (typeof channelsObject === 'object' && channelsObject !== null &&
           !Array.isArray(channelsObject)) {
         let channelNames = Object.keys(channelsObject);
-        completions = getPrefixMatchesWithDescriptions(channelMatch[2], channelNames, x => x, x => {
-          let channelObject = channelsObject[x];
-          return `${channelObject['channel_type']} (${channelObject['datatype']})`;
+        completions =
+            getPrefixMatchesWithDescriptions(channelMatch![2], channelNames, x => x, x => {
+              let channelObject = channelsObject[x];
+              return `${channelObject['channel_type']} (${channelObject['datatype']})`;
 
-        });
+            });
       }
     }
-    return {offset: channelMatch[1].length + 1, completions};
+    return {offset: channelMatch![1].length + 1, completions};
   });
 }
 
@@ -259,7 +261,7 @@ export function volumeCompleter(url: string): CancellablePromise<CompletionResul
   let path = match[2];
   return cancellableThen(
       tokenAndChannelCompleter(hostnames, path),
-      completions => applyCompletionOffset(match[1].length + 1, completions));
+      completions => applyCompletionOffset(match![1].length + 1, completions));
 }
 
 registerDataSourceFactory('ndstore', {

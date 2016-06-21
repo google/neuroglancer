@@ -53,7 +53,7 @@ export class ManifestChunk extends Chunk {
     this.systemMemoryBytes = 100;
     super.downloadSucceeded();
     if (this.priorityTier === ChunkPriorityTier.VISIBLE) {
-      this.source.chunkManager.scheduleUpdateChunkPriorities();
+      this.source!.chunkManager.scheduleUpdateChunkPriorities();
     }
   }
 
@@ -64,8 +64,8 @@ export class ManifestChunk extends Chunk {
  * Chunk that contains the mesh for a single fragment of a single object.
  */
 export class FragmentChunk extends Chunk {
-  manifestChunk: ManifestChunk = null;
-  fragmentId: FragmentId = null;
+  manifestChunk: ManifestChunk|null = null;
+  fragmentId: FragmentId|null = null;
   vertexPositions: Float32Array|null = null;
   indices: Uint32Array|null = null;
   vertexNormals: Float32Array|null = null;
@@ -82,18 +82,18 @@ export class FragmentChunk extends Chunk {
   }
   serialize(msg: any, transfers: any[]) {
     super.serialize(msg, transfers);
-    msg['objectKey'] = this.manifestChunk.key;
+    msg['objectKey'] = this.manifestChunk!.key;
     let {vertexPositions, indices, vertexNormals} = this;
     msg['vertexPositions'] = vertexPositions;
     msg['indices'] = indices;
     msg['vertexNormals'] = vertexNormals;
-    let vertexPositionsBuffer = vertexPositions.buffer;
+    let vertexPositionsBuffer = vertexPositions!.buffer;
     transfers.push(vertexPositionsBuffer);
-    let indicesBuffer = indices.buffer;
+    let indicesBuffer = indices!.buffer;
     if (indicesBuffer !== vertexPositionsBuffer) {
       transfers.push(indicesBuffer);
     }
-    let vertexNormalsBuffer = vertexNormals.buffer;
+    let vertexNormalsBuffer = vertexNormals!.buffer;
     if (vertexNormalsBuffer !== vertexPositionsBuffer && vertexNormalsBuffer !== indicesBuffer) {
       transfers.push(vertexNormalsBuffer);
     }
@@ -102,7 +102,7 @@ export class FragmentChunk extends Chunk {
   downloadSucceeded() {
     let {vertexPositions, indices, vertexNormals} = this;
     this.systemMemoryBytes = this.gpuMemoryBytes =
-        vertexPositions.byteLength + indices.byteLength + vertexNormals.byteLength;
+        vertexPositions!.byteLength + indices!.byteLength + vertexNormals!.byteLength;
     super.downloadSucceeded();
   }
 };
@@ -253,8 +253,8 @@ export abstract class MeshSource extends ChunkSource {
 };
 
 export class FragmentSource extends ChunkSource {
-  meshSource: MeshSource = null;
-  download(chunk: FragmentChunk) { this.meshSource.downloadFragment(chunk); }
+  meshSource: MeshSource|null = null;
+  download(chunk: FragmentChunk) { this.meshSource!.downloadFragment(chunk); }
 };
 registerSharedObject('mesh/FragmentSource', FragmentSource);
 
@@ -285,7 +285,7 @@ class MeshLayer extends SharedObjectCounterpart {
       chunkManager.requestChunk(
           manifestChunk, ChunkPriorityTier.VISIBLE, MESH_OBJECT_MANIFEST_CHUNK_PRIORITY);
       if (manifestChunk.state === ChunkState.SYSTEM_MEMORY_WORKER) {
-        for (let fragmentId of manifestChunk.fragmentIds) {
+        for (let fragmentId of manifestChunk.fragmentIds!) {
           let fragmentChunk = source.getFragmentChunk(manifestChunk, fragmentId);
           chunkManager.requestChunk(
               fragmentChunk, ChunkPriorityTier.VISIBLE, MESH_OBJECT_FRAGMENT_CHUNK_PRIORITY);

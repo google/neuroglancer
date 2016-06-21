@@ -33,7 +33,7 @@ class LayerWidget extends RefCounted {
   valueElement: HTMLSpanElement;
   dropdownElement: HTMLDivElement;
   dropdown: UserLayerDropdown|undefined;
-  userLayer: UserLayer;
+  userLayer: UserLayer|null;
   hovering: boolean;
 
   constructor(public layer: ManagedUserLayer, public panel: LayerPanel) {
@@ -201,7 +201,7 @@ export class LayerPanel extends RefCounted {
 
   dispose() {
     this.layerWidgets.forEach(x => x.dispose());
-    this.layerWidgets = null;
+    this.layerWidgets = <any>undefined;
   }
 
   handleLayersChanged() {
@@ -221,10 +221,13 @@ export class LayerPanel extends RefCounted {
     this.updateLayers();
     let values = this.manager.layerSelectedValues;
     for (let [layer, widget] of this.layerWidgets) {
-      let value = values.get(layer.layer);
+      let userLayer = layer.layer;
       let text = '';
-      if (value !== undefined) {
-        text = '' + value;
+      if (userLayer !== null) {
+        let value = values.get(userLayer);
+        if (value !== undefined) {
+          text = '' + value;
+        }
       }
       widget.valueElement.textContent = text;
     }

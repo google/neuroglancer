@@ -85,7 +85,7 @@ export class SpatialPosition extends RefCounted {
   voxelSize: VoxelSize;
   spatialCoordinates: Vec3;
   spatialCoordinatesValid: boolean;
-  private voxelCoordinates: Vec3 = null;
+  private voxelCoordinates: Vec3|null = null;
   changed = new Signal();
   constructor(voxelSize?: VoxelSize, spatialCoordinates?: Vec3) {
     super();

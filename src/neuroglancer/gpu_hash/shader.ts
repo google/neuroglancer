@@ -39,9 +39,9 @@ float computeHash(uint64_t x, vec4 a0, vec4 a1, float b, float c, float modulus,
 export class GPUHashTable extends RefCounted {
   a: Float32Array;
   b: Float32Array;
-  hashFunctions: HashFunction[][] = null;
-  generation: number = null;
-  textures = new Array<WebGLTexture>();
+  hashFunctions: HashFunction[][]|null = null;
+  generation = -1;
+  textures = new Array<WebGLTexture|null>();
 
   constructor(public gl: GL, public hashTable: HashTable) {
     super();
@@ -50,6 +50,7 @@ export class GPUHashTable extends RefCounted {
     this.b = new Float32Array(numAlternatives * 4 + 5);
     let {textures} = this;
     for (let i = 0; i < numAlternatives; ++i) {
+      // createTexture should never actually return null.
       textures[i] = gl.createTexture();
     }
   }
@@ -123,9 +124,9 @@ export class GPUHashTable extends RefCounted {
   disposed() {
     let {gl} = this;
     this.textures.forEach((texture) => { gl.deleteTexture(texture); });
-    this.textures = null;
-    this.gl = null;
-    this.hashTable = null;
+    this.textures = <any>undefined;
+    this.gl = <any>undefined;
+    this.hashTable = <any>undefined;
     this.hashFunctions = null;
   }
 

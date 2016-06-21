@@ -37,12 +37,12 @@ export class SkeletonChunk extends Chunk {
   freeSystemMemory() { this.data = null; }
   serialize(msg: any, transfers: any[]) {
     super.serialize(msg, transfers);
-    let data = msg['data'] = this.data;
+    let data = msg['data'] = this.data!;
     transfers.push(data.buffer);
     this.data = null;
   }
   downloadSucceeded() {
-    this.systemMemoryBytes = this.gpuMemoryBytes = this.data.byteLength;
+    this.systemMemoryBytes = this.gpuMemoryBytes = this.data!.byteLength;
     super.downloadSucceeded();
   }
 };

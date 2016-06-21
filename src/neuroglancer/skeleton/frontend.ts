@@ -138,7 +138,7 @@ export class SkeletonLayer extends RefCounted {
         displayState.segmentSelectionState.changed.add(dispatchRedrawNeeded));
 
     let sharedObject = this.registerDisposer(new SharedObject());
-    sharedObject.initializeCounterpart(chunkManager.rpc, {
+    sharedObject.initializeCounterpart(chunkManager.rpc!, {
       'type': 'skeleton/SkeletonLayer',
       'chunkManager': chunkManager.rpcId,
       'source': source.addCounterpartRef(),

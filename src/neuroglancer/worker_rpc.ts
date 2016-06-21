@@ -48,7 +48,7 @@ export class RPC {
       if (DEBUG_MESSAGES) {
         console.log('Received message', data);
       }
-      handlers.get(data.functionName).call(this, data);
+      handlers.get(data.functionName)!.call(this, data);
     };
   }
 
@@ -76,8 +76,8 @@ export class RPC {
 };
 
 export class SharedObject extends RefCounted {
-  rpc: RPC = null;
-  rpcId: RpcId = null;
+  rpc: RPC|null = null;
+  rpcId: RpcId|null = null;
   isOwner: boolean|undefined;
   unreferencedGeneration: number|undefined;
   referencedGeneration: number|undefined;
@@ -111,7 +111,7 @@ export class SharedObject extends RefCounted {
         this.ownerDispose();
       }
     } else if (this.isOwner === false) {
-      this.rpc.invoke(
+      this.rpc!.invoke(
           'SharedObject.refCountReachedZero', {'id': this.rpcId, 'gen': this.referencedGeneration});
     } else {
       super.refCountReachedZero();
@@ -123,12 +123,12 @@ export class SharedObject extends RefCounted {
    */
   protected ownerDispose() {
     if (DEBUG) {
-      console.log(`[${IS_WORKER}] #rpc object = ${this.rpc.numObjects}`);
+      console.log(`[${IS_WORKER}] #rpc object = ${this.rpc!.numObjects}`);
     }
     let {rpc, rpcId} = this;
     super.refCountReachedZero();
-    rpc.delete(rpcId);
-    rpc.invoke('SharedObject.dispose', {'id': rpcId});
+    rpc!.delete(rpcId!);
+    rpc!.invoke('SharedObject.dispose', {'id': rpcId});
   }
 
   /**
@@ -168,7 +168,7 @@ registerRPC('SharedObject.dispose', function(x) {
     console.log(`[${IS_WORKER}] #rpc objects: ${this.numObjects}`);
   }
   obj.disposed();
-  this.delete(obj.rpcId);
+  this.delete(obj.rpcId!);
   obj.rpcId = null;
   obj.rpc = null;
 });
@@ -188,7 +188,7 @@ export function registerSharedObject(name: string, constructorFunction: SharedOb
 registerRPC('SharedObject.new', function(x) {
   let rpc = <RPC>this;
   let typeName = <string>x['type'];
-  let constructorFunction = sharedObjectConstructors.get(typeName);
+  let constructorFunction = sharedObjectConstructors.get(typeName)!;
   let obj = new constructorFunction(rpc, x);
   // Counterpart objects start with a reference count of zero.
   --obj.refCount;

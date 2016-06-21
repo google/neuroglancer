@@ -82,7 +82,7 @@ export class SegmentSetWidget extends RefCounted implements SegmentationDisplayS
       this.addElement(x.toString());
     } else {
       let s = x.toString();
-      let itemElement = items.get(s);
+      let itemElement = items.get(s)!;
       itemElement.parentElement.removeChild(itemElement);
       items.delete(s);
     }
@@ -95,15 +95,15 @@ export class SegmentSetWidget extends RefCounted implements SegmentationDisplayS
     itemElement.title = `Remove segment ID ${s}`;
     let widget = this;
     itemElement.addEventListener('click', function(this: ItemElement) {
-      temp.parseString(this.textContent);
+      temp.parseString(this.textContent!);
       widget.visibleSegments.delete(temp);
     });
     itemElement.addEventListener('mouseenter', function(this: ItemElement) {
-      temp.parseString(this.textContent);
+      temp.parseString(this.textContent!);
       widget.segmentSelectionState.set(temp);
     });
     itemElement.addEventListener('mouseleave', function(this: ItemElement) {
-      temp.parseString(this.textContent);
+      temp.parseString(this.textContent!);
       widget.segmentSelectionState.set(null);
     });
     this.setItemColor(itemElement);
@@ -112,7 +112,7 @@ export class SegmentSetWidget extends RefCounted implements SegmentationDisplayS
   }
 
   private setItemColor(itemElement: ItemElement) {
-    temp.parseString(itemElement.textContent);
+    temp.parseString(itemElement.textContent!);
     itemElement.style.backgroundColor = this.segmentColorHash.computeCssColor(temp);
   }
 

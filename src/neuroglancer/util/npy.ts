@@ -42,7 +42,8 @@ supportedDataTypes.set('|u1', {
   dataType: DataType.UINT8,
 });
 for (let [endiannessChar, endianness] of <[string, Endianness][]>[
-         ['<', Endianness.LITTLE], ['>', Endianness.BIG]]) {
+       ['<', Endianness.LITTLE], ['>', Endianness.BIG]
+     ]) {
   supportedDataTypes.set(`${endiannessChar}u2`, {
     arrayConstructor: Uint16Array,
     elementBytes: 2,

@@ -43,7 +43,7 @@ export class VolumeChunkSource extends GenericVolumeChunkSource {
       chunkManager: ChunkManager, spec: VolumeChunkSpecification, public baseUrls: string[]|string,
       public path: string, public encoding: VolumeChunkEncoding) {
     super(chunkManager, spec);
-    this.initializeCounterpart(chunkManager.rpc, {
+    this.initializeCounterpart(chunkManager.rpc!, {
       'type': 'precomputed/VolumeChunkSource',
       'baseUrls': baseUrls,
       'path': path,
@@ -171,7 +171,7 @@ export class MeshSource extends GenericMeshSource {
       public lod: number) {
     super(chunkManager);
     this.initializeCounterpart(
-        this.chunkManager.rpc,
+        this.chunkManager.rpc!,
         {'type': 'precomputed/MeshSource', 'baseUrls': baseUrls, 'path': path, 'lod': lod});
   }
   toString() { return `precomputed:mesh:${this.baseUrls[0]}/${this.path}`; }

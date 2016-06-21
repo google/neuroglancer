@@ -27,7 +27,7 @@ import {Uint32ArrayBuilder} from 'neuroglancer/util/uint32array_builder.ts';
 const tempBuffer = new Uint32ArrayBuilder(20000);
 
 export function postProcessRawData(chunk: VolumeChunk, data: ArrayBufferView) {
-  const {spec} = chunk.source;
+  const {spec} = chunk.source!;
   if (spec.compressedSegmentationBlockSize) {
     const {dataType} = spec;
     tempBuffer.clear();
@@ -35,12 +35,12 @@ export function postProcessRawData(chunk: VolumeChunk, data: ArrayBufferView) {
       case DataType.UINT32:
         encodeChannelUint32(
             tempBuffer, spec.compressedSegmentationBlockSize, <Uint32Array>data,
-            chunk.chunkDataSize);
+            chunk.chunkDataSize!);
         break;
       case DataType.UINT64:
         encodeChannelUint64(
             tempBuffer, spec.compressedSegmentationBlockSize, <Uint32Array>data,
-            chunk.chunkDataSize);
+            chunk.chunkDataSize!);
         break;
       default:
         throw new Error(`Unsupported data type for compressed segmentation: ${DataType[dataType]}`);

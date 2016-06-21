@@ -65,7 +65,7 @@ export interface DataSourceFactory {
   getVolume?: (path: string) => Promise<MultiscaleVolumeChunkSource>;
   getMeshSource?: (chunkManager: ChunkManager, path: string, lod: number) => MeshSource;
   getSkeletonSource?: (chunkManager: ChunkManager, path: string) => SkeletonSource;
-  volumeCompleter?: (value: string) => CancellablePromise<CompletionResult|null>;
+  volumeCompleter?: (value: string) => CancellablePromise<CompletionResult>;
 
   /**
    * Returns a suggested layer name for the given volume source.
@@ -102,22 +102,22 @@ function getDataSource(url: string): [DataSourceFactory, string, string] {
 
 export function getVolume(url: string) {
   let [factories, path] = getDataSource(url);
-  return factories.getVolume(path);
+  return factories.getVolume!(path);
 }
 
 export function getMeshSource(chunkManager: ChunkManager, url: string, lod: number = 0) {
   let [factories, path] = getDataSource(url);
-  return factories.getMeshSource(chunkManager, path, lod);
+  return factories.getMeshSource!(chunkManager, path, lod);
 }
 
 export function getSkeletonSource(chunkManager: ChunkManager, url: string) {
   let [factories, path] = getDataSource(url);
-  return factories.getSkeletonSource(chunkManager, path);
+  return factories.getSkeletonSource!(chunkManager, path);
 }
 
 export function volumeCompleter(url: string): CancellablePromise<CompletionResult> {
-  // Check if url matches a protocol.
-  let protocolMatch = url.match(protocolPattern);
+  // Check if url matches a protocol.  Note that protocolPattern always matches.
+  let protocolMatch = url.match(protocolPattern)!;
   let protocol = protocolMatch[1];
   if (protocol === undefined) {
     // Return protocol completions.

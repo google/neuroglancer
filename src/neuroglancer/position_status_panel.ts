@@ -23,7 +23,7 @@ require('./position_status_panel.css');
 export class PositionStatusPanel extends RefCounted {
   private positionElements = new Array<HTMLInputElement>();
   private mouseElement: HTMLSpanElement;
-  private needsUpdate: number = null;
+  private needsUpdate: number|null = null;
   private tempPosition = vec3.create();
 
   constructor(public element: HTMLElement, public viewer: ViewerPositionState) {
@@ -136,7 +136,7 @@ export class PositionStatusPanel extends RefCounted {
     for (let x of this.positionElements) {
       this.element.removeChild(x);
     }
-    this.positionElements = null;
-    this.element = null;
+    this.positionElements = <any>undefined;
+    this.element = <any>undefined;
   }
 };

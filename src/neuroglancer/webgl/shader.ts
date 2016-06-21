@@ -92,11 +92,11 @@ export function getShader(gl: WebGLRenderingContext, source: string, shaderType:
   gl.compileShader(shader);
 
   if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
-    let log = gl.getShaderInfoLog(shader);
+    let log = gl.getShaderInfoLog(shader) || '';
     throw new ShaderCompilationError(shaderType, source, log, parseShaderErrors(log));
   }
 
-  return shader;
+  return shader!;
 }
 
 export type AttributeIndex = number;
@@ -106,8 +106,8 @@ export class ShaderProgram extends RefCounted {
   vertexShader: WebGLShader;
   fragmentShader: WebGLShader;
   attributes = new Map<string, AttributeIndex>();
-  uniforms = new Map<string, WebGLUniformLocation>();
-  textureUnits: Map<any, number> = null;
+  uniforms = new Map<string, WebGLUniformLocation|null>();
+  textureUnits: Map<any, number>;
 
   constructor(
       public gl: WebGLRenderingContext, public vertexSource: string, public fragmentSource: string,
@@ -125,14 +125,15 @@ export class ShaderProgram extends RefCounted {
     //   '</pre>');
     // }
 
-    let shaderProgram = this.program = gl.createProgram();
+    let shaderProgram = gl.createProgram();
     gl.attachShader(shaderProgram, vertexShader);
     gl.attachShader(shaderProgram, fragmentShader);
     gl.linkProgram(shaderProgram);
     if (!gl.getProgramParameter(shaderProgram, gl.LINK_STATUS)) {
-      let log = gl.getProgramInfoLog(shaderProgram);
+      let log = gl.getProgramInfoLog(shaderProgram) || '';
       throw new ShaderLinkError(vertexSource, fragmentSource, log);
     }
+    this.program = shaderProgram!;
 
     let {uniforms, attributes} = this;
     if (uniformNames) {
@@ -148,25 +149,25 @@ export class ShaderProgram extends RefCounted {
     }
   }
 
-  uniform(name: string): WebGLUniformLocation { return this.uniforms.get(name); }
+  uniform(name: string): WebGLUniformLocation { return this.uniforms.get(name)!; }
 
-  attribute(name: string): number { return this.attributes.get(name); }
+  attribute(name: string): number { return this.attributes.get(name)!; }
 
-  textureUnit(symbol: Symbol): number { return this.textureUnits.get(symbol); }
+  textureUnit(symbol: Symbol): number { return this.textureUnits.get(symbol)!; }
 
   bind() { this.gl.useProgram(this.program); }
 
   disposed() {
     let {gl} = this;
     gl.deleteShader(this.vertexShader);
-    this.vertexShader = null;
+    this.vertexShader = <any>undefined;
     gl.deleteShader(this.fragmentShader);
-    this.fragmentShader = null;
+    this.fragmentShader = <any>undefined;
     gl.deleteProgram(this.program);
-    this.program = null;
-    this.gl = null;
-    this.attributes = null;
-    this.uniforms = null;
+    this.program = <any>undefined;
+    this.gl = <any>undefined;
+    this.attributes = <any>undefined;
+    this.uniforms = <any>undefined;
   }
 };
 

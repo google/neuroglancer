@@ -15,14 +15,17 @@
  */
 
 /**
- * Facility for drawing a scale bar to indicate pixel size in physical length units.
+ * Facility for drawing a scale bar to indicate pixel size in physical length
+ * units.
  *
  * The physical length with which the scale bar is labeled will be of the form:
  *
  *   significand * 10^exponent
  *
- * Any exponent may be used, but the significand in the range [1, 10] will be equal to one of a
- * discrete set of allowed significand values, in order to ensure that the scale bar is easy to
+ * Any exponent may be used, but the significand in the range [1, 10] will be
+ * equal to one of a
+ * discrete set of allowed significand values, in order to ensure that the scale
+ * bar is easy to
  * understand.
  */
 
@@ -59,7 +62,8 @@ const ALLOWED_UNITS: LengthUnit[] = [
 
 export class ScaleBarDimensions {
   /**
-   * Allowed significand values.  1 is not included, but is always considered part of the set.
+   * Allowed significand values.  1 is not included, but is always considered
+   * part of the set.
    */
   allowedSignificands = DEFAULT_ALLOWED_SIGNIFICANDS;
 
@@ -90,7 +94,8 @@ export class ScaleBarDimensions {
   prevTargetLengthInPixels: number = 0;
 
   /**
-   * Updates physicalLength, physicalUnit, and lengthInPixels to be the optimal values corresponding
+   * Updates physicalLength, physicalUnit, and lengthInPixels to be the optimal
+   * values corresponding
    * to targetLengthInPixels and nanometersPerPixel.
    *
    * @returns true if the scale bar has changed, false if it is unchanged.
@@ -108,7 +113,8 @@ export class ScaleBarDimensions {
     const tenToThePowerExponent = Math.pow(10, exponent);
     const targetSignificand = targetNanometers / tenToThePowerExponent;
 
-    // Determine significand value in this.allowedSignificands that is closest to targetSignificand.
+    // Determine significand value in this.allowedSignificands that is closest
+    // to targetSignificand.
     let bestSignificand = 1;
     let {allowedSignificands} = this;
     for (let allowedSignificand of this.allowedSignificands) {

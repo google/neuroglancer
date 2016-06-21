@@ -55,7 +55,7 @@ export class VolumeChunkSource extends GenericVolumeChunkSource {
       chunkManager: ChunkManager, spec: VolumeChunkSpecification,
       public parameters: VolumeChunkSourceParameters) {
     super(chunkManager, spec);
-    this.initializeCounterpart(chunkManager.rpc, {
+    this.initializeCounterpart(chunkManager.rpc!, {
       'type': 'dvid/VolumeChunkSource',
       'parameters': parameters,
     });
@@ -184,7 +184,7 @@ export class TileChunkSource extends GenericVolumeChunkSource {
       chunkManager: ChunkManager, spec: VolumeChunkSpecification,
       public parameters: TileChunkSourceParameters) {
     super(chunkManager, spec);
-    this.initializeCounterpart(chunkManager.rpc, {
+    this.initializeCounterpart(chunkManager.rpc!, {
       'type': 'dvid/TileChunkSource',
       'parameters': parameters,
     });
@@ -366,7 +366,7 @@ export class ServerInfo {
   repositories: Map<string, RepositoryInfo>;
   constructor(obj: any) { this.repositories = parseRepositoriesInfo(obj); }
 
-  getNode(nodeKey: string) {
+  getNode(nodeKey: string): RepositoryInfo {
     // FIXME: Support non-root nodes.
     let matches: string[] = [];
     for (let key of this.repositories.keys()) {
@@ -378,7 +378,7 @@ export class ServerInfo {
       throw new Error(
           `Node key ${JSON.stringify(nodeKey)} matches ${JSON.stringify(matches)} nodes.`);
     }
-    return this.repositories.get(nodeKey);
+    return this.repositories.get(matches[0])!;
   }
 };
 
@@ -427,6 +427,9 @@ let existingVolumes = new Map<string, MultiscaleVolumeChunkSource>();
 export function getShardedVolume(baseUrls: string[], nodeKey: string, dataInstanceKey: string) {
   return getServerInfo(baseUrls).then(serverInfo => {
     let repositoryInfo = serverInfo.getNode(nodeKey);
+    if (repositoryInfo === undefined) {
+      throw new Error(`Invalid node: ${JSON.stringify(nodeKey)}.`);
+    }
     let dataInstanceInfo = repositoryInfo.dataInstances.get(dataInstanceKey);
     if (!(dataInstanceInfo instanceof VolumeDataInstanceInfo) &&
         !(dataInstanceInfo instanceof TileDataInstanceInfo)) {

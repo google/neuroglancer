@@ -34,10 +34,10 @@ export const CANCELLED = new CancellationError();
 export function makeCancellablePromise<T>(
     executor: (
         resolve: (value: T | PromiseLike<T>) => void, reject: (reason: any) => void,
-        onCancel: (callback: () => void) => void) => void) {
+        onCancel: (callback: (() => void) | undefined) => void) => void) {
   let finished = false;
-  let cancelHandler: () => void;
-  let cancelFunction: () => void;
+  let cancelHandler: (() => void)|undefined;
+  let cancelFunction: (() => void)|undefined;
   let promise: CancellablePromise<T> = new Promise<T>((resolve, reject) => {
     function resolver(value: T) {
       if (!finished) {
@@ -82,7 +82,7 @@ export function makeCancellablePromise<T>(
       }
     };
   });
-  promise.cancel = cancelFunction;
+  promise.cancel = cancelFunction!;
   return promise;
 }
 
@@ -105,7 +105,8 @@ export function cancelPromise<T>(promise: CancellablePromise<T>| null | undefine
  */
 export function callFinally<T>(
     inputPromise: CancellablePromise<T>,
-    handler: (onCancel: (newCancelHandler: () => void) => void) => void|PromiseLike<void>) {
+    handler: (onCancel: (newCancelHandler: (() => void) | undefined) => void) =>
+        void|PromiseLike<void>) {
   return makeCancellablePromise<T>((resolve, reject, onCancel) => {
     onCancel(() => { cancelPromise(inputPromise); });
     inputPromise.then(

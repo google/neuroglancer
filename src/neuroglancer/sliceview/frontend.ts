@@ -72,7 +72,7 @@ export class SliceView extends SliceViewBase {
     super();
     mat4.identity(this.dataToViewport);
     this.initializeCounterpart(
-        this.chunkManager.rpc, {'type': 'SliceView', 'chunkManager': chunkManager.rpcId});
+        this.chunkManager.rpc!, {'type': 'SliceView', 'chunkManager': chunkManager.rpcId});
     this.updateVisibleLayers();
 
     this.registerSignalBinding(
@@ -108,7 +108,7 @@ export class SliceView extends SliceViewBase {
     }
     this.visibleLayersStale = false;
     let visibleLayers = this.visibleLayers;
-    let rpc = this.rpc;
+    let rpc = this.rpc!;
     let rpcMessage: any = {'id': this.rpcId};
     // FIXME: avoid allocation?
     let newVisibleLayers = this.newVisibleLayers;
@@ -157,7 +157,7 @@ export class SliceView extends SliceViewBase {
   }
   setViewportSize(width: number, height: number) {
     if (super.setViewportSize(width, height)) {
-      this.rpc.invoke('SliceView.updateView', {id: this.rpcId, width: width, height: height});
+      this.rpc!.invoke('SliceView.updateView', {id: this.rpcId, width: width, height: height});
       // this.chunkManager.scheduleUpdateChunkPriorities();
       return true;
     }
@@ -167,7 +167,7 @@ export class SliceView extends SliceViewBase {
   onViewportToDataMatrixChanged() {
     let {viewportToData} = this;
     mat4.invert(this.dataToViewport, viewportToData);
-    this.rpc.invoke('SliceView.updateView', {id: this.rpcId, viewportToData: viewportToData});
+    this.rpc!.invoke('SliceView.updateView', {id: this.rpcId, viewportToData: viewportToData});
   }
 
   onHasValidViewport() { this.updateVisibleLayers(); }
@@ -181,7 +181,7 @@ export class SliceView extends SliceViewBase {
 
     let {gl, offscreenFramebuffer, width, height} = this;
 
-    offscreenFramebuffer.bind(width, height);
+    offscreenFramebuffer.bind(width!, height!);
     gl.disable(gl.SCISSOR_TEST);
 
     // we have viewportToData
@@ -264,7 +264,7 @@ export interface ChunkFormatHandler extends Disposable {
 }
 
 export type ChunkFormatHandlerFactory = (gl: GL, spec: VolumeChunkSpecification) =>
-    ChunkFormatHandler;
+    ChunkFormatHandler | null;
 
 var chunkFormatHandlers = new Array<ChunkFormatHandlerFactory>();
 
@@ -429,7 +429,7 @@ gl_Position = uProjectionMatrix * aVertexPosition;
   }
 
   draw(
-      texture: WebGLTexture, projectionMatrix: Mat4, colorFactor: Vec4, backgroundColor: Vec4,
+      texture: WebGLTexture|null, projectionMatrix: Mat4, colorFactor: Vec4, backgroundColor: Vec4,
       xStart: number, yStart: number, xEnd: number, yEnd: number) {
     let {gl, shader, textureCoordinateAdjustment} = this;
     textureCoordinateAdjustment[0] = xStart;

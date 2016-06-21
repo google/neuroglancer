@@ -106,7 +106,7 @@ export class MeshLayer extends PerspectiveViewRenderLayer {
         displayState.segmentSelectionState.changed.add(dispatchRedrawNeeded));
 
     let sharedObject = this.registerDisposer(new SharedObject());
-    sharedObject.initializeCounterpart(chunkManager.rpc, {
+    sharedObject.initializeCounterpart(chunkManager.rpc!, {
       'type': 'mesh/MeshLayer',
       'chunkManager': chunkManager.rpcId,
       'source': source.addCounterpartRef(),
@@ -200,7 +200,7 @@ export class FragmentSource extends ChunkSource {
   objectChunks = new Map<string, Set<FragmentChunk>>();
   constructor(chunkManager: ChunkManager, public meshSource: MeshSource) {
     super(chunkManager);
-    this.initializeCounterpart(chunkManager.rpc, {'type': 'mesh/FragmentSource'});
+    this.initializeCounterpart(chunkManager.rpc!, {'type': 'mesh/FragmentSource'});
   }
   addChunk(key: string, chunk: FragmentChunk) {
     super.addChunk(key, chunk);
@@ -218,7 +218,7 @@ export class FragmentSource extends ChunkSource {
     super.deleteChunk(key);
     let {objectChunks} = this;
     let {objectKey} = chunk;
-    let fragments = objectChunks.get(objectKey);
+    let fragments = objectChunks.get(objectKey)!;
     fragments.delete(chunk);
     if (fragments.size === 0) {
       objectChunks.delete(objectKey);

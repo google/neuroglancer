@@ -15,8 +15,8 @@
  */
 
 interface Node<T> {
-  NEXT_PROPERTY: T | null;
-  PREV_PROPERTY: T | null;
+  NEXT_PROPERTY: T|null;
+  PREV_PROPERTY: T|null;
 }
 
 export default class {

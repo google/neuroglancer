@@ -116,7 +116,7 @@ class ShaderCodeWidget extends RefCounted {
     if (error !== undefined) {
       this.textEditor.setOption('lint', {
         getAnnotations: () => {
-          if (error.name === 'ShaderCompilationError') {
+          if (error!.name === 'ShaderCompilationError') {
             let fragmentMainStartLine =
                 (<ShaderCompilationError>error).source.split('\n').indexOf(FRAGMENT_MAIN_START) + 2;
             return (<ShaderCompilationError>error).errorMessages.map(e => {
@@ -126,7 +126,7 @@ class ShaderCodeWidget extends RefCounted {
                 from: CodeMirror.Pos(e.line === undefined ? 0 : e.line - fragmentMainStartLine),
               };
             });
-          } else if (error.name === 'ShaderLinkError') {
+          } else if (error!.name === 'ShaderLinkError') {
             return [{
               message: (<ShaderLinkError>error).log,
               severity: 'error',
@@ -134,7 +134,7 @@ class ShaderCodeWidget extends RefCounted {
             }];
           } else {
             return [{
-              message: error.message,
+              message: error!.message,
               severity: 'error',
               from: CodeMirror.Pos(0),
             }];
@@ -160,10 +160,10 @@ class ShaderCodeWidget extends RefCounted {
   }
 
   disposed() {
-    (<{flush?: () => void}>this.debouncedValueUpdater).flush();
-    this.debouncedValueUpdater = undefined;
+    (<{flush?: () => void}>this.debouncedValueUpdater).flush!();
+    this.debouncedValueUpdater = <any>undefined;
     removeFromParent(this.element);
-    this.textEditor = undefined;
+    this.textEditor = <any>undefined;
   }
 };
 
