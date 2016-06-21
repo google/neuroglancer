@@ -15,6 +15,7 @@
 from PIL import Image
 import numpy as np
 import zlib
+import io
 
 def encode_jpeg(subvol):
   shape = subvol.shape
@@ -25,7 +26,9 @@ def encode_jpeg(subvol):
   return f.getvalue()
 def encode_npz(subvol):
   fileobj = io.BytesIO()
-  np.save(fileobj, subvol.reshape((1,) + subvol.shape))
+  if len(subvol.shape) == 3:
+    subvol = np.expand_dims(subvol, 0)
+  np.save(fileobj, subvol)
   cdz = zlib.compress(fileobj.getvalue())
   return cdz
 def encode_raw(subvol):

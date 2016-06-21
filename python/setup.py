@@ -8,7 +8,7 @@ import shutil
 
 static_files = [ 'main.bundle.js', 'chunk_worker.bundle.js', 'styles.css', 'index.html' ]
 
-class bundle_nodejs(build):
+class bundle_client(build):
 
     def run(self):
 
@@ -61,7 +61,8 @@ setup(
     },
     install_requires = [
         "Pillow>=3.2.0",
+        "numpy>=1.11.0",
     ],
     use_2to3 = True,
-    cmdclass = {'bundle_nodejs' : bundle_nodejs},
+    cmdclass = {'bundle_client' : bundle_client},
 )
