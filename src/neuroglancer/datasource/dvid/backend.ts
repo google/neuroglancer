@@ -15,12 +15,12 @@
  */
 
 import {handleChunkDownloadPromise} from 'neuroglancer/chunk_manager/backend';
-import {VolumeChunkSourceParameters, volumeSourceToString, TileChunkSourceParameters, tileSourceToString, TileEncoding} from 'neuroglancer/datasource/dvid/base';
+import {TileChunkSourceParameters, TileEncoding, VolumeChunkSourceParameters, tileSourceToString, volumeSourceToString} from 'neuroglancer/datasource/dvid/base';
 import {VolumeChunk, VolumeChunkSource as GenericVolumeChunkSource} from 'neuroglancer/sliceview/backend';
 import {ChunkDecoder} from 'neuroglancer/sliceview/backend_chunk_decoders';
 import {decodeJpegChunk} from 'neuroglancer/sliceview/backend_chunk_decoders/jpeg';
 import {decodeRawChunk} from 'neuroglancer/sliceview/backend_chunk_decoders/raw';
-import {sendHttpRequest, openShardedHttpRequest} from 'neuroglancer/util/http_request';
+import {openShardedHttpRequest, sendHttpRequest} from 'neuroglancer/util/http_request';
 import {RPC, registerSharedObject} from 'neuroglancer/worker_rpc';
 
 const TILE_CHUNK_DECODERS = new Map<TileEncoding, ChunkDecoder>([
@@ -42,12 +42,9 @@ class VolumeChunkSource extends GenericVolumeChunkSource {
       // computeChunkBounds.
       let chunkPosition = this.computeChunkBounds(chunk);
       let {chunkDataSize} = chunk;
- 
-      if (params['level'] == "0") {
-        path = `/api/node/${params['nodeKey']}/${params['dataInstanceKey']}/raw/0_1_2/${chunkDataSize[0]}_${chunkDataSize[1]}_${chunkDataSize[2]}/${chunkPosition[0]}_${chunkPosition[1]}_${chunkPosition[2]}/nd`;
-      } else {
-        path = `/api/node/${params['nodeKey']}/${params['dataInstanceKey']}_${params['level']}/raw/0_1_2/${chunkDataSize[0]}_${chunkDataSize[1]}_${chunkDataSize[2]}/${chunkPosition[0]}_${chunkPosition[1]}_${chunkPosition[2]}/nd`;
-      }
+
+      path =
+          `/api/node/${params['nodeKey']}/${params['dataInstanceKey']}/raw/0_1_2/${chunkDataSize[0]}_${chunkDataSize[1]}_${chunkDataSize[2]}/${chunkPosition[0]}_${chunkPosition[1]}_${chunkPosition[2]}/nd`;
     }
     handleChunkDownloadPromise(
         chunk, sendHttpRequest(openShardedHttpRequest(params.baseUrls, path), 'arraybuffer'),
@@ -72,10 +69,11 @@ class TileChunkSource extends GenericVolumeChunkSource {
 
     // Needed by decoder.
     chunk.chunkDataSize = this.spec.chunkDataSize;
-    let path = `/api/node/${params['nodeKey']}/${params['dataInstanceKey']}/tile/${params['dims']}/${params['level']}/${chunkGridPosition[0]}_${chunkGridPosition[1]}_${chunkGridPosition[2]}`;
+    let path =
+        `/api/node/${params['nodeKey']}/${params['dataInstanceKey']}/tile/${params['dims']}/${params['level']}/${chunkGridPosition[0]}_${chunkGridPosition[1]}_${chunkGridPosition[2]}`;
     handleChunkDownloadPromise(
         chunk, sendHttpRequest(openShardedHttpRequest(params.baseUrls, path), 'arraybuffer'),
-      this.chunkDecoder);
+        this.chunkDecoder);
   }
   toString() { return tileSourceToString(this.parameters); }
 };
