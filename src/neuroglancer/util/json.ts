@@ -449,3 +449,21 @@ export function parseQueryStringParameters(queryString: string) {
     return result;
   }
 }
+
+/**
+ * Verifies that `obj' is a string that, when converted to uppercase, matches a string property of
+ * `enumType`.
+ *
+ * Note: TypeScript does not seem to allow better typing of the return type.
+ *
+ * @returns The corresponding numerical value.
+ */
+export function verifyEnumString(obj: any, enumType: {[x: string]: any}): number {
+  if (typeof obj === 'string' && obj.match(/^[a-zA-Z]/) !== null) {
+    obj = obj.toUpperCase();
+    if (enumType.hasOwnProperty(obj)) {
+      return enumType[obj];
+    }
+  }
+  throw new Error(`Invalid enum value: ${JSON.stringify(obj)}.`);
+}

@@ -26,14 +26,8 @@ import {MultiscaleVolumeChunkSource as GenericMultiscaleVolumeChunkSource, Volum
 import {applyCompletionOffset, getPrefixMatchesWithDescriptions} from 'neuroglancer/util/completion';
 import {vec3} from 'neuroglancer/util/geom';
 import {openShardedHttpRequest, sendHttpRequest} from 'neuroglancer/util/http_request';
-import {parseArray, parseFiniteVec, parseIntVec, parseQueryStringParameters, stableStringify, verifyOptionalString, verifyString} from 'neuroglancer/util/json';
+import {parseArray, parseFiniteVec, parseIntVec, parseQueryStringParameters, stableStringify, verifyEnumString, verifyObjectProperty, verifyOptionalString, verifyString} from 'neuroglancer/util/json';
 import {CancellablePromise, cancellableThen} from 'neuroglancer/util/promise';
-
-let serverDataTypes = new Map<string, DataType>();
-serverDataTypes.set('uint8', DataType.UINT8);
-serverDataTypes.set('uint16', DataType.UINT16);
-serverDataTypes.set('uint32', DataType.UINT32);
-serverDataTypes.set('uint64', DataType.UINT64);
 
 let serverVolumeTypes = new Map<string, VolumeType>();
 serverVolumeTypes.set('image', VolumeType.IMAGE);
@@ -93,12 +87,8 @@ export class MultiscaleVolumeChunkSource implements GenericMultiscaleVolumeChunk
       volumeType = VolumeType.UNKNOWN;
     }
     this.volumeType = volumeType;
-    let dataTypeStr = channelObject['datatype'];
-    let dataType = serverDataTypes.get(dataTypeStr);
-    if (dataType === undefined) {
-      throw new Error(`Unsupported data type ${JSON.stringify(dataTypeStr)}`);
-    }
-    this.dataType = dataType;
+    this.dataType =
+        verifyObjectProperty(channelObject, 'datatype', x => verifyEnumString(x, DataType));
     this.numChannels = 1;
   }
 
