@@ -150,7 +150,10 @@ export class SkeletonLayer extends RefCounted {
 
   draw(
       renderContext: SliceViewPanelRenderContext, layer: RenderLayer, shader: ShaderProgram,
-      pickingOnly = false, lineWidth = pickingOnly? 5: 1) {
+      pickingOnly = false, lineWidth?: number) {
+    if (lineWidth === undefined) {
+      lineWidth = pickingOnly ? 5 : 1;
+    }
     let {gl, skeletonShaderManager} = this;
     shader.bind();
 

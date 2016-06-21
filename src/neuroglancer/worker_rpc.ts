@@ -37,9 +37,11 @@ interface RPCTarget {
   onmessage: (ev: MessageEvent) => any;
 }
 
+const INITIAL_RPC_ID = IS_WORKER ? -1 : 0;
+
 export class RPC {
   private objects = new Map<RpcId, any>();
-  private nextId: RpcId = IS_WORKER? -1: 0;
+  private nextId: RpcId = INITIAL_RPC_ID;
   constructor(public target: RPCTarget) {
     target.onmessage = (e) => {
       let data = e.data;

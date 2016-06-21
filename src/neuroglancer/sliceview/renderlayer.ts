@@ -127,9 +127,8 @@ class SliceViewShaderBuffers extends RefCounted {
     let vertexIndices: number[] = [];
     for (var p = 0; p < 8; ++p) {
       for (var i = 0; i < vertexBaseIndices.length; ++i) {
-        vertexIndices.push(
-            vertexUncorrectedToCorrected
-                [vertexPermutation[vertexCorrectedToUncorrected[p] * 8 + vertexBaseIndices[i]]]);
+        const vertexPermutationIndex = vertexCorrectedToUncorrected[p] * 8 + vertexBaseIndices[i];
+        vertexIndices.push(vertexUncorrectedToCorrected[vertexPermutation[vertexPermutationIndex]]);
       }
     }
 

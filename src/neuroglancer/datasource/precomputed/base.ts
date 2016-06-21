@@ -14,13 +14,8 @@
  * limitations under the License.
  */
 
-import 'neuroglancer/util/http_request';
-
 export enum VolumeChunkEncoding {
   RAW,
   JPEG,
   COMPRESSED_SEGMENTATION
 }
-
-// Prevent this from being considered a typings file.
-let x = 0;
