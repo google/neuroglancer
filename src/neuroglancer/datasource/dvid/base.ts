@@ -19,22 +19,18 @@ export interface DVIDSourceParameters {
   nodeKey: string;
   dataInstanceKey: string;
 }
-;
 
 export interface VolumeChunkSourceParameters extends DVIDSourceParameters { level: string; }
-;
 
 export enum TileEncoding {
   JPEG
 }
-;
 
 export interface TileChunkSourceParameters extends DVIDSourceParameters {
   dims: string;
   level: string;
   encoding: TileEncoding;
 }
-;
 
 export function volumeSourceToString(parameters: VolumeChunkSourceParameters) {
   return `dvid:volume:${parameters['baseUrls'][0]}/${parameters['nodeKey']}/${parameters['dataInstanceKey']}/${parameters['level']}`;
