@@ -1,1 +1,1 @@
-from neuroglancer import *
+from ndstore import serve

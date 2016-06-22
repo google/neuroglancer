@@ -31,38 +31,19 @@ import os
 import collections
 import json
 import posixpath
-import binascii
-import numpy as np
 import io
-import zlib
 import time
 import shutil
-
-from PIL import Image
+from volume import ServedVolume
+from chunks import encode_jpeg, encode_npz, encode_raw
+from token import make_random_token
+from static import content
 
 info_path_regex = re.compile(r'^/ocp/ca/([^/]+)/info/$')
 
 data_path_regex = re.compile(r'^/ocp/ca/([^/]+)/channel/([^/]+)/0/([0-9]+),([0-9]+)/([0-9]+),([0-9]+)/([0-9]+),([0-9]+)/neariso/')
 
 static_path_regex = re.compile(r'/static/([^/]+)/((?:[a-zA-Z0-9_\-][a-zA-Z0-9_\-.]*)?)$')
-
-def encode_jpeg(subvol):
-  shape = subvol.shape
-  reshaped = subvol.reshape(shape[0] * shape[1], shape[2])
-  img = Image.fromarray(reshaped)
-  f = io.BytesIO()
-  img.save(f, "JPEG")
-  return f.getvalue()
-def encode_npz(subvol):
-  fileobj = io.BytesIO()
-  np.save(fileobj, subvol.reshape((1,) + subvol.shape))
-  cdz = zlib.compress(fileobj.getvalue())
-  return cdz
-def encode_raw(subvol):
-  return subvol.tostring('C')
-
-def make_random_token():
-  return binascii.hexlify(os.urandom(20))
 
 mime_type_map = {
     '.css': 'text/css',
@@ -78,9 +59,10 @@ def guess_mime_type_from_path(path):
 class NDStoreCompatibleServer(ThreadingMixIn, HTTPServer):
   def __init__(self,
                bind_address='127.0.0.1',
+               bind_port=8888,
                static_file_open=open,
                static_file_path=None):
-    HTTPServer.__init__(self, (bind_address, 0), NDStoreCompatibleRequestHandler)
+    HTTPServer.__init__(self, (bind_address, bind_port), NDStoreCompatibleRequestHandler)
     self.daemon_threads = True
     if static_file_path is None:
       static_file_path = os.path.join(os.path.dirname(__file__), '../dist/dev')
@@ -88,19 +70,6 @@ class NDStoreCompatibleServer(ThreadingMixIn, HTTPServer):
     self.static_file_open = static_file_open
     self.volumes = dict()
     self.token = make_random_token()
-
-class ServedVolume(object):
-  def __init__(self, data, offset=(0,0,0), channel_type=None, voxel_size=(1,1,1)):
-    self.token = make_random_token()
-    self.data = data
-    self.voxel_size = voxel_size
-    self.offset = offset
-    self.shape = data.shape[::-1]
-    self.data_type = data.dtype.name
-    if self.data_type == 'uint8':
-      self.channel_type = 'image'
-    else:
-      self.channel_type = 'annotation'
 
 num_requests = 0
 
@@ -137,16 +106,14 @@ class NDStoreCompatibleRequestHandler(BaseHTTPRequestHandler):
       self.send_error(404)
     if path == '':
       path = 'index.html'
-    static_path = os.path.join(self.server.static_file_path, path)
     try:
-      with self.server.static_file_open(static_path) as f:
-        mime_type = guess_mime_type_from_path(path)
-        data = f.read()
-        self.send_response(200)
-        self.send_header('Content-type', mime_type)
-        self.send_header('Content-length', len(data))
-        self.end_headers()
-        self.wfile.write(data)
+      mime_type = guess_mime_type_from_path(path)
+      data = content[path]
+      self.send_response(200)
+      self.send_header('Content-type', mime_type)
+      self.send_header('Content-length', len(data))
+      self.end_headers()
+      self.wfile.write(data)
     except Exception as e:
       self.send_error(404)
 
