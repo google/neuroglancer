@@ -19,9 +19,18 @@ frustration later on.
 All submissions, including submissions by project members, require review.
 
 ### Coding Style
-For consistency, please run `clang-format` on all changed files, and ensure that `tslint` gives no warnings on changed files.  You can install `clang-format` and `tslint` globally (for your user) by running:
+For consistency, please ensure that all files are formatted by `clang-format` using the [.clang-format](.clang-format) style file.  You can verify this by running:
 ```shell
-npm install -g clang-format tslint
+npm run gulp check-format
+```
+To reformat all source files, run:
+```shell
+npm run gulp format
+```
+
+Please also ensure that `tslint` gives no warnings.  You can verify this by running:
+```shell
+npm run gulp tslint
 ```
 
 ### The small print

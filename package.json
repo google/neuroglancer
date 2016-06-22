@@ -20,12 +20,17 @@
     "test": "karma start ./config/karma.conf.js --single-run",
     "test:watch": "karma start ./config/karma.conf.js --no-single-run",
     "benchmark": "karma start ./config/karma.benchmark.js --single-run",
-    "benchmark:watch": "karma start ./config/karma.benchmark.js --no-single-run"
+    "benchmark:watch": "karma start ./config/karma.benchmark.js --no-single-run",
+    "gulp": "gulp"
   },
   "devDependencies": {
     "@types/jasmine": "^2.2.22-alpha",
+    "clang-format": "^1.0.42",
     "codemirror": "^5.15.2",
     "glsl-editor": "^1.0.0",
+    "gulp": "^3.9.1",
+    "gulp-clang-format": "^1.0.23",
+    "gulp-tslint": "^5.0.0",
     "istanbul": "github:gotwarlost/istanbul#master",
     "istanbul-instrumenter-loader": "^0.2.0",
     "jasmine-core": "^2.4.1",
@@ -40,6 +45,7 @@
     "karma-sourcemap-loader": "^0.3.7",
     "karma-webpack": "^1.7.0",
     "nunjucks": "^2.4.2",
+    "tslint": "^3.11.0",
     "tslint-eslint-rules": "^1.2.0",
     "webpack-dev-server": "^1.14.1"
   },
