@@ -153,6 +153,7 @@ function getBaseConfig(options) {
     module: {
       loaders: [
         getTypescriptLoaderEntry(options),
+        {test: /\.json$/, loader: require.resolve('json-loader')},
         {test: /\.css$/, loader: ExtractTextPlugin.extract('style-loader', 'css-loader')}, {
           test: /\.glsl$/,
           loader: require.resolve('raw-loader'),

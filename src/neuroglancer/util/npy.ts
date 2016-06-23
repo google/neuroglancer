@@ -20,8 +20,8 @@
  * See http://docs.scipy.org/doc/numpy-dev/neps/npy-format.html
  */
 
-import {DataType} from 'neuroglancer/util/data_type';
 import {TypedArrayConstructor} from 'neuroglancer/util/array';
+import {DataType} from 'neuroglancer/util/data_type';
 import {Endianness, convertEndian16, convertEndian32} from 'neuroglancer/util/endian';
 import {pythonLiteralParse} from 'neuroglancer/util/json';
 
@@ -63,7 +63,7 @@ for (let [endiannessChar, endianness] of <[string, Endianness][]>[
     elementBytes: 8,
     // We still maintain the low 32-bit value first.
     fixEndianness: array => { convertEndian32(array, endianness); },
-    javascriptElementsPerArrayElement: 1,
+    javascriptElementsPerArrayElement: 2,
     dataType: DataType.UINT64,
   });
   supportedDataTypes.set(`${endiannessChar}f4`, {
@@ -116,13 +116,13 @@ export function parseNpy(x: Uint8Array) {
   if (supportedDataType === undefined) {
     throw new Error(`Unsupported numpy data type ${JSON.stringify(dtype)}`);
   }
-  const totalDataBytes = supportedDataType.elementBytes * numElements;
+  let {arrayConstructor, javascriptElementsPerArrayElement} = supportedDataType;
+  const javascriptElements = javascriptElementsPerArrayElement * numElements;
+  const totalDataBytes = arrayConstructor.BYTES_PER_ELEMENT * javascriptElements;
   if (totalDataBytes + dataOffset !== x.byteLength) {
     throw new Error('Expected length does not match length of data');
   }
-  const data = new (supportedDataType.arrayConstructor)(
-      x.buffer, x.byteOffset + dataOffset,
-      numElements * supportedDataType.javascriptElementsPerArrayElement);
+  const data = new arrayConstructor(x.buffer, x.byteOffset + dataOffset, javascriptElements);
   supportedDataType.fixEndianness(data);
   return new NumpyArray(data, shape, supportedDataType, headerObject['fortran_order'] === true);
 }

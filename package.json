@@ -65,6 +65,7 @@
     "extract-text-webpack-plugin": "^1.0.1",
     "gl-matrix": "^2.3.2",
     "html-webpack-plugin": "^2.10.0",
+    "json-loader": "^0.5.4",
     "lodash": "^4.13.1",
     "pako": "^1.0.1",
     "raw-loader": "^0.5.1",
