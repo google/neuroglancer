@@ -20,10 +20,9 @@ import {makeRandomUint64Array} from 'neuroglancer/sliceview/compressed_segmentat
 import {prod4, vec3Key} from 'neuroglancer/util/geom';
 import {Uint32ArrayBuilder} from 'neuroglancer/util/uint32array_builder.ts';
 
-const exampleChunkData64 =
-    new Uint32Array((<Uint8Array><any>require(
-                         'raw-data!neuroglancer-testdata/64x64x64-raw-uint64-segmentation.dat'))
-                        .buffer);
+const exampleChunkData64 = new Uint32Array(
+    require<Uint8Array>('raw-data!neuroglancer-testdata/64x64x64-raw-uint64-segmentation.dat')
+        .buffer);
 
 const exampleChunkData32 =
     exampleChunkData64.filter((element, index) => { return index % 2 === 0; });
