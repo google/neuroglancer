@@ -14,5 +14,5 @@
  * limitations under the License.
  */
 
-var testContext = require.context('.', true, /\.spec\.ts/);
+var testContext = require.context('.', true, /\.spec\.ts$/);
 testContext.keys().map(testContext);
