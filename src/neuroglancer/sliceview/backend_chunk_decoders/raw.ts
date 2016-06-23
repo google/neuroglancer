@@ -16,7 +16,7 @@
 
 import {VolumeChunk} from 'neuroglancer/sliceview/backend';
 import {postProcessRawData} from 'neuroglancer/sliceview/backend_chunk_decoders/postprocess';
-import {DATA_TYPE_BYTES, DataType} from 'neuroglancer/sliceview/base';
+import {DATA_TYPE_BYTES, DataType} from 'neuroglancer/util/data_type';
 import {prod3} from 'neuroglancer/util/geom';
 
 export function decodeRawChunk(chunk: VolumeChunk, response: ArrayBuffer) {

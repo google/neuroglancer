@@ -20,7 +20,7 @@
  * See http://docs.scipy.org/doc/numpy-dev/neps/npy-format.html
  */
 
-import {DataType} from 'neuroglancer/sliceview/base';
+import {DataType} from 'neuroglancer/util/data_type';
 import {TypedArrayConstructor} from 'neuroglancer/util/array';
 import {Endianness, convertEndian16, convertEndian32} from 'neuroglancer/util/endian';
 import {pythonLiteralParse} from 'neuroglancer/util/json';

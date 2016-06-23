@@ -17,9 +17,12 @@
 import {ChunkLayout} from 'neuroglancer/sliceview/chunk_layout';
 import {partitionArray} from 'neuroglancer/util/array';
 import {approxEqual} from 'neuroglancer/util/compare';
+import {DATA_TYPE_BYTES, DataType} from 'neuroglancer/util/data_type';
 import {Mat4, Vec3, mat4, prod3, vec3, vec4} from 'neuroglancer/util/geom';
 import {kAxes, kZeroVec} from 'neuroglancer/util/geom';
 import {SharedObject} from 'neuroglancer/worker_rpc';
+
+export {DATA_TYPE_BYTES, DataType};
 
 const DEBUG_CHUNK_INTERSECTIONS = false;
 
@@ -555,28 +558,6 @@ export class SliceViewBase extends SharedObject {
     });
   }
 };
-
-/**
- * If this is updated, DATA_TYPE_BYTES must also be updated.
- */
-export enum DataType {
-  UINT8 = 0,
-  UINT16 = 1,
-  UINT32 = 2,
-  UINT64 = 3,
-  FLOAT32 = 4,
-}
-
-interface DataTypeBytes {
-  [index: number]: number;
-}
-
-export const DATA_TYPE_BYTES: DataTypeBytes = [];
-DATA_TYPE_BYTES[DataType.UINT8] = 1;
-DATA_TYPE_BYTES[DataType.UINT16] = 2;
-DATA_TYPE_BYTES[DataType.UINT32] = 4;
-DATA_TYPE_BYTES[DataType.UINT64] = 8;
-DATA_TYPE_BYTES[DataType.FLOAT32] = 4;
 
 /**
  * Specifies the interpretation of volumetric data.
