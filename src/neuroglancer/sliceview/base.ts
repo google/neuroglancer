@@ -448,6 +448,11 @@ export class SliceViewBase extends SharedObject {
       // Mutates lowerBound and upperBound while running, but leaves them the
       // same once finished.
       function checkBounds(nextSplitDim: number) {
+        if (DEBUG_CHUNK_INTERSECTIONS) {
+          console.log(
+              `chunk bounds: ${lowerBound} ${upperBound} fullyVisible: ${fullyVisibleSources} partiallyVisible: ${partiallyVisibleSources.slice(0, partiallyVisibleSourcesLength)}`);
+        }
+
         if (fullyVisibleSources.length === 0 && partiallyVisibleSourcesLength === 0) {
           if (DEBUG_CHUNK_INTERSECTIONS) {
             console.log('  no visible sources');
@@ -510,9 +515,8 @@ export class SliceViewBase extends SharedObject {
           partiallyVisibleSourcesLength = partitionArray(
               partiallyVisibleSources, 0, oldPartiallyVisibleSourcesLength, source => {
                 let spec = source.spec;
-                let result = compareBoundsSingleDimension(
-                    lowerBound[nextSplitDim], upperBound[nextSplitDim],
-                    spec.lowerChunkBound[nextSplitDim], spec.upperChunkBound[nextSplitDim]);
+                let result = compareBounds(
+                    lowerBound, upperBound, spec.lowerChunkBound, spec.upperChunkBound);
                 switch (result) {
                   case BoundsComparisonResult.PARTIALLY_INSIDE:
                     return true;
@@ -526,6 +530,12 @@ export class SliceViewBase extends SharedObject {
 
         adjustSources();
         checkBounds(newNextSplitDim);
+
+        // Truncate list of fully visible sources.
+        fullyVisibleSources.length = fullyVisibleSourcesLength;
+
+        // Restore partiallyVisibleSources.
+        partiallyVisibleSourcesLength = oldPartiallyVisibleSourcesLength;
 
         upperBound[nextSplitDim] = dimUpper;
         lowerBound[nextSplitDim] = splitPoint;
