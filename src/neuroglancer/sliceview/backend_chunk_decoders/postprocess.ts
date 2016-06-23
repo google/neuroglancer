@@ -20,27 +20,31 @@
 
 import {VolumeChunk} from 'neuroglancer/sliceview/backend';
 import {DataType} from 'neuroglancer/sliceview/base';
-import {encodeChannel as encodeChannelUint32} from 'neuroglancer/sliceview/compressed_segmentation/encode_uint32';
-import {encodeChannel as encodeChannelUint64} from 'neuroglancer/sliceview/compressed_segmentation/encode_uint64';
+import {encodeChannels as encodeChannelsUint32} from 'neuroglancer/sliceview/compressed_segmentation/encode_uint32';
+import {encodeChannels as encodeChannelsUint64} from 'neuroglancer/sliceview/compressed_segmentation/encode_uint64';
 import {Uint32ArrayBuilder} from 'neuroglancer/util/uint32array_builder.ts';
 
 const tempBuffer = new Uint32ArrayBuilder(20000);
+const tempVolumeSize = new Array<number>(4);
 
 export function postProcessRawData(chunk: VolumeChunk, data: ArrayBufferView) {
   const {spec} = chunk.source!;
   if (spec.compressedSegmentationBlockSize) {
     const {dataType} = spec;
     tempBuffer.clear();
+    let chunkDataSize = chunk.chunkDataSize!;
+    tempVolumeSize[0] = chunkDataSize[0];
+    tempVolumeSize[1] = chunkDataSize[1];
+    tempVolumeSize[2] = chunkDataSize[2];
+    tempVolumeSize[3] = spec.numChannels;
     switch (dataType) {
       case DataType.UINT32:
-        encodeChannelUint32(
-            tempBuffer, spec.compressedSegmentationBlockSize, <Uint32Array>data,
-            chunk.chunkDataSize!);
+        encodeChannelsUint32(
+            tempBuffer, spec.compressedSegmentationBlockSize, <Uint32Array>data, tempVolumeSize);
         break;
       case DataType.UINT64:
-        encodeChannelUint64(
-            tempBuffer, spec.compressedSegmentationBlockSize, <Uint32Array>data,
-            chunk.chunkDataSize!);
+        encodeChannelsUint64(
+            tempBuffer, spec.compressedSegmentationBlockSize, <Uint32Array>data, tempVolumeSize);
         break;
       default:
         throw new Error(`Unsupported data type for compressed segmentation: ${DataType[dataType]}`);
