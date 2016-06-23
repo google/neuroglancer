@@ -5,4 +5,3 @@
 /// <reference path="../third_party/installed_typings/index.d.ts" />
 /// <reference path="../node_modules/@types/jasmine/index.d.ts" />
 /// <reference path="../node_modules/@types/text-encoding/index.d.ts" />
-/// <reference path="../node_modules/@types/signals/index.d.ts" />

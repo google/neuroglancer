@@ -1,8 +1,8 @@
 {
   "resolution": "main",
   "tree": {
-    "src": "/home/jbms/shared/neuroglancer/third_party/typings_sources/gl-matrix.d.ts",
+    "src": "/usr/local/google/home/jbms/shared/neuroglancer/third_party/typings_sources/gl-matrix.d.ts",
     "raw": "file:third_party/typings_sources/gl-matrix.d.ts",
-    "typings": "/home/jbms/shared/neuroglancer/third_party/typings_sources/gl-matrix.d.ts"
+    "typings": "/usr/local/google/home/jbms/shared/neuroglancer/third_party/typings_sources/gl-matrix.d.ts"
   }
 }

@@ -52,7 +52,6 @@
   "dependencies": {
     "@types/codemirror": "0.0.22-alpha",
     "@types/pako": "^0.2.21-alpha",
-    "@types/signals": "0.0.11-alpha",
     "@types/sortablejs": "^1.3.20-alpha",
     "@types/text-encoding": "0.0.20-alpha",
     "babel-core": "^6.7.4",
