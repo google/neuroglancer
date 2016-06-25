@@ -30,7 +30,7 @@ import {DataType} from 'neuroglancer/sliceview/base';
 import {MultiscaleVolumeChunkSource, SliceView, VolumeChunkSource} from 'neuroglancer/sliceview/frontend';
 import {TrackableValue, WatchableValue} from 'neuroglancer/trackable_value';
 import {RefCounted} from 'neuroglancer/util/disposable';
-import {BoundingBox, Mat4, Vec3, vec3, vec4} from 'neuroglancer/util/geom';
+import {BoundingBox, Mat4, Vec3, vec3, vec3Key, vec4} from 'neuroglancer/util/geom';
 import {verifyFloat01} from 'neuroglancer/util/json';
 import {Buffer} from 'neuroglancer/webgl/buffer';
 import {GL} from 'neuroglancer/webgl/context';
@@ -51,6 +51,19 @@ export function trackableAlphaValue(initialValue = 0.5) {
 }
 
 const DEBUG_VERTICES = false;
+
+/**
+ * Amount by which a computed intersection point may lie outside the [0, 1] range and still be
+ * considered valid.  This needs to be non-zero in order to avoid vertex placement artifacts.
+ */
+const LAMBDA_EPSILON = 1e-3;
+
+/**
+ * If the absolute value of the dot product of a cube edge direction and the viewport plane normal
+ * is less than this value, intersections along that cube edge will be exluded.  This needs to be
+ * non-zero in order to avoid vertex placement artifacts.
+ */
+const ORTHOGONAL_EPSILON = 1e-3;
 
 class SliceViewShaderBuffers extends RefCounted {
   outputVertexIndices: Buffer;
@@ -216,9 +229,10 @@ for (int e = 0; e < 4; ++e) {
   highp vec3 vStart = v1 + uTranslation;
   highp vec3 vDir = v2 - v1;
   highp float denom = dot(vDir, uPlaneNormal);
-  if (abs(denom) > 1e-6) {
+  if (abs(denom) > ${ORTHOGONAL_EPSILON}) {
     highp float lambda = (uPlaneDistance - dot(vStart, uPlaneNormal)) / denom;
-    if ((lambda >= 0.0) && (lambda <= 1.0)) {
+    if ((lambda >= -${LAMBDA_EPSILON}) && (lambda <= (1.0 + ${LAMBDA_EPSILON}))) {
+      lambda = clamp(lambda, 0.0, 1.0);
       highp vec3 position = vStart + lambda * vDir;
       gl_Position = uProjectionMatrix * vec4(position, 1.0);
       vChunkPosition = mix(v1, v2, lambda);
@@ -251,9 +265,10 @@ for (int e = 0; e < 4; ++e) {
         vec3.add(vStart, v[0], uTranslation);
         vec3.subtract(vDir, v[1], v[0]);
         let denom = vec3.dot(vDir, uPlaneNormal);
-        if (Math.abs(denom) > 1e-6) {
+        if (Math.abs(denom) > ORTHOGONAL_EPSILON) {
           let lambda = (uPlaneDistance - vec3.dot(vStart, uPlaneNormal)) / denom;
-          if ((lambda >= 0.0) && (lambda <= 1.0)) {
+          if ((lambda >= -LAMBDA_EPSILON) && (lambda <= 1.0 + LAMBDA_EPSILON)) {
+            lambda = Math.max(0, Math.min(1, lambda));
             vec3.scaleAndAdd(position, vStart, vDir, lambda);
             vec3.transformMat4(
                 gl_Position, vec4.fromValues(position[0], position[1], position[2], 1.0),
@@ -261,9 +276,15 @@ for (int e = 0; e < 4; ++e) {
             vec3.scale(vChunkPosition, uVertexBasePosition(vidx[0]), 1.0 - lambda);
             vec3.scaleAndAdd(vChunkPosition, vChunkPosition, uVertexBasePosition(vidx[1]), lambda);
             console.log(
-                `vertex ${vertexIndex} at ${gl_Position}, vChunkPosition = ${vChunkPosition}, edge dir = ${vDir}, denom = ${denom}`);
+                `vertex ${vertexIndex}, e = ${e}, at ${gl_Position}, vChunkPosition = ${vChunkPosition}, edge dir = ${vDir}, denom = ${denom}`);
             break;
+          } else {
+            console.log(
+                `vertex ${vertexIndex}, e = ${e}, skipped, deom = ${denom}, vDir = ${vec3Key(vDir)}, uPlaneNormal = ${vec3Key(uPlaneNormal)}, lambda=${lambda}`);
           }
+        } else {
+          console.log(
+              `vertex ${vertexIndex}, e = ${e}, skipped, deom = ${denom}, vDir = ${vec3Key(vDir)}, uPlaneNormal = ${vec3Key(uPlaneNormal)}`);
         }
       }
     }
@@ -310,6 +331,7 @@ for (int e = 0; e < 4; ++e) {
     if (DEBUG_VERTICES) {
       let sliceView: SliceView = (<any>window)['debug_sliceView'];
       let chunkSize: Vec3 = (<any>window)['debug_sliceView_chunkSize'];
+      console.log(`Drawing chunk: ${vec3Key(chunkPosition)} of size ${vec3Key(chunkSize)}`);
       let dataToDeviceMatrix: Mat4 = (<any>window)['debug_sliceView_dataToDevice'];
       this.computeVerticesDebug(
           chunkSize, sliceView.viewportPlaneDistanceToOrigin, sliceView.viewportAxes[2],
