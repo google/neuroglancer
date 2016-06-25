@@ -53,3 +53,33 @@ export function prod4(x: ArrayLike<number>) {
 export function vec3Key(x: ArrayLike<number>) {
   return `${x[0]},${x[1]},${x[2]}`;
 }
+
+const RECTIFY_EPSILON = 1e-4;
+
+export function rectifyVec3IfAxisAligned(v: Float32Array, offset: number) {
+  let a0 = Math.abs(v[offset]), a1 = Math.abs(v[offset + 1]), a2 = Math.abs(v[offset + 2]);
+  let max = Math.max(a0, a1, a2);
+  if (a0 / max < RECTIFY_EPSILON) {
+    console.log('rectifying matrix');
+    v[offset] = 0;
+  }
+  if (a1 / max < RECTIFY_EPSILON) {
+    console.log('rectifying matrix');
+    v[offset + 1] = 0;
+  }
+  if (a2 / max < RECTIFY_EPSILON) {
+    console.log('rectifying matrix');
+    v[offset + 2] = 0;
+  }
+}
+
+/**
+ * Makes columns of m that are approximately axis-aligned exactly axis aligned.
+ *
+ * Note that mat is stored in Fortran order, and therefore the first column is m[0], m[1], m[2].
+ */
+export function rectifyTransformMatrixIfAxisAligned(m: Mat4) {
+  rectifyVec3IfAxisAligned(m, 0);
+  rectifyVec3IfAxisAligned(m, 4);
+  rectifyVec3IfAxisAligned(m, 8);
+}

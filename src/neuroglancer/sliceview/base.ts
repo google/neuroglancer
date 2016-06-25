@@ -18,7 +18,7 @@ import {ChunkLayout} from 'neuroglancer/sliceview/chunk_layout';
 import {partitionArray} from 'neuroglancer/util/array';
 import {approxEqual} from 'neuroglancer/util/compare';
 import {DATA_TYPE_BYTES, DataType} from 'neuroglancer/util/data_type';
-import {Mat4, Vec3, mat4, prod3, vec3, vec4} from 'neuroglancer/util/geom';
+import {Mat4, Vec3, mat4, prod3, rectifyTransformMatrixIfAxisAligned, vec3, vec4} from 'neuroglancer/util/geom';
 import {kAxes, kZeroVec} from 'neuroglancer/util/geom';
 import {SharedObject} from 'neuroglancer/worker_rpc';
 
@@ -201,7 +201,9 @@ export class SliceViewBase extends SharedObject {
 
     this.hasViewportToData = true;
 
-    mat4.copy(this.viewportToData, mat);
+    let {viewportToData} = this;
+    mat4.copy(viewportToData, mat);
+    rectifyTransformMatrixIfAxisAligned(viewportToData);
     vec3.transformMat4(this.centerDataPosition, kZeroVec, mat);
 
     // Initialize to zero to avoid confusing TypeScript compiler.
@@ -214,7 +216,7 @@ export class SliceViewBase extends SharedObject {
     // Compute axes.
     for (var i = 0; i < 3; ++i) {
       let a = viewportAxes[i];
-      vec4.transformMat4(a, kAxes[i], mat);
+      vec4.transformMat4(a, kAxes[i], viewportToData);
       // a[3] is guaranteed to be 0.
       if (i === 0) {
         newPixelSize = vec3.length(a);
@@ -414,11 +416,15 @@ export class SliceViewBase extends SharedObject {
           negativeVertexDistanceToOrigin +=
               normalValue * chunkSizeValue * (lowerValue + diff - positiveOffset);
         }
-        // console.log("{positive,negative}VertexDistanceToOrigin: ",
-        // positiveVertexDistanceToOrigin, negativeVertexDistanceToOrigin,
-        // planeDistanceToOrigin);
-        // console.log("intersectsPlane:", negativeVertexDistanceToOrigin,
-        //             planeDistanceToOrigin, positiveVertexDistanceToOrigin);
+        if (DEBUG_CHUNK_INTERSECTIONS) {
+          console.log(`    planeNormal = ${planeNormal}`);
+          console.log(
+              '    {positive,negative}VertexDistanceToOrigin: ', positiveVertexDistanceToOrigin,
+              negativeVertexDistanceToOrigin, planeDistanceToOrigin);
+          console.log(
+              '    intersectsPlane:', negativeVertexDistanceToOrigin, planeDistanceToOrigin,
+              positiveVertexDistanceToOrigin);
+        }
         if (positiveVertexDistanceToOrigin < planeDistanceToOrigin) {
           return false;
         }

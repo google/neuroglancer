@@ -24,7 +24,7 @@ import {ChunkLayout} from 'neuroglancer/sliceview/chunk_layout';
 import {RenderLayer} from 'neuroglancer/sliceview/renderlayer';
 import {RefCounted} from 'neuroglancer/util/disposable';
 import {Disposable} from 'neuroglancer/util/disposable';
-import {Mat4, Vec3, Vec4, mat4, vec3, vec3Key} from 'neuroglancer/util/geom';
+import {Mat4, Vec3, Vec4, mat4, rectifyTransformMatrixIfAxisAligned, vec3, vec3Key} from 'neuroglancer/util/geom';
 import {Uint64} from 'neuroglancer/util/uint64';
 import {Buffer} from 'neuroglancer/webgl/buffer';
 import {GL} from 'neuroglancer/webgl/context';
@@ -165,8 +165,9 @@ export class SliceView extends SliceViewBase {
   }
 
   onViewportToDataMatrixChanged() {
-    let {viewportToData} = this;
-    mat4.invert(this.dataToViewport, viewportToData);
+    let {viewportToData, dataToViewport} = this;
+    mat4.invert(dataToViewport, viewportToData);
+    rectifyTransformMatrixIfAxisAligned(dataToViewport);
     this.rpc!.invoke('SliceView.updateView', {id: this.rpcId, viewportToData: viewportToData});
   }
 
