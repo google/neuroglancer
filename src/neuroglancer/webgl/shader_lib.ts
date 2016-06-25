@@ -94,17 +94,19 @@ uint64_t toUint64(uint16_t x) {
 `
 ];
 
-export const glsl_uint32 = `
+export const glsl_uint32 = [
+  glsl_uint64, `
 struct uint32_t {
   vec4 value;
 };
-uint32_t toUint64(uint32_t x) {
+uint64_t toUint64(uint32_t x) {
   uint64_t result;
   result.low = x.value;
   result.high = vec4(0.0, 0.0, 0.0, 0.0);
   return result;
 }
-`;
+`
+];
 
 export var glsl_getSubscriptsFromNormalized = `
 vec3 getSubscriptsFromNormalized(vec3 normalizedPosition, vec3 size) {
