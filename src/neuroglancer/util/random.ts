@@ -14,6 +14,8 @@
  * limitations under the License.
  */
 
+import {TypedArray} from 'neuroglancer/util/array';
+
 export function getRandomHexString(numBits = 128) {
   const numValues = Math.ceil(numBits / 32);
   const data = new Uint32Array(numValues);
@@ -23,4 +25,15 @@ export function getRandomHexString(numBits = 128) {
     s += ('00000000' + data[i].toString(16)).slice(-8);
   }
   return s;
+}
+
+/**
+ * Calls crypto.getRandomValues as many times as needed to fill array.
+ */
+export function getRandomValues(array: TypedArray) {
+  let byteArray = new Uint8Array(array.buffer, array.byteOffset, array.byteLength);
+  const blockSize = 65536;
+  for (let i = 0, length = byteArray.length; i < length; i += blockSize) {
+    crypto.getRandomValues(byteArray.subarray(i, Math.min(length, i + blockSize)));
+  }
 }
