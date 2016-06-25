@@ -15,7 +15,7 @@
  */
 
 import {Disposable} from 'neuroglancer/util/disposable';
-import {GL_ARRAY_BUFFER} from 'neuroglancer/webgl/constants';
+import {GL_ARRAY_BUFFER, GL_FLOAT, GL_STATIC_DRAW} from 'neuroglancer/webgl/constants';
 import {AttributeIndex} from 'neuroglancer/webgl/shader';
 
 export type BufferType = number;
@@ -33,18 +33,15 @@ export class Buffer implements Disposable {
 
   bindToVertexAttrib(
       location: AttributeIndex, componentsPerVertexAttribute: number,
-      attributeType: WebGLDataType = this.gl.FLOAT, normalized = false, stride = 0, offset = 0) {
+      attributeType: WebGLDataType = GL_FLOAT, normalized = false, stride = 0, offset = 0) {
     this.bind();
     this.gl.enableVertexAttribArray(location);
     this.gl.vertexAttribPointer(
         location, componentsPerVertexAttribute, attributeType, normalized, stride, offset);
   }
 
-  setData(data: ArrayBufferView, usage?: WebGLBufferUsage) {
+  setData(data: ArrayBufferView, usage: WebGLBufferUsage = GL_STATIC_DRAW) {
     let gl = this.gl;
-    if (usage === undefined) {
-      usage = gl.STATIC_DRAW;
-    }
     this.bind();
     gl.bufferData(this.bufferType, data, usage);
   }
