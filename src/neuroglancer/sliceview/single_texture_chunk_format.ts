@@ -15,6 +15,7 @@
  */
 
 import {ChunkFormat, VolumeChunk, VolumeChunkSource} from 'neuroglancer/sliceview/frontend';
+import {TypedArray} from 'neuroglancer/util/array';
 import {Disposable, RefCounted} from 'neuroglancer/util/disposable';
 import {GL} from 'neuroglancer/webgl/context';
 import {ShaderBuilder, ShaderProgram} from 'neuroglancer/webgl/shader';
@@ -70,6 +71,8 @@ export abstract class SingleTextureChunkFormat<TextureLayout extends Disposable>
     }
     gl.bindTexture(gl.TEXTURE_2D, chunk.texture);
   }
+
+  abstract setTextureData(gl: GL, textureLayout: TextureLayout, data: TypedArray): void;
 };
 
 export abstract class SingleTextureVolumeChunk<Data, TextureLayout extends Disposable> extends

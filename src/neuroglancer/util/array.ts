@@ -45,6 +45,7 @@ export function partitionArray<T>(
 }
 
 export interface TypedArrayConstructor {
+  new (n: number): TypedArray;
   new (buffer: ArrayBuffer, byteOffset: number, length: number): TypedArray;
   BYTES_PER_ELEMENT: number;
 }

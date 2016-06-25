@@ -154,6 +154,12 @@ function findFrontVertexIndex(planeNormal: Vec3) {
   return frontVertexIndex;
 }
 
+export const glsl_getPositionWithinChunk = `
+vec3 getPositionWithinChunk () {
+  return floor(min(vChunkPosition, uChunkDataSize - 1.0));
+}
+`;
+
 class VolumeSliceVertexComputationManager extends RefCounted {
   data: SliceViewShaderBuffers;
   static get(gl: GL) {
@@ -198,9 +204,8 @@ class VolumeSliceVertexComputationManager extends RefCounted {
 
     // Chunk size.
     builder.addUniform('highp vec3', 'uChunkSize');
-    // Position within chunk of vertex.
+    // Position within chunk of vertex, in floating point range [0, chunkDataSize].
     builder.addVarying('highp vec3', 'vChunkPosition');
-    // varying highp vec2 vTexCoord;
 
     builder.setVertexMain(`
 int vertexIndex = int(aVertexIndexFloat);
@@ -216,12 +221,13 @@ for (int e = 0; e < 4; ++e) {
     if ((lambda >= 0.0) && (lambda <= 1.0)) {
       highp vec3 position = vStart + lambda * vDir;
       gl_Position = uProjectionMatrix * vec4(position, 1.0);
-      vChunkPosition = mix(uVertexBasePosition[vidx.x], uVertexBasePosition[vidx.y], lambda);
+      vChunkPosition = mix(v1, v2, lambda);
       break;
     }
   }
 }
 `);
+    builder.addFragmentCode(glsl_getPositionWithinChunk);
   }
 
   computeVerticesDebug(

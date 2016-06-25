@@ -18,6 +18,7 @@
 
 let webpack_helpers = require('./webpack_helpers');
 const path = require('path');
+const webpack = require('webpack');
 
 module.exports = function(config) {
 
@@ -28,7 +29,11 @@ module.exports = function(config) {
     exclude: [/\.spec\.ts$/, /node_modules/],
     loader: 'istanbul-instrumenter-loader',
   }];
-  webpackConfig.plugins = [];
+  webpackConfig.plugins = [
+    new webpack.DefinePlugin({
+      'WORKER': false,
+    }),
+  ];
 
   config.set({
     files: [
@@ -46,6 +51,7 @@ module.exports = function(config) {
       // 'ChromeCanary',
     ],
     colors: true,
+    browserNoActivityTimeout: 60000,
     reporters: ['mocha', 'coverage'],
     coverageReporter: {
       dir: path.resolve(__dirname, '../coverage/'),
