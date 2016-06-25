@@ -72,7 +72,6 @@ export class ChunkFormat extends SingleTextureChunkFormat<TextureLayout> {
     this.textureAccessHelper.defineShader(builder);
     let local = (x: string) => 'compressedSegmentationChunkFormat_' + x;
     builder.addUniform('highp vec3', 'uSubchunkGridSize');
-    builder.addUniform('highp vec3', 'uChunkDataSize');
     builder.addFragmentCode(glsl_getFortranOrderIndexFromNormalized);
     const {dataType} = this;
     const glslType = GLSL_TYPE_FOR_DATA_TYPE.get(dataType);
@@ -159,7 +158,6 @@ ${glslType} getDataValue (int channelIndex) {
    * Called each time textureLayout changes while drawing chunks.
    */
   setupTextureLayout(gl: GL, shader: ShaderProgram, textureLayout: TextureLayout) {
-    gl.uniform3fv(shader.uniform('uChunkDataSize'), textureLayout.chunkDataSize);
     gl.uniform3fv(shader.uniform('uSubchunkGridSize'), textureLayout.subchunkGridSize);
     this.textureAccessHelper.setupTextureLayout(gl, shader, textureLayout);
   }

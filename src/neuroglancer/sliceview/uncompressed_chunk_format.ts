@@ -109,7 +109,6 @@ export class ChunkFormat extends SingleTextureChunkFormat<TextureLayout> {
   defineShader(builder: ShaderBuilder) {
     super.defineShader(builder);
     this.textureAccessHelper.defineShader(builder);
-    builder.addUniform('highp vec3', 'uChunkDataSize');
 
     let {numChannels} = this;
     if (numChannels > 1) {
@@ -194,7 +193,6 @@ uint64_t getDataValue (int channelIndex) {
     if (this.numChannels > 1) {
       gl.uniform1f(shader.uniform('uChannelStride'), textureLayout.channelStride);
     }
-    gl.uniform3fv(shader.uniform('uChunkDataSize'), textureLayout.chunkDataSize);
     this.textureAccessHelper.setupTextureLayout(gl, shader, textureLayout);
   }
 

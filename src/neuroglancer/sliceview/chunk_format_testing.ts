@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-import {glsl_getPositionWithinChunk} from 'neuroglancer/sliceview/renderlayer';
+import {glsl_getPositionWithinChunk} from 'neuroglancer/sliceview/single_texture_chunk_format';
 import {SingleTextureChunkFormat} from 'neuroglancer/sliceview/single_texture_chunk_format';
 import {getFortranOrderStrides} from 'neuroglancer/util/array';
 import {TypedArray} from 'neuroglancer/util/array';
@@ -82,6 +82,7 @@ gl_FragData[${outputChannel++}] = getDataValue(${channel}).value;
          tester.build();
          let {shader} = tester;
          shader.bind();
+         gl.uniform3fv(shader.uniform('uChunkDataSize'), volumeSize.subarray(0, 3));
 
          let texture = gl.createTexture();
          tester.registerDisposer(() => { gl.deleteTexture(texture); });
@@ -95,8 +96,10 @@ gl_FragData[${outputChannel++}] = getDataValue(${channel}).value;
 
 
          // Position within chunk in floating point range [0, chunkDataSize].
-         function checkPosition(vChunkPosition: Vec3) {
-           gl.uniform3fv(shader.uniform('vChunkPosition'), vChunkPosition);
+         function checkPosition(positionInChunk: Vec3) {
+           gl.uniform3fv(
+               shader.uniform('vChunkPosition'),
+               vec3.divide(vec3.create(), positionInChunk, volumeSize));
            chunkFormat.beginDrawing(gl, shader);
            chunkFormat.setupTextureLayout(gl, shader, textureLayout);
            gl.bindTexture(gl.TEXTURE_2D, texture);
@@ -104,14 +107,14 @@ gl_FragData[${outputChannel++}] = getDataValue(${channel}).value;
            chunkFormat.endDrawing(gl, shader);
            let offset = 0;
            for (let i = 0; i < 3; ++i) {
-             offset += Math.floor(Math.max(0, Math.min(vChunkPosition[i], volumeSize[i] - 1))) *
+             offset += Math.floor(Math.max(0, Math.min(positionInChunk[i], volumeSize[i] - 1))) *
                  strides[i];
            }
            let outputChannel = 0;
            for (let channel = 0; channel < numChannels; ++channel) {
              const curOffset = offset + channel * strides[3];
              const msg =
-                 `volumeSize = ${vec3Key(volumeSize)}, vChunkPosition = ${vec3Key(vChunkPosition)}, channel = ${channel}, offset = ${curOffset}`;
+                 `volumeSize = ${vec3Key(volumeSize)}, positionInChunk = ${vec3Key(positionInChunk)}, channel = ${channel}, offset = ${curOffset}`;
              switch (dataType) {
                case DataType.UINT64: {
                  let low = tester.readUint32(outputChannel++);
