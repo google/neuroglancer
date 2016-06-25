@@ -60,15 +60,12 @@ export function rectifyVec3IfAxisAligned(v: Float32Array, offset: number) {
   let a0 = Math.abs(v[offset]), a1 = Math.abs(v[offset + 1]), a2 = Math.abs(v[offset + 2]);
   let max = Math.max(a0, a1, a2);
   if (a0 / max < RECTIFY_EPSILON) {
-    console.log('rectifying matrix');
     v[offset] = 0;
   }
   if (a1 / max < RECTIFY_EPSILON) {
-    console.log('rectifying matrix');
     v[offset + 1] = 0;
   }
   if (a2 / max < RECTIFY_EPSILON) {
-    console.log('rectifying matrix');
     v[offset + 2] = 0;
   }
 }
