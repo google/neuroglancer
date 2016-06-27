@@ -10,12 +10,26 @@ static_files = [ 'main.bundle.js', 'chunk_worker.bundle.js', 'styles.css', 'inde
 
 class bundle_client(build):
 
+    user_options = [
+
+        ('client-bundle-type=', None, 'The nodejs bundle type. "min" (default) creates condensed static files for production, "dev" creates human-readable files.')
+    ]
+
+    def initialize_options(self):
+
+        self.client_bundle_type = 'min'
+
+    def finalize_options(self):
+
+        if self.client_bundle_type not in  [ 'min', 'dev' ]:
+            raise RuntimeError('client-bundle-type has to be one of "min" or "dev"')
+
     def run(self):
 
         this_dir = os.path.abspath(os.path.dirname(__file__))
         project_dir = os.path.join(this_dir, '..')
 
-        build_dir = os.path.join(project_dir, 'dist/min')
+        build_dir = os.path.join(project_dir, 'dist/' + self.client_bundle_type)
         static_dir = os.path.join(this_dir, 'neuroglancer/static')
 
         print "Project dir " + project_dir
@@ -25,11 +39,16 @@ class bundle_client(build):
         prev_dir = os.path.abspath('.')
         os.chdir(project_dir)
 
+        target = {
+            "min" : "build-min",
+            "dev" : "build"
+        }
+
         try:
             call(['npm', 'i'])
-            res = call(['npm', 'run', 'build-min'])
+            res = call(['npm', 'run', target[self.client_bundle_type]])
         except:
-            raise RuntimeError('Could not run \'npm run build-min\'. Make sure node.js >= v5.9.0 is installed and in your path.')
+            raise RuntimeError('Could not run \'npm run build-%s\'. Make sure node.js >= v5.9.0 is installed and in your path.' % self.client_bundle_type)
 
         if res != 0:
             raise RuntimeError('failed to bundle neuroglancer node.js project')
