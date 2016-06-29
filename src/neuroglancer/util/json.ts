@@ -27,9 +27,17 @@ export function verifyFloat(obj: any) {
   throw new Error(`Expected floating-point number, but received: ${JSON.stringify(obj)}.`);
 }
 
-export function verifyFinitePositiveFloat(obj: any) {
+export function verifyFiniteFloat(obj: any) {
   let x = verifyFloat(obj);
-  if (Number.isFinite(x) && x > 0) {
+  if (Number.isFinite(x)) {
+    return x;
+  }
+  throw new Error(`Expected finite floating-point number, but received: ${x}.`);
+}
+
+export function verifyFinitePositiveFloat(obj: any) {
+  let x = verifyFiniteFloat(obj);
+  if (x > 0) {
     return x;
   }
   throw new Error(`Expected positive finite floating-point number, but received: ${x}.`);
