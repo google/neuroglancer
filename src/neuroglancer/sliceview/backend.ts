@@ -240,12 +240,10 @@ export class VolumeChunkSource extends ChunkSource implements VolumeChunkSourceI
 export class RenderLayer extends SharedObjectCounterpart implements RenderLayerInterface {
   rpcId: number;
   sources: VolumeChunkSource[][];
-  equivalences: string|undefined;
   layerChanged = new Signal();
 
   constructor(rpc: RPC, options: any) {
     super(rpc, options);
-    this.equivalences = options['equivalences'];
     let sources = this.sources = new Array<VolumeChunkSource[]>();
     for (let alternativeIds of options['sources']) {
       let alternatives = new Array<VolumeChunkSource>();
@@ -259,12 +257,3 @@ export class RenderLayer extends SharedObjectCounterpart implements RenderLayerI
   }
 };
 registerSharedObject('sliceview/RenderLayer', RenderLayer);
-
-registerRPC('sliceview/RenderLayer:updateEquivalences', function(x) {
-  let obj = <RenderLayer>this.get(x['id']);
-  let newValue = x['equivalences'];
-  if (newValue !== obj.equivalences) {
-    obj.equivalences = x['equivalences'];
-    obj.layerChanged.dispatch();
-  }
-});
