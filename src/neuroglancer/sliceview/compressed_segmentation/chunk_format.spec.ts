@@ -20,14 +20,16 @@ import {encodeChannels as encodeChannelsUint32} from 'neuroglancer/sliceview/com
 import {encodeChannels as encodeChannelsUint64} from 'neuroglancer/sliceview/compressed_segmentation/encode_uint64';
 import {makeRandomUint64Array} from 'neuroglancer/sliceview/compressed_segmentation/test_util';
 import {DataType} from 'neuroglancer/util/data_type';
-import {Vec4, prod4, vec3, vec4} from 'neuroglancer/util/geom';
+import {Vec3, Vec4, prod4, vec3, vec3Key, vec4} from 'neuroglancer/util/geom';
 import {getRandomValues} from 'neuroglancer/util/random';
 import {Uint32ArrayBuilder} from 'neuroglancer/util/uint32array_builder.ts';
 
 describe('sliceview/compressed_segmentation/chunk_format', () => {
   describe('data access', () => {
-    const compressedSegmentationBlockSize = vec3.fromValues(8, 8, 8);
-    function runTest(dataType: DataType, volumeSize: Vec4, rawData: Uint32Array) {
+    const vec888 = vec3.fromValues(8, 8, 8);
+    function runTest(
+        dataType: DataType, volumeSize: Vec4, rawData: Uint32Array,
+        compressedSegmentationBlockSize: Vec3) {
       let encodeBuffer = new Uint32ArrayBuilder();
       (dataType === DataType.UINT32 ? encodeChannelsUint32 : encodeChannelsUint64)(
           encodeBuffer, compressedSegmentationBlockSize, rawData, volumeSize);
@@ -40,32 +42,34 @@ describe('sliceview/compressed_segmentation/chunk_format', () => {
         return [chunkFormat, textureLayout];
       }, rawData, encodedData);
     }
-    describe('sequential values', () => {
-      for (let volumeSize of [vec4.fromValues(13, 17, 23, 1), vec4.fromValues(13, 17, 23, 2), ]) {
-        const numElements = prod4(volumeSize);
-        {
-          let rawData = new Uint32Array(numElements * 2);
-          for (let i = 0; i < rawData.length; ++i) {
-            rawData[i] = i;
+    for (let compressedSegmentationBlockSize of [vec888, vec3.fromValues(16, 8, 4)]) {
+      describe(`sequential values blockSize=${vec3Key(compressedSegmentationBlockSize)}`, () => {
+        for (let volumeSize of [vec4.fromValues(13, 17, 23, 1), vec4.fromValues(13, 17, 23, 2), ]) {
+          const numElements = prod4(volumeSize);
+          {
+            let rawData = new Uint32Array(numElements * 2);
+            for (let i = 0; i < rawData.length; ++i) {
+              rawData[i] = i;
+            }
+            runTest(DataType.UINT64, volumeSize, rawData, compressedSegmentationBlockSize);
           }
-          runTest(DataType.UINT64, volumeSize, rawData);
-        }
-        {
-          let rawData = new Uint32Array(numElements);
-          for (let i = 0; i < rawData.length; ++i) {
-            rawData[i] = i;
+          {
+            let rawData = new Uint32Array(numElements);
+            for (let i = 0; i < rawData.length; ++i) {
+              rawData[i] = i;
+            }
+            runTest(DataType.UINT32, volumeSize, rawData, compressedSegmentationBlockSize);
           }
-          runTest(DataType.UINT32, volumeSize, rawData);
         }
-      }
-    });
+      });
+    }
     for (let numPossibleValues of [100]) {
       describe(`random values out of ${numPossibleValues} possible`, () => {
         const dataType = DataType.UINT64;
         for (let volumeSize of [vec4.fromValues(64, 64, 64, 1), vec4.fromValues(36, 36, 36, 1), ]) {
           const numElements = prod4(volumeSize);
           let rawData = makeRandomUint64Array(numElements, numPossibleValues);
-          runTest(dataType, volumeSize, rawData);
+          runTest(dataType, volumeSize, rawData, vec888);
         }
       });
     }
@@ -74,19 +78,19 @@ describe('sliceview/compressed_segmentation/chunk_format', () => {
         const numElements = prod4(volumeSize);
         let rawData = new Uint32Array(numElements * 2);
         getRandomValues(rawData);
-        runTest(DataType.UINT64, volumeSize, rawData);
+        runTest(DataType.UINT64, volumeSize, rawData, vec888);
       }
       for (let volumeSize of [vec4.fromValues(13, 17, 23, 1), vec4.fromValues(13, 17, 23, 2), ]) {
         const numElements = prod4(volumeSize);
         {
           let rawData = new Uint32Array(numElements * 2);
           getRandomValues(rawData);
-          runTest(DataType.UINT64, volumeSize, rawData);
+          runTest(DataType.UINT64, volumeSize, rawData, vec888);
         }
         {
           let rawData = new Uint32Array(numElements);
           getRandomValues(rawData);
-          runTest(DataType.UINT32, volumeSize, rawData);
+          runTest(DataType.UINT32, volumeSize, rawData, vec888);
         }
       }
     });
