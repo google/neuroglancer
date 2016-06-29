@@ -21,6 +21,7 @@
 
 import {ChunkManager} from 'neuroglancer/chunk_manager/frontend';
 import {Completion, CompletionResult, registerDataSourceFactory} from 'neuroglancer/datasource/factory';
+import {VolumeChunkSourceParameters, volumeSourceToString} from 'neuroglancer/datasource/ndstore/base';
 import {DataType, VolumeChunkSpecification, VolumeType} from 'neuroglancer/sliceview/base';
 import {MultiscaleVolumeChunkSource as GenericMultiscaleVolumeChunkSource, VolumeChunkSource as GenericVolumeChunkSource} from 'neuroglancer/sliceview/frontend';
 import {applyCompletionOffset, getPrefixMatchesWithDescriptions} from 'neuroglancer/util/completion';
@@ -37,22 +38,15 @@ const VALID_ENCODINGS = new Set<string>(['npz', 'raw', 'jpeg']);
 
 export class VolumeChunkSource extends GenericVolumeChunkSource {
   constructor(
-      chunkManager: ChunkManager, spec: VolumeChunkSpecification, public hostnames: string[],
-      public key: string, public channel: string, public resolution: string,
-      public encoding: string) {
+      chunkManager: ChunkManager, spec: VolumeChunkSpecification,
+      public parameters: VolumeChunkSourceParameters) {
     super(chunkManager, spec);
     this.initializeCounterpart(chunkManager.rpc!, {
       'type': 'ndstore/VolumeChunkSource',
-      'hostnames': hostnames,
-      'key': key,
-      'channel': channel,
-      'resolution': resolution,
-      'encoding': encoding,
+      'parameters': parameters,
     });
   }
-  toString() {
-    return `ndstore:volume:${this.hostnames[0]}/${this.key}/${this.channel}/${this.resolution}/${this.encoding}`;
-  }
+  toString() { return volumeSourceToString(this.parameters); }
 };
 
 
@@ -67,7 +61,7 @@ export class MultiscaleVolumeChunkSource implements GenericMultiscaleVolumeChunk
   channel: string;
 
   constructor(
-      public hostnames: string[], public key: string, public response: any,
+      public baseUrls: string[], public key: string, public response: any,
       channel: string|undefined, public parameters: {[index: string]: any}) {
     let channelsObject = response['channels'];
     let channelNames = Object.keys(channelsObject);
@@ -125,12 +119,15 @@ export class MultiscaleVolumeChunkSource implements GenericMultiscaleVolumeChunk
              voxelSize,
              dataType: this.dataType, lowerVoxelBound, upperVoxelBound
            })) {
-        let cacheKey = stableStringify(
-            {'spec': spec, key: this.key, channel: this.channel, resolution: resolution});
+        let parameters = {
+          baseUrls: this.baseUrls,
+          key: this.key,
+          channel: this.channel, resolution,
+          encoding: encoding!
+        };
         alternatives.push(chunkManager.getChunkSource(
-            VolumeChunkSource, cacheKey, () => new VolumeChunkSource(
-                                             chunkManager, spec, this.hostnames, this.key,
-                                             this.channel, resolution, encoding!)));
+            VolumeChunkSource, stableStringify(parameters),
+            () => new VolumeChunkSource(chunkManager, spec, parameters)));
       }
     }
     return sources;

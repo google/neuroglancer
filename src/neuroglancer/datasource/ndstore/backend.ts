@@ -15,6 +15,7 @@
  */
 
 import {handleChunkDownloadPromise} from 'neuroglancer/chunk_manager/backend';
+import {VolumeChunkSourceParameters, volumeSourceToString} from 'neuroglancer/datasource/ndstore/base';
 import {VolumeChunk, VolumeChunkSource as GenericVolumeChunkSource} from 'neuroglancer/sliceview/backend';
 import {ChunkDecoder} from 'neuroglancer/sliceview/backend_chunk_decoders';
 import {decodeJpegChunk} from 'neuroglancer/sliceview/backend_chunk_decoders/jpeg';
@@ -29,26 +30,19 @@ chunkDecoders.set('jpeg', decodeJpegChunk);
 chunkDecoders.set('raw', decodeRawChunk);
 
 class VolumeChunkSource extends GenericVolumeChunkSource {
-  hostnames: string[];
-  key: string;
-  resolution: string;
-  channel: string;
-  encoding: string;
+  parameters: VolumeChunkSourceParameters;
   chunkDecoder: ChunkDecoder;
 
   constructor(rpc: RPC, options: any) {
     super(rpc, options);
-    this.hostnames = options['hostnames'];
-    this.key = options['key'];
-    this.channel = options['channel'];
-    this.resolution = options['resolution'];
-    this.encoding = options['encoding'];
-
-    this.chunkDecoder = chunkDecoders.get(this.encoding)!;
+    this.parameters = options['parameters'];
+    this.chunkDecoder = chunkDecoders.get(this.parameters.encoding)!;
   }
 
   download(chunk: VolumeChunk) {
-    let path = `/ocp/ca/${this.key}/${this.channel}/${this.encoding}/${this.resolution}`;
+    let {parameters} = this;
+    let path =
+        `/ocp/ca/${parameters.key}/${parameters.channel}/${parameters.encoding}/${parameters.resolution}`;
     {
       // chunkPosition must not be captured, since it will be invalidated by the next call to
       // computeChunkBounds.
@@ -60,12 +54,10 @@ class VolumeChunkSource extends GenericVolumeChunkSource {
     }
     path += `/neariso/`;
     handleChunkDownloadPromise(
-        chunk, sendHttpRequest(openShardedHttpRequest(this.hostnames, path), 'arraybuffer'),
+        chunk, sendHttpRequest(openShardedHttpRequest(parameters.baseUrls, path), 'arraybuffer'),
         this.chunkDecoder);
   }
 
-  toString() {
-    return `ndstore:volume:${this.hostnames[0]}/${this.key}/${this.channel}/${this.resolution}/${this.encoding}`;
-  }
+  toString() { return volumeSourceToString(this.parameters); }
 };
 registerSharedObject('ndstore/VolumeChunkSource', VolumeChunkSource);
