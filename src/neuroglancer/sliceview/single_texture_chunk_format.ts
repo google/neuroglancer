@@ -44,18 +44,12 @@ export abstract class SingleTextureChunkFormat<TextureLayout extends Disposable>
     builder.addFragmentCode(glsl_getPositionWithinChunk);
   }
 
-  /**
-   * Called when starting to draw chunks.
-   */
   beginDrawing(gl: GL, shader: ShaderProgram) {
     let textureUnit = shader.textureUnit(textureUnitSymbol);
     gl.activeTexture(gl.TEXTURE0 + textureUnit);
     (<any>shader)[textureLayoutSymbol] = null;
   }
 
-  /**
-   * Called once after all chunks have been drawn.
-   */
   endDrawing(gl: GL, shader: ShaderProgram) {
     gl.bindTexture(gl.TEXTURE_2D, null);
     (<any>shader)[textureLayoutSymbol] = null;
@@ -66,9 +60,6 @@ export abstract class SingleTextureChunkFormat<TextureLayout extends Disposable>
    */
   abstract setupTextureLayout(gl: GL, shader: ShaderProgram, textureLayout: TextureLayout): void;
 
-  /**
-   * Called just before drawing each chunk.
-   */
   bindChunk<Data>(
       gl: GL, shader: ShaderProgram, chunk: SingleTextureVolumeChunk<Data, TextureLayout>) {
     let textureLayout = chunk.textureLayout!;
@@ -82,6 +73,11 @@ export abstract class SingleTextureChunkFormat<TextureLayout extends Disposable>
   }
 
   abstract setTextureData(gl: GL, textureLayout: TextureLayout, data: TypedArray): void;
+
+  /**
+   * Does nothing, but may be overridden by subclass.
+   */
+  beginSource(gl: GL, shader: ShaderProgram) {}
 };
 
 export abstract class SingleTextureVolumeChunk<Data, TextureLayout extends Disposable> extends

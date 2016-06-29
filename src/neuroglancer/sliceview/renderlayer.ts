@@ -488,6 +488,9 @@ ${GLSL_TYPE_FOR_DATA_TYPE.get(this.dataType)} getDataValue() { return getDataVal
         continue;
       }
 
+      let sourceChunkFormat = source.chunkFormat;
+      sourceChunkFormat.beginSource(gl, shader);
+
       let setChunkDataSize = (newChunkDataSize: Vec3) => {
         vec3.multiply(chunkSize, newChunkDataSize, source.spec.voxelSize);
         chunkDataSize = newChunkDataSize;
@@ -504,7 +507,7 @@ ${GLSL_TYPE_FOR_DATA_TYPE.get(this.dataType)} getDataValue() { return getDataVal
 
           vec3.multiply(chunkPosition, originalChunkSize, chunk.chunkGridPosition);
           vec3.add(chunkPosition, chunkPosition, offset);
-          chunkFormat.bindChunk(gl, shader, chunk);
+          sourceChunkFormat.bindChunk(gl, shader, chunk);
           vertexComputationManager.drawChunk(gl, shader, chunkPosition);
         }
       }

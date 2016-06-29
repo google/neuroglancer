@@ -253,10 +253,32 @@ export class SliceView extends SliceViewBase {
 
 export interface ChunkFormat {
   shaderKey: string;
+
+  /**
+   * Called on the ChunkFormat of the first source of a RenderLayer.
+   */
   defineShader: (builder: ShaderBuilder) => void;
+
+  /**
+   * Called once per RenderLayer when starting to draw chunks, on the ChunkFormat of the first
+   * source.  This is not called before each source is drawn.
+   */
   beginDrawing: (gl: GL, shader: ShaderProgram) => void;
+
+  /**
+   * Called once after all chunks have been drawn, on the ChunkFormat of the first source.
+   */
   endDrawing: (gl: GL, shader: ShaderProgram) => void;
+
+  /**
+   * Called just before drawing each chunk, on the ChunkFormat .
+   */
   bindChunk: (gl: GL, shader: ShaderProgram, chunk: VolumeChunk) => void;
+
+  /**
+   * Called just before drawing chunks for the source.
+   */
+  beginSource: (gl: GL, shader: ShaderProgram) => void;
 }
 
 export interface ChunkFormatHandler extends Disposable {

@@ -52,9 +52,10 @@ class TextureLayout extends RefCounted {
 
 export class ChunkFormat extends SingleTextureChunkFormat<TextureLayout> {
   static get(gl: GL, dataType: DataType, subchunkSize: Vec3, numChannels: number) {
-    let key =
-        `sliceview.CompressedSegmentationChunkFormat:${dataType}:${vec3Key(subchunkSize)}:${numChannels}`;
-    return gl.memoize.get(key, () => new ChunkFormat(dataType, subchunkSize, numChannels, key));
+    let shaderKey = `sliceview.CompressedSegmentationChunkFormat:${dataType}:${numChannels}`;
+    let cacheKey = `${shaderKey}:${vec3Key(subchunkSize)}`;
+    return gl.memoize.get(
+        cacheKey, () => new ChunkFormat(dataType, subchunkSize, numChannels, shaderKey));
   }
 
   private textureAccessHelper: OneDimensionalTextureAccessHelper;
@@ -72,6 +73,7 @@ export class ChunkFormat extends SingleTextureChunkFormat<TextureLayout> {
     this.textureAccessHelper.defineShader(builder);
     let local = (x: string) => 'compressedSegmentationChunkFormat_' + x;
     builder.addUniform('highp vec3', 'uSubchunkGridSize');
+    builder.addUniform('highp vec3', 'uSubchunkSize');
     builder.addFragmentCode(glsl_getFortranOrderIndexFromNormalized);
     const {dataType} = this;
     const glslType = GLSL_TYPE_FOR_DATA_TYPE.get(dataType);
@@ -96,8 +98,6 @@ float ${local('getChannelOffset')}(int channelIndex) {
   return v.x * 255.0 + v.y * 255.0 * 256.0 + v.z * 255.0 * 256.0 * 256.0;
 }
 ${glslType} getDataValue (int channelIndex) {
-  const vec3 uSubchunkSize = ${vec3.str(this.subchunkSize)};
-
   vec3 chunkPosition = getPositionWithinChunk();
 
   // TODO: maybe premultiply this and store as uniform.
@@ -170,6 +170,11 @@ ${glslType} getDataValue (int channelIndex) {
 
   getTextureLayout(gl: GL, chunkDataSize: Vec3, dataLength: number) {
     return TextureLayout.get(gl, chunkDataSize, this.subchunkSize, dataLength);
+  }
+
+  beginSource(gl: GL, shader: ShaderProgram) {
+    super.beginSource(gl, shader);
+    gl.uniform3fv(shader.uniform('uSubchunkSize'), this.subchunkSize);
   }
 };
 
