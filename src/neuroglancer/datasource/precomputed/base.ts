@@ -19,3 +19,23 @@ export enum VolumeChunkEncoding {
   JPEG,
   COMPRESSED_SEGMENTATION
 }
+
+export interface VolumeChunkSourceParameters {
+  baseUrls: string[];
+  path: string;
+  encoding: VolumeChunkEncoding;
+}
+
+export function volumeSourceToString(parameters: VolumeChunkSourceParameters) {
+  return `precomputed:volume:${parameters.baseUrls[0]}/${parameters.path}`;
+}
+
+export interface MeshSourceParameters {
+  baseUrls: string[];
+  path: string;
+  lod: number;
+}
+
+export function meshSourceToString(parameters: MeshSourceParameters) {
+  return `precomputed:mesh:${parameters.baseUrls[0]}/${parameters.path}/${parameters.lod}`;
+}

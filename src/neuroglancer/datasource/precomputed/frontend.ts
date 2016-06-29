@@ -16,42 +16,25 @@
 
 import {ChunkManager} from 'neuroglancer/chunk_manager/frontend';
 import {registerDataSourceFactory} from 'neuroglancer/datasource/factory';
-import {VolumeChunkEncoding} from 'neuroglancer/datasource/precomputed/base';
+import {MeshSourceParameters, VolumeChunkEncoding, VolumeChunkSourceParameters, meshSourceToString, volumeSourceToString} from 'neuroglancer/datasource/precomputed/base';
 import {MeshSource as GenericMeshSource} from 'neuroglancer/mesh/frontend';
 import {DataType, VolumeChunkSpecification, VolumeType} from 'neuroglancer/sliceview/base';
 import {MultiscaleVolumeChunkSource as GenericMultiscaleVolumeChunkSource, VolumeChunkSource as GenericVolumeChunkSource} from 'neuroglancer/sliceview/frontend';
 import {Vec3, vec3} from 'neuroglancer/util/geom';
 import {openShardedHttpRequest, parseSpecialUrl, sendHttpRequest} from 'neuroglancer/util/http_request';
-import {parseArray, parseFiniteVec, parseIntVec, stableStringify} from 'neuroglancer/util/json';
-
-let serverDataTypes = new Map<string, DataType>();
-serverDataTypes.set('uint8', DataType.UINT8);
-serverDataTypes.set('uint32', DataType.UINT32);
-serverDataTypes.set('uint64', DataType.UINT64);
-
-let serverVolumeTypes = new Map<string, VolumeType>();
-serverVolumeTypes.set('image', VolumeType.IMAGE);
-serverVolumeTypes.set('segmentation', VolumeType.SEGMENTATION);
-
-let serverChunkEncodings = new Map<string, VolumeChunkEncoding>();
-serverChunkEncodings.set('raw', VolumeChunkEncoding.RAW);
-serverChunkEncodings.set('jpeg', VolumeChunkEncoding.JPEG);
-serverChunkEncodings.set('compressed_segmentation', VolumeChunkEncoding.COMPRESSED_SEGMENTATION);
+import {parseArray, parseFixedLengthArray, parseIntVec, stableStringify, verifyEnumString, verifyFinitePositiveFloat, verifyObject, verifyObjectProperty, verifyOptionalString, verifyPositiveInt, verifyString} from 'neuroglancer/util/json';
 
 export class VolumeChunkSource extends GenericVolumeChunkSource {
   constructor(
-      chunkManager: ChunkManager, spec: VolumeChunkSpecification, public baseUrls: string[]|string,
-      public path: string, public encoding: VolumeChunkEncoding) {
+      chunkManager: ChunkManager, spec: VolumeChunkSpecification,
+      public parameters: VolumeChunkSourceParameters) {
     super(chunkManager, spec);
     this.initializeCounterpart(chunkManager.rpc!, {
       'type': 'precomputed/VolumeChunkSource',
-      'baseUrls': baseUrls,
-      'path': path,
-      'encoding': encoding,
+      'parameters': this.parameters,
     });
   }
-
-  toString() { return `precomputed:volume:${this.baseUrls[0]}/${this.path}`; }
+  toString() { return volumeSourceToString(this.parameters); }
 };
 
 class ScaleInfo {
@@ -62,31 +45,28 @@ class ScaleInfo {
   size: Vec3;
   chunkSizes: Vec3[];
   compressedSegmentationBlockSize: Vec3|undefined;
-  constructor(response: any) {
-    if (typeof response !== 'object' || Array.isArray(response)) {
-      throw new Error('Failed to parse volume metadata.');
-    }
-    this.resolution = parseFiniteVec(vec3.create(), response['resolution']);
-    this.voxelOffset = parseIntVec(vec3.create(), response['voxel_offset']);
-    this.size = parseIntVec(vec3.create(), response['size']);
-    this.chunkSizes = parseArray(response['chunk_sizes'], x => parseFiniteVec(vec3.create(), x));
+  constructor(obj: any) {
+    verifyObject(obj);
+    this.resolution = verifyObjectProperty(
+        obj, 'resolution', x => parseFixedLengthArray(vec3.create(), x, verifyFinitePositiveFloat));
+    this.voxelOffset =
+        verifyObjectProperty(obj, 'voxel_offset', x => parseIntVec(vec3.create(), x)),
+    this.size = verifyObjectProperty(
+        obj, 'size', x => parseFixedLengthArray(vec3.create(), x, verifyPositiveInt));
+    this.chunkSizes = verifyObjectProperty(
+        obj, 'chunk_sizes',
+        x => parseArray(x, y => parseFixedLengthArray(vec3.create(), y, verifyPositiveInt)));
     if (this.chunkSizes.length === 0) {
       throw new Error('No chunk sizes specified.');
     }
-    let encodingStr = response['encoding'];
-    let encoding = serverChunkEncodings.get(encodingStr);
-    if (encoding === undefined) {
-      throw new Error(`Invalid chunk encoding: ${JSON.stringify(encodingStr)}`);
-    }
-    this.encoding = encoding;
+    let encoding = this.encoding =
+        verifyObjectProperty(obj, 'encoding', x => verifyEnumString(x, VolumeChunkEncoding));
     if (encoding === VolumeChunkEncoding.COMPRESSED_SEGMENTATION) {
-      this.compressedSegmentationBlockSize =
-          parseIntVec(vec3.create(), response['compressed_segmentation_block_size']);
+      this.compressedSegmentationBlockSize = verifyObjectProperty(
+          obj, 'compressed_segmentation_block_size',
+          x => parseFixedLengthArray(vec3.create(), x, verifyPositiveInt));
     }
-    this.key = response['key'];
-    if (typeof this.key !== 'string') {
-      throw new Error('No key specified.');
-    }
+    this.key = verifyObjectProperty(obj, 'key', verifyString);
   }
 };
 
@@ -102,37 +82,17 @@ export class MultiscaleVolumeChunkSource implements GenericMultiscaleVolumeChunk
     if (mesh === undefined) {
       return null;
     }
-    return getShardedMeshSource(chunkManager, this.baseUrls, `${this.path}/${mesh}`, /*lod=*/0);
+    return getShardedMeshSource(
+        chunkManager, {baseUrls: this.baseUrls, path: `${this.path}/${mesh}`, lod: 0});
   }
 
-  constructor(public baseUrls: string[], public path: string, private response: any) {
-    if (typeof response !== 'object' || Array.isArray(response)) {
-      throw new Error('Failed to parse volume metadata.');
-    }
-    let dataTypeStr = response['data_type'];
-    let dataType = serverDataTypes.get(dataTypeStr);
-    if (dataType === undefined) {
-      throw new Error(`Invalid data type: ${JSON.stringify(dataTypeStr)}`);
-    }
-    let numChannels = response['num_channels'];
-    if (typeof numChannels !== 'number') {
-      throw new Error('Invalid number of channels.');
-    }
-    this.numChannels = numChannels;
-    this.dataType = dataType;
-    let volumeTypeStr = response['type'];
-    let volumeType = serverVolumeTypes.get(volumeTypeStr);
-    if (volumeType === undefined) {
-      throw new Error(`Invalid volume type: ${JSON.stringify(volumeTypeStr)}`);
-    }
-    this.volumeType = volumeType;
-
-    let meshStr = response['mesh'];
-    if (meshStr !== undefined && typeof meshStr !== 'string') {
-      throw new Error('Invalid "mesh" field.');
-    }
-    this.mesh = meshStr;
-    this.scales = parseArray(response['scales'], x => new ScaleInfo(x));
+  constructor(public baseUrls: string[], public path: string, private obj: any) {
+    verifyObject(obj);
+    this.dataType = verifyObjectProperty(obj, 'data_type', x => verifyEnumString(x, DataType));
+    this.numChannels = verifyObjectProperty(obj, 'num_channels', verifyPositiveInt);
+    this.volumeType = verifyObjectProperty(obj, 'type', x => verifyEnumString(x, VolumeType));
+    this.mesh = verifyObjectProperty(obj, 'mesh', verifyOptionalString);
+    this.scales = verifyObjectProperty(obj, 'scales', x => parseArray(x, y => new ScaleInfo(y)));
   }
 
   getSources(chunkManager: ChunkManager) {
@@ -149,44 +109,36 @@ export class MultiscaleVolumeChunkSource implements GenericMultiscaleVolumeChunk
             compressedSegmentationBlockSize: scaleInfo.compressedSegmentationBlockSize
           })
           .map(spec => {
-            let path = `${this.path}/${scaleInfo.key}`;
-            let cacheKey = stableStringify({
-              'spec': spec,
+            let parameters = {
               'baseUrls': this.baseUrls,
-              'path': path,
+              'path': `${this.path}/${scaleInfo.key}`,
               'encoding': scaleInfo.encoding
-            });
+            };
             return chunkManager.getChunkSource(
-                VolumeChunkSource, cacheKey,
-                () => new VolumeChunkSource(
-                    chunkManager, spec, this.baseUrls, path, scaleInfo.encoding));
+                VolumeChunkSource, stableStringify(parameters),
+                () => new VolumeChunkSource(chunkManager, spec, parameters));
           });
     });
   }
 };
 
 export class MeshSource extends GenericMeshSource {
-  constructor(
-      chunkManager: ChunkManager, public baseUrls: string|string[], public path: string,
-      public lod: number) {
+  constructor(chunkManager: ChunkManager, public parameters: MeshSourceParameters) {
     super(chunkManager);
     this.initializeCounterpart(
-        this.chunkManager.rpc!,
-        {'type': 'precomputed/MeshSource', 'baseUrls': baseUrls, 'path': path, 'lod': lod});
+        this.chunkManager.rpc!, {'type': 'precomputed/MeshSource', 'parameters': parameters});
   }
-  toString() { return `precomputed:mesh:${this.baseUrls[0]}/${this.path}`; }
+  toString() { return meshSourceToString(this.parameters); }
 };
 
-export function getShardedMeshSource(
-    chunkManager: ChunkManager, baseUrls: string[], path: string, lod: number) {
+export function getShardedMeshSource(chunkManager: ChunkManager, parameters: MeshSourceParameters) {
   return chunkManager.getChunkSource(
-      MeshSource, JSON.stringify({'baseUrls': baseUrls, 'path': path, 'lod': lod}),
-      () => new MeshSource(chunkManager, baseUrls, path, lod));
+      MeshSource, stableStringify(parameters), () => new MeshSource(chunkManager, parameters));
 }
 
 export function getMeshSource(chunkManager: ChunkManager, url: string, lod: number) {
   const [baseUrls, path] = parseSpecialUrl(url);
-  return getShardedMeshSource(chunkManager, baseUrls, path, lod);
+  return getShardedMeshSource(chunkManager, {baseUrls, path, lod});
 }
 
 let existingVolumes = new Map<string, Promise<MultiscaleVolumeChunkSource>>();

@@ -15,7 +15,7 @@
  */
 
 import {handleChunkDownloadPromise} from 'neuroglancer/chunk_manager/backend';
-import {VolumeChunkEncoding} from 'neuroglancer/datasource/precomputed/base';
+import {MeshSourceParameters, VolumeChunkEncoding, VolumeChunkSourceParameters, meshSourceToString, volumeSourceToString} from 'neuroglancer/datasource/precomputed/base';
 import {FragmentChunk, ManifestChunk, MeshSource as GenericMeshSource, decodeJsonManifestChunk, decodeVertexPositionsAndIndices} from 'neuroglancer/mesh/backend';
 import {VolumeChunk, VolumeChunkSource as GenericVolumeChunkSource} from 'neuroglancer/sliceview/backend';
 import {ChunkDecoder} from 'neuroglancer/sliceview/backend_chunk_decoders';
@@ -32,20 +32,17 @@ chunkDecoders.set(VolumeChunkEncoding.JPEG, decodeJpegChunk);
 chunkDecoders.set(VolumeChunkEncoding.COMPRESSED_SEGMENTATION, decodeCompressedSegmentationChunk);
 
 class VolumeChunkSource extends GenericVolumeChunkSource {
-  baseUrls: string[];
-  path: string;
-  encoding: VolumeChunkEncoding;
+  parameters: VolumeChunkSourceParameters;
   chunkDecoder: ChunkDecoder;
 
   constructor(rpc: RPC, options: any) {
     super(rpc, options);
-    this.baseUrls = options['baseUrls'];
-    this.path = options['path'];
-    this.encoding = options['encoding'];
-    this.chunkDecoder = chunkDecoders.get(this.encoding)!;
+    this.parameters = options['parameters'];
+    this.chunkDecoder = chunkDecoders.get(this.parameters.encoding)!;
   }
 
   download(chunk: VolumeChunk) {
+    let {parameters} = this;
     let path: string;
     {
       // chunkPosition must not be captured, since it will be invalidated by the next call to
@@ -53,13 +50,13 @@ class VolumeChunkSource extends GenericVolumeChunkSource {
       let chunkPosition = this.computeChunkBounds(chunk);
       let chunkDataSize = chunk.chunkDataSize!;
       path =
-          `${this.path}/${chunkPosition[0]}-${chunkPosition[0] + chunkDataSize[0]}_${chunkPosition[1]}-${chunkPosition[1] + chunkDataSize[1]}_${chunkPosition[2]}-${chunkPosition[2] + chunkDataSize[2]}`;
+          `${parameters.path}/${chunkPosition[0]}-${chunkPosition[0] + chunkDataSize[0]}_${chunkPosition[1]}-${chunkPosition[1] + chunkDataSize[1]}_${chunkPosition[2]}-${chunkPosition[2] + chunkDataSize[2]}`;
     }
     handleChunkDownloadPromise(
-        chunk, sendHttpRequest(openShardedHttpRequest(this.baseUrls, path), 'arraybuffer'),
+        chunk, sendHttpRequest(openShardedHttpRequest(parameters.baseUrls, path), 'arraybuffer'),
         this.chunkDecoder);
   }
-  toString() { return `precomputed:volume:${this.baseUrls[0]}/${this.path}`; }
+  toString() { return volumeSourceToString(this.parameters); }
 };
 registerSharedObject('precomputed/VolumeChunkSource', VolumeChunkSource);
 
@@ -75,30 +72,28 @@ export function decodeFragmentChunk(chunk: FragmentChunk, response: ArrayBuffer)
 }
 
 export class MeshSource extends GenericMeshSource {
-  baseUrls: string[];
-  path: string;
-  lod: number;
-
+  parameters: MeshSourceParameters;
   constructor(rpc: RPC, options: any) {
     super(rpc, options);
-    this.baseUrls = options['baseUrls'];
-    this.path = options['path'];
-    this.lod = options['lod'];
+    this.parameters = options['parameters'];
   }
 
   download(chunk: ManifestChunk) {
-    let requestPath = `${this.path}/${chunk.objectId}:${this.lod}`;
+    let {parameters} = this;
+    let requestPath = `${parameters.path}/${chunk.objectId}:${parameters.lod}`;
     handleChunkDownloadPromise(
-        chunk, sendHttpRequest(openShardedHttpRequest(this.baseUrls, requestPath), 'json'),
+        chunk, sendHttpRequest(openShardedHttpRequest(parameters.baseUrls, requestPath), 'json'),
         decodeManifestChunk);
   }
 
   downloadFragment(chunk: FragmentChunk) {
-    let requestPath = `${this.path}/${chunk.fragmentId}`;
+    let {parameters} = this;
+    let requestPath = `${parameters.path}/${chunk.fragmentId}`;
     handleChunkDownloadPromise(
-        chunk, sendHttpRequest(openShardedHttpRequest(this.baseUrls, requestPath), 'arraybuffer'),
+        chunk,
+        sendHttpRequest(openShardedHttpRequest(parameters.baseUrls, requestPath), 'arraybuffer'),
         decodeFragmentChunk);
   }
-  toString() { return `precomputed:mesh:${this.baseUrls[0]}/${this.path}`; }
+  toString() { return meshSourceToString(this.parameters); }
 };
 registerSharedObject('precomputed/MeshSource', MeshSource);
