@@ -14,13 +14,17 @@
  * limitations under the License.
  */
 
-export interface CancellablePromise<T> extends Promise<T> {
-  // Prevents any chained actions from being called.
-  // Any finally handlers are scheduled to be run.
-  cancel?: () => void;
+/**
+ * @file Minimal support for integrating cancellation notification with Promises.
+ *
+ * For Promises that support cancellation, cancelling a pending Promise has the effect of
+ * synchronously invoking a cancellation callback function, if one has been set, and rejecting the
+ * promise with the error value CANCELLED.  Cancelling a resolved/rejected Promise, or a regular
+ * Promise that does not support cancellation (as indicated by the presence of a cancel method) has
+ * no effect.
+ */
 
-  finally?: <TResult>(handler: () => TResult | PromiseLike<TResult>) => Promise<T>;
-}
+export interface CancellablePromise<T> extends Promise<T> { cancel?: () => void; }
 
 export class CancellationError {
   toString() { return 'CancellationError'; }
@@ -31,6 +35,29 @@ export class CancellationError {
  */
 export const CANCELLED = new CancellationError();
 
+/**
+ * Create a new promise capable of receiving notification of cancellation.
+ *
+ * This extends the interface of the Promise consructor with an additional onCancel argument passed
+ * to the executor function.  It is used for specifying a callback function to be invoked when
+ * cancelPromise is called.
+ *
+ * onCancel may be invoked to set the cancellation callback any number of times, either
+ * synchronously from within the executor or asynchronously.
+ *
+ * The effect of invoking onCancel depends on whether the promise is pending (i.e. not yet resolved,
+ * rejected, or cancelled):
+ *
+ * - If at the time onCancel is invoked the promise is still pending, the stored cancellation
+ *   callback is replaced with the supplied callback.  The supplied callback may be undefined to
+ *   specify that no callback should be invoked.
+ *
+ * - If at the time onCancel is invoked the promise is not still pending, the supplied callback, if
+ *   not undefined, is invoked synchronously.
+ *
+ * WARNING: Because they may be invoked either synchronously or asynchronously, great care must be
+ * taken in writing callbacks to be supplied to onCancel,
+ */
 export function makeCancellablePromise<T>(
     executor: (
         resolve: (value: T | PromiseLike<T>) => void, reject: (reason: any) => void,
@@ -42,6 +69,7 @@ export function makeCancellablePromise<T>(
     function resolver(value: T) {
       if (!finished) {
         finished = true;
+        cancelHandler = undefined;
         // This can't throw.
         resolve(value);
       }
@@ -50,17 +78,22 @@ export function makeCancellablePromise<T>(
     function rejecter(value: any) {
       if (!finished) {
         finished = true;
+        cancelHandler = undefined;
         // This can't throw.
         reject(value);
       }
     }
 
-    function setCancelHandler(newCancelHandler: () => void) {
+    function setCancelHandler(newCancelHandler: (() => void)|undefined) {
       if (finished) {
         try {
-          newCancelHandler();
+          if (newCancelHandler !== undefined) {
+            newCancelHandler();
+          }
         } catch (ignoredError) {
         }
+      } else {
+        cancelHandler = newCancelHandler;
       }
     }
     try {
@@ -86,6 +119,15 @@ export function makeCancellablePromise<T>(
   return promise;
 }
 
+/**
+ * Try to cancel a promise.
+ *
+ * If the promise has a cancel method, invoke it synchronously.  For promises created by
+ * makeCancellablePromise, this has the effect of synchronously invoking the most recently set
+ * cancellation callback, if defined, and rejecting the promise with the error value CANCELLED.
+ *
+ * If the promise has no cancel method, or is null or undefined, do nothing.
+ */
 export function cancelPromise<T>(promise: CancellablePromise<T>| null | undefined) {
   if (promise != null) {
     let {cancel} = promise;
@@ -96,7 +138,7 @@ export function cancelPromise<T>(promise: CancellablePromise<T>| null | undefine
 }
 
 /**
- * Schedules a call to handler when promise is either fulfilled or rejected.  If the handler throws
+ * Schedule a call to handler when promise is either fulfilled or rejected.  If the handler throws
  * an error, the returned promise is rejected with it.  Otherwise, the returned promise has the same
  * state as the original promise.
  *
@@ -126,7 +168,7 @@ export function callFinally<T>(
 }
 
 /**
- * Schedules a call to onFulfilled as soon as the promise is fulfilled.
+ * Schedule a call to onFulfilled as soon as the promise is fulfilled.
  *
  * A cancellation handler may be set, which is called if the returned promise is cancelled afer
  * inputPromise is fulfilled.  If the returned promise is cancelled before inputPromise is
