@@ -4,7 +4,8 @@
     "noImplicitReturns": true,
     "noImplicitThis": true,
     "preserveConstEnums": true,
-    "strictNullChecks": false,
+    "experimentalDecorators": true,
+    "strictNullChecks": true,
     "sourceMap": true,
     "module": "commonjs",
     "target": "ES2015",
@@ -14,7 +15,8 @@
       "*": ["*"],
       "neuroglancer/*": ["third_party/neuroglancer/*"],
       "my-neuroglancer-project/*": ["src/my-neuroglancer-project/*"]
-    }
+    },
+    "typeRoots": []
   },
   "exclude": [
     "node_modules",
