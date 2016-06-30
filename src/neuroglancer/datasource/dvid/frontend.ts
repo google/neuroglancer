@@ -20,11 +20,10 @@
  */
 
 import {ChunkManager} from 'neuroglancer/chunk_manager/frontend';
-import {DVIDSourceParameters, TileChunkSourceParameters, TileEncoding, VolumeChunkSourceParameters, tileSourceToString, volumeSourceToString} from 'neuroglancer/datasource/dvid/base';
+import {DVIDSourceParameters, TileChunkSourceParameters, TileEncoding, VolumeChunkSourceParameters} from 'neuroglancer/datasource/dvid/base';
 import {CompletionResult, registerDataSourceFactory} from 'neuroglancer/datasource/factory';
 import {DataType, VolumeChunkSpecification, VolumeType} from 'neuroglancer/sliceview/base';
-import {ChunkLayout} from 'neuroglancer/sliceview/chunk_layout';
-import {MultiscaleVolumeChunkSource as GenericMultiscaleVolumeChunkSource, VolumeChunkSource as GenericVolumeChunkSource} from 'neuroglancer/sliceview/frontend';
+import {MultiscaleVolumeChunkSource as GenericMultiscaleVolumeChunkSource, VolumeChunkSource, defineParameterizedVolumeChunkSource} from 'neuroglancer/sliceview/frontend';
 import {StatusMessage} from 'neuroglancer/status';
 import {applyCompletionOffset, getPrefixMatchesWithDescriptions} from 'neuroglancer/util/completion';
 import {Vec3, vec3} from 'neuroglancer/util/geom';
@@ -50,18 +49,7 @@ export class DataInstanceInfo {
   constructor(public obj: any, public name: string, public base: DataInstanceBaseInfo) {}
 };
 
-export class VolumeChunkSource extends GenericVolumeChunkSource {
-  constructor(
-      chunkManager: ChunkManager, spec: VolumeChunkSpecification,
-      public parameters: VolumeChunkSourceParameters) {
-    super(chunkManager, spec);
-    this.initializeCounterpart(chunkManager.rpc!, {
-      'type': 'dvid/VolumeChunkSource',
-      'parameters': parameters,
-    });
-  }
-  toString() { return volumeSourceToString(this.parameters); }
-};
+const DVIDVolumeChunkSource = defineParameterizedVolumeChunkSource(VolumeChunkSourceParameters);
 
 export class VolumeDataInstanceInfo extends DataInstanceInfo {
   dataType: DataType;
@@ -106,7 +94,6 @@ export class VolumeDataInstanceInfo extends DataInstanceInfo {
     let sources: VolumeChunkSource[][] = [];
     for (let level = 0; level < this.numLevels; ++level) {
       let voxelSize = vec3.clone(this.voxelSize);
-      // does not have to correspond to internal dvid chunk size
       voxelSize[0] = voxelSize[0] * Math.pow(2, level);
       voxelSize[1] = voxelSize[1] * Math.pow(2, level);
       voxelSize[2] = voxelSize[2] * Math.pow(2, level);
@@ -128,21 +115,19 @@ export class VolumeDataInstanceInfo extends DataInstanceInfo {
         'baseUrls': parameters.baseUrls,
         'nodeKey': parameters.nodeKey,
         'dataInstanceKey': dataInstanceKey,
-        'level': level.toString(),
       };
-      let alternatives = Array
-                             .from(VolumeChunkSpecification.getDefaults({
+      let alternatives = VolumeChunkSpecification
+                             .getDefaults({
                                voxelSize: voxelSize,
                                dataType: this.dataType,
                                numChannels: this.numChannels,
-                               lowerVoxelBound: this.lowerVoxelBound,
-                               upperVoxelBound: this.upperVoxelBound,
+                               baseVoxelOffset: this.lowerVoxelBound,
+                               upperVoxelBound: vec3.subtract(
+                                   vec3.create(), this.upperVoxelBound, this.lowerVoxelBound),
                                volumeType: this.volumeType,
-                             }))
+                             })
                              .map(spec => {
-                               return chunkManager.getChunkSource(
-                                   VolumeChunkSource, stableStringify(volParameters),
-                                   () => new VolumeChunkSource(chunkManager, spec, volParameters));
+                               return DVIDVolumeChunkSource.get(chunkManager, spec, volParameters);
                              });
       sources.push(alternatives);
     }
@@ -179,18 +164,7 @@ const TILE_DIMS = [
   [1, 2],
 ];
 
-export class TileChunkSource extends GenericVolumeChunkSource {
-  constructor(
-      chunkManager: ChunkManager, spec: VolumeChunkSpecification,
-      public parameters: TileChunkSourceParameters) {
-    super(chunkManager, spec);
-    this.initializeCounterpart(chunkManager.rpc!, {
-      'type': 'dvid/TileChunkSource',
-      'parameters': parameters,
-    });
-  }
-  toString() { return tileSourceToString(this.parameters); }
-};
+const TileChunkSource = defineParameterizedVolumeChunkSource(TileChunkSourceParameters);
 
 export class TileDataInstanceInfo extends DataInstanceInfo {
   get dataType() { return DataType.UINT8; }
@@ -236,9 +210,9 @@ export class TileDataInstanceInfo extends DataInstanceInfo {
     }
   }
 
-  getSources(chunkManager: ChunkManager, parameters: DVIDSourceParameters):
-      GenericVolumeChunkSource[][] {
-    let sources: TileChunkSource[][] = [];
+  getSources(chunkManager: ChunkManager, parameters: DVIDSourceParameters) {
+    let sources: VolumeChunkSource[][] = [];
+    let {numChannels, dataType, encoding} = this;
     for (let [level, levelInfo] of this.levels) {
       let alternatives = TILE_DIMS.map(dims => {
         let voxelSize = vec3.clone(this.voxelSize);
@@ -248,8 +222,6 @@ export class TileDataInstanceInfo extends DataInstanceInfo {
           voxelSize[dims[i]] = levelInfo.resolution[dims[i]];
           chunkDataSize[dims[i]] = levelInfo.tileSize[dims[i]];
         }
-
-        let chunkLayout = ChunkLayout.get(vec3.multiply(vec3.create(), voxelSize, chunkDataSize));
         let lowerVoxelBound = vec3.create(), upperVoxelBound = vec3.create();
         for (let i = 0; i < 3; ++i) {
           lowerVoxelBound[i] =
@@ -257,20 +229,20 @@ export class TileDataInstanceInfo extends DataInstanceInfo {
           upperVoxelBound[i] =
               Math.ceil(this.upperVoxelBound[i] * (this.voxelSize[i] / voxelSize[i]));
         }
-        let spec = new VolumeChunkSpecification(
-            chunkLayout, chunkDataSize, this.numChannels, this.dataType, lowerVoxelBound,
-            upperVoxelBound);
-        let tileParameters: TileChunkSourceParameters = {
+        let spec = new VolumeChunkSpecification({
+          voxelSize,
+          chunkDataSize,
+          numChannels: numChannels,
+          dataType: dataType, lowerVoxelBound, upperVoxelBound
+        });
+        return TileChunkSource.get(chunkManager, spec, {
           'baseUrls': parameters.baseUrls,
           'nodeKey': parameters.nodeKey,
           'dataInstanceKey': parameters.dataInstanceKey,
-          'encoding': this.encoding,
+          'encoding': encoding,
           'level': level,
           'dims': `${dims[0]}_${dims[1]}`,
-        };
-        return chunkManager.getChunkSource(
-            VolumeChunkSource, stableStringify(tileParameters),
-            () => new TileChunkSource(chunkManager, spec, tileParameters));
+        });
       });
       sources.push(alternatives);
     }

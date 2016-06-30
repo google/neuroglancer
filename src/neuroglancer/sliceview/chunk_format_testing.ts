@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-import {glsl_getPositionWithinChunk} from 'neuroglancer/sliceview/single_texture_chunk_format';
+import {glsl_getPositionWithinChunk} from 'neuroglancer/sliceview/renderlayer';
 import {SingleTextureChunkFormat} from 'neuroglancer/sliceview/single_texture_chunk_format';
 import {getFortranOrderStrides} from 'neuroglancer/util/array';
 import {TypedArray} from 'neuroglancer/util/array';
@@ -39,6 +39,7 @@ export function chunkFormatTest<TextureLayout extends Disposable>(
          let {gl, builder} = tester;
          let [chunkFormat, textureLayout] = getChunkFormatAndTextureLayout(gl);
          builder.addUniform('vec3', 'vChunkPosition');
+         builder.addUniform('vec3', 'uChunkDataSize');
          builder.addFragmentCode(glsl_getPositionWithinChunk);
          chunkFormat.defineShader(builder);
          {
@@ -97,10 +98,9 @@ gl_FragData[${outputChannel++}] = getDataValue(${channel}).value;
 
          // Position within chunk in floating point range [0, chunkDataSize].
          function checkPosition(positionInChunk: Vec3) {
-           gl.uniform3fv(
-               shader.uniform('vChunkPosition'),
-               vec3.divide(vec3.create(), positionInChunk, volumeSize));
+           gl.uniform3fv(shader.uniform('vChunkPosition'), positionInChunk);
            chunkFormat.beginDrawing(gl, shader);
+           chunkFormat.beginSource(gl, shader);
            chunkFormat.setupTextureLayout(gl, shader, textureLayout);
            gl.bindTexture(gl.TEXTURE_2D, texture);
            tester.execute();

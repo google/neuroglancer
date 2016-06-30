@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-import {AvailableCapacity, ChunkState} from 'neuroglancer/chunk_manager/base';
+import {AvailableCapacity, CHUNK_MANAGER_RPC_ID, CHUNK_QUEUE_MANAGER_RPC_ID, ChunkState} from 'neuroglancer/chunk_manager/base';
 import {Memoize} from 'neuroglancer/util/memoize';
 import {GL} from 'neuroglancer/webgl/context';
 import {RPC, SharedObject, registerRPC} from 'neuroglancer/worker_rpc';
@@ -43,8 +43,8 @@ export class ChunkQueueManager extends SharedObject {
   pendingChunkUpdatesTail: any = null;
 
   /**
-   * If non-null, deadline in milliseconds since epoch after which
-   * chunk copies to the GPU may not start (until the next frame).
+   * If non-null, deadline in milliseconds since epoch after which chunk copies to the GPU may not
+   * start (until the next frame).
    */
   chunkUpdateDeadline: number|null = null;
 
@@ -57,7 +57,7 @@ export class ChunkQueueManager extends SharedObject {
   }) {
     super();
     this.initializeCounterpart(rpc, {
-      'type': 'ChunkQueueManager',
+      'type': CHUNK_QUEUE_MANAGER_RPC_ID,
       'gpuMemoryCapacity': capacities.gpuMemory.toObject(),
       'systemMemoryCapacity': capacities.systemMemory.toObject(),
       'downloadCapacity': capacities.download.toObject()
@@ -153,7 +153,7 @@ export class ChunkManager extends SharedObject {
     this.registerDisposer(chunkQueueManager.addRef());
     this.initializeCounterpart(
         chunkQueueManager.rpc!,
-        {'type': 'ChunkManager', 'chunkQueueManager': chunkQueueManager.rpcId});
+        {'type': CHUNK_MANAGER_RPC_ID, 'chunkQueueManager': chunkQueueManager.rpcId});
   }
 
   getChunkSource<T extends ChunkSource>(constructor: any, key: string, getter: () => T) {

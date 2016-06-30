@@ -38,7 +38,14 @@ export class RenderLayer extends RefCounted {
 
   getValueAt(x: Float32Array): any { return undefined; }
 
+  /**
+   * Base voxel size for this layer, in nanometers per voxel.
+   */
   voxelSize: Vec3|null = null;
+
+  /**
+   * Bounding box for this layer, in nanometers.
+   */
   boundingBox: BoundingBox|null = null;
 };
 
@@ -277,10 +284,11 @@ export class LayerManager extends RefCounted {
         if (!position.spatialCoordinatesValid && !position.voxelCoordinatesValid &&
             renderLayer.boundingBox != null) {
           let boundingBox = renderLayer.boundingBox;
-          let centerPosition = vec3.create();
+          let centerPosition = position.spatialCoordinates;
           vec3.add(centerPosition, boundingBox.lower, boundingBox.upper);
           vec3.scale(centerPosition, centerPosition, 0.5);
-          position.setVoxelCoordinates(centerPosition);
+          position.spatialCoordinatesValid = true;
+          position.changed.dispatch();
         }
       }
     }

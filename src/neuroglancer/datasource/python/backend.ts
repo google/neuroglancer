@@ -14,34 +14,26 @@
  * limitations under the License.
  */
 
-import {handleChunkDownloadPromise} from 'neuroglancer/chunk_manager/backend';
-import {MeshSourceParameters, VolumeChunkEncoding, VolumeChunkSourceParameters, meshSourceToString, volumeSourceToString} from 'neuroglancer/datasource/python/base';
-import {FragmentChunk, ManifestChunk, MeshSource as GenericMeshSource, decodeVertexPositionsAndIndices} from 'neuroglancer/mesh/backend';
-import {VolumeChunk, VolumeChunkSource as GenericVolumeChunkSource} from 'neuroglancer/sliceview/backend';
+import {handleChunkDownloadPromise, registerChunkSource} from 'neuroglancer/chunk_manager/backend';
+import {MeshSourceParameters, VolumeChunkEncoding, VolumeChunkSourceParameters} from 'neuroglancer/datasource/python/base';
+import {FragmentChunk, ManifestChunk, ParameterizedMeshSource, decodeVertexPositionsAndIndices} from 'neuroglancer/mesh/backend';
+import {ParameterizedVolumeChunkSource, VolumeChunk} from 'neuroglancer/sliceview/backend';
 import {ChunkDecoder} from 'neuroglancer/sliceview/backend_chunk_decoders';
 import {decodeJpegChunk} from 'neuroglancer/sliceview/backend_chunk_decoders/jpeg';
 import {decodeNdstoreNpzChunk} from 'neuroglancer/sliceview/backend_chunk_decoders/ndstoreNpz';
 import {decodeRawChunk} from 'neuroglancer/sliceview/backend_chunk_decoders/raw';
 import {Endianness} from 'neuroglancer/util/endian';
 import {openShardedHttpRequest, sendHttpRequest} from 'neuroglancer/util/http_request';
-import {RPC, registerSharedObject} from 'neuroglancer/worker_rpc';
 
 let chunkDecoders = new Map<VolumeChunkEncoding, ChunkDecoder>();
 chunkDecoders.set(VolumeChunkEncoding.NPZ, decodeNdstoreNpzChunk);
 chunkDecoders.set(VolumeChunkEncoding.JPEG, decodeJpegChunk);
 chunkDecoders.set(VolumeChunkEncoding.RAW, decodeRawChunk);
 
-class VolumeChunkSource extends GenericVolumeChunkSource {
-  chunkDecoder: ChunkDecoder;
-  parameters: VolumeChunkSourceParameters;
-  encoding: string;
-
-  constructor(rpc: RPC, options: any) {
-    super(rpc, options);
-    this.parameters = options['parameters'];
-    this.chunkDecoder = chunkDecoders.get(this.parameters['encoding'])!;
-    this.encoding = VolumeChunkEncoding[this.parameters.encoding].toLowerCase();
-  }
+@registerChunkSource(VolumeChunkSourceParameters)
+class VolumeChunkSource extends ParameterizedVolumeChunkSource<VolumeChunkSourceParameters> {
+  chunkDecoder = chunkDecoders.get(this.parameters['encoding'])!;
+  encoding = VolumeChunkEncoding[this.parameters.encoding].toLowerCase();
 
   download(chunk: VolumeChunk) {
     let {parameters} = this;
@@ -59,10 +51,7 @@ class VolumeChunkSource extends GenericVolumeChunkSource {
         chunk, sendHttpRequest(openShardedHttpRequest(parameters.baseUrls, path), 'arraybuffer'),
         this.chunkDecoder);
   }
-
-  toString() { return volumeSourceToString(this.parameters); }
 };
-registerSharedObject('python/VolumeChunkSource', VolumeChunkSource);
 
 export function decodeFragmentChunk(chunk: FragmentChunk, response: ArrayBuffer) {
   let dv = new DataView(response);
@@ -75,14 +64,8 @@ function decodeManifestChunk(chunk: ManifestChunk, response: any) {
   chunk.fragmentIds = [''];
 }
 
-export class MeshSource extends GenericMeshSource {
-  parameters: MeshSourceParameters;
-
-  constructor(rpc: RPC, options: any) {
-    super(rpc, options);
-    this.parameters = options['parameters'];
-  }
-
+@registerChunkSource(MeshSourceParameters)
+export class MeshSource extends ParameterizedMeshSource<MeshSourceParameters> {
   download(chunk: ManifestChunk) {
     // No manifest chunk to download, as there is always only a single fragment.
     handleChunkDownloadPromise(chunk, Promise.resolve(undefined), decodeManifestChunk);
@@ -96,6 +79,4 @@ export class MeshSource extends GenericMeshSource {
         sendHttpRequest(openShardedHttpRequest(parameters.baseUrls, requestPath), 'arraybuffer'),
         decodeFragmentChunk);
   }
-  toString() { return meshSourceToString(this.parameters); }
 };
-registerSharedObject('python/MeshSource', MeshSource);

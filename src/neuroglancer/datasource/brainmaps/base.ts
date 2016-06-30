@@ -22,23 +22,27 @@ export enum VolumeChunkEncoding {
   COMPRESSED_SEGMENTATION
 }
 
-export interface VolumeSourceParameters {
+export class VolumeSourceParameters {
   instance: BrainmapsInstance;
   volume_id: string;
   scaleIndex: number;
   encoding: VolumeChunkEncoding;
-}
 
-export function volumeSourceToString(p: VolumeSourceParameters) {
-  return `brainmaps-${brainmapsInstanceKey(p['instance'])}:volume/${p['volume_id']}/${p['scaleIndex']}/${VolumeChunkEncoding[p['encoding']]}`;
-}
+  static RPC_ID = 'brainmaps/VolumeChunkSource';
 
-export interface MeshSourceParameters {
+  static stringify(p: VolumeSourceParameters) {
+    return `brainmaps-${brainmapsInstanceKey(p['instance'])}:volume/${p['volume_id']}/${p['scaleIndex']}/${VolumeChunkEncoding[p['encoding']]}`;
+  }
+};
+
+export class MeshSourceParameters {
   instance: BrainmapsInstance;
   volume_id: string;
   mesh_name: string;
-}
 
-export function meshSourceToString(p: MeshSourceParameters) {
-  return `brainmaps:${brainmapsInstanceKey(p['instance'])}:mesh/${p['volume_id']}/${p['mesh_name']}`;
-}
+  static stringify(p: MeshSourceParameters) {
+    return `brainmaps:${brainmapsInstanceKey(p['instance'])}:mesh/${p['volume_id']}/${p['mesh_name']}`;
+  }
+
+  static RPC_ID = 'brainmaps/MeshSource';
+};

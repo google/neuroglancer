@@ -18,13 +18,13 @@ import 'neuroglancer/uint64_set'; // Import for side effects.
 
 import {Chunk, ChunkManager, ChunkSource} from 'neuroglancer/chunk_manager/backend';
 import {ChunkPriorityTier, ChunkState} from 'neuroglancer/chunk_manager/base';
+import {FRAGMENT_SOURCE_RPC_ID, MESH_LAYER_RPC_ID} from 'neuroglancer/mesh/base';
 import {Uint64Set} from 'neuroglancer/uint64_set';
 import {Endianness, convertEndian32} from 'neuroglancer/util/endian';
 import {vec3} from 'neuroglancer/util/geom';
 import {verifyObject, verifyObjectProperty} from 'neuroglancer/util/json';
 import {Uint64} from 'neuroglancer/util/uint64';
 import {RPC, SharedObjectCounterpart, registerSharedObject} from 'neuroglancer/worker_rpc';
-
 
 const MESH_OBJECT_MANIFEST_CHUNK_PRIORITY = 100;
 const MESH_OBJECT_FRAGMENT_CHUNK_PRIORITY = 50;
@@ -252,12 +252,21 @@ export abstract class MeshSource extends ChunkSource {
   abstract downloadFragment(chunk: FragmentChunk): void;
 };
 
+export abstract class ParameterizedMeshSource<Parameters> extends MeshSource {
+  parameters: Parameters;
+  constructor(rpc: RPC, options: any) {
+    super(rpc, options);
+    this.parameters = options['parameters'];
+  }
+};
+
+@registerSharedObject(FRAGMENT_SOURCE_RPC_ID)
 export class FragmentSource extends ChunkSource {
   meshSource: MeshSource|null = null;
   download(chunk: FragmentChunk) { this.meshSource!.downloadFragment(chunk); }
 };
-registerSharedObject('mesh/FragmentSource', FragmentSource);
 
+@registerSharedObject(MESH_LAYER_RPC_ID)
 class MeshLayer extends SharedObjectCounterpart {
   chunkManager: ChunkManager;
   source: MeshSource;
@@ -297,4 +306,3 @@ class MeshLayer extends SharedObjectCounterpart {
     }
   }
 };
-registerSharedObject('mesh/MeshLayer', MeshLayer);

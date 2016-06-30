@@ -20,6 +20,7 @@ import {RenderLayer} from 'neuroglancer/layer';
 import {VoxelSize} from 'neuroglancer/navigation_state';
 import {PerspectiveViewRenderContext, PerspectiveViewRenderLayer, perspectivePanelEmit} from 'neuroglancer/perspective_panel';
 import {SegmentationDisplayState} from 'neuroglancer/segmentation_display_state';
+import {SKELETON_LAYER_RPC_ID} from 'neuroglancer/skeleton/base';
 import {SliceViewPanelRenderContext, SliceViewPanelRenderLayer, sliceViewPanelEmit} from 'neuroglancer/sliceview/panel';
 import {RefCounted} from 'neuroglancer/util/disposable';
 import {Mat4, Vec3, mat4, vec3} from 'neuroglancer/util/geom';
@@ -139,7 +140,7 @@ export class SkeletonLayer extends RefCounted {
 
     let sharedObject = this.registerDisposer(new SharedObject());
     sharedObject.initializeCounterpart(chunkManager.rpc!, {
-      'type': 'skeleton/SkeletonLayer',
+      'type': SKELETON_LAYER_RPC_ID,
       'chunkManager': chunkManager.rpcId,
       'source': source.addCounterpartRef(),
       'visibleSegmentSet': displayState.visibleSegments.rpcId

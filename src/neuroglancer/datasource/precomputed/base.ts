@@ -20,22 +20,27 @@ export enum VolumeChunkEncoding {
   COMPRESSED_SEGMENTATION
 }
 
-export interface VolumeChunkSourceParameters {
+export class VolumeChunkSourceParameters {
   baseUrls: string[];
   path: string;
   encoding: VolumeChunkEncoding;
-}
 
-export function volumeSourceToString(parameters: VolumeChunkSourceParameters) {
-  return `precomputed:volume:${parameters.baseUrls[0]}/${parameters.path}`;
-}
+  static stringify(parameters: VolumeChunkSourceParameters) {
+    return `precomputed:volume:${parameters.baseUrls[0]}/${parameters.path}`;
+  }
 
-export interface MeshSourceParameters {
+  static RPC_ID = 'precomputed/VolumeChunkSource';
+};
+
+
+export class MeshSourceParameters {
   baseUrls: string[];
   path: string;
   lod: number;
-}
 
-export function meshSourceToString(parameters: MeshSourceParameters) {
-  return `precomputed:mesh:${parameters.baseUrls[0]}/${parameters.path}/${parameters.lod}`;
-}
+  static stringify(parameters: MeshSourceParameters) {
+    return `precomputed:mesh:${parameters.baseUrls[0]}/${parameters.path}/${parameters.lod}`;
+  }
+
+  static RPC_ID = 'precomputed/MeshSource';
+};

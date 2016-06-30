@@ -4,6 +4,7 @@
     "noImplicitReturns": true,
     "noImplicitThis": true,
     "preserveConstEnums": true,
+    "experimentalDecorators": true,
     "strictNullChecks": true,
     "sourceMap": true,
     "module": "commonjs",

@@ -19,6 +19,7 @@ import {Uint64} from 'neuroglancer/util/uint64';
 import {RPC, SharedObjectCounterpart, registerRPC, registerSharedObject} from 'neuroglancer/worker_rpc';
 import {Signal} from 'signals';
 
+@registerSharedObject('Uint64Set')
 export class Uint64Set extends SharedObjectCounterpart {
   hashTable = new HashTable();
   changed = new Signal();
@@ -108,5 +109,3 @@ registerRPC('Uint64Set.clear', function(x) {
     obj.changed.dispatch();
   }
 });
-
-registerSharedObject('Uint64Set', Uint64Set);

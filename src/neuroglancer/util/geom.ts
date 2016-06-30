@@ -36,6 +36,7 @@ export class BoundingBox {
 export const kAxes =
     [vec4.fromValues(1, 0, 0, 0), vec4.fromValues(0, 1, 0, 0), vec4.fromValues(0, 0, 1, 0)];
 export const kZeroVec = vec3.fromValues(0, 0, 0);
+export const kInfinityVec = vec3.fromValues(Infinity, Infinity, Infinity);
 
 export function prod3(x: ArrayLike<number>) {
   return x[0] * x[1] * x[2];

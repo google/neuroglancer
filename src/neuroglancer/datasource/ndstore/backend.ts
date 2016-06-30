@@ -14,30 +14,23 @@
  * limitations under the License.
  */
 
-import {handleChunkDownloadPromise} from 'neuroglancer/chunk_manager/backend';
-import {VolumeChunkSourceParameters, volumeSourceToString} from 'neuroglancer/datasource/ndstore/base';
-import {VolumeChunk, VolumeChunkSource as GenericVolumeChunkSource} from 'neuroglancer/sliceview/backend';
+import {handleChunkDownloadPromise, registerChunkSource} from 'neuroglancer/chunk_manager/backend';
+import {VolumeChunkSourceParameters} from 'neuroglancer/datasource/ndstore/base';
+import {ParameterizedVolumeChunkSource, VolumeChunk} from 'neuroglancer/sliceview/backend';
 import {ChunkDecoder} from 'neuroglancer/sliceview/backend_chunk_decoders';
 import {decodeJpegChunk} from 'neuroglancer/sliceview/backend_chunk_decoders/jpeg';
 import {decodeNdstoreNpzChunk} from 'neuroglancer/sliceview/backend_chunk_decoders/ndstoreNpz';
 import {decodeRawChunk} from 'neuroglancer/sliceview/backend_chunk_decoders/raw';
 import {openShardedHttpRequest, sendHttpRequest} from 'neuroglancer/util/http_request';
-import {RPC, registerSharedObject} from 'neuroglancer/worker_rpc';
 
 let chunkDecoders = new Map<string, ChunkDecoder>();
 chunkDecoders.set('npz', decodeNdstoreNpzChunk);
 chunkDecoders.set('jpeg', decodeJpegChunk);
 chunkDecoders.set('raw', decodeRawChunk);
 
-class VolumeChunkSource extends GenericVolumeChunkSource {
-  parameters: VolumeChunkSourceParameters;
-  chunkDecoder: ChunkDecoder;
-
-  constructor(rpc: RPC, options: any) {
-    super(rpc, options);
-    this.parameters = options['parameters'];
-    this.chunkDecoder = chunkDecoders.get(this.parameters.encoding)!;
-  }
+@registerChunkSource(VolumeChunkSourceParameters)
+class VolumeChunkSource extends ParameterizedVolumeChunkSource<VolumeChunkSourceParameters> {
+  chunkDecoder = chunkDecoders.get(this.parameters.encoding)!;
 
   download(chunk: VolumeChunk) {
     let {parameters} = this;
@@ -57,7 +50,4 @@ class VolumeChunkSource extends GenericVolumeChunkSource {
         chunk, sendHttpRequest(openShardedHttpRequest(parameters.baseUrls, path), 'arraybuffer'),
         this.chunkDecoder);
   }
-
-  toString() { return volumeSourceToString(this.parameters); }
 };
-registerSharedObject('ndstore/VolumeChunkSource', VolumeChunkSource);

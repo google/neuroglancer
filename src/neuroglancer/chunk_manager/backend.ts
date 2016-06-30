@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-import {AvailableCapacity, ChunkPriorityTier, ChunkState} from 'neuroglancer/chunk_manager/base';
+import {AvailableCapacity, CHUNK_MANAGER_RPC_ID, CHUNK_QUEUE_MANAGER_RPC_ID, ChunkPriorityTier, ChunkSourceParametersConstructor, ChunkState} from 'neuroglancer/chunk_manager/base';
 import {Disposable} from 'neuroglancer/util/disposable';
 import {LinkedListOperations} from 'neuroglancer/util/linked_list';
 import {ComparisonFunction, PairingHeapOperations} from 'neuroglancer/util/pairing_heap';
@@ -342,7 +342,7 @@ function tryToFreeCapacity(
   return true;
 }
 
-
+@registerSharedObject(CHUNK_QUEUE_MANAGER_RPC_ID)
 export class ChunkQueueManager extends SharedObjectCounterpart {
   gpuMemoryCapacity: AvailableCapacity;
   systemMemoryCapacity: AvailableCapacity;
@@ -626,9 +626,8 @@ export class ChunkQueueManager extends SharedObjectCounterpart {
     }
   }
 };
-registerSharedObject('ChunkQueueManager', ChunkQueueManager);
 
-
+@registerSharedObject(CHUNK_MANAGER_RPC_ID)
 export class ChunkManager extends SharedObjectCounterpart {
   queueManager: ChunkQueueManager;
 
@@ -714,4 +713,21 @@ export class ChunkManager extends SharedObjectCounterpart {
     this.queueManager.scheduleUpdate();
   }
 };
-registerSharedObject('ChunkManager', ChunkManager);
+
+/**
+ * Decorates final subclasses of ChunkSource.
+ *
+ * Defines the toString method based on the stringify method of the specified Parameters class.
+ *
+ * Calls registerSharedObject using parametersConstructor.RPC_ID.
+ */
+export function registerChunkSource<Parameters>(
+    parametersConstructor: ChunkSourceParametersConstructor<Parameters>) {
+  return <T extends{parameters: Parameters}&SharedObjectCounterpart>(
+             target: {new (rpc: RPC, options: any): T}) => {
+    registerSharedObject(parametersConstructor.RPC_ID)(target);
+    target.prototype.toString = function(this: {parameters: Parameters}) {
+      return parametersConstructor.stringify(this.parameters);
+    };
+  };
+}

@@ -14,17 +14,18 @@
  * limitations under the License.
  */
 
-import {ChunkState} from 'neuroglancer/chunk_manager/base';
+import {ChunkSourceParametersConstructor, ChunkState} from 'neuroglancer/chunk_manager/base';
 import {Chunk, ChunkManager, ChunkSource} from 'neuroglancer/chunk_manager/frontend';
 import {LayerManager} from 'neuroglancer/layer';
 import {MeshSource} from 'neuroglancer/mesh/frontend';
 import {NavigationState} from 'neuroglancer/navigation_state';
-import {DataType, SliceViewBase, VolumeChunkSource as VolumeChunkSourceInterface, VolumeChunkSpecification, VolumeType} from 'neuroglancer/sliceview/base';
+import {DataType, SLICEVIEW_RPC_ID, SliceViewBase, VolumeChunkSource as VolumeChunkSourceInterface, VolumeChunkSpecification, VolumeType} from 'neuroglancer/sliceview/base';
 import {ChunkLayout} from 'neuroglancer/sliceview/chunk_layout';
 import {RenderLayer} from 'neuroglancer/sliceview/renderlayer';
 import {RefCounted} from 'neuroglancer/util/disposable';
 import {Disposable} from 'neuroglancer/util/disposable';
 import {Mat4, Vec3, Vec4, mat4, rectifyTransformMatrixIfAxisAligned, vec3, vec3Key} from 'neuroglancer/util/geom';
+import {stableStringify} from 'neuroglancer/util/json';
 import {Uint64} from 'neuroglancer/util/uint64';
 import {Buffer} from 'neuroglancer/webgl/buffer';
 import {GL} from 'neuroglancer/webgl/context';
@@ -72,7 +73,7 @@ export class SliceView extends SliceViewBase {
     super();
     mat4.identity(this.dataToViewport);
     this.initializeCounterpart(
-        this.chunkManager.rpc!, {'type': 'SliceView', 'chunkManager': chunkManager.rpcId});
+        this.chunkManager.rpc!, {'type': SLICEVIEW_RPC_ID, 'chunkManager': chunkManager.rpcId});
     this.updateVisibleLayers();
 
     this.registerSignalBinding(
@@ -317,7 +318,7 @@ export abstract class VolumeChunkSource extends ChunkSource implements VolumeChu
   }
 
   initializeCounterpart(rpc: RPC, options: any) {
-    this.spec.toObject(options['spec'] = {});
+    options['spec'] = this.spec.toObject();
     super.initializeCounterpart(rpc, options);
   }
 
@@ -364,6 +365,28 @@ export abstract class VolumeChunkSource extends ChunkSource implements VolumeChu
 
   getChunk(x: any) { return this.chunkFormatHandler.getChunk(this, x); }
 };
+
+/**
+ * Defines a VolumeChunkSource for which all state, other than the VolumeChunkSpecification, is
+ * encapsulated in an object of type Parameters.
+ */
+export function defineParameterizedVolumeChunkSource<Parameters>(
+    parametersConstructor: ChunkSourceParametersConstructor<Parameters>) {
+  return class ParameterizedVolumeChunkSource extends VolumeChunkSource {
+    constructor(
+        chunkManager: ChunkManager, spec: VolumeChunkSpecification, public parameters: Parameters) {
+      super(chunkManager, spec);
+      this.initializeCounterpart(
+          chunkManager.rpc!, {'type': parametersConstructor.RPC_ID, 'parameters': parameters});
+    }
+    static get(chunkManager: ChunkManager, spec: VolumeChunkSpecification, parameters: Parameters) {
+      return chunkManager.getChunkSource(
+          this, stableStringify({parameters, spec: spec.toObject()}),
+          () => new this(chunkManager, spec, parameters));
+    }
+    toString() { return parametersConstructor.stringify(this.parameters); }
+  };
+}
 
 export abstract class VolumeChunk extends Chunk {
   chunkDataSize: Vec3;

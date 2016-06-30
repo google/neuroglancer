@@ -24,12 +24,6 @@ import {setRawTextureParameters} from 'neuroglancer/webgl/texture';
 const textureUnitSymbol = Symbol('SingleTextureVolumeChunk.textureUnit');
 const textureLayoutSymbol = Symbol('SingleTextureVolumeChunk.textureLayout');
 
-export const glsl_getPositionWithinChunk = `
-vec3 getPositionWithinChunk () {
-  return floor(min(vChunkPosition * uChunkDataSize, uChunkDataSize - 1.0));
-}
-`;
-
 export abstract class SingleTextureChunkFormat<TextureLayout extends Disposable> extends RefCounted
     implements ChunkFormat {
   arrayElementsPerTexel: number;
@@ -40,8 +34,6 @@ export abstract class SingleTextureChunkFormat<TextureLayout extends Disposable>
 
   defineShader(builder: ShaderBuilder) {
     builder.addTextureSampler2D('uVolumeChunkSampler', textureUnitSymbol);
-    builder.addUniform('highp vec3', 'uChunkDataSize');
-    builder.addFragmentCode(glsl_getPositionWithinChunk);
   }
 
   beginDrawing(gl: GL, shader: ShaderProgram) {
@@ -67,7 +59,6 @@ export abstract class SingleTextureChunkFormat<TextureLayout extends Disposable>
     if (existingTextureLayout !== textureLayout) {
       (<any>shader)[textureLayoutSymbol] = textureLayout;
       this.setupTextureLayout(gl, shader, textureLayout);
-      gl.uniform3fv(shader.uniform('uChunkDataSize'), chunk.chunkDataSize);
     }
     gl.bindTexture(gl.TEXTURE_2D, chunk.texture);
   }

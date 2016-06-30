@@ -20,21 +20,25 @@ export enum VolumeChunkEncoding {
   RAW
 }
 
-export interface VolumeChunkSourceParameters {
+export class VolumeChunkSourceParameters {
   baseUrls: string[];
   key: string;
   encoding: VolumeChunkEncoding;
-}
 
-export function volumeSourceToString(parameters: VolumeChunkSourceParameters) {
-  return `python:volume:${parameters['baseUrls'][0]}/${parameters['key']}/${VolumeChunkEncoding[parameters['encoding']]}`;
-}
+  static RPC_ID = 'python/VolumeChunkSource';
 
-export interface MeshSourceParameters {
+  static stringify(parameters: VolumeChunkSourceParameters) {
+    return `python:volume:${parameters['baseUrls'][0]}/${parameters['key']}/${VolumeChunkEncoding[parameters['encoding']]}`;
+  }
+};
+
+export class MeshSourceParameters {
   baseUrls: string[];
   key: string;
-}
 
-export function meshSourceToString(parameters: MeshSourceParameters) {
-  return `python:mesh:${parameters['baseUrls'][0]}/${parameters['key']}`;
-}
+  static RPC_ID = 'python/MeshSource';
+
+  static stringify(parameters: MeshSourceParameters) {
+    return `python:mesh:${parameters['baseUrls'][0]}/${parameters['key']}`;
+  }
+};

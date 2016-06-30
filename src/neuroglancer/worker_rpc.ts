@@ -181,8 +181,15 @@ registerRPC('SharedObject.refCountReachedZero', function(x) {
 
 const sharedObjectConstructors = new Map<string, SharedObjectConstructor>();
 
-export function registerSharedObject(name: string, constructorFunction: SharedObjectConstructor) {
-  sharedObjectConstructors.set(name, constructorFunction);
+/**
+ * Registers a class as a SharedObject type under the specified identifier.
+ *
+ * This is intended to be used as a decorator.
+ */
+export function registerSharedObject(identifier: string) {
+  return (constructorFunction: SharedObjectConstructor) => {
+    sharedObjectConstructors.set(identifier, constructorFunction);
+  };
 }
 
 registerRPC('SharedObject.new', function(x) {

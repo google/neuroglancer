@@ -20,14 +20,14 @@
  */
 
 import {ChunkManager} from 'neuroglancer/chunk_manager/frontend';
-import {Completion, CompletionResult, registerDataSourceFactory} from 'neuroglancer/datasource/factory';
-import {VolumeChunkSourceParameters, volumeSourceToString} from 'neuroglancer/datasource/ndstore/base';
+import {CompletionResult, registerDataSourceFactory} from 'neuroglancer/datasource/factory';
+import {VolumeChunkSourceParameters} from 'neuroglancer/datasource/ndstore/base';
 import {DataType, VolumeChunkSpecification, VolumeType} from 'neuroglancer/sliceview/base';
-import {MultiscaleVolumeChunkSource as GenericMultiscaleVolumeChunkSource, VolumeChunkSource as GenericVolumeChunkSource} from 'neuroglancer/sliceview/frontend';
+import {MultiscaleVolumeChunkSource as GenericMultiscaleVolumeChunkSource, defineParameterizedVolumeChunkSource} from 'neuroglancer/sliceview/frontend';
 import {applyCompletionOffset, getPrefixMatchesWithDescriptions} from 'neuroglancer/util/completion';
-import {vec3} from 'neuroglancer/util/geom';
+import {Vec3, vec3} from 'neuroglancer/util/geom';
 import {openShardedHttpRequest, sendHttpRequest} from 'neuroglancer/util/http_request';
-import {parseArray, parseFiniteVec, parseIntVec, parseQueryStringParameters, stableStringify, verifyEnumString, verifyObjectProperty, verifyOptionalString, verifyString} from 'neuroglancer/util/json';
+import {parseArray, parseQueryStringParameters, stableStringify, verify3dDimensions, verify3dScale, verify3dVec, verifyEnumString, verifyInt, verifyObject, verifyObjectAsMap, verifyObjectProperty, verifyOptionalString, verifyString} from 'neuroglancer/util/json';
 import {CancellablePromise, cancellableThen} from 'neuroglancer/util/promise';
 
 let serverVolumeTypes = new Map<string, VolumeType>();
@@ -36,101 +36,145 @@ serverVolumeTypes.set('annotation', VolumeType.SEGMENTATION);
 
 const VALID_ENCODINGS = new Set<string>(['npz', 'raw', 'jpeg']);
 
-export class VolumeChunkSource extends GenericVolumeChunkSource {
-  constructor(
-      chunkManager: ChunkManager, spec: VolumeChunkSpecification,
-      public parameters: VolumeChunkSourceParameters) {
-    super(chunkManager, spec);
-    this.initializeCounterpart(chunkManager.rpc!, {
-      'type': 'ndstore/VolumeChunkSource',
-      'parameters': parameters,
-    });
-  }
-  toString() { return volumeSourceToString(this.parameters); }
-};
+const VolumeChunkSource = defineParameterizedVolumeChunkSource(VolumeChunkSourceParameters);
 
+interface ChannelInfo {
+  channelType: string;
+  volumeType: VolumeType;
+  dataType: DataType;
+  description: string;
+}
+
+interface ScaleInfo {
+  voxelSize: Vec3;
+  voxelOffset: Vec3;
+  imageSize: Vec3;
+  key: string;
+}
+
+function parseScales(datasetObj: any): ScaleInfo[] {
+  verifyObject(datasetObj);
+  let voxelSizes = verifyObjectProperty(
+      datasetObj, 'neariso_voxelres', x => verifyObjectAsMap(x, verify3dScale));
+  let imageSizes = verifyObjectProperty(
+      datasetObj, 'neariso_imagesize', x => verifyObjectAsMap(x, verify3dDimensions));
+  let voxelOffsets =
+      verifyObjectProperty(datasetObj, 'neariso_offset', x => verifyObjectAsMap(x, verify3dVec));
+  let resolutions = verifyObjectProperty(datasetObj, 'resolutions', x => parseArray(x, verifyInt));
+  return resolutions.map(resolution => {
+    const key = '' + resolution;
+    const voxelSize = voxelSizes.get(key);
+    const imageSize = imageSizes.get(key);
+    let voxelOffset = voxelOffsets.get(key);
+    if (voxelSize === undefined || imageSize === undefined || voxelOffset === undefined) {
+      throw new Error(
+          `Missing neariso_voxelres/neariso_imagesize/neariso_offset for resolution ${resolution}.`);
+    }
+    return {key, voxelSize, imageSize, voxelOffset};
+  });
+}
+
+interface TokenInfo {
+  channels: Map<string, ChannelInfo>;
+  scales: ScaleInfo[];
+}
+
+function getVolumeTypeFromChannelType(channelType: string) {
+  let volumeType = serverVolumeTypes.get(channelType);
+  if (volumeType === undefined) {
+    volumeType = VolumeType.UNKNOWN;
+  }
+  return volumeType;
+}
+
+function parseChannelInfo(obj: any): ChannelInfo {
+  verifyObject(obj);
+  let channelType = verifyObjectProperty(obj, 'channel_type', verifyString);
+  return {
+    channelType,
+    description: verifyObjectProperty(obj, 'description', verifyString),
+    volumeType: getVolumeTypeFromChannelType(channelType),
+    dataType: verifyObjectProperty(obj, 'datatype', x => verifyEnumString(x, DataType)),
+  };
+}
+
+function parseTokenInfo(obj: any): TokenInfo {
+  verifyObject(obj);
+  return {
+    channels: verifyObjectProperty(obj, 'channels', x => verifyObjectAsMap(x, parseChannelInfo)),
+    scales: verifyObjectProperty(obj, 'dataset', parseScales),
+  };
+}
 
 export class MultiscaleVolumeChunkSource implements GenericMultiscaleVolumeChunkSource {
-  dataType: DataType;
-  numChannels: number;
-  volumeType: VolumeType;
+  get dataType() { return this.channelInfo.dataType; }
+  get numChannels() { return 1; }
+  get volumeType() { return this.channelInfo.volumeType; }
 
   /**
    * Ndstore channel name.
    */
   channel: string;
 
+  channelInfo: ChannelInfo;
+  scales: ScaleInfo[];
+
+  encoding: string;
+
   constructor(
-      public baseUrls: string[], public key: string, public response: any,
+      public baseUrls: string[], public key: string, public tokenInfo: TokenInfo,
       channel: string|undefined, public parameters: {[index: string]: any}) {
-    let channelsObject = response['channels'];
-    let channelNames = Object.keys(channelsObject);
     if (channel === undefined) {
+      const channelNames = Array.from(tokenInfo.channels.keys());
       if (channelNames.length !== 1) {
         throw new Error(`Dataset contains multiple channels: ${JSON.stringify(channelNames)}`);
       }
       channel = channelNames[0];
-    } else if (channelNames.indexOf(channel) === -1) {
+    }
+    const channelInfo = tokenInfo.channels.get(channel);
+    if (channelInfo === undefined) {
       throw new Error(
-          `Specified channel ${JSON.stringify(channel)} is not one of the supported channels ${JSON.stringify(channelNames)}`);
+          `Specified channel ${JSON.stringify(channel)} is not one of the supported channels ${JSON.stringify(Array.from(tokenInfo.channels.keys()))}`);
     }
     this.channel = channel;
-    let channelObject = channelsObject[channel];
-    let volumeType = serverVolumeTypes.get(channelObject['channel_type']);
-    if (volumeType === undefined) {
-      volumeType = VolumeType.UNKNOWN;
-    }
-    this.volumeType = volumeType;
-    this.dataType =
-        verifyObjectProperty(channelObject, 'datatype', x => verifyEnumString(x, DataType));
-    this.numChannels = 1;
-  }
+    this.channelInfo = channelInfo;
+    this.scales = tokenInfo.scales;
 
-  getSources(chunkManager: ChunkManager) {
-    let sources: VolumeChunkSource[][] = [];
-    const {response, volumeType} = this;
-    const datasetObject = response['dataset'];
-    let encoding = verifyOptionalString(this.parameters['encoding']);
+    let encoding = verifyOptionalString(parameters['encoding']);
     if (encoding === undefined) {
-      encoding = volumeType === VolumeType.IMAGE ? 'jpeg' : 'npz';
+      encoding = this.volumeType === VolumeType.IMAGE ? 'jpeg' : 'npz';
     } else {
       if (!VALID_ENCODINGS.has(encoding)) {
         throw new Error(`Invalid encoding: ${JSON.stringify(encoding)}.`);
       }
     }
-    for (let resolution of Object.keys(datasetObject['neariso_imagesize'])) {
-      let imageSize = parseIntVec(vec3.create(), datasetObject['neariso_imagesize'][resolution]);
-      let voxelSize = parseFiniteVec(vec3.create(), datasetObject['neariso_voxelres'][resolution]);
-      let alternatives: VolumeChunkSource[] = [];
-      sources.push(alternatives);
-      // The returned offset for downsampled resolutions can have non-integer components.  It
-      // appears that the true offset is obtained by rounding up.
-      let origLowerVoxelBound =
-          parseFiniteVec(vec3.create(), datasetObject['neariso_offset'][resolution]);
-      let lowerVoxelBound = vec3.create();
-      let upperVoxelBound = vec3.create();
+    this.encoding = encoding;
+  }
+
+  getSources(chunkManager: ChunkManager) {
+    return this.scales.map(scaleInfo => {
+      let {voxelOffset, voxelSize} = scaleInfo;
+      let baseVoxelOffset = vec3.create();
       for (let i = 0; i < 3; ++i) {
-        let origLower = origLowerVoxelBound[i];
-        lowerVoxelBound[i] = Math.ceil(origLower);
-        upperVoxelBound[i] = Math.floor(origLower + imageSize[i]);
+        baseVoxelOffset[i] = Math.ceil(voxelOffset[i]);
       }
-      for (let spec of VolumeChunkSpecification.getDefaults({
-             volumeType,
-             voxelSize,
-             dataType: this.dataType, lowerVoxelBound, upperVoxelBound
-           })) {
-        let parameters = {
-          baseUrls: this.baseUrls,
-          key: this.key,
-          channel: this.channel, resolution,
-          encoding: encoding!
-        };
-        alternatives.push(chunkManager.getChunkSource(
-            VolumeChunkSource, stableStringify(parameters),
-            () => new VolumeChunkSource(chunkManager, spec, parameters)));
-      }
-    }
-    return sources;
+      return VolumeChunkSpecification
+          .getDefaults({
+            numChannels: this.numChannels,
+            volumeType: this.volumeType,
+            dataType: this.dataType, voxelSize,
+            chunkLayoutOffset: vec3.multiply(vec3.create(), voxelOffset, voxelSize),
+            baseVoxelOffset,
+            upperVoxelBound: scaleInfo.imageSize,
+          })
+          .map(spec => VolumeChunkSource.get(chunkManager, spec, {
+            baseUrls: this.baseUrls,
+            key: this.key,
+            channel: this.channel,
+            resolution: scaleInfo.key,
+            encoding: this.encoding,
+          }));
+    });
   }
 
   /**
@@ -141,16 +185,16 @@ export class MultiscaleVolumeChunkSource implements GenericMultiscaleVolumeChunk
 
 const pathPattern = /^([^\/?]+)(?:\/([^\/?]+))?(?:\?(.*))?$/;
 
-let existingVolumeResponses = new Map<string, Promise<any>>();
-export function getVolumeInfo(hostnames: string[], token: string) {
+let existingTokenResponses = new Map<string, Promise<TokenInfo>>();
+export function getTokenInfo(hostnames: string[], token: string) {
   let fullKey = JSON.stringify({'hostnames': hostnames, 'token': token});
-  let result = existingVolumeResponses.get(fullKey);
+  let result = existingTokenResponses.get(fullKey);
   if (result !== undefined) {
     return result;
   }
-  let promise =
-      sendHttpRequest(openShardedHttpRequest(hostnames, `/ocp/ca/${token}/info/`), 'json');
-  existingVolumeResponses.set(fullKey, promise);
+  let promise = sendHttpRequest(openShardedHttpRequest(hostnames, `/ocp/ca/${token}/info/`), 'json')
+                    .then(parseTokenInfo);
+  existingTokenResponses.set(fullKey, promise);
   return promise;
 }
 
@@ -169,10 +213,10 @@ export function getShardedVolume(hostnames: string[], path: string) {
   let key = match[1];
   let channel = match[2];
   let parameters = parseQueryStringParameters(match[3] || '');
-  let promise = getVolumeInfo(hostnames, key)
+  let promise = getTokenInfo(hostnames, key)
                     .then(
-                        response => new MultiscaleVolumeChunkSource(
-                            hostnames, key, response, channel, parameters));
+                        tokenInfo => new MultiscaleVolumeChunkSource(
+                            hostnames, key, tokenInfo, channel, parameters));
   existingVolumes.set(fullKey, promise);
   return promise;
 }
@@ -219,21 +263,10 @@ export function tokenAndChannelCompleter(
       };
     });
   }
-  return cancellableThen(getVolumeInfo(hostnames, channelMatch[1]), response => {
-    let completions: Completion[] = [];
-    if (typeof response === 'object' && response !== null && !Array.isArray(response)) {
-      let channelsObject = response['channels'];
-      if (typeof channelsObject === 'object' && channelsObject !== null &&
-          !Array.isArray(channelsObject)) {
-        let channelNames = Object.keys(channelsObject);
-        completions =
-            getPrefixMatchesWithDescriptions(channelMatch![2], channelNames, x => x, x => {
-              let channelObject = channelsObject[x];
-              return `${channelObject['channel_type']} (${channelObject['datatype']})`;
-
-            });
-      }
-    }
+  return cancellableThen(getTokenInfo(hostnames, channelMatch[1]), tokenInfo => {
+    let completions = getPrefixMatchesWithDescriptions(
+        channelMatch![2], tokenInfo.channels, x => x[0],
+        x => { return `${x[1].channelType} (${DataType[x[1].dataType]})`; });
     return {offset: channelMatch![1].length + 1, completions};
   });
 }

@@ -18,13 +18,13 @@ import {ChunkLayout} from 'neuroglancer/sliceview/chunk_layout';
 import {partitionArray} from 'neuroglancer/util/array';
 import {approxEqual} from 'neuroglancer/util/compare';
 import {DATA_TYPE_BYTES, DataType} from 'neuroglancer/util/data_type';
-import {Mat4, Vec3, mat4, prod3, rectifyTransformMatrixIfAxisAligned, vec3, vec4} from 'neuroglancer/util/geom';
-import {kAxes, kZeroVec} from 'neuroglancer/util/geom';
+import {Mat4, Vec3, kAxes, kInfinityVec, kZeroVec, mat4, prod3, rectifyTransformMatrixIfAxisAligned, vec3, vec4} from 'neuroglancer/util/geom';
 import {SharedObject} from 'neuroglancer/worker_rpc';
 
 export {DATA_TYPE_BYTES, DataType};
 
 const DEBUG_CHUNK_INTERSECTIONS = false;
+const DEBUG_VISIBLE_SOURCES = false;
 
 /**
  * Heuristic estimate of the slice area contained within a chunk of the
@@ -108,14 +108,18 @@ export interface RenderLayer { sources: VolumeChunkSource[][]|null; }
 function pickBestAlternativeSource(xAxis: Vec3, yAxis: Vec3, alternatives: VolumeChunkSource[]) {
   let numAlternatives = alternatives.length;
   let bestAlternativeIndex = 0;
+  if (DEBUG_VISIBLE_SOURCES) {
+    console.log(alternatives);
+  }
   if (numAlternatives > 1) {
     let bestSliceArea = 0;
     for (let alternativeIndex = 0; alternativeIndex < numAlternatives; ++alternativeIndex) {
       let alternative = alternatives[alternativeIndex];
       let sliceArea = estimateSliceAreaPerChunk(xAxis, yAxis, alternative.spec.chunkLayout.size);
-      // console.log(`scaleIndex = ${scaleIndex}, xAxis = ${xAxis}, yAxis
-      // = ${yAxis}, chunksize = ${alternative.spec.chunkLayout.size},
-      // sliceArea = ${sliceArea}`);
+      if (DEBUG_VISIBLE_SOURCES) {
+        console.log(
+            `xAxis = ${xAxis}, yAxis = ${yAxis}, chunksize = ${alternative.spec.chunkLayout.size}, sliceArea = ${sliceArea}`);
+      }
       if (sliceArea > bestSliceArea) {
         bestSliceArea = sliceArea;
         bestAlternativeIndex = alternativeIndex;
@@ -574,85 +578,284 @@ export enum VolumeType {
   SEGMENTATION,
 }
 
+/**
+ * By default, choose a chunk size with at most 2^18 = 262144 voxels.
+ */
+export const DEFAULT_MAX_VOXELS_PER_CHUNK_LOG2 = 18;
 
-export const DEFAULT_CHUNK_DATA_SIZES = [vec3.fromValues(64, 64, 64)];
+/**
+ * Determines a near-isotropic (in nanometers) block size.  All dimensions will be powers of 2, and
+ * will not exceed upperVoxelBound - lowerVoxelBound.  The total number of voxels will not exceed
+ * maxVoxelsPerChunkLog2.
+ */
+export function getNearIsotropicBlockSize(options: {
+  voxelSize: Vec3,
+  lowerVoxelBound?: Vec3,
+  upperVoxelBound?: Vec3,
+  maxVoxelsPerChunkLog2?: number
+}) {
+  let {voxelSize, lowerVoxelBound = kZeroVec, upperVoxelBound,
+       maxVoxelsPerChunkLog2 = DEFAULT_MAX_VOXELS_PER_CHUNK_LOG2} = options;
+
+  let chunkDataSize = vec3.fromValues(1, 1, 1);
+  let maxChunkDataSize: Vec3;
+  if (upperVoxelBound === undefined) {
+    maxChunkDataSize = kInfinityVec;
+  } else {
+    maxChunkDataSize = vec3.create();
+    for (let i = 0; i < 3; ++i) {
+      maxChunkDataSize[i] =
+          Math.pow(2, Math.floor(Math.log2(upperVoxelBound[i] - lowerVoxelBound[i])));
+    }
+  }
+
+  // Determine the dimension in which chunkDataSize should be increased.  This is the smallest
+  // dimension (in nanometers) that is < maxChunkDataSize (in voxels).
+  //
+  // Returns -1 if there is no such dimension.
+  function findNextDimension() {
+    let minSize = Infinity;
+    let minDimension = -1;
+    for (let i = 0; i < 3; ++i) {
+      if (chunkDataSize[i] >= maxChunkDataSize[i]) {
+        continue;
+      }
+      let size = chunkDataSize[i] * voxelSize[i];
+      if (size < minSize) {
+        minSize = size;
+        minDimension = i;
+      }
+    }
+    return minDimension;
+  }
+
+  for (let i = 0; i < maxVoxelsPerChunkLog2; ++i) {
+    let nextDim = findNextDimension();
+    if (nextDim === -1) {
+      break;
+    }
+    chunkDataSize[nextDim] *= 2;
+  }
+  return chunkDataSize;
+}
+
+const tempVec3 = vec3.create();
+
+/**
+ * Computes a 3-d block size that has depth 1 in flatDimension and is near-isotropic (in nanometers)
+ * in the other two dimensions.  The remaining options are the same as for
+ * getNearIsotropicBlockSize.
+ */
+export function getTwoDimensionalBlockSize(options: {
+  flatDimension: number,
+  voxelSize: Vec3, lowerVoxelBound?: Vec3, upperVoxelBound?: Vec3, maxVoxelsPerChunkLog2?: number
+}) {
+  let {lowerVoxelBound = kZeroVec, upperVoxelBound = kInfinityVec, flatDimension, voxelSize,
+       maxVoxelsPerChunkLog2} = options;
+  vec3.subtract(tempVec3, upperVoxelBound, lowerVoxelBound);
+  tempVec3[flatDimension] = 1;
+  return getNearIsotropicBlockSize({voxelSize, upperVoxelBound: tempVec3, maxVoxelsPerChunkLog2});
+}
+
+/**
+ * Common parameters for the VolumeChunkSpecification constructor and
+ * VolumeChunkSpecification.getDefaults.
+ */
+export interface VolumeChunkSpecificationBaseOptions {
+  /**
+   * Origin of chunk grid, in nanometers, in global coordinates.
+   */
+  chunkLayoutOffset?: Vec3;
+
+  /**
+   * Voxel size in nanometers.
+   */
+  voxelSize: Vec3;
+
+  numChannels: number;
+  dataType: DataType;
+
+  /**
+   * Lower clipping bound (in nanometers), relative to chunkLayout coordinates.  If not specified,
+   * defaults to lowerVoxelBound * voxelSize.
+   *
+   * Both lowerClipBound and upperClipBound are applied during rendering but do not affect which
+   * chunks/voxels are actually retrieved.  That is determined by lowerVoxelBound and
+   * upperVoxelBound.
+   */
+  lowerClipBound?: Vec3;
+
+  /**
+   * Upper clipping bound (in nanometers), relative to chunkLayout coordinates.  If not specified,
+   * defaults to upperVoxelBound * voxelSize.
+   */
+  upperClipBound?: Vec3;
+
+  /**
+   * If not specified, defaults to (0, 0, 0).  This determines lowerChunkBound.  If this is not a
+   * multiple of chunkDataSize, then voxels at lower positions may still be requested.
+   */
+  lowerVoxelBound?: Vec3;
+
+  /**
+   * Upper voxel bound, relative to chunkLayout coordinates.  This determines upperChunkBound.
+   */
+  upperVoxelBound: Vec3;
+
+  /**
+   * Specifies offset for use by backend.ts:VolumeChunkSource.computeChunkBounds in calculating
+   * chunk voxel coordinates.  The calculated chunk coordinates will be equal to the voxel position
+   * (in chunkLayout coordinates) plus this value.
+   *
+   * Defaults to kZeroVec if not specified.
+   */
+  baseVoxelOffset?: Vec3;
+
+  /**
+   * If set, indicates that the chunk is in compressed segmentation format with the specified block
+   * size.
+   */
+  compressedSegmentationBlockSize?: Vec3;
+}
+
+/**
+ * Specifies constructor parameters for VolumeChunkSpecification.
+ */
+export interface VolumeChunkSpecificationOptions extends VolumeChunkSpecificationBaseOptions {
+  /**
+   * Chunk size in voxels.
+   */
+  chunkDataSize: Vec3;
+}
+
+
+/**
+ * Specifies additional parameters for VolumeChunkSpecification.withDefaultCompression.
+ */
+export interface VolumeChunkSpecificationDefaultCompressionOptions {
+  /**
+   * Volume type.
+   */
+  volumeType: VolumeType;
+}
+
+/**
+ * Specifies parameters for VolumeChunkSpecification.getDefaults.
+ */
+export interface VolumeChunkSpecificationGetDefaultsOptions extends
+    VolumeChunkSpecificationBaseOptions, VolumeChunkSpecificationDefaultCompressionOptions {
+  /**
+   * Chunk sizes in voxels.
+   */
+  chunkDataSizes?: Vec3[];
+
+  /**
+   * Maximum number of voxels per chunk.
+   */
+  maxVoxelsPerChunkLog2?: number;
+}
 
 /**
  * Specifies a chunk layout and voxel size.
  */
 export class VolumeChunkSpecification {
-  chunkBytes: number;
+  chunkLayout: ChunkLayout;
+  numChannels: number;
   voxelSize: Vec3;
+  dataType: DataType;
+  chunkDataSize: Vec3;
+
+  chunkBytes: number;
 
   // All valid chunks are in the range [lowerChunkBound, upperChunkBound).
   lowerChunkBound: Vec3;
   upperChunkBound: Vec3;
 
-  constructor(
-      public chunkLayout: ChunkLayout, public chunkDataSize: Vec3, public numChannels: number,
-      public dataType: DataType, public lowerVoxelBound: Vec3, public upperVoxelBound: Vec3,
-      public compressedSegmentationBlockSize?: Vec3) {
-    this.chunkBytes = prod3(chunkDataSize) * DATA_TYPE_BYTES[dataType] * numChannels;
-    let voxelSize = this.voxelSize =
-        vec3.divide(vec3.create(), this.chunkLayout.size, this.chunkDataSize);
+  lowerClipBound: Vec3;
+  upperClipBound: Vec3;
+
+  lowerVoxelBound: Vec3;
+  upperVoxelBound: Vec3;
+
+  baseVoxelOffset: Vec3;
+
+  compressedSegmentationBlockSize: Vec3|undefined;
+
+  constructor(options: VolumeChunkSpecificationOptions) {
+    let {dataType,
+         lowerVoxelBound = kZeroVec,
+         upperVoxelBound,
+         chunkDataSize,
+         chunkLayoutOffset = kZeroVec,
+         voxelSize,
+         baseVoxelOffset = kZeroVec,
+         numChannels} = options;
+    let {lowerClipBound = vec3.multiply(vec3.create(), voxelSize, lowerVoxelBound),
+         upperClipBound = vec3.multiply(vec3.create(), voxelSize, upperVoxelBound)} = options;
+    this.dataType = options.dataType;
+    this.numChannels = numChannels;
+    this.voxelSize = voxelSize;
+    this.chunkDataSize = chunkDataSize;
+    this.chunkLayout = ChunkLayout.get(
+        vec3.multiply(vec3.create(), options.chunkDataSize, voxelSize), chunkLayoutOffset);
+    this.chunkBytes = prod3(options.chunkDataSize) * DATA_TYPE_BYTES[dataType] * numChannels;
+    this.lowerClipBound = lowerClipBound;
+    this.upperClipBound = upperClipBound;
+    this.lowerVoxelBound = lowerVoxelBound;
+    this.upperVoxelBound = upperVoxelBound;
+    this.baseVoxelOffset = baseVoxelOffset;
+
     let lowerChunkBound = this.lowerChunkBound = vec3.create();
     let upperChunkBound = this.upperChunkBound = vec3.create();
-    let chunkSize = chunkLayout.size;
-    let chunkOffset = chunkLayout.offset;
     for (let i = 0; i < 3; ++i) {
-      lowerChunkBound[i] =
-          Math.floor((lowerVoxelBound[i] * voxelSize[i] - chunkOffset[i]) / chunkSize[i]);
-      upperChunkBound[i] =
-          Math.floor(((upperVoxelBound[i] - 1) * voxelSize[i] - chunkOffset[i]) / chunkSize[i] + 1);
+      lowerChunkBound[i] = Math.floor(lowerVoxelBound[i] / chunkDataSize[i]);
+      upperChunkBound[i] = Math.floor((upperVoxelBound[i] - 1) / chunkDataSize[i] + 1);
     }
-    // console.log(`voxelBound = [${vec3.str(lowerVoxelBound)},${vec3.str(upperVoxelBound)}),
-    // chunkBound = [${vec3.str(lowerChunkBound)},${vec3.str(upperChunkBound)}]`);
-    this.compressedSegmentationBlockSize = compressedSegmentationBlockSize;
+    this.compressedSegmentationBlockSize = options.compressedSegmentationBlockSize;
   }
-  static fromObject(msg: any) {
-    return new VolumeChunkSpecification(
-        ChunkLayout.fromObject(msg['chunkLayout']), msg['chunkDataSize'], msg['numChannels'],
-        msg['dataType'], msg['lowerVoxelBound'], msg['upperVoxelBound'],
-        msg['compressedSegmentationBlockSize']);
-  }
-  toObject(msg: any) {
-    this.chunkLayout.toObject(msg['chunkLayout'] = {});
-    msg['chunkDataSize'] = this.chunkDataSize;
-    msg['numChannels'] = this.numChannels;
-    msg['dataType'] = this.dataType;
-    msg['lowerVoxelBound'] = this.lowerVoxelBound;
-    msg['upperVoxelBound'] = this.upperVoxelBound;
-    msg['compressedSegmentationBlockSize'] = this.compressedSegmentationBlockSize;
+  static fromObject(msg: any) { return new VolumeChunkSpecification(msg); }
+  toObject(): VolumeChunkSpecificationOptions {
+    return {
+      chunkLayoutOffset: this.chunkLayout.offset,
+      numChannels: this.numChannels,
+      chunkDataSize: this.chunkDataSize,
+      voxelSize: this.voxelSize,
+      dataType: this.dataType,
+      lowerVoxelBound: this.lowerVoxelBound,
+      upperVoxelBound: this.upperVoxelBound,
+      lowerClipBound: this.lowerClipBound,
+      upperClipBound: this.upperClipBound,
+      baseVoxelOffset: this.baseVoxelOffset,
+      compressedSegmentationBlockSize: this.compressedSegmentationBlockSize,
+    };
   }
 
-  static getDefaults(options: {
-    voxelSize: Vec3,
-    lowerVoxelBound: Vec3,
-    upperVoxelBound: Vec3,
-    volumeType: VolumeType,
-    dataType: DataType,
-    numChannels?: number,
-    chunkDataSizes?: Vec3[],
-    compressedSegmentationBlockSize?: Vec3|undefined
-  }) {
-    let {voxelSize,       dataType,
-         lowerVoxelBound, chunkDataSizes = DEFAULT_CHUNK_DATA_SIZES,
-         numChannels = 1, compressedSegmentationBlockSize} = options;
-    let chunkOffset = vec3.multiply(vec3.create(), lowerVoxelBound, voxelSize);
+  /**
+   * Returns a VolumeChunkSpecification with default compression specified if suitable for the
+   * volumeType.
+   */
+  static withDefaultCompression(options: VolumeChunkSpecificationDefaultCompressionOptions&
+                                VolumeChunkSpecificationOptions) {
+    let {compressedSegmentationBlockSize, dataType, voxelSize, lowerVoxelBound, upperVoxelBound} =
+        options;
     if (compressedSegmentationBlockSize === undefined &&
         options.volumeType === VolumeType.SEGMENTATION &&
         (dataType === DataType.UINT32 || dataType === DataType.UINT64)) {
-      compressedSegmentationBlockSize = vec3.fromValues(8, 8, 8);
+      compressedSegmentationBlockSize = getNearIsotropicBlockSize(
+          {voxelSize, lowerVoxelBound, upperVoxelBound, maxVoxelsPerChunkLog2: 9});
     }
-    return chunkDataSizes.map(chunkDataSize => {
-      let chunkSize = vec3.create();
-      vec3.multiply(chunkSize, voxelSize, chunkDataSize);
-      let chunkLayout = ChunkLayout.get(chunkSize, chunkOffset);
-      return new VolumeChunkSpecification(
-          chunkLayout, chunkDataSize, numChannels, dataType, lowerVoxelBound,
-          options.upperVoxelBound, compressedSegmentationBlockSize);
-    });
+    return new VolumeChunkSpecification(
+        Object.assign({}, options, {compressedSegmentationBlockSize}));
+  }
+
+  static getDefaults(options: VolumeChunkSpecificationGetDefaultsOptions) {
+    let {chunkDataSizes = [getNearIsotropicBlockSize(options)]} = options;
+    return chunkDataSizes.map(
+        chunkDataSize => VolumeChunkSpecification.withDefaultCompression(
+            Object.assign({}, options, {chunkDataSize})));
   }
 };
 
 export interface VolumeChunkSource { spec: VolumeChunkSpecification; }
+
+export const SLICEVIEW_RPC_ID = 'SliceView';

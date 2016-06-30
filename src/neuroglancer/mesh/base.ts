@@ -14,16 +14,5 @@
  * limitations under the License.
  */
 
-export class VolumeChunkSourceParameters {
-  baseUrls: string[];
-  key: string;
-  channel: string;
-  resolution: string;
-  encoding: string;
-
-  static RPC_ID = 'ndstore/VolumeChunkSource';
-
-  static stringify(parameters: VolumeChunkSourceParameters) {
-    return `ndstore:volume:${parameters.baseUrls[0]}/${parameters.key}/${parameters.channel}/${parameters.resolution}/${parameters.encoding}`;
-  }
-};
+export const MESH_LAYER_RPC_ID = 'mesh/MeshLayer';
+export const FRAGMENT_SOURCE_RPC_ID = 'mesh/FragmentSource';

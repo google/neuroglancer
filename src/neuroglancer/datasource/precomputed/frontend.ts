@@ -16,26 +16,16 @@
 
 import {ChunkManager} from 'neuroglancer/chunk_manager/frontend';
 import {registerDataSourceFactory} from 'neuroglancer/datasource/factory';
-import {MeshSourceParameters, VolumeChunkEncoding, VolumeChunkSourceParameters, meshSourceToString, volumeSourceToString} from 'neuroglancer/datasource/precomputed/base';
-import {MeshSource as GenericMeshSource} from 'neuroglancer/mesh/frontend';
+import {MeshSourceParameters, VolumeChunkEncoding, VolumeChunkSourceParameters} from 'neuroglancer/datasource/precomputed/base';
+import {defineParameterizedMeshSource} from 'neuroglancer/mesh/frontend';
 import {DataType, VolumeChunkSpecification, VolumeType} from 'neuroglancer/sliceview/base';
-import {MultiscaleVolumeChunkSource as GenericMultiscaleVolumeChunkSource, VolumeChunkSource as GenericVolumeChunkSource} from 'neuroglancer/sliceview/frontend';
+import {MultiscaleVolumeChunkSource as GenericMultiscaleVolumeChunkSource, defineParameterizedVolumeChunkSource} from 'neuroglancer/sliceview/frontend';
 import {Vec3, vec3} from 'neuroglancer/util/geom';
 import {openShardedHttpRequest, parseSpecialUrl, sendHttpRequest} from 'neuroglancer/util/http_request';
 import {parseArray, parseFixedLengthArray, parseIntVec, stableStringify, verifyEnumString, verifyFinitePositiveFloat, verifyObject, verifyObjectProperty, verifyOptionalString, verifyPositiveInt, verifyString} from 'neuroglancer/util/json';
 
-export class VolumeChunkSource extends GenericVolumeChunkSource {
-  constructor(
-      chunkManager: ChunkManager, spec: VolumeChunkSpecification,
-      public parameters: VolumeChunkSourceParameters) {
-    super(chunkManager, spec);
-    this.initializeCounterpart(chunkManager.rpc!, {
-      'type': 'precomputed/VolumeChunkSource',
-      'parameters': this.parameters,
-    });
-  }
-  toString() { return volumeSourceToString(this.parameters); }
-};
+const VolumeChunkSource = defineParameterizedVolumeChunkSource(VolumeChunkSourceParameters);
+const MeshSource = defineParameterizedMeshSource(MeshSourceParameters);
 
 class ScaleInfo {
   key: string;
@@ -102,38 +92,25 @@ export class MultiscaleVolumeChunkSource implements GenericMultiscaleVolumeChunk
             voxelSize: scaleInfo.resolution,
             dataType: this.dataType,
             numChannels: this.numChannels,
-            lowerVoxelBound: scaleInfo.voxelOffset,
-            upperVoxelBound: vec3.add(vec3.create(), scaleInfo.voxelOffset, scaleInfo.size),
+            chunkLayoutOffset:
+                vec3.multiply(vec3.create(), scaleInfo.resolution, scaleInfo.voxelOffset),
+            upperVoxelBound: scaleInfo.size,
             volumeType: this.volumeType,
             chunkDataSizes: scaleInfo.chunkSizes,
+            baseVoxelOffset: scaleInfo.voxelOffset,
             compressedSegmentationBlockSize: scaleInfo.compressedSegmentationBlockSize
           })
-          .map(spec => {
-            let parameters = {
-              'baseUrls': this.baseUrls,
-              'path': `${this.path}/${scaleInfo.key}`,
-              'encoding': scaleInfo.encoding
-            };
-            return chunkManager.getChunkSource(
-                VolumeChunkSource, stableStringify(parameters),
-                () => new VolumeChunkSource(chunkManager, spec, parameters));
-          });
+          .map(spec => VolumeChunkSource.get(chunkManager, spec, {
+            'baseUrls': this.baseUrls,
+            'path': `${this.path}/${scaleInfo.key}`,
+            'encoding': scaleInfo.encoding
+          }));
     });
   }
 };
 
-export class MeshSource extends GenericMeshSource {
-  constructor(chunkManager: ChunkManager, public parameters: MeshSourceParameters) {
-    super(chunkManager);
-    this.initializeCounterpart(
-        this.chunkManager.rpc!, {'type': 'precomputed/MeshSource', 'parameters': parameters});
-  }
-  toString() { return meshSourceToString(this.parameters); }
-};
-
 export function getShardedMeshSource(chunkManager: ChunkManager, parameters: MeshSourceParameters) {
-  return chunkManager.getChunkSource(
-      MeshSource, stableStringify(parameters), () => new MeshSource(chunkManager, parameters));
+  return MeshSource.get(chunkManager, parameters);
 }
 
 export function getMeshSource(chunkManager: ChunkManager, url: string, lod: number) {

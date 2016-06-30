@@ -17,29 +17,33 @@ from __future__ import absolute_import
 from . import base_viewer
 from . import server
 
+
 class Viewer(base_viewer.BaseViewer):
-  def __init__(self, *args, **kwargs):
-    super(Viewer, self).__init__(*args, **kwargs)
-    server.start()
+    """Viewer based on neuroglancer.server."""
 
-  def register_volume(self, volume):
-    server.register_volume(volume)
+    def __init__(self, *args, **kwargs):
+        super(Viewer, self).__init__(*args, **kwargs)
+        server.start()
 
-  def get_server_url(self):
-    return server.get_server_url()
+    def register_volume(self, volume):
+        server.register_volume(volume)
 
-  def get_viewer_url(self):
-    return '%s/static/%s/#!%s' % (self.get_server_url(),
-                                  server.global_server.token,
-                                  self.get_encoded_state())
+    def get_server_url(self):
+        return server.get_server_url()
 
-  def __repr__(self):
-    return self.get_viewer_url()
+    def get_viewer_url(self):
+        return '%s/static/%s/#!%s' % (self.get_server_url(), server.global_server.token,
+                                      self.get_encoded_state())
 
-  def _repr_html_(self):
-    return '<a href="%s" target="_blank">Viewer</a>' % self.get_viewer_url()
+    def __repr__(self):
+        return self.get_viewer_url()
+
+    def _repr_html_(self):
+        return '<a href="%s" target="_blank">Viewer</a>' % self.get_viewer_url()
+
 
 def view(*args, **kwargs):
-  v = Viewer()
-  v.add(*args, **kwargs)
-  return v
+    """View a single array."""
+    v = Viewer()
+    v.add(*args, **kwargs)
+    return v

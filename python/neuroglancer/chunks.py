@@ -12,24 +12,29 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from PIL import Image
-import numpy as np
 import zlib
 import io
+from PIL import Image
+import numpy as np
+
 
 def encode_jpeg(subvol):
-  shape = subvol.shape
-  reshaped = subvol.reshape(shape[0] * shape[1], shape[2])
-  img = Image.fromarray(reshaped)
-  f = io.BytesIO()
-  img.save(f, "JPEG")
-  return f.getvalue()
+    shape = subvol.shape
+    reshaped = subvol.reshape(shape[0] * shape[1], shape[2])
+    img = Image.fromarray(reshaped)
+    f = io.BytesIO()
+    img.save(f, "JPEG")
+    return f.getvalue()
+
+
 def encode_npz(subvol):
-  fileobj = io.BytesIO()
-  if len(subvol.shape) == 3:
-    subvol = np.expand_dims(subvol, 0)
-  np.save(fileobj, subvol)
-  cdz = zlib.compress(fileobj.getvalue())
-  return cdz
+    fileobj = io.BytesIO()
+    if len(subvol.shape) == 3:
+        subvol = np.expand_dims(subvol, 0)
+    np.save(fileobj, subvol)
+    cdz = zlib.compress(fileobj.getvalue())
+    return cdz
+
+
 def encode_raw(subvol):
-  return subvol.tostring('C')
+    return subvol.tostring('C')

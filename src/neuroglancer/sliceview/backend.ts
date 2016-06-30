@@ -16,7 +16,7 @@
 
 import {Chunk, ChunkManager, ChunkSource} from 'neuroglancer/chunk_manager/backend';
 import {ChunkPriorityTier} from 'neuroglancer/chunk_manager/base';
-import {RenderLayer as RenderLayerInterface, SliceViewBase, VolumeChunkSource as VolumeChunkSourceInterface, VolumeChunkSpecification} from 'neuroglancer/sliceview/base';
+import {RenderLayer as RenderLayerInterface, SLICEVIEW_RPC_ID, SliceViewBase, VolumeChunkSource as VolumeChunkSourceInterface, VolumeChunkSpecification} from 'neuroglancer/sliceview/base';
 import {ChunkLayout} from 'neuroglancer/sliceview/chunk_layout';
 import {Vec3, vec3, vec3Key} from 'neuroglancer/util/geom';
 import {RPC, SharedObjectCounterpart, registerRPC, registerSharedObject} from 'neuroglancer/worker_rpc';
@@ -28,6 +28,7 @@ const SCALE_PRIORITY_MULTIPLIER = 1e5;
 const tempChunkPosition = vec3.create();
 const tempChunkDataSize = vec3.create();
 
+@registerSharedObject(SLICEVIEW_RPC_ID)
 export class SliceView extends SliceViewBase {
   chunkManager: ChunkManager;
 
@@ -88,7 +89,6 @@ export class SliceView extends SliceViewBase {
     }
   }
 };
-registerSharedObject('SliceView', SliceView);
 
 registerRPC('SliceView.updateView', function(x) {
   let obj = this.get(x.id);
@@ -166,17 +166,9 @@ export class VolumeChunk extends Chunk {
 
 export class VolumeChunkSource extends ChunkSource implements VolumeChunkSourceInterface {
   spec: VolumeChunkSpecification;
-  baseVoxelOffset = vec3.create();
-
   constructor(rpc: RPC, options: any) {
     super(rpc, options);
-    let spec = this.spec = VolumeChunkSpecification.fromObject(options['spec']);
-    let {baseVoxelOffset} = this;
-    let chunkOffset = spec.chunkLayout.offset;
-    let {voxelSize} = spec;
-    for (let i = 0; i < 3; ++i) {
-      baseVoxelOffset[i] = Math.round(chunkOffset[i] / voxelSize[i]);
-    }
+    this.spec = VolumeChunkSpecification.fromObject(options['spec']);
   }
 
   getChunk(chunkGridPosition: Vec3) {
@@ -215,7 +207,7 @@ export class VolumeChunkSource extends ChunkSource implements VolumeChunkSourceI
     // Chunk start position in voxel coordinates.
     let chunkPosition =
         vec3.multiply(tempChunkPosition, chunk.chunkGridPosition, origChunkDataSize);
-    vec3.add(chunkPosition, chunkPosition, this.baseVoxelOffset);
+    vec3.add(chunkPosition, chunkPosition, this.spec.baseVoxelOffset);
 
     // Specifies whether the chunk only partially fits within the data bounds.
     let partial = false;
@@ -237,6 +229,7 @@ export class VolumeChunkSource extends ChunkSource implements VolumeChunkSourceI
   }
 };
 
+@registerSharedObject('sliceview/RenderLayer')
 export class RenderLayer extends SharedObjectCounterpart implements RenderLayerInterface {
   rpcId: number;
   sources: VolumeChunkSource[][];
@@ -256,4 +249,17 @@ export class RenderLayer extends SharedObjectCounterpart implements RenderLayerI
     }
   }
 };
-registerSharedObject('sliceview/RenderLayer', RenderLayer);
+
+/**
+ * Extends VolumeChunkSource with a parameters member.
+ *
+ * Subclasses should be decorated with
+ * src/neuroglancer/chunk_manager/backend.ts:registerChunkSource.
+ */
+export class ParameterizedVolumeChunkSource<Parameters> extends VolumeChunkSource {
+  parameters: Parameters;
+  constructor(rpc: RPC, options: any) {
+    super(rpc, options);
+    this.parameters = options['parameters'];
+  }
+};

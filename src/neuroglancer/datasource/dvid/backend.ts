@@ -14,26 +14,20 @@
  * limitations under the License.
  */
 
-import {handleChunkDownloadPromise} from 'neuroglancer/chunk_manager/backend';
-import {TileChunkSourceParameters, TileEncoding, VolumeChunkSourceParameters, tileSourceToString, volumeSourceToString} from 'neuroglancer/datasource/dvid/base';
-import {VolumeChunk, VolumeChunkSource as GenericVolumeChunkSource} from 'neuroglancer/sliceview/backend';
+import {handleChunkDownloadPromise, registerChunkSource} from 'neuroglancer/chunk_manager/backend';
+import {TileChunkSourceParameters, TileEncoding, VolumeChunkSourceParameters} from 'neuroglancer/datasource/dvid/base';
+import {ParameterizedVolumeChunkSource, VolumeChunk} from 'neuroglancer/sliceview/backend';
 import {ChunkDecoder} from 'neuroglancer/sliceview/backend_chunk_decoders';
 import {decodeJpegChunk} from 'neuroglancer/sliceview/backend_chunk_decoders/jpeg';
 import {decodeRawChunk} from 'neuroglancer/sliceview/backend_chunk_decoders/raw';
 import {openShardedHttpRequest, sendHttpRequest} from 'neuroglancer/util/http_request';
-import {RPC, registerSharedObject} from 'neuroglancer/worker_rpc';
 
 const TILE_CHUNK_DECODERS = new Map<TileEncoding, ChunkDecoder>([
   [TileEncoding.JPEG, decodeJpegChunk],
 ]);
 
-class VolumeChunkSource extends GenericVolumeChunkSource {
-  parameters: VolumeChunkSourceParameters;
-  constructor(rpc: RPC, options: any) {
-    super(rpc, options);
-    this.parameters = options['parameters'];
-  }
-
+@registerChunkSource(VolumeChunkSourceParameters)
+class VolumeChunkSource extends ParameterizedVolumeChunkSource<VolumeChunkSourceParameters> {
   download(chunk: VolumeChunk) {
     let params = this.parameters;
     let path: string;
@@ -49,18 +43,11 @@ class VolumeChunkSource extends GenericVolumeChunkSource {
         chunk, sendHttpRequest(openShardedHttpRequest(params.baseUrls, path), 'arraybuffer'),
         decodeRawChunk);
   }
-  toString() { return volumeSourceToString(this.parameters); }
 };
-registerSharedObject('dvid/VolumeChunkSource', VolumeChunkSource);
 
-class TileChunkSource extends GenericVolumeChunkSource {
-  parameters: TileChunkSourceParameters;
-  chunkDecoder: ChunkDecoder;
-  constructor(rpc: RPC, options: any) {
-    super(rpc, options);
-    this.parameters = options['parameters'];
-    this.chunkDecoder = TILE_CHUNK_DECODERS.get(this.parameters['encoding'])!;
-  }
+@registerChunkSource(TileChunkSourceParameters)
+class TileChunkSource extends ParameterizedVolumeChunkSource<TileChunkSourceParameters> {
+  chunkDecoder = TILE_CHUNK_DECODERS.get(this.parameters['encoding'])!;
 
   download(chunk: VolumeChunk) {
     let params = this.parameters;
@@ -74,6 +61,4 @@ class TileChunkSource extends GenericVolumeChunkSource {
         chunk, sendHttpRequest(openShardedHttpRequest(params.baseUrls, path), 'arraybuffer'),
         this.chunkDecoder);
   }
-  toString() { return tileSourceToString(this.parameters); }
 };
-registerSharedObject('dvid/TileChunkSource', TileChunkSource);

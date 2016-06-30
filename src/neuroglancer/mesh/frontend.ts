@@ -14,11 +14,13 @@
  * limitations under the License.
  */
 
-import {ChunkState} from 'neuroglancer/chunk_manager/base';
+import {ChunkSourceParametersConstructor, ChunkState} from 'neuroglancer/chunk_manager/base';
 import {Chunk, ChunkManager, ChunkSource} from 'neuroglancer/chunk_manager/frontend';
+import {FRAGMENT_SOURCE_RPC_ID, MESH_LAYER_RPC_ID} from 'neuroglancer/mesh/base';
 import {PerspectiveViewRenderContext, PerspectiveViewRenderLayer, perspectivePanelEmit} from 'neuroglancer/perspective_panel';
 import {SegmentationDisplayState} from 'neuroglancer/segmentation_display_state';
 import {Mat4, Vec3, mat4, vec3, vec4} from 'neuroglancer/util/geom';
+import {stableStringify} from 'neuroglancer/util/json';
 import {Buffer} from 'neuroglancer/webgl/buffer';
 import {GL} from 'neuroglancer/webgl/context';
 import {ShaderBuilder, ShaderProgram} from 'neuroglancer/webgl/shader';
@@ -107,7 +109,7 @@ export class MeshLayer extends PerspectiveViewRenderLayer {
 
     let sharedObject = this.registerDisposer(new SharedObject());
     sharedObject.initializeCounterpart(chunkManager.rpc!, {
-      'type': 'mesh/MeshLayer',
+      'type': MESH_LAYER_RPC_ID,
       'chunkManager': chunkManager.rpcId,
       'source': source.addCounterpartRef(),
       'visibleSegmentSet': displayState.visibleSegments.rpcId
@@ -200,7 +202,7 @@ export class FragmentSource extends ChunkSource {
   objectChunks = new Map<string, Set<FragmentChunk>>();
   constructor(chunkManager: ChunkManager, public meshSource: MeshSource) {
     super(chunkManager);
-    this.initializeCounterpart(chunkManager.rpc!, {'type': 'mesh/FragmentSource'});
+    this.initializeCounterpart(chunkManager.rpc!, {'type': FRAGMENT_SOURCE_RPC_ID});
   }
   addChunk(key: string, chunk: FragmentChunk) {
     super.addChunk(key, chunk);
@@ -235,3 +237,22 @@ export abstract class MeshSource extends ChunkSource {
     super.initializeCounterpart(rpc, options);
   }
 };
+
+/**
+ * Defines a MeshSource for which all state is encapsulated in an object of type Parameters.
+ */
+export function defineParameterizedMeshSource<Parameters>(
+    parametersConstructor: ChunkSourceParametersConstructor<Parameters>) {
+  return class ParameterizedMeshSource extends MeshSource {
+    constructor(chunkManager: ChunkManager, public parameters: Parameters) {
+      super(chunkManager);
+      this.initializeCounterpart(
+          chunkManager.rpc!, {'type': parametersConstructor.RPC_ID, 'parameters': parameters});
+    }
+    static get(chunkManager: ChunkManager, parameters: Parameters) {
+      return chunkManager.getChunkSource(
+          this, stableStringify(parameters), () => new this(chunkManager, parameters));
+    }
+    toString() { return parametersConstructor.stringify(this.parameters); }
+  };
+}

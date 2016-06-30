@@ -18,6 +18,7 @@ import 'neuroglancer/uint64_set'; // Import for side effects.
 
 import {Chunk, ChunkManager, ChunkSource} from 'neuroglancer/chunk_manager/backend';
 import {ChunkPriorityTier} from 'neuroglancer/chunk_manager/base';
+import {SKELETON_LAYER_RPC_ID} from 'neuroglancer/skeleton/base';
 import {Uint64Set} from 'neuroglancer/uint64_set';
 import {Uint64} from 'neuroglancer/util/uint64';
 import {RPC, SharedObjectCounterpart, registerSharedObject} from 'neuroglancer/worker_rpc';
@@ -61,6 +62,7 @@ export class SkeletonSource extends ChunkSource {
   }
 };
 
+@registerSharedObject(SKELETON_LAYER_RPC_ID)
 export class SkeletonLayer extends SharedObjectCounterpart {
   chunkManager: ChunkManager;
   source: SkeletonSource;
@@ -99,5 +101,3 @@ export class SkeletonLayer extends SharedObjectCounterpart {
 export function decodeSkeletonChunk(chunk: SkeletonChunk, response: any) {
   chunk.data = new Uint8Array(response);
 }
-
-registerSharedObject('skeleton/SkeletonLayer', SkeletonLayer);

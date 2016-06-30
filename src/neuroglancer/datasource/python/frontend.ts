@@ -21,56 +21,34 @@
 
 import {ChunkManager} from 'neuroglancer/chunk_manager/frontend';
 import {registerDataSourceFactory} from 'neuroglancer/datasource/factory';
-import {MeshSourceParameters, VolumeChunkEncoding, VolumeChunkSourceParameters, meshSourceToString, volumeSourceToString} from 'neuroglancer/datasource/python/base';
-import {MeshSource as GenericMeshSource} from 'neuroglancer/mesh/frontend';
-import {DataType, VolumeChunkSpecification, VolumeType} from 'neuroglancer/sliceview/base';
-import {MultiscaleVolumeChunkSource as GenericMultiscaleVolumeChunkSource, VolumeChunkSource as GenericVolumeChunkSource} from 'neuroglancer/sliceview/frontend';
+import {MeshSourceParameters, VolumeChunkEncoding, VolumeChunkSourceParameters} from 'neuroglancer/datasource/python/base';
+import {defineParameterizedMeshSource} from 'neuroglancer/mesh/frontend';
+import {DEFAULT_MAX_VOXELS_PER_CHUNK_LOG2, DataType, VolumeChunkSpecification, VolumeType, getNearIsotropicBlockSize, getTwoDimensionalBlockSize} from 'neuroglancer/sliceview/base';
+import {MultiscaleVolumeChunkSource as GenericMultiscaleVolumeChunkSource, defineParameterizedVolumeChunkSource} from 'neuroglancer/sliceview/frontend';
 import {Vec3, vec3} from 'neuroglancer/util/geom';
 import {openShardedHttpRequest, sendHttpRequest} from 'neuroglancer/util/http_request';
-import {parseArray, parseFixedLengthArray, parseIntVec, stableStringify, verifyEnumString, verifyFinitePositiveFloat, verifyObject, verifyObjectProperty, verifyPositiveInt, verifyString} from 'neuroglancer/util/json';
+import {parseArray, parseFixedLengthArray, stableStringify, verify3dDimensions, verify3dScale, verify3dVec, verifyEnumString, verifyObject, verifyObjectProperty, verifyPositiveInt, verifyString} from 'neuroglancer/util/json';
 
-export class VolumeChunkSource extends GenericVolumeChunkSource {
-  constructor(
-      chunkManager: ChunkManager, spec: VolumeChunkSpecification,
-      public parameters: VolumeChunkSourceParameters) {
-    super(chunkManager, spec);
-    this.initializeCounterpart(
-        chunkManager.rpc!, {'type': 'python/VolumeChunkSource', 'parameters': parameters});
-  }
-  toString() { return volumeSourceToString(this.parameters); }
-};
-
-export class MeshSource extends GenericMeshSource {
-  constructor(chunkManager: ChunkManager, public parameters: MeshSourceParameters) {
-    super(chunkManager);
-    this.initializeCounterpart(
-        this.chunkManager.rpc!, {'type': 'python/MeshSource', 'parameters': parameters});
-  }
-  toString() { return meshSourceToString(this.parameters); }
-};
+const VolumeChunkSource = defineParameterizedVolumeChunkSource(VolumeChunkSourceParameters);
+const MeshSource = defineParameterizedMeshSource(MeshSourceParameters);
 
 interface ScaleInfo {
   key: string;
-  lowerVoxelBound: Vec3;
-  upperVoxelBound: Vec3;
-  chunkDataSizes?: Vec3[];
+  offset: Vec3;
+  sizeInVoxels: Vec3;
+  chunkDataSize?: Vec3;
   voxelSize: Vec3;
 }
 
-function parseScaleInfo(obj: any) {
+function parseScaleInfo(obj: any): ScaleInfo {
   verifyObject(obj);
   return {
     key: verifyObjectProperty(obj, 'key', verifyString),
-    lowerVoxelBound:
-        verifyObjectProperty(obj, 'lowerVoxelBound', x => parseIntVec(vec3.create(), x)),
-    upperVoxelBound:
-        verifyObjectProperty(obj, 'upperVoxelBound', x => parseIntVec(vec3.create(), x)),
-    voxelSize: verifyObjectProperty(
-        obj, 'voxelSize', x => parseFixedLengthArray(vec3.create(), x, verifyFinitePositiveFloat)),
-    chunkDataSizes: verifyObjectProperty(
-        obj, 'chunkDataSizes', x => x === undefined ?
-            x :
-            parseArray(x, y => parseFixedLengthArray(vec3.create(), y, verifyPositiveInt))),
+    offset: verifyObjectProperty(obj, 'offset', verify3dVec),
+    sizeInVoxels: verifyObjectProperty(obj, 'sizeInVoxels', verify3dDimensions),
+    voxelSize: verifyObjectProperty(obj, 'voxelSize', verify3dScale),
+    chunkDataSize: verifyObjectProperty(
+        obj, 'chunkDataSize', x => x === undefined ? undefined : verify3dDimensions(x)),
   };
 }
 
@@ -79,7 +57,7 @@ export class MultiscaleVolumeChunkSource implements GenericMultiscaleVolumeChunk
   numChannels: number;
   volumeType: VolumeType;
   encoding: VolumeChunkEncoding;
-  scales: ScaleInfo[];
+  scales: ScaleInfo[][];
 
   constructor(public baseUrls: string[], public key: string, public response: any) {
     verifyObject(response);
@@ -89,38 +67,91 @@ export class MultiscaleVolumeChunkSource implements GenericMultiscaleVolumeChunk
     this.numChannels = verifyObjectProperty(response, 'numChannels', verifyPositiveInt);
     this.encoding =
         verifyObjectProperty(response, 'encoding', x => verifyEnumString(x, VolumeChunkEncoding));
-    this.scales = verifyObjectProperty(response, 'scales', x => parseArray(x, parseScaleInfo));
+    let maxVoxelsPerChunkLog2 = verifyObjectProperty(
+        response, 'maxVoxelsPerChunkLog2',
+        x => x === undefined ? DEFAULT_MAX_VOXELS_PER_CHUNK_LOG2 : verifyPositiveInt(x));
+
+    /**
+     * Scales used for arbitrary orientation (should be near isotropic).
+     *
+     * Exactly one of threeDimensionalScales and twoDimensionalScales should be specified.
+     */
+    let threeDimensionalScales = verifyObjectProperty(
+        response, 'threeDimensionalScales',
+        x => x === undefined ? undefined : parseArray(x, parseScaleInfo));
+
+    /**
+     * Separate scales used for XY, XZ, YZ slice views, respectively.  The chunks should be flat or
+     * nearly flat in Z, Y, X respectively.  The inner arrays must have length 3.
+     */
+    let twoDimensionalScales = verifyObjectProperty(
+        response, 'twoDimensionalScales', x => x === undefined ?
+            undefined :
+            parseArray(x, y => parseFixedLengthArray(new Array<ScaleInfo>(3), y, parseScaleInfo)));
+    if ((twoDimensionalScales === undefined) === (threeDimensionalScales === undefined)) {
+      throw new Error(
+          `Exactly one of "threeDimensionalScales" and "twoDimensionalScales" must be specified.`);
+    }
+    if (twoDimensionalScales !== undefined) {
+      if (twoDimensionalScales.length === 0) {
+        throw new Error(`At least one scale must be specified.`);
+      }
+      this.scales = twoDimensionalScales.map(levelScales => levelScales.map((scale, index) => {
+        const {voxelSize, sizeInVoxels} = scale;
+        const flatDimension = 2 - index;
+        let {
+            chunkDataSize = getTwoDimensionalBlockSize(
+                {voxelSize, upperVoxelBound: sizeInVoxels, flatDimension, maxVoxelsPerChunkLog2})} =
+            scale;
+        return {
+          key: scale.key,
+          offset: scale.offset, sizeInVoxels, voxelSize, chunkDataSize,
+        };
+      }));
+      if (!vec3.equals(this.scales[0][0].voxelSize, this.scales[0][1].voxelSize) ||
+          !vec3.equals(this.scales[0][0].voxelSize, this.scales[0][2].voxelSize)) {
+        throw new Error(`Lowest scale must have uniform voxel size.`);
+      }
+    }
+    if (threeDimensionalScales !== undefined) {
+      if (threeDimensionalScales.length === 0) {
+        throw new Error(`At least one scale must be specified.`);
+      }
+      this.scales = threeDimensionalScales.map(scale => {
+        let {voxelSize, sizeInVoxels} = scale;
+        let {chunkDataSize = getNearIsotropicBlockSize(
+                 {voxelSize, upperVoxelBound: sizeInVoxels, maxVoxelsPerChunkLog2})} = scale;
+        return [{key: scale.key, offset: scale.offset, sizeInVoxels, voxelSize, chunkDataSize}];
+      });
+    }
   }
 
   getSources(chunkManager: ChunkManager) {
     let {numChannels, dataType, volumeType, encoding} = this;
-    return this.scales.map(scaleInfo => {
-      return VolumeChunkSpecification
-          .getDefaults({
-            voxelSize: scaleInfo.voxelSize,
-            dataType,
-            volumeType,
-            numChannels,
-            lowerVoxelBound: scaleInfo.lowerVoxelBound,
-            upperVoxelBound: scaleInfo.upperVoxelBound,
-            chunkDataSizes: scaleInfo.chunkDataSizes,
-          })
-          .map(spec => {
-            let parameters = {baseUrls: this.baseUrls, key: scaleInfo.key, encoding: encoding};
-            return chunkManager.getChunkSource(
-                VolumeChunkSource, stableStringify(parameters),
-                () => new VolumeChunkSource(chunkManager, spec, parameters));
-          });
-    });
+    // Clip based on the bounds of the first scale.
+    const baseScale = this.scales[0][0];
+    let upperClipBound = vec3.multiply(vec3.create(), baseScale.voxelSize, baseScale.sizeInVoxels);
+    return this.scales.map(levelScales => levelScales.map(scaleInfo => {
+      const spec = VolumeChunkSpecification.withDefaultCompression({
+        voxelSize: scaleInfo.voxelSize,
+        dataType,
+        volumeType,
+        numChannels,
+        chunkLayoutOffset: scaleInfo.offset,
+        upperVoxelBound: scaleInfo.sizeInVoxels,
+        upperClipBound: upperClipBound,
+        chunkDataSize: scaleInfo.chunkDataSize!,
+      });
+      return VolumeChunkSource.get(
+          chunkManager, spec, {baseUrls: this.baseUrls, key: scaleInfo.key, encoding: encoding});
+    }));
   }
 
   getMeshSource(chunkManager: ChunkManager) {
-    let parameters = {
+    return MeshSource.get(chunkManager, {
       baseUrls: this.baseUrls,
       key: this.key,
-    };
-    return chunkManager.getChunkSource(
-        MeshSource, stableStringify(parameters), () => new MeshSource(chunkManager, parameters));
+    });
   }
 };
 

@@ -15,6 +15,7 @@
  */
 
 import {WritableArrayLike} from 'neuroglancer/util/array';
+import {vec3} from 'neuroglancer/util/geom';
 
 export function verifyFloat(obj: any) {
   let t = typeof obj;
@@ -474,4 +475,16 @@ export function verifyEnumString(obj: any, enumType: {[x: string]: any}): number
     }
   }
   throw new Error(`Invalid enum value: ${JSON.stringify(obj)}.`);
+}
+
+export function verify3dVec(obj: any) {
+  return parseFixedLengthArray(vec3.create(), obj, verifyFiniteFloat);
+}
+
+export function verify3dScale(obj: any) {
+  return parseFixedLengthArray(vec3.create(), obj, verifyFinitePositiveFloat);
+}
+
+export function verify3dDimensions(obj: any) {
+  return parseFixedLengthArray(vec3.create(), obj, verifyPositiveInt);
 }

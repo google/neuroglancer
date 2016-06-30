@@ -14,28 +14,31 @@
  * limitations under the License.
  */
 
-export interface DVIDSourceParameters {
+export class DVIDSourceParameters {
   baseUrls: string[];
   nodeKey: string;
   dataInstanceKey: string;
 }
 
-export interface VolumeChunkSourceParameters extends DVIDSourceParameters { level: string; }
+export class VolumeChunkSourceParameters extends DVIDSourceParameters {
+  static RPC_ID = 'dvid/VolumeChunkSource';
+  static stringify(parameters: VolumeChunkSourceParameters) {
+    return `dvid:volume:${parameters['baseUrls'][0]}/${parameters['nodeKey']}/${parameters['dataInstanceKey']}`;
+  }
+};
 
 export enum TileEncoding {
   JPEG
 }
 
-export interface TileChunkSourceParameters extends DVIDSourceParameters {
+export class TileChunkSourceParameters extends DVIDSourceParameters {
   dims: string;
   level: string;
   encoding: TileEncoding;
-}
 
-export function volumeSourceToString(parameters: VolumeChunkSourceParameters) {
-  return `dvid:volume:${parameters['baseUrls'][0]}/${parameters['nodeKey']}/${parameters['dataInstanceKey']}/${parameters['level']}`;
-}
+  static RPC_ID = 'dvid/TileChunkSource';
 
-export function tileSourceToString(parameters: TileChunkSourceParameters) {
-  return `dvid:volume:${parameters['baseUrls'][0]}/${parameters['nodeKey']}/${parameters['dataInstanceKey']}/${parameters['dims']}/${parameters['level']}/${TileEncoding[parameters['encoding']]}`;
+  static stringify(parameters: TileChunkSourceParameters) {
+    return `dvid:volume:${parameters['baseUrls'][0]}/${parameters['nodeKey']}/${parameters['dataInstanceKey']}/${parameters['dims']}/${parameters['level']}/${TileEncoding[parameters['encoding']]}`;
+  }
 }
