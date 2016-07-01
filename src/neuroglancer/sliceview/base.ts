@@ -859,3 +859,4 @@ export class VolumeChunkSpecification {
 export interface VolumeChunkSource { spec: VolumeChunkSpecification; }
 
 export const SLICEVIEW_RPC_ID = 'SliceView';
+export const SLICEVIEW_RENDERLAYER_RPC_ID = 'sliceview/RenderLayer';

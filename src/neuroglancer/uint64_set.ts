@@ -24,11 +24,6 @@ export class Uint64Set extends SharedObjectCounterpart {
   hashTable = new HashTable();
   changed = new Signal();
 
-  initializeCounterpart(rpc: RPC, options: any = {}) {
-    options['type'] = 'Uint64Set';
-    super.initializeCounterpart(rpc, options);
-  }
-
   static makeWithCounterpart(rpc: RPC) {
     let obj = new Uint64Set();
     obj.initializeCounterpart(rpc);

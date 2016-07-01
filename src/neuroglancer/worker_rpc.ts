@@ -95,6 +95,7 @@ export class SharedObject extends RefCounted {
     this.referencedGeneration = 0;
     this.isOwner = true;
     options['id'] = this.rpcId;
+    options['type'] = this.RPC_TYPE_ID;
     rpc.invoke('SharedObject.new', options);
   }
 
@@ -142,6 +143,12 @@ export class SharedObject extends RefCounted {
       this.ownerDispose();
     }
   }
+
+  /**
+   * Should be set to a constant specifying the SharedObject type identifier on the prototype of
+   * final derived owner classes.  It is not used on counterpart (non-owner) classes.
+   */
+  RPC_TYPE_ID: string;
 };
 
 /**
@@ -182,13 +189,28 @@ registerRPC('SharedObject.refCountReachedZero', function(x) {
 const sharedObjectConstructors = new Map<string, SharedObjectConstructor>();
 
 /**
- * Registers a class as a SharedObject type under the specified identifier.
+ * Register a class as a SharedObject owner type under the specified identifier.
  *
  * This is intended to be used as a decorator.
+ */
+export function registerSharedObjectOwner(identifier: string) {
+  return (constructorFunction: {prototype: {RPC_TYPE_ID: string}}) => {
+    constructorFunction.prototype.RPC_TYPE_ID = identifier;
+  };
+}
+
+/**
+ * Register a class as a SharedObject counterpart type under the specified identifier.
+ *
+ * This is intended to be used as a decorator.
+ *
+ * Also register the type as a SharedObject owner, which is useful if this type is also used as a
+ * SharedObject owner.
  */
 export function registerSharedObject(identifier: string) {
   return (constructorFunction: SharedObjectConstructor) => {
     sharedObjectConstructors.set(identifier, constructorFunction);
+    constructorFunction.prototype.RPC_TYPE_ID = identifier;
   };
 }
 

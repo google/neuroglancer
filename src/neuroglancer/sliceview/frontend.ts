@@ -31,13 +31,14 @@ import {Buffer} from 'neuroglancer/webgl/buffer';
 import {GL} from 'neuroglancer/webgl/context';
 import {OffscreenFramebuffer} from 'neuroglancer/webgl/offscreen';
 import {ShaderBuilder, ShaderModule, ShaderProgram} from 'neuroglancer/webgl/shader';
-import {RPC} from 'neuroglancer/worker_rpc';
+import {RPC, registerSharedObjectOwner} from 'neuroglancer/worker_rpc';
 import {Signal} from 'signals';
 
 export type VolumeChunkKey = string;
 
 const tempMat = mat4.create();
 
+@registerSharedObjectOwner(SLICEVIEW_RPC_ID)
 export class SliceView extends SliceViewBase {
   dataToViewport = mat4.create();
 
@@ -72,8 +73,7 @@ export class SliceView extends SliceViewBase {
       public navigationState: NavigationState) {
     super();
     mat4.identity(this.dataToViewport);
-    this.initializeCounterpart(
-        this.chunkManager.rpc!, {'type': SLICEVIEW_RPC_ID, 'chunkManager': chunkManager.rpcId});
+    this.initializeCounterpart(this.chunkManager.rpc!, {'chunkManager': chunkManager.rpcId});
     this.updateVisibleLayers();
 
     this.registerSignalBinding(
@@ -372,12 +372,14 @@ export abstract class VolumeChunkSource extends ChunkSource implements VolumeChu
  */
 export function defineParameterizedVolumeChunkSource<Parameters>(
     parametersConstructor: ChunkSourceParametersConstructor<Parameters>) {
-  return class ParameterizedVolumeChunkSource extends VolumeChunkSource {
+  const newConstructor = class ParameterizedVolumeChunkSource extends VolumeChunkSource {
     constructor(
         chunkManager: ChunkManager, spec: VolumeChunkSpecification, public parameters: Parameters) {
       super(chunkManager, spec);
-      this.initializeCounterpart(
-          chunkManager.rpc!, {'type': parametersConstructor.RPC_ID, 'parameters': parameters});
+    }
+    initializeCounterpart(rpc: RPC, options: any) {
+      options['parameters'] = this.parameters;
+      super.initializeCounterpart(rpc, options);
     }
     static get(chunkManager: ChunkManager, spec: VolumeChunkSpecification, parameters: Parameters) {
       return chunkManager.getChunkSource(
@@ -386,6 +388,8 @@ export function defineParameterizedVolumeChunkSource<Parameters>(
     }
     toString() { return parametersConstructor.stringify(this.parameters); }
   };
+  newConstructor.prototype.RPC_TYPE_ID = parametersConstructor.RPC_ID;
+  return newConstructor;
 }
 
 export abstract class VolumeChunk extends Chunk {

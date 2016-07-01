@@ -17,7 +17,7 @@
 import {AvailableCapacity, CHUNK_MANAGER_RPC_ID, CHUNK_QUEUE_MANAGER_RPC_ID, ChunkState} from 'neuroglancer/chunk_manager/base';
 import {Memoize} from 'neuroglancer/util/memoize';
 import {GL} from 'neuroglancer/webgl/context';
-import {RPC, SharedObject, registerRPC} from 'neuroglancer/worker_rpc';
+import {RPC, SharedObject, registerRPC, registerSharedObjectOwner} from 'neuroglancer/worker_rpc';
 import {Signal} from 'signals';
 
 const DEBUG_CHUNK_UPDATES = false;
@@ -37,6 +37,7 @@ interface ChunkConstructor {
   new (source: ChunkSource, update: any): Chunk;
 }
 
+@registerSharedObjectOwner(CHUNK_QUEUE_MANAGER_RPC_ID)
 export class ChunkQueueManager extends SharedObject {
   visibleChunksChanged = new Signal();
   pendingChunkUpdates: any = null;
@@ -57,7 +58,6 @@ export class ChunkQueueManager extends SharedObject {
   }) {
     super();
     this.initializeCounterpart(rpc, {
-      'type': CHUNK_QUEUE_MANAGER_RPC_ID,
       'gpuMemoryCapacity': capacities.gpuMemory.toObject(),
       'systemMemoryCapacity': capacities.systemMemory.toObject(),
       'downloadCapacity': capacities.download.toObject()
@@ -144,6 +144,7 @@ registerRPC('Chunk.update', function(x) {
   }
 });
 
+@registerSharedObjectOwner(CHUNK_MANAGER_RPC_ID)
 export class ChunkManager extends SharedObject {
   chunkSourceCache: Map<any, Memoize<string, ChunkSource>> =
       new Map<any, Memoize<string, ChunkSource>>();
@@ -152,8 +153,7 @@ export class ChunkManager extends SharedObject {
     super();
     this.registerDisposer(chunkQueueManager.addRef());
     this.initializeCounterpart(
-        chunkQueueManager.rpc!,
-        {'type': CHUNK_MANAGER_RPC_ID, 'chunkQueueManager': chunkQueueManager.rpcId});
+        chunkQueueManager.rpc!, {'chunkQueueManager': chunkQueueManager.rpcId});
   }
 
   getChunkSource<T extends ChunkSource>(constructor: any, key: string, getter: () => T) {
@@ -163,7 +163,11 @@ export class ChunkManager extends SharedObject {
       sources = new Memoize<string, ChunkSource>();
       chunkSourceCache.set(constructor, sources);
     }
-    return sources.get(key, getter);
+    return sources.get(key, () => {
+      let value = getter();
+      value.initializeCounterpart(value.chunkManager.rpc!, {});
+      return value;
+    });
   }
 };
 

@@ -117,7 +117,6 @@ export class SliceViewPanelSkeletonLayer extends SliceViewPanelRenderLayer {
   get gl() { return this.base.gl; }
 
   draw(renderContext: SliceViewPanelRenderContext) {
-    console.log('drawing on sliceview');
     this.base.draw(renderContext, this, this.shader, false, 10);
   }
 };
@@ -139,8 +138,8 @@ export class SkeletonLayer extends RefCounted {
         displayState.segmentSelectionState.changed.add(dispatchRedrawNeeded));
 
     let sharedObject = this.registerDisposer(new SharedObject());
+    sharedObject.RPC_TYPE_ID = SKELETON_LAYER_RPC_ID;
     sharedObject.initializeCounterpart(chunkManager.rpc!, {
-      'type': SKELETON_LAYER_RPC_ID,
       'chunkManager': chunkManager.rpcId,
       'source': source.addCounterpartRef(),
       'visibleSegmentSet': displayState.visibleSegments.rpcId

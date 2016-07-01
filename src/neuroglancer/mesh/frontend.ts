@@ -25,7 +25,7 @@ import {Buffer} from 'neuroglancer/webgl/buffer';
 import {GL} from 'neuroglancer/webgl/context';
 import {ShaderBuilder, ShaderProgram} from 'neuroglancer/webgl/shader';
 import {setVec4FromUint32} from 'neuroglancer/webgl/shader_lib';
-import {RPC, SharedObject} from 'neuroglancer/worker_rpc';
+import {RPC, SharedObject, registerSharedObjectOwner} from 'neuroglancer/worker_rpc';
 
 export class MeshShaderManager {
   private tempLightVec = vec4.create();
@@ -108,8 +108,8 @@ export class MeshLayer extends PerspectiveViewRenderLayer {
         displayState.segmentSelectionState.changed.add(dispatchRedrawNeeded));
 
     let sharedObject = this.registerDisposer(new SharedObject());
+    sharedObject.RPC_TYPE_ID = MESH_LAYER_RPC_ID;
     sharedObject.initializeCounterpart(chunkManager.rpc!, {
-      'type': MESH_LAYER_RPC_ID,
       'chunkManager': chunkManager.rpcId,
       'source': source.addCounterpartRef(),
       'visibleSegmentSet': displayState.visibleSegments.rpcId
@@ -198,12 +198,10 @@ export class FragmentChunk extends Chunk {
   }
 };
 
+@registerSharedObjectOwner(FRAGMENT_SOURCE_RPC_ID)
 export class FragmentSource extends ChunkSource {
   objectChunks = new Map<string, Set<FragmentChunk>>();
-  constructor(chunkManager: ChunkManager, public meshSource: MeshSource) {
-    super(chunkManager);
-    this.initializeCounterpart(chunkManager.rpc!, {'type': FRAGMENT_SOURCE_RPC_ID});
-  }
+  constructor(chunkManager: ChunkManager, public meshSource: MeshSource) { super(chunkManager); }
   addChunk(key: string, chunk: FragmentChunk) {
     super.addChunk(key, chunk);
     let {objectChunks} = this;
@@ -226,13 +224,13 @@ export class FragmentSource extends ChunkSource {
       objectChunks.delete(objectKey);
     }
   }
-
   getChunk(x: any) { return new FragmentChunk(this, x); }
 };
 
 export abstract class MeshSource extends ChunkSource {
   fragmentSource = new FragmentSource(this.chunkManager, this);
   initializeCounterpart(rpc: RPC, options: any) {
+    this.fragmentSource.initializeCounterpart(this.chunkManager.rpc!, {});
     options['fragmentSource'] = this.fragmentSource.addCounterpartRef();
     super.initializeCounterpart(rpc, options);
   }
@@ -243,11 +241,11 @@ export abstract class MeshSource extends ChunkSource {
  */
 export function defineParameterizedMeshSource<Parameters>(
     parametersConstructor: ChunkSourceParametersConstructor<Parameters>) {
-  return class ParameterizedMeshSource extends MeshSource {
-    constructor(chunkManager: ChunkManager, public parameters: Parameters) {
-      super(chunkManager);
-      this.initializeCounterpart(
-          chunkManager.rpc!, {'type': parametersConstructor.RPC_ID, 'parameters': parameters});
+  const newConstructor = class ParameterizedMeshSource extends MeshSource {
+    constructor(chunkManager: ChunkManager, public parameters: Parameters) { super(chunkManager); }
+    initializeCounterpart(rpc: RPC, options: any) {
+      options['parameters'] = this.parameters;
+      super.initializeCounterpart(rpc, options);
     }
     static get(chunkManager: ChunkManager, parameters: Parameters) {
       return chunkManager.getChunkSource(
@@ -255,4 +253,6 @@ export function defineParameterizedMeshSource<Parameters>(
     }
     toString() { return parametersConstructor.stringify(this.parameters); }
   };
+  newConstructor.prototype.RPC_TYPE_ID = parametersConstructor.RPC_ID;
+  return newConstructor;
 }

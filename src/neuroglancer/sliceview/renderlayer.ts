@@ -26,7 +26,7 @@
 import {ChunkState} from 'neuroglancer/chunk_manager/base';
 import {ChunkManager} from 'neuroglancer/chunk_manager/frontend';
 import {RenderLayer as GenericRenderLayer} from 'neuroglancer/layer';
-import {DataType, VolumeChunkSpecification} from 'neuroglancer/sliceview/base';
+import {DataType, SLICEVIEW_RENDERLAYER_RPC_ID, VolumeChunkSpecification} from 'neuroglancer/sliceview/base';
 import {MultiscaleVolumeChunkSource, SliceView, VolumeChunkSource} from 'neuroglancer/sliceview/frontend';
 import {TrackableValue, WatchableValue} from 'neuroglancer/trackable_value';
 import {RefCounted} from 'neuroglancer/util/disposable';
@@ -392,8 +392,8 @@ export class RenderLayer extends GenericRenderLayer {
         }
       }
       let sharedObject = this.registerDisposer(new SharedObject());
-      sharedObject.initializeCounterpart(
-          chunkManager.rpc!, {'type': 'sliceview/RenderLayer', 'sources': sourceIds});
+      sharedObject.RPC_TYPE_ID = SLICEVIEW_RENDERLAYER_RPC_ID;
+      sharedObject.initializeCounterpart(chunkManager.rpc!, {'sources': sourceIds});
       this.rpcId = sharedObject.rpcId;
       let spec = this.sources[0][0].spec;
       this.voxelSize = spec.voxelSize;
