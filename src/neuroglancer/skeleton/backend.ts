@@ -62,6 +62,14 @@ export class SkeletonSource extends ChunkSource {
   }
 };
 
+export class ParameterizedSkeletonSource<Parameters> extends SkeletonSource {
+  parameters: Parameters;
+  constructor(rpc: RPC, options: any) {
+    super(rpc, options);
+    this.parameters = options['parameters'];
+  }
+};
+
 @registerSharedObject(SKELETON_LAYER_RPC_ID)
 export class SkeletonLayer extends SharedObjectCounterpart {
   chunkManager: ChunkManager;

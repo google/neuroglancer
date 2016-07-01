@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-import {ChunkState} from 'neuroglancer/chunk_manager/base';
+import {ChunkSourceParametersConstructor, ChunkState} from 'neuroglancer/chunk_manager/base';
 import {Chunk, ChunkManager, ChunkSource} from 'neuroglancer/chunk_manager/frontend';
 import {RenderLayer} from 'neuroglancer/layer';
 import {VoxelSize} from 'neuroglancer/navigation_state';
@@ -24,11 +24,12 @@ import {SKELETON_LAYER_RPC_ID} from 'neuroglancer/skeleton/base';
 import {SliceViewPanelRenderContext, SliceViewPanelRenderLayer, sliceViewPanelEmit} from 'neuroglancer/sliceview/panel';
 import {RefCounted} from 'neuroglancer/util/disposable';
 import {Mat4, Vec3, mat4, vec3} from 'neuroglancer/util/geom';
+import {stableStringify} from 'neuroglancer/util/json';
 import {Buffer} from 'neuroglancer/webgl/buffer';
 import {GL} from 'neuroglancer/webgl/context';
 import {ShaderBuilder, ShaderModule, ShaderProgram} from 'neuroglancer/webgl/shader';
 import {setVec4FromUint32} from 'neuroglancer/webgl/shader_lib';
-import {SharedObject} from 'neuroglancer/worker_rpc';
+import {RPC, SharedObject} from 'neuroglancer/worker_rpc';
 import {Signal} from 'signals';
 
 class SkeletonShaderManager {
@@ -228,3 +229,29 @@ export class SkeletonSource extends ChunkSource {
   chunks: Map<string, SkeletonChunk>;
   getChunk(x: any) { return new SkeletonChunk(this, x); }
 };
+
+export class ParameterizedSkeletonSource<Parameters> extends SkeletonSource {
+  constructor(chunkManager: ChunkManager, public parameters: Parameters) { super(chunkManager); }
+
+  initializeCounterpart(rpc: RPC, options: any) {
+    options['parameters'] = this.parameters;
+    super.initializeCounterpart(rpc, options);
+  }
+};
+
+/**
+ * Defines a SkeletonSource for which all state is encapsulated in an object of type Parameters.
+ */
+export function parameterizedSkeletonSource<Parameters>(
+    parametersConstructor: ChunkSourceParametersConstructor<Parameters>) {
+  const newConstructor =
+      class SpecializedParameterizedSkeletonSource extends ParameterizedSkeletonSource<Parameters> {
+    static get(chunkManager: ChunkManager, parameters: Parameters) {
+      return chunkManager.getChunkSource(
+          this, stableStringify(parameters), () => new this(chunkManager, parameters));
+    }
+    toString() { return parametersConstructor.stringify(this.parameters); }
+  };
+  newConstructor.prototype.RPC_TYPE_ID = parametersConstructor.RPC_ID;
+  return newConstructor;
+}
