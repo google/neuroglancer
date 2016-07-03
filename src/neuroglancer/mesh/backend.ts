@@ -205,7 +205,9 @@ export function decodeVertexPositionsAndIndices(
     numIndices = numTriangles * 3;
   }
 
-  let indices = new Uint32Array(data, indexByteOffset, numIndices);
+  // For compatibility with Firefox, length argument must not be undefined.
+  let indices = numIndices === undefined ? new Uint32Array(data, indexByteOffset) :
+                                           new Uint32Array(data, indexByteOffset, numIndices);
   if (indices.length % 3 !== 0) {
     throw new Error(`Number of indices is not a multiple of 3: ${indices.length}.`);
   }
