@@ -110,9 +110,10 @@ export abstract class RenderedDataPanel extends RenderedPanel {
     } else {
       let {navigationState} = this;
       let offset = tempVec3;
+      let delta = e.deltaY !== 0 ? e.deltaY : e.deltaX;
       offset[0] = 0;
       offset[1] = 0;
-      offset[2] = (e.wheelDelta > 0 ? 1 : -1) * (e.shiftKey ? 10 : 1);
+      offset[2] = (delta > 0 ? -1 : 1) * (e.shiftKey ? 10 : 1);
       navigationState.pose.translateVoxelsRelative(offset);
     }
     e.preventDefault();
