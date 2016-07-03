@@ -188,7 +188,7 @@ export class PerspectivePanel extends RenderedDataPanel {
   }
 
   onMousedown(e: MouseEvent) {
-    if (event.target !== this.element) {
+    if (e.target !== this.element) {
       return;
     }
     super.onMousedown(e);

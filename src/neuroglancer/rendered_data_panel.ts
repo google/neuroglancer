@@ -117,8 +117,9 @@ export abstract class RenderedDataPanel extends RenderedPanel {
     }
     e.preventDefault();
   }
+
   onMousedown(e: MouseEvent) {
-    if (event.target !== this.element) {
+    if (e.target !== this.element) {
       return;
     }
     this.onMousemove(e);
