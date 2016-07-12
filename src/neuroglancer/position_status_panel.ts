@@ -144,5 +144,6 @@ export class PositionStatusPanel extends RefCounted {
     }
     this.positionElements = <any>undefined;
     this.element = <any>undefined;
+    super.disposed();
   }
 };

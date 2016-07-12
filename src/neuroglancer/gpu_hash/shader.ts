@@ -128,6 +128,7 @@ export class GPUHashTable extends RefCounted {
     this.gl = <any>undefined;
     this.hashTable = <any>undefined;
     this.hashFunctions = null;
+    super.disposed();
   }
 
   static get(gl: GL, hashTable: HashTable) {

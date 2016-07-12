@@ -50,7 +50,10 @@ export abstract class RenderedPanel extends RefCounted {
 
   abstract draw(): void;
 
-  disposed() { this.context.removePanel(this); }
+  disposed() {
+    this.context.removePanel(this);
+    super.disposed();
+  }
 };
 
 export class DisplayContext extends RefCounted {

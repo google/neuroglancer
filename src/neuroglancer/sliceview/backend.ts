@@ -87,6 +87,7 @@ export class SliceView extends SliceViewBase {
     for (let layer of this.visibleLayers.keys()) {
       this.removeVisibleLayer(layer);
     }
+    super.disposed();
   }
 };
 

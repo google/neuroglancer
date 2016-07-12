@@ -352,7 +352,10 @@ export class Pose extends RefCounted {
     this.orientation.reset();
   }
 
-  dispose() { this.position.changed.remove(this.changed.dispatch, this.changed); }
+  disposed() {
+    this.position.changed.remove(this.changed.dispatch, this.changed);
+    super.disposed();
+  }
 
   toMat4(mat: Mat4) {
     mat4.fromRotationTranslation(

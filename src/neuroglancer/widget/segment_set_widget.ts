@@ -126,5 +126,6 @@ export class SegmentSetWidget extends RefCounted implements SegmentationDisplayS
     if (parentElement) {
       parentElement.removeChild(element);
     }
+    super.disposed();
   }
 };

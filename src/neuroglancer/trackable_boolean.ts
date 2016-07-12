@@ -67,6 +67,7 @@ export class TrackableBooleanCheckbox extends RefCounted {
     if (parentElement) {
       parentElement.removeChild(element);
     }
+    super.disposed();
   }
 };
 

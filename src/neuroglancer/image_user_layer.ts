@@ -164,6 +164,7 @@ class ShaderCodeWidget extends RefCounted {
     this.debouncedValueUpdater = <any>undefined;
     removeFromParent(this.element);
     this.textEditor = <any>undefined;
+    super.disposed();
   }
 };
 

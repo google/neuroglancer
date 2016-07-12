@@ -106,7 +106,10 @@ export class FourPanelLayout extends RefCounted {
     display.onResize();
   }
 
-  disposed() { removeChildren(this.rootElement); }
+  disposed() {
+    removeChildren(this.rootElement);
+    super.disposed();
+  }
 };
 
 export class SinglePanelLayout extends RefCounted {
@@ -128,7 +131,10 @@ export class SinglePanelLayout extends RefCounted {
     viewer.display.onResize();
   }
 
-  disposed() { removeChildren(this.rootElement); }
+  disposed() {
+    removeChildren(this.rootElement);
+    super.disposed();
+  }
 };
 
 interface DataDisplayLayout extends RefCounted {

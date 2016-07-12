@@ -153,6 +153,7 @@ class LayerWidget extends RefCounted {
       this.dropdown.dispose();
     }
     this.element.parentElement.removeChild(this.element);
+    super.disposed();
   }
 }
 
@@ -201,9 +202,10 @@ export class LayerPanel extends RefCounted {
     }
   }
 
-  dispose() {
+  disposed() {
     this.layerWidgets.forEach(x => x.dispose());
     this.layerWidgets = <any>undefined;
+    super.disposed();
   }
 
   handleLayersChanged() {

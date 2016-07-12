@@ -495,5 +495,6 @@ export class AutocompleteTextInput extends RefCounted {
       clearTimeout(this.updateHintScrollPositionTimer);
       this.updateHintScrollPositionTimer = null;
     }
+    super.disposed();
   }
 };

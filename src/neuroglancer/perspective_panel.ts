@@ -158,6 +158,7 @@ export class PerspectivePanel extends RenderedDataPanel {
       sliceView.dispose();
     }
     this.sliceViews.clear();
+    super.disposed();
   }
 
   updateMouseState(mouseState: MouseSelectionState): boolean {

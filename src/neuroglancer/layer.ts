@@ -114,10 +114,14 @@ export class ManagedUserLayer extends RefCounted {
         layer.specificationChanged, this.specificationChanged.dispatch, this.specificationChanged);
   }
 
+  /**
+   * If layer is not null, tranfers ownership of a reference.
+   */
   set layer(layer: UserLayer|null) {
     let oldLayer = this.layer_;
     if (oldLayer != null) {
       this.updateSignalBindings(oldLayer, removeSignalBinding);
+      oldLayer.dispose();
     }
     this.layer_ = layer;
     if (layer != null) {
@@ -126,10 +130,15 @@ export class ManagedUserLayer extends RefCounted {
       this.handleLayerChanged();
     }
   }
+
+  /**
+   * If layer is not null, tranfers ownership of a reference.
+   */
   constructor(public name: string, layer: UserLayer|null = null, public visible: boolean = true) {
     super();
     this.layer = layer;
   }
+
   private handleLayerChanged() {
     if (this.visible) {
       this.layerChanged.dispatch();
@@ -142,7 +151,11 @@ export class ManagedUserLayer extends RefCounted {
     }
   }
 
-  disposed() { this.wasDisposed = true; }
+  disposed() {
+    this.wasDisposed = true;
+    this.layer = null;
+    super.disposed();
+  }
 };
 
 export class LayerManager extends RefCounted {
@@ -226,7 +239,10 @@ export class LayerManager extends RefCounted {
     this.layersChanged.dispatch();
   }
 
-  disposed() { this.clear(); }
+  disposed() {
+    this.clear();
+    super.disposed();
+  }
 
   getLayerByName(name: string) { return this.managedLayers.find(x => x.name === name); }
 
@@ -469,6 +485,7 @@ export class VisibleRenderLayerTracker<RenderLayerType extends RenderLayer> exte
     this.cancelUpdate();
     this.visibleLayers.forEach(this.layerRemoved);
     this.visibleLayers.clear();
+    super.disposed();
   }
 
   private cancelUpdate() {

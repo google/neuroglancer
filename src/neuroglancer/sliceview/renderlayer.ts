@@ -432,7 +432,10 @@ export class RenderLayer extends GenericRenderLayer {
     }
   }
 
-  dispose() { this.disposeShader(); }
+  disposed() {
+    super.disposed();
+    this.disposeShader();
+  }
 
   getValueAt(position: Vec3) {
     for (let alternatives of this.sources!) {

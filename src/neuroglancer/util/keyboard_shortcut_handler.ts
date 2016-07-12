@@ -325,5 +325,6 @@ export class GlobalKeyboardShortcutHandler extends RefCounted {
       let index = globalKeyboardHandlerStack.findIndex(stackEntry => stackEntry[2] === this)!;
       globalKeyboardHandlerStack.splice(index, 1);
     }
+    super.disposed();
   }
 }

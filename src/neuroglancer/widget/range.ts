@@ -52,5 +52,8 @@ export class RangeWidget extends RefCounted {
     });
     value.changed.add(() => { this.inputElement.valueAsNumber = this.value.value; });
   }
-  disposed() { removeFromParent(this.element); }
+  disposed() {
+    removeFromParent(this.element);
+    super.disposed();
+  }
 };

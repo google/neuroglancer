@@ -51,5 +51,6 @@ export class Overlay extends RefCounted {
   disposed() {
     --overlaysOpen;
     document.body.removeChild(this.container);
+    super.disposed();
   }
 };

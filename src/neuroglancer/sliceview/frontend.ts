@@ -113,7 +113,6 @@ export class SliceView extends SliceViewBase {
     let visibleLayers = this.visibleLayers;
     let rpc = this.rpc!;
     let rpcMessage: any = {'id': this.rpcId};
-    // FIXME: avoid allocation?
     let newVisibleLayers = this.newVisibleLayers;
     let changed = false;
     let visibleLayerList = this.visibleLayerList;
@@ -123,7 +122,7 @@ export class SliceView extends SliceViewBase {
         newVisibleLayers.add(renderLayer);
         visibleLayerList.push(renderLayer);
         if (!visibleLayers.has(renderLayer)) {
-          visibleLayers.set(renderLayer, []);
+          visibleLayers.set(renderLayer.addRef(), []);
           renderLayer.redrawNeeded.add(this.viewChanged.dispatch, this.viewChanged);
           rpcMessage['layerId'] = renderLayer.rpcId;
           rpc.invoke('SliceView.addVisibleLayer', rpcMessage);
@@ -137,6 +136,7 @@ export class SliceView extends SliceViewBase {
         renderLayer.redrawNeeded.remove(this.viewChanged.dispatch, this.viewChanged);
         rpcMessage['layerId'] = renderLayer.rpcId;
         rpc.invoke('SliceView.removeVisibleLayer', rpcMessage);
+        renderLayer.dispose();
         changed = true;
       }
     }
@@ -251,6 +251,14 @@ export class SliceView extends SliceViewBase {
       visibleChunks[visibleChunks.length] = key;
     }
     this.computeVisibleChunks(getLayoutObject, addChunk);
+  }
+
+  disposed() {
+    for (let renderLayer of this.visibleLayers.keys()) {
+      renderLayer.dispose();
+    }
+    this.visibleLayers.clear();
+    this.visibleLayerList.length = 0;
   }
 };
 
