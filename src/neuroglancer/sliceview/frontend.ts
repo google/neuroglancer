@@ -92,6 +92,8 @@ export class SliceView extends SliceViewBase {
     this.viewChanged.add(() => { this.renderingStale = true; });
     this.registerSignalBinding(chunkManager.chunkQueueManager.visibleChunksChanged.add(
         this.viewChanged.dispatch, this.viewChanged));
+
+    this.updateViewportFromNavigationState();
   }
 
   private updateViewportFromNavigationState() {
