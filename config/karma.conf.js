@@ -19,8 +19,14 @@
 let webpack_helpers = require('./webpack_helpers');
 const path = require('path');
 const webpack = require('webpack');
+const minimist = require('minimist');
 
 module.exports = function(config) {
+
+  const argv = minimist(process.argv);
+  let pattern = argv['pattern'] || '';
+  let patternSuffix = '\\.spec\\.ts$';
+  let newRegExp = new RegExp(pattern + patternSuffix);
 
   let webpackConfig = webpack_helpers.getBaseConfig({useBabel: false, noOutput: true});
   webpackConfig.devtool = 'inline-source-map';
@@ -33,6 +39,13 @@ module.exports = function(config) {
     new webpack.DefinePlugin({
       'WORKER': false,
     }),
+    new webpack.ContextReplacementPlugin(
+        /.*/,
+        result => {
+          if (result.regExp.source === patternSuffix) {
+            result.regExp = newRegExp;
+          }
+        }),
   ];
 
   config.set({
