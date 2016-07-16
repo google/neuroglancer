@@ -86,9 +86,18 @@ export class Uint64 {
     return vHigh.toString(base) + '0'.repeat(lowDigits - vLowStr.length) + vLowStr;
   }
 
+  /**
+   * Returns true if a is strictly less than b.
+   */
   static less(a: Uint64, b: Uint64): boolean {
     return a.high < b.high || (a.high === b.high && a.low < b.low);
   }
+
+  /**
+   * Returns a negative number if a is strictly less than b, 0 if a is equal to b, or a positive
+   * number if a is strictly greater than b.
+   */
+  static compare(a: Uint64, b: Uint64): number { return (a.high - b.high) || (a.low - b.low); }
 
   static ZERO = new Uint64(0, 0);
 
