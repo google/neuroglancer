@@ -110,7 +110,7 @@ export class Uint64 {
     return new Uint64(randomTempBuffer[0], randomTempBuffer[1]);
   }
 
-  parseString(s: string, base = 10) {
+  tryParseString(s: string, base = 10) {
     let {lowDigits, lowBase, lowBase1, lowBase2, pattern} = stringConversionData[base];
     if (!pattern.test(s)) {
       return false;
@@ -141,12 +141,16 @@ export class Uint64 {
     return true;
   }
 
-  static parseString(s: string, base = 10) {
-    let x = new Uint64();
-    if (!x.parseString(s, base)) {
+  parseString(s: string, base = 10) {
+    if (!this.tryParseString(s, base)) {
       throw new Error(`Failed to parse string as uint64 value: ${JSON.stringify(s)}.`);
     }
-    return x;
+    return this;
+  }
+
+  static parseString(s: string, base = 10) {
+    let x = new Uint64();
+    return x.parseString(s, base);
   }
 
   valid() {

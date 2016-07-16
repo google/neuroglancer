@@ -56,7 +56,7 @@ export class Uint64EntryWidget extends RefCounted {
     });
   }
 
-  validateInput() { return this.value.parseString(this.input.value); }
+  validateInput() { return this.value.tryParseString(this.input.value); }
 
   disposed() {
     removeFromParent(this.element);

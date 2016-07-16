@@ -46,13 +46,13 @@ describe('uint64', () => {
 
   it('parseString failures', () => {
     let temp = new Uint64(1, 2);
-    expect(temp.parseString(' ')).toBe(false);
-    expect(temp.parseString(' 0')).toBe(false);
-    expect(temp.parseString('0 ')).toBe(false);
-    expect(temp.parseString('z')).toBe(false);
-    expect(temp.parseString('2', 2)).toBe(false);
-    expect(temp.parseString('18446744073709551616')).toBe(false);
-    expect(temp.parseString('1')).toBe(true);
+    expect(temp.tryParseString(' ')).toBe(false);
+    expect(temp.tryParseString(' 0')).toBe(false);
+    expect(temp.tryParseString('0 ')).toBe(false);
+    expect(temp.tryParseString('z')).toBe(false);
+    expect(temp.tryParseString('2', 2)).toBe(false);
+    expect(temp.tryParseString('18446744073709551616')).toBe(false);
+    expect(temp.tryParseString('1')).toBe(true);
   });
 
   it('parseString toString round trip', () => {
