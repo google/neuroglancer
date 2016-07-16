@@ -73,4 +73,8 @@ export class RefCounted implements Disposable {
     target.addEventListener(eventType, listener, arg);
     this.registerDisposer(() => target.removeEventListener(eventType, listener, arg));
   }
+  registerCancellable<T extends{cancel: () => void}>(cancellable: T) {
+    this.registerDisposer(() => { cancellable.cancel(); });
+    return cancellable;
+  }
 };
