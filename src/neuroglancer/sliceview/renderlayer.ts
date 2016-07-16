@@ -36,7 +36,6 @@ import {Buffer} from 'neuroglancer/webgl/buffer';
 import {GL} from 'neuroglancer/webgl/context';
 import {ShaderBuilder, ShaderCompilationError, ShaderLinkError, ShaderProgram} from 'neuroglancer/webgl/shader';
 import {RpcId, SharedObject} from 'neuroglancer/worker_rpc';
-import {Signal} from 'signals';
 
 export const GLSL_TYPE_FOR_DATA_TYPE = new Map<DataType, string>([
   [DataType.UINT8, 'uint8_t'],
@@ -370,7 +369,6 @@ export class RenderLayer extends GenericRenderLayer {
   sources: VolumeChunkSource[][]|null = null;
   shader: ShaderProgram|undefined = undefined;
   shaderUpdated = true;
-  redrawNeeded = new Signal();
   vertexComputationManager: VolumeSliceVertexComputationManager;
   rpcId: RpcId|null = null;
   shaderError = new WatchableValue<ShaderCompilationError|ShaderLinkError|undefined>(undefined);

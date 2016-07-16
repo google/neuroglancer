@@ -28,7 +28,6 @@ import {ViewerState} from 'neuroglancer/viewer_state';
 import {OffscreenCopyHelper, OffscreenFramebuffer} from 'neuroglancer/webgl/offscreen';
 import {ShaderBuilder} from 'neuroglancer/webgl/shader';
 import {glsl_packFloat01ToFixedPoint, unpackFloat01FromFixedPoint} from 'neuroglancer/webgl/shader_lib';
-import {Signal} from 'signals';
 
 require('neuroglancer/noselect.css');
 require('./perspective_panel.css');
@@ -42,7 +41,6 @@ export interface PerspectiveViewRenderContext {
 }
 
 export class PerspectiveViewRenderLayer extends RenderLayer {
-  redrawNeeded = new Signal();
   draw(renderContext: PerspectiveViewRenderContext) {
     // Must be overridden by subclasses.
   }

@@ -25,6 +25,7 @@ import {Signal} from 'signals';
 export class RenderLayer extends RefCounted {
   ready = false;
   layerChanged = new Signal();
+  redrawNeeded = new Signal();
   readyStateChanged = new Signal();
   setReady(value: boolean) {
     this.ready = value;
