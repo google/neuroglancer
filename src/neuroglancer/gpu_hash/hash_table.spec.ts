@@ -14,48 +14,31 @@
  * limitations under the License.
  */
 
-import {HashTable} from 'neuroglancer/gpu_hash/hash_table';
+import {HashMapUint64, HashSetUint64} from 'neuroglancer/gpu_hash/hash_table';
 import {Uint64} from 'neuroglancer/util/uint64';
 
 describe('gpu_hash/hash_table', () => {
-  it('test', () => {
-    let ht = new HashTable();
-    let map = new Map();
-
-    let maxValue = Math.pow(2, 32);
-    function genNumber() { return Math.floor(Math.random() * maxValue); }
-    function getRandomKey() {
-      while (true) {
-        let v = new Uint64(genNumber(), genNumber());
-        if (v.low !== ht.emptyLow || v.high !== ht.emptyHigh) {
-          return v;
-        }
-      }
-    }
+  it('HashSetUint64', () => {
+    let ht = new HashSetUint64();
+    let set = new Set<string>();
 
     function compareViaIterate() {
-      let htValues = new Map();
-      for (let [low, high] of ht) {
-        let v = new Uint64(low, high);
+      let htValues = new Set<string>();
+      for (let v of ht) {
         let s = v.toString();
-        if (htValues.has(s)) {
-          throw new Error('Duplicate key in hash table: ' + [low, high]);
-        }
-        if (!map.has(s)) {
-          throw new Error('Unexpected key ' + [low, high] + ' in hash table');
-        }
-        htValues.set(s, v);
+        expect(htValues.has(s)).toBe(false, `Duplicate key in hash table: ${s}`);
+        expect(set.has(s)).toBe(true, `Unexpected key ${s} in hash table`);
+        htValues.add(s);
       }
-      for (let [s, k] of map) {
-        if (!htValues.has(s)) {
-          throw new Error('Hash table is missing key ' + [k.low, k.high]);
-        }
+      for (let s of set) {
+        expect(htValues.has(s)).toBe(true, `Hash table is missing key ${s}`);
       }
     }
 
     function compareViaHas() {
-      for (let [, k] of map) {
-        expect(ht.has(k.low, k.high)).toBe(true, `Hash table is missing key ${[k.low, k.high]}`);
+      for (let s of set) {
+        let k = Uint64.parseString(s);
+        expect(ht.has(k)).toBe(true, `Hash table is missing key ${s}`);
       }
     }
 
@@ -64,21 +47,99 @@ describe('gpu_hash/hash_table', () => {
       compareViaHas();
     }
     let numInsertions = 100;
+
+    function testInsert(k: Uint64) {
+      let s = '' + k;
+      set.add(s);
+      expect(ht.has(k)).toBe(false, `Unexpected positive has result for ${[k.low, k.high]}`);
+      ht.add(k);
+      compare();
+    }
+
+    let empty0 = new Uint64(ht.emptyLow, ht.emptyHigh);
+    testInsert(empty0);
+
     for (let i = 0; i < numInsertions; ++i) {
       let k: Uint64;
       let s: string;
       while (true) {
-        k = getRandomKey();
+        k = Uint64.random();
         s = k.toString();
-        if (!map.has(k)) {
+        if (!set.has(s)) {
           break;
         }
       }
-      map.set(s, k);
-      expect(ht.has(k.low, k.high))
-          .toBe(false, `Unexpected positive has result for ${[k.low, k.high]}`);
-      ht.add(k.low, k.high);
+      testInsert(k);
+    }
+
+    let empty1 = new Uint64(ht.emptyLow, ht.emptyHigh);
+    testInsert(empty1);
+
+  });
+
+  it('HashMapUint64', () => {
+    let ht = new HashMapUint64();
+    let map = new Map<string, Uint64>();
+
+    function compareViaIterate() {
+      let htValues = new Map<string, Uint64>();
+      for (let [key, value] of ht) {
+        let s = key.toString();
+        expect(htValues.has(s)).toBe(false, `Duplicate key in hash table: ${s}`);
+        expect(map.has(s)).toBe(true, `Unexpected key ${s} in hash table`);
+        htValues.set(s, value.clone());
+      }
+      for (let [s, value] of map) {
+        let v = htValues.get(s);
+        expect(v !== undefined && Uint64.equal(v, value))
+            .toBe(true, `Hash table maps ${s} -> ${v} rather than -> ${value}`);
+      }
+    }
+
+    function compareViaGet() {
+      let value = new Uint64();
+      for (let [s, expectedValue] of map) {
+        let key = Uint64.parseString(s);
+        let has = ht.get(key, value);
+        expect(has && Uint64.equal(value, expectedValue))
+            .toBe(
+                true,
+                `Hash table maps ${key} -> ${has ? value : undefined} rather than -> ${expectedValue}`);
+      }
+    }
+
+    function compare() {
+      compareViaIterate();
+      compareViaGet();
+    }
+    let numInsertions = 100;
+
+    function testInsert(k: Uint64, v: Uint64) {
+      let s = '' + k;
+      map.set(s, v);
+      expect(ht.has(k)).toBe(false, `Unexpected positive has result for ${s}`);
+      ht.set(k, v);
       compare();
     }
+
+    let empty0 = new Uint64(ht.emptyLow, ht.emptyHigh);
+    testInsert(empty0, Uint64.random());
+
+    for (let i = 0; i < numInsertions; ++i) {
+      let k: Uint64;
+      let s: string;
+      while (true) {
+        k = Uint64.random();
+        s = k.toString();
+        if (!map.has(s)) {
+          break;
+        }
+      }
+      testInsert(k, Uint64.random());
+    }
+
+    let empty1 = new Uint64(ht.emptyLow, ht.emptyHigh);
+    testInsert(empty1, Uint64.random());
   });
+
 });

@@ -14,14 +14,14 @@
  * limitations under the License.
  */
 
-import {HashTable} from 'neuroglancer/gpu_hash/hash_table';
+import {HashSetUint64} from 'neuroglancer/gpu_hash/hash_table';
 import {Uint64} from 'neuroglancer/util/uint64';
 import {RPC, SharedObjectCounterpart, registerRPC, registerSharedObject} from 'neuroglancer/worker_rpc';
 import {Signal} from 'signals';
 
 @registerSharedObject('Uint64Set')
 export class Uint64Set extends SharedObjectCounterpart {
-  hashTable = new HashTable();
+  hashTable = new HashSetUint64();
   changed = new Signal();
 
   static makeWithCounterpart(rpc: RPC) {
@@ -36,7 +36,7 @@ export class Uint64Set extends SharedObjectCounterpart {
     this.changed = <any>undefined;
   }
 
-  add_(x: Uint64) { return this.hashTable.add(x.low, x.high); }
+  add_(x: Uint64) { return this.hashTable.add(x); }
 
   add(x: Uint64) {
     if (this.add_(x)) {
@@ -48,18 +48,11 @@ export class Uint64Set extends SharedObjectCounterpart {
     }
   }
 
-  has(x: Uint64) { return this.hashTable.has(x.low, x.high); }
+  has(x: Uint64) { return this.hashTable.has(x); }
 
-  * [Symbol.iterator]() {
-    let temp = new Uint64();
-    for (let x of this.hashTable[Symbol.iterator]()) {
-      temp.low = x[0];
-      temp.high = x[1];
-      yield temp;
-    }
-  }
+  [Symbol.iterator]() { return this.hashTable.keys(); }
 
-  delete_(x: Uint64) { return this.hashTable.delete(x.low, x.high); }
+  delete_(x: Uint64) { return this.hashTable.delete(x); }
 
   delete (x: Uint64) {
     if (this.delete_(x)) {

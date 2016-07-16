@@ -15,7 +15,7 @@
  */
 
 import {HashFunction, PRIME_MODULUS} from 'neuroglancer/gpu_hash/hash_function';
-import {HashTable, NUM_ALTERNATIVES} from 'neuroglancer/gpu_hash/hash_table';
+import {HashTableBase, NUM_ALTERNATIVES} from 'neuroglancer/gpu_hash/hash_table';
 import {RefCounted} from 'neuroglancer/util/disposable';
 import {GL} from 'neuroglancer/webgl/context';
 import {ShaderBuilder, ShaderProgram} from 'neuroglancer/webgl/shader';
@@ -36,23 +36,20 @@ float computeHash(uint64_t x, vec4 a0, vec4 a1, float b, float c, float modulus,
 `
 ];
 
-export class GPUHashTable extends RefCounted {
+export class GPUHashTable<HashTable extends HashTableBase> extends RefCounted {
   a: Float32Array;
   b: Float32Array;
   hashFunctions: HashFunction[][]|null = null;
   generation = -1;
-  textures = new Array<WebGLTexture|null>();
+  texture: WebGLTexture|null = null;
 
   constructor(public gl: GL, public hashTable: HashTable) {
     super();
     let numAlternatives = hashTable.hashFunctions.length;
     this.a = new Float32Array(4 * (numAlternatives * 4));
     this.b = new Float32Array(numAlternatives * 4 + 5);
-    let {textures} = this;
-    for (let i = 0; i < numAlternatives; ++i) {
-      // createTexture should never actually return null.
-      textures[i] = gl.createTexture();
-    }
+    // createTexture should never actually return null.
+    this.texture = gl.createTexture();
   }
 
   computeCoefficients() {
@@ -70,7 +67,7 @@ export class GPUHashTable extends RefCounted {
       b[numAlternatives * 4 + i] = PRIME_MODULUS;
       b[numAlternatives * 4 + 3 + i] = scalar[i];
     }
-    b[numAlternatives * 4 + 2] = 1 / (2 * width);
+    b[numAlternatives * 4 + 2] = 1 / (hashTable.entryStride * width);
     for (let alt = 0; alt < numAlternatives; ++alt) {
       let curFunctions = hashFunctions[alt];
       for (let i = 0; i < 2; ++i) {
@@ -79,9 +76,10 @@ export class GPUHashTable extends RefCounted {
         let aIndex = 4 * (alt * 4 + 2 * i);
         // Add 0.5 to b to give maximum margin of error.
         //
-        // For the x coordinate (i == 0), since each position is used to address two texels (for the
-        // low and high uint32 values), we only add 0.25.
-        b[bIndex] = h.b + (i === 0 ? 0.25 : 0.5);
+        // For the x coordinate (i == 0), since each position is used to address entryStride texels
+        // (for the low and high uint32 key values, and possibly associated entry values), we only
+        // add 0.5 / entryStride.
+        b[bIndex] = h.b + (i === 0 ? 0.5 / hashTable.entryStride : 0.5);
         b[bIndex + 1] = h.c;
         for (let j = 0; j < 4; ++j) {
           a[aIndex + j] = h.a0[j];
@@ -100,44 +98,43 @@ export class GPUHashTable extends RefCounted {
       return;
     }
     this.generation = generation;
-    let {width, height, tables} = hashTable;
-    let {gl, textures} = this;
-    let numAlternatives = textures.length;
+    let {width, height} = hashTable;
+    let {gl, texture} = this;
     gl.activeTexture(gl.TEXTURE0 + gl.tempTextureUnit);
-    for (let alt = 0; alt < numAlternatives; ++alt) {
-      gl.bindTexture(gl.TEXTURE_2D, textures[alt]);
-      gl.pixelStorei(gl.UNPACK_ALIGNMENT, 1);
-      setRawTextureParameters(gl);
+    gl.bindTexture(gl.TEXTURE_2D, texture);
+    gl.pixelStorei(gl.UNPACK_ALIGNMENT, 1);
+    setRawTextureParameters(gl);
 
-      const format = gl.RGBA;
+    const format = gl.RGBA;
 
+    hashTable.tableWithMungedEmptyKey(table => {
       gl.texImage2D(
           gl.TEXTURE_2D,
           /*level=*/0, format,
-          /*width=*/width * 2,
+          /*width=*/width * hashTable.entryStride,
           /*height=*/height,
-          /*border=*/0, format, gl.UNSIGNED_BYTE, new Uint8Array(tables[alt].buffer));
-    }
+          /*border=*/0, format, gl.UNSIGNED_BYTE, new Uint8Array(table.buffer));
+    });
     gl.bindTexture(gl.TEXTURE_2D, null);
   }
 
   disposed() {
     let {gl} = this;
-    this.textures.forEach((texture) => { gl.deleteTexture(texture); });
-    this.textures = <any>undefined;
+    gl.deleteTexture(this.texture);
+    this.texture = null;
     this.gl = <any>undefined;
     this.hashTable = <any>undefined;
     this.hashFunctions = null;
     super.disposed();
   }
 
-  static get(gl: GL, hashTable: HashTable) {
-    return gl.memoize.get(hashTable, () => new GPUHashTable(gl, hashTable));
+  static get<HashTable extends HashTableBase>(gl: GL, hashTable: HashTable) {
+    return gl.memoize.get(hashTable, () => new this(gl, hashTable));
   }
 };
 
-export class HashTableShaderManager {
-  textureUnitSymbol = Symbol('gpuhashtable:' + this.prefix);
+export class HashSetShaderManager {
+  textureUnitSymbol = Symbol.for (`gpuhashtable:${this.prefix}`);
   aName = this.prefix + '_a';
   bName = this.prefix + '_b';
   samplerName = this.prefix + '_sampler';
@@ -148,7 +145,7 @@ export class HashTableShaderManager {
     let {aName, bName, samplerName, numAlternatives} = this;
     builder.addUniform('highp vec4', aName, numAlternatives * 4);
     builder.addUniform('highp float', bName, numAlternatives * 4 + 5);
-    builder.addTextureSampler2D(samplerName, this.textureUnitSymbol, numAlternatives);
+    builder.addTextureSampler2D(samplerName, this.textureUnitSymbol);
     builder.addFragmentCode(glsl_hashFunction);
     let s = '';
     for (let alt = 0; alt < numAlternatives; ++alt) {
@@ -180,8 +177,8 @@ bool ${this.hasFunctionName}(uint64_t x) {
       s += `
   {
     vec2 v = ${this.prefix}_computeHash_${alt}(x);
-    vec4 lowResult = texture2D(${samplerName}[${alt}], v);
-    vec4 highResult = texture2D(${samplerName}[${alt}], vec2(v.x + highOffset, v.y));
+    vec4 lowResult = texture2D(${samplerName}, v);
+    vec4 highResult = texture2D(${samplerName}, vec2(v.x + highOffset, v.y));
     if (lowResult == x.low && highResult == x.high) {
       return true;
     }
@@ -197,27 +194,51 @@ bool ${this.hasFunctionName}(uint64_t x) {
 
   get hasFunctionName() { return `${this.prefix}_has`; }
 
-  enable(gl: GL, shader: ShaderProgram, hashTable: GPUHashTable) {
-    let {numAlternatives} = this;
-    let {textures} = hashTable;
+  enable<HashTable extends HashTableBase>(
+      gl: GL, shader: ShaderProgram, hashTable: GPUHashTable<HashTable>) {
     hashTable.copyToGPU();
     let textureUnit = shader.textureUnit(this.textureUnitSymbol);
-    for (let alt = 0; alt < numAlternatives; ++alt) {
-      let unit = alt + textureUnit;
-      gl.activeTexture(gl.TEXTURE0 + unit);
-      gl.bindTexture(gl.TEXTURE_2D, textures[alt]);
-    }
+    gl.activeTexture(gl.TEXTURE0 + textureUnit);
+    gl.bindTexture(gl.TEXTURE_2D, hashTable.texture);
     gl.uniform4fv(shader.uniform(this.aName), hashTable.a);
     gl.uniform1fv(shader.uniform(this.bName), hashTable.b);
   }
 
   disable(gl: GL, shader: ShaderProgram) {
-    let {numAlternatives} = this;
     let textureUnit = shader.textureUnit(this.textureUnitSymbol);
+    gl.activeTexture(gl.TEXTURE0 + textureUnit);
+    gl.bindTexture(gl.TEXTURE_2D, null);
+  }
+};
+
+export class HashMapShaderManager extends HashSetShaderManager {
+  defineShader(builder: ShaderBuilder) {
+    super.defineShader(builder);
+    let {bName, samplerName, numAlternatives} = this;
+    let s = `
+bool ${this.getFunctionName}(uint64_t x, out uint64_t value) {
+  float highOffset = ${bName}[${numAlternatives * 4 + 2}];
+`;
     for (let alt = 0; alt < numAlternatives; ++alt) {
-      let unit = alt + textureUnit;
-      gl.activeTexture(gl.TEXTURE0 + unit);
-      gl.bindTexture(gl.TEXTURE_2D, null);
+      s += `
+  {
+    vec2 v = ${this.prefix}_computeHash_${alt}(x);
+    vec4 lowResult = texture2D(${samplerName}, v);
+    vec4 highResult = texture2D(${samplerName}, vec2(v.x + highOffset, v.y));
+    if (lowResult == x.low && highResult == x.high) {
+      value.low = texture2D(${samplerName}, vec2(v.x + 2.0 * highOffset, v.y));
+      value.high = texture2D(${samplerName}, vec2(v.x + 3.0 * highOffset, v.y));
+      return true;
     }
   }
+`;
+    }
+    s += `
+  return false;
+}
+`;
+    builder.addFragmentCode(s);
+  }
+
+  get getFunctionName() { return `${this.prefix}_get`; }
 };

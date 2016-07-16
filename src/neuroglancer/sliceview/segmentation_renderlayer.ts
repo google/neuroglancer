@@ -15,7 +15,7 @@
  */
 
 import {ChunkManager} from 'neuroglancer/chunk_manager/frontend';
-import {GPUHashTable, HashTableShaderManager} from 'neuroglancer/gpu_hash/shader';
+import {GPUHashTable, HashSetShaderManager} from 'neuroglancer/gpu_hash/shader';
 import {SegmentColorShaderManager} from 'neuroglancer/segment_color';
 import {SegmentationDisplayState} from 'neuroglancer/segmentation_display_state';
 import {MultiscaleVolumeChunkSource, SliceView} from 'neuroglancer/sliceview/frontend';
@@ -25,7 +25,7 @@ import {ShaderBuilder, ShaderProgram} from 'neuroglancer/webgl/shader';
 export class SegmentationRenderLayer extends RenderLayer {
   private selectedSegmentForShader = new Float32Array(8);
   private segmentColorShaderManager = new SegmentColorShaderManager('segmentColorHash');
-  private hashTableManager = new HashTableShaderManager('visibleSegments');
+  private hashTableManager = new HashSetShaderManager('visibleSegments');
   private gpuHashTable = GPUHashTable.get(this.gl, this.displayState.visibleSegments.hashTable);
   constructor(
       chunkManager: ChunkManager, multiscaleSourcePromise: Promise<MultiscaleVolumeChunkSource>,
