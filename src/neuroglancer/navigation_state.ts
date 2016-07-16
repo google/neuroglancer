@@ -16,7 +16,7 @@
 
 import {RefCounted} from 'neuroglancer/util/disposable';
 import {Mat4, Quat, Vec3, mat3, mat4, quat, vec3} from 'neuroglancer/util/geom';
-import {parseFiniteVec} from 'neuroglancer/util/json';
+import {parseFiniteVec, verifyObject, verifyObjectProperty} from 'neuroglancer/util/json';
 import {Signal} from 'signals';
 
 export class VoxelSize extends RefCounted {
@@ -60,9 +60,11 @@ export class VoxelSize extends RefCounted {
   restoreState(obj: any) {
     try {
       parseFiniteVec(this.size, obj);
-      this.setValid();
+      this.valid = true;
+      this.changed.dispatch();
     } catch (e) {
       this.valid = false;
+      this.changed.dispatch();
     }
   }
 
@@ -189,23 +191,24 @@ export class SpatialPosition extends RefCounted {
   }
 
   restoreState(obj: any) {
-    this.voxelSize.restoreState(obj['voxelSize']);
+    verifyObject(obj);
+    verifyObjectProperty(obj, 'voxelSize', x => {
+      if (x !== undefined) {
+        this.voxelSize.restoreState(x);
+      }
+    });
     this.spatialCoordinatesValid = false;
-    if (obj.hasOwnProperty('voxelCoordinates')) {
-      try {
-        let voxelCoordinates = vec3.create();
-        parseFiniteVec(voxelCoordinates, obj['voxelCoordinates']);
-        this.setVoxelCoordinates(voxelCoordinates);
-      } catch (e) {
+    verifyObjectProperty(obj, 'voxelCoordinates', x => {
+      if (x !== undefined) {
+        this.setVoxelCoordinates(parseFiniteVec(vec3.create(), x));
       }
-    }
-    if (obj.hasOwnProperty('spatialCoordinates')) {
-      try {
-        parseFiniteVec(this.spatialCoordinates, obj['spatialCoordinates']);
+    });
+    verifyObjectProperty(obj, 'spatialCoordinates', x => {
+      if (x !== undefined) {
+        parseFiniteVec(this.spatialCoordinates, x);
         this.markSpatialCoordinatesChanged();
-      } catch (e) {
       }
-    }
+    });
   }
 
   snapToVoxel() {
@@ -346,7 +349,7 @@ export class Pose extends RefCounted {
   get valid() { return this.position.valid; }
 
   /**
-   * Resets everything except voxelSize.
+   * Resets everything.
    */
   reset() {
     this.position.reset();
@@ -373,8 +376,17 @@ export class Pose extends RefCounted {
   }
 
   restoreState(obj: any) {
-    this.position.restoreState(obj['position']);
-    this.orientation.restoreState(obj['orientation']);
+    verifyObject(obj);
+    verifyObjectProperty(obj, 'position', x => {
+      if (x !== undefined) {
+        this.position.restoreState(x);
+      }
+    });
+    verifyObjectProperty(obj, 'orientation', x => {
+      if (x !== undefined) {
+        this.orientation.restoreState(x);
+      }
+    });
   }
 
   /**
@@ -509,7 +521,7 @@ export class NavigationState extends RefCounted {
   get voxelSize() { return this.pose.position.voxelSize; }
 
   /**
-   * Resets everything except voxelSize.
+   * Resets everything.
    */
   reset() {
     this.pose.reset();
@@ -550,13 +562,23 @@ export class NavigationState extends RefCounted {
   }
 
   restoreState(obj: any) {
-    if (!obj || typeof obj !== 'object') {
-      return;
+    try {
+      verifyObject(obj);
+      verifyObjectProperty(obj, 'pose', x => {
+        if (x !== undefined) {
+          this.pose.restoreState(x);
+        }
+      });
+      verifyObjectProperty(obj, 'zoomFactor', x => {
+        if (x !== undefined) {
+          this.zoomFactor.restoreState(x);
+        }
+      });
+      this.handleVoxelSizeChanged();
+      this.changed.dispatch();
+    } catch (parseError) {
+      this.reset();
     }
-    this.pose.restoreState(obj['pose']);
-    this.zoomFactor.restoreState(obj['zoomFactor']);
-    this.handleVoxelSizeChanged();
-    this.changed.dispatch();
   }
 
   zoomBy(factor: number) { this.zoomFactor.zoomBy(factor); }
