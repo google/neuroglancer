@@ -40,6 +40,7 @@ export class TrackableValue<T> extends WatchableValue<T> implements Trackable {
     }
     return this.value_;
   }
+  reset() { this.value = this.defaultValue; }
   restoreState(x: any) {
     if (x !== undefined) {
       let {validator} = this;
@@ -49,9 +50,6 @@ export class TrackableValue<T> extends WatchableValue<T> implements Trackable {
       } catch (ignoredError) {
       }
     }
-    let {defaultValue} = this;
-    if (defaultValue !== undefined) {
-      this.value = defaultValue;
-    }
+    this.value = this.defaultValue;
   }
 };

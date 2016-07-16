@@ -69,6 +69,8 @@ export class LayerListSpecification extends RefCounted implements Trackable {
         layerManager.specificationChanged.add(this.changed.dispatch, this.changed));
   }
 
+  reset() { this.layerManager.clear(); }
+
   restoreState(x: any) {
     verifyObject(x);
     this.layerManager.clear();

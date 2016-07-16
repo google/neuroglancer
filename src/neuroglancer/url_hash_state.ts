@@ -35,6 +35,7 @@ const UPDATE_DELAY = 500;
 
 export interface Trackable {
   restoreState: (x: any) => void;
+  reset: () => void;
   changed: Signal;
   toJSON: () => any;
 }
@@ -47,7 +48,15 @@ function updateTrackedObjectsFromHash() {
     if (s === '' || s === '#' || s === '#!') {
       s = '#!{}';
     }
-    if (s.startsWith('#!')) {
+    if (s.startsWith('#!+')) {
+      s = s.slice(3);
+      // Firefox always %-encodes the URL even if it is not typed that way.
+      s = decodeURI(s);
+      let state = urlSafeParse(s);
+      if (typeof state === 'object') {
+        updateTrackedObjects(state);
+      }
+    } else if (s.startsWith('#!')) {
       s = s.slice(2);
       // Firefox always %-encodes the URL even if it is not typed that way.
       s = decodeURI(s);
@@ -56,6 +65,7 @@ function updateTrackedObjectsFromHash() {
         return;
       }
       lastHash = s;
+      resetTrackedObjects();
       let state = urlSafeParse(s);
       if (typeof state === 'object') {
         updateTrackedObjects(state);
@@ -66,6 +76,12 @@ function updateTrackedObjectsFromHash() {
   } catch (e) {
     // Failed to parse hash, ignore.
     console.log(e);
+  }
+}
+
+function resetTrackedObjects() {
+  for (let object of trackedKeys.values()) {
+    object.reset();
   }
 }
 

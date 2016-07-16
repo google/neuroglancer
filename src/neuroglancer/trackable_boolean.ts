@@ -28,7 +28,7 @@ export class TrackableBoolean implements Trackable {
   }
   toggle() { this.value = !this.value; }
   changed = new Signal();
-  constructor(private value_: boolean, public defaultValue?: boolean) {}
+  constructor(private value_: boolean, public defaultValue: boolean) {}
   toJSON() {
     let {value_} = this;
     if (value_ === this.defaultValue) {
@@ -37,13 +37,13 @@ export class TrackableBoolean implements Trackable {
     return this.value_;
   }
   restoreState(x: any) {
-    if (x === undefined) {
-      x = this.defaultValue;
-    }
     if (x === true || x === false) {
       this.value = x;
+      return;
     }
+    this.value = this.defaultValue;
   }
+  reset() { this.value = this.defaultValue; }
 };
 
 export class TrackableBooleanCheckbox extends RefCounted {
