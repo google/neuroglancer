@@ -157,4 +157,6 @@ export class Uint64 {
     let {low, high} = this;
     return ((low >>> 0) === low) && ((high >>> 0) === high);
   }
+
+  toJSON() { return this.toString(); }
 };

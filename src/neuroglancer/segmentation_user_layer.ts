@@ -123,10 +123,7 @@ export class SegmentationUserLayer extends UserLayer implements SegmentationDisp
     x['notSelectedAlpha'] = this.notSelectedAlpha.toJSON();
     let {visibleSegments} = this;
     if (visibleSegments.size > 0) {
-      let segments = x['segments'] = new Array<string>();
-      for (let id of visibleSegments) {
-        segments.push(id.toString());
-      }
+      x['segments'] = visibleSegments.toJSON();
     }
     return x;
   }

@@ -75,6 +75,14 @@ export class Uint64Set extends SharedObjectCounterpart {
       this.changed.dispatch(null, false);
     }
   }
+
+  toJSON() {
+    let result = new Array<string>();
+    for (let id of this) {
+      result.push(id.toString());
+    }
+    return result;
+  }
 };
 
 registerRPC('Uint64Set.add', function(x) {
