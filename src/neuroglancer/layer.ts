@@ -14,6 +14,7 @@
  * limitations under the License.
  */
 
+import * as debounce from 'lodash/debounce';
 import * as throttle from 'lodash/throttle';
 import {SpatialPosition} from 'neuroglancer/navigation_state';
 import {RefCounted} from 'neuroglancer/util/disposable';
@@ -248,36 +249,26 @@ export class LayerManager extends RefCounted {
   getLayerByName(name: string) { return this.managedLayers.find(x => x.name === name); }
 
   /**
-   * Asynchronously initialize the voxelSize and position based on the managed
-   * layers.
+   * Asynchronously initialize the voxelSize and position based on the managed layers.
    *
-   * The first ready layer with an associated bounding box will set the position
-   * to the center of the bounding box.
+   * The first ready layer with an associated bounding box will set the position to the center of
+   * the bounding box.
+   *
+   * If the position later becomes invalid, it will be initialized again.
    */
   initializePosition(position: SpatialPosition) {
-    if (position.valid) {
-      // Nothing to do.
-      return;
-    }
-
-    if (this.updatePositionFromLayers(position)) {
-      return;
-    }
-
     let {boundPositions} = this;
     if (boundPositions.has(position)) {
       return;
     }
     boundPositions.add(position);
 
-    let handler = () => {
-      this.updatePositionFromLayers(position);
-      if (position.valid) {
-        this.readyStateChanged.remove(handler);
-        this.boundPositions.delete(position);
-      }
-    };
+    // Deboucne to ensure that if the position is reset and the layers are reset immediately after,
+    // the position will not be reinitialized based on the soon to be reset layers.
+    const handler = debounce(() => { this.updatePositionFromLayers(position); });
     this.readyStateChanged.add(handler);
+    position.changed.add(handler);
+    this.updatePositionFromLayers(position);
   }
 
   updatePositionFromLayers(position: SpatialPosition) {

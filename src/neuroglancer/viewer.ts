@@ -224,7 +224,6 @@ export class Viewer extends RefCounted implements ViewerState {
         this.perspectiveNavigationState.pose.orientation.reset();
         this.perspectiveNavigationState.zoomFactor.reset();
         this.resetInitiated.dispatch();
-        this.layerManager.initializePosition(this.navigationState.position);
         if (!overlaysOpen) {
           new LayerDialog(this.layerSpecification);
         }
