@@ -220,7 +220,6 @@ export class Viewer extends RefCounted implements ViewerState {
     this.layerManager.layersChanged.add(() => {
       if (this.layerManager.managedLayers.length === 0) {
         // No layers, reset state.
-        this.navigationState.voxelSize.reset();
         this.navigationState.reset();
         this.perspectiveNavigationState.pose.orientation.reset();
         this.perspectiveNavigationState.zoomFactor.reset();

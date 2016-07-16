@@ -113,6 +113,7 @@ export class SpatialPosition extends RefCounted {
   reset() {
     this.spatialCoordinatesValid = false;
     this.voxelCoordinates = null;
+    this.voxelSize.reset();
     this.changed.dispatch();
   }
 
