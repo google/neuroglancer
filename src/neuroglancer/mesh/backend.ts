@@ -14,17 +14,17 @@
  * limitations under the License.
  */
 
-import 'neuroglancer/uint64_set'; // Import for side effects.
-
-import {Chunk, ChunkManager, ChunkSource} from 'neuroglancer/chunk_manager/backend';
+import {Chunk, ChunkSource} from 'neuroglancer/chunk_manager/backend';
 import {ChunkPriorityTier, ChunkState} from 'neuroglancer/chunk_manager/base';
 import {FRAGMENT_SOURCE_RPC_ID, MESH_LAYER_RPC_ID} from 'neuroglancer/mesh/base';
-import {Uint64Set} from 'neuroglancer/uint64_set';
+import {SegmentationLayerSharedObjectCounterpart} from 'neuroglancer/segmentation_display_state/backend';
+import {getObjectKey} from 'neuroglancer/segmentation_display_state/base';
+import {forEachVisibleSegment} from 'neuroglancer/segmentation_display_state/base';
 import {Endianness, convertEndian32} from 'neuroglancer/util/endian';
 import {vec3} from 'neuroglancer/util/geom';
 import {verifyObject, verifyObjectProperty} from 'neuroglancer/util/json';
 import {Uint64} from 'neuroglancer/util/uint64';
-import {RPC, SharedObjectCounterpart, registerSharedObject} from 'neuroglancer/worker_rpc';
+import {RPC, registerSharedObject} from 'neuroglancer/worker_rpc';
 
 const MESH_OBJECT_MANIFEST_CHUNK_PRIORITY = 100;
 const MESH_OBJECT_FRAGMENT_CHUNK_PRIORITY = 50;
@@ -229,7 +229,7 @@ export abstract class MeshSource extends ChunkSource {
   }
 
   getChunk(objectId: Uint64) {
-    let key = `${objectId.low}:${objectId.high}`;
+    const key = getObjectKey(objectId);
     let chunk = <ManifestChunk>this.chunks.get(key);
     if (chunk === undefined) {
       chunk = this.getNewChunk_(ManifestChunk);
@@ -269,30 +269,20 @@ export class FragmentSource extends ChunkSource {
 };
 
 @registerSharedObject(MESH_LAYER_RPC_ID)
-class MeshLayer extends SharedObjectCounterpart {
-  chunkManager: ChunkManager;
+class MeshLayer extends SegmentationLayerSharedObjectCounterpart {
   source: MeshSource;
-  visibleSegmentSet: Uint64Set;
 
   constructor(rpc: RPC, options: any) {
     super(rpc, options);
-    // No need to increase reference count of chunkManager and visibleSegmentSet since our owner
-    // counterpart will hold a reference to the owner counterparts of them.
-    this.chunkManager = <ChunkManager>rpc.get(options['chunkManager']);
-    this.visibleSegmentSet = <Uint64Set>rpc.get(options['visibleSegmentSet']);
     this.source = this.registerDisposer(rpc.getRef<MeshSource>(options['source']));
     this.registerSignalBinding(
         this.chunkManager.recomputeChunkPriorities.add(this.updateChunkPriorities, this));
-    this.registerSignalBinding(
-        this.visibleSegmentSet.changed.add(this.handleVisibleSegmentSetChanged, this));
   }
-
-  private handleVisibleSegmentSetChanged() { this.chunkManager.scheduleUpdateChunkPriorities(); }
 
   private updateChunkPriorities() {
     let {source, chunkManager} = this;
-    for (let segment of this.visibleSegmentSet) {
-      let manifestChunk = source.getChunk(segment);
+    forEachVisibleSegment(this, objectId => {
+      let manifestChunk = source.getChunk(objectId);
       chunkManager.requestChunk(
           manifestChunk, ChunkPriorityTier.VISIBLE, MESH_OBJECT_MANIFEST_CHUNK_PRIORITY);
       if (manifestChunk.state === ChunkState.SYSTEM_MEMORY_WORKER) {
@@ -305,6 +295,6 @@ class MeshLayer extends SharedObjectCounterpart {
         // console.log(manifestChunk.data);
         // let fragmentChunk = fragmentSource.getChunk(manifestChunk);
       }
-    }
+    });
   }
 };

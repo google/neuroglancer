@@ -18,14 +18,14 @@ import {ChunkSourceParametersConstructor, ChunkState} from 'neuroglancer/chunk_m
 import {Chunk, ChunkManager, ChunkSource} from 'neuroglancer/chunk_manager/frontend';
 import {FRAGMENT_SOURCE_RPC_ID, MESH_LAYER_RPC_ID} from 'neuroglancer/mesh/base';
 import {PerspectiveViewRenderContext, PerspectiveViewRenderLayer, perspectivePanelEmit} from 'neuroglancer/perspective_panel';
-import {SegmentationDisplayState} from 'neuroglancer/segmentation_display_state';
-import {Mat4, Vec3, mat4, vec3, vec4} from 'neuroglancer/util/geom';
+import {SegmentationDisplayState, SegmentationLayerSharedObject, forEachSegmentToDraw, getObjectColor, registerRedrawWhenSegmentationDisplayStateChanged} from 'neuroglancer/segmentation_display_state/frontend';
+import {Mat4, Vec3, identityMat4, vec3, vec4} from 'neuroglancer/util/geom';
 import {stableStringify} from 'neuroglancer/util/json';
 import {Buffer} from 'neuroglancer/webgl/buffer';
 import {GL} from 'neuroglancer/webgl/context';
 import {ShaderBuilder, ShaderProgram} from 'neuroglancer/webgl/shader';
 import {setVec4FromUint32} from 'neuroglancer/webgl/shader_lib';
-import {RPC, SharedObject, registerSharedObjectOwner} from 'neuroglancer/worker_rpc';
+import {RPC, registerSharedObjectOwner} from 'neuroglancer/worker_rpc';
 
 export class MeshShaderManager {
   private tempLightVec = vec4.create();
@@ -101,18 +101,13 @@ export class MeshLayer extends PerspectiveViewRenderLayer {
       public displayState: SegmentationDisplayState) {
     super();
 
-    let dispatchRedrawNeeded = () => { this.redrawNeeded.dispatch(); };
-    this.registerSignalBinding(displayState.segmentColorHash.changed.add(dispatchRedrawNeeded));
-    this.registerSignalBinding(displayState.visibleSegments.changed.add(dispatchRedrawNeeded));
-    this.registerSignalBinding(
-        displayState.segmentSelectionState.changed.add(dispatchRedrawNeeded));
+    registerRedrawWhenSegmentationDisplayStateChanged(displayState, this);
 
-    let sharedObject = this.registerDisposer(new SharedObject());
+    let sharedObject =
+        this.registerDisposer(new SegmentationLayerSharedObject(chunkManager, displayState));
     sharedObject.RPC_TYPE_ID = MESH_LAYER_RPC_ID;
-    sharedObject.initializeCounterpart(chunkManager.rpc!, {
-      'chunkManager': chunkManager.rpcId,
+    sharedObject.initializeCounterpartWithChunkManager({
       'source': source.addCounterpartRef(),
-      'visibleSegmentSet': displayState.visibleSegments.rpcId
     });
     this.setReady(true);
   }
@@ -120,44 +115,26 @@ export class MeshLayer extends PerspectiveViewRenderLayer {
   get gl() { return this.chunkManager.chunkQueueManager.gl; }
 
   draw(renderContext: PerspectiveViewRenderContext) {
-    let gl = this.gl;
-    let shader = this.shader;
+    let {gl, shader, displayState, meshShaderManager} = this;
     shader.bind();
-    let {meshShaderManager} = this;
     meshShaderManager.beginLayer(gl, shader, renderContext);
 
     let objectChunks = this.source.fragmentSource.objectChunks;
 
     let {pickIDs} = renderContext;
 
-    // FIXME: this maybe should change
-    let objectToDataMatrix = mat4.create();
-    mat4.identity(objectToDataMatrix);
+    const objectToDataMatrix = identityMat4;
 
-    let color = vec3.create();
-    let {displayState} = this;
-    let {segmentColorHash, segmentSelectionState} = displayState;
-
-    for (let objectId of displayState.visibleSegments) {
-      let objectKey = `${objectId.low}:${objectId.high}`;
-      let fragments = objectChunks.get(objectKey);
-      if (fragments === undefined) {
-        continue;
-      }
-      segmentColorHash.compute(color, objectId);
-      if (segmentSelectionState.isSelected(objectId)) {
-        for (let i = 0; i < 3; ++i) {
-          color[i] = color[i] * 0.5 + 0.5;
-        }
-      }
+    forEachSegmentToDraw(displayState, objectChunks, (rootObjectId, objectId, fragments) => {
       meshShaderManager.beginObject(
-          gl, shader, objectToDataMatrix, color, pickIDs.register(this, objectId));
+          gl, shader, objectToDataMatrix, getObjectColor(displayState, rootObjectId),
+          pickIDs.register(this, objectId));
       for (let fragment of fragments) {
         if (fragment.state === ChunkState.GPU_MEMORY) {
           meshShaderManager.drawFragment(gl, shader, fragment);
         }
       }
-    }
+    });
 
     meshShaderManager.endLayer(gl, shader);
   }

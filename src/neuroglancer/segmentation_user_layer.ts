@@ -21,7 +21,8 @@ import {getVolumeWithStatusMessage} from 'neuroglancer/layer_specification';
 import {MeshSource} from 'neuroglancer/mesh/frontend';
 import {MeshLayer} from 'neuroglancer/mesh/frontend';
 import {SegmentColorHash} from 'neuroglancer/segment_color';
-import {SegmentSelectionState, SegmentationDisplayState} from 'neuroglancer/segmentation_display_state';
+import {SegmentSelectionState, SegmentationDisplayState, Uint64MapEntry} from 'neuroglancer/segmentation_display_state/frontend';
+import {SharedDisjointUint64Sets} from 'neuroglancer/shared_disjoint_sets';
 import {PerspectiveViewSkeletonLayer, SkeletonLayer, SliceViewPanelSkeletonLayer} from 'neuroglancer/skeleton/frontend';
 import {trackableAlphaValue} from 'neuroglancer/sliceview/renderlayer';
 import {SegmentationRenderLayer} from 'neuroglancer/sliceview/segmentation_renderlayer';
@@ -39,7 +40,8 @@ export class SegmentationUserLayer extends UserLayer implements SegmentationDisp
   segmentSelectionState = new SegmentSelectionState();
   selectedAlpha = trackableAlphaValue(0.5);
   notSelectedAlpha = trackableAlphaValue(0);
-  visibleSegments: Uint64Set;
+  visibleSegments = Uint64Set.makeWithCounterpart(this.manager.worker);
+  segmentEquivalences = SharedDisjointUint64Sets.makeWithCounterpart(this.manager.worker);
   volumePath: string|undefined;
   meshPath: string|undefined;
   meshLod: number|undefined;
@@ -49,8 +51,8 @@ export class SegmentationUserLayer extends UserLayer implements SegmentationDisp
 
   constructor(public manager: LayerListSpecification, x: any) {
     super([]);
-    this.visibleSegments = Uint64Set.makeWithCounterpart(manager.worker);
     this.visibleSegments.changed.add(() => { this.specificationChanged.dispatch(); });
+    this.segmentEquivalences.changed.add(() => { this.specificationChanged.dispatch(); });
     this.segmentSelectionState.bindTo(manager.layerSelectedValues, this);
     this.selectedAlpha.changed.add(() => { this.specificationChanged.dispatch(); });
     this.notSelectedAlpha.changed.add(() => { this.specificationChanged.dispatch(); });
@@ -92,12 +94,14 @@ export class SegmentationUserLayer extends UserLayer implements SegmentationDisp
       this.addRenderLayer(new SliceViewPanelSkeletonLayer(base));
     }
 
+    verifyObjectProperty(x, 'equivalences', y => { this.segmentEquivalences.restoreState(y); });
+
     verifyObjectProperty(x, 'segments', y => {
       if (y !== undefined) {
-        let {visibleSegments} = this;
+        let {visibleSegments, segmentEquivalences} = this;
         parseArray(y, value => {
           let id = Uint64.parseString(String(value), 10);
-          visibleSegments.add(id);
+          visibleSegments.add(segmentEquivalences.get(id));
         });
       }
     });
@@ -125,7 +129,29 @@ export class SegmentationUserLayer extends UserLayer implements SegmentationDisp
     if (visibleSegments.size > 0) {
       x['segments'] = visibleSegments.toJSON();
     }
+    let {segmentEquivalences} = this;
+    if (segmentEquivalences.size > 0) {
+      x['equivalences'] = segmentEquivalences.toJSON();
+    }
     return x;
+  }
+
+  transformPickedValue(value: any) {
+    if (value == null) {
+      return value;
+    }
+    let {segmentEquivalences} = this;
+    if (segmentEquivalences.size === 0) {
+      return value;
+    }
+    if (typeof value === 'number') {
+      value = new Uint64(value, 0);
+    }
+    let mappedValue = segmentEquivalences.get(value);
+    if (Uint64.equal(mappedValue, value)) {
+      return value;
+    }
+    return new Uint64MapEntry(value, mappedValue);
   }
 
   makeDropdown(element: HTMLDivElement) { return new SegmentationDropdown(element, this); }

@@ -15,47 +15,108 @@
  */
 
 import {ChunkManager} from 'neuroglancer/chunk_manager/frontend';
-import {GPUHashTable, HashSetShaderManager} from 'neuroglancer/gpu_hash/shader';
+import {HashMapUint64} from 'neuroglancer/gpu_hash/hash_table';
+import {GPUHashTable, HashMapShaderManager, HashSetShaderManager} from 'neuroglancer/gpu_hash/shader';
 import {SegmentColorShaderManager} from 'neuroglancer/segment_color';
-import {SegmentationDisplayState} from 'neuroglancer/segmentation_display_state';
+import {SegmentationDisplayState, registerRedrawWhenSegmentationDisplayStateChanged} from 'neuroglancer/segmentation_display_state/frontend';
 import {MultiscaleVolumeChunkSource, SliceView} from 'neuroglancer/sliceview/frontend';
 import {RenderLayer, trackableAlphaValue} from 'neuroglancer/sliceview/renderlayer';
+import {DisjointUint64Sets} from 'neuroglancer/util/disjoint_sets';
 import {ShaderBuilder, ShaderProgram} from 'neuroglancer/webgl/shader';
 
+const selectedSegmentForShader = new Float32Array(8);
+
+export class EquivalencesHashMap {
+  generation = Number.NaN;
+  hashMap = new HashMapUint64();
+  constructor(public disjointSets: DisjointUint64Sets) {}
+  update() {
+    let {disjointSets} = this;
+    const {generation} = disjointSets;
+    if (this.generation !== generation) {
+      this.generation = generation;
+      let {hashMap} = this;
+      hashMap.clear();
+      for (let [objectId, minObjectId] of disjointSets.mappings()) {
+        hashMap.set(objectId, minObjectId);
+      }
+    }
+  }
+};
+
 export class SegmentationRenderLayer extends RenderLayer {
-  private selectedSegmentForShader = new Float32Array(8);
   private segmentColorShaderManager = new SegmentColorShaderManager('segmentColorHash');
   private hashTableManager = new HashSetShaderManager('visibleSegments');
   private gpuHashTable = GPUHashTable.get(this.gl, this.displayState.visibleSegments.hashTable);
+
+  private equivalencesShaderManager = new HashMapShaderManager('equivalences');
+  private equivalencesHashMap =
+      new EquivalencesHashMap(this.displayState.segmentEquivalences.disjointSets);
+  private gpuEquivalencesHashTable = GPUHashTable.get(this.gl, this.equivalencesHashMap.hashMap);
+  private hasEquivalences: boolean;
+
   constructor(
       chunkManager: ChunkManager, multiscaleSourcePromise: Promise<MultiscaleVolumeChunkSource>,
       public displayState: SegmentationDisplayState,
       public selectedAlpha = trackableAlphaValue(0.5),
       public notSelectedAlpha = trackableAlphaValue(0)) {
     super(chunkManager, multiscaleSourcePromise);
-    this.registerSignalBinding(
-        displayState.segmentSelectionState.changed.add(this.redrawNeeded.dispatch, this));
-    this.registerSignalBinding(
-        displayState.segmentColorHash.changed.add(this.redrawNeeded.dispatch, this));
-    this.registerSignalBinding(
-        displayState.visibleSegments.changed.add(this.redrawNeeded.dispatch, this));
+    registerRedrawWhenSegmentationDisplayStateChanged(displayState, this);
     this.registerSignalBinding(selectedAlpha.changed.add(() => { this.redrawNeeded.dispatch(); }));
+    this.hasEquivalences = this.displayState.segmentEquivalences.size !== 0;
+    displayState.segmentEquivalences.changed.add(() => {
+      let {segmentEquivalences} = this.displayState;
+      let hasEquivalences = segmentEquivalences.size !== 0;
+      if (hasEquivalences !== this.hasEquivalences) {
+        this.hasEquivalences = hasEquivalences;
+        this.shaderUpdated = true;
+        // No need to trigger redraw, since that will happen anyway.
+      }
+    });
     this.registerSignalBinding(
         notSelectedAlpha.changed.add(() => { this.redrawNeeded.dispatch(); }));
   }
 
-  getShaderKey() { return 'sliceview.SegmentationRenderLayer'; }
+  getShaderKey() {
+    // The shader to use depends on whether there are any equivalences.
+    return `sliceview.SegmentationRenderLayer/${this.hasEquivalences}`;
+  }
 
   defineShader(builder: ShaderBuilder) {
     super.defineShader(builder);
     this.hashTableManager.defineShader(builder);
+    builder.addFragmentCode(`
+uint64_t getUint64DataValue() {
+  return toUint64(getDataValue());
+}
+`);
+    if (this.hasEquivalences) {
+      this.equivalencesShaderManager.defineShader(builder);
+      builder.addFragmentCode(`
+uint64_t getMappedObjectId() {
+  uint64_t value = getUint64DataValue();
+  uint64_t mappedValue;
+  if (${this.equivalencesShaderManager.getFunctionName}(value, mappedValue)) {
+    return mappedValue;
+  }
+  return value;
+}
+`);
+    } else {
+      builder.addFragmentCode(`
+uint64_t getMappedObjectId() {
+  return getUint64DataValue();
+}
+`);
+    }
     this.segmentColorShaderManager.defineShader(builder);
     builder.addUniform('highp vec4', 'uSelectedSegment', 2);
     builder.addUniform('highp float', 'uShowAllSegments');
     builder.addUniform('highp float', 'uSelectedAlpha');
     builder.addUniform('highp float', 'uNotSelectedAlpha');
     builder.setFragmentMain(`
-  uint64_t value = toUint64(getDataValue());
+  uint64_t value = getMappedObjectId();
+  
   float alpha = uSelectedAlpha;
   float saturation = 1.0;
   if (value.low == vec4(0,0,0,0) && value.high == vec4(0,0,0,0)) {
@@ -76,7 +137,6 @@ export class SegmentationRenderLayer extends RenderLayer {
   beginSlice(sliceView: SliceView) {
     let shader = super.beginSlice(sliceView);
     let gl = this.gl;
-    let selectedSegmentForShader = this.selectedSegmentForShader;
 
     let {displayState} = this;
     let {segmentSelectionState, visibleSegments} = this.displayState;
@@ -95,6 +155,10 @@ export class SegmentationRenderLayer extends RenderLayer {
     gl.uniform4fv(shader.uniform('uSelectedSegment'), selectedSegmentForShader);
     gl.uniform1f(shader.uniform('uShowAllSegments'), visibleSegments.hashTable.size ? 0.0 : 1.0);
     this.hashTableManager.enable(gl, shader, this.gpuHashTable);
+    if (this.hasEquivalences) {
+      this.equivalencesHashMap.update();
+      this.equivalencesShaderManager.enable(gl, shader, this.gpuEquivalencesHashTable);
+    }
 
     this.segmentColorShaderManager.enable(gl, shader, displayState.segmentColorHash);
     return shader;

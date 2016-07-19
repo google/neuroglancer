@@ -19,17 +19,17 @@ import {Chunk, ChunkManager, ChunkSource} from 'neuroglancer/chunk_manager/front
 import {RenderLayer} from 'neuroglancer/layer';
 import {VoxelSize} from 'neuroglancer/navigation_state';
 import {PerspectiveViewRenderContext, PerspectiveViewRenderLayer, perspectivePanelEmit} from 'neuroglancer/perspective_panel';
-import {SegmentationDisplayState} from 'neuroglancer/segmentation_display_state';
+import {SegmentationDisplayState, SegmentationLayerSharedObject, forEachSegmentToDraw, getObjectColor, registerRedrawWhenSegmentationDisplayStateChanged} from 'neuroglancer/segmentation_display_state/frontend';
 import {SKELETON_LAYER_RPC_ID} from 'neuroglancer/skeleton/base';
 import {SliceViewPanelRenderContext, SliceViewPanelRenderLayer, sliceViewPanelEmit} from 'neuroglancer/sliceview/panel';
 import {RefCounted} from 'neuroglancer/util/disposable';
-import {Mat4, Vec3, mat4, vec3} from 'neuroglancer/util/geom';
+import {Mat4, Vec3, mat4} from 'neuroglancer/util/geom';
 import {stableStringify} from 'neuroglancer/util/json';
 import {Buffer} from 'neuroglancer/webgl/buffer';
 import {GL} from 'neuroglancer/webgl/context';
 import {ShaderBuilder, ShaderModule, ShaderProgram} from 'neuroglancer/webgl/shader';
 import {setVec4FromUint32} from 'neuroglancer/webgl/shader_lib';
-import {RPC, SharedObject} from 'neuroglancer/worker_rpc';
+import {RPC} from 'neuroglancer/worker_rpc';
 import {Signal} from 'signals';
 
 class SkeletonShaderManager {
@@ -63,13 +63,11 @@ class SkeletonShaderManager {
     });
   }
 
-  drawSkeleton(
-      gl: GL, shader: ShaderProgram, skeletonChunk: SkeletonChunk, color: Vec3, pickID: number,
-      pickingOnly: boolean) {
-    if (!pickingOnly) {
-      gl.uniform3fv(shader.uniform('uColor'), color);
-    }
+  setColor(gl: GL, shader: ShaderProgram, color: Vec3) {
+    gl.uniform3fv(shader.uniform('uColor'), color);
+  }
 
+  drawSkeleton(gl: GL, shader: ShaderProgram, skeletonChunk: SkeletonChunk, pickID: number) {
     gl.uniform4fv(shader.uniform('uPickID'), setVec4FromUint32(this.tempPickID, pickID));
 
     skeletonChunk.vertexBuffer.bindToVertexAttrib(
@@ -132,18 +130,12 @@ export class SkeletonLayer extends RefCounted {
       public voxelSizeObject: VoxelSize, public displayState: SegmentationDisplayState) {
     super();
 
-    let dispatchRedrawNeeded = () => { this.redrawNeeded.dispatch(); };
-    this.registerSignalBinding(displayState.segmentColorHash.changed.add(dispatchRedrawNeeded));
-    this.registerSignalBinding(displayState.visibleSegments.changed.add(dispatchRedrawNeeded));
-    this.registerSignalBinding(
-        displayState.segmentSelectionState.changed.add(dispatchRedrawNeeded));
-
-    let sharedObject = this.registerDisposer(new SharedObject());
+    registerRedrawWhenSegmentationDisplayStateChanged(displayState, this);
+    let sharedObject =
+        this.registerDisposer(new SegmentationLayerSharedObject(chunkManager, displayState));
     sharedObject.RPC_TYPE_ID = SKELETON_LAYER_RPC_ID;
-    sharedObject.initializeCounterpart(chunkManager.rpc!, {
-      'chunkManager': chunkManager.rpcId,
+    sharedObject.initializeCounterpartWithChunkManager({
       'source': source.addCounterpartRef(),
-      'visibleSegmentSet': displayState.visibleSegments.rpcId
     });
   }
 
@@ -167,29 +159,18 @@ export class SkeletonLayer extends RefCounted {
 
     let {pickIDs} = renderContext;
 
-    let color = vec3.create();
     let {displayState} = this;
-    let {segmentColorHash, segmentSelectionState} = displayState;
-
     gl.lineWidth(lineWidth);
 
-    for (let objectId of displayState.visibleSegments) {
-      let objectKey = `${objectId.low}:${objectId.high}`;
-      let skeleton = skeletons.get(objectKey);
-      if (skeleton === undefined || skeleton.state !== ChunkState.GPU_MEMORY) {
-        continue;
+    forEachSegmentToDraw(displayState, skeletons, (rootObjectId, objectId, skeleton) => {
+      if (skeleton.state !== ChunkState.GPU_MEMORY) {
+        return;
       }
       if (!pickingOnly) {
-        segmentColorHash.compute(color, objectId);
-        if (segmentSelectionState.isSelected(objectId)) {
-          for (let i = 0; i < 3; ++i) {
-            color[i] = color[i] * 0.5 + 0.5;
-          }
-        }
+        skeletonShaderManager.setColor(gl, shader, getObjectColor(displayState, rootObjectId));
       }
-      skeletonShaderManager.drawSkeleton(
-          gl, shader, skeleton, color, pickIDs.register(layer, objectId), pickingOnly);
-    }
+      skeletonShaderManager.drawSkeleton(gl, shader, skeleton, pickIDs.register(layer, objectId));
+    });
     skeletonShaderManager.endLayer(gl, shader);
   }
 };

@@ -80,7 +80,7 @@ export class UserLayer extends RefCounted {
     let result: any;
     let {renderLayers} = this;
     if (pickedRenderLayer !== null && renderLayers.indexOf(pickedRenderLayer) !== -1) {
-      return pickedObject;
+      return this.transformPickedValue(pickedObject);
     }
     for (let layer of renderLayers) {
       if (!layer.ready) {
@@ -91,8 +91,10 @@ export class UserLayer extends RefCounted {
         break;
       }
     }
-    return result;
+    return this.transformPickedValue(result);
   }
+
+  transformPickedValue(value: any) { return value; }
 
   toJSON(): any { return null; }
 

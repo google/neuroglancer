@@ -14,14 +14,13 @@
  * limitations under the License.
  */
 
-import 'neuroglancer/uint64_set'; // Import for side effects.
-
-import {Chunk, ChunkManager, ChunkSource} from 'neuroglancer/chunk_manager/backend';
+import {Chunk, ChunkSource} from 'neuroglancer/chunk_manager/backend';
 import {ChunkPriorityTier} from 'neuroglancer/chunk_manager/base';
+import {SegmentationLayerSharedObjectCounterpart} from 'neuroglancer/segmentation_display_state/backend';
+import {forEachVisibleSegment, getObjectKey} from 'neuroglancer/segmentation_display_state/base';
 import {SKELETON_LAYER_RPC_ID} from 'neuroglancer/skeleton/base';
-import {Uint64Set} from 'neuroglancer/uint64_set';
 import {Uint64} from 'neuroglancer/util/uint64';
-import {RPC, SharedObjectCounterpart, registerSharedObject} from 'neuroglancer/worker_rpc';
+import {RPC, registerSharedObject} from 'neuroglancer/worker_rpc';
 
 const SKELETON_CHUNK_PRIORITY = 60;
 
@@ -51,7 +50,7 @@ export class SkeletonChunk extends Chunk {
 export class SkeletonSource extends ChunkSource {
   chunks: Map<string, SkeletonChunk>;
   getChunk(objectId: Uint64) {
-    let key = `${objectId.low}:${objectId.high}`;
+    const key = getObjectKey(objectId);
     let chunk = this.chunks.get(key);
     if (chunk === undefined) {
       chunk = this.getNewChunk_(SkeletonChunk);
@@ -71,33 +70,22 @@ export class ParameterizedSkeletonSource<Parameters> extends SkeletonSource {
 };
 
 @registerSharedObject(SKELETON_LAYER_RPC_ID)
-export class SkeletonLayer extends SharedObjectCounterpart {
-  chunkManager: ChunkManager;
+export class SkeletonLayer extends SegmentationLayerSharedObjectCounterpart {
   source: SkeletonSource;
-  visibleSegmentSet: Uint64Set;
 
   constructor(rpc: RPC, options: any) {
     super(rpc, options);
-    // No need to increase reference count of chunkManager and visibleSegmentSet since our owner
-    // counterpart will hold a reference to the owner counterparts of them.
-    this.chunkManager = <ChunkManager>rpc.get(options['chunkManager']);
-    this.visibleSegmentSet = <Uint64Set>rpc.get(options['visibleSegmentSet']);
     this.source = this.registerDisposer(rpc.getRef<SkeletonSource>(options['source']));
     this.registerSignalBinding(
         this.chunkManager.recomputeChunkPriorities.add(this.updateChunkPriorities, this));
-    this.registerSignalBinding(
-        this.visibleSegmentSet.changed.add(this.handleVisibleSegmentSetChanged, this));
   }
 
-  private handleVisibleSegmentSetChanged() { this.chunkManager.scheduleUpdateChunkPriorities(); }
-
   private updateChunkPriorities() {
-    let source = this.source;
-    let chunkManager = this.chunkManager;
-    for (let segment of this.visibleSegmentSet) {
-      let chunk = source.getChunk(segment);
+    let {source, chunkManager} = this;
+    forEachVisibleSegment(this, objectId => {
+      let chunk = source.getChunk(objectId);
       chunkManager.requestChunk(chunk, ChunkPriorityTier.VISIBLE, SKELETON_CHUNK_PRIORITY);
-    }
+    });
   }
 };
 
