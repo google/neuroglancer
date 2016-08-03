@@ -93,11 +93,7 @@ export class VolumeDataInstanceInfo extends DataInstanceInfo {
   getSources(chunkManager: ChunkManager, parameters: DVIDSourceParameters) {
     let sources: VolumeChunkSource[][] = [];
     for (let level = 0; level < this.numLevels; ++level) {
-      let voxelSize = vec3.clone(this.voxelSize);
-      voxelSize[0] = voxelSize[0] * Math.pow(2, level);
-      voxelSize[1] = voxelSize[1] * Math.pow(2, level);
-      voxelSize[2] = voxelSize[2] * Math.pow(2, level);
-
+      let voxelSize = vec3.scale(vec3.create(), this.voxelSize, Math.pow(2, level));
       let lowerVoxelBound = vec3.create();
       let upperVoxelBound = vec3.create();
       for (let i = 0; i < 3; ++i) {
@@ -116,19 +112,19 @@ export class VolumeDataInstanceInfo extends DataInstanceInfo {
         'nodeKey': parameters.nodeKey,
         'dataInstanceKey': dataInstanceKey,
       };
-      let alternatives = VolumeChunkSpecification
-                             .getDefaults({
-                               voxelSize: voxelSize,
-                               dataType: this.dataType,
-                               numChannels: this.numChannels,
-                               baseVoxelOffset: this.lowerVoxelBound,
-                               upperVoxelBound: vec3.subtract(
-                                   vec3.create(), this.upperVoxelBound, this.lowerVoxelBound),
-                               volumeType: this.volumeType,
-                             })
-                             .map(spec => {
-                               return DVIDVolumeChunkSource.get(chunkManager, spec, volParameters);
-                             });
+      let alternatives =
+          VolumeChunkSpecification
+              .getDefaults({
+                voxelSize: voxelSize,
+                dataType: this.dataType,
+                numChannels: this.numChannels,
+                chunkLayoutOffset: vec3.multiply(vec3.create(), lowerVoxelBound, voxelSize),
+                baseVoxelOffset: lowerVoxelBound,
+                upperVoxelBound: vec3.subtract(vec3.create(), upperVoxelBound, lowerVoxelBound),
+                volumeType: this.volumeType,
+              })
+              .map(
+                  spec => { return DVIDVolumeChunkSource.get(chunkManager, spec, volParameters); });
       sources.push(alternatives);
     }
     return sources;
