@@ -208,7 +208,6 @@ export class VolumeChunkSource extends ChunkSource implements VolumeChunkSourceI
     // Chunk start position in voxel coordinates.
     let chunkPosition =
         vec3.multiply(tempChunkPosition, chunk.chunkGridPosition, origChunkDataSize);
-    vec3.add(chunkPosition, chunkPosition, this.spec.baseVoxelOffset);
 
     // Specifies whether the chunk only partially fits within the data bounds.
     let partial = false;
@@ -219,6 +218,8 @@ export class VolumeChunkSource extends ChunkSource implements VolumeChunkSourceI
         partial = true;
       }
     }
+
+    vec3.add(chunkPosition, chunkPosition, this.spec.baseVoxelOffset);
 
     if (partial) {
       chunk.chunkDataSize = vec3.clone(newChunkDataSize);
