@@ -61,6 +61,7 @@ const KEY_MAP = new KeySequenceMap({
   'arrowup': 'cycle-prev-active-completion',
   'tab': 'choose-active-completion-or-prefix',
   'enter': 'choose-active-completion',
+  'escape': 'cancel',
 });
 
 const KEY_COMMANDS = new Map<string, (this: AutocompleteTextInput) => boolean>([
@@ -86,6 +87,7 @@ const KEY_COMMANDS = new Map<string, (this: AutocompleteTextInput) => boolean>([
     'choose-active-completion',
     function() { return this.selectActiveCompletion(/*allowPrefix=*/false); }
   ],
+  ['cancel', function() { return this.cancel(); }],
 ]);
 
 export type Completer = (value: string) => CancellablePromise<CompletionResult>| null;
@@ -424,12 +426,17 @@ export class AutocompleteTextInput extends RefCounted {
       if (!allowPrefix) {
         return false;
       }
-      let {commonPrefix} = this;
-      if (commonPrefix.length > this.value.length) {
-        this.value = commonPrefix;
-        return true;
+      let {completionResult} = this;
+      if (completionResult !== null && completionResult.completions.length === 1) {
+        activeIndex = 0;
+      } else {
+        let {commonPrefix} = this;
+        if (commonPrefix.length > this.value.length) {
+          this.value = commonPrefix;
+          return true;
+        }
+        return false;
       }
-      return false;
     }
     let newValue = this.getCompletedValueByIndex(activeIndex);
     if (this.value === newValue) {
@@ -440,6 +447,11 @@ export class AutocompleteTextInput extends RefCounted {
   }
 
   selectCompletion(index: number) { this.value = this.getCompletedValueByIndex(index); }
+
+  /**
+   * Called when user presses escape.  Does nothing here, but may be overridden in a subclass.
+   */
+  cancel() { return false; }
 
   /**
    * Updates the hintElement scroll position to match the scroll position of inputElement.
