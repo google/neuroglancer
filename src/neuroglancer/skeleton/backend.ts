@@ -81,6 +81,9 @@ export class SkeletonLayer extends SegmentationLayerSharedObjectCounterpart {
   }
 
   private updateChunkPriorities() {
+    if (!this.visible) {
+      return;
+    }
     let {source, chunkManager} = this;
     forEachVisibleSegment(this, objectId => {
       let chunk = source.getChunk(objectId);

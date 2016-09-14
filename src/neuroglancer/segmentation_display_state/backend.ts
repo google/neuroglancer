@@ -19,16 +19,21 @@ import 'neuroglancer/shared_disjoint_sets';
 import 'neuroglancer/uint64_set';
 
 import {ChunkManager} from 'neuroglancer/chunk_manager/backend';
-import {VisibleSegmentsState} from 'neuroglancer/segmentation_display_state/base';
+import {ON_VISIBILITY_CHANGE_METHOD_ID, VisibleSegmentsState} from 'neuroglancer/segmentation_display_state/base';
 import {SharedDisjointUint64Sets} from 'neuroglancer/shared_disjoint_sets';
 import {Uint64Set} from 'neuroglancer/uint64_set';
-import {RPC, SharedObjectCounterpart} from 'neuroglancer/worker_rpc';
+import {RPC, SharedObjectCounterpart, registerRPC} from 'neuroglancer/worker_rpc';
 
 export class SegmentationLayerSharedObjectCounterpart extends SharedObjectCounterpart implements
     VisibleSegmentsState {
   chunkManager: ChunkManager;
   visibleSegments: Uint64Set;
   segmentEquivalences: SharedDisjointUint64Sets;
+
+  /**
+   * Indicates whether this layer is actually visible.
+   */
+  visible = false;
 
   constructor(rpc: RPC, options: any) {
     super(rpc, options);
@@ -44,3 +49,12 @@ export class SegmentationLayerSharedObjectCounterpart extends SharedObjectCounte
     this.registerSignalBinding(this.segmentEquivalences.changed.add(scheduleUpdateChunkPriorities));
   }
 };
+
+registerRPC(ON_VISIBILITY_CHANGE_METHOD_ID, function(x) {
+  let obj = <SegmentationLayerSharedObjectCounterpart>this.get(x['id']);
+  let value = <boolean>x['visible'];
+  if (obj.visible !== value) {
+    obj.visible = value;
+    obj.chunkManager.scheduleUpdateChunkPriorities();
+  }
+});

@@ -280,6 +280,9 @@ class MeshLayer extends SegmentationLayerSharedObjectCounterpart {
   }
 
   private updateChunkPriorities() {
+    if (!this.visible) {
+      return;
+    }
     let {source, chunkManager} = this;
     forEachVisibleSegment(this, objectId => {
       let manifestChunk = source.getChunk(objectId);

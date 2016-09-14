@@ -16,8 +16,8 @@
 
 import {AxesLineHelper} from 'neuroglancer/axes_lines';
 import {DisplayContext} from 'neuroglancer/display_context';
-import {RenderLayer} from 'neuroglancer/layer';
-import {MouseSelectionState, VisibleRenderLayerTracker} from 'neuroglancer/layer';
+import {VisibilityTrackedRenderLayer} from 'neuroglancer/layer';
+import {MouseSelectionState, makeRenderedPanelVisibleLayerTracker} from 'neuroglancer/layer';
 import {PickIDManager} from 'neuroglancer/object_picking';
 import {RenderedDataPanel} from 'neuroglancer/rendered_data_panel';
 import {SliceView, SliceViewRenderHelper} from 'neuroglancer/sliceview/frontend';
@@ -40,7 +40,7 @@ export interface PerspectiveViewRenderContext {
   pickIDs: PickIDManager;
 }
 
-export class PerspectiveViewRenderLayer extends RenderLayer {
+export class PerspectiveViewRenderLayer extends VisibilityTrackedRenderLayer {
   draw(renderContext: PerspectiveViewRenderContext) {
     // Must be overridden by subclasses.
   }
@@ -78,17 +78,8 @@ const tempVec3 = vec3.create();
 const tempMat4 = mat4.create();
 
 export class PerspectivePanel extends RenderedDataPanel {
-  private visibleLayerTracker =
-      this.registerDisposer(new VisibleRenderLayerTracker<PerspectiveViewRenderLayer>(
-          this.viewer.layerManager, PerspectiveViewRenderLayer,
-          layer => {
-            layer.redrawNeeded.add(this.scheduleRedraw, this);
-            this.scheduleRedraw();
-          },
-          layer => {
-            layer.redrawNeeded.remove(this.scheduleRedraw, this);
-            this.scheduleRedraw();
-          }));
+  private visibleLayerTracker = makeRenderedPanelVisibleLayerTracker(
+      this.viewer.layerManager, PerspectiveViewRenderLayer, this);
 
   sliceViews = new Set<SliceView>();
   projectionMat = mat4.create();

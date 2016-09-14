@@ -95,6 +95,7 @@ vColor = lightingFactor * uColor;
 export class MeshLayer extends PerspectiveViewRenderLayer {
   private meshShaderManager = new MeshShaderManager();
   private shader = this.registerDisposer(this.meshShaderManager.getShader(this.gl));
+  private sharedObject: SegmentationLayerSharedObject;
 
   constructor(
       public chunkManager: ChunkManager, public source: MeshSource,
@@ -103,13 +104,14 @@ export class MeshLayer extends PerspectiveViewRenderLayer {
 
     registerRedrawWhenSegmentationDisplayStateChanged(displayState, this);
 
-    let sharedObject =
+    let sharedObject = this.sharedObject =
         this.registerDisposer(new SegmentationLayerSharedObject(chunkManager, displayState));
     sharedObject.RPC_TYPE_ID = MESH_LAYER_RPC_ID;
     sharedObject.initializeCounterpartWithChunkManager({
       'source': source.addCounterpartRef(),
     });
     this.setReady(true);
+    this.visibilityCount.addDependency(sharedObject.visibilityCount);
   }
 
   get gl() { return this.chunkManager.chunkQueueManager.gl; }

@@ -16,7 +16,7 @@
 
 import {AxesLineHelper} from 'neuroglancer/axes_lines';
 import {DisplayContext} from 'neuroglancer/display_context';
-import {MouseSelectionState, RenderLayer, VisibleRenderLayerTracker} from 'neuroglancer/layer';
+import {MouseSelectionState, VisibilityTrackedRenderLayer, makeRenderedPanelVisibleLayerTracker} from 'neuroglancer/layer';
 import {PickIDManager} from 'neuroglancer/object_picking';
 import {RenderedDataPanel} from 'neuroglancer/rendered_data_panel';
 import {SliceView, SliceViewRenderHelper} from 'neuroglancer/sliceview/frontend';
@@ -27,7 +27,6 @@ import {ViewerState} from 'neuroglancer/viewer_state';
 import {OffscreenCopyHelper, OffscreenFramebuffer} from 'neuroglancer/webgl/offscreen';
 import {ShaderBuilder} from 'neuroglancer/webgl/shader';
 import {ScaleBarWidget} from 'neuroglancer/widget/scale_bar';
-import {Signal} from 'signals';
 
 export interface SliceViewerState extends ViewerState { showScaleBar: TrackableBoolean; }
 
@@ -52,8 +51,7 @@ export interface SliceViewPanelRenderContext {
   pickIDs: PickIDManager;
 }
 
-export class SliceViewPanelRenderLayer extends RenderLayer {
-  redrawNeeded = new Signal();
+export class SliceViewPanelRenderLayer extends VisibilityTrackedRenderLayer {
   draw(renderContext: SliceViewPanelRenderContext) {
     // Must be overriden by subclass.
   }
@@ -67,17 +65,8 @@ export class SliceViewPanel extends RenderedDataPanel {
   private backgroundColor = vec4.fromValues(0.5, 0.5, 0.5, 1.0);
   private pickIDs = new PickIDManager();
 
-  private visibleLayerTracker =
-      this.registerDisposer(new VisibleRenderLayerTracker<SliceViewPanelRenderLayer>(
-          this.viewer.layerManager, SliceViewPanelRenderLayer,
-          layer => {
-            layer.redrawNeeded.add(this.scheduleRedraw, this);
-            this.scheduleRedraw();
-          },
-          layer => {
-            layer.redrawNeeded.remove(this.scheduleRedraw, this);
-            this.scheduleRedraw();
-          }));
+  private visibleLayerTracker = makeRenderedPanelVisibleLayerTracker(
+      this.viewer.layerManager, SliceViewPanelRenderLayer, this);
 
   private offscreenFramebuffer =
       new OffscreenFramebuffer(this.gl, {numDataBuffers: OffscreenTextures.NUM_TEXTURES});

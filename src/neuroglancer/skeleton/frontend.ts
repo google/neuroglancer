@@ -92,6 +92,7 @@ export class PerspectiveViewSkeletonLayer extends PerspectiveViewRenderLayer {
     this.registerDisposer(base);
     this.registerSignalBinding(base.redrawNeeded.add(() => { this.redrawNeeded.dispatch(); }));
     this.setReady(true);
+    this.visibilityCount.addDependency(base.visibilityCount);
   }
   get gl() { return this.base.gl; }
 
@@ -112,6 +113,7 @@ export class SliceViewPanelSkeletonLayer extends SliceViewPanelRenderLayer {
     this.registerDisposer(base);
     this.registerSignalBinding(base.redrawNeeded.add(() => { this.redrawNeeded.dispatch(); }));
     this.setReady(true);
+    this.visibilityCount.addDependency(base.visibilityCount);
   }
   get gl() { return this.base.gl; }
 
@@ -124,6 +126,9 @@ export class SkeletonLayer extends RefCounted {
   private tempMat = mat4.create();
   skeletonShaderManager = new SkeletonShaderManager();
   redrawNeeded = new Signal();
+  private sharedObject: SegmentationLayerSharedObject;
+
+  get visibilityCount () { return this.sharedObject.visibilityCount; }
 
   constructor(
       public chunkManager: ChunkManager, public source: SkeletonSource,
@@ -131,7 +136,7 @@ export class SkeletonLayer extends RefCounted {
     super();
 
     registerRedrawWhenSegmentationDisplayStateChanged(displayState, this);
-    let sharedObject =
+    let sharedObject = this.sharedObject =
         this.registerDisposer(new SegmentationLayerSharedObject(chunkManager, displayState));
     sharedObject.RPC_TYPE_ID = SKELETON_LAYER_RPC_ID;
     sharedObject.initializeCounterpartWithChunkManager({

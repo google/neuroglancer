@@ -16,11 +16,13 @@
 
 import * as debounce from 'lodash/debounce';
 import * as throttle from 'lodash/throttle';
+import {RenderedPanel} from 'neuroglancer/display_context';
 import {SpatialPosition} from 'neuroglancer/navigation_state';
 import {RefCounted} from 'neuroglancer/util/disposable';
 import {BoundingBox, Vec3, vec3} from 'neuroglancer/util/geom';
 import {SignalBindingUpdater, addSignalBinding, removeSignalBinding} from 'neuroglancer/util/signal_binding_updater';
 import {Uint64} from 'neuroglancer/util/uint64';
+import {UseCount} from 'neuroglancer/util/use_count';
 import {Signal} from 'signals';
 
 export class RenderLayer extends RefCounted {
@@ -49,6 +51,14 @@ export class RenderLayer extends RefCounted {
    * Bounding box for this layer, in nanometers.
    */
   boundingBox: BoundingBox|null = null;
+};
+
+/**
+ * Extends RenderLayer with functionality for tracking the number of panels in which the layer is
+ * visible.
+ */
+export class VisibilityTrackedRenderLayer extends RenderLayer {
+  visibilityCount = this.registerDisposer(new UseCount());
 };
 
 export class UserLayerDropdown extends RefCounted {
@@ -452,13 +462,15 @@ export class LayerSelectedValues extends RefCounted {
   }
 };
 
-export class VisibleRenderLayerTracker<RenderLayerType extends RenderLayer> extends RefCounted {
+export class VisibleRenderLayerTracker<RenderLayerType extends VisibilityTrackedRenderLayer> extends
+    RefCounted {
   private visibleLayers = new Set<RenderLayerType>();
   private newVisibleLayers = new Set<RenderLayerType>();
   private updatePending: number|null = null;
 
   constructor(
-      public layerManager: LayerManager, public renderLayerType: any,
+      public layerManager: LayerManager,
+      public renderLayerType: {new (...args: any[]): RenderLayerType},
       private layerAdded: (layer: RenderLayerType) => void,
       private layerRemoved: (layer: RenderLayerType) => void) {
     super();
@@ -498,6 +510,7 @@ export class VisibleRenderLayerTracker<RenderLayerType extends RenderLayer> exte
         newVisibleLayers.add(typedLayer);
         if (!visibleLayers.has(typedLayer)) {
           visibleLayers.add(typedLayer);
+          typedLayer.visibilityCount.inc();
           layerAdded(typedLayer);
         }
       }
@@ -506,6 +519,7 @@ export class VisibleRenderLayerTracker<RenderLayerType extends RenderLayer> exte
       if (!newVisibleLayers.has(renderLayer)) {
         visibleLayers.delete(renderLayer);
         layerRemoved(renderLayer);
+        renderLayer.visibilityCount.dec();
       }
     }
     newVisibleLayers.clear();
@@ -519,3 +533,19 @@ export class VisibleRenderLayerTracker<RenderLayerType extends RenderLayer> exte
     return this.visibleLayers;
   }
 };
+
+export function
+makeRenderedPanelVisibleLayerTracker<RenderLayerType extends VisibilityTrackedRenderLayer>(
+    layerManager: LayerManager, renderLayerType: {new (...args: any[]): RenderLayerType},
+    panel: RenderedPanel) {
+  return panel.registerDisposer(new VisibleRenderLayerTracker(
+      layerManager, renderLayerType,
+      layer => {
+        layer.redrawNeeded.add(panel.scheduleRedraw, panel);
+        panel.scheduleRedraw();
+      },
+      layer => {
+        layer.redrawNeeded.remove(panel.scheduleRedraw, panel);
+        panel.scheduleRedraw();
+      }));
+}

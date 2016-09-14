@@ -44,3 +44,5 @@ export function forEachVisibleSegment(
     }
   }
 }
+
+export const ON_VISIBILITY_CHANGE_METHOD_ID = 'SegmentationLayerSharedObject.onVisibilityChange';

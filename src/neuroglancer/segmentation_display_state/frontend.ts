@@ -17,10 +17,11 @@
 import {ChunkManager} from 'neuroglancer/chunk_manager/frontend';
 import {LayerSelectedValues, UserLayer} from 'neuroglancer/layer';
 import {SegmentColorHash} from 'neuroglancer/segment_color';
-import {VisibleSegmentsState, forEachVisibleSegment, getObjectKey} from 'neuroglancer/segmentation_display_state/base';
+import {ON_VISIBILITY_CHANGE_METHOD_ID, VisibleSegmentsState, forEachVisibleSegment, getObjectKey} from 'neuroglancer/segmentation_display_state/base';
 import {RefCounted} from 'neuroglancer/util/disposable';
 import {vec3} from 'neuroglancer/util/geom';
 import {Uint64} from 'neuroglancer/util/uint64';
+import {UseCount} from 'neuroglancer/util/use_count';
 import {SharedObject} from 'neuroglancer/worker_rpc';
 import {Signal} from 'signals';
 
@@ -118,15 +119,29 @@ export function forEachSegmentToDraw<SegmentData>(
 }
 
 export class SegmentationLayerSharedObject extends SharedObject {
+
+  visibilityCount = new UseCount();
+
   constructor(public chunkManager: ChunkManager, public displayState: SegmentationDisplayState) {
     super();
   }
 
   initializeCounterpartWithChunkManager(options: any) {
-    let {displayState} = this;
+    let {displayState, visibilityCount} = this;
     options['chunkManager'] = this.chunkManager.rpcId;
     options['visibleSegments'] = displayState.visibleSegments.rpcId;
     options['segmentEquivalences'] = displayState.segmentEquivalences.rpcId;
     super.initializeCounterpart(this.chunkManager.rpc!, options);
+
+    visibilityCount.becameNonZero.add(() => {
+      if (this.rpc != null) {
+        this.rpc.invoke(ON_VISIBILITY_CHANGE_METHOD_ID, {'id': this.rpcId, 'visible': true});
+      }
+    });
+    visibilityCount.becameZero.add(() => {
+      if (this.rpc != null) {
+        this.rpc.invoke(ON_VISIBILITY_CHANGE_METHOD_ID, {'id': this.rpcId, 'visible': false});
+      }
+    });
   }
 }
