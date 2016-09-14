@@ -36,6 +36,7 @@ const AUTOCOMPLETE_INDEX_SYMBOL = Symbol('autocompleteIndex');
 
 export interface CompletionResult extends BasicCompletionResult {
   showSingleResult?: boolean;
+  selectSingleResult?: boolean;
   makeElement?: (completion: Completion) => HTMLElement;
 }
 
@@ -351,7 +352,11 @@ export class AutocompleteTextInput extends RefCounted {
           this.hasResultForDropdown = false;
         }
       }
-      this.setActiveIndex(0);
+      if (completionResult.selectSingleResult) {
+        this.setActiveIndex(0);
+      } else {
+        this.setHintValue(this.getCompletedValueByIndex(0));
+      }
     } else {
       this.hasResultForDropdown = true;
       // Check for a common prefix.
