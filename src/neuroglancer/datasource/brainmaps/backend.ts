@@ -19,7 +19,7 @@ import 'neuroglancer/datasource/brainmaps/api_backend';
 import {handleChunkDownloadPromise, registerChunkSource} from 'neuroglancer/chunk_manager/backend';
 import {makeRequest} from 'neuroglancer/datasource/brainmaps/api';
 import {MeshSourceParameters, VolumeChunkEncoding, VolumeSourceParameters} from 'neuroglancer/datasource/brainmaps/base';
-import {FragmentChunk, ManifestChunk, ParameterizedMeshSource, decodeJsonManifestChunk, decodeVertexPositionsAndIndices} from 'neuroglancer/mesh/backend';
+import {FragmentChunk, ManifestChunk, ParameterizedMeshSource, decodeJsonManifestChunk, decodeTriangleVertexPositionsAndIndices} from 'neuroglancer/mesh/backend';
 import {ParameterizedVolumeChunkSource, VolumeChunk} from 'neuroglancer/sliceview/backend';
 import {decodeCompressedSegmentationChunk} from 'neuroglancer/sliceview/backend_chunk_decoders/compressed_segmentation';
 import {decodeJpegChunk} from 'neuroglancer/sliceview/backend_chunk_decoders/jpeg';
@@ -97,7 +97,7 @@ function decodeFragmentChunk(chunk: FragmentChunk, response: ArrayBuffer) {
   if (numVerticesHigh !== 0) {
     throw new Error(`The number of vertices should not exceed 2^32-1.`);
   }
-  decodeVertexPositionsAndIndices(
+  decodeTriangleVertexPositionsAndIndices(
       chunk, response, Endianness.LITTLE, /*vertexByteOffset=*/8, numVertices);
 }
 

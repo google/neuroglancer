@@ -179,20 +179,19 @@ export function computeVertexNormals(positions: Float32Array, indices: Uint32Arr
 }
 
 /**
- * Extracts vertex positions and triangle vertex indices of the specified endianness from `data'.
- *
- * Vertex normals are computed.
+ * Extracts vertex positions and indices of the specified endianness from `data'.
  *
  * The vertexByteOffset specifies the byte offset into `data' of the start of the vertex position
- * data.  The vertex data must consist of 3 * numVertices 32-bit float values.
+ * data.  The vertex data must consist of verticesPerPrimitive * numVertices 32-bit float values.
  *
  * If indexByteOffset is not specified, it defaults to the end of the vertex position data.  If
- * numTriangles is not specified, it is assumed that the index data continues until the end of the
+ * numPrimitives is not specified, it is assumed that the index data continues until the end of the
  * array.
  */
 export function decodeVertexPositionsAndIndices(
-    chunk: FragmentChunk, data: ArrayBuffer, endianness: Endianness, vertexByteOffset: number,
-    numVertices: number, indexByteOffset?: number, numTriangles?: number) {
+    chunk: {vertexPositions: Float32Array|null, indices: Uint32Array|null}, verticesPerPrimitive: number,
+    data: ArrayBuffer, endianness: Endianness, vertexByteOffset: number, numVertices: number,
+    indexByteOffset?: number, numPrimitives?: number) {
   let vertexPositions = new Float32Array(data, vertexByteOffset, numVertices * 3);
   convertEndian32(vertexPositions, endianness);
 
@@ -201,21 +200,37 @@ export function decodeVertexPositionsAndIndices(
   }
 
   let numIndices: number|undefined;
-  if (numTriangles !== undefined) {
-    numIndices = numTriangles * 3;
+  if (numPrimitives !== undefined) {
+    numIndices = numPrimitives * verticesPerPrimitive;
   }
 
   // For compatibility with Firefox, length argument must not be undefined.
   let indices = numIndices === undefined ? new Uint32Array(data, indexByteOffset) :
                                            new Uint32Array(data, indexByteOffset, numIndices);
-  if (indices.length % 3 !== 0) {
-    throw new Error(`Number of indices is not a multiple of 3: ${indices.length}.`);
+  if (indices.length % verticesPerPrimitive !== 0) {
+    throw new Error(
+        `Number of indices is not a multiple of ${verticesPerPrimitive}: ${indices.length}.`);
   }
   convertEndian32(indices, endianness);
 
   chunk.vertexPositions = vertexPositions;
   chunk.indices = indices;
-  chunk.vertexNormals = computeVertexNormals(vertexPositions, indices);
+}
+
+/**
+ * Extracts vertex positions and triangle vertex indices of the specified endianness from `data'.
+ *
+ * Vertex normals are computed.
+ *
+ * See decodeVertexPositionsAndIndices above.
+ */
+export function decodeTriangleVertexPositionsAndIndices(
+    chunk: FragmentChunk, data: ArrayBuffer, endianness: Endianness, vertexByteOffset: number,
+    numVertices: number, indexByteOffset?: number, numTriangles?: number) {
+  decodeVertexPositionsAndIndices(
+      chunk, /*verticesPerPrimitive=*/3, data, endianness, vertexByteOffset, numVertices,
+      indexByteOffset, numTriangles);
+  chunk.vertexNormals = computeVertexNormals(chunk.vertexPositions!, chunk.indices!);
 }
 
 export abstract class MeshSource extends ChunkSource {

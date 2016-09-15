@@ -16,7 +16,7 @@
 
 import {handleChunkDownloadPromise, registerChunkSource} from 'neuroglancer/chunk_manager/backend';
 import {MeshSourceParameters, VolumeChunkEncoding, VolumeChunkSourceParameters} from 'neuroglancer/datasource/precomputed/base';
-import {FragmentChunk, ManifestChunk, ParameterizedMeshSource, decodeJsonManifestChunk, decodeVertexPositionsAndIndices} from 'neuroglancer/mesh/backend';
+import {FragmentChunk, ManifestChunk, ParameterizedMeshSource, decodeJsonManifestChunk, decodeTriangleVertexPositionsAndIndices} from 'neuroglancer/mesh/backend';
 import {ParameterizedVolumeChunkSource, VolumeChunk} from 'neuroglancer/sliceview/backend';
 import {ChunkDecoder} from 'neuroglancer/sliceview/backend_chunk_decoders';
 import {decodeCompressedSegmentationChunk} from 'neuroglancer/sliceview/backend_chunk_decoders/compressed_segmentation';
@@ -58,7 +58,7 @@ export function decodeManifestChunk(chunk: ManifestChunk, response: any) {
 export function decodeFragmentChunk(chunk: FragmentChunk, response: ArrayBuffer) {
   let dv = new DataView(response);
   let numVertices = dv.getUint32(0, true);
-  decodeVertexPositionsAndIndices(
+  decodeTriangleVertexPositionsAndIndices(
       chunk, response, Endianness.LITTLE, /*vertexByteOffset=*/4, numVertices);
 }
 

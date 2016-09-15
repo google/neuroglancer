@@ -16,7 +16,7 @@
 
 import {handleChunkDownloadPromise, registerChunkSource} from 'neuroglancer/chunk_manager/backend';
 import {MeshSourceParameters, VolumeChunkEncoding, VolumeChunkSourceParameters} from 'neuroglancer/datasource/python/base';
-import {FragmentChunk, ManifestChunk, ParameterizedMeshSource, decodeVertexPositionsAndIndices} from 'neuroglancer/mesh/backend';
+import {FragmentChunk, ManifestChunk, ParameterizedMeshSource, decodeTriangleVertexPositionsAndIndices} from 'neuroglancer/mesh/backend';
 import {ParameterizedVolumeChunkSource, VolumeChunk} from 'neuroglancer/sliceview/backend';
 import {ChunkDecoder} from 'neuroglancer/sliceview/backend_chunk_decoders';
 import {decodeJpegChunk} from 'neuroglancer/sliceview/backend_chunk_decoders/jpeg';
@@ -56,7 +56,7 @@ class VolumeChunkSource extends ParameterizedVolumeChunkSource<VolumeChunkSource
 export function decodeFragmentChunk(chunk: FragmentChunk, response: ArrayBuffer) {
   let dv = new DataView(response);
   let numVertices = dv.getUint32(0, true);
-  decodeVertexPositionsAndIndices(
+  decodeTriangleVertexPositionsAndIndices(
       chunk, response, Endianness.LITTLE, /*vertexByteOffset=*/4, numVertices);
 }
 
