@@ -152,15 +152,17 @@ export class SkeletonLayer extends RefCounted {
     if (lineWidth === undefined) {
       lineWidth = pickingOnly ? 5 : 1;
     }
-    let {gl, skeletonShaderManager} = this;
+    let {gl, skeletonShaderManager, source} = this;
     shader.bind();
 
     let objectToDataMatrix = this.tempMat;
     mat4.identity(objectToDataMatrix);
-    mat4.scale(objectToDataMatrix, objectToDataMatrix, this.voxelSizeObject.size);
+    if (source.skeletonVertexCoordinatesInVoxels) {
+      mat4.scale(objectToDataMatrix, objectToDataMatrix, this.voxelSizeObject.size);
+    }
     skeletonShaderManager.beginLayer(gl, shader, renderContext, objectToDataMatrix);
 
-    let skeletons = this.source.chunks;
+    let skeletons = source.chunks;
 
     let {pickIDs} = renderContext;
 
@@ -214,6 +216,12 @@ export class SkeletonChunk extends Chunk {
 export class SkeletonSource extends ChunkSource {
   chunks: Map<string, SkeletonChunk>;
   getChunk(x: any) { return new SkeletonChunk(this, x); }
+
+  /**
+   * Specifies whether the skeleton vertex coordinates are specified in units of voxels rather than
+   * nanometers.
+   */
+  get skeletonVertexCoordinatesInVoxels () { return true; }
 };
 
 export class ParameterizedSkeletonSource<Parameters> extends SkeletonSource {
