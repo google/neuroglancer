@@ -183,27 +183,23 @@ export class SkeletonLayer extends RefCounted {
 };
 
 export class SkeletonChunk extends Chunk {
-  data: Uint8Array;
+  vertexPositions: Float32Array;
+  indices: Uint32Array;
   vertexBuffer: Buffer;
   indexBuffer: Buffer;
   numIndices: number;
 
   constructor(source: SkeletonSource, x: any) {
     super(source);
-    this.data = x['data'];
+    this.vertexPositions = x['vertexPositions'];
+    let indices = this.indices = x['indices'];
+    this.numIndices = indices.length;
   }
 
   copyToGPU(gl: GL) {
     super.copyToGPU(gl);
-    let {data} = this;
-    let dv = new DataView(data.buffer);
-    let numVertices = dv.getInt32(0, true);
-    let positions = new Float32Array(data.buffer, 4, numVertices * 3);
-    let indices = new Uint32Array(data.buffer, 4 * (numVertices * 3) + 4);
-
-    this.vertexBuffer = Buffer.fromData(gl, positions, gl.ARRAY_BUFFER, gl.STATIC_DRAW);
-    this.indexBuffer = Buffer.fromData(gl, indices, gl.ELEMENT_ARRAY_BUFFER, gl.STATIC_DRAW);
-    this.numIndices = indices.length;
+    this.vertexBuffer = Buffer.fromData(gl, this.vertexPositions, gl.ARRAY_BUFFER, gl.STATIC_DRAW);
+    this.indexBuffer = Buffer.fromData(gl, this.indices, gl.ELEMENT_ARRAY_BUFFER, gl.STATIC_DRAW);
   }
 
   freeGPUMemory(gl: GL) {

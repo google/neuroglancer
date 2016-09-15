@@ -16,9 +16,11 @@
 
 import {Chunk, ChunkSource} from 'neuroglancer/chunk_manager/backend';
 import {ChunkPriorityTier} from 'neuroglancer/chunk_manager/base';
+import {decodeVertexPositionsAndIndices} from 'neuroglancer/mesh/backend';
 import {SegmentationLayerSharedObjectCounterpart} from 'neuroglancer/segmentation_display_state/backend';
 import {forEachVisibleSegment, getObjectKey} from 'neuroglancer/segmentation_display_state/base';
 import {SKELETON_LAYER_RPC_ID} from 'neuroglancer/skeleton/base';
+import {Endianness, convertEndian32} from 'neuroglancer/util/endian';
 import {Uint64} from 'neuroglancer/util/uint64';
 import {RPC, registerSharedObject} from 'neuroglancer/worker_rpc';
 
@@ -27,22 +29,31 @@ const SKELETON_CHUNK_PRIORITY = 60;
 // Chunk that contains the skeleton of a single object.
 export class SkeletonChunk extends Chunk {
   objectId = new Uint64();
-  data: Uint8Array|null = null;
+  vertexPositions: Float32Array|null = null;
+  indices: Uint32Array|null = null;
   constructor() { super(); }
 
   initializeSkeletonChunk(key: string, objectId: Uint64) {
     super.initialize(key);
     this.objectId.assign(objectId);
   }
-  freeSystemMemory() { this.data = null; }
+  freeSystemMemory() { this.vertexPositions = this.indices = null; }
   serialize(msg: any, transfers: any[]) {
     super.serialize(msg, transfers);
-    let data = msg['data'] = this.data!;
-    transfers.push(data.buffer);
-    this.data = null;
+    let {vertexPositions, indices} = this;
+    msg['vertexPositions'] = vertexPositions;
+    msg['indices'] = indices;
+    let vertexPositionsBuffer = vertexPositions!.buffer;
+    transfers.push(vertexPositionsBuffer);
+    let indicesBuffer = indices!.buffer;
+    if (indicesBuffer !== vertexPositionsBuffer) {
+      transfers.push(indicesBuffer);
+    }
+    this.vertexPositions = this.indices = null;
   }
   downloadSucceeded() {
-    this.systemMemoryBytes = this.gpuMemoryBytes = this.data!.byteLength;
+    this.systemMemoryBytes = this.gpuMemoryBytes =
+        this.vertexPositions!.byteLength + this.indices!.byteLength;
     super.downloadSucceeded();
   }
 };
@@ -93,10 +104,14 @@ export class SkeletonLayer extends SegmentationLayerSharedObjectCounterpart {
 };
 
 /**
- * Assigns chunk.data based on the received skeleton.
+ * Extracts vertex positions and edge vertex indices of the specified endianness from `data'.
  *
- * Currently just directly stores the skeleton data as a Uint8Array.
+ * See documentation of decodeVertexPositionsAndIndices.
  */
-export function decodeSkeletonChunk(chunk: SkeletonChunk, response: any) {
-  chunk.data = new Uint8Array(response);
+export function decodeSkeletonVertexPositionsAndIndices(
+    chunk: SkeletonChunk, data: ArrayBuffer, endianness: Endianness, vertexByteOffset: number,
+    numVertices: number, indexByteOffset?: number, numEdges?: number) {
+  decodeVertexPositionsAndIndices(
+      chunk, /*verticesPerPrimitive=*/2, data, endianness, vertexByteOffset, numVertices,
+      indexByteOffset, numEdges);
 }
