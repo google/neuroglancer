@@ -46,3 +46,7 @@ export class MeshSourceParameters {
 
   static RPC_ID = 'brainmaps/MeshSource';
 };
+
+export class SkeletonSourceParameters extends MeshSourceParameters {
+  static RPC_ID = 'brainmaps/SkeletonSource';
+};

@@ -18,9 +18,10 @@ import 'neuroglancer/datasource/brainmaps/api_frontend';
 
 import {ChunkManager} from 'neuroglancer/chunk_manager/frontend';
 import {BrainmapsInstance, INSTANCE_IDENTIFIERS, INSTANCE_NAMES, PRODUCTION_INSTANCE, makeRequest} from 'neuroglancer/datasource/brainmaps/api';
-import {MeshSourceParameters, VolumeChunkEncoding, VolumeSourceParameters} from 'neuroglancer/datasource/brainmaps/base';
+import {MeshSourceParameters, SkeletonSourceParameters, VolumeChunkEncoding, VolumeSourceParameters} from 'neuroglancer/datasource/brainmaps/base';
 import {registerDataSourceFactory} from 'neuroglancer/datasource/factory';
 import {defineParameterizedMeshSource} from 'neuroglancer/mesh/frontend';
+import {parameterizedSkeletonSource} from 'neuroglancer/skeleton/frontend';
 import {DataType, VolumeChunkSpecification, VolumeType} from 'neuroglancer/sliceview/base';
 import {MultiscaleVolumeChunkSource as GenericMultiscaleVolumeChunkSource, defineParameterizedVolumeChunkSource} from 'neuroglancer/sliceview/frontend';
 import {StatusMessage} from 'neuroglancer/status';
@@ -30,6 +31,7 @@ import {parseArray, parseXYZ, stableStringify, verifyFinitePositiveFloat, verify
 
 const VolumeChunkSource = defineParameterizedVolumeChunkSource(VolumeSourceParameters);
 const MeshSource = defineParameterizedMeshSource(MeshSourceParameters);
+const BaseSkeletonSource = parameterizedSkeletonSource(SkeletonSourceParameters);
 
 const SERVER_DATA_TYPES = new Map<string, DataType>();
 SERVER_DATA_TYPES.set('UINT8', DataType.UINT8);
@@ -166,6 +168,36 @@ export function getMeshSource(chunkManager: ChunkManager, parameters: MeshSource
   return MeshSource.get(chunkManager, parameters);
 }
 
+export class SkeletonSource extends BaseSkeletonSource {
+  get skeletonVertexCoordinatesInVoxels () {
+    return false;
+  }
+};
+
+export function getSkeletonSource(chunkManager: ChunkManager, parameters: SkeletonSourceParameters) {
+  return SkeletonSource.get(chunkManager, parameters);
+}
+
+const meshSourcePattern = /^([^\/]+)\/(.*)$/;
+
+function getMeshSourceParameters(instance: BrainmapsInstance, url: string) {
+  let match = url.match(meshSourcePattern);
+  if (match === null) {
+    throw new Error(`Invalid Brainmaps mesh URL: ${url}`);
+  }
+  return {instance, volume_id: match[1], mesh_name: match[2]};
+}
+
+export function getMeshSourceByUrl(
+    instance: BrainmapsInstance, chunkManager: ChunkManager, url: string) {
+  return getMeshSource(chunkManager, getMeshSourceParameters(instance, url));
+}
+
+export function getSkeletonSourceByUrl(
+    instance: BrainmapsInstance, chunkManager: ChunkManager, url: string) {
+  return getSkeletonSource(chunkManager, getMeshSourceParameters(instance, url));
+}
+
 let existingVolumes = new Map<string, Promise<MultiscaleVolumeChunkSource>>();
 
 export function getVolume(instance: BrainmapsInstance, key: string) {
@@ -267,6 +299,8 @@ export function registerBrainmapsDataSource(instance: BrainmapsInstance) {
   registerDataSourceFactory(protocol, {
     description: `Google ${INSTANCE_NAMES[instance]} API`,
     getVolume: getVolume.bind(undefined, instance),
+    getMeshSource: getMeshSourceByUrl.bind(undefined, instance),
+    getSkeletonSource: getSkeletonSourceByUrl.bind(undefined, instance),
     volumeCompleter: volumeCompleter.bind(undefined, instance),
   });
 }

@@ -18,8 +18,9 @@ import 'neuroglancer/datasource/brainmaps/api_backend';
 
 import {handleChunkDownloadPromise, registerChunkSource} from 'neuroglancer/chunk_manager/backend';
 import {makeRequest} from 'neuroglancer/datasource/brainmaps/api';
-import {MeshSourceParameters, VolumeChunkEncoding, VolumeSourceParameters} from 'neuroglancer/datasource/brainmaps/base';
+import {MeshSourceParameters, SkeletonSourceParameters, VolumeChunkEncoding, VolumeSourceParameters} from 'neuroglancer/datasource/brainmaps/base';
 import {FragmentChunk, ManifestChunk, ParameterizedMeshSource, decodeJsonManifestChunk, decodeTriangleVertexPositionsAndIndices} from 'neuroglancer/mesh/backend';
+import {ParameterizedSkeletonSource, SkeletonChunk, decodeSkeletonVertexPositionsAndIndices} from 'neuroglancer/skeleton/backend';
 import {ParameterizedVolumeChunkSource, VolumeChunk} from 'neuroglancer/sliceview/backend';
 import {decodeCompressedSegmentationChunk} from 'neuroglancer/sliceview/backend_chunk_decoders/compressed_segmentation';
 import {decodeJpegChunk} from 'neuroglancer/sliceview/backend_chunk_decoders/jpeg';
@@ -118,5 +119,34 @@ class MeshSource extends ParameterizedMeshSource<MeshSourceParameters> {
     handleChunkDownloadPromise(
         chunk, makeRequest(parameters['instance'], 'GET', path, 'arraybuffer'),
         decodeFragmentChunk);
+  }
+};
+
+function decodeSkeletonChunk(chunk: SkeletonChunk, response: ArrayBuffer) {
+  let dv = new DataView(response);
+  let numVertices = dv.getUint32(0, true);
+  let numVerticesHigh = dv.getUint32(4, true);
+  if (numVerticesHigh !== 0) {
+    throw new Error(`The number of vertices should not exceed 2^32-1.`);
+  }
+  let numEdges = dv.getUint32(8, true);
+  let numEdgesHigh = dv.getUint32(12, true);
+  if (numEdgesHigh !== 0) {
+    throw new Error(`The number of edges should not exceed 2^32-1.`);
+  }
+  decodeSkeletonVertexPositionsAndIndices(
+      chunk, response, Endianness.LITTLE, /*vertexByteOffset=*/16, numVertices,
+    /*indexByteOffset=*/undefined, /*numEdges=*/numEdges);
+}
+
+@registerChunkSource(SkeletonSourceParameters)
+export class SkeletonSource extends ParameterizedSkeletonSource<SkeletonSourceParameters> {
+  download(chunk: SkeletonChunk) {
+    const {parameters} = this;
+    const path =
+        `/v1beta2/binary/objects/binary/objects/skeleton/header.volume_id=${parameters['volume_id']}/mesh_name=${parameters['mesh_name']}/object_id=${chunk.objectId}?alt=media`;
+    handleChunkDownloadPromise(
+        chunk, makeRequest(parameters['instance'], 'GET', path, 'arraybuffer'),
+        decodeSkeletonChunk);
   }
 };
