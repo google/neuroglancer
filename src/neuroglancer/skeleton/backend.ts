@@ -20,7 +20,7 @@ import {decodeVertexPositionsAndIndices} from 'neuroglancer/mesh/backend';
 import {SegmentationLayerSharedObjectCounterpart} from 'neuroglancer/segmentation_display_state/backend';
 import {forEachVisibleSegment, getObjectKey} from 'neuroglancer/segmentation_display_state/base';
 import {SKELETON_LAYER_RPC_ID} from 'neuroglancer/skeleton/base';
-import {Endianness, convertEndian32} from 'neuroglancer/util/endian';
+import {Endianness} from 'neuroglancer/util/endian';
 import {Uint64} from 'neuroglancer/util/uint64';
 import {RPC, registerSharedObject} from 'neuroglancer/worker_rpc';
 
