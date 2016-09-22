@@ -62,10 +62,14 @@ export function suggestLayerNameBasedOnSeparator(path: string, separator?: strin
 
 export interface DataSourceFactory {
   description?: string;
-  getVolume?: (path: string) => Promise<MultiscaleVolumeChunkSource>;
-  getMeshSource?: (chunkManager: ChunkManager, path: string, lod: number) => MeshSource;
-  getSkeletonSource?: (chunkManager: ChunkManager, path: string) => SkeletonSource;
-  volumeCompleter?: (value: string) => CancellablePromise<CompletionResult>;
+  getVolume?:
+      (chunkManager: ChunkManager,
+       path: string) => Promise<MultiscaleVolumeChunkSource>| MultiscaleVolumeChunkSource;
+  getMeshSource?: (chunkManager: ChunkManager, path: string) => Promise<MeshSource>| MeshSource;
+  getSkeletonSource?:
+      (chunkManager: ChunkManager, path: string) => Promise<SkeletonSource>| SkeletonSource;
+  volumeCompleter?:
+      (value: string, chunkManager: ChunkManager) => CancellablePromise<CompletionResult>;
 
   /**
    * Returns a suggested layer name for the given volume source.
@@ -100,22 +104,23 @@ function getDataSource(url: string): [DataSourceFactory, string, string] {
   return [factory, m[2], dataSource];
 }
 
-export function getVolume(url: string) {
+export function getVolume(chunkManager: ChunkManager, url: string) {
   let [factories, path] = getDataSource(url);
-  return factories.getVolume!(path);
+  return Promise.resolve(factories.getVolume!(chunkManager, path));
 }
 
-export function getMeshSource(chunkManager: ChunkManager, url: string, lod: number = 0) {
+export function getMeshSource(chunkManager: ChunkManager, url: string) {
   let [factories, path] = getDataSource(url);
-  return factories.getMeshSource!(chunkManager, path, lod);
+  return Promise.resolve(factories.getMeshSource!(chunkManager, path));
 }
 
 export function getSkeletonSource(chunkManager: ChunkManager, url: string) {
   let [factories, path] = getDataSource(url);
-  return factories.getSkeletonSource!(chunkManager, path);
+  return Promise.resolve(factories.getSkeletonSource!(chunkManager, path));
 }
 
-export function volumeCompleter(url: string): CancellablePromise<CompletionResult> {
+export function volumeCompleter(
+    url: string, chunkManager: ChunkManager): CancellablePromise<CompletionResult> {
   // Check if url matches a protocol.  Note that protocolPattern always matches.
   let protocolMatch = url.match(protocolPattern)!;
   let protocol = protocolMatch[1];
@@ -135,7 +140,7 @@ export function volumeCompleter(url: string): CancellablePromise<CompletionResul
     let subCompleter = factory.volumeCompleter;
     if (subCompleter !== undefined) {
       return cancellableThen(
-          subCompleter(protocolMatch[2]),
+          subCompleter(protocolMatch[2], chunkManager),
           completions => applyCompletionOffset(protocol.length + 3, completions));
     }
   }

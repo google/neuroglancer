@@ -29,12 +29,14 @@ import {verifyObject, verifyObjectProperty, verifyOptionalString} from 'neurogla
 import {RPC} from 'neuroglancer/worker_rpc';
 import {Signal} from 'signals';
 
-export function getVolumeWithStatusMessage(x: string): Promise<MultiscaleVolumeChunkSource> {
-  return StatusMessage.forPromise(new Promise(function(resolve) { resolve(getVolume(x)); }), {
-    initialMessage: `Retrieving metadata for volume ${x}.`,
-    delay: true,
-    errorPrefix: `Error retrieving metadata for volume ${x}: `,
-  });
+export function getVolumeWithStatusMessage(
+    chunkManager: ChunkManager, x: string): Promise<MultiscaleVolumeChunkSource> {
+  return StatusMessage.forPromise(
+      new Promise(function(resolve) { resolve(getVolume(chunkManager, x)); }), {
+        initialMessage: `Retrieving metadata for volume ${x}.`,
+        delay: true,
+        errorPrefix: `Error retrieving metadata for volume ${x}: `,
+      });
 }
 
 export class ManagedUserLayerWithSpecification extends ManagedUserLayer {
@@ -101,7 +103,7 @@ export class LayerListSpecification extends RefCounted implements Trackable {
       if (sourceUrl === undefined) {
         throw new Error(`Either layer 'type' or 'source' URL must be specified.`);
       }
-      let volumeSourcePromise = getVolumeWithStatusMessage(sourceUrl);
+      let volumeSourcePromise = getVolumeWithStatusMessage(this.chunkManager, sourceUrl);
       volumeSourcePromise.then(source => {
         if (this.layerManager.managedLayers.indexOf(managedLayer) === -1) {
           // Layer was removed before promise became ready.

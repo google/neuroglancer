@@ -23,7 +23,7 @@ import {LayerListSpecification} from 'neuroglancer/layer_specification';
 import {getVolumeWithStatusMessage} from 'neuroglancer/layer_specification';
 import {Overlay} from 'neuroglancer/overlay';
 import {FRAGMENT_MAIN_START, ImageRenderLayer, getTrackableFragmentMain} from 'neuroglancer/sliceview/image_renderlayer';
-import {trackableAlphaValue} from 'neuroglancer/sliceview/renderlayer';
+import {makeWatchableShaderError, trackableAlphaValue} from 'neuroglancer/sliceview/renderlayer';
 import {RefCounted} from 'neuroglancer/util/disposable';
 import {removeFromParent} from 'neuroglancer/util/dom';
 import {ShaderCompilationError, ShaderLinkError} from 'neuroglancer/webgl/shader';
@@ -46,6 +46,7 @@ export class ImageUserLayer extends UserLayer {
   volumePath: string;
   opacity = trackableAlphaValue(0.5);
   fragmentMain = getTrackableFragmentMain();
+  shaderError = makeWatchableShaderError();
   renderLayer: ImageRenderLayer;
   constructor(manager: LayerListSpecification, x: any) {
     super();
@@ -58,11 +59,17 @@ export class ImageUserLayer extends UserLayer {
     this.registerSignalBinding(
         this.fragmentMain.changed.add(() => { this.specificationChanged.dispatch(); }));
     this.volumePath = volumePath;
-    let renderLayer = new ImageRenderLayer(
-        manager.chunkManager, getVolumeWithStatusMessage(volumePath), this.opacity,
-        this.fragmentMain);
-    this.renderLayer = renderLayer;
-    this.addRenderLayer(renderLayer);
+    getVolumeWithStatusMessage(manager.chunkManager, volumePath).then(volume => {
+      if (!this.wasDisposed) {
+        let renderLayer = this.renderLayer = new ImageRenderLayer(volume, {
+          opacity: this.opacity,
+          fragmentMain: this.fragmentMain,
+          shaderError: this.shaderError
+        });
+        this.addRenderLayer(renderLayer);
+        this.shaderError.changed.dispatch();
+      }
+    });
   }
   toJSON() {
     let x: any = {'type': 'image'};
@@ -104,15 +111,15 @@ class ShaderCodeWidget extends RefCounted {
       }
     }));
     this.registerSignalBinding(
-        this.layer.renderLayer.shaderError.changed.add(() => { this.updateErrorState(); }));
+        this.layer.shaderError.changed.add(() => { this.updateErrorState(); }));
     this.updateErrorState();
   }
 
   updateErrorState() {
-    if (this.layer.renderLayer.shaderUpdated) {
+    if (this.layer.renderLayer && this.layer.renderLayer.shaderUpdated) {
       this.setValidState(undefined);
     }
-    let error = this.layer.renderLayer.shaderError.value;
+    let error = this.layer.shaderError.value;
     if (error !== undefined) {
       this.textEditor.setOption('lint', {
         getAnnotations: () => {

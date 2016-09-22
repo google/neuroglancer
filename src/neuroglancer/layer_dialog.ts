@@ -47,13 +47,14 @@ export class LayerDialog extends Overlay {
     let dialogElement = this.content;
     dialogElement.classList.add('add-layer-overlay');
 
-    let sourceCompleter = (value: string) =>
-        cancellableThen(volumeCompleter(value), originalResult => ({
-                                                  completions: originalResult.completions,
-                                                  makeElement: makeCompletionElementWithDescription,
-                                                  offset: originalResult.offset,
-                                                  showSingleResult: true,
-                                                }));
+    let sourceCompleter = (value: string) => cancellableThen(
+        volumeCompleter(value, this.manager.chunkManager),
+        originalResult => ({
+          completions: originalResult.completions,
+          makeElement: makeCompletionElementWithDescription,
+          offset: originalResult.offset,
+          showSingleResult: true,
+        }));
     let sourceForm = document.createElement('form');
     sourceForm.className = 'source-form';
     this.registerEventListener(sourceForm, 'submit', (event: Event) => {
@@ -208,8 +209,8 @@ export class LayerDialog extends Overlay {
     }
 
     this.setInfo('Validating volume source...');
-    let volumePromise =
-        new Promise<MultiscaleVolumeChunkSource>(resolve => { resolve(getVolume(url)); });
+    let volumePromise = new Promise<MultiscaleVolumeChunkSource>(
+        resolve => { resolve(getVolume(this.manager.chunkManager, url)); });
     this.volumePromise = cancellableThen(volumePromise, source => {
       this.sourceValid = true;
       this.setInfo(

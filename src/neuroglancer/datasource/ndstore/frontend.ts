@@ -27,7 +27,7 @@ import {MultiscaleVolumeChunkSource as GenericMultiscaleVolumeChunkSource, defin
 import {applyCompletionOffset, getPrefixMatchesWithDescriptions} from 'neuroglancer/util/completion';
 import {Vec3, vec3} from 'neuroglancer/util/geom';
 import {openShardedHttpRequest, sendHttpRequest} from 'neuroglancer/util/http_request';
-import {parseArray, parseQueryStringParameters, stableStringify, verify3dDimensions, verify3dScale, verify3dVec, verifyEnumString, verifyInt, verifyObject, verifyObjectAsMap, verifyObjectProperty, verifyOptionalString, verifyString} from 'neuroglancer/util/json';
+import {parseArray, parseQueryStringParameters, verify3dDimensions, verify3dScale, verify3dVec, verifyEnumString, verifyInt, verifyObject, verifyObjectAsMap, verifyObjectProperty, verifyOptionalString, verifyString} from 'neuroglancer/util/json';
 import {CancellablePromise, cancellableThen} from 'neuroglancer/util/promise';
 
 let serverVolumeTypes = new Map<string, VolumeType>();
@@ -122,8 +122,9 @@ export class MultiscaleVolumeChunkSource implements GenericMultiscaleVolumeChunk
   encoding: string;
 
   constructor(
-      public baseUrls: string[], public key: string, public tokenInfo: TokenInfo,
-      channel: string|undefined, public parameters: {[index: string]: any}) {
+      public chunkManager: ChunkManager, public baseUrls: string[], public key: string,
+      public tokenInfo: TokenInfo, channel: string|undefined,
+      public parameters: {[index: string]: any}) {
     if (channel === undefined) {
       const channelNames = Array.from(tokenInfo.channels.keys());
       if (channelNames.length !== 1) {
@@ -151,7 +152,7 @@ export class MultiscaleVolumeChunkSource implements GenericMultiscaleVolumeChunk
     this.encoding = encoding;
   }
 
-  getSources(chunkManager: ChunkManager) {
+  getSources() {
     return this.scales.map(scaleInfo => {
       let {voxelOffset, voxelSize} = scaleInfo;
       let baseVoxelOffset = vec3.create();
@@ -167,7 +168,7 @@ export class MultiscaleVolumeChunkSource implements GenericMultiscaleVolumeChunk
             baseVoxelOffset,
             upperVoxelBound: scaleInfo.imageSize,
           })
-          .map(spec => VolumeChunkSource.get(chunkManager, spec, {
+          .map(spec => VolumeChunkSource.get(this.chunkManager, spec, {
             baseUrls: this.baseUrls,
             key: this.key,
             channel: this.channel,
@@ -180,73 +181,56 @@ export class MultiscaleVolumeChunkSource implements GenericMultiscaleVolumeChunk
   /**
    * Meshes are not supported.
    */
-  getMeshSource(chunkManager: ChunkManager): null { return null; }
+  getMeshSource(): null { return null; }
 };
 
 const pathPattern = /^([^\/?]+)(?:\/([^\/?]+))?(?:\?(.*))?$/;
 
-let existingTokenResponses = new Map<string, Promise<TokenInfo>>();
-export function getTokenInfo(hostnames: string[], token: string) {
-  let fullKey = JSON.stringify({'hostnames': hostnames, 'token': token});
-  let result = existingTokenResponses.get(fullKey);
-  if (result !== undefined) {
-    return result;
-  }
-  let promise = sendHttpRequest(openShardedHttpRequest(hostnames, `/ocp/ca/${token}/info/`), 'json')
-                    .then(parseTokenInfo);
-  existingTokenResponses.set(fullKey, promise);
-  return promise;
+export function getTokenInfo(chunkManager: ChunkManager, hostnames: string[], token: string) {
+  return chunkManager.memoize.getUncounted(
+      {'hostnames': hostnames, 'token': token},
+      () => sendHttpRequest(openShardedHttpRequest(hostnames, `/ocp/ca/${token}/info/`), 'json')
+                .then(parseTokenInfo));
 }
 
-let existingVolumes = new Map<string, Promise<MultiscaleVolumeChunkSource>>();
-export function getShardedVolume(hostnames: string[], path: string) {
-  let match = path.match(pathPattern);
+export function getShardedVolume(chunkManager: ChunkManager, hostnames: string[], path: string) {
+  const match = path.match(pathPattern);
   if (match === null) {
     throw new Error(`Invalid volume path ${JSON.stringify(path)}`);
   }
-  // Warning: If additional arguments are added, fullKey should be updated as well.
-  let fullKey = stableStringify({'hostnames': hostnames, 'path': path});
-  let existingResult = existingVolumes.get(fullKey);
-  if (existingResult !== undefined) {
-    return existingResult;
-  }
-  let key = match[1];
-  let channel = match[2];
-  let parameters = parseQueryStringParameters(match[3] || '');
-  let promise = getTokenInfo(hostnames, key)
-                    .then(
-                        tokenInfo => new MultiscaleVolumeChunkSource(
-                            hostnames, key, tokenInfo, channel, parameters));
-  existingVolumes.set(fullKey, promise);
-  return promise;
+  const key = match[1];
+  const channel = match[2];
+  const parameters = parseQueryStringParameters(match[3] || '');
+
+  // Warning: If additional arguments are added, the cache key should be updated as well.
+  return chunkManager.memoize.getUncounted(
+      {'hostnames': hostnames, 'path': path},
+      () => getTokenInfo(chunkManager, hostnames, key)
+                .then(
+                    tokenInfo => new MultiscaleVolumeChunkSource(
+                        chunkManager, hostnames, key, tokenInfo, channel, parameters)));
 }
 
 const urlPattern = /^((?:http|https):\/\/[^\/?]+)\/(.*)$/;
 
-export function getVolume(path: string) {
+export function getVolume(chunkManager: ChunkManager, path: string) {
   let match = path.match(urlPattern);
   if (match === null) {
     throw new Error(`Invalid ndstore volume path: ${JSON.stringify(path)}`);
   }
-  return getShardedVolume([match[1]], match[2]);
+  return getShardedVolume(chunkManager, [match[1]], match[2]);
 }
 
-const publicTokenPromises = new Map<string, Promise<string[]>>();
-export function getPublicTokens(hostnames: string[]) {
-  let key = JSON.stringify(hostnames);
-  let result = publicTokenPromises.get(key);
-  if (result !== undefined) {
-    return result;
-  }
-  let newResult =
-      sendHttpRequest(openShardedHttpRequest(hostnames, '/ocp/ca/public_tokens/'), 'json')
-          .then(value => parseArray(value, verifyString));
-  publicTokenPromises.set(key, newResult);
-  return newResult;
+export function getPublicTokens(chunkManager: ChunkManager, hostnames: string[]) {
+  return chunkManager.memoize.getUncounted(
+      hostnames,
+      () => sendHttpRequest(openShardedHttpRequest(hostnames, '/ocp/ca/public_tokens/'), 'json')
+                .then(value => parseArray(value, verifyString)));
 }
 
 export function tokenAndChannelCompleter(
-    hostnames: string[], path: string): CancellablePromise<CompletionResult> {
+    chunkManager: ChunkManager, hostnames: string[],
+    path: string): CancellablePromise<CompletionResult> {
   let channelMatch = path.match(/^(?:([^\/]+)(?:\/([^\/]*))?)?$/);
   if (channelMatch === null) {
     // URL has incorrect format, don't return any results.
@@ -255,7 +239,7 @@ export function tokenAndChannelCompleter(
   if (channelMatch[2] === undefined) {
     let keyPrefix = channelMatch[1] || '';
     // Try to complete the token.
-    return getPublicTokens(hostnames).then(tokens => {
+    return getPublicTokens(chunkManager, hostnames).then(tokens => {
       return {
         offset: 0,
         completions:
@@ -263,7 +247,7 @@ export function tokenAndChannelCompleter(
       };
     });
   }
-  return cancellableThen(getTokenInfo(hostnames, channelMatch[1]), tokenInfo => {
+  return cancellableThen(getTokenInfo(chunkManager, hostnames, channelMatch[1]), tokenInfo => {
     let completions = getPrefixMatchesWithDescriptions(
         channelMatch![2], tokenInfo.channels, x => x[0],
         x => { return `${x[1].channelType} (${DataType[x[1].dataType]})`; });
@@ -271,7 +255,8 @@ export function tokenAndChannelCompleter(
   });
 }
 
-export function volumeCompleter(url: string): CancellablePromise<CompletionResult> {
+export function volumeCompleter(
+    url: string, chunkManager: ChunkManager): CancellablePromise<CompletionResult> {
   let match = url.match(urlPattern);
   if (match === null) {
     // We don't yet have a full hostname.
@@ -280,7 +265,7 @@ export function volumeCompleter(url: string): CancellablePromise<CompletionResul
   let hostnames = [match[1]];
   let path = match[2];
   return cancellableThen(
-      tokenAndChannelCompleter(hostnames, path),
+      tokenAndChannelCompleter(chunkManager, hostnames, path),
       completions => applyCompletionOffset(match![1].length + 1, completions));
 }
 

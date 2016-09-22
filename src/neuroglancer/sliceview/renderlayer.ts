@@ -45,6 +45,8 @@ export const GLSL_TYPE_FOR_DATA_TYPE = new Map<DataType, string>([
   [DataType.UINT64, 'uint64_t'],
 ]);
 
+export type TrackableAlphaValue = TrackableValue<number>;
+
 export function trackableAlphaValue(initialValue = 0.5) {
   return new TrackableValue<number>(initialValue, verifyFloat01);
 }
@@ -365,41 +367,48 @@ for (int e = 0; e < 4; ++e) {
   }
 };
 
+export type WatchableShaderError = WatchableValue<ShaderCompilationError|ShaderLinkError|undefined>;
+
+export function makeWatchableShaderError() {
+  return new WatchableValue<ShaderCompilationError|ShaderLinkError|undefined>(undefined);
+}
+
 export class RenderLayer extends GenericRenderLayer {
+  chunkManager: ChunkManager;
   sources: VolumeChunkSource[][]|null = null;
   shader: ShaderProgram|undefined = undefined;
   shaderUpdated = true;
   vertexComputationManager: VolumeSliceVertexComputationManager;
   rpcId: RpcId|null = null;
-  shaderError = new WatchableValue<ShaderCompilationError|ShaderLinkError|undefined>(undefined);
+  shaderError: WatchableShaderError;
   constructor(
-      public chunkManager: ChunkManager,
-      multiscaleSourcePromise: Promise<MultiscaleVolumeChunkSource>) {
+      multiscaleSource: MultiscaleVolumeChunkSource,
+      {shaderError = makeWatchableShaderError()} = {}) {
     super();
+    this.shaderError = shaderError;
+    this.chunkManager = multiscaleSource.chunkManager;
     let gl = this.gl;
     this.vertexComputationManager = VolumeSliceVertexComputationManager.get(gl);
 
-    Promise.resolve(multiscaleSourcePromise).then(multiscaleSource => {
-      let sources = this.sources = multiscaleSource.getSources(chunkManager);
-      let sourceIds: number[][] = [];
-      for (let alternatives of sources) {
-        let alternativeIds: number[] = [];
-        sourceIds.push(alternativeIds);
-        for (let source of alternatives) {
-          alternativeIds.push(source.rpcId!);
-        }
+    let sources = this.sources = multiscaleSource.getSources();
+    let sourceIds: number[][] = [];
+    for (let alternatives of sources) {
+      let alternativeIds: number[] = [];
+      sourceIds.push(alternativeIds);
+      for (let source of alternatives) {
+        alternativeIds.push(source.rpcId!);
       }
-      let sharedObject = this.registerDisposer(new SharedObject());
-      sharedObject.RPC_TYPE_ID = SLICEVIEW_RENDERLAYER_RPC_ID;
-      sharedObject.initializeCounterpart(chunkManager.rpc!, {'sources': sourceIds});
-      this.rpcId = sharedObject.rpcId;
-      let spec = this.sources[0][0].spec;
-      this.voxelSize = spec.voxelSize;
-      this.boundingBox = new BoundingBox(
-          vec3.add(vec3.create(), spec.chunkLayout.offset, spec.lowerClipBound),
-          vec3.add(vec3.create(), spec.chunkLayout.offset, spec.upperClipBound));
-      this.setReady(true);
-    });
+    }
+    let sharedObject = this.registerDisposer(new SharedObject());
+    sharedObject.RPC_TYPE_ID = SLICEVIEW_RENDERLAYER_RPC_ID;
+    sharedObject.initializeCounterpart(this.chunkManager.rpc!, {'sources': sourceIds});
+    this.rpcId = sharedObject.rpcId;
+    let spec = this.sources[0][0].spec;
+    this.voxelSize = spec.voxelSize;
+    this.boundingBox = new BoundingBox(
+        vec3.add(vec3.create(), spec.chunkLayout.offset, spec.lowerClipBound),
+        vec3.add(vec3.create(), spec.chunkLayout.offset, spec.upperClipBound));
+    this.setReady(true);
   }
 
   get gl() { return this.chunkManager.chunkQueueManager.gl; }

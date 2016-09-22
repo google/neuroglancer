@@ -18,17 +18,18 @@
  * Convenience interface for accessing openconnecto.me server.
  */
 
+import {ChunkManager} from 'neuroglancer/chunk_manager/frontend';
 import {registerDataSourceFactory} from 'neuroglancer/datasource/factory';
 import {getShardedVolume, tokenAndChannelCompleter} from 'neuroglancer/datasource/ndstore/frontend';
 
 const HOSTNAMES = ['http://openconnecto.me', 'http://www.openconnecto.me'];
 
-export function getVolume(path: string) {
-  return getShardedVolume(HOSTNAMES, path);
+export function getVolume(chunkManager: ChunkManager, path: string) {
+  return getShardedVolume(chunkManager, HOSTNAMES, path);
 }
 
-export function volumeCompleter(url: string) {
-  return tokenAndChannelCompleter(HOSTNAMES, url);
+export function volumeCompleter(url: string, chunkManager: ChunkManager) {
+  return tokenAndChannelCompleter(chunkManager, HOSTNAMES, url);
 }
 
 registerDataSourceFactory('openconnectome', {

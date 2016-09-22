@@ -14,7 +14,8 @@
  * limitations under the License.
  */
 
-import {RefCounted} from 'neuroglancer/util/disposable';
+import {RefCounted, RefCountedValue} from 'neuroglancer/util/disposable';
+import {stableStringify} from 'neuroglancer/util/json';
 
 export class Memoize<Key, Value extends RefCounted> {
   private map = new Map<Key, Value>();
@@ -35,3 +36,16 @@ export class Memoize<Key, Value extends RefCounted> {
     return obj;
   }
 };
+
+export class StringMemoize extends Memoize<string, RefCounted> {
+  get<T extends RefCounted>(x: any, getter: () => T) {
+    if (typeof x !== 'string') {
+      x = stableStringify(x);
+    }
+    return super.get(x, getter);
+  }
+
+  getUncounted<T>(x: any, getter: () => T) {
+    return this.get(x, () => new RefCountedValue(getter())).value;
+  }
+}

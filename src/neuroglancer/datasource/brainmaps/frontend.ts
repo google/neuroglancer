@@ -27,7 +27,7 @@ import {MultiscaleVolumeChunkSource as GenericMultiscaleVolumeChunkSource, defin
 import {StatusMessage} from 'neuroglancer/status';
 import {getPrefixMatches} from 'neuroglancer/util/completion';
 import {Vec3, vec3} from 'neuroglancer/util/geom';
-import {parseArray, parseXYZ, stableStringify, verifyFinitePositiveFloat, verifyMapKey, verifyObject, verifyObjectProperty, verifyPositiveInt, verifyString} from 'neuroglancer/util/json';
+import {parseArray, parseXYZ, verifyFinitePositiveFloat, verifyMapKey, verifyObject, verifyObjectProperty, verifyPositiveInt, verifyString} from 'neuroglancer/util/json';
 
 const VolumeChunkSource = defineParameterizedVolumeChunkSource(VolumeSourceParameters);
 const MeshSource = defineParameterizedMeshSource(MeshSourceParameters);
@@ -66,15 +66,16 @@ export class MeshInfo {
   }
 };
 
-export class MultiscaleVolumeChunkSource implements GenericMultiscaleVolumeChunkSource {
+export class MultiscaleVolumeChunkSource implements
+    GenericMultiscaleVolumeChunkSource {
   volumeType: VolumeType;
   scales: VolumeInfo[];
   dataType: DataType;
   numChannels: number;
   meshes: MeshInfo[];
   constructor(
-      public instance: BrainmapsInstance, public volume_id: string, volumeInfoResponse: any,
-      meshesResponse: any) {
+      public chunkManager: ChunkManager, public instance: BrainmapsInstance,
+      public volume_id: string, volumeInfoResponse: any, meshesResponse: any) {
     try {
       verifyObject(volumeInfoResponse);
       let scales = this.scales = verifyObjectProperty(
@@ -124,7 +125,7 @@ export class MultiscaleVolumeChunkSource implements GenericMultiscaleVolumeChunk
     }
   }
 
-  getSources(chunkManager: ChunkManager) {
+  getSources() {
     let encoding = VolumeChunkEncoding.RAW;
     if (this.volumeType === VolumeType.SEGMENTATION) {
       encoding = VolumeChunkEncoding.COMPRESSED_SEGMENTATION;
@@ -144,7 +145,7 @@ export class MultiscaleVolumeChunkSource implements GenericMultiscaleVolumeChunk
                                           volumeType: this.volumeType,
                                         })
                                         .map(spec => {
-                                          return VolumeChunkSource.get(chunkManager, spec, {
+                                          return VolumeChunkSource.get(this.chunkManager, spec, {
                                             'instance': this.instance,
                                             'volume_id': this.volume_id,
                                             'scaleIndex': scaleIndex,
@@ -153,13 +154,13 @@ export class MultiscaleVolumeChunkSource implements GenericMultiscaleVolumeChunk
                                         }));
   }
 
-  getMeshSource(chunkManager: ChunkManager) {
+  getMeshSource() {
     let validMesh = this.meshes.find(x => x.type === 'TRIANGLES');
     if (validMesh === undefined) {
       return null;
     }
     return getMeshSource(
-        chunkManager,
+        this.chunkManager,
         {'instance': this.instance, 'volume_id': this.volume_id, 'mesh_name': validMesh.name});
   }
 };
@@ -198,24 +199,17 @@ export function getSkeletonSourceByUrl(
   return getSkeletonSource(chunkManager, getMeshSourceParameters(instance, url));
 }
 
-let existingVolumes = new Map<string, Promise<MultiscaleVolumeChunkSource>>();
-
-export function getVolume(instance: BrainmapsInstance, key: string) {
-  let cacheKey = stableStringify({'instance': instance, 'key': key});
-  let existingResult = existingVolumes.get(cacheKey);
-  if (existingResult !== undefined) {
-    return existingResult;
-  }
-  let promise = Promise
-                    .all([
-                      makeRequest(instance, 'GET', `/v1beta2/volumes/${key}`, 'json'),
-                      makeRequest(instance, 'GET', `/v1beta2/objects/${key}/meshes`, 'json'),
-                    ])
-                    .then(
-                        ([volumeInfoResponse, meshesResponse]) => new MultiscaleVolumeChunkSource(
-                            instance, key, volumeInfoResponse, meshesResponse));
-  existingVolumes.set(cacheKey, promise);
-  return promise;
+export function getVolume(instance: BrainmapsInstance, chunkManager: ChunkManager, key: string) {
+  return chunkManager.memoize.getUncounted(
+      {'instance': instance, 'key': key},
+      () => Promise
+                .all([
+                  makeRequest(instance, 'GET', `/v1beta2/volumes/${key}`, 'json'),
+                  makeRequest(instance, 'GET', `/v1beta2/objects/${key}/meshes`, 'json'),
+                ])
+                .then(
+                    ([volumeInfoResponse, meshesResponse]) => new MultiscaleVolumeChunkSource(
+                        chunkManager, instance, key, volumeInfoResponse, meshesResponse)));
 }
 
 export class VolumeList {
@@ -259,26 +253,23 @@ export class VolumeList {
   }
 };
 
-let volumeListCache = new Map<BrainmapsInstance, Promise<VolumeList>>();
-
-export function getVolumeList(instance: BrainmapsInstance) {
-  let promise = volumeListCache.get(instance);
-  if (promise === undefined) {
-    promise = makeRequest(instance, 'GET', '/v1beta2/volumes/', 'json')
-                  .then(response => new VolumeList(response));
+export function getVolumeList(chunkManager: ChunkManager, instance: BrainmapsInstance) {
+  return chunkManager.memoize.getUncounted(instance, () => {
+    let promise = makeRequest(instance, 'GET', '/v1beta2/volumes/', 'json')
+                      .then(response => new VolumeList(response));
     const description = `Google ${INSTANCE_NAMES[instance]} volume list`;
     StatusMessage.forPromise(promise, {
       delay: true,
       initialMessage: `Retrieving ${description}.`,
       errorPrefix: `Error retrieving ${description}: `,
     });
-    volumeListCache.set(instance, promise);
-  }
-  return promise;
+    return promise;
+  });
 }
 
-export function volumeCompleter(instance: BrainmapsInstance, url: string) {
-  return getVolumeList(instance).then(volumeList => {
+export function volumeCompleter(
+    instance: BrainmapsInstance, url: string, chunkManager: ChunkManager) {
+  return getVolumeList(chunkManager, instance).then(volumeList => {
     let lastColon = url.lastIndexOf(':');
     let splitPoint = lastColon + 1;
     let prefix = url.substring(0, splitPoint);

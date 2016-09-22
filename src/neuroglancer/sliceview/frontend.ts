@@ -423,7 +423,9 @@ export interface MultiscaleVolumeChunkSource {
    * @return Chunk sources for each scale, ordered by increasing minVoxelSize.  For each scale,
    * there may be alternative sources with different chunk layouts.
    */
-  getSources: (chunkManager: ChunkManager) => VolumeChunkSource[][];
+  getSources: () => VolumeChunkSource[][];
+
+  chunkManager: ChunkManager;
 
   numChannels: number;
   dataType: DataType;
@@ -434,7 +436,7 @@ export interface MultiscaleVolumeChunkSource {
    *
    * This only makes sense if volumeType === VolumeType.SEGMENTATION.
    */
-  getMeshSource: (chunkManager: ChunkManager) => MeshSource | null;
+  getMeshSource: () => MeshSource | null;
 }
 
 /**

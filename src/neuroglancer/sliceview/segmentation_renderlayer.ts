@@ -14,7 +14,6 @@
  * limitations under the License.
  */
 
-import {ChunkManager} from 'neuroglancer/chunk_manager/frontend';
 import {HashMapUint64} from 'neuroglancer/gpu_hash/hash_table';
 import {GPUHashTable, HashMapShaderManager, HashSetShaderManager} from 'neuroglancer/gpu_hash/shader';
 import {SegmentColorShaderManager} from 'neuroglancer/segment_color';
@@ -56,11 +55,10 @@ export class SegmentationRenderLayer extends RenderLayer {
   private hasEquivalences: boolean;
 
   constructor(
-      chunkManager: ChunkManager, multiscaleSourcePromise: Promise<MultiscaleVolumeChunkSource>,
-      public displayState: SegmentationDisplayState,
+      multiscaleSource: MultiscaleVolumeChunkSource, public displayState: SegmentationDisplayState,
       public selectedAlpha = trackableAlphaValue(0.5),
       public notSelectedAlpha = trackableAlphaValue(0)) {
-    super(chunkManager, multiscaleSourcePromise);
+    super(multiscaleSource);
     registerRedrawWhenSegmentationDisplayStateChanged(displayState, this);
     this.registerSignalBinding(selectedAlpha.changed.add(() => { this.redrawNeeded.dispatch(); }));
     this.hasEquivalences = this.displayState.segmentEquivalences.size !== 0;

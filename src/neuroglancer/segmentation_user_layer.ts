@@ -44,10 +44,8 @@ export class SegmentationUserLayer extends UserLayer implements SegmentationDisp
   segmentEquivalences = SharedDisjointUint64Sets.makeWithCounterpart(this.manager.worker);
   volumePath: string|undefined;
   meshPath: string|undefined;
-  meshLod: number|undefined;
   skeletonsPath: string|undefined;
   meshLayer: MeshLayer|undefined;
-  wasDisposed = false;
 
   constructor(public manager: LayerListSpecification, x: any) {
     super([]);
@@ -64,34 +62,37 @@ export class SegmentationUserLayer extends UserLayer implements SegmentationDisp
     let meshPath = this.meshPath = verifyOptionalString(x['mesh']);
     let skeletonsPath = this.skeletonsPath = verifyOptionalString(x['skeletons']);
     if (volumePath !== undefined) {
-      let volumePromise = getVolumeWithStatusMessage(volumePath);
-      volumePromise.then(volume => {
+      getVolumeWithStatusMessage(manager.chunkManager, volumePath).then(volume => {
         if (!this.wasDisposed) {
-          if (!this.meshLayer) {
-            let meshSource = volume.getMeshSource(this.manager.chunkManager);
+          this.addRenderLayer(
+              new SegmentationRenderLayer(volume, this, this.selectedAlpha, this.notSelectedAlpha));
+          if (meshPath === undefined) {
+            let meshSource = volume.getMeshSource();
             if (meshSource != null) {
               this.addMesh(meshSource);
             }
           }
         }
       });
-      this.addRenderLayer(new SegmentationRenderLayer(
-          manager.chunkManager, volumePromise, this, this.selectedAlpha, this.notSelectedAlpha));
     }
+
     if (meshPath !== undefined) {
-      let meshLod = x['meshLod'];
-      if (typeof meshLod !== 'number') {
-        meshLod = undefined;
-      }
-      this.meshLod = meshLod;
-      this.addMesh(getMeshSource(manager.chunkManager, meshPath, meshLod));
+      getMeshSource(manager.chunkManager, meshPath).then(meshSource => {
+        if (!this.wasDisposed) {
+          this.addMesh(meshSource);
+        }
+      });
     }
+
     if (skeletonsPath !== undefined) {
-      let base = new SkeletonLayer(
-          manager.chunkManager, getSkeletonSource(manager.chunkManager, skeletonsPath),
-          manager.voxelSize, this);
-      this.addRenderLayer(new PerspectiveViewSkeletonLayer(base));
-      this.addRenderLayer(new SliceViewPanelSkeletonLayer(base));
+      getSkeletonSource(manager.chunkManager, skeletonsPath).then(skeletonSource => {
+        if (!this.wasDisposed) {
+          let base =
+              new SkeletonLayer(manager.chunkManager, skeletonSource, manager.voxelSize, this);
+          this.addRenderLayer(new PerspectiveViewSkeletonLayer(base));
+          this.addRenderLayer(new SliceViewPanelSkeletonLayer(base));
+        }
+      });
     }
 
     verifyObjectProperty(x, 'equivalences', y => { this.segmentEquivalences.restoreState(y); });
@@ -107,11 +108,6 @@ export class SegmentationUserLayer extends UserLayer implements SegmentationDisp
     });
   }
 
-  disposed() {
-    super.disposed();
-    this.wasDisposed = true;
-  }
-
   addMesh(meshSource: MeshSource) {
     this.meshLayer = new MeshLayer(this.manager.chunkManager, meshSource, this);
     this.addRenderLayer(this.meshLayer);
@@ -121,7 +117,6 @@ export class SegmentationUserLayer extends UserLayer implements SegmentationDisp
     let x: any = {'type': 'segmentation'};
     x['source'] = this.volumePath;
     x['mesh'] = this.meshPath;
-    x['meshLod'] = this.meshLod;
     x['skeletons'] = this.skeletonsPath;
     x['selectedAlpha'] = this.selectedAlpha.toJSON();
     x['notSelectedAlpha'] = this.notSelectedAlpha.toJSON();

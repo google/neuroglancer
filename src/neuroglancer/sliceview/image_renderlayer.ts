@@ -14,9 +14,8 @@
  * limitations under the License.
  */
 
-import {ChunkManager} from 'neuroglancer/chunk_manager/frontend';
 import {MultiscaleVolumeChunkSource, SliceView} from 'neuroglancer/sliceview/frontend';
-import {RenderLayer, trackableAlphaValue} from 'neuroglancer/sliceview/renderlayer';
+import {RenderLayer, TrackableAlphaValue, makeWatchableShaderError, trackableAlphaValue} from 'neuroglancer/sliceview/renderlayer';
 import {TrackableValue} from 'neuroglancer/trackable_value';
 import {verifyString} from 'neuroglancer/util/json';
 import {ShaderBuilder} from 'neuroglancer/webgl/shader';
@@ -30,15 +29,22 @@ const DEFAULT_FRAGMENT_MAIN = `void main() {
 
 const glsl_COLORMAPS = require<string>('neuroglancer/webgl/colormaps.glsl');
 
+export type TrackableFragmentMain = TrackableValue<string>;
+
 export function getTrackableFragmentMain(value = DEFAULT_FRAGMENT_MAIN) {
   return new TrackableValue<string>(value, verifyString);
 }
 
 export class ImageRenderLayer extends RenderLayer {
+  fragmentMain: TrackableFragmentMain;
+  opacity: TrackableAlphaValue;
   constructor(
-      chunkManager: ChunkManager, multiscaleSourcePromise: Promise<MultiscaleVolumeChunkSource>,
-      public opacity = trackableAlphaValue(0.5), public fragmentMain = getTrackableFragmentMain()) {
-    super(chunkManager, multiscaleSourcePromise);
+      multiscaleSource: MultiscaleVolumeChunkSource,
+      {opacity = trackableAlphaValue(0.5), fragmentMain = getTrackableFragmentMain(),
+       shaderError = makeWatchableShaderError()} = {}) {
+    super(multiscaleSource, {shaderError});
+    this.fragmentMain = fragmentMain;
+    this.opacity = opacity;
     this.registerSignalBinding(opacity.changed.add(() => { this.redrawNeeded.dispatch(); }));
     this.registerSignalBinding(fragmentMain.changed.add(() => {
       this.shaderUpdated = true;
