@@ -453,7 +453,7 @@ export function parseQueryStringParameters(queryString: string) {
       if (m === null) {
         throw new Error(`Invalid query string part: ${JSON.stringify(part)}.`);
       }
-      result[m[1]] = m[2];
+      result[m[1]] = decodeURIComponent(m[2]);
     }
     return result;
   }
