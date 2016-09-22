@@ -50,7 +50,10 @@ export class PerspectiveViewRenderLayer extends VisibilityTrackedRenderLayer {
   }
 };
 
-export interface PerspectiveViewerState extends ViewerState { showSliceViews: TrackableBoolean; }
+export interface PerspectiveViewerState extends ViewerState {
+  showSliceViews: TrackableBoolean;
+  showSliceViewsCheckbox?: boolean;
+}
 
 export enum OffscreenTextures {
   COLOR,
@@ -103,14 +106,16 @@ export class PerspectivePanel extends RenderedDataPanel {
     super(context, element, viewer);
     this.registerSignalBinding(this.navigationState.changed.add(() => { this.viewportChanged(); }));
 
-    let showSliceViewsCheckbox =
-        this.registerDisposer(new TrackableBooleanCheckbox(viewer.showSliceViews));
-    showSliceViewsCheckbox.element.className = 'perspective-panel-show-slice-views noselect';
-    let showSliceViewsLabel = document.createElement('label');
-    showSliceViewsLabel.className = 'perspective-panel-show-slice-views noselect';
-    showSliceViewsLabel.appendChild(document.createTextNode('Slices'));
-    showSliceViewsLabel.appendChild(showSliceViewsCheckbox.element);
-    this.element.appendChild(showSliceViewsLabel);
+    if (viewer.showSliceViewsCheckbox) {
+      let showSliceViewsCheckbox =
+          this.registerDisposer(new TrackableBooleanCheckbox(viewer.showSliceViews));
+      showSliceViewsCheckbox.element.className = 'perspective-panel-show-slice-views noselect';
+      let showSliceViewsLabel = document.createElement('label');
+      showSliceViewsLabel.className = 'perspective-panel-show-slice-views noselect';
+      showSliceViewsLabel.appendChild(document.createTextNode('Slices'));
+      showSliceViewsLabel.appendChild(showSliceViewsCheckbox.element);
+      this.element.appendChild(showSliceViewsLabel);
+    }
     this.registerSignalBinding(viewer.showSliceViews.changed.add(() => { this.scheduleRedraw(); }));
     this.registerSignalBinding(viewer.showAxisLines.changed.add(() => { this.scheduleRedraw(); }));
   }

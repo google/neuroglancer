@@ -57,6 +57,7 @@ export class FourPanelLayout extends RefCounted {
       layerManager: viewer.layerManager,
       navigationState: viewer.perspectiveNavigationState,
       showSliceViews: viewer.showPerspectiveSliceViews,
+      showSliceViewsCheckbox: true,
       showAxisLines: viewer.showAxisLines,
     };
 
@@ -138,6 +139,31 @@ export class SinglePanelLayout extends RefCounted {
   }
 };
 
+export class SinglePerspectiveLayout extends RefCounted {
+  constructor(public rootElement: HTMLElement, public viewer: Viewer) {
+    super();
+    let perspectiveViewerState = {
+      mouseState: viewer.mouseState,
+      layerManager: viewer.layerManager,
+      navigationState: viewer.perspectiveNavigationState,
+      showSliceViews: new TrackableBoolean(false, false),
+      showAxisLines: viewer.showAxisLines,
+    };
+
+
+    L.box('row', [L.withFlex(1, element => {
+            this.registerDisposer(
+                new PerspectivePanel(viewer.display, element, perspectiveViewerState));
+          })])(rootElement);
+    viewer.display.onResize();
+  }
+
+  disposed() {
+    removeChildren(this.rootElement);
+    super.disposed();
+  }
+}
+
 interface DataDisplayLayout extends RefCounted {
   rootElement: HTMLElement;
 }
@@ -145,6 +171,7 @@ interface DataDisplayLayout extends RefCounted {
 export const LAYOUTS: [string, (element: HTMLElement, viewer: Viewer) => DataDisplayLayout][] = [
   ['4panel', (element, viewer) => new FourPanelLayout(element, viewer)],
   ['xy', (element, viewer) => new SinglePanelLayout(element, viewer)],
+  ['3d', (element, viewer) => new SinglePerspectiveLayout(element, viewer)],
 ];
 
 export function getLayoutByName(obj: any) {
