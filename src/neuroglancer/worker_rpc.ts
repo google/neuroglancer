@@ -15,6 +15,7 @@
  */
 
 import {RefCounted} from 'neuroglancer/util/disposable';
+import {cancelPromise, makeCancellablePromise} from 'neuroglancer/util/promise';
 
 export type RPCHandler = (this: RPC, x: any) => void;
 
@@ -26,11 +27,55 @@ const DEBUG = false;
 
 const DEBUG_MESSAGES = false;
 
+const PROMISE_RESPONSE_ID = 'rpc.promise.response';
+const PROMISE_CANCEL_ID = 'rpc.promise.cancel';
+
 var handlers = new Map<string, RPCHandler>();
 
 export function registerRPC(key: string, handler: RPCHandler) {
   handlers.set(key, handler);
 };
+
+export type RPCPromise<T> = Promise<{value: T, transfers?: any[]}>;
+
+export class RPCError extends Error {
+  constructor(public name: string, public message: string) { super(message); }
+}
+
+export function registerPromiseRPC<T>(key: string, handler: (this: RPC, x: any) => RPCPromise<T>) {
+  registerRPC(key, function(this: RPC, x: any) {
+    let id = <number>x['id'];
+    let promise = handler.call(this, x) as RPCPromise<T>;
+    this.set(id, promise);
+    promise.then(
+        ({value, transfers}) => {
+          this.delete(id);
+          this.invoke(PROMISE_RESPONSE_ID, {'id': id, 'value': value}, transfers);
+        },
+        error => {
+          this.delete(id);
+          this.invoke(
+              PROMISE_RESPONSE_ID, {'id': id, 'error': error.message, 'errorName': error.name});
+        });
+  });
+}
+
+registerRPC(PROMISE_CANCEL_ID, function(this: RPC, x: any) {
+  let id = <number>x['id'];
+  let promise = this.get(id);
+  cancelPromise(promise);
+});
+
+registerRPC(PROMISE_RESPONSE_ID, function(this: RPC, x: any) {
+  let id = <number>x['id'];
+  let {resolve, reject} = this.get(id);
+  this.delete(id);
+  if (x.hasOwnProperty('value')) {
+    resolve(x['value']);
+  } else {
+    reject(new RPCError(x['errorName'], x['error']));
+  }
+});
 
 interface RPCTarget {
   postMessage(message?: any, ports?: any): void;
@@ -65,12 +110,24 @@ export class RPC {
     obj.addRef();
     return obj;
   }
+
   invoke(name: string, x: any, transfers?: any[]) {
     x.functionName = name;
     if (DEBUG_MESSAGES) {
       console.trace('Sending message', x);
     }
     this.target.postMessage(x, transfers);
+  }
+
+  promiseInvoke<T>(name: string, x: any, transfers?: any[]): Promise<T> {
+    let id = this.newId();
+    x['id'] = id;
+    let promise = makeCancellablePromise<T>((resolve, reject, onCancel) => {
+      this.set(id, {resolve, reject});
+      onCancel(() => { this.invoke(PROMISE_CANCEL_ID, {'id': id}); });
+    });
+    this.invoke(name, x, transfers);
+    return promise;
   }
   newId() { return IS_WORKER ? this.nextId-- : this.nextId++; }
 };
