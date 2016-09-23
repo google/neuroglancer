@@ -18,12 +18,12 @@ import {ChunkSourceParametersConstructor, ChunkState} from 'neuroglancer/chunk_m
 import {Chunk, ChunkManager, ChunkSource} from 'neuroglancer/chunk_manager/frontend';
 import {RenderLayer} from 'neuroglancer/layer';
 import {VoxelSize} from 'neuroglancer/navigation_state';
-import {PerspectiveViewRenderContext, PerspectiveViewRenderLayer, perspectivePanelEmit} from 'neuroglancer/perspective_panel';
-import {SegmentationDisplayState, SegmentationLayerSharedObject, forEachSegmentToDraw, getObjectColor, registerRedrawWhenSegmentationDisplayStateChanged} from 'neuroglancer/segmentation_display_state/frontend';
+import {perspectivePanelEmit, PerspectiveViewRenderContext, PerspectiveViewRenderLayer} from 'neuroglancer/perspective_panel';
+import {forEachSegmentToDraw, getObjectColor, registerRedrawWhenSegmentationDisplayStateChanged, SegmentationDisplayState, SegmentationLayerSharedObject} from 'neuroglancer/segmentation_display_state/frontend';
 import {SKELETON_LAYER_RPC_ID} from 'neuroglancer/skeleton/base';
-import {SliceViewPanelRenderContext, SliceViewPanelRenderLayer, sliceViewPanelEmit} from 'neuroglancer/sliceview/panel';
+import {sliceViewPanelEmit, SliceViewPanelRenderContext, SliceViewPanelRenderLayer} from 'neuroglancer/sliceview/panel';
 import {RefCounted} from 'neuroglancer/util/disposable';
-import {Mat4, Vec3, mat4} from 'neuroglancer/util/geom';
+import {Mat4, mat4, Vec3} from 'neuroglancer/util/geom';
 import {stableStringify} from 'neuroglancer/util/json';
 import {Buffer} from 'neuroglancer/webgl/buffer';
 import {GL} from 'neuroglancer/webgl/context';
@@ -128,7 +128,7 @@ export class SkeletonLayer extends RefCounted {
   redrawNeeded = new Signal();
   private sharedObject: SegmentationLayerSharedObject;
 
-  get visibilityCount () { return this.sharedObject.visibilityCount; }
+  get visibilityCount() { return this.sharedObject.visibilityCount; }
 
   constructor(
       public chunkManager: ChunkManager, public source: SkeletonSource,
@@ -217,7 +217,7 @@ export class SkeletonSource extends ChunkSource {
    * Specifies whether the skeleton vertex coordinates are specified in units of voxels rather than
    * nanometers.
    */
-  get skeletonVertexCoordinatesInVoxels () { return true; }
+  get skeletonVertexCoordinatesInVoxels() { return true; }
 };
 
 export class ParameterizedSkeletonSource<Parameters> extends SkeletonSource {

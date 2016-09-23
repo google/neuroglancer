@@ -17,13 +17,13 @@
 import 'neuroglancer/datasource/brainmaps/api_frontend';
 
 import {ChunkManager} from 'neuroglancer/chunk_manager/frontend';
-import {BrainmapsInstance, INSTANCE_IDENTIFIERS, INSTANCE_NAMES, PRODUCTION_INSTANCE, makeRequest} from 'neuroglancer/datasource/brainmaps/api';
+import {BrainmapsInstance, INSTANCE_IDENTIFIERS, INSTANCE_NAMES, makeRequest, PRODUCTION_INSTANCE} from 'neuroglancer/datasource/brainmaps/api';
 import {MeshSourceParameters, SkeletonSourceParameters, VolumeChunkEncoding, VolumeSourceParameters} from 'neuroglancer/datasource/brainmaps/base';
 import {registerDataSourceFactory} from 'neuroglancer/datasource/factory';
 import {defineParameterizedMeshSource} from 'neuroglancer/mesh/frontend';
 import {parameterizedSkeletonSource} from 'neuroglancer/skeleton/frontend';
 import {DataType, VolumeChunkSpecification, VolumeType} from 'neuroglancer/sliceview/base';
-import {MultiscaleVolumeChunkSource as GenericMultiscaleVolumeChunkSource, defineParameterizedVolumeChunkSource} from 'neuroglancer/sliceview/frontend';
+import {defineParameterizedVolumeChunkSource, MultiscaleVolumeChunkSource as GenericMultiscaleVolumeChunkSource} from 'neuroglancer/sliceview/frontend';
 import {StatusMessage} from 'neuroglancer/status';
 import {getPrefixMatches} from 'neuroglancer/util/completion';
 import {Vec3, vec3} from 'neuroglancer/util/geom';
@@ -66,8 +66,7 @@ export class MeshInfo {
   }
 };
 
-export class MultiscaleVolumeChunkSource implements
-    GenericMultiscaleVolumeChunkSource {
+export class MultiscaleVolumeChunkSource implements GenericMultiscaleVolumeChunkSource {
   volumeType: VolumeType;
   scales: VolumeInfo[];
   dataType: DataType;
@@ -170,12 +169,11 @@ export function getMeshSource(chunkManager: ChunkManager, parameters: MeshSource
 }
 
 export class SkeletonSource extends BaseSkeletonSource {
-  get skeletonVertexCoordinatesInVoxels () {
-    return false;
-  }
+  get skeletonVertexCoordinatesInVoxels() { return false; }
 };
 
-export function getSkeletonSource(chunkManager: ChunkManager, parameters: SkeletonSourceParameters) {
+export function getSkeletonSource(
+    chunkManager: ChunkManager, parameters: SkeletonSourceParameters) {
   return SkeletonSource.get(chunkManager, parameters);
 }
 

@@ -19,11 +19,11 @@
  * This implements the authentication API based on neuroglancer/util/google_auth2.
  */
 
-import {Token, getToken, implementation} from 'neuroglancer/datasource/brainmaps/api_implementation';
+import {getToken, implementation, Token} from 'neuroglancer/datasource/brainmaps/api_implementation';
 import {StatusMessage} from 'neuroglancer/status';
 import {authenticateGoogleOAuth2} from 'neuroglancer/util/google_oauth2';
 import {callFinally, cancelPromise} from 'neuroglancer/util/promise';
-import {RPC, registerRPC} from 'neuroglancer/worker_rpc';
+import {registerRPC, RPC} from 'neuroglancer/worker_rpc';
 
 declare var BRAINMAPS_CLIENT_ID: string;
 const BRAINMAPS_SCOPE = 'https://www.googleapis.com/auth/brainmaps';

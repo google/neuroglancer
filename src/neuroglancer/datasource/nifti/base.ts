@@ -15,7 +15,7 @@
  */
 
 import {DataType, VolumeType} from 'neuroglancer/sliceview/base';
-import {Vec3, Mat4} from 'neuroglancer/util/geom';
+import {Mat4, Vec3} from 'neuroglancer/util/geom';
 
 export const NIFTI_FILE_SOURCE_RPC_ID = 'nifti/NiftiFileSource';
 export const GET_NIFTI_VOLUME_INFO_RPC_ID = 'nifti/getNiftiVolumeInfo';
@@ -55,7 +55,5 @@ export class VolumeSourceParameters {
 
   static RPC_ID = 'nifti/VolumeChunkSource';
 
-  static stringify(p: VolumeSourceParameters) {
-    return `nifti:${p.url}`;
-  }
+  static stringify(p: VolumeSourceParameters) { return `nifti:${p.url}`; }
 };

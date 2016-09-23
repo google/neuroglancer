@@ -18,7 +18,7 @@ import {ChunkLayout} from 'neuroglancer/sliceview/chunk_layout';
 import {partitionArray} from 'neuroglancer/util/array';
 import {approxEqual} from 'neuroglancer/util/compare';
 import {DATA_TYPE_BYTES, DataType} from 'neuroglancer/util/data_type';
-import {Mat4, Vec3, kAxes, kInfinityVec, kZeroVec, mat4, prod3, rectifyTransformMatrixIfAxisAligned, vec3, vec4} from 'neuroglancer/util/geom';
+import {kAxes, kInfinityVec, kZeroVec, Mat4, mat4, prod3, rectifyTransformMatrixIfAxisAligned, Vec3, vec3, vec4} from 'neuroglancer/util/geom';
 import {SharedObject} from 'neuroglancer/worker_rpc';
 
 export {DATA_TYPE_BYTES, DataType};

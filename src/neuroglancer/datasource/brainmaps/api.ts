@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-import {Token, getToken} from 'neuroglancer/datasource/brainmaps/api_implementation';
+import {getToken, Token} from 'neuroglancer/datasource/brainmaps/api_implementation';
 import {HttpError, openShardedHttpRequest} from 'neuroglancer/util/http_request';
 import {CancellablePromise, makeCancellablePromise} from 'neuroglancer/util/promise';
 

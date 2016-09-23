@@ -28,9 +28,7 @@ import {RPC} from 'neuroglancer/worker_rpc';
 interface FileDataRequester<Data> {
   resolve: (data: Data) => void;
   reject: (error: any) => void;
-  getPriority: () => {
-    priorityTier: ChunkPriorityTier, priority: number
-  };
+  getPriority: () => { priorityTier: ChunkPriorityTier, priority: number };
 }
 
 class GenericFileChunk<Data> extends Chunk {
@@ -61,9 +59,7 @@ class GenericFileChunk<Data> extends Chunk {
     }
   }
 
-  freeSystemMemory() {
-    this.data = undefined;
-  }
+  freeSystemMemory() { this.data = undefined; }
 }
 
 export abstract class GenericFileSource<Data> extends ChunkSource {

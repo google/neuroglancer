@@ -20,7 +20,7 @@ import {encodeChannels as encodeChannelsUint32} from 'neuroglancer/sliceview/com
 import {encodeChannels as encodeChannelsUint64} from 'neuroglancer/sliceview/compressed_segmentation/encode_uint64';
 import {makeRandomUint64Array} from 'neuroglancer/sliceview/compressed_segmentation/test_util';
 import {DataType} from 'neuroglancer/util/data_type';
-import {Vec3, Vec4, prod4, vec3, vec3Key, vec4} from 'neuroglancer/util/geom';
+import {prod4, Vec3, vec3, vec3Key, Vec4, vec4} from 'neuroglancer/util/geom';
 import {getRandomValues} from 'neuroglancer/util/random';
 import {Uint32ArrayBuilder} from 'neuroglancer/util/uint32array_builder.ts';
 

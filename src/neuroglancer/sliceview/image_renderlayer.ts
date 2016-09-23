@@ -15,7 +15,7 @@
  */
 
 import {MultiscaleVolumeChunkSource, SliceView} from 'neuroglancer/sliceview/frontend';
-import {RenderLayer, TrackableAlphaValue, makeWatchableShaderError, trackableAlphaValue} from 'neuroglancer/sliceview/renderlayer';
+import {makeWatchableShaderError, RenderLayer, TrackableAlphaValue, trackableAlphaValue} from 'neuroglancer/sliceview/renderlayer';
 import {TrackableValue} from 'neuroglancer/trackable_value';
 import {verifyString} from 'neuroglancer/util/json';
 import {ShaderBuilder} from 'neuroglancer/webgl/shader';

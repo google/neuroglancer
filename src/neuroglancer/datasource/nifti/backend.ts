@@ -21,11 +21,11 @@ import {GET_NIFTI_VOLUME_INFO_RPC_ID, NIFTI_FILE_SOURCE_RPC_ID, NiftiDataType, N
 import {ParameterizedVolumeChunkSource, VolumeChunk} from 'neuroglancer/sliceview/backend';
 import {decodeRawChunk} from 'neuroglancer/sliceview/backend_chunk_decoders/raw';
 import {DataType, VolumeType} from 'neuroglancer/sliceview/base';
+import {Endianness} from 'neuroglancer/util/endian';
 import {mat4, vec3} from 'neuroglancer/util/geom';
 import {cancellableThen} from 'neuroglancer/util/promise';
 import {registerPromiseRPC, registerSharedObject, RPC, RPCPromise} from 'neuroglancer/worker_rpc';
 import {decompress, isCompressed, NIFTI1, NIFTI2, readHeader, readImage} from 'nifti-reader-js';
-import {Endianness} from 'neuroglancer/util/endian';
 
 export class NiftiFileData {
   uncompressedData: ArrayBuffer;
@@ -48,9 +48,7 @@ function decodeNiftiFile(buffer: ArrayBuffer) {
 
 @registerSharedObject(NIFTI_FILE_SOURCE_RPC_ID)
 export class NiftiFileSource extends GenericFileSource<NiftiFileData> {
-  decodeFile(response: ArrayBuffer) {
-    return decodeNiftiFile(response);
-  }
+  decodeFile(response: ArrayBuffer) { return decodeNiftiFile(response); }
 }
 
 const NIFTI_HEADER_INFO_PRIORITY = 1000;
@@ -126,7 +124,6 @@ registerPromiseRPC(GET_NIFTI_VOLUME_INFO_RPC_ID, function(x): RPCPromise<NiftiVo
 
 @registerChunkSource(VolumeSourceParameters)
 class VolumeChunkSource extends ParameterizedVolumeChunkSource<VolumeSourceParameters> {
-
   fileSource: NiftiFileSource;
 
   constructor(rpc: RPC, options: any) {

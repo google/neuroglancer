@@ -14,7 +14,8 @@
  * limitations under the License.
  */
 
-import {Vec3, kZeroVec, vec3, vec3Key} from 'neuroglancer/util/geom';
+import {kZeroVec, Vec3, vec3, vec3Key} from 'neuroglancer/util/geom';
+
 
 
 /**

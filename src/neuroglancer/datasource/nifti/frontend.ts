@@ -21,15 +21,16 @@
 
 import {ChunkManager, ChunkSource} from 'neuroglancer/chunk_manager/frontend';
 import {registerDataSourceFactory} from 'neuroglancer/datasource/factory';
-import {VolumeSourceParameters, GET_NIFTI_VOLUME_INFO_RPC_ID, NIFTI_FILE_SOURCE_RPC_ID, NiftiVolumeInfo} from 'neuroglancer/datasource/nifti/base';
-import {defineParameterizedVolumeChunkSource, MultiscaleVolumeChunkSource as GenericMultiscaleVolumeChunkSource} from 'neuroglancer/sliceview/frontend';
+import {GET_NIFTI_VOLUME_INFO_RPC_ID, NIFTI_FILE_SOURCE_RPC_ID, NiftiVolumeInfo, VolumeSourceParameters} from 'neuroglancer/datasource/nifti/base';
 import {VolumeChunkSpecification} from 'neuroglancer/sliceview/base';
+import {defineParameterizedVolumeChunkSource, MultiscaleVolumeChunkSource as GenericMultiscaleVolumeChunkSource} from 'neuroglancer/sliceview/frontend';
 import {registerSharedObjectOwner} from 'neuroglancer/worker_rpc';
 import {RPC} from 'neuroglancer/worker_rpc';
 
 export class MultiscaleVolumeChunkSource implements GenericMultiscaleVolumeChunkSource {
-  constructor (public chunkManager: ChunkManager, public url: string, public info: NiftiVolumeInfo) {}
-  get numChannels () { return this.info.numChannels; }
+  constructor(public chunkManager: ChunkManager, public url: string, public info: NiftiVolumeInfo) {
+  }
+  get numChannels() { return this.info.numChannels; }
   get dataType() { return this.info.dataType; }
   get volumeType() { return this.info.volumeType; }
   getSources() {
@@ -41,9 +42,7 @@ export class MultiscaleVolumeChunkSource implements GenericMultiscaleVolumeChunk
       numChannels: this.info.numChannels,
       upperVoxelBound: this.info.volumeSize,
     });
-    return [[
-      VolumeChunkSource.get(this.chunkManager, spec, {url: this.url})
-    ]];
+    return [[VolumeChunkSource.get(this.chunkManager, spec, {url: this.url})]];
   }
 
   getMeshSource(): null { return null; }
@@ -67,13 +66,14 @@ class VolumeChunkSource extends BaseVolumeChunkSource {
  * Each chunk corresponds to a URL retrieved on the backend.
  */
 @registerSharedObjectOwner(NIFTI_FILE_SOURCE_RPC_ID)
-class NiftiFileSource extends ChunkSource {}
+class NiftiFileSource extends ChunkSource {
+}
 
 function getNiftiVolumeInfo(chunkManager: ChunkManager, url: string) {
   let source =
       chunkManager.getChunkSource(NiftiFileSource, '', () => new NiftiFileSource(chunkManager));
   let result = chunkManager.rpc!.promiseInvoke<NiftiVolumeInfo>(
-    GET_NIFTI_VOLUME_INFO_RPC_ID, {'source': source.addCounterpartRef(), 'url': url});
+      GET_NIFTI_VOLUME_INFO_RPC_ID, {'source': source.addCounterpartRef(), 'url': url});
   // Immediately dispose of our local reference to the source.  The counterpart reference will keep
   // it alive until a chunk is created.
   source.dispose();

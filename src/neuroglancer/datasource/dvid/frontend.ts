@@ -23,7 +23,7 @@ import {ChunkManager} from 'neuroglancer/chunk_manager/frontend';
 import {DVIDSourceParameters, TileChunkSourceParameters, TileEncoding, VolumeChunkSourceParameters} from 'neuroglancer/datasource/dvid/base';
 import {CompletionResult, registerDataSourceFactory} from 'neuroglancer/datasource/factory';
 import {DataType, VolumeChunkSpecification, VolumeType} from 'neuroglancer/sliceview/base';
-import {MultiscaleVolumeChunkSource as GenericMultiscaleVolumeChunkSource, VolumeChunkSource, defineParameterizedVolumeChunkSource} from 'neuroglancer/sliceview/frontend';
+import {defineParameterizedVolumeChunkSource, MultiscaleVolumeChunkSource as GenericMultiscaleVolumeChunkSource, VolumeChunkSource} from 'neuroglancer/sliceview/frontend';
 import {StatusMessage} from 'neuroglancer/status';
 import {applyCompletionOffset, getPrefixMatchesWithDescriptions} from 'neuroglancer/util/completion';
 import {Vec3, vec3} from 'neuroglancer/util/geom';
@@ -445,7 +445,8 @@ export function completeNodeAndInstance(serverInfo: ServerInfo, prefix: string):
   return applyCompletionOffset(nodeKey.length + 1, completeInstanceName(repository, match[2]));
 }
 
-export function volumeCompleter(url: string, chunkManager: ChunkManager): CancellablePromise<CompletionResult> {
+export function volumeCompleter(
+    url: string, chunkManager: ChunkManager): CancellablePromise<CompletionResult> {
   const curUrlPattern = /^((?:http|https):\/\/[^\/]+)\/(.*)$/;
   let match = url.match(curUrlPattern);
   if (match === null) {
@@ -455,9 +456,10 @@ export function volumeCompleter(url: string, chunkManager: ChunkManager): Cancel
   let baseUrl = match[1];
   let baseUrls = [baseUrl];
   let path = match[2];
-  return getServerInfo(chunkManager, baseUrls).then(
-      serverInfo =>
-          applyCompletionOffset(baseUrl.length + 1, completeNodeAndInstance(serverInfo, path)));
+  return getServerInfo(chunkManager, baseUrls)
+      .then(
+          serverInfo =>
+              applyCompletionOffset(baseUrl.length + 1, completeNodeAndInstance(serverInfo, path)));
 }
 
 registerDataSourceFactory('dvid', {

@@ -25,7 +25,7 @@
   },
   "devDependencies": {
     "@types/jasmine": "^2.2.22-alpha",
-    "clang-format": "^1.0.42",
+    "clang-format": "^1.0.43",
     "codemirror": "^5.15.2",
     "glsl-editor": "^1.0.0",
     "gulp": "^3.9.1",

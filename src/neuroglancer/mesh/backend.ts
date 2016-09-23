@@ -20,11 +20,11 @@ import {FRAGMENT_SOURCE_RPC_ID, MESH_LAYER_RPC_ID} from 'neuroglancer/mesh/base'
 import {SegmentationLayerSharedObjectCounterpart} from 'neuroglancer/segmentation_display_state/backend';
 import {getObjectKey} from 'neuroglancer/segmentation_display_state/base';
 import {forEachVisibleSegment} from 'neuroglancer/segmentation_display_state/base';
-import {Endianness, convertEndian32} from 'neuroglancer/util/endian';
+import {convertEndian32, Endianness} from 'neuroglancer/util/endian';
 import {vec3} from 'neuroglancer/util/geom';
 import {verifyObject, verifyObjectProperty} from 'neuroglancer/util/json';
 import {Uint64} from 'neuroglancer/util/uint64';
-import {RPC, registerSharedObject} from 'neuroglancer/worker_rpc';
+import {registerSharedObject, RPC} from 'neuroglancer/worker_rpc';
 
 const MESH_OBJECT_MANIFEST_CHUNK_PRIORITY = 100;
 const MESH_OBJECT_FRAGMENT_CHUNK_PRIORITY = 50;
@@ -189,9 +189,10 @@ export function computeVertexNormals(positions: Float32Array, indices: Uint32Arr
  * array.
  */
 export function decodeVertexPositionsAndIndices(
-    chunk: {vertexPositions: Float32Array|null, indices: Uint32Array|null}, verticesPerPrimitive: number,
-    data: ArrayBuffer, endianness: Endianness, vertexByteOffset: number, numVertices: number,
-    indexByteOffset?: number, numPrimitives?: number) {
+    chunk: {vertexPositions: Float32Array | null, indices: Uint32Array | null},
+    verticesPerPrimitive: number, data: ArrayBuffer, endianness: Endianness,
+    vertexByteOffset: number, numVertices: number, indexByteOffset?: number,
+    numPrimitives?: number) {
   let vertexPositions = new Float32Array(data, vertexByteOffset, numVertices * 3);
   convertEndian32(vertexPositions, endianness);
 

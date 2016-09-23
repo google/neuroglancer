@@ -140,7 +140,7 @@ export function getEventStrokeIdentifier(event: KeyboardEvent) {
 
 type KeyStrokeMap = Map<string, any>;
 
-type KeySequence = string | string[];
+type KeySequence = string|string[];
 
 export type KeyStrokeIdentifier = string;
 

@@ -17,7 +17,7 @@
 import {DisjointUint64Sets} from 'neuroglancer/util/disjoint_sets';
 import {parseArray} from 'neuroglancer/util/json';
 import {Uint64} from 'neuroglancer/util/uint64';
-import {RPC, SharedObjectCounterpart, registerRPC, registerSharedObject} from 'neuroglancer/worker_rpc';
+import {registerRPC, registerSharedObject, RPC, SharedObjectCounterpart} from 'neuroglancer/worker_rpc';
 import {Signal} from 'signals';
 
 const RPC_TYPE_ID = 'DisjointUint64Sets';

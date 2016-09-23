@@ -16,7 +16,7 @@
 
 import {HashSetUint64} from 'neuroglancer/gpu_hash/hash_table';
 import {Uint64} from 'neuroglancer/util/uint64';
-import {RPC, SharedObjectCounterpart, registerRPC, registerSharedObject} from 'neuroglancer/worker_rpc';
+import {registerRPC, registerSharedObject, RPC, SharedObjectCounterpart} from 'neuroglancer/worker_rpc';
 import {Signal} from 'signals';
 
 @registerSharedObject('Uint64Set')

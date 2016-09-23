@@ -18,7 +18,7 @@ import {ChunkManager} from 'neuroglancer/chunk_manager/frontend';
 import {MeshSource} from 'neuroglancer/mesh/frontend';
 import {SkeletonSource} from 'neuroglancer/skeleton/frontend';
 import {MultiscaleVolumeChunkSource} from 'neuroglancer/sliceview/frontend';
-import {CompletionWithDescription, applyCompletionOffset} from 'neuroglancer/util/completion';
+import {applyCompletionOffset, CompletionWithDescription} from 'neuroglancer/util/completion';
 import {CancellablePromise, cancellableThen} from 'neuroglancer/util/promise';
 
 export type Completion = CompletionWithDescription;

@@ -23,7 +23,7 @@
  * padding.
  */
 
-import {TypedArray, TypedArrayConstructor, maybePadArray} from 'neuroglancer/util/array';
+import {maybePadArray, TypedArray, TypedArrayConstructor} from 'neuroglancer/util/array';
 import {Vec2} from 'neuroglancer/util/geom';
 import {GL} from 'neuroglancer/webgl/context';
 import {ShaderBuilder, ShaderProgram} from 'neuroglancer/webgl/shader';

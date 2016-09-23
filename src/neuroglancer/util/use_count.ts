@@ -27,7 +27,7 @@ export class UseCount extends RefCounted {
   becameZero = new Signal();
   becameNonZero = new Signal();
 
-  get value () { return this.count; }
+  get value() { return this.count; }
 
   inc() {
     if (++this.count === 1) {

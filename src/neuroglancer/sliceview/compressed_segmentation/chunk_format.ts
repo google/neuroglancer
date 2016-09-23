@@ -17,14 +17,14 @@
 import {DataType, VolumeChunkSpecification} from 'neuroglancer/sliceview/base';
 import {readSingleChannelValue as readSingleChannelValueUint32} from 'neuroglancer/sliceview/compressed_segmentation/decode_uint32';
 import {readSingleChannelValue as readSingleChannelValueUint64} from 'neuroglancer/sliceview/compressed_segmentation/decode_uint64';
-import {ChunkFormatHandler, VolumeChunkSource, registerChunkFormatHandler} from 'neuroglancer/sliceview/frontend';
+import {ChunkFormatHandler, registerChunkFormatHandler, VolumeChunkSource} from 'neuroglancer/sliceview/frontend';
 import {GLSL_TYPE_FOR_DATA_TYPE} from 'neuroglancer/sliceview/renderlayer';
 import {SingleTextureChunkFormat, SingleTextureVolumeChunk} from 'neuroglancer/sliceview/single_texture_chunk_format';
 import {RefCounted} from 'neuroglancer/util/disposable';
 import {Vec3, vec3, vec3Key} from 'neuroglancer/util/geom';
 import {Uint64} from 'neuroglancer/util/uint64';
 import {GL} from 'neuroglancer/webgl/context';
-import {OneDimensionalTextureAccessHelper, compute1dTextureLayout, setOneDimensionalTextureData} from 'neuroglancer/webgl/one_dimensional_texture_access';
+import {compute1dTextureLayout, OneDimensionalTextureAccessHelper, setOneDimensionalTextureData} from 'neuroglancer/webgl/one_dimensional_texture_access';
 import {ShaderBuilder, ShaderProgram} from 'neuroglancer/webgl/shader';
 import {glsl_getFortranOrderIndexFromNormalized, glsl_uint32, glsl_uint64} from 'neuroglancer/webgl/shader_lib';
 

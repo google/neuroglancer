@@ -20,7 +20,6 @@
  */
 
 declare module 'nifti-reader-js' {
-
   class NIFTI1 {
     // data type codes
     static TYPE_NONE: number;

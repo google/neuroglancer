@@ -18,7 +18,7 @@ import {AvailableCapacity, CHUNK_MANAGER_RPC_ID, CHUNK_QUEUE_MANAGER_RPC_ID, Chu
 import {Disposable} from 'neuroglancer/util/disposable';
 import {LinkedListOperations} from 'neuroglancer/util/linked_list';
 import {ComparisonFunction, PairingHeapOperations} from 'neuroglancer/util/pairing_heap';
-import {RPC, SharedObjectCounterpart, registerSharedObject} from 'neuroglancer/worker_rpc';
+import {registerSharedObject, RPC, SharedObjectCounterpart} from 'neuroglancer/worker_rpc';
 import {Signal} from 'signals';
 
 import PairingHeap0 from 'neuroglancer/util/pairing_heap.0';
@@ -97,13 +97,19 @@ export class Chunk implements Disposable {
     this.newPriority = Number.NEGATIVE_INFINITY;
   }
 
-  dispose() { this.source = null; this.error = null; }
+  dispose() {
+    this.source = null;
+    this.error = null;
+  }
 
   get chunkManager() { return (<ChunkSource>this.source).chunkManager; }
 
   get queueManager() { return (<ChunkSource>this.source).chunkManager.queueManager; }
 
-  downloadFailed(error: any) { this.error = error; this.queueManager.updateChunkState(this, ChunkState.FAILED); }
+  downloadFailed(error: any) {
+    this.error = error;
+    this.queueManager.updateChunkState(this, ChunkState.FAILED);
+  }
 
   downloadSucceeded() { this.queueManager.updateChunkState(this, ChunkState.SYSTEM_MEMORY_WORKER); }
 

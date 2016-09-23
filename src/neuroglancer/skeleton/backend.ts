@@ -22,7 +22,7 @@ import {forEachVisibleSegment, getObjectKey} from 'neuroglancer/segmentation_dis
 import {SKELETON_LAYER_RPC_ID} from 'neuroglancer/skeleton/base';
 import {Endianness} from 'neuroglancer/util/endian';
 import {Uint64} from 'neuroglancer/util/uint64';
-import {RPC, registerSharedObject} from 'neuroglancer/worker_rpc';
+import {registerSharedObject, RPC} from 'neuroglancer/worker_rpc';
 
 const SKELETON_CHUNK_PRIORITY = 60;
 

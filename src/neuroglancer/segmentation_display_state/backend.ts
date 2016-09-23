@@ -22,7 +22,7 @@ import {ChunkManager} from 'neuroglancer/chunk_manager/backend';
 import {ON_VISIBILITY_CHANGE_METHOD_ID, VisibleSegmentsState} from 'neuroglancer/segmentation_display_state/base';
 import {SharedDisjointUint64Sets} from 'neuroglancer/shared_disjoint_sets';
 import {Uint64Set} from 'neuroglancer/uint64_set';
-import {RPC, SharedObjectCounterpart, registerRPC} from 'neuroglancer/worker_rpc';
+import {registerRPC, RPC, SharedObjectCounterpart} from 'neuroglancer/worker_rpc';
 
 export class SegmentationLayerSharedObjectCounterpart extends SharedObjectCounterpart implements
     VisibleSegmentsState {

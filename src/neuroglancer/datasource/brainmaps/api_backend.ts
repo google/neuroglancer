@@ -19,7 +19,7 @@
  * This implements the authentication API by simply forwarding all requests to the frontend.
  */
 
-import {Token, implementation} from 'neuroglancer/datasource/brainmaps/api_implementation';
+import {implementation, Token} from 'neuroglancer/datasource/brainmaps/api_implementation';
 import {registerRPC} from 'neuroglancer/worker_rpc';
 import {rpc} from 'neuroglancer/worker_rpc_context';
 

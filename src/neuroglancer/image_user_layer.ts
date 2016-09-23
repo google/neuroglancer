@@ -22,7 +22,7 @@ import {UserLayer, UserLayerDropdown} from 'neuroglancer/layer';
 import {LayerListSpecification} from 'neuroglancer/layer_specification';
 import {getVolumeWithStatusMessage} from 'neuroglancer/layer_specification';
 import {Overlay} from 'neuroglancer/overlay';
-import {FRAGMENT_MAIN_START, ImageRenderLayer, getTrackableFragmentMain} from 'neuroglancer/sliceview/image_renderlayer';
+import {FRAGMENT_MAIN_START, getTrackableFragmentMain, ImageRenderLayer} from 'neuroglancer/sliceview/image_renderlayer';
 import {makeWatchableShaderError, trackableAlphaValue} from 'neuroglancer/sliceview/renderlayer';
 import {RefCounted} from 'neuroglancer/util/disposable';
 import {removeFromParent} from 'neuroglancer/util/dom';

@@ -19,7 +19,7 @@ import {BasicCompletionResult, Completion, CompletionWithDescription} from 'neur
 import {RefCounted} from 'neuroglancer/util/disposable';
 import {removeChildren, removeFromParent} from 'neuroglancer/util/dom';
 import {positionDropdown} from 'neuroglancer/util/dropdown';
-import {KeySequenceMap, KeyboardShortcutHandler} from 'neuroglancer/util/keyboard_shortcut_handler';
+import {KeyboardShortcutHandler, KeySequenceMap} from 'neuroglancer/util/keyboard_shortcut_handler';
 import {longestCommonPrefix} from 'neuroglancer/util/longest_common_prefix';
 import {CancellablePromise, cancelPromise} from 'neuroglancer/util/promise';
 import {scrollIntoViewIfNeeded} from 'neuroglancer/util/scroll_into_view';

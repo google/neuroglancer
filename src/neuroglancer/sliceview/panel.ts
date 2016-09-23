@@ -16,12 +16,12 @@
 
 import {AxesLineHelper} from 'neuroglancer/axes_lines';
 import {DisplayContext} from 'neuroglancer/display_context';
-import {MouseSelectionState, VisibilityTrackedRenderLayer, makeRenderedPanelVisibleLayerTracker} from 'neuroglancer/layer';
+import {makeRenderedPanelVisibleLayerTracker, MouseSelectionState, VisibilityTrackedRenderLayer} from 'neuroglancer/layer';
 import {PickIDManager} from 'neuroglancer/object_picking';
 import {RenderedDataPanel} from 'neuroglancer/rendered_data_panel';
 import {SliceView, SliceViewRenderHelper} from 'neuroglancer/sliceview/frontend';
 import {ElementVisibilityFromTrackableBoolean, TrackableBoolean} from 'neuroglancer/trackable_boolean';
-import {Mat4, identityMat4, mat4, vec3, vec4} from 'neuroglancer/util/geom';
+import {identityMat4, Mat4, mat4, vec3, vec4} from 'neuroglancer/util/geom';
 import {startRelativeMouseDrag} from 'neuroglancer/util/mouse_drag';
 import {ViewerState} from 'neuroglancer/viewer_state';
 import {OffscreenCopyHelper, OffscreenFramebuffer} from 'neuroglancer/webgl/offscreen';

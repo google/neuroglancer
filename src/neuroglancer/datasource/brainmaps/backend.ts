@@ -19,8 +19,8 @@ import 'neuroglancer/datasource/brainmaps/api_backend';
 import {handleChunkDownloadPromise, registerChunkSource} from 'neuroglancer/chunk_manager/backend';
 import {makeRequest} from 'neuroglancer/datasource/brainmaps/api';
 import {MeshSourceParameters, SkeletonSourceParameters, VolumeChunkEncoding, VolumeSourceParameters} from 'neuroglancer/datasource/brainmaps/base';
-import {FragmentChunk, ManifestChunk, ParameterizedMeshSource, decodeJsonManifestChunk, decodeTriangleVertexPositionsAndIndices} from 'neuroglancer/mesh/backend';
-import {ParameterizedSkeletonSource, SkeletonChunk, decodeSkeletonVertexPositionsAndIndices} from 'neuroglancer/skeleton/backend';
+import {decodeJsonManifestChunk, decodeTriangleVertexPositionsAndIndices, FragmentChunk, ManifestChunk, ParameterizedMeshSource} from 'neuroglancer/mesh/backend';
+import {decodeSkeletonVertexPositionsAndIndices, ParameterizedSkeletonSource, SkeletonChunk} from 'neuroglancer/skeleton/backend';
 import {ParameterizedVolumeChunkSource, VolumeChunk} from 'neuroglancer/sliceview/backend';
 import {decodeCompressedSegmentationChunk} from 'neuroglancer/sliceview/backend_chunk_decoders/compressed_segmentation';
 import {decodeJpegChunk} from 'neuroglancer/sliceview/backend_chunk_decoders/jpeg';
@@ -136,7 +136,7 @@ function decodeSkeletonChunk(chunk: SkeletonChunk, response: ArrayBuffer) {
   }
   decodeSkeletonVertexPositionsAndIndices(
       chunk, response, Endianness.LITTLE, /*vertexByteOffset=*/16, numVertices,
-    /*indexByteOffset=*/undefined, /*numEdges=*/numEdges);
+      /*indexByteOffset=*/undefined, /*numEdges=*/numEdges);
 }
 
 @registerChunkSource(SkeletonSourceParameters)

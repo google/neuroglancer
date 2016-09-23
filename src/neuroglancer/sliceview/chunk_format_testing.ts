@@ -20,7 +20,7 @@ import {getFortranOrderStrides} from 'neuroglancer/util/array';
 import {TypedArray} from 'neuroglancer/util/array';
 import {DataType} from 'neuroglancer/util/data_type';
 import {Disposable} from 'neuroglancer/util/disposable';
-import {Vec3, Vec4, vec3, vec3Key} from 'neuroglancer/util/geom';
+import {Vec3, vec3, vec3Key, Vec4} from 'neuroglancer/util/geom';
 import {GL} from 'neuroglancer/webgl/context';
 import {fragmentShaderTest} from 'neuroglancer/webgl/shader_testing';
 import {setRawTextureParameters} from 'neuroglancer/webgl/texture';

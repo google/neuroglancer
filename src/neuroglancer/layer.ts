@@ -20,7 +20,7 @@ import {RenderedPanel} from 'neuroglancer/display_context';
 import {SpatialPosition} from 'neuroglancer/navigation_state';
 import {RefCounted} from 'neuroglancer/util/disposable';
 import {BoundingBox, Vec3, vec3} from 'neuroglancer/util/geom';
-import {SignalBindingUpdater, addSignalBinding, removeSignalBinding} from 'neuroglancer/util/signal_binding_updater';
+import {addSignalBinding, removeSignalBinding, SignalBindingUpdater} from 'neuroglancer/util/signal_binding_updater';
 import {Uint64} from 'neuroglancer/util/uint64';
 import {UseCount} from 'neuroglancer/util/use_count';
 import {Signal} from 'signals';

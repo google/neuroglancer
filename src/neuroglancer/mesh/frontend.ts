@@ -17,15 +17,15 @@
 import {ChunkSourceParametersConstructor, ChunkState} from 'neuroglancer/chunk_manager/base';
 import {Chunk, ChunkManager, ChunkSource} from 'neuroglancer/chunk_manager/frontend';
 import {FRAGMENT_SOURCE_RPC_ID, MESH_LAYER_RPC_ID} from 'neuroglancer/mesh/base';
-import {PerspectiveViewRenderContext, PerspectiveViewRenderLayer, perspectivePanelEmit} from 'neuroglancer/perspective_panel';
-import {SegmentationDisplayState, SegmentationLayerSharedObject, forEachSegmentToDraw, getObjectColor, registerRedrawWhenSegmentationDisplayStateChanged} from 'neuroglancer/segmentation_display_state/frontend';
-import {Mat4, Vec3, identityMat4, vec3, vec4} from 'neuroglancer/util/geom';
+import {perspectivePanelEmit, PerspectiveViewRenderContext, PerspectiveViewRenderLayer} from 'neuroglancer/perspective_panel';
+import {forEachSegmentToDraw, getObjectColor, registerRedrawWhenSegmentationDisplayStateChanged, SegmentationDisplayState, SegmentationLayerSharedObject} from 'neuroglancer/segmentation_display_state/frontend';
+import {identityMat4, Mat4, Vec3, vec3, vec4} from 'neuroglancer/util/geom';
 import {stableStringify} from 'neuroglancer/util/json';
 import {Buffer} from 'neuroglancer/webgl/buffer';
 import {GL} from 'neuroglancer/webgl/context';
 import {ShaderBuilder, ShaderProgram} from 'neuroglancer/webgl/shader';
 import {setVec4FromUint32} from 'neuroglancer/webgl/shader_lib';
-import {RPC, registerSharedObjectOwner} from 'neuroglancer/worker_rpc';
+import {registerSharedObjectOwner, RPC} from 'neuroglancer/worker_rpc';
 
 export class MeshShaderManager {
   private tempLightVec = vec4.create();

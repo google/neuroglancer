@@ -17,7 +17,7 @@
 import {AvailableCapacity, CHUNK_MANAGER_RPC_ID, CHUNK_QUEUE_MANAGER_RPC_ID, ChunkState} from 'neuroglancer/chunk_manager/base';
 import {Memoize, StringMemoize} from 'neuroglancer/util/memoize';
 import {GL} from 'neuroglancer/webgl/context';
-import {RPC, SharedObject, registerRPC, registerSharedObjectOwner} from 'neuroglancer/worker_rpc';
+import {registerRPC, registerSharedObjectOwner, RPC, SharedObject} from 'neuroglancer/worker_rpc';
 import {Signal} from 'signals';
 
 const DEBUG_CHUNK_UPDATES = false;
@@ -147,7 +147,7 @@ registerRPC('Chunk.update', function(x) {
 @registerSharedObjectOwner(CHUNK_MANAGER_RPC_ID)
 export class ChunkManager extends SharedObject {
   chunkSourceCache: Map<any, Memoize<string, ChunkSource>> =
-    new Map<any, Memoize<string, ChunkSource>>();
+      new Map<any, Memoize<string, ChunkSource>>();
 
   memoize = new StringMemoize();
 

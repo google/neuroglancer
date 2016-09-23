@@ -24,14 +24,14 @@ import {ChunkLayout} from 'neuroglancer/sliceview/chunk_layout';
 import {RenderLayer} from 'neuroglancer/sliceview/renderlayer';
 import {RefCounted} from 'neuroglancer/util/disposable';
 import {Disposable} from 'neuroglancer/util/disposable';
-import {Mat4, Vec3, Vec4, mat4, rectifyTransformMatrixIfAxisAligned, vec3, vec3Key} from 'neuroglancer/util/geom';
+import {Mat4, mat4, rectifyTransformMatrixIfAxisAligned, Vec3, vec3, vec3Key, Vec4} from 'neuroglancer/util/geom';
 import {stableStringify} from 'neuroglancer/util/json';
 import {Uint64} from 'neuroglancer/util/uint64';
 import {Buffer} from 'neuroglancer/webgl/buffer';
 import {GL} from 'neuroglancer/webgl/context';
 import {OffscreenFramebuffer} from 'neuroglancer/webgl/offscreen';
 import {ShaderBuilder, ShaderModule, ShaderProgram} from 'neuroglancer/webgl/shader';
-import {RPC, registerSharedObjectOwner} from 'neuroglancer/worker_rpc';
+import {registerSharedObjectOwner, RPC} from 'neuroglancer/worker_rpc';
 import {Signal} from 'signals';
 
 export type VolumeChunkKey = string;

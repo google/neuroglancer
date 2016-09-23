@@ -19,7 +19,7 @@ import {ChunkPriorityTier} from 'neuroglancer/chunk_manager/base';
 import {RenderLayer as RenderLayerInterface, SLICEVIEW_RPC_ID, SliceViewBase, VolumeChunkSource as VolumeChunkSourceInterface, VolumeChunkSpecification} from 'neuroglancer/sliceview/base';
 import {ChunkLayout} from 'neuroglancer/sliceview/chunk_layout';
 import {Vec3, vec3, vec3Key} from 'neuroglancer/util/geom';
-import {RPC, SharedObjectCounterpart, registerRPC, registerSharedObject} from 'neuroglancer/worker_rpc';
+import {registerRPC, registerSharedObject, RPC, SharedObjectCounterpart} from 'neuroglancer/worker_rpc';
 import {Signal} from 'signals';
 
 const SCALE_PRIORITY_MULTIPLIER = 1e5;
