@@ -184,13 +184,25 @@ export function cancellableThen<T, TResult>(
       cancelled = true;
       cancelPromise(inputPromise);
     });
-    inputPromise.then(value => {
-      if (cancelled) {
-        reject(CANCELLED);
-      } else {
-        onCancel(undefined);
-        resolve(onFulfilled(value, onCancel));
-      }
-    });
+    inputPromise.then(
+        value => {
+          if (cancelled) {
+            reject(CANCELLED);
+          } else {
+            onCancel(undefined);
+            try {
+              resolve(onFulfilled(value, onCancel));
+            } catch (error) {
+              reject(error);
+            }
+          }
+        },
+        error => {
+          if (cancelled) {
+            reject(CANCELLED);
+          } else {
+            reject(error);
+          }
+        });
   });
 }
