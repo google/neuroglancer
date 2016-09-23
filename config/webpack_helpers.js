@@ -62,6 +62,7 @@ const DEFAULT_DATA_SOURCES = exports.DEFAULT_DATA_SOURCES = [
   'neuroglancer/datasource/openconnectome',
   'neuroglancer/datasource/precomputed',
   'neuroglancer/datasource/python',
+  'neuroglancer/datasource/nifti',
 ];
 
 /**

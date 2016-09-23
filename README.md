@@ -23,6 +23,7 @@ Neuroglancer itself is purely a client-side program, but it depends on data bein
 - NDstore/Open Connectome <https://github.com/neurodata/ndstore>
 - DVID <https://github.com/janelia-flyem/dvid>
 - Precomputed chunk/mesh fragments exposed over HTTP
+- Single NIfTI files <https://www.nitrc.org/projects/nifti>
 
 # Supported browsers
 
