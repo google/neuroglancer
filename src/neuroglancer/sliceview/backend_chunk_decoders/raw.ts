@@ -17,9 +17,11 @@
 import {VolumeChunk} from 'neuroglancer/sliceview/backend';
 import {postProcessRawData} from 'neuroglancer/sliceview/backend_chunk_decoders/postprocess';
 import {DATA_TYPE_BYTES, DataType} from 'neuroglancer/util/data_type';
+import {convertEndian16, convertEndian32, Endianness, ENDIANNESS} from 'neuroglancer/util/endian';
 import {prod3} from 'neuroglancer/util/geom';
 
-export function decodeRawChunk(chunk: VolumeChunk, response: ArrayBuffer) {
+export function decodeRawChunk(
+    chunk: VolumeChunk, response: ArrayBuffer, endianness: Endianness = ENDIANNESS) {
   let {spec} = chunk.source!;
   let {dataType} = spec;
   let numElements = prod3(chunk.chunkDataSize!);
@@ -36,13 +38,16 @@ export function decodeRawChunk(chunk: VolumeChunk, response: ArrayBuffer) {
       break;
     case DataType.UINT16:
       data = new Uint16Array(response);
+      convertEndian16(data, endianness);
       break;
     case DataType.UINT32:
     case DataType.UINT64:
       data = new Uint32Array(response);
+      convertEndian32(data, endianness);
       break;
     case DataType.FLOAT32:
       data = new Float32Array(response);
+      convertEndian32(data, endianness);
       break;
     default:
       throw new Error(`Unexpected data type: ${dataType}.`);
