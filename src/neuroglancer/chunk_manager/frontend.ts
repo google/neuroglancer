@@ -175,7 +175,6 @@ export class ChunkManager extends SharedObject {
 
 export abstract class ChunkSource extends SharedObject {
   chunks = new Map<string, Chunk>();
-  backendOnly: boolean;
   constructor(public chunkManager: ChunkManager) {
     super();
     this.registerDisposer(chunkManager.addRef());

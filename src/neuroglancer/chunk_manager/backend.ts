@@ -44,6 +44,8 @@ export class Chunk implements Disposable {
   key: string|null = null;
   state = ChunkState.NEW;
 
+  error: any = null;
+
   /**
    * Specifies existing priority within priority tier.  Only meaningful if priorityTier in
    * CHUNK_ORDERED_PRIORITY_TIERS.
@@ -79,6 +81,7 @@ export class Chunk implements Disposable {
     this.priorityTier = ChunkPriorityTier.RECENT;
     this.newPriority = Number.NEGATIVE_INFINITY;
     this.newPriorityTier = ChunkPriorityTier.RECENT;
+    this.error = null;
   }
 
   /**
@@ -94,13 +97,13 @@ export class Chunk implements Disposable {
     this.newPriority = Number.NEGATIVE_INFINITY;
   }
 
-  dispose() { this.source = null; }
+  dispose() { this.source = null; this.error = null; }
 
   get chunkManager() { return (<ChunkSource>this.source).chunkManager; }
 
   get queueManager() { return (<ChunkSource>this.source).chunkManager.queueManager; }
 
-  downloadFailed() { this.queueManager.updateChunkState(this, ChunkState.FAILED); }
+  downloadFailed(error: any) { this.error = error; this.queueManager.updateChunkState(this, ChunkState.FAILED); }
 
   downloadSucceeded() { this.queueManager.updateChunkState(this, ChunkState.SYSTEM_MEMORY_WORKER); }
 
@@ -200,16 +203,16 @@ export function handleChunkDownloadPromise<ChunkType extends Chunk, Result>(
           chunk.downloadSucceeded();
         } catch (e) {
           console.log(`Failed to decode chunk ${chunk}: ${e}`);
-          chunk.downloadFailed();
+          chunk.downloadFailed(e);
         }
       },
-      function(xhr) {
+      function(e) {
         if (chunk.cancelDownload === null) {
           // Download was cancelled.
           return;
         }
         chunk.cancelDownload = null;
-        chunk.downloadFailed();
+        chunk.downloadFailed(e);
         console.log(`Download failed for chunk ${chunk}`);
       });
 }
@@ -626,6 +629,12 @@ export class ChunkQueueManager extends SharedObjectCounterpart {
     }
   }
 };
+
+/*
+ * Priority to use for handlers add to recomputeChunkPriorities that should execute last, because
+ * they depend on the result of another handler.
+ */
+export const RECOMPUTE_CHUNK_PRIORITIES_LAST = -1000;
 
 @registerSharedObject(CHUNK_MANAGER_RPC_ID)
 export class ChunkManager extends SharedObjectCounterpart {
