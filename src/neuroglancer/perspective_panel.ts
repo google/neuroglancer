@@ -343,6 +343,9 @@ export class PerspectivePanel extends RenderedDataPanel {
       gl.depthMask(true);
       gl.disable(gl.BLEND);
       gl.enable(gl.DEPTH_TEST);
+
+      // Restore framebuffer attachments.
+      this.offscreenFramebuffer.bind(width, height);
     }
 
     // Do picking only rendering pass.
