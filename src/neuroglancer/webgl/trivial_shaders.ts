@@ -14,22 +14,48 @@
  * limitations under the License.
  */
 
+import {getObjectId} from 'neuroglancer/util/object_id';
 import {GL} from 'neuroglancer/webgl/context';
-import {ShaderBuilder, ShaderProgram} from 'neuroglancer/webgl/shader';
+import {ShaderBuilder, ShaderModule, ShaderProgram} from 'neuroglancer/webgl/shader';
+
+export function defineCopyFragmentShader(builder: ShaderBuilder) {
+  builder.setFragmentMain('gl_FragColor = getValue0();');
+}
+
+export function elementWiseTextureShader(
+    gl: GL, shaderModule: ShaderModule = defineCopyFragmentShader,
+    numTextures: number = 1): ShaderProgram {
+  return gl.memoize.get(
+      `elementWiseTextureShader:${numTextures}:${getObjectId(shaderModule)}`, () => {
+        let builder = new ShaderBuilder(gl);
+        builder.addVarying('vec2', 'vTexCoord');
+        builder.addUniform('sampler2D', 'uSampler', numTextures);
+        builder.addInitializer(shader => {
+          let textureIndices: number[] = [];
+          for (let i = 0; i < numTextures; ++i) {
+            textureIndices[i] = i;
+          }
+          gl.uniform1iv(shader.uniform('uSampler'), textureIndices);
+        });
+        for (let i = 0; i < numTextures; ++i) {
+          builder.addFragmentCode(`
+vec4 getValue${i}() {
+  return texture2D(uSampler[${i}], vTexCoord);
+}
+`);
+        }
+        builder.addUniform('mat4', 'uProjectionMatrix');
+        builder.require(shaderModule);
+        builder.addAttribute('vec4', 'aVertexPosition');
+        builder.addAttribute('vec2', 'aTexCoord');
+        builder.setVertexMain(
+            'vTexCoord = aTexCoord; gl_Position = uProjectionMatrix * aVertexPosition;');
+        return builder.build();
+      });
+}
 
 export function trivialTextureShader(gl: GL): ShaderProgram {
-  return gl.memoize.get('trivialTextureShader', () => {
-    let builder = new ShaderBuilder(gl);
-    builder.addVarying('vec2', 'vTexCoord');
-    builder.addUniform('sampler2D', 'uSampler');
-    builder.addUniform('mat4', 'uProjectionMatrix');
-    builder.setFragmentMain('gl_FragColor = texture2D(uSampler, vTexCoord);');
-    builder.addAttribute('vec4', 'aVertexPosition');
-    builder.addAttribute('vec2', 'aTexCoord');
-    builder.setVertexMain(
-        'vTexCoord = aTexCoord; gl_Position = uProjectionMatrix * aVertexPosition;');
-    return builder.build();
-  });
+  return elementWiseTextureShader(gl, defineCopyFragmentShader, 1);
 }
 
 export function trivialColorShader(gl: GL): ShaderProgram {

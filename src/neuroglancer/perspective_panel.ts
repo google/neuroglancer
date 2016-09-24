@@ -25,8 +25,8 @@ import {TrackableBoolean, TrackableBooleanCheckbox} from 'neuroglancer/trackable
 import {kAxes, Mat4, mat4, Vec3, vec3, vec4} from 'neuroglancer/util/geom';
 import {startRelativeMouseDrag} from 'neuroglancer/util/mouse_drag';
 import {ViewerState} from 'neuroglancer/viewer_state';
-import {OffscreenCopyHelper, OffscreenFramebuffer} from 'neuroglancer/webgl/offscreen';
-import {ShaderBuilder} from 'neuroglancer/webgl/shader';
+import {DepthBuffer, FramebufferConfiguration, makeTextureBuffers, OffscreenCopyHelper} from 'neuroglancer/webgl/offscreen';
+import {ShaderBuilder, ShaderModule} from 'neuroglancer/webgl/shader';
 import {glsl_packFloat01ToFixedPoint, unpackFloat01FromFixedPoint} from 'neuroglancer/webgl/shader_lib';
 
 require('neuroglancer/noselect.css');
@@ -38,6 +38,7 @@ export interface PerspectiveViewRenderContext {
   ambientLighting: number;
   directionalLighting: number;
   pickIDs: PickIDManager;
+  emitter: ShaderModule;
 }
 
 export class PerspectiveViewRenderLayer extends VisibilityTrackedRenderLayer {
@@ -48,7 +49,12 @@ export class PerspectiveViewRenderLayer extends VisibilityTrackedRenderLayer {
   drawPicking(renderContext: PerspectiveViewRenderContext) {
     // Do nothing by default.
   }
-};
+
+  /**
+   * Should be rendered as transparent.
+   */
+  get isTransparent() { return false; }
+}
 
 export interface PerspectiveViewerState extends ViewerState {
   showSliceViews: TrackableBoolean;
@@ -72,13 +78,58 @@ void emit(vec4 color, vec4 pickId) {
 `
 ];
 
+/**
+ * http://jcgt.org/published/0002/02/09/paper.pdf
+ * http://casual-effects.blogspot.com/2015/03/implemented-weighted-blended-order.html
+ */
+export const glsl_computeOITWeight = `
+float computeOITWeight(float alpha) {
+  float a = min(1.0, alpha) * 8.0 + 0.01;
+  float b = -gl_FragCoord.z * 0.95 + 1.0;
+  return a * a * a * b * b * b;
+}
+`;
+
+// Color must be premultiplied by alpha.
+export const glsl_perspectivePanelEmitOITAccum = [
+  glsl_computeOITWeight, `
+void emit(vec4 color, vec4 pickId) {
+  float weight = computeOITWeight(color.a);
+  gl_FragColor = color * weight;
+}
+`
+];
+
+export const glsl_perspectivePanelEmitOITRevealage = `
+void emit(vec4 color, vec4 pickId) {
+  float a = color.a;
+  gl_FragColor = vec4(a, a, a, a);
+}
+`;
+
 export function perspectivePanelEmit(builder: ShaderBuilder) {
   builder.addFragmentExtension('GL_EXT_draw_buffers');
   builder.addFragmentCode(glsl_perspectivePanelEmit);
 }
 
+export function perspectivePanelEmitOITAccum(builder: ShaderBuilder) {
+  builder.addFragmentCode(glsl_perspectivePanelEmitOITAccum);
+}
+
+export function perspectivePanelEmitOITRevealage(builder: ShaderBuilder) {
+  builder.addFragmentCode(glsl_perspectivePanelEmitOITRevealage);
+}
+
 const tempVec3 = vec3.create();
 const tempMat4 = mat4.create();
+
+function defineTransparencyCopyShader(builder: ShaderBuilder) {
+  builder.setFragmentMain(`
+float revealage = getValue1().r;
+vec4 accum = getValue0();
+gl_FragColor = vec4(accum.rgb / accum.a, revealage);
+`);
+}
 
 export class PerspectivePanel extends RenderedDataPanel {
   private visibleLayerTracker = makeRenderedPanelVisibleLayerTracker(
@@ -93,14 +144,29 @@ export class PerspectivePanel extends RenderedDataPanel {
   height = 0;
   private pickIDs = new PickIDManager();
   private axesLineHelper = this.registerDisposer(AxesLineHelper.get(this.gl));
-  sliceViewRenderHelper = this.registerDisposer(SliceViewRenderHelper.get(
-      this.gl, 'SliceViewRenderHelper:PerspectivePanel', perspectivePanelEmit));
+  sliceViewRenderHelper =
+      this.registerDisposer(SliceViewRenderHelper.get(this.gl, perspectivePanelEmit));
 
-  private offscreenFramebuffer = new OffscreenFramebuffer(
-      this.gl,
-      {numDataBuffers: OffscreenTextures.NUM_TEXTURES, depthBuffer: true, stencilBuffer: true});
+  private offscreenFramebuffer = this.registerDisposer(new FramebufferConfiguration(this.gl, {
+    colorBuffers: makeTextureBuffers(this.gl, OffscreenTextures.NUM_TEXTURES),
+    depthBuffer: new DepthBuffer(this.gl)
+  }));
 
-  private offscreenCopyHelper = OffscreenCopyHelper.get(this.gl);
+  private accumConfiguration = this.registerDisposer(new FramebufferConfiguration(this.gl, {
+    framebuffer: this.offscreenFramebuffer.framebuffer.addRef(),
+    colorBuffers: makeTextureBuffers(this.gl, 1, this.gl.RGBA, this.gl.FLOAT),
+    depthBuffer: this.offscreenFramebuffer.depthBuffer!.addRef(),
+  }));
+
+  private revealageConfiguration = this.registerDisposer(new FramebufferConfiguration(this.gl, {
+    framebuffer: this.offscreenFramebuffer.framebuffer.addRef(),
+    colorBuffers: makeTextureBuffers(this.gl, 1, this.gl.RGBA, this.gl.FLOAT),
+    depthBuffer: this.offscreenFramebuffer.depthBuffer!.addRef(),
+  }));
+
+  private offscreenCopyHelper = this.registerDisposer(OffscreenCopyHelper.get(this.gl));
+  private transparencyCopyHelper =
+      this.registerDisposer(OffscreenCopyHelper.get(this.gl, defineTransparencyCopyShader, 2));
 
   constructor(context: DisplayContext, element: HTMLElement, viewer: PerspectiveViewerState) {
     super(context, element, viewer);
@@ -222,68 +288,84 @@ export class PerspectivePanel extends RenderedDataPanel {
     // FIXME; avoid temporaries
     let lightingDirection = vec4.create();
     vec4.transformMat4(lightingDirection, kAxes[2], this.modelViewMat);
-    vec4.normalize(lightingDirection, lightingDirection);
+    vec3.normalize(lightingDirection, lightingDirection);
 
     let ambient = 0.2;
     let directional = 1 - ambient;
 
     let pickIDs = this.pickIDs;
     pickIDs.clear();
-    let renderContext = {
+    let renderContext: PerspectiveViewRenderContext = {
       dataToDevice: projectionMat,
       lightDirection: lightingDirection.subarray(0, 3),
       ambientLighting: ambient,
       directionalLighting: directional,
-      pickIDs: pickIDs
+      pickIDs: pickIDs,
+      emitter: perspectivePanelEmit,
     };
 
     let visibleLayers = this.visibleLayerTracker.getVisibleLayers();
 
+    let hasTransparent = false;
+
+    // Draw fully-opaque layers first.
     for (let renderLayer of visibleLayers) {
-      renderLayer.draw(renderContext);
-    }
-
-    if (this.viewer.showSliceViews.value) {
-      let {sliceViewRenderHelper} = this;
-
-      for (let sliceView of this.sliceViews) {
-        let scalar = Math.abs(vec3.dot(lightingDirection, sliceView.viewportAxes[2]));
-        let factor = ambient + scalar * directional;
-        let mat = tempMat4;
-        // Need a matrix that maps (+1, +1, 0) to projectionMat * (width, height, 0)
-        mat4.identity(mat);
-        mat[0] = sliceView.width / 2.0;
-        mat[5] = -sliceView.height / 2.0;
-        mat4.multiply(mat, sliceView.viewportToData, mat);
-        mat4.multiply(mat, projectionMat, mat);
-
-        sliceViewRenderHelper.draw(
-            sliceView.offscreenFramebuffer.dataTextures[0], mat,
-            vec4.fromValues(factor, factor, factor, 1), vec4.fromValues(0.5, 0.5, 0.5, 1), 0, 0, 1,
-            1);
+      if (!renderLayer.isTransparent) {
+        renderLayer.draw(renderContext);
+      } else {
+        hasTransparent = true;
       }
     }
 
+    if (this.viewer.showSliceViews.value) {
+      this.drawSliceViews(renderContext);
+    }
+
     if (this.viewer.showAxisLines.value) {
-      let mat = tempMat4;
-      mat4.identity(mat);
-      // Draw axes lines.
-      let axisLength = 200 * 8;
+      this.drawAxisLines();
+    }
 
-      // Construct matrix that maps [-1, +1] x/y range to the full viewport data
-      // coordinates.
-      mat[0] = axisLength;
-      mat[5] = axisLength;
-      mat[10] = axisLength;
-      let center = this.navigationState.position.spatialCoordinates;
-      mat[12] = center[0];
-      mat[13] = center[1];
-      mat[14] = center[2];
-      mat[15] = 1;
-      mat4.multiply(mat, projectionMat, mat);
 
-      gl.WEBGL_draw_buffers.drawBuffersWEBGL([gl.WEBGL_draw_buffers.COLOR_ATTACHMENT0_WEBGL]);
-      this.axesLineHelper.draw(mat, false);
+    if (hasTransparent) {
+      // Draw transparent objects.
+      gl.depthMask(false);
+      gl.enable(gl.BLEND);
+
+      // Compute accumulate texture.
+      this.accumConfiguration.bind(width, height);
+      this.gl.clearColor(0.0, 0.0, 0.0, 0.0);
+      gl.clear(gl.COLOR_BUFFER_BIT);
+      renderContext.emitter = perspectivePanelEmitOITAccum;
+      gl.blendFunc(gl.ONE, gl.ONE);
+      for (let renderLayer of visibleLayers) {
+        if (renderLayer.isTransparent) {
+          renderLayer.draw(renderContext);
+        }
+      }
+
+      // Compute revealage texture.
+      this.revealageConfiguration.bind(width, height);
+      this.gl.clearColor(1.0, 1.0, 1.0, 1.0);
+      gl.clear(gl.COLOR_BUFFER_BIT);
+      renderContext.emitter = perspectivePanelEmitOITRevealage;
+      gl.blendFunc(gl.ZERO, gl.ONE_MINUS_SRC_ALPHA);
+      for (let renderLayer of visibleLayers) {
+        if (renderLayer.isTransparent) {
+          renderLayer.draw(renderContext);
+        }
+      }
+
+      // Copy transparent rendering result back to primary buffer.
+      gl.disable(gl.DEPTH_TEST);
+      this.offscreenFramebuffer.bindSingle(OffscreenTextures.COLOR);
+      gl.blendFunc(gl.ONE_MINUS_SRC_ALPHA, gl.SRC_ALPHA);
+      this.transparencyCopyHelper.draw(
+          this.accumConfiguration.colorBuffers[0].texture,
+          this.revealageConfiguration.colorBuffers[0].texture);
+
+      gl.depthMask(true);
+      gl.disable(gl.BLEND);
+      gl.enable(gl.DEPTH_TEST);
     }
 
     // Do picking only rendering pass.
@@ -291,6 +373,7 @@ export class PerspectivePanel extends RenderedDataPanel {
       gl.NONE, gl.WEBGL_draw_buffers.COLOR_ATTACHMENT1_WEBGL,
       gl.WEBGL_draw_buffers.COLOR_ATTACHMENT2_WEBGL
     ]);
+    renderContext.emitter = perspectivePanelEmit;
 
     for (let renderLayer of visibleLayers) {
       renderLayer.drawPicking(renderContext);
@@ -301,7 +384,53 @@ export class PerspectivePanel extends RenderedDataPanel {
 
     // Draw the texture over the whole viewport.
     this.setGLViewport();
-    this.offscreenCopyHelper.draw(this.offscreenFramebuffer.dataTextures[OffscreenTextures.COLOR]);
+    this.offscreenCopyHelper.draw(
+        this.offscreenFramebuffer.colorBuffers[OffscreenTextures.COLOR].texture);
+  }
+
+  private drawSliceViews(renderContext: PerspectiveViewRenderContext) {
+    let {sliceViewRenderHelper} = this;
+    let {lightDirection, ambientLighting, directionalLighting, dataToDevice} = renderContext;
+
+    for (let sliceView of this.sliceViews) {
+      let scalar = Math.abs(vec3.dot(lightDirection, sliceView.viewportAxes[2]));
+      let factor = ambientLighting + scalar * directionalLighting;
+      let mat = tempMat4;
+      // Need a matrix that maps (+1, +1, 0) to projectionMat * (width, height, 0)
+      mat4.identity(mat);
+      mat[0] = sliceView.width / 2.0;
+      mat[5] = -sliceView.height / 2.0;
+      mat4.multiply(mat, sliceView.viewportToData, mat);
+      mat4.multiply(mat, dataToDevice, mat);
+
+      sliceViewRenderHelper.draw(
+          sliceView.offscreenFramebuffer.colorBuffers[0].texture, mat,
+          vec4.fromValues(factor, factor, factor, 1), vec4.fromValues(0.5, 0.5, 0.5, 1), 0, 0, 1,
+          1);
+    }
+  }
+
+  private drawAxisLines() {
+    let {gl} = this;
+    let mat = tempMat4;
+    mat4.identity(mat);
+    // Draw axes lines.
+    let axisLength = 200 * 8;
+
+    // Construct matrix that maps [-1, +1] x/y range to the full viewport data
+    // coordinates.
+    mat[0] = axisLength;
+    mat[5] = axisLength;
+    mat[10] = axisLength;
+    let center = this.navigationState.position.spatialCoordinates;
+    mat[12] = center[0];
+    mat[13] = center[1];
+    mat[14] = center[2];
+    mat[15] = 1;
+    mat4.multiply(mat, this.projectionMat, mat);
+
+    gl.WEBGL_draw_buffers.drawBuffersWEBGL([gl.WEBGL_draw_buffers.COLOR_ATTACHMENT0_WEBGL]);
+    this.axesLineHelper.draw(mat, false);
   }
 
   zoomByMouse(factor: number) { this.navigationState.zoomBy(factor); }

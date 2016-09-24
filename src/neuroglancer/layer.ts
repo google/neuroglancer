@@ -478,9 +478,7 @@ export class VisibleRenderLayerTracker<RenderLayerType extends VisibilityTracked
     this.updateVisibleLayers();
   }
 
-  private handleLayersChanged() {
-    this.throttledUpdateVisibleLayers();
-  }
+  private handleLayersChanged() { this.throttledUpdateVisibleLayers(); }
 
   disposed() {
     this.throttledUpdateVisibleLayers.cancel();

@@ -24,7 +24,7 @@ import {ElementVisibilityFromTrackableBoolean, TrackableBoolean} from 'neuroglan
 import {identityMat4, Mat4, mat4, vec3, vec4} from 'neuroglancer/util/geom';
 import {startRelativeMouseDrag} from 'neuroglancer/util/mouse_drag';
 import {ViewerState} from 'neuroglancer/viewer_state';
-import {OffscreenCopyHelper, OffscreenFramebuffer} from 'neuroglancer/webgl/offscreen';
+import {FramebufferConfiguration, makeTextureBuffers, OffscreenCopyHelper} from 'neuroglancer/webgl/offscreen';
 import {ShaderBuilder} from 'neuroglancer/webgl/shader';
 import {ScaleBarWidget} from 'neuroglancer/widget/scale_bar';
 
@@ -58,9 +58,9 @@ export class SliceViewPanelRenderLayer extends VisibilityTrackedRenderLayer {
 };
 
 export class SliceViewPanel extends RenderedDataPanel {
-  private axesLineHelper = AxesLineHelper.get(this.gl);
+  private axesLineHelper = this.registerDisposer(AxesLineHelper.get(this.gl));
   private sliceViewRenderHelper =
-      SliceViewRenderHelper.get(this.gl, 'SliceViewRenderHelper', sliceViewPanelEmit);
+      this.registerDisposer(SliceViewRenderHelper.get(this.gl, sliceViewPanelEmit));
   private colorFactor = vec4.fromValues(1, 1, 1, 1);
   private backgroundColor = vec4.fromValues(0.5, 0.5, 0.5, 1.0);
   private pickIDs = new PickIDManager();
@@ -68,10 +68,10 @@ export class SliceViewPanel extends RenderedDataPanel {
   private visibleLayerTracker = makeRenderedPanelVisibleLayerTracker(
       this.viewer.layerManager, SliceViewPanelRenderLayer, this);
 
-  private offscreenFramebuffer =
-      new OffscreenFramebuffer(this.gl, {numDataBuffers: OffscreenTextures.NUM_TEXTURES});
+  private offscreenFramebuffer = this.registerDisposer(new FramebufferConfiguration(
+      this.gl, {colorBuffers: makeTextureBuffers(this.gl, OffscreenTextures.NUM_TEXTURES)}));
 
-  private offscreenCopyHelper = OffscreenCopyHelper.get(this.gl);
+  private offscreenCopyHelper = this.registerDisposer(OffscreenCopyHelper.get(this.gl));
 
   private scaleBarWidget = this.registerDisposer(new ScaleBarWidget());
 
@@ -114,7 +114,7 @@ export class SliceViewPanel extends RenderedDataPanel {
     let mat = mat4.create();
 
     this.sliceViewRenderHelper.draw(
-        sliceView.offscreenFramebuffer.dataTextures[0], identityMat4, this.colorFactor,
+        sliceView.offscreenFramebuffer.colorBuffers[0].texture, identityMat4, this.colorFactor,
         this.backgroundColor, 0, 0, 1, 1);
 
     let visibleLayers = this.visibleLayerTracker.getVisibleLayers();
@@ -154,7 +154,8 @@ export class SliceViewPanel extends RenderedDataPanel {
 
     // Draw the texture over the whole viewport.
     this.setGLViewport();
-    this.offscreenCopyHelper.draw(this.offscreenFramebuffer.dataTextures[OffscreenTextures.COLOR]);
+    this.offscreenCopyHelper.draw(
+        this.offscreenFramebuffer.colorBuffers[OffscreenTextures.COLOR].texture);
 
     // Update the scale bar if needed.
     {

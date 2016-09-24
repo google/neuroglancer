@@ -28,10 +28,9 @@ import {ChunkManager} from 'neuroglancer/chunk_manager/frontend';
 import {RenderLayer as GenericRenderLayer} from 'neuroglancer/layer';
 import {DataType, SLICEVIEW_RENDERLAYER_RPC_ID, VolumeChunkSpecification} from 'neuroglancer/sliceview/base';
 import {MultiscaleVolumeChunkSource, SliceView, VolumeChunkSource} from 'neuroglancer/sliceview/frontend';
-import {TrackableValue, WatchableValue} from 'neuroglancer/trackable_value';
+import {WatchableValue} from 'neuroglancer/trackable_value';
 import {RefCounted} from 'neuroglancer/util/disposable';
 import {BoundingBox, Mat4, Vec3, vec3, vec3Key, vec4} from 'neuroglancer/util/geom';
-import {verifyFloat01} from 'neuroglancer/util/json';
 import {Buffer} from 'neuroglancer/webgl/buffer';
 import {GL} from 'neuroglancer/webgl/context';
 import {ShaderBuilder, ShaderCompilationError, ShaderLinkError, ShaderProgram} from 'neuroglancer/webgl/shader';
@@ -44,12 +43,6 @@ export const GLSL_TYPE_FOR_DATA_TYPE = new Map<DataType, string>([
   [DataType.UINT32, 'uint32_t'],
   [DataType.UINT64, 'uint64_t'],
 ]);
-
-export type TrackableAlphaValue = TrackableValue<number>;
-
-export function trackableAlphaValue(initialValue = 0.5) {
-  return new TrackableValue<number>(initialValue, verifyFloat01);
-}
 
 const DEBUG_VERTICES = false;
 

@@ -18,8 +18,9 @@ import {ChunkManager} from 'neuroglancer/chunk_manager/frontend';
 import {LayerSelectedValues, UserLayer} from 'neuroglancer/layer';
 import {SegmentColorHash} from 'neuroglancer/segment_color';
 import {forEachVisibleSegment, getObjectKey, ON_VISIBILITY_CHANGE_METHOD_ID, VisibleSegmentsState} from 'neuroglancer/segmentation_display_state/base';
+import {TrackableAlphaValue} from 'neuroglancer/trackable_alpha';
 import {RefCounted} from 'neuroglancer/util/disposable';
-import {vec3} from 'neuroglancer/util/geom';
+import {vec4} from 'neuroglancer/util/geom';
 import {Uint64} from 'neuroglancer/util/uint64';
 import {UseCount} from 'neuroglancer/util/use_count';
 import {SharedObject} from 'neuroglancer/worker_rpc';
@@ -78,6 +79,10 @@ export interface SegmentationDisplayState extends VisibleSegmentsState {
   segmentColorHash: SegmentColorHash;
 }
 
+export interface SegmentationDisplayStateWithAlpha extends SegmentationDisplayState {
+  objectAlpha: TrackableAlphaValue;
+}
+
 export function registerRedrawWhenSegmentationDisplayStateChanged(
     displayState: SegmentationDisplayState, renderLayer: {redrawNeeded: Signal}&RefCounted) {
   let dispatchRedrawNeeded = () => { renderLayer.redrawNeeded.dispatch(); };
@@ -90,19 +95,35 @@ export function registerRedrawWhenSegmentationDisplayStateChanged(
       displayState.segmentSelectionState.changed.add(dispatchRedrawNeeded));
 }
 
+export function registerRedrawWhenSegmentationDisplayStateWithAlphaChanged(
+    displayState: SegmentationDisplayStateWithAlpha,
+    renderLayer: {redrawNeeded: Signal}&RefCounted) {
+  registerRedrawWhenSegmentationDisplayStateChanged(displayState, renderLayer);
+  let dispatchRedrawNeeded = () => { renderLayer.redrawNeeded.dispatch(); };
+  renderLayer.registerSignalBinding(displayState.objectAlpha.changed.add(dispatchRedrawNeeded));
+}
+
 /**
  * Temporary value used by getObjectColor.
  */
-const tempColor = vec3.create();
+const tempColor = vec4.create();
 
-export function getObjectColor(displayState: SegmentationDisplayState, objectId: Uint64) {
+/**
+ * Returns the alpha-premultiplied color to use.
+ */
+export function getObjectColor(
+    displayState: SegmentationDisplayState, objectId: Uint64, alpha: number = 1) {
   const color = tempColor;
+  color[3] = alpha;
   displayState.segmentColorHash.compute(color, objectId);
   if (displayState.segmentSelectionState.isSelected(objectId)) {
     for (let i = 0; i < 3; ++i) {
       color[i] = color[i] * 0.5 + 0.5;
     }
   }
+  color[0] *= alpha;
+  color[1] *= alpha;
+  color[2] *= alpha;
   return color;
 }
 

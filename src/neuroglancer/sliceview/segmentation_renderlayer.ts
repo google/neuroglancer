@@ -19,7 +19,8 @@ import {GPUHashTable, HashMapShaderManager, HashSetShaderManager} from 'neurogla
 import {SegmentColorShaderManager} from 'neuroglancer/segment_color';
 import {registerRedrawWhenSegmentationDisplayStateChanged, SegmentationDisplayState} from 'neuroglancer/segmentation_display_state/frontend';
 import {MultiscaleVolumeChunkSource, SliceView} from 'neuroglancer/sliceview/frontend';
-import {RenderLayer, trackableAlphaValue} from 'neuroglancer/sliceview/renderlayer';
+import {RenderLayer} from 'neuroglancer/sliceview/renderlayer';
+import {TrackableAlphaValue} from 'neuroglancer/trackable_alpha';
 import {DisjointUint64Sets} from 'neuroglancer/util/disjoint_sets';
 import {ShaderBuilder, ShaderProgram} from 'neuroglancer/webgl/shader';
 
@@ -43,6 +44,11 @@ export class EquivalencesHashMap {
   }
 };
 
+export interface SliceViewSegmentationDisplayState extends SegmentationDisplayState {
+  selectedAlpha: TrackableAlphaValue;
+  notSelectedAlpha: TrackableAlphaValue;
+}
+
 export class SegmentationRenderLayer extends RenderLayer {
   private segmentColorShaderManager = new SegmentColorShaderManager('segmentColorHash');
   private hashTableManager = new HashSetShaderManager('visibleSegments');
@@ -55,12 +61,12 @@ export class SegmentationRenderLayer extends RenderLayer {
   private hasEquivalences: boolean;
 
   constructor(
-      multiscaleSource: MultiscaleVolumeChunkSource, public displayState: SegmentationDisplayState,
-      public selectedAlpha = trackableAlphaValue(0.5),
-      public notSelectedAlpha = trackableAlphaValue(0)) {
+      multiscaleSource: MultiscaleVolumeChunkSource,
+      public displayState: SliceViewSegmentationDisplayState) {
     super(multiscaleSource);
     registerRedrawWhenSegmentationDisplayStateChanged(displayState, this);
-    this.registerSignalBinding(selectedAlpha.changed.add(() => { this.redrawNeeded.dispatch(); }));
+    this.registerSignalBinding(
+        displayState.selectedAlpha.changed.add(() => { this.redrawNeeded.dispatch(); }));
     this.hasEquivalences = this.displayState.segmentEquivalences.size !== 0;
     displayState.segmentEquivalences.changed.add(() => {
       let {segmentEquivalences} = this.displayState;
@@ -72,7 +78,7 @@ export class SegmentationRenderLayer extends RenderLayer {
       }
     });
     this.registerSignalBinding(
-        notSelectedAlpha.changed.add(() => { this.redrawNeeded.dispatch(); }));
+        displayState.notSelectedAlpha.changed.add(() => { this.redrawNeeded.dispatch(); }));
   }
 
   getShaderKey() {
@@ -148,8 +154,8 @@ uint64_t getMappedObjectId() {
         selectedSegmentForShader[4 + i] = ((high >> (8 * i)) & 0xFF) / 255.0;
       }
     }
-    gl.uniform1f(shader.uniform('uSelectedAlpha'), this.selectedAlpha.value);
-    gl.uniform1f(shader.uniform('uNotSelectedAlpha'), this.notSelectedAlpha.value);
+    gl.uniform1f(shader.uniform('uSelectedAlpha'), this.displayState.selectedAlpha.value);
+    gl.uniform1f(shader.uniform('uNotSelectedAlpha'), this.displayState.notSelectedAlpha.value);
     gl.uniform4fv(shader.uniform('uSelectedSegment'), selectedSegmentForShader);
     gl.uniform1f(shader.uniform('uShowAllSegments'), visibleSegments.hashTable.size ? 0.0 : 1.0);
     this.hashTableManager.enable(gl, shader, this.gpuHashTable);

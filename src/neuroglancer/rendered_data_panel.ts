@@ -101,7 +101,7 @@ export abstract class RenderedDataPanel extends RenderedPanel {
     mouseState.triggerUpdate();
   }
 
-  disposed () {
+  disposed() {
     let {mouseState} = this.viewer;
     if (mouseState.updater === this.mouseStateUpdater) {
       mouseState.updater = undefined;

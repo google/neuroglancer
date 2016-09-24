@@ -18,7 +18,7 @@ import {RefCounted} from 'neuroglancer/util/disposable';
 import {vec4} from 'neuroglancer/util/geom';
 import {Buffer} from 'neuroglancer/webgl/buffer';
 import {GL} from 'neuroglancer/webgl/context';
-import {OffscreenFramebuffer} from 'neuroglancer/webgl/offscreen';
+import {FramebufferConfiguration, makeTextureBuffers} from 'neuroglancer/webgl/offscreen';
 import {ShaderBuilder, ShaderProgram} from 'neuroglancer/webgl/shader';
 import {glsl_debugFunctions} from 'neuroglancer/webgl/shader_lib';
 import {webglTest} from 'neuroglancer/webgl/testing';
@@ -26,7 +26,8 @@ import {webglTest} from 'neuroglancer/webgl/testing';
 export class FragmentShaderTester extends RefCounted {
   builder = new ShaderBuilder(this.gl);
   shader: ShaderProgram;
-  offscreenFramebuffer = new OffscreenFramebuffer(this.gl, {numDataBuffers: this.numOutputs});
+  offscreenFramebuffer = new FramebufferConfiguration(
+      this.gl, {colorBuffers: makeTextureBuffers(this.gl, this.numOutputs)});
   private vertexPositionsBuffer = this.registerDisposer(Buffer.fromData(
       this.gl, new Float32Array([
         -1, -1, 0, 1,  //

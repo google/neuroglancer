@@ -26,10 +26,11 @@ import {RefCounted} from 'neuroglancer/util/disposable';
 import {Disposable} from 'neuroglancer/util/disposable';
 import {Mat4, mat4, rectifyTransformMatrixIfAxisAligned, Vec3, vec3, vec3Key, Vec4} from 'neuroglancer/util/geom';
 import {stableStringify} from 'neuroglancer/util/json';
+import {getObjectId} from 'neuroglancer/util/object_id';
 import {Uint64} from 'neuroglancer/util/uint64';
 import {Buffer} from 'neuroglancer/webgl/buffer';
 import {GL} from 'neuroglancer/webgl/context';
-import {OffscreenFramebuffer} from 'neuroglancer/webgl/offscreen';
+import {FramebufferConfiguration, makeTextureBuffers, StencilBuffer} from 'neuroglancer/webgl/offscreen';
 import {ShaderBuilder, ShaderModule, ShaderProgram} from 'neuroglancer/webgl/shader';
 import {registerSharedObjectOwner, RPC} from 'neuroglancer/worker_rpc';
 import {Signal} from 'signals';
@@ -65,8 +66,9 @@ export class SliceView extends SliceViewBase {
 
   newVisibleLayers = new Set<RenderLayer>();
 
-  offscreenFramebuffer = new OffscreenFramebuffer(
-      this.gl, {numDataBuffers: 1, depthBuffer: false, stencilBuffer: true});
+  offscreenFramebuffer = this.registerDisposer(new FramebufferConfiguration(
+      this.gl,
+      {colorBuffers: makeTextureBuffers(this.gl, 1), depthBuffer: new StencilBuffer(this.gl)}));
 
   constructor(
       public gl: GL, public chunkManager: ChunkManager, public layerManager: LayerManager,
@@ -519,7 +521,9 @@ gl_Position = uProjectionMatrix * aVertexPosition;
     gl.bindTexture(gl.TEXTURE_2D, null);
   }
 
-  static get(gl: GL, key: string, emitter: ShaderModule) {
-    return gl.memoize.get(key, () => { return new SliceViewRenderHelper(gl, emitter); });
+  static get(gl: GL, emitter: ShaderModule) {
+    return gl.memoize.get(
+        `sliceview/SliceViewRenderHelper:${getObjectId(emitter)}`,
+        () => new SliceViewRenderHelper(gl, emitter));
   }
-};
+}

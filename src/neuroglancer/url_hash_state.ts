@@ -122,7 +122,7 @@ export function delayHashUpdate() {
   }
 }
 
-function timerExpired () {
+function timerExpired() {
   pendingUpdate = -1;
   let time = Date.now();
   if (time >= nextUpdateTime) {

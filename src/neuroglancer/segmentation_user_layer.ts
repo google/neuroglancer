@@ -24,8 +24,8 @@ import {SegmentColorHash} from 'neuroglancer/segment_color';
 import {SegmentationDisplayState, SegmentSelectionState, Uint64MapEntry} from 'neuroglancer/segmentation_display_state/frontend';
 import {SharedDisjointUint64Sets} from 'neuroglancer/shared_disjoint_sets';
 import {PerspectiveViewSkeletonLayer, SkeletonLayer, SliceViewPanelSkeletonLayer} from 'neuroglancer/skeleton/frontend';
-import {trackableAlphaValue} from 'neuroglancer/sliceview/renderlayer';
 import {SegmentationRenderLayer} from 'neuroglancer/sliceview/segmentation_renderlayer';
+import {trackableAlphaValue} from 'neuroglancer/trackable_alpha';
 import {Uint64Set} from 'neuroglancer/uint64_set';
 import {parseArray, verifyObjectProperty, verifyOptionalString} from 'neuroglancer/util/json';
 import {Uint64} from 'neuroglancer/util/uint64';
@@ -35,11 +35,17 @@ import {Uint64EntryWidget} from 'neuroglancer/widget/uint64_entry_widget';
 
 require('./segmentation_user_layer.css');
 
+const SELECTED_ALPHA_JSON_KEY = 'selectedAlpha';
+const NOT_SELECTED_ALPHA_JSON_KEY = 'notSelectedAlpha';
+const OBJECT_ALPHA_JSON_KEY = 'objectAlpha';
+
+
 export class SegmentationUserLayer extends UserLayer implements SegmentationDisplayState {
   segmentColorHash = SegmentColorHash.getDefault();
   segmentSelectionState = new SegmentSelectionState();
   selectedAlpha = trackableAlphaValue(0.5);
   notSelectedAlpha = trackableAlphaValue(0);
+  objectAlpha = trackableAlphaValue(1.0);
   visibleSegments = Uint64Set.makeWithCounterpart(this.manager.worker);
   segmentEquivalences = SharedDisjointUint64Sets.makeWithCounterpart(this.manager.worker);
   volumePath: string|undefined;
@@ -54,9 +60,11 @@ export class SegmentationUserLayer extends UserLayer implements SegmentationDisp
     this.segmentSelectionState.bindTo(manager.layerSelectedValues, this);
     this.selectedAlpha.changed.add(() => { this.specificationChanged.dispatch(); });
     this.notSelectedAlpha.changed.add(() => { this.specificationChanged.dispatch(); });
+    this.objectAlpha.changed.add(() => { this.specificationChanged.dispatch(); });
 
-    this.selectedAlpha.restoreState(x['selectedAlpha']);
-    this.notSelectedAlpha.restoreState(x['notSelectedAlpha']);
+    this.selectedAlpha.restoreState(x[SELECTED_ALPHA_JSON_KEY]);
+    this.notSelectedAlpha.restoreState(x[NOT_SELECTED_ALPHA_JSON_KEY]);
+    this.objectAlpha.restoreState(x[OBJECT_ALPHA_JSON_KEY]);
 
     let volumePath = this.volumePath = verifyOptionalString(x['source']);
     let meshPath = this.meshPath = verifyOptionalString(x['mesh']);
@@ -64,8 +72,7 @@ export class SegmentationUserLayer extends UserLayer implements SegmentationDisp
     if (volumePath !== undefined) {
       getVolumeWithStatusMessage(manager.chunkManager, volumePath).then(volume => {
         if (!this.wasDisposed) {
-          this.addRenderLayer(
-              new SegmentationRenderLayer(volume, this, this.selectedAlpha, this.notSelectedAlpha));
+          this.addRenderLayer(new SegmentationRenderLayer(volume, this));
           if (meshPath === undefined) {
             let meshSource = volume.getMeshSource();
             if (meshSource != null) {
@@ -118,8 +125,9 @@ export class SegmentationUserLayer extends UserLayer implements SegmentationDisp
     x['source'] = this.volumePath;
     x['mesh'] = this.meshPath;
     x['skeletons'] = this.skeletonsPath;
-    x['selectedAlpha'] = this.selectedAlpha.toJSON();
-    x['notSelectedAlpha'] = this.notSelectedAlpha.toJSON();
+    x[SELECTED_ALPHA_JSON_KEY] = this.selectedAlpha.toJSON();
+    x[NOT_SELECTED_ALPHA_JSON_KEY] = this.notSelectedAlpha.toJSON();
+    x[OBJECT_ALPHA_JSON_KEY] = this.objectAlpha.toJSON();
     let {visibleSegments} = this;
     if (visibleSegments.size > 0) {
       x['segments'] = visibleSegments.toJSON();
@@ -183,15 +191,18 @@ class SegmentationDropdown extends UserLayerDropdown {
   addSegmentWidget = this.registerDisposer(new Uint64EntryWidget());
   selectedAlphaWidget = this.registerDisposer(new RangeWidget(this.layer.selectedAlpha));
   notSelectedAlphaWidget = this.registerDisposer(new RangeWidget(this.layer.notSelectedAlpha));
+  objectAlphaWidget = this.registerDisposer(new RangeWidget(this.layer.objectAlpha));
   constructor(public element: HTMLDivElement, public layer: SegmentationUserLayer) {
     super();
     element.classList.add('segmentation-dropdown');
-    let {selectedAlphaWidget, notSelectedAlphaWidget} = this;
+    let {selectedAlphaWidget, notSelectedAlphaWidget, objectAlphaWidget} = this;
     selectedAlphaWidget.promptElement.textContent = 'Opacity (on)';
     notSelectedAlphaWidget.promptElement.textContent = 'Opacity (off)';
+    objectAlphaWidget.promptElement.textContent = 'Opacity (3d)';
 
     element.appendChild(this.selectedAlphaWidget.element);
     element.appendChild(this.notSelectedAlphaWidget.element);
+    element.appendChild(this.objectAlphaWidget.element);
     this.addSegmentWidget.element.classList.add('add-segment');
     this.addSegmentWidget.element.title = 'Add segment ID';
     element.appendChild(this.registerDisposer(this.addSegmentWidget).element);
