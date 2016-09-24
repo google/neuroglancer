@@ -408,7 +408,7 @@ export class MouseSelectionState {
       this.changed.dispatch();
     }
   }
-};
+}
 
 export class LayerSelectedValues extends RefCounted {
   values = new Map<UserLayer, any>();
@@ -466,7 +466,7 @@ export class VisibleRenderLayerTracker<RenderLayerType extends VisibilityTracked
     RefCounted {
   private visibleLayers = new Set<RenderLayerType>();
   private newVisibleLayers = new Set<RenderLayerType>();
-  private updatePending: number|null = null;
+  private throttledUpdateVisibleLayers = throttle(() => { this.updateVisibleLayers(); }, 0);
 
   constructor(
       public layerManager: LayerManager,
@@ -479,27 +479,14 @@ export class VisibleRenderLayerTracker<RenderLayerType extends VisibilityTracked
   }
 
   private handleLayersChanged() {
-    if (this.updatePending === null) {
-      this.updatePending = setTimeout(() => {
-        this.updatePending = null;
-        this.updateVisibleLayers();
-      }, 0);
-    }
+    this.throttledUpdateVisibleLayers();
   }
 
   disposed() {
-    this.cancelUpdate();
+    this.throttledUpdateVisibleLayers.cancel();
     this.visibleLayers.forEach(this.layerRemoved);
     this.visibleLayers.clear();
     super.disposed();
-  }
-
-  private cancelUpdate() {
-    let {updatePending} = this;
-    if (updatePending !== null) {
-      clearTimeout(updatePending);
-      updatePending = null;
-    }
   }
 
   private updateVisibleLayers() {
@@ -526,13 +513,10 @@ export class VisibleRenderLayerTracker<RenderLayerType extends VisibilityTracked
   }
 
   getVisibleLayers() {
-    if (this.updatePending !== null) {
-      this.cancelUpdate();
-      this.updateVisibleLayers();
-    }
+    (<any>this.throttledUpdateVisibleLayers).flush();
     return this.visibleLayers;
   }
-};
+}
 
 export function
 makeRenderedPanelVisibleLayerTracker<RenderLayerType extends VisibilityTrackedRenderLayer>(
