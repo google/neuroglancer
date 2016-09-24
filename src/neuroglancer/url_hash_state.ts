@@ -29,7 +29,7 @@ let currentHashState: any = {};
 let updatingObject: Trackable|null = null;
 let updatedObjects = new Set<Trackable>();
 let lastHash: string|null = null;
-let pendingUpdate: number|null = null;
+let pendingUpdate = -1;
 
 const UPDATE_DELAY = 500;
 
@@ -106,22 +106,33 @@ function updateTrackedObjects(newState: any) {
   }
 }
 
+let nextUpdateTime = 0;
+
 function scheduleUpdate() {
-  // Wait another UPDATE_DELAY ms before updating hash.
-  if (pendingUpdate != null) {
-    clearTimeout(pendingUpdate);
+  // Wait UPDATE_DELAY ms before updating hash.
+  if (pendingUpdate === -1) {
+    nextUpdateTime = Date.now() + UPDATE_DELAY;
+    pendingUpdate = setTimeout(timerExpired, UPDATE_DELAY);
   }
-  pendingUpdate = setTimeout(updateHash, UPDATE_DELAY);
 }
 
 export function delayHashUpdate() {
-  if (pendingUpdate != null) {
-    scheduleUpdate();
+  if (pendingUpdate !== -1) {
+    nextUpdateTime = Date.now() + UPDATE_DELAY;
+  }
+}
+
+function timerExpired () {
+  pendingUpdate = -1;
+  let time = Date.now();
+  if (time >= nextUpdateTime) {
+    updateHash();
+  } else {
+    pendingUpdate = setTimeout(timerExpired, nextUpdateTime - time);
   }
 }
 
 function updateHash() {
-  pendingUpdate = null;
   // console.log(`updateHash at ${Date.now()}`);
   let updated = false;
   for (let obj of updatedObjects) {
