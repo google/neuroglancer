@@ -101,6 +101,15 @@ export abstract class RenderedDataPanel extends RenderedPanel {
     mouseState.triggerUpdate();
   }
 
+  disposed () {
+    let {mouseState} = this.viewer;
+    if (mouseState.updater === this.mouseStateUpdater) {
+      mouseState.updater = undefined;
+      mouseState.setActive(false);
+    }
+    super.disposed();
+  }
+
   abstract zoomByMouse(factor: number): void;
 
   onMousewheel(e: WheelEvent) {
