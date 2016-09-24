@@ -91,33 +91,25 @@ float computeOITWeight(float alpha) {
 `;
 
 // Color must be premultiplied by alpha.
-export const glsl_perspectivePanelEmitOITAccum = [
+export const glsl_perspectivePanelEmitOIT = [
   glsl_computeOITWeight, `
 void emit(vec4 color, vec4 pickId) {
   float weight = computeOITWeight(color.a);
-  gl_FragColor = color * weight;
+  vec4 accum = color * weight;
+  gl_FragData[0] = vec4(accum.rgb, color.a);
+  gl_FragData[1] = vec4(accum.a, 0.0, 0.0, 0.0);
 }
 `
 ];
-
-export const glsl_perspectivePanelEmitOITRevealage = `
-void emit(vec4 color, vec4 pickId) {
-  float a = color.a;
-  gl_FragColor = vec4(a, a, a, a);
-}
-`;
 
 export function perspectivePanelEmit(builder: ShaderBuilder) {
   builder.addFragmentExtension('GL_EXT_draw_buffers');
   builder.addFragmentCode(glsl_perspectivePanelEmit);
 }
 
-export function perspectivePanelEmitOITAccum(builder: ShaderBuilder) {
-  builder.addFragmentCode(glsl_perspectivePanelEmitOITAccum);
-}
-
-export function perspectivePanelEmitOITRevealage(builder: ShaderBuilder) {
-  builder.addFragmentCode(glsl_perspectivePanelEmitOITRevealage);
+export function perspectivePanelEmitOIT(builder: ShaderBuilder) {
+  builder.addFragmentExtension('GL_EXT_draw_buffers');
+  builder.addFragmentCode(glsl_perspectivePanelEmitOIT);
 }
 
 const tempVec3 = vec3.create();
@@ -125,8 +117,11 @@ const tempMat4 = mat4.create();
 
 function defineTransparencyCopyShader(builder: ShaderBuilder) {
   builder.setFragmentMain(`
-float revealage = getValue1().r;
-vec4 accum = getValue0();
+vec4 v0 = getValue0();
+vec4 v1 = getValue1();
+vec4 accum = vec4(v0.rgb, v1.r);
+float revealage = v0.a;
+
 gl_FragColor = vec4(accum.rgb / accum.a, revealage);
 `);
 }
@@ -152,15 +147,9 @@ export class PerspectivePanel extends RenderedDataPanel {
     depthBuffer: new DepthBuffer(this.gl)
   }));
 
-  private accumConfiguration = this.registerDisposer(new FramebufferConfiguration(this.gl, {
+  private transparentConfiguration = this.registerDisposer(new FramebufferConfiguration(this.gl, {
     framebuffer: this.offscreenFramebuffer.framebuffer.addRef(),
-    colorBuffers: makeTextureBuffers(this.gl, 1, this.gl.RGBA, this.gl.FLOAT),
-    depthBuffer: this.offscreenFramebuffer.depthBuffer!.addRef(),
-  }));
-
-  private revealageConfiguration = this.registerDisposer(new FramebufferConfiguration(this.gl, {
-    framebuffer: this.offscreenFramebuffer.framebuffer.addRef(),
-    colorBuffers: makeTextureBuffers(this.gl, 1, this.gl.RGBA, this.gl.FLOAT),
+    colorBuffers: makeTextureBuffers(this.gl, 2, this.gl.RGBA, this.gl.FLOAT),
     depthBuffer: this.offscreenFramebuffer.depthBuffer!.addRef(),
   }));
 
@@ -331,24 +320,12 @@ export class PerspectivePanel extends RenderedDataPanel {
       gl.depthMask(false);
       gl.enable(gl.BLEND);
 
-      // Compute accumulate texture.
-      this.accumConfiguration.bind(width, height);
-      this.gl.clearColor(0.0, 0.0, 0.0, 0.0);
+      // Compute accumulate and revelage textures.
+      this.transparentConfiguration.bind(width, height);
+      this.gl.clearColor(0.0, 0.0, 0.0, 1.0);
       gl.clear(gl.COLOR_BUFFER_BIT);
-      renderContext.emitter = perspectivePanelEmitOITAccum;
-      gl.blendFunc(gl.ONE, gl.ONE);
-      for (let renderLayer of visibleLayers) {
-        if (renderLayer.isTransparent) {
-          renderLayer.draw(renderContext);
-        }
-      }
-
-      // Compute revealage texture.
-      this.revealageConfiguration.bind(width, height);
-      this.gl.clearColor(1.0, 1.0, 1.0, 1.0);
-      gl.clear(gl.COLOR_BUFFER_BIT);
-      renderContext.emitter = perspectivePanelEmitOITRevealage;
-      gl.blendFunc(gl.ZERO, gl.ONE_MINUS_SRC_ALPHA);
+      renderContext.emitter = perspectivePanelEmitOIT;
+      gl.blendFuncSeparate(gl.ONE, gl.ONE, gl.ZERO, gl.ONE_MINUS_SRC_ALPHA);
       for (let renderLayer of visibleLayers) {
         if (renderLayer.isTransparent) {
           renderLayer.draw(renderContext);
@@ -360,8 +337,8 @@ export class PerspectivePanel extends RenderedDataPanel {
       this.offscreenFramebuffer.bindSingle(OffscreenTextures.COLOR);
       gl.blendFunc(gl.ONE_MINUS_SRC_ALPHA, gl.SRC_ALPHA);
       this.transparencyCopyHelper.draw(
-          this.accumConfiguration.colorBuffers[0].texture,
-          this.revealageConfiguration.colorBuffers[0].texture);
+          this.transparentConfiguration.colorBuffers[0].texture,
+          this.transparentConfiguration.colorBuffers[1].texture);
 
       gl.depthMask(true);
       gl.disable(gl.BLEND);
