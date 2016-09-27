@@ -83,6 +83,7 @@ export class UserLayer extends RefCounted {
     this.registerSignalBinding(layer.layerChanged.add(layersChanged.dispatch, layersChanged));
     this.registerSignalBinding(
         layer.readyStateChanged.add(readyStateChanged.dispatch, readyStateChanged));
+    readyStateChanged.dispatch();
     layersChanged.dispatch();
   }
 
@@ -193,6 +194,7 @@ export class LayerManager extends RefCounted {
     this.updateSignalBindings(managedLayer, addSignalBinding);
     this.managedLayers.push(managedLayer);
     this.layersChanged.dispatch();
+    this.readyStateChanged.dispatch();
     return managedLayer;
   }
 
