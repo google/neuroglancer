@@ -484,9 +484,16 @@ export class VisibleRenderLayerTracker<RenderLayerType extends VisibilityTracked
 
   disposed() {
     this.throttledUpdateVisibleLayers.cancel();
-    this.visibleLayers.forEach(this.layerRemoved);
+    this.visibleLayers.forEach(layer => { this.onLayerRemoved(layer); });
     this.visibleLayers.clear();
     super.disposed();
+  }
+
+  private onLayerRemoved(renderLayer: RenderLayerType) {
+    let {layerRemoved} = this;
+    layerRemoved(renderLayer);
+    renderLayer.visibilityCount.dec();
+    renderLayer.dispose();
   }
 
   private updateVisibleLayers() {
@@ -496,7 +503,7 @@ export class VisibleRenderLayerTracker<RenderLayerType extends VisibilityTracked
         let typedLayer = <RenderLayerType>renderLayer;
         newVisibleLayers.add(typedLayer);
         if (!visibleLayers.has(typedLayer)) {
-          visibleLayers.add(typedLayer);
+          visibleLayers.add(typedLayer.addRef());
           typedLayer.visibilityCount.inc();
           layerAdded(typedLayer);
         }
@@ -505,8 +512,7 @@ export class VisibleRenderLayerTracker<RenderLayerType extends VisibilityTracked
     for (let renderLayer of visibleLayers) {
       if (!newVisibleLayers.has(renderLayer)) {
         visibleLayers.delete(renderLayer);
-        layerRemoved(renderLayer);
-        renderLayer.visibilityCount.dec();
+        this.onLayerRemoved(renderLayer);
       }
     }
     newVisibleLayers.clear();
