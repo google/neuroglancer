@@ -4,7 +4,8 @@ from distutils.command.build import build
 from subprocess import call
 import os
 import shutil
-from setuptools import setup, find_packages
+import numpy as np
+from setuptools import setup, find_packages, Extension
 
 static_files = ['main.bundle.js', 'chunk_worker.bundle.js', 'styles.css', 'index.html']
 
@@ -64,21 +65,49 @@ class bundle_client(build):
 
         os.chdir(prev_dir)
 
+setup_dir = os.path.dirname(__file__)
+src_dir = os.path.join(setup_dir, 'ext/src')
+openmesh_dir = os.path.join(setup_dir, 'ext/third_party/openmesh/OpenMesh/src')
+local_sources = [
+    '_neuroglancer.cc',
+    'openmesh_dependencies.cc',
+    'on_demand_object_mesh_generator.cc',
+    'voxel_mesh_generator.cc',
+    'mesh_objects.cc',
+]
 
-setup(name='neuroglancer',
-      version='0.0.6',
-      description='Python data backend for neuroglancer, a WebGL-based viewer for volumetric data',
-      author='Jeremy Maitin-Shepard, Jan Funke',
-      author_email='jbms@google.com, jfunke@iri.upc.edu',
-      url='https://github.com/google/neuroglancer',
-      license='Apache License 2.0',
-      packages=find_packages(),
-      package_data={
-          'neuroglancer.static': static_files,
-      },
-      install_requires=[
-          "Pillow>=3.2.0",
-          "numpy>=1.11.0",
-      ],
-      use_2to3=True,
-      cmdclass={'bundle_client': bundle_client}, )
+USE_OMP = False
+if USE_OMP:
+    openmp_flags = ['-fopenmp']
+else:
+    openmp_flags = []
+
+setup(
+    name='neuroglancer',
+    version='0.0.6',
+    description='Python data backend for neuroglancer, a WebGL-based viewer for volumetric data',
+    author='Jeremy Maitin-Shepard, Jan Funke',
+    author_email='jbms@google.com, jfunke@iri.upc.edu',
+    url='https://github.com/google/neuroglancer',
+    license='Apache License 2.0',
+    packages=find_packages(),
+    package_data={
+        'neuroglancer.static': static_files,
+    },
+    install_requires=[
+        "Pillow>=3.2.0",
+        "numpy>=1.11.0",
+    ],
+    ext_modules=[
+        Extension(
+            '_neuroglancer',
+            sources=[os.path.join(src_dir, name) for name in local_sources],
+            language='c++',
+            include_dirs=[np.get_include(), openmesh_dir],
+            extra_compile_args=[
+                '-std=c++11', '-fvisibility=hidden', '-O3'
+            ] + openmp_flags,
+            extra_link_args=openmp_flags),
+    ],
+    use_2to3=True,
+    cmdclass={'bundle_client': bundle_client}, )

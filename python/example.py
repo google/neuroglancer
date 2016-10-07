@@ -10,6 +10,7 @@ a[1, :, :, :] = np.abs(np.sin(4 * (iy + iz))) * 255
 a[2, :, :, :] = np.abs(np.sin(4 * (ix + iz))) * 255
 
 b = np.cast[np.uint32](np.floor(np.sqrt((ix - 0.5)**2 + (iy - 0.5)**2 + (iz - 0.5)**2) * 10))
+b = np.pad(b, 1, 'constant')
 
 # Obtain the bundled Neuroglancer client code (HTML, CSS, and JavaScript) from
 # the demo server, so that this example works even if
@@ -19,10 +20,11 @@ b = np.cast[np.uint32](np.floor(np.sqrt((ix - 0.5)**2 + (iy - 0.5)**2 + (iz - 0.
 # has not been run.
 neuroglancer.set_static_content_source(url='https://neuroglancer-demo.appspot.com')
 
-viewer = neuroglancer.Viewer()
+viewer = neuroglancer.Viewer(voxel_size=[10, 10, 10])
 viewer.add(a,
            name='a',
-           offset=(20, 30, 50),
+           # offset is in nm, not voxels
+           offset=(200, 300, 150),
            shader="""
 void main() {
   emitRGB(vec3(toNormalized(getDataValue(0)),

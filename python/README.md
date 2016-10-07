@@ -52,6 +52,14 @@ python example.py
 ```
 because then the server will exit immediately.
 
+## Mesh generation
+
+For segmentation volumes, mesh representations of the surface of each object can
+be generated on-demand as they are requested by the client (e.g. due to the user
+selecting a segment).  This requires that the C++ extension module be built.  If
+you install this Python package normally, that will happen automatically.  For
+development, see the instructions below.
+
 ## Security
 
 By default the server binds only to the `127.0.0.1` address, and for protection
@@ -59,6 +67,15 @@ against cross-site scripting attacks only accepts requests that include a valid
 randomly-generated 160-bit secret key.
 
 ## Development
+
+## Building the C++ extension module
+
+Mesh generation for segmentation volumes depends on a C++ extension module.  To
+build it, activate a suitable Python virtual environment and run:
+
+```shell
+python setup.py develop
+```
 
 ### Serving the Neuroglancer client code
 

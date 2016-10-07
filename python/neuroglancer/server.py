@@ -29,6 +29,7 @@ import json
 import socket
 from .token import make_random_token
 from . import static
+from . import volume
 
 INFO_PATH_REGEX = re.compile(r'^/neuroglancer/info/([^/]+)$')
 
@@ -103,15 +104,13 @@ class RequestHandler(BaseHTTPRequestHandler):
         self.wfile.write(data)
 
     def handle_data_request(self, token, scale_key, data_format, start, end):  # pylint: disable=redefined-outer-name
-        volume = self.server.volumes.get(token)
-        if volume is None:
+        vol = self.server.volumes.get(token)
+        if vol is None:
             self.send_error(404)
             return
         try:
-            data, content_type = volume.get_encoded_subvolume(data_format,
-                                                              start,
-                                                              end,
-                                                              scale_key=scale_key)
+            data, content_type = vol.get_encoded_subvolume(
+                data_format, start, end, scale_key=scale_key)
         except ValueError as e:
             self.send_error(400, e.args[0])
             return
@@ -124,11 +123,11 @@ class RequestHandler(BaseHTTPRequestHandler):
         self.wfile.write(data)
 
     def handle_info_request(self, token):
-        volume = self.server.volumes.get(token)
-        if volume is None:
+        vol = self.server.volumes.get(token)
+        if vol is None:
             self.send_error(404)
             return
-        data = json.dumps(volume.info())
+        data = json.dumps(vol.info())
         self.send_response(200)
         self.send_header('Content-type', 'application/json')
         self.send_header('Content-length', len(data))
@@ -137,11 +136,20 @@ class RequestHandler(BaseHTTPRequestHandler):
         self.wfile.write(data)
 
     def handle_mesh_request(self, key, object_id):
-        volume = self.server.volumes.get(key)
-        if volume is None:
+        vol = self.server.volumes.get(key)
+        if vol is None:
             self.send_error(404)
         try:
-            encoded_mesh = volume.get_object_mesh(object_id)
+            encoded_mesh = vol.get_object_mesh(object_id)
+        except volume.MeshImplementationNotAvailable:
+            self.send_error(501, 'Mesh implementation not available')
+            return
+        except volume.MeshesNotSupportedForVolume:
+            self.send_error(405, 'Meshes not supported for volume')
+            return
+        except volume.InvalidObjectIdForMesh:
+            self.send_error(404, 'Mesh not available for specified object id')
+            return
         except ValueError as e:
             self.send_error(400, e.args[0])
             return

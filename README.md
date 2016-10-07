@@ -24,6 +24,7 @@ Neuroglancer itself is purely a client-side program, but it depends on data bein
 - DVID <https://github.com/janelia-flyem/dvid>
 - Precomputed chunk/mesh fragments exposed over HTTP
 - Single NIfTI files <https://www.nitrc.org/projects/nifti>
+- [Python in-memory volumes](python/README.md) (with automatic mesh generation)
 
 # Supported browsers
 
