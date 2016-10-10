@@ -318,6 +318,9 @@ function getChunkFormatHandler(gl: GL, spec: VolumeChunkSpecification) {
   throw new Error('No chunk format handler found.');
 }
 
+const tempChunkGridPosition = vec3.create();
+const tempLocalPosition = vec3.create();
+
 export abstract class VolumeChunkSource extends ChunkSource implements VolumeChunkSourceInterface {
   chunkFormatHandler: ChunkFormatHandler;
 
@@ -337,13 +340,16 @@ export abstract class VolumeChunkSource extends ChunkSource implements VolumeChu
   get chunkFormat() { return this.chunkFormatHandler.chunkFormat; }
 
   getValueAt(position: Vec3) {
-    let chunkGridPosition = vec3.create();
+    const chunkGridPosition = tempChunkGridPosition;
+    const localPosition = tempLocalPosition;
     let spec = this.spec;
     let chunkLayout = spec.chunkLayout;
-    let offset = chunkLayout.offset;
     let chunkSize = chunkLayout.size;
+    chunkLayout.globalToLocalSpatial(localPosition, position);
     for (let i = 0; i < 3; ++i) {
-      chunkGridPosition[i] = Math.floor((position[i] - offset[i]) / chunkSize[i]);
+      const chunkSizeValue = chunkSize[i];
+      const localPositionValue = localPosition[i];
+      chunkGridPosition[i] = Math.floor(localPositionValue / chunkSizeValue);
     }
     let key = vec3Key(chunkGridPosition);
     let chunk = <VolumeChunk>this.chunks.get(key);
@@ -351,11 +357,11 @@ export abstract class VolumeChunkSource extends ChunkSource implements VolumeChu
       return null;
     }
     // Reuse temporary variable.
-    let dataPosition = chunkGridPosition;
-    let voxelSize = spec.voxelSize;
+    const dataPosition = chunkGridPosition;
+    const voxelSize = spec.voxelSize;
     for (let i = 0; i < 3; ++i) {
-      dataPosition[i] = Math.floor(
-          (position[i] - offset[i] - chunkGridPosition[i] * chunkSize[i]) / voxelSize[i]);
+      dataPosition[i] =
+          Math.floor((localPosition[i] - chunkGridPosition[i] * chunkSize[i]) / voxelSize[i]);
     }
     let chunkDataSize = chunk.chunkDataSize;
     for (let i = 0; i < 3; ++i) {

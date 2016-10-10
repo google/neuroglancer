@@ -30,7 +30,7 @@ import {DataType, SLICEVIEW_RENDERLAYER_RPC_ID, VolumeChunkSpecification} from '
 import {MultiscaleVolumeChunkSource, SliceView, VolumeChunkSource} from 'neuroglancer/sliceview/frontend';
 import {WatchableValue} from 'neuroglancer/trackable_value';
 import {RefCounted} from 'neuroglancer/util/disposable';
-import {BoundingBox, Mat4, Vec3, vec3, vec3Key, vec4} from 'neuroglancer/util/geom';
+import {BoundingBox, Mat4, mat4, Vec3, vec3, vec3Key, vec4} from 'neuroglancer/util/geom';
 import {Buffer} from 'neuroglancer/webgl/buffer';
 import {GL} from 'neuroglancer/webgl/context';
 import {ShaderBuilder, ShaderCompilationError, ShaderLinkError, ShaderProgram} from 'neuroglancer/webgl/shader';
@@ -168,6 +168,8 @@ vec3 getPositionWithinChunk () {
 `;
 
 const tempVec3 = vec3.create();
+const tempVec3b = vec3.create();
+const tempMat4 = mat4.create();
 
 class VolumeSliceVertexComputationManager extends RefCounted {
   data: SliceViewShaderBuffers;
@@ -295,25 +297,9 @@ for (int e = 0; e < 4; ++e) {
     }
   }
 
-  beginSlice(gl: GL, shader: ShaderProgram, dataToDeviceMatrix: Mat4, sliceView: SliceView) {
-    let planeNormal = sliceView.viewportAxes[2];
-
-    let frontVertexIndex = findFrontVertexIndex(planeNormal);
-    gl.uniformMatrix4fv(shader.uniform('uProjectionMatrix'), false, dataToDeviceMatrix);
-    gl.uniform3fv(shader.uniform('uPlaneNormal'), planeNormal.subarray(0, 3));
-    gl.uniform1f(shader.uniform('uPlaneDistance'), sliceView.viewportPlaneDistanceToOrigin);
-
+  beginSlice(gl: GL, shader: ShaderProgram) {
     let aVertexIndexFloat = shader.attribute('aVertexIndexFloat');
     this.data.outputVertexIndices.bindToVertexAttrib(aVertexIndexFloat, 1);
-
-    gl.uniform2iv(
-        shader.uniform('uVertexIndex'),
-        this.data.vertexIndices.subarray(frontVertexIndex * 48, (frontVertexIndex + 1) * 48));
-
-    if (DEBUG_VERTICES) {
-      (<any>window)['debug_sliceView'] = sliceView;
-      (<any>window)['debug_sliceView_dataToDevice'] = dataToDeviceMatrix;
-    }
   }
 
   endSlice(gl: GL, shader: ShaderProgram) {
@@ -321,16 +307,40 @@ for (int e = 0; e < 4; ++e) {
     gl.disableVertexAttribArray(aVertexIndexFloat);
   }
 
-  beginSource(gl: GL, shader: ShaderProgram, spec: VolumeChunkSpecification) {
+  beginSource(
+      gl: GL, shader: ShaderProgram, sliceView: SliceView, dataToDeviceMatrix: Mat4,
+      spec: VolumeChunkSpecification) {
+    let {chunkLayout} = spec;
+
+    // Compute plane normal and distance to origin in chunk layout coordindates.
+    {
+      const localPlaneNormal =
+          chunkLayout.globalToLocalSpatialVector(tempVec3, sliceView.viewportAxes[2]);
+      const planeDistanceToOrigin = vec3.dot(
+          chunkLayout.globalToLocalSpatial(tempVec3b, sliceView.centerDataPosition),
+          localPlaneNormal);
+      gl.uniform3fv(shader.uniform('uPlaneNormal'), localPlaneNormal);
+      gl.uniform1f(shader.uniform('uPlaneDistance'), planeDistanceToOrigin);
+
+      const frontVertexIndex = findFrontVertexIndex(localPlaneNormal);
+      gl.uniform2iv(
+          shader.uniform('uVertexIndex'),
+          this.data.vertexIndices.subarray(frontVertexIndex * 48, (frontVertexIndex + 1) * 48));
+    }
+
+    // Compute projection matrix that transforms chunk layout coordinates to device coordinates.
+    gl.uniformMatrix4fv(
+        shader.uniform('uProjectionMatrix'), false,
+        mat4.multiply(
+            tempMat4, dataToDeviceMatrix, chunkLayout.assignLocalSpatialToGlobalMat4(tempMat4)));
+
     gl.uniform3fv(shader.uniform('uVoxelSize'), spec.voxelSize);
-    gl.uniform3fv(
-        shader.uniform('uLowerClipBound'),
-        vec3.add(tempVec3, spec.lowerClipBound, spec.chunkLayout.offset));
-    gl.uniform3fv(
-        shader.uniform('uUpperClipBound'),
-        vec3.add(tempVec3, spec.upperClipBound, spec.chunkLayout.offset));
+    gl.uniform3fv(shader.uniform('uLowerClipBound'), spec.lowerClipBound);
+    gl.uniform3fv(shader.uniform('uUpperClipBound'), spec.upperClipBound);
     if (DEBUG_VERTICES) {
       (<any>window)['debug_sliceView_uVoxelSize'] = spec.voxelSize;
+      (<any>window)['debug_sliceView'] = sliceView;
+      (<any>window)['debug_sliceView_dataToDevice'] = dataToDeviceMatrix;
     }
   }
 
@@ -397,10 +407,28 @@ export class RenderLayer extends GenericRenderLayer {
     sharedObject.initializeCounterpart(this.chunkManager.rpc!, {'sources': sourceIds});
     this.rpcId = sharedObject.rpcId;
     let spec = this.sources[0][0].spec;
-    this.voxelSize = spec.voxelSize;
-    this.boundingBox = new BoundingBox(
-        vec3.add(vec3.create(), spec.chunkLayout.offset, spec.lowerClipBound),
-        vec3.add(vec3.create(), spec.chunkLayout.offset, spec.upperClipBound));
+    let {chunkLayout} = spec;
+
+    const voxelSize = this.voxelSize =
+        chunkLayout.localSpatialVectorToGlobal(vec3.create(), spec.voxelSize);
+    for (let i = 0; i < 3; ++i) {
+      voxelSize[i] = Math.abs(voxelSize[i]);
+    }
+
+    const boundingBox = this.boundingBox = new BoundingBox(
+        vec3.fromValues(Infinity, Infinity, Infinity),
+        vec3.fromValues(-Infinity, -Infinity, -Infinity));
+    const globalCorner = vec3.create();
+    const localCorner = tempVec3;
+
+    for (let cornerIndex = 0; cornerIndex < 8; ++cornerIndex) {
+      for (let i = 0; i < 3; ++i) {
+        localCorner[i] = cornerIndex & (1 << i) ? spec.upperClipBound[i] : spec.lowerClipBound[i];
+      }
+      chunkLayout.localSpatialToGlobal(globalCorner, localCorner);
+      vec3.min(boundingBox.lower, boundingBox.lower, globalCorner);
+      vec3.max(boundingBox.upper, boundingBox.upper, globalCorner);
+    }
     this.setReady(true);
   }
 
@@ -476,12 +504,11 @@ ${GLSL_TYPE_FOR_DATA_TYPE.get(this.dataType)} getDataValue() { return getDataVal
   }
 
   beginSlice(sliceView: SliceView) {
-    let {dataToDevice} = sliceView;
     let gl = this.gl;
 
     let shader = this.shader!;
     shader.bind();
-    this.vertexComputationManager.beginSlice(gl, shader, dataToDevice, sliceView);
+    this.vertexComputationManager.beginSlice(gl, shader);
     return shader;
   }
 
@@ -513,8 +540,6 @@ ${GLSL_TYPE_FOR_DATA_TYPE.get(this.dataType)} getDataValue() { return getDataVal
 
     for (let source of visibleSources) {
       let chunkLayout = source.spec.chunkLayout;
-      let {offset} = chunkLayout;
-
       let chunks = source.chunks;
 
       let originalChunkSize = chunkLayout.size;
@@ -525,7 +550,8 @@ ${GLSL_TYPE_FOR_DATA_TYPE.get(this.dataType)} getDataValue() { return getDataVal
         continue;
       }
 
-      vertexComputationManager.beginSource(gl, shader, source.spec);
+      vertexComputationManager.beginSource(
+          gl, shader, sliceView, sliceView.dataToDevice, source.spec);
       let sourceChunkFormat = source.chunkFormat;
       sourceChunkFormat.beginSource(gl, shader);
 
@@ -543,7 +569,6 @@ ${GLSL_TYPE_FOR_DATA_TYPE.get(this.dataType)} getDataValue() { return getDataVal
           }
 
           vec3.multiply(chunkPosition, originalChunkSize, chunk.chunkGridPosition);
-          vec3.add(chunkPosition, chunkPosition, offset);
           sourceChunkFormat.bindChunk(gl, shader, chunk);
           vertexComputationManager.drawChunk(gl, shader, chunkPosition);
         }
@@ -552,4 +577,4 @@ ${GLSL_TYPE_FOR_DATA_TYPE.get(this.dataType)} getDataValue() { return getDataVal
     chunkFormat.endDrawing(gl, shader);
     this.endSlice(shader);
   }
-};
+}

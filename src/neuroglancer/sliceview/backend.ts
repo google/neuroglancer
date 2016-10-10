@@ -27,6 +27,7 @@ const SCALE_PRIORITY_MULTIPLIER = 1e5;
 // Temporary values used by SliceView.updateVisibleChunk and VolumeChunkSource.computeChunkPosition.
 const tempChunkPosition = vec3.create();
 const tempChunkDataSize = vec3.create();
+const tempCenter = vec3.create();
 
 @registerSharedObject(SLICEVIEW_RPC_ID)
 export class SliceView extends SliceViewBase {
@@ -52,18 +53,21 @@ export class SliceView extends SliceViewBase {
   }
 
   updateVisibleChunks() {
-    let center = this.centerDataPosition;
+    const globalCenter = this.centerDataPosition;
     let chunkManager = this.chunkManager;
 
-    let getLayoutObject =
-        (chunkLayout: ChunkLayout) => { return this.visibleChunkLayouts.get(chunkLayout); };
+    const localCenter = tempCenter;
+
+    let getLayoutObject = (chunkLayout: ChunkLayout) => {
+      chunkLayout.globalToLocalSpatial(localCenter, globalCenter);
+      return this.visibleChunkLayouts.get(chunkLayout);
+    };
 
     function addChunk(
         chunkLayout: ChunkLayout, sources: Map<VolumeChunkSource, number>, positionInChunks: Vec3,
         visibleSources: VolumeChunkSource[]) {
       vec3.multiply(tempChunkPosition, positionInChunks, chunkLayout.size);
-      vec3.add(tempChunkPosition, tempChunkPosition, chunkLayout.offset);
-      let priority = -vec3.distance(center, tempChunkPosition);
+      let priority = -vec3.distance(localCenter, tempChunkPosition);
       for (let source of visibleSources) {
         let priorityIndex = sources.get(source);
         let chunk = source.getChunk(positionInChunks);
