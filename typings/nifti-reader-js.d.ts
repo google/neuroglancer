@@ -93,9 +93,9 @@ declare module 'nifti-reader-js' {
     quatern_b: number;
     quatern_c: number;
     quatern_d: number;
-    quatern_x: number;
-    quatern_y: number;
-    quatern_z: number;
+    qoffset_x: number;
+    qoffset_y: number;
+    qoffset_z: number;
     affine: number[][];
     magic: string;
 
@@ -201,9 +201,9 @@ declare module 'nifti-reader-js' {
     quatern_b: number;
     quatern_c: number;
     quatern_d: number;
-    quatern_x: number;
-    quatern_y: number;
-    quatern_z: number;
+    qoffset_x: number;
+    qoffset_y: number;
+    qoffset_z: number;
     affine: number[][];
     magic: string;
     extensionFlag: number[];
