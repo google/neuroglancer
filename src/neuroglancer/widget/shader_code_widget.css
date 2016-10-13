@@ -14,23 +14,10 @@
  * limitations under the License.
  */
 
-.image-dropdown .neuroglancer-shader-code-widget {
-  height: 6em;
-  width: 60ch;
-  border: 1px solid transparent;
+.neuroglancer-shader-code-widget.invalid-input {
+  border: 1px solid red;
 }
 
-.image-dropdown-top-row {
-  display: flex;
-  flex-direction: row;
-  align-items: center;
-}
-
-/* .image-dropdown-top-row .range-slider {
-  flex: 1;
-} */
-
-.image-layer-shader-overlay .neuroglancer-shader-code-widget {
-  width: 80vw;
-  height: 80vh;
+.neuroglancer-shader-code-widget.valid-input {
+  border: 1px solid green;
 }

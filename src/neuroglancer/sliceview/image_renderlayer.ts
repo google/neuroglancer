@@ -15,10 +15,9 @@
  */
 
 import {MultiscaleVolumeChunkSource, SliceView} from 'neuroglancer/sliceview/frontend';
-import {makeWatchableShaderError, RenderLayer} from 'neuroglancer/sliceview/renderlayer';
+import {RenderLayer} from 'neuroglancer/sliceview/renderlayer';
 import {TrackableAlphaValue, trackableAlphaValue} from 'neuroglancer/trackable_alpha';
-import {TrackableValue} from 'neuroglancer/trackable_value';
-import {verifyString} from 'neuroglancer/util/json';
+import {makeTrackableFragmentMain, makeWatchableShaderError, TrackableFragmentMain} from 'neuroglancer/webgl/dynamic_shader';
 import {ShaderBuilder} from 'neuroglancer/webgl/shader';
 
 export const FRAGMENT_MAIN_START = '//NEUROGLANCER_IMAGE_RENDERLAYER_FRAGMENT_MAIN_START';
@@ -30,10 +29,8 @@ const DEFAULT_FRAGMENT_MAIN = `void main() {
 
 const glsl_COLORMAPS = require<string>('neuroglancer/webgl/colormaps.glsl');
 
-export type TrackableFragmentMain = TrackableValue<string>;
-
 export function getTrackableFragmentMain(value = DEFAULT_FRAGMENT_MAIN) {
-  return new TrackableValue<string>(value, verifyString);
+  return makeTrackableFragmentMain(value);
 }
 
 export class ImageRenderLayer extends RenderLayer {

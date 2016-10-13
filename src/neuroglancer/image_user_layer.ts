@@ -14,34 +14,19 @@
  * limitations under the License.
  */
 
-import 'codemirror/addon/lint/lint.js';
-
-import * as CodeMirror from 'codemirror';
-import * as debounce from 'lodash/debounce';
 import {UserLayer, UserLayerDropdown} from 'neuroglancer/layer';
 import {LayerListSpecification} from 'neuroglancer/layer_specification';
 import {getVolumeWithStatusMessage} from 'neuroglancer/layer_specification';
 import {Overlay} from 'neuroglancer/overlay';
 import {FRAGMENT_MAIN_START, getTrackableFragmentMain, ImageRenderLayer} from 'neuroglancer/sliceview/image_renderlayer';
-import {makeWatchableShaderError} from 'neuroglancer/sliceview/renderlayer';
 import {trackableAlphaValue} from 'neuroglancer/trackable_alpha';
-import {RefCounted} from 'neuroglancer/util/disposable';
-import {removeFromParent} from 'neuroglancer/util/dom';
-import {ShaderCompilationError, ShaderLinkError} from 'neuroglancer/webgl/shader';
+import {makeWatchableShaderError} from 'neuroglancer/webgl/dynamic_shader';
 import {RangeWidget} from 'neuroglancer/widget/range';
+import {ShaderCodeWidget} from 'neuroglancer/widget/shader_code_widget';
 
-require('codemirror/lib/codemirror.css');
-require('codemirror/addon/lint/lint.css');
 require('./image_user_layer.css');
 require('neuroglancer/help_button.css');
 require('neuroglancer/maximize_button.css');
-require<(codeMirror: typeof CodeMirror) => void>('glsl-editor/glsl')(CodeMirror);
-
-/**
- * Time in milliseconds during which the input field must not be modified before the shader is
- * recompiled.
- */
-const SHADER_UPDATE_DELAY = 500;
 
 export class ImageUserLayer extends UserLayer {
   volumePath: string;
@@ -80,105 +65,19 @@ export class ImageUserLayer extends UserLayer {
     return x;
   }
   makeDropdown(element: HTMLDivElement) { return new ImageDropdown(element, this); }
-};
+}
 
-class ShaderCodeWidget extends RefCounted {
-  textEditor: CodeMirror.Editor;
-  get element() { return this.textEditor.getWrapperElement(); }
-  private changingValue = false;
-  private debouncedValueUpdater = debounce(() => {
-    this.changingValue = true;
-    try {
-      this.layer.fragmentMain.value = this.textEditor.getValue();
-    } finally {
-      this.changingValue = false;
-    }
-  }, SHADER_UPDATE_DELAY);
-
-  constructor(public layer: ImageUserLayer) {
-    super();
-    this.textEditor = CodeMirror(element => {}, {
-      value: this.layer.fragmentMain.value,
-      mode: 'glsl',
-      gutters: ['CodeMirror-lint-markers'],
-    });
-    this.textEditor.on('change', () => {
-      this.setValidState(undefined);
-      this.debouncedValueUpdater();
-    });
-    this.registerSignalBinding(this.layer.fragmentMain.changed.add(() => {
-      if (!this.changingValue) {
-        this.textEditor.setValue(this.layer.fragmentMain.value);
-      }
-    }));
-    this.registerSignalBinding(
-        this.layer.shaderError.changed.add(() => { this.updateErrorState(); }));
-    this.updateErrorState();
-  }
-
-  updateErrorState() {
-    if (this.layer.renderLayer && this.layer.renderLayer.shaderUpdated) {
-      this.setValidState(undefined);
-    }
-    let error = this.layer.shaderError.value;
-    if (error !== undefined) {
-      this.textEditor.setOption('lint', {
-        getAnnotations: () => {
-          if (error!.name === 'ShaderCompilationError') {
-            let fragmentMainStartLine =
-                (<ShaderCompilationError>error).source.split('\n').indexOf(FRAGMENT_MAIN_START) + 2;
-            return (<ShaderCompilationError>error).errorMessages.map(e => {
-              return {
-                message: e.message,
-                severity: 'error',
-                from: CodeMirror.Pos(e.line === undefined ? 0 : e.line - fragmentMainStartLine),
-              };
-            });
-          } else if (error!.name === 'ShaderLinkError') {
-            return [{
-              message: (<ShaderLinkError>error).log,
-              severity: 'error',
-              from: CodeMirror.Pos(0),
-            }];
-          } else {
-            return [{
-              message: error!.message,
-              severity: 'error',
-              from: CodeMirror.Pos(0),
-            }];
-          }
-        },
-      });
-      this.setValidState(false);
-    } else {
-      this.textEditor.setOption('lint', undefined);
-      this.setValidState(true);
-    }
-  }
-
-  setValidState(valid?: boolean) {
-    let {element} = this;
-    element.classList.remove('invalid-input');
-    element.classList.remove('valid-input');
-    if (valid === true) {
-      element.classList.add('valid-input');
-    } else if (valid === false) {
-      element.classList.add('invalid-input');
-    }
-  }
-
-  disposed() {
-    (<{flush?: () => void}>this.debouncedValueUpdater).flush!();
-    this.debouncedValueUpdater = <any>undefined;
-    removeFromParent(this.element);
-    this.textEditor = <any>undefined;
-    super.disposed();
-  }
-};
+function makeShaderCodeWidget(layer: ImageUserLayer) {
+  return new ShaderCodeWidget({
+    shaderError: layer.shaderError,
+    fragmentMain: layer.fragmentMain,
+    fragmentMainStartLine: FRAGMENT_MAIN_START,
+  });
+}
 
 class ImageDropdown extends UserLayerDropdown {
   opacityWidget = this.registerDisposer(new RangeWidget(this.layer.opacity));
-  codeWidget = this.registerDisposer(new ShaderCodeWidget(this.layer));
+  codeWidget = this.registerDisposer(makeShaderCodeWidget(this.layer));
   constructor(public element: HTMLDivElement, public layer: ImageUserLayer) {
     super();
     element.classList.add('image-dropdown');
@@ -221,7 +120,7 @@ class ImageDropdown extends UserLayerDropdown {
 };
 
 class ShaderCodeOverlay extends Overlay {
-  codeWidget = this.registerDisposer(new ShaderCodeWidget(this.layer));
+  codeWidget = this.registerDisposer(makeShaderCodeWidget(this.layer));
   constructor(public layer: ImageUserLayer) {
     super();
     this.content.classList.add('image-layer-shader-overlay');

@@ -28,12 +28,12 @@ import {ChunkManager} from 'neuroglancer/chunk_manager/frontend';
 import {RenderLayer as GenericRenderLayer} from 'neuroglancer/layer';
 import {DataType, SLICEVIEW_RENDERLAYER_RPC_ID, VolumeChunkSpecification} from 'neuroglancer/sliceview/base';
 import {MultiscaleVolumeChunkSource, SliceView, VolumeChunkSource} from 'neuroglancer/sliceview/frontend';
-import {WatchableValue} from 'neuroglancer/trackable_value';
 import {RefCounted} from 'neuroglancer/util/disposable';
 import {BoundingBox, Mat4, mat4, Vec3, vec3, vec3Key, vec4} from 'neuroglancer/util/geom';
 import {Buffer} from 'neuroglancer/webgl/buffer';
 import {GL} from 'neuroglancer/webgl/context';
-import {ShaderBuilder, ShaderCompilationError, ShaderLinkError, ShaderProgram} from 'neuroglancer/webgl/shader';
+import {makeWatchableShaderError, WatchableShaderError} from 'neuroglancer/webgl/dynamic_shader';
+import {ShaderBuilder, ShaderProgram} from 'neuroglancer/webgl/shader';
 import {RpcId, SharedObject} from 'neuroglancer/worker_rpc';
 
 export const GLSL_TYPE_FOR_DATA_TYPE = new Map<DataType, string>([
@@ -370,12 +370,6 @@ for (int e = 0; e < 4; ++e) {
   }
 };
 
-export type WatchableShaderError = WatchableValue<ShaderCompilationError|ShaderLinkError|undefined>;
-
-export function makeWatchableShaderError() {
-  return new WatchableValue<ShaderCompilationError|ShaderLinkError|undefined>(undefined);
-}
-
 export class RenderLayer extends GenericRenderLayer {
   chunkManager: ChunkManager;
   sources: VolumeChunkSource[][]|null = null;
@@ -389,6 +383,7 @@ export class RenderLayer extends GenericRenderLayer {
       {shaderError = makeWatchableShaderError()} = {}) {
     super();
     this.shaderError = shaderError;
+    shaderError.value = undefined;
     this.chunkManager = multiscaleSource.chunkManager;
     let gl = this.gl;
     this.vertexComputationManager = VolumeSliceVertexComputationManager.get(gl);
@@ -447,7 +442,7 @@ export class RenderLayer extends GenericRenderLayer {
       let newShader = this.getShader();
       this.disposeShader();
       this.shader = newShader;
-      this.shaderError.value = undefined;
+      this.shaderError.value = null;
     } catch (shaderError) {
       this.shaderError.value = shaderError;
     }
