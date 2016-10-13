@@ -206,3 +206,32 @@ export function cancellableThen<T, TResult>(
         });
   });
 }
+
+export function cancellableAll<T>(origInputs: Iterable<T>): Promise<any[]> {
+  return makeCancellablePromise((resolve, reject, onCancel) => {
+    let inputs = <any[]>Array.from(origInputs);
+    let count = inputs.length;
+    let results = new Array<any>(count);
+    let numRemaining = count;
+    function cancel() { inputs.forEach(cancelPromise); }
+    inputs.forEach((input: Promise<any>, i: number) => {
+      input = inputs[i] = Promise.resolve(input);
+      input.then(
+          value => {
+            results[i] = value;
+            inputs[i] = undefined;
+            if (--numRemaining === 0) {
+              resolve(results);
+            }
+          },
+          error => {
+            cancel();
+            reject(error);
+          });
+    });
+    onCancel(cancel);
+    if (count === 0) {
+      resolve(results);
+    }
+  });
+}
