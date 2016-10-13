@@ -17,12 +17,14 @@
 // Import to register the shared object types.
 import 'neuroglancer/shared_disjoint_sets';
 import 'neuroglancer/uint64_set';
+import 'neuroglancer/shared_visibility_count/backend';
 
 import {ChunkManager} from 'neuroglancer/chunk_manager/backend';
-import {ON_VISIBILITY_CHANGE_METHOD_ID, VisibleSegmentsState} from 'neuroglancer/segmentation_display_state/base';
+import {VisibleSegmentsState} from 'neuroglancer/segmentation_display_state/base';
 import {SharedDisjointUint64Sets} from 'neuroglancer/shared_disjoint_sets';
 import {Uint64Set} from 'neuroglancer/uint64_set';
-import {registerRPC, RPC, SharedObjectCounterpart} from 'neuroglancer/worker_rpc';
+import {UseCount} from 'neuroglancer/util/use_count';
+import {RPC, SharedObjectCounterpart} from 'neuroglancer/worker_rpc';
 
 export class SegmentationLayerSharedObjectCounterpart extends SharedObjectCounterpart implements
     VisibleSegmentsState {
@@ -33,7 +35,9 @@ export class SegmentationLayerSharedObjectCounterpart extends SharedObjectCounte
   /**
    * Indicates whether this layer is actually visible.
    */
-  visible = false;
+  visibilityCount = new UseCount();
+
+  get visible() { return this.visibilityCount.value > 0; }
 
   constructor(rpc: RPC, options: any) {
     super(rpc, options);
@@ -47,14 +51,7 @@ export class SegmentationLayerSharedObjectCounterpart extends SharedObjectCounte
         () => { this.chunkManager.scheduleUpdateChunkPriorities(); };
     this.registerSignalBinding(this.visibleSegments.changed.add(scheduleUpdateChunkPriorities));
     this.registerSignalBinding(this.segmentEquivalences.changed.add(scheduleUpdateChunkPriorities));
+    this.visibilityCount.becameZero.add(scheduleUpdateChunkPriorities);
+    this.visibilityCount.becameNonZero.add(scheduleUpdateChunkPriorities);
   }
 };
-
-registerRPC(ON_VISIBILITY_CHANGE_METHOD_ID, function(x) {
-  let obj = <SegmentationLayerSharedObjectCounterpart>this.get(x['id']);
-  let value = <boolean>x['visible'];
-  if (obj.visible !== value) {
-    obj.visible = value;
-    obj.chunkManager.scheduleUpdateChunkPriorities();
-  }
-});
