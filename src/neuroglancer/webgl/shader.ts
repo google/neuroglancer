@@ -309,6 +309,7 @@ export class ShaderBuilder {
   addFragmentCode(code: ShaderCodePart) { this.fragmentCode.add(code); }
 
   setVertexMain(code: string) { this.vertexMain = code; }
+  addVertexMain(code: string) { this.vertexMain = (this.vertexMain || '') + code; }
 
   setFragmentMain(code: string) {
     this.fragmentMain = `void main() {
@@ -359,4 +360,15 @@ ${this.fragmentMain}
     }
     return shader;
   }
-};
+}
+
+export function shaderContainsIdentifiers(code: string, identifiers: Iterable<string>) {
+  let found = new Set<string>();
+  for (let identifier of identifiers) {
+    let pattern = new RegExp(`(?:^|[^a-zA-Z0-9_])${identifier}[^a-zA-Z0-9_])`);
+    if (code.match(pattern) !== null) {
+      found.add(identifier);
+    }
+  }
+  return found;
+}

@@ -20,6 +20,7 @@ import {ImageUserLayer} from 'neuroglancer/image_user_layer';
 import {LayerManager, LayerSelectedValues, ManagedUserLayer} from 'neuroglancer/layer';
 import {VoxelSize} from 'neuroglancer/navigation_state';
 import {SegmentationUserLayer} from 'neuroglancer/segmentation_user_layer';
+import {SingleMeshUserLayer} from 'neuroglancer/single_mesh_user_layer';
 import {VolumeType} from 'neuroglancer/sliceview/base';
 import {MultiscaleVolumeChunkSource} from 'neuroglancer/sliceview/frontend';
 import {StatusMessage} from 'neuroglancer/status';
@@ -127,6 +128,8 @@ export class LayerListSpecification extends RefCounted implements Trackable {
         managedLayer.layer = new ImageUserLayer(this, spec);
       } else if (layerType === 'segmentation') {
         managedLayer.layer = new SegmentationUserLayer(this, spec);
+      } else if (layerType === 'mesh') {
+        managedLayer.layer = new SingleMeshUserLayer(this, spec);
       } else {
         throw new Error('Layer type not specified.');
       }

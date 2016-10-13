@@ -1,0 +1,62 @@
+/**
+ * @license
+ * Copyright 2016 Google Inc.
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+.neuroglancer-single-mesh-dropdown .neuroglancer-single-mesh-attribute-widget {
+  max-height: 6em;
+}
+
+.neuroglancer-single-mesh-dropdown .neuroglancer-shader-code-widget {
+  height: 6em;
+  width: 60ch;
+  border: 1px solid transparent;
+}
+
+.neuroglancer-single-mesh-dropdown-top-row {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+}
+
+.neuroglancer-single-mesh-shader-overlay .neuroglancer-shader-code-widget {
+  width: 80vw;
+  height: 80vh;
+}
+
+.neuroglancer-single-mesh-attribute-widget {
+  word-wrap: break-word;
+  overflow-y: auto;
+  width: 60ch;
+}
+
+.neuroglancer-single-mesh-layer-shader-overlay .neuroglancer-single-mesh-attribute-widget {
+  max-height: 20vh;
+}
+
+.neuroglancer-single-mesh-attribute {
+  font-family: monospace;
+  display: flex;
+  flex-direction: row;
+}
+
+.neuroglancer-single-mesh-attribute-range {
+  white-space: nowrap;
+}
+
+.neuroglancer-single-mesh-attribute input {
+  font-family: monospace;
+  margin-left: 1ch;
+  flex: 1;
+}
