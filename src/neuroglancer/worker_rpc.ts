@@ -208,15 +208,19 @@ export class SharedObject extends RefCounted {
   RPC_TYPE_ID: string;
 };
 
+export function initializeSharedObjectCounterpart(obj: SharedObject, rpc?: RPC, options: any = {}) {
+  if (rpc != null) {
+    obj.initializeSharedObject(rpc, options['id']);
+  }
+}
+
 /**
  * Base class for defining a SharedObject type that will never be owned.
  */
 export class SharedObjectCounterpart extends SharedObject {
   constructor(rpc?: RPC, options: any = {}) {
     super();
-    if (rpc != null) {
-      this.initializeSharedObject(rpc, options['id']);
-    }
+    initializeSharedObjectCounterpart(this, rpc, options);
   }
 };
 
