@@ -19,13 +19,11 @@
  * volumes.
  */
 
-import {ChunkManager, ChunkSource} from 'neuroglancer/chunk_manager/frontend';
+import {ChunkManager} from 'neuroglancer/chunk_manager/frontend';
 import {registerDataSourceFactory} from 'neuroglancer/datasource/factory';
-import {GET_NIFTI_VOLUME_INFO_RPC_ID, NIFTI_FILE_SOURCE_RPC_ID, NiftiVolumeInfo, VolumeSourceParameters} from 'neuroglancer/datasource/nifti/base';
+import {GET_NIFTI_VOLUME_INFO_RPC_ID, NiftiVolumeInfo, VolumeSourceParameters} from 'neuroglancer/datasource/nifti/base';
 import {VolumeChunkSpecification} from 'neuroglancer/sliceview/base';
 import {defineParameterizedVolumeChunkSource, MultiscaleVolumeChunkSource as GenericMultiscaleVolumeChunkSource} from 'neuroglancer/sliceview/frontend';
-import {registerSharedObjectOwner} from 'neuroglancer/worker_rpc';
-import {RPC} from 'neuroglancer/worker_rpc';
 
 export class MultiscaleVolumeChunkSource implements GenericMultiscaleVolumeChunkSource {
   constructor(public chunkManager: ChunkManager, public url: string, public info: NiftiVolumeInfo) {
@@ -34,13 +32,17 @@ export class MultiscaleVolumeChunkSource implements GenericMultiscaleVolumeChunk
   get dataType() { return this.info.dataType; }
   get volumeType() { return this.info.volumeType; }
   getSources() {
+    let {info} = this;
     const spec = VolumeChunkSpecification.withDefaultCompression({
-      volumeType: this.info.volumeType,
-      chunkDataSize: this.info.volumeSize,
-      dataType: this.info.dataType,
-      voxelSize: this.info.voxelSize,
-      numChannels: this.info.numChannels,
-      upperVoxelBound: this.info.volumeSize,
+      volumeType: info.volumeType,
+      chunkDataSize: info.volumeSize,
+      dataType: info.dataType,
+      voxelSize: info.voxelSize,
+      numChannels: info.numChannels,
+      upperVoxelBound: info.volumeSize,
+      chunkLayoutOffset: info.qoffset,
+      chunkLayoutRotation: info.quatern,
+      chunkLayoutZReflection: info.qfac,
     });
     return [[VolumeChunkSource.get(this.chunkManager, spec, {url: this.url})]];
   }
@@ -48,42 +50,18 @@ export class MultiscaleVolumeChunkSource implements GenericMultiscaleVolumeChunk
   getMeshSource(): null { return null; }
 }
 
-function getNiftiFileSource(chunkManager: ChunkManager) {
-  return chunkManager.getChunkSource(NiftiFileSource, '', () => new NiftiFileSource(chunkManager));
-}
-
-const BaseVolumeChunkSource = defineParameterizedVolumeChunkSource(VolumeSourceParameters);
-class VolumeChunkSource extends BaseVolumeChunkSource {
-  initializeCounterpart(rpc: RPC, options: any) {
-    let fileSource = getNiftiFileSource(this.chunkManager);
-    options['fileSource'] = fileSource.addCounterpartRef();
-    fileSource.dispose();
-    super.initializeCounterpart(rpc, options);
-  }
-};
-
-/**
- * Each chunk corresponds to a URL retrieved on the backend.
- */
-@registerSharedObjectOwner(NIFTI_FILE_SOURCE_RPC_ID)
-class NiftiFileSource extends ChunkSource {
-}
+const VolumeChunkSource = defineParameterizedVolumeChunkSource(VolumeSourceParameters);
 
 function getNiftiVolumeInfo(chunkManager: ChunkManager, url: string) {
-  let source =
-      chunkManager.getChunkSource(NiftiFileSource, '', () => new NiftiFileSource(chunkManager));
-  let result = chunkManager.rpc!.promiseInvoke<NiftiVolumeInfo>(
-      GET_NIFTI_VOLUME_INFO_RPC_ID, {'source': source.addCounterpartRef(), 'url': url});
-  // Immediately dispose of our local reference to the source.  The counterpart reference will keep
-  // it alive until a chunk is created.
-  source.dispose();
-  return result;
+  return chunkManager.rpc!.promiseInvoke<NiftiVolumeInfo>(
+      GET_NIFTI_VOLUME_INFO_RPC_ID, {'chunkManager': chunkManager.addCounterpartRef(), 'url': url});
 }
 
 export function getVolume(chunkManager: ChunkManager, url: string) {
   return chunkManager.memoize.getUncounted(
-      url, () => getNiftiVolumeInfo(chunkManager, url)
-                     .then(info => new MultiscaleVolumeChunkSource(chunkManager, url, info)));
+      ['nifti/getVolume', url],
+      () => getNiftiVolumeInfo(chunkManager, url)
+                .then(info => new MultiscaleVolumeChunkSource(chunkManager, url, info)));
 }
 
 registerDataSourceFactory('nifti', {

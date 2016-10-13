@@ -19,16 +19,20 @@
  * Provides a simple way to request a file on the backend with priority integration.
  */
 
-import {Chunk, ChunkSource, handleChunkDownloadPromise, RECOMPUTE_CHUNK_PRIORITIES_LAST} from 'neuroglancer/chunk_manager/backend';
+import {Chunk, ChunkManager, ChunkSourceBase, handleChunkDownloadPromise, RECOMPUTE_CHUNK_PRIORITIES_LAST} from 'neuroglancer/chunk_manager/backend';
 import {ChunkPriorityTier, ChunkState} from 'neuroglancer/chunk_manager/base';
 import {openHttpRequest, sendHttpRequest} from 'neuroglancer/util/http_request';
+import {getObjectId} from 'neuroglancer/util/object_id';
 import {makeCancellablePromise} from 'neuroglancer/util/promise';
-import {RPC} from 'neuroglancer/worker_rpc';
+
+export type PriorityGetter = () => {
+  priorityTier: ChunkPriorityTier, priority: number
+};
 
 interface FileDataRequester<Data> {
   resolve: (data: Data) => void;
   reject: (error: any) => void;
-  getPriority: () => { priorityTier: ChunkPriorityTier, priority: number };
+  getPriority: PriorityGetter;
 }
 
 class GenericFileChunk<Data> extends Chunk {
@@ -62,11 +66,13 @@ class GenericFileChunk<Data> extends Chunk {
   freeSystemMemory() { this.data = undefined; }
 }
 
-export abstract class GenericFileSource<Data> extends ChunkSource {
+export class GenericFileSource<Data> extends ChunkSourceBase {
   chunks: Map<string, GenericFileChunk<Data>>;
 
-  constructor(rpc: RPC, options: any) {
-    super(rpc, options);
+  constructor(chunkManager: ChunkManager, public decodeFile: (response: ArrayBuffer) => Data) {
+    super(chunkManager);
+    this.registerDisposer(chunkManager);
+
     // This source is unusual in that it updates its own chunk priorities.
     this.registerSignalBinding(this.chunkManager.recomputeChunkPriorities.add(
         this.updateChunkPriorities, this, RECOMPUTE_CHUNK_PRIORITIES_LAST));
@@ -92,12 +98,10 @@ export abstract class GenericFileSource<Data> extends ChunkSource {
     });
   }
 
-  abstract decodeFile(response: ArrayBuffer): Data;
-
   /**
    * Precondition: priorityTier <= ChunkPriorityTier.LAST_ORDERED_TIER
    */
-  getData(key: string, getPriority: () => {priorityTier: ChunkPriorityTier, priority: number}) {
+  getData(key: string, getPriority: PriorityGetter) {
     let chunk = this.chunks.get(key);
     if (chunk === undefined) {
       chunk = this.getNewChunk_(GenericFileChunk);
@@ -125,5 +129,26 @@ export abstract class GenericFileSource<Data> extends ChunkSource {
       });
       this.chunkManager.scheduleUpdateChunkPriorities();
     });
+  }
+
+  /**
+   * Reference count of chunkManager should be incremented by the caller.
+   */
+  static get<Data>(chunkManager: ChunkManager, decodeFile: (response: ArrayBuffer) => Data) {
+    return chunkManager.memoize.get(
+        `getFileSource:${getObjectId(decodeFile)}`,
+        () => new GenericFileSource(chunkManager, decodeFile));
+  }
+
+  /**
+   * Reference count of chunkManager should be incremented by the caller.
+   */
+  static getData<Data>(
+      chunkManager: ChunkManager, decodeFile: (response: ArrayBuffer) => Data, key: string,
+      getPriority: PriorityGetter) {
+    const source = GenericFileSource.get(chunkManager, decodeFile);
+    const result = source.getData(key, getPriority);
+    source.dispose();
+    return result;
   }
 }

@@ -17,15 +17,14 @@
 import {AvailableCapacity, CHUNK_MANAGER_RPC_ID, CHUNK_QUEUE_MANAGER_RPC_ID, ChunkPriorityTier, ChunkSourceParametersConstructor, ChunkState} from 'neuroglancer/chunk_manager/base';
 import {Disposable} from 'neuroglancer/util/disposable';
 import {LinkedListOperations} from 'neuroglancer/util/linked_list';
+import {StringMemoize} from 'neuroglancer/util/memoize';
 import {ComparisonFunction, PairingHeapOperations} from 'neuroglancer/util/pairing_heap';
-import {registerSharedObject, RPC, SharedObjectCounterpart} from 'neuroglancer/worker_rpc';
+import {initializeSharedObjectCounterpart, registerSharedObject, RPC, SharedObject, SharedObjectCounterpart} from 'neuroglancer/worker_rpc';
 import {Signal} from 'signals';
-
 import PairingHeap0 from 'neuroglancer/util/pairing_heap.0';
 import PairingHeap1 from 'neuroglancer/util/pairing_heap.1';
 import LinkedList0 from 'neuroglancer/util/linked_list.0';
 import LinkedList1 from 'neuroglancer/util/linked_list.1';
-import {rpc} from 'neuroglancer/worker_rpc_context';
 import {CancellablePromise, cancelPromise} from 'neuroglancer/util/promise';
 
 const DEBUG_CHUNK_UPDATES = false;
@@ -132,17 +131,16 @@ interface ChunkConstructor<T extends Chunk> {
   new (): T;
 }
 
-export abstract class ChunkSource extends SharedObjectCounterpart {
-  chunkManager: ChunkManager;
+/**
+ * Base class inherited by both ChunkSource, for implementing the backend part of chunk sources that
+ * also have a frontend-part, as well as other chunk sources, such as the GenericFileSource, that
+ * has only a backend part.
+ */
+export abstract class ChunkSourceBase extends SharedObject {
   chunks: Map<string, Chunk> = new Map<string, Chunk>();
   freeChunks: Chunk[] = new Array<Chunk>();
 
-  constructor(rpc: RPC, options: any) {
-    super(rpc, options);
-    // No need to add a reference, since the owner counterpart will hold a reference to the owner
-    // counterpart of chunkManager.
-    this.chunkManager = (<ChunkManager>rpc.get(options['chunkManager']));
-  }
+  constructor(public chunkManager: ChunkManager) { super(); }
 
   getNewChunk_<T extends Chunk>(chunkType: ChunkConstructor<T>): T {
     let freeChunks = this.freeChunks;
@@ -188,7 +186,17 @@ export abstract class ChunkSource extends SharedObjectCounterpart {
       this.dispose();
     }
   }
-};
+}
+
+export abstract class ChunkSource extends ChunkSourceBase {
+  constructor(rpc: RPC, options: any) {
+    // No need to add a reference, since the owner counterpart will hold a reference to the owner
+    // counterpart of chunkManager.
+    const chunkManager = <ChunkManager>rpc.get(options['chunkManager']);
+    super(chunkManager);
+    initializeSharedObjectCounterpart(this, rpc, options);
+  }
+}
 
 export function handleChunkDownloadPromise<ChunkType extends Chunk, Result>(
     chunk: ChunkType, promise: CancellablePromise<Result>,
@@ -543,14 +551,14 @@ export class ChunkQueueManager extends SharedObjectCounterpart {
   }
 
   freeChunkGPUMemory(chunk: Chunk) {
-    rpc.invoke(
+    this.rpc!.invoke(
         'Chunk.update',
         {'id': chunk.key, 'state': ChunkState.SYSTEM_MEMORY, 'source': chunk.source!.rpcId});
   }
 
   freeChunkSystemMemory(chunk: Chunk) {
     if (chunk.state === ChunkState.SYSTEM_MEMORY_WORKER) {
-      rpc.invoke(
+      this.rpc!.invoke(
           'Chunk.update',
           {'id': chunk.key, 'state': ChunkState.EXPIRED, 'source': chunk.source!.rpcId});
     } else {
@@ -559,6 +567,7 @@ export class ChunkQueueManager extends SharedObjectCounterpart {
   }
 
   copyChunkToGPU(chunk: Chunk) {
+    let rpc = this.rpc!;
     if (chunk.state === ChunkState.SYSTEM_MEMORY) {
       rpc.invoke(
           'Chunk.update',
@@ -660,6 +669,8 @@ export class ChunkManager extends SharedObjectCounterpart {
   private updatePending: number|null = null;
 
   recomputeChunkPriorities = new Signal();
+
+  memoize = new StringMemoize();
 
   constructor(rpc: RPC, options: any) {
     super(rpc, options);

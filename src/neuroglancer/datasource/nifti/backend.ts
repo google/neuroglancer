@@ -14,17 +14,17 @@
  * limitations under the License.
  */
 
-import {handleChunkDownloadPromise, registerChunkSource} from 'neuroglancer/chunk_manager/backend';
+import {ChunkManager, handleChunkDownloadPromise, registerChunkSource} from 'neuroglancer/chunk_manager/backend';
 import {ChunkPriorityTier} from 'neuroglancer/chunk_manager/base';
-import {GenericFileSource} from 'neuroglancer/chunk_manager/generic_file_source';
-import {GET_NIFTI_VOLUME_INFO_RPC_ID, NIFTI_FILE_SOURCE_RPC_ID, NiftiDataType, NiftiVolumeInfo, VolumeSourceParameters} from 'neuroglancer/datasource/nifti/base';
+import {GenericFileSource, PriorityGetter} from 'neuroglancer/chunk_manager/generic_file_source';
+import {GET_NIFTI_VOLUME_INFO_RPC_ID, NiftiDataType, NiftiVolumeInfo, VolumeSourceParameters} from 'neuroglancer/datasource/nifti/base';
 import {ParameterizedVolumeChunkSource, VolumeChunk} from 'neuroglancer/sliceview/backend';
 import {decodeRawChunk} from 'neuroglancer/sliceview/backend_chunk_decoders/raw';
 import {DataType, VolumeType} from 'neuroglancer/sliceview/base';
 import {Endianness} from 'neuroglancer/util/endian';
-import {mat4, vec3} from 'neuroglancer/util/geom';
+import {mat4, quat, vec3} from 'neuroglancer/util/geom';
 import {cancellableThen} from 'neuroglancer/util/promise';
-import {registerPromiseRPC, registerSharedObject, RPC, RPCPromise} from 'neuroglancer/worker_rpc';
+import {registerPromiseRPC, RPCPromise} from 'neuroglancer/worker_rpc';
 import {decompress, isCompressed, NIFTI1, NIFTI2, readHeader, readImage} from 'nifti-reader-js';
 
 export class NiftiFileData {
@@ -46,17 +46,19 @@ function decodeNiftiFile(buffer: ArrayBuffer) {
   return data;
 }
 
-@registerSharedObject(NIFTI_FILE_SOURCE_RPC_ID)
-export class NiftiFileSource extends GenericFileSource<NiftiFileData> {
-  decodeFile(response: ArrayBuffer) { return decodeNiftiFile(response); }
+function getNiftiFileData(chunkManager: ChunkManager, url: string, getPriority: PriorityGetter) {
+  return GenericFileSource.getData(chunkManager, decodeNiftiFile, url, getPriority);
 }
 
 const NIFTI_HEADER_INFO_PRIORITY = 1000;
 
-function getNiftiHeaderInfo(source: NiftiFileSource, url: string) {
+/**
+ * Caller must increment ref count of chunkManager.
+ */
+function getNiftiHeaderInfo(chunkManager: ChunkManager, url: string) {
   return cancellableThen(
-      source.getData(
-          url,
+      getNiftiFileData(
+          chunkManager, url,
           () => ({priorityTier: ChunkPriorityTier.VISIBLE, priority: NIFTI_HEADER_INFO_PRIORITY})),
       data => data.header);
 }
@@ -81,61 +83,62 @@ const DATA_TYPE_CONVERSIONS = new Map([
 ]);
 
 registerPromiseRPC(GET_NIFTI_VOLUME_INFO_RPC_ID, function(x): RPCPromise<NiftiVolumeInfo> {
-  const source = this.getRef<NiftiFileSource>(x['source']);
-  let result = cancellableThen(getNiftiHeaderInfo(source, x['url']), header => {
-    let dataTypeInfo = DATA_TYPE_CONVERSIONS.get(header.datatypeCode);
-    if (dataTypeInfo === undefined) {
-      throw new Error(
-          `Unsupported data type: ${NiftiDataType[header.datatypeCode] || header.datatypeCode}.`);
-    }
-    if (header.dims[4] !== 1) {
-      throw new Error(`Time series data not supported.`);
-    }
-    const spatialUnits = header.xyzt_units & NIFTI1.SPATIAL_UNITS_MASK;
-    let unitsPerNm = 1;
-    switch (spatialUnits) {
-      case NIFTI1.UNITS_METER:
-        unitsPerNm = 1e9;
-        break;
-      case NIFTI1.UNITS_MM:
-        unitsPerNm = 1e6;
-        break;
-      case NIFTI1.UNITS_MICRON:
-        unitsPerNm = 1e3;
-        break;
-    }
-    let info: NiftiVolumeInfo = {
-      description: header.description,
-      affine: convertAffine(header.affine),
-      dataType: dataTypeInfo.dataType,
-      numChannels: header.dims[5],
-      volumeType: dataTypeInfo.volumeType,
-      voxelSize: vec3.fromValues(
-          unitsPerNm * header.pixDims[1], unitsPerNm * header.pixDims[2],
-          unitsPerNm * header.pixDims[3]),
-      volumeSize: vec3.fromValues(header.dims[1], header.dims[2], header.dims[3]),
-    };
-    return {value: info};
-  });
-  // Dispose of local reference to source.  Any chunk created will keep it alive.
-  source.dispose();
-  return result;
+  return cancellableThen(
+      getNiftiHeaderInfo(this.getRef<ChunkManager>(x['chunkManager']), x['url']), header => {
+        let dataTypeInfo = DATA_TYPE_CONVERSIONS.get(header.datatypeCode);
+        if (dataTypeInfo === undefined) {
+          throw new Error(
+              `Unsupported data type: ${NiftiDataType[header.datatypeCode] || header.datatypeCode}.`);
+        }
+        if (header.dims[4] !== 1) {
+          throw new Error(`Time series data not supported.`);
+        }
+        const spatialUnits = header.xyzt_units & NIFTI1.SPATIAL_UNITS_MASK;
+        let unitsPerNm = 1;
+        switch (spatialUnits) {
+          case NIFTI1.UNITS_METER:
+            unitsPerNm = 1e9;
+            break;
+          case NIFTI1.UNITS_MM:
+            unitsPerNm = 1e6;
+            break;
+          case NIFTI1.UNITS_MICRON:
+            unitsPerNm = 1e3;
+            break;
+        }
+        const {quatern_b, quatern_c, quatern_d} = header;
+        const quatern_a =
+            Math.sqrt(1.0 - quatern_b * quatern_b - quatern_c * quatern_c - quatern_d * quatern_d);
+        const qfac = header.pixDims[0] === -1 ? -1 : 1;
+        let info: NiftiVolumeInfo = {
+          description: header.description,
+          affine: convertAffine(header.affine),
+          dataType: dataTypeInfo.dataType,
+          numChannels: header.dims[5],
+          volumeType: dataTypeInfo.volumeType,
+          voxelSize: vec3.fromValues(
+              unitsPerNm * header.pixDims[1], unitsPerNm * header.pixDims[2],
+              unitsPerNm * header.pixDims[3]),
+          volumeSize: vec3.fromValues(header.dims[1], header.dims[2], header.dims[3]),
+          qoffset: vec3.fromValues(
+              unitsPerNm * header.qoffset_x, unitsPerNm * header.qoffset_y,
+              unitsPerNm * header.qoffset_z),
+          qform_code: header.qform_code,
+          sform_code: header.sform_code,
+          qfac: qfac,
+          quatern: quat.fromValues(quatern_b, quatern_c, quatern_d, quatern_a),
+        };
+        return {value: info};
+      });
 });
 
 @registerChunkSource(VolumeSourceParameters)
 class VolumeChunkSource extends ParameterizedVolumeChunkSource<VolumeSourceParameters> {
-  fileSource: NiftiFileSource;
-
-  constructor(rpc: RPC, options: any) {
-    super(rpc, options);
-    this.fileSource = rpc.getRef<NiftiFileSource>(options['fileSource']);
-  }
-
   download(chunk: VolumeChunk) {
     chunk.chunkDataSize = this.spec.chunkDataSize;
     handleChunkDownloadPromise(
-        chunk, this.fileSource.getData(
-                   this.parameters.url,
+        chunk, getNiftiFileData(
+                   this.chunkManager.addRef(), this.parameters.url,
                    () => ({priorityTier: chunk.priorityTier, priority: chunk.priority})),
         (c: VolumeChunk, data: NiftiFileData) => {
           let imageBuffer = readImage(data.header, data.uncompressedData);
