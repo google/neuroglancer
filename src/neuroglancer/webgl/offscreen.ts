@@ -114,9 +114,7 @@ export class TextureBuffer extends SizeManaged {
 
   attachToFramebuffer(attachment: number) {
     let {gl} = this;
-    gl.framebufferTexture2D(
-        gl.FRAMEBUFFER, attachment, gl.TEXTURE_2D, this.texture,
-        /*level=*/0);
+    gl.framebufferTexture2D(gl.FRAMEBUFFER, attachment, gl.TEXTURE_2D, this.texture, /*level=*/0);
   }
 }
 
@@ -184,6 +182,16 @@ export class FramebufferConfiguration<ColorBuffer extends TextureBuffer|Renderbu
   bindSingle(textureIndex: number) {
     let {gl} = this;
     this.framebuffer.bind();
+
+    // If this texture is still be bound to color attachment textureIndex, the attachment will fail
+    // (at least on some browsers).  Therefore, if textureIndex is not 0, we clear the attachment.
+    // In the case that textureIndex is 0, the attachment will be overridden anyway.
+    if (textureIndex !== 0) {
+      gl.framebufferTexture2D(
+          gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0 + textureIndex, gl.TEXTURE_2D, null, /*level=*/0);
+    }
+
+    gl.bindTexture(gl.TEXTURE_2D, null);
     this.colorBuffers[textureIndex].attachToFramebuffer(gl.COLOR_ATTACHMENT0);
     gl.WEBGL_draw_buffers.drawBuffersWEBGL(this.singleAttachmentList);
   }
@@ -219,7 +227,7 @@ export class FramebufferConfiguration<ColorBuffer extends TextureBuffer|Renderbu
     let {gl} = this;
     let framebufferStatus = gl.checkFramebufferStatus(gl.FRAMEBUFFER);
     if (framebufferStatus !== gl.FRAMEBUFFER_COMPLETE) {
-      throw new Error('Framebuffer configuration not supported');
+      throw new Error(`Framebuffer configuration not supported`);
     }
     this.attachmentVerified = true;
   }
