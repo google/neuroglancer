@@ -14,6 +14,10 @@
  * limitations under the License.
  */
 
+import {DataType} from 'neuroglancer/util/data_type';
+import {Endianness, ENDIANNESS} from 'neuroglancer/util/endian';
+
+
 /**
  * GLSL function for converting a float in [0,1) to 32-bit little endian fixed point representation
  * (encoded as a vector of four floats in [0,1]).  This is fast but may not be completely accurate.
@@ -50,6 +54,64 @@ vec3 hsvToRgb(vec3 c) {
 }
 `;
 
+/**
+ * Converts a little-endian integer value encoded as a float, vec2, vec3 or vec4 to an integer
+ * stored in a float.
+ */
+export const glsl_uintleToFloat = `
+float uintleToFloat(float v) {
+  return v * 255.0;
+}
+float uintleToFloat(vec2 v) {
+  return v.x * 255.0 + v.y * 65280.0;
+}
+float uintleToFloat(vec3 v) {
+  return v.x * 255.0 + v.y * 65280.0 + v.z * 16711680.0;
+}
+float uintleToFloat(vec4 v) {
+  return uintleToFloat(v.xyz);
+}
+`;
+
+export const glsl_uintbeToFloat = `
+float uintbeToFloat(float v) {
+  return v * 255.0;
+}
+float uintbeToFloat(vec2 v) {
+  return v.y * 255.0 + v.x * 65280.0;
+}
+float uintbeToFloat(vec3 v) {
+  return v.z * 255.0 + v.y * 65280.0 + v.x * 16711680.0;
+}
+float uintbeToFloat(vec4 v) {
+  return uint24leToFloat(v.gba);
+}
+`;
+
+/**
+ * Converts a native-endian integer value encoded as a float, vec2, vec3 or vec4 to an integer
+ * stores as a float.
+ */
+export const glsl_uintToFloat = (() => {
+  const suffix = ENDIANNESS === Endianness.BIG ? 'be' : 'le';
+  return [
+    ENDIANNESS === Endianness.BIG ? glsl_uintbeToFloat : glsl_uintleToFloat, `
+float uintToFloat(float v) {
+  return uint${suffix}ToFloat(v);
+}
+float uintToFloat(vec2 v) {
+  return uint${suffix}ToFloat(v);
+}
+float uintToFloat(vec3 v) {
+  return uint${suffix}ToFloat(v);
+}
+float uintToFloat(vec4 v) {
+  return uint${suffix}ToFloat(v);
+}
+`
+  ];
+})();
+
 export const glsl_uint64 = `
 struct uint64_t {
   vec4 low, high;
@@ -62,8 +124,23 @@ export const glsl_uint8 = [
 struct uint8_t {
   float value;
 };
+struct uint8x2_t {
+  vec2 value;
+};
+struct uint8x3_t {
+  vec3 value;
+};
+struct uint8x4_t {
+  vec4 value;
+};
 float toRaw(uint8_t x) { return x.value * 255.0; }
 float toNormalized(uint8_t x) { return x.value; }
+vec2 toRaw(uint8x2_t x) { return x.value * 255.0; }
+vec2 toNormalized(uint8x2_t x) { return x.value; }
+vec3 toRaw(uint8x3_t x) { return x.value * 255.0; }
+vec3 toNormalized(uint8x3_t x) { return x.value; }
+vec4 toRaw(uint8x4_t x) { return x.value * 255.0; }
+vec4 toNormalized(uint8x4_t x) { return x.value; }
 uint64_t toUint64(uint8_t x) {
   uint64_t result;
   result.low = vec4(x.value, 0.0, 0.0, 0.0);
@@ -76,6 +153,12 @@ uint64_t toUint64(uint8_t x) {
 export const glsl_float = `
 float toRaw(float x) { return x; }
 float toNormalized(float x) { return x; }
+vec2 toRaw(vec2 x) { return x; }
+vec2 toNormalized(vec2 x) { return x; }
+vec3 toRaw(vec3 x) { return x; }
+vec3 toNormalized(vec3 x) { return x; }
+vec4 toRaw(vec4 x) { return x; }
+vec4 toNormalized(vec4 x) { return x; }
 `;
 
 export const glsl_uint16 = [
@@ -83,8 +166,13 @@ export const glsl_uint16 = [
 struct uint16_t {
   vec2 value;
 };
+struct uint16x2_t {
+  vec4 value;
+};
 float toRaw(uint16_t x) { return x.value.x * 255.0 + x.value.y * 65280.0; }
 float toNormalized(uint16_t x) { return toRaw(x) / 65535.0; }
+vec2 toRaw(uint16x2_t x) { return vec2(x.value.x * 255.0 + x.value.y * 65280.0, x.value.z * 255.0 + x.value.w * 65280.0); }
+vec2 toNormalized(uint16x2_t x) { return toRaw(x) / 65535.0; }
 uint64_t toUint64(uint16_t x) {
   uint64_t result;
   result.low = vec4(x.value, 0.0, 0.0);
@@ -220,4 +308,44 @@ export function setVec4FromUint32(out: Float32Array, x: number) {
 
 export function getUint32FromVec4(v: Float32Array): number {
   return v[0] * 255 + v[1] * 255 * 256 + v[2] * 255 * 256 * 256 + v[3] * 255 * 256 * 256 * 256;
+}
+
+export function getShaderType(dataType: DataType, numComponents: number = 1) {
+  switch (dataType) {
+    case DataType.FLOAT32:
+      if (numComponents === 1) {
+        return 'float';
+      }
+      if (numComponents > 1 && numComponents < 4) {
+        return `vec${numComponents}`;
+      }
+      break;
+    case DataType.UINT8:
+      if (numComponents === 1) {
+        return 'uint8_t';
+      }
+      if (numComponents > 1 && numComponents < 4) {
+        return `uint8x${numComponents}_t`;
+      }
+      break;
+    case DataType.UINT16:
+      if (numComponents === 1) {
+        return 'uint16_t';
+      }
+      if (numComponents === 2) {
+        return `uint16x2_t`;
+      }
+      break;
+    case DataType.UINT32:
+      if (numComponents === 1) {
+        return 'uint32_t';
+      }
+      break;
+    case DataType.UINT64:
+      if (numComponents === 1) {
+        return 'uint64_t';
+      }
+      break;
+  }
+  throw new Error(`No shader type for ${DataType[dataType]}[${numComponents}].`);
 }

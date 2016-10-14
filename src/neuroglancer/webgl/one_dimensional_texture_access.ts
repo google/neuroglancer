@@ -24,14 +24,110 @@
  */
 
 import {maybePadArray, TypedArray, TypedArrayConstructor} from 'neuroglancer/util/array';
+import {DataType} from 'neuroglancer/util/data_type';
 import {Vec2} from 'neuroglancer/util/geom';
+import {GL_FLOAT, GL_LUMINANCE, GL_LUMINANCE_ALPHA, GL_RGB, GL_RGBA, GL_UNPACK_ALIGNMENT, GL_UNSIGNED_BYTE} from 'neuroglancer/webgl/constants';
 import {GL} from 'neuroglancer/webgl/context';
-import {ShaderBuilder, ShaderProgram} from 'neuroglancer/webgl/shader';
+import {ShaderBuilder, ShaderCodePart, ShaderProgram} from 'neuroglancer/webgl/shader';
+import {getShaderType, glsl_float, glsl_uint16, glsl_uint32, glsl_uint64, glsl_uint8} from 'neuroglancer/webgl/shader_lib';
+import {setRawTextureParameters} from 'neuroglancer/webgl/texture';
 
 export interface OneDimensionalTextureLayout {
-  textureWidth: number;
+  dataWidth: number;
   textureHeight: number;
   textureAccessCoefficients: Vec2;
+}
+
+export class OneDimensionalTextureFormat {
+  /**
+   * Number of texels per multi-channel element.
+   */
+  texelsPerElement: number;
+
+  /**
+   * Texture format to specify when uploading the texture data.
+   */
+  textureFormat: number;
+
+  /**
+   * Texel type to specify when uploading the texture data.
+   */
+  texelType: number;
+
+  /**
+   * Number of typed array elements per texel.
+   */
+  arrayElementsPerTexel: number;
+
+  /**
+   * TypedArray type that must be used when uploading the texture data.
+   */
+  arrayConstructor: TypedArrayConstructor;
+}
+
+export const textureFormatForNumComponents =
+    [-1, GL_LUMINANCE, GL_LUMINANCE_ALPHA, GL_RGB, GL_RGBA];
+export const textureSelectorForNumComponents = ['', 'r', 'ra', 'rgb', 'rgba'];
+
+/**
+ * Fills in a OneDimensionalTextureFormat object with the suitable texture format for the specified
+ * DataType and number of components.
+ */
+export function compute1dTextureFormat(
+    format: OneDimensionalTextureFormat, dataType: DataType, numComponents: number = 1) {
+  switch (dataType) {
+    case DataType.UINT8:
+      if (numComponents < 1 || numComponents > 4) {
+        break;
+      }
+      format.texelsPerElement = 1;
+      format.textureFormat = textureFormatForNumComponents[numComponents];
+      format.texelType = GL_UNSIGNED_BYTE;
+      format.arrayElementsPerTexel = numComponents;
+      format.arrayConstructor = Uint8Array;
+      return format;
+    case DataType.UINT16:
+      if (numComponents < 1 || numComponents > 2) {
+        break;
+      }
+      format.texelsPerElement = 1;
+      format.textureFormat = textureFormatForNumComponents[numComponents * 2];
+      format.texelType = GL_UNSIGNED_BYTE;
+      format.arrayElementsPerTexel = 2 * numComponents;
+      format.arrayConstructor = Uint8Array;
+      return format;
+    case DataType.UINT64:
+      if (numComponents !== 1) {
+        break;
+      }
+      format.texelsPerElement = 2;
+      format.textureFormat = GL_RGBA;
+      format.texelType = GL_UNSIGNED_BYTE;
+      format.arrayElementsPerTexel = 4;
+      format.arrayConstructor = Uint8Array;
+      return format;
+    case DataType.UINT32:
+      if (numComponents !== 1) {
+        break;
+      }
+      format.texelsPerElement = 1;
+      format.textureFormat = GL_RGBA;
+      format.texelType = GL_UNSIGNED_BYTE;
+      format.arrayElementsPerTexel = 4;
+      format.arrayConstructor = Uint8Array;
+      return format;
+    case DataType.FLOAT32:
+      if (numComponents < 1 || numComponents > 4) {
+        break;
+      }
+      format.texelsPerElement = 1;
+      format.textureFormat = textureFormatForNumComponents[numComponents];
+      format.texelType = GL_FLOAT;
+      format.arrayElementsPerTexel = numComponents;
+      format.arrayConstructor = Float32Array;
+      return format;
+  }
+  throw new Error(`No supported texture format for ${DataType[dataType]}[${numComponents}].`);
 }
 
 /**
@@ -61,7 +157,7 @@ export function compute3dTextureLayout(
     }
   }
   let dataHeight = Math.ceil(numElements / dataWidth);
-  layout.textureWidth = dataWidth * texelsPerElement;
+  layout.dataWidth = dataWidth;
   layout.textureHeight = dataHeight;
   layout.textureAccessCoefficients =
       Float32Array.of(1.0 / dataWidth, 1.0 / (dataWidth * dataHeight));
@@ -77,59 +173,128 @@ export function compute1dTextureLayout(
         numElements);
   }
   let dataHeight = Math.ceil(numElements / dataWidth);
-  layout.textureWidth = dataWidth * texelsPerElement;
+  layout.dataWidth = dataWidth;
   layout.textureHeight = dataHeight;
   layout.textureAccessCoefficients =
       Float32Array.of(1.0 / dataWidth, 1.0 / (dataWidth * dataHeight));
 }
 
 export function setOneDimensionalTextureData(
-    gl: GL, textureLayout: OneDimensionalTextureLayout, data: TypedArray,
-    arrayElementsPerTexel: number, textureFormat: number, texelType: number,
-    arrayConstructor: TypedArrayConstructor) {
-  let requiredSize =
-      textureLayout.textureWidth * textureLayout.textureHeight * arrayElementsPerTexel;
+    gl: GL, textureLayout: OneDimensionalTextureLayout, format: OneDimensionalTextureFormat,
+    data: TypedArray) {
+  const {arrayConstructor, arrayElementsPerTexel, textureFormat, texelsPerElement} = format;
+  const {dataWidth, textureHeight} = textureLayout;
+  const requiredSize = dataWidth * textureHeight * arrayElementsPerTexel * texelsPerElement;
   if (data.constructor !== arrayConstructor) {
     data = new arrayConstructor(
         data.buffer, data.byteOffset, data.byteLength / arrayConstructor.BYTES_PER_ELEMENT);
   }
   let padded = maybePadArray(data, requiredSize);
+  gl.pixelStorei(GL_UNPACK_ALIGNMENT, 1);
+  setRawTextureParameters(gl);
   gl.texImage2D(
       gl.TEXTURE_2D,
       /*level=*/0, textureFormat,
-      /*width=*/textureLayout.textureWidth,
-      /*height=*/textureLayout.textureHeight,
-      /*border=*/0, textureFormat, texelType, padded);
+      /*width=*/dataWidth * texelsPerElement,
+      /*height=*/textureHeight,
+      /*border=*/0, textureFormat, format.texelType, padded);
 }
 
 export class OneDimensionalTextureAccessHelper {
   uniformName = `uTextureAccessCoefficients_${this.key}`;
   readTextureValue = `readTextureValue_${this.key}`;
-  constructor(public key: string, public texelsPerElement: number) {}
+  constructor(public key: string) {}
   defineShader(builder: ShaderBuilder) {
-    let {texelsPerElement, uniformName} = this;
+    let {uniformName} = this;
     builder.addUniform('highp vec2', uniformName);
-    let fragmentCode = `
+  }
+
+  getReadTextureValueCode(texelsPerElement: number) {
+    let {uniformName} = this;
+    let code = `
 void ${this.readTextureValue}(highp sampler2D sampler, float index`;
     for (let i = 0; i < texelsPerElement; ++i) {
-      fragmentCode += `, out vec4 output${i}`;
+      code += `, out vec4 output${i}`;
     }
-    fragmentCode += `) {
-  index += ${0.5 / this.texelsPerElement};
+    code += `) {
+  index += ${0.5 / texelsPerElement};
   vec2 texCoords = vec2(fract(index * ${uniformName}.x),
                         index * ${uniformName}.y);
 `;
     for (let i = 0; i < texelsPerElement; ++i) {
-      fragmentCode += `
+      code += `
   output${i} = texture2D(sampler, vec2(texCoords.x + ${uniformName}.x * ${(i / texelsPerElement).toFixed(8)}, texCoords.y));
 `;
     }
-    fragmentCode += `
+    code += `
 }
 `;
-    builder.addFragmentCode(fragmentCode);
+    return code;
   }
+
+  getAccessor(
+      functionName: string, samplerName: string, dataType: DataType, numComponents: number = 1) {
+    const shaderType = getShaderType(dataType, numComponents);
+    let parts: ShaderCodePart[] = [];
+    let texelsPerElement = dataType === DataType.UINT64 ? 2 : 1;
+    parts.push(this.getReadTextureValueCode(texelsPerElement));
+    let code = `
+${shaderType} ${functionName}(float index) {
+`;
+    switch (dataType) {
+      case DataType.UINT8:
+        parts.push(glsl_uint8);
+        code += `
+  ${shaderType} result;
+  vec4 temp;
+  ${this.readTextureValue}(${samplerName}, index, temp);
+  result.value = temp.${textureSelectorForNumComponents[numComponents]};
+  return result;
+`;
+        break;
+      case DataType.UINT16:
+        parts.push(glsl_uint16);
+        code += `
+  ${shaderType} result;
+  vec4 temp;
+  ${this.readTextureValue}(${samplerName}, index, temp);
+  result.value = temp.${textureSelectorForNumComponents[numComponents * 2]};
+  return result;
+`;
+        break;
+      case DataType.UINT32:
+        parts.push(glsl_uint32);
+        code += `
+  ${shaderType} result;
+  ${this.readTextureValue}(${samplerName}, index, result.value);
+  return result;
+`;
+        break;
+      case DataType.UINT64:
+        parts.push(glsl_uint64);
+        code += `
+  ${shaderType} result;
+  ${this.readTextureValue}(${samplerName}, index, result.low, result.high);
+  return result;
+`;
+        break;
+      case DataType.FLOAT32:
+        parts.push(glsl_float);
+        code += `
+  vec4 temp;
+  ${this.readTextureValue}(${samplerName}, index, temp);
+  return temp.${textureSelectorForNumComponents[numComponents]};
+`;
+        break;
+    }
+    code += `
+}
+`;
+    parts.push(code);
+    return parts;
+  }
+
   setupTextureLayout(gl: GL, shader: ShaderProgram, textureLayout: OneDimensionalTextureLayout) {
     gl.uniform2fv(shader.uniform(this.uniformName), textureLayout.textureAccessCoefficients);
   }
-};
+}

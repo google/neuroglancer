@@ -26,7 +26,7 @@
 import {ChunkState} from 'neuroglancer/chunk_manager/base';
 import {ChunkManager} from 'neuroglancer/chunk_manager/frontend';
 import {RenderLayer as GenericRenderLayer} from 'neuroglancer/layer';
-import {DataType, SLICEVIEW_RENDERLAYER_RPC_ID, VolumeChunkSpecification} from 'neuroglancer/sliceview/base';
+import {SLICEVIEW_RENDERLAYER_RPC_ID, VolumeChunkSpecification} from 'neuroglancer/sliceview/base';
 import {MultiscaleVolumeChunkSource, SliceView, VolumeChunkSource} from 'neuroglancer/sliceview/frontend';
 import {RefCounted} from 'neuroglancer/util/disposable';
 import {BoundingBox, Mat4, mat4, Vec3, vec3, vec3Key, vec4} from 'neuroglancer/util/geom';
@@ -34,15 +34,8 @@ import {Buffer} from 'neuroglancer/webgl/buffer';
 import {GL} from 'neuroglancer/webgl/context';
 import {makeWatchableShaderError, WatchableShaderError} from 'neuroglancer/webgl/dynamic_shader';
 import {ShaderBuilder, ShaderProgram} from 'neuroglancer/webgl/shader';
+import {getShaderType} from 'neuroglancer/webgl/shader_lib';
 import {RpcId, SharedObject} from 'neuroglancer/worker_rpc';
-
-export const GLSL_TYPE_FOR_DATA_TYPE = new Map<DataType, string>([
-  [DataType.UINT8, 'uint8_t'],
-  [DataType.FLOAT32, 'float'],
-  [DataType.UINT16, 'uint16_t'],
-  [DataType.UINT32, 'uint32_t'],
-  [DataType.UINT64, 'uint64_t'],
-]);
 
 const DEBUG_VERTICES = false;
 
@@ -494,7 +487,7 @@ void emit(vec4 color) {
 `);
     this.chunkFormat.defineShader(builder);
     builder.addFragmentCode(`
-${GLSL_TYPE_FOR_DATA_TYPE.get(this.dataType)} getDataValue() { return getDataValue(0); }
+${getShaderType(this.dataType)} getDataValue() { return getDataValue(0); }
 `);
   }
 

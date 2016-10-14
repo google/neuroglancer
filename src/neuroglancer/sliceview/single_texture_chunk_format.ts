@@ -19,7 +19,6 @@ import {TypedArray} from 'neuroglancer/util/array';
 import {Disposable, RefCounted} from 'neuroglancer/util/disposable';
 import {GL} from 'neuroglancer/webgl/context';
 import {ShaderBuilder, ShaderProgram} from 'neuroglancer/webgl/shader';
-import {setRawTextureParameters} from 'neuroglancer/webgl/texture';
 
 const textureUnitSymbol = Symbol('SingleTextureVolumeChunk.textureUnit');
 const textureLayoutSymbol = Symbol('SingleTextureVolumeChunk.textureLayout');
@@ -88,8 +87,6 @@ export abstract class SingleTextureVolumeChunk<Data, TextureLayout extends Dispo
     super.copyToGPU(gl);
     let texture = this.texture = gl.createTexture();
     gl.bindTexture(gl.TEXTURE_2D, texture);
-    gl.pixelStorei(gl.UNPACK_ALIGNMENT, 1);
-    setRawTextureParameters(gl);
     this.setTextureData(gl);
     gl.bindTexture(gl.TEXTURE_2D, null);
   }

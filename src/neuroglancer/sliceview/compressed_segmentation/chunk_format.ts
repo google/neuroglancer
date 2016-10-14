@@ -18,18 +18,17 @@ import {DataType, VolumeChunkSpecification} from 'neuroglancer/sliceview/base';
 import {readSingleChannelValue as readSingleChannelValueUint32} from 'neuroglancer/sliceview/compressed_segmentation/decode_uint32';
 import {readSingleChannelValue as readSingleChannelValueUint64} from 'neuroglancer/sliceview/compressed_segmentation/decode_uint64';
 import {ChunkFormatHandler, registerChunkFormatHandler, VolumeChunkSource} from 'neuroglancer/sliceview/frontend';
-import {GLSL_TYPE_FOR_DATA_TYPE} from 'neuroglancer/sliceview/renderlayer';
 import {SingleTextureChunkFormat, SingleTextureVolumeChunk} from 'neuroglancer/sliceview/single_texture_chunk_format';
 import {RefCounted} from 'neuroglancer/util/disposable';
 import {Vec3, vec3, vec3Key} from 'neuroglancer/util/geom';
 import {Uint64} from 'neuroglancer/util/uint64';
 import {GL} from 'neuroglancer/webgl/context';
-import {compute1dTextureLayout, OneDimensionalTextureAccessHelper, setOneDimensionalTextureData} from 'neuroglancer/webgl/one_dimensional_texture_access';
+import {compute1dTextureFormat, compute1dTextureLayout, OneDimensionalTextureAccessHelper, OneDimensionalTextureFormat, setOneDimensionalTextureData} from 'neuroglancer/webgl/one_dimensional_texture_access';
 import {ShaderBuilder, ShaderProgram} from 'neuroglancer/webgl/shader';
-import {glsl_getFortranOrderIndexFromNormalized, glsl_uint32, glsl_uint64} from 'neuroglancer/webgl/shader_lib';
+import {getShaderType, glsl_getFortranOrderIndexFromNormalized, glsl_uint64} from 'neuroglancer/webgl/shader_lib';
 
 class TextureLayout extends RefCounted {
-  textureWidth: number;
+  dataWidth: number;
   textureHeight: number;
   textureAccessCoefficients: Float32Array;
   subchunkGridSize: Vec3;
@@ -48,7 +47,9 @@ class TextureLayout extends RefCounted {
         `sliceview.CompressedSegmentationTextureLayout:${vec3Key(chunkDataSize)},${vec3Key(subchunkSize)},${dataLength}`,
         () => new TextureLayout(gl, chunkDataSize, subchunkSize, dataLength));
   }
-};
+}
+
+const textureFormat = compute1dTextureFormat(new OneDimensionalTextureFormat(), DataType.UINT32);
 
 export class ChunkFormat extends SingleTextureChunkFormat<TextureLayout> {
   static get(gl: GL, dataType: DataType, subchunkSize: Vec3, numChannels: number) {
@@ -64,37 +65,32 @@ export class ChunkFormat extends SingleTextureChunkFormat<TextureLayout> {
       public dataType: DataType, public subchunkSize: Vec3, public numChannels: number,
       key: string) {
     super(key);
-    this.textureAccessHelper =
-        new OneDimensionalTextureAccessHelper('chunkData', /*texelsPerElement=*/1);
+    this.textureAccessHelper = new OneDimensionalTextureAccessHelper('chunkData');
   }
 
   defineShader(builder: ShaderBuilder) {
     super.defineShader(builder);
-    this.textureAccessHelper.defineShader(builder);
+    let {textureAccessHelper} = this;
+    textureAccessHelper.defineShader(builder);
     let local = (x: string) => 'compressedSegmentationChunkFormat_' + x;
     builder.addUniform('highp vec3', 'uSubchunkGridSize');
     builder.addUniform('highp vec3', 'uSubchunkSize');
     builder.addFragmentCode(glsl_getFortranOrderIndexFromNormalized);
     const {dataType} = this;
-    const glslType = GLSL_TYPE_FOR_DATA_TYPE.get(dataType);
+    const glslType = getShaderType(dataType);
 
     if (dataType === DataType.UINT64) {
       builder.addFragmentCode(glsl_uint64);
-    } else {
-      builder.addFragmentCode(glsl_uint32);
     }
+    builder.addFragmentCode(textureAccessHelper.getAccessor(
+        local('readTextureValue'), 'uVolumeChunkSampler', DataType.UINT32));
 
     let fragmentCode = `
-vec4 ${local('readTextureValue')}(float offset) {
-  vec4 result;
-  ${this.textureAccessHelper.readTextureValue}(uVolumeChunkSampler, offset, result);
-  return result;
-}
 float ${local('getChannelOffset')}(int channelIndex) {
   if (channelIndex == 0) {
     return ${this.numChannels}.0;
   }
-  vec4 v = ${local('readTextureValue')}(float(channelIndex));
+  vec4 v = ${local('readTextureValue')}(float(channelIndex)).value;
   return v.x * 255.0 + v.y * 255.0 * 256.0 + v.z * 255.0 * 256.0 * 256.0;
 }
 ${glslType} getDataValue (int channelIndex) {
@@ -109,8 +105,8 @@ ${glslType} getDataValue (int channelIndex) {
   // TODO: Maybe just combine this offset into subchunkGridStrides.
   float subchunkHeaderOffset = subchunkGridOffset * 2.0 + channelOffset;
 
-  vec4 subchunkHeader0 = ${local('readTextureValue')}(subchunkHeaderOffset);
-  vec4 subchunkHeader1 = ${local('readTextureValue')}(subchunkHeaderOffset + 1.0);
+  vec4 subchunkHeader0 = ${local('readTextureValue')}(subchunkHeaderOffset).value;
+  vec4 subchunkHeader1 = ${local('readTextureValue')}(subchunkHeaderOffset + 1.0).value;
 
   float outputValueOffset = dot(subchunkHeader0.xyz, vec3(255, 256 * 255, 256 * 256 * 255)) + channelOffset;
   float encodingBits = subchunkHeader0[3] * 255.0;
@@ -119,7 +115,7 @@ ${glslType} getDataValue (int channelIndex) {
     float subchunkOffset = getFortranOrderIndex(subchunkPosition, uSubchunkSize);
     highp float encodedValueBaseOffset = dot(subchunkHeader1.xyz, vec3(255.0, 256.0 * 255.0, 256.0 * 256.0 * 255.0)) + channelOffset;
     highp float encodedValueOffset = floor(encodedValueBaseOffset + subchunkOffset * encodingBits / 32.0);
-    vec4 encodedValue = ${local('readTextureValue')}(encodedValueOffset);
+    vec4 encodedValue = ${local('readTextureValue')}(encodedValueOffset).value;
     float wordOffset = mod(subchunkOffset * encodingBits, 32.0);
     // If the value is in the first byte, then 0 <= wordOffset < 8.
     // We need to mod by 2**encodedBits
@@ -139,12 +135,12 @@ ${glslType} getDataValue (int channelIndex) {
 `;
     if (dataType === DataType.UINT64) {
       fragmentCode += `
-  result.low = ${local('readTextureValue')}(outputValueOffset);
-  result.high = ${local('readTextureValue')}(outputValueOffset+1.0);
+  result.low = ${local('readTextureValue')}(outputValueOffset).value;
+  result.high = ${local('readTextureValue')}(outputValueOffset+1.0).value;
 `;
     } else {
       fragmentCode += `
-  result.value = ${local('readTextureValue')}(outputValueOffset);
+  result.value = ${local('readTextureValue')}(outputValueOffset).value;
 `;
     }
     fragmentCode += `
@@ -163,9 +159,7 @@ ${glslType} getDataValue (int channelIndex) {
   }
 
   setTextureData(gl: GL, textureLayout: TextureLayout, data: Uint32Array) {
-    setOneDimensionalTextureData(
-        gl, textureLayout, data, /*arrayElementsPerTexel=*/4, /*textureFormat=*/gl.RGBA,
-        /*texelType=*/gl.UNSIGNED_BYTE, Uint8Array);
+    setOneDimensionalTextureData(gl, textureLayout, textureFormat, data);
   }
 
   getTextureLayout(gl: GL, chunkDataSize: Vec3, dataLength: number) {
@@ -176,7 +170,7 @@ ${glslType} getDataValue (int channelIndex) {
     super.beginSource(gl, shader);
     gl.uniform3fv(shader.uniform('uSubchunkSize'), this.subchunkSize);
   }
-};
+}
 
 export class CompressedSegmentationVolumeChunk extends
     SingleTextureVolumeChunk<Uint32Array, TextureLayout> {
@@ -205,7 +199,7 @@ export class CompressedSegmentationVolumeChunk extends
           data, /*baseOffset=*/offset, chunkDataSize, chunkFormat.subchunkSize, dataPosition);
     }
   }
-};
+}
 
 export class CompressedSegmentationChunkFormatHandler extends RefCounted implements
     ChunkFormatHandler {
@@ -224,7 +218,7 @@ export class CompressedSegmentationChunkFormatHandler extends RefCounted impleme
   getChunk(source: VolumeChunkSource, x: any) {
     return new CompressedSegmentationVolumeChunk(source, x);
   }
-};
+}
 
 registerChunkFormatHandler((gl: GL, spec: VolumeChunkSpecification) => {
   if (spec.compressedSegmentationBlockSize != null) {

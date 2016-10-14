@@ -23,7 +23,6 @@ import {Disposable} from 'neuroglancer/util/disposable';
 import {Vec3, vec3, vec3Key, Vec4} from 'neuroglancer/util/geom';
 import {GL} from 'neuroglancer/webgl/context';
 import {fragmentShaderTest} from 'neuroglancer/webgl/shader_testing';
-import {setRawTextureParameters} from 'neuroglancer/webgl/texture';
 
 export function chunkFormatTest<TextureLayout extends Disposable>(
     dataType: DataType, volumeSize: Vec4,
@@ -90,8 +89,6 @@ gl_FragData[${outputChannel++}] = getDataValue(${channel}).value;
 
          chunkFormat.beginDrawing(gl, shader);
          gl.bindTexture(gl.TEXTURE_2D, texture);
-         gl.pixelStorei(gl.UNPACK_ALIGNMENT, 1);
-         setRawTextureParameters(gl);
          chunkFormat.setTextureData(gl, textureLayout, encodedData);
          chunkFormat.setupTextureLayout(gl, shader, textureLayout);
 

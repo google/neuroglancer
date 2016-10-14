@@ -22,7 +22,7 @@ import {makeRandomUint64Array} from 'neuroglancer/sliceview/compressed_segmentat
 import {DataType} from 'neuroglancer/util/data_type';
 import {prod4, Vec3, vec3, vec3Key, Vec4, vec4} from 'neuroglancer/util/geom';
 import {getRandomValues} from 'neuroglancer/util/random';
-import {Uint32ArrayBuilder} from 'neuroglancer/util/uint32array_builder.ts';
+import {Uint32ArrayBuilder} from 'neuroglancer/util/uint32array_builder';
 
 describe('sliceview/compressed_segmentation/chunk_format', () => {
   describe('data access', () => {
