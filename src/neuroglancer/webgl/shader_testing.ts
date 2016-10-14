@@ -29,20 +29,14 @@ export class FragmentShaderTester extends RefCounted {
   offscreenFramebuffer = new FramebufferConfiguration(
       this.gl, {colorBuffers: makeTextureBuffers(this.gl, this.numOutputs)});
   private vertexPositionsBuffer = this.registerDisposer(Buffer.fromData(
-      this.gl, new Float32Array([
-        -1, -1, 0, 1,  //
-        -1, +1, 0, 1,  //
-        +1, +1, 0, 1,  //
-        +1, -1, 0, 1,  //
-      ]),
-      this.gl.ARRAY_BUFFER, this.gl.STATIC_DRAW));
+      this.gl, Float32Array.of(0, 0, 0, 1), this.gl.ARRAY_BUFFER, this.gl.STATIC_DRAW));
 
   constructor(public gl: GL, public numOutputs: number) {
     super();
     let {builder} = this;
     builder.addFragmentExtension('GL_EXT_draw_buffers');
-    builder.addAttribute('vec4', 'aVertexPosition');
-    builder.setVertexMain(`gl_Position = aVertexPosition;`);
+    builder.addAttribute('vec4', 'shader_testing_aVertexPosition');
+    builder.setVertexMain(`gl_Position = shader_testing_aVertexPosition;`);
     builder.addFragmentCode(glsl_debugFunctions);
   }
   build() { this.shader = this.builder.build(); }
@@ -53,9 +47,9 @@ export class FragmentShaderTester extends RefCounted {
     gl.disable(gl.SCISSOR_TEST);
     gl.disable(gl.DEPTH_TEST);
     gl.disable(gl.BLEND);
-    let aVertexPosition = shader.attribute('aVertexPosition');
+    let aVertexPosition = shader.attribute('shader_testing_aVertexPosition');
     this.vertexPositionsBuffer.bindToVertexAttrib(aVertexPosition, 4);
-    gl.drawArrays(gl.TRIANGLE_FAN, 0, 4);
+    gl.drawArrays(gl.POINTS, 0, 1);
     gl.disableVertexAttribArray(aVertexPosition);
     this.offscreenFramebuffer.unbind();
   }
