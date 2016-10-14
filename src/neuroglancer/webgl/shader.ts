@@ -17,6 +17,8 @@
 import {RefCounted} from 'neuroglancer/util/disposable';
 import {GL_FRAGMENT_SHADER, GL_VERTEX_SHADER} from 'neuroglancer/webgl/constants';
 
+const DEBUG_SHADER = false;
+
 export enum ShaderType {
   VERTEX = GL_VERTEX_SHADER,
   FRAGMENT = GL_FRAGMENT_SHADER
@@ -93,6 +95,20 @@ export function getShader(gl: WebGLRenderingContext, source: string, shaderType:
 
   if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
     let log = gl.getShaderInfoLog(shader) || '';
+
+    if (DEBUG_SHADER) {
+      let lines = source.replace('<', '&lt;').replace('>', '&gt;').split('\n');
+      let s = '<pre>';
+      s += log.replace('<', '&lt;').replace('>', '&gt;') + '\n';
+      lines.forEach((line, i) => { s += `${i + 1}: ${line}\n`; });
+      s += `\n</pre>`;
+      let w = window.open('about:blank', '_blank');
+      try {
+        w.document.write(s);
+      } catch (writeError) {
+      }
+    }
+
     throw new ShaderCompilationError(shaderType, source, log, parseShaderErrors(log));
   }
 
@@ -116,21 +132,22 @@ export class ShaderProgram extends RefCounted {
     let vertexShader = this.vertexShader = getShader(gl, vertexSource, gl.VERTEX_SHADER);
     let fragmentShader = this.fragmentShader = getShader(gl, fragmentSource, gl.FRAGMENT_SHADER);
 
-    // DEBUG
-    // {
-    //   let combinedSource = 'VERTEX SHADER\n\n' + vertexSource + '\n\n\nFRAGMENT SHADER\n\n' +
-    //   fragmentSource + '\n';
-    //   let w = window.open("about:blank", "_blank");
-    //   w.document.write('<pre>' + combinedSource.replace('<', '&lt;').replace('>', '&gt;') +
-    //   '</pre>');
-    // }
-
     let shaderProgram = gl.createProgram();
     gl.attachShader(shaderProgram, vertexShader);
     gl.attachShader(shaderProgram, fragmentShader);
     gl.linkProgram(shaderProgram);
     if (!gl.getProgramParameter(shaderProgram, gl.LINK_STATUS)) {
       let log = gl.getProgramInfoLog(shaderProgram) || '';
+
+      // DEBUG
+      // {
+      //   let combinedSource = 'VERTEX SHADER\n\n' + vertexSource + '\n\n\nFRAGMENT SHADER\n\n' +
+      //   fragmentSource + '\n';
+      //   let w = window.open("about:blank", "_blank");
+      //   w.document.write('<pre>' + combinedSource.replace('<', '&lt;').replace('>', '&gt;') +
+      //   '</pre>');
+      // }
+
       throw new ShaderLinkError(vertexSource, fragmentSource, log);
     }
     this.program = shaderProgram!;
