@@ -135,9 +135,17 @@ node.js is required to build the viewer.
    This will start a server on <http://localhost:8080>.
    
 5. To run the unit test suite on Chrome:
-
+   
    `npm test`
    
+   To run only tests in files matching a given regular expression pattern:
+   
+   `npm test -- --pattern='<pattern>'`
+   
+   For example,
+   
+   `npm test -- --pattern='util/uint64'`
+
 6. See [package.json](package.json) for other commands available.
 
 # Creating a dependent project
