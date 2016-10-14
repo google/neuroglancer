@@ -18,7 +18,7 @@ import {ChunkSourceParametersConstructor, ChunkState} from 'neuroglancer/chunk_m
 import {Chunk, ChunkManager, ChunkSource} from 'neuroglancer/chunk_manager/frontend';
 import {RenderLayer} from 'neuroglancer/layer';
 import {VoxelSize} from 'neuroglancer/navigation_state';
-import {PerspectiveViewRenderContext, PerspectiveViewRenderLayer} from 'neuroglancer/perspective_panel';
+import {PerspectiveViewRenderContext, PerspectiveViewRenderLayer} from 'neuroglancer/perspective_view/render_layer';
 import {forEachSegmentToDraw, getObjectColor, registerRedrawWhenSegmentationDisplayStateWithAlphaChanged, SegmentationDisplayStateWithAlpha, SegmentationLayerSharedObject} from 'neuroglancer/segmentation_display_state/frontend';
 import {SKELETON_LAYER_RPC_ID} from 'neuroglancer/skeleton/base';
 import {sliceViewPanelEmit, SliceViewPanelRenderContext, SliceViewPanelRenderLayer} from 'neuroglancer/sliceview/panel';

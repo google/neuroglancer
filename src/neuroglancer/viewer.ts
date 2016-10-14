@@ -26,7 +26,7 @@ import {LayerListSpecification} from 'neuroglancer/layer_specification';
 import * as L from 'neuroglancer/layout';
 import {NavigationState, OrientationState, Pose} from 'neuroglancer/navigation_state';
 import {overlaysOpen} from 'neuroglancer/overlay';
-import {PerspectivePanel} from 'neuroglancer/perspective_panel';
+import {PerspectivePanel} from 'neuroglancer/perspective_view/panel';
 import {PositionStatusPanel} from 'neuroglancer/position_status_panel';
 import {SliceView} from 'neuroglancer/sliceview/frontend';
 import {SliceViewPanel} from 'neuroglancer/sliceview/panel';

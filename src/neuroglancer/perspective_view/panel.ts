@@ -16,45 +16,21 @@
 
 import {AxesLineHelper} from 'neuroglancer/axes_lines';
 import {DisplayContext} from 'neuroglancer/display_context';
-import {VisibilityTrackedRenderLayer} from 'neuroglancer/layer';
 import {makeRenderedPanelVisibleLayerTracker, MouseSelectionState} from 'neuroglancer/layer';
 import {PickIDManager} from 'neuroglancer/object_picking';
+import {PerspectiveViewRenderContext, PerspectiveViewRenderLayer} from 'neuroglancer/perspective_view/render_layer';
 import {RenderedDataPanel} from 'neuroglancer/rendered_data_panel';
 import {SliceView, SliceViewRenderHelper} from 'neuroglancer/sliceview/frontend';
 import {TrackableBoolean, TrackableBooleanCheckbox} from 'neuroglancer/trackable_boolean';
-import {kAxes, Mat4, mat4, Vec3, vec3, vec4} from 'neuroglancer/util/geom';
+import {kAxes, mat4, vec3, vec4} from 'neuroglancer/util/geom';
 import {startRelativeMouseDrag} from 'neuroglancer/util/mouse_drag';
 import {ViewerState} from 'neuroglancer/viewer_state';
 import {DepthBuffer, FramebufferConfiguration, makeTextureBuffers, OffscreenCopyHelper} from 'neuroglancer/webgl/offscreen';
-import {ShaderBuilder, ShaderModule} from 'neuroglancer/webgl/shader';
+import {ShaderBuilder} from 'neuroglancer/webgl/shader';
 import {glsl_packFloat01ToFixedPoint, unpackFloat01FromFixedPoint} from 'neuroglancer/webgl/shader_lib';
 
 require('neuroglancer/noselect.css');
-require('./perspective_panel.css');
-
-export interface PerspectiveViewRenderContext {
-  dataToDevice: Mat4;
-  lightDirection: Vec3;
-  ambientLighting: number;
-  directionalLighting: number;
-  pickIDs: PickIDManager;
-  emitter: ShaderModule;
-}
-
-export class PerspectiveViewRenderLayer extends VisibilityTrackedRenderLayer {
-  draw(renderContext: PerspectiveViewRenderContext) {
-    // Must be overridden by subclasses.
-  }
-
-  drawPicking(renderContext: PerspectiveViewRenderContext) {
-    // Do nothing by default.
-  }
-
-  /**
-   * Should be rendered as transparent.
-   */
-  get isTransparent() { return false; }
-}
+require('./panel.css');
 
 export interface PerspectiveViewerState extends ViewerState {
   showSliceViews: TrackableBoolean;

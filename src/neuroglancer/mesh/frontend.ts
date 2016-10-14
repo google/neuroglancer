@@ -17,7 +17,7 @@
 import {ChunkSourceParametersConstructor, ChunkState} from 'neuroglancer/chunk_manager/base';
 import {Chunk, ChunkManager, ChunkSource} from 'neuroglancer/chunk_manager/frontend';
 import {FRAGMENT_SOURCE_RPC_ID, MESH_LAYER_RPC_ID} from 'neuroglancer/mesh/base';
-import {PerspectiveViewRenderContext, PerspectiveViewRenderLayer} from 'neuroglancer/perspective_panel';
+import {PerspectiveViewRenderContext, PerspectiveViewRenderLayer} from 'neuroglancer/perspective_view/render_layer';
 import {forEachSegmentToDraw, getObjectColor, registerRedrawWhenSegmentationDisplayStateWithAlphaChanged, SegmentationDisplayStateWithAlpha, SegmentationLayerSharedObject} from 'neuroglancer/segmentation_display_state/frontend';
 import {identityMat4, Mat4, vec3, Vec4, vec4} from 'neuroglancer/util/geom';
 import {stableStringify} from 'neuroglancer/util/json';
