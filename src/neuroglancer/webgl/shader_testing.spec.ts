@@ -68,6 +68,47 @@ describe('FragmentShaderTester', () => {
     });
   });
 
+  it('packFloat2', () => {
+    fragmentShaderTest(2, tester => {
+      let {gl, builder} = tester;
+      builder.addUniform('highp float', 'inputValue1');
+      builder.addUniform('highp float', 'inputValue2');
+      builder.addFragmentCode(glsl_packFloat);
+      builder.setFragmentMain(`
+  gl_FragData[0] = packFloatIntoVec4(inputValue1);
+  gl_FragData[1] = packFloatIntoVec4(inputValue2);
+`);
+      tester.build();
+      function generateRandomNumber() {
+        let buf = new Uint32Array(1);
+        let temp = new Float32Array(buf.buffer);
+        do {
+          crypto.getRandomValues(buf);
+        } while (!Number.isFinite(temp[0]) ||
+                 (temp[0] !== 0 && Math.abs(Math.log2(Math.abs(temp[0]))) > 125));
+        return temp[0];
+      }
+
+      let {shader} = tester;
+      shader.bind();
+      let testValues = [0, 1, -1, 2, -2, 3, -3, 5, -5, 1.5, -1.5];
+      let count = 100;
+      for (let i = 0; i < count; ++i) {
+        testValues.push(generateRandomNumber());
+      }
+      for (let x of testValues) {
+        let inputValues = Float32Array.of(x, x + 0.5);
+        gl.uniform1f(shader.uniform('inputValue1'), inputValues[0]);
+        gl.uniform1f(shader.uniform('inputValue2'), inputValues[1]);
+        tester.execute();
+        let outputValue1 = tester.readFloat(0);
+        let outputValue2 = tester.readFloat(1);
+        expect(outputValue1).toEqual(inputValues[0]);
+        expect(outputValue2).toEqual(inputValues[1]);
+      }
+    });
+  });
+
   it('packFloat01ToFixedPoint', () => {
     fragmentShaderTest(1, tester => {
       let {gl, builder} = tester;
