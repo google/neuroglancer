@@ -194,7 +194,8 @@ export class SkeletonLayer extends RefCounted {
         skeletonShaderManager.setColor(
             gl, shader, getObjectColor(displayState, rootObjectId, alpha));
       }
-      skeletonShaderManager.drawSkeleton(gl, shader, skeleton, pickIDs.register(layer, objectId));
+      skeletonShaderManager.drawSkeleton(
+          gl, shader, skeleton, pickIDs.registerUint64(layer, objectId));
     });
     skeletonShaderManager.endLayer(gl, shader);
   }

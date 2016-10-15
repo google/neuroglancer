@@ -18,34 +18,65 @@ import {MouseSelectionState, RenderLayer} from 'neuroglancer/layer';
 import {Uint64} from 'neuroglancer/util/uint64';
 
 export class PickIDManager {
-  renderLayers: (RenderLayer|null)[] = [null];
-  lowValues = [0];
-  highValues = [0];
+  /**
+   * This specifies the render layer corresponding to each registered entry.
+   */
+  private renderLayers: (RenderLayer|null)[] = [null];
+
+  /**
+   * This contains 3 consecutive values, specifying (startPickID, low, high), for each registered
+   * entry.  startPickID specifies the first uint32 pick ID corresponding to the entry.  low and
+   * high specify two additional numbers associated with the entry.
+   */
+  private values = [0, 0, 0];
+
+  private nextPickID = 1;
 
   constructor() {}
 
   clear() {
     this.renderLayers.length = 1;
-    this.lowValues.length = 1;
-    this.highValues.length = 1;
+    this.values.length = 3;
+    this.nextPickID = 1;
   }
 
-  register(renderLayer: RenderLayer, x: Uint64): number {
-    let {renderLayers, lowValues, highValues} = this;
-    let id = renderLayers.length;
-    renderLayers[id] = renderLayer;
-    lowValues[id] = x.low;
-    highValues[id] = x.high;
-    return id;
+  registerUint64(renderLayer: RenderLayer, x: Uint64, count = 1): number {
+    return this.register(renderLayer, count, x.low, x.high);
+  }
+
+  register(renderLayer: RenderLayer, count = 1, low = 0, high = 0): number {
+    let {renderLayers, values} = this;
+    let pickID = this.nextPickID;
+    this.nextPickID += count;
+    let index = renderLayers.length;
+    renderLayers[index] = renderLayer;
+    let valuesOffset = index * 3;
+    values[valuesOffset] = pickID;
+    values[valuesOffset + 1] = low;
+    values[valuesOffset + 2] = high;
+    return pickID;
   }
 
   /**
    * Set the object state according to the specified pick ID.
    */
   setMouseState(mouseState: MouseSelectionState, pickID: number) {
-    mouseState.pickedRenderLayer = this.renderLayers[pickID];
+    // Binary search to find largest registered index with a pick ID <= pickID.
+    const {renderLayers, values} = this;
+    let lower = 0, upper = renderLayers.length - 1;
+    while (lower < upper) {
+      const mid = Math.ceil(lower + (upper - lower) / 2);
+      if (values[mid * 3] > pickID) {
+        upper = mid - 1;
+      } else {
+        lower = mid;
+      }
+    }
+    mouseState.pickedRenderLayer = renderLayers[lower];
+    const valuesOffset = lower * 3;
+    mouseState.pickedOffset = pickID - values[valuesOffset];
     let {pickedValue} = mouseState;
-    pickedValue.low = this.lowValues[pickID];
-    pickedValue.high = this.highValues[pickID];
+    pickedValue.low = values[valuesOffset + 1];
+    pickedValue.high = values[valuesOffset + 2];
   }
-};
+}

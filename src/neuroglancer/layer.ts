@@ -51,7 +51,13 @@ export class RenderLayer extends RefCounted {
    * Bounding box for this layer, in nanometers.
    */
   boundingBox: BoundingBox|null = null;
-};
+
+  /**
+   * Transform the stored pickedValue and offset associated with the retrieved pick ID into the
+   * actual value.
+   */
+  transformPickedValue(pickedValue: Uint64, pickedOffset: number): any { return pickedValue; }
+}
 
 /**
  * Extends RenderLayer with functionality for tracking the number of panels in which the layer is
@@ -87,11 +93,14 @@ export class UserLayer extends RefCounted {
     layersChanged.dispatch();
   }
 
-  getValueAt(position: Float32Array, pickedRenderLayer: RenderLayer|null, pickedObject: Uint64) {
+  getValueAt(position: Float32Array, pickState: PickState) {
     let result: any;
     let {renderLayers} = this;
+    let {pickedRenderLayer} = pickState;
     if (pickedRenderLayer !== null && renderLayers.indexOf(pickedRenderLayer) !== -1) {
-      return this.transformPickedValue(pickedObject);
+      result =
+          pickedRenderLayer.transformPickedValue(pickState.pickedValue, pickState.pickedOffset);
+      return this.transformPickedValue(result);
     }
     for (let layer of renderLayers) {
       if (!layer.ready) {
@@ -367,12 +376,19 @@ export class LayerManager extends RefCounted {
 
 const MOUSE_STATE_UPDATE_INTERVAL = 50;
 
-export class MouseSelectionState {
+export interface PickState {
+  pickedRenderLayer: RenderLayer|null;
+  pickedValue: Uint64;
+  pickedOffset: number;
+}
+
+export class MouseSelectionState implements PickState {
   changed = new Signal();
   position = vec3.create();
   active = false;
   pickedRenderLayer: RenderLayer|null = null;
   pickedValue = new Uint64(0, 0);
+  pickedOffset = 0;
 
   updater: ((mouseState: MouseSelectionState) => boolean)|undefined = undefined;
 
@@ -450,9 +466,7 @@ export class LayerSelectedValues extends RefCounted {
       for (let layer of this.layerManager.managedLayers) {
         let userLayer = layer.layer;
         if (layer.visible && userLayer) {
-          values.set(
-              userLayer,
-              userLayer.getValueAt(position, mouseState.pickedRenderLayer, mouseState.pickedValue));
+          values.set(userLayer, userLayer.getValueAt(position, mouseState));
         }
       }
     }

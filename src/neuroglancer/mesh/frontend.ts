@@ -149,7 +149,7 @@ export class MeshLayer extends PerspectiveViewRenderLayer {
     forEachSegmentToDraw(displayState, objectChunks, (rootObjectId, objectId, fragments) => {
       meshShaderManager.beginObject(
           gl, shader, objectToDataMatrix, getObjectColor(displayState, rootObjectId, alpha),
-          pickIDs.register(this, objectId));
+          pickIDs.registerUint64(this, objectId));
       for (let fragment of fragments) {
         if (fragment.state === ChunkState.GPU_MEMORY) {
           meshShaderManager.drawFragment(gl, shader, fragment);
