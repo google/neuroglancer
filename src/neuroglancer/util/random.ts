@@ -30,10 +30,11 @@ export function getRandomHexString(numBits = 128) {
 /**
  * Calls crypto.getRandomValues as many times as needed to fill array.
  */
-export function getRandomValues(array: TypedArray) {
+export function getRandomValues<T extends TypedArray>(array: T): T {
   let byteArray = new Uint8Array(array.buffer, array.byteOffset, array.byteLength);
   const blockSize = 65536;
   for (let i = 0, length = byteArray.length; i < length; i += blockSize) {
     crypto.getRandomValues(byteArray.subarray(i, Math.min(length, i + blockSize)));
   }
+  return array;
 }
