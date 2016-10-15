@@ -349,3 +349,94 @@ export function getShaderType(dataType: DataType, numComponents: number = 1) {
   }
   throw new Error(`No shader type for ${DataType[dataType]}[${numComponents}].`);
 }
+
+export const glsl_addUint32 = [
+  glsl_uint32, `
+uint32_t add(uint32_t a, uint32_t b) {
+  uint32_t result;
+  float partial = 0.0;
+
+  partial += a.value.x * 255.0 + b.value.x * 255.0;
+  {
+    float byte0 = mod(partial, 256.0);
+    result.value.x = byte0 / 255.0;
+    partial = (partial - byte0) / 256.0;
+  }
+
+  partial += a.value.y * 255.0 + b.value.y * 255.0;
+  {
+    float byte1 = mod(partial, 256.0);
+    result.value.y = byte1 / 255.0;
+    partial = (partial - byte1) / 256.0;
+  }
+
+  partial += a.value.z * 255.0 + b.value.z * 255.0;
+  {
+    float byte2 = mod(partial, 256.0);
+    result.value.z = byte2 / 255.0;
+    partial = (partial - byte2) / 256.0;
+  }
+
+  partial += a.value.w * 255.0 + b.value.w * 255.0;
+  {
+    float byte3 = mod(partial, 256.0);
+    result.value.w = byte3 / 255.0;
+    partial = (partial - byte3) / 256.0;
+  }
+  return result;
+}
+`
+];
+
+export const glsl_floatToUint32 = [
+  glsl_uint32, `
+uint32_t floatToUint32(float x) {
+  uint32_t result;
+  float v;
+  
+  v = mod(x, 256.0);
+  result.x = v / 255.0;
+  x = (x - v) / 256.0;
+
+  v = mod(x, 256.0);
+  result.y = v / 255.0;
+  x = (x - v) / 256.0;
+
+  v = mod(x, 256.0);
+  result.z = v / 255.0;
+  result.w = 0.0;
+  
+  return result;
+}
+`
+];
+
+/**
+ * This requires that divisor is an integer and 0 < divisor < 2^16.
+ */
+export const glsl_divmodUint32 = [
+  glsl_uint32, `
+float divmod(uint32_t dividend, float divisor, out uint32_t quotient) {
+
+  float partial = dividend.value.w * 255.0;
+  float remainder;
+
+  remainder = mod(partial, divisor);
+  quotient.value.w = (partial - remainder) / divisor / 255.0;
+  partial = remainder * 256.0 + dividend.value.z * 255.0;
+
+  remainder = mod(partial, divisor);
+  quotient.value.z = (partial - remainder) / divisor / 255.0;
+  partial = remainder * 256.0 + dividend.value.y * 255.0;
+
+  remainder = mod(partial, divisor);
+  quotient.value.y = (partial - remainder) / divisor / 255.0;
+  partial = remainder * 256.0 + dividend.value.x * 255.0;
+
+  remainder = mod(partial, divisor);
+  quotient.value.x = (partial - remainder) / divisor / 255.0;
+
+  return remainder;
+}
+`
+];
