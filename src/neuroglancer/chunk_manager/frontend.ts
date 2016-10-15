@@ -151,6 +151,8 @@ export class ChunkManager extends SharedObject {
 
   memoize = new StringMemoize();
 
+  get gl() { return this.chunkQueueManager.gl; }
+
   constructor(public chunkQueueManager: ChunkQueueManager) {
     super();
     this.registerDisposer(chunkQueueManager.addRef());

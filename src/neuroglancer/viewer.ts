@@ -24,19 +24,15 @@ import {LayerDialog} from 'neuroglancer/layer_dialog';
 import {LayerPanel} from 'neuroglancer/layer_panel';
 import {LayerListSpecification} from 'neuroglancer/layer_specification';
 import * as L from 'neuroglancer/layout';
-import {NavigationState, OrientationState, Pose} from 'neuroglancer/navigation_state';
+import {NavigationState, Pose} from 'neuroglancer/navigation_state';
 import {overlaysOpen} from 'neuroglancer/overlay';
-import {PerspectivePanel} from 'neuroglancer/perspective_view/panel';
 import {PositionStatusPanel} from 'neuroglancer/position_status_panel';
-import {SliceView} from 'neuroglancer/sliceview/frontend';
-import {SliceViewPanel} from 'neuroglancer/sliceview/panel';
 import {TrackableBoolean} from 'neuroglancer/trackable_boolean';
 import {TrackableValue} from 'neuroglancer/trackable_value';
 import {delayHashUpdate, registerTrackable} from 'neuroglancer/url_hash_state';
 import {RefCounted} from 'neuroglancer/util/disposable';
-import {removeChildren} from 'neuroglancer/util/dom';
-import {Mat4, Quat, quat} from 'neuroglancer/util/geom';
 import {GlobalKeyboardShortcutHandler, KeySequenceMap} from 'neuroglancer/util/keyboard_shortcut_handler';
+import {DataDisplayLayout, LAYOUTS} from 'neuroglancer/viewer_layouts';
 import {ViewerState} from 'neuroglancer/viewer_state';
 import {RPC} from 'neuroglancer/worker_rpc';
 import {Signal} from 'signals';
@@ -44,135 +40,6 @@ import {Signal} from 'signals';
 require('./viewer.css');
 require('./help_button.css');
 require('neuroglancer/noselect.css');
-
-export class FourPanelLayout extends RefCounted {
-  constructor(public rootElement: HTMLElement, public viewer: Viewer) {
-    super();
-
-    let sliceViews = viewer.makeOrthogonalSliceViews();
-    let {display} = viewer;
-
-    let perspectiveViewerState = {
-      mouseState: viewer.mouseState,
-      layerManager: viewer.layerManager,
-      navigationState: viewer.perspectiveNavigationState,
-      showSliceViews: viewer.showPerspectiveSliceViews,
-      showSliceViewsCheckbox: true,
-      showAxisLines: viewer.showAxisLines,
-    };
-
-    let sliceViewerState = {
-      mouseState: viewer.mouseState,
-      layerManager: viewer.layerManager,
-      navigationState: viewer.navigationState,
-      showAxisLines: viewer.showAxisLines,
-      showScaleBar: viewer.showScaleBar,
-    };
-
-    let sliceViewerStateWithoutScaleBar = {
-      mouseState: viewer.mouseState,
-      layerManager: viewer.layerManager,
-      navigationState: viewer.navigationState,
-      showAxisLines: viewer.showAxisLines,
-      showScaleBar: new TrackableBoolean(false, false),
-    };
-    let mainDisplayContents = [
-      L.withFlex(1, L.box('column', [
-        L.withFlex(1, L.box('row', [
-          L.withFlex(1, element => {
-            element.className = 'gllayoutcell noselect';
-            this.registerDisposer(new SliceViewPanel(display, element, sliceViews[0], sliceViewerState));
-          }),
-          L.withFlex(1, element => {
-            element.className = 'gllayoutcell noselect';
-            this.registerDisposer(new SliceViewPanel(display, element, sliceViews[1], sliceViewerStateWithoutScaleBar));
-          })
-        ])),
-        L.withFlex(1, L.box('row', [
-          L.withFlex(1, element => {
-            element.className = 'gllayoutcell noselect';
-            let perspectivePanel = this.registerDisposer(
-                new PerspectivePanel(display, element, perspectiveViewerState));
-            for (let sliceView of sliceViews) {
-              perspectivePanel.sliceViews.add(sliceView.addRef());
-            }
-          }),
-          L.withFlex(1, element => {
-            element.className = 'gllayoutcell noselect';
-            this.registerDisposer(new SliceViewPanel(display, element, sliceViews[2], sliceViewerStateWithoutScaleBar));
-          })
-        ])),
-      ]))
-    ];
-    L.box('row', mainDisplayContents)(rootElement);
-    display.onResize();
-  }
-
-  disposed() {
-    removeChildren(this.rootElement);
-    super.disposed();
-  }
-};
-
-export class SinglePanelLayout extends RefCounted {
-  constructor(public rootElement: HTMLElement, public viewer: Viewer) {
-    super();
-    let sliceView = viewer.makeSliceView();
-    let sliceViewerState = {
-      mouseState: viewer.mouseState,
-      layerManager: viewer.layerManager,
-      navigationState: viewer.navigationState,
-      showAxisLines: viewer.showAxisLines,
-      showScaleBar: viewer.showScaleBar,
-    };
-
-    L.box('row', [L.withFlex(1, element => {
-            this.registerDisposer(
-                new SliceViewPanel(viewer.display, element, sliceView, sliceViewerState));
-          })])(rootElement);
-    viewer.display.onResize();
-  }
-
-  disposed() {
-    removeChildren(this.rootElement);
-    super.disposed();
-  }
-};
-
-export class SinglePerspectiveLayout extends RefCounted {
-  constructor(public rootElement: HTMLElement, public viewer: Viewer) {
-    super();
-    let perspectiveViewerState = {
-      mouseState: viewer.mouseState,
-      layerManager: viewer.layerManager,
-      navigationState: viewer.perspectiveNavigationState,
-      showSliceViews: new TrackableBoolean(false, false),
-      showAxisLines: viewer.showAxisLines,
-    };
-
-
-    L.box('row', [L.withFlex(1, element => {
-            this.registerDisposer(
-                new PerspectivePanel(viewer.display, element, perspectiveViewerState));
-          })])(rootElement);
-    viewer.display.onResize();
-  }
-
-  disposed() {
-    removeChildren(this.rootElement);
-    super.disposed();
-  }
-}
-
-interface DataDisplayLayout extends RefCounted {
-  rootElement: HTMLElement;
-}
-
-export const LAYOUTS: [string, (element: HTMLElement, viewer: Viewer) => DataDisplayLayout][] = [
-  ['4panel', (element, viewer) => new FourPanelLayout(element, viewer)],
-  ['xy', (element, viewer) => new SinglePanelLayout(element, viewer)],
-  ['3d', (element, viewer) => new SinglePerspectiveLayout(element, viewer)],
-];
 
 export function getLayoutByName(obj: any) {
   let layout = LAYOUTS.find(x => x[0] === obj);
@@ -375,43 +242,6 @@ export class Viewer extends RefCounted implements ViewerState {
       return activePanel.onKeyCommand(action);
     }
     return false;
-  }
-
-  makeSliceView(baseToSelf?: Quat) {
-    let navigationState: NavigationState;
-    if (baseToSelf === undefined) {
-      navigationState = this.navigationState;
-    } else {
-      navigationState = new NavigationState(
-          new Pose(
-              this.navigationState.pose.position,
-              OrientationState.makeRelative(this.navigationState.pose.orientation, baseToSelf)),
-          this.navigationState.zoomFactor);
-    }
-    return new SliceView(this.gl, this.chunkManager, this.layerManager, navigationState);
-  }
-
-  makeOrthogonalSliceViews() {
-    let {gl, layerManager} = this;
-    let sliceViews = new Array<SliceView>();
-    let addSliceView = (mat?: Mat4) => { sliceViews.push(this.makeSliceView(mat)); };
-    addSliceView();
-    addSliceView(quat.rotateX(quat.create(), quat.create(), Math.PI / 2));
-    addSliceView(quat.rotateY(quat.create(), quat.create(), Math.PI / 2));
-    // {
-    //   let mat = mat4.create();
-    //   mat4.identity(mat);
-    //   mat4.rotateX(mat, mat, Math.PI / 2);
-    //   addSliceView(mat);
-    // }
-
-    // {
-    //   let mat = mat4.create();
-    //   mat4.identity(mat);
-    //   mat4.rotateY(mat, mat, Math.PI / 2);
-    //   addSliceView(mat);
-    // }
-    return sliceViews;
   }
 
   private handleNavigationStateChanged() {

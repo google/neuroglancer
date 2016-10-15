@@ -41,6 +41,8 @@ const tempMat = mat4.create();
 
 @registerSharedObjectOwner(SLICEVIEW_RPC_ID)
 export class SliceView extends SliceViewBase {
+  gl = this.chunkManager.gl;
+
   dataToViewport = mat4.create();
 
   // Transforms viewport coordinates to OpenGL normalized device coordinates
@@ -71,7 +73,7 @@ export class SliceView extends SliceViewBase {
       {colorBuffers: makeTextureBuffers(this.gl, 1), depthBuffer: new StencilBuffer(this.gl)}));
 
   constructor(
-      public gl: GL, public chunkManager: ChunkManager, public layerManager: LayerManager,
+      public chunkManager: ChunkManager, public layerManager: LayerManager,
       public navigationState: NavigationState) {
     super();
     mat4.identity(this.dataToViewport);
