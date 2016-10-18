@@ -271,6 +271,14 @@ export interface ChunkFormat {
 
   /**
    * Called on the ChunkFormat of the first source of a RenderLayer.
+   *
+   * This should define a fragment shader function:
+   *
+   *   value_type getDataValue(int channelIndex);
+   *
+   * where value_type is the shader data type corresponding to the chunk data type.  This function
+   * should retrieve the value for channel `channelIndex` at position `getPositionWithinChunk()`
+   * within the chunk.
    */
   defineShader: (builder: ShaderBuilder) => void;
 
