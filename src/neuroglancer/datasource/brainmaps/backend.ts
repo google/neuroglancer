@@ -92,6 +92,7 @@ function decodeManifestChunk(chunk: ManifestChunk, response: any) {
 }
 
 function decodeFragmentChunk(chunk: FragmentChunk, response: ArrayBuffer) {
+  response = inflate(new Uint8Array(response)).buffer;
   let dv = new DataView(response);
   let numVertices = dv.getUint32(0, true);
   let numVerticesHigh = dv.getUint32(4, true);
@@ -115,7 +116,7 @@ class MeshSource extends ParameterizedMeshSource<MeshSourceParameters> {
   downloadFragment(chunk: FragmentChunk) {
     let {parameters} = this;
     const path =
-        `/v1beta2/binary/objects/binary/objects/fragment/header.volume_id=${parameters['volume_id']}/mesh_name=${parameters['mesh_name']}/fragment_key=${chunk.fragmentId}/object_id=${chunk.manifestChunk!.objectId}?alt=media`;
+        `/v1beta2/binary/objects/binary/objects/fragment/header.volume_id=${parameters['volume_id']}/mesh_name=${parameters['mesh_name']}/fragment_key=${chunk.fragmentId}/object_id=${chunk.manifestChunk!.objectId}/header.gzip_compression_level=6?alt=media`;
     handleChunkDownloadPromise(
         chunk, makeRequest(parameters['instance'], 'GET', path, 'arraybuffer'),
         decodeFragmentChunk);
@@ -123,6 +124,7 @@ class MeshSource extends ParameterizedMeshSource<MeshSourceParameters> {
 };
 
 function decodeSkeletonChunk(chunk: SkeletonChunk, response: ArrayBuffer) {
+  response = inflate(new Uint8Array(response)).buffer;
   let dv = new DataView(response);
   let numVertices = dv.getUint32(0, true);
   let numVerticesHigh = dv.getUint32(4, true);
@@ -144,7 +146,7 @@ export class SkeletonSource extends ParameterizedSkeletonSource<SkeletonSourcePa
   download(chunk: SkeletonChunk) {
     const {parameters} = this;
     const path =
-        `/v1beta2/binary/objects/binary/objects/skeleton/header.volume_id=${parameters['volume_id']}/mesh_name=${parameters['mesh_name']}/object_id=${chunk.objectId}?alt=media`;
+        `/v1beta2/binary/objects/binary/objects/skeleton/header.volume_id=${parameters['volume_id']}/mesh_name=${parameters['mesh_name']}/object_id=${chunk.objectId}/header.gzip_compression_level=6?alt=media`;
     handleChunkDownloadPromise(
         chunk, makeRequest(parameters['instance'], 'GET', path, 'arraybuffer'),
         decodeSkeletonChunk);
