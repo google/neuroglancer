@@ -14,12 +14,14 @@
  * limitations under the License.
  */
 
+import {CoordinateTransform} from 'neuroglancer/coordinate_transform';
 import {UserLayer, UserLayerDropdown} from 'neuroglancer/layer';
 import {LayerListSpecification} from 'neuroglancer/layer_specification';
 import {getVolumeWithStatusMessage} from 'neuroglancer/layer_specification';
 import {Overlay} from 'neuroglancer/overlay';
 import {FRAGMENT_MAIN_START, getTrackableFragmentMain, ImageRenderLayer} from 'neuroglancer/sliceview/image_renderlayer';
 import {trackableAlphaValue} from 'neuroglancer/trackable_alpha';
+import {mat4} from 'neuroglancer/util/geom';
 import {makeWatchableShaderError} from 'neuroglancer/webgl/dynamic_shader';
 import {RangeWidget} from 'neuroglancer/widget/range';
 import {ShaderCodeWidget} from 'neuroglancer/widget/shader_code_widget';
@@ -34,6 +36,7 @@ export class ImageUserLayer extends UserLayer {
   fragmentMain = getTrackableFragmentMain();
   shaderError = makeWatchableShaderError();
   renderLayer: ImageRenderLayer;
+  transform = new CoordinateTransform();
   constructor(manager: LayerListSpecification, x: any) {
     super();
     let volumePath = x['source'];
@@ -42,6 +45,7 @@ export class ImageUserLayer extends UserLayer {
     }
     this.opacity.restoreState(x['opacity']);
     this.fragmentMain.restoreState(x['shader']);
+    this.transform.restoreState(x['transform']);
     this.registerSignalBinding(
         this.fragmentMain.changed.add(() => { this.specificationChanged.dispatch(); }));
     this.volumePath = volumePath;
@@ -50,7 +54,8 @@ export class ImageUserLayer extends UserLayer {
         let renderLayer = this.renderLayer = new ImageRenderLayer(volume, {
           opacity: this.opacity,
           fragmentMain: this.fragmentMain,
-          shaderError: this.shaderError
+          shaderError: this.shaderError,
+          volumeSourceOptions: {transform: mat4.clone(this.transform.transform)},
         });
         this.addRenderLayer(renderLayer);
         this.shaderError.changed.dispatch();
@@ -62,6 +67,7 @@ export class ImageUserLayer extends UserLayer {
     x['source'] = this.volumePath;
     x['opacity'] = this.opacity.toJSON();
     x['shader'] = this.fragmentMain.toJSON();
+    x['transform'] = this.transform.toJSON();
     return x;
   }
   makeDropdown(element: HTMLDivElement) { return new ImageDropdown(element, this); }

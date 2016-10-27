@@ -19,7 +19,7 @@ import {Chunk, ChunkManager, ChunkSource} from 'neuroglancer/chunk_manager/front
 import {RenderLayer} from 'neuroglancer/layer';
 import {VoxelSize} from 'neuroglancer/navigation_state';
 import {PerspectiveViewRenderContext, PerspectiveViewRenderLayer} from 'neuroglancer/perspective_view/render_layer';
-import {forEachSegmentToDraw, getObjectColor, registerRedrawWhenSegmentationDisplayStateWithAlphaChanged, SegmentationDisplayStateWithAlpha, SegmentationLayerSharedObject} from 'neuroglancer/segmentation_display_state/frontend';
+import {forEachSegmentToDraw, getObjectColor, registerRedrawWhenSegmentationDisplayState3DChanged, SegmentationDisplayState3D, SegmentationLayerSharedObject} from 'neuroglancer/segmentation_display_state/frontend';
 import {SKELETON_LAYER_RPC_ID} from 'neuroglancer/skeleton/base';
 import {sliceViewPanelEmit, SliceViewPanelRenderContext, SliceViewPanelRenderLayer} from 'neuroglancer/sliceview/panel';
 import {RefCounted} from 'neuroglancer/util/disposable';
@@ -145,10 +145,10 @@ export class SkeletonLayer extends RefCounted {
 
   constructor(
       public chunkManager: ChunkManager, public source: SkeletonSource,
-      public voxelSizeObject: VoxelSize, public displayState: SegmentationDisplayStateWithAlpha) {
+      public voxelSizeObject: VoxelSize, public displayState: SegmentationDisplayState3D) {
     super();
 
-    registerRedrawWhenSegmentationDisplayStateWithAlphaChanged(displayState, this);
+    registerRedrawWhenSegmentationDisplayState3DChanged(displayState, this);
     let sharedObject = this.sharedObject =
         this.registerDisposer(new SegmentationLayerSharedObject(chunkManager, displayState));
     sharedObject.RPC_TYPE_ID = SKELETON_LAYER_RPC_ID;
@@ -178,6 +178,8 @@ export class SkeletonLayer extends RefCounted {
     if (source.skeletonVertexCoordinatesInVoxels) {
       mat4.scale(objectToDataMatrix, objectToDataMatrix, this.voxelSizeObject.size);
     }
+    mat4.multiply(
+        objectToDataMatrix, this.displayState.objectToDataTransform.transform, objectToDataMatrix);
     skeletonShaderManager.beginLayer(gl, shader, renderContext, objectToDataMatrix);
 
     let skeletons = source.chunks;

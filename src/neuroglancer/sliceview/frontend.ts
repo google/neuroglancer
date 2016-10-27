@@ -19,7 +19,7 @@ import {Chunk, ChunkManager, ChunkSource} from 'neuroglancer/chunk_manager/front
 import {LayerManager} from 'neuroglancer/layer';
 import {MeshSource} from 'neuroglancer/mesh/frontend';
 import {NavigationState} from 'neuroglancer/navigation_state';
-import {DataType, SLICEVIEW_RPC_ID, SliceViewBase, VolumeChunkSource as VolumeChunkSourceInterface, VolumeChunkSpecification, VolumeType} from 'neuroglancer/sliceview/base';
+import {DataType, SLICEVIEW_RPC_ID, SliceViewBase, VolumeChunkSource as VolumeChunkSourceInterface, VolumeChunkSpecification, VolumeSourceOptions, VolumeType} from 'neuroglancer/sliceview/base';
 import {ChunkLayout} from 'neuroglancer/sliceview/chunk_layout';
 import {RenderLayer} from 'neuroglancer/sliceview/renderlayer';
 import {RefCounted} from 'neuroglancer/util/disposable';
@@ -441,7 +441,7 @@ export interface MultiscaleVolumeChunkSource {
    * @return Chunk sources for each scale, ordered by increasing minVoxelSize.  For each scale,
    * there may be alternative sources with different chunk layouts.
    */
-  getSources: () => VolumeChunkSource[][];
+  getSources: (options: VolumeSourceOptions) => VolumeChunkSource[][];
 
   chunkManager: ChunkManager;
 

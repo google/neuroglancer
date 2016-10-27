@@ -18,8 +18,8 @@ import {ChunkSourceParametersConstructor, ChunkState} from 'neuroglancer/chunk_m
 import {Chunk, ChunkManager, ChunkSource} from 'neuroglancer/chunk_manager/frontend';
 import {FRAGMENT_SOURCE_RPC_ID, MESH_LAYER_RPC_ID} from 'neuroglancer/mesh/base';
 import {PerspectiveViewRenderContext, PerspectiveViewRenderLayer} from 'neuroglancer/perspective_view/render_layer';
-import {forEachSegmentToDraw, getObjectColor, registerRedrawWhenSegmentationDisplayStateWithAlphaChanged, SegmentationDisplayStateWithAlpha, SegmentationLayerSharedObject} from 'neuroglancer/segmentation_display_state/frontend';
-import {identityMat4, Mat4, vec3, Vec4, vec4} from 'neuroglancer/util/geom';
+import {forEachSegmentToDraw, getObjectColor, registerRedrawWhenSegmentationDisplayState3DChanged, SegmentationDisplayState3D, SegmentationLayerSharedObject} from 'neuroglancer/segmentation_display_state/frontend';
+import {Mat4, vec3, Vec4, vec4} from 'neuroglancer/util/geom';
 import {stableStringify} from 'neuroglancer/util/json';
 import {getObjectId} from 'neuroglancer/util/object_id';
 import {Buffer} from 'neuroglancer/webgl/buffer';
@@ -100,10 +100,10 @@ export class MeshLayer extends PerspectiveViewRenderLayer {
 
   constructor(
       public chunkManager: ChunkManager, public source: MeshSource,
-      public displayState: SegmentationDisplayStateWithAlpha) {
+      public displayState: SegmentationDisplayState3D) {
     super();
 
-    registerRedrawWhenSegmentationDisplayStateWithAlphaChanged(displayState, this);
+    registerRedrawWhenSegmentationDisplayState3DChanged(displayState, this);
 
     let sharedObject = this.sharedObject =
         this.registerDisposer(new SegmentationLayerSharedObject(chunkManager, displayState));
@@ -144,7 +144,7 @@ export class MeshLayer extends PerspectiveViewRenderLayer {
 
     let {pickIDs} = renderContext;
 
-    const objectToDataMatrix = identityMat4;
+    const objectToDataMatrix = this.displayState.objectToDataTransform.transform;
 
     forEachSegmentToDraw(displayState, objectChunks, (rootObjectId, objectId, fragments) => {
       meshShaderManager.beginObject(

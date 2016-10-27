@@ -15,7 +15,6 @@
  */
 
 import * as debounce from 'lodash/debounce';
-import {CoordinateTransform} from 'neuroglancer/coordinate_transform';
 import {UserLayer, UserLayerDropdown} from 'neuroglancer/layer';
 import {LayerListSpecification} from 'neuroglancer/layer_specification';
 import {Overlay} from 'neuroglancer/overlay';
@@ -52,7 +51,6 @@ export class SingleMeshUserLayer extends UserLayer {
   parameters: SingleMeshSourceParameters;
   meshSource: SingleMeshSource|undefined;
   displayState = new SingleMeshDisplayState();
-  transform = new CoordinateTransform();
   userSpecifiedAttributeNames: (string|undefined)[]|undefined;
   defaultAttributeNames: string[]|undefined;
   constructor(public manager: LayerListSpecification, x: any) {
@@ -69,10 +67,7 @@ export class SingleMeshUserLayer extends UserLayer {
             }
           }),
     };
-    let transformObj = x['transform'];
-    if (transformObj !== undefined) {
-      this.transform.restoreState(transformObj);
-    }
+    this.displayState.objectToDataTransform.restoreState(x['transform']);
     this.displayState.fragmentMain.restoreState(x['shader']);
     this.userSpecifiedAttributeNames = verifyObjectProperty(x, 'vertexAttributeNames', y => {
       if (y === undefined) {
@@ -86,7 +81,6 @@ export class SingleMeshUserLayer extends UserLayer {
         return undefined;
       });
     });
-    this.transform.toMat4(this.displayState.objectToDataTransform);
     getSingleMeshSource(manager.chunkManager, this.parameters).then(source => {
       if (this.wasDisposed) {
         return;
@@ -120,7 +114,7 @@ export class SingleMeshUserLayer extends UserLayer {
       x['vertexAttributeSources'] = attributeSourceUrls;
     }
     x['shader'] = this.displayState.fragmentMain.toJSON();
-    x['transform'] = this.transform.toJSON();
+    x['transform'] = this.displayState.objectToDataTransform.toJSON();
     let persistentAttributeNames: (string|undefined)[]|undefined = undefined;
     if (this.meshSource === undefined) {
       persistentAttributeNames = this.userSpecifiedAttributeNames;

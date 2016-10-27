@@ -15,6 +15,7 @@
  */
 
 import {ChunkManager} from 'neuroglancer/chunk_manager/frontend';
+import {CoordinateTransform} from 'neuroglancer/coordinate_transform';
 import {LayerSelectedValues, UserLayer} from 'neuroglancer/layer';
 import {SegmentColorHash} from 'neuroglancer/segment_color';
 import {forEachVisibleSegment, getObjectKey, VisibleSegmentsState} from 'neuroglancer/segmentation_display_state/base';
@@ -84,6 +85,10 @@ export interface SegmentationDisplayStateWithAlpha extends SegmentationDisplaySt
   objectAlpha: TrackableAlphaValue;
 }
 
+export interface SegmentationDisplayState3D extends SegmentationDisplayStateWithAlpha {
+  objectToDataTransform: CoordinateTransform;
+}
+
 export function registerRedrawWhenSegmentationDisplayStateChanged(
     displayState: SegmentationDisplayState, renderLayer: {redrawNeeded: Signal}&RefCounted) {
   let dispatchRedrawNeeded = () => { renderLayer.redrawNeeded.dispatch(); };
@@ -102,6 +107,14 @@ export function registerRedrawWhenSegmentationDisplayStateWithAlphaChanged(
   registerRedrawWhenSegmentationDisplayStateChanged(displayState, renderLayer);
   let dispatchRedrawNeeded = () => { renderLayer.redrawNeeded.dispatch(); };
   renderLayer.registerSignalBinding(displayState.objectAlpha.changed.add(dispatchRedrawNeeded));
+}
+
+export function registerRedrawWhenSegmentationDisplayState3DChanged(
+    displayState: SegmentationDisplayState3D, renderLayer: {redrawNeeded: Signal}&RefCounted) {
+  registerRedrawWhenSegmentationDisplayStateWithAlphaChanged(displayState, renderLayer);
+  let dispatchRedrawNeeded = () => { renderLayer.redrawNeeded.dispatch(); };
+  renderLayer.registerSignalBinding(
+      displayState.objectToDataTransform.changed.add(dispatchRedrawNeeded));
 }
 
 /**

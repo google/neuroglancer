@@ -14,89 +14,106 @@
  * limitations under the License.
  */
 
-import {kIdentityQuat, kZeroVec, Mat4, mat4, Quat, quat, vec3, Vec3} from 'neuroglancer/util/geom';
+import {identityMat4, kOneVec, kZeroVec, mat4, Quat, quat, vec3, Vec3} from 'neuroglancer/util/geom';
 import {parseFiniteVec} from 'neuroglancer/util/json';
 import {Signal} from 'signals';
 
-/**
- * Class for representing a coordinate transform specified by a user in the form of a rotation
- * quaternion, translation vector, and scale vector.
- *
- * Typically it represents a transform from a local coordinate space to a global coordinate space.
- *
- * globalCoordinate = rotation * (localCoordinate .* scale) + translation.
- */
-export class CoordinateTransform {
+export interface RotationTranslationScale {
   rotation: Quat;
   translation: Vec3;
   scale: Vec3;
+}
+
+/**
+ * Class for representing a coordinate transform specified by a user.
+ *
+ * Typically it represents a transform from a local coordinate space to a global coordinate space.
+ */
+export class CoordinateTransform {
   changed = new Signal();
 
-  constructor(rotation = kIdentityQuat, translation = kZeroVec, scale = kZeroVec) {
-    this.rotation = quat.clone(rotation);
-    this.translation = vec3.clone(translation);
-    this.scale = vec3.clone(scale);
-  }
-
-  /**
-   * Sets `out` to the transformation matrix from local to global coordinates.
-   */
-  toMat4(out: Mat4) {
-    return mat4.fromRotationTranslationScale(out, this.rotation, this.translation, this.scale);
-  }
+  constructor(public transform = mat4.create()) {}
 
   /**
    * Resets to the identity transform.
    */
   reset() {
-    quat.identity(this.rotation);
-    vec3.copy(this.translation, kZeroVec);
-    vec3.copy(this.scale, kZeroVec);
+    mat4.copy(this.transform, identityMat4);
     this.changed.dispatch();
   }
 
   toJSON() {
-    let x: any = {};
-    let {rotation, translation, scale} = this;
-    let empty = true;
-    if (!quat.equals(kIdentityQuat, rotation)) {
-      x['rotation'] = Array.prototype.slice.call(rotation);
-      empty = false;
-    }
-    if (!vec3.equals(kZeroVec, translation)) {
-      x['translation'] = Array.prototype.slice.call(translation);
-      empty = false;
-    }
-    if (!vec3.equals(kZeroVec, scale)) {
-      x['scale'] = Array.prototype.slice.call(scale);
-      empty = false;
-    }
-    if (empty) {
+    if (mat4.equals(identityMat4, this.transform)) {
       return undefined;
     }
-    return x;
+    const m = this.transform;
+    return [
+      [m[0], m[4], m[8], m[12]],   //
+      [m[1], m[5], m[9], m[13]],   //
+      [m[2], m[6], m[10], m[14]],  //
+      [m[3], m[7], m[11], m[15]],  //
+    ];
   }
 
   restoreState(obj: any) {
-    try {
-      parseFiniteVec(this.rotation, obj['rotation']);
-      quat.normalize(this.rotation, this.rotation);
-    } catch (ignoredError) {
-      quat.identity(this.rotation);
+    if (obj == null) {
+      this.reset();
+      return;
+    }
+    if (Array.isArray(obj)) {
+      if (obj.length === 4) {
+        try {
+          for (let i = 0; i < 4; ++i) {
+            parseFiniteVec(this.transform.subarray(i * 4, (i + 1) * 4), obj[i]);
+          }
+          mat4.transpose(this.transform, this.transform);
+        } catch (ignoredError) {
+          this.reset();
+        }
+        return;
+      }
+      if (obj.length === 16) {
+        try {
+          parseFiniteVec(this.transform, obj);
+          mat4.transpose(this.transform, this.transform);
+        } catch (ignoredError) {
+          this.reset();
+        }
+        return;
+      }
+      // Invalid size.
+      this.reset();
+      return;
     }
 
-    try {
-      parseFiniteVec(this.translation, obj['translation']);
-    } catch (ignoredError) {
-      vec3.copy(this.translation, kZeroVec);
-    }
+    if (typeof obj === 'object') {
+      const rotation = quat.create();
+      const translation = vec3.create();
+      const scale = vec3.fromValues(1, 1, 1);
+      try {
+        parseFiniteVec(rotation, obj['rotation']);
+        quat.normalize(rotation, rotation);
+      } catch (ignoredError) {
+        quat.identity(rotation);
+      }
 
-    try {
-      parseFiniteVec(this.scale, obj['scale']);
-    } catch (ignoredError) {
-      vec3.copy(this.scale, kZeroVec);
-    }
+      try {
+        parseFiniteVec(translation, obj['translation']);
+      } catch (ignoredError) {
+        vec3.copy(translation, kZeroVec);
+      }
 
-    this.changed.dispatch();
+      try {
+        parseFiniteVec(scale, obj['scale']);
+      } catch (ignoredError) {
+        vec3.copy(scale, kOneVec);
+      }
+      mat4.fromRotationTranslationScale(this.transform, rotation, translation, scale);
+      this.changed.dispatch();
+    } else {
+      this.reset();
+    }
   }
+
+  clone() { return new CoordinateTransform(mat4.clone(this.transform)); }
 }

@@ -22,10 +22,10 @@
 import {ChunkManager} from 'neuroglancer/chunk_manager/frontend';
 import {CompletionResult, registerDataSourceFactory} from 'neuroglancer/datasource/factory';
 import {VolumeChunkSourceParameters} from 'neuroglancer/datasource/ndstore/base';
-import {DataType, VolumeChunkSpecification, VolumeType} from 'neuroglancer/sliceview/base';
+import {DataType, VolumeChunkSpecification, VolumeSourceOptions, VolumeType} from 'neuroglancer/sliceview/base';
 import {defineParameterizedVolumeChunkSource, MultiscaleVolumeChunkSource as GenericMultiscaleVolumeChunkSource} from 'neuroglancer/sliceview/frontend';
 import {applyCompletionOffset, getPrefixMatchesWithDescriptions} from 'neuroglancer/util/completion';
-import {Vec3, vec3} from 'neuroglancer/util/geom';
+import {mat4, Vec3, vec3} from 'neuroglancer/util/geom';
 import {openShardedHttpRequest, sendHttpRequest} from 'neuroglancer/util/http_request';
 import {parseArray, parseQueryStringParameters, verify3dDimensions, verify3dScale, verify3dVec, verifyEnumString, verifyInt, verifyObject, verifyObjectAsMap, verifyObjectProperty, verifyOptionalString, verifyString} from 'neuroglancer/util/json';
 import {CancellablePromise, cancellableThen} from 'neuroglancer/util/promise';
@@ -152,7 +152,7 @@ export class MultiscaleVolumeChunkSource implements GenericMultiscaleVolumeChunk
     this.encoding = encoding;
   }
 
-  getSources() {
+  getSources(volumeSourceOptions: VolumeSourceOptions) {
     return this.scales.map(scaleInfo => {
       let {voxelOffset, voxelSize} = scaleInfo;
       let baseVoxelOffset = vec3.create();
@@ -164,9 +164,10 @@ export class MultiscaleVolumeChunkSource implements GenericMultiscaleVolumeChunk
             numChannels: this.numChannels,
             volumeType: this.volumeType,
             dataType: this.dataType, voxelSize,
-            chunkLayoutOffset: vec3.multiply(vec3.create(), voxelOffset, voxelSize),
+            transform: mat4.fromTranslation(
+                mat4.create(), vec3.multiply(vec3.create(), voxelOffset, voxelSize)),
             baseVoxelOffset,
-            upperVoxelBound: scaleInfo.imageSize,
+            upperVoxelBound: scaleInfo.imageSize, volumeSourceOptions,
           })
           .map(spec => VolumeChunkSource.get(this.chunkManager, spec, {
             baseUrls: this.baseUrls,

@@ -23,9 +23,9 @@ import {ChunkManager} from 'neuroglancer/chunk_manager/frontend';
 import {registerDataSourceFactory} from 'neuroglancer/datasource/factory';
 import {MeshSourceParameters, VolumeChunkEncoding, VolumeChunkSourceParameters} from 'neuroglancer/datasource/python/base';
 import {defineParameterizedMeshSource} from 'neuroglancer/mesh/frontend';
-import {DataType, DEFAULT_MAX_VOXELS_PER_CHUNK_LOG2, getNearIsotropicBlockSize, getTwoDimensionalBlockSize, VolumeChunkSpecification, VolumeType} from 'neuroglancer/sliceview/base';
+import {DataType, DEFAULT_MAX_VOXELS_PER_CHUNK_LOG2, getNearIsotropicBlockSize, getTwoDimensionalBlockSize, VolumeChunkSpecification, VolumeSourceOptions, VolumeType} from 'neuroglancer/sliceview/base';
 import {defineParameterizedVolumeChunkSource, MultiscaleVolumeChunkSource as GenericMultiscaleVolumeChunkSource} from 'neuroglancer/sliceview/frontend';
-import {Vec3, vec3} from 'neuroglancer/util/geom';
+import {mat4, Vec3, vec3} from 'neuroglancer/util/geom';
 import {openShardedHttpRequest, sendHttpRequest} from 'neuroglancer/util/http_request';
 import {parseArray, parseFixedLengthArray, verify3dDimensions, verify3dScale, verify3dVec, verifyEnumString, verifyObject, verifyObjectProperty, verifyPositiveInt, verifyString} from 'neuroglancer/util/json';
 
@@ -128,7 +128,7 @@ export class MultiscaleVolumeChunkSource implements GenericMultiscaleVolumeChunk
     }
   }
 
-  getSources() {
+  getSources(volumeSourceOptions: VolumeSourceOptions) {
     let {numChannels, dataType, volumeType, encoding} = this;
     // Clip based on the bounds of the first scale.
     const baseScale = this.scales[0][0];
@@ -139,10 +139,10 @@ export class MultiscaleVolumeChunkSource implements GenericMultiscaleVolumeChunk
         dataType,
         volumeType,
         numChannels,
-        chunkLayoutOffset: scaleInfo.offset,
+        transform: mat4.fromTranslation(mat4.create(), scaleInfo.offset),
         upperVoxelBound: scaleInfo.sizeInVoxels,
         upperClipBound: upperClipBound,
-        chunkDataSize: scaleInfo.chunkDataSize!,
+        chunkDataSize: scaleInfo.chunkDataSize!, volumeSourceOptions,
       });
       return VolumeChunkSource.get(
           this.chunkManager, spec,

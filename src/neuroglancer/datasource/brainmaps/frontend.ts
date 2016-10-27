@@ -22,7 +22,7 @@ import {MeshSourceParameters, SkeletonSourceParameters, VolumeChunkEncoding, Vol
 import {registerDataSourceFactory} from 'neuroglancer/datasource/factory';
 import {defineParameterizedMeshSource} from 'neuroglancer/mesh/frontend';
 import {parameterizedSkeletonSource} from 'neuroglancer/skeleton/frontend';
-import {DataType, VolumeChunkSpecification, VolumeType} from 'neuroglancer/sliceview/base';
+import {DataType, VolumeChunkSpecification, VolumeSourceOptions, VolumeType} from 'neuroglancer/sliceview/base';
 import {defineParameterizedVolumeChunkSource, MultiscaleVolumeChunkSource as GenericMultiscaleVolumeChunkSource} from 'neuroglancer/sliceview/frontend';
 import {StatusMessage} from 'neuroglancer/status';
 import {getPrefixMatches} from 'neuroglancer/util/completion';
@@ -124,7 +124,7 @@ export class MultiscaleVolumeChunkSource implements GenericMultiscaleVolumeChunk
     }
   }
 
-  getSources() {
+  getSources(volumeSourceOptions: VolumeSourceOptions) {
     let encoding = VolumeChunkEncoding.RAW;
     if (this.volumeType === VolumeType.SEGMENTATION) {
       encoding = VolumeChunkEncoding.COMPRESSED_SEGMENTATION;
@@ -141,7 +141,7 @@ export class MultiscaleVolumeChunkSource implements GenericMultiscaleVolumeChunk
                                           dataType: volumeInfo.dataType,
                                           numChannels: volumeInfo.numChannels,
                                           upperVoxelBound: volumeInfo.upperVoxelBound,
-                                          volumeType: this.volumeType,
+                                          volumeType: this.volumeType, volumeSourceOptions,
                                         })
                                         .map(spec => {
                                           return VolumeChunkSource.get(this.chunkManager, spec, {

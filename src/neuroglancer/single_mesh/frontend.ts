@@ -16,13 +16,14 @@
 
 import {ChunkState} from 'neuroglancer/chunk_manager/base';
 import {Chunk, ChunkManager, ChunkSource} from 'neuroglancer/chunk_manager/frontend';
+import {CoordinateTransform} from 'neuroglancer/coordinate_transform';
 import {PerspectiveViewRenderContext, PerspectiveViewRenderLayer} from 'neuroglancer/perspective_view/render_layer';
 import {SharedObjectWithVisibilityCount} from 'neuroglancer/shared_visibility_count/base';
 import {shareVisibility} from 'neuroglancer/shared_visibility_count/frontend';
 import {GET_SINGLE_MESH_INFO_RPC_ID, SINGLE_MESH_CHUNK_KEY, SINGLE_MESH_LAYER_RPC_ID, SINGLE_MESH_SOURCE_RPC_ID, SingleMeshInfo, SingleMeshSourceParameters, VertexAttributeInfo} from 'neuroglancer/single_mesh/base';
 import {TrackableValue} from 'neuroglancer/trackable_value';
 import {DataType} from 'neuroglancer/util/data_type';
-import {identityMat4, mat4, Mat4, Vec2, vec3, vec4} from 'neuroglancer/util/geom';
+import {Mat4, Vec2, vec3, vec4} from 'neuroglancer/util/geom';
 import {parseArray, stableStringify, verifyOptionalString, verifyString} from 'neuroglancer/util/json';
 import {getObjectId} from 'neuroglancer/util/object_id';
 import {Uint64} from 'neuroglancer/util/uint64';
@@ -60,7 +61,7 @@ export class SingleMeshDisplayState {
   shaderError = makeWatchableShaderError();
   fragmentMain = getTrackableFragmentMain();
   attributeNames = getTrackableAttributeNames();
-  objectToDataTransform = mat4.create();
+  objectToDataTransform = new CoordinateTransform();
 }
 
 export function getShaderAttributeType(info: {dataType: DataType, numComponents: number}) {
@@ -360,6 +361,8 @@ export class SingleMeshLayer extends PerspectiveViewRenderLayer {
     };
     this.registerSignalBinding(displayState.fragmentMain.changed.add(shaderChanged));
     this.registerSignalBinding(displayState.attributeNames.changed.add(shaderChanged));
+    this.registerSignalBinding(
+        displayState.objectToDataTransform.changed.add(() => { this.redrawNeeded.dispatch(); }));
     this.displayState.shaderError.value = undefined;
     let sharedObject = this.sharedObject =
         this.registerDisposer(new SharedObjectWithVisibilityCount(this.visibilityCount));
@@ -448,7 +451,7 @@ export class SingleMeshLayer extends PerspectiveViewRenderLayer {
     let {pickIDs} = renderContext;
 
     shaderManager.beginObject(
-        gl, shader, this.displayState.objectToDataTransform,
+        gl, shader, this.displayState.objectToDataTransform.transform,
         pickIDs.register(this, chunk.numIndices / 3));
     shaderManager.drawFragment(gl, shader, chunk, this.countingBuffer);
     shaderManager.endLayer(gl, shader);

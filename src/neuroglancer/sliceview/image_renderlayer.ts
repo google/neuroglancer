@@ -14,6 +14,7 @@
  * limitations under the License.
  */
 
+import {VolumeSourceOptions} from 'neuroglancer/sliceview/base';
 import {MultiscaleVolumeChunkSource, SliceView} from 'neuroglancer/sliceview/frontend';
 import {RenderLayer} from 'neuroglancer/sliceview/renderlayer';
 import {TrackableAlphaValue, trackableAlphaValue} from 'neuroglancer/trackable_alpha';
@@ -36,11 +37,13 @@ export function getTrackableFragmentMain(value = DEFAULT_FRAGMENT_MAIN) {
 export class ImageRenderLayer extends RenderLayer {
   fragmentMain: TrackableFragmentMain;
   opacity: TrackableAlphaValue;
-  constructor(
-      multiscaleSource: MultiscaleVolumeChunkSource,
-      {opacity = trackableAlphaValue(0.5), fragmentMain = getTrackableFragmentMain(),
-       shaderError = makeWatchableShaderError()} = {}) {
-    super(multiscaleSource, {shaderError});
+  constructor(multiscaleSource: MultiscaleVolumeChunkSource, {
+    opacity = trackableAlphaValue(0.5),
+    fragmentMain = getTrackableFragmentMain(),
+    shaderError = makeWatchableShaderError(),
+    volumeSourceOptions = <VolumeSourceOptions>{},
+  } = {}) {
+    super(multiscaleSource, {shaderError, volumeSourceOptions});
     this.fragmentMain = fragmentMain;
     this.opacity = opacity;
     this.registerSignalBinding(opacity.changed.add(() => { this.redrawNeeded.dispatch(); }));

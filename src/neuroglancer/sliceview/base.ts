@@ -18,7 +18,7 @@ import {ChunkLayout} from 'neuroglancer/sliceview/chunk_layout';
 import {partitionArray} from 'neuroglancer/util/array';
 import {approxEqual} from 'neuroglancer/util/compare';
 import {DATA_TYPE_BYTES, DataType} from 'neuroglancer/util/data_type';
-import {kAxes, kIdentityQuat, kInfinityVec, kZeroVec, Mat4, mat4, prod3, Quat, rectifyTransformMatrixIfAxisAligned, Vec3, vec3, vec4} from 'neuroglancer/util/geom';
+import {effectiveScalingFactorFromMat4, identityMat4, kAxes, kInfinityVec, kZeroVec, Mat4, mat4, prod3, rectifyTransformMatrixIfAxisAligned, Vec3, vec3, vec4} from 'neuroglancer/util/geom';
 import {SharedObject} from 'neuroglancer/worker_rpc';
 
 export {DATA_TYPE_BYTES, DataType};
@@ -607,18 +607,51 @@ export enum VolumeType {
 export const DEFAULT_MAX_VOXELS_PER_CHUNK_LOG2 = 18;
 
 /**
- * Determines a near-isotropic (in nanometers) block size.  All dimensions will be powers of 2, and
- * will not exceed upperVoxelBound - lowerVoxelBound.  The total number of voxels will not exceed
- * maxVoxelsPerChunkLog2.
+ * Specifies common options for getNearIsotropicBlockSize and getTwoDimensionalBlockSize.
  */
-export function getNearIsotropicBlockSize(options: {
-  voxelSize: Vec3,
-  lowerVoxelBound?: Vec3,
-  upperVoxelBound?: Vec3,
-  maxVoxelsPerChunkLog2?: number
-}) {
+export interface BaseChunkLayoutOptions {
+  /**
+   * Voxel size in nanometers.
+   */
+  voxelSize: Vec3;
+
+  /**
+   * This, together with upperVoxelBound, specifies the total volume dimensions, which serves as a
+   * bound on the maximum chunk size.  If not specified, defaults to (0, 0, 0).
+   */
+  lowerVoxelBound?: Vec3;
+
+  /**
+   * Upper voxel bound.  If not specified, the total volume dimensions are not used to bound the
+   * chunk size.
+   */
+  upperVoxelBound?: Vec3;
+
+  /**
+   * Base 2 logarithm of the maximum number of voxels per chunk.  Defaults to
+   * DEFAULT_MAX_VOXELS_PER_CHUNK_LOG2.
+   */
+  maxVoxelsPerChunkLog2?: number;
+
+  /**
+   * Specifies an optional transform from local spatial coordinates to global coordinates.
+   */
+  transform?: Mat4;
+}
+
+/**
+ * Determines a near-isotropic (in global spatial coordinates) block size.  All dimensions will be
+ * powers of 2, and will not exceed upperVoxelBound - lowerVoxelBound.  The total number of voxels
+ * will not exceed maxVoxelsPerChunkLog2.
+ */
+export function getNearIsotropicBlockSize(options: BaseChunkLayoutOptions) {
   let {voxelSize, lowerVoxelBound = kZeroVec, upperVoxelBound,
-       maxVoxelsPerChunkLog2 = DEFAULT_MAX_VOXELS_PER_CHUNK_LOG2} = options;
+       maxVoxelsPerChunkLog2 = DEFAULT_MAX_VOXELS_PER_CHUNK_LOG2, transform = identityMat4} =
+      options;
+
+  // Adjust voxelSize by effective scaling factor.
+  let temp = effectiveScalingFactorFromMat4(vec3.create(), transform);
+  voxelSize = vec3.multiply(temp, temp, voxelSize);
 
   let chunkDataSize = vec3.fromValues(1, 1, 1);
   let maxChunkDataSize: Vec3;
@@ -667,15 +700,102 @@ export function getNearIsotropicBlockSize(options: {
  * in the other two dimensions.  The remaining options are the same as for
  * getNearIsotropicBlockSize.
  */
-export function getTwoDimensionalBlockSize(options: {
-  flatDimension: number,
-  voxelSize: Vec3, lowerVoxelBound?: Vec3, upperVoxelBound?: Vec3, maxVoxelsPerChunkLog2?: number
-}) {
-  let {lowerVoxelBound = kZeroVec, upperVoxelBound = kInfinityVec, flatDimension, voxelSize,
-       maxVoxelsPerChunkLog2} = options;
+export function getTwoDimensionalBlockSize(options: {flatDimension: number}&
+                                           BaseChunkLayoutOptions) {
+  let {lowerVoxelBound = kZeroVec,
+       upperVoxelBound = kInfinityVec,
+       flatDimension,
+       voxelSize,
+       maxVoxelsPerChunkLog2,
+       transform} = options;
   vec3.subtract(tempVec3, upperVoxelBound, lowerVoxelBound);
   tempVec3[flatDimension] = 1;
-  return getNearIsotropicBlockSize({voxelSize, upperVoxelBound: tempVec3, maxVoxelsPerChunkLog2});
+  return getNearIsotropicBlockSize(
+      {voxelSize, upperVoxelBound: tempVec3, maxVoxelsPerChunkLog2, transform});
+}
+
+/**
+ * Returns an array of [xy, xz, yz] 2-dimensional block sizes.
+ */
+export function getTwoDimensionalBlockSizes(options: BaseChunkLayoutOptions) {
+  let chunkDataSizes = new Array<Vec3>();
+  for (let i = 0; i < 3; ++i) {
+    chunkDataSizes[i] = getTwoDimensionalBlockSize({
+      flatDimension: i,
+      voxelSize: options.voxelSize,
+      lowerVoxelBound: options.lowerVoxelBound,
+      upperVoxelBound: options.upperVoxelBound,
+      maxVoxelsPerChunkLog2: options.maxVoxelsPerChunkLog2,
+      transform: options.transform,
+    });
+  }
+  return chunkDataSizes;
+}
+
+export enum ChunkLayoutPreference {
+  /**
+   * Indicates that isotropic chunks are desired.
+   */
+  ISOTROPIC = 0,
+
+  /**
+   * Indicates that 2-D chunks are desired.
+   */
+  FLAT = 1,
+}
+
+export interface VolumeSourceOptions {
+  /**
+   * Additional transform applied after the transform specified by the data source for transforming
+   * from local to global coordinates.
+   */
+  transform?: Mat4;
+}
+
+export function getCombinedTransform(transform: Mat4|undefined, options: {transform?: Mat4}) {
+  let additionalTransform = options.transform;
+  if (additionalTransform === undefined) {
+    if (transform === undefined) {
+      return identityMat4;
+    }
+    return transform;
+  }
+  if (transform === undefined) {
+    return additionalTransform;
+  }
+  return mat4.multiply(mat4.create(), additionalTransform, transform);
+}
+
+/**
+ * Specifies parameters for getChunkDataSizes.
+ */
+export interface ChunkLayoutOptions {
+  /**
+   * Chunk sizes in voxels.
+   */
+  chunkDataSizes?: Vec3[];
+
+  /**
+   * Preferred chunk layout, which determines chunk sizes to use if chunkDataSizes is not
+   * specified.
+   */
+  chunkLayoutPreference?: ChunkLayoutPreference;
+}
+
+export function getChunkDataSizes(options: ChunkLayoutOptions&BaseChunkLayoutOptions) {
+  if (options.chunkDataSizes !== undefined) {
+    return options.chunkDataSizes;
+  }
+  const {chunkLayoutPreference = ChunkLayoutPreference.ISOTROPIC} = options;
+  switch (chunkLayoutPreference) {
+    case ChunkLayoutPreference.ISOTROPIC:
+      return [getNearIsotropicBlockSize(options)];
+    case ChunkLayoutPreference.FLAT:
+      let chunkDataSizes = getTwoDimensionalBlockSizes(options);
+      chunkDataSizes.push(getNearIsotropicBlockSize(options));
+      return chunkDataSizes;
+  }
+  throw new Error(`Invalid chunk layout preference: ${chunkLayoutPreference}.`);
 }
 
 /**
@@ -684,23 +804,12 @@ export function getTwoDimensionalBlockSize(options: {
  */
 export interface VolumeChunkSpecificationBaseOptions {
   /**
-   * Origin of chunk grid, in nanometers, in global coordinates.
+   * Transform local spatial coordinates to global coordinates.
    */
-  chunkLayoutOffset?: Vec3;
+  transform?: Mat4;
 
   /**
-   * Transform from grid coordinates to global coordinates.
-   */
-  chunkLayoutRotation?: Quat;
-
-  /**
-   * Reflection coefficient, either 1 or -1, to apply to z axis of local coordinates prior to
-   * rotation.
-   */
-  chunkLayoutZReflection?: number;
-
-  /**
-   * Voxel size in nanometers.
+   * Voxel size in local spatial coordinates.
    */
   voxelSize: Vec3;
 
@@ -760,6 +869,10 @@ export interface VolumeChunkSpecificationOptions extends VolumeChunkSpecificatio
   chunkDataSize: Vec3;
 }
 
+export interface VolumeChunkSpecificationVolumeSourceOptions {
+  volumeSourceOptions: VolumeSourceOptions;
+}
+
 
 /**
  * Specifies additional parameters for VolumeChunkSpecification.withDefaultCompression.
@@ -775,17 +888,8 @@ export interface VolumeChunkSpecificationDefaultCompressionOptions {
  * Specifies parameters for VolumeChunkSpecification.getDefaults.
  */
 export interface VolumeChunkSpecificationGetDefaultsOptions extends
-    VolumeChunkSpecificationBaseOptions, VolumeChunkSpecificationDefaultCompressionOptions {
-  /**
-   * Chunk sizes in voxels.
-   */
-  chunkDataSizes?: Vec3[];
-
-  /**
-   * Maximum number of voxels per chunk.
-   */
-  maxVoxelsPerChunkLog2?: number;
-}
+    VolumeChunkSpecificationBaseOptions, VolumeChunkSpecificationDefaultCompressionOptions,
+    ChunkLayoutOptions, VolumeChunkSpecificationVolumeSourceOptions {}
 
 /**
  * Specifies a chunk layout and voxel size.
@@ -814,25 +918,16 @@ export class VolumeChunkSpecification {
   compressedSegmentationBlockSize: Vec3|undefined;
 
   constructor(options: VolumeChunkSpecificationOptions) {
-    let {dataType,
-         lowerVoxelBound = kZeroVec,
-         upperVoxelBound,
-         chunkDataSize,
-         chunkLayoutOffset = kZeroVec,
-         chunkLayoutRotation = kIdentityQuat,
-         chunkLayoutZReflection = 1,
-         voxelSize,
-         baseVoxelOffset = kZeroVec,
-         numChannels} = options;
+    let {dataType,  lowerVoxelBound = kZeroVec, upperVoxelBound, chunkDataSize, voxelSize,
+         transform, baseVoxelOffset = kZeroVec, numChannels} = options;
     let {lowerClipBound = vec3.multiply(vec3.create(), voxelSize, lowerVoxelBound),
          upperClipBound = vec3.multiply(vec3.create(), voxelSize, upperVoxelBound)} = options;
     this.dataType = options.dataType;
     this.numChannels = numChannels;
     this.voxelSize = voxelSize;
     this.chunkDataSize = chunkDataSize;
-    this.chunkLayout = ChunkLayout.get(
-        vec3.multiply(vec3.create(), options.chunkDataSize, voxelSize), chunkLayoutOffset,
-        chunkLayoutRotation, chunkLayoutZReflection);
+    this.chunkLayout =
+        ChunkLayout.get(vec3.multiply(vec3.create(), options.chunkDataSize, voxelSize), transform);
     this.chunkBytes = prod3(options.chunkDataSize) * DATA_TYPE_BYTES[dataType] * numChannels;
     this.lowerClipBound = lowerClipBound;
     this.upperClipBound = upperClipBound;
@@ -848,12 +943,17 @@ export class VolumeChunkSpecification {
     }
     this.compressedSegmentationBlockSize = options.compressedSegmentationBlockSize;
   }
+
+  static make(options: VolumeChunkSpecificationOptions&{volumeSourceOptions: VolumeSourceOptions}) {
+    return new VolumeChunkSpecification(Object.assign(
+        {}, options,
+        {transform: getCombinedTransform(options.transform, options.volumeSourceOptions)}));
+  }
+
   static fromObject(msg: any) { return new VolumeChunkSpecification(msg); }
   toObject(): VolumeChunkSpecificationOptions {
     return {
-      chunkLayoutOffset: this.chunkLayout.offset,
-      chunkLayoutRotation: this.chunkLayout.rotation,
-      chunkLayoutZReflection: this.chunkLayout.zReflection,
+      transform: this.chunkLayout.transform,
       numChannels: this.numChannels,
       chunkDataSize: this.chunkDataSize,
       voxelSize: this.voxelSize,
@@ -872,21 +972,31 @@ export class VolumeChunkSpecification {
    * volumeType.
    */
   static withDefaultCompression(options: VolumeChunkSpecificationDefaultCompressionOptions&
-                                VolumeChunkSpecificationOptions) {
-    let {compressedSegmentationBlockSize, dataType, voxelSize, lowerVoxelBound, upperVoxelBound} =
-        options;
+                                VolumeChunkSpecificationOptions&
+                                VolumeChunkSpecificationVolumeSourceOptions) {
+    let {compressedSegmentationBlockSize,
+         dataType,
+         voxelSize,
+         transform,
+         lowerVoxelBound,
+         upperVoxelBound} = options;
+    transform = getCombinedTransform(transform, options.volumeSourceOptions);
     if (compressedSegmentationBlockSize === undefined &&
         options.volumeType === VolumeType.SEGMENTATION &&
         (dataType === DataType.UINT32 || dataType === DataType.UINT64)) {
       compressedSegmentationBlockSize = getNearIsotropicBlockSize(
-          {voxelSize, lowerVoxelBound, upperVoxelBound, maxVoxelsPerChunkLog2: 9});
+          {voxelSize, transform, lowerVoxelBound, upperVoxelBound, maxVoxelsPerChunkLog2: 9});
     }
     return new VolumeChunkSpecification(
-        Object.assign({}, options, {compressedSegmentationBlockSize}));
+        Object.assign({}, options, {compressedSegmentationBlockSize, transform}));
   }
 
   static getDefaults(options: VolumeChunkSpecificationGetDefaultsOptions) {
-    let {chunkDataSizes = [getNearIsotropicBlockSize(options)]} = options;
+    const adjustedOptions = Object.assign(
+        {}, options,
+        {transform: getCombinedTransform(options.transform, options.volumeSourceOptions)});
+
+    let {chunkDataSizes = getChunkDataSizes(adjustedOptions)} = options;
     return chunkDataSizes.map(
         chunkDataSize => VolumeChunkSpecification.withDefaultCompression(
             Object.assign({}, options, {chunkDataSize})));

@@ -26,7 +26,7 @@
 import {ChunkState} from 'neuroglancer/chunk_manager/base';
 import {ChunkManager} from 'neuroglancer/chunk_manager/frontend';
 import {RenderLayer as GenericRenderLayer} from 'neuroglancer/layer';
-import {SLICEVIEW_RENDERLAYER_RPC_ID, VolumeChunkSpecification} from 'neuroglancer/sliceview/base';
+import {SLICEVIEW_RENDERLAYER_RPC_ID, VolumeChunkSpecification, VolumeSourceOptions} from 'neuroglancer/sliceview/base';
 import {MultiscaleVolumeChunkSource, SliceView, VolumeChunkSource} from 'neuroglancer/sliceview/frontend';
 import {RefCounted} from 'neuroglancer/util/disposable';
 import {BoundingBox, Mat4, mat4, Vec3, vec3, vec3Key, vec4} from 'neuroglancer/util/geom';
@@ -324,8 +324,7 @@ for (int e = 0; e < 4; ++e) {
     // Compute projection matrix that transforms chunk layout coordinates to device coordinates.
     gl.uniformMatrix4fv(
         shader.uniform('uProjectionMatrix'), false,
-        mat4.multiply(
-            tempMat4, dataToDeviceMatrix, chunkLayout.assignLocalSpatialToGlobalMat4(tempMat4)));
+        mat4.multiply(tempMat4, dataToDeviceMatrix, chunkLayout.transform));
 
     gl.uniform3fv(shader.uniform('uVoxelSize'), spec.voxelSize);
     gl.uniform3fv(shader.uniform('uLowerClipBound'), spec.lowerClipBound);
@@ -371,9 +370,10 @@ export class RenderLayer extends GenericRenderLayer {
   vertexComputationManager: VolumeSliceVertexComputationManager;
   rpcId: RpcId|null = null;
   shaderError: WatchableShaderError;
-  constructor(
-      multiscaleSource: MultiscaleVolumeChunkSource,
-      {shaderError = makeWatchableShaderError()} = {}) {
+  constructor(multiscaleSource: MultiscaleVolumeChunkSource, {
+    shaderError = makeWatchableShaderError(),
+    volumeSourceOptions = <VolumeSourceOptions>{}
+  } = {}) {
     super();
     this.shaderError = shaderError;
     shaderError.value = undefined;
@@ -381,7 +381,7 @@ export class RenderLayer extends GenericRenderLayer {
     let gl = this.gl;
     this.vertexComputationManager = VolumeSliceVertexComputationManager.get(gl);
 
-    let sources = this.sources = multiscaleSource.getSources();
+    let sources = this.sources = multiscaleSource.getSources(volumeSourceOptions);
     let sourceIds: number[][] = [];
     for (let alternatives of sources) {
       let alternativeIds: number[] = [];

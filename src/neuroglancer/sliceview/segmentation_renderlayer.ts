@@ -18,6 +18,7 @@ import {HashMapUint64} from 'neuroglancer/gpu_hash/hash_table';
 import {GPUHashTable, HashMapShaderManager, HashSetShaderManager} from 'neuroglancer/gpu_hash/shader';
 import {SegmentColorShaderManager} from 'neuroglancer/segment_color';
 import {registerRedrawWhenSegmentationDisplayStateChanged, SegmentationDisplayState} from 'neuroglancer/segmentation_display_state/frontend';
+import {VolumeSourceOptions} from 'neuroglancer/sliceview/base';
 import {MultiscaleVolumeChunkSource, SliceView} from 'neuroglancer/sliceview/frontend';
 import {RenderLayer} from 'neuroglancer/sliceview/renderlayer';
 import {TrackableAlphaValue} from 'neuroglancer/trackable_alpha';
@@ -47,6 +48,7 @@ export class EquivalencesHashMap {
 export interface SliceViewSegmentationDisplayState extends SegmentationDisplayState {
   selectedAlpha: TrackableAlphaValue;
   notSelectedAlpha: TrackableAlphaValue;
+  volumeSourceOptions: VolumeSourceOptions;
 }
 
 export class SegmentationRenderLayer extends RenderLayer {
@@ -63,7 +65,7 @@ export class SegmentationRenderLayer extends RenderLayer {
   constructor(
       multiscaleSource: MultiscaleVolumeChunkSource,
       public displayState: SliceViewSegmentationDisplayState) {
-    super(multiscaleSource);
+    super(multiscaleSource, {volumeSourceOptions: displayState.volumeSourceOptions});
     registerRedrawWhenSegmentationDisplayStateChanged(displayState, this);
     this.registerSignalBinding(
         displayState.selectedAlpha.changed.add(() => { this.redrawNeeded.dispatch(); }));

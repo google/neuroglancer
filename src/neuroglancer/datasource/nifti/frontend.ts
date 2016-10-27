@@ -22,8 +22,9 @@
 import {ChunkManager} from 'neuroglancer/chunk_manager/frontend';
 import {registerDataSourceFactory} from 'neuroglancer/datasource/factory';
 import {GET_NIFTI_VOLUME_INFO_RPC_ID, NiftiVolumeInfo, VolumeSourceParameters} from 'neuroglancer/datasource/nifti/base';
-import {VolumeChunkSpecification} from 'neuroglancer/sliceview/base';
+import {VolumeChunkSpecification, VolumeSourceOptions} from 'neuroglancer/sliceview/base';
 import {defineParameterizedVolumeChunkSource, MultiscaleVolumeChunkSource as GenericMultiscaleVolumeChunkSource} from 'neuroglancer/sliceview/frontend';
+import {kOneVec, mat4, translationRotationScaleZReflectionToMat4} from 'neuroglancer/util/geom';
 
 export class MultiscaleVolumeChunkSource implements GenericMultiscaleVolumeChunkSource {
   constructor(public chunkManager: ChunkManager, public url: string, public info: NiftiVolumeInfo) {
@@ -31,7 +32,7 @@ export class MultiscaleVolumeChunkSource implements GenericMultiscaleVolumeChunk
   get numChannels() { return this.info.numChannels; }
   get dataType() { return this.info.dataType; }
   get volumeType() { return this.info.volumeType; }
-  getSources() {
+  getSources(volumeSourceOptions: VolumeSourceOptions) {
     let {info} = this;
     const spec = VolumeChunkSpecification.withDefaultCompression({
       volumeType: info.volumeType,
@@ -40,9 +41,9 @@ export class MultiscaleVolumeChunkSource implements GenericMultiscaleVolumeChunk
       voxelSize: info.voxelSize,
       numChannels: info.numChannels,
       upperVoxelBound: info.volumeSize,
-      chunkLayoutOffset: info.qoffset,
-      chunkLayoutRotation: info.quatern,
-      chunkLayoutZReflection: info.qfac,
+      transform: translationRotationScaleZReflectionToMat4(
+          mat4.create(), info.qoffset, info.quatern, kOneVec, info.qfac),
+      volumeSourceOptions,
     });
     return [[VolumeChunkSource.get(this.chunkManager, spec, {url: this.url})]];
   }
