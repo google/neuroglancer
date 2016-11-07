@@ -24,7 +24,7 @@ def downsample_with_averaging(array, factor):
     @return: The downsampled array, of the same type as x.
     """
     factor = tuple(factor)
-    output_shape = tuple(math.ceil(s / f) for s, f in zip(array.shape, factor))
+    output_shape = tuple(int(math.ceil(s / f)) for s, f in zip(array.shape, factor))
     temp = np.zeros(output_shape, float)
     counts = np.zeros(output_shape, np.int)
     for offset in np.ndindex(factor):
