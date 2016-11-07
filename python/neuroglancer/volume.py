@@ -95,6 +95,8 @@ class ServedVolume(object):
             if offset is not None:
                 raise ValueError('Must specify at most one of \'offset\' and \'voxel_offset\'.')
             offset = tuple(voxel_offset * voxel_size)
+        if offset is None:
+            offset = (0, 0, 0)
         self.offset = offset
         self.data_type = data.dtype.name
         self.encoding = encoding

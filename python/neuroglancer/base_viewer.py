@@ -32,12 +32,12 @@ class Layer(object):
                  name=None,
                  default_voxel_size=(1, 1, 1),
                  voxel_size=None,
+                 voxel_offset=None,
                  offset=None,
                  shader=None,
                  visible=None,
                  **kwargs):
-        if offset is None:
-            offset = (0, 0, 0)
+        if offset is None and voxel_offset is None:
             if hasattr(data, 'attrs'):
                 if 'resolution' in data.attrs:
                     voxel_size = tuple(data.attrs['resolution'])[::-1]
@@ -45,7 +45,8 @@ class Layer(object):
                     offset = tuple(data.attrs['offset'])[::-1]
         if voxel_size is None:
             voxel_size = default_voxel_size
-        self.volume = volume.ServedVolume(data=data, offset=offset, voxel_size=voxel_size, **kwargs)
+        self.volume = volume.ServedVolume(
+            data=data, offset=offset, voxel_offset=voxel_offset, voxel_size=voxel_size, **kwargs)
         self.name = name
         extra_args = self.extra_args = dict()
         if shader is not None:
