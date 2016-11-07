@@ -57,16 +57,16 @@ static int tp_init(Obj* self, PyObject* args, PyObject* kwds) {
   float offset[3];
   meshing::SimplifyOptions simplify_options;
   int lock_boundary_vertices = simplify_options.lock_boundary_vertices;
-  static char* kw_list[] = {"data",
-                            "voxel_size",
-                            "offset",
-                            "max_quadrics_error",
-                            "max_normal_angle_deviation",
-                            "lock_boundary_vertices"};
+  static const char* kw_list[] = {"data",
+                                  "voxel_size",
+                                  "offset",
+                                  "max_quadrics_error",
+                                  "max_normal_angle_deviation",
+                                  "lock_boundary_vertices"};
   if (!PyArg_ParseTupleAndKeywords(
-          args, kwds, "O(fff)(fff)|ddi:__init__", kw_list, &array_argument,
-          voxel_size, voxel_size + 1, voxel_size + 2, offset, offset + 1,
-          offset + 2, &simplify_options.max_quadrics_error,
+          args, kwds, "O(fff)(fff)|ddi:__init__", const_cast<char**>(kw_list),
+          &array_argument, voxel_size, voxel_size + 1, voxel_size + 2, offset,
+          offset + 1, offset + 2, &simplify_options.max_quadrics_error,
           &simplify_options.max_normal_angle_deviation,
           &lock_boundary_vertices)) {
     return -1;
