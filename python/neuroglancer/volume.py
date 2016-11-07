@@ -99,6 +99,8 @@ class ServedVolume(object):
             offset = (0, 0, 0)
         self.offset = offset
         self.data_type = data.dtype.name
+        if self.data_type == 'float64':
+            self.data_type = 'float32'
         self.encoding = encoding
         if len(data.shape) == 3:
             self.num_channels = 1
@@ -198,6 +200,8 @@ class ServedVolume(object):
         else:
             full_downsample_factor = (1, ) + downsample_factor[::-1]
             subvol = self.data[(np.s_[:], ) + indexing_expr]
+        if subvol.dtype == 'float64':
+            subvol = np.cast[np.float32](subvol)
 
         if downsample_factor != (1, 1, 1):
             if self.volume_type == 'image':
