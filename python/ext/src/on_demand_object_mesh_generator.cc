@@ -18,7 +18,11 @@
 #include "mesh_objects.h"
 
 #include "OpenMesh/Core/Mesh/TriMeshT.hh"
+#if OM_VERSION == 0x10000
+#include "OpenMesh/Core/Mesh/Types/TriMesh_ArrayKernelT.hh"
+#else
 #include "OpenMesh/Core/Mesh/TriMesh_ArrayKernelT.hh"
+#endif
 #include "OpenMesh/Tools/Decimater/DecimaterT.hh"
 #include "OpenMesh/Tools/Decimater/ModNormalFlippingT.hh"
 #include "OpenMesh/Tools/Decimater/ModQuadricT.hh"
@@ -73,7 +77,7 @@ std::string EncodeMesh(const OpenMeshTriangleMesh& mesh) {
     float* vertex_buffer = reinterpret_cast<float*>(&output[vertex_offset]);
     for (auto vertex_it = mesh.vertices_begin();
          vertex_it != mesh.vertices_end(); ++vertex_it) {
-      auto const& pt = mesh.point(*vertex_it);
+      auto const& pt = mesh.point(vertex_it.handle());
       for (int i = 0; i < 3; ++i) {
         *(vertex_buffer++) = pt[i];
       }
@@ -86,9 +90,9 @@ std::string EncodeMesh(const OpenMeshTriangleMesh& mesh) {
         reinterpret_cast<uint32_t*>(&output[triangle_offset]);
     for (auto face_it = mesh.faces_begin(); face_it != mesh.faces_end();
          ++face_it) {
-      auto circ = mesh.cfh_iter(*face_it);
+      auto circ = mesh.cfh_iter(face_it.handle());
       for (int i = 0; i < 3; ++i, ++circ) {
-        auto vh = mesh.to_vertex_handle(*circ);
+        auto vh = mesh.to_vertex_handle(circ.handle());
         *(index_buffer++) = vh.idx();
       }
     }
@@ -108,17 +112,24 @@ bool SimplifyMesh(const SimplifyOptions& options, OpenMeshTriangleMesh* mesh) {
     mesh->request_vertex_status();
     for (auto it = mesh->vertices_begin(), end = mesh->vertices_end();
          it != end; ++it) {
-      mesh->status(*it).set_locked(mesh->is_boundary(*it));
+      mesh->status(it.handle()).set_locked(mesh->is_boundary(it.handle()));
     }
   }
   mesh->request_face_normals();
   mesh->update_face_normals();
   Decimater decimater(*mesh);
+#if OM_VERSION == 0x10000
+  OpenMesh::Decimater::ModQuadricT<Decimater>::Handle quadrics_module;
+  decimater.add_priority(quadrics_module);
+  OpenMesh::Decimater::ModNormalFlippingT<Decimater>::Handle normals_module;
+  decimater.add_binary(normals_module);
+#else
   OpenMesh::Decimater::ModQuadricT<OpenMeshTriangleMesh>::Handle quadrics_module;
   decimater.add(quadrics_module);
-  decimater.module(quadrics_module).set_max_err(options.max_quadrics_error);
   OpenMesh::Decimater::ModNormalFlippingT<OpenMeshTriangleMesh>::Handle normals_module;
   decimater.add(normals_module);
+#endif
+  decimater.module(quadrics_module).set_max_err(options.max_quadrics_error);
   decimater.module(normals_module)
       .set_max_normal_deviation(options.max_normal_angle_deviation);
   if (!decimater.initialize()) {
@@ -186,11 +197,11 @@ const std::string& OnDemandObjectMeshGenerator::GetSimplifiedMesh(
       .first->second;
 }
 
-#define DO_INSTANTIATE(Label)                                               \
-  template OnDemandObjectMeshGenerator::OnDemandObjectMeshGenerator<Label>( \
-      const Label* labels, const int64_t* size, const int64_t* strides,     \
-      const float voxel_size[3], const float offset[3],                     \
-      const SimplifyOptions& simplify_options);                             \
+#define DO_INSTANTIATE(Label)                                           \
+  template OnDemandObjectMeshGenerator::OnDemandObjectMeshGenerator(    \
+      const Label* labels, const int64_t* size, const int64_t* strides, \
+      const float voxel_size[3], const float offset[3],                 \
+      const SimplifyOptions& simplify_options);                         \
 /**/
 DO_INSTANTIATE(uint8_t)
 DO_INSTANTIATE(uint16_t)
