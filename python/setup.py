@@ -97,6 +97,7 @@ setup(
     install_requires=[
         "Pillow>=3.2.0",
         "numpy>=1.11.0",
+        'requests',
     ],
     ext_modules=[
         Extension(
