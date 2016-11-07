@@ -61,6 +61,10 @@ class Server(ThreadingMixIn, HTTPServer):
             hostname = bind_address
         self.server_url = 'http://%s:%s' % (hostname, self.server_address[1])
 
+    def handle_error(self, request, client_address):
+        # Don't print errors
+        pass
+
 
 class RequestHandler(BaseHTTPRequestHandler):
     protocol_version = 'HTTP/1.1'
@@ -159,6 +163,9 @@ class RequestHandler(BaseHTTPRequestHandler):
         self.send_header('Access-Control-Allow-Origin', '*')
         self.end_headers()
         self.wfile.write(encoded_mesh)
+    def log_message(self, format, *args):
+        # Skip logging.
+        return
 
 
 global_server = None
