@@ -238,7 +238,7 @@ class ServedVolume(object):
                     self._mesh_generator_lock.wait()
                 return self._mesh_generator
             try:
-                import _neuroglancer
+                from . import _neuroglancer
             except ImportError:
                 raise MeshImplementationNotAvailable()
             if not (self.num_channels == 1 and

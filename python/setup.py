@@ -101,7 +101,7 @@ setup(
     ],
     ext_modules=[
         Extension(
-            '_neuroglancer',
+            'neuroglancer._neuroglancer',
             sources=[os.path.join(src_dir, name) for name in local_sources],
             language='c++',
             include_dirs=[np.get_include(), openmesh_dir],
