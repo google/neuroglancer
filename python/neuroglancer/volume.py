@@ -251,7 +251,7 @@ class ServedVolume(object):
         else:
             data = self.data
         self._mesh_generator = _neuroglancer.OnDemandObjectMeshGenerator(
-            data, self.voxel_size, self.offset, **self._mesh_options)
+            data, self.voxel_size, self.offset / self.voxel_size, **self._mesh_options)
         with self._mesh_generator_lock:
             self._mesh_generator_pending = False
             self._mesh_generator_lock.notify_all()
