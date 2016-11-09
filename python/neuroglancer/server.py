@@ -44,6 +44,7 @@ global_static_content_source = None
 
 global_server_args = dict(bind_address='127.0.0.1', bind_port=0)
 
+debug = False
 
 class Server(ThreadingMixIn, HTTPServer):
     def __init__(self, bind_address='127.0.0.1', bind_port=0):
@@ -62,9 +63,8 @@ class Server(ThreadingMixIn, HTTPServer):
         self.server_url = 'http://%s:%s' % (hostname, self.server_address[1])
 
     def handle_error(self, request, client_address):
-        # Don't print errors
-        pass
-
+        if debug:
+            HTTPServer.handle_error(self, request, client_address)
 
 class RequestHandler(BaseHTTPRequestHandler):
     protocol_version = 'HTTP/1.1'
@@ -163,10 +163,10 @@ class RequestHandler(BaseHTTPRequestHandler):
         self.send_header('Access-Control-Allow-Origin', '*')
         self.end_headers()
         self.wfile.write(encoded_mesh)
-    def log_message(self, format, *args):
-        # Skip logging.
-        return
 
+    def log_message(self, format, *args):
+        if debug:
+            BaseHTTPRequestHandler.log_message(self, format, *args)
 
 global_server = None
 
