@@ -31,6 +31,7 @@ export function initializeWebGL(canvas: HTMLCanvasElement) {
   let options: any = {
     'antialias': false,
     'stencil': true,
+    'alpha': false,
   };
   if (DEBUG_SHADERS) {
     console.log('DEBUGGING via preserveDrawingBuffer');
