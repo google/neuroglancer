@@ -149,6 +149,13 @@ export class DisplayContext extends RefCounted {
         panel.setGLViewport();
         panel.draw();
       }
+
+      // Ensure the alpha buffer is set to 1.
+      gl.disable(gl.SCISSOR_TEST);
+      this.gl.clearColor(1.0, 1.0, 1.0, 1.0);
+      this.gl.colorMask(false, false, false, true);
+      gl.clear(gl.COLOR_BUFFER_BIT);
+      this.gl.colorMask(true, true, true, true);
     }
     this.updateFinished.dispatch();
   }
