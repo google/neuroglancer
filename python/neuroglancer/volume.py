@@ -97,7 +97,7 @@ class ServedVolume(object):
             offset = tuple(voxel_offset * voxel_size)
         if offset is None:
             offset = (0, 0, 0)
-        self.offset = offset
+        self.offset = tuple(offset)
         self.data_type = data.dtype.name
         if self.data_type == 'float64':
             self.data_type = 'float32'
