@@ -72,11 +72,14 @@ export class PickIDManager {
         lower = mid;
       }
     }
-    mouseState.pickedRenderLayer = renderLayers[lower];
+    const pickedRenderLayer = mouseState.pickedRenderLayer = renderLayers[lower];
     const valuesOffset = lower * 3;
-    mouseState.pickedOffset = pickID - values[valuesOffset];
+    const pickedOffset = mouseState.pickedOffset = pickID - values[valuesOffset];
     let {pickedValue} = mouseState;
     pickedValue.low = values[valuesOffset + 1];
     pickedValue.high = values[valuesOffset + 2];
+    if (pickedRenderLayer !== null) {
+      pickedRenderLayer.updateMouseState(mouseState, pickedValue, pickedOffset);
+    }
   }
 }
