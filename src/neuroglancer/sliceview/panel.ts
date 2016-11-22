@@ -195,34 +195,25 @@ export class SliceViewPanel extends RenderedDataPanel {
     return true;
   }
 
-  onMousedown(e: MouseEvent) {
-    if (e.target !== this.element) {
-      return;
-    }
-    super.onMousedown(e);
-    if (!this.sliceView.hasValidViewport) {
-      return;
-    }
-    if (e.button === 0) {
-      let {mouseState} = this.viewer;
-      if (mouseState.updateUnconditionally()) {
-        let initialPosition = vec3.clone(this.viewer.mouseState.position);
-        startRelativeMouseDrag(e, (event, deltaX, deltaY) => {
-          let {position} = this.viewer.navigationState;
-          if (event.shiftKey) {
-            let {viewportAxes} = this.sliceView;
-            this.viewer.navigationState.pose.rotateAbsolute(
-                viewportAxes[1], deltaX / 4.0 * Math.PI / 180.0, initialPosition);
-            this.viewer.navigationState.pose.rotateAbsolute(
-                viewportAxes[0], deltaY / 4.0 * Math.PI / 180.0, initialPosition);
-          } else {
-            let pos = position.spatialCoordinates;
-            vec3.set(pos, deltaX, deltaY, 0);
-            vec3.transformMat4(pos, pos, this.sliceView.viewportToData);
-            position.changed.dispatch();
-          }
-        });
-      }
+  startDragViewport(e: MouseEvent) {
+    let {mouseState} = this.viewer;
+    if (mouseState.updateUnconditionally()) {
+      let initialPosition = vec3.clone(mouseState.position);
+      startRelativeMouseDrag(e, (event, deltaX, deltaY) => {
+        let {position} = this.viewer.navigationState;
+        if (event.shiftKey) {
+          let {viewportAxes} = this.sliceView;
+          this.viewer.navigationState.pose.rotateAbsolute(
+              viewportAxes[1], deltaX / 4.0 * Math.PI / 180.0, initialPosition);
+          this.viewer.navigationState.pose.rotateAbsolute(
+              viewportAxes[0], deltaY / 4.0 * Math.PI / 180.0, initialPosition);
+        } else {
+          let pos = position.spatialCoordinates;
+          vec3.set(pos, deltaX, deltaY, 0);
+          vec3.transformMat4(pos, pos, this.sliceView.viewportToData);
+          position.changed.dispatch();
+        }
+      });
     }
   }
 

@@ -213,22 +213,14 @@ export class PerspectivePanel extends RenderedDataPanel {
     return true;
   }
 
-  onMousedown(e: MouseEvent) {
-    if (e.target !== this.element) {
-      return;
-    }
-    super.onMousedown(e);
-    if (!this.navigationState.valid) {
-      return;
-    }
-    if (e.button === 0) {
-      startRelativeMouseDrag(e, (event, deltaX, deltaY) => {
-        this.navigationState.pose.rotateRelative(kAxes[1], -deltaX / 4.0 * Math.PI / 180.0);
-        this.navigationState.pose.rotateRelative(kAxes[0], deltaY / 4.0 * Math.PI / 180.0);
-        this.viewer.navigationState.changed.dispatch();
-      });
-    }
+  startDragViewport(e: MouseEvent) {
+    startRelativeMouseDrag(e, (event, deltaX, deltaY) => {
+      this.navigationState.pose.rotateRelative(kAxes[1], -deltaX / 4.0 * Math.PI / 180.0);
+      this.navigationState.pose.rotateRelative(kAxes[0], deltaY / 4.0 * Math.PI / 180.0);
+      this.viewer.navigationState.changed.dispatch();
+    });
   }
+
   draw() {
     let {width, height} = this;
     if (!this.navigationState.valid || width === 0 || height === 0) {
