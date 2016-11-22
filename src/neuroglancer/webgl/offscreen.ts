@@ -17,9 +17,9 @@
 import {RefCounted} from 'neuroglancer/util/disposable';
 import {identityMat4} from 'neuroglancer/util/geom';
 import {getObjectId} from 'neuroglancer/util/object_id';
-import {Buffer} from 'neuroglancer/webgl/buffer';
 import {GL} from 'neuroglancer/webgl/context';
 import {ShaderModule, ShaderProgram} from 'neuroglancer/webgl/shader';
+import {getSquareCornersBuffer} from 'neuroglancer/webgl/square_corners_buffer';
 import {resizeTexture} from 'neuroglancer/webgl/texture';
 import {defineCopyFragmentShader, elementWiseTextureShader} from 'neuroglancer/webgl/trivial_shaders';
 
@@ -238,22 +238,8 @@ export class OffscreenCopyHelper extends RefCounted {
     super();
     this.registerDisposer(shader);
   }
-  private copyVertexPositionsBuffer = this.registerDisposer(Buffer.fromData(
-      this.gl, new Float32Array([
-        -1, -1, 0, 1,  //
-        -1, +1, 0, 1,  //
-        +1, +1, 0, 1,  //
-        +1, -1, 0, 1,  //
-      ]),
-      this.gl.ARRAY_BUFFER, this.gl.STATIC_DRAW));
-  private copyTexCoordsBuffer = this.registerDisposer(Buffer.fromData(
-      this.gl, new Float32Array([
-        0, 0,  //
-        0, 1,  //
-        1, 1,  //
-        1, 0,  //
-      ]),
-      this.gl.ARRAY_BUFFER, this.gl.STATIC_DRAW));
+  private copyVertexPositionsBuffer = getSquareCornersBuffer(this.gl);
+  private copyTexCoordsBuffer = getSquareCornersBuffer(this.gl, 0, 0, 1, 1);
 
   draw(...textures: (WebGLTexture|null)[]) {
     let {gl, shader} = this;
@@ -268,10 +254,10 @@ export class OffscreenCopyHelper extends RefCounted {
     gl.uniformMatrix4fv(shader.uniform('uProjectionMatrix'), false, identityMat4);
 
     let aVertexPosition = shader.attribute('aVertexPosition');
-    this.copyVertexPositionsBuffer.bindToVertexAttrib(aVertexPosition, 4);
+    this.copyVertexPositionsBuffer.bindToVertexAttrib(aVertexPosition, /*components=*/2);
 
     let aTexCoord = shader.attribute('aTexCoord');
-    this.copyTexCoordsBuffer.bindToVertexAttrib(aTexCoord, 2);
+    this.copyTexCoordsBuffer.bindToVertexAttrib(aTexCoord, /*components=*/2);
 
     gl.drawArrays(gl.TRIANGLE_FAN, 0, 4);
 

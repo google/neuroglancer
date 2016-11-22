@@ -28,10 +28,10 @@ import {Mat4, mat4, rectifyTransformMatrixIfAxisAligned, Vec3, vec3, vec3Key, Ve
 import {stableStringify} from 'neuroglancer/util/json';
 import {getObjectId} from 'neuroglancer/util/object_id';
 import {Uint64} from 'neuroglancer/util/uint64';
-import {Buffer} from 'neuroglancer/webgl/buffer';
 import {GL} from 'neuroglancer/webgl/context';
 import {FramebufferConfiguration, makeTextureBuffers, StencilBuffer} from 'neuroglancer/webgl/offscreen';
 import {ShaderBuilder, ShaderModule, ShaderProgram} from 'neuroglancer/webgl/shader';
+import {getSquareCornersBuffer} from 'neuroglancer/webgl/square_corners_buffer';
 import {registerSharedObjectOwner, RPC} from 'neuroglancer/worker_rpc';
 import {Signal} from 'signals';
 
@@ -461,22 +461,7 @@ export interface MultiscaleVolumeChunkSource {
  * Helper for rendering a SliceView that has been pre-rendered to a texture.
  */
 export class SliceViewRenderHelper extends RefCounted {
-  private copyVertexPositionsBuffer = this.registerDisposer(Buffer.fromData(
-      this.gl, new Float32Array([
-        -1, -1, 0, 1,  //
-        -1, +1, 0, 1,  //
-        +1, +1, 0, 1,  //
-        +1, -1, 0, 1,  //
-      ]),
-      this.gl.ARRAY_BUFFER, this.gl.STATIC_DRAW));
-  private copyTexCoordsBuffer = this.registerDisposer(Buffer.fromData(
-      this.gl, new Float32Array([
-        0, 0,  //
-        0, 1,  //
-        1, 1,  //
-        1, 0,  //
-      ]),
-      this.gl.ARRAY_BUFFER, this.gl.STATIC_DRAW));
+  private copyVertexPositionsBuffer = getSquareCornersBuffer(this.gl);
   private shader: ShaderProgram;
 
   private textureCoordinateAdjustment = new Float32Array(4);
@@ -500,9 +485,8 @@ if (sampledColor.a == 0.0) {
 emit(sampledColor * uColorFactor, vec4(0,0,0,0));
 `);
     builder.addAttribute('vec4', 'aVertexPosition');
-    builder.addAttribute('vec2', 'aTexCoord');
     builder.setVertexMain(`
-vTexCoord = uTextureCoordinateAdjustment.xy + aTexCoord * uTextureCoordinateAdjustment.zw;
+vTexCoord = uTextureCoordinateAdjustment.xy + 0.5 * (aVertexPosition.xy + 1.0) * uTextureCoordinateAdjustment.zw;
 gl_Position = uProjectionMatrix * aVertexPosition;
 `);
     this.shader = this.registerDisposer(builder.build());
@@ -525,15 +509,11 @@ gl_Position = uProjectionMatrix * aVertexPosition;
     gl.uniform4fv(shader.uniform('uTextureCoordinateAdjustment'), textureCoordinateAdjustment);
 
     let aVertexPosition = shader.attribute('aVertexPosition');
-    this.copyVertexPositionsBuffer.bindToVertexAttrib(aVertexPosition, 4);
-
-    let aTexCoord = shader.attribute('aTexCoord');
-    this.copyTexCoordsBuffer.bindToVertexAttrib(aTexCoord, 2);
+    this.copyVertexPositionsBuffer.bindToVertexAttrib(aVertexPosition, /*components=*/2);
 
     gl.drawArrays(gl.TRIANGLE_FAN, 0, 4);
 
     gl.disableVertexAttribArray(aVertexPosition);
-    gl.disableVertexAttribArray(aTexCoord);
     gl.bindTexture(gl.TEXTURE_2D, null);
   }
 
