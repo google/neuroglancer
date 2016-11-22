@@ -45,4 +45,9 @@ export class Int32ArrayBuilder {
     this.resize(length + other.length);
     this.data.set(other, length);
   }
-};
+
+  eraseRange(start: number, end: number) {
+    this.data.copyWithin(start, end, this.length);
+    this.length -= (end - start);
+  }
+}
