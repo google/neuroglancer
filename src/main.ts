@@ -20,8 +20,19 @@ import 'neuroglancer/single_mesh_user_layer';
 
 import {makeDefaultKeyBindings} from 'neuroglancer/default_key_bindings';
 import {makeDefaultViewer} from 'neuroglancer/default_viewer';
+import {getCurrentState} from 'neuroglancer/url_hash_state';
 
 window.addEventListener('DOMContentLoaded', () => {
   let viewer = (<any>window)['viewer'] = makeDefaultViewer();
   makeDefaultKeyBindings(viewer.keyMap);
+
+  document.addEventListener('copy', (event: ClipboardEvent) => {
+    const {tagName} = (<HTMLElement>event.target);
+    if (tagName === 'TEXTAREA' || tagName === 'INPUT') {
+      return;
+    }
+    const state = getCurrentState();
+    event.clipboardData.setData('text/plain', JSON.stringify(state, undefined, '  '));
+    event.preventDefault();
+  });
 });

@@ -26,10 +26,32 @@ let trackedKeys = new Map<string, Trackable>();
 let trackedObjects = new Map<Trackable, string>();
 
 let currentHashState: any = {};
+let hashStateUpdatedSinceLastUrlUpdate = false;
 let updatingObject: Trackable|null = null;
 let updatedObjects = new Set<Trackable>();
 let lastHash: string|null = null;
 let pendingUpdate = -1;
+
+export function getCurrentState() {
+  let updated = false;
+  for (let obj of updatedObjects) {
+    let key = trackedObjects.get(obj);
+    if (key === undefined) {
+      if (currentHashState.hasOwnProperty(key)) {
+        updated = true;
+      }
+      // Object may have been unregistered after update event.
+      continue;
+    }
+    updated = true;
+    currentHashState[key] = obj.toJSON();
+  }
+  updatedObjects.clear();
+  if (updated) {
+    hashStateUpdatedSinceLastUrlUpdate = true;
+  }
+  return currentHashState;
+}
 
 const UPDATE_DELAY = 500;
 
@@ -134,29 +156,17 @@ function timerExpired() {
 
 function updateHash() {
   // console.log(`updateHash at ${Date.now()}`);
-  let updated = false;
-  for (let obj of updatedObjects) {
-    let key = trackedObjects.get(obj);
-    if (key === undefined) {
-      if (currentHashState.hasOwnProperty(key)) {
-        updated = true;
-      }
-      // Object may have been unregistered after update event.
-      continue;
-    }
-    updated = true;
-    currentHashState[key] = obj.toJSON();
-  }
-  updatedObjects.clear();
-  if (updated) {
-    let newHash = urlSafeStringify(currentHashState);
+  let state = getCurrentState();
+  if (hashStateUpdatedSinceLastUrlUpdate) {
+    hashStateUpdatedSinceLastUrlUpdate = false;
+    let newHash = urlSafeStringify(state);
     if (newHash !== lastHash) {
       lastHash = newHash;
       // console.log(`replaceState at ${Date.now()}`);
       if (lastHash === '{}') {
-        history.replaceState(null, undefined, '#');
+        history.replaceState(null, '', '#');
       } else {
-        history.replaceState(null, undefined, '#!' + lastHash);
+        history.replaceState(null, '', '#!' + lastHash);
       }
       // console.log(`replaceState done at ${Date.now()}`);
     }
