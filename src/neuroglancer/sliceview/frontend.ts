@@ -156,7 +156,11 @@ export class SliceView extends SliceViewBase {
 
   onViewportChanged() {
     var {width, height, viewportToDevice, dataToViewport, dataToDevice} = this;
-    mat4.ortho(viewportToDevice, -width / 2, width / 2, height / 2, -height / 2, -1, 1);
+    // FIXME: Make this adjustable.
+    const sliceThickness = 10;
+    mat4.ortho(
+        viewportToDevice, -width / 2, width / 2, height / 2, -height / 2, -sliceThickness,
+        sliceThickness);
     mat4.multiply(dataToDevice, viewportToDevice, dataToViewport);
 
     this.visibleChunksStale = true;
