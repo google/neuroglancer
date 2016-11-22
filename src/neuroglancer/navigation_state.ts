@@ -75,9 +75,9 @@ export class VoxelSize extends RefCounted {
     return this.size.toString();
   }
 
-  voxelFromSpatial(voxel: Vec3, spatial: Vec3) { vec3.divide(voxel, spatial, this.size); }
+  voxelFromSpatial(voxel: Vec3, spatial: Vec3) { return vec3.divide(voxel, spatial, this.size); }
 
-  spatialFromVoxel(spatial: Vec3, voxel: Vec3) { vec3.multiply(spatial, voxel, this.size); }
+  spatialFromVoxel(spatial: Vec3, voxel: Vec3) { return vec3.multiply(spatial, voxel, this.size); }
 };
 
 const tempVec3 = vec3.create();
