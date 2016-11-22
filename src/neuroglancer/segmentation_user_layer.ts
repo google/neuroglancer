@@ -17,7 +17,7 @@
 import {CoordinateTransform} from 'neuroglancer/coordinate_transform';
 import {getMeshSource, getSkeletonSource} from 'neuroglancer/datasource/factory';
 import {UserLayer, UserLayerDropdown} from 'neuroglancer/layer';
-import {LayerListSpecification} from 'neuroglancer/layer_specification';
+import {LayerListSpecification, registerLayerType, registerVolumeLayerType} from 'neuroglancer/layer_specification';
 import {getVolumeWithStatusMessage} from 'neuroglancer/layer_specification';
 import {MeshSource} from 'neuroglancer/mesh/frontend';
 import {MeshLayer} from 'neuroglancer/mesh/frontend';
@@ -25,6 +25,7 @@ import {SegmentColorHash} from 'neuroglancer/segment_color';
 import {SegmentationDisplayState3D, SegmentSelectionState, Uint64MapEntry} from 'neuroglancer/segmentation_display_state/frontend';
 import {SharedDisjointUint64Sets} from 'neuroglancer/shared_disjoint_sets';
 import {PerspectiveViewSkeletonLayer, SkeletonLayer, SliceViewPanelSkeletonLayer} from 'neuroglancer/skeleton/frontend';
+import {VolumeType} from 'neuroglancer/sliceview/base';
 import {SegmentationRenderLayer, SliceViewSegmentationDisplayState} from 'neuroglancer/sliceview/segmentation_renderlayer';
 import {trackableAlphaValue} from 'neuroglancer/trackable_alpha';
 import {Uint64Set} from 'neuroglancer/uint64_set';
@@ -224,3 +225,6 @@ class SegmentationDropdown extends UserLayerDropdown {
     element.appendChild(this.registerDisposer(this.visibleSegmentWidget).element);
   }
 }
+
+registerLayerType('segmentation', SegmentationUserLayer);
+registerVolumeLayerType(VolumeType.SEGMENTATION, SegmentationUserLayer);

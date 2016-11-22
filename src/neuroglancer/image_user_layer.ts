@@ -16,9 +16,10 @@
 
 import {CoordinateTransform} from 'neuroglancer/coordinate_transform';
 import {UserLayer, UserLayerDropdown} from 'neuroglancer/layer';
-import {LayerListSpecification} from 'neuroglancer/layer_specification';
+import {LayerListSpecification, registerLayerType, registerVolumeLayerType} from 'neuroglancer/layer_specification';
 import {getVolumeWithStatusMessage} from 'neuroglancer/layer_specification';
 import {Overlay} from 'neuroglancer/overlay';
+import {VolumeType} from 'neuroglancer/sliceview/base';
 import {FRAGMENT_MAIN_START, getTrackableFragmentMain, ImageRenderLayer} from 'neuroglancer/sliceview/image_renderlayer';
 import {trackableAlphaValue} from 'neuroglancer/trackable_alpha';
 import {mat4} from 'neuroglancer/util/geom';
@@ -133,4 +134,7 @@ class ShaderCodeOverlay extends Overlay {
     this.content.appendChild(this.codeWidget.element);
     this.codeWidget.textEditor.refresh();
   }
-};
+}
+
+registerLayerType('image', ImageUserLayer);
+registerVolumeLayerType(VolumeType.IMAGE, ImageUserLayer);

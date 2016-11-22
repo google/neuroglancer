@@ -16,7 +16,7 @@
 
 import * as debounce from 'lodash/debounce';
 import {UserLayer, UserLayerDropdown} from 'neuroglancer/layer';
-import {LayerListSpecification} from 'neuroglancer/layer_specification';
+import {LayerListSpecification, registerLayerType} from 'neuroglancer/layer_specification';
 import {Overlay} from 'neuroglancer/overlay';
 import {SingleMeshSourceParameters} from 'neuroglancer/single_mesh/base';
 import {VertexAttributeInfo} from 'neuroglancer/single_mesh/base';
@@ -298,3 +298,5 @@ class ShaderCodeOverlay extends Overlay {
     this.codeWidget.textEditor.refresh();
   }
 }
+
+registerLayerType('mesh', SingleMeshUserLayer);
