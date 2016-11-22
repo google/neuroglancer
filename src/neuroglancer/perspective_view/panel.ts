@@ -259,6 +259,9 @@ export class PerspectivePanel extends RenderedDataPanel {
       directionalLighting: directional,
       pickIDs: pickIDs,
       emitter: perspectivePanelEmit,
+      emitColor: true,
+      emitPickID: true,
+      alreadyEmittedPickID: false,
     };
 
     let visibleLayers = this.visibleLayerTracker.getVisibleLayers();
@@ -294,6 +297,7 @@ export class PerspectivePanel extends RenderedDataPanel {
       gl.clear(gl.COLOR_BUFFER_BIT);
       renderContext.emitter = perspectivePanelEmitOIT;
       gl.blendFuncSeparate(gl.ONE, gl.ONE, gl.ZERO, gl.ONE_MINUS_SRC_ALPHA);
+      renderContext.emitPickID = false;
       for (let renderLayer of visibleLayers) {
         if (renderLayer.isTransparent) {
           renderLayer.draw(renderContext);
@@ -322,9 +326,11 @@ export class PerspectivePanel extends RenderedDataPanel {
       gl.WEBGL_draw_buffers.COLOR_ATTACHMENT2_WEBGL
     ]);
     renderContext.emitter = perspectivePanelEmit;
-
+    renderContext.emitPickID = true;
+    renderContext.emitColor = false;
     for (let renderLayer of visibleLayers) {
-      renderLayer.drawPicking(renderContext);
+      renderContext.alreadyEmittedPickID = !renderLayer.isTransparent;
+      renderLayer.draw(renderContext);
     }
 
     gl.disable(gl.DEPTH_TEST);

@@ -60,11 +60,16 @@ vColor = vec4(lightingFactor * uColor.rgb, uColor.a);
     gl.uniform4fv(shader.uniform('uLightDirection'), lightVec);
   }
 
-  beginObject(
-      gl: GL, shader: ShaderProgram, objectToDataMatrix: Mat4, color: Vec4, pickID: number) {
-    gl.uniformMatrix4fv(shader.uniform('uModelMatrix'), false, objectToDataMatrix);
-    gl.uniform4fv(shader.uniform('uPickID'), setVec4FromUint32(this.tempPickID, pickID));
+  setColor(gl: GL, shader: ShaderProgram, color: Vec4) {
     gl.uniform4fv(shader.uniform('uColor'), color);
+  }
+
+  setPickID(gl: GL, shader: ShaderProgram, pickID: number) {
+    gl.uniform4fv(shader.uniform('uPickID'), setVec4FromUint32(this.tempPickID, pickID));
+  }
+
+  beginObject(gl: GL, shader: ShaderProgram, objectToDataMatrix: Mat4) {
+    gl.uniformMatrix4fv(shader.uniform('uModelMatrix'), false, objectToDataMatrix);
   }
 
   getShader(gl: GL, emitter: ShaderModule) {
@@ -130,6 +135,10 @@ export class MeshLayer extends PerspectiveViewRenderLayer {
   get gl() { return this.chunkManager.chunkQueueManager.gl; }
 
   draw(renderContext: PerspectiveViewRenderContext) {
+    if (!renderContext.emitColor && renderContext.alreadyEmittedPickID) {
+      // No need for a separate pick ID pass.
+      return;
+    }
     let {gl, displayState, meshShaderManager} = this;
     let alpha = Math.min(1.0, displayState.objectAlpha.value);
     if (alpha <= 0.0) {
@@ -147,9 +156,13 @@ export class MeshLayer extends PerspectiveViewRenderLayer {
     const objectToDataMatrix = this.displayState.objectToDataTransform.transform;
 
     forEachSegmentToDraw(displayState, objectChunks, (rootObjectId, objectId, fragments) => {
-      meshShaderManager.beginObject(
-          gl, shader, objectToDataMatrix, getObjectColor(displayState, rootObjectId, alpha),
-          pickIDs.registerUint64(this, objectId));
+      if (renderContext.emitColor) {
+        meshShaderManager.setColor(gl, shader, getObjectColor(displayState, rootObjectId, alpha));
+      }
+      if (renderContext.emitPickID) {
+        meshShaderManager.setPickID(gl, shader, pickIDs.registerUint64(this, objectId));
+      }
+      meshShaderManager.beginObject(gl, shader, objectToDataMatrix);
       for (let fragment of fragments) {
         if (fragment.state === ChunkState.GPU_MEMORY) {
           meshShaderManager.drawFragment(gl, shader, fragment);
@@ -158,12 +171,6 @@ export class MeshLayer extends PerspectiveViewRenderLayer {
     });
 
     meshShaderManager.endLayer(gl, shader);
-  }
-
-  drawPicking(renderContext: PerspectiveViewRenderContext) {
-    if (this.isTransparent) {
-      this.draw(renderContext);
-    }
   }
 }
 

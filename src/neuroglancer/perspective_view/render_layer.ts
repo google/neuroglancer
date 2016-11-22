@@ -26,15 +26,26 @@ export interface PerspectiveViewRenderContext {
   directionalLighting: number;
   pickIDs: PickIDManager;
   emitter: ShaderModule;
+
+  /**
+   * Specifies whether the emitted color value will be used.
+   */
+  emitColor: boolean;
+
+  /**
+   * Specifies whether the emitted pick ID will be used.
+   */
+  emitPickID: boolean;
+
+  /**
+   * Specifies whether there was a previous pick ID pass.
+   */
+  alreadyEmittedPickID: boolean;
 }
 
 export class PerspectiveViewRenderLayer extends VisibilityTrackedRenderLayer {
   draw(renderContext: PerspectiveViewRenderContext) {
     // Must be overridden by subclasses.
-  }
-
-  drawPicking(renderContext: PerspectiveViewRenderContext) {
-    // Do nothing by default.
   }
 
   /**

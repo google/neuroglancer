@@ -25,7 +25,7 @@ import {identityMat4, Mat4, mat4, vec3, vec4} from 'neuroglancer/util/geom';
 import {startRelativeMouseDrag} from 'neuroglancer/util/mouse_drag';
 import {ViewerState} from 'neuroglancer/viewer_state';
 import {FramebufferConfiguration, makeTextureBuffers, OffscreenCopyHelper} from 'neuroglancer/webgl/offscreen';
-import {ShaderBuilder} from 'neuroglancer/webgl/shader';
+import {ShaderBuilder, ShaderModule} from 'neuroglancer/webgl/shader';
 import {ScaleBarWidget} from 'neuroglancer/widget/scale_bar';
 
 export interface SliceViewerState extends ViewerState { showScaleBar: TrackableBoolean; }
@@ -36,12 +36,18 @@ export enum OffscreenTextures {
   NUM_TEXTURES
 }
 
-export function sliceViewPanelEmit(builder: ShaderBuilder) {
-  builder.addFragmentExtension('GL_EXT_draw_buffers');
+function sliceViewPanelEmitColor(builder: ShaderBuilder) {
   builder.addFragmentCode(`
 void emit(vec4 color, vec4 pickId) {
-  gl_FragData[${OffscreenTextures.COLOR}] = color;
-  gl_FragData[${OffscreenTextures.PICK}] = pickId;
+  gl_FragColor = color;
+}
+`);
+}
+
+function sliceViewPanelEmitPickID(builder: ShaderBuilder) {
+  builder.addFragmentCode(`
+void emit(vec4 color, vec4 pickId) {
+  gl_FragColor = pickId;
 }
 `);
 }
@@ -49,18 +55,29 @@ void emit(vec4 color, vec4 pickId) {
 export interface SliceViewPanelRenderContext {
   dataToDevice: Mat4;
   pickIDs: PickIDManager;
+  emitter: ShaderModule;
+
+  /**
+   * Specifies whether the emitted color value will be used.
+   */
+  emitColor: boolean;
+
+  /**
+   * Specifies whether the emitted pick ID will be used.
+   */
+  emitPickID: boolean;
 }
 
 export class SliceViewPanelRenderLayer extends VisibilityTrackedRenderLayer {
   draw(renderContext: SliceViewPanelRenderContext) {
     // Must be overriden by subclass.
   }
-};
+}
 
 export class SliceViewPanel extends RenderedDataPanel {
   private axesLineHelper = this.registerDisposer(AxesLineHelper.get(this.gl));
   private sliceViewRenderHelper =
-      this.registerDisposer(SliceViewRenderHelper.get(this.gl, sliceViewPanelEmit));
+      this.registerDisposer(SliceViewRenderHelper.get(this.gl, sliceViewPanelEmitColor));
   private colorFactor = vec4.fromValues(1, 1, 1, 1);
   private backgroundColor = vec4.fromValues(0.5, 0.5, 0.5, 1.0);
   private pickIDs = new PickIDManager();
@@ -120,7 +137,24 @@ export class SliceViewPanel extends RenderedDataPanel {
     let visibleLayers = this.visibleLayerTracker.getVisibleLayers();
     let {pickIDs} = this;
     pickIDs.clear();
-    let renderContext = {dataToDevice: sliceView.dataToDevice, pickIDs: pickIDs};
+    this.offscreenFramebuffer.bindSingle(OffscreenTextures.COLOR);
+    let renderContext = {
+      dataToDevice: sliceView.dataToDevice,
+      pickIDs: pickIDs,
+      emitter: sliceViewPanelEmitColor,
+      emitColor: true,
+      emitPickID: false,
+    };
+    gl.enable(gl.BLEND);
+    gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
+    for (let renderLayer of visibleLayers) {
+      renderLayer.draw(renderContext);
+    }
+    gl.disable(gl.BLEND);
+    this.offscreenFramebuffer.bindSingle(OffscreenTextures.PICK);
+    renderContext.emitColor = false;
+    renderContext.emitPickID = true;
+    renderContext.emitter = sliceViewPanelEmitPickID;
 
     for (let renderLayer of visibleLayers) {
       renderLayer.draw(renderContext);
@@ -146,7 +180,7 @@ export class SliceViewPanel extends RenderedDataPanel {
         //
         mat[i] *= axisLength * pixelSize;
       }
-      gl.WEBGL_draw_buffers.drawBuffersWEBGL([gl.WEBGL_draw_buffers.COLOR_ATTACHMENT0_WEBGL]);
+      this.offscreenFramebuffer.bindSingle(OffscreenTextures.COLOR);
       this.axesLineHelper.draw(mat);
     }
 

@@ -176,9 +176,12 @@ vLightingFactor = abs(dot(normal, uLightDirection.xyz)) + uLightDirection.w;
     gl.uniform4fv(shader.uniform('uLightDirection'), lightVec);
   }
 
-  beginObject(gl: GL, shader: ShaderProgram, objectToDataMatrix: Mat4, pickID: number) {
-    gl.uniformMatrix4fv(shader.uniform('uModelMatrix'), false, objectToDataMatrix);
+  setPickID(gl: GL, shader: ShaderProgram, pickID: number) {
     gl.uniform4fv(shader.uniform('uPickID'), setVec4FromUint32(this.tempPickID, pickID));
+  }
+
+  beginObject(gl: GL, shader: ShaderProgram, objectToDataMatrix: Mat4) {
+    gl.uniformMatrix4fv(shader.uniform('uModelMatrix'), false, objectToDataMatrix);
   }
 
   getShader(gl: GL, emitter: ShaderModule) {
@@ -433,6 +436,10 @@ export class SingleMeshLayer extends PerspectiveViewRenderLayer {
   get gl() { return this.source.gl; }
 
   draw(renderContext: PerspectiveViewRenderContext) {
+    if (!renderContext.emitColor && renderContext.alreadyEmittedPickID) {
+      // No need for a separate pick ID pass.
+      return;
+    }
     let chunk = <SingleMeshChunk|undefined>this.source.chunks.get(SINGLE_MESH_CHUNK_KEY);
     if (chunk === undefined || chunk.state !== ChunkState.GPU_MEMORY) {
       return;
@@ -450,9 +457,10 @@ export class SingleMeshLayer extends PerspectiveViewRenderLayer {
 
     let {pickIDs} = renderContext;
 
-    shaderManager.beginObject(
-        gl, shader, this.displayState.objectToDataTransform.transform,
-        pickIDs.register(this, chunk.numIndices / 3));
+    shaderManager.beginObject(gl, shader, this.displayState.objectToDataTransform.transform);
+    if (renderContext.emitPickID) {
+      shaderManager.setPickID(gl, shader, pickIDs.register(this, chunk.numIndices / 3));
+    }
     shaderManager.drawFragment(gl, shader, chunk, this.countingBuffer);
     shaderManager.endLayer(gl, shader);
   }

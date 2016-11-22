@@ -21,7 +21,7 @@ import {VoxelSize} from 'neuroglancer/navigation_state';
 import {PerspectiveViewRenderContext, PerspectiveViewRenderLayer} from 'neuroglancer/perspective_view/render_layer';
 import {forEachSegmentToDraw, getObjectColor, registerRedrawWhenSegmentationDisplayState3DChanged, SegmentationDisplayState3D, SegmentationLayerSharedObject} from 'neuroglancer/segmentation_display_state/frontend';
 import {SKELETON_LAYER_RPC_ID} from 'neuroglancer/skeleton/base';
-import {sliceViewPanelEmit, SliceViewPanelRenderContext, SliceViewPanelRenderLayer} from 'neuroglancer/sliceview/panel';
+import {SliceViewPanelRenderContext, SliceViewPanelRenderLayer} from 'neuroglancer/sliceview/panel';
 import {RefCounted} from 'neuroglancer/util/disposable';
 import {Mat4, mat4, Vec3} from 'neuroglancer/util/geom';
 import {stableStringify} from 'neuroglancer/util/json';
@@ -33,10 +33,11 @@ import {setVec4FromUint32} from 'neuroglancer/webgl/shader_lib';
 import {RPC} from 'neuroglancer/worker_rpc';
 import {Signal} from 'signals';
 
-class SkeletonShaderManager {
-  private tempMat = mat4.create();
-  private tempPickID = new Float32Array(4);
-  constructor() {}
+const tempMat2 = mat4.create();
+const tempPickID = new Float32Array(4);
+
+class RenderHelper extends RefCounted {
+  private shaders = new Map<ShaderModule, ShaderProgram>();
 
   defineShader(builder: ShaderBuilder) {
     builder.addAttribute('highp vec3', 'aVertexPosition');
@@ -51,26 +52,35 @@ class SkeletonShaderManager {
       gl: GL, shader: ShaderProgram, renderContext: SliceViewPanelRenderContext,
       objectToDataMatrix: Mat4) {
     let {dataToDevice} = renderContext;
-    let mat = mat4.multiply(this.tempMat, dataToDevice, objectToDataMatrix);
+    let mat = mat4.multiply(tempMat2, dataToDevice, objectToDataMatrix);
     gl.uniformMatrix4fv(shader.uniform('uProjection'), false, mat);
   }
 
   getShader(gl: GL, emitter: ShaderModule) {
-    return gl.memoize.get(`skeleton/SkeletonShaderManager:${getObjectId(emitter)}`, () => {
-      let builder = new ShaderBuilder(gl);
-      builder.require(emitter);
-      this.defineShader(builder);
-      return builder.build();
-    });
+    let {shaders} = this;
+    let shader = shaders.get(emitter);
+    if (shader === undefined) {
+      shader = this.registerDisposer(
+          gl.memoize.get(`skeleton/SkeletonShaderManager:${getObjectId(emitter)}`, () => {
+            let builder = new ShaderBuilder(gl);
+            builder.require(emitter);
+            this.defineShader(builder);
+            return builder.build();
+          }));
+      shaders.set(emitter, shader);
+    }
+    return shader;
   }
 
   setColor(gl: GL, shader: ShaderProgram, color: Vec3) {
     gl.uniform4fv(shader.uniform('uColor'), color);
   }
 
-  drawSkeleton(gl: GL, shader: ShaderProgram, skeletonChunk: SkeletonChunk, pickID: number) {
-    gl.uniform4fv(shader.uniform('uPickID'), setVec4FromUint32(this.tempPickID, pickID));
+  setPickID(gl: GL, shader: ShaderProgram, pickID: number) {
+    gl.uniform4fv(shader.uniform('uPickID'), setVec4FromUint32(tempPickID, pickID));
+  }
 
+  drawSkeleton(gl: GL, shader: ShaderProgram, skeletonChunk: SkeletonChunk) {
     skeletonChunk.vertexBuffer.bindToVertexAttrib(
         shader.attribute('aVertexPosition'),
         /*components=*/3);
@@ -82,10 +92,10 @@ class SkeletonShaderManager {
   endLayer(gl: GL, shader: ShaderProgram) {
     gl.disableVertexAttribArray(shader.attribute('aVertexPosition'));
   }
-};
+}
 
 export class PerspectiveViewSkeletonLayer extends PerspectiveViewRenderLayer {
-  private shaders = new Map<ShaderModule, ShaderProgram>();
+  private renderHelper = this.registerDisposer(new RenderHelper());
 
   constructor(public base: SkeletonLayer) {
     super();
@@ -96,30 +106,15 @@ export class PerspectiveViewSkeletonLayer extends PerspectiveViewRenderLayer {
   }
   get gl() { return this.base.gl; }
 
-  private getShader(emitter: ShaderModule) {
-    let {shaders} = this;
-    let shader = shaders.get(emitter);
-    if (shader === undefined) {
-      shader = this.registerDisposer(this.base.skeletonShaderManager.getShader(this.gl, emitter));
-      shaders.set(emitter, shader);
-    }
-    return shader;
-  }
-
   get isTransparent() { return this.base.displayState.objectAlpha.value < 1.0; }
 
-  draw(renderContext: PerspectiveViewRenderContext, pickingOnly = false) {
-    let shader = this.getShader(renderContext.emitter);
-    this.base.draw(renderContext, this, shader, pickingOnly);
+  draw(renderContext: PerspectiveViewRenderContext) {
+    this.base.draw(renderContext, this, this.renderHelper);
   }
-  drawPicking(renderContext: PerspectiveViewRenderContext) {
-    let shader = this.getShader(renderContext.emitter);
-    this.base.draw(renderContext, this, shader, true);
-  }
-};
+}
 
 export class SliceViewPanelSkeletonLayer extends SliceViewPanelRenderLayer {
-  private shader = this.base.skeletonShaderManager.getShader(this.gl, sliceViewPanelEmit);
+  private renderHelper = this.registerDisposer(new RenderHelper());
 
   constructor(public base: SkeletonLayer) {
     super();
@@ -131,13 +126,12 @@ export class SliceViewPanelSkeletonLayer extends SliceViewPanelRenderLayer {
   get gl() { return this.base.gl; }
 
   draw(renderContext: SliceViewPanelRenderContext) {
-    this.base.draw(renderContext, this, this.shader, false, 10);
+    this.base.draw(renderContext, this, this.renderHelper, 10);
   }
 };
 
 export class SkeletonLayer extends RefCounted {
   private tempMat = mat4.create();
-  skeletonShaderManager = new SkeletonShaderManager();
   redrawNeeded = new Signal();
   private sharedObject: SegmentationLayerSharedObject;
 
@@ -160,17 +154,18 @@ export class SkeletonLayer extends RefCounted {
   get gl() { return this.chunkManager.chunkQueueManager.gl; }
 
   draw(
-      renderContext: SliceViewPanelRenderContext, layer: RenderLayer, shader: ShaderProgram,
-      pickingOnly = false, lineWidth?: number) {
+      renderContext: SliceViewPanelRenderContext, layer: RenderLayer, renderHelper: RenderHelper,
+      lineWidth?: number) {
     if (lineWidth === undefined) {
-      lineWidth = pickingOnly ? 5 : 1;
+      lineWidth = renderContext.emitColor ? 1 : 5;
     }
-    let {gl, skeletonShaderManager, source, displayState} = this;
+    let {gl, source, displayState} = this;
     let alpha = Math.min(1.0, displayState.objectAlpha.value);
     if (alpha <= 0.0) {
       // Skip drawing.
       return;
     }
+    const shader = renderHelper.getShader(gl, renderContext.emitter);
     shader.bind();
 
     let objectToDataMatrix = this.tempMat;
@@ -180,7 +175,7 @@ export class SkeletonLayer extends RefCounted {
     }
     mat4.multiply(
         objectToDataMatrix, this.displayState.objectToDataTransform.transform, objectToDataMatrix);
-    skeletonShaderManager.beginLayer(gl, shader, renderContext, objectToDataMatrix);
+    renderHelper.beginLayer(gl, shader, renderContext, objectToDataMatrix);
 
     let skeletons = source.chunks;
 
@@ -192,14 +187,15 @@ export class SkeletonLayer extends RefCounted {
       if (skeleton.state !== ChunkState.GPU_MEMORY) {
         return;
       }
-      if (!pickingOnly) {
-        skeletonShaderManager.setColor(
-            gl, shader, getObjectColor(displayState, rootObjectId, alpha));
+      if (renderContext.emitColor) {
+        renderHelper.setColor(gl, shader, getObjectColor(displayState, rootObjectId, alpha));
       }
-      skeletonShaderManager.drawSkeleton(
-          gl, shader, skeleton, pickIDs.registerUint64(layer, objectId));
+      if (renderContext.emitPickID) {
+        renderHelper.setPickID(gl, shader, pickIDs.registerUint64(layer, objectId));
+      }
+      renderHelper.drawSkeleton(gl, shader, skeleton);
     });
-    skeletonShaderManager.endLayer(gl, shader);
+    renderHelper.endLayer(gl, shader);
   }
 };
 
