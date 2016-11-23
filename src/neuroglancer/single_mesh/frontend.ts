@@ -243,7 +243,7 @@ vLightingFactor = abs(dot(normal, uLightDirection.xyz)) + uLightDirection.w;
   }
 
   endLayer(gl: GL, shader: ShaderProgram) {
-    disableCountingBuffer(shader);
+    disableCountingBuffer(gl, shader);
     this.indexBufferHelper.disable(shader);
     this.disableVertexData(gl, shader);
   }

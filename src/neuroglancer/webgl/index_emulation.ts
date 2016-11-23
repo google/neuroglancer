@@ -26,9 +26,9 @@ export class CountingBuffer extends RefCounted {
   numComponents: number|undefined;
   buffer: Buffer;
 
-  constructor(gl: GL) {
+  constructor(public gl: GL) {
     super();
-    this.buffer = new Buffer(gl);
+    this.buffer = this.registerDisposer(new Buffer(gl));
   }
 
   resize(length: number) {
@@ -81,18 +81,24 @@ export class CountingBuffer extends RefCounted {
         location, this.numComponents!, GL_UNSIGNED_BYTE, /*normalized=*/true);
   }
 
-  bind(shader: ShaderProgram) {
+  bind(shader: ShaderProgram, divisor = 0) {
     const location = shader.attribute('aIndexRaw');
     if (location >= 0) {
       this.bindToVertexAttrib(location);
+      if (divisor !== 0) {
+        this.gl.ANGLE_instanced_arrays.vertexAttribDivisorANGLE(location, divisor);
+      }
     }
   }
 }
 
-export function disableCountingBuffer(shader: ShaderProgram) {
+export function disableCountingBuffer(gl: GL, shader: ShaderProgram, instanced = false) {
   const location = shader.attribute('aIndexRaw');
   if (location >= 0) {
-    shader.gl.disableVertexAttribArray(location);
+    if (instanced) {
+      gl.ANGLE_instanced_arrays.vertexAttribDivisorANGLE(location, 0);
+    }
+    gl.disableVertexAttribArray(location);
   }
 }
 
