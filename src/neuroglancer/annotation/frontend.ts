@@ -14,15 +14,14 @@
  * limitations under the License.
  */
 
+import {AnnotationPointList} from 'neuroglancer/annotation/point_list';
 import {ChunkManager} from 'neuroglancer/chunk_manager/frontend';
 import {MouseSelectionState, RenderLayer} from 'neuroglancer/layer';
 import {VoxelSize} from 'neuroglancer/navigation_state';
 import {PerspectiveViewRenderContext, PerspectiveViewRenderLayer} from 'neuroglancer/perspective_view/render_layer';
 import {SliceViewPanelRenderContext, SliceViewPanelRenderLayer} from 'neuroglancer/sliceview/panel';
 import {RefCounted} from 'neuroglancer/util/disposable';
-import {Float32ArrayBuilder} from 'neuroglancer/util/float32array_builder';
-import {mat4, Vec3, vec3} from 'neuroglancer/util/geom';
-import {parseFixedLengthArray, verifyFiniteFloat} from 'neuroglancer/util/json';
+import {mat4, vec3} from 'neuroglancer/util/geom';
 import {Uint64} from 'neuroglancer/util/uint64';
 import {Buffer} from 'neuroglancer/webgl/buffer';
 import {GL} from 'neuroglancer/webgl/context';
@@ -34,67 +33,6 @@ import {Signal} from 'signals';
 
 const tempMat = mat4.create();
 const tempPickID = new Float32Array(4);
-
-export class AnnotationPointList {
-  points = new Float32ArrayBuilder();
-  changed = new Signal();
-  generation = 0;
-
-  get length() { return this.points.length / 3; }
-
-  delete (index: number) {
-    this.points.eraseRange(index * 3, index * 3 + 3);
-    ++this.generation;
-    this.changed.dispatch();
-  }
-
-  get(index: number) { return this.points.data.subarray(index * 3, index * 3 + 3); }
-
-  append(point: Vec3) {
-    this.points.appendArray(point.subarray(0, 3));
-    ++this.generation;
-    this.changed.dispatch();
-  }
-
-  reset() {
-    this.points.clear();
-    ++this.generation;
-    this.changed.dispatch();
-  }
-
-  restoreState(obj: any) {
-    try {
-      if (Array.isArray(obj)) {
-        const numPoints = obj.length;
-        let {points} = this;
-        points.resize(numPoints * 3);
-        let {data} = points;
-        for (let i = 0; i < numPoints; ++i) {
-          const j = i * 3;
-          parseFixedLengthArray<number, Float32Array>(
-              data.subarray(j, j + 3), obj[i], verifyFiniteFloat);
-        }
-        ++this.generation;
-        this.changed.dispatch();
-        return;
-      }
-    } catch (ignoredError) {
-      this.reset();
-    }
-  }
-
-  toJSON() {
-    let {points} = this;
-    const numPoints = this.length;
-    let data = points.data;
-    let result = new Array(numPoints);
-    for (let i = 0; i < numPoints; ++i) {
-      const j = i * 3;
-      result[i] = [data[j], data[j + 1], data[j + 2]];
-    }
-    return result;
-  }
-}
 
 export class AnnotationPointListLayer extends RefCounted {
   buffer: Buffer;

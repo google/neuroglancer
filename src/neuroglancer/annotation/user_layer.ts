@@ -14,10 +14,14 @@
  * limitations under the License.
  */
 
-import {AnnotationPointList, AnnotationPointListLayer, PerspectiveViewAnnotationPointListLayer, SliceViewAnnotationPointListLayer} from 'neuroglancer/annotation/frontend';
-import {UserLayer} from 'neuroglancer/layer';
+import {AnnotationPointListLayer, PerspectiveViewAnnotationPointListLayer, SliceViewAnnotationPointListLayer} from 'neuroglancer/annotation/frontend';
+import {AnnotationPointList} from 'neuroglancer/annotation/point_list';
+import {UserLayer, UserLayerDropdown} from 'neuroglancer/layer';
 import {LayerListSpecification, registerLayerType} from 'neuroglancer/layer_specification';
 import {vec3} from 'neuroglancer/util/geom';
+import {PointListWidget} from 'neuroglancer/widget/point_list_widget';
+
+require('./user_layer.css');
 
 const LAYER_TYPE = 'pointAnnotation';
 
@@ -51,6 +55,28 @@ export class AnnotationPointListUserLayer extends UserLayer {
         break;
       }
     }
+  }
+
+  makeDropdown(element: HTMLDivElement) { return new Dropdown(element, this); }
+}
+
+class Dropdown extends UserLayerDropdown {
+  pointListWidget = this.registerDisposer(new PointListWidget(this.layer.layer.pointList));
+  constructor(public element: HTMLDivElement, public layer: AnnotationPointListUserLayer) {
+    super();
+    element.classList.add('neuroglancer-annotation-point-list-dropdown');
+    element.appendChild(this.pointListWidget.element);
+    this.registerSignalBinding(this.pointListWidget.pointSelected.add((index: number) => {
+      this.layer.manager.setVoxelCoordinates(this.layer.layer.pointList.get(index));
+    }));
+  }
+  onShow() {
+    super.onShow();
+    this.pointListWidget.visible = true;
+  }
+  onHide() {
+    super.onHide();
+    this.pointListWidget.visible = false;
   }
 }
 

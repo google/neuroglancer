@@ -83,7 +83,7 @@ export class SegmentSetWidget extends RefCounted {
     } else {
       let s = x.toString();
       let itemElement = items.get(s)!;
-      itemElement.parentElement.removeChild(itemElement);
+      itemElement.parentElement!.removeChild(itemElement);
       items.delete(s);
     }
   }
@@ -128,4 +128,4 @@ export class SegmentSetWidget extends RefCounted {
     }
     super.disposed();
   }
-};
+}

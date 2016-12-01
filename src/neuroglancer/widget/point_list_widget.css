@@ -14,20 +14,42 @@
  * limitations under the License.
  */
 
-.noselect {
+.neuroglancer-point-list-widget {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+}
+
+.neuroglancer-point-list-widget .neuroglancer-clear-button {
+  flex-shrink: 0;
+}
+
+.neuroglancer-point-list-widget .neuroglancer-item-container {
+  flex: 1;
+  display: block;
+  overflow-y: auto;
+  max-height: 16em;
+  counter-reset: neuroglancer-point-list-counter -1;
+}
+
+.neuroglancer-point-list-item::before {
+  counter-increment: neuroglancer-point-list-counter;
+  content: counter(neuroglancer-point-list-counter);
+  text-align: right;
+  min-width: 3ch;
+  margin-right: 1ch;
+  display: inline-block;
+
   -webkit-touch-callout: none;
   -webkit-user-select: none;
   -khtml-user-select: none;
   -moz-user-select: none;
   -ms-user-select: none;
   user-select: none;
+  background-color: #333;
 }
 
-.neuroglancer-select-text {
-  -webkit-touch-callout: default;
-  -webkit-user-select: text;
-  -khtml-user-select: text;
-  -moz-user-select: text;
-  -ms-user-select: text;
-  user-select: text;
+.neuroglancer-point-list-item:hover {
+  text-decoration: underline;
+  cursor: pointer;
 }

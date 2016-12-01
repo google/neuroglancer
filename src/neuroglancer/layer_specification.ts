@@ -23,6 +23,7 @@ import {MultiscaleVolumeChunkSource} from 'neuroglancer/sliceview/frontend';
 import {StatusMessage} from 'neuroglancer/status';
 import {Trackable} from 'neuroglancer/url_hash_state';
 import {RefCounted} from 'neuroglancer/util/disposable';
+import {Vec3} from 'neuroglancer/util/geom';
 import {verifyObject, verifyObjectProperty, verifyOptionalString} from 'neuroglancer/util/json';
 import {RPC} from 'neuroglancer/worker_rpc';
 import {Signal} from 'signals';
@@ -60,6 +61,8 @@ export class ManagedUserLayerWithSpecification extends ManagedUserLayer {
 
 export class LayerListSpecification extends RefCounted implements Trackable {
   changed = new Signal();
+  voxelCoordinatesSet = new Signal();
+
   constructor(
       public layerManager: LayerManager, public chunkManager: ChunkManager, public worker: RPC,
       public layerSelectedValues: LayerSelectedValues, public voxelSize: VoxelSize) {
@@ -137,7 +140,14 @@ export class LayerListSpecification extends RefCounted implements Trackable {
     }
     return result;
   }
-};
+
+  /**
+   * Called by user layers to indicate that a voxel position has been selected interactively.
+   */
+  setVoxelCoordinates(voxelCoordinates: Vec3) {
+    this.voxelCoordinatesSet.dispatch(voxelCoordinates);
+  }
+}
 
 interface UserLayerConstructor {
   new (manager: LayerListSpecification, x: any): UserLayer;
