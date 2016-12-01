@@ -28,6 +28,10 @@ window.addEventListener('DOMContentLoaded', () => {
   makeDefaultKeyBindings(viewer.keyMap);
 
   document.addEventListener('copy', (event: ClipboardEvent) => {
+    const selection = window.getSelection();
+    if (!selection.isCollapsed) {
+      return;
+    }
     const {tagName} = (<HTMLElement>event.target);
     if (tagName === 'TEXTAREA' || tagName === 'INPUT') {
       return;
