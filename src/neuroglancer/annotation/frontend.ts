@@ -20,6 +20,7 @@ import {MouseSelectionState, RenderLayer} from 'neuroglancer/layer';
 import {VoxelSize} from 'neuroglancer/navigation_state';
 import {PerspectiveViewRenderContext, PerspectiveViewRenderLayer} from 'neuroglancer/perspective_view/render_layer';
 import {SliceViewPanelRenderContext, SliceViewPanelRenderLayer} from 'neuroglancer/sliceview/panel';
+import {WatchableValue} from 'neuroglancer/trackable_value';
 import {RefCounted} from 'neuroglancer/util/disposable';
 import {mat4, vec3} from 'neuroglancer/util/geom';
 import {Uint64} from 'neuroglancer/util/uint64';
@@ -39,13 +40,19 @@ export class AnnotationPointListLayer extends RefCounted {
   generation = -1;
   redrawNeeded = new Signal();
   color = Float32Array.of(1.0, 1.0, 0.0, 1.0);
+  selectedColor = Float32Array.of(0.0, 1.0, 0.0, 1.0);
 
   constructor(
       public chunkManager: ChunkManager, public pointList: AnnotationPointList,
-      public voxelSizeObject: VoxelSize) {
+      public voxelSizeObject: VoxelSize, public selectedIndex: WatchableValue<number|null>) {
     super();
     this.buffer = new Buffer(chunkManager.gl);
-    this.registerSignalBinding(pointList.changed.add(() => { this.redrawNeeded.dispatch(); }));
+    this.registerSignalBinding(pointList.changed.add(() => {
+      // Clear selectedIndex, since the indices have changed.
+      this.selectedIndex.value = null;
+      this.redrawNeeded.dispatch();
+    }));
+    this.registerSignalBinding(selectedIndex.changed.add(() => { this.redrawNeeded.dispatch(); }));
   }
 
   get gl() { return this.chunkManager.gl; }
@@ -82,6 +89,9 @@ export class RenderHelper extends RefCounted {
     builder.addUniform('highp vec2', 'uPointRadii');
 
     builder.addUniform('highp vec4', 'uColor');
+    builder.addUniform('highp vec4', 'uColorSelected');
+    builder.addUniform('highp vec4', 'uSelectedIndex');
+    builder.addVarying('highp vec4', 'vColor');
 
     // Transform from camera to clip coordinates.
     builder.addUniform('highp mat4', 'uProjection');
@@ -95,8 +105,16 @@ gl_Position = uProjection * vec4(aVertexPosition, 1.0);
 gl_Position.xy += aCornerOffset * uPointRadii * gl_Position.w;
 vPointCoord = aCornerOffset;
 
+uint32_t primitiveIndex = getPrimitiveIndex();
+
 uint32_t pickID; pickID.value = uPickID;
-vPickID = add(pickID, getPrimitiveIndex()).value;
+vPickID = add(pickID, primitiveIndex).value;
+
+if (uSelectedIndex == primitiveIndex.value) {
+  vColor = uColorSelected;
+} else {
+  vColor = uColor;
+}
 `);
     builder.setFragmentMain(`
 if (dot(vPointCoord, vPointCoord) > 1.0) {
@@ -149,6 +167,12 @@ emit(getColor(), vPickID);
     }
     if (renderContext.emitColor) {
       gl.uniform4fv(shader.uniform('uColor'), base.color);
+      gl.uniform4fv(shader.uniform('uColorSelected'), base.selectedColor);
+      let selectedIndex = base.selectedIndex.value;
+      if (selectedIndex === null) {
+        selectedIndex = 0xFFFFFFFF;
+      }
+      gl.uniform4fv(shader.uniform('uSelectedIndex'), setVec4FromUint32(tempPickID, selectedIndex));
     }
 
     gl.ANGLE_instanced_arrays.drawArraysInstancedANGLE(gl.TRIANGLE_FAN, 0, 4, numPoints);
@@ -162,7 +186,7 @@ class PerspectiveViewRenderHelper extends RenderHelper {
   defineShader(builder: ShaderBuilder) {
     super.defineShader(builder);
     builder.addFragmentCode(`
-vec4 getColor () { return uColor; }
+vec4 getColor () { return vColor; }
 `);
   }
 }
@@ -196,7 +220,7 @@ class SliceViewRenderHelper extends RenderHelper {
     builder.addFragmentCode(`
 vec4 getColor() {
   float scalar = 1.0 - 2.0 * abs(0.5 - gl_FragCoord.z);
-  return vec4(uColor.xyz, scalar * uColor.a);
+  return vec4(vColor.xyz, scalar * vColor.a);
 }
 `);
   }

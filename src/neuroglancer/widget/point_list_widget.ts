@@ -20,6 +20,7 @@
  */
 
 import {AnnotationPointList} from 'neuroglancer/annotation/point_list';
+import {WatchableValue} from 'neuroglancer/trackable_value';
 import {RefCounted} from 'neuroglancer/util/disposable';
 import {removeChildren, removeFromParent} from 'neuroglancer/util/dom';
 import {Signal} from 'signals';
@@ -35,7 +36,8 @@ export class PointListWidget extends RefCounted {
   pointSelected = new Signal();
   private visible_ = false;
 
-  constructor(public pointList: AnnotationPointList) {
+  constructor(
+      public pointList: AnnotationPointList, public selectionIndex: WatchableValue<number|null>) {
     super();
     let {element, clearButton, itemContainer} = this;
     element.className = 'neuroglancer-point-list-widget';
@@ -79,6 +81,8 @@ export class PointListWidget extends RefCounted {
       item.textContent =
           `${Math.round(data[j])} ${Math.round(data[j + 1])} ${Math.round(data[j + 2])}`;
       item.addEventListener('click', () => { this.pointSelected.dispatch(i); });
+      item.addEventListener('mouseenter', () => { this.selectionIndex.value = i; });
+      item.addEventListener('mouseleave', () => { this.selectionIndex.value = null; });
       itemContainer.appendChild(item);
     }
   }

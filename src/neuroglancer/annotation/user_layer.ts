@@ -18,6 +18,7 @@ import {AnnotationPointListLayer, PerspectiveViewAnnotationPointListLayer, Slice
 import {AnnotationPointList} from 'neuroglancer/annotation/point_list';
 import {UserLayer, UserLayerDropdown} from 'neuroglancer/layer';
 import {LayerListSpecification, registerLayerType} from 'neuroglancer/layer_specification';
+import {WatchableValue} from 'neuroglancer/trackable_value';
 import {vec3} from 'neuroglancer/util/geom';
 import {PointListWidget} from 'neuroglancer/widget/point_list_widget';
 
@@ -26,8 +27,10 @@ require('./user_layer.css');
 const LAYER_TYPE = 'pointAnnotation';
 
 export class AnnotationPointListUserLayer extends UserLayer {
+  selectedIndex = new WatchableValue<number|null>(null);
   layer = new AnnotationPointListLayer(
-      this.manager.chunkManager, new AnnotationPointList(), this.manager.voxelSize);
+      this.manager.chunkManager, new AnnotationPointList(), this.manager.voxelSize,
+      this.selectedIndex);
   constructor(public manager: LayerListSpecification, x: any) {
     super([]);
     this.layer.pointList.restoreState(x['points']);
@@ -35,6 +38,11 @@ export class AnnotationPointListUserLayer extends UserLayer {
         this.layer.pointList.changed.add(() => { this.specificationChanged.dispatch(); }));
     this.addRenderLayer(new PerspectiveViewAnnotationPointListLayer(this.layer));
     this.addRenderLayer(new SliceViewAnnotationPointListLayer(this.layer));
+    const {layerSelectedValues} = manager;
+    this.registerSignalBinding(layerSelectedValues.changed.add(() => {
+      let value = layerSelectedValues.get(this);
+      this.selectedIndex.value = typeof value === 'number' ? value : null;
+    }));
   }
   toJSON() {
     let x: any = {'type': LAYER_TYPE};
@@ -61,7 +69,8 @@ export class AnnotationPointListUserLayer extends UserLayer {
 }
 
 class Dropdown extends UserLayerDropdown {
-  pointListWidget = this.registerDisposer(new PointListWidget(this.layer.layer.pointList));
+  pointListWidget = this.registerDisposer(
+      new PointListWidget(this.layer.layer.pointList, this.layer.selectedIndex));
   constructor(public element: HTMLDivElement, public layer: AnnotationPointListUserLayer) {
     super();
     element.classList.add('neuroglancer-annotation-point-list-dropdown');
