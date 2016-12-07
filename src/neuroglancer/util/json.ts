@@ -45,7 +45,7 @@ export function verifyFinitePositiveFloat(obj: any) {
 }
 
 export function parseXYZ<A extends WritableArrayLike<number>>(
-    out: A, obj: any, validator = verifyFloat): A {
+    out: A, obj: any, validator: (x: any) => number = verifyFloat): A {
   verifyObject(obj);
   let keys = Object.keys(obj);
   keys.sort();
