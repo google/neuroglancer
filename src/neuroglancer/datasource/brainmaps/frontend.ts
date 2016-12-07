@@ -19,7 +19,7 @@ import 'neuroglancer/datasource/brainmaps/api_frontend';
 import {ChunkManager} from 'neuroglancer/chunk_manager/frontend';
 import {BrainmapsInstance, INSTANCE_IDENTIFIERS, INSTANCE_NAMES, makeRequest, PRODUCTION_INSTANCE} from 'neuroglancer/datasource/brainmaps/api';
 import {MeshSourceParameters, SkeletonSourceParameters, VolumeChunkEncoding, VolumeSourceParameters} from 'neuroglancer/datasource/brainmaps/base';
-import {registerDataSourceFactory} from 'neuroglancer/datasource/factory';
+import {GetVolumeOptions, registerDataSourceFactory} from 'neuroglancer/datasource/factory';
 import {defineParameterizedMeshSource} from 'neuroglancer/mesh/frontend';
 import {parameterizedSkeletonSource} from 'neuroglancer/skeleton/frontend';
 import {DataType, VolumeChunkSpecification, VolumeSourceOptions, VolumeType} from 'neuroglancer/sliceview/base';
@@ -74,7 +74,8 @@ export class MultiscaleVolumeChunkSource implements GenericMultiscaleVolumeChunk
   meshes: MeshInfo[];
   constructor(
       public chunkManager: ChunkManager, public instance: BrainmapsInstance,
-      public volume_id: string, volumeInfoResponse: any, meshesResponse: any) {
+      public volume_id: string, volumeInfoResponse: any, meshesResponse: any,
+      options: GetVolumeOptions) {
     try {
       verifyObject(volumeInfoResponse);
       let scales = this.scales = verifyObjectProperty(
@@ -98,12 +99,19 @@ export class MultiscaleVolumeChunkSource implements GenericMultiscaleVolumeChunk
       }
 
       // Infer the VolumeType from the data type and number of channels.
-      let volumeType = VolumeType.IMAGE;
+      let volumeType: VolumeType|undefined;
       if (numChannels === 1) {
         switch (dataType) {
           case DataType.UINT64:
             volumeType = VolumeType.SEGMENTATION;
             break;
+        }
+      }
+      if (volumeType === undefined) {
+        if (options.volumeType !== undefined) {
+          volumeType = options.volumeType;
+        } else {
+          volumeType = VolumeType.IMAGE;
         }
       }
       this.volumeType = volumeType;
@@ -126,7 +134,7 @@ export class MultiscaleVolumeChunkSource implements GenericMultiscaleVolumeChunk
 
   getSources(volumeSourceOptions: VolumeSourceOptions) {
     let encoding = VolumeChunkEncoding.RAW;
-    if (this.volumeType === VolumeType.SEGMENTATION) {
+    if (this.dataType === DataType.UINT64) {
       encoding = VolumeChunkEncoding.COMPRESSED_SEGMENTATION;
     } else if (
         this.volumeType === VolumeType.IMAGE && this.dataType === DataType.UINT8 &&
@@ -197,9 +205,11 @@ export function getSkeletonSourceByUrl(
   return getSkeletonSource(chunkManager, getMeshSourceParameters(instance, url));
 }
 
-export function getVolume(instance: BrainmapsInstance, chunkManager: ChunkManager, key: string) {
+export function getVolume(
+    instance: BrainmapsInstance, chunkManager: ChunkManager, key: string,
+    options: GetVolumeOptions) {
   return chunkManager.memoize.getUncounted(
-      {'instance': instance, 'key': key},
+      {'instance': instance, 'key': key, 'options': options},
       () => Promise
                 .all([
                   makeRequest(instance, 'GET', `/v1beta2/volumes/${key}`, 'json'),
@@ -207,7 +217,7 @@ export function getVolume(instance: BrainmapsInstance, chunkManager: ChunkManage
                 ])
                 .then(
                     ([volumeInfoResponse, meshesResponse]) => new MultiscaleVolumeChunkSource(
-                        chunkManager, instance, key, volumeInfoResponse, meshesResponse)));
+                        chunkManager, instance, key, volumeInfoResponse, meshesResponse, options)));
 }
 
 export class VolumeList {

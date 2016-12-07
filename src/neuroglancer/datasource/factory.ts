@@ -17,6 +17,7 @@
 import {ChunkManager} from 'neuroglancer/chunk_manager/frontend';
 import {MeshSource} from 'neuroglancer/mesh/frontend';
 import {SkeletonSource} from 'neuroglancer/skeleton/frontend';
+import {VolumeType} from 'neuroglancer/sliceview/base';
 import {MultiscaleVolumeChunkSource} from 'neuroglancer/sliceview/frontend';
 import {applyCompletionOffset, CompletionWithDescription} from 'neuroglancer/util/completion';
 import {CancellablePromise, cancellableThen} from 'neuroglancer/util/promise';
@@ -60,11 +61,17 @@ export function suggestLayerNameBasedOnSeparator(path: string, separator?: strin
   return path.substring(groupIndex);
 }
 
+export interface GetVolumeOptions {
+  /**
+   * Hint regarding the usage of the volume.
+   */
+  volumeType?: VolumeType;
+}
+
 export interface DataSourceFactory {
   description?: string;
-  getVolume?:
-      (chunkManager: ChunkManager,
-       path: string) => Promise<MultiscaleVolumeChunkSource>| MultiscaleVolumeChunkSource;
+  getVolume?: (chunkManager: ChunkManager, path: string, options: GetVolumeOptions) =>
+      Promise<MultiscaleVolumeChunkSource>| MultiscaleVolumeChunkSource;
   getMeshSource?: (chunkManager: ChunkManager, path: string) => Promise<MeshSource>| MeshSource;
   getSkeletonSource?:
       (chunkManager: ChunkManager, path: string) => Promise<SkeletonSource>| SkeletonSource;
@@ -104,9 +111,9 @@ function getDataSource(url: string): [DataSourceFactory, string, string] {
   return [factory, m[2], dataSource];
 }
 
-export function getVolume(chunkManager: ChunkManager, url: string) {
+export function getVolume(chunkManager: ChunkManager, url: string, options: GetVolumeOptions = {}) {
   let [factories, path] = getDataSource(url);
-  return Promise.resolve(factories.getVolume!(chunkManager, path));
+  return Promise.resolve(factories.getVolume!(chunkManager, path, options));
 }
 
 export function getMeshSource(chunkManager: ChunkManager, url: string) {

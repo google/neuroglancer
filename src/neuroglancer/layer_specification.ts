@@ -15,7 +15,7 @@
  */
 
 import {ChunkManager} from 'neuroglancer/chunk_manager/frontend';
-import {getVolume} from 'neuroglancer/datasource/factory';
+import {getVolume, GetVolumeOptions} from 'neuroglancer/datasource/factory';
 import {LayerManager, LayerSelectedValues, ManagedUserLayer, UserLayer} from 'neuroglancer/layer';
 import {VoxelSize} from 'neuroglancer/navigation_state';
 import {VolumeType} from 'neuroglancer/sliceview/base';
@@ -29,9 +29,10 @@ import {RPC} from 'neuroglancer/worker_rpc';
 import {Signal} from 'signals';
 
 export function getVolumeWithStatusMessage(
-    chunkManager: ChunkManager, x: string): Promise<MultiscaleVolumeChunkSource> {
+    chunkManager: ChunkManager, x: string,
+    options: GetVolumeOptions = {}): Promise<MultiscaleVolumeChunkSource> {
   return StatusMessage.forPromise(
-      new Promise(function(resolve) { resolve(getVolume(chunkManager, x)); }), {
+      new Promise(function(resolve) { resolve(getVolume(chunkManager, x, options)); }), {
         initialMessage: `Retrieving metadata for volume ${x}.`,
         delay: true,
         errorPrefix: `Error retrieving metadata for volume ${x}: `,

@@ -80,7 +80,9 @@ export class SegmentationUserLayer extends UserLayer {
     let meshPath = this.meshPath = verifyOptionalString(x['mesh']);
     let skeletonsPath = this.skeletonsPath = verifyOptionalString(x['skeletons']);
     if (volumePath !== undefined) {
-      getVolumeWithStatusMessage(manager.chunkManager, volumePath).then(volume => {
+      getVolumeWithStatusMessage(manager.chunkManager, volumePath, {
+        volumeType: VolumeType.SEGMENTATION
+      }).then(volume => {
         if (!this.wasDisposed) {
           this.addRenderLayer(new SegmentationRenderLayer(volume, this.displayState));
           if (meshPath === undefined) {
