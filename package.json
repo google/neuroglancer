@@ -16,7 +16,7 @@
     "build": "webpack --config ./config/webpack.config.js",
     "build-key_name_logger": "webpack --config ./config/webpack.key_name_logger.js",
     "build:watch": "webpack --config ./config/webpack.config.js --watch",
-    "dev-server": "webpack-dev-server --config ./config/webpack.config.js",
+    "dev-server": "webpack-dev-server --config ./config/webpack.config.js --host 0.0.0.0",
     "test": "karma start ./config/karma.conf.js --single-run",
     "test:watch": "karma start ./config/karma.conf.js --no-single-run",
     "benchmark": "karma start ./config/karma.benchmark.js --single-run",
