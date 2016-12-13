@@ -53,7 +53,7 @@ const CHUNK_DECODERS = new Map([
 
 @registerChunkSource(VolumeSourceParameters)
 class VolumeChunkSource extends ParameterizedVolumeChunkSource<VolumeSourceParameters> {
-  encodingParams = this.getEncodingParams();
+  extraParams = this.getExtraParams();
   chunkDecoder = CHUNK_DECODERS.get(this.parameters.encoding)!;
 
   private getEncodingParams() {
@@ -71,6 +71,24 @@ class VolumeChunkSource extends ParameterizedVolumeChunkSource<VolumeSourceParam
     }
   }
 
+  private getChangeStackParams() {
+    let {parameters} = this;
+    let changeStack = parameters['changeSpec'];
+    let result = '';
+    if (changeStack !== undefined) {
+      result += `/change_spec.change_stack_id=${changeStack.changeStackId}`;
+      if (changeStack.timeStamp !== undefined) {
+        result += `/change_spec.time_stamp=${Math.round(changeStack.timeStamp)}`;
+      }
+      if (changeStack.skipEquivalences) {
+        result += `/change_spec.skip_equivalences=true`;
+      }
+    }
+    return result;
+  }
+
+  private getExtraParams() { return `${this.getEncodingParams()}/${this.getChangeStackParams()}`; }
+
   download(chunk: VolumeChunk) {
     let {parameters} = this;
     let path: string;
@@ -80,7 +98,7 @@ class VolumeChunkSource extends ParameterizedVolumeChunkSource<VolumeSourceParam
       let chunkPosition = this.computeChunkBounds(chunk);
       let chunkDataSize = chunk.chunkDataSize!;
       path =
-          `/v1beta2/binary/volumes/binary/volumes/subvolume/header.volume_id=${parameters['volume_id']}/geometry.corner=${vec3Key(chunkPosition)}/geometry.size=${vec3Key(chunkDataSize)}/geometry.scale=${parameters['scaleIndex']}${this.encodingParams}?alt=media`;
+          `/v1beta2/binary/volumes/binary/volumes/subvolume/header.volume_id=${parameters['volumeId']}/geometry.corner=${vec3Key(chunkPosition)}/geometry.size=${vec3Key(chunkDataSize)}/geometry.scale=${parameters['scaleIndex']}${this.extraParams}?alt=media`;
     }
     handleChunkDownloadPromise(
         chunk, makeRequest(parameters['instance'], 'GET', path, 'arraybuffer'), this.chunkDecoder);
@@ -108,7 +126,7 @@ class MeshSource extends ParameterizedMeshSource<MeshSourceParameters> {
   download(chunk: ManifestChunk) {
     let {parameters} = this;
     const path =
-        `/v1beta2/objects/${parameters['volume_id']}/meshes/${parameters['mesh_name']}:listfragments?object_id=${chunk.objectId}`;
+        `/v1beta2/objects/${parameters['volumeId']}/meshes/${parameters['meshName']}:listfragments?object_id=${chunk.objectId}`;
     handleChunkDownloadPromise(
         chunk, makeRequest(parameters['instance'], 'GET', path, 'json'), decodeManifestChunk);
   }
@@ -116,7 +134,7 @@ class MeshSource extends ParameterizedMeshSource<MeshSourceParameters> {
   downloadFragment(chunk: FragmentChunk) {
     let {parameters} = this;
     const path =
-        `/v1beta2/binary/objects/binary/objects/fragment/header.volume_id=${parameters['volume_id']}/mesh_name=${parameters['mesh_name']}/fragment_key=${chunk.fragmentId}/object_id=${chunk.manifestChunk!.objectId}/header.gzip_compression_level=6?alt=media`;
+        `/v1beta2/binary/objects/binary/objects/fragment/header.volume_id=${parameters['volumeId']}/mesh_name=${parameters['meshName']}/fragment_key=${chunk.fragmentId}/object_id=${chunk.manifestChunk!.objectId}/header.gzip_compression_level=6?alt=media`;
     handleChunkDownloadPromise(
         chunk, makeRequest(parameters['instance'], 'GET', path, 'arraybuffer'),
         decodeFragmentChunk);
@@ -146,7 +164,7 @@ export class SkeletonSource extends ParameterizedSkeletonSource<SkeletonSourcePa
   download(chunk: SkeletonChunk) {
     const {parameters} = this;
     const path =
-        `/v1beta2/binary/objects/binary/objects/skeleton/header.volume_id=${parameters['volume_id']}/mesh_name=${parameters['mesh_name']}/object_id=${chunk.objectId}/header.gzip_compression_level=6?alt=media`;
+        `/v1beta2/binary/objects/binary/objects/skeleton/header.volume_id=${parameters['volumeId']}/mesh_name=${parameters['meshName']}/object_id=${chunk.objectId}/header.gzip_compression_level=6?alt=media`;
     handleChunkDownloadPromise(
         chunk, makeRequest(parameters['instance'], 'GET', path, 'arraybuffer'),
         decodeSkeletonChunk);
