@@ -25,7 +25,7 @@
   },
   "devDependencies": {
     "@types/jasmine": "^2.2.22-alpha",
-    "clang-format": "^1.0.43",
+    "clang-format": "^1.0.46",
     "codemirror": "^5.15.2",
     "glsl-editor": "^1.0.0",
     "gulp": "^3.9.1",
@@ -46,8 +46,8 @@
     "karma-webpack": "^1.7.0",
     "minimist": "^1.2.0",
     "nunjucks": "^2.4.2",
-    "tslint": "^3.11.0",
-    "tslint-eslint-rules": "^1.2.0",
+    "tslint": "^3.15.1",
+    "tslint-eslint-rules": "^1.6.1",
     "webpack-dev-server": "^1.14.1"
   },
   "dependencies": {
@@ -74,7 +74,7 @@
     "sortablejs": "^1.4.2",
     "style-loader": "^0.13.0",
     "ts-loader": "^0.8.2",
-    "typescript": "^1.9.0-dev.20160622-1.0",
+    "typescript": "^2.1.4",
     "webpack": "^1.13.1",
     "webpack-closure-compiler": "^2.0.2"
   }

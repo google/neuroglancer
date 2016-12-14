@@ -1,4 +1,3 @@
-/// <reference path="dom.d.ts" />
 /// <reference path="jpgjs.d.ts" />
 /// <reference path="karma-benchmark.d.ts" />
 /// <reference path="nifti-reader-js.d.ts" />

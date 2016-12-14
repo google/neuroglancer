@@ -236,7 +236,8 @@ export class AutocompleteTextInput extends RefCounted {
   private handleDropdownMousedown(event: MouseEvent) {
     this.inputElement.focus();
     let {dropdownElement} = this;
-    for (let target = event.target; target instanceof HTMLElement; target = target.parentElement) {
+    for (let target: EventTarget|null = event.target; target instanceof HTMLElement;
+         target = target.parentElement) {
       let index = (<any>target)[AUTOCOMPLETE_INDEX_SYMBOL];
       if (index !== undefined) {
         this.selectCompletion(index);

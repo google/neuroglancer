@@ -15,7 +15,7 @@
  */
 
 export function scrollIntoViewIfNeeded(element: HTMLElement) {
-  const parent = element.parentElement;
+  const parent = element.parentElement!;
   const elementLeft = element.offsetLeft - parent.clientLeft;
   const elementTop = element.offsetTop - parent.clientTop;
   const elementRight = elementLeft + element.offsetWidth;

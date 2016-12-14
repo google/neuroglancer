@@ -7,6 +7,7 @@
     "experimentalDecorators": true,
     "strictNullChecks": true,
     "sourceMap": true,
+    "moduleResolution": "node",
     "module": "commonjs",
     "target": "ES2015",
     "newLine": "LF",

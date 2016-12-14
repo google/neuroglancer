@@ -152,7 +152,7 @@ class LayerWidget extends RefCounted {
     if (this.dropdown) {
       this.dropdown.dispose();
     }
-    this.element.parentElement.removeChild(this.element);
+    this.element.parentElement!.removeChild(this.element);
     super.disposed();
   }
 }

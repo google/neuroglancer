@@ -187,7 +187,7 @@ export class MultiscaleVolumeChunkSource implements GenericMultiscaleVolumeChunk
 
 const pathPattern = /^([^\/?]+)(?:\/([^\/?]+))?(?:\?(.*))?$/;
 
-export function getTokenInfo(chunkManager: ChunkManager, hostnames: string[], token: string) {
+export function getTokenInfo(chunkManager: ChunkManager, hostnames: string[], token: string): Promise<TokenInfo> {
   return chunkManager.memoize.getUncounted(
       {'hostnames': hostnames, 'token': token},
       () => sendHttpRequest(openShardedHttpRequest(hostnames, `/ocp/ca/${token}/info/`), 'json')
