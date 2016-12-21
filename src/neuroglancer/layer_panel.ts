@@ -20,9 +20,7 @@ import {LayerListSpecification, ManagedUserLayerWithSpecification} from 'neurogl
 import {RefCounted} from 'neuroglancer/util/disposable';
 import {removeChildren} from 'neuroglancer/util/dom';
 import {positionDropdown} from 'neuroglancer/util/dropdown';
-
-// Sortable must be imported using non-ES6 module syntax because of how it is exported.
-import Sortable = require('sortablejs');
+import Sortable from 'sortablejs';
 
 require('neuroglancer/noselect.css');
 require('./layer_panel.css');
