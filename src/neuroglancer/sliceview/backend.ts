@@ -16,7 +16,7 @@
 
 import {Chunk, ChunkManager, ChunkSource} from 'neuroglancer/chunk_manager/backend';
 import {ChunkPriorityTier} from 'neuroglancer/chunk_manager/base';
-import {RenderLayer as RenderLayerInterface, SLICEVIEW_RPC_ID, SliceViewBase, VolumeChunkSource as VolumeChunkSourceInterface, VolumeChunkSpecification} from 'neuroglancer/sliceview/base';
+import {RenderLayer as RenderLayerInterface, SLICEVIEW_RENDERLAYER_RPC_ID, SLICEVIEW_RPC_ID, SliceViewBase, VolumeChunkSource as VolumeChunkSourceInterface, VolumeChunkSpecification} from 'neuroglancer/sliceview/base';
 import {ChunkLayout} from 'neuroglancer/sliceview/chunk_layout';
 import {Vec3, vec3, vec3Key} from 'neuroglancer/util/geom';
 import {registerRPC, registerSharedObject, RPC, SharedObjectCounterpart} from 'neuroglancer/worker_rpc';
@@ -235,7 +235,7 @@ export class VolumeChunkSource extends ChunkSource implements VolumeChunkSourceI
   }
 };
 
-@registerSharedObject('sliceview/RenderLayer')
+@registerSharedObject(SLICEVIEW_RENDERLAYER_RPC_ID)
 export class RenderLayer extends SharedObjectCounterpart implements RenderLayerInterface {
   rpcId: number;
   sources: VolumeChunkSource[][];
