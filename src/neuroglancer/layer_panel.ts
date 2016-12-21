@@ -64,13 +64,23 @@ class LayerWidget extends RefCounted {
     this.registerEventListener(
         widgetElement, 'click', (event: MouseEvent) => { layer.setVisible(!layer.visible); });
 
+    let dropdownElement = this.dropdownElement = document.createElement('div');
+
     // Hide the dropdown menu while dragging.  We can't wait until the onStart handler from
     // Sortablejs fires because it occurs too late to affect what is shown while dragging.
-    this.registerEventListener(element, 'mousedown', (event: MouseEvent) => {
-      if (event.button === 0) {
-        this.panel.setDragging(true);
-      }
-    });
+    const registerMousedownHandlers = (eventType: string) => {
+      this.registerEventListener(element, eventType, (event: MouseEvent) => {
+        if (event.button === 0) {
+          this.panel.setDragging(true);
+        }
+      });
+      this.registerEventListener(dropdownElement, eventType, (event: MouseEvent) => {
+        // Prevent clicks on the dropdown from triggering dragging.
+        event.stopPropagation();
+      });
+    };
+    registerMousedownHandlers('mousedown');
+    registerMousedownHandlers('pointerdown');
     this.registerEventListener(element, 'mouseup', (event: MouseEvent) => {
       if (event.button === 0) {
         this.panel.setDragging(false);
@@ -81,11 +91,6 @@ class LayerWidget extends RefCounted {
       if (layer instanceof ManagedUserLayerWithSpecification) {
         new LayerDialog(this.panel.manager, layer);
       }
-    });
-    let dropdownElement = this.dropdownElement = document.createElement('div');
-    this.registerEventListener(dropdownElement, 'mousedown', (event: MouseEvent) => {
-      // Prevent clicks on the dropdown from triggering dragging.
-      event.stopPropagation();
     });
     this.setupDropdownElement();
     this.handleLayerChanged();
