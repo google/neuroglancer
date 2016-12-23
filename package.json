@@ -56,6 +56,7 @@
     "@types/sortablejs": "^1.3.20-alpha",
     "@types/text-encoding": "0.0.20-alpha",
     "@types/signals": "0.0.17",
+    "@types/webpack-env": "^1.12.1",
     "babel-core": "^6.7.4",
     "babel-loader": "^6.2.4",
     "babel-plugin-transform-es2015-block-scoping": "^6.9.0",

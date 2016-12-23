@@ -1,8 +1,7 @@
 {
   "resolution": "third_party/installed_typings",
   "globalDependencies": {
-    "lodash": "github:DefinitelyTyped/DefinitelyTyped/lodash/lodash.d.ts#d456e7ccb07a53c47bdd63957e8785402c19c579",
-    "webpack-env": "registry:dt/webpack-env#1.12.2+20160316155526"
+    "lodash": "github:DefinitelyTyped/DefinitelyTyped/lodash/lodash.d.ts#d456e7ccb07a53c47bdd63957e8785402c19c579"
   },
   "dependencies": {
     "gl-matrix": "file:third_party/typings_sources/gl-matrix.d.ts"
