@@ -14,27 +14,23 @@
  * limitations under the License.
  */
 
-import {mat4, quat, vec3, vec4} from 'gl-matrix';
+import {mat4, quat, vec2, vec3, vec4} from 'gl-matrix';
 
 export {mat2, mat3, mat4, quat, vec2, vec3, vec4} from 'gl-matrix';
-
-export type Vec2 = Float32Array;
-export type Vec3 = Float32Array;
-export type Vec4 = Float32Array;
-export type Mat3 = Float32Array;
-export type Mat4 = Float32Array;
-export type Quat = Float32Array;
 
 export const identityMat4 = mat4.create();
 
 export const AXES_NAMES = ['x', 'y', 'z'];
 
 export class BoundingBox {
-  constructor(public lower: Vec3, public upper: Vec3) {}
+  constructor(public lower: vec3, public upper: vec3) {}
 };
 
-export const kAxes =
-    [vec4.fromValues(1, 0, 0, 0), vec4.fromValues(0, 1, 0, 0), vec4.fromValues(0, 0, 1, 0)];
+export const kAxes = [
+  vec3.fromValues(1, 0, 0),
+  vec3.fromValues(0, 1, 0),
+  vec3.fromValues(0, 0, 1),
+];
 export const kZeroVec = vec3.fromValues(0, 0, 0);
 export const kOneVec = vec3.fromValues(1, 1, 1);
 export const kInfinityVec = vec3.fromValues(Infinity, Infinity, Infinity);
@@ -78,7 +74,7 @@ export function rectifyVec3IfAxisAligned(v: Float32Array, offset: number) {
  *
  * Note that mat is stored in Fortran order, and therefore the first column is m[0], m[1], m[2].
  */
-export function rectifyTransformMatrixIfAxisAligned(m: Mat4) {
+export function rectifyTransformMatrixIfAxisAligned(m: mat4) {
   rectifyVec3IfAxisAligned(m, 0);
   rectifyVec3IfAxisAligned(m, 4);
   rectifyVec3IfAxisAligned(m, 8);
@@ -87,7 +83,7 @@ export function rectifyTransformMatrixIfAxisAligned(m: Mat4) {
 /**
  * Transforms `a` by a 180-degree rotation about X, stores result in `out`.
  */
-export function quatRotateX180(out: Quat, a: Quat) {
+export function quatRotateX180(out: quat, a: quat) {
   let x = a[0], y = a[1], z = a[2], w = a[3];
   out[0] = w;
   out[1] = z;
@@ -98,7 +94,7 @@ export function quatRotateX180(out: Quat, a: Quat) {
 /**
  * Transforms `a` by a 180-degree rotation about Y, stores result in `out`.
  */
-export function quatRotateY180(out: Quat, a: Quat) {
+export function quatRotateY180(out: quat, a: quat) {
   let x = a[0], y = a[1], z = a[2], w = a[3];
   out[0] = -z;
   out[1] = w;
@@ -109,7 +105,7 @@ export function quatRotateY180(out: Quat, a: Quat) {
 /**
  * Transforms `a` by a 180-degree rotation about Z, stores result in `out`.
  */
-export function quatRotateZ180(out: Quat, a: Quat) {
+export function quatRotateZ180(out: quat, a: quat) {
   let x = a[0], y = a[1], z = a[2], w = a[3];
   out[0] = y;
   out[1] = -x;
@@ -122,7 +118,7 @@ export function quatRotateZ180(out: Quat, a: Quat) {
  * Transforms a vector `a` by a homogenous transformation matrix `m`.  The translation component of
  * `m` is ignored.
  */
-export function transformVectorByMat4(out: Vec3, a: Vec3, m: Mat4) {
+export function transformVectorByMat4(out: vec3, a: vec3, m: mat4) {
   let x = a[0], y = a[1], z = a[2];
   out[0] = m[0] * x + m[4] * y + m[8] * z;
   out[1] = m[1] * x + m[5] * y + m[9] * z;
@@ -135,7 +131,7 @@ export function transformVectorByMat4(out: Vec3, a: Vec3, m: Mat4) {
  * Computes the effective scaling factor of each local spatial dimension by `m`, which is assumed to
  * transform local coordinates to global coordinates.
  */
-export function effectiveScalingFactorFromMat4(out: Vec3, m: Mat4) {
+export function effectiveScalingFactorFromMat4(out: vec3, m: mat4) {
   const m0 = m[0], m1 = m[1], m2 = m[2], m4 = m[4], m5 = m[5], m6 = m[6], m8 = m[8], m9 = m[9],
         m10 = m[10];
   out[0] = Math.sqrt(m0 * m0 + m1 * m1 + m2 * m2);
@@ -145,9 +141,10 @@ export function effectiveScalingFactorFromMat4(out: Vec3, m: Mat4) {
 }
 
 export function translationRotationScaleZReflectionToMat4(
-    out: Mat4, translation: Vec3, rotation: Quat, scale: Vec3, zReflection: number) {
+  out: mat4, translation: vec3, rotation: quat, scale: vec3, zReflection: number) {
+  const temp: Float32Array = out;
   out[0] = scale[0];
   out[1] = scale[1];
   out[2] = scale[2] * zReflection;
-  return mat4.fromRotationTranslationScale(out, rotation, translation, out);
+  return mat4.fromRotationTranslationScale(out, rotation, translation, <vec3>temp);
 }

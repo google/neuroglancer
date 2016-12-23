@@ -20,7 +20,7 @@ import {readSingleChannelValue as readSingleChannelValueUint64} from 'neuroglanc
 import {ChunkFormatHandler, registerChunkFormatHandler, VolumeChunkSource} from 'neuroglancer/sliceview/frontend';
 import {SingleTextureChunkFormat, SingleTextureVolumeChunk} from 'neuroglancer/sliceview/single_texture_chunk_format';
 import {RefCounted} from 'neuroglancer/util/disposable';
-import {Vec3, vec3, vec3Key} from 'neuroglancer/util/geom';
+import {vec2, vec3, vec3Key} from 'neuroglancer/util/geom';
 import {Uint64} from 'neuroglancer/util/uint64';
 import {GL} from 'neuroglancer/webgl/context';
 import {compute1dTextureFormat, compute1dTextureLayout, OneDimensionalTextureAccessHelper, OneDimensionalTextureFormat, setOneDimensionalTextureData} from 'neuroglancer/webgl/one_dimensional_texture_access';
@@ -30,10 +30,10 @@ import {getShaderType, glsl_getFortranOrderIndexFromNormalized, glsl_uint64} fro
 class TextureLayout extends RefCounted {
   dataWidth: number;
   textureHeight: number;
-  textureAccessCoefficients: Float32Array;
-  subchunkGridSize: Vec3;
+  textureAccessCoefficients: vec2;
+  subchunkGridSize: vec3;
 
-  constructor(gl: GL, public chunkDataSize: Vec3, public subchunkSize: Vec3, dataLength: number) {
+  constructor(gl: GL, public chunkDataSize: vec3, public subchunkSize: vec3, dataLength: number) {
     super();
     compute1dTextureLayout(this, gl, /*texelsPerElement=*/1, dataLength);
     let subchunkGridSize = this.subchunkGridSize = vec3.create();
@@ -42,7 +42,7 @@ class TextureLayout extends RefCounted {
     }
   }
 
-  static get(gl: GL, chunkDataSize: Vec3, subchunkSize: Vec3, dataLength: number) {
+  static get(gl: GL, chunkDataSize: vec3, subchunkSize: vec3, dataLength: number) {
     return gl.memoize.get(
         `sliceview.CompressedSegmentationTextureLayout:${vec3Key(chunkDataSize)},${vec3Key(subchunkSize)},${dataLength}`,
         () => new TextureLayout(gl, chunkDataSize, subchunkSize, dataLength));
@@ -52,7 +52,7 @@ class TextureLayout extends RefCounted {
 const textureFormat = compute1dTextureFormat(new OneDimensionalTextureFormat(), DataType.UINT32);
 
 export class ChunkFormat extends SingleTextureChunkFormat<TextureLayout> {
-  static get(gl: GL, dataType: DataType, subchunkSize: Vec3, numChannels: number) {
+  static get(gl: GL, dataType: DataType, subchunkSize: vec3, numChannels: number) {
     let shaderKey = `sliceview.CompressedSegmentationChunkFormat:${dataType}:${numChannels}`;
     let cacheKey = `${shaderKey}:${vec3Key(subchunkSize)}`;
     return gl.memoize.get(
@@ -62,7 +62,7 @@ export class ChunkFormat extends SingleTextureChunkFormat<TextureLayout> {
   private textureAccessHelper: OneDimensionalTextureAccessHelper;
 
   constructor(
-      public dataType: DataType, public subchunkSize: Vec3, public numChannels: number,
+      public dataType: DataType, public subchunkSize: vec3, public numChannels: number,
       key: string) {
     super(key);
     this.textureAccessHelper = new OneDimensionalTextureAccessHelper('chunkData');
@@ -162,7 +162,7 @@ ${glslType} getDataValue (int channelIndex) {
     setOneDimensionalTextureData(gl, textureLayout, textureFormat, data);
   }
 
-  getTextureLayout(gl: GL, chunkDataSize: Vec3, dataLength: number) {
+  getTextureLayout(gl: GL, chunkDataSize: vec3, dataLength: number) {
     return TextureLayout.get(gl, chunkDataSize, this.subchunkSize, dataLength);
   }
 
@@ -184,7 +184,7 @@ export class CompressedSegmentationVolumeChunk extends
     chunkFormat.setTextureData(gl, textureLayout, data);
   }
 
-  getChannelValueAt(dataPosition: Vec3, channel: number): Uint64|number {
+  getChannelValueAt(dataPosition: vec3, channel: number): Uint64|number {
     let {chunkDataSize, chunkFormat} = this;
     let {data} = this;
     let offset = data[channel];

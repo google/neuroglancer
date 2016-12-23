@@ -18,7 +18,7 @@ import {chunkFormatTest} from 'neuroglancer/sliceview/chunk_format_testing';
 import {ChunkFormat} from 'neuroglancer/sliceview/uncompressed_chunk_format';
 import {TypedArrayConstructor} from 'neuroglancer/util/array';
 import {DataType} from 'neuroglancer/util/data_type';
-import {prod4, vec4} from 'neuroglancer/util/geom';
+import {prod4, vec3, vec4} from 'neuroglancer/util/geom';
 import {getRandomValues} from 'neuroglancer/util/random';
 
 describe('sliceview/uncompressed_chunk_format', () => {
@@ -32,7 +32,7 @@ describe('sliceview/uncompressed_chunk_format', () => {
       const dataType = DataType.FLOAT32;
       chunkFormatTest(dataType, volumeSize, gl => {
         let chunkFormat = ChunkFormat.get(gl, dataType, volumeSize[3]);
-        let textureLayout = chunkFormat.getTextureLayout(gl, volumeSize.subarray(0, 3));
+        let textureLayout = chunkFormat.getTextureLayout(gl, <vec3>volumeSize.subarray(0, 3));
         return [chunkFormat, textureLayout];
       }, data, data);
     }
@@ -48,7 +48,7 @@ describe('sliceview/uncompressed_chunk_format', () => {
         getRandomValues(data);
         chunkFormatTest(dataType, volumeSize, gl => {
           let chunkFormat = ChunkFormat.get(gl, dataType, volumeSize[3]);
-          let textureLayout = chunkFormat.getTextureLayout(gl, volumeSize.subarray(0, 3));
+          let textureLayout = chunkFormat.getTextureLayout(gl, <vec3>volumeSize.subarray(0, 3));
           return [chunkFormat, textureLayout];
         }, data, data);
       }

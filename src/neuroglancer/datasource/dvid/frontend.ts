@@ -26,7 +26,7 @@ import {DataType, VolumeChunkSpecification, VolumeSourceOptions, VolumeType} fro
 import {defineParameterizedVolumeChunkSource, MultiscaleVolumeChunkSource as GenericMultiscaleVolumeChunkSource, VolumeChunkSource} from 'neuroglancer/sliceview/frontend';
 import {StatusMessage} from 'neuroglancer/status';
 import {applyCompletionOffset, getPrefixMatchesWithDescriptions} from 'neuroglancer/util/completion';
-import {mat4, Vec3, vec3} from 'neuroglancer/util/geom';
+import {mat4, vec3} from 'neuroglancer/util/geom';
 import {openShardedHttpRequest, sendHttpRequest} from 'neuroglancer/util/http_request';
 import {parseArray, parseFixedLengthArray, parseIntVec, verifyFinitePositiveFloat, verifyInt, verifyMapKey, verifyObject, verifyObjectAsMap, verifyObjectProperty, verifyPositiveInt, verifyString} from 'neuroglancer/util/json';
 import {CancellablePromise} from 'neuroglancer/util/promise';
@@ -53,9 +53,9 @@ const DVIDVolumeChunkSource = defineParameterizedVolumeChunkSource(VolumeChunkSo
 
 export class VolumeDataInstanceInfo extends DataInstanceInfo {
   dataType: DataType;
-  lowerVoxelBound: Vec3;
-  upperVoxelBound: Vec3;
-  voxelSize: Vec3;
+  lowerVoxelBound: vec3;
+  upperVoxelBound: vec3;
+  voxelSize: vec3;
   numChannels: number;
   numLevels: number;
   constructor(
@@ -139,8 +139,8 @@ export class TileLevelInfo {
    * Resolution of the two downsampled dimensions in the tile plane.  The tile depth is equal to the
    * base voxel size in that dimension.
    */
-  resolution: Vec3;
-  tileSize: Vec3;
+  resolution: vec3;
+  tileSize: vec3;
 
   constructor(obj: any) {
     verifyObject(obj);
@@ -175,12 +175,12 @@ export class TileDataInstanceInfo extends DataInstanceInfo {
   /**
    * Base voxel size (nm).
    */
-  voxelSize: Vec3;
+  voxelSize: vec3;
 
   levels: Map<string, TileLevelInfo>;
 
-  lowerVoxelBound: Vec3;
-  upperVoxelBound: Vec3;
+  lowerVoxelBound: vec3;
+  upperVoxelBound: vec3;
 
   constructor(obj: any, name: string, base: DataInstanceBaseInfo) {
     super(obj, name, base);

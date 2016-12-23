@@ -20,7 +20,7 @@
  */
 
 import {Float32ArrayBuilder} from 'neuroglancer/util/float32array_builder';
-import {Vec3} from 'neuroglancer/util/geom';
+import {vec3} from 'neuroglancer/util/geom';
 import {parseFixedLengthArray, verifyFiniteFloat} from 'neuroglancer/util/json';
 import {Signal} from 'signals';
 
@@ -37,9 +37,11 @@ export class AnnotationPointList {
     this.changed.dispatch();
   }
 
-  get(index: number) { return this.points.data.subarray(index * 3, index * 3 + 3); }
+  get(index: number): vec3 {
+    return <vec3>this.points.data.subarray(index * 3, index * 3 + 3);
+  }
 
-  append(point: Vec3) {
+  append(point: vec3) {
     this.points.appendArray(point.subarray(0, 3));
     ++this.generation;
     this.changed.dispatch();

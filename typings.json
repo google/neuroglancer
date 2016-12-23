@@ -1,6 +1,0 @@
-{
-  "resolution": "third_party/installed_typings",
-  "dependencies": {
-    "gl-matrix": "file:third_party/typings_sources/gl-matrix.d.ts"
-  }
-}

@@ -15,9 +15,9 @@
  */
 
 import {JpegDecoder} from 'jpgjs';
-import {Vec3, vec3} from 'neuroglancer/util/geom';
+import {vec3} from 'neuroglancer/util/geom';
 
-export function decodeJpegStack(data: Uint8Array, chunkDataSize: Vec3) {
+export function decodeJpegStack(data: Uint8Array, chunkDataSize: vec3) {
   let parser = new JpegDecoder();
   parser.parse(data);
   if (parser.numComponents !== 1) {

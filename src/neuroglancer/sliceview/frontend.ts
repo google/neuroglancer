@@ -24,7 +24,7 @@ import {ChunkLayout} from 'neuroglancer/sliceview/chunk_layout';
 import {RenderLayer} from 'neuroglancer/sliceview/renderlayer';
 import {RefCounted} from 'neuroglancer/util/disposable';
 import {Disposable} from 'neuroglancer/util/disposable';
-import {Mat4, mat4, rectifyTransformMatrixIfAxisAligned, Vec3, vec3, vec3Key, Vec4} from 'neuroglancer/util/geom';
+import {mat4, rectifyTransformMatrixIfAxisAligned, vec3, vec3Key, vec4} from 'neuroglancer/util/geom';
 import {stableStringify} from 'neuroglancer/util/json';
 import {getObjectId} from 'neuroglancer/util/object_id';
 import {Uint64} from 'neuroglancer/util/uint64';
@@ -254,7 +254,7 @@ export class SliceView extends SliceViewBase {
       }
       return visibleChunks;
     }
-    function addChunk(chunkLayout: ChunkLayout, visibleChunks: string[], positionInChunks: Vec3) {
+    function addChunk(chunkLayout: ChunkLayout, visibleChunks: string[], positionInChunks: vec3) {
       let key = vec3Key(positionInChunks);
       visibleChunks[visibleChunks.length] = key;
     }
@@ -353,7 +353,7 @@ export abstract class VolumeChunkSource extends ChunkSource implements VolumeChu
 
   get chunkFormat() { return this.chunkFormatHandler.chunkFormat; }
 
-  getValueAt(position: Vec3) {
+  getValueAt(position: vec3) {
     const chunkGridPosition = tempChunkGridPosition;
     const localPosition = tempLocalPosition;
     let spec = this.spec;
@@ -425,8 +425,8 @@ export function defineParameterizedVolumeChunkSource<Parameters>(
 }
 
 export abstract class VolumeChunk extends Chunk {
-  chunkDataSize: Vec3;
-  chunkGridPosition: Vec3;
+  chunkDataSize: vec3;
+  chunkGridPosition: vec3;
   source: VolumeChunkSource;
 
   get chunkFormat() { return this.source.chunkFormat; }
@@ -437,7 +437,7 @@ export abstract class VolumeChunk extends Chunk {
     this.chunkDataSize = x['chunkDataSize'] || source.spec.chunkDataSize;
     this.state = ChunkState.SYSTEM_MEMORY;
   }
-  abstract getChannelValueAt(dataPosition: Vec3, channel: number): any;
+  abstract getChannelValueAt(dataPosition: vec3, channel: number): any;
 };
 
 export interface MultiscaleVolumeChunkSource {
@@ -497,7 +497,7 @@ gl_Position = uProjectionMatrix * aVertexPosition;
   }
 
   draw(
-      texture: WebGLTexture|null, projectionMatrix: Mat4, colorFactor: Vec4, backgroundColor: Vec4,
+      texture: WebGLTexture|null, projectionMatrix: mat4, colorFactor: vec4, backgroundColor: vec4,
       xStart: number, yStart: number, xEnd: number, yEnd: number) {
     let {gl, shader, textureCoordinateAdjustment} = this;
     textureCoordinateAdjustment[0] = xStart;

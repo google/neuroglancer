@@ -26,7 +26,7 @@ import {DataType, VolumeChunkSpecification, VolumeSourceOptions, VolumeType} fro
 import {defineParameterizedVolumeChunkSource, MultiscaleVolumeChunkSource as GenericMultiscaleVolumeChunkSource} from 'neuroglancer/sliceview/frontend';
 import {StatusMessage} from 'neuroglancer/status';
 import {getPrefixMatches} from 'neuroglancer/util/completion';
-import {Vec3, vec3} from 'neuroglancer/util/geom';
+import {vec3} from 'neuroglancer/util/geom';
 import {parseArray, parseXYZ, verifyFinitePositiveFloat, verifyMapKey, verifyObject, verifyObjectProperty, verifyPositiveInt, verifyString} from 'neuroglancer/util/json';
 
 const VolumeChunkSource = defineParameterizedVolumeChunkSource(VolumeSourceParameters);
@@ -41,8 +41,8 @@ SERVER_DATA_TYPES.set('UINT64', DataType.UINT64);
 export class VolumeInfo {
   numChannels: number;
   dataType: DataType;
-  voxelSize: Vec3;
-  upperVoxelBound: Vec3;
+  voxelSize: vec3;
+  upperVoxelBound: vec3;
   constructor(obj: any) {
     try {
       verifyObject(obj);

@@ -22,7 +22,7 @@ import {PerspectiveViewRenderContext, PerspectiveViewRenderLayer} from 'neurogla
 import {RenderedDataPanel} from 'neuroglancer/rendered_data_panel';
 import {SliceView, SliceViewRenderHelper} from 'neuroglancer/sliceview/frontend';
 import {TrackableBoolean, TrackableBooleanCheckbox} from 'neuroglancer/trackable_boolean';
-import {kAxes, mat4, vec3, vec4} from 'neuroglancer/util/geom';
+import {kAxes, mat4, vec3, transformVectorByMat4, vec4} from 'neuroglancer/util/geom';
 import {startRelativeMouseDrag} from 'neuroglancer/util/mouse_drag';
 import {ViewerState} from 'neuroglancer/viewer_state';
 import {DepthBuffer, FramebufferConfiguration, makeTextureBuffers, OffscreenCopyHelper} from 'neuroglancer/webgl/offscreen';
@@ -243,8 +243,8 @@ export class PerspectivePanel extends RenderedDataPanel {
     this.updateProjectionMatrix();
 
     // FIXME; avoid temporaries
-    let lightingDirection = vec4.create();
-    vec4.transformMat4(lightingDirection, kAxes[2], this.modelViewMat);
+    let lightingDirection = vec3.create();
+    transformVectorByMat4(lightingDirection, kAxes[2], this.modelViewMat);
     vec3.normalize(lightingDirection, lightingDirection);
 
     let ambient = 0.2;
@@ -254,7 +254,7 @@ export class PerspectivePanel extends RenderedDataPanel {
     pickIDs.clear();
     let renderContext: PerspectiveViewRenderContext = {
       dataToDevice: projectionMat,
-      lightDirection: lightingDirection.subarray(0, 3),
+      lightDirection: lightingDirection,
       ambientLighting: ambient,
       directionalLighting: directional,
       pickIDs: pickIDs,

@@ -19,7 +19,7 @@ import {ChunkFormatHandler, registerChunkFormatHandler, VolumeChunkSource} from 
 import {SingleTextureChunkFormat, SingleTextureVolumeChunk} from 'neuroglancer/sliceview/single_texture_chunk_format';
 import {TypedArray, TypedArrayConstructor} from 'neuroglancer/util/array';
 import {RefCounted} from 'neuroglancer/util/disposable';
-import {Vec3, vec3Key} from 'neuroglancer/util/geom';
+import {vec2, vec3, vec3Key} from 'neuroglancer/util/geom';
 import {Uint64} from 'neuroglancer/util/uint64';
 import {GL} from 'neuroglancer/webgl/context';
 import {compute1dTextureFormat, compute3dTextureLayout, OneDimensionalTextureAccessHelper, setOneDimensionalTextureData} from 'neuroglancer/webgl/one_dimensional_texture_access';
@@ -29,10 +29,10 @@ import {getShaderType} from 'neuroglancer/webgl/shader_lib';
 class TextureLayout extends RefCounted {
   dataWidth: number;
   textureHeight: number;
-  textureAccessCoefficients: Float32Array;
+  textureAccessCoefficients: vec2;
   channelStride: number;
 
-  constructor(gl: GL, public chunkDataSize: Vec3, texelsPerElement: number, numChannels: number) {
+  constructor(gl: GL, public chunkDataSize: vec3, texelsPerElement: number, numChannels: number) {
     super();
     const dataPointsPerChannel = chunkDataSize[0] * chunkDataSize[1] * chunkDataSize[2];
     this.channelStride = dataPointsPerChannel;
@@ -41,7 +41,7 @@ class TextureLayout extends RefCounted {
         chunkDataSize[2] * numChannels);
   }
 
-  static get(gl: GL, chunkDataSize: Vec3, texelsPerElement: number, numChannels: number) {
+  static get(gl: GL, chunkDataSize: vec3, texelsPerElement: number, numChannels: number) {
     return gl.memoize.get(
         `sliceview.UncompressedTextureLayout:${vec3Key(chunkDataSize)},${texelsPerElement},${numChannels}`,
         () => new TextureLayout(gl, chunkDataSize, texelsPerElement, numChannels));
@@ -110,7 +110,7 @@ ${shaderType} getDataValue (int channelIndex) {
     this.textureAccessHelper.setupTextureLayout(gl, shader, textureLayout);
   }
 
-  getTextureLayout(gl: GL, chunkDataSize: Vec3) {
+  getTextureLayout(gl: GL, chunkDataSize: vec3) {
     return TextureLayout.get(gl, chunkDataSize, this.texelsPerElement, this.numChannels);
   }
 
@@ -142,7 +142,7 @@ export class UncompressedVolumeChunk extends SingleTextureVolumeChunk<Uint8Array
     this.chunkFormat.setTextureData(gl, textureLayout, this.data);
   }
 
-  getChannelValueAt(dataPosition: Vec3, channel: number): number|Uint64 {
+  getChannelValueAt(dataPosition: vec3, channel: number): number|Uint64 {
     let {chunkFormat} = this;
     let chunkDataSize = this.chunkDataSize;
     let index = dataPosition[0] +

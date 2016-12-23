@@ -14,14 +14,14 @@
  * limitations under the License.
  */
 
-import {identityMat4, kOneVec, kZeroVec, mat4, Quat, quat, vec3, Vec3} from 'neuroglancer/util/geom';
+import {identityMat4, kOneVec, kZeroVec, mat4, quat, vec3} from 'neuroglancer/util/geom';
 import {parseFiniteVec} from 'neuroglancer/util/json';
 import {Signal} from 'signals';
 
 export interface RotationTranslationScale {
-  rotation: Quat;
-  translation: Vec3;
-  scale: Vec3;
+  rotation: quat;
+  translation: vec3;
+  scale: vec3;
 }
 
 /**

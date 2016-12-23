@@ -21,7 +21,7 @@ import {PickIDManager} from 'neuroglancer/object_picking';
 import {RenderedDataPanel} from 'neuroglancer/rendered_data_panel';
 import {SliceView, SliceViewRenderHelper} from 'neuroglancer/sliceview/frontend';
 import {ElementVisibilityFromTrackableBoolean, TrackableBoolean} from 'neuroglancer/trackable_boolean';
-import {identityMat4, Mat4, mat4, vec3, vec4} from 'neuroglancer/util/geom';
+import {identityMat4, mat4, vec3, vec4} from 'neuroglancer/util/geom';
 import {startRelativeMouseDrag} from 'neuroglancer/util/mouse_drag';
 import {ViewerState} from 'neuroglancer/viewer_state';
 import {FramebufferConfiguration, makeTextureBuffers, OffscreenCopyHelper} from 'neuroglancer/webgl/offscreen';
@@ -53,7 +53,7 @@ void emit(vec4 color, vec4 pickId) {
 }
 
 export interface SliceViewPanelRenderContext {
-  dataToDevice: Mat4;
+  dataToDevice: mat4;
   pickIDs: PickIDManager;
   emitter: ShaderModule;
 

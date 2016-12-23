@@ -21,7 +21,6 @@
   "exclude": [
     "node_modules",
     "dist",
-    "third_party/typings_sources",
     "templates",
     "examples"
   ]

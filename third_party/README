@@ -1,5 +1,0 @@
-installed_typings/ contains typings installed by the typings
-(https://github.com/typings/typings/) tool.
-
-typings_sources/ contains input files for the typings tool.  They
-should not be used directly.

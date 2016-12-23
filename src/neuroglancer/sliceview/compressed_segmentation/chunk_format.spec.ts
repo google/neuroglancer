@@ -20,7 +20,7 @@ import {encodeChannels as encodeChannelsUint32} from 'neuroglancer/sliceview/com
 import {encodeChannels as encodeChannelsUint64} from 'neuroglancer/sliceview/compressed_segmentation/encode_uint64';
 import {makeRandomUint64Array} from 'neuroglancer/sliceview/compressed_segmentation/test_util';
 import {DataType} from 'neuroglancer/util/data_type';
-import {prod4, Vec3, vec3, vec3Key, Vec4, vec4} from 'neuroglancer/util/geom';
+import {prod4, vec3, vec3Key, vec4} from 'neuroglancer/util/geom';
 import {getRandomValues} from 'neuroglancer/util/random';
 import {Uint32ArrayBuilder} from 'neuroglancer/util/uint32array_builder';
 
@@ -28,8 +28,8 @@ describe('sliceview/compressed_segmentation/chunk_format', () => {
   describe('data access', () => {
     const vec888 = vec3.fromValues(8, 8, 8);
     function runTest(
-        dataType: DataType, volumeSize: Vec4, rawData: Uint32Array,
-        compressedSegmentationBlockSize: Vec3) {
+        dataType: DataType, volumeSize: vec4, rawData: Uint32Array,
+        compressedSegmentationBlockSize: vec3) {
       let encodeBuffer = new Uint32ArrayBuilder();
       (dataType === DataType.UINT32 ? encodeChannelsUint32 : encodeChannelsUint64)(
           encodeBuffer, compressedSegmentationBlockSize, rawData, volumeSize);
@@ -38,7 +38,7 @@ describe('sliceview/compressed_segmentation/chunk_format', () => {
         let chunkFormat =
             ChunkFormat.get(gl, dataType, compressedSegmentationBlockSize, volumeSize[3]);
         let textureLayout =
-            chunkFormat.getTextureLayout(gl, volumeSize.subarray(0, 3), encodedData.length);
+            chunkFormat.getTextureLayout(gl, <vec3>volumeSize.subarray(0, 3), encodedData.length);
         return [chunkFormat, textureLayout];
       }, rawData, encodedData);
     }

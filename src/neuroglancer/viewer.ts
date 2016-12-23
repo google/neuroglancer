@@ -31,7 +31,7 @@ import {TrackableBoolean} from 'neuroglancer/trackable_boolean';
 import {TrackableValue} from 'neuroglancer/trackable_value';
 import {delayHashUpdate, registerTrackable} from 'neuroglancer/url_hash_state';
 import {RefCounted} from 'neuroglancer/util/disposable';
-import {Vec3} from 'neuroglancer/util/geom';
+import {vec3} from 'neuroglancer/util/geom';
 import {GlobalKeyboardShortcutHandler, KeySequenceMap} from 'neuroglancer/util/keyboard_shortcut_handler';
 import {DataDisplayLayout, LAYOUTS} from 'neuroglancer/viewer_layouts';
 import {ViewerState} from 'neuroglancer/viewer_state';
@@ -115,7 +115,7 @@ export class Viewer extends RefCounted implements ViewerState {
     this.layerManager.initializePosition(this.navigationState.position);
 
     this.registerSignalBinding(
-        this.layerSpecification.voxelCoordinatesSet.add((voxelCoordinates: Vec3) => {
+        this.layerSpecification.voxelCoordinatesSet.add((voxelCoordinates: vec3) => {
           this.navigationState.position.setVoxelCoordinates(voxelCoordinates);
         }));
 

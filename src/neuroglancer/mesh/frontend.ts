@@ -19,7 +19,7 @@ import {Chunk, ChunkManager, ChunkSource} from 'neuroglancer/chunk_manager/front
 import {FRAGMENT_SOURCE_RPC_ID, MESH_LAYER_RPC_ID} from 'neuroglancer/mesh/base';
 import {PerspectiveViewRenderContext, PerspectiveViewRenderLayer} from 'neuroglancer/perspective_view/render_layer';
 import {forEachSegmentToDraw, getObjectColor, registerRedrawWhenSegmentationDisplayState3DChanged, SegmentationDisplayState3D, SegmentationLayerSharedObject} from 'neuroglancer/segmentation_display_state/frontend';
-import {Mat4, vec3, Vec4, vec4} from 'neuroglancer/util/geom';
+import {mat4, vec3, vec4} from 'neuroglancer/util/geom';
 import {stableStringify} from 'neuroglancer/util/json';
 import {getObjectId} from 'neuroglancer/util/object_id';
 import {Buffer} from 'neuroglancer/webgl/buffer';
@@ -29,7 +29,7 @@ import {setVec4FromUint32} from 'neuroglancer/webgl/shader_lib';
 import {registerSharedObjectOwner, RPC} from 'neuroglancer/worker_rpc';
 
 export class MeshShaderManager {
-  private tempLightVec = vec4.create();
+  private tempLightVec = new Float32Array(4);
   private tempPickID = new Float32Array(4);
   constructor() {}
 
@@ -54,13 +54,13 @@ vColor = vec4(lightingFactor * uColor.rgb, uColor.a);
   beginLayer(gl: GL, shader: ShaderProgram, renderContext: PerspectiveViewRenderContext) {
     let {dataToDevice, lightDirection, ambientLighting, directionalLighting} = renderContext;
     gl.uniformMatrix4fv(shader.uniform('uProjection'), false, dataToDevice);
-    let lightVec = this.tempLightVec;
+    let lightVec = <vec3>this.tempLightVec;
     vec3.scale(lightVec, lightDirection, directionalLighting);
     lightVec[3] = ambientLighting;
     gl.uniform4fv(shader.uniform('uLightDirection'), lightVec);
   }
 
-  setColor(gl: GL, shader: ShaderProgram, color: Vec4) {
+  setColor(gl: GL, shader: ShaderProgram, color: vec4) {
     gl.uniform4fv(shader.uniform('uColor'), color);
   }
 
@@ -68,7 +68,7 @@ vColor = vec4(lightingFactor * uColor.rgb, uColor.a);
     gl.uniform4fv(shader.uniform('uPickID'), setVec4FromUint32(this.tempPickID, pickID));
   }
 
-  beginObject(gl: GL, shader: ShaderProgram, objectToDataMatrix: Mat4) {
+  beginObject(gl: GL, shader: ShaderProgram, objectToDataMatrix: mat4) {
     gl.uniformMatrix4fv(shader.uniform('uModelMatrix'), false, objectToDataMatrix);
   }
 

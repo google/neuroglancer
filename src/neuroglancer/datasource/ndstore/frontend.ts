@@ -25,7 +25,7 @@ import {VolumeChunkSourceParameters} from 'neuroglancer/datasource/ndstore/base'
 import {DataType, VolumeChunkSpecification, VolumeSourceOptions, VolumeType} from 'neuroglancer/sliceview/base';
 import {defineParameterizedVolumeChunkSource, MultiscaleVolumeChunkSource as GenericMultiscaleVolumeChunkSource} from 'neuroglancer/sliceview/frontend';
 import {applyCompletionOffset, getPrefixMatchesWithDescriptions} from 'neuroglancer/util/completion';
-import {mat4, Vec3, vec3} from 'neuroglancer/util/geom';
+import {mat4, vec3} from 'neuroglancer/util/geom';
 import {openShardedHttpRequest, sendHttpRequest} from 'neuroglancer/util/http_request';
 import {parseArray, parseQueryStringParameters, verify3dDimensions, verify3dScale, verify3dVec, verifyEnumString, verifyInt, verifyObject, verifyObjectAsMap, verifyObjectProperty, verifyOptionalString, verifyString} from 'neuroglancer/util/json';
 import {CancellablePromise, cancellableThen} from 'neuroglancer/util/promise';
@@ -46,9 +46,9 @@ interface ChannelInfo {
 }
 
 interface ScaleInfo {
-  voxelSize: Vec3;
-  voxelOffset: Vec3;
-  imageSize: Vec3;
+  voxelSize: vec3;
+  voxelOffset: vec3;
+  imageSize: vec3;
   key: string;
 }
 

@@ -52,6 +52,7 @@
   },
   "dependencies": {
     "@types/codemirror": "0.0.22-alpha",
+    "@types/gl-matrix": "^2.2.34",
     "@types/lodash": "^4.14.44",
     "@types/pako": "^0.2.21-alpha",
     "@types/text-encoding": "0.0.20-alpha",

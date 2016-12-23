@@ -16,12 +16,12 @@
 
 import {VisibilityTrackedRenderLayer} from 'neuroglancer/layer';
 import {PickIDManager} from 'neuroglancer/object_picking';
-import {Mat4, Vec3} from 'neuroglancer/util/geom';
+import {mat4, vec3} from 'neuroglancer/util/geom';
 import {ShaderModule} from 'neuroglancer/webgl/shader';
 
 export interface PerspectiveViewRenderContext {
-  dataToDevice: Mat4;
-  lightDirection: Vec3;
+  dataToDevice: mat4;
+  lightDirection: vec3;
   ambientLighting: number;
   directionalLighting: number;
   pickIDs: PickIDManager;

@@ -18,7 +18,7 @@ import {Chunk, ChunkManager, ChunkSource} from 'neuroglancer/chunk_manager/backe
 import {ChunkPriorityTier} from 'neuroglancer/chunk_manager/base';
 import {RenderLayer as RenderLayerInterface, SLICEVIEW_RENDERLAYER_RPC_ID, SLICEVIEW_RPC_ID, SliceViewBase, VolumeChunkSource as VolumeChunkSourceInterface, VolumeChunkSpecification} from 'neuroglancer/sliceview/base';
 import {ChunkLayout} from 'neuroglancer/sliceview/chunk_layout';
-import {Vec3, vec3, vec3Key} from 'neuroglancer/util/geom';
+import {vec3, vec3Key} from 'neuroglancer/util/geom';
 import {registerRPC, registerSharedObject, RPC, SharedObjectCounterpart} from 'neuroglancer/worker_rpc';
 import {Signal} from 'signals';
 
@@ -64,7 +64,7 @@ export class SliceView extends SliceViewBase {
     };
 
     function addChunk(
-        chunkLayout: ChunkLayout, sources: Map<VolumeChunkSource, number>, positionInChunks: Vec3,
+        chunkLayout: ChunkLayout, sources: Map<VolumeChunkSource, number>, positionInChunks: vec3,
         visibleSources: VolumeChunkSource[]) {
       vec3.multiply(tempChunkPosition, positionInChunks, chunkLayout.size);
       let priority = -vec3.distance(localCenter, tempChunkPosition);
@@ -121,16 +121,16 @@ registerRPC('SliceView.removeVisibleLayer', function(x) {
 });
 
 export class VolumeChunk extends Chunk {
-  chunkGridPosition: Vec3;
+  chunkGridPosition: vec3;
   source: VolumeChunkSource|null = null;
-  chunkDataSize: Vec3|null;
+  chunkDataSize: vec3|null;
   data: ArrayBufferView|null;
   constructor() {
     super();
     this.chunkGridPosition = vec3.create();
   }
 
-  initializeVolumeChunk(key: string, chunkGridPosition: Vec3) {
+  initializeVolumeChunk(key: string, chunkGridPosition: vec3) {
     super.initialize(key);
 
     let source = this.source;
@@ -176,7 +176,7 @@ export class VolumeChunkSource extends ChunkSource implements VolumeChunkSourceI
     this.spec = VolumeChunkSpecification.fromObject(options['spec']);
   }
 
-  getChunk(chunkGridPosition: Vec3) {
+  getChunk(chunkGridPosition: vec3) {
     let key = vec3Key(chunkGridPosition);
     let chunk = <VolumeChunk>this.chunks.get(key);
     if (chunk === undefined) {

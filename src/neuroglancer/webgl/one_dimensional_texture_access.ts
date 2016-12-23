@@ -25,7 +25,7 @@
 
 import {maybePadArray, TypedArray, TypedArrayConstructor} from 'neuroglancer/util/array';
 import {DataType} from 'neuroglancer/util/data_type';
-import {Vec2} from 'neuroglancer/util/geom';
+import {vec2} from 'neuroglancer/util/geom';
 import {GL_FLOAT, GL_LUMINANCE, GL_LUMINANCE_ALPHA, GL_RGB, GL_RGBA, GL_UNPACK_ALIGNMENT, GL_UNSIGNED_BYTE} from 'neuroglancer/webgl/constants';
 import {GL} from 'neuroglancer/webgl/context';
 import {ShaderBuilder, ShaderCodePart, ShaderProgram} from 'neuroglancer/webgl/shader';
@@ -35,7 +35,7 @@ import {setRawTextureParameters} from 'neuroglancer/webgl/texture';
 export interface OneDimensionalTextureLayout {
   dataWidth: number;
   textureHeight: number;
-  textureAccessCoefficients: Vec2;
+  textureAccessCoefficients: vec2;
 }
 
 export class OneDimensionalTextureFormat {
@@ -160,7 +160,7 @@ export function compute3dTextureLayout(
   layout.dataWidth = dataWidth;
   layout.textureHeight = dataHeight;
   layout.textureAccessCoefficients =
-      Float32Array.of(1.0 / dataWidth, 1.0 / (dataWidth * dataHeight));
+      <vec2>Float32Array.of(1.0 / dataWidth, 1.0 / (dataWidth * dataHeight));
 }
 
 export function compute1dTextureLayout(
@@ -176,7 +176,7 @@ export function compute1dTextureLayout(
   layout.dataWidth = dataWidth;
   layout.textureHeight = dataHeight;
   layout.textureAccessCoefficients =
-      Float32Array.of(1.0 / dataWidth, 1.0 / (dataWidth * dataHeight));
+      <vec2>Float32Array.of(1.0 / dataWidth, 1.0 / (dataWidth * dataHeight));
 }
 
 export function setOneDimensionalTextureData(

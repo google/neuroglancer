@@ -14,28 +14,28 @@
  * limitations under the License.
  */
 
-import {identityMat4, mat4, Mat4, transformVectorByMat4, Vec3, vec3} from 'neuroglancer/util/geom';
+import {identityMat4, mat4, transformVectorByMat4, vec3} from 'neuroglancer/util/geom';
 
 export class ChunkLayout {
   /**
    * Size of each chunk in local spatial coordinates.
    */
-  size: Vec3;
+  size: vec3;
 
   /**
    * Transform from local spatial coordinates to global coordinates (nm).
    */
-  transform: Mat4;
+  transform: mat4;
 
   /**
    * Inverse of transform.  Transform from global spatial coordinates to local spatial coordinates.
    */
-  invTransform: Mat4;
+  invTransform: mat4;
 
-  constructor(size: Vec3, transform: Mat4 = identityMat4) {
+  constructor(size: vec3, transform: mat4 = identityMat4) {
     this.size = vec3.clone(size);
     this.transform = mat4.clone(transform);
-    this.invTransform = mat4.invert(mat4.create(), transform);
+    this.invTransform = mat4.invert(mat4.create(), transform)!;
   }
   static cache = new Map<string, ChunkLayout>();
   toObject(msg: any) {
@@ -43,7 +43,7 @@ export class ChunkLayout {
     msg['transform'] = this.transform;
   }
 
-  static get(size: Vec3, transform = identityMat4) {
+  static get(size: vec3, transform = identityMat4) {
     let cache = ChunkLayout.cache;
     const key = JSON.stringify([Array.from(size), Array.from(transform)]);
     let obj = cache.get(key);
@@ -59,30 +59,30 @@ export class ChunkLayout {
   /**
    * Transform local spatial coordinates to global spatial coordinates.
    */
-  localSpatialToGlobal(out: Vec3, localSpatial: Vec3): Vec3 {
+  localSpatialToGlobal(out: vec3, localSpatial: vec3): vec3 {
     return vec3.transformMat4(out, localSpatial, this.transform);
   }
 
   /**
    * Transform global spatial coordinates to local spatial coordinates.
    */
-  globalToLocalSpatial(out: Vec3, globalSpatial: Vec3): Vec3 {
+  globalToLocalSpatial(out: vec3, globalSpatial: vec3): vec3 {
     return vec3.transformMat4(out, globalSpatial, this.invTransform);
   }
 
-  globalToLocalGrid(out: Vec3, globalSpatial: Vec3): Vec3 {
+  globalToLocalGrid(out: vec3, globalSpatial: vec3): vec3 {
     this.globalToLocalSpatial(out, globalSpatial);
     vec3.divide(out, out, this.size);
     return out;
   }
 
-  localSpatialVectorToGlobal(out: Vec3, localVector: Vec3): Vec3 {
+  localSpatialVectorToGlobal(out: vec3, localVector: vec3): vec3 {
     return transformVectorByMat4(out, localVector, this.transform);
   }
 
-  globalToLocalSpatialVector(out: Vec3, globalVector: Vec3): Vec3 {
+  globalToLocalSpatialVector(out: vec3, globalVector: vec3): vec3 {
     return transformVectorByMat4(out, globalVector, this.invTransform);
   }
 
-  assignLocalSpatialToGlobalMat4(out: Mat4): Mat4 { return mat4.copy(out, this.transform); }
+  assignLocalSpatialToGlobalMat4(out: mat4): mat4 { return mat4.copy(out, this.transform); }
 }

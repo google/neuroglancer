@@ -19,7 +19,7 @@ import throttle from 'lodash/throttle';
 import {RenderedPanel} from 'neuroglancer/display_context';
 import {SpatialPosition} from 'neuroglancer/navigation_state';
 import {RefCounted} from 'neuroglancer/util/disposable';
-import {BoundingBox, Vec3, vec3} from 'neuroglancer/util/geom';
+import {BoundingBox, vec3} from 'neuroglancer/util/geom';
 import {addSignalBinding, removeSignalBinding, SignalBindingUpdater} from 'neuroglancer/util/signal_binding_updater';
 import {Uint64} from 'neuroglancer/util/uint64';
 import {UseCount} from 'neuroglancer/util/use_count';
@@ -45,7 +45,7 @@ export class RenderLayer extends RefCounted {
   /**
    * Base voxel size for this layer, in nanometers per voxel.
    */
-  voxelSize: Vec3|null = null;
+  voxelSize: vec3|null = null;
 
   /**
    * Bounding box for this layer, in nanometers.

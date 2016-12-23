@@ -25,7 +25,7 @@ import {SliceViewPanel} from 'neuroglancer/sliceview/panel';
 import {TrackableBoolean} from 'neuroglancer/trackable_boolean';
 import {RefCounted} from 'neuroglancer/util/disposable';
 import {removeChildren} from 'neuroglancer/util/dom';
-import {Mat4, Quat, quat} from 'neuroglancer/util/geom';
+import {mat4, quat} from 'neuroglancer/util/geom';
 
 export interface SliceViewViewerState {
   chunkManager: ChunkManager;
@@ -43,7 +43,7 @@ export interface ViewerUIState extends SliceViewViewerState {
 }
 
 
-export function makeSliceView(viewerState: SliceViewViewerState, baseToSelf?: Quat) {
+export function makeSliceView(viewerState: SliceViewViewerState, baseToSelf?: quat) {
   let navigationState: NavigationState;
   if (baseToSelf === undefined) {
     navigationState = viewerState.navigationState;
@@ -60,7 +60,7 @@ export function makeSliceView(viewerState: SliceViewViewerState, baseToSelf?: Qu
 
 export function makeOrthogonalSliceViews(viewerState: SliceViewViewerState) {
   let sliceViews = new Array<SliceView>();
-  let addSliceView = (mat?: Mat4) => { sliceViews.push(makeSliceView(viewerState, mat)); };
+  let addSliceView = (q?: quat) => { sliceViews.push(makeSliceView(viewerState, q)); };
   addSliceView();
   addSliceView(quat.rotateX(quat.create(), quat.create(), Math.PI / 2));
   addSliceView(quat.rotateY(quat.create(), quat.create(), Math.PI / 2));
