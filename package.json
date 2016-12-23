@@ -67,6 +67,7 @@
     "extract-text-webpack-plugin": "^2.0.0-beta.4",
     "gl-matrix": "^2.3.2",
     "glsl-editor": "^1.0.0",
+    "glsl-strip-comments-loader": "^1.0.0",
     "html-webpack-plugin": "^2.24.1",
     "json-loader": "^0.5.4",
     "lodash": "^4.13.1",

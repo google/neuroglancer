@@ -183,7 +183,10 @@ function getBaseConfig(options) {
         },
         {
           test: /\.glsl$/,
-          loader: require.resolve('raw-loader'),
+          loader: [
+            {loader: require.resolve('raw-loader')},
+            {loader: require.resolve('glsl-strip-comments-loader')},
+          ],
         }
       ],
     },
