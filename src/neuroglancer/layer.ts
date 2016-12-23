@@ -14,8 +14,8 @@
  * limitations under the License.
  */
 
-import * as debounce from 'lodash/debounce';
-import * as throttle from 'lodash/throttle';
+import debounce from 'lodash/debounce';
+import throttle from 'lodash/throttle';
 import {RenderedPanel} from 'neuroglancer/display_context';
 import {SpatialPosition} from 'neuroglancer/navigation_state';
 import {RefCounted} from 'neuroglancer/util/disposable';

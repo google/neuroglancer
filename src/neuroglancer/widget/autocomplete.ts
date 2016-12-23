@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-import * as debounce from 'lodash/debounce';
+import debounce from 'lodash/debounce';
 import {BasicCompletionResult, Completion, CompletionWithDescription} from 'neuroglancer/util/completion';
 import {RefCounted} from 'neuroglancer/util/disposable';
 import {removeChildren, removeFromParent} from 'neuroglancer/util/dom';

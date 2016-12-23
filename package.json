@@ -52,6 +52,7 @@
   },
   "dependencies": {
     "@types/codemirror": "0.0.22-alpha",
+    "@types/lodash": "^4.14.44",
     "@types/pako": "^0.2.21-alpha",
     "@types/sortablejs": "^1.3.20-alpha",
     "@types/text-encoding": "0.0.20-alpha",

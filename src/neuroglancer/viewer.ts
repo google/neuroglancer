@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-import * as debounce from 'lodash/debounce';
+import debounce from 'lodash/debounce';
 import {AvailableCapacity} from 'neuroglancer/chunk_manager/base';
 import {ChunkManager, ChunkQueueManager} from 'neuroglancer/chunk_manager/frontend';
 import {DisplayContext} from 'neuroglancer/display_context';

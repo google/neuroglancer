@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-import * as debounce from 'lodash/debounce';
+import debounce from 'lodash/debounce';
 import {UserLayer, UserLayerDropdown} from 'neuroglancer/layer';
 import {LayerListSpecification, registerLayerType} from 'neuroglancer/layer_specification';
 import {Overlay} from 'neuroglancer/overlay';
