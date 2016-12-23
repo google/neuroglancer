@@ -9,7 +9,7 @@
     "allowSyntheticDefaultImports": true,
     "sourceMap": true,
     "moduleResolution": "node",
-    "module": "commonjs",
+    "module": "es2015",
     "target": "ES2015",
     "newLine": "LF",
     "baseUrl": ".",

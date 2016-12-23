@@ -16,7 +16,7 @@
 
 'use strict';
 
-let webpack_helpers = require('./webpack_helpers');
+let webpackHelpers = require('./webpack_helpers');
 const path = require('path');
 const webpack = require('webpack');
 const minimist = require('minimist');
@@ -28,13 +28,12 @@ module.exports = function(config) {
   let patternSuffix = '\\.spec\\.ts$';
   let newRegExp = new RegExp(pattern + patternSuffix);
 
-  let webpackConfig = webpack_helpers.getBaseConfig({useBabel: false, noOutput: true});
+  let webpackConfig = webpackHelpers.getBaseConfig({
+    useBabel: true,
+    babelPlugins: [...webpackHelpers.DEFAULT_BABEL_PLUGINS, 'babel-plugin-istanbul'],
+    noOutput: true
+  });
   webpackConfig.devtool = 'inline-source-map';
-  webpackConfig.module.postLoaders = [{
-    test: /\.ts$/,
-    exclude: [/\.spec\.ts$/, /node_modules/],
-    loader: 'istanbul-instrumenter-loader',
-  }];
   webpackConfig.plugins = [
     new webpack.DefinePlugin({
       'WORKER': false,
@@ -54,7 +53,7 @@ module.exports = function(config) {
     ],
     frameworks: ['jasmine'],
     preprocessors: {
-      '../src/spec.js': ['coverage', 'webpack', 'sourcemap'],
+      '../src/spec.js': ['webpack', 'sourcemap'],
     },
 
     webpack: webpackConfig,
@@ -68,7 +67,11 @@ module.exports = function(config) {
     reporters: ['mocha', 'coverage'],
     coverageReporter: {
       dir: path.resolve(__dirname, '../coverage/'),
-      reporters: [{type: 'text-summary'}, {type: 'json'}, {type: 'html'}]
+      reporters: [
+        {type: 'text-summary'}, {type: 'json'},
+        // HTML reporter not compatible with babel-plugin-istanbul 3.0.0
+        // {type: 'html'},
+      ]
     },
     // logLevel: config.LOG_DEBUG,
     // singleRun: true,
