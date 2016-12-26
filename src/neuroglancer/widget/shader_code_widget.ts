@@ -16,7 +16,7 @@
 
 import 'codemirror/addon/lint/lint.js';
 
-import * as CodeMirror from 'codemirror';
+import CodeMirror from 'codemirror';
 import debounce from 'lodash/debounce';
 import {WatchableValue} from 'neuroglancer/trackable_value';
 import {RefCounted} from 'neuroglancer/util/disposable';
