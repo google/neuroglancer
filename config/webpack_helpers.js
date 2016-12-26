@@ -294,6 +294,7 @@ function getViewerConfig(options) {
     Object.assign(
         {
           entry: {'main': [...frontendDataSourceModules, ...frontendModules]},
+          target: 'web',
           plugins: [
             htmlPlugin,
             cssPlugin,
@@ -309,6 +310,7 @@ function getViewerConfig(options) {
     Object.assign(
         {
           entry: {'chunk_worker': [...chunkWorkerModules]},
+          target: 'webworker',
           plugins: [
             new webpack.DefinePlugin(
                 Object.assign({}, defaultDefines, extraDefines, {'WORKER': true})),
