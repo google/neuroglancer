@@ -23,17 +23,7 @@ const webpack = require('webpack');
 const ClosureCompilerPlugin = require('webpack-closure-compiler');
 const fs = require('fs');
 const AliasPlugin = require('./webpack_alias_plugin');
-
-/**
- * Resolve a path to an absolute path, expanding all symbolic links.  This is
- * used to ensure that the same file is not seen under multiple paths by the
- * TypeScript compiler, leading to the same file being compiled more than once,
- * which can result in various errors.
- */
-function resolveReal() {
-  return fs.realpathSync(path.resolve.apply(undefined, arguments));
-}
-exports.resolveReal = resolveReal;
+const resolveReal = require('./resolve_real');
 
 // Note: We use require.resolve below to ensure the plugins are resolved
 // relative to this configuration file, rather than relative to the source
