@@ -22,6 +22,7 @@ const ExtractTextPlugin = require('extract-text-webpack-plugin');
 const webpack = require('webpack');
 const ClosureCompilerPlugin = require('webpack-closure-compiler');
 const fs = require('fs');
+const AliasPlugin = require('./webpack_alias_plugin');
 
 /**
  * Resolve a path to an absolute path, expanding all symbolic links.  This is
@@ -150,17 +151,24 @@ function getBaseConfig(options) {
   options = options || {};
   let {loaderEntry: tsLoaderEntry, extraResolveAliases} = getTypescriptLoaderEntry(options);
   console.log(extraResolveAliases);
+  let aliasMappings = Object.assign(
+      {
+        'neuroglancer-testdata': resolveReal(__dirname, '../testdata'),
+
+        // Patched version of jpgjs.
+        'jpgjs': resolveReal(__dirname, '../third_party/jpgjs/jpg.js'),
+      },
+      extraResolveAliases, options.resolveAliases || {});
   let baseConfig = {
     resolve: {
       extensions: ['.ts', '.js'],
-      alias: Object.assign(
-          {
-            'neuroglancer-testdata': resolveReal(__dirname, '../testdata'),
-
-            // Patched version of jpgjs.
-            'jpgjs': resolveReal(__dirname, '../third_party/jpgjs/jpg.js'),
-          },
-          extraResolveAliases, options.resolveAliases || {}),
+      /** Don't use the built-in alias mechanism because of a bug in the normalize function defined
+       * in the memory-fs package it depends on.
+       */
+      // alias: aliasMappings,
+      plugins: [
+        new AliasPlugin(aliasMappings, 'described-resolve', 'resolve'),
+      ],
     },
     resolveLoader: {
       alias: Object.assign(
