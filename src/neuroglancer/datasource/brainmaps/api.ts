@@ -43,9 +43,6 @@ export function setupBrainmapsInstance(
   INSTANCE_NAMES[instance] = name;
   instanceHostname[instance] = hostname;
   let baseUrls = [`https://${hostname}`];
-  for (let shard = 0; shard <= 9; ++shard) {
-    baseUrls.push(`https://s${shard}-${hostname}`);
-  }
   INSTANCE_BASE_URLS[instance] = baseUrls;
 }
 
