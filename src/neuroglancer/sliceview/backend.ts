@@ -72,7 +72,7 @@ export class SliceView extends SliceViewBase {
         let priorityIndex = sources.get(source);
         let chunk = source.getChunk(positionInChunks);
         chunkManager.requestChunk(
-            chunk, ChunkPriorityTier.VISIBLE, priority - SCALE_PRIORITY_MULTIPLIER * priorityIndex);
+            chunk, ChunkPriorityTier.VISIBLE, priority + SCALE_PRIORITY_MULTIPLIER * priorityIndex);
       }
     }
     this.computeVisibleChunks(getLayoutObject, addChunk);

@@ -174,6 +174,8 @@ export class SliceViewBase extends SharedObject {
 
   /**
    * For each visible ChunkLayout, maps each visible VolumeChunkSource to its priority index.
+   * Overall chunk priority ordering is based on a lexicographical ordering of (priorityIndex,
+   * -distanceToCenter).
    */
   visibleChunkLayouts = new Map<ChunkLayout, Map<VolumeChunkSource, number>>();
 
@@ -321,7 +323,7 @@ export class SliceViewBase extends SharedObject {
           existingSources = new Map<VolumeChunkSource, number>();
           visibleChunkLayouts.set(chunkLayout, existingSources);
         }
-        existingSources.set(source, numSources - sourceScaleIndex - 1);
+        existingSources.set(source, sourceScaleIndex);
       };
 
       scaleIndex = numSources - 1;
