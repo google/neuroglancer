@@ -19,12 +19,10 @@
       "spaces"
     ],
     "jsdoc-format": true,
-    "no-duplicate-key": true,
     "no-duplicate-variable": true,
     "no-eval": true,
     "no-internal-module": true,
     "no-trailing-whitespace": true,
-    "no-unused-variable": true,
     "no-var-keyword": false,
     "one-line": [
       true,
@@ -68,7 +66,6 @@
       "check-type"
     ],
     "no-conditional-assignment": true,
-    "no-duplicate-key": true,
     "no-duplicate-case": true,
     "no-empty-character-class": true,
     "no-extra-boolean-cast": true,
@@ -79,7 +76,6 @@
     "no-invalid-regexp": true,
     "no-irregular-whitespace": true,
     "no-unexpected-multiline": true,
-    "no-unreachable": true,
     "use-isnan": true,
     "valid-typeof": true,
     "curly": true,

@@ -3,6 +3,7 @@
     "noImplicitAny": true,
     "noImplicitReturns": true,
     "noImplicitThis": true,
+    "noUnusedParameters": true,
     "preserveConstEnums": true,
     "experimentalDecorators": true,
     "strictNullChecks": true,
