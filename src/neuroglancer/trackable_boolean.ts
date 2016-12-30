@@ -54,7 +54,7 @@ export class TrackableBooleanCheckbox extends RefCounted {
     element.type = 'checkbox';
     this.registerSignalBinding(model.changed.add(this.updateCheckbox, this));
     this.updateCheckbox();
-    this.registerEventListener(element, 'change', function(this: typeof element, e: Event) {
+    this.registerEventListener(element, 'change', function(this: typeof element, _e: Event) {
       model.value = this.checked;
     });
   }

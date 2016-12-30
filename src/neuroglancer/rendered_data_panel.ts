@@ -74,7 +74,7 @@ export abstract class RenderedDataPanel extends RenderedPanel {
         element, 'dblclick', () => { this.viewer.layerManager.invokeAction('select'); });
   }
 
-  onMouseout(event: MouseEvent) {
+  onMouseout(_event: MouseEvent) {
     let {mouseState} = this.viewer;
     mouseState.updater = undefined;
     mouseState.setActive(false);

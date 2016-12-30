@@ -76,7 +76,7 @@ gl_FragData[3] = packFloatIntoVec4(modResult);
         let hashTable = new HashSetUint64();
         let gpuHashTable = tester.registerDisposer(GPUHashTable.get(gl, hashTable));
 
-        for (let i = 0; i < COUNT; ++i) {
+        for (let iter = 0; iter < COUNT; ++iter) {
           let x = Uint64.random();
           let temp = new Uint32Array(2);
           temp[0] = x.low;
@@ -323,7 +323,7 @@ gl_FragData[2] = y.high;
         expect(hashTable.has(x)).toBe(true, `cpu: i = ${i}, x = ${x}`);
         checkPresent(x);
       });
-      notPresentValues.forEach((x, i) => { checkPresent(x); });
+      notPresentValues.forEach((x, ) => { checkPresent(x); });
     });
   });
 });

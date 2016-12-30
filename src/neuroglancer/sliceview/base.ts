@@ -312,7 +312,7 @@ export class SliceViewBase extends SharedObject {
        * Registers a source as being visible.  This should be called with consecutively decreasing
        * values of scaleIndex.
        */
-      const addVisibleSource = (source: VolumeChunkSource, scaleIndex: number) => {
+      const addVisibleSource = (source: VolumeChunkSource, sourceScaleIndex: number) => {
         // Add to end of visibleSources list.  We will reverse the list after all sources are added.
         visibleSources[visibleSources.length++] = source;
         let chunkLayout = source.spec.chunkLayout;
@@ -321,7 +321,7 @@ export class SliceViewBase extends SharedObject {
           existingSources = new Map<VolumeChunkSource, number>();
           visibleChunkLayouts.set(chunkLayout, existingSources);
         }
-        existingSources.set(source, numSources - scaleIndex - 1);
+        existingSources.set(source, numSources - sourceScaleIndex - 1);
       };
 
       scaleIndex = numSources - 1;

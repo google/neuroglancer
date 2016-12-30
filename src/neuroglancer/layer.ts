@@ -36,11 +36,11 @@ export class RenderLayer extends RefCounted {
     this.layerChanged.dispatch();
   }
 
-  handleAction(action: string) {
+  handleAction(_action: string) {
     // Do nothing by default.
   }
 
-  getValueAt(x: Float32Array): any { return undefined; }
+  getValueAt(_x: Float32Array): any { return undefined; }
 
   /**
    * Base voxel size for this layer, in nanometers per voxel.
@@ -56,13 +56,13 @@ export class RenderLayer extends RefCounted {
    * Transform the stored pickedValue and offset associated with the retrieved pick ID into the
    * actual value.
    */
-  transformPickedValue(pickedValue: Uint64, pickedOffset: number): any { return pickedValue; }
+  transformPickedValue(pickedValue: Uint64, _pickedOffset: number): any { return pickedValue; }
 
   /**
    * Optionally updates the mouse state based on the retrived pick information.  This might snap the
    * 3-d position to the center of the picked point.
    */
-  updateMouseState(mouseState: MouseSelectionState, pickedValue: Uint64, pickedOffset: number) {}
+  updateMouseState(_mouseState: MouseSelectionState, _pickedValue: Uint64, _pickedOffset: number) {}
 }
 
 /**
@@ -124,9 +124,9 @@ export class UserLayer extends RefCounted {
 
   toJSON(): any { return null; }
 
-  makeDropdown(element: HTMLDivElement): UserLayerDropdown|undefined { return undefined; }
+  makeDropdown(_element: HTMLDivElement): UserLayerDropdown|undefined { return undefined; }
 
-  handleAction(action: string): void {}
+  handleAction(_action: string): void {}
 };
 
 export class ManagedUserLayer extends RefCounted {

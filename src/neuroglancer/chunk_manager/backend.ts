@@ -114,7 +114,7 @@ export class Chunk implements Disposable {
 
   freeSystemMemory() {}
 
-  serialize(msg: any, transfers: any[]) {
+  serialize(msg: any, _transfers: any[]) {
     msg['id'] = this.key;
     msg['source'] = (<ChunkSource>this.source).rpcId;
     msg['new'] = true;
@@ -156,7 +156,7 @@ export abstract class ChunkSourceBase extends SharedObject {
     return chunk;
   }
 
-  download(chunk: Chunk) {}
+  download(_chunk: Chunk) {}
 
   /**
    * Adds the specified chunk to the chunk cache.
@@ -229,13 +229,6 @@ export function handleChunkDownloadPromise<ChunkType extends Chunk, Result>(
         chunk.downloadFailed(e);
         console.log(`Download failed for chunk ${chunk}`);
       });
-}
-
-const enum ChunkPriorityQueueType {
-  // Queue finds lowest priority chunks.
-  MIN = 0,
-  // Queue finds highest priority chunks.
-  MAX = 1
 }
 
 class ChunkPriorityQueue {

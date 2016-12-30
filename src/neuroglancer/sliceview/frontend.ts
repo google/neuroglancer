@@ -254,7 +254,7 @@ export class SliceView extends SliceViewBase {
       }
       return visibleChunks;
     }
-    function addChunk(chunkLayout: ChunkLayout, visibleChunks: string[], positionInChunks: vec3) {
+    function addChunk(_chunkLayout: ChunkLayout, visibleChunks: string[], positionInChunks: vec3) {
       let key = vec3Key(positionInChunks);
       visibleChunks[visibleChunks.length] = key;
     }

@@ -44,7 +44,7 @@ export interface PerspectiveViewRenderContext {
 }
 
 export class PerspectiveViewRenderLayer extends VisibilityTrackedRenderLayer {
-  draw(renderContext: PerspectiveViewRenderContext) {
+  draw(_renderContext: PerspectiveViewRenderContext) {
     // Must be overridden by subclasses.
   }
 

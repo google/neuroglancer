@@ -30,7 +30,7 @@ implementation.getNewTokenPromise = function(invalidToken) {
   if (invalidToken != null) {
     msg['invalidToken'] = invalidToken;
   }
-  let promise = new Promise(function(resolve, reject) { resolvePromise = resolve; });
+  let promise = new Promise(function(resolve, _reject) { resolvePromise = resolve; });
   rpc.invoke('brainmaps.requestToken', msg);
   return promise;
 };

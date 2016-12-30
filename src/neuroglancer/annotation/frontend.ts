@@ -207,11 +207,11 @@ export class PerspectiveViewAnnotationPointListLayer extends PerspectiveViewRend
     this.renderHelper.draw(this, this.base, renderContext);
   }
 
-  updateMouseState(mouseState: MouseSelectionState, pickedValue: Uint64, pickedOffset: number) {
+  updateMouseState(mouseState: MouseSelectionState, _pickedValue: Uint64, pickedOffset: number) {
     this.base.updateMouseState(mouseState, pickedOffset);
   }
 
-  transformPickedValue(pickedValue: Uint64, pickedOffset: number) { return pickedOffset; }
+  transformPickedValue(_pickedValue: Uint64, pickedOffset: number) { return pickedOffset; }
 }
 
 class SliceViewRenderHelper extends RenderHelper {
@@ -242,9 +242,9 @@ export class SliceViewAnnotationPointListLayer extends SliceViewPanelRenderLayer
     this.renderHelper.draw(this, this.base, renderContext);
   }
 
-  updateMouseState(mouseState: MouseSelectionState, pickedValue: Uint64, pickedOffset: number) {
+  updateMouseState(mouseState: MouseSelectionState, _pickedValue: Uint64, pickedOffset: number) {
     this.base.updateMouseState(mouseState, pickedOffset);
   }
 
-  transformPickedValue(pickedValue: Uint64, pickedOffset: number) { return pickedOffset; }
+  transformPickedValue(_pickedValue: Uint64, pickedOffset: number) { return pickedOffset; }
 }

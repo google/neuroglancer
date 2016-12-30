@@ -288,7 +288,7 @@ for (int e = 0; e < 4; ++e) {
     }
   }
 
-  beginSlice(gl: GL, shader: ShaderProgram) {
+  beginSlice(_gl: GL, shader: ShaderProgram) {
     let aVertexIndexFloat = shader.attribute('aVertexIndexFloat');
     this.data.outputVertexIndices.bindToVertexAttrib(aVertexIndexFloat, 1);
   }
@@ -489,7 +489,7 @@ ${getShaderType(this.dataType)} getDataValue() { return getDataValue(0); }
 `);
   }
 
-  beginSlice(sliceView: SliceView) {
+  beginSlice(_sliceView: SliceView) {
     let gl = this.gl;
 
     let shader = this.shader!;

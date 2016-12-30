@@ -69,8 +69,8 @@ export interface SliceViewPanelRenderContext {
 }
 
 export class SliceViewPanelRenderLayer extends VisibilityTrackedRenderLayer {
-  draw(renderContext: SliceViewPanelRenderContext) {
-    // Must be overriden by subclass.
+  draw(_renderContext: SliceViewPanelRenderContext) {
+    // Must be overridden by subclasses.
   }
 }
 

@@ -271,7 +271,7 @@ export class AutocompleteTextInput extends RefCounted {
   private handleKeyCommand(action: string) { return KEY_COMMANDS.get(action)!.call(this); }
 
   private registerInputHandler() {
-    const handler = (event: Event) => {
+    const handler = (_event: Event) => {
       let value = this.inputElement.value;
       if (value !== this.prevInputValue) {
         this.prevInputValue = value;

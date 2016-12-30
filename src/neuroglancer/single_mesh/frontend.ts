@@ -467,7 +467,7 @@ export class SingleMeshLayer extends PerspectiveViewRenderLayer {
 
   drawPicking(renderContext: PerspectiveViewRenderContext) { this.draw(renderContext); }
 
-  transformPickedValue(pickedValue: Uint64, pickedOffset: number) {
+  transformPickedValue(_pickedValue: Uint64, pickedOffset: number) {
     let chunk = <SingleMeshChunk|undefined>this.source.chunks.get(SINGLE_MESH_CHUNK_KEY);
     if (chunk === undefined) {
       return undefined;

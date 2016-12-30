@@ -244,7 +244,7 @@ export function tokenAndChannelCompleter(
       return {
         offset: 0,
         completions:
-            getPrefixMatchesWithDescriptions(keyPrefix, tokens, x => x + '/', x => undefined)
+            getPrefixMatchesWithDescriptions(keyPrefix, tokens, x => x + '/', () => undefined)
       };
     });
   }

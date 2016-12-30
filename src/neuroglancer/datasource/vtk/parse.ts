@@ -72,7 +72,8 @@ function parsePolydataAscii(header: VTKHeader, data: ArrayBufferView): Triangula
 
   let vertexAttributes = new Array<VertexAttribute>();
 
-  function parseArray(fieldName: string, n: number, numComponents: number, dataType: string) {
+  function parseArray(fieldName: string, n: number, numComponents: number, _dataType: string) {
+    // TODO(jbms): respect dataType
     let pattern = RegExp(
         '^[ \t]*' +
         '([^\s]+)[ \t]+'.repeat(numComponents - 1) + '([^\s]+)[ \t]*$');

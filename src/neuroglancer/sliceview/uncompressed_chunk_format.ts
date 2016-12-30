@@ -61,7 +61,7 @@ export class ChunkFormat extends SingleTextureChunkFormat<TextureLayout> {
     return gl.memoize.get(key, () => new ChunkFormat(gl, dataType, numChannels, key));
   }
 
-  constructor(gl: GL, public dataType: DataType, public numChannels: number, key: string) {
+  constructor(_gl: GL, public dataType: DataType, public numChannels: number, key: string) {
     super(key);
     compute1dTextureFormat(this, dataType);
     this.textureAccessHelper = new OneDimensionalTextureAccessHelper('chunkData');

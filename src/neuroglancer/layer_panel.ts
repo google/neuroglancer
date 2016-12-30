@@ -52,7 +52,7 @@ class LayerWidget extends RefCounted {
     let closeElement = document.createElement('span');
     closeElement.title = 'Delete layer';
     closeElement.className = 'layer-item-close';
-    this.registerEventListener(closeElement, 'click', (event: MouseEvent) => {
+    this.registerEventListener(closeElement, 'click', (_event: MouseEvent) => {
       this.panel.layerManager.removeManagedLayer(this.layer);
     });
     widgetElement.appendChild(layerNumberElement);
@@ -60,7 +60,7 @@ class LayerWidget extends RefCounted {
     widgetElement.appendChild(valueElement);
     widgetElement.appendChild(closeElement);
     this.registerEventListener(
-        widgetElement, 'click', (event: MouseEvent) => { layer.setVisible(!layer.visible); });
+        widgetElement, 'click', (_event: MouseEvent) => { layer.setVisible(!layer.visible); });
 
     let dropdownElement = this.dropdownElement = document.createElement('div');
 
@@ -85,7 +85,7 @@ class LayerWidget extends RefCounted {
       }
     });
 
-    this.registerEventListener(widgetElement, 'dblclick', (event: MouseEvent) => {
+    this.registerEventListener(widgetElement, 'dblclick', (_event: MouseEvent) => {
       if (layer instanceof ManagedUserLayerWithSpecification) {
         new LayerDialog(this.panel.manager, layer);
       }
@@ -99,7 +99,7 @@ class LayerWidget extends RefCounted {
       this.hovering = true;
       this.updateDropdownState();
     });
-    this.registerEventListener(element, 'mouseleave', (event: MouseEvent) => {
+    this.registerEventListener(element, 'mouseleave', (_event: MouseEvent) => {
       this.hovering = false;
       this.updateDropdownState();
     });
@@ -184,7 +184,7 @@ export class LayerPanel extends RefCounted {
     this.update();
     let sortable = new Sortable(this.element, {
       draggable: '.layer-item-parent',
-      onStart: (evt) => {
+      onStart: (_evt) => {
         this.setDragging(true);
         this.element.classList.add('sorting-in-progress');
       },

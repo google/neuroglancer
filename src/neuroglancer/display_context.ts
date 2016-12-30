@@ -24,7 +24,7 @@ export abstract class RenderedPanel extends RefCounted {
     super();
     this.gl = context.gl;
     this.registerEventListener(
-        element, 'mouseenter', (event: MouseEvent) => { this.context.setActivePanel(this); });
+        element, 'mouseenter', (_event: MouseEvent) => { this.context.setActivePanel(this); });
     context.addPanel(this);
   }
 
@@ -46,7 +46,7 @@ export abstract class RenderedPanel extends RefCounted {
 
   abstract onResize(): void;
 
-  onKeyCommand(action: string) { return false; }
+  onKeyCommand(_action: string) { return false; }
 
   abstract draw(): void;
 

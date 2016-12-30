@@ -36,7 +36,7 @@ interface SupportedDataType {
 const supportedDataTypes = new Map<string, SupportedDataType>();
 supportedDataTypes.set('|u1', {
   arrayConstructor: Uint8Array,
-  fixEndianness: array => {},
+  fixEndianness: () => {},
   javascriptElementsPerArrayElement: 1,
   elementBytes: 1,
   dataType: DataType.UINT8,
