@@ -128,6 +128,9 @@ node.js is required to build the viewer.
 
    `npm i`
 
+   Also re-run this any time the dependencies listed in [package.json](package.json) may have
+   changed, such as after checking out a different revision or pulling changes.
+
 4. To run a local server for development purposes:
 
    `npm run dev-server`
