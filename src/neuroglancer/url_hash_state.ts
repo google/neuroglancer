@@ -53,7 +53,7 @@ export function getCurrentState() {
   return currentHashState;
 }
 
-const UPDATE_DELAY = 500;
+const UPDATE_DELAY = 200;
 
 export interface Trackable {
   restoreState: (x: any) => void;
@@ -135,12 +135,6 @@ function scheduleUpdate() {
   if (pendingUpdate === -1) {
     nextUpdateTime = Date.now() + UPDATE_DELAY;
     pendingUpdate = setTimeout(timerExpired, UPDATE_DELAY);
-  }
-}
-
-export function delayHashUpdate() {
-  if (pendingUpdate !== -1) {
-    nextUpdateTime = Date.now() + UPDATE_DELAY;
   }
 }
 

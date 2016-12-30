@@ -29,7 +29,7 @@ import {overlaysOpen} from 'neuroglancer/overlay';
 import {PositionStatusPanel} from 'neuroglancer/position_status_panel';
 import {TrackableBoolean} from 'neuroglancer/trackable_boolean';
 import {TrackableValue} from 'neuroglancer/trackable_value';
-import {delayHashUpdate, registerTrackable} from 'neuroglancer/url_hash_state';
+import {registerTrackable} from 'neuroglancer/url_hash_state';
 import {RefCounted} from 'neuroglancer/util/disposable';
 import {vec3} from 'neuroglancer/util/geom';
 import {GlobalKeyboardShortcutHandler, KeySequenceMap} from 'neuroglancer/util/keyboard_shortcut_handler';
@@ -232,7 +232,6 @@ export class Viewer extends RefCounted implements ViewerState {
   get gl() { return this.display.gl; }
 
   onUpdateDisplay() {
-    delayHashUpdate();
     this.chunkQueueManager.chunkUpdateDeadline = null;
   }
 
