@@ -25,6 +25,9 @@ const fs = require('fs');
 const AliasPlugin = require('./webpack_alias_plugin');
 const resolveReal = require('./resolve_real');
 
+// Monkey patch ts-loader.
+require('./ts_loader_patch');
+
 // Note: We use require.resolve below to ensure the plugins are resolved
 // relative to this configuration file, rather than relative to the source
 // files, in case this configuration is being used from a dependent project that
