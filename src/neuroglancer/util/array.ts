@@ -45,8 +45,8 @@ export function partitionArray<T>(
 }
 
 export interface TypedArrayConstructor {
-  new (n: number): TypedArray;
-  new (buffer: ArrayBuffer, byteOffset: number, length: number): TypedArray;
+  new(n: number): TypedArray;
+  new(buffer: ArrayBuffer, byteOffset: number, length: number): TypedArray;
   BYTES_PER_ELEMENT: number;
 }
 
@@ -76,4 +76,20 @@ export function getFortranOrderStrides(size: ArrayLike<number>, baseStride = 1) 
     strides[i] = stride;
   }
   return strides;
+}
+
+/**
+ * Converts an array of shape [majorSize, minorSize] to
+ * [minorSize, majorSize].
+ */
+export function transposeArray2d<T extends TypedArray>(
+    array: T, majorSize: number, minorSize: number): T {
+  let transpose = new (<any>array.constructor)(array.length);
+  for (let i = 0; i < majorSize * minorSize; i += minorSize) {
+    for (let j = 0; j < minorSize; j++) {
+      let index: number = i / minorSize;
+      transpose[j * majorSize + index] = array[i + j];
+    }
+  }
+  return transpose;
 }

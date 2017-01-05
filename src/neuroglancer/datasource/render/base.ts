@@ -14,12 +14,23 @@
  * limitations under the License.
  */
 
-import {VolumeChunk} from 'neuroglancer/sliceview/backend';
-import {postProcessRawData} from 'neuroglancer/sliceview/backend_chunk_decoders/postprocess';
-import {decodeJpegStack} from 'neuroglancer/sliceview/decode_jpeg_stack';
+export class RenderSourceParameters {
+  baseUrls: string[];
+  owner: string;
+  project: string;
+  stack: string;
+  encoding: string;
+}
 
-export function decodeJpegChunk(chunk: VolumeChunk, response: ArrayBuffer) {
-  postProcessRawData(
-      chunk, decodeJpegStack(
-                 new Uint8Array(response), chunk.chunkDataSize!, chunk.source!.spec.numChannels));
+export class TileChunkSourceParameters extends RenderSourceParameters {
+  dims: string;
+  level: number;
+  encoding: string;
+
+  static RPC_ID = 'render/TileChunkSource';
+
+  static stringify(parameters: TileChunkSourceParameters) {
+    return `render:tile:${parameters.baseUrls[0]}/${parameters.owner
+        }/${parameters.project}/${parameters.stack}/${parameters.level}/${parameters.encoding}`;
+  }
 }
