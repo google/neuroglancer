@@ -18,7 +18,7 @@ import {decodeChannel, decodeChannels} from 'neuroglancer/sliceview/compressed_s
 import {encodeBlock, encodeChannel, encodeChannels, newCache} from 'neuroglancer/sliceview/compressed_segmentation/encode_uint64';
 import {makeRandomUint64Array} from 'neuroglancer/sliceview/compressed_segmentation/test_util';
 import {prod3, prod4} from 'neuroglancer/util/geom';
-import {Uint32ArrayBuilder} from 'neuroglancer/util/uint32array_builder.ts';
+import {Uint32ArrayBuilder} from 'neuroglancer/util/uint32array_builder';
 
 describe('compressed_segmentation uint64', () => {
   describe('encodeBlock', () => {

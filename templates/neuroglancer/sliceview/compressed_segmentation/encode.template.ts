@@ -19,11 +19,11 @@
  * Support for compressing uint32/uint64 segment label chunks.
  */
 
-import {encodeChannel as encodeChannelCommon, encodeChannels as encodeChannelsCommon, writeBlock} from 'neuroglancer/sliceview/compressed_segmentation/encode_common.ts';
+import {encodeChannel as encodeChannelCommon, encodeChannels as encodeChannelsCommon, writeBlock} from 'neuroglancer/sliceview/compressed_segmentation/encode_common';
 import {getFortranOrderStrides} from 'neuroglancer/util/array';
-import {Uint32ArrayBuilder} from 'neuroglancer/util/uint32array_builder.ts';
+import {Uint32ArrayBuilder} from 'neuroglancer/util/uint32array_builder';
 
-export {newCache} from 'neuroglancer/sliceview/compressed_segmentation/encode_common.ts';
+export {newCache} from 'neuroglancer/sliceview/compressed_segmentation/encode_common';
 
 let tempEncodingBuffer: Uint32Array;
 let tempValuesBuffer1: Uint32Array;

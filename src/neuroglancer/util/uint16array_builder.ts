@@ -19,7 +19,9 @@ export class Uint16ArrayBuilder {
   length = 0;
   data: Uint16Array;
 
-  constructor(initialCapacity: number = 16) { this.data = new Uint16Array(initialCapacity); }
+  constructor(initialCapacity: number = 16) {
+    this.data = new Uint16Array(initialCapacity);
+  }
 
   resize(newLength: number) {
     let {data} = this;
@@ -36,9 +38,13 @@ export class Uint16ArrayBuilder {
     return new Uint16Array(data.buffer, data.byteOffset, this.length);
   }
 
-  shrinkToFit() { this.data = new Uint16Array(this.view); }
+  shrinkToFit() {
+    this.data = new Uint16Array(this.view);
+  }
 
-  clear() { this.length = 0; }
+  clear() {
+    this.length = 0;
+  }
 
   appendArray(other: ArrayLike<number>) {
     let {length} = this;
