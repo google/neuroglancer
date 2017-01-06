@@ -157,10 +157,10 @@ emit(getColor(), vPickID);
     mat4.scale(objectToDataMatrix, objectToDataMatrix, base.voxelSizeObject.size);
     mat4.multiply(tempMat, renderContext.dataToDevice, objectToDataMatrix);
     gl.uniformMatrix4fv(shader.uniform('uProjection'), false, tempMat);
-    const viewport = gl.getParameter(gl.VIEWPORT);
     const pointRadius = 8;
     gl.uniform2f(
-        shader.uniform('uPointRadii'), pointRadius / viewport[2], pointRadius / viewport[3]);
+        shader.uniform('uPointRadii'), pointRadius / renderContext.viewportWidth,
+        pointRadius / renderContext.viewportHeight);
     if (renderContext.emitPickID) {
       const pickID = renderContext.pickIDs.register(renderLayer, numPoints);
       gl.uniform4fv(shader.uniform('uPickID'), setVec4FromUint32(tempPickID, pickID));

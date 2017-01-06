@@ -66,6 +66,16 @@ export interface SliceViewPanelRenderContext {
    * Specifies whether the emitted pick ID will be used.
    */
   emitPickID: boolean;
+
+  /**
+   * Width of GL viewport in pixels.
+   */
+  viewportWidth: number;
+
+  /**
+   * Height of GL viewport in pixels.
+   */
+  viewportHeight: number;
 }
 
 export class SliceViewPanelRenderLayer extends VisibilityTrackedRenderLayer {
@@ -138,12 +148,14 @@ export class SliceViewPanel extends RenderedDataPanel {
     let {pickIDs} = this;
     pickIDs.clear();
     this.offscreenFramebuffer.bindSingle(OffscreenTextures.COLOR);
-    let renderContext = {
+    let renderContext: SliceViewPanelRenderContext = {
       dataToDevice: sliceView.dataToDevice,
       pickIDs: pickIDs,
       emitter: sliceViewPanelEmitColor,
       emitColor: true,
       emitPickID: false,
+      viewportWidth: width,
+      viewportHeight: height,
     };
     gl.enable(gl.BLEND);
     gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);

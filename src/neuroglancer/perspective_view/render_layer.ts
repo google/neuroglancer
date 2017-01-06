@@ -41,6 +41,16 @@ export interface PerspectiveViewRenderContext {
    * Specifies whether there was a previous pick ID pass.
    */
   alreadyEmittedPickID: boolean;
+
+  /**
+   * Width of GL viewport in pixels.
+   */
+  viewportWidth: number;
+
+  /**
+   * Height of GL viewport in pixels.
+   */
+  viewportHeight: number;
 }
 
 export class PerspectiveViewRenderLayer extends VisibilityTrackedRenderLayer {

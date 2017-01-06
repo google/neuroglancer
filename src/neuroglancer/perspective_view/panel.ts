@@ -262,6 +262,8 @@ export class PerspectivePanel extends RenderedDataPanel {
       emitColor: true,
       emitPickID: true,
       alreadyEmittedPickID: false,
+      viewportWidth: width,
+      viewportHeight: height,
     };
 
     let visibleLayers = this.visibleLayerTracker.getVisibleLayers();
