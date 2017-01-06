@@ -58,10 +58,22 @@ module.exports = function(config) {
 
     webpack: webpackConfig,
     webpackServer: {noInfo: true},
+    browserStack: {
+      // This empty object is required to work around a bug in karma-browserstack-launcher.
+    },
     browsers: [
       'Chrome',
       // 'ChromeCanary',
     ],
+    customLaunchers: {
+      browserstack_chrome55_osx_sierra: {
+        base: 'BrowserStack',
+        browser: 'chrome',
+        browser_version: '55.0',
+        os: 'OS X',
+        os_version: 'Sierra',
+      },
+    },
     colors: true,
     browserNoActivityTimeout: 60000,
     reporters: ['mocha', 'coverage'],
