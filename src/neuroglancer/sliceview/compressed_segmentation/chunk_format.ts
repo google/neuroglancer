@@ -25,7 +25,7 @@ import {Uint64} from 'neuroglancer/util/uint64';
 import {GL} from 'neuroglancer/webgl/context';
 import {compute1dTextureFormat, compute1dTextureLayout, OneDimensionalTextureAccessHelper, OneDimensionalTextureFormat, setOneDimensionalTextureData} from 'neuroglancer/webgl/one_dimensional_texture_access';
 import {ShaderBuilder, ShaderProgram} from 'neuroglancer/webgl/shader';
-import {getShaderType, glsl_getFortranOrderIndexFromNormalized, glsl_uint64} from 'neuroglancer/webgl/shader_lib';
+import {getShaderType, glsl_getFortranOrderIndexFromNormalized, glsl_uint64, glsl_unnormalizeUint8, glsl_uintleToFloat} from 'neuroglancer/webgl/shader_lib';
 
 class TextureLayout extends RefCounted {
   dataWidth: number;
@@ -84,6 +84,8 @@ export class ChunkFormat extends SingleTextureChunkFormat<TextureLayout> {
     }
     builder.addFragmentCode(textureAccessHelper.getAccessor(
         local('readTextureValue'), 'uVolumeChunkSampler', DataType.UINT32));
+    builder.addFragmentCode(glsl_unnormalizeUint8);
+    builder.addFragmentCode(glsl_uintleToFloat);
 
     let fragmentCode = `
 float ${local('getChannelOffset')}(int channelIndex) {
@@ -91,7 +93,7 @@ float ${local('getChannelOffset')}(int channelIndex) {
     return ${this.numChannels}.0;
   }
   vec4 v = ${local('readTextureValue')}(float(channelIndex)).value;
-  return v.x * 255.0 + v.y * 255.0 * 256.0 + v.z * 255.0 * 256.0 * 256.0;
+  return uintleToFloat(v.xyz);
 }
 ${glslType} getDataValue (int channelIndex) {
   vec3 chunkPosition = getPositionWithinChunk();
@@ -108,12 +110,12 @@ ${glslType} getDataValue (int channelIndex) {
   vec4 subchunkHeader0 = ${local('readTextureValue')}(subchunkHeaderOffset).value;
   vec4 subchunkHeader1 = ${local('readTextureValue')}(subchunkHeaderOffset + 1.0).value;
 
-  float outputValueOffset = dot(subchunkHeader0.xyz, vec3(255, 256 * 255, 256 * 256 * 255)) + channelOffset;
-  float encodingBits = subchunkHeader0[3] * 255.0;
+  float outputValueOffset = uintleToFloat(subchunkHeader0.xyz) + channelOffset;
+  float encodingBits = unnormalizeUint8(subchunkHeader0[3]);
   if (encodingBits > 0.0) {
     vec3 subchunkPosition = floor(min(chunkPosition - subchunkGridPosition * uSubchunkSize, uSubchunkSize - 1.0));
     float subchunkOffset = getFortranOrderIndex(subchunkPosition, uSubchunkSize);
-    highp float encodedValueBaseOffset = dot(subchunkHeader1.xyz, vec3(255.0, 256.0 * 255.0, 256.0 * 256.0 * 255.0)) + channelOffset;
+    highp float encodedValueBaseOffset = uintleToFloat(subchunkHeader1.xyz) + channelOffset;
     highp float encodedValueOffset = floor(encodedValueBaseOffset + subchunkOffset * encodingBits / 32.0);
     vec4 encodedValue = ${local('readTextureValue')}(encodedValueOffset).value;
     float wordOffset = mod(subchunkOffset * encodingBits, 32.0);
@@ -123,9 +125,9 @@ ${glslType} getDataValue (int channelIndex) {
     float encodedValueMod = pow(2.0, encodingBits);
     float encodedValueShifted;
     if (wordOffset < 16.0) {
-      encodedValueShifted = dot(encodedValue.xy, vec2(255.0, 255.0 * 256.0));
+      encodedValueShifted = dot(unnormalizeUint8(encodedValue.xy), vec2(1.0, 256.0));
     } else {
-      encodedValueShifted = dot(encodedValue.zw, vec2(255.0 * 256.0 * 256.0, 255.0 * 256.0 * 256.0 * 256.0));
+      encodedValueShifted = dot(unnormalizeUint8(encodedValue.zw), vec2(256.0 * 256.0, 256.0 * 256.0 * 256.0));
     }
     encodedValueShifted = floor(encodedValueShifted * wordShifter);
     float decodedValue = mod(encodedValueShifted, encodedValueMod);

@@ -24,6 +24,7 @@ import {RenderLayer} from 'neuroglancer/sliceview/renderlayer';
 import {TrackableAlphaValue} from 'neuroglancer/trackable_alpha';
 import {DisjointUint64Sets} from 'neuroglancer/util/disjoint_sets';
 import {ShaderBuilder, ShaderProgram} from 'neuroglancer/webgl/shader';
+import {glsl_unnormalizeUint8} from 'neuroglancer/webgl/shader_lib';
 
 const selectedSegmentForShader = new Float32Array(8);
 
@@ -120,6 +121,7 @@ uint64_t getMappedObjectId() {
     builder.addUniform('highp float', 'uShowAllSegments');
     builder.addUniform('highp float', 'uSelectedAlpha');
     builder.addUniform('highp float', 'uNotSelectedAlpha');
+    builder.addFragmentCode(glsl_unnormalizeUint8);
     builder.setFragmentMain(`
   uint64_t value = getMappedObjectId();
   
@@ -130,7 +132,8 @@ uint64_t getMappedObjectId() {
     return;
   }
   bool has = uShowAllSegments > 0.0 ? true : ${this.hashTableManager.hasFunctionName}(value);
-  if (uSelectedSegment[0] == value.low && uSelectedSegment[1] == value.high) {
+  if (uSelectedSegment[0] == unnormalizeUint8(value.low) &&
+      uSelectedSegment[1] == unnormalizeUint8(value.high)) {
     saturation = has ? 0.5 : 0.75;
   } else if (!has) {
     alpha = uNotSelectedAlpha;
@@ -152,8 +155,8 @@ uint64_t getMappedObjectId() {
       let seg = segmentSelectionState.selectedSegment;
       let low = seg.low, high = seg.high;
       for (let i = 0; i < 4; ++i) {
-        selectedSegmentForShader[i] = ((low >> (8 * i)) & 0xFF) / 255.0;
-        selectedSegmentForShader[4 + i] = ((high >> (8 * i)) & 0xFF) / 255.0;
+        selectedSegmentForShader[i] = ((low >> (8 * i)) & 0xFF);
+        selectedSegmentForShader[4 + i] = ((high >> (8 * i)) & 0xFF);
       }
     }
     gl.uniform1f(shader.uniform('uSelectedAlpha'), this.displayState.selectedAlpha.value);
