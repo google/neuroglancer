@@ -32,7 +32,7 @@ import {ShaderBuilder, ShaderCodePart, ShaderProgram} from 'neuroglancer/webgl/s
 import {getShaderType, glsl_float, glsl_uint16, glsl_uint32, glsl_uint64, glsl_uint8} from 'neuroglancer/webgl/shader_lib';
 import {setRawTextureParameters} from 'neuroglancer/webgl/texture';
 
-export interface OneDimensionalTextureLayout {
+export class OneDimensionalTextureLayout {
   dataWidth: number;
   textureHeight: number;
   textureAccessCoefficients: vec2;
