@@ -22,7 +22,8 @@ import {vec3, vec3Key} from 'neuroglancer/util/geom';
 import {registerRPC, registerSharedObject, RPC, SharedObjectCounterpart} from 'neuroglancer/worker_rpc';
 import {Signal} from 'signals';
 
-const SCALE_PRIORITY_MULTIPLIER = 1e5;
+const BASE_PRIORITY = -1e12;
+const SCALE_PRIORITY_MULTIPLIER = 1e9;
 
 // Temporary values used by SliceView.updateVisibleChunk and VolumeChunkSource.computeChunkPosition.
 const tempChunkPosition = vec3.create();
@@ -72,7 +73,7 @@ export class SliceView extends SliceViewBase {
         let priorityIndex = sources.get(source);
         let chunk = source.getChunk(positionInChunks);
         chunkManager.requestChunk(
-            chunk, ChunkPriorityTier.VISIBLE, priority + SCALE_PRIORITY_MULTIPLIER * priorityIndex);
+            chunk, ChunkPriorityTier.VISIBLE, BASE_PRIORITY + priority + SCALE_PRIORITY_MULTIPLIER * priorityIndex);
       }
     }
     this.computeVisibleChunks(getLayoutObject, addChunk);
