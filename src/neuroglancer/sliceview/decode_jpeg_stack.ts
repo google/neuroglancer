@@ -34,7 +34,7 @@ export function decodeJpegStack(data: Uint8Array, chunkDataSize: vec3, numCompon
     return parser.getData(parser.width, parser.height, /*forceRGBOutput=*/false);
   } else if (parser.numComponents === 3) {
     let output = parser.getData(parser.width, parser.height, /*forceRGBOutput=*/false);
-    return transposeArray2d(output, parser.width, parser.height);
+    return transposeArray2d(output, parser.width * parser.height, 3);
   } else {
     throw new Error(
       `JPEG data has an unsupported number of components: components=${parser.numComponents}`);
