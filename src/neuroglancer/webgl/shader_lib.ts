@@ -55,38 +55,54 @@ vec3 hsvToRgb(vec3 c) {
 `;
 
 /**
- * Converts a little-endian integer value encoded as a float, vec2, vec3 or vec4 to an integer
- * stored in a float.
+ * Converts a float value containing a uint8 value normalized to [0, 1] (by dividing by 255) back to
+ * an integer in [0, 255] (but still stored as a float).  The rounding is needed because on certain
+ * graphics hardware, in particular Intel HD Graphics 4000, the normalization done by the texture
+ * system is not exactly reversed by multiplying by 255.
  */
-export const glsl_uintleToFloat = `
+export const glsl_unnormalizeUint8 = ['float', 'vec2', 'vec3', 'vec4']
+                                         .map(t => `
+${t} unnormalizeUint8(${t} value) {
+  return floor(value * 255.0 + 0.5);
+}
+`).join('');
+
+
+/**
+ * Converts a little-endian or big-endian integer value encoded as a normalized float, vec2, vec3 or
+ * vec4 to an integer stored in a float.
+ */
+export const glsl_uintleToFloat = [
+  glsl_unnormalizeUint8, `
 float uintleToFloat(float v) {
-  return v * 255.0;
+  return unnormalizeUint8(v);
 }
 float uintleToFloat(vec2 v) {
-  return v.x * 255.0 + v.y * 65280.0;
+  v = unnormalizeUint8(v);
+  return v.x + v.y * 256.0;
 }
 float uintleToFloat(vec3 v) {
-  return v.x * 255.0 + v.y * 65280.0 + v.z * 16711680.0;
+  v = unnormalizeUint8(v);
+  return v.x + v.y * 256.0 + v.z * 256.0 * 256.0;
 }
-float uintleToFloat(vec4 v) {
-  return uintleToFloat(v.xyz);
-}
-`;
+`
+];
 
-export const glsl_uintbeToFloat = `
+export const glsl_uintbeToFloat = [
+  glsl_unnormalizeUint8, `
 float uintbeToFloat(float v) {
-  return v * 255.0;
+  return unnormalizeUint8(v);
 }
 float uintbeToFloat(vec2 v) {
-  return v.y * 255.0 + v.x * 65280.0;
+  v = unnormalizeUint8(v);
+  return v.y + v.x * 256.0;
 }
 float uintbeToFloat(vec3 v) {
-  return v.z * 255.0 + v.y * 65280.0 + v.x * 16711680.0;
+  v = unnormalizeUint8(v);
+  return v.z + v.y * 256.0 + v.x * 256.0 * 256.0;
 }
-float uintbeToFloat(vec4 v) {
-  return uint24leToFloat(v.gba);
-}
-`;
+`
+];
 
 /**
  * Converts a native-endian integer value encoded as a float, vec2, vec3 or vec4 to an integer
@@ -105,9 +121,6 @@ float uintToFloat(vec2 v) {
 float uintToFloat(vec3 v) {
   return uint${suffix}ToFloat(v);
 }
-float uintToFloat(vec4 v) {
-  return uint${suffix}ToFloat(v);
-}
 `
   ];
 })();
@@ -120,7 +133,7 @@ uint64_t toUint64(uint64_t x) { return x; }
 `;
 
 export const glsl_uint8 = [
-  glsl_uint64, `
+  glsl_unnormalizeUint8, glsl_uint64, `
 struct uint8_t {
   float value;
 };
@@ -133,13 +146,13 @@ struct uint8x3_t {
 struct uint8x4_t {
   vec4 value;
 };
-float toRaw(uint8_t x) { return x.value * 255.0; }
+float toRaw(uint8_t x) { return unnormalizeUint8(x.value); }
 float toNormalized(uint8_t x) { return x.value; }
-vec2 toRaw(uint8x2_t x) { return x.value * 255.0; }
+vec2 toRaw(uint8x2_t x) { return unnormalizeUint8(x.value); }
 vec2 toNormalized(uint8x2_t x) { return x.value; }
-vec3 toRaw(uint8x3_t x) { return x.value * 255.0; }
+vec3 toRaw(uint8x3_t x) { return unnormalizeUint8(x.value); }
 vec3 toNormalized(uint8x3_t x) { return x.value; }
-vec4 toRaw(uint8x4_t x) { return x.value * 255.0; }
+vec4 toRaw(uint8x4_t x) { return unnormalizeUint8(x.value); }
 vec4 toNormalized(uint8x4_t x) { return x.value; }
 uint64_t toUint64(uint8_t x) {
   uint64_t result;
@@ -162,16 +175,16 @@ vec4 toNormalized(vec4 x) { return x; }
 `;
 
 export const glsl_uint16 = [
-  glsl_uint64, `
+  glsl_uint64, glsl_uintleToFloat, `
 struct uint16_t {
   vec2 value;
 };
 struct uint16x2_t {
   vec4 value;
 };
-float toRaw(uint16_t x) { return x.value.x * 255.0 + x.value.y * 65280.0; }
+float toRaw(uint16_t x) { return uintleToFloat(x.value); }
 float toNormalized(uint16_t x) { return toRaw(x) / 65535.0; }
-vec2 toRaw(uint16x2_t x) { return vec2(x.value.x * 255.0 + x.value.y * 65280.0, x.value.z * 255.0 + x.value.w * 65280.0); }
+vec2 toRaw(uint16x2_t x) { return vec2(uintleToFloat(x.value.xy), uintleToFloat(x.value.zw)); }
 vec2 toNormalized(uint16x2_t x) { return toRaw(x) / 65535.0; }
 uint64_t toUint64(uint16_t x) {
   uint64_t result;

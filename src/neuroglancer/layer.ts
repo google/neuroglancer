@@ -14,12 +14,12 @@
  * limitations under the License.
  */
 
-import * as debounce from 'lodash/debounce';
-import * as throttle from 'lodash/throttle';
+import debounce from 'lodash/debounce';
+import throttle from 'lodash/throttle';
 import {RenderedPanel} from 'neuroglancer/display_context';
 import {SpatialPosition} from 'neuroglancer/navigation_state';
 import {RefCounted} from 'neuroglancer/util/disposable';
-import {BoundingBox, Vec3, vec3} from 'neuroglancer/util/geom';
+import {BoundingBox, vec3} from 'neuroglancer/util/geom';
 import {addSignalBinding, removeSignalBinding, SignalBindingUpdater} from 'neuroglancer/util/signal_binding_updater';
 import {Uint64} from 'neuroglancer/util/uint64';
 import {UseCount} from 'neuroglancer/util/use_count';
@@ -36,16 +36,16 @@ export class RenderLayer extends RefCounted {
     this.layerChanged.dispatch();
   }
 
-  handleAction(action: string) {
+  handleAction(_action: string) {
     // Do nothing by default.
   }
 
-  getValueAt(x: Float32Array): any { return undefined; }
+  getValueAt(_x: Float32Array): any { return undefined; }
 
   /**
    * Base voxel size for this layer, in nanometers per voxel.
    */
-  voxelSize: Vec3|null = null;
+  voxelSize: vec3|null = null;
 
   /**
    * Bounding box for this layer, in nanometers.
@@ -56,13 +56,13 @@ export class RenderLayer extends RefCounted {
    * Transform the stored pickedValue and offset associated with the retrieved pick ID into the
    * actual value.
    */
-  transformPickedValue(pickedValue: Uint64, pickedOffset: number): any { return pickedValue; }
+  transformPickedValue(pickedValue: Uint64, _pickedOffset: number): any { return pickedValue; }
 
   /**
    * Optionally updates the mouse state based on the retrived pick information.  This might snap the
    * 3-d position to the center of the picked point.
    */
-  updateMouseState(mouseState: MouseSelectionState, pickedValue: Uint64, pickedOffset: number) {}
+  updateMouseState(_mouseState: MouseSelectionState, _pickedValue: Uint64, _pickedOffset: number) {}
 }
 
 /**
@@ -124,9 +124,9 @@ export class UserLayer extends RefCounted {
 
   toJSON(): any { return null; }
 
-  makeDropdown(element: HTMLDivElement): UserLayerDropdown|undefined { return undefined; }
+  makeDropdown(_element: HTMLDivElement): UserLayerDropdown|undefined { return undefined; }
 
-  handleAction(action: string): void {}
+  handleAction(_action: string): void {}
 };
 
 export class ManagedUserLayer extends RefCounted {

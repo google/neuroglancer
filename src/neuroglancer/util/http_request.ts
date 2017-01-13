@@ -114,7 +114,6 @@ export function parseSpecialUrl(url: string): [string[], string] {
   if (protocol === 'gs') {
     const bucket = match[2];
     const baseUrls = [
-      `https://${bucket}.storage.googleapis.com`,
       `https://storage.googleapis.com/${bucket}`,
     ];
     return [baseUrls, match[3]];

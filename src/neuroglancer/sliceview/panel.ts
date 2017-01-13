@@ -21,7 +21,7 @@ import {PickIDManager} from 'neuroglancer/object_picking';
 import {RenderedDataPanel} from 'neuroglancer/rendered_data_panel';
 import {SliceView, SliceViewRenderHelper} from 'neuroglancer/sliceview/frontend';
 import {ElementVisibilityFromTrackableBoolean, TrackableBoolean} from 'neuroglancer/trackable_boolean';
-import {identityMat4, Mat4, mat4, vec3, vec4} from 'neuroglancer/util/geom';
+import {identityMat4, mat4, vec3, vec4} from 'neuroglancer/util/geom';
 import {startRelativeMouseDrag} from 'neuroglancer/util/mouse_drag';
 import {ViewerState} from 'neuroglancer/viewer_state';
 import {FramebufferConfiguration, makeTextureBuffers, OffscreenCopyHelper} from 'neuroglancer/webgl/offscreen';
@@ -53,7 +53,7 @@ void emit(vec4 color, vec4 pickId) {
 }
 
 export interface SliceViewPanelRenderContext {
-  dataToDevice: Mat4;
+  dataToDevice: mat4;
   pickIDs: PickIDManager;
   emitter: ShaderModule;
 
@@ -66,11 +66,21 @@ export interface SliceViewPanelRenderContext {
    * Specifies whether the emitted pick ID will be used.
    */
   emitPickID: boolean;
+
+  /**
+   * Width of GL viewport in pixels.
+   */
+  viewportWidth: number;
+
+  /**
+   * Height of GL viewport in pixels.
+   */
+  viewportHeight: number;
 }
 
 export class SliceViewPanelRenderLayer extends VisibilityTrackedRenderLayer {
-  draw(renderContext: SliceViewPanelRenderContext) {
-    // Must be overriden by subclass.
+  draw(_renderContext: SliceViewPanelRenderContext) {
+    // Must be overridden by subclasses.
   }
 }
 
@@ -138,12 +148,14 @@ export class SliceViewPanel extends RenderedDataPanel {
     let {pickIDs} = this;
     pickIDs.clear();
     this.offscreenFramebuffer.bindSingle(OffscreenTextures.COLOR);
-    let renderContext = {
+    let renderContext: SliceViewPanelRenderContext = {
       dataToDevice: sliceView.dataToDevice,
       pickIDs: pickIDs,
       emitter: sliceViewPanelEmitColor,
       emitColor: true,
       emitPickID: false,
+      viewportWidth: width,
+      viewportHeight: height,
     };
     gl.enable(gl.BLEND);
     gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);

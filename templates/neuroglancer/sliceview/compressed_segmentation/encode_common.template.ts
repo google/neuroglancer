@@ -14,11 +14,11 @@
  * limitations under the License.
  */
 
-import {Uint32ArrayBuilder} from 'neuroglancer/util/uint32array_builder.ts';
+import {Uint32ArrayBuilder} from 'neuroglancer/util/uint32array_builder';
 
 export const BLOCK_HEADER_SIZE = 2;
 
-export function newCache () {
+export function newCache() {
   return new Map<string, number>();
 }
 
@@ -96,9 +96,9 @@ export function writeBlock(
 }
 
 type EncodeBlockFunction =
-    (rawData: Uint32Array, inputOffset: number, inputStrides: ArrayLike<number>, blockSize: ArrayLike<number>,
-     actualSize: ArrayLike<number>, baseOffset: number, cache: ValueTableCache,
-     output: Uint32ArrayBuilder) => [number, number];
+    (rawData: Uint32Array, inputOffset: number, inputStrides: ArrayLike<number>,
+     blockSize: ArrayLike<number>, actualSize: ArrayLike<number>, baseOffset: number,
+     cache: ValueTableCache, output: Uint32ArrayBuilder) => [number, number];
 
 export function encodeChannel(
     output: Uint32ArrayBuilder, blockSize: ArrayLike<number>, rawData: Uint32Array,
@@ -130,7 +130,8 @@ export function encodeChannel(
         let inputOffset = bz * zBlockSize * sz + by * yBlockSize * sy + bx * xBlockSize * sx;
         let encodedValueBaseOffset = output.length - baseOffset;
         let [encodedBits, tableOffset] = encodeBlock(
-          rawData, baseInputOffset + inputOffset, inputStrides, blockSize, actualSize, baseOffset, cache, output);
+            rawData, baseInputOffset + inputOffset, inputStrides, blockSize, actualSize, baseOffset,
+            cache, output);
         let outputData = output.data;
         outputData[headerOffset++] = tableOffset | (encodedBits << 24);
         outputData[headerOffset++] = encodedValueBaseOffset;
@@ -148,6 +149,8 @@ export function encodeChannels(
   output.resize(channelOffsetOutputBase + numChannels);
   for (let channel = 0; channel < numChannels; ++channel) {
     output.data[channelOffsetOutputBase + channel] = output.length;
-    encodeChannel(output, blockSize, rawData, volumeSize, baseInputOffset + inputStrides[3] * channel, inputStrides, encodeBlock);
+    encodeChannel(
+        output, blockSize, rawData, volumeSize, baseInputOffset + inputStrides[3] * channel,
+        inputStrides, encodeBlock);
   }
 }

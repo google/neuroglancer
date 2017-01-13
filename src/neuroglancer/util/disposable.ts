@@ -14,6 +14,8 @@
  * limitations under the License.
  */
 
+import {SignalBinding} from 'signals';
+
 export interface Disposable { dispose: () => void; }
 
 export type Disposer = Disposable | (() => void);

@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-import * as debounce from 'lodash/debounce';
+import debounce from 'lodash/debounce';
 import {BasicCompletionResult, Completion, CompletionWithDescription} from 'neuroglancer/util/completion';
 import {RefCounted} from 'neuroglancer/util/disposable';
 import {removeChildren, removeFromParent} from 'neuroglancer/util/dom';
@@ -236,7 +236,8 @@ export class AutocompleteTextInput extends RefCounted {
   private handleDropdownMousedown(event: MouseEvent) {
     this.inputElement.focus();
     let {dropdownElement} = this;
-    for (let target = event.target; target instanceof HTMLElement; target = target.parentElement) {
+    for (let target: EventTarget|null = event.target; target instanceof HTMLElement;
+         target = target.parentElement) {
       let index = (<any>target)[AUTOCOMPLETE_INDEX_SYMBOL];
       if (index !== undefined) {
         this.selectCompletion(index);
@@ -270,7 +271,7 @@ export class AutocompleteTextInput extends RefCounted {
   private handleKeyCommand(action: string) { return KEY_COMMANDS.get(action)!.call(this); }
 
   private registerInputHandler() {
-    const handler = (event: Event) => {
+    const handler = (_event: Event) => {
       let value = this.inputElement.value;
       if (value !== this.prevInputValue) {
         this.prevInputValue = value;

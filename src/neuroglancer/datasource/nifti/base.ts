@@ -15,7 +15,7 @@
  */
 
 import {DataType, VolumeType} from 'neuroglancer/sliceview/base';
-import {Mat4, Quat, Vec3} from 'neuroglancer/util/geom';
+import {mat4, quat, vec3} from 'neuroglancer/util/geom';
 
 export const GET_NIFTI_VOLUME_INFO_RPC_ID = 'nifti/getNiftiVolumeInfo';
 
@@ -23,12 +23,12 @@ export interface NiftiVolumeInfo {
   numChannels: number;
   dataType: DataType;
   volumeType: VolumeType;
-  voxelSize: Vec3;
-  affine: Mat4;
+  voxelSize: vec3;
+  affine: mat4;
   description: string;
-  volumeSize: Vec3;
-  qoffset: Vec3;
-  quatern: Quat;
+  volumeSize: vec3;
+  qoffset: vec3;
+  quatern: quat;
   qfac: number;
   qform_code: number;
   sform_code: number;

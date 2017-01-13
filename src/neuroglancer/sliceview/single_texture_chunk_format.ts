@@ -67,7 +67,7 @@ export abstract class SingleTextureChunkFormat<TextureLayout extends Disposable>
   /**
    * Does nothing, but may be overridden by subclass.
    */
-  beginSource(gl: GL, shader: ShaderProgram) {}
+  beginSource(_gl: GL, _shader: ShaderProgram) {}
 };
 
 export abstract class SingleTextureVolumeChunk<Data, TextureLayout extends Disposable> extends

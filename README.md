@@ -22,6 +22,7 @@ Neuroglancer itself is purely a client-side program, but it depends on data bein
 
 - NDstore/Open Connectome <https://github.com/neurodata/ndstore>
 - DVID <https://github.com/janelia-flyem/dvid>
+- Render <https://github.com/saalfeldlab/render>
 - Precomputed chunk/mesh fragments exposed over HTTP
 - Single NIfTI files <https://www.nitrc.org/projects/nifti>
 - [Python in-memory volumes](python/README.md) (with automatic mesh generation)
@@ -128,6 +129,9 @@ node.js is required to build the viewer.
 
    `npm i`
 
+   Also re-run this any time the dependencies listed in [package.json](package.json) may have
+   changed, such as after checking out a different revision or pulling changes.
+
 4. To run a local server for development purposes:
 
    `npm run dev-server`
@@ -160,6 +164,10 @@ There is a Google Group/mailing list for discussion related to Neuroglancer:
 # Contributing
 
 Want to contribute?  Great!  First, read [CONTRIBUTING.md](CONTRIBUTING.md).
+
+# Acknowledgements
+[<img src="https://neuroglancer-public-data.storage.googleapis.com/website/browserstack-logo-429x92.png" alt="BrowserStack Logo" width=215 height=46 align="middle">](https://www.browserstack.com)
+ - Cross-browser testing infrastructure provided by [BrowserStack](https://www.browserstack.com).
 
 # License
 

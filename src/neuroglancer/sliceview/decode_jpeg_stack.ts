@@ -15,19 +15,28 @@
  */
 
 import {JpegDecoder} from 'jpgjs';
-import {Vec3, vec3} from 'neuroglancer/util/geom';
+import {transposeArray2d} from 'neuroglancer/util/array';
+import {vec3} from 'neuroglancer/util/geom';
 
-export function decodeJpegStack(data: Uint8Array, chunkDataSize: Vec3) {
+export function decodeJpegStack(data: Uint8Array, chunkDataSize: vec3, numComponents: number) {
   let parser = new JpegDecoder();
   parser.parse(data);
-  if (parser.numComponents !== 1) {
-    throw new Error('JPEG data does not have the expected number of components');
-  }
-
   // Just check that the total number pixels matches the expected value.
   if (parser.width * parser.height !== chunkDataSize[0] * chunkDataSize[1] * chunkDataSize[2]) {
     throw new Error(
         `JPEG data does not have the expected dimensions: width=${parser.width}, height=${parser.height}, chunkDataSize=${vec3.str(chunkDataSize)}`);
   }
-  return parser.getData(parser.width, parser.height, /*forceRGBOutput=*/false);
+  if (parser.numComponents !== numComponents) {
+    throw new Error(
+        `JPEG data does not have the expected number of components: components=${parser.numComponents}, expected=${numComponents}`);
+  }
+  if (parser.numComponents === 1) {
+    return parser.getData(parser.width, parser.height, /*forceRGBOutput=*/false);
+  } else if (parser.numComponents === 3) {
+    let output = parser.getData(parser.width, parser.height, /*forceRGBOutput=*/false);
+    return transposeArray2d(output, parser.width * parser.height, 3);
+  } else {
+    throw new Error(
+      `JPEG data has an unsupported number of components: components=${parser.numComponents}`);
+  }
 }

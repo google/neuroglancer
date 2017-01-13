@@ -14,6 +14,23 @@
  * limitations under the License.
  */
 
-interface KeyboardEvent {
-  code: string;
+export class RenderSourceParameters {
+  baseUrls: string[];
+  owner: string;
+  project: string;
+  stack: string;
+  encoding: string;
+}
+
+export class TileChunkSourceParameters extends RenderSourceParameters {
+  dims: string;
+  level: number;
+  encoding: string;
+
+  static RPC_ID = 'render/TileChunkSource';
+
+  static stringify(parameters: TileChunkSourceParameters) {
+    return `render:tile:${parameters.baseUrls[0]}/${parameters.owner
+        }/${parameters.project}/${parameters.stack}/${parameters.level}/${parameters.encoding}`;
+  }
 }

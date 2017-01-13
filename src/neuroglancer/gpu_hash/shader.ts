@@ -19,14 +19,14 @@ import {HashTableBase, NUM_ALTERNATIVES} from 'neuroglancer/gpu_hash/hash_table'
 import {RefCounted} from 'neuroglancer/util/disposable';
 import {GL} from 'neuroglancer/webgl/context';
 import {ShaderBuilder, ShaderProgram} from 'neuroglancer/webgl/shader';
-import {glsl_exactDot, glsl_imod, glsl_uint64} from 'neuroglancer/webgl/shader_lib';
+import {glsl_exactDot, glsl_imod, glsl_uint64, glsl_unnormalizeUint8} from 'neuroglancer/webgl/shader_lib';
 import {setRawTextureParameters} from 'neuroglancer/webgl/texture';
 
 export const glsl_hashFunction = [
-  glsl_uint64, glsl_exactDot, glsl_imod, `
+  glsl_unnormalizeUint8, glsl_uint64, glsl_exactDot, glsl_imod, `
 float computeHash(uint64_t x, vec4 a0, vec4 a1, float b, float c, float modulus, float scalar) {
-  x.low *= 255.0;
-  x.high *= 255.0;
+  x.low = unnormalizeUint8(x.low);
+  x.high = unnormalizeUint8(x.high);
   float dotResult = imod(exactDot(a0, x.low) + exactDot(a1, x.high), modulus);
   float dotResult2 = imod(dotResult * dotResult, modulus);
   float y = imod(dotResult2 * c, modulus);

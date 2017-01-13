@@ -20,9 +20,7 @@ import {LayerListSpecification, ManagedUserLayerWithSpecification} from 'neurogl
 import {RefCounted} from 'neuroglancer/util/disposable';
 import {removeChildren} from 'neuroglancer/util/dom';
 import {positionDropdown} from 'neuroglancer/util/dropdown';
-
-// Sortable must be imported using non-ES6 module syntax because of how it is exported.
-import Sortable = require('sortablejs');
+import Sortable from 'sortablejs';
 
 require('neuroglancer/noselect.css');
 require('./layer_panel.css');
@@ -54,7 +52,7 @@ class LayerWidget extends RefCounted {
     let closeElement = document.createElement('span');
     closeElement.title = 'Delete layer';
     closeElement.className = 'layer-item-close';
-    this.registerEventListener(closeElement, 'click', (event: MouseEvent) => {
+    this.registerEventListener(closeElement, 'click', (_event: MouseEvent) => {
       this.panel.layerManager.removeManagedLayer(this.layer);
     });
     widgetElement.appendChild(layerNumberElement);
@@ -62,30 +60,35 @@ class LayerWidget extends RefCounted {
     widgetElement.appendChild(valueElement);
     widgetElement.appendChild(closeElement);
     this.registerEventListener(
-        widgetElement, 'click', (event: MouseEvent) => { layer.setVisible(!layer.visible); });
+        widgetElement, 'click', (_event: MouseEvent) => { layer.setVisible(!layer.visible); });
+
+    let dropdownElement = this.dropdownElement = document.createElement('div');
 
     // Hide the dropdown menu while dragging.  We can't wait until the onStart handler from
     // Sortablejs fires because it occurs too late to affect what is shown while dragging.
-    this.registerEventListener(element, 'mousedown', (event: MouseEvent) => {
-      if (event.button === 0) {
-        this.panel.setDragging(true);
-      }
-    });
+    const registerMousedownHandlers = (eventType: string) => {
+      this.registerEventListener(element, eventType, (event: MouseEvent) => {
+        if (event.button === 0) {
+          this.panel.setDragging(true);
+        }
+      });
+      this.registerEventListener(dropdownElement, eventType, (event: MouseEvent) => {
+        // Prevent clicks on the dropdown from triggering dragging.
+        event.stopPropagation();
+      });
+    };
+    registerMousedownHandlers('mousedown');
+    registerMousedownHandlers('pointerdown');
     this.registerEventListener(element, 'mouseup', (event: MouseEvent) => {
       if (event.button === 0) {
         this.panel.setDragging(false);
       }
     });
 
-    this.registerEventListener(widgetElement, 'dblclick', (event: MouseEvent) => {
+    this.registerEventListener(widgetElement, 'dblclick', (_event: MouseEvent) => {
       if (layer instanceof ManagedUserLayerWithSpecification) {
         new LayerDialog(this.panel.manager, layer);
       }
-    });
-    let dropdownElement = this.dropdownElement = document.createElement('div');
-    this.registerEventListener(dropdownElement, 'mousedown', (event: MouseEvent) => {
-      // Prevent clicks on the dropdown from triggering dragging.
-      event.stopPropagation();
     });
     this.setupDropdownElement();
     this.handleLayerChanged();
@@ -96,7 +99,7 @@ class LayerWidget extends RefCounted {
       this.hovering = true;
       this.updateDropdownState();
     });
-    this.registerEventListener(element, 'mouseleave', (event: MouseEvent) => {
+    this.registerEventListener(element, 'mouseleave', (_event: MouseEvent) => {
       this.hovering = false;
       this.updateDropdownState();
     });
@@ -152,7 +155,7 @@ class LayerWidget extends RefCounted {
     if (this.dropdown) {
       this.dropdown.dispose();
     }
-    this.element.parentElement.removeChild(this.element);
+    this.element.parentElement!.removeChild(this.element);
     super.disposed();
   }
 }
@@ -181,7 +184,7 @@ export class LayerPanel extends RefCounted {
     this.update();
     let sortable = new Sortable(this.element, {
       draggable: '.layer-item-parent',
-      onStart: (evt) => {
+      onStart: (_evt) => {
         this.setDragging(true);
         this.element.classList.add('sorting-in-progress');
       },

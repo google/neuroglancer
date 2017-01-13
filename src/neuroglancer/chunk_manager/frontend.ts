@@ -28,14 +28,10 @@ export abstract class Chunk {
 
   get gl() { return this.source.gl; }
 
-  copyToGPU(gl: GL) { this.state = ChunkState.GPU_MEMORY; }
+  copyToGPU(_gl: GL) { this.state = ChunkState.GPU_MEMORY; }
 
-  freeGPUMemory(gl: GL) { this.state = ChunkState.SYSTEM_MEMORY; }
+  freeGPUMemory(_gl: GL) { this.state = ChunkState.SYSTEM_MEMORY; }
 };
-
-interface ChunkConstructor {
-  new (source: ChunkSource, update: any): Chunk;
-}
 
 @registerSharedObjectOwner(CHUNK_QUEUE_MANAGER_RPC_ID)
 export class ChunkQueueManager extends SharedObject {
@@ -199,5 +195,5 @@ export abstract class ChunkSource extends SharedObject {
   /**
    * Default implementation for use with backendOnly chunk sources.
    */
-  getChunk(x: any): Chunk { throw new Error('Not implemented.'); }
+  getChunk(_x: any): Chunk { throw new Error('Not implemented.'); }
 };

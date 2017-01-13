@@ -18,14 +18,14 @@ import {encodeChannels as encodeChannelsUint32} from 'neuroglancer/sliceview/com
 import {encodeChannels as encodeChannelsUint64} from 'neuroglancer/sliceview/compressed_segmentation/encode_uint64';
 import {makeRandomUint64Array} from 'neuroglancer/sliceview/compressed_segmentation/test_util';
 import {prod4, vec3Key} from 'neuroglancer/util/geom';
-import {Uint32ArrayBuilder} from 'neuroglancer/util/uint32array_builder.ts';
+import {Uint32ArrayBuilder} from 'neuroglancer/util/uint32array_builder';
 
 const exampleChunkData64 = new Uint32Array(
     require<Uint8Array>('raw-data!neuroglancer-testdata/64x64x64-raw-uint64-segmentation.dat')
         .buffer);
 
 const exampleChunkData32 =
-    exampleChunkData64.filter((element, index) => { return index % 2 === 0; });
+    exampleChunkData64.filter((_element, index) => { return index % 2 === 0; });
 
 suite('64x64x64 example', () => {
   const blockSize = [8, 8, 8];

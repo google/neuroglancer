@@ -16,12 +16,12 @@
 
 import {VisibilityTrackedRenderLayer} from 'neuroglancer/layer';
 import {PickIDManager} from 'neuroglancer/object_picking';
-import {Mat4, Vec3} from 'neuroglancer/util/geom';
+import {mat4, vec3} from 'neuroglancer/util/geom';
 import {ShaderModule} from 'neuroglancer/webgl/shader';
 
 export interface PerspectiveViewRenderContext {
-  dataToDevice: Mat4;
-  lightDirection: Vec3;
+  dataToDevice: mat4;
+  lightDirection: vec3;
   ambientLighting: number;
   directionalLighting: number;
   pickIDs: PickIDManager;
@@ -41,10 +41,20 @@ export interface PerspectiveViewRenderContext {
    * Specifies whether there was a previous pick ID pass.
    */
   alreadyEmittedPickID: boolean;
+
+  /**
+   * Width of GL viewport in pixels.
+   */
+  viewportWidth: number;
+
+  /**
+   * Height of GL viewport in pixels.
+   */
+  viewportHeight: number;
 }
 
 export class PerspectiveViewRenderLayer extends VisibilityTrackedRenderLayer {
-  draw(renderContext: PerspectiveViewRenderContext) {
+  draw(_renderContext: PerspectiveViewRenderContext) {
     // Must be overridden by subclasses.
   }
 

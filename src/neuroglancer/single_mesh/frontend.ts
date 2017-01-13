@@ -23,7 +23,7 @@ import {shareVisibility} from 'neuroglancer/shared_visibility_count/frontend';
 import {GET_SINGLE_MESH_INFO_RPC_ID, SINGLE_MESH_CHUNK_KEY, SINGLE_MESH_LAYER_RPC_ID, SINGLE_MESH_SOURCE_RPC_ID, SingleMeshInfo, SingleMeshSourceParameters, VertexAttributeInfo} from 'neuroglancer/single_mesh/base';
 import {TrackableValue} from 'neuroglancer/trackable_value';
 import {DataType} from 'neuroglancer/util/data_type';
-import {Mat4, Vec2, vec3, vec4} from 'neuroglancer/util/geom';
+import {mat4, vec2, vec3, vec4} from 'neuroglancer/util/geom';
 import {parseArray, stableStringify, verifyOptionalString, verifyString} from 'neuroglancer/util/json';
 import {getObjectId} from 'neuroglancer/util/object_id';
 import {Uint64} from 'neuroglancer/util/uint64';
@@ -75,7 +75,7 @@ const vertexPositionTextureFormat =
 const vertexNormalTextureFormat = vertexPositionTextureFormat;
 
 export class SingleMeshShaderManager {
-  private tempLightVec = vec4.create();
+  private tempLightVec = new Float32Array(4);
   private tempPickID = new Float32Array(4);
 
   private textureAccessHelper = new OneDimensionalTextureAccessHelper('vertexData');
@@ -170,7 +170,7 @@ vLightingFactor = abs(dot(normal, uLightDirection.xyz)) + uLightDirection.w;
   beginLayer(gl: GL, shader: ShaderProgram, renderContext: PerspectiveViewRenderContext) {
     let {dataToDevice, lightDirection, ambientLighting, directionalLighting} = renderContext;
     gl.uniformMatrix4fv(shader.uniform('uProjection'), false, dataToDevice);
-    let lightVec = this.tempLightVec;
+    let lightVec = <vec3>this.tempLightVec;
     vec3.scale(lightVec, lightDirection, directionalLighting);
     lightVec[3] = ambientLighting;
     gl.uniform4fv(shader.uniform('uLightDirection'), lightVec);
@@ -180,7 +180,7 @@ vLightingFactor = abs(dot(normal, uLightDirection.xyz)) + uLightDirection.w;
     gl.uniform4fv(shader.uniform('uPickID'), setVec4FromUint32(this.tempPickID, pickID));
   }
 
-  beginObject(gl: GL, shader: ShaderProgram, objectToDataMatrix: Mat4) {
+  beginObject(gl: GL, shader: ShaderProgram, objectToDataMatrix: mat4) {
     gl.uniformMatrix4fv(shader.uniform('uModelMatrix'), false, objectToDataMatrix);
   }
 
@@ -260,7 +260,7 @@ export class VertexChunkData {
   // Emulation of buffer as texture.
   dataWidth: number;
   textureHeight: number;
-  textureAccessCoefficients: Vec2;
+  textureAccessCoefficients: vec2;
 
   copyToGPU(gl: GL, attributeFormats: OneDimensionalTextureFormat[]) {
     let numVertices = this.vertexPositions.length / 3;
@@ -467,7 +467,7 @@ export class SingleMeshLayer extends PerspectiveViewRenderLayer {
 
   drawPicking(renderContext: PerspectiveViewRenderContext) { this.draw(renderContext); }
 
-  transformPickedValue(pickedValue: Uint64, pickedOffset: number) {
+  transformPickedValue(_pickedValue: Uint64, pickedOffset: number) {
     let chunk = <SingleMeshChunk|undefined>this.source.chunks.get(SINGLE_MESH_CHUNK_KEY);
     if (chunk === undefined) {
       return undefined;

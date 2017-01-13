@@ -16,8 +16,8 @@
 
 import 'codemirror/addon/lint/lint.js';
 
-import * as CodeMirror from 'codemirror';
-import * as debounce from 'lodash/debounce';
+import CodeMirror from 'codemirror';
+import debounce from 'lodash/debounce';
 import {WatchableValue} from 'neuroglancer/trackable_value';
 import {RefCounted} from 'neuroglancer/util/disposable';
 import {removeFromParent} from 'neuroglancer/util/dom';
@@ -56,7 +56,7 @@ export class ShaderCodeWidget extends RefCounted {
 
   constructor(public state: ShaderCodeState) {
     super();
-    this.textEditor = CodeMirror(element => {}, {
+    this.textEditor = CodeMirror(_element => {}, {
       value: this.state.fragmentMain.value,
       mode: 'glsl',
       gutters: ['CodeMirror-lint-markers'],

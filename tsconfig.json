@@ -3,23 +3,26 @@
     "noImplicitAny": true,
     "noImplicitReturns": true,
     "noImplicitThis": true,
+    "noUnusedParameters": true,
     "preserveConstEnums": true,
     "experimentalDecorators": true,
     "strictNullChecks": true,
+    "allowSyntheticDefaultImports": true,
     "sourceMap": true,
-    "module": "commonjs",
+    "moduleResolution": "node",
+    "module": "es2015",
     "target": "ES2015",
     "newLine": "LF",
     "baseUrl": ".",
     "paths": {
       "*": ["*"],
       "neuroglancer/*": ["src/neuroglancer/*"]
-    }
+    },
+    "typeRoots": []
   },
   "exclude": [
     "node_modules",
     "dist",
-    "third_party/typings_sources",
     "templates",
     "examples"
   ]

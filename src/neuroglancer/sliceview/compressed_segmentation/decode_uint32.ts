@@ -30,7 +30,7 @@ import {decodeValueOffset} from 'neuroglancer/sliceview/compressed_segmentation/
  *
  * @param baseOffset The base offset into `data' at which the compressed data for this channel
  * starts.
- * @param chunkDataSize A 3-element array specifying the size of the volume,
+ * @param chunkDataSize A 3-element array specifying the size of the volume.
  * @param blockSize A 3-element array specifying the block size ued for compression.
  * @param dataPosition A 3-element array specifying the position within the volume from which to
  * read.

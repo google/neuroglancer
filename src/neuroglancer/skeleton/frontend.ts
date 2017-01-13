@@ -23,7 +23,7 @@ import {forEachSegmentToDraw, getObjectColor, registerRedrawWhenSegmentationDisp
 import {SKELETON_LAYER_RPC_ID} from 'neuroglancer/skeleton/base';
 import {SliceViewPanelRenderContext, SliceViewPanelRenderLayer} from 'neuroglancer/sliceview/panel';
 import {RefCounted} from 'neuroglancer/util/disposable';
-import {Mat4, mat4, Vec3} from 'neuroglancer/util/geom';
+import {mat4, vec3} from 'neuroglancer/util/geom';
 import {stableStringify} from 'neuroglancer/util/json';
 import {getObjectId} from 'neuroglancer/util/object_id';
 import {Buffer} from 'neuroglancer/webgl/buffer';
@@ -50,7 +50,7 @@ class RenderHelper extends RefCounted {
 
   beginLayer(
       gl: GL, shader: ShaderProgram, renderContext: SliceViewPanelRenderContext,
-      objectToDataMatrix: Mat4) {
+      objectToDataMatrix: mat4) {
     let {dataToDevice} = renderContext;
     let mat = mat4.multiply(tempMat2, dataToDevice, objectToDataMatrix);
     gl.uniformMatrix4fv(shader.uniform('uProjection'), false, mat);
@@ -72,7 +72,7 @@ class RenderHelper extends RefCounted {
     return shader;
   }
 
-  setColor(gl: GL, shader: ShaderProgram, color: Vec3) {
+  setColor(gl: GL, shader: ShaderProgram, color: vec3) {
     gl.uniform4fv(shader.uniform('uColor'), color);
   }
 
@@ -188,7 +188,8 @@ export class SkeletonLayer extends RefCounted {
         return;
       }
       if (renderContext.emitColor) {
-        renderHelper.setColor(gl, shader, getObjectColor(displayState, rootObjectId, alpha));
+        renderHelper.setColor(
+            gl, shader, <vec3><Float32Array>getObjectColor(displayState, rootObjectId, alpha));
       }
       if (renderContext.emitPickID) {
         renderHelper.setPickID(gl, shader, pickIDs.registerUint64(layer, objectId));

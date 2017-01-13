@@ -22,26 +22,41 @@ export enum VolumeChunkEncoding {
   COMPRESSED_SEGMENTATION
 }
 
+export class ChangeSpec {
+  changeStackId: string;
+  /**
+   * Apply changes prior to this timestamp (in milliseconds since epoch).  If 0, no changes should
+   * be applied.  If negative, all changes should be applied.
+   */
+  timeStamp?: number;
+  skipEquivalences?: boolean;
+
+  static stringify(p: ChangeSpec) {
+    return `${p['changeStackId']}/${p['timeStamp']}/${p['skipEquivalences']}`;
+  }
+}
+
 export class VolumeSourceParameters {
   instance: BrainmapsInstance;
-  volume_id: string;
+  volumeId: string;
   scaleIndex: number;
   encoding: VolumeChunkEncoding;
+  changeSpec: ChangeSpec|undefined;
 
   static RPC_ID = 'brainmaps/VolumeChunkSource';
 
   static stringify(p: VolumeSourceParameters) {
-    return `brainmaps-${brainmapsInstanceKey(p['instance'])}:volume/${p['volume_id']}/${p['scaleIndex']}/${VolumeChunkEncoding[p['encoding']]}`;
+    return `brainmaps-${brainmapsInstanceKey(p['instance'])}:volume/${p['volumeId']}/${p['scaleIndex']}/${VolumeChunkEncoding[p['encoding']]}/ChangeSpec.stringify(p['changeSpec'])`;
   }
-};
+}
 
 export class MeshSourceParameters {
   instance: BrainmapsInstance;
-  volume_id: string;
-  mesh_name: string;
+  volumeId: string;
+  meshName: string;
 
   static stringify(p: MeshSourceParameters) {
-    return `brainmaps:${brainmapsInstanceKey(p['instance'])}:mesh/${p['volume_id']}/${p['mesh_name']}`;
+    return `brainmaps:${brainmapsInstanceKey(p['instance'])}:mesh/${p['volumeId']}/${p['meshName']}`;
   }
 
   static RPC_ID = 'brainmaps/MeshSource';

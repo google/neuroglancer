@@ -68,5 +68,7 @@ export default class {
       yield x;
     }
   }
-  static initializeHead<T extends Node<T>>(head: T) { head.next1 = head.prev1 = head; }
+  static initializeHead<T extends Node<T>>(head: T) {
+    head.next1 = head.prev1 = head;
+  }
 };

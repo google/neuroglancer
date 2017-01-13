@@ -17,7 +17,7 @@
 import {WritableArrayLike} from 'neuroglancer/util/array';
 import {vec3} from 'neuroglancer/util/geom';
 
-export function verifyFloat(obj: any) {
+export function verifyFloat(obj: any): number {
   let t = typeof obj;
   if (t === 'number' || t === 'string') {
     let x = parseFloat('' + obj);
@@ -28,7 +28,7 @@ export function verifyFloat(obj: any) {
   throw new Error(`Expected floating-point number, but received: ${JSON.stringify(obj)}.`);
 }
 
-export function verifyFiniteFloat(obj: any) {
+export function verifyFiniteFloat(obj: any): number {
   let x = verifyFloat(obj);
   if (Number.isFinite(x)) {
     return x;
@@ -36,7 +36,7 @@ export function verifyFiniteFloat(obj: any) {
   throw new Error(`Expected finite floating-point number, but received: ${x}.`);
 }
 
-export function verifyFinitePositiveFloat(obj: any) {
+export function verifyFinitePositiveFloat(obj: any): number {
   let x = verifyFiniteFloat(obj);
   if (x > 0) {
     return x;

@@ -60,7 +60,7 @@ export function decodeFragmentChunk(chunk: FragmentChunk, response: ArrayBuffer)
       chunk, response, Endianness.LITTLE, /*vertexByteOffset=*/4, numVertices);
 }
 
-function decodeManifestChunk(chunk: ManifestChunk, response: any) {
+function decodeManifestChunk(chunk: ManifestChunk, _response: any) {
   chunk.fragmentIds = [''];
 }
 

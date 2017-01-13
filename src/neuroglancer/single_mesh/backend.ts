@@ -134,7 +134,8 @@ export function getMinMax(array: TypedArray): [number, number] {
 export function getCombinedMesh(
     chunkManager: ChunkManager, parameters: SingleMeshSourceParameters,
     getPriority: PriorityGetter) {
-  let promises = [getMesh(chunkManager, parameters.meshSourceUrl, getPriority)];
+  let promises: Promise<SingleMesh|SingleMeshVertexAttributes>[] =
+      [getMesh(chunkManager, parameters.meshSourceUrl, getPriority)];
   for (let source of parameters.attributeSourceUrls) {
     promises.push(getMeshVertexAttributes(chunkManager, source, getPriority));
   }

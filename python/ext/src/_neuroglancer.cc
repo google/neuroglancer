@@ -62,7 +62,8 @@ static int tp_init(Obj* self, PyObject* args, PyObject* kwds) {
                                   "offset",
                                   "max_quadrics_error",
                                   "max_normal_angle_deviation",
-                                  "lock_boundary_vertices"};
+                                  "lock_boundary_vertices",
+                                  nullptr};
   if (!PyArg_ParseTupleAndKeywords(
           args, kwds, "O(fff)(fff)|ddi:__init__", const_cast<char**>(kw_list),
           &array_argument, voxel_size, voxel_size + 1, voxel_size + 2, offset,

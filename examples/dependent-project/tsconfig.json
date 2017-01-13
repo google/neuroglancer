@@ -1,22 +1,12 @@
 {
+  "extends": "./node_modules/neuroglancer/tsconfig.json",
   "compilerOptions": {
-    "noImplicitAny": true,
-    "noImplicitReturns": true,
-    "noImplicitThis": true,
-    "preserveConstEnums": true,
-    "experimentalDecorators": true,
-    "strictNullChecks": true,
-    "sourceMap": true,
-    "module": "commonjs",
-    "target": "ES2015",
-    "newLine": "LF",
     "baseUrl": ".",
     "paths": {
       "*": ["*"],
       "neuroglancer/*": ["third_party/neuroglancer/*"],
       "my-neuroglancer-project/*": ["src/my-neuroglancer-project/*"]
-    },
-    "typeRoots": []
+    }
   },
   "exclude": [
     "node_modules",

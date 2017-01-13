@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-import * as debounce from 'lodash/debounce';
+import debounce from 'lodash/debounce';
 import {AvailableCapacity} from 'neuroglancer/chunk_manager/base';
 import {ChunkManager, ChunkQueueManager} from 'neuroglancer/chunk_manager/frontend';
 import {DisplayContext} from 'neuroglancer/display_context';
@@ -29,9 +29,9 @@ import {overlaysOpen} from 'neuroglancer/overlay';
 import {PositionStatusPanel} from 'neuroglancer/position_status_panel';
 import {TrackableBoolean} from 'neuroglancer/trackable_boolean';
 import {TrackableValue} from 'neuroglancer/trackable_value';
-import {delayHashUpdate, registerTrackable} from 'neuroglancer/url_hash_state';
+import {registerTrackable} from 'neuroglancer/url_hash_state';
 import {RefCounted} from 'neuroglancer/util/disposable';
-import {Vec3} from 'neuroglancer/util/geom';
+import {vec3} from 'neuroglancer/util/geom';
 import {GlobalKeyboardShortcutHandler, KeySequenceMap} from 'neuroglancer/util/keyboard_shortcut_handler';
 import {DataDisplayLayout, LAYOUTS} from 'neuroglancer/viewer_layouts';
 import {ViewerState} from 'neuroglancer/viewer_state';
@@ -115,7 +115,7 @@ export class Viewer extends RefCounted implements ViewerState {
     this.layerManager.initializePosition(this.navigationState.position);
 
     this.registerSignalBinding(
-        this.layerSpecification.voxelCoordinatesSet.add((voxelCoordinates: Vec3) => {
+        this.layerSpecification.voxelCoordinatesSet.add((voxelCoordinates: vec3) => {
           this.navigationState.position.setVoxelCoordinates(voxelCoordinates);
         }));
 
@@ -232,7 +232,6 @@ export class Viewer extends RefCounted implements ViewerState {
   get gl() { return this.display.gl; }
 
   onUpdateDisplay() {
-    delayHashUpdate();
     this.chunkQueueManager.chunkUpdateDeadline = null;
   }
 

@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-import {partitionArray} from 'neuroglancer/util/array';
+import {partitionArray, transposeArray2d} from 'neuroglancer/util/array';
 
 describe('partitionArray', () => {
   it('basic test', () => {
@@ -23,4 +23,36 @@ describe('partitionArray', () => {
     expect(arr).toEqual([0, 1, 2, 8, 4, 6, 7, 5, 3, 9, 10]);
     expect(newEnd).toBe(6);
   });
+});
+
+describe('transposeArray2d', () => {
+
+  it('square', () => {
+    let arr = new Uint8Array(4), out = new Uint8Array(4);
+    arr.set([0, 1, 2, 3]);
+    out.set([0, 2, 1, 3]);
+    expect(transposeArray2d(arr, 2, 2)).toEqual(out);
+  });
+
+  it('minor > major rectangle', () => {
+    let arr = new Uint8Array(6), out = new Uint8Array(6);
+    arr.set([0, 1, 2, 3, 4, 5]);
+    out.set([0, 3, 1, 4, 2, 5]);
+    expect(transposeArray2d(arr, 2, 3)).toEqual(out);
+  });
+
+  it('major > minor rectangle', () => {
+    let arr = new Uint8Array(8), out = new Uint8Array(8);
+    arr.set([0, 1, 2, 3, 4, 5, 6, 7]);
+    out.set([0, 2, 4, 6, 1, 3, 5, 7]);
+    expect(transposeArray2d(arr, 4, 2)).toEqual(out);
+  });
+
+  it('single axis', () => {
+    let arr = new Uint8Array(3), out = new Uint8Array(3);
+    arr.set([0, 1, 2]);
+    out.set([0, 1, 2]);
+    expect(transposeArray2d(arr, 3, 1)).toEqual(out);
+  });
+
 });

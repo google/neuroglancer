@@ -20,12 +20,12 @@ import {getFortranOrderStrides} from 'neuroglancer/util/array';
 import {TypedArray} from 'neuroglancer/util/array';
 import {DataType} from 'neuroglancer/util/data_type';
 import {Disposable} from 'neuroglancer/util/disposable';
-import {Vec3, vec3, vec3Key, Vec4} from 'neuroglancer/util/geom';
+import {vec3, vec3Key, vec4} from 'neuroglancer/util/geom';
 import {GL} from 'neuroglancer/webgl/context';
 import {fragmentShaderTest} from 'neuroglancer/webgl/shader_testing';
 
 export function chunkFormatTest<TextureLayout extends Disposable>(
-    dataType: DataType, volumeSize: Vec4,
+    dataType: DataType, volumeSize: vec4,
     getChunkFormatAndTextureLayout:
         (gl: GL) => [SingleTextureChunkFormat<TextureLayout>, TextureLayout],
     rawData: TypedArray, encodedData: TypedArray) {
@@ -94,7 +94,7 @@ gl_FragData[${outputChannel++}] = getDataValue(${channel}).value;
 
 
          // Position within chunk in floating point range [0, chunkDataSize].
-         function checkPosition(positionInChunk: Vec3) {
+         function checkPosition(positionInChunk: vec3) {
            gl.uniform3fv(shader.uniform('vChunkPosition'), positionInChunk);
            chunkFormat.beginDrawing(gl, shader);
            chunkFormat.beginSource(gl, shader);

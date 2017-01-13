@@ -23,7 +23,7 @@ import {MultiscaleVolumeChunkSource} from 'neuroglancer/sliceview/frontend';
 import {StatusMessage} from 'neuroglancer/status';
 import {Trackable} from 'neuroglancer/url_hash_state';
 import {RefCounted} from 'neuroglancer/util/disposable';
-import {Vec3} from 'neuroglancer/util/geom';
+import {vec3} from 'neuroglancer/util/geom';
 import {verifyObject, verifyObjectProperty, verifyOptionalString} from 'neuroglancer/util/json';
 import {RPC} from 'neuroglancer/worker_rpc';
 import {Signal} from 'signals';
@@ -145,7 +145,7 @@ export class LayerListSpecification extends RefCounted implements Trackable {
   /**
    * Called by user layers to indicate that a voxel position has been selected interactively.
    */
-  setVoxelCoordinates(voxelCoordinates: Vec3) {
+  setVoxelCoordinates(voxelCoordinates: vec3) {
     this.voxelCoordinatesSet.dispatch(voxelCoordinates);
   }
 }

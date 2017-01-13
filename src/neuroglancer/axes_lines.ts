@@ -15,7 +15,7 @@
  */
 
 import {RefCounted} from 'neuroglancer/util/disposable';
-import {Mat4} from 'neuroglancer/util/geom';
+import {mat4} from 'neuroglancer/util/geom';
 import {Buffer} from 'neuroglancer/webgl/buffer';
 import {GL} from 'neuroglancer/webgl/context';
 import {ShaderProgram} from 'neuroglancer/webgl/shader';
@@ -57,7 +57,7 @@ export class AxesLineHelper extends RefCounted {
     return gl.memoize.get('SliceViewPanel:AxesLineHelper', () => new AxesLineHelper(gl));
   }
 
-  draw(mat: Mat4, blend = true) {
+  draw(mat: mat4, blend = true) {
     let shader = this.trivialColorShader;
     let gl = this.gl;
     shader.bind();

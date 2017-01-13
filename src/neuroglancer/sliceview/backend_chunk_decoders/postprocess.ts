@@ -22,7 +22,7 @@ import {VolumeChunk} from 'neuroglancer/sliceview/backend';
 import {DataType} from 'neuroglancer/sliceview/base';
 import {encodeChannels as encodeChannelsUint32} from 'neuroglancer/sliceview/compressed_segmentation/encode_uint32';
 import {encodeChannels as encodeChannelsUint64} from 'neuroglancer/sliceview/compressed_segmentation/encode_uint64';
-import {Uint32ArrayBuilder} from 'neuroglancer/util/uint32array_builder.ts';
+import {Uint32ArrayBuilder} from 'neuroglancer/util/uint32array_builder';
 
 const tempBuffer = new Uint32ArrayBuilder(20000);
 const tempVolumeSize = new Array<number>(4);

@@ -68,7 +68,7 @@ export class LayerDialog extends Overlay {
         this.registerDisposer(new AutocompleteTextInput({completer: sourceCompleter, delay: 0}));
     sourceInput.element.classList.add('add-layer-source');
     sourceInput.inputElement.addEventListener(
-        'blur', event => { this.validateSource(/*focusName=*/false); });
+        'blur', () => { this.validateSource(/*focusName=*/false); });
     this.submitElement.disabled = true;
     sourceInput.inputChanged.add(() => {
       cancelPromise(this.volumePromise);

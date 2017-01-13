@@ -14,12 +14,18 @@
  * limitations under the License.
  */
 
-import {VolumeChunk} from 'neuroglancer/sliceview/backend';
-import {postProcessRawData} from 'neuroglancer/sliceview/backend_chunk_decoders/postprocess';
-import {decodeJpegStack} from 'neuroglancer/sliceview/decode_jpeg_stack';
+'use strict';
 
-export function decodeJpegChunk(chunk: VolumeChunk, response: ArrayBuffer) {
-  postProcessRawData(
-      chunk, decodeJpegStack(
-                 new Uint8Array(response), chunk.chunkDataSize!, chunk.source!.spec.numChannels));
+const path = require('path');
+const fs = require('fs');
+
+/**
+ * Resolve a path to an absolute path, expanding all symbolic links.  This is
+ * used to ensure that the same file is not seen under multiple paths by the
+ * TypeScript compiler, leading to the same file being compiled more than once,
+ * which can result in various errors.
+ */
+function resolveReal() {
+  return fs.realpathSync(path.resolve.apply(undefined, arguments));
 }
+module.exports = resolveReal;

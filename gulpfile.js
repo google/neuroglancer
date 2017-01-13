@@ -53,6 +53,7 @@ const tslint = require('gulp-tslint');
       'tslint', () => gulp.src(sourcesToLint, {base: '.', nodir: true})
                           .pipe(tslint({
                             tslint: require('tslint'),
+                            formatter: "verbose",
                           }))
-                          .pipe(tslint.report('verbose')));
+                          .pipe(tslint.report()));
 }

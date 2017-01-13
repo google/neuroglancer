@@ -172,7 +172,7 @@ export function computeVertexNormals(positions: Float32Array, indices: Uint32Arr
   // Normalize all vertex normals.
   let numVertices = vertexNormals.length;
   for (let i = 0; i < numVertices; i += 3) {
-    let vec = vertexNormals.subarray(i, 3);
+    let vec = <vec3>vertexNormals.subarray(i, 3);
     vec3.normalize(vec, vec);
   }
   return vertexNormals;

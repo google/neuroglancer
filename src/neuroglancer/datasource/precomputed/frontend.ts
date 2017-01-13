@@ -20,7 +20,7 @@ import {MeshSourceParameters, VolumeChunkEncoding, VolumeChunkSourceParameters} 
 import {defineParameterizedMeshSource} from 'neuroglancer/mesh/frontend';
 import {DataType, VolumeChunkSpecification, VolumeSourceOptions, VolumeType} from 'neuroglancer/sliceview/base';
 import {defineParameterizedVolumeChunkSource, MultiscaleVolumeChunkSource as GenericMultiscaleVolumeChunkSource} from 'neuroglancer/sliceview/frontend';
-import {mat4, Vec3, vec3} from 'neuroglancer/util/geom';
+import {mat4, vec3} from 'neuroglancer/util/geom';
 import {openShardedHttpRequest, parseSpecialUrl, sendHttpRequest} from 'neuroglancer/util/http_request';
 import {parseArray, parseFixedLengthArray, parseIntVec, verifyEnumString, verifyFinitePositiveFloat, verifyObject, verifyObjectProperty, verifyOptionalString, verifyPositiveInt, verifyString} from 'neuroglancer/util/json';
 
@@ -30,11 +30,11 @@ const MeshSource = defineParameterizedMeshSource(MeshSourceParameters);
 class ScaleInfo {
   key: string;
   encoding: VolumeChunkEncoding;
-  resolution: Vec3;
-  voxelOffset: Vec3;
-  size: Vec3;
-  chunkSizes: Vec3[];
-  compressedSegmentationBlockSize: Vec3|undefined;
+  resolution: vec3;
+  voxelOffset: vec3;
+  size: vec3;
+  chunkSizes: vec3[];
+  compressedSegmentationBlockSize: vec3|undefined;
   constructor(obj: any) {
     verifyObject(obj);
     this.resolution = verifyObjectProperty(

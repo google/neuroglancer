@@ -18,7 +18,7 @@
 
 const path = require('path');
 const original_webpack_helpers = require('neuroglancer/config/webpack_helpers');
-const resolveReal = original_webpack_helpers.resolveReal;
+const resolveReal = require('neuroglancer/config/resolve_real');
 
 function modifyViewerOptions(options) {
   options = options || {};
