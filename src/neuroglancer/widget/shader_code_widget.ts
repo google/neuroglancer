@@ -65,13 +65,13 @@ export class ShaderCodeWidget extends RefCounted {
       this.setValidState(undefined);
       this.debouncedValueUpdater();
     });
-    this.registerSignalBinding(this.state.fragmentMain.changed.add(() => {
+    this.registerDisposer(this.state.fragmentMain.changed.add(() => {
       if (!this.changingValue) {
         this.textEditor.setValue(this.state.fragmentMain.value);
       }
     }));
     this.element.classList.add('neuroglancer-shader-code-widget');
-    this.registerSignalBinding(
+    this.registerDisposer(
         this.state.shaderError.changed.add(() => { this.updateErrorState(); }));
     this.updateErrorState();
   }

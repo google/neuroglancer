@@ -74,8 +74,9 @@ export class GenericFileSource<Data> extends ChunkSourceBase {
     this.registerDisposer(chunkManager);
 
     // This source is unusual in that it updates its own chunk priorities.
-    this.registerSignalBinding(this.chunkManager.recomputeChunkPriorities.add(
-        this.updateChunkPriorities, this, RECOMPUTE_CHUNK_PRIORITIES_LAST));
+    this.registerDisposer(this.chunkManager.recomputeChunkPrioritiesLate.add(() => {
+      this.updateChunkPriorities();
+    }));
   }
 
   updateChunkPriorities() {

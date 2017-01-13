@@ -27,6 +27,5 @@ export function shareVisibility(obj: SharedObjectWithVisibilityCount) {
   if (obj.visibilityCount.value > 0) {
     update();
   }
-  obj.visibilityCount.becameNonZero.add(update);
-  obj.visibilityCount.becameZero.add(update);
+  obj.visibilityCount.signChanged.add(update);
 }

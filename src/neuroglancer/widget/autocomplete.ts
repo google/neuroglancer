@@ -23,8 +23,8 @@ import {KeyboardShortcutHandler, KeySequenceMap} from 'neuroglancer/util/keyboar
 import {longestCommonPrefix} from 'neuroglancer/util/longest_common_prefix';
 import {CancellablePromise, cancelPromise} from 'neuroglancer/util/promise';
 import {scrollIntoViewIfNeeded} from 'neuroglancer/util/scroll_into_view';
+import {Signal} from 'neuroglancer/util/signal';
 import {associateLabelWithElement} from 'neuroglancer/widget/associate_label';
-import {Signal} from 'signals';
 
 export {Completion, CompletionWithDescription} from 'neuroglancer/util/completion';
 
@@ -102,7 +102,7 @@ export class AutocompleteTextInput extends RefCounted {
   inputElement: HTMLInputElement;
   hintElement: HTMLInputElement;
   dropdownElement: HTMLDivElement;
-  inputChanged = new Signal();
+  inputChanged = new Signal<(value: string) => void>();
   private prevInputValue = '';
   private completionsVisible = false;
   private activeCompletionPromise: CancellablePromise<CompletionResult>|null = null;

@@ -47,7 +47,7 @@ export class ImageUserLayer extends UserLayer {
     this.opacity.restoreState(x['opacity']);
     this.fragmentMain.restoreState(x['shader']);
     this.transform.restoreState(x['transform']);
-    this.registerSignalBinding(
+    this.registerDisposer(
         this.fragmentMain.changed.add(() => { this.specificationChanged.dispatch(); }));
     this.volumePath = volumePath;
     getVolumeWithStatusMessage(manager.chunkManager, volumePath).then(volume => {

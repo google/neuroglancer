@@ -16,8 +16,8 @@
 
 import {RefCounted} from 'neuroglancer/util/disposable';
 import {removeFromParent} from 'neuroglancer/util/dom';
+import {Signal} from 'neuroglancer/util/signal';
 import {Uint64} from 'neuroglancer/util/uint64';
-import {Signal} from 'signals';
 
 require('neuroglancer/noselect.css');
 require('./uint64_entry_widget.css');
@@ -27,7 +27,7 @@ export class Uint64EntryWidget extends RefCounted {
   label = document.createElement('label');
   input = document.createElement('input');
   value = new Uint64();
-  valueEntered = new Signal();
+  valueEntered = new Signal<(value: Uint64) => void>();
 
   constructor() {
     super();

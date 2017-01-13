@@ -87,8 +87,9 @@ export class SkeletonLayer extends SegmentationLayerSharedObjectCounterpart {
   constructor(rpc: RPC, options: any) {
     super(rpc, options);
     this.source = this.registerDisposer(rpc.getRef<SkeletonSource>(options['source']));
-    this.registerSignalBinding(
-        this.chunkManager.recomputeChunkPriorities.add(this.updateChunkPriorities, this));
+    this.registerDisposer(this.chunkManager.recomputeChunkPriorities.add(() => {
+      this.updateChunkPriorities();
+    }));
   }
 
   private updateChunkPriorities() {

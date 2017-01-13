@@ -362,9 +362,9 @@ export class SingleMeshLayer extends PerspectiveViewRenderLayer {
       this.disposeShaders();
       this.redrawNeeded.dispatch();
     };
-    this.registerSignalBinding(displayState.fragmentMain.changed.add(shaderChanged));
-    this.registerSignalBinding(displayState.attributeNames.changed.add(shaderChanged));
-    this.registerSignalBinding(
+    this.registerDisposer(displayState.fragmentMain.changed.add(shaderChanged));
+    this.registerDisposer(displayState.attributeNames.changed.add(shaderChanged));
+    this.registerDisposer(
         displayState.objectToDataTransform.changed.add(() => { this.redrawNeeded.dispatch(); }));
     this.displayState.shaderError.value = undefined;
     let sharedObject = this.sharedObject =

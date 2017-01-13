@@ -17,15 +17,15 @@
 import {AvailableCapacity, CHUNK_MANAGER_RPC_ID, CHUNK_QUEUE_MANAGER_RPC_ID, ChunkPriorityTier, ChunkSourceParametersConstructor, ChunkState} from 'neuroglancer/chunk_manager/base';
 import {Disposable} from 'neuroglancer/util/disposable';
 import {LinkedListOperations} from 'neuroglancer/util/linked_list';
-import {StringMemoize} from 'neuroglancer/util/memoize';
-import {ComparisonFunction, PairingHeapOperations} from 'neuroglancer/util/pairing_heap';
-import {initializeSharedObjectCounterpart, registerSharedObject, RPC, SharedObject, SharedObjectCounterpart} from 'neuroglancer/worker_rpc';
-import {Signal} from 'signals';
-import PairingHeap0 from 'neuroglancer/util/pairing_heap.0';
-import PairingHeap1 from 'neuroglancer/util/pairing_heap.1';
 import LinkedList0 from 'neuroglancer/util/linked_list.0';
 import LinkedList1 from 'neuroglancer/util/linked_list.1';
+import {StringMemoize} from 'neuroglancer/util/memoize';
+import {ComparisonFunction, PairingHeapOperations} from 'neuroglancer/util/pairing_heap';
+import PairingHeap0 from 'neuroglancer/util/pairing_heap.0';
+import PairingHeap1 from 'neuroglancer/util/pairing_heap.1';
 import {CancellablePromise, cancelPromise} from 'neuroglancer/util/promise';
+import {NullarySignal} from 'neuroglancer/util/signal';
+import {initializeSharedObjectCounterpart, registerSharedObject, RPC, SharedObject, SharedObjectCounterpart} from 'neuroglancer/worker_rpc';
 
 const DEBUG_CHUNK_UPDATES = false;
 
@@ -661,7 +661,13 @@ export class ChunkManager extends SharedObjectCounterpart {
 
   private updatePending: number|null = null;
 
-  recomputeChunkPriorities = new Signal();
+  recomputeChunkPriorities = new NullarySignal();
+
+  /**
+   * Dispatched immediately after recomputeChunkPriorities is dispatched.
+   * This signal should be used for handlers that depend on the result of another handler.
+   */
+  recomputeChunkPrioritiesLate = new NullarySignal();
 
   memoize = new StringMemoize();
 
@@ -686,6 +692,7 @@ export class ChunkManager extends SharedObjectCounterpart {
   private recomputeChunkPriorities_() {
     this.updatePending = null;
     this.recomputeChunkPriorities.dispatch();
+    this.recomputeChunkPrioritiesLate.dispatch();
     this.updateQueueState([ChunkPriorityTier.VISIBLE]);
   };
 

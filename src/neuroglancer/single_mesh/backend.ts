@@ -238,12 +238,13 @@ class SingleMeshLayer extends SharedObjectCounterpart {
     this.chunkManager = <ChunkManager>rpc.get(options['chunkManager']);
 
     this.source = this.registerDisposer(rpc.getRef<SingleMeshSource>(options['source']));
-    this.registerSignalBinding(
-        this.chunkManager.recomputeChunkPriorities.add(this.updateChunkPriorities, this));
-    const scheduleUpdateChunkPriorities =
-        () => { this.chunkManager.scheduleUpdateChunkPriorities(); };
-    this.visibilityCount.becameZero.add(scheduleUpdateChunkPriorities);
-    this.visibilityCount.becameNonZero.add(scheduleUpdateChunkPriorities);
+    this.registerDisposer(this.chunkManager.recomputeChunkPriorities.add(() => {
+      this.updateChunkPriorities();
+    }));
+    const scheduleUpdateChunkPriorities = () => {
+      this.chunkManager.scheduleUpdateChunkPriorities();
+    };
+    this.visibilityCount.signChanged.add(scheduleUpdateChunkPriorities);
   }
 
   private updateChunkPriorities() {

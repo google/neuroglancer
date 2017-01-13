@@ -34,12 +34,12 @@ export class AnnotationPointListUserLayer extends UserLayer {
   constructor(public manager: LayerListSpecification, x: any) {
     super([]);
     this.layer.pointList.restoreState(x['points']);
-    this.registerSignalBinding(
+    this.registerDisposer(
         this.layer.pointList.changed.add(() => { this.specificationChanged.dispatch(); }));
     this.addRenderLayer(new PerspectiveViewAnnotationPointListLayer(this.layer));
     this.addRenderLayer(new SliceViewAnnotationPointListLayer(this.layer));
     const {layerSelectedValues} = manager;
-    this.registerSignalBinding(layerSelectedValues.changed.add(() => {
+    this.registerDisposer(layerSelectedValues.changed.add(() => {
       let value = layerSelectedValues.get(this);
       this.selectedIndex.value = typeof value === 'number' ? value : null;
     }));
@@ -75,7 +75,7 @@ class Dropdown extends UserLayerDropdown {
     super();
     element.classList.add('neuroglancer-annotation-point-list-dropdown');
     element.appendChild(this.pointListWidget.element);
-    this.registerSignalBinding(this.pointListWidget.pointSelected.add((index: number) => {
+    this.registerDisposer(this.pointListWidget.pointSelected.add((index: number) => {
       this.layer.manager.setVoxelCoordinates(this.layer.layer.pointList.get(index));
     }));
   }

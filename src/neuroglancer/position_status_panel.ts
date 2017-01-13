@@ -77,8 +77,12 @@ export class PositionStatusPanel extends RefCounted {
 
     let {navigationState, mouseState} = viewer;
 
-    this.registerSignalBinding(navigationState.pose.changed.add(this.handleChange, this));
-    this.registerSignalBinding(mouseState.changed.add(this.handleChange, this));
+    this.registerDisposer(navigationState.pose.changed.add(() => {
+      this.handleChange();
+    }));
+    this.registerDisposer(mouseState.changed.add(() => {
+      this.handleChange();
+    }));
     this.handleChange();
   }
 

@@ -17,11 +17,11 @@
 import {HashFunction, PRIME_MODULUS} from 'neuroglancer/gpu_hash/hash_function';
 import {glsl_hashFunction} from 'neuroglancer/gpu_hash/shader';
 import {hsvToRgb} from 'neuroglancer/util/colorspace';
+import {NullarySignal} from 'neuroglancer/util/signal';
 import {Uint64} from 'neuroglancer/util/uint64';
 import {GL} from 'neuroglancer/webgl/context';
 import {ShaderBuilder, ShaderProgram} from 'neuroglancer/webgl/shader';
 import {glsl_hsvToRgb, glsl_uint64} from 'neuroglancer/webgl/shader_lib';
-import {Signal} from 'signals';
 
 const NUM_COMPONENTS = 2;
 
@@ -75,7 +75,7 @@ export class SegmentColorHash {
   hashFunctions: HashFunction[];
   a_ = new Float32Array(4 * 2 * NUM_COMPONENTS);
   b_ = new Float32Array(2 * NUM_COMPONENTS);
-  changed = new Signal();
+  changed = new NullarySignal();
 
   constructor(hashFunctions?: HashFunction[]) {
     if (hashFunctions == null) {
