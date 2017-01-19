@@ -23,7 +23,7 @@ import {forEachVisibleSegment} from 'neuroglancer/segmentation_display_state/bas
 import {CancellationToken} from 'neuroglancer/util/cancellation';
 import {convertEndian32, Endianness} from 'neuroglancer/util/endian';
 import {vec3} from 'neuroglancer/util/geom';
-import {verifyObject, verifyObjectProperty} from 'neuroglancer/util/json';
+import {verifyObject, verifyObjectProperty, verifyStringArray} from 'neuroglancer/util/json';
 import {Uint64} from 'neuroglancer/util/uint64';
 import {registerSharedObject, RPC} from 'neuroglancer/worker_rpc';
 
@@ -116,17 +116,7 @@ export class FragmentChunk extends Chunk {
 export function decodeJsonManifestChunk(
     chunk: ManifestChunk, response: any, keysPropertyName: string) {
   verifyObject(response);
-  chunk.fragmentIds = verifyObjectProperty(response, keysPropertyName, fragmentKeys => {
-    if (!Array.isArray(fragmentKeys)) {
-      throw new Error(`Expected array, received: ${JSON.stringify(fragmentKeys)}.`);
-    }
-    for (let x of fragmentKeys) {
-      if (typeof x !== 'string') {
-        throw new Error(`Expected string fragment key, received: ${JSON.stringify(x)}.`);
-      }
-    }
-    return <string[]>fragmentKeys;
-  });
+  chunk.fragmentIds = verifyObjectProperty(response, keysPropertyName, verifyStringArray);
 }
 
 /**

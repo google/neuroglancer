@@ -18,7 +18,7 @@ import 'neuroglancer/datasource/brainmaps/api_backend';
 
 import {registerChunkSource} from 'neuroglancer/chunk_manager/backend';
 import {makeRequest} from 'neuroglancer/datasource/brainmaps/api';
-import {MeshSourceParameters, SkeletonSourceParameters, VolumeChunkEncoding, VolumeSourceParameters} from 'neuroglancer/datasource/brainmaps/base';
+import {ChangeSpec, MeshSourceParameters, SkeletonSourceParameters, VolumeChunkEncoding, VolumeSourceParameters} from 'neuroglancer/datasource/brainmaps/base';
 import {decodeJsonManifestChunk, decodeTriangleVertexPositionsAndIndices, FragmentChunk, ManifestChunk, ParameterizedMeshSource} from 'neuroglancer/mesh/backend';
 import {decodeSkeletonVertexPositionsAndIndices, ParameterizedSkeletonSource, SkeletonChunk} from 'neuroglancer/skeleton/backend';
 import {ParameterizedVolumeChunkSource, VolumeChunk} from 'neuroglancer/sliceview/backend';
@@ -28,6 +28,7 @@ import {decodeRawChunk} from 'neuroglancer/sliceview/backend_chunk_decoders/raw'
 import {CancellationToken} from 'neuroglancer/util/cancellation';
 import {Endianness} from 'neuroglancer/util/endian';
 import {vec3Key} from 'neuroglancer/util/geom';
+import {verifyObject, verifyObjectProperty, verifyStringArray} from 'neuroglancer/util/json';
 import {inflate} from 'pako';
 
 export function decodeGzippedRawChunk(chunk: VolumeChunk, response: ArrayBuffer) {
@@ -51,6 +52,19 @@ const CHUNK_DECODERS = new Map([
   ]
 ]);
 
+function getChangeStackParams(changeStack: ChangeSpec|undefined) {
+  let result = '';
+  if (changeStack !== undefined) {
+    result += `/change_spec.change_stack_id=${changeStack.changeStackId}`;
+    if (changeStack.timeStamp !== undefined) {
+      result += `/change_spec.time_stamp=${Math.round(changeStack.timeStamp)}`;
+    }
+    if (changeStack.skipEquivalences) {
+      result += `/change_spec.skip_equivalences=true`;
+    }
+  }
+  return result;
+}
 
 @registerChunkSource(VolumeSourceParameters)
 class VolumeChunkSource extends ParameterizedVolumeChunkSource<VolumeSourceParameters> {
@@ -77,21 +91,11 @@ class VolumeChunkSource extends ParameterizedVolumeChunkSource<VolumeSourceParam
   private getChangeStackParams() {
     let {parameters} = this;
     let changeStack = parameters['changeSpec'];
-    let result = '';
-    if (changeStack !== undefined) {
-      result += `/change_spec.change_stack_id=${changeStack.changeStackId}`;
-      if (changeStack.timeStamp !== undefined) {
-        result += `/change_spec.time_stamp=${Math.round(changeStack.timeStamp)}`;
-      }
-      if (changeStack.skipEquivalences) {
-        result += `/change_spec.skip_equivalences=true`;
-      }
-    }
-    return result;
+    return getChangeStackParams(changeStack);
   }
 
   private getExtraParams() {
-    return `${this.getEncodingParams()}${this.getChangeStackParams()}`;
+    return this.getEncodingParams() + this.getChangeStackParams();
   }
 
   download(chunk: VolumeChunk, cancellationToken: CancellationToken) {
@@ -117,6 +121,18 @@ function decodeManifestChunk(chunk: ManifestChunk, response: any) {
   return decodeJsonManifestChunk(chunk, response, 'fragmentKey');
 }
 
+function decodeManifestChunkWithSupervoxelIds(chunk: ManifestChunk, response: any) {
+  verifyObject(response);
+  const fragmentKeys = verifyObjectProperty(response, 'fragmentKey', verifyStringArray);
+  const supervoxelIds = verifyObjectProperty(response, 'supervoxelId', verifyStringArray);
+  const length = fragmentKeys.length;
+  if (length !== supervoxelIds.length) {
+    throw new Error('Expected fragmentKey and supervoxelId arrays to have the same length.');
+  }
+  chunk.fragmentIds =
+      supervoxelIds.map((supervoxelId, index) => supervoxelId + '\0' + fragmentKeys[index]);
+}
+
 function decodeFragmentChunk(chunk: FragmentChunk, response: ArrayBuffer) {
   response = inflate(new Uint8Array(response)).buffer;
   let dv = new DataView(response);
@@ -131,20 +147,52 @@ function decodeFragmentChunk(chunk: FragmentChunk, response: ArrayBuffer) {
 
 @registerChunkSource(MeshSourceParameters)
 class MeshSource extends ParameterizedMeshSource<MeshSourceParameters> {
+  private getChangeStackParams() {
+    let {parameters} = this;
+    let changeStack = parameters['changeSpec'];
+    return getChangeStackParams(changeStack);
+  }
+
+  private extraParams = this.getChangeStackParams();
+
+  private manifestDecoder = this.parameters.changeSpec !== undefined ?
+      decodeManifestChunkWithSupervoxelIds :
+      decodeManifestChunk;
+
+  private listFragmentsParams = (() => {
+    const {parameters} = this;
+    const {changeSpec} = parameters;
+    if (changeSpec !== undefined) {
+      return `&header.changeStackId=${changeSpec.changeStackId}&return_supervoxel_ids=true`;
+    }
+    return '';
+  })();
+
   download(chunk: ManifestChunk, cancellationToken: CancellationToken) {
     let {parameters} = this;
     const path = `/v1beta2/objects/${parameters['volumeId']}/meshes/` +
-        `${parameters['meshName']}:listfragments?object_id=${chunk.objectId}`;
+        `${parameters['meshName']}:listfragments?object_id=${chunk.objectId}` +
+        this.listFragmentsParams;
     return makeRequest(parameters['instance'], 'GET', path, 'json', cancellationToken)
-        .then(response => decodeManifestChunk(chunk, response));
+        .then(response => this.manifestDecoder(chunk, response));
   }
 
   downloadFragment(chunk: FragmentChunk, cancellationToken: CancellationToken) {
     let {parameters} = this;
+    let objectId: string;
+    let fragmentId = chunk.fragmentId!;
+    if (parameters.changeSpec !== undefined) {
+      const splitIndex = fragmentId.indexOf('\0');
+      objectId = fragmentId.substring(0, splitIndex);
+      fragmentId = fragmentId.substring(splitIndex + 1);
+    } else {
+      objectId = chunk.manifestChunk!.objectId.toString();
+    }
+
     const path = `/v1beta2/binary/objects/binary/objects/fragment/` +
         `header.volume_id=${parameters['volumeId']}/` +
-        `mesh_name=${parameters['meshName']}/fragment_key=${chunk.fragmentId}/` +
-        `object_id=${chunk.manifestChunk!.objectId}/header.gzip_compression_level=6?alt=media`;
+        `mesh_name=${parameters['meshName']}/fragment_key=${fragmentId}/` +
+        `object_id=${objectId}/header.gzip_compression_level=6?alt=media`;
     return makeRequest(parameters['instance'], 'GET', path, 'arraybuffer', cancellationToken)
         .then(response => decodeFragmentChunk(chunk, response));
   }

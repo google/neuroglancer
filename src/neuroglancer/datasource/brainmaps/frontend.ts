@@ -167,9 +167,12 @@ export class MultiscaleVolumeChunkSource implements GenericMultiscaleVolumeChunk
     if (validMesh === undefined) {
       return null;
     }
-    return getMeshSource(
-        this.chunkManager,
-        {'instance': this.instance, 'volumeId': this.volumeId, 'meshName': validMesh.name});
+    return getMeshSource(this.chunkManager, {
+      'instance': this.instance,
+      'volumeId': this.volumeId,
+      'meshName': validMesh.name,
+      'changeSpec': this.changeSpec,
+    });
   }
 };
 
