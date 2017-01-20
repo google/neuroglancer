@@ -8,11 +8,11 @@
   },
   "dependencies": {
     "neuroglancer": "^0.0.0-beta.0",
-    "webpack": "^2.2.0-rc.3"
+    "webpack": "^2.2.0"
   },
   "devDependencies": {
     "tslint-eslint-rules": "^3.2.1",
     "typescript": ">=2.1.4",
-    "webpack-dev-server": "^2.2.0-rc.0"
+    "webpack-dev-server": "^2.2.0"
   }
 }
