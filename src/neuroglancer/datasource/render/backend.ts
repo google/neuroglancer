@@ -14,7 +14,8 @@
  * limitations under the License.
  */
 
-import {handleChunkDownloadPromise, registerChunkSource} from 'neuroglancer/chunk_manager/backend';
+import {registerChunkSource} from 'neuroglancer/chunk_manager/backend';
+import {CancellationToken} from 'neuroglancer/util/cancellation';
 import {TileChunkSourceParameters} from 'neuroglancer/datasource/render/base';
 import {ParameterizedVolumeChunkSource, VolumeChunk} from 'neuroglancer/sliceview/backend';
 import {ChunkDecoder} from 'neuroglancer/sliceview/backend_chunk_decoders';
@@ -28,7 +29,7 @@ chunkDecoders.set('jpg', decodeJpegChunk);
 class TileChunkSource extends ParameterizedVolumeChunkSource<TileChunkSourceParameters> {
   chunkDecoder = chunkDecoders.get(this.parameters.encoding)!;
 
-  download(chunk: VolumeChunk) {
+  download(chunk: VolumeChunk, cancellationToken: CancellationToken) {
     let {parameters} = this;
     let {chunkGridPosition} = chunk;
 
@@ -48,8 +49,8 @@ class TileChunkSource extends ParameterizedVolumeChunkSource<TileChunkSourcePara
         }/stack/${parameters.stack}/z/${chunkGridPosition[2]}/box/${xTile},${yTile},${chunk
             .chunkDataSize[0]},${chunk.chunkDataSize[1]},${scale}/jpeg-image`;
 
-    handleChunkDownloadPromise(
-        chunk, sendHttpRequest(openShardedHttpRequest(parameters.baseUrls, path), 'arraybuffer'),
-        this.chunkDecoder);
+    return sendHttpRequest(
+               openShardedHttpRequest(parameters.baseUrls, path), 'arraybuffer', cancellationToken)
+        .then(response => this.chunkDecoder(chunk, response));
   }
-};
+}

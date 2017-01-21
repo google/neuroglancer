@@ -23,7 +23,7 @@ import {StringMemoize} from 'neuroglancer/util/memoize';
 import {ComparisonFunction, PairingHeapOperations} from 'neuroglancer/util/pairing_heap';
 import PairingHeap0 from 'neuroglancer/util/pairing_heap.0';
 import PairingHeap1 from 'neuroglancer/util/pairing_heap.1';
-import {CancellablePromise, cancelPromise} from 'neuroglancer/util/promise';
+import {CancellationTokenSource, CancellationToken} from 'neuroglancer/util/cancellation';
 import {NullarySignal} from 'neuroglancer/util/signal';
 import {initializeSharedObjectCounterpart, registerSharedObject, RPC, SharedObject, SharedObjectCounterpart} from 'neuroglancer/worker_rpc';
 
@@ -69,9 +69,10 @@ export class Chunk implements Disposable {
   backendOnly = false;
 
   /**
-   * Must be set to a non-null value by ChunkSource.prototype.download.
+   * Cancellation token used to cancel the pending download.  Set to undefined except when state !==
+   * DOWNLOADING.  This should not be accessed by code outside this module.
    */
-  cancelDownload: (() => void)|null = null;
+  downloadCancellationToken: CancellationTokenSource|undefined = undefined;
 
   initialize(key: string) {
     this.key = key;
@@ -156,7 +157,16 @@ export abstract class ChunkSourceBase extends SharedObject {
     return chunk;
   }
 
-  download(_chunk: Chunk) {}
+  /**
+   * Begin downloading the specified the chunk.  The returned promise should resolve when the
+   * downloaded data has been successfully decoded and stored in the chunk, or rejected if the
+   * download or decoding fails.
+   *
+   * @param chunk Chunk to download.
+   * @param cancellationToken If this token is canceled, the download/decoding should be aborted if
+   * possible.
+   */
+  abstract download(chunk: Chunk, cancellationToken: CancellationToken): Promise<void>;
 
   /**
    * Adds the specified chunk to the chunk cache.
@@ -198,37 +208,29 @@ export abstract class ChunkSource extends ChunkSourceBase {
   }
 }
 
-export function handleChunkDownloadPromise<ChunkType extends Chunk, Result>(
-    chunk: ChunkType, promise: CancellablePromise<Result>,
-    chunkDecoder: (chunk: ChunkType, result: Result) => void) {
-  chunk.cancelDownload = function() {
-    chunk.cancelDownload = null;
-    cancelPromise(promise);
-  };
-  promise.then(
-      response => {
-        if (chunk.cancelDownload === null) {
-          // Download was cancelled.
-          return;
-        }
-        chunk.cancelDownload = null;
-        try {
-          chunkDecoder.call(undefined, chunk, response);
-          chunk.downloadSucceeded();
-        } catch (e) {
-          console.log(`Failed to decode chunk ${chunk}: ${e}`);
-          chunk.downloadFailed(e);
-        }
-      },
-      function(e) {
-        if (chunk.cancelDownload === null) {
-          // Download was cancelled.
-          return;
-        }
-        chunk.cancelDownload = null;
-        chunk.downloadFailed(e);
-        console.log(`Download failed for chunk ${chunk}`);
-      });
+function startChunkDownload(chunk: Chunk) {
+  const downloadCancellationToken = chunk.downloadCancellationToken = new CancellationTokenSource();
+  chunk.source!.download(chunk, downloadCancellationToken)
+      .then(
+          () => {
+            if (chunk.downloadCancellationToken === downloadCancellationToken) {
+              chunk.downloadCancellationToken = undefined;
+              chunk.downloadSucceeded();
+            }
+          },
+          (error: any) => {
+            if (chunk.downloadCancellationToken === downloadCancellationToken) {
+              chunk.downloadCancellationToken = undefined;
+              chunk.downloadFailed(error);
+              console.log(`Error retrieving chunk ${chunk}: ${error}`);
+            }
+          });
+}
+
+function cancelChunkDownload(chunk: Chunk) {
+  const token = chunk.downloadCancellationToken!;
+  chunk.downloadCancellationToken = undefined;
+  token.cancel();
 }
 
 class ChunkPriorityQueue {
@@ -579,7 +581,7 @@ export class ChunkQueueManager extends SharedObjectCounterpart {
     function evict(chunk: Chunk) {
       switch (chunk.state) {
         case ChunkState.DOWNLOADING:
-          chunk.cancelDownload!();
+          cancelChunkDownload(chunk);
           break;
         case ChunkState.GPU_MEMORY:
           queueManager.freeChunkGPUMemory(chunk);
@@ -616,7 +618,7 @@ export class ChunkQueueManager extends SharedObjectCounterpart {
         return;
       }
       this.updateChunkState(promotionCandidate, ChunkState.DOWNLOADING);
-      promotionCandidate.source!.download(promotionCandidate);
+      startChunkDownload(promotionCandidate);
     }
   }
 

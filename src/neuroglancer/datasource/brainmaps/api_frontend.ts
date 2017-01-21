@@ -21,8 +21,8 @@
 
 import {getToken, implementation, Token} from 'neuroglancer/datasource/brainmaps/api_implementation';
 import {StatusMessage} from 'neuroglancer/status';
+import {CancellationTokenSource} from 'neuroglancer/util/cancellation';
 import {authenticateGoogleOAuth2} from 'neuroglancer/util/google_oauth2';
-import {callFinally, cancelPromise} from 'neuroglancer/util/promise';
 import {registerRPC, RPC} from 'neuroglancer/worker_rpc';
 
 declare var BRAINMAPS_CLIENT_ID: string;
@@ -31,47 +31,52 @@ const BRAINMAPS_SCOPE = 'https://www.googleapis.com/auth/brainmaps';
 let nextGenerationId = 0;
 
 implementation.getNewTokenPromise = function() {
-  let status = new StatusMessage(/*delay=*/true);
-  let authPromise: Promise<Token>|undefined|null;
-  let tokenPromise = new Promise(function(resolve) {
+  const status = new StatusMessage(/*delay=*/true);
+  let cancellationSource: CancellationTokenSource|undefined;
+  return new Promise(resolve => {
     function writeLoginStatus(
         msg = 'Brain Maps authorization required.', linkMessage = 'Request authorization.') {
       status.setText(msg + '  ');
       let button = document.createElement('button');
       button.textContent = linkMessage;
       status.element.appendChild(button);
-      button.addEventListener('click', () => { login(/*immediate=*/false); });
+      button.addEventListener('click', () => {
+        login(/*immediate=*/false);
+      });
       status.setVisible(true);
     }
     function login(immediate: boolean) {
-      if (authPromise !== undefined) {
-        cancelPromise(authPromise);
+      if (cancellationSource !== undefined) {
+        cancellationSource.cancel();
       }
+      cancellationSource = new CancellationTokenSource();
       writeLoginStatus('Waiting for Brain Maps authorization...', 'Retry');
-      authPromise = authenticateGoogleOAuth2({
-        clientId: BRAINMAPS_CLIENT_ID,
-        scopes: [BRAINMAPS_SCOPE],
-        immediate: immediate,
-        authUser: 0,
-      });
-      authPromise.then(
-          token => {
-            token['generationId'] = nextGenerationId++;
-            resolve(token);
+      authenticateGoogleOAuth2(
+          {
+            clientId: BRAINMAPS_CLIENT_ID,
+            scopes: [BRAINMAPS_SCOPE],
+            immediate: immediate,
+            authUser: 0,
           },
-          reason => {
-            if (immediate) {
-              writeLoginStatus();
-            } else {
-              writeLoginStatus(`Brain Maps authorization failed: ${reason}.`, 'Retry');
-            }
-          });
-      callFinally(authPromise, () => { authPromise = undefined; });
+          cancellationSource)
+          .then(
+              token => {
+                cancellationSource = undefined;
+                (<any>token)['generationId'] = nextGenerationId++;
+                status.dispose();
+                resolve(token);
+              },
+              reason => {
+                cancellationSource = undefined;
+                if (immediate) {
+                  writeLoginStatus();
+                } else {
+                  writeLoginStatus(`Brain Maps authorization failed: ${reason}.`, 'Retry');
+                }
+              });
     }
     login(/*immediate=*/true);
   });
-  callFinally(tokenPromise, () => { status.dispose(); });
-  return tokenPromise;
 };
 
 registerRPC('brainmaps.requestToken', function(x) {

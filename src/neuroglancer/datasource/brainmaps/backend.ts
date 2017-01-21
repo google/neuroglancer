@@ -16,7 +16,7 @@
 
 import 'neuroglancer/datasource/brainmaps/api_backend';
 
-import {handleChunkDownloadPromise, registerChunkSource} from 'neuroglancer/chunk_manager/backend';
+import {registerChunkSource} from 'neuroglancer/chunk_manager/backend';
 import {makeRequest} from 'neuroglancer/datasource/brainmaps/api';
 import {MeshSourceParameters, SkeletonSourceParameters, VolumeChunkEncoding, VolumeSourceParameters} from 'neuroglancer/datasource/brainmaps/base';
 import {decodeJsonManifestChunk, decodeTriangleVertexPositionsAndIndices, FragmentChunk, ManifestChunk, ParameterizedMeshSource} from 'neuroglancer/mesh/backend';
@@ -25,6 +25,7 @@ import {ParameterizedVolumeChunkSource, VolumeChunk} from 'neuroglancer/slicevie
 import {decodeCompressedSegmentationChunk} from 'neuroglancer/sliceview/backend_chunk_decoders/compressed_segmentation';
 import {decodeJpegChunk} from 'neuroglancer/sliceview/backend_chunk_decoders/jpeg';
 import {decodeRawChunk} from 'neuroglancer/sliceview/backend_chunk_decoders/raw';
+import {CancellationToken} from 'neuroglancer/util/cancellation';
 import {Endianness} from 'neuroglancer/util/endian';
 import {vec3Key} from 'neuroglancer/util/geom';
 import {inflate} from 'pako';
@@ -65,7 +66,8 @@ class VolumeChunkSource extends ParameterizedVolumeChunkSource<VolumeSourceParam
       case VolumeChunkEncoding.JPEG:
         return '/subvolume_format=SINGLE_IMAGE/image_format_options.image_format=JPEG';
       case VolumeChunkEncoding.COMPRESSED_SEGMENTATION:
-        return `/subvolume_format=RAW/image_format_options.compressed_segmentation_block_size=${vec3Key(this.spec.compressedSegmentationBlockSize!)}${compression_suffix}`;
+        return `/subvolume_format=RAW/image_format_options.compressed_segmentation_block_size=` +
+            vec3Key(this.spec.compressedSegmentationBlockSize!) + compression_suffix;
       default:
         throw new Error(`Invalid encoding: ${encoding}`);
     }
@@ -87,9 +89,11 @@ class VolumeChunkSource extends ParameterizedVolumeChunkSource<VolumeSourceParam
     return result;
   }
 
-  private getExtraParams() { return `${this.getEncodingParams()}/${this.getChangeStackParams()}`; }
+  private getExtraParams() {
+    return `${this.getEncodingParams()}${this.getChangeStackParams()}`;
+  }
 
-  download(chunk: VolumeChunk) {
+  download(chunk: VolumeChunk, cancellationToken: CancellationToken) {
     let {parameters} = this;
     let path: string;
     {
@@ -97,11 +101,14 @@ class VolumeChunkSource extends ParameterizedVolumeChunkSource<VolumeSourceParam
       // computeChunkBounds.
       let chunkPosition = this.computeChunkBounds(chunk);
       let chunkDataSize = chunk.chunkDataSize!;
-      path =
-          `/v1beta2/binary/volumes/binary/volumes/subvolume/header.volume_id=${parameters['volumeId']}/geometry.corner=${vec3Key(chunkPosition)}/geometry.size=${vec3Key(chunkDataSize)}/geometry.scale=${parameters['scaleIndex']}${this.extraParams}?alt=media`;
+      path = `/v1beta2/binary/volumes/binary/volumes/subvolume/` +
+          `header.volume_id=${parameters['volumeId']}/` +
+          `geometry.corner=${vec3Key(chunkPosition)}/` +
+          `geometry.size=${vec3Key(chunkDataSize)}/` +
+          `geometry.scale=${parameters['scaleIndex']}${this.extraParams}?alt=media`;
     }
-    handleChunkDownloadPromise(
-        chunk, makeRequest(parameters['instance'], 'GET', path, 'arraybuffer'), this.chunkDecoder);
+    return makeRequest(parameters['instance'], 'GET', path, 'arraybuffer', cancellationToken)
+        .then(response => this.chunkDecoder(chunk, response));
   }
 };
 
@@ -123,23 +130,24 @@ function decodeFragmentChunk(chunk: FragmentChunk, response: ArrayBuffer) {
 
 @registerChunkSource(MeshSourceParameters)
 class MeshSource extends ParameterizedMeshSource<MeshSourceParameters> {
-  download(chunk: ManifestChunk) {
+  download(chunk: ManifestChunk, cancellationToken: CancellationToken) {
     let {parameters} = this;
-    const path =
-        `/v1beta2/objects/${parameters['volumeId']}/meshes/${parameters['meshName']}:listfragments?object_id=${chunk.objectId}`;
-    handleChunkDownloadPromise(
-        chunk, makeRequest(parameters['instance'], 'GET', path, 'json'), decodeManifestChunk);
+    const path = `/v1beta2/objects/${parameters['volumeId']}/meshes/` +
+        `${parameters['meshName']}:listfragments?object_id=${chunk.objectId}`;
+    return makeRequest(parameters['instance'], 'GET', path, 'json', cancellationToken)
+        .then(response => decodeManifestChunk(chunk, response));
   }
 
-  downloadFragment(chunk: FragmentChunk) {
+  downloadFragment(chunk: FragmentChunk, cancellationToken: CancellationToken) {
     let {parameters} = this;
-    const path =
-        `/v1beta2/binary/objects/binary/objects/fragment/header.volume_id=${parameters['volumeId']}/mesh_name=${parameters['meshName']}/fragment_key=${chunk.fragmentId}/object_id=${chunk.manifestChunk!.objectId}/header.gzip_compression_level=6?alt=media`;
-    handleChunkDownloadPromise(
-        chunk, makeRequest(parameters['instance'], 'GET', path, 'arraybuffer'),
-        decodeFragmentChunk);
+    const path = `/v1beta2/binary/objects/binary/objects/fragment/` +
+        `header.volume_id=${parameters['volumeId']}/` +
+        `mesh_name=${parameters['meshName']}/fragment_key=${chunk.fragmentId}/` +
+        `object_id=${chunk.manifestChunk!.objectId}/header.gzip_compression_level=6?alt=media`;
+    return makeRequest(parameters['instance'], 'GET', path, 'arraybuffer', cancellationToken)
+        .then(response => decodeFragmentChunk(chunk, response));
   }
-};
+}
 
 function decodeSkeletonChunk(chunk: SkeletonChunk, response: ArrayBuffer) {
   response = inflate(new Uint8Array(response)).buffer;
@@ -161,12 +169,12 @@ function decodeSkeletonChunk(chunk: SkeletonChunk, response: ArrayBuffer) {
 
 @registerChunkSource(SkeletonSourceParameters)
 export class SkeletonSource extends ParameterizedSkeletonSource<SkeletonSourceParameters> {
-  download(chunk: SkeletonChunk) {
+  download(chunk: SkeletonChunk, cancellationToken: CancellationToken) {
     const {parameters} = this;
-    const path =
-        `/v1beta2/binary/objects/binary/objects/skeleton/header.volume_id=${parameters['volumeId']}/mesh_name=${parameters['meshName']}/object_id=${chunk.objectId}/header.gzip_compression_level=6?alt=media`;
-    handleChunkDownloadPromise(
-        chunk, makeRequest(parameters['instance'], 'GET', path, 'arraybuffer'),
-        decodeSkeletonChunk);
+    const path = `/v1beta2/binary/objects/binary/objects/skeleton/` +
+        `header.volume_id=${parameters['volumeId']}/mesh_name=${parameters['meshName']}/` +
+        `object_id=${chunk.objectId}/header.gzip_compression_level=6?alt=media`;
+    return makeRequest(parameters['instance'], 'GET', path, 'arraybuffer', cancellationToken)
+        .then(response => decodeSkeletonChunk(chunk, response));
   }
-};
+}

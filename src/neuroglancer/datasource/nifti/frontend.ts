@@ -24,14 +24,21 @@ import {registerDataSourceFactory} from 'neuroglancer/datasource/factory';
 import {GET_NIFTI_VOLUME_INFO_RPC_ID, NiftiVolumeInfo, VolumeSourceParameters} from 'neuroglancer/datasource/nifti/base';
 import {VolumeChunkSpecification, VolumeSourceOptions} from 'neuroglancer/sliceview/base';
 import {defineParameterizedVolumeChunkSource, MultiscaleVolumeChunkSource as GenericMultiscaleVolumeChunkSource} from 'neuroglancer/sliceview/frontend';
+import {CancellationToken, uncancelableToken} from 'neuroglancer/util/cancellation';
 import {kOneVec, mat4, translationRotationScaleZReflectionToMat4} from 'neuroglancer/util/geom';
 
 export class MultiscaleVolumeChunkSource implements GenericMultiscaleVolumeChunkSource {
   constructor(public chunkManager: ChunkManager, public url: string, public info: NiftiVolumeInfo) {
   }
-  get numChannels() { return this.info.numChannels; }
-  get dataType() { return this.info.dataType; }
-  get volumeType() { return this.info.volumeType; }
+  get numChannels() {
+    return this.info.numChannels;
+  }
+  get dataType() {
+    return this.info.dataType;
+  }
+  get volumeType() {
+    return this.info.volumeType;
+  }
   getSources(volumeSourceOptions: VolumeSourceOptions) {
     let {info} = this;
     const spec = VolumeChunkSpecification.withDefaultCompression({
@@ -48,20 +55,23 @@ export class MultiscaleVolumeChunkSource implements GenericMultiscaleVolumeChunk
     return [[VolumeChunkSource.get(this.chunkManager, spec, {url: this.url})]];
   }
 
-  getMeshSource(): null { return null; }
+  getMeshSource(): null {
+    return null;
+  }
 }
 
 const VolumeChunkSource = defineParameterizedVolumeChunkSource(VolumeSourceParameters);
 
-function getNiftiVolumeInfo(chunkManager: ChunkManager, url: string) {
+function getNiftiVolumeInfo(chunkManager: ChunkManager, url: string, cancellationToken: CancellationToken) {
   return chunkManager.rpc!.promiseInvoke<NiftiVolumeInfo>(
-      GET_NIFTI_VOLUME_INFO_RPC_ID, {'chunkManager': chunkManager.addCounterpartRef(), 'url': url});
+      GET_NIFTI_VOLUME_INFO_RPC_ID, {'chunkManager': chunkManager.addCounterpartRef(), 'url': url},
+      cancellationToken);
 }
 
 export function getVolume(chunkManager: ChunkManager, url: string) {
   return chunkManager.memoize.getUncounted(
       ['nifti/getVolume', url],
-      () => getNiftiVolumeInfo(chunkManager, url)
+      () => getNiftiVolumeInfo(chunkManager, url, uncancelableToken)
                 .then(info => new MultiscaleVolumeChunkSource(chunkManager, url, info)));
 }
 

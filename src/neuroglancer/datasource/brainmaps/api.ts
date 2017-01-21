@@ -16,7 +16,7 @@
 
 import {getToken, Token} from 'neuroglancer/datasource/brainmaps/api_implementation';
 import {HttpError, openShardedHttpRequest} from 'neuroglancer/util/http_request';
-import {CancellablePromise, makeCancellablePromise} from 'neuroglancer/util/promise';
+import {CancellationToken, uncancelableToken, CANCELED} from 'neuroglancer/util/cancellation';
 
 export var numPendingRequests = 0;
 
@@ -49,22 +49,33 @@ export function setupBrainmapsInstance(
 setupBrainmapsInstance(PRODUCTION_INSTANCE, 'brainmaps.googleapis.com', 'prod', 'Brain Maps');
 
 export function makeRequest(
-    instance: BrainmapsInstance, method: string, path: string,
-    responseType: 'arraybuffer'): CancellablePromise<ArrayBuffer>;
+    instance: BrainmapsInstance, method: string, path: string, responseType: 'arraybuffer',
+    cancellationToken?: CancellationToken): Promise<ArrayBuffer>;
 export function makeRequest(
-    instance: BrainmapsInstance, method: string, path: string,
-    responseType: 'json'): CancellablePromise<any>;
+    instance: BrainmapsInstance, method: string, path: string, responseType: 'json',
+    cancellationToken?: CancellationToken): Promise<any>;
 export function makeRequest(
-    instance: BrainmapsInstance, method: string, path: string, responseType: string): any;
+    instance: BrainmapsInstance, method: string, path: string, responseType: string,
+    cancellationToken?: CancellationToken): any;
 
 export function makeRequest(
-    instance: BrainmapsInstance, method: string, path: string, responseType: string): any {
+    instance: BrainmapsInstance, method: string, path: string, responseType: string,
+    cancellationToken: CancellationToken = uncancelableToken): any {
   /**
    * undefined means request not yet attempted.  null means request
    * cancelled.
    */
   let xhr: XMLHttpRequest|undefined|null = undefined;
-  return makeCancellablePromise<any>((resolve, reject, onCancel) => {
+  return new Promise<any>((resolve, reject) => {
+    const abort = () => {
+      let origXhr = xhr;
+      xhr = null;
+      if (origXhr != null) {
+        origXhr.abort();
+      }
+      reject(CANCELED);
+    };
+    cancellationToken.add(abort);
     function start(token: Token) {
       if (xhr === null) {
         --numPendingRequests;
@@ -81,24 +92,19 @@ export function makeRequest(
         let status = this.status;
         if (status >= 200 && status < 300) {
           --numPendingRequests;
+          cancellationToken.remove(abort);
           resolve(this.response);
         } else if (status === 403 || status === 401) {
           // Authorization needed.
           getToken(token).then(start);
         } else {
           --numPendingRequests;
+          cancellationToken.remove(abort);
           reject(HttpError.fromXhr(this));
         }
       };
       xhr.send();
     }
-    onCancel(() => {
-      let origXhr = xhr;
-      xhr = null;
-      if (origXhr != null) {
-        origXhr.abort();
-      }
-    });
     getToken().then(start);
   });
 }

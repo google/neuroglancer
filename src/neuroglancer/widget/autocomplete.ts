@@ -15,13 +15,13 @@
  */
 
 import debounce from 'lodash/debounce';
+import {CancellationToken, CancellationTokenSource} from 'neuroglancer/util/cancellation';
 import {BasicCompletionResult, Completion, CompletionWithDescription} from 'neuroglancer/util/completion';
 import {RefCounted} from 'neuroglancer/util/disposable';
 import {removeChildren, removeFromParent} from 'neuroglancer/util/dom';
 import {positionDropdown} from 'neuroglancer/util/dropdown';
 import {KeyboardShortcutHandler, KeySequenceMap} from 'neuroglancer/util/keyboard_shortcut_handler';
 import {longestCommonPrefix} from 'neuroglancer/util/longest_common_prefix';
-import {CancellablePromise, cancelPromise} from 'neuroglancer/util/promise';
 import {scrollIntoViewIfNeeded} from 'neuroglancer/util/scroll_into_view';
 import {Signal} from 'neuroglancer/util/signal';
 import {associateLabelWithElement} from 'neuroglancer/widget/associate_label';
@@ -82,16 +82,26 @@ const KEY_COMMANDS = new Map<string, (this: AutocompleteTextInput) => boolean>([
   ],
   [
     'choose-active-completion-or-prefix',
-    function() { return this.selectActiveCompletion(/*allowPrefix=*/true); }
+    function() {
+      return this.selectActiveCompletion(/*allowPrefix=*/true);
+    }
   ],
   [
     'choose-active-completion',
-    function() { return this.selectActiveCompletion(/*allowPrefix=*/false); }
+    function() {
+      return this.selectActiveCompletion(/*allowPrefix=*/false);
+    }
   ],
-  ['cancel', function() { return this.cancel(); }],
+  [
+    'cancel',
+    function() {
+      return this.cancel();
+    }
+  ],
 ]);
 
-export type Completer = (value: string) => CancellablePromise<CompletionResult>| null;
+export type Completer = (value: string, cancellationToken: CancellationToken) =>
+    Promise<CompletionResult>| null;
 
 const DEFAULT_COMPLETION_DELAY = 200;  // milliseconds
 
@@ -105,7 +115,8 @@ export class AutocompleteTextInput extends RefCounted {
   inputChanged = new Signal<(value: string) => void>();
   private prevInputValue = '';
   private completionsVisible = false;
-  private activeCompletionPromise: CancellablePromise<CompletionResult>|null = null;
+  private activeCompletionPromise: Promise<CompletionResult>|null = null;
+  private activeCompletionCancellationToken: CancellationTokenSource|undefined = undefined;
   private hasFocus = false;
   private completionResult: CompletionResult|null = null;
   private dropdownContentsStale = true;
@@ -132,7 +143,10 @@ export class AutocompleteTextInput extends RefCounted {
     let {delay = DEFAULT_COMPLETION_DELAY} = options;
 
     let debouncedCompleter = this.scheduleUpdateCompletions = debounce(() => {
-      let activeCompletionPromise = this.activeCompletionPromise = this.completer(this.value);
+      const cancellationToken = this.activeCompletionCancellationToken =
+          new CancellationTokenSource();
+      let activeCompletionPromise = this.activeCompletionPromise =
+          this.completer(this.value, cancellationToken);
       if (activeCompletionPromise !== null) {
         activeCompletionPromise.then(completionResult => {
           if (this.activeCompletionPromise === activeCompletionPromise) {
@@ -142,7 +156,9 @@ export class AutocompleteTextInput extends RefCounted {
         });
       }
     }, delay);
-    this.registerDisposer(() => { debouncedCompleter.cancel(); });
+    this.registerDisposer(() => {
+      debouncedCompleter.cancel();
+    });
 
     let element = this.element = document.createElement('div');
     element.className = 'autocomplete';
@@ -196,11 +212,13 @@ export class AutocompleteTextInput extends RefCounted {
         this.updateDropdown();
       }
     });
-    this.registerEventListener(
-        element.ownerDocument.defaultView, 'resize', () => { this.dropdownStyleStale = true; });
+    this.registerEventListener(element.ownerDocument.defaultView, 'resize', () => {
+      this.dropdownStyleStale = true;
+    });
 
-    this.registerEventListener(
-        element.ownerDocument.defaultView, 'scroll', () => { this.dropdownStyleStale = true; });
+    this.registerEventListener(element.ownerDocument.defaultView, 'scroll', () => {
+      this.dropdownStyleStale = true;
+    });
 
     this.registerEventListener(
         this.dropdownElement, 'mousedown', this.handleDropdownMousedown.bind(this));
@@ -229,9 +247,13 @@ export class AutocompleteTextInput extends RefCounted {
     }
   }
 
-  get disabled() { return this.inputElement.disabled; }
+  get disabled() {
+    return this.inputElement.disabled;
+  }
 
-  set disabled(value: boolean) { this.inputElement.disabled = value; }
+  set disabled(value: boolean) {
+    this.inputElement.disabled = value;
+  }
 
   private handleDropdownMousedown(event: MouseEvent) {
     this.inputElement.focus();
@@ -268,7 +290,9 @@ export class AutocompleteTextInput extends RefCounted {
     this.setActiveIndex(activeIndex);
   }
 
-  private handleKeyCommand(action: string) { return KEY_COMMANDS.get(action)!.call(this); }
+  private handleKeyCommand(action: string) {
+    return KEY_COMMANDS.get(action)!.call(this);
+  }
 
   private registerInputHandler() {
     const handler = (_event: Event) => {
@@ -361,7 +385,7 @@ export class AutocompleteTextInput extends RefCounted {
     } else {
       this.hasResultForDropdown = true;
       // Check for a common prefix.
-      let commonResultPrefix = longestCommonPrefix(function* () {
+      let commonResultPrefix = longestCommonPrefix(function*() {
         for (let completion of completionResult.completions) {
           yield completion.value;
         }
@@ -378,8 +402,9 @@ export class AutocompleteTextInput extends RefCounted {
 
   private scheduleUpdateHintScrollPosition() {
     if (this.updateHintScrollPositionTimer === null) {
-      this.updateHintScrollPositionTimer =
-          setTimeout(() => { this.updateHintScrollPosition(); }, 0);
+      this.updateHintScrollPositionTimer = setTimeout(() => {
+        this.updateHintScrollPosition();
+      }, 0);
     }
   }
 
@@ -452,12 +477,16 @@ export class AutocompleteTextInput extends RefCounted {
     return true;
   }
 
-  selectCompletion(index: number) { this.value = this.getCompletedValueByIndex(index); }
+  selectCompletion(index: number) {
+    this.value = this.getCompletedValueByIndex(index);
+  }
 
   /**
    * Called when user presses escape.  Does nothing here, but may be overridden in a subclass.
    */
-  cancel() { return false; }
+  cancel() {
+    return false;
+  }
 
   /**
    * Updates the hintElement scroll position to match the scroll position of inputElement.
@@ -471,7 +500,11 @@ export class AutocompleteTextInput extends RefCounted {
   }
 
   private cancelActiveCompletion() {
-    cancelPromise(this.activeCompletionPromise);
+    const token = this.activeCompletionCancellationToken;
+    if (token !== undefined) {
+      token.cancel();
+    }
+    this.activeCompletionCancellationToken = undefined;
     this.activeCompletionPromise = null;
   }
 
@@ -496,7 +529,9 @@ export class AutocompleteTextInput extends RefCounted {
     }
   }
 
-  get value() { return this.prevInputValue; }
+  get value() {
+    return this.prevInputValue;
+  }
 
   set value(value: string) {
     if (value !== this.prevInputValue) {
@@ -515,4 +550,4 @@ export class AutocompleteTextInput extends RefCounted {
     }
     super.disposed();
   }
-};
+}

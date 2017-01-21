@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-import {handleChunkDownloadPromise, registerChunkSource} from 'neuroglancer/chunk_manager/backend';
+import {registerChunkSource} from 'neuroglancer/chunk_manager/backend';
 import {MeshSourceParameters, VolumeChunkEncoding, VolumeChunkSourceParameters} from 'neuroglancer/datasource/precomputed/base';
 import {decodeJsonManifestChunk, decodeTriangleVertexPositionsAndIndices, FragmentChunk, ManifestChunk, ParameterizedMeshSource} from 'neuroglancer/mesh/backend';
 import {ParameterizedVolumeChunkSource, VolumeChunk} from 'neuroglancer/sliceview/backend';
@@ -22,6 +22,7 @@ import {ChunkDecoder} from 'neuroglancer/sliceview/backend_chunk_decoders';
 import {decodeCompressedSegmentationChunk} from 'neuroglancer/sliceview/backend_chunk_decoders/compressed_segmentation';
 import {decodeJpegChunk} from 'neuroglancer/sliceview/backend_chunk_decoders/jpeg';
 import {decodeRawChunk} from 'neuroglancer/sliceview/backend_chunk_decoders/raw';
+import {CancellationToken} from 'neuroglancer/util/cancellation';
 import {Endianness} from 'neuroglancer/util/endian';
 import {openShardedHttpRequest, sendHttpRequest} from 'neuroglancer/util/http_request';
 
@@ -34,7 +35,7 @@ chunkDecoders.set(VolumeChunkEncoding.COMPRESSED_SEGMENTATION, decodeCompressedS
 class VolumeChunkSource extends ParameterizedVolumeChunkSource<VolumeChunkSourceParameters> {
   chunkDecoder = chunkDecoders.get(this.parameters.encoding)!;
 
-  download(chunk: VolumeChunk) {
+  download(chunk: VolumeChunk, cancellationToken: CancellationToken) {
     let {parameters} = this;
     let path: string;
     {
@@ -42,14 +43,15 @@ class VolumeChunkSource extends ParameterizedVolumeChunkSource<VolumeChunkSource
       // computeChunkBounds.
       let chunkPosition = this.computeChunkBounds(chunk);
       let chunkDataSize = chunk.chunkDataSize!;
-      path =
-          `${parameters.path}/${chunkPosition[0]}-${chunkPosition[0] + chunkDataSize[0]}_${chunkPosition[1]}-${chunkPosition[1] + chunkDataSize[1]}_${chunkPosition[2]}-${chunkPosition[2] + chunkDataSize[2]}`;
+      path = `${parameters.path}/${chunkPosition[0]}-${chunkPosition[0] + chunkDataSize[0]}_` +
+          `${chunkPosition[1]}-${chunkPosition[1] + chunkDataSize[1]}_` +
+          `${chunkPosition[2]}-${chunkPosition[2] + chunkDataSize[2]}`;
     }
-    handleChunkDownloadPromise(
-        chunk, sendHttpRequest(openShardedHttpRequest(parameters.baseUrls, path), 'arraybuffer'),
-        this.chunkDecoder);
+    return sendHttpRequest(
+               openShardedHttpRequest(parameters.baseUrls, path), 'arraybuffer', cancellationToken)
+        .then(response => this.chunkDecoder(chunk, response));
   }
-};
+}
 
 export function decodeManifestChunk(chunk: ManifestChunk, response: any) {
   return decodeJsonManifestChunk(chunk, response, 'fragments');
@@ -64,20 +66,20 @@ export function decodeFragmentChunk(chunk: FragmentChunk, response: ArrayBuffer)
 
 @registerChunkSource(MeshSourceParameters)
 class MeshSource extends ParameterizedMeshSource<MeshSourceParameters> {
-  download(chunk: ManifestChunk) {
+  download(chunk: ManifestChunk, cancellationToken: CancellationToken) {
     let {parameters} = this;
     let requestPath = `${parameters.path}/${chunk.objectId}:${parameters.lod}`;
-    handleChunkDownloadPromise(
-        chunk, sendHttpRequest(openShardedHttpRequest(parameters.baseUrls, requestPath), 'json'),
-        decodeManifestChunk);
+    return sendHttpRequest(
+               openShardedHttpRequest(parameters.baseUrls, requestPath), 'json', cancellationToken)
+        .then(response => decodeManifestChunk(chunk, response));
   }
 
-  downloadFragment(chunk: FragmentChunk) {
+  downloadFragment(chunk: FragmentChunk, cancellationToken: CancellationToken) {
     let {parameters} = this;
     let requestPath = `${parameters.path}/${chunk.fragmentId}`;
-    handleChunkDownloadPromise(
-        chunk,
-        sendHttpRequest(openShardedHttpRequest(parameters.baseUrls, requestPath), 'arraybuffer'),
-        decodeFragmentChunk);
+    return sendHttpRequest(
+               openShardedHttpRequest(parameters.baseUrls, requestPath), 'arraybuffer',
+               cancellationToken)
+        .then(response => decodeFragmentChunk(chunk, response));
   }
-};
+}

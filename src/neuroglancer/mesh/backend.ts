@@ -20,6 +20,7 @@ import {FRAGMENT_SOURCE_RPC_ID, MESH_LAYER_RPC_ID} from 'neuroglancer/mesh/base'
 import {SegmentationLayerSharedObjectCounterpart} from 'neuroglancer/segmentation_display_state/backend';
 import {getObjectKey} from 'neuroglancer/segmentation_display_state/base';
 import {forEachVisibleSegment} from 'neuroglancer/segmentation_display_state/base';
+import {CancellationToken} from 'neuroglancer/util/cancellation';
 import {convertEndian32, Endianness} from 'neuroglancer/util/endian';
 import {vec3} from 'neuroglancer/util/geom';
 import {verifyObject, verifyObjectProperty} from 'neuroglancer/util/json';
@@ -267,7 +268,8 @@ export abstract class MeshSource extends ChunkSource {
     return chunk;
   }
 
-  abstract downloadFragment(chunk: FragmentChunk): void;
+  abstract downloadFragment(chunk: FragmentChunk, cancellationToken: CancellationToken):
+      Promise<void>;
 };
 
 export abstract class ParameterizedMeshSource<Parameters> extends MeshSource {
@@ -281,7 +283,9 @@ export abstract class ParameterizedMeshSource<Parameters> extends MeshSource {
 @registerSharedObject(FRAGMENT_SOURCE_RPC_ID)
 export class FragmentSource extends ChunkSource {
   meshSource: MeshSource|null = null;
-  download(chunk: FragmentChunk) { this.meshSource!.downloadFragment(chunk); }
+  download(chunk: FragmentChunk, cancellationToken: CancellationToken) {
+    return this.meshSource!.downloadFragment(chunk, cancellationToken);
+  }
 };
 
 @registerSharedObject(MESH_LAYER_RPC_ID)

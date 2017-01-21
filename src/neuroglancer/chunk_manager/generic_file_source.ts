@@ -19,11 +19,11 @@
  * Provides a simple way to request a file on the backend with priority integration.
  */
 
-import {Chunk, ChunkManager, ChunkSourceBase, handleChunkDownloadPromise, RECOMPUTE_CHUNK_PRIORITIES_LAST} from 'neuroglancer/chunk_manager/backend';
+import {Chunk, ChunkManager, ChunkSourceBase, RECOMPUTE_CHUNK_PRIORITIES_LAST} from 'neuroglancer/chunk_manager/backend';
 import {ChunkPriorityTier, ChunkState} from 'neuroglancer/chunk_manager/base';
+import {CANCELED, CancellationToken, makeCancelablePromise} from 'neuroglancer/util/cancellation';
 import {openHttpRequest, sendHttpRequest} from 'neuroglancer/util/http_request';
 import {getObjectId} from 'neuroglancer/util/object_id';
-import {makeCancellablePromise} from 'neuroglancer/util/promise';
 
 export type PriorityGetter = () => {
   priorityTier: ChunkPriorityTier, priority: number
@@ -92,24 +92,26 @@ export class GenericFileSource<Data> extends ChunkSourceBase {
     }
   }
 
-  download(chunk: GenericFileChunk<Data>) {
-    let xhr = openHttpRequest(chunk.key!);
-    handleChunkDownloadPromise(chunk, sendHttpRequest(xhr, 'arraybuffer'), (c, response) => {
-      c.data = this.decodeFile(response);
-    });
+  download(chunk: GenericFileChunk<Data>, cancellationToken: CancellationToken) {
+    return sendHttpRequest(openHttpRequest(chunk.key!), 'arraybuffer', cancellationToken)
+        .then(response => {
+          chunk.data = this.decodeFile(response);
+        });
   }
 
   /**
    * Precondition: priorityTier <= ChunkPriorityTier.LAST_ORDERED_TIER
    */
-  getData(key: string, getPriority: PriorityGetter) {
+  getData(key: string, getPriority: PriorityGetter, cancellationToken: CancellationToken) {
     let chunk = this.chunks.get(key);
     if (chunk === undefined) {
       chunk = this.getNewChunk_(GenericFileChunk);
       chunk.initialize(key);
       this.addChunk(chunk);
     }
-    return makeCancellablePromise<Data>((resolve, reject, onCancel) => {
+    return makeCancelablePromise<Data>(cancellationToken, (resolve, reject, token) => {
+      // If the data is already available or the request has already failed, resolve/reject the
+      // promise immediately.
       switch (chunk!.state) {
         case ChunkState.FAILED:
           reject(chunk!.error);
@@ -119,14 +121,15 @@ export class GenericFileSource<Data> extends ChunkSourceBase {
           resolve(chunk!.data!);
           return;
       }
-
-      let requester: FileDataRequester<Data> = {resolve, reject, getPriority};
+      const requester: FileDataRequester<Data> = {resolve, reject, getPriority};
       chunk!.requesters!.add(requester);
-      onCancel(() => {
+      token.add(() => {
         let {requesters} = chunk!;
         if (requesters !== undefined) {
           requesters.delete(requester);
+          this.chunkManager.scheduleUpdateChunkPriorities();
         }
+        reject(CANCELED);
       });
       this.chunkManager.scheduleUpdateChunkPriorities();
     });
@@ -146,9 +149,9 @@ export class GenericFileSource<Data> extends ChunkSourceBase {
    */
   static getData<Data>(
       chunkManager: ChunkManager, decodeFile: (response: ArrayBuffer) => Data, key: string,
-      getPriority: PriorityGetter) {
+      getPriority: PriorityGetter, cancellationToken: CancellationToken) {
     const source = GenericFileSource.get(chunkManager, decodeFile);
-    const result = source.getData(key, getPriority);
+    const result = source.getData(key, getPriority, cancellationToken);
     source.dispose();
     return result;
   }

@@ -19,7 +19,7 @@ import {LayerListSpecification, ManagedUserLayerWithSpecification} from 'neurogl
 import {Overlay} from 'neuroglancer/overlay';
 import {DataType, VolumeType} from 'neuroglancer/sliceview/base';
 import {MultiscaleVolumeChunkSource} from 'neuroglancer/sliceview/frontend';
-import {cancellableThen, CANCELLED, cancelPromise} from 'neuroglancer/util/promise';
+import {CancellationToken, CANCELED, CancellationTokenSource} from 'neuroglancer/util/cancellation';
 import {associateLabelWithElement} from 'neuroglancer/widget/associate_label';
 import {AutocompleteTextInput, makeCompletionElementWithDescription} from 'neuroglancer/widget/autocomplete';
 import {makeHiddenSubmitButton} from 'neuroglancer/widget/hidden_submit_button';
@@ -36,7 +36,7 @@ export class LayerDialog extends Overlay {
   submitElement = document.createElement('button');
   namePromptElement = document.createElement('label');
   nameInputElement = document.createElement('input');
-  volumePromise: Promise<void>|undefined;
+  volumeCancellationSource: CancellationTokenSource|undefined = undefined;
   sourceValid: boolean = false;
   nameValid: boolean = true;
 
@@ -47,14 +47,14 @@ export class LayerDialog extends Overlay {
     let dialogElement = this.content;
     dialogElement.classList.add('add-layer-overlay');
 
-    let sourceCompleter = (value: string) => cancellableThen(
-        volumeCompleter(value, this.manager.chunkManager),
-        originalResult => ({
-          completions: originalResult.completions,
-          makeElement: makeCompletionElementWithDescription,
-          offset: originalResult.offset,
-          showSingleResult: true,
-        }));
+    let sourceCompleter = (value: string, cancellationToken: CancellationToken) =>
+        volumeCompleter(value, this.manager.chunkManager, cancellationToken)
+            .then(originalResult => ({
+                    completions: originalResult.completions,
+                    makeElement: makeCompletionElementWithDescription,
+                    offset: originalResult.offset,
+                    showSingleResult: true,
+                  }));
     let sourceForm = document.createElement('form');
     sourceForm.className = 'source-form';
     this.registerEventListener(sourceForm, 'submit', (event: Event) => {
@@ -71,8 +71,11 @@ export class LayerDialog extends Overlay {
         'blur', () => { this.validateSource(/*focusName=*/false); });
     this.submitElement.disabled = true;
     sourceInput.inputChanged.add(() => {
-      cancelPromise(this.volumePromise);
-      this.volumePromise = undefined;
+      const {volumeCancellationSource} = this;
+      if (volumeCancellationSource !== undefined) {
+        volumeCancellationSource.cancel();
+        this.volumeCancellationSource = undefined;
+      }
       this.sourceValid = false;
       this.submitElement.disabled = true;
       this.statusElement.textContent = '';
@@ -209,18 +212,22 @@ export class LayerDialog extends Overlay {
     }
 
     this.setInfo('Validating volume source...');
-    let volumePromise = new Promise<MultiscaleVolumeChunkSource>(
-        resolve => { resolve(getVolume(this.manager.chunkManager, url)); });
-    this.volumePromise = cancellableThen(volumePromise, source => {
-      this.sourceValid = true;
-      this.setInfo(
-          `${VolumeType[source.volumeType].toLowerCase()}: ${source.numChannels}-channel ${DataType[source.dataType].toLowerCase()}`);
-      this.validityChanged();
-    });
-    volumePromise.catch((reason: Error) => {
-      if (reason === CANCELLED) {
+    const token = this.volumeCancellationSource = new CancellationTokenSource();
+    getVolume(this.manager.chunkManager, url, token).then(source => {
+      if (token.isCanceled) {
         return;
       }
+      this.volumeCancellationSource = undefined;
+      this.sourceValid = true;
+      this.setInfo(
+          `${VolumeType[source.volumeType].toLowerCase()}: ` +
+          `${source.numChannels}-channel ${DataType[source.dataType].toLowerCase()}`);
+      this.validityChanged();
+    }).catch((reason: Error) => {
+      if (token.isCanceled) {
+        return;
+      }
+      this.volumeCancellationSource = undefined;
       this.setError(reason.message);
     });
   }
@@ -234,4 +241,4 @@ export class LayerDialog extends Overlay {
     this.statusElement.className = 'dialog-status dialog-status-error';
     this.statusElement.textContent = message;
   }
-};
+}

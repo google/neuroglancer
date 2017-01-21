@@ -24,11 +24,11 @@ import {CompletionResult, registerDataSourceFactory} from 'neuroglancer/datasour
 import {VolumeChunkSourceParameters} from 'neuroglancer/datasource/ndstore/base';
 import {DataType, VolumeChunkSpecification, VolumeSourceOptions, VolumeType} from 'neuroglancer/sliceview/base';
 import {defineParameterizedVolumeChunkSource, MultiscaleVolumeChunkSource as GenericMultiscaleVolumeChunkSource} from 'neuroglancer/sliceview/frontend';
+import {CancellationToken} from 'neuroglancer/util/cancellation';
 import {applyCompletionOffset, getPrefixMatchesWithDescriptions} from 'neuroglancer/util/completion';
 import {mat4, vec3} from 'neuroglancer/util/geom';
 import {openShardedHttpRequest, sendHttpRequest} from 'neuroglancer/util/http_request';
 import {parseArray, parseQueryStringParameters, verify3dDimensions, verify3dScale, verify3dVec, verifyEnumString, verifyInt, verifyObject, verifyObjectAsMap, verifyObjectProperty, verifyOptionalString, verifyString} from 'neuroglancer/util/json';
-import {CancellablePromise, cancellableThen} from 'neuroglancer/util/promise';
 
 let serverVolumeTypes = new Map<string, VolumeType>();
 serverVolumeTypes.set('image', VolumeType.IMAGE);
@@ -230,8 +230,7 @@ export function getPublicTokens(chunkManager: ChunkManager, hostnames: string[])
 }
 
 export function tokenAndChannelCompleter(
-    chunkManager: ChunkManager, hostnames: string[],
-    path: string): CancellablePromise<CompletionResult> {
+    chunkManager: ChunkManager, hostnames: string[], path: string): Promise<CompletionResult> {
   let channelMatch = path.match(/^(?:([^\/]+)(?:\/([^\/]*))?)?$/);
   if (channelMatch === null) {
     // URL has incorrect format, don't return any results.
@@ -248,16 +247,17 @@ export function tokenAndChannelCompleter(
       };
     });
   }
-  return cancellableThen(getTokenInfo(chunkManager, hostnames, channelMatch[1]), tokenInfo => {
-    let completions = getPrefixMatchesWithDescriptions(
-        channelMatch![2], tokenInfo.channels, x => x[0],
-        x => { return `${x[1].channelType} (${DataType[x[1].dataType]})`; });
+  return getTokenInfo(chunkManager, hostnames, channelMatch[1]).then(tokenInfo => {
+    let completions =
+        getPrefixMatchesWithDescriptions(channelMatch![2], tokenInfo.channels, x => x[0], x => {
+          return `${x[1].channelType} (${DataType[x[1].dataType]})`;
+        });
     return {offset: channelMatch![1].length + 1, completions};
   });
 }
 
 export function volumeCompleter(
-    url: string, chunkManager: ChunkManager): CancellablePromise<CompletionResult> {
+    url: string, chunkManager: ChunkManager): Promise<CompletionResult> {
   let match = url.match(urlPattern);
   if (match === null) {
     // We don't yet have a full hostname.
@@ -265,9 +265,8 @@ export function volumeCompleter(
   }
   let hostnames = [match[1]];
   let path = match[2];
-  return cancellableThen(
-      tokenAndChannelCompleter(chunkManager, hostnames, path),
-      completions => applyCompletionOffset(match![1].length + 1, completions));
+  return tokenAndChannelCompleter(chunkManager, hostnames, path)
+      .then(completions => applyCompletionOffset(match![1].length + 1, completions));
 }
 
 registerDataSourceFactory('ndstore', {

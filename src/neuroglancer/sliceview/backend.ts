@@ -168,9 +168,9 @@ export class VolumeChunk extends Chunk {
 
   freeSystemMemory() { this.data = null; }
   toString() { return this.source!.toString() + ':' + vec3Key(this.chunkGridPosition); }
-};
+}
 
-export class VolumeChunkSource extends ChunkSource implements VolumeChunkSourceInterface {
+export abstract class VolumeChunkSource extends ChunkSource implements VolumeChunkSourceInterface {
   spec: VolumeChunkSpecification;
   constructor(rpc: RPC, options: any) {
     super(rpc, options);
@@ -234,7 +234,7 @@ export class VolumeChunkSource extends ChunkSource implements VolumeChunkSourceI
 
     return chunkPosition;
   }
-};
+}
 
 @registerSharedObject(SLICEVIEW_RENDERLAYER_RPC_ID)
 export class RenderLayer extends SharedObjectCounterpart implements RenderLayerInterface {
@@ -255,7 +255,7 @@ export class RenderLayer extends SharedObjectCounterpart implements RenderLayerI
       }
     }
   }
-};
+}
 
 /**
  * Extends VolumeChunkSource with a parameters member.
@@ -263,10 +263,10 @@ export class RenderLayer extends SharedObjectCounterpart implements RenderLayerI
  * Subclasses should be decorated with
  * src/neuroglancer/chunk_manager/backend.ts:registerChunkSource.
  */
-export class ParameterizedVolumeChunkSource<Parameters> extends VolumeChunkSource {
+export abstract class ParameterizedVolumeChunkSource<Parameters> extends VolumeChunkSource {
   parameters: Parameters;
   constructor(rpc: RPC, options: any) {
     super(rpc, options);
     this.parameters = options['parameters'];
   }
-};
+}

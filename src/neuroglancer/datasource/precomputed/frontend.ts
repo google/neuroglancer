@@ -117,9 +117,9 @@ export function getShardedMeshSource(chunkManager: ChunkManager, parameters: Mes
   return MeshSource.get(chunkManager, parameters);
 }
 
-export function getMeshSource(chunkManager: ChunkManager, url: string, lod: number = 0) {
+export function getMeshSource(chunkManager: ChunkManager, url: string) {
   const [baseUrls, path] = parseSpecialUrl(url);
-  return getShardedMeshSource(chunkManager, {baseUrls, path, lod});
+  return getShardedMeshSource(chunkManager, {baseUrls, path, lod: 0});
 }
 
 export function getShardedVolume(chunkManager: ChunkManager, baseUrls: string[], path: string) {
