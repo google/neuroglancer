@@ -124,7 +124,7 @@ export function getMeshSource(chunkManager: ChunkManager, url: string) {
 
 export function getShardedVolume(chunkManager: ChunkManager, baseUrls: string[], path: string) {
   return chunkManager.memoize.getUncounted(
-      {'baseUrls': baseUrls, 'path': path},
+      {'type': 'precomputed:MultiscaleVolumeChunkSource', baseUrls, path},
       () => sendHttpRequest(openShardedHttpRequest(baseUrls, path + '/info'), 'json')
                 .then(
                     response =>

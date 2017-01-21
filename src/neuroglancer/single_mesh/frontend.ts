@@ -497,7 +497,7 @@ export class SingleMeshLayer extends PerspectiveViewRenderLayer {
 
 function getSingleMeshInfo(chunkManager: ChunkManager, parameters: SingleMeshSourceParameters) {
   return chunkManager.memoize.getUncounted(
-      ['single_mesh/getMeshInfo', parameters],
+      {type: 'single_mesh:getMeshInfo', parameters},
       () => chunkManager.rpc!.promiseInvoke<SingleMeshInfo>(
           GET_SINGLE_MESH_INFO_RPC_ID,
           {'chunkManager': chunkManager.addCounterpartRef(), 'parameters': parameters}));

@@ -70,7 +70,7 @@ function getNiftiVolumeInfo(chunkManager: ChunkManager, url: string, cancellatio
 
 export function getVolume(chunkManager: ChunkManager, url: string) {
   return chunkManager.memoize.getUncounted(
-      ['nifti/getVolume', url],
+      {type: 'nifti/getVolume', url},
       () => getNiftiVolumeInfo(chunkManager, url, uncancelableToken)
                 .then(info => new MultiscaleVolumeChunkSource(chunkManager, url, info)));
 }

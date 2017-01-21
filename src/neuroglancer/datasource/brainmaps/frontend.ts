@@ -225,7 +225,7 @@ export function getVolume(
     options: GetVolumeOptions) {
   const {volumeId, changeSpec} = parseVolumeKey(key);
   return chunkManager.memoize.getUncounted(
-      {instance, volumeId, changeSpec, options},
+      {type: 'brainmaps:getVolume', instance, volumeId, changeSpec, options},
       () => Promise
                 .all([
                   makeRequest(instance, 'GET', `/v1beta2/volumes/${volumeId}`, 'json'),
@@ -276,7 +276,7 @@ export class VolumeList {
       throw new Error(`Failed to parse Brain Maps volume list reply: ${parseError.message}`);
     }
   }
-};
+}
 
 export function getVolumeList(chunkManager: ChunkManager, instance: BrainmapsInstance) {
   return chunkManager.memoize.getUncounted({instance, type: 'brainmaps:getVolumeList'}, () => {

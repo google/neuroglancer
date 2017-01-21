@@ -264,7 +264,7 @@ export class MultiscaleVolumeChunkSource implements GenericMultiscaleVolumeChunk
 export function getOwnerInfo(
     chunkManager: ChunkManager, hostnames: string[], owner: string): Promise<OwnerInfo> {
   return chunkManager.memoize.getUncounted(
-      {'hostnames': hostnames, 'owner': owner},
+      {'type': 'render:getOwnerInfo', hostnames, owner},
       () => sendHttpRequest(
                 openShardedHttpRequest(hostnames, `/render-ws/v1/owner/${owner}/stacks`), 'json')
                 .then(parseOwnerInfo));
@@ -283,7 +283,7 @@ export function getShardedVolume(chunkManager: ChunkManager, hostnames: string[]
   const parameters = parseQueryStringParameters(match[4] || '');
 
   return chunkManager.memoize.getUncounted(
-      {'hostnames': hostnames, 'path': path},
+      {type: 'render:MultiscaleVolumeChunkSource', hostnames, path},
       () => getOwnerInfo(chunkManager, hostnames, owner)
                 .then(
                     ownerInfo => new MultiscaleVolumeChunkSource(

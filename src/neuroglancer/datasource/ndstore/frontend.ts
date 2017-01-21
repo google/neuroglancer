@@ -189,7 +189,7 @@ const pathPattern = /^([^\/?]+)(?:\/([^\/?]+))?(?:\?(.*))?$/;
 
 export function getTokenInfo(chunkManager: ChunkManager, hostnames: string[], token: string): Promise<TokenInfo> {
   return chunkManager.memoize.getUncounted(
-      {'hostnames': hostnames, 'token': token},
+      {type: 'ndstore:getTokenInfo', hostnames, token},
       () => sendHttpRequest(openShardedHttpRequest(hostnames, `/ocp/ca/${token}/info/`), 'json')
                 .then(parseTokenInfo));
 }
@@ -205,7 +205,7 @@ export function getShardedVolume(chunkManager: ChunkManager, hostnames: string[]
 
   // Warning: If additional arguments are added, the cache key should be updated as well.
   return chunkManager.memoize.getUncounted(
-      {'hostnames': hostnames, 'path': path},
+      {type: 'ndstore:MultiscaleVolumeChunkSource', hostnames, path},
       () => getTokenInfo(chunkManager, hostnames, key)
                 .then(
                     tokenInfo => new MultiscaleVolumeChunkSource(
@@ -224,7 +224,7 @@ export function getVolume(chunkManager: ChunkManager, path: string) {
 
 export function getPublicTokens(chunkManager: ChunkManager, hostnames: string[]) {
   return chunkManager.memoize.getUncounted(
-      hostnames,
+      {type: 'dvid:getPublicTokens', hostnames},
       () => sendHttpRequest(openShardedHttpRequest(hostnames, '/ocp/ca/public_tokens/'), 'json')
                 .then(value => parseArray(value, verifyString)));
 }
