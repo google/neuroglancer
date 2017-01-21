@@ -64,7 +64,8 @@ class VolumeChunkSource extends ParameterizedVolumeChunkSource<VolumeSourceParam
       case VolumeChunkEncoding.RAW:
         return `/subvolume_format=RAW${compression_suffix}`;
       case VolumeChunkEncoding.JPEG:
-        return '/subvolume_format=SINGLE_IMAGE/image_format_options.image_format=JPEG';
+        return '/subvolume_format=SINGLE_IMAGE/image_format_options.image_format=JPEG/' +
+            'image_format_options.jpeg_quality=70';
       case VolumeChunkEncoding.COMPRESSED_SEGMENTATION:
         return `/subvolume_format=RAW/image_format_options.compressed_segmentation_block_size=` +
             vec3Key(this.spec.compressedSegmentationBlockSize!) + compression_suffix;
