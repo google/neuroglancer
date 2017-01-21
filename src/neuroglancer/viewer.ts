@@ -29,11 +29,11 @@ import {overlaysOpen} from 'neuroglancer/overlay';
 import {PositionStatusPanel} from 'neuroglancer/position_status_panel';
 import {TrackableBoolean} from 'neuroglancer/trackable_boolean';
 import {TrackableValue} from 'neuroglancer/trackable_value';
-import {registerTrackable} from 'neuroglancer/url_hash_state';
 import {RefCounted} from 'neuroglancer/util/disposable';
 import {vec3} from 'neuroglancer/util/geom';
 import {GlobalKeyboardShortcutHandler, KeySequenceMap} from 'neuroglancer/util/keyboard_shortcut_handler';
 import {NullarySignal} from 'neuroglancer/util/signal';
+import {CompoundTrackable} from 'neuroglancer/util/trackable';
 import {DataDisplayLayout, LAYOUTS} from 'neuroglancer/viewer_layouts';
 import {ViewerState} from 'neuroglancer/viewer_state';
 import {RPC} from 'neuroglancer/worker_rpc';
@@ -84,10 +84,11 @@ export class Viewer extends RefCounted implements ViewerState {
       this.navigationState.voxelSize);
   layoutName = new TrackableValue<string>(LAYOUTS[0][0], validateLayoutName);
 
+  state = new CompoundTrackable();
+
   constructor(public display: DisplayContext) {
     super();
 
-    // Delay hash update after each redraw to try to prevent noticeable lag in Chrome.
     this.registerDisposer(display.updateStarted.add(() => { this.onUpdateDisplay(); }));
     this.registerDisposer(display.updateFinished.add(() => { this.onUpdateDisplayFinished(); }));
 
@@ -98,16 +99,16 @@ export class Viewer extends RefCounted implements ViewerState {
       return false;
     });
 
+    const {state} = this;
+    state.add('layers', this.layerSpecification);
+    state.add('navigation', this.navigationState);
+    state.add('showAxisLines', this.showAxisLines);
+    state.add('showScaleBar', this.showScaleBar);
 
-    registerTrackable('layers', this.layerSpecification);
-    registerTrackable('navigation', this.navigationState);
-    registerTrackable('showAxisLines', this.showAxisLines);
-    registerTrackable('showScaleBar', this.showScaleBar);
-
-    registerTrackable('perspectiveOrientation', this.perspectiveNavigationState.pose.orientation);
-    registerTrackable('perspectiveZoom', this.perspectiveNavigationState.zoomFactor);
-    registerTrackable('showSlices', this.showPerspectiveSliceViews);
-    registerTrackable('layout', this.layoutName);
+    state.add('perspectiveOrientation', this.perspectiveNavigationState.pose.orientation);
+    state.add('perspectiveZoom', this.perspectiveNavigationState.zoomFactor);
+    state.add('showSlices', this.showPerspectiveSliceViews);
+    state.add('layout', this.layoutName);
 
     this.registerDisposer(
       this.navigationState.changed.add(() => { this.handleNavigationStateChanged(); }));
@@ -121,7 +122,7 @@ export class Viewer extends RefCounted implements ViewerState {
 
     // Debounce this call to ensure that a transient state does not result in the layer dialog being
     // shown.
-    this.layerManager.layersChanged.add(this.registerCancellable(debounce(() => {
+    const maybeResetState = this.registerCancellable(debounce(() => {
       if (this.layerManager.managedLayers.length === 0) {
         // No layers, reset state.
         this.navigationState.reset();
@@ -132,7 +133,9 @@ export class Viewer extends RefCounted implements ViewerState {
           new LayerDialog(this.layerSpecification);
         }
       }
-    })));
+    }));
+    this.layerManager.layersChanged.add(maybeResetState);
+    maybeResetState();
 
     this.registerDisposer(this.chunkQueueManager.visibleChunksChanged.add(
         () => { this.layerSelectedValues.handleLayerChange(); }));
@@ -180,12 +183,6 @@ export class Viewer extends RefCounted implements ViewerState {
     keyCommands.set('toggle-scale-bar', function() { this.showScaleBar.toggle(); });
     this.keyCommands.set(
         'toggle-show-slices', function() { this.showPerspectiveSliceViews.toggle(); });
-
-    // This needs to happen after the global keyboard shortcut handler for the viewer has been
-    // registered, so that it has priority.
-    if (this.layerManager.managedLayers.length === 0) {
-      new LayerDialog(this.layerSpecification);
-    }
   }
 
   private makeUI() {
@@ -256,4 +253,4 @@ export class Viewer extends RefCounted implements ViewerState {
     }
     this.mouseState.stale = true;
   }
-};
+}

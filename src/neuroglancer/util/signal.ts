@@ -89,3 +89,16 @@ export class Signal<Callable extends Function> {
  * Simple specialization of Signal for the common case of a nullary handler signature.
  */
 export class NullarySignal extends Signal<() => void> {}
+
+/**
+ * Interface for a signal excluding the dispatch method.
+ *
+ * Unlike Signal, this interface is covariant in the type of Callable.
+ */
+export interface ReadonlySignal<Callable extends Function> {
+  readonly count: number;
+  add(handler: Callable): () => void;
+  remove(handler: Callable): boolean;
+}
+
+export type NullaryReadonlySignal = ReadonlySignal<() => void>;

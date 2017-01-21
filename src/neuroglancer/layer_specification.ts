@@ -21,11 +21,11 @@ import {VoxelSize} from 'neuroglancer/navigation_state';
 import {VolumeType} from 'neuroglancer/sliceview/base';
 import {MultiscaleVolumeChunkSource} from 'neuroglancer/sliceview/frontend';
 import {StatusMessage} from 'neuroglancer/status';
-import {Trackable} from 'neuroglancer/url_hash_state';
 import {RefCounted} from 'neuroglancer/util/disposable';
 import {vec3} from 'neuroglancer/util/geom';
 import {verifyObject, verifyObjectProperty, verifyOptionalString} from 'neuroglancer/util/json';
 import {NullarySignal, Signal} from 'neuroglancer/util/signal';
+import {Trackable} from 'neuroglancer/util/trackable';
 import {RPC} from 'neuroglancer/worker_rpc';
 
 export function getVolumeWithStatusMessage(

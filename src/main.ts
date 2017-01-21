@@ -21,11 +21,15 @@ import 'neuroglancer/annotation/user_layer';
 
 import {makeDefaultKeyBindings} from 'neuroglancer/default_key_bindings';
 import {makeDefaultViewer} from 'neuroglancer/default_viewer';
-import {getCurrentState} from 'neuroglancer/url_hash_state';
+import {UrlHashBinding} from 'neuroglancer/ui/url_hash_binding';
+import {getCachedJson} from 'neuroglancer/util/trackable';
 
 window.addEventListener('DOMContentLoaded', () => {
   let viewer = (<any>window)['viewer'] = makeDefaultViewer();
   makeDefaultKeyBindings(viewer.keyMap);
+
+  const hashBinding = new UrlHashBinding(viewer.state);
+  hashBinding.updateFromUrlHash();
 
   document.addEventListener('copy', (event: ClipboardEvent) => {
     const selection = window.getSelection();
@@ -36,8 +40,8 @@ window.addEventListener('DOMContentLoaded', () => {
     if (tagName === 'TEXTAREA' || tagName === 'INPUT') {
       return;
     }
-    const state = getCurrentState();
-    event.clipboardData.setData('text/plain', JSON.stringify(state, undefined, '  '));
+    const stateJson = getCachedJson(viewer.state).value;
+    event.clipboardData.setData('text/plain', JSON.stringify(stateJson, undefined, '  '));
     event.preventDefault();
   });
 });
