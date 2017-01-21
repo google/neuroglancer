@@ -25,9 +25,9 @@ import {parameterizedSkeletonSource} from 'neuroglancer/skeleton/frontend';
 import {DataType, VolumeChunkSpecification, VolumeSourceOptions, VolumeType} from 'neuroglancer/sliceview/base';
 import {defineParameterizedVolumeChunkSource, MultiscaleVolumeChunkSource as GenericMultiscaleVolumeChunkSource} from 'neuroglancer/sliceview/frontend';
 import {StatusMessage} from 'neuroglancer/status';
-import {getPrefixMatches} from 'neuroglancer/util/completion';
+import {getPrefixMatches, getPrefixMatchesWithDescriptions} from 'neuroglancer/util/completion';
 import {vec3} from 'neuroglancer/util/geom';
-import {parseArray, parseXYZ, verifyFinitePositiveFloat, verifyMapKey, verifyObject, verifyObjectProperty, verifyPositiveInt, verifyString} from 'neuroglancer/util/json';
+import {parseArray, parseXYZ, verifyFinitePositiveFloat, verifyMapKey, verifyObject, verifyObjectProperty, verifyOptionalString, verifyPositiveInt, verifyString} from 'neuroglancer/util/json';
 
 const VolumeChunkSource = defineParameterizedVolumeChunkSource(VolumeSourceParameters);
 const MeshSource = defineParameterizedMeshSource(MeshSourceParameters);
@@ -237,13 +237,47 @@ export function getVolume(
                         meshesResponse, options)));
 }
 
+interface ProjectMetadata {
+  id: string;
+  label: string;
+  description?: string;
+}
+
+function parseProject(obj: any): ProjectMetadata {
+  try {
+    verifyObject(obj);
+    return {
+      id: verifyObjectProperty(obj, 'id', verifyString),
+      label: verifyObjectProperty(obj, 'label', verifyString),
+      description: verifyObjectProperty(obj, 'description', verifyOptionalString),
+    };
+  } catch (parseError) {
+    throw new Error(`Failed to parse project: ${parseError.message}`);
+  }
+}
+
+function parseProjectList(obj: any) {
+  try {
+    verifyObject(obj);
+    return verifyObjectProperty(obj, 'project', x => parseArray(x, parseProject));
+  } catch (parseError) {
+    throw new Error(`Error parsing project list: ${parseError.message}`);
+  }
+}
+
 export class VolumeList {
   volumeIds: string[];
+  projects = new Map<string, ProjectMetadata>();
   hierarchicalVolumeIds = new Map<string, string[]>();
-  constructor(response: any) {
+  constructor(projectsResponse: any, volumesResponse: any) {
+    const {projects} = this;
+    for (let project of parseProjectList(projectsResponse)) {
+      projects.set(project.id, project);
+    }
     try {
-      verifyObject(response);
-      let volumeIds = this.volumeIds = parseArray(response['volumeId'], verifyString);
+      verifyObject(volumesResponse);
+      let volumeIds = this.volumeIds =
+          verifyObjectProperty(volumesResponse, 'volumeId', x => parseArray(x, verifyString));
       volumeIds.sort();
       let hierarchicalSets = new Map<string, Set<string>>();
       for (let volumeId of volumeIds) {
@@ -280,8 +314,14 @@ export class VolumeList {
 
 export function getVolumeList(chunkManager: ChunkManager, instance: BrainmapsInstance) {
   return chunkManager.memoize.getUncounted({instance, type: 'brainmaps:getVolumeList'}, () => {
-    let promise = makeRequest(instance, 'GET', '/v1beta2/volumes/', 'json')
-                      .then(response => new VolumeList(response));
+    let promise = Promise
+                      .all([
+                        makeRequest(instance, 'GET', '/v1beta2/projects', 'json'),
+                        makeRequest(instance, 'GET', '/v1beta2/volumes', 'json')
+                      ])
+                      .then(
+                          ([projectsResponse, volumesResponse]) =>
+                              new VolumeList(projectsResponse, volumesResponse));
     const description = `Google ${INSTANCE_NAMES[instance]} volume list`;
     StatusMessage.forPromise(promise, {
       delay: true,
@@ -291,7 +331,6 @@ export function getVolumeList(chunkManager: ChunkManager, instance: BrainmapsIns
     return promise;
   });
 }
-
 export function parseChangeStackList(x: any) {
   return verifyObjectProperty(
       x, 'changeStackId', y => y === undefined ? undefined : parseArray(y, verifyString));
@@ -341,7 +380,20 @@ export function volumeCompleter(
     if (possibleMatches === undefined) {
       return null;
     }
-    return {offset: prefix.length, completions: getPrefixMatches(matchString, possibleMatches)};
+    if (prefix) {
+      // Project id already matched.
+      return {offset: prefix.length, completions: getPrefixMatches(matchString, possibleMatches)};
+    } else {
+      return {
+        offset: 0,
+        completions: getPrefixMatchesWithDescriptions(
+            matchString, possibleMatches, x => x,
+            x => {
+              const metadata = volumeList.projects.get(x.substring(0, x.length - 1));
+              return metadata && metadata.label;
+            })
+      };
+    }
   });
 }
 
