@@ -14,6 +14,11 @@
  * limitations under the License.
  */
 
+import 'neuroglancer/image_user_layer';
+import 'neuroglancer/segmentation_user_layer';
+import 'neuroglancer/single_mesh_user_layer';
+import 'neuroglancer/annotation/user_layer';
+
 import {makeExtraKeyBindings} from 'my-neuroglancer-project/extra_key_bindings';
 import {navigateToOrigin} from 'my-neuroglancer-project/navigate_to_origin';
 import {makeDefaultKeyBindings} from 'neuroglancer/default_key_bindings';
