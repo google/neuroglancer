@@ -68,6 +68,13 @@ const DEFAULT_DATA_SOURCES = exports.DEFAULT_DATA_SOURCES = [
   'neuroglancer/datasource/csv',
 ];
 
+const DEFAULT_SUPPORTED_LAYERS = exports.DEFAULT_SUPPORTED_LAYERS = [
+  'neuroglancer/image_user_layer',
+  'neuroglancer/segmentation_user_layer',
+  'neuroglancer/single_mesh_user_layer',
+  'neuroglancer/annotation/user_layer',
+];
+
 /**
  * Returns a loader specification for TypeScript files.
  *
@@ -230,6 +237,8 @@ function getBaseConfig(options) {
  *     configuration.
  * @param {string[]=} options.frontendModules Array of modules to include in the frontend bundle.
  *     If specified, '../src/main.ts' will not be included automatically.
+ * @param {string[]=} [options.supportedLayers=DEFAULT_SUPPORTED_LAYERS] Array of supported layer
+ *     modules to include in the frontend.
  * @param options.cssPlugin If specified, overrides the default CSS plugin for the frontend.
  * @param options.htmlPlugin If specified, overrides the default HTML plugin for the frontend.
  */
@@ -241,6 +250,7 @@ function getViewerConfig(options) {
     options.modifyBaseConfig(baseConfig);
   }
   let dataSources = options.dataSources || DEFAULT_DATA_SOURCES;
+  let supportedLayers = options.supportedLayers || DEFAULT_SUPPORTED_LAYERS;
   let frontendDataSourceModules = [];
   let backendDataSourceModules = [];
   for (let datasource of dataSources) {
@@ -288,6 +298,10 @@ function getViewerConfig(options) {
     ...extraChunkWorkerModules,
   ];
   let frontendModules = options.frontendModules || [resolveReal(srcDir, 'main.ts')];
+  let frontendLayerModules = [];
+  for (let name of supportedLayers) {
+    frontendLayerModules.push(name);
+  }
   let htmlPlugin =
       options.htmlPlugin || new HtmlWebpackPlugin({template: resolveReal(srcDir, 'index.html')});
   let cssPlugin =
@@ -295,7 +309,8 @@ function getViewerConfig(options) {
   return [
     Object.assign(
         {
-          entry: {'main': [...frontendDataSourceModules, ...frontendModules]},
+          entry:
+              {'main': [...frontendDataSourceModules, ...frontendLayerModules, ...frontendModules]},
           target: 'web',
           plugins: [
             htmlPlugin,
