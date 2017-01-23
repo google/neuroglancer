@@ -34,6 +34,8 @@ const VALID_ENCODINGS = new Set<string>(['jpg']);
 
 const TileChunkSource = defineParameterizedVolumeChunkSource(TileChunkSourceParameters);
 
+const VALID_STACK_STATES = new Set<string>(['COMPLETE']);
+
 interface OwnerInfo {
   owner: string;
   stacks: Map<string, StackInfo>;
@@ -53,7 +55,7 @@ function parseOwnerInfo(obj: any): OwnerInfo {
   if (stackObjs.length < 1) {
     throw new Error(`No stacks found for owner object.`);
   }
-
+  
   let stacks = new Map<string, StackInfo>();
 
   // Get the owner from the first stack
@@ -61,8 +63,10 @@ function parseOwnerInfo(obj: any): OwnerInfo {
 
   for (let stackObj of stackObjs) {
     let stackName = verifyObjectProperty(stackObj, 'stackId', parseStackName);
-
-    stacks.set(stackName, parseStackInfo(stackObj));
+    let stackInfo = parseStackInfo(stackObj); 
+    if (stackInfo !== undefined) {
+      stacks.set(stackName, parseStackInfo(stackObj));
+    }
   }
 
   return {owner, stacks};
@@ -78,8 +82,14 @@ function parseStackOwner(stackIdObj: any): string {
   return verifyObjectProperty(stackIdObj, 'owner', verifyString);
 }
 
-function parseStackInfo(obj: any): StackInfo {
+function parseStackInfo(obj: any): StackInfo | undefined {
   verifyObject(obj);
+
+  let state = verifyObjectProperty(obj, 'state', verifyString); 
+  if (!VALID_STACK_STATES.has(state)) {
+    return undefined; 
+  }
+
   let lowerVoxelBound: vec3 = verifyObjectProperty(obj, 'stats', parseLowerVoxelBounds);
   let upperVoxelBound: vec3 = verifyObjectProperty(obj, 'stats', parseUpperVoxelBounds);
 
