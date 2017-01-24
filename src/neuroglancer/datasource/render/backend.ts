@@ -19,6 +19,7 @@ import {TileChunkSourceParameters} from 'neuroglancer/datasource/render/base';
 import {ParameterizedVolumeChunkSource, VolumeChunk} from 'neuroglancer/sliceview/backend';
 import {ChunkDecoder} from 'neuroglancer/sliceview/backend_chunk_decoders';
 import {decodeJpegChunk} from 'neuroglancer/sliceview/backend_chunk_decoders/jpeg';
+import {vec3} from 'neuroglancer/util/geom';
 import {openShardedHttpRequest, sendHttpRequest} from 'neuroglancer/util/http_request';
 
 let chunkDecoders = new Map<string, ChunkDecoder>();
@@ -32,21 +33,26 @@ class TileChunkSource extends ParameterizedVolumeChunkSource<TileChunkSourcePara
     let {parameters} = this;
     let {chunkGridPosition} = chunk;
 
+    // Calculate scale.
+    let scale = 1.0 / Math.pow(2, parameters.level);
+
     // Needed by JPEG decoder.
     chunk.chunkDataSize = this.spec.chunkDataSize;
 
-    // calculate scale
-    let scale = 1.0 / Math.pow(2, parameters.level);
+    let xTileSize = chunk.chunkDataSize[0] * Math.pow(2, parameters.level);
+    let yTileSize = chunk.chunkDataSize[1] * Math.pow(2, parameters.level);
 
-    let xTile = chunkGridPosition[0] * chunk.chunkDataSize[0];
-    let yTile = chunkGridPosition[1] * chunk.chunkDataSize[1];
+    // Convert grid position to global coordinates position.
+    let chunkPosition = vec3.create();
+
+    chunkPosition[0] = chunkGridPosition[0] * xTileSize;
+    chunkPosition[1] = chunkGridPosition[1] * yTileSize;
+    chunkPosition[2] = chunkGridPosition[2];
 
     // GET
     // /v1/owner/{owner}/project/{project}/stack/{stack}/z/{z}/box/{x},{y},{width},{height},{scale}/png-image
     let path =
-        `/render-ws/v1/owner/${parameters.owner}/project/${parameters.project
-        }/stack/${parameters.stack}/z/${chunkGridPosition[2]}/box/${xTile},${yTile},${chunk
-            .chunkDataSize[0]},${chunk.chunkDataSize[1]},${scale}/jpeg-image`;
+        `/render-ws/v1/owner/${parameters.owner}/project/${parameters.project}/stack/${parameters.stack}/z/${chunkPosition[2]}/box/${chunkPosition[0]},${chunkPosition[1]},${xTileSize},${yTileSize},${scale}/jpeg-image`;
 
     handleChunkDownloadPromise(
         chunk, sendHttpRequest(openShardedHttpRequest(parameters.baseUrls, path), 'arraybuffer'),

@@ -45,7 +45,6 @@ interface StackInfo {
   lowerVoxelBound: vec3;
   upperVoxelBound: vec3;
   voxelResolution: vec3; /* in nm */
-  mipMapLevels: number;
   project: string;
 }
 
@@ -55,7 +54,7 @@ function parseOwnerInfo(obj: any): OwnerInfo {
   if (stackObjs.length < 1) {
     throw new Error(`No stacks found for owner object.`);
   }
-  
+
   let stacks = new Map<string, StackInfo>();
 
   // Get the owner from the first stack
@@ -63,7 +62,7 @@ function parseOwnerInfo(obj: any): OwnerInfo {
 
   for (let stackObj of stackObjs) {
     let stackName = verifyObjectProperty(stackObj, 'stackId', parseStackName);
-    let stackInfo = parseStackInfo(stackObj); 
+    let stackInfo = parseStackInfo(stackObj);
     if (stackInfo !== undefined) {
       stacks.set(stackName, parseStackInfo(stackObj));
     }
@@ -82,12 +81,12 @@ function parseStackOwner(stackIdObj: any): string {
   return verifyObjectProperty(stackIdObj, 'owner', verifyString);
 }
 
-function parseStackInfo(obj: any): StackInfo | undefined {
+function parseStackInfo(obj: any): StackInfo|undefined {
   verifyObject(obj);
 
-  let state = verifyObjectProperty(obj, 'state', verifyString); 
+  let state = verifyObjectProperty(obj, 'state', verifyString);
   if (!VALID_STACK_STATES.has(state)) {
-    return undefined; 
+    return undefined;
   }
 
   let lowerVoxelBound: vec3 = verifyObjectProperty(obj, 'stats', parseLowerVoxelBounds);
@@ -95,12 +94,9 @@ function parseStackInfo(obj: any): StackInfo | undefined {
 
   let voxelResolution: vec3 = verifyObjectProperty(obj, 'currentVersion', parseStackVersionInfo);
 
-  let mipMapLevels: number =
-      verifyObjectProperty(obj, 'currentMipmapPathBuilder', parseMipMapLevels);
-
   let project: string = verifyObjectProperty(obj, 'stackId', parseStackProject);
 
-  return {lowerVoxelBound, upperVoxelBound, voxelResolution, mipMapLevels, project};
+  return {lowerVoxelBound, upperVoxelBound, voxelResolution, project};
 }
 
 function parseUpperVoxelBounds(stackStatsObj: any): vec3 {
@@ -148,19 +144,6 @@ function parseStackVersionInfo(stackVersionObj: any): vec3 {
   }
 
   return voxelResolution;
-}
-
-function parseMipMapLevels(_currentMipMapPathBuilderObj: any): number {
-  let levels = 0;
-  /*
-  try {
-    levels = verifyObjectProperty(currentMipMapPathBuilderObj, 'numberOfLevels', verifyInt);
-  } catch (ignoredError) {
-    // TODO: Something better than console.log for passing messages?
-    console.log('No Mip Map Levels specified. Using default of 0.');
-  }
-  */
-  return levels;
 }
 
 function parseStackProject(stackIdObj: any): string {
@@ -215,15 +198,17 @@ export class MultiscaleVolumeChunkSource implements GenericMultiscaleVolumeChunk
     this.encoding = encoding;
 
     this.dims = vec3.create();
-    this.dims[0] = 512;
-    this.dims[1] = 512;
+    this.dims[0] = 1024;
+    this.dims[1] = 1024;
     this.dims[2] = 1;
   }
 
   getSources(volumeSourceOptions: VolumeSourceOptions) {
     let sources: VolumeChunkSource[][] = [];
 
-    for (let level = 0; level <= this.stackInfo.mipMapLevels; level++) {
+    let numLevels = computeStackHierarchy(this.stackInfo, this.dims[0]);
+
+    for (let level = 0; level < numLevels; level++) {
       let voxelSize = vec3.clone(this.stackInfo.voxelResolution);
       let chunkDataSize = vec3.fromValues(1, 1, 1);
       // tiles are NxMx1
@@ -270,6 +255,22 @@ export class MultiscaleVolumeChunkSource implements GenericMultiscaleVolumeChunk
     return null;
   }
 };
+
+export function computeStackHierarchy(stackInfo: StackInfo, tileSize: number) {
+  let maxBound = 0;
+  for (let i = 0; i < 2; i++) {
+    maxBound < stackInfo.upperVoxelBound[i] ? maxBound = stackInfo.upperVoxelBound[i] :
+                                              maxBound = maxBound;
+  }
+
+  let counter = 0;
+  while (maxBound > tileSize) {
+    maxBound = maxBound / 2;
+    counter++;
+  }
+
+  return counter;
+}
 
 export function getOwnerInfo(
     chunkManager: ChunkManager, hostnames: string[], owner: string): Promise<OwnerInfo> {
