@@ -48,10 +48,12 @@ export class SegmentSetWidget extends RefCounted {
 
     itemContainer.appendChild(clearButton);
 
-    this.registerSignalBinding(
-        displayState.visibleSegments.changed.add(this.handleSetChanged, this));
-    this.registerSignalBinding(
-        displayState.segmentColorHash.changed.add(this.handleColorChanged, this));
+    this.registerDisposer(displayState.visibleSegments.changed.add((x, add) => {
+      this.handleSetChanged(x, add);
+    }));
+    this.registerDisposer(displayState.segmentColorHash.changed.add(() => {
+      this.handleColorChanged();
+    }));
 
     for (let x of displayState.visibleSegments) {
       this.addElement(x.toString());

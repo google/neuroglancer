@@ -100,9 +100,9 @@ export class SingleMeshUserLayer extends UserLayer {
       this.displayState.attributeNames.value = initialAttributeNames;
       this.addRenderLayer(new SingleMeshLayer(source, this.displayState));
     });
-    this.registerSignalBinding(this.displayState.fragmentMain.changed.add(
+    this.registerDisposer(this.displayState.fragmentMain.changed.add(
         () => { this.specificationChanged.dispatch(); }));
-    this.registerSignalBinding(this.displayState.attributeNames.changed.add(
+    this.registerDisposer(this.displayState.attributeNames.changed.add(
         () => { this.specificationChanged.dispatch(); }));
   }
   toJSON() {
@@ -171,7 +171,7 @@ class VertexAttributeWidget extends RefCounted {
     this.element.className = 'neuroglancer-single-mesh-attribute-widget';
 
     this.updateInputElements();
-    this.registerSignalBinding(attributeNames.changed.add(() => { this.updateInputElements(); }));
+    this.registerDisposer(attributeNames.changed.add(() => { this.updateInputElements(); }));
   }
 
   private updateInputElements() {

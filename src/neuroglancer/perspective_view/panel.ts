@@ -135,7 +135,7 @@ export class PerspectivePanel extends RenderedDataPanel {
 
   constructor(context: DisplayContext, element: HTMLElement, viewer: PerspectiveViewerState) {
     super(context, element, viewer);
-    this.registerSignalBinding(this.navigationState.changed.add(() => { this.viewportChanged(); }));
+    this.registerDisposer(this.navigationState.changed.add(() => { this.viewportChanged(); }));
 
     if (viewer.showSliceViewsCheckbox) {
       let showSliceViewsCheckbox =
@@ -147,8 +147,8 @@ export class PerspectivePanel extends RenderedDataPanel {
       showSliceViewsLabel.appendChild(showSliceViewsCheckbox.element);
       this.element.appendChild(showSliceViewsLabel);
     }
-    this.registerSignalBinding(viewer.showSliceViews.changed.add(() => { this.scheduleRedraw(); }));
-    this.registerSignalBinding(viewer.showAxisLines.changed.add(() => { this.scheduleRedraw(); }));
+    this.registerDisposer(viewer.showSliceViews.changed.add(() => { this.scheduleRedraw(); }));
+    this.registerDisposer(viewer.showAxisLines.changed.add(() => { this.scheduleRedraw(); }));
   }
   get navigationState() { return this.viewer.navigationState; }
 

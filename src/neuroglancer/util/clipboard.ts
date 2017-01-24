@@ -14,18 +14,18 @@
  * limitations under the License.
  */
 
-import {ON_VISIBILITY_CHANGE_METHOD_ID, SharedObjectWithVisibilityCount} from 'neuroglancer/shared_visibility_count/base';
-
-export function shareVisibility(obj: SharedObjectWithVisibilityCount) {
-  const update = () => {
-    if (obj.rpc != null) {
-      obj.rpc.invoke(
-          ON_VISIBILITY_CHANGE_METHOD_ID,
-          {'id': obj.rpcId, 'visible': obj.visibilityCount.value > 0});
-    }
-  };
-  if (obj.visibilityCount.value > 0) {
-    update();
+/**
+ * Returns true if the event appears to be targetted on input text and should not be overridden by a
+ * global handler.
+ */
+export function eventHasInputTextTarget(event: Event) {
+  const selection = window.getSelection();
+  if (!selection.isCollapsed) {
+    return true;
   }
-  obj.visibilityCount.signChanged.add(update);
+  const {tagName} = (<HTMLElement>event.target);
+  if (tagName === 'TEXTAREA' || tagName === 'INPUT') {
+    return true;
+  }
+  return false;
 }

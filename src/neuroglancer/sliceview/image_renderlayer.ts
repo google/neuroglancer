@@ -46,8 +46,8 @@ export class ImageRenderLayer extends RenderLayer {
     super(multiscaleSource, {shaderError, volumeSourceOptions});
     this.fragmentMain = fragmentMain;
     this.opacity = opacity;
-    this.registerSignalBinding(opacity.changed.add(() => { this.redrawNeeded.dispatch(); }));
-    this.registerSignalBinding(fragmentMain.changed.add(() => {
+    this.registerDisposer(opacity.changed.add(() => { this.redrawNeeded.dispatch(); }));
+    this.registerDisposer(fragmentMain.changed.add(() => {
       this.shaderUpdated = true;
       this.redrawNeeded.dispatch();
     }));

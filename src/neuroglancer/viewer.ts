@@ -29,14 +29,14 @@ import {overlaysOpen} from 'neuroglancer/overlay';
 import {PositionStatusPanel} from 'neuroglancer/position_status_panel';
 import {TrackableBoolean} from 'neuroglancer/trackable_boolean';
 import {TrackableValue} from 'neuroglancer/trackable_value';
-import {registerTrackable} from 'neuroglancer/url_hash_state';
 import {RefCounted} from 'neuroglancer/util/disposable';
 import {vec3} from 'neuroglancer/util/geom';
 import {GlobalKeyboardShortcutHandler, KeySequenceMap} from 'neuroglancer/util/keyboard_shortcut_handler';
+import {NullarySignal} from 'neuroglancer/util/signal';
+import {CompoundTrackable} from 'neuroglancer/util/trackable';
 import {DataDisplayLayout, LAYOUTS} from 'neuroglancer/viewer_layouts';
 import {ViewerState} from 'neuroglancer/viewer_state';
 import {RPC} from 'neuroglancer/worker_rpc';
-import {Signal} from 'signals';
 
 require('./viewer.css');
 require('./help_button.css');
@@ -69,7 +69,7 @@ export class Viewer extends RefCounted implements ViewerState {
   layerSelectedValues =
       this.registerDisposer(new LayerSelectedValues(this.layerManager, this.mouseState));
   worker = new RPC(new Worker('chunk_worker.bundle.js'));
-  resetInitiated = new Signal();
+  resetInitiated = new NullarySignal();
 
   chunkQueueManager = new ChunkQueueManager(this.worker, this.display.gl, {
     gpuMemory: new AvailableCapacity(1e6, 1e9),
@@ -84,12 +84,13 @@ export class Viewer extends RefCounted implements ViewerState {
       this.navigationState.voxelSize);
   layoutName = new TrackableValue<string>(LAYOUTS[0][0], validateLayoutName);
 
+  state = new CompoundTrackable();
+
   constructor(public display: DisplayContext) {
     super();
 
-    // Delay hash update after each redraw to try to prevent noticeable lag in Chrome.
-    this.registerSignalBinding(display.updateStarted.add(this.onUpdateDisplay, this));
-    this.registerSignalBinding(display.updateFinished.add(this.onUpdateDisplayFinished, this));
+    this.registerDisposer(display.updateStarted.add(() => { this.onUpdateDisplay(); }));
+    this.registerDisposer(display.updateFinished.add(() => { this.onUpdateDisplayFinished(); }));
 
     // Prevent contextmenu on rightclick, as this inteferes with our use
     // of the right mouse button.
@@ -98,30 +99,30 @@ export class Viewer extends RefCounted implements ViewerState {
       return false;
     });
 
+    const {state} = this;
+    state.add('layers', this.layerSpecification);
+    state.add('navigation', this.navigationState);
+    state.add('showAxisLines', this.showAxisLines);
+    state.add('showScaleBar', this.showScaleBar);
 
-    registerTrackable('layers', this.layerSpecification);
-    registerTrackable('navigation', this.navigationState);
-    registerTrackable('showAxisLines', this.showAxisLines);
-    registerTrackable('showScaleBar', this.showScaleBar);
+    state.add('perspectiveOrientation', this.perspectiveNavigationState.pose.orientation);
+    state.add('perspectiveZoom', this.perspectiveNavigationState.zoomFactor);
+    state.add('showSlices', this.showPerspectiveSliceViews);
+    state.add('layout', this.layoutName);
 
-    registerTrackable('perspectiveOrientation', this.perspectiveNavigationState.pose.orientation);
-    registerTrackable('perspectiveZoom', this.perspectiveNavigationState.zoomFactor);
-    registerTrackable('showSlices', this.showPerspectiveSliceViews);
-    registerTrackable('layout', this.layoutName);
-
-    this.registerSignalBinding(
-        this.navigationState.changed.add(this.handleNavigationStateChanged, this));
+    this.registerDisposer(
+      this.navigationState.changed.add(() => { this.handleNavigationStateChanged(); }));
 
     this.layerManager.initializePosition(this.navigationState.position);
 
-    this.registerSignalBinding(
+    this.registerDisposer(
         this.layerSpecification.voxelCoordinatesSet.add((voxelCoordinates: vec3) => {
           this.navigationState.position.setVoxelCoordinates(voxelCoordinates);
         }));
 
     // Debounce this call to ensure that a transient state does not result in the layer dialog being
     // shown.
-    this.layerManager.layersChanged.add(this.registerCancellable(debounce(() => {
+    const maybeResetState = this.registerCancellable(debounce(() => {
       if (this.layerManager.managedLayers.length === 0) {
         // No layers, reset state.
         this.navigationState.reset();
@@ -132,12 +133,14 @@ export class Viewer extends RefCounted implements ViewerState {
           new LayerDialog(this.layerSpecification);
         }
       }
-    })));
+    }));
+    this.layerManager.layersChanged.add(maybeResetState);
+    maybeResetState();
 
-    this.registerSignalBinding(this.chunkQueueManager.visibleChunksChanged.add(
+    this.registerDisposer(this.chunkQueueManager.visibleChunksChanged.add(
         () => { this.layerSelectedValues.handleLayerChange(); }));
 
-    this.chunkQueueManager.visibleChunksChanged.add(display.scheduleRedraw, display);
+    this.chunkQueueManager.visibleChunksChanged.add(() => { display.scheduleRedraw(); });
 
     this.makeUI();
 
@@ -180,12 +183,6 @@ export class Viewer extends RefCounted implements ViewerState {
     keyCommands.set('toggle-scale-bar', function() { this.showScaleBar.toggle(); });
     this.keyCommands.set(
         'toggle-show-slices', function() { this.showPerspectiveSliceViews.toggle(); });
-
-    // This needs to happen after the global keyboard shortcut handler for the viewer has been
-    // registered, so that it has priority.
-    if (this.layerManager.managedLayers.length === 0) {
-      new LayerDialog(this.layerSpecification);
-    }
   }
 
   private makeUI() {
@@ -256,4 +253,4 @@ export class Viewer extends RefCounted implements ViewerState {
     }
     this.mouseState.stale = true;
   }
-};
+}

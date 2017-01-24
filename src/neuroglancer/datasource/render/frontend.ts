@@ -28,7 +28,6 @@ import {applyCompletionOffset, getPrefixMatchesWithDescriptions} from 'neuroglan
 import {vec3} from 'neuroglancer/util/geom';
 import {openShardedHttpRequest, sendHttpRequest} from 'neuroglancer/util/http_request';
 import {parseArray, parseQueryStringParameters, verifyFloat, verifyInt, verifyOptionalInt, verifyObject, verifyObjectProperty, verifyOptionalString, verifyString} from 'neuroglancer/util/json';
-import {CancellablePromise, cancellableThen} from 'neuroglancer/util/promise';
 
 const VALID_ENCODINGS = new Set<string>(['jpg']);
 
@@ -182,7 +181,8 @@ export class MultiscaleVolumeChunkSource implements GenericMultiscaleVolumeChunk
     const stackInfo = ownerInfo.stacks.get(stack);
     if (stackInfo === undefined) {
       throw new Error(
-          `Specified stack ${JSON.stringify(stack)} is not one of the supported stacks ${JSON.stringify(Array.from(ownerInfo.stacks.keys()))}`);
+          `Specified stack ${JSON.stringify(stack)} is not one of the supported stacks: ` +
+          JSON.stringify(Array.from(ownerInfo.stacks.keys())));
     }
     this.stack = stack;
     this.stackInfo = stackInfo;
@@ -280,7 +280,7 @@ export function computeStackHierarchy(stackInfo: StackInfo, tileSize: number) {
 export function getOwnerInfo(
     chunkManager: ChunkManager, hostnames: string[], owner: string): Promise<OwnerInfo> {
   return chunkManager.memoize.getUncounted(
-      {'hostnames': hostnames, 'owner': owner},
+      {'type': 'render:getOwnerInfo', hostnames, owner},
       () => sendHttpRequest(
                 openShardedHttpRequest(hostnames, `/render-ws/v1/owner/${owner}/stacks`), 'json')
                 .then(parseOwnerInfo));
@@ -299,7 +299,7 @@ export function getShardedVolume(chunkManager: ChunkManager, hostnames: string[]
   const parameters = parseQueryStringParameters(match[4] || '');
 
   return chunkManager.memoize.getUncounted(
-      {'hostnames': hostnames, 'path': path},
+      {type: 'render:MultiscaleVolumeChunkSource', hostnames, path},
       () => getOwnerInfo(chunkManager, hostnames, owner)
                 .then(
                     ownerInfo => new MultiscaleVolumeChunkSource(
@@ -317,8 +317,7 @@ export function getVolume(chunkManager: ChunkManager, path: string) {
 }
 
 export function stackAndProjectCompleter(
-    chunkManager: ChunkManager, hostnames: string[],
-    path: string): CancellablePromise<CompletionResult> {
+    chunkManager: ChunkManager, hostnames: string[], path: string): Promise<CompletionResult> {
   const stackMatch = path.match(/^(?:([^\/]+)(?:\/([^\/]+))\/?(?:\/([^\/]*)))?$/);
   if (stackMatch === null) {
     // URL has incorrect format, don't return any results.
@@ -329,7 +328,7 @@ export function stackAndProjectCompleter(
     // TODO, complete the project? for now reject
     return Promise.reject<CompletionResult>(null);
   }
-  return cancellableThen(getOwnerInfo(chunkManager, hostnames, stackMatch[1]), ownerInfo => {
+  return getOwnerInfo(chunkManager, hostnames, stackMatch[1]).then(ownerInfo => {
     let completions =
         getPrefixMatchesWithDescriptions(stackMatch[3], ownerInfo.stacks, x => x[0], x => {
           return `${x[1].project}`;
@@ -339,7 +338,7 @@ export function stackAndProjectCompleter(
 }
 
 export function volumeCompleter(
-    url: string, chunkManager: ChunkManager): CancellablePromise<CompletionResult> {
+    url: string, chunkManager: ChunkManager): Promise<CompletionResult> {
   let match = url.match(urlPattern);
   if (match === null) {
     // We don't yet have a full hostname.
@@ -348,9 +347,8 @@ export function volumeCompleter(
   let hostnames = [match[1]];
   let path = match[2];
 
-  return cancellableThen(
-      stackAndProjectCompleter(chunkManager, hostnames, path),
-      completions => applyCompletionOffset(match![1].length + 1, completions));
+  return stackAndProjectCompleter(chunkManager, hostnames, path)
+      .then(completions => applyCompletionOffset(match![1].length + 1, completions));
 }
 
 registerDataSourceFactory('render', {

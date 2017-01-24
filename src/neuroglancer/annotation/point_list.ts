@@ -22,11 +22,11 @@
 import {Float32ArrayBuilder} from 'neuroglancer/util/float32array_builder';
 import {vec3} from 'neuroglancer/util/geom';
 import {parseFixedLengthArray, verifyFiniteFloat} from 'neuroglancer/util/json';
-import {Signal} from 'signals';
+import {NullarySignal} from 'neuroglancer/util/signal';
 
 export class AnnotationPointList {
   points = new Float32ArrayBuilder();
-  changed = new Signal();
+  changed = new NullarySignal();
   generation = 0;
 
   get length() { return this.points.length / 3; }

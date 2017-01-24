@@ -14,14 +14,14 @@
  * limitations under the License.
  */
 
-import {Signal} from 'signals';
+import {Signal} from 'neuroglancer/util/signal';
 
-export function removeSignalBinding(signal: Signal, handler: () => void, context: any) {
-  signal.remove(handler, context);
+export function removeSignalBinding<T extends Function>(signal: Signal<T>, handler: T) {
+  signal.remove(handler);
 }
 
-export function addSignalBinding(signal: Signal, handler: () => void, context: any) {
-  signal.add(handler, context);
+export function addSignalBinding<T extends Function>(signal: Signal<T>, handler: T) {
+  signal.add(handler);
 }
 
-export interface SignalBindingUpdater { (signal: Signal, handler: () => void, context: any): void; }
+export interface SignalBindingUpdater<T extends Function> { (signal: Signal<T>, handler: T): void; }

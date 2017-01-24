@@ -27,13 +27,13 @@ import {Disposable} from 'neuroglancer/util/disposable';
 import {mat4, rectifyTransformMatrixIfAxisAligned, vec3, vec3Key, vec4} from 'neuroglancer/util/geom';
 import {stableStringify} from 'neuroglancer/util/json';
 import {getObjectId} from 'neuroglancer/util/object_id';
+import {NullarySignal} from 'neuroglancer/util/signal';
 import {Uint64} from 'neuroglancer/util/uint64';
 import {GL} from 'neuroglancer/webgl/context';
 import {FramebufferConfiguration, makeTextureBuffers, StencilBuffer} from 'neuroglancer/webgl/offscreen';
 import {ShaderBuilder, ShaderModule, ShaderProgram} from 'neuroglancer/webgl/shader';
 import {getSquareCornersBuffer} from 'neuroglancer/webgl/square_corners_buffer';
 import {registerSharedObjectOwner, RPC} from 'neuroglancer/worker_rpc';
-import {Signal} from 'signals';
 
 export type VolumeChunkKey = string;
 
@@ -54,7 +54,7 @@ export class SliceView extends SliceViewBase {
 
   visibleChunks = new Map<ChunkLayout, VolumeChunkKey[]>();
 
-  viewChanged = new Signal();
+  viewChanged = new NullarySignal();
 
   renderingStale = true;
 
@@ -80,11 +80,11 @@ export class SliceView extends SliceViewBase {
     this.initializeCounterpart(this.chunkManager.rpc!, {'chunkManager': chunkManager.rpcId});
     this.updateVisibleLayers();
 
-    this.registerSignalBinding(
+    this.registerDisposer(
         navigationState.changed.add(() => { this.updateViewportFromNavigationState(); }));
     this.updateViewportFromNavigationState();
 
-    this.registerSignalBinding(layerManager.layersChanged.add(() => {
+    this.registerDisposer(layerManager.layersChanged.add(() => {
       if (!this.visibleLayersStale) {
         if (this.hasValidViewport) {
           this.visibleLayersStale = true;
@@ -94,8 +94,7 @@ export class SliceView extends SliceViewBase {
     }));
 
     this.viewChanged.add(() => { this.renderingStale = true; });
-    this.registerSignalBinding(chunkManager.chunkQueueManager.visibleChunksChanged.add(
-        this.viewChanged.dispatch, this.viewChanged));
+    this.registerDisposer(chunkManager.chunkQueueManager.visibleChunksChanged.add(this.viewChanged.dispatch));
 
     this.updateViewportFromNavigationState();
   }
@@ -127,7 +126,7 @@ export class SliceView extends SliceViewBase {
         visibleLayerList.push(renderLayer);
         if (!visibleLayers.has(renderLayer)) {
           visibleLayers.set(renderLayer.addRef(), []);
-          renderLayer.redrawNeeded.add(this.viewChanged.dispatch, this.viewChanged);
+          renderLayer.redrawNeeded.add(this.viewChanged.dispatch);
           rpcMessage['layerId'] = renderLayer.rpcId;
           rpc.invoke('SliceView.addVisibleLayer', rpcMessage);
           changed = true;
@@ -137,7 +136,7 @@ export class SliceView extends SliceViewBase {
     for (let renderLayer of visibleLayers.keys()) {
       if (!newVisibleLayers.has(renderLayer)) {
         visibleLayers.delete(renderLayer);
-        renderLayer.redrawNeeded.remove(this.viewChanged.dispatch, this.viewChanged);
+        renderLayer.redrawNeeded.remove(this.viewChanged.dispatch);
         rpcMessage['layerId'] = renderLayer.rpcId;
         rpc.invoke('SliceView.removeVisibleLayer', rpcMessage);
         renderLayer.dispose();

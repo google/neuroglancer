@@ -15,8 +15,8 @@
  */
 
 import {RefCounted} from 'neuroglancer/util/disposable';
+import {NullarySignal} from 'neuroglancer/util/signal';
 import {GL, initializeWebGL} from 'neuroglancer/webgl/context';
-import {Signal} from 'signals';
 
 export abstract class RenderedPanel extends RefCounted {
   gl: GL;
@@ -59,8 +59,8 @@ export abstract class RenderedPanel extends RefCounted {
 export class DisplayContext extends RefCounted {
   canvas = document.createElement('canvas');
   gl: GL;
-  updateStarted = new Signal();
-  updateFinished = new Signal();
+  updateStarted = new NullarySignal();
+  updateFinished = new NullarySignal();
   panels = new Set<RenderedPanel>();
   activePanel: RenderedPanel|null = null;
   private updatePending: number|null = null;

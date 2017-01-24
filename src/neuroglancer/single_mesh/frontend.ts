@@ -362,9 +362,9 @@ export class SingleMeshLayer extends PerspectiveViewRenderLayer {
       this.disposeShaders();
       this.redrawNeeded.dispatch();
     };
-    this.registerSignalBinding(displayState.fragmentMain.changed.add(shaderChanged));
-    this.registerSignalBinding(displayState.attributeNames.changed.add(shaderChanged));
-    this.registerSignalBinding(
+    this.registerDisposer(displayState.fragmentMain.changed.add(shaderChanged));
+    this.registerDisposer(displayState.attributeNames.changed.add(shaderChanged));
+    this.registerDisposer(
         displayState.objectToDataTransform.changed.add(() => { this.redrawNeeded.dispatch(); }));
     this.displayState.shaderError.value = undefined;
     let sharedObject = this.sharedObject =
@@ -497,7 +497,7 @@ export class SingleMeshLayer extends PerspectiveViewRenderLayer {
 
 function getSingleMeshInfo(chunkManager: ChunkManager, parameters: SingleMeshSourceParameters) {
   return chunkManager.memoize.getUncounted(
-      ['single_mesh/getMeshInfo', parameters],
+      {type: 'single_mesh:getMeshInfo', parameters},
       () => chunkManager.rpc!.promiseInvoke<SingleMeshInfo>(
           GET_SINGLE_MESH_INFO_RPC_ID,
           {'chunkManager': chunkManager.addCounterpartRef(), 'parameters': parameters}));

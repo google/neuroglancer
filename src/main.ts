@@ -14,30 +14,11 @@
  * limitations under the License.
  */
 
-import 'neuroglancer/image_user_layer';
-import 'neuroglancer/segmentation_user_layer';
-import 'neuroglancer/single_mesh_user_layer';
-import 'neuroglancer/annotation/user_layer';
-
-import {makeDefaultKeyBindings} from 'neuroglancer/default_key_bindings';
-import {makeDefaultViewer} from 'neuroglancer/default_viewer';
-import {getCurrentState} from 'neuroglancer/url_hash_state';
+/**
+ * @file Main entry point for default neuroglancer viewer.
+ */
+import {setupDefaultViewer} from 'neuroglancer/ui/default_viewer_setup';
 
 window.addEventListener('DOMContentLoaded', () => {
-  let viewer = (<any>window)['viewer'] = makeDefaultViewer();
-  makeDefaultKeyBindings(viewer.keyMap);
-
-  document.addEventListener('copy', (event: ClipboardEvent) => {
-    const selection = window.getSelection();
-    if (!selection.isCollapsed) {
-      return;
-    }
-    const {tagName} = (<HTMLElement>event.target);
-    if (tagName === 'TEXTAREA' || tagName === 'INPUT') {
-      return;
-    }
-    const state = getCurrentState();
-    event.clipboardData.setData('text/plain', JSON.stringify(state, undefined, '  '));
-    event.preventDefault();
-  });
+  const viewer = setupDefaultViewer();
 });

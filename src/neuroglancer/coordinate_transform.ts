@@ -16,7 +16,7 @@
 
 import {identityMat4, kOneVec, kZeroVec, mat4, quat, vec3} from 'neuroglancer/util/geom';
 import {parseFiniteVec} from 'neuroglancer/util/json';
-import {Signal} from 'signals';
+import {NullarySignal} from 'neuroglancer/util/signal';
 
 export interface RotationTranslationScale {
   rotation: quat;
@@ -30,7 +30,7 @@ export interface RotationTranslationScale {
  * Typically it represents a transform from a local coordinate space to a global coordinate space.
  */
 export class CoordinateTransform {
-  changed = new Signal();
+  changed = new NullarySignal();
 
   constructor(public transform = mat4.create()) {}
 

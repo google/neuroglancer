@@ -29,7 +29,6 @@ import {applyCompletionOffset, getPrefixMatchesWithDescriptions} from 'neuroglan
 import {mat4, vec3} from 'neuroglancer/util/geom';
 import {openShardedHttpRequest, sendHttpRequest} from 'neuroglancer/util/http_request';
 import {parseArray, parseFixedLengthArray, parseIntVec, verifyFinitePositiveFloat, verifyInt, verifyMapKey, verifyObject, verifyObjectAsMap, verifyObjectProperty, verifyPositiveInt, verifyString} from 'neuroglancer/util/json';
-import {CancellablePromise} from 'neuroglancer/util/promise';
 
 let serverDataTypes = new Map<string, DataType>();
 serverDataTypes.set('uint8', DataType.UINT8);
@@ -356,7 +355,7 @@ export class ServerInfo {
 }
 
 export function getServerInfo(chunkManager: ChunkManager, baseUrls: string[]) {
-  return chunkManager.memoize.getUncounted(baseUrls, () => {
+  return chunkManager.memoize.getUncounted({type: 'dvid:getServerInfo', baseUrls}, () => {
     let result = sendHttpRequest(openShardedHttpRequest(baseUrls, '/api/repos/info', 'GET'), 'json')
                      .then(response => new ServerInfo(response));
     const description = `repository info for DVID server ${baseUrls[0]}`;
@@ -407,7 +406,11 @@ export function getShardedVolume(
       throw new Error(`Invalid data instance ${dataInstanceKey}.`);
     }
     return chunkManager.memoize.getUncounted(
-        {'baseUrls': baseUrls, 'nodeKey': repositoryInfo.uuid, 'dataInstanceKey': dataInstanceKey},
+        {
+          type: 'dvid:MultiscaleVolumeChunkSource',
+          baseUrls,
+          nodeKey: repositoryInfo.uuid, dataInstanceKey,
+        },
         () => new MultiscaleVolumeChunkSource(
             chunkManager, baseUrls, repositoryInfo.uuid, dataInstanceKey, dataInstanceInfo));
   });
@@ -453,7 +456,7 @@ export function completeNodeAndInstance(serverInfo: ServerInfo, prefix: string):
 }
 
 export function volumeCompleter(
-    url: string, chunkManager: ChunkManager): CancellablePromise<CompletionResult> {
+    url: string, chunkManager: ChunkManager): Promise<CompletionResult> {
   const curUrlPattern = /^((?:http|https):\/\/[^\/]+)\/(.*)$/;
   let match = url.match(curUrlPattern);
   if (match === null) {

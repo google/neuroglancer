@@ -15,7 +15,7 @@
  */
 
 import {simpleStringHash} from 'neuroglancer/util/hash';
-import {CancellablePromise, makeCancellablePromise} from 'neuroglancer/util/promise';
+import {CancellationToken, uncancelableToken} from 'neuroglancer/util/cancellation';
 
 export type RequestModifier = (request: XMLHttpRequest) => void;
 
@@ -76,22 +76,24 @@ export function openShardedHttpRequest(baseUrls: string|string[], path: string, 
 }
 
 export function sendHttpRequest(
-    xhr: XMLHttpRequest, responseType: 'arraybuffer'): CancellablePromise<ArrayBuffer>;
-export function sendHttpRequest(xhr: XMLHttpRequest, responseType: 'json'): CancellablePromise<any>;
-export function sendHttpRequest(xhr: XMLHttpRequest, responseType: string): any;
+  xhr: XMLHttpRequest, responseType: 'arraybuffer', token?: CancellationToken): Promise<ArrayBuffer>;
+export function sendHttpRequest(xhr: XMLHttpRequest, responseType: 'json', token?: CancellationToken): Promise<any>;
+export function sendHttpRequest(xhr: XMLHttpRequest, responseType: string, token?: CancellationToken): any;
 
-export function sendHttpRequest(xhr: XMLHttpRequest, responseType: string) {
+export function sendHttpRequest(xhr: XMLHttpRequest, responseType: string, token: CancellationToken = uncancelableToken) {
   xhr.responseType = responseType;
-  return makeCancellablePromise((resolve, reject, onCancel) => {
+  return new Promise((resolve, reject) => {
+    const abort = () => { xhr.abort(); };
+    token.add(abort);
     xhr.onloadend = function(this: XMLHttpRequest) {
       let status = this.status;
+      token.remove(abort);
       if (status >= 200 && status < 300) {
         resolve(this.response);
       } else {
         reject(HttpError.fromXhr(xhr));
       }
     };
-    onCancel(() => { xhr.abort(); });
     xhr.send();
   });
 }

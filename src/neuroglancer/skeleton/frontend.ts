@@ -26,12 +26,12 @@ import {RefCounted} from 'neuroglancer/util/disposable';
 import {mat4, vec3} from 'neuroglancer/util/geom';
 import {stableStringify} from 'neuroglancer/util/json';
 import {getObjectId} from 'neuroglancer/util/object_id';
+import {NullarySignal} from 'neuroglancer/util/signal';
 import {Buffer} from 'neuroglancer/webgl/buffer';
 import {GL} from 'neuroglancer/webgl/context';
 import {ShaderBuilder, ShaderModule, ShaderProgram} from 'neuroglancer/webgl/shader';
 import {setVec4FromUint32} from 'neuroglancer/webgl/shader_lib';
 import {RPC} from 'neuroglancer/worker_rpc';
-import {Signal} from 'signals';
 
 const tempMat2 = mat4.create();
 const tempPickID = new Float32Array(4);
@@ -100,7 +100,7 @@ export class PerspectiveViewSkeletonLayer extends PerspectiveViewRenderLayer {
   constructor(public base: SkeletonLayer) {
     super();
     this.registerDisposer(base);
-    this.registerSignalBinding(base.redrawNeeded.add(() => { this.redrawNeeded.dispatch(); }));
+    this.registerDisposer(base.redrawNeeded.add(() => { this.redrawNeeded.dispatch(); }));
     this.setReady(true);
     this.visibilityCount.addDependency(base.visibilityCount);
   }
@@ -119,7 +119,7 @@ export class SliceViewPanelSkeletonLayer extends SliceViewPanelRenderLayer {
   constructor(public base: SkeletonLayer) {
     super();
     this.registerDisposer(base);
-    this.registerSignalBinding(base.redrawNeeded.add(() => { this.redrawNeeded.dispatch(); }));
+    this.registerDisposer(base.redrawNeeded.add(() => { this.redrawNeeded.dispatch(); }));
     this.setReady(true);
     this.visibilityCount.addDependency(base.visibilityCount);
   }
@@ -132,7 +132,7 @@ export class SliceViewPanelSkeletonLayer extends SliceViewPanelRenderLayer {
 
 export class SkeletonLayer extends RefCounted {
   private tempMat = mat4.create();
-  redrawNeeded = new Signal();
+  redrawNeeded = new NullarySignal();
   private sharedObject: SegmentationLayerSharedObject;
 
   get visibilityCount() { return this.sharedObject.visibilityCount; }

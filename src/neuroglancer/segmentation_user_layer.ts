@@ -222,7 +222,7 @@ class SegmentationDropdown extends UserLayerDropdown {
     this.addSegmentWidget.element.classList.add('add-segment');
     this.addSegmentWidget.element.title = 'Add segment ID';
     element.appendChild(this.registerDisposer(this.addSegmentWidget).element);
-    this.registerSignalBinding(this.addSegmentWidget.valueEntered.add(
+    this.registerDisposer(this.addSegmentWidget.valueEntered.add(
         (value: Uint64) => { this.layer.displayState.visibleSegments.add(value); }));
     element.appendChild(this.registerDisposer(this.visibleSegmentWidget).element);
   }

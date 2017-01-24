@@ -14,8 +14,8 @@
  * limitations under the License.
  */
 
+import {CANCELED, CancellationToken, CancellationTokenSource, makeCancelablePromise, uncancelableToken} from 'neuroglancer/util/cancellation';
 import {RefCounted} from 'neuroglancer/util/disposable';
-import {cancelPromise, makeCancellablePromise} from 'neuroglancer/util/promise';
 
 export type RPCHandler = (this: RPC, x: any) => void;
 
@@ -42,11 +42,14 @@ export class RPCError extends Error {
   constructor(public name: string, public message: string) { super(message); }
 }
 
-export function registerPromiseRPC<T>(key: string, handler: (this: RPC, x: any) => RPCPromise<T>) {
+export function registerPromiseRPC<T>(
+    key: string,
+    handler: (this: RPC, x: any, cancellationToken: CancellationToken) => RPCPromise<T>) {
   registerRPC(key, function(this: RPC, x: any) {
     let id = <number>x['id'];
-    let promise = handler.call(this, x) as RPCPromise<T>;
-    this.set(id, promise);
+    const cancellationToken = new CancellationTokenSource();
+    let promise = handler.call(this, x, cancellationToken) as RPCPromise<T>;
+    this.set(id, {promise, cancellationToken});
     promise.then(
         ({value, transfers}) => {
           this.delete(id);
@@ -62,8 +65,8 @@ export function registerPromiseRPC<T>(key: string, handler: (this: RPC, x: any) 
 
 registerRPC(PROMISE_CANCEL_ID, function(this: RPC, x: any) {
   let id = <number>x['id'];
-  let promise = this.get(id);
-  cancelPromise(promise);
+  let {cancellationToken} = this.get(id);
+  cancellationToken.cancel();
 });
 
 registerRPC(PROMISE_RESPONSE_ID, function(this: RPC, x: any) {
@@ -73,7 +76,12 @@ registerRPC(PROMISE_RESPONSE_ID, function(this: RPC, x: any) {
   if (x.hasOwnProperty('value')) {
     resolve(x['value']);
   } else {
-    reject(new RPCError(x['errorName'], x['error']));
+    const errorName = x['errorName'];
+    if (errorName === CANCELED.name) {
+      reject(CANCELED);
+    } else {
+      reject(new RPCError(x['errorName'], x['error']));
+    }
   }
 });
 
@@ -119,15 +127,16 @@ export class RPC {
     this.target.postMessage(x, transfers);
   }
 
-  promiseInvoke<T>(name: string, x: any, transfers?: any[]): Promise<T> {
-    let id = this.newId();
-    x['id'] = id;
-    let promise = makeCancellablePromise<T>((resolve, reject, onCancel) => {
+  promiseInvoke<T>(name: string, x: any, cancellationToken = uncancelableToken, transfers?: any[]):
+      Promise<T> {
+    return makeCancelablePromise<T>(cancellationToken, (resolve, reject, token) => {
+      const id = x['id'] = this.newId();
       this.set(id, {resolve, reject});
-      onCancel(() => { this.invoke(PROMISE_CANCEL_ID, {'id': id}); });
+      this.invoke(name, x, transfers);
+      token.add(() => {
+        this.invoke(PROMISE_CANCEL_ID, {'id': id});
+      });
     });
-    this.invoke(name, x, transfers);
-    return promise;
   }
   newId() { return IS_WORKER ? this.nextId-- : this.nextId++; }
 };

@@ -16,9 +16,9 @@
 
 import {AvailableCapacity, CHUNK_MANAGER_RPC_ID, CHUNK_QUEUE_MANAGER_RPC_ID, ChunkState} from 'neuroglancer/chunk_manager/base';
 import {Memoize, StringMemoize} from 'neuroglancer/util/memoize';
+import {NullarySignal} from 'neuroglancer/util/signal';
 import {GL} from 'neuroglancer/webgl/context';
 import {registerRPC, registerSharedObjectOwner, RPC, SharedObject} from 'neuroglancer/worker_rpc';
-import {Signal} from 'signals';
 
 const DEBUG_CHUNK_UPDATES = false;
 
@@ -35,7 +35,7 @@ export abstract class Chunk {
 
 @registerSharedObjectOwner(CHUNK_QUEUE_MANAGER_RPC_ID)
 export class ChunkQueueManager extends SharedObject {
-  visibleChunksChanged = new Signal();
+  visibleChunksChanged = new NullarySignal();
   pendingChunkUpdates: any = null;
   pendingChunkUpdatesTail: any = null;
 

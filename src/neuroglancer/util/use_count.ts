@@ -15,29 +15,29 @@
  */
 
 import {RefCounted} from 'neuroglancer/util/disposable';
-import {Signal} from 'signals';
-
+import {Signal} from 'neuroglancer/util/signal';
 
 /**
  * Contains a count and signals that are invoked when the count becomes zero or non-zero.
  */
 export class UseCount extends RefCounted {
   private count = 0;
-  private dependencies = new Map<UseCount, number>();
-  becameZero = new Signal();
-  becameNonZero = new Signal();
+  private dependencies = new Map<UseCount, {refCount: number, unregister: () => void}>();
+  signChanged = new Signal<{(sign: number): void}>();
 
-  get value() { return this.count; }
+  get value() {
+    return this.count;
+  }
 
   inc() {
     if (++this.count === 1) {
-      this.becameNonZero.dispatch();
+      this.signChanged.dispatch(1);
     }
   }
 
   dec() {
     if (--this.count === 0) {
-      this.becameZero.dispatch();
+      this.signChanged.dispatch(0);
     }
   }
 
@@ -46,24 +46,17 @@ export class UseCount extends RefCounted {
    */
   addDependency(other: UseCount) {
     let {dependencies} = this;
-    let existingCount = dependencies.get(other);
-    if (existingCount !== undefined) {
-      dependencies.set(other, existingCount + 1);
+    let existing = dependencies.get(other);
+    if (existing !== undefined) {
+      existing.refCount += 1;
     } else {
-      dependencies.set(other, 1);
-      this.becameZero.add(other.dec, other);
-      this.becameNonZero.add(other.inc, other);
+      dependencies.set(other, {
+        refCount: 1,
+        unregister: this.signChanged.add(sign => sign ? other.inc() : other.dec())
+      });
       if (this.count > 0) {
         other.inc();
       }
-    }
-  }
-
-  private removeDependency_(other: UseCount) {
-    this.becameZero.remove(other.dec, other);
-    this.becameNonZero.remove(other.inc, other);
-    if (this.count > 0) {
-      other.dec();
     }
   }
 
@@ -76,18 +69,23 @@ export class UseCount extends RefCounted {
     if (existing === undefined) {
       throw new Error('Attempted to remove non-existing dependency.');
     }
-    if (--existing === 0) {
+    if (--existing.refCount === 0) {
       dependencies.delete(other);
-      this.removeDependency_(other);
-    } else {
-      dependencies.set(other, existing);
+      existing.unregister();
+      if (this.count) {
+        other.dec();
+      }
     }
   }
 
   disposed() {
-    for (let other of this.dependencies.keys()) {
-      this.removeDependency_(other);
+    const {count} = this;
+    for (let [other, info] of this.dependencies) {
+      info.unregister();
+      if (count) {
+        other.dec();
+      }
     }
     this.dependencies.clear();
   }
-};
+}
