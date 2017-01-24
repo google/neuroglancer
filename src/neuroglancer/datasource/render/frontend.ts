@@ -27,7 +27,7 @@ import {defineParameterizedVolumeChunkSource, MultiscaleVolumeChunkSource as Gen
 import {applyCompletionOffset, getPrefixMatchesWithDescriptions} from 'neuroglancer/util/completion';
 import {vec3} from 'neuroglancer/util/geom';
 import {openShardedHttpRequest, sendHttpRequest} from 'neuroglancer/util/http_request';
-import {parseArray, parseQueryStringParameters, verifyFloat, verifyInt, verifyObject, verifyObjectProperty, verifyOptionalString, verifyString} from 'neuroglancer/util/json';
+import {parseArray, parseQueryStringParameters, verifyFloat, verifyInt, verifyOptionalInt, verifyObject, verifyObjectProperty, verifyOptionalString, verifyString} from 'neuroglancer/util/json';
 import {CancellablePromise, cancellableThen} from 'neuroglancer/util/promise';
 
 const VALID_ENCODINGS = new Set<string>(['jpg']);
@@ -198,8 +198,13 @@ export class MultiscaleVolumeChunkSource implements GenericMultiscaleVolumeChunk
     this.encoding = encoding;
 
     this.dims = vec3.create();
-    this.dims[0] = 1024;
-    this.dims[1] = 1024;
+
+    let tileSize = verifyOptionalInt(parameters['tilesize']);
+    if (tileSize === undefined) {
+      tileSize = 1024; // Default tile size is 1024 x 1024 
+    }
+    this.dims[0] = tileSize;
+    this.dims[1] = tileSize;
     this.dims[2] = 1;
   }
 
