@@ -402,6 +402,13 @@ export function verifyOptionalString(obj: any): string|undefined {
   return verifyString(obj);
 }
 
+export function verifyOptionalInt(obj: any): number|undefined {
+  if (obj === undefined) {
+    return undefined;
+  }
+  return verifyInt(obj);
+}
+
 export function verifyObjectProperty<T>(
     obj: any, propertyName: string, validator: (value: any) => T): T {
   let value = obj.hasOwnProperty(propertyName) ? obj[propertyName] : undefined;
