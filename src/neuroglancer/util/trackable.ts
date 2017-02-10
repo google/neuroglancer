@@ -29,7 +29,7 @@ export interface Trackable {
   toJSON: () => any;
 }
 
-export class CompoundTrackable implements Trackable {
+export class CompoundTrackable extends RefCounted implements Trackable {
   children = new Map<string, Trackable>();
   changed = new NullarySignal();
 
@@ -55,7 +55,8 @@ export class CompoundTrackable implements Trackable {
     this.changed.dispatch();
   }
 
-  dispose () {
+  disposed () {
+    super.disposed();
     const {changed} = this;
     for (let value of this.children.values()) {
       value.changed.remove(changed.dispatch);
@@ -64,14 +65,21 @@ export class CompoundTrackable implements Trackable {
   }
 
   toJSON () {
-    const result = this.baseJSON();
+    const result = this.baseJson();
     for (let [key, value] of this.children) {
-      result[key] = value.toJSON();
+      const valueJson = value.toJSON();
+      if (valueJson !== undefined) {
+        result[key] = valueJson;
+      }
     }
-    return result;
+    // Only return the result if it is non-empty.
+    for (let _ in result) {
+      return result;
+    }
+    return undefined;
   }
 
-  baseJSON () {
+  baseJson () {
     return <{[key: string]: any}>{};
   }
 
@@ -93,6 +101,13 @@ export class CompoundTrackable implements Trackable {
       }
     }
   }
+}
+
+export interface TrackableListLike<T extends Trackable> extends Trackable {
+  children: Iterable<T>;
+  remove(index: number): void;
+  move(fromIndex: number, toIndex: number): void;
+  appendChildJson(x: any): T;
 }
 
 /**
@@ -118,7 +133,7 @@ export function getCachedJson(root: Trackable): {value: any, generation: number}
   }
   let value: any;
   if (root instanceof CompoundTrackable) {
-    value = root.baseJSON();
+    value = root.baseJson();
     for (let [k, v] of root.children) {
       value[k] = getCachedJson(v).value;
     }

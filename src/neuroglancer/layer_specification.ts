@@ -23,7 +23,7 @@ import {MultiscaleVolumeChunkSource} from 'neuroglancer/sliceview/frontend';
 import {StatusMessage} from 'neuroglancer/status';
 import {RefCounted} from 'neuroglancer/util/disposable';
 import {vec3} from 'neuroglancer/util/geom';
-import {verifyObject, verifyObjectProperty, verifyOptionalString} from 'neuroglancer/util/json';
+import {verifyObject, verifyObjectProperty, verifyOptionalString, verifyString} from 'neuroglancer/util/json';
 import {NullarySignal, Signal} from 'neuroglancer/util/signal';
 import {Trackable} from 'neuroglancer/util/trackable';
 import {RPC} from 'neuroglancer/worker_rpc';
@@ -75,10 +75,18 @@ export class LayerListSpecification extends RefCounted implements Trackable {
   reset() { this.layerManager.clear(); }
 
   restoreState(x: any) {
-    verifyObject(x);
-    this.layerManager.clear();
-    for (let key of Object.keys(x)) {
-      this.layerManager.addManagedLayer(this.getLayer(key, x[key]));
+    if (Array.isArray(x)) {
+      this.layerManager.clear();
+      for (let layerSpec of x) {
+        const name = verifyObjectProperty(layerSpec, 'name', verifyString);
+        this.layerManager.addManagedLayer(this.getLayer(name, layerSpec));
+      }
+    } else {
+      verifyObject(x);
+      this.layerManager.clear();
+      for (let key of Object.keys(x)) {
+        this.layerManager.addManagedLayer(this.getLayer(key, x[key]));
+      }
     }
   }
 

@@ -98,6 +98,9 @@ setup(
         "Pillow>=3.2.0",
         "numpy>=1.11.0",
         'requests',
+        'tornado',
+        'sockjs-tornado',
+        'six',
     ],
     ext_modules=[
         Extension(

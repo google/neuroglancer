@@ -18,7 +18,8 @@ b = np.pad(b, 1, 'constant')
 #   python setup.py bundle_client
 #
 # has not been run.
-neuroglancer.set_static_content_source(url='https://neuroglancer-demo.appspot.com')
+#neuroglancer.set_static_content_source(url='https://neuroglancer-demo.appspot.com')
+neuroglancer.set_static_content_source(url='http://localhost:8080')
 
 viewer = neuroglancer.Viewer(voxel_size=[10, 10, 10])
 viewer.add(a,
@@ -34,3 +35,6 @@ void main() {
 """)
 viewer.add(b, name='b')
 print(viewer)
+import time
+time.sleep(100000)
+#raw_input()

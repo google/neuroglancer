@@ -55,6 +55,11 @@ export function validateLayoutName(obj: any) {
   return layout[0];
 }
 
+export interface ViewerOptions {
+  resetStateWhenEmpty?: boolean;
+  showLayerDialogWhenEmpty?: boolean;
+}
+
 export class Viewer extends RefCounted implements ViewerState {
   navigationState = this.registerDisposer(new NavigationState());
   perspectiveNavigationState = new NavigationState(new Pose(this.navigationState.position), 1);
@@ -86,7 +91,7 @@ export class Viewer extends RefCounted implements ViewerState {
 
   state = new CompoundTrackable();
 
-  constructor(public display: DisplayContext) {
+  constructor(public display: DisplayContext, public options: ViewerOptions = {}) {
     super();
 
     this.registerDisposer(display.updateStarted.add(() => { this.onUpdateDisplay(); }));
@@ -120,22 +125,24 @@ export class Viewer extends RefCounted implements ViewerState {
           this.navigationState.position.setVoxelCoordinates(voxelCoordinates);
         }));
 
-    // Debounce this call to ensure that a transient state does not result in the layer dialog being
-    // shown.
-    const maybeResetState = this.registerCancellable(debounce(() => {
-      if (this.layerManager.managedLayers.length === 0) {
-        // No layers, reset state.
-        this.navigationState.reset();
-        this.perspectiveNavigationState.pose.orientation.reset();
-        this.perspectiveNavigationState.zoomFactor.reset();
-        this.resetInitiated.dispatch();
-        if (!overlaysOpen) {
-          new LayerDialog(this.layerSpecification);
+    if (this.options.resetStateWhenEmpty) {
+      // Debounce this call to ensure that a transient state does not result in the layer dialog
+      // being shown.
+      const maybeResetState = this.registerCancellable(debounce(() => {
+        if (this.layerManager.managedLayers.length === 0) {
+          // No layers, reset state.
+          this.navigationState.reset();
+          this.perspectiveNavigationState.pose.orientation.reset();
+          this.perspectiveNavigationState.zoomFactor.reset();
+          this.resetInitiated.dispatch();
+          if (!overlaysOpen && this.options.showLayerDialogWhenEmpty) {
+            new LayerDialog(this.layerSpecification);
+          }
         }
-      }
-    }));
-    this.layerManager.layersChanged.add(maybeResetState);
-    maybeResetState();
+      }));
+      this.layerManager.layersChanged.add(maybeResetState);
+      maybeResetState();
+    }
 
     this.registerDisposer(this.chunkQueueManager.visibleChunksChanged.add(
         () => { this.layerSelectedValues.handleLayerChange(); }));

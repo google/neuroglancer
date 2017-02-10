@@ -16,14 +16,15 @@ from __future__ import absolute_import
 
 from . import base_viewer
 from . import server
-
+from .token import make_random_token
 
 class Viewer(base_viewer.BaseViewer):
     """Viewer based on neuroglancer.server."""
 
     def __init__(self, *args, **kwargs):
-        super(Viewer, self).__init__(*args, **kwargs)
-        server.start()
+        super(Viewer, self).__init__(server.make_context(), *args, **kwargs)
+        self.token = make_random_token()
+        server.register_viewer(self)
 
     def register_volume(self, volume):
         server.register_volume(volume)
@@ -32,8 +33,7 @@ class Viewer(base_viewer.BaseViewer):
         return server.get_server_url()
 
     def get_viewer_url(self):
-        return '%s/static/%s/#!%s' % (self.get_server_url(), server.global_server.token,
-                                      self.get_encoded_state())
+        return '%s/static/%s/#%s' % (self.get_server_url(), server.global_server.token, self.token)
 
     def __repr__(self):
         return self.get_viewer_url()

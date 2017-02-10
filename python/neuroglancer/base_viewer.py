@@ -25,18 +25,25 @@ except ImportError:
     from urllib.parse import quote as urlquote  # pylint: disable=no-name-in-module,import-error
 
 from . import volume
+from .trackable import TrackableContext
+from .trackable import CompoundTrackable
+from .trackable import TrackableList
+from .trackable import make_trackable
+from .operational_transformation import ManagedState
 
-class Layer(object):
+class Layer(CompoundTrackable):
     def __init__(self,
+                 context,
                  data,
                  name=None,
                  default_voxel_size=(1, 1, 1),
                  voxel_size=None,
                  voxel_offset=None,
                  offset=None,
-                 shader=None,
                  visible=None,
+                 shader=None,
                  **kwargs):
+        super(Layer, self).__init__(context)
         if offset is None and voxel_offset is None:
             if hasattr(data, 'attrs'):
                 if 'resolution' in data.attrs:
@@ -47,30 +54,36 @@ class Layer(object):
             voxel_size = default_voxel_size
         self.volume = volume.ServedVolume(
             data=data, offset=offset, voxel_offset=voxel_offset, voxel_size=voxel_size, **kwargs)
-        self.name = name
-        extra_args = self.extra_args = dict()
-        if shader is not None:
-            extra_args['shader'] = shader
+        self['name'] = make_trackable(context, name)
+        for k, v in kwargs.items():
+            self[k] = make_trackable(context, v)
+        self['type'] = make_trackable(context, self.volume.volume_type)
+        self['source'] = make_trackable(context, 'python://%s' % (self.volume.token,))
         if visible is not None:
-            extra_args['visible'] = visible
-
-    def get_layer_spec(self, server_url):
-        return dict(type=self.volume.volume_type,
-                    source='python://%s/%s' % (server_url, self.volume.token),
-                    **self.extra_args)
+            self['visible'] = make_trackable(context, visible)
+        if shader is not None:
+            self['shader'] = make_trackable(context, shader)
 
 
 class BaseViewer(object):
-    def __init__(self, voxel_size=None):
+    def __init__(self, context, voxel_size=None):
         self.voxel_size = voxel_size
-        self.layers = []
+        self.context = context
+        self.state = CompoundTrackable(context)
+        self.managed_state = ManagedState(self.state)
+        self.state['layers'] = make_trackable(context, []) #TrackableList()
+        self.layers = self.state['layers'].value
+        self.state['navigation'] = CompoundTrackable(context)
+        self.state['navigation']['pose'] = CompoundTrackable(context)
+        self.state['navigation']['pose']['position'] = make_trackable(context, dict(voxelSize=list(voxel_size)))
 
     def add(self, *args, **kwargs):
         if self.voxel_size is None:
             default_voxel_size = (1, 1, 1)
         else:
             default_voxel_size = self.voxel_size
-        layer = Layer(*args, default_voxel_size=default_voxel_size, **kwargs)
+        layer = Layer(self.context, *args, default_voxel_size=default_voxel_size, **kwargs)
+        self.register_volume(layer.volume)
         self.layers.append(layer)
 
     def get_json_state(self):
@@ -78,7 +91,6 @@ class BaseViewer(object):
         layers = state['layers'] = collections.OrderedDict()
         specified_names = set(layer.name for layer in self.layers)
         for layer in self.layers:
-            self.register_volume(layer.volume)
             name = layer.name
             if name is None:
                 base_name = layer.volume.volume_type

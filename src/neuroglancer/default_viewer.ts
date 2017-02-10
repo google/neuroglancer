@@ -19,9 +19,9 @@ require('./default_viewer.css');
 import 'neuroglancer/sliceview/chunk_format_handlers';
 
 import {DisplayContext} from 'neuroglancer/display_context';
-import {Viewer} from 'neuroglancer/viewer';
+import {Viewer, ViewerOptions} from 'neuroglancer/viewer';
 
-export function makeDefaultViewer() {
+export function makeDefaultViewer(options?: ViewerOptions) {
   let display = new DisplayContext(document.getElementById('container')!);
-  return new Viewer(display);
+  return new Viewer(display, options);
 }

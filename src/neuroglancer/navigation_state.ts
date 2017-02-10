@@ -18,6 +18,7 @@ import {RefCounted} from 'neuroglancer/util/disposable';
 import {mat3, mat4, quat, vec3} from 'neuroglancer/util/geom';
 import {parseFiniteVec, verifyObject, verifyObjectProperty} from 'neuroglancer/util/json';
 import {NullarySignal} from 'neuroglancer/util/signal';
+import {CompoundTrackable} from 'neuroglancer/util/trackable';
 
 export class VoxelSize extends RefCounted {
   size: vec3;
@@ -230,7 +231,7 @@ export class SpatialPosition extends RefCounted {
       this.changed.dispatch();
     }
   }
-};
+}
 
 function quaternionIsIdentity(quat: quat) {
   return quat[0] === 0 && quat[1] === 0 && quat[2] === 0 && quat[3] === 1;
@@ -324,64 +325,30 @@ export class OrientationState extends RefCounted {
     }));
     return self;
   }
-};
+}
 
-export class Pose extends RefCounted {
+export class Pose extends CompoundTrackable {
   position: SpatialPosition;
   orientation: OrientationState;
-  changed = new NullarySignal();
   constructor(position?: SpatialPosition, orientation?: OrientationState) {
     super();
     if (position == null) {
       position = new SpatialPosition();
     }
-    this.position = position;
+    this.position = this.registerDisposer(position);
+    this.add('position', position);
     if (orientation == null) {
       orientation = new OrientationState();
     }
-    this.orientation = orientation;
-    this.registerDisposer(this.position);
-    this.registerDisposer(this.orientation);
-    this.registerDisposer(this.position.changed.add(this.changed.dispatch));
-    this.registerDisposer(this.orientation.changed.add(this.changed.dispatch));
+    this.orientation = this.registerDisposer(orientation);
+    this.add('orientation', orientation);
   }
 
   get valid() { return this.position.valid; }
 
-  /**
-   * Resets everything.
-   */
-  reset() {
-    this.position.reset();
-    this.orientation.reset();
-  }
-
   toMat4(mat: mat4) {
     mat4.fromRotationTranslation(
         mat, this.orientation.orientation, this.position.spatialCoordinates);
-  }
-
-  toJSON() {
-    let positionJson = this.position.toJSON();
-    let orientationJson = this.orientation.toJSON();
-    if (positionJson === undefined && orientationJson === undefined) {
-      return undefined;
-    }
-    return {'position': positionJson, 'orientation': orientationJson};
-  }
-
-  restoreState(obj: any) {
-    verifyObject(obj);
-    verifyObjectProperty(obj, 'position', x => {
-      if (x !== undefined) {
-        this.position.restoreState(x);
-      }
-    });
-    verifyObjectProperty(obj, 'orientation', x => {
-      if (x !== undefined) {
-        this.orientation.restoreState(x);
-      }
-    });
   }
 
   /**
@@ -455,7 +422,7 @@ export class Pose extends RefCounted {
     }
     this.orientation.changed.dispatch();
   }
-};
+}
 
 export class TrackableZoomState {
   constructor(private value_ = Number.NaN, public defaultValue = value_) {}
@@ -493,9 +460,9 @@ export class TrackableZoomState {
     }
     this.value = value_ * factor;
   }
-};
+}
 
-export class NavigationState extends RefCounted {
+export class NavigationState extends CompoundTrackable {
   changed = new NullarySignal();
   zoomFactor: TrackableZoomState;
 
@@ -506,22 +473,13 @@ export class NavigationState extends RefCounted {
     } else {
       this.zoomFactor = zoomFactor;
     }
-    this.registerDisposer(pose);
-    this.registerDisposer(this.pose.changed.add(() => { this.changed.dispatch(); }));
-    this.registerDisposer(this.zoomFactor.changed.add(() => { this.changed.dispatch(); }));
+    this.add('pose', this.registerDisposer(pose));
+    this.add('zoomFactor', this.zoomFactor);
     this.registerDisposer(
         this.voxelSize.changed.add(() => { this.handleVoxelSizeChanged(); }));
     this.handleVoxelSizeChanged();
   }
   get voxelSize() { return this.pose.position.voxelSize; }
-
-  /**
-   * Resets everything.
-   */
-  reset() {
-    this.pose.reset();
-    this.zoomFactor.reset();
-  }
 
   private setZoomFactorFromVoxelSize() {
     let {voxelSize} = this;
@@ -547,34 +505,5 @@ export class NavigationState extends RefCounted {
 
   get valid() { return this.pose.valid; }
 
-  toJSON() {
-    let poseJson = this.pose.toJSON();
-    let zoomFactorJson = this.zoomFactor.toJSON();
-    if (poseJson === undefined && zoomFactorJson === undefined) {
-      return undefined;
-    }
-    return {'pose': poseJson, 'zoomFactor': zoomFactorJson};
-  }
-
-  restoreState(obj: any) {
-    try {
-      verifyObject(obj);
-      verifyObjectProperty(obj, 'pose', x => {
-        if (x !== undefined) {
-          this.pose.restoreState(x);
-        }
-      });
-      verifyObjectProperty(obj, 'zoomFactor', x => {
-        if (x !== undefined) {
-          this.zoomFactor.restoreState(x);
-        }
-      });
-      this.handleVoxelSizeChanged();
-      this.changed.dispatch();
-    } catch (parseError) {
-      this.reset();
-    }
-  }
-
   zoomBy(factor: number) { this.zoomFactor.zoomBy(factor); }
-};
+}
