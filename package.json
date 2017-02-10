@@ -12,7 +12,7 @@
   },
   "scripts": {
     "generate-code": "node ./config/generate_code.js",
-    "build-min": "webpack --config ./config/webpack.min.js --display-modules",
+    "build-min": "webpack --config ./config/webpack.config.js --display-modules --env=min",
     "build": "webpack --config ./config/webpack.config.js --display-modules",
     "build-key_name_logger": "webpack --config ./config/webpack.key_name_logger.js",
     "build:watch": "webpack --config ./config/webpack.config.js --watch",
