@@ -39,7 +39,7 @@ export enum OffscreenTextures {
 function sliceViewPanelEmitColor(builder: ShaderBuilder) {
   builder.addFragmentCode(`
 void emit(vec4 color, vec4 pickId) {
-  gl_FragColor = color;
+  v4f_fragColor = color;
 }
 `);
 }
@@ -47,7 +47,7 @@ void emit(vec4 color, vec4 pickId) {
 function sliceViewPanelEmitPickID(builder: ShaderBuilder) {
   builder.addFragmentCode(`
 void emit(vec4 color, vec4 pickId) {
-  gl_FragColor = pickId;
+  v4f_fragColor = pickId;
 }
 `);
 }
@@ -113,10 +113,9 @@ export class SliceViewPanel extends RenderedDataPanel {
     this.registerDisposer(sliceView.viewChanged.add(() => {
       context.scheduleRedraw();
     }));
-    this.registerDisposer(viewer.showAxisLines.changed.add(() => {
-      this.scheduleRedraw();
+    this.registerDisposer(viewer.showAxisLines.changed.add(() => {    
+      this.scheduleRedraw();    
     }));
-
     {
       let scaleBar = this.scaleBarWidget.element;
       this.registerDisposer(

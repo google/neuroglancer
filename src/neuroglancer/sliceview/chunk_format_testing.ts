@@ -50,32 +50,35 @@ export function chunkFormatTest<TextureLayout extends Disposable>(
                  fragmentMain += `
 {
   uint64_t value = getDataValue(${channel});
-  gl_FragData[${outputChannel++}] = value.low;
-  gl_FragData[${outputChannel++}] = value.high;
+  v4f_fragData${outputChannel++} = value.low;
+  v4f_fragData${outputChannel++} = value.high;
 }
 `;
                  break;
                case DataType.UINT8:
                  fragmentMain += `
-gl_FragData[${outputChannel++}] = vec4(getDataValue(${channel}).value, 0, 0, 0);
+v4f_fragData${outputChannel++} = vec4(getDataValue(${channel}).value, 0, 0, 0);
 `;
                  break;
                case DataType.FLOAT32:
                  fragmentMain += `
-gl_FragData[${outputChannel++}] = packFloatIntoVec4(getDataValue(${channel}));
+v4f_fragData${outputChannel++} = packFloatIntoVec4(getDataValue(${channel}));
 `;
                  break;
                case DataType.UINT16:
                  fragmentMain += `
-gl_FragData[${outputChannel++}] = vec4(getDataValue(${channel}).value, 0, 0);
+v4f_fragData${outputChannel++} = vec4(getDataValue(${channel}).value, 0, 0);
 `;
                  break;
                case DataType.UINT32:
                  fragmentMain += `
-gl_FragData[${outputChannel++}] = getDataValue(${channel}).value;
+v4f_fragData${outputChannel++} = getDataValue(${channel}).value;
 `;
                  break;
              }
+           }
+           for (let i = 0; i < outputChannel; ++i) {
+             builder.addFragmentOutput('vec4', `v4f_fragData${i}`, i);
            }
            builder.setFragmentMain(fragmentMain);
          }

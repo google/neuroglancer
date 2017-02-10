@@ -24,8 +24,9 @@ describe('webgl/index_emulation', () => {
       let helper = new IndexBufferAttributeHelper('VertexIndex');
       helper.defineShader(builder);
       builder.addVarying('highp float', 'vVertexIndex');
+      builder.addFragmentOutput('vec4', 'v4f_fragData0', 0);
       builder.addVertexMain(`vVertexIndex = getVertexIndex();`);
-      builder.setFragmentMain(`gl_FragData[0] = packFloatIntoVec4(vVertexIndex);`);
+      builder.setFragmentMain(`v4f_fragData0 = packFloatIntoVec4(vVertexIndex);`);
 
       tester.build();
       let {shader} = tester;

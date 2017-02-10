@@ -37,9 +37,10 @@ describe('webgl/shader_lib', () => {
       builder.addFragmentCode(glsl_addUint32);
       builder.addUniform('highp vec4', 'uValue1');
       builder.addUniform('highp vec4', 'uValue2');
+      builder.addFragmentOutput('vec4', 'v4f_fragData0', 0);
       builder.setFragmentMain(`
 uint32_t a, b; a.value = uValue1; b.value = uValue2;
-gl_FragData[0] = add(a, b).value;
+v4f_fragData0 = add(a, b).value;
 `);
 
       tester.build();
@@ -75,11 +76,13 @@ gl_FragData[0] = add(a, b).value;
       builder.addFragmentCode(glsl_divmodUint32);
       builder.addUniform('highp vec4', 'uDividend');
       builder.addUniform('highp float', 'uDivisor');
+      builder.addFragmentOutput('vec4', 'v4f_fragData0', 0);
+      builder.addFragmentOutput('vec4', 'v4f_fragData1', 1);
       builder.setFragmentMain(`
 uint32_t a; a.value = uDividend;
 uint32_t quotient;
-gl_FragData[0] = packFloatIntoVec4(divmod(a, uDivisor, quotient));
-gl_FragData[1] = quotient.value;
+v4f_fragData0 = packFloatIntoVec4(divmod(a, uDivisor, quotient));
+v4f_fragData1 = quotient.value;
 `);
 
       tester.build();

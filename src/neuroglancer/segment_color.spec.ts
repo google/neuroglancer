@@ -26,6 +26,9 @@ describe('segment_color', () => {
       let {gl, builder} = tester;
       shaderManager.defineShader(builder);
       builder.addUniform('highp vec4', 'inputValue', 2);
+      builder.addFragmentOutput('vec4', 'v4f_fragData0', 0);
+      builder.addFragmentOutput('vec4', 'v4f_fragData1', 1);
+      builder.addFragmentOutput('vec4', 'v4f_fragData2', 2);
       const colorHash = SegmentColorHash.getDefault();
       builder.setFragmentMain(`
 uint64_t x;
@@ -33,9 +36,9 @@ x.low = inputValue[0];
 x.high = inputValue[1];
 
 highp vec3 color = getColor(x);
-gl_FragData[0] = packFloatIntoVec4(color.x);
-gl_FragData[1] = packFloatIntoVec4(color.y);
-gl_FragData[2] = packFloatIntoVec4(color.z);
+v4f_fragData0 = packFloatIntoVec4(color.x);
+v4f_fragData1 = packFloatIntoVec4(color.y);
+v4f_fragData2 = packFloatIntoVec4(color.z);
 `);
       tester.build();
       let {shader} = tester;

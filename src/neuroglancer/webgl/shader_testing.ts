@@ -34,7 +34,6 @@ export class FragmentShaderTester extends RefCounted {
   constructor(public gl: GL, public numOutputs: number) {
     super();
     let {builder} = this;
-    builder.addFragmentExtension('GL_EXT_draw_buffers');
     builder.addAttribute('vec4', 'shader_testing_aVertexPosition');
     builder.setVertexMain(`gl_Position = shader_testing_aVertexPosition;`);
     builder.addFragmentCode(glsl_debugFunctions);

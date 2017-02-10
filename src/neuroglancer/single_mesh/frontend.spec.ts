@@ -44,18 +44,24 @@ describe('single_mesh/frontend', () => {
       builder.addUniform('highp float', 'vertexIndex');
       builder.addVarying('highp vec3', 'vVertexPosition');
       builder.addVarying('highp vec3', 'vVertexNormal');
+      builder.addFragmentOutput('vec4', 'v4f_fragData0', 0);
+      builder.addFragmentOutput('vec4', 'v4f_fragData1', 1);
+      builder.addFragmentOutput('vec4', 'v4f_fragData2', 2);
+      builder.addFragmentOutput('vec4', 'v4f_fragData3', 3);
+      builder.addFragmentOutput('vec4', 'v4f_fragData4', 4);
+      builder.addFragmentOutput('vec4', 'v4f_fragData5', 5);
       shaderManager.defineAttributeAccess(builder, 'vertexIndex');
       builder.addVertexMain(`
   vVertexPosition = vertexPosition;
   vVertexNormal = vertexNormal;
 `);
       builder.setFragmentMain(`
-  gl_FragData[0] = packFloatIntoVec4(vVertexPosition.x);
-  gl_FragData[1] = packFloatIntoVec4(vVertexPosition.y);
-  gl_FragData[2] = packFloatIntoVec4(vVertexPosition.z);
-  gl_FragData[3] = packFloatIntoVec4(vVertexNormal.x);
-  gl_FragData[4] = packFloatIntoVec4(vVertexNormal.y);
-  gl_FragData[5] = packFloatIntoVec4(vVertexNormal.z);
+  v4f_fragData0 = packFloatIntoVec4(vVertexPosition.x);
+  v4f_fragData1 = packFloatIntoVec4(vVertexPosition.y);
+  v4f_fragData2 = packFloatIntoVec4(vVertexPosition.z);
+  v4f_fragData3 = packFloatIntoVec4(vVertexNormal.x);
+  v4f_fragData4 = packFloatIntoVec4(vVertexNormal.y);
+  v4f_fragData5 = packFloatIntoVec4(vVertexNormal.z);
 `);
       vertexData.copyToGPU(gl, attributeFormats);
       tester.build();

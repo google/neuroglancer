@@ -23,7 +23,7 @@ export type WebGLDataType = number;
 export type WebGLBufferUsage = number;
 export class Buffer implements Disposable {
   buffer: WebGLBuffer|null;
-  constructor(public gl: WebGLRenderingContext, public bufferType: BufferType = GL_ARRAY_BUFFER) {
+  constructor(public gl: WebGL2RenderingContext, public bufferType: BufferType = GL_ARRAY_BUFFER) {
     this.gl = gl;
     // This should never return null.
     this.buffer = gl.createBuffer();
@@ -53,7 +53,7 @@ export class Buffer implements Disposable {
   }
 
   static fromData(
-      gl: WebGLRenderingContext, data: ArrayBufferView, bufferType?: BufferType,
+      gl: WebGL2RenderingContext, data: ArrayBufferView, bufferType?: BufferType,
       usage?: WebGLBufferUsage) {
     let buffer = new Buffer(gl, bufferType);
     buffer.setData(data, usage);

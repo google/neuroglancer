@@ -20,7 +20,7 @@ import {GL} from 'neuroglancer/webgl/context';
  * Sets parameters to make a texture suitable for use as a raw array: NEAREST
  * filtering, clamping.
  */
-export function setRawTextureParameters(gl: WebGLRenderingContext) {
+export function setRawTextureParameters(gl: WebGL2RenderingContext) {
   gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
   gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
   // Prevents s-coordinate wrapping (repeating).  Repeating not

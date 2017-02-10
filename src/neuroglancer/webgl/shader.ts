@@ -88,7 +88,7 @@ export class ShaderLinkError extends Error {
   }
 };
 
-export function getShader(gl: WebGLRenderingContext, source: string, shaderType: ShaderType) {
+export function getShader(gl: WebGL2RenderingContext, source: string, shaderType: ShaderType) {
   var shader = gl.createShader(shaderType);
   gl.shaderSource(shader, source);
   gl.compileShader(shader);
@@ -116,6 +116,7 @@ export function getShader(gl: WebGLRenderingContext, source: string, shaderType:
 }
 
 export type AttributeIndex = number;
+export type FragOutputIndex = number;
 
 export class ShaderProgram extends RefCounted {
   program: WebGLProgram;
@@ -123,10 +124,11 @@ export class ShaderProgram extends RefCounted {
   fragmentShader: WebGLShader;
   attributes = new Map<string, AttributeIndex>();
   uniforms = new Map<string, WebGLUniformLocation|null>();
+  fragmentOutputs = new Map<string, FragOutputIndex>();
   textureUnits: Map<any, number>;
 
   constructor(
-      public gl: WebGLRenderingContext, public vertexSource: string, public fragmentSource: string,
+      public gl: WebGL2RenderingContext, public vertexSource: string, public fragmentSource: string,
       uniformNames?: string[], attributeNames?: string[]) {
     super();
     let vertexShader = this.vertexShader = getShader(gl, vertexSource, gl.VERTEX_SHADER);
@@ -233,19 +235,22 @@ export class ShaderBuilder {
   private nextTextureUnit = 0;
   private uniformsCode = '';
   private attributesCode = '';
-  private varyingsCode = '';
+  private varyingsCodeVS = '';
+  private varyingsCodeFS = '';
   private fragmentExtensionsSet = new Set<string>();
   private fragmentExtensions = '';
   private vertexCode = new ShaderCode();
   private vertexMain = '';
   private fragmentCode = new ShaderCode();
+  private fragmentOutput = new Array<any>();
+  private fragmentOutputCode = '';
   private fragmentMain = '';
   private required = new Set<ShaderModule>();
   private uniforms = new Array<string>();
   private attributes = new Array<string>();
   private initializers: Array<ShaderInitializer> = [];
   private textureUnits = new Map<Symbol, number>();
-  constructor(public gl: WebGLRenderingContext) {}
+  constructor(public gl: WebGL2RenderingContext) {}
 
   allocateTextureUnit(symbol: Symbol, count: number = 1) {
     if (this.textureUnits.has(symbol)) {
@@ -278,12 +283,23 @@ export class ShaderBuilder {
 
   addAttribute(typeName: string, name: string) {
     this.attributes.push(name);
-    this.attributesCode += `attribute ${typeName} ${name};\n`;
+    this.attributesCode += `in ${typeName} ${name};\n`;
     return name;
   }
 
   addVarying(typeName: string, name: string) {
-    this.varyingsCode += `varying ${typeName} ${name};\n`;
+    this.varyingsCodeVS += `out ${typeName} ${name};\n`;
+    this.varyingsCodeFS += `in ${typeName} ${name};\n`;
+  }
+
+  addFragmentOutput(typeName: string, name: string, location?: number) {
+    const loc = location | null;
+    this.fragmentOutput.push({ "name": name, "loc": loc });
+    if (loc != null) {
+      this.fragmentOutputCode += `layout(location = ${loc}) out ${typeName} ${name};\n`;
+    } else {
+      this.fragmentOutputCode += `out ${typeName} ${name};\n`;
+    }
   }
 
   addUniform(typeName: string, name: string, extent?: number) {
@@ -330,21 +346,26 @@ ${code}
   }
 
   build() {
-    let vertexSource = `
+    if (this.fragmentOutputCode === '') {
+      this.addFragmentOutput("vec4", "v4f_fragColor");
+    }
+
+    let vertexSource = `#version 300 es
 precision highp float;
 ${this.uniformsCode}
 ${this.attributesCode}
-${this.varyingsCode}
+${this.varyingsCodeVS}
 ${this.vertexCode}
 void main() {
 ${this.vertexMain}
 }
 `;
-    let fragmentSource = `
+    let fragmentSource = `#version 300 es
 ${this.fragmentExtensions}
 precision highp float;
 ${this.uniformsCode}
-${this.varyingsCode}
+${this.varyingsCodeFS}
+${this.fragmentOutputCode}
 ${this.fragmentCode}
 ${this.fragmentMain}
 `;

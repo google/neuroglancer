@@ -481,7 +481,7 @@ export class SliceViewRenderHelper extends RefCounted {
     builder.addUniform('vec4', 'uTextureCoordinateAdjustment');
     builder.require(emitter);
     builder.setFragmentMain(`
-vec4 sampledColor = texture2D(uSampler, vTexCoord);
+vec4 sampledColor = texture(uSampler, vTexCoord);
 if (sampledColor.a == 0.0) {
   sampledColor = uBackgroundColor;
 }
