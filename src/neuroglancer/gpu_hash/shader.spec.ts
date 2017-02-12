@@ -44,12 +44,18 @@ x.high = inputValue[1];
 
 x.low *= 255.0;
 x.high *= 255.0;
-float modulus = ${bName}[${numAlternatives * 4 + i}];
-float scalar = ${bName}[${numAlternatives * 4 + 3 + i}];
+float modulus = ${bName}[${numAlternatives *
+                4 +
+            i}];
+float scalar = ${bName}[${numAlternatives *
+                4 +
+            3 + i}];
 vec4 a0 = ${aName}[${aIndex}];
-vec4 a1 = ${aName}[${aIndex + 1}];
+vec4 a1 = ${aName}[${aIndex +
+            1}];
 float b = ${bName}[${bIndex}];
-float c = ${bName}[${bIndex + 1}];
+float c = ${bName}[${bIndex +
+            1}];
 
   float dotResult0 = exactDot(a0, x.low) + exactDot(a1, x.high);
   float dotResult = imod(dotResult0, modulus);
@@ -182,7 +188,9 @@ uint64_t x;
 x.low = inputValue[0];
 x.high = inputValue[1];
 gl_FragData[0] = h_has(x) ? vec4(1.0, 1.0, 1.0, 1.0) : vec4(0.0, 0.0, 0.0, 0.0);
-float highOffset = ${bName}[${numAlternatives * 4 + 2}];
+float highOffset = ${bName}[${numAlternatives *
+              4 +
+          2}];
 `;
       {
         let outputNumber = 1;
@@ -223,7 +231,9 @@ float highOffset = ${bName}[${numAlternatives * 4 + 2}];
       }
       let executeIndex = 0;
       let mungedTable: Uint32Array;
-      hashTable.tableWithMungedEmptyKey(table => { mungedTable = new Uint32Array(table); });
+      hashTable.tableWithMungedEmptyKey(table => {
+        mungedTable = new Uint32Array(table);
+      });
       function checkPresent(x: Uint64) {
         let temp = new Uint32Array(2);
         temp[0] = x.low;
@@ -300,7 +310,9 @@ gl_FragData[2] = y.high;
         notPresentValues.push(x);
       }
       let mungedTable: Uint32Array;
-      hashTable.tableWithMungedEmptyKey(table => { mungedTable = new Uint32Array(table); });
+      hashTable.tableWithMungedEmptyKey(table => {
+        mungedTable = new Uint32Array(table);
+      });
       function checkPresent(x: Uint64) {
         let temp = new Uint32Array(2);
         temp[0] = x.low;
@@ -323,7 +335,9 @@ gl_FragData[2] = y.high;
         expect(hashTable.has(x)).toBe(true, `cpu: i = ${i}, x = ${x}`);
         checkPresent(x);
       });
-      notPresentValues.forEach((x, ) => { checkPresent(x); });
+      notPresentValues.forEach((x, ) => {
+        checkPresent(x);
+      });
     });
   });
 });

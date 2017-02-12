@@ -23,14 +23,16 @@ import {shareVisibility} from 'neuroglancer/shared_visibility_count/frontend';
 import {TrackableAlphaValue} from 'neuroglancer/trackable_alpha';
 import {RefCounted} from 'neuroglancer/util/disposable';
 import {vec4} from 'neuroglancer/util/geom';
+import {NullarySignal} from 'neuroglancer/util/signal';
 import {Uint64} from 'neuroglancer/util/uint64';
 import {UseCount} from 'neuroglancer/util/use_count';
 import {SharedObject} from 'neuroglancer/worker_rpc';
-import {NullarySignal} from 'neuroglancer/util/signal';
 
 export class Uint64MapEntry {
   constructor(public key: Uint64, public value: Uint64) {}
-  toString() { return `${this.key}→${this.value}`; }
+  toString() {
+    return `${this.key}→${this.value}`;
+  }
 };
 
 export class SegmentSelectionState extends RefCounted {

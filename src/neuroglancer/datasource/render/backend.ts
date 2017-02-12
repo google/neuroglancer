@@ -15,11 +15,11 @@
  */
 
 import {registerChunkSource} from 'neuroglancer/chunk_manager/backend';
-import {CancellationToken} from 'neuroglancer/util/cancellation';
 import {TileChunkSourceParameters} from 'neuroglancer/datasource/render/base';
 import {ParameterizedVolumeChunkSource, VolumeChunk} from 'neuroglancer/sliceview/backend';
 import {ChunkDecoder} from 'neuroglancer/sliceview/backend_chunk_decoders';
 import {decodeJpegChunk} from 'neuroglancer/sliceview/backend_chunk_decoders/jpeg';
+import {CancellationToken} from 'neuroglancer/util/cancellation';
 import {vec3} from 'neuroglancer/util/geom';
 import {openShardedHttpRequest, sendHttpRequest} from 'neuroglancer/util/http_request';
 
@@ -53,7 +53,10 @@ class TileChunkSource extends ParameterizedVolumeChunkSource<TileChunkSourcePara
     // GET
     // /v1/owner/{owner}/project/{project}/stack/{stack}/z/{z}/box/{x},{y},{width},{height},{scale}/png-image
     let path =
-        `/render-ws/v1/owner/${parameters.owner}/project/${parameters.project}/stack/${parameters.stack}/z/${chunkPosition[2]}/box/${chunkPosition[0]},${chunkPosition[1]},${xTileSize},${yTileSize},${scale}/jpeg-image`;
+        `/render-ws/v1/owner/${parameters.owner}/project/${parameters.project
+        }/stack/${parameters.stack
+        }/z/${chunkPosition[2]}/box/${chunkPosition[0]},${chunkPosition[1]},${xTileSize},${yTileSize
+                                                                          },${scale}/jpeg-image`;
 
     return sendHttpRequest(
                openShardedHttpRequest(parameters.baseUrls, path), 'arraybuffer', cancellationToken)

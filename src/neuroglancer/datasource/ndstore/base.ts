@@ -24,6 +24,7 @@ export class VolumeChunkSourceParameters {
   static RPC_ID = 'ndstore/VolumeChunkSource';
 
   static stringify(parameters: VolumeChunkSourceParameters) {
-    return `ndstore:volume:${parameters.baseUrls[0]}/${parameters.key}/${parameters.channel}/${parameters.resolution}/${parameters.encoding}`;
+    return `ndstore:volume:${parameters.baseUrls[0]}/${parameters.key
+        }/${parameters.channel}/${parameters.resolution}/${parameters.encoding}`;
   }
 };

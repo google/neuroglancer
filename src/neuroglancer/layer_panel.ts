@@ -59,8 +59,9 @@ class LayerWidget extends RefCounted {
     widgetElement.appendChild(labelElement);
     widgetElement.appendChild(valueElement);
     widgetElement.appendChild(closeElement);
-    this.registerEventListener(
-        widgetElement, 'click', (_event: MouseEvent) => { layer.setVisible(!layer.visible); });
+    this.registerEventListener(widgetElement, 'click', (_event: MouseEvent) => {
+      layer.setVisible(!layer.visible);
+    });
 
     let dropdownElement = this.dropdownElement = document.createElement('div');
 
@@ -127,7 +128,9 @@ class LayerWidget extends RefCounted {
     }
   }
 
-  setupDropdownElement() { this.dropdownElement.className = 'layer-dropdown'; }
+  setupDropdownElement() {
+    this.dropdownElement.className = 'layer-dropdown';
+  }
 
   update() {
     let {layer} = this;
@@ -169,7 +172,9 @@ export class LayerPanel extends RefCounted {
   private addButton: HTMLButtonElement;
   dragging = false;
 
-  get layerManager() { return this.manager.layerManager; }
+  get layerManager() {
+    return this.manager.layerManager;
+  }
 
   constructor(public element: HTMLElement, public manager: LayerListSpecification) {
     super();
@@ -183,7 +188,9 @@ export class LayerPanel extends RefCounted {
     let addButton = this.addButton = document.createElement('button');
     addButton.className = 'layer-add-button';
     addButton.title = 'Add layer';
-    this.registerEventListener(addButton, 'click', () => { this.addLayerMenu(); });
+    this.registerEventListener(addButton, 'click', () => {
+      this.addLayerMenu();
+    });
     element.appendChild(addButton);
     this.update();
     let sortable = new Sortable(this.element, {
@@ -197,9 +204,13 @@ export class LayerPanel extends RefCounted {
         this.element.classList.remove('sorting-in-progress');
         this.layerManager.reorderManagedLayer(evt.oldIndex, evt.newIndex);
       },
-      onMove: evt => { return (evt.related !== this.addButton); },
+      onMove: evt => {
+        return (evt.related !== this.addButton);
+      },
     });
-    this.registerDisposer(() => { sortable.destroy(); });
+    this.registerDisposer(() => {
+      sortable.destroy();
+    });
   }
 
   setDragging(value: boolean) {

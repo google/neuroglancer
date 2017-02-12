@@ -43,7 +43,8 @@ class TextureLayout extends RefCounted {
 
   static get(gl: GL, chunkDataSize: vec3, texelsPerElement: number, numChannels: number) {
     return gl.memoize.get(
-        `sliceview.UncompressedTextureLayout:${vec3Key(chunkDataSize)},${texelsPerElement},${numChannels}`,
+        `sliceview.UncompressedTextureLayout:${vec3Key(
+            chunkDataSize)},${texelsPerElement},${numChannels}`,
         () => new TextureLayout(gl, chunkDataSize, texelsPerElement, numChannels));
   }
 };
@@ -176,7 +177,9 @@ export class UncompressedChunkFormatHandler extends RefCounted implements ChunkF
         this.registerDisposer(this.chunkFormat.getTextureLayout(gl, spec.chunkDataSize));
   }
 
-  getChunk(source: VolumeChunkSource, x: any) { return new UncompressedVolumeChunk(source, x); }
+  getChunk(source: VolumeChunkSource, x: any) {
+    return new UncompressedVolumeChunk(source, x);
+  }
 };
 
 registerChunkFormatHandler((gl: GL, spec: VolumeChunkSpecification) => {

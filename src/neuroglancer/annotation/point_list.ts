@@ -29,9 +29,11 @@ export class AnnotationPointList {
   changed = new NullarySignal();
   generation = 0;
 
-  get length() { return this.points.length / 3; }
+  get length() {
+    return this.points.length / 3;
+  }
 
-  delete (index: number) {
+  delete(index: number) {
     this.points.eraseRange(index * 3, index * 3 + 3);
     ++this.generation;
     this.changed.dispatch();

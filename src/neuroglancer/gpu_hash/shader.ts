@@ -134,7 +134,7 @@ export class GPUHashTable<HashTable extends HashTableBase> extends RefCounted {
 };
 
 export class HashSetShaderManager {
-  textureUnitSymbol = Symbol.for (`gpuhashtable:${this.prefix}`);
+  textureUnitSymbol = Symbol.for(`gpuhashtable:${this.prefix}`);
   aName = this.prefix + '_a';
   bName = this.prefix + '_b';
   samplerName = this.prefix + '_sampler';
@@ -154,9 +154,14 @@ export class HashSetShaderManager {
         let aIndex = alt * 4 + 2 * i;
         s += `
 float ${this.prefix}_computeHash_${alt}_${i}(uint64_t x) {
-  float primeModulus = ${bName}[${numAlternatives * 4 + i}];
-  float scalar = ${bName}[${numAlternatives * 4 + 3 + i}];
-  return computeHash(x, ${aName}[${aIndex}], ${aName}[${aIndex + 1}], ${bName}[${bIndex}], ${bName}[${bIndex + 1}], primeModulus, scalar);
+  float primeModulus = ${bName}[${numAlternatives *
+                4 +
+            i}];
+  float scalar = ${bName}[${numAlternatives *
+                4 +
+            3 + i}];
+  return computeHash(x, ${aName}[${aIndex}], ${aName}[${aIndex +
+            1}], ${bName}[${bIndex}], ${bName}[${bIndex + 1}], primeModulus, scalar);
 }
 `;
       }
@@ -171,7 +176,9 @@ vec2 ${this.prefix}_computeHash_${alt}(uint64_t x) {
     }
     s += `
 bool ${this.hasFunctionName}(uint64_t x) {
-  float highOffset = ${bName}[${numAlternatives * 4 + 2}];
+  float highOffset = ${bName}[${numAlternatives *
+            4 +
+        2}];
 `;
     for (let alt = 0; alt < numAlternatives; ++alt) {
       s += `
@@ -192,7 +199,9 @@ bool ${this.hasFunctionName}(uint64_t x) {
     builder.addFragmentCode(s);
   }
 
-  get hasFunctionName() { return `${this.prefix}_has`; }
+  get hasFunctionName() {
+    return `${this.prefix}_has`;
+  }
 
   enable<HashTable extends HashTableBase>(
       gl: GL, shader: ShaderProgram, hashTable: GPUHashTable<HashTable>) {
@@ -217,7 +226,9 @@ export class HashMapShaderManager extends HashSetShaderManager {
     let {bName, samplerName, numAlternatives} = this;
     let s = `
 bool ${this.getFunctionName}(uint64_t x, out uint64_t value) {
-  float highOffset = ${bName}[${numAlternatives * 4 + 2}];
+  float highOffset = ${bName}[${numAlternatives *
+            4 +
+        2}];
 `;
     for (let alt = 0; alt < numAlternatives; ++alt) {
       s += `
@@ -240,5 +251,7 @@ bool ${this.getFunctionName}(uint64_t x, out uint64_t value) {
     builder.addFragmentCode(s);
   }
 
-  get getFunctionName() { return `${this.prefix}_get`; }
+  get getFunctionName() {
+    return `${this.prefix}_get`;
+  }
 };

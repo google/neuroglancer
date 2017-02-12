@@ -68,8 +68,9 @@ export class SegmentationRenderLayer extends RenderLayer {
       public displayState: SliceViewSegmentationDisplayState) {
     super(multiscaleSource, {volumeSourceOptions: displayState.volumeSourceOptions});
     registerRedrawWhenSegmentationDisplayStateChanged(displayState, this);
-    this.registerDisposer(
-        displayState.selectedAlpha.changed.add(() => { this.redrawNeeded.dispatch(); }));
+    this.registerDisposer(displayState.selectedAlpha.changed.add(() => {
+      this.redrawNeeded.dispatch();
+    }));
     this.hasEquivalences = this.displayState.segmentEquivalences.size !== 0;
     displayState.segmentEquivalences.changed.add(() => {
       let {segmentEquivalences} = this.displayState;
@@ -80,8 +81,9 @@ export class SegmentationRenderLayer extends RenderLayer {
         // No need to trigger redraw, since that will happen anyway.
       }
     });
-    this.registerDisposer(
-        displayState.notSelectedAlpha.changed.add(() => { this.redrawNeeded.dispatch(); }));
+    this.registerDisposer(displayState.notSelectedAlpha.changed.add(() => {
+      this.redrawNeeded.dispatch();
+    }));
   }
 
   getShaderKey() {

@@ -166,5 +166,7 @@ export class ScaleBarWidget extends RefCounted {
     }
   }
 
-  disposed() { removeFromParent(this.element); }
+  disposed() {
+    removeFromParent(this.element);
+  }
 };

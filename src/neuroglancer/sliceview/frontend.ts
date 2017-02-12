@@ -80,8 +80,9 @@ export class SliceView extends SliceViewBase {
     this.initializeCounterpart(this.chunkManager.rpc!, {'chunkManager': chunkManager.rpcId});
     this.updateVisibleLayers();
 
-    this.registerDisposer(
-        navigationState.changed.add(() => { this.updateViewportFromNavigationState(); }));
+    this.registerDisposer(navigationState.changed.add(() => {
+      this.updateViewportFromNavigationState();
+    }));
     this.updateViewportFromNavigationState();
 
     this.registerDisposer(layerManager.layersChanged.add(() => {
@@ -93,8 +94,11 @@ export class SliceView extends SliceViewBase {
       }
     }));
 
-    this.viewChanged.add(() => { this.renderingStale = true; });
-    this.registerDisposer(chunkManager.chunkQueueManager.visibleChunksChanged.add(this.viewChanged.dispatch));
+    this.viewChanged.add(() => {
+      this.renderingStale = true;
+    });
+    this.registerDisposer(
+        chunkManager.chunkQueueManager.visibleChunksChanged.add(this.viewChanged.dispatch));
 
     this.updateViewportFromNavigationState();
   }
@@ -181,7 +185,9 @@ export class SliceView extends SliceViewBase {
     this.rpc!.invoke('SliceView.updateView', {id: this.rpcId, viewportToData: viewportToData});
   }
 
-  onHasValidViewport() { this.updateVisibleLayers(); }
+  onHasValidViewport() {
+    this.updateVisibleLayers();
+  }
 
   updateRendering() {
     if (!this.renderingStale || !this.hasValidViewport || this.width === 0 || this.height === 0) {
@@ -350,7 +356,9 @@ export abstract class VolumeChunkSource extends ChunkSource implements VolumeChu
     super.initializeCounterpart(rpc, options);
   }
 
-  get chunkFormat() { return this.chunkFormatHandler.chunkFormat; }
+  get chunkFormat() {
+    return this.chunkFormatHandler.chunkFormat;
+  }
 
   getValueAt(position: vec3) {
     const chunkGridPosition = tempChunkGridPosition;
@@ -394,7 +402,9 @@ export abstract class VolumeChunkSource extends ChunkSource implements VolumeChu
     }
   }
 
-  getChunk(x: any) { return this.chunkFormatHandler.getChunk(this, x); }
+  getChunk(x: any) {
+    return this.chunkFormatHandler.getChunk(this, x);
+  }
 };
 
 /**
@@ -417,7 +427,9 @@ export function defineParameterizedVolumeChunkSource<Parameters>(
           this, stableStringify({parameters, spec: spec.toObject()}),
           () => new this(chunkManager, spec, parameters));
     }
-    toString() { return parametersConstructor.stringify(this.parameters); }
+    toString() {
+      return parametersConstructor.stringify(this.parameters);
+    }
   };
   newConstructor.prototype.RPC_TYPE_ID = parametersConstructor.RPC_ID;
   return newConstructor;
@@ -428,7 +440,9 @@ export abstract class VolumeChunk extends Chunk {
   chunkGridPosition: vec3;
   source: VolumeChunkSource;
 
-  get chunkFormat() { return this.source.chunkFormat; }
+  get chunkFormat() {
+    return this.source.chunkFormat;
+  }
 
   constructor(source: VolumeChunkSource, x: any) {
     super(source);
@@ -474,7 +488,9 @@ export class SliceViewRenderHelper extends RefCounted {
     let builder = new ShaderBuilder(gl);
     builder.addVarying('vec2', 'vTexCoord');
     builder.addUniform('sampler2D', 'uSampler');
-    builder.addInitializer(shader => { gl.uniform1i(shader.uniform('uSampler'), 0); });
+    builder.addInitializer(shader => {
+      gl.uniform1i(shader.uniform('uSampler'), 0);
+    });
     builder.addUniform('vec4', 'uColorFactor');
     builder.addUniform('vec4', 'uBackgroundColor');
     builder.addUniform('mat4', 'uProjectionMatrix');

@@ -40,6 +40,8 @@ export function getToken(invalidToken?: Token) {
   }
   token = null;
   promise = implementation.getNewTokenPromise(invalidToken);
-  promise.then((t: Token) => { token = t; });
+  promise.then((t: Token) => {
+    token = t;
+  });
   return promise;
 }

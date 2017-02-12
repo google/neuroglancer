@@ -46,7 +46,9 @@ export class VolumeSourceParameters {
   static RPC_ID = 'brainmaps/VolumeChunkSource';
 
   static stringify(p: VolumeSourceParameters) {
-    return `brainmaps-${brainmapsInstanceKey(p['instance'])}:volume/${p['volumeId']}/${p['scaleIndex']}/${VolumeChunkEncoding[p['encoding']]}/ChangeSpec.stringify(p['changeSpec'])`;
+    return `brainmaps-${brainmapsInstanceKey(
+        p['instance'])}:volume/${p['volumeId']}/${p['scaleIndex']}/${VolumeChunkEncoding
+        [p['encoding']]}/ChangeSpec.stringify(p['changeSpec'])`;
   }
 }
 
@@ -56,7 +58,8 @@ export class MeshSourceParameters {
   meshName: string;
 
   static stringify(p: MeshSourceParameters) {
-    return `brainmaps:${brainmapsInstanceKey(p['instance'])}:mesh/${p['volumeId']}/${p['meshName']}`;
+    return `brainmaps:${brainmapsInstanceKey(
+        p['instance'])}:mesh/${p['volumeId']}/${p['meshName']}`;
   }
 
   static RPC_ID = 'brainmaps/MeshSource';

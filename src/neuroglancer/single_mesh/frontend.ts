@@ -341,8 +341,12 @@ export class SingleMeshSource extends ChunkSource {
     options['info'] = this.info;
     super.initializeCounterpart(rpc, options);
   }
-  getChunk(x: any) { return new SingleMeshChunk(this, x); }
-  toString() { return SingleMeshSourceParameters.stringify(this.parameters); }
+  getChunk(x: any) {
+    return new SingleMeshChunk(this, x);
+  }
+  toString() {
+    return SingleMeshSourceParameters.stringify(this.parameters);
+  }
 }
 
 export class SingleMeshLayer extends PerspectiveViewRenderLayer {
@@ -364,8 +368,9 @@ export class SingleMeshLayer extends PerspectiveViewRenderLayer {
     };
     this.registerDisposer(displayState.fragmentMain.changed.add(shaderChanged));
     this.registerDisposer(displayState.attributeNames.changed.add(shaderChanged));
-    this.registerDisposer(
-        displayState.objectToDataTransform.changed.add(() => { this.redrawNeeded.dispatch(); }));
+    this.registerDisposer(displayState.objectToDataTransform.changed.add(() => {
+      this.redrawNeeded.dispatch();
+    }));
     this.displayState.shaderError.value = undefined;
     let sharedObject = this.sharedObject =
         this.registerDisposer(new SharedObjectWithVisibilityCount(this.visibilityCount));
@@ -433,7 +438,9 @@ export class SingleMeshLayer extends PerspectiveViewRenderLayer {
     return this.displayState.fragmentMain.value.match(/emitRGBA|emitPremultipliedRGBA/) !== null;
   }
 
-  get gl() { return this.source.gl; }
+  get gl() {
+    return this.source.gl;
+  }
 
   draw(renderContext: PerspectiveViewRenderContext) {
     if (!renderContext.emitColor && renderContext.alreadyEmittedPickID) {
@@ -465,7 +472,9 @@ export class SingleMeshLayer extends PerspectiveViewRenderLayer {
     shaderManager.endLayer(gl, shader);
   }
 
-  drawPicking(renderContext: PerspectiveViewRenderContext) { this.draw(renderContext); }
+  drawPicking(renderContext: PerspectiveViewRenderContext) {
+    this.draw(renderContext);
+  }
 
   transformPickedValue(_pickedValue: Uint64, pickedOffset: number) {
     let chunk = <SingleMeshChunk|undefined>this.source.chunks.get(SINGLE_MESH_CHUNK_KEY);

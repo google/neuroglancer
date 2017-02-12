@@ -47,14 +47,18 @@ for (let [endiannessChar, endianness] of <[string, Endianness][]>[
   supportedDataTypes.set(`${endiannessChar}u2`, {
     arrayConstructor: Uint16Array,
     elementBytes: 2,
-    fixEndianness: array => { convertEndian16(array, endianness); },
+    fixEndianness: array => {
+      convertEndian16(array, endianness);
+    },
     javascriptElementsPerArrayElement: 1,
     dataType: DataType.UINT16,
   });
   supportedDataTypes.set(`${endiannessChar}u4`, {
     arrayConstructor: Uint32Array,
     elementBytes: 4,
-    fixEndianness: array => { convertEndian32(array, endianness); },
+    fixEndianness: array => {
+      convertEndian32(array, endianness);
+    },
     javascriptElementsPerArrayElement: 1,
     dataType: DataType.UINT32,
   });
@@ -62,14 +66,18 @@ for (let [endiannessChar, endianness] of <[string, Endianness][]>[
     arrayConstructor: Uint32Array,
     elementBytes: 8,
     // We still maintain the low 32-bit value first.
-    fixEndianness: array => { convertEndian32(array, endianness); },
+    fixEndianness: array => {
+      convertEndian32(array, endianness);
+    },
     javascriptElementsPerArrayElement: 2,
     dataType: DataType.UINT64,
   });
   supportedDataTypes.set(`${endiannessChar}f4`, {
     arrayConstructor: Float32Array,
     elementBytes: 4,
-    fixEndianness: array => { convertEndian32(array, endianness); },
+    fixEndianness: array => {
+      convertEndian32(array, endianness);
+    },
     javascriptElementsPerArrayElement: 1,
     dataType: DataType.FLOAT32,
   });

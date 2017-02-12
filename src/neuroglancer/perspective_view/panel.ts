@@ -22,7 +22,7 @@ import {PerspectiveViewRenderContext, PerspectiveViewRenderLayer} from 'neurogla
 import {RenderedDataPanel} from 'neuroglancer/rendered_data_panel';
 import {SliceView, SliceViewRenderHelper} from 'neuroglancer/sliceview/frontend';
 import {TrackableBoolean, TrackableBooleanCheckbox} from 'neuroglancer/trackable_boolean';
-import {kAxes, mat4, vec3, transformVectorByMat4, vec4} from 'neuroglancer/util/geom';
+import {kAxes, mat4, transformVectorByMat4, vec3, vec4} from 'neuroglancer/util/geom';
 import {startRelativeMouseDrag} from 'neuroglancer/util/mouse_drag';
 import {ViewerState} from 'neuroglancer/viewer_state';
 import {DepthBuffer, FramebufferConfiguration, makeTextureBuffers, OffscreenCopyHelper} from 'neuroglancer/webgl/offscreen';
@@ -105,7 +105,7 @@ gl_FragColor = vec4(accum.rgb / accum.a, revealage);
 
 export class PerspectivePanel extends RenderedDataPanel {
   protected visibleLayerTracker = makeRenderedPanelVisibleLayerTracker(
-    this.viewer.layerManager, PerspectiveViewRenderLayer, this);
+      this.viewer.layerManager, PerspectiveViewRenderLayer, this);
 
   sliceViews = new Set<SliceView>();
   projectionMat = mat4.create();
@@ -117,7 +117,7 @@ export class PerspectivePanel extends RenderedDataPanel {
   protected pickIDs = new PickIDManager();
   protected axesLineHelper = this.registerDisposer(AxesLineHelper.get(this.gl));
   sliceViewRenderHelper =
-  this.registerDisposer(SliceViewRenderHelper.get(this.gl, perspectivePanelEmit));
+      this.registerDisposer(SliceViewRenderHelper.get(this.gl, perspectivePanelEmit));
 
   protected offscreenFramebuffer = this.registerDisposer(new FramebufferConfiguration(this.gl, {
     colorBuffers: makeTextureBuffers(this.gl, OffscreenTextures.NUM_TEXTURES),
@@ -132,15 +132,17 @@ export class PerspectivePanel extends RenderedDataPanel {
 
   protected offscreenCopyHelper = this.registerDisposer(OffscreenCopyHelper.get(this.gl));
   protected transparencyCopyHelper =
-  this.registerDisposer(OffscreenCopyHelper.get(this.gl, defineTransparencyCopyShader, 2));
+      this.registerDisposer(OffscreenCopyHelper.get(this.gl, defineTransparencyCopyShader, 2));
 
   constructor(context: DisplayContext, element: HTMLElement, viewer: PerspectiveViewerState) {
     super(context, element, viewer);
-    this.registerDisposer(this.navigationState.changed.add(() => { this.viewportChanged(); }));
+    this.registerDisposer(this.navigationState.changed.add(() => {
+      this.viewportChanged();
+    }));
 
     if (viewer.showSliceViewsCheckbox) {
       let showSliceViewsCheckbox =
-        this.registerDisposer(new TrackableBooleanCheckbox(viewer.showSliceViews));
+          this.registerDisposer(new TrackableBooleanCheckbox(viewer.showSliceViews));
       showSliceViewsCheckbox.element.className = 'perspective-panel-show-slice-views noselect';
       let showSliceViewsLabel = document.createElement('label');
       showSliceViewsLabel.className = 'perspective-panel-show-slice-views noselect';
@@ -148,10 +150,16 @@ export class PerspectivePanel extends RenderedDataPanel {
       showSliceViewsLabel.appendChild(showSliceViewsCheckbox.element);
       this.element.appendChild(showSliceViewsLabel);
     }
-    this.registerDisposer(viewer.showSliceViews.changed.add(() => { this.scheduleRedraw(); }));
-    this.registerDisposer(viewer.showAxisLines.changed.add(() => { this.scheduleRedraw(); }));
+    this.registerDisposer(viewer.showSliceViews.changed.add(() => {
+      this.scheduleRedraw();
+    }));
+    this.registerDisposer(viewer.showAxisLines.changed.add(() => {
+      this.scheduleRedraw();
+    }));
   }
-  get navigationState() { return this.viewer.navigationState; }
+  get navigationState() {
+    return this.viewer.navigationState;
+  }
 
   updateProjectionMatrix() {
     let projectionMat = this.projectionMat;
@@ -171,7 +179,9 @@ export class PerspectivePanel extends RenderedDataPanel {
     mat4.invert(this.inverseProjectionMat, projectionMat);
   }
 
-  viewportChanged() { this.context.scheduleRedraw(); }
+  viewportChanged() {
+    this.context.scheduleRedraw();
+  }
 
   onResize() {
     this.width = this.element.clientWidth;
@@ -209,8 +219,8 @@ export class PerspectivePanel extends RenderedDataPanel {
     out[2] = 2.0 * glWindowZ - 1.0;
     vec3.transformMat4(out, out, this.inverseProjectionMat);
     this.pickIDs.setMouseState(
-      mouseState,
-      offscreenFramebuffer.readPixelAsUint32(OffscreenTextures.PICK, glWindowX, glWindowY));
+        mouseState,
+        offscreenFramebuffer.readPixelAsUint32(OffscreenTextures.PICK, glWindowX, glWindowY));
     return true;
   }
 
@@ -312,8 +322,8 @@ export class PerspectivePanel extends RenderedDataPanel {
       this.offscreenFramebuffer.bindSingle(OffscreenTextures.COLOR);
       gl.blendFunc(gl.ONE_MINUS_SRC_ALPHA, gl.SRC_ALPHA);
       this.transparencyCopyHelper.draw(
-        this.transparentConfiguration.colorBuffers[0].texture,
-        this.transparentConfiguration.colorBuffers[1].texture);
+          this.transparentConfiguration.colorBuffers[0].texture,
+          this.transparentConfiguration.colorBuffers[1].texture);
 
       gl.depthMask(true);
       gl.disable(gl.BLEND);
@@ -342,7 +352,7 @@ export class PerspectivePanel extends RenderedDataPanel {
     // Draw the texture over the whole viewport.
     this.setGLViewport();
     this.offscreenCopyHelper.draw(
-      this.offscreenFramebuffer.colorBuffers[OffscreenTextures.COLOR].texture);
+        this.offscreenFramebuffer.colorBuffers[OffscreenTextures.COLOR].texture);
   }
 
   protected drawSliceViews(renderContext: PerspectiveViewRenderContext) {
@@ -361,9 +371,9 @@ export class PerspectivePanel extends RenderedDataPanel {
       mat4.multiply(mat, dataToDevice, mat);
 
       sliceViewRenderHelper.draw(
-        sliceView.offscreenFramebuffer.colorBuffers[0].texture, mat,
-        vec4.fromValues(factor, factor, factor, 1), vec4.fromValues(0.5, 0.5, 0.5, 1), 0, 0, 1,
-        1);
+          sliceView.offscreenFramebuffer.colorBuffers[0].texture, mat,
+          vec4.fromValues(factor, factor, factor, 1), vec4.fromValues(0.5, 0.5, 0.5, 1), 0, 0, 1,
+          1);
     }
   }
 
@@ -390,7 +400,9 @@ export class PerspectivePanel extends RenderedDataPanel {
     this.axesLineHelper.draw(mat, false);
   }
 
-  zoomByMouse(factor: number) { this.navigationState.zoomBy(factor); }
+  zoomByMouse(factor: number) {
+    this.navigationState.zoomBy(factor);
+  }
 };
 
 export class StereoPerspectivePanel extends PerspectivePanel {
@@ -425,15 +437,13 @@ export class StereoPerspectivePanel extends PerspectivePanel {
         mat4.multiply(projectionMat, VRmodelViewMat, modelViewMatInv);
         mat4.multiply(projectionMat, VRprojectionMat, projectionMat);
         mat4.invert(this.inverseProjectionMat, projectionMat);
-      }
-      else {
+      } else {
         notPresenting = true;
       }
-    }
-    else{
+    } else {
       noDevice = true;
     }
-    if(noDevice || notPresenting){
+    if (noDevice || notPresenting) {
       let projectionMat = this.projectionMat;
       mat4.perspective(projectionMat, Math.PI / 4.0, this.width / this.height, 10, 5000);
       let modelViewMat = this.modelViewMat;
@@ -548,8 +558,8 @@ export class StereoPerspectivePanel extends PerspectivePanel {
         this.offscreenFramebuffer.bindSingle(OffscreenTextures.COLOR);
         gl.blendFunc(gl.ONE_MINUS_SRC_ALPHA, gl.SRC_ALPHA);
         this.transparencyCopyHelper.draw(
-          this.transparentConfiguration.colorBuffers[0].texture,
-          this.transparentConfiguration.colorBuffers[1].texture);
+            this.transparentConfiguration.colorBuffers[0].texture,
+            this.transparentConfiguration.colorBuffers[1].texture);
 
         gl.depthMask(true);
         gl.disable(gl.BLEND);
@@ -570,9 +580,10 @@ export class StereoPerspectivePanel extends PerspectivePanel {
 
       if (isLeft) {
         gl.viewport(0, 0, this.element.clientWidth / 2, this.element.clientHeight);
-      }
-      else {
-        gl.viewport(this.element.clientWidth / 2, 0, this.element.clientWidth / 2, this.element.clientHeight);
+      } else {
+        gl.viewport(
+            this.element.clientWidth / 2, 0, this.element.clientWidth / 2,
+            this.element.clientHeight);
       }
 
       for (let renderLayer of visibleLayers) {
@@ -584,7 +595,7 @@ export class StereoPerspectivePanel extends PerspectivePanel {
 
       // Draw the texture over the whole viewport.
       this.offscreenCopyHelper.draw(
-        this.offscreenFramebuffer.colorBuffers[OffscreenTextures.COLOR].texture);
+          this.offscreenFramebuffer.colorBuffers[OffscreenTextures.COLOR].texture);
     }
   }
 }

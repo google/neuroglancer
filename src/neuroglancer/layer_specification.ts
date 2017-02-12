@@ -32,7 +32,10 @@ export function getVolumeWithStatusMessage(
     chunkManager: ChunkManager, x: string,
     options: GetVolumeOptions = {}): Promise<MultiscaleVolumeChunkSource> {
   return StatusMessage.forPromise(
-      new Promise(function(resolve) { resolve(getVolume(chunkManager, x, options)); }), {
+      new Promise(function(resolve) {
+        resolve(getVolume(chunkManager, x, options));
+      }),
+      {
         initialMessage: `Retrieving metadata for volume ${x}.`,
         delay: true,
         errorPrefix: `Error retrieving metadata for volume ${x}: `,
@@ -72,7 +75,9 @@ export class LayerListSpecification extends RefCounted implements Trackable {
     this.registerDisposer(layerManager.specificationChanged.add(this.changed.dispatch));
   }
 
-  reset() { this.layerManager.clear(); }
+  reset() {
+    this.layerManager.clear();
+  }
 
   restoreState(x: any) {
     verifyObject(x);
@@ -150,7 +155,7 @@ export class LayerListSpecification extends RefCounted implements Trackable {
 }
 
 interface UserLayerConstructor {
-  new (manager: LayerListSpecification, x: any): UserLayer;
+  new(manager: LayerListSpecification, x: any): UserLayer;
 }
 
 const layerTypes = new Map<string, UserLayerConstructor>();

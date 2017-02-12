@@ -141,7 +141,7 @@ export function effectiveScalingFactorFromMat4(out: vec3, m: mat4) {
 }
 
 export function translationRotationScaleZReflectionToMat4(
-  out: mat4, translation: vec3, rotation: quat, scale: vec3, zReflection: number) {
+    out: mat4, translation: vec3, rotation: quat, scale: vec3, zReflection: number) {
   const temp: Float32Array = out;
   out[0] = scale[0];
   out[1] = scale[1];

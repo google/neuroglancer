@@ -27,7 +27,9 @@ export abstract class SizeManaged extends RefCounted {
   width = Number.NaN;
   height = Number.NaN;
 
-  hasSize(width: number, height: number) { return this.width === width && this.height === height; }
+  hasSize(width: number, height: number) {
+    return this.width === width && this.height === height;
+  }
 
   resize(width: number, height: number) {
     if (this.hasSize(width, height)) {
@@ -56,7 +58,9 @@ export class Renderbuffer extends SizeManaged {
     gl.bindRenderbuffer(gl.RENDERBUFFER, null);
   }
 
-  disposed() { this.gl.deleteRenderbuffer(this.renderbuffer); }
+  disposed() {
+    this.gl.deleteRenderbuffer(this.renderbuffer);
+  }
 
   attachToFramebuffer(attachment: number) {
     let {gl} = this;
@@ -76,14 +80,18 @@ export class DepthBuffer extends Renderbuffer {
 }
 
 export class DepthStencilBuffer extends DepthBuffer {
-  constructor(gl: GL) { super(gl, /*includeStencilBuffer=*/true); }
+  constructor(gl: GL) {
+    super(gl, /*includeStencilBuffer=*/true);
+  }
 }
 
 export const StencilBuffer = DepthStencilBuffer;
 
 export class Framebuffer extends RefCounted {
   framebuffer = this.gl.createFramebuffer();
-  constructor(public gl: GL) { super(); }
+  constructor(public gl: GL) {
+    super();
+  }
   disposed() {
     let {gl} = this;
     gl.deleteFramebuffer(this.framebuffer);
@@ -110,7 +118,9 @@ export class TextureBuffer extends SizeManaged {
     resizeTexture(this.gl, this.texture, this.width, this.height, this.format, this.dataType);
   }
 
-  disposed() { this.gl.deleteTexture(this.texture); }
+  disposed() {
+    this.gl.deleteTexture(this.texture);
+  }
 
   attachToFramebuffer(attachment: number) {
     let {gl} = this;
@@ -159,7 +169,9 @@ export class FramebufferConfiguration<ColorBuffer extends TextureBuffer|Renderbu
     });
   }
 
-  hasSize(width: number, height: number) { return this.width === width && this.height === height; }
+  hasSize(width: number, height: number) {
+    return this.width === width && this.height === height;
+  }
 
   bind(width: number, height: number) {
     this.width = width;
@@ -196,7 +208,9 @@ export class FramebufferConfiguration<ColorBuffer extends TextureBuffer|Renderbu
     gl.WEBGL_draw_buffers.drawBuffersWEBGL(this.singleAttachmentList);
   }
 
-  unbind() { this.framebuffer.unbind(); }
+  unbind() {
+    this.framebuffer.unbind();
+  }
 
   /**
    * Only supports UNSIGNED_BYTE RGBA textures.

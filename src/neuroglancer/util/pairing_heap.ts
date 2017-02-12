@@ -17,7 +17,7 @@
 export interface ComparisonFunction<T> { (a: T, b: T): boolean; }
 
 export interface PairingHeapOperationsConstructor<T> {
-  new (compare: ComparisonFunction<T>): PairingHeapOperations<T>;
+  new(compare: ComparisonFunction<T>): PairingHeapOperations<T>;
 }
 
 export interface PairingHeapOperations<T> {

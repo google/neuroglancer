@@ -39,7 +39,9 @@ export class FragmentShaderTester extends RefCounted {
     builder.setVertexMain(`gl_Position = shader_testing_aVertexPosition;`);
     builder.addFragmentCode(glsl_debugFunctions);
   }
-  build() { this.shader = this.builder.build(); }
+  build() {
+    this.shader = this.builder.build();
+  }
   execute() {
     this.offscreenFramebuffer.bind(1, 1);
     let {gl, shader} = this;
@@ -53,7 +55,9 @@ export class FragmentShaderTester extends RefCounted {
     gl.disableVertexAttribArray(aVertexPosition);
     this.offscreenFramebuffer.unbind();
   }
-  readBytes(index = 0) { return this.offscreenFramebuffer.readPixel(index, 0, 0); }
+  readBytes(index = 0) {
+    return this.offscreenFramebuffer.readPixel(index, 0, 0);
+  }
 
   readVec4(index?: number) {
     let x = this.readBytes(index);

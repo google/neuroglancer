@@ -25,7 +25,7 @@ import {Uint64} from 'neuroglancer/util/uint64';
 import {GL} from 'neuroglancer/webgl/context';
 import {compute1dTextureFormat, compute1dTextureLayout, OneDimensionalTextureAccessHelper, OneDimensionalTextureFormat, setOneDimensionalTextureData} from 'neuroglancer/webgl/one_dimensional_texture_access';
 import {ShaderBuilder, ShaderProgram} from 'neuroglancer/webgl/shader';
-import {getShaderType, glsl_getFortranOrderIndexFromNormalized, glsl_uint64, glsl_unnormalizeUint8, glsl_uintleToFloat} from 'neuroglancer/webgl/shader_lib';
+import {getShaderType, glsl_getFortranOrderIndexFromNormalized, glsl_uint64, glsl_uintleToFloat, glsl_unnormalizeUint8} from 'neuroglancer/webgl/shader_lib';
 
 class TextureLayout extends RefCounted {
   dataWidth: number;
@@ -44,7 +44,8 @@ class TextureLayout extends RefCounted {
 
   static get(gl: GL, chunkDataSize: vec3, subchunkSize: vec3, dataLength: number) {
     return gl.memoize.get(
-        `sliceview.CompressedSegmentationTextureLayout:${vec3Key(chunkDataSize)},${vec3Key(subchunkSize)},${dataLength}`,
+        `sliceview.CompressedSegmentationTextureLayout:${vec3Key(chunkDataSize)},${vec3Key(
+            subchunkSize)},${dataLength}`,
         () => new TextureLayout(gl, chunkDataSize, subchunkSize, dataLength));
   }
 }
@@ -131,7 +132,10 @@ ${glslType} getDataValue (int channelIndex) {
     }
     encodedValueShifted = floor(encodedValueShifted * wordShifter);
     float decodedValue = mod(encodedValueShifted, encodedValueMod);
-    outputValueOffset += decodedValue * ${this.dataType === DataType.UINT64 ? '2.0' : '1.0'};
+    outputValueOffset += decodedValue * ${this.dataType === DataType.UINT64 ?
+        '2.0' :
+        '1.0'
+        };
   }
   ${glslType} result;
 `;

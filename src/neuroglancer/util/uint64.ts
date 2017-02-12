@@ -63,7 +63,9 @@ for (let base = 2; base <= 36; ++base) {
 export class Uint64 {
   constructor(public low: number = 0, public high: number = 0) {}
 
-  clone() { return new Uint64(this.low, this.high); }
+  clone() {
+    return new Uint64(this.low, this.high);
+  }
 
   assign(x: Uint64) {
     this.low = x.low;
@@ -97,13 +99,19 @@ export class Uint64 {
    * Returns a negative number if a is strictly less than b, 0 if a is equal to b, or a positive
    * number if a is strictly greater than b.
    */
-  static compare(a: Uint64, b: Uint64): number { return (a.high - b.high) || (a.low - b.low); }
+  static compare(a: Uint64, b: Uint64): number {
+    return (a.high - b.high) || (a.low - b.low);
+  }
 
   static ZERO = new Uint64(0, 0);
 
-  static equal(a: Uint64, b: Uint64) { return a.low === b.low && a.high === b.high; }
+  static equal(a: Uint64, b: Uint64) {
+    return a.low === b.low && a.high === b.high;
+  }
 
-  static min(a: Uint64, b: Uint64): Uint64 { return Uint64.less(a, b) ? a : b; }
+  static min(a: Uint64, b: Uint64): Uint64 {
+    return Uint64.less(a, b) ? a : b;
+  }
 
   static random() {
     crypto.getRandomValues(randomTempBuffer);
@@ -158,5 +166,7 @@ export class Uint64 {
     return ((low >>> 0) === low) && ((high >>> 0) === high);
   }
 
-  toJSON() { return this.toString(); }
+  toJSON() {
+    return this.toString();
+  }
 };

@@ -38,12 +38,17 @@ export class HashFunction {
   }
 
   toString() {
-    return `new HashFunction(Float32Array.of(${this.a0}), Float32Array.of(${this.a1}), ${this.b}, ${this.c})`;
+    return `new HashFunction(Float32Array.of(${this.a0}), Float32Array.of(${this.a1
+        }), ${this.b}, ${this.c})`;
   }
 
   static generate() {
-    function genCoeff() { return Math.floor(Math.random() * PRIME_MODULUS); }
-    function genVector() { return Float32Array.of(genCoeff(), genCoeff(), genCoeff(), genCoeff()); }
+    function genCoeff() {
+      return Math.floor(Math.random() * PRIME_MODULUS);
+    }
+    function genVector() {
+      return Float32Array.of(genCoeff(), genCoeff(), genCoeff(), genCoeff());
+    }
     return new HashFunction(genVector(), genVector(), genCoeff(), genCoeff());
   }
 };

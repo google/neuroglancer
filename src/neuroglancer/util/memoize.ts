@@ -28,7 +28,9 @@ export class Memoize<Key, Value extends RefCounted> {
     let obj = <T>map.get(key);
     if (obj === undefined) {
       obj = getter();
-      obj.registerDisposer(() => { map.delete(key); });
+      obj.registerDisposer(() => {
+        map.delete(key);
+      });
       map.set(key, obj);
     } else {
       obj.addRef();

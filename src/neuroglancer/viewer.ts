@@ -36,8 +36,8 @@ import {NullarySignal} from 'neuroglancer/util/signal';
 import {CompoundTrackable} from 'neuroglancer/util/trackable';
 import {DataDisplayLayout, LAYOUTS} from 'neuroglancer/viewer_layouts';
 import {ViewerState} from 'neuroglancer/viewer_state';
+import {addButton, removeButton} from 'neuroglancer/webvr-util';
 import {RPC} from 'neuroglancer/worker_rpc';
-import { addButton, removeButton } from 'neuroglancer/webvr-util';
 
 require('./viewer.css');
 require('./help_button.css');
@@ -85,13 +85,17 @@ export class Viewer extends RefCounted implements ViewerState {
       this.navigationState.voxelSize);
   layoutName = new TrackableValue<string>(LAYOUTS[0][0], validateLayoutName);
 
-state = new CompoundTrackable();
+  state = new CompoundTrackable();
 
   constructor(public display: DisplayContext) {
     super();
 
-    this.registerDisposer(display.updateStarted.add(() => { this.onUpdateDisplay(); }));
-    this.registerDisposer(display.updateFinished.add(() => { this.onUpdateDisplayFinished(); }));
+    this.registerDisposer(display.updateStarted.add(() => {
+      this.onUpdateDisplay();
+    }));
+    this.registerDisposer(display.updateFinished.add(() => {
+      this.onUpdateDisplayFinished();
+    }));
 
     // Prevent contextmenu on rightclick, as this inteferes with our use
     // of the right mouse button.
@@ -111,8 +115,9 @@ state = new CompoundTrackable();
     state.add('showSlices', this.showPerspectiveSliceViews);
     state.add('layout', this.layoutName);
 
-    this.registerDisposer(
-      this.navigationState.changed.add(() => { this.handleNavigationStateChanged(); }));
+    this.registerDisposer(this.navigationState.changed.add(() => {
+      this.handleNavigationStateChanged();
+    }));
 
     this.layerManager.initializePosition(this.navigationState.position);
 
@@ -138,10 +143,13 @@ state = new CompoundTrackable();
     this.layerManager.layersChanged.add(maybeResetState);
     maybeResetState();
 
-    this.registerDisposer(this.chunkQueueManager.visibleChunksChanged.add(
-        () => { this.layerSelectedValues.handleLayerChange(); }));
+    this.registerDisposer(this.chunkQueueManager.visibleChunksChanged.add(() => {
+      this.layerSelectedValues.handleLayerChange();
+    }));
 
-    this.chunkQueueManager.visibleChunksChanged.add(() => { display.scheduleRedraw(); });
+    this.chunkQueueManager.visibleChunksChanged.add(() => {
+      display.scheduleRedraw();
+    });
 
     this.makeUI();
 
@@ -157,8 +165,12 @@ state = new CompoundTrackable();
     });
 
     let {keyCommands} = this;
-    keyCommands.set('toggle-layout', function() { this.toggleLayout(); });
-    keyCommands.set('snap', function() { this.navigationState.pose.snap(); });
+    keyCommands.set('toggle-layout', function() {
+      this.toggleLayout();
+    });
+    keyCommands.set('snap', function() {
+      this.navigationState.pose.snap();
+    });
     keyCommands.set('add-layer', function() {
       this.layerPanel.addLayerMenu();
       return true;
@@ -177,14 +189,21 @@ state = new CompoundTrackable();
     }
 
     for (let command of ['recolor', 'clear-segments']) {
-      keyCommands.set(command, function() { this.layerManager.invokeAction(command); });
+      keyCommands.set(command, function() {
+        this.layerManager.invokeAction(command);
+      });
     }
 
-    keyCommands.set('toggle-axis-lines', function() { this.showAxisLines.toggle(); });
-    keyCommands.set('toggle-scale-bar', function() { this.showScaleBar.toggle(); });
-    this.keyCommands.set(
-        'toggle-show-slices', function() { this.showPerspectiveSliceViews.toggle(); });
-    }
+    keyCommands.set('toggle-axis-lines', function() {
+      this.showAxisLines.toggle();
+    });
+    keyCommands.set('toggle-scale-bar', function() {
+      this.showScaleBar.toggle();
+    });
+    this.keyCommands.set('toggle-show-slices', function() {
+      this.showPerspectiveSliceViews.toggle();
+    });
+  }
 
   private makeUI() {
     let {display} = this;
@@ -204,22 +223,33 @@ state = new CompoundTrackable();
               button.textContent = '?';
               button.title = 'Help';
               element.appendChild(button);
-              this.registerEventListener(button, 'click', () => { this.showHelpDialog(); });
+              this.registerEventListener(button, 'click', () => {
+                this.showHelpDialog();
+              });
             },
           ]),
-      element => { this.layerPanel = new LayerPanel(element, this.layerSpecification); },
-      L.withFlex(1, element => { this.createDataDisplayLayout(element); }),
+      element => {
+        this.layerPanel = new LayerPanel(element, this.layerSpecification);
+      },
+      L.withFlex(
+          1,
+          element => {
+            this.createDataDisplayLayout(element);
+          }),
     ])(gridContainer);
     this.display.onResize();
   }
 
   createDataDisplayLayout(element: HTMLElement) {
     let layoutCreator = getLayoutByName(this.layoutName.value)[1];
-    if(this.layoutName.value == "stereo" && navigator.getVRDisplays){
-      this.display.vrResetPoseButton = addButton("Reset Pose", "R", null, () => { this.display.vrDisplay.resetPose(); });
-      this.display.vrPresentButton = addButton("Enter VR<br>(Experience is not perfectly calibrated<br>and might cause user discomfort)", "E", null, 
-                                                this.display.onVRRequestPresent.bind(this.display));
-    }else{
+    if (this.layoutName.value === 'stereo' && navigator.getVRDisplays) {
+      this.display.vrResetPoseButton = addButton('Reset Pose', 'R', null, () => {
+        this.display.vrDisplay.resetPose();
+      });
+      this.display.vrPresentButton = addButton(
+          'Enter VR<br>(Experience is not perfectly calibrated<br>and might cause user discomfort)',
+          'E', null, this.display.onVRRequestPresent.bind(this.display));
+    } else {
       removeButton(this.display.vrResetPoseButton);
       removeButton(this.display.vrPresentButton);
     }
@@ -233,15 +263,21 @@ state = new CompoundTrackable();
     this.layoutName.value = newLayout[0];
   }
 
-  showHelpDialog() { new KeyBindingHelpDialog(this.keyMap); }
+  showHelpDialog() {
+    new KeyBindingHelpDialog(this.keyMap);
+  }
 
-  get gl() { return this.display.gl; }
+  get gl() {
+    return this.display.gl;
+  }
 
   onUpdateDisplay() {
     this.chunkQueueManager.chunkUpdateDeadline = null;
   }
 
-  onUpdateDisplayFinished() { this.mouseState.updateIfStale(); }
+  onUpdateDisplayFinished() {
+    this.mouseState.updateIfStale();
+  }
 
   private onKeyCommand(action: string) {
     let command = this.keyCommands.get(action);

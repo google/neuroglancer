@@ -39,7 +39,9 @@ export function registerRPC(key: string, handler: RPCHandler) {
 export type RPCPromise<T> = Promise<{value: T, transfers?: any[]}>;
 
 export class RPCError extends Error {
-  constructor(public name: string, public message: string) { super(message); }
+  constructor(public name: string, public message: string) {
+    super(message);
+  }
 }
 
 export function registerPromiseRPC<T>(
@@ -105,12 +107,20 @@ export class RPC {
     };
   }
 
-  get numObjects() { return this.objects.size; }
+  get numObjects() {
+    return this.objects.size;
+  }
 
-  set(id: RpcId, value: any) { this.objects.set(id, value); }
+  set(id: RpcId, value: any) {
+    this.objects.set(id, value);
+  }
 
-  delete (id: RpcId) { this.objects.delete(id); }
-  get(id: RpcId) { return this.objects.get(id); }
+  delete(id: RpcId) {
+    this.objects.delete(id);
+  }
+  get(id: RpcId) {
+    return this.objects.get(id);
+  }
   getRef<T extends SharedObject>(x: {'id': RpcId, 'gen': number}) {
     let rpcId = x['id'];
     let obj = <T>this.get(rpcId);
@@ -138,7 +148,9 @@ export class RPC {
       });
     });
   }
-  newId() { return IS_WORKER ? this.nextId-- : this.nextId++; }
+  newId() {
+    return IS_WORKER ? this.nextId-- : this.nextId++;
+  }
 };
 
 export class SharedObject extends RefCounted {
@@ -165,12 +177,16 @@ export class SharedObject extends RefCounted {
     rpc.invoke('SharedObject.new', options);
   }
 
-  dispose() { super.dispose(); }
+  dispose() {
+    super.dispose();
+  }
 
   /**
    * Precondition: this.isOwner === true.
    */
-  addCounterpartRef() { return {'id': this.rpcId, 'gen': ++this.referencedGeneration}; }
+  addCounterpartRef() {
+    return {'id': this.rpcId, 'gen': ++this.referencedGeneration};
+  }
 
   protected refCountReachedZero() {
     if (this.isOwner === true) {
@@ -234,7 +250,7 @@ export class SharedObjectCounterpart extends SharedObject {
 };
 
 
-export interface SharedObjectConstructor { new (rpc: RPC, options: any): SharedObjectCounterpart; }
+export interface SharedObjectConstructor { new(rpc: RPC, options: any): SharedObjectCounterpart; }
 
 registerRPC('SharedObject.dispose', function(x) {
   let obj = <SharedObject>this.get(x['id']);

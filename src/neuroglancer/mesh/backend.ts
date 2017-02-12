@@ -38,7 +38,9 @@ export class ManifestChunk extends Chunk {
   objectId = new Uint64();
   fragmentIds: FragmentId[]|null;
 
-  constructor() { super(); }
+  constructor() {
+    super();
+  }
   // We can't save a reference to objectId, because it may be a temporary
   // object.
   initializeManifestChunk(key: string, objectId: Uint64) {
@@ -46,7 +48,9 @@ export class ManifestChunk extends Chunk {
     this.objectId.assign(objectId);
   }
 
-  freeSystemMemory() { this.fragmentIds = null; }
+  freeSystemMemory() {
+    this.fragmentIds = null;
+  }
 
   downloadSucceeded() {
     // We can't easily determine the memory usage of the JSON manifest.  Just use 100 bytes as a
@@ -58,7 +62,9 @@ export class ManifestChunk extends Chunk {
     }
   }
 
-  toString() { return this.objectId.toString(); }
+  toString() {
+    return this.objectId.toString();
+  }
 };
 
 /**
@@ -70,7 +76,9 @@ export class FragmentChunk extends Chunk {
   vertexPositions: Float32Array|null = null;
   indices: Uint32Array|null = null;
   vertexNormals: Float32Array|null = null;
-  constructor() { super(); }
+  constructor() {
+    super();
+  }
   initializeFragmentChunk(key: string, manifestChunk: ManifestChunk, fragmentId: FragmentId) {
     super.initialize(key);
     this.manifestChunk = manifestChunk;

@@ -43,8 +43,9 @@ export class PositionStatusPanel extends RefCounted {
       element.appendChild(label);
       positionElements.push(input);
       let nextInputIsChange = false;
-      this.registerEventListener(
-          input, 'change', (_event: Event) => { this.handleCoordinateChange(); });
+      this.registerEventListener(input, 'change', (_event: Event) => {
+        this.handleCoordinateChange();
+      });
       this.registerEventListener(input, 'input', (_event: Event) => {
         if (nextInputIsChange) {
           this.handleCoordinateChange();
@@ -65,7 +66,9 @@ export class PositionStatusPanel extends RefCounted {
         nextInputIsChange = true;
         return true;
       });
-      this.registerEventListener(input, 'click', (_event: MouseEvent) => { return true; });
+      this.registerEventListener(input, 'click', (_event: MouseEvent) => {
+        return true;
+      });
       this.registerEventListener(input, 'blur', (_event: MouseEvent) => {
         nextInputIsChange = false;
         return true;

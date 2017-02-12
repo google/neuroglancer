@@ -68,7 +68,8 @@ function parseScales(datasetObj: any): ScaleInfo[] {
     let voxelOffset = voxelOffsets.get(key);
     if (voxelSize === undefined || imageSize === undefined || voxelOffset === undefined) {
       throw new Error(
-          `Missing neariso_voxelres/neariso_imagesize/neariso_offset for resolution ${resolution}.`);
+          `Missing neariso_voxelres/neariso_imagesize/neariso_offset for resolution ${resolution
+          }.`);
     }
     return {key, voxelSize, imageSize, voxelOffset};
   });
@@ -107,9 +108,15 @@ function parseTokenInfo(obj: any): TokenInfo {
 }
 
 export class MultiscaleVolumeChunkSource implements GenericMultiscaleVolumeChunkSource {
-  get dataType() { return this.channelInfo.dataType; }
-  get numChannels() { return 1; }
-  get volumeType() { return this.channelInfo.volumeType; }
+  get dataType() {
+    return this.channelInfo.dataType;
+  }
+  get numChannels() {
+    return 1;
+  }
+  get volumeType() {
+    return this.channelInfo.volumeType;
+  }
 
   /**
    * Ndstore channel name.
@@ -135,7 +142,8 @@ export class MultiscaleVolumeChunkSource implements GenericMultiscaleVolumeChunk
     const channelInfo = tokenInfo.channels.get(channel);
     if (channelInfo === undefined) {
       throw new Error(
-          `Specified channel ${JSON.stringify(channel)} is not one of the supported channels ${JSON.stringify(Array.from(tokenInfo.channels.keys()))}`);
+          `Specified channel ${JSON.stringify(channel)} is not one of the supported channels ${JSON
+              .stringify(Array.from(tokenInfo.channels.keys()))}`);
     }
     this.channel = channel;
     this.channelInfo = channelInfo;
@@ -182,12 +190,15 @@ export class MultiscaleVolumeChunkSource implements GenericMultiscaleVolumeChunk
   /**
    * Meshes are not supported.
    */
-  getMeshSource(): null { return null; }
+  getMeshSource(): null {
+    return null;
+  }
 };
 
 const pathPattern = /^([^\/?]+)(?:\/([^\/?]+))?(?:\?(.*))?$/;
 
-export function getTokenInfo(chunkManager: ChunkManager, hostnames: string[], token: string): Promise<TokenInfo> {
+export function getTokenInfo(
+    chunkManager: ChunkManager, hostnames: string[], token: string): Promise<TokenInfo> {
   return chunkManager.memoize.getUncounted(
       {type: 'ndstore:getTokenInfo', hostnames, token},
       () => sendHttpRequest(openShardedHttpRequest(hostnames, `/ocp/ca/${token}/info/`), 'json')

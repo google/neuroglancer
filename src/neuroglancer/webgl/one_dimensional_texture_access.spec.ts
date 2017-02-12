@@ -17,7 +17,7 @@
 import {DataType} from 'neuroglancer/util/data_type';
 import {Uint64} from 'neuroglancer/util/uint64';
 import {compute1dTextureFormat, compute1dTextureLayout, OneDimensionalTextureAccessHelper, OneDimensionalTextureFormat, OneDimensionalTextureLayout, setOneDimensionalTextureData} from 'neuroglancer/webgl/one_dimensional_texture_access';
-import {setVec4FromUint32, encodeBytesToFloat32, glsl_unnormalizeUint8, glsl_uintleToFloat} from 'neuroglancer/webgl/shader_lib';
+import {encodeBytesToFloat32, glsl_uintleToFloat, glsl_unnormalizeUint8, setVec4FromUint32} from 'neuroglancer/webgl/shader_lib';
 import {fragmentShaderTest} from 'neuroglancer/webgl/shader_testing';
 
 describe('one_dimensional_texture_access', () => {
@@ -90,8 +90,10 @@ gl_FragData[3] = packFloatIntoVec4(value.value.w);
           expected[i] = (value >>> (8 * i)) & 0xFF;
         }
         expect(actual).toEqual(expected, `offset = ${x}, value = ${x}`);
-        expect(tester.readFloat(4)).toEqual(value, `uint24le value != expected, offset = ${x}, value = ${x}`);
-        expect(tester.readFloat(5)).toEqual(1.0, `uExpected != value in shader, offset = ${x}, value = ${x}`);
+        expect(tester.readFloat(4))
+            .toEqual(value, `uint24le value != expected, offset = ${x}, value = ${x}`);
+        expect(tester.readFloat(5))
+            .toEqual(1.0, `uExpected != value in shader, offset = ${x}, value = ${x}`);
       }
 
       for (let i = 0; i < 100; ++i) {

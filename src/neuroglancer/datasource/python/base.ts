@@ -28,7 +28,8 @@ export class VolumeChunkSourceParameters {
   static RPC_ID = 'python/VolumeChunkSource';
 
   static stringify(parameters: VolumeChunkSourceParameters) {
-    return `python:volume:${parameters['baseUrls'][0]}/${parameters['key']}/${VolumeChunkEncoding[parameters['encoding']]}`;
+    return `python:volume:${parameters['baseUrls'][0]}/${parameters['key']}/${VolumeChunkEncoding
+        [parameters['encoding']]}`;
   }
 };
 

@@ -30,8 +30,8 @@ export function embedRelayFrame(proxyName: string, rpcToken: string) {
   iframe.id = proxyName;
   iframe.name = proxyName;
   const origin = location.origin;
-  iframe.src =
-      `https://accounts.google.com/o/oauth2/postmessageRelay?parent=${encodeURIComponent(origin)}#rpctoken=${rpcToken}`;
+  iframe.src = `https://accounts.google.com/o/oauth2/postmessageRelay?parent=${encodeURIComponent(
+      origin)}#rpctoken=${rpcToken}`;
   document.body.appendChild(iframe);
 }
 
@@ -74,8 +74,8 @@ class AuthHandler {
             let arg = verifyString(args[0]);
             let origin = location.origin;
             if (!arg.startsWith(origin + '#') && !arg.startsWith(origin + '?')) {
-              throw new Error(
-                  `oauth2callback: URL ${JSON.stringify(arg)} does not match current origin ${origin}.`);
+              throw new Error(`oauth2callback: URL ${JSON.stringify(
+                  arg)} does not match current origin ${origin}.`);
             }
             let hashPart = arg.substring(origin.length + 1);
             let parts = hashPart.split('&');
@@ -83,8 +83,8 @@ class AuthHandler {
             for (let part of parts) {
               let match = part.match('^([a-z_]+)=(.*)$');
               if (match === null) {
-                throw new Error(
-                    `oauth2callback: URL part ${JSON.stringify(match)} does not match expected pattern.`);
+                throw new Error(`oauth2callback: URL part ${JSON.stringify(
+                    match)} does not match expected pattern.`);
               }
               params.set(match[1], match[2]);
             }
@@ -125,8 +125,8 @@ class AuthHandler {
             return;
           }
         } catch (parseError) {
-          throw new Error(
-              `Invalid message received from ${AUTH_ORIGIN}: ${JSON.stringify(event.data)}: ${parseError.message}.`);
+          throw new Error(`Invalid message received from ${AUTH_ORIGIN
+                          }: ${JSON.stringify(event.data)}: ${parseError.message}.`);
         }
       });
     });
@@ -135,7 +135,9 @@ class AuthHandler {
   addPendingRequest(state: string) {
     let request = new PendingRequest();
     this.pendingRequests.set(state, request);
-    request.finished.add(() => { this.pendingRequests.delete(state); });
+    request.finished.add(() => {
+      this.pendingRequests.delete(state);
+    });
     return request;
   }
 

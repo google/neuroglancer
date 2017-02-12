@@ -89,12 +89,12 @@ export class MultiscaleVolumeChunkSource implements GenericMultiscaleVolumeChunk
       for (let scaleIndex = 1, numScales = scales.length; scaleIndex < numScales; ++scaleIndex) {
         let scale = scales[scaleIndex];
         if (scale.dataType !== dataType) {
-          throw new Error(
-              `Scale ${scaleIndex} has data type ${DataType[scale.dataType]} but scale 0 has data type ${DataType[dataType]}.`);
+          throw new Error(`Scale ${scaleIndex} has data type ${DataType
+                              [scale.dataType]} but scale 0 has data type ${DataType[dataType]}.`);
         }
         if (scale.numChannels !== numChannels) {
-          throw new Error(
-              `Scale ${scaleIndex} has ${scale.numChannels} channel(s) but scale 0 has ${numChannels} channels.`);
+          throw new Error(`Scale ${scaleIndex} has ${scale.numChannels
+                          } channel(s) but scale 0 has ${numChannels} channels.`);
         }
       }
 
@@ -178,7 +178,9 @@ export function getMeshSource(chunkManager: ChunkManager, parameters: MeshSource
 }
 
 export class SkeletonSource extends BaseSkeletonSource {
-  get skeletonVertexCoordinatesInVoxels() { return false; }
+  get skeletonVertexCoordinatesInVoxels() {
+    return false;
+  }
 };
 
 export function getSkeletonSource(

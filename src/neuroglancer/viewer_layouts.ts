@@ -20,13 +20,13 @@ import {LayerManager, MouseSelectionState} from 'neuroglancer/layer';
 import * as L from 'neuroglancer/layout';
 import {NavigationState, OrientationState, Pose} from 'neuroglancer/navigation_state';
 import {PerspectivePanel} from 'neuroglancer/perspective_view/panel';
+import {StereoPerspectivePanel} from 'neuroglancer/perspective_view/panel';
 import {SliceView} from 'neuroglancer/sliceview/frontend';
 import {SliceViewPanel} from 'neuroglancer/sliceview/panel';
 import {TrackableBoolean} from 'neuroglancer/trackable_boolean';
 import {RefCounted} from 'neuroglancer/util/disposable';
 import {removeChildren} from 'neuroglancer/util/dom';
 import {mat4, quat} from 'neuroglancer/util/geom';
-import { StereoPerspectivePanel } from 'neuroglancer/perspective_view/panel';
 
 export interface SliceViewViewerState {
   chunkManager: ChunkManager;
@@ -61,7 +61,9 @@ export function makeSliceView(viewerState: SliceViewViewerState, baseToSelf?: qu
 
 export function makeOrthogonalSliceViews(viewerState: SliceViewViewerState) {
   let sliceViews = new Array<SliceView>();
-  let addSliceView = (q?: quat) => { sliceViews.push(makeSliceView(viewerState, q)); };
+  let addSliceView = (q?: quat) => {
+    sliceViews.push(makeSliceView(viewerState, q));
+  };
   addSliceView();
   addSliceView(quat.rotateX(quat.create(), quat.create(), Math.PI / 2));
   addSliceView(quat.rotateY(quat.create(), quat.create(), Math.PI / 2));
@@ -239,70 +241,55 @@ export class SinglePerspectiveLayout extends RefCounted {
   }
 }
 
-function clone<T>( originalObject: T , circular: boolean ) : T
-{
-    // First create an empty object with
-    // same prototype of our original source
+function clone<T>(originalObject: T, circular: boolean): T {
+  // First create an empty object with
+  // same prototype of our original source
 
-    var propertyIndex ,
-        descriptor ,
-        keys ,
-        current ,
-        nextSource ,
-        indexOf ,
-        copies = [ {
-            source: originalObject ,
-            target: Object.create( Object.getPrototypeOf( originalObject ) )
-        } ] ,
-        cloneObject = copies[ 0 ].target ,
-        sourceReferences = [ originalObject ] ,
-        targetReferences = [ cloneObject ] ;
+  var propertyIndex, descriptor, keys, current, nextSource, indexOf,
+      copies =
+          [{source: originalObject, target: Object.create(Object.getPrototypeOf(originalObject))}],
+      cloneObject = copies[0].target, sourceReferences = [originalObject],
+      targetReferences = [cloneObject];
 
-    // First in, first out
-    while ( current = copies.shift() )
-    {
-        keys = Object.getOwnPropertyNames( current.source ) ;
+  // First in, first out
+  while (current = copies.shift()) {
+    keys = Object.getOwnPropertyNames(current.source);
 
-        for ( propertyIndex = 0 ; propertyIndex < keys.length ; propertyIndex ++ )
-        {
-            // Save the source's descriptor
-            descriptor = Object.getOwnPropertyDescriptor( current.source , keys[ propertyIndex ] ) ;
+    for (propertyIndex = 0; propertyIndex < keys.length; propertyIndex++) {
+      // Save the source's descriptor
+      descriptor = Object.getOwnPropertyDescriptor(current.source, keys[propertyIndex]);
 
-            if ( ! descriptor.value || typeof descriptor.value !== 'object' )
-            {
-                Object.defineProperty( current.target , keys[ propertyIndex ] , descriptor ) ;
-                continue ;
-            }
+      if (!descriptor.value || typeof descriptor.value !== 'object') {
+        Object.defineProperty(current.target, keys[propertyIndex], descriptor);
+        continue;
+      }
 
-            nextSource = descriptor.value ;
-            descriptor.value = Array.isArray( nextSource ) ?
-                [] :
-                Object.create( Object.getPrototypeOf( nextSource ) ) ;
+      nextSource = descriptor.value;
+      descriptor.value =
+          Array.isArray(nextSource) ? [] : Object.create(Object.getPrototypeOf(nextSource));
 
-            if ( circular )
-            {
-                indexOf = sourceReferences.indexOf( nextSource ) ;
+      if (circular) {
+        indexOf = sourceReferences.indexOf(nextSource);
 
-                if ( indexOf !== -1 )
-                {
-                    // The source is already referenced, just assign reference
-                    descriptor.value = targetReferences[ indexOf ] ;
-                    Object.defineProperty( current.target , keys[ propertyIndex ] , descriptor ) ;
-                    continue ;
-                }
-
-                sourceReferences.push( nextSource ) ;
-                targetReferences.push( descriptor.value ) ;
-            }
-
-            Object.defineProperty( current.target , keys[ propertyIndex ] , descriptor ) ;
-
-            copies.push( { source: nextSource , target: descriptor.value } ) ;
+        if (indexOf !== -1) {
+          // The source is already referenced, just assign reference
+          descriptor.value = targetReferences[indexOf];
+          Object.defineProperty(current.target, keys[propertyIndex], descriptor);
+          continue;
         }
-    }
 
-    return cloneObject ;
-} ;
+        sourceReferences.push(nextSource);
+        targetReferences.push(descriptor.value);
+      }
+
+      Object.defineProperty(current.target, keys[propertyIndex], descriptor);
+
+      copies.push({source: nextSource, target: descriptor.value});
+    }
+  }
+
+  return cloneObject;
+};
 
 export class StereoPerspectivePanelLayout extends RefCounted {
   constructor(public rootElement: HTMLElement, public viewer: ViewerUIState) {
@@ -348,20 +335,25 @@ export class StereoPerspectivePanel3SlicesLayout extends RefCounted {
       showAxisLines: viewer.showAxisLines,
       showScaleBar: new TrackableBoolean(false, false),
     };
-   
+
     L.withFlex(1, L.box('row', [
-          L.withFlex(1, element => {
+      L.withFlex(
+          1,
+          element => {
             element.className = 'gllayoutcell noselect';
-            new SliceViewPanel(viewer.display, element, sliceViews[0], sliceViewerStateWithoutScaleBar)
-            new SliceViewPanel(viewer.display, element, sliceViews[1], sliceViewerStateWithoutScaleBar)
-            new SliceViewPanel(viewer.display, element, sliceViews[2], sliceViewerStateWithoutScaleBar)
+            new SliceViewPanel(
+                viewer.display, element, sliceViews[0], sliceViewerStateWithoutScaleBar);
+            new SliceViewPanel(
+                viewer.display, element, sliceViews[1], sliceViewerStateWithoutScaleBar);
+            new SliceViewPanel(
+                viewer.display, element, sliceViews[2], sliceViewerStateWithoutScaleBar);
             let perspectivePanel = this.registerDisposer(
                 new StereoPerspectivePanel(viewer.display, element, perspectiveViewerState));
             for (let sliceView of sliceViews) {
               perspectivePanel.sliceViews.add(sliceView.addRef());
             }
           }),
-        ]))(rootElement);
+    ]))(rootElement);
     viewer.display.onResize();
   }
 
@@ -391,18 +383,21 @@ export class StereoPerspectivePanel1SliceLayout extends RefCounted {
       showAxisLines: viewer.showAxisLines,
       showScaleBar: new TrackableBoolean(false, false),
     };
-   
+
     L.withFlex(1, L.box('row', [
-          L.withFlex(1, element => {
+      L.withFlex(
+          1,
+          element => {
             element.className = 'gllayoutcell noselect';
-            new SliceViewPanel(viewer.display, element, sliceViews[0], sliceViewerStateWithoutScaleBar)
+            new SliceViewPanel(
+                viewer.display, element, sliceViews[0], sliceViewerStateWithoutScaleBar);
             let perspectivePanel = this.registerDisposer(
                 new StereoPerspectivePanel(viewer.display, element, perspectiveViewerState));
             for (let sliceView of sliceViews) {
               perspectivePanel.sliceViews.add(sliceView.addRef());
             }
           }),
-        ]))(rootElement);
+    ]))(rootElement);
     viewer.display.onResize();
   }
 
@@ -425,7 +420,9 @@ export const LAYOUTS:
       ['stereo', (element, viewer) => new StereoPerspectivePanelLayout(element, viewer)],
       // Slice layouts
       /*
-      ['stereo-1-slice', (element, viewer) => new StereoPerspectivePanel1SliceLayout(element, viewer)],
-      ['stereo-3-slices', (element, viewer) => new StereoPerspectivePanel3SlicesLayout(element, viewer)],
+      ['stereo-1-slice', (element, viewer) => new StereoPerspectivePanel1SliceLayout(element,
+      viewer)],
+      ['stereo-3-slices', (element, viewer) => new StereoPerspectivePanel3SlicesLayout(element,
+      viewer)],
       */
     ];
