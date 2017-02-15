@@ -274,17 +274,15 @@ for (int e = 0; e < 4; ++e) {
             vec3.scale(vChunkPosition, uVertexBasePosition(vidx[0]), 1.0 - lambda);
             vec3.scaleAndAdd(vChunkPosition, vChunkPosition, uVertexBasePosition(vidx[1]), lambda);
             console.log(
-                `vertex ${vertexIndex}, e = ${e}, at ${gl_Position
-                }, vChunkPosition = ${vChunkPosition}, edge dir = ${vDir}, denom = ${denom}`);
+                `vertex ${vertexIndex}, e = ${e}, at ${gl_Position}, vChunkPosition = ${vChunkPosition}, edge dir = ${vDir}, denom = ${denom}`);
             break;
           } else {
             console.log(
-                `vertex ${vertexIndex}, e = ${e}, skipped, deom = ${denom}, vDir = ${vec3Key(
-                    vDir)}, uPlaneNormal = ${vec3Key(uPlaneNormal)}, lambda=${lambda}`);
+                `vertex ${vertexIndex}, e = ${e}, skipped, deom = ${denom}, vDir = ${vec3Key(vDir)}, uPlaneNormal = ${vec3Key(uPlaneNormal)}, lambda=${lambda}`);
           }
         } else {
-          console.log(`vertex ${vertexIndex}, e = ${e}, skipped, deom = ${denom}, vDir = ${vec3Key(
-              vDir)}, uPlaneNormal = ${vec3Key(uPlaneNormal)}`);
+          console.log(
+              `vertex ${vertexIndex}, e = ${e}, skipped, deom = ${denom}, vDir = ${vec3Key(vDir)}, uPlaneNormal = ${vec3Key(uPlaneNormal)}`);
         }
       }
     }
@@ -420,17 +418,11 @@ export class RenderLayer extends GenericRenderLayer {
     this.setReady(true);
   }
 
-  get gl() {
-    return this.chunkManager.chunkQueueManager.gl;
-  }
+  get gl() { return this.chunkManager.chunkQueueManager.gl; }
 
-  get chunkFormat() {
-    return this.sources![0][0].chunkFormat;
-  }
+  get chunkFormat() { return this.sources![0][0].chunkFormat; }
 
-  get dataType() {
-    return this.sources![0][0].spec.dataType;
-  }
+  get dataType() { return this.sources![0][0].spec.dataType; }
 
   initializeShader() {
     if (!this.shaderUpdated) {
@@ -471,9 +463,7 @@ export class RenderLayer extends GenericRenderLayer {
     return null;
   }
 
-  getShaderKey() {
-    return '';
-  }
+  getShaderKey() { return ''; }
 
   getShader() {
     let key = this.getShaderKey() + '/' + this.chunkFormat.shaderKey;

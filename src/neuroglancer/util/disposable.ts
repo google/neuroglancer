@@ -75,15 +75,11 @@ export class RefCounted implements Disposable {
     this.registerDisposer(() => target.removeEventListener(eventType, listener, arg));
   }
   registerCancellable<T extends{cancel: () => void}>(cancellable: T) {
-    this.registerDisposer(() => {
-      cancellable.cancel();
-    });
+    this.registerDisposer(() => { cancellable.cancel(); });
     return cancellable;
   }
 }
 
 export class RefCountedValue<T> extends RefCounted {
-  constructor(public value: T) {
-    super();
-  }
+  constructor(public value: T) { super(); }
 }

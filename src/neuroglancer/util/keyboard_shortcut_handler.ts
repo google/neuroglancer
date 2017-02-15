@@ -239,7 +239,7 @@ function* keySequenceMapEntries(
   for (let [key, value] of map) {
     let newPrefix = [...prefix, key];
     if (typeof value === 'string') {
-      yield [newPrefix, value];
+      yield[newPrefix, value];
     } else {
       yield* keySequenceMapEntries(value, newPrefix);
     }
@@ -267,8 +267,7 @@ export class KeySequenceMap {
       }
       if (typeof value === 'string') {
         throw new Error(
-            `Error binding key sequence ${formatKeySequence(keySequence)}: prefix ${formatKeySequence(
-                keySequence.slice(0, i + 1))} is already bound to action ${JSON.stringify(value)}`);
+            `Error binding key sequence ${formatKeySequence(keySequence)}: prefix ${formatKeySequence(keySequence.slice(0, i + 1))} is already bound to action ${JSON.stringify(value)}`);
       }
       currentNode = value;
     }
@@ -276,8 +275,7 @@ export class KeySequenceMap {
     let existingValue = currentNode.get(stroke);
     if (existingValue !== undefined) {
       throw new Error(
-          `Key sequence ${formatKeySequence(
-              keySequence)} is already bound to action ${JSON.stringify(existingValue)}`);
+          `Key sequence ${formatKeySequence(keySequence)} is already bound to action ${JSON.stringify(existingValue)}`);
     }
     currentNode.set(stroke, action);
   }
@@ -288,9 +286,7 @@ export class KeySequenceMap {
     }
   }
 
-  entries() {
-    return keySequenceMapEntries(this.root);
-  }
+  entries() { return keySequenceMapEntries(this.root); }
 };
 
 let globalKeyboardHandler: KeyboardShortcutHandler;
@@ -300,9 +296,8 @@ let globalKeyboardState: any;
 export function pushGlobalKeyboardHandler(
     keySequenceMap: KeySequenceMap, handler: Handler, identifier: any) {
   if (globalKeyboardHandler === undefined) {
-    globalKeyboardHandler = new KeyboardShortcutHandler(window, new KeySequenceMap(), () => {
-      return false;
-    });
+    globalKeyboardHandler =
+        new KeyboardShortcutHandler(window, new KeySequenceMap(), () => { return false; });
   }
   globalKeyboardHandlerStack.push(
       [globalKeyboardHandler.keySequenceMap, globalKeyboardHandler.handler, globalKeyboardState]);

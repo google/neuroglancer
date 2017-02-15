@@ -18,7 +18,7 @@ import {ChunkLayout} from 'neuroglancer/sliceview/chunk_layout';
 import {partitionArray} from 'neuroglancer/util/array';
 import {approxEqual} from 'neuroglancer/util/compare';
 import {DATA_TYPE_BYTES, DataType} from 'neuroglancer/util/data_type';
-import {effectiveScalingFactorFromMat4, identityMat4, kAxes, kInfinityVec, kZeroVec, mat4, prod3, rectifyTransformMatrixIfAxisAligned, transformVectorByMat4, vec3, vec4} from 'neuroglancer/util/geom';
+import {effectiveScalingFactorFromMat4, identityMat4, kAxes, kInfinityVec, kZeroVec, mat4, prod3, rectifyTransformMatrixIfAxisAligned, vec3, vec4, transformVectorByMat4} from 'neuroglancer/util/geom';
 import {SharedObject} from 'neuroglancer/worker_rpc';
 
 export {DATA_TYPE_BYTES, DataType};
@@ -130,8 +130,8 @@ function pickBestAlternativeSource(zAxis: vec3, alternatives: VolumeChunkSource[
       let {chunkLayout} = alternative.spec;
       let sliceArea = estimateSliceAreaPerChunk(zAxis, chunkLayout);
       if (DEBUG_VISIBLE_SOURCES) {
-        console.log(`zAxis = ${zAxis}, chunksize = ${alternative.spec.chunkLayout.size
-                    }, sliceArea = ${sliceArea}`);
+        console.log(
+            `zAxis = ${zAxis}, chunksize = ${alternative.spec.chunkLayout.size}, sliceArea = ${sliceArea}`);
       }
       if (sliceArea > bestSliceArea) {
         bestSliceArea = sliceArea;
@@ -386,8 +386,8 @@ export class SliceViewBase extends SharedObject {
       computeSourcesChunkBounds(
           sourcesLowerChunkBound, sourcesUpperChunkBound, visibleSources.keys());
       if (DEBUG_CHUNK_INTERSECTIONS) {
-        console.log(`Initial sources chunk bounds: ${vec3.str(sourcesLowerChunkBound)}, ${vec3.str(
-            sourcesUpperChunkBound)}`);
+        console.log(
+            `Initial sources chunk bounds: ${vec3.str(sourcesLowerChunkBound)}, ${vec3.str(sourcesUpperChunkBound)}`);
       }
 
       vec3.set(
@@ -467,10 +467,7 @@ export class SliceViewBase extends SharedObject {
             lowerChunkBound, upperChunkBound, spec.lowerChunkBound, spec.upperChunkBound);
         if (DEBUG_CHUNK_INTERSECTIONS) {
           console.log(
-              `Comparing source bounds lowerBound=${vec3.str(lowerChunkBound)}, upperBound=${vec3
-                  .str(upperChunkBound)}, lowerChunkBound=${vec3
-                  .str(spec.lowerChunkBound)}, upperChunkBound=${vec3.str(
-                      spec.upperChunkBound)}, got ${BoundsComparisonResult[result]}`,
+              `Comparing source bounds lowerBound=${vec3.str(lowerChunkBound)}, upperBound=${vec3.str(upperChunkBound)}, lowerChunkBound=${vec3.str(spec.lowerChunkBound)}, upperChunkBound=${vec3.str(spec.upperChunkBound)}, got ${BoundsComparisonResult[result]}`,
               spec, source);
         }
         switch (result) {
@@ -488,10 +485,8 @@ export class SliceViewBase extends SharedObject {
       // same once finished.
       function checkBounds(nextSplitDim: number) {
         if (DEBUG_CHUNK_INTERSECTIONS) {
-          console.log(`chunk bounds: ${lowerChunkBound} ${upperChunkBound
-                      } fullyVisible: ${fullyVisibleSources
-                      } partiallyVisible: ${partiallyVisibleSources.slice(
-                          0, partiallyVisibleSourcesLength)}`);
+          console.log(
+              `chunk bounds: ${lowerChunkBound} ${upperChunkBound} fullyVisible: ${fullyVisibleSources} partiallyVisible: ${partiallyVisibleSources.slice(0, partiallyVisibleSourcesLength)}`);
         }
 
         if (fullyVisibleSources.length === 0 && partiallyVisibleSourcesLength === 0) {
@@ -652,13 +647,9 @@ export interface BaseChunkLayoutOptions {
  * will not exceed maxVoxelsPerChunkLog2.
  */
 export function getNearIsotropicBlockSize(options: BaseChunkLayoutOptions) {
-  let {
-    voxelSize,
-    lowerVoxelBound = kZeroVec,
-    upperVoxelBound,
-    maxVoxelsPerChunkLog2 = DEFAULT_MAX_VOXELS_PER_CHUNK_LOG2,
-    transform = identityMat4
-  } = options;
+  let {voxelSize, lowerVoxelBound = kZeroVec, upperVoxelBound,
+       maxVoxelsPerChunkLog2 = DEFAULT_MAX_VOXELS_PER_CHUNK_LOG2, transform = identityMat4} =
+      options;
 
   // Adjust voxelSize by effective scaling factor.
   let temp = effectiveScalingFactorFromMat4(vec3.create(), transform);
@@ -713,14 +704,12 @@ export function getNearIsotropicBlockSize(options: BaseChunkLayoutOptions) {
  */
 export function getTwoDimensionalBlockSize(options: {flatDimension: number}&
                                            BaseChunkLayoutOptions) {
-  let {
-    lowerVoxelBound = kZeroVec,
-    upperVoxelBound = kInfinityVec,
-    flatDimension,
-    voxelSize,
-    maxVoxelsPerChunkLog2,
-    transform
-  } = options;
+  let {lowerVoxelBound = kZeroVec,
+       upperVoxelBound = kInfinityVec,
+       flatDimension,
+       voxelSize,
+       maxVoxelsPerChunkLog2,
+       transform} = options;
   vec3.subtract(tempVec3, upperVoxelBound, lowerVoxelBound);
   tempVec3[flatDimension] = 1;
   return getNearIsotropicBlockSize(
@@ -931,20 +920,10 @@ export class VolumeChunkSpecification {
   compressedSegmentationBlockSize: vec3|undefined;
 
   constructor(options: VolumeChunkSpecificationOptions) {
-    let {
-      dataType,
-      lowerVoxelBound = kZeroVec,
-      upperVoxelBound,
-      chunkDataSize,
-      voxelSize,
-      transform,
-      baseVoxelOffset = kZeroVec,
-      numChannels
-    } = options;
-    let {
-      lowerClipBound = vec3.multiply(vec3.create(), voxelSize, lowerVoxelBound),
-      upperClipBound = vec3.multiply(vec3.create(), voxelSize, upperVoxelBound)
-    } = options;
+    let {dataType,  lowerVoxelBound = kZeroVec, upperVoxelBound, chunkDataSize, voxelSize,
+         transform, baseVoxelOffset = kZeroVec, numChannels} = options;
+    let {lowerClipBound = vec3.multiply(vec3.create(), voxelSize, lowerVoxelBound),
+         upperClipBound = vec3.multiply(vec3.create(), voxelSize, upperVoxelBound)} = options;
     this.dataType = options.dataType;
     this.numChannels = numChannels;
     this.voxelSize = voxelSize;
@@ -973,9 +952,7 @@ export class VolumeChunkSpecification {
         {transform: getCombinedTransform(options.transform, options.volumeSourceOptions)}));
   }
 
-  static fromObject(msg: any) {
-    return new VolumeChunkSpecification(msg);
-  }
+  static fromObject(msg: any) { return new VolumeChunkSpecification(msg); }
   toObject(): VolumeChunkSpecificationOptions {
     return {
       transform: this.chunkLayout.transform,
@@ -999,14 +976,12 @@ export class VolumeChunkSpecification {
   static withDefaultCompression(options: VolumeChunkSpecificationDefaultCompressionOptions&
                                 VolumeChunkSpecificationOptions&
                                 VolumeChunkSpecificationVolumeSourceOptions) {
-    let {
-      compressedSegmentationBlockSize,
-      dataType,
-      voxelSize,
-      transform,
-      lowerVoxelBound,
-      upperVoxelBound
-    } = options;
+    let {compressedSegmentationBlockSize,
+         dataType,
+         voxelSize,
+         transform,
+         lowerVoxelBound,
+         upperVoxelBound} = options;
     transform = getCombinedTransform(transform, options.volumeSourceOptions);
     if (compressedSegmentationBlockSize === undefined &&
         options.volumeType === VolumeType.SEGMENTATION &&

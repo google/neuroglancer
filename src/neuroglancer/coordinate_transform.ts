@@ -115,7 +115,5 @@ export class CoordinateTransform {
     }
   }
 
-  clone() {
-    return new CoordinateTransform(mat4.clone(this.transform));
-  }
+  clone() { return new CoordinateTransform(mat4.clone(this.transform)); }
 }

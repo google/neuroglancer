@@ -44,8 +44,7 @@ export function decodeNdstoreNpzChunk(chunk: VolumeChunk, response: ArrayBuffer)
   let {spec} = source;
   if (parsedDataType !== spec.dataType) {
     throw new Error(
-        `Data type ${DataType[parsedDataType]} does not match expected data type ${DataType
-            [spec.dataType]}`);
+        `Data type ${DataType[parsedDataType]} does not match expected data type ${DataType[spec.dataType]}`);
   }
   postProcessRawData(chunk, parseResult.data);
 }

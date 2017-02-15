@@ -15,7 +15,6 @@
  */
 
 import {AvailableCapacity, CHUNK_MANAGER_RPC_ID, CHUNK_QUEUE_MANAGER_RPC_ID, ChunkPriorityTier, ChunkSourceParametersConstructor, ChunkState} from 'neuroglancer/chunk_manager/base';
-import {CancellationToken, CancellationTokenSource} from 'neuroglancer/util/cancellation';
 import {Disposable} from 'neuroglancer/util/disposable';
 import {LinkedListOperations} from 'neuroglancer/util/linked_list';
 import LinkedList0 from 'neuroglancer/util/linked_list.0';
@@ -24,6 +23,7 @@ import {StringMemoize} from 'neuroglancer/util/memoize';
 import {ComparisonFunction, PairingHeapOperations} from 'neuroglancer/util/pairing_heap';
 import PairingHeap0 from 'neuroglancer/util/pairing_heap.0';
 import PairingHeap1 from 'neuroglancer/util/pairing_heap.1';
+import {CancellationTokenSource, CancellationToken} from 'neuroglancer/util/cancellation';
 import {NullarySignal} from 'neuroglancer/util/signal';
 import {initializeSharedObjectCounterpart, registerSharedObject, RPC, SharedObject, SharedObjectCounterpart} from 'neuroglancer/worker_rpc';
 
@@ -102,22 +102,16 @@ export class Chunk implements Disposable {
     this.error = null;
   }
 
-  get chunkManager() {
-    return (<ChunkSource>this.source).chunkManager;
-  }
+  get chunkManager() { return (<ChunkSource>this.source).chunkManager; }
 
-  get queueManager() {
-    return (<ChunkSource>this.source).chunkManager.queueManager;
-  }
+  get queueManager() { return (<ChunkSource>this.source).chunkManager.queueManager; }
 
   downloadFailed(error: any) {
     this.error = error;
     this.queueManager.updateChunkState(this, ChunkState.FAILED);
   }
 
-  downloadSucceeded() {
-    this.queueManager.updateChunkState(this, ChunkState.SYSTEM_MEMORY_WORKER);
-  }
+  downloadSucceeded() { this.queueManager.updateChunkState(this, ChunkState.SYSTEM_MEMORY_WORKER); }
 
   freeSystemMemory() {}
 
@@ -127,21 +121,15 @@ export class Chunk implements Disposable {
     msg['new'] = true;
   }
 
-  toString() {
-    return this.key;
-  }
+  toString() { return this.key; }
 
-  static priorityLess(a: Chunk, b: Chunk) {
-    return a.priority < b.priority;
-  };
+  static priorityLess(a: Chunk, b: Chunk) { return a.priority < b.priority; };
 
-  static priorityGreater(a: Chunk, b: Chunk) {
-    return a.priority > b.priority;
-  }
+  static priorityGreater(a: Chunk, b: Chunk) { return a.priority > b.priority; }
 };
 
 interface ChunkConstructor<T extends Chunk> {
-  new(): T;
+  new (): T;
 }
 
 /**
@@ -153,9 +141,7 @@ export abstract class ChunkSourceBase extends SharedObject {
   chunks: Map<string, Chunk> = new Map<string, Chunk>();
   freeChunks: Chunk[] = new Array<Chunk>();
 
-  constructor(public chunkManager: ChunkManager) {
-    super();
-  }
+  constructor(public chunkManager: ChunkManager) { super(); }
 
   getNewChunk_<T extends Chunk>(chunkType: ChunkConstructor<T>): T {
     let freeChunks = this.freeChunks;
@@ -326,7 +312,7 @@ class ChunkPriorityQueue {
    * Deletes a chunk from this priority queue.
    * @param chunk The chunk to delete from the priority queue.
    */
-  delete(chunk: Chunk) {
+  delete (chunk: Chunk) {
     let priorityTier = chunk.priorityTier;
     if (priorityTier === ChunkPriorityTier.RECENT) {
       this.linkedListOperations.pop(chunk);
@@ -501,8 +487,8 @@ export class ChunkQueueManager extends SharedObjectCounterpart {
       return;
     }
     if (DEBUG_CHUNK_UPDATES) {
-      console.log(`${chunk}: changed priority ${chunk.priorityTier}:${chunk.priority
-                  } -> ${chunk.newPriorityTier}:${chunk.newPriority}`);
+      console.log(
+          `${chunk}: changed priority ${chunk.priorityTier}:${chunk.priority} -> ${chunk.newPriorityTier}:${chunk.newPriority}`);
     }
     this.removeChunkFromQueues_(chunk);
     chunk.updatePriorityProperties();
@@ -648,9 +634,8 @@ export class ChunkQueueManager extends SharedObjectCounterpart {
 
   logStatistics() {
     if (DEBUG_CHUNK_UPDATES) {
-      console.log(`[Chunk status] QUEUED: ${this.numQueued
-                  }, FAILED: ${this.numFailed}, DOWNLOAD: ${this.downloadCapacity
-                  }, MEM: ${this.systemMemoryCapacity}, GPU: ${this.gpuMemoryCapacity}`);
+      console.log(
+          `[Chunk status] QUEUED: ${this.numQueued}, FAILED: ${this.numFailed}, DOWNLOAD: ${this.downloadCapacity}, MEM: ${this.systemMemoryCapacity}, GPU: ${this.gpuMemoryCapacity}`);
     }
   }
 };

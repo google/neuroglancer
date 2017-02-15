@@ -130,13 +130,9 @@ export class MeshLayer extends PerspectiveViewRenderLayer {
     return shader;
   }
 
-  get isTransparent() {
-    return this.displayState.objectAlpha.value < 1.0;
-  }
+  get isTransparent() { return this.displayState.objectAlpha.value < 1.0; }
 
-  get gl() {
-    return this.chunkManager.chunkQueueManager.gl;
-  }
+  get gl() { return this.chunkManager.chunkQueueManager.gl; }
 
   draw(renderContext: PerspectiveViewRenderContext) {
     if (!renderContext.emitColor && renderContext.alreadyEmittedPickID) {
@@ -216,9 +212,7 @@ export class FragmentChunk extends Chunk {
 @registerSharedObjectOwner(FRAGMENT_SOURCE_RPC_ID)
 export class FragmentSource extends ChunkSource {
   objectChunks = new Map<string, Set<FragmentChunk>>();
-  constructor(chunkManager: ChunkManager, public meshSource: MeshSource) {
-    super(chunkManager);
-  }
+  constructor(chunkManager: ChunkManager, public meshSource: MeshSource) { super(chunkManager); }
   addChunk(key: string, chunk: FragmentChunk) {
     super.addChunk(key, chunk);
     let {objectChunks} = this;
@@ -241,9 +235,7 @@ export class FragmentSource extends ChunkSource {
       objectChunks.delete(objectKey);
     }
   }
-  getChunk(x: any) {
-    return new FragmentChunk(this, x);
-  }
+  getChunk(x: any) { return new FragmentChunk(this, x); }
 };
 
 export abstract class MeshSource extends ChunkSource {
@@ -261,9 +253,7 @@ export abstract class MeshSource extends ChunkSource {
 export function defineParameterizedMeshSource<Parameters>(
     parametersConstructor: ChunkSourceParametersConstructor<Parameters>) {
   const newConstructor = class ParameterizedMeshSource extends MeshSource {
-    constructor(chunkManager: ChunkManager, public parameters: Parameters) {
-      super(chunkManager);
-    }
+    constructor(chunkManager: ChunkManager, public parameters: Parameters) { super(chunkManager); }
     initializeCounterpart(rpc: RPC, options: any) {
       options['parameters'] = this.parameters;
       super.initializeCounterpart(rpc, options);
@@ -272,9 +262,7 @@ export function defineParameterizedMeshSource<Parameters>(
       return chunkManager.getChunkSource(
           this, stableStringify(parameters), () => new this(chunkManager, parameters));
     }
-    toString() {
-      return parametersConstructor.stringify(this.parameters);
-    }
+    toString() { return parametersConstructor.stringify(this.parameters); }
   };
   newConstructor.prototype.RPC_TYPE_ID = parametersConstructor.RPC_ID;
   return newConstructor;

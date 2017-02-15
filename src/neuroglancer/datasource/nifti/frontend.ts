@@ -62,8 +62,7 @@ export class MultiscaleVolumeChunkSource implements GenericMultiscaleVolumeChunk
 
 const VolumeChunkSource = defineParameterizedVolumeChunkSource(VolumeSourceParameters);
 
-function getNiftiVolumeInfo(
-    chunkManager: ChunkManager, url: string, cancellationToken: CancellationToken) {
+function getNiftiVolumeInfo(chunkManager: ChunkManager, url: string, cancellationToken: CancellationToken) {
   return chunkManager.rpc!.promiseInvoke<NiftiVolumeInfo>(
       GET_NIFTI_VOLUME_INFO_RPC_ID, {'chunkManager': chunkManager.addCounterpartRef(), 'url': url},
       cancellationToken);

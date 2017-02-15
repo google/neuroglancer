@@ -31,17 +31,13 @@ export class SkeletonChunk extends Chunk {
   objectId = new Uint64();
   vertexPositions: Float32Array|null = null;
   indices: Uint32Array|null = null;
-  constructor() {
-    super();
-  }
+  constructor() { super(); }
 
   initializeSkeletonChunk(key: string, objectId: Uint64) {
     super.initialize(key);
     this.objectId.assign(objectId);
   }
-  freeSystemMemory() {
-    this.vertexPositions = this.indices = null;
-  }
+  freeSystemMemory() { this.vertexPositions = this.indices = null; }
   serialize(msg: any, transfers: any[]) {
     super.serialize(msg, transfers);
     let {vertexPositions, indices} = this;

@@ -26,17 +26,11 @@ export abstract class Chunk {
   state = ChunkState.SYSTEM_MEMORY;
   constructor(public source: ChunkSource) {}
 
-  get gl() {
-    return this.source.gl;
-  }
+  get gl() { return this.source.gl; }
 
-  copyToGPU(_gl: GL) {
-    this.state = ChunkState.GPU_MEMORY;
-  }
+  copyToGPU(_gl: GL) { this.state = ChunkState.GPU_MEMORY; }
 
-  freeGPUMemory(_gl: GL) {
-    this.state = ChunkState.SYSTEM_MEMORY;
-  }
+  freeGPUMemory(_gl: GL) { this.state = ChunkState.SYSTEM_MEMORY; }
 };
 
 @registerSharedObjectOwner(CHUNK_QUEUE_MANAGER_RPC_ID)
@@ -87,8 +81,8 @@ export class ChunkQueueManager extends SharedObject {
     let {rpc} = this;
     let source = rpc!.get(update['source']);
     if (DEBUG_CHUNK_UPDATES) {
-      console.log(`${Date.now()} Chunk.update processed: ${source.rpcId
-                  } ${update['id']} ${update['state']}`);
+      console.log(
+          `${Date.now()} Chunk.update processed: ${source.rpcId} ${update['id']} ${update['state']}`);
     }
     let newState: number = update['state'];
     if (newState === ChunkState.EXPIRED) {
@@ -131,8 +125,8 @@ export class ChunkQueueManager extends SharedObject {
 registerRPC('Chunk.update', function(x) {
   let source = this.get(x['source']);
   if (DEBUG_CHUNK_UPDATES) {
-    console.log(`${Date.now()} Chunk.update received: ${source.rpcId
-                } ${x['id']} ${x['state']} with chunkDataSize ${x['chunkDataSize']}`);
+    console.log(
+        `${Date.now()} Chunk.update received: ${source.rpcId} ${x['id']} ${x['state']} with chunkDataSize ${x['chunkDataSize']}`);
   }
   let queueManager = source.chunkManager.chunkQueueManager;
   let pendingTail = queueManager.pendingChunkUpdatesTail;
@@ -153,9 +147,7 @@ export class ChunkManager extends SharedObject {
 
   memoize = new StringMemoize();
 
-  get gl() {
-    return this.chunkQueueManager.gl;
-  }
+  get gl() { return this.chunkQueueManager.gl; }
 
   constructor(public chunkQueueManager: ChunkQueueManager) {
     super();
@@ -194,22 +186,14 @@ export abstract class ChunkSource extends SharedObject {
     super.initializeCounterpart(rpc, options);
   }
 
-  get gl() {
-    return this.chunkManager.chunkQueueManager.gl;
-  }
+  get gl() { return this.chunkManager.chunkQueueManager.gl; }
 
-  deleteChunk(key: string) {
-    this.chunks.delete(key);
-  }
+  deleteChunk(key: string) { this.chunks.delete(key); }
 
-  addChunk(key: string, chunk: Chunk) {
-    this.chunks.set(key, chunk);
-  }
+  addChunk(key: string, chunk: Chunk) { this.chunks.set(key, chunk); }
 
   /**
    * Default implementation for use with backendOnly chunk sources.
    */
-  getChunk(_x: any): Chunk {
-    throw new Error('Not implemented.');
-  }
+  getChunk(_x: any): Chunk { throw new Error('Not implemented.'); }
 };

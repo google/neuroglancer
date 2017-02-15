@@ -104,8 +104,7 @@ describe('gpu_hash/hash_table', () => {
         expect(has && Uint64.equal(value, expectedValue))
             .toBe(
                 true,
-                `Hash table maps ${key} -> ${has ? value :
-                                                   undefined} rather than -> ${expectedValue}`);
+                `Hash table maps ${key} -> ${has ? value : undefined} rather than -> ${expectedValue}`);
       }
     }
 

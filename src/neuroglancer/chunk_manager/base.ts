@@ -85,17 +85,12 @@ export class AvailableCapacity {
   }
 
   toString() {
-    return `${this.availableItems}/${this.itemCapacity} items, ${this.availableSize
-        }/${this.sizeCapacity} size`;
+    return `${this.availableItems}/${this.itemCapacity} items, ${this.availableSize}/${this.sizeCapacity} size`;
   }
 
-  toObject() {
-    return {'itemCapacity': this.itemCapacity, 'sizeCapacity': this.sizeCapacity};
-  }
+  toObject() { return {'itemCapacity': this.itemCapacity, 'sizeCapacity': this.sizeCapacity}; }
 
-  static fromObject(x: any) {
-    return new AvailableCapacity(x['itemCapacity'], x['sizeCapacity']);
-  }
+  static fromObject(x: any) { return new AvailableCapacity(x['itemCapacity'], x['sizeCapacity']); }
 
   static INFINITE = new AvailableCapacity(Number.POSITIVE_INFINITY, Number.POSITIVE_INFINITY);
 };
@@ -104,7 +99,7 @@ export const CHUNK_QUEUE_MANAGER_RPC_ID = 'ChunkQueueManager';
 export const CHUNK_MANAGER_RPC_ID = 'ChunkManager';
 
 export interface ChunkSourceParametersConstructor<T> {
-  new(): T;
+  new (): T;
   RPC_ID: string;
   stringify: (parameters: T) => string;
 }

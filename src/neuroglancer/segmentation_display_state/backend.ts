@@ -37,9 +37,7 @@ export class SegmentationLayerSharedObjectCounterpart extends SharedObjectCounte
    */
   visibilityCount = new UseCount();
 
-  get visible() {
-    return this.visibilityCount.value > 0;
-  }
+  get visible() { return this.visibilityCount.value > 0; }
 
   constructor(rpc: RPC, options: any) {
     super(rpc, options);
@@ -49,9 +47,8 @@ export class SegmentationLayerSharedObjectCounterpart extends SharedObjectCounte
     this.visibleSegments = <Uint64Set>rpc.get(options['visibleSegments']);
     this.segmentEquivalences = <SharedDisjointUint64Sets>rpc.get(options['segmentEquivalences']);
 
-    const scheduleUpdateChunkPriorities = () => {
-      this.chunkManager.scheduleUpdateChunkPriorities();
-    };
+    const scheduleUpdateChunkPriorities =
+        () => { this.chunkManager.scheduleUpdateChunkPriorities(); };
     this.registerDisposer(this.visibleSegments.changed.add(scheduleUpdateChunkPriorities));
     this.registerDisposer(this.segmentEquivalences.changed.add(scheduleUpdateChunkPriorities));
     this.visibilityCount.signChanged.add(scheduleUpdateChunkPriorities);

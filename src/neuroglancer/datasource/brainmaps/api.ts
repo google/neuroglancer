@@ -15,8 +15,8 @@
  */
 
 import {getToken, Token} from 'neuroglancer/datasource/brainmaps/api_implementation';
-import {CANCELED, CancellationToken, uncancelableToken} from 'neuroglancer/util/cancellation';
 import {HttpError, openShardedHttpRequest} from 'neuroglancer/util/http_request';
+import {CancellationToken, uncancelableToken, CANCELED} from 'neuroglancer/util/cancellation';
 
 export var numPendingRequests = 0;
 

@@ -18,8 +18,6 @@ import {UseCount} from 'neuroglancer/util/use_count';
 import {SharedObject} from 'neuroglancer/worker_rpc';
 
 export class SharedObjectWithVisibilityCount extends SharedObject {
-  constructor(public visibilityCount = new UseCount()) {
-    super();
-  }
+  constructor(public visibilityCount = new UseCount()) { super(); }
 }
 export const ON_VISIBILITY_CHANGE_METHOD_ID = 'shared_visibility_count.onVisibilityChange';

@@ -46,18 +46,14 @@ export class ImageRenderLayer extends RenderLayer {
     super(multiscaleSource, {shaderError, volumeSourceOptions});
     this.fragmentMain = fragmentMain;
     this.opacity = opacity;
-    this.registerDisposer(opacity.changed.add(() => {
-      this.redrawNeeded.dispatch();
-    }));
+    this.registerDisposer(opacity.changed.add(() => { this.redrawNeeded.dispatch(); }));
     this.registerDisposer(fragmentMain.changed.add(() => {
       this.shaderUpdated = true;
       this.redrawNeeded.dispatch();
     }));
   }
 
-  getShaderKey() {
-    return `sliceview.ImageRenderLayer:${JSON.stringify(this.fragmentMain.value)}`;
-  }
+  getShaderKey() { return `sliceview.ImageRenderLayer:${JSON.stringify(this.fragmentMain.value)}`; }
 
   defineShader(builder: ShaderBuilder) {
     super.defineShader(builder);

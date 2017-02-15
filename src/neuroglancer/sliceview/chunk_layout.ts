@@ -54,9 +54,7 @@ export class ChunkLayout {
     return obj;
   }
 
-  static fromObject(msg: any) {
-    return ChunkLayout.get(msg['size'], msg['transform']);
-  }
+  static fromObject(msg: any) { return ChunkLayout.get(msg['size'], msg['transform']); }
 
   /**
    * Transform local spatial coordinates to global spatial coordinates.
@@ -86,7 +84,5 @@ export class ChunkLayout {
     return transformVectorByMat4(out, globalVector, this.invTransform);
   }
 
-  assignLocalSpatialToGlobalMat4(out: mat4): mat4 {
-    return mat4.copy(out, this.transform);
-  }
+  assignLocalSpatialToGlobalMat4(out: mat4): mat4 { return mat4.copy(out, this.transform); }
 }

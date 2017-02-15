@@ -36,9 +36,7 @@ serverDataTypes.set('uint32', DataType.UINT32);
 serverDataTypes.set('uint64', DataType.UINT64);
 
 export class DataInstanceBaseInfo {
-  get typeName(): string {
-    return this.obj['TypeName'];
-  }
+  get typeName(): string { return this.obj['TypeName']; }
 
   constructor(public obj: any) {
     verifyObject(obj);
@@ -127,9 +125,8 @@ export class VolumeDataInstanceInfo extends DataInstanceInfo {
                 upperVoxelBound: vec3.subtract(vec3.create(), upperVoxelBound, lowerVoxelBound),
                 volumeType: this.volumeType, volumeSourceOptions,
               })
-              .map(spec => {
-                return DVIDVolumeChunkSource.get(chunkManager, spec, volParameters);
-              });
+              .map(
+                  spec => { return DVIDVolumeChunkSource.get(chunkManager, spec, volParameters); });
       sources.push(alternatives);
     }
     return sources;
@@ -168,15 +165,9 @@ const TILE_DIMS = [
 const TileChunkSource = defineParameterizedVolumeChunkSource(TileChunkSourceParameters);
 
 export class TileDataInstanceInfo extends DataInstanceInfo {
-  get dataType() {
-    return DataType.UINT8;
-  }
-  get volumeType() {
-    return VolumeType.IMAGE;
-  }
-  get numChannels() {
-    return 1;
-  }
+  get dataType() { return DataType.UINT8; }
+  get volumeType() { return VolumeType.IMAGE; }
+  get numChannels() { return 1; }
 
   encoding: TileEncoding;
 
@@ -345,9 +336,7 @@ export function parseRepositoriesInfo(obj: any) {
 
 export class ServerInfo {
   repositories: Map<string, RepositoryInfo>;
-  constructor(obj: any) {
-    this.repositories = parseRepositoriesInfo(obj);
-  }
+  constructor(obj: any) { this.repositories = parseRepositoriesInfo(obj); }
 
   getNode(nodeKey: string): RepositoryInfo {
     // FIXME: Support non-root nodes.
@@ -380,15 +369,9 @@ export function getServerInfo(chunkManager: ChunkManager, baseUrls: string[]) {
 }
 
 export class MultiscaleVolumeChunkSource implements GenericMultiscaleVolumeChunkSource {
-  get dataType() {
-    return this.info.dataType;
-  }
-  get numChannels() {
-    return this.info.numChannels;
-  }
-  get volumeType() {
-    return this.info.volumeType;
-  }
+  get dataType() { return this.info.dataType; }
+  get numChannels() { return this.info.numChannels; }
+  get volumeType() { return this.info.volumeType; }
 
   constructor(
       public chunkManager: ChunkManager, public baseUrls: string[], public nodeKey: string,
@@ -407,9 +390,7 @@ export class MultiscaleVolumeChunkSource implements GenericMultiscaleVolumeChunk
   /**
    * Meshes are not supported.
    */
-  getMeshSource(): null {
-    return null;
-  }
+  getMeshSource(): null { return null; }
 }
 
 export function getShardedVolume(
@@ -451,9 +432,7 @@ export function completeInstanceName(
     offset: 0,
     completions: getPrefixMatchesWithDescriptions<DataInstanceInfo>(
         prefix, repositoryInfo.dataInstances.values(), instance => instance.name,
-        instance => {
-          return `${instance.base.typeName}`;
-        })
+        instance => { return `${instance.base.typeName}`; })
   };
 }
 

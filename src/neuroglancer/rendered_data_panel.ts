@@ -43,16 +43,10 @@ for (let axis = 0; axis < 3; ++axis) {
     });
   }
 }
-KEY_COMMANDS.set('snap', function() {
-  this.navigationState.pose.snap();
-});
+KEY_COMMANDS.set('snap', function() { this.navigationState.pose.snap(); });
 
-KEY_COMMANDS.set('zoom-in', function() {
-  this.navigationState.zoomBy(0.5);
-});
-KEY_COMMANDS.set('zoom-out', function() {
-  this.navigationState.zoomBy(2.0);
-});
+KEY_COMMANDS.set('zoom-in', function() { this.navigationState.zoomBy(0.5); });
+KEY_COMMANDS.set('zoom-out', function() { this.navigationState.zoomBy(2.0); });
 
 const tempVec3 = vec3.create();
 
@@ -76,9 +70,8 @@ export abstract class RenderedDataPanel extends RenderedPanel {
     this.registerEventListener(element, 'mouseleave', this.onMouseout.bind(this));
     this.registerEventListener(element, 'mousedown', this.onMousedown.bind(this), false);
     this.registerEventListener(element, 'wheel', this.onMousewheel.bind(this), false);
-    this.registerEventListener(element, 'dblclick', () => {
-      this.viewer.layerManager.invokeAction('select');
-    });
+    this.registerEventListener(
+        element, 'dblclick', () => { this.viewer.layerManager.invokeAction('select'); });
   }
 
   onMouseout(_event: MouseEvent) {

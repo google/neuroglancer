@@ -29,8 +29,7 @@ export function decodeRawChunk(
   let expectedBytes = numElements * bytesPerElement * spec.numChannels;
   if (expectedBytes !== response.byteLength) {
     throw new Error(
-        `Raw-format chunk is ${response.byteLength} bytes, but ${numElements} * ${bytesPerElement
-                                                  } = ${expectedBytes} bytes are expected.`);
+        `Raw-format chunk is ${response.byteLength} bytes, but ${numElements} * ${bytesPerElement} = ${expectedBytes} bytes are expected.`);
   }
   let data: ArrayBufferView;
   switch (dataType) {

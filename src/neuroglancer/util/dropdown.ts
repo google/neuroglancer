@@ -18,16 +18,10 @@
  * Utilities for positioning dropdown menus.
  */
 
-export function positionDropdown(dropdownElement: HTMLElement, associatedElement: HTMLElement, {
-  horizontal = false,
-  vertical = true,
-  topMargin = 6,
-  bottomMargin = 6,
-  leftMargin = 6,
-  rightMargin = 6,
-  maxHeight = true,
-  maxWidth = true
-} = {}) {
+export function positionDropdown(
+    dropdownElement: HTMLElement, associatedElement: HTMLElement,
+    {horizontal = false, vertical = true, topMargin = 6, bottomMargin = 6, leftMargin = 6,
+     rightMargin = 6, maxHeight = true, maxWidth = true} = {}) {
   let rect = associatedElement.getBoundingClientRect();
 
   if (horizontal) {

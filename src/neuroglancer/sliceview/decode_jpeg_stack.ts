@@ -24,12 +24,11 @@ export function decodeJpegStack(data: Uint8Array, chunkDataSize: vec3, numCompon
   // Just check that the total number pixels matches the expected value.
   if (parser.width * parser.height !== chunkDataSize[0] * chunkDataSize[1] * chunkDataSize[2]) {
     throw new Error(
-        `JPEG data does not have the expected dimensions: width=${parser.width
-        }, height=${parser.height}, chunkDataSize=${vec3.str(chunkDataSize)}`);
+        `JPEG data does not have the expected dimensions: width=${parser.width}, height=${parser.height}, chunkDataSize=${vec3.str(chunkDataSize)}`);
   }
   if (parser.numComponents !== numComponents) {
-    throw new Error(`JPEG data does not have the expected number of components: components=${parser
-                        .numComponents}, expected=${numComponents}`);
+    throw new Error(
+        `JPEG data does not have the expected number of components: components=${parser.numComponents}, expected=${numComponents}`);
   }
   if (parser.numComponents === 1) {
     return parser.getData(parser.width, parser.height, /*forceRGBOutput=*/false);
@@ -38,6 +37,6 @@ export function decodeJpegStack(data: Uint8Array, chunkDataSize: vec3, numCompon
     return transposeArray2d(output, parser.width * parser.height, 3);
   } else {
     throw new Error(
-        `JPEG data has an unsupported number of components: components=${parser.numComponents}`);
+      `JPEG data has an unsupported number of components: components=${parser.numComponents}`);
   }
 }

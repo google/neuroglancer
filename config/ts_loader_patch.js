@@ -49,23 +49,24 @@
 const tsLoaderConfigModule = require('ts-loader/dist/config.js');
 const tsLoaderUtilsModule = require('ts-loader/dist/utils.js');
 
-tsLoaderConfigModule.getConfigFile = function getConfigFile(
-    compiler, loader, loaderOptions, compilerCompatible, log, compilerDetailsLogMessage) {
+tsLoaderConfigModule.getConfigFile = function getConfigFile(compiler, loader, loaderOptions, compilerCompatible, log, compilerDetailsLogMessage) {
   let configFilePath = loaderOptions.configFileName;
   var configFileError;
-  log.logInfo(('ts-loader: Using config file at ' + configFilePath).green);
+  log.logInfo(("ts-loader: Using config file at " + configFilePath).green);
   let configFile = compiler.readConfigFile(configFilePath, compiler.sys.readFile);
   if (configFile.error) {
-    configFileError = tsLoaderUtilsModule.formatErrors(
-        [configFile.error], loaderOptions, compiler, {file: configFilePath})[0];
+    configFileError = tsLoaderUtilsModule.formatErrors([configFile.error], loaderOptions, compiler, { file: configFilePath })[0];
   }
   if (!configFileError) {
-    configFile.config.compilerOptions =
-        Object.assign({}, configFile.config.compilerOptions, loaderOptions.compilerOptions);
+    configFile.config.compilerOptions = Object.assign({}, configFile.config.compilerOptions, loaderOptions.compilerOptions);
     // do any necessary config massaging
     if (loaderOptions.transpileOnly) {
       configFile.config.compilerOptions.isolatedModules = true;
     }
   }
-  return {configFilePath: configFilePath, configFile: configFile, configFileError: configFileError};
+  return {
+    configFilePath: configFilePath,
+    configFile: configFile,
+    configFileError: configFileError
+  };
 };

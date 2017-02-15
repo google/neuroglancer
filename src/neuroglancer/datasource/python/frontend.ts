@@ -87,8 +87,7 @@ export class MultiscaleVolumeChunkSource implements GenericMultiscaleVolumeChunk
      * nearly flat in Z, Y, X respectively.  The inner arrays must have length 3.
      */
     let twoDimensionalScales = verifyObjectProperty(
-        response, 'twoDimensionalScales',
-        x => x === undefined ?
+        response, 'twoDimensionalScales', x => x === undefined ?
             undefined :
             parseArray(x, y => parseFixedLengthArray(new Array<ScaleInfo>(3), y, parseScaleInfo)));
     if ((twoDimensionalScales === undefined) === (threeDimensionalScales === undefined)) {

@@ -29,9 +29,7 @@ export abstract class SingleTextureChunkFormat<TextureLayout extends Disposable>
   texelType: number;
   textureFormat: number;
 
-  constructor(public shaderKey: string) {
-    super();
-  }
+  constructor(public shaderKey: string) { super(); }
 
   defineShader(builder: ShaderBuilder) {
     builder.addTextureSampler2D('uVolumeChunkSampler', textureUnitSymbol);

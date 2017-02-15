@@ -100,9 +100,7 @@ export function getShader(gl: WebGLRenderingContext, source: string, shaderType:
       let lines = source.replace('<', '&lt;').replace('>', '&gt;').split('\n');
       let s = '<pre>';
       s += log.replace('<', '&lt;').replace('>', '&gt;') + '\n';
-      lines.forEach((line, i) => {
-        s += `${i + 1}: ${line}\n`;
-      });
+      lines.forEach((line, i) => { s += `${i + 1}: ${line}\n`; });
       s += `\n</pre>`;
       let w = window.open('about:blank', '_blank');
       try {
@@ -168,21 +166,13 @@ export class ShaderProgram extends RefCounted {
     }
   }
 
-  uniform(name: string): WebGLUniformLocation {
-    return this.uniforms.get(name)!;
-  }
+  uniform(name: string): WebGLUniformLocation { return this.uniforms.get(name)!; }
 
-  attribute(name: string): number {
-    return this.attributes.get(name)!;
-  }
+  attribute(name: string): number { return this.attributes.get(name)!; }
 
-  textureUnit(symbol: Symbol): number {
-    return this.textureUnits.get(symbol)!;
-  }
+  textureUnit(symbol: Symbol): number { return this.textureUnits.get(symbol)!; }
 
-  bind() {
-    this.gl.useProgram(this.program);
-  }
+  bind() { this.gl.useProgram(this.program); }
 
   disposed() {
     let {gl} = this;
@@ -232,9 +222,7 @@ export class ShaderCode {
     }
   }
 
-  toString(): string {
-    return this.code;
-  }
+  toString(): string { return this.code; }
 };
 
 export type ShaderInitializer = ((x: ShaderProgram) => void);
@@ -286,9 +274,7 @@ export class ShaderBuilder {
     return textureUnit;
   }
 
-  symbol(name: string) {
-    return name + (this.nextSymbolID++);
-  }
+  symbol(name: string) { return name + (this.nextSymbolID++); }
 
   addAttribute(typeName: string, name: string) {
     this.attributes.push(name);
@@ -318,20 +304,12 @@ export class ShaderBuilder {
     this.fragmentExtensions += `#extension ${name} : require\n`;
   }
 
-  addVertexCode(code: ShaderCodePart) {
-    this.vertexCode.add(code);
-  }
+  addVertexCode(code: ShaderCodePart) { this.vertexCode.add(code); }
 
-  addFragmentCode(code: ShaderCodePart) {
-    this.fragmentCode.add(code);
-  }
+  addFragmentCode(code: ShaderCodePart) { this.fragmentCode.add(code); }
 
-  setVertexMain(code: string) {
-    this.vertexMain = code;
-  }
-  addVertexMain(code: string) {
-    this.vertexMain = (this.vertexMain || '') + code;
-  }
+  setVertexMain(code: string) { this.vertexMain = code; }
+  addVertexMain(code: string) { this.vertexMain = (this.vertexMain || '') + code; }
 
   setFragmentMain(code: string) {
     this.fragmentMain = `void main() {
@@ -339,13 +317,9 @@ ${code}
 }
 `;
   }
-  setFragmentMainFunction(code: string) {
-    this.fragmentMain = code;
-  }
+  setFragmentMainFunction(code: string) { this.fragmentMain = code; }
 
-  addInitializer(f: ShaderInitializer) {
-    this.initializers.push(f);
-  }
+  addInitializer(f: ShaderInitializer) { this.initializers.push(f); }
 
   require(f: ShaderModule): void {
     if (this.required.has(f)) {

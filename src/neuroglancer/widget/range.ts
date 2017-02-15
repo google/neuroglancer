@@ -37,9 +37,7 @@ export class RangeWidget extends RefCounted {
     inputElement.valueAsNumber = this.value.value;
     element.appendChild(promptElement);
     element.appendChild(inputElement);
-    const inputValueChanged = () => {
-      this.value.value = this.inputElement.valueAsNumber;
-    };
+    const inputValueChanged = () => { this.value.value = this.inputElement.valueAsNumber; };
     this.registerEventListener(inputElement, 'change', inputValueChanged);
     this.registerEventListener(inputElement, 'input', inputValueChanged);
     this.registerEventListener(inputElement, 'wheel', (event: WheelEvent) => {
@@ -52,9 +50,7 @@ export class RangeWidget extends RefCounted {
         inputValueChanged();
       }
     });
-    value.changed.add(() => {
-      this.inputElement.valueAsNumber = this.value.value;
-    });
+    value.changed.add(() => { this.inputElement.valueAsNumber = this.value.value; });
   }
   disposed() {
     removeFromParent(this.element);

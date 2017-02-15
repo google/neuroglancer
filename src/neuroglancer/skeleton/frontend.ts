@@ -100,19 +100,13 @@ export class PerspectiveViewSkeletonLayer extends PerspectiveViewRenderLayer {
   constructor(public base: SkeletonLayer) {
     super();
     this.registerDisposer(base);
-    this.registerDisposer(base.redrawNeeded.add(() => {
-      this.redrawNeeded.dispatch();
-    }));
+    this.registerDisposer(base.redrawNeeded.add(() => { this.redrawNeeded.dispatch(); }));
     this.setReady(true);
     this.visibilityCount.addDependency(base.visibilityCount);
   }
-  get gl() {
-    return this.base.gl;
-  }
+  get gl() { return this.base.gl; }
 
-  get isTransparent() {
-    return this.base.displayState.objectAlpha.value < 1.0;
-  }
+  get isTransparent() { return this.base.displayState.objectAlpha.value < 1.0; }
 
   draw(renderContext: PerspectiveViewRenderContext) {
     this.base.draw(renderContext, this, this.renderHelper);
@@ -125,15 +119,11 @@ export class SliceViewPanelSkeletonLayer extends SliceViewPanelRenderLayer {
   constructor(public base: SkeletonLayer) {
     super();
     this.registerDisposer(base);
-    this.registerDisposer(base.redrawNeeded.add(() => {
-      this.redrawNeeded.dispatch();
-    }));
+    this.registerDisposer(base.redrawNeeded.add(() => { this.redrawNeeded.dispatch(); }));
     this.setReady(true);
     this.visibilityCount.addDependency(base.visibilityCount);
   }
-  get gl() {
-    return this.base.gl;
-  }
+  get gl() { return this.base.gl; }
 
   draw(renderContext: SliceViewPanelRenderContext) {
     this.base.draw(renderContext, this, this.renderHelper, 10);
@@ -145,9 +135,7 @@ export class SkeletonLayer extends RefCounted {
   redrawNeeded = new NullarySignal();
   private sharedObject: SegmentationLayerSharedObject;
 
-  get visibilityCount() {
-    return this.sharedObject.visibilityCount;
-  }
+  get visibilityCount() { return this.sharedObject.visibilityCount; }
 
   constructor(
       public chunkManager: ChunkManager, public source: SkeletonSource,
@@ -163,9 +151,7 @@ export class SkeletonLayer extends RefCounted {
     });
   }
 
-  get gl() {
-    return this.chunkManager.chunkQueueManager.gl;
-  }
+  get gl() { return this.chunkManager.chunkQueueManager.gl; }
 
   draw(
       renderContext: SliceViewPanelRenderContext, layer: RenderLayer, renderHelper: RenderHelper,
@@ -243,23 +229,17 @@ export class SkeletonChunk extends Chunk {
 
 export class SkeletonSource extends ChunkSource {
   chunks: Map<string, SkeletonChunk>;
-  getChunk(x: any) {
-    return new SkeletonChunk(this, x);
-  }
+  getChunk(x: any) { return new SkeletonChunk(this, x); }
 
   /**
    * Specifies whether the skeleton vertex coordinates are specified in units of voxels rather than
    * nanometers.
    */
-  get skeletonVertexCoordinatesInVoxels() {
-    return true;
-  }
+  get skeletonVertexCoordinatesInVoxels() { return true; }
 };
 
 export class ParameterizedSkeletonSource<Parameters> extends SkeletonSource {
-  constructor(chunkManager: ChunkManager, public parameters: Parameters) {
-    super(chunkManager);
-  }
+  constructor(chunkManager: ChunkManager, public parameters: Parameters) { super(chunkManager); }
 
   initializeCounterpart(rpc: RPC, options: any) {
     options['parameters'] = this.parameters;
@@ -278,9 +258,7 @@ export function parameterizedSkeletonSource<Parameters>(
       return chunkManager.getChunkSource(
           this, stableStringify(parameters), () => new this(chunkManager, parameters));
     }
-    toString() {
-      return parametersConstructor.stringify(this.parameters);
-    }
+    toString() { return parametersConstructor.stringify(this.parameters); }
   };
   newConstructor.prototype.RPC_TYPE_ID = parametersConstructor.RPC_ID;
   return newConstructor;

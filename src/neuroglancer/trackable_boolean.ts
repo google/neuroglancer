@@ -19,18 +19,14 @@ import {NullarySignal} from 'neuroglancer/util/signal';
 import {Trackable} from 'neuroglancer/util/trackable';
 
 export class TrackableBoolean implements Trackable {
-  get value() {
-    return this.value_;
-  }
+  get value() { return this.value_; }
   set value(newValue: boolean) {
     if (newValue !== this.value_) {
       this.value_ = newValue;
       this.changed.dispatch();
     }
   }
-  toggle() {
-    this.value = !this.value;
-  }
+  toggle() { this.value = !this.value; }
   changed = new NullarySignal();
   constructor(private value_: boolean, public defaultValue: boolean) {}
   toJSON() {
@@ -47,9 +43,7 @@ export class TrackableBoolean implements Trackable {
     }
     this.value = this.defaultValue;
   }
-  reset() {
-    this.value = this.defaultValue;
-  }
+  reset() { this.value = this.defaultValue; }
 };
 
 export class TrackableBooleanCheckbox extends RefCounted {
@@ -67,9 +61,7 @@ export class TrackableBooleanCheckbox extends RefCounted {
     });
   }
 
-  updateCheckbox() {
-    this.element.checked = this.model.value;
-  }
+  updateCheckbox() { this.element.checked = this.model.value; }
 
   disposed() {
     let {element} = this;
@@ -85,12 +77,8 @@ export class ElementVisibilityFromTrackableBoolean extends RefCounted {
   constructor(public model: TrackableBoolean, public element: HTMLElement) {
     super();
     this.updateVisibility();
-    this.registerDisposer(model.changed.add(() => {
-      this.updateVisibility();
-    }));
+    this.registerDisposer(model.changed.add(() => { this.updateVisibility(); }));
   }
 
-  updateVisibility() {
-    this.element.style.display = this.model.value ? '' : 'none';
-  }
+  updateVisibility() { this.element.style.display = this.model.value ? '' : 'none'; }
 };

@@ -34,9 +34,8 @@ export class AnnotationPointListUserLayer extends UserLayer {
   constructor(public manager: LayerListSpecification, x: any) {
     super([]);
     this.layer.pointList.restoreState(x['points']);
-    this.registerDisposer(this.layer.pointList.changed.add(() => {
-      this.specificationChanged.dispatch();
-    }));
+    this.registerDisposer(
+        this.layer.pointList.changed.add(() => { this.specificationChanged.dispatch(); }));
     this.addRenderLayer(new PerspectiveViewAnnotationPointListLayer(this.layer));
     this.addRenderLayer(new SliceViewAnnotationPointListLayer(this.layer));
     const {layerSelectedValues} = manager;
@@ -66,9 +65,7 @@ export class AnnotationPointListUserLayer extends UserLayer {
     }
   }
 
-  makeDropdown(element: HTMLDivElement) {
-    return new Dropdown(element, this);
-  }
+  makeDropdown(element: HTMLDivElement) { return new Dropdown(element, this); }
 }
 
 class Dropdown extends UserLayerDropdown {

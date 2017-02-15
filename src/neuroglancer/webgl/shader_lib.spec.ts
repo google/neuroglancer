@@ -99,9 +99,7 @@ gl_FragData[1] = quotient.value;
       }
 
       function testPairs(dividends: Uint32Array, divisors: number[]) {
-        dividends.forEach((dividend, i) => {
-          testPair(dividend, divisors[i]);
-        });
+        dividends.forEach((dividend, i) => { testPair(dividend, divisors[i]); });
       }
 
       testPairs(

@@ -24,9 +24,8 @@ const exampleChunkData64 = new Uint32Array(
     require<Uint8Array>('raw-data!neuroglancer-testdata/64x64x64-raw-uint64-segmentation.dat')
         .buffer);
 
-const exampleChunkData32 = exampleChunkData64.filter((_element, index) => {
-  return index % 2 === 0;
-});
+const exampleChunkData32 =
+    exampleChunkData64.filter((_element, index) => { return index % 2 === 0; });
 
 suite('64x64x64 example', () => {
   const blockSize = [8, 8, 8];

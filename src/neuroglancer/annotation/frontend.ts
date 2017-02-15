@@ -52,14 +52,10 @@ export class AnnotationPointListLayer extends RefCounted {
       this.selectedIndex.value = null;
       this.redrawNeeded.dispatch();
     }));
-    this.registerDisposer(selectedIndex.changed.add(() => {
-      this.redrawNeeded.dispatch();
-    }));
+    this.registerDisposer(selectedIndex.changed.add(() => { this.redrawNeeded.dispatch(); }));
   }
 
-  get gl() {
-    return this.chunkManager.gl;
-  }
+  get gl() { return this.chunkManager.gl; }
 
   updateBuffer() {
     let {pointList} = this;
@@ -80,9 +76,7 @@ export class RenderHelper extends RefCounted {
   private squareCornersBuffer = getSquareCornersBuffer(this.gl);
   private countingBuffer = this.registerDisposer(getCountingBuffer(this.gl));
 
-  constructor(public gl: GL) {
-    super();
-  }
+  constructor(public gl: GL) { super(); }
 
   defineShader(builder: ShaderBuilder) {
     // Position of point in camera coordinates.
@@ -203,15 +197,11 @@ export class PerspectiveViewAnnotationPointListLayer extends PerspectiveViewRend
   constructor(public base: AnnotationPointListLayer) {
     super();
     this.registerDisposer(base);
-    this.registerDisposer(base.redrawNeeded.add(() => {
-      this.redrawNeeded.dispatch();
-    }));
+    this.registerDisposer(base.redrawNeeded.add(() => { this.redrawNeeded.dispatch(); }));
     this.setReady(true);
   }
 
-  get gl() {
-    return this.base.chunkManager.gl;
-  }
+  get gl() { return this.base.chunkManager.gl; }
 
   draw(renderContext: PerspectiveViewRenderContext) {
     this.renderHelper.draw(this, this.base, renderContext);
@@ -221,9 +211,7 @@ export class PerspectiveViewAnnotationPointListLayer extends PerspectiveViewRend
     this.base.updateMouseState(mouseState, pickedOffset);
   }
 
-  transformPickedValue(_pickedValue: Uint64, pickedOffset: number) {
-    return pickedOffset;
-  }
+  transformPickedValue(_pickedValue: Uint64, pickedOffset: number) { return pickedOffset; }
 }
 
 class SliceViewRenderHelper extends RenderHelper {
@@ -244,15 +232,11 @@ export class SliceViewAnnotationPointListLayer extends SliceViewPanelRenderLayer
   constructor(public base: AnnotationPointListLayer) {
     super();
     this.registerDisposer(base);
-    this.registerDisposer(base.redrawNeeded.add(() => {
-      this.redrawNeeded.dispatch();
-    }));
+    this.registerDisposer(base.redrawNeeded.add(() => { this.redrawNeeded.dispatch(); }));
     this.setReady(true);
   }
 
-  get gl() {
-    return this.base.chunkManager.gl;
-  }
+  get gl() { return this.base.chunkManager.gl; }
 
   draw(renderContext: SliceViewPanelRenderContext) {
     this.renderHelper.draw(this, this.base, renderContext);
@@ -262,7 +246,5 @@ export class SliceViewAnnotationPointListLayer extends SliceViewPanelRenderLayer
     this.base.updateMouseState(mouseState, pickedOffset);
   }
 
-  transformPickedValue(_pickedValue: Uint64, pickedOffset: number) {
-    return pickedOffset;
-  }
+  transformPickedValue(_pickedValue: Uint64, pickedOffset: number) { return pickedOffset; }
 }

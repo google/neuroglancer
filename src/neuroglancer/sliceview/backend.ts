@@ -19,8 +19,8 @@ import {ChunkPriorityTier} from 'neuroglancer/chunk_manager/base';
 import {RenderLayer as RenderLayerInterface, SLICEVIEW_RENDERLAYER_RPC_ID, SLICEVIEW_RPC_ID, SliceViewBase, VolumeChunkSource as VolumeChunkSourceInterface, VolumeChunkSpecification} from 'neuroglancer/sliceview/base';
 import {ChunkLayout} from 'neuroglancer/sliceview/chunk_layout';
 import {vec3, vec3Key} from 'neuroglancer/util/geom';
-import {NullarySignal} from 'neuroglancer/util/signal';
 import {registerRPC, registerSharedObject, RPC, SharedObjectCounterpart} from 'neuroglancer/worker_rpc';
+import {NullarySignal} from 'neuroglancer/util/signal';
 
 const BASE_PRIORITY = -1e12;
 const SCALE_PRIORITY_MULTIPLIER = 1e9;
@@ -41,14 +41,11 @@ export class SliceView extends SliceViewBase {
     this.initializeSharedObject(rpc, options['id']);
     this.chunkManager =
         this.registerDisposer((<ChunkManager>rpc.get(options['chunkManager'])).addRef());
-    this.registerDisposer(this.chunkManager.recomputeChunkPriorities.add(() => {
-      this.updateVisibleChunks();
-    }));
+    this.registerDisposer(
+      this.chunkManager.recomputeChunkPriorities.add(() => { this.updateVisibleChunks(); }));
   }
 
-  onViewportChanged() {
-    this.chunkManager.scheduleUpdateChunkPriorities();
-  }
+  onViewportChanged() { this.chunkManager.scheduleUpdateChunkPriorities(); }
 
   handleLayerChanged = (() => {
     if (this.hasValidViewport) {
@@ -76,8 +73,7 @@ export class SliceView extends SliceViewBase {
         let priorityIndex = sources.get(source);
         let chunk = source.getChunk(positionInChunks);
         chunkManager.requestChunk(
-            chunk, ChunkPriorityTier.VISIBLE,
-            BASE_PRIORITY + priority + SCALE_PRIORITY_MULTIPLIER * priorityIndex);
+            chunk, ChunkPriorityTier.VISIBLE, BASE_PRIORITY + priority + SCALE_PRIORITY_MULTIPLIER * priorityIndex);
       }
     }
     this.computeVisibleChunks(getLayoutObject, addChunk);
@@ -170,12 +166,8 @@ export class VolumeChunk extends Chunk {
     super.downloadSucceeded();
   }
 
-  freeSystemMemory() {
-    this.data = null;
-  }
-  toString() {
-    return this.source!.toString() + ':' + vec3Key(this.chunkGridPosition);
-  }
+  freeSystemMemory() { this.data = null; }
+  toString() { return this.source!.toString() + ':' + vec3Key(this.chunkGridPosition); }
 }
 
 export abstract class VolumeChunkSource extends ChunkSource implements VolumeChunkSourceInterface {

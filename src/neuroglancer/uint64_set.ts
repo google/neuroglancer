@@ -15,9 +15,9 @@
  */
 
 import {HashSetUint64} from 'neuroglancer/gpu_hash/hash_table';
-import {Signal} from 'neuroglancer/util/signal';
 import {Uint64} from 'neuroglancer/util/uint64';
 import {registerRPC, registerSharedObject, RPC, SharedObjectCounterpart} from 'neuroglancer/worker_rpc';
+import {Signal} from 'neuroglancer/util/signal';
 
 @registerSharedObject('Uint64Set')
 export class Uint64Set extends SharedObjectCounterpart {
@@ -36,9 +36,7 @@ export class Uint64Set extends SharedObjectCounterpart {
     this.changed = <any>undefined;
   }
 
-  add_(x: Uint64) {
-    return this.hashTable.add(x);
-  }
+  add_(x: Uint64) { return this.hashTable.add(x); }
 
   add(x: Uint64) {
     if (this.add_(x)) {
@@ -50,19 +48,13 @@ export class Uint64Set extends SharedObjectCounterpart {
     }
   }
 
-  has(x: Uint64) {
-    return this.hashTable.has(x);
-  }
+  has(x: Uint64) { return this.hashTable.has(x); }
 
-  [Symbol.iterator]() {
-    return this.hashTable.keys();
-  }
+  [Symbol.iterator]() { return this.hashTable.keys(); }
 
-  delete_(x: Uint64) {
-    return this.hashTable.delete(x);
-  }
+  delete_(x: Uint64) { return this.hashTable.delete(x); }
 
-  delete(x: Uint64) {
+  delete (x: Uint64) {
     if (this.delete_(x)) {
       let {rpc} = this;
       if (rpc) {
@@ -72,9 +64,7 @@ export class Uint64Set extends SharedObjectCounterpart {
     }
   }
 
-  get size() {
-    return this.hashTable.size;
-  }
+  get size() { return this.hashTable.size; }
 
   clear() {
     if (this.hashTable.clear()) {

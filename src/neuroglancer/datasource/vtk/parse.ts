@@ -143,8 +143,8 @@ function parsePolydataAscii(header: VTKHeader, data: ArrayBufferView): Triangula
 
   function parsePointData(nVertices: number) {
     if (numVertices !== nVertices) {
-      throw new Error(`Number of vertices specified in POINT_DATA section (${nVertices
-                      }) must match number of points (${numVertices}).`);
+      throw new Error(
+          `Number of vertices specified in POINT_DATA section (${nVertices}) must match number of points (${numVertices}).`);
     }
     while (lineNumber < numLines) {
       let line = lines[lineNumber];
