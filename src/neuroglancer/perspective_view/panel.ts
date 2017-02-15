@@ -22,12 +22,13 @@ import {PerspectiveViewRenderContext, PerspectiveViewRenderLayer} from 'neurogla
 import {RenderedDataPanel} from 'neuroglancer/rendered_data_panel';
 import {SliceView, SliceViewRenderHelper} from 'neuroglancer/sliceview/frontend';
 import {TrackableBoolean, TrackableBooleanCheckbox} from 'neuroglancer/trackable_boolean';
-import {kAxes, mat4, vec3, transformVectorByMat4, vec4} from 'neuroglancer/util/geom';
+import {kAxes, mat4, transformVectorByMat4, vec3, vec4} from 'neuroglancer/util/geom';
 import {startRelativeMouseDrag} from 'neuroglancer/util/mouse_drag';
 import {ViewerState} from 'neuroglancer/viewer_state';
 import {DepthBuffer, FramebufferConfiguration, makeTextureBuffers, OffscreenCopyHelper} from 'neuroglancer/webgl/offscreen';
 import {ShaderBuilder} from 'neuroglancer/webgl/shader';
 import {glsl_packFloat01ToFixedPoint, unpackFloat01FromFixedPoint} from 'neuroglancer/webgl/shader_lib';
+import {getMat4} from 'neuroglancer/webvr-util';
 
 require('neuroglancer/noselect.css');
 require('./panel.css');
@@ -103,7 +104,7 @@ gl_FragColor = vec4(accum.rgb / accum.a, revealage);
 }
 
 export class PerspectivePanel extends RenderedDataPanel {
-  private visibleLayerTracker = makeRenderedPanelVisibleLayerTracker(
+  protected visibleLayerTracker = makeRenderedPanelVisibleLayerTracker(
       this.viewer.layerManager, PerspectiveViewRenderLayer, this);
 
   sliceViews = new Set<SliceView>();
@@ -113,29 +114,31 @@ export class PerspectivePanel extends RenderedDataPanel {
   modelViewMat = mat4.create();
   width = 0;
   height = 0;
-  private pickIDs = new PickIDManager();
-  private axesLineHelper = this.registerDisposer(AxesLineHelper.get(this.gl));
+  protected pickIDs = new PickIDManager();
+  protected axesLineHelper = this.registerDisposer(AxesLineHelper.get(this.gl));
   sliceViewRenderHelper =
       this.registerDisposer(SliceViewRenderHelper.get(this.gl, perspectivePanelEmit));
 
-  private offscreenFramebuffer = this.registerDisposer(new FramebufferConfiguration(this.gl, {
+  protected offscreenFramebuffer = this.registerDisposer(new FramebufferConfiguration(this.gl, {
     colorBuffers: makeTextureBuffers(this.gl, OffscreenTextures.NUM_TEXTURES),
     depthBuffer: new DepthBuffer(this.gl)
   }));
 
-  private transparentConfiguration = this.registerDisposer(new FramebufferConfiguration(this.gl, {
+  protected transparentConfiguration = this.registerDisposer(new FramebufferConfiguration(this.gl, {
     framebuffer: this.offscreenFramebuffer.framebuffer.addRef(),
     colorBuffers: makeTextureBuffers(this.gl, 2, this.gl.RGBA, this.gl.FLOAT),
     depthBuffer: this.offscreenFramebuffer.depthBuffer!.addRef(),
   }));
 
-  private offscreenCopyHelper = this.registerDisposer(OffscreenCopyHelper.get(this.gl));
-  private transparencyCopyHelper =
+  protected offscreenCopyHelper = this.registerDisposer(OffscreenCopyHelper.get(this.gl));
+  protected transparencyCopyHelper =
       this.registerDisposer(OffscreenCopyHelper.get(this.gl, defineTransparencyCopyShader, 2));
 
   constructor(context: DisplayContext, element: HTMLElement, viewer: PerspectiveViewerState) {
     super(context, element, viewer);
-    this.registerDisposer(this.navigationState.changed.add(() => { this.viewportChanged(); }));
+    this.registerDisposer(this.navigationState.changed.add(() => {
+      this.viewportChanged();
+    }));
 
     if (viewer.showSliceViewsCheckbox) {
       let showSliceViewsCheckbox =
@@ -147,10 +150,16 @@ export class PerspectivePanel extends RenderedDataPanel {
       showSliceViewsLabel.appendChild(showSliceViewsCheckbox.element);
       this.element.appendChild(showSliceViewsLabel);
     }
-    this.registerDisposer(viewer.showSliceViews.changed.add(() => { this.scheduleRedraw(); }));
-    this.registerDisposer(viewer.showAxisLines.changed.add(() => { this.scheduleRedraw(); }));
+    this.registerDisposer(viewer.showSliceViews.changed.add(() => {
+      this.scheduleRedraw();
+    }));
+    this.registerDisposer(viewer.showAxisLines.changed.add(() => {
+      this.scheduleRedraw();
+    }));
   }
-  get navigationState() { return this.viewer.navigationState; }
+  get navigationState() {
+    return this.viewer.navigationState;
+  }
 
   updateProjectionMatrix() {
     let projectionMat = this.projectionMat;
@@ -170,7 +179,9 @@ export class PerspectivePanel extends RenderedDataPanel {
     mat4.invert(this.inverseProjectionMat, projectionMat);
   }
 
-  viewportChanged() { this.context.scheduleRedraw(); }
+  viewportChanged() {
+    this.context.scheduleRedraw();
+  }
 
   onResize() {
     this.width = this.element.clientWidth;
@@ -344,7 +355,7 @@ export class PerspectivePanel extends RenderedDataPanel {
         this.offscreenFramebuffer.colorBuffers[OffscreenTextures.COLOR].texture);
   }
 
-  private drawSliceViews(renderContext: PerspectiveViewRenderContext) {
+  protected drawSliceViews(renderContext: PerspectiveViewRenderContext) {
     let {sliceViewRenderHelper} = this;
     let {lightDirection, ambientLighting, directionalLighting, dataToDevice} = renderContext;
 
@@ -366,7 +377,7 @@ export class PerspectivePanel extends RenderedDataPanel {
     }
   }
 
-  private drawAxisLines() {
+  protected drawAxisLines() {
     let {gl} = this;
     let mat = tempMat4;
     mat4.identity(mat);
@@ -389,5 +400,202 @@ export class PerspectivePanel extends RenderedDataPanel {
     this.axesLineHelper.draw(mat, false);
   }
 
-  zoomByMouse(factor: number) { this.navigationState.zoomBy(factor); }
+  zoomByMouse(factor: number) {
+    this.navigationState.zoomBy(factor);
+  }
 };
+
+export class StereoPerspectivePanel extends PerspectivePanel {
+  cameraOffsetZ = 100;
+
+  updateProjectionMatrixStereo(isLeft: boolean) {
+    let noDevice: boolean = false;
+    let notPresenting: boolean = false;
+    if (this.displayContext.vrDisplay != null) {
+      if (this.displayContext.vrDisplay.isPresenting) {
+        let projectionMat = this.projectionMat;
+        let modelViewMat = this.modelViewMat;
+        this.navigationState.toMat4(modelViewMat);
+        vec3.set(tempVec3, 1, 1, 1);
+        mat4.scale(modelViewMat, modelViewMat, tempVec3);
+        let viewOffset = vec3.set(tempVec3, 0, 0, this.cameraOffsetZ);
+        mat4.translate(modelViewMat, modelViewMat, viewOffset);
+
+        let modelViewMatInv = tempMat4;
+        mat4.invert(modelViewMatInv, modelViewMat);
+
+        let VRprojectionMat: mat4 = mat4.create();
+        let VRmodelViewMat: mat4 = mat4.create();
+        this.displayContext.vrDisplay.getFrameData(this.displayContext.frameData);
+        if (isLeft) {
+          VRprojectionMat = getMat4(this.displayContext.frameData.leftProjectionMatrix);
+          VRmodelViewMat = getMat4(this.displayContext.frameData.leftViewMatrix);
+        } else {
+          VRprojectionMat = getMat4(this.displayContext.frameData.rightProjectionMatrix);
+          VRmodelViewMat = getMat4(this.displayContext.frameData.rightViewMatrix);
+        }
+        mat4.multiply(projectionMat, VRmodelViewMat, modelViewMatInv);
+        mat4.multiply(projectionMat, VRprojectionMat, projectionMat);
+        mat4.invert(this.inverseProjectionMat, projectionMat);
+      } else {
+        notPresenting = true;
+      }
+    } else {
+      noDevice = true;
+    }
+    if (noDevice || notPresenting) {
+      let projectionMat = this.projectionMat;
+      mat4.perspective(projectionMat, Math.PI / 4.0, this.width / this.height, 10, 5000);
+      let modelViewMat = this.modelViewMat;
+      this.navigationState.toMat4(modelViewMat);
+      vec3.set(tempVec3, 1, -1, -1);
+      mat4.scale(modelViewMat, modelViewMat, tempVec3);
+
+      let viewOffset = vec3.set(tempVec3, 0, 0, this.cameraOffsetZ);
+      mat4.translate(modelViewMat, modelViewMat, viewOffset);
+      if (isLeft) {
+        vec3.set(viewOffset, this.cameraOffsetZ * -0.03, 0, 0);
+      } else {
+        vec3.set(viewOffset, this.cameraOffsetZ * 0.03, 0, 0);
+      }
+      mat4.translate(modelViewMat, modelViewMat, viewOffset);
+
+      let modelViewMatInv = tempMat4;
+      mat4.invert(modelViewMatInv, modelViewMat);
+
+      mat4.multiply(projectionMat, projectionMat, modelViewMatInv);
+      mat4.invert(this.inverseProjectionMat, projectionMat);
+    }
+  }
+  draw() {
+    for (let isLeft of [true, false]) {
+      let {width, height} = this;
+      if (!this.navigationState.valid || width === 0 || height === 0) {
+        return;
+      }
+
+      for (let sliceView of this.sliceViews) {
+        sliceView.updateRendering();
+      }
+
+      let gl = this.gl;
+      this.offscreenFramebuffer.bind(width, height);
+
+      gl.disable(gl.SCISSOR_TEST);
+      this.gl.clearColor(0.0, 0.0, 0.0, 0.0);
+      gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+
+      gl.enable(gl.DEPTH_TEST);
+      let {projectionMat} = this;
+      this.updateProjectionMatrixStereo(isLeft);
+
+      // FIXME; avoid temporaries
+      let lightingDirection = vec3.create();
+      transformVectorByMat4(lightingDirection, kAxes[2], this.modelViewMat);
+      vec3.normalize(lightingDirection, lightingDirection);
+
+      let ambient = 0.2;
+      let directional = 1 - ambient;
+
+      let pickIDs = this.pickIDs;
+      pickIDs.clear();
+      let renderContext: PerspectiveViewRenderContext = {
+        dataToDevice: projectionMat,
+        lightDirection: lightingDirection,
+        ambientLighting: ambient,
+        directionalLighting: directional,
+        pickIDs: pickIDs,
+        emitter: perspectivePanelEmit,
+        emitColor: true,
+        emitPickID: true,
+        alreadyEmittedPickID: false,
+        viewportWidth: width,
+        viewportHeight: height,
+      };
+
+      let visibleLayers = this.visibleLayerTracker.getVisibleLayers();
+
+      let hasTransparent = false;
+
+      // Draw fully-opaque layers first.
+      for (let renderLayer of visibleLayers) {
+        if (!renderLayer.isTransparent) {
+          renderLayer.draw(renderContext);
+        } else {
+          hasTransparent = true;
+        }
+      }
+
+      if (this.viewer.showSliceViews.value) {
+        this.drawSliceViews(renderContext);
+      }
+
+      if (this.viewer.showAxisLines.value) {
+        this.drawAxisLines();
+      }
+
+
+      if (hasTransparent) {
+        // Draw transparent objects.
+        gl.depthMask(false);
+        gl.enable(gl.BLEND);
+
+        // Compute accumulate and revelage textures.
+        this.transparentConfiguration.bind(width, height);
+        this.gl.clearColor(0.0, 0.0, 0.0, 1.0);
+        gl.clear(gl.COLOR_BUFFER_BIT);
+        renderContext.emitter = perspectivePanelEmitOIT;
+        gl.blendFuncSeparate(gl.ONE, gl.ONE, gl.ZERO, gl.ONE_MINUS_SRC_ALPHA);
+        renderContext.emitPickID = false;
+        for (let renderLayer of visibleLayers) {
+          if (renderLayer.isTransparent) {
+            renderLayer.draw(renderContext);
+          }
+        }
+
+        // Copy transparent rendering result back to primary buffer.
+        gl.disable(gl.DEPTH_TEST);
+        this.offscreenFramebuffer.bindSingle(OffscreenTextures.COLOR);
+        gl.blendFunc(gl.ONE_MINUS_SRC_ALPHA, gl.SRC_ALPHA);
+        this.transparencyCopyHelper.draw(
+            this.transparentConfiguration.colorBuffers[0].texture,
+            this.transparentConfiguration.colorBuffers[1].texture);
+
+        gl.depthMask(true);
+        gl.disable(gl.BLEND);
+        gl.enable(gl.DEPTH_TEST);
+
+        // Restore framebuffer attachments.
+        this.offscreenFramebuffer.bind(width, height);
+      }
+
+      // Do picking only rendering pass.
+      gl.WEBGL_draw_buffers.drawBuffersWEBGL([
+        gl.NONE, gl.WEBGL_draw_buffers.COLOR_ATTACHMENT1_WEBGL,
+        gl.WEBGL_draw_buffers.COLOR_ATTACHMENT2_WEBGL
+      ]);
+      renderContext.emitter = perspectivePanelEmit;
+      renderContext.emitPickID = true;
+      renderContext.emitColor = false;
+
+      if (isLeft) {
+        gl.viewport(0, 0, this.element.clientWidth / 2, this.element.clientHeight);
+      } else {
+        gl.viewport(
+            this.element.clientWidth / 2, 0, this.element.clientWidth / 2,
+            this.element.clientHeight);
+      }
+
+      for (let renderLayer of visibleLayers) {
+        renderContext.alreadyEmittedPickID = !renderLayer.isTransparent;
+        renderLayer.draw(renderContext);
+      }
+      gl.disable(gl.DEPTH_TEST);
+      this.offscreenFramebuffer.unbind();
+
+      // Draw the texture over the whole viewport.
+      this.offscreenCopyHelper.draw(
+          this.offscreenFramebuffer.colorBuffers[OffscreenTextures.COLOR].texture);
+    }
+  }
+}
