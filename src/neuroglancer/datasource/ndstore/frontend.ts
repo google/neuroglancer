@@ -190,7 +190,7 @@ const pathPattern = /^([^\/?]+)(?:\/([^\/?]+))?(?:\?(.*))?$/;
 export function getTokenInfo(chunkManager: ChunkManager, hostnames: string[], token: string): Promise<TokenInfo> {
   return chunkManager.memoize.getUncounted(
       {type: 'ndstore:getTokenInfo', hostnames, token},
-      () => sendHttpRequest(openShardedHttpRequest(hostnames, `/ocp/ca/${token}/info/`), 'json')
+      () => sendHttpRequest(openShardedHttpRequest(hostnames, `/nd/sd/${token}/info/`), 'json')
                 .then(parseTokenInfo));
 }
 
@@ -225,7 +225,7 @@ export function getVolume(chunkManager: ChunkManager, path: string) {
 export function getPublicTokens(chunkManager: ChunkManager, hostnames: string[]) {
   return chunkManager.memoize.getUncounted(
       {type: 'dvid:getPublicTokens', hostnames},
-      () => sendHttpRequest(openShardedHttpRequest(hostnames, '/ocp/ca/public_tokens/'), 'json')
+      () => sendHttpRequest(openShardedHttpRequest(hostnames, '/nd/sd/public_tokens/'), 'json')
                 .then(value => parseArray(value, verifyString)));
 }
 
