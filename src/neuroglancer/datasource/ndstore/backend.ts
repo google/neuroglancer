@@ -43,10 +43,12 @@ class VolumeChunkSource extends ParameterizedVolumeChunkSource<VolumeChunkSource
       let chunkPosition = this.computeChunkBounds(chunk);
       let chunkDataSize = chunk.chunkDataSize!;
       for (let i = 0; i < 3; ++i) {
-        path += `/${chunkPosition[i]},${chunkPosition[i] + chunkDataSize[i]}`;
+        path += `/${chunkPosition[i]},${chunkPosition[i] + chunkDataSize[i]}/`;
       }
     }
-    path += `/neariso/`;
+    if (parameters.neariso) {
+      path += `neariso/`;
+    }
     return sendHttpRequest(
                openShardedHttpRequest(parameters.baseUrls, path), 'arraybuffer', cancellationToken)
         .then(response => this.chunkDecoder(chunk, response));
