@@ -120,6 +120,7 @@ export class MultiscaleVolumeChunkSource implements GenericMultiscaleVolumeChunk
   scales: ScaleInfo[];
 
   encoding: string;
+  neariso: boolean;
 
   constructor(
       public chunkManager: ChunkManager, public baseUrls: string[], public key: string,
@@ -150,6 +151,13 @@ export class MultiscaleVolumeChunkSource implements GenericMultiscaleVolumeChunk
       }
     }
     this.encoding = encoding;
+
+    this.neariso = true; 
+    let neariso = verifyOptionalString(parameters['neariso']);
+    if (neariso === 'false') {
+      this.neariso = false; 
+    } 
+
   }
 
   getSources(volumeSourceOptions: VolumeSourceOptions) {
@@ -175,6 +183,7 @@ export class MultiscaleVolumeChunkSource implements GenericMultiscaleVolumeChunk
             channel: this.channel,
             resolution: scaleInfo.key,
             encoding: this.encoding,
+            neariso: this.neariso
           }));
     });
   }
