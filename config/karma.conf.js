@@ -59,7 +59,7 @@ module.exports = function(config) {
     webpack: webpackConfig,
     webpackServer: {noInfo: true},
     browserStack: {
-      // This empty object is required to work around a bug in karma-browserstack-launcher.
+        // This empty object is required to work around a bug in karma-browserstack-launcher.
     },
     browsers: [
       'Chrome',
@@ -73,6 +73,10 @@ module.exports = function(config) {
         os: 'OS X',
         os_version: 'Sierra',
       },
+      Chrome_travis_ci: {
+        base: 'Chrome',
+        flags: ['--no-sandbox']
+      }
     },
     colors: true,
     browserNoActivityTimeout: 60000,
@@ -88,4 +92,7 @@ module.exports = function(config) {
     // logLevel: config.LOG_DEBUG,
     // singleRun: true,
   });
+  if (process.env.TRAVIS) {
+    config.browsers = ['Chrome_travis_ci'];
+  }
 };

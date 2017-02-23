@@ -1,0 +1,55 @@
+language: node_js
+dist: trusty
+sudo: required
+node_js:
+  - "7.3.0"
+cache:
+  directories:
+    - node_modules
+
+addons:
+  apt:
+    packages:
+    - mesa-utils
+    - xvfb
+    - libgl1-mesa-dri
+    - libglapi-mesa
+    - libosmesa6
+
+before_install:
+- openssl aes-256-cbc -K $encrypted_79de2f75386b_key -iv $encrypted_79de2f75386b_iv
+  -in credentials.tar.gz.enc -out credentials.tar.gz -d
+- tar -xzf credentials.tar.gz 
+- export CHROME_BIN=/usr/bin/google-chrome
+- export DISPLAY=:99.0
+- sudo apt-get update
+- sudo apt-get install -y libappindicator1 fonts-liberation
+- wget https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb
+- sudo dpkg -i google-chrome*.deb
+- rm google-chrome*.deb
+- sh -e /etc/init.d/xvfb start
+- sleep 3
+script:
+- npm install
+- npm install --only=dev 
+# - gulp check-format
+# - gulp tslint
+# - npm test # dissable because of being unable to run webgl on travis
+before_deploy:
+- npm run build-min
+- cp -r ./dist/min static/
+- rm -rf node_modules
+- $(python version.py)
+- export DEPLOY="false"
+- if [ "$APPVERSION" == "master" ]; then export DEPLOY="true"; fi
+deploy:
+  provider: gae
+  skip_cleanup: true
+  keyfile: client-secret.json
+  project: neuromancer-seung-import
+  version: $APPVERSION
+  on:
+    all_branches: true
+  no_promote: true
+  default: $DEPLOY
+  verbosity: "error"

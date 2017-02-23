@@ -1,12 +1,13 @@
 {
   "compilerOptions": {
+    "skipLibCheck": true,
     "noImplicitAny": true,
     "noImplicitReturns": true,
     "noImplicitThis": true,
     "noUnusedParameters": true,
     "preserveConstEnums": true,
     "experimentalDecorators": true,
-    "strictNullChecks": true,
+    "strictNullChecks": false,
     "allowSyntheticDefaultImports": true,
     "sourceMap": true,
     "moduleResolution": "node",
