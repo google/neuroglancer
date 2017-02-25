@@ -152,11 +152,11 @@ export class MultiscaleVolumeChunkSource implements GenericMultiscaleVolumeChunk
     }
     this.encoding = encoding;
 
-    this.neariso = true; 
+    this.neariso = true;
     let neariso = verifyOptionalString(parameters['neariso']);
     if (neariso === 'false') {
-      this.neariso = false; 
-    } 
+      this.neariso = false;
+    }
 
   }
 
