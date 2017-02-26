@@ -63,7 +63,7 @@ function parseOwnerInfo(obj: any): OwnerInfo {
     let stackName = verifyObjectProperty(stackObj, 'stackId', parseStackName);
     let stackInfo = parseStackInfo(stackObj);
     if (stackInfo !== undefined) {
-      stacks.set(stackName, parseStackInfo(stackObj));
+      stacks.set(stackName, stackInfo);
     }
   }
 

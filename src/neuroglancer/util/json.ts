@@ -228,7 +228,7 @@ function convertStringLiteral(
       s += m[1];
       s += '\\';
       s += quoteReplace;
-      inner = inner.substr(m.index + m[0].length);
+      inner = inner.substr(m.index! + m[0].length);
     }
     s += quoteReplace;
     return s;
@@ -272,7 +272,7 @@ function convertJsonHelper(x: string, desiredCommaChar: string, desiredQuoteChar
       replacement = '';
     } else {
       before = x.substr(0, m.index);
-      x = x.substr(m.index + m[0].length);
+      x = x.substr(m.index! + m[0].length);
       let originalString = m[1];
       if (originalString !== undefined) {
         replacement =
@@ -313,7 +313,7 @@ export function pythonLiteralToJSON(x: string) {
       replacement = '';
     } else {
       before = x.substr(0, m.index);
-      x = x.substr(m.index + m[0].length);
+      x = x.substr(m.index! + m[0].length);
       let singleQuoteString = m[1];
       if (singleQuoteString !== undefined) {
         replacement = normalizeStringLiteral(singleQuoteString);
