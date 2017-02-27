@@ -80,8 +80,8 @@ def compute_two_dimensional_near_isotropic_downsampling_scales(
     def scale_satisfies_criteria(scale):
         return np.prod(scale) < max_downsampling and (size / scale).max() > max_downsampled_size
 
-    for i in xrange(1, max_scales):
-        cur_scales = tuple(scales_transpose[d][i] for d in xrange(3))
+    for i in range(1, max_scales):
+        cur_scales = tuple(scales_transpose[d][i] for d in range(3))
         if all(not scale_satisfies_criteria(scale) for scale in cur_scales):
             break
         scales.append(cur_scales)
