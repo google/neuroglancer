@@ -2,3 +2,5 @@ dist
 build
 neuroglancer.egg-info
 _neuroglancer.so
+ext/src/endian.h
+snemi3d

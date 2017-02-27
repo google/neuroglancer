@@ -12,3 +12,5 @@ __pycache__
 env
 venv
 static
+lib
+staging

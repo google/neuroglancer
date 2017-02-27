@@ -1,5 +1,5 @@
 # @license
-# Copyright 2016 Google Inc.
+# Copyright 2017 The Neuroglancer Authors
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
 # You may obtain a copy of the License at
@@ -17,13 +17,44 @@ import io
 import numpy as np
 from PIL import Image
 
+def encode_jpeg(arr):
+    assert arr.dtype == np.uint8
+
+    # simulate multi-channel array for single channel arrays
+    if len(arr.shape) == 3:
+        arr = np.expand_dims(arr, 3) # add channels to end of x,y,z
+
+    arr = arr.transpose((3,2,1,0)) # channels, z, y, x
+    reshaped = arr.reshape(arr.shape[3] * arr.shape[2], arr.shape[1] * arr.shape[0])
+    if arr.shape[0] == 1:
+        img = Image.fromarray(reshaped, mode='L')
+    elif arr.shape[0] == 3:
+        img = Image.fromarray(reshaped, mode='RGB')
+    else:
+        raise ValueError("Number of image channels should be 1 or 3. Got: {}".format(arr.shape[3]))
+
+    f = io.BytesIO()
+    img.save(f, "JPEG")
+    return f.getvalue()
+
+def decode_jpeg(bytestring, shape=(64,64,64), dtype=np.uint8):
+
+    # if len(bytestring) <= 3404: # black jpeg of shape (64,64,64) in mode L
+    #     return np.zeros(shape=shape, dtype=dtype)
+
+    img = Image.open(io.BytesIO(bytestring))
+    data = np.array(img.getdata(), dtype=dtype)
+
+    return data.reshape(shape[::-1]).T
+
 def encode_npz(subvol):
     """
     This file format is unrelated to np.savez
     We are just saving as .npy and the compressing
     using zlib. 
-    The .npy format contains metadata indicate
-    shape and dtype, in opositon to just doing np.tobytes
+    The .npy format contains metadata indicating
+    shape and dtype, instead of np.tobytes which doesn't
+    contain any metadata.
     """
     fileobj = io.BytesIO()
     if len(subvol.shape) == 3:
@@ -36,20 +67,9 @@ def decode_npz(string):
     fileobj = io.BytesIO(zlib.decompress(string))
     return np.load(fileobj)
 
-def encode_jpeg(arr):
-    assert arr.dtype == np.uint8
-    arr = arr.transpose((3,2,1,0))
-    reshaped = arr.reshape(arr.shape[3] * arr.shape[2], arr.shape[1] * arr.shape[0])
-    if shape[3] == 1:
-        img = Image.fromarray(reshaped, mode='L')
-    elif shape[3] == 3:
-        img = Image.fromarray(reshaped, mode='RGB')
-    else:
-        raise ValueError(shape[3] + " should be 1 or 3.")
-
-    f = io.BytesIO()
-    img.save(f, "JPEG")
-    return f.getvalue()
-
 def encode_raw(subvol):
     return subvol.tostring('F')
+
+def decode_raw(bytestring, shape=(64,64,64), dtype=np.uint32):
+    return np.frombuffer(bytestring, dtype=dtype).reshape(shape[::-1]).T
+

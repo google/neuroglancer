@@ -9,9 +9,8 @@ import os
 from tempfile import NamedTemporaryFile
 import blosc
 
-from base import QUEUE_NAME, PROJECT_NAME, Storage
+from lib import GCLOUD_QUEUE_NAME, GCLOUD_PROJECT_NAME, Storage, credentials_path
 from neuroglancer import chunks, downsample
-from neuroglancer.ingest.base import credentials_path
 
 
 class IngestTask(object):
@@ -367,7 +366,7 @@ class TaskQueue(object):
         def __init__(self):
             super(LookupError, self).__init__('Queue Empty')
 
-    def __init__(self, project=PROJECT_NAME, queue_name=QUEUE_NAME, local=True):
+    def __init__(self, project=GCLOUD_PROJECT_NAME, queue_name=GCLOUD_QUEUE_NAME, local=True):
         self._project = 's~' + project # unsure why this is necessary
         self._queue_name = queue_name
 

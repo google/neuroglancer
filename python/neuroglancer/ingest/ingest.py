@@ -8,7 +8,7 @@ from tqdm import tqdm
 
 from neuroglancer import downsample_scales, chunks
 from neuroglancer.ingest.tasks import IngestTask, TaskQueue
-from neuroglancer.ingest.base import  Storage
+from neuroglancer.ingest.lib import  Storage
 from neuroglancer.ingest.volumes import HDF5Volume
 
 PROCESSING_CHUNK = (1024, 1024, 128)

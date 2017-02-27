@@ -1,5 +1,5 @@
 # @license
-# Copyright 2016 Google Inc.
+# Copyright 2017 The Neuroglancer Authors
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
 # You may obtain a copy of the License at
@@ -17,7 +17,6 @@ from __future__ import division
 import math
 import numpy as np
 
-
 def downsample_with_averaging(array, factor):
     """Downsample x by factor using averaging.
 
@@ -34,8 +33,43 @@ def downsample_with_averaging(array, factor):
         counts[indexing_expr] += 1
     return np.cast[array.dtype](temp / counts)
 
+def downsample_segmentation(data, factor):
+  if tuple(factor) != (2,2,1):
+    return downsample_with_striding(data, factor)
+  
+  output = np.zeros(
+    shape=( data.shape[0] / 2, data.shape[1] / 2, data.shape[2]), 
+    dtype=data.dtype
+  )
 
-def downsample_with_striding(array, factor):
+  for z in xrange(data.shape[2]):
+    output[:,:,z] = downsample_segmentation_2D_4x(data[:,:,z])
+
+  return output
+
+def downsample_segmentation_2D_4x(data):
+  """Vectorized implementation of downsampling a 2D 
+  image by 2 on each side using the COUNTLESS algorithm."""
+  sections = []
+
+  factor = (2,2)
+  for offset in np.ndindex(factor):
+    part = data[tuple(np.s_[o::f] for o, f in zip(offset, factor))]
+    sections.append(part)
+
+  a, b, c, d = sections
+
+  ab = a * (a == b)
+  ac = a * (a == c)
+  bc = b * (b == c)
+
+  a = ab | ac | bc
+
+  # o = logical or, i.e., shortcutting logic
+  # o = lambda p,q: p | (q & ((p != 0) - 1).astype(data.dtype)) # requires using unsigned dtypes
+  return a + (a == 0) * d
+  
+def downsample_with_striding(array, factor): 
     """Downsample x by factor using striding.
 
     @return: The downsampled array, of the same type as x.

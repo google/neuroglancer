@@ -2,7 +2,7 @@ from __future__ import print_function
 
 from tqdm import tqdm
 
-from neuroglancer.ingest.base import Storage
+from neuroglancer.ingest.lib import Storage
 from neuroglancer.ingest.tasks import TaskQueue, BigArrayTask, IngestTask
 
 def create_ingest_task(dataset_name, layer_name):

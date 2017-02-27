@@ -66,7 +66,7 @@ def upload_mesh_manifests(fragments, cloudpath):
 def pull_chunk_manifests(cloudpath):
   bucket_name, dataset, layer = cloudpath_to_hierarchy(cloudpath)
   prefix_path = '{}/{}/build/manifests/'.format(dataset, layer)
-  client = storage.Client(project=lib.GCLOUD_PROJECT)
+  client = storage.Client(project=lib.GCLOUD_PROJECT_NAME)
   bucket = client.get_bucket(bucket_name)
   manifests = []
   for blob in tqdm(bucket.list_blobs(prefix=prefix_path)):
