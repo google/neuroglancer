@@ -16,6 +16,16 @@ The four-pane view consists of 3 orthogonal cross-sectional views as well as a 3
 
   This dataset was copied from <https://www.janelia.org/project-team/flyem/data-and-software-release>, and is made available under the [Open Data Common Attribution License](http://opendatacommons.org/licenses/by/1.0/).  Paper: <a href="http://dx.doi.org/10.1073/pnas.1509820112" target="_blank">Takemura, Shin-ya et al. "Synaptic Circuits and Their Variations within Different Columns in the Visual System of Drosophila."  Proceedings of the National Academy of Sciences of the United States of America 112.44 (2015): 13711-13716.</a>
   
+# Docker Image
+
+A Docker image has been made for the python code in this project and can be run by using the Docker pull and run commands
+```
+docker pull 4quant/neuroglancer
+docker run -t 4quant/neuroglancer
+```
+
+More details about running with Docker and example scripts are available at the [neuroglancer-docker repository](https://github.com/4Quant/neuroglancer-docker)
+  
 # Supported data sources
 
 Neuroglancer itself is purely a client-side program, but it depends on data being accessible via HTTP in a suitable format.  It is designed to easily support many different data sources, and there is existing support for the following data APIs/formats:
