@@ -20,7 +20,17 @@ handlers:
   static_files: static/index.html
   upload: static/index.html
   login: required
+  secure: always
+  redirect_http_response_code: 301
+  
+- url: /blob(.*)
+  script: blob.app
+  login: required
+  secure: always
+  redirect_http_response_code: 301
 
 - url: /
   static_dir: static
   login: required
+  secure: always
+  redirect_http_response_code: 301

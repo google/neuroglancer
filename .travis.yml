@@ -22,13 +22,13 @@ before_install:
 - tar -xzf credentials.tar.gz 
 - export CHROME_BIN=/usr/bin/google-chrome
 - export DISPLAY=:99.0
-- sudo apt-get update
-- sudo apt-get install -y libappindicator1 fonts-liberation
-- wget https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb
-- sudo dpkg -i google-chrome*.deb
-- rm google-chrome*.deb
-- sh -e /etc/init.d/xvfb start
-- sleep 3
+# - sudo apt-get update
+# - sudo apt-get install -y libappindicator1 fonts-liberation
+# - wget https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb
+# - sudo dpkg -i google-chrome*.deb
+# - rm google-chrome*.deb
+# - sh -e /etc/init.d/xvfb start
+# - sleep 3
 script:
 - npm install
 - npm install --only=dev 
@@ -42,6 +42,9 @@ before_deploy:
 - $(python version.py)
 - export DEPLOY="false"
 - if [ "$APPVERSION" == "master" ]; then export DEPLOY="true"; fi
+- virtualenv env
+- source env/bin/activate
+- pip install -t lib -r requirements.txt
 deploy:
   provider: gae
   skip_cleanup: true
