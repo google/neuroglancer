@@ -1,0 +1,46 @@
+# -*- Makefile -*-
+
+-include Makefile-include-wine
+
+########
+# Rules
+########
+
+ALLTESTS = 	./bin/utility/test/address_of_test.o \
+		./bin/utility/test/is_printable_test.o \
+		./bin/utility/test/enable_if_test.o \
+		./bin/concurrency/test/mutex_test.o \
+		./bin/concurrency/test/barrier_test.o \
+		./bin/concurrency/test/semaphore_test.o \
+		./bin/concurrency/test/task_manager_test.o \
+		./bin/concurrency/test/condition_variable_test.o \
+		./bin/atomic/test/atomic_test.o \
+		./bin/cache/test/member_function_test.o \
+		./bin/cache/test/key_extractors_test.o
+
+
+$(BINDIR)/unit_tests.exe: $(ALLTESTS) ./main.cpp
+	$(MKDIR) $(dir $@)
+	$(ECHO) [CXX] building  $(BINDIR)/unit_tests.exe
+	$(CXX) $(CXXFLAGS) -DZUNIT_NOT_STANDALONE -o $(BINDIR)/unit_tests.exe $(ALLTESTS) ./main.cpp
+
+all: $(BINDIR)/unit_tests.exe
+
+runtests: all
+	$(ECHO) [RUN] running   $(BINDIR)/unit_tests.exe
+	$(BINDIR)/unit_tests.exe
+
+ALLDEPS = 	./bin/utility/test/address_of_test.d \
+		./bin/utility/test/is_printable_test.d \
+		./bin/utility/test/enable_if_test.d \
+		./bin/concurrency/test/mutex_test.d \
+		./bin/concurrency/test/barrier_test.d \
+		./bin/concurrency/test/semaphore_test.d \
+		./bin/concurrency/test/task_manager_test.d \
+		./bin/concurrency/test/condition_variable_test.d \
+		./bin/atomic/test/atomic_test.d \
+		./bin/cache/test/member_function_test.d \
+		./bin/cache/test/key_extractors_test.d
+
+
+-include $(ALLDEPS)

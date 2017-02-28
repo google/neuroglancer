@@ -1,0 +1,12 @@
+queue:
+- name: test-pull-queue
+  mode: pull
+  acl:
+    - user_email: 830953782987@developer.gserviceaccount.com 
+    - writer_email: 830953782987@developer.gserviceaccount.com 
+
+- name: pull-queue
+  mode: pull
+  acl:
+    - user_email: 830953782987@developer.gserviceaccount.com 
+    - writer_email: 830953782987@developer.gserviceaccount.com 

@@ -1,0 +1,85 @@
+//
+// Copyright (C) 2010  Aleksandar Zlateski <zlateski@mit.edu>
+// ----------------------------------------------------------
+//
+// This program is free software: you can redistribute it and/or modify
+// it under the terms of the GNU General Public License as published by
+// the Free Software Foundation, either version 3 of the License, or
+// (at your option) any later version.
+//
+// This program is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+// GNU General Public License for more details.
+//
+// You should have received a copy of the GNU General Public License
+// along with this program.  If not, see <http://www.gnu.org/licenses/>.
+//
+
+#ifndef ZI_UTILITY_ENABLE_IF_HPP
+#define ZI_UTILITY_ENABLE_IF_HPP 1
+
+#include <zi/utility/detail/yes_no_type.hpp>
+
+namespace zi {
+namespace detail {
+namespace enable_if_ {
+
+template< bool Cond, class Type = void > struct enable_if
+{
+    typedef Type type;
+};
+
+template< class Type > struct enable_if< false, Type >
+{
+    /* No type defined */
+};
+
+template< class Cond, class Type = void > struct enable_if_t
+{
+    typedef Type type;
+};
+
+template< class Type > struct enable_if_t< detail::no_type, Type >
+{
+    /* No type defined */
+};
+
+} // namespace enable_if_
+
+
+namespace disable_if_ {
+
+
+template< bool Cond, class Type = void > struct disable_if
+{
+    typedef Type type;
+};
+
+template< class Type > struct disable_if< true, Type >
+{
+    /* No type defined */
+};
+
+template< class Cond, class Type = void > struct disable_if_t
+{
+    typedef Type type;
+};
+
+template< class Type > struct disable_if_t< detail::yes_type, Type >
+{
+    /* No type defined */
+};
+
+
+} // namespace disable_if_
+} // namespace detail
+
+using detail::enable_if_::enable_if ;
+using detail::disable_if_::disable_if;
+using detail::enable_if_::enable_if_t ;
+using detail::disable_if_::disable_if_t;
+
+} // namespace zi
+
+#endif

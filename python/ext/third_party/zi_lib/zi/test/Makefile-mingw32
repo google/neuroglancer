@@ -1,0 +1,24 @@
+# -*- Makefile -*-
+
+-include Makefile-include-mingw32
+
+########
+# Rules
+########
+
+ALLTESTS = $(shell find ../  | grep -Z --color=never "_test\.cpp$$" | replace ".cpp" ".o" -- | replace "../" "./bin/" -- )
+
+$(BINDIR)/unit_tests.exe: $(ALLTESTS) ./main.cpp
+	$(MKDIR) -p $(dir $@)
+	$(ECHO) "[CXX] building  $(BINDIR)/unit_tests.exe"
+	$(CXX) $(CXXFLAGS) -DZUNIT_NOT_STANDALONE -o $(BINDIR)/unit_tests.exe $(ALLTESTS) ./main.cpp
+
+all: $(BINDIR)/unit_tests.exe
+
+runtests: all
+	$(ECHO) "[RUN] running   $(BINDIR)/unit_tests.exe"
+	$(BINDIR)/unit_tests.exe
+
+ALLDEPS = $(shell find ../  | grep -Z --color=never "_test\.cpp$$" | replace ".cpp" ".d" -- | replace "../" "./bin/" -- )
+
+-include $(ALLDEPS)

@@ -1,0 +1,479 @@
+//
+// Copyright (C) 2010  Aleksandar Zlateski <zlateski@mit.edu>
+// ----------------------------------------------------------
+//
+// This program is free software: you can redistribute it and/or modify
+// it under the terms of the GNU General Public License as published by
+// the Free Software Foundation, either version 3 of the License, or
+// (at your option) any later version.
+//
+// This program is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+// GNU General Public License for more details.
+//
+// You should have received a copy of the GNU General Public License
+// along with this program.  If not, see <http://www.gnu.org/licenses/>.
+//
+
+#include <zi/cache/container.hpp>
+#include <zi/zunit/zunit.hpp>
+#include <zi/concurrency/concurrency.hpp>
+
+#include <set>
+
+ZiSUITE( ZiLib_Cache_Tests );
+
+namespace cache_tests {
+
+struct simple_tag;
+
+struct simple_cache
+{
+    bool flush( const int key )
+    {
+        flushed_.insert( key );
+        return true;
+    }
+
+    std::set< int > flushed_;
+};
+
+namespace fn_flushed {
+
+std::set< int > flushed;
+
+static bool flush( const int& key )
+{
+    flushed.insert( key );
+    return true;
+}
+
+}
+
+} // namespace cache_tests
+
+ZiTEST( Test_ContainerWithObject )
+{
+    using namespace cache_tests;
+
+    zi::cache::cache_container<> cc;
+    simple_cache                 sc;
+
+    int64_t tok10 = cc.insert( sc, 10 );
+    zi::this_thread::sleep( 100 );
+    int64_t tok20 = cc.insert( sc, 20 );
+    zi::this_thread::sleep( 100 );
+    int64_t tok30 = cc.insert( sc, 30 );
+
+    EXPECT_GTE( cc.age_of( tok10 ), cc.age_of( tok20 ) );
+    EXPECT_GTE( cc.age_of( tok20 ), cc.age_of( tok30 ) );
+
+    EXPECT_EQ( cc.oldest_token(), tok10 );
+
+    zi::this_thread::sleep( 100 );
+    cc.touch( tok10 );
+
+    EXPECT_LTE( cc.age_of( tok10 ), cc.age_of( tok20 ) );
+    EXPECT_LTE( cc.age_of( tok10 ), cc.age_of( tok30 ) );
+    EXPECT_LTE( cc.age_of( tok30 ), cc.age_of( tok20 ) );
+
+    EXPECT_EQ( cc.size(), 3 );
+    EXPECT_EQ( cc.oldest_token(), tok20 );
+
+    cc.remove( tok20 );
+
+    EXPECT_EQ( cc.size(), 2 );
+    EXPECT_EQ( cc.oldest_token(), tok30 );
+    EXPECT_EQ( sc.flushed_.size(), 1 );
+
+    cc.remove( tok30 );
+
+    EXPECT_EQ( cc.size(), 1 );
+    EXPECT_EQ( cc.oldest_token(), tok10 );
+    EXPECT_EQ( sc.flushed_.size(), 2 );
+
+}
+
+ZiTEST( Test_ContainerWithFunction )
+{
+    using namespace cache_tests;
+
+    fn_flushed::flushed.clear();
+    zi::cache::cache_container<> cc;
+
+    int64_t tok10 = cc.insert( fn_flushed::flush, 10 );
+
+    zi::this_thread::sleep( 100 );
+    int64_t tok20 = cc.insert( fn_flushed::flush, 20 );
+
+    zi::this_thread::sleep( 100 );
+    int64_t tok30 = cc.insert( fn_flushed::flush, 30 );
+
+    EXPECT_GTE( cc.age_of( tok10 ), cc.age_of( tok20 ) );
+    EXPECT_GTE( cc.age_of( tok20 ), cc.age_of( tok30 ) );
+
+    EXPECT_EQ( cc.oldest_token(), tok10 );
+
+    zi::this_thread::sleep( 100 );
+    cc.touch( tok10 );
+
+    EXPECT_LTE( cc.age_of( tok10 ), cc.age_of( tok20 ) );
+    EXPECT_LTE( cc.age_of( tok10 ), cc.age_of( tok30 ) );
+    EXPECT_LTE( cc.age_of( tok30 ), cc.age_of( tok20 ) );
+
+    EXPECT_EQ( cc.size(), 3 );
+    EXPECT_EQ( cc.oldest_token(), tok20 );
+
+    cc.remove( tok20 );
+
+    EXPECT_EQ( cc.size(), 2 );
+    EXPECT_EQ( cc.oldest_token(), tok30 );
+    EXPECT_EQ( fn_flushed::flushed.size(), 1 );
+
+    cc.remove( tok30 );
+
+    EXPECT_EQ( cc.size(), 1 );
+    EXPECT_EQ( cc.oldest_token(), tok10 );
+    EXPECT_EQ( fn_flushed::flushed.size(), 2 );
+
+}
+
+
+ZiTEST( Test_ContainerWithCombined )
+{
+    using namespace cache_tests;
+
+    fn_flushed::flushed.clear();
+    simple_cache                 sc;
+    zi::cache::cache_container<> cc;
+
+
+    int64_t tok10f = cc.insert( fn_flushed::flush, 10 );
+
+    zi::this_thread::sleep( 30 );
+    int64_t tok10o = cc.insert( sc, 10 );
+
+    zi::this_thread::sleep( 30 );
+    int64_t tok20f = cc.insert( fn_flushed::flush, 20 );
+
+    zi::this_thread::sleep( 30 );
+    int64_t tok20o = cc.insert( sc, 20 );
+
+    zi::this_thread::sleep( 30 );
+    int64_t tok30f = cc.insert( fn_flushed::flush, 30 );
+
+    zi::this_thread::sleep( 30 );
+    int64_t tok30o = cc.insert( sc, 30 );
+
+
+    EXPECT_GTE( cc.age_of( tok10f ), cc.age_of( tok10o ) );
+    EXPECT_GTE( cc.age_of( tok20f ), cc.age_of( tok30o ) );
+    EXPECT_GTE( cc.age_of( tok30f ), cc.age_of( tok30o ) );
+    EXPECT_GTE( cc.age_of( tok10o ), cc.age_of( tok20f ) );
+    EXPECT_GTE( cc.age_of( tok20o ), cc.age_of( tok30f ) );
+
+    EXPECT_EQ( cc.oldest_token(), tok10f );
+
+    zi::this_thread::sleep( 10 );
+    cc.touch( tok10f );
+
+    EXPECT_GTE( cc.age_of( tok20f ), cc.age_of( tok30o ) );
+    EXPECT_GTE( cc.age_of( tok30f ), cc.age_of( tok30o ) );
+    EXPECT_GTE( cc.age_of( tok10o ), cc.age_of( tok20f ) );
+    EXPECT_GTE( cc.age_of( tok20o ), cc.age_of( tok30f ) );
+    EXPECT_GTE( cc.age_of( tok30o ), cc.age_of( tok10f ) );
+
+    EXPECT_EQ( cc.size(), 6 );
+    EXPECT_EQ( cc.oldest_token(), tok10o );
+
+    cc.remove( tok20f );
+
+    EXPECT_EQ( cc.size(), 5 );
+    EXPECT_EQ( cc.oldest_token(), tok10o );
+    EXPECT_EQ( fn_flushed::flushed.size(), 1 );
+    EXPECT_EQ( sc.flushed_.size(), 0 );
+
+    cc.remove( tok10o );
+
+    EXPECT_EQ( cc.size(), 4 );
+    EXPECT_EQ( cc.oldest_token(), tok20o );
+    EXPECT_EQ( fn_flushed::flushed.size(), 1 );
+    EXPECT_EQ( sc.flushed_.size(), 1 );
+
+    cc.remove( tok20o );
+
+    EXPECT_EQ( cc.size(), 3 );
+    EXPECT_EQ( cc.oldest_token(), tok30f );
+    EXPECT_EQ( fn_flushed::flushed.size(), 1 );
+    EXPECT_EQ( sc.flushed_.size(), 2 );
+
+
+}
+
+
+ZiTEST( Test_ContainerCounts )
+{
+    using namespace cache_tests;
+
+    fn_flushed::flushed.clear();
+    simple_cache                 sc1;
+    simple_cache                 sc2;
+    simple_cache                 sc3;
+
+    zi::cache::cache_container<> cc;
+
+    int64_t toks[ 4 ][ 100 ];
+
+    for ( int i = 0; i < 100; ++i )
+    {
+        toks[ 0 ][ i ] = cc.insert( sc1, i );
+        toks[ 1 ][ i ] = cc.insert( sc2, i );
+        toks[ 2 ][ i ] = cc.insert( sc3, i );
+        toks[ 3 ][ i ] = cc.insert( fn_flushed::flush, i );
+    }
+
+    EXPECT_EQ( cc.size(), 400 );
+    EXPECT_EQ( cc.count_of( sc1 ), 100 );
+    EXPECT_EQ( cc.count_of( sc2 ), 100 );
+    EXPECT_EQ( cc.count_of( sc3 ), 100 );
+    EXPECT_EQ( cc.count_of( fn_flushed::flush ), 100 );
+
+
+    for ( int i = 0; i < 50; ++i )
+    {
+        for ( int j = 0; j < 4; ++j )
+            cc.remove( toks[ j ][ i ] );
+    }
+
+    EXPECT_EQ( cc.size(), 200 );
+    EXPECT_EQ( cc.count_of( sc1 ), 50 );
+    EXPECT_EQ( cc.count_of( sc2 ), 50 );
+    EXPECT_EQ( cc.count_of( sc3 ), 50 );
+    EXPECT_EQ( cc.count_of( fn_flushed::flush ), 50 );
+
+    EXPECT_EQ( cc.clear_group( sc1 ), 50 );
+    EXPECT_EQ( cc.size(), 150 );
+
+    EXPECT_EQ( cc.clear_group( sc2 ), 50 );
+    EXPECT_EQ( cc.size(), 100 );
+
+    EXPECT_EQ( cc.clear_group( sc3 ), 50 );
+    EXPECT_EQ( cc.size(), 50 );
+
+    EXPECT_EQ( cc.clear_group( fn_flushed::flush ), 50 );
+    EXPECT_EQ( cc.size(), 0 );
+
+}
+
+
+namespace cache_tests {
+
+template< class Cache, class CacheType, int N >
+struct cache_filler: zi::runnable
+{
+    cache_filler( Cache &cache, CacheType &ct ):
+        cache_( cache ), ct_( ct )
+    {
+    }
+
+    void run()
+    {
+        for ( int i = 0; i < N; ++i )
+        {
+            tokens_[ i ] = cache_.insert( ct_, i );
+        }
+    }
+
+    Cache      &cache_;
+    CacheType  &ct_;
+    int64_t    tokens_[ N ];
+
+};
+
+template< class Cache, int N >
+struct cache_remover: zi::runnable
+{
+    cache_remover( Cache &cache, int64_t *tokens ):
+        cache_( cache ), tokens_( tokens )
+    {
+    }
+
+    void run()
+    {
+        for ( int i = 0; i < N; ++i )
+        {
+            cache_.remove( tokens_[0] );
+            ++tokens_;
+        }
+    }
+
+    Cache      &cache_ ;
+    int64_t   *tokens_ ;
+};
+
+
+template< class Cache, class CacheType >
+struct cache_clearer: zi::runnable
+{
+    cache_clearer( Cache &cache, CacheType &ct ):
+        cache_( cache ), ct_( ct ), removed_( 0 )
+    {
+    }
+
+    void run()
+    {
+        removed_ = cache_.clear_group( ct_ );
+    }
+
+    Cache       &cache_;
+    CacheType   &ct_;
+    std::size_t  removed_;
+};
+
+
+} // namespace cache_tests
+
+
+ZiTEST( Test_ContainerConcurrency )
+{
+    using namespace cache_tests;
+
+    fn_flushed::flushed.clear();
+    simple_cache                 sc1;
+    simple_cache                 sc2;
+    simple_cache                 sc3;
+
+    zi::cache::cache_container<> cc;
+
+    zi::shared_ptr< cache_filler< zi::cache::cache_container<>, simple_cache, 100 > > cf1
+        ( new  cache_filler< zi::cache::cache_container<>, simple_cache, 100 >( cc, sc1 ) );
+
+    zi::shared_ptr< cache_filler< zi::cache::cache_container<>, simple_cache, 100 > > cf2
+        ( new  cache_filler< zi::cache::cache_container<>, simple_cache, 100 >( cc, sc2 ) );
+
+    zi::shared_ptr< cache_filler< zi::cache::cache_container<>, simple_cache, 100 > > cf3
+        ( new  cache_filler< zi::cache::cache_container<>, simple_cache, 100 >( cc, sc3 ) );
+
+    zi::shared_ptr< cache_filler< zi::cache::cache_container<>, bool (&)( const int& ), 100 > > cf4
+        ( new  cache_filler< zi::cache::cache_container<>, bool (&)( const int &), 100 >
+          ( cc, fn_flushed::flush ) );
+
+    {
+
+        zi::thread th1( cf1 );
+        th1.start();
+
+        zi::thread th2( cf2 );
+        th2.start();
+
+        zi::thread th3( cf3 );
+        th3.start();
+
+        zi::thread th4( cf4 );
+        th4.start();
+
+        zi::all_threads::join();
+
+        EXPECT_EQ( cc.count_of( sc1 ), 100 );
+        EXPECT_EQ( cc.count_of( sc2 ), 100 );
+        EXPECT_EQ( cc.count_of( sc3 ), 100 );
+        EXPECT_EQ( cc.count_of( fn_flushed::flush ), 100 );
+
+    }
+
+    zi::shared_ptr< cache_remover< zi::cache::cache_container<>, 10 > > cfr1
+        ( new  cache_remover< zi::cache::cache_container<>, 10 >( cc, cf1->tokens_ ) );
+
+    zi::shared_ptr< cache_remover< zi::cache::cache_container<>, 10 > > cfr2
+        ( new  cache_remover< zi::cache::cache_container<>, 10 >( cc, cf2->tokens_ ) );
+
+    zi::shared_ptr< cache_remover< zi::cache::cache_container<>, 10 > > cfr3
+        ( new  cache_remover< zi::cache::cache_container<>, 10 >( cc, cf3->tokens_ ) );
+
+    zi::shared_ptr< cache_remover< zi::cache::cache_container<>, 10 > > cfr4
+        ( new  cache_remover< zi::cache::cache_container<>, 10 >( cc, cf4->tokens_ ) );
+
+
+    for ( int i = 90; i >= 50; i-= 10 )
+    {
+
+        zi::thread th1( cfr1 );
+        th1.start();
+
+        zi::thread th2( cfr2 );
+        th2.start();
+
+        zi::all_threads::join();
+
+        EXPECT_EQ( cc.count_of( sc1 ), i );
+        EXPECT_EQ( cc.count_of( sc2 ), i );
+        EXPECT_EQ( cc.count_of( sc3 ), i + 10 );
+        EXPECT_EQ( cc.count_of( fn_flushed::flush ), i + 10 );
+
+        zi::thread th3( cfr3 );
+        th3.start();
+
+        zi::thread th4( cfr4 );
+        th4.start();
+
+        zi::all_threads::join();
+
+        EXPECT_EQ( cc.count_of( sc3 ), i );
+        EXPECT_EQ( cc.count_of( fn_flushed::flush ), i );
+
+    }
+
+    zi::shared_ptr< cache_clearer< zi::cache::cache_container<>, simple_cache > > cfc1
+        ( new  cache_clearer< zi::cache::cache_container<>, simple_cache >( cc, sc1 ) );
+
+    zi::shared_ptr< cache_clearer< zi::cache::cache_container<>, simple_cache > > cfc2
+        ( new  cache_clearer< zi::cache::cache_container<>, simple_cache >( cc, sc2 ) );
+
+    zi::shared_ptr< cache_clearer< zi::cache::cache_container<>, simple_cache > > cfc3
+        ( new  cache_clearer< zi::cache::cache_container<>, simple_cache >( cc, sc3 ) );
+
+    zi::shared_ptr< cache_clearer< zi::cache::cache_container<>, bool (&)( const int& ) > > cfc4
+        ( new  cache_clearer< zi::cache::cache_container<>, bool (&)( const int &) >
+          ( cc, fn_flushed::flush ) );
+
+    {
+
+        zi::thread th1( cfc1 );
+        th1.start();
+
+        zi::thread th2( cfc2 );
+        th2.start();
+
+        zi::all_threads::join();
+
+        EXPECT_EQ( cc.count_of( sc1 ), 0 );
+        EXPECT_EQ( cc.count_of( sc2 ), 0 );
+        EXPECT_EQ( cc.count_of( sc3 ), 50 );
+        EXPECT_EQ( cc.count_of( fn_flushed::flush ), 50 );
+
+        EXPECT_EQ( cfc1->removed_, 50 );
+        EXPECT_EQ( cfc2->removed_, 50 );
+
+        zi::thread th3( cfc3 );
+        th3.start();
+
+        zi::thread th4( cfc4 );
+        th4.start();
+
+        zi::all_threads::join();
+
+        EXPECT_EQ( cc.count_of( sc1 ), 0 );
+        EXPECT_EQ( cc.count_of( sc2 ), 0 );
+        EXPECT_EQ( cc.count_of( sc3 ), 0 );
+        EXPECT_EQ( cc.count_of( fn_flushed::flush ), 0 );
+
+        EXPECT_EQ( cfc3->removed_, 50 );
+        EXPECT_EQ( cfc4->removed_, 50 );
+
+
+    }
+
+}
+
+

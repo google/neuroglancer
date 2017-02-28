@@ -14,9 +14,27 @@
 
 import zlib
 import io
-from PIL import Image
 import numpy as np
+from PIL import Image
 
+def encode_npz(subvol):
+    """
+    This file format is unrelated to np.savez
+    We are just saving as .npy and the compressing
+    using zlib. 
+    The .npy format contains metadata indicate
+    shape and dtype, in opositon to just doing np.tobytes
+    """
+    fileobj = io.BytesIO()
+    if len(subvol.shape) == 3:
+        subvol = np.expand_dims(subvol, 0)
+    np.save(fileobj, subvol)
+    cdz = zlib.compress(fileobj.getvalue())
+    return cdz
+
+def decode_npz(string):
+    fileobj = io.BytesIO(zlib.decompress(string))
+    return np.load(fileobj)
 
 def encode_jpeg(subvol):
     shape = subvol.shape
@@ -25,15 +43,6 @@ def encode_jpeg(subvol):
     f = io.BytesIO()
     img.save(f, "JPEG")
     return f.getvalue()
-
-
-def encode_npz(subvol):
-    fileobj = io.BytesIO()
-    if len(subvol.shape) == 3:
-        subvol = np.expand_dims(subvol, 0)
-    np.save(fileobj, subvol)
-    cdz = zlib.compress(fileobj.getvalue())
-    return cdz
 
 
 def encode_raw(subvol):

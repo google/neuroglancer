@@ -1,0 +1,23 @@
+-include Makefile-include-wine
+
+########
+# Rules
+########
+
+ALLTESTS = 	./bin/utility/test/address_of_test.o \
+		./bin/utility/test/is_printable_test.o \
+		./bin/utility/test/enable_if_test.o \
+		./bin/concurrency/test/mutex_test.o \
+		./bin/concurrency/test/condition_variable_test.o \
+		./bin/atomic/test/atomic_test.o
+
+$(BINDIR)/unit_tests.exe: $(ALLTESTS) ./main.cpp
+	$(MKDIR) -p $(dir $@)
+	$(ECHO) [CXX] building  $(BINDIR)/unit_tests.exe
+	$(CXX) $(CXXFLAGS) -DZUNIT_NOT_STANDALONE -o $(BINDIR)/unit_tests $(ALLTESTS) ./main.cpp
+
+all: $(BINDIR)/unit_tests.exe
+
+runtests: all
+	$(ECHO) [RUN] running   $(BINDIR)/unit_tests.exe
+	$(BINDIR)/unit_tests.exe
