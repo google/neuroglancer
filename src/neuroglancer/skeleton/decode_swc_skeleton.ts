@@ -1,7 +1,6 @@
 import {SkeletonChunk} from 'neuroglancer/skeleton/backend';
 
-export function decodeSwcSkeletonChunk(
-    chunk: SkeletonChunk, swcStr: string) {
+export function decodeSwcSkeletonChunk(chunk: SkeletonChunk, swcStr: string) {
   let swcObjects: Array<PointObj> = parseSwc(swcStr);
   if (swcObjects.length < 2) {
     throw new Error(`ERROR parsing swc file`);
