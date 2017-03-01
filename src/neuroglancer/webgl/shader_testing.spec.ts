@@ -103,8 +103,10 @@ describe('FragmentShaderTester', () => {
         tester.execute();
         let outputValue1 = tester.readFloat(0);
         let outputValue2 = tester.readFloat(1);
-        expect(outputValue1).toEqual(inputValues[0]);
-        expect(outputValue2).toEqual(inputValues[1]);
+        expect(Math.abs(outputValue1 - inputValues[0])).toBeLessThan(
+            Math.pow(2, -23));
+        expect(Math.abs(outputValue2 - inputValues[1])).toBeLessThan(
+            Math.pow(2, -23));
       }
     });
   });
