@@ -40,6 +40,8 @@ function findRepresentative(v: any): any {
   return ancestor;
 }
 
+// Rank of a set is the smallest ordinal greater than the 
+// any rank contained within the set. e.g. empty set 
 function linkUnequalSetRepresentatives(i: any, j: any): any {
   let iRank = i[rankSymbol];
   let jRank = j[rankSymbol];
@@ -67,7 +69,6 @@ function spliceCircularLists(i: any, j: any) {
   i[prevSymbol] = jPrev;
   jPrev[nextSymbol] = i;
 }
-
 
 
 function* setElementIterator(i: any) {
@@ -99,6 +100,12 @@ function isRootElement(v: any) {
 export class DisjointUint64Sets {
   private map = new Map<string, Uint64>();
   generation = 0;
+
+  has(x: Uint64): boolean {
+    let key = x.toString();
+    let element = this.map.get(key);
+    return element === undefined;
+  }
 
   get(x: Uint64): Uint64 {
     let key = x.toString();
@@ -139,9 +146,88 @@ export class DisjointUint64Sets {
     spliceCircularLists(a, b);
     let aMin = (<any>a)[minSymbol];
     let bMin = (<any>b)[minSymbol];
-    newNode[minSymbol] = Uint64.less(aMin, bMin) ? aMin : bMin;
+    newNode[minSymbol] = Uint64.min(aMin, bMin);
     return true;
   }
+
+  unlink (a: Uint64): boolean {
+    let key = a.toString();
+    let element = this.map.get(key);
+
+    if (!element 
+      || (
+        (<any>element)[parentSymbol] === element
+        && (<any>element)[rankSymbol] === 0)) {
+
+      return true;
+    }
+
+    let nodes = this.shatter(element);
+
+    if (nodes[0] === element) {
+      nodes.shift();
+    }
+
+    if (nodes.length === 0) {
+      return false;
+    }
+
+    let is_ok = true;
+
+    if (nodes.length > 1) {
+      nodes.forEach( (x) => {
+        if (x !== element) {
+          let this_is_ok = this.link(nodes[0], x);
+          is_ok = is_ok && this_is_ok;
+        }
+      });
+    }
+
+    return is_ok;
+  }
+
+  private shatter (a: Uint64) : Uint64[] {
+    let rep = this.makeSet(a);
+
+    let nodes = [];
+    for (let node of setElementIterator(rep)) {
+      nodes.push(node);
+    } 
+
+    nodes.forEach(initializeElement);
+
+    return nodes;
+  }
+
+  split (a: Uint64[], b: Uint64[]) : boolean {
+    if (a.length === 0 || b.length === 0) {
+      return false;
+    }
+
+    let consistencyfn = (list: Uint64[]) => {
+      let root = this.get(list[0]);
+      for (let elem of list) {
+        if (root !== this.get(elem)) {
+          throw new Error(`${elem} was not attached to ${list}`);
+        }
+      }
+    };
+
+    consistencyfn(a);
+    consistencyfn(b);
+
+    if (this.get(a[0]) !== this.get(b[0])) {
+      throw new Error(`${a} and ${b} are not in the same set.`);
+    }
+
+    this.shatter(a[0]);
+
+    a.forEach( (x) => this.link(a[0], x) );
+    b.forEach( (x) => this.link(b[0], x) );
+
+    return true;
+  }
+
 
   * setElements(a: Uint64): IterableIterator<Uint64> {
     let key = a.toString();

@@ -5,3 +5,6 @@
 /// <reference path="../node_modules/@types/jasmine/index.d.ts" />
 /// <reference path="../node_modules/@types/text-encoding/index.d.ts" />
 /// <reference path="../node_modules/@types/webpack-env/index.d.ts" />
+/// <reference path="../node_modules/@types/whatwg-fetch/index.d.ts" />
+/// <reference path="../node_modules/@types/sockjs-client/index.d.ts" />
+/// <reference path="../node_modules/@types/es6-promise/index.d.ts" />

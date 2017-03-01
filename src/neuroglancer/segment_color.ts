@@ -65,7 +65,7 @@ vec3 ${this.prefix}(uint64_t x) {
 };
 
 function fract(x: number) {
-  return x - Math.floor(x);
+  return x - Math.trunc(x);
 }
 
 let tempOutput = new Float32Array(NUM_COMPONENTS);
@@ -136,7 +136,7 @@ export class SegmentColorHash {
     return out;
   }
 
-  randomize_() {
+  private randomize_() {
     for (let i = 0; i < 2; ++i) {
       this.hashFunctions[i] = HashFunction.generate();
     }
@@ -149,7 +149,7 @@ export class SegmentColorHash {
 
   toString() { return `new SegmentColorHash([${this.hashFunctions}])`; }
 
-  computeGPUCoefficients_() {
+  private computeGPUCoefficients_() {
     let hashFunctions = this.hashFunctions;
     let a = this.a_;
     let b = this.b_;

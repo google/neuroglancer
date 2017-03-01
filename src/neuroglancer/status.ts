@@ -42,6 +42,7 @@ export class StatusMessage {
     } else {
       this.timer = null;
     }
+
     statusContainer.appendChild(element);
   }
   dispose() {
@@ -66,6 +67,13 @@ export class StatusMessage {
   setVisible(value: boolean) {
     this.timer = null;
     this.element.style.display = value ? 'block' : 'none';
+  }
+
+  static displayText (text: string, msec: number = 1500) {
+    let status = new StatusMessage();
+    status.setText(text);
+    setTimeout(status.dispose.bind(status), msec);
+    return status;
   }
 
   static forPromise<T>(

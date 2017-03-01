@@ -15,7 +15,7 @@
  */
 
 import {DisplayContext, RenderedPanel} from 'neuroglancer/display_context';
-import {MouseSelectionState} from 'neuroglancer/layer';
+import {MouseSelectionState, SplitState} from 'neuroglancer/layer';
 import {NavigationState} from 'neuroglancer/navigation_state';
 import {AXES_NAMES, kAxes, vec3} from 'neuroglancer/util/geom';
 import {getWheelZoomAmount} from 'neuroglancer/util/wheel_zoom';
@@ -71,7 +71,7 @@ export abstract class RenderedDataPanel extends RenderedPanel {
     this.registerEventListener(element, 'mousedown', this.onMousedown.bind(this), false);
     this.registerEventListener(element, 'wheel', this.onMousewheel.bind(this), false);
     this.registerEventListener(
-        element, 'dblclick', () => { this.viewer.layerManager.invokeAction('select'); });
+        element, 'dblclick', () => { this.viewer.layerManager.invokeAction('select');});
   }
 
   onMouseout(_event: MouseEvent) {
@@ -135,17 +135,19 @@ export abstract class RenderedDataPanel extends RenderedPanel {
       return;
     }
     this.onMousemove(e);
+    let {mouseState} = this.viewer;
     if (e.button === 0) {
       if (e.ctrlKey) {
-        let {mouseState} = this.viewer;
         if (mouseState.updateUnconditionally()) {
           this.viewer.layerManager.invokeAction('annotate');
         }
+      } else if (mouseState.splitStatus != SplitState.INACTIVE) {
+        let action = mouseState.updateSplit();
+        this.viewer.layerManager.invokeAction(`split-select-${action}`);
       } else {
         this.startDragViewport(e);
       }
     } else if (e.button === 2) {
-      let {mouseState} = this.viewer;
       if (mouseState.updateUnconditionally()) {
         let position = this.navigationState.pose.position;
         vec3.copy(position.spatialCoordinates, mouseState.position);

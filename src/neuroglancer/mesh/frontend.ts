@@ -27,6 +27,7 @@ import {GL} from 'neuroglancer/webgl/context';
 import {ShaderBuilder, ShaderModule, ShaderProgram} from 'neuroglancer/webgl/shader';
 import {setVec4FromUint32} from 'neuroglancer/webgl/shader_lib';
 import {registerSharedObjectOwner, RPC} from 'neuroglancer/worker_rpc';
+import {Uint64} from 'neuroglancer/util/uint64';
 
 export class MeshShaderManager {
   private tempLightVec = new Float32Array(4);
@@ -156,8 +157,34 @@ export class MeshLayer extends PerspectiveViewRenderLayer {
     const objectToDataMatrix = this.displayState.objectToDataTransform.transform;
 
     forEachSegmentToDraw(displayState, objectChunks, (rootObjectId, objectId, fragments) => {
+      let color =  vec4.create();
+      let coloring_id = new Uint64();
+
+      if (displayState.semanticMode) {
+        if (!displayState.semanticHashMap.get(objectId, coloring_id)){
+          //Display them in white
+          color[0] = alpha;
+          color[1] = alpha;
+          color[2] = alpha;
+        } else {
+          color = getObjectColor(displayState, coloring_id, alpha)
+        }
+      } else {
+        if (displayState.semanticHashMap.get(objectId, coloring_id)) {
+          if (coloring_id.high == 1) { //Don't draw this segment
+            return;
+          }
+        }
+        coloring_id = displayState.shattered 
+        ? objectId
+        : rootObjectId;
+        color = getObjectColor(displayState, coloring_id, alpha)
+      }
+
+
+
       if (renderContext.emitColor) {
-        meshShaderManager.setColor(gl, shader, getObjectColor(displayState, rootObjectId, alpha));
+        meshShaderManager.setColor(gl, shader, color);
       }
       if (renderContext.emitPickID) {
         meshShaderManager.setPickID(gl, shader, pickIDs.registerUint64(this, objectId));
@@ -171,6 +198,19 @@ export class MeshLayer extends PerspectiveViewRenderLayer {
     });
 
     meshShaderManager.endLayer(gl, shader);
+  }
+
+  handleAction(action: string) {
+    super.handleAction(action);
+
+    let actions: { [key:string] : Function } = {
+    };
+
+    let fn : Function = actions[action];
+
+    if (fn) {
+      fn.call(this);
+    }
   }
 }
 

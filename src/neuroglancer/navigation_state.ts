@@ -14,6 +14,8 @@
  * limitations under the License.
  */
 
+// This module read and writes the url 
+
 import {RefCounted} from 'neuroglancer/util/disposable';
 import {mat3, mat4, quat, vec3} from 'neuroglancer/util/geom';
 import {parseFiniteVec, verifyObject, verifyObjectProperty} from 'neuroglancer/util/json';

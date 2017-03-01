@@ -408,16 +408,16 @@ uint32_t floatToUint32(float x) {
   float v;
   
   v = mod(x, 256.0);
-  result.x = v / 255.0;
+  result.value.x = v / 255.0;
   x = (x - v) / 256.0;
 
   v = mod(x, 256.0);
-  result.y = v / 255.0;
+  result.value.y = v / 255.0;
   x = (x - v) / 256.0;
 
   v = mod(x, 256.0);
-  result.z = v / 255.0;
-  result.w = 0.0;
+  result.value.z = v / 255.0;
+  result.value.w = 0.0;
   
   return result;
 }

@@ -17,10 +17,14 @@
 import {SharedDisjointUint64Sets} from 'neuroglancer/shared_disjoint_sets';
 import {Uint64Set} from 'neuroglancer/uint64_set';
 import {Uint64} from 'neuroglancer/util/uint64';
+import {HashMapUint64} from 'neuroglancer/gpu_hash/hash_table';
 
 export interface VisibleSegmentsState {
   visibleSegments: Uint64Set;
   segmentEquivalences: SharedDisjointUint64Sets;
+  shattered: boolean;
+  semanticHashMap: HashMapUint64;
+  semanticMode: boolean;
 }
 
 /**
@@ -44,3 +48,4 @@ export function forEachVisibleSegment(
     }
   }
 }
+

@@ -35,6 +35,7 @@ export class Uint64MapEntry {
 
 export class SegmentSelectionState extends RefCounted {
   selectedSegment = new Uint64();
+  rawSelectedSegment = new Uint64();
   hasSelectedSegment = false;
   changed = new Signal();
 
@@ -44,10 +45,12 @@ export class SegmentSelectionState extends RefCounted {
         this.hasSelectedSegment = false;
         this.changed.dispatch();
       }
-    } else {
+    } 
+    else {
       let existingValue = this.selectedSegment;
-      if (!this.hasSelectedSegment || value.low !== existingValue.low ||
-          value.high !== existingValue.high) {
+      let existingRawValue = this.rawSelectedSegment;
+      if (!this.hasSelectedSegment || value.low !== existingValue.low || value.high !== existingValue.high) {
+
         existingValue.low = value.low;
         existingValue.high = value.high;
         this.hasSelectedSegment = true;
@@ -56,22 +59,48 @@ export class SegmentSelectionState extends RefCounted {
     }
   }
 
+  setRaw(value: Uint64|null|undefined) {
+    if (value == null) {
+      return;
+    }
+    
+    let existingValue = this.selectedSegment;
+    let existingRawValue = this.rawSelectedSegment;
+    if (!this.hasSelectedSegment || value.low !== existingRawValue.low || value.high !== existingRawValue.high) {
+
+      existingRawValue.low = value.low;
+      existingRawValue.high = value.high;
+    }
+  }
+
+
   isSelected(value: Uint64) {
     return this.hasSelectedSegment && Uint64.equal(value, this.selectedSegment);
   }
 
   bindTo(layerSelectedValues: LayerSelectedValues, userLayer: UserLayer) {
     let temp = new Uint64();
+
+    function toUint64 (value: Uint64|number|Uint64MapEntry) : Uint64 {
+        if (typeof value === 'number') {
+          temp.low = value;
+          temp.high = 0;
+          value = temp;
+        } else if (value instanceof Uint64MapEntry) {
+          value = value.value;
+        }
+
+        return value;
+    }
+
     this.registerSignalBinding(layerSelectedValues.changed.add(() => {
       let value = layerSelectedValues.get(userLayer);
-      if (typeof value === 'number') {
-        temp.low = value;
-        temp.high = 0;
-        value = temp;
-      } else if (value instanceof Uint64MapEntry) {
-        value = value.value;
-      }
-      this.set(value);
+      this.set(toUint64(value));
+    }));
+
+    this.registerSignalBinding(layerSelectedValues.changed.add(() => {
+      let value = layerSelectedValues.getRaw(userLayer);
+      this.setRaw(toUint64(value));
     }));
   }
 };
@@ -142,8 +171,10 @@ export function getObjectColor(
 }
 
 export function forEachSegmentToDraw<SegmentData>(
-    displayState: SegmentationDisplayState, objects: Map<string, SegmentData>,
+    displayState: SegmentationDisplayState, 
+    objects: Map<string, SegmentData>,
     callback: (rootObjectId: Uint64, objectId: Uint64, segmentData: SegmentData) => void) {
+
   forEachVisibleSegment(displayState, (objectId, rootObjectId) => {
     const key = getObjectKey(objectId);
     const segmentData = objects.get(key);

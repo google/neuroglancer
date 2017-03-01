@@ -38,7 +38,9 @@ export function makeDefaultKeyBindings(keyMap: KeySequenceMap) {
   keyMap.bind('shift+arrowright', 'rotate-relative-y+');
   keyMap.bind('keyl', 'recolor');
   keyMap.bind('keyx', 'clear-segments');
-  keyMap.bind('keys', 'toggle-show-slices');
+  keyMap.bind('keys', 'toggle-shatter-equivalencies');
+  keyMap.bind('keyv', 'toggle-semantic-mode');
+  keyMap.bind('keyp', 'toggle-show-slices');
   keyMap.bind('keyb', 'toggle-scale-bar');
   keyMap.bind('keya', 'toggle-axis-lines');
 
@@ -48,6 +50,8 @@ export function makeDefaultKeyBindings(keyMap: KeySequenceMap) {
 
   keyMap.bind('keyn', 'add-layer');
   keyMap.bind('keyh', 'help');
-
   keyMap.bind('space', 'toggle-layout');
+  keyMap.bind('keym', 'merge-selection');
+  keyMap.bind('keyt', 'two-point-split');
+
 }

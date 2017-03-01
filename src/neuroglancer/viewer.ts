@@ -19,7 +19,7 @@ import {AvailableCapacity} from 'neuroglancer/chunk_manager/base';
 import {ChunkManager, ChunkQueueManager} from 'neuroglancer/chunk_manager/frontend';
 import {DisplayContext} from 'neuroglancer/display_context';
 import {KeyBindingHelpDialog} from 'neuroglancer/help/key_bindings';
-import {LayerManager, LayerSelectedValues, MouseSelectionState} from 'neuroglancer/layer';
+import {LayerManager, LayerSelectedValues, MouseSelectionState, SplitState} from 'neuroglancer/layer';
 import {LayerDialog} from 'neuroglancer/layer_dialog';
 import {LayerPanel} from 'neuroglancer/layer_panel';
 import {LayerListSpecification} from 'neuroglancer/layer_specification';
@@ -37,6 +37,7 @@ import {DataDisplayLayout, LAYOUTS} from 'neuroglancer/viewer_layouts';
 import {ViewerState} from 'neuroglancer/viewer_state';
 import {RPC} from 'neuroglancer/worker_rpc';
 import {Signal} from 'signals';
+import {StatusMessage} from 'neuroglancer/status';
 
 require('./viewer.css');
 require('./help_button.css');
@@ -97,7 +98,6 @@ export class Viewer extends RefCounted implements ViewerState {
       e.preventDefault();
       return false;
     });
-
 
     registerTrackable('layers', this.layerSpecification);
     registerTrackable('navigation', this.navigationState);
@@ -172,7 +172,7 @@ export class Viewer extends RefCounted implements ViewerState {
       });
     }
 
-    for (let command of ['recolor', 'clear-segments']) {
+    for (let command of ['toggle-shatter-equivalencies', 'merge-selection', 'recolor', 'clear-segments', 'toggle-semantic-mode']) {
       keyCommands.set(command, function() { this.layerManager.invokeAction(command); });
     }
 
@@ -186,6 +186,18 @@ export class Viewer extends RefCounted implements ViewerState {
     if (this.layerManager.managedLayers.length === 0) {
       new LayerDialog(this.layerSpecification);
     }
+
+    keyCommands.set('two-point-split', function () { 
+      this.mouseState.toggleSplit(); 
+
+      if (this.mouseState.splitStatus === SplitState.INACTIVE) {
+        StatusMessage.displayText('Split Mode Deactivated.');
+      }
+      else {
+       StatusMessage.displayText('Split Mode Activated.'); 
+      }
+    });
+
   }
 
   private makeUI() {

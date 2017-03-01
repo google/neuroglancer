@@ -103,7 +103,27 @@ export class Uint64 {
 
   static equal(a: Uint64, b: Uint64) { return a.low === b.low && a.high === b.high; }
 
-  static min(a: Uint64, b: Uint64): Uint64 { return Uint64.less(a, b) ? a : b; }
+  static min(...args: Uint64[]): Uint64 { 
+    let minimum = args[0];
+
+    for (let i = 1; i < args.length - 1; i++) {
+      let contender = args[i];
+      minimum = Uint64.less(minimum, contender) ? minimum : contender;
+    }
+
+    return minimum; 
+  }
+
+  static max(...args: Uint64[]): Uint64 { 
+    let maximum = args[0];
+
+    for (let i = 1; i < args.length - 1; i++) {
+      let contender = args[i];
+      maximum = Uint64.less(maximum, contender) ? contender : maximum;
+    }
+
+    return maximum; 
+  }
 
   static random() {
     crypto.getRandomValues(randomTempBuffer);
@@ -159,4 +179,39 @@ export class Uint64 {
   }
 
   toJSON() { return this.toString(); }
+
+  static encodeUint32Array (array: Uint64[]) : Uint32Array {
+    const transferable = new Uint32Array(array.length * 2);
+
+    for (let i = 0; i < array.length; i++) {
+      const num = array[i];
+
+      transferable[2 * i]      = num.low;
+      transferable[2 * i + 1]  = num.high;
+    }
+
+    return transferable;
+  }
+
+  static decodeUint32Array (array: Uint32Array|ArrayBuffer) : Uint64[] {
+    if (array instanceof ArrayBuffer) {
+      array = new Uint32Array(array);
+    }
+
+    if (array.length % 2 === 1) {
+      throw new Error(`Decode error. Length of input array was not even: ${array.length}`);
+    }
+
+    const decoded = new Array<Uint64>(array.length / 2);
+
+    for (let i = 0; i < decoded.length; i++) {
+      decoded[i] = new Uint64(
+        array[2 * i],
+        array[2 * i + 1],
+      );
+    }
+
+    return decoded;
+  }
+
 };

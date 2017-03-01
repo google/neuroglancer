@@ -25,6 +25,9 @@ import {TrackableAlphaValue} from 'neuroglancer/trackable_alpha';
 import {DisjointUint64Sets} from 'neuroglancer/util/disjoint_sets';
 import {ShaderBuilder, ShaderProgram} from 'neuroglancer/webgl/shader';
 import {glsl_unnormalizeUint8} from 'neuroglancer/webgl/shader_lib';
+import {StatusMessage} from 'neuroglancer/status';
+import {SharedDisjointUint64Sets} from 'neuroglancer/shared_disjoint_sets';
+import {Uint64} from 'neuroglancer/util/uint64';
 
 const selectedSegmentForShader = new Float32Array(8);
 
@@ -32,6 +35,7 @@ export class EquivalencesHashMap {
   generation = Number.NaN;
   hashMap = new HashMapUint64();
   constructor(public disjointSets: DisjointUint64Sets) {}
+
   update() {
     let {disjointSets} = this;
     const {generation} = disjointSets;
@@ -39,6 +43,7 @@ export class EquivalencesHashMap {
       this.generation = generation;
       let {hashMap} = this;
       hashMap.clear();
+
       for (let [objectId, minObjectId] of disjointSets.mappings()) {
         hashMap.set(objectId, minObjectId);
       }
@@ -62,6 +67,9 @@ export class SegmentationRenderLayer extends RenderLayer {
       new EquivalencesHashMap(this.displayState.segmentEquivalences.disjointSets);
   private gpuEquivalencesHashTable = GPUHashTable.get(this.gl, this.equivalencesHashMap.hashMap);
   private hasEquivalences: boolean;
+
+  private semanticShaderManager = new HashMapShaderManager('semantic');
+  private gpusemanticHashTable = GPUHashTable.get(this.gl, this.displayState.semanticHashMap);
 
   constructor(
       multiscaleSource: MultiscaleVolumeChunkSource,
@@ -91,6 +99,8 @@ export class SegmentationRenderLayer extends RenderLayer {
 
   defineShader(builder: ShaderBuilder) {
     super.defineShader(builder);
+    this.segmentColorShaderManager.defineShader(builder);
+    this.semanticShaderManager.defineShader(builder);
     this.hashTableManager.defineShader(builder);
     builder.addFragmentCode(`
 uint64_t getUint64DataValue() {
@@ -116,11 +126,29 @@ uint64_t getMappedObjectId() {
 }
 `);
     }
-    this.segmentColorShaderManager.defineShader(builder);
+
+    builder.addFragmentCode(`
+      uint64_t getObjectSemantic() {
+        uint64_t value = getUint64DataValue();
+        uint64_t mappedValue;
+        if(${this.semanticShaderManager.getFunctionName}(value, mappedValue)){
+          return mappedValue;
+        }
+        mappedValue.high = vec4(255,255,255,255);
+        mappedValue.low = vec4(255,255,255,255);
+        return mappedValue;
+      }
+      `);
+
+
+
+
     builder.addUniform('highp vec4', 'uSelectedSegment', 2);
     builder.addUniform('highp float', 'uShowAllSegments');
     builder.addUniform('highp float', 'uSelectedAlpha');
     builder.addUniform('highp float', 'uNotSelectedAlpha');
+    builder.addUniform('lowp float', 'uShattered');
+    builder.addUniform('lowp float', 'uSemanticMode');
     builder.addFragmentCode(glsl_unnormalizeUint8);
     builder.setFragmentMain(`
   uint64_t value = getMappedObjectId();
@@ -134,12 +162,39 @@ uint64_t getMappedObjectId() {
   bool has = uShowAllSegments > 0.0 ? true : ${this.hashTableManager.hasFunctionName}(value);
   if (uSelectedSegment[0] == unnormalizeUint8(value.low) &&
       uSelectedSegment[1] == unnormalizeUint8(value.high)) {
-    saturation = has ? 0.5 : 0.75;
+    saturation = has ? 0.5 : uNotSelectedAlpha;
   } else if (!has) {
     alpha = uNotSelectedAlpha;
   }
-  vec3 rgb = segmentColorHash(value);
-  emit(vec4(mix(vec3(1.0,1.0,1.0), rgb, saturation), alpha));
+
+  if (uShattered == 1.0) {
+    value = getUint64DataValue();
+  }
+
+  uint64_t semantic = getObjectSemantic();
+  bool hasSemantic = true;
+  if (semantic.low == vec4(255,255,255,255) && semantic.high == vec4(255,255,255,255)) {
+    hasSemantic = false;
+  }
+
+  if (uSemanticMode == 1.0) {
+   if(hasSemantic) {
+      //ignore the high values, those are just flags
+      semantic.high = vec4(0,0,0,0);
+      vec3 rgb = segmentColorHash(semantic);
+      emit(vec4(mix(vec3(1.0,1.0,1.0), rgb, saturation), alpha));
+    } else {
+      emit(vec4(mix(vec3(1.0,1.0,1.0), vec3(1.0,1.0,1.0), saturation), alpha));
+    }
+  } else {
+    bool vissible = abs(semantic.high.x - 1.0/255.0) < 0.001;
+    if (hasSemantic && !vissible) {
+      emit(vec4(vec4(0, 0, 0, 0)));
+    } else {
+      vec3 rgb = segmentColorHash(value);
+      emit(vec4(mix(vec3(1.0,1.0,1.0), rgb, saturation), alpha));
+    }
+  }
 `);
   }
 
@@ -163,12 +218,16 @@ uint64_t getMappedObjectId() {
     gl.uniform1f(shader.uniform('uNotSelectedAlpha'), this.displayState.notSelectedAlpha.value);
     gl.uniform4fv(shader.uniform('uSelectedSegment'), selectedSegmentForShader);
     gl.uniform1f(shader.uniform('uShowAllSegments'), visibleSegments.hashTable.size ? 0.0 : 1.0);
+    gl.uniform1f(shader.uniform('uShattered'), this.displayState.shattered ? 1.0 : 0.0);
+    gl.uniform1f(shader.uniform('uSemanticMode'), this.displayState.semanticMode ? 1.0 : 0.0);
+
     this.hashTableManager.enable(gl, shader, this.gpuHashTable);
+
     if (this.hasEquivalences) {
       this.equivalencesHashMap.update();
       this.equivalencesShaderManager.enable(gl, shader, this.gpuEquivalencesHashTable);
     }
-
+    this.semanticShaderManager.enable(gl, shader, this.gpusemanticHashTable);
     this.segmentColorShaderManager.enable(gl, shader, displayState.segmentColorHash);
     return shader;
   }
@@ -177,4 +236,23 @@ uint64_t getMappedObjectId() {
     this.hashTableManager.disable(gl, shader);
     super.endSlice(shader);
   }
+
+  handleAction(action: string) {
+    super.handleAction(action);
+
+
+    //FIXME probably redraw should be call everytime we dispatch
+    //segmentation_user_layer.specificationChanged.dispatch();
+    this.redrawNeeded.dispatch();
+
+    let actions: { [key:string] : Function } = {};
+
+    let fn : Function = actions[action]
+
+    if (fn) {
+      fn.call(this);
+      this.redrawNeeded.dispatch();
+    }
+  }
+
 };

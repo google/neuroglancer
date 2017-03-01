@@ -78,6 +78,7 @@ export class UserLayerDropdown extends RefCounted {
   onHide() {}
 }
 
+// And user layer contains an array of RenderLayer
 export class UserLayer extends RefCounted {
   layersChanged = new Signal();
   readyStateChanged = new Signal();
@@ -104,9 +105,7 @@ export class UserLayer extends RefCounted {
     let {renderLayers} = this;
     let {pickedRenderLayer} = pickState;
     if (pickedRenderLayer !== null && renderLayers.indexOf(pickedRenderLayer) !== -1) {
-      result =
-          pickedRenderLayer.transformPickedValue(pickState.pickedValue, pickState.pickedOffset);
-      return this.transformPickedValue(result);
+      return pickedRenderLayer.transformPickedValue(pickState.pickedValue, pickState.pickedOffset);
     }
     for (let layer of renderLayers) {
       if (!layer.ready) {
@@ -117,7 +116,7 @@ export class UserLayer extends RefCounted {
         break;
       }
     }
-    return this.transformPickedValue(result);
+    return result;
   }
 
   transformPickedValue(value: any) { return value; }
@@ -363,6 +362,10 @@ export class LayerManager extends RefCounted {
     };
   }
 
+  //FIXME Shouldn't we stop once a layer can handle an action? 
+  //For example if you had multiple annotation layers
+  //You probably just want the closest to the left to be doing
+  //the annotation and not all of them.
   invokeAction(action: string) {
     for (let managedLayer of this.managedLayers) {
       if (managedLayer.layer === null || !managedLayer.visible) {
@@ -388,6 +391,15 @@ export interface PickState {
   pickedOffset: number;
 }
 
+export enum SplitState {
+  INACTIVE,
+  // Selecting elements for the first group.
+  FIRST,
+  // Selecting elements for the second group.
+  SECOND,
+}
+
+
 export class MouseSelectionState implements PickState {
   changed = new Signal();
   position = vec3.create();
@@ -395,6 +407,28 @@ export class MouseSelectionState implements PickState {
   pickedRenderLayer: RenderLayer|null = null;
   pickedValue = new Uint64(0, 0);
   pickedOffset = 0;
+
+  splitStatus = SplitState.INACTIVE;
+  
+  toggleSplit() {
+    if (this.splitStatus == SplitState.INACTIVE) {
+      this.splitStatus = SplitState.FIRST;
+    } else {
+      this.splitStatus = SplitState.INACTIVE;
+    }
+  }
+
+  updateSplit() {
+    if (this.splitStatus == SplitState.FIRST){
+      this.splitStatus = SplitState.SECOND;
+      return 'first';
+    } else {
+      // this.splitStatus has to be SplitState.SECOND
+      this.toggleSplit();
+      return 'second';
+    } 
+
+  }
 
   updater: ((mouseState: MouseSelectionState) => boolean)|undefined = undefined;
 
@@ -436,6 +470,7 @@ export class MouseSelectionState implements PickState {
 
 export class LayerSelectedValues extends RefCounted {
   values = new Map<UserLayer, any>();
+  rawValues = new Map<UserLayer, any>();
   changed = new Signal();
   needsUpdate = true;
   constructor(public layerManager: LayerManager, public mouseState: MouseSelectionState) {
@@ -463,8 +498,10 @@ export class LayerSelectedValues extends RefCounted {
     if (!this.needsUpdate) {
       return;
     }
+
     this.needsUpdate = false;
     let values = this.values;
+    let rawValues = this.rawValues;
     let mouseState = this.mouseState;
     values.clear();
     if (mouseState.active) {
@@ -472,7 +509,10 @@ export class LayerSelectedValues extends RefCounted {
       for (let layer of this.layerManager.managedLayers) {
         let userLayer = layer.layer;
         if (layer.visible && userLayer) {
-          values.set(userLayer, userLayer.getValueAt(position, mouseState));
+          let result = userLayer.getValueAt(position, mouseState);
+          
+          rawValues.set(userLayer, result);
+          values.set(userLayer, userLayer.transformPickedValue(result));
         }
       }
     }
@@ -481,6 +521,11 @@ export class LayerSelectedValues extends RefCounted {
   get(userLayer: UserLayer) {
     this.update();
     return this.values.get(userLayer);
+  }
+
+  getRaw (userLayer: UserLayer) {
+    this.update();
+    return this.rawValues.get(userLayer);
   }
 };
 

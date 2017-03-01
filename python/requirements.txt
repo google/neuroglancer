@@ -1,3 +1,16 @@
 google-api-python-client=1.6.2
 tqdm=4.7.6
 google-cloud=0.22.0
+Cython==0.25.2
+backports-abc==0.5
+certifi==2016.9.26
+decorator==4.0.11
+h5py==2.5.0
+networkx==1.11
+numpy==1.11.1
+singledispatch==3.4.0.3
+six==1.10.0
+tornado==4.4.2
+sockjs-tornado>=1.0.3
+wsgiref==0.1.2
+Pillow>=3.2.0
