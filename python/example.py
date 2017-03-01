@@ -1,36 +1,55 @@
 from __future__ import print_function
 
-import neuroglancer
 import numpy as np
+import h5py
+import webbrowser
+import neuroglancer
 
-a = np.zeros((3, 100, 100, 100), dtype=np.uint8)
-ix, iy, iz = np.meshgrid(*[np.linspace(0, 1, n) for n in a.shape[1:]], indexing='ij')
-a[0, :, :, :] = np.abs(np.sin(4 * (ix + iy))) * 255
-a[1, :, :, :] = np.abs(np.sin(4 * (iy + iz))) * 255
-a[2, :, :, :] = np.abs(np.sin(4 * (ix + iz))) * 255
-
-b = np.cast[np.uint32](np.floor(np.sqrt((ix - 0.5)**2 + (iy - 0.5)**2 + (iz - 0.5)**2) * 10))
-b = np.pad(b, 1, 'constant')
-
-# Obtain the bundled Neuroglancer client code (HTML, CSS, and JavaScript) from
-# the demo server, so that this example works even if
-#
-#   python setup.py bundle_client
-#
-# has not been run.
 neuroglancer.set_static_content_source(url='https://neuroglancer-demo.appspot.com')
 
 viewer = neuroglancer.Viewer(voxel_size=[10, 10, 10])
-viewer.add(a,
-           name='a',
-           # offset is in nm, not voxels
-           offset=(200, 300, 150),
-           shader="""
-void main() {
-  emitRGB(vec3(toNormalized(getDataValue(0)),
-               toNormalized(getDataValue(1)),
-               toNormalized(getDataValue(2))));
-}
-""")
-viewer.add(b, name='b')
-print(viewer)
+neuroglancer.set_static_content_source(url='http://localhost:8080')
+viewer = neuroglancer.Viewer()
+
+# def initialize(state):
+#   state['layers']['point']['points'] = synapses.failed
+#   state['layers']['synapse']['points'] = synapses.parsed
+#   return state
+
+# viewer.initialize_state = initialize
+
+# def on_state_changed(state):
+#   try:
+#     visible_segments =  map(int, state['layers']['segmentation']['segments'])
+#   except KeyError:
+#     visible_segments = []
+#   print (visible_segments)
+
+# viewer.on_state_changed = on_state_changed
+
+img =  h5py.File('./snemi3d/image.h5')
+
+# img = np.pad(f['main'][:], 1, 'constant', constant_values=0)
+viewer.add(volume_type='image', data=img['main'], name='image', voxel_size=[6, 6, 40])
+
+# if you add this layer by itself neuroglancer doesn't know the dataset size
+# viewer.add(volume_type='point', name='point')
+
+# if you add this layer by itself neuroglancer doesn't know the dataset size
+viewer.add(volume_type='synapse', name='synapse')
+
+
+f = h5py.File('./snemi3d/machine_labels.h5')
+
+# 0 pad is useful to make the meshes that are in contact with the borders
+# of the volume have a planar cap
+seg = np.pad(f['main'][:], 1, 'constant', constant_values=0)
+viewer.add(
+  volume_type='segmentation', 
+  data=seg, 
+  name='segmentation', 
+  voxel_size=[6, 6, 40], 
+  graph='./snemi3d/snemi3d_graph.pickle'
+)
+
+webbrowser.open(viewer.get_viewer_url())

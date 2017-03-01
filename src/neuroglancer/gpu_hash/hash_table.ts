@@ -426,6 +426,18 @@ export class HashMapUint64 extends HashTableBase {
     return true;
   }
 
+  setOrUpdate(key: Uint64, value: Uint64) {
+    if (!this.set(key,value)) {
+      let h = this.indexOf(key);
+      if (h == -1) {
+        console.error('failed to update, this should never happen');
+      }
+      this.table[h+2] = value.low;
+      this.table[h+3] = value.high;
+    }
+    ++this.generation;
+  }
+
   get(key: Uint64, value: Uint64): boolean {
     let h = this.indexOf(key);
     if (h === -1) {

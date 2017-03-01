@@ -1,0 +1,19 @@
+.semantic-entry input {
+  width: 19ch;
+}
+
+.semantic-entry input.invalid-input {
+  color: red;
+}
+
+.semantic-entry li {
+  color: white;
+}
+
+.down {
+    background: #bbb;
+    border-top: solid 2px #777;
+    border-left: solid 2px #777;
+    border-bottom:solid 2px  #eaeaea;
+    border-right: solid 2px #eaeaea;
+}
