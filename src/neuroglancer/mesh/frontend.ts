@@ -167,11 +167,12 @@ export class MeshLayer extends PerspectiveViewRenderLayer {
           color[1] = alpha;
           color[2] = alpha;
         } else {
+          coloring_id.high = 0;
           color = getObjectColor(displayState, coloring_id, alpha)
         }
       } else {
         if (displayState.semanticHashMap.get(objectId, coloring_id)) {
-          if (coloring_id.high == 1) { //Don't draw this segment
+          if (coloring_id.high == 0) { //Don't draw this segment
             return;
           }
         }

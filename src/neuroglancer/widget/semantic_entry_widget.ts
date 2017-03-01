@@ -76,38 +76,41 @@ export class SemanticEntryWidget extends RefCounted {
     </div>
     `
     this.visible[this.items.length] = 1;
-    let semanticButton : ItemElement = li.querySelector(".semantic");
-    let visibilityButton : ItemElement = li.querySelector(".visibility");
+    let semanticButton : HTMLButtonElement = <HTMLButtonElement>li.querySelector(".semantic");
+    let visibilityButton : HTMLButtonElement = <HTMLButtonElement>li.querySelector(".visibility");
 
     let self = this;
     semanticButton.addEventListener('click', function(this: ItemElement) {
+      let id : number = parseInt(this.id);
+
       for (let segid of self.displayState.visibleSegments) {
-        if (self.visible[this.id] == 0){
+        if (self.visible[id] == 0){
           self.displayState.visibleSegments.delete(segid);
         }
-        self.displayState.semanticHashMap.setOrUpdate(segid, new Uint64(this.id, self.visible[this.id]));
+        self.displayState.semanticHashMap.setOrUpdate(segid, new Uint64(id, self.visible[id]));
       }
       StatusMessage.displayText(`Applied semantics to ${self.displayState.visibleSegments.size} segments`);
       self.semanticUpdated.dispatch();
     });
 
     visibilityButton.addEventListener('click', function(this: ItemElement) {
+      let id : number = parseInt(this.id);
       if (visibilityButton.classList.contains("down")) { //Invisible
         for (let [key, value] of self.displayState.semanticHashMap) {
-          if (value.low == this.id) {
+          if (value.low == id) {
             value.high = 0;
             self.displayState.semanticHashMap.setOrUpdate(key, value)
           }
         }
-        self.visible[this.id] = 0;
+        self.visible[id] = 0;
       } else { //Visible
         for (let [key, value] of self.displayState.semanticHashMap) {
-          if (value.low == this.id) {
+          if (value.low == id) {
             value.high = 1;
             self.displayState.semanticHashMap.setOrUpdate(key, value)
           }
         }
-        self.visible[this.id] = 1;
+        self.visible[id] = 1;
       }
       visibilityButton.classList.toggle("down");
       self.semanticUpdated.dispatch();
