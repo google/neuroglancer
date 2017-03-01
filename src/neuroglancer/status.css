@@ -28,4 +28,7 @@
   width: 100vw;
   max-height: 25vh;
   overflow-y: auto;
+  padding: 10px;
+  font-family: monospace;
+  padding-left: 15px;
 }

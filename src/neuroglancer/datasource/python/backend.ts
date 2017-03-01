@@ -37,7 +37,7 @@ class VolumeChunkSource extends ParameterizedVolumeChunkSource<VolumeChunkSource
 
   download(chunk: VolumeChunk) {
     let {parameters} = this;
-    let path = `/neuroglancer/${this.encoding}/${parameters.key}`;
+    let path = `/neuroglancer/${parameters.key}/${this.encoding}`;
     {
       // chunkPosition must not be captured, since it will be invalidated by the next call to
       // computeChunkBounds.
@@ -73,7 +73,7 @@ export class MeshSource extends ParameterizedMeshSource<MeshSourceParameters> {
 
   downloadFragment(chunk: FragmentChunk) {
     let {parameters} = this;
-    let requestPath = `/neuroglancer/mesh/${parameters.key}/${chunk.manifestChunk!.objectId}`;
+    let requestPath = `/neuroglancer/${parameters.key}/mesh/${chunk.manifestChunk!.objectId}`;
     handleChunkDownloadPromise(
         chunk,
         sendHttpRequest(openShardedHttpRequest(parameters.baseUrls, requestPath), 'arraybuffer'),

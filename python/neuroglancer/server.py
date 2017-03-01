@@ -13,6 +13,10 @@
 # limitations under the License.
 
 from __future__ import absolute_import, print_function
+import threading
+import json
+import socket
+import re
 
 try:
     # Python 2 case
@@ -23,35 +27,76 @@ except ImportError:
     from socketserver import ThreadingMixIn  # pylint: disable=import-error
     from http.server import HTTPServer, BaseHTTPRequestHandler  # pylint: disable=import-error
 
-import threading
-import re
-import json
-import socket
-from .token import make_random_token
+from .randomtoken import make_random_token
 from . import static
 from . import volume
+from collections import OrderedDict
 
-INFO_PATH_REGEX = re.compile(r'^/neuroglancer/info/([^/]+)$')
-
-DATA_PATH_REGEX = re.compile(
-    r'^/neuroglancer/([^/]+)/([^/]+)/([^/]+)/([0-9]+),([0-9]+)/([0-9]+),([0-9]+)/([0-9]+),([0-9]+)$')
-
-MESH_PATH_REGEX = re.compile(r'^/neuroglancer/mesh/([^/]+)/([0-9]+)$')
-
-STATIC_PATH_REGEX = re.compile(r'/static/([^/]+)/((?:[a-zA-Z0-9_\-][a-zA-Z0-9_\-.]*)?)$')
+from tornado import web, ioloop
+from sockjs.tornado import SockJSConnection, SockJSRouter
 
 global_static_content_source = None
+global_server_args = dict(bind_address='127.0.0.1', bind_port=8000)
+global_server = None
+debug = True
 
-global_server_args = dict(bind_address='127.0.0.1', bind_port=0)
 
-debug = False
+VOLUME_PATH_REGEX = re.compile(r'^/neuroglancer/([^/]+)/(.*)/?$')
+STATIC_PATH_REGEX = re.compile(r'/static/([^/]+)/((?:[a-zA-Z0-9_\-][a-zA-Z0-9_\-.]*)?)$')
+
+# Used for manipulating all clients at once
+# from the server. E.g. from the command line.
+LAST_STATE = {} 
+CLIENTS = set()
+
+class StateHandler(SockJSConnection):
+    clients = set()
+    last_state = None
+
+    def __init__(self, *args, **kwargs):
+        super(StateHandler, self).__init__(*args, **kwargs)
+        self.clients = set()
+        self.last_state = None
+
+    def on_open(self, info):
+        global CLIENTS
+        # When new client comes in, will add it to the clients list
+        self.clients.add(self)
+        CLIENTS.add(self)
+       
+    def on_message(self, msg):
+        global LAST_STATE
+        state = json.JSONDecoder(object_pairs_hook=OrderedDict).decode(msg)
+
+        
+        if not self.last_state:
+            new_state = global_server.viewer.initialize_state(state)
+            if new_state:
+                self.broadcast(self.clients, json.dumps(state))
+                state = new_state
+        else:
+            new_state = global_server.viewer.on_state_changed(state) 
+            if new_state:
+                self.broadcast(self.clients, json.dumps(state))
+                state = new_state
+
+        self.last_state = state
+        LAST_STATE = state
+
+    def on_close(self):
+        global CLIENTS
+        # If client disconnects, remove him from the clients list
+        self.clients.remove(self)
+        CLIENTS.remove(self)
+        # global_server.viewer.on_close(self.last_state)
 
 class Server(ThreadingMixIn, HTTPServer):
-    def __init__(self, bind_address='127.0.0.1', bind_port=0):
+    def __init__(self, viewer, bind_address='127.0.0.1', bind_port=0):
         HTTPServer.__init__(self, (bind_address, bind_port), RequestHandler)
         self.daemon_threads = True
         self.volumes = dict()
         self.token = make_random_token()
+        self.viewer = viewer
         global global_static_content_source
         if global_static_content_source is None:
             global_static_content_source = static.get_default_static_content_source()
@@ -62,36 +107,55 @@ class Server(ThreadingMixIn, HTTPServer):
             hostname = bind_address
         self.server_url = 'http://%s:%s' % (hostname, self.server_address[1])
 
+        self._websocketRouter = SockJSRouter(StateHandler, '/state')
+        socketApp = web.Application(self._websocketRouter.urls)
+        socketApp.listen(9999)
+
+        self.ioloop = ioloop.IOLoop.instance()
+
+    def start(self):
+        self.serve_forever()
+
+    def start_websockets(self):
+        self.ioloop.start()
+
+    def shutdown():
+        self.shutdown()
+        self.ioloop.stop()
+
+    @property
+    def state(self):
+        global LAST_STATE
+        return LAST_STATE
+
+    def broadcastState(self):
+        global LAST_STATE
+        global CLIENTS
+        
+        self._websocketRouter.broadcast(CLIENTS, json.dumps(LAST_STATE))  
+
     def handle_error(self, request, client_address):
         if debug:
             HTTPServer.handle_error(self, request, client_address)
 
 class RequestHandler(BaseHTTPRequestHandler):
-    protocol_version = 'HTTP/1.1'
 
     def do_GET(self):  # pylint: disable=invalid-name
-        m = re.match(DATA_PATH_REGEX, self.path)
+        m = re.match(VOLUME_PATH_REGEX, self.path)
         if m is not None:
-            self.handle_data_request(token=m.group(2),
-                                     data_format=m.group(1),
-                                     scale_key=m.group(3),
-                                     start=(int(m.group(4)), int(m.group(6)), int(m.group(8))),
-                                     end=(int(m.group(5)), int(m.group(7)), int(m.group(9))))
-            return
-        m = re.match(MESH_PATH_REGEX, self.path)
-        if m is not None:
-            self.handle_mesh_request(m.group(1), int(m.group(2)))
-            return
-        m = re.match(INFO_PATH_REGEX, self.path)
-        if m is not None:
-            self.handle_info_request(m.group(1))
+            token, path  = m.groups()
+            vol = self.server.volumes.get(token)
+            if vol is None:
+                self.send_error(404)
+                return
+            vol.handle_request(path, self)
             return
         m = re.match(STATIC_PATH_REGEX, self.path)
         if m is not None:
             self.handle_static_request(m.group(1), m.group(2))
             return
         self.send_error(404)
-
+        
     def handle_static_request(self, token, path):
         if token != self.server.token:
             self.send_error(404)
@@ -100,94 +164,32 @@ class RequestHandler(BaseHTTPRequestHandler):
         except ValueError as e:
             self.send_error(404, e.args[0])
             return
-
-        self.send_response(200)
-        self.send_header('Content-type', content_type)
-        self.send_header('Content-length', len(data))
-        self.end_headers()
-        self.wfile.write(data)
-
-    def handle_data_request(self, token, scale_key, data_format, start, end):  # pylint: disable=redefined-outer-name
-        vol = self.server.volumes.get(token)
-        if vol is None:
-            self.send_error(404)
-            return
-        try:
-            data, content_type = vol.get_encoded_subvolume(
-                data_format, start, end, scale_key=scale_key)
-        except ValueError as e:
-            self.send_error(400, e.args[0])
-            return
-
         self.send_response(200)
         self.send_header('Content-type', content_type)
         self.send_header('Content-length', len(data))
         self.send_header('Access-Control-Allow-Origin', '*')
         self.end_headers()
-        self.wfile.write(data)
-
-    def handle_info_request(self, token):
-        vol = self.server.volumes.get(token)
-        if vol is None:
-            self.send_error(404)
-            return
-        data = json.dumps(vol.info())
-        self.send_response(200)
-        self.send_header('Content-type', 'application/json')
-        self.send_header('Content-length', len(data))
-        self.send_header('Access-Control-Allow-Origin', '*')
-        self.end_headers()
-        self.wfile.write(data)
-
-    def handle_mesh_request(self, key, object_id):
-        vol = self.server.volumes.get(key)
-        if vol is None:
-            self.send_error(404)
-        try:
-            encoded_mesh = vol.get_object_mesh(object_id)
-        except volume.MeshImplementationNotAvailable:
-            self.send_error(501, 'Mesh implementation not available')
-            return
-        except volume.MeshesNotSupportedForVolume:
-            self.send_error(405, 'Meshes not supported for volume')
-            return
-        except volume.InvalidObjectIdForMesh:
-            self.send_error(404, 'Mesh not available for specified object id')
-            return
-        except ValueError as e:
-            self.send_error(400, e.args[0])
-            return
-        self.send_response(200)
-        self.send_header('Content-type', 'application/octet-stream')
-        self.send_header('Content-length', len(encoded_mesh))
-        self.send_header('Access-Control-Allow-Origin', '*')
-        self.end_headers()
-        self.wfile.write(encoded_mesh)
+        self.wfile.write(data)   
 
     def log_message(self, format, *args):
         if debug:
             BaseHTTPRequestHandler.log_message(self, format, *args)
 
-global_server = None
 
 
 def set_static_content_source(*args, **kwargs):
     global global_static_content_source
     global_static_content_source = static.get_static_content_source(*args, **kwargs)
 
-
 def set_server_bind_address(bind_address='127.0.0.1', bind_port=0):
     global global_server_args
     global_server_args = dict(bind_address=bind_address, bind_port=bind_port)
 
-
 def is_server_running():
     return global_server is not None
 
-
 def stop():
     """Stop the server, invalidating any viewer URLs.
-
     This allows any previously-referenced data arrays to be garbage collected if there are no other
     references to them.
     """
@@ -196,20 +198,20 @@ def stop():
         global_server.shutdown()
         global_server = None
 
-
 def get_server_url():
     return global_server.server_url
 
-
-def start():
+def start(viewer):
     global global_server
     if global_server is None:
-        global_server = Server(**global_server_args)
-        thread = threading.Thread(target=global_server.serve_forever)
+        global_server = Server(viewer, **global_server_args)
+        thread = threading.Thread(target=global_server.start)
         thread.daemon = True
         thread.start()
 
+        thread = threading.Thread(target=global_server.start_websockets)
+        thread.daemon = True
+        thread.start()
 
 def register_volume(volume):
-    start()
     global_server.volumes[volume.token] = volume

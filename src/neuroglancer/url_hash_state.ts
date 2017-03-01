@@ -18,6 +18,19 @@
 
 import {urlSafeParse, urlSafeStringify} from 'neuroglancer/util/json';
 import {Signal} from 'signals';
+import * as SockJS from 'sockjs-client';
+
+let sock = new SockJS('http://127.0.0.1:9999/state');
+sock.onopen = function() {
+     // sock.send('{}');
+};
+sock.onmessage = function(e: any) {
+  let state = JSON.parse(e.data);
+  updateTrackedObjects(state);
+};
+sock.onclose = function() {
+     console.log('close');
+};
 
 
 // Maps keys to objects.
@@ -163,6 +176,7 @@ function updateHash() {
         history.replaceState(null, '', '#!' + lastHash);
       }
       // console.log(`replaceState done at ${Date.now()}`);
+      sock.send(JSON.stringify(state));
     }
     // window.location.hash = lastHash;
   }

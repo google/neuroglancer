@@ -24,7 +24,7 @@ import {PointListWidget} from 'neuroglancer/widget/point_list_widget';
 
 require('./user_layer.css');
 
-const LAYER_TYPE = 'pointAnnotation';
+const LAYER_TYPE = 'point';
 
 export class AnnotationPointListUserLayer extends UserLayer {
   selectedIndex = new WatchableValue<number|null>(null);

@@ -235,7 +235,7 @@ export function tokenAndChannelCompleter(
   let channelMatch = path.match(/^(?:([^\/]+)(?:\/([^\/]*))?)?$/);
   if (channelMatch === null) {
     // URL has incorrect format, don't return any results.
-    return Promise.reject<CompletionResult>(null);
+    return Promise.reject<CompletionResult|null>(null);
   }
   if (channelMatch[2] === undefined) {
     let keyPrefix = channelMatch[1] || '';
@@ -261,7 +261,7 @@ export function volumeCompleter(
   let match = url.match(urlPattern);
   if (match === null) {
     // We don't yet have a full hostname.
-    return Promise.reject<CompletionResult>(null);
+    return Promise.reject<CompletionResult|null>(null);
   }
   let hostnames = [match[1]];
   let path = match[2];
