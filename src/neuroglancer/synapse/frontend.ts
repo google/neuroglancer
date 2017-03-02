@@ -148,7 +148,7 @@ else {
     builder.addUniform('highp mat4', 'uProjection');
     builder.addUniform('highp vec4', 'uPickID');
     builder.setVertexMain(`gl_Position = uProjection * vec4(aVertexPosition, 1.0);`);
-    builder.setFragmentMain(`gl_FragColor = vec4(0.0,0.0,0.0,1.0);`);
+    builder.setFragmentMain(`gl_FragColor = vec4(1.0,1.0,1.0,1.0);`);
   }
 
   getShader(emitter: ShaderModule) {
