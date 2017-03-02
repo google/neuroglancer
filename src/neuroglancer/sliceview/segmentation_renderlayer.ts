@@ -172,10 +172,8 @@ uint64_t getMappedObjectId() {
   }
 
   uint64_t semantic = getObjectSemantic();
-  bool hasSemantic = true;
-  if (semantic.low == vec4(255,255,255,255) && semantic.high == vec4(255,255,255,255)) {
-    hasSemantic = false;
-  }
+  vec4 WHITE = vec4(255,255,255,255);
+  bool hasSemantic = (semantic.low != WHITE) || (semantic.high != WHITE);
 
   if (uSemanticMode == 1.0) {
    if(hasSemantic) {
@@ -187,8 +185,8 @@ uint64_t getMappedObjectId() {
       emit(vec4(mix(vec3(1.0,1.0,1.0), vec3(1.0,1.0,1.0), saturation), alpha));
     }
   } else {
-    bool vissible = abs(semantic.high.x - 1.0/255.0) < 0.001;
-    if (hasSemantic && !vissible) {
+    bool visible = abs(semantic.high.x - 1.0/255.0) < 0.001;
+    if (hasSemantic && !visible) {
       emit(vec4(vec4(0, 0, 0, 0)));
     } else {
       vec3 rgb = segmentColorHash(value);

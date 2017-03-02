@@ -300,6 +300,13 @@ vec4 packFloatIntoVec4(float f) {
 }
 `;
 
+export var gsls_floatvec4eq = `
+bool floatvec4eq(vec4 u,vec4 v) {
+  const float EPSILON = 0.000001;
+  return all(lessThan(abs(u-v), vec4(EPSILON)));
+}
+`
+
 export var glsl_debugFunctions = [glsl_packFloat];
 
 export function encodeBytesToFloat32(x: ArrayBufferView) {
@@ -453,3 +460,4 @@ float divmod(uint32_t dividend, float divisor, out uint32_t quotient) {
 }
 `
 ];
+

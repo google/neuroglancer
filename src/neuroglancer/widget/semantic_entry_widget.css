@@ -10,7 +10,7 @@
   color: white;
 }
 
-.down {
+.semantic-entry .down {
     background: #bbb;
     border-top: solid 2px #777;
     border-left: solid 2px #777;

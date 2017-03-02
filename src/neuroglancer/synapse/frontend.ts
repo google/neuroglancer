@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2016 Google Inc.
+ * Copyright 2016 The Neuroglancer Authors.
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
@@ -29,7 +29,7 @@ import {GL} from 'neuroglancer/webgl/context';
 import {countingBufferShaderModule, disableCountingBuffer, getCountingBuffer} from 'neuroglancer/webgl/index_emulation';
 import {ShaderBuilder, ShaderModule, ShaderProgram} from 'neuroglancer/webgl/shader';
 import {GL_FLOAT} from 'neuroglancer/webgl/constants';
-import {glsl_addUint32, setVec4FromUint32, glsl_divmodUint32, glsl_floatToUint32} from 'neuroglancer/webgl/shader_lib';
+import {glsl_addUint32, setVec4FromUint32, glsl_divmodUint32, glsl_floatToUint32, gsls_floatvec4eq} from 'neuroglancer/webgl/shader_lib';
 import {getSquareCornersBuffer} from 'neuroglancer/webgl/square_corners_buffer';
 import {Signal} from 'signals';
 
@@ -106,6 +106,7 @@ export class RenderHelper extends RefCounted {
     builder.require(countingBufferShaderModule);
     builder.addVertexCode(glsl_addUint32);
     builder.addVertexCode(glsl_divmodUint32);
+    builder.addVertexCode(gsls_floatvec4eq);
     builder.setVertexMain(`
 gl_Position = uProjection * vec4(aVertexPosition, 1.0);
 gl_Position.xy += aCornerOffset * uPointRadii * gl_Position.w;
@@ -127,8 +128,7 @@ else {
   vColor = uColorPost;
 }
 
-const float EPSILON = 0.000001;
-if (all(lessThan(abs(uSelectedIndex-quotient.value), vec4(EPSILON)))) {
+if (floatvec4eq(uSelectedIndex, quotient.value)) {
   vColor = uColorSelected;
 } 
 
