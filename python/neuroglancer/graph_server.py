@@ -8,7 +8,7 @@ from tornado import httpserver, netutil
 
 import networkx as nx
 import numpy as np
-
+import ssl
 
 class BaseHandler(tornado.web.RequestHandler):
 
@@ -29,13 +29,6 @@ class BaseHandler(tornado.web.RequestHandler):
 
 class NodeHandler(BaseHandler):
     def get(self, u):
-        if self.not_initialized:
-            print("Not initialized.")
-            self.clear()
-            self.set_status(503)
-            self.finish()
-            return
-
         #TODO(tartavull) add optional threshold argument
         u = int(u)
         if self.G.has_node(u):
@@ -71,15 +64,13 @@ class NodeHandler(BaseHandler):
             self.write(data)
 
         else:
-            self.clear()
-            self.set_status(400)
-            self.finish()
+            self.G.add_node(u)
+            self.write('')
 
     def post(self, u):
         u = int(u)
 
         self.G.add_node(u)
-        self.clear()
         self.set_status(200)
         self.finish()
 
@@ -259,10 +250,14 @@ def make_app(path):
 
 def start_server(path=None):
     app = make_app(path)
-    sockets = netutil.bind_sockets(0, '')
-    server = httpserver.HTTPServer(app)
-    server.add_sockets(sockets)
-    
+    http_server = tornado.httpserver.HTTPServer(app, ssl_options={
+    "certfile": "./certificate.crt",
+    "keyfile": "./privateKey.key",
+    })
+    http_server.bind(8888)
+    http_server.start(1)
+    tornado.ioloop.IOLoop.current().start()
+
     # thread = threading.Thread(target=tornado.ioloop.IOLoop.instance().start)
     # thread.daemon = True
     # thread.start()

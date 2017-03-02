@@ -44,52 +44,6 @@ debug = True
 VOLUME_PATH_REGEX = re.compile(r'^/neuroglancer/([^/]+)/(.*)/?$')
 STATIC_PATH_REGEX = re.compile(r'/static/([^/]+)/((?:[a-zA-Z0-9_\-][a-zA-Z0-9_\-.]*)?)$')
 
-# Used for manipulating all clients at once
-# from the server. E.g. from the command line.
-LAST_STATE = {} 
-CLIENTS = set()
-
-class StateHandler(SockJSConnection):
-    clients = set()
-    last_state = None
-
-    def __init__(self, *args, **kwargs):
-        super(StateHandler, self).__init__(*args, **kwargs)
-        self.clients = set()
-        self.last_state = None
-
-    def on_open(self, info):
-        global CLIENTS
-        # When new client comes in, will add it to the clients list
-        self.clients.add(self)
-        CLIENTS.add(self)
-       
-    def on_message(self, msg):
-        global LAST_STATE
-        state = json.JSONDecoder(object_pairs_hook=OrderedDict).decode(msg)
-
-        
-        if not self.last_state:
-            new_state = global_server.viewer.initialize_state(state)
-            if new_state:
-                self.broadcast(self.clients, json.dumps(state))
-                state = new_state
-        else:
-            new_state = global_server.viewer.on_state_changed(state) 
-            if new_state:
-                self.broadcast(self.clients, json.dumps(state))
-                state = new_state
-
-        self.last_state = state
-        LAST_STATE = state
-
-    def on_close(self):
-        global CLIENTS
-        # If client disconnects, remove him from the clients list
-        self.clients.remove(self)
-        CLIENTS.remove(self)
-        # global_server.viewer.on_close(self.last_state)
-
 class Server(ThreadingMixIn, HTTPServer):
     def __init__(self, viewer, bind_address='127.0.0.1', bind_port=0):
         HTTPServer.__init__(self, (bind_address, bind_port), RequestHandler)
@@ -107,32 +61,11 @@ class Server(ThreadingMixIn, HTTPServer):
             hostname = bind_address
         self.server_url = 'http://%s:%s' % (hostname, self.server_address[1])
 
-        self._websocketRouter = SockJSRouter(StateHandler, '/state')
-        socketApp = web.Application(self._websocketRouter.urls)
-        socketApp.listen(9999)
-
-        self.ioloop = ioloop.IOLoop.instance()
-
     def start(self):
         self.serve_forever()
 
-    def start_websockets(self):
-        self.ioloop.start()
-
     def shutdown():
         self.shutdown()
-        self.ioloop.stop()
-
-    @property
-    def state(self):
-        global LAST_STATE
-        return LAST_STATE
-
-    def broadcastState(self):
-        global LAST_STATE
-        global CLIENTS
-        
-        self._websocketRouter.broadcast(CLIENTS, json.dumps(LAST_STATE))  
 
     def handle_error(self, request, client_address):
         if debug:
@@ -206,10 +139,6 @@ def start(viewer):
     if global_server is None:
         global_server = Server(viewer, **global_server_args)
         thread = threading.Thread(target=global_server.start)
-        thread.daemon = True
-        thread.start()
-
-        thread = threading.Thread(target=global_server.start_websockets)
         thread.daemon = True
         thread.start()
 

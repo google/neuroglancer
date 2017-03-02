@@ -29,7 +29,7 @@ import {overlaysOpen} from 'neuroglancer/overlay';
 import {PositionStatusPanel} from 'neuroglancer/position_status_panel';
 import {TrackableBoolean} from 'neuroglancer/trackable_boolean';
 import {TrackableValue} from 'neuroglancer/trackable_value';
-import {registerTrackable} from 'neuroglancer/url_hash_state';
+import {registerTrackable, setStateServerURL} from 'neuroglancer/url_hash_state';
 import {RefCounted} from 'neuroglancer/util/disposable';
 import {vec3} from 'neuroglancer/util/geom';
 import {GlobalKeyboardShortcutHandler, KeySequenceMap} from 'neuroglancer/util/keyboard_shortcut_handler';
@@ -56,6 +56,11 @@ export function validateLayoutName(obj: any) {
   return layout[0];
 }
 
+export function validateStateServer(url: string) {
+  setStateServerURL(url);
+  return url;
+}
+
 export class Viewer extends RefCounted implements ViewerState {
   navigationState = this.registerDisposer(new NavigationState());
   perspectiveNavigationState = new NavigationState(new Pose(this.navigationState.position), 1);
@@ -65,7 +70,7 @@ export class Viewer extends RefCounted implements ViewerState {
   dataDisplayLayout: DataDisplayLayout;
   showScaleBar = new TrackableBoolean(true, true);
   showPerspectiveSliceViews = new TrackableBoolean(true, true);
-
+  stateServerURL= '';
   layerPanel: LayerPanel;
   layerSelectedValues =
       this.registerDisposer(new LayerSelectedValues(this.layerManager, this.mouseState));
@@ -84,6 +89,7 @@ export class Viewer extends RefCounted implements ViewerState {
       this.layerManager, this.chunkManager, this.worker, this.layerSelectedValues,
       this.navigationState.voxelSize);
   layoutName = new TrackableValue<string>(LAYOUTS[0][0], validateLayoutName);
+  stateServer = new TrackableValue<string>(this.stateServerURL, validateStateServer);
 
   constructor(public display: DisplayContext) {
     super();
@@ -99,6 +105,7 @@ export class Viewer extends RefCounted implements ViewerState {
       return false;
     });
 
+
     registerTrackable('layers', this.layerSpecification);
     registerTrackable('navigation', this.navigationState);
     registerTrackable('showAxisLines', this.showAxisLines);
@@ -108,7 +115,8 @@ export class Viewer extends RefCounted implements ViewerState {
     registerTrackable('perspectiveZoom', this.perspectiveNavigationState.zoomFactor);
     registerTrackable('showSlices', this.showPerspectiveSliceViews);
     registerTrackable('layout', this.layoutName);
-
+    registerTrackable('stateURL', this.stateServer);
+   
     this.registerSignalBinding(
         this.navigationState.changed.add(this.handleNavigationStateChanged, this));
 

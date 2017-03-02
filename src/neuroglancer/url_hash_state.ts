@@ -20,17 +20,27 @@ import {urlSafeParse, urlSafeStringify} from 'neuroglancer/util/json';
 import {Signal} from 'signals';
 import * as SockJS from 'sockjs-client';
 
-let sock = new SockJS('http://127.0.0.1:9999/state');
-sock.onopen = function() {
-     // sock.send('{}');
+let sock = {
+  onopen(e: any) {e;},
+  send(e: any) {e;},
+  onmessage(e: any) {e;},
+  onclose(e: any) {e;}
 };
-sock.onmessage = function(e: any) {
-  let state = JSON.parse(e.data);
-  updateTrackedObjects(state);
-};
-sock.onclose = function() {
-     console.log('close');
-};
+
+
+export function setStateServerURL(url: string){
+  sock = new SockJS(url);
+  sock.onopen = function() {
+    updateHash();
+  };
+  sock.onmessage = function(e: any) {
+    let state = JSON.parse(e.data);
+    updateTrackedObjects(state);
+  };
+  sock.onclose = function() {
+    console.log('closing socket connection');
+  };
+}
 
 
 // Maps keys to objects.
