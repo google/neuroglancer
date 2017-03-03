@@ -31,7 +31,8 @@ let sock = {
 export function setStateServerURL(url: string){
   sock = new SockJS(url);
   sock.onopen = function() {
-    updateHash();
+    let state = getCurrentState();
+    sock.send(JSON.stringify(state))
   };
   sock.onmessage = function(e: any) {
     let state = JSON.parse(e.data);
