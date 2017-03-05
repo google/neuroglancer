@@ -188,7 +188,7 @@ class ServedVolume(object):
             raise ValueError('Invalid scale.')
         shape = scale_info.shape
         downsample_factor = scale_info.downsample_factor
-        for i in xrange(3):
+        for i in range(3):
             if end[i] < start[i] or start[i] < 0 or end[i] > shape[i]:
                 raise ValueError('Out of bounds data request.')
 

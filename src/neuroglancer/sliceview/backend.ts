@@ -70,10 +70,11 @@ export class SliceView extends SliceViewBase {
       vec3.multiply(tempChunkPosition, positionInChunks, chunkLayout.size);
       let priority = -vec3.distance(localCenter, tempChunkPosition);
       for (let source of visibleSources) {
-        let priorityIndex = sources.get(source);
+        let priorityIndex = sources.get(source)!;
         let chunk = source.getChunk(positionInChunks);
         chunkManager.requestChunk(
-            chunk, ChunkPriorityTier.VISIBLE, BASE_PRIORITY + priority + SCALE_PRIORITY_MULTIPLIER * priorityIndex);
+            chunk, ChunkPriorityTier.VISIBLE,
+            BASE_PRIORITY + priority + SCALE_PRIORITY_MULTIPLIER * priorityIndex);
       }
     }
     this.computeVisibleChunks(getLayoutObject, addChunk);

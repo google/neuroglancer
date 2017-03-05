@@ -103,12 +103,13 @@ gl_FragColor = vec4(accum.rgb / accum.a, revealage);
 }
 
 export class PerspectivePanel extends RenderedDataPanel {
+  viewer: PerspectiveViewerState;
+
   private visibleLayerTracker = makeRenderedPanelVisibleLayerTracker(
       this.viewer.layerManager, PerspectiveViewRenderLayer, this);
 
   sliceViews = new Set<SliceView>();
   projectionMat = mat4.create();
-  viewer: PerspectiveViewerState;
   inverseProjectionMat = mat4.create();
   modelViewMat = mat4.create();
   width = 0;

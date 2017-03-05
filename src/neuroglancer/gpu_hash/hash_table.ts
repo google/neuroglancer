@@ -41,13 +41,14 @@ export abstract class HashTableBase {
   maxRehashAttempts = 5;
   maxAttempts = 5;
   capacity: number;
-  maxWidth = 4096 / this.entryStride;
-  generation = 0;
 
   /**
    * Number of uint32 elements per entry in hash table.
    */
   entryStride: number;
+
+  maxWidth = 4096 / this.entryStride;
+  generation = 0;
 
   mungedEmptyKey = -1;
 

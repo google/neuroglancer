@@ -73,7 +73,7 @@ export class SegmentSetWidget extends RefCounted {
       // Cleared.
       let {itemContainer, clearButton} = this;
       while (true) {
-        let lastElement = itemContainer.lastElementChild;
+        let lastElement = itemContainer.lastElementChild!;
         if (lastElement === clearButton) {
           break;
         }
