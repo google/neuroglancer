@@ -401,7 +401,7 @@ export class Pose extends RefCounted {
     if (!this.valid) {
       return;
     }
-    var temp = vec3.create();
+    const temp = tempVec3;
     vec3.transformQuat(temp, translation, this.orientation.orientation);
     vec3.add(this.position.spatialCoordinates, this.position.spatialCoordinates, temp);
     this.position.changed.dispatch();
