@@ -15,10 +15,17 @@ def id_generator(size=24, chars=string.ascii_uppercase + string.digits):
 def random_folder():
     return './tmp/' + id_generator()
 
+def credentials_path():
+    self_dir = os.path.dirname(os.path.realpath(__file__))
+    return self_dir+'/client-secret.json'
 
 class Storage(object):
 
-    def __init__(self, dataset_name='', layer_name='', compress=True):
+    def __init__(self, dataset_name='', layer_name='', compress=False):
+        """
+        If the file is large it will be download in parts and decompression will
+        fail because of a bug in google.cloud.storage library
+        """
         self._dataset_name = dataset_name
         self._layer_name = layer_name
         self._compress = compress
@@ -26,14 +33,13 @@ class Storage(object):
         os.makedirs(self._local)
         self._n_objects = 0 
 
-        client = storage.Client \
-            .from_service_account_json('client-secret.json')
+        self._client = storage.Client \
+            .from_service_account_json(credentials_path(), project=PROJECT_NAME)
 
-        self._bucket = client.get_bucket(BUCKET_NAME)
+        self._bucket = self._client.get_bucket(BUCKET_NAME)
 
     def get_blob(self, name):
         return self._bucket.get_blob(name)
-
 
     def flush(self, folder_name=''):
         if not self._n_objects:
@@ -71,7 +77,7 @@ class Storage(object):
         ]
 
         headers = [ x for x in headers if x is not None ]
-        gsutil_upload_command = "gsutil {headers} -m cp {compress} -a public-read {local_dir}/* {remote_dir}".format(
+        gsutil_upload_command = "gsutil {headers} -m cp {compress} -a public-read {local_dir}/* {remote_dir}/".format(
           headers=" ".join(headers),
           compress=('-Z' if self._compress else ''),
           local_dir=self._local,

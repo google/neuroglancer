@@ -1,5 +1,7 @@
 import numpy as np
 import requests
+import re
+import h5py
 
 class Volume(object):
 
@@ -14,7 +16,12 @@ class Volume(object):
         """
         Asumes x,y,z coordinates
         """
-        return self._shape
+        if len(self._shape) == 3:
+            return self._shape
+        elif len(self._shape) == 4:
+            return self._shape[:-1]
+        else:
+            raise Exception('Wrong shape')  
 
     @property
     def data_type(self):
@@ -30,6 +37,9 @@ class Volume(object):
         """
         Either segmentation or image
         """
+        if self._layer_type == 'affinities':
+            return 'image'
+
         return self._layer_type
 
     @property
@@ -55,85 +65,70 @@ class Volume(object):
 
     @property
     def num_channels(self):
-        if len(self.shape) == 3:
+        if len(self._shape) == 3:
             return 1
-        elif len(self.shape) == 4:
-            return self.shape[0]
+        elif len(self._shape) == 4:
+            return self._shape[-1]
         else:
-            raise Exception('Wrong shape')  
+            raise Exception('Wrong shape')
+
+    @property
+    def encoding(self):
+        if self._layer_type == 'affinities':
+            return 'raw'
+        elif self._layer_type == 'image':
+            return 'jpeg'
+        elif self._layer_type == 'segmentation':
+            return 'raw'
+        else:
+            raise NotImplementedError(self._layer_type)
+      
     
 class HDF5Volume(Volume):
 
-    def __init__(self, path):
-        import h5py
+    def __init__(self, path, layer_type):
+        self._layer_type = layer_type
         self._f = h5py.File(path, 'r')
-        self._data = self._f['main']
-        self._layer_type = 'image'
-        self._mesh = False
-        self._resolution = [4,4,40]
+        self._data = self._f['main']      
+        self._mesh = (self._layer_type == 'segmentation')
+        self._resolution = [6,6,30]
+        self._shape = self._data.shape[::-1]
         self._underlying = self.shape
-        self._data_type = self._f['main'].dtype
 
-    @property
-    def shape(self):
-        return self._data.shape[::-1]
-
+        if self._layer_type == "affinities":
+            self._data_type = "uint8"
+        else:
+            self._data_type = self._f['main'].dtype
 
     def __getitem__(self, slices):
         """
         Asumes x,y,z coordinates
         """
-        return np.swapaxes(self._data.__getitem__(slices[::-1]),0,2)
+        data = self._data.__getitem__(slices[::-1])
+        if self._layer_type == "affinities":
+            data = data.transpose((3,2,1,0)) * 255.0
+            return data.astype(np.uint8) 
+        else:
+            return np.expand_dims(np.swapaxes(data,0,2),3)
 
     def __del__(self):
         self._f.close()
 
-class FakeVolume(Volume):
+
+class NumpyVolume(Volume):
 
     def __init__(self):
         arr = np.ones(shape=(127,127,127),dtype=np.uint32)
         self._data = np.pad(arr, 1, 'constant')
-        self._layer_type = 'image'
-        self._mesh = False
+        self._layer_type = 'segmentation'
+        self._mesh = True
         self._resolution = [6,6,30]
         self._underlying = self.shape
         self._data_type = self._data.dtype
-
-    @property
-    def shape(self):
-        return self._data.shape
-
+        self._shape = self._data.shape
 
     def __getitem__(self, slices):
         """
         Asumes x,y,z coordinates
         """
         return self._data.__getitem__(slices)
-
-class DVIDVolume(Volume):
-
-    def __init__(self):
-        self._info = requests.get('http://seung-titan01.pni.princeton.edu:8000/api/node/5d7b0fea4b674a1ea48020f1abaaf009/tiles4/info').json()
-        self._resolution = self._info['Extended']['Levels']['0']['Resolution']
-        self._shape = self._info['Extended']['MaxTileCoord']
-        self._underlying = self._info['Extended']['Levels']['0']['TileSize']
-        self._layer_type = 'image'
-        self._mesh = False
-        self._data_type = 'uint8'
-
-    def __getitem__(self, slices):
-        x, y, z = slices
-        x_size = x.stop - x.start; x_min = x.start
-        y_size = y.stop - y.start; y_min = y.start
-        z_size = z.stop - z.start; z_min = z.start
-
-        url = "{api}/node/{UUID}/{dataname}/raw/{dims}/{size}/{offset}/nd".format(
-            api="http://seung-titan01.pni.princeton.edu:8000/api",
-            UUID="5d7b0fea4b674a1ea48020f1abaaf009",
-            dataname="grayscale",
-            dims="0_1_2",
-            size="_".join(map(str,[x_size,y_size,z_size])),
-            offset="_".join(map(str,[x_min, y_min, z_min])),
-            )
-
-        return np.swapaxes(np.fromstring(requests.get(url).content , np.uint8).reshape(z_size,y_size,x_size),0,2)

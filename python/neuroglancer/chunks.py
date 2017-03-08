@@ -36,14 +36,20 @@ def decode_npz(string):
     fileobj = io.BytesIO(zlib.decompress(string))
     return np.load(fileobj)
 
-def encode_jpeg(subvol):
-    shape = subvol.shape
-    reshaped = subvol.reshape(shape[0] * shape[1], shape[2])
-    img = Image.fromarray(reshaped)
+def encode_jpeg(arr):
+    assert arr.dtype == np.uint8
+    arr = arr.transpose((3,2,1,0))
+    reshaped = arr.reshape(arr.shape[3] * arr.shape[2], arr.shape[1] * arr.shape[0])
+    if shape[3] == 1:
+        img = Image.fromarray(reshaped, mode='L')
+    elif shape[3] == 3:
+        img = Image.fromarray(reshaped, mode='RGB')
+    else:
+        raise ValueError(shape[3] + " should be 1 or 3.")
+
     f = io.BytesIO()
     img.save(f, "JPEG")
     return f.getvalue()
 
-
 def encode_raw(subvol):
-    return subvol.tostring('C')
+    return subvol.tostring('F')
