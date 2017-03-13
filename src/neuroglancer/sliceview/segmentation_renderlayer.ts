@@ -22,6 +22,7 @@ import {VolumeSourceOptions} from 'neuroglancer/sliceview/base';
 import {MultiscaleVolumeChunkSource, SliceView} from 'neuroglancer/sliceview/frontend';
 import {RenderLayer} from 'neuroglancer/sliceview/renderlayer';
 import {TrackableAlphaValue} from 'neuroglancer/trackable_alpha';
+import {TrackableBoolean} from 'neuroglancer/trackable_boolean';
 import {DisjointUint64Sets} from 'neuroglancer/util/disjoint_sets';
 import {ShaderBuilder, ShaderProgram} from 'neuroglancer/webgl/shader';
 import {glsl_unnormalizeUint8} from 'neuroglancer/webgl/shader_lib';
@@ -50,6 +51,7 @@ export interface SliceViewSegmentationDisplayState extends SegmentationDisplaySt
   selectedAlpha: TrackableAlphaValue;
   notSelectedAlpha: TrackableAlphaValue;
   volumeSourceOptions: VolumeSourceOptions;
+  hideSegmentZero: TrackableBoolean;
 }
 
 export class SegmentationRenderLayer extends RenderLayer {
@@ -70,6 +72,10 @@ export class SegmentationRenderLayer extends RenderLayer {
     registerRedrawWhenSegmentationDisplayStateChanged(displayState, this);
     this.registerDisposer(
         displayState.selectedAlpha.changed.add(() => { this.redrawNeeded.dispatch(); }));
+    this.registerDisposer(displayState.hideSegmentZero.changed.add(() => {
+      this.redrawNeeded.dispatch();
+      this.shaderUpdated = true;
+    }));
     this.hasEquivalences = this.displayState.segmentEquivalences.size !== 0;
     displayState.segmentEquivalences.changed.add(() => {
       let {segmentEquivalences} = this.displayState;
@@ -85,8 +91,10 @@ export class SegmentationRenderLayer extends RenderLayer {
   }
 
   getShaderKey() {
-    // The shader to use depends on whether there are any equivalences.
-    return `sliceview.SegmentationRenderLayer/${this.hasEquivalences}`;
+    // The shader to use depends on whether there are any equivalences, and on whether we are hiding
+    // segment ID 0.
+    return `sliceview.SegmentationRenderLayer/${this.hasEquivalences}/` +
+        this.displayState.hideSegmentZero.value;
   }
 
   defineShader(builder: ShaderBuilder) {
@@ -122,15 +130,21 @@ uint64_t getMappedObjectId() {
     builder.addUniform('highp float', 'uSelectedAlpha');
     builder.addUniform('highp float', 'uNotSelectedAlpha');
     builder.addFragmentCode(glsl_unnormalizeUint8);
-    builder.setFragmentMain(`
+    let fragmentMain = `
   uint64_t value = getMappedObjectId();
   
   float alpha = uSelectedAlpha;
   float saturation = 1.0;
+`;
+    if (this.displayState.hideSegmentZero.value) {
+      fragmentMain += `
   if (value.low == vec4(0,0,0,0) && value.high == vec4(0,0,0,0)) {
     emit(vec4(vec4(0, 0, 0, 0)));
     return;
   }
+`;
+    }
+    fragmentMain += `
   bool has = uShowAllSegments > 0.0 ? true : ${this.hashTableManager.hasFunctionName}(value);
   if (uSelectedSegment[0] == unnormalizeUint8(value.low) &&
       uSelectedSegment[1] == unnormalizeUint8(value.high)) {
@@ -140,7 +154,8 @@ uint64_t getMappedObjectId() {
   }
   vec3 rgb = segmentColorHash(value);
   emit(vec4(mix(vec3(1.0,1.0,1.0), rgb, saturation), alpha));
-`);
+`;
+    builder.setFragmentMain(fragmentMain);
   }
 
   beginSlice(sliceView: SliceView) {
