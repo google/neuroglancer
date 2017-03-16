@@ -77,7 +77,7 @@ class Storage(object):
         ]
 
         headers = [ x for x in headers if x is not None ]
-        gsutil_upload_command = "gsutil {headers} -m cp {compress} -a public-read {local_dir}/* {remote_dir}/".format(
+        gsutil_upload_command = "gsutil {headers} cp {compress} -a public-read {local_dir}/* {remote_dir}/".format(
           headers=" ".join(headers),
           compress=('-Z' if self._compress else ''),
           local_dir=self._local,

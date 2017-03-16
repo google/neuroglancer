@@ -36,7 +36,6 @@ class Volume(object):
         """
 
         return self._data_type
-    
 
     @property
     def layer_type(self):
@@ -63,9 +62,16 @@ class Volume(object):
         return self._resolution
 
     @property
+    def offset(self):
+        """
+        distantance to the pixel closes to the origin
+        """
+        return self._offset
+
+    @property
     def underlying(self):
         """
-        Size of the underlying chunks
+        Size of the underlying chunks in pixels
         """
         return self._underlying
 
@@ -92,15 +98,16 @@ class Volume(object):
     
 class HDF5Volume(Volume):
 
-    def __init__(self, path, layer_type):
+    def __init__(self, path, layer_type, resolution=[1,1,1], offset=[0,0,0]):
         self._layer_type = layer_type
         self._f = h5py.File(path, 'r')
         self._data = self._f['main']      
         self._mesh = (self._layer_type == 'segmentation')
-        self._resolution = [6,6,30]
+        self._resolution = resolution
+        self._offset = offset
         self._shape = self._data.shape[::-1]
         self._underlying = self.shape
-
+        
         if self._layer_type == "affinities":
             self._data_type = "uint8"
         else:
@@ -123,12 +130,13 @@ class HDF5Volume(Volume):
 
 class NumpyVolume(Volume):
 
-    def __init__(self):
+    def __init__(self, resolution=[1,1,1], offset=[0,0,0]):
         arr = np.ones(shape=(127,127,127),dtype=np.uint32)
         self._data = np.pad(arr, 1, 'constant')
         self._layer_type = 'segmentation'
         self._mesh = True
-        self._resolution = [6,6,30]
+        self._resolution = resolution
+        self._offset = offset
         self._underlying = self.shape
         self._data_type = self._data.dtype
         self._shape = self._data.shape
@@ -138,6 +146,16 @@ class NumpyVolume(Volume):
         Asumes x,y,z coordinates
         """
         return self._data.__getitem__(slices)
+
+class EmptyVolume(Volume):
+    def __init__(self, shape, offset):
+        self._layer_type = 'segmentation'
+        self._mesh = True
+        self._resolution = [5, 5, 45] 
+        self._offset = offset
+        self._underlying = [896,896,112]
+        self._data_type = "uint16"
+        self._shape = shape
 
 
 class VolumeCutout(np.ndarray):

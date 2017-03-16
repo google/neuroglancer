@@ -50,6 +50,11 @@ class Runner(object):
             max_downsampled_size=np.max(self._volume.shape / self._chunk_size * self._neuroglancer_chunk_size)
         )
 
+        # if the voxel_offset is not divisible by the ratio
+        # zooming out will slightly shift the data.
+        # imagine the offset is 10
+        # the mip 1 will have an offset of 5
+        # the mip 2 will have an offset of 2 instead of 2.5 meaning that it will he half a pixel to the left
         for ratio in scale_ratio:
             downsampled_resolution = map(int, (self._volume.resolution * np.array(ratio)))
             scale = {  
@@ -58,7 +63,7 @@ class Runner(object):
               "key": "_".join(map(str, downsampled_resolution)),
               "resolution": downsampled_resolution,
               "size": map(int, np.ceil(np.array(self._volume.shape) / ratio)),
-              "voxel_offset": [0, 0, 0],
+              "voxel_offset": map(int, self._volume.offset /  np.array(ratio)),
             }
             info["scales"].append(scale)
 
@@ -79,6 +84,14 @@ class Runner(object):
                                  y_min:y_max,
                                  z_min:z_max]
 
+            #adds offsets
+            x_min += self._volume.offset[0]
+            x_max += self._volume.offset[0]
+            y_min += self._volume.offset[1]
+            y_max += self._volume.offset[1]
+            z_min += self._volume.offset[2]
+            z_max += self._volume.offset[2]
+
             filename = "{}-{}_{}-{}_{}-{}".format(
                 x_min, x_max, y_min, y_max, z_min, z_max)
             if self._encoding == "npz":
@@ -97,14 +110,18 @@ class Runner(object):
                 info_path = "gs://neuroglancer/{}/{}/info".format(self._dataset_name, self._layer_name)
             )
             self._tasks.append(task)
+        
 
         self._storage.flush('build/')
         self.flush_tasks()
   
 if __name__ == '__main__':
-    v =  HDF5Volume('/usr/people/it2/snemi3d/image.h5', layer_type='image')
-    Runner(v, 'snemi3dtest_v0', 'image')
-    v =  HDF5Volume('/usr/people/it2/snemi3d/human_labels.h5', layer_type='segmentation')
-    Runner(v, 'snemi3dtest_v0', 'segmentation')
-    v =  HDF5Volume('/usr/people/it2/snemi3d/affinities.h5', layer_type='affinities')
-    Runner(v, 'snemi3dtest_v0', 'affinities')
+    v =  HDF5Volume('/usr/people/it2/snemi3d/image.h5', layer_type='image', offset=[64, 64, 64])
+    Runner(v, 'offset_v0', 'image')
+    v =  HDF5Volume('/usr/people/it2/snemi3d/human_labels.h5', layer_type='segmentation', offset=[64, 64, 64])
+    Runner(v, 'offset_v0', 'segmentation')
+    v =  HDF5Volume('/usr/people/it2/snemi3d/affinities.h5', layer_type='affinities', offset=[64, 64, 64])
+    Runner(v, 'offset_v0', 'affinities')
+    # v = EmptyVolume(shape=[15616, 20992, 16512], offset=[0, 0, 0])
+    # Runner(v, 'zfish_v0','segmentation')
+

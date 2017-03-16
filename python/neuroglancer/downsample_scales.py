@@ -32,8 +32,10 @@ def compute_near_isotropic_downsampling_scales(size,
     num_dims = len(voxel_size)
     cur_scale = np.ones((num_dims, ), dtype=int)
     scales = [tuple(cur_scale)]
-    while (len(scales) < max_scales and (np.prod(cur_scale) < max_downsampling) and
-           (size / cur_scale).max() > max_downsampled_size):
+    while (len(scales) < max_scales 
+            and (np.prod(cur_scale) < max_downsampling) 
+            and np.all(size / cur_scale > max_downsampled_size)
+            and np.all(np.mod(size,cur_scale) == 0)): # the number of chunks should be integer
         # Find dimension with smallest voxelsize.
         cur_voxel_size = cur_scale * voxel_size
         smallest_cur_voxel_size_dim = dimensions_to_downsample[np.argmin(cur_voxel_size[
