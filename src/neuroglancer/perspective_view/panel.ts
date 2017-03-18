@@ -215,10 +215,23 @@ export class PerspectivePanel extends RenderedDataPanel {
   }
 
   startDragViewport(e: MouseEvent) {
-    startRelativeMouseDrag(e, (_event, deltaX, deltaY) => {
-      this.navigationState.pose.rotateRelative(kAxes[1], -deltaX / 4.0 * Math.PI / 180.0);
-      this.navigationState.pose.rotateRelative(kAxes[0], deltaY / 4.0 * Math.PI / 180.0);
-      this.viewer.navigationState.changed.dispatch();
+    startRelativeMouseDrag(e, (event, deltaX, deltaY) => {
+      if (event.shiftKey) {
+        const temp = tempVec3;
+        const {projectionMat} = this;
+        const {width, height} = this;
+        const {position} = this.viewer.navigationState;
+        const pos = position.spatialCoordinates;
+        vec3.transformMat4(temp, pos, projectionMat);
+        temp[0] = 2 * deltaX / width;
+        temp[1] = -2 * deltaY / height;
+        vec3.transformMat4(pos, temp, this.inverseProjectionMat);
+        position.changed.dispatch();
+      } else {
+        this.navigationState.pose.rotateRelative(kAxes[1], -deltaX / 4.0 * Math.PI / 180.0);
+        this.navigationState.pose.rotateRelative(kAxes[0], deltaY / 4.0 * Math.PI / 180.0);
+        this.viewer.navigationState.changed.dispatch();
+      }
     });
   }
 

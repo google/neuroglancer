@@ -495,3 +495,15 @@ export function verify3dScale(obj: any) {
 export function verify3dDimensions(obj: any) {
   return parseFixedLengthArray(vec3.create(), obj, verifyPositiveInt);
 }
+
+export function verifyStringArray(a: any) {
+  if (!Array.isArray(a)) {
+    throw new Error(`Expected array, received: ${JSON.stringify(a)}.`);
+  }
+  for (let x of a) {
+    if (typeof x !== 'string') {
+      throw new Error(`Expected string, received: ${JSON.stringify(x)}.`);
+    }
+  }
+  return <string[]>a;
+}

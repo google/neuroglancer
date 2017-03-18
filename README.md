@@ -163,6 +163,17 @@ See [examples/dependent-project](examples/dependent-project).
 There is a Google Group/mailing list for discussion related to Neuroglancer:
 <https://groups.google.com/forum/#!forum/neuroglancer>.
 
+# Related Projects
+
+- [nyroglancer](https://github.com/funkey/nyroglancer) - Jupyter notebook extension for visualizing
+  Numpy arrays with Neuroglancer.
+- [4Quant/neuroglancer-docker](https://github.com/4Quant/neuroglancer-docker) - Example setup for
+  Docker deployment of the [Neuroglancer Python integration](python/README.md).
+- [FZJ-INM1-BDA/neuroglancer-scripts](https://github.com/FZJ-INM1-BDA/neuroglancer-scripts) -
+  Scripts for converting the [BigBrain](https://bigbrain.loris.ca) dataset to the
+  Neuroglancer [precomputed data format](src/neuroglancer/datasource/precomputed), which may serve
+  as a useful example for converting other datasets.
+
 # Contributing
 
 Want to contribute?  Great!  First, read [CONTRIBUTING.md](CONTRIBUTING.md).

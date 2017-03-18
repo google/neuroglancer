@@ -28,6 +28,7 @@ import {PerspectiveViewSkeletonLayer, SkeletonLayer, SliceViewPanelSkeletonLayer
 import {VolumeType} from 'neuroglancer/sliceview/base';
 import {SegmentationRenderLayer, SliceViewSegmentationDisplayState} from 'neuroglancer/sliceview/segmentation_renderlayer';
 import {trackableAlphaValue} from 'neuroglancer/trackable_alpha';
+import {TrackableBoolean, TrackableBooleanCheckbox} from 'neuroglancer/trackable_boolean';
 import {Uint64Set} from 'neuroglancer/uint64_set';
 import {parseArray, verifyObjectProperty, verifyOptionalString} from 'neuroglancer/util/json';
 import {Uint64} from 'neuroglancer/util/uint64';
@@ -35,11 +36,13 @@ import {RangeWidget} from 'neuroglancer/widget/range';
 import {SegmentSetWidget} from 'neuroglancer/widget/segment_set_widget';
 import {Uint64EntryWidget} from 'neuroglancer/widget/uint64_entry_widget';
 
+require('neuroglancer/noselect.css');
 require('./segmentation_user_layer.css');
 
 const SELECTED_ALPHA_JSON_KEY = 'selectedAlpha';
 const NOT_SELECTED_ALPHA_JSON_KEY = 'notSelectedAlpha';
 const OBJECT_ALPHA_JSON_KEY = 'objectAlpha';
+const HIDE_SEGMENT_ZERO_JSON_KEY = 'hideSegmentZero';
 
 
 export class SegmentationUserLayer extends UserLayer {
@@ -49,6 +52,7 @@ export class SegmentationUserLayer extends UserLayer {
     selectedAlpha: trackableAlphaValue(0.5),
     notSelectedAlpha: trackableAlphaValue(0),
     objectAlpha: trackableAlphaValue(1.0),
+    hideSegmentZero: new TrackableBoolean(true, true),
     visibleSegments: Uint64Set.makeWithCounterpart(this.manager.worker),
     segmentEquivalences: SharedDisjointUint64Sets.makeWithCounterpart(this.manager.worker),
     volumeSourceOptions: {},
@@ -68,10 +72,12 @@ export class SegmentationUserLayer extends UserLayer {
     this.displayState.selectedAlpha.changed.add(() => { this.specificationChanged.dispatch(); });
     this.displayState.notSelectedAlpha.changed.add(() => { this.specificationChanged.dispatch(); });
     this.displayState.objectAlpha.changed.add(() => { this.specificationChanged.dispatch(); });
+    this.displayState.hideSegmentZero.changed.add(() => { this.specificationChanged.dispatch(); });
 
     this.displayState.selectedAlpha.restoreState(x[SELECTED_ALPHA_JSON_KEY]);
     this.displayState.notSelectedAlpha.restoreState(x[NOT_SELECTED_ALPHA_JSON_KEY]);
     this.displayState.objectAlpha.restoreState(x[OBJECT_ALPHA_JSON_KEY]);
+    this.displayState.hideSegmentZero.restoreState(x[HIDE_SEGMENT_ZERO_JSON_KEY]);
     this.displayState.objectToDataTransform.restoreState(x['transform']);
     this.displayState.volumeSourceOptions.transform =
         this.displayState.objectToDataTransform.transform;
@@ -141,6 +147,7 @@ export class SegmentationUserLayer extends UserLayer {
     x[SELECTED_ALPHA_JSON_KEY] = this.displayState.selectedAlpha.toJSON();
     x[NOT_SELECTED_ALPHA_JSON_KEY] = this.displayState.notSelectedAlpha.toJSON();
     x[OBJECT_ALPHA_JSON_KEY] = this.displayState.objectAlpha.toJSON();
+    x[HIDE_SEGMENT_ZERO_JSON_KEY] = this.displayState.hideSegmentZero.toJSON();
     let {visibleSegments} = this.displayState;
     if (visibleSegments.size > 0) {
       x['segments'] = visibleSegments.toJSON();
@@ -208,6 +215,7 @@ class SegmentationDropdown extends UserLayerDropdown {
   notSelectedAlphaWidget =
       this.registerDisposer(new RangeWidget(this.layer.displayState.notSelectedAlpha));
   objectAlphaWidget = this.registerDisposer(new RangeWidget(this.layer.displayState.objectAlpha));
+
   constructor(public element: HTMLDivElement, public layer: SegmentationUserLayer) {
     super();
     element.classList.add('segmentation-dropdown');
@@ -219,6 +227,18 @@ class SegmentationDropdown extends UserLayerDropdown {
     element.appendChild(this.selectedAlphaWidget.element);
     element.appendChild(this.notSelectedAlphaWidget.element);
     element.appendChild(this.objectAlphaWidget.element);
+
+    {
+      const checkbox =
+          this.registerDisposer(new TrackableBooleanCheckbox(layer.displayState.hideSegmentZero));
+      checkbox.element.className = 'neuroglancer-segmentation-dropdown-hide-segment-zero noselect';
+      const label = document.createElement('label');
+      label.className = 'neuroglancer-segmentation-dropdown-hide-segment-zero noselect';
+      label.appendChild(document.createTextNode('Hide segment ID 0'));
+      label.appendChild(checkbox.element);
+      element.appendChild(label);
+    }
+
     this.addSegmentWidget.element.classList.add('add-segment');
     this.addSegmentWidget.element.title = 'Add segment ID';
     element.appendChild(this.registerDisposer(this.addSegmentWidget).element);
