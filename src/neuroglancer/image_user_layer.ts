@@ -19,8 +19,8 @@ import {UserLayer, UserLayerDropdown} from 'neuroglancer/layer';
 import {LayerListSpecification, registerLayerType, registerVolumeLayerType} from 'neuroglancer/layer_specification';
 import {getVolumeWithStatusMessage} from 'neuroglancer/layer_specification';
 import {Overlay} from 'neuroglancer/overlay';
-import {VolumeType} from 'neuroglancer/sliceview/base';
-import {FRAGMENT_MAIN_START, getTrackableFragmentMain, ImageRenderLayer} from 'neuroglancer/sliceview/image_renderlayer';
+import {VolumeType} from 'neuroglancer/sliceview/volume/base';
+import {FRAGMENT_MAIN_START, getTrackableFragmentMain, ImageRenderLayer} from 'neuroglancer/sliceview/volume/image_renderlayer';
 import {trackableAlphaValue} from 'neuroglancer/trackable_alpha';
 import {mat4} from 'neuroglancer/util/geom';
 import {makeWatchableShaderError} from 'neuroglancer/webgl/dynamic_shader';
@@ -56,7 +56,7 @@ export class ImageUserLayer extends UserLayer {
           opacity: this.opacity,
           fragmentMain: this.fragmentMain,
           shaderError: this.shaderError,
-          volumeSourceOptions: {transform: mat4.clone(this.transform.transform)},
+          sourceOptions: {transform: mat4.clone(this.transform.transform)},
         });
         this.addRenderLayer(renderLayer);
         this.shaderError.changed.dispatch();

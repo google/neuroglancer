@@ -14,12 +14,14 @@
  * limitations under the License.
  */
 
-import {VolumeSourceOptions} from 'neuroglancer/sliceview/base';
-import {MultiscaleVolumeChunkSource, SliceView} from 'neuroglancer/sliceview/frontend';
-import {RenderLayer} from 'neuroglancer/sliceview/renderlayer';
+import {VolumeSourceOptions} from 'neuroglancer/sliceview/volume/base';
+import {MultiscaleVolumeChunkSource} from 'neuroglancer/sliceview/volume/frontend';
+import {SliceView} from 'neuroglancer/sliceview/frontend';
+import {RenderLayer} from 'neuroglancer/sliceview/volume/renderlayer';
 import {TrackableAlphaValue, trackableAlphaValue} from 'neuroglancer/trackable_alpha';
 import {makeTrackableFragmentMain, makeWatchableShaderError, TrackableFragmentMain} from 'neuroglancer/webgl/dynamic_shader';
 import {ShaderBuilder} from 'neuroglancer/webgl/shader';
+import {vec3} from 'neuroglancer/util/geom';
 
 export const FRAGMENT_MAIN_START = '//NEUROGLANCER_IMAGE_RENDERLAYER_FRAGMENT_MAIN_START';
 
@@ -41,9 +43,9 @@ export class ImageRenderLayer extends RenderLayer {
     opacity = trackableAlphaValue(0.5),
     fragmentMain = getTrackableFragmentMain(),
     shaderError = makeWatchableShaderError(),
-    volumeSourceOptions = <VolumeSourceOptions>{},
+    sourceOptions = <VolumeSourceOptions>{},
   } = {}) {
-    super(multiscaleSource, {shaderError, volumeSourceOptions});
+    super(multiscaleSource, {shaderError, sourceOptions});
     this.fragmentMain = fragmentMain;
     this.opacity = opacity;
     this.registerDisposer(opacity.changed.add(() => { this.redrawNeeded.dispatch(); }));
@@ -53,7 +55,19 @@ export class ImageRenderLayer extends RenderLayer {
     }));
   }
 
-  getShaderKey() { return `sliceview.ImageRenderLayer:${JSON.stringify(this.fragmentMain.value)}`; }
+  getShaderKey() { return `volume.ImageRenderLayer:${JSON.stringify(this.fragmentMain.value)}`; }
+
+  getValueAt(position: vec3) {
+    for (let alternatives of this.sources!) {
+      for (let source of alternatives) {
+        let result = source.getValueAt(position);
+        if (result != null) {
+          return result;
+        }
+      }
+    }
+    return null;
+  }
 
   defineShader(builder: ShaderBuilder) {
     super.defineShader(builder);

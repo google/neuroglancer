@@ -18,9 +18,9 @@ import {ChunkManager, registerChunkSource} from 'neuroglancer/chunk_manager/back
 import {ChunkPriorityTier} from 'neuroglancer/chunk_manager/base';
 import {GenericFileSource, PriorityGetter} from 'neuroglancer/chunk_manager/generic_file_source';
 import {GET_NIFTI_VOLUME_INFO_RPC_ID, NiftiDataType, NiftiVolumeInfo, VolumeSourceParameters} from 'neuroglancer/datasource/nifti/base';
-import {ParameterizedVolumeChunkSource, VolumeChunk} from 'neuroglancer/sliceview/backend';
+import {ParameterizedVolumeChunkSource, VolumeChunk} from 'neuroglancer/sliceview/volume/backend';
 import {decodeRawChunk} from 'neuroglancer/sliceview/backend_chunk_decoders/raw';
-import {DataType, VolumeType} from 'neuroglancer/sliceview/base';
+import {DataType, VolumeType} from 'neuroglancer/sliceview/volume/base';
 import {CancellationToken} from 'neuroglancer/util/cancellation';
 import {Endianness} from 'neuroglancer/util/endian';
 import {mat4, quat, vec3} from 'neuroglancer/util/geom';

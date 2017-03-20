@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-import {VolumeChunk} from 'neuroglancer/sliceview/backend';
+import {VolumeChunk} from 'neuroglancer/sliceview/volume/backend';
 import {postProcessRawData} from 'neuroglancer/sliceview/backend_chunk_decoders/postprocess';
 import {DATA_TYPE_BYTES, DataType} from 'neuroglancer/util/data_type';
 import {convertEndian16, convertEndian32, Endianness, ENDIANNESS} from 'neuroglancer/util/endian';

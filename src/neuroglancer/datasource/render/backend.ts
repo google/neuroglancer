@@ -17,7 +17,7 @@
 import {registerChunkSource} from 'neuroglancer/chunk_manager/backend';
 import {CancellationToken} from 'neuroglancer/util/cancellation';
 import {TileChunkSourceParameters} from 'neuroglancer/datasource/render/base';
-import {ParameterizedVolumeChunkSource, VolumeChunk} from 'neuroglancer/sliceview/backend';
+import {ParameterizedVolumeChunkSource, VolumeChunk} from 'neuroglancer/sliceview/volume/backend';
 import {ChunkDecoder} from 'neuroglancer/sliceview/backend_chunk_decoders';
 import {decodeJpegChunk} from 'neuroglancer/sliceview/backend_chunk_decoders/jpeg';
 import {vec3} from 'neuroglancer/util/geom';

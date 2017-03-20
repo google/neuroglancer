@@ -19,5 +19,5 @@
  * in various formats.
  */
 
-import {VolumeChunk} from 'neuroglancer/sliceview/backend';
+import {VolumeChunk} from 'neuroglancer/sliceview/volume/backend';
 export type ChunkDecoder = (chunk: VolumeChunk, response: ArrayBuffer) => void;

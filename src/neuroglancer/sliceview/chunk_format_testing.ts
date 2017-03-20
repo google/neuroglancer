@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-import {glsl_getPositionWithinChunk} from 'neuroglancer/sliceview/renderlayer';
+import {glsl_getPositionWithinChunk} from 'neuroglancer/sliceview/volume/renderlayer';
 import {SingleTextureChunkFormat} from 'neuroglancer/sliceview/single_texture_chunk_format';
 import {getFortranOrderStrides} from 'neuroglancer/util/array';
 import {TypedArray} from 'neuroglancer/util/array';

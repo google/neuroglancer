@@ -22,8 +22,8 @@ import {ChangeSpec, MeshSourceParameters, SkeletonSourceParameters, VolumeChunkE
 import {GetVolumeOptions, registerDataSourceFactory} from 'neuroglancer/datasource/factory';
 import {defineParameterizedMeshSource} from 'neuroglancer/mesh/frontend';
 import {parameterizedSkeletonSource} from 'neuroglancer/skeleton/frontend';
-import {DataType, VolumeChunkSpecification, VolumeSourceOptions, VolumeType} from 'neuroglancer/sliceview/base';
-import {defineParameterizedVolumeChunkSource, MultiscaleVolumeChunkSource as GenericMultiscaleVolumeChunkSource} from 'neuroglancer/sliceview/frontend';
+import {DataType, VolumeChunkSpecification, VolumeSourceOptions, VolumeType} from 'neuroglancer/sliceview/volume/base';
+import {defineParameterizedVolumeChunkSource, MultiscaleVolumeChunkSource as GenericMultiscaleVolumeChunkSource} from 'neuroglancer/sliceview/volume/frontend';
 import {StatusMessage} from 'neuroglancer/status';
 import {getPrefixMatches, getPrefixMatchesWithDescriptions} from 'neuroglancer/util/completion';
 import {vec3} from 'neuroglancer/util/geom';
@@ -114,7 +114,7 @@ export class MultiscaleVolumeChunkSource implements GenericMultiscaleVolumeChunk
           volumeType = VolumeType.IMAGE;
         }
       }
-      this.volumeType = volumeType;
+      this.volumeType = volumeType!;
     } catch (parseError) {
       throw new Error(
           `Failed to parse BrainMaps multiscale volume specification: ${parseError.message}`);

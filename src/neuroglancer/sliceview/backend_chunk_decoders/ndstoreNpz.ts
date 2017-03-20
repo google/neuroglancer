@@ -22,7 +22,7 @@
  * (each corresponding to a different variable) in NPY binary format.
  */
 
-import {VolumeChunk} from 'neuroglancer/sliceview/backend';
+import {VolumeChunk} from 'neuroglancer/sliceview/volume/backend';
 import {postProcessRawData} from 'neuroglancer/sliceview/backend_chunk_decoders/postprocess';
 import {DataType} from 'neuroglancer/sliceview/base';
 import {vec3Key} from 'neuroglancer/util/geom';
