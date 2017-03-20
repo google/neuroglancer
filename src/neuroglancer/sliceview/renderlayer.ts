@@ -166,8 +166,6 @@ export abstract class RenderLayer extends GenericRenderLayer {
 
   get gl() { return this.chunkManager.chunkQueueManager.gl; }
 
-  get chunkFormat() { return this.sources![0][0].chunkFormat; }
-
   initializeShader() {
     if (!this.shaderUpdated) {
       return;
@@ -198,7 +196,7 @@ export abstract class RenderLayer extends GenericRenderLayer {
   getShaderKey() { return ''; }
 
   getShader() {
-    let key = this.getShaderKey() + '/' + this.chunkFormat.shaderKey;
+    let key = this.getShaderKey(); 
     return this.gl.memoize.get(key, () => this.buildShader());
   }
 

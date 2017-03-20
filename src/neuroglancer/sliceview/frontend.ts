@@ -269,80 +269,15 @@ export class SliceView extends SliceViewBase {
   }
 };
 
-export interface ChunkFormat {
-  shaderKey: string;
-
-  /**
-   * Called on the ChunkFormat of the first source of a RenderLayer.
-   *
-   * This should define a fragment shader function:
-   *
-   *   value_type getDataValue(int channelIndex);
-   *
-   * where value_type is the shader data type corresponding to the chunk data type.  This function
-   * should retrieve the value for channel `channelIndex` at position `getPositionWithinChunk()`
-   * within the chunk.
-   */
-  defineShader: (builder: ShaderBuilder) => void;
-
-  /**
-   * Called once per RenderLayer when starting to draw chunks, on the ChunkFormat of the first
-   * source.  This is not called before each source is drawn.
-   */
-  beginDrawing: (gl: GL, shader: ShaderProgram) => void;
-
-  /**
-   * Called once after all chunks have been drawn, on the ChunkFormat of the first source.
-   */
-  endDrawing: (gl: GL, shader: ShaderProgram) => void;
-
-  /**
-   * Called just before drawing each chunk, on the ChunkFormat .
-   */
-  bindChunk: (gl: GL, shader: ShaderProgram, chunk: SliceViewChunk) => void;
-
-  /**
-   * Called just before drawing chunks for the source.
-   */
-  beginSource: (gl: GL, shader: ShaderProgram) => void;
-}
-
-export interface ChunkFormatHandler extends Disposable {
-  chunkFormat: ChunkFormat;
-  getChunk(source: SliceViewChunkSource, x: any): SliceViewChunk;
-}
-
-export type ChunkFormatHandlerFactory = (gl: GL, spec: SliceViewChunkSpecification) =>
-    ChunkFormatHandler | null;
-
-var chunkFormatHandlers = new Array<ChunkFormatHandlerFactory>();
-
-export function registerChunkFormatHandler(factory: ChunkFormatHandlerFactory) {
-  chunkFormatHandlers.push(factory);
-}
-
-export function getChunkFormatHandler(gl: GL, spec: SliceViewChunkSpecification) {
-  for (let handler of chunkFormatHandlers) {
-    let result = handler(gl, spec);
-    if (result != null) {
-      return result;
-    }
-  }
-  throw new Error('No chunk format handler found.');
-}
-
 const tempChunkGridPosition = vec3.create();
 const tempLocalPosition = vec3.create();
 
 export abstract class SliceViewChunkSource extends ChunkSource implements SliceViewChunkSourceInterface {
-  chunkFormatHandler: ChunkFormatHandler;
 
   chunks: Map<string, SliceViewChunk>;
 
   constructor(chunkManager: ChunkManager, public spec: SliceViewChunkSpecification) {
     super(chunkManager);
-    this.chunkFormatHandler =
-        this.registerDisposer(getChunkFormatHandler(chunkManager.chunkQueueManager.gl, spec));
   }
 
   initializeCounterpart(rpc: RPC, options: any) {
@@ -350,9 +285,7 @@ export abstract class SliceViewChunkSource extends ChunkSource implements SliceV
     super.initializeCounterpart(rpc, options);
   }
 
-  get chunkFormat() { return this.chunkFormatHandler.chunkFormat; }
-
-  getChunk(x: any) { return this.chunkFormatHandler.getChunk(this, x); }
+  abstract getChunk(x: any): any 
 };
 
 export abstract class SliceViewChunk extends Chunk {
@@ -360,15 +293,12 @@ export abstract class SliceViewChunk extends Chunk {
   chunkGridPosition: vec3;
   source: SliceViewChunkSource;
 
-  get chunkFormat() { return this.source.chunkFormat; }
-
   constructor(source: SliceViewChunkSource, x: any) {
     super(source);
     this.chunkGridPosition = x['chunkGridPosition'];
     this.chunkDataSize = x['chunkDataSize'] || source.spec.chunkDataSize;
     this.state = ChunkState.SYSTEM_MEMORY;
   }
-  abstract getChannelValueAt(dataPosition: vec3, channel: number): any;
 };
 
 /**

@@ -20,7 +20,7 @@ import {LayerManager} from 'neuroglancer/layer';
 import {MeshSource} from 'neuroglancer/mesh/frontend';
 import {NavigationState} from 'neuroglancer/navigation_state';
 import {DataType, SliceViewBase} from 'neuroglancer/sliceview/base';
-import {SliceView, SliceViewChunk, SliceViewChunkSource, SliceViewRenderHelper, MultiscaleSliceViewChunkSource, ChunkFormatHandler, getChunkFormatHandler} from 'neuroglancer/sliceview/frontend';
+import {SliceView, SliceViewChunk, SliceViewChunkSource, SliceViewRenderHelper, MultiscaleSliceViewChunkSource} from 'neuroglancer/sliceview/frontend';
 import {VolumeChunkSource as VolumeChunkSourceInterface, VolumeChunkSpecification, VolumeSourceOptions, VolumeType} from 'neuroglancer/sliceview/volume/base';
 import {ChunkLayout} from 'neuroglancer/sliceview/chunk_layout';
 import {RenderLayer as GenericRenderLayer} from 'neuroglancer/sliceview/renderlayer';
@@ -43,6 +43,70 @@ const tempMat = mat4.create();
 
 const tempChunkGridPosition = vec3.create();
 const tempLocalPosition = vec3.create();
+
+
+export interface ChunkFormat {
+  shaderKey: string;
+
+  /**
+   * Called on the ChunkFormat of the first source of a RenderLayer.
+   *
+   * This should define a fragment shader function:
+   *
+   *   value_type getDataValue(int channelIndex);
+   *
+   * where value_type is the shader data type corresponding to the chunk data type.  This function
+   * should retrieve the value for channel `channelIndex` at position `getPositionWithinChunk()`
+   * within the chunk.
+   */
+  defineShader: (builder: ShaderBuilder) => void;
+
+  /**
+   * Called once per RenderLayer when starting to draw chunks, on the ChunkFormat of the first
+   * source.  This is not called before each source is drawn.
+   */
+  beginDrawing: (gl: GL, shader: ShaderProgram) => void;
+
+  /**
+   * Called once after all chunks have been drawn, on the ChunkFormat of the first source.
+   */
+  endDrawing: (gl: GL, shader: ShaderProgram) => void;
+
+  /**
+   * Called just before drawing each chunk, on the ChunkFormat .
+   */
+  bindChunk: (gl: GL, shader: ShaderProgram, chunk: SliceViewChunk) => void;
+
+  /**
+   * Called just before drawing chunks for the source.
+   */
+  beginSource: (gl: GL, shader: ShaderProgram) => void;
+}
+
+export interface ChunkFormatHandler extends Disposable {
+  chunkFormat: ChunkFormat;
+  getChunk(source: SliceViewChunkSource, x: any): SliceViewChunk;
+}
+
+export type ChunkFormatHandlerFactory = (gl: GL, spec: VolumeChunkSpecification) =>
+    ChunkFormatHandler | null;
+
+var chunkFormatHandlers = new Array<ChunkFormatHandlerFactory>();
+
+export function registerChunkFormatHandler(factory: ChunkFormatHandlerFactory) {
+  chunkFormatHandlers.push(factory);
+}
+
+export function getChunkFormatHandler(gl: GL, spec: VolumeChunkSpecification) {
+  for (let handler of chunkFormatHandlers) {
+    let result = handler(gl, spec);
+    if (result != null) {
+      return result;
+    }
+  }
+  throw new Error('No chunk format handler found.');
+}
+
 
 export abstract class VolumeChunkSource extends SliceViewChunkSource implements VolumeChunkSourceInterface {
   chunkFormatHandler: ChunkFormatHandler;

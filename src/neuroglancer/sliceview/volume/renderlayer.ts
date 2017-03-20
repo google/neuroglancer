@@ -323,6 +323,11 @@ export class RenderLayer extends GenericSliceViewRenderLayer {
     return null;
   }
 
+  getShader() {
+    let key = this.getShaderKey() + '/' + this.chunkFormat.shaderKey;
+    return this.gl.memoize.get(key, () => this.buildShader());
+  }
+
   defineShader(builder: ShaderBuilder) {
     this.vertexComputationManager.defineShader(builder);
     builder.addFragmentCode(`

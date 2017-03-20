@@ -15,7 +15,7 @@
  */
 
 import {VolumeChunk, VolumeChunkSource} from 'neuroglancer/sliceview/volume/frontend';
-import {ChunkFormat} from 'neuroglancer/sliceview/frontend';
+import {ChunkFormat} from 'neuroglancer/sliceview/volume/frontend';
 import {TypedArray} from 'neuroglancer/util/array';
 import {Disposable, RefCounted} from 'neuroglancer/util/disposable';
 import {GL} from 'neuroglancer/webgl/context';

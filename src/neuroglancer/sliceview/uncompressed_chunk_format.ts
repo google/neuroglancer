@@ -16,7 +16,7 @@
 
 import {DataType, VolumeChunkSpecification} from 'neuroglancer/sliceview/volume/base';
 import {VolumeChunkSource} from 'neuroglancer/sliceview/volume/frontend';
-import {ChunkFormatHandler, registerChunkFormatHandler} from 'neuroglancer/sliceview/frontend';
+import {ChunkFormatHandler, registerChunkFormatHandler} from 'neuroglancer/sliceview/volume/frontend';
 import {SingleTextureChunkFormat, SingleTextureVolumeChunk} from 'neuroglancer/sliceview/single_texture_chunk_format';
 import {TypedArray, TypedArrayConstructor} from 'neuroglancer/util/array';
 import {RefCounted} from 'neuroglancer/util/disposable';

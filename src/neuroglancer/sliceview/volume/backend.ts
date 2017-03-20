@@ -38,7 +38,6 @@ export class VolumeChunk extends SliceViewChunk {
   data: ArrayBufferView|null;
   constructor() {
     super();
-    this.chunkGridPosition = vec3.create();
   }
 
   initializeVolumeChunk(key: string, chunkGridPosition: vec3) {
@@ -96,7 +95,6 @@ export abstract class VolumeChunkSource extends SliceViewChunkSource implements 
 export class RenderLayer extends SliceViewRenderLayer implements RenderLayerInterface {
   rpcId: number;
   sources: VolumeChunkSource[][];
-  layerChanged = new NullarySignal();
 
   constructor(rpc: RPC, options: any) {
     super(rpc, options);
