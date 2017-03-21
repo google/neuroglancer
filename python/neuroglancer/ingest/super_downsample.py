@@ -1,4 +1,8 @@
+#!/usr/bin/python
+
+import argparse
 import operator
+import sys
 
 import numpy as np
 from tqdm import tqdm
@@ -102,12 +106,56 @@ def generate_jpegs(dataset_name, layer, mip):
     img.save(directory + '{}.jpeg'.format(z), "JPEG")
 
 if __name__ == "__main__":
-  dataset = 'snemi3dtest_v0'
-  mip = 0
+  parser = argparse.ArgumentParser(description='Generate additional MIP levels for neuroglancer layers.')
+  parser.add_argument('--layer', dest='layer', action='store',
+                    default=None, 
+                    help='Name of layer in dataset.')
 
-  # generate_jpegs(dataset, 'image', mip)
-  generate_downsamples(dataset, 'image', mip)
-  # generate_downsamples(dataset, 'segmentation', mip)
+  parser.add_argument('--image', dest='image', action='store_true',
+                    default=False, 
+                    help='Select image layer in dataset.')
+
+  parser.add_argument('--segmentation', dest='segmentation', action='store_true',
+                    default=False, 
+                    help='Select segmentation layer in dataset.')
+
+  parser.add_argument('--affinity', dest='affinity', action='store_true',
+                    default=False, 
+                    help='Select affinity layer in dataset.')
+
+  parser.add_argument('--jpeg', dest='jpeg', action='store_true',
+                    default=False, 
+                    help='Just generate Z slice images for debugging.')
+
+  parser.add_argument('--dataset', dest='dataset', action='store',
+                    help='Name of dataset in neuroglancer bucket.', required=True)
+
+  parser.add_argument('--mip', dest='mip', action='store',
+                  help='Which mip level to source from counting from 0. -1 means use the top one.', required=True)  
+
+  args = parser.parse_args()
+  dataset = args.dataset
+  mip = int(args.mip)
+
+  layer = args.layer
+  jpeg = args.jpeg
+
+  if jpeg:
+    generate_jpegs(dataset, 'image', mip)
+    sys.exit()
+
+  if layer is not None:
+    generate_downsamples(dataset, layer, mip)
+
+  if args.image:
+    generate_downsamples(dataset, 'image', mip)
+
+  if args.segmentation:
+    generate_downsamples(dataset, 'segmentation', mip)
+
+  if args.affinity:
+    print "affinity layers are not yet supported."
+
   print 'done'
 
 # https://neuromancer-seung-import.appspot.com/#!{'layers':{'image':{'type':'image'_'source':'precomputed://glance://s1_v0/image'}_'segmentation':{'type':'segmentation'_'source':'precomputed://glance://s1_v0/segmentation'}}}
