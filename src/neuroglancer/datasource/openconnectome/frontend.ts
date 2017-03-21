@@ -21,15 +21,16 @@
 import {ChunkManager} from 'neuroglancer/chunk_manager/frontend';
 import {registerDataSourceFactory} from 'neuroglancer/datasource/factory';
 import {getShardedVolume, tokenAndChannelCompleter} from 'neuroglancer/datasource/ndstore/frontend';
+import {LEGACY_URL_PREFIX} from 'neuroglancer/datasource/ndstore/base';
 
 const HOSTNAMES = ['http://openconnecto.me', 'http://www.openconnecto.me'];
 
 export function getVolume(chunkManager: ChunkManager, path: string) {
-  return getShardedVolume(chunkManager, HOSTNAMES, path);
+  return getShardedVolume(chunkManager, HOSTNAMES, path, LEGACY_URL_PREFIX);
 }
 
 export function volumeCompleter(url: string, chunkManager: ChunkManager) {
-  return tokenAndChannelCompleter(chunkManager, HOSTNAMES, url);
+  return tokenAndChannelCompleter(chunkManager, HOSTNAMES, url, LEGACY_URL_PREFIX);
 }
 
 registerDataSourceFactory('openconnectome', {

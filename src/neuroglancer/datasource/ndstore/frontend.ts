@@ -21,7 +21,7 @@
 
 import {ChunkManager} from 'neuroglancer/chunk_manager/frontend';
 import {CompletionResult, registerDataSourceFactory} from 'neuroglancer/datasource/factory';
-import {VolumeChunkSourceParameters} from 'neuroglancer/datasource/ndstore/base';
+import {VolumeChunkSourceParameters, NDSTORE_URL_PREFIX, LEGACY_URL_PREFIX} from 'neuroglancer/datasource/ndstore/base';
 import {DataType, VolumeChunkSpecification, VolumeSourceOptions, VolumeType} from 'neuroglancer/sliceview/base';
 import {defineParameterizedVolumeChunkSource, MultiscaleVolumeChunkSource as GenericMultiscaleVolumeChunkSource} from 'neuroglancer/sliceview/frontend';
 import {CancellationToken} from 'neuroglancer/util/cancellation';
@@ -119,11 +119,13 @@ export class MultiscaleVolumeChunkSource implements GenericMultiscaleVolumeChunk
   channelInfo: ChannelInfo;
   scales: ScaleInfo[];
 
+  urlPrefix: string = NDSTORE_URL_PREFIX;
+  neariso: boolean = true;
   encoding: string;
 
   constructor(
       public chunkManager: ChunkManager, public baseUrls: string[], public key: string,
-      public tokenInfo: TokenInfo, channel: string|undefined,
+      public tokenInfo: TokenInfo, channel: string|undefined, urlprefix: string|undefined,
       public parameters: {[index: string]: any}) {
     if (channel === undefined) {
       const channelNames = Array.from(tokenInfo.channels.keys());
@@ -140,6 +142,15 @@ export class MultiscaleVolumeChunkSource implements GenericMultiscaleVolumeChunk
     this.channel = channel;
     this.channelInfo = channelInfo;
     this.scales = tokenInfo.scales;
+
+    if (urlprefix !== undefined) {
+      this.urlPrefix = urlprefix;
+    }
+
+    let neariso = verifyOptionalString(parameters['neariso']);
+    if (neariso === 'false') {
+      this.neariso = false;
+    }
 
     let encoding = verifyOptionalString(parameters['encoding']);
     if (encoding === undefined) {
@@ -171,10 +182,12 @@ export class MultiscaleVolumeChunkSource implements GenericMultiscaleVolumeChunk
           })
           .map(spec => VolumeChunkSource.get(this.chunkManager, spec, {
             baseUrls: this.baseUrls,
+            urlPrefix: this.urlPrefix,
             key: this.key,
             channel: this.channel,
             resolution: scaleInfo.key,
             encoding: this.encoding,
+            neariso: this.neariso
           }));
     });
   }
@@ -187,14 +200,14 @@ export class MultiscaleVolumeChunkSource implements GenericMultiscaleVolumeChunk
 
 const pathPattern = /^([^\/?]+)(?:\/([^\/?]+))?(?:\?(.*))?$/;
 
-export function getTokenInfo(chunkManager: ChunkManager, hostnames: string[], token: string): Promise<TokenInfo> {
+export function getTokenInfo(chunkManager: ChunkManager, hostnames: string[], token: string, urlprefix: string): Promise<TokenInfo> {
   return chunkManager.memoize.getUncounted(
       {type: 'ndstore:getTokenInfo', hostnames, token},
-      () => sendHttpRequest(openShardedHttpRequest(hostnames, `/ocp/ca/${token}/info/`), 'json')
+      () => sendHttpRequest(openShardedHttpRequest(hostnames, `${urlprefix}/${token}/info/`), 'json')
                 .then(parseTokenInfo));
 }
 
-export function getShardedVolume(chunkManager: ChunkManager, hostnames: string[], path: string) {
+export function getShardedVolume(chunkManager: ChunkManager, hostnames: string[], path: string, urlprefix: string) {
   const match = path.match(pathPattern);
   if (match === null) {
     throw new Error(`Invalid volume path ${JSON.stringify(path)}`);
@@ -206,10 +219,10 @@ export function getShardedVolume(chunkManager: ChunkManager, hostnames: string[]
   // Warning: If additional arguments are added, the cache key should be updated as well.
   return chunkManager.memoize.getUncounted(
       {type: 'ndstore:MultiscaleVolumeChunkSource', hostnames, path},
-      () => getTokenInfo(chunkManager, hostnames, key)
+      () => getTokenInfo(chunkManager, hostnames, key, urlprefix)
                 .then(
                     tokenInfo => new MultiscaleVolumeChunkSource(
-                        chunkManager, hostnames, key, tokenInfo, channel, parameters)));
+                        chunkManager, hostnames, key, tokenInfo, channel, urlprefix, parameters)));
 }
 
 const urlPattern = /^((?:http|https):\/\/[^\/?]+)\/(.*)$/;
@@ -219,18 +232,18 @@ export function getVolume(chunkManager: ChunkManager, path: string) {
   if (match === null) {
     throw new Error(`Invalid ndstore volume path: ${JSON.stringify(path)}`);
   }
-  return getShardedVolume(chunkManager, [match[1]], match[2]);
+  return getShardedVolume(chunkManager, [match[1]], match[2], NDSTORE_URL_PREFIX);
 }
 
-export function getPublicTokens(chunkManager: ChunkManager, hostnames: string[]) {
+export function getPublicTokens(chunkManager: ChunkManager, hostnames: string[], urlprefix: string) {
   return chunkManager.memoize.getUncounted(
       {type: 'dvid:getPublicTokens', hostnames},
-      () => sendHttpRequest(openShardedHttpRequest(hostnames, '/ocp/ca/public_tokens/'), 'json')
+      () => sendHttpRequest(openShardedHttpRequest(hostnames, `${urlprefix}/public_tokens/`), 'json')
                 .then(value => parseArray(value, verifyString)));
 }
 
 export function tokenAndChannelCompleter(
-    chunkManager: ChunkManager, hostnames: string[], path: string): Promise<CompletionResult> {
+    chunkManager: ChunkManager, hostnames: string[], path: string, urlprefix: string): Promise<CompletionResult> {
   let channelMatch = path.match(/^(?:([^\/]+)(?:\/([^\/]*))?)?$/);
   if (channelMatch === null) {
     // URL has incorrect format, don't return any results.
@@ -239,7 +252,7 @@ export function tokenAndChannelCompleter(
   if (channelMatch[2] === undefined) {
     let keyPrefix = channelMatch[1] || '';
     // Try to complete the token.
-    return getPublicTokens(chunkManager, hostnames).then(tokens => {
+    return getPublicTokens(chunkManager, hostnames, urlprefix).then(tokens => {
       return {
         offset: 0,
         completions:
@@ -247,7 +260,7 @@ export function tokenAndChannelCompleter(
       };
     });
   }
-  return getTokenInfo(chunkManager, hostnames, channelMatch[1]).then(tokenInfo => {
+  return getTokenInfo(chunkManager, hostnames, channelMatch[1], urlprefix).then(tokenInfo => {
     let completions =
         getPrefixMatchesWithDescriptions(channelMatch![2], tokenInfo.channels, x => x[0], x => {
           return `${x[1].channelType} (${DataType[x[1].dataType]})`;
@@ -265,7 +278,7 @@ export function volumeCompleter(
   }
   let hostnames = [match[1]];
   let path = match[2];
-  return tokenAndChannelCompleter(chunkManager, hostnames, path)
+  return tokenAndChannelCompleter(chunkManager, hostnames, path, NDSTORE_URL_PREFIX)
       .then(completions => applyCompletionOffset(match![1].length + 1, completions));
 }
 
