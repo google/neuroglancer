@@ -15,13 +15,13 @@
  */
 
 import {ChunkManager} from 'neuroglancer/chunk_manager/frontend';
-import {ChunkLayout} from 'neuroglancer/sliceview/chunk_layout';
-import {SliceViewSourceOptions, SliceViewChunkSpecification, SliceViewChunkSpecificationBaseOptions, SliceViewChunkSource, ChunkLayoutOptions, getCombinedTransform, getNearIsotropicBlockSize, getChunkDataSizes} from 'neuroglancer/sliceview/base';
 import {MeshSource} from 'neuroglancer/mesh/frontend';
+import {ChunkLayoutOptions, getChunkDataSizes, getCombinedTransform, getNearIsotropicBlockSize, SliceViewChunkSource, SliceViewChunkSpecification, SliceViewChunkSpecificationBaseOptions, SliceViewSourceOptions} from 'neuroglancer/sliceview/base';
+import {ChunkLayout} from 'neuroglancer/sliceview/chunk_layout';
 import {partitionArray} from 'neuroglancer/util/array';
 import {approxEqual} from 'neuroglancer/util/compare';
 import {DATA_TYPE_BYTES, DataType} from 'neuroglancer/util/data_type';
-import {effectiveScalingFactorFromMat4, identityMat4, kAxes, kInfinityVec, kZeroVec, mat4, prod3, rectifyTransformMatrixIfAxisAligned, vec3, vec4, transformVectorByMat4} from 'neuroglancer/util/geom';
+import {effectiveScalingFactorFromMat4, identityMat4, kAxes, kInfinityVec, kZeroVec, mat4, prod3, rectifyTransformMatrixIfAxisAligned, transformVectorByMat4, vec3, vec4} from 'neuroglancer/util/geom';
 import {SharedObject} from 'neuroglancer/worker_rpc';
 
 export {DATA_TYPE_BYTES, DataType};
@@ -58,8 +58,8 @@ export interface VolumeSourceOptions extends SliceViewSourceOptions {}
 /**
  * Specifies constructor parameters for VolumeChunkSpecification.
  */
-export interface VolumeChunkSpecificationBaseOptions extends SliceViewChunkSpecificationBaseOptions {
-
+export interface VolumeChunkSpecificationBaseOptions extends
+    SliceViewChunkSpecificationBaseOptions {
   numChannels: number;
   dataType: DataType;
 
@@ -111,23 +111,26 @@ export class VolumeChunkSpecification extends SliceViewChunkSpecification {
   compressedSegmentationBlockSize: vec3|undefined;
 
   constructor(options: VolumeChunkSpecificationOptions) {
-    super(options)
+    super(options);
 
     let dataType = this.dataType = options.dataType;
     let numChannels = this.numChannels = options.numChannels;
 
     this.chunkBytes = prod3(options.chunkDataSize) * DATA_TYPE_BYTES[dataType] * numChannels;
-    
+
     this.compressedSegmentationBlockSize = options.compressedSegmentationBlockSize;
   }
 
-  static make(options: VolumeChunkSpecificationOptions&{volumeSourceOptions: SliceViewSourceOptions}) {
+  static make(options: VolumeChunkSpecificationOptions&
+              {volumeSourceOptions: SliceViewSourceOptions}) {
     return new VolumeChunkSpecification(Object.assign(
         {}, options,
         {transform: getCombinedTransform(options.transform, options.volumeSourceOptions)}));
   }
 
-  static fromObject(msg: any) { return new VolumeChunkSpecification(msg); }
+  static fromObject(msg: any) {
+    return new VolumeChunkSpecification(msg);
+  }
   toObject(): VolumeChunkSpecificationOptions {
     return {
       transform: this.chunkLayout.transform,
@@ -151,12 +154,14 @@ export class VolumeChunkSpecification extends SliceViewChunkSpecification {
   static withDefaultCompression(options: VolumeChunkSpecificationDefaultCompressionOptions&
                                 VolumeChunkSpecificationOptions&
                                 VolumeChunkSpecificationVolumeSourceOptions) {
-    let {compressedSegmentationBlockSize,
-         dataType,
-         voxelSize,
-         transform,
-         lowerVoxelBound,
-         upperVoxelBound} = options;
+    let {
+      compressedSegmentationBlockSize,
+      dataType,
+      voxelSize,
+      transform,
+      lowerVoxelBound,
+      upperVoxelBound
+    } = options;
     transform = getCombinedTransform(transform, options.volumeSourceOptions);
     if (compressedSegmentationBlockSize === undefined &&
         options.volumeType === VolumeType.SEGMENTATION &&

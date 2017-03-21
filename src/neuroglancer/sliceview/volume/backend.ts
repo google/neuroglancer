@@ -16,13 +16,13 @@
 
 import {Chunk, ChunkManager} from 'neuroglancer/chunk_manager/backend';
 import {ChunkPriorityTier} from 'neuroglancer/chunk_manager/base';
+import {RenderLayer as SliceViewRenderLayer, SliceViewChunk, SliceViewChunkSource} from 'neuroglancer/sliceview/backend';
 import {SLICEVIEW_RENDERLAYER_RPC_ID} from 'neuroglancer/sliceview/base';
-import {RenderLayer as RenderLayerInterface, VOLUME_RENDERLAYER_RPC_ID, VOLUME_RPC_ID, VolumeChunkSource as VolumeChunkSourceInterface, VolumeChunkSpecification} from 'neuroglancer/sliceview/volume/base';
-import {SliceViewChunk, SliceViewChunkSource, RenderLayer as SliceViewRenderLayer} from 'neuroglancer/sliceview/backend';
 import {ChunkLayout} from 'neuroglancer/sliceview/chunk_layout';
+import {RenderLayer as RenderLayerInterface, VOLUME_RENDERLAYER_RPC_ID, VOLUME_RPC_ID, VolumeChunkSource as VolumeChunkSourceInterface, VolumeChunkSpecification} from 'neuroglancer/sliceview/volume/base';
 import {vec3, vec3Key} from 'neuroglancer/util/geom';
-import {registerRPC, registerSharedObject, RPC, SharedObjectCounterpart} from 'neuroglancer/worker_rpc';
 import {NullarySignal} from 'neuroglancer/util/signal';
+import {registerRPC, registerSharedObject, RPC, SharedObjectCounterpart} from 'neuroglancer/worker_rpc';
 
 const BASE_PRIORITY = -1e12;
 const SCALE_PRIORITY_MULTIPLIER = 1e9;
@@ -69,10 +69,13 @@ export class VolumeChunk extends SliceViewChunk {
     super.downloadSucceeded();
   }
 
-  freeSystemMemory() { this.data = null; }  
+  freeSystemMemory() {
+    this.data = null;
+  }
 }
 
-export abstract class VolumeChunkSource extends SliceViewChunkSource implements VolumeChunkSourceInterface {
+export abstract class VolumeChunkSource extends SliceViewChunkSource implements
+    VolumeChunkSourceInterface {
   spec: VolumeChunkSpecification;
   constructor(rpc: RPC, options: any) {
     super(rpc, options);

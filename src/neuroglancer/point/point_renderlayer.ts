@@ -16,12 +16,12 @@
 
 import {PointSourceOptions} from 'neuroglancer/point/base';
 import {MultiscalePointChunkSource} from 'neuroglancer/point/frontend';
-import {SliceView} from 'neuroglancer/sliceview/frontend';
 import {RenderLayer} from 'neuroglancer/point/frontend';
+import {SliceView} from 'neuroglancer/sliceview/frontend';
 import {TrackableAlphaValue, trackableAlphaValue} from 'neuroglancer/trackable_alpha';
+import {vec3} from 'neuroglancer/util/geom';
 import {makeTrackableFragmentMain, makeWatchableShaderError, TrackableFragmentMain} from 'neuroglancer/webgl/dynamic_shader';
 import {ShaderBuilder} from 'neuroglancer/webgl/shader';
-import {vec3} from 'neuroglancer/util/geom';
 
 export const FRAGMENT_MAIN_START = '//NEUROGLANCER_POINT_RENDERLAYER_FRAGMENT_MAIN_START';
 
@@ -45,10 +45,14 @@ export class PointRenderLayer extends RenderLayer {
   } = {}) {
     super(multiscaleSource, {shaderError, sourceOptions});
     this.opacity = opacity;
-    this.registerDisposer(opacity.changed.add(() => {      this.redrawNeeded.dispatch(); }));
+    this.registerDisposer(opacity.changed.add(() => {
+      this.redrawNeeded.dispatch();
+    }));
   }
 
-  getShaderKey() { return `point.PointRenderLayer`; }
+  getShaderKey() {
+    return `point.PointRenderLayer`;
+  }
 
   defineShader(builder: ShaderBuilder) {
     super.defineShader(builder);
@@ -75,7 +79,8 @@ void emitTransparent() {
     let shader = super.beginSlice(sliceView);
     let {gl} = this;
     gl.uniform1f(shader.uniform('uOpacity'), this.opacity.value);
-    gl.uniform3fv(shader.uniform('uColor'), vec3.fromValues(1.0, 0.0, 0.5)); // TODO accept from user 
+    gl.uniform3fv(
+        shader.uniform('uColor'), vec3.fromValues(1.0, 0.0, 0.5));  // TODO accept from user
     return shader;
   }
 };

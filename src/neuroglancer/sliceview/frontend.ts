@@ -80,8 +80,9 @@ export class SliceView extends SliceViewBase {
     this.initializeCounterpart(this.chunkManager.rpc!, {'chunkManager': chunkManager.rpcId});
     this.updateVisibleLayers();
 
-    this.registerDisposer(
-        navigationState.changed.add(() => { this.updateViewportFromNavigationState(); }));
+    this.registerDisposer(navigationState.changed.add(() => {
+      this.updateViewportFromNavigationState();
+    }));
     this.updateViewportFromNavigationState();
 
     this.registerDisposer(layerManager.layersChanged.add(() => {
@@ -93,8 +94,11 @@ export class SliceView extends SliceViewBase {
       }
     }));
 
-    this.viewChanged.add(() => { this.renderingStale = true; });
-    this.registerDisposer(chunkManager.chunkQueueManager.visibleChunksChanged.add(this.viewChanged.dispatch));
+    this.viewChanged.add(() => {
+      this.renderingStale = true;
+    });
+    this.registerDisposer(
+        chunkManager.chunkQueueManager.visibleChunksChanged.add(this.viewChanged.dispatch));
 
     this.updateViewportFromNavigationState();
   }
@@ -181,7 +185,9 @@ export class SliceView extends SliceViewBase {
     this.rpc!.invoke('SliceView.updateView', {id: this.rpcId, viewportToData: viewportToData});
   }
 
-  onHasValidViewport() { this.updateVisibleLayers(); }
+  onHasValidViewport() {
+    this.updateVisibleLayers();
+  }
 
   updateRendering() {
     if (!this.renderingStale || !this.hasValidViewport || this.width === 0 || this.height === 0) {
@@ -272,8 +278,8 @@ export class SliceView extends SliceViewBase {
 const tempChunkGridPosition = vec3.create();
 const tempLocalPosition = vec3.create();
 
-export abstract class SliceViewChunkSource extends ChunkSource implements SliceViewChunkSourceInterface {
-
+export abstract class SliceViewChunkSource extends ChunkSource implements
+    SliceViewChunkSourceInterface {
   chunks: Map<string, SliceViewChunk>;
 
   constructor(chunkManager: ChunkManager, public spec: SliceViewChunkSpecification) {
@@ -285,7 +291,7 @@ export abstract class SliceViewChunkSource extends ChunkSource implements SliceV
     super.initializeCounterpart(rpc, options);
   }
 
-  abstract getChunk(x: any): any 
+  abstract getChunk(x: any): any
 };
 
 export abstract class SliceViewChunk extends Chunk {
@@ -315,7 +321,9 @@ export class SliceViewRenderHelper extends RefCounted {
     let builder = new ShaderBuilder(gl);
     builder.addVarying('vec2', 'vTexCoord');
     builder.addUniform('sampler2D', 'uSampler');
-    builder.addInitializer(shader => { gl.uniform1i(shader.uniform('uSampler'), 0); });
+    builder.addInitializer(shader => {
+      gl.uniform1i(shader.uniform('uSampler'), 0);
+    });
     builder.addUniform('vec4', 'uColorFactor');
     builder.addUniform('vec4', 'uBackgroundColor');
     builder.addUniform('mat4', 'uProjectionMatrix');

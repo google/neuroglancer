@@ -25,13 +25,13 @@
 
 import {ChunkState} from 'neuroglancer/chunk_manager/base';
 import {ChunkManager} from 'neuroglancer/chunk_manager/frontend';
-import {RenderLayer as GenericSliceViewRenderLayer} from 'neuroglancer/sliceview/renderlayer';
 import {RenderLayer as GenericRenderLayer} from 'neuroglancer/layer';
-
-import {VOLUME_RENDERLAYER_RPC_ID, VolumeChunkSpecification, VolumeSourceOptions} from 'neuroglancer/sliceview/volume/base';
 import {SLICEVIEW_RENDERLAYER_RPC_ID} from 'neuroglancer/sliceview/base';
-import {MultiscaleVolumeChunkSource, VolumeChunkSource} from 'neuroglancer/sliceview/volume/frontend';
 import {SliceView} from 'neuroglancer/sliceview/frontend';
+import {RenderLayer as GenericSliceViewRenderLayer} from 'neuroglancer/sliceview/renderlayer';
+import {SliceViewShaderBuffers} from 'neuroglancer/sliceview/renderlayer';
+import {VOLUME_RENDERLAYER_RPC_ID, VolumeChunkSpecification, VolumeSourceOptions} from 'neuroglancer/sliceview/volume/base';
+import {MultiscaleVolumeChunkSource, VolumeChunkSource} from 'neuroglancer/sliceview/volume/frontend';
 import {RefCounted} from 'neuroglancer/util/disposable';
 import {BoundingBox, mat4, vec3, vec3Key, vec4} from 'neuroglancer/util/geom';
 import {Buffer} from 'neuroglancer/webgl/buffer';
@@ -40,7 +40,6 @@ import {makeWatchableShaderError, WatchableShaderError} from 'neuroglancer/webgl
 import {ShaderBuilder, ShaderProgram} from 'neuroglancer/webgl/shader';
 import {getShaderType} from 'neuroglancer/webgl/shader_lib';
 import {RpcId, SharedObject} from 'neuroglancer/worker_rpc';
-import {SliceViewShaderBuffers} from 'neuroglancer/sliceview/renderlayer';
 
 const DEBUG_VERTICES = false;
 
@@ -191,15 +190,43 @@ for (int e = 0; e < 4; ++e) {
             vec3.scale(vChunkPosition, uVertexBasePosition(vidx[0]), 1.0 - lambda);
             vec3.scaleAndAdd(vChunkPosition, vChunkPosition, uVertexBasePosition(vidx[1]), lambda);
             console.log(
-                `vertex ${vertexIndex}, e = ${e}, at ${gl_Position}, vChunkPosition = ${vChunkPosition}, edge dir = ${vDir}, denom = ${denom}`);
+                `vertex ${
+                          vertexIndex
+                        }, e = ${e}, at ${
+                                          gl_Position
+                                        }, vChunkPosition = ${
+                                                              vChunkPosition
+                                                            }, edge dir = ${vDir}, denom = ${
+                                                                                             denom
+                                                                                           }`);
             break;
           } else {
             console.log(
-                `vertex ${vertexIndex}, e = ${e}, skipped, deom = ${denom}, vDir = ${vec3Key(vDir)}, uPlaneNormal = ${vec3Key(uPlaneNormal)}, lambda=${lambda}`);
+                `vertex ${
+                          vertexIndex
+                        }, e = ${e}, skipped, deom = ${
+                                                       denom
+                                                     }, vDir = ${
+                                                                 vec3Key(vDir)
+                                                               }, uPlaneNormal = ${
+                                                                                   vec3Key(
+                                                                                       uPlaneNormal)
+                                                                                 }, lambda=${
+                                                                                             lambda
+                                                                                           }`);
           }
         } else {
           console.log(
-              `vertex ${vertexIndex}, e = ${e}, skipped, deom = ${denom}, vDir = ${vec3Key(vDir)}, uPlaneNormal = ${vec3Key(uPlaneNormal)}`);
+              `vertex ${
+                        vertexIndex
+                      }, e = ${e}, skipped, deom = ${
+                                                     denom
+                                                   }, vDir = ${
+                                                               vec3Key(vDir)
+                                                             }, uPlaneNormal = ${
+                                                                                 vec3Key(
+                                                                                     uPlaneNormal)
+                                                                               }`);
         }
       }
     }
@@ -280,13 +307,12 @@ for (int e = 0; e < 4; ++e) {
 export class RenderLayer extends GenericSliceViewRenderLayer {
   sources: VolumeChunkSource[][]|null = null;
   vertexComputationManager: VolumeSliceVertexComputationManager;
-  constructor(multiscaleSource: MultiscaleVolumeChunkSource, {
-    shaderError = makeWatchableShaderError(),
-    sourceOptions = <VolumeSourceOptions>{}
-  } = {}) {
+  constructor(
+      multiscaleSource: MultiscaleVolumeChunkSource,
+      {shaderError = makeWatchableShaderError(), sourceOptions = <VolumeSourceOptions> {}} = {}) {
     super(multiscaleSource.chunkManager, multiscaleSource.getSources(sourceOptions)[0][0].spec, {
-    shaderError = makeWatchableShaderError(),
-  } = {});
+      shaderError = makeWatchableShaderError(),
+    } = {});
 
     let gl = this.gl;
     this.vertexComputationManager = VolumeSliceVertexComputationManager.get(gl);
@@ -304,12 +330,16 @@ export class RenderLayer extends GenericSliceViewRenderLayer {
     let sharedObject = this.registerDisposer(new SharedObject());
     sharedObject.RPC_TYPE_ID = VOLUME_RENDERLAYER_RPC_ID;
     sharedObject.initializeCounterpart(this.chunkManager.rpc!, {'sources': sourceIds});
-    this.rpcId = sharedObject.rpcId; 
+    this.rpcId = sharedObject.rpcId;
   }
 
-  get dataType() { return this.sources![0][0].spec.dataType; }
+  get dataType() {
+    return this.sources![0][0].spec.dataType;
+  }
 
-  get chunkFormat() { return this.sources![0][0].chunkFormat; }
+  get chunkFormat() {
+    return this.sources![0][0].chunkFormat;
+  }
 
   getValueAt(position: vec3) {
     for (let alternatives of this.sources!) {
@@ -356,7 +386,6 @@ ${getShaderType(this.dataType)} getDataValue() { return getDataValue(0); }
   }
 
   draw(sliceView: SliceView) {
-
     let visibleSources = sliceView.visibleLayers.get(this)!;
     if (visibleSources.length === 0) {
       return;

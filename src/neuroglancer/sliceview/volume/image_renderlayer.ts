@@ -14,14 +14,14 @@
  * limitations under the License.
  */
 
+import {SliceView} from 'neuroglancer/sliceview/frontend';
 import {VolumeSourceOptions} from 'neuroglancer/sliceview/volume/base';
 import {MultiscaleVolumeChunkSource} from 'neuroglancer/sliceview/volume/frontend';
-import {SliceView} from 'neuroglancer/sliceview/frontend';
 import {RenderLayer} from 'neuroglancer/sliceview/volume/renderlayer';
 import {TrackableAlphaValue, trackableAlphaValue} from 'neuroglancer/trackable_alpha';
+import {vec3} from 'neuroglancer/util/geom';
 import {makeTrackableFragmentMain, makeWatchableShaderError, TrackableFragmentMain} from 'neuroglancer/webgl/dynamic_shader';
 import {ShaderBuilder} from 'neuroglancer/webgl/shader';
-import {vec3} from 'neuroglancer/util/geom';
 
 export const FRAGMENT_MAIN_START = '//NEUROGLANCER_IMAGE_RENDERLAYER_FRAGMENT_MAIN_START';
 
@@ -48,14 +48,18 @@ export class ImageRenderLayer extends RenderLayer {
     super(multiscaleSource, {shaderError, sourceOptions});
     this.fragmentMain = fragmentMain;
     this.opacity = opacity;
-    this.registerDisposer(opacity.changed.add(() => { this.redrawNeeded.dispatch(); }));
+    this.registerDisposer(opacity.changed.add(() => {
+      this.redrawNeeded.dispatch();
+    }));
     this.registerDisposer(fragmentMain.changed.add(() => {
       this.shaderUpdated = true;
       this.redrawNeeded.dispatch();
     }));
   }
 
-  getShaderKey() { return `volume.ImageRenderLayer:${JSON.stringify(this.fragmentMain.value)}`; }
+  getShaderKey() {
+    return `volume.ImageRenderLayer:${JSON.stringify(this.fragmentMain.value)}`;
+  }
 
   getValueAt(position: vec3) {
     for (let alternatives of this.sources!) {

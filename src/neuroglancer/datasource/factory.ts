@@ -16,10 +16,10 @@
 
 import {ChunkManager} from 'neuroglancer/chunk_manager/frontend';
 import {MeshSource} from 'neuroglancer/mesh/frontend';
+import {MultiscalePointChunkSource} from 'neuroglancer/point/frontend';
 import {SkeletonSource} from 'neuroglancer/skeleton/frontend';
 import {VolumeType} from 'neuroglancer/sliceview/volume/base';
 import {MultiscaleVolumeChunkSource} from 'neuroglancer/sliceview/volume/frontend';
-import {MultiscalePointChunkSource} from 'neuroglancer/point/frontend';
 import {CancellationToken, uncancelableToken} from 'neuroglancer/util/cancellation';
 import {applyCompletionOffset, CompletionWithDescription} from 'neuroglancer/util/completion';
 
@@ -79,8 +79,8 @@ export interface DataSourceFactory {
            CancellationToken) => Promise<MultiscaleVolumeChunkSource>| MultiscaleVolumeChunkSource;
   getPoint?:
       (chunkManager: ChunkManager, path: string, options: GetPointOptions,
-      cancellationToken:
-        CancellationToken) => Promise<MultiscalePointChunkSource>|MultiscalePointChunkSource;
+       cancellationToken:
+           CancellationToken) => Promise<MultiscalePointChunkSource>| MultiscalePointChunkSource;
   getMeshSource?:
       (chunkManager: ChunkManager, path: string,
        cancellationToken: CancellationToken) => Promise<MeshSource>| MeshSource;
@@ -134,11 +134,12 @@ export function getVolume(
 }
 
 export function getPoint(
-  chunkManager: ChunkManager, url: string, options: GetPointOptions = {}, cancellationToken = uncancelableToken) {
-    let [factories, path] = getDataSource(url);
-    return new Promise<MultiscalePointChunkSource>(resolve => {
-      resolve(factories.getPoint!(chunkManager, path, options, cancellationToken));
-    });
+    chunkManager: ChunkManager, url: string, options: GetPointOptions = {},
+    cancellationToken = uncancelableToken) {
+  let [factories, path] = getDataSource(url);
+  return new Promise<MultiscalePointChunkSource>(resolve => {
+    resolve(factories.getPoint!(chunkManager, path, options, cancellationToken));
+  });
 }
 
 export function getMeshSource(

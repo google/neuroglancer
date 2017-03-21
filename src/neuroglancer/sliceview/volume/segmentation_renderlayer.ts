@@ -18,16 +18,16 @@ import {HashMapUint64} from 'neuroglancer/gpu_hash/hash_table';
 import {GPUHashTable, HashMapShaderManager, HashSetShaderManager} from 'neuroglancer/gpu_hash/shader';
 import {SegmentColorShaderManager} from 'neuroglancer/segment_color';
 import {registerRedrawWhenSegmentationDisplayStateChanged, SegmentationDisplayState} from 'neuroglancer/segmentation_display_state/frontend';
+import {SliceView} from 'neuroglancer/sliceview/frontend';
 import {VolumeSourceOptions} from 'neuroglancer/sliceview/volume/base';
 import {MultiscaleVolumeChunkSource} from 'neuroglancer/sliceview/volume/frontend';
-import {SliceView} from 'neuroglancer/sliceview/frontend';
 import {RenderLayer} from 'neuroglancer/sliceview/volume/renderlayer';
 import {TrackableAlphaValue} from 'neuroglancer/trackable_alpha';
 import {TrackableBoolean} from 'neuroglancer/trackable_boolean';
 import {DisjointUint64Sets} from 'neuroglancer/util/disjoint_sets';
+import {vec3} from 'neuroglancer/util/geom';
 import {ShaderBuilder, ShaderProgram} from 'neuroglancer/webgl/shader';
 import {glsl_unnormalizeUint8} from 'neuroglancer/webgl/shader_lib';
-import {vec3} from 'neuroglancer/util/geom';
 
 const selectedSegmentForShader = new Float32Array(8);
 
@@ -72,8 +72,9 @@ export class SegmentationRenderLayer extends RenderLayer {
       public displayState: SliceViewSegmentationDisplayState) {
     super(multiscaleSource, {sourceOptions: displayState.volumeSourceOptions});
     registerRedrawWhenSegmentationDisplayStateChanged(displayState, this);
-    this.registerDisposer(
-        displayState.selectedAlpha.changed.add(() => { this.redrawNeeded.dispatch(); }));
+    this.registerDisposer(displayState.selectedAlpha.changed.add(() => {
+      this.redrawNeeded.dispatch();
+    }));
     this.registerDisposer(displayState.hideSegmentZero.changed.add(() => {
       this.redrawNeeded.dispatch();
       this.shaderUpdated = true;
@@ -88,8 +89,9 @@ export class SegmentationRenderLayer extends RenderLayer {
         // No need to trigger redraw, since that will happen anyway.
       }
     });
-    this.registerDisposer(
-        displayState.notSelectedAlpha.changed.add(() => { this.redrawNeeded.dispatch(); }));
+    this.registerDisposer(displayState.notSelectedAlpha.changed.add(() => {
+      this.redrawNeeded.dispatch();
+    }));
   }
 
   getValueAt(position: vec3) {

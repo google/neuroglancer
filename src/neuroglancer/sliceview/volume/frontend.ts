@@ -20,10 +20,10 @@ import {LayerManager} from 'neuroglancer/layer';
 import {MeshSource} from 'neuroglancer/mesh/frontend';
 import {NavigationState} from 'neuroglancer/navigation_state';
 import {DataType, SliceViewBase} from 'neuroglancer/sliceview/base';
-import {SliceView, SliceViewChunk, SliceViewChunkSource, SliceViewRenderHelper, MultiscaleSliceViewChunkSource} from 'neuroglancer/sliceview/frontend';
-import {VolumeChunkSource as VolumeChunkSourceInterface, VolumeChunkSpecification, VolumeSourceOptions, VolumeType} from 'neuroglancer/sliceview/volume/base';
 import {ChunkLayout} from 'neuroglancer/sliceview/chunk_layout';
+import {MultiscaleSliceViewChunkSource, SliceView, SliceViewChunk, SliceViewChunkSource, SliceViewRenderHelper} from 'neuroglancer/sliceview/frontend';
 import {RenderLayer as GenericRenderLayer} from 'neuroglancer/sliceview/renderlayer';
+import {VolumeChunkSource as VolumeChunkSourceInterface, VolumeChunkSpecification, VolumeSourceOptions, VolumeType} from 'neuroglancer/sliceview/volume/base';
 import {RefCounted} from 'neuroglancer/util/disposable';
 import {Disposable} from 'neuroglancer/util/disposable';
 import {mat4, rectifyTransformMatrixIfAxisAligned, vec3, vec3Key, vec4} from 'neuroglancer/util/geom';
@@ -108,7 +108,8 @@ export function getChunkFormatHandler(gl: GL, spec: VolumeChunkSpecification) {
 }
 
 
-export abstract class VolumeChunkSource extends SliceViewChunkSource implements VolumeChunkSourceInterface {
+export abstract class VolumeChunkSource extends SliceViewChunkSource implements
+    VolumeChunkSourceInterface {
   chunkFormatHandler: ChunkFormatHandler;
 
   chunks: Map<string, VolumeChunk>;
@@ -124,7 +125,9 @@ export abstract class VolumeChunkSource extends SliceViewChunkSource implements 
     super.initializeCounterpart(rpc, options);
   }
 
-  get chunkFormat() { return this.chunkFormatHandler.chunkFormat; }
+  get chunkFormat() {
+    return this.chunkFormatHandler.chunkFormat;
+  }
 
   getValueAt(position: vec3) {
     const chunkGridPosition = tempChunkGridPosition;
@@ -168,7 +171,9 @@ export abstract class VolumeChunkSource extends SliceViewChunkSource implements 
     }
   }
 
-  getChunk(x: any): VolumeChunk { return <VolumeChunk>this.chunkFormatHandler.getChunk(this, x); }
+  getChunk(x: any): VolumeChunk {
+    return <VolumeChunk>this.chunkFormatHandler.getChunk(this, x);
+  }
 };
 
 /**
@@ -191,7 +196,9 @@ export function defineParameterizedVolumeChunkSource<Parameters>(
           this, stableStringify({parameters, spec: spec.toObject()}),
           () => new this(chunkManager, spec, parameters));
     }
-    toString() { return parametersConstructor.stringify(this.parameters); }
+    toString() {
+      return parametersConstructor.stringify(this.parameters);
+    }
   };
   newConstructor.prototype.RPC_TYPE_ID = parametersConstructor.RPC_ID;
   return newConstructor;
@@ -200,7 +207,9 @@ export function defineParameterizedVolumeChunkSource<Parameters>(
 export abstract class VolumeChunk extends SliceViewChunk {
   source: VolumeChunkSource;
 
-  get chunkFormat() { return this.source.chunkFormat; }
+  get chunkFormat() {
+    return this.source.chunkFormat;
+  }
 
   constructor(source: VolumeChunkSource, x: any) {
     super(source, x);
