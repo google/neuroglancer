@@ -80,7 +80,7 @@ class GCloudVolume(Volume):
     return Vec3(*self.info['scales'][mip]['size'])
 
   @property
-  def mips(self):
+  def available_mips(self):
     return range(len(self.info['scales']))
 
   @property
@@ -95,12 +95,12 @@ class GCloudVolume(Volume):
   def encoding(self):
     return self.mip_encoding(self.mip)
 
+  def mip_encoding(self, mip):
+    return self.info['scales'][mip]['encoding']
+
   @property
   def num_channels(self):
     return self.info['num_channels']
-
-  def mip_encoding(self, mip):
-    return self.info['scales'][mip]['encoding']
 
   @property
   def voxel_offset(self):
@@ -126,6 +126,20 @@ class GCloudVolume(Volume):
 
   def mip_underlying(self, mip):
     return Vec3(*self.info['scales'][mip]['chunk_sizes'][0])
+
+  @property
+  def volume_size(self):
+    return self.mip_volume_size(self.mip)
+
+  def mip_volume_size(self, mip):
+    return Vec3(*self.info['scales'][mip]['size'])
+
+  @property
+  def layer_key(self):
+    return self.mip_layer_key(self.mip)
+
+  def mip_layer_key(self, mip):
+    return self.info['scales'][self.mip]['key']
 
   def __getitem__(self, slices):
     slices = list(slices)
@@ -154,28 +168,23 @@ class GCloudVolume(Volume):
 
     savedir = os.path.join(lib.COMMON_STAGING_DIR, 'gcloud', self.dataset_name, self.layer, str(self.mip))
 
-    return self.cutout(
+    return self._cutout(
       xmin=minpt.x, xmax=maxpt.x, xstep=steps.x,
       ymin=minpt.y, ymax=maxpt.y, ystep=steps.y,
       zmin=minpt.z, zmax=maxpt.z, zstep=steps.z,
       savedir=( savedir if self.cache_files else None ),
     )
 
-  def cutout(self, xmin, xmax, ymin, ymax, zmin, zmax, xstep=1, ystep=1, zstep=1, savedir=None):
+  def _cutout(self, xmin, xmax, ymin, ymax, zmin, zmax, xstep=1, ystep=1, zstep=1, savedir=None):
     
-    try:
-      requested_mip_level = self.info['scales'][self.mip]
-    except IndexError:
-      raise Exception("{} mip level has not been generated. Max: {}".format(self.mip, len(self.info['scales']) - 1))
-
     requested_bbox = Bbox(Vec3(xmin, ymin, zmin), Vec3(xmax, ymax, zmax)) / self.downsample_ratio
-    volume_bbox = Bbox.from_vec(Vec3(*requested_mip_level['size'])) # volume size in voxels
+    volume_bbox = Bbox.from_vec(self.volume_size) # volume size in voxels
     volume_bbox += self.voxel_offset
 
     realized_bbox = requested_bbox.fit_to_chunk_size(self.underlying)
     realized_bbox = Bbox.clamp(requested_bbox, volume_bbox)
     
-    cloudpaths = self.__cloudpaths(realized_bbox, volume_bbox, requested_mip_level['key'], self.underlying)
+    cloudpaths = self.__cloudpaths(realized_bbox, volume_bbox, self.layer_key, self.underlying)
     renderbuffer = np.zeros(shape=realized_bbox.size3(), dtype=self.data_type)
 
     files = lib.gcloudFileIterator(cloudpaths, savedir, use_ls=self.use_ls, compress=(self.encoding == 'raw'))
@@ -183,16 +192,8 @@ class GCloudVolume(Volume):
     for filehandle in tqdm(files, total=len(cloudpaths), desc="Rendering Image"):
       bbox = Bbox.from_filename(filehandle.name)
 
-      filedata = filehandle.read()
-      encoding = requested_mip_level['encoding'] # e.g. jpeg, raw
-
-      if len(filedata) == 0:
-        img3d = np.zeros(shape=bbox.size3(), dtype=self.data_type)
-      elif encoding == 'jpeg':
-        img3d = neuroglancer.chunks.decode_jpeg(filedata, shape=bbox.size3(), dtype=self.data_type)
-      elif encoding == 'raw':
-        img3d = neuroglancer.chunks.decode_raw(filedata, shape=bbox.size3(), dtype=self.data_type)
-
+      img3d = self.__decode(filehandle.read(), bbox.size3())
+      
       start = bbox.minpt - realized_bbox.minpt
       end = min2(start + self.underlying, renderbuffer.shape )
       delta = min2(end - start, img3d.shape)
@@ -206,6 +207,16 @@ class GCloudVolume(Volume):
     hd = realized_bbox.maxpt - global_deltas.maxpt # high delta
 
     return renderbuffer[ ld.x:hd.x:xstep, ld.y:hd.y:ystep, ld.z:hd.z:zstep ] 
+
+  def __decode(self, filedata, shape):
+    if len(filedata) == 0:
+      return np.zeros(shape=shape, dtype=self.data_type)
+    elif self.encoding == 'jpeg':
+      return neuroglancer.chunks.decode_jpeg(filedata, shape=shape, dtype=self.data_type)
+    elif self.encoding == 'raw':
+      return neuroglancer.chunks.decode_raw(filedata, shape=shape, dtype=self.data_type)
+    else:
+      raise NotImplementedError(encoding)
 
   def __cloudpaths(self, bbox, volume_bbox, key, chunk_size):
     def cloudpathgenerator():
