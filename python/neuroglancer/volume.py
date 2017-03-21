@@ -218,6 +218,8 @@ class ServedVolume(Served):
         if downsample_factor != (1, 1, 1):
             if self.volume_type == 'image':
                 subvol = downsample.downsample_with_averaging(subvol, full_downsample_factor)
+            elif self.volume_type == 'segmentation':
+                subvol = downsample.downsample_segmentation(subvol, full_downsample_factor)
             else:
                 subvol = downsample.downsample_with_striding(subvol, full_downsample_factor)
         content_type = 'application/octet-stream'

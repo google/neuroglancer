@@ -34,7 +34,17 @@ def downsample_with_averaging(array, factor):
     return np.cast[array.dtype](temp / counts)
 
 def downsample_segmentation(data, factor):
-  if tuple(factor) != (2,2,1):
+  factor = tuple(factor)
+
+  if factor == (1,1,1):
+    return data
+
+  is_pot = lambda x: (x != 0) and not (x & (x - 1)) # is power of two
+  is_twod_pot_downsample = (factor[2] == 1) and (factor[1] == factor[0]) and is_pot(factor[0])
+
+  has_even_dims = (data.shape[0] % 2 == 0) and (data.shape[1] % 2 == 0)
+
+  if not is_twod_pot_downsample or not has_even_dims:
     return downsample_with_striding(data, factor)
   
   output = np.zeros(
@@ -45,7 +55,9 @@ def downsample_segmentation(data, factor):
   for z in xrange(data.shape[2]):
     output[:,:,z] = downsample_segmentation_2D_4x(data[:,:,z])
 
-  return output
+  factor = (factor[0] / 2, factor[1] / 2, 1)
+
+  return downsample_segmentation(output, factor)
 
 def downsample_segmentation_2D_4x(data):
   """Vectorized implementation of downsampling a 2D 
