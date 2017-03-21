@@ -2,6 +2,7 @@ from __future__ import print_function
 import json
 import math
 import re
+from itertools import product
 
 import numpy as np
 from tqdm import tqdm
@@ -9,6 +10,7 @@ from tqdm import tqdm
 from neuroglancer import downsample_scales, chunks
 from neuroglancer.ingest.base import Storage
 from neuroglancer.ingest.tasks import TaskQueue, BigArrayTask, IngestTask, HyperSquareTask
+from neuroglancer.ingest.volumes import HDF5Volume
 
 def create_ingest_task(dataset_name, layer_name):
     """
@@ -194,6 +196,53 @@ def create_hypersquare_tasks(dataset_name, layer_name, bucket_name, path_from_bu
             # tq.insert(t)
             t.execute()
 
+def upload_build_chunks(dataset_name, layer_name, volume, offset=[0, 0, 0], build_chunk_size=[1024,1024,128]):
+    storage = Storage(dataset_name=dataset_name, layer_name=layer_name, compress=False)
+    xyzranges = ( xrange(0, vs, bcs) for vs, bcs in zip(volume.shape, build_chunk_size) )
+    for x_min, y_min, z_min in tqdm(product(*xyzranges)):
+        x_max = min(volume.shape[0], x_min + build_chunk_size[0])
+        y_max = min(volume.shape[1], y_min + build_chunk_size[1])
+        z_max = min(volume.shape[2], z_min + build_chunk_size[2])
+        chunk = volume[x_min:x_max, y_min:y_max, z_min:z_max]
+
+        #adds offsets
+        x_min += offset[0]; x_max += offset[0]
+        y_min += offset[1]; y_max += offset[1]
+        z_min += offset[2]; z_max += offset[2]
+        filename = "{}-{}_{}-{}_{}-{}".format(
+            x_min, x_max, y_min, y_max, z_min, z_max)
+        storage.add_file(filename, chunks.encode_npz(chunk))
+    storage.flush('build/')
+
+
+def ingest_hdf5_example():
+    dataset_name = "snemi3d_v0"
+    resolution=[6,6,30]
+    #ingest image
+    layer_name = "image"
+    layer_type = "image"
+    volume =  HDF5Volume('/usr/people/it2/snemi3d/image.h5', layer_type)
+    upload_build_chunks(dataset_name, layer_name, volume)
+    create_info_file_from_build(dataset_name, layer_name, layer_type, resolution=resolution, encoding="jpeg")
+    create_ingest_task(dataset_name, layer_name)
+
+    #ingest segmentation
+    layer_name = "segmentation"
+    layer_type = "segmentation"
+    volume =  HDF5Volume('/usr/people/it2/snemi3d/human_labels.h5', layer_type)
+    upload_build_chunks(dataset_name, layer_name, volume)
+    create_info_file_from_build(dataset_name, layer_name, layer_type, resolution=resolution, encoding="raw")
+    create_ingest_task(dataset_name, layer_name)
+
+    #ingest affinities
+    # HDF5Volume does some type convertion when affinities are specified as layer type
+    # but neuroglancer only has image or segmentation layer types
+    layer_name = "affinities"
+    layer_type = "image"
+    volume =  HDF5Volume('/usr/people/it2/snemi3d/affinities.h5', layer_type='affinities') 
+    upload_build_chunks(dataset_name, layer_name, volume)
+    create_info_file_from_build(dataset_name, layer_name, layer_type, resolution=resolution, encoding="raw")
+    create_ingest_task(dataset_name, layer_name)
     
 if __name__ == '__main__':   
     # create_hypersquare_tasks("zfish_v0","segmentation", "zfish", "all_7/hypersquare/")
