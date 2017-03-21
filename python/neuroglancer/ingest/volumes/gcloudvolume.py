@@ -5,10 +5,10 @@ import re
 import numpy as np
 from tqdm import tqdm
 
-import lib
-from lib import clamp, xyzrange, Vec3, Bbox, min2, mkdir, COMMON_STAGING_DIR
 import neuroglancer
-from volumes import Volume, VolumeCutout
+import neuroglancer.ingest.lib as lib
+from neuroglancer.ingest.lib import clamp, xyzrange, Vec3, Bbox, min2
+from neuroglancer.ingest.volumes import Volume, VolumeCutout
 from google.cloud import storage as gstorage
 
 class GCloudVolume(Volume):

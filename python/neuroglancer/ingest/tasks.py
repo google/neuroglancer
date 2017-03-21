@@ -1,20 +1,23 @@
 from __future__ import print_function
-import json
 import base64
+from collections import defaultdict
+import json
 import re
 import itertools
 import io
-import h5py
 import os
 from tempfile import NamedTemporaryFile
-from backports import lzma
 
+import h5py
 import blosc
 import numpy as np
+from backports import lzma
+from tqdm import tqdm
 
 from neuroglancer.ingest.base import Storage, credentials_path, PROJECT_NAME, QUEUE_NAME
 from neuroglancer.ingest.volumes.gcloudvolume import GCloudVolume
 from neuroglancer import chunks, downsample
+from neuroglancer.ingest.mesher import Mesher
 
 
 class IngestTask(object):
@@ -179,8 +182,7 @@ class DownsampleTask(object):
 
 
 class MeshTask(object):
-    """Ingests and does downsampling
-    """
+
     def __init__(self, chunk_key=None, chunk_position=None, info_path=None, 
                  lod=0, simplification=5, segments=[], fromjson=None, _id=None):
         self._id =  None
@@ -223,9 +225,11 @@ class MeshTask(object):
             self.chunk_key, self.chunk_position, self.info_path, self.lod, self.simplification, self.segments)
 
     def execute(self):
+        self._mesher = Mesher()
         self._parse_chunk_key()
         self._parse_chunk_position()
         self._parse_info_path()
+        self._storage = Storage(self._dataset_name, self._layer_name, compress=True)
         self._download_info()
         self._download_data()
         self._compute_meshes()
@@ -253,53 +257,120 @@ class MeshTask(object):
             raise ValueError("Path on where to store the meshes is not present")
 
     def _download_data(self):
-        raise NotImplementedError()
+        """
+        It assumes that the chunk_position includes a 1 pixel overlap
+        """
+        volume = GCloudVolume(self._dataset_name, self._layer_name, cache_files=True)
+        self._data = volume[self._xmin:self._xmax,
+                            self._ymin:self._ymax,
+                            self._zmin:self._zmax]
 
     def _compute_meshes(self):
-        mesher = Mesher()
         data = np.swapaxes(self._data, 0,2)
-        mesher.mesh(data.flatten(), *data.shape)
-        self._storage.add_file(
-            filename=self._task.chunk_path + '.json',
-            content=json.dumps(mesher.ids()))
-        self._storage.flush('build/manifests/')
-
-        for obj_id in tqdm(mesher.ids()):
-            vbo = self._create_vbo(mesher, obj_id)
+        self._mesher.mesh(data.flatten(), *data.shape)
+        for obj_id in tqdm(self._mesher.ids()):
             self._storage.add_file(
-                filename='{}:{}:{}'.format(obj_id, 0, self._task.chunk_path),
-                content=vbo)
+                filename='{}:{}:{}'.format(obj_id, self.lod, self.chunk_position),
+                content=self._create_mesh(obj_id))
         self._storage.flush(self._info['mesh'])
 
 
-    # def create_vbo(self, mesher, obj_id):
-    #     def update_points(points, resolution):
-    #         # zlib meshing multiplies verticies by two to avoid working with floats like 1.5
-    #         # but we need to recover the exact position for display
-    #         points /= 2.0 
+    def _create_mesh(self, obj_id):
+        mesh = self._mesher.get_mesh(obj_id, simplification_factor=128, max_simplification_error=1000000)
+        vertices = self._update_vertices(np.array(mesh['points'], dtype=np.float32)) 
+        vertex_index_format = [
+            np.uint32(len(vertices) / 3), #Number of vertices (each vertex it's composed of three numbers(x,y,z))
+            vertices,
+            np.array(mesh['faces'], dtype=np.uint32)
+        ]
+        return b''.join([ array.tobytes() for array in vertex_index_format ])
 
-    #         points[0::3] = (points[0::3] + self._xmin) * resolution[0]   # x
-    #         points[1::3] = (points[1::3] + self._ymin) * resolution[1]   # y
-    #         points[2::3] = (points[2::3] + self._zmin) * resolution[2]   # z
+    def _update_vertices(self, points):
+        # zlib meshing multiplies verticies by two to avoid working with floats like 1.5
+        # but we need to recover the exact position for display
+        points /= 2.0
+        resolution = self._info['scales'][0]['resolution']
+        points[0::3] = (points[0::3] + self._xmin) * resolution[0]   # x
+        points[1::3] = (points[1::3] + self._ymin) * resolution[1]   # y
+        points[2::3] = (points[2::3] + self._zmin) * resolution[2]   # z
+        return points
 
-    #         return points
 
-    #     mesh = mesher.get_mesh(obj_id, simplification_factor=128, max_simplification_error=1000000)
+class MeshManifestTask(object):
+    """
+    Finalize mesh generation by post-processing chunk fragment
+    lists into mesh fragment manifests.
+    These are necessary for neuroglancer to know which mesh
+    fragments to download for a given segid.
+    """
+    def __init__(self, info_path=None, lod=None, fromjson=None, _id=None):
+        self._id =  None
+        self.info_path = info_path
+        self.lod = lod
+        self.tag = 'mesh_manifest'
+        if fromjson:
+            self.payloadBase64 = fromjson
+            self._id = _id
 
-    #     numpoints = len(mesh['points']) / 3
-    #     numindicies = len(mesh['faces'])
+    @property
+    def payloadBase64(self):
+        payload = json.dumps({
+            'info_path': self.info_path,
+            'lod': self.lod
+        })
+        return base64.b64encode(payload)
+    
+    @payloadBase64.setter
+    def payloadBase64(self, payload):
+        decoded_string =  base64.b64decode(payload).encode('ascii')
+        d = json.loads(decoded_string)
+        self.info_path = d['info_path']
+        self.lod = d['lod']
 
-    #     points = np.array(mesh['points'], dtype=np.float32)
-    #     resolution = self._info['scales'][0]['resolution']
-    #     scalepoints = update_points(points, resolution) 
+    def __repr__(self):
+        return "MeshManifestTask(info_path='{}', lod={})".format(
+            self.info_path, self.lod)
 
-    #     vertex_index_format = [
-    #         np.array([ numpoints ], dtype=np.uint32),
-    #         np.array(scalepoints, dtype=np.float32),
-    #         np.array(mesh['faces'], dtype=np.uint32)
-    #     ]
+    def execute(self):
+        self._parse_info_path()
+        self._storage = Storage(self._dataset_name, self._layer_name, compress=True)
+        self._download_info()
+        self._download_data()
 
-    #     return b''.join([ array.tobytes() for array in vertex_index_format ])
+    def _parse_info_path(self):
+        match = re.match(r'^.*/([^//]+)/([^//]+)/info$', self.info_path)
+        self._dataset_name, self._layer_name = match.groups()
+
+    def _download_info(self):
+        info_string = self._storage.get_blob(
+                '{}/{}/info'.format(self._dataset_name, self._layer_name) \
+            ).download_as_string()
+        self._info = json.loads(info_string)
+        
+    def _download_data(self):
+        """
+        Assumes that list blob is lexicographically ordered
+        """
+        last_id = 0
+        last_fragments = []
+        for blob in self._storage.list_blobs(prefix='snemi3d_v0/segmentation/mesh'):
+            match = re.match(r'.*/(\d+):(\d+):(.*)$', blob.name)
+            if not match: # a manifest file will not match
+                continue
+            _id, lod, chunk_position = match.groups()
+            _id = int(_id); lod = int(lod)
+            if lod != self.lod:
+                continue
+
+            if last_id != _id:
+                self._storage.add_file(
+                    filename='{}:{}'.format(last_id, self.lod),
+                    content=json.dumps({"fragments": last_fragments}))
+                last_id = _id
+                last_fragments = []
+
+            last_fragments.append('{}:{}:{}'.format(_id, lod, chunk_position))
+        self._storage.flush(self._info['mesh'])
 
 
 class BigArrayTask(object):
@@ -672,6 +743,8 @@ class TaskQueue(object):
             return DownsampleTask(fromjson=task_json['payloadBase64'], _id=task_json['id'])
         elif task_json['tag'] == 'mesh':
             return MeshTask(fromjson=task_json['payloadBase64'], _id=task_json['id'])
+        elif task_json['tag'] == 'mesh_manifest':
+            return MeshManifestTask(fromjson=task_json['payloadBase64'], _id=task_json['id'])
         elif task_json['tag'] == 'bigarray':
             return BigArrayTask(fromjson=task_json['payloadBase64'], _id=task_json['id'])    
         elif task_json['tag'] == 'hypersquare':

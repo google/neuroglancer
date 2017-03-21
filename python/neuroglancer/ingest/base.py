@@ -20,11 +20,26 @@ def credentials_path():
     return self_dir+'/client-secret.json'
 
 class Storage(object):
+    """
+    Probably rather sooner that later we will have to store datasets in S3.
+    The idea is to modify this class constructor to probably take a path of 
+    the problem protocol://bucket_name/dataset_name/layer_name where protocol
+    can be s3, gs or file.
+
+    file:// would be useful for when the in-memory python datasource uses too much RAM,
+    or possible for writing unit tests.
+
+    This should be the only way to interact with files, if there are methods outside this
+    class the transition to many protocols will be harder.
+    """
 
     def __init__(self, dataset_name='', layer_name='', compress=False):
         """
-        If the file is large it will be download in parts and decompression will
-        fail because of a bug in google.cloud.storage library
+        Args:
+            dataset_name (str, optional): Name of dataset
+            layer_name (str, optional): Name of the layer
+            compress (bool, optional):  If the file is large it will be download in parts and decompression will
+                                        fail because of a bug in google.cloud.storage library
         """
         self._dataset_name = dataset_name
         self._layer_name = layer_name
@@ -38,8 +53,8 @@ class Storage(object):
 
         self._bucket = self._client.get_bucket(BUCKET_NAME)
 
-    def get_blob(self, name):
-        return self._bucket.get_blob(name)
+        self.get_blob = self._bucket.get_blob
+        self.list_blobs = self._bucket.list_blobs
 
     def flush(self, folder_name=''):
         if not self._n_objects:

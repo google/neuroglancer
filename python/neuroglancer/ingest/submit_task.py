@@ -9,7 +9,7 @@ from tqdm import tqdm
 
 from neuroglancer import downsample_scales, chunks
 from neuroglancer.ingest.base import Storage
-from neuroglancer.ingest.tasks import TaskQueue, BigArrayTask, IngestTask, HyperSquareTask
+from neuroglancer.ingest.tasks import TaskQueue, BigArrayTask, IngestTask, HyperSquareTask, MeshTask, MeshManifestTask
 from neuroglancer.ingest.volumes import HDF5Volume
 
 def create_ingest_task(dataset_name, layer_name):
@@ -96,9 +96,9 @@ def compute_build_bounding_box(dataset_name, layer_name):
         chunk_size = (x_max - x_min, y_max - y_min, z_max - z_min)
         chunk_sizes.add(chunk_size)
 
-    shape = [abs_x_max-abs_x_min+1,
-             abs_y_max-abs_y_min+1,
-             abs_z_max-abs_z_min+1]
+    shape = [abs_x_max-abs_x_min,
+             abs_y_max-abs_y_min,
+             abs_z_max-abs_z_min]
     offset = [abs_x_min, abs_y_min, abs_z_min]  
     chunk_size = largest_size(chunk_sizes)
     print('shape=', shape , '; offset=', offset, '; chunk_size=', chunk_size)
@@ -217,12 +217,13 @@ def upload_build_chunks(dataset_name, layer_name, volume, offset=[0, 0, 0], buil
 
 def ingest_hdf5_example():
     dataset_name = "snemi3d_v0"
+    offset = [128,128,128]
     resolution=[6,6,30]
     #ingest image
     layer_name = "image"
     layer_type = "image"
     volume =  HDF5Volume('/usr/people/it2/snemi3d/image.h5', layer_type)
-    upload_build_chunks(dataset_name, layer_name, volume)
+    upload_build_chunks(dataset_name, layer_name, volume, offset)
     create_info_file_from_build(dataset_name, layer_name, layer_type, resolution=resolution, encoding="jpeg")
     create_ingest_task(dataset_name, layer_name)
 
@@ -230,7 +231,7 @@ def ingest_hdf5_example():
     layer_name = "segmentation"
     layer_type = "segmentation"
     volume =  HDF5Volume('/usr/people/it2/snemi3d/human_labels.h5', layer_type)
-    upload_build_chunks(dataset_name, layer_name, volume)
+    upload_build_chunks(dataset_name, layer_name, volume, offset)
     create_info_file_from_build(dataset_name, layer_name, layer_type, resolution=resolution, encoding="raw")
     create_ingest_task(dataset_name, layer_name)
 
@@ -240,9 +241,20 @@ def ingest_hdf5_example():
     layer_name = "affinities"
     layer_type = "image"
     volume =  HDF5Volume('/usr/people/it2/snemi3d/affinities.h5', layer_type='affinities') 
-    upload_build_chunks(dataset_name, layer_name, volume)
+    upload_build_chunks(dataset_name, layer_name, volume, offset)
     create_info_file_from_build(dataset_name, layer_name, layer_type, resolution=resolution, encoding="raw")
     create_ingest_task(dataset_name, layer_name)
+
+    MeshTask(chunk_key="gs://neuroglancer/snemi3d_v0/segmentation/6_6_30",
+             chunk_position="0-1024_0-1024_0-51",
+             info_path="gs://neuroglancer/snemi3d_v0/segmentation/info", 
+             lod=0, simplification=5, segments=[]).execute()
+    MeshTask(chunk_key="gs://neuroglancer/snemi3d_v0/segmentation/6_6_30",
+             chunk_position="0-1024_0-1024_50-100",
+             info_path="gs://neuroglancer/snemi3d_v0/segmentation/info", 
+             lod=0, simplification=5, segments=[]).execute()
+    MeshManifestTask(info_path="gs://neuroglancer/snemi3d_v0/segmentation/info",
+                     lod=0).execute()
     
 if __name__ == '__main__':   
     # create_hypersquare_tasks("zfish_v0","segmentation", "zfish", "all_7/hypersquare/")
@@ -252,9 +264,12 @@ if __name__ == '__main__':
     #                             resolution=[5,5,45])
     # create_ingest_task("zfish_v0","segmentation")
 
-    create_hypersquare_tasks("e2198_v0","image","e2198_compressed","")
+    # create_hypersquare_tasks("e2198_v0","image","e2198_compressed","")
     # create_info_file_from_build(dataset_name="e2198_v0",
     #                             layer_name="image",
     #                             layer_type="image",
     #                             resolution=[17,17,23])
     # create_ingest_task("e2198_v0","image")
+    # ingest_hdf5_example()
+
+    

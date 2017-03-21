@@ -442,14 +442,14 @@ def credentials_path():
     self_dir = os.path.dirname(os.path.realpath(__file__))
     return os.path.join(self_dir, 'client-secret.json')
 
-def create_bucket_from_secrets():
+def get_bucket_from_secrets():
     client = storage.Client.from_service_account_json('client-secret.json')
     return client.get_bucket(GCLOUD_BUCKET_NAME)
 
 def get_blob(name):
     global BLOB_BUCKET
     if BLOB_BUCKET is None:
-        BLOB_BUCKET = create_bucket_from_secrets()
+        BLOB_BUCKET = get_bucket_from_secrets()
 
     return BLOB_BUCKET.get_blob(name)
 
@@ -459,12 +459,10 @@ class Storage(object):
         self._dataset_name = dataset_name
         self._layer_name = layer_name
         self._compress = compress
+        self._public = public
        
         self._local = None
-        self._n_objects = 0 
-
-        self._public = public
-
+        self._n_objects = 0
         self.emptyCache()
 
     def emptyCache(self):
