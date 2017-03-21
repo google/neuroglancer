@@ -120,6 +120,7 @@ export class MultiscaleVolumeChunkSource implements GenericMultiscaleVolumeChunk
   scales: ScaleInfo[];
 
   encoding: string;
+  neariso: boolean;
 
   constructor(
       public chunkManager: ChunkManager, public baseUrls: string[], public key: string,
@@ -150,6 +151,13 @@ export class MultiscaleVolumeChunkSource implements GenericMultiscaleVolumeChunk
       }
     }
     this.encoding = encoding;
+
+    this.neariso = true;
+    let neariso = verifyOptionalString(parameters['neariso']);
+    if (neariso === 'false') {
+      this.neariso = false;
+    }
+
   }
 
   getSources(volumeSourceOptions: VolumeSourceOptions) {
@@ -175,6 +183,7 @@ export class MultiscaleVolumeChunkSource implements GenericMultiscaleVolumeChunk
             channel: this.channel,
             resolution: scaleInfo.key,
             encoding: this.encoding,
+            neariso: this.neariso
           }));
     });
   }
@@ -190,7 +199,7 @@ const pathPattern = /^([^\/?]+)(?:\/([^\/?]+))?(?:\?(.*))?$/;
 export function getTokenInfo(chunkManager: ChunkManager, hostnames: string[], token: string): Promise<TokenInfo> {
   return chunkManager.memoize.getUncounted(
       {type: 'ndstore:getTokenInfo', hostnames, token},
-      () => sendHttpRequest(openShardedHttpRequest(hostnames, `/ocp/ca/${token}/info/`), 'json')
+      () => sendHttpRequest(openShardedHttpRequest(hostnames, `/nd/sd/${token}/info/`), 'json')
                 .then(parseTokenInfo));
 }
 
@@ -225,7 +234,7 @@ export function getVolume(chunkManager: ChunkManager, path: string) {
 export function getPublicTokens(chunkManager: ChunkManager, hostnames: string[]) {
   return chunkManager.memoize.getUncounted(
       {type: 'dvid:getPublicTokens', hostnames},
-      () => sendHttpRequest(openShardedHttpRequest(hostnames, '/ocp/ca/public_tokens/'), 'json')
+      () => sendHttpRequest(openShardedHttpRequest(hostnames, '/nd/sd/public_tokens/'), 'json')
                 .then(value => parseArray(value, verifyString)));
 }
 

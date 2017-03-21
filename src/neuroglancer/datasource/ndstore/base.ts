@@ -20,6 +20,7 @@ export class VolumeChunkSourceParameters {
   channel: string;
   resolution: string;
   encoding: string;
+  neariso: boolean;
 
   static RPC_ID = 'ndstore/VolumeChunkSource';
 
