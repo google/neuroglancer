@@ -14,12 +14,17 @@
  * limitations under the License.
  */
 
+export const LEGACY_URL_PREFIX = '/ocp/ca';
+export const NDSTORE_URL_PREFIX = '/nd/sd';
+
 export class VolumeChunkSourceParameters {
   baseUrls: string[];
+  urlPrefix: string;
   key: string;
   channel: string;
   resolution: string;
   encoding: string;
+  neariso: boolean;
 
   static RPC_ID = 'ndstore/VolumeChunkSource';
 
@@ -27,3 +32,4 @@ export class VolumeChunkSourceParameters {
     return `ndstore:volume:${parameters.baseUrls[0]}/${parameters.key}/${parameters.channel}/${parameters.resolution}/${parameters.encoding}`;
   }
 };
+
