@@ -2,10 +2,10 @@ from __future__ import print_function
 import base64
 from collections import defaultdict
 import json
-import re
 import itertools
 import io
 import os
+import re
 from tempfile import NamedTemporaryFile
 
 import h5py
@@ -62,7 +62,7 @@ class IngestTask(object):
         self._parse_info_path()
         self._storage = Storage(self._dataset_name, self._layer_name, compress=True)
         self._download_info()
-        self._download_data()
+        self._download_input_chunk()
         self._create_chunks()
 
     def _parse_chunk_path(self):
@@ -85,7 +85,7 @@ class IngestTask(object):
             ).download_as_string()
         self._info = json.loads(info_string)
 
-    def _download_data(self):
+    def _download_input_chunk(self):
         string_data = self._storage.get_blob(
             '{}/{}/build/{}'.format(self._dataset_name, self._layer_name, self._filename)) \
         .download_as_string()
@@ -180,6 +180,81 @@ class DownsampleTask(object):
         return "DownsampleTask(chunk_path='{}', info_path='{}')".format(
             self.chunk_path, self.info_path)
 
+    def execute(self):
+        self._parse_info_path()
+        self._storage = Storage(self._dataset_name, self._layer_name, compress=True)
+        self._download_info()
+        self._parse_chunk_path()
+        self._compute_downsampling_ratio()
+        self._download_input_chunk()
+        self._upload_output_chunk()
+
+    def _parse_info_path(self):
+        match = re.match(r'^.*/([^//]+)/([^//]+)/info$', self.info_path)
+        self._dataset_name, self._layer_name = match.groups()
+
+    def _download_info(self):
+        info_string = self._storage.get_blob(
+                '{}/{}/info'.format(self._dataset_name, self._layer_name) \
+            ).download_as_string()
+        self._info = json.loads(info_string)
+
+    def _parse_chunk_path(self):
+        match = re.match(r'.*/([^//]+)/(\d+)-(\d+)_(\d+)-(\d+)_(\d+)-(\d+)$', self.chunk_path)
+        self._key = match.groups()[0]
+        (self._xmin, self._xmax,
+         self._ymin, self._ymax,
+         self._zmin, self._zmax) = map(int, match.groups()[1:])
+
+    def _compute_downsampling_ratio(self):
+        self._current_index = self._find_scale_idx()
+        current_resolution = self._info['scales'][self._current_index]['resolution']
+        higher_resolution = self._info['scales'][self._current_index-1]['resolution']
+        self._downsample_ratio = [ c/h for c,h in zip(current_resolution, higher_resolution)]
+
+    def _find_scale_idx(self):
+        for scale_idx, scale in enumerate(self._info['scales']):
+            if scale['key'] == self._key:
+                assert scale_idx > 0
+                return scale_idx
+
+    def _download_input_chunk(self):
+        volume = GCloudVolume(self._dataset_name, self._layer_name, self._current_index-1, cache_files=False)
+        chunk = volume[
+            self._xmin * self._downsample_ratio[0]:self._xmax * self._downsample_ratio[0],
+            self._ymin * self._downsample_ratio[1]:self._ymax * self._downsample_ratio[1],
+            self._zmin * self._downsample_ratio[2]:self._zmax * self._downsample_ratio[2]]
+        self._downsample_chunk(chunk)
+
+    def _downsample_chunk(self, chunk):
+        if self._info['type'] == 'image':
+            self._data = downsample.downsample_with_averaging(chunk, self._downsample_ratio)
+        elif self._info['type'] == 'segmentation':
+            self._data = downsample.downsample_segmentation(chunk, self._downsample_ratio)
+        else:
+            raise NotImplementedError(self._info['type'])
+
+    def _upload_output_chunk(self): 
+        self._storage.add_file(
+            filename=self._get_filename(),
+            content=self._encode(self._data, self._info['scales'][self._current_index]["encoding"])
+            )
+        self._storage.flush(self._key)
+
+    def _encode(self, chunk, encoding):
+        if encoding == "jpeg":
+            return chunks.encode_jpeg(chunk)
+        elif encoding == "npz":
+            return chunks.encode_npz(chunk)
+        elif encoding == "raw":
+            return chunks.encode_raw(chunk)
+        else:
+            raise NotImplementedError(encoding)
+
+    def _get_filename(self):
+        return '{:d}-{:d}_{:d}-{:d}_{:d}-{:d}'.format(
+          self._xmin, self._xmax, self._ymin, self._ymax, self._zmin, self._zmax) 
+
 
 class MeshTask(object):
 
@@ -231,7 +306,7 @@ class MeshTask(object):
         self._parse_info_path()
         self._storage = Storage(self._dataset_name, self._layer_name, compress=True)
         self._download_info()
-        self._download_data()
+        self._download_input_chunk()
         self._compute_meshes()
 
     def _parse_chunk_key(self):
@@ -256,11 +331,11 @@ class MeshTask(object):
         if 'mesh' not in self._info:
             raise ValueError("Path on where to store the meshes is not present")
 
-    def _download_data(self):
+    def _download_input_chunk(self):
         """
         It assumes that the chunk_position includes a 1 pixel overlap
         """
-        volume = GCloudVolume(self._dataset_name, self._layer_name, cache_files=True)
+        volume = GCloudVolume(self._dataset_name, self._layer_name, cache_files=False)
         self._data = volume[self._xmin:self._xmax,
                             self._ymin:self._ymax,
                             self._zmin:self._zmax]
@@ -335,7 +410,7 @@ class MeshManifestTask(object):
         self._parse_info_path()
         self._storage = Storage(self._dataset_name, self._layer_name, compress=True)
         self._download_info()
-        self._download_data()
+        self._download_input_chunk()
 
     def _parse_info_path(self):
         match = re.match(r'^.*/([^//]+)/([^//]+)/info$', self.info_path)
@@ -347,7 +422,7 @@ class MeshManifestTask(object):
             ).download_as_string()
         self._info = json.loads(info_string)
         
-    def _download_data(self):
+    def _download_input_chunk(self):
         """
         Assumes that list blob is lexicographically ordered
         """
@@ -408,7 +483,7 @@ class BigArrayTask(object):
     def execute(self):
         self._parse_chunk_path()
         self._storage = Storage(self._dataset_name, self._layer_name, compress=False)
-        self._download_data()
+        self._download_input_chunk()
         self._upload_chunk()
         # self._delete_data()
 
@@ -435,7 +510,7 @@ class BigArrayTask(object):
         self._zmax = int(self._zmax)
         self._filename = self.chunk_path.split('/')[-1]
 
-    def _download_data(self):
+    def _download_input_chunk(self):
         self._datablob = self._storage.get_blob(
             '{}/{}/bigarray/{}'.format(self._dataset_name, self._layer_name, self._filename)) \
         
@@ -548,7 +623,7 @@ class HyperSquareTask(object):
         self._parse_chunk_path()
         self._storage = Storage(self._dataset_name, self._layer_name, compress=False)
         self._download_metadata()
-        self._download_data()
+        self._download_input_chunk()
         self._upload_chunk()
 
     def _parse_chunk_path(self):
@@ -573,7 +648,7 @@ class HyperSquareTask(object):
         .download_as_string()
         self._metadata = json.loads(metadata)
         
-    def _download_data(self):
+    def _download_input_chunk(self):
         if 'segmentation' in self._layer_name: 
             self._datablob = self._bukcet.get_blob(
                 '{}/segmentation.lzma'.format(self._chunk_folder))
@@ -616,11 +691,6 @@ class HyperSquareTask(object):
 
         xmin, ymin, zmin = (self._metadata['physical_offset_min'] / voxel_resolution) + overlap
         xmax, ymax, zmax = (self._metadata['physical_offset_max'] / voxel_resolution) - overlap
-  
-        assert xmax - xmin == 224
-        assert ymax - ymin == 224
-        print (xmax - xmin)
-
         filename = '{:d}-{:d}_{:d}-{:d}_{:d}-{:d}'.format(
           xmin, xmax, ymin, ymax, zmin, zmax)
         encoded = self._encode(chunk, self.chunk_encoding)
