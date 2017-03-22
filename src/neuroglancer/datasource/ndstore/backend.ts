@@ -35,7 +35,7 @@ class VolumeChunkSource extends ParameterizedVolumeChunkSource<VolumeChunkSource
 
   download(chunk: VolumeChunk, cancellationToken: CancellationToken) {
     let {parameters} = this;
-    let path = `/ocp/ca/${parameters.key}/${parameters.channel}/` +
+    let path = `${parameters.urlPrefix}/${parameters.key}/${parameters.channel}/` +
         `${parameters.encoding}/${parameters.resolution}`;
     {
       // chunkPosition must not be captured, since it will be invalidated by the next call to
@@ -46,7 +46,9 @@ class VolumeChunkSource extends ParameterizedVolumeChunkSource<VolumeChunkSource
         path += `/${chunkPosition[i]},${chunkPosition[i] + chunkDataSize[i]}`;
       }
     }
-    path += `/neariso/`;
+    if (parameters.neariso) {
+      path += `/neariso/`;
+    }
     return sendHttpRequest(
                openShardedHttpRequest(parameters.baseUrls, path), 'arraybuffer', cancellationToken)
         .then(response => this.chunkDecoder(chunk, response));
