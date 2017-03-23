@@ -180,6 +180,7 @@ export class MultiscaleVolumeChunkSource implements GenericMultiscaleVolumeChunk
   dims: vec3;
 
   encoding: string;
+  numLevels: number|undefined;
 
   constructor(
       public chunkManager: ChunkManager, public baseUrls: string[], public ownerInfo: OwnerInfo,
@@ -215,6 +216,8 @@ export class MultiscaleVolumeChunkSource implements GenericMultiscaleVolumeChunk
     }
     this.encoding = encoding;
 
+    this.numLevels = verifyOptionalInt(parameters['numlevels']);
+
     this.dims = vec3.create();
 
     let tileSize = verifyOptionalInt(parameters['tilesize']);
@@ -230,7 +233,10 @@ export class MultiscaleVolumeChunkSource implements GenericMultiscaleVolumeChunk
   getSources(volumeSourceOptions: VolumeSourceOptions) {
     let sources: VolumeChunkSource[][] = [];
 
-    let numLevels = computeStackHierarchy(this.stackInfo, this.dims[0]);
+    let numLevels = this.numLevels; 
+    if (numLevels === undefined) {
+      numLevels = computeStackHierarchy(this.stackInfo, this.dims[0]);
+    }
 
     for (let level = 0; level < numLevels; level++) {
       let voxelSize = vec3.clone(this.stackInfo.voxelResolution);
