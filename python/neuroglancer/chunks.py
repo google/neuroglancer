@@ -17,6 +17,16 @@ import io
 import numpy as np
 from PIL import Image
 
+def encode(img_chunk, encoding):
+  if encoding == "jpeg":
+    return encode_jpeg(img_chunk)
+  elif encoding == "npz":
+    return encode_npz(img_chunk)
+  elif encoding == "raw":
+    return encode_raw(img_chunk)
+  else:
+    raise NotImplemented
+
 def encode_jpeg(arr):
     assert arr.dtype == np.uint8
 
@@ -38,10 +48,6 @@ def encode_jpeg(arr):
     return f.getvalue()
 
 def decode_jpeg(bytestring, shape=(64,64,64), dtype=np.uint8):
-
-    # if len(bytestring) <= 3404: # black jpeg of shape (64,64,64) in mode L
-    #     return np.zeros(shape=shape, dtype=dtype)
-
     img = Image.open(io.BytesIO(bytestring))
     data = np.array(img.getdata(), dtype=dtype)
 

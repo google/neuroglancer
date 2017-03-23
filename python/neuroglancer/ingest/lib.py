@@ -202,6 +202,7 @@ def download_from_gcloud(cloudpaths, destination, log=None, gzip=False):
 
   if gzip:
     paths = [ os.path.join(destination, name) for name in os.listdir(destination) ]
+    paths = [ path for path in paths if not path.endswith('.gz') ]
     for path in tqdm(paths, desc="Gzipping Downloads"):
       subprocess.check_output(['gzip', path])
 

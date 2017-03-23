@@ -16,8 +16,8 @@ from __future__ import division
 
 import numpy as np
 
-DEFAULT_MAX_DOWNSAMPLING = 64
-DEFAULT_MAX_DOWNSAMPLED_SIZE = 128
+DEFAULT_MAX_DOWNSAMPLING = 64 # maximum factor to downsample by
+DEFAULT_MAX_DOWNSAMPLED_SIZE = 128 # minimum length of a side after downsampling
 DEFAULT_MAX_DOWNSAMPLING_SCALES = float('inf')
 
 
@@ -48,7 +48,6 @@ def compute_near_isotropic_downsampling_scales(size,
                 cur_scale[d] *= 2
         scales.append(tuple(cur_scale))
     return scales
-
 
 def compute_two_dimensional_near_isotropic_downsampling_scales(
         size,
@@ -86,3 +85,34 @@ def compute_two_dimensional_near_isotropic_downsampling_scales(
             break
         scales.append(cur_scales)
     return scales
+
+def compute_xy_plane_downsampling_scales(size,
+                                       voxel_size,
+                                       max_scales=DEFAULT_MAX_DOWNSAMPLING_SCALES,
+                                       max_downsampling=DEFAULT_MAX_DOWNSAMPLING,
+                                       max_downsampled_size=DEFAULT_MAX_DOWNSAMPLED_SIZE):
+
+    x,y,z = size
+
+    dimension = min(x,y)
+    num_downsamples = int(np.log2(dimension / max_downsampled_size))
+    num_downsamples = min(num_downsamples, max_scales)
+
+    factor = 2
+    scales = [ (1,1,1) ]
+    for i in xrange(num_downsamples):
+        if factor > max_downsampling:
+            break
+        elif dimension / factor < max_downsampled_size:
+            break
+
+        scales.append( (factor, factor, 1) )
+        factor *= 2
+
+    return scales
+    
+
+
+
+
+

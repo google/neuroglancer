@@ -17,6 +17,14 @@ from __future__ import division
 import math
 import numpy as np
 
+def method(layer_type):
+  if layer_type == 'image':
+    return downsample_with_averaging
+  elif layer_type == 'segmentation':
+    return downsample_segmentation
+  else:
+    return downsample_with_striding 
+
 def downsample_with_averaging(array, factor):
     """Downsample x by factor using averaging.
 

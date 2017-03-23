@@ -12,75 +12,100 @@ from neuroglancer import chunks, downsample, downsample_scales
 from volumes import GCloudVolume
 from lib import Storage, xyzrange, Vec3, min2, mkdir
 
-def generate_chunks(img, chunk_sizes, voxel_offset):
+DEFAULT_CHUNK_SIZE = Vec3(2048, 2048, 256)
+
+def generate_big_chunks(vol):
+  chunk_sizes = min2(DEFAULT_CHUNK_SIZE, vol.shape)
+
+  for startpt in xyzrange( (0,0,0), vol.shape, chunk_sizes ):
+    endpt = min2(startpt + chunk_sizes, vol.shape)
+    data = np.zeros(shape=chunk_sizes, dtype=vol.data_type)
+
+    delta = endpt - startpt
+
+    data[ :delta.x, :delta.y, :delta.z ] = vol[ startpt.x:endpt.x, startpt.y:endpt.y, startpt.z:endpt.z ]
+
+    yield data, startpt + vol.voxel_offset, endpt + vol.voxel_offset
+
+def generate_neuroglancer_chunks(img, chunk_sizes):
   chunk_sizes = Vec3(*chunk_sizes)
   volume_size = Vec3(*img.shape)
 
-  for startpt in xyzrange( voxel_offset, volume_size, chunk_sizes ):
+  for startpt in xyzrange( (0,0,0), volume_size, chunk_sizes ):
     endpt = min2(startpt + chunk_sizes, volume_size)
 
     chunkimg = img[ startpt.x:endpt.x, startpt.y:endpt.y, startpt.z:endpt.z ]
 
-    filename = '{}-{}_{}-{}_{}-{}'.format(
-      startpt.x, endpt.x,
-      startpt.y, endpt.y,
-      startpt.z, endpt.z
-    ) 
-
-    yield chunkimg, filename 
+    yield chunkimg, startpt, endpt 
 
 def generate_downsamples(dataset_name, layer, starting_mip=-1):
-  vol = GCloudVolume(dataset_name, layer, mip=starting_mip)
+  vol = GCloudVolume(dataset_name, layer, mip=starting_mip, use_ls=False)
 
-  fullscales = downsample_scales.compute_near_isotropic_downsampling_scales(
-    size=vol.shape,
-    voxel_size=vol.resolution,
-    dimensions_to_downsample=[0,1,2],
-    # This expression computes the maximum number of downsamples that can be
-    # extracted. That is, how many times can we downsize and still be greater 
-    # than or equal to the underlying chunk size? 
-    max_downsampling=int(reduce(operator.mul, vol.shape / vol.underlying )),
-  )
+  def get_factors(chunk_size):
+    fullscales = downsample_scales.compute_xy_plane_downsampling_scales(
+      size=chunk_size,
+      voxel_size=vol.resolution,
+      # # This expression computes the maximum number of downsamples that can be
+      # # extracted. That is, how many times can we downsize and still be greater 
+      # # than or equal to the underlying chunk size? 
+      # max_downsampling=int(reduce(operator.mul, chunk_size / vol.underlying )),
+    )
 
-  fullscales = [ Vec3(*scale) for scale in fullscales ] 
-  scales = []
-  for i in xrange(1, len(fullscales)):
-    scales.append( fullscales[i] / fullscales[i - 1]  )
+    fullscales = [ Vec3(*scale) for scale in fullscales ] 
+    deltas = []
+    for i in xrange(1, len(fullscales)):
+      deltas.append( fullscales[i] / fullscales[i - 1]  )
 
-  fullscales = fullscales[1:] # omit (1,1,1)
+    return deltas, fullscales[1:] # omit (1,1,1)
 
   compress = (vol.layer_type == 'segmentation')
   storage = Storage(dataset_name, layer, compress)
-  downsampled_img = vol[:,:,:]
 
-  if vol.layer_type == 'image':
-    downsamplefn = downsample.downsample_with_averaging
-  elif vol.layer_type == 'segmentation':
-    downsamplefn = downsample.downsample_segmentation
-  else:
-    downsamplefn = downsample.downsample_with_striding
+  scales, fullscales = get_factors( min2(DEFAULT_CHUNK_SIZE, vol.shape) )
+  for totalfactor3 in fullscales:
+    vol.addScale(totalfactor3 * vol.downsample_ratio) # total downsample ratio for new scale
 
-  for totalfactor3, factor3 in zip(fullscales, scales):
-    scale = vol.addScale(totalfactor3 * vol.downsample_ratio) # total downsample ratio for new scale
-    downsampled_img = downsamplefn(downsampled_img, factor3)
+  vol.commit()
 
-    image_chunks = generate_chunks(downsampled_img, vol.underlying, vol.voxel_offset)
+  for bigchunk, bigstart, bigend in generate_big_chunks(vol):
+    scales, fullscales = get_factors(bigchunk.shape)
 
-    for img_chunk, filename in tqdm(image_chunks, desc="{} Chunks".format(totalfactor3)):
-      if scale["encoding"] == "jpeg":
-        encoded = chunks.encode_jpeg(img_chunk)
-      elif scale["encoding"] == "npz":
-        encoded = chunks.encode_npz(img_chunk)
-      elif scale["encoding"] == "raw":
-        encoded = chunks.encode_raw(img_chunk)
-      else:
-        raise NotImplemented
+    current_mip = vol.mip
+    downsampled_img = bigchunk
 
-      storage.add_file(filename, encoded)
+    multiplied_factor = Vec3(1,1,1)
 
-    storage.flush(scale['key'])
+    for factor3, totalfactor3 in tqdm(zip(scales, fullscales), desc="Generating MIP " + str(current_mip + 1)):
+      current_mip += 1
 
-    vol.commit()
+      multiplied_factor *= factor3
+
+      downsampled_img = downsample.method(vol.layer_type)(downsampled_img, factor3)
+      image_chunks = generate_neuroglancer_chunks(downsampled_img, vol.underlying)
+
+      bounds = vol.mip_bounds(current_mip)
+
+      for img_chunk, chunkstart, chunkend in tqdm(image_chunks, desc="{} Chunks".format(totalfactor3)):
+        startpt = (bigstart / multiplied_factor) + chunkstart
+        endpt = (bigstart / multiplied_factor) + chunkend
+
+        startpt = min2(startpt, bounds.maxpt)
+        endpt = min2(endpt, bounds.maxpt)
+
+        if np.array_equal(startpt, endpt):
+          continue
+
+        filename = '{}-{}_{}-{}_{}-{}'.format(
+          startpt.x, endpt.x,
+          startpt.y, endpt.y,
+          startpt.z, endpt.z
+        ) 
+
+        encoded = chunks.encode(img_chunk, vol.mip_encoding(current_mip))
+
+        storage.add_file(filename, encoded)
+
+      storage.flush(vol.mip_key(current_mip))
 
 def generate_jpegs(dataset_name, layer, mip):
   """You can use and modify this function to visualize the data you pull down"""

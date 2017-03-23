@@ -15,16 +15,31 @@ class GCloudVolume(Volume):
   def __init__(self, dataset_name, layer, mip, cache_files=True, use_ls=True):
     super(self.__class__, self).__init__()
 
-    self.dataset_name = dataset_name
-    self.layer = layer
+    # You can access these two with properties
+    self._dataset_name = dataset_name
+    self._layer = layer
+
     self.mip = mip
     
     self.cache_files = cache_files
     self.use_ls = use_ls
 
-    blob = self.__getInfoBlob()
+    self.refreshInfo()
 
+    try:
+      self.mip = self.available_mips[self.mip]
+    except:
+      raise Exception("MIP {} has not been generated.".format(self.mip))
+
+  def refreshInfo(self):
+    blob = self.__getInfoBlob()
     self.info = json.loads(blob.download_as_string())
+    return self
+
+  def commit(self):
+    blob = self.__getInfoBlob()
+    blob.upload_from_string(json.dumps(self.info), 'application/json')
+    return self
 
   def __getInfoBlob(self):
     client = gstorage.Client(project=lib.GCLOUD_PROJECT_NAME)
@@ -33,40 +48,32 @@ class GCloudVolume(Volume):
     info_path = os.path.join(self.dataset_name, self.layer, 'info')
     return gstorage.blob.Blob(info_path, bucket)
 
-  def addScale(self, factor):
-    # e.g. {"encoding": "raw", "chunk_sizes": [[64, 64, 64]], "key": "4_4_40", 
-    # "resolution": [4, 4, 40], "voxel_offset": [0, 0, 0], 
-    # "size": [2048, 2048, 256]}
-    fullres = self.info['scales'][0]
+  @property
+  def dataset_name(self):
+    return self._dataset_name
 
-    newscale = {
-      u"encoding": fullres['encoding'],
-      u"chunk_sizes": fullres['chunk_sizes'],
-      u"resolution": list( Vec3(*fullres['resolution']) * factor ),
-      u"voxel_offset": list(np.ceil(Vec3(*fullres['voxel_offset']) / Vec3(*factor)).astype(int) ),
-      u"size": list(np.ceil(Vec3(*fullres['size']) / Vec3(*factor)).astype(int)),
-    }
+  @dataset_name.setter
+  def dataset_name(self, name):
+    if name != self._dataset_name:
+      self._dataset_name = name
+      self.refreshInfo()
+  @property
 
-    newscale[u'key'] = unicode("_".join([ str(res) for res in newscale['resolution']]))
+  def layer(self):
+    return self._layer
 
-    new_res = np.array(newscale['resolution'], dtype=int)
+  @layer.setter
+  def layer(self, name):
+    if name != self._layer:
+      self._layer = name
+      self.refreshInfo()
 
-    preexisting = False
-    for index, scale in enumerate(self.info['scales']):
-      res = np.array(scale['resolution'], dtype=int)
-      if np.array_equal(new_res, res):
-        preexisting = True
-        self.info['scales'][index] = newscale
-        break
+  @property
+  def scale(self):
+    return self.mip_scale(self.mip)
 
-    if not preexisting:    
-      self.info['scales'].append(newscale)
-
-    return newscale
-
-  def commit(self):
-    blob = self.__getInfoBlob()
-    blob.upload_from_string(json.dumps(self.info), 'application/json')
+  def mip_scale(self, mip):
+    return self.info['scales'][mip]
 
   @property
   def base_cloudpath(self):
@@ -128,18 +135,51 @@ class GCloudVolume(Volume):
     return Vec3(*self.info['scales'][mip]['chunk_sizes'][0])
 
   @property
-  def volume_size(self):
-    return self.mip_volume_size(self.mip)
+  def key(self):
+    return self.mip_key(self.mip)
 
-  def mip_volume_size(self, mip):
-    return Vec3(*self.info['scales'][mip]['size'])
+  def mip_key(self, mip):
+    return self.info['scales'][mip]['key']
 
   @property
-  def layer_key(self):
-    return self.mip_layer_key(self.mip)
+  def bounds(self):
+    return self.mip_bounds(self.mip)
 
-  def mip_layer_key(self, mip):
-    return self.info['scales'][self.mip]['key']
+  def mip_bounds(self, mip):
+    offset = self.mip_voxel_offset(mip)
+    shape = self.mip_shape(mip)
+    return Bbox( offset, offset + shape )
+
+  def addScale(self, factor):
+    # e.g. {"encoding": "raw", "chunk_sizes": [[64, 64, 64]], "key": "4_4_40", 
+    # "resolution": [4, 4, 40], "voxel_offset": [0, 0, 0], 
+    # "size": [2048, 2048, 256]}
+    fullres = self.info['scales'][0]
+
+    newscale = {
+      u"encoding": fullres['encoding'],
+      u"chunk_sizes": fullres['chunk_sizes'],
+      u"resolution": list( Vec3(*fullres['resolution']) * factor ),
+      u"voxel_offset": list(np.ceil(Vec3(*fullres['voxel_offset']) / Vec3(*factor)).astype(int) ),
+      u"size": list(np.ceil(Vec3(*fullres['size']) / Vec3(*factor)).astype(int)),
+    }
+
+    newscale[u'key'] = unicode("_".join([ str(res) for res in newscale['resolution']]))
+
+    new_res = np.array(newscale['resolution'], dtype=int)
+
+    preexisting = False
+    for index, scale in enumerate(self.info['scales']):
+      res = np.array(scale['resolution'], dtype=int)
+      if np.array_equal(new_res, res):
+        preexisting = True
+        self.info['scales'][index] = newscale
+        break
+
+    if not preexisting:    
+      self.info['scales'].append(newscale)
+
+    return newscale
 
   def __getitem__(self, slices):
     slices = list(slices)
@@ -163,8 +203,8 @@ class GCloudVolume(Volume):
     maxpt = Vec3(*[ slc.stop for slc in slices ]) * self.downsample_ratio
     steps = Vec3(*[ slc.step for slc in slices ])
 
-    minpt += self.voxel_offset
-    maxpt += self.voxel_offset
+    minpt += self.voxel_offset * self.downsample_ratio
+    maxpt += self.voxel_offset * self.downsample_ratio
 
     savedir = os.path.join(lib.COMMON_STAGING_DIR, 'gcloud', self.dataset_name, self.layer, str(self.mip))
 
@@ -176,15 +216,16 @@ class GCloudVolume(Volume):
     )
 
   def _cutout(self, xmin, xmax, ymin, ymax, zmin, zmax, xstep=1, ystep=1, zstep=1, savedir=None):
-    
+
     requested_bbox = Bbox(Vec3(xmin, ymin, zmin), Vec3(xmax, ymax, zmax)) / self.downsample_ratio
-    volume_bbox = Bbox.from_vec(self.volume_size) # volume size in voxels
+    volume_bbox = Bbox.from_vec(self.shape) # volume size in voxels
     volume_bbox += self.voxel_offset
 
     realized_bbox = requested_bbox.fit_to_chunk_size(self.underlying)
     realized_bbox = Bbox.clamp(requested_bbox, volume_bbox)
     
-    cloudpaths = self.__cloudpaths(realized_bbox, volume_bbox, self.layer_key, self.underlying)
+    cloudpaths = self.__cloudpaths(realized_bbox, volume_bbox, self.key, self.underlying)
+
     renderbuffer = np.zeros(shape=realized_bbox.size3(), dtype=self.data_type)
 
     files = lib.gcloudFileIterator(cloudpaths, savedir, use_ls=self.use_ls, compress=(self.encoding == 'raw'))
