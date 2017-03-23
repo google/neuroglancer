@@ -38,6 +38,8 @@ DATA_PATH_REGEX = re.compile(
 
 MESH_PATH_REGEX = re.compile(r'^/neuroglancer/mesh/([^/]+)/([0-9]+)$')
 
+SKELETON_PATH_REGEX = re.compile(r'^/neuroglancer/skeleton/([^/]+)/([0-9]+)$')
+
 STATIC_PATH_REGEX = re.compile(r'/static/([^/]+)/((?:[a-zA-Z0-9_\-][a-zA-Z0-9_\-.]*)?)$')
 
 global_static_content_source = None
@@ -81,6 +83,10 @@ class RequestHandler(BaseHTTPRequestHandler):
         m = re.match(MESH_PATH_REGEX, self.path)
         if m is not None:
             self.handle_mesh_request(m.group(1), int(m.group(2)))
+            return
+        m = re.match(SKELETON_PATH_REGEX, self.path)
+        if m is not None:
+            self.handle_skeleton_request(m.group(1), int(m.group(2)))
             return
         m = re.match(INFO_PATH_REGEX, self.path)
         if m is not None:
@@ -163,6 +169,27 @@ class RequestHandler(BaseHTTPRequestHandler):
         self.send_header('Access-Control-Allow-Origin', '*')
         self.end_headers()
         self.wfile.write(encoded_mesh)
+
+    def handle_skeleton_request(self, key, object_id):
+        vol = self.server.volumes.get(key)
+        if vol is None:
+            self.send_error(404)
+        if vol.skeletons is None:
+            self.send_error(405, 'Skeletons not supported for volume')
+            return
+
+        skeleton = vol.skeletons.get_skeleton(object_id)
+        if skeleton is None:
+            self.send_error(404, 'Skeleton not available for specified object id')
+            return
+        encoded_skeleton = skeleton.encode(vol.skeletons)
+
+        self.send_response(200)
+        self.send_header('Content-type', 'application/octet-stream')
+        self.send_header('Content-length', len(encoded_skeleton))
+        self.send_header('Access-Control-Allow-Origin', '*')
+        self.end_headers()
+        self.wfile.write(encoded_skeleton)
 
     def log_message(self, format, *args):
         if debug:

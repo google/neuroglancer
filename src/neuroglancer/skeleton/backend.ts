@@ -20,6 +20,7 @@ import {decodeVertexPositionsAndIndices} from 'neuroglancer/mesh/backend';
 import {SegmentationLayerSharedObjectCounterpart} from 'neuroglancer/segmentation_display_state/backend';
 import {forEachVisibleSegment, getObjectKey} from 'neuroglancer/segmentation_display_state/base';
 import {SKELETON_LAYER_RPC_ID} from 'neuroglancer/skeleton/base';
+import {TypedArray} from 'neuroglancer/util/array';
 import {Endianness} from 'neuroglancer/util/endian';
 import {Uint64} from 'neuroglancer/util/uint64';
 import {registerSharedObject, RPC} from 'neuroglancer/worker_rpc';
@@ -30,6 +31,7 @@ const SKELETON_CHUNK_PRIORITY = 60;
 export class SkeletonChunk extends Chunk {
   objectId = new Uint64();
   vertexPositions: Float32Array|null = null;
+  vertexAttributes: TypedArray[]|null = null;
   indices: Uint32Array|null = null;
   constructor() { super(); }
 
@@ -38,22 +40,56 @@ export class SkeletonChunk extends Chunk {
     this.objectId.assign(objectId);
   }
   freeSystemMemory() { this.vertexPositions = this.indices = null; }
+
+  private getVertexAttributeBytes() {
+    let total = this.vertexPositions!.byteLength;
+    const {vertexAttributes} = this;
+    if (vertexAttributes != null) {
+      vertexAttributes.forEach(a => {
+        total += a.byteLength;
+      });
+    }
+    return total;
+  }
+
   serialize(msg: any, transfers: any[]) {
     super.serialize(msg, transfers);
-    let {vertexPositions, indices} = this;
-    msg['vertexPositions'] = vertexPositions;
+    console.log('serialize called', this.toString());
+    const vertexPositions = this.vertexPositions!;
+    const indices = this.indices!;
+    let vertexDataBytes = vertexPositions.byteLength;
     msg['indices'] = indices;
-    let vertexPositionsBuffer = vertexPositions!.buffer;
-    transfers.push(vertexPositionsBuffer);
-    let indicesBuffer = indices!.buffer;
-    if (indicesBuffer !== vertexPositionsBuffer) {
-      transfers.push(indicesBuffer);
+    transfers.push(indices.buffer);
+
+    const {vertexAttributes} = this;
+    if (vertexAttributes != null && vertexAttributes.length > 0) {
+      const vertexData = new Uint8Array(this.getVertexAttributeBytes());
+      vertexData.set(new Uint8Array(
+          vertexPositions.buffer, vertexPositions.byteOffset, vertexPositions.byteLength));
+      let vertexAttributeOffsets = msg['vertexAttributeOffsets'] =
+        new Uint32Array(vertexAttributes.length + 1);
+      vertexAttributeOffsets[0] = 0;
+      let offset = vertexPositions.byteLength;
+      vertexAttributes.forEach((a, i) => {
+        vertexAttributeOffsets[i + 1] = offset;
+        vertexData.set(new Uint8Array(a.buffer, a.byteOffset, a.byteLength), offset);
+        offset += a.byteLength;
+      });
+      transfers.push(vertexData.buffer);
+      msg['vertexAttributes'] = vertexData;
+    } else {
+      msg['vertexAttributes'] = new Uint8Array(
+          vertexPositions.buffer, vertexPositions.byteOffset, vertexPositions.byteLength);
+      msg['vertexAttributeOffsets'] = Uint32Array.of(0);
+      if (vertexPositions.buffer !== transfers[0]) {
+        transfers.push(vertexPositions.buffer);
+      }
     }
-    this.vertexPositions = this.indices = null;
+    this.vertexPositions = this.indices = this.vertexAttributes = null;
   }
   downloadSucceeded() {
     this.systemMemoryBytes = this.gpuMemoryBytes =
-        this.vertexPositions!.byteLength + this.indices!.byteLength;
+        this.indices!.byteLength + this.getVertexAttributeBytes();
     super.downloadSucceeded();
   }
 };
