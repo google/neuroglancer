@@ -94,7 +94,7 @@ export function makeRequest(
           --numPendingRequests;
           cancellationToken.remove(abort);
           resolve(this.response);
-        } else if (status === 403 || status === 401) {
+        } else if (status === 401) {
           // Authorization needed.
           getToken(token).then(start);
         } else {
