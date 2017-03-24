@@ -346,6 +346,13 @@ class Bbox(object):
 
       return Bbox( (xmin, ymin, zmin), (xmax, ymax, zmax) )
 
+    def to_filename(self):
+      return '{}-{}_{}-{}_{}-{}'.format(
+        self.minpt.x, self.maxpt.x,
+        self.minpt.y, self.maxpt.y,
+        self.minpt.z, self.maxpt.z,
+      )
+
     @classmethod
     def clamp(cls, bbx0, bbx1):
       result = bbx0.clone()

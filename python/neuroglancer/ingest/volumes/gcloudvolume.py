@@ -6,9 +6,9 @@ import numpy as np
 from tqdm import tqdm
 
 import lib
-from lib import clamp, xyzrange, Vec3, Bbox, min2
+from lib import clamp, xyzrange, Vec3, Bbox, min2, mkdir, COMMON_STAGING_DIR
 import neuroglancer
-from volumes import Volume
+from volumes import Volume, VolumeCutout
 from google.cloud import storage as gstorage
 
 class GCloudVolume(Volume):
@@ -247,7 +247,16 @@ class GCloudVolume(Volume):
     ld = global_deltas.minpt # low delta
     hd = realized_bbox.maxpt - global_deltas.maxpt # high delta
 
-    return renderbuffer[ ld.x:hd.x:xstep, ld.y:hd.y:ystep, ld.z:hd.z:zstep ] 
+    renderbuffer = renderbuffer[ ld.x:hd.x:xstep, ld.y:hd.y:ystep, ld.z:hd.z:zstep ] 
+
+    return VolumeCutout(
+      buf=renderbuffer,
+      dataset_name=self.dataset_name,
+      layer=self.layer,
+      mip=self.mip,
+      layer_type=self.layer_type,
+      bounds=realized_bbox,
+    )
 
   def __decode(self, filedata, shape):
     if len(filedata) == 0:
@@ -274,6 +283,5 @@ class GCloudVolume(Volume):
         yield os.path.join(resolution_cloudpath, filename)
 
     return [ path for path in cloudpathgenerator() ] 
-
 
 

@@ -1,7 +1,13 @@
-import numpy as np
-import requests
+import os
 import re
+
 import h5py
+import requests
+import numpy as np
+from tqdm import tqdm
+from PIL import Image
+
+from neuroglancer.ingest.lib import mkdir, COMMON_STAGING_DIR
 
 class Volume(object):
 
@@ -132,3 +138,60 @@ class NumpyVolume(Volume):
         Asumes x,y,z coordinates
         """
         return self._data.__getitem__(slices)
+
+
+class VolumeCutout(np.ndarray):
+
+  def __new__(cls, buf, dataset_name, layer, mip, layer_type, bounds, *args, **kwargs):
+    return super(VolumeCutout, cls).__new__(cls, shape=buf.shape, buffer=buf, dtype=buf.dtype)
+
+  def __init__(self, buf, dataset_name, layer, mip, layer_type, bounds, *args, **kwargs):
+    super(VolumeCutout, self).__init__(self, shape=buf.shape, buffer=buf, dtype=buf.dtype)
+    
+    self.dataset_name = dataset_name
+    self.layer = layer
+    self.mip = mip
+    self.layer_type = layer_type
+    self.bounds = bounds
+
+  def save_images(self, axis='z', directory=None, image_format="PNG"):
+
+    if directory is None:
+      directory = os.path.join(COMMON_STAGING_DIR, 'save_images', self.dataset_name, self.layer, str(self.mip), self.bounds.to_filename())
+    
+    mkdir(directory)
+
+    print "Saving to {}".format(directory)
+
+    indexmap = {
+        'x': 0,
+        'y': 1,
+        'z': 2,
+    }
+
+    index = indexmap[axis]
+
+    for level in tqdm(xrange(self.shape[index]), desc="Saving Images"):
+      if index == 0:
+        img = self[level, :, :]
+      elif index == 1:
+        img = self[:, level, :]
+      elif index == 2:
+        img = self[:, :, level]
+      else:
+        raise NotImplemented
+
+      # discovered that downloaded cube is in a weird rotated state.
+      # it requires a 90deg counterclockwise rotation on xy plane (leaving z alone)
+      # followed by a flip on Y
+      if axis == 'z':
+        img = np.flipud(np.rot90(img, 1)) 
+
+      img = Image.fromarray(img)
+
+      path = os.path.join(directory,'{}.{}'.format(level, image_format.lower()))
+
+      img.save(path, image_format)
+
+
+
