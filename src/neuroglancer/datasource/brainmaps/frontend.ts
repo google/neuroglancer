@@ -231,8 +231,8 @@ export function getVolume(
       {type: 'brainmaps:getVolume', instance, volumeId, changeSpec, options},
       () => Promise
                 .all([
-                  makeRequest(instance, 'GET', `/v1beta2/volumes/${volumeId}`, 'json'),
-                  makeRequest(instance, 'GET', `/v1beta2/objects/${volumeId}/meshes`, 'json'),
+                  makeRequest(instance, {method: 'GET', path: `/v1beta2/volumes/${volumeId}`, responseType: 'json'}),
+                  makeRequest(instance, {method: 'GET', path: `/v1beta2/objects/${volumeId}/meshes`, responseType: 'json'}),
                 ])
                 .then(
                     ([volumeInfoResponse, meshesResponse]) => new MultiscaleVolumeChunkSource(
@@ -320,8 +320,8 @@ export function getVolumeList(chunkManager: ChunkManager, instance: BrainmapsIns
   return chunkManager.memoize.getUncounted({instance, type: 'brainmaps:getVolumeList'}, () => {
     let promise = Promise
                       .all([
-                        makeRequest(instance, 'GET', '/v1beta2/projects', 'json'),
-                        makeRequest(instance, 'GET', '/v1beta2/volumes', 'json')
+                        makeRequest(instance, {method: 'GET', path: '/v1beta2/projects', responseType: 'json'}),
+                        makeRequest(instance, {method: 'GET', path: '/v1beta2/volumes', responseType: 'json'})
                       ])
                       .then(
                           ([projectsResponse, volumesResponse]) =>
@@ -345,7 +345,7 @@ export function getChangeStackList(
   return chunkManager.memoize.getUncounted(
       {instance, type: 'brainmaps:getChangeStackList', volumeId}, () => {
         let promise: Promise<string[]> =
-            makeRequest(instance, 'GET', `/v1beta2/changes/${volumeId}/change_stacks`, 'json')
+            makeRequest(instance, {method: 'GET', path: `/v1beta2/changes/${volumeId}/change_stacks`, responseType: 'json'})
                 .then(response => parseChangeStackList(response));
         const description = `change stacks for ${volumeId}`;
         StatusMessage.forPromise(promise, {
