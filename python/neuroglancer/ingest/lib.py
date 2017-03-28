@@ -8,6 +8,7 @@ import tempfile
 import shutil
 import gc
 import gzip
+import operator
 from itertools import product
 
 from google.cloud import storage
@@ -106,11 +107,12 @@ def gcloudFileIterator(cloudpaths, keep_files=None, use_ls=True, compress=False)
   requested = set([ os.path.basename(path) for path in cloudpaths ])
   already_have = requested.intersection(set(filenames))
   to_download = requested.difference(already_have)
-  
+
   # ask gcloud which files are in the directory we care about
   # and filter out the ones it doesn't have. This is much faster than
   # requesting them one by one and getting a 404.
   if use_ls:
+    print "Downloading directoring listing. If this is not desired, set use_ls=False."
     in_cloud = set( gcloud_ls(os.path.dirname(cloudpaths[0])) )
     future_failed_downloads = to_download.difference(in_cloud)
     to_download = to_download.difference(future_failed_downloads)
@@ -260,62 +262,63 @@ def min2(a, b, dtype=np.int32):
 def clamp(val, low, high):
   return min(max(val, low), high)
 
-class Vec3(np.ndarray):
-    def __new__(cls, x, y, z, dtype=int):
-      return super(Vec3, cls).__new__(cls, shape=(3,), buffer=np.array([x,y,z]).astype(dtype), dtype=dtype)
-
-    @classmethod
-    def triple(cls, x):
-      return Vec3(x,x,x)
+class Vec(np.ndarray):
+    def __new__(cls, *args, **kwargs):
+      dtype = kwargs['dtype'] if 'dtype' in kwargs else int
+      return super(Vec, cls).__new__(cls, shape=(len(args),), buffer=np.array(args).astype(dtype), dtype=dtype)
 
     @classmethod
     def clamp(cls, val, minvec, maxvec):
-      return Vec3(*min2(max2(val, minvec), maxvec))
-
-    @property
-    def x(self):
-        return self[0]
-
-    @x.setter
-    def x(self, val):
-        self[0] = val
-
-    @property
-    def y(self):
-        return self[1]
-
-    @y.setter
-    def y(self, val):
-        self[1] = val
-
-    @property
-    def z(self):
-        return self[2]
-
-    @z.setter
-    def z(self, val):
-        self[2] = val
+      return Vec(*min2(max2(val, minvec), maxvec))
 
     def clone(self):
-      return Vec3(self[0], self[1], self[2])
+      return Vec(*self[:], dtype=self.dtype)
 
     def null(self):
         return self.length() <= 10 * np.finfo(np.float32).eps
 
     def dot(self, vec):
-        return (self.x * vec.x) + (self.y * vec.y) + (self.z * vec.z)
+      return sum(self * vec)
+
+    def length2(self):
+        return self.dot(self)
 
     def length(self):
-        return math.sqrt(self[0] * self[0] + self[1] * self[1] + self[2] + self[2])
+        return math.sqrt(self.dot(self))
 
     def rectVolume(self):
-        return self[0] * self[1] * self[2]
+        return reduce(operator.mul, self)
 
     def __hash__(self):
         return repr(self)
 
     def __repr__(self):
-        return "Vec3({},{},{})".format(self.x, self.y, self.z)
+      values = u",".join(self.astype(unicode))
+      return u"Vec({}, dtype={})".format(values, self.dtype)
+
+def __assign(self, val, index):
+  self[index] = val
+
+Vec.x = property(lambda self: self[0], lambda self,val: __assign(self,val,0))
+Vec.y = property(lambda self: self[1], lambda self,val: __assign(self,val,1))
+Vec.z = property(lambda self: self[2], lambda self,val: __assign(self,val,2))
+Vec.w = property(lambda self: self[3], lambda self,val: __assign(self,val,3))
+
+Vec.r = Vec.x
+Vec.g = Vec.y
+Vec.b = Vec.z
+Vec.a = Vec.w
+
+class Vec3(Vec):
+    def __new__(cls, x, y, z, dtype=int):
+      return super(Vec, cls).__new__(cls, shape=(3,), buffer=np.array([x,y,z]).astype(dtype), dtype=dtype)
+
+    @classmethod
+    def triple(cls, x):
+      return Vec3(x,x,x)
+
+    def __repr__(self):
+        return "Vec3({},{},{}, dtype={})".format(self.x, self.y, self.z, self.dtype)
 
 class Bbox(object):
 
@@ -338,7 +341,7 @@ class Bbox(object):
 
     @classmethod
     def from_filename(cls, filename):
-      match = re.match(r'^(\d+)-(\d+)_(\d+)-(\d+)_(\d+)-(\d+)', os.path.basename(filename))
+      match = re.search(r'(\d+)-(\d+)_(\d+)-(\d+)_(\d+)-(\d+)(?:\.gz)?$', os.path.basename(filename))
 
       (xmin, xmax,
        ymin, ymax,
@@ -346,12 +349,34 @@ class Bbox(object):
 
       return Bbox( (xmin, ymin, zmin), (xmax, ymax, zmax) )
 
+    @classmethod
+    def from_slices(cls, slices3):
+      return Bbox(
+        (slices3[0].start, slices3[1].start, slices3[2].start), 
+        (slices3[0].stop, slices3[1].stop, slices3[2].stop) 
+      )
+
     def to_filename(self):
       return '{}-{}_{}-{}_{}-{}'.format(
         self.minpt.x, self.maxpt.x,
         self.minpt.y, self.maxpt.y,
         self.minpt.z, self.maxpt.z,
       )
+
+    def to_slices(self):
+      return (
+        slice(self.minpt.x, self.maxpt.x),
+        slice(self.minpt.y, self.maxpt.y),
+        slice(self.minpt.z, self.maxpt.z)
+      )
+
+    @classmethod
+    def union(cls, *args):
+      result = args[0].clone()
+      for bbx in args:
+        result.minpt = min2(result, bbx)
+        result.maxpt = max2(result, bbx)
+      return result
 
     @classmethod
     def clamp(cls, bbx0, bbx1):
@@ -369,11 +394,18 @@ class Bbox(object):
     def center(self):
       return (self.minpt + self.maxpt) / 2.0
 
-    def fit_to_chunk_size(self, chunk_size):
-      chunk_size = Vec3(*chunk_size)
+    def expand_to_chunk_size(self, chunk_size):
+      chunk_size = np.array(chunk_size, dtype=np.float32)
       result = self.clone()
-      result.minpt = result.minpt - np.mod(result.minpt, chunk_size)
-      result.maxpt = result.maxpt + (chunk_size - np.mod(result.maxpt, chunk_size))
+      result.minpt = np.floor(result.minpt / chunk_size) * chunk_size
+      result.maxpt = np.ceil(result.maxpt / chunk_size) * chunk_size 
+      return result
+
+    def shink_to_chunk_size(self, chunk_size):
+      chunk_size = np.array(chunk_size, dtype=np.float32)
+      result = self.clone()
+      result.minpt = np.ceil(result.minpt / chunk_size) * chunk_size
+      result.maxpt = np.floor(result.maxpt / chunk_size) * chunk_size 
       return result
 
     def contains(self, point):
@@ -443,7 +475,8 @@ def credentials_path():
     return os.path.join(self_dir, 'client-secret.json')
 
 def get_bucket_from_secrets():
-    client = storage.Client.from_service_account_json('client-secret.json')
+    client = storage.Client \
+            .from_service_account_json(credentials_path(), project=GCLOUD_PROJECT_NAME)
     return client.get_bucket(GCLOUD_BUCKET_NAME)
 
 def get_blob(name):

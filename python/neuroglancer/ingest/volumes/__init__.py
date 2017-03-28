@@ -1,5 +1,5 @@
-from volumes import Volume, HDF5Volume, NumpyVolume
-from gcloudvolume import GCloudVolume
+from volumes import *
+from gcloudvolume import *
 
 
 

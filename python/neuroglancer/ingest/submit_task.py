@@ -188,7 +188,7 @@ def create_downsampling_task(dataset_name, layer_name, downsample_ratio=[2, 2, 1
     info_blob = storage.get_blob(
                 '{}/{}/info'.format(dataset_name, layer_name))
     info = json.loads(info_blob.download_as_string())
-    next_scale = compute_next_scale(self._info['scales'][-1])
+    next_scale = compute_next_scale(info['scales'][-1], downsample_ratio)
     info['scales'].append(next_scale)
     storage.add_file(
         filename='info',
@@ -198,7 +198,7 @@ def create_downsampling_task(dataset_name, layer_name, downsample_ratio=[2, 2, 1
 
     # create tasks based on the new scale
     tq = TaskQueue()
-    for filename in iterate_over_chunks(next_scale)
+    for filename in iterate_over_chunks(next_scale):
         t = DownsampleTask(
            chunk_path="gs://neuroglancer/{}/{}/{}/{}".format(
                 dataset_name, layer_name, next_scale['key'], filename),
@@ -208,7 +208,7 @@ def create_downsampling_task(dataset_name, layer_name, downsample_ratio=[2, 2, 1
         t.execute()
         # tq.insert(t)
 
-def compute_next_scale(old_scale, downsample_ratio)
+def compute_next_scale(old_scale, downsample_ratio):
     next_scale = copy.deepcopy(old_scale)
     next_scale['resolution'] = [ r*v  for r,v in zip(next_scale['resolution'], downsample_ratio) ]
     next_scale['key'] = '_'.join(map(str,next_scale['resolution']))
@@ -277,7 +277,7 @@ def ingest_hdf5_example():
     upload_build_chunks(dataset_name, layer_name, volume, offset)
     create_info_file_from_build(dataset_name, layer_name, layer_type, resolution=resolution, encoding="jpeg")
     create_ingest_task(dataset_name, layer_name)
-    create_downsampling_task("snemi3d_v0","image")
+    create_downsampling_task(dataset_name,"image")
 
     #ingest segmentation
     layer_name = "segmentation"
@@ -286,16 +286,16 @@ def ingest_hdf5_example():
     upload_build_chunks(dataset_name, layer_name, volume, offset)
     create_info_file_from_build(dataset_name, layer_name, layer_type, resolution=resolution, encoding="raw")
     create_ingest_task(dataset_name, layer_name)
-    create_downsampling_task("snemi3d_v0","segmentation")
-    MeshTask(chunk_key="gs://neuroglancer/snemi3d_v0/segmentation/6_6_30",
+    create_downsampling_task(dataset_name,"segmentation")
+    MeshTask(chunk_key="gs://neuroglancer/"+dataset_name+"/segmentation/6_6_30",
              chunk_position="0-1024_0-1024_0-51",
-             info_path="gs://neuroglancer/snemi3d_v0/segmentation/info", 
+             info_path="gs://neuroglancer/"+dataset_name+"/segmentation/info",
              lod=0, simplification=5, segments=[]).execute()
-    MeshTask(chunk_key="gs://neuroglancer/snemi3d_v0/segmentation/6_6_30",
+    MeshTask(chunk_key="gs://neuroglancer/"+dataset_name+"/segmentation/6_6_30",
              chunk_position="0-1024_0-1024_50-100",
-             info_path="gs://neuroglancer/snemi3d_v0/segmentation/info", 
+             info_path="gs://neuroglancer/"+dataset_name+"/segmentation/info",
              lod=0, simplification=5, segments=[]).execute()
-    MeshManifestTask(info_path="gs://neuroglancer/snemi3d_v0/segmentation/info",
+    MeshManifestTask(info_path="gs://neuroglancer/"+dataset_name+"/segmentation/info",
                      lod=0).execute()
 
     #ingest affinities
@@ -307,9 +307,7 @@ def ingest_hdf5_example():
     upload_build_chunks(dataset_name, layer_name, volume, offset)
     create_info_file_from_build(dataset_name, layer_name, layer_type, resolution=resolution, encoding="raw")
     create_ingest_task(dataset_name, layer_name)
-
-    #FIXME gcloudvolume doesn't support num_channels > 1
-    create_downsampling_task("snemi3d_v0","affinities")
+    create_downsampling_task(dataset_name,"affinities")
 
     
 if __name__ == '__main__':   
@@ -326,3 +324,4 @@ if __name__ == '__main__':
     #                             layer_type="image",
     #                             resolution=[17,17,23])
     # create_ingest_task("e2198_v0","image")
+    pass

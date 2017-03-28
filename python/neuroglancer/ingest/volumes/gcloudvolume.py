@@ -7,12 +7,12 @@ from tqdm import tqdm
 
 import neuroglancer
 import neuroglancer.ingest.lib as lib
-from neuroglancer.ingest.lib import clamp, xyzrange, Vec3, Bbox, min2
-from neuroglancer.ingest.volumes import Volume, VolumeCutout
+from neuroglancer.ingest.lib import clamp, xyzrange, Vec, Vec3, Bbox, min2, Storage
+from neuroglancer.ingest.volumes import Volume, VolumeCutout, generate_slices
 from google.cloud import storage as gstorage
 
 class GCloudVolume(Volume):
-  def __init__(self, dataset_name, layer, mip, cache_files=True, use_ls=True):
+  def __init__(self, dataset_name, layer, mip=0, cache_files=True, use_ls=True, use_secrets=False):
     super(self.__class__, self).__init__()
 
     # You can access these two with properties
@@ -23,6 +23,9 @@ class GCloudVolume(Volume):
     
     self.cache_files = cache_files
     self.use_ls = use_ls
+    self.use_secrets = use_secrets
+
+    self._uncommitted_changes = []
 
     self.refreshInfo()
 
@@ -31,21 +34,34 @@ class GCloudVolume(Volume):
     except:
       raise Exception("MIP {} has not been generated.".format(self.mip))
 
+  @classmethod
+  def from_cloudpath(cls, cloudpath, mip=0, *args, **kwargs):
+    # e.g. gs://neuroglancer/DATASET/LAYER/info
+    match = re.match(r'(?:gs://)?([\d\w_\-]+)/([\d\w_\-]+)/([\d\w_\-]+)/?(?:info)?')
+    bucket, dataset_name, layer = match.groups()
+
+    return GCloudVolume(dataset_name, layer, mip, *args, **kwargs)
+
   def refreshInfo(self):
     blob = self.__getInfoBlob()
     self.info = json.loads(blob.download_as_string())
     return self
 
-  def commit(self):
+  def commitInfo(self):
     blob = self.__getInfoBlob()
     blob.upload_from_string(json.dumps(self.info), 'application/json')
     return self
 
   def __getInfoBlob(self):
+    info_path = os.path.join(self.dataset_name, self.layer, 'info')
+
+    # for cloud use
+    if self.use_secrets:
+      return lib.get_blob(info_path)
+
+    # generally for local use
     client = gstorage.Client(project=lib.GCLOUD_PROJECT_NAME)
     bucket = client.get_bucket(lib.GCLOUD_BUCKET_NAME)
-
-    info_path = os.path.join(self.dataset_name, self.layer, 'info')
     return gstorage.blob.Blob(info_path, bucket)
 
   @property
@@ -84,7 +100,15 @@ class GCloudVolume(Volume):
     return self.mip_shape(self.mip)
 
   def mip_shape(self, mip):
-    return Vec3(*self.info['scales'][mip]['size'])
+    size = self.mip_volume_size(mip)
+    return Vec(size.x, size.y, size.z, self.num_channels)
+
+  @property
+  def volume_size(self):
+    return self.mip_volume_size(self.mip)
+
+  def mip_volume_size(self, mip):
+    return Vec(*self.info['scales'][mip]['size'])
 
   @property
   def available_mips(self):
@@ -107,7 +131,7 @@ class GCloudVolume(Volume):
 
   @property
   def num_channels(self):
-    return self.info['num_channels']
+    return int(self.info['num_channels'])
 
   @property
   def voxel_offset(self):
@@ -147,7 +171,7 @@ class GCloudVolume(Volume):
 
   def mip_bounds(self, mip):
     offset = self.mip_voxel_offset(mip)
-    shape = self.mip_shape(mip)
+    shape = self.mip_volume_size(mip)
     return Bbox( offset, offset + shape )
 
   def addScale(self, factor):
@@ -182,22 +206,13 @@ class GCloudVolume(Volume):
     return newscale
 
   def __getitem__(self, slices):
-    slices = list(slices)
-
-    while len(slices) < 3:
-      slices.append( slice() )
-
-    maxsize = Vec3(*self.info['scales'][self.mip]['size'])
     
-    for index, slc in enumerate(slices):
-      if isinstance(slc, int) or isinstance(slc, float) or isinstance(slc, long):
-        slices[index] = slice(int(slc), int(slc)+1, 1)
-      else:
-        start = 0 if slc.start is None else clamp(slc.start, 0, maxsize[index])
-        end = maxsize[index] if slc.stop is None else clamp(slc.stop, 0, maxsize[index])
-        step = 1 if slc.step is None else slc.step
+    maxsize = list(self.volume_size)
+    maxsize.append(self.num_channels)
 
-        slices[index] =  slice(start, end, step)
+    slices = generate_slices(slices, maxsize)
+
+    channel_slice = slices.pop()
 
     minpt = Vec3(*[ slc.start for slc in slices ]) * self.downsample_ratio
     maxpt = Vec3(*[ slc.stop for slc in slices ]) * self.downsample_ratio
@@ -212,61 +227,104 @@ class GCloudVolume(Volume):
       xmin=minpt.x, xmax=maxpt.x, xstep=steps.x,
       ymin=minpt.y, ymax=maxpt.y, ystep=steps.y,
       zmin=minpt.z, zmax=maxpt.z, zstep=steps.z,
+      channel_slice=channel_slice,
       savedir=( savedir if self.cache_files else None ),
     )
 
-  def _cutout(self, xmin, xmax, ymin, ymax, zmin, zmax, xstep=1, ystep=1, zstep=1, savedir=None):
+  def _cutout(self, xmin, xmax, ymin, ymax, zmin, zmax, xstep=1, ystep=1, zstep=1, channel_slice=slice(None), savedir=None):
 
     requested_bbox = Bbox(Vec3(xmin, ymin, zmin), Vec3(xmax, ymax, zmax)) / self.downsample_ratio
     volume_bbox = Bbox.from_vec(self.shape) # volume size in voxels
     volume_bbox += self.voxel_offset
 
-    realized_bbox = requested_bbox.fit_to_chunk_size(self.underlying)
-    realized_bbox = Bbox.clamp(requested_bbox, volume_bbox)
-    
+    realized_bbox = requested_bbox.expand_to_chunk_size(self.underlying)
+    realized_bbox = Bbox.clamp(realized_bbox, volume_bbox)
+
     cloudpaths = self.__cloudpaths(realized_bbox, volume_bbox, self.key, self.underlying)
 
-    renderbuffer = np.zeros(shape=realized_bbox.size3(), dtype=self.data_type)
+    def multichannel_shape(bbox):
+      shape = bbox.size3()
+      return (shape[0], shape[1], shape[2], self.num_channels)
+
+    renderbuffer = np.zeros(shape=multichannel_shape(realized_bbox), dtype=self.data_type)
 
     files = lib.gcloudFileIterator(cloudpaths, savedir, use_ls=self.use_ls, compress=(self.encoding == 'raw'))
 
     for filehandle in tqdm(files, total=len(cloudpaths), desc="Rendering Image"):
       bbox = Bbox.from_filename(filehandle.name)
 
-      img3d = self.__decode(filehandle.read(), bbox.size3())
+      img3d = neuroglancer.chunks.decode(
+        filehandle.read(), self.encoding, multichannel_shape(bbox), self.data_type
+      )
       
       start = bbox.minpt - realized_bbox.minpt
-      end = min2(start + self.underlying, renderbuffer.shape )
-      delta = min2(end - start, img3d.shape)
+      end = min2(start + self.underlying, renderbuffer.shape[:3] )
+      delta = min2(end - start, img3d.shape[:3])
 
       end = start + delta
 
-      renderbuffer[ start.x:end.x, start.y:end.y, start.z:end.z ] = img3d[:delta.x,:delta.y,:delta.z]
+      renderbuffer[ start.x:end.x, start.y:end.y, start.z:end.z, : ] = img3d[ :delta.x, :delta.y, :delta.z, : ]
 
-    global_deltas = realized_bbox - Bbox.clamp(requested_bbox, volume_bbox)
-    ld = global_deltas.minpt # low delta
-    hd = realized_bbox.maxpt - global_deltas.maxpt # high delta
+    requested_bbox = Bbox.clamp(requested_bbox, volume_bbox)
+    lp = requested_bbox.minpt - realized_bbox.minpt # low realized point
+    hp = requested_bbox.maxpt 
 
-    renderbuffer = renderbuffer[ ld.x:hd.x:xstep, ld.y:hd.y:ystep, ld.z:hd.z:zstep ] 
+    renderbuffer = renderbuffer[ lp.x:hp.x:xstep, lp.y:hp.y:ystep, lp.z:hp.z:zstep, channel_slice ] 
 
-    return VolumeCutout(
-      buf=renderbuffer,
-      dataset_name=self.dataset_name,
-      layer=self.layer,
-      mip=self.mip,
-      layer_type=self.layer_type,
-      bounds=realized_bbox,
-    )
+    return VolumeCutout.from_volume(self, renderbuffer, realized_bbox)
+  
+  def __setitem__(self, slices, value):
+    self._uncommitted_changes.append( (slices, value) )
 
-  def __decode(self, filedata, shape):
-    if len(filedata) == 0:
-      return np.zeros(shape=shape, dtype=self.data_type)
-    elif self.encoding == 'jpeg':
-      return neuroglancer.chunks.decode_jpeg(filedata, shape=shape, dtype=self.data_type)
-    elif self.encoding == 'raw':
-      return neuroglancer.chunks.decode_raw(filedata, shape=shape, dtype=self.data_type)
-    else:
-      raise NotImplementedError(encoding)
+  def commitData(self):
+    allslices = map(lambda x: x[0], self._uncommitted_changes)
+    allslices = [ generate_slices(slices, self.volume_size) for slices in allslices ]
+    allboxes = map(Bbox.from_slices, allslices)
+    
+    big_bbox = Bbox.union(*allboxes)
+    subvol = self[ big_bbox.to_slices() ]
+
+    for slcs, img in self._uncommitted_changes:
+      bbox = Bbox.from_slices(slcs) - big_bbox.minpt
+      subvol[ bbox.to_slices() ] = img 
+
+    self.upload_image(subvol, big_bbox.minpt)
+    self._uncommitted_changes = []
+
+  def upload_image(self, img, offset):
+    shape = Vec(*img.shape)
+    offset = Vec(*offset)
+
+    bounds = Bbox( offset, shape + offset)
+    bounds = Bbox.clamp(bounds, self.volume_size)
+    bounds = bounds.shrink_to_chunk_size( self.underlying )
+
+    img_offset = bounds.minpt - offset
+    img_end = Vec.clamp(bounds.size3() + img_offset, Vec(0,0,0), shape)
+
+    def generate_chunks():
+      for startpt in xyzrange( img_offset, img_end, self.underlying ):
+        endpt = min2(startpt + self.underlying, shape)
+        chunkimg = img[ startpt.x:endpt.x, startpt.y:endpt.y, startpt.z:endpt.z ]
+        yield chunkimg, startpt + bounds.minpt, endpt + bounds.minpt
+
+    compress = (self.layer_type == 'segmentation')
+    storage = Storage(self.dataset_name, self.layer, compress)
+
+    for imgchunk, spt, ept in generate_chunks():
+      if np.array_equal(spt, ept):
+          continue
+
+      filename = "{}-{}_{}-{}_{}-{}".format(
+          spt.x, ept.x,
+          spt.y, ept.y, 
+          spt.z, ept.z
+        )
+
+      encoded = neuroglancer.chunks.encode(imgchunk, self.encoding)
+      storage.add_file(filename, encoded)
+
+    storage.flush(self.key)
 
   def __cloudpaths(self, bbox, volume_bbox, key, chunk_size):
     def cloudpathgenerator():

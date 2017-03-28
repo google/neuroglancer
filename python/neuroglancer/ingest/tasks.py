@@ -210,7 +210,7 @@ class DownsampleTask(object):
         self._current_index = self._find_scale_idx()
         current_resolution = self._info['scales'][self._current_index]['resolution']
         higher_resolution = self._info['scales'][self._current_index-1]['resolution']
-        self._downsample_ratio = [ c/h for c,h in zip(current_resolution, higher_resolution)]
+        self._downsample_ratio = [ c/h for c,h in zip(current_resolution, higher_resolution)] + [1]
 
     def _find_scale_idx(self):
         for scale_idx, scale in enumerate(self._info['scales']):
@@ -219,7 +219,7 @@ class DownsampleTask(object):
                 return scale_idx
 
     def _download_input_chunk(self):
-        volume = GCloudVolume(self._dataset_name, self._layer_name, self._current_index-1, cache_files=False)
+        volume = GCloudVolume(self._dataset_name, self._layer_name, mip=self._current_index-1, cache_files=False)
         chunk = volume[
             self._xmin * self._downsample_ratio[0]:self._xmax * self._downsample_ratio[0],
             self._ymin * self._downsample_ratio[1]:self._ymax * self._downsample_ratio[1],
@@ -341,7 +341,7 @@ class MeshTask(object):
                             self._zmin:self._zmax]
 
     def _compute_meshes(self):
-        data = np.swapaxes(self._data, 0,2)
+        data = np.swapaxes(self._data[:,:,:,0], 0,2)
         self._mesher.mesh(data.flatten(), *data.shape)
         for obj_id in tqdm(self._mesher.ids()):
             self._storage.add_file(
