@@ -35,6 +35,7 @@ class Layer(object):
                  voxel_offset=None,
                  offset=None,
                  shader=None,
+                 skeleton_shader=None,
                  visible=None,
                  **kwargs):
         if offset is None and voxel_offset is None:
@@ -51,13 +52,21 @@ class Layer(object):
         extra_args = self.extra_args = dict()
         if shader is not None:
             extra_args['shader'] = shader
+        if skeleton_shader is not None:
+            extra_args['skeletonShader'] = skeleton_shader
         if visible is not None:
             extra_args['visible'] = visible
 
     def get_layer_spec(self, server_url):
-        return dict(type=self.volume.volume_type,
+        spec = dict(type=self.volume.volume_type,
                     source='python://%s/%s' % (server_url, self.volume.token),
                     **self.extra_args)
+        if self.volume.skeletons is not None:
+            spec['skeletons'] = 'python://%s/%s?%s' % (
+                server_url, self.volume.token,
+                json.dumps(self.volume.skeletons.get_vertex_attributes_spec()))
+            spec['mesh'] = None
+        return spec
 
 
 class BaseViewer(object):

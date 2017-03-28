@@ -21,16 +21,19 @@
 
 import {ChunkManager} from 'neuroglancer/chunk_manager/frontend';
 import {registerDataSourceFactory} from 'neuroglancer/datasource/factory';
-import {MeshSourceParameters, VolumeChunkEncoding, VolumeChunkSourceParameters} from 'neuroglancer/datasource/python/base';
+import {MeshSourceParameters, SkeletonSourceParameters, VolumeChunkEncoding, VolumeChunkSourceParameters} from 'neuroglancer/datasource/python/base';
 import {defineParameterizedMeshSource} from 'neuroglancer/mesh/frontend';
+import {VertexAttributeInfo} from 'neuroglancer/skeleton/base';
+import {parameterizedSkeletonSource} from 'neuroglancer/skeleton/frontend';
 import {DataType, DEFAULT_MAX_VOXELS_PER_CHUNK_LOG2, getNearIsotropicBlockSize, getTwoDimensionalBlockSize, VolumeChunkSpecification, VolumeSourceOptions, VolumeType} from 'neuroglancer/sliceview/base';
 import {defineParameterizedVolumeChunkSource, MultiscaleVolumeChunkSource as GenericMultiscaleVolumeChunkSource} from 'neuroglancer/sliceview/frontend';
 import {mat4, vec3} from 'neuroglancer/util/geom';
 import {openShardedHttpRequest, sendHttpRequest} from 'neuroglancer/util/http_request';
-import {parseArray, parseFixedLengthArray, verify3dDimensions, verify3dScale, verify3dVec, verifyEnumString, verifyObject, verifyObjectProperty, verifyPositiveInt, verifyString} from 'neuroglancer/util/json';
+import {parseArray, parseFixedLengthArray, verify3dDimensions, verify3dScale, verify3dVec, verifyEnumString, verifyObject, verifyObjectAsMap, verifyObjectProperty, verifyPositiveInt, verifyString} from 'neuroglancer/util/json';
 
 const VolumeChunkSource = defineParameterizedVolumeChunkSource(VolumeChunkSourceParameters);
 const MeshSource = defineParameterizedMeshSource(MeshSourceParameters);
+const BaseSkeletonSource = parameterizedSkeletonSource(SkeletonSourceParameters);
 
 interface ScaleInfo {
   key: string;
@@ -158,6 +161,37 @@ export class MultiscaleVolumeChunkSource implements GenericMultiscaleVolumeChunk
   }
 }
 
+export class SkeletonSource extends BaseSkeletonSource {
+  get skeletonVertexCoordinatesInVoxels() { return false; }
+  get vertexAttributes() { return this.parameters.vertexAttributes; }
+}
+
+function parseVertexAttributeInfo(x: any): VertexAttributeInfo {
+  verifyObject(x);
+  return {
+    dataType: verifyObjectProperty(x, 'dataType', y => verifyEnumString(y, DataType)),
+    numComponents: verifyObjectProperty(x, 'numComponents', verifyPositiveInt),
+  };
+}
+
+function parseSkeletonVertexAttributes(spec: string): Map<string, VertexAttributeInfo> {
+  return verifyObjectAsMap(JSON.parse(spec), parseVertexAttributeInfo);
+}
+
+export function getSkeletonSource(chunkManager: ChunkManager, path: string) {
+  const skeletonUrlPattern = /^((?:http|https):\/\/[^\/?]+)\/([^\/?]+)\?(.*)$/;
+
+  let match = path.match(skeletonUrlPattern);
+  if (match === null) {
+    throw new Error(`Invalid python volume path: ${JSON.stringify(path)}`);
+  }
+  return SkeletonSource.get(chunkManager, {
+    baseUrls: [match[1]],
+    key: match[2],
+    vertexAttributes: parseSkeletonVertexAttributes(match[3]),
+  });
+}
+
 export function getShardedVolume(chunkManager: ChunkManager, baseUrls: string[], key: string) {
   return chunkManager.memoize.getUncounted(
       {'type': 'python:MultiscaleVolumeChunkSource', baseUrls, key},
@@ -167,7 +201,7 @@ export function getShardedVolume(chunkManager: ChunkManager, baseUrls: string[],
                         new MultiscaleVolumeChunkSource(chunkManager, baseUrls, key, response)));
 }
 
-const urlPattern = /^((?:http|https):\/\/[^\/?]+)\/(.*)$/;
+const urlPattern = /^((?:http|https):\/\/[^\/?]+)\/([^\/?]+)$/;
 
 export function getVolume(chunkManager: ChunkManager, path: string) {
   let match = path.match(urlPattern);
@@ -180,4 +214,5 @@ export function getVolume(chunkManager: ChunkManager, path: string) {
 registerDataSourceFactory('python', {
   description: 'Python-served volume',
   getVolume: getVolume,
+  getSkeletonSource: getSkeletonSource,
 });

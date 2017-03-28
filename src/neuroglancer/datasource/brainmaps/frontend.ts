@@ -231,8 +231,8 @@ export function getVolume(
       {type: 'brainmaps:getVolume', instance, volumeId, changeSpec, options},
       () => Promise
                 .all([
-                  makeRequest(instance, 'GET', `/v1beta2/volumes/${volumeId}`, 'json'),
-                  makeRequest(instance, 'GET', `/v1beta2/objects/${volumeId}/meshes`, 'json'),
+                  makeRequest(instance, {method: 'GET', path: `/v1beta2/volumes/${volumeId}`, responseType: 'json'}),
+                  makeRequest(instance, {method: 'GET', path: `/v1beta2/objects/${volumeId}/meshes`, responseType: 'json'}),
                 ])
                 .then(
                     ([volumeInfoResponse, meshesResponse]) => new MultiscaleVolumeChunkSource(
@@ -262,7 +262,8 @@ function parseProject(obj: any): ProjectMetadata {
 function parseProjectList(obj: any) {
   try {
     verifyObject(obj);
-    return verifyObjectProperty(obj, 'project', x => parseArray(x, parseProject));
+    return verifyObjectProperty(
+        obj, 'project', x => x === undefined ? [] : parseArray(x, parseProject));
   } catch (parseError) {
     throw new Error(`Error parsing project list: ${parseError.message}`);
   }
@@ -279,8 +280,8 @@ export class VolumeList {
     }
     try {
       verifyObject(volumesResponse);
-      let volumeIds = this.volumeIds =
-          verifyObjectProperty(volumesResponse, 'volumeId', x => parseArray(x, verifyString));
+      let volumeIds = this.volumeIds = verifyObjectProperty(
+          volumesResponse, 'volumeId', x => x === undefined ? [] : parseArray(x, verifyString));
       volumeIds.sort();
       let hierarchicalSets = new Map<string, Set<string>>();
       for (let volumeId of volumeIds) {
@@ -319,8 +320,8 @@ export function getVolumeList(chunkManager: ChunkManager, instance: BrainmapsIns
   return chunkManager.memoize.getUncounted({instance, type: 'brainmaps:getVolumeList'}, () => {
     let promise = Promise
                       .all([
-                        makeRequest(instance, 'GET', '/v1beta2/projects', 'json'),
-                        makeRequest(instance, 'GET', '/v1beta2/volumes', 'json')
+                        makeRequest(instance, {method: 'GET', path: '/v1beta2/projects', responseType: 'json'}),
+                        makeRequest(instance, {method: 'GET', path: '/v1beta2/volumes', responseType: 'json'})
                       ])
                       .then(
                           ([projectsResponse, volumesResponse]) =>
@@ -344,7 +345,7 @@ export function getChangeStackList(
   return chunkManager.memoize.getUncounted(
       {instance, type: 'brainmaps:getChangeStackList', volumeId}, () => {
         let promise: Promise<string[]> =
-            makeRequest(instance, 'GET', `/v1beta2/changes/${volumeId}/change_stacks`, 'json')
+            makeRequest(instance, {method: 'GET', path: `/v1beta2/changes/${volumeId}/change_stacks`, responseType: 'json'})
                 .then(response => parseChangeStackList(response));
         const description = `change stacks for ${volumeId}`;
         StatusMessage.forPromise(promise, {

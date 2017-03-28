@@ -41,31 +41,47 @@ supportedDataTypes.set('|u1', {
   elementBytes: 1,
   dataType: DataType.UINT8,
 });
+supportedDataTypes.set('|i1', {
+  arrayConstructor: Uint8Array,
+  fixEndianness: () => {},
+  javascriptElementsPerArrayElement: 1,
+  elementBytes: 1,
+  dataType: DataType.UINT8,
+});
 for (let [endiannessChar, endianness] of <[string, Endianness][]>[
        ['<', Endianness.LITTLE], ['>', Endianness.BIG]
      ]) {
-  supportedDataTypes.set(`${endiannessChar}u2`, {
-    arrayConstructor: Uint16Array,
-    elementBytes: 2,
-    fixEndianness: array => { convertEndian16(array, endianness); },
-    javascriptElementsPerArrayElement: 1,
-    dataType: DataType.UINT16,
-  });
-  supportedDataTypes.set(`${endiannessChar}u4`, {
-    arrayConstructor: Uint32Array,
-    elementBytes: 4,
-    fixEndianness: array => { convertEndian32(array, endianness); },
-    javascriptElementsPerArrayElement: 1,
-    dataType: DataType.UINT32,
-  });
-  supportedDataTypes.set(`${endiannessChar}u8`, {
-    arrayConstructor: Uint32Array,
-    elementBytes: 8,
-    // We still maintain the low 32-bit value first.
-    fixEndianness: array => { convertEndian32(array, endianness); },
-    javascriptElementsPerArrayElement: 2,
-    dataType: DataType.UINT64,
-  });
+  // For now, treat both signed and unsigned integer types as unsigned.
+  for (let typeChar of ['u', 'i']) {
+    supportedDataTypes.set(`${endiannessChar}${typeChar}2`, {
+      arrayConstructor: Uint16Array,
+      elementBytes: 2,
+      fixEndianness: array => {
+        convertEndian16(array, endianness);
+      },
+      javascriptElementsPerArrayElement: 1,
+      dataType: DataType.UINT16,
+    });
+    supportedDataTypes.set(`${endiannessChar}${typeChar}4`, {
+      arrayConstructor: Uint32Array,
+      elementBytes: 4,
+      fixEndianness: array => {
+        convertEndian32(array, endianness);
+      },
+      javascriptElementsPerArrayElement: 1,
+      dataType: DataType.UINT32,
+    });
+    supportedDataTypes.set(`${endiannessChar}${typeChar}8`, {
+      arrayConstructor: Uint32Array,
+      elementBytes: 8,
+      // We still maintain the low 32-bit value first.
+      fixEndianness: array => {
+        convertEndian32(array, endianness);
+      },
+      javascriptElementsPerArrayElement: 2,
+      dataType: DataType.UINT64,
+    });
+  }
   supportedDataTypes.set(`${endiannessChar}f4`, {
     arrayConstructor: Float32Array,
     elementBytes: 4,

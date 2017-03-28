@@ -14,4 +14,11 @@
  * limitations under the License.
  */
 
+import {DataType} from 'neuroglancer/util/data_type';
+
 export const SKELETON_LAYER_RPC_ID = 'skeleton/SkeletonLayer';
+
+export interface VertexAttributeInfo {
+  dataType: DataType;
+  numComponents: number;
+}
