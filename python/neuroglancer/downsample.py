@@ -72,14 +72,11 @@ def downsample_segmentation_2D_4x(data):
 
   a, b, c, d = sections
 
-  ab = a * (a == b)
-  ac = a * (a == c)
+  ab_ac = a * ((a == b) | (a == c))
   bc = b * (b == c)
 
-  a = ab | ac | bc
+  a = ab_ac | bc
 
-  # o = logical or, i.e., shortcutting logic
-  # o = lambda p,q: p | (q & ((p != 0) - 1).astype(data.dtype)) # requires using unsigned dtypes
   return a + (a == 0) * d
   
 def downsample_with_striding(array, factor): 
