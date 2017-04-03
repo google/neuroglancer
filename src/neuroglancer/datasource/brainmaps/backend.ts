@@ -29,6 +29,7 @@ import {CancellationToken} from 'neuroglancer/util/cancellation';
 import {Endianness} from 'neuroglancer/util/endian';
 import {vec3Key} from 'neuroglancer/util/geom';
 import {verifyObject, verifyObjectProperty, verifyStringArray} from 'neuroglancer/util/json';
+import {inflate} from 'pako';
 
 const CHUNK_DECODERS = new Map([
   [
@@ -211,6 +212,7 @@ class MeshSource extends ParameterizedMeshSource<MeshSourceParameters> {
 }
 
 function decodeSkeletonChunk(chunk: SkeletonChunk, response: ArrayBuffer) {
+  response = inflate(new Uint8Array(response)).buffer;
   let dv = new DataView(response);
   let numVertices = dv.getUint32(0, true);
   let numVerticesHigh = dv.getUint32(4, true);
