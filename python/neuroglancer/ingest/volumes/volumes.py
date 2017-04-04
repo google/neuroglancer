@@ -249,7 +249,13 @@ class VolumeCutout(np.ndarray):
         if axis == 'z':
           img2d = np.flipud(np.rot90(img2d, 1)) 
 
-        img2d = Image.fromarray(img2d)
+        if img2d.dtype == 'uint8':
+          img2d = Image.fromarray(img2d, 'L')
+        else:
+          img2d = img2d.astype('uint32')
+          img2d *= 32
+          img2d[:,:] |= 0xff000000 # for little endian abgr
+          img2d = Image.fromarray(img2d, 'RGBA')
 
         filename = '{}.{}'.format(level, image_format.lower())
         if num_channels > 1:
@@ -258,21 +264,5 @@ class VolumeCutout(np.ndarray):
         path = os.path.join(directory, filename)
         img2d.save(path, image_format)
 
-  # def __getitem__(self, slices):
-  #   s = generate_slices(slices, self.bounds.maxpt)
 
-  #   bounds = self.bounds.clone()
-  #   bounds.minpt += Vec(s[0].start, s[1].start, s[2].start)
-  #   bounds.maxpt -= Vec(s[0].stop, s[1].stop, s[2].stop)
-
-  #   print s
-
-  #   return VolumeCutout(
-  #     buf=np.array(self)[ tuple(s) ],
-  #     dataset_name=self.dataset_name,
-  #     layer=self.layer,
-  #     mip=self.mip,
-  #     layer_type=self.layer_type,
-  #     bounds=bounds,
-  #   )
 
