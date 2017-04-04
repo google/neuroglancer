@@ -232,7 +232,6 @@ class GCloudVolume(Volume):
     )
 
   def _cutout(self, xmin, xmax, ymin, ymax, zmin, zmax, xstep=1, ystep=1, zstep=1, channel_slice=slice(None), savedir=None):
-
     requested_bbox = Bbox(Vec3(xmin, ymin, zmin), Vec3(xmax, ymax, zmax)) / self.downsample_ratio
     volume_bbox = Bbox.from_vec(self.shape) # volume size in voxels
     volume_bbox += self.voxel_offset
@@ -267,7 +266,7 @@ class GCloudVolume(Volume):
 
     requested_bbox = Bbox.clamp(requested_bbox, volume_bbox)
     lp = requested_bbox.minpt - realized_bbox.minpt # low realized point
-    hp = requested_bbox.maxpt 
+    hp = lp + requested_bbox.size3()
 
     renderbuffer = renderbuffer[ lp.x:hp.x:xstep, lp.y:hp.y:ystep, lp.z:hp.z:zstep, channel_slice ] 
 

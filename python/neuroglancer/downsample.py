@@ -76,12 +76,12 @@ def downsample_segmentation_2D_4x(data):
 
   a, b, c, d = sections
 
-  ab_ac = a * ((a == b) | (a == c))
+  ab_ac = a * ((a == b) | (a == c)) # ab := a if a == b else 0 and so on for ac, bc
   bc = b * (b == c)
 
-  a = ab_ac | bc
+  a = ab_ac | bc # ab or ac or bc
 
-  return a + (a == 0) * d - 1
+  return a + (a == 0) * d - 1 # a or d + 1
   
 def downsample_with_striding(array, factor): 
     """Downsample x by factor using striding.
