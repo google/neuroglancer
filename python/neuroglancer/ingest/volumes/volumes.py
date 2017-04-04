@@ -253,7 +253,6 @@ class VolumeCutout(np.ndarray):
           img2d = Image.fromarray(img2d, 'L')
         else:
           img2d = img2d.astype('uint32')
-          img2d *= 32
           img2d[:,:] |= 0xff000000 # for little endian abgr
           img2d = Image.fromarray(img2d, 'RGBA')
 

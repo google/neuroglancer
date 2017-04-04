@@ -67,7 +67,7 @@ def downsample_segmentation_2D_4x(data):
 
   # This algorithm doesn't handle 0 correctly, so add one now and take it away later
   # It's essentially a tradeoff between the low and high end of the integer.
-  data += 1 
+  data = data + 1 # don't use +=, it will affect the original data.
 
   factor = (2,2)
   for offset in np.ndindex(factor):
