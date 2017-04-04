@@ -65,6 +65,10 @@ def downsample_segmentation_2D_4x(data):
   image by 2 on each side using the COUNTLESS algorithm."""
   sections = []
 
+  # This algorithm doesn't handle 0 correctly, so add one now and take it away later
+  # It's essentially a tradeoff between the low and high end of the integer.
+  data += 1 
+
   factor = (2,2)
   for offset in np.ndindex(factor):
     part = data[tuple(np.s_[o::f] for o, f in zip(offset, factor))]
@@ -77,7 +81,7 @@ def downsample_segmentation_2D_4x(data):
 
   a = ab_ac | bc
 
-  return a + (a == 0) * d
+  return a + (a == 0) * d - 1
   
 def downsample_with_striding(array, factor): 
     """Downsample x by factor using striding.
