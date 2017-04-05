@@ -17,7 +17,7 @@
 import 'neuroglancer/datasource/brainmaps/api_backend';
 
 import {registerChunkSource} from 'neuroglancer/chunk_manager/backend';
-import {makeRequest, HttpCall, ChangeSpecPayload, ChangeStackAwarePayload, MeshFragmentPayload, SubvolumePayload} from 'neuroglancer/datasource/brainmaps/api';
+import {makeRequest, HttpCall, ChangeSpecPayload, ChangeStackAwarePayload, MeshFragmentPayload, SkeletonPayload, SubvolumePayload} from 'neuroglancer/datasource/brainmaps/api';
 import {ChangeSpec, MeshSourceParameters, SkeletonSourceParameters, VolumeChunkEncoding, VolumeSourceParameters} from 'neuroglancer/datasource/brainmaps/base';
 import {decodeJsonManifestChunk, decodeTriangleVertexPositionsAndIndices, FragmentChunk, ManifestChunk, ParameterizedMeshSource} from 'neuroglancer/mesh/backend';
 import {decodeSkeletonVertexPositionsAndIndices, ParameterizedSkeletonSource, SkeletonChunk} from 'neuroglancer/skeleton/backend';
@@ -212,7 +212,6 @@ class MeshSource extends ParameterizedMeshSource<MeshSourceParameters> {
 }
 
 function decodeSkeletonChunk(chunk: SkeletonChunk, response: ArrayBuffer) {
-  response = inflate(new Uint8Array(response)).buffer;
   let dv = new DataView(response);
   let numVertices = dv.getUint32(0, true);
   let numVerticesHigh = dv.getUint32(4, true);
@@ -233,12 +232,17 @@ function decodeSkeletonChunk(chunk: SkeletonChunk, response: ArrayBuffer) {
 export class SkeletonSource extends ParameterizedSkeletonSource<SkeletonSourceParameters> {
   download(chunk: SkeletonChunk, cancellationToken: CancellationToken) {
     const {parameters} = this;
-    const path = `/v1beta2/binary/objects/binary/objects/skeleton/` +
-        `header.volume_id=${parameters['volumeId']}/mesh_name=${parameters['meshName']}/` +
-        `object_id=${chunk.objectId}/header.gzip_compression_level=6?alt=media`;
+    let payload: SkeletonPayload = {
+      object_id: `${chunk.objectId}`,
+    };
+    const path = `/v1/objects/${parameters['volumeId']}` +
+      `/meshes/${parameters['meshName']}` +
+      '/skeleton:binary';
+    applyChangeStack(parameters.changeSpec, payload);
     let httpCall: HttpCall = {
-      method: 'GET',
+      method: 'POST',
       path,
+      payload: JSON.stringify(payload),
       responseType: 'arraybuffer',
     };
     return makeRequest(parameters['instance'], httpCall, cancellationToken)
