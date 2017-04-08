@@ -14,8 +14,8 @@
  * limitations under the License.
  */
 
-interface Handler {
-  (element: HTMLElement): void;
+export interface Handler { 
+  (element: HTMLElement): void; 
 }
 
 export function withFlex(value: any, handler: Handler) {
