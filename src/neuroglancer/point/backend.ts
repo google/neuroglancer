@@ -35,8 +35,8 @@ export class PointChunk extends SliceViewChunk {
 
     let source = this.source;
 
-    this.systemMemoryBytes = source!.spec.chunkBytes;
-    this.gpuMemoryBytes = source!.spec.chunkBytes;
+    this.systemMemoryBytes = source!.chunkBytes;
+    this.gpuMemoryBytes = source!.chunkBytes;
 
     this.vertexPositions = null;
   }
@@ -60,12 +60,12 @@ export class PointChunk extends SliceViewChunk {
   freeSystemMemory() {
     this.vertexPositions = null;
   }
-};
+}
 
-// @registerSharedObject(POINT_SOURCE_RPC_ID)
 export abstract class PointChunkSource extends SliceViewChunkSource implements
     PointChunkSourceInterface {
   spec: PointChunkSpecification;
+  chunkBytes: number;
 
   constructor(rpc: RPC, options: any) {
     super(rpc, options);
@@ -82,7 +82,7 @@ export abstract class PointChunkSource extends SliceViewChunkSource implements
     }
     return chunk;
   }
-};
+}
 
 @registerSharedObject(POINT_RENDERLAYER_RPC_ID)
 export class RenderLayer extends SliceViewRenderLayer implements RenderLayerInterface {
@@ -111,4 +111,4 @@ export abstract class ParameterizedPointChunkSource<Parameters> extends PointChu
     super(rpc, options);
     this.parameters = options['parameters'];
   }
-};
+}

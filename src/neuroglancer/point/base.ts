@@ -27,7 +27,7 @@ export interface RenderLayer { sources: PointChunkSource[][]|null; }
 export interface PointSourceOptions extends SliceViewSourceOptions {}
 
 export interface PointChunkSource extends SliceViewChunkSource { spec: PointChunkSpecification; }
-;
+
 
 export interface PointChunkSpecificationOptions extends SliceViewChunkSpecificationBaseOptions {
   chunkDataSize: vec3;
@@ -37,12 +37,9 @@ export interface PointChunkSpecificationOptions extends SliceViewChunkSpecificat
  * Specifies a chunk layout and voxel size.
  */
 export class PointChunkSpecification extends SliceViewChunkSpecification {
-  chunkBytes: number;
 
   constructor(options: PointChunkSpecificationOptions) {
     super(options);
-
-    let chunkBytes = 10000;  // TODO!  remove??
   }
 
   static make(options: PointChunkSpecificationOptions&{pointSourceOptions: PointSourceOptions}) {
@@ -67,8 +64,7 @@ export class PointChunkSpecification extends SliceViewChunkSpecification {
       baseVoxelOffset: this.baseVoxelOffset,
     };
   }
-};
-
+}
 
 export const POINT_RPC_ID = 'point';
 export const POINT_RENDERLAYER_RPC_ID = 'point/RenderLayer';
