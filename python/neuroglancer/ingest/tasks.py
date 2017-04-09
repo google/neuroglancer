@@ -17,7 +17,7 @@ from tqdm import tqdm
 from neuroglancer.ingest.base import Storage, credentials_path, PROJECT_NAME, QUEUE_NAME
 from neuroglancer.ingest.volumes.gcloudvolume import GCloudVolume
 from neuroglancer import chunks, downsample
-from neuroglancer.ingest.mesher import Mesher
+# from neuroglancer.ingest.mesher import Mesher
 
 
 class IngestTask(object):
@@ -658,7 +658,8 @@ class HyperSquareTask(object):
             self._data = np.zeros(shape=(256,256,256), dtype=np.uint8) #x,y,z,channels
             for blob in self._bucket.list_blobs(prefix='{}/jpg'.format(self._chunk_folder)):
                 z = int(re.findall(r'(\d+)\.jpg', blob.name)[0])
-                self._data[:,:,z] = chunks.decode_jpeg(blob.download_as_string()).transpose()
+                img = blob.download_as_string()
+                self._data[:,:,z] = chunks.decode_jpeg(img, shape=(256,256,1)).transpose()
             self._data.transpose((2,1,0))
         else:
             return NotImplementedError("Don't know how to get the images for this layer")

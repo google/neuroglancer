@@ -235,15 +235,15 @@ def create_hypersquare_tasks(dataset_name, layer_name, bucket_name, path_from_bu
     tq = TaskQueue()
     storage = Storage(dataset_name=dataset_name, layer_name=layer_name, compress=False)
     bucket = storage._client.get_bucket(bucket_name)
-    for blob in tqdm(bucket.list_blobs(prefix=path_from_bucket)):
+    for blob in tqdm(bucket.list_blobs(prefix=path_from_bucket), desc="Listing Blobs"):
         if '/0.jpg' in blob.name and 'Volume' in blob.name:
             t = HyperSquareTask(
                 chunk_path='gs://{}/{}'.format(bucket_name, blob.name),
                 chunk_encoding='npz',
                 version='{}/{}'.format(dataset_name, layer_name),
                 info_path='gs://neuroglancer/{}/{}/info'.format(dataset_name,layer_name))
-            # tq.insert(t)
-            t.execute()
+            tq.insert(t)
+            # t.execute()
 
 def upload_build_chunks(dataset_name, layer_name, volume, offset=[0, 0, 0], build_chunk_size=[1024,1024,128]):
     storage = Storage(dataset_name=dataset_name, layer_name=layer_name, compress=False)
@@ -318,10 +318,10 @@ if __name__ == '__main__':
     #                             resolution=[5,5,45])
     # create_ingest_task("zfish_v0","segmentation")
 
-    # create_hypersquare_tasks("e2198_v0","image","e2198_compressed","")
+    create_hypersquare_tasks("e2198_v0","image","e2198_compressed","")
     # create_info_file_from_build(dataset_name="e2198_v0",
-    #                             layer_name="image",
-    #                             layer_type="image",
-    #                             resolution=[17,17,23])
+                                # layer_name="image",
+                                # layer_type="image",
+                                # resolution=[17,17,23])
     # create_ingest_task("e2198_v0","image")
     pass
