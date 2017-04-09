@@ -21,10 +21,6 @@ import {UserLayer, UserLayerDropdown} from 'neuroglancer/layer';
 import {LayerListSpecification, registerLayerType, registerVolumeLayerType} from 'neuroglancer/layer_specification';
 import {getVolumeWithStatusMessage} from 'neuroglancer/layer_specification';
 import {Overlay} from 'neuroglancer/overlay';
-// import {VolumeType} from 'neuroglancer/sliceview/base';
-// import {FRAGMENT_MAIN_START, getTrackableFragmentMain, ImageRenderLayer} from
-// 'neuroglancer/sliceview/image_renderlayer'; import {SliceViewPanelPointLayer, PointLayer} from
-// 'neuroglancer/point/frontend';
 import {MultiscalePointChunkSource, RenderLayer} from 'neuroglancer/point/frontend';
 import {PointRenderLayer} from 'neuroglancer/point/point_renderlayer';
 import {StatusMessage} from 'neuroglancer/status';
@@ -56,8 +52,6 @@ function getPointsWithStatusMessage(
 export class PointUserLayer extends UserLayer {
   pointsPath: string|undefined;
   opacity = trackableAlphaValue(0.5);
-  //   fragmentMain = getTrackableFragmentMain();
-  //   shaderError = makeWatchableShaderError();
   renderLayer: RenderLayer;
   constructor(manager: LayerListSpecification, x: any) {
     super();
@@ -77,7 +71,7 @@ export class PointUserLayer extends UserLayer {
   }
   toJSON() {
     let x: any = {'type': 'point'};
-    x['point'] = this.pointsPath;
+    x['source'] = this.pointsPath;
     x['opacity'] = this.opacity.toJSON();
     return x;
   }
@@ -85,16 +79,6 @@ export class PointUserLayer extends UserLayer {
     return new PointDropDown(element, this);
   }
 }
-
-/*
-function makeShaderCodeWidget(layer: ImageUserLayer) {
-  return new ShaderCodeWidget({
-    shaderError: layer.shaderError,
-    fragmentMain: layer.fragmentMain,
-    fragmentMainStartLine: FRAGMENT_MAIN_START,
-  });
-}
-*/
 
 class PointDropDown extends UserLayerDropdown {
   opacityWidget = this.registerDisposer(new RangeWidget(this.layer.opacity));

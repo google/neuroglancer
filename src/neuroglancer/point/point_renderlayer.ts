@@ -83,4 +83,4 @@ void emitTransparent() {
         shader.uniform('uColor'), vec3.fromValues(1.0, 0.0, 0.5));  // TODO accept from user
     return shader;
   }
-};
+}

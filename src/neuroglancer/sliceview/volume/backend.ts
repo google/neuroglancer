@@ -60,8 +60,6 @@ export class VolumeChunk extends SliceViewChunk {
 
     transfers.push(data.buffer);
     this.data = null;
-    // console.log(`Serializing chunk ${this.source.rpcId}:${this.key} with
-    // chunkDataSize = ${this.chunkDataSize}`);
   }
 
   downloadSucceeded() {

@@ -168,7 +168,6 @@ export abstract class SliceViewChunkSource extends ChunkSource implements
   spec: SliceViewChunkSpecification;
   constructor(rpc: RPC, options: any) {
     super(rpc, options);
-    // this.spec = SliceViewChunkSpecification.fromObject(options['spec']);
   }
 
   abstract getChunk(chunkGridPosition: vec3): SliceViewChunk
@@ -224,6 +223,8 @@ export abstract class SliceViewChunkSource extends ChunkSource implements
 export abstract class RenderLayer extends SharedObjectCounterpart implements RenderLayerInterface {
   sources: SliceViewChunkSource[][];
   layerChanged = new NullarySignal();
+
+  // TODO: can we refactor this to simply let the volume and point renderlayer override the type of source? 
 }
 
 /**

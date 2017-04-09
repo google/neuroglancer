@@ -166,7 +166,7 @@ export class PointChunk extends SliceViewChunk {
     super.freeGPUMemory(gl);
     this.vertexBuffer.dispose();
   }
-};
+}
 
 export abstract class PointChunkSource extends SliceViewChunkSource implements
     PointChunkSourceInterface {
@@ -192,7 +192,7 @@ export abstract class PointChunkSource extends SliceViewChunkSource implements
   get pointVertexCoordinatesInVoxels() {
     return true;
   }
-};
+}
 
 export class ParameterizedPointSource<Parameters> extends PointChunkSource {
   constructor(
@@ -204,7 +204,7 @@ export class ParameterizedPointSource<Parameters> extends PointChunkSource {
     options['parameters'] = this.parameters;
     super.initializeCounterpart(rpc, options);
   }
-};
+}
 
 /**
  * Defines a PointSource for which all state is encapsulated in an object of type Parameters.
