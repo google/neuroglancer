@@ -14,10 +14,10 @@ import numpy as np
 from backports import lzma
 from tqdm import tqdm
 
-from neuroglancer.ingest.base import Storage, credentials_path, PROJECT_NAME, QUEUE_NAME
+from neuroglancer.ingest.storage import Storage, GoogleCloudStorageInterface, PROJECT_NAME, QUEUE_NAME
 from neuroglancer.ingest.volumes.gcloudvolume import GCloudVolume
 from neuroglancer import chunks, downsample
-# from neuroglancer.ingest.mesher import Mesher
+from neuroglancer.ingest.mesher import Mesher
 
 
 class IngestTask(object):
@@ -27,10 +27,10 @@ class IngestTask(object):
        The downsample scales should be such that the lowest resolution chunk should be able
        to be produce from the data available.
     """
-    def __init__(self, chunk_path=None, chunk_encoding=None, info_path=None, fromjson=None, _id=None):
+    def __init__(self, chunk_path=None, chunk_encoding=None, layer_path=None, fromjson=None, _id=None):
         self.chunk_path = chunk_path
         self.chunk_encoding = chunk_encoding
-        self.info_path = info_path
+        self.layer_path = layer_path
         self.tag = 'ingest'
         if fromjson:
             self.payloadBase64 = fromjson
@@ -41,7 +41,7 @@ class IngestTask(object):
         payload = json.dumps({
             'chunk_path': self.chunk_path,
             'chunk_encoding': self.chunk_encoding,
-            'info_path': self.info_path
+            'layer_path': self.layer_path
         })
         return base64.b64encode(payload)
     
@@ -51,19 +51,19 @@ class IngestTask(object):
         d = json.loads(decoded_string)
         self.chunk_path = d['chunk_path']
         self.chunk_encoding = d['chunk_encoding']
-        self.info_path = d['info_path']
+        self.layer_path = d['layer_path']
 
     def __repr__(self):
-        return "IngestTask(chunk_path='{}', chunk_encoding='{}', info_path='{}'')".format(
-            self.chunk_path, self.chunk_encoding, self.info_path)
+        return "IngestTask(chunk_path='{}', chunk_encoding='{}', layer_path='{}'')".format(
+            self.chunk_path, self.chunk_encoding, self.layer_path)
 
     def execute(self):
+        self._storage = Storage(self.layer_path)
         self._parse_chunk_path()
-        self._parse_info_path()
-        self._storage = Storage(self._dataset_name, self._layer_name, compress=True)
         self._download_info()
         self._download_input_chunk()
         self._create_chunks()
+        self._storage.wait_until_queue_empty()
 
     def _parse_chunk_path(self):
         match = re.match(r'^.*/(\d+)-(\d+)_(\d+)-(\d+)_(\d+)-(\d+)$', self.chunk_path)
@@ -75,21 +75,11 @@ class IngestTask(object):
             self._ymin, self._ymax,
             self._zmin, self._zmax)
 
-    def _parse_info_path(self):
-        match = re.match(r'^.*/([^//]+)/([^//]+)/info$', self.info_path)
-        self._dataset_name, self._layer_name = match.groups()
-
     def _download_info(self):
-        info_string = self._storage.get_blob(
-                '{}/{}/info'.format(self._dataset_name, self._layer_name) \
-            ).download_as_string()
-        self._info = json.loads(info_string)
+        self._info = json.loads(self._storage.get_file('info'))
 
     def _download_input_chunk(self):
-        string_data = self._storage.get_blob(
-            '{}/{}/build/{}'.format(self._dataset_name, self._layer_name, self._filename)) \
-        .download_as_string()
-
+        string_data = self._storage.get_file(os.path.join('build', self._filename))
         if self.chunk_encoding == 'npz':
           self._data = chunks.decode_npz(string_data)
         else:
@@ -98,9 +88,8 @@ class IngestTask(object):
     def _create_chunks(self):
         for scale in self._info["scales"]:
             for chunk_size in scale['chunk_sizes']:
-                for encoded, filename in self._generate_chunks(scale, chunk_size):
-                    self._storage.add_file(filename, encoded)
-            self._storage.flush(scale['key'])
+                self._generate_chunks(scale, chunk_size)
+                    
 
     def _generate_chunks(self, scale, chunk_size):
         highest_resolution = np.array(self._info['scales'][0]['resolution'])
@@ -125,7 +114,7 @@ class IngestTask(object):
 
             encoded = self._encode(chunk, scale["encoding"])
             filename = self._get_filename(x, y, z, chunk_size, downsample_ratio, scale)
-            yield encoded, filename
+            self._storage.put_file(filename, encoded)
 
     def _encode(self, chunk, encoding):
         if encoding == "jpeg":
@@ -148,14 +137,14 @@ class IngestTask(object):
         zmin = z * chunk_size[2] + self._zmin / downsample_ratio[2]
         zmax = min((z + 1) * chunk_size[2] + self._zmin / downsample_ratio[2], scale['size'][2] + scale['voxel_offset'][2])
 
-        return '{:d}-{:d}_{:d}-{:d}_{:d}-{:d}'.format(
+        return '{}/{:d}-{:d}_{:d}-{:d}_{:d}-{:d}'.format(scale['key'],
           xmin, xmax, ymin, ymax, zmin, zmax) 
 
 class DownsampleTask(object):
-    def __init__(self, chunk_path=None, info_path=None, fromjson=None, _id=None):
+    def __init__(self, chunk_path=None, layer_path=None, fromjson=None, _id=None):
         self._id =  None
         self.chunk_path = chunk_path
-        self.info_path = info_path
+        self.layer_path = layer_path
         self.tag = 'downsample'
         if fromjson:
             self.payloadBase64 = fromjson
@@ -165,7 +154,7 @@ class DownsampleTask(object):
     def payloadBase64(self):
         payload = json.dumps({
             'chunk_path': self.chunk_path,
-            'info_path': self.info_path
+            'layer_path': self.layer_path
         })
         return base64.b64encode(payload)
     
@@ -174,30 +163,22 @@ class DownsampleTask(object):
         decoded_string =  base64.b64decode(payload).encode('ascii')
         d = json.loads(decoded_string)
         self.chunk_path = d['chunk_path']
-        self.info_path = d['info_path']
+        self.layer_path = d['layer_path']
 
     def __repr__(self):
-        return "DownsampleTask(chunk_path='{}', info_path='{}')".format(
-            self.chunk_path, self.info_path)
+        return "DownsampleTask(chunk_path='{}', layer_path='{}')".format(
+            self.chunk_path, self.layer_path)
 
     def execute(self):
-        self._parse_info_path()
-        self._storage = Storage(self._dataset_name, self._layer_name, compress=True)
+        self._storage = Storage(self.layer_path)
         self._download_info()
         self._parse_chunk_path()
         self._compute_downsampling_ratio()
         self._download_input_chunk()
         self._upload_output_chunk()
 
-    def _parse_info_path(self):
-        match = re.match(r'^.*/([^//]+)/([^//]+)/info$', self.info_path)
-        self._dataset_name, self._layer_name = match.groups()
-
     def _download_info(self):
-        info_string = self._storage.get_blob(
-                '{}/{}/info'.format(self._dataset_name, self._layer_name) \
-            ).download_as_string()
-        self._info = json.loads(info_string)
+        self._info = json.loads(self._storage.get_file('info'))
 
     def _parse_chunk_path(self):
         match = re.match(r'.*/([^//]+)/(\d+)-(\d+)_(\d+)-(\d+)_(\d+)-(\d+)$', self.chunk_path)
@@ -219,7 +200,11 @@ class DownsampleTask(object):
                 return scale_idx
 
     def _download_input_chunk(self):
-        volume = GCloudVolume(self._dataset_name, self._layer_name, mip=self._current_index-1, cache_files=False)
+        #TODO make this work with storage
+        volume = GCloudVolume(self._storage._path.dataset_name,
+                             self._storage._path.layer_name,
+                             mip=self._current_index-1,
+                             cache_files=False)
         chunk = volume[
             self._xmin * self._downsample_ratio[0]:self._xmax * self._downsample_ratio[0],
             self._ymin * self._downsample_ratio[1]:self._ymax * self._downsample_ratio[1],
@@ -235,11 +220,10 @@ class DownsampleTask(object):
             raise NotImplementedError(self._info['type'])
 
     def _upload_output_chunk(self): 
-        self._storage.add_file(
-            filename=self._get_filename(),
+        self._storage.put_file(
+            file_path=self._get_filename(),
             content=self._encode(self._data, self._info['scales'][self._current_index]["encoding"])
             )
-        self._storage.flush(self._key)
 
     def _encode(self, chunk, encoding):
         if encoding == "jpeg":
@@ -252,18 +236,18 @@ class DownsampleTask(object):
             raise NotImplementedError(encoding)
 
     def _get_filename(self):
-        return '{:d}-{:d}_{:d}-{:d}_{:d}-{:d}'.format(
+        return '{}/{:d}-{:d}_{:d}-{:d}_{:d}-{:d}'.format(self._key,
           self._xmin, self._xmax, self._ymin, self._ymax, self._zmin, self._zmax) 
 
 
 class MeshTask(object):
 
-    def __init__(self, chunk_key=None, chunk_position=None, info_path=None, 
+    def __init__(self, chunk_key=None, chunk_position=None, layer_path=None, 
                  lod=0, simplification=5, segments=[], fromjson=None, _id=None):
         self._id =  None
         self.chunk_key = chunk_key
         self.chunk_position = chunk_position
-        self.info_path = info_path
+        self.layer_path = layer_path
         self.lod = lod
         self.simplification = simplification
         self.segments = segments
@@ -277,7 +261,7 @@ class MeshTask(object):
         payload = json.dumps({
             'chunk_key': self.chunk_key,
             'chunk_position': self.chunk_position,
-            'info_path': self.info_path,
+            'layer_path': self.layer_path,
             'lod': self.lod,
             'simplification': self.simplification,
             'segments': self.segments
@@ -290,21 +274,20 @@ class MeshTask(object):
         d = json.loads(decoded_string)
         self.chunk_key = d['chunk_key']
         self.chunk_position = d['chunk_position']
-        self.info_path = d['info_path']
+        self.layer_path = d['layer_path']
         self.lod = d['lod']
         self.simplification = d['simplification']
         self.segments = d['segments'] 
 
     def __repr__(self):
-        return "MeshTask(chunk_key='{}', chunk_position='{}', info_path='{}', lod={}, simplification={}, segments={})".format(
-            self.chunk_key, self.chunk_position, self.info_path, self.lod, self.simplification, self.segments)
+        return "MeshTask(chunk_key='{}', chunk_position='{}', layer_path='{}', lod={}, simplification={}, segments={})".format(
+            self.chunk_key, self.chunk_position, self.layer_path, self.lod, self.simplification, self.segments)
 
     def execute(self):
+        self._storage = Storage(self.layer_path)
         self._mesher = Mesher()
         self._parse_chunk_key()
         self._parse_chunk_position()
-        self._parse_info_path()
-        self._storage = Storage(self._dataset_name, self._layer_name, compress=True)
         self._download_info()
         self._download_input_chunk()
         self._compute_meshes()
@@ -318,15 +301,8 @@ class MeshTask(object):
          self._ymin, self._ymax,
          self._zmin, self._zmax) = map(int, match.groups())
     
-    def _parse_info_path(self):
-        match = re.match(r'^.*/([^//]+)/([^//]+)/info$', self.info_path)
-        self._dataset_name, self._layer_name = match.groups()
-
     def _download_info(self):
-        info_string = self._storage.get_blob(
-                '{}/{}/info'.format(self._dataset_name, self._layer_name) \
-            ).download_as_string()
-        self._info = json.loads(info_string)
+        self._info = json.loads(self._storage.get_file('info'))
 
         if 'mesh' not in self._info:
             raise ValueError("Path on where to store the meshes is not present")
@@ -334,8 +310,13 @@ class MeshTask(object):
     def _download_input_chunk(self):
         """
         It assumes that the chunk_position includes a 1 pixel overlap
+        FIXME choose the mip level based on the chunk key
         """
-        volume = GCloudVolume(self._dataset_name, self._layer_name, cache_files=False)
+        volume = GCloudVolume(self._storage._path.dataset_name,
+                             self._storage._path.layer_name,
+                             mip=0,
+                             cache_files=False)        
+
         self._data = volume[self._xmin:self._xmax,
                             self._ymin:self._ymax,
                             self._zmin:self._zmax]
@@ -344,11 +325,9 @@ class MeshTask(object):
         data = np.swapaxes(self._data[:,:,:,0], 0,2)
         self._mesher.mesh(data.flatten(), *data.shape)
         for obj_id in tqdm(self._mesher.ids()):
-            self._storage.add_file(
-                filename='{}:{}:{}'.format(obj_id, self.lod, self.chunk_position),
+            self._storage.put_file(
+                file_path='{}/{}:{}:{}'.format(self._info['mesh'], obj_id, self.lod, self.chunk_position),
                 content=self._create_mesh(obj_id))
-        self._storage.flush(self._info['mesh'])
-
 
     def _create_mesh(self, obj_id):
         mesh = self._mesher.get_mesh(obj_id, simplification_factor=128, max_simplification_error=1000000)
@@ -378,9 +357,9 @@ class MeshManifestTask(object):
     These are necessary for neuroglancer to know which mesh
     fragments to download for a given segid.
     """
-    def __init__(self, info_path=None, lod=None, fromjson=None, _id=None):
+    def __init__(self, layer_path=None, lod=None, fromjson=None, _id=None):
         self._id =  None
-        self.info_path = info_path
+        self.layer_path = layer_path
         self.lod = lod
         self.tag = 'mesh_manifest'
         if fromjson:
@@ -390,7 +369,7 @@ class MeshManifestTask(object):
     @property
     def payloadBase64(self):
         payload = json.dumps({
-            'info_path': self.info_path,
+            'layer_path': self.layer_path,
             'lod': self.lod
         })
         return base64.b64encode(payload)
@@ -399,28 +378,20 @@ class MeshManifestTask(object):
     def payloadBase64(self, payload):
         decoded_string =  base64.b64decode(payload).encode('ascii')
         d = json.loads(decoded_string)
-        self.info_path = d['info_path']
+        self.layer_path = d['layer_path']
         self.lod = d['lod']
 
     def __repr__(self):
-        return "MeshManifestTask(info_path='{}', lod={})".format(
-            self.info_path, self.lod)
+        return "MeshManifestTask(layer_path='{}', lod={})".format(
+            self.layer_path, self.lod)
 
     def execute(self):
-        self._parse_info_path()
-        self._storage = Storage(self._dataset_name, self._layer_name, compress=True)
+        self._storage = Storage(self.layer_path)
         self._download_info()
         self._download_input_chunk()
 
-    def _parse_info_path(self):
-        match = re.match(r'^.*/([^//]+)/([^//]+)/info$', self.info_path)
-        self._dataset_name, self._layer_name = match.groups()
-
     def _download_info(self):
-        info_string = self._storage.get_blob(
-                '{}/{}/info'.format(self._dataset_name, self._layer_name) \
-            ).download_as_string()
-        self._info = json.loads(info_string)
+        self._info = json.loads(self._storage.get_file('info'))
         
     def _download_input_chunk(self):
         """
@@ -428,8 +399,8 @@ class MeshManifestTask(object):
         """
         last_id = 0
         last_fragments = []
-        for blob in self._storage.list_blobs(prefix='snemi3d_v0/segmentation/mesh'):
-            match = re.match(r'.*/(\d+):(\d+):(.*)$', blob.name)
+        for filename in self._storage.list_files(prefix='mesh/'):
+            match = re.match(r'(\d+):(\d+):(.*)$',filename)
             if not match: # a manifest file will not match
                 continue
             _id, lod, chunk_position = match.groups()
@@ -438,19 +409,18 @@ class MeshManifestTask(object):
                 continue
 
             if last_id != _id:
-                self._storage.add_file(
-                    filename='{}:{}'.format(last_id, self.lod),
+                self._storage.put_file(
+                    file_path='{}/{}:{}'.format(self._info['mesh'],last_id, self.lod),
                     content=json.dumps({"fragments": last_fragments}))
                 last_id = _id
                 last_fragments = []
 
             last_fragments.append('{}:{}:{}'.format(_id, lod, chunk_position))
-        self._storage.flush(self._info['mesh'])
-
 
 class BigArrayTask(object):
-    def __init__(self, chunk_path=None, chunk_encoding=None, version=None, fromjson=None, _id=None):
+    def __init__(self, layer_path, chunk_path=None, chunk_encoding=None, version=None, fromjson=None, _id=None):
         self._id =  None
+        self.layer_path = layer_path
         self.chunk_path = chunk_path
         self.chunk_encoding = chunk_encoding
         self.version = version
@@ -482,23 +452,21 @@ class BigArrayTask(object):
 
     def execute(self):
         self._parse_chunk_path()
-        self._storage = Storage(self._dataset_name, self._layer_name, compress=False)
+        self._storage = Storage(self.layer_path)
         self._download_input_chunk()
         self._upload_chunk()
-        # self._delete_data()
 
     def _parse_chunk_path(self):
         if self.version == 'zfish_v0/affinities':
-            match = re.match(r'^.*/([^//]+)/([^//]+)/bigarray/block_(\d+)-(\d+)_(\d+)-(\d+)_(\d+)-(\d+)_1-3.h5$',
+            match = re.match(r'^.*/bigarray/block_(\d+)-(\d+)_(\d+)-(\d+)_(\d+)-(\d+)_1-3.h5$',
                 self.chunk_path)
         elif self.version == 'zfish_v0/image' or self.version == 'pinky_v0/image':
-            match = re.match(r'^.*/([^//]+)/([^//]+)/bigarray/(\d+):(\d+)_(\d+):(\d+)_(\d+):(\d+)$',
+            match = re.match(r'^.*/bigarray/(\d+):(\d+)_(\d+):(\d+)_(\d+):(\d+)$',
                 self.chunk_path)
         else:
             raise NotImplementedError(self.version)
 
-        (self._dataset_name, self._layer_name, 
-         self._xmin, self._xmax,
+        (self._xmin, self._xmax,
          self._ymin, self._ymax,
          self._zmin, self._zmax) = match.groups()
          
@@ -511,10 +479,7 @@ class BigArrayTask(object):
         self._filename = self.chunk_path.split('/')[-1]
 
     def _download_input_chunk(self):
-        self._datablob = self._storage.get_blob(
-            '{}/{}/bigarray/{}'.format(self._dataset_name, self._layer_name, self._filename)) \
-        
-        string_data = self._datablob.download_as_string()
+        string_data = self._storage.get_file(os.path.join('bigarray',self._filename))
         if self.version == 'zfish_v0/affinities':
             self._data = self._decode_hdf5(string_data)
         elif self.version == 'zfish_v0/image':
@@ -560,11 +525,10 @@ class BigArrayTask(object):
 
         #bigarray chunk has padding to fill the volume
         chunk = self._data[:xmax-xmin, :ymax-ymin, :zmax-zmin, :]
-        filename = '{:d}-{:d}_{:d}-{:d}_{:d}-{:d}'.format(
+        filename = 'build/{:d}-{:d}_{:d}-{:d}_{:d}-{:d}'.format(
           xmin, xmax, ymin, ymax, zmin, zmax)
         encoded = self._encode(chunk, self.chunk_encoding)
-        self._storage.add_file(filename, encoded)
-        self._storage.flush('build')
+        self._storage.put_file(filename, encoded)
 
     def _encode(self, chunk, encoding):
         if encoding == "jpeg":
@@ -580,16 +544,13 @@ class BigArrayTask(object):
         else:
             raise NotImplementedError(encoding)
 
-    def _delete_data(self):
-        self._datablob.delete()
-
 class HyperSquareTask(object):
-    def __init__(self, chunk_path=None, chunk_encoding=None, version=None, info_path=None, fromjson=None, _id=None):
+    def __init__(self, chunk_path=None, chunk_encoding=None, version=None, layer_path=None, fromjson=None, _id=None):
         self._id =  None
         self.chunk_path = chunk_path
         self.chunk_encoding = chunk_encoding
         self.version = version
-        self.info_path = info_path
+        self.layer_path = layer_path
         self.tag = 'hypersquare'
         if fromjson:
             self.payloadBase64 = fromjson
@@ -601,7 +562,7 @@ class HyperSquareTask(object):
             'chunk_path': self.chunk_path,
             'chunk_encoding': self.chunk_encoding,
             'version': self.version,
-            'info_path': self.info_path
+            'layer_path': self.layer_path
         })
         return base64.b64encode(payload)
     
@@ -612,36 +573,31 @@ class HyperSquareTask(object):
         self.chunk_path = d['chunk_path']
         self.chunk_encoding = d['chunk_encoding']
         self.version = d['version']
-        self.info_path = d['info_path']
+        self.layer_path = d['layer_path']
 
     def __repr__(self):
-        return "HyperSquareTask(chunk_path='{}, chunk_encoding='{}', version='{}', info_path='{}')".format(
-            self.chunk_path, self.chunk_encoding, self.version, self.info_path)
+        return "HyperSquareTask(chunk_path='{}, chunk_encoding='{}', version='{}', layer_path='{}')".format(
+            self.chunk_path, self.chunk_encoding, self.version, self.layer_path)
 
     def execute(self):
-        self._parse_info_path()
         self._parse_chunk_path()
-        self._storage = Storage(self._dataset_name, self._layer_name, compress=False)
+        self._storage = Storage(self.layer_path)
         self._download_metadata()
         self._download_input_chunk()
         self._upload_chunk()
 
     def _parse_chunk_path(self):
-        if 'segmentation' in self._layer_name: 
+        if 'segmentation' in self._storage._path.layer_name: 
             match = re.match(r'^gs://(.*)/(.*)/segmentation.lzma', self.chunk_path)
             self._bucket_name, self._chunk_folder = match.groups()
-        elif 'image' in self._layer_name:
+        elif 'image' in self._storage._path.layer_name:
             match = re.match(r'^gs://(.*)/(.*)/jpg/0\.jpg', self.chunk_path)
             self._bucket_name, self._chunk_folder = match.groups()
         else:
             return NotImplementedError("Don't know how process this layer")
 
-
-    def _parse_info_path(self):
-        match = re.match(r'^.*/([^//]+)/([^//]+)/info$', self.info_path)
-        self._dataset_name, self._layer_name = match.groups()
-
     def _download_metadata(self):
+        #FIXME self._storage._client doesn't exist anymore
         self._bucket = self._storage._client.get_bucket(self._bucket_name)
         metadata = self._bucket.get_blob(
             '{}/metadata-fixed.json'.format(self._chunk_folder)) \
@@ -649,12 +605,12 @@ class HyperSquareTask(object):
         self._metadata = json.loads(metadata)
         
     def _download_input_chunk(self):
-        if 'segmentation' in self._layer_name: 
+        if 'segmentation' in self._storage._path.layer_name: 
             self._datablob = self._bukcet.get_blob(
                 '{}/segmentation.lzma'.format(self._chunk_folder))
             string_data = self._datablob.download_as_string()
             self._data = self._decode_lzma(string_data)
-        elif 'image' in self._layer_name:
+        elif 'image' in self._storage._path.layer_name:
             self._data = np.zeros(shape=(256,256,256), dtype=np.uint8) #x,y,z,channels
             for blob in self._bucket.list_blobs(prefix='{}/jpg'.format(self._chunk_folder)):
                 z = int(re.findall(r'(\d+)\.jpg', blob.name)[0])
@@ -692,11 +648,10 @@ class HyperSquareTask(object):
 
         xmin, ymin, zmin = (self._metadata['physical_offset_min'] / voxel_resolution) + overlap
         xmax, ymax, zmax = (self._metadata['physical_offset_max'] / voxel_resolution) - overlap
-        filename = '{:d}-{:d}_{:d}-{:d}_{:d}-{:d}'.format(
+        filename = 'build/{:d}-{:d}_{:d}-{:d}_{:d}-{:d}'.format(
           xmin, xmax, ymin, ymax, zmin, zmax)
         encoded = self._encode(chunk, self.chunk_encoding)
-        self._storage.add_file(filename, encoded)
-        self._storage.flush('build')
+        self._storage.put_file(filename, encoded)
 
     def _encode(self, chunk, encoding):
         if encoding == "jpeg":
@@ -733,8 +688,9 @@ class TaskQueue(object):
 
         if local:
             from oauth2client import service_account
+            credentials_path = GoogleCloudStorageInterface.credentials_path()
             self._credentials = service_account.ServiceAccountCredentials \
-            .from_json_keyfile_name(credentials_path())
+            .from_json_keyfile_name(credentials_path)
         else:
             from oauth2client.client import GoogleCredentials
             self._credentials = GoogleCredentials.get_application_default()
