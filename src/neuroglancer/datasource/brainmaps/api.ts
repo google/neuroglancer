@@ -145,6 +145,9 @@ export function makeRequest(
         } else if (status === 401) {
           // Authorization needed.
           getToken(token).then(start);
+        } else if (status === 504) {
+          // Gateway timeout can occur if the server takes too long to reply.  Retry.
+          getToken().then(start);
         } else {
           --numPendingRequests;
           cancellationToken.remove(abort);
