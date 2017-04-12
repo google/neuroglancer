@@ -177,8 +177,8 @@ bool ${this.hasFunctionName}(uint64_t x) {
       s += `
   {
     vec2 v = ${this.prefix}_computeHash_${alt}(x);
-    vec4 lowResult = texture2D(${samplerName}, v);
-    vec4 highResult = texture2D(${samplerName}, vec2(v.x + highOffset, v.y));
+    vec4 lowResult = texture(${samplerName}, v);
+    vec4 highResult = texture(${samplerName}, vec2(v.x + highOffset, v.y));
     if (lowResult == x.low && highResult == x.high) {
       return true;
     }
@@ -223,11 +223,11 @@ bool ${this.getFunctionName}(uint64_t x, out uint64_t value) {
       s += `
   {
     vec2 v = ${this.prefix}_computeHash_${alt}(x);
-    vec4 lowResult = texture2D(${samplerName}, v);
-    vec4 highResult = texture2D(${samplerName}, vec2(v.x + highOffset, v.y));
+    vec4 lowResult = texture(${samplerName}, v);
+    vec4 highResult = texture(${samplerName}, vec2(v.x + highOffset, v.y));
     if (lowResult == x.low && highResult == x.high) {
-      value.low = texture2D(${samplerName}, vec2(v.x + 2.0 * highOffset, v.y));
-      value.high = texture2D(${samplerName}, vec2(v.x + 3.0 * highOffset, v.y));
+      value.low = texture(${samplerName}, vec2(v.x + 2.0 * highOffset, v.y));
+      value.high = texture(${samplerName}, vec2(v.x + 3.0 * highOffset, v.y));
       return true;
     }
   }

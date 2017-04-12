@@ -174,7 +174,7 @@ export class FramebufferConfiguration<ColorBuffer extends TextureBuffer|Renderbu
       buffer.resize(width, height);
       buffer.attachToFramebuffer(gl.COLOR_ATTACHMENT0 + i);
     });
-    gl.WEBGL_draw_buffers.drawBuffersWEBGL(this.fullAttachmentList);
+    gl.drawBuffers(this.fullAttachmentList);
     this.verifyAttachment();
     gl.viewport(0, 0, width, height);
   }
@@ -193,7 +193,7 @@ export class FramebufferConfiguration<ColorBuffer extends TextureBuffer|Renderbu
 
     gl.bindTexture(gl.TEXTURE_2D, null);
     this.colorBuffers[textureIndex].attachToFramebuffer(gl.COLOR_ATTACHMENT0);
-    gl.WEBGL_draw_buffers.drawBuffersWEBGL(this.singleAttachmentList);
+    gl.drawBuffers(this.singleAttachmentList);
   }
 
   unbind() { this.framebuffer.unbind(); }

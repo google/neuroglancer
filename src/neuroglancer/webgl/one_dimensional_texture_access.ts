@@ -223,7 +223,7 @@ void ${this.readTextureValue}(highp sampler2D sampler, float index`;
 `;
     for (let i = 0; i < texelsPerElement; ++i) {
       code += `
-  output${i} = texture2D(sampler, vec2(texCoords.x + ${uniformName}.x * ${(i / texelsPerElement).toFixed(8)}, texCoords.y));
+  output${i} = texture(sampler, vec2(texCoords.x + ${uniformName}.x * ${(i / texelsPerElement).toFixed(8)}, texCoords.y));
 `;
     }
     code += `

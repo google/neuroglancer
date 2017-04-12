@@ -47,9 +47,9 @@ export enum OffscreenTextures {
 export const glsl_perspectivePanelEmit = [
   glsl_packFloat01ToFixedPoint, `
 void emit(vec4 color, vec4 pickId) {
-  gl_FragData[${OffscreenTextures.COLOR}] = color;
-  gl_FragData[${OffscreenTextures.Z}] = packFloat01ToFixedPoint(1.0 - gl_FragCoord.z);
-  gl_FragData[${OffscreenTextures.PICK}] = pickId;
+  v4f_fragData${OffscreenTextures.COLOR} = color;
+  v4f_fragData${OffscreenTextures.Z} = packFloat01ToFixedPoint(1.0 - gl_FragCoord.z);
+  v4f_fragData${OffscreenTextures.PICK} = pickId;
 }
 `
 ];
@@ -72,19 +72,22 @@ export const glsl_perspectivePanelEmitOIT = [
 void emit(vec4 color, vec4 pickId) {
   float weight = computeOITWeight(color.a);
   vec4 accum = color * weight;
-  gl_FragData[0] = vec4(accum.rgb, color.a);
-  gl_FragData[1] = vec4(accum.a, 0.0, 0.0, 0.0);
+  v4f_fragData0 = vec4(accum.rgb, color.a);
+  v4f_fragData1 = vec4(accum.a, 0.0, 0.0, 0.0);
 }
 `
 ];
 
 export function perspectivePanelEmit(builder: ShaderBuilder) {
-  builder.addFragmentExtension('GL_EXT_draw_buffers');
+  builder.addFragmentOutput('vec4', `v4f_fragData${OffscreenTextures.COLOR}`, OffscreenTextures.COLOR);
+  builder.addFragmentOutput('vec4', `v4f_fragData${OffscreenTextures.Z}`, OffscreenTextures.Z);
+  builder.addFragmentOutput('vec4', `v4f_fragData${OffscreenTextures.PICK}`, OffscreenTextures.PICK); 
   builder.addFragmentCode(glsl_perspectivePanelEmit);
 }
 
 export function perspectivePanelEmitOIT(builder: ShaderBuilder) {
-  builder.addFragmentExtension('GL_EXT_draw_buffers');
+  builder.addFragmentOutput('vec4', 'v4f_fragData0', 0);
+  builder.addFragmentOutput('vec4', 'v4f_fragData1', 1);
   builder.addFragmentCode(glsl_perspectivePanelEmitOIT);
 }
 
@@ -98,7 +101,7 @@ vec4 v1 = getValue1();
 vec4 accum = vec4(v0.rgb, v1.r);
 float revealage = v0.a;
 
-gl_FragColor = vec4(accum.rgb / accum.a, revealage);
+v4f_fragColor = vec4(accum.rgb / accum.a, revealage);
 `);
 }
 
@@ -337,9 +340,8 @@ export class PerspectivePanel extends RenderedDataPanel {
     }
 
     // Do picking only rendering pass.
-    gl.WEBGL_draw_buffers.drawBuffersWEBGL([
-      gl.NONE, gl.WEBGL_draw_buffers.COLOR_ATTACHMENT1_WEBGL,
-      gl.WEBGL_draw_buffers.COLOR_ATTACHMENT2_WEBGL
+    gl.drawBuffers([
+      gl.NONE, gl.COLOR_ATTACHMENT1, gl.COLOR_ATTACHMENT2
     ]);
     renderContext.emitter = perspectivePanelEmit;
     renderContext.emitPickID = true;
@@ -399,7 +401,7 @@ export class PerspectivePanel extends RenderedDataPanel {
     mat[15] = 1;
     mat4.multiply(mat, this.projectionMat, mat);
 
-    gl.WEBGL_draw_buffers.drawBuffersWEBGL([gl.WEBGL_draw_buffers.COLOR_ATTACHMENT0_WEBGL]);
+    gl.drawBuffers([gl.COLOR_ATTACHMENT0]);
     this.axesLineHelper.draw(mat, false);
   }
 
