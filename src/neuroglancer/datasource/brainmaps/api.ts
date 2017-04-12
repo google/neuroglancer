@@ -60,6 +60,10 @@ export interface SubvolumePayload extends ChangeStackAwarePayload, GeometryAware
   subvolume_format?: 'RAW'|'SINGLE_IMAGE';
 }
 
+export interface SkeletonPayload extends ChangeStackAwarePayload {
+  object_id: string;
+}
+
 export interface MeshFragmentPayload extends ChangeStackAwarePayload {
   fragment_key: string;
   object_id: string;
