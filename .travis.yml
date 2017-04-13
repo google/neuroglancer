@@ -29,6 +29,9 @@ before_install:
 # - rm google-chrome*.deb
 # - sh -e /etc/init.d/xvfb start
 # - sleep 3
+- sudo apt-get install libhdf5-dev
+- pip install -r python/requirements.txt
+- py.test python/test
 script:
 - npm install
 - npm install --only=dev 

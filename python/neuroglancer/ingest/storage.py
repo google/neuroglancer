@@ -169,12 +169,21 @@ class FileInterface(object):
             with open(path, 'wb') as f:
                 f.write(content)
         except IOError:
-            os.makedirs(os.path.dirname(path))
+            try: 
+                # a raise condition is possible
+                # where the first try fails to create the file
+                # because the folder that contains it doesn't exists
+                # but when we try to create here, some other thread
+                # already created this folder
+                os.makedirs(os.path.dirname(path))
+            except OSError:
+                pass
+
             with open(path, 'wb') as f:
                 f.write(content)
 
     def get_file(self, file_path):
-        path = self.get_path_to_file(file_path)        
+        path = self.get_path_to_file(file_path) 
         try:
             with open(path, 'rb') as f:
                 return f.read(), None

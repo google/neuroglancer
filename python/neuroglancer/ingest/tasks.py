@@ -15,7 +15,7 @@ from backports import lzma
 from tqdm import tqdm
 
 from neuroglancer.ingest.storage import Storage, GoogleCloudStorageInterface, PROJECT_NAME, QUEUE_NAME
-from neuroglancer.ingest.volumes.gcloudvolume import GCloudVolume
+from neuroglancer.ingest.volumes.precomputed import Precomputed
 from neuroglancer import chunks, downsample
 from neuroglancer.ingest.mesher import Mesher
 
@@ -200,11 +200,7 @@ class DownsampleTask(object):
                 return scale_idx
 
     def _download_input_chunk(self):
-        #TODO make this work with storage
-        volume = GCloudVolume(self._storage._path.dataset_name,
-                             self._storage._path.layer_name,
-                             mip=self._current_index-1,
-                             cache_files=False)
+        volume = Precomputed(self._storage, scale_idx=self._current_index-1)
         chunk = volume[
             self._xmin * self._downsample_ratio[0]:self._xmax * self._downsample_ratio[0],
             self._ymin * self._downsample_ratio[1]:self._ymax * self._downsample_ratio[1],
@@ -291,6 +287,7 @@ class MeshTask(object):
         self._download_info()
         self._download_input_chunk()
         self._compute_meshes()
+        self._storage.wait_until_queue_empty()
 
     def _parse_chunk_key(self):
         self._key = self.chunk_key.split('/')[-1]
@@ -312,11 +309,8 @@ class MeshTask(object):
         It assumes that the chunk_position includes a 1 pixel overlap
         FIXME choose the mip level based on the chunk key
         """
-        volume = GCloudVolume(self._storage._path.dataset_name,
-                             self._storage._path.layer_name,
-                             mip=0,
-                             cache_files=False)        
-
+        #TODO modify Precomputed to allow for non-grid aligned tasks
+        volume = Precomputed(self._storage)
         self._data = volume[self._xmin:self._xmax,
                             self._ymin:self._ymax,
                             self._zmin:self._zmax]

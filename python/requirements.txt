@@ -1,8 +1,8 @@
 google-api-python-client==1.6.2
 tqdm==4.7.6
 google-cloud==0.22.0
-Cython==0.25.2
 backports-abc==0.5
+boto==2.39.0
 Cython==0.25.2
 certifi==2016.9.26
 decorator==4.0.11
@@ -23,3 +23,4 @@ Pillow==3.2.0
 blosc==1.5.0
 backports.lzma==0.0.8
 scipy==0.18.1
+pytest==2.9.2
