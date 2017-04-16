@@ -26,7 +26,7 @@ def create_layer(size, offset, layer_type="image"):
 def delete_layer():
     shutil.rmtree("/tmp/removeme/layer", ignore_errors=True)
     
-def test_read():
+def test_aligned_read():
     delete_layer()
     storage, data = create_layer(size=(50,50,50,1), offset=(0,0,0))
     pr = Precomputed(storage)
@@ -40,7 +40,7 @@ def test_read():
     #the last dimension is the number of channels
     assert pr[0:64,0:64,0:64].shape == (64,64,64,1) 
     assert np.all(pr[0:64,0:64,0:64] ==  data[:64,:64,:64,:])
-    
+
     delete_layer()
     storage, data = create_layer(size=(128,64,64,1), offset=(10,20,0))
     pr = Precomputed(storage)
@@ -52,6 +52,22 @@ def test_read():
     cutout2 = pr[74:138,20:84,0:64]
     assert cutout2.shape == (64,64,64,1) 
     assert np.all(cutout2 ==  data[64:128,:64,:64,:])
+
+def test_non_aligned_read():
+    delete_layer()
+    storage, data = create_layer(size=(128,64,64,1), offset=(0,0,0))
+    pr = Precomputed(storage)
+    #the last dimension is the number of channels
+    assert pr[31:65,0:64,0:64].shape == (34,64,64,1) 
+    assert np.all(pr[31:65,0:64,0:64] ==  data[31:65,:64,:64,:])
+
+    #read a single pixel
+    delete_layer()
+    storage, data = create_layer(size=(64,64,64,1), offset=(0,0,0))
+    pr = Precomputed(storage)
+    #the last dimension is the number of channels
+    assert pr[22:23,22:23,22:23].shape == (1,1,1,1) 
+    assert np.all(pr[22:23,22:23,22:23] ==  data[22:23,22:23,22:23,:])
 
 def test_write():
     delete_layer()

@@ -307,9 +307,8 @@ class MeshTask(object):
     def _download_input_chunk(self):
         """
         It assumes that the chunk_position includes a 1 pixel overlap
-        FIXME choose the mip level based on the chunk key
         """
-        #TODO modify Precomputed to allow for non-grid aligned tasks
+        #FIXME choose the mip level based on the chunk key
         volume = Precomputed(self._storage)
         self._data = volume[self._xmin:self._xmax,
                             self._ymin:self._ymax,
