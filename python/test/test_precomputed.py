@@ -40,6 +40,13 @@ def test_read():
     #the last dimension is the number of channels
     assert pr[0:64,0:64,0:64].shape == (64,64,64,1) 
     assert np.all(pr[0:64,0:64,0:64] ==  data[:64,:64,:64,:])
+
+    delete_layer()
+    storage, data = create_layer(size=(128,64,64,1), offset=(0,0,0))
+    pr = Precomputed(storage)
+    #the last dimension is the number of channels
+    assert pr[31:65,0:64,0:64].shape == (64,64,64,1) 
+    assert np.all(pr[31:65,0:64,0:64] ==  data[31:65,:64,:64,:])
     
     delete_layer()
     storage, data = create_layer(size=(128,64,64,1), offset=(10,20,0))

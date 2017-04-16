@@ -25,14 +25,16 @@ class Precomputed(object):
     def __getitem__(self, slices):
         """
         It only supports grid aligned slices which
-        spans an intenger number of chunks.
+        spans an integer number of chunks.
         """
+        new_slices, sub_slices = self._align_slices(slices)
+
         return_volume = np.empty(
-            shape=self._get_slices_shape(slices),
+            shape=self._get_slices_shape(new_slices),
             dtype=self.info['data_type'])
 
-        offset =  self._get_offsets(slices)
-        for c in self._iter_chunks(slices):
+        offset =  self._get_offsets(new_slices)
+        for c in self._iter_chunks(new_slices):
 
             file_path = self._chunk_to_file_path(c)
             content = chunks.decode(
@@ -41,7 +43,7 @@ class Precomputed(object):
                 shape=self._get_chunk_shape(c),
                 dtype=self.info['data_type'])
             return_volume[self._slices_from_chunk(c,offset)] = content
-        return return_volume
+        return return_volume[sub_slices]
 
     def __setitem__(self, slices, input_volume):
         offset =  self._get_offsets(slices)
@@ -92,6 +94,29 @@ class Precomputed(object):
                                      y_start, y_stop,
                                      z_start, z_stop)
 
+    def _align_slices(self, slices):
+        """
+        Return new_slices, sub_slices with the property that
+        new_slices is grid aligned and A[new_slices][sub_slices]
+        is equal to A[slices]
+        """
+        new_slices=[]
+        sub_slices=[]
+        for slc_idx in xrange(len(slices)):
+            slc = slices[slc_idx]
+            voxel_offset = self._scale['voxel_offset'][slc_idx]
+            start = slc.start - voxel_offset
+            stop = slc.stop - voxel_offset
+            chunk_size = self._scale['chunk_sizes'][0][slc_idx]
+
+            #round to nearest grid size
+            new_start = start - (start % chunk_size)
+            new_stop = stop + ((-stop) % chunk_size)
+
+            new_slices.append(slice(new_start, new_stop))
+            sub_slices.append(slice(start % chunk_size, stop - new_start))
+
+        return tuple(new_slices), tuple(sub_slices)
 
     def _slice_to_chunks(self, slices, slc_idx):
         slc = slices[slc_idx]
