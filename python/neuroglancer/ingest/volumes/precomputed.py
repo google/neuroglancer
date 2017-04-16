@@ -113,7 +113,7 @@ class Precomputed(object):
             new_start = start - (start % chunk_size)
             new_stop = stop + ((-stop) % chunk_size)
 
-            new_slices.append(slice(new_start, new_stop))
+            new_slices.append(slice(new_start + voxel_offset, new_stop + voxel_offset))
             sub_slices.append(slice(start % chunk_size, stop - new_start))
 
         return tuple(new_slices), tuple(sub_slices)
