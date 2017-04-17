@@ -34,3 +34,9 @@
   width: 80vw;
   height: 80vh;
 }
+
+.neuroglancer-segmentation-dropdown-skeleton-shader-header {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+}

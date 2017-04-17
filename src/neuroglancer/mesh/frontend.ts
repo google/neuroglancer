@@ -209,6 +209,15 @@ export class FragmentChunk extends Chunk {
   }
 };
 
+export abstract class MeshSource extends ChunkSource {
+  fragmentSource = new FragmentSource(this.chunkManager, this);
+  initializeCounterpart(rpc: RPC, options: any) {
+    this.fragmentSource.initializeCounterpart(this.chunkManager.rpc!, {});
+    options['fragmentSource'] = this.fragmentSource.addCounterpartRef();
+    super.initializeCounterpart(rpc, options);
+  }
+};
+
 @registerSharedObjectOwner(FRAGMENT_SOURCE_RPC_ID)
 export class FragmentSource extends ChunkSource {
   objectChunks = new Map<string, Set<FragmentChunk>>();
@@ -236,15 +245,6 @@ export class FragmentSource extends ChunkSource {
     }
   }
   getChunk(x: any) { return new FragmentChunk(this, x); }
-};
-
-export abstract class MeshSource extends ChunkSource {
-  fragmentSource = new FragmentSource(this.chunkManager, this);
-  initializeCounterpart(rpc: RPC, options: any) {
-    this.fragmentSource.initializeCounterpart(this.chunkManager.rpc!, {});
-    options['fragmentSource'] = this.fragmentSource.addCounterpartRef();
-    super.initializeCounterpart(rpc, options);
-  }
 };
 
 /**

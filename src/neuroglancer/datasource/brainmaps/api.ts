@@ -26,6 +26,50 @@ export const PRODUCTION_INSTANCE = 0;
 export const INSTANCE_NAMES: string[] = [];
 
 /**
+ * API-related interfaces.
+ */
+
+export interface ChangeSpecPayload {
+  change_stack_id?: string;
+  time_stamp?: number;
+  skip_equivalences?: boolean;
+}
+
+export interface ChangeStackAwarePayload {
+  change_spec?: ChangeSpecPayload;
+}
+
+export interface GeometryPayload {
+  corner: string;
+  size: string;
+  scale: number;
+}
+
+export interface GeometryAwarePayload {
+  geometry: GeometryPayload;
+}
+
+export interface ImageFormatOptionsPayload {
+  image_format?: 'AUTO'|'JPEG'|'PNG'|'JSON';
+  jpeg_quality?: number;
+  compressed_segmentation_block_size?: string;
+}
+
+export interface SubvolumePayload extends ChangeStackAwarePayload, GeometryAwarePayload {
+  image_format_options?: ImageFormatOptionsPayload;
+  subvolume_format?: 'RAW'|'SINGLE_IMAGE';
+}
+
+export interface SkeletonPayload extends ChangeStackAwarePayload {
+  object_id: string;
+}
+
+export interface MeshFragmentPayload extends ChangeStackAwarePayload {
+  fragment_key: string;
+  object_id: string;
+}
+
+/**
  * Maps a BrainmapsInstance to the list of base URL shards to use for accessing it.
  */
 export const INSTANCE_BASE_URLS: string[][] = [];
@@ -48,18 +92,26 @@ export function setupBrainmapsInstance(
 
 setupBrainmapsInstance(PRODUCTION_INSTANCE, 'brainmaps.googleapis.com', 'prod', 'Brain Maps');
 
+export interface HttpCall {
+  method: 'GET'|'POST';
+  path: string;
+  responseType: 'arraybuffer'|'json'|string;
+  payload?: string;
+}
+
+
 export function makeRequest(
-    instance: BrainmapsInstance, method: string, path: string, responseType: 'arraybuffer',
+    instance: BrainmapsInstance, httpCall: HttpCall,
     cancellationToken?: CancellationToken): Promise<ArrayBuffer>;
 export function makeRequest(
-    instance: BrainmapsInstance, method: string, path: string, responseType: 'json',
+    instance: BrainmapsInstance, httpCall: HttpCall,
     cancellationToken?: CancellationToken): Promise<any>;
 export function makeRequest(
-    instance: BrainmapsInstance, method: string, path: string, responseType: string,
+    instance: BrainmapsInstance, httpCall: HttpCall,
     cancellationToken?: CancellationToken): any;
 
 export function makeRequest(
-    instance: BrainmapsInstance, method: string, path: string, responseType: string,
+    instance: BrainmapsInstance, httpCall: HttpCall,
     cancellationToken: CancellationToken = uncancelableToken): any {
   /**
    * undefined means request not yet attempted.  null means request
@@ -81,8 +133,8 @@ export function makeRequest(
         --numPendingRequests;
         return;
       }
-      xhr = openShardedHttpRequest(INSTANCE_BASE_URLS[instance], path, method);
-      xhr.responseType = responseType;
+      xhr = openShardedHttpRequest(INSTANCE_BASE_URLS[instance], httpCall.path, httpCall.method);
+      xhr.responseType = httpCall.responseType;
       xhr.setRequestHeader('Authorization', `${token['tokenType']} ${token['accessToken']}`);
       xhr.onloadend = function(this: XMLHttpRequest) {
         if (xhr === null) {
@@ -94,16 +146,19 @@ export function makeRequest(
           --numPendingRequests;
           cancellationToken.remove(abort);
           resolve(this.response);
-        } else if (status === 403 || status === 401) {
+        } else if (status === 401) {
           // Authorization needed.
           getToken(token).then(start);
+        } else if (status === 504) {
+          // Gateway timeout can occur if the server takes too long to reply.  Retry.
+          getToken().then(start);
         } else {
           --numPendingRequests;
           cancellationToken.remove(abort);
           reject(HttpError.fromXhr(this));
         }
       };
-      xhr.send();
+      xhr.send(httpCall.payload);
     }
     getToken().then(start);
   });
