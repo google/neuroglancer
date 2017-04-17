@@ -221,10 +221,24 @@ export abstract class SliceViewChunkSource extends ChunkSource implements
 }
 
 export abstract class RenderLayer extends SharedObjectCounterpart implements RenderLayerInterface {
+  rpcId: number;
   sources: SliceViewChunkSource[][];
   layerChanged = new NullarySignal();
 
-  // TODO: can we refactor this to simply let the volume and point renderlayer override the type of source? 
+  constructor(rpc: RPC, options: any) {
+    super(rpc, options);
+    let sources = this.sources = new Array<SliceViewChunkSource[]>();
+    for (let alternativeIds of options['sources']) {
+      let alternatives = new Array<SliceViewChunkSource>();
+      sources.push(alternatives);
+      for (let sourceId of alternativeIds) {
+        let source: SliceViewChunkSource = rpc.get(sourceId);
+        this.registerDisposer(source.addRef());
+        alternatives.push(source);
+      }
+    }
+  }
+
 }
 
 /**

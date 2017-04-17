@@ -86,22 +86,7 @@ export abstract class PointChunkSource extends SliceViewChunkSource implements
 
 @registerSharedObject(POINT_RENDERLAYER_RPC_ID)
 export class RenderLayer extends SliceViewRenderLayer implements RenderLayerInterface {
-  rpcId: number;
   sources: PointChunkSource[][];
-
-  constructor(rpc: RPC, options: any) {
-    super(rpc, options);
-    let sources = this.sources = new Array<PointChunkSource[]>();
-    for (let alternativeIds of options['sources']) {
-      let alternatives = new Array<PointChunkSource>();
-      sources.push(alternatives);
-      for (let sourceId of alternativeIds) {
-        let source: PointChunkSource = rpc.get(sourceId);
-        this.registerDisposer(source.addRef());
-        alternatives.push(source);
-      }
-    }
-  }
 }
 
 

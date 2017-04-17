@@ -37,6 +37,7 @@ import {registerSharedObjectOwner, RPC, RpcId, SharedObject} from 'neuroglancer/
 const tempMat4 = mat4.create();
 
 export class RenderLayer extends GenericSliceViewRenderLayer {
+  sources: PointChunkSource[][];
   shader: ShaderProgram|undefined = undefined;
   shaderUpdated = true;
   rpcId: RpcId|null = null;
@@ -48,25 +49,15 @@ export class RenderLayer extends GenericSliceViewRenderLayer {
   constructor(
       multiscaleSource: MultiscalePointChunkSource,
       {shaderError = makeWatchableShaderError(), sourceOptions = <PointSourceOptions> {}} = {}) {
-    super(multiscaleSource.chunkManager, multiscaleSource.getSources(sourceOptions)[0][0].spec, {
+    super(multiscaleSource.chunkManager, multiscaleSource.getSources(sourceOptions), {
       shaderError = makeWatchableShaderError(),
     } = {});
 
     let gl = this.gl;
 
-    let sources = this.sources = multiscaleSource.getSources(sourceOptions);
-    let sourceIds: number[][] = [];
-    for (let alternatives of sources) {
-      let alternativeIds: number[] = [];
-      sourceIds.push(alternativeIds);
-      for (let source of alternatives) {
-        alternativeIds.push(source.rpcId!);
-      }
-    }
-
     let sharedObject = this.registerDisposer(new SharedObject());
     sharedObject.RPC_TYPE_ID = POINT_RENDERLAYER_RPC_ID;
-    sharedObject.initializeCounterpart(this.chunkManager.rpc!, {'sources': sourceIds});
+    sharedObject.initializeCounterpart(this.chunkManager.rpc!, {'sources': this.sourceIds});
     this.rpcId = sharedObject.rpcId;
   }
 

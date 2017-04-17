@@ -29,7 +29,6 @@ import {RenderLayer as GenericRenderLayer} from 'neuroglancer/layer';
 import {SLICEVIEW_RENDERLAYER_RPC_ID} from 'neuroglancer/sliceview/base';
 import {SliceView} from 'neuroglancer/sliceview/frontend';
 import {RenderLayer as GenericSliceViewRenderLayer} from 'neuroglancer/sliceview/renderlayer';
-import {SliceViewShaderBuffers} from 'neuroglancer/sliceview/renderlayer';
 import {VOLUME_RENDERLAYER_RPC_ID, VolumeChunkSpecification, VolumeSourceOptions} from 'neuroglancer/sliceview/volume/base';
 import {MultiscaleVolumeChunkSource, VolumeChunkSource} from 'neuroglancer/sliceview/volume/frontend';
 import {RefCounted} from 'neuroglancer/util/disposable';
@@ -79,6 +78,95 @@ vec3 getPositionWithinChunk () {
 const tempVec3 = vec3.create();
 const tempVec3b = vec3.create();
 const tempMat4 = mat4.create();
+
+export class SliceViewShaderBuffers extends RefCounted {
+  outputVertexIndices: Buffer;
+  vertexBasePositions: number[];
+  vertexIndices: Int32Array;
+  constructor(gl: GL) {
+    super();
+    this.outputVertexIndices = this.registerDisposer(
+        Buffer.fromData(gl, new Float32Array([0, 1, 2, 3, 4, 5]), gl.ARRAY_BUFFER, gl.STATIC_DRAW));
+
+    // This specifies the original, "uncorrected" vertex positions.
+    // var vertexBasePositions = [
+    //   0, 0, 0,
+    //   1, 0, 0,
+    //   0, 1, 0,
+    //   0, 0, 1,
+    //   1, 0, 1,
+    //   1, 1, 0,
+    //   0, 1, 1,
+    //   1, 1, 1,
+    // ];
+
+    // This specifies the "corrected" vertex positions.
+    this.vertexBasePositions = [
+      0, 0, 0,  //
+      1, 0, 0,  //
+      0, 1, 0,  //
+      1, 1, 0,  //
+      0, 0, 1,  //
+      1, 0, 1,  //
+      0, 1, 1,  //
+      1, 1, 1,  //
+    ];
+
+    // correct_index, vertex_position, uncorrected_index
+    // 0:  0, 0, 0   0
+    // 1:  1, 0, 0   1
+    // 2:  0, 1, 0   2
+    // 4:  0, 0, 1   3
+    // 5:  1, 0, 1   4
+    // 3:  1, 1, 0   5
+    // 6:  0, 1, 1   6
+    // 7:  1, 1, 1   7
+
+    // This maps uncorrected vertex indices to corrected vertex indices.
+    let vertexUncorrectedToCorrected = [0, 1, 2, 4, 5, 3, 6, 7];
+
+    // This maps corrected vertex indices to uncorrected vertex indices.
+    let vertexCorrectedToUncorrected = [0, 1, 2, 5, 3, 4, 6, 7];
+
+
+    // Page 666
+    let vertexBaseIndices = [
+      0, 1, 1, 4, 4, 7, 4, 7,  //
+      1, 5, 0, 1, 1, 4, 4, 7,  //
+      0, 2, 2, 5, 5, 7, 5, 7,  //
+      2, 6, 0, 2, 2, 5, 5, 7,  //
+      0, 3, 3, 6, 6, 7, 6, 7,  //
+      3, 4, 0, 3, 3, 6, 6, 7,  //
+    ];
+
+    // Determined by looking at the figure and determining the corresponding
+    // vertex order for each possible front vertex.
+    let vertexPermutation = [
+      0, 1, 2, 3, 4, 5, 6, 7,  //
+      1, 4, 5, 0, 3, 7, 2, 6,  //
+      2, 6, 0, 5, 7, 3, 1, 4,  //
+      3, 0, 6, 4, 1, 2, 7, 5,  //
+      4, 3, 7, 1, 0, 6, 5, 2,  //
+      5, 2, 1, 7, 6, 0, 4, 3,  //
+      6, 7, 3, 2, 5, 4, 0, 1,  //
+      7, 5, 4, 6, 2, 1, 3, 0,  //
+    ];
+
+    let vertexIndices: number[] = [];
+    for (var p = 0; p < 8; ++p) {
+      for (var i = 0; i < vertexBaseIndices.length; ++i) {
+        const vertexPermutationIndex = vertexCorrectedToUncorrected[p] * 8 + vertexBaseIndices[i];
+        vertexIndices.push(vertexUncorrectedToCorrected[vertexPermutation[vertexPermutationIndex]]);
+      }
+    }
+
+    this.vertexIndices = new Int32Array(vertexIndices);
+  }
+
+  static get(gl: GL) {
+    return gl.memoize.get('SliceViewShaderBuffers', () => new SliceViewShaderBuffers(gl));
+  }
+};
 
 class VolumeSliceVertexComputationManager extends RefCounted {
   data: SliceViewShaderBuffers;
@@ -277,31 +365,21 @@ for (int e = 0; e < 4; ++e) {
 };
 
 export class RenderLayer extends GenericSliceViewRenderLayer {
-  sources: VolumeChunkSource[][]|null = null;
+  sources: VolumeChunkSource[][];
   vertexComputationManager: VolumeSliceVertexComputationManager;
   constructor(
       multiscaleSource: MultiscaleVolumeChunkSource,
       {shaderError = makeWatchableShaderError(), sourceOptions = <VolumeSourceOptions> {}} = {}) {
-    super(multiscaleSource.chunkManager, multiscaleSource.getSources(sourceOptions)[0][0].spec, {
+    super(multiscaleSource.chunkManager, multiscaleSource.getSources(sourceOptions), {
       shaderError = makeWatchableShaderError(),
     } = {});
 
     let gl = this.gl;
     this.vertexComputationManager = VolumeSliceVertexComputationManager.get(gl);
 
-    let sources = this.sources = multiscaleSource.getSources(sourceOptions);
-    let sourceIds: number[][] = [];
-    for (let alternatives of sources) {
-      let alternativeIds: number[] = [];
-      sourceIds.push(alternativeIds);
-      for (let source of alternatives) {
-        alternativeIds.push(source.rpcId!);
-      }
-    }
-
     let sharedObject = this.registerDisposer(new SharedObject());
     sharedObject.RPC_TYPE_ID = VOLUME_RENDERLAYER_RPC_ID;
-    sharedObject.initializeCounterpart(this.chunkManager.rpc!, {'sources': sourceIds});
+    sharedObject.initializeCounterpart(this.chunkManager.rpc!, {'sources': this.sourceIds});
     this.rpcId = sharedObject.rpcId;
   }
 
