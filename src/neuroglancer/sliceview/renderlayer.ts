@@ -13,7 +13,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
- 
+
 import {ChunkState} from 'neuroglancer/chunk_manager/base';
 import {ChunkManager} from 'neuroglancer/chunk_manager/frontend';
 import {RenderLayer as GenericRenderLayer} from 'neuroglancer/layer';
@@ -48,9 +48,7 @@ export abstract class RenderLayer extends GenericRenderLayer {
     this.shaderError = shaderError;
     shaderError.value = undefined;
     this.chunkManager = chunkManager;
-    console.log(sources);
     this.sources = sources;
-    console.log(this.sources);
     let gl = this.gl;
 
     for (let alternatives of sources) {

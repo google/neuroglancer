@@ -201,7 +201,7 @@ export class MultiscaleVolumeChunkSource implements GenericMultiscaleVolumeChunk
 
     let tileSize = verifyOptionalInt(parameters['tilesize']);
     if (tileSize === undefined) {
-      tileSize = 1024; // Default tile size is 1024 x 1024 
+      tileSize = 1024; // Default tile size is 1024 x 1024
     }
     this.dims[0] = tileSize;
     this.dims[1] = tileSize;
