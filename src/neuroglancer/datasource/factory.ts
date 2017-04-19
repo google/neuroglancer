@@ -16,7 +16,7 @@
 
 import {ChunkManager} from 'neuroglancer/chunk_manager/frontend';
 import {MeshSource} from 'neuroglancer/mesh/frontend';
-import {MultiscalePointChunkSource} from 'neuroglancer/point/frontend';
+import {MultiscaleVectorGraphicsChunkSource} from 'neuroglancer/sliceview/vector_graphics/frontend';
 import {SkeletonSource} from 'neuroglancer/skeleton/frontend';
 import {VolumeType} from 'neuroglancer/sliceview/volume/base';
 import {MultiscaleVolumeChunkSource} from 'neuroglancer/sliceview/volume/frontend';
@@ -69,7 +69,7 @@ export interface GetVolumeOptions {
   volumeType?: VolumeType;
 }
 
-export interface GetPointOptions {}
+export interface GetVectorGraphicsOptions {}
 
 export interface DataSourceFactory {
   description?: string;
@@ -77,10 +77,10 @@ export interface DataSourceFactory {
       (chunkManager: ChunkManager, path: string, options: GetVolumeOptions,
        cancellationToken:
            CancellationToken) => Promise<MultiscaleVolumeChunkSource>| MultiscaleVolumeChunkSource;
-  getPoint?:
-      (chunkManager: ChunkManager, path: string, options: GetPointOptions,
+  getVectorGraphicsSource?:
+      (chunkManager: ChunkManager, path: string, options: GetVectorGraphicsOptions,
        cancellationToken:
-           CancellationToken) => Promise<MultiscalePointChunkSource>| MultiscalePointChunkSource;
+           CancellationToken) => Promise<MultiscaleVectorGraphicsChunkSource>| MultiscaleVectorGraphicsChunkSource;
   getMeshSource?:
       (chunkManager: ChunkManager, path: string,
        cancellationToken: CancellationToken) => Promise<MeshSource>| MeshSource;
@@ -133,12 +133,12 @@ export function getVolume(
   });
 }
 
-export function getPoint(
-    chunkManager: ChunkManager, url: string, options: GetPointOptions = {},
+export function getVectorGraphicsSource(
+    chunkManager: ChunkManager, url: string, options: GetVectorGraphicsOptions = {},
     cancellationToken = uncancelableToken) {
   let [factories, path] = getDataSource(url);
-  return new Promise<MultiscalePointChunkSource>(resolve => {
-    resolve(factories.getPoint!(chunkManager, path, options, cancellationToken));
+  return new Promise<MultiscaleVectorGraphicsChunkSource>(resolve => {
+    resolve(factories.getVectorGraphicsSource!(chunkManager, path, options, cancellationToken));
   });
 }
 

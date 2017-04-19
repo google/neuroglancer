@@ -22,37 +22,37 @@ import {approxEqual} from 'neuroglancer/util/compare';
 import {kAxes, kZeroVec, mat4, rectifyTransformMatrixIfAxisAligned, transformVectorByMat4, vec3} from 'neuroglancer/util/geom';
 import {SharedObject} from 'neuroglancer/worker_rpc';
 
-export interface RenderLayer { sources: PointChunkSource[][]|null; }
+export interface RenderLayer { sources: VectorGraphicsChunkSource[][]|null; }
 
-export interface PointSourceOptions extends SliceViewSourceOptions {}
+export interface VectorGraphicsSourceOptions extends SliceViewSourceOptions {}
 
-export interface PointChunkSource extends SliceViewChunkSource { spec: PointChunkSpecification; }
+export interface VectorGraphicsChunkSource extends SliceViewChunkSource { spec: VectorGraphicsChunkSpecification; }
 
 
-export interface PointChunkSpecificationOptions extends SliceViewChunkSpecificationBaseOptions {
+export interface VectorGraphicsChunkSpecificationOptions extends SliceViewChunkSpecificationBaseOptions {
   chunkDataSize: vec3;
 }
 
 /**
  * Specifies a chunk layout and voxel size.
  */
-export class PointChunkSpecification extends SliceViewChunkSpecification {
+export class VectorGraphicsChunkSpecification extends SliceViewChunkSpecification {
 
-  constructor(options: PointChunkSpecificationOptions) {
+  constructor(options: VectorGraphicsChunkSpecificationOptions) {
     super(options);
   }
 
-  static make(options: PointChunkSpecificationOptions&{pointSourceOptions: PointSourceOptions}) {
-    return new PointChunkSpecification(Object.assign(
+  static make(options: VectorGraphicsChunkSpecificationOptions&{vectorGraphicsSourceOptions: VectorGraphicsSourceOptions}) {
+    return new VectorGraphicsChunkSpecification(Object.assign(
         {}, options,
-        {transform: getCombinedTransform(options.transform, options.pointSourceOptions)}));
+        {transform: getCombinedTransform(options.transform, options.vectorGraphicsSourceOptions)}));
   }
 
   static fromObject(msg: any) {
-    return new PointChunkSpecification(msg);
+    return new VectorGraphicsChunkSpecification(msg);
   }
 
-  toObject(): PointChunkSpecificationOptions {
+  toObject(): VectorGraphicsChunkSpecificationOptions {
     return {
       transform: this.chunkLayout.transform,
       chunkDataSize: this.chunkDataSize,
@@ -66,5 +66,5 @@ export class PointChunkSpecification extends SliceViewChunkSpecification {
   }
 }
 
-export const POINT_RPC_ID = 'point';
-export const POINT_RENDERLAYER_RPC_ID = 'point/RenderLayer';
+export const VECTOR_GRAPHICS_RPC_ID = 'vectorgraphics';
+export const VECTOR_GRAPHICS_RENDERLAYER_RPC_ID = 'vectorgraphics/RenderLayer';

@@ -16,16 +16,17 @@
 
 import {Chunk, ChunkManager, ChunkSource} from 'neuroglancer/chunk_manager/backend';
 import {ChunkPriorityTier} from 'neuroglancer/chunk_manager/base';
-import {POINT_RENDERLAYER_RPC_ID, PointChunkSource as PointChunkSourceInterface, PointChunkSpecification, RenderLayer as RenderLayerInterface} from 'neuroglancer/point/base';
+import {VECTOR_GRAPHICS_RENDERLAYER_RPC_ID, VectorGraphicsChunkSource as VectorGraphicsChunkSourceInterface, VectorGraphicsChunkSpecification, RenderLayer as RenderLayerInterface} from 'neuroglancer/sliceview/vector_graphics/base';
 import {RenderLayer as SliceViewRenderLayer, SliceViewChunk, SliceViewChunkSource} from 'neuroglancer/sliceview/backend';
 import {CancellationToken} from 'neuroglancer/util/cancellation';
 import {vec3, vec3Key} from 'neuroglancer/util/geom';
 import {UseCount} from 'neuroglancer/util/use_count';
 import {registerRPC, registerSharedObject, RPC, SharedObjectCounterpart} from 'neuroglancer/worker_rpc';
 
-export class PointChunk extends SliceViewChunk {
-  source: PointChunkSource|null = null;
+export class VectorGraphicsChunk extends SliceViewChunk {
+  source: VectorGraphicsChunkSource|null = null;
   vertexPositions: Float32Array|null = null;
+  vertexNormals: Float32Array|null = null;
   constructor() {
     super();
   }
@@ -35,8 +36,15 @@ export class PointChunk extends SliceViewChunk {
 
     let source = this.source;
 
-    this.systemMemoryBytes = source!.chunkBytes;
-    this.gpuMemoryBytes = source!.chunkBytes;
+    let chunkBytes: number = 0;
+    if (this.vertexPositions) {
+      chunkBytes = chunkBytes + this.vertexPositions!.buffer.byteLength; 
+    }
+    if (this.vertexNormals) {
+      chunkBytes = chunkBytes + this.vertexNormals!.buffer.byteLength; 
+    }
+    this.systemMemoryBytes = chunkBytes; 
+    this.gpuMemoryBytes = chunkBytes;
 
     this.vertexPositions = null;
   }
@@ -44,12 +52,20 @@ export class PointChunk extends SliceViewChunk {
 
   serialize(msg: any, transfers: any[]) {
     super.serialize(msg, transfers);
-    let {vertexPositions} = this;
+    let {vertexPositions, vertexNormals} = this;
+    
     msg['vertexPositions'] = vertexPositions;
     let vertexPositionsBuffer = vertexPositions!.buffer;
     transfers.push(vertexPositionsBuffer);
 
+    if (vertexNormals) {
+      msg['vertexNormals'] = vertexNormals; 
+      let vertexNormalsBuffer = vertexNormals!.buffer;
+      transfers.push(vertexNormalsBuffer);
+    }
+    
     this.vertexPositions = null;
+    this.vertexNormals = null;
   }
 
   downloadSucceeded() {
@@ -59,24 +75,25 @@ export class PointChunk extends SliceViewChunk {
 
   freeSystemMemory() {
     this.vertexPositions = null;
+    this.vertexNormals = null;
   }
 }
 
-export abstract class PointChunkSource extends SliceViewChunkSource implements
-    PointChunkSourceInterface {
-  spec: PointChunkSpecification;
+export abstract class VectorGraphicsChunkSource extends SliceViewChunkSource implements
+    VectorGraphicsChunkSourceInterface {
+  spec: VectorGraphicsChunkSpecification;
   chunkBytes: number;
 
   constructor(rpc: RPC, options: any) {
     super(rpc, options);
-    this.spec = PointChunkSpecification.fromObject(options['spec']);
+    this.spec = VectorGraphicsChunkSpecification.fromObject(options['spec']);
   }
 
   getChunk(chunkGridPosition: vec3) {
     let key = vec3Key(chunkGridPosition);
-    let chunk = <PointChunk>this.chunks.get(key);
+    let chunk = <VectorGraphicsChunk>this.chunks.get(key);
     if (chunk === undefined) {
-      chunk = this.getNewChunk_(PointChunk);
+      chunk = this.getNewChunk_(VectorGraphicsChunk);
       chunk.initializeVolumeChunk(key, chunkGridPosition);
       this.addChunk(chunk);
     }
@@ -84,13 +101,13 @@ export abstract class PointChunkSource extends SliceViewChunkSource implements
   }
 }
 
-@registerSharedObject(POINT_RENDERLAYER_RPC_ID)
+@registerSharedObject(VECTOR_GRAPHICS_RENDERLAYER_RPC_ID)
 export class RenderLayer extends SliceViewRenderLayer implements RenderLayerInterface {
-  sources: PointChunkSource[][];
+  sources: VectorGraphicsChunkSource[][];
 }
 
 
-export abstract class ParameterizedPointChunkSource<Parameters> extends PointChunkSource {
+export abstract class ParameterizedVectorGraphicsChunkSource<Parameters> extends VectorGraphicsChunkSource {
   parameters: Parameters;
   constructor(rpc: RPC, options: any) {
     super(rpc, options);
