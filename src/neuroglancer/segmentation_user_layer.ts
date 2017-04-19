@@ -129,8 +129,8 @@ export class SegmentationUserLayer extends UserLayer {
         if (!this.wasDisposed) {
           let base = new SkeletonLayer(
               manager.chunkManager, skeletonSource, manager.voxelSize, this.displayState);
-          this.addRenderLayer(new PerspectiveViewSkeletonLayer(base));
-          this.addRenderLayer(new SliceViewPanelSkeletonLayer(base));
+          this.addRenderLayer(new PerspectiveViewSkeletonLayer(base.addRef()));
+          this.addRenderLayer(new SliceViewPanelSkeletonLayer(/* transfer ownership */ base));
         }
       });
     }
