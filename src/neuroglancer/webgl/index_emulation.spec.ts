@@ -32,7 +32,7 @@ describe('webgl/index_emulation', () => {
       shader.bind();
 
       for (let indexValue of [0, 1, 143210]) {
-        let indices = Uint32Array.of(indexValue);
+        let indices = Uint32Array.of(indexValue, indexValue, indexValue, indexValue);
         let indexBuffer = makeIndexBuffer(gl, indices);
         try {
           helper.bind(indexBuffer, shader);
