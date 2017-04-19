@@ -40,14 +40,13 @@ script:
 # - npm test # dissable because of being unable to run webgl on travis
 before_deploy:
 - npm run build-min
-- cp -r ./dist/min static/
-- rm -rf node_modules
-- $(python version.py)
+- cp -r ./dist/min appengine/static/
 - export DEPLOY="false"
+- $(python version.py) #exports APPVERSION
 - if [ "$APPVERSION" == "master" ]; then export DEPLOY="true"; fi
 - virtualenv env
 - source env/bin/activate
-- pip install -t lib -r requirements.txt
+- pip install -t ./appengine/lib -r ./appengine/requirements.txt
 deploy:
   provider: gae
   skip_cleanup: true
@@ -59,3 +58,4 @@ deploy:
   no_promote: true
   default: $DEPLOY
   verbosity: "error"
+  config: "./appengine/app.yaml"

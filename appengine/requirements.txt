@@ -1,2 +1,1 @@
-# used by appengine
 google-api-python-client==1.6.2
