@@ -7,11 +7,11 @@ from threading import Thread
 
 from glob import glob
 from google.cloud.storage import Client
-import boto
+import boto 
+from boto.s3.connection import S3Connection
 import gzip
 
-QUEUE_NAME = 'pull-queue'
-PROJECT_NAME = 'neuromancer-seung-import'
+from neuroglancer.pipeline.secrets import PROJECT_NAME, google_credentials_path, aws_credentials
 
 class Storage(object):
     """
@@ -204,14 +204,9 @@ class GoogleCloudStorageInterface(object):
     def __init__(self, path):
         self._path = path
         client = Client.from_service_account_json(
-            self.credentials_path(),
+            google_credentials_path,
             project=PROJECT_NAME)
         self._bucket = client.get_bucket(self._path.bucket_name)
-
-    @staticmethod
-    def credentials_path():
-        curr_dir = os.path.dirname(os.path.realpath(__file__))
-        return os.path.join(curr_dir,'client-secret.json')
 
     def get_path_to_file(self, file_path):
         clean = filter(None,[self._path.dataset_path,
@@ -255,7 +250,8 @@ class S3Interface(object):
 
     def __init__(self, path):
         self._path = path
-        conn = boto.connect_s3()
+        conn = S3Connection(aws_credentials['AWS_ACCESS_KEY_ID'],
+                            aws_credentials['AWS_SECRET_ACCESS_KEY'])
         self._bucket = conn.get_bucket(self._path.bucket_name)
 
     def get_path_to_file(self, file_path):

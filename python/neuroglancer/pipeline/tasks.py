@@ -1,5 +1,4 @@
 from __future__ import print_function
-import base64
 from collections import defaultdict
 import json
 import itertools
@@ -14,48 +13,23 @@ import numpy as np
 from backports import lzma
 from tqdm import tqdm
 
-from neuroglancer.ingest.storage import Storage, GoogleCloudStorageInterface, PROJECT_NAME, QUEUE_NAME
-from neuroglancer.ingest.volumes.precomputed import Precomputed
+from neuroglancer.pipeline import Storage, Precomputed, RegisteredTask
 from neuroglancer import chunks, downsample
 from neuroglancer.ingest.mesher import Mesher
 
 
-class IngestTask(object):
+class IngestTask(RegisteredTask):
     """Ingests and does downsampling.
        We want tasks execution to be independent of each other, so that no sincronization is
        required.
        The downsample scales should be such that the lowest resolution chunk should be able
        to be produce from the data available.
     """
-    def __init__(self, chunk_path=None, chunk_encoding=None, layer_path=None, fromjson=None, _id=None):
+    def __init__(self, chunk_path, chunk_encoding, layer_path):
+        super(IngestTask, self).__init__(chunk_path, chunk_encoding, layer_path)
         self.chunk_path = chunk_path
         self.chunk_encoding = chunk_encoding
         self.layer_path = layer_path
-        self.tag = 'ingest'
-        if fromjson:
-            self.payloadBase64 = fromjson
-            self._id = _id
-
-    @property
-    def payloadBase64(self):
-        payload = json.dumps({
-            'chunk_path': self.chunk_path,
-            'chunk_encoding': self.chunk_encoding,
-            'layer_path': self.layer_path
-        })
-        return base64.b64encode(payload)
-    
-    @payloadBase64.setter
-    def payloadBase64(self, payload):
-        decoded_string =  base64.b64decode(payload).encode('ascii')
-        d = json.loads(decoded_string)
-        self.chunk_path = d['chunk_path']
-        self.chunk_encoding = d['chunk_encoding']
-        self.layer_path = d['layer_path']
-
-    def __repr__(self):
-        return "IngestTask(chunk_path='{}', chunk_encoding='{}', layer_path='{}'')".format(
-            self.chunk_path, self.chunk_encoding, self.layer_path)
 
     def execute(self):
         self._storage = Storage(self.layer_path)
@@ -140,34 +114,11 @@ class IngestTask(object):
         return '{}/{:d}-{:d}_{:d}-{:d}_{:d}-{:d}'.format(scale['key'],
           xmin, xmax, ymin, ymax, zmin, zmax) 
 
-class DownsampleTask(object):
-    def __init__(self, chunk_path=None, layer_path=None, fromjson=None, _id=None):
-        self._id =  None
+class DownsampleTask(RegisteredTask):
+    def __init__(self, chunk_path, layer_path):
+        super(DownsampleTask, self).__init__(chunk_path, layer_path)
         self.chunk_path = chunk_path
         self.layer_path = layer_path
-        self.tag = 'downsample'
-        if fromjson:
-            self.payloadBase64 = fromjson
-            self._id = _id
-
-    @property
-    def payloadBase64(self):
-        payload = json.dumps({
-            'chunk_path': self.chunk_path,
-            'layer_path': self.layer_path
-        })
-        return base64.b64encode(payload)
-    
-    @payloadBase64.setter
-    def payloadBase64(self, payload):
-        decoded_string =  base64.b64decode(payload).encode('ascii')
-        d = json.loads(decoded_string)
-        self.chunk_path = d['chunk_path']
-        self.layer_path = d['layer_path']
-
-    def __repr__(self):
-        return "DownsampleTask(chunk_path='{}', layer_path='{}')".format(
-            self.chunk_path, self.layer_path)
 
     def execute(self):
         self._storage = Storage(self.layer_path)
@@ -235,49 +186,19 @@ class DownsampleTask(object):
         return '{}/{:d}-{:d}_{:d}-{:d}_{:d}-{:d}'.format(self._key,
           self._xmin, self._xmax, self._ymin, self._ymax, self._zmin, self._zmax) 
 
+class MeshTask(RegisteredTask):
 
-class MeshTask(object):
-
-    def __init__(self, chunk_key=None, chunk_position=None, layer_path=None, 
-                 lod=0, simplification=5, segments=[], fromjson=None, _id=None):
-        self._id =  None
+    def __init__(self, chunk_key, chunk_position, layer_path, 
+                 lod=0, simplification=5, segments=[]):
+        
+        super(MeshTask, self).__init__(chunk_key, chunk_position, layer_path, 
+                                       lod, simplification, segments)
         self.chunk_key = chunk_key
         self.chunk_position = chunk_position
         self.layer_path = layer_path
         self.lod = lod
         self.simplification = simplification
         self.segments = segments
-        self.tag = 'mesh'
-        if fromjson:
-            self.payloadBase64 = fromjson
-            self._id = _id
-
-    @property
-    def payloadBase64(self):
-        payload = json.dumps({
-            'chunk_key': self.chunk_key,
-            'chunk_position': self.chunk_position,
-            'layer_path': self.layer_path,
-            'lod': self.lod,
-            'simplification': self.simplification,
-            'segments': self.segments
-        })
-        return base64.b64encode(payload)
-    
-    @payloadBase64.setter
-    def payloadBase64(self, payload):
-        decoded_string =  base64.b64decode(payload).encode('ascii')
-        d = json.loads(decoded_string)
-        self.chunk_key = d['chunk_key']
-        self.chunk_position = d['chunk_position']
-        self.layer_path = d['layer_path']
-        self.lod = d['lod']
-        self.simplification = d['simplification']
-        self.segments = d['segments'] 
-
-    def __repr__(self):
-        return "MeshTask(chunk_key='{}', chunk_position='{}', layer_path='{}', lod={}, simplification={}, segments={})".format(
-            self.chunk_key, self.chunk_position, self.layer_path, self.lod, self.simplification, self.segments)
 
     def execute(self):
         self._storage = Storage(self.layer_path)
@@ -342,41 +263,17 @@ class MeshTask(object):
         points[2::3] = (points[2::3] + self._zmin) * resolution[2]   # z
         return points
 
-
-class MeshManifestTask(object):
+class MeshManifestTask(RegisteredTask):
     """
     Finalize mesh generation by post-processing chunk fragment
     lists into mesh fragment manifests.
     These are necessary for neuroglancer to know which mesh
     fragments to download for a given segid.
     """
-    def __init__(self, layer_path=None, lod=None, fromjson=None, _id=None):
-        self._id =  None
+    def __init__(self, layer_path, lod):
+        super(MeshManifestTask, self).__init__(layer_path, lod)
         self.layer_path = layer_path
         self.lod = lod
-        self.tag = 'mesh_manifest'
-        if fromjson:
-            self.payloadBase64 = fromjson
-            self._id = _id
-
-    @property
-    def payloadBase64(self):
-        payload = json.dumps({
-            'layer_path': self.layer_path,
-            'lod': self.lod
-        })
-        return base64.b64encode(payload)
-    
-    @payloadBase64.setter
-    def payloadBase64(self, payload):
-        decoded_string =  base64.b64decode(payload).encode('ascii')
-        d = json.loads(decoded_string)
-        self.layer_path = d['layer_path']
-        self.lod = d['lod']
-
-    def __repr__(self):
-        return "MeshManifestTask(layer_path='{}', lod={})".format(
-            self.layer_path, self.lod)
 
     def execute(self):
         self._storage = Storage(self.layer_path)
@@ -410,39 +307,14 @@ class MeshManifestTask(object):
 
             last_fragments.append('{}:{}:{}'.format(_id, lod, chunk_position))
 
-class BigArrayTask(object):
-    def __init__(self, layer_path, chunk_path=None, chunk_encoding=None, version=None, fromjson=None, _id=None):
-        self._id =  None
+class BigArrayTask(RegisteredTask):
+    def __init__(self, layer_path, chunk_path, chunk_encoding, version):
+        super(BigArrayTask, self).__init__(layer_path, chunk_path, chunk_encoding, version)
         self.layer_path = layer_path
         self.chunk_path = chunk_path
         self.chunk_encoding = chunk_encoding
         self.version = version
-        self.tag = 'bigarray'
-        if fromjson:
-            self.payloadBase64 = fromjson
-            self._id = _id
-
-    @property
-    def payloadBase64(self):
-        payload = json.dumps({
-            'chunk_path': self.chunk_path,
-            'chunk_encoding': self.chunk_encoding,
-            'version': self.version,
-        })
-        return base64.b64encode(payload)
-    
-    @payloadBase64.setter
-    def payloadBase64(self, payload):
-        decoded_string =  base64.b64decode(payload).encode('ascii')
-        d = json.loads(decoded_string)
-        self.chunk_path = d['chunk_path']
-        self.chunk_encoding = d['chunk_encoding']
-        self.version = d['version']
-
-    def __repr__(self):
-        return "BigArrayTask(chunk_path='{}, chunk_encoding='{}', version='{}')".format(
-            self.chunk_path, self.chunk_encoding, self.version)
-
+  
     def execute(self):
         self._parse_chunk_path()
         self._storage = Storage(self.layer_path)
@@ -537,40 +409,13 @@ class BigArrayTask(object):
         else:
             raise NotImplementedError(encoding)
 
-class HyperSquareTask(object):
-    def __init__(self, chunk_path=None, chunk_encoding=None, version=None, layer_path=None, fromjson=None, _id=None):
-        self._id =  None
+class HyperSquareTask(RegisteredTask):
+    def __init__(self, chunk_path, chunk_encoding, version, layer_path):
+        super(HyperSquareTask, self).__init__(chunk_path, chunk_encoding, version, layer_path)
         self.chunk_path = chunk_path
         self.chunk_encoding = chunk_encoding
         self.version = version
         self.layer_path = layer_path
-        self.tag = 'hypersquare'
-        if fromjson:
-            self.payloadBase64 = fromjson
-            self._id = _id
-
-    @property
-    def payloadBase64(self):
-        payload = json.dumps({
-            'chunk_path': self.chunk_path,
-            'chunk_encoding': self.chunk_encoding,
-            'version': self.version,
-            'layer_path': self.layer_path
-        })
-        return base64.b64encode(payload)
-    
-    @payloadBase64.setter
-    def payloadBase64(self, payload):
-        decoded_string =  base64.b64decode(payload).encode('ascii')
-        d = json.loads(decoded_string)
-        self.chunk_path = d['chunk_path']
-        self.chunk_encoding = d['chunk_encoding']
-        self.version = d['version']
-        self.layer_path = d['layer_path']
-
-    def __repr__(self):
-        return "HyperSquareTask(chunk_path='{}, chunk_encoding='{}', version='{}', layer_path='{}')".format(
-            self.chunk_path, self.chunk_encoding, self.version, self.layer_path)
 
     def execute(self):
         self._parse_chunk_path()
@@ -656,142 +501,3 @@ class HyperSquareTask(object):
         else:
             raise NotImplementedError(encoding)
 
-
-class TaskQueue(object):
-    """
-    The standard usage is that a client calls lease to get the next available task,
-    performs that task, and then calls task.delete on that task before the lease expires.
-    If the client cannot finish the task before the lease expires,
-    and has a reasonable chance of completing the task,
-    it should call task.update before the lease expires.
-
-    If the client completes the task after the lease has expired,
-    it still needs to delete the task. 
-
-    Tasks should be designed to be idempotent to avoid errors 
-    if multiple clients complete the same task.
-    """
-    class QueueEmpty(LookupError):
-        def __init__(self):
-            super(LookupError, self).__init__('Queue Empty')
-
-    def __init__(self, project=PROJECT_NAME, queue_name=QUEUE_NAME, local=True):
-        self._project = 's~' + project # unsure why this is necessary
-        self._queue_name = queue_name
-
-        if local:
-            from oauth2client import service_account
-            credentials_path = GoogleCloudStorageInterface.credentials_path()
-            self._credentials = service_account.ServiceAccountCredentials \
-            .from_json_keyfile_name(credentials_path)
-        else:
-            from oauth2client.client import GoogleCredentials
-            self._credentials = GoogleCredentials.get_application_default()
-
-        from googleapiclient.discovery import build
-        self.api =  build('taskqueue', 'v1beta2', credentials=self._credentials).tasks()
-
-
-    def insert(self, task):
-        """
-        Insert a task into an existing queue.
-        """
-        body = {
-            "payloadBase64": task.payloadBase64,
-            "queueName": self._queue_name,
-            "groupByTag": True,
-            "tag": task.tag
-        }
-
-        self.api.insert(project=self._project,
-                        taskqueue=self._queue_name,
-                        body=body).execute(num_retries=6)
-
-
-    def get(self):
-        """
-        Gets the named task in a TaskQueue.
-        """
-        raise NotImplemented
-
-    def list(self):
-        """
-        Lists all non-deleted Tasks in a TaskQueue, 
-        whether or not they are currently leased, up to a maximum of 100.
-        """
-        print (self.api.list(project=self._project, taskqueue=self._queue_name).execute(num_retries=6))
-
-
-    def update(self, task):
-        """
-        Update the duration of a task lease.
-        Required query parameters: newLeaseSeconds
-        """
-        raise NotImplemented
-
-    def lease(self, tag=''):
-        """
-        Acquires a lease on the topmost N unowned tasks in the specified queue.
-        Required query parameters: leaseSecs, numTasks
-        """
-        if not tag:
-            tasks = self.api.lease(
-                project=self._project,
-                taskqueue=self._queue_name, 
-                numTasks=1, 
-                leaseSecs=600,
-                ).execute(num_retries=6)
-        else:
-            tasks = self.api.lease(
-                project=self._project,
-                taskqueue=self._queue_name, 
-                numTasks=1, 
-                leaseSecs=600,
-                groupByTag=True,
-                tag=tag).execute(num_retries=6)
-
-
-        if not 'items' in tasks:
-            raise TaskQueue.QueueEmpty
-        
-          
-        task_json = tasks['items'][0]
-        
-        if task_json['tag'] == 'ingest':
-            return IngestTask(fromjson=task_json['payloadBase64'], _id=task_json['id'])
-        elif task_json['tag'] == 'downsample':
-            return DownsampleTask(fromjson=task_json['payloadBase64'], _id=task_json['id'])
-        elif task_json['tag'] == 'mesh':
-            return MeshTask(fromjson=task_json['payloadBase64'], _id=task_json['id'])
-        elif task_json['tag'] == 'mesh_manifest':
-            return MeshManifestTask(fromjson=task_json['payloadBase64'], _id=task_json['id'])
-        elif task_json['tag'] == 'bigarray':
-            return BigArrayTask(fromjson=task_json['payloadBase64'], _id=task_json['id'])    
-        elif task_json['tag'] == 'hypersquare':
-            return HyperSquareTask(fromjson=task_json['payloadBase64'], _id=task_json['id'])  
-        else:
-            raise NotImplementedError
-
-    def patch(self):
-        """
-        Update tasks that are leased out of a TaskQueue.
-        Required query parameters: newLeaseSeconds
-        """
-        raise NotImplemented
-
-    def delete(self, task):
-        """Deletes a task from a TaskQueue."""
-        self.api.delete(
-            project=self._project,
-            taskqueue=self._queue_name,
-            task=task._id).execute(num_retries=6)
-
-
-if __name__ == '__main__':
-    tq = TaskQueue()
-    t = BigArrayTask(
-        chunk_path='gs://neuroglancer/zfish_v0/affinities/bigarray/block_14337-15360_18433-19456_16385-16512_1-3.h5',
-        chunk_encoding='npz_uint8',
-        version='zfish_affinities')
-    t.execute()
-    # tq.delete(t)

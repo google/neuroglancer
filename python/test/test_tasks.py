@@ -2,10 +2,8 @@ import os.path
 
 import numpy as np
 
-from neuroglancer.ingest.tasks import DownsampleTask, MeshTask
-from neuroglancer.ingest.storage import Storage
-from neuroglancer.ingest.volumes.precomputed import Precomputed
-from neuroglancer.ingest.submit_task import create_downsampling_task, MockTaskQueue
+from neuroglancer.pipeline import Storage, Precomputed, DownsampleTask, MeshTask
+from neuroglancer.pipeline.task_creation import create_downsampling_task, MockTaskQueue
 from neuroglancer import downsample
 from test.test_precomputed import create_layer, delete_layer
 

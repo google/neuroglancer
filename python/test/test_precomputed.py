@@ -2,9 +2,9 @@ import pytest
 
 import shutil
 import numpy as np
-from neuroglancer.ingest.volumes.precomputed import Precomputed
-from neuroglancer.ingest.storage import Storage
-from neuroglancer.ingest.submit_task import (upload_build_chunks, create_info_file_from_build,
+
+from neuroglancer.pipeline import Storage, Precomputed
+from neuroglancer.pipeline.task_creation import (upload_build_chunks, create_info_file_from_build,
     create_ingest_task, MockTaskQueue)
 
 def create_layer(size, offset, layer_type="image"):

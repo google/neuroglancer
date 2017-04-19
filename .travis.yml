@@ -2,11 +2,10 @@ language: node_js
 dist: trusty
 sudo: required
 node_js:
-  - "7.3.0"
+- 7.3.0
 cache:
   directories:
-    - node_modules
-
+  - node_modules
 addons:
   apt:
     packages:
@@ -15,34 +14,24 @@ addons:
     - libgl1-mesa-dri
     - libglapi-mesa
     - libosmesa6
-
 before_install:
-- openssl aes-256-cbc -K $encrypted_79de2f75386b_key -iv $encrypted_79de2f75386b_iv
+- openssl aes-256-cbc -K $encrypted_5d2bae8122b8_key -iv $encrypted_5d2bae8122b8_iv
   -in credentials.tar.gz.enc -out credentials.tar.gz -d
-- tar -xzf credentials.tar.gz 
+- tar -xzf credentials.tar.gz
+- sudo mv secrets /secrets && sudo chown $USER /secrets
 - export CHROME_BIN=/usr/bin/google-chrome
 - export DISPLAY=:99.0
-# - sudo apt-get update
-# - sudo apt-get install -y libappindicator1 fonts-liberation
-# - wget https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb
-# - sudo dpkg -i google-chrome*.deb
-# - rm google-chrome*.deb
-# - sh -e /etc/init.d/xvfb start
-# - sleep 3
 - sudo apt-get install libhdf5-dev
 - pip install -r python/requirements.txt
 - py.test python/test
 script:
 - npm install
-- npm install --only=dev 
-# - gulp check-format
-# - gulp tslint
-# - npm test # dissable because of being unable to run webgl on travis
+- npm install --only=dev
 before_deploy:
 - npm run build-min
 - cp -r ./dist/min appengine/static/
 - export DEPLOY="false"
-- $(python version.py) #exports APPVERSION
+- "$(python version.py)"
 - if [ "$APPVERSION" == "master" ]; then export DEPLOY="true"; fi
 - virtualenv env
 - source env/bin/activate
@@ -50,12 +39,12 @@ before_deploy:
 deploy:
   provider: gae
   skip_cleanup: true
-  keyfile: client-secret.json
+  keyfile: "/secrets/google-secret.json"
   project: neuromancer-seung-import
-  version: $APPVERSION
+  version: "$APPVERSION"
   on:
     all_branches: true
   no_promote: true
-  default: $DEPLOY
-  verbosity: "error"
+  default: "$DEPLOY"
+  verbosity: error
   config: "./appengine/app.yaml"

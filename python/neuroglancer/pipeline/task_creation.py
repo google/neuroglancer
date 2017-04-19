@@ -10,8 +10,8 @@ import numpy as np
 from tqdm import tqdm
 
 from neuroglancer import downsample_scales, chunks
-from neuroglancer.ingest.storage import Storage
-from neuroglancer.ingest.tasks import (TaskQueue, BigArrayTask, IngestTask,
+from neuroglancer.pipeline import Storage, TaskQueue
+from neuroglancer.pipeline.tasks import (BigArrayTask, IngestTask,
      HyperSquareTask, MeshTask, MeshManifestTask, DownsampleTask)
 from neuroglancer.ingest.volumes import HDF5Volume
 
@@ -233,14 +233,14 @@ class MockTaskQueue():
         del task
 
 def ingest_hdf5_example():
-    dataset_name='test_v1'
+    dataset_path='gs://neuroglancer/test_v0'
     task_queue = MockTaskQueue()
     offset = [0,0,0]
     resolution=[6,6,30]
     #ingest image
     layer_type = 'image'
     volume =  HDF5Volume('/usr/people/it2/snemi3d/image.h5', layer_type)
-    storage = Storage('file:///tmp/'+dataset_name+'/image', n_threads=0)
+    storage = Storage(dataset_path+'/image', n_threads=0)
     upload_build_chunks(storage, volume, offset)
     create_info_file_from_build(storage, layer_type, resolution=resolution, encoding='raw')
     create_ingest_task(storage, task_queue)
@@ -250,27 +250,30 @@ def ingest_hdf5_example():
     #ingest segmentation
     layer_type = 'segmentation'
     volume =  HDF5Volume('/usr/people/it2/snemi3d/human_labels.h5', layer_type)
-    storage = Storage('file:///tmp/'+dataset_name+'/segmentation', n_threads=0)
+    storage = Storage(dataset_path+'/segmentation', n_threads=0)
     upload_build_chunks(storage, volume, offset)
     create_info_file_from_build(storage, layer_type, resolution=resolution, encoding='raw')
     create_ingest_task(storage, task_queue)
-    # create_downsampling_task(storage, task_queue)
-    MeshTask(chunk_key='file:///tmp/'+dataset_name+'/segmentation/6_6_30',
-             chunk_position='0-1024_0-1024_0-50',
-             layer_path='file:///tmp/'+dataset_name+'/segmentation',
-             lod=0, simplification=5, segments=[]).execute()
-    MeshTask(chunk_key='file:///tmp/'+dataset_name+'/segmentation/6_6_30',
+    create_downsampling_task(storage, task_queue)
+    t = MeshTask(chunk_key=dataset_path+'/segmentation/6_6_30',
+             chunk_position='0-1024_0-1024_0-51',
+             layer_path=dataset_path+'/segmentation',
+             lod=0, simplification=5, segments=[])
+    task_queue.insert(t)
+    t = MeshTask(chunk_key=dataset_path+'/segmentation/6_6_30',
              chunk_position='0-1024_0-1024_50-100',
-             layer_path='file:///tmp/'+dataset_name+'/segmentation',
-             lod=0, simplification=5, segments=[]).execute()
-    MeshManifestTask(layer_path='file:///tmp/'+dataset_name+'/segmentation',
+             layer_path=dataset_path+'/segmentation',
+             lod=0, simplification=5, segments=[])
+    task_queue.insert(t)
+    t = MeshManifestTask(layer_path=dataset_path+'/segmentation',
                      lod=0).execute()
+    task_queue.insert(t)
 
     #ingest affinities
     # HDF5Volume does some type convertion when affinities are specified as layer type
     # but neuroglancer only has image or segmentation layer types
     volume =  HDF5Volume('/usr/people/it2/snemi3d/affinities.h5', layer_type='affinities')
-    storage = Storage('file://tmp/'+dataset_name+'/affinities', n_threads=0)
+    storage = Storage(dataset_path+'/affinities', n_threads=0)
     upload_build_chunks(storage, volume, offset)
     create_info_file_from_build(storage, layer_type='image',
         resolution=resolution, encoding='raw')
