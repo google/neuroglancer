@@ -8,6 +8,7 @@ RUN apt-get update && apt-get install -y -qq --no-install-recommends wget unzip 
 # Install the Google Cloud SDK.
 ENV HOME /
 ENV CLOUDSDK_PYTHON_SITEPACKAGES 1
+ENV CLOUD_COMPUTING 1
 RUN wget https://dl.google.com/dl/cloudsdk/channels/rapid/google-cloud-sdk.zip && unzip google-cloud-sdk.zip && rm google-cloud-sdk.zip
 RUN google-cloud-sdk/install.sh --usage-reporting=true --path-update=true --bash-completion=true --rc-path=/.bashrc --additional-components app-engine-java app-engine-python app kubectl alpha beta gcd-emulator pubsub-emulator cloud-datastore-emulator app-engine-go bigtable
 # Disable updater check for the whole installation.
