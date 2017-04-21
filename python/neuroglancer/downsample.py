@@ -78,6 +78,9 @@ def downsample_with_averaging(array, factor):
 
     @return: The downsampled array, of the same type as x.
     """
+    if len(array.shape) == 4 and len(factor) == 3:
+      factor = list(factor) + [ 1 ] # don't mix channels
+
     factor = tuple(factor)
     output_shape = tuple(int(math.ceil(s / f)) for s, f in zip(array.shape, factor))
     temp = np.zeros(output_shape, float)
