@@ -15,6 +15,7 @@
 from __future__ import division
 
 import math
+import operator
 import numpy as np
 
 def method(layer_type):
@@ -24,6 +25,53 @@ def method(layer_type):
     return downsample_segmentation
   else:
     return downsample_with_striding 
+
+def odd_to_even(image):
+  """
+  To facilitate 2x2 downsampling segmentation, change an odd sized image into an even sized one.
+  Works by mirroring the starting 1 pixel edge of the image on odd shaped sides.
+
+  e.g. turn a 3x3x5 image into a 4x4x5 (the x and y are what are getting downsampled)
+  
+  For example: [ 3, 2, 4 ] => [ 3, 3, 2, 4 ] which is now super easy to downsample.
+
+  """
+  if len(image.shape) == 3:
+    image = image[ :,:,:, np.newaxis ]
+
+  shape = np.array(image.shape)
+
+  offset = (shape % 2)[:2] # x,y offset
+  
+  if not np.any(offset): # any non-zeros
+    return image
+
+  oddshape = image.shape[:2] + offset
+  oddshape = np.append(oddshape, shape[2:])
+  oddshape = oddshape.astype(int)
+
+  newimg = np.empty(shape=oddshape, dtype=image.dtype)
+
+  ox,oy = offset
+  sx,sy,sz,ch = oddshape
+
+  newimg[0,0,0,:] = image[0,0,0,:] # corner
+  newimg[ox:sx,0,0,:] = image[:,0,0,:] # x axis line
+  newimg[0,oy:sy,0,:] = image[0,:,0,:] # y axis line 
+  newimg[0,0,:,:] = image[0,0,:,:] # vertical line
+
+  newimg[ox:,oy:,:,:] = image[:,:,:,:]
+  newimg[ox:sx,0,:,:] = image[:,0,:,:]
+  newimg[0,oy:sy,:,:] = image[0,:,:,:]
+
+  return newimg
+
+def scale_series_to_downsample_factors(scales):
+  fullscales = [ np.array(scale) for scale in scales ] 
+  factors = []
+  for i in xrange(1, len(fullscales)):
+    factors.append( fullscales[i] / fullscales[i - 1]  )
+  return [ factor.astype(int) for factor in factors ]
 
 def downsample_with_averaging(array, factor):
     """Downsample x by factor using averaging.
@@ -42,22 +90,45 @@ def downsample_with_averaging(array, factor):
     return np.cast[array.dtype](temp / counts)
 
 def downsample_segmentation(data, factor):
-  factor = tuple(factor)
-  if factor == (1,1,1):
+  factor = np.array(factor)
+  if np.array_equal(factor, np.array([1,1,1])):
     return data
 
   is_pot = lambda x: (x != 0) and not (x & (x - 1)) # is power of two
-  is_twod_pot_downsample = (factor[2] == 1) and (factor[1] == factor[0]) and is_pot(factor[0])
-  has_even_dims = (data.shape[0] % 2 == 0) and (data.shape[1] % 2 == 0)
-  if not is_twod_pot_downsample or not has_even_dims:
-    return downsample_with_striding(data, factor)
+  is_twod_pot_downsample = np.any(factor == 1) and is_pot(reduce(operator.mul, factor))
+  
+  if not is_twod_pot_downsample:
+    return downsample_with_striding(data, tuple(factor))
+
+  preserved_axis = np.where(factor == 1)[0][0] # e.g. 0, 1, 2
+
+  shape3d = np.array(data.shape[:3])
+
+  modulo_shape = shape3d % 2
+  modulo_shape[preserved_axis] = 0
+  has_even_dims = sum(modulo_shape) == 0 
+
+  # algorithm is written for xy plane, so
+  # switch other orientations to that plane, 
+  # do computation and switch back.
+  data = np.swapaxes(data, preserved_axis, 2)
+
+  if not has_even_dims:
+    data = odd_to_even(data)
+    shape3d = np.array(data.shape[:3])
+
   output = np.zeros(
-    shape=( data.shape[0] / 2, data.shape[1] / 2, data.shape[2], data.shape[3]), 
+    shape=( int(data.shape[0] / 2), int(data.shape[1] / 2), data.shape[2], data.shape[3]), 
     dtype=data.dtype
   )
   for z in xrange(data.shape[2]):
     output[:,:,z,:] = downsample_segmentation_2D_4x(data[:,:,z,:])
-  factor = (factor[0] / 2, factor[1] / 2, 1)
+  
+  factor = factor / 2
+  factor[preserved_axis] = 1
+
+  output = np.swapaxes(output, preserved_axis, 2)
+  
   return downsample_segmentation(output, factor)
 
 def downsample_segmentation_2D_4x(data):
