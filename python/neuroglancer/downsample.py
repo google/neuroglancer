@@ -65,8 +65,10 @@ def downsample_segmentation_2D_4x(data):
   image by 2 on each side using the COUNTLESS algorithm."""
   sections = []
 
-  # This algorithm doesn't handle 0 correctly, so add one now and take it away later
-  # It's essentially a tradeoff between the low and high end of the integer.
+  # allows us to prevent losing 1/2 a bit of information 
+  # at the top end by using a bigger type. Without this 255 is handled incorrectly.
+  data, upgraded = upgrade_type(data) 
+
   data = data + 1 # don't use +=, it will affect the original data.
 
   factor = (2,2)
@@ -81,8 +83,37 @@ def downsample_segmentation_2D_4x(data):
 
   a = ab_ac | bc # ab or ac or bc
 
-  return a + (a == 0) * d - 1 # a or d + 1
+  result = a + (a == 0) * d - 1 # a or d - 1
+
+  if upgraded:
+    return downgrade_type(result)
+
+  return result
+
+def upgrade_type(arr):
+  dtype = arr.dtype
+
+  if dtype == np.uint8:
+    return arr.astype(np.uint16), True
+  elif dtype == np.uint16:
+    return arr.astype(np.uint32), True
+  elif dtype == np.uint32:
+    return arr.astype(np.uint64), True
+
+  return arr, False
   
+def downgrade_type(arr):
+  dtype = arr.dtype
+
+  if dtype == np.uint64:
+    return arr.astype(np.uint32)
+  elif dtype == np.uint32:
+    return arr.astype(np.uint16)
+  elif dtype == np.uint16:
+    return arr.astype(np.uint8)
+  
+  return arr
+
 def downsample_with_striding(array, factor): 
     """Downsample x by factor using striding.
 
