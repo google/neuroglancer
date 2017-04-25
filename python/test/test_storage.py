@@ -34,13 +34,24 @@ def test_read_write():
             "gs://neuroglancer/removeme/read_write",
             "s3://neuroglancer/removeme/read_write"]
 
-    for url in urls:
-        s = Storage(url, n_threads=5)
-        content = 'some_string'
-        s.put_file('info', content, compress=False)
-        s.wait_until_queue_empty()
-        assert s.get_file('info') == content
-        assert s.get_file('nonexistentfile') is None
+    for num_threads in xrange(0,11,5):
+        for url in urls:
+            s = Storage(url, n_threads=num_threads)
+            content = 'some_string'
+            s.put_file('info', content, compress=False)
+            s.wait_until_queue_empty()
+            assert s.get_file('info') == content
+            assert s.get_file('nonexistentfile') is None
+
+            num_infos = max(num_threads, 1)
+
+            results = s.get_files([ 'info' for i in xrange(num_infos) ])
+
+            assert len(results) == num_infos
+            assert results[0]['filename'] == 'info'
+            assert results[0]['content'] == content
+            assert all(map(lambda x: x['error'] is None, results))
+            assert s.get_files([ 'nonexistentfile' ])[0]['content'] is None
 
     shutil.rmtree("/tmp/removeme/read_write")
 

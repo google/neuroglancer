@@ -4,6 +4,7 @@ from Queue import Queue
 import os.path
 import re
 from threading import Thread
+from functools import partial
 
 from glob import glob
 from google.cloud.storage import Client
@@ -56,6 +57,11 @@ class Storage(object):
             worker.setDaemon(True)
             worker.start()
 
+    def _kill_threads(self):
+        self.wait_until_queue_empty()
+        for _ in xrange(self._n_threads):
+            self._queue.put( ('TERMINATE', None, None ) )
+
     def _process_task(self):
         """
         Connections to s3 or gcs are likely not thread-safe,
@@ -64,12 +70,26 @@ class Storage(object):
         """
         interface = self._interface(self._path)
         while True:
-            # task[0] referes to an string with
-            # the method name.
-            # task[1:] are the arguments to the
-            # method.
+            # task[0] referes to an string with the method name.
+            # task[1] is a callback
+            # task[2:] are the arguments to the method.
             task = self._queue.get()
-            getattr(interface, task[0])(*task[1:])
+            fn_name, cb, args = task[0], task[1], task[2:]
+            
+            if fn_name == 'TERMINATE':
+                self._queue.task_done()
+                return
+
+            result = error = None
+
+            try:
+                result = getattr(interface, fn_name)(*args)
+            except Exception as e:
+                error = e.value
+
+            if cb:
+                cb(result, error)
+
             self._queue.task_done()
 
     @classmethod
@@ -90,11 +110,8 @@ class Storage(object):
             content = self._compress(content)
 
         if self._n_threads:
-            try:
-                self._queue.put(('put_file', file_path, content, compress))
-            except Queue.Full:
-                self.wait_until_queue_empty()
-                self._queue.put(('put_file', file_path, content, compress))
+            # None is the non-existant callback
+            self._queue.put(('put_file', None, file_path, content, compress), block=True)
         else:
             self._interface(self._path).put_file(file_path, content, compress)
 
@@ -107,6 +124,46 @@ class Storage(object):
             content = self._maybe_uncompress(content)
         return content
 
+    def get_files(self, file_paths):
+        """
+        returns a list of files faster by using threads
+        """
+
+        results = []
+
+        def store_result(path, result, error):
+            content, decompress = result
+
+            if content and decompress:
+                content = self._maybe_uncompress(content)
+
+            results.append({
+                "filename": path,
+                "content": content,
+                "error": error,
+            })
+
+        for path in file_paths:
+            if self._n_threads:
+                callback = partial(store_result, path)
+                self._queue.put(('get_file', callback, path), block=True)
+            else:
+                result = error = None
+
+                try:
+                    # False is the decompress? flag
+                    # get_file already runs through maybe_decompress, 
+                    # so it's definitely already decompressed
+                    result = ( self.get_file(path), False ) 
+                except Exception as e:
+                    error = e.value
+
+                store_result(path, result, error)
+
+        self.wait_until_queue_empty()
+
+        return results
+
     def _maybe_uncompress(self, content):
         """ Uncompression is applied if the first to bytes matches with
             the gzip magic numbers. 
@@ -118,19 +175,13 @@ class Storage(object):
             return self._uncompress(content)
         return content
 
-    def get_files(self, file_paths):
-        """
-        returns a list of files faster by using threads
-        """
-        pass
-
     @staticmethod
     def _compress(content):
         stringio = StringIO()
         gzip_obj = gzip.GzipFile(mode='wb', fileobj=stringio)
         gzip_obj.write(content)
         gzip_obj.close()
-        return  stringio.getvalue()
+        return stringio.getvalue()
 
     @staticmethod
     def _uncompress(content):
@@ -147,7 +198,7 @@ class Storage(object):
             self._queue.join()
 
     def __del__(self):
-        self.wait_until_queue_empty()
+        self._kill_threads()
 
 class FileInterface(object):
 
