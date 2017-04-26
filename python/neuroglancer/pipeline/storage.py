@@ -31,7 +31,7 @@ class Storage(object):
     ExtractedPath = namedtuple('ExtractedPath',
         ['protocol','bucket_name','dataset_path','dataset_name','layer_name'])
 
-    def __init__(self, layer_path='', n_threads=10):
+    def __init__(self, layer_path='', n_threads=20):
 
         self._layer_path = layer_path
         self._path = self.extract_path(layer_path)

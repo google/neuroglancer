@@ -22,9 +22,9 @@ while True:
     try:
         task = tq.lease()
         task.execute()
-        tq.delete(task)
+        tq.delete(task.id)
         cloud_logger.info({
-            "taskName": task._id,
+            "taskName": task.id,
             "taskQueueName": QUEUE_NAME,
             "message": "succesfully executed.\n" + task.__repr__()
         }) 
