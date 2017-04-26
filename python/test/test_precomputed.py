@@ -156,3 +156,11 @@ def test_reader_grid_aligned():
 
     with pytest.raises(ValueError):
         pr._slice_to_chunks([slice(63,128)], slc_idx=0)
+
+
+def test_setitem_mismatch():
+    delete_layer()
+    storage, data = create_layer(size=(64,64,64,1), offset=(0,0,0))
+    pr = Precomputed(storage)
+    with pytest.raises(ValueError):
+        pr[0:64,0:64,0:64] = np.zeros(shape=(5,5,5,1), dtype=np.uint8)

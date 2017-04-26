@@ -50,9 +50,12 @@ class Precomputed(object):
         """
         offset =  self._get_offsets(slices)
         for c in self._iter_chunks(slices):
-            content = chunks.encode(
-                input_volume[self._slices_from_chunk(c, offset)], 
-                self._scale['encoding'])
+            input_chunk = input_volume[self._slices_from_chunk(c, offset)]
+            if input_chunk.shape != self._get_chunk_shape(c):
+                raise ValueError("Illegal slicing, {} != {}".format(
+                    self._get_slices_shape(slices), input_volume.shape))
+
+            content = chunks.encode(input_chunk, self._scale['encoding'])
             self._storage.put_file(
                 file_path=self._chunk_to_file_path(c),
                 content=content)
