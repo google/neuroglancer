@@ -117,6 +117,13 @@ export function parseSpecialUrl(url: string): [string[], string] {
     ];
     return [baseUrls, match[3]];
   }
+  else if (protocol === 's3') {
+    const bucket = match[2];
+    const baseUrls = [
+      `https://s3.amazonaws.com/${bucket}`,
+    ];
+    return [baseUrls, match[3]];
+  }
   else if (protocol === 'glance') {
     const gs_cloudpath = url.replace('glance://', '');
     url = `https://${location.hostname}/blob/${gs_cloudpath}`;

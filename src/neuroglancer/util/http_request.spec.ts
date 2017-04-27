@@ -16,6 +16,13 @@ describe('Prasing Special URLs', () => {
     expect(result[1]).toBe('/dataset/layer/');
   });
 
+  it('Parse AWS S3 Url (s3://)', () => {
+    let result = parseSpecialUrl('s3://bucket/dataset/layer/')
+    
+    expect(result[0][0]).toBe('https://s3.amazonaws.com/bucket');
+    expect(result[1]).toBe('/dataset/layer/');
+  });
+
   it('Parse Glance Url (glance://)', () => {
     expect(ezParseSpecialUrl('glance://dataset/layer/')).toBe('https://localhost/blob/dataset/layer/');
   });
