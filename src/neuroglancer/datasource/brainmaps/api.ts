@@ -71,7 +71,7 @@ export function makeRequest(
         return;
       }
       xhr = openShardedHttpRequest(INSTANCE_BASE_URLS[instance], path, method);
-      xhr.responseType = responseType;
+      xhr.responseType = <XMLHttpRequestResponseType>responseType;
       xhr.setRequestHeader('Authorization', `${token['tokenType']} ${token['accessToken']}`);
       xhr.onloadend = function(this: XMLHttpRequest) {
         if (xhr === null) {
