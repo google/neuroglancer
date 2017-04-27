@@ -1,3 +1,5 @@
+from __future__ import print_function
+
 import threading
 import json
 from weakref import WeakValueDictionary
@@ -218,7 +220,7 @@ class ObjectHandler(BaseHandler):
 def make_app(path):
     if path:
         G = nx.read_gpickle(path)
-        print 'graph restored'
+        print('graph restored')
     else:
         G = nx.Graph()
 

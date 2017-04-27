@@ -1,3 +1,6 @@
+
+from __future__ import print_function
+
 import os
 import re
 
@@ -216,7 +219,7 @@ class VolumeCutout(np.ndarray):
     
     mkdir(directory)
 
-    print "Saving to {}".format(directory)
+    print("Saving to {}".format(directory))
 
     indexmap = {
       'x': 0,

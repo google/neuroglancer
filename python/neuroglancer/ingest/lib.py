@@ -1,3 +1,5 @@
+from __future__ import print_function
+
 import os
 import io
 import re 
@@ -114,7 +116,7 @@ def gcloudFileIterator(cloudpaths, keep_files=None, use_ls=False, compress=False
   # and filter out the ones it doesn't have. This is much faster than
   # requesting them one by one and getting a 404.
   if use_ls:
-    print "Downloading directoring listing. If this is not desired, set use_ls=False."
+    print("Downloading directoring listing. If this is not desired, set use_ls=False.")
     in_cloud = set( gcloud_ls(os.path.dirname(cloudpaths[0])) )
     future_failed_downloads = to_download.difference(in_cloud)
     to_download = to_download.difference(future_failed_downloads)
