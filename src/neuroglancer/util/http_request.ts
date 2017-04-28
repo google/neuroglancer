@@ -78,9 +78,8 @@ export function openShardedHttpRequest(baseUrls: string|string[], path: string, 
 export function sendHttpRequest(
   xhr: XMLHttpRequest, responseType: 'arraybuffer', token?: CancellationToken): Promise<ArrayBuffer>;
 export function sendHttpRequest(xhr: XMLHttpRequest, responseType: 'json', token?: CancellationToken): Promise<any>;
-export function sendHttpRequest(xhr: XMLHttpRequest, responseType: string, token?: CancellationToken): any;
-
-export function sendHttpRequest(xhr: XMLHttpRequest, responseType: string, token: CancellationToken = uncancelableToken) {
+export function sendHttpRequest(xhr: XMLHttpRequest, responseType: XMLHttpRequestResponseType, token?: CancellationToken): any;
+export function sendHttpRequest(xhr: XMLHttpRequest, responseType: XMLHttpRequestResponseType, token: CancellationToken = uncancelableToken) {
   xhr.responseType = responseType;
   return new Promise((resolve, reject) => {
     const abort = () => { xhr.abort(); };

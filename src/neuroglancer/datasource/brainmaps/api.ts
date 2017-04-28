@@ -95,7 +95,7 @@ setupBrainmapsInstance(PRODUCTION_INSTANCE, 'brainmaps.googleapis.com', 'prod', 
 export interface HttpCall {
   method: 'GET'|'POST';
   path: string;
-  responseType: 'arraybuffer'|'json'|string;
+  responseType: XMLHttpRequestResponseType;
   payload?: string;
 }
 
