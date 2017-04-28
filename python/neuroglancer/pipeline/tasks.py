@@ -37,7 +37,7 @@ class IngestTask(RegisteredTask):
         self._download_info()
         self._download_input_chunk()
         self._create_chunks()
-        self._storage.wait_until_queue_empty()
+        self._storage.wait()
 
     def _parse_chunk_path(self):
         match = re.match(r'^.*/(\d+)-(\d+)_(\d+)-(\d+)_(\d+)-(\d+)$', self.chunk_path)
@@ -89,6 +89,7 @@ class IngestTask(RegisteredTask):
             encoded = self._encode(chunk, scale["encoding"])
             filename = self._get_filename(x, y, z, chunk_size, downsample_ratio, scale)
             self._storage.put_file(filename, encoded)
+            self._storage.wait()
 
     def _encode(self, chunk, encoding):
         if encoding == "jpeg":
@@ -128,7 +129,7 @@ class DownsampleTask(RegisteredTask):
         self._compute_input_slice()
         self._download_input_chunk()
         self._upload_output_chunk()
-        self._storage.wait_until_queue_empty()
+        self._storage.wait()
 
     def _download_info(self):
         self._info = json.loads(self._storage.get_file('info'))
@@ -186,6 +187,7 @@ class DownsampleTask(RegisteredTask):
             file_path=self._get_filename(),
             content=self._encode(self._data, self._info['scales'][self._output_index]["encoding"])
             )
+        self._storage.wait()
 
     def _encode(self, chunk, encoding):
         if encoding == "jpeg":
@@ -223,7 +225,7 @@ class MeshTask(RegisteredTask):
         self._download_info()
         self._download_input_chunk()
         self._compute_meshes()
-        self._storage.wait_until_queue_empty()
+        self._storage.wait()
 
     def _parse_chunk_key(self):
         self._key = self.chunk_key.split('/')[-1]
@@ -257,6 +259,7 @@ class MeshTask(RegisteredTask):
             self._storage.put_file(
                 file_path='{}/{}:{}:{}'.format(self._info['mesh'], obj_id, self.lod, self.chunk_position),
                 content=self._create_mesh(obj_id))
+            self._storage.wait()
 
     def _create_mesh(self, obj_id):
         mesh = self._mesher.get_mesh(obj_id, simplification_factor=128, max_simplification_error=1000000)
@@ -321,6 +324,7 @@ class MeshManifestTask(RegisteredTask):
                 last_fragments = []
 
             last_fragments.append('{}:{}:{}'.format(_id, lod, chunk_position))
+        self._storage.wait()
 
 class BigArrayTask(RegisteredTask):
     def __init__(self, layer_path, chunk_path, chunk_encoding, version):
@@ -409,6 +413,7 @@ class BigArrayTask(RegisteredTask):
           xmin, xmax, ymin, ymax, zmin, zmax)
         encoded = self._encode(chunk, self.chunk_encoding)
         self._storage.put_file(filename, encoded)
+        self._storage.wait()
 
     def _encode(self, chunk, encoding):
         if encoding == "jpeg":
@@ -505,6 +510,7 @@ class HyperSquareTask(RegisteredTask):
           xmin, xmax, ymin, ymax, zmin, zmax)
         encoded = self._encode(chunk, self.chunk_encoding)
         self._storage.put_file(filename, encoded)
+        self._storage.wait()
 
     def _encode(self, chunk, encoding):
         if encoding == "jpeg":

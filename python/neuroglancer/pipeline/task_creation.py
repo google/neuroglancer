@@ -168,8 +168,7 @@ def create_downsampling_task(storage, task_queue, downsample_ratio=[2, 2, 1]):
     info = json.loads(storage.get_file('info'))
     next_scale = compute_next_scale(info['scales'][-1], downsample_ratio)
     info['scales'].append(next_scale)
-    storage.put_file(file_path='info', content=json.dumps(info))
-    storage.wait_until_queue_empty()
+    storage.put_file(file_path='info', content=json.dumps(info)).wait()
 
     # create tasks based on the new scale
     for filename in iterate_over_chunks(next_scale):
@@ -177,6 +176,7 @@ def create_downsampling_task(storage, task_queue, downsample_ratio=[2, 2, 1]):
            chunk_path=storage.get_path_to_file(os.path.join(next_scale['key'],filename)),
            layer_path=storage.get_path_to_file(''))
         task_queue.insert(t)
+    task_queue.wait()
 
 def compute_next_scale(old_scale, downsample_ratio):
     next_scale = copy.deepcopy(old_scale)
@@ -226,11 +226,13 @@ def upload_build_chunks(storage, volume, offset=[0, 0, 0], build_chunk_size=[102
         filename = 'build/{}-{}_{}-{}_{}-{}'.format(
             x_min, x_max, y_min, y_max, z_min, z_max)
         storage.put_file(filename, chunks.encode_npz(chunk))
+    storage.wait()
 
 class MockTaskQueue():
     def insert(self, task):
         task.execute()
         del task
+
 
 def ingest_hdf5_example():
     dataset_path='gs://neuroglancer/test_v0'

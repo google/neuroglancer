@@ -58,7 +58,7 @@ class Storage(object):
             worker.start()
 
     def _kill_threads(self):
-        self.wait_until_queue_empty()
+        self.wait()
         for _ in xrange(self._n_threads):
             self._queue.put( ('TERMINATE', None, None ) )
 
@@ -160,8 +160,7 @@ class Storage(object):
 
                 store_result(path, result, error)
 
-        self.wait_until_queue_empty()
-
+        self.wait()
         return results
 
     def _maybe_uncompress(self, content):
@@ -193,11 +192,12 @@ class Storage(object):
         for f in self._interface(self._path).list_files(prefix):
             yield f
 
-    def wait_until_queue_empty(self):
+    def wait(self):
         if self._n_threads:
             self._queue.join()
-
-    def __del__(self):
+        return self
+    
+    def __del__(self):      
         self._kill_threads()
 
 class FileInterface(object):
@@ -229,9 +229,6 @@ class FileInterface(object):
                 os.makedirs(os.path.dirname(path))
             except OSError:
                 pass
-
-            with open(path, 'wb') as f:
-                f.write(content)
 
     def get_file(self, file_path):
         path = self.get_path_to_file(file_path) 

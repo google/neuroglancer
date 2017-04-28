@@ -14,7 +14,7 @@ def test_downsample():
     assert len(pr.info['scales']) == 1
     create_downsampling_task(storage, MockTaskQueue(), downsample_ratio=[2, 2, 1])
     # pr.info now has an outdated copy of the info file
-    storage.wait_until_queue_empty()
+    storage.wait()
     pr_new = Precomputed(storage, scale_idx=1)
     assert len(pr_new.info['scales']) == 2
     assert pr_new.info['scales'][1]['size'] == [64,64,64]

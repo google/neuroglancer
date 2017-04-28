@@ -72,10 +72,9 @@ class Precomputed(object):
         return_volume = np.empty(
             shape=self._get_slices_shape(aligned_slices),
             dtype=self.info['data_type'])
-
+        
         offset =  self._get_offsets(aligned_slices)
         for c in self._iter_chunks(aligned_slices):
-
             file_path = self._chunk_to_file_path(c)
             content =  self._storage.get_file(file_path)
             if not content and not self._fill:
@@ -106,6 +105,7 @@ class Precomputed(object):
             self._storage.put_file(
                 file_path=self._chunk_to_file_path(c),
                 content=content)
+        self._storage.wait()
 
     def _get_offsets(self, slices):
         first_chunk = self._iter_chunks(slices).next()

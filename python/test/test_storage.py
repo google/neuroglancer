@@ -1,6 +1,7 @@
 import pytest
 import re
 import shutil
+import time
 
 from neuroglancer.pipeline import Storage
 
@@ -39,7 +40,7 @@ def test_read_write():
             s = Storage(url, n_threads=num_threads)
             content = 'some_string'
             s.put_file('info', content, compress=False)
-            s.wait_until_queue_empty()
+            s.wait()
             assert s.get_file('info') == content
             assert s.get_file('nonexistentfile') is None
 
@@ -64,7 +65,7 @@ def test_compression():
         s = Storage(url, n_threads=5)
         content = 'some_string'
         s.put_file('info', content, compress=True)
-        s.wait_until_queue_empty()
+        s.wait()
         assert s.get_file('info') == content
         assert s.get_file('nonexistentfile') is None
 
@@ -78,10 +79,11 @@ def test_list():
     for url in urls:
         s = Storage(url, n_threads=5)
         content = 'some_string'
-        s.put_file('info1', content , compress=False)
-        s.put_file('info2', content , compress=False)
-        s.put_file('build/info3', content , compress=False)
-        s.wait_until_queue_empty()
+        s.put_file('info1', content, compress=False)
+        s.put_file('info2', content, compress=False)
+        s.put_file('build/info3', content, compress=False)
+        s.wait()
+        time.sleep(1) # sometimes it takes a moment for google to update the list
         assert set(s.list_files(prefix='')) == set(['info1','info2'])
         assert set(s.list_files(prefix='inf')) == set(['info1','info2'])
         assert set(s.list_files(prefix='info1')) == set(['info1'])
