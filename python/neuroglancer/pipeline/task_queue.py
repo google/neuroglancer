@@ -74,7 +74,11 @@ class RegisteredTask(object):
             else:
                 string += "{}={},".format(arg_name, arg_value)
 
-        return string[:-1] + ")"  #remove the last comma
+        # remove the last comma if necessary
+        if string[-1] == ',':
+            string = string[:-1]
+
+        return string + ")"  
 
 class TaskQueue(object):
     """
@@ -94,11 +98,11 @@ class TaskQueue(object):
         def __init__(self):
             super(LookupError, self).__init__('Queue Empty')
 
-    def __init__(self, n_threads=40, project=PROJECT_NAME, queue_name=QUEUE_NAME, local=True):
-        self._project = 's~' + project # unsure why this is necessary
+    def __init__(self, n_threads=40, project=PROJECT_NAME, queue_name=QUEUE_NAME):
+        self._project = 's~' + project # s~ means North America, e~ means Europe
         self._queue_name = queue_name
 
-        self._api = googleapiclient.discovery.build('taskqueue', 'v1beta2', credentials=google_credentials).tasks()
+        self._api = googleapiclient.discovery.build('taskqueue', 'v1beta2', credentials=google_credentials)
 
         self._queue = Queue.Queue(maxsize=0) # infinite size
         self._threads = ()
@@ -106,6 +110,22 @@ class TaskQueue(object):
 
         self._start_threads(n_threads)
 
+    @property
+    def enqueued(self):
+        """
+        Returns the approximate(!) number of tasks enqueued in the cloud.
+
+        WARNING: The number computed by Google is eventually
+            consistent. It may return impossible numbers that
+            are small deviations from the number in the queue.
+            For instance, we've seen 1005 enqueued after 1000 
+            inserts.
+        
+        Returns: (int) number of tasks in cloud queue
+        """
+        tqinfo = self.get()
+        return tqinfo['stats']['totalTasks']
+        
     @property
     def pending(self):
         return self._queue.qsize()
@@ -126,11 +146,12 @@ class TaskQueue(object):
             threads.append(worker)
 
         self._threads = tuple(threads)
+        return self
 
     def _kill_threads(self):
-        self._queue.join() # if no threads were set the queue is always empty
         self._terminate.set()
         self._threads = ()
+        return self
 
     def _consume_queue(self, terminate_evt):
         """
@@ -143,7 +164,7 @@ class TaskQueue(object):
         is a common event for this generation of threads. The threads
         will terminate when the event is set and the queue burns down.
         """
-        api = googleapiclient.discovery.build('taskqueue', 'v1beta2', credentials=google_credentials).tasks()
+        api = googleapiclient.discovery.build('taskqueue', 'v1beta2', credentials=google_credentials)
 
         while not terminate_evt.is_set():
             try:
@@ -172,7 +193,7 @@ class TaskQueue(object):
         }
 
         def cloud_insertion(api):
-            api.insert(
+            api.tasks().insert(
                 project=self._project,
                 taskqueue=self._queue_name,
                 body=body,
@@ -183,21 +204,53 @@ class TaskQueue(object):
         else:
             cloud_insertion(self._api)
 
-    def wait_until_queue_empty(self):
+        return self
+
+    def wait(self):
+        """
+        Allow background threads to process until the
+        task queue is empty. If there are no threads,
+        in theory the queue should always be empty
+        as processing happens immediately on the main thread.
+
+        Required: None
+        
+        Returns: self (for chaining)
+        """
         self._queue.join()
+        return self
 
     def get(self):
         """
-        Gets the named task in a TaskQueue.
+        Gets information about the TaskQueue
         """
-        raise NotImplemented
+        return self._api.taskqueues().get(
+            project=self._project,
+            taskqueue=self._queue_name,
+            getStats=True,
+        ).execute(num_retries=6)
+
+    def get_task(self, tid):
+        """
+        Gets the named task in the TaskQueue. 
+        tid is a unique string Google provides 
+        e.g. '7c6e81c9b7ab23f0'
+        """
+        return self._api.tasks().get(
+            project=self._project,
+            taskqueue=self._queue_name,
+            task=tid,
+        ).execute(num_retries=6)
 
     def list(self):
         """
         Lists all non-deleted Tasks in a TaskQueue, 
         whether or not they are currently leased, up to a maximum of 100.
         """
-        return self._api.list(project=self._project, taskqueue=self._queue_name).execute(num_retries=6)
+        return self._api.tasks().list(
+            project=self._project, 
+            taskqueue=self._queue_name
+        ).execute(num_retries=6)
 
     def update(self, task):
         """
@@ -212,7 +265,7 @@ class TaskQueue(object):
         Required query parameters: leaseSecs, numTasks
         """
         
-        tasks = self._api.lease(
+        tasks = self._api.tasks().lease(
             project=self._project,
             taskqueue=self._queue_name, 
             numTasks=1, 
@@ -247,15 +300,16 @@ class TaskQueue(object):
 
             for tid in taskids:
                 self.delete(tid)
+            
+            self.wait()
 
-        if len(self._threads):
-            self.wait_until_queue_empty()
+        return self
 
     def delete(self, tid):
         """Deletes a task from a TaskQueue."""
 
         def cloud_delete(api):
-            api.delete(
+            api.tasks().delete(
                 project=self._project,
                 taskqueue=self._queue_name,
                 task=tid,
@@ -266,7 +320,10 @@ class TaskQueue(object):
         else:
             cloud_delete(self._api)
 
+        return self
+
     def __del__(self):
+        self._queue.join() # if no threads were set the queue is always empty
         self._kill_threads()
 
 

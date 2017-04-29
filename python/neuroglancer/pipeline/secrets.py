@@ -1,8 +1,9 @@
+import os
 import json
 
 from oauth2client import service_account
 
-QUEUE_NAME = 'pull-queue'
+QUEUE_NAME = 'pull-queue' if 'PIPELINE_USER_QUEUE' not in os.environ else os.environ['PIPELINE_USER_QUEUE']
 PROJECT_NAME = 'neuromancer-seung-import'
 
 google_credentials_path = '/secrets/google-secret.json'
