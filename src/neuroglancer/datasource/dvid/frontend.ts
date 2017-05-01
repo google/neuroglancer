@@ -79,10 +79,6 @@ export class VolumeDataInstanceInfo extends DataInstanceInfo {
 
     this.dataType =
         verifyObjectProperty(extendedValues[0], 'DataType', x => verifyMapKey(x, serverDataTypes));
-    this.lowerVoxelBound =
-        verifyObjectProperty(extended, 'MinPoint', x => parseIntVec(vec3.create(), x));
-    this.upperVoxelBound =
-        verifyObjectProperty(extended, 'MaxPoint', x => parseIntVec(vec3.create(), x));
     this.voxelSize = verifyObjectProperty(
         extended, 'VoxelSize',
         x => parseFixedLengthArray(vec3.create(), x, verifyFinitePositiveFloat));
@@ -369,6 +365,35 @@ export function getServerInfo(chunkManager: ChunkManager, baseUrls: string[]) {
   });
 }
 
+/**
+ * Get extra dataInstance info that isn't available on the server level.
+ * this requires an extra api call
+ */
+export function getDataInstanceDetails(chunkManager: ChunkManager, baseUrls: string[], 
+  nodeKey: string, info: VolumeDataInstanceInfo|TileDataInstanceInfo){
+  return chunkManager.memoize.getUncounted({type: 'dvid:getInstanceDetails', baseUrls, nodeKey, name: info.name}, () => {
+    let result = sendHttpRequest(openShardedHttpRequest(baseUrls, `/api/node/${nodeKey}/${info.name}/info`, 'GET'), 'json')
+    const description = `datainstance info for node ${nodeKey} and instance ${info.name} on DVID server ${baseUrls[0]}`;
+  
+    StatusMessage.forPromise(result, {
+      initialMessage: `Retrieving ${description}.`,
+      delay: true,
+      errorPrefix: `Error retrieving ${description}: `,
+    });
+  
+    return result.then(result => {
+        let extended = verifyObjectProperty(result, 'Extended', verifyObject);
+        info.lowerVoxelBound =
+            verifyObjectProperty(extended, 'MinPoint', x => parseIntVec(vec3.create(), x));
+        info.upperVoxelBound =
+            verifyObjectProperty(extended, 'MaxPoint', x => parseIntVec(vec3.create(), x));
+      return info;
+    })
+
+  });
+}
+
+
 export class MultiscaleVolumeChunkSource implements GenericMultiscaleVolumeChunkSource {
   get dataType() { return this.info.dataType; }
   get numChannels() { return this.info.numChannels; }
@@ -406,14 +431,18 @@ export function getShardedVolume(
         !(dataInstanceInfo instanceof TileDataInstanceInfo)) {
       throw new Error(`Invalid data instance ${dataInstanceKey}.`);
     }
+    return getDataInstanceDetails(chunkManager, baseUrls, nodeKey, dataInstanceInfo)
+}).then( (info: VolumeDataInstanceInfo|TileDataInstanceInfo) => {
+
     return chunkManager.memoize.getUncounted(
         {
           type: 'dvid:MultiscaleVolumeChunkSource',
           baseUrls,
-          nodeKey: repositoryInfo.uuid, dataInstanceKey,
+          nodeKey: nodeKey,
+          dataInstanceKey,
         },
         () => new MultiscaleVolumeChunkSource(
-            chunkManager, baseUrls, repositoryInfo.uuid, dataInstanceKey, dataInstanceInfo));
+            chunkManager, baseUrls, nodeKey, dataInstanceKey, info));
   });
 }
 
