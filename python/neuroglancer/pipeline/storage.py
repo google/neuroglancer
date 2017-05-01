@@ -323,13 +323,22 @@ class S3Interface(object):
             k.set_contents_from_string(content)
             
     def get_file(self, file_path):
+        """
+            There are many types of execptions which can get raised
+            from this method. We want to make sure we only return
+            None when the file doesn't exist.
+
+            TODO maybe implement retry in case of timeouts. 
+        """
         k = boto.s3.key.Key(self._bucket)
         k.key = self.get_path_to_file(file_path)
         try:
             return k.get_contents_as_string(), k.content_encoding == "gzip"
-        except boto.exception.S3ResponseError:
-            return None, False
-
+        except boto.exception.S3ResponseError as e:
+            if e.error_code == 'NoSuchKey':
+                return None, False
+            else:
+                raise e
     def list_files(self, prefix):
         """
         if there is no trailing slice we are looking for files with that prefix
