@@ -21,8 +21,8 @@ import {ChunkDecoder} from 'neuroglancer/sliceview/backend_chunk_decoders';
 import {decodeCompressedSegmentationChunk} from 'neuroglancer/sliceview/backend_chunk_decoders/compressed_segmentation';
 import {decodeJpegChunk} from 'neuroglancer/sliceview/backend_chunk_decoders/jpeg';
 import {decodeRawChunk} from 'neuroglancer/sliceview/backend_chunk_decoders/raw';
-import {CancellationToken} from 'neuroglancer/util/cancellation';
 import {VolumeType} from 'neuroglancer/sliceview/base';
+import {CancellationToken} from 'neuroglancer/util/cancellation';
 import {vec3} from 'neuroglancer/util/geom';
 import {openShardedHttpRequest, sendHttpRequest} from 'neuroglancer/util/http_request';
 import {RPC} from 'neuroglancer/worker_rpc';
@@ -33,7 +33,6 @@ const TILE_CHUNK_DECODERS = new Map<TileEncoding, ChunkDecoder>([
 
 @registerChunkSource(VolumeChunkSourceParameters)
 class VolumeChunkSource extends ParameterizedVolumeChunkSource<VolumeChunkSourceParameters> {
-
   compressedSegmentationBlockSize: vec3|undefined;
 
   constructor(rpc: RPC, options: any) {
@@ -64,10 +63,14 @@ class VolumeChunkSource extends ParameterizedVolumeChunkSource<VolumeChunkSource
   }
   getPath(chunkPosition: Float32Array, chunkDataSize: Float32Array, params: any) {
     if (params.volumeType === VolumeType.IMAGE) {
-      return `/api/node/${params['nodeKey']}/${params['dataInstanceKey']}/raw/0_1_2/${chunkDataSize[0]}_${chunkDataSize[1]}_${chunkDataSize[2]}/${chunkPosition[0]}_${chunkPosition[1]}_${chunkPosition[2]}/jpeg`;
+      return `/api/node/${params['nodeKey']}/${params['dataInstanceKey']}/raw/0_1_2/` +
+          `${chunkDataSize[0]}_${chunkDataSize[1]}_${chunkDataSize[2]}/` +
+          `${chunkPosition[0]}_${chunkPosition[1]}_${chunkPosition[2]}/jpeg`;
     } else {
       // volumeType is SEGMENTATION
-      return `/api/node/${params['nodeKey']}/${params['dataInstanceKey']}/raw/0_1_2/${chunkDataSize[0]}_${chunkDataSize[1]}_${chunkDataSize[2]}/${chunkPosition[0]}_${chunkPosition[1]}_${chunkPosition[2]}?compression=googlegzip`;
+      return `/api/node/${params['nodeKey']}/${params['dataInstanceKey']}/raw/0_1_2/` +
+          `${chunkDataSize[0]}_${chunkDataSize[1]}_${chunkDataSize[2]}/` +
+          `${chunkPosition[0]}_${chunkPosition[1]}_${chunkPosition[2]}?compression=googlegzip`;
     }
   }
   getDecoder(params: any) {
