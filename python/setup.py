@@ -93,6 +93,7 @@ setup(
     packages=find_packages(),
     package_data={
         'neuroglancer.static': static_files,
+		'': ["*.jl"]
     },
     install_requires=[
         "Pillow>=3.2.0",

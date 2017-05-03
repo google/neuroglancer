@@ -19,19 +19,25 @@ before_install:
   -in credentials.tar.gz.enc -out credentials.tar.gz -d
 - tar -xzf credentials.tar.gz
 - sudo mv secrets /secrets && sudo chown $USER /secrets
-- export CHROME_BIN=/usr/bin/google-chrome
-- export DISPLAY=:99.0
-- sudo apt-get install libhdf5-dev
-- pip install -r python/requirements.txt
-- py.test python/test
+# build docker container
+- $(python version.py) #sets APPVERSION
+- docker build --tag tartavull/neuroglancer:$APPVERSION .
 script:
-- npm install
-- npm install --only=dev
+- docker run -it -v /secrets:/secrets tartavull/neuroglancer:$APPVERSION /bin/sh -c 'cd /neuroglancer && py.test python/test'
+after_success:
+- docker login -u="$DOCKER_USERNAME" -p="$DOCKER_PASSWORD"
+- 'if [ "$TRAVIS_BRANCH" == "master" ]; then
+    docker push $DOCKER_USERNAME/neuroglancer:latest;
+  else
+    docker push $DOCKER_USERNAME/neuroglancer:$APPVERSION;
+  fi'
+
 before_deploy:
+- npm install
+- npm install --only=dev 
 - npm run build-min
 - cp -r ./dist/min appengine/static/
 - export DEPLOY="false"
-- "$(python version.py)"
 - if [ "$APPVERSION" == "master" ]; then export DEPLOY="true"; fi
 - virtualenv env
 - source env/bin/activate
