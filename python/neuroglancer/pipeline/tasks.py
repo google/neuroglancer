@@ -125,8 +125,10 @@ class DownsampleTask(RegisteredTask):
         self._download_info()
         self._parse_chunk_path()
         self._compute_downsampling_ratio()
+        self._compute_input_slice()
         self._download_input_chunk()
         self._upload_output_chunk()
+        self._storage.wait_until_queue_empty()
 
     def _download_info(self):
         self._info = json.loads(self._storage.get_file('info'))
@@ -139,10 +141,23 @@ class DownsampleTask(RegisteredTask):
          self._zmin, self._zmax) = map(int, match.groups()[1:])
 
     def _compute_downsampling_ratio(self):
-        self._current_index = self._find_scale_idx()
-        current_resolution = self._info['scales'][self._current_index]['resolution']
-        higher_resolution = self._info['scales'][self._current_index-1]['resolution']
-        self._downsample_ratio = [ c/h for c,h in zip(current_resolution, higher_resolution)] + [1]
+        self._output_index = self._find_scale_idx()
+        self._input_index = self._output_index-1
+        output_resolution = self._info['scales'][self._output_index]['resolution']
+
+        self._input_scale = self._info['scales'][self._input_index]
+        input_resolution = self._input_scale['resolution']
+        self._downsample_ratio = [ c/h for c,h in zip(output_resolution, input_resolution)] + [1]
+
+    def _compute_input_slice(self):
+        self._input_xmin =  self._xmin * self._downsample_ratio[0]
+        self._input_ymin =  self._ymin * self._downsample_ratio[1]
+        self._input_zmin =  self._zmin * self._downsample_ratio[2]
+
+        input_max_input_size = [self._input_scale['voxel_offset'][idx] + self._input_scale['size'][idx] for idx in range(3)]
+        self._input_xmax = min(self._xmax * self._downsample_ratio[0],  input_max_input_size[0])
+        self._input_ymax = min(self._ymax * self._downsample_ratio[1],  input_max_input_size[1])
+        self._input_zmax = min(self._zmax * self._downsample_ratio[2],  input_max_input_size[2])
 
     def _find_scale_idx(self):
         for scale_idx, scale in enumerate(self._info['scales']):
@@ -151,11 +166,11 @@ class DownsampleTask(RegisteredTask):
                 return scale_idx
 
     def _download_input_chunk(self):
-        volume = Precomputed(self._storage, scale_idx=self._current_index-1)
+        volume = Precomputed(self._storage, scale_idx=self._input_index, fill=False)
         chunk = volume[
-            self._xmin * self._downsample_ratio[0]:self._xmax * self._downsample_ratio[0],
-            self._ymin * self._downsample_ratio[1]:self._ymax * self._downsample_ratio[1],
-            self._zmin * self._downsample_ratio[2]:self._zmax * self._downsample_ratio[2]]
+            self._input_xmin:self._input_xmax,
+            self._input_ymin:self._input_ymax,
+            self._input_zmin:self._input_zmax]
         self._downsample_chunk(chunk)
 
     def _downsample_chunk(self, chunk):
@@ -166,10 +181,10 @@ class DownsampleTask(RegisteredTask):
         else:
             raise NotImplementedError(self._info['type'])
 
-    def _upload_output_chunk(self): 
+    def _upload_output_chunk(self):
         self._storage.put_file(
             file_path=self._get_filename(),
-            content=self._encode(self._data, self._info['scales'][self._current_index]["encoding"])
+            content=self._encode(self._data, self._info['scales'][self._output_index]["encoding"])
             )
 
     def _encode(self, chunk, encoding):
