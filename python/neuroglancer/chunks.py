@@ -35,7 +35,7 @@ def decode(filedata, encoding, shape=None, dtype=None):
   if (shape is None or dtype is None) and encoding is not 'npz':
     raise ValueError("Only npz encoding can omit shape and dtype arguments. {}".format(encoding))
 
-  if len(filedata) == 0:
+  if filedata is None or len(filedata) == 0:
     return np.zeros(shape=shape, dtype=dtype)
   elif encoding == 'jpeg':
     return decode_jpeg(filedata, shape=shape, dtype=dtype)
