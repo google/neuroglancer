@@ -553,11 +553,11 @@ export class ChunkQueueManager extends SharedObjectCounterpart {
 
   freeChunkSystemMemory(chunk: Chunk) {
     if (chunk.state === ChunkState.SYSTEM_MEMORY_WORKER) {
+      chunk.freeSystemMemory();
+    } else {
       this.rpc!.invoke(
           'Chunk.update',
           {'id': chunk.key, 'state': ChunkState.EXPIRED, 'source': chunk.source!.rpcId});
-    } else {
-      chunk.freeSystemMemory();
     }
   }
 
