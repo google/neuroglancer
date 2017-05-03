@@ -1,0 +1,7 @@
+h5py
+gitpython
+scipy
+pandas
+tensorflow-gpu
+networkx
+boto

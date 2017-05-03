@@ -1,0 +1,41 @@
+#Stage one requires affinities, watershed, and result of mean affinity agglomeration.
+#It will generate a regiongraph (for the chunk) which is a list of vertices (supervoxel ids) and a list of edges.
+#It will also generate a list of sample points in the chunk which will be used later.
+
+{
+   #input
+   "chunk_position": "0-1024_1024-2048_0-128",
+   "crop_position": "128-896_128-896_16-112",
+   "watershed": "s3://neuroglancer/pinky40_v3/watershed",
+   "mean_affinity": "s3://neuroglancer/pinky40_v3/mean_affinity",
+   "affinities": "s3://neuroglancer/pinky40_v3/affinities",
+
+   #output
+   "mean_affinity_regiongraph": "s3://neuroglancer/pinky40_v3/mean_affinity_regiongraph",
+   "samples": "s3://neuroglancer/pinky40_v3/samples",
+}
+
+#Stage two will run error detection on a chunk. It requires mean affinity, image, and samples. It will generate a chunk of size "crop_position" which it should write back to a global volume.
+{
+   #input
+   "chunk_position": "0-1024_1024-2048_0-128",
+   "crop_position": "128-896_128-896_16-112",
+   "mean_affinity": "s3://neuroglancer/pinky40_v3/mean_affinity",
+   "image": "s3://neuroglancer/pinky40_v3/image",
+
+   #output
+   "errors": "s3://neuroglancer/pinky40_v3/errors",
+}
+
+#Stage three will run agglomeration on a chunk. It requires errors, image, and a regiongraph. It will output a new regiongraph.
+{
+   #input
+   "chunk_position": "0-1024_1024-2048_0-128",
+   "crop_position": "128-896_128-896_16-112",
+   "mean_affinity_regiongraph": "s3://neuroglancer/pinky40_v3/mean_affinity_regiongraph",
+   "image": "s3://neuroglancer/pinky40_v3/image",
+
+   #output
+   "errors": "s3://neuroglancer/pinky40_v3/errors",
+   "revised_regiongraph": "s3://neuroglancer/pinky40_v3/revised_regiongraph",
+}

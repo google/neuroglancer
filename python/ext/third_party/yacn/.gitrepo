@@ -1,0 +1,11 @@
+; DO NOT EDIT (unless you know what you are doing)
+;
+; This subdirectory is a git "subrepo", and this file is maintained by the
+; git-subrepo command. See https://github.com/git-commands/git-subrepo#readme
+;
+[subrepo]
+	remote = https://github.com/seung-lab/yacn
+	branch = master
+	commit = 55f83c162ade306edf93520f895dbf6d2173254d
+	parent = f71991ea25acb0414b9e19125e042041a3c72ca3
+	cmdver = 0.3.1

@@ -1,0 +1,7 @@
+*.pyc
+*.h5
+*.json
+*.html
+*.pickle
+docker/.boto
+cruft

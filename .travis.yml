@@ -27,7 +27,7 @@ script:
 after_success:
 - docker login -u="$DOCKER_USERNAME" -p="$DOCKER_PASSWORD"
 - 'if [ "$TRAVIS_BRANCH" == "master" ]; then
-    docker push $DOCKER_USERNAME/neuroglancer:latest;
+    docker push $DOCKER_USERNAME/neuroglancer;
   else
     docker push $DOCKER_USERNAME/neuroglancer:$APPVERSION;
   fi'
