@@ -20,7 +20,7 @@
  */
 
 import {ChunkManager} from 'neuroglancer/chunk_manager/frontend';
-import {DVIDSourceParameters, TileChunkSourceParameters, TileEncoding, VolumeChunkSourceParameters} from 'neuroglancer/datasource/dvid/base';
+import {DVIDSourceParameters, TileChunkSourceParameters, TileEncoding, VolumeChunkEncoding, VolumeChunkSourceParameters} from 'neuroglancer/datasource/dvid/base';
 import {CompletionResult, registerDataSourceFactory} from 'neuroglancer/datasource/factory';
 import {DataType, VolumeChunkSpecification, VolumeSourceOptions, VolumeType} from 'neuroglancer/sliceview/base';
 import {defineParameterizedVolumeChunkSource, MultiscaleVolumeChunkSource as GenericMultiscaleVolumeChunkSource, VolumeChunkSource} from 'neuroglancer/sliceview/frontend';
@@ -59,8 +59,9 @@ export class VolumeDataInstanceInfo extends DataInstanceInfo {
   voxelSize: vec3;
   numChannels: number;
   numLevels: number;
+
   constructor(
-      obj: any, name: string, base: DataInstanceBaseInfo, public volumeType: VolumeType,
+      obj: any, name: string, base: DataInstanceBaseInfo, public encoding: VolumeChunkEncoding,
       instanceNames: Array<string>) {
     super(obj, name, base);
     let extended = verifyObjectProperty(obj, 'Extended', verifyObject);
@@ -87,9 +88,16 @@ export class VolumeDataInstanceInfo extends DataInstanceInfo {
     this.numChannels = 1;
   }
 
+  get volumeType() {
+    return (
+        this.encoding === VolumeChunkEncoding.COMPRESSED_SEGMENTATION ? VolumeType.SEGMENTATION :
+                                                                        VolumeType.IMAGE);
+  }
+
   getSources(
       chunkManager: ChunkManager, parameters: DVIDSourceParameters,
       volumeSourceOptions: VolumeSourceOptions) {
+    let {encoding} = this;
     let sources: VolumeChunkSource[][] = [];
     for (let level = 0; level < this.numLevels; ++level) {
       let voxelSize = vec3.scale(vec3.create(), this.voxelSize, Math.pow(2, level));
@@ -110,7 +118,7 @@ export class VolumeDataInstanceInfo extends DataInstanceInfo {
         'baseUrls': parameters.baseUrls,
         'nodeKey': parameters.nodeKey,
         'dataInstanceKey': dataInstanceKey,
-        'volumeType': this.volumeType,
+        'encoding': encoding,
       };
       let alternatives =
           VolumeChunkSpecification
@@ -124,6 +132,10 @@ export class VolumeDataInstanceInfo extends DataInstanceInfo {
                 upperVoxelBound: vec3.subtract(vec3.create(), upperVoxelBound, lowerVoxelBound),
                 volumeType: this.volumeType,
                 volumeSourceOptions,
+                compressedSegmentationBlockSize:
+                    (encoding === VolumeChunkEncoding.COMPRESSED_SEGMENTATION ?
+                         vec3.fromValues(8, 8, 8) :
+                         undefined)
               })
               .map(spec => {
                 return DVIDVolumeChunkSource.get(chunkManager, spec, volParameters);
@@ -267,13 +279,14 @@ export function parseDataInstance(
   switch (baseInfo.typeName) {
     case 'uint8blk':
     case 'grayscale8':
-      return new VolumeDataInstanceInfo(obj, name, baseInfo, VolumeType.IMAGE, instanceNames);
+      return new VolumeDataInstanceInfo(
+          obj, name, baseInfo, VolumeChunkEncoding.JPEG, instanceNames);
     case 'imagetile':
       return new TileDataInstanceInfo(obj, name, baseInfo);
     case 'labels64':
     case 'labelblk':
       return new VolumeDataInstanceInfo(
-          obj, name, baseInfo, VolumeType.SEGMENTATION, instanceNames);
+          obj, name, baseInfo, VolumeChunkEncoding.COMPRESSED_SEGMENTATION, instanceNames);
     default:
       throw new Error(`DVID data type ${JSON.stringify(baseInfo.typeName)} is not supported.`);
   }

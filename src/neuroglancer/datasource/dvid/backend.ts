@@ -15,7 +15,7 @@
  */
 
 import {registerChunkSource} from 'neuroglancer/chunk_manager/backend';
-import {TileChunkSourceParameters, TileEncoding, VolumeChunkSourceParameters} from 'neuroglancer/datasource/dvid/base';
+import {TileChunkSourceParameters, TileEncoding, VolumeChunkEncoding, VolumeChunkSourceParameters} from 'neuroglancer/datasource/dvid/base';
 import {ParameterizedVolumeChunkSource, VolumeChunk} from 'neuroglancer/sliceview/backend';
 import {ChunkDecoder} from 'neuroglancer/sliceview/backend_chunk_decoders';
 import {decodeCompressedSegmentationChunk} from 'neuroglancer/sliceview/backend_chunk_decoders/compressed_segmentation';
@@ -33,15 +33,10 @@ const TILE_CHUNK_DECODERS = new Map<TileEncoding, ChunkDecoder>([
 
 @registerChunkSource(VolumeChunkSourceParameters)
 class VolumeChunkSource extends ParameterizedVolumeChunkSource<VolumeChunkSourceParameters> {
-  compressedSegmentationBlockSize: vec3|undefined;
-
   constructor(rpc: RPC, options: any) {
     super(rpc, options);
 
     this.parameters = options['parameters'];
-    if (this.parameters.volumeType === VolumeType.SEGMENTATION) {
-      this.compressedSegmentationBlockSize = vec3.fromValues(8, 8, 8);
-    }
   }
 
   download(chunk: VolumeChunk, cancellationToken: CancellationToken) {
@@ -54,30 +49,31 @@ class VolumeChunkSource extends ParameterizedVolumeChunkSource<VolumeChunkSource
       let chunkDataSize = chunk.chunkDataSize!;
 
       // if the volume is an image, get a jpeg
-      path = this.getPath(chunkPosition, chunkDataSize, params);
+      path = this.getPath(chunkPosition, chunkDataSize);
     }
     let decoder = this.getDecoder(params);
     return sendHttpRequest(
                openShardedHttpRequest(params.baseUrls, path), 'arraybuffer', cancellationToken)
         .then(response => decoder(chunk, response));
   }
-  getPath(chunkPosition: Float32Array, chunkDataSize: Float32Array, params: any) {
-    if (params.volumeType === VolumeType.IMAGE) {
+  getPath(chunkPosition: Float32Array, chunkDataSize: Float32Array) {
+    let params = this.parameters;
+    if (params.encoding === VolumeChunkEncoding.JPEG) {
       return `/api/node/${params['nodeKey']}/${params['dataInstanceKey']}/raw/0_1_2/` +
           `${chunkDataSize[0]}_${chunkDataSize[1]}_${chunkDataSize[2]}/` +
           `${chunkPosition[0]}_${chunkPosition[1]}_${chunkPosition[2]}/jpeg`;
     } else {
-      // volumeType is SEGMENTATION
+      // encoding is COMPRESSED_SEGMENTATION
       return `/api/node/${params['nodeKey']}/${params['dataInstanceKey']}/raw/0_1_2/` +
           `${chunkDataSize[0]}_${chunkDataSize[1]}_${chunkDataSize[2]}/` +
           `${chunkPosition[0]}_${chunkPosition[1]}_${chunkPosition[2]}?compression=googlegzip`;
     }
   }
   getDecoder(params: any) {
-    if (params.volumeType === VolumeType.IMAGE) {
+    if (params.encoding === VolumeChunkEncoding.JPEG) {
       return decodeJpegChunk;
     } else {
-      // volumeType is SEGMENTATION
+      // encoding is COMPRESSED_SEGMENTATION
       return decodeCompressedSegmentationChunk;
     }
   }
