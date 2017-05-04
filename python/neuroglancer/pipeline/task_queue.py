@@ -296,30 +296,27 @@ class TaskQueue(object):
             if not lst.has_key('items'):
                 break
 
-            taskids = [ task['id'] for task in lst['items'] ]
-
-            for tid in taskids:
-                self.delete(tid)
-            
+            for task in lst['items']:
+                self.delete(task['id'])
             self.wait()
-
         return self
 
-    def delete(self, tid):
+    def delete(self, task_id):
         """Deletes a task from a TaskQueue."""
+        if isinstance(task_id, RegisteredTask):
+            task_id = task_id.id
 
         def cloud_delete(api):
             api.tasks().delete(
                 project=self._project,
                 taskqueue=self._queue_name,
-                task=tid,
+                task=task_id,
             ).execute(num_retries=6)
 
         if len(self._threads):
             self._queue.put(cloud_delete, block=True)
         else:
             cloud_delete(self._api)
-
         return self
 
     def __del__(self):
