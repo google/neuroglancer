@@ -7,13 +7,17 @@ from neuroglancer.pipeline import Storage, Precomputed
 from neuroglancer.pipeline.task_creation import (upload_build_chunks, create_info_file_from_build,
     create_ingest_task, MockTaskQueue)
 
-def create_layer(size, offset, layer_type="image"):
-    storage = Storage('file:///tmp/removeme/layer', n_threads=0)
+def create_layer(size, offset=[0,0,0], layer_type="image", layer_name="layer"):
+    storage = Storage('file:///tmp/removeme/'+ layer_name, n_threads=0)
 
     if layer_type == "image":
         random_data = np.random.randint(255, size=size, dtype=np.uint8)
         upload_build_chunks(storage, random_data, offset)
         # Jpeg encoding is lossy so it won't work
+        create_info_file_from_build(storage, layer_type= 'image', encoding="raw")
+    elif layer_type == "affinities":
+        random_data = np.random.uniform(size=size).astype(np.float32)
+        upload_build_chunks(storage, random_data, offset)
         create_info_file_from_build(storage, layer_type= 'image', encoding="raw")
     else:
         random_data = np.random.randint(0xFFFFFF, size=size, dtype=np.uint32)
@@ -23,8 +27,8 @@ def create_layer(size, offset, layer_type="image"):
     create_ingest_task(storage, MockTaskQueue())
     return storage, random_data
 
-def delete_layer():
-    shutil.rmtree("/tmp/removeme/layer", ignore_errors=True)
+def delete_layer(layer_name="layer"):
+    shutil.rmtree("/tmp/removeme/"+layer_name, ignore_errors=True)
     
 def test_aligned_read():
     delete_layer()

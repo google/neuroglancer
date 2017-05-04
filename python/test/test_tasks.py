@@ -2,7 +2,7 @@ import os.path
 
 import numpy as np
 
-from neuroglancer.pipeline import Storage, Precomputed, DownsampleTask, MeshTask
+from neuroglancer.pipeline import Storage, Precomputed, DownsampleTask, MeshTask, WatershedTask
 from neuroglancer.pipeline.task_creation import create_downsampling_task, MockTaskQueue
 from neuroglancer import downsample
 from test.test_precomputed import create_layer, delete_layer
@@ -38,3 +38,43 @@ def test_mesh():
     t.execute()
     assert storage.get_file('mesh/1:0:0-64_0-64_0-64') is not None 
     assert list(storage.list_files('mesh/')) == ['1:0:0-64_0-64_0-64']
+
+def test_watershed():
+    delete_layer('affinities')
+    storage, data = create_layer(size=(64,64,64,3), layer_type='affinities', layer_name='affinities')
+
+    delete_layer('segmentation')
+    storage, data = create_layer(size=(64,64,64,1), layer_type='segmentation', layer_name='segmentation')
+
+    WatershedTask(chunk_position='0-64_0-64_0-64',
+                  crop_position='0-64_0-64_0-64',
+                  layer_path_affinities='file:///tmp/removeme/affinities',
+                  layer_path_segmentation='file:///tmp/removeme/segmentation',
+                  high_threshold=0.999987, low_threshold=0.003, merge_threshold=0.3, 
+                  merge_size=800, dust_size=800).execute()
+
+
+def test_real_data():
+    return # this is to expensive to be test by travis
+    from tqdm import tqdm
+    from itertools import product
+    storage = Storage('s3://neuroglancer/pinky40_v11/affinitymap-jnet')
+    scale = Precomputed(storage).info['scales'][0]
+    for x_min in xrange(0, scale['size'][0], 512):
+        for y_min in xrange(0, scale['size'][1], 512):
+            for z_min in xrange(0, scale['size'][2], 1024):
+                x_max = min(scale['size'][0], x_min + 768)
+                y_max = min(scale['size'][1], y_min + 768)
+                z_max = min(scale['size'][2], z_min + 1024)
+
+                #adds offsets
+                x_min += scale['voxel_offset'][0]; x_max += scale['voxel_offset'][0]
+                y_min += scale['voxel_offset'][1]; y_max += scale['voxel_offset'][1]
+                z_min += scale['voxel_offset'][2]; z_max += scale['voxel_offset'][2]
+                WatershedTask(chunk_position='{}-{}_{}-{}_{}-{}'.format(x_min, x_max, y_min, y_max, z_min, z_max),
+                  crop_position='128-640_128-640_0-1024',
+                  layer_path_affinities='s3://neuroglancer/pinky40_v11/affinitymap-jnet',
+                  layer_path_segmentation='s3://neuroglancer/pinky40_v11/chunked_watershed',
+                  high_threshold=0.999987, low_threshold=0.003, merge_threshold=0.3, 
+                  merge_size=800, dust_size=800).execute()
+   

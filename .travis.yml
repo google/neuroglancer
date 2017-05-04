@@ -3,6 +3,8 @@ dist: trusty
 sudo: required
 node_js:
 - 7.3.0
+julia:
+  0.5.1
 cache:
   directories:
   - node_modules

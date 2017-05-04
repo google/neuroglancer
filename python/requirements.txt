@@ -1,9 +1,9 @@
-google-api-python-client==1.6.2
 tqdm==4.7.6
-google-cloud==0.22.0
 backports-abc==0.5
 backports.tempfile==1.0rc1
+backports.lzma==0.0.8
 boto==2.39.0
+blosc==1.5.0
 Cython==0.25.2
 certifi==2016.9.26
 decorator==4.0.11
@@ -11,6 +11,8 @@ google-api-python-client==1.6.2
 google-cloud==0.22.0
 networkx==1.11
 numpy==1.11.1
+pytest==3.0.7 
+protobuf==3.2.0
 Pillow==3.2.0
 requests==2.13.0
 singledispatch==3.4.0.3
@@ -19,9 +21,4 @@ sockjs-tornado==1.0.3
 tqdm==4.7.6
 tornado==4.4.2
 wsgiref==0.1.2
-Pillow==3.2.0
-blosc==1.5.0
-backports.lzma==0.0.8
 scipy==0.18.1
-pytest==3.0.7 
-#h5py==2.5.0 ##disable because docker fails to install it, use apt-get install python-h5py instead
