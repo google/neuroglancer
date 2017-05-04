@@ -7,20 +7,51 @@ from neuroglancer.pipeline.task_creation import create_downsampling_task, MockTa
 from neuroglancer import downsample
 from test.test_precomputed import create_layer, delete_layer
 
-def test_downsample():
+def test_downsample_segmentation():
     delete_layer()
-    storage, data = create_layer(size=(128,128,64,1), offset=(0,0,0))
+    storage, data = create_layer(size=(63,64,65,1), layer_type="segmentation")
     pr = Precomputed(storage)
     assert len(pr.info['scales']) == 1
-    create_downsampling_task(storage, MockTaskQueue(), downsample_ratio=[2, 2, 1])
+
+    create_downsampling_task(storage, MockTaskQueue(), downsample_ratio=[1, 2, 3])
+    storage.wait()
+
+    pr_new = Precomputed(storage, scale_idx=1)
+    assert len(pr_new.info['scales']) == 2
+    assert pr_new.info['scales'][1]['size'] == [63,32,21]
+    print pr_new.info
+    data = downsample.downsample_segmentation(data, factor=[1, 2, 3, 1])
+    assert np.all(pr_new[0:63,0:32,0:21] == data[0:63,0:32,0:21])
+
+def test_downsample_image():
+    delete_layer()
+    storage, data = create_layer(size=(24,25,26,1), layer_type="image")
+    pr = Precomputed(storage)
+    assert len(pr.info['scales']) == 1
+    create_downsampling_task(storage, MockTaskQueue(), downsample_ratio=[3, 1, 26])
     # pr.info now has an outdated copy of the info file
     storage.wait()
     pr_new = Precomputed(storage, scale_idx=1)
     assert len(pr_new.info['scales']) == 2
-    assert pr_new.info['scales'][1]['size'] == [64,64,64]
+    assert pr_new.info['scales'][1]['size'] == [8, 25, 1]
     data = downsample.downsample_with_averaging(
-        data, factor=[2, 2, 1, 1])
-    assert np.all(pr_new[0:64,0:64,0:64] == data)
+        data, factor=[3, 1, 26, 1])
+    assert np.all(pr_new[0:8,0:25,0:1] == data)
+
+def test_downsample_affinities():
+    delete_layer()
+    storage, data = create_layer(size=(62,64,65,3), layer_type="affinities")
+    pr = Precomputed(storage)
+    assert len(pr.info['scales']) == 1
+    create_downsampling_task(storage, MockTaskQueue(), downsample_ratio=[8, 5, 3])
+    # pr.info now has an outdated copy of the info file
+    storage.wait()
+    pr_new = Precomputed(storage, scale_idx=1)
+    assert len(pr_new.info['scales']) == 2
+    assert pr_new.info['scales'][1]['size'] == [7,12,21]
+    data = downsample.downsample_with_averaging(
+        data, factor=[8, 5, 3, 1])
+    assert np.all(pr_new[0:7,0:12,0:21] == data[0:7,0:12,0:21])
 
 def test_mesh():
     delete_layer()

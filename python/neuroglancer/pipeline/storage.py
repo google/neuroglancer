@@ -100,7 +100,7 @@ class Storage(object):
         else:
             return cls.ExtractedPath(*match.groups())
 
-    def put_file(self, file_path, content, compress=False):
+    def put_file(self, file_path, content, compress=True):
         """ 
         Args:
             filename (string): it can contains folders

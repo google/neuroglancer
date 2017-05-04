@@ -93,6 +93,10 @@ def downsample_with_averaging(array, factor):
     return np.cast[array.dtype](temp / counts)
 
 def downsample_segmentation(data, factor):
+  if len(factor) == 4:
+    assert factor[3] == 1 
+    factor = factor[:3]
+
   factor = np.array(factor)
   if np.array_equal(factor, np.array([1,1,1])):
     return data

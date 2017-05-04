@@ -98,7 +98,8 @@ def get_build_data_type_and_shape(storage):
         arr = chunks.decode_npz(storage.get_file('build/'+filename))
         return arr.dtype.name, arr.shape[3] #num_channels
 
-def create_info_file_from_build(storage, layer_type, resolution=[1,1,1], encoding='raw'):
+def create_info_file_from_build(storage, layer_type, resolution=[1,1,1], encoding='raw',
+    soft_chunk=[64,64,64], force_chunk=None):
     assert layer_type == 'image' or layer_type == 'segmentation'
     layer_shape, layer_offset, build_chunk_size = compute_build_bounding_box(storage)
     data_type, num_channels = get_build_data_type_and_shape(storage)
@@ -111,7 +112,10 @@ def create_info_file_from_build(storage, layer_type, resolution=[1,1,1], encodin
     if layer_type == 'segmentation':
         info['mesh'] = 'mesh'
 
-    neuroglancer_chunk_size = find_closest_divisor(build_chunk_size, closest_to=[64,64,64])
+    if force_chunk is not None:
+        neuroglancer_chunk_size =  force_chunk
+    else:
+        neuroglancer_chunk_size = find_closest_divisor(build_chunk_size, closest_to=soft_chunk)
     scale_ratios = downsample_scales.compute_near_isotropic_downsampling_scales(
         size=layer_shape,
         voxel_size=resolution,

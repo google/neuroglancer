@@ -185,8 +185,7 @@ class DownsampleTask(RegisteredTask):
     def _upload_output_chunk(self):
         self._storage.put_file(
             file_path=self._get_filename(),
-            content=self._encode(self._data, self._info['scales'][self._output_index]["encoding"])
-            )
+            content=self._encode(self._data, self._info['scales'][self._output_index]["encoding"]))
         self._storage.wait()
 
     def _encode(self, chunk, encoding):
