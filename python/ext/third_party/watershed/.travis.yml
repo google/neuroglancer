@@ -1,0 +1,13 @@
+language: julia
+os: linux
+
+julia:
+        - 0.4
+
+notifications:
+        email: false
+
+script:
+        - julia -e 'Pkg.add("DataStructures")'
+        - julia -e 'Pkg.clone("https://github.com/seung-lab/Watershed.jl.git")'
+        - julia -e 'Pkg.test("Watershed")'

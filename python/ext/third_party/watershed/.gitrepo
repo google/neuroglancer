@@ -1,0 +1,11 @@
+; DO NOT EDIT (unless you know what you are doing)
+;
+; This subdirectory is a git "subrepo", and this file is maintained by the
+; git-subrepo command. See https://github.com/git-commands/git-subrepo#readme
+;
+[subrepo]
+	remote = https://github.com/seung-lab/watershed.jl
+	branch = master
+	commit = db890b3284cbc92f2fddbf853b23da7516e3dbee
+	parent = 0dd503122aaab16d09f0ed689edd7f18cb6b88cb
+	cmdver = 0.3.1
