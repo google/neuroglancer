@@ -29,9 +29,11 @@ import {mat4, vec3, vec3Key} from 'neuroglancer/util/geom';
 import {stableStringify} from 'neuroglancer/util/json';
 import {Buffer} from 'neuroglancer/webgl/buffer';
 import {GL} from 'neuroglancer/webgl/context';
+import {GL_ARRAY_BUFFER, GL_FLOAT} from 'neuroglancer/webgl/constants';
 import {makeWatchableShaderError, WatchableShaderError} from 'neuroglancer/webgl/dynamic_shader';
 import {FramebufferConfiguration, makeTextureBuffers, StencilBuffer} from 'neuroglancer/webgl/offscreen';
 import {ShaderBuilder, ShaderModule, ShaderProgram} from 'neuroglancer/webgl/shader';
+import {setVec4FromUint32} from 'neuroglancer/webgl/shader_lib';
 import {registerSharedObjectOwner, RPC, RpcId, SharedObject} from 'neuroglancer/worker_rpc';
 
 const tempMat4 = mat4.create();
@@ -43,8 +45,8 @@ export class RenderLayer extends GenericSliceViewRenderLayer {
   rpcId: RpcId|null = null;
   shaderError: WatchableShaderError;
   private sharedObject: SharedObject;
-
-  private tempMat = mat4.create();
+  private vertexIndexBuffer: Buffer;
+  private normalDirectionBuffer: Buffer;
 
   constructor(
       multiscaleSource: MultiscaleVectorGraphicsChunkSource,
@@ -59,6 +61,21 @@ export class RenderLayer extends GenericSliceViewRenderLayer {
     sharedObject.RPC_TYPE_ID = VECTOR_GRAPHICS_RENDERLAYER_RPC_ID;
     sharedObject.initializeCounterpart(this.chunkManager.rpc!, {'sources': this.sourceIds});
     this.rpcId = sharedObject.rpcId;
+    
+    let vertexIndex = new Float32Array(8);
+    // (1, 0) , (0, 1) , (1, 0) , (0 1)
+    vertexIndex[0] = 1.;
+    vertexIndex[3] = 1.;
+    vertexIndex[4] = 1.;
+    vertexIndex[7] = 1.;
+    this.vertexIndexBuffer = Buffer.fromData(gl, vertexIndex, gl.ARRAY_BUFFER, gl.STATIC_DRAW);
+
+    let normalDirection = new Float32Array(4);
+    normalDirection[0] = 1.;
+    normalDirection[1] = 1.;
+    normalDirection[2] = -1.;
+    normalDirection[3] = -1.;
+    this.normalDirectionBuffer = Buffer.fromData(gl, normalDirection, gl.ARRAY_BUFFER, gl.STATIC_DRAW);
   }
 
   defineShader(builder: ShaderBuilder) {
@@ -68,8 +85,11 @@ void emit(vec4 color) {
 }
 `);
 
-    builder.addAttribute('highp vec3', 'aVertexPosition');
-    builder.addAttribute('highp vec3', 'aVertexNormal');
+    builder.addAttribute('highp float', 'aNormalDirection');
+    builder.addAttribute('highp vec2', 'aVertexIndex');
+
+    builder.addAttribute('highp vec3', 'aVertexFirst');
+    builder.addAttribute('highp vec3', 'aVertexSecond');
     builder.addUniform('highp mat4', 'uProjection');
   }
 
@@ -83,8 +103,12 @@ void emit(vec4 color) {
 
   endSlice(shader: ShaderProgram) {
     let gl = this.gl;
-    gl.disableVertexAttribArray(shader.attribute('aVertexPosition'));
-    gl.disableVertexAttribArray(shader.attribute('aVertexNormal'));
+
+    gl.disableVertexAttribArray(shader.attribute('aVertexIndex'));
+    gl.disableVertexAttribArray(shader.attribute('aNormalDirection'));
+
+    gl.disableVertexAttribArray(shader.attribute('aVertexFirst'));
+    gl.disableVertexAttribArray(shader.attribute('aVertexSecond'));
   }
 
   draw(sliceView: SliceView) {
@@ -122,13 +146,45 @@ void emit(vec4 color) {
       for (let key of visibleChunks) {
         let chunk = chunks.get(key);
         if (chunk && chunk.state === ChunkState.GPU_MEMORY) {
+          let numInstances = chunk.numPrimitives;
+
+          this.vertexIndexBuffer.bindToVertexAttrib(
+            shader.attribute('aVertexIndex'),
+            /*components=*/2
+          );
+
+          this.normalDirectionBuffer.bindToVertexAttrib(
+            shader.attribute('aNormalDirection'),
+            /*components=*/1
+          );
+
+          const aVertexFirst = shader.attribute('aVertexFirst');
           chunk.vertexBuffer.bindToVertexAttrib(
-              shader.attribute('aVertexPosition'),
-              /*components=*/3);
-          chunk.normalBuffer.bindToVertexAttrib(
-            shader.attribute('aVertexNormal'),
-            /*components=*/3);
-          gl.drawArrays(gl.TRIANGLES, 0, chunk.numPoints);
+            aVertexFirst,
+            /*components=*/3,
+            /*attributeType=*/GL_FLOAT,
+            /*normalized=*/false,
+            /*stride=*/6*4,
+            /*offset=*/0
+          );
+          gl.ANGLE_instanced_arrays.vertexAttribDivisorANGLE(aVertexFirst, 1);
+
+          const aVertexSecond = shader.attribute('aVertexSecond');
+          chunk.vertexBuffer.bindToVertexAttrib(
+            aVertexSecond,
+            /*components=*/3,
+            /*attributeType=*/GL_FLOAT,
+            /*normalized=*/false,
+            /*stride=*/6*4,
+            /*offset=*/3*4
+          );
+          gl.ANGLE_instanced_arrays.vertexAttribDivisorANGLE(aVertexSecond, 1);
+
+          gl.ANGLE_instanced_arrays.drawArraysInstancedANGLE(gl.TRIANGLE_STRIP, 0, 4, numInstances);
+
+          gl.ANGLE_instanced_arrays.vertexAttribDivisorANGLE(aVertexFirst, 0);
+          gl.ANGLE_instanced_arrays.vertexAttribDivisorANGLE(aVertexSecond, 0);
+          
         }
       }
     }
@@ -141,26 +197,22 @@ export class VectorGraphicsChunk extends SliceViewChunk {
   vertexPositions: Float32Array;
   vertexBuffer: Buffer;
   vertexNormals: Float32Array;
-  normalBuffer: Buffer;
-  numPoints: number;
+  numPrimitives: number;
 
   constructor(source: VectorGraphicsChunkSource, x: any) {
     super(source, x);
     this.vertexPositions = x['vertexPositions'];
-    this.vertexNormals = x['vertexNormals'];
-    this.numPoints = Math.floor(this.vertexPositions.length / 3);
+    this.numPrimitives = Math.floor(this.vertexPositions.length / 6); 
   }
 
   copyToGPU(gl: GL) {
     super.copyToGPU(gl);
     this.vertexBuffer = Buffer.fromData(gl, this.vertexPositions, gl.ARRAY_BUFFER, gl.STATIC_DRAW);
-    this.normalBuffer = Buffer.fromData(gl, this.vertexNormals, gl.ARRAY_BUFFER, gl.STATIC_DRAW);
   }
 
   freeGPUMemory(gl: GL) {
     super.freeGPUMemory(gl);
     this.vertexBuffer.dispose();
-    this.normalBuffer.dispose();
   }
 }
 

@@ -25,7 +25,7 @@ import {ShaderBuilder} from 'neuroglancer/webgl/shader';
 
 export const FRAGMENT_MAIN_START = '//NEUROGLANCER_VECTORGRAPHICS_RENDERLAYER_FRAGMENT_MAIN_START';
 
-const DEFAULT_FRAGMENT_MAIN = `void main() {
+const DEFAULT_FRAGMENT_MAIN = `void main() {  
   float distance = length(vNormal);
   float feather = 1.0; 
   vec3 color = vec3(0,1,0);
@@ -88,13 +88,23 @@ void emitTransparent() {
     builder.setFragmentMainFunction(FRAGMENT_MAIN_START + '\n' + this.fragmentMain.value);
 
     builder.setVertexMain(`
-vNormal = aVertexNormal; 
-vLineWidth = 3.0;
-vec4 delta = vec4(aVertexNormal * vLineWidth, 0.0);
-vec4 pos = vec4(aVertexPosition, 1.0);
+
+vec3 direction = vec3(0., 0., 0.); 
+direction.z = aNormalDirection;
+
+vec3 difference = aVertexSecond - aVertexFirst;
+difference.z = 0.; 
+
+vec3 normal = cross(difference, direction);
+normal = normalize(normal); 
+vNormal = normal; 
+
+vLineWidth = 30.0;
+vec4 delta = vec4(normal * vLineWidth, 0.0);
+vec4 pos = vec4(aVertexFirst * aVertexIndex.x + aVertexSecond * aVertexIndex.y, 1.0);
+
 gl_Position = uProjection * (pos + delta);
 `);
-    
   }
 
   beginSlice(sliceView: SliceView) {
