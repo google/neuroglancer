@@ -70,7 +70,7 @@ export abstract class RenderedDataPanel extends RenderedPanel {
     this.registerEventListener(element, 'mouseleave', this.onMouseout.bind(this));
     this.registerEventListener(element, 'mousedown', this.onMousedown.bind(this), false);
     this.registerEventListener(element, 'wheel', this.onMousewheel.bind(this), false);
-    this.registerEventListener( 
+    this.registerEventListener(
         element, 'dblclick', () => { this.viewer.layerManager.invokeAction('select'); });
     this.registerEventListener(
         element, 'click', (e: MouseEvent) => {
