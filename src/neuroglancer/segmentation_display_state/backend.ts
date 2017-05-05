@@ -30,6 +30,7 @@ export class SegmentationLayerSharedObjectCounterpart extends SharedObjectCounte
     VisibleSegmentsState {
   chunkManager: ChunkManager;
   visibleSegments: Uint64Set;
+  highlightedSegments: Uint64Set;
   segmentEquivalences: SharedDisjointUint64Sets;
 
   /**
@@ -45,6 +46,7 @@ export class SegmentationLayerSharedObjectCounterpart extends SharedObjectCounte
     // segmentEquivalences since our owner will hold a reference to their owners.
     this.chunkManager = <ChunkManager>rpc.get(options['chunkManager']);
     this.visibleSegments = <Uint64Set>rpc.get(options['visibleSegments']);
+    this.highlightedSegments = <Uint64Set>rpc.get(options['highlightedSegments']);  
     this.segmentEquivalences = <SharedDisjointUint64Sets>rpc.get(options['segmentEquivalences']);
 
     const scheduleUpdateChunkPriorities =

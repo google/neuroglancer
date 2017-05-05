@@ -20,6 +20,7 @@ import {Uint64} from 'neuroglancer/util/uint64';
 
 export interface VisibleSegmentsState {
   visibleSegments: Uint64Set;
+  highlightedSegments: Uint64Set;
   segmentEquivalences: SharedDisjointUint64Sets;
 }
 
@@ -33,7 +34,7 @@ export function getObjectKey(objectId: Uint64): string {
 
 export function forEachVisibleSegment(
     state: VisibleSegmentsState, callback: (objectId: Uint64, rootObjectId: Uint64) => void) {
-  let {visibleSegments, segmentEquivalences} = state;
+  let {visibleSegments, highlightedSegments, segmentEquivalences} = state;
   for (let rootObjectId of visibleSegments) {
     // TODO(jbms): Remove this check if logic is added to ensure that it always holds.
     if (!segmentEquivalences.disjointSets.isMinElement(rootObjectId)) {
