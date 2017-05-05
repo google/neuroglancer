@@ -3,7 +3,7 @@ from cStringIO import StringIO
 from Queue import Queue
 import os.path
 import re
-from threading import Thread
+from threading import Thread, Lock
 from functools import partial
 
 from glob import glob
@@ -114,6 +114,7 @@ class Storage(object):
             self._queue.put(('put_file', None, file_path, content, compress), block=True)
         else:
             self._interface(self._path).put_file(file_path, content, compress)
+        return self
 
 
     def get_file(self, file_path):
@@ -201,9 +202,11 @@ class Storage(object):
         self._kill_threads()
 
 class FileInterface(object):
+    lock = Lock()
 
     def __init__(self, path):
         self._path = path
+
 
     def get_path_to_file(self, file_path):
         
@@ -216,19 +219,13 @@ class FileInterface(object):
 
     def put_file(self, file_path, content, compress):
         path = self.get_path_to_file(file_path)
-        try:
-            with open(path, 'wb') as f:
-                f.write(content)
-        except IOError:
-            try: 
-                # a raise condition is possible
-                # where the first try fails to create the file
-                # because the folder that contains it doesn't exists
-                # but when we try to create here, some other thread
-                # already created this folder
-                os.makedirs(os.path.dirname(path))
-            except OSError:
-                pass
+        dirpath = os.path.dirname(path)
+        with FileInterface.lock:
+            if not os.path.exists(dirpath):
+                os.makedirs(dirpath)
+
+        with open(path, 'wb') as f:
+            f.write(content)
 
     def get_file(self, file_path):
         path = self.get_path_to_file(file_path) 
