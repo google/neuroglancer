@@ -4,6 +4,7 @@ backports.tempfile==1.0rc1
 backports.lzma==0.0.8
 boto==2.39.0
 blosc==1.5.0
+click==6.6
 Cython==0.25.2
 certifi==2016.9.26
 decorator==4.0.11
