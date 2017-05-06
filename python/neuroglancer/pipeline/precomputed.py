@@ -80,12 +80,12 @@ class Precomputed(object):
             if not content and not self._fill:
                 raise EmptyVolumeException()
 
-            content = chunks.decode(
-                self._storage.get_file(file_path), 
+            decoded = chunks.decode(
+                filedata=content,
                 encoding=self._scale['encoding'], 
                 shape=self._get_chunk_shape(c),
                 dtype=self.info['data_type'])
-            return_volume[self._slices_from_chunk(c,offset)] = content
+            return_volume[self._slices_from_chunk(c,offset)] = decoded
         return return_volume[crop_slices]
 
     def __setitem__(self, slices, input_volume):
@@ -101,10 +101,10 @@ class Precomputed(object):
                 raise ValueError("Illegal slicing, {} != {}".format(
                     self._get_slices_shape(slices), input_volume.shape))
 
-            content = chunks.encode(input_chunk, self._scale['encoding'])
+            encoded = chunks.encode(input_chunk, self._scale['encoding'])
             self._storage.put_file(
                 file_path=self._chunk_to_file_path(c),
-                content=content)
+                content=encoded)
         self._storage.wait()
 
     def _get_offsets(self, slices):

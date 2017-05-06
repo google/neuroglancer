@@ -228,7 +228,7 @@ class FileInterface(object):
             f.write(content)
 
     def get_file(self, file_path):
-        path = self.get_path_to_file(file_path) 
+        path = self.get_path_to_file(file_path)
         try:
             with open(path, 'rb') as f:
                 return f.read(), None
@@ -278,7 +278,9 @@ class GoogleCloudStorageInterface(object):
         blob = self._bucket.get_blob( key )
         if not blob:
             return None, False
-        return blob.download_as_string(), blob.content_encoding == "gzip"
+        # blob handles the decompression in the case
+        # it is necessary
+        return blob.download_as_string(), False
 
     def list_files(self, prefix):
         """

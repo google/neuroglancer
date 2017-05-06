@@ -7,6 +7,7 @@ ENV DEBIAN_FRONTEND noninteractive
 RUN apt-get update && apt-get install -y -qq --no-install-recommends \
     apt-utils \
     curl \
+    git \
     openssh-client \
     python-openssl \
     python \

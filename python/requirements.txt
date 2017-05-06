@@ -9,7 +9,6 @@ Cython==0.25.2
 certifi==2016.9.26
 decorator==4.0.11
 google-api-python-client==1.6.2
-google-cloud==0.22.0
 networkx==1.11
 numpy==1.11.1
 pytest==3.0.7 
@@ -23,3 +22,8 @@ tqdm==4.7.6
 tornado==4.4.2
 wsgiref==0.1.2
 scipy==0.18.1
+
+# do not use
+# google-cloud==0.22.0 
+# use hacked version which adds accept-encoding
+git+git://github.com/tartavull/google-cloud-python@hack#egg=google-cloud
