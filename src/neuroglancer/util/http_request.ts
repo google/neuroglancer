@@ -76,15 +76,10 @@ export function openShardedHttpRequest(baseUrls: string|string[], path: string, 
 }
 
 export function sendHttpRequest(
-    xhr: XMLHttpRequest, responseType: 'arraybuffer',
-    token?: CancellationToken): Promise<ArrayBuffer>;
-export function sendHttpRequest(
-    xhr: XMLHttpRequest, responseType: 'json', token?: CancellationToken): Promise<any>;
-export function sendHttpRequest(
-    xhr: XMLHttpRequest, responseType: string, token?: CancellationToken): any;
-
-export function sendHttpRequest(
-    xhr: XMLHttpRequest, responseType: string, token: CancellationToken = uncancelableToken) {
+  xhr: XMLHttpRequest, responseType: 'arraybuffer', token?: CancellationToken): Promise<ArrayBuffer>;
+export function sendHttpRequest(xhr: XMLHttpRequest, responseType: 'json', token?: CancellationToken): Promise<any>;
+export function sendHttpRequest(xhr: XMLHttpRequest, responseType: XMLHttpRequestResponseType, token?: CancellationToken): any;
+export function sendHttpRequest(xhr: XMLHttpRequest, responseType: XMLHttpRequestResponseType, token: CancellationToken = uncancelableToken) {
   xhr.responseType = responseType;
   return new Promise((resolve, reject) => {
     const abort = () => {
@@ -105,16 +100,14 @@ export function sendHttpRequest(
 }
 
 export function sendHttpJsonPostRequest(
-    xhr: XMLHttpRequest, payload: any, responseType: 'arraybuffer',
-    token?: CancellationToken): Promise<ArrayBuffer>;
+    xhr: XMLHttpRequest, payload: any, responseType: 'arraybuffer', token?: CancellationToken): Promise<ArrayBuffer>;
 export function sendHttpJsonPostRequest(
-    xhr: XMLHttpRequest, payload: any, responseType: 'json',
-    token?: CancellationToken): Promise<any>;
+    xhr: XMLHttpRequest, payload: any, responseType: 'json', token?: CancellationToken): Promise<any>;
 export function sendHttpJsonPostRequest(
-    xhr: XMLHttpRequest, payload: any, responseType: string, token?: CancellationToken): any;
+    xhr: XMLHttpRequest, payload: any, responseType: XMLHttpRequestResponseType, token?: CancellationToken): any;
 
 export function sendHttpJsonPostRequest(
-    xhr: XMLHttpRequest, payload: any, responseType: string,
+    xhr: XMLHttpRequest, payload: any, responseType: XMLHttpRequestResponseType,
     token: CancellationToken = uncancelableToken) {
   xhr.responseType = responseType;
   xhr.setRequestHeader('Content-Type', `application/json`);

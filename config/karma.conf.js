@@ -73,6 +73,13 @@ module.exports = function(config) {
         os: 'OS X',
         os_version: 'Sierra',
       },
+      browserstack_chrome57_windows_10: {
+        base: 'BrowserStack',
+        browser: 'chrome',
+        browser_version: '57.0',
+        os: 'Windows',
+        os_version: '10',
+      }
     },
     colors: true,
     browserNoActivityTimeout: 60000,

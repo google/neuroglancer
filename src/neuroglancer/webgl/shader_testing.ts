@@ -18,22 +18,22 @@ import {RefCounted} from 'neuroglancer/util/disposable';
 import {vec4} from 'neuroglancer/util/geom';
 import {Buffer} from 'neuroglancer/webgl/buffer';
 import {GL} from 'neuroglancer/webgl/context';
-import {FramebufferConfiguration, makeTextureBuffers} from 'neuroglancer/webgl/offscreen';
+import {FramebufferConfiguration, makeTextureBuffers, TextureBuffer} from 'neuroglancer/webgl/offscreen';
 import {ShaderBuilder, ShaderProgram} from 'neuroglancer/webgl/shader';
 import {glsl_debugFunctions} from 'neuroglancer/webgl/shader_lib';
+import {getSquareCornersBuffer} from 'neuroglancer/webgl/square_corners_buffer';
 import {webglTest} from 'neuroglancer/webgl/testing';
 
 export class FragmentShaderTester extends RefCounted {
   builder = new ShaderBuilder(this.gl);
   shader: ShaderProgram;
-  offscreenFramebuffer = new FramebufferConfiguration(
-      this.gl, {colorBuffers: makeTextureBuffers(this.gl, this.numOutputs)});
-  private vertexPositionsBuffer = this.registerDisposer(Buffer.fromData(
-      this.gl, Float32Array.of(0, 0, 0, 1), this.gl.ARRAY_BUFFER, this.gl.STATIC_DRAW));
+  offscreenFramebuffer: FramebufferConfiguration<TextureBuffer>;
+  private vertexPositionsBuffer = getSquareCornersBuffer(this.gl, -1, -1, 1, 1);
 
-  constructor(public gl: GL, public numOutputs: number) {
+  constructor(public gl: GL, colorBuffers: TextureBuffer[]) {
     super();
     let {builder} = this;
+    this.offscreenFramebuffer = new FramebufferConfiguration(this.gl, {colorBuffers});
     builder.addFragmentExtension('GL_EXT_draw_buffers');
     builder.addAttribute('vec4', 'shader_testing_aVertexPosition');
     builder.setVertexMain(`gl_Position = shader_testing_aVertexPosition;`);
@@ -48,8 +48,8 @@ export class FragmentShaderTester extends RefCounted {
     gl.disable(gl.DEPTH_TEST);
     gl.disable(gl.BLEND);
     let aVertexPosition = shader.attribute('shader_testing_aVertexPosition');
-    this.vertexPositionsBuffer.bindToVertexAttrib(aVertexPosition, 4);
-    gl.drawArrays(gl.POINTS, 0, 1);
+    this.vertexPositionsBuffer.bindToVertexAttrib(aVertexPosition, /*components=*/2);
+    gl.drawArrays(gl.TRIANGLE_FAN, 0, 4);
     gl.disableVertexAttribArray(aVertexPosition);
     this.offscreenFramebuffer.unbind();
   }
@@ -77,7 +77,7 @@ export class FragmentShaderTester extends RefCounted {
 
 export function fragmentShaderTest(numOutputs: number, f: (tester: FragmentShaderTester) => void) {
   webglTest(gl => {
-    let tester = new FragmentShaderTester(gl, numOutputs);
+    let tester = new FragmentShaderTester(gl, makeTextureBuffers(gl, numOutputs));
     try {
       f(tester);
     } finally {

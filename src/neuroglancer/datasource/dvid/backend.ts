@@ -15,13 +15,17 @@
  */
 
 import {registerChunkSource} from 'neuroglancer/chunk_manager/backend';
-import {TileChunkSourceParameters, TileEncoding, VolumeChunkSourceParameters} from 'neuroglancer/datasource/dvid/base';
+import {TileChunkSourceParameters, TileEncoding, VolumeChunkEncoding, VolumeChunkSourceParameters} from 'neuroglancer/datasource/dvid/base';
 import {ParameterizedVolumeChunkSource, VolumeChunk} from 'neuroglancer/sliceview/volume/backend';
 import {ChunkDecoder} from 'neuroglancer/sliceview/backend_chunk_decoders';
+import {decodeCompressedSegmentationChunk} from 'neuroglancer/sliceview/backend_chunk_decoders/compressed_segmentation';
 import {decodeJpegChunk} from 'neuroglancer/sliceview/backend_chunk_decoders/jpeg';
 import {decodeRawChunk} from 'neuroglancer/sliceview/backend_chunk_decoders/raw';
+import {VolumeType} from 'neuroglancer/sliceview/volume/base';
 import {CancellationToken} from 'neuroglancer/util/cancellation';
+import {vec3} from 'neuroglancer/util/geom';
 import {openShardedHttpRequest, sendHttpRequest} from 'neuroglancer/util/http_request';
+import {RPC} from 'neuroglancer/worker_rpc';
 
 const TILE_CHUNK_DECODERS = new Map<TileEncoding, ChunkDecoder>([
   [TileEncoding.JPEG, decodeJpegChunk],
@@ -29,6 +33,12 @@ const TILE_CHUNK_DECODERS = new Map<TileEncoding, ChunkDecoder>([
 
 @registerChunkSource(VolumeChunkSourceParameters)
 class VolumeChunkSource extends ParameterizedVolumeChunkSource<VolumeChunkSourceParameters> {
+  constructor(rpc: RPC, options: any) {
+    super(rpc, options);
+
+    this.parameters = options['parameters'];
+  }
+
   download(chunk: VolumeChunk, cancellationToken: CancellationToken) {
     let params = this.parameters;
     let path: string;
@@ -37,13 +47,35 @@ class VolumeChunkSource extends ParameterizedVolumeChunkSource<VolumeChunkSource
       // computeChunkBounds.
       let chunkPosition = this.computeChunkBounds(chunk);
       let chunkDataSize = chunk.chunkDataSize!;
-      path = `/api/node/${params['nodeKey']}/${params['dataInstanceKey']}/raw/0_1_2/` +
-          `${chunkDataSize[0]}_${chunkDataSize[1]}_${chunkDataSize[2]}/` +
-          `${chunkPosition[0]}_${chunkPosition[1]}_${chunkPosition[2]}/nd`;
+
+      // if the volume is an image, get a jpeg
+      path = this.getPath(chunkPosition, chunkDataSize);
     }
+    let decoder = this.getDecoder(params);
     return sendHttpRequest(
                openShardedHttpRequest(params.baseUrls, path), 'arraybuffer', cancellationToken)
-        .then(response => decodeRawChunk(chunk, response));
+        .then(response => decoder(chunk, response));
+  }
+  getPath(chunkPosition: Float32Array, chunkDataSize: Float32Array) {
+    let params = this.parameters;
+    if (params.encoding === VolumeChunkEncoding.JPEG) {
+      return `/api/node/${params['nodeKey']}/${params['dataInstanceKey']}/raw/0_1_2/` +
+          `${chunkDataSize[0]}_${chunkDataSize[1]}_${chunkDataSize[2]}/` +
+          `${chunkPosition[0]}_${chunkPosition[1]}_${chunkPosition[2]}/jpeg`;
+    } else {
+      // encoding is COMPRESSED_SEGMENTATION
+      return `/api/node/${params['nodeKey']}/${params['dataInstanceKey']}/raw/0_1_2/` +
+          `${chunkDataSize[0]}_${chunkDataSize[1]}_${chunkDataSize[2]}/` +
+          `${chunkPosition[0]}_${chunkPosition[1]}_${chunkPosition[2]}?compression=googlegzip`;
+    }
+  }
+  getDecoder(params: any) {
+    if (params.encoding === VolumeChunkEncoding.JPEG) {
+      return decodeJpegChunk;
+    } else {
+      // encoding is COMPRESSED_SEGMENTATION
+      return decodeCompressedSegmentationChunk;
+    }
   }
 }
 
