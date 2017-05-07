@@ -16,8 +16,8 @@
 
 import {ChunkManager} from 'neuroglancer/chunk_manager/frontend';
 import {MeshSource} from 'neuroglancer/mesh/frontend';
-import {MultiscaleVectorGraphicsChunkSource} from 'neuroglancer/sliceview/vector_graphics/frontend';
 import {SkeletonSource} from 'neuroglancer/skeleton/frontend';
+import {MultiscaleVectorGraphicsChunkSource} from 'neuroglancer/sliceview/vector_graphics/frontend';
 import {VolumeType} from 'neuroglancer/sliceview/volume/base';
 import {MultiscaleVolumeChunkSource} from 'neuroglancer/sliceview/volume/frontend';
 import {CancellationToken, uncancelableToken} from 'neuroglancer/util/cancellation';
@@ -79,8 +79,8 @@ export interface DataSourceFactory {
            CancellationToken) => Promise<MultiscaleVolumeChunkSource>| MultiscaleVolumeChunkSource;
   getVectorGraphicsSource?:
       (chunkManager: ChunkManager, path: string, options: GetVectorGraphicsOptions,
-       cancellationToken:
-           CancellationToken) => Promise<MultiscaleVectorGraphicsChunkSource>| MultiscaleVectorGraphicsChunkSource;
+       cancellationToken: CancellationToken) =>
+          Promise<MultiscaleVectorGraphicsChunkSource>| MultiscaleVectorGraphicsChunkSource;
   getMeshSource?:
       (chunkManager: ChunkManager, path: string,
        cancellationToken: CancellationToken) => Promise<MeshSource>| MeshSource;

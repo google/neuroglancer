@@ -26,10 +26,13 @@ export interface RenderLayer { sources: VectorGraphicsChunkSource[][]|null; }
 
 export interface VectorGraphicsSourceOptions extends SliceViewSourceOptions {}
 
-export interface VectorGraphicsChunkSource extends SliceViewChunkSource { spec: VectorGraphicsChunkSpecification; }
+export interface VectorGraphicsChunkSource extends SliceViewChunkSource {
+  spec: VectorGraphicsChunkSpecification;
+}
 
 
-export interface VectorGraphicsChunkSpecificationOptions extends SliceViewChunkSpecificationBaseOptions {
+export interface VectorGraphicsChunkSpecificationOptions extends
+    SliceViewChunkSpecificationBaseOptions {
   chunkDataSize: vec3;
 }
 
@@ -37,12 +40,12 @@ export interface VectorGraphicsChunkSpecificationOptions extends SliceViewChunkS
  * Specifies a chunk layout and voxel size.
  */
 export class VectorGraphicsChunkSpecification extends SliceViewChunkSpecification {
-
   constructor(options: VectorGraphicsChunkSpecificationOptions) {
     super(options);
   }
 
-  static make(options: VectorGraphicsChunkSpecificationOptions&{vectorGraphicsSourceOptions: VectorGraphicsSourceOptions}) {
+  static make(options: VectorGraphicsChunkSpecificationOptions&
+              {vectorGraphicsSourceOptions: VectorGraphicsSourceOptions}) {
     return new VectorGraphicsChunkSpecification(Object.assign(
         {}, options,
         {transform: getCombinedTransform(options.transform, options.vectorGraphicsSourceOptions)}));

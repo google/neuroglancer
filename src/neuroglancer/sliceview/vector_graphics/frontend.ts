@@ -17,19 +17,19 @@
 import {ChunkSourceParametersConstructor, ChunkState} from 'neuroglancer/chunk_manager/base';
 import {Chunk, ChunkManager, ChunkSource} from 'neuroglancer/chunk_manager/frontend';
 import {NavigationState} from 'neuroglancer/navigation_state';
-import {VECTOR_GRAPHICS_RENDERLAYER_RPC_ID, VectorGraphicsChunkSource as VectorGraphicsChunkSourceInterface, VectorGraphicsChunkSpecification, VectorGraphicsSourceOptions} from 'neuroglancer/sliceview/vector_graphics/base';
 import {SharedObjectWithVisibilityCount} from 'neuroglancer/shared_visibility_count/base';
 import {ChunkLayout} from 'neuroglancer/sliceview/chunk_layout';
 import {MultiscaleSliceViewChunkSource, SliceViewChunk, SliceViewChunkSource} from 'neuroglancer/sliceview/frontend';
 import {SliceView} from 'neuroglancer/sliceview/frontend';
 import {SliceViewPanelRenderContext, SliceViewPanelRenderLayer} from 'neuroglancer/sliceview/panel';
 import {RenderLayer as GenericSliceViewRenderLayer} from 'neuroglancer/sliceview/renderlayer';
+import {VECTOR_GRAPHICS_RENDERLAYER_RPC_ID, VectorGraphicsChunkSource as VectorGraphicsChunkSourceInterface, VectorGraphicsChunkSpecification, VectorGraphicsSourceOptions} from 'neuroglancer/sliceview/vector_graphics/base';
 import {RefCounted} from 'neuroglancer/util/disposable';
 import {mat4, vec3, vec3Key} from 'neuroglancer/util/geom';
 import {stableStringify} from 'neuroglancer/util/json';
 import {Buffer} from 'neuroglancer/webgl/buffer';
-import {GL} from 'neuroglancer/webgl/context';
 import {GL_ARRAY_BUFFER, GL_FLOAT} from 'neuroglancer/webgl/constants';
+import {GL} from 'neuroglancer/webgl/context';
 import {makeWatchableShaderError, WatchableShaderError} from 'neuroglancer/webgl/dynamic_shader';
 import {FramebufferConfiguration, makeTextureBuffers, StencilBuffer} from 'neuroglancer/webgl/offscreen';
 import {ShaderBuilder, ShaderModule, ShaderProgram} from 'neuroglancer/webgl/shader';
@@ -46,9 +46,10 @@ export abstract class RenderLayer extends GenericSliceViewRenderLayer {
   shaderError: WatchableShaderError;
   private sharedObject: SharedObject;
 
-  constructor(
-      multiscaleSource: MultiscaleVectorGraphicsChunkSource,
-      {shaderError = makeWatchableShaderError(), sourceOptions = <VectorGraphicsSourceOptions> {}} = {}) {
+  constructor(multiscaleSource: MultiscaleVectorGraphicsChunkSource, {
+    shaderError = makeWatchableShaderError(),
+    sourceOptions = <VectorGraphicsSourceOptions> {}
+  } = {}) {
     super(multiscaleSource.chunkManager, multiscaleSource.getSources(sourceOptions), {
       shaderError = makeWatchableShaderError(),
     } = {});
@@ -91,7 +92,7 @@ void emitTransparent() {
 
   abstract endSlice(shader: ShaderProgram): void
 
-  abstract draw(sliceView: SliceView): void 
+      abstract draw(sliceView: SliceView): void
 }
 
 export class VectorGraphicsChunk extends SliceViewChunk {
@@ -145,7 +146,8 @@ export abstract class VectorGraphicsChunkSource extends SliceViewChunkSource imp
 
 export class ParameterizedVectorGraphicsSource<Parameters> extends VectorGraphicsChunkSource {
   constructor(
-      chunkManager: ChunkManager, spec: VectorGraphicsChunkSpecification, public parameters: Parameters) {
+      chunkManager: ChunkManager, spec: VectorGraphicsChunkSpecification,
+      public parameters: Parameters) {
     super(chunkManager, spec);
   }
 
@@ -156,14 +158,16 @@ export class ParameterizedVectorGraphicsSource<Parameters> extends VectorGraphic
 }
 
 /**
- * Defines a VectorGraphicsSource for which all state is encapsulated in an object of type Parameters.
+ * Defines a VectorGraphicsSource for which all state is encapsulated in an object of type
+ * Parameters.
  */
 export function defineParameterizedVectorGraphicsSource<Parameters>(
     parametersConstructor: ChunkSourceParametersConstructor<Parameters>) {
-  const newConstructor =
-      class SpecializedParameterizedVectorGraphicsSource extends ParameterizedVectorGraphicsSource<Parameters> {
+  const newConstructor = class SpecializedParameterizedVectorGraphicsSource extends
+      ParameterizedVectorGraphicsSource<Parameters> {
     constructor(
-        chunkManager: ChunkManager, spec: VectorGraphicsChunkSpecification, public parameters: Parameters) {
+        chunkManager: ChunkManager, spec: VectorGraphicsChunkSpecification,
+        public parameters: Parameters) {
       super(chunkManager, spec, parameters);
     }
 
@@ -172,7 +176,9 @@ export function defineParameterizedVectorGraphicsSource<Parameters>(
       super.initializeCounterpart(rpc, options);
     }
 
-    static get(chunkManager: ChunkManager, spec: VectorGraphicsChunkSpecification, parameters: Parameters) {
+    static get(
+        chunkManager: ChunkManager, spec: VectorGraphicsChunkSpecification,
+        parameters: Parameters) {
       return chunkManager.getChunkSource(
           this, stableStringify({parameters, spec: spec.toObject()}),
           () => new this(chunkManager, spec, parameters));

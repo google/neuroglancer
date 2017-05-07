@@ -15,18 +15,19 @@
  */
 
 import {ChunkState} from 'neuroglancer/chunk_manager/base';
+import {SliceView} from 'neuroglancer/sliceview/frontend';
 import {VectorGraphicsSourceOptions} from 'neuroglancer/sliceview/vector_graphics/base';
-import {RenderLayer as GenericVectorGraphicsRenderLayer, MultiscaleVectorGraphicsChunkSource, VectorGraphicsChunkSource} from 'neuroglancer/sliceview/vector_graphics/frontend';
-import {mat4, vec3} from 'neuroglancer/util/geom';
+import {MultiscaleVectorGraphicsChunkSource, RenderLayer as GenericVectorGraphicsRenderLayer, VectorGraphicsChunkSource} from 'neuroglancer/sliceview/vector_graphics/frontend';
 import {TrackableAlphaValue, trackableAlphaValue} from 'neuroglancer/trackable_alpha';
 import {TrackableFiniteFloat, trackableFiniteFloat} from 'neuroglancer/trackable_finite_float';
-import {makeTrackableFragmentMain, makeWatchableShaderError, TrackableFragmentMain} from 'neuroglancer/webgl/dynamic_shader';
+import {mat4, vec3} from 'neuroglancer/util/geom';
 import {Buffer} from 'neuroglancer/webgl/buffer';
 import {GL_ARRAY_BUFFER, GL_FLOAT} from 'neuroglancer/webgl/constants';
+import {makeTrackableFragmentMain, makeWatchableShaderError, TrackableFragmentMain} from 'neuroglancer/webgl/dynamic_shader';
 import {ShaderBuilder, ShaderProgram} from 'neuroglancer/webgl/shader';
-import {SliceView} from 'neuroglancer/sliceview/frontend';
 
-export const FRAGMENT_MAIN_START = '//NEUROGLANCER_VECTORGRAPHICS_LINE_RENDERLAYER_FRAGMENT_MAIN_START';
+export const FRAGMENT_MAIN_START =
+    '//NEUROGLANCER_VECTORGRAPHICS_LINE_RENDERLAYER_FRAGMENT_MAIN_START';
 
 const DEFAULT_FRAGMENT_MAIN = `void main() {  
 vec3 color = vec3(0,1,0);
@@ -61,7 +62,7 @@ export class VectorGraphicsLineRenderLayer extends GenericVectorGraphicsRenderLa
   private normalDirectionBuffer: Buffer;
 
 
-constructor(multiscaleSource: MultiscaleVectorGraphicsChunkSource, {
+  constructor(multiscaleSource: MultiscaleVectorGraphicsChunkSource, {
     opacity = trackableAlphaValue(0.5),
     primitiveSize = trackableFiniteFloat(10.0),
     fragmentMain = getTrackableFragmentMain(),
@@ -69,17 +70,17 @@ constructor(multiscaleSource: MultiscaleVectorGraphicsChunkSource, {
     sourceOptions = <VectorGraphicsSourceOptions>{},
   } = {}) {
     super(multiscaleSource, {shaderError, sourceOptions});
-    
-    this.opacity = opacity;    
+
+    this.opacity = opacity;
     this.registerDisposer(opacity.changed.add(() => {
       this.redrawNeeded.dispatch();
     }));
-    
+
     this.primitiveSize = primitiveSize;
     this.registerDisposer(primitiveSize.changed.add(() => {
       this.redrawNeeded.dispatch();
     }));
-    
+
     this.fragmentMain = fragmentMain;
     this.registerDisposer(fragmentMain.changed.add(() => {
       this.shaderUpdated = true;
@@ -88,24 +89,20 @@ constructor(multiscaleSource: MultiscaleVectorGraphicsChunkSource, {
 
     let gl = this.gl;
 
-    let vertexIndex = new Float32Array([
-        1, 0,
-        0, 1,
-        1, 0,
-        0, 1
-    ]);
+    let vertexIndex = new Float32Array([1, 0, 0, 1, 1, 0, 0, 1]);
 
     this.vertexIndexBuffer = Buffer.fromData(gl, vertexIndex, gl.ARRAY_BUFFER, gl.STATIC_DRAW);
 
-    let normalDirection = new Float32Array([
-        1, 1, -1, -1
-    ]);
+    let normalDirection = new Float32Array([1, 1, -1, -1]);
 
-    this.normalDirectionBuffer = Buffer.fromData(gl, normalDirection, gl.ARRAY_BUFFER, gl.STATIC_DRAW);
+    this.normalDirectionBuffer =
+        Buffer.fromData(gl, normalDirection, gl.ARRAY_BUFFER, gl.STATIC_DRAW);
   }
 
   getShaderKey() {
-    return `vectorgraphics.VectorGraphicsLineRenderLayer:${JSON.stringify(this.fragmentMain.value)}`;
+    return `vectorgraphics.VectorGraphicsLineRenderLayer:${
+                                                           JSON.stringify(this.fragmentMain.value)
+                                                         }`;
   }
 
   defineShader(builder: ShaderBuilder) {
@@ -197,45 +194,40 @@ gl_Position = uProjection * (pos + delta);
       for (let key of visibleChunks) {
         let chunk = chunks.get(key);
         if (chunk && chunk.state === ChunkState.GPU_MEMORY) {
-          let numInstances = chunk.numPoints / 2; // Two points == One vector 
+          let numInstances = chunk.numPoints / 2;  // Two points == One vector
 
           this.vertexIndexBuffer.bindToVertexAttrib(
-            shader.attribute('aVertexIndex'),
-            /*components=*/2
-          );
+              shader.attribute('aVertexIndex'),
+              /*components=*/2);
 
           this.normalDirectionBuffer.bindToVertexAttrib(
-            shader.attribute('aNormalDirection'),
-            /*components=*/1
-          );
+              shader.attribute('aNormalDirection'),
+              /*components=*/1);
 
           const aVertexFirst = shader.attribute('aVertexFirst');
           chunk.vertexBuffer.bindToVertexAttrib(
-            aVertexFirst,
-            /*components=*/3,
-            /*attributeType=*/GL_FLOAT,
-            /*normalized=*/false,
-            /*stride=*/6 * 4,
-            /*offset=*/0
-          );
+              aVertexFirst,
+              /*components=*/3,
+              /*attributeType=*/GL_FLOAT,
+              /*normalized=*/false,
+              /*stride=*/6 * 4,
+              /*offset=*/0);
           gl.ANGLE_instanced_arrays.vertexAttribDivisorANGLE(aVertexFirst, 1);
 
           const aVertexSecond = shader.attribute('aVertexSecond');
           chunk.vertexBuffer.bindToVertexAttrib(
-            aVertexSecond,
-            /*components=*/3,
-            /*attributeType=*/GL_FLOAT,
-            /*normalized=*/false,
-            /*stride=*/6 * 4,
-            /*offset=*/3 * 4
-          );
+              aVertexSecond,
+              /*components=*/3,
+              /*attributeType=*/GL_FLOAT,
+              /*normalized=*/false,
+              /*stride=*/6 * 4,
+              /*offset=*/3 * 4);
           gl.ANGLE_instanced_arrays.vertexAttribDivisorANGLE(aVertexSecond, 1);
 
           gl.ANGLE_instanced_arrays.drawArraysInstancedANGLE(gl.TRIANGLE_STRIP, 0, 4, numInstances);
 
           gl.ANGLE_instanced_arrays.vertexAttribDivisorANGLE(aVertexFirst, 0);
           gl.ANGLE_instanced_arrays.vertexAttribDivisorANGLE(aVertexSecond, 0);
-
         }
       }
     }

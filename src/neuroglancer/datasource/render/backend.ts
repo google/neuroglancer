@@ -15,16 +15,16 @@
  */
 
 import {registerChunkSource} from 'neuroglancer/chunk_manager/backend';
-import {CancellationToken} from 'neuroglancer/util/cancellation';
-import {TileChunkSourceParameters, PointMatchChunkSourceParameters} from 'neuroglancer/datasource/render/base';
-import {ParameterizedVolumeChunkSource, VolumeChunk} from 'neuroglancer/sliceview/volume/backend';
-import {ParameterizedVectorGraphicsChunkSource, VectorGraphicsChunk} from 'neuroglancer/sliceview/vector_graphics/backend';
+import {PointMatchChunkSourceParameters, TileChunkSourceParameters} from 'neuroglancer/datasource/render/base';
 import {ChunkDecoder} from 'neuroglancer/sliceview/backend_chunk_decoders';
 import {decodeJpegChunk} from 'neuroglancer/sliceview/backend_chunk_decoders/jpeg';
-import {vec3} from 'neuroglancer/util/geom';
-import {openShardedHttpRequest, sendHttpRequest, sendHttpJsonPostRequest} from 'neuroglancer/util/http_request';
-import {verifyObject, verifyInt, verifyFloat, verify3dVec, verifyString, parseArray} from 'neuroglancer/util/json';
+import {ParameterizedVectorGraphicsChunkSource, VectorGraphicsChunk} from 'neuroglancer/sliceview/vector_graphics/backend';
+import {ParameterizedVolumeChunkSource, VolumeChunk} from 'neuroglancer/sliceview/volume/backend';
+import {CancellationToken} from 'neuroglancer/util/cancellation';
 import {Float32ArrayBuilder} from 'neuroglancer/util/float32array_builder';
+import {vec3} from 'neuroglancer/util/geom';
+import {openShardedHttpRequest, sendHttpJsonPostRequest, sendHttpRequest} from 'neuroglancer/util/http_request';
+import {parseArray, verify3dVec, verifyFloat, verifyInt, verifyObject, verifyString} from 'neuroglancer/util/json';
 
 let chunkDecoders = new Map<string, ChunkDecoder>();
 chunkDecoders.set('jpg', decodeJpegChunk);
@@ -65,17 +65,17 @@ class TileChunkSource extends ParameterizedVolumeChunkSource<TileChunkSourcePara
 }
 
 function decodeSectionIDs(response: any) {
-  let sectionIDs: string[] = []; 
+  let sectionIDs: string[] = [];
   parseArray(response, x => {
     verifyObject(x);
-    sectionIDs.push(verifyString(x["sectionId"]));
+    sectionIDs.push(verifyString(x['sectionId']));
   });
   return sectionIDs
 }
 
 function parseCoordinateTransform(coordsResult: any): vec3[] {
   let coords = new Array<vec3>();
-  
+
   parseArray(coordsResult, coordsObj => {
     verifyObject(coordsObj);
     coords.push(verify3dVec(coordsObj['world']));
@@ -84,19 +84,21 @@ function parseCoordinateTransform(coordsResult: any): vec3[] {
 }
 
 function createConversionObject(tileId: string, xcoord: any, ycoord: any) {
-  return {
-    'tileId': tileId,
-    'local': [xcoord, ycoord]
-  };
+  return {'tileId': tileId, 'local': [xcoord, ycoord]};
 }
 
-function conversionObjectToWorld(conversionObjectArray: Array<any>, parameters: PointMatchChunkSourceParameters, cancellationToken: CancellationToken) {
+function conversionObjectToWorld(
+    conversionObjectArray: Array<any>, parameters: PointMatchChunkSourceParameters,
+    cancellationToken: CancellationToken) {
   let path = `/render-ws/v1/owner/${parameters.owner}/project/${parameters.project}/stack/${parameters.stack}/local-to-world-coordinates`;
-  return sendHttpJsonPostRequest(openShardedHttpRequest(parameters.baseUrls, path, 'PUT'), conversionObjectArray, 'json', cancellationToken);
+  return sendHttpJsonPostRequest(
+      openShardedHttpRequest(parameters.baseUrls, path, 'PUT'), conversionObjectArray, 'json',
+      cancellationToken);
 }
 
-function decodePointMatches(chunk: VectorGraphicsChunk, response: any, parameters: PointMatchChunkSourceParameters, cancellationToken: CancellationToken) {
-
+function decodePointMatches(
+    chunk: VectorGraphicsChunk, response: any, parameters: PointMatchChunkSourceParameters,
+    cancellationToken: CancellationToken) {
   let conversionObjects = new Array<any>();
 
   parseArray(response, (matchObj) => {
@@ -104,78 +106,84 @@ function decodePointMatches(chunk: VectorGraphicsChunk, response: any, parameter
     let qId = verifyString(matchObj['qId']);
     let matches = verifyObject(matchObj['matches']);
 
-    let pMatches = matches['p']; // [[x],[y]]
-    let qMatches = matches['q']; 
+    let pMatches = matches['p'];  // [[x],[y]]
+    let qMatches = matches['q'];
 
-    // Create conversion objects 
-    for( let i=0 ; i<pMatches[0].length ; i++ ) {
-      // Create pConversion 
-      conversionObjects.push(createConversionObject(pId, pMatches[0][i] , pMatches[1][i])); 
-      // Create qConversion 
-      conversionObjects.push(createConversionObject(qId, qMatches[0][i] , qMatches[1][i])); 
+    // Create conversion objects
+    for (let i = 0; i < pMatches[0].length; i++) {
+      // Create pConversion
+      conversionObjects.push(createConversionObject(pId, pMatches[0][i], pMatches[1][i]));
+      // Create qConversion
+      conversionObjects.push(createConversionObject(qId, qMatches[0][i], qMatches[1][i]));
     }
   });
 
-  return conversionObjectToWorld(conversionObjects, parameters, cancellationToken).then(
-      allConvertedCoordinates => { 
+  return conversionObjectToWorld(conversionObjects, parameters, cancellationToken)
+      .then(allConvertedCoordinates => {
         let tmpVertexPositions = new Float32ArrayBuilder();
-        for( let i=0 ; i<allConvertedCoordinates.length; i++ ) {
-          let convertedCoordinate = verifyObject(allConvertedCoordinates[i]); 
+        for (let i = 0; i < allConvertedCoordinates.length; i++) {
+          let convertedCoordinate = verifyObject(allConvertedCoordinates[i]);
           let point = verify3dVec(convertedCoordinate['world']);
           tmpVertexPositions.appendArray([point[0], point[1], point[2]])
         }
         let vertexPositions = new Float32ArrayBuilder();
 
-        for( let i=0 ; i<tmpVertexPositions.length ; i+=6 ) {
-          let pt1 = vec3.fromValues( tmpVertexPositions.view[i] , tmpVertexPositions.view[i + 1] , tmpVertexPositions.view[i + 2] );
-          let pt2 = vec3.fromValues( tmpVertexPositions.view[i + 3] , tmpVertexPositions.view[i + 4] , tmpVertexPositions.view[i + 5] );
-          
-          vertexPositions.appendArray( pt1 );
-          vertexPositions.appendArray( pt2 );
+        for (let i = 0; i < tmpVertexPositions.length; i += 6) {
+          let pt1 = vec3.fromValues(
+              tmpVertexPositions.view[i], tmpVertexPositions.view[i + 1],
+              tmpVertexPositions.view[i + 2]);
+          let pt2 = vec3.fromValues(
+              tmpVertexPositions.view[i + 3], tmpVertexPositions.view[i + 4],
+              tmpVertexPositions.view[i + 5]);
 
+          vertexPositions.appendArray(pt1);
+          vertexPositions.appendArray(pt2);
         }
         chunk.vertexPositions = vertexPositions.view;
-      }
-    );
+      });
 }
 
-function getPointMatches(chunk: VectorGraphicsChunk, sectionIds: string[], parameters: PointMatchChunkSourceParameters, cancellationToken: CancellationToken) {
-  let path: string; 
+function getPointMatches(
+    chunk: VectorGraphicsChunk, sectionIds: string[], parameters: PointMatchChunkSourceParameters,
+    cancellationToken: CancellationToken) {
+  let path: string;
   if (sectionIds.length == 1) {
-    path = 
-    `/render-ws/v1/owner/${parameters.owner}/matchCollection/${parameters.matchCollection}/group/${sectionIds[0]}/matchesWith/${sectionIds[0]}`;
+    path = `/render-ws/v1/owner/${parameters.owner}/matchCollection/${parameters.matchCollection}/group/${sectionIds[0]}/matchesWith/${sectionIds[0]}`;
   } else if (sectionIds.length == 2) {
-    path = 
-    `/render-ws/v1/owner/${parameters.owner}/matchCollection/${parameters.matchCollection}/group/${sectionIds[0]}/matchesWith/${sectionIds[1]}`;
+    path = `/render-ws/v1/owner/${parameters.owner}/matchCollection/${parameters.matchCollection}/group/${sectionIds[0]}/matchesWith/${sectionIds[1]}`;
   } else {
-    throw new  Error(`Invalid section Id vector of length: ${JSON.stringify(sectionIds.length)}`);
+    throw new Error(`Invalid section Id vector of length: ${JSON.stringify(sectionIds.length)}`);
   }
-   
+
   return sendHttpRequest(
-    openShardedHttpRequest(parameters.baseUrls, path), 'json', cancellationToken)
-      .then(response => { return decodePointMatches(chunk, response, parameters, cancellationToken) });
+             openShardedHttpRequest(parameters.baseUrls, path), 'json', cancellationToken)
+      .then(
+          response => {return decodePointMatches(chunk, response, parameters, cancellationToken)});
 }
 
 
-function downloadPointMatchChunk(chunk: VectorGraphicsChunk, path: string, parameters: PointMatchChunkSourceParameters , cancellationToken: CancellationToken ): Promise<void> {
+function downloadPointMatchChunk(
+    chunk: VectorGraphicsChunk, path: string, parameters: PointMatchChunkSourceParameters,
+    cancellationToken: CancellationToken): Promise<void> {
   return sendHttpRequest(
-      openShardedHttpRequest(parameters.baseUrls, path), 'json', cancellationToken)
-        .then(response => 
-          { return getPointMatches(chunk, decodeSectionIDs(response), parameters, cancellationToken); } );  
+             openShardedHttpRequest(parameters.baseUrls, path), 'json', cancellationToken)
+      .then(response => {
+        return getPointMatches(chunk, decodeSectionIDs(response), parameters, cancellationToken);
+      });
 }
 
 @registerChunkSource(PointMatchChunkSourceParameters)
-class PointMatchSource extends ParameterizedVectorGraphicsChunkSource<PointMatchChunkSourceParameters> {
-
+class PointMatchSource extends
+    ParameterizedVectorGraphicsChunkSource<PointMatchChunkSourceParameters> {
   download(chunk: VectorGraphicsChunk, cancellationToken: CancellationToken): Promise<void> {
-    let {parameters} = this; 
-    let {chunkGridPosition} = chunk; 
-    // Convert grid position to global coordinates 
-    let chunkPosition = vec3.create(); 
+    let {parameters} = this;
+    let {chunkGridPosition} = chunk;
+    // Convert grid position to global coordinates
+    let chunkPosition = vec3.create();
     chunkPosition[2] = chunkGridPosition[2];
 
-    // Get section IDs 
-    let path = `/render-ws/v1/owner/${parameters.owner}/project/${parameters.project}/stack/${parameters.stack}/sectionData?minZ=${chunkPosition[2]}&maxZ=${chunkPosition[2]+parameters.zoffset}`
+    // Get section IDs
+    let path = `/render-ws/v1/owner/${parameters.owner}/project/${parameters.project}/stack/${parameters.stack}/sectionData?minZ=${chunkPosition[2]}&maxZ=${chunkPosition[2] + parameters.zoffset}`;
 
     return downloadPointMatchChunk(chunk, path, parameters, cancellationToken);
   }

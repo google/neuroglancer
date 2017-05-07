@@ -238,7 +238,6 @@ export abstract class RenderLayer extends SharedObjectCounterpart implements Ren
       }
     }
   }
-
 }
 
 /**

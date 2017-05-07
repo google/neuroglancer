@@ -16,8 +16,8 @@
 
 import {Chunk, ChunkManager, ChunkSource} from 'neuroglancer/chunk_manager/backend';
 import {ChunkPriorityTier} from 'neuroglancer/chunk_manager/base';
-import {VECTOR_GRAPHICS_RENDERLAYER_RPC_ID, VectorGraphicsChunkSource as VectorGraphicsChunkSourceInterface, VectorGraphicsChunkSpecification, RenderLayer as RenderLayerInterface} from 'neuroglancer/sliceview/vector_graphics/base';
 import {RenderLayer as SliceViewRenderLayer, SliceViewChunk, SliceViewChunkSource} from 'neuroglancer/sliceview/backend';
+import {RenderLayer as RenderLayerInterface, VECTOR_GRAPHICS_RENDERLAYER_RPC_ID, VectorGraphicsChunkSource as VectorGraphicsChunkSourceInterface, VectorGraphicsChunkSpecification} from 'neuroglancer/sliceview/vector_graphics/base';
 import {CancellationToken} from 'neuroglancer/util/cancellation';
 import {vec3, vec3Key} from 'neuroglancer/util/geom';
 import {UseCount} from 'neuroglancer/util/use_count';
@@ -38,12 +38,12 @@ export class VectorGraphicsChunk extends SliceViewChunk {
 
     let chunkBytes: number = 0;
     if (this.vertexPositions) {
-      chunkBytes = chunkBytes + this.vertexPositions!.buffer.byteLength; 
+      chunkBytes = chunkBytes + this.vertexPositions!.buffer.byteLength;
     }
     if (this.vertexNormals) {
-      chunkBytes = chunkBytes + this.vertexNormals!.buffer.byteLength; 
+      chunkBytes = chunkBytes + this.vertexNormals!.buffer.byteLength;
     }
-    this.systemMemoryBytes = chunkBytes; 
+    this.systemMemoryBytes = chunkBytes;
     this.gpuMemoryBytes = chunkBytes;
 
     this.vertexPositions = null;
@@ -53,17 +53,17 @@ export class VectorGraphicsChunk extends SliceViewChunk {
   serialize(msg: any, transfers: any[]) {
     super.serialize(msg, transfers);
     let {vertexPositions, vertexNormals} = this;
-    
+
     msg['vertexPositions'] = vertexPositions;
     let vertexPositionsBuffer = vertexPositions!.buffer;
     transfers.push(vertexPositionsBuffer);
 
     if (vertexNormals) {
-      msg['vertexNormals'] = vertexNormals; 
+      msg['vertexNormals'] = vertexNormals;
       let vertexNormalsBuffer = vertexNormals!.buffer;
       transfers.push(vertexNormalsBuffer);
     }
-    
+
     this.vertexPositions = null;
     this.vertexNormals = null;
   }
@@ -107,7 +107,8 @@ export class RenderLayer extends SliceViewRenderLayer implements RenderLayerInte
 }
 
 
-export abstract class ParameterizedVectorGraphicsChunkSource<Parameters> extends VectorGraphicsChunkSource {
+export abstract class ParameterizedVectorGraphicsChunkSource<Parameters> extends
+    VectorGraphicsChunkSource {
   parameters: Parameters;
   constructor(rpc: RPC, options: any) {
     super(rpc, options);

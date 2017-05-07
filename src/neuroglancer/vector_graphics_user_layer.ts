@@ -16,18 +16,18 @@
 
 import {ChunkManager} from 'neuroglancer/chunk_manager/frontend';
 import {CoordinateTransform} from 'neuroglancer/coordinate_transform';
-import {getVectorGraphicsSource, GetVectorGraphicsOptions} from 'neuroglancer/datasource/factory';
+import {GetVectorGraphicsOptions, getVectorGraphicsSource} from 'neuroglancer/datasource/factory';
 import {UserLayer, UserLayerDropdown} from 'neuroglancer/layer';
 import {LayerListSpecification, registerLayerType, registerVolumeLayerType} from 'neuroglancer/layer_specification';
 import {getVolumeWithStatusMessage} from 'neuroglancer/layer_specification';
 import {Overlay} from 'neuroglancer/overlay';
 import {MultiscaleVectorGraphicsChunkSource, RenderLayer} from 'neuroglancer/sliceview/vector_graphics/frontend';
-import {FRAGMENT_MAIN_START, VectorGraphicsLineRenderLayer, getTrackableFragmentMain} from 'neuroglancer/sliceview/vector_graphics/vector_graphics_line_renderlayer';
+import {FRAGMENT_MAIN_START, getTrackableFragmentMain, VectorGraphicsLineRenderLayer} from 'neuroglancer/sliceview/vector_graphics/vector_graphics_line_renderlayer';
 import {StatusMessage} from 'neuroglancer/status';
 import {trackableAlphaValue} from 'neuroglancer/trackable_alpha';
 import {trackableFiniteFloat} from 'neuroglancer/trackable_finite_float';
 import {mat4} from 'neuroglancer/util/geom';
-import {verifyOptionalString, verifyFiniteFloat} from 'neuroglancer/util/json';
+import {verifyFiniteFloat, verifyOptionalString} from 'neuroglancer/util/json';
 import {makeWatchableShaderError} from 'neuroglancer/webgl/dynamic_shader';
 import {RangeWidget} from 'neuroglancer/widget/range';
 import {ShaderCodeWidget} from 'neuroglancer/widget/shader_code_widget';
@@ -65,21 +65,23 @@ export class VectorGraphicsUserLayer extends UserLayer {
     this.registerDisposer(this.fragmentMain.changed.add(() => {
       this.specificationChanged.dispatch();
     }));
-    
+
     let vectorGraphicsPath = this.vectorGraphicsPath = verifyOptionalString(x['source']);
     if (vectorGraphicsPath !== undefined) {
-      getVectorGraphicsWithStatusMessage(manager.chunkManager, vectorGraphicsPath).then(vectorGraphics => {
-        if (!this.wasDisposed) {
-            let renderLayer = this.renderLayer =
-                new VectorGraphicsLineRenderLayer(vectorGraphics, {
-                  opacity: this.opacity,
-                  primitiveSize: this.primitiveSize,
-                  fragmentMain: this.fragmentMain,
-                  shaderError: this.shaderError,
-                  sourceOptions: {}});
-            this.addRenderLayer(renderLayer);
-        }
-      });
+      getVectorGraphicsWithStatusMessage(manager.chunkManager, vectorGraphicsPath)
+          .then(vectorGraphics => {
+            if (!this.wasDisposed) {
+              let renderLayer = this.renderLayer =
+                  new VectorGraphicsLineRenderLayer(vectorGraphics, {
+                    opacity: this.opacity,
+                    primitiveSize: this.primitiveSize,
+                    fragmentMain: this.fragmentMain,
+                    shaderError: this.shaderError,
+                    sourceOptions: {}
+                  });
+              this.addRenderLayer(renderLayer);
+            }
+          });
     }
   }
   toJSON() {
@@ -104,7 +106,8 @@ function makeShaderCodeWidget(layer: VectorGraphicsUserLayer) {
 
 class VectorGraphicsDropDown extends UserLayerDropdown {
   opacityWidget = this.registerDisposer(new RangeWidget(this.layer.opacity));
-  primitiveSizeWidget = this.registerDisposer(new RangeWidget(this.layer.primitiveSize, {min: 0, max: 50, step: 1}));
+  primitiveSizeWidget =
+      this.registerDisposer(new RangeWidget(this.layer.primitiveSize, {min: 0, max: 50, step: 1}));
   codeWidget = this.registerDisposer(makeShaderCodeWidget(this.layer));
 
   constructor(public element: HTMLDivElement, public layer: VectorGraphicsUserLayer) {
@@ -126,8 +129,8 @@ class VectorGraphicsDropDown extends UserLayerDropdown {
     helpLink.appendChild(helpButton);
     helpLink.title = 'Documentation on vector graphics layer rendering';
     helpLink.target = '_blank';
-    helpLink.href = 
-      'https://github.com/google/neuroglancer/blob/master/src/neuroglancer/sliceview/vectorgraphics_layer_rendering.md';
+    helpLink.href =
+        'https://github.com/google/neuroglancer/blob/master/src/neuroglancer/sliceview/vectorgraphics_layer_rendering.md';
 
     let maximizeButton = document.createElement('button');
     maximizeButton.innerHTML = '&square;';
@@ -164,5 +167,5 @@ class ShaderCodeOverlay extends Overlay {
 }
 
 registerLayerType('vectorgraphics', VectorGraphicsUserLayer);
-// backwards compatibility 
+// backwards compatibility
 registerLayerType('point', VectorGraphicsUserLayer);
