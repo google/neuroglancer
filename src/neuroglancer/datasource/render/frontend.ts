@@ -21,9 +21,11 @@
 
 import {ChunkManager} from 'neuroglancer/chunk_manager/frontend';
 import {CompletionResult, registerDataSourceFactory} from 'neuroglancer/datasource/factory';
-import {TileChunkSourceParameters} from 'neuroglancer/datasource/render/base';
+import {TileChunkSourceParameters, PointMatchChunkSourceParameters} from 'neuroglancer/datasource/render/base';
 import {DataType, VolumeChunkSpecification, VolumeSourceOptions, VolumeType} from 'neuroglancer/sliceview/volume/base';
 import {defineParameterizedVolumeChunkSource, MultiscaleVolumeChunkSource as GenericMultiscaleVolumeChunkSource, VolumeChunkSource} from 'neuroglancer/sliceview/volume/frontend';
+import {defineParameterizedVectorGraphicsSource, MultiscaleVectorGraphicsChunkSource as GenericMultiscalePointChunkSource, VectorGraphicsChunkSource} from 'neuroglancer/sliceview/vector_graphics/frontend';
+import {VectorGraphicsChunkSpecification, VectorGraphicsSourceOptions} from 'neuroglancer/sliceview/vector_graphics/base';
 import {applyCompletionOffset, getPrefixMatchesWithDescriptions, getPrefixMatches} from 'neuroglancer/util/completion';
 import {vec3} from 'neuroglancer/util/geom';
 import {openShardedHttpRequest, sendHttpRequest} from 'neuroglancer/util/http_request';
@@ -32,6 +34,7 @@ import {parseArray, parseQueryStringParameters, verifyFloat, verifyInt, verifyOp
 const VALID_ENCODINGS = new Set<string>(['jpg']);
 
 const TileChunkSource = defineParameterizedVolumeChunkSource(TileChunkSourceParameters);
+const PointMatchSource = defineParameterizedVectorGraphicsSource(PointMatchChunkSourceParameters); 
 
 const VALID_STACK_STATES = new Set<string>(['COMPLETE']);
 
@@ -389,8 +392,136 @@ export function volumeCompleter(
       .then(completions => applyCompletionOffset(match![1].length + 1, completions));
 }
 
+export class MultiscaleVectorGraphicsChunkSource implements GenericMultiscalePointChunkSource {
+  stack: string;
+  stackInfo: StackInfo;
+
+  matchCollection: string;
+  zoffset: number;
+
+  dims: vec3;
+
+  constructor(
+      public chunkManager: ChunkManager, public baseUrls: string[], public ownerInfo: OwnerInfo,
+      stack: string|undefined, public project: string, public parameters: {[index: string]: any}) {
+        let projectInfo = ownerInfo.projects.get(project);
+        if (projectInfo === undefined) {
+          throw new Error(`Specificed project ${JSON.stringify(project)} does not exist for specified owner ${JSON.stringify(ownerInfo.owner)}`);
+        }
+
+        if (stack === undefined) {
+          const stackNames = Array.from(projectInfo.stacks.keys());
+          if (stackNames.length !== 1) {
+            throw new Error(`Dataset contains multiple stacks: ${JSON.stringify(stackNames)}`);
+          }
+          stack = stackNames[0];
+        }
+        const stackInfo = projectInfo.stacks.get(stack);
+        if (stackInfo === undefined) {
+          throw new Error(
+              `Specified stack ${JSON.stringify(stack)} is not one of the supported stacks: ` +
+              JSON.stringify(Array.from(projectInfo.stacks.keys())));
+        }
+        this.stack = stack;
+        this.stackInfo = stackInfo;
+
+        let matchCollection = verifyOptionalString(parameters['matchCollection']);
+        if (matchCollection === undefined) {
+          matchCollection = stack;
+        }
+        this.matchCollection = matchCollection;
+
+        let zoffset = verifyOptionalInt(parameters['zoffset']);
+        if (zoffset === undefined) {
+          zoffset = 1; 
+        }
+        this.zoffset = zoffset;
+
+        this.dims = vec3.create();
+
+        let tileSize = verifyOptionalInt(parameters['tilesize']);
+        if (tileSize === undefined) {
+          tileSize = 1024; // Default tile size is 1024 x 1024 
+        }
+        this.dims[0] = tileSize;
+        this.dims[1] = tileSize;
+        this.dims[2] = 1;
+    }
+  getSources(vectorGraphicsSourceOptions: VectorGraphicsSourceOptions) {
+    let sources: VectorGraphicsChunkSource[][] = [];
+
+    let voxelSize = vec3.clone(this.stackInfo.voxelResolution);
+
+    let lowerVoxelBound = vec3.create(), upperVoxelBound = vec3.create();
+
+    for (let i = 0; i < 3; i++) {
+      lowerVoxelBound[i] = Math.floor(
+            this.stackInfo.lowerVoxelBound[i] * (this.stackInfo.voxelResolution[i] / voxelSize[i]));
+      upperVoxelBound[i] = Math.ceil(
+            this.stackInfo.upperVoxelBound[i] * (this.stackInfo.voxelResolution[i] / voxelSize[i]));
+    }
+
+    // For now we set the chunkDataSize to be the size of an entire slab, pending possible bug fix in render point match service
+    let chunkDataSize = vec3.clone(upperVoxelBound);
+    chunkDataSize[0] += Math.abs(lowerVoxelBound[0]);
+    chunkDataSize[1] += Math.abs(lowerVoxelBound[1]);
+    chunkDataSize[2] = 1; 
+    
+
+    let spec = VectorGraphicsChunkSpecification.make({  
+      voxelSize,
+      lowerVoxelBound,
+      upperVoxelBound,
+      chunkDataSize,
+      vectorGraphicsSourceOptions
+    });
+    let source = PointMatchSource.get(this.chunkManager, spec, {
+      'baseUrls': this.baseUrls,
+      'owner': this.ownerInfo.owner,
+      'project': this.stackInfo.project,
+      'stack': this.stack,
+      'encoding': 'points',
+      'matchCollection': this.matchCollection,
+      'zoffset': this.zoffset
+    });
+
+    return [[source]];
+  }
+};
+
+export function getPointMatches(chunkManager: ChunkManager, path: string) {
+  let match = path.match(urlPattern);
+  if (match === null) {
+    throw new Error(`Invalid render point path: ${JSON.stringify(path)}`);
+  }
+  return getShardedPointMatches(chunkManager, [match[1]], match[2]);
+}
+
+
+export function getShardedPointMatches(
+  chunkManager: ChunkManager, hostnames: string[], path: string) {
+    const match = path.match(pathPattern); 
+    if (match === null) {
+      throw new Error(`Invalid point path ${JSON.stringify(path)}`);
+    }
+
+  const owner = match[1];
+  const project = match[2];
+  const stack = match[3];
+
+  const parameters = parseQueryStringParameters(match[4] || '');
+
+  return chunkManager.memoize.getUncounted(
+      {type: 'render:MultiscaleVectorGraphicsChunkSource', hostnames, path},
+      () => getOwnerInfo(chunkManager, hostnames, owner)
+                .then(
+                    ownerInfo => new MultiscaleVectorGraphicsChunkSource(
+                        chunkManager, hostnames, ownerInfo, stack, project, parameters)));
+}
+
 registerDataSourceFactory('render', {
   description: 'Render',
   volumeCompleter: volumeCompleter,
   getVolume: getVolume,
+  getVectorGraphicsSource: getPointMatches,
 });
