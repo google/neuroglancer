@@ -22,11 +22,12 @@ import {LayerListSpecification, registerLayerType, registerVolumeLayerType} from
 import {getVolumeWithStatusMessage} from 'neuroglancer/layer_specification';
 import {Overlay} from 'neuroglancer/overlay';
 import {MultiscaleVectorGraphicsChunkSource, RenderLayer} from 'neuroglancer/sliceview/vector_graphics/frontend';
-import {FRAGMENT_MAIN_START, VectorGraphicsRenderLayer, getTrackableFragmentMain} from 'neuroglancer/sliceview/vector_graphics/vector_graphics_renderlayer';
+import {FRAGMENT_MAIN_START, VectorGraphicsLineRenderLayer, getTrackableFragmentMain} from 'neuroglancer/sliceview/vector_graphics/vector_graphics_line_renderlayer';
 import {StatusMessage} from 'neuroglancer/status';
 import {trackableAlphaValue} from 'neuroglancer/trackable_alpha';
+import {trackableFiniteFloat} from 'neuroglancer/trackable_finite_float';
 import {mat4} from 'neuroglancer/util/geom';
-import {verifyOptionalString} from 'neuroglancer/util/json';
+import {verifyOptionalString, verifyFiniteFloat} from 'neuroglancer/util/json';
 import {makeWatchableShaderError} from 'neuroglancer/webgl/dynamic_shader';
 import {RangeWidget} from 'neuroglancer/widget/range';
 import {ShaderCodeWidget} from 'neuroglancer/widget/shader_code_widget';
@@ -52,6 +53,7 @@ function getVectorGraphicsWithStatusMessage(
 export class VectorGraphicsUserLayer extends UserLayer {
   vectorGraphicsPath: string|undefined;
   opacity = trackableAlphaValue(0.5);
+  primitiveSize = trackableFiniteFloat(10.0);
   fragmentMain = getTrackableFragmentMain();
   shaderError = makeWatchableShaderError();
   renderLayer: RenderLayer;
@@ -63,18 +65,19 @@ export class VectorGraphicsUserLayer extends UserLayer {
     this.registerDisposer(this.fragmentMain.changed.add(() => {
       this.specificationChanged.dispatch();
     }));
-
+    
     let vectorGraphicsPath = this.vectorGraphicsPath = verifyOptionalString(x['source']);
     if (vectorGraphicsPath !== undefined) {
       getVectorGraphicsWithStatusMessage(manager.chunkManager, vectorGraphicsPath).then(vectorGraphics => {
         if (!this.wasDisposed) {
-          let renderLayer = this.renderLayer =
-              new VectorGraphicsRenderLayer(vectorGraphics, {
-                opacity: this.opacity,
-                fragmentMain: this.fragmentMain,
-                shaderError: this.shaderError,
-                sourceOptions: {}});
-          this.addRenderLayer(renderLayer);
+            let renderLayer = this.renderLayer =
+                new VectorGraphicsLineRenderLayer(vectorGraphics, {
+                  opacity: this.opacity,
+                  primitiveSize: this.primitiveSize,
+                  fragmentMain: this.fragmentMain,
+                  shaderError: this.shaderError,
+                  sourceOptions: {}});
+            this.addRenderLayer(renderLayer);
         }
       });
     }
@@ -101,16 +104,19 @@ function makeShaderCodeWidget(layer: VectorGraphicsUserLayer) {
 
 class VectorGraphicsDropDown extends UserLayerDropdown {
   opacityWidget = this.registerDisposer(new RangeWidget(this.layer.opacity));
+  primitiveSizeWidget = this.registerDisposer(new RangeWidget(this.layer.primitiveSize, {min: 0, max: 50, step: 1}));
   codeWidget = this.registerDisposer(makeShaderCodeWidget(this.layer));
 
   constructor(public element: HTMLDivElement, public layer: VectorGraphicsUserLayer) {
     super();
     element.classList.add('image-dropdown');
-    let {opacityWidget} = this;
+    let {opacityWidget, primitiveSizeWidget} = this;
     let topRow = document.createElement('div');
     topRow.className = 'image-dropdown-top-row';
     opacityWidget.promptElement.textContent = 'Opacity';
+    primitiveSizeWidget.promptElement.textContent = 'Primitive Size';
     let spacer = document.createElement('div');
+    let lineBreak = document.createElement('br');
     spacer.style.flex = '1';
     let helpLink = document.createElement('a');
     let helpButton = document.createElement('button');
@@ -137,6 +143,7 @@ class VectorGraphicsDropDown extends UserLayerDropdown {
     topRow.appendChild(helpLink);
 
     element.appendChild(topRow);
+    element.appendChild(this.primitiveSizeWidget.element);
     element.appendChild(this.codeWidget.element);
     this.codeWidget.textEditor.refresh();
   }
@@ -157,5 +164,5 @@ class ShaderCodeOverlay extends Overlay {
 }
 
 registerLayerType('vectorgraphics', VectorGraphicsUserLayer);
-// Backwards compatibility 
+// backwards compatibility 
 registerLayerType('point', VectorGraphicsUserLayer);

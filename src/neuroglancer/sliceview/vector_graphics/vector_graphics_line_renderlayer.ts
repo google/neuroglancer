@@ -1,0 +1,244 @@
+/**
+ * @license
+ * Copyright 2017 Google Inc.
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+import {ChunkState} from 'neuroglancer/chunk_manager/base';
+import {VectorGraphicsSourceOptions} from 'neuroglancer/sliceview/vector_graphics/base';
+import {RenderLayer as GenericVectorGraphicsRenderLayer, MultiscaleVectorGraphicsChunkSource, VectorGraphicsChunkSource} from 'neuroglancer/sliceview/vector_graphics/frontend';
+import {mat4, vec3} from 'neuroglancer/util/geom';
+import {TrackableAlphaValue, trackableAlphaValue} from 'neuroglancer/trackable_alpha';
+import {TrackableFiniteFloat, trackableFiniteFloat} from 'neuroglancer/trackable_finite_float';
+import {makeTrackableFragmentMain, makeWatchableShaderError, TrackableFragmentMain} from 'neuroglancer/webgl/dynamic_shader';
+import {Buffer} from 'neuroglancer/webgl/buffer';
+import {GL_ARRAY_BUFFER, GL_FLOAT} from 'neuroglancer/webgl/constants';
+import {ShaderBuilder, ShaderProgram} from 'neuroglancer/webgl/shader';
+import {SliceView} from 'neuroglancer/sliceview/frontend';
+
+export const FRAGMENT_MAIN_START = '//NEUROGLANCER_VECTORGRAPHICS_LINE_RENDERLAYER_FRAGMENT_MAIN_START';
+
+const DEFAULT_FRAGMENT_MAIN = `void main() {  
+vec3 color = vec3(0,1,0);
+  
+  float distance = length(vNormal);
+  
+  float feather = 0.5;
+  
+  if (distance >= 1.0 - feather) {
+    emitRGBA(vec4(color, (distance - 1.0) / -feather )); 
+  }
+  else if (distance < 1.0 - feather) {
+  	emitRGB(color);
+  }
+  else {
+    emitTransparent();
+  }
+}
+`;
+
+export function getTrackableFragmentMain(value = DEFAULT_FRAGMENT_MAIN) {
+  return makeTrackableFragmentMain(value);
+}
+
+const tempMat4 = mat4.create();
+
+export class VectorGraphicsLineRenderLayer extends GenericVectorGraphicsRenderLayer {
+  fragmentMain: TrackableFragmentMain;
+  opacity: TrackableAlphaValue;
+  primitiveSize: TrackableFiniteFloat;
+  private vertexIndexBuffer: Buffer;
+  private normalDirectionBuffer: Buffer;
+
+
+constructor(multiscaleSource: MultiscaleVectorGraphicsChunkSource, {
+    opacity = trackableAlphaValue(0.5),
+    primitiveSize = trackableFiniteFloat(10.0),
+    fragmentMain = getTrackableFragmentMain(),
+    shaderError = makeWatchableShaderError(),
+    sourceOptions = <VectorGraphicsSourceOptions>{},
+  } = {}) {
+    super(multiscaleSource, {shaderError, sourceOptions});
+    
+    this.opacity = opacity;    
+    this.registerDisposer(opacity.changed.add(() => {
+      this.redrawNeeded.dispatch();
+    }));
+    
+    this.primitiveSize = primitiveSize;
+    this.registerDisposer(primitiveSize.changed.add(() => {
+      this.redrawNeeded.dispatch();
+    }));
+    
+    this.fragmentMain = fragmentMain;
+    this.registerDisposer(fragmentMain.changed.add(() => {
+      this.shaderUpdated = true;
+      this.redrawNeeded.dispatch();
+    }));
+
+    let gl = this.gl;
+
+    let vertexIndex = new Float32Array([
+        1, 0,
+        0, 1,
+        1, 0,
+        0, 1
+    ]);
+
+    this.vertexIndexBuffer = Buffer.fromData(gl, vertexIndex, gl.ARRAY_BUFFER, gl.STATIC_DRAW);
+
+    let normalDirection = new Float32Array([
+        1, 1, -1, -1
+    ]);
+
+    this.normalDirectionBuffer = Buffer.fromData(gl, normalDirection, gl.ARRAY_BUFFER, gl.STATIC_DRAW);
+  }
+
+  getShaderKey() {
+    return `vectorgraphics.VectorGraphicsLineRenderLayer:${JSON.stringify(this.fragmentMain.value)}`;
+  }
+
+  defineShader(builder: ShaderBuilder) {
+    super.defineShader(builder);
+
+    builder.addUniform('highp float', 'uOpacity');
+    builder.addUniform('highp float', 'uPrimitiveSize');
+    builder.addVarying('vec3', 'vNormal');
+
+    builder.addAttribute('highp float', 'aNormalDirection');
+    builder.addAttribute('highp vec2', 'aVertexIndex');
+
+    builder.addAttribute('highp vec3', 'aVertexFirst');
+    builder.addAttribute('highp vec3', 'aVertexSecond');
+    builder.addUniform('highp mat4', 'uProjection');
+
+    builder.setFragmentMainFunction(FRAGMENT_MAIN_START + '\n' + this.fragmentMain.value);
+
+    builder.setVertexMain(`
+vec3 direction = vec3(0., 0., 0.); 
+direction.z = aNormalDirection;
+
+vec3 difference = aVertexSecond - aVertexFirst;
+difference.z = 0.; 
+
+vec3 normal = cross(difference, direction);
+normal = normalize(normal); 
+vNormal = normal; 
+
+vec4 delta = vec4(normal * uPrimitiveSize, 0.0);
+vec4 pos = vec4(aVertexFirst * aVertexIndex.x + aVertexSecond * aVertexIndex.y, 1.0);
+
+gl_Position = uProjection * (pos + delta);
+`);
+  }
+
+  beginSlice(_sliceView: SliceView) {
+    super.beginSlice(_sliceView);
+
+    let gl = this.gl;
+    let shader = this.shader!;
+    gl.uniform1f(shader.uniform('uOpacity'), this.opacity.value);
+    gl.uniform1f(shader.uniform('uPrimitiveSize'), this.primitiveSize.value);
+    return shader;
+  }
+
+  endSlice(shader: ShaderProgram) {
+    let gl = this.gl;
+
+    gl.disableVertexAttribArray(shader.attribute('aVertexIndex'));
+    gl.disableVertexAttribArray(shader.attribute('aNormalDirection'));
+
+    gl.disableVertexAttribArray(shader.attribute('aVertexFirst'));
+    gl.disableVertexAttribArray(shader.attribute('aVertexSecond'));
+  }
+
+  draw(sliceView: SliceView) {
+    let visibleSources = sliceView.visibleLayers.get(this)!;
+    if (visibleSources.length === 0) {
+      return;
+    }
+
+    this.initializeShader();
+    if (this.shader === undefined) {
+      console.log('error: shader undefined');
+      return;
+    }
+
+    let gl = this.gl;
+
+    let shader = this.beginSlice(sliceView);
+
+    for (let _source of visibleSources) {
+      let source = _source as VectorGraphicsChunkSource;
+      let chunkLayout = source.spec.chunkLayout;
+      let chunks = source.chunks;
+
+      // Compute projection matrix that transforms vertex coordinates to device coordinates
+      gl.uniformMatrix4fv(
+          shader.uniform('uProjection'), false,
+          mat4.multiply(tempMat4, sliceView.dataToDevice, chunkLayout.transform));
+
+      let chunkDataSize: vec3|undefined;
+      let visibleChunks = sliceView.visibleChunks.get(chunkLayout);
+      if (!visibleChunks) {
+        continue;
+      }
+
+      for (let key of visibleChunks) {
+        let chunk = chunks.get(key);
+        if (chunk && chunk.state === ChunkState.GPU_MEMORY) {
+          let numInstances = chunk.numPoints / 2; // Two points == One vector 
+
+          this.vertexIndexBuffer.bindToVertexAttrib(
+            shader.attribute('aVertexIndex'),
+            /*components=*/2
+          );
+
+          this.normalDirectionBuffer.bindToVertexAttrib(
+            shader.attribute('aNormalDirection'),
+            /*components=*/1
+          );
+
+          const aVertexFirst = shader.attribute('aVertexFirst');
+          chunk.vertexBuffer.bindToVertexAttrib(
+            aVertexFirst,
+            /*components=*/3,
+            /*attributeType=*/GL_FLOAT,
+            /*normalized=*/false,
+            /*stride=*/6 * 4,
+            /*offset=*/0
+          );
+          gl.ANGLE_instanced_arrays.vertexAttribDivisorANGLE(aVertexFirst, 1);
+
+          const aVertexSecond = shader.attribute('aVertexSecond');
+          chunk.vertexBuffer.bindToVertexAttrib(
+            aVertexSecond,
+            /*components=*/3,
+            /*attributeType=*/GL_FLOAT,
+            /*normalized=*/false,
+            /*stride=*/6 * 4,
+            /*offset=*/3 * 4
+          );
+          gl.ANGLE_instanced_arrays.vertexAttribDivisorANGLE(aVertexSecond, 1);
+
+          gl.ANGLE_instanced_arrays.drawArraysInstancedANGLE(gl.TRIANGLE_STRIP, 0, 4, numInstances);
+
+          gl.ANGLE_instanced_arrays.vertexAttribDivisorANGLE(aVertexFirst, 0);
+          gl.ANGLE_instanced_arrays.vertexAttribDivisorANGLE(aVertexSecond, 0);
+
+        }
+      }
+    }
+    this.endSlice(shader);
+  }
+}
