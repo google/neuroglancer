@@ -61,6 +61,7 @@ export class VectorGraphicsUserLayer extends UserLayer {
     super();
 
     this.opacity.restoreState(x['opacity']);
+    this.primitiveSize.restoreState(x['size']);
     this.fragmentMain.restoreState(x['shader']);
     this.registerDisposer(this.fragmentMain.changed.add(() => {
       this.specificationChanged.dispatch();
@@ -88,6 +89,7 @@ export class VectorGraphicsUserLayer extends UserLayer {
     let x: any = {'type': 'vectorgraphics'};
     x['source'] = this.vectorGraphicsPath;
     x['opacity'] = this.opacity.toJSON();
+    x['size'] = this.primitiveSize.toJSON();
     x['shader'] = this.fragmentMain.toJSON();
     return x;
   }
