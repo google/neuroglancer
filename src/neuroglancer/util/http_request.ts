@@ -125,7 +125,7 @@ export function sendHttpJsonPostRequest(
         reject(HttpError.fromXhr(xhr));
       }
     };
-    xhr.send(`${JSON.stringify(payload)}`);
+    xhr.send(JSON.stringify(payload));
   });
 }
 

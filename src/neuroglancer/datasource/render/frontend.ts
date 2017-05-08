@@ -23,7 +23,7 @@ import {ChunkManager} from 'neuroglancer/chunk_manager/frontend';
 import {CompletionResult, registerDataSourceFactory} from 'neuroglancer/datasource/factory';
 import {PointMatchChunkSourceParameters, TileChunkSourceParameters} from 'neuroglancer/datasource/render/base';
 import {VectorGraphicsChunkSpecification, VectorGraphicsSourceOptions} from 'neuroglancer/sliceview/vector_graphics/base';
-import {defineParameterizedVectorGraphicsSource, MultiscaleVectorGraphicsChunkSource as GenericMultiscalePointChunkSource, VectorGraphicsChunkSource} from 'neuroglancer/sliceview/vector_graphics/frontend';
+import {defineParameterizedVectorGraphicsSource, MultiscaleVectorGraphicsChunkSource as GenericMultiscaleVectorGraphicsChunkSource, VectorGraphicsChunkSource} from 'neuroglancer/sliceview/vector_graphics/frontend';
 import {DataType, VolumeChunkSpecification, VolumeSourceOptions, VolumeType} from 'neuroglancer/sliceview/volume/base';
 import {defineParameterizedVolumeChunkSource, MultiscaleVolumeChunkSource as GenericMultiscaleVolumeChunkSource, VolumeChunkSource} from 'neuroglancer/sliceview/volume/frontend';
 import {applyCompletionOffset, getPrefixMatches, getPrefixMatchesWithDescriptions} from 'neuroglancer/util/completion';
@@ -191,7 +191,7 @@ export class MultiscaleVolumeChunkSource implements GenericMultiscaleVolumeChunk
     let projectInfo = ownerInfo.projects.get(project);
     if (projectInfo === undefined) {
       throw new Error(
-          `Specificed project ${JSON.stringify(project)} does not exist for specified owner ${JSON.stringify(ownerInfo.owner)}`);
+          `Specified project ${JSON.stringify(project)} does not exist for specified owner ${JSON.stringify(ownerInfo.owner)}`);
     }
 
     if (stack === undefined) {
@@ -392,7 +392,7 @@ export function volumeCompleter(
       .then(completions => applyCompletionOffset(match![1].length + 1, completions));
 }
 
-export class MultiscaleVectorGraphicsChunkSource implements GenericMultiscalePointChunkSource {
+export class MultiscaleVectorGraphicsChunkSource implements GenericMultiscaleVectorGraphicsChunkSource {
   stack: string;
   stackInfo: StackInfo;
 
@@ -484,7 +484,7 @@ export class MultiscaleVectorGraphicsChunkSource implements GenericMultiscalePoi
 
     return [[source]];
   }
-};
+}
 
 export function getPointMatches(chunkManager: ChunkManager, path: string) {
   let match = path.match(urlPattern);
