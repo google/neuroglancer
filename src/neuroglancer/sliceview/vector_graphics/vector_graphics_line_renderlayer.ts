@@ -146,6 +146,15 @@ gl_Position = uProjection * (pos + delta);
     let shader = this.shader!;
     gl.uniform1f(shader.uniform('uOpacity'), this.opacity.value);
     gl.uniform1f(shader.uniform('uPrimitiveSize'), this.primitiveSize.value);
+
+    this.vertexIndexBuffer.bindToVertexAttrib(
+        shader.attribute('aVertexIndex'),
+        /*components=*/2);
+
+    this.normalDirectionBuffer.bindToVertexAttrib(
+        shader.attribute('aNormalDirection'),
+        /*components=*/1);
+
     return shader;
   }
 
@@ -195,14 +204,6 @@ gl_Position = uProjection * (pos + delta);
         let chunk = chunks.get(key);
         if (chunk && chunk.state === ChunkState.GPU_MEMORY) {
           let numInstances = chunk.numPoints / 2;  // Two points == One vector
-
-          this.vertexIndexBuffer.bindToVertexAttrib(
-              shader.attribute('aVertexIndex'),
-              /*components=*/2);
-
-          this.normalDirectionBuffer.bindToVertexAttrib(
-              shader.attribute('aNormalDirection'),
-              /*components=*/1);
 
           const aVertexFirst = shader.attribute('aVertexFirst');
           chunk.vertexBuffer.bindToVertexAttrib(
