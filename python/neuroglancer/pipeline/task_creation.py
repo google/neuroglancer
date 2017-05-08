@@ -304,4 +304,5 @@ if __name__ == '__main__':
                                 # layer_type='image',
                                 # resolution=[17,17,23])
     # create_ingest_task('e2198_v0','image')
-    ingest_hdf5_example()
+    # ingest_hdf5_example()
+    pass

@@ -1,8 +1,11 @@
 import os.path
+import json
 
+import shutil
 import numpy as np
 
-from neuroglancer.pipeline import Storage, Precomputed, DownsampleTask, MeshTask, WatershedTask
+from neuroglancer.pipeline import (Storage, Precomputed, DownsampleTask,
+    MeshTask, WatershedTask, MeshManifestTask)
 from neuroglancer.pipeline.task_creation import create_downsampling_task, MockTaskQueue
 from neuroglancer import downsample
 from test.layer_harness import create_layer, delete_layer
@@ -69,6 +72,41 @@ def test_mesh():
     t.execute()
     assert storage.get_file('mesh/1:0:0-64_0-64_0-64') is not None 
     assert list(storage.list_files('mesh/')) == ['1:0:0-64_0-64_0-64']
+
+def test_manifest():
+    
+    s = Storage('file:///tmp/removeme/manifest')
+    def _create_meshes():
+        #create some fake meshes
+        for filename in ['mesh/1:0:chunk0','mesh/1:0:chunk9', 'mesh/10:0:chunk0','mesh/9:0:chunk1','mesh/9:0:chunk10']:
+            s.put_file(filename, 'meshdata')
+
+        #create a non-compliant info file, that has the information required by the MeshManifestTask.
+        s.put_file('info', json.dumps({'mesh':'mesh'}))
+        s.wait()
+
+    def _delete_meshes():
+        shutil.rmtree('/tmp/removeme/manifest', ignore_errors=True)
+
+
+    _delete_meshes()
+    _create_meshes()
+    # Make sure the correct files were produced by the task
+    t = MeshManifestTask(layer_path='file:///tmp/removeme/manifest',
+            lod=0, prefix=1).execute()
+
+    assert json.loads(s.get_file('mesh/1:0')) == {"fragments": ["1:0:chunk0", "1:0:chunk9"]}
+    assert s.get_file('mesh/9:0') is None
+    assert json.loads(s.get_file('mesh/10:0')) == {"fragments": ["10:0:chunk0"]}
+
+    _delete_meshes()
+    _create_meshes()
+    t = MeshManifestTask(layer_path='file:///tmp/removeme/manifest',
+            lod=0).execute() 
+
+    assert json.loads(s.get_file('mesh/1:0')) == {"fragments": ["1:0:chunk0", "1:0:chunk9"]}
+    assert json.loads(s.get_file('mesh/10:0')) == {"fragments": ["10:0:chunk0"]}
+    assert json.loads(s.get_file('mesh/9:0')) == {"fragments": ['9:0:chunk1','9:0:chunk10']}
 
 def test_watershed():
     delete_layer('affinities')

@@ -280,15 +280,32 @@ class MeshTask(RegisteredTask):
 
 class MeshManifestTask(RegisteredTask):
     """
-    Finalize mesh generation by post-processing chunk fragment
+    Finalizes mesh generation by post-processing chunk fragment
     lists into mesh fragment manifests.
     These are necessary for neuroglancer to know which mesh
-    fragments to download for a given segid.
+    fragments to download for a given segment id.
+
+    This implements a parallel version which has many assumptions, which if 
+    they don't hold true some manifest will be missing, or the manifest won't be 
+    correct.
+
+    We first assume that storage.list_files returns a msd radix ordered list of filename
+    which is true for gs:// s3:// and file:// protocols We also asume that mesh is 
+    composed of 3 strings id:lod:chunk_position
+
+    Because of ord(':') > ord('9') when listing files, '99:0:chunk' appears first than
+    '9:0:chunk'.
+    If we parallelize using prefixes single digit prefixes ['0','1',..'9'] all meshes will
+    be correctly processed. But if we do ['10','11',..'99'] meshes from [0,9] won't get
+    processed and need to be handle specifically by creating tasks that will process
+    a single mesh ['0:','1:',..'9:']
+    
     """
-    def __init__(self, layer_path, lod):
-        super(MeshManifestTask, self).__init__(layer_path, lod)
+    def __init__(self, layer_path, lod, prefix=''):
+        super(MeshManifestTask, self).__init__(layer_path, lod, prefix)
         self.layer_path = layer_path
         self.lod = lod
+        self.prefix = prefix
 
     def execute(self):
         self._storage = Storage(self.layer_path)
@@ -297,14 +314,12 @@ class MeshManifestTask(RegisteredTask):
 
     def _download_info(self):
         self._info = json.loads(self._storage.get_file('info'))
-        
-    def _download_input_chunk(self):
+
+    def _iter_over_meshes(self):
         """
-        Assumes that list blob is lexicographically ordered
+        Assumes that list files is most significant digix randix sorted
         """
-        last_id = 0
-        last_fragments = []
-        for filename in self._storage.list_files(prefix='mesh/'):
+        for filename in self._storage.list_files(prefix='mesh/{}'.format(self.prefix)):
             match = re.match(r'(\d+):(\d+):(.*)$',filename)
             if not match: # a manifest file will not match
                 continue
@@ -313,6 +328,12 @@ class MeshManifestTask(RegisteredTask):
             if lod != self.lod:
                 continue
 
+            yield _id, lod, chunk_position
+
+    def _download_input_chunk(self):
+        last_id = 0
+        last_fragments = []
+        for _id, lod, chunk_position in self._iter_over_meshes():
             if last_id != _id:
                 self._storage.put_file(
                     file_path='{}/{}:{}'.format(self._info['mesh'],last_id, self.lod),
@@ -321,6 +342,11 @@ class MeshManifestTask(RegisteredTask):
                 last_fragments = []
 
             last_fragments.append('{}:{}:{}'.format(_id, lod, chunk_position))
+
+        # add last last_fragments
+        self._storage.put_file(
+                    file_path='{}/{}:{}'.format(self._info['mesh'],last_id, self.lod),
+                    content=json.dumps({"fragments": last_fragments}))
         self._storage.wait()
 
 class BigArrayTask(RegisteredTask):

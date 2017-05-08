@@ -239,11 +239,12 @@ class FileInterface(object):
         layer_path = self.get_path_to_file("")        
         path = os.path.join(layer_path, prefix)
         path += "*"
-
+        filenames = []
         for file_path in glob(path):
             if not os.path.isfile(file_path):
                 continue
-            yield os.path.basename(file_path)
+            filenames.append(os.path.basename(file_path))
+        return _radix_sort(filenames).__iter__()
 
 class GoogleCloudStorageInterface(object):
     def __init__(self, path):
@@ -262,10 +263,6 @@ class GoogleCloudStorageInterface(object):
 
 
     def put_file(self, file_path, content, compress):
-        """ 
-        TODO set the content-encoding to
-        gzip in case of compression.
-        """
         key = self.get_path_to_file(file_path)
         blob = self._bucket.blob( key )
         blob.upload_from_string(content)
@@ -346,3 +343,19 @@ class S3Interface(object):
             filename =  os.path.basename(prefix) + blob.name[len(path):]
             if '/' not in filename:
                 yield filename
+
+def _radix_sort(L, i=0):
+    """
+    Most significant char radix sort
+    """
+    if len(L) <= 1: 
+        return L
+    done_bucket = []
+    buckets = [ [] for x in range(255) ]
+    for s in L:
+        if i >= len(s):
+            done_bucket.append(s)
+        else:
+            buckets[ ord(s[i]) ].append(s)
+    buckets = [ _radix_sort(b, i + 1) for b in buckets ]
+    return done_bucket + [ b for blist in buckets for b in blist ]
