@@ -1,5 +1,5 @@
 # distutils: language = c++
-# distutils: sources = cMesher.cpp
+# distutils: sources = ext/third_party/mc/cMesher.cpp
 
 # Cython interface file for wrapping the object
 #

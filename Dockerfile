@@ -36,8 +36,7 @@ RUN pip install setuptools Cython wheel numpy
 RUN mkdir /.ssh
 ADD ./ /neuroglancer
 RUN pip install -r /neuroglancer/python/requirements.txt
-RUN cd /neuroglancer/python && python setup.py install
-RUN cd /neuroglancer/python/neuroglancer/ingest && make
+RUN cd /neuroglancer/python && pip install . && python setup.py develop
 
 #installs julia
 RUN add-apt-repository ppa:staticfloat/juliareleases && \

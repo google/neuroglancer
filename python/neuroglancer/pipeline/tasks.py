@@ -13,10 +13,8 @@ import numpy as np
 from backports import lzma
 from tqdm import tqdm
 
-from neuroglancer.pipeline import Storage, Precomputed, RegisteredTask
+from neuroglancer.pipeline import Storage, Precomputed, RegisteredTask, Mesher
 from neuroglancer import chunks, downsample
-from neuroglancer.ingest.mesher import Mesher
-
 
 class IngestTask(RegisteredTask):
     """Ingests and does downsampling.

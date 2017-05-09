@@ -6,9 +6,9 @@ import os
 import shutil
 import numpy as np
 from setuptools import setup, find_packages, Extension
+from Cython.Build import cythonize
 
 static_files = ['main.bundle.js', 'chunk_worker.bundle.js', 'styles.css', 'index.html']
-
 
 class bundle_client(build):
 
@@ -65,51 +65,65 @@ class bundle_client(build):
 
         os.chdir(prev_dir)
 
-setup_dir = os.path.dirname(__file__)
-src_dir = os.path.join(setup_dir, 'ext/src')
-openmesh_dir = os.path.join(setup_dir, 'ext/third_party/openmesh/OpenMesh/src')
-local_sources = [
-    '_neuroglancer.cc',
-    'openmesh_dependencies.cc',
-    'on_demand_object_mesh_generator.cc',
-    'voxel_mesh_generator.cc',
-    'mesh_objects.cc',
-]
+def _neuroglancer_compile():
+    setup_dir = os.path.dirname(__file__)
+    src_dir = os.path.join(setup_dir, 'ext/src')
+    third_party_dir = os.path.join(setup_dir, 'ext/third_party')
+    openmesh_dir = os.path.join(setup_dir, 'ext/third_party/openmesh/OpenMesh/src')
+    print cythonize(os.path.join(third_party_dir,'mc/_mesher.pyx'))[0].__dict__
+    local_sources = [
+        '_neuroglancer.cc',
+        'openmesh_dependencies.cc',
+        'on_demand_object_mesh_generator.cc',
+        'voxel_mesh_generator.cc',
+        'mesh_objects.cc',
+    ]
 
-USE_OMP = False
-if USE_OMP:
-    openmp_flags = ['-fopenmp']
-else:
-    openmp_flags = []
+    USE_OMP = False
+    if USE_OMP:
+        openmp_flags = ['-fopenmp']
+    else:
+        openmp_flags = []
 
-setup(
-    name='neuroglancer',
-    version='0.0.6',
-    description='Python data backend for neuroglancer, a WebGL-based viewer for volumetric data',
-    author='Jeremy Maitin-Shepard, Jan Funke',
-    author_email='jbms@google.com, jfunke@iri.upc.edu',
-    url='https://github.com/google/neuroglancer',
-    license='Apache License 2.0',
-    packages=find_packages(),
-    package_data={
-        'neuroglancer.static': static_files,
-		'': ["*.jl"]
-    },
-    install_requires=[
-        "Pillow>=3.2.0",
-        "numpy>=1.11.0",
-        'requests',
-    ],
-    ext_modules=[
-        Extension(
-            'neuroglancer._neuroglancer',
-            sources=[os.path.join(src_dir, name) for name in local_sources],
-            language='c++',
-            include_dirs=[np.get_include(), openmesh_dir],
-            extra_compile_args=[
-                '-std=c++11', '-fvisibility=hidden', '-O3'
-            ] + openmp_flags,
-            extra_link_args=openmp_flags),
-    ],
-    use_2to3=True,
-    cmdclass={'bundle_client': bundle_client}, )
+    setup(
+        name='neuroglancer',
+        version='0.0.6',
+        description='Python data backend for neuroglancer, a WebGL-based viewer for volumetric data',
+        author='Jeremy Maitin-Shepard, Jan Funke',
+        author_email='jbms@google.com, jfunke@iri.upc.edu',
+        url='https://github.com/google/neuroglancer',
+        license='Apache License 2.0',
+        packages=find_packages(),
+        package_data={
+            'neuroglancer.static': static_files,
+    		'': ["*.jl"]
+        },
+        install_requires=[
+            "Pillow>=3.2.0",
+            "numpy>=1.11.0",
+            'requests',
+        ],
+        ext_modules=[
+            Extension(
+                'neuroglancer._neuroglancer',
+                sources=[os.path.join(src_dir, name) for name in local_sources],
+                language='c++',
+                include_dirs=[np.get_include(), openmesh_dir],
+                extra_compile_args=[
+                    '-std=c++11', '-fvisibility=hidden', '-O3'
+                ] + openmp_flags,
+                extra_link_args=openmp_flags),
+            Extension(
+                'neuroglancer._mesher',
+                sources=[ os.path.join(third_party_dir, name) for name in ('mc/_mesher.cpp','mc/cMesher.cpp') ],
+                depends=[ os.path.join(third_party_dir, 'mc/cMesher.h')],
+                language='c++',
+                include_dirs=[ os.path.join(third_party_dir, name) for name in ('zi_lib/', 'mc/') ],
+                extra_compile_args=[
+                  '-std=c++11','-O3']) #don't use  '-fvisibility=hidden', python can't see init module
+        ],
+        use_2to3=True,
+        cmdclass={'bundle_client': bundle_client}, )
+
+_neuroglancer_compile()
+

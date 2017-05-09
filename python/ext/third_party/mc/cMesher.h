@@ -29,5 +29,4 @@ public:
 private:
   zi::mesh::marching_cubes<unsigned int> mc;
   zi::mesh::simplifier<double> s;
-
 };
