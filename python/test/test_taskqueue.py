@@ -110,4 +110,11 @@ def test_multi_threaded_insertion():
   assert tq.enqueued == 0
   
 
+def test_400_errors():
+  global QUEUE_NAME
+  with TaskQueue(n_threads=1, queue_name=QUEUE_NAME) as tq:
+    tq.delete('nonexistent')
+
+
+
 

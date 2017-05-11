@@ -4,16 +4,15 @@ import json
 import inspect
 import base64
 import copy
+import re
 from collections import OrderedDict
-import Queue
 from functools import partial
-import threading
-import time
 
 import googleapiclient.errors
 import googleapiclient.discovery
 
 from neuroglancer.pipeline.secrets import google_credentials, PROJECT_NAME, QUEUE_NAME
+from neuroglancer.pipeline.threaded_queue import ThreadedQueue
 
 __all__ = ['RegisteredTask', 'TaskQueue']
 
@@ -80,7 +79,7 @@ class RegisteredTask(object):
 
         return string + ")"  
 
-class TaskQueue(object):
+class TaskQueue(ThreadedQueue):
     """
     The standard usage is that a client calls lease to get the next available task,
     performs that task, and then calls task.delete on that task before the lease expires.
@@ -99,16 +98,15 @@ class TaskQueue(object):
             super(LookupError, self).__init__('Queue Empty')
 
     def __init__(self, n_threads=40, project=PROJECT_NAME, queue_name=QUEUE_NAME):
+        super(TaskQueue, self).__init__(n_threads) # creates self._queue
+
         self._project = 's~' + project # s~ means North America, e~ means Europe
         self._queue_name = queue_name
+        self._api = self._initialize_interface()
 
-        self._api = googleapiclient.discovery.build('taskqueue', 'v1beta2', credentials=google_credentials)
-
-        self._queue = Queue.Queue(maxsize=0) # infinite size
-        self._threads = ()
-        self._terminate = threading.Event()
-
-        self._start_threads(n_threads)
+    # This is key to making sure threading works. Don't refactor this method away.
+    def _initialize_interface(self):
+        return googleapiclient.discovery.build('taskqueue', 'v1beta2', credentials=google_credentials)
 
     @property
     def enqueued(self):
@@ -126,60 +124,20 @@ class TaskQueue(object):
         tqinfo = self.get()
         return tqinfo['stats']['totalTasks']
         
-    @property
-    def pending(self):
-        return self._queue.qsize()
-
-    def _start_threads(self, n_threads):
-        self._terminate.set()
-        self._terminate = threading.Event()
-
-        threads = []
-
-        for _ in xrange(n_threads):
-            worker = threading.Thread(
-                target=self._consume_queue, 
-                args=(self._terminate,)
-            )
-            worker.daemon = True
-            worker.start()
-            threads.append(worker)
-
-        self._threads = tuple(threads)
-        return self
-
-    def _kill_threads(self):
-        self._terminate.set()
-        self._threads = ()
-        return self
-
-    def _consume_queue(self, terminate_evt):
-        """
-        This is the main thread function that consumes functions that are
-        inside the _queue object. To use, execute self._queue(fn), where fn
-        is a function that performs some kind of network IO or otherwise
-        benefits from threading and is independent.
-
-        terminate_evt is automatically passed in on thread creation and 
-        is a common event for this generation of threads. The threads
-        will terminate when the event is set and the queue burns down.
-        """
-        api = googleapiclient.discovery.build('taskqueue', 'v1beta2', credentials=google_credentials)
-
-        while not terminate_evt.is_set():
-            try:
-                fn = self._queue.get(block=True, timeout=1)
-            except Queue.Empty:
-                continue # periodically check if the thread is supposed to die
-
-            try:
-                fn(api)
-            except googleapiclient.errors.HttpError as httperr:
-                print(httperr)
-                if httperr.resp.status != 400: # i.e. "task name is invalid"
-                    self._queue.put(fn)
-            finally:
-                self._queue.task_done()
+    def _consume_queue_execution(self, fn):
+        try:
+            super(self.__class__, self)._consume_queue_execution(fn)
+        except googleapiclient.errors.HttpError as httperr:
+            # Retry if Timeout, Service Unavailable, or ISE
+            # ISEs can happen from flooding or other issues that
+            # aren't the fault of the request.
+            if httperr.resp.status in (408, 500, 503): 
+                self.put(fn)
+            elif httperr.resp.status == 400:
+                if not re.search('task name is invalid', repr(httperr), flags=re.IGNORECASE):
+                    raise
+            else:
+                raise
 
     def insert(self, task):
         """
@@ -200,24 +158,10 @@ class TaskQueue(object):
             ).execute(num_retries=6)
 
         if len(self._threads):
-            self._queue.put(cloud_insertion, block=True)
+            self.put(cloud_insertion)
         else:
             cloud_insertion(self._api)
 
-        return self
-
-    def wait(self):
-        """
-        Allow background threads to process until the
-        task queue is empty. If there are no threads,
-        in theory the queue should always be empty
-        as processing happens immediately on the main thread.
-
-        Required: None
-        
-        Returns: self (for chaining)
-        """
-        self._queue.join()
         return self
 
     def get(self):
@@ -314,13 +258,7 @@ class TaskQueue(object):
             ).execute(num_retries=6)
 
         if len(self._threads):
-            self._queue.put(cloud_delete, block=True)
+            self.put(cloud_delete)
         else:
             cloud_delete(self._api)
         return self
-
-    def __del__(self):
-        self._queue.join() # if no threads were set the queue is always empty
-        self._kill_threads()
-
-
