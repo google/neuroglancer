@@ -93,4 +93,11 @@ export class StatusMessage {
     });
     return promise;
   }
+
+  static showMessage(message: string): StatusMessage {
+    const msg = new StatusMessage();
+    msg.element.textContent = message;
+    msg.setVisible(true);
+    return msg;
+  }
 }

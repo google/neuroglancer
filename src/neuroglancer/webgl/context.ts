@@ -39,6 +39,9 @@ export function initializeWebGL(canvas: HTMLCanvasElement) {
   }
   let gl =
       <GL>(canvas.getContext('webgl', options) || canvas.getContext('experimental-webgl', options));
+  if (gl == null) {
+    throw new Error('WebGL not supported.');
+  }
   gl.memoize = new Memoize<any, RefCounted>();
   gl.maxTextureSize = gl.getParameter(gl.MAX_TEXTURE_SIZE);
   gl.maxTextureImageUnits = gl.getParameter(gl.MAX_TEXTURE_IMAGE_UNITS);
