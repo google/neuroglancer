@@ -87,6 +87,7 @@ export class SegmentationUserLayer extends UserLayer {
     this.displayState.notSelectedAlpha.changed.add(() => { this.specificationChanged.dispatch(); });
     this.displayState.saturation.changed.add(() => { this.specificationChanged.dispatch(); });
     this.displayState.objectAlpha.changed.add(() => { this.specificationChanged.dispatch(); });
+    this.displayState.highlightedSegments.changed.add(() => this.specificationChanged.dispatch());
     this.displayState.hideSegmentZero.changed.add(() => { this.specificationChanged.dispatch(); });
     this.displayState.fragmentMain.changed.add(() => {
       this.specificationChanged.dispatch();
