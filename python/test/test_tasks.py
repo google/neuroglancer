@@ -5,7 +5,7 @@ import numpy as np
 from neuroglancer.pipeline import Storage, Precomputed, DownsampleTask, MeshTask, WatershedTask
 from neuroglancer.pipeline.task_creation import create_downsampling_task, MockTaskQueue
 from neuroglancer import downsample
-from test.test_precomputed import create_layer, delete_layer
+from test.layer_harness import create_layer, delete_layer
 
 def test_downsample_segmentation():
     delete_layer()
