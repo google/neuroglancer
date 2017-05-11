@@ -29,7 +29,12 @@
 
 #include <memory>
 
-#include <endian.h>
+// OS X doesn't have endian.h
+#if __has_include(<endian.h>)
+# include <endian.h>
+#else
+# include "endian.h"
+#endif
 
 namespace neuroglancer {
 namespace meshing {

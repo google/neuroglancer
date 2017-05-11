@@ -3,6 +3,5 @@ build
 neuroglancer.egg-info
 _neuroglancer.so
 _mesher.so
-ext/src/endian.h
 snemi3d
 .cache
