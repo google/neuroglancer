@@ -111,13 +111,6 @@ export class Viewer extends RefCounted implements ViewerState {
     this.registerDisposer(display.updateStarted.add(() => { this.onUpdateDisplay(); }));
     this.registerDisposer(display.updateFinished.add(() => { this.onUpdateDisplayFinished(); }));
 
-    // Prevent contextmenu on rightclick, as this inteferes with our use
-    // of the right mouse button.
-    this.registerEventListener(document, 'contextmenu', (e: Event) => {
-      e.preventDefault();
-      return false;
-    });
-
     const {state} = this;
     state.add('layers', this.layerSpecification);
     state.add('navigation', this.navigationState);
