@@ -23,67 +23,31 @@ import {TrackableFiniteFloat, trackableFiniteFloat} from 'neuroglancer/trackable
 import {mat4, vec3} from 'neuroglancer/util/geom';
 import {Buffer} from 'neuroglancer/webgl/buffer';
 import {GL_ARRAY_BUFFER, GL_FLOAT} from 'neuroglancer/webgl/constants';
-import {makeTrackableFragmentMain, makeWatchableShaderError, TrackableFragmentMain} from 'neuroglancer/webgl/dynamic_shader';
 import {ShaderBuilder, ShaderProgram} from 'neuroglancer/webgl/shader';
-
-export const FRAGMENT_MAIN_START =
-    '//NEUROGLANCER_VECTORGRAPHICS_LINE_RENDERLAYER_FRAGMENT_MAIN_START';
-
-const DEFAULT_FRAGMENT_MAIN = `void main() {  
-vec3 color = vec3(0,1,0);
-  
-  float distance = length(vNormal);
-  
-  float feather = 0.5;
-  
-  if (distance >= 1.0 - feather) {
-    emitRGBA(vec4(color, (distance - 1.0) / -feather )); 
-  }
-  else if (distance < 1.0 - feather) {
-  	emitRGB(color);
-  }
-  else {
-    emitTransparent();
-  }
-}
-`;
-
-export function getTrackableFragmentMain(value = DEFAULT_FRAGMENT_MAIN) {
-  return makeTrackableFragmentMain(value);
-}
 
 const tempMat4 = mat4.create();
 
 export class VectorGraphicsLineRenderLayer extends GenericVectorGraphicsRenderLayer {
-  fragmentMain: TrackableFragmentMain;
   opacity: TrackableAlphaValue;
-  primitiveSize: TrackableFiniteFloat;
+  lineWidth: TrackableFiniteFloat;
   private vertexIndexBuffer: Buffer;
   private normalDirectionBuffer: Buffer;
 
 
   constructor(multiscaleSource: MultiscaleVectorGraphicsChunkSource, {
     opacity = trackableAlphaValue(0.5),
-    primitiveSize = trackableFiniteFloat(10.0),
-    fragmentMain = getTrackableFragmentMain(),
-    shaderError = makeWatchableShaderError(),
+    lineWidth = trackableFiniteFloat(10.0),
     sourceOptions = <VectorGraphicsSourceOptions>{},
   } = {}) {
-    super(multiscaleSource, {shaderError, sourceOptions});
+    super(multiscaleSource, {sourceOptions});
 
     this.opacity = opacity;
     this.registerDisposer(opacity.changed.add(() => {
       this.redrawNeeded.dispatch();
     }));
 
-    this.primitiveSize = primitiveSize;
-    this.registerDisposer(primitiveSize.changed.add(() => {
-      this.redrawNeeded.dispatch();
-    }));
-
-    this.fragmentMain = fragmentMain;
-    this.registerDisposer(fragmentMain.changed.add(() => {
-      this.shaderUpdated = true;
+    this.lineWidth = lineWidth;
+    this.registerDisposer(lineWidth.changed.add(() => {
       this.redrawNeeded.dispatch();
     }));
 
@@ -100,16 +64,14 @@ export class VectorGraphicsLineRenderLayer extends GenericVectorGraphicsRenderLa
   }
 
   getShaderKey() {
-    return `vectorgraphics.VectorGraphicsLineRenderLayer:${
-                                                           JSON.stringify(this.fragmentMain.value)
-                                                         }`;
+    return `vectorgraphics.VectorGraphicsLineRenderLayer`;
   }
 
   defineShader(builder: ShaderBuilder) {
     super.defineShader(builder);
 
     builder.addUniform('highp float', 'uOpacity');
-    builder.addUniform('highp float', 'uPrimitiveSize');
+    builder.addUniform('highp float', 'ulineWidth');
     builder.addVarying('vec3', 'vNormal');
 
     builder.addAttribute('highp float', 'aNormalDirection');
@@ -119,8 +81,23 @@ export class VectorGraphicsLineRenderLayer extends GenericVectorGraphicsRenderLa
     builder.addAttribute('highp vec3', 'aVertexSecond');
     builder.addUniform('highp mat4', 'uProjection');
 
-    builder.setFragmentMainFunction(FRAGMENT_MAIN_START + '\n' + this.fragmentMain.value);
+    builder.setFragmentMain(`  
+vec3 color = vec3(0,1,0);
+  
+float distance = length(vNormal);
 
+float antialiasing = 0.5;
+
+if (distance >= 1.0 - antialiasing) {
+  emitRGBA(vec4(color, (distance - 1.0) / -antialiasing )); 
+}
+else if (distance < 1.0 - antialiasing) {
+  emitRGB(color);
+}
+else {
+  discard;
+}`
+    );
     builder.setVertexMain(`
 vec3 direction = vec3(0., 0., 0.); 
 direction.z = aNormalDirection;
@@ -132,7 +109,7 @@ vec3 normal = cross(difference, direction);
 normal = normalize(normal); 
 vNormal = normal; 
 
-vec4 delta = vec4(normal * uPrimitiveSize, 0.0);
+vec4 delta = vec4(normal * ulineWidth, 0.0);
 vec4 pos = vec4(aVertexFirst * aVertexIndex.x + aVertexSecond * aVertexIndex.y, 1.0);
 
 gl_Position = uProjection * (pos + delta);
@@ -145,7 +122,7 @@ gl_Position = uProjection * (pos + delta);
     let gl = this.gl;
     let shader = this.shader!;
     gl.uniform1f(shader.uniform('uOpacity'), this.opacity.value);
-    gl.uniform1f(shader.uniform('uPrimitiveSize'), this.primitiveSize.value);
+    gl.uniform1f(shader.uniform('ulineWidth'), this.lineWidth.value);
 
     this.vertexIndexBuffer.bindToVertexAttrib(
         shader.attribute('aVertexIndex'),

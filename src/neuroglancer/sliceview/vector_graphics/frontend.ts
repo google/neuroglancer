@@ -30,7 +30,6 @@ import {stableStringify} from 'neuroglancer/util/json';
 import {Buffer} from 'neuroglancer/webgl/buffer';
 import {GL_ARRAY_BUFFER, GL_FLOAT} from 'neuroglancer/webgl/constants';
 import {GL} from 'neuroglancer/webgl/context';
-import {makeWatchableShaderError, WatchableShaderError} from 'neuroglancer/webgl/dynamic_shader';
 import {FramebufferConfiguration, makeTextureBuffers, StencilBuffer} from 'neuroglancer/webgl/offscreen';
 import {ShaderBuilder, ShaderModule, ShaderProgram} from 'neuroglancer/webgl/shader';
 import {setVec4FromUint32} from 'neuroglancer/webgl/shader_lib';
@@ -43,16 +42,12 @@ export abstract class RenderLayer extends GenericSliceViewRenderLayer {
   shader: ShaderProgram|undefined = undefined;
   shaderUpdated = true;
   rpcId: RpcId|null = null;
-  shaderError: WatchableShaderError;
   private sharedObject: SharedObject;
 
   constructor(multiscaleSource: MultiscaleVectorGraphicsChunkSource, {
-    shaderError = makeWatchableShaderError(),
     sourceOptions = <VectorGraphicsSourceOptions> {}
   } = {}) {
-    super(multiscaleSource.chunkManager, multiscaleSource.getSources(sourceOptions), {
-      shaderError = makeWatchableShaderError(),
-    } = {});
+    super(multiscaleSource.chunkManager, multiscaleSource.getSources(sourceOptions));
 
     let gl = this.gl;
 
