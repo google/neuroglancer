@@ -407,7 +407,7 @@ export class MultiscaleVectorGraphicsChunkSource implements GenericMultiscaleVec
     let projectInfo = ownerInfo.projects.get(project);
     if (projectInfo === undefined) {
       throw new Error(
-          `Specificed project ${JSON.stringify(project)} does not exist for specified owner ${JSON.stringify(ownerInfo.owner)}`);
+          `Specified project ${JSON.stringify(project)} does not exist for specified owner ${JSON.stringify(ownerInfo.owner)}`);
     }
 
     if (stack === undefined) {
