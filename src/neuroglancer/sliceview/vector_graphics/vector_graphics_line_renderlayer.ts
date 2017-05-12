@@ -94,9 +94,7 @@ if (distance >= 1.0 - antialiasing) {
 else if (distance < 1.0 - antialiasing) {
   emitRGB(color);
 }
-else {
-  discard;
-}`
+`
     );
     builder.setVertexMain(`
 vec3 direction = vec3(0., 0., 0.); 
@@ -212,3 +210,4 @@ gl_Position = uProjection * (pos + delta);
     this.endSlice(shader);
   }
 }
+
