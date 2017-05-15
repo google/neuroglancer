@@ -21,6 +21,8 @@ import {AXES_NAMES, kAxes, vec3} from 'neuroglancer/util/geom';
 import {getWheelZoomAmount} from 'neuroglancer/util/wheel_zoom';
 import {ViewerState} from 'neuroglancer/viewer_state';
 
+import {UserEventEmitter} from 'neuroglancer/ui/user_events';
+
 require('./rendered_data_panel.css');
 
 export const KEY_COMMANDS = new Map<string, (this: RenderedDataPanel) => void>();
@@ -58,6 +60,7 @@ export abstract class RenderedDataPanel extends RenderedPanel {
   abstract updateMouseState(state: MouseSelectionState): boolean;
 
   private mouseStateUpdater = this.updateMouseState.bind(this);
+  private eventEmitter: UserEventEmitter;
 
   navigationState: NavigationState;
 
@@ -66,12 +69,15 @@ export abstract class RenderedDataPanel extends RenderedPanel {
 
     element.classList.add('rendered-data-panel');
 
-    this.registerEventListener(element, 'mousemove', this.onMousemove.bind(this));
-    this.registerEventListener(element, 'mouseleave', this.onMouseout.bind(this));
-    this.registerEventListener(element, 'mousedown', this.onMousedown.bind(this), false);
-    this.registerEventListener(element, 'wheel', this.onMousewheel.bind(this), false);
-    this.registerEventListener(
-        element, 'dblclick', () => { this.viewer.layerManager.invokeAction('select'); });
+    this.eventEmitter = new UserEventEmitter(element);
+
+    let disposers = this.eventEmitter.on({
+      mousemove: this.onMousemove.bind(this),
+      mouseleave: this.onMouseout.bind(this),
+      mousedown: [this.onMousedown.bind(this), false],
+      wheel: [this.onMousewheel.bind(this), false],
+      dblclick: () => this.viewer.layerManager.invokeAction('select'),
+    });
   }
 
   onMouseout(_event: MouseEvent) {
@@ -107,6 +113,8 @@ export abstract class RenderedDataPanel extends RenderedPanel {
       mouseState.updater = undefined;
       mouseState.setActive(false);
     }
+
+    this.eventEmitter.dispose();
     super.disposed();
   }
 

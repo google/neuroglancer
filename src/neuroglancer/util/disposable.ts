@@ -18,6 +18,10 @@ export interface Disposable { dispose: () => void; }
 
 export type Disposer = Disposable | (() => void);
 
+export interface TypedEventListener<E> extends EventListener {
+  (event: E): any;
+}
+
 export class RefCounted implements Disposable {
   public refCount = 1;
   wasDisposed: boolean|undefined;
@@ -70,7 +74,7 @@ export class RefCounted implements Disposable {
     }
     return f;
   }
-  registerEventListener(target: EventTarget, eventType: string, listener: any, arg?: any) {
+  registerEventListener<E>(target: EventTarget, eventType: string, listener: TypedEventListener<E>, arg?: any) {
     target.addEventListener(eventType, listener, arg);
     this.registerDisposer(() => target.removeEventListener(eventType, listener, arg));
   }
