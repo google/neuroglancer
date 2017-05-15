@@ -27,6 +27,7 @@ import {Uint64} from 'neuroglancer/util/uint64';
 import {UseCount} from 'neuroglancer/util/use_count';
 import {SharedObject} from 'neuroglancer/worker_rpc';
 import {NullarySignal} from 'neuroglancer/util/signal';
+import {rgbToHsv, hsvToRgb} from 'neuroglancer/util/colorspace';
 
 export class Uint64MapEntry {
   constructor(public key: Uint64, public value: Uint64) {}
@@ -79,6 +80,7 @@ export class SegmentSelectionState extends RefCounted {
 export interface SegmentationDisplayState extends VisibleSegmentsState {
   segmentSelectionState: SegmentSelectionState;
   segmentColorHash: SegmentColorHash;
+  saturation: TrackableAlphaValue;
 }
 
 export interface SegmentationDisplayStateWithAlpha extends SegmentationDisplayState {
@@ -128,6 +130,25 @@ export function getObjectColor(
   const color = tempColor;
   color[3] = alpha;
   displayState.segmentColorHash.compute(color, objectId);
+
+  // Apply saturation
+  let hsv = new Float32Array(3);
+  rgbToHsv(hsv, color[0], color[1], color[2]);
+  hsv[1] *= displayState.saturation.value;
+  let rgb = new Float32Array(3);
+  hsvToRgb(rgb, hsv[0], hsv[1], hsv[2]);
+  color[0] = rgb[0];
+  color[1] = rgb[1];
+  color[2] = rgb[2];
+
+  // Color highlighted segments
+  if(displayState.highlightedSegments.has(objectId)) {
+    // Make it vivid blue for selection
+    color[0] = 0.2;
+    color[1] = 0.2;
+    color[2] = 2.0;
+    color[3] = 1.0;
+  }
   if (displayState.segmentSelectionState.isSelected(objectId)) {
     for (let i = 0; i < 3; ++i) {
       color[i] = color[i] * 0.5 + 0.5;

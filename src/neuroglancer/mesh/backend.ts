@@ -117,6 +117,10 @@ export function decodeJsonManifestChunk(
     chunk: ManifestChunk, response: any, keysPropertyName: string) {
   verifyObject(response);
   chunk.fragmentIds = verifyObjectProperty(response, keysPropertyName, verifyStringArray);
+  if (chunk.fragmentIds.length > 500) {
+    console.log('"Ignored large object: ', chunk.fragmentIds.length, chunk);
+    chunk.fragmentIds = [];
+  }
 }
 
 /**
