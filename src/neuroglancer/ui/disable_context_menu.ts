@@ -14,16 +14,13 @@
  * limitations under the License.
  */
 
-require('./default_viewer.css');
-
-import 'neuroglancer/sliceview/chunk_format_handlers';
-
-import {DisplayContext} from 'neuroglancer/display_context';
-import {Viewer} from 'neuroglancer/viewer';
-import {disableContextMenu} from 'neuroglancer/ui/disable_context_menu';
-
-export function makeDefaultViewer() {
-  disableContextMenu();
-  let display = new DisplayContext(document.getElementById('container')!);
-  return new Viewer(display);
+/**
+ * Prevent context menu on right click, as this interferes with other event handlers for right mouse
+ * clicks.
+ */
+export function disableContextMenu() {
+  document.addEventListener('contextmenu', (e: Event) => {
+    e.preventDefault();
+    return false;
+  });
 }
