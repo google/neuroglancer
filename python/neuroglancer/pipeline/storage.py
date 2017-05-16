@@ -13,8 +13,9 @@ from boto.s3.connection import S3Connection
 import gzip
 
 from neuroglancer.pipeline.secrets import PROJECT_NAME, google_credentials_path, aws_credentials
+from neuroglancer.pipeline.threaded_queue import ThreadedQueue
 
-class Storage(object):
+class Storage(ThreadedQueue):
     """
     Probably rather sooner that later we will have to store datasets in S3.
     The idea is to modify this class constructor to probably take a path of 
@@ -24,7 +25,7 @@ class Storage(object):
     file:// would be useful for when the in-memory python datasource uses too much RAM,
     or possible for writing unit tests.
 
-    This should be the only way to interact with files, either for anyone of the protocols
+    This should be the only way to interact with files for any of the protocols.
     """
     gzip_magic_numbers = [0x1f,0x8b]
     path_regex = re.compile(r'^(gs|file|s3)://(/?.*?)/(.*/)?([^//]+)/([^//]+)/?$')
@@ -32,65 +33,29 @@ class Storage(object):
         ['protocol','bucket_name','dataset_path','dataset_name','layer_name'])
 
     def __init__(self, layer_path='', n_threads=20):
-
         self._layer_path = layer_path
         self._path = self.extract_path(layer_path)
-        self._n_threads = n_threads
-
+        
         if self._path.protocol == 'file':
-            self._interface = FileInterface
+            self._interface_cls = FileInterface
         elif self._path.protocol == 'gs':
-            self._interface = GoogleCloudStorageInterface
+            self._interface_cls = GoogleCloudStorageInterface
         elif self._path.protocol == 's3':
-            self._interface = S3Interface
+            self._interface_cls = S3Interface
 
-        if self._n_threads:
-            self._create_processing_queue()
+        self._interface = self._interface_cls(self._path)
+
+        super(Storage, self).__init__(n_threads)
+
+    def _initialize_interface(self):
+        return self._interface_cls(self._path)
+
+    @property
+    def layer_path(self):
+        return self._layer_path
 
     def get_path_to_file(self, file_path):
         return os.path.join(self._layer_path, file_path)
-
-    def _create_processing_queue(self):
-        self._queue = Queue(maxsize=self._n_threads*4)
-        for _ in xrange(self._n_threads):
-            worker = Thread(target=self._process_task)
-            worker.setDaemon(True)
-            worker.start()
-
-    def _kill_threads(self):
-        self.wait()
-        for _ in xrange(self._n_threads):
-            self._queue.put( ('TERMINATE', None, None ) )
-
-    def _process_task(self):
-        """
-        Connections to s3 or gcs are likely not thread-safe,
-        to account for that every worker create it's own 
-        connection.
-        """
-        interface = self._interface(self._path)
-        while True:
-            # task[0] referes to an string with the method name.
-            # task[1] is a callback
-            # task[2:] are the arguments to the method.
-            task = self._queue.get()
-            fn_name, cb, args = task[0], task[1], task[2:]
-            
-            if fn_name == 'TERMINATE':
-                self._queue.task_done()
-                return
-
-            result = error = None
-
-            try:
-                result = getattr(interface, fn_name)(*args)
-            except Exception as e:
-                error = e.value
-
-            if cb:
-                cb(result, error)
-
-            self._queue.task_done()
 
     @classmethod
     def extract_path(cls, layer_path):
@@ -100,27 +65,45 @@ class Storage(object):
         else:
             return cls.ExtractedPath(*match.groups())
 
-    def put_file(self, file_path, content, compress=True):
+    def put_file(self, file_path, content, compress=False):
         """ 
         Args:
             filename (string): it can contains folders
             content (string): binary data to save
         """
-        if compress:
-            content = self._compress(content)
+        return self.put_files([ (file_path, content) ], compress, block=False)
 
-        if self._n_threads:
-            # None is the non-existant callback
-            self._queue.put(('put_file', None, file_path, content, compress), block=True)
-        else:
-            self._interface(self._path).put_file(file_path, content, compress)
+    def put_files(self, files, compress=False, block=True):
+        """
+        Put lots of files at once and get a nice progress bar. It'll also wait
+        for the upload to complete, just like get_files.
+
+        Required:
+            files: [ (filepath, content), .... ]
+        """
+        def base_uploadfn(path, content, interface):
+            interface.put_file(path, content, compress)
+
+        for path, content in files:
+            if compress:
+                content = self._compress(content)
+
+            uploadfn = partial(base_uploadfn, path, content)
+
+            if len(self._threads):
+                self.put(uploadfn)
+            else:
+                uploadfn(self._interface)
+
+        if block:
+            self.wait()
+
         return self
-
 
     def get_file(self, file_path):
         # Create get_files does uses threading to speed up downloading
 
-        content, decompress = self._interface(self._path).get_file(file_path)
+        content, decompress = self._interface.get_file(file_path)
         if content and decompress != False:
             content = self._maybe_uncompress(content)
         return content
@@ -132,9 +115,16 @@ class Storage(object):
 
         results = []
 
-        def store_result(path, result, error):
-            content, decompress = result
+        def get_file_thunk(path, interface):
+            result = error = None 
 
+            try:
+                result = interface.get_file(path)
+            except Exception as err:
+                error = err
+                print(err)
+            
+            content, decompress = result
             if content and decompress:
                 content = self._maybe_uncompress(content)
 
@@ -145,23 +135,13 @@ class Storage(object):
             })
 
         for path in file_paths:
-            if self._n_threads:
-                callback = partial(store_result, path)
-                self._queue.put(('get_file', callback, path), block=True)
+            if len(self._threads):
+                self.put(partial(get_file_thunk, path))
             else:
-                result = error = None
-
-                try:
-                    # False is the decompress? flag
-                    # get_file already runs through maybe_decompress, 
-                    # so it's definitely already decompressed
-                    result = ( self.get_file(path), False ) 
-                except Exception as e:
-                    error = e.value
-
-                store_result(path, result, error)
+                get_file_thunk(path, self._interface)
 
         self.wait()
+
         return results
 
     def _maybe_uncompress(self, content):
@@ -190,16 +170,8 @@ class Storage(object):
             return gfile.read()
 
     def list_files(self, prefix=""):
-        for f in self._interface(self._path).list_files(prefix):
+        for f in self._interface.list_files(prefix):
             yield f
-
-    def wait(self):
-        if self._n_threads:
-            self._queue.join()
-        return self
-    
-    def __del__(self):      
-        self._kill_threads()
 
 class FileInterface(object):
     lock = Lock()
