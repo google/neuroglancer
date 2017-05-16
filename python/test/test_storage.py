@@ -56,6 +56,19 @@ def test_read_write():
 
     shutil.rmtree("/tmp/removeme/read_write")
 
+def test_delete():
+    urls = ["file:///tmp/removeme/list",
+            "gs://neuroglancer/removeme/list",
+            "s3://neuroglancer/removeme/list"]
+
+    for url in urls:
+        with Storage(url, n_threads=1) as s:
+            content = 'some_string'
+            s.put_file('delete-test', content, compress=False).wait()
+            assert s.get_file('delete-test') == content
+            s.delete_file('delete-test').wait()
+            assert s.get_file('delete-test') is None
+
 def test_compression():
     urls = ["file:///tmp/removeme/compression",
             "gs://neuroglancer/removeme/compression",
@@ -68,6 +81,7 @@ def test_compression():
             s.wait()
             assert s.get_file('info') == content
             assert s.get_file('nonexistentfile') is None
+            s.delete_file('info')
 
     shutil.rmtree("/tmp/removeme/compression")
 
@@ -90,5 +104,7 @@ def test_list():
             assert set(s.list_files(prefix='build')) == set([])
             assert set(s.list_files(prefix='build/')) == set(['info3'])
             assert set(s.list_files(prefix='nofolder/')) == set([])
+            for file_path in ('info1', 'info2', 'build/info3'):
+                s.delete_file(file_path)
     
     shutil.rmtree("/tmp/removeme/list")

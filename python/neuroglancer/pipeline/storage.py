@@ -7,6 +7,7 @@ from threading import Thread, Lock
 from functools import partial
 
 from glob import glob
+import google.cloud.exceptions
 from google.cloud.storage import Client
 import boto 
 from boto.s3.connection import S3Connection
@@ -144,6 +145,18 @@ class Storage(ThreadedQueue):
 
         return results
 
+    def delete_file(self, file_path):
+
+        def thunk_delete(interface):
+            interface.delete_file(file_path)
+
+        if len(self._threads):
+            self.put(thunk_delete)
+        else:
+            thunk_delete(self._interface)
+
+        return self
+
     def _maybe_uncompress(self, content):
         """ Uncompression is applied if the first to bytes matches with
             the gzip magic numbers. 
@@ -207,6 +220,11 @@ class FileInterface(object):
         except IOError:
             return None, False
 
+    def delete_file(self, file_path):
+        path = self.get_path_to_file(file_path)
+        if os.path.exists(path):
+            os.remove(path)
+
     def list_files(self, prefix):
         layer_path = self.get_path_to_file("")        
         path = os.path.join(layer_path, prefix)
@@ -250,6 +268,14 @@ class GoogleCloudStorageInterface(object):
         # blob handles the decompression in the case
         # it is necessary
         return blob.download_as_string(), False
+
+    def delete_file(self, file_path):
+        key = self.get_path_to_file(file_path)
+        
+        try:
+            self._bucket.delete_blob( key )
+        except google.cloud.exceptions.NotFound:
+            pass
 
     def list_files(self, prefix):
         """
@@ -304,6 +330,12 @@ class S3Interface(object):
                 return None, False
             else:
                 raise e
+
+    def delete_file(self, file_path):
+        k = boto.s3.key.Key(self._bucket)
+        k.key = self.get_path_to_file(file_path)
+        self._bucket.delete_key(k)
+
     def list_files(self, prefix):
         """
         if there is no trailing slice we are looking for files with that prefix
