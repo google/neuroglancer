@@ -29,6 +29,8 @@ import {DepthBuffer, FramebufferConfiguration, makeTextureBuffers, OffscreenCopy
 import {ShaderBuilder} from 'neuroglancer/webgl/shader';
 import {glsl_packFloat01ToFixedPoint, unpackFloat01FromFixedPoint} from 'neuroglancer/webgl/shader_lib';
 
+import {MouseDragEvent} from 'neuroglancer/ui/user_events';
+
 require('neuroglancer/noselect.css');
 require('./panel.css');
 
@@ -146,6 +148,10 @@ export class PerspectivePanel extends RenderedDataPanel {
     }
     this.registerDisposer(viewer.showSliceViews.changed.add(() => { this.scheduleRedraw(); }));
     this.registerDisposer(viewer.showAxisLines.changed.add(() => { this.scheduleRedraw(); }));
+
+    this.eventEmitter.on({
+      mousedrag: this.onMousedrag.bind(this),
+    });
   }
   get navigationState() { return this.viewer.navigationState; }
 
@@ -210,25 +216,28 @@ export class PerspectivePanel extends RenderedDataPanel {
     return true;
   }
 
-  startDragViewport(e: MouseEvent) {
-    startRelativeMouseDrag(e, (event, deltaX, deltaY) => {
-      if (event.shiftKey) {
-        const temp = tempVec3;
-        const {projectionMat} = this;
-        const {width, height} = this;
-        const {position} = this.viewer.navigationState;
-        const pos = position.spatialCoordinates;
-        vec3.transformMat4(temp, pos, projectionMat);
-        temp[0] = 2 * deltaX / width;
-        temp[1] = -2 * deltaY / height;
-        vec3.transformMat4(pos, temp, this.inverseProjectionMat);
-        position.changed.dispatch();
-      } else {
-        this.navigationState.pose.rotateRelative(kAxes[1], -deltaX / 4.0 * Math.PI / 180.0);
-        this.navigationState.pose.rotateRelative(kAxes[0], deltaY / 4.0 * Math.PI / 180.0);
-        this.viewer.navigationState.changed.dispatch();
-      }
-    });
+  // TODO(blakely): Remove
+
+  startDragViewport() {
+  }
+
+  onMousedrag(event: MouseDragEvent) {
+    if (event.shiftKey) {
+      const temp = tempVec3;
+      const {projectionMat} = this;
+      const {width, height} = this;
+      const {position} = this.viewer.navigationState;
+      const pos = position.spatialCoordinates;
+      vec3.transformMat4(temp, pos, projectionMat);
+      temp[0] = 2 * event.delta.x / width;
+      temp[1] = -2 * event.delta.y / height;
+      vec3.transformMat4(pos, temp, this.inverseProjectionMat);
+      position.changed.dispatch();
+    } else {
+      this.navigationState.pose.rotateRelative(kAxes[1], -event.delta.x  / 4.0 * Math.PI / 180.0);
+      this.navigationState.pose.rotateRelative(kAxes[0], event.delta.y / 4.0 * Math.PI / 180.0);
+      this.viewer.navigationState.changed.dispatch();
+    }
   }
 
   private get transparentConfiguration() {

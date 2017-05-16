@@ -18,14 +18,20 @@ import {RefCounted} from 'neuroglancer/util/disposable';
 import {NullarySignal} from 'neuroglancer/util/signal';
 import {GL, initializeWebGL} from 'neuroglancer/webgl/context';
 
+import {UserEventEmitter} from 'neuroglancer/ui/user_events';
+
 export abstract class RenderedPanel extends RefCounted {
+  eventEmitter: UserEventEmitter;
   gl: GL;
+
   constructor(public context: DisplayContext, public element: HTMLElement) {
     super();
     this.gl = context.gl;
     this.registerEventListener(
         element, 'mouseenter', (_event: MouseEvent) => { this.context.setActivePanel(this); });
     context.addPanel(this);
+
+    this.eventEmitter = new UserEventEmitter(element);
   }
 
   scheduleRedraw() { this.context.scheduleRedraw(); }

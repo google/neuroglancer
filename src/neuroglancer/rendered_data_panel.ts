@@ -21,8 +21,6 @@ import {AXES_NAMES, kAxes, vec3} from 'neuroglancer/util/geom';
 import {getWheelZoomAmount} from 'neuroglancer/util/wheel_zoom';
 import {ViewerState} from 'neuroglancer/viewer_state';
 
-import {UserEventEmitter} from 'neuroglancer/ui/user_events';
-
 require('./rendered_data_panel.css');
 
 export const KEY_COMMANDS = new Map<string, (this: RenderedDataPanel) => void>();
@@ -60,7 +58,6 @@ export abstract class RenderedDataPanel extends RenderedPanel {
   abstract updateMouseState(state: MouseSelectionState): boolean;
 
   private mouseStateUpdater = this.updateMouseState.bind(this);
-  private eventEmitter: UserEventEmitter;
 
   navigationState: NavigationState;
 
@@ -149,8 +146,6 @@ export abstract class RenderedDataPanel extends RenderedPanel {
         if (mouseState.updateUnconditionally()) {
           this.viewer.layerManager.invokeAction('annotate');
         }
-      } else {
-        this.startDragViewport(e);
       }
     } else if (e.button === 2) {
       let {mouseState} = this.viewer;
