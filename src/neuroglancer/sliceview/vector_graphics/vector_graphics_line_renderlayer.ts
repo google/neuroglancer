@@ -18,6 +18,7 @@ import {ChunkState} from 'neuroglancer/chunk_manager/base';
 import {SliceView} from 'neuroglancer/sliceview/frontend';
 import {VectorGraphicsSourceOptions} from 'neuroglancer/sliceview/vector_graphics/base';
 import {MultiscaleVectorGraphicsChunkSource, RenderLayer as GenericVectorGraphicsRenderLayer, VectorGraphicsChunkSource} from 'neuroglancer/sliceview/vector_graphics/frontend';
+import {trackableVec3, TrackableVec3} from 'neuroglancer/trackable_vec3';
 import {TrackableAlphaValue, trackableAlphaValue} from 'neuroglancer/trackable_alpha';
 import {TrackableFiniteFloat, trackableFiniteFloat} from 'neuroglancer/trackable_finite_float';
 import {mat4, vec3} from 'neuroglancer/util/geom';
@@ -30,6 +31,7 @@ const tempMat4 = mat4.create();
 export class VectorGraphicsLineRenderLayer extends GenericVectorGraphicsRenderLayer {
   opacity: TrackableAlphaValue;
   lineWidth: TrackableFiniteFloat;
+  color: TrackableVec3;
   private vertexIndexBuffer: Buffer;
   private normalDirectionBuffer: Buffer;
 
@@ -37,6 +39,7 @@ export class VectorGraphicsLineRenderLayer extends GenericVectorGraphicsRenderLa
   constructor(multiscaleSource: MultiscaleVectorGraphicsChunkSource, {
     opacity = trackableAlphaValue(0.5),
     lineWidth = trackableFiniteFloat(10.0),
+    color = trackableVec3(vec3.fromValues(255.0, 255.0, 255.0)),
     sourceOptions = <VectorGraphicsSourceOptions>{},
   } = {}) {
     super(multiscaleSource, {sourceOptions});
@@ -49,6 +52,11 @@ export class VectorGraphicsLineRenderLayer extends GenericVectorGraphicsRenderLa
     this.lineWidth = lineWidth;
     this.registerDisposer(lineWidth.changed.add(() => {
       this.redrawNeeded.dispatch();
+    }));
+
+    this.color = color;
+    this.registerDisposer(color.changed.add(() => { 
+      this.redrawNeeded.dispatch(); 
     }));
 
     let gl = this.gl;
@@ -72,6 +80,7 @@ export class VectorGraphicsLineRenderLayer extends GenericVectorGraphicsRenderLa
 
     builder.addUniform('highp float', 'uOpacity');
     builder.addUniform('highp float', 'ulineWidth');
+    builder.addUniform('highp vec3', 'uColor');
     builder.addVarying('vec3', 'vNormal');
 
     builder.addAttribute('highp float', 'aNormalDirection');
@@ -81,18 +90,16 @@ export class VectorGraphicsLineRenderLayer extends GenericVectorGraphicsRenderLa
     builder.addAttribute('highp vec3', 'aVertexSecond');
     builder.addUniform('highp mat4', 'uProjection');
 
-    builder.setFragmentMain(`  
-vec3 color = vec3(0,1,0);
-  
+    builder.setFragmentMain(`    
 float distance = length(vNormal);
 
 float antialiasing = 0.5;
 
 if (distance >= 1.0 - antialiasing) {
-  emitRGBA(vec4(color, (distance - 1.0) / -antialiasing )); 
+  emitRGBA(vec4(uColor, (distance - 1.0) / -antialiasing )); 
 }
 else if (distance < 1.0 - antialiasing) {
-  emitRGB(color);
+  emitRGB(uColor);
 }
 `
     );
@@ -121,6 +128,7 @@ gl_Position = uProjection * (pos + delta);
     let shader = this.shader!;
     gl.uniform1f(shader.uniform('uOpacity'), this.opacity.value);
     gl.uniform1f(shader.uniform('ulineWidth'), this.lineWidth.value);
+    gl.uniform3fv(shader.uniform('uColor'), this.color.value);
 
     this.vertexIndexBuffer.bindToVertexAttrib(
         shader.attribute('aVertexIndex'),

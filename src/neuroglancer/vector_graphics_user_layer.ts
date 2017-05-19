@@ -26,10 +26,12 @@ import {VectorGraphicsLineRenderLayer} from 'neuroglancer/sliceview/vector_graph
 import {StatusMessage} from 'neuroglancer/status';
 import {trackableAlphaValue} from 'neuroglancer/trackable_alpha';
 import {trackableFiniteFloat} from 'neuroglancer/trackable_finite_float';
-import {mat4} from 'neuroglancer/util/geom';
-import {verifyFiniteFloat, verifyOptionalString} from 'neuroglancer/util/json';
+import {trackableVec3, TrackableVec3} from 'neuroglancer/trackable_vec3';
+import {vec3, mat4} from 'neuroglancer/util/geom';
+import {verifyFiniteFloat, verifyInt, verifyOptionalString} from 'neuroglancer/util/json';
 import {makeWatchableShaderError} from 'neuroglancer/webgl/dynamic_shader';
 import {RangeWidget} from 'neuroglancer/widget/range';
+import {Vec3Widget} from 'neuroglancer/widget/vec3_entry_widget';
 import {ShaderCodeWidget} from 'neuroglancer/widget/shader_code_widget';
 
 require('./image_user_layer.css');
@@ -54,12 +56,17 @@ export class VectorGraphicsUserLayer extends UserLayer {
   vectorGraphicsPath: string|undefined;
   opacity = trackableAlphaValue(0.5);
   lineWidth = trackableFiniteFloat(10.0);
+  color = trackableVec3(vec3.fromValues(1.0, 1.0, 1.0));
   renderLayer: RenderLayer;
   constructor(manager: LayerListSpecification, x: any) {
     super();
 
     this.opacity.restoreState(x['opacity']);
-    this.lineWidth.restoreState(x['size']);
+    this.lineWidth.restoreState(x['linewidth']);
+    this.color.restoreState(x['color']);
+
+    this.lineWidth.changed.add(() => { this.specificationChanged.dispatch(); });
+    this.color.changed.add(() => { this.specificationChanged.dispatch(); });
 
     let vectorGraphicsPath = this.vectorGraphicsPath = verifyOptionalString(x['source']);
     if (vectorGraphicsPath !== undefined) {
@@ -70,6 +77,7 @@ export class VectorGraphicsUserLayer extends UserLayer {
                   new VectorGraphicsLineRenderLayer(vectorGraphics, {
                     opacity: this.opacity,
                     lineWidth: this.lineWidth,
+                    color: this.color,
                     sourceOptions: {}
                   });
               this.addRenderLayer(renderLayer);
@@ -77,13 +85,16 @@ export class VectorGraphicsUserLayer extends UserLayer {
           });
     }
   }
+
   toJSON() {
     let x: any = {'type': 'vectorgraphics'};
     x['source'] = this.vectorGraphicsPath;
     x['opacity'] = this.opacity.toJSON();
-    x['size'] = this.lineWidth.toJSON();
+    x['linewidth'] = this.lineWidth.toJSON();
+    x['color'] = this.color.toJSON();
     return x;
   }
+
   makeDropdown(element: HTMLDivElement) {
     return new VectorGraphicsDropDown(element, this);
   }
@@ -93,15 +104,18 @@ class VectorGraphicsDropDown extends UserLayerDropdown {
   opacityWidget = this.registerDisposer(new RangeWidget(this.layer.opacity));
   lineWidthWidget =
       this.registerDisposer(new RangeWidget(this.layer.lineWidth, {min: 0, max: 50, step: 1}));
+  colorWidget = this.registerDisposer(new VectorGraphicsColorWidget(this.layer.color));
 
   constructor(public element: HTMLDivElement, public layer: VectorGraphicsUserLayer) {
     super();
     element.classList.add('image-dropdown');
-    let {opacityWidget, lineWidthWidget} = this;
+    let {opacityWidget, lineWidthWidget, colorWidget} = this;
     let topRow = document.createElement('div');
     topRow.className = 'image-dropdown-top-row';
     opacityWidget.promptElement.textContent = 'Opacity';
     lineWidthWidget.promptElement.textContent = 'Primitive Size';
+    colorWidget.promptElement.textContent = 'Color';
+
     let spacer = document.createElement('div');
     let lineBreak = document.createElement('br');
     spacer.style.flex = '1';
@@ -116,14 +130,44 @@ class VectorGraphicsDropDown extends UserLayerDropdown {
     helpLink.href =
         'https://github.com/google/neuroglancer/blob/master/src/neuroglancer/sliceview/vectorgraphics_layer_rendering.md';
 
-    topRow.appendChild(this.opacityWidget.element);
+    // topRow.appendChild();
     topRow.appendChild(spacer);
     topRow.appendChild(helpLink);
 
     element.appendChild(topRow);
+    element.appendChild(this.opacityWidget.element);
     element.appendChild(this.lineWidthWidget.element);
+    element.appendChild(this.colorWidget.element);
   }
 }
+
+
+class VectorGraphicsColorWidget extends Vec3Widget {
+  constructor(model: TrackableVec3) {
+    super(model);
+  }
+
+  verifyValue(value: any) {
+    let num = verifyFiniteFloat(value);
+    // Scale from [0,255] to [0,1]
+    num = num / 255.0;
+
+    if (num < 0.) {
+      return 0.;
+    } 
+    if (num > 1.) {
+      return 1.;
+    }
+    return num;
+  }
+
+  updateInput() {
+    this.inputx.valueAsNumber = Math.round(this.model.value[0]*255.);
+    this.inputy.valueAsNumber = Math.round(this.model.value[1]*255.); 
+    this.inputz.valueAsNumber = Math.round(this.model.value[2]*255.); 
+  }
+}
+
 
 registerLayerType('vectorgraphics', VectorGraphicsUserLayer);
 // backwards compatibility
