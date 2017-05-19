@@ -23,7 +23,7 @@ import {kAxes, kZeroVec, mat4, rectifyTransformMatrixIfAxisAligned, transformVec
 import {SharedObject} from 'neuroglancer/worker_rpc';
 
 export enum VECTOR_GRAPHICS_LAYER_TYPE {
-  LINE, 
+  LINE,
   POINT
 }
 

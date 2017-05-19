@@ -70,7 +70,7 @@ function decodeSectionIDs(response: any) {
     verifyObject(x);
     sectionIDs.push(verifyString(x['sectionId']));
   });
-  return sectionIDs
+  return sectionIDs;
 }
 
 function parseCoordinateTransform(coordsResult: any): vec3[] {
@@ -124,7 +124,7 @@ function decodePointMatches(
         for (let i = 0; i < allConvertedCoordinates.length; i++) {
           let convertedCoordinate = verifyObject(allConvertedCoordinates[i]);
           let point = verify3dVec(convertedCoordinate['world']);
-          tmpVertexPositions.appendArray([point[0], point[1], point[2]])
+          tmpVertexPositions.appendArray([point[0], point[1], point[2]]);
         }
         let vertexPositions = new Float32ArrayBuilder();
 
@@ -147,9 +147,9 @@ function getPointMatches(
     chunk: VectorGraphicsChunk, sectionIds: string[], parameters: PointMatchChunkSourceParameters,
     cancellationToken: CancellationToken) {
   let path: string;
-  if (sectionIds.length == 1) {
+  if (sectionIds.length === 1) {
     path = `/render-ws/v1/owner/${parameters.owner}/matchCollection/${parameters.matchCollection}/group/${sectionIds[0]}/matchesWith/${sectionIds[0]}`;
-  } else if (sectionIds.length == 2) {
+  } else if (sectionIds.length === 2) {
     path = `/render-ws/v1/owner/${parameters.owner}/matchCollection/${parameters.matchCollection}/group/${sectionIds[0]}/matchesWith/${sectionIds[1]}`;
   } else {
     throw new Error(`Invalid section Id vector of length: ${JSON.stringify(sectionIds.length)}`);
@@ -158,7 +158,7 @@ function getPointMatches(
   return sendHttpRequest(
              openShardedHttpRequest(parameters.baseUrls, path), 'json', cancellationToken)
       .then(
-          response => {return decodePointMatches(chunk, response, parameters, cancellationToken)});
+          response => { return decodePointMatches(chunk, response, parameters, cancellationToken); });
 }
 
 

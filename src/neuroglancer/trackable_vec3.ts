@@ -16,17 +16,19 @@
 
 
 import {RefCounted} from 'neuroglancer/util/disposable';
-import {NullarySignal, Signal} from 'neuroglancer/util/signal';
-import {Trackable} from 'neuroglancer/util/trackable';
 import {vec3} from 'neuroglancer/util/geom';
 import {verify3dVec, verifyFiniteFloat} from 'neuroglancer/util/json';
+import {NullarySignal, Signal} from 'neuroglancer/util/signal';
+import {Trackable} from 'neuroglancer/util/trackable';
 
 export function trackableVec3(defaultValue = vec3.create()) {
-    return new TrackableVec3(defaultValue, defaultValue);
+  return new TrackableVec3(defaultValue, defaultValue);
 }
 
 export class TrackableVec3 implements Trackable {
-  get value() { return this.value_; }
+  get value() {
+    return this.value_;
+  }
   set value(newValue: vec3) {
     if (newValue !== this.value_) {
       this.value_ = newValue;
@@ -44,10 +46,12 @@ export class TrackableVec3 implements Trackable {
   }
   restoreState(x: any) {
     try {
-        this.value = verify3dVec(x.split(','));
-    } catch(e) {
-        this.value = this.defaultValue;
+      this.value = verify3dVec(x.split(','));
+    } catch (e) {
+      this.value = this.defaultValue;
     }
   }
-  reset() { this.value = this.defaultValue; }
+  reset() {
+    this.value = this.defaultValue;
+  }
 };

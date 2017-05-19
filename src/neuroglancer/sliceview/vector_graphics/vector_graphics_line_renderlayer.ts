@@ -18,9 +18,9 @@ import {ChunkState} from 'neuroglancer/chunk_manager/base';
 import {SliceView} from 'neuroglancer/sliceview/frontend';
 import {VectorGraphicsSourceOptions} from 'neuroglancer/sliceview/vector_graphics/base';
 import {MultiscaleVectorGraphicsChunkSource, RenderLayer as GenericVectorGraphicsRenderLayer, VectorGraphicsChunkSource} from 'neuroglancer/sliceview/vector_graphics/frontend';
-import {trackableVec3, TrackableVec3} from 'neuroglancer/trackable_vec3';
 import {TrackableAlphaValue, trackableAlphaValue} from 'neuroglancer/trackable_alpha';
 import {TrackableFiniteFloat, trackableFiniteFloat} from 'neuroglancer/trackable_finite_float';
+import {trackableVec3, TrackableVec3} from 'neuroglancer/trackable_vec3';
 import {mat4, vec3} from 'neuroglancer/util/geom';
 import {Buffer} from 'neuroglancer/webgl/buffer';
 import {GL_ARRAY_BUFFER, GL_FLOAT} from 'neuroglancer/webgl/constants';
@@ -55,8 +55,8 @@ export class VectorGraphicsLineRenderLayer extends GenericVectorGraphicsRenderLa
     }));
 
     this.color = color;
-    this.registerDisposer(color.changed.add(() => { 
-      this.redrawNeeded.dispatch(); 
+    this.registerDisposer(color.changed.add(() => {
+      this.redrawNeeded.dispatch();
     }));
 
     let gl = this.gl;
@@ -101,8 +101,7 @@ if (distance >= 1.0 - antialiasing) {
 else if (distance < 1.0 - antialiasing) {
   emitRGB(uColor);
 }
-`
-    );
+`);
     builder.setVertexMain(`
 vec3 direction = vec3(0., 0., 0.); 
 direction.z = aNormalDirection;
@@ -218,4 +217,3 @@ gl_Position = uProjection * (pos + delta);
     this.endSlice(shader);
   }
 }
-

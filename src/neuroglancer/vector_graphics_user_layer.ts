@@ -21,19 +21,19 @@ import {UserLayer, UserLayerDropdown} from 'neuroglancer/layer';
 import {LayerListSpecification, registerLayerType, registerVolumeLayerType} from 'neuroglancer/layer_specification';
 import {getVolumeWithStatusMessage} from 'neuroglancer/layer_specification';
 import {Overlay} from 'neuroglancer/overlay';
-import {MultiscaleVectorGraphicsChunkSource, RenderLayer} from 'neuroglancer/sliceview/vector_graphics/frontend';
 import {VECTOR_GRAPHICS_LAYER_TYPE} from 'neuroglancer/sliceview/vector_graphics/base';
+import {MultiscaleVectorGraphicsChunkSource, RenderLayer} from 'neuroglancer/sliceview/vector_graphics/frontend';
 import {VectorGraphicsLineRenderLayer} from 'neuroglancer/sliceview/vector_graphics/vector_graphics_line_renderlayer';
 import {StatusMessage} from 'neuroglancer/status';
 import {trackableAlphaValue} from 'neuroglancer/trackable_alpha';
 import {trackableFiniteFloat} from 'neuroglancer/trackable_finite_float';
 import {trackableVec3, TrackableVec3} from 'neuroglancer/trackable_vec3';
-import {vec3, mat4} from 'neuroglancer/util/geom';
-import {verifyFiniteFloat, verifyInt, verifyEnumString, verifyOptionalString} from 'neuroglancer/util/json';
+import {mat4, vec3} from 'neuroglancer/util/geom';
+import {verifyEnumString, verifyFiniteFloat, verifyInt, verifyOptionalString} from 'neuroglancer/util/json';
 import {makeWatchableShaderError} from 'neuroglancer/webgl/dynamic_shader';
 import {RangeWidget} from 'neuroglancer/widget/range';
-import {Vec3Widget} from 'neuroglancer/widget/vec3_entry_widget';
 import {ShaderCodeWidget} from 'neuroglancer/widget/shader_code_widget';
+import {Vec3Widget} from 'neuroglancer/widget/vec3_entry_widget';
 
 require('./image_user_layer.css');
 require('neuroglancer/help_button.css');
@@ -67,8 +67,12 @@ export class VectorGraphicsUserLayer extends UserLayer {
     this.lineWidth.restoreState(x['linewidth']);
     this.color.restoreState(x['color']);
 
-    this.lineWidth.changed.add(() => { this.specificationChanged.dispatch(); });
-    this.color.changed.add(() => { this.specificationChanged.dispatch(); });
+    this.lineWidth.changed.add(() => {
+      this.specificationChanged.dispatch();
+    });
+    this.color.changed.add(() => {
+      this.specificationChanged.dispatch();
+    });
 
     this.vectorGraphicsLayerType = verifyEnumString(x['type'], VECTOR_GRAPHICS_LAYER_TYPE);
 
@@ -76,18 +80,18 @@ export class VectorGraphicsUserLayer extends UserLayer {
     if (vectorGraphicsPath !== undefined) {
       if (this.vectorGraphicsLayerType === VECTOR_GRAPHICS_LAYER_TYPE.LINE) {
         getVectorGraphicsWithStatusMessage(manager.chunkManager, vectorGraphicsPath)
-          .then(vectorGraphics => {
-            if (!this.wasDisposed) {
-              let renderLayer = this.renderLayer =
-                  new VectorGraphicsLineRenderLayer(vectorGraphics, {
-                    opacity: this.opacity,
-                    lineWidth: this.lineWidth,
-                    color: this.color,
-                    sourceOptions: {}
-                  });
-              this.addRenderLayer(renderLayer);
-            }
-          });
+            .then(vectorGraphics => {
+              if (!this.wasDisposed) {
+                let renderLayer = this.renderLayer =
+                    new VectorGraphicsLineRenderLayer(vectorGraphics, {
+                      opacity: this.opacity,
+                      lineWidth: this.lineWidth,
+                      color: this.color,
+                      sourceOptions: {}
+                    });
+                this.addRenderLayer(renderLayer);
+              }
+            });
       }
     }
   }
@@ -164,7 +168,7 @@ class VectorGraphicsColorWidget extends Vec3Widget {
 
     if (num < 0.) {
       return 0.;
-    } 
+    }
     if (num > 1.) {
       return 1.;
     }
@@ -172,9 +176,9 @@ class VectorGraphicsColorWidget extends Vec3Widget {
   }
 
   updateInput() {
-    this.inputx.valueAsNumber = Math.round(this.model.value[0]*255.);
-    this.inputy.valueAsNumber = Math.round(this.model.value[1]*255.); 
-    this.inputz.valueAsNumber = Math.round(this.model.value[2]*255.); 
+    this.inputx.valueAsNumber = Math.round(this.model.value[0] * 255.);
+    this.inputy.valueAsNumber = Math.round(this.model.value[1] * 255.);
+    this.inputz.valueAsNumber = Math.round(this.model.value[2] * 255.);
   }
 }
 
