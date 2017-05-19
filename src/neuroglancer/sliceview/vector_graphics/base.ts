@@ -22,6 +22,11 @@ import {approxEqual} from 'neuroglancer/util/compare';
 import {kAxes, kZeroVec, mat4, rectifyTransformMatrixIfAxisAligned, transformVectorByMat4, vec3} from 'neuroglancer/util/geom';
 import {SharedObject} from 'neuroglancer/worker_rpc';
 
+export enum VECTOR_GRAPHICS_LAYER_TYPE {
+  LINE, 
+  POINT
+}
+
 export interface RenderLayer { sources: VectorGraphicsChunkSource[][]|null; }
 
 export interface VectorGraphicsSourceOptions extends SliceViewSourceOptions {}

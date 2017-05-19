@@ -22,13 +22,14 @@ import {LayerListSpecification, registerLayerType, registerVolumeLayerType} from
 import {getVolumeWithStatusMessage} from 'neuroglancer/layer_specification';
 import {Overlay} from 'neuroglancer/overlay';
 import {MultiscaleVectorGraphicsChunkSource, RenderLayer} from 'neuroglancer/sliceview/vector_graphics/frontend';
+import {VECTOR_GRAPHICS_LAYER_TYPE} from 'neuroglancer/sliceview/vector_graphics/base';
 import {VectorGraphicsLineRenderLayer} from 'neuroglancer/sliceview/vector_graphics/vector_graphics_line_renderlayer';
 import {StatusMessage} from 'neuroglancer/status';
 import {trackableAlphaValue} from 'neuroglancer/trackable_alpha';
 import {trackableFiniteFloat} from 'neuroglancer/trackable_finite_float';
 import {trackableVec3, TrackableVec3} from 'neuroglancer/trackable_vec3';
 import {vec3, mat4} from 'neuroglancer/util/geom';
-import {verifyFiniteFloat, verifyInt, verifyOptionalString} from 'neuroglancer/util/json';
+import {verifyFiniteFloat, verifyInt, verifyEnumString, verifyOptionalString} from 'neuroglancer/util/json';
 import {makeWatchableShaderError} from 'neuroglancer/webgl/dynamic_shader';
 import {RangeWidget} from 'neuroglancer/widget/range';
 import {Vec3Widget} from 'neuroglancer/widget/vec3_entry_widget';
@@ -54,6 +55,7 @@ function getVectorGraphicsWithStatusMessage(
 
 export class VectorGraphicsUserLayer extends UserLayer {
   vectorGraphicsPath: string|undefined;
+  vectorGraphicsLayerType: VECTOR_GRAPHICS_LAYER_TYPE;
   opacity = trackableAlphaValue(0.5);
   lineWidth = trackableFiniteFloat(10.0);
   color = trackableVec3(vec3.fromValues(1.0, 1.0, 1.0));
@@ -68,9 +70,12 @@ export class VectorGraphicsUserLayer extends UserLayer {
     this.lineWidth.changed.add(() => { this.specificationChanged.dispatch(); });
     this.color.changed.add(() => { this.specificationChanged.dispatch(); });
 
+    this.vectorGraphicsLayerType = verifyEnumString(x['type'], VECTOR_GRAPHICS_LAYER_TYPE);
+
     let vectorGraphicsPath = this.vectorGraphicsPath = verifyOptionalString(x['source']);
     if (vectorGraphicsPath !== undefined) {
-      getVectorGraphicsWithStatusMessage(manager.chunkManager, vectorGraphicsPath)
+      if (this.vectorGraphicsLayerType === VECTOR_GRAPHICS_LAYER_TYPE.LINE) {
+        getVectorGraphicsWithStatusMessage(manager.chunkManager, vectorGraphicsPath)
           .then(vectorGraphics => {
             if (!this.wasDisposed) {
               let renderLayer = this.renderLayer =
@@ -83,16 +88,22 @@ export class VectorGraphicsUserLayer extends UserLayer {
               this.addRenderLayer(renderLayer);
             }
           });
+      }
     }
   }
 
   toJSON() {
-    let x: any = {'type': 'vectorgraphics'};
+    let x: any = {'type': this.getLayerType()};
     x['source'] = this.vectorGraphicsPath;
     x['opacity'] = this.opacity.toJSON();
     x['linewidth'] = this.lineWidth.toJSON();
     x['color'] = this.color.toJSON();
     return x;
+  }
+
+  getLayerType() {
+    let typeStr = VECTOR_GRAPHICS_LAYER_TYPE[this.vectorGraphicsLayerType];
+    return typeStr.toLowerCase();
   }
 
   makeDropdown(element: HTMLDivElement) {
@@ -168,6 +179,5 @@ class VectorGraphicsColorWidget extends Vec3Widget {
 }
 
 
-registerLayerType('vectorgraphics', VectorGraphicsUserLayer);
-// backwards compatibility
-registerLayerType('point', VectorGraphicsUserLayer);
+registerLayerType('line', VectorGraphicsUserLayer);
+// registerLayerType('point', VectorGraphicsUserLayer);
