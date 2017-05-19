@@ -113,7 +113,7 @@ class VectorGraphicsDropDown extends UserLayerDropdown {
     let topRow = document.createElement('div');
     topRow.className = 'image-dropdown-top-row';
     opacityWidget.promptElement.textContent = 'Opacity';
-    lineWidthWidget.promptElement.textContent = 'Primitive Size';
+    lineWidthWidget.promptElement.textContent = 'Line Width';
     colorWidget.promptElement.textContent = 'Color';
 
     let spacer = document.createElement('div');
@@ -130,7 +130,6 @@ class VectorGraphicsDropDown extends UserLayerDropdown {
     helpLink.href =
         'https://github.com/google/neuroglancer/blob/master/src/neuroglancer/sliceview/vectorgraphics_layer_rendering.md';
 
-    // topRow.appendChild();
     topRow.appendChild(spacer);
     topRow.appendChild(helpLink);
 
