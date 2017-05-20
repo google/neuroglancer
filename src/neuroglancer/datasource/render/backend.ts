@@ -120,24 +120,11 @@ function decodePointMatches(
 
   return conversionObjectToWorld(conversionObjects, parameters, cancellationToken)
       .then(allConvertedCoordinates => {
-        let tmpVertexPositions = new Float32ArrayBuilder();
+        let vertexPositions = new Float32ArrayBuilder();
         for (let i = 0; i < allConvertedCoordinates.length; i++) {
           let convertedCoordinate = verifyObject(allConvertedCoordinates[i]);
           let point = verify3dVec(convertedCoordinate['world']);
-          tmpVertexPositions.appendArray([point[0], point[1], point[2]]);
-        }
-        let vertexPositions = new Float32ArrayBuilder();
-
-        for (let i = 0; i < tmpVertexPositions.length; i += 6) {
-          let pt1 = vec3.fromValues(
-              tmpVertexPositions.view[i], tmpVertexPositions.view[i + 1],
-              tmpVertexPositions.view[i + 2]);
-          let pt2 = vec3.fromValues(
-              tmpVertexPositions.view[i + 3], tmpVertexPositions.view[i + 4],
-              tmpVertexPositions.view[i + 5]);
-
-          vertexPositions.appendArray(pt1);
-          vertexPositions.appendArray(pt2);
+          vertexPositions.appendArray(point);
         }
         chunk.vertexPositions = vertexPositions.view;
       });
