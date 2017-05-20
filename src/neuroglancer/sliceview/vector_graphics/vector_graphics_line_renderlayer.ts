@@ -175,11 +175,11 @@ gl_Position = uProjection * (pos + delta);
       let objectToDataMatrix = tempMat4;
       mat4.identity(objectToDataMatrix);
       if (source.vectorGraphicsCoordinatesInVoxels) {
-        mat4.scale(objectToDataMatrix, objectToDataMatrix, voxelSize)
+        mat4.scale(objectToDataMatrix, objectToDataMatrix, voxelSize);
       }
       mat4.multiply(
         objectToDataMatrix, chunkLayout.transform, objectToDataMatrix);
-  
+
       // Compute projection matrix that transforms vertex coordinates to device coordinates
       gl.uniformMatrix4fv(
           shader.uniform('uProjection'), false,

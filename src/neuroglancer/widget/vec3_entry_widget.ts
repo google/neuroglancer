@@ -48,7 +48,7 @@ export class Vec3Widget extends RefCounted {
 
     const inputValueChanged = () => {
       this.model.value = this.getVec3Values();
-    }; 
+    };
     this.registerEventListener(inputx, 'change', inputValueChanged);
     this.registerEventListener(inputy, 'change', inputValueChanged);
     this.registerEventListener(inputz, 'change', inputValueChanged);

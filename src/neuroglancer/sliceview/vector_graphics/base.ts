@@ -79,13 +79,13 @@ export class VectorGraphicsChunkSpecification extends SliceViewChunkSpecificatio
       lowerVoxelBound,
       upperVoxelBound,
       chunkDataSize
-    } = options; 
+    } = options;
     transform = getCombinedTransform(transform, options.vectorGraphicsSourceOptions);
 
     if (chunkDataSize === undefined) {
-      chunkDataSize = vec3.clone(upperVoxelBound); 
+      chunkDataSize = vec3.clone(upperVoxelBound);
       if (lowerVoxelBound !== undefined) {
-        for( let i=0 ; i<3 ; i++ ) {
+        for (let i = 0; i < 3; i++) {
           chunkDataSize[i] += Math.abs(lowerVoxelBound[i]);
         }
       }
