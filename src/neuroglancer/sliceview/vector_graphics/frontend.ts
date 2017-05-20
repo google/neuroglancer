@@ -134,7 +134,7 @@ export abstract class VectorGraphicsChunkSource extends SliceViewChunkSource imp
    * Specifies whether the point vertex coordinates are specified in units of voxels rather than
    * nanometers.
    */
-  get pointVertexCoordinatesInVoxels() {
+  get vectorGraphicsCoordinatesInVoxels() {
     return true;
   }
 }

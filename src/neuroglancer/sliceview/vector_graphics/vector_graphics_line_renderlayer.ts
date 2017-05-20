@@ -169,12 +169,21 @@ gl_Position = uProjection * (pos + delta);
     for (let _source of visibleSources) {
       let source = _source as VectorGraphicsChunkSource;
       let chunkLayout = source.spec.chunkLayout;
+      let voxelSize = source.spec.voxelSize;
       let chunks = source.chunks;
 
+      let objectToDataMatrix = tempMat4;
+      mat4.identity(objectToDataMatrix);
+      if (source.vectorGraphicsCoordinatesInVoxels) {
+        mat4.scale(objectToDataMatrix, objectToDataMatrix, voxelSize)
+      }
+      mat4.multiply(
+        objectToDataMatrix, chunkLayout.transform, objectToDataMatrix);
+  
       // Compute projection matrix that transforms vertex coordinates to device coordinates
       gl.uniformMatrix4fv(
           shader.uniform('uProjection'), false,
-          mat4.multiply(tempMat4, sliceView.dataToDevice, chunkLayout.transform));
+          mat4.multiply(tempMat4, sliceView.dataToDevice, objectToDataMatrix));
 
       let chunkDataSize: vec3|undefined;
       let visibleChunks = sliceView.visibleChunks.get(chunkLayout);

@@ -15,19 +15,23 @@
  */
 
 import {SliceViewChunkSource, SliceViewChunkSpecification, SliceViewChunkSpecificationBaseOptions, SliceViewSourceOptions} from 'neuroglancer/sliceview/base';
-import {getCombinedTransform} from 'neuroglancer/sliceview/base';
+import {getCombinedTransform, getChunkDataSizes} from 'neuroglancer/sliceview/base';
 import {ChunkLayout} from 'neuroglancer/sliceview/chunk_layout';
 import {partitionArray} from 'neuroglancer/util/array';
 import {approxEqual} from 'neuroglancer/util/compare';
 import {kAxes, kZeroVec, mat4, rectifyTransformMatrixIfAxisAligned, transformVectorByMat4, vec3} from 'neuroglancer/util/geom';
 import {SharedObject} from 'neuroglancer/worker_rpc';
 
-export enum VECTOR_GRAPHICS_LAYER_TYPE {
+export enum VectorGraphicsType {
   LINE,
   POINT
 }
 
 export interface RenderLayer { sources: VectorGraphicsChunkSource[][]|null; }
+
+export interface VectorGraphicsChunkSpecificationSourceOptions {
+  vectorGraphicsSourceOptions: VectorGraphicsSourceOptions;
+}
 
 export interface VectorGraphicsSourceOptions extends SliceViewSourceOptions {}
 
@@ -35,11 +39,18 @@ export interface VectorGraphicsChunkSource extends SliceViewChunkSource {
   spec: VectorGraphicsChunkSpecification;
 }
 
-
 export interface VectorGraphicsChunkSpecificationOptions extends
     SliceViewChunkSpecificationBaseOptions {
   chunkDataSize: vec3;
 }
+
+export interface VectorGraphicsChunkSpecificationDefaultChunkSizeOptions extends SliceViewChunkSpecificationBaseOptions {
+  chunkDataSize?: vec3;
+}
+
+export interface VectorGraphicsChunkSpecificationGetDefaultsOptions extends
+VectorGraphicsChunkSpecificationDefaultChunkSizeOptions,
+VectorGraphicsChunkSpecificationSourceOptions {}
 
 /**
  * Specifies a chunk layout and voxel size.
@@ -58,6 +69,31 @@ export class VectorGraphicsChunkSpecification extends SliceViewChunkSpecificatio
 
   static fromObject(msg: any) {
     return new VectorGraphicsChunkSpecification(msg);
+  }
+
+  static withDefaults(options: VectorGraphicsChunkSpecificationGetDefaultsOptions) {
+
+    let {
+      voxelSize,
+      transform,
+      lowerVoxelBound,
+      upperVoxelBound,
+      chunkDataSize
+    } = options; 
+    transform = getCombinedTransform(transform, options.vectorGraphicsSourceOptions);
+
+    if (chunkDataSize === undefined) {
+      chunkDataSize = vec3.clone(upperVoxelBound); 
+      if (lowerVoxelBound !== undefined) {
+        for( let i=0 ; i<3 ; i++ ) {
+          chunkDataSize[i] += Math.abs(lowerVoxelBound[i]);
+        }
+      }
+    }
+    console.log(chunkDataSize);
+    console.log(options);
+
+    return new VectorGraphicsChunkSpecification(Object.assign({}, options, {transform, chunkDataSize}));
   }
 
   toObject(): VectorGraphicsChunkSpecificationOptions {

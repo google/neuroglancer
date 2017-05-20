@@ -21,7 +21,7 @@ import {UserLayer, UserLayerDropdown} from 'neuroglancer/layer';
 import {LayerListSpecification, registerLayerType, registerVolumeLayerType} from 'neuroglancer/layer_specification';
 import {getVolumeWithStatusMessage} from 'neuroglancer/layer_specification';
 import {Overlay} from 'neuroglancer/overlay';
-import {VECTOR_GRAPHICS_LAYER_TYPE} from 'neuroglancer/sliceview/vector_graphics/base';
+import {VectorGraphicsType} from 'neuroglancer/sliceview/vector_graphics/base';
 import {MultiscaleVectorGraphicsChunkSource, RenderLayer} from 'neuroglancer/sliceview/vector_graphics/frontend';
 import {VectorGraphicsLineRenderLayer} from 'neuroglancer/sliceview/vector_graphics/vector_graphics_line_renderlayer';
 import {StatusMessage} from 'neuroglancer/status';
@@ -55,7 +55,7 @@ function getVectorGraphicsWithStatusMessage(
 
 export class VectorGraphicsUserLayer extends UserLayer {
   vectorGraphicsPath: string|undefined;
-  vectorGraphicsLayerType: VECTOR_GRAPHICS_LAYER_TYPE;
+  vectorGraphicsLayerType: VectorGraphicsType;
   opacity = trackableAlphaValue(0.5);
   lineWidth = trackableFiniteFloat(10.0);
   color = trackableVec3(vec3.fromValues(1.0, 1.0, 1.0));
@@ -74,11 +74,11 @@ export class VectorGraphicsUserLayer extends UserLayer {
       this.specificationChanged.dispatch();
     });
 
-    this.vectorGraphicsLayerType = verifyEnumString(x['type'], VECTOR_GRAPHICS_LAYER_TYPE);
+    this.vectorGraphicsLayerType = verifyEnumString(x['type'], VectorGraphicsType);
 
     let vectorGraphicsPath = this.vectorGraphicsPath = verifyOptionalString(x['source']);
     if (vectorGraphicsPath !== undefined) {
-      if (this.vectorGraphicsLayerType === VECTOR_GRAPHICS_LAYER_TYPE.LINE) {
+      if (this.vectorGraphicsLayerType === VectorGraphicsType.LINE) {
         getVectorGraphicsWithStatusMessage(manager.chunkManager, vectorGraphicsPath)
             .then(vectorGraphics => {
               if (!this.wasDisposed) {
@@ -106,7 +106,7 @@ export class VectorGraphicsUserLayer extends UserLayer {
   }
 
   getLayerType() {
-    let typeStr = VECTOR_GRAPHICS_LAYER_TYPE[this.vectorGraphicsLayerType];
+    let typeStr = VectorGraphicsType[this.vectorGraphicsLayerType];
     return typeStr.toLowerCase();
   }
 

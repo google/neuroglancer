@@ -22,6 +22,7 @@ import {VolumeType} from 'neuroglancer/sliceview/volume/base';
 import {MultiscaleVolumeChunkSource} from 'neuroglancer/sliceview/volume/frontend';
 import {CancellationToken, uncancelableToken} from 'neuroglancer/util/cancellation';
 import {applyCompletionOffset, CompletionWithDescription} from 'neuroglancer/util/completion';
+import {VectorGraphicsType} from 'neuroglancer/sliceview/vector_graphics/base';
 
 export type Completion = CompletionWithDescription;
 
@@ -69,7 +70,9 @@ export interface GetVolumeOptions {
   volumeType?: VolumeType;
 }
 
-export interface GetVectorGraphicsOptions {}
+export interface GetVectorGraphicsOptions {
+  vectorGraphicsType?: VectorGraphicsType;
+}
 
 export interface DataSourceFactory {
   description?: string;
