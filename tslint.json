@@ -80,6 +80,7 @@
     "valid-typeof": true,
     "curly": true,
     "radix": true,
-    "no-shadowed-variable": true
+    "no-shadowed-variable": true,
+    "no-extra-semi": true
   }
 }
