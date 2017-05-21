@@ -17,35 +17,24 @@
 // Import to register the shared object types.
 import 'neuroglancer/shared_disjoint_sets';
 import 'neuroglancer/uint64_set';
-import 'neuroglancer/shared_visibility_count/backend';
 
-import {ChunkManager} from 'neuroglancer/chunk_manager/backend';
+import {withChunkManager} from 'neuroglancer/chunk_manager/backend';
 import {VisibleSegmentsState} from 'neuroglancer/segmentation_display_state/base';
 import {SharedDisjointUint64Sets} from 'neuroglancer/shared_disjoint_sets';
 import {Uint64Set} from 'neuroglancer/uint64_set';
-import {UseCount} from 'neuroglancer/util/use_count';
+import {withSharedVisibility} from 'neuroglancer/visibility_priority/backend';
 import {RPC, SharedObjectCounterpart} from 'neuroglancer/worker_rpc';
 
-export class SegmentationLayerSharedObjectCounterpart extends SharedObjectCounterpart implements
-    VisibleSegmentsState {
-  chunkManager: ChunkManager;
+const Base = withSharedVisibility(withChunkManager(SharedObjectCounterpart));
+
+export class SegmentationLayerSharedObjectCounterpart extends Base implements VisibleSegmentsState {
   visibleSegments: Uint64Set;
   segmentEquivalences: SharedDisjointUint64Sets;
 
-  /**
-   * Indicates whether this layer is actually visible.
-   */
-  visibilityCount = new UseCount();
-
-  get visible() {
-    return this.visibilityCount.value > 0;
-  }
-
   constructor(rpc: RPC, options: any) {
     super(rpc, options);
-    // No need to increase the reference count of chunkManager, visibleSegments or
+    // No need to increase the reference count of visibleSegments or
     // segmentEquivalences since our owner will hold a reference to their owners.
-    this.chunkManager = <ChunkManager>rpc.get(options['chunkManager']);
     this.visibleSegments = <Uint64Set>rpc.get(options['visibleSegments']);
     this.segmentEquivalences = <SharedDisjointUint64Sets>rpc.get(options['segmentEquivalences']);
 
@@ -54,6 +43,5 @@ export class SegmentationLayerSharedObjectCounterpart extends SharedObjectCounte
     };
     this.registerDisposer(this.visibleSegments.changed.add(scheduleUpdateChunkPriorities));
     this.registerDisposer(this.segmentEquivalences.changed.add(scheduleUpdateChunkPriorities));
-    this.visibilityCount.signChanged.add(scheduleUpdateChunkPriorities);
   }
 }

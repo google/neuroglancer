@@ -15,7 +15,6 @@
  */
 
 import {Chunk, ChunkSource} from 'neuroglancer/chunk_manager/backend';
-import {ChunkPriorityTier} from 'neuroglancer/chunk_manager/base';
 import {decodeVertexPositionsAndIndices} from 'neuroglancer/mesh/backend';
 import {SegmentationLayerSharedObjectCounterpart} from 'neuroglancer/segmentation_display_state/backend';
 import {forEachVisibleSegment, getObjectKey} from 'neuroglancer/segmentation_display_state/base';
@@ -23,6 +22,7 @@ import {SKELETON_LAYER_RPC_ID} from 'neuroglancer/skeleton/base';
 import {TypedArray} from 'neuroglancer/util/array';
 import {Endianness} from 'neuroglancer/util/endian';
 import {Uint64} from 'neuroglancer/util/uint64';
+import {getBasePriority, getPriorityTier} from 'neuroglancer/visibility_priority/backend';
 import {registerSharedObject, RPC} from 'neuroglancer/worker_rpc';
 
 const SKELETON_CHUNK_PRIORITY = 60;
@@ -131,13 +131,16 @@ export class SkeletonLayer extends SegmentationLayerSharedObjectCounterpart {
   }
 
   private updateChunkPriorities() {
-    if (!this.visible) {
+    const visibility = this.visibility.value;
+    if (visibility === Number.NEGATIVE_INFINITY) {
       return;
     }
-    let {source, chunkManager} = this;
+    const priorityTier = getPriorityTier(visibility);
+    const basePriority = getBasePriority(visibility);
+    const {source, chunkManager} = this;
     forEachVisibleSegment(this, objectId => {
-      let chunk = source.getChunk(objectId);
-      chunkManager.requestChunk(chunk, ChunkPriorityTier.VISIBLE, SKELETON_CHUNK_PRIORITY);
+      const chunk = source.getChunk(objectId);
+      chunkManager.requestChunk(chunk, priorityTier, basePriority + SKELETON_CHUNK_PRIORITY);
     });
   }
 }

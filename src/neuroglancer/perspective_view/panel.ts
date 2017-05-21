@@ -259,8 +259,10 @@ export class PerspectivePanel extends RenderedDataPanel {
       return;
     }
 
-    for (let sliceView of this.sliceViews) {
-      sliceView.updateRendering();
+    if (this.viewer.showSliceViews.value) {
+      for (let sliceView of this.sliceViews) {
+        sliceView.updateRendering();
+      }
     }
 
     let gl = this.gl;

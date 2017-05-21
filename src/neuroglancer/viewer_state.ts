@@ -17,6 +17,7 @@
 import {LayerManager, MouseSelectionState} from 'neuroglancer/layer';
 import {NavigationState} from 'neuroglancer/navigation_state';
 import {TrackableBoolean} from 'neuroglancer/trackable_boolean';
+import {VisibilityPrioritySpecification} from 'neuroglancer/visibility_priority/frontend';
 
 export interface ViewerPositionState {
   navigationState: NavigationState;
@@ -24,4 +25,8 @@ export interface ViewerPositionState {
   showAxisLines: TrackableBoolean;
 }
 
-export interface ViewerState extends ViewerPositionState { layerManager: LayerManager; }
+export {VisibilityPrioritySpecification};
+
+export interface ViewerState extends ViewerPositionState, VisibilityPrioritySpecification {
+  layerManager: LayerManager;
+}

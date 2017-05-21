@@ -16,11 +16,14 @@
 
 import {RefCounted} from 'neuroglancer/util/disposable';
 import {NullarySignal} from 'neuroglancer/util/signal';
+import {WatchableVisibilityPriority} from 'neuroglancer/visibility_priority/frontend';
 import {GL, initializeWebGL} from 'neuroglancer/webgl/context';
 
 export abstract class RenderedPanel extends RefCounted {
   gl: GL;
-  constructor(public context: DisplayContext, public element: HTMLElement) {
+  constructor(
+      public context: DisplayContext, public element: HTMLElement,
+      public visibility: WatchableVisibilityPriority) {
     super();
     this.gl = context.gl;
     this.registerEventListener(element, 'mouseenter', (_event: MouseEvent) => {
@@ -58,6 +61,10 @@ export abstract class RenderedPanel extends RefCounted {
   disposed() {
     this.context.removePanel(this);
     super.disposed();
+  }
+
+  get visible() {
+    return this.visibility.visible;
   }
 }
 
@@ -137,7 +144,6 @@ export class DisplayContext extends RefCounted {
     this.updatePending = null;
     this.updateStarted.dispatch();
     if (this.needsRedraw) {
-      // console.log("Redraw");
       this.needsRedraw = false;
       let gl = this.gl;
       let canvas = this.canvas;
@@ -147,7 +153,8 @@ export class DisplayContext extends RefCounted {
       gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
       for (let panel of this.panels) {
         let {element} = panel;
-        if (element.clientWidth === 0 || element.clientHeight === 0) {
+        if (!panel.visible || element.clientWidth === 0 || element.clientHeight === 0 ||
+            element.offsetWidth === 0 || element.offsetHeight === 0) {
           // Skip drawing if the panel has zero client area.
           continue;
         }
