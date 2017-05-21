@@ -14,21 +14,17 @@
  * limitations under the License.
  */
 
-import {ChunkSourceParametersConstructor, ChunkState} from 'neuroglancer/chunk_manager/base';
+import {ChunkState} from 'neuroglancer/chunk_manager/base';
 import {Chunk, ChunkManager, ChunkSource} from 'neuroglancer/chunk_manager/frontend';
 import {LayerManager} from 'neuroglancer/layer';
-import {MeshSource} from 'neuroglancer/mesh/frontend';
 import {NavigationState} from 'neuroglancer/navigation_state';
-import {DataType, SLICEVIEW_RPC_ID, SliceViewBase, SliceViewChunkSource as SliceViewChunkSourceInterface, SliceViewChunkSpecification, SliceViewSourceOptions} from 'neuroglancer/sliceview/base';
+import {SLICEVIEW_RPC_ID, SliceViewBase, SliceViewChunkSource as SliceViewChunkSourceInterface, SliceViewChunkSpecification, SliceViewSourceOptions} from 'neuroglancer/sliceview/base';
 import {ChunkLayout} from 'neuroglancer/sliceview/chunk_layout';
 import {RenderLayer} from 'neuroglancer/sliceview/renderlayer';
 import {RefCounted} from 'neuroglancer/util/disposable';
-import {Disposable} from 'neuroglancer/util/disposable';
 import {mat4, rectifyTransformMatrixIfAxisAligned, vec3, vec3Key, vec4} from 'neuroglancer/util/geom';
-import {stableStringify} from 'neuroglancer/util/json';
 import {getObjectId} from 'neuroglancer/util/object_id';
 import {NullarySignal} from 'neuroglancer/util/signal';
-import {Uint64} from 'neuroglancer/util/uint64';
 import {GL} from 'neuroglancer/webgl/context';
 import {FramebufferConfiguration, makeTextureBuffers, StencilBuffer} from 'neuroglancer/webgl/offscreen';
 import {ShaderBuilder, ShaderModule, ShaderProgram} from 'neuroglancer/webgl/shader';
@@ -274,9 +270,6 @@ export class SliceView extends SliceViewBase {
     this.visibleLayerList.length = 0;
   }
 };
-
-const tempChunkGridPosition = vec3.create();
-const tempLocalPosition = vec3.create();
 
 export abstract class SliceViewChunkSource extends ChunkSource implements
     SliceViewChunkSourceInterface {

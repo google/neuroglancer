@@ -14,14 +14,10 @@
  * limitations under the License.
  */
 
-import {Chunk, ChunkManager, ChunkSource} from 'neuroglancer/chunk_manager/backend';
-import {ChunkPriorityTier} from 'neuroglancer/chunk_manager/base';
 import {RenderLayer as SliceViewRenderLayer, SliceViewChunk, SliceViewChunkSource} from 'neuroglancer/sliceview/backend';
 import {RenderLayer as RenderLayerInterface, VECTOR_GRAPHICS_RENDERLAYER_RPC_ID, VectorGraphicsChunkSource as VectorGraphicsChunkSourceInterface, VectorGraphicsChunkSpecification} from 'neuroglancer/sliceview/vector_graphics/base';
-import {CancellationToken} from 'neuroglancer/util/cancellation';
 import {vec3, vec3Key} from 'neuroglancer/util/geom';
-import {UseCount} from 'neuroglancer/util/use_count';
-import {registerRPC, registerSharedObject, RPC, SharedObjectCounterpart} from 'neuroglancer/worker_rpc';
+import {registerSharedObject, RPC} from 'neuroglancer/worker_rpc';
 
 export class VectorGraphicsChunk extends SliceViewChunk {
   source: VectorGraphicsChunkSource|null = null;
@@ -33,8 +29,6 @@ export class VectorGraphicsChunk extends SliceViewChunk {
 
   initializeVolumeChunk(key: string, chunkGridPosition: vec3) {
     super.initializeVolumeChunk(key, chunkGridPosition);
-
-    let source = this.source;
 
     let chunkBytes: number = 0;
     if (this.vertexPositions) {

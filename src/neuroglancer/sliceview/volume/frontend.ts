@@ -14,32 +14,21 @@
  * limitations under the License.
  */
 
-import {ChunkSourceParametersConstructor, ChunkState} from 'neuroglancer/chunk_manager/base';
-import {Chunk, ChunkManager, ChunkSource} from 'neuroglancer/chunk_manager/frontend';
-import {LayerManager} from 'neuroglancer/layer';
+import {ChunkSourceParametersConstructor} from 'neuroglancer/chunk_manager/base';
+import {ChunkManager} from 'neuroglancer/chunk_manager/frontend';
 import {MeshSource} from 'neuroglancer/mesh/frontend';
-import {NavigationState} from 'neuroglancer/navigation_state';
-import {DataType, SliceViewBase} from 'neuroglancer/sliceview/base';
-import {ChunkLayout} from 'neuroglancer/sliceview/chunk_layout';
-import {MultiscaleSliceViewChunkSource, SliceView, SliceViewChunk, SliceViewChunkSource, SliceViewRenderHelper} from 'neuroglancer/sliceview/frontend';
-import {RenderLayer as GenericRenderLayer} from 'neuroglancer/sliceview/renderlayer';
+import {DataType} from 'neuroglancer/sliceview/base';
+import {MultiscaleSliceViewChunkSource, SliceViewChunk, SliceViewChunkSource} from 'neuroglancer/sliceview/frontend';
 import {VolumeChunkSource as VolumeChunkSourceInterface, VolumeChunkSpecification, VolumeSourceOptions, VolumeType} from 'neuroglancer/sliceview/volume/base';
-import {RefCounted} from 'neuroglancer/util/disposable';
 import {Disposable} from 'neuroglancer/util/disposable';
-import {mat4, rectifyTransformMatrixIfAxisAligned, vec3, vec3Key, vec4} from 'neuroglancer/util/geom';
+import {vec3, vec3Key} from 'neuroglancer/util/geom';
 import {stableStringify} from 'neuroglancer/util/json';
-import {getObjectId} from 'neuroglancer/util/object_id';
-import {NullarySignal} from 'neuroglancer/util/signal';
 import {Uint64} from 'neuroglancer/util/uint64';
 import {GL} from 'neuroglancer/webgl/context';
-import {FramebufferConfiguration, makeTextureBuffers, StencilBuffer} from 'neuroglancer/webgl/offscreen';
-import {ShaderBuilder, ShaderModule, ShaderProgram} from 'neuroglancer/webgl/shader';
-import {getSquareCornersBuffer} from 'neuroglancer/webgl/square_corners_buffer';
-import {registerSharedObjectOwner, RPC} from 'neuroglancer/worker_rpc';
+import {ShaderBuilder, ShaderProgram} from 'neuroglancer/webgl/shader';
+import {RPC} from 'neuroglancer/worker_rpc';
 
 export type VolumeChunkKey = string;
-
-const tempMat = mat4.create();
 
 const tempChunkGridPosition = vec3.create();
 const tempLocalPosition = vec3.create();

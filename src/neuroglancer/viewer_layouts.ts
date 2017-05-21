@@ -25,7 +25,7 @@ import {SliceViewPanel} from 'neuroglancer/sliceview/panel';
 import {TrackableBoolean} from 'neuroglancer/trackable_boolean';
 import {RefCounted} from 'neuroglancer/util/disposable';
 import {removeChildren} from 'neuroglancer/util/dom';
-import {mat4, quat} from 'neuroglancer/util/geom';
+import {quat} from 'neuroglancer/util/geom';
 
 export interface SliceViewViewerState {
   chunkManager: ChunkManager;

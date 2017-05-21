@@ -24,13 +24,13 @@ import {CancellationToken} from 'neuroglancer/util/cancellation';
 import {Float32ArrayBuilder} from 'neuroglancer/util/float32array_builder';
 import {vec3} from 'neuroglancer/util/geom';
 import {openShardedHttpRequest, sendHttpJsonPostRequest, sendHttpRequest} from 'neuroglancer/util/http_request';
-import {parseArray, verify3dVec, verifyFloat, verifyInt, verifyObject, verifyString} from 'neuroglancer/util/json';
+import {parseArray, verify3dVec, verifyObject, verifyString} from 'neuroglancer/util/json';
 
 let chunkDecoders = new Map<string, ChunkDecoder>();
 chunkDecoders.set('jpg', decodeJpegChunk);
 
 @registerChunkSource(TileChunkSourceParameters)
-class TileChunkSource extends ParameterizedVolumeChunkSource<TileChunkSourceParameters> {
+export class TileChunkSource extends ParameterizedVolumeChunkSource<TileChunkSourceParameters> {
   chunkDecoder = chunkDecoders.get(this.parameters.encoding)!;
 
   download(chunk: VolumeChunk, cancellationToken: CancellationToken) {
@@ -71,16 +71,6 @@ function decodeSectionIDs(response: any) {
     sectionIDs.push(verifyString(x['sectionId']));
   });
   return sectionIDs;
-}
-
-function parseCoordinateTransform(coordsResult: any): vec3[] {
-  let coords = new Array<vec3>();
-
-  parseArray(coordsResult, coordsObj => {
-    verifyObject(coordsObj);
-    coords.push(verify3dVec(coordsObj['world']));
-  });
-  return coords;
 }
 
 function createConversionObject(tileId: string, xcoord: any, ycoord: any) {
@@ -160,7 +150,7 @@ function downloadPointMatchChunk(
 }
 
 @registerChunkSource(PointMatchChunkSourceParameters)
-class PointMatchSource extends
+export class PointMatchSource extends
     ParameterizedVectorGraphicsChunkSource<PointMatchChunkSourceParameters> {
   download(chunk: VectorGraphicsChunk, cancellationToken: CancellationToken): Promise<void> {
     let {parameters} = this;

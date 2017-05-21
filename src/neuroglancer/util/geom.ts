@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-import {mat4, quat, vec2, vec3, vec4} from 'gl-matrix';
+import {mat4, quat, vec3} from 'gl-matrix';
 
 export {mat2, mat3, mat4, quat, vec2, vec3, vec4} from 'gl-matrix';
 

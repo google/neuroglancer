@@ -14,42 +14,28 @@
  * limitations under the License.
  */
 
-import {ChunkSourceParametersConstructor, ChunkState} from 'neuroglancer/chunk_manager/base';
-import {Chunk, ChunkManager, ChunkSource} from 'neuroglancer/chunk_manager/frontend';
-import {NavigationState} from 'neuroglancer/navigation_state';
-import {SharedObjectWithVisibilityCount} from 'neuroglancer/shared_visibility_count/base';
-import {ChunkLayout} from 'neuroglancer/sliceview/chunk_layout';
+import {ChunkSourceParametersConstructor} from 'neuroglancer/chunk_manager/base';
+import {ChunkManager} from 'neuroglancer/chunk_manager/frontend';
 import {MultiscaleSliceViewChunkSource, SliceViewChunk, SliceViewChunkSource} from 'neuroglancer/sliceview/frontend';
 import {SliceView} from 'neuroglancer/sliceview/frontend';
-import {SliceViewPanelRenderContext, SliceViewPanelRenderLayer} from 'neuroglancer/sliceview/panel';
 import {RenderLayer as GenericSliceViewRenderLayer} from 'neuroglancer/sliceview/renderlayer';
 import {VECTOR_GRAPHICS_RENDERLAYER_RPC_ID, VectorGraphicsChunkSource as VectorGraphicsChunkSourceInterface, VectorGraphicsChunkSpecification, VectorGraphicsSourceOptions} from 'neuroglancer/sliceview/vector_graphics/base';
-import {RefCounted} from 'neuroglancer/util/disposable';
-import {mat4, vec3, vec3Key} from 'neuroglancer/util/geom';
 import {stableStringify} from 'neuroglancer/util/json';
 import {Buffer} from 'neuroglancer/webgl/buffer';
-import {GL_ARRAY_BUFFER, GL_FLOAT} from 'neuroglancer/webgl/constants';
 import {GL} from 'neuroglancer/webgl/context';
-import {FramebufferConfiguration, makeTextureBuffers, StencilBuffer} from 'neuroglancer/webgl/offscreen';
-import {ShaderBuilder, ShaderModule, ShaderProgram} from 'neuroglancer/webgl/shader';
-import {setVec4FromUint32} from 'neuroglancer/webgl/shader_lib';
-import {registerSharedObjectOwner, RPC, RpcId, SharedObject} from 'neuroglancer/worker_rpc';
-
-const tempMat4 = mat4.create();
+import {ShaderBuilder, ShaderProgram} from 'neuroglancer/webgl/shader';
+import {RPC, RpcId, SharedObject} from 'neuroglancer/worker_rpc';
 
 export abstract class RenderLayer extends GenericSliceViewRenderLayer {
   sources: VectorGraphicsChunkSource[][];
   shader: ShaderProgram|undefined = undefined;
   shaderUpdated = true;
   rpcId: RpcId|null = null;
-  private sharedObject: SharedObject;
 
   constructor(multiscaleSource: MultiscaleVectorGraphicsChunkSource, {
     sourceOptions = <VectorGraphicsSourceOptions> {}
   } = {}) {
     super(multiscaleSource.chunkManager, multiscaleSource.getSources(sourceOptions));
-
-    let gl = this.gl;
 
     let sharedObject = this.registerDisposer(new SharedObject());
     sharedObject.RPC_TYPE_ID = VECTOR_GRAPHICS_RENDERLAYER_RPC_ID;
@@ -78,8 +64,6 @@ void emitTransparent() {
   }
 
   beginSlice(_sliceView: SliceView) {
-    let gl = this.gl;
-
     let shader = this.shader!;
     shader.bind();
     return shader;

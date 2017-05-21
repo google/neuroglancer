@@ -23,7 +23,7 @@ import {shareVisibility} from 'neuroglancer/shared_visibility_count/frontend';
 import {GET_SINGLE_MESH_INFO_RPC_ID, SINGLE_MESH_CHUNK_KEY, SINGLE_MESH_LAYER_RPC_ID, SINGLE_MESH_SOURCE_RPC_ID, SingleMeshInfo, SingleMeshSourceParameters, VertexAttributeInfo} from 'neuroglancer/single_mesh/base';
 import {TrackableValue} from 'neuroglancer/trackable_value';
 import {DataType} from 'neuroglancer/util/data_type';
-import {mat4, vec2, vec3, vec4} from 'neuroglancer/util/geom';
+import {mat4, vec2, vec3} from 'neuroglancer/util/geom';
 import {parseArray, stableStringify, verifyOptionalString, verifyString} from 'neuroglancer/util/json';
 import {getObjectId} from 'neuroglancer/util/object_id';
 import {Uint64} from 'neuroglancer/util/uint64';
@@ -210,7 +210,7 @@ vLightingFactor = abs(dot(normal, uLightDirection.xyz)) + uLightDirection.w;
     };
     bindTexture(data.vertexTexture);
     bindTexture(data.normalTexture);
-    let {attributeInfo, attributeNames} = this;
+    const {attributeNames} = this;
     data.vertexAttributeTextures.forEach((texture, i) => {
       if (attributeNames[i] !== undefined) {
         bindTexture(texture);
@@ -449,7 +449,7 @@ export class SingleMeshLayer extends PerspectiveViewRenderLayer {
       return;
     }
 
-    let {gl, displayState} = this;
+    let {gl} = this;
     let shaderManager = this.shaderManager!;
     shader.bind();
     shaderManager.beginLayer(gl, shader, renderContext);

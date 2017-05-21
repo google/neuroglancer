@@ -23,10 +23,10 @@ import {ChunkManager} from 'neuroglancer/chunk_manager/frontend';
 import {CompletionResult, registerDataSourceFactory} from 'neuroglancer/datasource/factory';
 import {PointMatchChunkSourceParameters, TileChunkSourceParameters} from 'neuroglancer/datasource/render/base';
 import {VectorGraphicsChunkSpecification, VectorGraphicsSourceOptions} from 'neuroglancer/sliceview/vector_graphics/base';
-import {defineParameterizedVectorGraphicsSource, MultiscaleVectorGraphicsChunkSource as GenericMultiscaleVectorGraphicsChunkSource, VectorGraphicsChunkSource} from 'neuroglancer/sliceview/vector_graphics/frontend';
+import {defineParameterizedVectorGraphicsSource, MultiscaleVectorGraphicsChunkSource as GenericMultiscaleVectorGraphicsChunkSource} from 'neuroglancer/sliceview/vector_graphics/frontend';
 import {DataType, VolumeChunkSpecification, VolumeSourceOptions, VolumeType} from 'neuroglancer/sliceview/volume/base';
 import {defineParameterizedVolumeChunkSource, MultiscaleVolumeChunkSource as GenericMultiscaleVolumeChunkSource, VolumeChunkSource} from 'neuroglancer/sliceview/volume/frontend';
-import {applyCompletionOffset, getPrefixMatches, getPrefixMatchesWithDescriptions} from 'neuroglancer/util/completion';
+import {applyCompletionOffset, getPrefixMatchesWithDescriptions} from 'neuroglancer/util/completion';
 import {vec3} from 'neuroglancer/util/geom';
 import {openShardedHttpRequest, sendHttpRequest} from 'neuroglancer/util/http_request';
 import {parseArray, parseQueryStringParameters, verifyFloat, verifyInt, verifyObject, verifyObjectProperty, verifyOptionalInt, verifyOptionalString, verifyString} from 'neuroglancer/util/json';
@@ -449,8 +449,6 @@ export class MultiscaleVectorGraphicsChunkSource implements GenericMultiscaleVec
     this.dims[2] = 1;
   }
   getSources(vectorGraphicsSourceOptions: VectorGraphicsSourceOptions) {
-    let sources: VectorGraphicsChunkSource[][] = [];
-
     let voxelSize = vec3.clone(this.stackInfo.voxelResolution);
 
     let lowerVoxelBound = vec3.create(), upperVoxelBound = vec3.create();

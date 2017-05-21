@@ -15,9 +15,8 @@
  */
 
 import {DataType} from 'neuroglancer/util/data_type';
-import {Uint64} from 'neuroglancer/util/uint64';
 import {compute1dTextureFormat, compute1dTextureLayout, OneDimensionalTextureAccessHelper, OneDimensionalTextureFormat, OneDimensionalTextureLayout, setOneDimensionalTextureData} from 'neuroglancer/webgl/one_dimensional_texture_access';
-import {setVec4FromUint32, encodeBytesToFloat32, glsl_unnormalizeUint8, glsl_uintleToFloat} from 'neuroglancer/webgl/shader_lib';
+import {setVec4FromUint32, glsl_unnormalizeUint8, glsl_uintleToFloat} from 'neuroglancer/webgl/shader_lib';
 import {fragmentShaderTest} from 'neuroglancer/webgl/shader_testing';
 
 describe('one_dimensional_texture_access', () => {

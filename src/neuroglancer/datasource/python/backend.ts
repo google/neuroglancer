@@ -35,7 +35,7 @@ chunkDecoders.set(VolumeChunkEncoding.JPEG, decodeJpegChunk);
 chunkDecoders.set(VolumeChunkEncoding.RAW, decodeRawChunk);
 
 @registerChunkSource(VolumeChunkSourceParameters)
-class VolumeChunkSource extends ParameterizedVolumeChunkSource<VolumeChunkSourceParameters> {
+export class VolumeChunkSource extends ParameterizedVolumeChunkSource<VolumeChunkSourceParameters> {
   chunkDecoder = chunkDecoders.get(this.parameters['encoding'])!;
   encoding = VolumeChunkEncoding[this.parameters.encoding].toLowerCase();
 

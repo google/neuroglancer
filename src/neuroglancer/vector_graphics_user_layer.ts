@@ -15,12 +15,9 @@
  */
 
 import {ChunkManager} from 'neuroglancer/chunk_manager/frontend';
-import {CoordinateTransform} from 'neuroglancer/coordinate_transform';
 import {GetVectorGraphicsOptions, getVectorGraphicsSource} from 'neuroglancer/datasource/factory';
 import {UserLayer, UserLayerDropdown} from 'neuroglancer/layer';
-import {LayerListSpecification, registerLayerType, registerVolumeLayerType} from 'neuroglancer/layer_specification';
-import {getVolumeWithStatusMessage} from 'neuroglancer/layer_specification';
-import {Overlay} from 'neuroglancer/overlay';
+import {LayerListSpecification, registerLayerType} from 'neuroglancer/layer_specification';
 import {VectorGraphicsType} from 'neuroglancer/sliceview/vector_graphics/base';
 import {MultiscaleVectorGraphicsChunkSource, RenderLayer} from 'neuroglancer/sliceview/vector_graphics/frontend';
 import {VectorGraphicsLineRenderLayer} from 'neuroglancer/sliceview/vector_graphics/vector_graphics_line_renderlayer';
@@ -28,11 +25,9 @@ import {StatusMessage} from 'neuroglancer/status';
 import {trackableAlphaValue} from 'neuroglancer/trackable_alpha';
 import {trackableFiniteFloat} from 'neuroglancer/trackable_finite_float';
 import {trackableVec3, TrackableVec3} from 'neuroglancer/trackable_vec3';
-import {mat4, vec3} from 'neuroglancer/util/geom';
-import {verifyEnumString, verifyFiniteFloat, verifyInt, verifyOptionalString} from 'neuroglancer/util/json';
-import {makeWatchableShaderError} from 'neuroglancer/webgl/dynamic_shader';
+import {vec3} from 'neuroglancer/util/geom';
+import {verifyEnumString, verifyFiniteFloat, verifyOptionalString} from 'neuroglancer/util/json';
 import {RangeWidget} from 'neuroglancer/widget/range';
-import {ShaderCodeWidget} from 'neuroglancer/widget/shader_code_widget';
 import {Vec3Widget} from 'neuroglancer/widget/vec3_entry_widget';
 
 require('./image_user_layer.css');
@@ -132,7 +127,6 @@ class VectorGraphicsDropDown extends UserLayerDropdown {
     colorWidget.promptElement.textContent = 'Color';
 
     let spacer = document.createElement('div');
-    let lineBreak = document.createElement('br');
     spacer.style.flex = '1';
     let helpLink = document.createElement('a');
     let helpButton = document.createElement('button');

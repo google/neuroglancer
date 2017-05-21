@@ -141,7 +141,7 @@ registerPromiseRPC(
     });
 
 @registerChunkSource(VolumeSourceParameters)
-class VolumeChunkSource extends ParameterizedVolumeChunkSource<VolumeSourceParameters> {
+export class VolumeChunkSource extends ParameterizedVolumeChunkSource<VolumeSourceParameters> {
   download(chunk: VolumeChunk, cancellationToken: CancellationToken) {
     chunk.chunkDataSize = this.spec.chunkDataSize;
     return getNiftiFileData(

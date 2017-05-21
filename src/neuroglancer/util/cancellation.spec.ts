@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-import {CANCELED, CancellationToken, CancellationTokenSource, makeCancelablePromise, throwIfCanceled, uncancelableToken} from 'neuroglancer/util/cancellation';
+import {CANCELED, CancellationTokenSource, makeCancelablePromise, throwIfCanceled, uncancelableToken} from 'neuroglancer/util/cancellation';
 
 describe('cancellation', () => {
   describe('CancellationTokenSource', () => {
@@ -112,7 +112,7 @@ describe('cancellation', () => {
     it('unregisters the cancellation handler when the promise is fulfilled', () => {
       const source = new CancellationTokenSource();
       const log: string[] = [];
-      const promise = makeCancelablePromise<number>(source, (resolve, _reject, token) => {
+      makeCancelablePromise<number>(source, (resolve, _reject, token) => {
         token.add(() => {
           log.push('cancel called');
         });
@@ -125,7 +125,7 @@ describe('cancellation', () => {
     it('unregisters the cancellation handler when the promise is rejected', () => {
       const source = new CancellationTokenSource();
       const log: string[] = [];
-      const promise = makeCancelablePromise<number>(source, (_resolve, reject, token) => {
+      makeCancelablePromise<number>(source, (_resolve, reject, token) => {
         token.add(() => {
           log.push('cancel called');
         });

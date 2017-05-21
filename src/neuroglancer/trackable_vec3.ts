@@ -15,10 +15,9 @@
  */
 
 
-import {RefCounted} from 'neuroglancer/util/disposable';
 import {vec3} from 'neuroglancer/util/geom';
-import {verify3dVec, verifyFiniteFloat} from 'neuroglancer/util/json';
-import {NullarySignal, Signal} from 'neuroglancer/util/signal';
+import {verify3dVec} from 'neuroglancer/util/json';
+import {NullarySignal} from 'neuroglancer/util/signal';
 import {Trackable} from 'neuroglancer/util/trackable';
 
 export function trackableVec3(defaultValue = vec3.create()) {

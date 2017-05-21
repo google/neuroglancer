@@ -32,7 +32,7 @@ chunkDecoders.set(VolumeChunkEncoding.JPEG, decodeJpegChunk);
 chunkDecoders.set(VolumeChunkEncoding.COMPRESSED_SEGMENTATION, decodeCompressedSegmentationChunk);
 
 @registerChunkSource(VolumeChunkSourceParameters)
-class VolumeChunkSource extends ParameterizedVolumeChunkSource<VolumeChunkSourceParameters> {
+export class VolumeChunkSource extends ParameterizedVolumeChunkSource<VolumeChunkSourceParameters> {
   chunkDecoder = chunkDecoders.get(this.parameters.encoding)!;
 
   download(chunk: VolumeChunk, cancellationToken: CancellationToken) {
@@ -65,7 +65,7 @@ export function decodeFragmentChunk(chunk: FragmentChunk, response: ArrayBuffer)
 }
 
 @registerChunkSource(MeshSourceParameters)
-class MeshSource extends ParameterizedMeshSource<MeshSourceParameters> {
+export class MeshSource extends ParameterizedMeshSource<MeshSourceParameters> {
   download(chunk: ManifestChunk, cancellationToken: CancellationToken) {
     let {parameters} = this;
     let requestPath = `${parameters.path}/${chunk.objectId}:${parameters.lod}`;

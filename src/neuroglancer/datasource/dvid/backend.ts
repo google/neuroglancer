@@ -20,10 +20,7 @@ import {ParameterizedVolumeChunkSource, VolumeChunk} from 'neuroglancer/slicevie
 import {ChunkDecoder} from 'neuroglancer/sliceview/backend_chunk_decoders';
 import {decodeCompressedSegmentationChunk} from 'neuroglancer/sliceview/backend_chunk_decoders/compressed_segmentation';
 import {decodeJpegChunk} from 'neuroglancer/sliceview/backend_chunk_decoders/jpeg';
-import {decodeRawChunk} from 'neuroglancer/sliceview/backend_chunk_decoders/raw';
-import {VolumeType} from 'neuroglancer/sliceview/volume/base';
 import {CancellationToken} from 'neuroglancer/util/cancellation';
-import {vec3} from 'neuroglancer/util/geom';
 import {openShardedHttpRequest, sendHttpRequest} from 'neuroglancer/util/http_request';
 import {RPC} from 'neuroglancer/worker_rpc';
 
@@ -32,7 +29,7 @@ const TILE_CHUNK_DECODERS = new Map<TileEncoding, ChunkDecoder>([
 ]);
 
 @registerChunkSource(VolumeChunkSourceParameters)
-class VolumeChunkSource extends ParameterizedVolumeChunkSource<VolumeChunkSourceParameters> {
+export class VolumeChunkSource extends ParameterizedVolumeChunkSource<VolumeChunkSourceParameters> {
   constructor(rpc: RPC, options: any) {
     super(rpc, options);
 
@@ -80,7 +77,7 @@ class VolumeChunkSource extends ParameterizedVolumeChunkSource<VolumeChunkSource
 }
 
 @registerChunkSource(TileChunkSourceParameters)
-class TileChunkSource extends ParameterizedVolumeChunkSource<TileChunkSourceParameters> {
+export class TileChunkSource extends ParameterizedVolumeChunkSource<TileChunkSourceParameters> {
   chunkDecoder = TILE_CHUNK_DECODERS.get(this.parameters['encoding'])!;
 
   download(chunk: VolumeChunk, cancellationToken: CancellationToken) {

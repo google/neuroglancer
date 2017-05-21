@@ -14,13 +14,11 @@
  * limitations under the License.
  */
 
-import {ChunkManager} from 'neuroglancer/chunk_manager/frontend';
-import {MeshSource} from 'neuroglancer/mesh/frontend';
 import {ChunkLayout} from 'neuroglancer/sliceview/chunk_layout';
 import {partitionArray} from 'neuroglancer/util/array';
 import {approxEqual} from 'neuroglancer/util/compare';
 import {DATA_TYPE_BYTES, DataType} from 'neuroglancer/util/data_type';
-import {effectiveScalingFactorFromMat4, identityMat4, kAxes, kInfinityVec, kZeroVec, mat4, prod3, rectifyTransformMatrixIfAxisAligned, transformVectorByMat4, vec3, vec4} from 'neuroglancer/util/geom';
+import {effectiveScalingFactorFromMat4, identityMat4, kAxes, kInfinityVec, kZeroVec, mat4, rectifyTransformMatrixIfAxisAligned, transformVectorByMat4, vec3} from 'neuroglancer/util/geom';
 import {SharedObject} from 'neuroglancer/worker_rpc';
 
 export {DATA_TYPE_BYTES, DataType};

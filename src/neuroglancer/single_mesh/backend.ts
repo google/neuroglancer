@@ -227,7 +227,7 @@ export class SingleMeshSource extends ChunkSource {
 }
 
 @registerSharedObject(SINGLE_MESH_LAYER_RPC_ID)
-class SingleMeshLayer extends SharedObjectCounterpart {
+export class SingleMeshLayer extends SharedObjectCounterpart {
   source: SingleMeshSource;
   chunkManager: ChunkManager;
 

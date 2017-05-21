@@ -16,7 +16,6 @@
 
 import {RefCounted} from 'neuroglancer/util/disposable';
 import {vec4} from 'neuroglancer/util/geom';
-import {Buffer} from 'neuroglancer/webgl/buffer';
 import {GL} from 'neuroglancer/webgl/context';
 import {FramebufferConfiguration, makeTextureBuffers, TextureBuffer} from 'neuroglancer/webgl/offscreen';
 import {ShaderBuilder, ShaderProgram} from 'neuroglancer/webgl/shader';

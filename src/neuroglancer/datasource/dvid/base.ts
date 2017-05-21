@@ -13,7 +13,6 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-import {VolumeType} from 'neuroglancer/sliceview/volume/base';
 
 export enum VolumeChunkEncoding {
   JPEG,

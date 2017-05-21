@@ -264,8 +264,6 @@ export class SkeletonLayer extends RefCounted {
 
     let {pickIDs} = renderContext;
 
-    const {vertexAttributes} = this;
-
     gl.lineWidth(lineWidth);
 
     forEachSegmentToDraw(displayState, skeletons, (rootObjectId, objectId, skeleton) => {

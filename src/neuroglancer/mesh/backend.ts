@@ -279,7 +279,7 @@ export class FragmentSource extends ChunkSource {
 };
 
 @registerSharedObject(MESH_LAYER_RPC_ID)
-class MeshLayer extends SegmentationLayerSharedObjectCounterpart {
+export class MeshLayer extends SegmentationLayerSharedObjectCounterpart {
   source: MeshSource;
 
   constructor(rpc: RPC, options: any) {

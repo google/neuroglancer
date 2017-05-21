@@ -316,7 +316,7 @@ export class AutocompleteTextInput extends RefCounted {
   }
 
   private updateDropdownStyle() {
-    let {element, dropdownElement, inputElement} = this;
+    let {dropdownElement, inputElement} = this;
     positionDropdown(dropdownElement, inputElement, {horizontal: false});
     this.dropdownStyleStale = false;
   }

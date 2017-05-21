@@ -23,7 +23,7 @@ import {TrackableFiniteFloat, trackableFiniteFloat} from 'neuroglancer/trackable
 import {trackableVec3, TrackableVec3} from 'neuroglancer/trackable_vec3';
 import {mat4, vec3} from 'neuroglancer/util/geom';
 import {Buffer} from 'neuroglancer/webgl/buffer';
-import {GL_ARRAY_BUFFER, GL_FLOAT} from 'neuroglancer/webgl/constants';
+import {GL_FLOAT} from 'neuroglancer/webgl/constants';
 import {ShaderBuilder, ShaderProgram} from 'neuroglancer/webgl/shader';
 
 const tempMat4 = mat4.create();
@@ -185,7 +185,6 @@ gl_Position = uProjection * (pos + delta);
           shader.uniform('uProjection'), false,
           mat4.multiply(tempMat4, sliceView.dataToDevice, objectToDataMatrix));
 
-      let chunkDataSize: vec3|undefined;
       let visibleChunks = sliceView.visibleChunks.get(chunkLayout);
       if (!visibleChunks) {
         continue;

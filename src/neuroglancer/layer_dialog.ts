@@ -18,8 +18,7 @@ import {findSourceGroup, getVolume, suggestLayerName, volumeCompleter} from 'neu
 import {LayerListSpecification, ManagedUserLayerWithSpecification} from 'neuroglancer/layer_specification';
 import {Overlay} from 'neuroglancer/overlay';
 import {DataType, VolumeType} from 'neuroglancer/sliceview/volume/base';
-import {MultiscaleVolumeChunkSource} from 'neuroglancer/sliceview/volume/frontend';
-import {CancellationToken, CANCELED, CancellationTokenSource} from 'neuroglancer/util/cancellation';
+import {CancellationToken, CancellationTokenSource} from 'neuroglancer/util/cancellation';
 import {associateLabelWithElement} from 'neuroglancer/widget/associate_label';
 import {AutocompleteTextInput, makeCompletionElementWithDescription} from 'neuroglancer/widget/autocomplete';
 import {makeHiddenSubmitButton} from 'neuroglancer/widget/hidden_submit_button';

@@ -21,10 +21,9 @@
 
 import {ChunkManager} from 'neuroglancer/chunk_manager/frontend';
 import {CompletionResult, registerDataSourceFactory} from 'neuroglancer/datasource/factory';
-import {VolumeChunkSourceParameters, NDSTORE_URL_PREFIX, LEGACY_URL_PREFIX} from 'neuroglancer/datasource/ndstore/base';
+import {VolumeChunkSourceParameters, NDSTORE_URL_PREFIX} from 'neuroglancer/datasource/ndstore/base';
 import {DataType, VolumeChunkSpecification, VolumeSourceOptions, VolumeType} from 'neuroglancer/sliceview/volume/base';
 import {defineParameterizedVolumeChunkSource, MultiscaleVolumeChunkSource as GenericMultiscaleVolumeChunkSource} from 'neuroglancer/sliceview/volume/frontend';
-import {CancellationToken} from 'neuroglancer/util/cancellation';
 import {applyCompletionOffset, getPrefixMatchesWithDescriptions} from 'neuroglancer/util/completion';
 import {mat4, vec3} from 'neuroglancer/util/geom';
 import {openShardedHttpRequest, sendHttpRequest} from 'neuroglancer/util/http_request';

@@ -15,12 +15,8 @@
  */
 
 import {SliceViewChunkSource, SliceViewChunkSpecification, SliceViewChunkSpecificationBaseOptions, SliceViewSourceOptions} from 'neuroglancer/sliceview/base';
-import {getCombinedTransform, getChunkDataSizes} from 'neuroglancer/sliceview/base';
-import {ChunkLayout} from 'neuroglancer/sliceview/chunk_layout';
-import {partitionArray} from 'neuroglancer/util/array';
-import {approxEqual} from 'neuroglancer/util/compare';
-import {kAxes, kZeroVec, mat4, rectifyTransformMatrixIfAxisAligned, transformVectorByMat4, vec3} from 'neuroglancer/util/geom';
-import {SharedObject} from 'neuroglancer/worker_rpc';
+import {getCombinedTransform} from 'neuroglancer/sliceview/base';
+import {vec3} from 'neuroglancer/util/geom';
 
 export enum VectorGraphicsType {
   LINE,
@@ -74,7 +70,6 @@ export class VectorGraphicsChunkSpecification extends SliceViewChunkSpecificatio
   static withDefaults(options: VectorGraphicsChunkSpecificationGetDefaultsOptions) {
 
     let {
-      voxelSize,
       transform,
       lowerVoxelBound,
       upperVoxelBound,

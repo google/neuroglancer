@@ -14,24 +14,10 @@
  * limitations under the License.
  */
 
-import {Chunk, ChunkManager} from 'neuroglancer/chunk_manager/backend';
-import {ChunkPriorityTier} from 'neuroglancer/chunk_manager/base';
 import {RenderLayer as SliceViewRenderLayer, SliceViewChunk, SliceViewChunkSource} from 'neuroglancer/sliceview/backend';
-import {SLICEVIEW_RENDERLAYER_RPC_ID} from 'neuroglancer/sliceview/base';
-import {ChunkLayout} from 'neuroglancer/sliceview/chunk_layout';
-import {RenderLayer as RenderLayerInterface, VOLUME_RENDERLAYER_RPC_ID, VOLUME_RPC_ID, VolumeChunkSource as VolumeChunkSourceInterface, VolumeChunkSpecification} from 'neuroglancer/sliceview/volume/base';
+import {RenderLayer as RenderLayerInterface, VOLUME_RENDERLAYER_RPC_ID, VolumeChunkSource as VolumeChunkSourceInterface, VolumeChunkSpecification} from 'neuroglancer/sliceview/volume/base';
 import {vec3, vec3Key} from 'neuroglancer/util/geom';
-import {NullarySignal} from 'neuroglancer/util/signal';
-import {registerRPC, registerSharedObject, RPC, SharedObjectCounterpart} from 'neuroglancer/worker_rpc';
-
-const BASE_PRIORITY = -1e12;
-const SCALE_PRIORITY_MULTIPLIER = 1e9;
-
-// Temporary values used by VolumeChunkSource.computeChunkPosition.
-const tempChunkPosition = vec3.create();
-const tempChunkDataSize = vec3.create();
-const tempCenter = vec3.create();
-
+import {registerSharedObject, RPC} from 'neuroglancer/worker_rpc';
 
 export class VolumeChunk extends SliceViewChunk {
   source: VolumeChunkSource|null = null;

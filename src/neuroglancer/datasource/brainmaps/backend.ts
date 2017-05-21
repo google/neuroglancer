@@ -17,7 +17,7 @@
 import 'neuroglancer/datasource/brainmaps/api_backend';
 
 import {registerChunkSource} from 'neuroglancer/chunk_manager/backend';
-import {makeRequest, HttpCall, ChangeSpecPayload, ChangeStackAwarePayload, MeshFragmentPayload, SkeletonPayload, SubvolumePayload} from 'neuroglancer/datasource/brainmaps/api';
+import {makeRequest, HttpCall, ChangeStackAwarePayload, MeshFragmentPayload, SkeletonPayload, SubvolumePayload} from 'neuroglancer/datasource/brainmaps/api';
 import {ChangeSpec, MeshSourceParameters, SkeletonSourceParameters, VolumeChunkEncoding, VolumeSourceParameters} from 'neuroglancer/datasource/brainmaps/base';
 import {decodeJsonManifestChunk, decodeTriangleVertexPositionsAndIndices, FragmentChunk, ManifestChunk, ParameterizedMeshSource} from 'neuroglancer/mesh/backend';
 import {decodeSkeletonVertexPositionsAndIndices, ParameterizedSkeletonSource, SkeletonChunk} from 'neuroglancer/skeleton/backend';
@@ -29,7 +29,6 @@ import {CancellationToken} from 'neuroglancer/util/cancellation';
 import {Endianness} from 'neuroglancer/util/endian';
 import {vec3Key} from 'neuroglancer/util/geom';
 import {verifyObject, verifyObjectProperty, verifyStringArray} from 'neuroglancer/util/json';
-import {inflate} from 'pako';
 
 const CHUNK_DECODERS = new Map([
   [
@@ -59,12 +58,11 @@ function applyChangeStack(changeStack: ChangeSpec|undefined, payload: ChangeStac
 }
 
 @registerChunkSource(VolumeSourceParameters)
-class VolumeChunkSource extends ParameterizedVolumeChunkSource<VolumeSourceParameters> {
+export class VolumeChunkSource extends ParameterizedVolumeChunkSource<VolumeSourceParameters> {
   chunkDecoder = CHUNK_DECODERS.get(this.parameters.encoding)!;
 
   private applyEncodingParams(payload: SubvolumePayload) {
     let {encoding} = this.parameters;
-    const compression_suffix = `/image_format_options.gzip_compression_level=6`;
     switch (encoding) {
       case VolumeChunkEncoding.RAW:
         payload.subvolume_format = 'RAW';
@@ -148,7 +146,7 @@ function decodeFragmentChunk(chunk: FragmentChunk, response: ArrayBuffer) {
 }
 
 @registerChunkSource(MeshSourceParameters)
-class MeshSource extends ParameterizedMeshSource<MeshSourceParameters> {
+export class MeshSource extends ParameterizedMeshSource<MeshSourceParameters> {
   private manifestDecoder = this.parameters.changeSpec !== undefined ?
       decodeManifestChunkWithSupervoxelIds :
       decodeManifestChunk;

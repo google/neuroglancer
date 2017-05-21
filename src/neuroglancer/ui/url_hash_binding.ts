@@ -16,7 +16,7 @@
 
 import {RefCounted} from 'neuroglancer/util/disposable';
 import {verifyObject, urlSafeParse, urlSafeStringify} from 'neuroglancer/util/json';
-import {CompoundTrackable, Trackable, getCachedJson} from 'neuroglancer/util/trackable';
+import {Trackable, getCachedJson} from 'neuroglancer/util/trackable';
 import {WatchableValue} from 'neuroglancer/trackable_value';
 import debounce from 'lodash/debounce';
 

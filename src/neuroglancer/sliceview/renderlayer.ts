@@ -14,23 +14,15 @@
  * limitations under the License.
  */
 
-import {ChunkState} from 'neuroglancer/chunk_manager/base';
 import {ChunkManager} from 'neuroglancer/chunk_manager/frontend';
 import {RenderLayer as GenericRenderLayer} from 'neuroglancer/layer';
-import {SLICEVIEW_RENDERLAYER_RPC_ID, SliceViewChunkSpecification, SliceViewSourceOptions} from 'neuroglancer/sliceview/base';
-import {SliceView, SliceViewChunkSource, MultiscaleSliceViewChunkSource} from 'neuroglancer/sliceview/frontend';
+import {SliceView, SliceViewChunkSource} from 'neuroglancer/sliceview/frontend';
 import {ShaderBuilder, ShaderProgram} from 'neuroglancer/webgl/shader';
-import {RefCounted} from 'neuroglancer/util/disposable';
-import {BoundingBox, mat4, vec3, vec3Key, vec4} from 'neuroglancer/util/geom';
-import {Buffer} from 'neuroglancer/webgl/buffer';
-import {GL} from 'neuroglancer/webgl/context';
+import {BoundingBox, vec3} from 'neuroglancer/util/geom';
 import {makeWatchableShaderError, WatchableShaderError} from 'neuroglancer/webgl/dynamic_shader';
-import {getShaderType} from 'neuroglancer/webgl/shader_lib';
-import {RpcId, SharedObject} from 'neuroglancer/worker_rpc';
+import {RpcId} from 'neuroglancer/worker_rpc';
 
 const tempVec3 = vec3.create();
-const tempVec3b = vec3.create();
-const tempMat4 = mat4.create();
 
 export abstract class RenderLayer extends GenericRenderLayer {
   chunkManager: ChunkManager;
@@ -49,7 +41,6 @@ export abstract class RenderLayer extends GenericRenderLayer {
     shaderError.value = undefined;
     this.chunkManager = chunkManager;
     this.sources = sources;
-    let gl = this.gl;
 
     for (let alternatives of sources) {
       let alternativeIds: number[] = [];

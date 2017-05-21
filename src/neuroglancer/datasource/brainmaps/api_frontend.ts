@@ -19,7 +19,7 @@
  * This implements the authentication API based on neuroglancer/util/google_auth2.
  */
 
-import {getToken, implementation, Token} from 'neuroglancer/datasource/brainmaps/api_implementation';
+import {getToken, implementation} from 'neuroglancer/datasource/brainmaps/api_implementation';
 import {StatusMessage} from 'neuroglancer/status';
 import {CancellationTokenSource} from 'neuroglancer/util/cancellation';
 import {authenticateGoogleOAuth2} from 'neuroglancer/util/google_oauth2';

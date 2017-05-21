@@ -14,26 +14,13 @@
  * limitations under the License.
  */
 
-import {ChunkManager} from 'neuroglancer/chunk_manager/frontend';
-import {MeshSource} from 'neuroglancer/mesh/frontend';
 import {ChunkLayoutOptions, getChunkDataSizes, getCombinedTransform, getNearIsotropicBlockSize, SliceViewChunkSource, SliceViewChunkSpecification, SliceViewChunkSpecificationBaseOptions, SliceViewSourceOptions} from 'neuroglancer/sliceview/base';
-import {ChunkLayout} from 'neuroglancer/sliceview/chunk_layout';
-import {partitionArray} from 'neuroglancer/util/array';
-import {approxEqual} from 'neuroglancer/util/compare';
 import {DATA_TYPE_BYTES, DataType} from 'neuroglancer/util/data_type';
-import {effectiveScalingFactorFromMat4, identityMat4, kAxes, kInfinityVec, kZeroVec, mat4, prod3, rectifyTransformMatrixIfAxisAligned, transformVectorByMat4, vec3, vec4} from 'neuroglancer/util/geom';
-import {SharedObject} from 'neuroglancer/worker_rpc';
+import {prod3, vec3} from 'neuroglancer/util/geom';
 
 export {DATA_TYPE_BYTES, DataType};
 
-const DEBUG_CHUNK_INTERSECTIONS = false;
-const DEBUG_VISIBLE_SOURCES = false;
-
-const tempVec3 = vec3.create();
-
 export interface RenderLayer { sources: VolumeChunkSource[][]|null; }
-
-const tempCorners = [vec3.create(), vec3.create(), vec3.create(), vec3.create()];
 
 /**
  * Specifies the interpretation of volumetric data.

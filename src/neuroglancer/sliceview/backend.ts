@@ -16,7 +16,7 @@
 
 import {Chunk, ChunkManager, ChunkSource} from 'neuroglancer/chunk_manager/backend';
 import {ChunkPriorityTier} from 'neuroglancer/chunk_manager/base';
-import {RenderLayer as RenderLayerInterface, SLICEVIEW_RENDERLAYER_RPC_ID, SLICEVIEW_RPC_ID, SliceViewBase, SliceViewChunkSource as SliceViewChunkSourceInterface, SliceViewChunkSpecification} from 'neuroglancer/sliceview/base';
+import {RenderLayer as RenderLayerInterface, SLICEVIEW_RPC_ID, SliceViewBase, SliceViewChunkSource as SliceViewChunkSourceInterface, SliceViewChunkSpecification} from 'neuroglancer/sliceview/base';
 import {ChunkLayout} from 'neuroglancer/sliceview/chunk_layout';
 import {vec3, vec3Key} from 'neuroglancer/util/geom';
 import {NullarySignal} from 'neuroglancer/util/signal';

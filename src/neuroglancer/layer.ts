@@ -523,7 +523,7 @@ export class VisibleRenderLayerTracker<RenderLayerType extends VisibilityTracked
   }
 
   private updateVisibleLayers() {
-    let {visibleLayers, newVisibleLayers, renderLayerType, layerAdded, layerRemoved} = this;
+    let {visibleLayers, newVisibleLayers, renderLayerType, layerAdded} = this;
     for (let renderLayer of this.layerManager.readyRenderLayers()) {
       if (renderLayer instanceof renderLayerType) {
         let typedLayer = <RenderLayerType>renderLayer;

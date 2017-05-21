@@ -77,8 +77,7 @@ export class MultiscaleVolumeChunkSource implements GenericMultiscaleVolumeChunk
   }
 
   constructor(
-      public chunkManager: ChunkManager, public baseUrls: string[], public path: string,
-      private obj: any) {
+      public chunkManager: ChunkManager, public baseUrls: string[], public path: string, obj: any) {
     verifyObject(obj);
     this.dataType = verifyObjectProperty(obj, 'data_type', x => verifyEnumString(x, DataType));
     this.numChannels = verifyObjectProperty(obj, 'num_channels', verifyPositiveInt);

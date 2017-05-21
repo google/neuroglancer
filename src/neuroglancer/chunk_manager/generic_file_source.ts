@@ -19,7 +19,7 @@
  * Provides a simple way to request a file on the backend with priority integration.
  */
 
-import {Chunk, ChunkManager, ChunkSourceBase, RECOMPUTE_CHUNK_PRIORITIES_LAST} from 'neuroglancer/chunk_manager/backend';
+import {Chunk, ChunkManager, ChunkSourceBase} from 'neuroglancer/chunk_manager/backend';
 import {ChunkPriorityTier, ChunkState} from 'neuroglancer/chunk_manager/base';
 import {CANCELED, CancellationToken, makeCancelablePromise} from 'neuroglancer/util/cancellation';
 import {openHttpRequest, sendHttpRequest} from 'neuroglancer/util/http_request';
