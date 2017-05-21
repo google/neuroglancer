@@ -30,7 +30,17 @@ export class TileChunkSourceParameters extends RenderSourceParameters {
   static RPC_ID = 'render/TileChunkSource';
 
   static stringify(parameters: TileChunkSourceParameters) {
-    return `render:tile:${parameters.baseUrls[0]}/${parameters.owner
-        }/${parameters.project}/${parameters.stack}/${parameters.level}/${parameters.encoding}`;
+    return `render:tile:${parameters.baseUrls[0]}/${parameters.owner}/${parameters.project}/${parameters.stack}/${parameters.level}/${parameters.encoding}`;
+  }
+}
+
+export class PointMatchChunkSourceParameters extends RenderSourceParameters {
+  matchCollection: string;
+  zoffset: number;
+
+  static RPC_ID = 'render/PointMatchSource';
+
+  static stringify(parameters: PointMatchChunkSourceParameters) {
+    return `render:pointmatch:${parameters.baseUrls[0]}/${parameters.owner}/${parameters.project}/${parameters.stack}/${parameters.matchCollection}`;
   }
 }

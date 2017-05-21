@@ -14,10 +14,11 @@
  * limitations under the License.
  */
 
-import {DataType, VolumeChunkSpecification} from 'neuroglancer/sliceview/base';
+import {DataType, VolumeChunkSpecification} from 'neuroglancer/sliceview/volume/base';
 import {readSingleChannelValue as readSingleChannelValueUint32} from 'neuroglancer/sliceview/compressed_segmentation/decode_uint32';
 import {readSingleChannelValue as readSingleChannelValueUint64} from 'neuroglancer/sliceview/compressed_segmentation/decode_uint64';
-import {ChunkFormatHandler, registerChunkFormatHandler, VolumeChunkSource} from 'neuroglancer/sliceview/frontend';
+import {ChunkFormatHandler, registerChunkFormatHandler} from 'neuroglancer/sliceview/volume/frontend';
+import {VolumeChunkSource} from 'neuroglancer/sliceview/volume/frontend';
 import {SingleTextureChunkFormat, SingleTextureVolumeChunk} from 'neuroglancer/sliceview/single_texture_chunk_format';
 import {RefCounted} from 'neuroglancer/util/disposable';
 import {vec2, vec3, vec3Key} from 'neuroglancer/util/geom';

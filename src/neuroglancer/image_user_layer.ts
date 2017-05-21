@@ -19,8 +19,8 @@ import {UserLayer, UserLayerDropdown} from 'neuroglancer/layer';
 import {LayerListSpecification, registerLayerType, registerVolumeLayerType} from 'neuroglancer/layer_specification';
 import {getVolumeWithStatusMessage} from 'neuroglancer/layer_specification';
 import {Overlay} from 'neuroglancer/overlay';
-import {VolumeType} from 'neuroglancer/sliceview/base';
-import {FRAGMENT_MAIN_START, getTrackableFragmentMain, ImageRenderLayer} from 'neuroglancer/sliceview/image_renderlayer';
+import {VolumeType} from 'neuroglancer/sliceview/volume/base';
+import {FRAGMENT_MAIN_START, getTrackableFragmentMain, ImageRenderLayer} from 'neuroglancer/sliceview/volume/image_renderlayer';
 import {trackableAlphaValue} from 'neuroglancer/trackable_alpha';
 import {mat4} from 'neuroglancer/util/geom';
 import {makeWatchableShaderError} from 'neuroglancer/webgl/dynamic_shader';
@@ -47,8 +47,9 @@ export class ImageUserLayer extends UserLayer {
     this.opacity.restoreState(x['opacity']);
     this.fragmentMain.restoreState(x['shader']);
     this.transform.restoreState(x['transform']);
-    this.registerDisposer(
-        this.fragmentMain.changed.add(() => { this.specificationChanged.dispatch(); }));
+    this.registerDisposer(this.fragmentMain.changed.add(() => {
+      this.specificationChanged.dispatch();
+    }));
     this.volumePath = volumePath;
     getVolumeWithStatusMessage(manager.chunkManager, volumePath).then(volume => {
       if (!this.wasDisposed) {
@@ -56,7 +57,7 @@ export class ImageUserLayer extends UserLayer {
           opacity: this.opacity,
           fragmentMain: this.fragmentMain,
           shaderError: this.shaderError,
-          volumeSourceOptions: {transform: mat4.clone(this.transform.transform)},
+          sourceOptions: {transform: mat4.clone(this.transform.transform)},
         });
         this.addRenderLayer(renderLayer);
         this.shaderError.changed.dispatch();
@@ -71,7 +72,9 @@ export class ImageUserLayer extends UserLayer {
     x['transform'] = this.transform.toJSON();
     return x;
   }
-  makeDropdown(element: HTMLDivElement) { return new ImageDropdown(element, this); }
+  makeDropdown(element: HTMLDivElement) {
+    return new ImageDropdown(element, this);
+  }
 }
 
 function makeShaderCodeWidget(layer: ImageUserLayer) {
@@ -110,8 +113,9 @@ class ImageDropdown extends UserLayerDropdown {
     maximizeButton.innerHTML = '&square;';
     maximizeButton.className = 'maximize-button';
     maximizeButton.title = 'Show larger editor view';
-    this.registerEventListener(
-        maximizeButton, 'click', () => { new ShaderCodeOverlay(this.layer); });
+    this.registerEventListener(maximizeButton, 'click', () => {
+      new ShaderCodeOverlay(this.layer);
+    });
 
     topRow.appendChild(this.opacityWidget.element);
     topRow.appendChild(spacer);
@@ -123,7 +127,9 @@ class ImageDropdown extends UserLayerDropdown {
     this.codeWidget.textEditor.refresh();
   }
 
-  onShow() { this.codeWidget.textEditor.refresh(); }
+  onShow() {
+    this.codeWidget.textEditor.refresh();
+  }
 };
 
 class ShaderCodeOverlay extends Overlay {

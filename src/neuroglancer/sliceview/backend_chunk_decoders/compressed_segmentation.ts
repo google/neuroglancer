@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-import {VolumeChunk} from 'neuroglancer/sliceview/backend';
+import {VolumeChunk} from 'neuroglancer/sliceview/volume/backend';
 
 export function decodeCompressedSegmentationChunk(chunk: VolumeChunk, response: ArrayBuffer) {
   chunk.data = new Uint32Array(response);

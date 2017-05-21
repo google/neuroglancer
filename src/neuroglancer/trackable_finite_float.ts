@@ -14,12 +14,16 @@
  * limitations under the License.
  */
 
-import {VolumeChunk} from 'neuroglancer/sliceview/volume/backend';
-import {postProcessRawData} from 'neuroglancer/sliceview/backend_chunk_decoders/postprocess';
-import {decodeJpegStack} from 'neuroglancer/sliceview/decode_jpeg_stack';
+/**
+ * @file Convenience interface for creating TrackableValue instances designed to represent alpha
+ * (opacity) values.
+ */
 
-export function decodeJpegChunk(chunk: VolumeChunk, response: ArrayBuffer) {
-  postProcessRawData(
-      chunk, decodeJpegStack(
-                 new Uint8Array(response), chunk.chunkDataSize!, chunk.source!.spec.numChannels));
+import {TrackableValue} from 'neuroglancer/trackable_value';
+import {verifyFiniteFloat} from 'neuroglancer/util/json';
+
+export type TrackableFiniteFloat = TrackableValue<number>;
+
+export function trackableFiniteFloat(initialValue = 1.0) {
+  return new TrackableValue<number>(initialValue, verifyFiniteFloat);
 }

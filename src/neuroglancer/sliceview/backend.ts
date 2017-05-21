@@ -16,16 +16,16 @@
 
 import {Chunk, ChunkManager, ChunkSource} from 'neuroglancer/chunk_manager/backend';
 import {ChunkPriorityTier} from 'neuroglancer/chunk_manager/base';
-import {RenderLayer as RenderLayerInterface, SLICEVIEW_RENDERLAYER_RPC_ID, SLICEVIEW_RPC_ID, SliceViewBase, VolumeChunkSource as VolumeChunkSourceInterface, VolumeChunkSpecification} from 'neuroglancer/sliceview/base';
+import {RenderLayer as RenderLayerInterface, SLICEVIEW_RENDERLAYER_RPC_ID, SLICEVIEW_RPC_ID, SliceViewBase, SliceViewChunkSource as SliceViewChunkSourceInterface, SliceViewChunkSpecification} from 'neuroglancer/sliceview/base';
 import {ChunkLayout} from 'neuroglancer/sliceview/chunk_layout';
 import {vec3, vec3Key} from 'neuroglancer/util/geom';
-import {registerRPC, registerSharedObject, RPC, SharedObjectCounterpart} from 'neuroglancer/worker_rpc';
 import {NullarySignal} from 'neuroglancer/util/signal';
+import {registerRPC, registerSharedObject, RPC, SharedObjectCounterpart} from 'neuroglancer/worker_rpc';
 
 const BASE_PRIORITY = -1e12;
 const SCALE_PRIORITY_MULTIPLIER = 1e9;
 
-// Temporary values used by SliceView.updateVisibleChunk and VolumeChunkSource.computeChunkPosition.
+// Temporary values used by SliceView.updateVisibleChunk
 const tempChunkPosition = vec3.create();
 const tempChunkDataSize = vec3.create();
 const tempCenter = vec3.create();
@@ -34,18 +34,21 @@ const tempCenter = vec3.create();
 export class SliceView extends SliceViewBase {
   chunkManager: ChunkManager;
 
-  visibleLayers: Map<RenderLayer, VolumeChunkSource[]>;
+  visibleLayers: Map<RenderLayer, SliceViewChunkSource[]>;
 
   constructor(rpc: RPC, options: any) {
     super();
     this.initializeSharedObject(rpc, options['id']);
     this.chunkManager =
         this.registerDisposer((<ChunkManager>rpc.get(options['chunkManager'])).addRef());
-    this.registerDisposer(
-      this.chunkManager.recomputeChunkPriorities.add(() => { this.updateVisibleChunks(); }));
+    this.registerDisposer(this.chunkManager.recomputeChunkPriorities.add(() => {
+      this.updateVisibleChunks();
+    }));
   }
 
-  onViewportChanged() { this.chunkManager.scheduleUpdateChunkPriorities(); }
+  onViewportChanged() {
+    this.chunkManager.scheduleUpdateChunkPriorities();
+  }
 
   handleLayerChanged = (() => {
     if (this.hasValidViewport) {
@@ -65,8 +68,8 @@ export class SliceView extends SliceViewBase {
     };
 
     function addChunk(
-        chunkLayout: ChunkLayout, sources: Map<VolumeChunkSource, number>, positionInChunks: vec3,
-        visibleSources: VolumeChunkSource[]) {
+        chunkLayout: ChunkLayout, sources: Map<SliceViewChunkSource, number>,
+        positionInChunks: vec3, visibleSources: SliceViewChunkSource[]) {
       vec3.multiply(tempChunkPosition, positionInChunks, chunkLayout.size);
       let priority = -vec3.distance(localCenter, tempChunkPosition);
       for (let source of visibleSources) {
@@ -122,11 +125,11 @@ registerRPC('SliceView.removeVisibleLayer', function(x) {
   obj.removeVisibleLayer(layer);
 });
 
-export class VolumeChunk extends Chunk {
+export class SliceViewChunk extends Chunk {
   chunkGridPosition: vec3;
-  source: VolumeChunkSource|null = null;
+  source: SliceViewChunkSource|null = null;
   chunkDataSize: vec3|null;
-  data: ArrayBufferView|null;
+
   constructor() {
     super();
     this.chunkGridPosition = vec3.create();
@@ -135,59 +138,39 @@ export class VolumeChunk extends Chunk {
   initializeVolumeChunk(key: string, chunkGridPosition: vec3) {
     super.initialize(key);
 
-    let source = this.source;
-
-    /**
-     * Grid position within chunk layout (coordinates are in units of chunks).
-     */
     vec3.copy(this.chunkGridPosition, chunkGridPosition);
-    this.systemMemoryBytes = source!.spec.chunkBytes;
-    this.gpuMemoryBytes = source!.spec.chunkBytes;
 
     this.chunkDataSize = null;
-    this.data = null;
   }
 
   serialize(msg: any, transfers: any[]) {
     super.serialize(msg, transfers);
-    let data = msg['data'] = this.data!;
     let chunkDataSize = this.chunkDataSize;
     if (chunkDataSize !== this.source!.spec.chunkDataSize) {
       msg['chunkDataSize'] = chunkDataSize;
     }
     msg['chunkGridPosition'] = this.chunkGridPosition;
-    transfers.push(data.buffer);
-    this.data = null;
-    // console.log(`Serializing chunk ${this.source.rpcId}:${this.key} with
-    // chunkDataSize = ${this.chunkDataSize}`);
   }
 
   downloadSucceeded() {
-    this.systemMemoryBytes = this.gpuMemoryBytes = this.data!.byteLength;
     super.downloadSucceeded();
   }
 
-  freeSystemMemory() { this.data = null; }
-  toString() { return this.source!.toString() + ':' + vec3Key(this.chunkGridPosition); }
+  freeSystemMemory() {}
+
+  toString() {
+    return this.source!.toString() + ':' + vec3Key(this.chunkGridPosition);
+  }
 }
 
-export abstract class VolumeChunkSource extends ChunkSource implements VolumeChunkSourceInterface {
-  spec: VolumeChunkSpecification;
+export abstract class SliceViewChunkSource extends ChunkSource implements
+    SliceViewChunkSourceInterface {
+  spec: SliceViewChunkSpecification;
   constructor(rpc: RPC, options: any) {
     super(rpc, options);
-    this.spec = VolumeChunkSpecification.fromObject(options['spec']);
   }
 
-  getChunk(chunkGridPosition: vec3) {
-    let key = vec3Key(chunkGridPosition);
-    let chunk = <VolumeChunk>this.chunks.get(key);
-    if (chunk === undefined) {
-      chunk = this.getNewChunk_(VolumeChunk);
-      chunk.initializeVolumeChunk(key, chunkGridPosition);
-      this.addChunk(chunk);
-    }
-    return chunk;
-  }
+  abstract getChunk(chunkGridPosition: vec3): SliceViewChunk
 
   /**
    * Helper function for computing the voxel bounds of a chunk based on its chunkGridPosition.
@@ -204,7 +187,7 @@ export abstract class VolumeChunkSource extends ChunkSource implements VolumeChu
    * The returned Vec3 will be invalidated by any subsequent call to this method, even on a
    * different VolumeChunkSource instance.
    */
-  computeChunkBounds(chunk: VolumeChunk) {
+  computeChunkBounds(chunk: SliceViewChunk) {
     let {spec} = this;
     let {upperVoxelBound} = spec;
 
@@ -237,20 +220,19 @@ export abstract class VolumeChunkSource extends ChunkSource implements VolumeChu
   }
 }
 
-@registerSharedObject(SLICEVIEW_RENDERLAYER_RPC_ID)
-export class RenderLayer extends SharedObjectCounterpart implements RenderLayerInterface {
+export abstract class RenderLayer extends SharedObjectCounterpart implements RenderLayerInterface {
   rpcId: number;
-  sources: VolumeChunkSource[][];
+  sources: SliceViewChunkSource[][];
   layerChanged = new NullarySignal();
 
   constructor(rpc: RPC, options: any) {
     super(rpc, options);
-    let sources = this.sources = new Array<VolumeChunkSource[]>();
+    let sources = this.sources = new Array<SliceViewChunkSource[]>();
     for (let alternativeIds of options['sources']) {
-      let alternatives = new Array<VolumeChunkSource>();
+      let alternatives = new Array<SliceViewChunkSource>();
       sources.push(alternatives);
       for (let sourceId of alternativeIds) {
-        let source: VolumeChunkSource = rpc.get(sourceId);
+        let source: SliceViewChunkSource = rpc.get(sourceId);
         this.registerDisposer(source.addRef());
         alternatives.push(source);
       }
@@ -259,12 +241,12 @@ export class RenderLayer extends SharedObjectCounterpart implements RenderLayerI
 }
 
 /**
- * Extends VolumeChunkSource with a parameters member.
+ * Extends SliceViewChunkSource with a parameters member.
  *
  * Subclasses should be decorated with
  * src/neuroglancer/chunk_manager/backend.ts:registerChunkSource.
  */
-export abstract class ParameterizedVolumeChunkSource<Parameters> extends VolumeChunkSource {
+export abstract class ParameterizedSliceViewChunkSource<Parameters> extends SliceViewChunkSource {
   parameters: Parameters;
   constructor(rpc: RPC, options: any) {
     super(rpc, options);
