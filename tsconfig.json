@@ -4,6 +4,7 @@
     "noImplicitReturns": true,
     "noImplicitThis": true,
     "noUnusedParameters": true,
+    "noUnusedLocals": true,
     "preserveConstEnums": true,
     "experimentalDecorators": true,
     "strictNullChecks": true,
