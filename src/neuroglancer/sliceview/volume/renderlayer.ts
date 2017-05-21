@@ -163,7 +163,7 @@ export class SliceViewShaderBuffers extends RefCounted {
   static get(gl: GL) {
     return gl.memoize.get('SliceViewShaderBuffers', () => new SliceViewShaderBuffers(gl));
   }
-};
+}
 
 class VolumeSliceVertexComputationManager extends RefCounted {
   data: SliceViewShaderBuffers;
@@ -275,15 +275,20 @@ for (int e = 0; e < 4; ++e) {
             vec3.scale(vChunkPosition, uVertexBasePosition(vidx[0]), 1.0 - lambda);
             vec3.scaleAndAdd(vChunkPosition, vChunkPosition, uVertexBasePosition(vidx[1]), lambda);
             console.log(
-                `vertex ${vertexIndex}, e = ${e}, at ${gl_Position}, vChunkPosition = ${vChunkPosition}, edge dir = ${vDir}, denom = ${denom}`);
+                `vertex ${vertexIndex}, e = ${e}, at ${gl_Position}, ` +
+                `vChunkPosition = ${vChunkPosition}, edge dir = ${vDir}, denom = ${denom}`);
             break;
           } else {
             console.log(
-              `vertex ${vertexIndex}, e = ${e}, skipped, deom = ${denom}, vDir = ${vec3Key(vDir)}, uPlaneNormal = ${vec3Key(uPlaneNormal)}, lambda=${lambda}`);
+                `vertex ${vertexIndex}, e = ${e}, skipped, deom = ${denom}, ` +
+                `vDir = ${vec3Key(vDir)}, ` +
+                `uPlaneNormal = ${vec3Key(uPlaneNormal)}, ` +
+                `lambda=${lambda}`);
           }
         } else {
           console.log(
-            `vertex ${vertexIndex}, e = ${e}, skipped, deom = ${denom}, vDir = ${vec3Key(vDir)}, uPlaneNormal = ${vec3Key(uPlaneNormal)}`);
+              `vertex ${vertexIndex}, e = ${e}, skipped, deom = ${denom}, ` +
+              `vDir = ${vec3Key(vDir)}, uPlaneNormal = ${vec3Key(uPlaneNormal)}`);
         }
       }
     }
@@ -359,7 +364,7 @@ for (int e = 0; e < 4; ++e) {
           sliceView.viewportAxes[2], chunkPosition, dataToDeviceMatrix);
     }
   }
-};
+}
 
 export class RenderLayer extends GenericSliceViewRenderLayer {
   sources: VolumeChunkSource[][];

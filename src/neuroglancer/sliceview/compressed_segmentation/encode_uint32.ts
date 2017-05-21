@@ -79,7 +79,7 @@ export function encodeBlock(
 
           if (valueLow !== prevLow
 
-              ) {
+          ) {
             prevLow = valuesBuffer1[noAdjacentDuplicateIndex * 1] = valueLow;
 
             indexBuffer1[noAdjacentDuplicateIndex] = noAdjacentDuplicateIndex++;
@@ -107,7 +107,7 @@ export function encodeBlock(
 
       if (valueLow !== prevLow
 
-          ) {
+      ) {
         ++numUniqueValues;
         let outputIndex2 = numUniqueValues * uint32sPerElement;
         prevLow = valuesBuffer2[outputIndex2] = valueLow;

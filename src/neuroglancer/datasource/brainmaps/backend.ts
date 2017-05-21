@@ -17,14 +17,14 @@
 import 'neuroglancer/datasource/brainmaps/api_backend';
 
 import {registerChunkSource} from 'neuroglancer/chunk_manager/backend';
-import {makeRequest, HttpCall, ChangeStackAwarePayload, MeshFragmentPayload, SkeletonPayload, SubvolumePayload} from 'neuroglancer/datasource/brainmaps/api';
+import {ChangeStackAwarePayload, HttpCall, makeRequest, MeshFragmentPayload, SkeletonPayload, SubvolumePayload} from 'neuroglancer/datasource/brainmaps/api';
 import {ChangeSpec, MeshSourceParameters, SkeletonSourceParameters, VolumeChunkEncoding, VolumeSourceParameters} from 'neuroglancer/datasource/brainmaps/base';
 import {decodeJsonManifestChunk, decodeTriangleVertexPositionsAndIndices, FragmentChunk, ManifestChunk, ParameterizedMeshSource} from 'neuroglancer/mesh/backend';
 import {decodeSkeletonVertexPositionsAndIndices, ParameterizedSkeletonSource, SkeletonChunk} from 'neuroglancer/skeleton/backend';
-import {ParameterizedVolumeChunkSource, VolumeChunk} from 'neuroglancer/sliceview/volume/backend';
 import {decodeCompressedSegmentationChunk} from 'neuroglancer/sliceview/backend_chunk_decoders/compressed_segmentation';
 import {decodeJpegChunk} from 'neuroglancer/sliceview/backend_chunk_decoders/jpeg';
 import {decodeRawChunk} from 'neuroglancer/sliceview/backend_chunk_decoders/raw';
+import {ParameterizedVolumeChunkSource, VolumeChunk} from 'neuroglancer/sliceview/volume/backend';
 import {CancellationToken} from 'neuroglancer/util/cancellation';
 import {Endianness} from 'neuroglancer/util/endian';
 import {vec3Key} from 'neuroglancer/util/geom';
@@ -88,7 +88,7 @@ export class VolumeChunkSource extends ParameterizedVolumeChunkSource<VolumeSour
   download(chunk: VolumeChunk, cancellationToken: CancellationToken) {
     let {parameters} = this;
     let path: string;
-    
+
     // chunkPosition must not be captured, since it will be invalidated by the next call to
     // computeChunkBounds.
     let chunkPosition = this.computeChunkBounds(chunk);
@@ -110,13 +110,13 @@ export class VolumeChunkSource extends ParameterizedVolumeChunkSource<VolumeSour
       method: 'POST',
       payload: JSON.stringify(payload),
       path,
-      responseType: 'arraybuffer'
+      responseType: 'arraybuffer',
     };
-     
+
     return makeRequest(parameters['instance'], httpCall, cancellationToken)
         .then(response => this.chunkDecoder(chunk, response));
   }
-};
+}
 
 function decodeManifestChunk(chunk: ManifestChunk, response: any) {
   return decodeJsonManifestChunk(chunk, response, 'fragmentKey');
@@ -187,16 +187,16 @@ export class MeshSource extends ParameterizedMeshSource<MeshSourceParameters> {
     }
 
     const path = `/v1/objects/${parameters['volumeId']}` +
-      `/meshes/${parameters['meshName']}` +
-      '/fragment:binary';
-    
+        `/meshes/${parameters['meshName']}` +
+        '/fragment:binary';
+
     let payload: MeshFragmentPayload = {
       fragment_key: fragmentId,
       object_id: objectId,
     };
 
     applyChangeStack(parameters.changeSpec, payload);
-    
+
     let httpCall: HttpCall = {
       method: 'POST',
       path,
@@ -234,8 +234,8 @@ export class SkeletonSource extends ParameterizedSkeletonSource<SkeletonSourcePa
       object_id: `${chunk.objectId}`,
     };
     const path = `/v1/objects/${parameters['volumeId']}` +
-      `/meshes/${parameters['meshName']}` +
-      '/skeleton:binary';
+        `/meshes/${parameters['meshName']}` +
+        '/skeleton:binary';
     applyChangeStack(parameters.changeSpec, payload);
     let httpCall: HttpCall = {
       method: 'POST',

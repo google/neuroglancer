@@ -45,7 +45,8 @@ export enum OffscreenTextures {
 }
 
 export const glsl_perspectivePanelEmit = [
-  glsl_packFloat01ToFixedPoint, `
+  glsl_packFloat01ToFixedPoint,
+  `
 void emit(vec4 color, vec4 pickId) {
   gl_FragData[${OffscreenTextures.COLOR}] = color;
   gl_FragData[${OffscreenTextures.Z}] = packFloat01ToFixedPoint(1.0 - gl_FragCoord.z);
@@ -132,7 +133,9 @@ export class PerspectivePanel extends RenderedDataPanel {
 
   constructor(context: DisplayContext, element: HTMLElement, viewer: PerspectiveViewerState) {
     super(context, element, viewer);
-    this.registerDisposer(this.navigationState.changed.add(() => { this.viewportChanged(); }));
+    this.registerDisposer(this.navigationState.changed.add(() => {
+      this.viewportChanged();
+    }));
 
     if (viewer.showSliceViewsCheckbox) {
       let showSliceViewsCheckbox =
@@ -144,10 +147,16 @@ export class PerspectivePanel extends RenderedDataPanel {
       showSliceViewsLabel.appendChild(showSliceViewsCheckbox.element);
       this.element.appendChild(showSliceViewsLabel);
     }
-    this.registerDisposer(viewer.showSliceViews.changed.add(() => { this.scheduleRedraw(); }));
-    this.registerDisposer(viewer.showAxisLines.changed.add(() => { this.scheduleRedraw(); }));
+    this.registerDisposer(viewer.showSliceViews.changed.add(() => {
+      this.scheduleRedraw();
+    }));
+    this.registerDisposer(viewer.showAxisLines.changed.add(() => {
+      this.scheduleRedraw();
+    }));
   }
-  get navigationState() { return this.viewer.navigationState; }
+  get navigationState() {
+    return this.viewer.navigationState;
+  }
 
   updateProjectionMatrix() {
     let projectionMat = this.projectionMat;
@@ -167,7 +176,9 @@ export class PerspectivePanel extends RenderedDataPanel {
     mat4.invert(this.inverseProjectionMat, projectionMat);
   }
 
-  viewportChanged() { this.context.scheduleRedraw(); }
+  viewportChanged() {
+    this.context.scheduleRedraw();
+  }
 
   onResize() {
     this.width = this.element.clientWidth;
@@ -411,5 +422,7 @@ export class PerspectivePanel extends RenderedDataPanel {
     this.axesLineHelper.draw(mat, false);
   }
 
-  zoomByMouse(factor: number) { this.navigationState.zoomBy(factor); }
-};
+  zoomByMouse(factor: number) {
+    this.navigationState.zoomBy(factor);
+  }
+}

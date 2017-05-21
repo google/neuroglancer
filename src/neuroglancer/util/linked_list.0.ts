@@ -71,4 +71,4 @@ export default class {
   static initializeHead<T extends Node<T>>(head: T) {
     head.next0 = head.prev0 = head;
   }
-};
+}

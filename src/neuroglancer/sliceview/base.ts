@@ -469,7 +469,11 @@ export class SliceViewBase extends SharedObject {
             lowerChunkBound, upperChunkBound, spec.lowerChunkBound, spec.upperChunkBound);
         if (DEBUG_CHUNK_INTERSECTIONS) {
           console.log(
-              `Comparing source bounds lowerBound=${vec3.str(lowerChunkBound)}, upperBound=${vec3.str(upperChunkBound)}, lowerChunkBound=${vec3.str(spec.lowerChunkBound)}, upperChunkBound=${vec3.str(spec.upperChunkBound)}, got ${BoundsComparisonResult[result]}`,
+              `Comparing source bounds lowerBound=${vec3.str(lowerChunkBound)}, ` +
+                  `upperBound=${vec3.str(upperChunkBound)}, ` +
+                  `lowerChunkBound=${vec3.str(spec.lowerChunkBound)}, ` +
+                  `upperChunkBound=${vec3.str(spec.upperChunkBound)}, ` +
+                  `got ${BoundsComparisonResult[result]}`,
               spec, source);
         }
         switch (result) {
@@ -488,7 +492,9 @@ export class SliceViewBase extends SharedObject {
       function checkBounds(nextSplitDim: number) {
         if (DEBUG_CHUNK_INTERSECTIONS) {
           console.log(
-              `chunk bounds: ${lowerChunkBound} ${upperChunkBound} fullyVisible: ${fullyVisibleSources} partiallyVisible: ${partiallyVisibleSources.slice(0, partiallyVisibleSourcesLength)}`);
+              `chunk bounds: ${lowerChunkBound} ${upperChunkBound} ` +
+              `fullyVisible: ${fullyVisibleSources} partiallyVisible: ` +
+              `${partiallyVisibleSources.slice(0, partiallyVisibleSourcesLength)}`);
         }
 
         if (fullyVisibleSources.length === 0 && partiallyVisibleSourcesLength === 0) {
@@ -523,7 +529,8 @@ export class SliceViewBase extends SharedObject {
 
         if (DEBUG_CHUNK_INTERSECTIONS) {
           console.log(
-              'Within bounds: [' + vec3.str(lowerChunkBound) + ', ' + vec3.str(upperChunkBound) + ']');
+              'Within bounds: [' + vec3.str(lowerChunkBound) + ', ' + vec3.str(upperChunkBound) +
+              ']');
         }
 
         if (volume === 1) {
@@ -593,7 +600,7 @@ export class SliceViewBase extends SharedObject {
       checkBounds(0);
     });
   }
-};
+}
 
 /**
  * By default, choose a chunk size with at most 2^18 = 262144 voxels.

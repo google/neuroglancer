@@ -53,7 +53,9 @@ export class SharedDisjointUint64Sets extends SharedObjectCounterpart {
     }
   }
 
-  get(x: Uint64): Uint64 { return this.disjointSets.get(x); }
+  get(x: Uint64): Uint64 {
+    return this.disjointSets.get(x);
+  }
 
   clear() {
     if (this.disjointSets.clear()) {
@@ -65,11 +67,17 @@ export class SharedDisjointUint64Sets extends SharedObjectCounterpart {
     }
   }
 
-  setElements(a: Uint64) { return this.disjointSets.setElements(a); }
+  setElements(a: Uint64) {
+    return this.disjointSets.setElements(a);
+  }
 
-  get size() { return this.disjointSets.size; }
+  get size() {
+    return this.disjointSets.size;
+  }
 
-  toJSON() { return this.disjointSets.toJSON(); }
+  toJSON() {
+    return this.disjointSets.toJSON();
+  }
 
   /**
    * Restores the state from a JSON representation.
@@ -88,7 +96,7 @@ export class SharedDisjointUint64Sets extends SharedObjectCounterpart {
       });
     }
   }
-};
+}
 
 const tempA = new Uint64();
 const tempB = new Uint64();

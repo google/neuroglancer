@@ -40,13 +40,14 @@ export interface VectorGraphicsChunkSpecificationOptions extends
   chunkDataSize: vec3;
 }
 
-export interface VectorGraphicsChunkSpecificationDefaultChunkSizeOptions extends SliceViewChunkSpecificationBaseOptions {
+export interface VectorGraphicsChunkSpecificationDefaultChunkSizeOptions extends
+    SliceViewChunkSpecificationBaseOptions {
   chunkDataSize?: vec3;
 }
 
 export interface VectorGraphicsChunkSpecificationGetDefaultsOptions extends
-VectorGraphicsChunkSpecificationDefaultChunkSizeOptions,
-VectorGraphicsChunkSpecificationSourceOptions {}
+    VectorGraphicsChunkSpecificationDefaultChunkSizeOptions,
+    VectorGraphicsChunkSpecificationSourceOptions {}
 
 /**
  * Specifies a chunk layout and voxel size.
@@ -68,13 +69,7 @@ export class VectorGraphicsChunkSpecification extends SliceViewChunkSpecificatio
   }
 
   static withDefaults(options: VectorGraphicsChunkSpecificationGetDefaultsOptions) {
-
-    let {
-      transform,
-      lowerVoxelBound,
-      upperVoxelBound,
-      chunkDataSize
-    } = options;
+    let {transform, lowerVoxelBound, upperVoxelBound, chunkDataSize} = options;
     transform = getCombinedTransform(transform, options.vectorGraphicsSourceOptions);
 
     if (chunkDataSize === undefined) {
@@ -88,7 +83,8 @@ export class VectorGraphicsChunkSpecification extends SliceViewChunkSpecificatio
     console.log(chunkDataSize);
     console.log(options);
 
-    return new VectorGraphicsChunkSpecification(Object.assign({}, options, {transform, chunkDataSize}));
+    return new VectorGraphicsChunkSpecification(
+        Object.assign({}, options, {transform, chunkDataSize}));
   }
 
   toObject(): VectorGraphicsChunkSpecificationOptions {

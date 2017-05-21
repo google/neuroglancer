@@ -55,8 +55,9 @@ export class TileChunkSource extends ParameterizedVolumeChunkSource<TileChunkSou
 
     // GET
     // /v1/owner/{owner}/project/{project}/stack/{stack}/z/{z}/box/{x},{y},{width},{height},{scale}/jpeg-image
-    let path =
-        `/render-ws/v1/owner/${parameters.owner}/project/${parameters.project}/stack/${parameters.stack}/z/${chunkPosition[2]}/box/${chunkPosition[0]},${chunkPosition[1]},${xTileSize},${yTileSize},${scale}/jpeg-image`;
+    let path = `/render-ws/v1/owner/${parameters.owner}/project/${parameters.project}/` +
+        `stack/${parameters.stack}/z/${chunkPosition[2]}/` +
+        `box/${chunkPosition[0]},${chunkPosition[1]},${xTileSize},${yTileSize},${scale}/jpeg-image`;
 
     return sendHttpRequest(
                openShardedHttpRequest(parameters.baseUrls, path), 'arraybuffer', cancellationToken)
@@ -80,7 +81,8 @@ function createConversionObject(tileId: string, xcoord: any, ycoord: any) {
 function conversionObjectToWorld(
     conversionObjectArray: Array<any>, parameters: PointMatchChunkSourceParameters,
     cancellationToken: CancellationToken) {
-  let path = `/render-ws/v1/owner/${parameters.owner}/project/${parameters.project}/stack/${parameters.stack}/local-to-world-coordinates`;
+  let path = `/render-ws/v1/owner/${parameters.owner}/project/${parameters.project}/` +
+      `stack/${parameters.stack}/local-to-world-coordinates`;
   return sendHttpJsonPostRequest(
       openShardedHttpRequest(parameters.baseUrls, path, 'PUT'), conversionObjectArray, 'json',
       cancellationToken);
@@ -125,17 +127,20 @@ function getPointMatches(
     cancellationToken: CancellationToken) {
   let path: string;
   if (sectionIds.length === 1) {
-    path = `/render-ws/v1/owner/${parameters.owner}/matchCollection/${parameters.matchCollection}/group/${sectionIds[0]}/matchesWith/${sectionIds[0]}`;
+    path = `/render-ws/v1/owner/${parameters.owner}/matchCollection/` +
+        `${parameters.matchCollection}/group/${sectionIds[0]}/matchesWith/${sectionIds[0]}`;
   } else if (sectionIds.length === 2) {
-    path = `/render-ws/v1/owner/${parameters.owner}/matchCollection/${parameters.matchCollection}/group/${sectionIds[0]}/matchesWith/${sectionIds[1]}`;
+    path = `/render-ws/v1/owner/${parameters.owner}/matchCollection/` +
+        `${parameters.matchCollection}/group/${sectionIds[0]}/matchesWith/${sectionIds[1]}`;
   } else {
     throw new Error(`Invalid section Id vector of length: ${JSON.stringify(sectionIds.length)}`);
   }
 
   return sendHttpRequest(
              openShardedHttpRequest(parameters.baseUrls, path), 'json', cancellationToken)
-      .then(
-          response => { return decodePointMatches(chunk, response, parameters, cancellationToken); });
+      .then(response => {
+        return decodePointMatches(chunk, response, parameters, cancellationToken);
+      });
 }
 
 
@@ -160,7 +165,9 @@ export class PointMatchSource extends
     chunkPosition[2] = chunkGridPosition[2];
 
     // Get section IDs
-    let path = `/render-ws/v1/owner/${parameters.owner}/project/${parameters.project}/stack/${parameters.stack}/sectionData?minZ=${chunkPosition[2]}&maxZ=${chunkPosition[2] + parameters.zoffset}`;
+    let path = `/render-ws/v1/owner/${parameters.owner}/project/${parameters.project}/` +
+        `stack/${parameters.stack}/sectionData?minZ=${chunkPosition[2]}&` +
+        `maxZ=${chunkPosition[2] + parameters.zoffset}`;
 
     return downloadPointMatchChunk(chunk, path, parameters, cancellationToken);
   }

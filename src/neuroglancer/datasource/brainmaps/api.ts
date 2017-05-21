@@ -15,8 +15,8 @@
  */
 
 import {getToken, Token} from 'neuroglancer/datasource/brainmaps/api_implementation';
+import {CANCELED, CancellationToken, uncancelableToken} from 'neuroglancer/util/cancellation';
 import {HttpError, openShardedHttpRequest} from 'neuroglancer/util/http_request';
-import {CancellationToken, uncancelableToken, CANCELED} from 'neuroglancer/util/cancellation';
 
 export var numPendingRequests = 0;
 
@@ -35,9 +35,7 @@ export interface ChangeSpecPayload {
   skip_equivalences?: boolean;
 }
 
-export interface ChangeStackAwarePayload {
-  change_spec?: ChangeSpecPayload;
-}
+export interface ChangeStackAwarePayload { change_spec?: ChangeSpecPayload; }
 
 export interface GeometryPayload {
   corner: string;
@@ -45,9 +43,7 @@ export interface GeometryPayload {
   scale: number;
 }
 
-export interface GeometryAwarePayload {
-  geometry: GeometryPayload;
-}
+export interface GeometryAwarePayload { geometry: GeometryPayload; }
 
 export interface ImageFormatOptionsPayload {
   image_format?: 'AUTO'|'JPEG'|'PNG'|'JSON';
@@ -60,9 +56,7 @@ export interface SubvolumePayload extends ChangeStackAwarePayload, GeometryAware
   subvolume_format?: 'RAW'|'SINGLE_IMAGE';
 }
 
-export interface SkeletonPayload extends ChangeStackAwarePayload {
-  object_id: string;
-}
+export interface SkeletonPayload extends ChangeStackAwarePayload { object_id: string; }
 
 export interface MeshFragmentPayload extends ChangeStackAwarePayload {
   fragment_key: string;
@@ -107,8 +101,7 @@ export function makeRequest(
     instance: BrainmapsInstance, httpCall: HttpCall,
     cancellationToken?: CancellationToken): Promise<any>;
 export function makeRequest(
-    instance: BrainmapsInstance, httpCall: HttpCall,
-    cancellationToken?: CancellationToken): any;
+    instance: BrainmapsInstance, httpCall: HttpCall, cancellationToken?: CancellationToken): any;
 
 export function makeRequest(
     instance: BrainmapsInstance, httpCall: HttpCall,

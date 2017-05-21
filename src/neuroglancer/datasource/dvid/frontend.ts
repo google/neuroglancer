@@ -405,8 +405,8 @@ export function getDataInstanceDetails(
         let result = sendHttpRequest(
             openShardedHttpRequest(baseUrls, `/api/node/${nodeKey}/${info.name}/info`, 'GET'),
             'json');
-        const description =
-            `datainstance info for node ${nodeKey} and instance ${info.name} on DVID server ${baseUrls[0]}`;
+        const description = `datainstance info for node ${nodeKey} and instance ${info.name} ` +
+            `on DVID server ${baseUrls[0]}`;
 
         StatusMessage.forPromise(result, {
           initialMessage: `Retrieving ${description}.`,

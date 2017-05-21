@@ -40,7 +40,9 @@ export class RenderLayer extends RefCounted {
     // Do nothing by default.
   }
 
-  getValueAt(_x: Float32Array): any { return undefined; }
+  getValueAt(_x: Float32Array): any {
+    return undefined;
+  }
 
   /**
    * Base voxel size for this layer, in nanometers per voxel.
@@ -56,7 +58,9 @@ export class RenderLayer extends RefCounted {
    * Transform the stored pickedValue and offset associated with the retrieved pick ID into the
    * actual value.
    */
-  transformPickedValue(pickedValue: Uint64, _pickedOffset: number): any { return pickedValue; }
+  transformPickedValue(pickedValue: Uint64, _pickedOffset: number): any {
+    return pickedValue;
+  }
 
   /**
    * Optionally updates the mouse state based on the retrived pick information.  This might snap the
@@ -71,7 +75,7 @@ export class RenderLayer extends RefCounted {
  */
 export class VisibilityTrackedRenderLayer extends RenderLayer {
   visibilityCount = this.registerDisposer(new UseCount());
-};
+}
 
 export class UserLayerDropdown extends RefCounted {
   onShow() {}
@@ -119,14 +123,20 @@ export class UserLayer extends RefCounted {
     return this.transformPickedValue(result);
   }
 
-  transformPickedValue(value: any) { return value; }
+  transformPickedValue(value: any) {
+    return value;
+  }
 
-  toJSON(): any { return null; }
+  toJSON(): any {
+    return null;
+  }
 
-  makeDropdown(_element: HTMLDivElement): UserLayerDropdown|undefined { return undefined; }
+  makeDropdown(_element: HTMLDivElement): UserLayerDropdown|undefined {
+    return undefined;
+  }
 
   handleAction(_action: string): void {}
-};
+}
 
 export class ManagedUserLayer extends RefCounted {
   readyStateChanged = new NullarySignal();
@@ -134,8 +144,10 @@ export class ManagedUserLayer extends RefCounted {
   specificationChanged = new NullarySignal();
   wasDisposed = false;
   private layer_: UserLayer|null = null;
-  get layer() { return this.layer_; }
-  private unregisterUserLayer: (() => void) | undefined;
+  get layer() {
+    return this.layer_;
+  }
+  private unregisterUserLayer: (() => void)|undefined;
 
   /**
    * If layer is not null, tranfers ownership of a reference.
@@ -186,7 +198,7 @@ export class ManagedUserLayer extends RefCounted {
     this.layer = null;
     super.disposed();
   }
-};
+}
 
 export class LayerManager extends RefCounted {
   managedLayers = new Array<ManagedUserLayer>();
@@ -275,7 +287,9 @@ export class LayerManager extends RefCounted {
     super.disposed();
   }
 
-  getLayerByName(name: string) { return this.managedLayers.find(x => x.name === name); }
+  getLayerByName(name: string) {
+    return this.managedLayers.find(x => x.name === name);
+  }
 
   /**
    * Asynchronously initialize the voxelSize and position based on the managed layers.
@@ -294,7 +308,9 @@ export class LayerManager extends RefCounted {
 
     // Deboucne to ensure that if the position is reset and the layers are reset immediately after,
     // the position will not be reinitialized based on the soon to be reset layers.
-    const handler = debounce(() => { this.updatePositionFromLayers(position); });
+    const handler = debounce(() => {
+      this.updatePositionFromLayers(position);
+    });
     this.readyStateChanged.add(handler);
     position.changed.add(handler);
     this.updatePositionFromLayers(position);
@@ -378,7 +394,7 @@ export class LayerManager extends RefCounted {
       }
     }
   }
-};
+}
 
 const MOUSE_STATE_UPDATE_INTERVAL = 50;
 
@@ -400,8 +416,9 @@ export class MouseSelectionState implements PickState {
 
   stale = false;
 
-  triggerUpdate = throttle(
-      () => { this.update(); }, MOUSE_STATE_UPDATE_INTERVAL, {leading: true, trailing: true});
+  triggerUpdate = throttle(() => {
+    this.update();
+  }, MOUSE_STATE_UPDATE_INTERVAL, {leading: true, trailing: true});
 
   updateUnconditionally() {
     this.triggerUpdate.cancel();
@@ -486,17 +503,19 @@ export class LayerSelectedValues extends RefCounted {
     this.update();
     return this.values.get(userLayer);
   }
-};
+}
 
 export class VisibleRenderLayerTracker<RenderLayerType extends VisibilityTrackedRenderLayer> extends
     RefCounted {
   private visibleLayers = new Set<RenderLayerType>();
   private newVisibleLayers = new Set<RenderLayerType>();
-  private throttledUpdateVisibleLayers = throttle(() => { this.updateVisibleLayers(); }, 0);
+  private throttledUpdateVisibleLayers = throttle(() => {
+    this.updateVisibleLayers();
+  }, 0);
 
   constructor(
       public layerManager: LayerManager,
-      public renderLayerType: {new (...args: any[]): RenderLayerType},
+      public renderLayerType: {new(...args: any[]): RenderLayerType},
       private layerAdded: (layer: RenderLayerType) => void,
       private layerRemoved: (layer: RenderLayerType) => void) {
     super();
@@ -506,11 +525,15 @@ export class VisibleRenderLayerTracker<RenderLayerType extends VisibilityTracked
     this.updateVisibleLayers();
   }
 
-  private handleLayersChanged() { this.throttledUpdateVisibleLayers(); }
+  private handleLayersChanged() {
+    this.throttledUpdateVisibleLayers();
+  }
 
   disposed() {
     this.throttledUpdateVisibleLayers.cancel();
-    this.visibleLayers.forEach(layer => { this.onLayerRemoved(layer); });
+    this.visibleLayers.forEach(layer => {
+      this.onLayerRemoved(layer);
+    });
     this.visibleLayers.clear();
     super.disposed();
   }

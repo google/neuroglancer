@@ -14,8 +14,8 @@
  * limitations under the License.
  */
 
-import {glsl_getPositionWithinChunk} from 'neuroglancer/sliceview/volume/renderlayer';
 import {SingleTextureChunkFormat} from 'neuroglancer/sliceview/single_texture_chunk_format';
+import {glsl_getPositionWithinChunk} from 'neuroglancer/sliceview/volume/renderlayer';
 import {getFortranOrderStrides} from 'neuroglancer/util/array';
 import {TypedArray} from 'neuroglancer/util/array';
 import {DataType} from 'neuroglancer/util/data_type';
@@ -32,7 +32,8 @@ export function chunkFormatTest<TextureLayout extends Disposable>(
   const numChannels = volumeSize[3];
   let strides = getFortranOrderStrides(volumeSize);
   let outputChannelsPerChannel = dataType === DataType.UINT64 ? 2 : 1;
-  it(`volumeSize = ${vec3Key(volumeSize)}, numChannels = ${volumeSize[3]}, dataType = ${DataType[dataType]}`,
+  it(`volumeSize = ${vec3Key(volumeSize)}, numChannels = ${volumeSize[3]}, ` +
+         `dataType = ${DataType[dataType]}`,
      () => {
        fragmentShaderTest(outputChannelsPerChannel * numChannels, tester => {
          let {gl, builder} = tester;
@@ -85,7 +86,9 @@ gl_FragData[${outputChannel++}] = getDataValue(${channel}).value;
          gl.uniform3fv(shader.uniform('uChunkDataSize'), volumeSize.subarray(0, 3));
 
          let texture = gl.createTexture();
-         tester.registerDisposer(() => { gl.deleteTexture(texture); });
+         tester.registerDisposer(() => {
+           gl.deleteTexture(texture);
+         });
 
          chunkFormat.beginDrawing(gl, shader);
          gl.bindTexture(gl.TEXTURE_2D, texture);
@@ -110,8 +113,9 @@ gl_FragData[${outputChannel++}] = getDataValue(${channel}).value;
            let outputChannel = 0;
            for (let channel = 0; channel < numChannels; ++channel) {
              const curOffset = offset + channel * strides[3];
-             const msg =
-                 `volumeSize = ${vec3Key(volumeSize)}, positionInChunk = ${vec3Key(positionInChunk)}, channel = ${channel}, offset = ${curOffset}`;
+             const msg = `volumeSize = ${vec3Key(volumeSize)}, ` +
+                 `positionInChunk = ${vec3Key(positionInChunk)}, ` +
+                 `channel = ${channel}, offset = ${curOffset}`;
              switch (dataType) {
                case DataType.UINT64: {
                  let low = tester.readUint32(outputChannel++);

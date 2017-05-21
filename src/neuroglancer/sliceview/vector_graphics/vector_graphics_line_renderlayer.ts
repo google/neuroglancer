@@ -177,8 +177,7 @@ gl_Position = uProjection * (pos + delta);
       if (source.vectorGraphicsCoordinatesInVoxels) {
         mat4.scale(objectToDataMatrix, objectToDataMatrix, voxelSize);
       }
-      mat4.multiply(
-        objectToDataMatrix, chunkLayout.transform, objectToDataMatrix);
+      mat4.multiply(objectToDataMatrix, chunkLayout.transform, objectToDataMatrix);
 
       // Compute projection matrix that transforms vertex coordinates to device coordinates
       gl.uniformMatrix4fv(

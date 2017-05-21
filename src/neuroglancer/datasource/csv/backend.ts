@@ -48,7 +48,7 @@ function parseCSVFromArrayBuffer(buffer: ArrayBuffer): SingleMeshVertexAttribute
 
 registerSingleMeshVertexAttributesFactory('csv', {
   description: 'Comma separated value text file',
-  getMeshVertexAttributes:
-      (chunkManager, url, getPriority, cancellationToken) => GenericFileSource.getData(
+  getMeshVertexAttributes: (chunkManager, url, getPriority, cancellationToken) =>
+      GenericFileSource.getData(
           chunkManager.addRef(), parseCSVFromArrayBuffer, url, getPriority, cancellationToken)
 });

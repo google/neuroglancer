@@ -166,7 +166,9 @@ export function getCombinedMesh(
         name: info.name,
         source,
         numComponents: info.numComponents,
-        dataType: info.dataType, min, max
+        dataType: info.dataType,
+        min,
+        max
       });
       combinedMesh.vertexAttributes.push(data);
     }
@@ -181,8 +183,8 @@ export function getCombinedMesh(
       let result = <SingleMeshVertexAttributes>results[i + 1];
       if (result.numVertices !== origMesh.info.numVertices) {
         throw new Error(
-            `Vertex attribute source ${JSON.stringify(source)} specifies attributes for ${result
-                .numVertices} vertices, but mesh has ${origMesh.info.numVertices} vertices.`);
+            `Vertex attribute source ${JSON.stringify(source)} specifies attributes for ` +
+            `${result.numVertices} vertices, but mesh has ${origMesh.info.numVertices} vertices.`);
       }
       addAttributes(result.attributeInfo, result.attributes, source);
     });

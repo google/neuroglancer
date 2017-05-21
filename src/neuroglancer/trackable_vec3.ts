@@ -53,4 +53,4 @@ export class TrackableVec3 implements Trackable {
   reset() {
     this.value = this.defaultValue;
   }
-};
+}

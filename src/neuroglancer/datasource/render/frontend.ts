@@ -191,7 +191,8 @@ export class MultiscaleVolumeChunkSource implements GenericMultiscaleVolumeChunk
     let projectInfo = ownerInfo.projects.get(project);
     if (projectInfo === undefined) {
       throw new Error(
-          `Specified project ${JSON.stringify(project)} does not exist for specified owner ${JSON.stringify(ownerInfo.owner)}`);
+          `Specified project ${JSON.stringify(project)} does not exist for ` +
+          `specified owner ${JSON.stringify(ownerInfo.owner)}`);
     }
 
     if (stack === undefined) {
@@ -263,7 +264,10 @@ export class MultiscaleVolumeChunkSource implements GenericMultiscaleVolumeChunk
         voxelSize,
         chunkDataSize,
         numChannels: this.numChannels,
-        dataType: this.dataType, lowerVoxelBound, upperVoxelBound, volumeSourceOptions,
+        dataType: this.dataType,
+        lowerVoxelBound,
+        upperVoxelBound,
+        volumeSourceOptions,
       });
 
       let source = TileChunkSource.get(this.chunkManager, spec, {
@@ -287,7 +291,7 @@ export class MultiscaleVolumeChunkSource implements GenericMultiscaleVolumeChunk
   getMeshSource(): null {
     return null;
   }
-};
+}
 
 export function computeStackHierarchy(stackInfo: StackInfo, tileSize: number) {
   let maxBound = 0;
@@ -392,7 +396,8 @@ export function volumeCompleter(
       .then(completions => applyCompletionOffset(match![1].length + 1, completions));
 }
 
-export class MultiscaleVectorGraphicsChunkSource implements GenericMultiscaleVectorGraphicsChunkSource {
+export class MultiscaleVectorGraphicsChunkSource implements
+    GenericMultiscaleVectorGraphicsChunkSource {
   stack: string;
   stackInfo: StackInfo;
 
@@ -407,7 +412,8 @@ export class MultiscaleVectorGraphicsChunkSource implements GenericMultiscaleVec
     let projectInfo = ownerInfo.projects.get(project);
     if (projectInfo === undefined) {
       throw new Error(
-          `Specified project ${JSON.stringify(project)} does not exist for specified owner ${JSON.stringify(ownerInfo.owner)}`);
+          `Specified project ${JSON.stringify(project)} does not exist for ` +
+          `specified owner ${JSON.stringify(ownerInfo.owner)}`);
     }
 
     if (stack === undefined) {

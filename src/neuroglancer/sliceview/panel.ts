@@ -102,7 +102,9 @@ export class SliceViewPanel extends RenderedDataPanel {
 
   private scaleBarWidget = this.registerDisposer(new ScaleBarWidget());
 
-  get navigationState() { return this.sliceView.navigationState; }
+  get navigationState() {
+    return this.sliceView.navigationState;
+  }
 
   constructor(
       context: DisplayContext, element: HTMLElement, public sliceView: SliceView,
@@ -300,4 +302,4 @@ export class SliceViewPanel extends RenderedDataPanel {
         mouseY * (oldZoom - newZoom));
     navigationState.position.changed.dispatch();
   }
-};
+}

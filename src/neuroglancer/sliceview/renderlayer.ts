@@ -17,9 +17,9 @@
 import {ChunkManager} from 'neuroglancer/chunk_manager/frontend';
 import {RenderLayer as GenericRenderLayer} from 'neuroglancer/layer';
 import {SliceView, SliceViewChunkSource} from 'neuroglancer/sliceview/frontend';
-import {ShaderBuilder, ShaderProgram} from 'neuroglancer/webgl/shader';
 import {BoundingBox, vec3} from 'neuroglancer/util/geom';
 import {makeWatchableShaderError, WatchableShaderError} from 'neuroglancer/webgl/dynamic_shader';
+import {ShaderBuilder, ShaderProgram} from 'neuroglancer/webgl/shader';
 import {RpcId} from 'neuroglancer/worker_rpc';
 
 const tempVec3 = vec3.create();
@@ -76,7 +76,9 @@ export abstract class RenderLayer extends GenericRenderLayer {
     this.setReady(true);
   }
 
-  get gl() { return this.chunkManager.chunkQueueManager.gl; }
+  get gl() {
+    return this.chunkManager.chunkQueueManager.gl;
+  }
 
   initializeShader() {
     if (!this.shaderUpdated) {
@@ -105,7 +107,9 @@ export abstract class RenderLayer extends GenericRenderLayer {
     this.disposeShader();
   }
 
-  getShaderKey() { return ''; }
+  getShaderKey() {
+    return '';
+  }
 
   getShader() {
     let key = this.getShaderKey();
@@ -118,11 +122,8 @@ export abstract class RenderLayer extends GenericRenderLayer {
     return builder.build();
   }
 
-  abstract defineShader(builder: ShaderBuilder): void
-
-  abstract beginSlice(_sliceView: SliceView): ShaderProgram
-
-  abstract endSlice(shader: ShaderProgram): void
-
-  abstract draw(sliceView: SliceView): void
+  abstract defineShader(builder: ShaderBuilder): void;
+  abstract beginSlice(_sliceView: SliceView): ShaderProgram;
+  abstract endSlice(shader: ShaderProgram): void;
+  abstract draw(sliceView: SliceView): void;
 }

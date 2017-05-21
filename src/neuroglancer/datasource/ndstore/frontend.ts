@@ -21,7 +21,7 @@
 
 import {ChunkManager} from 'neuroglancer/chunk_manager/frontend';
 import {CompletionResult, registerDataSourceFactory} from 'neuroglancer/datasource/factory';
-import {VolumeChunkSourceParameters, NDSTORE_URL_PREFIX} from 'neuroglancer/datasource/ndstore/base';
+import {NDSTORE_URL_PREFIX, VolumeChunkSourceParameters} from 'neuroglancer/datasource/ndstore/base';
 import {DataType, VolumeChunkSpecification, VolumeSourceOptions, VolumeType} from 'neuroglancer/sliceview/volume/base';
 import {defineParameterizedVolumeChunkSource, MultiscaleVolumeChunkSource as GenericMultiscaleVolumeChunkSource} from 'neuroglancer/sliceview/volume/frontend';
 import {applyCompletionOffset, getPrefixMatchesWithDescriptions} from 'neuroglancer/util/completion';
@@ -67,7 +67,8 @@ function parseScales(datasetObj: any): ScaleInfo[] {
     let voxelOffset = voxelOffsets.get(key);
     if (voxelSize === undefined || imageSize === undefined || voxelOffset === undefined) {
       throw new Error(
-          `Missing neariso_voxelres/neariso_imagesize/neariso_offset for resolution ${resolution}.`);
+          `Missing neariso_voxelres/neariso_imagesize/neariso_offset for resolution ` +
+          `${resolution}.`);
     }
     return {key, voxelSize, imageSize, voxelOffset};
   });
@@ -106,9 +107,15 @@ function parseTokenInfo(obj: any): TokenInfo {
 }
 
 export class MultiscaleVolumeChunkSource implements GenericMultiscaleVolumeChunkSource {
-  get dataType() { return this.channelInfo.dataType; }
-  get numChannels() { return 1; }
-  get volumeType() { return this.channelInfo.volumeType; }
+  get dataType() {
+    return this.channelInfo.dataType;
+  }
+  get numChannels() {
+    return 1;
+  }
+  get volumeType() {
+    return this.channelInfo.volumeType;
+  }
 
   /**
    * Ndstore channel name.
@@ -136,7 +143,8 @@ export class MultiscaleVolumeChunkSource implements GenericMultiscaleVolumeChunk
     const channelInfo = tokenInfo.channels.get(channel);
     if (channelInfo === undefined) {
       throw new Error(
-          `Specified channel ${JSON.stringify(channel)} is not one of the supported channels ${JSON.stringify(Array.from(tokenInfo.channels.keys()))}`);
+          `Specified channel ${JSON.stringify(channel)} is not one of the supported ` +
+          `channels ${JSON.stringify(Array.from(tokenInfo.channels.keys()))}`);
     }
     this.channel = channel;
     this.channelInfo = channelInfo;
@@ -173,11 +181,13 @@ export class MultiscaleVolumeChunkSource implements GenericMultiscaleVolumeChunk
           .getDefaults({
             numChannels: this.numChannels,
             volumeType: this.volumeType,
-            dataType: this.dataType, voxelSize,
+            dataType: this.dataType,
+            voxelSize,
             transform: mat4.fromTranslation(
                 mat4.create(), vec3.multiply(vec3.create(), voxelOffset, voxelSize)),
             baseVoxelOffset,
-            upperVoxelBound: scaleInfo.imageSize, volumeSourceOptions,
+            upperVoxelBound: scaleInfo.imageSize,
+            volumeSourceOptions,
           })
           .map(spec => VolumeChunkSource.get(this.chunkManager, spec, {
             baseUrls: this.baseUrls,
@@ -194,19 +204,25 @@ export class MultiscaleVolumeChunkSource implements GenericMultiscaleVolumeChunk
   /**
    * Meshes are not supported.
    */
-  getMeshSource(): null { return null; }
-};
+  getMeshSource(): null {
+    return null;
+  }
+}
 
 const pathPattern = /^([^\/?]+)(?:\/([^\/?]+))?(?:\?(.*))?$/;
 
-export function getTokenInfo(chunkManager: ChunkManager, hostnames: string[], token: string, urlprefix: string): Promise<TokenInfo> {
+export function getTokenInfo(
+    chunkManager: ChunkManager, hostnames: string[], token: string,
+    urlprefix: string): Promise<TokenInfo> {
   return chunkManager.memoize.getUncounted(
       {type: 'ndstore:getTokenInfo', hostnames, token},
-      () => sendHttpRequest(openShardedHttpRequest(hostnames, `${urlprefix}/${token}/info/`), 'json')
-                .then(parseTokenInfo));
+      () =>
+          sendHttpRequest(openShardedHttpRequest(hostnames, `${urlprefix}/${token}/info/`), 'json')
+              .then(parseTokenInfo));
 }
 
-export function getShardedVolume(chunkManager: ChunkManager, hostnames: string[], path: string, urlprefix: string) {
+export function getShardedVolume(
+    chunkManager: ChunkManager, hostnames: string[], path: string, urlprefix: string) {
   const match = path.match(pathPattern);
   if (match === null) {
     throw new Error(`Invalid volume path ${JSON.stringify(path)}`);
@@ -234,15 +250,18 @@ export function getVolume(chunkManager: ChunkManager, path: string) {
   return getShardedVolume(chunkManager, [match[1]], match[2], NDSTORE_URL_PREFIX);
 }
 
-export function getPublicTokens(chunkManager: ChunkManager, hostnames: string[], urlprefix: string) {
+export function getPublicTokens(
+    chunkManager: ChunkManager, hostnames: string[], urlprefix: string) {
   return chunkManager.memoize.getUncounted(
       {type: 'dvid:getPublicTokens', hostnames},
-      () => sendHttpRequest(openShardedHttpRequest(hostnames, `${urlprefix}/public_tokens/`), 'json')
-                .then(value => parseArray(value, verifyString)));
+      () =>
+          sendHttpRequest(openShardedHttpRequest(hostnames, `${urlprefix}/public_tokens/`), 'json')
+              .then(value => parseArray(value, verifyString)));
 }
 
 export function tokenAndChannelCompleter(
-    chunkManager: ChunkManager, hostnames: string[], path: string, urlprefix: string): Promise<CompletionResult> {
+    chunkManager: ChunkManager, hostnames: string[], path: string,
+    urlprefix: string): Promise<CompletionResult> {
   let channelMatch = path.match(/^(?:([^\/]+)(?:\/([^\/]*))?)?$/);
   if (channelMatch === null) {
     // URL has incorrect format, don't return any results.

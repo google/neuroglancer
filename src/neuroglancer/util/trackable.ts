@@ -18,8 +18,8 @@
  * @file Defines a generic interface for a simple state tracking mechanism.
  */
 
-import {NullarySignal, NullaryReadonlySignal} from 'neuroglancer/util/signal';
 import {verifyObject} from 'neuroglancer/util/json';
+import {NullaryReadonlySignal, NullarySignal} from 'neuroglancer/util/signal';
 
 export interface Trackable {
   restoreState: (x: any) => void;
@@ -40,7 +40,9 @@ export class CompoundTrackable implements Trackable {
     this.children.set(key, value);
     value.changed.add(this.changed.dispatch);
     this.changed.dispatch();
-    return () => { this.remove(key); };
+    return () => {
+      this.remove(key);
+    };
   }
 
   remove(key: string): void {
@@ -54,7 +56,7 @@ export class CompoundTrackable implements Trackable {
     this.changed.dispatch();
   }
 
-  dispose () {
+  dispose() {
     const {changed} = this;
     for (let value of this.children.values()) {
       value.changed.remove(changed.dispatch);
@@ -62,7 +64,7 @@ export class CompoundTrackable implements Trackable {
     this.children = <any>undefined;
   }
 
-  toJSON () {
+  toJSON() {
     const result = this.baseJSON();
     for (let [key, value] of this.children) {
       result[key] = value.toJSON();
@@ -70,7 +72,7 @@ export class CompoundTrackable implements Trackable {
     return result;
   }
 
-  baseJSON () {
+  baseJSON() {
     return <{[key: string]: any}>{};
   }
 

@@ -14,9 +14,7 @@
  * limitations under the License.
  */
 
-export interface Handler { 
-  (element: HTMLElement): void; 
-}
+export interface Handler { (element: HTMLElement): void; }
 
 export function withFlex(value: any, handler: Handler) {
   return (element: HTMLElement) => {
@@ -36,7 +34,7 @@ export function withAttributes(attributes: {}, handler: Handler) {
     Object.assign(element, attributes);
     handler(element);
   };
-};
+}
 
 export function box(flexDirection: string, spec: Handler[]) {
   return (container: HTMLElement) => {

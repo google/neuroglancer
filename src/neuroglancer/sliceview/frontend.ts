@@ -269,7 +269,7 @@ export class SliceView extends SliceViewBase {
     this.visibleLayers.clear();
     this.visibleLayerList.length = 0;
   }
-};
+}
 
 export abstract class SliceViewChunkSource extends ChunkSource implements
     SliceViewChunkSourceInterface {
@@ -285,7 +285,7 @@ export abstract class SliceViewChunkSource extends ChunkSource implements
   }
 
   abstract getChunk(x: any): any
-};
+}
 
 export abstract class SliceViewChunk extends Chunk {
   chunkDataSize: vec3;
@@ -298,7 +298,7 @@ export abstract class SliceViewChunk extends Chunk {
     this.chunkDataSize = x['chunkDataSize'] || source.spec.chunkDataSize;
     this.state = ChunkState.SYSTEM_MEMORY;
   }
-};
+}
 
 /**
  * Helper for rendering a SliceView that has been pre-rendered to a texture.

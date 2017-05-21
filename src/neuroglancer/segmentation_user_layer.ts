@@ -76,14 +76,25 @@ export class SegmentationUserLayer extends UserLayer {
 
   constructor(public manager: LayerListSpecification, x: any) {
     super([]);
-    this.displayState.visibleSegments.changed.add(() => { this.specificationChanged.dispatch(); });
-    this.displayState.segmentEquivalences.changed.add(
-        () => { this.specificationChanged.dispatch(); });
+    this.displayState.visibleSegments.changed.add(() => {
+      this.specificationChanged.dispatch();
+    });
+    this.displayState.segmentEquivalences.changed.add(() => {
+      this.specificationChanged.dispatch();
+    });
     this.displayState.segmentSelectionState.bindTo(manager.layerSelectedValues, this);
-    this.displayState.selectedAlpha.changed.add(() => { this.specificationChanged.dispatch(); });
-    this.displayState.notSelectedAlpha.changed.add(() => { this.specificationChanged.dispatch(); });
-    this.displayState.objectAlpha.changed.add(() => { this.specificationChanged.dispatch(); });
-    this.displayState.hideSegmentZero.changed.add(() => { this.specificationChanged.dispatch(); });
+    this.displayState.selectedAlpha.changed.add(() => {
+      this.specificationChanged.dispatch();
+    });
+    this.displayState.notSelectedAlpha.changed.add(() => {
+      this.specificationChanged.dispatch();
+    });
+    this.displayState.objectAlpha.changed.add(() => {
+      this.specificationChanged.dispatch();
+    });
+    this.displayState.hideSegmentZero.changed.add(() => {
+      this.specificationChanged.dispatch();
+    });
     this.displayState.fragmentMain.changed.add(() => {
       this.specificationChanged.dispatch();
     });
@@ -135,8 +146,9 @@ export class SegmentationUserLayer extends UserLayer {
       });
     }
 
-    verifyObjectProperty(
-        x, 'equivalences', y => { this.displayState.segmentEquivalences.restoreState(y); });
+    verifyObjectProperty(x, 'equivalences', y => {
+      this.displayState.segmentEquivalences.restoreState(y);
+    });
 
     verifyObjectProperty(x, 'segments', y => {
       if (y !== undefined) {
@@ -194,7 +206,9 @@ export class SegmentationUserLayer extends UserLayer {
     return new Uint64MapEntry(value, mappedValue);
   }
 
-  makeDropdown(element: HTMLDivElement) { return new SegmentationDropdown(element, this); }
+  makeDropdown(element: HTMLDivElement) {
+    return new SegmentationDropdown(element, this);
+  }
 
   handleAction(action: string) {
     switch (action) {
@@ -267,8 +281,9 @@ class SegmentationDropdown extends UserLayerDropdown {
     this.addSegmentWidget.element.classList.add('add-segment');
     this.addSegmentWidget.element.title = 'Add segment ID';
     element.appendChild(this.registerDisposer(this.addSegmentWidget).element);
-    this.registerDisposer(this.addSegmentWidget.valueEntered.add(
-        (value: Uint64) => { this.layer.displayState.visibleSegments.add(value); }));
+    this.registerDisposer(this.addSegmentWidget.valueEntered.add((value: Uint64) => {
+      this.layer.displayState.visibleSegments.add(value);
+    }));
     element.appendChild(this.registerDisposer(this.visibleSegmentWidget).element);
 
     if (this.layer.skeletonsPath !== undefined) {

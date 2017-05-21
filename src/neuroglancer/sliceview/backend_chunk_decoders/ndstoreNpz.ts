@@ -22,9 +22,9 @@
  * (each corresponding to a different variable) in NPY binary format.
  */
 
-import {VolumeChunk} from 'neuroglancer/sliceview/volume/backend';
 import {postProcessRawData} from 'neuroglancer/sliceview/backend_chunk_decoders/postprocess';
 import {DataType} from 'neuroglancer/sliceview/base';
+import {VolumeChunk} from 'neuroglancer/sliceview/volume/backend';
 import {vec3Key} from 'neuroglancer/util/geom';
 import {parseNpy} from 'neuroglancer/util/npy';
 import {inflate} from 'pako';
@@ -44,7 +44,8 @@ export function decodeNdstoreNpzChunk(chunk: VolumeChunk, response: ArrayBuffer)
   let {spec} = source;
   if (parsedDataType !== spec.dataType) {
     throw new Error(
-        `Data type ${DataType[parsedDataType]} does not match expected data type ${DataType[spec.dataType]}`);
+        `Data type ${DataType[parsedDataType]} does not match ` +
+        `expected data type ${DataType[spec.dataType]}`);
   }
   postProcessRawData(chunk, parseResult.data);
 }

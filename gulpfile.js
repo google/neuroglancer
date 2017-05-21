@@ -50,10 +50,11 @@ const tslint = require('gulp-tslint');
     'src/**/*.ts',
   ];
   gulp.task(
-      'tslint', () => gulp.src(sourcesToLint, {base: '.', nodir: true})
-                          .pipe(tslint({
-                            tslint: require('tslint'),
-                            formatter: "verbose",
-                          }))
-                          .pipe(tslint.report()));
+      'tslint',
+      () => gulp.src(sourcesToLint, {base: '.', nodir: true})
+                .pipe(tslint({
+                  tslint: require('tslint'),
+                  formatter: 'verbose',
+                }))
+                .pipe(tslint.report()));
 }

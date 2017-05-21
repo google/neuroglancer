@@ -142,7 +142,7 @@ export class ScaleBarDimensions {
     this.physicalLength = physicalNanometers / unit.lengthInNanometers;
     return true;
   }
-};
+}
 
 export class ScaleBarWidget extends RefCounted {
   element = document.createElement('div');
@@ -165,5 +165,7 @@ export class ScaleBarWidget extends RefCounted {
     }
   }
 
-  disposed() { removeFromParent(this.element); }
-};
+  disposed() {
+    removeFromParent(this.element);
+  }
+}

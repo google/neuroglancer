@@ -14,11 +14,13 @@
  * limitations under the License.
  */
 
-import {Trackable} from 'neuroglancer/util/trackable';
 import {NullarySignal} from 'neuroglancer/util/signal';
+import {Trackable} from 'neuroglancer/util/trackable';
 
 export class WatchableValue<T> {
-  get value() { return this.value_; }
+  get value() {
+    return this.value_;
+  }
   set value(newValue: T) {
     if (newValue !== this.value_) {
       this.value_ = newValue;
@@ -27,7 +29,7 @@ export class WatchableValue<T> {
   }
   changed = new NullarySignal();
   constructor(protected value_: T) {}
-};
+}
 
 export class TrackableValue<T> extends WatchableValue<T> implements Trackable {
   constructor(value: T, public validator: (value: any) => T, public defaultValue = value) {
@@ -40,7 +42,9 @@ export class TrackableValue<T> extends WatchableValue<T> implements Trackable {
     }
     return this.value_;
   }
-  reset() { this.value = this.defaultValue; }
+  reset() {
+    this.value = this.defaultValue;
+  }
   restoreState(x: any) {
     if (x !== undefined) {
       let {validator} = this;
@@ -52,4 +56,4 @@ export class TrackableValue<T> extends WatchableValue<T> implements Trackable {
     }
     this.value = this.defaultValue;
   }
-};
+}

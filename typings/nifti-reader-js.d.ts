@@ -100,8 +100,8 @@ declare module 'nifti-reader-js' {
     magic: string;
 
     /**
-      * Indicates if hdr/img format.
-      */
+     * Indicates if hdr/img format.
+     */
     isHDR: boolean;
 
     extensionFlag: number[];

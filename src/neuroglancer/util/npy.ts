@@ -48,7 +48,7 @@ supportedDataTypes.set('|i1', {
   elementBytes: 1,
   dataType: DataType.UINT8,
 });
-for (let [endiannessChar, endianness] of <[string, Endianness][]>[
+for (let [endiannessChar, endianness] of<[string, Endianness][]>[
        ['<', Endianness.LITTLE], ['>', Endianness.BIG]
      ]) {
   // For now, treat both signed and unsigned integer types as unsigned.
@@ -85,7 +85,9 @@ for (let [endiannessChar, endianness] of <[string, Endianness][]>[
   supportedDataTypes.set(`${endiannessChar}f4`, {
     arrayConstructor: Float32Array,
     elementBytes: 4,
-    fixEndianness: array => { convertEndian32(array, endianness); },
+    fixEndianness: array => {
+      convertEndian32(array, endianness);
+    },
     javascriptElementsPerArrayElement: 1,
     dataType: DataType.FLOAT32,
   });
@@ -95,7 +97,7 @@ export class NumpyArray {
   constructor(
       public data: ArrayBufferView, public shape: number[], public dataType: SupportedDataType,
       public fortranOrder: boolean) {}
-};
+}
 
 export function parseNpy(x: Uint8Array) {
   // Verify 6-byte magic sequence: 147, 78, 85, 77, 80, 89

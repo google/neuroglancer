@@ -14,12 +14,13 @@
  * limitations under the License.
  */
 
-import {VolumeChunk} from 'neuroglancer/sliceview/volume/backend';
 import {postProcessRawData} from 'neuroglancer/sliceview/backend_chunk_decoders/postprocess';
 import {decodeJpegStack} from 'neuroglancer/sliceview/decode_jpeg_stack';
+import {VolumeChunk} from 'neuroglancer/sliceview/volume/backend';
 
 export function decodeJpegChunk(chunk: VolumeChunk, response: ArrayBuffer) {
   postProcessRawData(
-      chunk, decodeJpegStack(
-                 new Uint8Array(response), chunk.chunkDataSize!, chunk.source!.spec.numChannels));
+      chunk,
+      decodeJpegStack(
+          new Uint8Array(response), chunk.chunkDataSize!, chunk.source!.spec.numChannels));
 }

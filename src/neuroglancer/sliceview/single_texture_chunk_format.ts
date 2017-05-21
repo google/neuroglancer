@@ -30,7 +30,9 @@ export abstract class SingleTextureChunkFormat<TextureLayout extends Disposable>
   texelType: number;
   textureFormat: number;
 
-  constructor(public shaderKey: string) { super(); }
+  constructor(public shaderKey: string) {
+    super();
+  }
 
   defineShader(builder: ShaderBuilder) {
     builder.addTextureSampler2D('uVolumeChunkSampler', textureUnitSymbol);
@@ -69,7 +71,7 @@ export abstract class SingleTextureChunkFormat<TextureLayout extends Disposable>
    * Does nothing, but may be overridden by subclass.
    */
   beginSource(_gl: GL, _shader: ShaderProgram) {}
-};
+}
 
 export abstract class SingleTextureVolumeChunk<Data, TextureLayout extends Disposable> extends
     VolumeChunk {
@@ -99,4 +101,4 @@ export abstract class SingleTextureVolumeChunk<Data, TextureLayout extends Dispo
     this.textureLayout!.dispose();
     this.textureLayout = null;
   }
-};
+}

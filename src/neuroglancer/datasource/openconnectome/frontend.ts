@@ -20,8 +20,8 @@
 
 import {ChunkManager} from 'neuroglancer/chunk_manager/frontend';
 import {registerDataSourceFactory} from 'neuroglancer/datasource/factory';
-import {getShardedVolume, tokenAndChannelCompleter} from 'neuroglancer/datasource/ndstore/frontend';
 import {LEGACY_URL_PREFIX} from 'neuroglancer/datasource/ndstore/base';
+import {getShardedVolume, tokenAndChannelCompleter} from 'neuroglancer/datasource/ndstore/frontend';
 
 const HOSTNAMES = ['http://openconnecto.me', 'http://www.openconnecto.me'];
 

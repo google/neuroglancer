@@ -23,12 +23,15 @@ export abstract class RenderedPanel extends RefCounted {
   constructor(public context: DisplayContext, public element: HTMLElement) {
     super();
     this.gl = context.gl;
-    this.registerEventListener(
-        element, 'mouseenter', (_event: MouseEvent) => { this.context.setActivePanel(this); });
+    this.registerEventListener(element, 'mouseenter', (_event: MouseEvent) => {
+      this.context.setActivePanel(this);
+    });
     context.addPanel(this);
   }
 
-  scheduleRedraw() { this.context.scheduleRedraw(); }
+  scheduleRedraw() {
+    this.context.scheduleRedraw();
+  }
 
   setGLViewport() {
     let element = this.element;
@@ -46,7 +49,9 @@ export abstract class RenderedPanel extends RefCounted {
 
   abstract onResize(): void;
 
-  onKeyCommand(_action: string) { return false; }
+  onKeyCommand(_action: string) {
+    return false;
+  }
 
   abstract draw(): void;
 
@@ -54,7 +59,7 @@ export abstract class RenderedPanel extends RefCounted {
     this.context.removePanel(this);
     super.disposed();
   }
-};
+}
 
 export class DisplayContext extends RefCounted {
   canvas = document.createElement('canvas');
@@ -159,4 +164,4 @@ export class DisplayContext extends RefCounted {
     }
     this.updateFinished.dispatch();
   }
-};
+}

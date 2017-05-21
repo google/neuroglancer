@@ -29,7 +29,9 @@ export class Buffer implements Disposable {
     this.buffer = gl.createBuffer();
   }
 
-  bind() { this.gl.bindBuffer(this.bufferType, this.buffer); }
+  bind() {
+    this.gl.bindBuffer(this.bufferType, this.buffer);
+  }
 
   bindToVertexAttrib(
       location: AttributeIndex, componentsPerVertexAttribute: number,
@@ -59,4 +61,4 @@ export class Buffer implements Disposable {
     buffer.setData(data, usage);
     return buffer;
   }
-};
+}

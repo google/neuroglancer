@@ -130,7 +130,7 @@ class ImageDropdown extends UserLayerDropdown {
   onShow() {
     this.codeWidget.textEditor.refresh();
   }
-};
+}
 
 class ShaderCodeOverlay extends Overlay {
   codeWidget = this.registerDisposer(makeShaderCodeWidget(this.layer));

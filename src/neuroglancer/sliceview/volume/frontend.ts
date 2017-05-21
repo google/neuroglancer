@@ -163,7 +163,7 @@ export abstract class VolumeChunkSource extends SliceViewChunkSource implements
   getChunk(x: any): VolumeChunk {
     return <VolumeChunk>this.chunkFormatHandler.getChunk(this, x);
   }
-};
+}
 
 /**
  * Defines a VolumeChunkSource for which all state, other than the VolumeChunkSpecification, is
@@ -204,7 +204,7 @@ export abstract class VolumeChunk extends SliceViewChunk {
     super(source, x);
   }
   abstract getChannelValueAt(dataPosition: vec3, channel: number): any;
-};
+}
 
 
 export interface MultiscaleVolumeChunkSource extends MultiscaleSliceViewChunkSource {

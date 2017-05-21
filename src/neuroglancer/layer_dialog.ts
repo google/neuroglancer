@@ -66,8 +66,9 @@ export class LayerDialog extends Overlay {
     let sourceInput = this.sourceInput =
         this.registerDisposer(new AutocompleteTextInput({completer: sourceCompleter, delay: 0}));
     sourceInput.element.classList.add('add-layer-source');
-    sourceInput.inputElement.addEventListener(
-        'blur', () => { this.validateSource(/*focusName=*/false); });
+    sourceInput.inputElement.addEventListener('blur', () => {
+      this.validateSource(/*focusName=*/false);
+    });
     this.submitElement.disabled = true;
     sourceInput.inputChanged.add(() => {
       const {volumeCancellationSource} = this;
@@ -99,7 +100,9 @@ export class LayerDialog extends Overlay {
 
     nameInputElement.type = 'text';
 
-    this.registerEventListener(nameInputElement, 'input', () => { this.validateName(); });
+    this.registerEventListener(nameInputElement, 'input', () => {
+      this.validateName();
+    });
 
     submitElement.type = 'submit';
 
@@ -182,7 +185,9 @@ export class LayerDialog extends Overlay {
     this.validityChanged();
   }
 
-  validityChanged() { this.submitElement.disabled = !(this.nameValid && this.sourceValid); }
+  validityChanged() {
+    this.submitElement.disabled = !(this.nameValid && this.sourceValid);
+  }
 
   validateSource(focusName: boolean = false) {
     let url = this.sourceInput.value;
@@ -212,23 +217,25 @@ export class LayerDialog extends Overlay {
 
     this.setInfo('Validating volume source...');
     const token = this.volumeCancellationSource = new CancellationTokenSource();
-    getVolume(this.manager.chunkManager, url, token).then(source => {
-      if (token.isCanceled) {
-        return;
-      }
-      this.volumeCancellationSource = undefined;
-      this.sourceValid = true;
-      this.setInfo(
-          `${VolumeType[source.volumeType].toLowerCase()}: ` +
-          `${source.numChannels}-channel ${DataType[source.dataType].toLowerCase()}`);
-      this.validityChanged();
-    }).catch((reason: Error) => {
-      if (token.isCanceled) {
-        return;
-      }
-      this.volumeCancellationSource = undefined;
-      this.setError(reason.message);
-    });
+    getVolume(this.manager.chunkManager, url, token)
+        .then(source => {
+          if (token.isCanceled) {
+            return;
+          }
+          this.volumeCancellationSource = undefined;
+          this.sourceValid = true;
+          this.setInfo(
+              `${VolumeType[source.volumeType].toLowerCase()}: ` +
+              `${source.numChannels}-channel ${DataType[source.dataType].toLowerCase()}`);
+          this.validityChanged();
+        })
+        .catch((reason: Error) => {
+          if (token.isCanceled) {
+            return;
+          }
+          this.volumeCancellationSource = undefined;
+          this.setError(reason.message);
+        });
   }
 
   setInfo(message: string) {

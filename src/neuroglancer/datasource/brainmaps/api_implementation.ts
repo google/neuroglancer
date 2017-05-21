@@ -33,13 +33,16 @@ let promise: Promise<Token>|null = null;
 let token: Token|null = null;
 
 export function getToken(invalidToken?: Token) {
-  if (promise !== null && (token === null || invalidToken == null ||
-                           invalidToken['generationId'] !== token['generationId'])) {
+  if (promise !== null &&
+      (token === null || invalidToken == null ||
+       invalidToken['generationId'] !== token['generationId'])) {
     // Either we already have a valid token, or we are already obtaining one.
     return promise;
   }
   token = null;
   promise = implementation.getNewTokenPromise(invalidToken);
-  promise.then((t: Token) => { token = t; });
+  promise.then((t: Token) => {
+    token = t;
+  });
   return promise;
 }

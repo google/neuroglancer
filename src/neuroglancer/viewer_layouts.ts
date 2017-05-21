@@ -60,7 +60,9 @@ export function makeSliceView(viewerState: SliceViewViewerState, baseToSelf?: qu
 
 export function makeOrthogonalSliceViews(viewerState: SliceViewViewerState) {
   let sliceViews = new Array<SliceView>();
-  let addSliceView = (q?: quat) => { sliceViews.push(makeSliceView(viewerState, q)); };
+  let addSliceView = (q?: quat) => {
+    sliceViews.push(makeSliceView(viewerState, q));
+  };
   addSliceView();
   addSliceView(quat.rotateX(quat.create(), quat.create(), Math.PI / 2));
   addSliceView(quat.rotateY(quat.create(), quat.create(), Math.PI / 2));
@@ -211,7 +213,7 @@ export class SinglePanelLayout extends RefCounted {
     removeChildren(this.rootElement);
     super.disposed();
   }
-};
+}
 
 export class SinglePerspectiveLayout extends RefCounted {
   constructor(public rootElement: HTMLElement, public viewer: ViewerUIState) {

@@ -14,8 +14,8 @@
  * limitations under the License.
  */
 
-import {VolumeChunk} from 'neuroglancer/sliceview/volume/backend';
 import {postProcessRawData} from 'neuroglancer/sliceview/backend_chunk_decoders/postprocess';
+import {VolumeChunk} from 'neuroglancer/sliceview/volume/backend';
 import {DATA_TYPE_BYTES, DataType} from 'neuroglancer/util/data_type';
 import {convertEndian16, convertEndian32, Endianness, ENDIANNESS} from 'neuroglancer/util/endian';
 import {prod3} from 'neuroglancer/util/geom';
@@ -29,7 +29,8 @@ export function decodeRawChunk(
   let expectedBytes = numElements * bytesPerElement * spec.numChannels;
   if (expectedBytes !== response.byteLength) {
     throw new Error(
-        `Raw-format chunk is ${response.byteLength} bytes, but ${numElements} * ${bytesPerElement} = ${expectedBytes} bytes are expected.`);
+        `Raw-format chunk is ${response.byteLength} bytes, ` +
+        `but ${numElements} * ${bytesPerElement} = ${expectedBytes} bytes are expected.`);
   }
   let data: ArrayBufferView;
   switch (dataType) {

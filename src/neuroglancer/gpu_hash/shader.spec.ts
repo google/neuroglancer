@@ -223,7 +223,9 @@ float highOffset = ${bName}[${numAlternatives * 4 + 2}];
       }
       let executeIndex = 0;
       let mungedTable: Uint32Array;
-      hashTable.tableWithMungedEmptyKey(table => { mungedTable = new Uint32Array(table); });
+      hashTable.tableWithMungedEmptyKey(table => {
+        mungedTable = new Uint32Array(table);
+      });
       function checkPresent(x: Uint64) {
         let temp = new Uint32Array(2);
         temp[0] = x.low;
@@ -300,7 +302,9 @@ gl_FragData[2] = y.high;
         notPresentValues.push(x);
       }
       let mungedTable: Uint32Array;
-      hashTable.tableWithMungedEmptyKey(table => { mungedTable = new Uint32Array(table); });
+      hashTable.tableWithMungedEmptyKey(table => {
+        mungedTable = new Uint32Array(table);
+      });
       function checkPresent(x: Uint64) {
         let temp = new Uint32Array(2);
         temp[0] = x.low;
@@ -323,7 +327,9 @@ gl_FragData[2] = y.high;
         expect(hashTable.has(x)).toBe(true, `cpu: i = ${i}, x = ${x}`);
         checkPresent(x);
       });
-      notPresentValues.forEach((x, ) => { checkPresent(x); });
+      notPresentValues.forEach(x => {
+        checkPresent(x);
+      });
     });
   });
 });

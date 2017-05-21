@@ -142,7 +142,9 @@ export function stableStringify(x: any) {
 }
 
 function swapQuotes(x: string) {
-  return x.replace(/['"]/g, s => { return (s === '"' ? '\'' : '"'); });
+  return x.replace(/['"]/g, s => {
+    return (s === '"' ? '\'' : '"');
+  });
 }
 
 export function urlSafeStringifyString(x: string) {
@@ -383,7 +385,8 @@ export function verifyMapKey<U>(obj: any, map: Map<string, U>) {
   let result = map.get(obj);
   if (result === undefined) {
     throw new Error(
-        `Expected one of ${JSON.stringify(Array.from(map.keys()))}, but received: ${JSON.stringify(obj)}.`);
+        `Expected one of ${JSON.stringify(Array.from(map.keys()))}, ` +
+        `but received: ${JSON.stringify(obj)}.`);
   }
   return result;
 }

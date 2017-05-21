@@ -75,10 +75,14 @@ export class VoxelSize extends RefCounted {
     return this.size.toString();
   }
 
-  voxelFromSpatial(voxel: vec3, spatial: vec3) { return vec3.divide(voxel, spatial, this.size); }
+  voxelFromSpatial(voxel: vec3, spatial: vec3) {
+    return vec3.divide(voxel, spatial, this.size);
+  }
 
-  spatialFromVoxel(spatial: vec3, voxel: vec3) { return vec3.multiply(spatial, voxel, this.size); }
-};
+  spatialFromVoxel(spatial: vec3, voxel: vec3) {
+    return vec3.multiply(spatial, voxel, this.size);
+  }
+}
 
 const tempVec3 = vec3.create();
 const tempQuat = quat.create();
@@ -105,12 +109,18 @@ export class SpatialPosition extends RefCounted {
     this.spatialCoordinatesValid = spatialCoordinatesValid;
 
     this.registerDisposer(voxelSize);
-    this.registerDisposer(voxelSize.changed.add(() => { this.handleVoxelSizeChanged(); }));
+    this.registerDisposer(voxelSize.changed.add(() => {
+      this.handleVoxelSizeChanged();
+    }));
   }
 
-  get valid() { return this.spatialCoordinatesValid && this.voxelSize.valid; }
+  get valid() {
+    return this.spatialCoordinatesValid && this.voxelSize.valid;
+  }
 
-  get voxelCoordinatesValid() { return this.valid || this.voxelCoordinates != null; }
+  get voxelCoordinatesValid() {
+    return this.valid || this.voxelCoordinates != null;
+  }
 
   reset() {
     this.spatialCoordinatesValid = false;
@@ -230,7 +240,7 @@ export class SpatialPosition extends RefCounted {
       this.changed.dispatch();
     }
   }
-};
+}
 
 function quaternionIsIdentity(quat: quat) {
   return quat[0] === 0 && quat[1] === 0 && quat[2] === 0 && quat[3] === 1;
@@ -324,7 +334,7 @@ export class OrientationState extends RefCounted {
     }));
     return self;
   }
-};
+}
 
 export class Pose extends RefCounted {
   position: SpatialPosition;
@@ -346,7 +356,9 @@ export class Pose extends RefCounted {
     this.registerDisposer(this.orientation.changed.add(this.changed.dispatch));
   }
 
-  get valid() { return this.position.valid; }
+  get valid() {
+    return this.position.valid;
+  }
 
   /**
    * Resets everything.
@@ -455,11 +467,13 @@ export class Pose extends RefCounted {
     }
     this.orientation.changed.dispatch();
   }
-};
+}
 
 export class TrackableZoomState {
   constructor(private value_ = Number.NaN, public defaultValue = value_) {}
-  get value() { return this.value_; }
+  get value() {
+    return this.value_;
+  }
   set value(newValue: number) {
     if (newValue !== this.value_) {
       this.value_ = newValue;
@@ -484,7 +498,9 @@ export class TrackableZoomState {
     }
   }
 
-  reset() { this.value = this.defaultValue; }
+  reset() {
+    this.value = this.defaultValue;
+  }
 
   zoomBy(factor: number) {
     let {value_} = this;
@@ -493,7 +509,7 @@ export class TrackableZoomState {
     }
     this.value = value_ * factor;
   }
-};
+}
 
 export class NavigationState extends RefCounted {
   changed = new NullarySignal();
@@ -507,13 +523,20 @@ export class NavigationState extends RefCounted {
       this.zoomFactor = zoomFactor;
     }
     this.registerDisposer(pose);
-    this.registerDisposer(this.pose.changed.add(() => { this.changed.dispatch(); }));
-    this.registerDisposer(this.zoomFactor.changed.add(() => { this.changed.dispatch(); }));
-    this.registerDisposer(
-        this.voxelSize.changed.add(() => { this.handleVoxelSizeChanged(); }));
+    this.registerDisposer(this.pose.changed.add(() => {
+      this.changed.dispatch();
+    }));
+    this.registerDisposer(this.zoomFactor.changed.add(() => {
+      this.changed.dispatch();
+    }));
+    this.registerDisposer(this.voxelSize.changed.add(() => {
+      this.handleVoxelSizeChanged();
+    }));
     this.handleVoxelSizeChanged();
   }
-  get voxelSize() { return this.pose.position.voxelSize; }
+  get voxelSize() {
+    return this.pose.position.voxelSize;
+  }
 
   /**
    * Resets everything.
@@ -538,14 +561,18 @@ export class NavigationState extends RefCounted {
       this.setZoomFactorFromVoxelSize();
     }
   }
-  get position() { return this.pose.position; }
+  get position() {
+    return this.pose.position;
+  }
   toMat4(mat: mat4) {
     this.pose.toMat4(mat);
     let zoom = this.zoomFactor.value;
     mat4.scale(mat, mat, vec3.fromValues(zoom, zoom, zoom));
-  };
+  }
 
-  get valid() { return this.pose.valid; }
+  get valid() {
+    return this.pose.valid;
+  }
 
   toJSON() {
     let poseJson = this.pose.toJSON();
@@ -576,5 +603,7 @@ export class NavigationState extends RefCounted {
     }
   }
 
-  zoomBy(factor: number) { this.zoomFactor.zoomBy(factor); }
-};
+  zoomBy(factor: number) {
+    this.zoomFactor.zoomBy(factor);
+  }
+}

@@ -170,7 +170,7 @@ export class VolumeChunkSpecification extends SliceViewChunkSpecification {
         chunkDataSize => VolumeChunkSpecification.withDefaultCompression(
             Object.assign({}, options, {chunkDataSize})));
   }
-};
+}
 
 export interface VolumeChunkSource extends SliceViewChunkSource { spec: VolumeChunkSpecification; }
 

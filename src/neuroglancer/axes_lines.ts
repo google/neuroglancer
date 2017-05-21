@@ -88,4 +88,4 @@ export class AxesLineHelper extends RefCounted {
     gl.disableVertexAttribArray(aVertexPosition);
     gl.disableVertexAttribArray(aColor);
   }
-};
+}

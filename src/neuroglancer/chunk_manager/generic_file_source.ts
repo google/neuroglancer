@@ -63,7 +63,9 @@ class GenericFileChunk<Data> extends Chunk {
     }
   }
 
-  freeSystemMemory() { this.data = undefined; }
+  freeSystemMemory() {
+    this.data = undefined;
+  }
 }
 
 export class GenericFileSource<Data> extends ChunkSourceBase {

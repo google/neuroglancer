@@ -144,7 +144,8 @@ function parsePolydataAscii(header: VTKHeader, data: ArrayBufferView): Triangula
   function parsePointData(nVertices: number) {
     if (numVertices !== nVertices) {
       throw new Error(
-          `Number of vertices specified in POINT_DATA section (${nVertices}) must match number of points (${numVertices}).`);
+          `Number of vertices specified in POINT_DATA section (${nVertices}) ` +
+          `must match number of points (${numVertices}).`);
     }
     while (lineNumber < numLines) {
       let line = lines[lineNumber];
@@ -223,7 +224,9 @@ export function parseVTK(data: ArrayBufferView) {
   const dataFormat = headerMatch[3];
   const header: VTKHeader = {
     version: headerMatch[1],
-    comment: headerMatch[2], datasetType, dataFormat,
+    comment: headerMatch[2],
+    datasetType,
+    dataFormat,
   };
   const remainingData =
       new Uint8Array(data.buffer, data.byteOffset + byteOffset, data.byteLength - byteOffset);

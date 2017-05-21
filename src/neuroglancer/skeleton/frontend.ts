@@ -62,7 +62,6 @@ interface VertexAttributeRenderInfo extends VertexAttributeInfo {
 }
 
 class RenderHelper extends RefCounted {
-
   shaders = new Map<ShaderModule, ShaderProgram|null>();
   shaderGeneration = -1;
   private vertexAttributesKey = stableStringify(this.vertexAttributes);
@@ -133,8 +132,7 @@ void emitDefault() {
     gl.uniform4fv(shader.uniform('uPickID'), setVec4FromUint32(tempPickID, pickID));
   }
 
-  drawSkeleton(
-    gl: GL, shader: ShaderProgram, skeletonChunk: SkeletonChunk) {
+  drawSkeleton(gl: GL, shader: ShaderProgram, skeletonChunk: SkeletonChunk) {
     const {vertexAttributes} = this;
     const numAttributes = vertexAttributes.length;
     const {vertexAttributeOffsets} = skeletonChunk;
@@ -170,7 +168,9 @@ export class SkeletonLayer extends RefCounted {
   vertexAttributes: VertexAttributeRenderInfo[];
   fallbackFragmentMain = DEFAULT_FRAGMENT_MAIN;
 
-  get visibilityCount() { return this.sharedObject.visibilityCount; }
+  get visibilityCount() {
+    return this.sharedObject.visibilityCount;
+  }
 
   constructor(
       public chunkManager: ChunkManager, public source: SkeletonSource,
@@ -203,7 +203,9 @@ export class SkeletonLayer extends RefCounted {
     }
   }
 
-  get gl() { return this.chunkManager.chunkQueueManager.gl; }
+  get gl() {
+    return this.chunkManager.chunkQueueManager.gl;
+  }
 
   private getShader(gl: GL, renderHelper: RenderHelper, emitter: ShaderModule) {
     const {fragmentMain} = this.displayState;
@@ -289,13 +291,19 @@ export class PerspectiveViewSkeletonLayer extends PerspectiveViewRenderLayer {
   constructor(public base: SkeletonLayer) {
     super();
     this.registerDisposer(base);
-    this.registerDisposer(base.redrawNeeded.add(() => { this.redrawNeeded.dispatch(); }));
+    this.registerDisposer(base.redrawNeeded.add(() => {
+      this.redrawNeeded.dispatch();
+    }));
     this.setReady(true);
     this.visibilityCount.addDependency(base.visibilityCount);
   }
-  get gl() { return this.base.gl; }
+  get gl() {
+    return this.base.gl;
+  }
 
-  get isTransparent() { return this.base.displayState.objectAlpha.value < 1.0; }
+  get isTransparent() {
+    return this.base.displayState.objectAlpha.value < 1.0;
+  }
 
   draw(renderContext: PerspectiveViewRenderContext) {
     this.base.draw(renderContext, this, this.renderHelper);
@@ -308,11 +316,15 @@ export class SliceViewPanelSkeletonLayer extends SliceViewPanelRenderLayer {
   constructor(public base: SkeletonLayer) {
     super();
     this.registerDisposer(base);
-    this.registerDisposer(base.redrawNeeded.add(() => { this.redrawNeeded.dispatch(); }));
+    this.registerDisposer(base.redrawNeeded.add(() => {
+      this.redrawNeeded.dispatch();
+    }));
     this.setReady(true);
     this.visibilityCount.addDependency(base.visibilityCount);
   }
-  get gl() { return this.base.gl; }
+  get gl() {
+    return this.base.gl;
+  }
 
   draw(renderContext: SliceViewPanelRenderContext) {
     this.base.draw(renderContext, this, this.renderHelper, 10);
@@ -321,10 +333,10 @@ export class SliceViewPanelSkeletonLayer extends SliceViewPanelRenderLayer {
 
 function getWebglDataType(dataType: DataType) {
   switch (dataType) {
-  case DataType.FLOAT32:
-    return GL_FLOAT;
-  default:
-    throw new Error('Data type not supported by WebGL: ${DataType[dataType]}');
+    case DataType.FLOAT32:
+      return GL_FLOAT;
+    default:
+      throw new Error('Data type not supported by WebGL: ${DataType[dataType]}');
   }
 }
 
@@ -370,7 +382,9 @@ const emptyVertexAttributes = new Map<string, VertexAttributeInfo>();
 
 export class SkeletonSource extends ChunkSource {
   chunks: Map<string, SkeletonChunk>;
-  getChunk(x: any) { return new SkeletonChunk(this, x); }
+  getChunk(x: any) {
+    return new SkeletonChunk(this, x);
+  }
 
   /**
    * Specifies whether the skeleton vertex coordinates are specified in units of voxels rather than
@@ -386,7 +400,9 @@ export class SkeletonSource extends ChunkSource {
 }
 
 export class ParameterizedSkeletonSource<Parameters> extends SkeletonSource {
-  constructor(chunkManager: ChunkManager, public parameters: Parameters) { super(chunkManager); }
+  constructor(chunkManager: ChunkManager, public parameters: Parameters) {
+    super(chunkManager);
+  }
 
   initializeCounterpart(rpc: RPC, options: any) {
     options['parameters'] = this.parameters;
@@ -405,7 +421,9 @@ export function parameterizedSkeletonSource<Parameters>(
       return chunkManager.getChunkSource(
           this, stableStringify(parameters), () => new this(chunkManager, parameters));
     }
-    toString() { return parametersConstructor.stringify(this.parameters); }
+    toString() {
+      return parametersConstructor.stringify(this.parameters);
+    }
   };
   newConstructor.prototype.RPC_TYPE_ID = parametersConstructor.RPC_ID;
   return newConstructor;

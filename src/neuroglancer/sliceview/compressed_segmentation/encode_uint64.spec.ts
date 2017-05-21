@@ -111,7 +111,7 @@ describe('compressed_segmentation uint64', () => {
       const input = Uint32Array.of(
           4, 0, 3, 0, 5, 0, 4, 0,  //
           1, 0, 3, 0, 3, 0, 3, 0   //
-          );
+      );
       const volumeSize = [2, 2, 2];
       const blockSize = [2, 2, 1];
       const output = new Uint32ArrayBuilder();
@@ -124,7 +124,7 @@ describe('compressed_segmentation uint64', () => {
               12 | (1 << 24), 11,            //
               0b01100001, 3, 0, 4, 0, 5, 0,  //
               0b1110, 1, 0, 3, 0             //
-              ));
+          ));
     });
 
     it('basic cached 0-bit', () => {
@@ -133,7 +133,7 @@ describe('compressed_segmentation uint64', () => {
           3, 0, 3, 0, 3, 0, 3, 0,  //
           3, 0, 3, 0, 3, 0, 3, 0,  //
           4, 0, 4, 0, 4, 0, 4, 0   //
-          );
+      );
       const volumeSize = [2, 2, 4];
       const blockSize = [2, 2, 1];
       const output = new Uint32ArrayBuilder();
@@ -148,7 +148,7 @@ describe('compressed_segmentation uint64', () => {
               8 | (0 << 24), 12,   //
               4, 0,                //
               3, 0                 //
-              ));
+          ));
     });
 
     it('basic cached 2-bit', () => {
@@ -157,7 +157,7 @@ describe('compressed_segmentation uint64', () => {
           1, 0, 3, 0, 3, 0, 3, 0,  //
           3, 0, 1, 0, 1, 0, 1, 0,  //
           5, 0, 5, 0, 3, 0, 4, 0   //
-          );
+      );
       const volumeSize = [2, 2, 4];
       const blockSize = [2, 2, 1];
       const output = new Uint32ArrayBuilder();
@@ -174,7 +174,7 @@ describe('compressed_segmentation uint64', () => {
               0b1110, 1, 0, 3, 0,            //
               0b00000001,                    //
               0b01001010                     //
-              ));
+          ));
     });
 
     for (let volumeSize of [  //
@@ -201,7 +201,7 @@ describe('compressed_segmentation uint64', () => {
       const blockSize = [2, 2, 1];
       const input = Uint32Array.of(
           4, 0, 4, 0, 4, 0, 4, 0  //
-          );
+      );
       const volumeSize = [2, 2, 1, 1];
       const output = new Uint32ArrayBuilder();
       encodeChannels(output, blockSize, input, volumeSize);
@@ -209,7 +209,7 @@ describe('compressed_segmentation uint64', () => {
           .toEqual(Uint32Array.of(
               1,          //
               2, 2, 4, 0  //
-              ));
+          ));
     });
 
     for (let volumeSize of [  //

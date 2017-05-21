@@ -25,8 +25,8 @@ import {MeshSourceParameters, SkeletonSourceParameters, VolumeChunkEncoding, Vol
 import {defineParameterizedMeshSource} from 'neuroglancer/mesh/frontend';
 import {VertexAttributeInfo} from 'neuroglancer/skeleton/base';
 import {parameterizedSkeletonSource} from 'neuroglancer/skeleton/frontend';
-import {VolumeChunkSpecification, VolumeSourceOptions, VolumeType} from 'neuroglancer/sliceview/volume/base';
 import {DataType, DEFAULT_MAX_VOXELS_PER_CHUNK_LOG2, getNearIsotropicBlockSize, getTwoDimensionalBlockSize} from 'neuroglancer/sliceview/base';
+import {VolumeChunkSpecification, VolumeSourceOptions, VolumeType} from 'neuroglancer/sliceview/volume/base';
 import {defineParameterizedVolumeChunkSource, MultiscaleVolumeChunkSource as GenericMultiscaleVolumeChunkSource} from 'neuroglancer/sliceview/volume/frontend';
 import {mat4, vec3} from 'neuroglancer/util/geom';
 import {openShardedHttpRequest, sendHttpRequest} from 'neuroglancer/util/http_request';
@@ -91,7 +91,8 @@ export class MultiscaleVolumeChunkSource implements GenericMultiscaleVolumeChunk
      * nearly flat in Z, Y, X respectively.  The inner arrays must have length 3.
      */
     let twoDimensionalScales = verifyObjectProperty(
-        response, 'twoDimensionalScales', x => x === undefined ?
+        response, 'twoDimensionalScales',
+        x => x === undefined ?
             undefined :
             parseArray(x, y => parseFixedLengthArray(new Array<ScaleInfo>(3), y, parseScaleInfo)));
     if ((twoDimensionalScales === undefined) === (threeDimensionalScales === undefined)) {
@@ -111,7 +112,10 @@ export class MultiscaleVolumeChunkSource implements GenericMultiscaleVolumeChunk
             scale;
         return {
           key: scale.key,
-          offset: scale.offset, sizeInVoxels, voxelSize, chunkDataSize,
+          offset: scale.offset,
+          sizeInVoxels,
+          voxelSize,
+          chunkDataSize,
         };
       }));
       if (!vec3.equals(this.scales[0][0].voxelSize, this.scales[0][1].voxelSize) ||
@@ -146,7 +150,8 @@ export class MultiscaleVolumeChunkSource implements GenericMultiscaleVolumeChunk
         transform: mat4.fromTranslation(mat4.create(), scaleInfo.offset),
         upperVoxelBound: scaleInfo.sizeInVoxels,
         upperClipBound: upperClipBound,
-        chunkDataSize: scaleInfo.chunkDataSize!, volumeSourceOptions,
+        chunkDataSize: scaleInfo.chunkDataSize!,
+        volumeSourceOptions,
       });
       return VolumeChunkSource.get(
           this.chunkManager, spec,
@@ -163,8 +168,12 @@ export class MultiscaleVolumeChunkSource implements GenericMultiscaleVolumeChunk
 }
 
 export class SkeletonSource extends BaseSkeletonSource {
-  get skeletonVertexCoordinatesInVoxels() { return false; }
-  get vertexAttributes() { return this.parameters.vertexAttributes; }
+  get skeletonVertexCoordinatesInVoxels() {
+    return false;
+  }
+  get vertexAttributes() {
+    return this.parameters.vertexAttributes;
+  }
 }
 
 function parseVertexAttributeInfo(x: any): VertexAttributeInfo {

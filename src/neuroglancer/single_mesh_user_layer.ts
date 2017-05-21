@@ -100,10 +100,12 @@ export class SingleMeshUserLayer extends UserLayer {
       this.displayState.attributeNames.value = initialAttributeNames;
       this.addRenderLayer(new SingleMeshLayer(source, this.displayState));
     });
-    this.registerDisposer(this.displayState.fragmentMain.changed.add(
-        () => { this.specificationChanged.dispatch(); }));
-    this.registerDisposer(this.displayState.attributeNames.changed.add(
-        () => { this.specificationChanged.dispatch(); }));
+    this.registerDisposer(this.displayState.fragmentMain.changed.add(() => {
+      this.specificationChanged.dispatch();
+    }));
+    this.registerDisposer(this.displayState.attributeNames.changed.add(() => {
+      this.specificationChanged.dispatch();
+    }));
   }
   toJSON() {
     let x: any = {'type': 'mesh'};
@@ -139,7 +141,9 @@ export class SingleMeshUserLayer extends UserLayer {
     x['vertexAttributeNames'] = persistentAttributeNames;
     return x;
   }
-  makeDropdown(element: HTMLDivElement) { return new SingleMeshDropdown(element, this); }
+  makeDropdown(element: HTMLDivElement) {
+    return new SingleMeshDropdown(element, this);
+  }
 }
 
 function makeShaderCodeWidget(layer: SingleMeshUserLayer) {
@@ -161,8 +165,9 @@ class VertexAttributeWidget extends RefCounted {
 
   attributeNameElements: HTMLInputElement[]|undefined;
 
-  private debouncedValueUpdater =
-      debounce(() => { this.updateAttributeNames(); }, SHADER_UPDATE_DELAY);
+  private debouncedValueUpdater = debounce(() => {
+    this.updateAttributeNames();
+  }, SHADER_UPDATE_DELAY);
 
   constructor(
       public attributeNames: TrackableAttributeNames,
@@ -171,7 +176,9 @@ class VertexAttributeWidget extends RefCounted {
     this.element.className = 'neuroglancer-single-mesh-attribute-widget';
 
     this.updateInputElements();
-    this.registerDisposer(attributeNames.changed.add(() => { this.updateInputElements(); }));
+    this.registerDisposer(attributeNames.changed.add(() => {
+      this.updateInputElements();
+    }));
   }
 
   private updateInputElements() {
@@ -215,10 +222,14 @@ class VertexAttributeWidget extends RefCounted {
       }
     }
     const attributeNamesValue = attributeNames.value;
-    attributeNamesValue.forEach((name, i) => { attributeNameElements![i].value = name || ''; });
+    attributeNamesValue.forEach((name, i) => {
+      attributeNameElements![i].value = name || '';
+    });
   }
 
-  disposed() { removeFromParent(this.element); }
+  disposed() {
+    removeFromParent(this.element);
+  }
 
   private updateAttributeNames() {
     const attributeNames = this.attributeNames.value;
@@ -271,8 +282,9 @@ class SingleMeshDropdown extends UserLayerDropdown {
     maximizeButton.innerHTML = '&square;';
     maximizeButton.className = 'maximize-button';
     maximizeButton.title = 'Show larger editor view';
-    this.registerEventListener(
-        maximizeButton, 'click', () => { new ShaderCodeOverlay(this.layer); });
+    this.registerEventListener(maximizeButton, 'click', () => {
+      new ShaderCodeOverlay(this.layer);
+    });
 
     topRow.appendChild(spacer);
     topRow.appendChild(maximizeButton);
@@ -284,7 +296,9 @@ class SingleMeshDropdown extends UserLayerDropdown {
     this.codeWidget.textEditor.refresh();
   }
 
-  onShow() { this.codeWidget.textEditor.refresh(); }
+  onShow() {
+    this.codeWidget.textEditor.refresh();
+  }
 }
 
 class ShaderCodeOverlay extends Overlay {

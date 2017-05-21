@@ -38,7 +38,9 @@ export class ManifestChunk extends Chunk {
   objectId = new Uint64();
   fragmentIds: FragmentId[]|null;
 
-  constructor() { super(); }
+  constructor() {
+    super();
+  }
   // We can't save a reference to objectId, because it may be a temporary
   // object.
   initializeManifestChunk(key: string, objectId: Uint64) {
@@ -46,7 +48,9 @@ export class ManifestChunk extends Chunk {
     this.objectId.assign(objectId);
   }
 
-  freeSystemMemory() { this.fragmentIds = null; }
+  freeSystemMemory() {
+    this.fragmentIds = null;
+  }
 
   downloadSucceeded() {
     // We can't easily determine the memory usage of the JSON manifest.  Just use 100 bytes as a
@@ -58,8 +62,10 @@ export class ManifestChunk extends Chunk {
     }
   }
 
-  toString() { return this.objectId.toString(); }
-};
+  toString() {
+    return this.objectId.toString();
+  }
+}
 
 /**
  * Chunk that contains the mesh for a single fragment of a single object.
@@ -70,7 +76,9 @@ export class FragmentChunk extends Chunk {
   vertexPositions: Float32Array|null = null;
   indices: Uint32Array|null = null;
   vertexNormals: Float32Array|null = null;
-  constructor() { super(); }
+  constructor() {
+    super();
+  }
   initializeFragmentChunk(key: string, manifestChunk: ManifestChunk, fragmentId: FragmentId) {
     super.initialize(key);
     this.manifestChunk = manifestChunk;
@@ -106,7 +114,7 @@ export class FragmentChunk extends Chunk {
         vertexPositions!.byteLength + indices!.byteLength + vertexNormals!.byteLength;
     super.downloadSucceeded();
   }
-};
+}
 
 /**
  * Assigns chunk.fragmentKeys to response[keysPropertyName].
@@ -260,7 +268,7 @@ export abstract class MeshSource extends ChunkSource {
 
   abstract downloadFragment(chunk: FragmentChunk, cancellationToken: CancellationToken):
       Promise<void>;
-};
+}
 
 export abstract class ParameterizedMeshSource<Parameters> extends MeshSource {
   parameters: Parameters;
@@ -268,7 +276,7 @@ export abstract class ParameterizedMeshSource<Parameters> extends MeshSource {
     super(rpc, options);
     this.parameters = options['parameters'];
   }
-};
+}
 
 @registerSharedObject(FRAGMENT_SOURCE_RPC_ID)
 export class FragmentSource extends ChunkSource {
@@ -276,7 +284,7 @@ export class FragmentSource extends ChunkSource {
   download(chunk: FragmentChunk, cancellationToken: CancellationToken) {
     return this.meshSource!.downloadFragment(chunk, cancellationToken);
   }
-};
+}
 
 @registerSharedObject(MESH_LAYER_RPC_ID)
 export class MeshLayer extends SegmentationLayerSharedObjectCounterpart {
@@ -311,4 +319,4 @@ export class MeshLayer extends SegmentationLayerSharedObjectCounterpart {
       }
     });
   }
-};
+}

@@ -61,5 +61,7 @@ export class PerspectiveViewRenderLayer extends VisibilityTrackedRenderLayer {
   /**
    * Should be rendered as transparent.
    */
-  get isTransparent() { return false; }
+  get isTransparent() {
+    return false;
+  }
 }

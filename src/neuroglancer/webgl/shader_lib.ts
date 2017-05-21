@@ -61,7 +61,8 @@ vec3 hsvToRgb(vec3 c) {
  * system is not exactly reversed by multiplying by 255.
  */
 export const glsl_unnormalizeUint8 = ['float', 'vec2', 'vec3', 'vec4']
-                                         .map(t => `
+                                         .map(
+                                             t => `
 ${t} unnormalizeUint8(${t} value) {
   return floor(value * 255.0 + 0.5);
 }
@@ -111,7 +112,8 @@ float uintbeToFloat(vec3 v) {
 export const glsl_uintToFloat = (() => {
   const suffix = ENDIANNESS === Endianness.BIG ? 'be' : 'le';
   return [
-    ENDIANNESS === Endianness.BIG ? glsl_uintbeToFloat : glsl_uintleToFloat, `
+    ENDIANNESS === Endianness.BIG ? glsl_uintbeToFloat : glsl_uintleToFloat,
+    `
 float uintToFloat(float v) {
   return uint${suffix}ToFloat(v);
 }

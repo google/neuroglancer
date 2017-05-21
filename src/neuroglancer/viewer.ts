@@ -64,10 +64,10 @@ export interface UIOptions {
 export interface ViewerOptions extends UIOptions {}
 
 const defaultViewerOptions: ViewerOptions = {
-  showHelpButton : true,
-  showLayerDialog : true,
-  showLayerPanel : true,
-  showLocation : true,
+  showHelpButton: true,
+  showLayerDialog: true,
+  showLayerPanel: true,
+  showLocation: true,
 };
 
 export class Viewer extends RefCounted implements ViewerState {
@@ -108,8 +108,12 @@ export class Viewer extends RefCounted implements ViewerState {
 
     this.options = {...defaultViewerOptions, ...options};
 
-    this.registerDisposer(display.updateStarted.add(() => { this.onUpdateDisplay(); }));
-    this.registerDisposer(display.updateFinished.add(() => { this.onUpdateDisplayFinished(); }));
+    this.registerDisposer(display.updateStarted.add(() => {
+      this.onUpdateDisplay();
+    }));
+    this.registerDisposer(display.updateFinished.add(() => {
+      this.onUpdateDisplayFinished();
+    }));
 
     const {state} = this;
     state.add('layers', this.layerSpecification);
@@ -122,8 +126,9 @@ export class Viewer extends RefCounted implements ViewerState {
     state.add('showSlices', this.showPerspectiveSliceViews);
     state.add('layout', this.layoutName);
 
-    this.registerDisposer(
-      this.navigationState.changed.add(() => { this.handleNavigationStateChanged(); }));
+    this.registerDisposer(this.navigationState.changed.add(() => {
+      this.handleNavigationStateChanged();
+    }));
 
     this.layerManager.initializePosition(this.navigationState.position);
 
@@ -149,10 +154,13 @@ export class Viewer extends RefCounted implements ViewerState {
     this.layerManager.layersChanged.add(maybeResetState);
     maybeResetState();
 
-    this.registerDisposer(this.chunkQueueManager.visibleChunksChanged.add(
-        () => { this.layerSelectedValues.handleLayerChange(); }));
+    this.registerDisposer(this.chunkQueueManager.visibleChunksChanged.add(() => {
+      this.layerSelectedValues.handleLayerChange();
+    }));
 
-    this.chunkQueueManager.visibleChunksChanged.add(() => { display.scheduleRedraw(); });
+    this.chunkQueueManager.visibleChunksChanged.add(() => {
+      display.scheduleRedraw();
+    });
 
     this.makeUI();
 
@@ -168,8 +176,12 @@ export class Viewer extends RefCounted implements ViewerState {
     });
 
     let {keyCommands} = this;
-    keyCommands.set('toggle-layout', function() { this.toggleLayout(); });
-    keyCommands.set('snap', function() { this.navigationState.pose.snap(); });
+    keyCommands.set('toggle-layout', function() {
+      this.toggleLayout();
+    });
+    keyCommands.set('snap', function() {
+      this.navigationState.pose.snap();
+    });
     keyCommands.set('add-layer', function() {
       this.layerPanel.addLayerMenu();
       return true;
@@ -188,13 +200,20 @@ export class Viewer extends RefCounted implements ViewerState {
     }
 
     for (let command of ['recolor', 'clear-segments']) {
-      keyCommands.set(command, function() { this.layerManager.invokeAction(command); });
+      keyCommands.set(command, function() {
+        this.layerManager.invokeAction(command);
+      });
     }
 
-    keyCommands.set('toggle-axis-lines', function() { this.showAxisLines.toggle(); });
-    keyCommands.set('toggle-scale-bar', function() { this.showScaleBar.toggle(); });
-    this.keyCommands.set(
-       'toggle-show-slices', function() { this.showPerspectiveSliceViews.toggle(); });
+    keyCommands.set('toggle-axis-lines', function() {
+      this.showAxisLines.toggle();
+    });
+    keyCommands.set('toggle-scale-bar', function() {
+      this.showScaleBar.toggle();
+    });
+    this.keyCommands.set('toggle-show-slices', function() {
+      this.showPerspectiveSliceViews.toggle();
+    });
   }
 
   private makeUI() {
@@ -218,18 +237,23 @@ export class Viewer extends RefCounted implements ViewerState {
           button.textContent = '?';
           button.title = 'Help';
           element.appendChild(button);
-          this.registerEventListener(button, 'click', () => { this.showHelpDialog(); });
+          this.registerEventListener(button, 'click', () => {
+            this.showHelpDialog();
+          });
         });
       }
       uiElements.push(L.box('row', rowElements));
     }
 
     if (options.showLayerPanel) {
-      uiElements.push(
-          element => { this.layerPanel = new LayerPanel(element, this.layerSpecification); });
+      uiElements.push(element => {
+        this.layerPanel = new LayerPanel(element, this.layerSpecification);
+      });
     }
 
-    uiElements.push(L.withFlex(1, element => { this.createDataDisplayLayout(element); }));
+    uiElements.push(L.withFlex(1, element => {
+      this.createDataDisplayLayout(element);
+    }));
 
     L.box('column', uiElements)(gridContainer);
     this.display.onResize();
@@ -247,15 +271,21 @@ export class Viewer extends RefCounted implements ViewerState {
     this.layoutName.value = newLayout[0];
   }
 
-  showHelpDialog() { new KeyBindingHelpDialog(this.keyMap); }
+  showHelpDialog() {
+    new KeyBindingHelpDialog(this.keyMap);
+  }
 
-  get gl() { return this.display.gl; }
+  get gl() {
+    return this.display.gl;
+  }
 
   onUpdateDisplay() {
     this.chunkQueueManager.chunkUpdateDeadline = null;
   }
 
-  onUpdateDisplayFinished() { this.mouseState.updateIfStale(); }
+  onUpdateDisplayFinished() {
+    this.mouseState.updateIfStale();
+  }
 
   private onKeyCommand(action: string) {
     let command = this.keyCommands.get(action);

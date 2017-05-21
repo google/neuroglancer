@@ -52,5 +52,7 @@ export class SingleMeshSourceParameters {
 
   static RPC_ID = 'single_mesh/SingleMeshSource';
 
-  static stringify(p: SingleMeshSourceParameters) { return `single_mesh:${JSON.stringify(p)}`; }
+  static stringify(p: SingleMeshSourceParameters) {
+    return `single_mesh:${JSON.stringify(p)}`;
+  }
 }

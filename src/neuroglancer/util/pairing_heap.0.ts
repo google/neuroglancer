@@ -164,4 +164,4 @@ export default class Implementation<T extends Node<T>> implements PairingHeapOpe
       }
     }
   }
-};
+}

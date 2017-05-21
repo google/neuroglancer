@@ -31,9 +31,15 @@ export class SegmentSetWidget extends RefCounted {
   private itemContainer = document.createElement('span');
   private items = new Map<string, ItemElement>();
 
-  get visibleSegments() { return this.displayState.visibleSegments; }
-  get segmentColorHash() { return this.displayState.segmentColorHash; }
-  get segmentSelectionState() { return this.displayState.segmentSelectionState; }
+  get visibleSegments() {
+    return this.displayState.visibleSegments;
+  }
+  get segmentColorHash() {
+    return this.displayState.segmentColorHash;
+  }
+  get segmentSelectionState() {
+    return this.displayState.segmentSelectionState;
+  }
 
   constructor(public displayState: SegmentationDisplayState) {
     super();
@@ -41,7 +47,9 @@ export class SegmentSetWidget extends RefCounted {
     element.className = 'segment-set-widget noselect';
     clearButton.className = 'clear-button';
     clearButton.title = 'Remove all segment IDs';
-    this.registerEventListener(clearButton, 'click', () => { this.visibleSegments.clear(); });
+    this.registerEventListener(clearButton, 'click', () => {
+      this.visibleSegments.clear();
+    });
 
     itemContainer.className = 'item-container';
     element.appendChild(itemContainer);
@@ -119,7 +127,9 @@ export class SegmentSetWidget extends RefCounted {
   }
 
   private handleColorChanged() {
-    this.items.forEach(itemElement => { this.setItemColor(itemElement); });
+    this.items.forEach(itemElement => {
+      this.setItemColor(itemElement);
+    });
   }
 
   disposed() {

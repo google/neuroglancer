@@ -43,14 +43,20 @@ export class PointListWidget extends RefCounted {
     element.className = 'neuroglancer-point-list-widget';
     clearButton.className = 'neuroglancer-clear-button';
     clearButton.textContent = 'Delete all points';
-    this.registerEventListener(clearButton, 'click', () => { this.pointList.reset(); });
+    this.registerEventListener(clearButton, 'click', () => {
+      this.pointList.reset();
+    });
     itemContainer.className = 'neuroglancer-item-container neuroglancer-select-text';
     element.appendChild(clearButton);
     element.appendChild(itemContainer);
-    this.registerDisposer(pointList.changed.add(() => { this.maybeUpdate(); }));
+    this.registerDisposer(pointList.changed.add(() => {
+      this.maybeUpdate();
+    }));
   }
 
-  get visible() { return this.visible_; }
+  get visible() {
+    return this.visible_;
+  }
   set visible(value: boolean) {
     if (this.visible_ !== value) {
       this.visible_ = value;
@@ -80,9 +86,15 @@ export class PointListWidget extends RefCounted {
       let j = i * 3;
       item.textContent =
           `${Math.round(data[j])} ${Math.round(data[j + 1])} ${Math.round(data[j + 2])}`;
-      item.addEventListener('click', () => { this.pointSelected.dispatch(i); });
-      item.addEventListener('mouseenter', () => { this.selectionIndex.value = i; });
-      item.addEventListener('mouseleave', () => { this.selectionIndex.value = null; });
+      item.addEventListener('click', () => {
+        this.pointSelected.dispatch(i);
+      });
+      item.addEventListener('mouseenter', () => {
+        this.selectionIndex.value = i;
+      });
+      item.addEventListener('mouseleave', () => {
+        this.selectionIndex.value = null;
+      });
       itemContainer.appendChild(item);
     }
   }

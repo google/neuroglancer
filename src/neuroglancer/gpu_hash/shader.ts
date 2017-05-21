@@ -131,10 +131,10 @@ export class GPUHashTable<HashTable extends HashTableBase> extends RefCounted {
   static get<HashTable extends HashTableBase>(gl: GL, hashTable: HashTable) {
     return gl.memoize.get(hashTable, () => new this(gl, hashTable));
   }
-};
+}
 
 export class HashSetShaderManager {
-  textureUnitSymbol = Symbol.for (`gpuhashtable:${this.prefix}`);
+  textureUnitSymbol = Symbol.for(`gpuhashtable:${this.prefix}`);
   aName = this.prefix + '_a';
   bName = this.prefix + '_b';
   samplerName = this.prefix + '_sampler';
@@ -156,7 +156,10 @@ export class HashSetShaderManager {
 float ${this.prefix}_computeHash_${alt}_${i}(uint64_t x) {
   float primeModulus = ${bName}[${numAlternatives * 4 + i}];
   float scalar = ${bName}[${numAlternatives * 4 + 3 + i}];
-  return computeHash(x, ${aName}[${aIndex}], ${aName}[${aIndex + 1}], ${bName}[${bIndex}], ${bName}[${bIndex + 1}], primeModulus, scalar);
+  return computeHash(x,
+                     ${aName}[${aIndex}], ${aName}[${aIndex + 1}],
+                     ${bName}[${bIndex}], ${bName}[${bIndex + 1}],
+                     primeModulus, scalar);
 }
 `;
       }
@@ -192,7 +195,9 @@ bool ${this.hasFunctionName}(uint64_t x) {
     builder.addFragmentCode(s);
   }
 
-  get hasFunctionName() { return `${this.prefix}_has`; }
+  get hasFunctionName() {
+    return `${this.prefix}_has`;
+  }
 
   enable<HashTable extends HashTableBase>(
       gl: GL, shader: ShaderProgram, hashTable: GPUHashTable<HashTable>) {
@@ -209,7 +214,7 @@ bool ${this.hasFunctionName}(uint64_t x) {
     gl.activeTexture(gl.TEXTURE0 + textureUnit);
     gl.bindTexture(gl.TEXTURE_2D, null);
   }
-};
+}
 
 export class HashMapShaderManager extends HashSetShaderManager {
   defineShader(builder: ShaderBuilder) {
@@ -240,5 +245,7 @@ bool ${this.getFunctionName}(uint64_t x, out uint64_t value) {
     builder.addFragmentCode(s);
   }
 
-  get getFunctionName() { return `${this.prefix}_get`; }
-};
+  get getFunctionName() {
+    return `${this.prefix}_get`;
+  }
+}

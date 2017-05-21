@@ -172,7 +172,9 @@ export abstract class HashTableBase {
    * Returns the offset into the hash table of the specified element, or -1 if the element is not
    * present.
    */
-  indexOf(x: Uint64) { return this.indexOfPair(x.low, x.high); }
+  indexOf(x: Uint64) {
+    return this.indexOfPair(x.low, x.high);
+  }
 
   /**
    * Changes the empty key to a value that is not equal to the current empty key and is not present
@@ -210,14 +212,18 @@ export abstract class HashTableBase {
   /**
    * Returns true iff the specified element is present.
    */
-  has(x: Uint64) { return this.indexOf(x) !== -1; }
+  has(x: Uint64) {
+    return this.indexOf(x) !== -1;
+  }
 
   /**
    * Returns true iff the specified element is present.
    */
-  hasPair(low: number, high: number) { return this.indexOfPair(low, high) !== -1; }
+  hasPair(low: number, high: number) {
+    return this.indexOfPair(low, high) !== -1;
+  }
 
-  delete (x: Uint64) {
+  delete(x: Uint64) {
     let index = this.indexOf(x);
     if (index !== -1) {
       let {table} = this;
@@ -380,7 +386,7 @@ export abstract class HashTableBase {
       this.restorePending();
     }
   }
-};
+}
 
 export class HashSetUint64 extends HashTableBase {
   add(x: Uint64) {
@@ -401,8 +407,10 @@ export class HashSetUint64 extends HashTableBase {
    * Iterates over the keys.  The same temporary value will be modified and yielded at every
    * iteration.
    */
-  [Symbol.iterator]() { return this.keys(); }
-};
+  [Symbol.iterator]() {
+    return this.keys();
+  }
+}
 HashSetUint64.prototype.entryStride = 2;
 
 // Value that needs to be inserted.  Temporary variables used during insert.  These can safely be
@@ -467,7 +475,9 @@ export class HashMapUint64 extends HashTableBase {
    * Iterates over entries.  The same temporary value will be modified and yielded at every
    * iteration.
    */
-  [Symbol.iterator]() { return this.entries(); }
+  [Symbol.iterator]() {
+    return this.entries();
+  }
 
   /**
    * Iterates over entries.  The same temporary value will be modified and yielded at every
@@ -488,5 +498,5 @@ export class HashMapUint64 extends HashTableBase {
       }
     }
   }
-};
+}
 HashMapUint64.prototype.entryStride = 4;

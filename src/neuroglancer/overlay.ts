@@ -53,4 +53,4 @@ export class Overlay extends RefCounted {
     document.body.removeChild(this.container);
     super.disposed();
   }
-};
+}

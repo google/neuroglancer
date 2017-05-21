@@ -59,7 +59,7 @@ module.exports = function(config) {
     webpack: webpackConfig,
     webpackServer: {noInfo: true},
     browserStack: {
-      // This empty object is required to work around a bug in karma-browserstack-launcher.
+        // This empty object is required to work around a bug in karma-browserstack-launcher.
     },
     browsers: [
       'Chrome',

@@ -43,7 +43,9 @@ interface ShaderCodeState {
 
 export class ShaderCodeWidget extends RefCounted {
   textEditor: CodeMirror.Editor;
-  get element() { return this.textEditor.getWrapperElement(); }
+  get element() {
+    return this.textEditor.getWrapperElement();
+  }
   private changingValue = false;
   private debouncedValueUpdater = debounce(() => {
     this.changingValue = true;
@@ -71,8 +73,9 @@ export class ShaderCodeWidget extends RefCounted {
       }
     }));
     this.element.classList.add('neuroglancer-shader-code-widget');
-    this.registerDisposer(
-        this.state.shaderError.changed.add(() => { this.updateErrorState(); }));
+    this.registerDisposer(this.state.shaderError.changed.add(() => {
+      this.updateErrorState();
+    }));
     this.updateErrorState();
   }
 

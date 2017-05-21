@@ -59,5 +59,7 @@ export class VolumeSourceParameters {
 
   static RPC_ID = 'nifti/VolumeChunkSource';
 
-  static stringify(p: VolumeSourceParameters) { return `nifti:${p.url}`; }
+  static stringify(p: VolumeSourceParameters) {
+    return `nifti:${p.url}`;
+  }
 }

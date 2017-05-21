@@ -93,4 +93,4 @@ export class Vec3Widget extends RefCounted {
     }
     super.disposed();
   }
-};
+}

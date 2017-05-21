@@ -30,7 +30,7 @@ export class VolumeChunkSourceParameters {
   }
 
   static RPC_ID = 'precomputed/VolumeChunkSource';
-};
+}
 
 
 export class MeshSourceParameters {
@@ -43,4 +43,4 @@ export class MeshSourceParameters {
   }
 
   static RPC_ID = 'precomputed/MeshSource';
-};
+}

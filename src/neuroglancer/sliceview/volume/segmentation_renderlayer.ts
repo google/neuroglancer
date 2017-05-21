@@ -47,7 +47,7 @@ export class EquivalencesHashMap {
       }
     }
   }
-};
+}
 
 export interface SliceViewSegmentationDisplayState extends SegmentationDisplayState {
   selectedAlpha: TrackableAlphaValue;
@@ -208,4 +208,4 @@ uint64_t getMappedObjectId() {
     this.hashTableManager.disable(gl, shader);
     super.endSlice(shader);
   }
-};
+}

@@ -30,9 +30,13 @@ implementation.getNewTokenPromise = function(invalidToken) {
   if (invalidToken != null) {
     msg['invalidToken'] = invalidToken;
   }
-  let promise = new Promise(function(resolve, _reject) { resolvePromise = resolve; });
+  let promise = new Promise(function(resolve, _reject) {
+    resolvePromise = resolve;
+  });
   rpc.invoke('brainmaps.requestToken', msg);
   return promise;
 };
 
-registerRPC('brainmaps.receiveToken', function(x) { resolvePromise!(x['authResult']); });
+registerRPC('brainmaps.receiveToken', function(x) {
+  resolvePromise!(x['authResult']);
+});

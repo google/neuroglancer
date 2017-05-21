@@ -33,13 +33,17 @@ export class SkeletonChunk extends Chunk {
   vertexPositions: Float32Array|null = null;
   vertexAttributes: TypedArray[]|null = null;
   indices: Uint32Array|null = null;
-  constructor() { super(); }
+  constructor() {
+    super();
+  }
 
   initializeSkeletonChunk(key: string, objectId: Uint64) {
     super.initialize(key);
     this.objectId.assign(objectId);
   }
-  freeSystemMemory() { this.vertexPositions = this.indices = null; }
+  freeSystemMemory() {
+    this.vertexPositions = this.indices = null;
+  }
 
   private getVertexAttributeBytes() {
     let total = this.vertexPositions!.byteLength;
@@ -65,7 +69,7 @@ export class SkeletonChunk extends Chunk {
       vertexData.set(new Uint8Array(
           vertexPositions.buffer, vertexPositions.byteOffset, vertexPositions.byteLength));
       let vertexAttributeOffsets = msg['vertexAttributeOffsets'] =
-        new Uint32Array(vertexAttributes.length + 1);
+          new Uint32Array(vertexAttributes.length + 1);
       vertexAttributeOffsets[0] = 0;
       let offset = vertexPositions.byteLength;
       vertexAttributes.forEach((a, i) => {
@@ -90,7 +94,7 @@ export class SkeletonChunk extends Chunk {
         this.indices!.byteLength + this.getVertexAttributeBytes();
     super.downloadSucceeded();
   }
-};
+}
 
 export abstract class SkeletonSource extends ChunkSource {
   chunks: Map<string, SkeletonChunk>;
@@ -104,7 +108,7 @@ export abstract class SkeletonSource extends ChunkSource {
     }
     return chunk;
   }
-};
+}
 
 export abstract class ParameterizedSkeletonSource<Parameters> extends SkeletonSource {
   parameters: Parameters;
@@ -112,7 +116,7 @@ export abstract class ParameterizedSkeletonSource<Parameters> extends SkeletonSo
     super(rpc, options);
     this.parameters = options['parameters'];
   }
-};
+}
 
 @registerSharedObject(SKELETON_LAYER_RPC_ID)
 export class SkeletonLayer extends SegmentationLayerSharedObjectCounterpart {
@@ -136,7 +140,7 @@ export class SkeletonLayer extends SegmentationLayerSharedObjectCounterpart {
       chunkManager.requestChunk(chunk, ChunkPriorityTier.VISIBLE, SKELETON_CHUNK_PRIORITY);
     });
   }
-};
+}
 
 /**
  * Extracts vertex positions and edge vertex indices of the specified endianness from `data'.

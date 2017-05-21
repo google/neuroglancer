@@ -100,4 +100,4 @@ void emitTransparent() {
     gl.uniform1f(shader.uniform('uOpacity'), this.opacity.value);
     return shader;
   }
-};
+}

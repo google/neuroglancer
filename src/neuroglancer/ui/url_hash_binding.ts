@@ -14,11 +14,11 @@
  * limitations under the License.
  */
 
-import {RefCounted} from 'neuroglancer/util/disposable';
-import {verifyObject, urlSafeParse, urlSafeStringify} from 'neuroglancer/util/json';
-import {Trackable, getCachedJson} from 'neuroglancer/util/trackable';
-import {WatchableValue} from 'neuroglancer/trackable_value';
 import debounce from 'lodash/debounce';
+import {WatchableValue} from 'neuroglancer/trackable_value';
+import {RefCounted} from 'neuroglancer/util/disposable';
+import {urlSafeParse, urlSafeStringify, verifyObject} from 'neuroglancer/util/json';
+import {getCachedJson, Trackable} from 'neuroglancer/util/trackable';
 
 /**
  * @file Implements a binding between a Trackable value and the URL hash state.
@@ -44,7 +44,7 @@ export class UrlHashBinding extends RefCounted {
    */
   parseError = new WatchableValue<Error|undefined>(undefined);
 
-  constructor (public root: Trackable, updateDelayMilliseconds = 200) {
+  constructor(public root: Trackable, updateDelayMilliseconds = 200) {
     super();
     this.registerEventListener(window, 'hashchange', () => this.updateFromUrlHash());
     const throttledSetUrlHash = debounce(() => this.setUrlHash(), updateDelayMilliseconds);
