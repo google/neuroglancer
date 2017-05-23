@@ -48,6 +48,10 @@ const DEFAULT_DATA_SOURCES = exports.DEFAULT_DATA_SOURCES = [
     source: 'neuroglancer/datasource/brainmaps',
     registerCredentials: 'neuroglancer/datasource/brainmaps/register_credentials_provider'
   },
+  {
+    source: 'neuroglancer/datasource/boss',
+    registerCredentials: 'neuroglancer/datasource/boss/register_credentials_provider'
+  },
   'neuroglancer/datasource/ndstore',
   'neuroglancer/datasource/dvid',
   'neuroglancer/datasource/render',
