@@ -25,6 +25,17 @@ import {getCachedJson, Trackable} from 'neuroglancer/util/trackable';
  */
 
 /**
+ * Keycloak authentication (used for the Boss datasource) has the unfortunate side effect of moving the fragment string into a query parameter. Here we check to see if the `redirect_fragment` query string field is set. If so, we move the contents from the query string into the hash.
+ */
+export function parseHashFromQueryString() {
+  let params = new URLSearchParams(window.location.search.substring(1));
+  let stateString = params.get("redirect_fragment");
+  if (stateString) {
+    history.replaceState(null, '', '#' + stateString);
+  }
+}
+
+/**
  * An instance of this class manages a binding between a Trackable value and the URL hash state.
  * The binding is initialized in the constructor, and is removed when dispose is called.
  */
