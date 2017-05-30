@@ -20,8 +20,6 @@ import {StatusMessage} from 'neuroglancer/status';
 // import {authenticateKeycloakOIDC} from 'neuroglancer/util/keycloak_oidc';
 import {registerRPC, RPC} from 'neuroglancer/worker_rpc';
 
-const authServer = 'https://auth.boss.neurodata.io/auth';
-
 import * as Keycloak from 'keycloak-js';
 
 export class KeycloakService {
@@ -29,7 +27,7 @@ export class KeycloakService {
 
   static initialized: boolean = false; 
 
-  static init(): Promise<any> {
+  static init(authServer: string): Promise<any> {
     const keycloakAuth = Keycloak({
       url: authServer,
       realm: 'BOSS',
@@ -55,7 +53,7 @@ export class KeycloakService {
   }
 }
 
-implementation.getNewTokenPromise = function() {
+implementation.getNewTokenPromise = function(authServer: string) {
   const status = new StatusMessage(/*delay=*/false);
   let cancellationSource: CancellationTokenSource|undefined;
 
@@ -87,7 +85,7 @@ implementation.getNewTokenPromise = function() {
                 });
             } else {
                 writeLoginStatus(`Boss requires authorization.`, 'Initializing...');
-                KeycloakService.init()
+                KeycloakService.init(authServer)
                 .then(() => { login(); });
             }
     }

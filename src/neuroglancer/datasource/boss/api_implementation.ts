@@ -35,13 +35,13 @@ export var implementation = new Implementation();
 let promise: Promise<Token>|null = null;
 let token: Token|null = null;
 
-export function getToken(invalidToken?: Token) {
-  if (promise !== null && (token === null || invalidToken == null))
+export function getToken(authServer: string) {
+  if (promise !== null && token === null)
   {
      return promise; 
   }  
   token = null;
-  promise = implementation.getNewTokenPromise(invalidToken);
+  promise = implementation.getNewTokenPromise(authServer);
   promise.then((t: Token) => { token = t; });
   return promise;
 }

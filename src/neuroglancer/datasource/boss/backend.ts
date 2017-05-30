@@ -20,16 +20,16 @@ import {registerChunkSource} from 'neuroglancer/chunk_manager/backend';
 import {makeRequest, HttpHeader, HttpCall} from 'neuroglancer/datasource/boss/api';
 import {VolumeChunkSourceParameters, MeshSourceParameters} from 'neuroglancer/datasource/boss/base';
 import {ParameterizedVolumeChunkSource, VolumeChunk} from 'neuroglancer/sliceview/volume/backend';
-import {decodeTriangleVertexPositionsAndIndices, FragmentChunk, ManifestChunk, ParameterizedMeshSource} from 'neuroglancer/mesh/backend';
+import {decodeJsonManifestChunk, decodeTriangleVertexPositionsAndIndices, FragmentChunk, ManifestChunk, ParameterizedMeshSource} from 'neuroglancer/mesh/backend';
 import {ChunkDecoder} from 'neuroglancer/sliceview/backend_chunk_decoders';
 import {decodeJpegChunk} from 'neuroglancer/sliceview/backend_chunk_decoders/jpeg';
-import {decodeNdstoreNpzChunk} from 'neuroglancer/sliceview/backend_chunk_decoders/ndstoreNpz';
+import {decodeBossNpzChunk} from 'neuroglancer/sliceview/backend_chunk_decoders/bossNpz';
 import {openShardedHttpRequest, sendHttpRequest} from 'neuroglancer/util/http_request';
 import {CancellationToken} from 'neuroglancer/util/cancellation';
 import {Endianness} from 'neuroglancer/util/endian';
 
 let chunkDecoders = new Map<string, ChunkDecoder>();
-chunkDecoders.set('npz', decodeNdstoreNpzChunk);
+chunkDecoders.set('npz', decodeBossNpzChunk);
 chunkDecoders.set('jpeg', decodeJpegChunk);
 
 let acceptHeaders = new Map<string, string>();
@@ -69,11 +69,14 @@ export class VolumeChunkSource extends ParameterizedVolumeChunkSource<VolumeChun
         responseType: 'arraybuffer',
         headers: [acceptHeader]
     };
-    return makeRequest(parameters.baseUrls, httpCall, cancellationToken)
-    // return makeRequest(parameters.baseUrls, 'GET', path, parameters.token, acceptHeader, 'arraybuffer', cancellationToken)
+    return makeRequest(parameters.baseUrls, parameters.authServer, httpCall, cancellationToken)
       .then(response => this.chunkDecoder(chunk, response));
   }
 };
+
+function decodeManifestChunk(chunk: ManifestChunk, response: any) {
+  return decodeJsonManifestChunk(chunk, response, 'fragments');
+}
 
 function decodeFragmentChunk(chunk: FragmentChunk, response: ArrayBuffer) {
   let dv = new DataView(response);
@@ -90,24 +93,18 @@ function decodeFragmentChunk(chunk: FragmentChunk, response: ArrayBuffer) {
 export class MeshSource extends ParameterizedMeshSource<MeshSourceParameters> {
   download(chunk: ManifestChunk, cancellationToken: CancellationToken)
   {
-    console.log(cancellationToken); /* skipping download for now, so don't log the cancellationToken */
-    chunk.fragmentIds = new Array<string>(); 
-    chunk.fragmentIds.push("0","1");     
-    return new Promise<void>((resolve, reject) => {
-      let fragmentKeys: string[] = new Array<string>(); 
-      fragmentKeys.push("0");
-      resolve();
-      reject(); 
-    });
+    let {parameters} = this;
+    let requestPath = `${parameters.path}/${chunk.objectId}`;
+    return sendHttpRequest(
+      openShardedHttpRequest(parameters.baseUrls, requestPath), 'json', cancellationToken)
+      .then(response => decodeManifestChunk(chunk, response));
   }
   
   downloadFragment(chunk: FragmentChunk, cancellationToken: CancellationToken) {
-    // let {parameters} = this; 
-    // Hard coded mesh for now 
-    const tmpUrl = `https://s3.amazonaws.com/meshes.boss`; 
-    const path = `/bossmesh.${chunk.fragmentId}.${chunk.manifestChunk!.objectId}.bin`;
+    let {parameters} = this; 
+    let requestPath = `${parameters.path}/${chunk.fragmentId}`;
     return sendHttpRequest(
-      openShardedHttpRequest(tmpUrl, path), 'arraybuffer', cancellationToken)
+      openShardedHttpRequest(parameters.baseUrls, requestPath), 'arraybuffer', cancellationToken)
       .then(response => decodeFragmentChunk(chunk, response)); 
   }
 }
