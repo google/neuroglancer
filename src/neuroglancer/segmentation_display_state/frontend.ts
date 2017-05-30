@@ -144,7 +144,7 @@ export function forEachSegmentToDraw<SegmentData>(
     displayState: SegmentationDisplayState, objects: Map<string, SegmentData>,
     callback: (rootObjectId: Uint64, objectId: Uint64, segmentData: SegmentData) => void) {
   forEachVisibleSegment(displayState, (objectId, rootObjectId) => {
-    const key = getObjectKey(objectId);
+    const key = getObjectKey(objectId, displayState.clipBounds.value);
     const segmentData = objects.get(key);
     if (segmentData !== undefined) {
       callback(rootObjectId, objectId, segmentData);
@@ -156,6 +156,7 @@ const Base = withSharedVisibility(SharedObject);
 export class SegmentationLayerSharedObject extends Base {
   constructor(public chunkManager: ChunkManager, public displayState: SegmentationDisplayState) {
     super();
+    this.registerDisposer(displayState.clipBounds.changed.add(() => chunkManager.chunkQueueManager.scheduleChunkUpdate()));
   }
 
   initializeCounterpartWithChunkManager(options: any) {
@@ -163,6 +164,7 @@ export class SegmentationLayerSharedObject extends Base {
     options['chunkManager'] = this.chunkManager.rpcId;
     options['visibleSegments'] = displayState.visibleSegments.rpcId;
     options['segmentEquivalences'] = displayState.segmentEquivalences.rpcId;
+    options['clipBounds'] = displayState.clipBounds.rpcId;
     super.initializeCounterpart(this.chunkManager.rpc!, options);
   }
 }
