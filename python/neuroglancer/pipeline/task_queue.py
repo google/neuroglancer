@@ -203,18 +203,19 @@ class TaskQueue(ThreadedQueue):
         """
         raise NotImplemented
 
-    def lease(self, tag=''):
+    def lease(self, tag=None):
         """
         Acquires a lease on the topmost N unowned tasks in the specified queue.
         Required query parameters: leaseSecs, numTasks
         """
+        tag = tag if tag else None
         
         tasks = self._api.tasks().lease(
             project=self._project,
             taskqueue=self._queue_name, 
             numTasks=1, 
             leaseSecs=600,
-            groupByTag=(tag != ''),
+            groupByTag=(tag is not None),
             tag=tag,
         ).execute(num_retries=6)
 
