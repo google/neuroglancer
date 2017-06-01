@@ -168,8 +168,8 @@ export class SkeletonLayer extends RefCounted {
   vertexAttributes: VertexAttributeRenderInfo[];
   fallbackFragmentMain = DEFAULT_FRAGMENT_MAIN;
 
-  get visibilityCount() {
-    return this.sharedObject.visibilityCount;
+  get visibility() {
+    return this.sharedObject.visibility;
   }
 
   constructor(
@@ -295,7 +295,7 @@ export class PerspectiveViewSkeletonLayer extends PerspectiveViewRenderLayer {
       this.redrawNeeded.dispatch();
     }));
     this.setReady(true);
-    this.visibilityCount.addDependency(base.visibilityCount);
+    this.registerDisposer(base.visibility.add(this.visibility));
   }
   get gl() {
     return this.base.gl;
@@ -320,7 +320,7 @@ export class SliceViewPanelSkeletonLayer extends SliceViewPanelRenderLayer {
       this.redrawNeeded.dispatch();
     }));
     this.setReady(true);
-    this.visibilityCount.addDependency(base.visibilityCount);
+    this.registerDisposer(base.visibility.add(this.visibility));
   }
   get gl() {
     return this.base.gl;

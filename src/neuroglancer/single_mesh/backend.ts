@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-import {Chunk, ChunkManager, ChunkSource} from 'neuroglancer/chunk_manager/backend';
+import {Chunk, ChunkManager, ChunkSource, withChunkManager} from 'neuroglancer/chunk_manager/backend';
 import {ChunkPriorityTier} from 'neuroglancer/chunk_manager/base';
 import {PriorityGetter} from 'neuroglancer/chunk_manager/generic_file_source';
 import {computeVertexNormals} from 'neuroglancer/mesh/backend';
@@ -22,7 +22,7 @@ import {GET_SINGLE_MESH_INFO_RPC_ID, SINGLE_MESH_CHUNK_KEY, SINGLE_MESH_LAYER_RP
 import {TypedArray} from 'neuroglancer/util/array';
 import {CancellationToken} from 'neuroglancer/util/cancellation';
 import {stableStringify} from 'neuroglancer/util/json';
-import {UseCount} from 'neuroglancer/util/use_count';
+import {getBasePriority, getPriorityTier, withSharedVisibility} from 'neuroglancer/visibility_priority/backend';
 import {registerPromiseRPC, registerSharedObject, RPC, RPCPromise, SharedObjectCounterpart} from 'neuroglancer/worker_rpc';
 
 const SINGLE_MESH_CHUNK_PRIORITY = 50;
@@ -228,45 +228,29 @@ export class SingleMeshSource extends ChunkSource {
   }
 }
 
+const SingleMeshLayerBase = withSharedVisibility(withChunkManager(SharedObjectCounterpart));
 @registerSharedObject(SINGLE_MESH_LAYER_RPC_ID)
-export class SingleMeshLayer extends SharedObjectCounterpart {
+export class SingleMeshLayer extends SingleMeshLayerBase {
   source: SingleMeshSource;
-  chunkManager: ChunkManager;
-
-  /**
-   * Indicates whether this layer is actually visible.
-   */
-  visibilityCount = new UseCount();
-
-  get visible() {
-    return this.visibilityCount.value > 0;
-  }
 
   constructor(rpc: RPC, options: any) {
     super(rpc, options);
-
-    // No need to increase the reference count of chunkManager since our owner will hold a reference
-    // to its owner.
-    this.chunkManager = <ChunkManager>rpc.get(options['chunkManager']);
-
     this.source = this.registerDisposer(rpc.getRef<SingleMeshSource>(options['source']));
     this.registerDisposer(this.chunkManager.recomputeChunkPriorities.add(() => {
       this.updateChunkPriorities();
     }));
-    const scheduleUpdateChunkPriorities = () => {
-      this.chunkManager.scheduleUpdateChunkPriorities();
-    };
-    this.visibilityCount.signChanged.add(scheduleUpdateChunkPriorities);
   }
 
   private updateChunkPriorities() {
-    if (!this.visible) {
+    const visibility = this.visibility.value;
+    if (visibility === Number.NEGATIVE_INFINITY) {
       return;
     }
-    let {source, chunkManager} = this;
-
-    let chunk = source.getChunk();
-    chunkManager.requestChunk(chunk, ChunkPriorityTier.VISIBLE, SINGLE_MESH_CHUNK_PRIORITY);
+    const priorityTier = getPriorityTier(visibility);
+    const basePriority = getBasePriority(visibility);
+    const {source, chunkManager} = this;
+    const chunk = source.getChunk();
+    chunkManager.requestChunk(chunk, priorityTier, basePriority + SINGLE_MESH_CHUNK_PRIORITY);
   }
 }
 

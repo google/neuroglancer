@@ -25,6 +25,7 @@ import {RefCounted} from 'neuroglancer/util/disposable';
 import {mat4, rectifyTransformMatrixIfAxisAligned, vec3, vec3Key, vec4} from 'neuroglancer/util/geom';
 import {getObjectId} from 'neuroglancer/util/object_id';
 import {NullarySignal} from 'neuroglancer/util/signal';
+import {withSharedVisibility} from 'neuroglancer/visibility_priority/frontend';
 import {GL} from 'neuroglancer/webgl/context';
 import {FramebufferConfiguration, makeTextureBuffers, StencilBuffer} from 'neuroglancer/webgl/offscreen';
 import {ShaderBuilder, ShaderModule, ShaderProgram} from 'neuroglancer/webgl/shader';
@@ -35,8 +36,10 @@ export type GenericChunkKey = string;
 
 const tempMat = mat4.create();
 
+const Base = withSharedVisibility(SliceViewBase);
+
 @registerSharedObjectOwner(SLICEVIEW_RPC_ID)
-export class SliceView extends SliceViewBase {
+export class SliceView extends Base {
   gl = this.chunkManager.gl;
 
   dataToViewport = mat4.create();
@@ -73,7 +76,10 @@ export class SliceView extends SliceViewBase {
       public navigationState: NavigationState) {
     super();
     mat4.identity(this.dataToViewport);
-    this.initializeCounterpart(this.chunkManager.rpc!, {'chunkManager': chunkManager.rpcId});
+    const rpc = this.chunkManager.rpc!;
+    this.initializeCounterpart(rpc, {
+      'chunkManager': chunkManager.rpcId,
+    });
     this.updateVisibleLayers();
 
     this.registerDisposer(navigationState.changed.add(() => {

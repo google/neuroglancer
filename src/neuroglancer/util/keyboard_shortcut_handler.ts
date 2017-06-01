@@ -294,43 +294,85 @@ export class KeySequenceMap {
   }
 }
 
-let globalKeyboardHandler: KeyboardShortcutHandler;
-let globalKeyboardHandlerStack = new Array<[KeySequenceMap, Handler, any]>();
-let globalKeyboardState: any;
-
-export function pushGlobalKeyboardHandler(
-    keySequenceMap: KeySequenceMap, handler: Handler, identifier: any) {
-  if (globalKeyboardHandler === undefined) {
-    globalKeyboardHandler = new KeyboardShortcutHandler(window, new KeySequenceMap(), () => {
-      return false;
-    });
-  }
-  globalKeyboardHandlerStack.push(
-      [globalKeyboardHandler.keySequenceMap, globalKeyboardHandler.handler, globalKeyboardState]);
-  globalKeyboardHandler.setKeySequenceMap(keySequenceMap);
-  globalKeyboardHandler.handler = handler;
-  globalKeyboardState = identifier;
+interface HandlerStackEntry {
+  keySequenceMap: KeySequenceMap;
+  handler: Handler;
+  identifier: any;
+  priority: number;
 }
 
-export function popGlobalKeyboardHandler() {
-  let [keySequenceMap, handler, identifier] = globalKeyboardHandlerStack.pop()!;
-  globalKeyboardHandler.setKeySequenceMap(keySequenceMap);
-  globalKeyboardHandler.handler = handler;
-  globalKeyboardState = identifier;
-}
-
-export class GlobalKeyboardShortcutHandler extends RefCounted {
-  constructor(public keySequenceMap: KeySequenceMap, public handler: Handler) {
+export class KeyboardHandlerStack extends RefCounted {
+  keyboardHandler: KeyboardShortcutHandler|undefined;
+  stack = new Array<HandlerStackEntry>();
+  constructor(public target: EventTarget) {
     super();
-    pushGlobalKeyboardHandler(keySequenceMap, handler, this);
   }
-  disposed() {
-    if (globalKeyboardState === this) {
-      popGlobalKeyboardHandler();
-    } else {
-      let index = globalKeyboardHandlerStack.findIndex(stackEntry => stackEntry[2] === this)!;
-      globalKeyboardHandlerStack.splice(index, 1);
+
+  push(keySequenceMap: KeySequenceMap, handler: Handler, priority: number = 0) {
+    const identifier = {};
+    const entry = {keySequenceMap, handler, identifier, priority};
+    const {stack} = this;
+    let insertionIndex = stack.length;
+    while (insertionIndex > 0 && stack[insertionIndex - 1].priority > priority) {
+      --insertionIndex;
     }
+    this.stack.splice(insertionIndex, 0, entry);
+    if (insertionIndex === stack.length - 1) {
+      this.updateHandler();
+    }
+
+    const disposer = () => {
+      this.delete(identifier);
+    };
+    return disposer;
+  }
+
+  private delete(identifier: any) {
+    const {stack} = this;
+    const index = stack.findIndex(entry => entry.identifier === identifier);
+    if (index === -1) {
+      throw new Error('Attempt to delete keyboard handler that does not exist.');
+    }
+    stack.splice(index, 1);
+    if (index === stack.length) {
+      this.updateHandler();
+    }
+  }
+
+  /**
+   * Update this.keyboardHandler to reflect top of stack.
+   */
+  private updateHandler() {
+    const {stack} = this;
+    let {keyboardHandler} = this;
+    if (stack.length === 0) {
+      if (keyboardHandler !== undefined) {
+        keyboardHandler.dispose();
+        this.keyboardHandler = undefined;
+        return;
+      }
+    }
+
+    const {keySequenceMap, handler} = stack[stack.length - 1];
+
+    if (keyboardHandler === undefined) {
+      this.keyboardHandler = new KeyboardShortcutHandler(window, keySequenceMap, handler);
+      return;
+    }
+
+    keyboardHandler.setKeySequenceMap(keySequenceMap);
+    keyboardHandler.handler = handler;
+  }
+
+  disposed() {
+    const {keyboardHandler} = this;
+    if (keyboardHandler !== undefined) {
+      keyboardHandler.dispose();
+    }
+    this.keyboardHandler = undefined;
+    this.stack.length = 0;
     super.disposed();
   }
 }
+
+export const globalKeyboardHandlerStack = new KeyboardHandlerStack(window);

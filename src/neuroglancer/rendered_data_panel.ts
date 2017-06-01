@@ -68,7 +68,7 @@ export abstract class RenderedDataPanel extends RenderedPanel {
   navigationState: NavigationState;
 
   constructor(context: DisplayContext, element: HTMLElement, public viewer: ViewerState) {
-    super(context, element);
+    super(context, element, viewer.visibility);
 
     element.classList.add('rendered-data-panel');
 

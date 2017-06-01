@@ -15,7 +15,9 @@
  */
 
 import {RefCounted} from 'neuroglancer/util/disposable';
-import {GlobalKeyboardShortcutHandler, KeySequenceMap} from 'neuroglancer/util/keyboard_shortcut_handler';
+import {globalKeyboardHandlerStack, KeySequenceMap} from 'neuroglancer/util/keyboard_shortcut_handler';
+
+export const overlayKeyboardHandlerPriority = 100;
 
 require('./overlay.css');
 
@@ -26,7 +28,6 @@ KEY_MAP.bind('escape', 'close');
 
 export class Overlay extends RefCounted {
   container: HTMLDivElement;
-  keyboardShortcutHandler: GlobalKeyboardShortcutHandler;
   content: HTMLDivElement;
   constructor(public keySequenceMap: KeySequenceMap = KEY_MAP) {
     super();
@@ -37,8 +38,8 @@ export class Overlay extends RefCounted {
     content.className = 'overlay-content';
     container.appendChild(content);
     document.body.appendChild(container);
-    this.keyboardShortcutHandler = this.registerDisposer(
-        new GlobalKeyboardShortcutHandler(keySequenceMap, this.commandReceived.bind(this)));
+    this.registerDisposer(globalKeyboardHandlerStack.push(
+        keySequenceMap, this.commandReceived.bind(this), overlayKeyboardHandlerPriority));
   }
 
   commandReceived(action: string) {

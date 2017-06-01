@@ -23,7 +23,7 @@ import {BoundingBox, vec3} from 'neuroglancer/util/geom';
 import {NullarySignal} from 'neuroglancer/util/signal';
 import {addSignalBinding, removeSignalBinding, SignalBindingUpdater} from 'neuroglancer/util/signal_binding_updater';
 import {Uint64} from 'neuroglancer/util/uint64';
-import {UseCount} from 'neuroglancer/util/use_count';
+import {VisibilityPriorityAggregator, WatchableVisibilityPriority} from 'neuroglancer/visibility_priority/frontend';
 
 export class RenderLayer extends RefCounted {
   ready = false;
@@ -74,7 +74,7 @@ export class RenderLayer extends RefCounted {
  * visible.
  */
 export class VisibilityTrackedRenderLayer extends RenderLayer {
-  visibilityCount = this.registerDisposer(new UseCount());
+  visibility = new VisibilityPriorityAggregator();
 }
 
 export class UserLayerDropdown extends RefCounted {
@@ -507,7 +507,10 @@ export class LayerSelectedValues extends RefCounted {
 
 export class VisibleRenderLayerTracker<RenderLayerType extends VisibilityTrackedRenderLayer> extends
     RefCounted {
-  private visibleLayers = new Set<RenderLayerType>();
+  /**
+   * Maps a layer to the disposer to call when it is no longer visible.
+   */
+  private visibleLayers = new Map<RenderLayerType, () => void>();
   private newVisibleLayers = new Set<RenderLayerType>();
   private throttledUpdateVisibleLayers = throttle(() => {
     this.updateVisibleLayers();
@@ -516,8 +519,8 @@ export class VisibleRenderLayerTracker<RenderLayerType extends VisibilityTracked
   constructor(
       public layerManager: LayerManager,
       public renderLayerType: {new(...args: any[]): RenderLayerType},
-      private layerAdded: (layer: RenderLayerType) => void,
-      private layerRemoved: (layer: RenderLayerType) => void) {
+      private layerAdded: (layer: RenderLayerType) => (() => void),
+      public visibility: WatchableVisibilityPriority) {
     super();
     this.registerDisposer(layerManager.layersChanged.add(() => {
       this.handleLayersChanged();
@@ -531,18 +534,9 @@ export class VisibleRenderLayerTracker<RenderLayerType extends VisibilityTracked
 
   disposed() {
     this.throttledUpdateVisibleLayers.cancel();
-    this.visibleLayers.forEach(layer => {
-      this.onLayerRemoved(layer);
-    });
+    this.visibleLayers.forEach(disposer => disposer());
     this.visibleLayers.clear();
     super.disposed();
-  }
-
-  private onLayerRemoved(renderLayer: RenderLayerType) {
-    let {layerRemoved} = this;
-    layerRemoved(renderLayer);
-    renderLayer.visibilityCount.dec();
-    renderLayer.dispose();
   }
 
   private updateVisibleLayers() {
@@ -552,16 +546,20 @@ export class VisibleRenderLayerTracker<RenderLayerType extends VisibilityTracked
         let typedLayer = <RenderLayerType>renderLayer;
         newVisibleLayers.add(typedLayer);
         if (!visibleLayers.has(typedLayer)) {
-          visibleLayers.add(typedLayer.addRef());
-          typedLayer.visibilityCount.inc();
-          layerAdded(typedLayer);
+          typedLayer.visibility.add(this.visibility);
+          const disposer = layerAdded(typedLayer);
+          visibleLayers.set(typedLayer.addRef(), () => {
+            disposer();
+            typedLayer.visibility.remove(this.visibility);
+            typedLayer.dispose();
+          });
         }
       }
     }
-    for (let renderLayer of visibleLayers) {
+    for (let [renderLayer, disposer] of visibleLayers) {
       if (!newVisibleLayers.has(renderLayer)) {
         visibleLayers.delete(renderLayer);
-        this.onLayerRemoved(renderLayer);
+        disposer();
       }
     }
     newVisibleLayers.clear();
@@ -569,7 +567,7 @@ export class VisibleRenderLayerTracker<RenderLayerType extends VisibilityTracked
 
   getVisibleLayers() {
     (<any>this.throttledUpdateVisibleLayers).flush();
-    return this.visibleLayers;
+    return this.visibleLayers.keys();
   }
 }
 
@@ -577,15 +575,13 @@ export function
 makeRenderedPanelVisibleLayerTracker<RenderLayerType extends VisibilityTrackedRenderLayer>(
     layerManager: LayerManager, renderLayerType: {new (...args: any[]): RenderLayerType},
     panel: RenderedPanel) {
-  const removalFunctions = new Map<RenderLayerType, () => void>();
-  return panel.registerDisposer(new VisibleRenderLayerTracker(
-      layerManager, renderLayerType,
-      layer => {
-        removalFunctions.set(layer, layer.redrawNeeded.add(() => panel.scheduleRedraw()));
+  return panel.registerDisposer(
+      new VisibleRenderLayerTracker(layerManager, renderLayerType, layer => {
+        const disposer = layer.redrawNeeded.add(() => panel.scheduleRedraw());
         panel.scheduleRedraw();
-      },
-      layer => {
-        removalFunctions.get(layer)!();
-        panel.scheduleRedraw();
-      }));
+        return () => {
+          disposer();
+          panel.scheduleRedraw();
+        };
+      }, panel.visibility));
 }

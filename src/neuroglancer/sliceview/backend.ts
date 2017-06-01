@@ -14,12 +14,12 @@
  * limitations under the License.
  */
 
-import {Chunk, ChunkManager, ChunkSource} from 'neuroglancer/chunk_manager/backend';
-import {ChunkPriorityTier} from 'neuroglancer/chunk_manager/base';
+import {Chunk, ChunkSource, withChunkManager} from 'neuroglancer/chunk_manager/backend';
 import {RenderLayer as RenderLayerInterface, SLICEVIEW_RPC_ID, SliceViewBase, SliceViewChunkSource as SliceViewChunkSourceInterface, SliceViewChunkSpecification} from 'neuroglancer/sliceview/base';
 import {ChunkLayout} from 'neuroglancer/sliceview/chunk_layout';
 import {vec3, vec3Key} from 'neuroglancer/util/geom';
 import {NullarySignal} from 'neuroglancer/util/signal';
+import {getBasePriority, getPriorityTier, withSharedVisibility} from 'neuroglancer/visibility_priority/backend';
 import {registerRPC, registerSharedObject, RPC, SharedObjectCounterpart} from 'neuroglancer/worker_rpc';
 
 const BASE_PRIORITY = -1e12;
@@ -30,17 +30,20 @@ const tempChunkPosition = vec3.create();
 const tempChunkDataSize = vec3.create();
 const tempCenter = vec3.create();
 
-@registerSharedObject(SLICEVIEW_RPC_ID)
-export class SliceView extends SliceViewBase {
-  chunkManager: ChunkManager;
-
-  visibleLayers: Map<RenderLayer, SliceViewChunkSource[]>;
-
+class SliceViewCounterpartBase extends SliceViewBase {
   constructor(rpc: RPC, options: any) {
     super();
     this.initializeSharedObject(rpc, options['id']);
-    this.chunkManager =
-        this.registerDisposer((<ChunkManager>rpc.get(options['chunkManager'])).addRef());
+  }
+}
+
+const SliceViewIntermediateBase = withSharedVisibility(withChunkManager(SliceViewCounterpartBase));
+@registerSharedObject(SLICEVIEW_RPC_ID)
+export class SliceView extends SliceViewIntermediateBase {
+  visibleLayers: Map<RenderLayer, SliceViewChunkSource[]>;
+
+  constructor(rpc: RPC, options: any) {
+    super(rpc, options);
     this.registerDisposer(this.chunkManager.recomputeChunkPriorities.add(() => {
       this.updateVisibleChunks();
     }));
@@ -59,6 +62,14 @@ export class SliceView extends SliceViewBase {
   updateVisibleChunks() {
     const globalCenter = this.centerDataPosition;
     let chunkManager = this.chunkManager;
+    const visibility = this.visibility.value;
+    if (visibility === Number.NEGATIVE_INFINITY) {
+      return;
+    }
+
+    const priorityTier = getPriorityTier(visibility);
+    let basePriority = getBasePriority(visibility);
+    basePriority += BASE_PRIORITY;
 
     const localCenter = tempCenter;
 
@@ -76,8 +87,8 @@ export class SliceView extends SliceViewBase {
         let priorityIndex = sources.get(source)!;
         let chunk = source.getChunk(positionInChunks);
         chunkManager.requestChunk(
-            chunk, ChunkPriorityTier.VISIBLE,
-            BASE_PRIORITY + priority + SCALE_PRIORITY_MULTIPLIER * priorityIndex);
+            chunk, priorityTier,
+            basePriority + priority + SCALE_PRIORITY_MULTIPLIER * priorityIndex);
       }
     }
     this.computeVisibleChunks(getLayoutObject, addChunk);

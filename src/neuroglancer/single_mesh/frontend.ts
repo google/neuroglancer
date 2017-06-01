@@ -18,8 +18,6 @@ import {ChunkState} from 'neuroglancer/chunk_manager/base';
 import {Chunk, ChunkManager, ChunkSource} from 'neuroglancer/chunk_manager/frontend';
 import {CoordinateTransform} from 'neuroglancer/coordinate_transform';
 import {PerspectiveViewRenderContext, PerspectiveViewRenderLayer} from 'neuroglancer/perspective_view/render_layer';
-import {SharedObjectWithVisibilityCount} from 'neuroglancer/shared_visibility_count/base';
-import {shareVisibility} from 'neuroglancer/shared_visibility_count/frontend';
 import {GET_SINGLE_MESH_INFO_RPC_ID, SINGLE_MESH_CHUNK_KEY, SINGLE_MESH_LAYER_RPC_ID, SINGLE_MESH_SOURCE_RPC_ID, SingleMeshInfo, SingleMeshSourceParameters, VertexAttributeInfo} from 'neuroglancer/single_mesh/base';
 import {TrackableValue} from 'neuroglancer/trackable_value';
 import {DataType} from 'neuroglancer/util/data_type';
@@ -27,6 +25,7 @@ import {mat4, vec2, vec3} from 'neuroglancer/util/geom';
 import {parseArray, stableStringify, verifyOptionalString, verifyString} from 'neuroglancer/util/json';
 import {getObjectId} from 'neuroglancer/util/object_id';
 import {Uint64} from 'neuroglancer/util/uint64';
+import {withSharedVisibility} from 'neuroglancer/visibility_priority/frontend';
 import {Buffer} from 'neuroglancer/webgl/buffer';
 import {GL} from 'neuroglancer/webgl/context';
 import {makeWatchableShaderError} from 'neuroglancer/webgl/dynamic_shader';
@@ -34,7 +33,7 @@ import {CountingBuffer, countingBufferShaderModule, disableCountingBuffer, getCo
 import {compute1dTextureFormat, compute1dTextureLayout, OneDimensionalTextureAccessHelper, OneDimensionalTextureFormat, setOneDimensionalTextureData} from 'neuroglancer/webgl/one_dimensional_texture_access';
 import {ShaderBuilder, ShaderModule, ShaderProgram} from 'neuroglancer/webgl/shader';
 import {getShaderType, glsl_addUint32, glsl_divmodUint32, setVec4FromUint32} from 'neuroglancer/webgl/shader_lib';
-import {registerSharedObjectOwner, RPC} from 'neuroglancer/worker_rpc';
+import {registerSharedObjectOwner, RPC, SharedObject} from 'neuroglancer/worker_rpc';
 
 export const FRAGMENT_MAIN_START = '//NEUROGLANCER_SINGLE_MESH_LAYER_FRAGMENT_MAIN_START';
 
@@ -349,10 +348,13 @@ export class SingleMeshSource extends ChunkSource {
   }
 }
 
+const SharedObjectWithSharedVisibility = withSharedVisibility(SharedObject);
+class SingleMeshLayerSharedObject extends SharedObjectWithSharedVisibility {}
+
 export class SingleMeshLayer extends PerspectiveViewRenderLayer {
   private shaderManager: SingleMeshShaderManager|undefined;
   private shaders = new Map<ShaderModule, ShaderProgram|null>();
-  private sharedObject: SharedObjectWithVisibilityCount;
+  private sharedObject = this.registerDisposer(new SingleMeshLayerSharedObject());
   private fallbackFragmentMain = DEFAULT_FRAGMENT_MAIN;
   private countingBuffer = this.registerDisposer(getCountingBuffer(this.gl));
 
@@ -372,15 +374,13 @@ export class SingleMeshLayer extends PerspectiveViewRenderLayer {
       this.redrawNeeded.dispatch();
     }));
     this.displayState.shaderError.value = undefined;
-    let sharedObject = this.sharedObject =
-        this.registerDisposer(new SharedObjectWithVisibilityCount(this.visibilityCount));
+    const {sharedObject} = this;
+    sharedObject.visibility.add(this.visibility);
     sharedObject.RPC_TYPE_ID = SINGLE_MESH_LAYER_RPC_ID;
     sharedObject.initializeCounterpart(source.chunkManager.rpc!, {
       'chunkManager': source.chunkManager.rpcId,
       'source': source.addCounterpartRef(),
     });
-    shareVisibility(sharedObject);
-
     this.setReady(true);
   }
 

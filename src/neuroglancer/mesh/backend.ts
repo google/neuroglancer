@@ -25,6 +25,7 @@ import {convertEndian32, Endianness} from 'neuroglancer/util/endian';
 import {vec3} from 'neuroglancer/util/geom';
 import {verifyObject, verifyObjectProperty, verifyStringArray} from 'neuroglancer/util/json';
 import {Uint64} from 'neuroglancer/util/uint64';
+import {getBasePriority, getPriorityTier} from 'neuroglancer/visibility_priority/backend';
 import {registerSharedObject, RPC} from 'neuroglancer/worker_rpc';
 
 const MESH_OBJECT_MANIFEST_CHUNK_PRIORITY = 100;
@@ -57,7 +58,7 @@ export class ManifestChunk extends Chunk {
     // default value.
     this.systemMemoryBytes = 100;
     super.downloadSucceeded();
-    if (this.priorityTier === ChunkPriorityTier.VISIBLE) {
+    if (this.priorityTier < ChunkPriorityTier.RECENT) {
       this.source!.chunkManager.scheduleUpdateChunkPriorities();
     }
   }
@@ -299,23 +300,23 @@ export class MeshLayer extends SegmentationLayerSharedObjectCounterpart {
   }
 
   private updateChunkPriorities() {
-    if (!this.visible) {
+    const visibility = this.visibility.value;
+    if (visibility === Number.NEGATIVE_INFINITY) {
       return;
     }
-    let {source, chunkManager} = this;
+    const priorityTier = getPriorityTier(visibility);
+    const basePriority = getBasePriority(visibility);
+    const {source, chunkManager} = this;
     forEachVisibleSegment(this, objectId => {
       let manifestChunk = source.getChunk(objectId);
       chunkManager.requestChunk(
-          manifestChunk, ChunkPriorityTier.VISIBLE, MESH_OBJECT_MANIFEST_CHUNK_PRIORITY);
+          manifestChunk, priorityTier, basePriority + MESH_OBJECT_MANIFEST_CHUNK_PRIORITY);
       if (manifestChunk.state === ChunkState.SYSTEM_MEMORY_WORKER) {
         for (let fragmentId of manifestChunk.fragmentIds!) {
           let fragmentChunk = source.getFragmentChunk(manifestChunk, fragmentId);
           chunkManager.requestChunk(
-              fragmentChunk, ChunkPriorityTier.VISIBLE, MESH_OBJECT_FRAGMENT_CHUNK_PRIORITY);
+              fragmentChunk, priorityTier, basePriority + MESH_OBJECT_FRAGMENT_CHUNK_PRIORITY);
         }
-        // console.log("FIXME: updatefragment chunk priority");
-        // console.log(manifestChunk.data);
-        // let fragmentChunk = fragmentSource.getChunk(manifestChunk);
       }
     });
   }

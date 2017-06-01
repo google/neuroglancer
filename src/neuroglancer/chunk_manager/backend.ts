@@ -657,12 +657,6 @@ export class ChunkQueueManager extends SharedObjectCounterpart {
   }
 }
 
-/*
- * Priority to use for handlers add to recomputeChunkPriorities that should execute last, because
- * they depend on the result of another handler.
- */
-export const RECOMPUTE_CHUNK_PRIORITIES_LAST = -1000;
-
 @registerSharedObject(CHUNK_MANAGER_RPC_ID)
 export class ChunkManager extends SharedObjectCounterpart {
   queueManager: ChunkQueueManager;
@@ -774,5 +768,29 @@ export function registerChunkSource<Parameters>(
     target.prototype.toString = function(this: {parameters: Parameters}) {
       return parametersConstructor.stringify(this.parameters);
     };
+  };
+}
+
+/**
+ * Interface that represents shared objects that request chunks from a ChunkManager.
+ */
+export interface ChunkRequester extends SharedObject { chunkManager: ChunkManager; }
+
+/**
+ * Mixin that adds a chunkManager property initialized from the RPC-supplied options.
+ *
+ * The resultant class implements `ChunkRequester`.
+ */
+export function withChunkManager<T extends{new (...args: any[]): SharedObject}>(Base: T) {
+  return class extends Base implements ChunkRequester {
+    chunkManager: ChunkManager;
+    constructor(...args: any[]) {
+      super(...args);
+      const rpc: RPC = args[0];
+      const options = args[1];
+      // We don't increment the reference count, because our owner owns a reference to the
+      // ChunkManager.
+      this.chunkManager = this.registerDisposer(<ChunkManager>rpc.get(options['chunkManager']));
+    }
   };
 }

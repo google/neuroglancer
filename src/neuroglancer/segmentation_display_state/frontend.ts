@@ -19,13 +19,12 @@ import {CoordinateTransform} from 'neuroglancer/coordinate_transform';
 import {LayerSelectedValues, UserLayer} from 'neuroglancer/layer';
 import {SegmentColorHash} from 'neuroglancer/segment_color';
 import {forEachVisibleSegment, getObjectKey, VisibleSegmentsState} from 'neuroglancer/segmentation_display_state/base';
-import {shareVisibility} from 'neuroglancer/shared_visibility_count/frontend';
 import {TrackableAlphaValue} from 'neuroglancer/trackable_alpha';
 import {RefCounted} from 'neuroglancer/util/disposable';
 import {vec4} from 'neuroglancer/util/geom';
 import {NullarySignal} from 'neuroglancer/util/signal';
 import {Uint64} from 'neuroglancer/util/uint64';
-import {UseCount} from 'neuroglancer/util/use_count';
+import {withSharedVisibility} from 'neuroglancer/visibility_priority/frontend';
 import {SharedObject} from 'neuroglancer/worker_rpc';
 
 export class Uint64MapEntry {
@@ -153,9 +152,8 @@ export function forEachSegmentToDraw<SegmentData>(
   });
 }
 
-export class SegmentationLayerSharedObject extends SharedObject {
-  visibilityCount = new UseCount();
-
+const Base = withSharedVisibility(SharedObject);
+export class SegmentationLayerSharedObject extends Base {
   constructor(public chunkManager: ChunkManager, public displayState: SegmentationDisplayState) {
     super();
   }
@@ -166,6 +164,5 @@ export class SegmentationLayerSharedObject extends SharedObject {
     options['visibleSegments'] = displayState.visibleSegments.rpcId;
     options['segmentEquivalences'] = displayState.segmentEquivalences.rpcId;
     super.initializeCounterpart(this.chunkManager.rpc!, options);
-    shareVisibility(this);
   }
 }

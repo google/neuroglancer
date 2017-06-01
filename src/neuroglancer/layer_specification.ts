@@ -26,7 +26,6 @@ import {vec3} from 'neuroglancer/util/geom';
 import {verifyObject, verifyObjectProperty, verifyOptionalString} from 'neuroglancer/util/json';
 import {NullarySignal, Signal} from 'neuroglancer/util/signal';
 import {Trackable} from 'neuroglancer/util/trackable';
-import {RPC} from 'neuroglancer/worker_rpc';
 
 export function getVolumeWithStatusMessage(
     chunkManager: ChunkManager, x: string,
@@ -67,8 +66,19 @@ export class LayerListSpecification extends RefCounted implements Trackable {
   changed = new NullarySignal();
   voxelCoordinatesSet = new Signal<(coordinates: vec3) => void>();
 
+  /**
+   * @deprecated
+   */
+  get worker() {
+    return this.chunkManager.rpc!;
+  }
+
+  get rpc() {
+    return this.chunkManager.rpc!;
+  }
+
   constructor(
-      public layerManager: LayerManager, public chunkManager: ChunkManager, public worker: RPC,
+      public layerManager: LayerManager, public chunkManager: ChunkManager,
       public layerSelectedValues: LayerSelectedValues, public voxelSize: VoxelSize) {
     super();
     this.registerDisposer(layerManager.layersChanged.add(this.changed.dispatch));

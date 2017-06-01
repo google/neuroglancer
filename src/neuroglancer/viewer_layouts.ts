@@ -26,6 +26,7 @@ import {TrackableBoolean} from 'neuroglancer/trackable_boolean';
 import {RefCounted} from 'neuroglancer/util/disposable';
 import {removeChildren} from 'neuroglancer/util/dom';
 import {quat} from 'neuroglancer/util/geom';
+import {VisibilityPrioritySpecification} from 'neuroglancer/viewer_state';
 
 export interface SliceViewViewerState {
   chunkManager: ChunkManager;
@@ -33,7 +34,7 @@ export interface SliceViewViewerState {
   layerManager: LayerManager;
 }
 
-export interface ViewerUIState extends SliceViewViewerState {
+export interface ViewerUIState extends SliceViewViewerState, VisibilityPrioritySpecification {
   display: DisplayContext;
   mouseState: MouseSelectionState;
   perspectiveNavigationState: NavigationState;
@@ -69,6 +70,15 @@ export function makeOrthogonalSliceViews(viewerState: SliceViewViewerState) {
   return sliceViews;
 }
 
+export function getCommonViewerState(viewer: ViewerUIState) {
+  return {
+    mouseState: viewer.mouseState,
+    layerManager: viewer.layerManager,
+    showAxisLines: viewer.showAxisLines,
+    visibility: viewer.visibility,
+  };
+}
+
 export class FourPanelLayout extends RefCounted {
   constructor(public rootElement: HTMLElement, public viewer: ViewerUIState) {
     super();
@@ -76,28 +86,22 @@ export class FourPanelLayout extends RefCounted {
     let sliceViews = makeOrthogonalSliceViews(viewer);
     let {display} = viewer;
 
-    let perspectiveViewerState = {
-      mouseState: viewer.mouseState,
-      layerManager: viewer.layerManager,
+    const perspectiveViewerState = {
+      ...getCommonViewerState(viewer),
       navigationState: viewer.perspectiveNavigationState,
       showSliceViews: viewer.showPerspectiveSliceViews,
       showSliceViewsCheckbox: true,
-      showAxisLines: viewer.showAxisLines,
     };
 
-    let sliceViewerState = {
-      mouseState: viewer.mouseState,
-      layerManager: viewer.layerManager,
+    const sliceViewerState = {
+      ...getCommonViewerState(viewer),
       navigationState: viewer.navigationState,
-      showAxisLines: viewer.showAxisLines,
       showScaleBar: viewer.showScaleBar,
     };
 
-    let sliceViewerStateWithoutScaleBar = {
-      mouseState: viewer.mouseState,
-      layerManager: viewer.layerManager,
+    const sliceViewerStateWithoutScaleBar = {
+      ...getCommonViewerState(viewer),
       navigationState: viewer.navigationState,
-      showAxisLines: viewer.showAxisLines,
       showScaleBar: new TrackableBoolean(false, false),
     };
     let mainDisplayContents = [
@@ -147,20 +151,16 @@ export class SliceViewPerspectiveTwoPanelLayout extends RefCounted {
     let sliceView = makeSliceView(viewer);
     let {display} = viewer;
 
-    let perspectiveViewerState = {
-      mouseState: viewer.mouseState,
-      layerManager: viewer.layerManager,
+    const perspectiveViewerState = {
+      ...getCommonViewerState(viewer),
       navigationState: viewer.perspectiveNavigationState,
       showSliceViews: viewer.showPerspectiveSliceViews,
       showSliceViewsCheckbox: true,
-      showAxisLines: viewer.showAxisLines,
     };
 
-    let sliceViewerState = {
-      mouseState: viewer.mouseState,
-      layerManager: viewer.layerManager,
+    const sliceViewerState = {
+      ...getCommonViewerState(viewer),
       navigationState: viewer.navigationState,
-      showAxisLines: viewer.showAxisLines,
       showScaleBar: viewer.showScaleBar,
     };
 
@@ -194,11 +194,9 @@ export class SinglePanelLayout extends RefCounted {
   constructor(public rootElement: HTMLElement, public viewer: ViewerUIState) {
     super();
     let sliceView = makeSliceView(viewer);
-    let sliceViewerState = {
-      mouseState: viewer.mouseState,
-      layerManager: viewer.layerManager,
+    const sliceViewerState = {
+      ...getCommonViewerState(viewer),
       navigationState: viewer.navigationState,
-      showAxisLines: viewer.showAxisLines,
       showScaleBar: viewer.showScaleBar,
     };
 
@@ -219,11 +217,9 @@ export class SinglePerspectiveLayout extends RefCounted {
   constructor(public rootElement: HTMLElement, public viewer: ViewerUIState) {
     super();
     let perspectiveViewerState = {
-      mouseState: viewer.mouseState,
-      layerManager: viewer.layerManager,
+      ...getCommonViewerState(viewer),
       navigationState: viewer.perspectiveNavigationState,
       showSliceViews: new TrackableBoolean(false, false),
-      showAxisLines: viewer.showAxisLines,
     };
 
 

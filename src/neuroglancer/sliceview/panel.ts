@@ -112,11 +112,16 @@ export class SliceViewPanel extends RenderedDataPanel {
     super(context, element, viewer);
 
     this.registerDisposer(sliceView);
+    this.registerDisposer(sliceView.visibility.add(this.visibility));
     this.registerDisposer(sliceView.viewChanged.add(() => {
-      context.scheduleRedraw();
+      if (this.visible) {
+        context.scheduleRedraw();
+      }
     }));
     this.registerDisposer(viewer.showAxisLines.changed.add(() => {
-      this.scheduleRedraw();
+      if (this.visible) {
+        this.scheduleRedraw();
+      }
     }));
 
     {

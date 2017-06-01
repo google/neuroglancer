@@ -48,6 +48,8 @@ export enum ChunkPriorityTier {
   LAST_TIER = 2
 }
 
+export const PREFETCH_PRIORITY_MULTIPLIER = 1e13;
+
 export class AvailableCapacity {
   availableItems: number;
   itemCapacity: number;
