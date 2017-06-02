@@ -26,6 +26,7 @@ import {vec3} from 'neuroglancer/util/geom';
 import {verifyObject, verifyObjectProperty, verifyOptionalString} from 'neuroglancer/util/json';
 import {NullarySignal, Signal} from 'neuroglancer/util/signal';
 import {Trackable} from 'neuroglancer/util/trackable';
+import {TrackableMap} from 'neuroglancer/trackable_map';
 
 export function getVolumeWithStatusMessage(
     chunkManager: ChunkManager, x: string,
@@ -168,8 +169,8 @@ interface UserLayerConstructor {
   new(manager: LayerListSpecification, x: any): UserLayer;
 }
 
-const layerTypes = new Map<string, UserLayerConstructor>();
-const volumeLayerTypes = new Map<VolumeType, UserLayerConstructor>();
+export const layerTypes = new TrackableMap<string, UserLayerConstructor>();
+export const volumeLayerTypes = new TrackableMap<VolumeType, UserLayerConstructor>();
 
 export function registerLayerType(name: string, layerConstructor: UserLayerConstructor) {
   layerTypes.set(name, layerConstructor);
