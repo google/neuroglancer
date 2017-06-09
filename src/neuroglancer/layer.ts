@@ -567,7 +567,7 @@ export class VisibleRenderLayerTracker<RenderLayerType extends VisibilityTracked
 
   getVisibleLayers() {
     (<any>this.throttledUpdateVisibleLayers).flush();
-    return this.visibleLayers.keys();
+    return [...this.visibleLayers.keys()];
   }
 }
 
