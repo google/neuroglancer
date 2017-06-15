@@ -1,5 +1,20 @@
 #!/usr/bin/python
 
+"""
+WARNING: This script is defunct and broken, but could be revived
+if the need arose, though makes more sense to just run
+DownsampleTasks.
+
+This script will download an entire layer at a given resolution,
+execute downsampling, and upload the results. It generally creates
+multiple mip levels from a given layer. Because it downloads everything,
+the dataset has to be rather small for it to fit on a single machine.
+
+Example Command:
+  python super_downsample.py --image --dataset s1_v0 --mip 4  
+
+"""
+
 from __future__ import print_function
 
 import argparse
