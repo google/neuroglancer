@@ -21,8 +21,6 @@ sockjs-tornado==1.0.3
 tornado==4.4.2
 wsgiref==0.1.2
 scipy==0.18.1
-
-# do not use
-# google-cloud==0.22.0 
-# use hacked version which adds accept-encoding
-git+git://github.com/tartavull/google-cloud-python@hack#egg=google-cloud
+pytest==3.0.7 
+google-cloud==0.25
+jsonschema==2.6.0
