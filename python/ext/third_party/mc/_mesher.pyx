@@ -12,7 +12,7 @@ from libcpp.string cimport string
 # c++ interface to cython
 cdef extern from "cMesher.h":
     cdef struct meshobj:
-        vector[unsigned int] points
+        vector[float] points
         vector[float] normals
         vector[unsigned int] faces
 

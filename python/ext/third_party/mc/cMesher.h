@@ -12,7 +12,7 @@ Adapted to include passing of multidimensional arrays
 #include <zi/mesh/marching_cubes.hpp>
 
 struct meshobj {
-  std::vector<unsigned int> points;
+  std::vector<float> points;
   std::vector<float> normals;
   std::vector<unsigned int> faces;
 };
