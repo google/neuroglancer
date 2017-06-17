@@ -22,7 +22,7 @@ class Provenance(object):
   def commit(self):
     formatted = self.tojson()
     with Storage(self.cloudpath, n_threads=0) as stor:
-      stor.put_file('provenance', self.tojson(), 'application/json')
+      stor.put_file('provenance', self.tojson(), compress=False)
     return self
 
   def fromjson(self, jsondata):
