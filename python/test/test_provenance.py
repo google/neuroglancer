@@ -5,12 +5,13 @@ import json
 
 from layer_harness import delete_layer
 from neuroglancer.pipeline.volumes.provenance import DataLayerProvenance, DatasetProvenance
+from neuroglancer.pipeline import Storage
 
 def test_dataset_provenance():
   fs = '/tmp/removeme/provenance/'
   delete_layer(fs)
 
-  prov = DatasetProvenance('file://' + fs)
+  prov = DatasetProvenance()
 
   prov.dataset_name = 'ur-mom-2039'
   prov.dataset_description = 'EM serial section of your mom\'s brain'
@@ -20,7 +21,8 @@ def test_dataset_provenance():
   prov.references = [ 'doi:presigiousjournalofyourmom-12142' ]
   prov.owners = [ 'scientist@princeton.edu', 'techstaff@princeton.edu' ]
 
-  prov.commit()
+  with Storage('file://' + fs) as stor:
+    stor.put_file('provenance', prov.serialize())
 
   path = os.path.join(fs, 'provenance')
 
@@ -37,7 +39,9 @@ def test_dataset_provenance():
     'owners': [ 'scientist@princeton.edu', 'techstaff@princeton.edu' ],
   }
 
-  prov = DatasetProvenance('file://' + fs)
+  with Storage('file://' + fs) as stor:
+    provjson = stor.get_file('provenance')
+    prov = DatasetProvenance().from_json(provjson)
 
   assert prov.dataset_name == 'ur-mom-2039'
   assert prov.dataset_description == 'EM serial section of your mom\'s brain'
@@ -51,7 +55,7 @@ def test_data_layer_provenance():
   fs = '/tmp/removeme/provenance/layer/'
   delete_layer(fs)
 
-  prov = DataLayerProvenance('file://' + fs)
+  prov = DataLayerProvenance()
 
   prov.description = 'example dataset'
   prov.sources = [ 'gs://neuroglancer/example/image' ]
@@ -60,7 +64,8 @@ def test_data_layer_provenance():
   ]
   prov.owners = [ 'gradstudent@princeton.edu' ]
 
-  prov.commit()
+  with Storage('file://' + fs) as stor:
+    stor.put_file('provenance', prov.serialize())
 
   path = os.path.join(fs, 'provenance')
 
@@ -76,7 +81,9 @@ def test_data_layer_provenance():
     'owners': [ 'gradstudent@princeton.edu' ]
   }
 
-  prov = DataLayerProvenance('file://' + fs)
+  with Storage('file://' + fs) as stor:
+    provjson = stor.get_file('provenance')
+    prov = DataLayerProvenance().from_json(provjson)
 
   assert prov.description == 'example dataset'
   assert prov.sources == [ 'gs://neuroglancer/example/image' ]

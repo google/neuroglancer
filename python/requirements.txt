@@ -24,3 +24,4 @@ scipy==0.18.1
 pytest==3.0.7 
 google-cloud==0.25
 jsonschema==2.6.0
+python-jsonschema-objects==0.2.1
