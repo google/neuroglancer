@@ -23,7 +23,7 @@ def create_ingest_task(storage, task_queue):
     """
     for filename in tqdm(storage.list_files(prefix='build/')):
         t = IngestTask(
-            chunk_path=storage.get_path_to_file('build/'+filename),
+            chunk_path=storage.get_path_to_file(filename),
             chunk_encoding='npz',
             layer_path=storage.get_path_to_file(''))
         task_queue.insert(t)
@@ -51,7 +51,7 @@ def compute_bigarray_bounding_box(storage):
     abs_x_min = abs_y_min = abs_z_min = float('inf')
     abs_x_max = abs_y_max = abs_z_max = 0
     for filename in tqdm(storage.list_files(prefix='bigarray/')):
-        match = re.match(r'(\d+):(\d+)_(\d+):(\d+)_(\d+):(\d+)$', filename)
+        match = re.search(r'(\d+):(\d+)_(\d+):(\d+)_(\d+):(\d+)$', filename)
         (_, _, 
         x_min, x_max,
         y_min, y_max,
@@ -72,7 +72,7 @@ def compute_build_bounding_box(storage):
     abs_x_max = abs_y_max = abs_z_max = 0
     chunk_sizes = set()
     for filename in tqdm(storage.list_files(prefix='build/')):
-        match = re.match(r'^(\d+)-(\d+)_(\d+)-(\d+)_(\d+)-(\d+)$', filename)
+        match = re.search(r'(\d+)-(\d+)_(\d+)-(\d+)_(\d+)-(\d+)$', filename)
         (x_min, x_max,
          y_min, y_max,
          z_min, z_max) = map(int, match.groups())
@@ -95,7 +95,7 @@ def compute_build_bounding_box(storage):
 
 def get_build_data_type_and_shape(storage):
     for filename in storage.list_files(prefix='build/'):
-        arr = chunks.decode_npz(storage.get_file('build/'+filename))
+        arr = chunks.decode_npz(storage.get_file(filename))
         return arr.dtype.name, arr.shape[3] #num_channels
 
 def create_info_file_from_build(storage, layer_type, resolution=[1,1,1], encoding='raw',

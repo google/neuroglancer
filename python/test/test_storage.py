@@ -86,25 +86,43 @@ def test_compression():
     shutil.rmtree("/tmp/removeme/compression")
 
 def test_list():  
-    urls = ["file:///tmp/removeme/list",
-            "gs://neuroglancer/removeme/list",
-            "s3://neuroglancer/removeme/list"]
+    urls = [
+        "file:///tmp/removeme/list",
+        "gs://neuroglancer/removeme/list",
+        "s3://neuroglancer/removeme/list"
+    ]
 
     for url in urls:
         with Storage(url, n_threads=5) as s:
+            print 'testing service:', url
             content = 'some_string'
             s.put_file('info1', content, compress=False)
             s.put_file('info2', content, compress=False)
             s.put_file('build/info3', content, compress=False)
+            s.put_file('level1/level2/info4', content, compress=False)
             s.wait()
             time.sleep(1) # sometimes it takes a moment for google to update the list
-            assert set(s.list_files(prefix='')) == set(['info1','info2'])
+            assert set(s.list_files(prefix='')) == set(['build/info3','info1', 'info2', 'level1/level2/info4'])
+            
             assert set(s.list_files(prefix='inf')) == set(['info1','info2'])
             assert set(s.list_files(prefix='info1')) == set(['info1'])
-            assert set(s.list_files(prefix='build')) == set([])
-            assert set(s.list_files(prefix='build/')) == set(['info3'])
+            assert set(s.list_files(prefix='build')) == set(['build/info3'])
+            assert set(s.list_files(prefix='build/')) == set(['build/info3'])
+            assert set(s.list_files(prefix='level1/')) == set(['level1/level2/info4'])
             assert set(s.list_files(prefix='nofolder/')) == set([])
-            for file_path in ('info1', 'info2', 'build/info3'):
+
+            # Tests (1)
+            assert set(s.list_files(prefix='', flat=True)) == set(['info1','info2'])
+            assert set(s.list_files(prefix='inf', flat=True)) == set(['info1','info2'])
+            # Tests (2)
+            assert set(s.list_files(prefix='build', flat=True)) == set([])
+            # Tests (3)
+            assert set(s.list_files(prefix='level1/', flat=True)) == set([])
+            assert set(s.list_files(prefix='build/', flat=True)) == set(['build/info3'])
+            # Tests (4)
+            assert set(s.list_files(prefix='build/inf', flat=True)) == set(['build/info3'])
+
+            for file_path in ('info1', 'info2', 'build/info3', 'level1/level2/info4'):
                 s.delete_file(file_path)
     
     shutil.rmtree("/tmp/removeme/list")

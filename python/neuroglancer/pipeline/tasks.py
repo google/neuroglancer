@@ -320,7 +320,7 @@ class MeshManifestTask(RegisteredTask):
         Assumes that list files is most significant digix randix sorted
         """
         for filename in self._storage.list_files(prefix='mesh/{}'.format(self.prefix)):
-            match = re.match(r'(\d+):(\d+):(.*)$',filename)
+            match = re.search(r'(\d+):(\d+):(.*)$',filename)
             if not match: # a manifest file will not match
                 continue
             _id, lod, chunk_position = match.groups()

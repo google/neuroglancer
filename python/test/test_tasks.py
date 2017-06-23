@@ -71,7 +71,7 @@ def test_mesh():
              lod=0, simplification=5, segments=[])
     t.execute()
     assert storage.get_file('mesh/1:0:0-64_0-64_0-64') is not None 
-    assert list(storage.list_files('mesh/')) == ['1:0:0-64_0-64_0-64']
+    assert list(storage.list_files(prefix='mesh/')) == ['mesh/1:0:0-64_0-64_0-64']
 
 def test_manifest():
     
@@ -87,7 +87,6 @@ def test_manifest():
 
     def _delete_meshes():
         shutil.rmtree('/tmp/removeme/manifest', ignore_errors=True)
-
 
     _delete_meshes()
     _create_meshes()
