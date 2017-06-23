@@ -17,6 +17,7 @@ datasets = ls('gs://neuroglancer') + ls('s3://neuroglancer')
 
 missing_report = []
 invalid_report = []
+success_report = []
 
 for dataset in datasets:
   layers = ls(dataset)
@@ -26,21 +27,42 @@ for dataset in datasets:
       continue 
 
     with Storage(layer, n_threads=0) as stor:
-      if stor.exists('provenance'):
+      if not stor.exists('provenance'):
         missing_report.append(layer)
       else:
+        prov = stor.get_file('provenance')
+
         try:
-          DataLayerProvenance(layer)
+          prov = DataLayerProvenance().from_json(prov)
         except:
           invalid_report.append(layer)
+        else:
+          success_report.append(layer)
 
-if len(missing_report):
-  print "The following data layers are missing a provenance file:"
-  print ",".join(missing_report)
+RESET_COLOR = "\033[m"
+YELLOW = "\033[1;93m"
+RED = '\033[1;91m'        
+GREEN = '\033[1;92m' 
+
+def colorize(color, array):
+  print color + "\n".join(array) + RESET_COLOR + "\n"
+
+print """
+The following reports the status of the 'provenance' file in
+each layer of a neuroglancer dataset. 
+"""
+
+if len(success_report):
+  print "VALID"
+  colorize(GREEN, success_report)
 
 if len(invalid_report):
-  print "The following data layers have invalid provenance files:"
-  print ",".join(invalid_report)
+  print "INVALID"
+  colorize(YELLOW, invalid_report)
+
+if len(missing_report):
+  print "MISSING"
+  colorize(RED, missing_report)
 
 print 'done.'
 
