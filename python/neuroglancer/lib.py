@@ -11,6 +11,7 @@ import shutil
 import gc
 import gzip
 import operator
+import time
 from itertools import product
 
 from google.cloud import storage
@@ -25,8 +26,16 @@ COMMON_STAGING_DIR = './staging/'
 CLOUD_COMPUTING = False if 'CLOUD_COMPUTING' not in os.environ else bool(int(os.environ['CLOUD_COMPUTING']))
 
 def mkdir(path):
-  if path != '' and not os.path.exists(path):
-    os.makedirs(path)
+  try:
+    if path != '' and not os.path.exists(path):
+      os.makedirs(path)
+  except OSError as e:
+    if e.errno == 17: # File Exists
+      time.sleep(0.1)
+      return mkdir(path)
+    else:
+      raise
+
   return path
 
 def touch(path):
@@ -45,6 +54,43 @@ def list_shape(shape, elem=None):
         return [ helper(elem, shape, i+1) for _ in xrange(shape[i]) ]
 
     return helper(elem, shape, 0)
+
+
+def find_closest_divisor(to_divide, closest_to):
+  """
+  This is used to find the right chunk size for
+  importing a neuroglancer dataset that has a
+  chunk import size that's not evenly divisible by
+  64,64,64. 
+
+  e.g. 
+    neuroglancer_chunk_size = find_closest_divisor(build_chunk_size, closest_to=[64,64,64])
+
+  Required:
+    to_divide: (tuple) x,y,z chunk size to rechunk
+    closest_to: (tuple) x,y,z ideal chunk size
+
+  Return: [x,y,z] chunk size that works for ingestion
+  """
+  def find_closest(td, ct):
+    min_distance = td
+    best = td
+    
+    for divisor in divisors(td):
+      if abs(divisor - ct) < min_distance:
+        min_distance = abs(divisor - ct)
+        best = divisor
+    return best
+  
+  return [ find_closest(td, ct) for td, ct in zip(to_divide, closest_to) ]
+
+def divisors(n):
+  """Generate the divisors of n"""
+  for i in xrange(1, int(math.sqrt(n) + 1)):
+    if n % i == 0:
+      yield i
+      if i*i != n:
+        yield n / i
 
 def xyzrange(start_vec, end_vec=None, stride_vec=(1,1,1)):
   if end_vec is None:
@@ -116,7 +162,7 @@ def gcloudFileIterator(cloudpaths, keep_files=None, use_ls=False, compress=False
   # and filter out the ones it doesn't have. This is much faster than
   # requesting them one by one and getting a 404.
   if use_ls:
-    print("Downloading directoring listing. If this is not desired, set use_ls=False.")
+    print("Downloading directory listing. If this is not desired, set use_ls=False.")
     in_cloud = set( gcloud_ls(os.path.dirname(cloudpaths[0])) )
     future_failed_downloads = to_download.difference(in_cloud)
     to_download = to_download.difference(future_failed_downloads)
@@ -256,7 +302,7 @@ def map2(fn, a, b):
   result = np.empty(len(a))
 
   for i in xrange(len(result)):
-      result[i] = fn(a[i], b[i])
+    result[i] = fn(a[i], b[i])
 
   if isinstance(a, Vec) or isinstance(b, Vec):
     return Vec(*result)
@@ -271,6 +317,11 @@ def min2(a, b):
 
 def clamp(val, low, high):
   return min(max(val, low), high)
+
+def eclamp(val, low, high):
+  if val > high or val < low:
+    raise ValueError('Value {} cannot be outside of inclusive range {} to {}'.format(val,low,high))
+  return val
 
 class Vec(np.ndarray):
     def __new__(cls, *args, **kwargs):
@@ -331,7 +382,7 @@ class Vec3(Vec):
         return "Vec3({},{},{}, dtype={})".format(self.x, self.y, self.z, self.dtype)
 
 class Bbox(object):
-
+  """Represents a three dimensional cuboid in space."""
   def __init__(self, a, b):
     self.minpt = Vec3(
       min(a[0], b[0]),
@@ -412,6 +463,16 @@ class Bbox(object):
     return (self.minpt + self.maxpt) / 2.0
 
   def expand_to_chunk_size(self, chunk_size, offset=Vec(0,0,0, dtype=int)):
+    """
+    Align a potentially non-axis aligned bbox to the grid by growing it
+    to the nearest grid lines.
+
+    Required:
+      chunk_size: arraylike (x,y,z), the size of chunks in the 
+                    dataset e.g. (64,64,64)
+    Optional:
+      offset: arraylike (x,y,z), the starting coordinate of the dataset
+    """
     chunk_size = np.array(chunk_size, dtype=np.float32)
     result = self.clone()
     result = result - offset
@@ -419,19 +480,41 @@ class Bbox(object):
     result.maxpt = np.ceil(result.maxpt / chunk_size) * chunk_size 
     return result + offset
 
-  def shrink_to_chunk_size(self, chunk_size):
+  def shrink_to_chunk_size(self, chunk_size, offset=Vec(0,0,0, dtype=int)):
+    """
+    Align a potentially non-axis aligned bbox to the grid by shrinking it
+    to the nearest grid lines.
+
+    Required:
+      chunk_size: arraylike (x,y,z), the size of chunks in the 
+                    dataset e.g. (64,64,64)
+    Optional:
+      offset: arraylike (x,y,z), the starting coordinate of the dataset
+    """
     chunk_size = np.array(chunk_size, dtype=np.float32)
     result = self.clone()
+    result = result - offset
     result.minpt = np.ceil(result.minpt / chunk_size) * chunk_size
     result.maxpt = np.floor(result.maxpt / chunk_size) * chunk_size 
-    return result
+    return result + offset
 
-  def round_to_chunk_size(self, chunk_size):
+  def round_to_chunk_size(self, chunk_size, offset=Vec(0,0,0, dtype=int)):
+    """
+    Align a potentially non-axis aligned bbox to the grid by rounding it
+    to the nearest grid lines.
+
+    Required:
+      chunk_size: arraylike (x,y,z), the size of chunks in the 
+                    dataset e.g. (64,64,64)
+    Optional:
+      offset: arraylike (x,y,z), the starting coordinate of the dataset
+    """
     chunk_size = np.array(chunk_size, dtype=np.float32)
     result = self.clone()
+    result = result - offset
     result.minpt = np.round(result.minpt / chunk_size) * chunk_size
     result.maxpt = np.round(result.maxpt / chunk_size) * chunk_size
-    return result
+    return result + offset
 
   def contains(self, point):
     return (
@@ -496,6 +579,9 @@ class Bbox(object):
     tmp.maxpt /= operand
     return tmp
 
+  def __ne__(self, other):
+    return not (self == other)
+
   def __eq__(self, other):
     return np.array_equal(self.minpt, other.minpt) and np.array_equal(self.maxpt, other.maxpt)
 
@@ -504,6 +590,7 @@ class Bbox(object):
 
   def __repr__(self):
     return "Bbox({},{})".format(self.minpt, self.maxpt)
+
 
 BUCKETS = {}
 

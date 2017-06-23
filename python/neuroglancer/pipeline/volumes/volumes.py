@@ -10,7 +10,7 @@ import numpy as np
 from tqdm import tqdm
 from PIL import Image
 
-from neuroglancer.ingest.lib import Vec, clamp, mkdir, COMMON_STAGING_DIR, xyzrange
+from neuroglancer.lib import Vec, clamp, mkdir, COMMON_STAGING_DIR, xyzrange
 
 def generate_slices(slices, maxsize):
   """Assisting function for __getitem__. e.g. vol[:,:,:,:]"""

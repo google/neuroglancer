@@ -13,7 +13,7 @@ from neuroglancer import downsample_scales, chunks
 from neuroglancer.pipeline import Storage, TaskQueue
 from neuroglancer.pipeline.tasks import (BigArrayTask, IngestTask,
      HyperSquareTask, MeshTask, MeshManifestTask, DownsampleTask)
-from neuroglancer.ingest.volumes import HDF5Volume
+from neuroglancer.pipeline.volumes import HDF5Volume
 
 def create_ingest_task(storage, task_queue):
     """
