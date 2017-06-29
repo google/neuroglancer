@@ -126,3 +126,22 @@ def test_list():
                 s.delete_file(file_path)
     
     shutil.rmtree("/tmp/removeme/list")
+
+
+def test_exists():
+    urls = [
+        "file:///tmp/removeme/exists",
+        "gs://neuroglancer/removeme/exists",
+        "s3://neuroglancer/removeme/exists"
+    ]
+
+    for url in urls:
+        with Storage(url, n_threads=5) as s:
+            content = 'some_string'
+            s.put_file('info', content, compress=False)
+            s.wait()
+            time.sleep(1) # sometimes it takes a moment for google to update the list
+            
+            assert s.exists('info')
+            assert not s.exists('doesntexist')
+            s.delete_file('info')
