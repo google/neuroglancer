@@ -30,10 +30,15 @@
 #include <memory>
 
 // OS X doesn't have endian.h
-#if __has_include(<endian.h>)
-# include <endian.h>
+// To avoid problem with non-clang compilers not having this macro.
+#if defined(__has_include)
+# if __has_include(<endian.h>)
+#   include <endian.h>
+# else
+#   include "endian.h"
+# endif
 #else
-# include "endian.h"
+# include <endian.h>
 #endif
 
 namespace neuroglancer {
