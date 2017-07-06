@@ -27,7 +27,7 @@ import {defineParameterizedVolumeChunkSource, MultiscaleVolumeChunkSource as Gen
 import {StatusMessage} from 'neuroglancer/status';
 import {getPrefixMatches, getPrefixMatchesWithDescriptions} from 'neuroglancer/util/completion';
 import {vec3} from 'neuroglancer/util/geom';
-import {parseArray, parseXYZ, verifyFinitePositiveFloat, verifyMapKey, verifyObject, verifyObjectProperty, verifyOptionalString, verifyPositiveInt, verifyString} from 'neuroglancer/util/json';
+import {parseArray, parseQueryStringParameters, parseXYZ, verifyEnumString, verifyFinitePositiveFloat, verifyMapKey, verifyObject, verifyObjectProperty, verifyOptionalString, verifyPositiveInt, verifyString} from 'neuroglancer/util/json';
 
 const VolumeChunkSource = defineParameterizedVolumeChunkSource(VolumeSourceParameters);
 const MeshSource = defineParameterizedMeshSource(MeshSourceParameters);
@@ -66,16 +66,22 @@ export class MeshInfo {
   }
 }
 
+export interface GetBrainmapsVolumeOptions extends GetVolumeOptions {
+  encoding?: VolumeChunkEncoding;
+}
+
 export class MultiscaleVolumeChunkSource implements GenericMultiscaleVolumeChunkSource {
   volumeType: VolumeType;
   scales: VolumeInfo[];
   dataType: DataType;
   numChannels: number;
   meshes: MeshInfo[];
+  encoding: VolumeChunkEncoding|undefined;
   constructor(
       public chunkManager: ChunkManager, public instance: BrainmapsInstance,
       public volumeId: string, public changeSpec: ChangeSpec|undefined, volumeInfoResponse: any,
-      meshesResponse: any, options: GetVolumeOptions) {
+      meshesResponse: any, options: GetBrainmapsVolumeOptions) {
+    this.encoding = options.encoding;
     try {
       verifyObject(volumeInfoResponse);
       let scales = this.scales = verifyObjectProperty(
@@ -140,7 +146,7 @@ export class MultiscaleVolumeChunkSource implements GenericMultiscaleVolumeChunk
       encoding = VolumeChunkEncoding.COMPRESSED_SEGMENTATION;
     } else if (
         this.volumeType === VolumeType.IMAGE && this.dataType === DataType.UINT8 &&
-        this.numChannels === 1) {
+        this.numChannels === 1 && this.encoding !== VolumeChunkEncoding.RAW) {
       encoding = VolumeChunkEncoding.JPEG;
     }
 
@@ -195,8 +201,8 @@ export function getSkeletonSource(
 }
 
 export function parseVolumeKey(key: string):
-    {volumeId: string, changeSpec: ChangeSpec | undefined} {
-  const match = key.match(/^([^:]+:[^:]+:[^:]+)(?::([^:]+))?$/);
+    {volumeId: string, changeSpec: ChangeSpec | undefined, parameters: any} {
+  const match = key.match(/^([^:?]+:[^:?]+:[^:?]+)(?::([^:?]+))?(?:\?(.*))?$/);
   if (match === null) {
     throw new Error(`Invalid Brainmaps volume key: ${JSON.stringify(key)}.`);
   }
@@ -204,7 +210,8 @@ export function parseVolumeKey(key: string):
   if (match[2] !== undefined) {
     changeSpec = {changeStackId: match[2]};
   }
-  return {volumeId: match[1], changeSpec};
+  const parameters = parseQueryStringParameters(match[3] || '');
+  return {volumeId: match[1], changeSpec, parameters};
 }
 
 const meshSourcePattern = /^([^\/]+)\/(.*)$/;
@@ -231,9 +238,15 @@ export function getSkeletonSourceByUrl(
 export function getVolume(
     instance: BrainmapsInstance, chunkManager: ChunkManager, key: string,
     options: GetVolumeOptions) {
-  const {volumeId, changeSpec} = parseVolumeKey(key);
+  const {volumeId, changeSpec, parameters} = parseVolumeKey(key);
+  verifyObject(parameters);
+  const encoding = verifyObjectProperty(
+      parameters, 'encoding',
+      x => x === undefined ? undefined :
+                             verifyEnumString(parameters['encoding'], VolumeChunkEncoding));
+  const brainmapsOptions: GetBrainmapsVolumeOptions = {...options, encoding};
   return chunkManager.memoize.getUncounted(
-      {type: 'brainmaps:getVolume', instance, volumeId, changeSpec, options},
+      {type: 'brainmaps:getVolume', instance, volumeId, changeSpec, brainmapsOptions},
       () => Promise
                 .all([
                   makeRequest(
@@ -248,7 +261,7 @@ export function getVolume(
                 .then(
                     ([volumeInfoResponse, meshesResponse]) => new MultiscaleVolumeChunkSource(
                         chunkManager, instance, volumeId, changeSpec, volumeInfoResponse,
-                        meshesResponse, options)));
+                        meshesResponse, brainmapsOptions)));
 }
 
 interface ProjectMetadata {
