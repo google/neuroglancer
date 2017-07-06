@@ -372,9 +372,7 @@ export class RenderLayer extends GenericSliceViewRenderLayer {
   constructor(
       multiscaleSource: MultiscaleVolumeChunkSource,
       {shaderError = makeWatchableShaderError(), sourceOptions = <VolumeSourceOptions> {}} = {}) {
-    super(multiscaleSource.chunkManager, multiscaleSource.getSources(sourceOptions), {
-      shaderError = makeWatchableShaderError(),
-    } = {});
+    super(multiscaleSource.chunkManager, multiscaleSource.getSources(sourceOptions), {shaderError});
 
     let gl = this.gl;
     this.vertexComputationManager = VolumeSliceVertexComputationManager.get(gl);
