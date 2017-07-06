@@ -85,6 +85,15 @@ void emitTransparent();
 You can map values in the range [0,1] to an RGB color using one of the color maps defined in
 [colormaps.glsl](../webgl/colormaps.glsl).
 
+### Avoiding artifacts due to lossy compression
+
+If a discontinuous color mapping is applied to a volume that is stored or retrieved using lossy compression (e.g. JPEG), compression artifacts may be visible.  Lossy compression can be disabled for individual data sources as follows:
+
+| Data source | Behavior |
+| -------- | ------- |
+| `ndstore` | JPEG compression is used by default for image volumes.  To override this, append a `?encoding=npz` or `?encoding=raw` query string parameter to the data source URL. |
+| `brainmaps` | JPEG compression is used by default for single-channel uint8 volumes.  To override this, append a `?encoding=raw` query string parameter to the data source URL. |
+
 ### Examples
 
 The default shader, that displays the first channel as a grayscale intensity:
@@ -117,9 +126,21 @@ void main () {
 }
 ```
 
-Thresholding a single-channel volume:
+Thresholding a single-channel volume (see note above about avoiding artifacts due to lossy compression):
 ```glsl
 void main () {
   emitGrayscale(step(0.5, toNormalized(getDataValue())));
+}
+```
+
+Mapping particular values to specific colors (see note above about avoiding artifacts due to lossy compression):
+```glsl
+void main() {
+  float value = toRaw(getDataValue(0));
+  vec3 color = vec3(0, 0, 0);
+  if (value == 2.0) color = vec3(1, 0, 0);
+  if (value == 3.0) color = vec3(0, 1, 0);
+  if (value == 4.0) color = vec3(0, 0, 1);
+  emitRGB(color);
 }
 ```
