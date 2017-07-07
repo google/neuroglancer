@@ -546,11 +546,11 @@ export class VisibleRenderLayerTracker<RenderLayerType extends VisibilityTracked
         let typedLayer = <RenderLayerType>renderLayer;
         newVisibleLayers.add(typedLayer);
         if (!visibleLayers.has(typedLayer)) {
-          typedLayer.visibility.add(this.visibility);
+          const visibilityDisposer = typedLayer.visibility.add(this.visibility);
           const disposer = layerAdded(typedLayer);
           visibleLayers.set(typedLayer.addRef(), () => {
             disposer();
-            typedLayer.visibility.remove(this.visibility);
+            visibilityDisposer();
             typedLayer.dispose();
           });
         }

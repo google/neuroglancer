@@ -53,7 +53,7 @@ export interface VisibilityPrioritySpecification { visibility: WatchableVisibili
  * Maintains the maximum value of multiple WatchableVisibilityPriority values.
  */
 export class VisibilityPriorityAggregator extends WatchableVisibilityPriority {
-  private contributors = new Map<WatchableVisibilityPriority, () => void>();
+  private contributors = new Map<() => void, WatchableVisibilityPriority>();
 
   /**
    * Registers `x` to be included in the set of values to be aggregated.
@@ -66,28 +66,18 @@ export class VisibilityPriorityAggregator extends WatchableVisibilityPriority {
       this.update();
     });
     const disposer = () => {
-      contributors.delete(x);
+      contributors.delete(disposer);
       changedDisposer();
       this.update();
     };
-    contributors.set(x, disposer);
+    contributors.set(disposer, x);
     this.update();
     return disposer;
   }
 
-  /**
-   * Unregisters `x` from the set of values to be aggregated.
-   *
-   * This is equivalent to calling the disposer function returned by `this.add(x)`.
-   */
-  remove(x: WatchableVisibilityPriority) {
-    const disposer = this.contributors.get(x)!;
-    disposer();
-  }
-
   private update() {
     let priority = Number.NEGATIVE_INFINITY;
-    for (const x of this.contributors.keys()) {
+    for (const x of this.contributors.values()) {
       priority = Math.max(priority, x.value);
     }
     this.value = priority;
