@@ -1,0 +1,3 @@
+[submodule "python/ext/third_party/contact_analysis"]
+	path = python/ext/third_party/contact_analysis
+	url = https://github.com/seung-lab/ContactAnalysis.jl.git
