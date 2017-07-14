@@ -106,7 +106,7 @@ gl_FragColor = vec4(accum.rgb / accum.a, revealage);
 export class PerspectivePanel extends RenderedDataPanel {
   viewer: PerspectiveViewerState;
 
-  private visibleLayerTracker = makeRenderedPanelVisibleLayerTracker(
+  protected visibleLayerTracker = makeRenderedPanelVisibleLayerTracker(
       this.viewer.layerManager, PerspectiveViewRenderLayer, this);
 
   sliceViews = new Set<SliceView>();
@@ -115,20 +115,20 @@ export class PerspectivePanel extends RenderedDataPanel {
   modelViewMat = mat4.create();
   width = 0;
   height = 0;
-  private pickIDs = new PickIDManager();
+  protected pickIDs = new PickIDManager();
   private axesLineHelper = this.registerDisposer(AxesLineHelper.get(this.gl));
   sliceViewRenderHelper =
       this.registerDisposer(SliceViewRenderHelper.get(this.gl, perspectivePanelEmit));
 
-  private offscreenFramebuffer = this.registerDisposer(new FramebufferConfiguration(this.gl, {
+  protected offscreenFramebuffer = this.registerDisposer(new FramebufferConfiguration(this.gl, {
     colorBuffers: makeTextureBuffers(this.gl, OffscreenTextures.NUM_TEXTURES),
     depthBuffer: new DepthBuffer(this.gl)
   }));
 
-  private transparentConfiguration_: FramebufferConfiguration<TextureBuffer>|undefined;
+  protected transparentConfiguration_: FramebufferConfiguration<TextureBuffer>|undefined;
 
-  private offscreenCopyHelper = this.registerDisposer(OffscreenCopyHelper.get(this.gl));
-  private transparencyCopyHelper =
+  protected offscreenCopyHelper = this.registerDisposer(OffscreenCopyHelper.get(this.gl));
+  protected transparencyCopyHelper =
       this.registerDisposer(OffscreenCopyHelper.get(this.gl, defineTransparencyCopyShader, 2));
 
   constructor(context: DisplayContext, element: HTMLElement, viewer: PerspectiveViewerState) {
@@ -383,7 +383,7 @@ export class PerspectivePanel extends RenderedDataPanel {
         this.offscreenFramebuffer.colorBuffers[OffscreenTextures.COLOR].texture);
   }
 
-  private drawSliceViews(renderContext: PerspectiveViewRenderContext) {
+  protected drawSliceViews(renderContext: PerspectiveViewRenderContext) {
     let {sliceViewRenderHelper} = this;
     let {lightDirection, ambientLighting, directionalLighting, dataToDevice} = renderContext;
 
@@ -405,7 +405,7 @@ export class PerspectivePanel extends RenderedDataPanel {
     }
   }
 
-  private drawAxisLines() {
+  protected drawAxisLines() {
     let {gl} = this;
     let mat = tempMat4;
     mat4.identity(mat);
