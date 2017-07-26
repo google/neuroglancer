@@ -186,9 +186,9 @@ static void register_type(PyObject* module) {
 }  // namespace pywrap_on_demand_object_mesh_generator
 
 #ifndef PyMODINIT_FUNC /* declarations for DLL import/export */
-#define PyMODINIT_FUNC void
+#define PyMODINIT_FUNC extern "C" void
 #endif
-extern "C" PyMODINIT_FUNC DLL_PUBLIC init_neuroglancer(void) {
+PyMODINIT_FUNC DLL_PUBLIC init_neuroglancer(void) {
   static PyMethodDef module_methods[] = {
       {NULL} /* Sentinel */
   };
