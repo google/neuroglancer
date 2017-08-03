@@ -188,7 +188,6 @@ export abstract class ChunkSource extends SharedObject {
    */
   constructor(public chunkManager: ChunkManager) {
     super();
-    this.registerDisposer(chunkManager.addRef());
   }
 
   initializeCounterpart(rpc: RPC, options: any) {

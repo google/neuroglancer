@@ -20,7 +20,7 @@ import {getCachedJson} from 'neuroglancer/util/trackable';
 import {Viewer} from 'neuroglancer/viewer';
 
 export function bindDefaultCopyHandler(viewer: Viewer) {
-  document.addEventListener('copy', (event: ClipboardEvent) => {
+  viewer.registerEventListener(document, 'copy', (event: ClipboardEvent) => {
     if (eventHasInputTextTarget(event)) {
       return;
     }
@@ -47,7 +47,7 @@ export function parsePositionString(s: string): vec3|undefined {
 }
 
 export function bindDefaultPasteHandler(viewer: Viewer) {
-  document.addEventListener('paste', (event: ClipboardEvent) => {
+  viewer.registerEventListener(document, 'paste', (event: ClipboardEvent) => {
     if (eventHasInputTextTarget(event)) {
       return;
     }

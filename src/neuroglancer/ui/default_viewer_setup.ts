@@ -26,7 +26,7 @@ export function setupDefaultViewer() {
   let viewer = (<any>window)['viewer'] = makeDefaultViewer();
   makeDefaultKeyBindings(viewer.keyMap);
 
-  const hashBinding = new UrlHashBinding(viewer.state);
+  const hashBinding = viewer.registerDisposer(new UrlHashBinding(viewer.state));
   hashBinding.updateFromUrlHash();
 
   bindDefaultCopyHandler(viewer);

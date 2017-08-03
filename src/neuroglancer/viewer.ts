@@ -30,6 +30,7 @@ import {PositionStatusPanel} from 'neuroglancer/position_status_panel';
 import {TrackableBoolean} from 'neuroglancer/trackable_boolean';
 import {TrackableValue} from 'neuroglancer/trackable_value';
 import {RefCounted} from 'neuroglancer/util/disposable';
+import {removeFromParent} from 'neuroglancer/util/dom';
 import {vec3} from 'neuroglancer/util/geom';
 import {globalKeyboardHandlerStack, KeySequenceMap} from 'neuroglancer/util/keyboard_shortcut_handler';
 import {NullarySignal} from 'neuroglancer/util/signal';
@@ -57,20 +58,23 @@ export function validateLayoutName(obj: any) {
   return layout[0];
 }
 
-export class DataManagementContext {
-  chunkQueueManager =
-      new ChunkQueueManager(new RPC(new Worker('chunk_worker.bundle.js')), this.gl, {
-        gpuMemory: new AvailableCapacity(1e6, 1e9),
-        systemMemory: new AvailableCapacity(1e7, 2e9),
-        download: new AvailableCapacity(32, Number.POSITIVE_INFINITY)
-      });
-  chunkManager = new ChunkManager(this.chunkQueueManager);
+export class DataManagementContext extends RefCounted {
+  worker = new Worker('chunk_worker.bundle.js');
+  chunkQueueManager = this.registerDisposer(new ChunkQueueManager(new RPC(this.worker), this.gl, {
+    gpuMemory: new AvailableCapacity(1e6, 1e9),
+    systemMemory: new AvailableCapacity(1e7, 2e9),
+    download: new AvailableCapacity(32, Number.POSITIVE_INFINITY)
+  }));
+  chunkManager = this.registerDisposer(new ChunkManager(this.chunkQueueManager));
 
   get rpc(): RPC {
     return this.chunkQueueManager.rpc!;
   }
 
-  constructor(public gl: GL) {}
+  constructor(public gl: GL) {
+    super();
+    this.chunkQueueManager.registerDisposer(() => this.worker.terminate());
+  }
 }
 
 export interface UIOptions {
@@ -139,6 +143,8 @@ export class Viewer extends RefCounted implements ViewerState {
       visibility = new WatchableVisibilityPriority(WatchableVisibilityPriority.VISIBLE),
     } = options;
 
+    this.registerDisposer(dataContext);
+
     this.options = {...defaultViewerOptions, ...options, dataContext, visibility};
 
     this.layerSpecification = new LayerListSpecification(
@@ -177,7 +183,7 @@ export class Viewer extends RefCounted implements ViewerState {
     // Debounce this call to ensure that a transient state does not result in the layer dialog being
     // shown.
     const maybeResetState = this.registerCancellable(debounce(() => {
-      if (this.layerManager.managedLayers.length === 0) {
+      if (!this.wasDisposed && this.layerManager.managedLayers.length === 0) {
         // No layers, reset state.
         this.navigationState.reset();
         this.perspectiveNavigationState.pose.orientation.reset();
@@ -258,6 +264,7 @@ export class Viewer extends RefCounted implements ViewerState {
     gridContainer.setAttribute('class', 'gllayoutcontainer noselect');
     let {container} = display;
     container.appendChild(gridContainer);
+    this.registerDisposer(() => removeFromParent(gridContainer));
 
     let uiElements: L.Handler[] = [];
 
