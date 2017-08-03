@@ -57,13 +57,14 @@ export function validateLayoutName(obj: any) {
   return layout[0];
 }
 
+const WORKER_RPC = new RPC(new Worker('chunk_worker.bundle.js'));
+
 export class DataManagementContext {
-  chunkQueueManager =
-      new ChunkQueueManager(new RPC(new Worker('chunk_worker.bundle.js')), this.gl, {
-        gpuMemory: new AvailableCapacity(1e6, 1e9),
-        systemMemory: new AvailableCapacity(1e7, 2e9),
-        download: new AvailableCapacity(32, Number.POSITIVE_INFINITY)
-      });
+  chunkQueueManager = new ChunkQueueManager(WORKER_RPC, this.gl, {
+    gpuMemory: new AvailableCapacity(1e6, 1e9),
+    systemMemory: new AvailableCapacity(1e7, 2e9),
+    download: new AvailableCapacity(32, Number.POSITIVE_INFINITY)
+  });
   chunkManager = new ChunkManager(this.chunkQueueManager);
 
   get rpc(): RPC {
