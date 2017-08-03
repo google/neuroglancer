@@ -48,7 +48,7 @@ vec3 ${this.prefix}(uint64_t x) {
       let aIndex = 2 * i;
       s += `
   v[${i}] = computeHash(x,
-                        ${aName}[${aIndex}], ${aName}[${aIndex + 1}], 
+                        ${aName}[${aIndex}], ${aName}[${aIndex + 1}],
                         ${bName}[${bIndex}], ${bName}[${bIndex + 1}],
                         primeModulus, 1.0 / 256.0);
 `;

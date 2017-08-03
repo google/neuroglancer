@@ -56,15 +56,6 @@
       true,
       "ban-keywords"
     ],
-    "whitespace": [
-      true,
-      "check-branch",
-      "check-decl",
-      "check-module",
-      "check-operator",
-      "check-separator",
-      "check-type"
-    ],
     "no-conditional-assignment": true,
     "no-duplicate-case": true,
     "no-empty-character-class": true,

@@ -242,8 +242,8 @@ export class SpatialPosition extends RefCounted {
   }
 }
 
-function quaternionIsIdentity(quat: quat) {
-  return quat[0] === 0 && quat[1] === 0 && quat[2] === 0 && quat[3] === 1;
+function quaternionIsIdentity(q: quat) {
+  return q[0] === 0 && q[1] === 0 && q[2] === 0 && q[3] === 1;
 }
 
 export class OrientationState extends RefCounted {
