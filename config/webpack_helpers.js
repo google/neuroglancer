@@ -189,7 +189,7 @@ function getBaseConfig(options) {
         tsLoaderEntry, {test: /\.json$/, loader: require.resolve('json-loader')}, {
           test: /\.css$/,
           loader:
-              ExtractTextPlugin.extract({fallbackLoader: 'style-loader', loader: 'css-loader'})
+              ExtractTextPlugin.extract({fallback: 'style-loader', use: 'css-loader'})
         },
         {
           test: /\.glsl$/,
