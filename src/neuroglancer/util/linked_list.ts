@@ -14,13 +14,13 @@
  * limitations under the License.
  */
 
-export interface LinkedListOperations {
-  insertAfter: <T>(head: T, x: T) => void;
-  pop: <T>(head: T) => T;
-  insertBefore: <T>(head: T, x: T) => void;
-  front: <T>(head: T) => T | null;
-  back: <T>(head: T) => T | null;
-  iterator: <T>(head: T) => Iterator<T>;
-  reverseIterator: <T>(head: T) => Iterator<T>;
-  initializeHead: <T>(head: T) => void;
+export interface LinkedListOperations<T> {
+  insertAfter: (head: T, x: T) => void;
+  pop: (head: T) => T;
+  insertBefore: (head: T, x: T) => void;
+  front: (head: T) => T | null;
+  back: (head: T) => T | null;
+  iterator: (head: T) => Iterator<T>;
+  reverseIterator: (head: T) => Iterator<T>;
+  initializeHead: (head: T) => void;
 }

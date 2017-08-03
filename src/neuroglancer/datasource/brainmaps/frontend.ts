@@ -370,11 +370,12 @@ export function getChangeStackList(
     chunkManager: ChunkManager, instance: BrainmapsInstance, volumeId: string) {
   return chunkManager.memoize.getUncounted(
       {instance, type: 'brainmaps:getChangeStackList', volumeId}, () => {
-        let promise: Promise<string[]> = makeRequest(instance, {
-                                           method: 'GET',
-                                           path: `/v1beta2/changes/${volumeId}/change_stacks`,
-                                           responseType: 'json'
-                                         }).then(response => parseChangeStackList(response));
+        let promise: Promise<string[]|undefined> =
+            makeRequest(instance, {
+              method: 'GET',
+              path: `/v1beta2/changes/${volumeId}/change_stacks`,
+              responseType: 'json'
+            }).then(response => parseChangeStackList(response));
         const description = `change stacks for ${volumeId}`;
         StatusMessage.forPromise(promise, {
           delay: true,

@@ -217,7 +217,7 @@ export class LayerDialog extends Overlay {
 
     this.setInfo('Validating volume source...');
     const token = this.volumeCancellationSource = new CancellationTokenSource();
-    getVolume(this.manager.chunkManager, url, token)
+    getVolume(this.manager.chunkManager, url, /*options=*/undefined, token)
         .then(source => {
           if (token.isCanceled) {
             return;

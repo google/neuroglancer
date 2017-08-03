@@ -259,7 +259,7 @@ class ChunkPriorityQueue {
   private recentHead = new Chunk();
   constructor(
       private heapOperations: PairingHeapOperations<Chunk>,
-      private linkedListOperations: LinkedListOperations) {
+      private linkedListOperations: LinkedListOperations<Chunk>) {
     linkedListOperations.initializeHead(this.recentHead);
   }
 
