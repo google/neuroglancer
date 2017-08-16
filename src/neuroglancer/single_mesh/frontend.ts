@@ -352,11 +352,11 @@ const SharedObjectWithSharedVisibility = withSharedVisibility(SharedObject);
 class SingleMeshLayerSharedObject extends SharedObjectWithSharedVisibility {}
 
 export class SingleMeshLayer extends PerspectiveViewRenderLayer {
-  private shaderManager: SingleMeshShaderManager|undefined;
+  protected shaderManager: SingleMeshShaderManager|undefined;
   private shaders = new Map<ShaderModule, ShaderProgram|null>();
   private sharedObject = this.registerDisposer(new SingleMeshLayerSharedObject());
   private fallbackFragmentMain = DEFAULT_FRAGMENT_MAIN;
-  private countingBuffer = this.registerDisposer(getCountingBuffer(this.gl));
+  protected countingBuffer = this.registerDisposer(getCountingBuffer(this.gl));
 
   constructor(public source: SingleMeshSource, public displayState: SingleMeshDisplayState) {
     super();
@@ -399,12 +399,12 @@ export class SingleMeshLayer extends PerspectiveViewRenderLayer {
     super.disposed();
   }
 
-  private makeShaderManager(fragmentMain = this.displayState.fragmentMain.value) {
+  protected makeShaderManager(fragmentMain = this.displayState.fragmentMain.value) {
     return new SingleMeshShaderManager(
         this.displayState.attributeNames.value, this.source.info.vertexAttributes, fragmentMain);
   }
 
-  private getShader(emitter: ShaderModule): ShaderProgram|null {
+  protected getShader(emitter: ShaderModule): ShaderProgram|null {
     let {shaders} = this;
     let shader = shaders.get(emitter);
     if (shader === undefined) {

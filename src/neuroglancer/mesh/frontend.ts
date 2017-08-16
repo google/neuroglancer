@@ -99,7 +99,7 @@ vColor = vec4(lightingFactor * uColor.rgb, uColor.a);
 }
 
 export class MeshLayer extends PerspectiveViewRenderLayer {
-  private meshShaderManager = new MeshShaderManager();
+  protected meshShaderManager = new MeshShaderManager();
   private shaders = new Map<ShaderModule, ShaderProgram>();
   private sharedObject: SegmentationLayerSharedObject;
 
@@ -120,7 +120,7 @@ export class MeshLayer extends PerspectiveViewRenderLayer {
     sharedObject.visibility.add(this.visibility);
   }
 
-  private getShader(emitter: ShaderModule) {
+  protected getShader(emitter: ShaderModule) {
     let {shaders} = this;
     let shader = shaders.get(emitter);
     if (shader === undefined) {

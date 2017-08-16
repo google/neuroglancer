@@ -57,7 +57,7 @@ export interface SliceViewSegmentationDisplayState extends SegmentationDisplaySt
 }
 
 export class SegmentationRenderLayer extends RenderLayer {
-  private segmentColorShaderManager = new SegmentColorShaderManager('segmentColorHash');
+  protected segmentColorShaderManager = new SegmentColorShaderManager('segmentColorHash');
   private hashTableManager = new HashSetShaderManager('visibleSegments');
   private gpuHashTable = GPUHashTable.get(this.gl, this.displayState.visibleSegments.hashTable);
 
