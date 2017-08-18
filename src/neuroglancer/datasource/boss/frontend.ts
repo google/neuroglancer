@@ -22,21 +22,21 @@
 import 'neuroglancer/datasource/boss/api_frontend';
 
 import {ChunkManager} from 'neuroglancer/chunk_manager/frontend';
-import {CompletionResult, registerDataSourceFactory} from 'neuroglancer/datasource/factory';
 import {makeRequest} from 'neuroglancer/datasource/boss/api';
-import {VolumeChunkSourceParameters, MeshSourceParameters} from 'neuroglancer/datasource/boss/base';
+import {MeshSourceParameters, VolumeChunkSourceParameters} from 'neuroglancer/datasource/boss/base';
+import {CompletionResult, registerDataSourceFactory} from 'neuroglancer/datasource/factory';
+import {defineParameterizedMeshSource} from 'neuroglancer/mesh/frontend';
 import {DataType, VolumeChunkSpecification, VolumeSourceOptions, VolumeType} from 'neuroglancer/sliceview/volume/base';
 import {defineParameterizedVolumeChunkSource, MultiscaleVolumeChunkSource as GenericMultiscaleVolumeChunkSource} from 'neuroglancer/sliceview/volume/frontend';
-import {defineParameterizedMeshSource} from 'neuroglancer/mesh/frontend';
 import {applyCompletionOffset, getPrefixMatchesWithDescriptions} from 'neuroglancer/util/completion';
-import {mat4, vec3, vec2} from 'neuroglancer/util/geom';
-import {parseArray, parseQueryStringParameters, verify3dDimensions, verify3dScale, verifyEnumString, verifyInt, verifyObject, verifyObjectAsMap, verifyObjectProperty, verifyOptionalString, verifyString, verifyFiniteFloat} from 'neuroglancer/util/json';
+import {mat4, vec2, vec3} from 'neuroglancer/util/geom';
+import {parseArray, parseQueryStringParameters, verify3dDimensions, verify3dScale, verifyEnumString, verifyFiniteFloat, verifyInt, verifyObject, verifyObjectAsMap, verifyObjectProperty, verifyOptionalString, verifyString} from 'neuroglancer/util/json';
 
 let serverVolumeTypes = new Map<string, VolumeType>();
 serverVolumeTypes.set('image', VolumeType.IMAGE);
 serverVolumeTypes.set('annotation', VolumeType.SEGMENTATION);
 
-const VALID_ENCODINGS = new Set<string>(['npz', 'jpeg']);  //, 'raw', 'jpeg']);
+const VALID_ENCODINGS = new Set<string>(['npz', 'jpeg']);
 
 const DEFAULT_CUBOID_SIZE = vec3.fromValues(512, 512, 16);
 
@@ -48,18 +48,27 @@ interface ChannelInfo {
   volumeType: VolumeType;
   dataType: DataType;
   downsampled: boolean;
+  scales: ScaleInfo[];
   description: string;
   key: string;
 }
 
 interface CoordinateFrameInfo {
-  voxelSizeBase: vec3;
+  voxelSizeBaseNanometers: vec3;
   voxelOffsetBase: vec3;
   imageSizeBase: vec3;
+  voxelUnit: VoxelUnitType;
+}
+
+enum VoxelUnitType {
+  NANOMETERS = 0,
+  MICROMETERS = 1,
+  MILLIMETERS = 2,
+  CENTIMETERS = 3
 }
 
 interface ScaleInfo {
-  voxelSize: vec3;
+  voxelSizeNanometers: vec3;
   imageSize: vec3;
   key: string;
 }
@@ -68,10 +77,30 @@ interface ExperimentInfo {
   channels: Map<string, ChannelInfo>;
   scalingLevels: number;
   coordFrameKey: string;
-  coordFrame: CoordinateFrameInfo;
-  scales: ScaleInfo[];
+  coordFrame?: CoordinateFrameInfo;
   key: string;
   collection: string;
+}
+
+function scaleVoxelSize(voxelSizeInput: vec3, voxelUnit: VoxelUnitType): vec3 {
+  switch (voxelUnit) {
+    case VoxelUnitType.MICROMETERS: {
+      for (let i = 0; i < 3; i++) {
+        voxelSizeInput[i] *= 1.e3;
+      }
+    } break;
+    case VoxelUnitType.MILLIMETERS: {
+      for (let i = 0; i < 3; i++) {
+        voxelSizeInput[i] *= 1.e6;
+      }
+    } break;
+    case VoxelUnitType.CENTIMETERS: {
+      for (let i = 0; i < 3; i++) {
+        voxelSizeInput[i] *= 1.e7;
+      }
+    } break;
+  }
+  return voxelSizeInput;
 }
 
 /**
@@ -81,8 +110,7 @@ interface ExperimentInfo {
 function parseCoordinateFrame(coordFrame: any, experimentInfo: ExperimentInfo): ExperimentInfo {
   verifyObject(coordFrame);
 
-  let voxelSizeBase = vec3.create(), voxelOffsetBase = vec3.create(), imageSizeBase = vec3.create();  
-  
+  let voxelSizeBase = vec3.create(), voxelOffsetBase = vec3.create(), imageSizeBase = vec3.create();
   voxelSizeBase[0] = verifyObjectProperty(coordFrame, 'x_voxel_size', verifyInt);
   voxelSizeBase[1] = verifyObjectProperty(coordFrame, 'y_voxel_size', verifyInt);
   voxelSizeBase[2] = verifyObjectProperty(coordFrame, 'z_voxel_size', verifyInt);
@@ -95,7 +123,12 @@ function parseCoordinateFrame(coordFrame: any, experimentInfo: ExperimentInfo): 
   imageSizeBase[1] = verifyObjectProperty(coordFrame, 'y_stop', verifyInt);
   imageSizeBase[2] = verifyObjectProperty(coordFrame, 'z_stop', verifyInt);
 
-  experimentInfo.coordFrame = {voxelSizeBase, voxelOffsetBase, imageSizeBase};
+  let voxelUnit =
+      verifyObjectProperty(coordFrame, 'voxel_unit', x => verifyEnumString(x, VoxelUnitType));
+
+  let voxelSizeBaseNanometers: vec3 = scaleVoxelSize(voxelSizeBase, voxelUnit);
+
+  experimentInfo.coordFrame = {voxelSizeBaseNanometers, voxelOffsetBase, imageSizeBase, voxelUnit};
   return experimentInfo;
 }
 
@@ -114,7 +147,7 @@ function parseChannelInfo(obj: any): ChannelInfo {
   let downsampleStr = verifyObjectProperty(obj, 'downsample_status', verifyString);
   if (downsampleStr === 'DOWNSAMPLED') {
     downsampleStatus = true;
-  } 
+  }
 
   return {
     channelType,
@@ -122,33 +155,37 @@ function parseChannelInfo(obj: any): ChannelInfo {
     volumeType: getVolumeTypeFromChannelType(channelType),
     dataType: verifyObjectProperty(obj, 'datatype', x => verifyEnumString(x, DataType)),
     downsampled: downsampleStatus,
+    scales: [],
     key: verifyObjectProperty(obj, 'name', verifyString),
   };
 }
 
 function parseExperimentInfo(
-    obj: any, chunkManager: ChunkManager, hostnames: string[], authServer: string, collection: string,
-    experiment: string): Promise<ExperimentInfo> {
+    obj: any, chunkManager: ChunkManager, hostnames: string[], authServer: string,
+    collection: string, experiment: string): Promise<ExperimentInfo> {
   verifyObject(obj);
 
   let channelPromiseArray = verifyObjectProperty(
       obj, 'channels',
       x => parseArray(
           x, x => getChannelInfo(chunkManager, hostnames, authServer, experiment, collection, x)));
-  return Promise.all(channelPromiseArray)
-    .then(channelArray => {
-      let channels: Map<string, ChannelInfo> = new Map<string, ChannelInfo>();
-      channelArray.forEach(channel => {channels.set(channel.key, channel)});
-      let firstChannel = channels.values().next().value;
-      
-      return getDownsampleInfo(chunkManager, hostnames, authServer, collection, experiment, firstChannel.key).then(downsampleInfo => { return {
-        channels: channels,
-            scalingLevels: verifyObjectProperty(obj, 'num_hierarchy_levels', verifyInt),
-            coordFrameKey: verifyObjectProperty(obj, 'coord_frame', verifyString), scales: downsampleInfo,
-            key: verifyObjectProperty(obj, 'name', verifyString),
-            collection: verifyObjectProperty(obj, 'collection', verifyString),
-      }});
-    });
+  return Promise.all(channelPromiseArray).then(channelArray => {
+    // Parse out channel information
+    let channels: Map<string, ChannelInfo> = new Map<string, ChannelInfo>();
+    channelArray.forEach(channel => {channels.set(channel.key, channel)});
+
+    let experimentInfo = {
+      channels: channels,
+      scalingLevels: verifyObjectProperty(obj, 'num_hierarchy_levels', verifyInt),
+      coordFrameKey: verifyObjectProperty(obj, 'coord_frame', verifyString),
+      coordFrame: undefined,
+      key: verifyObjectProperty(obj, 'name', verifyString),
+      collection: verifyObjectProperty(obj, 'collection', verifyString),
+    };
+
+    // Get and parse the coordinate frame
+    return getCoordinateFrame(chunkManager, hostnames, authServer, experimentInfo);
+  });
 }
 
 export class MultiscaleVolumeChunkSource implements GenericMultiscaleVolumeChunkSource {
@@ -167,9 +204,9 @@ export class MultiscaleVolumeChunkSource implements GenericMultiscaleVolumeChunk
   }
 
   /**
-   * The Boss experiment name 
+   * The Boss experiment name
    */
-  experiment: string; 
+  experiment: string;
 
   /**
    * The Boss channel/layer name.
@@ -177,17 +214,17 @@ export class MultiscaleVolumeChunkSource implements GenericMultiscaleVolumeChunk
   channel: string;
 
   /**
-   * Parameters for getting 3D meshes alongside segmentations 
+   * Parameters for getting 3D meshes alongside segmentations
    */
-  meshPath?: string = undefined; 
-  meshUrl?: string = undefined; 
+  meshPath?: string = undefined;
+  meshUrl?: string = undefined;
 
   channelInfo: ChannelInfo;
   scales: ScaleInfo[];
   coordinateFrame: CoordinateFrameInfo;
 
   encoding: string;
-  window: vec2 | undefined;
+  window: vec2|undefined;
 
   constructor(
       public chunkManager: ChunkManager, public baseUrls: string[], public authServer: string,
@@ -207,13 +244,19 @@ export class MultiscaleVolumeChunkSource implements GenericMultiscaleVolumeChunk
     }
     this.channel = channel;
     this.channelInfo = channelInfo;
-    this.scales = experimentInfo.scales;
+    this.scales = channelInfo.scales;
+
+    if (experimentInfo.coordFrame === undefined) {
+      throw new Error(
+          `Specified experiment ${JSON.stringify(experimentInfo.key)} does not have a valid coordinate frame`);
+    }
     this.coordinateFrame = experimentInfo.coordFrame;
+
     if (this.channelInfo.downsampled === false) {
-      this.scales = [experimentInfo.scales[0]]; 
+      this.scales = [channelInfo.scales[0]];
     }
     this.experiment = experimentInfo.key;
-  
+
     let window = verifyOptionalString(parameters['window']);
     if (window !== undefined) {
       let windowobj = vec2.create();
@@ -229,22 +272,23 @@ export class MultiscaleVolumeChunkSource implements GenericMultiscaleVolumeChunk
       }
       this.window = windowobj;
       if (this.window[0] === this.window[1]) {
-        throw new Error(`Invalid window. First element must be different from second: ${JSON.stringify(window)}.`);
+        throw new Error(
+            `Invalid window. First element must be different from second: ${JSON.stringify(window)}.`);
       }
     }
 
     let meshUrl = verifyOptionalString(parameters['meshurl']);
     if (meshUrl !== undefined) {
-      this.meshUrl = meshUrl; 
+      this.meshUrl = meshUrl;
     }
     let meshPath = verifyOptionalString(parameters['meshpath']);
     if (meshPath !== undefined) {
       if (meshPath[0] !== '/') {
         meshPath = `/${meshPath}`;
       }
-      this.meshPath = meshPath; 
+      this.meshPath = meshPath;
     }
-    
+
     /*
     this.cuboidSize = DEFAULT_CUBOID_SIZE;
     let cuboidXY = verifyOptionalString(parameters['xySize']);
@@ -269,7 +313,7 @@ export class MultiscaleVolumeChunkSource implements GenericMultiscaleVolumeChunk
 
   getSources(volumeSourceOptions: VolumeSourceOptions) {
     return this.scales.map(scaleInfo => {
-      let {voxelSize, imageSize} = scaleInfo;
+      let {voxelSizeNanometers, imageSize} = scaleInfo;
       let voxelOffset = this.coordinateFrame.voxelOffsetBase;
       let baseVoxelOffset = vec3.create();
       for (let i = 0; i < 3; ++i) {
@@ -279,12 +323,14 @@ export class MultiscaleVolumeChunkSource implements GenericMultiscaleVolumeChunk
           .getDefaults({
             numChannels: this.numChannels,
             volumeType: this.volumeType,
-            dataType: this.dataType, voxelSize,
+            dataType: this.dataType,
+            voxelSize: voxelSizeNanometers,
             chunkDataSizes: [DEFAULT_CUBOID_SIZE],
             transform: mat4.fromTranslation(
-                mat4.create(), vec3.multiply(vec3.create(), voxelOffset, voxelSize)),
+                mat4.create(), vec3.multiply(vec3.create(), voxelOffset, voxelSizeNanometers)),
             baseVoxelOffset,
-            upperVoxelBound: imageSize, volumeSourceOptions,
+            upperVoxelBound: imageSize,
+            volumeSourceOptions,
           })
           .map(spec => VolumeChunkSource.get(this.chunkManager, spec, {
             baseUrls: this.baseUrls,
@@ -300,14 +346,14 @@ export class MultiscaleVolumeChunkSource implements GenericMultiscaleVolumeChunk
     });
   }
 
-  getMeshSource() { 
+  getMeshSource() {
     if (this.meshPath !== undefined) {
       if (this.meshUrl === undefined) {
         this.meshUrl = 'https://api.theboss.io';
       }
-      return MeshSource.get(this.chunkManager, {'baseUrls': [this.meshUrl], 'path': this.meshPath}); 
+      return MeshSource.get(this.chunkManager, {'baseUrls': [this.meshUrl], 'path': this.meshPath});
     }
-    return null; 
+    return null;
   }
 };
 
@@ -317,9 +363,12 @@ export function getExperimentInfo(
     chunkManager: ChunkManager, hostnames: string[], authServer: string, experiment: string,
     collection: string): Promise<ExperimentInfo> {
   return chunkManager.memoize.getUncounted(
-      {'hostnames': hostnames, 'experiment': experiment, 'collection': collection},
-      () => makeRequest(
-                hostnames, authServer, {method: 'GET', path: `/latest/collection/${collection}/experiment/${experiment}/`, responseType: 'json'})
+      {'hostnames': hostnames, 'collection': collection, 'experiment': experiment},
+      () => makeRequest(hostnames, authServer, {
+              method: 'GET',
+              path: `/latest/collection/${collection}/experiment/${experiment}/`,
+              responseType: 'json'
+            })
                 .then(
                     value => parseExperimentInfo(
                         value, chunkManager, hostnames, authServer, collection, experiment)));
@@ -335,68 +384,99 @@ export function getChannelInfo(
         'experiment': experiment,
         'channel': channel
       },
-      () => makeRequest(
-                hostnames, authServer, {method: 'GET', path: 
-                `/latest/collection/${collection}/experiment/${experiment}/channel/${channel}/`, responseType: 'json'})
-                .then(parseChannelInfo))
+      () => makeRequest(hostnames, authServer, {
+              method: 'GET',
+              path: `/latest/collection/${collection}/experiment/${experiment}/channel/${channel}/`,
+              responseType: 'json'
+            }).then(parseChannelInfo));
 }
 
-export function getDownsampleInfo(chunkManager: ChunkManager, hostnames: string[], authServer: string, collection: string, experiment: string, channel: string): Promise<any> {
-  return chunkManager.memoize.getUncounted({
-    'hostnames': hostnames,
-    'collection': collection,
-    'experiment': experiment,
-    'channel': channel,
-    'downsample': true
-  },
-  () => makeRequest(
-    hostnames, authServer, {method: 'GET', path: `/latest/downsample/${collection}/${experiment}/${channel}/`, responseType: 'json'})
-  ).then(parseDownsampleInfo);
+export function getDownsampleInfoForChannel(
+    chunkManager: ChunkManager, hostnames: string[], authServer: string, collection: string,
+    experimentInfo: ExperimentInfo, channel: string): Promise<ExperimentInfo> {
+  return chunkManager.memoize
+      .getUncounted(
+          {
+            'hostnames': hostnames,
+            'collection': collection,
+            'experiment': experimentInfo.key,
+            'channel': channel,
+            'downsample': true
+          },
+          () => makeRequest(hostnames, authServer, {
+            method: 'GET',
+            path: `/latest/downsample/${collection}/${experimentInfo.key}/${channel}/`,
+            responseType: 'json'
+          }))
+      .then(downsampleObj => {
+        return parseDownsampleInfoForChannel(downsampleObj, experimentInfo, channel);
+      });
 }
 
-export function parseDownsampleInfo(downsampleObj: any): ScaleInfo[] {
+export function parseDownsampleScales(downsampleObj: any, voxelUnit: VoxelUnitType): ScaleInfo[] {
   verifyObject(downsampleObj);
 
-  let voxelSizes = verifyObjectProperty(downsampleObj, 'voxel_size', x => verifyObjectAsMap(x, verify3dScale));
-  let imageSizes = verifyObjectProperty(downsampleObj, 'extent', x => verifyObjectAsMap(x, verify3dDimensions));
+  let voxelSizes =
+      verifyObjectProperty(downsampleObj, 'voxel_size', x => verifyObjectAsMap(x, verify3dScale));
 
-  let num_hierarchy_levels = verifyObjectProperty(downsampleObj, 'num_hierarchy_levels', verifyInt);  
+  let imageSizes =
+      verifyObjectProperty(downsampleObj, 'extent', x => verifyObjectAsMap(x, verify3dDimensions));
+
+  let num_hierarchy_levels = verifyObjectProperty(downsampleObj, 'num_hierarchy_levels', verifyInt);
 
   let scaleInfo = new Array<ScaleInfo>();
-  for(let i=0 ; i<num_hierarchy_levels ; i++) {
+  for (let i = 0; i < num_hierarchy_levels; i++) {
     let key: string = String(i);
     const voxelSize = voxelSizes.get(key);
     const imageSize = imageSizes.get(key);
     if (voxelSize === undefined || imageSize === undefined) {
-      throw new Error(
-          `Missing voxel_size/extent for resolution ${key}.`);
+      throw new Error(`Missing voxel_size/extent for resolution ${key}.`);
     }
-    scaleInfo[i] = {voxelSize, imageSize, key};
+    let voxelSizeNanometers = scaleVoxelSize(voxelSize, voxelUnit);
+    scaleInfo[i] = {voxelSizeNanometers, imageSize, key};
   }
   return scaleInfo;
 }
 
-export function getShardedVolume(chunkManager: ChunkManager, hostnames: string[], authServer: string, path: string) {
+export function parseDownsampleInfoForChannel(
+    downsampleObj: any, experimentInfo: ExperimentInfo, channel: string): ExperimentInfo {
+  let coordFrame = experimentInfo.coordFrame;
+  if (coordFrame === undefined) {
+    throw new Error(`Missing coordinate frame information for experiment ${experimentInfo.key}. A valid coordinate frame is required to retrieve downsampling information.`);
+  }
+  let channelInfo = experimentInfo.channels.get(channel);
+  if (channelInfo === undefined) {
+    throw new Error(
+        `Specified channel ${JSON.stringify(channel)} is not one of the supported channels ${JSON.stringify(Array.from(experimentInfo.channels.keys()))}`);
+  }
+  channelInfo.scales = parseDownsampleScales(downsampleObj, coordFrame.voxelUnit);
+  experimentInfo.channels.set(channel, channelInfo);
+  return experimentInfo;
+}
+
+export function getShardedVolume(
+    chunkManager: ChunkManager, hostnames: string[], authServer: string, path: string) {
   const match = path.match(pathPattern);
   if (match === null) {
     throw new Error(`Invalid volume path ${JSON.stringify(path)}`);
   }
-    const collection = match[1];
-    const experiment = match[2];
-    const channel = match[3];
-    const parameters = parseQueryStringParameters(match[4] || '');
-    // Warning: If additional arguments are added, the cache key should be updated as well.
-    return chunkManager.memoize.getUncounted(
-        {'hostnames': hostnames, 'path': path},
-        () => getExperimentInfo(chunkManager, hostnames, authServer, experiment, collection)
-                  .then(
-                      experimentInfo => getCoordinateFrame(
-                                            chunkManager, hostnames, authServer,
-                                            experimentInfo.coordFrameKey, experimentInfo)
-                                            .then(
-                                                experimentInfo => new MultiscaleVolumeChunkSource(
-                                                    chunkManager, hostnames, authServer, experimentInfo,
-                                                    channel, parameters))));
+  const collection = match[1];
+  const experiment = match[2];
+  const channel = match[3];
+  const parameters = parseQueryStringParameters(match[4] || '');
+  // Warning: If additional arguments are added, the cache key should be updated as well.
+  return chunkManager.memoize.getUncounted(
+      {'hostnames': hostnames, 'path': path},
+      () => getExperimentInfo(chunkManager, hostnames, authServer, experiment, collection)
+                .then(experimentInfo => {
+                  return getDownsampleInfoForChannel(
+                             chunkManager, hostnames, authServer, collection, experimentInfo,
+                             channel)
+                      .then(
+                          experimentInfo => new MultiscaleVolumeChunkSource(
+                              chunkManager, hostnames, authServer, experimentInfo, channel,
+                              parameters));
+                }));
 }
 
 const urlPattern = /^((?:http|https):\/\/[^\/?]+)\/(.*)$/;
@@ -410,10 +490,13 @@ export function getVolume(chunkManager: ChunkManager, path: string) {
   return getShardedVolume(chunkManager, [match[1]], authServer, match[2]);
 }
 
-export function getCollections(chunkManager: ChunkManager, hostnames: string[], authServer: string) {
+export function getCollections(
+    chunkManager: ChunkManager, hostnames: string[], authServer: string) {
   return chunkManager.memoize.getUncounted(
       hostnames,
-      () => makeRequest(hostnames, authServer, {method: 'GET', path: '/latest/collection/', responseType: 'json'})
+      () => makeRequest(
+                hostnames, authServer,
+                {method: 'GET', path: '/latest/collection/', responseType: 'json'})
                 .then(
                     value => verifyObjectProperty(
                         value, 'collections', x => parseArray(x, verifyString))));
@@ -423,67 +506,72 @@ export function getExperiments(
     chunkManager: ChunkManager, hostnames: string[], authServer: string, collection: string) {
   return chunkManager.memoize.getUncounted(
       {'hostnames': hostnames, 'collection': collection},
-      () =>
-          makeRequest(hostnames, authServer, {method: 'GET', path: `/latest/collection/${collection}/experiment/`, responseType: 'json'})
-              .then(
-                  value => verifyObjectProperty(
-                    value, 'experiments', x => parseArray(x, verifyString))));
+      () => makeRequest(hostnames, authServer, {
+              method: 'GET',
+              path: `/latest/collection/${collection}/experiment/`,
+              responseType: 'json'
+            })
+                .then(
+                    value => verifyObjectProperty(
+                        value, 'experiments', x => parseArray(x, verifyString))));
 }
 
 export function getCoordinateFrame(
-    chunkManager: ChunkManager, hostnames: string[], authServer: string, key: string,
+    chunkManager: ChunkManager, hostnames: string[], authServer: string,
     experimentInfo: ExperimentInfo): Promise<ExperimentInfo> {
+  let key = experimentInfo.coordFrameKey;
   return chunkManager.memoize.getUncounted(
       {'hostnames': hostnames, 'coordinateframe': key},
       () =>
-          makeRequest(hostnames, authServer, {method: 'GET', path: `/latest/coord/${key}/`, responseType: 'json'})
-              .then(
-                  coordinateFrameObj => parseCoordinateFrame(coordinateFrameObj, experimentInfo)));
+          makeRequest(hostnames, authServer, {
+            method: 'GET',
+            path: `/latest/coord/${key}/`,
+            responseType: 'json'
+          }).then(coordinateFrameObj => parseCoordinateFrame(coordinateFrameObj, experimentInfo)));
 }
 
 export function collectionExperimentChannelCompleter(
     chunkManager: ChunkManager, hostnames: string[], authServer: string,
     path: string): Promise<CompletionResult> {
-
-    let channelMatch = path.match(/^(?:([^\/]+)(?:\/?([^\/]*)(?:\/?([^\/]*)(?:\/?([^\/]*)?))?)?)?$/);
-    if (channelMatch === null) {
-      // URL has incorrect format, don't return any results.
-      return Promise.reject<CompletionResult>(null);
-    }
-    if (channelMatch[1] === undefined) {
-      // No collection. Reject.
-      return Promise.reject<CompletionResult>(null);
-    }
-    if (channelMatch[2] === undefined) {
-      let collectionPrefix = channelMatch[1] || '';
-      // Try to complete the collection.
-      return getCollections(chunkManager, hostnames, authServer)
-        .then(collections => {
-          return {
-            offset: 0,
-            completions: getPrefixMatchesWithDescriptions(
-                collectionPrefix, collections, x => x + '/', () => undefined)
-          };
-      });
-    }
-    if (channelMatch[3] === undefined) {
-      let experimentPrefix = channelMatch[2] || '';
-      return getExperiments(chunkManager, hostnames, authServer, channelMatch[1])
-          .then(experiments => {
-            return {
-              offset: channelMatch![1].length + 1,
-              completions: getPrefixMatchesWithDescriptions(
-                  experimentPrefix, experiments, y => y + '/', () => undefined)
-            };
-          }); 
-    }
-    return getExperimentInfo(chunkManager, hostnames, authServer, channelMatch[2], channelMatch[1]).then(experimentInfo => {
-      let completions = getPrefixMatchesWithDescriptions(
-              channelMatch![3], experimentInfo.channels, x => x[0], x => {
-                return `${x[1].channelType} (${DataType[x[1].dataType]})`;
-              });
-        return {offset: channelMatch![1].length + channelMatch![2].length + 2, completions};
+  let channelMatch = path.match(/^(?:([^\/]+)(?:\/?([^\/]*)(?:\/?([^\/]*)(?:\/?([^\/]*)?))?)?)?$/);
+  if (channelMatch === null) {
+    // URL has incorrect format, don't return any results.
+    return Promise.reject<CompletionResult>(null);
+  }
+  if (channelMatch[1] === undefined) {
+    // No collection. Reject.
+    return Promise.reject<CompletionResult>(null);
+  }
+  if (channelMatch[2] === undefined) {
+    let collectionPrefix = channelMatch[1] || '';
+    // Try to complete the collection.
+    return getCollections(chunkManager, hostnames, authServer).then(collections => {
+      return {
+        offset: 0,
+        completions: getPrefixMatchesWithDescriptions(
+            collectionPrefix, collections, x => x + '/', () => undefined)
+      };
     });
+  }
+  if (channelMatch[3] === undefined) {
+    let experimentPrefix = channelMatch[2] || '';
+    return getExperiments(chunkManager, hostnames, authServer, channelMatch[1])
+        .then(experiments => {
+          return {
+            offset: channelMatch![1].length + 1,
+            completions: getPrefixMatchesWithDescriptions(
+                experimentPrefix, experiments, y => y + '/', () => undefined)
+          };
+        });
+  }
+  return getExperimentInfo(chunkManager, hostnames, authServer, channelMatch[2], channelMatch[1])
+      .then(experimentInfo => {
+        let completions = getPrefixMatchesWithDescriptions(
+            channelMatch![3], experimentInfo.channels, x => x[0], x => {
+              return `${x[1].channelType} (${DataType[x[1].dataType]})`;
+            });
+        return {offset: channelMatch![1].length + channelMatch![2].length + 2, completions};
+      });
 }
 
 export function volumeCompleter(
@@ -497,7 +585,7 @@ export function volumeCompleter(
   let authServer = getAuthServer(match[1]);
   let path = match[2];
   return collectionExperimentChannelCompleter(chunkManager, hostnames, authServer, path)
-    .then(completions => applyCompletionOffset(match![1].length + 1, completions));
+      .then(completions => applyCompletionOffset(match![1].length + 1, completions));
 }
 
 function getAuthServer(endpoint: string): string {
@@ -506,7 +594,7 @@ function getAuthServer(endpoint: string): string {
     throw new Error(`Unable to construct auth server hostname from base hostname ${endpoint}.`);
   }
   let authServer = `https://auth${baseHostName[1]}/auth`;
-  return authServer; 
+  return authServer;
 }
 
 registerDataSourceFactory('boss', {
