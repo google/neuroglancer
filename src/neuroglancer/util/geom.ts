@@ -15,6 +15,7 @@
  */
 
 import {mat4, quat, vec3} from 'gl-matrix';
+import {Uint64} from 'neuroglancer/util/uint64';
 
 export {mat2, mat3, mat4, quat, vec2, vec3, vec4} from 'gl-matrix';
 
@@ -147,4 +148,36 @@ export function translationRotationScaleZReflectionToMat4(
   out[1] = scale[1];
   out[2] = scale[2] * zReflection;
   return mat4.fromRotationTranslationScale(out, rotation, translation, <vec3>temp);
+}
+
+
+/**
+ * Transforms a z-index to/from Morton Codes (i.e. z-indices).
+ */
+const magicBits = [
+  new Uint64(0x49249249, 0x12492492), // AND step
+  new Uint64(0xc30c30c3, 0x30c30c30), // XOR steps
+  new Uint64(0x0f00f00f, 0xf00f00f0),
+  new Uint64(0xff0000ff, 0x00ff0000),
+  new Uint64(0x0000ffff, 0x00ff0000),
+  new Uint64(0x001fffff, 0x00000000),
+];
+
+export function compactMorton(input: Uint64) {
+  let x = input;
+  x = x.and(magicBits[0]);
+  for (let i = 1; i < magicBits.length; ++i) {
+    x = x.xor(x.rshift(Math.pow(2,i))).and(magicBits[i]);
+  }
+  return x;
+}
+
+export function decodeMorton(input: Uint64) {
+  if (input.high) {
+    throw new Error('Fragment ids >= 2^32 not supported yet');
+  }
+  const x = compactMorton(input.rshift(0));
+  const y = compactMorton(input.rshift(1));
+  const z = compactMorton(input.rshift(2));
+  return vec3.clone([x.low, y.low, z.low]);
 }

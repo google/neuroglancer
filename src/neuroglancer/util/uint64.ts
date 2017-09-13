@@ -169,4 +169,44 @@ export class Uint64 {
   toJSON() {
     return this.toString();
   }
+
+  lshift(bits: number) {
+    bits &= 63;
+    if (bits == 0) {
+      return this.clone();
+    } else {
+      let {low, high} = this;
+      if (bits < 32) {
+        return new Uint64(low << bits, (high << bits) | (low >>> (32 - bits)));
+      } else {
+        return new Uint64(0, low << (bits - 32));
+      }
+    }
+  }
+
+  rshift(bits: number) {
+    bits &= 63;
+    if (bits == 0) {
+      return this.clone();
+    } else {
+      let {low, high} = this;
+      if (bits < 32) {
+        return new Uint64((low >>> bits) | (high << (32 - bits)), high >> bits);
+      } else {
+        return new Uint64(high >> (bits - 32), high >= 0 ? 0 : -1);
+      }
+    }
+  }
+
+  or(other: Uint64) {
+    return new Uint64(this.low | other.low, this.high | other.high);
+  }
+
+  xor(other: Uint64) {
+    return new Uint64(this.low ^ other.low, this.high ^ other.high);
+  }
+
+  and(other: Uint64) {
+    return new Uint64(this.low & other.low, this.high & other.high);
+  }
 }
