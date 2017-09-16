@@ -209,7 +209,7 @@ class ServedVolume(object):
             if self.volume_type == 'image':
                 subvol = downsample.downsample_with_averaging(subvol, full_downsample_factor)
             else:
-                subvol = downsample.downsample_with_striding(subvol, full_downsample_factor)
+                subvol = downsample.downsample_segmentation(subvol, full_downsample_factor)
         content_type = 'application/octet-stream'
         if data_format == 'jpeg':
             data = encode_jpeg(subvol)
