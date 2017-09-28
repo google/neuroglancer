@@ -45,6 +45,20 @@ const DEBUG_VERTICES = false;
  */
 const LAMBDA_EPSILON = 1e-3;
 
+
+/**
+ * Extra amount by which the chunk position computed in the vertex shader is shifted in the
+ * direction of the component-wise absolute value of the plane normal.  In Neuroglancer, a
+ * cross-section plane exactly on the boundary between two voxels is a common occurrence and is
+ * intended to result in the display of the "next" (i.e. higher coordinate) plane rather than the
+ * "previous" (lower coordinate) plane.  However, due to various sources of floating point
+ * inaccuracy (in particular, shader code which has relaxed rules), values exactly on the boundary
+ * between voxels may be slightly shifted in either direction.  To ensure that this doesn't result
+ * in the display of the wrong data (i.e. the previous rather than next plane), we always shift
+ * toward the "next" plane by this small amount.
+ */
+const CHUNK_POSITION_EPSILON = 1e-3;
+
 /**
  * If the absolute value of the dot product of a cube edge direction and the viewport plane normal
  * is less than this value, intersections along that cube edge will be exluded.  This needs to be
@@ -234,7 +248,7 @@ for (int e = 0; e < 4; ++e) {
       lambda = clamp(lambda, 0.0, 1.0);
       highp vec3 position = v1 + lambda * vDir;
       gl_Position = uProjectionMatrix * vec4(position, 1.0);
-      vChunkPosition = (position - uTranslation) / uVoxelSize;
+      vChunkPosition = (position - uTranslation) / uVoxelSize + ${CHUNK_POSITION_EPSILON} * abs(uPlaneNormal);
       break;
     }
   }
@@ -245,16 +259,18 @@ for (int e = 0; e < 4; ++e) {
   }
 
   computeVerticesDebug(
-      uChunkDataSize: vec3, uVoxelSize: vec3, uPlaneDistance: number, uPlaneNormal: vec3,
-      uTranslation: vec3, uProjectionMatrix: mat4) {
+      uChunkDataSize: vec3, uVoxelSize: vec3, uLowerClipBound: vec3, uUpperClipBound: vec3,
+      uPlaneDistance: number, uPlaneNormal: vec3, uTranslation: vec3, uProjectionMatrix: mat4) {
     let chunkSize = vec3.multiply(vec3.create(), uChunkDataSize, uVoxelSize);
     let frontVertexIndex = findFrontVertexIndex(uPlaneNormal);
     let uVertexIndex =
         this.data.vertexIndices.subarray(frontVertexIndex * 48, (frontVertexIndex + 1) * 48);
     let vidx = [0, 0];
     let v = [vec3.create(), vec3.create()];
-    let vStart = vec3.create(), vDir = vec3.create(), position = vec3.create(),
-        gl_Position = vec3.create(), vChunkPosition = vec3.create();
+    let vDir = vec3.create(), position = vec3.create(), gl_Position = vec3.create(),
+        vChunkPosition = vec3.create(),
+        planeNormalAbs = vec3.fromValues(
+            Math.abs(uPlaneNormal[0]), Math.abs(uPlaneNormal[1]), Math.abs(uPlaneNormal[2]));
     let vertexBasePositions = new Float32Array(this.data.vertexBasePositions);
     let uVertexBasePosition = (i: number) => <vec3>vertexBasePositions.subarray(i * 3, i * 3 + 3);
     for (let vertexIndex = 0; vertexIndex < 6; ++vertexIndex) {
@@ -262,18 +278,22 @@ for (int e = 0; e < 4; ++e) {
         for (let j = 0; j < 2; ++j) {
           vidx[j] = uVertexIndex[2 * (vertexIndex * 4 + e) + j];
           vec3.multiply(v[j], chunkSize, uVertexBasePosition(vidx[j]));
+          vec3.add(v[j], v[j], uTranslation);
+          vec3.min(v[j], v[j], uUpperClipBound);
+          vec3.max(v[j], v[j], uLowerClipBound);
         }
-        vec3.add(vStart, v[0], uTranslation);
         vec3.subtract(vDir, v[1], v[0]);
         let denom = vec3.dot(vDir, uPlaneNormal);
         if (Math.abs(denom) > ORTHOGONAL_EPSILON) {
-          let lambda = (uPlaneDistance - vec3.dot(vStart, uPlaneNormal)) / denom;
+          let lambda = (uPlaneDistance - vec3.dot(v[0], uPlaneNormal)) / denom;
           if ((lambda >= -LAMBDA_EPSILON) && (lambda <= 1.0 + LAMBDA_EPSILON)) {
             lambda = Math.max(0, Math.min(1, lambda));
-            vec3.scaleAndAdd(position, vStart, vDir, lambda);
+            vec3.scaleAndAdd(position, v[0], vDir, lambda);
             vec3.transformMat4(gl_Position, position, uProjectionMatrix);
-            vec3.scale(vChunkPosition, uVertexBasePosition(vidx[0]), 1.0 - lambda);
-            vec3.scaleAndAdd(vChunkPosition, vChunkPosition, uVertexBasePosition(vidx[1]), lambda);
+            vec3.sub(vChunkPosition, position, uTranslation);
+            vec3.divide(vChunkPosition, vChunkPosition, uVoxelSize);
+            vec3.scaleAndAdd(
+                vChunkPosition, vChunkPosition, planeNormalAbs, CHUNK_POSITION_EPSILON);
             console.log(
                 `vertex ${vertexIndex}, e = ${e}, at ${gl_Position}, ` +
                 `vChunkPosition = ${vChunkPosition}, edge dir = ${vDir}, denom = ${denom}`);
@@ -335,6 +355,8 @@ for (int e = 0; e < 4; ++e) {
     gl.uniform3fv(shader.uniform('uUpperClipBound'), spec.upperClipBound);
     if (DEBUG_VERTICES) {
       (<any>window)['debug_sliceView_uVoxelSize'] = spec.voxelSize;
+      (<any>window)['debug_sliceView_uLowerClipBound'] = spec.lowerClipBound;
+      (<any>window)['debug_sliceView_uUpperClipBound'] = spec.upperClipBound;
       (<any>window)['debug_sliceView'] = sliceView;
       (<any>window)['debug_sliceView_dataToDevice'] = dataToDeviceMatrix;
     }
@@ -356,12 +378,15 @@ for (int e = 0; e < 4; ++e) {
       let sliceView: SliceView = (<any>window)['debug_sliceView'];
       let chunkDataSize: vec3 = (<any>window)['debug_sliceView_chunkDataSize'];
       let voxelSize: vec3 = (<any>window)['debug_sliceView_uVoxelSize'];
+      let lowerClipBound: vec3 = (<any>window)['debug_sliceView_uLowerClipBound'];
+      let upperClipBound: vec3 = (<any>window)['debug_sliceView_uUpperClipBound'];
       console.log(
           `Drawing chunk: ${vec3Key(chunkPosition)} of data size ${vec3Key(chunkDataSize)}`);
       let dataToDeviceMatrix: mat4 = (<any>window)['debug_sliceView_dataToDevice'];
       this.computeVerticesDebug(
-          chunkDataSize, voxelSize, sliceView.viewportPlaneDistanceToOrigin,
-          sliceView.viewportAxes[2], chunkPosition, dataToDeviceMatrix);
+          chunkDataSize, voxelSize, lowerClipBound, upperClipBound,
+          sliceView.viewportPlaneDistanceToOrigin, sliceView.viewportAxes[2], chunkPosition,
+          dataToDeviceMatrix);
     }
   }
 }
