@@ -355,7 +355,7 @@ for (int e = 0; e < 4; ++e) {
     if (DEBUG_VERTICES) {
       let sliceView: SliceView = (<any>window)['debug_sliceView'];
       let chunkDataSize: vec3 = (<any>window)['debug_sliceView_chunkDataSize'];
-      let voxelSize: vec3 = (<any>window)['debug_sliceView_voxelSize'];
+      let voxelSize: vec3 = (<any>window)['debug_sliceView_uVoxelSize'];
       console.log(
           `Drawing chunk: ${vec3Key(chunkPosition)} of data size ${vec3Key(chunkDataSize)}`);
       let dataToDeviceMatrix: mat4 = (<any>window)['debug_sliceView_dataToDevice'];
