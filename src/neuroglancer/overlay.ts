@@ -15,7 +15,8 @@
  */
 
 import {RefCounted} from 'neuroglancer/util/disposable';
-import {globalKeyboardHandlerStack, KeySequenceMap} from 'neuroglancer/util/keyboard_shortcut_handler';
+import {KeySequenceMap, KeyboardShortcutHandler} from 'neuroglancer/util/keyboard_shortcut_handler';
+import {AutomaticallyFocusedElement} from 'neuroglancer/util/automatic_focus';
 
 export const overlayKeyboardHandlerPriority = 100;
 
@@ -35,11 +36,13 @@ export class Overlay extends RefCounted {
     let container = this.container = document.createElement('div');
     container.className = 'overlay';
     let content = this.content = document.createElement('div');
+    this.registerDisposer(new AutomaticallyFocusedElement(content));
     content.className = 'overlay-content';
     container.appendChild(content);
     document.body.appendChild(container);
-    this.registerDisposer(globalKeyboardHandlerStack.push(
-        keySequenceMap, this.commandReceived.bind(this), overlayKeyboardHandlerPriority));
+    this.registerDisposer(new KeyboardShortcutHandler(
+      this.container, keySequenceMap, this.commandReceived.bind(this)));
+    content.focus();
   }
 
   commandReceived(action: string) {

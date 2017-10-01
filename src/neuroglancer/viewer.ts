@@ -32,7 +32,7 @@ import {TrackableValue} from 'neuroglancer/trackable_value';
 import {RefCounted} from 'neuroglancer/util/disposable';
 import {removeFromParent} from 'neuroglancer/util/dom';
 import {vec3} from 'neuroglancer/util/geom';
-import {globalKeyboardHandlerStack, KeySequenceMap} from 'neuroglancer/util/keyboard_shortcut_handler';
+import {KeySequenceMap, KeyboardShortcutHandler} from 'neuroglancer/util/keyboard_shortcut_handler';
 import {NullarySignal} from 'neuroglancer/util/signal';
 import {CompoundTrackable} from 'neuroglancer/util/trackable';
 import {DataDisplayLayout, LAYOUTS} from 'neuroglancer/viewer_layouts';
@@ -40,6 +40,7 @@ import {ViewerState, VisibilityPrioritySpecification} from 'neuroglancer/viewer_
 import {WatchableVisibilityPriority} from 'neuroglancer/visibility_priority/frontend';
 import {GL} from 'neuroglancer/webgl/context';
 import {RPC} from 'neuroglancer/worker_rpc';
+import {AutomaticallyFocusedElement} from 'neuroglancer/util/automatic_focus';
 
 require('./viewer.css');
 require('./help_button.css');
@@ -262,6 +263,9 @@ export class Viewer extends RefCounted implements ViewerState {
     let {display, options} = this;
     let gridContainer = document.createElement('div');
     gridContainer.setAttribute('class', 'gllayoutcontainer noselect');
+    this.registerDisposer(
+      new KeyboardShortcutHandler(gridContainer, this.keyMap, this.onKeyCommand.bind(this)));
+    this.registerDisposer(new AutomaticallyFocusedElement(gridContainer));
     let {container} = display;
     container.appendChild(gridContainer);
     this.registerDisposer(() => removeFromParent(gridContainer));
@@ -301,35 +305,14 @@ export class Viewer extends RefCounted implements ViewerState {
     L.box('column', uiElements)(gridContainer);
     this.display.onResize();
 
-    let keyboardHandlerDisposer: (() => void)|undefined;
-
     const updateVisibility = () => {
       const shouldBeVisible = this.visibility.visible;
-      if (shouldBeVisible) {
-        if (keyboardHandlerDisposer === undefined) {
-          keyboardHandlerDisposer =
-              globalKeyboardHandlerStack.push(this.keyMap, this.onKeyCommand.bind(this));
-        }
-        if (!this.visible) {
-          gridContainer.style.visibility = 'inherit';
-        }
-      } else if (!shouldBeVisible && this.visible) {
-        if (keyboardHandlerDisposer !== undefined) {
-          keyboardHandlerDisposer!();
-          keyboardHandlerDisposer = undefined;
-        }
-        if (this.visible) {
-          gridContainer.style.visibility = 'hidden';
-        }
+      if (shouldBeVisible !== this.visible) {
+        gridContainer.style.visibility = shouldBeVisible ? 'inherit' : 'hidden';
+        this.visible = shouldBeVisible;
       }
-      this.visible = shouldBeVisible;
     };
     updateVisibility();
-    this.registerDisposer(() => {
-      if (keyboardHandlerDisposer !== undefined) {
-        keyboardHandlerDisposer();
-      }
-    });
     this.registerDisposer(this.visibility.changed.add(updateVisibility));
   }
 
