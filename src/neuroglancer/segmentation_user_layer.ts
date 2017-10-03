@@ -295,9 +295,11 @@ class SegmentationDropdown extends UserLayerDropdown {
     {
       const checkbox =
           this.registerDisposer(new TrackableBooleanCheckbox(layer.displayState.hideSegmentZero));
-      checkbox.element.className = 'neuroglancer-segmentation-dropdown-hide-segment-zero noselect';
+      checkbox.element.className =
+          'neuroglancer-segmentation-dropdown-hide-segment-zero neuroglancer-noselect';
       const label = document.createElement('label');
-      label.className = 'neuroglancer-segmentation-dropdown-hide-segment-zero noselect';
+      label.className =
+          'neuroglancer-segmentation-dropdown-hide-segment-zero neuroglancer-noselect';
       label.appendChild(document.createTextNode('Hide segment ID 0'));
       label.appendChild(checkbox.element);
       element.appendChild(label);

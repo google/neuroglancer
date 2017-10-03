@@ -26,6 +26,7 @@ import {getWheelZoomAmount} from 'neuroglancer/util/wheel_zoom';
 import {ViewerState} from 'neuroglancer/viewer_state';
 
 require('./rendered_data_panel.css');
+require('neuroglancer/noselect.css');
 
 const tempVec3 = vec3.create();
 
@@ -49,7 +50,9 @@ export abstract class RenderedDataPanel extends RenderedPanel {
     super(context, element, viewer.visibility);
     this.inputEventMap = viewer.inputEventMap;
 
-    element.classList.add('rendered-data-panel');
+    element.classList.add('neuroglancer-rendered-data-panel');
+    element.classList.add('neuroglancer-panel');
+    element.classList.add('neuroglancer-noselect');
 
     this.registerDisposer(new AutomaticallyFocusedElement(element));
     this.registerDisposer(new KeyboardEventBinder(element, this.inputEventMap));

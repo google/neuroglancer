@@ -41,18 +41,13 @@
   z-index: 2;
 }
 
-.gllayoutrow {
-  flex: 1;
-  display: flex;
-  flex-direction: row;
-}
-.gllayoutcell {
+.neuroglancer-panel {
   border-style: solid;
   border-color: black;
   border-width: 2px;
   flex: 1;
 }
 
-.gllayoutcell:focus {
+.neuroglancer-panel:focus {
   border-color: white;
 }

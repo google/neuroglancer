@@ -163,8 +163,13 @@ export class Viewer extends RefCounted implements ViewerState {
 
     this.registerDisposer(dataContext);
 
-    this.options =
-        {...defaultViewerOptions, ...options, dataContext, visibility, inputEventBindings};
+    this.options = {
+      ...defaultViewerOptions,
+      ...options,
+      dataContext,
+      visibility,
+      inputEventBindings,
+    };
 
     this.layerSpecification = new LayerListSpecification(
         this.layerManager, this.chunkManager, this.layerSelectedValues,
@@ -240,7 +245,7 @@ export class Viewer extends RefCounted implements ViewerState {
   private makeUI() {
     let {display, options} = this;
     let gridContainer = document.createElement('div');
-    gridContainer.setAttribute('class', 'gllayoutcontainer noselect');
+    gridContainer.setAttribute('class', 'gllayoutcontainer neuroglancer-noselect');
     let {container} = display;
     container.appendChild(gridContainer);
     this.registerDisposer(() => removeFromParent(gridContainer));

@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-.noselect {
+.neuroglancer-noselect {
   -webkit-touch-callout: none;
   -webkit-user-select: none;
   -khtml-user-select: none;

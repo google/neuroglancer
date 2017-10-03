@@ -39,9 +39,9 @@ class LayerWidget extends RefCounted {
   constructor(public layer: ManagedUserLayer, public panel: LayerPanel) {
     super();
     let element = this.element = document.createElement('span');
-    element.className = 'layer-item-parent noselect';
+    element.className = 'layer-item-parent neuroglancer-noselect';
     let widgetElement = this.widgetElement = document.createElement('span');
-    widgetElement.className = 'layer-item noselect';
+    widgetElement.className = 'layer-item neuroglancer-noselect';
     element.appendChild(widgetElement);
     let labelElement = this.labelElement = document.createElement('span');
     labelElement.className = 'layer-item-label';

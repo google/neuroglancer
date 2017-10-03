@@ -163,9 +163,9 @@ export class PerspectivePanel extends RenderedDataPanel {
     if (viewer.showSliceViewsCheckbox) {
       let showSliceViewsCheckbox =
           this.registerDisposer(new TrackableBooleanCheckbox(viewer.showSliceViews));
-      showSliceViewsCheckbox.element.className = 'perspective-panel-show-slice-views noselect';
+      showSliceViewsCheckbox.element.className = 'perspective-panel-show-slice-views neuroglancer-noselect';
       let showSliceViewsLabel = document.createElement('label');
-      showSliceViewsLabel.className = 'perspective-panel-show-slice-views noselect';
+      showSliceViewsLabel.className = 'perspective-panel-show-slice-views neuroglancer-noselect';
       showSliceViewsLabel.appendChild(document.createTextNode('Slices'));
       showSliceViewsLabel.appendChild(showSliceViewsCheckbox.element);
       this.element.appendChild(showSliceViewsLabel);

@@ -32,7 +32,7 @@ export class Uint64EntryWidget extends RefCounted {
   constructor() {
     super();
     let {element, label, input} = this;
-    element.className = 'uint64-entry noselect';
+    element.className = 'uint64-entry neuroglancer-noselect';
     element.appendChild(label);
     label.appendChild(input);
     this.registerEventListener(element, 'submit', (event: Event) => {

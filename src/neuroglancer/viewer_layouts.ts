@@ -128,17 +128,14 @@ export class FourPanelLayout extends RefCounted {
       L.withFlex(1, L.box('column', [
         L.withFlex(1, L.box('row', [
           L.withFlex(1, element => {
-            element.className = 'gllayoutcell noselect';
             this.registerDisposer(new SliceViewPanel(display, element, sliceViews[0], sliceViewerState));
           }),
           L.withFlex(1, element => {
-            element.className = 'gllayoutcell noselect';
             this.registerDisposer(new SliceViewPanel(display, element, sliceViews[1], sliceViewerStateWithoutScaleBar));
           })
         ])),
         L.withFlex(1, L.box('row', [
           L.withFlex(1, element => {
-            element.className = 'gllayoutcell noselect';
             let perspectivePanel = this.registerDisposer(
                 new PerspectivePanel(display, element, perspectiveViewerState));
             for (let sliceView of sliceViews) {
@@ -146,7 +143,6 @@ export class FourPanelLayout extends RefCounted {
             }
           }),
           L.withFlex(1, element => {
-            element.className = 'gllayoutcell noselect';
             this.registerDisposer(new SliceViewPanel(display, element, sliceViews[2], sliceViewerStateWithoutScaleBar));
           })
         ])),
@@ -186,14 +182,12 @@ export class SliceViewPerspectiveTwoPanelLayout extends RefCounted {
       L.withFlex(
           1,
           element => {
-            element.className = 'gllayoutcell noselect';
             this.registerDisposer(
                 new SliceViewPanel(display, element, sliceView, sliceViewerState));
           }),
       L.withFlex(
           1,
           element => {
-            element.className = 'gllayoutcell noselect';
             let perspectivePanel = this.registerDisposer(
                 new PerspectivePanel(display, element, perspectiveViewerState));
             perspectivePanel.sliceViews.add(sliceView.addRef());

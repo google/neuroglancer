@@ -44,7 +44,7 @@ export class SegmentSetWidget extends RefCounted {
   constructor(public displayState: SegmentationDisplayState) {
     super();
     let {element, clearButton, itemContainer} = this;
-    element.className = 'segment-set-widget noselect';
+    element.className = 'segment-set-widget neuroglancer-noselect';
     clearButton.className = 'clear-button';
     clearButton.title = 'Remove all segment IDs';
     this.registerEventListener(clearButton, 'click', () => {
