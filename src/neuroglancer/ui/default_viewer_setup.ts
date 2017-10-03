@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-import {makeDefaultViewer} from 'neuroglancer/default_viewer';
+import {makeDefaultViewer} from 'neuroglancer/ui/default_viewer';
 import {bindDefaultCopyHandler, bindDefaultPasteHandler} from 'neuroglancer/ui/default_clipboard_handling';
 import {setDefaultInputEventBindings} from 'neuroglancer/ui/default_input_event_bindings';
 import {UrlHashBinding} from 'neuroglancer/ui/url_hash_binding';

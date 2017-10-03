@@ -93,6 +93,7 @@ export interface UIOptions {
 
 export interface ViewerOptions extends UIOptions, VisibilityPrioritySpecification {
   dataContext: DataManagementContext;
+  element: HTMLElement;
 }
 
 const defaultViewerOptions = {
@@ -146,6 +147,10 @@ export class Viewer extends RefCounted implements ViewerState {
     return this.inputEventBindings.global;
   }
 
+  get element() {
+    return this.options.element;
+  }
+
   visible = true;
 
   constructor(public display: DisplayContext, options: Partial<ViewerOptions> = {}) {
@@ -159,7 +164,10 @@ export class Viewer extends RefCounted implements ViewerState {
         sliceView: new EventActionMap(),
         perspectiveView: new EventActionMap(),
       },
+      element = display.makeCanvasOverlayElement(),
     } = options;
+
+    this.registerDisposer(() => removeFromParent(this.element));
 
     this.registerDisposer(dataContext);
 
@@ -169,6 +177,7 @@ export class Viewer extends RefCounted implements ViewerState {
       dataContext,
       visibility,
       inputEventBindings,
+      element,
     };
 
     this.layerSpecification = new LayerListSpecification(
@@ -232,24 +241,14 @@ export class Viewer extends RefCounted implements ViewerState {
     }));
 
     this.makeUI();
-
-    this.layoutName.changed.add(() => {
-      if (this.dataDisplayLayout !== undefined) {
-        let element = this.dataDisplayLayout.rootElement;
-        this.dataDisplayLayout.dispose();
-        this.createDataDisplayLayout(element);
-      }
-    });
+    this.registerActionListeners();
+    this.registerEventActionBindings();
   }
 
   private makeUI() {
-    let {display, options} = this;
-    let gridContainer = document.createElement('div');
-    gridContainer.setAttribute('class', 'gllayoutcontainer neuroglancer-noselect');
-    let {container} = display;
-    container.appendChild(gridContainer);
-    this.registerDisposer(() => removeFromParent(gridContainer));
-
+    const {options} = this;
+    const gridContainer = this.element;
+    gridContainer.classList.add('neuroglancer-noselect');
     let uiElements: L.Handler[] = [];
 
     if (options.showHelpButton || options.showLocation) {
@@ -280,6 +279,13 @@ export class Viewer extends RefCounted implements ViewerState {
 
     uiElements.push(L.withFlex(1, element => {
       this.createDataDisplayLayout(element);
+
+      this.layoutName.changed.add(() => {
+        if (this.dataDisplayLayout !== undefined) {
+          this.dataDisplayLayout.dispose();
+          this.createDataDisplayLayout(element);
+        }
+      });
     }));
 
     L.box('column', uiElements)(gridContainer);
@@ -294,48 +300,56 @@ export class Viewer extends RefCounted implements ViewerState {
     };
     updateVisibility();
     this.registerDisposer(this.visibility.changed.add(updateVisibility));
+  }
 
-    {
-      const element = gridContainer;
-      this.registerDisposer(new KeyboardEventBinder(element, this.inputEventMap));
-      this.registerDisposer(new AutomaticallyFocusedElement(element));
+  /**
+   * Called once by the constructor to set up event handlers.
+   */
+  private registerEventActionBindings() {
+    const {element} = this;
+    this.registerDisposer(new KeyboardEventBinder(element, this.inputEventMap));
+    this.registerDisposer(new AutomaticallyFocusedElement(element));
+  }
 
-      const bindAction = (action: string, handler: () => void) => {
-        registerActionListener(element, action, handler);
-      };
+  bindAction(action: string, handler: () => void) {
+    this.registerDisposer(registerActionListener(this.element, action, handler));
+  }
 
-      for (const action of ['recolor', 'clear-segments', ]) {
-        bindAction(action, () => {
-          this.layerManager.invokeAction(action);
-        });
-      }
-
-      for (const action of ['select', 'annotate', ]) {
-        bindAction(action, () => {
-          this.mouseState.updateUnconditionally();
-          this.layerManager.invokeAction(action);
-        });
-      }
-
-      bindAction('toggle-layout', () => this.toggleLayout());
-      bindAction('add-layer', () => this.layerPanel.addLayerMenu());
-      bindAction('help', () => this.showHelpDialog());
-
-      for (let i = 1; i <= 9; ++i) {
-        bindAction(`toggle-layer-${i}`, () => {
-          const layerIndex = i - 1;
-          const layers = this.layerManager.managedLayers;
-          if (layerIndex < layers.length) {
-            let layer = layers[layerIndex];
-            layer.setVisible(!layer.visible);
-          }
-        });
-      }
-
-      bindAction('toggle-axis-lines', () => this.showAxisLines.toggle());
-      bindAction('toggle-scale-bar', () => this.showScaleBar.toggle());
-      bindAction('toggle-show-slices', () => this.showPerspectiveSliceViews.toggle());
+  /**
+   * Called once by the constructor to register the action listeners.
+   */
+  private registerActionListeners() {
+    for (const action of ['recolor', 'clear-segments', ]) {
+      this.bindAction(action, () => {
+        this.layerManager.invokeAction(action);
+      });
     }
+
+    for (const action of ['select', 'annotate', ]) {
+      this.bindAction(action, () => {
+        this.mouseState.updateUnconditionally();
+        this.layerManager.invokeAction(action);
+      });
+    }
+
+    this.bindAction('toggle-layout', () => this.toggleLayout());
+    this.bindAction('add-layer', () => this.layerPanel.addLayerMenu());
+    this.bindAction('help', () => this.showHelpDialog());
+
+    for (let i = 1; i <= 9; ++i) {
+      this.bindAction(`toggle-layer-${i}`, () => {
+        const layerIndex = i - 1;
+        const layers = this.layerManager.managedLayers;
+        if (layerIndex < layers.length) {
+          let layer = layers[layerIndex];
+          layer.setVisible(!layer.visible);
+        }
+      });
+    }
+
+    this.bindAction('toggle-axis-lines', () => this.showAxisLines.toggle());
+    this.bindAction('toggle-scale-bar', () => this.showScaleBar.toggle());
+    this.bindAction('toggle-show-slices', () => this.showPerspectiveSliceViews.toggle());
   }
 
   createDataDisplayLayout(element: HTMLElement) {

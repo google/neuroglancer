@@ -29,3 +29,8 @@ body {
   display: flex;
   flex-direction: column;
 }
+
+#neuroglancer-container {
+  width: 100vw;
+  flex: 1;
+}
