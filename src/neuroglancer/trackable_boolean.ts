@@ -65,6 +65,11 @@ export class TrackableBooleanCheckbox extends RefCounted {
     this.registerEventListener(element, 'change', function(this: typeof element, _e: Event) {
       model.value = this.checked;
     });
+
+    // Prevent the checkbox from becoming focused.
+    element.addEventListener('mousedown', (event: MouseEvent) => {
+      event.preventDefault();
+    });
   }
 
   updateCheckbox() {
