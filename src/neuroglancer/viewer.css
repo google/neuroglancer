@@ -53,6 +53,6 @@
   flex: 1;
 }
 
-.gllayoutcell[isActivePanel=true] {
+.gllayoutcell:focus {
   border-color: white;
 }

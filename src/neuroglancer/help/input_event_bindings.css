@@ -18,7 +18,7 @@
   overflow-x: hidden;
 }
 
-.describe-key-bindings .dl {
+.describe-key-bindings-container {
   overflow-y: scroll;
   max-height: 80vh;
   overflow-x: hidden;

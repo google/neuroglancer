@@ -25,6 +25,7 @@ import {SliceViewPanel} from 'neuroglancer/sliceview/panel';
 import {TrackableBoolean} from 'neuroglancer/trackable_boolean';
 import {RefCounted} from 'neuroglancer/util/disposable';
 import {removeChildren} from 'neuroglancer/util/dom';
+import {EventActionMap} from 'neuroglancer/util/event_action_map';
 import {quat} from 'neuroglancer/util/geom';
 import {VisibilityPrioritySpecification} from 'neuroglancer/viewer_state';
 
@@ -34,6 +35,11 @@ export interface SliceViewViewerState {
   layerManager: LayerManager;
 }
 
+export class InputEventBindings {
+  perspectiveView = new EventActionMap();
+  sliceView = new EventActionMap();
+}
+
 export interface ViewerUIState extends SliceViewViewerState, VisibilityPrioritySpecification {
   display: DisplayContext;
   mouseState: MouseSelectionState;
@@ -41,6 +47,7 @@ export interface ViewerUIState extends SliceViewViewerState, VisibilityPriorityS
   showPerspectiveSliceViews: TrackableBoolean;
   showAxisLines: TrackableBoolean;
   showScaleBar: TrackableBoolean;
+  inputEventBindings: InputEventBindings;
 }
 
 
@@ -79,6 +86,22 @@ export function getCommonViewerState(viewer: ViewerUIState) {
   };
 }
 
+function getCommonPerspectiveViewerState(viewer: ViewerUIState) {
+  return {
+    ...getCommonViewerState(viewer),
+    navigationState: viewer.perspectiveNavigationState,
+    inputEventMap: viewer.inputEventBindings.perspectiveView,
+  };
+}
+
+function getCommonSliceViewerState(viewer: ViewerUIState) {
+  return {
+    ...getCommonViewerState(viewer),
+    navigationState: viewer.navigationState,
+    inputEventMap: viewer.inputEventBindings.sliceView,
+  };
+}
+
 export class FourPanelLayout extends RefCounted {
   constructor(public rootElement: HTMLElement, public viewer: ViewerUIState) {
     super();
@@ -87,21 +110,18 @@ export class FourPanelLayout extends RefCounted {
     let {display} = viewer;
 
     const perspectiveViewerState = {
-      ...getCommonViewerState(viewer),
-      navigationState: viewer.perspectiveNavigationState,
+      ...getCommonPerspectiveViewerState(viewer),
       showSliceViews: viewer.showPerspectiveSliceViews,
       showSliceViewsCheckbox: true,
     };
 
     const sliceViewerState = {
-      ...getCommonViewerState(viewer),
-      navigationState: viewer.navigationState,
+      ...getCommonSliceViewerState(viewer),
       showScaleBar: viewer.showScaleBar,
     };
 
     const sliceViewerStateWithoutScaleBar = {
-      ...getCommonViewerState(viewer),
-      navigationState: viewer.navigationState,
+      ...getCommonSliceViewerState(viewer),
       showScaleBar: new TrackableBoolean(false, false),
     };
     let mainDisplayContents = [
@@ -152,15 +172,13 @@ export class SliceViewPerspectiveTwoPanelLayout extends RefCounted {
     let {display} = viewer;
 
     const perspectiveViewerState = {
-      ...getCommonViewerState(viewer),
-      navigationState: viewer.perspectiveNavigationState,
+      ...getCommonPerspectiveViewerState(viewer),
       showSliceViews: viewer.showPerspectiveSliceViews,
       showSliceViewsCheckbox: true,
     };
 
     const sliceViewerState = {
-      ...getCommonViewerState(viewer),
-      navigationState: viewer.navigationState,
+      ...getCommonSliceViewerState(viewer),
       showScaleBar: viewer.showScaleBar,
     };
 
@@ -195,8 +213,7 @@ export class SinglePanelLayout extends RefCounted {
     super();
     let sliceView = makeSliceView(viewer);
     const sliceViewerState = {
-      ...getCommonViewerState(viewer),
-      navigationState: viewer.navigationState,
+      ...getCommonSliceViewerState(viewer),
       showScaleBar: viewer.showScaleBar,
     };
 
@@ -217,8 +234,7 @@ export class SinglePerspectiveLayout extends RefCounted {
   constructor(public rootElement: HTMLElement, public viewer: ViewerUIState) {
     super();
     let perspectiveViewerState = {
-      ...getCommonViewerState(viewer),
-      navigationState: viewer.perspectiveNavigationState,
+      ...getCommonPerspectiveViewerState(viewer),
       showSliceViews: new TrackableBoolean(false, false),
     };
 

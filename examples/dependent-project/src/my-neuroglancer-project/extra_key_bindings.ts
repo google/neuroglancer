@@ -14,8 +14,8 @@
  * limitations under the License.
  */
 
-import {KeySequenceMap} from 'neuroglancer/util/keyboard_shortcut_handler';
+import {EventActionMap} from 'neuroglancer/util/event_action_map';
 
-export function makeExtraKeyBindings(keyMap: KeySequenceMap) {
-  keyMap.bind('keyo', 'navigate-to-origin');
+export function makeExtraKeyBindings(keyMap: EventActionMap) {
+  keyMap.set('keyo', 'navigate-to-origin');
 }

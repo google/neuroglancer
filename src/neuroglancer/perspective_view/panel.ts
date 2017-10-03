@@ -19,12 +19,12 @@ import {DisplayContext} from 'neuroglancer/display_context';
 import {makeRenderedPanelVisibleLayerTracker, MouseSelectionState} from 'neuroglancer/layer';
 import {PickIDManager} from 'neuroglancer/object_picking';
 import {PerspectiveViewRenderContext, PerspectiveViewRenderLayer} from 'neuroglancer/perspective_view/render_layer';
-import {RenderedDataPanel} from 'neuroglancer/rendered_data_panel';
+import {RenderedDataPanel, RenderedDataViewerState} from 'neuroglancer/rendered_data_panel';
 import {SliceView, SliceViewRenderHelper} from 'neuroglancer/sliceview/frontend';
 import {TrackableBoolean, TrackableBooleanCheckbox} from 'neuroglancer/trackable_boolean';
+import {ActionEvent, registerActionListener} from 'neuroglancer/util/event_action_map';
 import {kAxes, mat4, transformVectorByMat4, vec3, vec4} from 'neuroglancer/util/geom';
 import {startRelativeMouseDrag} from 'neuroglancer/util/mouse_drag';
-import {ViewerState} from 'neuroglancer/viewer_state';
 import {DepthBuffer, FramebufferConfiguration, makeTextureBuffers, OffscreenCopyHelper, TextureBuffer} from 'neuroglancer/webgl/offscreen';
 import {ShaderBuilder} from 'neuroglancer/webgl/shader';
 import {glsl_packFloat01ToFixedPoint, unpackFloat01FromFixedPoint} from 'neuroglancer/webgl/shader_lib';
@@ -32,7 +32,7 @@ import {glsl_packFloat01ToFixedPoint, unpackFloat01FromFixedPoint} from 'neurogl
 require('neuroglancer/noselect.css');
 require('./panel.css');
 
-export interface PerspectiveViewerState extends ViewerState {
+export interface PerspectiveViewerState extends RenderedDataViewerState {
   showSliceViews: TrackableBoolean;
   showSliceViewsCheckbox?: boolean;
 }
@@ -137,6 +137,29 @@ export class PerspectivePanel extends RenderedDataPanel {
       this.viewportChanged();
     }));
 
+    registerActionListener(element, 'translate-via-mouse-drag', (e: ActionEvent<MouseEvent>) => {
+      startRelativeMouseDrag(e.detail, (_event, deltaX, deltaY) => {
+        const temp = tempVec3;
+        const {projectionMat} = this;
+        const {width, height} = this;
+        const {position} = this.viewer.navigationState;
+        const pos = position.spatialCoordinates;
+        vec3.transformMat4(temp, pos, projectionMat);
+        temp[0] = 2 * deltaX / width;
+        temp[1] = -2 * deltaY / height;
+        vec3.transformMat4(pos, temp, this.inverseProjectionMat);
+        position.changed.dispatch();
+      });
+    });
+
+    registerActionListener(element, 'rotate-via-mouse-drag', (e: ActionEvent<MouseEvent>) => {
+      startRelativeMouseDrag(e.detail, (_event, deltaX, deltaY) => {
+        this.navigationState.pose.rotateRelative(kAxes[1], -deltaX / 4.0 * Math.PI / 180.0);
+        this.navigationState.pose.rotateRelative(kAxes[0], deltaY / 4.0 * Math.PI / 180.0);
+        this.viewer.navigationState.changed.dispatch();
+      });
+    });
+
     if (viewer.showSliceViewsCheckbox) {
       let showSliceViewsCheckbox =
           this.registerDisposer(new TrackableBooleanCheckbox(viewer.showSliceViews));
@@ -222,27 +245,6 @@ export class PerspectivePanel extends RenderedDataPanel {
         mouseState,
         offscreenFramebuffer.readPixelAsUint32(OffscreenTextures.PICK, glWindowX, glWindowY));
     return true;
-  }
-
-  startDragViewport(e: MouseEvent) {
-    startRelativeMouseDrag(e, (event, deltaX, deltaY) => {
-      if (event.shiftKey) {
-        const temp = tempVec3;
-        const {projectionMat} = this;
-        const {width, height} = this;
-        const {position} = this.viewer.navigationState;
-        const pos = position.spatialCoordinates;
-        vec3.transformMat4(temp, pos, projectionMat);
-        temp[0] = 2 * deltaX / width;
-        temp[1] = -2 * deltaY / height;
-        vec3.transformMat4(pos, temp, this.inverseProjectionMat);
-        position.changed.dispatch();
-      } else {
-        this.navigationState.pose.rotateRelative(kAxes[1], -deltaX / 4.0 * Math.PI / 180.0);
-        this.navigationState.pose.rotateRelative(kAxes[0], deltaY / 4.0 * Math.PI / 180.0);
-        this.viewer.navigationState.changed.dispatch();
-      }
-    });
   }
 
   private get transparentConfiguration() {

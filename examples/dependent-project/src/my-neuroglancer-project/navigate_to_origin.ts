@@ -17,8 +17,8 @@
 import {kZeroVec} from 'neuroglancer/util/geom';
 import {Viewer} from 'neuroglancer/viewer';
 
-export function navigateToOrigin(this: Viewer) {
-  let {position} = this.navigationState.pose;
+export function navigateToOrigin(viewer: Viewer) {
+  let {position} = viewer.navigationState.pose;
   if (position.valid) {
     position.setVoxelCoordinates(kZeroVec);
   }

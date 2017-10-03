@@ -18,6 +18,13 @@ export interface Disposable { dispose: () => void; }
 
 export type Disposer = Disposable | (() => void);
 
+export function registerEventListener(
+    target: EventTarget, type: string, listener: EventListenerOrEventListenerObject,
+    options?: boolean|AddEventListenerOptions) {
+  target.addEventListener(type, listener, options);
+  return () => target.removeEventListener(type, listener, options);
+}
+
 export class RefCounted implements Disposable {
   public refCount = 1;
   wasDisposed: boolean|undefined;
@@ -70,9 +77,10 @@ export class RefCounted implements Disposable {
     }
     return f;
   }
-  registerEventListener(target: EventTarget, eventType: string, listener: any, arg?: any) {
-    target.addEventListener(eventType, listener, arg);
-    this.registerDisposer(() => target.removeEventListener(eventType, listener, arg));
+  registerEventListener(
+      target: EventTarget, type: string, listener: EventListenerOrEventListenerObject,
+      options?: boolean|AddEventListenerOptions) {
+    this.registerDisposer(registerEventListener(target, type, listener, options));
   }
   registerCancellable<T extends{cancel: () => void}>(cancellable: T) {
     this.registerDisposer(() => {
