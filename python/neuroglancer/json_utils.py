@@ -1,5 +1,5 @@
 # @license
-# Copyright 2016 Google Inc.
+# Copyright 2017 Google Inc.
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
 # You may obtain a copy of the License at
@@ -12,10 +12,12 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import os
-import binascii
-
-
-def make_random_token():
-    """Return a 20-byte (40 character) random hex string."""
-    return binascii.hexlify(os.urandom(20)).decode()
+def json_encoder_default(obj):
+    """JSON encoder function that handles some numpy types."""
+    if isinstance(obj, np.integer):
+        return str(obj)
+    elif isinstance(obj, np.floating):
+        return float(obj)
+    elif isintance(obj, np.ndarray):
+        return list(obj)
+    raise TypeError

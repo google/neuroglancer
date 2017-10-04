@@ -33,7 +33,7 @@ This will invalidate any existing URLs.
 
 ## Example
 
-See the [example.py](example.py) script.  You can run it as:
+See the [examples/example.py](examples/example.py) script.  You can run it as:
 
 ```shell
 python -i example.py
@@ -67,6 +67,12 @@ against cross-site scripting attacks only accepts requests that include a valid
 randomly-generated 160-bit secret key.
 
 ## Development
+
+First, make sure NumPy is installed.  If using a virtual environment (which is recommended), run:
+
+```shell
+pip install numpy
+```
 
 ## Building the C++ extension module
 

@@ -4,7 +4,11 @@ from distutils.command.build import build
 from subprocess import call
 import os
 import shutil
-import numpy as np
+try:
+    import numpy as np
+except ImportError:
+    print('Please install numpy before installing neuroglancer')
+    raise
 from setuptools import setup, find_packages, Extension
 
 static_files = ['main.bundle.js', 'chunk_worker.bundle.js', 'styles.css', 'index.html']

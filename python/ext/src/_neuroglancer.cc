@@ -157,7 +157,7 @@ static PyObject* get_mesh(Obj* self, PyObject* args) {
   if (encoded_mesh->empty()) {
     Py_RETURN_NONE;
   }
-  return PyString_FromStringAndSize(encoded_mesh->data(), encoded_mesh->size());
+  return PyBytes_FromStringAndSize(encoded_mesh->data(), encoded_mesh->size());
 }
 
 static PyMethodDef methods[] = {
@@ -168,7 +168,7 @@ static PyMethodDef methods[] = {
 
 static void register_type(PyObject* module) {
   static PyTypeObject t = {
-      PyObject_HEAD_INIT(NULL) 0,                 /*ob_size*/
+      PyVarObject_HEAD_INIT(NULL, 0)             /*ob_size*/
       MODULE_NAME ".OnDemandObjectMeshGenerator", /*tp_name*/
       sizeof(Obj),                                /*tp_basicsize*/
   };
@@ -185,17 +185,50 @@ static void register_type(PyObject* module) {
 }
 }  // namespace pywrap_on_demand_object_mesh_generator
 
-#ifndef PyMODINIT_FUNC /* declarations for DLL import/export */
-#define PyMODINIT_FUNC extern "C" void
+
+// The following Python2/3 compatibility code was derived from py3c.
+// Copyright (c) 2015, Red Hat, Inc. and/or its affiliates
+// Licensed under the MIT license.
+#if PY_MAJOR_VERSION >= 3
+#define MODULE_INIT_FUNC(name) \
+  extern "C" DLL_PUBLIC PyObject * PyInit_ ## name(void)
+#else
+#define PyModuleDef_HEAD_INIT 0
+
+typedef struct PyModuleDef {
+    int m_base;
+    const char* m_name;
+    const char* m_doc;
+    Py_ssize_t m_size;
+    PyMethodDef *m_methods;
+} PyModuleDef;
+
+#define PyModule_Create(def) \
+    Py_InitModule3((def)->m_name, (def)->m_methods, (def)->m_doc)
+
+#define MODULE_INIT_FUNC(name) \
+    static PyObject *PyInit_ ## name(void); \
+    extern "C" DLL_PUBLIC void init ## name(void) { PyInit_ ## name(); } \
+    static PyObject *PyInit_ ## name(void)
+
 #endif
-PyMODINIT_FUNC DLL_PUBLIC init_neuroglancer(void) {
+
+
+MODULE_INIT_FUNC(_neuroglancer) {
   static PyMethodDef module_methods[] = {
       {NULL} /* Sentinel */
   };
-  PyObject* m = Py_InitModule3(MODULE_NAME, module_methods,
-                               "Neuroglancer C extension module.");
-  import_array();
+  static struct PyModuleDef moduledef = {
+    PyModuleDef_HEAD_INIT,
+    "_neuroglancer", /* m_name */
+    "Neuroglancer C extension module.", /* m_doc */
+    -1, /* m_size */
+    module_methods
+  };
+  import_array1(nullptr);
+  PyObject* m = PyModule_Create(&moduledef);
   pywrap_on_demand_object_mesh_generator::register_type(m);
+  return m;
 }
 
 }  // namespace neuroglancer

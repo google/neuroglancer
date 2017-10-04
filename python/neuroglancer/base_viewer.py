@@ -25,6 +25,7 @@ except ImportError:
     from urllib.parse import quote as urlquote  # pylint: disable=no-name-in-module,import-error
 
 from . import volume
+from .json_utils import json_encoder_default
 
 class Layer(object):
     def __init__(self,
@@ -64,7 +65,8 @@ class Layer(object):
         if self.volume.skeletons is not None:
             spec['skeletons'] = 'python://%s/%s?%s' % (
                 server_url, self.volume.token,
-                json.dumps(self.volume.skeletons.get_vertex_attributes_spec()))
+                json.dumps(self.volume.skeletons.get_vertex_attributes_spec(),
+                           default=json_encoder_default))
             spec['mesh'] = None
         return spec
 
@@ -120,5 +122,5 @@ class BaseViewer(object):
 
     def get_encoded_state(self):
         return urlquote(
-            json.dumps(self.get_json_state(), separators=(',', ':')),
+            json.dumps(self.get_json_state(), separators=(',', ':'), default=json_encoder_default),
             '~@#$&()*!+=:;,.?/\'')

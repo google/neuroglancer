@@ -27,9 +27,12 @@ import threading
 import re
 import json
 import socket
+import numpy as np
+
 from .token import make_random_token
 from . import static
 from . import volume
+from .json_utils import json_encoder_default
 
 INFO_PATH_REGEX = re.compile(r'^/neuroglancer/info/([^/]+)$')
 
@@ -47,6 +50,7 @@ global_static_content_source = None
 global_server_args = dict(bind_address='127.0.0.1', bind_port=0)
 
 debug = False
+
 
 class Server(ThreadingMixIn, HTTPServer):
     def __init__(self, bind_address='127.0.0.1', bind_port=0):
@@ -137,7 +141,7 @@ class RequestHandler(BaseHTTPRequestHandler):
         if vol is None:
             self.send_error(404)
             return
-        data = json.dumps(vol.info())
+        data = json.dumps(vol.info(), default=json_encoder_default).encode()
         self.send_response(200)
         self.send_header('Content-type', 'application/json')
         self.send_header('Content-length', len(data))
