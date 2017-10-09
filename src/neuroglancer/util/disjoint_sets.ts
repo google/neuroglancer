@@ -130,6 +130,10 @@ export class DisjointUint64Sets {
     return findRepresentative(element);
   }
 
+  /**
+   * Union the sets containing `a` and `b`.
+   * @returns `false` if `a` and `b` are already in the same set, otherwise `true`.
+   */
   link(a: Uint64, b: Uint64): boolean {
     a = this.makeSet(a);
     b = this.makeSet(b);
@@ -143,6 +147,19 @@ export class DisjointUint64Sets {
     let bMin = (<any>b)[minSymbol];
     newNode[minSymbol] = Uint64.less(aMin, bMin) !== this.highBitRepresentative.value ? aMin : bMin;
     return true;
+  }
+
+  /**
+   * Unlinks all members of the specified set.
+   */
+  deleteSet(x: Uint64) {
+    const {map} = this;
+    let changed = false;
+    for (const y of this.setElements(x)) {
+      map.delete(y.toString());
+      changed = true;
+    }
+    return changed;
   }
 
   * setElements(a: Uint64): IterableIterator<Uint64> {

@@ -25,6 +25,7 @@ const RPC_TYPE_ID = 'DisjointUint64Sets';
 const ADD_METHOD_ID = 'DisjointUint64Sets.add';
 const CLEAR_METHOD_ID = 'DisjointUint64Sets.clear';
 const HIGH_BIT_REPRESENTATIVE_CHANGED_ID = 'DisjointUint64Sets.highBitRepresentativeChanged';
+const DELETE_SET_METHOD_ID = 'DisjointUint64Sets.deleteSet';
 
 @registerSharedObject(RPC_TYPE_ID)
 export class SharedDisjointUint64Sets extends SharedObjectCounterpart implements
@@ -88,6 +89,16 @@ export class SharedDisjointUint64Sets extends SharedObjectCounterpart implements
     return this.disjointSets.setElements(a);
   }
 
+  deleteSet(x: Uint64) {
+    if (this.disjointSets.deleteSet(x)) {
+      let {rpc} = this;
+      if (rpc) {
+        rpc.invoke(DELETE_SET_METHOD_ID, {'id': this.rpcId, 'l': x.low, 'h': x.high});
+      }
+      this.changed.dispatch();
+    }
+  }
+
   get size() {
     return this.disjointSets.size;
   }
@@ -149,4 +160,13 @@ function updateHighBitRepresentative(obj: SharedDisjointUint64Sets) {
 registerRPC(HIGH_BIT_REPRESENTATIVE_CHANGED_ID, function(x) {
   let obj = this.get(x['id']) as SharedDisjointUint64Sets;
   obj.disjointSets.highBitRepresentative.value = x['value'];
+});
+
+registerRPC(DELETE_SET_METHOD_ID, function(x) {
+  let obj = <SharedDisjointUint64Sets>this.get(x['id']);
+  tempA.low = x['l'];
+  tempA.high = x['h'];
+  if (obj.disjointSets.deleteSet(tempA)) {
+    obj.changed.dispatch();
+  }
 });
