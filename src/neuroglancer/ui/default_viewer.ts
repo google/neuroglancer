@@ -20,14 +20,14 @@ import 'neuroglancer/sliceview/chunk_format_handlers';
 
 import {StatusMessage} from 'neuroglancer/status';
 import {DisplayContext} from 'neuroglancer/display_context';
-import {Viewer} from 'neuroglancer/viewer';
+import {Viewer, ViewerOptions} from 'neuroglancer/viewer';
 import {disableContextMenu} from 'neuroglancer/ui/disable_context_menu';
 
-export function makeDefaultViewer() {
+export function makeDefaultViewer(options?: Partial<ViewerOptions>) {
   disableContextMenu();
   try {
     let display = new DisplayContext(document.getElementById('neuroglancer-container')!);
-    return new Viewer(display);
+    return new Viewer(display, options);
   } catch (error) {
     StatusMessage.showMessage(`Error: ${error.message}`);
     throw error;
