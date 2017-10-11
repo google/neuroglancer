@@ -12,12 +12,14 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import numpy as np
+
 def json_encoder_default(obj):
     """JSON encoder function that handles some numpy types."""
     if isinstance(obj, np.integer):
         return str(obj)
     elif isinstance(obj, np.floating):
         return float(obj)
-    elif isintance(obj, np.ndarray):
+    elif isinstance(obj, np.ndarray):
         return list(obj)
     raise TypeError
