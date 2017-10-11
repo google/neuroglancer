@@ -12,8 +12,15 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import numpy as np
+from __future__ import absolute_import
+
+import collections
+import json
 import numbers
+
+import numpy as np
+
+from . import local_volume
 
 min_safe_integer = -9007199254740991
 max_safe_integer = 9007199254740991
@@ -31,3 +38,17 @@ def json_encoder_default(obj):
     elif isinstance(obj, (set, frozenset)):
         return list(obj)
     raise TypeError
+
+def json_encoder_default_for_repr(obj):
+    if isinstance(obj, local_volume.LocalVolume):
+        return '<LocalVolume>'
+    return json_encoder_default(obj)
+
+def decode_json(x):
+    return json.loads(x, object_pairs_hook=collections.OrderedDict)
+
+def encode_json(obj):
+    return json.dumps(obj, default=json_encoder_default)
+
+def encode_json_for_repr(obj):
+    return json.dumps(obj, default=json_encoder_default_for_repr)

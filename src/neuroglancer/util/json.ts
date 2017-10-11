@@ -510,3 +510,10 @@ export function verifyStringArray(a: any) {
   }
   return <string[]>a;
 }
+
+export function verifyBoolean(x: any) {
+  if (typeof x !== 'boolean') {
+    throw new Error(`Expected boolean, received: ${JSON.stringify(x)}`);
+  }
+  return x;
+}

@@ -27,7 +27,7 @@ import {VolumeChunk, VolumeChunkSource} from 'neuroglancer/sliceview/volume/back
 import {CancellationToken} from 'neuroglancer/util/cancellation';
 import {DATA_TYPE_BYTES} from 'neuroglancer/util/data_type';
 import {convertEndian16, convertEndian32, Endianness} from 'neuroglancer/util/endian';
-import {openShardedHttpRequest, sendHttpRequest} from 'neuroglancer/util/http_request';
+import {openHttpRequest, sendHttpRequest} from 'neuroglancer/util/http_request';
 import {registerSharedObject} from 'neuroglancer/worker_rpc';
 
 let chunkDecoders = new Map<VolumeChunkEncoding, ChunkDecoder>();
@@ -52,8 +52,7 @@ chunkDecoders.set(VolumeChunkEncoding.RAW, decodeRawChunk);
         path += `/${chunkPosition[i]},${chunkPosition[i] + chunkDataSize![i]}`;
       }
     }
-    return sendHttpRequest(
-               openShardedHttpRequest(parameters.baseUrls, path), 'arraybuffer', cancellationToken)
+    return sendHttpRequest(openHttpRequest(path), 'arraybuffer', cancellationToken)
         .then(response => this.chunkDecoder(chunk, response));
   }
 }
@@ -76,9 +75,7 @@ export function decodeFragmentChunk(chunk: FragmentChunk, response: ArrayBuffer)
   downloadFragment(chunk: FragmentChunk, cancellationToken: CancellationToken) {
     let {parameters} = this;
     let requestPath = `/neuroglancer/mesh/${parameters.key}/${chunk.manifestChunk!.objectId}`;
-    return sendHttpRequest(
-               openShardedHttpRequest(parameters.baseUrls, requestPath), 'arraybuffer',
-               cancellationToken)
+    return sendHttpRequest(openHttpRequest(requestPath), 'arraybuffer', cancellationToken)
         .then(response => decodeFragmentChunk(chunk, response));
   }
 }
@@ -122,9 +119,7 @@ function decodeSkeletonChunk(
   download(chunk: SkeletonChunk, cancellationToken: CancellationToken) {
     const {parameters} = this;
     let requestPath = `/neuroglancer/skeleton/${parameters.key}/${chunk.objectId}`;
-    return sendHttpRequest(
-               openShardedHttpRequest(parameters.baseUrls, requestPath), 'arraybuffer',
-               cancellationToken)
+    return sendHttpRequest(openHttpRequest(requestPath), 'arraybuffer', cancellationToken)
         .then(response => decodeSkeletonChunk(chunk, response, parameters.vertexAttributes));
   }
 }

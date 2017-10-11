@@ -23,7 +23,6 @@ export enum VolumeChunkEncoding {
 }
 
 export class VolumeChunkSourceParameters {
-  baseUrls: string[];
   key: string;
   encoding: VolumeChunkEncoding;
 
@@ -31,14 +30,12 @@ export class VolumeChunkSourceParameters {
 }
 
 export class MeshSourceParameters {
-  baseUrls: string[];
   key: string;
 
   static RPC_ID = 'python/MeshSource';
 }
 
 export class SkeletonSourceParameters {
-  baseUrls: string[];
   key: string;
   vertexAttributes: Map<string, VertexAttributeInfo>;
 

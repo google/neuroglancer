@@ -15,15 +15,14 @@
 from __future__ import absolute_import, division, print_function
 
 import collections
-import time
 import threading
 
 import numpy as np
 
+from . import downsample, downsample_scales
 from .chunks import encode_jpeg, encode_npz, encode_raw
-from .token import make_random_token
-from . import downsample
-from . import downsample_scales
+from .random_token import make_random_token
+
 
 class MeshImplementationNotAvailable(Exception):
     pass
@@ -44,7 +43,7 @@ def get_scale_key(scale):
     return '%d,%d,%d' % scale
 
 
-class ServedVolume(object):
+class LocalVolume(object):
     def __init__(self,
                  data,
                  offset=None,
@@ -59,7 +58,7 @@ class ServedVolume(object):
                  max_downsampling=downsample_scales.DEFAULT_MAX_DOWNSAMPLING,
                  max_downsampled_size=downsample_scales.DEFAULT_MAX_DOWNSAMPLED_SIZE,
                  max_downsampling_scales=downsample_scales.DEFAULT_MAX_DOWNSAMPLING_SCALES):
-        """Initializes a ServedVolume.
+        """Initializes a LocalVolume.
 
         @param data: 3-d [z, y, x] array or 4-d [channel, z, y, x] array.
 
@@ -89,6 +88,14 @@ class ServedVolume(object):
                 - lock_boundary_vertices: bool.  Retain all vertices along mesh surface boundaries,
                   which can only occur at the boundary of the volume.  Defaults to true.
         """
+        if hasattr(data, 'attrs'):
+            if 'resolution' in data.attrs:
+                if voxel_size is None:
+                    voxel_size = tuple(data.attrs['resolution'])[::-1]
+                if 'offset' in data.attrs:
+                    if offset is None and voxel_offset is None:
+                        offset = tuple(data.attrs['offset'])[::-1]
+        voxel_size = np.array(voxel_size)
         self.token = make_random_token()
         self.max_voxels_per_chunk_log2 = max_voxels_per_chunk_log2
         self.data = data
@@ -96,6 +103,7 @@ class ServedVolume(object):
         if voxel_offset is not None:
             if offset is not None:
                 raise ValueError('Must specify at most one of \'offset\' and \'voxel_offset\'.')
+            voxel_offset = np.array(voxel_offset)
             offset = tuple(voxel_offset * voxel_size)
         if offset is None:
             offset = (0, 0, 0)
@@ -171,7 +179,7 @@ class ServedVolume(object):
 
         def get_scale_info(s):
             info = self.downsampling_scale_info[get_scale_key(s)]
-            return dict(key='%s/%s' % (self.token, info.key),
+            return dict(key=info.key,
                         offset=self.offset,
                         sizeInVoxels=info.shape,
                         voxelSize=info.voxel_size)
@@ -258,3 +266,10 @@ class ServedVolume(object):
             self._mesh_generator_pending = False
             self._mesh_generator_lock.notify_all()
         return self._mesh_generator
+
+    def __deepcopy__(self, memo):
+        """Since this type is immutable, we don't need to deepcopy it.
+
+        Actually deep copying would intefere with the use of deepcopy by JsonObjectWrapper.
+        """
+        return self

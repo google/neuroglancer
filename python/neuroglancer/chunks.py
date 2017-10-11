@@ -12,10 +12,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import zlib
 import io
-from PIL import Image
+import zlib
+
 import numpy as np
+from PIL import Image
 
 
 def encode_jpeg(subvol):

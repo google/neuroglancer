@@ -1,15 +1,18 @@
 #!/usr/bin/env python
 from __future__ import print_function
-from distutils.command.build import build
-from subprocess import call
+
 import os
 import shutil
+import subprocess
+from distutils.command.build import build
+
+from setuptools import Extension, find_packages, setup
+
 try:
     import numpy as np
 except ImportError:
     print('Please install numpy before installing neuroglancer')
     raise
-from setuptools import setup, find_packages, Extension
 
 static_files = ['main.bundle.js', 'chunk_worker.bundle.js', 'styles.css', 'index.html']
 
@@ -36,7 +39,7 @@ class bundle_client(build):
         this_dir = os.path.abspath(os.path.dirname(__file__))
         project_dir = os.path.join(this_dir, '..')
 
-        build_dir = os.path.join(project_dir, 'dist/' + self.client_bundle_type)
+        build_dir = os.path.join(project_dir, 'dist/python-' + self.client_bundle_type)
         static_dir = os.path.join(this_dir, 'neuroglancer/static')
 
         print("Project dir " + project_dir)
@@ -46,15 +49,16 @@ class bundle_client(build):
         prev_dir = os.path.abspath('.')
         os.chdir(project_dir)
 
-        target = {"min": "build-min", "dev": "build"}
+        target = {"min": "build-python-min", "dev": "build-python"}
 
         try:
-            call(['npm', 'i'])
-            res = call(['npm', 'run', target[self.client_bundle_type]])
+            t = target[self.client_bundle_type]
+            subprocess.call(['npm', 'i'])
+            res = subprocess.call(['npm', 'run', t])
         except:
             raise RuntimeError(
-                'Could not run \'npm run build-%s\'. Make sure node.js >= v5.9.0 is installed and in your path.'
-                % self.client_bundle_type)
+                'Could not run \'npm run %s\'. Make sure node.js >= v5.9.0 is installed and in your path.'
+                % t)
 
         if res != 0:
             raise RuntimeError('failed to bundle neuroglancer node.js project')
@@ -102,6 +106,11 @@ setup(
         "Pillow>=3.2.0",
         "numpy>=1.11.0",
         'requests',
+        'tornado',
+        'sockjs-tornado',
+        'six',
+        'google-apitools',
+        'futures',
     ],
     ext_modules=[
         Extension(

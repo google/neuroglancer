@@ -1,5 +1,5 @@
 # @license
-# Copyright 2016 Google Inc.
+# Copyright 2017 Google Inc.
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
 # You may obtain a copy of the License at
@@ -14,26 +14,16 @@
 
 from __future__ import absolute_import
 
-from . import base_viewer
-from . import server
+from . import server, url_state, viewer_base
 
 
-class Viewer(base_viewer.BaseViewer):
-    """Viewer based on neuroglancer.server."""
-
-    def __init__(self, *args, **kwargs):
-        super(Viewer, self).__init__(*args, **kwargs)
-        server.start()
-
-    def register_volume(self, volume):
-        server.register_volume(volume)
-
-    def get_server_url(self):
-        return server.get_server_url()
+class Viewer(viewer_base.ViewerBase):
+    def __init__(self):
+        super(Viewer, self).__init__()
+        server.register_viewer(self)
 
     def get_viewer_url(self):
-        return '%s/static/%s/#!%s' % (self.get_server_url(), server.global_server.token,
-                                      self.get_encoded_state())
+        return '%s/v/%s/' % (server.get_server_url(), self.token)
 
     def __repr__(self):
         return self.get_viewer_url()
@@ -42,8 +32,16 @@ class Viewer(base_viewer.BaseViewer):
         return '<a href="%s" target="_blank">Viewer</a>' % self.get_viewer_url()
 
 
-def view(*args, **kwargs):
-    """View a single array."""
-    v = Viewer()
-    v.add(*args, **kwargs)
-    return v
+class UnsynchronizedViewer(viewer_base.UnsynchronizedViewerBase):
+    def __init__(self):
+        super(UnsynchronizedViewer, self).__init__()
+        server.register_viewer(self)
+
+    def get_viewer_url(self):
+        return url_state.to_url(self.raw_state, '%s/v/%s/' % (server.get_server_url(), self.token))
+
+    def __repr__(self):
+        return self.get_viewer_url()
+
+    def _repr_html_(self):
+        return '<a href="%s" target="_blank">Viewer</a>' % self.get_viewer_url()

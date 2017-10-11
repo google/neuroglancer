@@ -96,6 +96,44 @@ export class CompoundTrackable implements Trackable {
   }
 }
 
+export class PersistentCompoundTrackable extends CompoundTrackable {
+  lastState: {[key: string]: any} = {};
+
+  restoreState(x: any) {
+    verifyObject(x);
+    this.lastState = x;
+    super.restoreState(x);
+  }
+
+  reset () {
+    this.lastState = {};
+    super.reset();
+  }
+
+  baseJSON() {
+    const result = Object.assign(super.baseJSON(), this.lastState);
+    for (const key of this.children.keys()) {
+      delete result[key];
+    }
+    return result;
+  }
+
+  toJSON() {
+    const result = super.toJSON();
+    this.lastState = result;
+    return result;
+  }
+  add(key: string, value: Trackable) {
+    const result = super.add(key, value);
+    const existingValue = this.lastState[key];
+    if (existingValue !== undefined) {
+      value.reset();
+      value.restoreState(existingValue);
+    }
+    return result;
+  }
+}
+
 /**
  * Cache used by getCachedJson.
  */

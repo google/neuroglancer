@@ -16,10 +16,11 @@ from __future__ import absolute_import
 
 import collections
 import io
-import six
 import struct
 
 import numpy as np
+import six
+
 
 class Skeleton(object):
     def __init__(self, vertex_positions, edges, vertex_attributes=None):

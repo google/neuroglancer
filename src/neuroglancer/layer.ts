@@ -503,6 +503,25 @@ export class LayerSelectedValues extends RefCounted {
     this.update();
     return this.values.get(userLayer);
   }
+
+  toJSON () {
+    this.update();
+    const result: {[key: string]: any} = {};
+    const {values} = this;
+    for (const layer of this.layerManager.managedLayers) {
+      const userLayer = layer.layer;
+      if (userLayer) {
+        let v = values.get(userLayer);
+        if (v !== undefined) {
+          if (v instanceof Uint64) {
+            v = {'t': 'u64', 'v': v};
+          }
+          result[layer.name] = v;
+        }
+      }
+    }
+    return result;
+  }
 }
 
 export class VisibleRenderLayerTracker<RenderLayerType extends VisibilityTrackedRenderLayer> extends

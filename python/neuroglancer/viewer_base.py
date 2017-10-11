@@ -1,0 +1,119 @@
+# @license
+# Copyright 2017 Google Inc.
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+from __future__ import absolute_import
+
+import contextlib
+import json
+import re
+
+from . import local_volume, trackable_state, viewer_config_state, viewer_state
+from .json_utils import decode_json, encode_json, json_encoder_default
+from .random_token import make_random_token
+
+
+class LocalVolumeManager(trackable_state.ChangeNotifier):
+    def __init__(self, token_prefix):
+        super(LocalVolumeManager, self).__init__()
+        self.volumes = dict()
+        self.__token_prefix = token_prefix
+
+    def register_volume(self, v):
+        if v.token not in self.volumes:
+            self.volumes[v.token] = v
+            self._dispatch_changed_callbacks()
+        return 'python://%s%s' % (self.__token_prefix, v.token)
+
+    def update(self, json_str):
+        pattern = '|'.join(self.volumes)
+        present_tokens = set()
+        for m in re.finditer(pattern, json_str):
+            present_tokens.add(m.group(0))
+        modified = False
+        for x in self.volumes:
+            if x not in present_tokens:
+                del self.volumes[x]
+                modified = True
+        if modified:
+            self._dispatch_changed_callbacks()
+
+
+class ViewerCommonBase(object):
+    def __init__(self):
+        self.token = make_random_token()
+        self.config_state = trackable_state.TrackableState(viewer_config_state.ConfigState)
+
+        def set_actions(actions):
+            def func(s):
+                s.actions = actions
+            self.config_state.retry_txn(func)
+        self.actions = viewer_config_state.Actions(set_actions)
+
+        self.volume_manager = LocalVolumeManager(self.token + '.')
+
+    def _transform_viewer_state(self, new_state):
+        if isinstance(new_state, viewer_state.ViewerState):
+            new_state = new_state.to_json()
+            def encoder(x):
+                if isinstance(x, local_volume.LocalVolume):
+                    return self.volume_manager.register_volume(x)
+                return json_encoder_default(x)
+            new_state = decode_json(json.dumps(new_state, default=encoder))
+        return new_state
+
+    def txn(self):
+        raise NotImplementedError
+
+
+class ViewerBase(ViewerCommonBase):
+    def __init__(self):
+        super(ViewerBase, self).__init__()
+        self.shared_state = trackable_state.TrackableState(viewer_state.ViewerState,
+                                                           self._transform_viewer_state)
+        self.shared_state.add_changed_callback(
+            lambda: self.volume_manager.update(encode_json(self.shared_state.raw_state)))
+
+    @property
+    def state(self):
+        return self.shared_state.state
+
+    def set_state(self, *args, **kwargs):
+        return self.shared_state.set_state(*args, **kwargs)
+
+    def txn(self, *args, **kwargs):
+        return self.shared_state.txn(*args, **kwargs)
+
+    def retry_txn(self, *args, **kwargs):
+        return self.shared_state.retry_txn(*args, **kwargs)
+
+
+
+class UnsynchronizedViewerBase(ViewerCommonBase):
+    def __init__(self):
+        super(UnsynchronizedViewerBase, self).__init__()
+        self.state = viewer_state.ViewerState()
+
+    @property
+    def raw_state(self):
+        return self._transform_viewer_state(self.state)
+
+    def set_state(self, new_state):
+        self.state = viewer_state.ViewerState(new_state)
+
+    @contextlib.contextmanager
+    def txn(self):
+        yield self.state
+
+    def retry_txn(self, func, retries=None): # pylint: disable=unused-argument
+        return func(self.state)

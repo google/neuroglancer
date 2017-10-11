@@ -1,39 +1,25 @@
 # Neuroglancer Python Integration
 
-This package provides a Python interface for viewing in-memory arrays with
+This package provides a Python interface for controlling
 [Neuroglancer](https://github.com/google/neuroglancer), a web-based 3-d
 volumetric data viewer.
 
-It uses the builtin `BaseHTTPServer` Python package to start a local HTTP server
-for both serving data to the Neuroglancer client and serving a copy of the
-Neuroglancer client code.
+The following features are supported:
+ - Viewing in-memory NumPy arrays (or any other array type with a similar
+   interface, including HDF5 arrays loaded through h5py)
+ - Reading and writing the Neuroglancer viewer state from Python
+ - Changing Neuroglancer key and mouse bindings
+ - Defining actions (to be triggered by key or mouse bindings) that cause a
+   Python callback to be invoked.
 
-## Usage
-
-Using the `neuroglancer.Viewer` class, you can specify one or more array to
-display as separate layers.  Both 3-d `(z, y, x)` and 4-d `(channel, z, y, x)`
-formats are supported.  In addition to NumPy arrays, compatible types like
-[h5py](http://www.h5py.org) arrays are also supported.  After specifying the
-arrays, you can obtain a URL for accessing the viewer.
-
-If the contents of an array changes after the viewer is opened, you can refresh
-the browser to see the latest version.
-
-The running Python server will hold a reference to any array specified to the
-viewer, which will prevent the array from being garbage collected.  While in
-many cases this is desirable, in long-running Python instances this can lead to
-a memory leak.  To release all references to previously-specified arrays and
-shutdown the running server, call
-
-```python
-neuroglancer.stop()
-```
-
-This will invalidate any existing URLs.
+It starts a local web server for communicating state changes using sockjs,
+serving a copy of the Neuroglancer client code, and for serving data to the
+Neuroglancer client if Python data sources are used.
 
 ## Example
 
-See the [examples/example.py](examples/example.py) script.  You can run it as:
+See the example programs in the [examples/](examples/) directory.  Run them
+using the Python interpreter in interactive mode, e.g.
 
 ```shell
 python -i example.py
@@ -45,7 +31,7 @@ or using the IPython magic command
 %run -i python.py
 ```
 
-Do not run the example non-interactively as
+Do not run an example non-interactively as
 
 ```shell
 python example.py
@@ -54,11 +40,11 @@ because then the server will exit immediately.
 
 ## Mesh generation
 
-For segmentation volumes, mesh representations of the surface of each object can
-be generated on-demand as they are requested by the client (e.g. due to the user
-selecting a segment).  This requires that the C++ extension module be built.  If
-you install this Python package normally, that will happen automatically.  For
-development, see the instructions below.
+For in-memory segmentation volumes, mesh representations of the surface of each
+object can be generated on-demand as they are requested by the client (e.g. due
+to the user selecting a segment).  This requires that the C++ extension module
+be built.  If you install this Python package normally, that will happen
+automatically.  For development, see the instructions below.
 
 ## Security
 

@@ -1,5 +1,5 @@
 # @license
-# Copyright 2016 Google Inc.
+# Copyright 2017 Google Inc.
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
 # You may obtain a copy of the License at
@@ -12,11 +12,14 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from __future__ import absolute_import
-from .server import set_static_content_source, set_server_bind_address, is_server_running, stop
-from .static import dist_dev_static_content_source
-from .viewer import Viewer, UnsynchronizedViewer
-from .local_volume import LocalVolume
-from .viewer_state import *
-from .url_state import to_url, parse_url
-from . import server
+from . import credentials_provider, google_credentials
+
+
+default_credentials_manager = credentials_provider.CredentialsManager()
+default_credentials_manager.register(
+    u'google-brainmaps',
+    google_credentials.GoogleCredentialsProvider(
+        client_id=u'639403125587-ue3c18dalqidqehs1n1p5rjvgni5f7qu.apps.googleusercontent.com',
+        client_secret=u'kuaqECaVXOKEJ2L6ifZu4Aqt',
+        scopes=[u'https://www.googleapis.com/auth/brainmaps'],
+    ))
