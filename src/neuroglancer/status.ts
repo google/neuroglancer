@@ -64,7 +64,10 @@ export class StatusMessage {
     }
   }
   setVisible(value: boolean) {
-    this.timer = null;
+    if (this.timer !== null) {
+      clearTimeout(this.timer);
+      this.timer = null;
+    }
     this.element.style.display = value ? 'block' : 'none';
   }
 
