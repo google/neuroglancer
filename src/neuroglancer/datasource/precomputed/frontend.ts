@@ -16,8 +16,9 @@
 
 import {ChunkManager, WithParameters} from 'neuroglancer/chunk_manager/frontend';
 import {DataSource} from 'neuroglancer/datasource';
-import {MeshSourceParameters, VolumeChunkEncoding, VolumeChunkSourceParameters} from 'neuroglancer/datasource/precomputed/base';
+import {MeshSourceParameters, SkeletonSourceParameters, VolumeChunkEncoding, VolumeChunkSourceParameters} from 'neuroglancer/datasource/precomputed/base';
 import {MeshSource} from 'neuroglancer/mesh/frontend';
+import {SkeletonSource} from 'neuroglancer/skeleton/frontend';
 import {DataType, VolumeChunkSpecification, VolumeSourceOptions, VolumeType} from 'neuroglancer/sliceview/volume/base';
 import {MultiscaleVolumeChunkSource as GenericMultiscaleVolumeChunkSource, VolumeChunkSource} from 'neuroglancer/sliceview/volume/frontend';
 import {mat4, vec3} from 'neuroglancer/util/geom';
@@ -29,6 +30,9 @@ class PrecomputedVolumeChunkSource extends
 
 class PrecomputedMeshSource extends
 (WithParameters(MeshSource, MeshSourceParameters)) {}
+
+class PrecomputedSkeletonSource extends
+(WithParameters(SkeletonSource, SkeletonSourceParameters)) {}
 
 class ScaleInfo {
   key: string;
@@ -68,6 +72,7 @@ export class MultiscaleVolumeChunkSource implements GenericMultiscaleVolumeChunk
   numChannels: number;
   volumeType: VolumeType;
   mesh: string|undefined;
+  skeleton: string|undefined;
   scales: ScaleInfo[];
 
   getMeshSource() {
@@ -86,6 +91,7 @@ export class MultiscaleVolumeChunkSource implements GenericMultiscaleVolumeChunk
     this.numChannels = verifyObjectProperty(obj, 'num_channels', verifyPositiveInt);
     this.volumeType = verifyObjectProperty(obj, 'type', x => verifyEnumString(x, VolumeType));
     this.mesh = verifyObjectProperty(obj, 'mesh', verifyOptionalString);
+    this.skeleton = verifyObjectProperty(obj, 'skeleton', verifyOptionalString);
     this.scales = verifyObjectProperty(obj, 'scales', x => parseArray(x, y => new ScaleInfo(y)));
   }
 
@@ -122,6 +128,16 @@ export function getShardedMeshSource(chunkManager: ChunkManager, parameters: Mes
   return chunkManager.getChunkSource(PrecomputedMeshSource, {parameters});
 }
 
+export function getShardedSkeletonSource(
+    chunkManager: ChunkManager, parameters: SkeletonSourceParameters) {
+  return chunkManager.getChunkSource(PrecomputedSkeletonSource, {parameters});
+}
+
+export function getSkeletonSource(chunkManager: ChunkManager, url: string) {
+  const [baseUrls, path] = parseSpecialUrl(url);
+  return getShardedSkeletonSource(chunkManager, {baseUrls, path});
+}
+
 export function getShardedVolume(chunkManager: ChunkManager, baseUrls: string[], path: string) {
   return chunkManager.memoize.getUncounted(
       {'type': 'precomputed:MultiscaleVolumeChunkSource', baseUrls, path},
@@ -150,5 +166,8 @@ export class PrecomputedDataSource extends DataSource {
   }
   getMeshSource(chunkManager: ChunkManager, url: string) {
     return getMeshSource(chunkManager, url);
+  }
+  getSkeletonSource(chunkManager: ChunkManager, url: string) {
+    return getSkeletonSource(chunkManager, url);
   }
 }

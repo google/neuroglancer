@@ -15,8 +15,9 @@
  */
 
 import {WithParameters} from 'neuroglancer/chunk_manager/backend';
-import {MeshSourceParameters, VolumeChunkEncoding, VolumeChunkSourceParameters} from 'neuroglancer/datasource/precomputed/base';
+import {MeshSourceParameters, SkeletonSourceParameters, VolumeChunkEncoding, VolumeChunkSourceParameters} from 'neuroglancer/datasource/precomputed/base';
 import {decodeJsonManifestChunk, decodeTriangleVertexPositionsAndIndices, FragmentChunk, ManifestChunk, MeshSource} from 'neuroglancer/mesh/backend';
+import {decodeSkeletonVertexPositionsAndIndices, SkeletonChunk, SkeletonSource} from 'neuroglancer/skeleton/backend';
 import {ChunkDecoder} from 'neuroglancer/sliceview/backend_chunk_decoders';
 import {decodeCompressedSegmentationChunk} from 'neuroglancer/sliceview/backend_chunk_decoders/compressed_segmentation';
 import {decodeJpegChunk} from 'neuroglancer/sliceview/backend_chunk_decoders/jpeg';
@@ -82,5 +83,33 @@ export function decodeFragmentChunk(chunk: FragmentChunk, response: ArrayBuffer)
                openShardedHttpRequest(parameters.baseUrls, requestPath), 'arraybuffer',
                cancellationToken)
         .then(response => decodeFragmentChunk(chunk, response));
+  }
+}
+
+function decodeSkeletonChunk(chunk: SkeletonChunk, response: ArrayBuffer) {
+  let dv = new DataView(response);
+  let numVertices = dv.getUint32(0, true);
+  let numVerticesHigh = dv.getUint32(4, true);
+  if (numVerticesHigh !== 0) {
+    throw new Error(`The number of vertices should not exceed 2^32-1.`);
+  }
+  let numEdges = dv.getUint32(8, true);
+  let numEdgesHigh = dv.getUint32(12, true);
+  if (numEdgesHigh !== 0) {
+    throw new Error(`The number of edges should not exceed 2^32-1.`);
+  }
+  decodeSkeletonVertexPositionsAndIndices(
+      chunk, response, Endianness.LITTLE, /*vertexByteOffset=*/16, numVertices,
+      /*indexByteOffset=*/undefined, /*numEdges=*/numEdges);
+}
+
+@registerSharedObject() export class PrecomputedSkeletonSource extends (WithParameters(SkeletonSource, SkeletonSourceParameters)) {
+  download(chunk: SkeletonChunk, cancellationToken: CancellationToken) {
+    const {parameters} = this;
+    let requestPath = `${parameters.path}/${chunk.objectId}`;
+    return sendHttpRequest(
+               openShardedHttpRequest(parameters.baseUrls, requestPath), 'arraybuffer',
+               cancellationToken)
+        .then(response => decodeSkeletonChunk(chunk, response));
   }
 }

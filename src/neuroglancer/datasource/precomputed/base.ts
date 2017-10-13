@@ -36,3 +36,11 @@ export class MeshSourceParameters {
 
   static RPC_ID = 'precomputed/MeshSource';
 }
+
+
+export class SkeletonSourceParameters {
+  baseUrls: string[];
+  path: string;
+
+  static RPC_ID = 'precomputed/SkeletonSource';
+}
