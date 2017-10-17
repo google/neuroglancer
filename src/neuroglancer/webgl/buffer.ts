@@ -14,9 +14,9 @@
  * limitations under the License.
  */
 
-import {Disposable} from 'neuroglancer/util/disposable';
-import {GL_ARRAY_BUFFER, GL_FLOAT, GL_STATIC_DRAW} from 'neuroglancer/webgl/constants';
-import {AttributeIndex} from 'neuroglancer/webgl/shader';
+import {Disposable} from '../util/disposable';
+import {GL_ARRAY_BUFFER, GL_FLOAT, GL_STATIC_DRAW} from './constants';
+import {AttributeIndex} from './shader';
 
 export type BufferType = number;
 export type WebGLDataType = number;

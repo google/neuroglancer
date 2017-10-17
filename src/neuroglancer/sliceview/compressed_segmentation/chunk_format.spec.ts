@@ -14,15 +14,15 @@
  * limitations under the License.
  */
 
-import {chunkFormatTest} from 'neuroglancer/sliceview/chunk_format_testing';
-import {ChunkFormat} from 'neuroglancer/sliceview/compressed_segmentation/chunk_format';
-import {encodeChannels as encodeChannelsUint32} from 'neuroglancer/sliceview/compressed_segmentation/encode_uint32';
-import {encodeChannels as encodeChannelsUint64} from 'neuroglancer/sliceview/compressed_segmentation/encode_uint64';
-import {makeRandomUint64Array} from 'neuroglancer/sliceview/compressed_segmentation/test_util';
-import {DataType} from 'neuroglancer/util/data_type';
-import {prod4, vec3, vec3Key, vec4} from 'neuroglancer/util/geom';
-import {getRandomValues} from 'neuroglancer/util/random';
-import {Uint32ArrayBuilder} from 'neuroglancer/util/uint32array_builder';
+import {chunkFormatTest} from '../chunk_format_testing';
+import {ChunkFormat} from './chunk_format';
+import {encodeChannels as encodeChannelsUint32} from './encode_uint32';
+import {encodeChannels as encodeChannelsUint64} from './encode_uint64';
+import {makeRandomUint64Array} from './test_util';
+import {DataType} from '../../util/data_type';
+import {prod4, vec3, vec3Key, vec4} from '../../util/geom';
+import {getRandomValues} from '../../util/random';
+import {Uint32ArrayBuilder} from '../../util/uint32array_builder';
 
 describe('sliceview/compressed_segmentation/chunk_format', () => {
   describe('data access', () => {

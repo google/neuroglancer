@@ -14,8 +14,8 @@
  * limitations under the License.
  */
 
-import {CancellationToken, uncancelableToken} from 'neuroglancer/util/cancellation';
-import {simpleStringHash} from 'neuroglancer/util/hash';
+import {CancellationToken, uncancelableToken} from './cancellation';
+import {simpleStringHash} from './hash';
 
 export type RequestModifier = (request: XMLHttpRequest) => void;
 

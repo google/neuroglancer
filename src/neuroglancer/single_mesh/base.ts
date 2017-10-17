@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-import {DataType} from 'neuroglancer/util/data_type';
+import {DataType} from '../util/data_type';
 
 export const SINGLE_MESH_LAYER_RPC_ID = 'single_mesh/SingleMeshLayer';
 export const SINGLE_MESH_SOURCE_RPC_ID = 'single_mesh/SingleMeshSource';

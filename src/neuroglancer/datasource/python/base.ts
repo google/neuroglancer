@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-import {VertexAttributeInfo} from 'neuroglancer/skeleton/base';
+import {VertexAttributeInfo} from '../../skeleton/base';
 
 export enum VolumeChunkEncoding {
   JPEG,

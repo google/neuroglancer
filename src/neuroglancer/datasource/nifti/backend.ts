@@ -14,17 +14,17 @@
  * limitations under the License.
  */
 
-import {ChunkManager, registerChunkSource} from 'neuroglancer/chunk_manager/backend';
-import {ChunkPriorityTier} from 'neuroglancer/chunk_manager/base';
-import {GenericFileSource, PriorityGetter} from 'neuroglancer/chunk_manager/generic_file_source';
-import {GET_NIFTI_VOLUME_INFO_RPC_ID, NiftiDataType, NiftiVolumeInfo, VolumeSourceParameters} from 'neuroglancer/datasource/nifti/base';
-import {decodeRawChunk} from 'neuroglancer/sliceview/backend_chunk_decoders/raw';
-import {ParameterizedVolumeChunkSource, VolumeChunk} from 'neuroglancer/sliceview/volume/backend';
-import {DataType, VolumeType} from 'neuroglancer/sliceview/volume/base';
-import {CancellationToken} from 'neuroglancer/util/cancellation';
-import {Endianness} from 'neuroglancer/util/endian';
-import {mat4, quat, vec3} from 'neuroglancer/util/geom';
-import {registerPromiseRPC, RPCPromise} from 'neuroglancer/worker_rpc';
+import {ChunkManager, registerChunkSource} from '../../chunk_manager/backend';
+import {ChunkPriorityTier} from '../../chunk_manager/base';
+import {GenericFileSource, PriorityGetter} from '../../chunk_manager/generic_file_source';
+import {GET_NIFTI_VOLUME_INFO_RPC_ID, NiftiDataType, NiftiVolumeInfo, VolumeSourceParameters} from './base';
+import {decodeRawChunk} from '../../sliceview/backend_chunk_decoders/raw';
+import {ParameterizedVolumeChunkSource, VolumeChunk} from '../../sliceview/volume/backend';
+import {DataType, VolumeType} from '../../sliceview/volume/base';
+import {CancellationToken} from '../../util/cancellation';
+import {Endianness} from '../../util/endian';
+import {mat4, quat, vec3} from '../../util/geom';
+import {registerPromiseRPC, RPCPromise} from '../../worker_rpc';
 import {decompress, isCompressed, NIFTI1, NIFTI2, readHeader, readImage} from 'nifti-reader-js';
 
 export class NiftiFileData {

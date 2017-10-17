@@ -23,19 +23,19 @@
 // VMV 2005.
 // http://www.cg.informatik.uni-siegen.de/data/Publications/2005/rezksalamaVMV2005.pdf
 
-import {ChunkState} from 'neuroglancer/chunk_manager/base';
-import {SliceView} from 'neuroglancer/sliceview/frontend';
-import {RenderLayer as GenericSliceViewRenderLayer} from 'neuroglancer/sliceview/renderlayer';
-import {VOLUME_RENDERLAYER_RPC_ID, VolumeChunkSpecification, VolumeSourceOptions} from 'neuroglancer/sliceview/volume/base';
-import {MultiscaleVolumeChunkSource, VolumeChunkSource} from 'neuroglancer/sliceview/volume/frontend';
-import {RefCounted} from 'neuroglancer/util/disposable';
-import {mat4, vec3, vec3Key} from 'neuroglancer/util/geom';
-import {Buffer} from 'neuroglancer/webgl/buffer';
-import {GL} from 'neuroglancer/webgl/context';
-import {makeWatchableShaderError} from 'neuroglancer/webgl/dynamic_shader';
-import {ShaderBuilder, ShaderProgram} from 'neuroglancer/webgl/shader';
-import {getShaderType} from 'neuroglancer/webgl/shader_lib';
-import {SharedObject} from 'neuroglancer/worker_rpc';
+import {ChunkState} from '../../chunk_manager/base';
+import {SliceView} from '../frontend';
+import {RenderLayer as GenericSliceViewRenderLayer} from '../renderlayer';
+import {VOLUME_RENDERLAYER_RPC_ID, VolumeChunkSpecification, VolumeSourceOptions} from './base';
+import {MultiscaleVolumeChunkSource, VolumeChunkSource} from './frontend';
+import {RefCounted} from '../../util/disposable';
+import {mat4, vec3, vec3Key} from '../../util/geom';
+import {Buffer} from '../../webgl/buffer';
+import {GL} from '../../webgl/context';
+import {makeWatchableShaderError} from '../../webgl/dynamic_shader';
+import {ShaderBuilder, ShaderProgram} from '../../webgl/shader';
+import {getShaderType} from '../../webgl/shader_lib';
+import {SharedObject} from '../../worker_rpc';
 
 const DEBUG_VERTICES = false;
 

@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-import {BrainmapsInstance, brainmapsInstanceKey} from 'neuroglancer/datasource/brainmaps/api';
+import {BrainmapsInstance, brainmapsInstanceKey} from './api';
 
 export enum VolumeChunkEncoding {
   RAW,

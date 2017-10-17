@@ -14,11 +14,11 @@
  * limitations under the License.
  */
 
-import {postProcessRawData} from 'neuroglancer/sliceview/backend_chunk_decoders/postprocess';
-import {VolumeChunk} from 'neuroglancer/sliceview/volume/backend';
-import {DATA_TYPE_BYTES, DataType} from 'neuroglancer/util/data_type';
-import {convertEndian16, convertEndian32, Endianness, ENDIANNESS} from 'neuroglancer/util/endian';
-import {prod3} from 'neuroglancer/util/geom';
+import {postProcessRawData} from './postprocess';
+import {VolumeChunk} from '../volume/backend';
+import {DATA_TYPE_BYTES, DataType} from '../../util/data_type';
+import {convertEndian16, convertEndian32, Endianness, ENDIANNESS} from '../../util/endian';
+import {prod3} from '../../util/geom';
 
 export function decodeRawChunk(
     chunk: VolumeChunk, response: ArrayBuffer, endianness: Endianness = ENDIANNESS) {

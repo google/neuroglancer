@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-import {partitionArray, transposeArray2d} from 'neuroglancer/util/array';
+import {partitionArray, transposeArray2d} from './array';
 
 describe('partitionArray', () => {
   it('basic test', () => {

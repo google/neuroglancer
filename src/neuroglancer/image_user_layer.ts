@@ -14,22 +14,22 @@
  * limitations under the License.
  */
 
-import {CoordinateTransform} from 'neuroglancer/coordinate_transform';
-import {UserLayer, UserLayerDropdown} from 'neuroglancer/layer';
-import {LayerListSpecification, registerLayerType, registerVolumeLayerType} from 'neuroglancer/layer_specification';
-import {getVolumeWithStatusMessage} from 'neuroglancer/layer_specification';
-import {Overlay} from 'neuroglancer/overlay';
-import {VolumeType} from 'neuroglancer/sliceview/volume/base';
-import {FRAGMENT_MAIN_START, getTrackableFragmentMain, ImageRenderLayer} from 'neuroglancer/sliceview/volume/image_renderlayer';
-import {trackableAlphaValue} from 'neuroglancer/trackable_alpha';
-import {mat4} from 'neuroglancer/util/geom';
-import {makeWatchableShaderError} from 'neuroglancer/webgl/dynamic_shader';
-import {RangeWidget} from 'neuroglancer/widget/range';
-import {ShaderCodeWidget} from 'neuroglancer/widget/shader_code_widget';
+import {CoordinateTransform} from './coordinate_transform';
+import {UserLayer, UserLayerDropdown} from './layer';
+import {LayerListSpecification, registerLayerType, registerVolumeLayerType} from './layer_specification';
+import {getVolumeWithStatusMessage} from './layer_specification';
+import {Overlay} from './overlay';
+import {VolumeType} from './sliceview/volume/base';
+import {FRAGMENT_MAIN_START, getTrackableFragmentMain, ImageRenderLayer} from './sliceview/volume/image_renderlayer';
+import {trackableAlphaValue} from './trackable_alpha';
+import {mat4} from './util/geom';
+import {makeWatchableShaderError} from './webgl/dynamic_shader';
+import {RangeWidget} from './widget/range';
+import {ShaderCodeWidget} from './widget/shader_code_widget';
 
 require('./image_user_layer.css');
-require('neuroglancer/help_button.css');
-require('neuroglancer/maximize_button.css');
+require('./help_button.css');
+require('./maximize_button.css');
 
 export class ImageUserLayer extends UserLayer {
   volumePath: string;

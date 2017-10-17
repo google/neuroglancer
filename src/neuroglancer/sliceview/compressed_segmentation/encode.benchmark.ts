@@ -14,11 +14,11 @@
  * limitations under the License.
  */
 
-import {encodeChannels as encodeChannelsUint32} from 'neuroglancer/sliceview/compressed_segmentation/encode_uint32';
-import {encodeChannels as encodeChannelsUint64} from 'neuroglancer/sliceview/compressed_segmentation/encode_uint64';
-import {makeRandomUint64Array} from 'neuroglancer/sliceview/compressed_segmentation/test_util';
-import {prod4, vec3Key} from 'neuroglancer/util/geom';
-import {Uint32ArrayBuilder} from 'neuroglancer/util/uint32array_builder';
+import {encodeChannels as encodeChannelsUint32} from './encode_uint32';
+import {encodeChannels as encodeChannelsUint64} from './encode_uint64';
+import {makeRandomUint64Array} from './test_util';
+import {prod4, vec3Key} from '../../util/geom';
+import {Uint32ArrayBuilder} from '../../util/uint32array_builder';
 
 const exampleChunkData64 = new Uint32Array(
     require<Uint8Array>('raw-data!neuroglancer-testdata/64x64x64-raw-uint64-segmentation.dat')

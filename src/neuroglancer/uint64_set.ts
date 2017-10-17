@@ -14,10 +14,10 @@
  * limitations under the License.
  */
 
-import {HashSetUint64} from 'neuroglancer/gpu_hash/hash_table';
-import {Signal} from 'neuroglancer/util/signal';
-import {Uint64} from 'neuroglancer/util/uint64';
-import {registerRPC, registerSharedObject, RPC, SharedObjectCounterpart} from 'neuroglancer/worker_rpc';
+import {HashSetUint64} from './gpu_hash/hash_table';
+import {Signal} from './util/signal';
+import {Uint64} from './util/uint64';
+import {registerRPC, registerSharedObject, RPC, SharedObjectCounterpart} from './worker_rpc';
 
 @registerSharedObject('Uint64Set')
 export class Uint64Set extends SharedObjectCounterpart {

@@ -14,10 +14,10 @@
  * limitations under the License.
  */
 
-import {LayerManager, MouseSelectionState} from 'neuroglancer/layer';
-import {NavigationState} from 'neuroglancer/navigation_state';
-import {TrackableBoolean} from 'neuroglancer/trackable_boolean';
-import {VisibilityPrioritySpecification} from 'neuroglancer/visibility_priority/frontend';
+import {LayerManager, MouseSelectionState} from './layer';
+import {NavigationState} from './navigation_state';
+import {TrackableBoolean} from './trackable_boolean';
+import {VisibilityPrioritySpecification} from './visibility_priority/frontend';
 
 export interface ViewerPositionState {
   navigationState: NavigationState;

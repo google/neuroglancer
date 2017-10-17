@@ -14,12 +14,12 @@
  * limitations under the License.
  */
 
-import {VolumeChunk, VolumeChunkSource} from 'neuroglancer/sliceview/volume/frontend';
-import {ChunkFormat} from 'neuroglancer/sliceview/volume/frontend';
-import {TypedArray} from 'neuroglancer/util/array';
-import {Disposable, RefCounted} from 'neuroglancer/util/disposable';
-import {GL} from 'neuroglancer/webgl/context';
-import {ShaderBuilder, ShaderProgram} from 'neuroglancer/webgl/shader';
+import {VolumeChunk, VolumeChunkSource} from './volume/frontend';
+import {ChunkFormat} from './volume/frontend';
+import {TypedArray} from '../util/array';
+import {Disposable, RefCounted} from '../util/disposable';
+import {GL} from '../webgl/context';
+import {ShaderBuilder, ShaderProgram} from '../webgl/shader';
 
 const textureUnitSymbol = Symbol('SingleTextureVolumeChunk.textureUnit');
 const textureLayoutSymbol = Symbol('SingleTextureVolumeChunk.textureLayout');

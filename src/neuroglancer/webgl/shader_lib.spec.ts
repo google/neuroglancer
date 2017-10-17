@@ -14,10 +14,10 @@
  * limitations under the License.
  */
 
-import {vec4} from 'neuroglancer/util/geom';
-import {getRandomValues} from 'neuroglancer/util/random';
-import {glsl_addUint32, glsl_divmodUint32, setVec4FromUint32} from 'neuroglancer/webgl/shader_lib';
-import {fragmentShaderTest} from 'neuroglancer/webgl/shader_testing';
+import {vec4} from '../util/geom';
+import {getRandomValues} from '../util/random';
+import {glsl_addUint32, glsl_divmodUint32, setVec4FromUint32} from './shader_lib';
+import {fragmentShaderTest} from './shader_testing';
 
 /**
  * Returns an array of `count` integers in the range [min, max].

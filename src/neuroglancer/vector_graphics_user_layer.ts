@@ -14,25 +14,25 @@
  * limitations under the License.
  */
 
-import {ChunkManager} from 'neuroglancer/chunk_manager/frontend';
-import {GetVectorGraphicsOptions, getVectorGraphicsSource} from 'neuroglancer/datasource/factory';
-import {UserLayer, UserLayerDropdown} from 'neuroglancer/layer';
-import {LayerListSpecification, registerLayerType} from 'neuroglancer/layer_specification';
-import {VectorGraphicsType} from 'neuroglancer/sliceview/vector_graphics/base';
-import {MultiscaleVectorGraphicsChunkSource, RenderLayer} from 'neuroglancer/sliceview/vector_graphics/frontend';
-import {VectorGraphicsLineRenderLayer} from 'neuroglancer/sliceview/vector_graphics/vector_graphics_line_renderlayer';
-import {StatusMessage} from 'neuroglancer/status';
-import {trackableAlphaValue} from 'neuroglancer/trackable_alpha';
-import {trackableFiniteFloat} from 'neuroglancer/trackable_finite_float';
-import {trackableVec3, TrackableVec3} from 'neuroglancer/trackable_vec3';
-import {vec3} from 'neuroglancer/util/geom';
-import {verifyEnumString, verifyFiniteFloat, verifyOptionalString} from 'neuroglancer/util/json';
-import {RangeWidget} from 'neuroglancer/widget/range';
-import {Vec3Widget} from 'neuroglancer/widget/vec3_entry_widget';
+import {ChunkManager} from './chunk_manager/frontend';
+import {GetVectorGraphicsOptions, getVectorGraphicsSource} from './datasource/factory';
+import {UserLayer, UserLayerDropdown} from './layer';
+import {LayerListSpecification, registerLayerType} from './layer_specification';
+import {VectorGraphicsType} from './sliceview/vector_graphics/base';
+import {MultiscaleVectorGraphicsChunkSource, RenderLayer} from './sliceview/vector_graphics/frontend';
+import {VectorGraphicsLineRenderLayer} from './sliceview/vector_graphics/vector_graphics_line_renderlayer';
+import {StatusMessage} from './status';
+import {trackableAlphaValue} from './trackable_alpha';
+import {trackableFiniteFloat} from './trackable_finite_float';
+import {trackableVec3, TrackableVec3} from './trackable_vec3';
+import {vec3} from './util/geom';
+import {verifyEnumString, verifyFiniteFloat, verifyOptionalString} from './util/json';
+import {RangeWidget} from './widget/range';
+import {Vec3Widget} from './widget/vec3_entry_widget';
 
 require('./image_user_layer.css');
-require('neuroglancer/help_button.css');
-require('neuroglancer/maximize_button.css');
+require('./help_button.css');
+require('./maximize_button.css');
 
 function getVectorGraphicsWithStatusMessage(
     chunkManager: ChunkManager, x: string,

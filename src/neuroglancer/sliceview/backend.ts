@@ -14,13 +14,13 @@
  * limitations under the License.
  */
 
-import {Chunk, ChunkSource, withChunkManager} from 'neuroglancer/chunk_manager/backend';
-import {RenderLayer as RenderLayerInterface, SLICEVIEW_RPC_ID, SliceViewBase, SliceViewChunkSource as SliceViewChunkSourceInterface, SliceViewChunkSpecification} from 'neuroglancer/sliceview/base';
-import {ChunkLayout} from 'neuroglancer/sliceview/chunk_layout';
-import {vec3, vec3Key} from 'neuroglancer/util/geom';
-import {NullarySignal} from 'neuroglancer/util/signal';
-import {getBasePriority, getPriorityTier, withSharedVisibility} from 'neuroglancer/visibility_priority/backend';
-import {registerRPC, registerSharedObject, RPC, SharedObjectCounterpart} from 'neuroglancer/worker_rpc';
+import {Chunk, ChunkSource, withChunkManager} from '../chunk_manager/backend';
+import {RenderLayer as RenderLayerInterface, SLICEVIEW_RPC_ID, SliceViewBase, SliceViewChunkSource as SliceViewChunkSourceInterface, SliceViewChunkSpecification} from './base';
+import {ChunkLayout} from './chunk_layout';
+import {vec3, vec3Key} from '../util/geom';
+import {NullarySignal} from '../util/signal';
+import {getBasePriority, getPriorityTier, withSharedVisibility} from '../visibility_priority/backend';
+import {registerRPC, registerSharedObject, RPC, SharedObjectCounterpart} from '../worker_rpc';
 
 const BASE_PRIORITY = -1e12;
 const SCALE_PRIORITY_MULTIPLIER = 1e9;

@@ -14,10 +14,10 @@
  * limitations under the License.
  */
 
-import {eventHasInputTextTarget} from 'neuroglancer/util/clipboard';
-import {vec3} from 'neuroglancer/util/geom';
-import {getCachedJson} from 'neuroglancer/util/trackable';
-import {Viewer} from 'neuroglancer/viewer';
+import {eventHasInputTextTarget} from '../util/clipboard';
+import {vec3} from '../util/geom';
+import {getCachedJson} from '../util/trackable';
+import {Viewer} from '../viewer';
 
 export function bindDefaultCopyHandler(viewer: Viewer) {
   viewer.registerEventListener(document, 'copy', (event: ClipboardEvent) => {

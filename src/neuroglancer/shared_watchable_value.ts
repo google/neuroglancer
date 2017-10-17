@@ -18,8 +18,8 @@
  * @file Facility for sharing arbitrary values that support structural cloning between threads.
  */
 
-import {WatchableValue} from 'neuroglancer/trackable_value';
-import {registerRPC, registerSharedObject, RPC, SharedObjectCounterpart} from 'neuroglancer/worker_rpc';
+import {WatchableValue} from './trackable_value';
+import {registerRPC, registerSharedObject, RPC, SharedObjectCounterpart} from './worker_rpc';
 
 const CHANGED_RPC_METHOD_ID = 'SharedWatchableValue.changed';
 

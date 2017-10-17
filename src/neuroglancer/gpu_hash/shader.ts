@@ -14,13 +14,13 @@
  * limitations under the License.
  */
 
-import {HashFunction, PRIME_MODULUS} from 'neuroglancer/gpu_hash/hash_function';
-import {HashTableBase, NUM_ALTERNATIVES} from 'neuroglancer/gpu_hash/hash_table';
-import {RefCounted} from 'neuroglancer/util/disposable';
-import {GL} from 'neuroglancer/webgl/context';
-import {ShaderBuilder, ShaderProgram} from 'neuroglancer/webgl/shader';
-import {glsl_exactDot, glsl_imod, glsl_uint64, glsl_unnormalizeUint8} from 'neuroglancer/webgl/shader_lib';
-import {setRawTextureParameters} from 'neuroglancer/webgl/texture';
+import {HashFunction, PRIME_MODULUS} from './hash_function';
+import {HashTableBase, NUM_ALTERNATIVES} from './hash_table';
+import {RefCounted} from '../util/disposable';
+import {GL} from '../webgl/context';
+import {ShaderBuilder, ShaderProgram} from '../webgl/shader';
+import {glsl_exactDot, glsl_imod, glsl_uint64, glsl_unnormalizeUint8} from '../webgl/shader_lib';
+import {setRawTextureParameters} from '../webgl/texture';
 
 export const glsl_hashFunction = [
   glsl_unnormalizeUint8, glsl_uint64, glsl_exactDot, glsl_imod, `

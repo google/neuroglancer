@@ -14,8 +14,8 @@
  * limitations under the License.
  */
 
-import {DisjointUint64Sets} from 'neuroglancer/util/disjoint_sets';
-import {Uint64} from 'neuroglancer/util/uint64';
+import {DisjointUint64Sets} from './disjoint_sets';
+import {Uint64} from './uint64';
 
 function getSortedElementStrings(disjointSets: DisjointUint64Sets, x: Uint64) {
   let members = Array.from(disjointSets.setElements(x));

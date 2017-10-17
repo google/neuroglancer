@@ -14,15 +14,15 @@
  * limitations under the License.
  */
 
-import {ManagedUserLayer, UserLayer, UserLayerDropdown} from 'neuroglancer/layer';
-import {LayerDialog} from 'neuroglancer/layer_dialog';
-import {LayerListSpecification, ManagedUserLayerWithSpecification} from 'neuroglancer/layer_specification';
-import {RefCounted} from 'neuroglancer/util/disposable';
-import {removeChildren} from 'neuroglancer/util/dom';
-import {positionDropdown} from 'neuroglancer/util/dropdown';
+import {ManagedUserLayer, UserLayer, UserLayerDropdown} from './layer';
+import {LayerDialog} from './layer_dialog';
+import {LayerListSpecification, ManagedUserLayerWithSpecification} from './layer_specification';
+import {RefCounted} from './util/disposable';
+import {removeChildren} from './util/dom';
+import {positionDropdown} from './util/dropdown';
 import Sortable from 'sortablejs';
 
-require('neuroglancer/noselect.css');
+require('./noselect.css');
 require('./layer_panel.css');
 
 class LayerWidget extends RefCounted {

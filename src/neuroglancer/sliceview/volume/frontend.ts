@@ -14,19 +14,19 @@
  * limitations under the License.
  */
 
-import {ChunkSourceParametersConstructor} from 'neuroglancer/chunk_manager/base';
-import {ChunkManager} from 'neuroglancer/chunk_manager/frontend';
-import {MeshSource} from 'neuroglancer/mesh/frontend';
-import {DataType} from 'neuroglancer/sliceview/base';
-import {MultiscaleSliceViewChunkSource, SliceViewChunk, SliceViewChunkSource} from 'neuroglancer/sliceview/frontend';
-import {VolumeChunkSource as VolumeChunkSourceInterface, VolumeChunkSpecification, VolumeSourceOptions, VolumeType} from 'neuroglancer/sliceview/volume/base';
-import {Disposable} from 'neuroglancer/util/disposable';
-import {vec3, vec3Key} from 'neuroglancer/util/geom';
-import {stableStringify} from 'neuroglancer/util/json';
-import {Uint64} from 'neuroglancer/util/uint64';
-import {GL} from 'neuroglancer/webgl/context';
-import {ShaderBuilder, ShaderProgram} from 'neuroglancer/webgl/shader';
-import {RPC} from 'neuroglancer/worker_rpc';
+import {ChunkSourceParametersConstructor} from '../../chunk_manager/base';
+import {ChunkManager} from '../../chunk_manager/frontend';
+import {MeshSource} from '../../mesh/frontend';
+import {DataType} from '../base';
+import {MultiscaleSliceViewChunkSource, SliceViewChunk, SliceViewChunkSource} from '../frontend';
+import {VolumeChunkSource as VolumeChunkSourceInterface, VolumeChunkSpecification, VolumeSourceOptions, VolumeType} from './base';
+import {Disposable} from '../../util/disposable';
+import {vec3, vec3Key} from '../../util/geom';
+import {stableStringify} from '../../util/json';
+import {Uint64} from '../../util/uint64';
+import {GL} from '../../webgl/context';
+import {ShaderBuilder, ShaderProgram} from '../../webgl/shader';
+import {RPC} from '../../worker_rpc';
 
 export type VolumeChunkKey = string;
 

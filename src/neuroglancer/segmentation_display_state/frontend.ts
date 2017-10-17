@@ -14,18 +14,18 @@
  * limitations under the License.
  */
 
-import {ChunkManager} from 'neuroglancer/chunk_manager/frontend';
-import {CoordinateTransform} from 'neuroglancer/coordinate_transform';
-import {LayerSelectedValues, UserLayer} from 'neuroglancer/layer';
-import {SegmentColorHash} from 'neuroglancer/segment_color';
-import {forEachVisibleSegment, getObjectKey, VisibleSegmentsState} from 'neuroglancer/segmentation_display_state/base';
-import {TrackableAlphaValue} from 'neuroglancer/trackable_alpha';
-import {RefCounted} from 'neuroglancer/util/disposable';
-import {vec4} from 'neuroglancer/util/geom';
-import {NullarySignal} from 'neuroglancer/util/signal';
-import {Uint64} from 'neuroglancer/util/uint64';
-import {withSharedVisibility} from 'neuroglancer/visibility_priority/frontend';
-import {SharedObject} from 'neuroglancer/worker_rpc';
+import {ChunkManager} from '../chunk_manager/frontend';
+import {CoordinateTransform} from '../coordinate_transform';
+import {LayerSelectedValues, UserLayer} from '../layer';
+import {SegmentColorHash} from '../segment_color';
+import {forEachVisibleSegment, getObjectKey, VisibleSegmentsState} from './base';
+import {TrackableAlphaValue} from '../trackable_alpha';
+import {RefCounted} from '../util/disposable';
+import {vec4} from '../util/geom';
+import {NullarySignal} from '../util/signal';
+import {Uint64} from '../util/uint64';
+import {withSharedVisibility} from '../visibility_priority/frontend';
+import {SharedObject} from '../worker_rpc';
 
 export class Uint64MapEntry {
   constructor(public key: Uint64, public value: Uint64) {}

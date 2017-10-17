@@ -14,8 +14,8 @@
  * limitations under the License.
  */
 
-import {RefCounted} from 'neuroglancer/util/disposable';
-import {globalKeyboardHandlerStack, KeySequenceMap} from 'neuroglancer/util/keyboard_shortcut_handler';
+import {RefCounted} from './util/disposable';
+import {globalKeyboardHandlerStack, KeySequenceMap} from './util/keyboard_shortcut_handler';
 
 export const overlayKeyboardHandlerPriority = 100;
 

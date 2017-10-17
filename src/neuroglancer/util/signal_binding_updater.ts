@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-import {Signal} from 'neuroglancer/util/signal';
+import {Signal} from './signal';
 
 export function removeSignalBinding<T extends Function>(signal: Signal<T>, handler: T) {
   signal.remove(handler);

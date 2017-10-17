@@ -19,16 +19,16 @@
  * Support for DVID (https://github.com/janelia-flyem/dvid) servers.
  */
 
-import {ChunkManager} from 'neuroglancer/chunk_manager/frontend';
-import {DVIDSourceParameters, TileChunkSourceParameters, TileEncoding, VolumeChunkEncoding, VolumeChunkSourceParameters} from 'neuroglancer/datasource/dvid/base';
-import {CompletionResult, registerDataSourceFactory} from 'neuroglancer/datasource/factory';
-import {DataType, VolumeChunkSpecification, VolumeSourceOptions, VolumeType} from 'neuroglancer/sliceview/volume/base';
-import {defineParameterizedVolumeChunkSource, MultiscaleVolumeChunkSource as GenericMultiscaleVolumeChunkSource, VolumeChunkSource} from 'neuroglancer/sliceview/volume/frontend';
-import {StatusMessage} from 'neuroglancer/status';
-import {applyCompletionOffset, getPrefixMatchesWithDescriptions} from 'neuroglancer/util/completion';
-import {mat4, vec3} from 'neuroglancer/util/geom';
-import {openShardedHttpRequest, sendHttpRequest} from 'neuroglancer/util/http_request';
-import {parseArray, parseFixedLengthArray, parseIntVec, verifyFinitePositiveFloat, verifyInt, verifyMapKey, verifyObject, verifyObjectAsMap, verifyObjectProperty, verifyPositiveInt, verifyString} from 'neuroglancer/util/json';
+import {ChunkManager} from '../../chunk_manager/frontend';
+import {DVIDSourceParameters, TileChunkSourceParameters, TileEncoding, VolumeChunkEncoding, VolumeChunkSourceParameters} from './base';
+import {CompletionResult, registerDataSourceFactory} from '../factory';
+import {DataType, VolumeChunkSpecification, VolumeSourceOptions, VolumeType} from '../../sliceview/volume/base';
+import {defineParameterizedVolumeChunkSource, MultiscaleVolumeChunkSource as GenericMultiscaleVolumeChunkSource, VolumeChunkSource} from '../../sliceview/volume/frontend';
+import {StatusMessage} from '../../status';
+import {applyCompletionOffset, getPrefixMatchesWithDescriptions} from '../../util/completion';
+import {mat4, vec3} from '../../util/geom';
+import {openShardedHttpRequest, sendHttpRequest} from '../../util/http_request';
+import {parseArray, parseFixedLengthArray, parseIntVec, verifyFinitePositiveFloat, verifyInt, verifyMapKey, verifyObject, verifyObjectAsMap, verifyObjectProperty, verifyPositiveInt, verifyString} from '../../util/json';
 
 let serverDataTypes = new Map<string, DataType>();
 serverDataTypes.set('uint8', DataType.UINT8);

@@ -14,12 +14,12 @@
  * limitations under the License.
  */
 
-import {chunkFormatTest} from 'neuroglancer/sliceview/chunk_format_testing';
-import {ChunkFormat} from 'neuroglancer/sliceview/uncompressed_chunk_format';
-import {TypedArrayConstructor} from 'neuroglancer/util/array';
-import {DataType} from 'neuroglancer/util/data_type';
-import {prod4, vec3, vec4} from 'neuroglancer/util/geom';
-import {getRandomValues} from 'neuroglancer/util/random';
+import {chunkFormatTest} from './chunk_format_testing';
+import {ChunkFormat} from './uncompressed_chunk_format';
+import {TypedArrayConstructor} from '../util/array';
+import {DataType} from '../util/data_type';
+import {prod4, vec3, vec4} from '../util/geom';
+import {getRandomValues} from '../util/random';
 
 describe('sliceview/uncompressed_chunk_format', () => {
   describe('data access', () => {

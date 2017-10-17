@@ -14,12 +14,12 @@
  * limitations under the License.
  */
 
-import {RefCounted} from 'neuroglancer/util/disposable';
-import {Buffer} from 'neuroglancer/webgl/buffer';
-import {GL_ARRAY_BUFFER, GL_STATIC_DRAW, GL_UNSIGNED_BYTE} from 'neuroglancer/webgl/constants';
-import {GL} from 'neuroglancer/webgl/context';
-import {ShaderBuilder, ShaderProgram} from 'neuroglancer/webgl/shader';
-import {glsl_uint32} from 'neuroglancer/webgl/shader_lib';
+import {RefCounted} from '../util/disposable';
+import {Buffer} from './buffer';
+import {GL_ARRAY_BUFFER, GL_STATIC_DRAW, GL_UNSIGNED_BYTE} from './constants';
+import {GL} from './context';
+import {ShaderBuilder, ShaderProgram} from './shader';
+import {glsl_uint32} from './shader_lib';
 
 export class CountingBuffer extends RefCounted {
   length: number|undefined;

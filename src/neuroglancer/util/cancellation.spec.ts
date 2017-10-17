@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-import {CANCELED, CancellationTokenSource, makeCancelablePromise, throwIfCanceled, uncancelableToken} from 'neuroglancer/util/cancellation';
+import {CANCELED, CancellationTokenSource, makeCancelablePromise, throwIfCanceled, uncancelableToken} from './cancellation';
 
 describe('cancellation', () => {
   describe('CancellationTokenSource', () => {

@@ -14,19 +14,19 @@
  * limitations under the License.
  */
 
-import {Chunk, ChunkSource} from 'neuroglancer/chunk_manager/backend';
-import {ChunkPriorityTier, ChunkState} from 'neuroglancer/chunk_manager/base';
-import {FRAGMENT_SOURCE_RPC_ID, MESH_LAYER_RPC_ID} from 'neuroglancer/mesh/base';
-import {SegmentationLayerSharedObjectCounterpart} from 'neuroglancer/segmentation_display_state/backend';
-import {getObjectKey} from 'neuroglancer/segmentation_display_state/base';
-import {forEachVisibleSegment, Bounds} from 'neuroglancer/segmentation_display_state/base';
-import {CancellationToken} from 'neuroglancer/util/cancellation';
-import {convertEndian32, Endianness} from 'neuroglancer/util/endian';
-import {vec3} from 'neuroglancer/util/geom';
-import {verifyObject, verifyObjectProperty, verifyStringArray} from 'neuroglancer/util/json';
-import {Uint64} from 'neuroglancer/util/uint64';
-import {getBasePriority, getPriorityTier} from 'neuroglancer/visibility_priority/backend';
-import {registerSharedObject, RPC} from 'neuroglancer/worker_rpc';
+import {Chunk, ChunkSource} from '../chunk_manager/backend';
+import {ChunkPriorityTier, ChunkState} from '../chunk_manager/base';
+import {FRAGMENT_SOURCE_RPC_ID, MESH_LAYER_RPC_ID} from './base';
+import {SegmentationLayerSharedObjectCounterpart} from '../segmentation_display_state/backend';
+import {getObjectKey} from '../segmentation_display_state/base';
+import {forEachVisibleSegment, Bounds} from '../segmentation_display_state/base';
+import {CancellationToken} from '../util/cancellation';
+import {convertEndian32, Endianness} from '../util/endian';
+import {vec3} from '../util/geom';
+import {verifyObject, verifyObjectProperty, verifyStringArray} from '../util/json';
+import {Uint64} from '../util/uint64';
+import {getBasePriority, getPriorityTier} from '../visibility_priority/backend';
+import {registerSharedObject, RPC} from '../worker_rpc';
 
 const MESH_OBJECT_MANIFEST_CHUNK_PRIORITY = 100;
 const MESH_OBJECT_FRAGMENT_CHUNK_PRIORITY = 50;

@@ -14,12 +14,12 @@
  * limitations under the License.
  */
 
-import 'neuroglancer/shared_watchable_value';
+import '../shared_watchable_value';
 
-import {ChunkRequester} from 'neuroglancer/chunk_manager/backend';
-import {ChunkPriorityTier, PREFETCH_PRIORITY_MULTIPLIER} from 'neuroglancer/chunk_manager/base';
-import {SharedWatchableValue} from 'neuroglancer/shared_watchable_value';
-import {RPC} from 'neuroglancer/worker_rpc';
+import {ChunkRequester} from '../chunk_manager/backend';
+import {ChunkPriorityTier, PREFETCH_PRIORITY_MULTIPLIER} from '../chunk_manager/base';
+import {SharedWatchableValue} from '../shared_watchable_value';
+import {RPC} from '../worker_rpc';
 
 /**
  * Mixin for adding a visibility shared property to a ChunkRequester.  Calls

@@ -14,8 +14,8 @@
  * limitations under the License.
  */
 
-import {parsePositionString} from 'neuroglancer/ui/default_clipboard_handling';
-import {vec3} from 'neuroglancer/util/geom';
+import {parsePositionString} from './default_clipboard_handling';
+import {vec3} from '../util/geom';
 
 describe('default_clipboard_handling', () => {
   describe('parsePositionString', () => {

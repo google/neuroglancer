@@ -15,7 +15,7 @@
  */
 
 import {mat4, quat, vec3} from 'gl-matrix';
-import {Uint64} from 'neuroglancer/util/uint64';
+import {Uint64} from './uint64';
 
 export {mat2, mat3, mat4, quat, vec2, vec3, vec4} from 'gl-matrix';
 

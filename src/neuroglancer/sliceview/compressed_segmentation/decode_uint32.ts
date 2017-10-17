@@ -21,7 +21,7 @@
  * Support for decompressing uint64 segment label chunks.
  */
 
-import {decodeValueOffset} from 'neuroglancer/sliceview/compressed_segmentation/decode_common';
+import {decodeValueOffset} from './decode_common';
 
 
 

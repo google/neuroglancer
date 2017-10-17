@@ -14,16 +14,16 @@
  * limitations under the License.
  */
 
-import {Chunk, ChunkManager, ChunkSource, withChunkManager} from 'neuroglancer/chunk_manager/backend';
-import {ChunkPriorityTier} from 'neuroglancer/chunk_manager/base';
-import {PriorityGetter} from 'neuroglancer/chunk_manager/generic_file_source';
-import {computeVertexNormals} from 'neuroglancer/mesh/backend';
-import {GET_SINGLE_MESH_INFO_RPC_ID, SINGLE_MESH_CHUNK_KEY, SINGLE_MESH_LAYER_RPC_ID, SINGLE_MESH_SOURCE_RPC_ID, SingleMeshData, SingleMeshInfo, SingleMeshSourceParameters, VertexAttributeInfo} from 'neuroglancer/single_mesh/base';
-import {TypedArray} from 'neuroglancer/util/array';
-import {CancellationToken} from 'neuroglancer/util/cancellation';
-import {stableStringify} from 'neuroglancer/util/json';
-import {getBasePriority, getPriorityTier, withSharedVisibility} from 'neuroglancer/visibility_priority/backend';
-import {registerPromiseRPC, registerSharedObject, RPC, RPCPromise, SharedObjectCounterpart} from 'neuroglancer/worker_rpc';
+import {Chunk, ChunkManager, ChunkSource, withChunkManager} from '../chunk_manager/backend';
+import {ChunkPriorityTier} from '../chunk_manager/base';
+import {PriorityGetter} from '../chunk_manager/generic_file_source';
+import {computeVertexNormals} from '../mesh/backend';
+import {GET_SINGLE_MESH_INFO_RPC_ID, SINGLE_MESH_CHUNK_KEY, SINGLE_MESH_LAYER_RPC_ID, SINGLE_MESH_SOURCE_RPC_ID, SingleMeshData, SingleMeshInfo, SingleMeshSourceParameters, VertexAttributeInfo} from './base';
+import {TypedArray} from '../util/array';
+import {CancellationToken} from '../util/cancellation';
+import {stableStringify} from '../util/json';
+import {getBasePriority, getPriorityTier, withSharedVisibility} from '../visibility_priority/backend';
+import {registerPromiseRPC, registerSharedObject, RPC, RPCPromise, SharedObjectCounterpart} from '../worker_rpc';
 
 const SINGLE_MESH_CHUNK_PRIORITY = 50;
 

@@ -14,8 +14,8 @@
  * limitations under the License.
  */
 
-import {WritableArrayLike} from 'neuroglancer/util/array';
-import {vec3} from 'neuroglancer/util/geom';
+import {WritableArrayLike} from './array';
+import {vec3} from './geom';
 
 export function verifyFloat(obj: any): number {
   let t = typeof obj;

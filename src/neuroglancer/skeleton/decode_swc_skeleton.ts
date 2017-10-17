@@ -1,4 +1,4 @@
-import {SkeletonChunk} from 'neuroglancer/skeleton/backend';
+import {SkeletonChunk} from './backend';
 
 export function decodeSwcSkeletonChunk(chunk: SkeletonChunk, swcStr: string) {
   let swcObjects: Array<PointObj> = parseSwc(swcStr);

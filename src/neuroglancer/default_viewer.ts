@@ -16,12 +16,12 @@
 
 require('./default_viewer.css');
 
-import 'neuroglancer/sliceview/chunk_format_handlers';
+import './sliceview/chunk_format_handlers';
 
-import {StatusMessage} from 'neuroglancer/status';
-import {DisplayContext} from 'neuroglancer/display_context';
-import {Viewer} from 'neuroglancer/viewer';
-import {disableContextMenu} from 'neuroglancer/ui/disable_context_menu';
+import {StatusMessage} from './status';
+import {DisplayContext} from './display_context';
+import {Viewer} from './viewer';
+import {disableContextMenu} from './ui/disable_context_menu';
 
 export function makeDefaultViewer() {
   disableContextMenu();

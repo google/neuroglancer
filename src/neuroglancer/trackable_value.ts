@@ -14,8 +14,8 @@
  * limitations under the License.
  */
 
-import {NullarySignal} from 'neuroglancer/util/signal';
-import {Trackable} from 'neuroglancer/util/trackable';
+import {NullarySignal} from './util/signal';
+import {Trackable} from './util/trackable';
 
 export class WatchableValue<T> {
   get value() {

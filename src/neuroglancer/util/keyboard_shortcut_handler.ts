@@ -16,7 +16,7 @@
 
 // This is based on goog/ui/keyboardshortcuthandler.js in the Google Closure library.
 
-import {RefCounted} from 'neuroglancer/util/disposable';
+import {RefCounted} from './disposable';
 
 type Handler = (action: string) => boolean;
 

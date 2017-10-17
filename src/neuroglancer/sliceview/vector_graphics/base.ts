@@ -14,9 +14,9 @@
  * limitations under the License.
  */
 
-import {SliceViewChunkSource, SliceViewChunkSpecification, SliceViewChunkSpecificationBaseOptions, SliceViewSourceOptions} from 'neuroglancer/sliceview/base';
-import {getCombinedTransform} from 'neuroglancer/sliceview/base';
-import {vec3} from 'neuroglancer/util/geom';
+import {SliceViewChunkSource, SliceViewChunkSpecification, SliceViewChunkSpecificationBaseOptions, SliceViewSourceOptions} from '../base';
+import {getCombinedTransform} from '../base';
+import {vec3} from '../../util/geom';
 
 export enum VectorGraphicsType {
   LINE,

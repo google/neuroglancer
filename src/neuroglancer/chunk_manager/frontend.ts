@@ -14,11 +14,11 @@
  * limitations under the License.
  */
 
-import {AvailableCapacity, CHUNK_MANAGER_RPC_ID, CHUNK_QUEUE_MANAGER_RPC_ID, ChunkState} from 'neuroglancer/chunk_manager/base';
-import {Memoize, StringMemoize} from 'neuroglancer/util/memoize';
-import {NullarySignal} from 'neuroglancer/util/signal';
-import {GL} from 'neuroglancer/webgl/context';
-import {registerRPC, registerSharedObjectOwner, RPC, SharedObject} from 'neuroglancer/worker_rpc';
+import {AvailableCapacity, CHUNK_MANAGER_RPC_ID, CHUNK_QUEUE_MANAGER_RPC_ID, ChunkState} from './base';
+import {Memoize, StringMemoize} from '../util/memoize';
+import {NullarySignal} from '../util/signal';
+import {GL} from '../webgl/context';
+import {registerRPC, registerSharedObjectOwner, RPC, SharedObject} from '../worker_rpc';
 
 const DEBUG_CHUNK_UPDATES = false;
 

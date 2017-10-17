@@ -14,30 +14,30 @@
  * limitations under the License.
  */
 
-import {ChunkSourceParametersConstructor, ChunkState} from 'neuroglancer/chunk_manager/base';
-import {Chunk, ChunkManager, ChunkSource} from 'neuroglancer/chunk_manager/frontend';
-import {RenderLayer} from 'neuroglancer/layer';
-import {VoxelSize} from 'neuroglancer/navigation_state';
-import {PerspectiveViewRenderContext, PerspectiveViewRenderLayer} from 'neuroglancer/perspective_view/render_layer';
-import {forEachSegmentToDraw, getObjectColor, registerRedrawWhenSegmentationDisplayState3DChanged, SegmentationDisplayState3D, SegmentationLayerSharedObject} from 'neuroglancer/segmentation_display_state/frontend';
-import {SKELETON_LAYER_RPC_ID, VertexAttributeInfo} from 'neuroglancer/skeleton/base';
-import {SliceViewPanelRenderContext, SliceViewPanelRenderLayer} from 'neuroglancer/sliceview/panel';
-import {TrackableValue} from 'neuroglancer/trackable_value';
-import {DataType} from 'neuroglancer/util/data_type';
-import {RefCounted} from 'neuroglancer/util/disposable';
-import {mat4, vec3} from 'neuroglancer/util/geom';
-import {stableStringify, verifyString} from 'neuroglancer/util/json';
-import {getObjectId} from 'neuroglancer/util/object_id';
-import {NullarySignal} from 'neuroglancer/util/signal';
-import {Buffer} from 'neuroglancer/webgl/buffer';
-import {GL_FLOAT} from 'neuroglancer/webgl/constants';
-import {GL} from 'neuroglancer/webgl/context';
-import {WatchableShaderError} from 'neuroglancer/webgl/dynamic_shader';
-import {ShaderBuilder, ShaderModule, ShaderProgram} from 'neuroglancer/webgl/shader';
-import {setVec4FromUint32} from 'neuroglancer/webgl/shader_lib';
-import {RPC} from 'neuroglancer/worker_rpc';
+import {ChunkSourceParametersConstructor, ChunkState} from '../chunk_manager/base';
+import {Chunk, ChunkManager, ChunkSource} from '../chunk_manager/frontend';
+import {RenderLayer} from '../layer';
+import {VoxelSize} from '../navigation_state';
+import {PerspectiveViewRenderContext, PerspectiveViewRenderLayer} from '../perspective_view/render_layer';
+import {forEachSegmentToDraw, getObjectColor, registerRedrawWhenSegmentationDisplayState3DChanged, SegmentationDisplayState3D, SegmentationLayerSharedObject} from '../segmentation_display_state/frontend';
+import {SKELETON_LAYER_RPC_ID, VertexAttributeInfo} from './base';
+import {SliceViewPanelRenderContext, SliceViewPanelRenderLayer} from '../sliceview/panel';
+import {TrackableValue} from '../trackable_value';
+import {DataType} from '../util/data_type';
+import {RefCounted} from '../util/disposable';
+import {mat4, vec3} from '../util/geom';
+import {stableStringify, verifyString} from '../util/json';
+import {getObjectId} from '../util/object_id';
+import {NullarySignal} from '../util/signal';
+import {Buffer} from '../webgl/buffer';
+import {GL_FLOAT} from '../webgl/constants';
+import {GL} from '../webgl/context';
+import {WatchableShaderError} from '../webgl/dynamic_shader';
+import {ShaderBuilder, ShaderModule, ShaderProgram} from '../webgl/shader';
+import {setVec4FromUint32} from '../webgl/shader_lib';
+import {RPC} from '../worker_rpc';
 
-const glsl_COLORMAPS = require<string>('neuroglancer/webgl/colormaps.glsl');
+const glsl_COLORMAPS = require<string>('../webgl/colormaps.glsl');
 
 const tempMat2 = mat4.create();
 const tempPickID = new Float32Array(4);

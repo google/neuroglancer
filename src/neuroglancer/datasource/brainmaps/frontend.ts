@@ -14,20 +14,20 @@
  * limitations under the License.
  */
 
-import 'neuroglancer/datasource/brainmaps/api_frontend';
+import './api_frontend';
 
-import {ChunkManager} from 'neuroglancer/chunk_manager/frontend';
-import {BrainmapsInstance, INSTANCE_IDENTIFIERS, INSTANCE_NAMES, makeRequest, PRODUCTION_INSTANCE} from 'neuroglancer/datasource/brainmaps/api';
-import {ChangeSpec, MeshSourceParameters, SkeletonSourceParameters, VolumeChunkEncoding, VolumeSourceParameters} from 'neuroglancer/datasource/brainmaps/base';
-import {GetVolumeOptions, registerDataSourceFactory} from 'neuroglancer/datasource/factory';
-import {defineParameterizedMeshSource} from 'neuroglancer/mesh/frontend';
-import {parameterizedSkeletonSource} from 'neuroglancer/skeleton/frontend';
-import {DataType, VolumeChunkSpecification, VolumeSourceOptions, VolumeType} from 'neuroglancer/sliceview/volume/base';
-import {defineParameterizedVolumeChunkSource, MultiscaleVolumeChunkSource as GenericMultiscaleVolumeChunkSource} from 'neuroglancer/sliceview/volume/frontend';
-import {StatusMessage} from 'neuroglancer/status';
-import {getPrefixMatches, getPrefixMatchesWithDescriptions} from 'neuroglancer/util/completion';
-import {vec3} from 'neuroglancer/util/geom';
-import {parseArray, parseQueryStringParameters, parseXYZ, verifyEnumString, verifyFinitePositiveFloat, verifyMapKey, verifyObject, verifyObjectProperty, verifyOptionalString, verifyPositiveInt, verifyString} from 'neuroglancer/util/json';
+import {ChunkManager} from '../../chunk_manager/frontend';
+import {BrainmapsInstance, INSTANCE_IDENTIFIERS, INSTANCE_NAMES, makeRequest, PRODUCTION_INSTANCE} from './api';
+import {ChangeSpec, MeshSourceParameters, SkeletonSourceParameters, VolumeChunkEncoding, VolumeSourceParameters} from './base';
+import {GetVolumeOptions, registerDataSourceFactory} from '../factory';
+import {defineParameterizedMeshSource} from '../../mesh/frontend';
+import {parameterizedSkeletonSource} from '../../skeleton/frontend';
+import {DataType, VolumeChunkSpecification, VolumeSourceOptions, VolumeType} from '../../sliceview/volume/base';
+import {defineParameterizedVolumeChunkSource, MultiscaleVolumeChunkSource as GenericMultiscaleVolumeChunkSource} from '../../sliceview/volume/frontend';
+import {StatusMessage} from '../../status';
+import {getPrefixMatches, getPrefixMatchesWithDescriptions} from '../../util/completion';
+import {vec3} from '../../util/geom';
+import {parseArray, parseQueryStringParameters, parseXYZ, verifyEnumString, verifyFinitePositiveFloat, verifyMapKey, verifyObject, verifyObjectProperty, verifyOptionalString, verifyPositiveInt, verifyString} from '../../util/json';
 
 const VolumeChunkSource = defineParameterizedVolumeChunkSource(VolumeSourceParameters);
 const MeshSource = defineParameterizedMeshSource(MeshSourceParameters);

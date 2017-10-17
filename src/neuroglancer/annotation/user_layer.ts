@@ -14,13 +14,13 @@
  * limitations under the License.
  */
 
-import {AnnotationPointListLayer, PerspectiveViewAnnotationPointListLayer, SliceViewAnnotationPointListLayer} from 'neuroglancer/annotation/frontend';
-import {AnnotationPointList} from 'neuroglancer/annotation/point_list';
-import {UserLayer, UserLayerDropdown} from 'neuroglancer/layer';
-import {LayerListSpecification, registerLayerType} from 'neuroglancer/layer_specification';
-import {WatchableValue} from 'neuroglancer/trackable_value';
-import {vec3} from 'neuroglancer/util/geom';
-import {PointListWidget} from 'neuroglancer/widget/point_list_widget';
+import {AnnotationPointListLayer, PerspectiveViewAnnotationPointListLayer, SliceViewAnnotationPointListLayer} from './frontend';
+import {AnnotationPointList} from './point_list';
+import {UserLayer, UserLayerDropdown} from '../layer';
+import {LayerListSpecification, registerLayerType} from '../layer_specification';
+import {WatchableValue} from '../trackable_value';
+import {vec3} from '../util/geom';
+import {PointListWidget} from '../widget/point_list_widget';
 
 require('./user_layer.css');
 

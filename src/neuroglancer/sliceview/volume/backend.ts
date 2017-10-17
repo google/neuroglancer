@@ -14,10 +14,10 @@
  * limitations under the License.
  */
 
-import {RenderLayer as SliceViewRenderLayer, SliceViewChunk, SliceViewChunkSource} from 'neuroglancer/sliceview/backend';
-import {RenderLayer as RenderLayerInterface, VOLUME_RENDERLAYER_RPC_ID, VolumeChunkSource as VolumeChunkSourceInterface, VolumeChunkSpecification} from 'neuroglancer/sliceview/volume/base';
-import {vec3, vec3Key} from 'neuroglancer/util/geom';
-import {registerSharedObject, RPC} from 'neuroglancer/worker_rpc';
+import {RenderLayer as SliceViewRenderLayer, SliceViewChunk, SliceViewChunkSource} from '../backend';
+import {RenderLayer as RenderLayerInterface, VOLUME_RENDERLAYER_RPC_ID, VolumeChunkSource as VolumeChunkSourceInterface, VolumeChunkSpecification} from './base';
+import {vec3, vec3Key} from '../../util/geom';
+import {registerSharedObject, RPC} from '../../worker_rpc';
 
 export class VolumeChunk extends SliceViewChunk {
   source: VolumeChunkSource|null = null;

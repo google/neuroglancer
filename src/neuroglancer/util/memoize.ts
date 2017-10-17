@@ -14,8 +14,8 @@
  * limitations under the License.
  */
 
-import {RefCounted, RefCountedValue} from 'neuroglancer/util/disposable';
-import {stableStringify} from 'neuroglancer/util/json';
+import {RefCounted, RefCountedValue} from './disposable';
+import {stableStringify} from './json';
 
 export class Memoize<Key, Value extends RefCounted> {
   private map = new Map<Key, Value>();

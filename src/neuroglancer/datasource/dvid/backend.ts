@@ -14,15 +14,15 @@
  * limitations under the License.
  */
 
-import {registerChunkSource} from 'neuroglancer/chunk_manager/backend';
-import {TileChunkSourceParameters, TileEncoding, VolumeChunkEncoding, VolumeChunkSourceParameters} from 'neuroglancer/datasource/dvid/base';
-import {ChunkDecoder} from 'neuroglancer/sliceview/backend_chunk_decoders';
-import {decodeCompressedSegmentationChunk} from 'neuroglancer/sliceview/backend_chunk_decoders/compressed_segmentation';
-import {decodeJpegChunk} from 'neuroglancer/sliceview/backend_chunk_decoders/jpeg';
-import {ParameterizedVolumeChunkSource, VolumeChunk} from 'neuroglancer/sliceview/volume/backend';
-import {CancellationToken} from 'neuroglancer/util/cancellation';
-import {openShardedHttpRequest, sendHttpRequest} from 'neuroglancer/util/http_request';
-import {RPC} from 'neuroglancer/worker_rpc';
+import {registerChunkSource} from '../../chunk_manager/backend';
+import {TileChunkSourceParameters, TileEncoding, VolumeChunkEncoding, VolumeChunkSourceParameters} from './base';
+import {ChunkDecoder} from '../../sliceview/backend_chunk_decoders';
+import {decodeCompressedSegmentationChunk} from '../../sliceview/backend_chunk_decoders/compressed_segmentation';
+import {decodeJpegChunk} from '../../sliceview/backend_chunk_decoders/jpeg';
+import {ParameterizedVolumeChunkSource, VolumeChunk} from '../../sliceview/volume/backend';
+import {CancellationToken} from '../../util/cancellation';
+import {openShardedHttpRequest, sendHttpRequest} from '../../util/http_request';
+import {RPC} from '../../worker_rpc';
 
 const TILE_CHUNK_DECODERS = new Map<TileEncoding, ChunkDecoder>([
   [TileEncoding.JPEG, decodeJpegChunk],

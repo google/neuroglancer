@@ -56,24 +56,24 @@ const minifyBabelPlugins = exports.minifyBabelPlugins = [
 ];
 
 const DEFAULT_DATA_SOURCES = exports.DEFAULT_DATA_SOURCES = [
-  'neuroglancer/datasource/brainmaps',
-  'neuroglancer/datasource/ndstore',
-  'neuroglancer/datasource/dvid',
-  'neuroglancer/datasource/render',
-  'neuroglancer/datasource/openconnectome',
-  'neuroglancer/datasource/precomputed',
-  'neuroglancer/datasource/python',
-  'neuroglancer/datasource/nifti',
-  'neuroglancer/datasource/vtk',
-  'neuroglancer/datasource/csv',
+  './src/neuroglancer/datasource/brainmaps',
+  './src/neuroglancer/datasource/ndstore',
+  './src/neuroglancer/datasource/dvid',
+  './src/neuroglancer/datasource/render',
+  './src/neuroglancer/datasource/openconnectome',
+  './src/neuroglancer/datasource/precomputed',
+  './src/neuroglancer/datasource/python',
+  './src/neuroglancer/datasource/nifti',
+  './src/neuroglancer/datasource/vtk',
+  './src/neuroglancer/datasource/csv',
 ];
 
 const DEFAULT_SUPPORTED_LAYERS = exports.DEFAULT_SUPPORTED_LAYERS = [
-  'neuroglancer/image_user_layer',
-  'neuroglancer/vector_graphics_user_layer',
-  'neuroglancer/segmentation_user_layer',
-  'neuroglancer/single_mesh_user_layer',
-  'neuroglancer/annotation/user_layer',
+  './src/neuroglancer/image_user_layer',
+  './src/neuroglancer/vector_graphics_user_layer',
+  './src/neuroglancer/segmentation_user_layer',
+  './src/neuroglancer/single_mesh_user_layer',
+  './src/neuroglancer/annotation/user_layer',
 ];
 
 /**
@@ -292,9 +292,9 @@ function getViewerConfig(options) {
   let extraFrontendPlugins = options.frontendPlugins || [];
   let extraChunkWorkerPlugins = options.chunkWorkerPlugins || [];
   let chunkWorkerModules = [
-    'neuroglancer/worker_rpc_context',
-    'neuroglancer/chunk_manager/backend',
-    'neuroglancer/sliceview/backend',
+    './src/neuroglancer/worker_rpc_context',
+    './src/neuroglancer/chunk_manager/backend',
+    './src/neuroglancer/sliceview/backend',
     ...backendDataSourceModules,
     ...extraChunkWorkerModules,
   ];

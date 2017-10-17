@@ -14,9 +14,9 @@
  * limitations under the License.
  */
 
-import {postProcessRawData} from 'neuroglancer/sliceview/backend_chunk_decoders/postprocess';
-import {decodeJpegStack} from 'neuroglancer/sliceview/decode_jpeg_stack';
-import {VolumeChunk} from 'neuroglancer/sliceview/volume/backend';
+import {postProcessRawData} from './postprocess';
+import {decodeJpegStack} from '../decode_jpeg_stack';
+import {VolumeChunk} from '../volume/backend';
 
 export function decodeJpegChunk(chunk: VolumeChunk, response: ArrayBuffer) {
   postProcessRawData(

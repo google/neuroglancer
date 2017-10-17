@@ -15,35 +15,35 @@
  */
 
 import debounce from 'lodash/debounce';
-import {AvailableCapacity} from 'neuroglancer/chunk_manager/base';
-import {ChunkManager, ChunkQueueManager} from 'neuroglancer/chunk_manager/frontend';
-import {DisplayContext} from 'neuroglancer/display_context';
-import {KeyBindingHelpDialog} from 'neuroglancer/help/key_bindings';
-import {LayerManager, LayerSelectedValues, MouseSelectionState} from 'neuroglancer/layer';
-import {LayerDialog} from 'neuroglancer/layer_dialog';
-import {LayerPanel} from 'neuroglancer/layer_panel';
-import {LayerListSpecification} from 'neuroglancer/layer_specification';
-import * as L from 'neuroglancer/layout';
-import {NavigationState, Pose} from 'neuroglancer/navigation_state';
-import {overlaysOpen} from 'neuroglancer/overlay';
-import {PositionStatusPanel} from 'neuroglancer/position_status_panel';
-import {TrackableBoolean} from 'neuroglancer/trackable_boolean';
-import {TrackableValue} from 'neuroglancer/trackable_value';
-import {RefCounted} from 'neuroglancer/util/disposable';
-import {removeFromParent} from 'neuroglancer/util/dom';
-import {vec3} from 'neuroglancer/util/geom';
-import {globalKeyboardHandlerStack, KeySequenceMap} from 'neuroglancer/util/keyboard_shortcut_handler';
-import {NullarySignal} from 'neuroglancer/util/signal';
-import {CompoundTrackable} from 'neuroglancer/util/trackable';
-import {DataDisplayLayout, LAYOUTS} from 'neuroglancer/viewer_layouts';
-import {ViewerState, VisibilityPrioritySpecification} from 'neuroglancer/viewer_state';
-import {WatchableVisibilityPriority} from 'neuroglancer/visibility_priority/frontend';
-import {GL} from 'neuroglancer/webgl/context';
-import {RPC} from 'neuroglancer/worker_rpc';
+import {AvailableCapacity} from './chunk_manager/base';
+import {ChunkManager, ChunkQueueManager} from './chunk_manager/frontend';
+import {DisplayContext} from './display_context';
+import {KeyBindingHelpDialog} from './help/key_bindings';
+import {LayerManager, LayerSelectedValues, MouseSelectionState} from './layer';
+import {LayerDialog} from './layer_dialog';
+import {LayerPanel} from './layer_panel';
+import {LayerListSpecification} from './layer_specification';
+import * as L from './layout';
+import {NavigationState, Pose} from './navigation_state';
+import {overlaysOpen} from './overlay';
+import {PositionStatusPanel} from './position_status_panel';
+import {TrackableBoolean} from './trackable_boolean';
+import {TrackableValue} from './trackable_value';
+import {RefCounted} from './util/disposable';
+import {removeFromParent} from './util/dom';
+import {vec3} from './util/geom';
+import {globalKeyboardHandlerStack, KeySequenceMap} from './util/keyboard_shortcut_handler';
+import {NullarySignal} from './util/signal';
+import {CompoundTrackable} from './util/trackable';
+import {DataDisplayLayout, LAYOUTS} from './viewer_layouts';
+import {ViewerState, VisibilityPrioritySpecification} from './viewer_state';
+import {WatchableVisibilityPriority} from './visibility_priority/frontend';
+import {GL} from './webgl/context';
+import {RPC} from './worker_rpc';
 
 require('./viewer.css');
 require('./help_button.css');
-require('neuroglancer/noselect.css');
+require('./noselect.css');
 
 export function getLayoutByName(obj: any) {
   let layout = LAYOUTS.find(x => x[0] === obj);

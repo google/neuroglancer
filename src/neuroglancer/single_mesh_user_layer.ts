@@ -15,16 +15,16 @@
  */
 
 import debounce from 'lodash/debounce';
-import {UserLayer, UserLayerDropdown} from 'neuroglancer/layer';
-import {LayerListSpecification, registerLayerType} from 'neuroglancer/layer_specification';
-import {Overlay} from 'neuroglancer/overlay';
-import {SingleMeshSourceParameters} from 'neuroglancer/single_mesh/base';
-import {VertexAttributeInfo} from 'neuroglancer/single_mesh/base';
-import {FRAGMENT_MAIN_START, getShaderAttributeType, getSingleMeshSource, SingleMeshDisplayState, SingleMeshLayer, SingleMeshSource, TrackableAttributeNames} from 'neuroglancer/single_mesh/frontend';
-import {RefCounted} from 'neuroglancer/util/disposable';
-import {removeFromParent} from 'neuroglancer/util/dom';
-import {parseArray, verifyObjectProperty, verifyOptionalString, verifyString} from 'neuroglancer/util/json';
-import {ShaderCodeWidget} from 'neuroglancer/widget/shader_code_widget';
+import {UserLayer, UserLayerDropdown} from './layer';
+import {LayerListSpecification, registerLayerType} from './layer_specification';
+import {Overlay} from './overlay';
+import {SingleMeshSourceParameters} from './single_mesh/base';
+import {VertexAttributeInfo} from './single_mesh/base';
+import {FRAGMENT_MAIN_START, getShaderAttributeType, getSingleMeshSource, SingleMeshDisplayState, SingleMeshLayer, SingleMeshSource, TrackableAttributeNames} from './single_mesh/frontend';
+import {RefCounted} from './util/disposable';
+import {removeFromParent} from './util/dom';
+import {parseArray, verifyObjectProperty, verifyOptionalString, verifyString} from './util/json';
+import {ShaderCodeWidget} from './widget/shader_code_widget';
 
 require('./single_mesh_user_layer.css');
 

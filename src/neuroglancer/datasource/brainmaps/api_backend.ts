@@ -19,9 +19,9 @@
  * This implements the authentication API by simply forwarding all requests to the frontend.
  */
 
-import {implementation, Token} from 'neuroglancer/datasource/brainmaps/api_implementation';
-import {registerRPC} from 'neuroglancer/worker_rpc';
-import {rpc} from 'neuroglancer/worker_rpc_context';
+import {implementation, Token} from './api_implementation';
+import {registerRPC} from '../../worker_rpc';
+import {rpc} from '../../worker_rpc_context';
 
 let resolvePromise: ((token: Token) => void)|null = null;
 

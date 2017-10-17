@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-import {GL} from 'neuroglancer/webgl/context';
+import {GL} from './context';
 
 /**
  * Sets parameters to make a texture suitable for use as a raw array: NEAREST

@@ -19,18 +19,18 @@
  * Support for Python integration.
  */
 
-import {ChunkManager} from 'neuroglancer/chunk_manager/frontend';
-import {registerDataSourceFactory} from 'neuroglancer/datasource/factory';
-import {MeshSourceParameters, SkeletonSourceParameters, VolumeChunkEncoding, VolumeChunkSourceParameters} from 'neuroglancer/datasource/python/base';
-import {defineParameterizedMeshSource} from 'neuroglancer/mesh/frontend';
-import {VertexAttributeInfo} from 'neuroglancer/skeleton/base';
-import {parameterizedSkeletonSource} from 'neuroglancer/skeleton/frontend';
-import {DataType, DEFAULT_MAX_VOXELS_PER_CHUNK_LOG2, getNearIsotropicBlockSize, getTwoDimensionalBlockSize} from 'neuroglancer/sliceview/base';
-import {VolumeChunkSpecification, VolumeSourceOptions, VolumeType} from 'neuroglancer/sliceview/volume/base';
-import {defineParameterizedVolumeChunkSource, MultiscaleVolumeChunkSource as GenericMultiscaleVolumeChunkSource} from 'neuroglancer/sliceview/volume/frontend';
-import {mat4, vec3} from 'neuroglancer/util/geom';
-import {openShardedHttpRequest, sendHttpRequest} from 'neuroglancer/util/http_request';
-import {parseArray, parseFixedLengthArray, verify3dDimensions, verify3dScale, verify3dVec, verifyEnumString, verifyObject, verifyObjectAsMap, verifyObjectProperty, verifyPositiveInt, verifyString} from 'neuroglancer/util/json';
+import {ChunkManager} from '../../chunk_manager/frontend';
+import {registerDataSourceFactory} from '../factory';
+import {MeshSourceParameters, SkeletonSourceParameters, VolumeChunkEncoding, VolumeChunkSourceParameters} from './base';
+import {defineParameterizedMeshSource} from '../../mesh/frontend';
+import {VertexAttributeInfo} from '../../skeleton/base';
+import {parameterizedSkeletonSource} from '../../skeleton/frontend';
+import {DataType, DEFAULT_MAX_VOXELS_PER_CHUNK_LOG2, getNearIsotropicBlockSize, getTwoDimensionalBlockSize} from '../../sliceview/base';
+import {VolumeChunkSpecification, VolumeSourceOptions, VolumeType} from '../../sliceview/volume/base';
+import {defineParameterizedVolumeChunkSource, MultiscaleVolumeChunkSource as GenericMultiscaleVolumeChunkSource} from '../../sliceview/volume/frontend';
+import {mat4, vec3} from '../../util/geom';
+import {openShardedHttpRequest, sendHttpRequest} from '../../util/http_request';
+import {parseArray, parseFixedLengthArray, verify3dDimensions, verify3dScale, verify3dVec, verifyEnumString, verifyObject, verifyObjectAsMap, verifyObjectProperty, verifyPositiveInt, verifyString} from '../../util/json';
 
 const VolumeChunkSource = defineParameterizedVolumeChunkSource(VolumeChunkSourceParameters);
 const MeshSource = defineParameterizedMeshSource(MeshSourceParameters);

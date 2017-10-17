@@ -18,10 +18,10 @@
  * Convenience interface for accessing openconnecto.me server.
  */
 
-import {ChunkManager} from 'neuroglancer/chunk_manager/frontend';
-import {registerDataSourceFactory} from 'neuroglancer/datasource/factory';
-import {LEGACY_URL_PREFIX} from 'neuroglancer/datasource/ndstore/base';
-import {getShardedVolume, tokenAndChannelCompleter} from 'neuroglancer/datasource/ndstore/frontend';
+import {ChunkManager} from '../../chunk_manager/frontend';
+import {registerDataSourceFactory} from '../factory';
+import {LEGACY_URL_PREFIX} from '../ndstore/base';
+import {getShardedVolume, tokenAndChannelCompleter} from '../ndstore/frontend';
 
 const HOSTNAMES = ['http://openconnecto.me', 'http://www.openconnecto.me'];
 

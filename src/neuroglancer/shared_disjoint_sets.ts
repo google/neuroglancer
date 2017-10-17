@@ -14,11 +14,11 @@
  * limitations under the License.
  */
 
-import {DisjointUint64Sets} from 'neuroglancer/util/disjoint_sets';
-import {parseArray} from 'neuroglancer/util/json';
-import {NullarySignal} from 'neuroglancer/util/signal';
-import {Uint64} from 'neuroglancer/util/uint64';
-import {registerRPC, registerSharedObject, RPC, SharedObjectCounterpart} from 'neuroglancer/worker_rpc';
+import {DisjointUint64Sets} from './util/disjoint_sets';
+import {parseArray} from './util/json';
+import {NullarySignal} from './util/signal';
+import {Uint64} from './util/uint64';
+import {registerRPC, registerSharedObject, RPC, SharedObjectCounterpart} from './worker_rpc';
 
 const RPC_TYPE_ID = 'DisjointUint64Sets';
 const ADD_METHOD_ID = 'DisjointUint64Sets.add';

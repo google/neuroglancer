@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-import {NullarySignal, Signal} from 'neuroglancer/util/signal';
+import {NullarySignal, Signal} from './signal';
 
 describe('signal', () => {
   it('should invoke the handler when dispatched', () => {

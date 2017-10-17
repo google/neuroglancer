@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-import {GL, initializeWebGL} from 'neuroglancer/webgl/context';
+import {GL, initializeWebGL} from './context';
 
 export function webglTest(f: (gl: GL, canvas: HTMLCanvasElement) => void) {
   let canvas = document.createElement('canvas');

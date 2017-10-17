@@ -14,18 +14,18 @@
  * limitations under the License.
  */
 
-import {AvailableCapacity, CHUNK_MANAGER_RPC_ID, CHUNK_QUEUE_MANAGER_RPC_ID, ChunkPriorityTier, ChunkSourceParametersConstructor, ChunkState} from 'neuroglancer/chunk_manager/base';
-import {CancellationToken, CancellationTokenSource} from 'neuroglancer/util/cancellation';
-import {Disposable} from 'neuroglancer/util/disposable';
-import {LinkedListOperations} from 'neuroglancer/util/linked_list';
-import LinkedList0 from 'neuroglancer/util/linked_list.0';
-import LinkedList1 from 'neuroglancer/util/linked_list.1';
-import {StringMemoize} from 'neuroglancer/util/memoize';
-import {ComparisonFunction, PairingHeapOperations} from 'neuroglancer/util/pairing_heap';
-import PairingHeap0 from 'neuroglancer/util/pairing_heap.0';
-import PairingHeap1 from 'neuroglancer/util/pairing_heap.1';
-import {NullarySignal} from 'neuroglancer/util/signal';
-import {initializeSharedObjectCounterpart, registerSharedObject, RPC, SharedObject, SharedObjectCounterpart} from 'neuroglancer/worker_rpc';
+import {AvailableCapacity, CHUNK_MANAGER_RPC_ID, CHUNK_QUEUE_MANAGER_RPC_ID, ChunkPriorityTier, ChunkSourceParametersConstructor, ChunkState} from './base';
+import {CancellationToken, CancellationTokenSource} from '../util/cancellation';
+import {Disposable} from '../util/disposable';
+import {LinkedListOperations} from '../util/linked_list';
+import LinkedList0 from '../util/linked_list.0';
+import LinkedList1 from '../util/linked_list.1';
+import {StringMemoize} from '../util/memoize';
+import {ComparisonFunction, PairingHeapOperations} from '../util/pairing_heap';
+import PairingHeap0 from '../util/pairing_heap.0';
+import PairingHeap1 from '../util/pairing_heap.1';
+import {NullarySignal} from '../util/signal';
+import {initializeSharedObjectCounterpart, registerSharedObject, RPC, SharedObject, SharedObjectCounterpart} from '../worker_rpc';
 
 const DEBUG_CHUNK_UPDATES = false;
 

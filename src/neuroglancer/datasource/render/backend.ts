@@ -14,17 +14,17 @@
  * limitations under the License.
  */
 
-import {registerChunkSource} from 'neuroglancer/chunk_manager/backend';
-import {PointMatchChunkSourceParameters, TileChunkSourceParameters} from 'neuroglancer/datasource/render/base';
-import {ChunkDecoder} from 'neuroglancer/sliceview/backend_chunk_decoders';
-import {decodeJpegChunk} from 'neuroglancer/sliceview/backend_chunk_decoders/jpeg';
-import {ParameterizedVectorGraphicsChunkSource, VectorGraphicsChunk} from 'neuroglancer/sliceview/vector_graphics/backend';
-import {ParameterizedVolumeChunkSource, VolumeChunk} from 'neuroglancer/sliceview/volume/backend';
-import {CancellationToken} from 'neuroglancer/util/cancellation';
-import {Float32ArrayBuilder} from 'neuroglancer/util/float32array_builder';
-import {vec3} from 'neuroglancer/util/geom';
-import {openShardedHttpRequest, sendHttpJsonPostRequest, sendHttpRequest} from 'neuroglancer/util/http_request';
-import {parseArray, verify3dVec, verifyObject, verifyString} from 'neuroglancer/util/json';
+import {registerChunkSource} from '../../chunk_manager/backend';
+import {PointMatchChunkSourceParameters, TileChunkSourceParameters} from './base';
+import {ChunkDecoder} from '../../sliceview/backend_chunk_decoders';
+import {decodeJpegChunk} from '../../sliceview/backend_chunk_decoders/jpeg';
+import {ParameterizedVectorGraphicsChunkSource, VectorGraphicsChunk} from '../../sliceview/vector_graphics/backend';
+import {ParameterizedVolumeChunkSource, VolumeChunk} from '../../sliceview/volume/backend';
+import {CancellationToken} from '../../util/cancellation';
+import {Float32ArrayBuilder} from '../../util/float32array_builder';
+import {vec3} from '../../util/geom';
+import {openShardedHttpRequest, sendHttpJsonPostRequest, sendHttpRequest} from '../../util/http_request';
+import {parseArray, verify3dVec, verifyObject, verifyString} from '../../util/json';
 
 let chunkDecoders = new Map<string, ChunkDecoder>();
 chunkDecoders.set('jpg', decodeJpegChunk);

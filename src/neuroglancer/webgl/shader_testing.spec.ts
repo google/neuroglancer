@@ -14,9 +14,9 @@
  * limitations under the License.
  */
 
-import {vec4} from 'neuroglancer/util/geom';
-import {glsl_packFloat, glsl_packFloat01ToFixedPoint, unpackFloat01FromFixedPoint} from 'neuroglancer/webgl/shader_lib';
-import {fragmentShaderTest} from 'neuroglancer/webgl/shader_testing';
+import {vec4} from '../util/geom';
+import {glsl_packFloat, glsl_packFloat01ToFixedPoint, unpackFloat01FromFixedPoint} from './shader_lib';
+import {fragmentShaderTest} from './shader_testing';
 
 describe('FragmentShaderTester', () => {
   it('value passthrough', () => {

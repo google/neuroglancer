@@ -14,10 +14,10 @@
  * limitations under the License.
  */
 
-import {RefCounted} from 'neuroglancer/util/disposable';
-import {mat3, mat4, quat, vec3} from 'neuroglancer/util/geom';
-import {parseFiniteVec, verifyObject, verifyObjectProperty} from 'neuroglancer/util/json';
-import {NullarySignal} from 'neuroglancer/util/signal';
+import {RefCounted} from './util/disposable';
+import {mat3, mat4, quat, vec3} from './util/geom';
+import {parseFiniteVec, verifyObject, verifyObjectProperty} from './util/json';
+import {NullarySignal} from './util/signal';
 
 export class VoxelSize extends RefCounted {
   size: vec3;

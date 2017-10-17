@@ -14,14 +14,14 @@
  * limitations under the License.
  */
 
-import {RefCounted} from 'neuroglancer/util/disposable';
-import {identityMat4} from 'neuroglancer/util/geom';
-import {getObjectId} from 'neuroglancer/util/object_id';
-import {GL} from 'neuroglancer/webgl/context';
-import {ShaderModule, ShaderProgram} from 'neuroglancer/webgl/shader';
-import {getSquareCornersBuffer} from 'neuroglancer/webgl/square_corners_buffer';
-import {resizeTexture} from 'neuroglancer/webgl/texture';
-import {defineCopyFragmentShader, elementWiseTextureShader} from 'neuroglancer/webgl/trivial_shaders';
+import {RefCounted} from '../util/disposable';
+import {identityMat4} from '../util/geom';
+import {getObjectId} from '../util/object_id';
+import {GL} from './context';
+import {ShaderModule, ShaderProgram} from './shader';
+import {getSquareCornersBuffer} from './square_corners_buffer';
+import {resizeTexture} from './texture';
+import {defineCopyFragmentShader, elementWiseTextureShader} from './trivial_shaders';
 
 export abstract class SizeManaged extends RefCounted {
   width = Number.NaN;

@@ -14,9 +14,9 @@
  * limitations under the License.
  */
 
-import {VertexAttributeInfo} from 'neuroglancer/single_mesh/base';
-import {getAttributeTextureFormats, SingleMeshShaderManager, VertexChunkData} from 'neuroglancer/single_mesh/frontend';
-import {fragmentShaderTest} from 'neuroglancer/webgl/shader_testing';
+import {VertexAttributeInfo} from './base';
+import {getAttributeTextureFormats, SingleMeshShaderManager, VertexChunkData} from './frontend';
+import {fragmentShaderTest} from '../webgl/shader_testing';
 
 describe('single_mesh/frontend', () => {
   it('attributes', () => {

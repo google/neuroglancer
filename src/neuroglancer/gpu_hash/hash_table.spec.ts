@@ -14,8 +14,8 @@
  * limitations under the License.
  */
 
-import {HashMapUint64, HashSetUint64} from 'neuroglancer/gpu_hash/hash_table';
-import {Uint64} from 'neuroglancer/util/uint64';
+import {HashMapUint64, HashSetUint64} from './hash_table';
+import {Uint64} from '../util/uint64';
 
 describe('gpu_hash/hash_table', () => {
   it('HashSetUint64', () => {

@@ -14,9 +14,9 @@
  * limitations under the License.
  */
 
-import {RefCounted} from 'neuroglancer/util/disposable';
-import {NullarySignal} from 'neuroglancer/util/signal';
-import {Trackable} from 'neuroglancer/util/trackable';
+import {RefCounted} from './util/disposable';
+import {NullarySignal} from './util/signal';
+import {Trackable} from './util/trackable';
 
 export class TrackableBoolean implements Trackable {
   get value() {

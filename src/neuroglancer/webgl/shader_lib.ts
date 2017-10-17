@@ -14,8 +14,8 @@
  * limitations under the License.
  */
 
-import {DataType} from 'neuroglancer/util/data_type';
-import {Endianness, ENDIANNESS} from 'neuroglancer/util/endian';
+import {DataType} from '../util/data_type';
+import {Endianness, ENDIANNESS} from '../util/endian';
 
 
 /**

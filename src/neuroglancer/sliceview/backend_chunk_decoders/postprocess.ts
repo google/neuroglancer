@@ -18,11 +18,11 @@
  * Converts raw data volumes to the appropriate format required by the frontend.
  */
 
-import {DataType} from 'neuroglancer/sliceview/base';
-import {encodeChannels as encodeChannelsUint32} from 'neuroglancer/sliceview/compressed_segmentation/encode_uint32';
-import {encodeChannels as encodeChannelsUint64} from 'neuroglancer/sliceview/compressed_segmentation/encode_uint64';
-import {VolumeChunk} from 'neuroglancer/sliceview/volume/backend';
-import {Uint32ArrayBuilder} from 'neuroglancer/util/uint32array_builder';
+import {DataType} from '../base';
+import {encodeChannels as encodeChannelsUint32} from '../compressed_segmentation/encode_uint32';
+import {encodeChannels as encodeChannelsUint64} from '../compressed_segmentation/encode_uint64';
+import {VolumeChunk} from '../volume/backend';
+import {Uint32ArrayBuilder} from '../../util/uint32array_builder';
 
 const tempBuffer = new Uint32ArrayBuilder(20000);
 const tempVolumeSize = new Array<number>(4);

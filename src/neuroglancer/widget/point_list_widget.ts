@@ -19,13 +19,13 @@
  * Defines a widget for displaying a list of point locations.
  */
 
-import {AnnotationPointList} from 'neuroglancer/annotation/point_list';
-import {WatchableValue} from 'neuroglancer/trackable_value';
-import {RefCounted} from 'neuroglancer/util/disposable';
-import {removeChildren, removeFromParent} from 'neuroglancer/util/dom';
-import {Signal} from 'neuroglancer/util/signal';
+import {AnnotationPointList} from '../annotation/point_list';
+import {WatchableValue} from '../trackable_value';
+import {RefCounted} from '../util/disposable';
+import {removeChildren, removeFromParent} from '../util/dom';
+import {Signal} from '../util/signal';
 
-require('neuroglancer/noselect.css');
+require('../noselect.css');
 require('./point_list_widget.css');
 
 export class PointListWidget extends RefCounted {

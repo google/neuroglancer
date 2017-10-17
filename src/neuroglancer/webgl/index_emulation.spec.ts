@@ -14,8 +14,8 @@
  * limitations under the License.
  */
 
-import {IndexBufferAttributeHelper, makeIndexBuffer} from 'neuroglancer/webgl/index_emulation';
-import {fragmentShaderTest} from 'neuroglancer/webgl/shader_testing';
+import {IndexBufferAttributeHelper, makeIndexBuffer} from './index_emulation';
+import {fragmentShaderTest} from './shader_testing';
 
 describe('webgl/index_emulation', () => {
   it('indexBuffer', () => {

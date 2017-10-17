@@ -14,23 +14,23 @@
  * limitations under the License.
  */
 
-import 'neuroglancer/datasource/brainmaps/api_backend';
+import './api_backend';
 
-import {registerChunkSource} from 'neuroglancer/chunk_manager/backend';
-import {ChangeStackAwarePayload, HttpCall, makeRequest, MeshFragmentPayload, SkeletonPayload, SubvolumePayload} from 'neuroglancer/datasource/brainmaps/api';
-import {ChangeSpec, MeshSourceParameters, SkeletonSourceParameters, VolumeChunkEncoding, VolumeSourceParameters} from 'neuroglancer/datasource/brainmaps/base';
-import {decodeJsonManifestChunk, decodeTriangleVertexPositionsAndIndices, FragmentChunk, ManifestChunk, ParameterizedMeshSource} from 'neuroglancer/mesh/backend';
-import {Bounds} from 'neuroglancer/segmentation_display_state/base';
-import {decodeSkeletonVertexPositionsAndIndices, ParameterizedSkeletonSource, SkeletonChunk} from 'neuroglancer/skeleton/backend';
-import {decodeCompressedSegmentationChunk} from 'neuroglancer/sliceview/backend_chunk_decoders/compressed_segmentation';
-import {decodeJpegChunk} from 'neuroglancer/sliceview/backend_chunk_decoders/jpeg';
-import {decodeRawChunk} from 'neuroglancer/sliceview/backend_chunk_decoders/raw';
-import {ParameterizedVolumeChunkSource, VolumeChunk} from 'neuroglancer/sliceview/volume/backend';
-import {CancellationToken} from 'neuroglancer/util/cancellation';
-import {Endianness} from 'neuroglancer/util/endian';
-import {vec3Key, vec3, decodeMorton} from 'neuroglancer/util/geom';
-import {verifyObject, verifyObjectProperty, verifyStringArray} from 'neuroglancer/util/json';
-import {Uint64} from 'neuroglancer/util/uint64';
+import {registerChunkSource} from '../../chunk_manager/backend';
+import {ChangeStackAwarePayload, HttpCall, makeRequest, MeshFragmentPayload, SkeletonPayload, SubvolumePayload} from './api';
+import {ChangeSpec, MeshSourceParameters, SkeletonSourceParameters, VolumeChunkEncoding, VolumeSourceParameters} from './base';
+import {decodeJsonManifestChunk, decodeTriangleVertexPositionsAndIndices, FragmentChunk, ManifestChunk, ParameterizedMeshSource} from '../../mesh/backend';
+import {Bounds} from '../../segmentation_display_state/base';
+import {decodeSkeletonVertexPositionsAndIndices, ParameterizedSkeletonSource, SkeletonChunk} from '../../skeleton/backend';
+import {decodeCompressedSegmentationChunk} from '../../sliceview/backend_chunk_decoders/compressed_segmentation';
+import {decodeJpegChunk} from '../../sliceview/backend_chunk_decoders/jpeg';
+import {decodeRawChunk} from '../../sliceview/backend_chunk_decoders/raw';
+import {ParameterizedVolumeChunkSource, VolumeChunk} from '../../sliceview/volume/backend';
+import {CancellationToken} from '../../util/cancellation';
+import {Endianness} from '../../util/endian';
+import {vec3Key, vec3, decodeMorton} from '../../util/geom';
+import {verifyObject, verifyObjectProperty, verifyStringArray} from '../../util/json';
+import {Uint64} from '../../util/uint64';
 
 const CHUNK_DECODERS = new Map([
   [

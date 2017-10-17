@@ -14,10 +14,10 @@
  * limitations under the License.
  */
 
-import {makeDefaultKeyBindings} from 'neuroglancer/default_key_bindings';
-import {makeDefaultViewer} from 'neuroglancer/default_viewer';
-import {bindDefaultCopyHandler, bindDefaultPasteHandler} from 'neuroglancer/ui/default_clipboard_handling';
-import {UrlHashBinding} from 'neuroglancer/ui/url_hash_binding';
+import {makeDefaultKeyBindings} from '../default_key_bindings';
+import {makeDefaultViewer} from '../default_viewer';
+import {bindDefaultCopyHandler, bindDefaultPasteHandler} from './default_clipboard_handling';
+import {UrlHashBinding} from './url_hash_binding';
 
 /**
  * Sets up the default neuroglancer viewer.

@@ -20,10 +20,10 @@
  * See http://docs.scipy.org/doc/numpy-dev/neps/npy-format.html
  */
 
-import {TypedArrayConstructor} from 'neuroglancer/util/array';
-import {DataType} from 'neuroglancer/util/data_type';
-import {convertEndian16, convertEndian32, Endianness} from 'neuroglancer/util/endian';
-import {pythonLiteralParse} from 'neuroglancer/util/json';
+import {TypedArrayConstructor} from './array';
+import {DataType} from './data_type';
+import {convertEndian16, convertEndian32, Endianness} from './endian';
+import {pythonLiteralParse} from './json';
 
 interface SupportedDataType {
   arrayConstructor: TypedArrayConstructor;

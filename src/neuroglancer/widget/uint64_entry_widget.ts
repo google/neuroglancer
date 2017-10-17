@@ -14,12 +14,12 @@
  * limitations under the License.
  */
 
-import {RefCounted} from 'neuroglancer/util/disposable';
-import {removeFromParent} from 'neuroglancer/util/dom';
-import {Signal} from 'neuroglancer/util/signal';
-import {Uint64} from 'neuroglancer/util/uint64';
+import {RefCounted} from '../util/disposable';
+import {removeFromParent} from '../util/dom';
+import {Signal} from '../util/signal';
+import {Uint64} from '../util/uint64';
 
-require('neuroglancer/noselect.css');
+require('../noselect.css');
 require('./uint64_entry_widget.css');
 
 export class Uint64EntryWidget extends RefCounted {

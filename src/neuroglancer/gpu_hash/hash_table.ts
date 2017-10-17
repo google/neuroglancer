@@ -14,8 +14,8 @@
  * limitations under the License.
  */
 
-import {HashFunction} from 'neuroglancer/gpu_hash/hash_function';
-import {Uint64} from 'neuroglancer/util/uint64';
+import {HashFunction} from './hash_function';
+import {Uint64} from '../util/uint64';
 
 export const NUM_ALTERNATIVES = 3;
 

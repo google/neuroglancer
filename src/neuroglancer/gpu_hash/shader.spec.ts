@@ -14,12 +14,12 @@
  * limitations under the License.
  */
 
-import {PRIME_MODULUS} from 'neuroglancer/gpu_hash/hash_function';
-import {HashMapUint64, HashSetUint64, NUM_ALTERNATIVES} from 'neuroglancer/gpu_hash/hash_table';
-import {GPUHashTable, HashMapShaderManager, HashSetShaderManager} from 'neuroglancer/gpu_hash/shader';
-import {Uint64} from 'neuroglancer/util/uint64';
-import {encodeBytesToFloat32, glsl_exactDot} from 'neuroglancer/webgl/shader_lib';
-import {fragmentShaderTest} from 'neuroglancer/webgl/shader_testing';
+import {PRIME_MODULUS} from './hash_function';
+import {HashMapUint64, HashSetUint64, NUM_ALTERNATIVES} from './hash_table';
+import {GPUHashTable, HashMapShaderManager, HashSetShaderManager} from './shader';
+import {Uint64} from '../util/uint64';
+import {encodeBytesToFloat32, glsl_exactDot} from '../webgl/shader_lib';
+import {fragmentShaderTest} from '../webgl/shader_testing';
 
 const COUNT = 100;
 

@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-import {PairingHeapOperations} from 'neuroglancer/util/pairing_heap';
+import {PairingHeapOperations} from './pairing_heap';
 
 interface Node<T> {
   child1: T|null;

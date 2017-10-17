@@ -29,8 +29,8 @@
  * understand.
  */
 
-import {RefCounted} from 'neuroglancer/util/disposable';
-import {removeFromParent} from 'neuroglancer/util/dom';
+import {RefCounted} from '../util/disposable';
+import {removeFromParent} from '../util/dom';
 
 require('./scale_bar.css');
 

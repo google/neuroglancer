@@ -16,14 +16,14 @@
 
 import debounce from 'lodash/debounce';
 import throttle from 'lodash/throttle';
-import {RenderedPanel} from 'neuroglancer/display_context';
-import {SpatialPosition} from 'neuroglancer/navigation_state';
-import {RefCounted} from 'neuroglancer/util/disposable';
-import {BoundingBox, vec3} from 'neuroglancer/util/geom';
-import {NullarySignal} from 'neuroglancer/util/signal';
-import {addSignalBinding, removeSignalBinding, SignalBindingUpdater} from 'neuroglancer/util/signal_binding_updater';
-import {Uint64} from 'neuroglancer/util/uint64';
-import {VisibilityPriorityAggregator, WatchableVisibilityPriority} from 'neuroglancer/visibility_priority/frontend';
+import {RenderedPanel} from './display_context';
+import {SpatialPosition} from './navigation_state';
+import {RefCounted} from './util/disposable';
+import {BoundingBox, vec3} from './util/geom';
+import {NullarySignal} from './util/signal';
+import {addSignalBinding, removeSignalBinding, SignalBindingUpdater} from './util/signal_binding_updater';
+import {Uint64} from './util/uint64';
+import {VisibilityPriorityAggregator, WatchableVisibilityPriority} from './visibility_priority/frontend';
 
 export class RenderLayer extends RefCounted {
   ready = false;

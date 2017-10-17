@@ -14,16 +14,16 @@
  * limitations under the License.
  */
 
-import {Chunk, ChunkSource} from 'neuroglancer/chunk_manager/backend';
-import {decodeVertexPositionsAndIndices} from 'neuroglancer/mesh/backend';
-import {SegmentationLayerSharedObjectCounterpart} from 'neuroglancer/segmentation_display_state/backend';
-import {forEachVisibleSegment, getObjectKey} from 'neuroglancer/segmentation_display_state/base';
-import {SKELETON_LAYER_RPC_ID} from 'neuroglancer/skeleton/base';
-import {TypedArray} from 'neuroglancer/util/array';
-import {Endianness} from 'neuroglancer/util/endian';
-import {Uint64} from 'neuroglancer/util/uint64';
-import {getBasePriority, getPriorityTier} from 'neuroglancer/visibility_priority/backend';
-import {registerSharedObject, RPC} from 'neuroglancer/worker_rpc';
+import {Chunk, ChunkSource} from '../chunk_manager/backend';
+import {decodeVertexPositionsAndIndices} from '../mesh/backend';
+import {SegmentationLayerSharedObjectCounterpart} from '../segmentation_display_state/backend';
+import {forEachVisibleSegment, getObjectKey} from '../segmentation_display_state/base';
+import {SKELETON_LAYER_RPC_ID} from './base';
+import {TypedArray} from '../util/array';
+import {Endianness} from '../util/endian';
+import {Uint64} from '../util/uint64';
+import {getBasePriority, getPriorityTier} from '../visibility_priority/backend';
+import {registerSharedObject, RPC} from '../worker_rpc';
 
 const SKELETON_CHUNK_PRIORITY = 60;
 

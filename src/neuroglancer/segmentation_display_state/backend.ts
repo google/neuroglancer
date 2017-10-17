@@ -15,16 +15,16 @@
  */
 
 // Import to register the shared object types.
-import 'neuroglancer/shared_disjoint_sets';
-import 'neuroglancer/uint64_set';
+import '../shared_disjoint_sets';
+import '../uint64_set';
 
-import {withChunkManager} from 'neuroglancer/chunk_manager/backend';
-import {Bounds, VisibleSegmentsState} from 'neuroglancer/segmentation_display_state/base';
-import {SharedDisjointUint64Sets} from 'neuroglancer/shared_disjoint_sets';
-import {Uint64Set} from 'neuroglancer/uint64_set';
-import {withSharedVisibility} from 'neuroglancer/visibility_priority/backend';
-import {RPC, SharedObjectCounterpart} from 'neuroglancer/worker_rpc';
-import {SharedWatchableValue} from 'neuroglancer/shared_watchable_value';
+import {withChunkManager} from '../chunk_manager/backend';
+import {Bounds, VisibleSegmentsState} from './base';
+import {SharedDisjointUint64Sets} from '../shared_disjoint_sets';
+import {Uint64Set} from '../uint64_set';
+import {withSharedVisibility} from '../visibility_priority/backend';
+import {RPC, SharedObjectCounterpart} from '../worker_rpc';
+import {SharedWatchableValue} from '../shared_watchable_value';
 
 const Base = withSharedVisibility(withChunkManager(SharedObjectCounterpart));
 

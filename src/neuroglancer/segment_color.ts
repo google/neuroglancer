@@ -14,14 +14,14 @@
  * limitations under the License.
  */
 
-import {HashFunction, PRIME_MODULUS} from 'neuroglancer/gpu_hash/hash_function';
-import {glsl_hashFunction} from 'neuroglancer/gpu_hash/shader';
-import {hsvToRgb} from 'neuroglancer/util/colorspace';
-import {NullarySignal} from 'neuroglancer/util/signal';
-import {Uint64} from 'neuroglancer/util/uint64';
-import {GL} from 'neuroglancer/webgl/context';
-import {ShaderBuilder, ShaderProgram} from 'neuroglancer/webgl/shader';
-import {glsl_hsvToRgb, glsl_uint64} from 'neuroglancer/webgl/shader_lib';
+import {HashFunction, PRIME_MODULUS} from './gpu_hash/hash_function';
+import {glsl_hashFunction} from './gpu_hash/shader';
+import {hsvToRgb} from './util/colorspace';
+import {NullarySignal} from './util/signal';
+import {Uint64} from './util/uint64';
+import {GL} from './webgl/context';
+import {ShaderBuilder, ShaderProgram} from './webgl/shader';
+import {glsl_hsvToRgb, glsl_uint64} from './webgl/shader_lib';
 
 const NUM_COMPONENTS = 2;
 

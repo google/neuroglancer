@@ -15,18 +15,18 @@
  */
 
 import debounce from 'lodash/debounce';
-import {CancellationToken, CancellationTokenSource} from 'neuroglancer/util/cancellation';
-import {BasicCompletionResult, Completion, CompletionWithDescription} from 'neuroglancer/util/completion';
-import {RefCounted} from 'neuroglancer/util/disposable';
-import {removeChildren, removeFromParent} from 'neuroglancer/util/dom';
-import {positionDropdown} from 'neuroglancer/util/dropdown';
-import {KeyboardShortcutHandler, KeySequenceMap} from 'neuroglancer/util/keyboard_shortcut_handler';
-import {longestCommonPrefix} from 'neuroglancer/util/longest_common_prefix';
-import {scrollIntoViewIfNeeded} from 'neuroglancer/util/scroll_into_view';
-import {Signal} from 'neuroglancer/util/signal';
-import {associateLabelWithElement} from 'neuroglancer/widget/associate_label';
+import {CancellationToken, CancellationTokenSource} from '../util/cancellation';
+import {BasicCompletionResult, Completion, CompletionWithDescription} from '../util/completion';
+import {RefCounted} from '../util/disposable';
+import {removeChildren, removeFromParent} from '../util/dom';
+import {positionDropdown} from '../util/dropdown';
+import {KeyboardShortcutHandler, KeySequenceMap} from '../util/keyboard_shortcut_handler';
+import {longestCommonPrefix} from '../util/longest_common_prefix';
+import {scrollIntoViewIfNeeded} from '../util/scroll_into_view';
+import {Signal} from '../util/signal';
+import {associateLabelWithElement} from './associate_label';
 
-export {Completion, CompletionWithDescription} from 'neuroglancer/util/completion';
+export {Completion, CompletionWithDescription} from '../util/completion';
 
 require('./autocomplete.css');
 

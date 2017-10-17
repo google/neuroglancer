@@ -14,14 +14,14 @@
  * limitations under the License.
  */
 
-import {SliceView} from 'neuroglancer/sliceview/frontend';
-import {VolumeSourceOptions} from 'neuroglancer/sliceview/volume/base';
-import {MultiscaleVolumeChunkSource} from 'neuroglancer/sliceview/volume/frontend';
-import {RenderLayer} from 'neuroglancer/sliceview/volume/renderlayer';
-import {TrackableAlphaValue, trackableAlphaValue} from 'neuroglancer/trackable_alpha';
-import {vec3} from 'neuroglancer/util/geom';
-import {makeTrackableFragmentMain, makeWatchableShaderError, TrackableFragmentMain} from 'neuroglancer/webgl/dynamic_shader';
-import {ShaderBuilder} from 'neuroglancer/webgl/shader';
+import {SliceView} from '../frontend';
+import {VolumeSourceOptions} from './base';
+import {MultiscaleVolumeChunkSource} from './frontend';
+import {RenderLayer} from './renderlayer';
+import {TrackableAlphaValue, trackableAlphaValue} from '../../trackable_alpha';
+import {vec3} from '../../util/geom';
+import {makeTrackableFragmentMain, makeWatchableShaderError, TrackableFragmentMain} from '../../webgl/dynamic_shader';
+import {ShaderBuilder} from '../../webgl/shader';
 
 export const FRAGMENT_MAIN_START = '//NEUROGLANCER_IMAGE_RENDERLAYER_FRAGMENT_MAIN_START';
 
@@ -30,7 +30,7 @@ const DEFAULT_FRAGMENT_MAIN = `void main() {
 }
 `;
 
-const glsl_COLORMAPS = require<string>('neuroglancer/webgl/colormaps.glsl');
+const glsl_COLORMAPS = require<string>('../../webgl/colormaps.glsl');
 
 export function getTrackableFragmentMain(value = DEFAULT_FRAGMENT_MAIN) {
   return makeTrackableFragmentMain(value);

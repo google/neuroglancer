@@ -14,19 +14,19 @@
  * limitations under the License.
  */
 
-import {ChunkManager} from 'neuroglancer/chunk_manager/frontend';
-import {DisplayContext} from 'neuroglancer/display_context';
-import {LayerManager, MouseSelectionState} from 'neuroglancer/layer';
-import * as L from 'neuroglancer/layout';
-import {NavigationState, OrientationState, Pose} from 'neuroglancer/navigation_state';
-import {PerspectivePanel} from 'neuroglancer/perspective_view/panel';
-import {SliceView} from 'neuroglancer/sliceview/frontend';
-import {SliceViewPanel} from 'neuroglancer/sliceview/panel';
-import {TrackableBoolean} from 'neuroglancer/trackable_boolean';
-import {RefCounted} from 'neuroglancer/util/disposable';
-import {removeChildren} from 'neuroglancer/util/dom';
-import {quat} from 'neuroglancer/util/geom';
-import {VisibilityPrioritySpecification} from 'neuroglancer/viewer_state';
+import {ChunkManager} from './chunk_manager/frontend';
+import {DisplayContext} from './display_context';
+import {LayerManager, MouseSelectionState} from './layer';
+import * as L from './layout';
+import {NavigationState, OrientationState, Pose} from './navigation_state';
+import {PerspectivePanel} from './perspective_view/panel';
+import {SliceView} from './sliceview/frontend';
+import {SliceViewPanel} from './sliceview/panel';
+import {TrackableBoolean} from './trackable_boolean';
+import {RefCounted} from './util/disposable';
+import {removeChildren} from './util/dom';
+import {quat} from './util/geom';
+import {VisibilityPrioritySpecification} from './viewer_state';
 
 export interface SliceViewViewerState {
   chunkManager: ChunkManager;

@@ -15,10 +15,10 @@
  */
 
 import debounce from 'lodash/debounce';
-import {WatchableValue} from 'neuroglancer/trackable_value';
-import {RefCounted} from 'neuroglancer/util/disposable';
-import {urlSafeParse, urlSafeStringify, verifyObject} from 'neuroglancer/util/json';
-import {getCachedJson, Trackable} from 'neuroglancer/util/trackable';
+import {WatchableValue} from '../trackable_value';
+import {RefCounted} from '../util/disposable';
+import {urlSafeParse, urlSafeStringify, verifyObject} from '../util/json';
+import {getCachedJson, Trackable} from '../util/trackable';
 
 /**
  * @file Implements a binding between a Trackable value and the URL hash state.

@@ -14,35 +14,35 @@
  * limitations under the License.
  */
 
-import {CoordinateTransform} from 'neuroglancer/coordinate_transform';
-import {getMeshSource, getSkeletonSource} from 'neuroglancer/datasource/factory';
-import {UserLayer, UserLayerDropdown} from 'neuroglancer/layer';
-import {LayerListSpecification, registerLayerType, registerVolumeLayerType} from 'neuroglancer/layer_specification';
-import {getVolumeWithStatusMessage} from 'neuroglancer/layer_specification';
-import {MeshSource} from 'neuroglancer/mesh/frontend';
-import {MeshLayer} from 'neuroglancer/mesh/frontend';
-import {Overlay} from 'neuroglancer/overlay';
-import {SegmentColorHash} from 'neuroglancer/segment_color';
-import {SegmentationDisplayState3D, SegmentSelectionState, Uint64MapEntry} from 'neuroglancer/segmentation_display_state/frontend';
-import {SharedDisjointUint64Sets} from 'neuroglancer/shared_disjoint_sets';
-import {FRAGMENT_MAIN_START as SKELETON_FRAGMENT_MAIN_START, getTrackableFragmentMain, PerspectiveViewSkeletonLayer, SkeletonLayer, SkeletonLayerDisplayState, SliceViewPanelSkeletonLayer} from 'neuroglancer/skeleton/frontend';
-import {VolumeType} from 'neuroglancer/sliceview/volume/base';
-import {SegmentationRenderLayer, SliceViewSegmentationDisplayState} from 'neuroglancer/sliceview/volume/segmentation_renderlayer';
-import {trackableAlphaValue} from 'neuroglancer/trackable_alpha';
-import {TrackableBoolean, TrackableBooleanCheckbox} from 'neuroglancer/trackable_boolean';
-import {Uint64Set} from 'neuroglancer/uint64_set';
-import {parseArray, verifyObjectProperty, verifyOptionalString, verify3dVec} from 'neuroglancer/util/json';
-import {Uint64} from 'neuroglancer/util/uint64';
-import {makeWatchableShaderError} from 'neuroglancer/webgl/dynamic_shader';
-import {RangeWidget} from 'neuroglancer/widget/range';
-import {SegmentSetWidget} from 'neuroglancer/widget/segment_set_widget';
-import {ShaderCodeWidget} from 'neuroglancer/widget/shader_code_widget';
-import {Uint64EntryWidget} from 'neuroglancer/widget/uint64_entry_widget';
-import {SharedWatchableValue} from 'neuroglancer/shared_watchable_value';
-import {Bounds} from 'neuroglancer/segmentation_display_state/base';
-import {vec3} from 'neuroglancer/util/geom';
+import {CoordinateTransform} from './coordinate_transform';
+import {getMeshSource, getSkeletonSource} from './datasource/factory';
+import {UserLayer, UserLayerDropdown} from './layer';
+import {LayerListSpecification, registerLayerType, registerVolumeLayerType} from './layer_specification';
+import {getVolumeWithStatusMessage} from './layer_specification';
+import {MeshSource} from './mesh/frontend';
+import {MeshLayer} from './mesh/frontend';
+import {Overlay} from './overlay';
+import {SegmentColorHash} from './segment_color';
+import {SegmentationDisplayState3D, SegmentSelectionState, Uint64MapEntry} from './segmentation_display_state/frontend';
+import {SharedDisjointUint64Sets} from './shared_disjoint_sets';
+import {FRAGMENT_MAIN_START as SKELETON_FRAGMENT_MAIN_START, getTrackableFragmentMain, PerspectiveViewSkeletonLayer, SkeletonLayer, SkeletonLayerDisplayState, SliceViewPanelSkeletonLayer} from './skeleton/frontend';
+import {VolumeType} from './sliceview/volume/base';
+import {SegmentationRenderLayer, SliceViewSegmentationDisplayState} from './sliceview/volume/segmentation_renderlayer';
+import {trackableAlphaValue} from './trackable_alpha';
+import {TrackableBoolean, TrackableBooleanCheckbox} from './trackable_boolean';
+import {Uint64Set} from './uint64_set';
+import {parseArray, verifyObjectProperty, verifyOptionalString, verify3dVec} from './util/json';
+import {Uint64} from './util/uint64';
+import {makeWatchableShaderError} from './webgl/dynamic_shader';
+import {RangeWidget} from './widget/range';
+import {SegmentSetWidget} from './widget/segment_set_widget';
+import {ShaderCodeWidget} from './widget/shader_code_widget';
+import {Uint64EntryWidget} from './widget/uint64_entry_widget';
+import {SharedWatchableValue} from './shared_watchable_value';
+import {Bounds} from './segmentation_display_state/base';
+import {vec3} from './util/geom';
 
-require('neuroglancer/noselect.css');
+require('./noselect.css');
 require('./segmentation_user_layer.css');
 
 const SELECTED_ALPHA_JSON_KEY = 'selectedAlpha';

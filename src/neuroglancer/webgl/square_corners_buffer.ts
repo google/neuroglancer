@@ -14,10 +14,10 @@
  * limitations under the License.
  */
 
-import {RefCountedValue} from 'neuroglancer/util/disposable';
-import {Buffer} from 'neuroglancer/webgl/buffer';
-import {GL_ARRAY_BUFFER, GL_STATIC_DRAW} from 'neuroglancer/webgl/constants';
-import {GL} from 'neuroglancer/webgl/context';
+import {RefCountedValue} from '../util/disposable';
+import {Buffer} from './buffer';
+import {GL_ARRAY_BUFFER, GL_STATIC_DRAW} from './constants';
+import {GL} from './context';
 
 export function getSquareCornersBuffer(gl: GL, startX = -1, startY = -1, endX = 1, endY = 1) {
   return gl.memoize

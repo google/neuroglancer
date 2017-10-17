@@ -14,10 +14,10 @@
  * limitations under the License.
  */
 
-import {RefCounted} from 'neuroglancer/util/disposable';
-import {NullarySignal} from 'neuroglancer/util/signal';
-import {WatchableVisibilityPriority} from 'neuroglancer/visibility_priority/frontend';
-import {GL, initializeWebGL} from 'neuroglancer/webgl/context';
+import {RefCounted} from './util/disposable';
+import {NullarySignal} from './util/signal';
+import {WatchableVisibilityPriority} from './visibility_priority/frontend';
+import {GL, initializeWebGL} from './webgl/context';
 
 export abstract class RenderedPanel extends RefCounted {
   gl: GL;

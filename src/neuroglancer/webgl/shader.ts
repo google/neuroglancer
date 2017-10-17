@@ -14,8 +14,8 @@
  * limitations under the License.
  */
 
-import {RefCounted} from 'neuroglancer/util/disposable';
-import {GL_FRAGMENT_SHADER, GL_VERTEX_SHADER} from 'neuroglancer/webgl/constants';
+import {RefCounted} from '../util/disposable';
+import {GL_FRAGMENT_SHADER, GL_VERTEX_SHADER} from './constants';
 
 const DEBUG_SHADER = false;
 

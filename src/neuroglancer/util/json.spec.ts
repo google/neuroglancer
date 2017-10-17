@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-import {normalizeStringLiteral, pythonLiteralParse, pythonLiteralToJSON, urlSafeParse, urlSafeStringify, urlSafeStringifyString, urlSafeToJSON} from 'neuroglancer/util/json';
+import {normalizeStringLiteral, pythonLiteralParse, pythonLiteralToJSON, urlSafeParse, urlSafeStringify, urlSafeStringifyString, urlSafeToJSON} from './json';
 
 describe('url safe json', () => {
   it('urlSafeStringifyString', () => {

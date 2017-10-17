@@ -14,14 +14,14 @@
  * limitations under the License.
  */
 
-import {findSourceGroup, getVolume, suggestLayerName, volumeCompleter} from 'neuroglancer/datasource/factory';
-import {LayerListSpecification, ManagedUserLayerWithSpecification} from 'neuroglancer/layer_specification';
-import {Overlay} from 'neuroglancer/overlay';
-import {DataType, VolumeType} from 'neuroglancer/sliceview/volume/base';
-import {CancellationToken, CancellationTokenSource} from 'neuroglancer/util/cancellation';
-import {associateLabelWithElement} from 'neuroglancer/widget/associate_label';
-import {AutocompleteTextInput, makeCompletionElementWithDescription} from 'neuroglancer/widget/autocomplete';
-import {makeHiddenSubmitButton} from 'neuroglancer/widget/hidden_submit_button';
+import {findSourceGroup, getVolume, suggestLayerName, volumeCompleter} from './datasource/factory';
+import {LayerListSpecification, ManagedUserLayerWithSpecification} from './layer_specification';
+import {Overlay} from './overlay';
+import {DataType, VolumeType} from './sliceview/volume/base';
+import {CancellationToken, CancellationTokenSource} from './util/cancellation';
+import {associateLabelWithElement} from './widget/associate_label';
+import {AutocompleteTextInput, makeCompletionElementWithDescription} from './widget/autocomplete';
+import {makeHiddenSubmitButton} from './widget/hidden_submit_button';
 
 require('./layer_dialog.css');
 

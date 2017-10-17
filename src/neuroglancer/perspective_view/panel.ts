@@ -14,22 +14,22 @@
  * limitations under the License.
  */
 
-import {AxesLineHelper} from 'neuroglancer/axes_lines';
-import {DisplayContext} from 'neuroglancer/display_context';
-import {makeRenderedPanelVisibleLayerTracker, MouseSelectionState} from 'neuroglancer/layer';
-import {PickIDManager} from 'neuroglancer/object_picking';
-import {PerspectiveViewRenderContext, PerspectiveViewRenderLayer} from 'neuroglancer/perspective_view/render_layer';
-import {RenderedDataPanel} from 'neuroglancer/rendered_data_panel';
-import {SliceView, SliceViewRenderHelper} from 'neuroglancer/sliceview/frontend';
-import {TrackableBoolean, TrackableBooleanCheckbox} from 'neuroglancer/trackable_boolean';
-import {kAxes, mat4, transformVectorByMat4, vec3, vec4} from 'neuroglancer/util/geom';
-import {startRelativeMouseDrag} from 'neuroglancer/util/mouse_drag';
-import {ViewerState} from 'neuroglancer/viewer_state';
-import {DepthBuffer, FramebufferConfiguration, makeTextureBuffers, OffscreenCopyHelper, TextureBuffer} from 'neuroglancer/webgl/offscreen';
-import {ShaderBuilder} from 'neuroglancer/webgl/shader';
-import {glsl_packFloat01ToFixedPoint, unpackFloat01FromFixedPoint} from 'neuroglancer/webgl/shader_lib';
+import {AxesLineHelper} from '../axes_lines';
+import {DisplayContext} from '../display_context';
+import {makeRenderedPanelVisibleLayerTracker, MouseSelectionState} from '../layer';
+import {PickIDManager} from '../object_picking';
+import {PerspectiveViewRenderContext, PerspectiveViewRenderLayer} from './render_layer';
+import {RenderedDataPanel} from '../rendered_data_panel';
+import {SliceView, SliceViewRenderHelper} from '../sliceview/frontend';
+import {TrackableBoolean, TrackableBooleanCheckbox} from '../trackable_boolean';
+import {kAxes, mat4, transformVectorByMat4, vec3, vec4} from '../util/geom';
+import {startRelativeMouseDrag} from '../util/mouse_drag';
+import {ViewerState} from '../viewer_state';
+import {DepthBuffer, FramebufferConfiguration, makeTextureBuffers, OffscreenCopyHelper, TextureBuffer} from '../webgl/offscreen';
+import {ShaderBuilder} from '../webgl/shader';
+import {glsl_packFloat01ToFixedPoint, unpackFloat01FromFixedPoint} from '../webgl/shader_lib';
 
-require('neuroglancer/noselect.css');
+require('../noselect.css');
 require('./panel.css');
 
 export interface PerspectiveViewerState extends ViewerState {

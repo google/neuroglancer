@@ -18,8 +18,8 @@
  * @file Defines a generic interface for a simple state tracking mechanism.
  */
 
-import {verifyObject} from 'neuroglancer/util/json';
-import {NullaryReadonlySignal, NullarySignal} from 'neuroglancer/util/signal';
+import {verifyObject} from './json';
+import {NullaryReadonlySignal, NullarySignal} from './signal';
 
 export interface Trackable {
   restoreState: (x: any) => void;

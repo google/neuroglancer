@@ -14,9 +14,9 @@
  * limitations under the License.
  */
 
-import {TrackableValue} from 'neuroglancer/trackable_value';
-import {RefCounted} from 'neuroglancer/util/disposable';
-import {removeFromParent} from 'neuroglancer/util/dom';
+import {TrackableValue} from '../trackable_value';
+import {RefCounted} from '../util/disposable';
+import {removeFromParent} from '../util/dom';
 
 require('./range.css');
 

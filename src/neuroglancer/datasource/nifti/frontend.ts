@@ -19,13 +19,13 @@
  * volumes.
  */
 
-import {ChunkManager} from 'neuroglancer/chunk_manager/frontend';
-import {registerDataSourceFactory} from 'neuroglancer/datasource/factory';
-import {GET_NIFTI_VOLUME_INFO_RPC_ID, NiftiVolumeInfo, VolumeSourceParameters} from 'neuroglancer/datasource/nifti/base';
-import {VolumeChunkSpecification, VolumeSourceOptions} from 'neuroglancer/sliceview/volume/base';
-import {defineParameterizedVolumeChunkSource, MultiscaleVolumeChunkSource as GenericMultiscaleVolumeChunkSource} from 'neuroglancer/sliceview/volume/frontend';
-import {CancellationToken, uncancelableToken} from 'neuroglancer/util/cancellation';
-import {kOneVec, mat4, translationRotationScaleZReflectionToMat4} from 'neuroglancer/util/geom';
+import {ChunkManager} from '../../chunk_manager/frontend';
+import {registerDataSourceFactory} from '../factory';
+import {GET_NIFTI_VOLUME_INFO_RPC_ID, NiftiVolumeInfo, VolumeSourceParameters} from './base';
+import {VolumeChunkSpecification, VolumeSourceOptions} from '../../sliceview/volume/base';
+import {defineParameterizedVolumeChunkSource, MultiscaleVolumeChunkSource as GenericMultiscaleVolumeChunkSource} from '../../sliceview/volume/frontend';
+import {CancellationToken, uncancelableToken} from '../../util/cancellation';
+import {kOneVec, mat4, translationRotationScaleZReflectionToMat4} from '../../util/geom';
 
 export class MultiscaleVolumeChunkSource implements GenericMultiscaleVolumeChunkSource {
   constructor(public chunkManager: ChunkManager, public url: string, public info: NiftiVolumeInfo) {

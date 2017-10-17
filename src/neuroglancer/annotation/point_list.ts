@@ -19,10 +19,10 @@
  * Defines a trackable in-memory list of point locations.
  */
 
-import {Float32ArrayBuilder} from 'neuroglancer/util/float32array_builder';
-import {vec3} from 'neuroglancer/util/geom';
-import {parseFixedLengthArray, verifyFiniteFloat} from 'neuroglancer/util/json';
-import {NullarySignal} from 'neuroglancer/util/signal';
+import {Float32ArrayBuilder} from '../util/float32array_builder';
+import {vec3} from '../util/geom';
+import {parseFixedLengthArray, verifyFiniteFloat} from '../util/json';
+import {NullarySignal} from '../util/signal';
 
 export class AnnotationPointList {
   points = new Float32ArrayBuilder();

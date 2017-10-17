@@ -14,15 +14,15 @@
  * limitations under the License.
  */
 
-import {SingleTextureChunkFormat} from 'neuroglancer/sliceview/single_texture_chunk_format';
-import {glsl_getPositionWithinChunk} from 'neuroglancer/sliceview/volume/renderlayer';
-import {getFortranOrderStrides} from 'neuroglancer/util/array';
-import {TypedArray} from 'neuroglancer/util/array';
-import {DataType} from 'neuroglancer/util/data_type';
-import {Disposable} from 'neuroglancer/util/disposable';
-import {vec3, vec3Key, vec4} from 'neuroglancer/util/geom';
-import {GL} from 'neuroglancer/webgl/context';
-import {fragmentShaderTest} from 'neuroglancer/webgl/shader_testing';
+import {SingleTextureChunkFormat} from './single_texture_chunk_format';
+import {glsl_getPositionWithinChunk} from './volume/renderlayer';
+import {getFortranOrderStrides} from '../util/array';
+import {TypedArray} from '../util/array';
+import {DataType} from '../util/data_type';
+import {Disposable} from '../util/disposable';
+import {vec3, vec3Key, vec4} from '../util/geom';
+import {GL} from '../webgl/context';
+import {fragmentShaderTest} from '../webgl/shader_testing';
 
 export function chunkFormatTest<TextureLayout extends Disposable>(
     dataType: DataType, volumeSize: vec4,

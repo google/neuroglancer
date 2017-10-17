@@ -15,10 +15,10 @@
  */
 
 
-import {vec3} from 'neuroglancer/util/geom';
-import {verify3dVec} from 'neuroglancer/util/json';
-import {NullarySignal} from 'neuroglancer/util/signal';
-import {Trackable} from 'neuroglancer/util/trackable';
+import {vec3} from './util/geom';
+import {verify3dVec} from './util/json';
+import {NullarySignal} from './util/signal';
+import {Trackable} from './util/trackable';
 
 export function trackableVec3(defaultValue = vec3.create()) {
   return new TrackableVec3(defaultValue, defaultValue);

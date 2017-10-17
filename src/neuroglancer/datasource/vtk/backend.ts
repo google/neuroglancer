@@ -14,11 +14,11 @@
  * limitations under the License.
  */
 
-import {GenericFileSource} from 'neuroglancer/chunk_manager/generic_file_source';
-import {parseVTK} from 'neuroglancer/datasource/vtk/parse';
-import {registerSingleMeshFactory, SingleMesh} from 'neuroglancer/single_mesh/backend';
-import {DataType} from 'neuroglancer/util/data_type';
-import {maybeDecompressGzip} from 'neuroglancer/util/gzip';
+import {GenericFileSource} from '../../chunk_manager/generic_file_source';
+import {parseVTK} from './parse';
+import {registerSingleMeshFactory, SingleMesh} from '../../single_mesh/backend';
+import {DataType} from '../../util/data_type';
+import {maybeDecompressGzip} from '../../util/gzip';
 
 /**
  * This needs to be a global function, because it identifies the instance of GenericFileSource to

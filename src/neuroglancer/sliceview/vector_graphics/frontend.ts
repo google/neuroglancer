@@ -14,17 +14,17 @@
  * limitations under the License.
  */
 
-import {ChunkSourceParametersConstructor} from 'neuroglancer/chunk_manager/base';
-import {ChunkManager} from 'neuroglancer/chunk_manager/frontend';
-import {MultiscaleSliceViewChunkSource, SliceViewChunk, SliceViewChunkSource} from 'neuroglancer/sliceview/frontend';
-import {SliceView} from 'neuroglancer/sliceview/frontend';
-import {RenderLayer as GenericSliceViewRenderLayer} from 'neuroglancer/sliceview/renderlayer';
-import {VECTOR_GRAPHICS_RENDERLAYER_RPC_ID, VectorGraphicsChunkSource as VectorGraphicsChunkSourceInterface, VectorGraphicsChunkSpecification, VectorGraphicsSourceOptions} from 'neuroglancer/sliceview/vector_graphics/base';
-import {stableStringify} from 'neuroglancer/util/json';
-import {Buffer} from 'neuroglancer/webgl/buffer';
-import {GL} from 'neuroglancer/webgl/context';
-import {ShaderBuilder, ShaderProgram} from 'neuroglancer/webgl/shader';
-import {RPC, RpcId, SharedObject} from 'neuroglancer/worker_rpc';
+import {ChunkSourceParametersConstructor} from '../../chunk_manager/base';
+import {ChunkManager} from '../../chunk_manager/frontend';
+import {MultiscaleSliceViewChunkSource, SliceViewChunk, SliceViewChunkSource} from '../frontend';
+import {SliceView} from '../frontend';
+import {RenderLayer as GenericSliceViewRenderLayer} from '../renderlayer';
+import {VECTOR_GRAPHICS_RENDERLAYER_RPC_ID, VectorGraphicsChunkSource as VectorGraphicsChunkSourceInterface, VectorGraphicsChunkSpecification, VectorGraphicsSourceOptions} from './base';
+import {stableStringify} from '../../util/json';
+import {Buffer} from '../../webgl/buffer';
+import {GL} from '../../webgl/context';
+import {ShaderBuilder, ShaderProgram} from '../../webgl/shader';
+import {RPC, RpcId, SharedObject} from '../../worker_rpc';
 
 export abstract class RenderLayer extends GenericSliceViewRenderLayer {
   sources: VectorGraphicsChunkSource[][];

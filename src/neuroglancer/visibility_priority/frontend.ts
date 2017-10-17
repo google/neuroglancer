@@ -14,10 +14,10 @@
  * limitations under the License.
  */
 
-import {SharedWatchableValue} from 'neuroglancer/shared_watchable_value';
-import {WatchableValue} from 'neuroglancer/trackable_value';
-import {RPC} from 'neuroglancer/worker_rpc';
-import {SharedObject} from 'neuroglancer/worker_rpc';
+import {SharedWatchableValue} from '../shared_watchable_value';
+import {WatchableValue} from '../trackable_value';
+import {RPC} from '../worker_rpc';
+import {SharedObject} from '../worker_rpc';
 
 /**
  * Numeric value specifying a visibility or prefetch priority.

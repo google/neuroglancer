@@ -14,8 +14,8 @@
  * limitations under the License.
  */
 
-import {DataType, VolumeType} from 'neuroglancer/sliceview/volume/base';
-import {mat4, quat, vec3} from 'neuroglancer/util/geom';
+import {DataType, VolumeType} from '../../sliceview/volume/base';
+import {mat4, quat, vec3} from '../../util/geom';
 
 export const GET_NIFTI_VOLUME_INFO_RPC_ID = 'nifti/getNiftiVolumeInfo';
 

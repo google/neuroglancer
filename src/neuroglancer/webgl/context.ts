@@ -14,8 +14,8 @@
  * limitations under the License.
  */
 
-import {RefCounted} from 'neuroglancer/util/disposable';
-import {Memoize} from 'neuroglancer/util/memoize';
+import {RefCounted} from '../util/disposable';
+import {Memoize} from '../util/memoize';
 
 export interface GL extends WebGLRenderingContext {
   memoize: Memoize<any, RefCounted>;

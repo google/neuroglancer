@@ -16,8 +16,7 @@
     "newLine": "LF",
     "baseUrl": ".",
     "paths": {
-      "*": ["*"],
-      "neuroglancer/*": ["src/neuroglancer/*"]
+      "*": ["*"]
     },
     "typeRoots": []
   },

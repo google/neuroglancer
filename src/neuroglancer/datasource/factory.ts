@@ -14,15 +14,15 @@
  * limitations under the License.
  */
 
-import {ChunkManager} from 'neuroglancer/chunk_manager/frontend';
-import {MeshSource} from 'neuroglancer/mesh/frontend';
-import {SkeletonSource} from 'neuroglancer/skeleton/frontend';
-import {VectorGraphicsType} from 'neuroglancer/sliceview/vector_graphics/base';
-import {MultiscaleVectorGraphicsChunkSource} from 'neuroglancer/sliceview/vector_graphics/frontend';
-import {VolumeType} from 'neuroglancer/sliceview/volume/base';
-import {MultiscaleVolumeChunkSource} from 'neuroglancer/sliceview/volume/frontend';
-import {CancellationToken, uncancelableToken} from 'neuroglancer/util/cancellation';
-import {applyCompletionOffset, CompletionWithDescription} from 'neuroglancer/util/completion';
+import {ChunkManager} from '../chunk_manager/frontend';
+import {MeshSource} from '../mesh/frontend';
+import {SkeletonSource} from '../skeleton/frontend';
+import {VectorGraphicsType} from '../sliceview/vector_graphics/base';
+import {MultiscaleVectorGraphicsChunkSource} from '../sliceview/vector_graphics/frontend';
+import {VolumeType} from '../sliceview/volume/base';
+import {MultiscaleVolumeChunkSource} from '../sliceview/volume/frontend';
+import {CancellationToken, uncancelableToken} from '../util/cancellation';
+import {applyCompletionOffset, CompletionWithDescription} from '../util/completion';
 
 export type Completion = CompletionWithDescription;
 

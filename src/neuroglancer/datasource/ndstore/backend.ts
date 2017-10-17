@@ -14,15 +14,15 @@
  * limitations under the License.
  */
 
-import {registerChunkSource} from 'neuroglancer/chunk_manager/backend';
-import {VolumeChunkSourceParameters} from 'neuroglancer/datasource/ndstore/base';
-import {ChunkDecoder} from 'neuroglancer/sliceview/backend_chunk_decoders';
-import {decodeJpegChunk} from 'neuroglancer/sliceview/backend_chunk_decoders/jpeg';
-import {decodeNdstoreNpzChunk} from 'neuroglancer/sliceview/backend_chunk_decoders/ndstoreNpz';
-import {decodeRawChunk} from 'neuroglancer/sliceview/backend_chunk_decoders/raw';
-import {ParameterizedVolumeChunkSource, VolumeChunk} from 'neuroglancer/sliceview/volume/backend';
-import {CancellationToken} from 'neuroglancer/util/cancellation';
-import {openShardedHttpRequest, sendHttpRequest} from 'neuroglancer/util/http_request';
+import {registerChunkSource} from '../../chunk_manager/backend';
+import {VolumeChunkSourceParameters} from './base';
+import {ChunkDecoder} from '../../sliceview/backend_chunk_decoders';
+import {decodeJpegChunk} from '../../sliceview/backend_chunk_decoders/jpeg';
+import {decodeNdstoreNpzChunk} from '../../sliceview/backend_chunk_decoders/ndstoreNpz';
+import {decodeRawChunk} from '../../sliceview/backend_chunk_decoders/raw';
+import {ParameterizedVolumeChunkSource, VolumeChunk} from '../../sliceview/volume/backend';
+import {CancellationToken} from '../../util/cancellation';
+import {openShardedHttpRequest, sendHttpRequest} from '../../util/http_request';
 
 let chunkDecoders = new Map<string, ChunkDecoder>();
 chunkDecoders.set('npz', decodeNdstoreNpzChunk);

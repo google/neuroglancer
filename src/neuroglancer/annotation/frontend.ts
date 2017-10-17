@@ -14,23 +14,23 @@
  * limitations under the License.
  */
 
-import {AnnotationPointList} from 'neuroglancer/annotation/point_list';
-import {ChunkManager} from 'neuroglancer/chunk_manager/frontend';
-import {MouseSelectionState, RenderLayer} from 'neuroglancer/layer';
-import {VoxelSize} from 'neuroglancer/navigation_state';
-import {PerspectiveViewRenderContext, PerspectiveViewRenderLayer} from 'neuroglancer/perspective_view/render_layer';
-import {SliceViewPanelRenderContext, SliceViewPanelRenderLayer} from 'neuroglancer/sliceview/panel';
-import {WatchableValue} from 'neuroglancer/trackable_value';
-import {RefCounted} from 'neuroglancer/util/disposable';
-import {mat4, vec3} from 'neuroglancer/util/geom';
-import {NullarySignal} from 'neuroglancer/util/signal';
-import {Uint64} from 'neuroglancer/util/uint64';
-import {Buffer} from 'neuroglancer/webgl/buffer';
-import {GL} from 'neuroglancer/webgl/context';
-import {countingBufferShaderModule, disableCountingBuffer, getCountingBuffer} from 'neuroglancer/webgl/index_emulation';
-import {ShaderBuilder, ShaderModule, ShaderProgram} from 'neuroglancer/webgl/shader';
-import {glsl_addUint32, setVec4FromUint32} from 'neuroglancer/webgl/shader_lib';
-import {getSquareCornersBuffer} from 'neuroglancer/webgl/square_corners_buffer';
+import {AnnotationPointList} from './point_list';
+import {ChunkManager} from '../chunk_manager/frontend';
+import {MouseSelectionState, RenderLayer} from '../layer';
+import {VoxelSize} from '../navigation_state';
+import {PerspectiveViewRenderContext, PerspectiveViewRenderLayer} from '../perspective_view/render_layer';
+import {SliceViewPanelRenderContext, SliceViewPanelRenderLayer} from '../sliceview/panel';
+import {WatchableValue} from '../trackable_value';
+import {RefCounted} from '../util/disposable';
+import {mat4, vec3} from '../util/geom';
+import {NullarySignal} from '../util/signal';
+import {Uint64} from '../util/uint64';
+import {Buffer} from '../webgl/buffer';
+import {GL} from '../webgl/context';
+import {countingBufferShaderModule, disableCountingBuffer, getCountingBuffer} from '../webgl/index_emulation';
+import {ShaderBuilder, ShaderModule, ShaderProgram} from '../webgl/shader';
+import {glsl_addUint32, setVec4FromUint32} from '../webgl/shader_lib';
+import {getSquareCornersBuffer} from '../webgl/square_corners_buffer';
 
 const tempMat = mat4.create();
 const tempPickID = new Float32Array(4);

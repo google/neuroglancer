@@ -14,8 +14,8 @@
  * limitations under the License.
  */
 
-import {MouseSelectionState, RenderLayer} from 'neuroglancer/layer';
-import {Uint64} from 'neuroglancer/util/uint64';
+import {MouseSelectionState, RenderLayer} from './layer';
+import {Uint64} from './util/uint64';
 
 export class PickIDManager {
   /**

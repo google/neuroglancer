@@ -14,5 +14,5 @@
  * limitations under the License.
  */
 
-import 'neuroglancer/sliceview/uncompressed_chunk_format';
-import 'neuroglancer/sliceview/compressed_segmentation/chunk_format';
+import './uncompressed_chunk_format';
+import './compressed_segmentation/chunk_format';

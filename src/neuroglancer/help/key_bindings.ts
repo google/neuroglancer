@@ -14,8 +14,8 @@
  * limitations under the License.
  */
 
-import {Overlay} from 'neuroglancer/overlay';
-import {KeySequenceMap} from 'neuroglancer/util/keyboard_shortcut_handler';
+import {Overlay} from '../overlay';
+import {KeySequenceMap} from '../util/keyboard_shortcut_handler';
 
 require('./key_bindings.css');
 

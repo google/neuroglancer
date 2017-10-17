@@ -14,20 +14,20 @@
  * limitations under the License.
  */
 
-import {registerChunkSource} from 'neuroglancer/chunk_manager/backend';
-import {MeshSourceParameters, SkeletonSourceParameters, VolumeChunkEncoding, VolumeChunkSourceParameters} from 'neuroglancer/datasource/python/base';
-import {decodeTriangleVertexPositionsAndIndices, FragmentChunk, ManifestChunk, ParameterizedMeshSource} from 'neuroglancer/mesh/backend';
-import {decodeSkeletonVertexPositionsAndIndices, ParameterizedSkeletonSource, SkeletonChunk} from 'neuroglancer/skeleton/backend';
-import {VertexAttributeInfo} from 'neuroglancer/skeleton/base';
-import {ChunkDecoder} from 'neuroglancer/sliceview/backend_chunk_decoders';
-import {decodeJpegChunk} from 'neuroglancer/sliceview/backend_chunk_decoders/jpeg';
-import {decodeNdstoreNpzChunk} from 'neuroglancer/sliceview/backend_chunk_decoders/ndstoreNpz';
-import {decodeRawChunk} from 'neuroglancer/sliceview/backend_chunk_decoders/raw';
-import {ParameterizedVolumeChunkSource, VolumeChunk} from 'neuroglancer/sliceview/volume/backend';
-import {CancellationToken} from 'neuroglancer/util/cancellation';
-import {DATA_TYPE_BYTES} from 'neuroglancer/util/data_type';
-import {convertEndian16, convertEndian32, Endianness} from 'neuroglancer/util/endian';
-import {openShardedHttpRequest, sendHttpRequest} from 'neuroglancer/util/http_request';
+import {registerChunkSource} from '../../chunk_manager/backend';
+import {MeshSourceParameters, SkeletonSourceParameters, VolumeChunkEncoding, VolumeChunkSourceParameters} from './base';
+import {decodeTriangleVertexPositionsAndIndices, FragmentChunk, ManifestChunk, ParameterizedMeshSource} from '../../mesh/backend';
+import {decodeSkeletonVertexPositionsAndIndices, ParameterizedSkeletonSource, SkeletonChunk} from '../../skeleton/backend';
+import {VertexAttributeInfo} from '../../skeleton/base';
+import {ChunkDecoder} from '../../sliceview/backend_chunk_decoders';
+import {decodeJpegChunk} from '../../sliceview/backend_chunk_decoders/jpeg';
+import {decodeNdstoreNpzChunk} from '../../sliceview/backend_chunk_decoders/ndstoreNpz';
+import {decodeRawChunk} from '../../sliceview/backend_chunk_decoders/raw';
+import {ParameterizedVolumeChunkSource, VolumeChunk} from '../../sliceview/volume/backend';
+import {CancellationToken} from '../../util/cancellation';
+import {DATA_TYPE_BYTES} from '../../util/data_type';
+import {convertEndian16, convertEndian32, Endianness} from '../../util/endian';
+import {openShardedHttpRequest, sendHttpRequest} from '../../util/http_request';
 
 let chunkDecoders = new Map<VolumeChunkEncoding, ChunkDecoder>();
 chunkDecoders.set(VolumeChunkEncoding.NPZ, decodeNdstoreNpzChunk);

@@ -19,8 +19,8 @@
  * (opacity) values.
  */
 
-import {TrackableValue} from 'neuroglancer/trackable_value';
-import {verifyFiniteFloat} from 'neuroglancer/util/json';
+import {TrackableValue} from './trackable_value';
+import {verifyFiniteFloat} from './util/json';
 
 export type TrackableFiniteFloat = TrackableValue<number>;
 

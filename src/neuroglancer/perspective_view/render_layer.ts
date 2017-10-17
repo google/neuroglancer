@@ -14,10 +14,10 @@
  * limitations under the License.
  */
 
-import {VisibilityTrackedRenderLayer} from 'neuroglancer/layer';
-import {PickIDManager} from 'neuroglancer/object_picking';
-import {mat4, vec3} from 'neuroglancer/util/geom';
-import {ShaderModule} from 'neuroglancer/webgl/shader';
+import {VisibilityTrackedRenderLayer} from '../layer';
+import {PickIDManager} from '../object_picking';
+import {mat4, vec3} from '../util/geom';
+import {ShaderModule} from '../webgl/shader';
 
 export interface PerspectiveViewRenderContext {
   dataToDevice: mat4;

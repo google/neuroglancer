@@ -17,7 +17,7 @@
 /**
  * @file Main entry point for default neuroglancer viewer.
  */
-import {setupDefaultViewer} from 'neuroglancer/ui/default_viewer_setup';
+import {setupDefaultViewer} from './neuroglancer/ui/default_viewer_setup';
 
 window.addEventListener('DOMContentLoaded', () => {
   setupDefaultViewer();

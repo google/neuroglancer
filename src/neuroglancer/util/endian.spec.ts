@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-import {swapEndian16, swapEndian32} from 'neuroglancer/util/endian';
+import {swapEndian16, swapEndian32} from './endian';
 
 describe('endian', () => {
   it('swapEndian16', () => {

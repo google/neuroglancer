@@ -14,14 +14,14 @@
  * limitations under the License.
  */
 
-import {RefCounted} from 'neuroglancer/util/disposable';
-import {vec4} from 'neuroglancer/util/geom';
-import {GL} from 'neuroglancer/webgl/context';
-import {FramebufferConfiguration, makeTextureBuffers, TextureBuffer} from 'neuroglancer/webgl/offscreen';
-import {ShaderBuilder, ShaderProgram} from 'neuroglancer/webgl/shader';
-import {glsl_debugFunctions} from 'neuroglancer/webgl/shader_lib';
-import {getSquareCornersBuffer} from 'neuroglancer/webgl/square_corners_buffer';
-import {webglTest} from 'neuroglancer/webgl/testing';
+import {RefCounted} from '../util/disposable';
+import {vec4} from '../util/geom';
+import {GL} from './context';
+import {FramebufferConfiguration, makeTextureBuffers, TextureBuffer} from './offscreen';
+import {ShaderBuilder, ShaderProgram} from './shader';
+import {glsl_debugFunctions} from './shader_lib';
+import {getSquareCornersBuffer} from './square_corners_buffer';
+import {webglTest} from './testing';
 
 export class FragmentShaderTester extends RefCounted {
   builder = new ShaderBuilder(this.gl);

@@ -14,30 +14,30 @@
  * limitations under the License.
  */
 
-import {ChunkState} from 'neuroglancer/chunk_manager/base';
-import {Chunk, ChunkManager, ChunkSource} from 'neuroglancer/chunk_manager/frontend';
-import {CoordinateTransform} from 'neuroglancer/coordinate_transform';
-import {PerspectiveViewRenderContext, PerspectiveViewRenderLayer} from 'neuroglancer/perspective_view/render_layer';
-import {GET_SINGLE_MESH_INFO_RPC_ID, SINGLE_MESH_CHUNK_KEY, SINGLE_MESH_LAYER_RPC_ID, SINGLE_MESH_SOURCE_RPC_ID, SingleMeshInfo, SingleMeshSourceParameters, VertexAttributeInfo} from 'neuroglancer/single_mesh/base';
-import {TrackableValue} from 'neuroglancer/trackable_value';
-import {DataType} from 'neuroglancer/util/data_type';
-import {mat4, vec2, vec3} from 'neuroglancer/util/geom';
-import {parseArray, stableStringify, verifyOptionalString, verifyString} from 'neuroglancer/util/json';
-import {getObjectId} from 'neuroglancer/util/object_id';
-import {Uint64} from 'neuroglancer/util/uint64';
-import {withSharedVisibility} from 'neuroglancer/visibility_priority/frontend';
-import {Buffer} from 'neuroglancer/webgl/buffer';
-import {GL} from 'neuroglancer/webgl/context';
-import {makeWatchableShaderError} from 'neuroglancer/webgl/dynamic_shader';
-import {CountingBuffer, countingBufferShaderModule, disableCountingBuffer, getCountingBuffer, IndexBufferAttributeHelper, makeIndexBuffer} from 'neuroglancer/webgl/index_emulation';
-import {compute1dTextureFormat, compute1dTextureLayout, OneDimensionalTextureAccessHelper, OneDimensionalTextureFormat, setOneDimensionalTextureData} from 'neuroglancer/webgl/one_dimensional_texture_access';
-import {ShaderBuilder, ShaderModule, ShaderProgram} from 'neuroglancer/webgl/shader';
-import {getShaderType, glsl_addUint32, glsl_divmodUint32, setVec4FromUint32} from 'neuroglancer/webgl/shader_lib';
-import {registerSharedObjectOwner, RPC, SharedObject} from 'neuroglancer/worker_rpc';
+import {ChunkState} from '../chunk_manager/base';
+import {Chunk, ChunkManager, ChunkSource} from '../chunk_manager/frontend';
+import {CoordinateTransform} from '../coordinate_transform';
+import {PerspectiveViewRenderContext, PerspectiveViewRenderLayer} from '../perspective_view/render_layer';
+import {GET_SINGLE_MESH_INFO_RPC_ID, SINGLE_MESH_CHUNK_KEY, SINGLE_MESH_LAYER_RPC_ID, SINGLE_MESH_SOURCE_RPC_ID, SingleMeshInfo, SingleMeshSourceParameters, VertexAttributeInfo} from './base';
+import {TrackableValue} from '../trackable_value';
+import {DataType} from '../util/data_type';
+import {mat4, vec2, vec3} from '../util/geom';
+import {parseArray, stableStringify, verifyOptionalString, verifyString} from '../util/json';
+import {getObjectId} from '../util/object_id';
+import {Uint64} from '../util/uint64';
+import {withSharedVisibility} from '../visibility_priority/frontend';
+import {Buffer} from '../webgl/buffer';
+import {GL} from '../webgl/context';
+import {makeWatchableShaderError} from '../webgl/dynamic_shader';
+import {CountingBuffer, countingBufferShaderModule, disableCountingBuffer, getCountingBuffer, IndexBufferAttributeHelper, makeIndexBuffer} from '../webgl/index_emulation';
+import {compute1dTextureFormat, compute1dTextureLayout, OneDimensionalTextureAccessHelper, OneDimensionalTextureFormat, setOneDimensionalTextureData} from '../webgl/one_dimensional_texture_access';
+import {ShaderBuilder, ShaderModule, ShaderProgram} from '../webgl/shader';
+import {getShaderType, glsl_addUint32, glsl_divmodUint32, setVec4FromUint32} from '../webgl/shader_lib';
+import {registerSharedObjectOwner, RPC, SharedObject} from '../worker_rpc';
 
 export const FRAGMENT_MAIN_START = '//NEUROGLANCER_SINGLE_MESH_LAYER_FRAGMENT_MAIN_START';
 
-const glsl_COLORMAPS = require<string>('neuroglancer/webgl/colormaps.glsl');
+const glsl_COLORMAPS = require<string>('../webgl/colormaps.glsl');
 
 const DEFAULT_FRAGMENT_MAIN = `void main() {
   emitGray();

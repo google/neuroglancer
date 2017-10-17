@@ -14,23 +14,23 @@
  * limitations under the License.
  */
 
-import {ChunkState} from 'neuroglancer/chunk_manager/base';
-import {Chunk, ChunkManager, ChunkSource} from 'neuroglancer/chunk_manager/frontend';
-import {LayerManager} from 'neuroglancer/layer';
-import {NavigationState} from 'neuroglancer/navigation_state';
-import {SLICEVIEW_RPC_ID, SliceViewBase, SliceViewChunkSource as SliceViewChunkSourceInterface, SliceViewChunkSpecification, SliceViewSourceOptions} from 'neuroglancer/sliceview/base';
-import {ChunkLayout} from 'neuroglancer/sliceview/chunk_layout';
-import {RenderLayer} from 'neuroglancer/sliceview/renderlayer';
-import {RefCounted} from 'neuroglancer/util/disposable';
-import {mat4, rectifyTransformMatrixIfAxisAligned, vec3, vec3Key, vec4} from 'neuroglancer/util/geom';
-import {getObjectId} from 'neuroglancer/util/object_id';
-import {NullarySignal} from 'neuroglancer/util/signal';
-import {withSharedVisibility} from 'neuroglancer/visibility_priority/frontend';
-import {GL} from 'neuroglancer/webgl/context';
-import {FramebufferConfiguration, makeTextureBuffers, StencilBuffer} from 'neuroglancer/webgl/offscreen';
-import {ShaderBuilder, ShaderModule, ShaderProgram} from 'neuroglancer/webgl/shader';
-import {getSquareCornersBuffer} from 'neuroglancer/webgl/square_corners_buffer';
-import {registerSharedObjectOwner, RPC} from 'neuroglancer/worker_rpc';
+import {ChunkState} from '../chunk_manager/base';
+import {Chunk, ChunkManager, ChunkSource} from '../chunk_manager/frontend';
+import {LayerManager} from '../layer';
+import {NavigationState} from '../navigation_state';
+import {SLICEVIEW_RPC_ID, SliceViewBase, SliceViewChunkSource as SliceViewChunkSourceInterface, SliceViewChunkSpecification, SliceViewSourceOptions} from './base';
+import {ChunkLayout} from './chunk_layout';
+import {RenderLayer} from './renderlayer';
+import {RefCounted} from '../util/disposable';
+import {mat4, rectifyTransformMatrixIfAxisAligned, vec3, vec3Key, vec4} from '../util/geom';
+import {getObjectId} from '../util/object_id';
+import {NullarySignal} from '../util/signal';
+import {withSharedVisibility} from '../visibility_priority/frontend';
+import {GL} from '../webgl/context';
+import {FramebufferConfiguration, makeTextureBuffers, StencilBuffer} from '../webgl/offscreen';
+import {ShaderBuilder, ShaderModule, ShaderProgram} from '../webgl/shader';
+import {getSquareCornersBuffer} from '../webgl/square_corners_buffer';
+import {registerSharedObjectOwner, RPC} from '../worker_rpc';
 
 export type GenericChunkKey = string;
 

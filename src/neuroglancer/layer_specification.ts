@@ -14,18 +14,18 @@
  * limitations under the License.
  */
 
-import {ChunkManager} from 'neuroglancer/chunk_manager/frontend';
-import {getVolume, GetVolumeOptions} from 'neuroglancer/datasource/factory';
-import {LayerManager, LayerSelectedValues, ManagedUserLayer, UserLayer} from 'neuroglancer/layer';
-import {VoxelSize} from 'neuroglancer/navigation_state';
-import {VolumeType} from 'neuroglancer/sliceview/volume/base';
-import {MultiscaleVolumeChunkSource} from 'neuroglancer/sliceview/volume/frontend';
-import {StatusMessage} from 'neuroglancer/status';
-import {RefCounted} from 'neuroglancer/util/disposable';
-import {vec3} from 'neuroglancer/util/geom';
-import {verifyObject, verifyObjectProperty, verifyOptionalString} from 'neuroglancer/util/json';
-import {NullarySignal, Signal} from 'neuroglancer/util/signal';
-import {Trackable} from 'neuroglancer/util/trackable';
+import {ChunkManager} from './chunk_manager/frontend';
+import {getVolume, GetVolumeOptions} from './datasource/factory';
+import {LayerManager, LayerSelectedValues, ManagedUserLayer, UserLayer} from './layer';
+import {VoxelSize} from './navigation_state';
+import {VolumeType} from './sliceview/volume/base';
+import {MultiscaleVolumeChunkSource} from './sliceview/volume/frontend';
+import {StatusMessage} from './status';
+import {RefCounted} from './util/disposable';
+import {vec3} from './util/geom';
+import {verifyObject, verifyObjectProperty, verifyOptionalString} from './util/json';
+import {NullarySignal, Signal} from './util/signal';
+import {Trackable} from './util/trackable';
 
 export function getVolumeWithStatusMessage(
     chunkManager: ChunkManager, x: string,

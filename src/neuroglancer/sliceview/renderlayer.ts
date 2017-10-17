@@ -14,13 +14,13 @@
  * limitations under the License.
  */
 
-import {ChunkManager} from 'neuroglancer/chunk_manager/frontend';
-import {RenderLayer as GenericRenderLayer} from 'neuroglancer/layer';
-import {SliceView, SliceViewChunkSource} from 'neuroglancer/sliceview/frontend';
-import {BoundingBox, vec3} from 'neuroglancer/util/geom';
-import {makeWatchableShaderError, WatchableShaderError} from 'neuroglancer/webgl/dynamic_shader';
-import {ShaderBuilder, ShaderProgram} from 'neuroglancer/webgl/shader';
-import {RpcId} from 'neuroglancer/worker_rpc';
+import {ChunkManager} from '../chunk_manager/frontend';
+import {RenderLayer as GenericRenderLayer} from '../layer';
+import {SliceView, SliceViewChunkSource} from './frontend';
+import {BoundingBox, vec3} from '../util/geom';
+import {makeWatchableShaderError, WatchableShaderError} from '../webgl/dynamic_shader';
+import {ShaderBuilder, ShaderProgram} from '../webgl/shader';
+import {RpcId} from '../worker_rpc';
 
 const tempVec3 = vec3.create();
 

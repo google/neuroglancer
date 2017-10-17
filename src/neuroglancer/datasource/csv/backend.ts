@@ -14,11 +14,11 @@
  * limitations under the License.
  */
 
-import {GenericFileSource} from 'neuroglancer/chunk_manager/generic_file_source';
-import {registerSingleMeshVertexAttributesFactory, SingleMeshVertexAttributes} from 'neuroglancer/single_mesh/backend';
-import {VertexAttributeInfo} from 'neuroglancer/single_mesh/base';
-import {DataType} from 'neuroglancer/util/data_type';
-import {maybeDecompressGzip} from 'neuroglancer/util/gzip';
+import {GenericFileSource} from '../../chunk_manager/generic_file_source';
+import {registerSingleMeshVertexAttributesFactory, SingleMeshVertexAttributes} from '../../single_mesh/backend';
+import {VertexAttributeInfo} from '../../single_mesh/base';
+import {DataType} from '../../util/data_type';
+import {maybeDecompressGzip} from '../../util/gzip';
 
 function parseCSVFromArrayBuffer(buffer: ArrayBuffer): SingleMeshVertexAttributes {
   const decoder = new TextDecoder();

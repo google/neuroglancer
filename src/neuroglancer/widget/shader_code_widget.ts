@@ -18,11 +18,11 @@ import 'codemirror/addon/lint/lint.js';
 
 import CodeMirror from 'codemirror';
 import debounce from 'lodash/debounce';
-import {WatchableValue} from 'neuroglancer/trackable_value';
-import {RefCounted} from 'neuroglancer/util/disposable';
-import {removeFromParent} from 'neuroglancer/util/dom';
-import {WatchableShaderError} from 'neuroglancer/webgl/dynamic_shader';
-import {ShaderCompilationError, ShaderLinkError} from 'neuroglancer/webgl/shader';
+import {WatchableValue} from '../trackable_value';
+import {RefCounted} from '../util/disposable';
+import {removeFromParent} from '../util/dom';
+import {WatchableShaderError} from '../webgl/dynamic_shader';
+import {ShaderCompilationError, ShaderLinkError} from '../webgl/shader';
 
 require('./shader_code_widget.css');
 require('codemirror/lib/codemirror.css');

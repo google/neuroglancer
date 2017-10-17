@@ -14,17 +14,17 @@
  * limitations under the License.
  */
 
-import {ChunkState} from 'neuroglancer/chunk_manager/base';
-import {SliceView} from 'neuroglancer/sliceview/frontend';
-import {VectorGraphicsSourceOptions} from 'neuroglancer/sliceview/vector_graphics/base';
-import {MultiscaleVectorGraphicsChunkSource, RenderLayer as GenericVectorGraphicsRenderLayer, VectorGraphicsChunkSource} from 'neuroglancer/sliceview/vector_graphics/frontend';
-import {TrackableAlphaValue, trackableAlphaValue} from 'neuroglancer/trackable_alpha';
-import {TrackableFiniteFloat, trackableFiniteFloat} from 'neuroglancer/trackable_finite_float';
-import {trackableVec3, TrackableVec3} from 'neuroglancer/trackable_vec3';
-import {mat4, vec3} from 'neuroglancer/util/geom';
-import {Buffer} from 'neuroglancer/webgl/buffer';
-import {GL_FLOAT} from 'neuroglancer/webgl/constants';
-import {ShaderBuilder, ShaderProgram} from 'neuroglancer/webgl/shader';
+import {ChunkState} from '../../chunk_manager/base';
+import {SliceView} from '../frontend';
+import {VectorGraphicsSourceOptions} from './base';
+import {MultiscaleVectorGraphicsChunkSource, RenderLayer as GenericVectorGraphicsRenderLayer, VectorGraphicsChunkSource} from './frontend';
+import {TrackableAlphaValue, trackableAlphaValue} from '../../trackable_alpha';
+import {TrackableFiniteFloat, trackableFiniteFloat} from '../../trackable_finite_float';
+import {trackableVec3, TrackableVec3} from '../../trackable_vec3';
+import {mat4, vec3} from '../../util/geom';
+import {Buffer} from '../../webgl/buffer';
+import {GL_FLOAT} from '../../webgl/constants';
+import {ShaderBuilder, ShaderProgram} from '../../webgl/shader';
 
 const tempMat4 = mat4.create();
 

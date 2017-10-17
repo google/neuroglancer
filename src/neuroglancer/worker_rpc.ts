@@ -14,8 +14,8 @@
  * limitations under the License.
  */
 
-import {CANCELED, CancellationToken, CancellationTokenSource, makeCancelablePromise, uncancelableToken} from 'neuroglancer/util/cancellation';
-import {RefCounted} from 'neuroglancer/util/disposable';
+import {CANCELED, CancellationToken, CancellationTokenSource, makeCancelablePromise, uncancelableToken} from './util/cancellation';
+import {RefCounted} from './util/disposable';
 
 export type RPCHandler = (this: RPC, x: any) => void;
 

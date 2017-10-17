@@ -14,12 +14,12 @@
  * limitations under the License.
  */
 
-import {DisplayContext, RenderedPanel} from 'neuroglancer/display_context';
-import {MouseSelectionState} from 'neuroglancer/layer';
-import {NavigationState} from 'neuroglancer/navigation_state';
-import {AXES_NAMES, kAxes, vec3} from 'neuroglancer/util/geom';
-import {getWheelZoomAmount} from 'neuroglancer/util/wheel_zoom';
-import {ViewerState} from 'neuroglancer/viewer_state';
+import {DisplayContext, RenderedPanel} from './display_context';
+import {MouseSelectionState} from './layer';
+import {NavigationState} from './navigation_state';
+import {AXES_NAMES, kAxes, vec3} from './util/geom';
+import {getWheelZoomAmount} from './util/wheel_zoom';
+import {ViewerState} from './viewer_state';
 
 require('./rendered_data_panel.css');
 

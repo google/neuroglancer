@@ -14,10 +14,10 @@
  * limitations under the License.
  */
 
-import {DataType} from 'neuroglancer/util/data_type';
-import {compute1dTextureFormat, compute1dTextureLayout, OneDimensionalTextureAccessHelper, OneDimensionalTextureFormat, OneDimensionalTextureLayout, setOneDimensionalTextureData} from 'neuroglancer/webgl/one_dimensional_texture_access';
-import {glsl_uintleToFloat, glsl_unnormalizeUint8, setVec4FromUint32} from 'neuroglancer/webgl/shader_lib';
-import {fragmentShaderTest} from 'neuroglancer/webgl/shader_testing';
+import {DataType} from '../util/data_type';
+import {compute1dTextureFormat, compute1dTextureLayout, OneDimensionalTextureAccessHelper, OneDimensionalTextureFormat, OneDimensionalTextureLayout, setOneDimensionalTextureData} from './one_dimensional_texture_access';
+import {glsl_uintleToFloat, glsl_unnormalizeUint8, setVec4FromUint32} from './shader_lib';
+import {fragmentShaderTest} from './shader_testing';
 
 describe('one_dimensional_texture_access', () => {
   it('uint32 access works correctly', () => {

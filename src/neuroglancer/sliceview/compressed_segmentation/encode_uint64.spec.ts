@@ -14,11 +14,11 @@
  * limitations under the License.
  */
 
-import {decodeChannel, decodeChannels} from 'neuroglancer/sliceview/compressed_segmentation/decode_uint64';
-import {encodeBlock, encodeChannel, encodeChannels, newCache} from 'neuroglancer/sliceview/compressed_segmentation/encode_uint64';
-import {makeRandomUint64Array} from 'neuroglancer/sliceview/compressed_segmentation/test_util';
-import {prod3, prod4} from 'neuroglancer/util/geom';
-import {Uint32ArrayBuilder} from 'neuroglancer/util/uint32array_builder';
+import {decodeChannel, decodeChannels} from './decode_uint64';
+import {encodeBlock, encodeChannel, encodeChannels, newCache} from './encode_uint64';
+import {makeRandomUint64Array} from './test_util';
+import {prod3, prod4} from '../../util/geom';
+import {Uint32ArrayBuilder} from '../../util/uint32array_builder';
 
 describe('compressed_segmentation uint64', () => {
   describe('encodeBlock', () => {

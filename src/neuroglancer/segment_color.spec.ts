@@ -14,10 +14,10 @@
  * limitations under the License.
  */
 
-import {SegmentColorHash, SegmentColorShaderManager} from 'neuroglancer/segment_color';
-import {Uint64} from 'neuroglancer/util/uint64';
-import {encodeBytesToFloat32} from 'neuroglancer/webgl/shader_lib';
-import {fragmentShaderTest} from 'neuroglancer/webgl/shader_testing';
+import {SegmentColorHash, SegmentColorShaderManager} from './segment_color';
+import {Uint64} from './util/uint64';
+import {encodeBytesToFloat32} from './webgl/shader_lib';
+import {fragmentShaderTest} from './webgl/shader_testing';
 
 describe('segment_color', () => {
   it('the JavaScript implementation matches the WebGL shader implementation', () => {

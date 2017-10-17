@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-import {Uint64} from 'neuroglancer/util/uint64';
+import {Uint64} from './uint64';
 
 describe('uint64', () => {
   it('less', () => {

@@ -14,18 +14,18 @@
  * limitations under the License.
  */
 
-import {SingleTextureChunkFormat, SingleTextureVolumeChunk} from 'neuroglancer/sliceview/single_texture_chunk_format';
-import {DataType, VolumeChunkSpecification} from 'neuroglancer/sliceview/volume/base';
-import {VolumeChunkSource} from 'neuroglancer/sliceview/volume/frontend';
-import {ChunkFormatHandler, registerChunkFormatHandler} from 'neuroglancer/sliceview/volume/frontend';
-import {TypedArray, TypedArrayConstructor} from 'neuroglancer/util/array';
-import {RefCounted} from 'neuroglancer/util/disposable';
-import {vec2, vec3, vec3Key} from 'neuroglancer/util/geom';
-import {Uint64} from 'neuroglancer/util/uint64';
-import {GL} from 'neuroglancer/webgl/context';
-import {compute1dTextureFormat, compute3dTextureLayout, OneDimensionalTextureAccessHelper, setOneDimensionalTextureData} from 'neuroglancer/webgl/one_dimensional_texture_access';
-import {ShaderBuilder, ShaderProgram} from 'neuroglancer/webgl/shader';
-import {getShaderType} from 'neuroglancer/webgl/shader_lib';
+import {SingleTextureChunkFormat, SingleTextureVolumeChunk} from './single_texture_chunk_format';
+import {DataType, VolumeChunkSpecification} from './volume/base';
+import {VolumeChunkSource} from './volume/frontend';
+import {ChunkFormatHandler, registerChunkFormatHandler} from './volume/frontend';
+import {TypedArray, TypedArrayConstructor} from '../util/array';
+import {RefCounted} from '../util/disposable';
+import {vec2, vec3, vec3Key} from '../util/geom';
+import {Uint64} from '../util/uint64';
+import {GL} from '../webgl/context';
+import {compute1dTextureFormat, compute3dTextureLayout, OneDimensionalTextureAccessHelper, setOneDimensionalTextureData} from '../webgl/one_dimensional_texture_access';
+import {ShaderBuilder, ShaderProgram} from '../webgl/shader';
+import {getShaderType} from '../webgl/shader_lib';
 
 class TextureLayout extends RefCounted {
   dataWidth: number;

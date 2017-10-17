@@ -14,19 +14,19 @@
  * limitations under the License.
  */
 
-import {readSingleChannelValue as readSingleChannelValueUint32} from 'neuroglancer/sliceview/compressed_segmentation/decode_uint32';
-import {readSingleChannelValue as readSingleChannelValueUint64} from 'neuroglancer/sliceview/compressed_segmentation/decode_uint64';
-import {SingleTextureChunkFormat, SingleTextureVolumeChunk} from 'neuroglancer/sliceview/single_texture_chunk_format';
-import {DataType, VolumeChunkSpecification} from 'neuroglancer/sliceview/volume/base';
-import {ChunkFormatHandler, registerChunkFormatHandler} from 'neuroglancer/sliceview/volume/frontend';
-import {VolumeChunkSource} from 'neuroglancer/sliceview/volume/frontend';
-import {RefCounted} from 'neuroglancer/util/disposable';
-import {vec2, vec3, vec3Key} from 'neuroglancer/util/geom';
-import {Uint64} from 'neuroglancer/util/uint64';
-import {GL} from 'neuroglancer/webgl/context';
-import {compute1dTextureFormat, compute1dTextureLayout, OneDimensionalTextureAccessHelper, OneDimensionalTextureFormat, setOneDimensionalTextureData} from 'neuroglancer/webgl/one_dimensional_texture_access';
-import {ShaderBuilder, ShaderProgram} from 'neuroglancer/webgl/shader';
-import {getShaderType, glsl_getFortranOrderIndexFromNormalized, glsl_uint64, glsl_uintleToFloat, glsl_unnormalizeUint8} from 'neuroglancer/webgl/shader_lib';
+import {readSingleChannelValue as readSingleChannelValueUint32} from './decode_uint32';
+import {readSingleChannelValue as readSingleChannelValueUint64} from './decode_uint64';
+import {SingleTextureChunkFormat, SingleTextureVolumeChunk} from '../single_texture_chunk_format';
+import {DataType, VolumeChunkSpecification} from '../volume/base';
+import {ChunkFormatHandler, registerChunkFormatHandler} from '../volume/frontend';
+import {VolumeChunkSource} from '../volume/frontend';
+import {RefCounted} from '../../util/disposable';
+import {vec2, vec3, vec3Key} from '../../util/geom';
+import {Uint64} from '../../util/uint64';
+import {GL} from '../../webgl/context';
+import {compute1dTextureFormat, compute1dTextureLayout, OneDimensionalTextureAccessHelper, OneDimensionalTextureFormat, setOneDimensionalTextureData} from '../../webgl/one_dimensional_texture_access';
+import {ShaderBuilder, ShaderProgram} from '../../webgl/shader';
+import {getShaderType, glsl_getFortranOrderIndexFromNormalized, glsl_uint64, glsl_uintleToFloat, glsl_unnormalizeUint8} from '../../webgl/shader_lib';
 
 class TextureLayout extends RefCounted {
   dataWidth: number;

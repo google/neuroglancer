@@ -14,9 +14,9 @@
  * limitations under the License.
  */
 
-import {getObjectId} from 'neuroglancer/util/object_id';
-import {GL} from 'neuroglancer/webgl/context';
-import {ShaderBuilder, ShaderModule, ShaderProgram} from 'neuroglancer/webgl/shader';
+import {getObjectId} from '../util/object_id';
+import {GL} from './context';
+import {ShaderBuilder, ShaderModule, ShaderProgram} from './shader';
 
 export function defineCopyFragmentShader(builder: ShaderBuilder) {
   builder.setFragmentMain('gl_FragColor = getValue0();');

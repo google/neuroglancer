@@ -14,11 +14,11 @@
  * limitations under the License.
  */
 
-import {SharedDisjointUint64Sets} from 'neuroglancer/shared_disjoint_sets';
-import {Uint64Set} from 'neuroglancer/uint64_set';
-import {Uint64} from 'neuroglancer/util/uint64';
-import {vec3} from 'neuroglancer/util/geom';
-import {SharedWatchableValue} from 'neuroglancer/shared_watchable_value';
+import {SharedDisjointUint64Sets} from '../shared_disjoint_sets';
+import {Uint64Set} from '../uint64_set';
+import {Uint64} from '../util/uint64';
+import {vec3} from '../util/geom';
+import {SharedWatchableValue} from '../shared_watchable_value';
 
 export interface Bounds {
   center: vec3;

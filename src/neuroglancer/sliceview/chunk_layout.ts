@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-import {identityMat4, mat4, transformVectorByMat4, vec3} from 'neuroglancer/util/geom';
+import {identityMat4, mat4, transformVectorByMat4, vec3} from '../util/geom';
 
 export class ChunkLayout {
   /**

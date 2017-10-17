@@ -14,11 +14,11 @@
  * limitations under the License.
  */
 
-import {CANCELED, uncancelableToken} from 'neuroglancer/util/cancellation';
-import {removeFromParent} from 'neuroglancer/util/dom';
-import {parseArray, verifyObject, verifyString} from 'neuroglancer/util/json';
-import {getRandomHexString} from 'neuroglancer/util/random';
-import {Signal} from 'neuroglancer/util/signal';
+import {CANCELED, uncancelableToken} from './cancellation';
+import {removeFromParent} from './dom';
+import {parseArray, verifyObject, verifyString} from './json';
+import {getRandomHexString} from './random';
+import {Signal} from './signal';
 
 export const AUTH_SERVER = 'https://accounts.google.com/o/oauth2/auth';
 

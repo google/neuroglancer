@@ -14,20 +14,20 @@
  * limitations under the License.
  */
 
-import {HashMapUint64} from 'neuroglancer/gpu_hash/hash_table';
-import {GPUHashTable, HashMapShaderManager, HashSetShaderManager} from 'neuroglancer/gpu_hash/shader';
-import {SegmentColorShaderManager} from 'neuroglancer/segment_color';
-import {registerRedrawWhenSegmentationDisplayStateChanged, SegmentationDisplayState} from 'neuroglancer/segmentation_display_state/frontend';
-import {SliceView} from 'neuroglancer/sliceview/frontend';
-import {VolumeSourceOptions} from 'neuroglancer/sliceview/volume/base';
-import {MultiscaleVolumeChunkSource} from 'neuroglancer/sliceview/volume/frontend';
-import {RenderLayer} from 'neuroglancer/sliceview/volume/renderlayer';
-import {TrackableAlphaValue} from 'neuroglancer/trackable_alpha';
-import {TrackableBoolean} from 'neuroglancer/trackable_boolean';
-import {DisjointUint64Sets} from 'neuroglancer/util/disjoint_sets';
-import {vec3} from 'neuroglancer/util/geom';
-import {ShaderBuilder, ShaderProgram} from 'neuroglancer/webgl/shader';
-import {glsl_unnormalizeUint8} from 'neuroglancer/webgl/shader_lib';
+import {HashMapUint64} from '../../gpu_hash/hash_table';
+import {GPUHashTable, HashMapShaderManager, HashSetShaderManager} from '../../gpu_hash/shader';
+import {SegmentColorShaderManager} from '../../segment_color';
+import {registerRedrawWhenSegmentationDisplayStateChanged, SegmentationDisplayState} from '../../segmentation_display_state/frontend';
+import {SliceView} from '../frontend';
+import {VolumeSourceOptions} from './base';
+import {MultiscaleVolumeChunkSource} from './frontend';
+import {RenderLayer} from './renderlayer';
+import {TrackableAlphaValue} from '../../trackable_alpha';
+import {TrackableBoolean} from '../../trackable_boolean';
+import {DisjointUint64Sets} from '../../util/disjoint_sets';
+import {vec3} from '../../util/geom';
+import {ShaderBuilder, ShaderProgram} from '../../webgl/shader';
+import {glsl_unnormalizeUint8} from '../../webgl/shader_lib';
 
 const selectedSegmentForShader = new Float32Array(8);
 

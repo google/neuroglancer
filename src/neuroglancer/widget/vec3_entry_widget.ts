@@ -14,11 +14,11 @@
  * limitations under the License.
  */
 
-import {TrackableVec3} from 'neuroglancer/trackable_vec3.ts';
-import {RefCounted} from 'neuroglancer/util/disposable';
-import {vec3} from 'neuroglancer/util/geom';
-import {verifyFiniteFloat} from 'neuroglancer/util/json';
-import {Signal} from 'neuroglancer/util/signal';
+import {TrackableVec3} from '../trackable_vec3.ts';
+import {RefCounted} from '../util/disposable';
+import {vec3} from '../util/geom';
+import {verifyFiniteFloat} from '../util/json';
+import {Signal} from '../util/signal';
 
 require('./vec3.css');
 

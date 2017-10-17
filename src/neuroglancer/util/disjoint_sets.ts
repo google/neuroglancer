@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-import {Uint64} from 'neuroglancer/util/uint64';
+import {Uint64} from './uint64';
 
 const rankSymbol = Symbol('disjoint_sets:rank');
 const parentSymbol = Symbol('disjoint_sets:parent');

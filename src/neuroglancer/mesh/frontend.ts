@@ -14,19 +14,19 @@
  * limitations under the License.
  */
 
-import {ChunkSourceParametersConstructor, ChunkState} from 'neuroglancer/chunk_manager/base';
-import {Chunk, ChunkManager, ChunkSource} from 'neuroglancer/chunk_manager/frontend';
-import {FRAGMENT_SOURCE_RPC_ID, MESH_LAYER_RPC_ID} from 'neuroglancer/mesh/base';
-import {PerspectiveViewRenderContext, PerspectiveViewRenderLayer} from 'neuroglancer/perspective_view/render_layer';
-import {forEachSegmentToDraw, getObjectColor, registerRedrawWhenSegmentationDisplayState3DChanged, SegmentationDisplayState3D, SegmentationLayerSharedObject} from 'neuroglancer/segmentation_display_state/frontend';
-import {mat4, vec3, vec4} from 'neuroglancer/util/geom';
-import {stableStringify} from 'neuroglancer/util/json';
-import {getObjectId} from 'neuroglancer/util/object_id';
-import {Buffer} from 'neuroglancer/webgl/buffer';
-import {GL} from 'neuroglancer/webgl/context';
-import {ShaderBuilder, ShaderModule, ShaderProgram} from 'neuroglancer/webgl/shader';
-import {setVec4FromUint32} from 'neuroglancer/webgl/shader_lib';
-import {registerSharedObjectOwner, RPC} from 'neuroglancer/worker_rpc';
+import {ChunkSourceParametersConstructor, ChunkState} from '../chunk_manager/base';
+import {Chunk, ChunkManager, ChunkSource} from '../chunk_manager/frontend';
+import {FRAGMENT_SOURCE_RPC_ID, MESH_LAYER_RPC_ID} from './base';
+import {PerspectiveViewRenderContext, PerspectiveViewRenderLayer} from '../perspective_view/render_layer';
+import {forEachSegmentToDraw, getObjectColor, registerRedrawWhenSegmentationDisplayState3DChanged, SegmentationDisplayState3D, SegmentationLayerSharedObject} from '../segmentation_display_state/frontend';
+import {mat4, vec3, vec4} from '../util/geom';
+import {stableStringify} from '../util/json';
+import {getObjectId} from '../util/object_id';
+import {Buffer} from '../webgl/buffer';
+import {GL} from '../webgl/context';
+import {ShaderBuilder, ShaderModule, ShaderProgram} from '../webgl/shader';
+import {setVec4FromUint32} from '../webgl/shader_lib';
+import {registerSharedObjectOwner, RPC} from '../worker_rpc';
 
 export class MeshShaderManager {
   private tempLightVec = new Float32Array(4);

@@ -14,9 +14,9 @@
  * limitations under the License.
  */
 
-import {RefCounted} from 'neuroglancer/util/disposable';
-import {AXES_NAMES, vec3} from 'neuroglancer/util/geom';
-import {ViewerPositionState} from 'neuroglancer/viewer_state';
+import {RefCounted} from './util/disposable';
+import {AXES_NAMES, vec3} from './util/geom';
+import {ViewerPositionState} from './viewer_state';
 
 require('./position_status_panel.css');
 

@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-import {TypedArray} from 'neuroglancer/util/array';
+import {TypedArray} from './array';
 
 export function getRandomHexString(numBits = 128) {
   const numValues = Math.ceil(numBits / 32);

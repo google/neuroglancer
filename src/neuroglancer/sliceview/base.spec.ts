@@ -14,8 +14,8 @@
  * limitations under the License.
  */
 
-import {getNearIsotropicBlockSize} from 'neuroglancer/sliceview/base';
-import {vec3} from 'neuroglancer/util/geom';
+import {getNearIsotropicBlockSize} from './base';
+import {vec3} from '../util/geom';
 
 describe('sliceview/base', () => {
   it('getNearIsotropicBlockSize', () => {

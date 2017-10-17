@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-import {KeySequenceMap} from 'neuroglancer/util/keyboard_shortcut_handler';
+import {KeySequenceMap} from './util/keyboard_shortcut_handler';
 
 /**
  * This binds the default set of viewer key bindings.

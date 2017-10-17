@@ -14,9 +14,9 @@
  * limitations under the License.
  */
 
-import {ChunkLayoutOptions, getChunkDataSizes, getCombinedTransform, getNearIsotropicBlockSize, SliceViewChunkSource, SliceViewChunkSpecification, SliceViewChunkSpecificationBaseOptions, SliceViewSourceOptions} from 'neuroglancer/sliceview/base';
-import {DATA_TYPE_BYTES, DataType} from 'neuroglancer/util/data_type';
-import {prod3, vec3} from 'neuroglancer/util/geom';
+import {ChunkLayoutOptions, getChunkDataSizes, getCombinedTransform, getNearIsotropicBlockSize, SliceViewChunkSource, SliceViewChunkSpecification, SliceViewChunkSpecificationBaseOptions, SliceViewSourceOptions} from '../base';
+import {DATA_TYPE_BYTES, DataType} from '../../util/data_type';
+import {prod3, vec3} from '../../util/geom';
 
 export {DATA_TYPE_BYTES, DataType};
 

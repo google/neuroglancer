@@ -14,10 +14,10 @@
  * limitations under the License.
  */
 
-import {WatchableValue} from 'neuroglancer/trackable_value';
-import {TrackableValue} from 'neuroglancer/trackable_value';
-import {verifyString} from 'neuroglancer/util/json';
-import {ShaderCompilationError, ShaderLinkError} from 'neuroglancer/webgl/shader';
+import {WatchableValue} from '../trackable_value';
+import {TrackableValue} from '../trackable_value';
+import {verifyString} from '../util/json';
+import {ShaderCompilationError, ShaderLinkError} from './shader';
 
 /**
  * undefined means shader has not been compiled.  null means shader was compiled successfully.

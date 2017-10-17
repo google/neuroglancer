@@ -14,8 +14,8 @@
  * limitations under the License.
  */
 
-import {DataType} from 'neuroglancer/util/data_type';
-import {parseNpy} from 'neuroglancer/util/npy';
+import {DataType} from './data_type';
+import {parseNpy} from './npy';
 
 interface ExampleSpec {
   dataType: string;

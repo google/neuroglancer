@@ -14,9 +14,9 @@
  * limitations under the License.
  */
 
-import {getToken, Token} from 'neuroglancer/datasource/brainmaps/api_implementation';
-import {CANCELED, CancellationToken, uncancelableToken} from 'neuroglancer/util/cancellation';
-import {HttpError, openShardedHttpRequest} from 'neuroglancer/util/http_request';
+import {getToken, Token} from './api_implementation';
+import {CANCELED, CancellationToken, uncancelableToken} from '../../util/cancellation';
+import {HttpError, openShardedHttpRequest} from '../../util/http_request';
 
 export var numPendingRequests = 0;
 

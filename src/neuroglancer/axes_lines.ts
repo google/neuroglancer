@@ -14,12 +14,12 @@
  * limitations under the License.
  */
 
-import {RefCounted} from 'neuroglancer/util/disposable';
-import {mat4} from 'neuroglancer/util/geom';
-import {Buffer} from 'neuroglancer/webgl/buffer';
-import {GL} from 'neuroglancer/webgl/context';
-import {ShaderProgram} from 'neuroglancer/webgl/shader';
-import {trivialColorShader} from 'neuroglancer/webgl/trivial_shaders';
+import {RefCounted} from './util/disposable';
+import {mat4} from './util/geom';
+import {Buffer} from './webgl/buffer';
+import {GL} from './webgl/context';
+import {ShaderProgram} from './webgl/shader';
+import {trivialColorShader} from './webgl/trivial_shaders';
 
 export class AxesLineHelper extends RefCounted {
   vertexBuffer: Buffer;
