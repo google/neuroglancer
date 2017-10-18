@@ -281,16 +281,29 @@ export abstract class SliceViewChunkSource extends ChunkSource implements
     SliceViewChunkSourceInterface {
   chunks: Map<string, SliceViewChunk>;
 
-  constructor(chunkManager: ChunkManager, public spec: SliceViewChunkSpecification) {
-    super(chunkManager);
+  spec: SliceViewChunkSpecification;
+
+  constructor(chunkManager: ChunkManager, options: {spec: SliceViewChunkSpecification}) {
+    super(chunkManager, options);
+    this.spec = options.spec;
+  }
+
+  static encodeOptions(options: {spec: SliceViewChunkSpecification}) {
+    const encoding = super.encodeOptions(options);
+    encoding.spec = options.spec.toObject();
+    return encoding;
   }
 
   initializeCounterpart(rpc: RPC, options: any) {
     options['spec'] = this.spec.toObject();
     super.initializeCounterpart(rpc, options);
   }
+}
 
-  abstract getChunk(x: any): any
+export interface SliceViewChunkSource {
+  // TODO(jbms): Move this declaration to the class definition above and declare abstract once
+  // TypeScript supports mixins with abstact classes.
+  getChunk(x: any): any;
 }
 
 export abstract class SliceViewChunk extends Chunk {

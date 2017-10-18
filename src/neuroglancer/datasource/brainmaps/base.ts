@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-import {BrainmapsInstance, brainmapsInstanceKey} from 'neuroglancer/datasource/brainmaps/api';
+import {BrainmapsInstance} from 'neuroglancer/datasource/brainmaps/api';
 
 export enum VolumeChunkEncoding {
   RAW,
@@ -30,13 +30,6 @@ export class ChangeSpec {
    */
   timeStamp?: number;
   skipEquivalences?: boolean;
-
-  static stringify(p: ChangeSpec|undefined) {
-    if (p === undefined) {
-      return '';
-    }
-    return `${p['changeStackId']}/${p['timeStamp']}/${p['skipEquivalences']}`;
-  }
 }
 
 export class VolumeSourceParameters {
@@ -47,12 +40,6 @@ export class VolumeSourceParameters {
   changeSpec: ChangeSpec|undefined;
 
   static RPC_ID = 'brainmaps/VolumeChunkSource';
-
-  static stringify(p: VolumeSourceParameters) {
-    return `brainmaps-${brainmapsInstanceKey(p['instance'])}:volume/${p['volumeId']}/` +
-        `${p['scaleIndex']}/${VolumeChunkEncoding[p['encoding']]}/` +
-        `${ChangeSpec.stringify(p['changeSpec'])}`;
-  }
 }
 
 export class MeshSourceParameters {
@@ -60,12 +47,6 @@ export class MeshSourceParameters {
   volumeId: string;
   meshName: string;
   changeSpec: ChangeSpec|undefined;
-
-  static stringify(p: MeshSourceParameters) {
-    return `brainmaps:${brainmapsInstanceKey(p['instance'])}:mesh/` +
-        `${p['volumeId']}/${p['meshName']}/` +
-        `${ChangeSpec.stringify(p['changeSpec'])}`;
-  }
 
   static RPC_ID = 'brainmaps/MeshSource';
 }

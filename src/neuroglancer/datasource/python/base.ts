@@ -28,11 +28,6 @@ export class VolumeChunkSourceParameters {
   encoding: VolumeChunkEncoding;
 
   static RPC_ID = 'python/VolumeChunkSource';
-
-  static stringify(parameters: VolumeChunkSourceParameters) {
-    return `python:volume:${parameters['baseUrls'][0]}/${parameters['key']}/` +
-        `${VolumeChunkEncoding[parameters['encoding']]}`;
-  }
 }
 
 export class MeshSourceParameters {
@@ -40,10 +35,6 @@ export class MeshSourceParameters {
   key: string;
 
   static RPC_ID = 'python/MeshSource';
-
-  static stringify(parameters: MeshSourceParameters) {
-    return `python:mesh:${parameters['baseUrls'][0]}/${parameters['key']}`;
-  }
 }
 
 export class SkeletonSourceParameters {
@@ -52,8 +43,4 @@ export class SkeletonSourceParameters {
   vertexAttributes: Map<string, VertexAttributeInfo>;
 
   static RPC_ID = 'python/SkeletonSource';
-
-  static stringify(parameters: SkeletonSourceParameters) {
-    return `python:skeleton:${parameters['baseUrls'][0]}/${parameters['key']}`;
-  }
 }

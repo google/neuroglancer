@@ -73,7 +73,7 @@ export class VectorGraphicsChunk extends SliceViewChunk {
   }
 }
 
-export abstract class VectorGraphicsChunkSource extends SliceViewChunkSource implements
+export class VectorGraphicsChunkSource extends SliceViewChunkSource implements
     VectorGraphicsChunkSourceInterface {
   spec: VectorGraphicsChunkSpecification;
   chunkBytes: number;
@@ -98,14 +98,4 @@ export abstract class VectorGraphicsChunkSource extends SliceViewChunkSource imp
 @registerSharedObject(VECTOR_GRAPHICS_RENDERLAYER_RPC_ID)
 export class RenderLayer extends SliceViewRenderLayer implements RenderLayerInterface {
   sources: VectorGraphicsChunkSource[][];
-}
-
-
-export abstract class ParameterizedVectorGraphicsChunkSource<Parameters> extends
-    VectorGraphicsChunkSource {
-  parameters: Parameters;
-  constructor(rpc: RPC, options: any) {
-    super(rpc, options);
-    this.parameters = options['parameters'];
-  }
 }

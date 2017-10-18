@@ -19,13 +19,13 @@
  * Support for Render (https://github.com/saalfeldlab/render) servers.
  */
 
-import {ChunkManager} from 'neuroglancer/chunk_manager/frontend';
-import {CompletionResult, registerDataSourceFactory} from 'neuroglancer/datasource/factory';
+import {ChunkManager, WithParameters} from 'neuroglancer/chunk_manager/frontend';
+import {CompletionResult, DataSource} from 'neuroglancer/datasource';
 import {PointMatchChunkSourceParameters, TileChunkSourceParameters} from 'neuroglancer/datasource/render/base';
 import {VectorGraphicsChunkSpecification, VectorGraphicsSourceOptions} from 'neuroglancer/sliceview/vector_graphics/base';
-import {defineParameterizedVectorGraphicsSource, MultiscaleVectorGraphicsChunkSource as GenericMultiscaleVectorGraphicsChunkSource} from 'neuroglancer/sliceview/vector_graphics/frontend';
+import {MultiscaleVectorGraphicsChunkSource as GenericMultiscaleVectorGraphicsChunkSource, VectorGraphicsChunkSource} from 'neuroglancer/sliceview/vector_graphics/frontend';
 import {DataType, VolumeChunkSpecification, VolumeSourceOptions, VolumeType} from 'neuroglancer/sliceview/volume/base';
-import {defineParameterizedVolumeChunkSource, MultiscaleVolumeChunkSource as GenericMultiscaleVolumeChunkSource, VolumeChunkSource} from 'neuroglancer/sliceview/volume/frontend';
+import {MultiscaleVolumeChunkSource as GenericMultiscaleVolumeChunkSource, VolumeChunkSource} from 'neuroglancer/sliceview/volume/frontend';
 import {applyCompletionOffset, getPrefixMatchesWithDescriptions} from 'neuroglancer/util/completion';
 import {vec3} from 'neuroglancer/util/geom';
 import {openShardedHttpRequest, sendHttpRequest} from 'neuroglancer/util/http_request';
@@ -33,8 +33,11 @@ import {parseArray, parseQueryStringParameters, verifyFloat, verifyInt, verifyOb
 
 const VALID_ENCODINGS = new Set<string>(['jpg']);
 
-const TileChunkSource = defineParameterizedVolumeChunkSource(TileChunkSourceParameters);
-const PointMatchSource = defineParameterizedVectorGraphicsSource(PointMatchChunkSourceParameters);
+const TileChunkSourceBase = WithParameters(VolumeChunkSource, TileChunkSourceParameters);
+class TileChunkSource extends TileChunkSourceBase {}
+const PointMatchSourceBase =
+    WithParameters(VectorGraphicsChunkSource, PointMatchChunkSourceParameters);
+class PointMatchSource extends PointMatchSourceBase {}
 
 const VALID_STACK_STATES = new Set<string>(['COMPLETE']);
 
@@ -270,14 +273,17 @@ export class MultiscaleVolumeChunkSource implements GenericMultiscaleVolumeChunk
         volumeSourceOptions,
       });
 
-      let source = TileChunkSource.get(this.chunkManager, spec, {
-        'baseUrls': this.baseUrls,
-        'owner': this.ownerInfo.owner,
-        'project': this.stackInfo.project,
-        'stack': this.stack,
-        'encoding': this.encoding,
-        'level': level,
-        'dims': `${this.dims[0]}_${this.dims[1]}`,
+      let source = this.chunkManager.getChunkSource(TileChunkSource, {
+        spec,
+        parameters: {
+          'baseUrls': this.baseUrls,
+          'owner': this.ownerInfo.owner,
+          'project': this.stackInfo.project,
+          'stack': this.stack,
+          'encoding': this.encoding,
+          'level': level,
+          'dims': `${this.dims[0]}_${this.dims[1]}`,
+        }
       });
 
       sources.push([source]);
@@ -476,14 +482,17 @@ export class MultiscaleVectorGraphicsChunkSource implements
 
     let spec = VectorGraphicsChunkSpecification.make(
         {voxelSize, lowerVoxelBound, upperVoxelBound, chunkDataSize, vectorGraphicsSourceOptions});
-    let source = PointMatchSource.get(this.chunkManager, spec, {
-      'baseUrls': this.baseUrls,
-      'owner': this.ownerInfo.owner,
-      'project': this.stackInfo.project,
-      'stack': this.stack,
-      'encoding': 'points',
-      'matchCollection': this.matchCollection,
-      'zoffset': this.zoffset
+    let source = this.chunkManager.getChunkSource(PointMatchSource, {
+      spec,
+      parameters: {
+        'baseUrls': this.baseUrls,
+        'owner': this.ownerInfo.owner,
+        'project': this.stackInfo.project,
+        'stack': this.stack,
+        'encoding': 'points',
+        'matchCollection': this.matchCollection,
+        'zoffset': this.zoffset
+      }
     });
 
     return [[source]];
@@ -520,9 +529,17 @@ export function getShardedPointMatches(
                         chunkManager, hostnames, ownerInfo, stack, project, parameters)));
 }
 
-registerDataSourceFactory('render', {
-  description: 'Render',
-  volumeCompleter: volumeCompleter,
-  getVolume: getVolume,
-  getVectorGraphicsSource: getPointMatches,
-});
+export class RenderDataSource extends DataSource {
+  get description() {
+    return 'Render';
+  }
+  getVolume(chunkManager: ChunkManager, url: string) {
+    return getVolume(chunkManager, url);
+  }
+  volumeCompleter(url: string, chunkManager: ChunkManager) {
+    return volumeCompleter(url, chunkManager);
+  }
+  getVectorGraphicsSource(chunkManager: ChunkManager, url: string) {
+    return getPointMatches(chunkManager, url);
+  }
+}

@@ -238,7 +238,13 @@ export function decodeTriangleVertexPositionsAndIndices(
   chunk.vertexNormals = computeVertexNormals(chunk.vertexPositions!, chunk.indices!);
 }
 
-export abstract class MeshSource extends ChunkSource {
+export interface MeshSource {
+  // TODO(jbms): Move this declaration to class definition below and declare abstract once
+  // TypeScript supports mixins with abstract classes.
+  downloadFragment(chunk: FragmentChunk, cancellationToken: CancellationToken): Promise<void>;
+}
+
+export class MeshSource extends ChunkSource {
   fragmentSource: FragmentSource;
 
   constructor(rpc: RPC, options: any) {
@@ -279,17 +285,6 @@ export abstract class MeshSource extends ChunkSource {
       fragmentSource.addChunk(chunk);
     }
     return chunk;
-  }
-
-  abstract downloadFragment(chunk: FragmentChunk, cancellationToken: CancellationToken):
-      Promise<void>;
-}
-
-export abstract class ParameterizedMeshSource<Parameters> extends MeshSource {
-  parameters: Parameters;
-  constructor(rpc: RPC, options: any) {
-    super(rpc, options);
-    this.parameters = options['parameters'];
   }
 }
 

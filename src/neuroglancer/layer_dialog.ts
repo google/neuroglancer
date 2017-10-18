@@ -14,7 +14,6 @@
  * limitations under the License.
  */
 
-import {findSourceGroup, getVolume, suggestLayerName, volumeCompleter} from 'neuroglancer/datasource/factory';
 import {LayerListSpecification, ManagedUserLayerWithSpecification} from 'neuroglancer/layer_specification';
 import {Overlay} from 'neuroglancer/overlay';
 import {DataType, VolumeType} from 'neuroglancer/sliceview/volume/base';
@@ -47,7 +46,8 @@ export class LayerDialog extends Overlay {
     dialogElement.classList.add('add-layer-overlay');
 
     let sourceCompleter = (value: string, cancellationToken: CancellationToken) =>
-        volumeCompleter(value, this.manager.chunkManager, cancellationToken)
+        this.manager.dataSourceProvider
+            .volumeCompleter(value, this.manager.chunkManager, cancellationToken)
             .then(originalResult => ({
                     completions: originalResult.completions,
                     makeElement: makeCompletionElementWithDescription,
@@ -134,7 +134,7 @@ export class LayerDialog extends Overlay {
         if (lastLayer instanceof ManagedUserLayerWithSpecification) {
           let {sourceUrl} = lastLayer;
           if (sourceUrl !== undefined) {
-            let groupIndex = findSourceGroup(sourceUrl);
+            let groupIndex = this.manager.dataSourceProvider.findSourceGroup(sourceUrl);
             sourceInput.value = sourceUrl.substring(0, groupIndex);
             sourceInput.inputElement.setSelectionRange(0, groupIndex);
           }
@@ -195,7 +195,7 @@ export class LayerDialog extends Overlay {
       return;
     }
     try {
-      let baseSuggestedName = suggestLayerName(url);
+      let baseSuggestedName = this.manager.dataSourceProvider.suggestLayerName(url);
       let {nameInputElement} = this;
       if (this.nameInputElement.value === '') {
         let suggestedName = baseSuggestedName;
@@ -217,7 +217,8 @@ export class LayerDialog extends Overlay {
 
     this.setInfo('Validating volume source...');
     const token = this.volumeCancellationSource = new CancellationTokenSource();
-    getVolume(this.manager.chunkManager, url, /*options=*/undefined, token)
+    this.manager.dataSourceProvider
+        .getVolume(this.manager.chunkManager, url, /*options=*/undefined, token)
         .then(source => {
           if (token.isCanceled) {
             return;

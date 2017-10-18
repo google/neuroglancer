@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-import {ChunkSourceParametersConstructor, ChunkState} from 'neuroglancer/chunk_manager/base';
+import {ChunkState} from 'neuroglancer/chunk_manager/base';
 import {Chunk, ChunkManager, ChunkSource} from 'neuroglancer/chunk_manager/frontend';
 import {RenderLayer} from 'neuroglancer/layer';
 import {VoxelSize} from 'neuroglancer/navigation_state';
@@ -35,7 +35,6 @@ import {GL} from 'neuroglancer/webgl/context';
 import {WatchableShaderError} from 'neuroglancer/webgl/dynamic_shader';
 import {ShaderBuilder, ShaderModule, ShaderProgram} from 'neuroglancer/webgl/shader';
 import {setVec4FromUint32} from 'neuroglancer/webgl/shader_lib';
-import {RPC} from 'neuroglancer/worker_rpc';
 
 const glsl_COLORMAPS = require<string>('neuroglancer/webgl/colormaps.glsl');
 
@@ -397,34 +396,4 @@ export class SkeletonSource extends ChunkSource {
   get vertexAttributes(): Map<string, VertexAttributeInfo> {
     return emptyVertexAttributes;
   }
-}
-
-export class ParameterizedSkeletonSource<Parameters> extends SkeletonSource {
-  constructor(chunkManager: ChunkManager, public parameters: Parameters) {
-    super(chunkManager);
-  }
-
-  initializeCounterpart(rpc: RPC, options: any) {
-    options['parameters'] = this.parameters;
-    super.initializeCounterpart(rpc, options);
-  }
-}
-
-/**
- * Defines a SkeletonSource for which all state is encapsulated in an object of type Parameters.
- */
-export function parameterizedSkeletonSource<Parameters>(
-    parametersConstructor: ChunkSourceParametersConstructor<Parameters>) {
-  const newConstructor =
-      class SpecializedParameterizedSkeletonSource extends ParameterizedSkeletonSource<Parameters> {
-    static get(chunkManager: ChunkManager, parameters: Parameters) {
-      return chunkManager.getChunkSource(
-          this, stableStringify(parameters), () => new this(chunkManager, parameters));
-    }
-    toString() {
-      return parametersConstructor.stringify(this.parameters);
-    }
-  };
-  newConstructor.prototype.RPC_TYPE_ID = parametersConstructor.RPC_ID;
-  return newConstructor;
 }

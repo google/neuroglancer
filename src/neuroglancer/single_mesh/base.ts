@@ -17,7 +17,6 @@
 import {DataType} from 'neuroglancer/util/data_type';
 
 export const SINGLE_MESH_LAYER_RPC_ID = 'single_mesh/SingleMeshLayer';
-export const SINGLE_MESH_SOURCE_RPC_ID = 'single_mesh/SingleMeshSource';
 export const GET_SINGLE_MESH_INFO_RPC_ID = 'single_mesh/getSingleMeshInfo';
 
 export const SINGLE_MESH_CHUNK_KEY = '';
@@ -49,10 +48,10 @@ export interface SingleMeshData {
 export class SingleMeshSourceParameters {
   meshSourceUrl: string;
   attributeSourceUrls: string[];
+}
+
+export class SingleMeshSourceParametersWithInfo extends SingleMeshSourceParameters {
+  info: SingleMeshInfo;
 
   static RPC_ID = 'single_mesh/SingleMeshSource';
-
-  static stringify(p: SingleMeshSourceParameters) {
-    return `single_mesh:${JSON.stringify(p)}`;
-  }
 }

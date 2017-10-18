@@ -174,14 +174,18 @@ export class SliceViewChunk extends Chunk {
   }
 }
 
-export abstract class SliceViewChunkSource extends ChunkSource implements
+export interface SliceViewChunkSource {
+  // TODO(jbms): Move this declaration to the class definition below and declare abstract once
+  // TypeScript supports mixins with abstact classes.
+  getChunk(chunkGridPosition: vec3): SliceViewChunk;
+}
+
+export class SliceViewChunkSource extends ChunkSource implements
     SliceViewChunkSourceInterface {
   spec: SliceViewChunkSpecification;
   constructor(rpc: RPC, options: any) {
     super(rpc, options);
   }
-
-  abstract getChunk(chunkGridPosition: vec3): SliceViewChunk
 
   /**
    * Helper function for computing the voxel bounds of a chunk based on its chunkGridPosition.
@@ -248,19 +252,5 @@ export abstract class RenderLayer extends SharedObjectCounterpart implements Ren
         alternatives.push(source);
       }
     }
-  }
-}
-
-/**
- * Extends SliceViewChunkSource with a parameters member.
- *
- * Subclasses should be decorated with
- * src/neuroglancer/chunk_manager/backend.ts:registerChunkSource.
- */
-export abstract class ParameterizedSliceViewChunkSource<Parameters> extends SliceViewChunkSource {
-  parameters: Parameters;
-  constructor(rpc: RPC, options: any) {
-    super(rpc, options);
-    this.parameters = options['parameters'];
   }
 }

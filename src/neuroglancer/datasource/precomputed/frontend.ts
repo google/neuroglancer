@@ -14,18 +14,21 @@
  * limitations under the License.
  */
 
-import {ChunkManager} from 'neuroglancer/chunk_manager/frontend';
-import {registerDataSourceFactory} from 'neuroglancer/datasource/factory';
+import {ChunkManager, WithParameters} from 'neuroglancer/chunk_manager/frontend';
+import {DataSource} from 'neuroglancer/datasource';
 import {MeshSourceParameters, VolumeChunkEncoding, VolumeChunkSourceParameters} from 'neuroglancer/datasource/precomputed/base';
-import {defineParameterizedMeshSource} from 'neuroglancer/mesh/frontend';
+import {MeshSource} from 'neuroglancer/mesh/frontend';
 import {DataType, VolumeChunkSpecification, VolumeSourceOptions, VolumeType} from 'neuroglancer/sliceview/volume/base';
-import {defineParameterizedVolumeChunkSource, MultiscaleVolumeChunkSource as GenericMultiscaleVolumeChunkSource} from 'neuroglancer/sliceview/volume/frontend';
+import {MultiscaleVolumeChunkSource as GenericMultiscaleVolumeChunkSource, VolumeChunkSource} from 'neuroglancer/sliceview/volume/frontend';
 import {mat4, vec3} from 'neuroglancer/util/geom';
 import {openShardedHttpRequest, parseSpecialUrl, sendHttpRequest} from 'neuroglancer/util/http_request';
 import {parseArray, parseFixedLengthArray, parseIntVec, verifyEnumString, verifyFinitePositiveFloat, verifyObject, verifyObjectProperty, verifyOptionalString, verifyPositiveInt, verifyString} from 'neuroglancer/util/json';
 
-const VolumeChunkSource = defineParameterizedVolumeChunkSource(VolumeChunkSourceParameters);
-const MeshSource = defineParameterizedMeshSource(MeshSourceParameters);
+class PrecomputedVolumeChunkSource extends
+(WithParameters(VolumeChunkSource, VolumeChunkSourceParameters)) {}
+
+class PrecomputedMeshSource extends
+(WithParameters(MeshSource, MeshSourceParameters)) {}
 
 class ScaleInfo {
   key: string;
@@ -103,22 +106,20 @@ export class MultiscaleVolumeChunkSource implements GenericMultiscaleVolumeChunk
             compressedSegmentationBlockSize: scaleInfo.compressedSegmentationBlockSize,
             volumeSourceOptions,
           })
-          .map(spec => VolumeChunkSource.get(this.chunkManager, spec, {
-            'baseUrls': this.baseUrls,
-            'path': `${this.path}/${scaleInfo.key}`,
-            'encoding': scaleInfo.encoding
+          .map(spec => this.chunkManager.getChunkSource(PrecomputedVolumeChunkSource, {
+            spec,
+            parameters: {
+              'baseUrls': this.baseUrls,
+              'path': `${this.path}/${scaleInfo.key}`,
+              'encoding': scaleInfo.encoding
+            }
           }));
     });
   }
 }
 
 export function getShardedMeshSource(chunkManager: ChunkManager, parameters: MeshSourceParameters) {
-  return MeshSource.get(chunkManager, parameters);
-}
-
-export function getMeshSource(chunkManager: ChunkManager, url: string) {
-  const [baseUrls, path] = parseSpecialUrl(url);
-  return getShardedMeshSource(chunkManager, {baseUrls, path, lod: 0});
+  return chunkManager.getChunkSource(PrecomputedMeshSource, {parameters});
 }
 
 export function getShardedVolume(chunkManager: ChunkManager, baseUrls: string[], path: string) {
@@ -130,13 +131,24 @@ export function getShardedVolume(chunkManager: ChunkManager, baseUrls: string[],
                         new MultiscaleVolumeChunkSource(chunkManager, baseUrls, path, response)));
 }
 
+export function getMeshSource(chunkManager: ChunkManager, url: string) {
+  const [baseUrls, path] = parseSpecialUrl(url);
+  return getShardedMeshSource(chunkManager, {baseUrls, path, lod: 0});
+}
+
 export function getVolume(chunkManager: ChunkManager, url: string) {
   const [baseUrls, path] = parseSpecialUrl(url);
   return getShardedVolume(chunkManager, baseUrls, path);
 }
 
-registerDataSourceFactory('precomputed', {
-  description: 'Precomputed file-backed data source',
-  getVolume: getVolume,
-  getMeshSource: getMeshSource,
-});
+export class PrecomputedDataSource extends DataSource {
+  get description() {
+    return 'Precomputed file-backed data source';
+  }
+  getVolume(chunkManager: ChunkManager, url: string) {
+    return getVolume(chunkManager, url);
+  }
+  getMeshSource(chunkManager: ChunkManager, url: string) {
+    return getMeshSource(chunkManager, url);
+  }
+}

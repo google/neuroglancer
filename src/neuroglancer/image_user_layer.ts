@@ -51,18 +51,19 @@ export class ImageUserLayer extends UserLayer {
       this.specificationChanged.dispatch();
     }));
     this.volumePath = volumePath;
-    getVolumeWithStatusMessage(manager.chunkManager, volumePath).then(volume => {
-      if (!this.wasDisposed) {
-        let renderLayer = this.renderLayer = new ImageRenderLayer(volume, {
-          opacity: this.opacity,
-          fragmentMain: this.fragmentMain,
-          shaderError: this.shaderError,
-          sourceOptions: {transform: mat4.clone(this.transform.transform)},
+    getVolumeWithStatusMessage(manager.dataSourceProvider, manager.chunkManager, volumePath)
+        .then(volume => {
+          if (!this.wasDisposed) {
+            let renderLayer = this.renderLayer = new ImageRenderLayer(volume, {
+              opacity: this.opacity,
+              fragmentMain: this.fragmentMain,
+              shaderError: this.shaderError,
+              sourceOptions: {transform: mat4.clone(this.transform.transform)},
+            });
+            this.addRenderLayer(renderLayer);
+            this.shaderError.changed.dispatch();
+          }
         });
-        this.addRenderLayer(renderLayer);
-        this.shaderError.changed.dispatch();
-      }
-    });
   }
   toJSON() {
     let x: any = {'type': 'image'};

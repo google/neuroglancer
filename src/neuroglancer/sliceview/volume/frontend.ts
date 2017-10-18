@@ -14,7 +14,6 @@
  * limitations under the License.
  */
 
-import {ChunkSourceParametersConstructor} from 'neuroglancer/chunk_manager/base';
 import {ChunkManager} from 'neuroglancer/chunk_manager/frontend';
 import {MeshSource} from 'neuroglancer/mesh/frontend';
 import {DataType} from 'neuroglancer/sliceview/base';
@@ -22,11 +21,9 @@ import {MultiscaleSliceViewChunkSource, SliceViewChunk, SliceViewChunkSource} fr
 import {VolumeChunkSource as VolumeChunkSourceInterface, VolumeChunkSpecification, VolumeSourceOptions, VolumeType} from 'neuroglancer/sliceview/volume/base';
 import {Disposable} from 'neuroglancer/util/disposable';
 import {vec3, vec3Key} from 'neuroglancer/util/geom';
-import {stableStringify} from 'neuroglancer/util/json';
 import {Uint64} from 'neuroglancer/util/uint64';
 import {GL} from 'neuroglancer/webgl/context';
 import {ShaderBuilder, ShaderProgram} from 'neuroglancer/webgl/shader';
-import {RPC} from 'neuroglancer/worker_rpc';
 
 export type VolumeChunkKey = string;
 
@@ -97,21 +94,17 @@ export function getChunkFormatHandler(gl: GL, spec: VolumeChunkSpecification) {
 }
 
 
-export abstract class VolumeChunkSource extends SliceViewChunkSource implements
-    VolumeChunkSourceInterface {
+export class VolumeChunkSource extends SliceViewChunkSource implements VolumeChunkSourceInterface {
   chunkFormatHandler: ChunkFormatHandler;
 
   chunks: Map<string, VolumeChunk>;
 
-  constructor(chunkManager: ChunkManager, public spec: VolumeChunkSpecification) {
-    super(chunkManager, spec);
-    this.chunkFormatHandler =
-        this.registerDisposer(getChunkFormatHandler(chunkManager.chunkQueueManager.gl, spec));
-  }
+  spec: VolumeChunkSpecification;
 
-  initializeCounterpart(rpc: RPC, options: any) {
-    options['spec'] = this.spec.toObject();
-    super.initializeCounterpart(rpc, options);
+  constructor(chunkManager: ChunkManager, options: {spec: VolumeChunkSpecification}) {
+    super(chunkManager, options);
+    this.chunkFormatHandler =
+        this.registerDisposer(getChunkFormatHandler(chunkManager.chunkQueueManager.gl, this.spec));
   }
 
   get chunkFormat() {
@@ -163,34 +156,6 @@ export abstract class VolumeChunkSource extends SliceViewChunkSource implements
   getChunk(x: any): VolumeChunk {
     return <VolumeChunk>this.chunkFormatHandler.getChunk(this, x);
   }
-}
-
-/**
- * Defines a VolumeChunkSource for which all state, other than the VolumeChunkSpecification, is
- * encapsulated in an object of type Parameters.
- */
-export function defineParameterizedVolumeChunkSource<Parameters>(
-    parametersConstructor: ChunkSourceParametersConstructor<Parameters>) {
-  const newConstructor = class ParameterizedVolumeChunkSource extends VolumeChunkSource {
-    constructor(
-        chunkManager: ChunkManager, spec: VolumeChunkSpecification, public parameters: Parameters) {
-      super(chunkManager, spec);
-    }
-    initializeCounterpart(rpc: RPC, options: any) {
-      options['parameters'] = this.parameters;
-      super.initializeCounterpart(rpc, options);
-    }
-    static get(chunkManager: ChunkManager, spec: VolumeChunkSpecification, parameters: Parameters) {
-      return chunkManager.getChunkSource(
-          this, stableStringify({parameters, spec: spec.toObject()}),
-          () => new this(chunkManager, spec, parameters));
-    }
-    toString() {
-      return parametersConstructor.stringify(this.parameters);
-    }
-  };
-  newConstructor.prototype.RPC_TYPE_ID = parametersConstructor.RPC_ID;
-  return newConstructor;
 }
 
 export abstract class VolumeChunk extends SliceViewChunk {

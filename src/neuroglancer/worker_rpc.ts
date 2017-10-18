@@ -293,10 +293,17 @@ export function registerSharedObjectOwner(identifier: string) {
  * Also register the type as a SharedObject owner, which is useful if this type is also used as a
  * SharedObject owner.
  */
-export function registerSharedObject(identifier: string) {
+export function registerSharedObject(identifier?: string) {
   return (constructorFunction: SharedObjectConstructor) => {
+    if (identifier !== undefined) {
+      constructorFunction.prototype.RPC_TYPE_ID = identifier;
+    } else {
+      identifier = constructorFunction.prototype.RPC_TYPE_ID;
+      if (identifier === undefined) {
+        throw new Error('RPC_TYPE_ID should have already been defined');
+      }
+    }
     sharedObjectConstructors.set(identifier, constructorFunction);
-    constructorFunction.prototype.RPC_TYPE_ID = identifier;
   };
 }
 

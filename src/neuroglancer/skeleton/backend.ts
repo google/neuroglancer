@@ -96,7 +96,7 @@ export class SkeletonChunk extends Chunk {
   }
 }
 
-export abstract class SkeletonSource extends ChunkSource {
+export class SkeletonSource extends ChunkSource {
   chunks: Map<string, SkeletonChunk>;
   getChunk(objectId: Uint64) {
     const key = getObjectKey(objectId);
@@ -107,14 +107,6 @@ export abstract class SkeletonSource extends ChunkSource {
       this.addChunk(chunk);
     }
     return chunk;
-  }
-}
-
-export abstract class ParameterizedSkeletonSource<Parameters> extends SkeletonSource {
-  parameters: Parameters;
-  constructor(rpc: RPC, options: any) {
-    super(rpc, options);
-    this.parameters = options['parameters'];
   }
 }
 

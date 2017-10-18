@@ -17,6 +17,9 @@
 import debounce from 'lodash/debounce';
 import {AvailableCapacity} from 'neuroglancer/chunk_manager/base';
 import {ChunkManager, ChunkQueueManager} from 'neuroglancer/chunk_manager/frontend';
+import {defaultCredentialsManager} from 'neuroglancer/credentials_provider/default_manager';
+import {DataSourceProvider} from 'neuroglancer/datasource';
+import {getDefaultDataSourceProvider} from 'neuroglancer/datasource/default_provider';
 import {DisplayContext} from 'neuroglancer/display_context';
 import {InputEventBindingHelpDialog} from 'neuroglancer/help/input_event_bindings';
 import {LayerManager, LayerSelectedValues, MouseSelectionState} from 'neuroglancer/layer';
@@ -95,6 +98,7 @@ export interface UIOptions {
 export interface ViewerOptions extends UIOptions, VisibilityPrioritySpecification {
   dataContext: DataManagementContext;
   element: HTMLElement;
+  dataSourceProvider: DataSourceProvider;
 }
 
 const defaultViewerOptions = {
@@ -153,6 +157,8 @@ export class Viewer extends RefCounted implements ViewerState {
     return this.options.element;
   }
 
+  get dataSourceProvider() { return this.options.dataSourceProvider; }
+
   visible = true;
 
   constructor(public display: DisplayContext, options: Partial<ViewerOptions> = {}) {
@@ -167,6 +173,7 @@ export class Viewer extends RefCounted implements ViewerState {
         perspectiveView: new EventActionMap(),
       },
       element = display.makeCanvasOverlayElement(),
+      dataSourceProvider = getDefaultDataSourceProvider({credentialsManager: defaultCredentialsManager}),
     } = options;
 
     this.registerDisposer(() => removeFromParent(this.element));
@@ -180,10 +187,11 @@ export class Viewer extends RefCounted implements ViewerState {
       visibility,
       inputEventBindings,
       element,
+      dataSourceProvider,
     };
 
     this.layerSpecification = new LayerListSpecification(
-        this.layerManager, this.chunkManager, this.layerSelectedValues,
+        this.dataSourceProvider, this.layerManager, this.chunkManager, this.layerSelectedValues,
         this.navigationState.voxelSize);
 
     this.registerDisposer(display.updateStarted.add(() => {

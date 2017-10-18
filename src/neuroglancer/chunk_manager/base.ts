@@ -108,5 +108,4 @@ export const CHUNK_MANAGER_RPC_ID = 'ChunkManager';
 export interface ChunkSourceParametersConstructor<T> {
   new(): T;
   RPC_ID: string;
-  stringify: (parameters: T) => string;
 }

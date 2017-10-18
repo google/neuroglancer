@@ -14,11 +14,11 @@
  * limitations under the License.
  */
 
-import {Chunk, ChunkManager, ChunkSource, withChunkManager} from 'neuroglancer/chunk_manager/backend';
+import {Chunk, ChunkManager, ChunkSource, withChunkManager, WithParameters} from 'neuroglancer/chunk_manager/backend';
 import {ChunkPriorityTier} from 'neuroglancer/chunk_manager/base';
 import {PriorityGetter} from 'neuroglancer/chunk_manager/generic_file_source';
 import {computeVertexNormals} from 'neuroglancer/mesh/backend';
-import {GET_SINGLE_MESH_INFO_RPC_ID, SINGLE_MESH_CHUNK_KEY, SINGLE_MESH_LAYER_RPC_ID, SINGLE_MESH_SOURCE_RPC_ID, SingleMeshData, SingleMeshInfo, SingleMeshSourceParameters, VertexAttributeInfo} from 'neuroglancer/single_mesh/base';
+import {GET_SINGLE_MESH_INFO_RPC_ID, SINGLE_MESH_CHUNK_KEY, SINGLE_MESH_LAYER_RPC_ID, SingleMeshData, SingleMeshInfo, SingleMeshSourceParameters, SingleMeshSourceParametersWithInfo, VertexAttributeInfo} from 'neuroglancer/single_mesh/base';
 import {TypedArray} from 'neuroglancer/util/array';
 import {CancellationToken} from 'neuroglancer/util/cancellation';
 import {stableStringify} from 'neuroglancer/util/json';
@@ -192,16 +192,8 @@ export function getCombinedMesh(
   });
 }
 
-@registerSharedObject(SINGLE_MESH_SOURCE_RPC_ID)
-export class SingleMeshSource extends ChunkSource {
-  parameters: SingleMeshSourceParameters;
-  info: SingleMeshInfo;
-  constructor(rpc: RPC, options: any) {
-    super(rpc, options);
-    this.parameters = options['parameters'];
-    this.info = options['info'];
-  }
-
+@registerSharedObject() export class SingleMeshSource extends
+(WithParameters(ChunkSource, SingleMeshSourceParametersWithInfo)) {
   getChunk() {
     const key = SINGLE_MESH_CHUNK_KEY;
     let chunk = <SingleMeshChunk>this.chunks.get(key);
@@ -217,7 +209,7 @@ export class SingleMeshSource extends ChunkSource {
     const getPriority = () => ({priorityTier: chunk.priorityTier, priority: chunk.priority});
     return getCombinedMesh(this.chunkManager, this.parameters, getPriority, cancellationToken)
         .then(data => {
-          if (stableStringify(data.info) !== stableStringify(this.info)) {
+          if (stableStringify(data.info) !== stableStringify(this.parameters.info)) {
             throw new Error(`Mesh info has changed.`);
           }
           if (data.vertexNormals === undefined) {

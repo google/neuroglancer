@@ -14,24 +14,34 @@
  * limitations under the License.
  */
 
-import 'neuroglancer/datasource/brainmaps/api_frontend';
-
-import {ChunkManager} from 'neuroglancer/chunk_manager/frontend';
-import {BrainmapsInstance, INSTANCE_IDENTIFIERS, INSTANCE_NAMES, makeRequest, PRODUCTION_INSTANCE} from 'neuroglancer/datasource/brainmaps/api';
+import {ChunkManager, WithParameters} from 'neuroglancer/chunk_manager/frontend';
+import {WithCredentialsProvider} from 'neuroglancer/credentials_provider/chunk_source_frontend';
+import {DataSource, GetVolumeOptions} from 'neuroglancer/datasource';
+import {BrainmapsCredentialsProvider, BrainmapsInstance, Credentials, makeRequest} from 'neuroglancer/datasource/brainmaps/api';
 import {ChangeSpec, MeshSourceParameters, SkeletonSourceParameters, VolumeChunkEncoding, VolumeSourceParameters} from 'neuroglancer/datasource/brainmaps/base';
-import {GetVolumeOptions, registerDataSourceFactory} from 'neuroglancer/datasource/factory';
-import {defineParameterizedMeshSource} from 'neuroglancer/mesh/frontend';
-import {parameterizedSkeletonSource} from 'neuroglancer/skeleton/frontend';
+import {MeshSource} from 'neuroglancer/mesh/frontend';
+import {SkeletonSource} from 'neuroglancer/skeleton/frontend';
 import {DataType, VolumeChunkSpecification, VolumeSourceOptions, VolumeType} from 'neuroglancer/sliceview/volume/base';
-import {defineParameterizedVolumeChunkSource, MultiscaleVolumeChunkSource as GenericMultiscaleVolumeChunkSource} from 'neuroglancer/sliceview/volume/frontend';
+import {MultiscaleVolumeChunkSource as GenericMultiscaleVolumeChunkSource, VolumeChunkSource} from 'neuroglancer/sliceview/volume/frontend';
 import {StatusMessage} from 'neuroglancer/status';
 import {getPrefixMatches, getPrefixMatchesWithDescriptions} from 'neuroglancer/util/completion';
+import {Owned} from 'neuroglancer/util/disposable';
 import {vec3} from 'neuroglancer/util/geom';
 import {parseArray, parseQueryStringParameters, parseXYZ, verifyEnumString, verifyFinitePositiveFloat, verifyMapKey, verifyObject, verifyObjectProperty, verifyOptionalString, verifyPositiveInt, verifyString} from 'neuroglancer/util/json';
 
-const VolumeChunkSource = defineParameterizedVolumeChunkSource(VolumeSourceParameters);
-const MeshSource = defineParameterizedMeshSource(MeshSourceParameters);
-const BaseSkeletonSource = parameterizedSkeletonSource(SkeletonSourceParameters);
+class BrainmapsVolumeChunkSource extends
+(WithParameters(
+    WithCredentialsProvider<Credentials>()(VolumeChunkSource), VolumeSourceParameters)) {}
+
+class BrainmapsMeshSource extends
+(WithParameters(WithCredentialsProvider<Credentials>()(MeshSource), MeshSourceParameters)) {}
+
+export class BrainmapsSkeletonSource extends
+(WithParameters(WithCredentialsProvider<Credentials>()(SkeletonSource), SkeletonSourceParameters)) {
+  get skeletonVertexCoordinatesInVoxels() {
+    return false;
+  }
+}
 
 const SERVER_DATA_TYPES = new Map<string, DataType>();
 SERVER_DATA_TYPES.set('UINT8', DataType.UINT8);
@@ -79,8 +89,9 @@ export class MultiscaleVolumeChunkSource implements GenericMultiscaleVolumeChunk
   encoding: VolumeChunkEncoding|undefined;
   constructor(
       public chunkManager: ChunkManager, public instance: BrainmapsInstance,
-      public volumeId: string, public changeSpec: ChangeSpec|undefined, volumeInfoResponse: any,
-      meshesResponse: any, options: GetBrainmapsVolumeOptions) {
+      public credentialsProvider: BrainmapsCredentialsProvider, public volumeId: string,
+      public changeSpec: ChangeSpec|undefined, volumeInfoResponse: any, meshesResponse: any,
+      options: GetBrainmapsVolumeOptions) {
     this.encoding = options.encoding;
     try {
       verifyObject(volumeInfoResponse);
@@ -161,13 +172,18 @@ export class MultiscaleVolumeChunkSource implements GenericMultiscaleVolumeChunk
                                           volumeSourceOptions,
                                         })
                                         .map(spec => {
-                                          return VolumeChunkSource.get(this.chunkManager, spec, {
-                                            'instance': this.instance,
-                                            'volumeId': this.volumeId,
-                                            'changeSpec': this.changeSpec,
-                                            'scaleIndex': scaleIndex,
-                                            'encoding': encoding,
-                                          });
+                                          return this.chunkManager.getChunkSource(
+                                              BrainmapsVolumeChunkSource, {
+                                                credentialsProvider: this.credentialsProvider,
+                                                spec,
+                                                parameters: {
+                                                  'instance': this.instance,
+                                                  'volumeId': this.volumeId,
+                                                  'changeSpec': this.changeSpec,
+                                                  'scaleIndex': scaleIndex,
+                                                  'encoding': encoding,
+                                                }
+                                              });
                                         }));
   }
 
@@ -176,35 +192,24 @@ export class MultiscaleVolumeChunkSource implements GenericMultiscaleVolumeChunk
     if (validMesh === undefined) {
       return null;
     }
-    return getMeshSource(this.chunkManager, {
-      'instance': this.instance,
-      'volumeId': this.volumeId,
-      'meshName': validMesh.name,
-      'changeSpec': this.changeSpec,
+    return this.chunkManager.getChunkSource(BrainmapsMeshSource, {
+      credentialsProvider: this.credentialsProvider,
+      parameters: {
+        'instance': this.instance,
+        'volumeId': this.volumeId,
+        'meshName': validMesh.name,
+        'changeSpec': this.changeSpec,
+      }
     });
   }
 }
 
-export function getMeshSource(chunkManager: ChunkManager, parameters: MeshSourceParameters) {
-  return MeshSource.get(chunkManager, parameters);
-}
-
-export class SkeletonSource extends BaseSkeletonSource {
-  get skeletonVertexCoordinatesInVoxels() {
-    return false;
-  }
-}
-
-export function getSkeletonSource(
-    chunkManager: ChunkManager, parameters: SkeletonSourceParameters) {
-  return SkeletonSource.get(chunkManager, parameters);
-}
 
 export function parseVolumeKey(key: string):
     {volumeId: string, changeSpec: ChangeSpec | undefined, parameters: any} {
   const match = key.match(/^([^:?]+:[^:?]+:[^:?]+)(?::([^:?]+))?(?:\?(.*))?$/);
   if (match === null) {
-    throw new Error(`Invalid Brainmaps volume key: ${JSON.stringify(key)}.`);
+    throw new Error(`Invalid Brain Maps volume key: ${JSON.stringify(key)}.`);
   }
   let changeSpec: ChangeSpec|undefined;
   if (match[2] !== undefined) {
@@ -216,53 +221,6 @@ export function parseVolumeKey(key: string):
 
 const meshSourcePattern = /^([^\/]+)\/(.*)$/;
 
-function getMeshSourceParameters(instance: BrainmapsInstance, url: string) {
-  let match = url.match(meshSourcePattern);
-  if (match === null) {
-    throw new Error(`Invalid Brainmaps mesh URL: ${url}`);
-  }
-  let {volumeId, changeSpec} = parseVolumeKey(match[1]);
-  return {instance, volumeId, changeSpec, meshName: match[2]};
-}
-
-export function getMeshSourceByUrl(
-    instance: BrainmapsInstance, chunkManager: ChunkManager, url: string) {
-  return getMeshSource(chunkManager, getMeshSourceParameters(instance, url));
-}
-
-export function getSkeletonSourceByUrl(
-    instance: BrainmapsInstance, chunkManager: ChunkManager, url: string) {
-  return getSkeletonSource(chunkManager, getMeshSourceParameters(instance, url));
-}
-
-export function getVolume(
-    instance: BrainmapsInstance, chunkManager: ChunkManager, key: string,
-    options: GetVolumeOptions) {
-  const {volumeId, changeSpec, parameters} = parseVolumeKey(key);
-  verifyObject(parameters);
-  const encoding = verifyObjectProperty(
-      parameters, 'encoding',
-      x => x === undefined ? undefined :
-                             verifyEnumString(parameters['encoding'], VolumeChunkEncoding));
-  const brainmapsOptions: GetBrainmapsVolumeOptions = {...options, encoding};
-  return chunkManager.memoize.getUncounted(
-      {type: 'brainmaps:getVolume', instance, volumeId, changeSpec, brainmapsOptions},
-      () => Promise
-                .all([
-                  makeRequest(
-                      instance,
-                      {method: 'GET', path: `/v1beta2/volumes/${volumeId}`, responseType: 'json'}),
-                  makeRequest(instance, {
-                    method: 'GET',
-                    path: `/v1beta2/objects/${volumeId}/meshes`,
-                    responseType: 'json'
-                  }),
-                ])
-                .then(
-                    ([volumeInfoResponse, meshesResponse]) => new MultiscaleVolumeChunkSource(
-                        chunkManager, instance, volumeId, changeSpec, volumeInfoResponse,
-                        meshesResponse, brainmapsOptions)));
-}
 
 interface ProjectMetadata {
   id: string;
@@ -340,108 +298,171 @@ export class VolumeList {
   }
 }
 
-export function getVolumeList(chunkManager: ChunkManager, instance: BrainmapsInstance) {
-  return chunkManager.memoize.getUncounted({instance, type: 'brainmaps:getVolumeList'}, () => {
-    let promise =
-        Promise
-            .all([
-              makeRequest(
-                  instance, {method: 'GET', path: '/v1beta2/projects', responseType: 'json'}),
-              makeRequest(
-                  instance, {method: 'GET', path: '/v1beta2/volumes', responseType: 'json'})
-            ])
-            .then(([projectsResponse,
-                    volumesResponse]) => new VolumeList(projectsResponse, volumesResponse));
-    const description = `Google ${INSTANCE_NAMES[instance]} volume list`;
-    StatusMessage.forPromise(promise, {
-      delay: true,
-      initialMessage: `Retrieving ${description}.`,
-      errorPrefix: `Error retrieving ${description}: `,
-    });
-    return promise;
-  });
-}
+
 export function parseChangeStackList(x: any) {
   return verifyObjectProperty(
       x, 'changeStackId', y => y === undefined ? undefined : parseArray(y, verifyString));
 }
 
-export function getChangeStackList(
-    chunkManager: ChunkManager, instance: BrainmapsInstance, volumeId: string) {
-  return chunkManager.memoize.getUncounted(
-      {instance, type: 'brainmaps:getChangeStackList', volumeId}, () => {
-        let promise: Promise<string[]|undefined> =
-            makeRequest(instance, {
-              method: 'GET',
-              path: `/v1beta2/changes/${volumeId}/change_stacks`,
-              responseType: 'json'
-            }).then(response => parseChangeStackList(response));
-        const description = `change stacks for ${volumeId}`;
-        StatusMessage.forPromise(promise, {
-          delay: true,
-          initialMessage: `Retrieving ${description}.`,
-          errorPrefix: `Error retrieving ${description}: `,
-        });
-        return promise;
-      });
-}
 
-export function volumeCompleter(
-    instance: BrainmapsInstance, url: string, chunkManager: ChunkManager) {
-  return getVolumeList(chunkManager, instance).then(volumeList => {
-    // Check if there is a valid 3-part volume id followed by a colon, in which case we complete the
-    // change stack name.
-    const changeStackMatch = url.match(/^([^:]+:[^:]+:[^:]+):(.*)$/);
-    if (changeStackMatch !== null) {
-      const volumeId = changeStackMatch[1];
-      const matchString = changeStackMatch[2];
-      return getChangeStackList(chunkManager, instance, volumeId).then(changeStacks => {
-        if (changeStacks === undefined) {
-          return null;
-        }
-        return {
-          offset: volumeId.length + 1,
-          completions: getPrefixMatches(matchString, changeStacks)
-        };
-      });
-    }
-    let lastColon = url.lastIndexOf(':');
-    let splitPoint = lastColon + 1;
-    let prefix = url.substring(0, splitPoint);
-    let matchString = url.substring(splitPoint);
-    let possibleMatches = volumeList.hierarchicalVolumeIds.get(prefix);
-    if (possibleMatches === undefined) {
-      return null;
-    }
-    if (prefix) {
-      // Project id already matched.
-      return {offset: prefix.length, completions: getPrefixMatches(matchString, possibleMatches)};
-    } else {
-      return {
-        offset: 0,
-        completions: getPrefixMatchesWithDescriptions(
-            matchString, possibleMatches, x => x,
-            x => {
-              const metadata = volumeList.projects.get(x.substring(0, x.length - 1));
-              return metadata && metadata.label;
-            })
-      };
-    }
-  });
-}
-
-export function registerBrainmapsDataSource(instance: BrainmapsInstance) {
-  let protocol = 'brainmaps';
-  if (instance !== PRODUCTION_INSTANCE) {
-    protocol += `-${INSTANCE_IDENTIFIERS[instance].toLowerCase()}`;
+export class BrainmapsDataSource extends DataSource {
+  constructor(
+      public instance: BrainmapsInstance,
+      public credentialsProvider: Owned<BrainmapsCredentialsProvider>) {
+    super();
   }
-  registerDataSourceFactory(protocol, {
-    description: `Google ${INSTANCE_NAMES[instance]} API`,
-    getVolume: getVolume.bind(undefined, instance),
-    getMeshSource: getMeshSourceByUrl.bind(undefined, instance),
-    getSkeletonSource: getSkeletonSourceByUrl.bind(undefined, instance),
-    volumeCompleter: volumeCompleter.bind(undefined, instance),
-  });
+
+  get description() {
+    return this.instance.description;
+  }
+
+  getMeshSource(chunkManager: ChunkManager, url: string) {
+    return chunkManager.getChunkSource(BrainmapsMeshSource, {
+      credentialsProvider: this.credentialsProvider,
+      parameters: this.getMeshSourceParameters(url)
+    });
+  }
+
+
+  getMeshSourceParameters(url: string) {
+    let match = url.match(meshSourcePattern);
+    if (match === null) {
+      throw new Error(`Invalid Brainmaps mesh URL: ${url}`);
+    }
+    let {volumeId, changeSpec} = parseVolumeKey(match[1]);
+    return {instance: this.instance, volumeId, changeSpec, meshName: match[2]};
+  }
+
+  getSkeletonSource(chunkManager: ChunkManager, url: string) {
+    return chunkManager.getChunkSource(BrainmapsSkeletonSource, {
+      credentialsProvider: this.credentialsProvider,
+      parameters: this.getMeshSourceParameters(url)
+    });
+  }
+
+  getVolume(chunkManager: ChunkManager, key: string, options: GetVolumeOptions) {
+    const {volumeId, changeSpec, parameters} = parseVolumeKey(key);
+    verifyObject(parameters);
+    const encoding = verifyObjectProperty(
+        parameters, 'encoding',
+        x => x === undefined ? undefined :
+                               verifyEnumString(parameters['encoding'], VolumeChunkEncoding));
+    const brainmapsOptions: GetBrainmapsVolumeOptions = {...options, encoding};
+    return chunkManager.memoize.getUncounted(
+        {
+          type: 'brainmaps:getVolume',
+          instance: this.instance,
+          volumeId,
+          changeSpec,
+          brainmapsOptions
+        },
+        () =>
+            Promise
+                .all([
+                  makeRequest(
+                      this.instance, this.credentialsProvider,
+                      {method: 'GET', path: `/v1beta2/volumes/${volumeId}`, responseType: 'json'}),
+                  makeRequest(this.instance, this.credentialsProvider, {
+                    method: 'GET',
+                    path: `/v1beta2/objects/${volumeId}/meshes`,
+                    responseType: 'json'
+                  }),
+                ])
+                .then(
+                    ([volumeInfoResponse, meshesResponse]) => new MultiscaleVolumeChunkSource(
+                        chunkManager, this.instance, this.credentialsProvider, volumeId, changeSpec,
+                        volumeInfoResponse, meshesResponse, brainmapsOptions)));
+  }
+
+  getVolumeList(chunkManager: ChunkManager) {
+    return chunkManager.memoize.getUncounted(
+        {instance: this.instance, type: 'brainmaps:getVolumeList'}, () => {
+          let promise = Promise
+                            .all([
+                              makeRequest(
+                                  this.instance, this.credentialsProvider,
+                                  {method: 'GET', path: '/v1beta2/projects', responseType: 'json'}),
+                              makeRequest(
+                                  this.instance, this.credentialsProvider,
+                                  {method: 'GET', path: '/v1beta2/volumes', responseType: 'json'})
+                            ])
+                            .then(
+                                ([projectsResponse, volumesResponse]) =>
+                                    new VolumeList(projectsResponse, volumesResponse));
+          const description = `${this.instance.description} volume list`;
+          StatusMessage.forPromise(promise, {
+            delay: true,
+            initialMessage: `Retrieving ${description}.`,
+            errorPrefix: `Error retrieving ${description}: `,
+          });
+          return promise;
+        });
+  }
+
+  getChangeStackList(chunkManager: ChunkManager, volumeId: string) {
+    return chunkManager.memoize.getUncounted(
+        {instance: this.instance, type: 'brainmaps:getChangeStackList', volumeId}, () => {
+          let promise: Promise<string[]|undefined> =
+              makeRequest(this.instance, this.credentialsProvider, {
+                method: 'GET',
+                path: `/v1beta2/changes/${volumeId}/change_stacks`,
+                responseType: 'json'
+              }).then(response => parseChangeStackList(response));
+          const description = `change stacks for ${volumeId}`;
+          StatusMessage.forPromise(promise, {
+            delay: true,
+            initialMessage: `Retrieving ${description}.`,
+            errorPrefix: `Error retrieving ${description}: `,
+          });
+          return promise;
+        });
+  }
+
+  volumeCompleter(url: string, chunkManager: ChunkManager) {
+    return this.getVolumeList(chunkManager).then(volumeList => {
+      // Check if there is a valid 3-part volume id followed by a colon, in which case we complete
+      // the change stack name.
+      const changeStackMatch = url.match(/^([^:]+:[^:]+:[^:]+):(.*)$/);
+      if (changeStackMatch !== null) {
+        const volumeId = changeStackMatch[1];
+        const matchString = changeStackMatch[2];
+        return this.getChangeStackList(chunkManager, volumeId).then(changeStacks => {
+          if (changeStacks === undefined) {
+            throw null;
+          }
+          return {
+            offset: volumeId.length + 1,
+            completions: getPrefixMatches(matchString, changeStacks)
+          };
+        });
+      }
+      let lastColon = url.lastIndexOf(':');
+      let splitPoint = lastColon + 1;
+      let prefix = url.substring(0, splitPoint);
+      let matchString = url.substring(splitPoint);
+      let possibleMatches = volumeList.hierarchicalVolumeIds.get(prefix);
+      if (possibleMatches === undefined) {
+        throw null;
+      }
+      if (prefix) {
+        // Project id already matched.
+        return {offset: prefix.length, completions: getPrefixMatches(matchString, possibleMatches)};
+      } else {
+        return {
+          offset: 0,
+          completions: getPrefixMatchesWithDescriptions(
+              matchString, possibleMatches, x => x,
+              x => {
+                const metadata = volumeList.projects.get(x.substring(0, x.length - 1));
+                return metadata && metadata.label;
+              })
+        };
+      }
+    });
+  }
 }
 
-registerBrainmapsDataSource(PRODUCTION_INSTANCE);
+export const productionInstance: BrainmapsInstance = {
+  description: 'Google Brain Maps',
+  serverUrls: ['https://brainmaps.googleapis.com'],
+};

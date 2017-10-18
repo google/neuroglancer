@@ -35,7 +35,10 @@ export function embedRelayFrame(proxyName: string, rpcToken: string) {
   document.body.appendChild(iframe);
 }
 
-export interface Token {
+/**
+ * OAuth2 Token
+ */
+export interface OAuth2Token {
   accessToken: string;
   expiresIn: string;
   tokenType: string;
@@ -43,7 +46,7 @@ export interface Token {
 }
 
 class PendingRequest {
-  finished = new Signal<(token?: Token, error?: any) => void>();
+  finished = new Signal<(token?: OAuth2Token, error?: any) => void>();
 }
 
 class AuthHandler {
@@ -217,7 +220,7 @@ export function authenticateGoogleOAuth2(
     authUser: options.authUser,
   });
   const request = handler.addPendingRequest(state);
-  const promise = new Promise<Token>((resolve, reject) => {
+  const promise = new Promise<OAuth2Token>((resolve, reject) => {
     request.finished.add((token, error) => {
       if (token !== undefined) {
         resolve(token);

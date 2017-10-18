@@ -15,7 +15,7 @@
  */
 
 import {ChunkManager} from 'neuroglancer/chunk_manager/frontend';
-import {GetVectorGraphicsOptions, getVectorGraphicsSource} from 'neuroglancer/datasource/factory';
+import {DataSourceProvider, GetVectorGraphicsOptions} from 'neuroglancer/datasource';
 import {UserLayer, UserLayerDropdown} from 'neuroglancer/layer';
 import {LayerListSpecification, registerLayerType} from 'neuroglancer/layer_specification';
 import {VectorGraphicsType} from 'neuroglancer/sliceview/vector_graphics/base';
@@ -35,11 +35,11 @@ require('neuroglancer/help_button.css');
 require('neuroglancer/maximize_button.css');
 
 function getVectorGraphicsWithStatusMessage(
-    chunkManager: ChunkManager, x: string,
+    dataSourceProvider: DataSourceProvider, chunkManager: ChunkManager, x: string,
     options: GetVectorGraphicsOptions = {}): Promise<MultiscaleVectorGraphicsChunkSource> {
   return StatusMessage.forPromise(
       new Promise(function(resolve) {
-        resolve(getVectorGraphicsSource(chunkManager, x, options));
+        resolve(dataSourceProvider.getVectorGraphicsSource(chunkManager, x, options));
       }),
       {
         initialMessage: `Retrieving metadata for vector graphics source ${x}.`,
@@ -74,7 +74,8 @@ export class VectorGraphicsUserLayer extends UserLayer {
     let vectorGraphicsPath = this.vectorGraphicsPath = verifyOptionalString(x['source']);
     if (vectorGraphicsPath !== undefined) {
       if (this.vectorGraphicsLayerType === VectorGraphicsType.LINE) {
-        getVectorGraphicsWithStatusMessage(manager.chunkManager, vectorGraphicsPath)
+        getVectorGraphicsWithStatusMessage(
+            manager.dataSourceProvider, manager.chunkManager, vectorGraphicsPath)
             .then(vectorGraphics => {
               if (!this.wasDisposed) {
                 let renderLayer = this.renderLayer =

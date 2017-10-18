@@ -19,11 +19,11 @@
  * Support for NDstore (https://github.com/neurodata/ndstore) servers.
  */
 
-import {ChunkManager} from 'neuroglancer/chunk_manager/frontend';
-import {CompletionResult, registerDataSourceFactory} from 'neuroglancer/datasource/factory';
+import {ChunkManager, WithParameters} from 'neuroglancer/chunk_manager/frontend';
+import {CompletionResult, DataSource} from 'neuroglancer/datasource';
 import {NDSTORE_URL_PREFIX, VolumeChunkSourceParameters} from 'neuroglancer/datasource/ndstore/base';
 import {DataType, VolumeChunkSpecification, VolumeSourceOptions, VolumeType} from 'neuroglancer/sliceview/volume/base';
-import {defineParameterizedVolumeChunkSource, MultiscaleVolumeChunkSource as GenericMultiscaleVolumeChunkSource} from 'neuroglancer/sliceview/volume/frontend';
+import {MultiscaleVolumeChunkSource as GenericMultiscaleVolumeChunkSource, VolumeChunkSource} from 'neuroglancer/sliceview/volume/frontend';
 import {applyCompletionOffset, getPrefixMatchesWithDescriptions} from 'neuroglancer/util/completion';
 import {mat4, vec3} from 'neuroglancer/util/geom';
 import {openShardedHttpRequest, sendHttpRequest} from 'neuroglancer/util/http_request';
@@ -35,7 +35,8 @@ serverVolumeTypes.set('annotation', VolumeType.SEGMENTATION);
 
 const VALID_ENCODINGS = new Set<string>(['npz', 'raw', 'jpeg']);
 
-const VolumeChunkSource = defineParameterizedVolumeChunkSource(VolumeChunkSourceParameters);
+class NDStoreVolumeChunkSource extends
+(WithParameters(VolumeChunkSource, VolumeChunkSourceParameters)) {}
 
 interface ChannelInfo {
   channelType: string;
@@ -189,14 +190,17 @@ export class MultiscaleVolumeChunkSource implements GenericMultiscaleVolumeChunk
             upperVoxelBound: scaleInfo.imageSize,
             volumeSourceOptions,
           })
-          .map(spec => VolumeChunkSource.get(this.chunkManager, spec, {
-            baseUrls: this.baseUrls,
-            urlPrefix: this.urlPrefix,
-            key: this.key,
-            channel: this.channel,
-            resolution: scaleInfo.key,
-            encoding: this.encoding,
-            neariso: this.neariso
+          .map(spec => this.chunkManager.getChunkSource(NDStoreVolumeChunkSource, {
+            spec,
+            parameters: {
+              baseUrls: this.baseUrls,
+              urlPrefix: this.urlPrefix,
+              key: this.key,
+              channel: this.channel,
+              resolution: scaleInfo.key,
+              encoding: this.encoding,
+              neariso: this.neariso
+            }
           }));
     });
   }
@@ -300,8 +304,30 @@ export function volumeCompleter(
       .then(completions => applyCompletionOffset(match![1].length + 1, completions));
 }
 
-registerDataSourceFactory('ndstore', {
-  description: 'NDstore',
-  volumeCompleter: volumeCompleter,
-  getVolume: getVolume,
-});
+export class NDStoreDataSource extends DataSource {
+  get description() {
+    return 'NDstore';
+  }
+  volumeCompleter(url: string, chunkManager: ChunkManager) {
+    return volumeCompleter(url, chunkManager);
+  }
+  getVolume(chunkManager: ChunkManager, url: string) {
+    return getVolume(chunkManager, url);
+  }
+}
+
+export class SingleServerDataSource extends DataSource {
+  constructor(
+      public description: string, public hostnames: string[],
+      public urlprefix: string = NDSTORE_URL_PREFIX) {
+    super();
+  }
+
+  getVolume(chunkManager: ChunkManager, path: string) {
+    return getShardedVolume(chunkManager, this.hostnames, path, this.urlprefix);
+  }
+
+  volumeCompleter(url: string, chunkManager: ChunkManager) {
+    return tokenAndChannelCompleter(chunkManager, this.hostnames, url, this.urlprefix);
+  }
+}

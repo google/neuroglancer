@@ -14,8 +14,11 @@
  * limitations under the License.
  */
 
-import {AvailableCapacity, CHUNK_MANAGER_RPC_ID, CHUNK_QUEUE_MANAGER_RPC_ID, ChunkState} from 'neuroglancer/chunk_manager/base';
-import {Memoize, StringMemoize} from 'neuroglancer/util/memoize';
+import {AvailableCapacity, CHUNK_MANAGER_RPC_ID, CHUNK_QUEUE_MANAGER_RPC_ID, ChunkSourceParametersConstructor, ChunkState} from 'neuroglancer/chunk_manager/base';
+import {Borrowed} from 'neuroglancer/util/disposable';
+import {stableStringify} from 'neuroglancer/util/json';
+import {StringMemoize} from 'neuroglancer/util/memoize';
+import {getObjectId} from 'neuroglancer/util/object_id';
 import {NullarySignal} from 'neuroglancer/util/signal';
 import {GL} from 'neuroglancer/webgl/context';
 import {registerRPC, registerSharedObjectOwner, RPC, SharedObject} from 'neuroglancer/worker_rpc';
@@ -148,11 +151,13 @@ registerRPC('Chunk.update', function(x) {
   }
 });
 
+export interface ChunkSourceConstructor<Options, T = ChunkSource> {
+  new(...args: any[]): T;
+  encodeOptions(options: Options): {[key: string]: any};
+}
+
 @registerSharedObjectOwner(CHUNK_MANAGER_RPC_ID)
 export class ChunkManager extends SharedObject {
-  chunkSourceCache: Map<any, Memoize<string, ChunkSource>> =
-      new Map<any, Memoize<string, ChunkSource>>();
-
   memoize = new StringMemoize();
 
   get gl() {
@@ -166,27 +171,23 @@ export class ChunkManager extends SharedObject {
         chunkQueueManager.rpc!, {'chunkQueueManager': chunkQueueManager.rpcId});
   }
 
-  getChunkSource<T extends ChunkSource>(constructor: any, key: string, getter: () => T) {
-    let {chunkSourceCache} = this;
-    let sources = chunkSourceCache.get(constructor);
-    if (sources === undefined) {
-      sources = new Memoize<string, ChunkSource>();
-      chunkSourceCache.set(constructor, sources);
-    }
-    return sources.get(key, () => {
-      let value = getter();
-      value.initializeCounterpart(value.chunkManager.rpc!, {});
-      return value;
+  getChunkSource<T extends ChunkSource, Options>(
+      constructorFunction: ChunkSourceConstructor<Options, T>, options: any): T {
+    const keyObject = constructorFunction.encodeOptions(options);
+    keyObject['constructorId'] = getObjectId(constructorFunction);
+    const key = stableStringify(keyObject);
+    return this.memoize.get(key, () => {
+      const newSource = new constructorFunction(this, options);
+      newSource.initializeCounterpart(this.rpc!, {});
+      return newSource;
     });
   }
 }
 
-export abstract class ChunkSource extends SharedObject {
+export class ChunkSource extends SharedObject {
   chunks = new Map<string, Chunk>();
-  /**
-   * Does not transfer ownership of a reference to chunkManager.
-   */
-  constructor(public chunkManager: ChunkManager) {
+
+  constructor(public chunkManager: Borrowed<ChunkManager>, _options: {} = {}) {
     super();
   }
 
@@ -213,4 +214,33 @@ export abstract class ChunkSource extends SharedObject {
   getChunk(_x: any): Chunk {
     throw new Error('Not implemented.');
   }
+
+  static encodeOptions(_options: {}): {[key: string]: any} {
+    return {};
+  }
+}
+
+export function
+WithParameters<Parameters, BaseOptions, TBase extends ChunkSourceConstructor<BaseOptions>>(
+    Base: TBase, parametersConstructor: ChunkSourceParametersConstructor<Parameters>) {
+  type Options = BaseOptions&{parameters: Parameters};
+  @registerSharedObjectOwner(parametersConstructor.RPC_ID)
+  class C extends Base {
+    parameters: Parameters;
+    constructor(...args: any[]) {
+      super(...args);
+      const options: Options = args[1];
+      this.parameters = options.parameters;
+    }
+    initializeCounterpart(rpc: RPC, options: any) {
+      options['parameters'] = this.parameters;
+      super.initializeCounterpart(rpc, options);
+    }
+    static encodeOptions(options: Options) {
+      const encoding = super.encodeOptions(options);
+      encoding['parameters'] = options.parameters;
+      return encoding;
+    }
+  }
+  return C;
 }

@@ -25,7 +25,7 @@ import {ComparisonFunction, PairingHeapOperations} from 'neuroglancer/util/pairi
 import PairingHeap0 from 'neuroglancer/util/pairing_heap.0';
 import PairingHeap1 from 'neuroglancer/util/pairing_heap.1';
 import {NullarySignal} from 'neuroglancer/util/signal';
-import {initializeSharedObjectCounterpart, registerSharedObject, RPC, SharedObject, SharedObjectCounterpart} from 'neuroglancer/worker_rpc';
+import {initializeSharedObjectCounterpart, registerSharedObject, registerSharedObjectOwner, RPC, SharedObject, SharedObjectCounterpart} from 'neuroglancer/worker_rpc';
 
 const DEBUG_CHUNK_UPDATES = false;
 
@@ -149,7 +149,7 @@ interface ChunkConstructor<T extends Chunk> {
  * also have a frontend-part, as well as other chunk sources, such as the GenericFileSource, that
  * has only a backend part.
  */
-export abstract class ChunkSourceBase extends SharedObject {
+export class ChunkSourceBase extends SharedObject {
   chunks: Map<string, Chunk> = new Map<string, Chunk>();
   freeChunks: Chunk[] = new Array<Chunk>();
 
@@ -170,17 +170,6 @@ export abstract class ChunkSourceBase extends SharedObject {
     chunk.source = this;
     return chunk;
   }
-
-  /**
-   * Begin downloading the specified the chunk.  The returned promise should resolve when the
-   * downloaded data has been successfully decoded and stored in the chunk, or rejected if the
-   * download or decoding fails.
-   *
-   * @param chunk Chunk to download.
-   * @param cancellationToken If this token is canceled, the download/decoding should be aborted if
-   * possible.
-   */
-  abstract download(chunk: Chunk, cancellationToken: CancellationToken): Promise<void>;
 
   /**
    * Adds the specified chunk to the chunk cache.
@@ -212,7 +201,25 @@ export abstract class ChunkSourceBase extends SharedObject {
   }
 }
 
-export abstract class ChunkSource extends ChunkSourceBase {
+export interface ChunkSourceBase {
+  /**
+   * Begin downloading the specified the chunk.  The returned promise should resolve when the
+   * downloaded data has been successfully decoded and stored in the chunk, or rejected if the
+   * download or decoding fails.
+   *
+   * Note: This method must be defined by subclasses.
+   *
+   * @param chunk Chunk to download.
+   * @param cancellationToken If this token is canceled, the download/decoding should be aborted if
+   * possible.
+   *
+   * TODO(jbms): Move this back to the class definition above and declare this abstract once mixins
+   * are compatible with abstract classes.
+   */
+  download(chunk: Chunk, cancellationToken: CancellationToken): Promise<void>;
+}
+
+export class ChunkSource extends ChunkSourceBase {
   constructor(rpc: RPC, options: any) {
     // No need to add a reference, since the owner counterpart will hold a reference to the owner
     // counterpart of chunkManager.
@@ -753,22 +760,23 @@ export class ChunkManager extends SharedObjectCounterpart {
   }
 }
 
+
 /**
- * Decorates final subclasses of ChunkSource.
- *
- * Defines the toString method based on the stringify method of the specified Parameters class.
- *
- * Calls registerSharedObject using parametersConstructor.RPC_ID.
+ * Mixin for adding a `parameters` member to a ChunkSource, and for registering the shared object
+ * type based on the `RPC_ID` member of the Parameters class.
  */
-export function registerChunkSource<Parameters>(
-    parametersConstructor: ChunkSourceParametersConstructor<Parameters>) {
-  return <T extends{parameters: Parameters}&SharedObjectCounterpart>(
-             target: {new (rpc: RPC, options: any): T}) => {
-    registerSharedObject(parametersConstructor.RPC_ID)(target);
-    target.prototype.toString = function(this: {parameters: Parameters}) {
-      return parametersConstructor.stringify(this.parameters);
-    };
-  };
+export function WithParameters<Parameters, TBase extends {new (...args: any[]): SharedObject}>(
+    Base: TBase, parametersConstructor: ChunkSourceParametersConstructor<Parameters>) {
+  @registerSharedObjectOwner(parametersConstructor.RPC_ID)
+  class C extends Base {
+    parameters: Parameters;
+    constructor(...args: any[]) {
+      super(...args);
+      const options = args[1];
+      this.parameters = options['parameters'];
+    }
+  }
+  return C;
 }
 
 /**
@@ -781,7 +789,7 @@ export interface ChunkRequester extends SharedObject { chunkManager: ChunkManage
  *
  * The resultant class implements `ChunkRequester`.
  */
-export function withChunkManager<T extends{new (...args: any[]): SharedObject}>(Base: T) {
+export function withChunkManager<T extends {new (...args: any[]): SharedObject}>(Base: T) {
   return class extends Base implements ChunkRequester {
     chunkManager: ChunkManager;
     constructor(...args: any[]) {
@@ -790,7 +798,7 @@ export function withChunkManager<T extends{new (...args: any[]): SharedObject}>(
       const options = args[1];
       // We don't increment the reference count, because our owner owns a reference to the
       // ChunkManager.
-      this.chunkManager = this.registerDisposer(<ChunkManager>rpc.get(options['chunkManager']));
+      this.chunkManager = <ChunkManager>rpc.get(options['chunkManager']);
     }
   };
 }

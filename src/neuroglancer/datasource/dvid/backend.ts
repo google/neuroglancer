@@ -14,28 +14,22 @@
  * limitations under the License.
  */
 
-import {registerChunkSource} from 'neuroglancer/chunk_manager/backend';
+import {WithParameters} from 'neuroglancer/chunk_manager/backend';
 import {TileChunkSourceParameters, TileEncoding, VolumeChunkEncoding, VolumeChunkSourceParameters} from 'neuroglancer/datasource/dvid/base';
 import {ChunkDecoder} from 'neuroglancer/sliceview/backend_chunk_decoders';
 import {decodeCompressedSegmentationChunk} from 'neuroglancer/sliceview/backend_chunk_decoders/compressed_segmentation';
 import {decodeJpegChunk} from 'neuroglancer/sliceview/backend_chunk_decoders/jpeg';
-import {ParameterizedVolumeChunkSource, VolumeChunk} from 'neuroglancer/sliceview/volume/backend';
+import {VolumeChunk, VolumeChunkSource} from 'neuroglancer/sliceview/volume/backend';
 import {CancellationToken} from 'neuroglancer/util/cancellation';
 import {openShardedHttpRequest, sendHttpRequest} from 'neuroglancer/util/http_request';
-import {RPC} from 'neuroglancer/worker_rpc';
+import {registerSharedObject} from 'neuroglancer/worker_rpc';
 
 const TILE_CHUNK_DECODERS = new Map<TileEncoding, ChunkDecoder>([
   [TileEncoding.JPEG, decodeJpegChunk],
 ]);
 
-@registerChunkSource(VolumeChunkSourceParameters)
-export class VolumeChunkSource extends ParameterizedVolumeChunkSource<VolumeChunkSourceParameters> {
-  constructor(rpc: RPC, options: any) {
-    super(rpc, options);
-
-    this.parameters = options['parameters'];
-  }
-
+@registerSharedObject() export class DVIDVolumeChunkSource extends
+(WithParameters(VolumeChunkSource, VolumeChunkSourceParameters)) {
   download(chunk: VolumeChunk, cancellationToken: CancellationToken) {
     let params = this.parameters;
     let path: string;
@@ -76,8 +70,8 @@ export class VolumeChunkSource extends ParameterizedVolumeChunkSource<VolumeChun
   }
 }
 
-@registerChunkSource(TileChunkSourceParameters)
-export class TileChunkSource extends ParameterizedVolumeChunkSource<TileChunkSourceParameters> {
+@registerSharedObject() export class TileChunkSource extends
+(WithParameters(VolumeChunkSource, TileChunkSourceParameters)) {
   chunkDecoder = TILE_CHUNK_DECODERS.get(this.parameters['encoding'])!;
 
   download(chunk: VolumeChunk, cancellationToken: CancellationToken) {

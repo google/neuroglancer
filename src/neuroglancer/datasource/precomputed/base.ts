@@ -25,10 +25,6 @@ export class VolumeChunkSourceParameters {
   path: string;
   encoding: VolumeChunkEncoding;
 
-  static stringify(parameters: VolumeChunkSourceParameters) {
-    return `precomputed:volume:${parameters.baseUrls[0]}/${parameters.path}`;
-  }
-
   static RPC_ID = 'precomputed/VolumeChunkSource';
 }
 
@@ -37,10 +33,6 @@ export class MeshSourceParameters {
   baseUrls: string[];
   path: string;
   lod: number;
-
-  static stringify(parameters: MeshSourceParameters) {
-    return `precomputed:mesh:${parameters.baseUrls[0]}/${parameters.path}/${parameters.lod}`;
-  }
 
   static RPC_ID = 'precomputed/MeshSource';
 }

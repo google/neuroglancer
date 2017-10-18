@@ -14,17 +14,14 @@
  * limitations under the License.
  */
 
-import {ChunkSourceParametersConstructor} from 'neuroglancer/chunk_manager/base';
-import {ChunkManager} from 'neuroglancer/chunk_manager/frontend';
 import {MultiscaleSliceViewChunkSource, SliceViewChunk, SliceViewChunkSource} from 'neuroglancer/sliceview/frontend';
 import {SliceView} from 'neuroglancer/sliceview/frontend';
 import {RenderLayer as GenericSliceViewRenderLayer} from 'neuroglancer/sliceview/renderlayer';
 import {VECTOR_GRAPHICS_RENDERLAYER_RPC_ID, VectorGraphicsChunkSource as VectorGraphicsChunkSourceInterface, VectorGraphicsChunkSpecification, VectorGraphicsSourceOptions} from 'neuroglancer/sliceview/vector_graphics/base';
-import {stableStringify} from 'neuroglancer/util/json';
 import {Buffer} from 'neuroglancer/webgl/buffer';
 import {GL} from 'neuroglancer/webgl/context';
 import {ShaderBuilder, ShaderProgram} from 'neuroglancer/webgl/shader';
-import {RPC, RpcId, SharedObject} from 'neuroglancer/worker_rpc';
+import {RpcId, SharedObject} from 'neuroglancer/worker_rpc';
 
 export abstract class RenderLayer extends GenericSliceViewRenderLayer {
   sources: VectorGraphicsChunkSource[][];
@@ -69,9 +66,9 @@ void emitTransparent() {
     return shader;
   }
 
-  abstract endSlice(shader: ShaderProgram): void
+  abstract endSlice(shader: ShaderProgram): void;
 
-      abstract draw(sliceView: SliceView): void
+  abstract draw(sliceView: SliceView): void;
 }
 
 export class VectorGraphicsChunk extends SliceViewChunk {
@@ -97,18 +94,10 @@ export class VectorGraphicsChunk extends SliceViewChunk {
   }
 }
 
-export abstract class VectorGraphicsChunkSource extends SliceViewChunkSource implements
+export class VectorGraphicsChunkSource extends SliceViewChunkSource implements
     VectorGraphicsChunkSourceInterface {
   chunks: Map<string, VectorGraphicsChunk>;
-
-  constructor(chunkManager: ChunkManager, public spec: VectorGraphicsChunkSpecification) {
-    super(chunkManager, spec);
-  }
-
-  initializeCounterpart(rpc: RPC, options: any) {
-    options['spec'] = this.spec.toObject();
-    super.initializeCounterpart(rpc, options);
-  }
+  spec: VectorGraphicsChunkSpecification;
 
   getChunk(x: any): VectorGraphicsChunk {
     return new VectorGraphicsChunk(this, x);
@@ -121,53 +110,6 @@ export abstract class VectorGraphicsChunkSource extends SliceViewChunkSource imp
   get vectorGraphicsCoordinatesInVoxels() {
     return true;
   }
-}
-
-export class ParameterizedVectorGraphicsSource<Parameters> extends VectorGraphicsChunkSource {
-  constructor(
-      chunkManager: ChunkManager, spec: VectorGraphicsChunkSpecification,
-      public parameters: Parameters) {
-    super(chunkManager, spec);
-  }
-
-  initializeCounterpart(rpc: RPC, options: any) {
-    options['parameters'] = this.parameters;
-    super.initializeCounterpart(rpc, options);
-  }
-}
-
-/**
- * Defines a VectorGraphicsSource for which all state is encapsulated in an object of type
- * Parameters.
- */
-export function defineParameterizedVectorGraphicsSource<Parameters>(
-    parametersConstructor: ChunkSourceParametersConstructor<Parameters>) {
-  const newConstructor = class SpecializedParameterizedVectorGraphicsSource extends
-      ParameterizedVectorGraphicsSource<Parameters> {
-    constructor(
-        chunkManager: ChunkManager, spec: VectorGraphicsChunkSpecification,
-        public parameters: Parameters) {
-      super(chunkManager, spec, parameters);
-    }
-
-    initializeCounterpart(rpc: RPC, options: any) {
-      options['parameters'] = this.parameters;
-      super.initializeCounterpart(rpc, options);
-    }
-
-    static get(
-        chunkManager: ChunkManager, spec: VectorGraphicsChunkSpecification,
-        parameters: Parameters) {
-      return chunkManager.getChunkSource(
-          this, stableStringify({parameters, spec: spec.toObject()}),
-          () => new this(chunkManager, spec, parameters));
-    }
-    toString() {
-      return parametersConstructor.stringify(this.parameters);
-    }
-  };
-  newConstructor.prototype.RPC_TYPE_ID = parametersConstructor.RPC_ID;
-  return newConstructor;
 }
 
 export interface MultiscaleVectorGraphicsChunkSource extends MultiscaleSliceViewChunkSource {

@@ -14,23 +14,24 @@
  * limitations under the License.
  */
 
-import {registerChunkSource} from 'neuroglancer/chunk_manager/backend';
+import {WithParameters} from 'neuroglancer/chunk_manager/backend';
 import {PointMatchChunkSourceParameters, TileChunkSourceParameters} from 'neuroglancer/datasource/render/base';
 import {ChunkDecoder} from 'neuroglancer/sliceview/backend_chunk_decoders';
 import {decodeJpegChunk} from 'neuroglancer/sliceview/backend_chunk_decoders/jpeg';
-import {ParameterizedVectorGraphicsChunkSource, VectorGraphicsChunk} from 'neuroglancer/sliceview/vector_graphics/backend';
-import {ParameterizedVolumeChunkSource, VolumeChunk} from 'neuroglancer/sliceview/volume/backend';
+import {VectorGraphicsChunk, VectorGraphicsChunkSource} from 'neuroglancer/sliceview/vector_graphics/backend';
+import {VolumeChunk, VolumeChunkSource} from 'neuroglancer/sliceview/volume/backend';
 import {CancellationToken} from 'neuroglancer/util/cancellation';
 import {Float32ArrayBuilder} from 'neuroglancer/util/float32array_builder';
 import {vec3} from 'neuroglancer/util/geom';
 import {openShardedHttpRequest, sendHttpJsonPostRequest, sendHttpRequest} from 'neuroglancer/util/http_request';
 import {parseArray, verify3dVec, verifyObject, verifyString} from 'neuroglancer/util/json';
+import {registerSharedObject} from 'neuroglancer/worker_rpc';
 
 let chunkDecoders = new Map<string, ChunkDecoder>();
 chunkDecoders.set('jpg', decodeJpegChunk);
 
-@registerChunkSource(TileChunkSourceParameters)
-export class TileChunkSource extends ParameterizedVolumeChunkSource<TileChunkSourceParameters> {
+@registerSharedObject() export class TileChunkSource extends
+(WithParameters(VolumeChunkSource, TileChunkSourceParameters)) {
   chunkDecoder = chunkDecoders.get(this.parameters.encoding)!;
 
   download(chunk: VolumeChunk, cancellationToken: CancellationToken) {
@@ -154,9 +155,8 @@ function downloadPointMatchChunk(
       });
 }
 
-@registerChunkSource(PointMatchChunkSourceParameters)
-export class PointMatchSource extends
-    ParameterizedVectorGraphicsChunkSource<PointMatchChunkSourceParameters> {
+@registerSharedObject() export class PointMatchSource extends
+(WithParameters(VectorGraphicsChunkSource, PointMatchChunkSourceParameters)) {
   download(chunk: VectorGraphicsChunk, cancellationToken: CancellationToken): Promise<void> {
     let {parameters} = this;
     let {chunkGridPosition} = chunk;

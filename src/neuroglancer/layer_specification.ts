@@ -15,7 +15,7 @@
  */
 
 import {ChunkManager} from 'neuroglancer/chunk_manager/frontend';
-import {getVolume, GetVolumeOptions} from 'neuroglancer/datasource/factory';
+import {DataSourceProvider, GetVolumeOptions} from 'neuroglancer/datasource';
 import {LayerManager, LayerSelectedValues, ManagedUserLayer, UserLayer} from 'neuroglancer/layer';
 import {VoxelSize} from 'neuroglancer/navigation_state';
 import {VolumeType} from 'neuroglancer/sliceview/volume/base';
@@ -28,11 +28,11 @@ import {NullarySignal, Signal} from 'neuroglancer/util/signal';
 import {Trackable} from 'neuroglancer/util/trackable';
 
 export function getVolumeWithStatusMessage(
-    chunkManager: ChunkManager, x: string,
+    dataSourceProvider: DataSourceProvider, chunkManager: ChunkManager, x: string,
     options: GetVolumeOptions = {}): Promise<MultiscaleVolumeChunkSource> {
   return StatusMessage.forPromise(
       new Promise(function(resolve) {
-        resolve(getVolume(chunkManager, x, options));
+        resolve(dataSourceProvider.getVolume(chunkManager, x, options));
       }),
       {
         initialMessage: `Retrieving metadata for volume ${x}.`,
@@ -78,8 +78,9 @@ export class LayerListSpecification extends RefCounted implements Trackable {
   }
 
   constructor(
-      public layerManager: LayerManager, public chunkManager: ChunkManager,
-      public layerSelectedValues: LayerSelectedValues, public voxelSize: VoxelSize) {
+      public dataSourceProvider: DataSourceProvider, public layerManager: LayerManager,
+      public chunkManager: ChunkManager, public layerSelectedValues: LayerSelectedValues,
+      public voxelSize: VoxelSize) {
     super();
     this.registerDisposer(layerManager.layersChanged.add(this.changed.dispatch));
     this.registerDisposer(layerManager.specificationChanged.add(this.changed.dispatch));
@@ -119,7 +120,8 @@ export class LayerListSpecification extends RefCounted implements Trackable {
       if (sourceUrl === undefined) {
         throw new Error(`Either layer 'type' or 'source' URL must be specified.`);
       }
-      let volumeSourcePromise = getVolumeWithStatusMessage(this.chunkManager, sourceUrl);
+      let volumeSourcePromise =
+          getVolumeWithStatusMessage(this.dataSourceProvider, this.chunkManager, sourceUrl);
       volumeSourcePromise.then(source => {
         if (this.layerManager.managedLayers.indexOf(managedLayer) === -1) {
           // Layer was removed before promise became ready.

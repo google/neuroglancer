@@ -14,23 +14,24 @@
  * limitations under the License.
  */
 
-import 'neuroglancer/datasource/brainmaps/api_backend';
-
-import {registerChunkSource} from 'neuroglancer/chunk_manager/backend';
-import {ChangeStackAwarePayload, HttpCall, makeRequest, MeshFragmentPayload, SkeletonPayload, SubvolumePayload} from 'neuroglancer/datasource/brainmaps/api';
+import {WithParameters} from 'neuroglancer/chunk_manager/backend';
+import {ChunkSourceParametersConstructor} from 'neuroglancer/chunk_manager/base';
+import {WithSharedCredentialsProviderCounterpart} from 'neuroglancer/credentials_provider/shared_counterpart';
+import {ChangeStackAwarePayload, Credentials, HttpCall, makeRequest, MeshFragmentPayload, SkeletonPayload, SubvolumePayload} from 'neuroglancer/datasource/brainmaps/api';
 import {ChangeSpec, MeshSourceParameters, SkeletonSourceParameters, VolumeChunkEncoding, VolumeSourceParameters} from 'neuroglancer/datasource/brainmaps/base';
-import {decodeJsonManifestChunk, decodeTriangleVertexPositionsAndIndices, FragmentChunk, ManifestChunk, ParameterizedMeshSource} from 'neuroglancer/mesh/backend';
+import {decodeJsonManifestChunk, decodeTriangleVertexPositionsAndIndices, FragmentChunk, ManifestChunk, MeshSource} from 'neuroglancer/mesh/backend';
 import {Bounds} from 'neuroglancer/segmentation_display_state/base';
-import {decodeSkeletonVertexPositionsAndIndices, ParameterizedSkeletonSource, SkeletonChunk} from 'neuroglancer/skeleton/backend';
+import {decodeSkeletonVertexPositionsAndIndices, SkeletonChunk, SkeletonSource} from 'neuroglancer/skeleton/backend';
 import {decodeCompressedSegmentationChunk} from 'neuroglancer/sliceview/backend_chunk_decoders/compressed_segmentation';
 import {decodeJpegChunk} from 'neuroglancer/sliceview/backend_chunk_decoders/jpeg';
 import {decodeRawChunk} from 'neuroglancer/sliceview/backend_chunk_decoders/raw';
-import {ParameterizedVolumeChunkSource, VolumeChunk} from 'neuroglancer/sliceview/volume/backend';
+import {VolumeChunk, VolumeChunkSource} from 'neuroglancer/sliceview/volume/backend';
 import {CancellationToken} from 'neuroglancer/util/cancellation';
 import {Endianness} from 'neuroglancer/util/endian';
-import {vec3Key, vec3, decodeMorton} from 'neuroglancer/util/geom';
+import {decodeMorton, vec3, vec3Key} from 'neuroglancer/util/geom';
 import {verifyObject, verifyObjectProperty, verifyStringArray} from 'neuroglancer/util/json';
 import {Uint64} from 'neuroglancer/util/uint64';
+import {registerSharedObject, SharedObject} from 'neuroglancer/worker_rpc';
 
 const CHUNK_DECODERS = new Map([
   [
@@ -59,8 +60,15 @@ function applyChangeStack(changeStack: ChangeSpec|undefined, payload: ChangeStac
   }
 }
 
-@registerChunkSource(VolumeSourceParameters)
-export class VolumeChunkSource extends ParameterizedVolumeChunkSource<VolumeSourceParameters> {
+function BrainmapsSource<Parameters, TBase extends {new (...args: any[]): SharedObject}>(
+    Base: TBase, parametersConstructor: ChunkSourceParametersConstructor<Parameters>) {
+  return WithParameters(
+      WithSharedCredentialsProviderCounterpart<Credentials>()(Base), parametersConstructor);
+}
+
+@registerSharedObject()
+export class BrainmapsVolumeChunkSource extends
+(BrainmapsSource(VolumeChunkSource, VolumeSourceParameters)) {
   chunkDecoder = CHUNK_DECODERS.get(this.parameters.encoding)!;
 
   private applyEncodingParams(payload: SubvolumePayload) {
@@ -115,7 +123,8 @@ export class VolumeChunkSource extends ParameterizedVolumeChunkSource<VolumeSour
       responseType: 'arraybuffer',
     };
 
-    return makeRequest(parameters['instance'], httpCall, cancellationToken)
+    return makeRequest(
+               parameters['instance'], this.credentialsProvider, httpCall, cancellationToken)
         .then(response => this.chunkDecoder(chunk, response));
   }
 }
@@ -123,7 +132,7 @@ export class VolumeChunkSource extends ParameterizedVolumeChunkSource<VolumeSour
 function decodeManifestChunk(chunk: ManifestChunk, response: any) {
   decodeJsonManifestChunk(chunk, response, 'fragmentKey');
   if (chunk.clipBounds) {
-    chunk.fragmentIds = filterFragments(chunk.fragmentIds, chunk.clipBounds)
+    chunk.fragmentIds = filterFragments(chunk.fragmentIds, chunk.clipBounds);
   }
   return chunk;
 }
@@ -220,8 +229,8 @@ function decodeFragmentChunk(chunk: FragmentChunk, response: ArrayBuffer) {
       chunk, response, Endianness.LITTLE, /*vertexByteOffset=*/8, numVertices);
 }
 
-@registerChunkSource(MeshSourceParameters)
-export class MeshSource extends ParameterizedMeshSource<MeshSourceParameters> {
+@registerSharedObject() export class BrainmapsMeshSource extends
+(BrainmapsSource(MeshSource, MeshSourceParameters)) {
   private manifestDecoder = this.parameters.changeSpec !== undefined ?
       decodeManifestChunkWithSupervoxelIds :
       decodeManifestChunk;
@@ -245,7 +254,8 @@ export class MeshSource extends ParameterizedMeshSource<MeshSourceParameters> {
       path,
       responseType: 'json',
     };
-    return makeRequest(parameters['instance'], httpCall, cancellationToken)
+    return makeRequest(
+               parameters['instance'], this.credentialsProvider, httpCall, cancellationToken)
         .then(response => this.manifestDecoder(chunk, response));
   }
 
@@ -279,7 +289,8 @@ export class MeshSource extends ParameterizedMeshSource<MeshSourceParameters> {
       responseType: 'arraybuffer',
     };
 
-    return makeRequest(parameters['instance'], httpCall, cancellationToken)
+    return makeRequest(
+               parameters['instance'], this.credentialsProvider, httpCall, cancellationToken)
         .then(response => decodeFragmentChunk(chunk, response));
   }
 }
@@ -301,8 +312,8 @@ function decodeSkeletonChunk(chunk: SkeletonChunk, response: ArrayBuffer) {
       /*indexByteOffset=*/undefined, /*numEdges=*/numEdges);
 }
 
-@registerChunkSource(SkeletonSourceParameters)
-export class SkeletonSource extends ParameterizedSkeletonSource<SkeletonSourceParameters> {
+@registerSharedObject() export class BrainmapsSkeletonSource extends
+(BrainmapsSource(SkeletonSource, SkeletonSourceParameters)) {
   download(chunk: SkeletonChunk, cancellationToken: CancellationToken) {
     const {parameters} = this;
     let payload: SkeletonPayload = {
@@ -318,7 +329,8 @@ export class SkeletonSource extends ParameterizedSkeletonSource<SkeletonSourcePa
       payload: JSON.stringify(payload),
       responseType: 'arraybuffer',
     };
-    return makeRequest(parameters['instance'], httpCall, cancellationToken)
+    return makeRequest(
+               parameters['instance'], this.credentialsProvider, httpCall, cancellationToken)
         .then(response => decodeSkeletonChunk(chunk, response));
   }
 }

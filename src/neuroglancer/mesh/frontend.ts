@@ -14,13 +14,12 @@
  * limitations under the License.
  */
 
-import {ChunkSourceParametersConstructor, ChunkState} from 'neuroglancer/chunk_manager/base';
+import {ChunkState} from 'neuroglancer/chunk_manager/base';
 import {Chunk, ChunkManager, ChunkSource} from 'neuroglancer/chunk_manager/frontend';
 import {FRAGMENT_SOURCE_RPC_ID, MESH_LAYER_RPC_ID} from 'neuroglancer/mesh/base';
 import {PerspectiveViewRenderContext, PerspectiveViewRenderLayer} from 'neuroglancer/perspective_view/render_layer';
 import {forEachSegmentToDraw, getObjectColor, registerRedrawWhenSegmentationDisplayState3DChanged, SegmentationDisplayState3D, SegmentationLayerSharedObject} from 'neuroglancer/segmentation_display_state/frontend';
 import {mat4, vec3, vec4} from 'neuroglancer/util/geom';
-import {stableStringify} from 'neuroglancer/util/json';
 import {getObjectId} from 'neuroglancer/util/object_id';
 import {Buffer} from 'neuroglancer/webgl/buffer';
 import {GL} from 'neuroglancer/webgl/context';
@@ -213,7 +212,7 @@ export class FragmentChunk extends Chunk {
   }
 }
 
-export abstract class MeshSource extends ChunkSource {
+export class MeshSource extends ChunkSource {
   fragmentSource = this.registerDisposer(new FragmentSource(this.chunkManager, this));
   initializeCounterpart(rpc: RPC, options: any) {
     this.fragmentSource.initializeCounterpart(this.chunkManager.rpc!, {});
@@ -253,29 +252,4 @@ export class FragmentSource extends ChunkSource {
   getChunk(x: any) {
     return new FragmentChunk(this, x);
   }
-}
-
-/**
- * Defines a MeshSource for which all state is encapsulated in an object of type Parameters.
- */
-export function defineParameterizedMeshSource<Parameters>(
-    parametersConstructor: ChunkSourceParametersConstructor<Parameters>) {
-  const newConstructor = class ParameterizedMeshSource extends MeshSource {
-    constructor(chunkManager: ChunkManager, public parameters: Parameters) {
-      super(chunkManager);
-    }
-    initializeCounterpart(rpc: RPC, options: any) {
-      options['parameters'] = this.parameters;
-      super.initializeCounterpart(rpc, options);
-    }
-    static get(chunkManager: ChunkManager, parameters: Parameters) {
-      return chunkManager.getChunkSource(
-          this, stableStringify(parameters), () => new this(chunkManager, parameters));
-    }
-    toString() {
-      return parametersConstructor.stringify(this.parameters);
-    }
-  };
-  newConstructor.prototype.RPC_TYPE_ID = parametersConstructor.RPC_ID;
-  return newConstructor;
 }

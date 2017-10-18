@@ -19,22 +19,23 @@
  * Support for Python integration.
  */
 
-import {ChunkManager} from 'neuroglancer/chunk_manager/frontend';
-import {registerDataSourceFactory} from 'neuroglancer/datasource/factory';
+import {ChunkManager, WithParameters} from 'neuroglancer/chunk_manager/frontend';
+import {DataSource} from 'neuroglancer/datasource';
 import {MeshSourceParameters, SkeletonSourceParameters, VolumeChunkEncoding, VolumeChunkSourceParameters} from 'neuroglancer/datasource/python/base';
-import {defineParameterizedMeshSource} from 'neuroglancer/mesh/frontend';
+import {MeshSource} from 'neuroglancer/mesh/frontend';
 import {VertexAttributeInfo} from 'neuroglancer/skeleton/base';
-import {parameterizedSkeletonSource} from 'neuroglancer/skeleton/frontend';
+import {SkeletonSource} from 'neuroglancer/skeleton/frontend';
 import {DataType, DEFAULT_MAX_VOXELS_PER_CHUNK_LOG2, getNearIsotropicBlockSize, getTwoDimensionalBlockSize} from 'neuroglancer/sliceview/base';
 import {VolumeChunkSpecification, VolumeSourceOptions, VolumeType} from 'neuroglancer/sliceview/volume/base';
-import {defineParameterizedVolumeChunkSource, MultiscaleVolumeChunkSource as GenericMultiscaleVolumeChunkSource} from 'neuroglancer/sliceview/volume/frontend';
+import {VolumeChunkSource, MultiscaleVolumeChunkSource as GenericMultiscaleVolumeChunkSource} from 'neuroglancer/sliceview/volume/frontend';
 import {mat4, vec3} from 'neuroglancer/util/geom';
 import {openShardedHttpRequest, sendHttpRequest} from 'neuroglancer/util/http_request';
 import {parseArray, parseFixedLengthArray, verify3dDimensions, verify3dScale, verify3dVec, verifyEnumString, verifyObject, verifyObjectAsMap, verifyObjectProperty, verifyPositiveInt, verifyString} from 'neuroglancer/util/json';
 
-const VolumeChunkSource = defineParameterizedVolumeChunkSource(VolumeChunkSourceParameters);
-const MeshSource = defineParameterizedMeshSource(MeshSourceParameters);
-const BaseSkeletonSource = parameterizedSkeletonSource(SkeletonSourceParameters);
+class PythonVolumeChunkSource extends
+(WithParameters(VolumeChunkSource, VolumeChunkSourceParameters)) {}
+class PythonMeshSource extends
+(WithParameters(MeshSource, MeshSourceParameters)) {}
 
 interface ScaleInfo {
   key: string;
@@ -153,21 +154,24 @@ export class MultiscaleVolumeChunkSource implements GenericMultiscaleVolumeChunk
         chunkDataSize: scaleInfo.chunkDataSize!,
         volumeSourceOptions,
       });
-      return VolumeChunkSource.get(
-          this.chunkManager, spec,
-          {baseUrls: this.baseUrls, key: scaleInfo.key, encoding: encoding});
+      return this.chunkManager.getChunkSource(
+          PythonVolumeChunkSource,
+          {spec, parameters: {baseUrls: this.baseUrls, key: scaleInfo.key, encoding: encoding}});
     }));
   }
 
   getMeshSource() {
-    return MeshSource.get(this.chunkManager, {
-      baseUrls: this.baseUrls,
-      key: this.key,
+    return this.chunkManager.getChunkSource(PythonMeshSource, {
+      parameters: {
+        baseUrls: this.baseUrls,
+        key: this.key,
+      }
     });
   }
 }
 
-export class SkeletonSource extends BaseSkeletonSource {
+export class PythonSkeletonSource extends
+(WithParameters(SkeletonSource, SkeletonSourceParameters)) {
   get skeletonVertexCoordinatesInVoxels() {
     return false;
   }
@@ -195,10 +199,12 @@ export function getSkeletonSource(chunkManager: ChunkManager, path: string) {
   if (match === null) {
     throw new Error(`Invalid python volume path: ${JSON.stringify(path)}`);
   }
-  return SkeletonSource.get(chunkManager, {
-    baseUrls: [match[1]],
-    key: match[2],
-    vertexAttributes: parseSkeletonVertexAttributes(match[3]),
+  return chunkManager.getChunkSource(PythonSkeletonSource, {
+    parameters: {
+      baseUrls: [match[1]],
+      key: match[2],
+      vertexAttributes: parseSkeletonVertexAttributes(match[3]),
+    }
   });
 }
 
@@ -221,8 +227,14 @@ export function getVolume(chunkManager: ChunkManager, path: string) {
   return getShardedVolume(chunkManager, [match[1]], match[2]);
 }
 
-registerDataSourceFactory('python', {
-  description: 'Python-served volume',
-  getVolume: getVolume,
-  getSkeletonSource: getSkeletonSource,
-});
+export class PythonDataSource extends DataSource {
+  get description() {
+    return 'Python-served volume';
+  }
+  getVolume(chunkManager: ChunkManager, path: string) {
+    return getVolume(chunkManager, path);
+  }
+  getSkeletonSource(chunkManager: ChunkManager, url: string) {
+    return getSkeletonSource(chunkManager, url);
+  }
+}

@@ -19,11 +19,11 @@
  * Support for DVID (https://github.com/janelia-flyem/dvid) servers.
  */
 
-import {ChunkManager} from 'neuroglancer/chunk_manager/frontend';
+import {ChunkManager, WithParameters} from 'neuroglancer/chunk_manager/frontend';
+import {CompletionResult, DataSource} from 'neuroglancer/datasource';
 import {DVIDSourceParameters, TileChunkSourceParameters, TileEncoding, VolumeChunkEncoding, VolumeChunkSourceParameters} from 'neuroglancer/datasource/dvid/base';
-import {CompletionResult, registerDataSourceFactory} from 'neuroglancer/datasource/factory';
 import {DataType, VolumeChunkSpecification, VolumeSourceOptions, VolumeType} from 'neuroglancer/sliceview/volume/base';
-import {defineParameterizedVolumeChunkSource, MultiscaleVolumeChunkSource as GenericMultiscaleVolumeChunkSource, VolumeChunkSource} from 'neuroglancer/sliceview/volume/frontend';
+import {MultiscaleVolumeChunkSource as GenericMultiscaleVolumeChunkSource, VolumeChunkSource} from 'neuroglancer/sliceview/volume/frontend';
 import {StatusMessage} from 'neuroglancer/status';
 import {applyCompletionOffset, getPrefixMatchesWithDescriptions} from 'neuroglancer/util/completion';
 import {mat4, vec3} from 'neuroglancer/util/geom';
@@ -50,7 +50,8 @@ export class DataInstanceInfo {
   constructor(public obj: any, public name: string, public base: DataInstanceBaseInfo) {}
 }
 
-const DVIDVolumeChunkSource = defineParameterizedVolumeChunkSource(VolumeChunkSourceParameters);
+class DVIDVolumeChunkSource extends
+(WithParameters(VolumeChunkSource, VolumeChunkSourceParameters)) {}
 
 export class VolumeDataInstanceInfo extends DataInstanceInfo {
   dataType: DataType;
@@ -138,7 +139,8 @@ export class VolumeDataInstanceInfo extends DataInstanceInfo {
                          undefined)
               })
               .map(spec => {
-                return DVIDVolumeChunkSource.get(chunkManager, spec, volParameters);
+                return chunkManager.getChunkSource(
+                    DVIDVolumeChunkSource, {spec, parameters: volParameters});
               });
       sources.push(alternatives);
     }
@@ -175,7 +177,8 @@ const TILE_DIMS = [
   [1, 2],
 ];
 
-const TileChunkSource = defineParameterizedVolumeChunkSource(TileChunkSourceParameters);
+class TileChunkSource extends
+(WithParameters(VolumeChunkSource, TileChunkSourceParameters)) {}
 
 export class TileDataInstanceInfo extends DataInstanceInfo {
   get dataType() {
@@ -257,13 +260,16 @@ export class TileDataInstanceInfo extends DataInstanceInfo {
           upperVoxelBound,
           volumeSourceOptions,
         });
-        return TileChunkSource.get(chunkManager, spec, {
-          'baseUrls': parameters.baseUrls,
-          'nodeKey': parameters.nodeKey,
-          'dataInstanceKey': parameters.dataInstanceKey,
-          'encoding': encoding,
-          'level': level,
-          'dims': `${dims[0]}_${dims[1]}`,
+        return chunkManager.getChunkSource(TileChunkSource, {
+          spec,
+          parameters: {
+            'baseUrls': parameters.baseUrls,
+            'nodeKey': parameters.nodeKey,
+            'dataInstanceKey': parameters.dataInstanceKey,
+            'encoding': encoding,
+            'level': level,
+            'dims': `${dims[0]}_${dims[1]}`,
+          }
         });
       });
       sources.push(alternatives);
@@ -547,8 +553,16 @@ export function volumeCompleter(
               applyCompletionOffset(baseUrl.length + 1, completeNodeAndInstance(serverInfo, path)));
 }
 
-registerDataSourceFactory('dvid', {
-  description: 'DVID',
-  volumeCompleter: volumeCompleter,
-  getVolume: getVolume,
-});
+export class DVIDDataSource extends DataSource {
+  get description() {
+    return 'DVID';
+  }
+
+  getVolume(chunkManager: ChunkManager, url: string) {
+    return getVolume(chunkManager, url);
+  }
+
+  volumeCompleter(url: string, chunkManager: ChunkManager) {
+    return volumeCompleter(url, chunkManager);
+  }
+}

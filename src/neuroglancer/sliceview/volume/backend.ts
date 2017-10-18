@@ -58,7 +58,7 @@ export class VolumeChunk extends SliceViewChunk {
   }
 }
 
-export abstract class VolumeChunkSource extends SliceViewChunkSource implements
+export class VolumeChunkSource extends SliceViewChunkSource implements
     VolumeChunkSourceInterface {
   spec: VolumeChunkSpecification;
   constructor(rpc: RPC, options: any) {
@@ -81,18 +81,4 @@ export abstract class VolumeChunkSource extends SliceViewChunkSource implements
 @registerSharedObject(VOLUME_RENDERLAYER_RPC_ID)
 export class RenderLayer extends SliceViewRenderLayer implements RenderLayerInterface {
   sources: VolumeChunkSource[][];
-}
-
-/**
- * Extends VolumeChunkSource with a parameters member.
- *
- * Subclasses should be decorated with
- * src/neuroglancer/chunk_manager/backend.ts:registerChunkSource.
- */
-export abstract class ParameterizedVolumeChunkSource<Parameters> extends VolumeChunkSource {
-  parameters: Parameters;
-  constructor(rpc: RPC, options: any) {
-    super(rpc, options);
-    this.parameters = options['parameters'];
-  }
 }

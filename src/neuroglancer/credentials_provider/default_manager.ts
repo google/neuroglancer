@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2016 Google Inc.
+ * Copyright 2017 Google Inc.
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
@@ -14,30 +14,10 @@
  * limitations under the License.
  */
 
-export enum VolumeChunkEncoding {
-  JPEG,
-  COMPRESSED_SEGMENTATION
-}
+/**
+ * @file CredentialsManager for globally registering a CredentialsProvider
+ */
 
-export class DVIDSourceParameters {
-  baseUrls: string[];
-  nodeKey: string;
-  dataInstanceKey: string;
-}
+import {MapBasedCredentialsManager} from 'neuroglancer/credentials_provider';
 
-export class VolumeChunkSourceParameters extends DVIDSourceParameters {
-  encoding: VolumeChunkEncoding;
-  static RPC_ID = 'dvid/VolumeChunkSource';
-}
-
-export enum TileEncoding {
-  JPEG
-}
-
-export class TileChunkSourceParameters extends DVIDSourceParameters {
-  dims: string;
-  level: string;
-  encoding: TileEncoding;
-
-  static RPC_ID = 'dvid/TileChunkSource';
-}
+export const defaultCredentialsManager = new MapBasedCredentialsManager();

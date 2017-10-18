@@ -44,7 +44,10 @@ const minifyBabelPlugins = exports.minifyBabelPlugins = [
 ];
 
 const DEFAULT_DATA_SOURCES = exports.DEFAULT_DATA_SOURCES = [
-  'neuroglancer/datasource/brainmaps',
+  {
+    source: 'neuroglancer/datasource/brainmaps',
+    registerCredentials: 'neuroglancer/datasource/brainmaps/register_credentials_provider'
+  },
   'neuroglancer/datasource/ndstore',
   'neuroglancer/datasource/dvid',
   'neuroglancer/datasource/render',
@@ -52,8 +55,8 @@ const DEFAULT_DATA_SOURCES = exports.DEFAULT_DATA_SOURCES = [
   'neuroglancer/datasource/precomputed',
   'neuroglancer/datasource/python',
   'neuroglancer/datasource/nifti',
-  'neuroglancer/datasource/vtk',
-  'neuroglancer/datasource/csv',
+  {source: 'neuroglancer/datasource/vtk', register: null},
+  {source: 'neuroglancer/datasource/csv', register: null},
 ];
 
 const DEFAULT_SUPPORTED_LAYERS = exports.DEFAULT_SUPPORTED_LAYERS = [
@@ -206,6 +209,8 @@ function getBaseConfig(options) {
  *     getTypescriptLoaderEntry, the following options may also be specified.
  * @param {boolean=} [options.minify=false] Specifies whether to produce minified output (using the
  *     SIMPLE mode of Google Closure Compiler).
+ * @param {boolean=} [options.registerCredentials=true] Specifies whether to register source-specific
+ *     CredentialsProvider implementations with the default credentials manager.
  * @param {function(object)=} options.modifyBaseConfig Function that is invoked on the result of
  *     getBaseConfig, and is allowed to modify it before it is used to generate the main and worker
  *     bundles.
@@ -243,8 +248,19 @@ function getViewerConfig(options) {
   let frontendDataSourceModules = [];
   let backendDataSourceModules = [];
   for (let datasource of dataSources) {
-    frontendDataSourceModules.push(`${datasource}/frontend`);
-    backendDataSourceModules.push(`${datasource}/backend`);
+    if (typeof datasource === 'string') {
+      datasource = {source: datasource};
+    }
+    frontendDataSourceModules.push(`${datasource.source}/frontend`);
+    if (options.registerCredentials !== false && datasource.registerCredentials) {
+      frontendDataSourceModules.push(datasource.registerCredentials);
+    }
+    if (datasource.register === undefined) {
+      frontendDataSourceModules.push(`${datasource.source}/register_default`);
+    } else if (datasource.register !== null) {
+      frontendDataSourceModules.push(datasource.register);
+    }
+    backendDataSourceModules.push(`${datasource.source}/backend`);
   }
   let defaultDefines = {
     // This is the default client ID used for the hosted neuroglancer.

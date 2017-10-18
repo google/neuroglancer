@@ -19,13 +19,16 @@
  * volumes.
  */
 
-import {ChunkManager} from 'neuroglancer/chunk_manager/frontend';
-import {registerDataSourceFactory} from 'neuroglancer/datasource/factory';
+import {ChunkManager, WithParameters} from 'neuroglancer/chunk_manager/frontend';
+import {DataSource} from 'neuroglancer/datasource';
 import {GET_NIFTI_VOLUME_INFO_RPC_ID, NiftiVolumeInfo, VolumeSourceParameters} from 'neuroglancer/datasource/nifti/base';
 import {VolumeChunkSpecification, VolumeSourceOptions} from 'neuroglancer/sliceview/volume/base';
-import {defineParameterizedVolumeChunkSource, MultiscaleVolumeChunkSource as GenericMultiscaleVolumeChunkSource} from 'neuroglancer/sliceview/volume/frontend';
+import {VolumeChunkSource, MultiscaleVolumeChunkSource as GenericMultiscaleVolumeChunkSource} from 'neuroglancer/sliceview/volume/frontend';
 import {CancellationToken, uncancelableToken} from 'neuroglancer/util/cancellation';
 import {kOneVec, mat4, translationRotationScaleZReflectionToMat4} from 'neuroglancer/util/geom';
+
+class NiftiVolumeChunkSource extends
+(WithParameters(VolumeChunkSource, VolumeSourceParameters)) {}
 
 export class MultiscaleVolumeChunkSource implements GenericMultiscaleVolumeChunkSource {
   constructor(public chunkManager: ChunkManager, public url: string, public info: NiftiVolumeInfo) {
@@ -52,15 +55,13 @@ export class MultiscaleVolumeChunkSource implements GenericMultiscaleVolumeChunk
           mat4.create(), info.qoffset, info.quatern, kOneVec, info.qfac),
       volumeSourceOptions,
     });
-    return [[VolumeChunkSource.get(this.chunkManager, spec, {url: this.url})]];
+    return [[this.chunkManager.getChunkSource(NiftiVolumeChunkSource, {spec, parameters: {url: this.url}})]];
   }
 
   getMeshSource(): null {
     return null;
   }
 }
-
-const VolumeChunkSource = defineParameterizedVolumeChunkSource(VolumeSourceParameters);
 
 function getNiftiVolumeInfo(
     chunkManager: ChunkManager, url: string, cancellationToken: CancellationToken) {
@@ -76,7 +77,9 @@ export function getVolume(chunkManager: ChunkManager, url: string) {
                 .then(info => new MultiscaleVolumeChunkSource(chunkManager, url, info)));
 }
 
-registerDataSourceFactory('nifti', {
-  description: 'Single NIfTI file',
-  getVolume: getVolume,
-});
+export class NiftiDataSource extends DataSource {
+  get description() { return 'Single NIfTI file'; }
+  getVolume(chunkManager: ChunkManager, url: string) {
+    return getVolume(chunkManager, url);
+  }
+}

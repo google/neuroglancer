@@ -14,16 +14,32 @@
  * limitations under the License.
  */
 
-import {getToken, Token} from 'neuroglancer/datasource/brainmaps/api_implementation';
+import {CredentialsProvider, CredentialsWithGeneration} from 'neuroglancer/credentials_provider';
 import {CANCELED, CancellationToken, uncancelableToken} from 'neuroglancer/util/cancellation';
 import {HttpError, openShardedHttpRequest} from 'neuroglancer/util/http_request';
 
-export var numPendingRequests = 0;
+export type BrainmapsCredentialsProvider = CredentialsProvider<Credentials>;
 
-export type BrainmapsInstance = number;
-export const PRODUCTION_INSTANCE = 0;
+/**
+ * OAuth2 token
+ */
+export interface Credentials {
+  tokenType: string;
+  accessToken: string;
+}
 
-export const INSTANCE_NAMES: string[] = [];
+/**
+ * Key used for retrieving the CredentialsProvider from a CredentialsManager.
+ */
+export const credentialsKey = 'google-brainmaps';
+
+export interface BrainmapsInstance {
+  description: string;
+  /**
+   * One or more server URLs to use to connect to the instance.
+   */
+  serverUrls: string[];
+}
 
 /**
  * API-related interfaces.
@@ -63,29 +79,6 @@ export interface MeshFragmentPayload extends ChangeStackAwarePayload {
   object_id: string;
 }
 
-/**
- * Maps a BrainmapsInstance to the list of base URL shards to use for accessing it.
- */
-export const INSTANCE_BASE_URLS: string[][] = [];
-const instanceHostname: string[] = [];
-
-export const INSTANCE_IDENTIFIERS: string[] = [];
-
-export function brainmapsInstanceKey(instance: BrainmapsInstance) {
-  return INSTANCE_IDENTIFIERS[instance];
-}
-
-export function setupBrainmapsInstance(
-    instance: BrainmapsInstance, hostname: string, identifier: string, name: string) {
-  INSTANCE_IDENTIFIERS[instance] = identifier;
-  INSTANCE_NAMES[instance] = name;
-  instanceHostname[instance] = hostname;
-  let baseUrls = [`https://${hostname}`];
-  INSTANCE_BASE_URLS[instance] = baseUrls;
-}
-
-setupBrainmapsInstance(PRODUCTION_INSTANCE, 'brainmaps.googleapis.com', 'prod', 'Brain Maps');
-
 export interface HttpCall {
   method: 'GET'|'POST';
   path: string;
@@ -93,19 +86,19 @@ export interface HttpCall {
   payload?: string;
 }
 
+export function makeRequest(
+    instance: BrainmapsInstance, credentialsProvider: BrainmapsCredentialsProvider,
+    httpCall: HttpCall, cancellationToken?: CancellationToken): Promise<ArrayBuffer>;
+export function makeRequest(
+    instance: BrainmapsInstance, credentialsProvider: BrainmapsCredentialsProvider,
+    httpCall: HttpCall, cancellationToken?: CancellationToken): Promise<any>;
+// export function makeRequest(
+//     instance: BrainmapsInstance, credentialsProvider: BrainmapsCredentialsProvider,
+//     httpCall: HttpCall, cancellationToken?: CancellationToken): any;
 
 export function makeRequest(
-    instance: BrainmapsInstance, httpCall: HttpCall,
-    cancellationToken?: CancellationToken): Promise<ArrayBuffer>;
-export function makeRequest(
-    instance: BrainmapsInstance, httpCall: HttpCall,
-    cancellationToken?: CancellationToken): Promise<any>;
-export function makeRequest(
-    instance: BrainmapsInstance, httpCall: HttpCall, cancellationToken?: CancellationToken): any;
-
-export function makeRequest(
-    instance: BrainmapsInstance, httpCall: HttpCall,
-    cancellationToken: CancellationToken = uncancelableToken): any {
+    instance: BrainmapsInstance, credentialsProvider: BrainmapsCredentialsProvider,
+    httpCall: HttpCall, cancellationToken: CancellationToken = uncancelableToken): any {
   /**
    * undefined means request not yet attempted.  null means request
    * cancelled.
@@ -121,38 +114,34 @@ export function makeRequest(
       reject(CANCELED);
     };
     cancellationToken.add(abort);
-    function start(token: Token) {
+    function start(credentials: CredentialsWithGeneration<Credentials>) {
       if (xhr === null) {
-        --numPendingRequests;
         return;
       }
-      xhr = openShardedHttpRequest(INSTANCE_BASE_URLS[instance], httpCall.path, httpCall.method);
+      xhr = openShardedHttpRequest(instance.serverUrls, httpCall.path, httpCall.method);
       xhr.responseType = httpCall.responseType;
-      xhr.setRequestHeader('Authorization', `${token['tokenType']} ${token['accessToken']}`);
+      xhr.setRequestHeader(
+          'Authorization',
+          `${credentials.credentials.tokenType} ${credentials.credentials.accessToken}`);
       xhr.onloadend = function(this: XMLHttpRequest) {
         if (xhr === null) {
-          --numPendingRequests;
           return;
         }
         let status = this.status;
         if (status >= 200 && status < 300) {
-          --numPendingRequests;
           cancellationToken.remove(abort);
           resolve(this.response);
-        } else if (status === 401) {
-          // Authorization needed.
-          getToken(token).then(start);
-        } else if (status === 504) {
-          // Gateway timeout can occur if the server takes too long to reply.  Retry.
-          getToken().then(start);
+        } else if (status === 401 || status === 504) {
+          // 401: Authorization needed.  OAuth2 token may have expired.
+          // 504: Gateway timeout.  Can occur if the server takes too long to reply.  Retry.
+          credentialsProvider.get(credentials, cancellationToken).then(start);
         } else {
-          --numPendingRequests;
           cancellationToken.remove(abort);
           reject(HttpError.fromXhr(this));
         }
       };
       xhr.send(httpCall.payload);
     }
-    getToken().then(start);
+    credentialsProvider.get(/*invalidToken=*/undefined, cancellationToken).then(start);
   });
 }
