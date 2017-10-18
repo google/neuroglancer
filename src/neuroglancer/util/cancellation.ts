@@ -138,6 +138,29 @@ export class CancellationTokenSource implements CancellationToken {
   }
 }
 
+/**
+ * Creates a CancellationToken corresponding to an asynchronous process with multiple consumers.  It
+ * is cancelled only when the cancellation tokens corresponding to all of the consumers have been
+ * cancelled.
+ */
+export class MultipleConsumerCancellationTokenSource extends CancellationTokenSource {
+  private consumers = new Set<CancellationToken>();
+
+  addConsumer(cancellationToken: CancellationToken = uncancelableToken) {
+    const {consumers} = this;
+    if (consumers.has(cancellationToken) || cancellationToken.isCanceled) {
+      return;
+    }
+    consumers.add(cancellationToken);
+    cancellationToken.add(() => {
+      consumers.delete(cancellationToken);
+      if (consumers.size === 0) {
+        this.cancel();
+      }
+    });
+  }
+}
+
 
 /**
  * Creates a promise and a dependent cancellation token.

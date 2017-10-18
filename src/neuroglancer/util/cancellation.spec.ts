@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-import {CANCELED, CancellationTokenSource, makeCancelablePromise, throwIfCanceled, uncancelableToken} from 'neuroglancer/util/cancellation';
+import {CANCELED, CancellationTokenSource, makeCancelablePromise, MultipleConsumerCancellationTokenSource, throwIfCanceled, uncancelableToken} from 'neuroglancer/util/cancellation';
 
 describe('cancellation', () => {
   describe('CancellationTokenSource', () => {
@@ -84,6 +84,36 @@ describe('cancellation', () => {
       const handler = () => {};
       uncancelableToken.add(handler);
       uncancelableToken.remove(handler);
+    });
+  });
+
+  describe('MultipleConsumerCancellationTokenSource', () => {
+    it('supports cancellation from two consumers', () => {
+      const multiToken = new MultipleConsumerCancellationTokenSource();
+      const token1 = new CancellationTokenSource();
+      multiToken.addConsumer(token1);
+      const token2 = new CancellationTokenSource();
+      multiToken.addConsumer(token2);
+      token1.cancel();
+      expect(multiToken.isCanceled).toBe(false);
+      token2.cancel();
+      expect(multiToken.isCanceled).toBe(true);
+    });
+
+    it('supports cancellation from three consumers', () => {
+      const multiToken = new MultipleConsumerCancellationTokenSource();
+      const token1 = new CancellationTokenSource();
+      multiToken.addConsumer(token1);
+      const token2 = new CancellationTokenSource();
+      multiToken.addConsumer(token2);
+      token1.cancel();
+      expect(multiToken.isCanceled).toBe(false);
+      const token3 = new CancellationTokenSource();
+      multiToken.addConsumer(token3);
+      token2.cancel();
+      expect(multiToken.isCanceled).toBe(false);
+      token3.cancel();
+      expect(multiToken.isCanceled).toBe(true);
     });
   });
 
