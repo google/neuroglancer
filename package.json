@@ -76,7 +76,7 @@
     "raw-loader": "^0.5.1",
     "sortablejs": "^1.5.0-rc1",
     "style-loader": "^0.18.2",
-    "ts-loader": "2.3.2",
+    "ts-loader": "^3.0.2",
     "typescript": "^2.5.3",
     "webpack": "^3.4.1",
     "webpack-closure-compiler": "^2.1.2"
