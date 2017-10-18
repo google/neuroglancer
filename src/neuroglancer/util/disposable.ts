@@ -95,3 +95,14 @@ export class RefCountedValue<T> extends RefCounted {
     super();
   }
 }
+
+/**
+ * A variable of this type is associated with an increment of the reference count.  If a function
+ * parameter is declared with this type, then callers must donate a reference count.
+ */
+export type Owned<T extends RefCounted> = T;
+
+/**
+ * A variable of this type is not associated with an increment of the reference count.
+ */
+export type Borrowed<T extends RefCounted> = T;
