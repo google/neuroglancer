@@ -60,6 +60,8 @@ export class SegmentationRenderLayer extends RenderLayer {
   protected segmentColorShaderManager = new SegmentColorShaderManager('segmentColorHash');
   private hashTableManager = new HashSetShaderManager('visibleSegments');
   private gpuHashTable = GPUHashTable.get(this.gl, this.displayState.visibleSegments.hashTable);
+  private hashTableManagerHighlighted = new HashSetShaderManager('highlightedSegments');
+  private gpuHashTableHighlighted = GPUHashTable.get(this.gl, this.displayState.highlightedSegments.hashTable);
 
   private equivalencesShaderManager = new HashMapShaderManager('equivalences');
   private equivalencesHashMap =
@@ -116,6 +118,7 @@ export class SegmentationRenderLayer extends RenderLayer {
   defineShader(builder: ShaderBuilder) {
     super.defineShader(builder);
     this.hashTableManager.defineShader(builder);
+    this.hashTableManagerHighlighted.defineShader(builder);
     builder.addFragmentCode(`
 uint64_t getUint64DataValue() {
   return toUint64(getDataValue());
@@ -145,12 +148,13 @@ uint64_t getMappedObjectId() {
     builder.addUniform('highp float', 'uShowAllSegments');
     builder.addUniform('highp float', 'uSelectedAlpha');
     builder.addUniform('highp float', 'uNotSelectedAlpha');
+    builder.addUniform('highp float', 'uSaturation');
     builder.addFragmentCode(glsl_unnormalizeUint8);
     let fragmentMain = `
   uint64_t value = getMappedObjectId();
-  
+
   float alpha = uSelectedAlpha;
-  float saturation = 1.0;
+  float saturation = uSaturation;
 `;
     if (this.displayState.hideSegmentZero.value) {
       fragmentMain += `
@@ -169,6 +173,17 @@ uint64_t getMappedObjectId() {
     alpha = uNotSelectedAlpha;
   }
   vec3 rgb = segmentColorHash(value);
+  `;
+
+  // Override color for all highlighted segments.
+  fragmentMain += `
+  if(${this.hashTableManagerHighlighted.hasFunctionName}(value)) {
+    rgb = vec3(0.2,0.2,2.0);
+    saturation = 1.0;
+  };
+`;
+
+  fragmentMain += `
   emit(vec4(mix(vec3(1.0,1.0,1.0), rgb, saturation), alpha));
 `;
     builder.setFragmentMain(fragmentMain);
@@ -191,10 +206,12 @@ uint64_t getMappedObjectId() {
       }
     }
     gl.uniform1f(shader.uniform('uSelectedAlpha'), this.displayState.selectedAlpha.value);
+    gl.uniform1f(shader.uniform('uSaturation'), this.displayState.saturation.value);
     gl.uniform1f(shader.uniform('uNotSelectedAlpha'), this.displayState.notSelectedAlpha.value);
     gl.uniform4fv(shader.uniform('uSelectedSegment'), selectedSegmentForShader);
     gl.uniform1f(shader.uniform('uShowAllSegments'), visibleSegments.hashTable.size ? 0.0 : 1.0);
     this.hashTableManager.enable(gl, shader, this.gpuHashTable);
+    this.hashTableManagerHighlighted.enable(gl, shader, this.gpuHashTableHighlighted);
     if (this.hasEquivalences) {
       this.equivalencesHashMap.update();
       this.equivalencesShaderManager.enable(gl, shader, this.gpuEquivalencesHashTable);
@@ -206,6 +223,7 @@ uint64_t getMappedObjectId() {
   endSlice(shader: ShaderProgram) {
     let {gl} = this;
     this.hashTableManager.disable(gl, shader);
+    this.hashTableManagerHighlighted.disable(gl, shader);
     super.endSlice(shader);
   }
 }

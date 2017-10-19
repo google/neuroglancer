@@ -30,6 +30,7 @@ const Base = withSharedVisibility(withChunkManager(SharedObjectCounterpart));
 
 export class SegmentationLayerSharedObjectCounterpart extends Base implements VisibleSegmentsState {
   visibleSegments: Uint64Set;
+  highlightedSegments: Uint64Set;
   clipBounds: SharedWatchableValue<Bounds>;
   segmentEquivalences: SharedDisjointUint64Sets;
 
@@ -39,6 +40,7 @@ export class SegmentationLayerSharedObjectCounterpart extends Base implements Vi
     // segmentEquivalences since our owner will hold a reference to their owners.
     this.visibleSegments = <Uint64Set>rpc.get(options['visibleSegments']);
     this.clipBounds = <SharedWatchableValue<Bounds>>rpc.get(options['clipBounds']);
+    this.highlightedSegments = <Uint64Set>rpc.get(options['highlightedSegments']);
     this.segmentEquivalences = <SharedDisjointUint64Sets>rpc.get(options['segmentEquivalences']);
 
     const scheduleUpdateChunkPriorities = () => {
