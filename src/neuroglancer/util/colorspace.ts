@@ -60,3 +60,39 @@ export function hsvToRgb(out: Float32Array, h: number, s: number, v: number): Fl
   }
   return out;
 }
+
+
+/**
+ * Converts from RGB values (with r,g,b in range [0,1]) to an array of HSV values (in range [0, 1])
+ *
+ * Based on goog/color/color.js in the Google Closure library.
+ */
+export function rgbToHsv(out: Float32Array, r: number, g: number, b:number): Float32Array {
+
+    const max = Math.max(Math.max(r, g), b);
+    const min = Math.min(Math.min(r, g), b);
+    out[2] = max;
+    if (min === max) {
+      out[0] = 0;
+      out[1] = 0;
+    } else {
+      const delta = (max - min);
+      out[1] = delta / max;
+
+      if (r === max) {
+        out[0] = (g - b) / delta;
+      } else if (g === max) {
+        out[0] = 2 + ((b - r) / delta);
+      } else {
+        out[0] = 4 + ((r - g) / delta);
+      }
+      out[0] /= 6.0;
+      if (out[0] < 0.0) {
+        out[0] += 1.0;
+      }
+      if (out[0] > 1.0) {
+        out[0] -= 1.0;
+      }
+    }
+    return out;
+  };
