@@ -205,8 +205,8 @@ export class SegmentationUserLayer extends UserLayer {
     let {clipBounds} = this.displayState;
     if (clipBounds.value) {
       x['clipBounds'] = {
-        center: clipBounds.value.center,
-        size: clipBounds.value.size,
+        center: Array.from(clipBounds.value.center),
+        size: Array.from(clipBounds.value.size),
       };
     }
     x['transform'] = this.displayState.objectToDataTransform.toJSON();
