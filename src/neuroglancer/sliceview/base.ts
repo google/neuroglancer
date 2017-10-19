@@ -859,7 +859,7 @@ export abstract class SliceViewChunkSpecification {
     }
   }
 
-  abstract toObject(): SliceViewChunkSpecificationOptions
+  abstract toObject(): SliceViewChunkSpecificationOptions;
 }
 
 /**
