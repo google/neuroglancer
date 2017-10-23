@@ -53,7 +53,7 @@ export class Signal<Callable extends Function> {
    *
    * @return A function that unregisters the handler.
    */
-  add(handler: Callable): () => void {
+  add(handler: Callable): () => boolean {
     this.handlers.add(handler);
     return () => {
       return this.remove(handler);
