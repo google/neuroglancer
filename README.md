@@ -1,6 +1,26 @@
-Neuroglancer is a WebGL-based viewer for volumetric data.  It is capable of displaying arbitrary (non axis-aligned) cross-sectional views of volumetric data, as well as 3-D meshes and line-segment based models (skeletons).
+Neuroglancer is a WebGL-based viewer for volumetric data.  It is capable of displaying arbitrary (non-axis-aligned) cross-sectional views of volumetric data, as well as 3-D meshes and line-segment based models (skeletons).
 
 This is not an official Google product.
+
+Table of Contents (ToC)
+==========================
+
+* [Examples](#examples)
+* [Supported Data Sources](#supported-data-sources)
+* [Supported Browsers](#supported-browsers)
+* [Keyboard and Mousa Bindings](#keyboard-and-mouse-bindings)
+* [Troubleshooting](#troubleshooting)
+* [Multithreaded Architecture](#multithreaded-architecture)
+* [Documentation Index](#documentation-index)
+* [Building](#building)
+* [Creating a Dependent Project](#creating-a-dependent-project)
+* [Discussion Group](#discussion-group)
+* [Related Projects](#related-projects)
+* [Contributing](#contributing)
+* [Acknowledgements](#acknowledgements)
+* [Licensing](#licensing)
+
+---
 
 # Examples
 
@@ -14,7 +34,9 @@ The four-pane view consists of 3 orthogonal cross-sectional views as well as a 3
   
 - Janelia FlyEM FIB-25.  7-column Drosophila medulla (8x8x8 cubic nanometer resolution).  <a href="https://neuroglancer-demo.appspot.com/#!{'layers':{'image':{'type':'image'_'source':'precomputed://gs://neuroglancer-public-data/flyem_fib-25/image'}_'ground-truth':{'type':'segmentation'_'source':'precomputed://gs://neuroglancer-public-data/flyem_fib-25/ground_truth'_'segments':['21894'_'22060'_'158571'_'24436'_'2515']}}_'navigation':{'pose':{'position':{'voxelSize':[8_8_8]_'voxelCoordinates':[2914.500732421875_3088.243408203125_4045]}}_'zoomFactor':30.09748283999932}_'perspectiveOrientation':[0.3143535554409027_0.8142156600952148_0.4843369424343109_-0.06040262430906296]_'perspectiveZoom':443.63404517712684_'showSlices':false}" target="_blank">Open viewer.</a>
 
-  This dataset was copied from <https://www.janelia.org/project-team/flyem/data-and-software-release>, and is made available under the [Open Data Common Attribution License](http://opendatacommons.org/licenses/by/1.0/).  Paper: <a href="http://dx.doi.org/10.1073/pnas.1509820112" target="_blank">Takemura, Shin-ya et al. "Synaptic Circuits and Their Variations within Different Columns in the Visual System of Drosophila."  Proceedings of the National Academy of Sciences of the United States of America 112.44 (2015): 13711-13716.</a>
+  This dataset was copied from <https://www.janelia.org/project-team/flyem/data-and-software-release> and is made available under the [Open Data Common Attribution License](http://opendatacommons.org/licenses/by/1.0/).  Paper: <a href="http://dx.doi.org/10.1073/pnas.1509820112" target="_blank">Takemura, Shin-ya et al. "Synaptic Circuits and Their Variations within Different Columns in the Visual System of Drosophila."  Proceedings of the National Academy of Sciences of the United States of America 112.44 (2015): 13711-13716.</a>
+
+---
   
 # Supported data sources
 
@@ -27,10 +49,14 @@ Neuroglancer itself is purely a client-side program, but it depends on data bein
 - Single NIfTI files <https://www.nitrc.org/projects/nifti>
 - [Python in-memory volumes](python/README.md) (with automatic mesh generation)
 
+---
+
 # Supported browsers
 
 - Chrome >= 51
 - Firefox >= 46
+
+---
 
 # Keyboard and mouse bindings
 
@@ -45,6 +71,8 @@ or within Neuroglancer, press `h` or click on the button labeled `?` in the uppe
 - Hover over a segmentation layer name to see the current list of objects shown and to access the opacity sliders.
 
 - Hover over an image layer name to access the opacity slider and the text editor for modifying the [rendering code](src/neuroglancer/sliceview/image_layer_rendering.md).
+
+---
 
 # Troubleshooting
 
@@ -67,25 +95,29 @@ or within Neuroglancer, press `h` or click on the button labeled `?` in the uppe
     
 - Failure to access a data source.
 
-  As a security measure, browsers will in many prevent a webpage from accessing the true error code associated with a failed HTTP request.  It is therefore often necessary to check the developer tools to see the true cause of any HTTP request error.
+  As a security measure, browsers will in many prevent a web page from accessing the true error code associated with a failed HTTP request.  It is therefore often necessary to check the developer tools to see the true cause of any HTTP request error.
 
   There are several likely causes:
   
   - [Cross-origin resource sharing (CORS)](https://en.wikipedia.org/wiki/Cross-origin_resource_sharing)
   
-    Neuroglancer relies on cross-origin requests to retrieve data from third-party servers.  As a security measure, if an appropriate `Access-Control-Allow-Origin` response header is not sent by the server, browsers prevent webpages from accessing any information about the response from a cross-origin request.  In order to make the data accessible to Neuroglancer, you may need to change the cross-origin request sharing (CORS) configuration of the HTTP server.
+    Neuroglancer relies on cross-origin requests to retrieve data from third-party servers.  As a security measure, if an appropriate `Access-Control-Allow-Origin` response header is not sent by the server, browsers prevent web pages from accessing any information about the response from a cross-origin request.  In order to make the data accessible to Neuroglancer, you may need to change the cross-origin request sharing (CORS) configuration of the HTTP server.
   
   - Accessing an `http://` resource from a Neuroglancer client hosted at an `https://` URL
     
-    As a security measure, recent versions of Chrome and Firefox prohibit webpages hosted at `https://` URLs from issuing requests to `http://` URLs.  As a workaround, you can use a Neuroglancer client hosted at a `http://` URL, e.g. the demo client running at http://neuroglancer-demo.appspot.com, or one running on localhost.  Alternatively, you can start Chrome with the `--disable-web-security` flag, but that should be done only with extreme caution.  (Make sure to use a separate profile, and do not access any untrusted webpages when running with that flag enabled.)
-    
+    As a security measure, recent versions of Chrome and Firefox prohibit web pages hosted at `https://` URLs from issuing requests to `http://` URLs.  As a workaround, you can use a Neuroglancer client hosted at a `http://` URL, e.g. the demo client running at http://neuroglancer-demo.appspot.com, or one running on localhost.  Alternatively, you can start Chrome with the `--disable-web-security` flag, but that should be done only with extreme caution.  (Make sure to use a separate profile, and do not access any untrusted web pages when running with that flag enabled.)
+   
+---   
+   
 # Multi-threaded architecture
 
 In order to maintain a responsive UI and data display even during rapid navigation, work is split between the main UI thread (referred to as the "frontend") and a separate WebWorker thread (referred to as the "backend").  This introduces some complexity due to the fact that current browsers:
  - do not support any form of *shared* memory or standard synchronization mechanism (although they do support relatively efficient *transfers* of typed arrays between threads);
  - require that all manipulation of the DOM and the WebGL context happens on the main UI thread.
 
-The "frontend" UI thread handles user actions and rendering, while the "backend" WebWorker thread handle all queuing, downloading, and preprocessing of data needed for rendering.
+The "frontend" UI thread handles user actions and rendering, while the "backend" WebWorker thread handles all queuing, downloading, and preprocessing of data needed for rendering.
+
+---
 
 # Documentation Index
 
@@ -95,11 +127,13 @@ The "frontend" UI thread handles user actions and rendering, while the "backend"
 - [Data chunk management](src/neuroglancer/chunk_manager/)
 - [On-GPU hashing](src/neuroglancer/gpu_hash/)
 
+---
+
 # Building
 
 node.js is required to build the viewer.
 
-1. First install NVM (node version manager) per the instructions here:
+1. First, install NVM (node version manager) per the instructions here:
 
   https://github.com/creationix/nvm
 
@@ -140,14 +174,20 @@ node.js is required to build the viewer.
 
 6. See [package.json](package.json) for other commands available.
 
+---
+
 # Creating a dependent project
 
 See [examples/dependent-project](examples/dependent-project).
+
+---
 
 # Discussion Group
 
 There is a Google Group/mailing list for discussion related to Neuroglancer:
 <https://groups.google.com/forum/#!forum/neuroglancer>.
+
+---
 
 # Related Projects
 
@@ -160,13 +200,19 @@ There is a Google Group/mailing list for discussion related to Neuroglancer:
   Neuroglancer [precomputed data format](src/neuroglancer/datasource/precomputed), which may serve
   as a useful example for converting other datasets.
 
+---
+
 # Contributing
 
 Want to contribute?  Great!  First, read [CONTRIBUTING.md](CONTRIBUTING.md).
 
+---
+
 # Acknowledgements
 [<img src="https://neuroglancer-public-data.storage.googleapis.com/website/browserstack-logo-429x92.png" alt="BrowserStack Logo" width=215 height=46 align="middle">](https://www.browserstack.com)
  - Cross-browser testing infrastructure provided by [BrowserStack](https://www.browserstack.com).
+
+---
 
 # License
 
@@ -181,3 +227,7 @@ distributed under the License is distributed on an "AS IS" BASIS,
 WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
+
+---
+
+<img src="https://avatars2.githubusercontent.com/u/1342004?s=200&v=4" width="50"></img>
