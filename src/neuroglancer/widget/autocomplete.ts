@@ -20,7 +20,7 @@ import {BasicCompletionResult, Completion, CompletionWithDescription} from 'neur
 import {RefCounted} from 'neuroglancer/util/disposable';
 import {removeChildren, removeFromParent} from 'neuroglancer/util/dom';
 import {positionDropdown} from 'neuroglancer/util/dropdown';
-import {KeyboardShortcutHandler, KeySequenceMap} from 'neuroglancer/util/keyboard_shortcut_handler';
+import {EventActionMap, KeyboardEventBinder, registerActionListener} from 'neuroglancer/util/keyboard_bindings';
 import {longestCommonPrefix} from 'neuroglancer/util/longest_common_prefix';
 import {scrollIntoViewIfNeeded} from 'neuroglancer/util/scroll_into_view';
 import {Signal} from 'neuroglancer/util/signal';
@@ -57,48 +57,14 @@ export function makeCompletionElementWithDescription(completion: CompletionWithD
   return element;
 }
 
-const KEY_MAP = new KeySequenceMap({
-  'arrowdown': 'cycle-next-active-completion',
-  'arrowup': 'cycle-prev-active-completion',
-  'tab': 'choose-active-completion-or-prefix',
-  'enter': 'choose-active-completion',
-  'escape': 'cancel',
+const keyMap = EventActionMap.fromObject({
+  'arrowdown': {action: 'cycle-next-active-completion'},
+  'arrowup': {action: 'cycle-prev-active-completion'},
+  'tab': {action: 'choose-active-completion-or-prefix', preventDefault: false},
+  'enter': {action: 'choose-active-completion', preventDefault: false},
+  'escape': {action: 'cancel', preventDefault: false, stopPropagation: false},
 });
 
-const KEY_COMMANDS = new Map<string, (this: AutocompleteTextInput) => boolean>([
-  [
-    'cycle-next-active-completion',
-    function() {
-      this.cycleActiveCompletion(+1);
-      return true;
-    }
-  ],
-  [
-    'cycle-prev-active-completion',
-    function() {
-      this.cycleActiveCompletion(-1);
-      return true;
-    }
-  ],
-  [
-    'choose-active-completion-or-prefix',
-    function() {
-      return this.selectActiveCompletion(/*allowPrefix=*/true);
-    }
-  ],
-  [
-    'choose-active-completion',
-    function() {
-      return this.selectActiveCompletion(/*allowPrefix=*/false);
-    }
-  ],
-  [
-    'cancel',
-    function() {
-      return this.cancel();
-    }
-  ],
-]);
 
 export type Completer = (value: string, cancellationToken: CancellationToken) =>
     Promise<CompletionResult>| null;
@@ -121,7 +87,6 @@ export class AutocompleteTextInput extends RefCounted {
   private completionResult: CompletionResult|null = null;
   private dropdownContentsStale = true;
   private updateHintScrollPositionTimer: number|null = null;
-  private keyboardHandler: KeyboardShortcutHandler;
   private completionElements: HTMLElement[]|null = null;
   private hasResultForDropdown = false;
   private commonPrefix = '';
@@ -236,9 +201,35 @@ export class AutocompleteTextInput extends RefCounted {
       }
     });
 
-    let keyboardHandler = this.keyboardHandler = this.registerDisposer(
-        new KeyboardShortcutHandler(inputElement, KEY_MAP, this.handleKeyCommand.bind(this)));
+    const keyboardHandler = this.registerDisposer(new KeyboardEventBinder(inputElement, keyMap));
     keyboardHandler.allShortcutsAreGlobal = true;
+
+    registerActionListener(inputElement, 'cycle-next-active-completion', () => {
+      this.cycleActiveCompletion(+1);
+    });
+
+    registerActionListener(inputElement, 'cycle-prev-active-completion', () => {
+      this.cycleActiveCompletion(-1);
+    });
+
+    registerActionListener(
+        inputElement, 'choose-active-completion-or-prefix', (event: CustomEvent) => {
+          if (this.selectActiveCompletion(/*allowPrefix=*/true)) {
+            event.preventDefault();
+          }
+        });
+    registerActionListener(inputElement, 'choose-active-completion', (event: CustomEvent) => {
+      if (this.selectActiveCompletion(/*allowPrefix=*/false)) {
+        event.preventDefault();
+      }
+    });
+    registerActionListener(inputElement, 'cancel', (event: CustomEvent) => {
+      event.stopPropagation();
+      if (this.cancel()) {
+        event.detail.preventDefault();
+        event.detail.stopPropagation();
+      }
+    });
   }
 
   private hintScrollPositionMayBeStale() {
@@ -288,10 +279,6 @@ export class AutocompleteTextInput extends RefCounted {
       activeIndex = (activeIndex + delta + numCompletions) % numCompletions;
     }
     this.setActiveIndex(activeIndex);
-  }
-
-  private handleKeyCommand(action: string) {
-    return KEY_COMMANDS.get(action)!.call(this);
   }
 
   private registerInputHandler() {

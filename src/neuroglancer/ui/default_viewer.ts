@@ -26,7 +26,7 @@ import {disableContextMenu} from 'neuroglancer/ui/disable_context_menu';
 export function makeDefaultViewer() {
   disableContextMenu();
   try {
-    let display = new DisplayContext(document.getElementById('container')!);
+    let display = new DisplayContext(document.getElementById('neuroglancer-container')!);
     return new Viewer(display);
   } catch (error) {
     StatusMessage.showMessage(`Error: ${error.message}`);

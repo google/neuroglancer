@@ -32,29 +32,15 @@ Neuroglancer itself is purely a client-side program, but it depends on data bein
 - Chrome >= 51
 - Firefox >= 46
 
-# Key bindings
+# Keyboard and mouse bindings
 
-See [src/neuroglancer/default_key_bindings.ts](src/neuroglancer/default_key_bindings.ts).
-
-# Mouse bindings
+For the complete set of bindings, see
+[src/neuroglancer/ui/default_input_event_bindings.ts](src/neuroglancer/default_input_event_bindings.ts),
+or within Neuroglancer, press `h` or click on the button labeled `?` in the upper right corner.
 
 - Click on a layer name to toggle its visibility.
 
 - Double-click on a layer name to edit its properties.
-
-- Left-drag within a slice view to move within that plane.
-
-- Shift-left-drag within a slice view to change the orientation of the slice views.  The projection of the point where the drag started will remain fixed.
-
-- Rotate the mouse wheel to move forward or backward in the local z axis of the 3-d or cross-sectional view under the mouse pointer.  Hold down shift to move 10x faster.
-
-- Control-mouse wheel zooms in or out.  When used in the cross-sectional view, the projection of the point under the mouse pointer will remain fixed.
-
-- Left-drag within the 3-d view to change the orientation.
-
-- Right click to move to the position under the mouse pointer.
-
-- Double click to toggle showing the object under the mouse pointer.
 
 - Hover over a segmentation layer name to see the current list of objects shown and to access the opacity sliders.
 

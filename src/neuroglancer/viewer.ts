@@ -18,7 +18,7 @@ import debounce from 'lodash/debounce';
 import {AvailableCapacity} from 'neuroglancer/chunk_manager/base';
 import {ChunkManager, ChunkQueueManager} from 'neuroglancer/chunk_manager/frontend';
 import {DisplayContext} from 'neuroglancer/display_context';
-import {KeyBindingHelpDialog} from 'neuroglancer/help/key_bindings';
+import {InputEventBindingHelpDialog} from 'neuroglancer/help/input_event_bindings';
 import {LayerManager, LayerSelectedValues, MouseSelectionState} from 'neuroglancer/layer';
 import {LayerDialog} from 'neuroglancer/layer_dialog';
 import {LayerPanel} from 'neuroglancer/layer_panel';
@@ -29,13 +29,15 @@ import {overlaysOpen} from 'neuroglancer/overlay';
 import {PositionStatusPanel} from 'neuroglancer/position_status_panel';
 import {TrackableBoolean} from 'neuroglancer/trackable_boolean';
 import {TrackableValue} from 'neuroglancer/trackable_value';
+import {AutomaticallyFocusedElement} from 'neuroglancer/util/automatic_focus';
 import {RefCounted} from 'neuroglancer/util/disposable';
 import {removeFromParent} from 'neuroglancer/util/dom';
+import {registerActionListener} from 'neuroglancer/util/event_action_map';
 import {vec3} from 'neuroglancer/util/geom';
-import {globalKeyboardHandlerStack, KeySequenceMap} from 'neuroglancer/util/keyboard_shortcut_handler';
+import {EventActionMap, KeyboardEventBinder} from 'neuroglancer/util/keyboard_bindings';
 import {NullarySignal} from 'neuroglancer/util/signal';
 import {CompoundTrackable} from 'neuroglancer/util/trackable';
-import {DataDisplayLayout, LAYOUTS} from 'neuroglancer/viewer_layouts';
+import {DataDisplayLayout, InputEventBindings as DataPanelInputEventBindings, LAYOUTS} from 'neuroglancer/viewer_layouts';
 import {ViewerState, VisibilityPrioritySpecification} from 'neuroglancer/viewer_state';
 import {WatchableVisibilityPriority} from 'neuroglancer/visibility_priority/frontend';
 import {GL} from 'neuroglancer/webgl/context';
@@ -77,15 +79,21 @@ export class DataManagementContext extends RefCounted {
   }
 }
 
+export class InputEventBindings extends DataPanelInputEventBindings {
+  global = new EventActionMap();
+}
+
 export interface UIOptions {
   showHelpButton: boolean;
   showLayerDialog: boolean;
   showLayerPanel: boolean;
   showLocation: boolean;
+  inputEventBindings: InputEventBindings;
 }
 
 export interface ViewerOptions extends UIOptions, VisibilityPrioritySpecification {
   dataContext: DataManagementContext;
+  element: HTMLElement;
 }
 
 const defaultViewerOptions = {
@@ -117,8 +125,6 @@ export class Viewer extends RefCounted implements ViewerState {
     return this.dataContext.chunkQueueManager;
   }
 
-  keyMap = new KeySequenceMap();
-  keyCommands = new Map<string, (this: Viewer) => void>();
   layerSpecification: LayerListSpecification;
   layoutName = new TrackableValue<string>(LAYOUTS[0][0], validateLayoutName);
 
@@ -133,6 +139,18 @@ export class Viewer extends RefCounted implements ViewerState {
     return this.options.visibility;
   }
 
+  get inputEventBindings() {
+    return this.options.inputEventBindings;
+  }
+
+  get inputEventMap() {
+    return this.inputEventBindings.global;
+  }
+
+  get element() {
+    return this.options.element;
+  }
+
   visible = true;
 
   constructor(public display: DisplayContext, options: Partial<ViewerOptions> = {}) {
@@ -141,11 +159,26 @@ export class Viewer extends RefCounted implements ViewerState {
     const {
       dataContext = new DataManagementContext(display.gl),
       visibility = new WatchableVisibilityPriority(WatchableVisibilityPriority.VISIBLE),
+      inputEventBindings = {
+        global: new EventActionMap(),
+        sliceView: new EventActionMap(),
+        perspectiveView: new EventActionMap(),
+      },
+      element = display.makeCanvasOverlayElement(),
     } = options;
+
+    this.registerDisposer(() => removeFromParent(this.element));
 
     this.registerDisposer(dataContext);
 
-    this.options = {...defaultViewerOptions, ...options, dataContext, visibility};
+    this.options = {
+      ...defaultViewerOptions,
+      ...options,
+      dataContext,
+      visibility,
+      inputEventBindings,
+      element,
+    };
 
     this.layerSpecification = new LayerListSpecification(
         this.layerManager, this.chunkManager, this.layerSelectedValues,
@@ -208,64 +241,14 @@ export class Viewer extends RefCounted implements ViewerState {
     }));
 
     this.makeUI();
-
-    this.layoutName.changed.add(() => {
-      if (this.dataDisplayLayout !== undefined) {
-        let element = this.dataDisplayLayout.rootElement;
-        this.dataDisplayLayout.dispose();
-        this.createDataDisplayLayout(element);
-      }
-    });
-
-    let {keyCommands} = this;
-    keyCommands.set('toggle-layout', function() {
-      this.toggleLayout();
-    });
-    keyCommands.set('snap', function() {
-      this.navigationState.pose.snap();
-    });
-    keyCommands.set('add-layer', function() {
-      this.layerPanel.addLayerMenu();
-      return true;
-    });
-    keyCommands.set('help', this.showHelpDialog);
-
-    for (let i = 1; i <= 9; ++i) {
-      keyCommands.set('toggle-layer-' + i, function() {
-        let layerIndex = i - 1;
-        let layers = this.layerManager.managedLayers;
-        if (layerIndex < layers.length) {
-          let layer = layers[layerIndex];
-          layer.setVisible(!layer.visible);
-        }
-      });
-    }
-
-    for (let command of ['recolor', 'clear-segments']) {
-      keyCommands.set(command, function() {
-        this.layerManager.invokeAction(command);
-      });
-    }
-
-    keyCommands.set('toggle-axis-lines', function() {
-      this.showAxisLines.toggle();
-    });
-    keyCommands.set('toggle-scale-bar', function() {
-      this.showScaleBar.toggle();
-    });
-    this.keyCommands.set('toggle-show-slices', function() {
-      this.showPerspectiveSliceViews.toggle();
-    });
+    this.registerActionListeners();
+    this.registerEventActionBindings();
   }
 
   private makeUI() {
-    let {display, options} = this;
-    let gridContainer = document.createElement('div');
-    gridContainer.setAttribute('class', 'gllayoutcontainer noselect');
-    let {container} = display;
-    container.appendChild(gridContainer);
-    this.registerDisposer(() => removeFromParent(gridContainer));
-
+    const {options} = this;
+    const gridContainer = this.element;
+    gridContainer.classList.add('neuroglancer-noselect');
     let uiElements: L.Handler[] = [];
 
     if (options.showHelpButton || options.showLocation) {
@@ -296,41 +279,77 @@ export class Viewer extends RefCounted implements ViewerState {
 
     uiElements.push(L.withFlex(1, element => {
       this.createDataDisplayLayout(element);
+
+      this.layoutName.changed.add(() => {
+        if (this.dataDisplayLayout !== undefined) {
+          this.dataDisplayLayout.dispose();
+          this.createDataDisplayLayout(element);
+        }
+      });
     }));
 
     L.box('column', uiElements)(gridContainer);
     this.display.onResize();
 
-    let keyboardHandlerDisposer: (() => void)|undefined;
-
     const updateVisibility = () => {
       const shouldBeVisible = this.visibility.visible;
-      if (shouldBeVisible) {
-        if (keyboardHandlerDisposer === undefined) {
-          keyboardHandlerDisposer =
-              globalKeyboardHandlerStack.push(this.keyMap, this.onKeyCommand.bind(this));
-        }
-        if (!this.visible) {
-          gridContainer.style.visibility = 'inherit';
-        }
-      } else if (!shouldBeVisible && this.visible) {
-        if (keyboardHandlerDisposer !== undefined) {
-          keyboardHandlerDisposer!();
-          keyboardHandlerDisposer = undefined;
-        }
-        if (this.visible) {
-          gridContainer.style.visibility = 'hidden';
-        }
+      if (shouldBeVisible !== this.visible) {
+        gridContainer.style.visibility = shouldBeVisible ? 'inherit' : 'hidden';
+        this.visible = shouldBeVisible;
       }
-      this.visible = shouldBeVisible;
     };
     updateVisibility();
-    this.registerDisposer(() => {
-      if (keyboardHandlerDisposer !== undefined) {
-        keyboardHandlerDisposer();
-      }
-    });
     this.registerDisposer(this.visibility.changed.add(updateVisibility));
+  }
+
+  /**
+   * Called once by the constructor to set up event handlers.
+   */
+  private registerEventActionBindings() {
+    const {element} = this;
+    this.registerDisposer(new KeyboardEventBinder(element, this.inputEventMap));
+    this.registerDisposer(new AutomaticallyFocusedElement(element));
+  }
+
+  bindAction(action: string, handler: () => void) {
+    this.registerDisposer(registerActionListener(this.element, action, handler));
+  }
+
+  /**
+   * Called once by the constructor to register the action listeners.
+   */
+  private registerActionListeners() {
+    for (const action of ['recolor', 'clear-segments', ]) {
+      this.bindAction(action, () => {
+        this.layerManager.invokeAction(action);
+      });
+    }
+
+    for (const action of ['select', 'annotate', ]) {
+      this.bindAction(action, () => {
+        this.mouseState.updateUnconditionally();
+        this.layerManager.invokeAction(action);
+      });
+    }
+
+    this.bindAction('toggle-layout', () => this.toggleLayout());
+    this.bindAction('add-layer', () => this.layerPanel.addLayerMenu());
+    this.bindAction('help', () => this.showHelpDialog());
+
+    for (let i = 1; i <= 9; ++i) {
+      this.bindAction(`toggle-layer-${i}`, () => {
+        const layerIndex = i - 1;
+        const layers = this.layerManager.managedLayers;
+        if (layerIndex < layers.length) {
+          let layer = layers[layerIndex];
+          layer.setVisible(!layer.visible);
+        }
+      });
+    }
+
+    this.bindAction('toggle-axis-lines', () => this.showAxisLines.toggle());
+    this.bindAction('toggle-scale-bar', () => this.showScaleBar.toggle());
+    this.bindAction('toggle-show-slices', () => this.showPerspectiveSliceViews.toggle());
   }
 
   createDataDisplayLayout(element: HTMLElement) {
@@ -346,7 +365,12 @@ export class Viewer extends RefCounted implements ViewerState {
   }
 
   showHelpDialog() {
-    new KeyBindingHelpDialog(this.keyMap);
+    const {inputEventBindings} = this;
+    new InputEventBindingHelpDialog([
+      ['Global', inputEventBindings.global],
+      ['Slice View', inputEventBindings.sliceView],
+      ['Perspective View', inputEventBindings.perspectiveView],
+    ]);
   }
 
   get gl() {
@@ -363,18 +387,6 @@ export class Viewer extends RefCounted implements ViewerState {
     if (this.visible) {
       this.mouseState.updateIfStale();
     }
-  }
-
-  private onKeyCommand(action: string) {
-    let command = this.keyCommands.get(action);
-    if (command && command.call(this)) {
-      return true;
-    }
-    let {activePanel} = this.display;
-    if (activePanel) {
-      return activePanel.onKeyCommand(action);
-    }
-    return false;
   }
 
   private handleNavigationStateChanged() {

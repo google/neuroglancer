@@ -14,32 +14,23 @@
  * limitations under the License.
  */
 
-.describe-key-bindings {
-  overflow-x: hidden;
+html, body {
+  margin: 0px;
+  padding: 0px;
+  overflow: hidden;
+  width: 100vw;
+  height: 100vh;
+  background-color: black;
+  color: white;
 }
 
-.describe-key-bindings .dl {
-  overflow-y: scroll;
-  max-height: 80vh;
-  overflow-x: hidden;
+body {
+  position: relative;
+  display: flex;
+  flex-direction: column;
 }
 
-.describe-key-bindings .definition-outer-container {
-  display: block;
-}
-
-.describe-key-bindings .definition-container {
-  display: inline-block;
-  white-space: nowrap;
-}
-
-.describe-key-bindings .dt {
-  font-family: monospace;
-  font-weight: bold;
-  display: inline-block;
-  width: 20ch;
-}
-
-.describe-key-bindings .dd {
-  display: inline-block;
+#neuroglancer-container {
+  width: 100vw;
+  flex: 1;
 }

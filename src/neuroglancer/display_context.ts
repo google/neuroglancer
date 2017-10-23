@@ -26,9 +26,6 @@ export abstract class RenderedPanel extends RefCounted {
       public visibility: WatchableVisibilityPriority) {
     super();
     this.gl = context.gl;
-    this.registerEventListener(element, 'mouseenter', (_event: MouseEvent) => {
-      this.context.setActivePanel(this);
-    });
     context.addPanel(this);
   }
 
@@ -52,10 +49,6 @@ export abstract class RenderedPanel extends RefCounted {
 
   abstract onResize(): void;
 
-  onKeyCommand(_action: string) {
-    return false;
-  }
-
   abstract draw(): void;
 
   disposed() {
@@ -74,17 +67,37 @@ export class DisplayContext extends RefCounted {
   updateStarted = new NullarySignal();
   updateFinished = new NullarySignal();
   panels = new Set<RenderedPanel>();
-  activePanel: RenderedPanel|null = null;
   private updatePending: number|null = null;
   private needsRedraw = false;
 
   constructor(public container: HTMLElement) {
     super();
     let {canvas} = this;
-    canvas.className = 'gl-canvas';
+    container.style.position = 'relative';
+    canvas.style.position = 'absolute';
+    canvas.style.top = '0px';
+    canvas.style.left = '0px';
+    canvas.style.width = '100%';
+    canvas.style.height = '100%';
+    canvas.style.zIndex = '0';
     container.appendChild(canvas);
     this.gl = initializeWebGL(canvas);
     this.registerEventListener(window, 'resize', this.onResize.bind(this));
+  }
+
+  /**
+   * Returns a child element that overlays the canvas.
+   */
+  makeCanvasOverlayElement() {
+    const element = document.createElement('div');
+    element.style.position = 'absolute';
+    element.style.top = '0px';
+    element.style.left = '0px';
+    element.style.width = '100%';
+    element.style.height = '100%';
+    element.style.zIndex = '2';
+    this.container.appendChild(element);
+    return element;
   }
 
   disposed() {
@@ -96,27 +109,10 @@ export class DisplayContext extends RefCounted {
 
   addPanel(panel: RenderedPanel) {
     this.panels.add(panel);
-    if (this.activePanel == null) {
-      this.setActivePanel(panel);
-    }
-  }
-
-  setActivePanel(panel: RenderedPanel|null) {
-    let existingPanel = this.activePanel;
-    if (existingPanel != null) {
-      existingPanel.element.attributes.removeNamedItem('isActivePanel');
-    }
-    if (panel != null) {
-      panel.element.setAttribute('isActivePanel', 'true');
-    }
-    this.activePanel = panel;
   }
 
   removePanel(panel: RenderedPanel) {
     this.panels.delete(panel);
-    if (panel === this.activePanel) {
-      this.setActivePanel(null);
-    }
     panel.dispose();
   }
 

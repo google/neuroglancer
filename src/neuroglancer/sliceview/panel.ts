@@ -18,17 +18,19 @@ import {AxesLineHelper} from 'neuroglancer/axes_lines';
 import {DisplayContext} from 'neuroglancer/display_context';
 import {makeRenderedPanelVisibleLayerTracker, MouseSelectionState, VisibilityTrackedRenderLayer} from 'neuroglancer/layer';
 import {PickIDManager} from 'neuroglancer/object_picking';
-import {RenderedDataPanel} from 'neuroglancer/rendered_data_panel';
+import {RenderedDataPanel, RenderedDataViewerState} from 'neuroglancer/rendered_data_panel';
 import {SliceView, SliceViewRenderHelper} from 'neuroglancer/sliceview/frontend';
 import {ElementVisibilityFromTrackableBoolean, TrackableBoolean} from 'neuroglancer/trackable_boolean';
+import {ActionEvent, registerActionListener} from 'neuroglancer/util/event_action_map';
 import {identityMat4, mat4, vec3, vec4} from 'neuroglancer/util/geom';
 import {startRelativeMouseDrag} from 'neuroglancer/util/mouse_drag';
-import {ViewerState} from 'neuroglancer/viewer_state';
 import {FramebufferConfiguration, makeTextureBuffers, OffscreenCopyHelper} from 'neuroglancer/webgl/offscreen';
 import {ShaderBuilder, ShaderModule} from 'neuroglancer/webgl/shader';
 import {ScaleBarWidget} from 'neuroglancer/widget/scale_bar';
 
-export interface SliceViewerState extends ViewerState { showScaleBar: TrackableBoolean; }
+export interface SliceViewerState extends RenderedDataViewerState {
+  showScaleBar: TrackableBoolean;
+}
 
 export enum OffscreenTextures {
   COLOR,
@@ -110,6 +112,33 @@ export class SliceViewPanel extends RenderedDataPanel {
       context: DisplayContext, element: HTMLElement, public sliceView: SliceView,
       viewer: SliceViewerState) {
     super(context, element, viewer);
+
+    registerActionListener(element, 'translate-via-mouse-drag', (e: ActionEvent<MouseEvent>) => {
+      const {mouseState} = this.viewer;
+      if (mouseState.updateUnconditionally()) {
+        startRelativeMouseDrag(e.detail, (_event, deltaX, deltaY) => {
+          const {position} = this.viewer.navigationState;
+          const pos = position.spatialCoordinates;
+          vec3.set(pos, deltaX, deltaY, 0);
+          vec3.transformMat4(pos, pos, this.sliceView.viewportToData);
+          position.changed.dispatch();
+        });
+      }
+    });
+
+    registerActionListener(element, 'rotate-via-mouse-drag', (e: ActionEvent<MouseEvent>) => {
+      const {mouseState} = this.viewer;
+      if (mouseState.updateUnconditionally()) {
+        const initialPosition = vec3.clone(mouseState.position);
+        startRelativeMouseDrag(e.detail, (_event, deltaX, deltaY) => {
+          let {viewportAxes} = this.sliceView;
+          this.viewer.navigationState.pose.rotateAbsolute(
+              viewportAxes[1], deltaX / 4.0 * Math.PI / 180.0, initialPosition);
+          this.viewer.navigationState.pose.rotateAbsolute(
+              viewportAxes[0], deltaY / 4.0 * Math.PI / 180.0, initialPosition);
+        });
+      }
+    });
 
     this.registerDisposer(sliceView);
     this.registerDisposer(sliceView.visibility.add(this.visibility));
@@ -251,28 +280,6 @@ export class SliceViewPanel extends RenderedDataPanel {
         mouseState,
         offscreenFramebuffer.readPixelAsUint32(OffscreenTextures.PICK, glWindowX, glWindowY));
     return true;
-  }
-
-  startDragViewport(e: MouseEvent) {
-    let {mouseState} = this.viewer;
-    if (mouseState.updateUnconditionally()) {
-      let initialPosition = vec3.clone(mouseState.position);
-      startRelativeMouseDrag(e, (event, deltaX, deltaY) => {
-        let {position} = this.viewer.navigationState;
-        if (event.shiftKey) {
-          let {viewportAxes} = this.sliceView;
-          this.viewer.navigationState.pose.rotateAbsolute(
-              viewportAxes[1], deltaX / 4.0 * Math.PI / 180.0, initialPosition);
-          this.viewer.navigationState.pose.rotateAbsolute(
-              viewportAxes[0], deltaY / 4.0 * Math.PI / 180.0, initialPosition);
-        } else {
-          let pos = position.spatialCoordinates;
-          vec3.set(pos, deltaX, deltaY, 0);
-          vec3.transformMat4(pos, pos, this.sliceView.viewportToData);
-          position.changed.dispatch();
-        }
-      });
-    }
   }
 
   /**

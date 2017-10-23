@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-.rendered-data-panel {
+.neuroglancer-rendered-data-panel {
   cursor: crosshair;
   position: relative;
 }

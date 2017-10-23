@@ -14,8 +14,9 @@
  * limitations under the License.
  */
 
+import {AutomaticallyFocusedElement} from 'neuroglancer/util/automatic_focus';
 import {RefCounted} from 'neuroglancer/util/disposable';
-import {globalKeyboardHandlerStack, KeySequenceMap} from 'neuroglancer/util/keyboard_shortcut_handler';
+import {EventActionMap, KeyboardEventBinder} from 'neuroglancer/util/keyboard_bindings';
 
 export const overlayKeyboardHandlerPriority = 100;
 
@@ -23,30 +24,30 @@ require('./overlay.css');
 
 export let overlaysOpen = 0;
 
-let KEY_MAP = new KeySequenceMap();
-KEY_MAP.bind('escape', 'close');
+export const defaultEventMap = EventActionMap.fromObject({
+  'escape': {action: 'close'},
+});
 
 export class Overlay extends RefCounted {
   container: HTMLDivElement;
   content: HTMLDivElement;
-  constructor(public keySequenceMap: KeySequenceMap = KEY_MAP) {
+  keyMap = new EventActionMap();
+  constructor() {
     super();
+    this.keyMap.addParent(defaultEventMap, Number.NEGATIVE_INFINITY);
     ++overlaysOpen;
     let container = this.container = document.createElement('div');
     container.className = 'overlay';
     let content = this.content = document.createElement('div');
+    this.registerDisposer(new AutomaticallyFocusedElement(content));
     content.className = 'overlay-content';
     container.appendChild(content);
     document.body.appendChild(container);
-    this.registerDisposer(globalKeyboardHandlerStack.push(
-        keySequenceMap, this.commandReceived.bind(this), overlayKeyboardHandlerPriority));
-  }
-
-  commandReceived(action: string) {
-    if (action === 'close') {
+    this.registerDisposer(new KeyboardEventBinder(this.container, this.keyMap));
+    this.registerEventListener(container, 'action:close', () => {
       this.dispose();
-    }
-    return false;
+    });
+    content.focus();
   }
 
   disposed() {
