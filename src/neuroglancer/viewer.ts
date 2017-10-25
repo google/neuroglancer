@@ -53,6 +53,10 @@ require('./help_button.css');
 require('neuroglancer/noselect.css');
 require('neuroglancer/ui/button.css');
 
+export function validateStateServer(obj: any) {
+  return obj;
+}
+
 export class DataManagementContext extends RefCounted {
   worker = new Worker('chunk_worker.bundle.js');
   chunkQueueManager = this.registerDisposer(new ChunkQueueManager(new RPC(this.worker), this.gl, {
@@ -136,7 +140,7 @@ export class Viewer extends RefCounted implements ViewerState {
   showScaleBar = new TrackableBoolean(true, true);
   showPerspectiveSliceViews = new TrackableBoolean(true, true);
   contextMenu: ContextMenu;
-  
+
   layerPanel: LayerPanel;
   layerSelectedValues =
       this.registerDisposer(new LayerSelectedValues(this.layerManager, this.mouseState));
@@ -152,6 +156,7 @@ export class Viewer extends RefCounted implements ViewerState {
   layerSpecification: TopLevelLayerListSpecification;
   layout: RootLayoutContainer;
 
+  stateServer = new TrackableValue<string>('', validateStateServer);
   state = new CompoundTrackable();
 
   options: ViewerOptions;
@@ -236,6 +241,7 @@ export class Viewer extends RefCounted implements ViewerState {
         'systemMemoryLimit', this.dataContext.chunkQueueManager.capacities.systemMemory.sizeLimit);
     state.add(
         'concurrentDownloads', this.dataContext.chunkQueueManager.capacities.download.itemLimit);
+    state.add('stateServer', this.stateServer);
 
     this.registerDisposer(this.navigationState.changed.add(() => {
       this.handleNavigationStateChanged();

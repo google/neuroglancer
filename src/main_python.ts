@@ -33,7 +33,7 @@ import {bindDefaultCopyHandler, bindDefaultPasteHandler} from 'neuroglancer/ui/d
 import {setDefaultInputEventBindings} from 'neuroglancer/ui/default_input_event_bindings';
 import {makeDefaultViewer} from 'neuroglancer/ui/default_viewer';
 import {UrlHashBinding} from 'neuroglancer/ui/url_hash_binding';
-import {CompoundTrackable, Trackable} from 'neuroglancer/util/trackable';
+import {CompoundTrackable} from 'neuroglancer/util/trackable';
 import {InputEventBindings} from 'neuroglancer/viewer';
 
 function makeTrackableBasedEventActionMaps(inputEventBindings: InputEventBindings) {
@@ -113,15 +113,18 @@ window.addEventListener('DOMContentLoaded', () => {
 
   configState.add('statusMessages', new TrackableBasedStatusMessages());
 
-  let sharedState: Trackable|undefined = viewer.state;
+  const hashBinding = viewer.registerDisposer(new UrlHashBinding(viewer.state));
+  hashBinding.updateFromUrlHash();
 
-  if (window.location.hash) {
-    const hashBinding = viewer.registerDisposer(new UrlHashBinding(viewer.state));
-    hashBinding.updateFromUrlHash();
-    sharedState = undefined;
+  let serverConnection: ServerConnection;
+  if (viewer.stateServer.value === '') {
+    serverConnection = new ServerConnection(undefined, privateState, configState);
   }
-
-  const serverConnection = new ServerConnection(sharedState, privateState, configState);
+  else {
+    serverConnection = new ServerConnection(viewer.state, privateState, configState,
+        viewer.stateServer.value);
+    serverConnection.sendActionNotification('initState', viewer.state);
+  }
   remoteActionHandler.sendActionRequested.add(
       (action, state) => serverConnection.sendActionNotification(action, state));
 

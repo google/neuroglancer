@@ -1,5 +1,5 @@
 language: node_js
-dist: trusty
+group: travis_lts
 addons:
   chrome: stable
 sudo: required
@@ -21,8 +21,8 @@ script:
 after_success:
 - sudo apt-get -qq update;
 - sudo apt-get install -y oracle-java8-set-default
-- npm run build-min
-- cp -r ./dist/min appengine/frontend/static/
+- npm run build-python-min
+- cp -r ./dist/python-min appengine/frontend/static/
 deploy:
 - provider: gae
   skip_cleanup: true
