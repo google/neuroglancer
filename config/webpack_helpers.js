@@ -209,8 +209,10 @@ function getBaseConfig(options) {
  *     getTypescriptLoaderEntry, the following options may also be specified.
  * @param {boolean=} [options.minify=false] Specifies whether to produce minified output (using the
  *     SIMPLE mode of Google Closure Compiler).
- * @param {boolean=} [options.registerCredentials=true] Specifies whether to register source-specific
- *     CredentialsProvider implementations with the default credentials manager.
+ * @param {boolean=} [options.python=false] Specifies whether to use the Python client
+ *     configuration.
+ * @param {boolean=} [options.registerCredentials=!options.python] Specifies whether to register
+ *     source-specific CredentialsProvider implementations with the default credentials manager.
  * @param {function(object)=} options.modifyBaseConfig Function that is invoked on the result of
  *     getBaseConfig, and is allowed to modify it before it is used to generate the main and worker
  *     bundles.
@@ -221,6 +223,7 @@ function getBaseConfig(options) {
  *     specified as directories containing a 'frontend.ts' and 'backend.ts' file to be included in
  *     the frontend and backend bundles, respectively.  Note that if you wish for the default data
  *     sources to be included, you must include them in the array that you pass.
+ * @param {string[]} [options.extraDataSources=[]] Array of additional data source to include.
  * @param {string[]=} options.chunkWorkerModules Array of additional modules to include in the chunk
  *     worker.
  * @param {object[]=} options.commonPlugins Array of additional plugins to include in both the main
@@ -243,16 +246,21 @@ function getViewerConfig(options) {
   if (options.modifyBaseConfig) {
     options.modifyBaseConfig(baseConfig);
   }
-  let dataSources = options.dataSources || DEFAULT_DATA_SOURCES;
+  let dataSources = [...(options.dataSources || DEFAULT_DATA_SOURCES),
+                     ...(options.extraDataSources || [])];
   let supportedLayers = options.supportedLayers || DEFAULT_SUPPORTED_LAYERS;
   let frontendDataSourceModules = [];
   let backendDataSourceModules = [];
+  const registerCredentials =
+      options.registerCredentials !== undefined ? options.registerCredentials : !options.python;
   for (let datasource of dataSources) {
     if (typeof datasource === 'string') {
       datasource = {source: datasource};
     }
-    frontendDataSourceModules.push(`${datasource.source}/frontend`);
-    if (options.registerCredentials !== false && datasource.registerCredentials) {
+    if (datasource.frontend !== null) {
+      frontendDataSourceModules.push(datasource.frontend || `${datasource.source}/frontend`);
+    }
+    if (registerCredentials && datasource.registerCredentials) {
       frontendDataSourceModules.push(datasource.registerCredentials);
     }
     if (datasource.register === undefined) {
@@ -260,7 +268,9 @@ function getViewerConfig(options) {
     } else if (datasource.register !== null) {
       frontendDataSourceModules.push(datasource.register);
     }
-    backendDataSourceModules.push(`${datasource.source}/backend`);
+    if (datasource.backend !== null) {
+      backendDataSourceModules.push(datasource.backend || `${datasource.source}/backend`);
+    }
   }
   let defaultDefines = {
     // This is the default client ID used for the hosted neuroglancer.
@@ -345,6 +355,33 @@ function getViewerConfig(options) {
   ];
 }
 
+
+function makePythonClientOptions(options) {
+  const srcDir = resolveReal(__dirname, '../src');
+  options = Object.assign({}, options);
+  options.extraDataSources = [...(options.extraDataSources || []),
+                              'neuroglancer/datasource/python',
+                             ];
+  options.frontendModules = options.frontendModules || [resolveReal(srcDir, 'main_python.ts')];
+  options.registerCredentials = false;
+  return options;
+}
+
+function getViewerConfigFromEnv(options, env) {
+  env = env || 'dev';
+  const envParts = new Set(env.split('-'));
+  options = Object.assign({}, options);
+  if (envParts.has('min')) {
+    options.minify = true;
+  }
+  if (envParts.has('python')) {
+    options = makePythonClientOptions(options);
+  }
+  return getViewerConfig(options);
+}
+
 exports.getTypescriptLoaderEntry = getTypescriptLoaderEntry;
 exports.getBaseConfig = getBaseConfig;
 exports.getViewerConfig = getViewerConfig;
+exports.makePythonClientOptions = makePythonClientOptions;
+exports.getViewerConfigFromEnv = getViewerConfigFromEnv;

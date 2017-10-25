@@ -19,12 +19,7 @@
 const path = require('path');
 const webpack_helpers = require('./webpack_helpers');
 module.exports = env => {
-  let outputSuffix = 'dev';
-  let options = {};
-  if (env === 'min') {
-    outputSuffix = 'min';
-    options.minify = true;
-  }
-  options.outputPath = path.resolve(__dirname, '../dist/' + outputSuffix);
-  return webpack_helpers.getViewerConfig(options);
+  env = env || 'dev';
+  return webpack_helpers.getViewerConfigFromEnv(
+      {outputPath: path.resolve(__dirname, '../dist/' + env)}, env);
 };
