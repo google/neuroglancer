@@ -25,7 +25,7 @@ import {DataType, VolumeChunkSpecification, VolumeSourceOptions, VolumeType} fro
 import {MultiscaleVolumeChunkSource as GenericMultiscaleVolumeChunkSource, VolumeChunkSource} from 'neuroglancer/sliceview/volume/frontend';
 import {StatusMessage} from 'neuroglancer/status';
 import {getPrefixMatches, getPrefixMatchesWithDescriptions} from 'neuroglancer/util/completion';
-import {Owned} from 'neuroglancer/util/disposable';
+import {Owned, Borrowed} from 'neuroglancer/util/disposable';
 import {vec3} from 'neuroglancer/util/geom';
 import {parseArray, parseQueryStringParameters, parseXYZ, verifyEnumString, verifyFinitePositiveFloat, verifyMapKey, verifyObject, verifyObjectProperty, verifyOptionalString, verifyPositiveInt, verifyString} from 'neuroglancer/util/json';
 
@@ -89,7 +89,7 @@ export class MultiscaleVolumeChunkSource implements GenericMultiscaleVolumeChunk
   encoding: VolumeChunkEncoding|undefined;
   constructor(
       public chunkManager: ChunkManager, public instance: BrainmapsInstance,
-      public credentialsProvider: BrainmapsCredentialsProvider, public volumeId: string,
+      public credentialsProvider: Borrowed<BrainmapsCredentialsProvider>, public volumeId: string,
       public changeSpec: ChangeSpec|undefined, volumeInfoResponse: any, meshesResponse: any,
       options: GetBrainmapsVolumeOptions) {
     this.encoding = options.encoding;

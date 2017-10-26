@@ -14,10 +14,6 @@
  * limitations under the License.
  */
 
-/**
- * @file CredentialsManager for globally registering a CredentialsProvider
- */
-
 import {defaultCredentialsManager} from 'neuroglancer/credentials_provider/default_manager';
 import {credentialsKey} from 'neuroglancer/datasource/brainmaps/api';
 import {BrainmapsCredentialsProvider} from 'neuroglancer/datasource/brainmaps/credentials_provider';
