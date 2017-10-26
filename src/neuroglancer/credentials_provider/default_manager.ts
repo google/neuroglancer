@@ -18,6 +18,6 @@
  * @file CredentialsManager for globally registering a CredentialsProvider
  */
 
-import {MapBasedCredentialsManager} from 'neuroglancer/credentials_provider';
+import {CachingMapBasedCredentialsManager} from 'neuroglancer/credentials_provider';
 
-export const defaultCredentialsManager = new MapBasedCredentialsManager();
+export const defaultCredentialsManager = new CachingMapBasedCredentialsManager();

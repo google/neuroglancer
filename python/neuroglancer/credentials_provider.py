@@ -22,11 +22,11 @@ class CredentialsManager(object):
     def __init__(self):
         self._providers = dict()
 
-    def register(self, key, credentials_provider):
-        self._providers[key] = credentials_provider
+    def register(self, key, credentials_provider_getter):
+        self._providers[key] = credentials_provider_getter
 
-    def get(self, key):
-        return self._providers.get(key)
+    def get(self, key, parameters):
+        return self._providers.get(key)(parameters)
 
 
 class CredentialsProvider(object):

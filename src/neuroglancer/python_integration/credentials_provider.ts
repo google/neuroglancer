@@ -22,6 +22,7 @@ import {CredentialsManager, CredentialsProvider, CredentialsWithGeneration, make
 import {TrackableValue} from 'neuroglancer/trackable_value';
 import {Memoize} from 'neuroglancer/util/memoize';
 import {PersistentCompoundTrackable} from 'neuroglancer/util/trackable';
+import {stableStringify} from 'neuroglancer/util/json';
 
 class TrackableBasedCredentialsProvider<Credentials> extends CredentialsProvider<Credentials> {
   invalidCredentials = new TrackableValue<number|null|undefined>(undefined, x => x);
@@ -60,11 +61,15 @@ export class TrackableBasedCredentialsManager implements CredentialsManager {
   outputState = new PersistentCompoundTrackable();
   private memoize = new Memoize<string, TrackableBasedCredentialsProvider<any>>();
 
-  getCredentialsProvider<Credentials>(key: string) {
-    return this.memoize.get(key, () => {
+  getCredentialsProvider<Credentials>(key: string, parameters?: any) {
+    if (parameters === undefined) {
+      parameters = null;
+    }
+    const combinedKey = stableStringify({key, parameters});
+    return this.memoize.get(combinedKey, () => {
       const provider = new TrackableBasedCredentialsProvider<Credentials>();
-      provider.registerDisposer(this.inputState.add(key, provider.validCredentials));
-      provider.registerDisposer(this.outputState.add(key, provider.invalidCredentials));
+      provider.registerDisposer(this.inputState.add(combinedKey, provider.validCredentials));
+      provider.registerDisposer(this.outputState.add(combinedKey, provider.invalidCredentials));
       return provider;
     });
   }

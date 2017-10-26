@@ -21,6 +21,7 @@
 
 import {getDefaultDataSourceProvider} from 'neuroglancer/datasource/default_provider';
 import {TrackableBasedCredentialsManager} from 'neuroglancer/python_integration/credentials_provider';
+import {CachingCredentialsManager} from 'neuroglancer/credentials_provider';
 import {TrackableBasedEventActionMap} from 'neuroglancer/python_integration/event_action_map';
 import {RemoteActionHandler} from 'neuroglancer/python_integration/remote_actions';
 import {TrackableBasedStatusMessages} from 'neuroglancer/python_integration/remote_status_messages';
@@ -66,7 +67,8 @@ window.addEventListener('DOMContentLoaded', () => {
   let viewer = (<any>window)['viewer'] = makeDefaultViewer({
     showLayerDialog: false,
     resetStateWhenEmpty: false,
-    dataSourceProvider: getDefaultDataSourceProvider({credentialsManager})
+    dataSourceProvider: getDefaultDataSourceProvider(
+        {credentialsManager: new CachingCredentialsManager(credentialsManager)})
   });
   setDefaultInputEventBindings(viewer.inputEventBindings);
   configState.add(

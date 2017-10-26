@@ -18,4 +18,4 @@ import {defaultCredentialsManager} from 'neuroglancer/credentials_provider/defau
 import {credentialsKey} from 'neuroglancer/datasource/brainmaps/api';
 import {BrainmapsCredentialsProvider} from 'neuroglancer/datasource/brainmaps/credentials_provider';
 
-defaultCredentialsManager.register(credentialsKey, new BrainmapsCredentialsProvider());
+defaultCredentialsManager.register(credentialsKey, () => new BrainmapsCredentialsProvider());

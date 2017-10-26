@@ -48,7 +48,8 @@ class ClientCredentialsHandler(object):
             for key, value in credentials.iteritems():
                 prev_value = self._previous_invalid_credentials.get(key, 'invalid')
                 if prev_value != value:
-                    provider = self.credentials_manager.get(key)
+                    parsed_key = json.loads(key)
+                    provider = self.credentials_manager.get(parsed_key['key'], parsed_key.get('parameters'))
                     if provider is not None:
                         def handle_credentials(f, key=key):
                             if self._closed:

@@ -20,6 +20,7 @@
 
 import {CancellationToken, MultipleConsumerCancellationTokenSource} from 'neuroglancer/util/cancellation';
 import {Owned, RefCounted} from 'neuroglancer/util/disposable';
+import {StringMemoize} from 'neuroglancer/util/memoize';
 
 /**
  * Wraps an arbitrary JSON credentials object with a generation number.
@@ -93,23 +94,58 @@ export function makeCredentialsGetter<Credentials>(
  * Interface for obtaining a CredentialsProvider based on a string key.
  */
 export interface CredentialsManager {
-  getCredentialsProvider<Credentials>(key: string): Owned<CredentialsProvider<Credentials>>;
+  getCredentialsProvider<Credentials>(key: string, parameters?: any):
+      Owned<CredentialsProvider<Credentials>>;
 }
 
 /**
  * CredentialsManager that supports registration.
  */
-export class MapBasedCredentialsManager extends RefCounted implements CredentialsManager {
-  providers = new Map<string, Owned<CredentialsProvider<any>>>();
-  register<Credentials>(key: string, provider: Owned<CredentialsProvider<Credentials>>) {
-    this.providers.set(key, this.registerDisposer(provider));
+export class MapBasedCredentialsManager implements CredentialsManager {
+  providers = new Map<string, (parameters: any) => Owned<CredentialsProvider<any>>>();
+  register<Credentials>(
+      key: string, providerGetter: (parameters: any) => Owned<CredentialsProvider<Credentials>>) {
+    this.providers.set(key, providerGetter);
   }
 
-  getCredentialsProvider<Credentials>(key: string): Owned<CredentialsProvider<Credentials>> {
-    const value = this.providers.get(key);
-    if (value === undefined) {
+  getCredentialsProvider<Credentials>(key: string, parameters?: any):
+      Owned<CredentialsProvider<Credentials>> {
+    const getter = this.providers.get(key);
+    if (getter === undefined) {
       throw new Error(`No registered credentials provider: ${JSON.stringify(key)}`);
     }
-    return <CredentialsProvider<Credentials>>value.addRef();
+    return getter(parameters);
+  }
+}
+
+/**
+ * CredentialsManager that wraps another and caches the CredentialsProvider objects.
+ */
+export class CachingCredentialsManager<Base extends CredentialsManager> extends RefCounted
+    implements CredentialsManager {
+  memoize = new StringMemoize();
+
+  constructor(public base: Base) {
+    super();
+  }
+
+  getCredentialsProvider<Credentials>(key: string, parameters?: any):
+      Owned<CredentialsProvider<Credentials>> {
+    return this.memoize.get(
+        {key, parameters},
+        () => this.registerDisposer(
+            this.base.getCredentialsProvider<Credentials>(key, parameters).addRef()));
+  }
+}
+
+export class CachingMapBasedCredentialsManager extends
+    CachingCredentialsManager<MapBasedCredentialsManager> {
+  constructor() {
+    super(new MapBasedCredentialsManager());
+  }
+
+  register<Credentials>(
+      key: string, providerGetter: (parameters: any) => Owned<CredentialsProvider<Credentials>>) {
+    this.base.register(key, providerGetter);
   }
 }
