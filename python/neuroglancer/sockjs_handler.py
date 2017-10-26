@@ -157,6 +157,8 @@ class SockJSHandler(sockjs.tornado.SockJSConnection):
         self.is_open = True
 
     def on_message(self, message_text):
+        if self.viewer is None:
+            return
         try:
             message = decode_json(message_text)
             if isinstance(message, dict):

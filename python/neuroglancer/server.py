@@ -25,7 +25,6 @@ import weakref
 import tornado.httpserver
 import tornado.ioloop
 import tornado.netutil
-import tornado.routing
 import tornado.web
 
 import sockjs.tornado
@@ -51,20 +50,6 @@ global_server_args = dict(bind_address='127.0.0.1', bind_port=0)
 
 debug = False
 
-class SocketMatcher(tornado.routing.Matcher):
-    def __init__(self, server):
-        self.server = server
-        self.regex = re.compile(SOCKET_PATH_REGEX)
-        super(SocketMatcher, self).__init__()
-    def match(self, request):
-        m = self.regex.match(request.path)
-        if m is None:
-            return None
-        token = m.group('viewer_token')
-        if token != self.server.token and token not in self.server.viewers:
-            return None
-        return {}
-
 class Server(object):
     def __init__(self, ioloop, bind_address='127.0.0.1', bind_port=0):
         self.viewers = weakref.WeakValueDictionary()
@@ -84,8 +69,7 @@ class Server(object):
             (DATA_PATH_REGEX, SubvolumeHandler, dict(server=self)),
             (SKELETON_PATH_REGEX, SkeletonHandler, dict(server=self)),
             (MESH_PATH_REGEX, MeshHandler, dict(server=self)),
-            (SocketMatcher(self), sockjs_router.urls),
-        ], log_function=log_function)
+        ] + sockjs_router.urls, log_function=log_function)
         http_server = tornado.httpserver.HTTPServer(app)
         sockets = tornado.netutil.bind_sockets(port=bind_port, address=bind_address)
         http_server.add_sockets(sockets)
@@ -274,6 +258,7 @@ def start():
     global global_server
     if global_server is None:
         ioloop = tornado.ioloop.IOLoop()
+        ioloop.make_current()
         global_server = Server(ioloop=ioloop, **global_server_args)
         thread = threading.Thread(target=ioloop.start)
         thread.daemon = True
