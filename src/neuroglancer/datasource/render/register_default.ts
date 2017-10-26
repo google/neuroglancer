@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-import {RenderDataSource} from 'neuroglancer/datasource/render/frontend';
 import {registerProvider} from 'neuroglancer/datasource/default_provider';
+import {RenderDataSource} from 'neuroglancer/datasource/render/frontend';
 
 registerProvider('render', () => new RenderDataSource());

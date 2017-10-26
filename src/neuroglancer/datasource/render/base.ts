@@ -14,12 +14,19 @@
  * limitations under the License.
  */
 
-export class RenderSourceParameters {
+export class RenderBaseSourceParameters {
   baseUrls: string[];
   owner: string;
   project: string;
   stack: string;
-  encoding: string;
+  channel: string|undefined;
+}
+
+export class RenderSourceParameters extends RenderBaseSourceParameters {
+  minIntensity: number|undefined;
+  maxIntensity: number|undefined;
+  maxTileSpecsToRender: number|undefined;
+  filter: boolean|undefined;
 }
 
 export class TileChunkSourceParameters extends RenderSourceParameters {

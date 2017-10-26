@@ -34,6 +34,27 @@ chunkDecoders.set('jpg', decodeJpegChunk);
 (WithParameters(VolumeChunkSource, TileChunkSourceParameters)) {
   chunkDecoder = chunkDecoders.get(this.parameters.encoding)!;
 
+  queryString = (() => {
+    let {parameters} = this;
+    let query_params: string[] = [];
+    if (parameters.channel !== undefined) {
+      query_params.push('channels=' + parameters.channel);
+    }
+    if (parameters.minIntensity !== undefined) {
+      query_params.push(`minIntensity=${JSON.stringify(parameters.minIntensity)}`);
+    }
+    if (parameters.maxIntensity !== undefined) {
+      query_params.push(`maxIntensity=${JSON.stringify(parameters.maxIntensity)}`);
+    }
+    if (parameters.maxTileSpecsToRender !== undefined) {
+      query_params.push(`maxTileSpecsToRender=${JSON.stringify(parameters.maxTileSpecsToRender)}`);
+    }
+    if (parameters.filter !== undefined) {
+      query_params.push(`filter=${JSON.stringify(parameters.filter)}`);
+    }
+    return query_params.join('&');
+  })();
+
   download(chunk: VolumeChunk, cancellationToken: CancellationToken) {
     let {parameters} = this;
     let {chunkGridPosition} = chunk;
@@ -56,12 +77,11 @@ chunkDecoders.set('jpg', decodeJpegChunk);
 
     // GET
     // /v1/owner/{owner}/project/{project}/stack/{stack}/z/{z}/box/{x},{y},{width},{height},{scale}/jpeg-image
-    let path = `/render-ws/v1/owner/${parameters.owner}/project/${parameters.project}/` +
-        `stack/${parameters.stack}/z/${chunkPosition[2]}/` +
-        `box/${chunkPosition[0]},${chunkPosition[1]},${xTileSize},${yTileSize},${scale}/jpeg-image`;
+    let path = `/render-ws/v1/owner/${parameters.owner}/project/${parameters.project}/stack/${parameters.stack}/z/${chunkPosition[2]}/box/${chunkPosition[0]},${chunkPosition[1]},${xTileSize},${yTileSize},${scale}/jpeg-image`;
 
     return sendHttpRequest(
-               openShardedHttpRequest(parameters.baseUrls, path), 'arraybuffer', cancellationToken)
+               openShardedHttpRequest(parameters.baseUrls, path + '?' + this.queryString),
+               'arraybuffer', cancellationToken)
         .then(response => this.chunkDecoder(chunk, response));
   }
 }
