@@ -14,7 +14,6 @@
  * limitations under the License.
  */
 
-import {Token} from 'neuroglancer/datasource/boss/api_implementation';
 import {vec2} from 'neuroglancer/util/geom';
 
 export class BossSourceParameters {
@@ -24,7 +23,6 @@ export class BossSourceParameters {
   experiment: string;
   channel: string;
   resolution: string;
-  token: Token;
 }
 
 export class VolumeChunkSourceParameters extends BossSourceParameters {

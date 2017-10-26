@@ -14,11 +14,21 @@
  * limitations under the License.
  */
 
-import {getToken, Token} from 'neuroglancer/datasource/boss/api_implementation';
+import {CredentialsProvider} from 'neuroglancer/credentials_provider';
+import {CredentialsWithGeneration} from 'neuroglancer/credentials_provider';
 import {HttpError, openShardedHttpRequest} from 'neuroglancer/util/http_request';
 import {CancellationToken, uncancelableToken, CANCELED} from 'neuroglancer/util/cancellation';
 
 export var numPendingRequests = 0;
+
+export type BossToken = string;
+
+/**
+ * Key used for retrieving the CredentialsProvider from a CredentialsManager.
+ */
+export const credentialsKey = 'boss';
+
+// export type BossCredentialsProvider = CredentialsProvider<BossToken>;
 
 export interface HttpHeader {
     key: string;
@@ -34,14 +44,14 @@ export interface HttpCall {
 }
 
 export function makeRequest(
-    baseUrls: string|string[], authServer: string, httpCall: HttpCall, cancellationToken?: CancellationToken): Promise<ArrayBuffer>;
+    baseUrls: string|string[], credentialsProvider: CredentialsProvider<BossToken>, httpCall: HttpCall, cancellationToken?: CancellationToken): Promise<ArrayBuffer>;
 export function makeRequest(
-    baseUrls: string|string[], authServer: string, httpCall: HttpCall, cancellationToken?: CancellationToken): Promise<any>;
+    baseUrls: string|string[], credentialsProvider: CredentialsProvider<BossToken>, httpCall: HttpCall, cancellationToken?: CancellationToken): Promise<any>;
 export function makeRequest(
-    baseUrls: string|string[], authServer: string, httpCall: HttpCall, cancellationToken?: CancellationToken): any;
+    baseUrls: string|string[], credentialsProvider: CredentialsProvider<BossToken>, httpCall: HttpCall, cancellationToken?: CancellationToken): any;
 
 export function makeRequest(
-    baseUrls: string|string[], authServer: string, httpCall: HttpCall, cancellationToken: CancellationToken = uncancelableToken): any {
+    baseUrls: string|string[], credentialsProvider: CredentialsProvider<BossToken>, httpCall: HttpCall, cancellationToken: CancellationToken = uncancelableToken): any {
   /**
    * undefined means request not yet attempted.  null means request
    * cancelled.
@@ -57,14 +67,14 @@ export function makeRequest(
       reject(CANCELED);
     } 
     cancellationToken.add(abort);
-    function start(token: Token) {
+    function start(credentials: CredentialsWithGeneration<BossToken>) {
       if (xhr === null) {
         --numPendingRequests;
         return;
       }
       xhr = openShardedHttpRequest(baseUrls, httpCall.path, httpCall.method);
       xhr.responseType = httpCall.responseType;
-      xhr.setRequestHeader('Authorization', `Bearer ${token}`);
+      xhr.setRequestHeader('Authorization', `Bearer ${credentials.credentials}`);
       if (httpCall.headers !== undefined) {
           for (let i=0; i<httpCall.headers.length; i++) {
               let header = httpCall.headers[i];
@@ -82,10 +92,12 @@ export function makeRequest(
           resolve(this.response);
         } else if (status === 403 || status === 401) {
           // Authorization needed.
-          getToken(authServer).then(start);
+          credentialsProvider.get(credentials, cancellationToken).then(start); 
+          // getToken(authServer).then(start);
         } else if (status === 504) {
           // Gateway timeout can occur if the server takes too long to reply.  Retry.
-          getToken(authServer).then(start);
+          credentialsProvider.get(credentials, cancellationToken).then(start);        
+          // getToken(authServer).then(start);
         } else {
           --numPendingRequests;
           cancellationToken.remove(abort);
@@ -94,6 +106,7 @@ export function makeRequest(
       };
       xhr.send(httpCall.payload);
     }
-    getToken(authServer).then(start);
+    // getToken(authServer).then(start);
+    credentialsProvider.get(/*invalidToken=*/undefined, cancellationToken).then(start);    
   });
 }
