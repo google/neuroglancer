@@ -285,7 +285,7 @@ class Layers(object):
         if self._readonly:
             raise AttributeError
         if len(args) == 1 and not kwargs and isinstance(args[0], ManagedLayer):
-            pass
+            layer = args[0]
         else:
             layer = ManagedLayer(*args, **kwargs)
         self._layers.append(layer)
@@ -345,6 +345,3 @@ class ViewerState(JsonObjectWrapper):
     @voxel_size.setter
     def voxel_size(self, v):
         self.navigation.voxel_size = v
-
-    def append_layer(self, *args, **kwargs):
-        self.layers.append(ManagedLayer(*args, **kwargs))
