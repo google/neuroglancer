@@ -14,19 +14,20 @@
  * limitations under the License.
  */
 
-import 'neuroglancer/datasource/boss/api_backend';
-
-import {registerChunkSource} from 'neuroglancer/chunk_manager/backend';
-import {makeRequest, HttpHeader, HttpCall} from 'neuroglancer/datasource/boss/api';
+import {WithParameters} from 'neuroglancer/chunk_manager/backend';
+import {ChunkSourceParametersConstructor} from 'neuroglancer/chunk_manager/base';
+import {WithSharedCredentialsProviderCounterpart} from 'neuroglancer/credentials_provider/shared_counterpart';
+import {BossToken, makeRequest, HttpHeader, HttpCall} from 'neuroglancer/datasource/boss/api';
 import {VolumeChunkSourceParameters, MeshSourceParameters} from 'neuroglancer/datasource/boss/base';
-import {ParameterizedVolumeChunkSource, VolumeChunk} from 'neuroglancer/sliceview/volume/backend';
-import {decodeJsonManifestChunk, decodeTriangleVertexPositionsAndIndices, FragmentChunk, ManifestChunk, ParameterizedMeshSource} from 'neuroglancer/mesh/backend';
+import {VolumeChunkSource, VolumeChunk} from 'neuroglancer/sliceview/volume/backend';
+import {decodeJsonManifestChunk, decodeTriangleVertexPositionsAndIndices, FragmentChunk, ManifestChunk, MeshSource} from 'neuroglancer/mesh/backend';
 import {ChunkDecoder} from 'neuroglancer/sliceview/backend_chunk_decoders';
 import {decodeJpegChunk} from 'neuroglancer/sliceview/backend_chunk_decoders/jpeg';
 import {decodeBossNpzChunk} from 'neuroglancer/sliceview/backend_chunk_decoders/bossNpz';
 import {openShardedHttpRequest, sendHttpRequest} from 'neuroglancer/util/http_request';
 import {CancellationToken} from 'neuroglancer/util/cancellation';
 import {Endianness} from 'neuroglancer/util/endian';
+import {registerSharedObject, SharedObject} from 'neuroglancer/worker_rpc';
 
 let chunkDecoders = new Map<string, ChunkDecoder>();
 chunkDecoders.set('npz', decodeBossNpzChunk);
@@ -36,8 +37,14 @@ let acceptHeaders = new Map<string, string>();
 acceptHeaders.set('npz', 'application/npygz');
 acceptHeaders.set('jpeg', 'image/jpeg');
 
-@registerChunkSource(VolumeChunkSourceParameters)
-export class VolumeChunkSource extends ParameterizedVolumeChunkSource<VolumeChunkSourceParameters> {
+function BossSource<Parameters, TBase extends {new (...args: any[]): SharedObject}>(
+  Base: TBase, parametersConstructor: ChunkSourceParametersConstructor<Parameters>) {
+return WithParameters(
+    WithSharedCredentialsProviderCounterpart<BossToken>()(Base), parametersConstructor);
+}
+
+@registerSharedObject()
+export class BossVolumeChunkSource extends (BossSource(VolumeChunkSource, VolumeChunkSourceParameters)) {
   chunkDecoder = chunkDecoders.get(this.parameters.encoding)!;
 
   download(chunk: VolumeChunk, cancellationToken: CancellationToken) {
@@ -69,7 +76,7 @@ export class VolumeChunkSource extends ParameterizedVolumeChunkSource<VolumeChun
         responseType: 'arraybuffer',
         headers: [acceptHeader]
     };
-    return makeRequest(parameters.baseUrls, parameters.authServer, httpCall, cancellationToken)
+    return makeRequest(parameters.baseUrls, this.credentialsProvider, httpCall, cancellationToken)
       .then(response => this.chunkDecoder(chunk, response));
   }
 };
@@ -89,8 +96,8 @@ function decodeFragmentChunk(chunk: FragmentChunk, response: ArrayBuffer) {
       chunk, response, Endianness.LITTLE, /*vertexByteOffset=*/8, numVertices);
 }
 
-@registerChunkSource(MeshSourceParameters)
-export class MeshSource extends ParameterizedMeshSource<MeshSourceParameters> {
+@registerSharedObject()
+export class BossMeshSource extends (BossSource(MeshSource, MeshSourceParameters)) {
   download(chunk: ManifestChunk, cancellationToken: CancellationToken)
   {
     let {parameters} = this;
