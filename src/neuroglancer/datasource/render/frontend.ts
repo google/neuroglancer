@@ -245,6 +245,15 @@ export class MultiscaleVolumeChunkSource implements GenericMultiscaleVolumeChunk
       numLevels = computeStackHierarchy(this.stackInfo, this.dims[0]);
     }
 
+    let lowerClipBound = vec3.create(), upperClipBound = vec3.create();
+    // Generate and set the clip bounds based on the highest resolution (lowest scale) data in
+    // render. Otherwise, rounding errors can cause inconsistencies in clip bounds between scaling
+    // levels.
+    for (let i = 0; i < 3; i++) {
+      lowerClipBound[i] = this.stackInfo.lowerVoxelBound[i] * this.stackInfo.voxelResolution[i];
+      upperClipBound[i] = this.stackInfo.upperVoxelBound[i] * this.stackInfo.voxelResolution[i];
+    }
+
     for (let level = 0; level < numLevels; level++) {
       let voxelSize = vec3.clone(this.stackInfo.voxelResolution);
       let chunkDataSize = vec3.fromValues(1, 1, 1);
@@ -268,6 +277,8 @@ export class MultiscaleVolumeChunkSource implements GenericMultiscaleVolumeChunk
         chunkDataSize,
         numChannels: this.numChannels,
         dataType: this.dataType,
+        lowerClipBound,
+        upperClipBound,
         lowerVoxelBound,
         upperVoxelBound,
         volumeSourceOptions,
