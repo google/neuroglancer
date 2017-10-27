@@ -29,7 +29,7 @@ import {MultiscaleVolumeChunkSource as GenericMultiscaleVolumeChunkSource, Volum
 import {applyCompletionOffset, getPrefixMatchesWithDescriptions} from 'neuroglancer/util/completion';
 import {vec3} from 'neuroglancer/util/geom';
 import {openShardedHttpRequest, sendHttpRequest} from 'neuroglancer/util/http_request';
-import {parseArray, parseQueryStringParameters, verifyFloat, verifyInt, verifyObject, verifyObjectProperty, verifyOptionalBoolean, verifyOptionalInt, verifyOptionalString, verifyString} from 'neuroglancer/util/json';
+import {parseArray, parseQueryStringParameters, verifyFloat, verifyObject, verifyObjectProperty, verifyOptionalBoolean, verifyOptionalInt, verifyOptionalString, verifyString} from 'neuroglancer/util/json';
 
 const VALID_ENCODINGS = new Set<string>(['jpg']);
 
@@ -131,13 +131,9 @@ function parseUpperVoxelBounds(stackStatsObj: any): vec3 {
 
   let upperVoxelBound: vec3 = vec3.create();
 
-  upperVoxelBound[0] = verifyObjectProperty(stackBounds, 'maxX', verifyInt);
-  upperVoxelBound[1] = verifyObjectProperty(stackBounds, 'maxY', verifyInt);
-  upperVoxelBound[2] = verifyObjectProperty(stackBounds, 'maxZ', verifyInt);
-
-  for (let i = 0; i < 3; i++) {
-    upperVoxelBound[i] += 1;
-  }
+  upperVoxelBound[0] = verifyObjectProperty(stackBounds, 'maxX', verifyFloat);
+  upperVoxelBound[1] = verifyObjectProperty(stackBounds, 'maxY', verifyFloat);
+  upperVoxelBound[2] = verifyObjectProperty(stackBounds, 'maxZ', verifyFloat);
 
   return upperVoxelBound;
 }
@@ -148,9 +144,9 @@ function parseLowerVoxelBounds(stackStatsObj: any): vec3 {
 
   let lowerVoxelBound: vec3 = vec3.create();
 
-  lowerVoxelBound[0] = verifyObjectProperty(stackBounds, 'minX', verifyInt);
-  lowerVoxelBound[1] = verifyObjectProperty(stackBounds, 'minY', verifyInt);
-  lowerVoxelBound[2] = verifyObjectProperty(stackBounds, 'minZ', verifyInt);
+  lowerVoxelBound[0] = verifyObjectProperty(stackBounds, 'minX', verifyFloat);
+  lowerVoxelBound[1] = verifyObjectProperty(stackBounds, 'minY', verifyFloat);
+  lowerVoxelBound[2] = verifyObjectProperty(stackBounds, 'minZ', verifyFloat);
 
   return lowerVoxelBound;
 }
