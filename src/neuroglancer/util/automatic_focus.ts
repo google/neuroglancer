@@ -60,8 +60,6 @@ export class AutomaticallyFocusedElement extends RefCounted {
       if (this.focusTimer === undefined) {
         this.focusTimer = setTimeout(() => element.focus(), 0);
       }
-      console.log('focusing element due to mouseenter', element);
-      // element.focus();
     });
     this.registerEventListener(element, 'mouseleave', () => {
       const {focusTimer} = this;
@@ -69,8 +67,6 @@ export class AutomaticallyFocusedElement extends RefCounted {
         clearTimeout(focusTimer);
         this.focusTimer = undefined;
       }
-      console.log('focusing element due to mouseenter', element);
-      // element.focus();
     });
     // Insert at the end of the list.
     LinkedListOperations.insertBefore(<any>automaticFocusList, this);
