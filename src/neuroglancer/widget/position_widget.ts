@@ -93,6 +93,7 @@ export class PositionWidget extends RefCounted {
     this.registerEventListener(inputElement, 'change', () => this.updatePosition());
     this.registerEventListener(inputElement, 'blur', () => this.updatePosition());
     this.registerEventListener(inputElement, 'input', () => this.cleanInput());
+    this.registerEventListener(inputElement, 'keydown', this.updateHintScrollPosition);
     let wasFocused = false;
     this.registerEventListener(inputElement, 'mousedown', () => {
       wasFocused = document.activeElement === inputElement;
@@ -257,6 +258,9 @@ export class PositionWidget extends RefCounted {
         this.inputElement.selectionEnd = cleanCursor;
         this.inputElement.selectionStart = cleanCursor;
       }
+
+      this.updateHintScrollPosition();
+
       if (match[2] !== undefined && match[4] !== undefined && match[6] !== undefined) {
         return {
           position: vec3.set(
@@ -288,6 +292,10 @@ export class PositionWidget extends RefCounted {
     }
   }
 
+  private updateHintScrollPosition = this.registerCancellable(animationFrameDebounce(() => {
+    this.hintElement.scrollLeft = this.inputElement.scrollLeft;
+  }));
+
   private updateView() {
     const {position} = this;
     const voxelPosition = this.tempPosition;
@@ -306,7 +314,8 @@ export class PositionWidget extends RefCounted {
       const prevSelectionDirection = inputElement.selectionDirection;
       inputElement.value = inputText;
       inputElement.setSelectionRange(prevSelectionStart, prevSelectionEnd, prevSelectionDirection);
-      this.hintElement.value = hintText;
+      this.hintElement.value = hintText + ' '.repeat(inputText.length - hintText.length);
+      this.updateHintScrollPosition();
     } else {
       this.inputElement.value = '';
       this.hintElement.value = '';
