@@ -28,7 +28,7 @@ export function disableContextMenu() {
 
 export function disableWheel() {
   return registerEventListener(document, 'wheel', (e: WheelEvent) => {
-    if (!(e.target instanceof HTMLInputElement)) {
+    if (e.ctrlKey) {
       e.preventDefault();
     }
   });
