@@ -46,12 +46,12 @@ const DEFAULT_ALLOWED_SIGNIFICANDS = [
   10,
 ];
 
-interface LengthUnit {
+export interface LengthUnit {
   unit: string;
   lengthInNanometers: number;
 }
 
-const ALLOWED_UNITS: LengthUnit[] = [
+export const ALLOWED_UNITS: LengthUnit[] = [
   {unit: 'km', lengthInNanometers: 1e12},
   {unit: 'm', lengthInNanometers: 1e9},
   {unit: 'mm', lengthInNanometers: 1e6},
@@ -59,6 +59,19 @@ const ALLOWED_UNITS: LengthUnit[] = [
   {unit: 'nm', lengthInNanometers: 1},
   {unit: 'pm', lengthInNanometers: 1e-3},
 ];
+
+export function pickLengthUnit(lengthInNanometers: number) {
+  const numAllowedUnits = ALLOWED_UNITS.length;
+  let unit = ALLOWED_UNITS[numAllowedUnits - 1];
+  for (let i = 0; i < numAllowedUnits; ++i) {
+    const allowedUnit = ALLOWED_UNITS[i];
+    if (lengthInNanometers >= allowedUnit.lengthInNanometers) {
+      unit = allowedUnit;
+      break;
+    }
+  }
+  return unit;
+}
 
 export class ScaleBarDimensions {
   /**
@@ -127,16 +140,7 @@ export class ScaleBarDimensions {
     }
 
     const physicalNanometers = bestSignificand * tenToThePowerExponent;
-    const numAllowedUnits = ALLOWED_UNITS.length;
-    let unit = ALLOWED_UNITS[numAllowedUnits - 1];
-    for (let i = 0; i < numAllowedUnits; ++i) {
-      const allowedUnit = ALLOWED_UNITS[i];
-      if (physicalNanometers >= allowedUnit.lengthInNanometers) {
-        unit = allowedUnit;
-        break;
-      }
-    }
-
+    const unit = pickLengthUnit(physicalNanometers);
     this.lengthInPixels = Math.round(physicalNanometers / nanometersPerPixel);
     this.physicalUnit = unit.unit;
     this.physicalLength = physicalNanometers / unit.lengthInNanometers;

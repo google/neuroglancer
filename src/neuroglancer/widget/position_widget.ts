@@ -14,17 +14,18 @@
  * limitations under the License.
  */
 
-import {SpatialPosition, VoxelSize} from 'neuroglancer/navigation_state';
 import {MouseSelectionState} from 'neuroglancer/layer';
+import {SpatialPosition, VoxelSize} from 'neuroglancer/navigation_state';
 import {StatusMessage} from 'neuroglancer/status';
 import {animationFrameDebounce} from 'neuroglancer/util/animation_frame_debounce';
 import {setClipboard} from 'neuroglancer/util/clipboard';
 import {RefCounted} from 'neuroglancer/util/disposable';
-import {removeFromParent, removeChildren} from 'neuroglancer/util/dom';
+import {removeChildren, removeFromParent} from 'neuroglancer/util/dom';
 import {EventActionMap, registerActionListener} from 'neuroglancer/util/event_action_map';
 import {vec3} from 'neuroglancer/util/geom';
 import {KeyboardEventBinder} from 'neuroglancer/util/keyboard_bindings';
 import {MouseEventBinder} from 'neuroglancer/util/mouse_bindings';
+import {pickLengthUnit} from 'neuroglancer/widget/scale_bar';
 
 require('./position_widget.css');
 
@@ -353,11 +354,22 @@ export class VoxelSizeWidget extends RefCounted {
     } else {
       this.element.style.visibility = 'visible';
     }
-    unitsElement.textContent = 'nm';
+    const {size} = this.voxelSize;
+    const minVoxelSize = Math.min(size[0], size[1], size[2]);
+    const unit = pickLengthUnit(minVoxelSize);
+    unitsElement.textContent = unit.unit;
     for (let i = 0; i < 3; ++i) {
+      const v = size[i] / unit.lengthInNanometers;
+      let s = '';
+      for (let digits = 0; digits <= 2; ++digits) {
+        s = v.toFixed(digits);
+        if (parseFloat(s) === v) {
+          break;
+        }
+      }
       const dimElement = document.createElement('span');
       dimElement.className = 'neuroglancer-voxel-size-dimension';
-      dimElement.textContent = '' + this.voxelSize.size[i];
+      dimElement.textContent = s;
       dimensionsContainer.appendChild(dimElement);
     }
   }
