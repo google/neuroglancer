@@ -14,13 +14,22 @@
  * limitations under the License.
  */
 
+import {registerEventListener} from 'neuroglancer/util/disposable';
+
 /**
  * Prevent context menu on right click, as this interferes with other event handlers for right mouse
  * clicks.
  */
 export function disableContextMenu() {
-  document.addEventListener('contextmenu', (e: Event) => {
+  return registerEventListener(document, 'contextmenu', (e: Event) => {
     e.preventDefault();
-    return false;
+  });
+}
+
+export function disableWheel() {
+  return registerEventListener(document, 'wheel', (e: WheelEvent) => {
+    if (!(e.target instanceof HTMLInputElement)) {
+      e.preventDefault();
+    }
   });
 }
