@@ -29,7 +29,7 @@ import {LayerListSpecification} from 'neuroglancer/layer_specification';
 import * as L from 'neuroglancer/layout';
 import {NavigationState, Pose} from 'neuroglancer/navigation_state';
 import {overlaysOpen} from 'neuroglancer/overlay';
-import {PositionStatusPanel} from 'neuroglancer/position_status_panel';
+import {PositionWidget, VoxelSizeWidget, MousePositionWidget} from 'neuroglancer/widget/position_widget';
 import {TrackableBoolean} from 'neuroglancer/trackable_boolean';
 import {TrackableValue} from 'neuroglancer/trackable_value';
 import {AutomaticallyFocusedElement} from 'neuroglancer/util/automatic_focus';
@@ -265,7 +265,15 @@ export class Viewer extends RefCounted implements ViewerState {
     if (options.showHelpButton || options.showLocation) {
       let rowElements: L.Handler[] = [];
       if (options.showLocation) {
-        rowElements.push(L.withFlex(1, element => new PositionStatusPanel(element, this)));
+        rowElements.push(element => this.registerDisposer(
+                             new VoxelSizeWidget(element, this.navigationState.voxelSize)));
+        rowElements.push(element => this.registerDisposer(
+                             new PositionWidget(element, this.navigationState.position)));
+        rowElements.push(L.withFlex(1, element => {
+          element.style.alignSelf = 'center';
+          this.registerDisposer(
+              new MousePositionWidget(element, this.mouseState, this.navigationState.voxelSize));
+        }));
       }
       if (options.showHelpButton) {
         rowElements.push(element => {
@@ -279,7 +287,10 @@ export class Viewer extends RefCounted implements ViewerState {
           });
         });
       }
-      uiElements.push(L.box('row', rowElements));
+      uiElements.push(element => {
+        element.style.alignItems = 'stretch';
+        L.box('row', rowElements)(element);
+      });
     }
 
     if (options.showLayerPanel) {

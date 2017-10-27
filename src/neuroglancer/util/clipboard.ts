@@ -14,6 +14,8 @@
  * limitations under the License.
  */
 
+import {registerEventListener} from 'neuroglancer/util/disposable';
+
 /**
  * Returns true if the event appears to be targetted on input text and should not be overridden by a
  * global handler.
@@ -28,4 +30,20 @@ export function eventHasInputTextTarget(event: Event) {
     return true;
   }
   return false;
+}
+
+export function setClipboard(data: string, format = 'text/plain') {
+  let success = false;
+  const cleanup = registerEventListener(document, 'copy', (event: ClipboardEvent) => {
+    event.clipboardData.setData(format, data);
+    success = true;
+    event.stopPropagation();
+    event.preventDefault();
+  }, true);
+  try {
+    document.execCommand('copy');
+  } finally {
+    cleanup();
+  }
+  return success;
 }

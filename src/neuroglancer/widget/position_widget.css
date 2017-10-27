@@ -1,0 +1,98 @@
+/**
+ * @license
+ * Copyright 2017 Google Inc.
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+.neuroglancer-position-widget {
+  display: inline-block;
+}
+
+.neuroglancer-position-widget-input-container {
+  position: relative;
+  display: inline-block;
+  outline: 0;
+  border: 0;
+  margin: 0;
+  padding: 0;
+}
+
+.neuroglancer-position-widget input {
+  font-family: monospace;
+  font-size: medium;
+  background-color: transparent;
+  border: 0;
+  margin: 0;
+  top: 0;
+  left: 0;
+}
+
+.neuroglancer-position-widget-input {
+  color: white;
+  background-color: black;
+  position: relative;
+  vertical-align: top;
+}
+.neuroglancer-position-widget-input:focus {
+  outline: 0px;
+  }
+
+.neuroglancer-position-widget-hint {
+  position: absolute;
+  border-color: transparent;
+  box-shadow: none;
+  color: #aaa;
+}
+
+.neuroglancer-copy-button {
+  padding: 0px;
+  margin-right: 2px;
+  margin-left: 2px;
+}
+
+.neuroglancer-copy-button:focus {
+  outline: 0px;
+}
+
+.neuroglancer-voxel-size-widget {
+  background-color: #333;
+  vertical-align: center;
+}
+
+.neuroglancer-voxel-size-units {
+  font-family: monospace;
+  font-size: medium;
+  color: white;
+  margin-left: 3px;
+}
+.neuroglancer-voxel-size-units::after {
+  content: "³";
+  
+}
+
+.neuroglancer-voxel-size-dimension {
+  font-family: monospace;
+  font-size: medium;
+  color: white;
+}
+
+.neuroglancer-voxel-size-dimension + .neuroglancer-voxel-size-dimension::before {
+  content: "×";
+  color: #aaa;
+}
+
+.neuroglancer-mouse-position-widget {
+  vertical-align: center;
+  font-family: monospace;
+  font-size: medium;
+  color: orange;
+}
