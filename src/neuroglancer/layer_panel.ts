@@ -214,6 +214,9 @@ export class LayerPanel extends RefCounted {
   }
 
   setDragging(value: boolean) {
+    if (this.dragging === value) {
+      return;
+    }
     this.dragging = value;
     for (let widget of this.layerWidgets.values()) {
       widget.updateDropdownState();

@@ -51,11 +51,26 @@ export class AutomaticallyFocusedElement extends RefCounted {
   prev0: AutomaticallyFocusedElement|null = null;
   next0: AutomaticallyFocusedElement|null = null;
 
+  focusTimer: number|undefined;
+
   constructor(public element: HTMLElement) {
     super();
     element.tabIndex = -1;
     this.registerEventListener(element, 'mouseenter', () => {
-      element.focus();
+      if (this.focusTimer === undefined) {
+        this.focusTimer = setTimeout(() => element.focus(), 0);
+      }
+      console.log('focusing element due to mouseenter', element);
+      // element.focus();
+    });
+    this.registerEventListener(element, 'mouseleave', () => {
+      const {focusTimer} = this;
+      if (focusTimer !== undefined) {
+        clearTimeout(focusTimer);
+        this.focusTimer = undefined;
+      }
+      console.log('focusing element due to mouseenter', element);
+      // element.focus();
     });
     // Insert at the end of the list.
     LinkedListOperations.insertBefore(<any>automaticFocusList, this);
@@ -68,7 +83,10 @@ export class AutomaticallyFocusedElement extends RefCounted {
   }
 
   disposed() {
-    super.disposed();
     LinkedListOperations.pop<AutomaticallyFocusedElement>(this);
+    if (this.focusTimer !== undefined) {
+      clearTimeout(this.focusTimer);
+    }
+    super.disposed();
   }
 }
