@@ -21,7 +21,7 @@ export type RPCHandler = (this: RPC, x: any) => void;
 
 export type RpcId = number;
 
-const IS_WORKER = WORKER;
+const IS_WORKER = !(typeof Window !== 'undefined' && self instanceof Window);
 
 const DEBUG = false;
 

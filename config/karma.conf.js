@@ -35,9 +35,6 @@ module.exports = function(config) {
   });
   webpackConfig.devtool = 'inline-source-map';
   webpackConfig.plugins = [
-    new webpack.DefinePlugin({
-      'WORKER': false,
-    }),
     new webpack.ContextReplacementPlugin(
         /.*/,
         result => {

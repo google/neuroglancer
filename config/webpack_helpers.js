@@ -330,9 +330,7 @@ function getViewerConfig(options) {
           plugins: [
             htmlPlugin,
             cssPlugin,
-            new webpack.DefinePlugin(Object.assign({}, defaultDefines, extraDefines, {
-              'WORKER': false,
-            })),
+            new webpack.DefinePlugin(Object.assign({}, defaultDefines, extraDefines)),
             ...extraFrontendPlugins,
             ...commonPlugins,
             ...extraCommonPlugins,
@@ -345,7 +343,7 @@ function getViewerConfig(options) {
           target: 'webworker',
           plugins: [
             new webpack.DefinePlugin(
-                Object.assign({}, defaultDefines, extraDefines, {'WORKER': true})),
+                Object.assign({}, defaultDefines, extraDefines)),
             ...extraChunkWorkerPlugins,
             ...commonPlugins,
             ...extraCommonPlugins,
