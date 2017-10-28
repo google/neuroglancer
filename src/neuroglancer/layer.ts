@@ -217,9 +217,12 @@ export class LayerManager extends RefCounted {
   /**
    * Assumes ownership of an existing reference to managedLayer.
    */
-  addManagedLayer(managedLayer: ManagedUserLayer) {
+  addManagedLayer(managedLayer: ManagedUserLayer, index?: number|undefined) {
     this.updateSignalBindings(managedLayer, addSignalBinding);
-    this.managedLayers.push(managedLayer);
+    if (index === undefined) {
+      index = this.managedLayers.length;
+    }
+    this.managedLayers.splice(index, 0, managedLayer);
     this.layersChanged.dispatch();
     this.readyStateChanged.dispatch();
     return managedLayer;
@@ -289,6 +292,15 @@ export class LayerManager extends RefCounted {
 
   getLayerByName(name: string) {
     return this.managedLayers.find(x => x.name === name);
+  }
+
+  getUniqueLayerName(name: string) {
+    let suggestedName = name;
+    let suffix = 0;
+    while (this.getLayerByName(suggestedName) !== undefined) {
+      suggestedName = name + (++suffix);
+    }
+    return suggestedName;
   }
 
   /**

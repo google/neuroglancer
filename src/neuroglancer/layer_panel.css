@@ -143,3 +143,8 @@
 .layer-item[layer-visible=false] {
   color: #bbb;
 }
+
+.neuroglancer-layer-panel-drop-zone {
+  display: inline-block;
+  flex: 1;
+}

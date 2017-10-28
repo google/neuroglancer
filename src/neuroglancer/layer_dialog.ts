@@ -198,11 +198,7 @@ export class LayerDialog extends Overlay {
       let baseSuggestedName = this.manager.dataSourceProvider.suggestLayerName(url);
       let {nameInputElement} = this;
       if (this.nameInputElement.value === '') {
-        let suggestedName = baseSuggestedName;
-        let suffix = 0;
-        while (this.manager.layerManager.getLayerByName(suggestedName) !== undefined) {
-          suggestedName = baseSuggestedName + (++suffix);
-        }
+        let suggestedName = this.manager.layerManager.getUniqueLayerName(baseSuggestedName);
         nameInputElement.value = suggestedName;
         nameInputElement.setSelectionRange(0, suggestedName.length);
         this.validateName();

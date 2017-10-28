@@ -98,8 +98,8 @@ export class LayerListSpecification extends RefCounted implements Trackable {
     }
   }
 
-  getLayer(name: string, spec: any) {
-    let managedLayer = new ManagedUserLayerWithSpecification(name, spec, this);
+  initializeLayerFromSpec(managedLayer: ManagedUserLayerWithSpecification, spec: any) {
+    managedLayer.initialSpecification = spec;
     if (typeof spec === 'string') {
       spec = {'source': spec};
     }
@@ -142,6 +142,11 @@ export class LayerListSpecification extends RefCounted implements Trackable {
         throw new Error(`Unsupported layer type: ${JSON.stringify(layerType)}.`);
       }
     }
+  }
+
+  getLayer(name: string, spec: any) {
+    let managedLayer = new ManagedUserLayerWithSpecification(name, spec, this);
+    this.initializeLayerFromSpec(managedLayer, spec);
     return managedLayer;
   }
 
