@@ -29,6 +29,8 @@ import {pickLengthUnit} from 'neuroglancer/widget/scale_bar';
 
 require('./position_widget.css');
 
+export const positionDragType = 'neuroglancer-position';
+
 const inputEventMap = EventActionMap.fromObject({
   'tab': {action: 'tab-forward', preventDefault: false},
   'arrowup': {action: 'adjust-up'},
@@ -78,6 +80,12 @@ export class PositionWidget extends RefCounted {
       StatusMessage.showTemporaryMessage(
           result ? 'Position copied to clipboard' : 'Failed to copy position to clipboard');
     });
+    copyButton.draggable = true;
+    copyButton.addEventListener('dragstart', event => {
+      event.dataTransfer.setData(positionDragType, JSON.stringify(position.toJSON()));
+      event.dataTransfer.setData('text', this.getPositionText());
+    });
+    copyButton.draggable = true;
     element.appendChild(copyButton);
     element.appendChild(inputContainer);
     inputContainer.appendChild(hintElement);

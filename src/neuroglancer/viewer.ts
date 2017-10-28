@@ -29,7 +29,6 @@ import {LayerListSpecification} from 'neuroglancer/layer_specification';
 import * as L from 'neuroglancer/layout';
 import {NavigationState, Pose} from 'neuroglancer/navigation_state';
 import {overlaysOpen} from 'neuroglancer/overlay';
-import {PositionWidget, VoxelSizeWidget, MousePositionWidget} from 'neuroglancer/widget/position_widget';
 import {TrackableBoolean} from 'neuroglancer/trackable_boolean';
 import {TrackableValue} from 'neuroglancer/trackable_value';
 import {AutomaticallyFocusedElement} from 'neuroglancer/util/automatic_focus';
@@ -44,6 +43,7 @@ import {DataDisplayLayout, InputEventBindings as DataPanelInputEventBindings, LA
 import {ViewerState, VisibilityPrioritySpecification} from 'neuroglancer/viewer_state';
 import {WatchableVisibilityPriority} from 'neuroglancer/visibility_priority/frontend';
 import {GL} from 'neuroglancer/webgl/context';
+import {MousePositionWidget, positionDragType, PositionWidget, VoxelSizeWidget} from 'neuroglancer/widget/position_widget';
 import {RPC} from 'neuroglancer/worker_rpc';
 
 require('./viewer.css');
@@ -254,6 +254,20 @@ export class Viewer extends RefCounted implements ViewerState {
     this.makeUI();
     this.registerActionListeners();
     this.registerEventActionBindings();
+
+    this.registerEventListener(element, 'drop', (event: DragEvent) => {
+      if (event.dataTransfer.types.indexOf(positionDragType) !== -1) {
+        const positionState = JSON.parse(event.dataTransfer.getData(positionDragType));
+        this.navigationState.position.restoreState(positionState);
+      }
+    });
+    this.registerEventListener(element, 'dragover', (event: DragEvent) => {
+      if (event.dataTransfer.types.indexOf(positionDragType) !== -1) {
+        // Permit drag.
+        event.dataTransfer.dropEffect = 'link';
+        event.preventDefault();
+      }
+    });
   }
 
   private makeUI() {
