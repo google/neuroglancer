@@ -40,12 +40,13 @@ class LocalVolumeManager(trackable_state.ChangeNotifier):
         present_tokens = set()
         for m in re.finditer(pattern, json_str):
             present_tokens.add(m.group(0))
-        modified = False
+        volumes_to_delete = []
         for x in self.volumes:
             if x not in present_tokens:
-                del self.volumes[x]
-                modified = True
-        if modified:
+                volumes_to_delete.append(x)
+        for x in volumes_to_delete:
+            del self.volumes[x]
+        if volumes_to_delete:
             self._dispatch_changed_callbacks()
 
 
