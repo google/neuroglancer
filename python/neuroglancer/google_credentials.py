@@ -19,6 +19,7 @@ import logging
 import threading
 
 from . import credentials_provider
+from .futures import run_on_new_thread
 
 
 class GoogleCredentialsProvider(credentials_provider.CredentialsProvider):
@@ -33,9 +34,7 @@ class GoogleCredentialsProvider(credentials_provider.CredentialsProvider):
         logging.basicConfig()
 
     def get_new(self):
-        f = concurrent.futures.Future()
-
-        def thread_func():
+        def func():
             import apitools.base.py.credentials_lib
             result = apitools.base.py.credentials_lib.GetCredentials(
                 package_name='',
@@ -44,10 +43,6 @@ class GoogleCredentialsProvider(credentials_provider.CredentialsProvider):
                 client_secret=self.client_secret,
                 user_agent=u'python-neuroglancer',
             )
-            f.set_result(
-                dict(tokenType=u'Bearer', accessToken=result.get_access_token().access_token))
+            return dict(tokenType=u'Bearer', accessToken=result.get_access_token().access_token)
 
-        t = threading.Thread(target=thread_func)
-        t.daemon = True
-        t.start()
-        return f
+        return run_on_new_thread(func)
