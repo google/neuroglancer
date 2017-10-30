@@ -14,11 +14,10 @@
 
 from . import credentials_provider, google_credentials
 
-
 default_credentials_manager = credentials_provider.CredentialsManager()
 default_credentials_manager.register(
     u'google-brainmaps',
-    lambda _parmameters: google_credentials.GoogleCredentialsProvider(
+    lambda _parameters: google_credentials.GoogleCredentialsProvider(
         client_id=u'639403125587-ue3c18dalqidqehs1n1p5rjvgni5f7qu.apps.googleusercontent.com',
         client_secret=u'kuaqECaVXOKEJ2L6ifZu4Aqt',
         scopes=[u'https://www.googleapis.com/auth/brainmaps'],
