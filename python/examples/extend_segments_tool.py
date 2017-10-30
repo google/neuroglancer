@@ -16,7 +16,7 @@ neuroglancer.set_static_content_source(url='http://localhost:8080')
 
 def get_segmentation_layer(layers):
     for layer in layers:
-        if isinstance(layer.user_layer, neuroglancer.SegmentationLayer):
+        if isinstance(layer.layer, neuroglancer.SegmentationLayer):
             return layer
 
 
@@ -26,7 +26,7 @@ class Annotator(object):
         self.point_annotation_layer_name = 'false-merges'
         self.states = []
         self.state_index = None
-        viewer = self.viewer = neuroglancer.managed_viewer.ManagedViewer()
+        viewer = self.viewer = neuroglancer.Viewer()
         self.other_state_segment_ids = dict()
 
         viewer.actions.add('anno-next-state', lambda s: self.next_state())
@@ -260,8 +260,8 @@ if __name__ == '__main__':
     if args.print_summary:
         print('<html>')
         print('<h1>%s</h1>' % args.filename)
-        print('<a href="%s">Neuroglancer</a><br/>' %
-              neuroglancer.to_url(anno.make_combined_state()))
+        print(
+            '<a href="%s">Neuroglancer</a><br/>' % neuroglancer.to_url(anno.make_combined_state()))
         print(repr(anno.get_sets()))
         print('</html>')
     else:
