@@ -1,7 +1,7 @@
 #!/usr/bin/env python2
 """Tool for extending via equivalences a set of segments."""
 
-from __future__ import absolute_imports, print_function
+from __future__ import absolute_import, print_function
 
 import argparse
 import copy
