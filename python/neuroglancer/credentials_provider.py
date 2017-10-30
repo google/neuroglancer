@@ -17,6 +17,7 @@ from __future__ import absolute_import
 import concurrent.futures
 import threading
 
+from .futures import future_then_immediate
 
 class CredentialsManager(object):
     def __init__(self):
@@ -26,7 +27,7 @@ class CredentialsManager(object):
         self._providers[key] = credentials_provider_getter
 
     def get(self, key, parameters):
-        return self._providers.get(key)(parameters)
+        return self._providers[key](parameters)
 
 
 class CredentialsProvider(object):
@@ -37,22 +38,23 @@ class CredentialsProvider(object):
         self._lock = threading.Lock()
 
     def get(self, invalid_generation=None):
-        if self.future is not None and (self.credentials is None or invalid_generation != self.credentials['generation']):
-            return self.future
-        self.credentials = None
-        self.future = outer_future = concurrent.futures.Future()
-        def on_done(f):
-            try:
-                credentials = f.result()
+        with self._lock:
+            if self.future is not None and (self.credentials is None or
+                                            invalid_generation != self.credentials['generation']):
+                return self.future
+            self.credentials = None
+
+            def attach_generation_and_save_credentials(credentials):
                 with self._lock:
                     self.next_generation += 1
-                    credentials_with_generation = dict(credentials=credentials, generation=self.next_generation)
+                    credentials_with_generation = dict(
+                        credentials=credentials, generation=self.next_generation)
                     self.credentials = credentials_with_generation
-                outer_future.set_result(credentials_with_generation)
-            except Exception as e:
-                outer_future.set_exception(e)
-        self.get_new().add_done_callback(on_done)
-        return outer_future
+                    return credentials_with_generation
+
+            self.future = future_then_immediate(self.get_new(),
+                                                attach_generation_and_save_credentials)
+            return self.future
 
     def get_new(self):
         raise NotImplementedError
