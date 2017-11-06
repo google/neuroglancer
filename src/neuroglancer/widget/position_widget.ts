@@ -28,6 +28,7 @@ import {MouseEventBinder} from 'neuroglancer/util/mouse_bindings';
 import {pickLengthUnit} from 'neuroglancer/widget/scale_bar';
 
 require('./position_widget.css');
+require('neuroglancer/ui/button.css');
 
 export const positionDragType = 'neuroglancer-position';
 
@@ -46,6 +47,7 @@ const normalizedPrefixString = '  ';
 const normalizedSeparatorString = ',   ';
 
 export class PositionWidget extends RefCounted {
+  element = document.createElement('div');
   inputContainer = document.createElement('div');
   inputElement = document.createElement('input');
   hintElement = document.createElement('input');
@@ -54,9 +56,9 @@ export class PositionWidget extends RefCounted {
 
   inputFieldWidth: number;
 
-  constructor(public element: HTMLElement, public position: SpatialPosition, public maxNumberWidth = 6) {
+  constructor(public position: SpatialPosition, public maxNumberWidth = 6) {
     super();
-    const {inputElement, hintElement, inputContainer} = this;
+    const {element, inputElement, hintElement, inputContainer} = this;
     inputContainer.className = 'neuroglancer-position-widget-input-container';
     inputElement.className = 'neuroglancer-position-widget-input';
     hintElement.className = 'neuroglancer-position-widget-hint';
@@ -71,25 +73,25 @@ export class PositionWidget extends RefCounted {
       x.style.width = this.inputFieldWidth + 'ch';
     }
     hintElement.disabled = true;
-    const copyButton = document.createElement('button');
+    const copyButton = document.createElement('div');
     copyButton.textContent = '⧉';
-    copyButton.className = 'neuroglancer-copy-button';
+    copyButton.className = 'neuroglancer-copy-button neuroglancer-button';
     copyButton.title = 'Copy position to clipboard';
     copyButton.addEventListener('click', () => {
       const result = setClipboard(this.getPositionText());
       StatusMessage.showTemporaryMessage(
           result ? 'Position copied to clipboard' : 'Failed to copy position to clipboard');
     });
-    copyButton.draggable = true;
     copyButton.addEventListener('dragstart', event => {
       event.dataTransfer.setData(positionDragType, JSON.stringify(position.toJSON()));
       event.dataTransfer.setData('text', this.getPositionText());
+      event.stopPropagation();
     });
     copyButton.draggable = true;
     element.appendChild(copyButton);
     element.appendChild(inputContainer);
-    inputContainer.appendChild(hintElement);
     inputContainer.appendChild(inputElement);
+    inputContainer.appendChild(hintElement);
     element.className = 'neuroglancer-position-widget';
     this.registerDisposer(position.changed.add(
         this.registerCancellable(animationFrameDebounce(() => this.updateView()))));
@@ -103,6 +105,14 @@ export class PositionWidget extends RefCounted {
     this.registerEventListener(inputElement, 'blur', () => this.updatePosition());
     this.registerEventListener(inputElement, 'input', () => this.cleanInput());
     this.registerEventListener(inputElement, 'keydown', this.updateHintScrollPosition);
+    this.registerEventListener(inputElement, 'copy', (event: ClipboardEvent) => {
+      const {selectionStart, selectionEnd} = inputElement;
+      let selection = inputElement.value.substring(selectionStart, selectionEnd);
+      selection = selection.trim().replace(/\s+/g, ' ');
+      event.clipboardData.setData('text/plain', selection);
+      event.stopPropagation();
+      event.preventDefault();
+    });
     let wasFocused = false;
     this.registerEventListener(inputElement, 'mousedown', () => {
       wasFocused = document.activeElement === inputElement;
@@ -189,6 +199,7 @@ export class PositionWidget extends RefCounted {
     this.registerDisposer(registerActionListener<WheelEvent>(inputElement, 'adjust-down', () => {
       this.adjustFromCursor(undefined, -1);
     }));
+    this.updateView();
   }
 
   private adjustFromCursor(cursorPosition: number|undefined, adjustment: number) {

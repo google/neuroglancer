@@ -13,8 +13,10 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+
 .neuroglancer-position-widget {
-  display: inline-block;
+  display: inline-flex;
+  align-items: center;
 }
 
 .neuroglancer-position-widget-input-container {
@@ -29,14 +31,13 @@
 .neuroglancer-position-widget input {
   font-family: monospace;
   font-size: medium;
-  background-color: transparent;
   border: 0;
   margin: 0;
   top: 0;
   left: 0;
 }
 
-.neuroglancer-position-widget-input {
+input.neuroglancer-position-widget-input {
   color: white;
   background-color: black;
   position: relative;
@@ -48,15 +49,20 @@
 
 .neuroglancer-position-widget-hint {
   position: absolute;
+  background-color: transparent;
   border-color: transparent;
   box-shadow: none;
   color: #aaa;
+  pointer-events: none;
 }
 
 .neuroglancer-copy-button {
   padding: 0px;
   margin-right: 2px;
-  margin-left: 2px;
+  display: inline-block;
+  user-select: none;
+  color: black;
+  background-color: #ccc;
 }
 
 .neuroglancer-copy-button:focus {
@@ -66,6 +72,7 @@
 .neuroglancer-voxel-size-widget {
   background-color: #333;
   vertical-align: center;
+  margin-right: 2px;
 }
 
 .neuroglancer-voxel-size-units {
@@ -73,6 +80,7 @@
   font-size: medium;
   color: white;
   margin-left: 3px;
+  outline: 0px;
 }
 .neuroglancer-voxel-size-units::after {
   content: "³";

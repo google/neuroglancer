@@ -18,19 +18,20 @@ import debounce from 'lodash/debounce';
 import {AvailableCapacity} from 'neuroglancer/chunk_manager/base';
 import {ChunkManager, ChunkQueueManager} from 'neuroglancer/chunk_manager/frontend';
 import {defaultCredentialsManager} from 'neuroglancer/credentials_provider/default_manager';
+import {InputEventBindings as DataPanelInputEventBindings} from 'neuroglancer/data_panel_layout';
 import {DataSourceProvider} from 'neuroglancer/datasource';
 import {getDefaultDataSourceProvider} from 'neuroglancer/datasource/default_provider';
 import {DisplayContext} from 'neuroglancer/display_context';
 import {InputEventBindingHelpDialog} from 'neuroglancer/help/input_event_bindings';
 import {LayerManager, LayerSelectedValues, MouseSelectionState} from 'neuroglancer/layer';
 import {LayerDialog} from 'neuroglancer/layer_dialog';
+import {RootLayoutContainer} from 'neuroglancer/layer_groups_layout';
 import {LayerPanel} from 'neuroglancer/layer_panel';
-import {LayerListSpecification} from 'neuroglancer/layer_specification';
-import * as L from 'neuroglancer/layout';
+import {TopLevelLayerListSpecification} from 'neuroglancer/layer_specification';
 import {NavigationState, Pose} from 'neuroglancer/navigation_state';
 import {overlaysOpen} from 'neuroglancer/overlay';
 import {TrackableBoolean} from 'neuroglancer/trackable_boolean';
-import {TrackableValue} from 'neuroglancer/trackable_value';
+import {setupPositionDropHandlers} from 'neuroglancer/ui/position_drag_and_drop';
 import {AutomaticallyFocusedElement} from 'neuroglancer/util/automatic_focus';
 import {RefCounted} from 'neuroglancer/util/disposable';
 import {removeFromParent} from 'neuroglancer/util/dom';
@@ -39,29 +40,16 @@ import {vec3} from 'neuroglancer/util/geom';
 import {EventActionMap, KeyboardEventBinder} from 'neuroglancer/util/keyboard_bindings';
 import {NullarySignal} from 'neuroglancer/util/signal';
 import {CompoundTrackable} from 'neuroglancer/util/trackable';
-import {DataDisplayLayout, InputEventBindings as DataPanelInputEventBindings, LAYOUTS} from 'neuroglancer/viewer_layouts';
 import {ViewerState, VisibilityPrioritySpecification} from 'neuroglancer/viewer_state';
 import {WatchableVisibilityPriority} from 'neuroglancer/visibility_priority/frontend';
 import {GL} from 'neuroglancer/webgl/context';
-import {MousePositionWidget, positionDragType, PositionWidget, VoxelSizeWidget} from 'neuroglancer/widget/position_widget';
+import {MousePositionWidget, PositionWidget, VoxelSizeWidget} from 'neuroglancer/widget/position_widget';
 import {RPC} from 'neuroglancer/worker_rpc';
 
 require('./viewer.css');
 require('./help_button.css');
 require('neuroglancer/noselect.css');
-
-export function getLayoutByName(obj: any) {
-  let layout = LAYOUTS.find(x => x[0] === obj);
-  if (layout === undefined) {
-    throw new Error(`Invalid layout name: ${JSON.stringify(obj)}.`);
-  }
-  return layout;
-}
-
-export function validateLayoutName(obj: any) {
-  let layout = getLayoutByName(obj);
-  return layout[0];
-}
+require('neuroglancer/ui/button.css');
 
 export class DataManagementContext extends RefCounted {
   worker = new Worker('chunk_worker.bundle.js');
@@ -115,7 +103,6 @@ export class Viewer extends RefCounted implements ViewerState {
   mouseState = new MouseSelectionState();
   layerManager = this.registerDisposer(new LayerManager());
   showAxisLines = new TrackableBoolean(true, true);
-  dataDisplayLayout: DataDisplayLayout;
   showScaleBar = new TrackableBoolean(true, true);
   showPerspectiveSliceViews = new TrackableBoolean(true, true);
 
@@ -131,12 +118,12 @@ export class Viewer extends RefCounted implements ViewerState {
     return this.dataContext.chunkQueueManager;
   }
 
-  layerSpecification: LayerListSpecification;
-  layoutName = new TrackableValue<string>(LAYOUTS[0][0], validateLayoutName);
+  layerSpecification: TopLevelLayerListSpecification;
+  layout: RootLayoutContainer;
 
   state = new CompoundTrackable();
 
-  private options: ViewerOptions;
+  options: ViewerOptions;
 
   get dataContext() {
     return this.options.dataContext;
@@ -190,7 +177,7 @@ export class Viewer extends RefCounted implements ViewerState {
       dataSourceProvider,
     };
 
-    this.layerSpecification = new LayerListSpecification(
+    this.layerSpecification = new TopLevelLayerListSpecification(
         this.dataSourceProvider, this.layerManager, this.chunkManager, this.layerSelectedValues,
         this.navigationState.voxelSize);
 
@@ -210,7 +197,6 @@ export class Viewer extends RefCounted implements ViewerState {
     state.add('perspectiveOrientation', this.perspectiveNavigationState.pose.orientation);
     state.add('perspectiveZoom', this.perspectiveNavigationState.zoomFactor);
     state.add('showSlices', this.showPerspectiveSliceViews);
-    state.add('layout', this.layoutName);
 
     this.registerDisposer(this.navigationState.changed.add(() => {
       this.handleNavigationStateChanged();
@@ -252,79 +238,54 @@ export class Viewer extends RefCounted implements ViewerState {
     }));
 
     this.makeUI();
+    state.add('layout', this.layout);
+
     this.registerActionListeners();
     this.registerEventActionBindings();
 
-    this.registerEventListener(element, 'drop', (event: DragEvent) => {
-      if (event.dataTransfer.types.indexOf(positionDragType) !== -1) {
-        const positionState = JSON.parse(event.dataTransfer.getData(positionDragType));
-        this.navigationState.position.restoreState(positionState);
-      }
-    });
-    this.registerEventListener(element, 'dragover', (event: DragEvent) => {
-      if (event.dataTransfer.types.indexOf(positionDragType) !== -1) {
-        // Permit drag.
-        event.dataTransfer.dropEffect = 'link';
-        event.preventDefault();
-      }
-    });
+    this.registerDisposer(setupPositionDropHandlers(element, this.navigationState.position));
   }
 
   private makeUI() {
     const {options} = this;
     const gridContainer = this.element;
+    gridContainer.classList.add('neuroglancer-viewer');
     gridContainer.classList.add('neuroglancer-noselect');
-    let uiElements: L.Handler[] = [];
-
+    gridContainer.style.display = 'flex';
+    gridContainer.style.flexDirection = 'column';
     if (options.showHelpButton || options.showLocation) {
-      let rowElements: L.Handler[] = [];
+      const topRow = document.createElement('div');
+      topRow.style.display = 'flex';
+      topRow.style.flexDirection = 'row';
+      topRow.style.alignItems = 'stretch';
       if (options.showLocation) {
-        rowElements.push(element => this.registerDisposer(
-                             new VoxelSizeWidget(element, this.navigationState.voxelSize)));
-        rowElements.push(element => this.registerDisposer(
-                             new PositionWidget(element, this.navigationState.position)));
-        rowElements.push(L.withFlex(1, element => {
-          element.style.alignSelf = 'center';
-          this.registerDisposer(
-              new MousePositionWidget(element, this.mouseState, this.navigationState.voxelSize));
-        }));
+        const voxelSizeWidget = this.registerDisposer(
+            new VoxelSizeWidget(document.createElement('div'), this.navigationState.voxelSize));
+        topRow.appendChild(voxelSizeWidget.element);
+        const positionWidget = this.registerDisposer(
+            new PositionWidget(this.navigationState.position));
+        topRow.appendChild(positionWidget.element);
+        const mousePositionWidget = this.registerDisposer(new MousePositionWidget(
+            document.createElement('div'), this.mouseState, this.navigationState.voxelSize));
+        mousePositionWidget.element.style.flex = '1';
+        mousePositionWidget.element.style.alignSelf = 'center';
+        topRow.appendChild(mousePositionWidget.element);
       }
       if (options.showHelpButton) {
-        rowElements.push(element => {
-          let button = document.createElement('button');
-          button.className = 'help-button';
-          button.textContent = '?';
-          button.title = 'Help';
-          element.appendChild(button);
-          this.registerEventListener(button, 'click', () => {
-            this.showHelpDialog();
-          });
+        let button = document.createElement('div');
+        button.className = 'neuroglancer-help-button neuroglancer-button';
+        button.textContent = '?';
+        button.title = 'Help';
+        this.registerEventListener(button, 'click', () => {
+          this.showHelpDialog();
         });
+        topRow.appendChild(button);
       }
-      uiElements.push(element => {
-        element.style.alignItems = 'stretch';
-        L.box('row', rowElements)(element);
-      });
+      gridContainer.appendChild(topRow);
     }
 
-    if (options.showLayerPanel) {
-      uiElements.push(element => {
-        this.layerPanel = new LayerPanel(element, this.layerSpecification);
-      });
-    }
-
-    uiElements.push(L.withFlex(1, element => {
-      this.createDataDisplayLayout(element);
-
-      this.layoutName.changed.add(() => {
-        if (this.dataDisplayLayout !== undefined) {
-          this.dataDisplayLayout.dispose();
-          this.createDataDisplayLayout(element);
-        }
-      });
-    }));
-
-    L.box('column', uiElements)(gridContainer);
+    this.layout = this.registerDisposer(new RootLayoutContainer(this, '4panel'));
+    gridContainer.appendChild(this.layout.element);
     this.display.onResize();
 
     const updateVisibility = () => {
@@ -368,8 +329,6 @@ export class Viewer extends RefCounted implements ViewerState {
       });
     }
 
-    this.bindAction('toggle-layout', () => this.toggleLayout());
-    this.bindAction('add-layer', () => this.layerPanel.addLayerMenu());
     this.bindAction('help', () => this.showHelpDialog());
 
     for (let i = 1; i <= 9; ++i) {
@@ -386,18 +345,6 @@ export class Viewer extends RefCounted implements ViewerState {
     this.bindAction('toggle-axis-lines', () => this.showAxisLines.toggle());
     this.bindAction('toggle-scale-bar', () => this.showScaleBar.toggle());
     this.bindAction('toggle-show-slices', () => this.showPerspectiveSliceViews.toggle());
-  }
-
-  createDataDisplayLayout(element: HTMLElement) {
-    let layoutCreator = getLayoutByName(this.layoutName.value)[1];
-    this.dataDisplayLayout = layoutCreator(element, this);
-  }
-
-  toggleLayout() {
-    let existingLayout = getLayoutByName(this.layoutName.value);
-    let layoutIndex = LAYOUTS.indexOf(existingLayout);
-    let newLayout = LAYOUTS[(layoutIndex + 1) % LAYOUTS.length];
-    this.layoutName.value = newLayout[0];
   }
 
   showHelpDialog() {

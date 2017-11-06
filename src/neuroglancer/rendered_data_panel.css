@@ -17,4 +17,5 @@
 .neuroglancer-rendered-data-panel {
   cursor: crosshair;
   position: relative;
+  outline: 0;
 }

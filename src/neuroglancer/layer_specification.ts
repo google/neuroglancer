@@ -21,11 +21,12 @@ import {VoxelSize} from 'neuroglancer/navigation_state';
 import {VolumeType} from 'neuroglancer/sliceview/volume/base';
 import {MultiscaleVolumeChunkSource} from 'neuroglancer/sliceview/volume/frontend';
 import {StatusMessage} from 'neuroglancer/status';
-import {RefCounted} from 'neuroglancer/util/disposable';
+import {Owned, RefCounted, Borrowed} from 'neuroglancer/util/disposable';
 import {vec3} from 'neuroglancer/util/geom';
-import {verifyObject, verifyObjectProperty, verifyOptionalString} from 'neuroglancer/util/json';
+import {parseArray, verifyObject, verifyObjectProperty, verifyOptionalString, verifyString} from 'neuroglancer/util/json';
 import {NullarySignal, Signal} from 'neuroglancer/util/signal';
 import {Trackable} from 'neuroglancer/util/trackable';
+import {RPC} from 'neuroglancer/worker_rpc';
 
 export function getVolumeWithStatusMessage(
     dataSourceProvider: DataSourceProvider, chunkManager: ChunkManager, x: string,
@@ -62,7 +63,39 @@ export class ManagedUserLayerWithSpecification extends ManagedUserLayer {
   }
 }
 
-export class LayerListSpecification extends RefCounted implements Trackable {
+export interface LayerListSpecification extends RefCounted, Trackable {
+  changed: NullarySignal;
+  voxelCoordinatesSet: Signal<(coordinates: vec3) => void>;
+
+  /**
+   * @deprecated
+   */
+  worker: RPC;
+
+  rpc: RPC;
+
+  dataSourceProvider: Borrowed<DataSourceProvider>;
+  layerManager: Borrowed<LayerManager>;
+  chunkManager: Borrowed<ChunkManager>;
+  layerSelectedValues: Borrowed<LayerSelectedValues>;
+  voxelSize: Borrowed<VoxelSize>;
+
+
+  initializeLayerFromSpec(managedLayer: ManagedUserLayerWithSpecification, spec: any): void;
+
+  getLayer(name: string, spec: any): ManagedUserLayerWithSpecification;
+
+  add(layer: Owned<ManagedUserLayer>, index?: number|undefined): void;
+
+  /**
+   * Called by user layers to indicate that a voxel position has been selected interactively.
+   */
+  setVoxelCoordinates(voxelCoordinates: vec3): void;
+
+  rootLayers: Borrowed<LayerManager>;
+}
+
+export class TopLevelLayerListSpecification extends RefCounted implements LayerListSpecification {
   changed = new NullarySignal();
   voxelCoordinatesSet = new Signal<(coordinates: vec3) => void>();
 
@@ -144,18 +177,27 @@ export class LayerListSpecification extends RefCounted implements Trackable {
     }
   }
 
-  getLayer(name: string, spec: any) {
+  getLayer(name: string, spec: any): ManagedUserLayerWithSpecification {
     let managedLayer = new ManagedUserLayerWithSpecification(name, spec, this);
     this.initializeLayerFromSpec(managedLayer, spec);
     return managedLayer;
+  }
+
+  add(layer: ManagedUserLayer, index?: number|undefined) {
+    this.layerManager.addManagedLayer(layer, index);
   }
 
   toJSON() {
     let result: any = {};
     let numResults = 0;
     for (let managedLayer of this.layerManager.managedLayers) {
-      result[managedLayer.name] = (<ManagedUserLayerWithSpecification>managedLayer).toJSON();
-      ++numResults;
+      const layerJson = (<ManagedUserLayerWithSpecification>managedLayer).toJSON();
+      // A `null` layer specification is used to indicate a transient drag target, and should not be
+      // serialized.
+      if (layerJson != null) {
+        result[managedLayer.name] = layerJson;
+        ++numResults;
+      }
     }
     if (numResults === 0) {
       return undefined;
@@ -169,6 +211,81 @@ export class LayerListSpecification extends RefCounted implements Trackable {
   setVoxelCoordinates(voxelCoordinates: vec3) {
     this.voxelCoordinatesSet.dispatch(voxelCoordinates);
   }
+
+  get rootLayers () { return this.layerManager; }
+}
+
+/**
+ * Class for specifying a subset of a TopLevelLayerListsSpecification.
+ */
+export class LayerSubsetSpecification extends RefCounted implements LayerListSpecification {
+  changed = new NullarySignal();
+
+  get voxelCoordinatesSet() { return this.master.voxelCoordinatesSet; }
+
+  get worker() { return this.master.rpc; }
+  get rpc() { return this.master.rpc; }
+
+  get dataSourceProvider () { return this.master.dataSourceProvider; }
+  get chunkManager () { return this.master.chunkManager; }
+  get voxelSize () { return this.master.voxelSize; }
+  get layerSelectedValues () { return this.master.layerSelectedValues; }
+
+  layerManager = new LayerManager();
+
+  constructor (public master: Owned<LayerListSpecification>) {
+    super();
+    this.registerDisposer(master);
+    const {layerManager} = this;
+    this.registerDisposer(layerManager.layersChanged.add(this.changed.dispatch));
+    this.registerDisposer(layerManager.specificationChanged.add(this.changed.dispatch));
+  }
+
+  reset() {
+    this.layerManager.clear();
+  }
+
+  restoreState(x: any) {
+    const masterLayerManager = this.master.layerManager;
+    const layers: ManagedUserLayer[] = [];
+    for (const name of new Set(parseArray(x, verifyString))) {
+      const layer = masterLayerManager.getLayerByName(name);
+      if (layer === undefined) {
+        throw new Error(`Undefined layer referenced in subset specification: ${JSON.stringify(name)}`);
+      }
+      layers.push(layer);
+    }
+    this.layerManager.clear();
+    for (const layer of layers) {
+      this.layerManager.addManagedLayer(layer.addRef());
+    }
+  }
+
+  toJSON() {
+    return this.layerManager.managedLayers.map(x => x.name);
+  }
+
+  initializeLayerFromSpec(managedLayer: ManagedUserLayerWithSpecification, spec: any) {
+    this.master.initializeLayerFromSpec(managedLayer, spec);
+  }
+
+  getLayer(name: string, spec: any): ManagedUserLayerWithSpecification {
+    return this.master.getLayer(name, spec);
+  }
+
+  add(layer: ManagedUserLayer, index?: number|undefined) {
+    if (this.master.layerManager.managedLayers.indexOf(layer) === -1) {
+      layer.name = this.master.layerManager.getUniqueLayerName(layer.name);
+      this.master.layerManager.addManagedLayer(layer.addRef());
+    }
+    this.layerManager.addManagedLayer(layer, index);
+  }
+
+  setVoxelCoordinates(voxelCoordinates: vec3) {
+    this.master.setVoxelCoordinates(voxelCoordinates);
+  }
+
+  get rootLayers () { return this.master.rootLayers; }
 }
 
 interface UserLayerConstructor {

@@ -18,7 +18,7 @@ import debounce from 'lodash/debounce';
 import throttle from 'lodash/throttle';
 import {RenderedPanel} from 'neuroglancer/display_context';
 import {SpatialPosition} from 'neuroglancer/navigation_state';
-import {RefCounted} from 'neuroglancer/util/disposable';
+import {Borrowed, RefCounted} from 'neuroglancer/util/disposable';
 import {BoundingBox, vec3} from 'neuroglancer/util/geom';
 import {NullarySignal} from 'neuroglancer/util/signal';
 import {addSignalBinding, removeSignalBinding, SignalBindingUpdater} from 'neuroglancer/util/signal_binding_updater';
@@ -206,12 +206,55 @@ export class LayerManager extends RefCounted {
   readyStateChanged = new NullarySignal();
   specificationChanged = new NullarySignal();
   boundPositions = new WeakSet<SpatialPosition>();
+  numDirectUsers = 0;
+
+  constructor() {
+    super();
+    this.layersChanged.add(this.scheduleRemoveLayersWithSingleRef);
+  }
+
+  private scheduleRemoveLayersWithSingleRef =
+    this.registerCancellable(debounce(() => this.removeLayersWithSingleRef(), 0));
+
+  filter(predicate: (layer: ManagedUserLayer) => boolean) {
+    let changed = false;
+    this.managedLayers = this.managedLayers.filter(layer => {
+      if (!predicate(layer)) {
+        this.unbindManagedLayer(layer);
+        changed = true;
+        return false;
+      }
+      return true;
+    });
+    if (changed) {
+      this.layersChanged.dispatch();
+    }
+  }
+
+  private removeLayersWithSingleRef() {
+    if (this.numDirectUsers > 0) {
+      return;
+    }
+    this.filter(layer => layer.refCount !== 1);
+  }
 
   private updateSignalBindings(
       layer: ManagedUserLayer, callback: SignalBindingUpdater<() => void>) {
     callback(layer.layerChanged, this.layersChanged.dispatch);
     callback(layer.readyStateChanged, this.readyStateChanged.dispatch);
     callback(layer.specificationChanged, this.specificationChanged.dispatch);
+  }
+
+  useDirectly () {
+    if (++this.numDirectUsers === 1) {
+      this.layersChanged.remove(this.scheduleRemoveLayersWithSingleRef);
+    }
+    return () => {
+      if (--this.numDirectUsers === 0) {
+        this.layersChanged.add(this.scheduleRemoveLayersWithSingleRef);
+        this.scheduleRemoveLayersWithSingleRef();
+      }
+    };
   }
 
   /**
@@ -263,14 +306,18 @@ export class LayerManager extends RefCounted {
     this.layersChanged.dispatch();
   }
 
+  remove(index: number) {
+    this.unbindManagedLayer(this.managedLayers[index]);
+    this.managedLayers.splice(index, 1);
+    this.layersChanged.dispatch();
+  }
+
   removeManagedLayer(managedLayer: ManagedUserLayer) {
     let index = this.managedLayers.indexOf(managedLayer);
     if (index === -1) {
       throw new Error(`Internal error: invalid managed layer.`);
     }
-    this.unbindManagedLayer(managedLayer);
-    this.managedLayers.splice(index, 1);
-    this.layersChanged.dispatch();
+    this.remove(index);
   }
 
   reorderManagedLayer(oldIndex: number, newIndex: number) {
@@ -301,6 +348,10 @@ export class LayerManager extends RefCounted {
       suggestedName = name + (++suffix);
     }
     return suggestedName;
+  }
+
+  has(layer: Borrowed<ManagedUserLayer>) {
+    return this.managedLayers.indexOf(layer) !== -1;
   }
 
   /**

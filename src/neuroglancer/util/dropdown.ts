@@ -15,6 +15,7 @@
  */
 
 /**
+ * @file
  * Utilities for positioning dropdown menus.
  */
 

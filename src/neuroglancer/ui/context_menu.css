@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2016 Google Inc.
+ * Copyright 2017 Google Inc.
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
@@ -14,6 +14,12 @@
  * limitations under the License.
  */
 
-.neuroglancer-help-button.neuroglancer-button {
-  font-weight: bold;
+.neuroglancer-context-menu {
+  position: absolute;
+  z-index: 200;
+  border: 1px solid white;
+  background-color: black;
+  box-shadow: 5px 5px 2px 1px rgba(0, 0, 0, 0.5);
+  font-family: sans-serif;
+  font-size: 11pt;
 }

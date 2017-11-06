@@ -50,10 +50,10 @@ class JsonObjectWrapper(object):
         object.__setattr__(self, '_json_data', json_data)
         object.__setattr__(self, '_cached_wrappers', dict())
         object.__setattr__(self, '_lock', threading.RLock())
-        object.__setattr__(self, '_readonly', _readonly)
-
+        object.__setattr__(self, '_readonly', 1 if _readonly else False)
         for k in kwargs:
             setattr(self, k, kwargs[k])
+        object.__setattr__(self, '_readonly', _readonly)
 
     def to_json(self):
         with self._lock:
@@ -82,7 +82,7 @@ class JsonObjectWrapper(object):
             return wrapper
 
     def _set_wrapped(self, key, value, validator):
-        if self._readonly:
+        if self._readonly is True:
             raise AttributeError
         value = validator(value)
         with self._lock:
@@ -91,7 +91,7 @@ class JsonObjectWrapper(object):
 
 def _normalize_validator(wrapped_type, validator):
     if validator is None:
-        if inspect.isroutine(wrapped_type):
+        if inspect.isroutine(wrapped_type) or hasattr(wrapped_type, 'supports_validation'):
             validator = wrapped_type
         else:
             def validator_func(x):
@@ -212,93 +212,57 @@ def typed_list(wrapped_type, validator=None):
     validator = _normalize_validator(wrapped_type, validator)
     class TypedList(object):
         supports_readonly = True
+        supports_validation = True
         def __init__(self, json_data=None, _readonly=False):
             if json_data is None:
                 json_data = []
-            if not isinstance(json_data, (list, tuple)):
+            if not isinstance(json_data, (list, tuple, np.ndarray)):
                 raise ValueError
             self._readonly = _readonly
-            self._json_data = json_data
-            self._cached_wrappers = [None] * len(json_data)
-            self._lock = threading.RLock()
-
-        def _get_wrapped(self, key):
-            with self._lock:
-                json_value = self._json_data[key]
-                cached_value = self._cached_wrappers[key]
-                if cached_value is not None:
-                    return cached_value[0]
-                kwargs = dict()
-                if self._readonly and hasattr(wrapped_type, 'supports_readonly'):
-                    kwargs['_readonly'] = True
-                wrapper = wrapped_type(json_value, **kwargs)
-                self._cached_wrappers[key] = (wrapper,)
-                return wrapper
-
-        def _set_wrapped(self, key, value):
-            if self._readonly:
-                raise AttributeError
-            value = validator(value)
-            with self._lock:
-                self._cached_wrappers[key] = (value,)
+            self._data = [validator(x) for x in json_data]
 
         def __len__(self):
-            return len(self._json_data)
+            return len(self._data)
 
         def __getitem__(self, key):
-            if isinstance(key, slice):
-                return [self._get_wrapped(i) for i in range(*key.indices(len(self)))]
-            return self._get_wrapped(key)
+            return self._data[key]
 
         def __delitem__(self, key):
             if self._readonly:
                 raise AttributeError
-            with self._lock:
-                del self._json_data[key]
-                del self._cached_wrappers[key]
+            del self._data[key]
 
         def __setitem__(self, key, value):
             if self._readonly:
                 raise AttributeError
             if isinstance(key, slice):
                 values = [validator(x) for x in value]
-                with self._lock:
-                    self._json_data[key] = values
-                    self._cached_wrappers[key] = [(x,) for x in values]
+                self._data[key] = values
+            else:
+                value = validator(x)
+                self._data[key] = value
 
         def __iter__(self):
-            for i in range(len(self._json_data)):
-                yield self._get_wrapped(i)
+            return iter(self._data)
 
         def append(self, x):
+            if self._readonly:
+                raise AttributeError
             x = validator(x)
-            with self._lock:
-                self._json_data.append(None)
-                self._cached_wrappers.append((x,))
+            self._data.append(x)
 
         def extend(self, values):
-            with self._lock:
-                for x in values:
-                    self.append(x)
+            for x in values:
+                self.append(x)
         def insert(self, index, x):
             x = validator(x)
-            with self._lock:
-                self._json_data.insert(index, x)
-                self._cached_wrappers.insert(index, (x,))
+            self._data.insert(index, x)
 
         def pop(self, index=-1):
-            with self._lock:
-                value = self[index]
-                del self[index]
-                return value
+            return self._data.pop(index)
 
         def to_json(self):
-            with self._lock:
-                r = list(self._json_data)
-                for k, cache_data in enumerate(self._cached_wrappers):
-                    if cache_data is not None:
-                        r[k] = to_json(cache_data[0])
-                return r
+            return [to_json(x) for x in self._data]
 
         def __deepcopy__(self, memo):
             return type(self)(copy.deepcopy(self.to_json(), memo))

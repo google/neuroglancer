@@ -259,11 +259,14 @@ export class PerspectivePanel extends RenderedDataPanel {
   }
 
   draw() {
-    let {width, height} = this;
-    if (!this.navigationState.valid || width === 0 || height === 0) {
+    if (!this.navigationState.valid) {
       return;
     }
     this.onResize();
+    let {width, height} = this;
+    if (width === 0 || height === 0) {
+      return;
+    }
 
     if (this.viewer.showSliceViews.value) {
       for (let sliceView of this.sliceViews) {
@@ -390,6 +393,9 @@ export class PerspectivePanel extends RenderedDataPanel {
     let {lightDirection, ambientLighting, directionalLighting, dataToDevice} = renderContext;
 
     for (let sliceView of this.sliceViews) {
+      if (sliceView.width === 0 || sliceView.height === 0) {
+        continue;
+      }
       let scalar = Math.abs(vec3.dot(lightDirection, sliceView.viewportAxes[2]));
       let factor = ambientLighting + scalar * directionalLighting;
       let mat = tempMat4;

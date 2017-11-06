@@ -25,6 +25,31 @@
   border-color: white;
 }
 
-.neuroglancer-viewer {
+.neuroglancer-layer-group-viewer {
   outline: 0px;
+}
+
+.neuroglancer-layer-group-viewer-context-menu {
+  flex-direction: column;
+  background-color: black;
+  padding: 5px;
+  border: 1px solid white;
+  box-sizing: border-box;
+  color: white;
+  align-items: stretch;
+}
+
+.neuroglancer-layer-group-viewer-context-menu label {
+  display: flex;
+  flex-direction: row;
+  justify-content: space-between;
+}
+
+.neuroglancer-layer-group-viewer-context-menu select::before {
+  flex: 1;
+  content: " ";
+}
+
+.neuroglancer-layer-group-viewer-context-menu select {
+  margin-left: 5px;
 }

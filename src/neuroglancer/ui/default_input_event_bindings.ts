@@ -36,6 +36,7 @@ export function getDefaultGlobalBindings() {
     map.set('keyh', 'help');
 
     map.set('space', 'toggle-layout');
+    map.set('shift+space', 'toggle-layout-alternative');
     defaultGlobalBindings = map;
   }
   return defaultGlobalBindings;

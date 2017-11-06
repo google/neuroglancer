@@ -14,105 +14,138 @@
  * limitations under the License.
  */
 
+import {DisplayContext} from 'neuroglancer/display_context';
 import {ManagedUserLayer, UserLayer, UserLayerDropdown} from 'neuroglancer/layer';
 import {LayerDialog} from 'neuroglancer/layer_dialog';
+import {LinkedViewerNavigationState} from 'neuroglancer/layer_group_viewer';
 import {LayerListSpecification, ManagedUserLayerWithSpecification} from 'neuroglancer/layer_specification';
+import {NavigationLinkType} from 'neuroglancer/navigation_state';
+import {ContextMenu} from 'neuroglancer/ui/context_menu';
+import {DropLayers, endLayerDrag, getDropLayers, getLayerDropEffect, startLayerDrag} from 'neuroglancer/ui/layer_drag_and_drop';
+import {animationFrameDebounce} from 'neuroglancer/util/animation_frame_debounce';
 import {RefCounted, registerEventListener} from 'neuroglancer/util/disposable';
 import {removeChildren} from 'neuroglancer/util/dom';
-import {decodeParametersFromDragTypeList, encodeParametersAsDragType} from 'neuroglancer/util/drag_and_drop';
-import {positionDropdown} from 'neuroglancer/util/dropdown';
-import {verifyBoolean, verifyObjectProperty, verifyString} from 'neuroglancer/util/json';
-
-const layerDragTypePrefix = 'neuroglancer-layer\0';
+import {getDropEffect, preventDrag, setDropEffect} from 'neuroglancer/util/drag_and_drop';
+import {PositionWidget} from 'neuroglancer/widget/position_widget';
 
 require('neuroglancer/noselect.css');
 require('./layer_panel.css');
+require('neuroglancer/ui/button.css');
 
-/**
- * If a layer originating in this browser is being dragged.
- */
-let dragSourceWidget: LayerWidget|undefined;
-
-/**
- * If there is a layer representation in this browser of the layer being dropped.
- */
-let dropTargetWidget: LayerWidget|undefined;
-
+function destroyDropLayers(
+    dropLayers: DropLayers, targetLayer?: ManagedUserLayerWithSpecification) {
+  if (dropLayers.method === 'move') {
+    // Nothing to do.
+    return false;
+  }
+  dropLayers.manager.layerManager.filter(
+      layer => !dropLayers.layers.has(<ManagedUserLayerWithSpecification>layer));
+  return targetLayer !== undefined && dropLayers.layers.has(targetLayer);
+}
 
 function registerDropHandlers(
-    panel: LayerPanel, target: EventTarget, targetWidget: LayerWidget|undefined) {
-  const enterDisposer = registerEventListener(target, 'dragenter', (event: DragEvent) => {
-    const result = decodeParametersFromDragTypeList(event.dataTransfer.types, layerDragTypePrefix);
-    if (result === undefined) {
-      return;
-    }
-    const layerInfo = result.parameters;
-    if (targetWidget !== undefined &&
-        (dropTargetWidget === targetWidget || dragSourceWidget === targetWidget)) {
-      // Dragged onto itself, nothing to do.
-      return;
-    }
-    const originalName = verifyObjectProperty(layerInfo, 'name', verifyString);
-    const visible = verifyObjectProperty(layerInfo, 'visible', verifyBoolean);
-    let newIndex: number;
-    if (targetWidget !== undefined) {
-      newIndex = panel.manager.layerManager.managedLayers.indexOf(targetWidget.layer);
-    } else {
-      newIndex = panel.manager.layerManager.managedLayers.length;
-    }
-    if (dropTargetWidget === undefined && dragSourceWidget !== undefined &&
-        dragSourceWidget.panel.layerManager === panel.layerManager) {
-      // A move within the same layer manager.
-      dropTargetWidget = dragSourceWidget;
-    }
-    if (dropTargetWidget === undefined) {
-      const uniqueName = panel.manager.layerManager.getUniqueLayerName(originalName);
-      const newLayer = new ManagedUserLayerWithSpecification(uniqueName, null, panel.manager);
-      newLayer.visible = visible;
-      panel.manager.layerManager.addManagedLayer(newLayer, newIndex);
-      panel.updateLayers();
-      dropTargetWidget = panel.layerWidgets.get(newLayer);
-    } else {
-      const oldIndex = panel.manager.layerManager.managedLayers.indexOf(dropTargetWidget.layer);
-      if (newIndex === panel.layerManager.managedLayers.length) {
-        --newIndex;
+    panel: LayerPanel, target: EventTarget,
+    targetLayer: ManagedUserLayerWithSpecification|undefined) {
+  function update(event: DragEvent, updateDropEffect: boolean): DropLayers|undefined {
+    let dropLayers = panel.dropLayers;
+    const dropEffect =
+        updateDropEffect ? getLayerDropEffect(event, panel.manager) : getDropEffect();
+    let existingDropLayers = true;
+    if (dropLayers !== undefined) {
+      if (updateDropEffect) {
+        setDropEffect(event, dropEffect);
       }
-      panel.layerManager.reorderManagedLayer(oldIndex, newIndex);
+      if (!dropLayers.compatibleWithMethod(dropEffect)) {
+        panel.dropLayers = undefined;
+        if (destroyDropLayers(dropLayers, targetLayer)) {
+          // We destroyed the layer for which we received the dragenter event.  Wait until we get
+          // another dragenter or drop event to do something.
+          return undefined;
+        }
+      }
+    }
+    if (dropLayers === undefined) {
+      dropLayers = panel.dropLayers = getDropLayers(
+          event, panel.manager, /*forceCopy=*/dropEffect === 'copy', /*allowMove=*/true,
+          /*newTarget=*/false);
+      if (dropLayers === undefined) {
+        return undefined;
+      }
+      existingDropLayers = dropLayers.method === 'move';
+    }
+
+    // Dragged onto itself, nothing to do.
+    if (targetLayer !== undefined && dropLayers.layers.has(targetLayer)) {
+      return dropLayers;
+    }
+    if (!existingDropLayers) {
+      let newIndex: number|undefined;
+      if (targetLayer !== undefined) {
+        newIndex = panel.manager.layerManager.managedLayers.indexOf(targetLayer);
+      }
+
+      for (const newLayer of dropLayers.layers.keys()) {
+        panel.manager.add(newLayer, newIndex);
+      }
+    } else {
+      // Rearrange layers.
+      const {layerManager} = panel.manager;
+      const existingLayers = new Set<ManagedUserLayerWithSpecification>();
+      let firstRemovalIndex = Number.POSITIVE_INFINITY;
+      const managedLayers = layerManager.managedLayers =
+          layerManager.managedLayers.filter((x: ManagedUserLayerWithSpecification, index) => {
+            if (dropLayers!.layers.has(x)) {
+              if (firstRemovalIndex === Number.POSITIVE_INFINITY) {
+                firstRemovalIndex = index;
+              }
+              existingLayers.add(x);
+              return false;
+            } else {
+              return true;
+            }
+          });
+      let newIndex: number;
+      if (targetLayer !== undefined) {
+        newIndex = managedLayers.indexOf(targetLayer);
+        if (firstRemovalIndex <= newIndex) {
+          ++newIndex;
+        }
+      } else {
+        newIndex = managedLayers.length;
+      }
+      // Filter out layers that have been concurrently removed.
+      for (const layer of dropLayers.layers.keys()) {
+        if (!existingLayers.has(layer)) {
+          dropLayers.layers.delete(layer);
+        }
+      }
+      managedLayers.splice(newIndex, 0, ...dropLayers.layers.keys());
+      layerManager.layersChanged.dispatch();
+    }
+    return dropLayers;
+  }
+  const enterDisposer = registerEventListener(target, 'dragenter', (event: DragEvent) => {
+    if (update(event, /*updateDropEffect=*/true) !== undefined) {
+      event.preventDefault();
     }
   });
   const dropDisposer = registerEventListener(target, 'drop', (event: DragEvent) => {
     event.preventDefault();
-    const result = decodeParametersFromDragTypeList(event.dataTransfer.types, layerDragTypePrefix);
-    if (result === undefined) {
-      return;
-    }
-    if (dropTargetWidget !== undefined) {
-      try {
-        if (dragSourceWidget === undefined ||
-            dragSourceWidget.panel.layerManager !== dropTargetWidget.panel.layerManager) {
-          try {
-            const spec = JSON.parse(event.dataTransfer.getData(result.dragType));
-            panel.manager.initializeLayerFromSpec(
-                <ManagedUserLayerWithSpecification>dropTargetWidget.layer, spec);
-          } catch {
-            dropTargetWidget.panel.layerManager.removeManagedLayer(dropTargetWidget.layer);
-          }
-        }
-      } finally {
-        dropTargetWidget = undefined;
+    const dropLayers = update(event, /*updateDropEffect=*/false);
+    if (dropLayers !== undefined) {
+      if (!dropLayers.finalize(event)) {
+        destroyDropLayers(dropLayers);
+      } else {
+        event.dataTransfer.dropEffect = getDropEffect();
+        endLayerDrag(dropLayers.method === 'move' ? undefined : event);
       }
     }
+    panel.dropLayers = undefined;
   });
   const overDisposer = registerEventListener(target, 'dragover', (event: DragEvent) => {
-    const result = decodeParametersFromDragTypeList(event.dataTransfer.types, layerDragTypePrefix);
-    if (result === undefined) {
+    const dropLayers = update(event, /*updateDropEffect=*/true);
+    if (dropLayers === undefined) {
       return;
-    }
-    if (dragSourceWidget !== undefined &&
-        dragSourceWidget.panel.layerManager === panel.layerManager) {
-      event.dataTransfer.dropEffect = 'move';
-    } else {
-      event.dataTransfer.dropEffect = 'copy';
     }
     event.preventDefault();
     event.stopPropagation();
@@ -127,118 +160,81 @@ function registerDropHandlers(
 
 
 class LayerWidget extends RefCounted {
-  element: HTMLSpanElement;
-  widgetElement: HTMLSpanElement;
+  element: HTMLElement;
   layerNumberElement: HTMLSpanElement;
   labelElement: HTMLSpanElement;
   valueElement: HTMLSpanElement;
-  dropdownElement: HTMLDivElement;
   dropdown: UserLayerDropdown|undefined;
   userLayer: UserLayer|null;
-  hovering: boolean;
+  contextMenu: ContextMenu;
 
-  constructor(public layer: ManagedUserLayer, public panel: LayerPanel) {
+  constructor(public layer: ManagedUserLayerWithSpecification, public panel: LayerPanel) {
     super();
-    let element = this.element = document.createElement('span');
-    element.className = 'layer-item-parent neuroglancer-noselect';
-    let widgetElement = this.widgetElement = document.createElement('span');
-    widgetElement.className = 'layer-item neuroglancer-noselect';
-    element.appendChild(widgetElement);
+    let element = this.element = document.createElement('div');
+    element.title = 'Right click for layer options, drag to move/copy.';
+    element.className = 'neuroglancer-layer-item neuroglancer-noselect';
     let labelElement = this.labelElement = document.createElement('span');
-    labelElement.className = 'layer-item-label';
+    labelElement.className = 'neuroglancer-layer-item-label';
     let layerNumberElement = this.layerNumberElement = document.createElement('span');
-    layerNumberElement.className = 'layer-item-number';
+    layerNumberElement.className = 'neuroglancer-layer-item-number';
     let valueElement = this.valueElement = document.createElement('span');
-    valueElement.className = 'layer-item-value';
+    valueElement.className = 'neuroglancer-layer-item-value';
     let closeElement = document.createElement('span');
     closeElement.title = 'Delete layer';
-    closeElement.className = 'layer-item-close';
-    this.registerEventListener(closeElement, 'click', (_event: MouseEvent) => {
+    closeElement.className = 'neuroglancer-layer-item-close';
+    this.registerEventListener(closeElement, 'click', (event: MouseEvent) => {
       this.panel.layerManager.removeManagedLayer(this.layer);
+      event.stopPropagation();
     });
-    widgetElement.appendChild(layerNumberElement);
-    widgetElement.appendChild(labelElement);
-    widgetElement.appendChild(valueElement);
-    widgetElement.appendChild(closeElement);
-    this.registerEventListener(widgetElement, 'click', (_event: MouseEvent) => {
+    element.appendChild(layerNumberElement);
+    element.appendChild(labelElement);
+    element.appendChild(valueElement);
+    element.appendChild(closeElement);
+    this.registerEventListener(element, 'click', (_event: MouseEvent) => {
       layer.setVisible(!layer.visible);
     });
 
-    let dropdownElement = this.dropdownElement = document.createElement('div');
-
-    widgetElement.draggable = true;
-    this.registerEventListener(widgetElement, 'dragstart', (event: DragEvent) => {
-      dragSourceWidget = this;
-      event.dataTransfer.setData(
-          encodeParametersAsDragType(
-              layerDragTypePrefix, {name: this.layer.name, visible: this.layer.visible}),
-          JSON.stringify((<ManagedUserLayerWithSpecification>this.layer).toJSON()));
+    const contextMenu = this.contextMenu =
+      this.registerDisposer(new ContextMenu(element));
+    contextMenu.element.classList.add('neuroglancer-layer-dropdown');
+    contextMenu.opened.add(() => {
+      if (this.dropdown !== undefined) {
+        this.dropdown.onShow();
+      }
+    });
+    contextMenu.closed.add(() => {
+      if (this.dropdown !== undefined) {
+        this.dropdown.onHide();
+      }
     });
 
-    this.registerEventListener(widgetElement, 'dragend', (_event: DragEvent) => {
-      dragSourceWidget = undefined;
+    element.draggable = true;
+    this.registerEventListener(element, 'dragstart', (event: DragEvent) => {
+      startLayerDrag(event, {manager: panel.manager, layers: [this.layer]});
+      event.stopPropagation();
     });
 
-    this.registerDisposer(registerDropHandlers(this.panel, widgetElement, this));
+    this.registerEventListener(element, 'dragend', (event: DragEvent) => {
+      endLayerDrag(event);
+    });
 
-    this.registerEventListener(widgetElement, 'dblclick', (_event: MouseEvent) => {
+    this.registerDisposer(registerDropHandlers(this.panel, element, this.layer));
+
+    this.registerEventListener(element, 'dblclick', (_event: MouseEvent) => {
       if (layer instanceof ManagedUserLayerWithSpecification) {
         new LayerDialog(this.panel.manager, layer);
       }
     });
-    this.setupDropdownElement();
     this.handleLayerChanged();
     this.registerDisposer(layer.layerChanged.add(() => {
       this.handleLayerChanged();
     }));
-    element.appendChild(dropdownElement);
-
-    this.registerEventListener(element, 'mouseenter', (event: MouseEvent) => {
-      this.hovering = event.buttons === 0 ? true : false;
-      this.updateDropdownState();
-    });
-    this.registerEventListener(element, 'mouseup', (event: MouseEvent) => {
-      this.hovering = this.hovering || (event.buttons === 0 ? true : false);
-      this.updateDropdownState();
-    });
-    this.registerEventListener(widgetElement, 'mousedown', (_event: MouseEvent) => {
-      this.hovering = false;
-      this.updateDropdownState();
-    });
-    this.registerEventListener(element, 'mouseleave', (_event: MouseEvent) => {
-      this.hovering = false;
-      this.updateDropdownState();
-    });
-  }
-
-  updateDropdownState() {
-    let style = this.dropdownElement.style;
-    if (this.hovering && this.dropdownElement.childElementCount > 0) {
-      if (style.display !== 'flex') {
-        style.display = 'flex';
-        if (this.dropdown) {
-          this.dropdown.onShow();
-        }
-      }
-      positionDropdown(this.dropdownElement, this.widgetElement);
-    } else {
-      if (style.display !== 'none') {
-        this.dropdownElement.style.display = 'none';
-        if (this.dropdown) {
-          this.dropdown.onHide();
-        }
-      }
-    }
-  }
-
-  setupDropdownElement() {
-    this.dropdownElement.className = 'layer-dropdown';
   }
 
   update() {
     let {layer} = this;
     this.labelElement.textContent = layer.name;
-    this.widgetElement.setAttribute('layer-visible', layer.visible.toString());
+    this.element.setAttribute('layer-visible', layer.visible.toString());
   }
 
   private handleLayerChanged() {
@@ -247,16 +243,18 @@ class LayerWidget extends RefCounted {
     if (userLayer !== this.userLayer) {
       if (this.dropdown) {
         this.dropdown.dispose();
-        removeChildren(this.dropdownElement);
-        this.setupDropdownElement();
+        removeChildren(this.contextMenu.element);
       }
       this.userLayer = userLayer;
       if (userLayer) {
-        this.dropdown = userLayer.makeDropdown(this.dropdownElement);
+        const childElement = document.createElement('div');
+        this.contextMenu.element.appendChild(childElement);
+        this.dropdown = userLayer.makeDropdown(childElement);
       } else {
         this.dropdown = undefined;
       }
     }
+    this.contextMenu.disabled = this.dropdown === undefined;
   }
 
   disposed() {
@@ -270,27 +268,41 @@ class LayerWidget extends RefCounted {
 
 export class LayerPanel extends RefCounted {
   layerWidgets = new Map<ManagedUserLayer, LayerWidget>();
+  element = document.createElement('div');
   private layerUpdateNeeded = true;
   private valueUpdateNeeded = false;
-  private addButton: HTMLButtonElement;
-  private dropZone: HTMLDivElement;
+  private addButton: HTMLElement;
+  dropZone: HTMLDivElement;
+  private layerWidgetInsertionPoint = document.createElement('div');
+  private positionWidget =
+      this.registerDisposer(new PositionWidget(this.viewerNavigationState.position.value));
+
+  /**
+   * For use within this module only.
+   */
+  dropLayers: DropLayers|undefined;
 
   get layerManager() {
     return this.manager.layerManager;
   }
 
-  constructor(public element: HTMLElement, public manager: LayerListSpecification) {
+  constructor(public display: DisplayContext, public manager: LayerListSpecification, public viewerNavigationState: LinkedViewerNavigationState) {
     super();
-    element.className = 'layer-panel';
+    const {element} = this;
+    element.className = 'neuroglancer-layer-panel';
     this.registerDisposer(manager.layerSelectedValues.changed.add(() => {
       this.handleLayerValuesChanged();
     }));
     this.registerDisposer(manager.layerManager.layersChanged.add(() => {
       this.handleLayersChanged();
     }));
-    let addButton = this.addButton = document.createElement('button');
-    addButton.className = 'layer-add-button';
+    this.layerWidgetInsertionPoint.style.display = 'none';
+    this.element.appendChild(this.layerWidgetInsertionPoint);
+
+    let addButton = this.addButton = document.createElement('div');
+    addButton.className = 'neuroglancer-layer-add-button neuroglancer-button';
     addButton.title = 'Add layer';
+    addButton.textContent = '+';
     let dropZone = this.dropZone = document.createElement('div');
     dropZone.className = 'neuroglancer-layer-panel-drop-zone';
 
@@ -299,21 +311,34 @@ export class LayerPanel extends RefCounted {
     });
     element.appendChild(addButton);
     element.appendChild(dropZone);
+    this.registerDisposer(preventDrag(addButton));
+
+    element.appendChild(this.positionWidget.element);
+    const updatePositionWidgetVisibility = () => {
+      const linkValue = this.viewerNavigationState.position.link.value;
+      this.positionWidget.element.style.display = linkValue === NavigationLinkType.LINKED ? 'none' : null;
+    };
+    this.registerDisposer(this.viewerNavigationState.position.link.changed.add(updatePositionWidgetVisibility));
+    updatePositionWidgetVisibility();
+
     this.update();
 
     this.registerEventListener(element, 'dragleave', (event: DragEvent) => {
       if (event.relatedTarget && element.contains(<Node>event.relatedTarget)) {
         return;
       }
-      if (dropTargetWidget !== undefined) {
-        if (dragSourceWidget === undefined) {
-          dropTargetWidget.panel.layerManager.removeManagedLayer(dropTargetWidget.layer);
-        }
-        dropTargetWidget = undefined;
+      const {dropLayers} = this;
+      if (dropLayers !== undefined) {
+        destroyDropLayers(dropLayers);
+        this.dropLayers = undefined;
       }
     });
     this.registerDisposer(registerDropHandlers(this, addButton, undefined));
     this.registerDisposer(registerDropHandlers(this, dropZone, undefined));
+
+    // Ensure layer widgets are updated before WebGL drawing starts; we don't want the layout to
+    // change after WebGL drawing or we will get flicker.
+    this.registerDisposer(display.updateStarted.add(() => this.updateLayers()));
   }
 
   disposed() {
@@ -330,11 +355,13 @@ export class LayerPanel extends RefCounted {
   handleLayerValuesChanged() {
     if (!this.valueUpdateNeeded) {
       this.valueUpdateNeeded = true;
-      requestAnimationFrame(this.update.bind(this));
+      this.scheduleUpdate();
     }
   }
 
-  update() {
+  private scheduleUpdate = this.registerCancellable(animationFrameDebounce(() => this.update()));
+
+  private update() {
     this.valueUpdateNeeded = false;
     this.updateLayers();
     let values = this.manager.layerSelectedValues;
@@ -358,10 +385,11 @@ export class LayerPanel extends RefCounted {
     this.layerUpdateNeeded = false;
     let container = this.element;
     let layers = new Set();
-    let nextChild = container.firstElementChild;
-    this.manager.layerManager.managedLayers.forEach((layer, layerIndex) => {
+    let nextChild = this.layerWidgetInsertionPoint.nextElementSibling;
+    this.manager.layerManager.managedLayers.forEach((layer: ManagedUserLayerWithSpecification) => {
       layers.add(layer);
       let widget = this.layerWidgets.get(layer);
+      const layerIndex = this.manager.rootLayers.managedLayers.indexOf(layer);
       if (widget === undefined) {
         widget = new LayerWidget(layer, this);
         this.layerWidgets.set(layer, widget);

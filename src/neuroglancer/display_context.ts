@@ -35,9 +35,11 @@ export abstract class RenderedPanel extends RefCounted {
 
   setGLViewport() {
     let element = this.element;
-    let left = element.offsetLeft + element.clientLeft;
+    const clientRect = element.getBoundingClientRect();
+    const canvasRect = this.context.canvasRect!;
+    let left = element.clientLeft + clientRect.left - canvasRect.left;
     let width = element.clientWidth;
-    let top = element.offsetTop + element.clientTop;
+    let top = clientRect.top - canvasRect.top + element.clientTop;
     let height = element.clientHeight;
     let bottom = top + height;
     let gl = this.gl;
@@ -69,6 +71,7 @@ export class DisplayContext extends RefCounted {
   panels = new Set<RenderedPanel>();
   private updatePending: number|null = null;
   private needsRedraw = false;
+  canvasRect: ClientRect|undefined;
 
   constructor(public container: HTMLElement) {
     super();
@@ -145,6 +148,7 @@ export class DisplayContext extends RefCounted {
       let canvas = this.canvas;
       canvas.width = canvas.offsetWidth;
       canvas.height = canvas.offsetHeight;
+      this.canvasRect = canvas.getBoundingClientRect();
       this.gl.clearColor(0.0, 0.0, 0.0, 0.0);
       gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
       for (let panel of this.panels) {

@@ -29,6 +29,7 @@
  */
 
 import {hexEncode, hexDecode} from 'neuroglancer/util/hex';
+import {registerEventListener} from 'neuroglancer/util/disposable';
 
 export function encodeStringAsDragType(s: string) {
   return hexEncode(new TextEncoder().encode(s));
@@ -58,7 +59,12 @@ export function encodeParametersAsDragType(prefix: string, parameters: any) {
   return prefix + encodeStringAsDragType(JSON.stringify(parameters));
 }
 
-export function decodeParametersFromDragTypeList(dragTypes: string[], prefix: string) {
+export interface DragInfo {
+  dragType: string;
+  parameters: any;
+}
+
+export function decodeParametersFromDragTypeList(dragTypes: string[], prefix: string): DragInfo|undefined {
   for (const dragType of dragTypes) {
     const parameters = decodeParametersFromDragType(dragType, prefix);
     if (parameters !== undefined) {
@@ -66,4 +72,32 @@ export function decodeParametersFromDragTypeList(dragTypes: string[], prefix: st
     }
   }
   return undefined;
+}
+
+let savedDropEffect: string;
+
+/**
+ * On Chrome 62, the dataTransfer.dropEffect property is reset to 'none' when the 'drop' event is
+ * dispatched.  As a workaround, we store it in a global variable.
+ *
+ * The alternative workaround of recomputing it in the 'drop' event handler is problematic for a
+ * different reason: the computation may depend on the modifier key states, and on Firefox 52, these
+ * key states are not set in the 'drop' event.
+ */
+export function setDropEffect<T extends string>(event: DragEvent, dropEffect: T) {
+  event.dataTransfer.dropEffect = dropEffect;
+  savedDropEffect = dropEffect;
+  return dropEffect;
+}
+
+export function getDropEffect() {
+  return savedDropEffect;
+}
+
+export function preventDrag(element: HTMLElement) {
+  element.draggable = true;
+  return registerEventListener(element, 'dragstart', (event: DragEvent) => {
+    event.stopPropagation();
+    event.preventDefault();
+  });
 }

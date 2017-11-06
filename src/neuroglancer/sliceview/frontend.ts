@@ -14,6 +14,7 @@
  * limitations under the License.
  */
 
+import debounce from 'lodash/debounce';
 import {ChunkState} from 'neuroglancer/chunk_manager/base';
 import {Chunk, ChunkManager, ChunkSource} from 'neuroglancer/chunk_manager/frontend';
 import {LayerManager} from 'neuroglancer/layer';
@@ -59,8 +60,6 @@ export class SliceView extends Base {
 
   visibleChunksStale = true;
 
-  visibleLayersStale = false;
-
   visibleLayerList = new Array<RenderLayer>();
 
   visibleLayers: Map<RenderLayer, any[]>;
@@ -80,19 +79,14 @@ export class SliceView extends Base {
     this.initializeCounterpart(rpc, {
       'chunkManager': chunkManager.rpcId,
     });
-    this.updateVisibleLayers();
-
     this.registerDisposer(navigationState.changed.add(() => {
       this.updateViewportFromNavigationState();
     }));
     this.updateViewportFromNavigationState();
 
     this.registerDisposer(layerManager.layersChanged.add(() => {
-      if (!this.visibleLayersStale) {
-        if (this.hasValidViewport) {
-          this.visibleLayersStale = true;
-          setTimeout(this.updateVisibleLayers.bind(this), 0);
-        }
+      if (this.hasValidViewport) {
+        this.updateVisibleLayers();
       }
     }));
 
@@ -103,6 +97,7 @@ export class SliceView extends Base {
         chunkManager.chunkQueueManager.visibleChunksChanged.add(this.viewChanged.dispatch));
 
     this.updateViewportFromNavigationState();
+    this.updateVisibleLayers();
   }
 
   private updateViewportFromNavigationState() {
@@ -114,11 +109,17 @@ export class SliceView extends Base {
     this.setViewportToDataMatrix(tempMat);
   }
 
-  updateVisibleLayers() {
+  private updateVisibleLayers = this.registerCancellable(debounce(() => {
+    this.updateVisibleLayersNow();
+  }, 0));
+
+  private updateVisibleLayersNow() {
+    if (this.wasDisposed) {
+      return false;
+    }
     if (!this.hasValidViewport) {
       return false;
     }
-    this.visibleLayersStale = false;
     let visibleLayers = this.visibleLayers;
     let rpc = this.rpc!;
     let rpcMessage: any = {'id': this.rpcId};
@@ -239,6 +240,7 @@ export class SliceView extends Base {
   }
 
   maybeUpdateVisibleChunks() {
+    this.updateVisibleLayers.flush();
     if (!this.visibleChunksStale && !this.visibleSourcesStale) {
       // console.log("Not updating visible chunks");
       return false;

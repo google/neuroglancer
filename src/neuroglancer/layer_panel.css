@@ -14,22 +14,24 @@
  * limitations under the License.
  */
 
-.layer-panel {
+.neuroglancer-layer-panel {
   width: 100%;
   display: flex;
   flex-direction: row;
   flex-wrap: wrap;
+  background-color: black;
+  align-items: stretch;
 }
 
-.layer-item + .layer-item {
+.neuroglancer-layer-item + .neuroglancer-layer-item {
   margin-left: 5px;
 }
 
-.layer-item + .layer-add-button {
+.neuroglancer-layer-item + .neuroglancer-layer-add-button {
   margin-left: 5px;
 }
 
-.layer-item {
+.neuroglancer-layer-item {
   position: relative;
   display: flex;
   align-items: center;
@@ -38,13 +40,16 @@
   border-width: 1px;
   border-style: solid;
   border-color: #ccc;
+  font-family: sans-serif;
+  font-size: 10pt;
+  background-color: black;
 }
 
-.layer-item, .layer-add-button {
+.neuroglancer-layer-item, .neuroglancer-layer-add-button {
   margin: 2px;
 }
 
-.layer-item-parent:hover .layer-item {
+.neuroglancer-layer-item:hover {
   border-color: #daa520;
 }
 
@@ -52,41 +57,21 @@
   content: "x";
 }
 
-.layer-dropdown {
-  display: none;
-  position: absolute;
+.neuroglancer-layer-dropdown {
   flex-direction: column;
-  min-width: 100%;
   background-color: black;
   padding: 5px;
   border: 1px solid white;
   box-sizing: border-box;
-  /**
-   * Ensure it is on top of most things, including the status messages.
-   */
-  z-index: 200;
 }
 
-.layer-item-parent {
-  display: inline-block;
-  background-color: black;
-}
-
-.layer-item-parent:not(.sortable-chosen) {
-  /* Setting position: relative; results in an ugly display artifact
-   * while dragging in Chrome.  It is only needed to position the
-   * dropdown menu properly, which is hidden while dragging anyway.
-   */
-  position: relative;
-}
-
-.layer-item-label {
+.neuroglancer-layer-item-label {
   display: inline-block;
   background-color: #222;
   padding-right: 3px;
 }
 
-.layer-item-number {
+.neuroglancer-layer-item-number {
   display: inline-block;
   background-color: /*#daa520*/ #9a7518;
   font-weight: bold;
@@ -94,7 +79,7 @@
   margin: 3px;
 }
 
-.layer-item-value {
+.neuroglancer-layer-item-value {
   display: inline-block;
   min-width: 10ch;
   max-width: 30ch;
@@ -105,11 +90,11 @@
   text-align: center;
 }
 
-.layer-item-close::before {
+.neuroglancer-layer-item-close::before {
   content: "\274c"; /* CROSS MARK */
 }
 
-.layer-item-close {
+.neuroglancer-layer-item-close {
   display: flex;
   align-items: center;
   justify-content: center;
@@ -123,24 +108,24 @@
   position: relative;
 }
 
-.layer-item-close:hover {
+.neuroglancer-layer-item-close:hover {
   background-color: #db4437;
 }
 
-.layer-item[layer-visible=false] .layer-item-label {
+.neuroglancer-layer-item[layer-visible=false] .neuroglancer-layer-item-label {
   text-decoration: line-through;
 }
 
-.layer-add-button {
-  
+.neuroglancer-layer-item[layer-visible=false] .neuroglancer-layer-item-value {
+  display: none;
 }
 
-.layer-add-button::before {
+
+.neuroglancer-layer-add-button.neuroglancer-button {
   font-weight: bold;
-  content: "+";
 }
 
-.layer-item[layer-visible=false] {
+.neuroglancer-layer-item[layer-visible=false] {
   color: #bbb;
 }
 

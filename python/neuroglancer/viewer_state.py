@@ -311,6 +311,117 @@ class Layers(object):
         return repr(self._layers)
 
 
+def layout_specification(x, _readonly=False):
+    if isinstance(x, basestring):
+        return six.text_type(x)
+    if isinstance(x, (StackLayout, LayerGroupViewer)):
+        return type(x)(x.to_json(), _readonly=_readonly)
+    if not isinstance(x, dict):
+        raise ValueError
+    layout_type = layout_types.get(x.get('type'))
+    if layout_type is None:
+        raise ValueError
+    return layout_type(x, _readonly=_readonly)
+
+
+layout_specification.supports_readonly = True
+
+
+@export
+class StackLayout(JsonObjectWrapper):
+    __slots__ = ()
+    type = wrapped_property('type', text_type)
+    children = wrapped_property('children', typed_list(layout_specification))
+
+    def __getitem__(self, key):
+        return self.children[key]
+
+    def __len__(self):
+        return len(self.children)
+
+    def __setitem__(self, key, value):
+        self.children[key] = value
+
+    def __delitem__(self, key):
+        del self.children[key]
+
+    def __iter__(self):
+        return iter(self.children)
+
+
+@export
+def row_layout(children):
+    return StackLayout(type='row', children=children)
+
+
+@export
+def column_layout(children):
+    return StackLayout(type='column', children=children)
+
+
+def navigation_link_type(x):
+    x = six.text_type(x)
+    x = x.lower()
+    if x not in [u'linked', u'unlinked', u'relative']:
+        raise ValueError('Invalid navigation link type: %r' % x)
+    return x
+
+
+def make_linked_navigation_type(value_type):
+    class LinkedType(JsonObjectWrapper):
+        __slots__ = ()
+        link = wrapped_property('link', optional(navigation_link_type, u'linked'))
+        value = wrapped_property('value', optional(value_type))
+
+    return LinkedType
+
+
+@export
+class LinkedSpatialPosition(make_linked_navigation_type(SpatialPosition)):
+    __slots__ = ()
+
+
+@export
+class LinkedZoomFactor(make_linked_navigation_type(float)):
+    __slots__ = ()
+
+
+@export
+class LinkedOrientationState(make_linked_navigation_type(array_wrapper(np.float32, 4))):
+    __slots__ = ()
+
+
+@export
+class LayerGroupViewer(JsonObjectWrapper):
+    __slots__ = ()
+    type = wrapped_property('type', text_type)
+    layers = wrapped_property('layers', typed_list(text_type))
+    layout = wrapped_property('layout', text_type)
+    position = wrapped_property('position', LinkedSpatialPosition)
+    cross_section_orientation = crossSectionOrientation = wrapped_property('crossSectionOrientation', LinkedOrientationState)
+    cross_section_zoom = crossSectionZoom = wrapped_property('crossSectionZoom', LinkedZoomFactor)
+    perspective_orientation = perspectiveOrientation = wrapped_property('perspectiveOrientation', LinkedOrientationState)
+    perspective_zoom = perspectiveZoom = wrapped_property('perspectiveZoom', LinkedZoomFactor)
+
+    def __init__(self, *args, **kwargs):
+        super(LayerGroupViewer, self).__init__(*args, **kwargs)
+        self.type = 'viewer'
+
+    def __repr__(self):
+        j = self.to_json()
+        j.pop('type', None)
+        return u'%s(%s)' % (type(self).__name__, encode_json_for_repr(j))
+
+
+
+layout_types = {
+    'row': StackLayout,
+    'column': StackLayout,
+    'viewer': LayerGroupViewer,
+}
+
+
+
 @export
 class ViewerState(JsonObjectWrapper):
     __slots__ = ()
@@ -320,7 +431,7 @@ class ViewerState(JsonObjectWrapper):
         'perspectiveOrientation', optional(array_wrapper(np.float32, 4)))
     show_slices = showSlices = wrapped_property('showSlices', optional(bool, True))
     layers = wrapped_property('layers', Layers)
-    layout = wrapped_property('layout', optional(text_type, '4panel'))
+    layout = wrapped_property('layout', optional(layout_specification, u'4panel'))
 
     @property
     def position(self):
