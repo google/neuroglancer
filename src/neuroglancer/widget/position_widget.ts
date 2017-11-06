@@ -363,15 +363,16 @@ export class VoxelSizeWidget extends RefCounted {
     unitsElement.className = 'neuroglancer-voxel-size-units';
     this.registerDisposer(voxelSize.changed.add(
         this.registerCancellable(animationFrameDebounce(() => this.updateView()))));
+    this.updateView();
   }
 
   private updateView() {
     const {dimensionsContainer, unitsElement} = this;
     removeChildren(dimensionsContainer);
     if (!this.voxelSize.valid) {
-      this.element.style.visibility = 'hidden';
+      this.element.style.display = 'none';
     } else {
-      this.element.style.visibility = 'visible';
+      this.element.style.display = null;
     }
     const {size} = this.voxelSize;
     const minVoxelSize = Math.min(size[0], size[1], size[2]);
