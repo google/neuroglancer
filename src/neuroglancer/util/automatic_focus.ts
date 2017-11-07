@@ -51,22 +51,30 @@ export class AutomaticallyFocusedElement extends RefCounted {
   prev0: AutomaticallyFocusedElement|null = null;
   next0: AutomaticallyFocusedElement|null = null;
 
-  focusTimer: number|undefined;
+  private lastFocusedElement: Element|null = null;
+
+  private scheduleUpdateFocus = this.registerCancellable(debounce(() => {
+    const {activeElement} = document;
+    const {element} = this;
+    if (element.contains(activeElement)) {
+      // Never steal focus from descendant.
+      return;
+    }
+    if (activeElement === this.lastFocusedElement || activeElement.contains(element)) {
+      this.element.focus();
+    }
+    this.lastFocusedElement = null;
+  }, 0));
 
   constructor(public element: HTMLElement) {
     super();
     element.tabIndex = -1;
     this.registerEventListener(element, 'mouseenter', () => {
-      if (this.focusTimer === undefined) {
-        this.focusTimer = setTimeout(() => element.focus(), 0);
-      }
+      this.lastFocusedElement = document.activeElement;
+      this.scheduleUpdateFocus();
     });
     this.registerEventListener(element, 'mouseleave', () => {
-      const {focusTimer} = this;
-      if (focusTimer !== undefined) {
-        clearTimeout(focusTimer);
-        this.focusTimer = undefined;
-      }
+      this.scheduleUpdateFocus.cancel();
     });
     // Insert at the end of the list.
     LinkedListOperations.insertBefore(<any>automaticFocusList, this);
@@ -80,9 +88,6 @@ export class AutomaticallyFocusedElement extends RefCounted {
 
   disposed() {
     LinkedListOperations.pop<AutomaticallyFocusedElement>(this);
-    if (this.focusTimer !== undefined) {
-      clearTimeout(this.focusTimer);
-    }
     super.disposed();
   }
 }
