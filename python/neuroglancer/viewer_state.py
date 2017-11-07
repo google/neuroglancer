@@ -16,7 +16,6 @@
 from __future__ import absolute_import
 
 import collections
-import json
 
 import numpy as np
 import six
@@ -84,8 +83,7 @@ class PointAnnotationLayer(Layer):
     __slots__ = ()
 
     def __init__(self, *args, **kwargs):
-        super(PointAnnotationLayer, self).__init__(*args, **kwargs)
-        self.type = 'pointAnnotation'
+        super(PointAnnotationLayer, self).__init__(*args, type='pointAnnotation', **kwargs)
 
     points = wrapped_property('points', typed_list(array_wrapper(np.float32, 3)))
 
@@ -103,8 +101,7 @@ class ImageLayer(Layer):
     __slots__ = ()
 
     def __init__(self, *args, **kwargs):
-        super(ImageLayer, self).__init__(*args, **kwargs)
-        self.type = 'image'
+        super(ImageLayer, self).__init__(*args, type='image', **kwargs)
 
     source = wrapped_property('source', volume_source)
     shader = wrapped_property('shader', text_type)
@@ -124,8 +121,7 @@ class SegmentationLayer(Layer):
     __slots__ = ()
 
     def __init__(self, *args, **kwargs):
-        super(SegmentationLayer, self).__init__(*args, **kwargs)
-        self.type = 'segmentation'
+        super(SegmentationLayer, self).__init__(*args, type='segmentation', **kwargs)
 
     source = wrapped_property('source', optional(volume_source))
     mesh = wrapped_property('mesh', optional(text_type))
@@ -181,7 +177,7 @@ class ManagedLayer(JsonObjectWrapper):
             json_data = collections.OrderedDict()
         elif isinstance(layer, local_volume.LocalVolume):
             json_data = collections.OrderedDict()
-            layer = make_layer(layer)
+            layer = make_layer(layer, _readonly=_readonly)
         else:
             if layer is None:
                 json_data = collections.OrderedDict()
@@ -206,7 +202,7 @@ class ManagedLayer(JsonObjectWrapper):
             return setattr(self.layer, key, value)
 
     def __repr__(self):
-        return u'ManagedLayer(%r,%s)' % (encode_json_for_repr(self.name),
+        return u'ManagedLayer(%s,%s)' % (encode_json_for_repr(self.name),
                                          encode_json_for_repr(self.to_json()))
 
     def to_json(self):
@@ -228,7 +224,7 @@ class Layers(object):
         self._layers = []
         self._readonly = _readonly
         for k, v in six.iteritems(json_data):
-            self._layers.append(ManagedLayer(k, v))
+            self._layers.append(ManagedLayer(k, v, _readonly=_readonly))
 
     def index(self, k):
         for i, u in enumerate(self._layers):
