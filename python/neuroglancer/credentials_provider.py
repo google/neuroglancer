@@ -31,10 +31,12 @@ class CredentialsManager(object):
 
 
 class CredentialsProvider(object):
+    next_generation = 0
+    next_generation_lock = threading.Lock()
+
     def __init__(self):
         self.credentials = None
         self.future = None
-        self.next_generation = 0
         self._lock = threading.Lock()
 
     def get(self, invalid_generation=None):
@@ -46,9 +48,11 @@ class CredentialsProvider(object):
 
             def attach_generation_and_save_credentials(credentials):
                 with self._lock:
-                    self.next_generation += 1
+                    with CredentialsProvider.next_generation_lock:
+                        CredentialsProvider.next_generation += 1
+                        next_generation = CredentialsProvider.next_generation
                     credentials_with_generation = dict(
-                        credentials=credentials, generation=self.next_generation)
+                        credentials=credentials, generation=next_generation)
                     self.credentials = credentials_with_generation
                     return credentials_with_generation
 

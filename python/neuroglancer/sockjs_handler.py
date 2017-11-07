@@ -60,7 +60,8 @@ class ClientCredentialsHandler(object):
                                     s.credentials[key] = credentials
                                 self.config_state.retry_txn(func)
                             except:
-                                pass
+                                import traceback
+                                traceback.print_exc()
 
                         provider.get(value).add_done_callback(handle_credentials)
         except:
