@@ -56,6 +56,7 @@ export class ContextMenu extends RefCounted {
     const {element} = this;
     element.className = 'neuroglancer-context-menu';
     element.style.visibility = 'hidden';
+    element.tabIndex = -1;
     document.body.appendChild(element);
 
     if (parent !== undefined) {
