@@ -114,56 +114,63 @@ export class ChunkQueueManager extends SharedObject {
   }
   processPendingChunkUpdates() {
     let deadline = this.chunkUpdateDeadline;
-    if (deadline !== null && Date.now() > deadline) {
-      // No time to perform chunk update now, we will wait some more.
-      setTimeout(this.processPendingChunkUpdates.bind(this), this.chunkUpdateDelay);
-      return;
+    if (deadline === null) {
+      deadline = Date.now() + 30;
     }
-    let update = this.pendingChunkUpdates;
-    let {rpc} = this;
-    let source = rpc!.get(update['source']);
-    if (DEBUG_CHUNK_UPDATES) {
-      console.log(
-          `${Date.now()} Chunk.update processed: ${source.rpcId} ` +
-          `${update['id']} ${update['state']}`);
-    }
-    let newState: number = update['state'];
-    if (newState === ChunkState.EXPIRED) {
-      // FIXME: maybe use freeList for chunks here
-      source.deleteChunk(update['id']);
-    } else {
-      let chunk: Chunk;
-      let key = update['id'];
-      if (update['new']) {
-        chunk = source.getChunk(update);
-        source.addChunk(key, chunk);
-      } else {
-        chunk = source.chunks.get(key);
+    while (true) {
+      if (Date.now() > deadline) {
+        // No time to perform chunk update now, we will wait some more.
+        setTimeout(this.processPendingChunkUpdates.bind(this), this.chunkUpdateDelay);
+        return;
       }
-      let oldState = chunk.state;
-      if (newState !== oldState) {
-        switch (newState) {
-          case ChunkState.GPU_MEMORY:
-            // console.log("Copying to GPU", chunk);
-            chunk.copyToGPU(this.gl);
-            this.visibleChunksChanged.dispatch();
-            break;
-          case ChunkState.SYSTEM_MEMORY:
-            chunk.freeGPUMemory(this.gl);
-            break;
-          default:
-            throw new Error(`INTERNAL ERROR: Invalid chunk state: ${ChunkState[newState]}`);
+      let update = this.pendingChunkUpdates;
+      let {rpc} = this;
+      let source = rpc!.get(update['source']);
+      if (DEBUG_CHUNK_UPDATES) {
+        console.log(
+            `${Date.now()} Chunk.update processed: ${source.rpcId} ` +
+            `${update['id']} ${update['state']}`);
+      }
+      let newState: number = update['state'];
+      if (newState === ChunkState.EXPIRED) {
+        // FIXME: maybe use freeList for chunks here
+        source.deleteChunk(update['id']);
+      } else {
+        let chunk: Chunk;
+        let key = update['id'];
+        if (update['new']) {
+          chunk = source.getChunk(update);
+          source.addChunk(key, chunk);
+        } else {
+          chunk = source.chunks.get(key);
+        }
+        let oldState = chunk.state;
+        if (newState !== oldState) {
+          switch (newState) {
+            case ChunkState.GPU_MEMORY:
+              // console.log("Copying to GPU", chunk);
+              chunk.copyToGPU(this.gl);
+              this.visibleChunksChanged.dispatch();
+              break;
+            case ChunkState.SYSTEM_MEMORY:
+              chunk.freeGPUMemory(this.gl);
+              break;
+            default:
+              throw new Error(`INTERNAL ERROR: Invalid chunk state: ${ChunkState[newState]}`);
+          }
         }
       }
-    }
-    let nextUpdate = this.pendingChunkUpdates = update.nextUpdate;
-    if (nextUpdate != null) {
-      this.scheduleChunkUpdate();
-    } else {
-      this.pendingChunkUpdatesTail = null;
+      let nextUpdate = this.pendingChunkUpdates = update.nextUpdate;
+      --(<any>window).numPendingChunkUpdates;
+      if (nextUpdate == null) {
+        this.pendingChunkUpdatesTail = null;
+        break;
+      }
     }
   }
 }
+
+(<any>window).numPendingChunkUpdates = 0;
 
 registerRPC('Chunk.update', function(x) {
   let source = this.get(x['source']);
@@ -174,6 +181,9 @@ registerRPC('Chunk.update', function(x) {
   }
   let queueManager = source.chunkManager.chunkQueueManager;
   let pendingTail = queueManager.pendingChunkUpdatesTail;
+  if (++(<any>window).numPendingChunkUpdates > 3) {
+    //console.log(`numPendingChunkUpdates=${(<any>window).numPendingChunkUpdates}`);
+  }
   if (pendingTail == null) {
     queueManager.pendingChunkUpdates = x;
     queueManager.pendingChunkUpdatesTail = x;
