@@ -97,7 +97,7 @@ export class ServerConnection extends RefCounted {
   private connect() {
     this.status.setText('Connecting to Python server');
     this.status.setVisible(true);
-    const socket = this.socket = new SockJS(this.url);
+    const socket = this.socket = new SockJS(this.url, {transports: ['websocket', 'xhr-streaming']});
     socket.onopen = () => {
       this.isOpen = true;
       this.reconnectionDelay = defaultReconnectionDelay;
