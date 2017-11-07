@@ -131,10 +131,12 @@ export function makeRequest(
         if (status >= 200 && status < 300) {
           cancellationToken.remove(abort);
           resolve(this.response);
-        } else if (status === 401 || status === 504) {
+        } else if (status === 401) {
           // 401: Authorization needed.  OAuth2 token may have expired.
-          // 504: Gateway timeout.  Can occur if the server takes too long to reply.  Retry.
           credentialsProvider.get(credentials, cancellationToken).then(start);
+        } else if (status === 504) {
+          // 504: Gateway timeout.  Can occur if the server takes too long to reply.  Retry.
+          credentialsProvider.get(/*invalidToken=*/undefined, cancellationToken).then(start);
         } else {
           cancellationToken.remove(abort);
           reject(HttpError.fromXhr(this));
