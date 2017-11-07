@@ -31,11 +31,6 @@
 
 .neuroglancer-layer-group-viewer-context-menu {
   flex-direction: column;
-  background-color: black;
-  padding: 5px;
-  border: 1px solid white;
-  box-sizing: border-box;
-  color: white;
   align-items: stretch;
 }
 

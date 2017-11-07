@@ -22,4 +22,6 @@
   box-shadow: 5px 5px 2px 1px rgba(0, 0, 0, 0.5);
   font-family: sans-serif;
   font-size: 11pt;
+  padding: 5px;
+  color: white;
 }

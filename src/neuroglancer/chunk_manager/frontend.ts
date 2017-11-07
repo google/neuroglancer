@@ -14,7 +14,9 @@
  * limitations under the License.
  */
 
-import {AvailableCapacity, CHUNK_MANAGER_RPC_ID, CHUNK_QUEUE_MANAGER_RPC_ID, ChunkSourceParametersConstructor, ChunkState} from 'neuroglancer/chunk_manager/base';
+import {CHUNK_MANAGER_RPC_ID, CHUNK_QUEUE_MANAGER_RPC_ID, ChunkSourceParametersConstructor, ChunkState} from 'neuroglancer/chunk_manager/base';
+import {SharedWatchableValue} from 'neuroglancer/shared_watchable_value';
+import {TrackableValue} from 'neuroglancer/trackable_value';
 import {Borrowed} from 'neuroglancer/util/disposable';
 import {stableStringify} from 'neuroglancer/util/json';
 import {StringMemoize} from 'neuroglancer/util/memoize';
@@ -42,6 +44,25 @@ export abstract class Chunk {
   }
 }
 
+function validateLimitValue(x: any) {
+  if (typeof x !== 'number' || x < 0) {
+    throw new Error(`Expected non-negative number as limit, but received: ${JSON.stringify(x)}`);
+  }
+  return x;
+}
+
+export class CapacitySpecification {
+  sizeLimit: TrackableValue<number>;
+  itemLimit: TrackableValue<number>;
+  constructor({
+    defaultItemLimit = Number.POSITIVE_INFINITY,
+    defaultSizeLimit = Number.POSITIVE_INFINITY
+  } = {}) {
+    this.sizeLimit = new TrackableValue<number>(defaultSizeLimit, validateLimitValue);
+    this.itemLimit = new TrackableValue<number>(defaultItemLimit, validateLimitValue);
+  }
+}
+
 @registerSharedObjectOwner(CHUNK_QUEUE_MANAGER_RPC_ID)
 export class ChunkQueueManager extends SharedObject {
   visibleChunksChanged = new NullarySignal();
@@ -56,16 +77,28 @@ export class ChunkQueueManager extends SharedObject {
 
   chunkUpdateDelay: number = 30;
 
-  constructor(rpc: RPC, public gl: GL, capacities: {
-    gpuMemory: AvailableCapacity,
-    systemMemory: AvailableCapacity,
-    download: AvailableCapacity
+  constructor(rpc: RPC, public gl: GL, public capacities: {
+    gpuMemory: CapacitySpecification,
+    systemMemory: CapacitySpecification,
+    download: CapacitySpecification
   }) {
     super();
+
+    const makeCapacityCounterparts = (capacity: CapacitySpecification) => {
+      return {
+        itemLimit:
+            this.registerDisposer(SharedWatchableValue.makeFromExisting(rpc, capacity.itemLimit))
+                .rpcId,
+        sizeLimit:
+            this.registerDisposer(SharedWatchableValue.makeFromExisting(rpc, capacity.sizeLimit))
+                .rpcId,
+      };
+    };
+
     this.initializeCounterpart(rpc, {
-      'gpuMemoryCapacity': capacities.gpuMemory.toObject(),
-      'systemMemoryCapacity': capacities.systemMemory.toObject(),
-      'downloadCapacity': capacities.download.toObject()
+      'gpuMemoryCapacity': makeCapacityCounterparts(capacities.gpuMemory),
+      'systemMemoryCapacity': makeCapacityCounterparts(capacities.systemMemory),
+      'downloadCapacity': makeCapacityCounterparts(capacities.download),
     });
   }
 

@@ -50,58 +50,6 @@ export enum ChunkPriorityTier {
 
 export const PREFETCH_PRIORITY_MULTIPLIER = 1e13;
 
-export class AvailableCapacity {
-  availableItems: number;
-  itemCapacity: number;
-  availableSize: number;
-  sizeCapacity: number;
-
-  constructor(maxItems: number, maxSize: number) {
-    /**
-     * Number of additional items that are available.
-     */
-    this.availableItems = maxItems;
-
-    /**
-     * Total number of items that can be accomodated.
-     */
-    this.itemCapacity = maxItems;
-
-    /**
-     * Aggregate additional size capacity that is available.
-     */
-    this.availableSize = maxSize;
-
-    /**
-     * Total aggregate item size that can be accomodated.
-     */
-    this.sizeCapacity = maxSize;
-  }
-
-  /**
-   * Adjust available capacity by the specified amounts.
-   */
-  adjust(items: number, size: number) {
-    this.availableItems += items;
-    this.availableSize += size;
-  }
-
-  toString() {
-    return `${this.availableItems}/${this.itemCapacity} items, ` +
-        `${this.availableSize}/${this.sizeCapacity} size`;
-  }
-
-  toObject() {
-    return {'itemCapacity': this.itemCapacity, 'sizeCapacity': this.sizeCapacity};
-  }
-
-  static fromObject(x: any) {
-    return new AvailableCapacity(x['itemCapacity'], x['sizeCapacity']);
-  }
-
-  static INFINITE = new AvailableCapacity(Number.POSITIVE_INFINITY, Number.POSITIVE_INFINITY);
-}
-
 export const CHUNK_QUEUE_MANAGER_RPC_ID = 'ChunkQueueManager';
 export const CHUNK_MANAGER_RPC_ID = 'ChunkManager';
 

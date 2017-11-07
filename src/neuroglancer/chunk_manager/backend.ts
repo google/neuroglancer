@@ -14,9 +14,11 @@
  * limitations under the License.
  */
 
-import {AvailableCapacity, CHUNK_MANAGER_RPC_ID, CHUNK_QUEUE_MANAGER_RPC_ID, ChunkPriorityTier, ChunkSourceParametersConstructor, ChunkState} from 'neuroglancer/chunk_manager/base';
+import {CHUNK_MANAGER_RPC_ID, CHUNK_QUEUE_MANAGER_RPC_ID, ChunkPriorityTier, ChunkSourceParametersConstructor, ChunkState} from 'neuroglancer/chunk_manager/base';
+import {SharedWatchableValue} from 'neuroglancer/shared_watchable_value';
 import {CancellationToken, CancellationTokenSource} from 'neuroglancer/util/cancellation';
-import {Disposable} from 'neuroglancer/util/disposable';
+import {Disposable, RefCounted} from 'neuroglancer/util/disposable';
+import {Borrowed} from 'neuroglancer/util/disposable';
 import {LinkedListOperations} from 'neuroglancer/util/linked_list';
 import LinkedList0 from 'neuroglancer/util/linked_list.0';
 import LinkedList1 from 'neuroglancer/util/linked_list.1';
@@ -375,6 +377,36 @@ function tryToFreeCapacity(
   return true;
 }
 
+class AvailableCapacity extends RefCounted {
+  currentSize: number = 0;
+  currentItems: number = 0;
+
+  capacityChanged = new NullarySignal();
+
+  constructor(
+      public itemLimit: Borrowed<SharedWatchableValue<number>>,
+      public sizeLimit: Borrowed<SharedWatchableValue<number>>) {
+    super();
+    this.registerDisposer(itemLimit.changed.add(this.capacityChanged.dispatch));
+    this.registerDisposer(sizeLimit.changed.add(this.capacityChanged.dispatch));
+  }
+
+  /**
+   * Adjust available capacity by the specified amounts.
+   */
+  adjust(items: number, size: number) {
+    this.currentItems -= items;
+    this.currentSize -= size;
+  }
+
+  get availableSize() {
+    return this.sizeLimit.value - this.currentSize;
+  }
+  get availableItems() {
+    return this.itemLimit.value - this.currentItems;
+  }
+}
+
 @registerSharedObject(CHUNK_QUEUE_MANAGER_RPC_ID)
 export class ChunkQueueManager extends SharedObjectCounterpart {
   gpuMemoryCapacity: AvailableCapacity;
@@ -414,9 +446,15 @@ export class ChunkQueueManager extends SharedObjectCounterpart {
 
   constructor(rpc: RPC, options: any) {
     super(rpc, options);
-    this.gpuMemoryCapacity = AvailableCapacity.fromObject(options['gpuMemoryCapacity']);
-    this.systemMemoryCapacity = AvailableCapacity.fromObject(options['systemMemoryCapacity']);
-    this.downloadCapacity = AvailableCapacity.fromObject(options['downloadCapacity']);
+    const getCapacity = (capacity: any) => {
+      const result = this.registerDisposer(
+          new AvailableCapacity(rpc.get(capacity['itemLimit']), rpc.get(capacity['sizeLimit'])));
+      result.capacityChanged.add(() => this.scheduleUpdate());
+      return result;
+    };
+    this.gpuMemoryCapacity = getCapacity(options['gpuMemoryCapacity']);
+    this.systemMemoryCapacity = getCapacity(options['systemMemoryCapacity']);
+    this.downloadCapacity = getCapacity(options['downloadCapacity']);
   }
 
   scheduleUpdate() {

@@ -15,8 +15,7 @@
  */
 
 import debounce from 'lodash/debounce';
-import {AvailableCapacity} from 'neuroglancer/chunk_manager/base';
-import {ChunkManager, ChunkQueueManager} from 'neuroglancer/chunk_manager/frontend';
+import {CapacitySpecification, ChunkManager, ChunkQueueManager} from 'neuroglancer/chunk_manager/frontend';
 import {defaultCredentialsManager} from 'neuroglancer/credentials_provider/default_manager';
 import {InputEventBindings as DataPanelInputEventBindings} from 'neuroglancer/data_panel_layout';
 import {DataSourceProvider} from 'neuroglancer/datasource';
@@ -30,7 +29,9 @@ import {LayerPanel} from 'neuroglancer/layer_panel';
 import {TopLevelLayerListSpecification} from 'neuroglancer/layer_specification';
 import {NavigationState, Pose} from 'neuroglancer/navigation_state';
 import {overlaysOpen} from 'neuroglancer/overlay';
-import {TrackableBoolean} from 'neuroglancer/trackable_boolean';
+import {TrackableBoolean, TrackableBooleanCheckbox} from 'neuroglancer/trackable_boolean';
+import {TrackableValue} from 'neuroglancer/trackable_value';
+import {ContextMenu} from 'neuroglancer/ui/context_menu';
 import {setupPositionDropHandlers} from 'neuroglancer/ui/position_drag_and_drop';
 import {AutomaticallyFocusedElement} from 'neuroglancer/util/automatic_focus';
 import {RefCounted} from 'neuroglancer/util/disposable';
@@ -43,6 +44,7 @@ import {CompoundTrackable} from 'neuroglancer/util/trackable';
 import {ViewerState, VisibilityPrioritySpecification} from 'neuroglancer/viewer_state';
 import {WatchableVisibilityPriority} from 'neuroglancer/visibility_priority/frontend';
 import {GL} from 'neuroglancer/webgl/context';
+import {NumberInputWidget} from 'neuroglancer/widget/number_input_widget';
 import {MousePositionWidget, PositionWidget, VoxelSizeWidget} from 'neuroglancer/widget/position_widget';
 import {RPC} from 'neuroglancer/worker_rpc';
 
@@ -54,9 +56,10 @@ require('neuroglancer/ui/button.css');
 export class DataManagementContext extends RefCounted {
   worker = new Worker('chunk_worker.bundle.js');
   chunkQueueManager = this.registerDisposer(new ChunkQueueManager(new RPC(this.worker), this.gl, {
-    gpuMemory: new AvailableCapacity(1e6, 1e9),
-    systemMemory: new AvailableCapacity(1e7, 2e9),
-    download: new AvailableCapacity(32, Number.POSITIVE_INFINITY)
+    gpuMemory: new CapacitySpecification({defaultItemLimit: 1e6, defaultSizeLimit: 1e9}),
+    systemMemory: new CapacitySpecification({defaultItemLimit: 1e7, defaultSizeLimit: 2e9}),
+    download: new CapacitySpecification(
+        {defaultItemLimit: 32, defaultSizeLimit: Number.POSITIVE_INFINITY}),
   }));
   chunkManager = this.registerDisposer(new ChunkManager(this.chunkQueueManager));
 
@@ -96,6 +99,33 @@ const defaultViewerOptions = {
   showLocation: true,
   resetStateWhenEmpty: true,
 };
+
+function makeViewerContextMenu(viewer: Viewer) {
+  const menu = new ContextMenu();
+  const {element} = menu;
+  element.classList.add('neuroglancer-viewer-context-menu');
+  const addLimitWidget = (label: string, limit: TrackableValue<number>) => {
+    const widget = menu.registerDisposer(new NumberInputWidget(limit, {label}));
+    widget.element.classList.add('neuroglancer-viewer-context-menu-limit-widget');
+    element.appendChild(widget.element);
+  };
+  addLimitWidget('GPU memory limit', viewer.chunkQueueManager.capacities.gpuMemory.sizeLimit);
+  addLimitWidget('System memory limit', viewer.chunkQueueManager.capacities.systemMemory.sizeLimit);
+  addLimitWidget(
+    'Concurrent chunk requests', viewer.chunkQueueManager.capacities.download.itemLimit);
+
+  const addCheckbox = (label: string, value: TrackableBoolean) => {
+    const labelElement = document.createElement('label');
+    labelElement.textContent = label;
+    const checkbox = menu.registerDisposer(new TrackableBooleanCheckbox(value));
+    labelElement.appendChild(checkbox.element);
+    element.appendChild(labelElement);
+  };
+  addCheckbox('Show axis lines', viewer.showAxisLines);
+  addCheckbox('Show scale bar', viewer.showScaleBar);
+  addCheckbox('Show cross sections in 3-d', viewer.showPerspectiveSliceViews);
+  return menu;
+}
 
 export class Viewer extends RefCounted implements ViewerState {
   navigationState = this.registerDisposer(new NavigationState());
@@ -144,7 +174,9 @@ export class Viewer extends RefCounted implements ViewerState {
     return this.options.element;
   }
 
-  get dataSourceProvider() { return this.options.dataSourceProvider; }
+  get dataSourceProvider() {
+    return this.options.dataSourceProvider;
+  }
 
   visible = true;
 
@@ -160,7 +192,8 @@ export class Viewer extends RefCounted implements ViewerState {
         perspectiveView: new EventActionMap(),
       },
       element = display.makeCanvasOverlayElement(),
-      dataSourceProvider = getDefaultDataSourceProvider({credentialsManager: defaultCredentialsManager}),
+      dataSourceProvider =
+          getDefaultDataSourceProvider({credentialsManager: defaultCredentialsManager}),
     } = options;
 
     this.registerDisposer(() => removeFromParent(this.element));
@@ -197,6 +230,11 @@ export class Viewer extends RefCounted implements ViewerState {
     state.add('perspectiveOrientation', this.perspectiveNavigationState.pose.orientation);
     state.add('perspectiveZoom', this.perspectiveNavigationState.zoomFactor);
     state.add('showSlices', this.showPerspectiveSliceViews);
+    state.add('gpuMemoryLimit', this.dataContext.chunkQueueManager.capacities.gpuMemory.sizeLimit);
+    state.add(
+        'systemMemoryLimit', this.dataContext.chunkQueueManager.capacities.systemMemory.sizeLimit);
+    state.add(
+        'concurrentDownloads', this.dataContext.chunkQueueManager.capacities.download.itemLimit);
 
     this.registerDisposer(this.navigationState.changed.add(() => {
       this.handleNavigationStateChanged();
@@ -255,6 +293,9 @@ export class Viewer extends RefCounted implements ViewerState {
     gridContainer.style.flexDirection = 'column';
     if (options.showHelpButton || options.showLocation) {
       const topRow = document.createElement('div');
+      topRow.title = 'Right click for settings';
+      const contextMenu = this.registerDisposer(makeViewerContextMenu(this));
+      contextMenu.registerParent(topRow);
       topRow.style.display = 'flex';
       topRow.style.flexDirection = 'row';
       topRow.style.alignItems = 'stretch';
@@ -262,8 +303,8 @@ export class Viewer extends RefCounted implements ViewerState {
         const voxelSizeWidget = this.registerDisposer(
             new VoxelSizeWidget(document.createElement('div'), this.navigationState.voxelSize));
         topRow.appendChild(voxelSizeWidget.element);
-        const positionWidget = this.registerDisposer(
-            new PositionWidget(this.navigationState.position));
+        const positionWidget =
+            this.registerDisposer(new PositionWidget(this.navigationState.position));
         topRow.appendChild(positionWidget.element);
         const mousePositionWidget = this.registerDisposer(new MousePositionWidget(
             document.createElement('div'), this.mouseState, this.navigationState.voxelSize));
