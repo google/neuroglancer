@@ -59,9 +59,7 @@ export class NumberInputWidget extends RefCounted {
       return;
     }
     try {
-      console.log('updating model', value);
       value = this.validator(value);
-      console.log('updating model new', value);
       this.model.value = value;
     } catch {
       this.updateView();
