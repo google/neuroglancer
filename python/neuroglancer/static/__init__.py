@@ -14,18 +14,8 @@
 
 import os
 import posixpath
-import pkg_resources
 
-content = {
-    k: (pkg_resources.resource_string(__name__, k)
-        if pkg_resources.resource_exists(__name__, k) else None)
-    for k in ['main.bundle.js', 'chunk_worker.bundle.js', 'styles.css', 'index.html']
-}
-
-main_js = content['main.bundle.js']
-chunk_worker_js = content['chunk_worker.bundle.js']
-styles_css = content['styles.css']
-index_html = content['index.html']
+static_content_filenames = set(['main.bundle.js', 'chunk_worker.bundle.js', 'styles.css', 'index.html'])
 
 mime_type_map = {
     '.css': 'text/css',
@@ -51,13 +41,14 @@ class StaticContentSource(object):
 
 class PkgResourcesContentSource(StaticContentSource):
     def get_content(self, name):
-        if name not in content:
+        import pkg_resources
+        if name not in static_content_filenames:
             raise ValueError('Invalid static resource name: %r' % name)
-        value = content.get(name)
-        if value is None:
-            raise ValueError(
-                'Static resources not built.  Run: "python setup.py bundle_client" or use an alternative static content source.')
-        return value
+        if pkg_resources.resource_exists(__name__, name):
+            return pkg_resources.resource_string(__name__, name)
+        raise ValueError(
+            'Static resources not built.  Run: "python setup.py bundle_client" or use an alternative static content source.'
+        )
 
 
 class HttpSource(StaticContentSource):
@@ -76,7 +67,7 @@ class HttpSource(StaticContentSource):
 class FileSource(StaticContentSource):
     def __init__(self, path=None, file_open=open):
         if path is None:
-            path = os.path.join(os.path.dirname(__file__), '../../../dist/dev')
+            path = os.path.join(os.path.dirname(__file__), '../../../dist/dev-python')
         self.file_path = path
         self.file_open = file_open
 
