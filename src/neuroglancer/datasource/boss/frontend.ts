@@ -19,7 +19,6 @@
  * Support for The Boss (https://github.com/jhuapl-boss) web services.
  */
 
-// import {Owned} from 'neuroglancer/util/disposable';
 import {ChunkManager, WithParameters} from 'neuroglancer/chunk_manager/frontend';
 import {WithCredentialsProvider} from 'neuroglancer/credentials_provider/chunk_source_frontend';
 import {CredentialsManager, CredentialsProvider} from 'neuroglancer/credentials_provider';
@@ -369,7 +368,7 @@ export function getExperimentInfo(
     chunkManager: ChunkManager, hostnames: string[], credentialsProvider: CredentialsProvider<BossToken>, experiment: string,
     collection: string): Promise<ExperimentInfo> {
   return chunkManager.memoize.getUncounted(
-      {'hostnames': hostnames, 'collection': collection, 'experiment': experiment},
+      {hostnames: hostnames, collection: collection, experiment: experiment, type: 'boss:getExperimentInfo'},
       () => makeRequest(hostnames, credentialsProvider, {
               method: 'GET',
               path: `/latest/collection/${collection}/experiment/${experiment}/`,
@@ -385,10 +384,11 @@ export function getChannelInfo(
     collection: string, channel: string): Promise<ChannelInfo> {
   return chunkManager.memoize.getUncounted(
       {
-        'hostnames': hostnames,
-        'collection': collection,
-        'experiment': experiment,
-        'channel': channel
+        hostnames: hostnames,
+        collection: collection,
+        experiment: experiment,
+        channel: channel,
+        type: 'boss:getChannelInfo'
       },
       () => makeRequest(hostnames, credentialsProvider, {
               method: 'GET',
@@ -403,11 +403,12 @@ export function getDownsampleInfoForChannel(
   return chunkManager.memoize
       .getUncounted(
           {
-            'hostnames': hostnames,
-            'collection': collection,
-            'experiment': experimentInfo.key,
-            'channel': channel,
-            'downsample': true
+            hostnames: hostnames,
+            collection: collection,
+            experiment: experimentInfo.key,
+            channel: channel,
+            downsample: true,
+            type: 'boss:getDownsampleInfoForChannel'
           },
           () => makeRequest(hostnames, credentialsProvider, {
             method: 'GET',
@@ -472,7 +473,7 @@ export function getShardedVolume(
   const parameters = parseQueryStringParameters(match[4] || '');
   // Warning: If additional arguments are added, the cache key should be updated as well.
   return chunkManager.memoize.getUncounted(
-      {'hostnames': hostnames, 'path': path},
+      {hostnames: hostnames, path: path, type: 'boss:getShardedVolume'},
       () => getExperimentInfo(chunkManager, hostnames, credentialsProvider, experiment, collection)
                 .then(experimentInfo => {
                   return getDownsampleInfoForChannel(
@@ -490,7 +491,7 @@ const urlPattern = /^((?:http|https):\/\/[^\/?]+)\/(.*)$/;
 export function getCollections(
     chunkManager: ChunkManager, hostnames: string[], credentialsProvider: CredentialsProvider<BossToken>) {
   return chunkManager.memoize.getUncounted(
-      hostnames,
+      {hostnames: hostnames, type: 'boss:getCollections'},
       () => makeRequest(
                 hostnames, credentialsProvider,
                 {method: 'GET', path: '/latest/collection/', responseType: 'json'})
@@ -502,7 +503,7 @@ export function getCollections(
 export function getExperiments(
     chunkManager: ChunkManager, hostnames: string[], credentialsProvider: CredentialsProvider<BossToken>, collection: string) {
   return chunkManager.memoize.getUncounted(
-      {'hostnames': hostnames, 'collection': collection},
+      {hostnames: hostnames, collection: collection, type: 'boss:getExperiments'},
       () => makeRequest(hostnames, credentialsProvider, {
               method: 'GET',
               path: `/latest/collection/${collection}/experiment/`,
@@ -518,7 +519,7 @@ export function getCoordinateFrame(
     experimentInfo: ExperimentInfo): Promise<ExperimentInfo> {
   let key = experimentInfo.coordFrameKey;
   return chunkManager.memoize.getUncounted(
-      {'hostnames': hostnames, 'coordinateframe': key},
+      {hostnames: hostnames, coordinateframe: key, experimentInfo: experimentInfo, type: 'boss:getCoordinateFrame'},
       () =>
           makeRequest(hostnames, credentialsProvider, {
             method: 'GET',
