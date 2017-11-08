@@ -26,8 +26,7 @@ export class Uint64EntryWidget extends RefCounted {
   element = document.createElement('form');
   label = document.createElement('label');
   input = document.createElement('input');
-  value = new Uint64();
-  valueEntered = new Signal<(value: Uint64) => void>();
+  valuesEntered = new Signal<(values: Uint64[]) => void>();
 
   constructor() {
     super();
@@ -37,10 +36,11 @@ export class Uint64EntryWidget extends RefCounted {
     label.appendChild(input);
     this.registerEventListener(element, 'submit', (event: Event) => {
       event.preventDefault();
-      if (this.validateInput()) {
+      const values = this.validateInput();
+      if (values !== undefined) {
         this.input.value = '';
         this.input.classList.remove('valid-input', 'invalid-input');
-        this.valueEntered.dispatch(this.value);
+        this.valuesEntered.dispatch(values);
       }
     });
     this.registerEventListener(element, 'input', () => {
@@ -56,8 +56,23 @@ export class Uint64EntryWidget extends RefCounted {
     });
   }
 
-  validateInput() {
-    return this.value.tryParseString(this.input.value);
+  validateInput(): Uint64[]|undefined {
+    let value = this.input.value;
+    value = value.replace(/[\s,\(\)\[\]\{\};]+/g, ' ');
+    value = value.trim();
+    const parts = value.split(' ');
+    if (parts.length === 0) {
+      return undefined;
+    }
+    const results: Uint64[] = [];
+    for (const part of parts) {
+      const x = new Uint64();
+      if (!x.tryParseString(part)) {
+        return undefined;
+      }
+      results.push(x);
+    }
+    return results;
   }
 
   disposed() {
