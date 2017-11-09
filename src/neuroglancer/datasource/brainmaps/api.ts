@@ -134,7 +134,8 @@ export function makeRequest(
         } else if (status === 401) {
           // 401: Authorization needed.  OAuth2 token may have expired.
           credentialsProvider.get(credentials, cancellationToken).then(start);
-        } else if (status === 504) {
+        } else if (status === 504 || status === 503) {
+          // 503: Service unavailable.  Retry.
           // 504: Gateway timeout.  Can occur if the server takes too long to reply.  Retry.
           credentialsProvider.get(/*invalidToken=*/undefined, cancellationToken).then(start);
         } else {
