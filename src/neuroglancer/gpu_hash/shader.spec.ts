@@ -301,10 +301,6 @@ gl_FragData[2] = y.high;
         }
         notPresentValues.push(x);
       }
-      let mungedTable: Uint32Array;
-      hashTable.tableWithMungedEmptyKey(table => {
-        mungedTable = new Uint32Array(table);
-      });
       function checkPresent(x: Uint64) {
         let temp = new Uint32Array(2);
         temp[0] = x.low;
