@@ -194,7 +194,7 @@ registerRPC('Chunk.update', function(x) {
   }
 });
 
-export interface ChunkSourceConstructor<Options, T = ChunkSource> {
+export interface ChunkSourceConstructor<Options, T extends ChunkSource = ChunkSource> {
   new(...args: any[]): T;
   encodeOptions(options: Options): {[key: string]: any};
 }
