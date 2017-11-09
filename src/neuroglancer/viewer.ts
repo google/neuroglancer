@@ -150,6 +150,7 @@ export class Viewer extends RefCounted implements ViewerState {
 
   layerSpecification: TopLevelLayerListSpecification;
   layout: RootLayoutContainer;
+  defaultLayout: string = '4panel';
 
   state = new CompoundTrackable();
 
@@ -325,7 +326,7 @@ export class Viewer extends RefCounted implements ViewerState {
       gridContainer.appendChild(topRow);
     }
 
-    this.layout = this.registerDisposer(new RootLayoutContainer(this, '4panel'));
+    this.layout = this.registerDisposer(new RootLayoutContainer(this, this.defaultLayout));
     gridContainer.appendChild(this.layout.element);
     this.display.onResize();
 
