@@ -583,7 +583,6 @@ export class ChunkQueueManager extends SharedObjectCounterpart {
     let promotionCandidates = this.gpuMemoryPromotionQueue.candidates();
     let evictionCandidates = this.gpuMemoryEvictionQueue.candidates();
     let capacity = this.gpuMemoryCapacity;
-    let visibleChunksChanged = false;
     while (true) {
       let promotionCandidate = promotionCandidates.next().value;
       if (promotionCandidate === undefined) {
@@ -598,9 +597,6 @@ export class ChunkQueueManager extends SharedObjectCounterpart {
         }
         this.copyChunkToGPU(promotionCandidate);
         this.updateChunkState(promotionCandidate, ChunkState.GPU_MEMORY);
-        if (priorityTier === ChunkPriorityTier.VISIBLE) {
-          visibleChunksChanged = true;
-        }
       }
     }
   }

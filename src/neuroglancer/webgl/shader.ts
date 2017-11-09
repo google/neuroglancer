@@ -105,9 +105,11 @@ export function getShader(gl: WebGLRenderingContext, source: string, shaderType:
       });
       s += `\n</pre>`;
       let w = window.open('about:blank', '_blank');
-      try {
-        w.document.write(s);
-      } catch (writeError) {
+      if (w !== null) {
+        try {
+          w.document.write(s);
+        } catch (writeError) {
+        }
       }
     }
 

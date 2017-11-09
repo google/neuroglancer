@@ -223,7 +223,7 @@ export class ChunkManager extends SharedObject {
       const newSource = new constructorFunction(this, options);
       newSource.initializeCounterpart(this.rpc!, {});
       return newSource;
-    });
+    }) as T;
   }
 }
 

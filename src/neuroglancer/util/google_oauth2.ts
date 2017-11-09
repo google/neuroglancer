@@ -250,9 +250,11 @@ export function authenticateGoogleOAuth2(
   } else {
     if (!cancellationToken.isCanceled) {
       const newWindow = open(url);
-      request.finished.add(() => {
-        newWindow.close();
-      });
+      if (newWindow !== null) {
+        request.finished.add(() => {
+          newWindow.close();
+        });
+      }
     }
   }
   return promise;
