@@ -53,7 +53,6 @@ const DEFAULT_DATA_SOURCES = exports.DEFAULT_DATA_SOURCES = [
   'neuroglancer/datasource/render',
   'neuroglancer/datasource/openconnectome',
   'neuroglancer/datasource/precomputed',
-  // 'neuroglancer/datasource/python',
   'neuroglancer/datasource/nifti',
   {source: 'neuroglancer/datasource/vtk', register: null},
   {source: 'neuroglancer/datasource/csv', register: null},
@@ -358,7 +357,7 @@ function makePythonClientOptions(options) {
   const srcDir = resolveReal(__dirname, '../src');
   options = Object.assign({}, options);
   options.extraDataSources = [...(options.extraDataSources || []),
-                              'neuroglancer/datasource/python',
+                              {source: 'neuroglancer/datasource/python', register: null},
                              ];
   options.frontendModules = options.frontendModules || [resolveReal(srcDir, 'main_python.ts')];
   options.registerCredentials = false;

@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-import {CHUNK_MANAGER_RPC_ID, CHUNK_QUEUE_MANAGER_RPC_ID, ChunkSourceParametersConstructor, ChunkState} from 'neuroglancer/chunk_manager/base';
+import {CHUNK_MANAGER_RPC_ID, CHUNK_QUEUE_MANAGER_RPC_ID, CHUNK_SOURCE_INVALIDATE_RPC_ID, ChunkSourceParametersConstructor, ChunkState} from 'neuroglancer/chunk_manager/base';
 import {SharedWatchableValue} from 'neuroglancer/shared_watchable_value';
 import {TrackableValue} from 'neuroglancer/trackable_value';
 import {Borrowed} from 'neuroglancer/util/disposable';
@@ -117,46 +117,55 @@ export class ChunkQueueManager extends SharedObject {
     if (deadline === null) {
       deadline = Date.now() + 30;
     }
+    let visibleChunksChanged = false;
     while (true) {
       if (Date.now() > deadline) {
         // No time to perform chunk update now, we will wait some more.
         setTimeout(this.processPendingChunkUpdates.bind(this), this.chunkUpdateDelay);
-        return;
+        break;
       }
       let update = this.pendingChunkUpdates;
       let {rpc} = this;
-      let source = rpc!.get(update['source']);
+      const source = <ChunkSource>rpc!.get(update['source']);
       if (DEBUG_CHUNK_UPDATES) {
         console.log(
             `${Date.now()} Chunk.update processed: ${source.rpcId} ` +
             `${update['id']} ${update['state']}`);
       }
-      let newState: number = update['state'];
-      if (newState === ChunkState.EXPIRED) {
-        // FIXME: maybe use freeList for chunks here
-        source.deleteChunk(update['id']);
-      } else {
-        let chunk: Chunk;
-        let key = update['id'];
-        if (update['new']) {
-          chunk = source.getChunk(update);
-          source.addChunk(key, chunk);
-        } else {
-          chunk = source.chunks.get(key);
+      if (update['id'] === undefined) {
+        // Invalidate source.
+        for (const chunkKey of source.chunks.keys()) {
+          source.deleteChunk(chunkKey);
         }
-        let oldState = chunk.state;
-        if (newState !== oldState) {
-          switch (newState) {
-            case ChunkState.GPU_MEMORY:
-              // console.log("Copying to GPU", chunk);
-              chunk.copyToGPU(this.gl);
-              this.visibleChunksChanged.dispatch();
-              break;
-            case ChunkState.SYSTEM_MEMORY:
-              chunk.freeGPUMemory(this.gl);
-              break;
-            default:
-              throw new Error(`INTERNAL ERROR: Invalid chunk state: ${ChunkState[newState]}`);
+        visibleChunksChanged = true;
+      } else {
+        let newState: number = update['state'];
+        if (newState === ChunkState.EXPIRED) {
+          // FIXME: maybe use freeList for chunks here
+          source.deleteChunk(update['id']);
+        } else {
+          let chunk: Chunk;
+          let key = update['id'];
+          if (update['new']) {
+            chunk = source.getChunk(update);
+            source.addChunk(key, chunk);
+          } else {
+            chunk = source.chunks.get(key)!;
+          }
+          let oldState = chunk.state;
+          if (newState !== oldState) {
+            switch (newState) {
+              case ChunkState.GPU_MEMORY:
+                // console.log("Copying to GPU", chunk);
+                chunk.copyToGPU(this.gl);
+                visibleChunksChanged = true;
+                break;
+              case ChunkState.SYSTEM_MEMORY:
+                chunk.freeGPUMemory(this.gl);
+                break;
+              default:
+                throw new Error(`INTERNAL ERROR: Invalid chunk state: ${ChunkState[newState]}`);
+            }
           }
         }
       }
@@ -166,6 +175,9 @@ export class ChunkQueueManager extends SharedObject {
         this.pendingChunkUpdatesTail = null;
         break;
       }
+    }
+    if (visibleChunksChanged) {
+      this.visibleChunksChanged.dispatch();
     }
   }
 }
@@ -244,6 +256,10 @@ export class ChunkSource extends SharedObject {
   }
 
   deleteChunk(key: string) {
+    const chunk = this.chunks.get(key)!;
+    if (chunk.state === ChunkState.GPU_MEMORY) {
+      chunk.freeGPUMemory(this.gl);
+    }
     this.chunks.delete(key);
   }
 
@@ -256,6 +272,13 @@ export class ChunkSource extends SharedObject {
    */
   getChunk(_x: any): Chunk {
     throw new Error('Not implemented.');
+  }
+
+  /**
+   * Invalidates the chunk cache.  Operates asynchronously.
+   */
+  invalidateCache(): void {
+    this.rpc!.invoke(CHUNK_SOURCE_INVALIDATE_RPC_ID, {'id': this.rpcId});
   }
 
   static encodeOptions(_options: {}): {[key: string]: any} {

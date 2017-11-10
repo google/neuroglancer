@@ -19,23 +19,59 @@
  * Support for Python integration.
  */
 
-import {ChunkManager, WithParameters} from 'neuroglancer/chunk_manager/frontend';
+import {ChunkManager, ChunkSource, ChunkSourceConstructor, WithParameters} from 'neuroglancer/chunk_manager/frontend';
 import {DataSource} from 'neuroglancer/datasource';
-import {MeshSourceParameters, SkeletonSourceParameters, VolumeChunkEncoding, VolumeChunkSourceParameters} from 'neuroglancer/datasource/python/base';
+import {MeshSourceParameters, PythonSourceParameters, SkeletonSourceParameters, VolumeChunkEncoding, VolumeChunkSourceParameters} from 'neuroglancer/datasource/python/base';
 import {MeshSource} from 'neuroglancer/mesh/frontend';
 import {VertexAttributeInfo} from 'neuroglancer/skeleton/base';
 import {SkeletonSource} from 'neuroglancer/skeleton/frontend';
 import {DataType, DEFAULT_MAX_VOXELS_PER_CHUNK_LOG2, getNearIsotropicBlockSize, getTwoDimensionalBlockSize} from 'neuroglancer/sliceview/base';
 import {VolumeChunkSpecification, VolumeSourceOptions, VolumeType} from 'neuroglancer/sliceview/volume/base';
-import {VolumeChunkSource, MultiscaleVolumeChunkSource as GenericMultiscaleVolumeChunkSource} from 'neuroglancer/sliceview/volume/frontend';
+import {MultiscaleVolumeChunkSource as GenericMultiscaleVolumeChunkSource, VolumeChunkSource} from 'neuroglancer/sliceview/volume/frontend';
+import {Borrowed, Owned} from 'neuroglancer/util/disposable';
 import {mat4, vec3} from 'neuroglancer/util/geom';
 import {openHttpRequest, sendHttpRequest} from 'neuroglancer/util/http_request';
 import {parseArray, parseFixedLengthArray, verify3dDimensions, verify3dScale, verify3dVec, verifyEnumString, verifyObject, verifyObjectAsMap, verifyObjectProperty, verifyPositiveInt, verifyString} from 'neuroglancer/util/json';
+import {getObjectId} from 'neuroglancer/util/object_id';
+
+interface PythonChunkSource extends ChunkSource {
+  dataSource: PythonDataSource;
+  generation: number;
+}
+
+function WithPythonDataSource<BaseOptions extends {parameters: PythonSourceParameters}, TBase extends ChunkSourceConstructor<BaseOptions>>(
+    Base: TBase) {
+  type Options = BaseOptions&{
+    dataSource: Borrowed<PythonDataSource>;
+    generation: number;
+  };
+  class C extends Base {
+    dataSource: Owned<PythonDataSource>;
+    generation: number;
+    parameters: PythonSourceParameters;
+    constructor(...args: any[]) {
+      super(...args);
+      const options: Options = args[1];
+      const dataSource = this.dataSource = this.registerDisposer(options.dataSource.addRef());
+      this.generation = options.generation;
+      const key = options.parameters.key;
+      dataSource.registerSource(key, this);
+    }
+    static encodeOptions(options: Options) {
+      const encoding = super.encodeOptions(options);
+      // `generation` is not encoded in cache key, since it is not fixed.
+      encoding['dataSource'] = getObjectId(options.dataSource);
+      return encoding;
+    }
+  }
+  return C;
+}
 
 class PythonVolumeChunkSource extends
-(WithParameters(VolumeChunkSource, VolumeChunkSourceParameters)) {}
+(WithPythonDataSource(WithParameters(VolumeChunkSource, VolumeChunkSourceParameters))) {
+}
 class PythonMeshSource extends
-(WithParameters(MeshSource, MeshSourceParameters)) {}
+(WithPythonDataSource(WithParameters(MeshSource, MeshSourceParameters))) {}
 
 interface ScaleInfo {
   key: string;
@@ -63,15 +99,18 @@ export class MultiscaleVolumeChunkSource implements GenericMultiscaleVolumeChunk
   volumeType: VolumeType;
   encoding: VolumeChunkEncoding;
   scales: ScaleInfo[][];
+  generation: number;
 
-  constructor(public chunkManager: ChunkManager, public key: string, public response: any) {
+  // TODO(jbms): Properly handle reference counting of `dataSource`.
+  constructor(public dataSource: Borrowed<PythonDataSource>, public chunkManager: ChunkManager, public key: string, public response: any) {
     verifyObject(response);
     this.dataType = verifyObjectProperty(response, 'dataType', x => verifyEnumString(x, DataType));
     this.volumeType =
         verifyObjectProperty(response, 'volumeType', x => verifyEnumString(x, VolumeType));
     this.numChannels = verifyObjectProperty(response, 'numChannels', verifyPositiveInt);
     this.encoding =
-        verifyObjectProperty(response, 'encoding', x => verifyEnumString(x, VolumeChunkEncoding));
+      verifyObjectProperty(response, 'encoding', x => verifyEnumString(x, VolumeChunkEncoding));
+    this.generation = verifyObjectProperty(response, 'generation', x => x);
     let maxVoxelsPerChunkLog2 = verifyObjectProperty(
         response, 'maxVoxelsPerChunkLog2',
         x => x === undefined ? DEFAULT_MAX_VOXELS_PER_CHUNK_LOG2 : verifyPositiveInt(x));
@@ -152,14 +191,19 @@ export class MultiscaleVolumeChunkSource implements GenericMultiscaleVolumeChunk
         chunkDataSize: scaleInfo.chunkDataSize!,
         volumeSourceOptions,
       });
-      return this.chunkManager.getChunkSource(
-          PythonVolumeChunkSource,
-          {spec, parameters: {key: `${this.key}/${scaleInfo.key}`, encoding: encoding}});
+      return this.chunkManager.getChunkSource(PythonVolumeChunkSource, {
+        spec,
+        dataSource: this.dataSource,
+        generation: this.generation,
+        parameters: {key: this.key, scaleKey: scaleInfo.key, encoding: encoding}
+      });
     }));
   }
 
   getMeshSource() {
     return this.chunkManager.getChunkSource(PythonMeshSource, {
+      dataSource: this.dataSource,
+      generation: this.generation,
       parameters: {
         key: this.key,
       }
@@ -168,7 +212,7 @@ export class MultiscaleVolumeChunkSource implements GenericMultiscaleVolumeChunk
 }
 
 export class PythonSkeletonSource extends
-(WithParameters(SkeletonSource, SkeletonSourceParameters)) {
+(WithPythonDataSource(WithParameters(SkeletonSource, SkeletonSourceParameters))) {
   get skeletonVertexCoordinatesInVoxels() {
     return false;
   }
@@ -189,38 +233,75 @@ function parseSkeletonVertexAttributes(spec: string): Map<string, VertexAttribut
   return verifyObjectAsMap(JSON.parse(spec), parseVertexAttributeInfo);
 }
 
-export function getSkeletonSource(chunkManager: ChunkManager, key: string) {
-  const skeletonKeyPattern = /^([^\/?]+)\?(.*)$/;
-
-  let match = key.match(skeletonKeyPattern);
-  if (match === null) {
-    throw new Error(`Invalid python volume path: ${JSON.stringify(key)}`);
-  }
-  return chunkManager.getChunkSource(PythonSkeletonSource, {
-    parameters: {
-      key: match[1],
-      vertexAttributes: parseSkeletonVertexAttributes(match[2]),
-    }
-  });
-}
-
-export function getVolume(chunkManager: ChunkManager, key: string) {
-  return chunkManager.memoize.getUncounted(
-      {'type': 'python:MultiscaleVolumeChunkSource', key},
-      () => sendHttpRequest(openHttpRequest(`/neuroglancer/info/${key}`), 'json')
-                .then(
-                    response =>
-                        new MultiscaleVolumeChunkSource(chunkManager, key, response)));
-}
-
 export class PythonDataSource extends DataSource {
+  private sources = new Map<string, Set<PythonChunkSource>>();
+  sourceGenerations = new Map<string, number>();
+
+  registerSource(key: string, source: PythonChunkSource) {
+    let existingSet = this.sources.get(key);
+    if (existingSet === undefined) {
+      existingSet = new Set();
+      this.sources.set(key, existingSet);
+    }
+    const generation = this.sourceGenerations.get(key);
+    if (generation !== undefined) {
+      source.generation = generation;
+    }
+    existingSet.add(source);
+    source.registerDisposer(() => {
+      existingSet!.delete(source);
+      if (existingSet!.size === 0) {
+        this.sources.delete(key);
+      }
+    });
+  }
+
+  setSourceGeneration(key: string, generation: number) {
+    const {sourceGenerations} = this;
+    if (sourceGenerations.get(key) === generation) {
+      return;
+    }
+    sourceGenerations.set(key, generation);
+    const sources = this.sources.get(key);
+    if (sources !== undefined) {
+      for (const source of sources) {
+        if (source.generation !== generation) {
+          source.generation = generation;
+          source.invalidateCache();
+        }
+      }
+    }
+  }
+
+  deleteSourceGeneration(key: string) {
+    this.sourceGenerations.delete(key);
+  }
+
   get description() {
     return 'Python-served volume';
   }
   getVolume(chunkManager: ChunkManager, key: string) {
-    return getVolume(chunkManager, key);
+    return chunkManager.memoize.getUncounted(
+        {'type': 'python:MultiscaleVolumeChunkSource', key},
+        () => sendHttpRequest(openHttpRequest(`/neuroglancer/info/${key}`), 'json')
+                  .then(
+                      response =>
+                          new MultiscaleVolumeChunkSource(this, chunkManager, key, response)));
   }
   getSkeletonSource(chunkManager: ChunkManager, key: string) {
-    return getSkeletonSource(chunkManager, key);
+    const skeletonKeyPattern = /^([^\/?]+)\?(.*)$/;
+
+    let match = key.match(skeletonKeyPattern);
+    if (match === null) {
+      throw new Error(`Invalid python volume path: ${JSON.stringify(key)}`);
+    }
+    return chunkManager.getChunkSource(PythonSkeletonSource, {
+      dataSource: this,
+      generation: -1,
+      parameters: {
+        key: match[1],
+        vertexAttributes: parseSkeletonVertexAttributes(match[2]),
+      }
+    });
   }
 }

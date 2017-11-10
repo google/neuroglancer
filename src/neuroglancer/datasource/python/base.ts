@@ -22,21 +22,22 @@ export enum VolumeChunkEncoding {
   RAW
 }
 
-export class VolumeChunkSourceParameters {
+export class PythonSourceParameters {
   key: string;
+}
+
+export class VolumeChunkSourceParameters extends PythonSourceParameters {
+  scaleKey: string;
   encoding: VolumeChunkEncoding;
 
   static RPC_ID = 'python/VolumeChunkSource';
 }
 
-export class MeshSourceParameters {
-  key: string;
-
+export class MeshSourceParameters extends PythonSourceParameters {
   static RPC_ID = 'python/MeshSource';
 }
 
-export class SkeletonSourceParameters {
-  key: string;
+export class SkeletonSourceParameters extends PythonSourceParameters {
   vertexAttributes: Map<string, VertexAttributeInfo>;
 
   static RPC_ID = 'python/SkeletonSource';

@@ -47,6 +47,8 @@ class JsonObjectWrapper(object):
     def __init__(self, json_data=None, _readonly=False, **kwargs):
         if json_data is None:
             json_data = collections.OrderedDict()
+        elif not isinstance(json_data, dict):
+            raise TypeError
         object.__setattr__(self, '_json_data', json_data)
         object.__setattr__(self, '_cached_wrappers', dict())
         object.__setattr__(self, '_lock', threading.RLock())
@@ -145,9 +147,21 @@ def optional(wrapper, default_value=None):
         modified_wrapper.supports_readonly = True
     return modified_wrapper
 
+class MapBase(object):
+    pass
+
 def typed_string_map(wrapped_type, validator=None):
     validator = _normalize_validator(wrapped_type, validator)
-    class Map(JsonObjectWrapper):
+    class Map(JsonObjectWrapper, MapBase):
+        supports_validation = True
+
+        def __init__(self, json_data=None, _readonly=False):
+            if isinstance(json_data, MapBase):
+                json_data = json_data.to_json()
+            for v in six.viewvalues(json_data):
+                validator(v)
+            super(Map, self).__init__(json_data, _readonly=_readonly)
+
         def clear(self):
             with self._lock:
                 self._cached_wrappers.clear()

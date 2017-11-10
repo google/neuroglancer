@@ -21,6 +21,7 @@ import numpy as np
 
 from . import downsample, downsample_scales
 from .chunks import encode_jpeg, encode_npz, encode_raw
+from . import trackable_state
 from .random_token import make_random_token
 
 
@@ -43,7 +44,7 @@ def get_scale_key(scale):
     return '%d,%d,%d' % scale
 
 
-class LocalVolume(object):
+class LocalVolume(trackable_state.ChangeNotifier):
     def __init__(self,
                  data,
                  offset=None,
@@ -88,6 +89,7 @@ class LocalVolume(object):
                 - lock_boundary_vertices: bool.  Retain all vertices along mesh surface boundaries,
                   which can only occur at the boundary of the volume.  Defaults to true.
         """
+        super(LocalVolume, self).__init__()
         if hasattr(data, 'attrs'):
             if 'resolution' in data.attrs:
                 if voxel_size is None:
@@ -131,7 +133,7 @@ class LocalVolume(object):
         self.volume_type = volume_type
 
         self._mesh_generator = None
-        self._mesh_generator_pending = False
+        self._mesh_generator_pending = None
         self._mesh_generator_lock = threading.Condition()
         self._mesh_options = mesh_options.copy() if mesh_options is not None else dict()
 
@@ -173,7 +175,9 @@ class LocalVolume(object):
         info = dict(volumeType=self.volume_type,
                     dataType=self.data_type,
                     encoding=self.encoding,
-                    numChannels=self.num_channels)
+                    numChannels=self.num_channels,
+                    generation=self.change_count,
+        )
         if self.max_voxels_per_chunk_log2 is not None:
             info['maxVoxelsPerChunkLog2'] = self.max_voxels_per_chunk_log2
 
@@ -240,32 +244,38 @@ class LocalVolume(object):
     def _get_mesh_generator(self):
         if self._mesh_generator is not None:
             return self._mesh_generator
-        with self._mesh_generator_lock:
-            if self._mesh_generator is not None:
-                return self._mesh_generator
-            if self._mesh_generator_pending:
-                while self._mesh_generator is None:
-                    self._mesh_generator_lock.wait()
-                return self._mesh_generator
-            try:
-                from . import _neuroglancer
-            except ImportError:
-                raise MeshImplementationNotAvailable()
-            if not (self.num_channels == 1 and
-                    (self.data_type == 'uint8' or self.data_type == 'uint16' or
-                     self.data_type == 'uint32' or self.data_type == 'uint64')):
-                raise MeshesNotSupportedForVolume()
-            self._mesh_generator_pending = True
-        if len(self.data.shape) == 4:
-            data = self.data[0, :, :, :]
-        else:
-            data = self.data
-        self._mesh_generator = _neuroglancer.OnDemandObjectMeshGenerator(
-            data, self.voxel_size, self.offset / self.voxel_size, **self._mesh_options)
-        with self._mesh_generator_lock:
-            self._mesh_generator_pending = False
-            self._mesh_generator_lock.notify_all()
-        return self._mesh_generator
+        while True:
+            with self._mesh_generator_lock:
+                if self._mesh_generator is not None:
+                    return self._mesh_generator
+                if self._mesh_generator_pending is not None:
+                    while self._mesh_generator is None:
+                        self._mesh_generator_lock.wait()
+                    if self._mesh_generator is not None:
+                        return self._mesh_generator
+                try:
+                    from . import _neuroglancer
+                except ImportError:
+                    raise MeshImplementationNotAvailable()
+                if not (self.num_channels == 1 and
+                        (self.data_type == 'uint8' or self.data_type == 'uint16' or
+                         self.data_type == 'uint32' or self.data_type == 'uint64')):
+                    raise MeshesNotSupportedForVolume()
+                pending_obj = object()
+                self._mesh_generator_pending = pending_obj
+            if len(self.data.shape) == 4:
+                data = self.data[0, :, :, :]
+            else:
+                data = self.data
+            new_mesh_generator = _neuroglancer.OnDemandObjectMeshGenerator(
+                data, self.voxel_size, self.offset / self.voxel_size, **self._mesh_options)
+            with self._mesh_generator_lock:
+                if self._mesh_generator_pending is not pending_obj:
+                    continue
+                self._mesh_generator = new_mesh_generator
+                self._mesh_generator_pending = False
+                self._mesh_generator_lock.notify_all()
+            return new_mesh_generator
 
     def __deepcopy__(self, memo):
         """Since this type is immutable, we don't need to deepcopy it.
@@ -273,3 +283,10 @@ class LocalVolume(object):
         Actually deep copying would intefere with the use of deepcopy by JsonObjectWrapper.
         """
         return self
+
+    def invalidate(self):
+        """Mark the data invalidated.  Clients will refetch the volume."""
+        with self._mesh_generator_lock:
+            self._mesh_generator_pending = None
+            self._mesh_generator = None
+        self._dispatch_changed_callbacks()

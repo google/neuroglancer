@@ -27,20 +27,26 @@ class ConcurrentModificationError(RuntimeError):
 class ChangeNotifier(object):
     def __init__(self):
         self.__changed_callbacks = set()
+        self.change_count = 0
+        self.__lock = threading.Lock()
 
     def add_changed_callback(self, callback):
         """Registers a callback to be invoked when the state changes.
 
         The callback is invoked immediately with no arguments.  The callback must not block.
         """
-        self.__changed_callbacks.add(callback)
+        with self.__lock:
+            self.__changed_callbacks.add(callback)
 
     def remove_changed_callback(self, callback):
-        self.__changed_callbacks.remove(callback)
+        with self.__lock:
+            self.__changed_callbacks.remove(callback)
 
     def _dispatch_changed_callbacks(self):
-        for callback in self.__changed_callbacks:
-            callback()
+        with self.__lock:
+            self.change_count += 1
+            for callback in self.__changed_callbacks:
+                callback()
 
 class TrackableState(ChangeNotifier):
     def __init__(self, wrapper_type, transform_state=None):
@@ -59,10 +65,10 @@ class TrackableState(ChangeNotifier):
         self._transform_state = transform_state
 
     def set_state(self, new_state, generation=None, existing_generation=None):
-        new_state = self._transform_state(new_state)
         with self._lock:
             if existing_generation is not None and self._generation != existing_generation:
                 raise ConcurrentModificationError
+            new_state = self._transform_state(new_state)
             if new_state != self._raw_state or (generation is not None and generation != self._generation):
                 if generation is None:
                     generation = make_random_token()

@@ -18,6 +18,8 @@ import contextlib
 import json
 import re
 
+import six
+
 from . import local_volume, trackable_state, viewer_config_state, viewer_state
 from .json_utils import decode_json, encode_json, json_encoder_default
 from .random_token import make_random_token
@@ -33,7 +35,10 @@ class LocalVolumeManager(trackable_state.ChangeNotifier):
         if v.token not in self.volumes:
             self.volumes[v.token] = v
             self._dispatch_changed_callbacks()
-        return 'python://%s%s' % (self.__token_prefix, v.token)
+        return 'python://%s' % (self.get_volume_key(v))
+
+    def get_volume_key(self, v):
+        return self.__token_prefix + v.token
 
     def update(self, json_str):
         pattern = '|'.join(self.volumes)
@@ -58,18 +63,47 @@ class ViewerCommonBase(object):
         def set_actions(actions):
             def func(s):
                 s.actions = actions
+
             self.config_state.retry_txn(func)
+
         self.actions = viewer_config_state.Actions(set_actions)
 
         self.volume_manager = LocalVolumeManager(self.token + '.')
 
+        self.__watched_volumes = dict()
+
+        self.volume_manager.add_changed_callback(self._handle_volumes_changed)
+
+    def _handle_volumes_changed(self):
+        volumes = self.volume_manager.volumes
+        for key in volumes:
+            if key not in self.__watched_volumes:
+                volume = volumes[key]
+                self.__watched_volumes[key] = volume
+                volume.add_changed_callback(self._update_source_generations)
+        keys_to_remove = [key for key in self.__watched_volumes if key not in volumes]
+        for key in keys_to_remove:
+            volume = self.__watched_volumes.pop(key)
+            volume.remove_changed_callback(self._update_source_generations)
+
+    def _update_source_generations(self):
+        def func(s):
+            volume_manager = self.volume_manager
+            s.source_generations = {
+                volume_manager.get_volume_key(x): x.change_count for x in six.viewvalues(self.volume_manager.volumes)
+            }
+
+        self.config_state.retry_txn(func)
+
     def _transform_viewer_state(self, new_state):
         if isinstance(new_state, viewer_state.ViewerState):
             new_state = new_state.to_json()
+
             def encoder(x):
                 if isinstance(x, local_volume.LocalVolume):
                     return self.volume_manager.register_volume(x)
                 return json_encoder_default(x)
+
             new_state = decode_json(json.dumps(new_state, default=encoder))
         return new_state
 
@@ -99,7 +133,6 @@ class ViewerBase(ViewerCommonBase):
         return self.shared_state.retry_txn(*args, **kwargs)
 
 
-
 class UnsynchronizedViewerBase(ViewerCommonBase):
     def __init__(self):
         super(UnsynchronizedViewerBase, self).__init__()
@@ -116,5 +149,5 @@ class UnsynchronizedViewerBase(ViewerCommonBase):
     def txn(self):
         yield self.state
 
-    def retry_txn(self, func, retries=None): # pylint: disable=unused-argument
+    def retry_txn(self, func, retries=None):  # pylint: disable=unused-argument
         return func(self.state)

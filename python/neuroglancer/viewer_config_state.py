@@ -102,6 +102,7 @@ class ConfigState(JsonObjectWrapper):
     actions = wrapped_property('actions', typed_set(text_type))
     input_event_bindings = inputEventBindings = wrapped_property('inputEventBindings', InputEventBindings)
     status_messages = statusMessages = wrapped_property('statusMessages', typed_string_map(text_type))
+    source_generations = sourceGenerations = wrapped_property('sourceGenerations', typed_string_map(int))
 
 class PrivateState(JsonObjectWrapper):
     __slots__ = ()

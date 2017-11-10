@@ -42,7 +42,7 @@ chunkDecoders.set(VolumeChunkEncoding.RAW, decodeRawChunk);
 
   download(chunk: VolumeChunk, cancellationToken: CancellationToken) {
     let {parameters} = this;
-    let path = `/neuroglancer/${this.encoding}/${parameters.key}`;
+    let path = `/neuroglancer/${this.encoding}/${parameters.key}/${parameters.scaleKey}`;
     {
       // chunkPosition must not be captured, since it will be invalidated by the next call to
       // computeChunkBounds.

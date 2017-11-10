@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-import {CHUNK_MANAGER_RPC_ID, CHUNK_QUEUE_MANAGER_RPC_ID, ChunkPriorityTier, ChunkSourceParametersConstructor, ChunkState} from 'neuroglancer/chunk_manager/base';
+import {CHUNK_MANAGER_RPC_ID, CHUNK_QUEUE_MANAGER_RPC_ID, CHUNK_SOURCE_INVALIDATE_RPC_ID, ChunkPriorityTier, ChunkSourceParametersConstructor, ChunkState} from 'neuroglancer/chunk_manager/base';
 import {SharedWatchableValue} from 'neuroglancer/shared_watchable_value';
 import {CancellationToken, CancellationTokenSource} from 'neuroglancer/util/cancellation';
 import {Disposable, RefCounted} from 'neuroglancer/util/disposable';
@@ -27,7 +27,7 @@ import {ComparisonFunction, PairingHeapOperations} from 'neuroglancer/util/pairi
 import PairingHeap0 from 'neuroglancer/util/pairing_heap.0';
 import PairingHeap1 from 'neuroglancer/util/pairing_heap.1';
 import {NullarySignal} from 'neuroglancer/util/signal';
-import {initializeSharedObjectCounterpart, registerSharedObject, registerSharedObjectOwner, RPC, SharedObject, SharedObjectCounterpart} from 'neuroglancer/worker_rpc';
+import {initializeSharedObjectCounterpart, registerRPC, registerSharedObject, registerSharedObjectOwner, RPC, SharedObject, SharedObjectCounterpart} from 'neuroglancer/worker_rpc';
 
 const DEBUG_CHUNK_UPDATES = false;
 
@@ -634,7 +634,7 @@ export class ChunkQueueManager extends SharedObjectCounterpart {
 
   private processQueuePromotions_() {
     let queueManager = this;
-    function evict(chunk: Chunk) {
+    const evict = (chunk: Chunk) => {
       switch (chunk.state) {
         case ChunkState.DOWNLOADING:
           cancelChunkDownload(chunk);
@@ -647,8 +647,8 @@ export class ChunkQueueManager extends SharedObjectCounterpart {
           break;
       }
       // Note: After calling this, chunk may no longer be valid.
-      chunk.source!.chunkManager.queueManager.updateChunkState(chunk, ChunkState.QUEUED);
-    }
+      this.updateChunkState(chunk, ChunkState.QUEUED);
+    };
     let promotionCandidates = this.queuedPromotionQueue.candidates();
     let downloadEvictionCandidates = this.downloadEvictionQueue.candidates();
     let systemMemoryEvictionCandidates = this.systemMemoryEvictionQueue.candidates();
@@ -695,6 +695,23 @@ export class ChunkQueueManager extends SharedObjectCounterpart {
           `${this.numFailed}, DOWNLOAD: ${this.downloadCapacity}, ` +
           `MEM: ${this.systemMemoryCapacity}, GPU: ${this.gpuMemoryCapacity}`);
     }
+  }
+
+  invalidateSourceCache(source: ChunkSource) {
+    for (const chunk of source.chunks.values()) {
+      switch (chunk.state) {
+        case ChunkState.DOWNLOADING:
+          cancelChunkDownload(chunk);
+          break;
+        case ChunkState.SYSTEM_MEMORY_WORKER:
+          chunk.freeSystemMemory();
+          break;
+      }
+      // Note: After calling this, chunk may no longer be valid.
+      this.updateChunkState(chunk, ChunkState.QUEUED);
+    }
+    this.rpc!.invoke('Chunk.update', {'source': source.rpcId});
+    this.scheduleUpdate();
   }
 }
 
@@ -836,3 +853,8 @@ export function withChunkManager<T extends {new (...args: any[]): SharedObject}>
     }
   };
 }
+
+registerRPC(CHUNK_SOURCE_INVALIDATE_RPC_ID, function(x) {
+  const source = <ChunkSource>this.get(x['id']);
+  source.chunkManager.queueManager.invalidateSourceCache(source);
+});

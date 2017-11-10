@@ -19,13 +19,16 @@
  * Sets up the Python-integrated neuroglancer viewer.
  */
 
-import {getDefaultDataSourceProvider} from 'neuroglancer/datasource/default_provider';
-import {TrackableBasedCredentialsManager} from 'neuroglancer/python_integration/credentials_provider';
+import debounce from 'lodash/debounce';
 import {CachingCredentialsManager} from 'neuroglancer/credentials_provider';
+import {getDefaultDataSourceProvider} from 'neuroglancer/datasource/default_provider';
+import {PythonDataSource} from 'neuroglancer/datasource/python/frontend';
+import {TrackableBasedCredentialsManager} from 'neuroglancer/python_integration/credentials_provider';
 import {TrackableBasedEventActionMap} from 'neuroglancer/python_integration/event_action_map';
 import {RemoteActionHandler} from 'neuroglancer/python_integration/remote_actions';
 import {TrackableBasedStatusMessages} from 'neuroglancer/python_integration/remote_status_messages';
 import {ServerConnection} from 'neuroglancer/python_integration/server_connection';
+import {TrackableValue} from 'neuroglancer/trackable_value';
 import {bindDefaultCopyHandler, bindDefaultPasteHandler} from 'neuroglancer/ui/default_clipboard_handling';
 import {setDefaultInputEventBindings} from 'neuroglancer/ui/default_input_event_bindings';
 import {makeDefaultViewer} from 'neuroglancer/ui/default_viewer';
@@ -55,6 +58,31 @@ function makeTrackableBasedEventActionMaps(inputEventBindings: InputEventBinding
   return config;
 }
 
+function makeTrackableBasedSourceGenerationHandler(pythonDataSource: PythonDataSource) {
+  const state = new TrackableValue<{[key: string]: number}>({}, x => {
+    for (const key of Object.keys(x)) {
+      const value = x[key];
+      if (typeof value !== 'number') {
+        throw new Error(`Expected key ${
+            JSON.stringify(key)} to have a numeric value, but received: ${JSON.stringify(value)}.`);
+      }
+    }
+    return x;
+  });
+  state.changed.add(debounce(() => {
+    const generations = state.value;
+    for (const key of Object.keys(generations)) {
+      pythonDataSource.setSourceGeneration(key, generations[key]);
+    }
+    for (const key of pythonDataSource.sourceGenerations.keys()) {
+      if (!generations.hasOwnProperty(key)) {
+        pythonDataSource.deleteSourceGeneration(key);
+      }
+    }
+  }, 0));
+  return state;
+}
+
 window.addEventListener('DOMContentLoaded', () => {
 
   const configState = new CompoundTrackable();
@@ -64,11 +92,16 @@ window.addEventListener('DOMContentLoaded', () => {
   configState.add('credentials', credentialsManager.inputState);
   privateState.add('credentials', credentialsManager.outputState);
 
+  const dataSourceProvider = getDefaultDataSourceProvider(
+    {credentialsManager: new CachingCredentialsManager(credentialsManager)});
+  const pythonDataSource = new PythonDataSource();
+  dataSourceProvider.register('python', pythonDataSource);
+  configState.add('sourceGenerations', makeTrackableBasedSourceGenerationHandler(pythonDataSource));
+
   let viewer = (<any>window)['viewer'] = makeDefaultViewer({
     showLayerDialog: false,
     resetStateWhenEmpty: false,
-    dataSourceProvider: getDefaultDataSourceProvider(
-        {credentialsManager: new CachingCredentialsManager(credentialsManager)})
+    dataSourceProvider,
   });
   setDefaultInputEventBindings(viewer.inputEventBindings);
   configState.add(
