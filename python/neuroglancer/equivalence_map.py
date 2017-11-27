@@ -36,6 +36,7 @@ class EquivalenceMap(object):
             self._parents = {}
             self._prev_next = {}
             self._min_values = {}
+            self._readonly = False
             if existing is not None:
                 if isinstance(existing, dict):
                     existing = six.viewitems(existing)
@@ -43,9 +44,8 @@ class EquivalenceMap(object):
                     self.union(*group)
         self._readonly = _readonly
 
-
     def _get_representative(self, obj):
-        """Find and return the name of the set containing the object."""
+        """Finds and returns the root of the set containing `obj`."""
 
         if obj not in self._parents:
             self._parents[obj] = obj
@@ -88,6 +88,10 @@ class EquivalenceMap(object):
         self._min_values.clear()
 
     def union(self, *args):
+        """Unions the equivalence classes containing the elements in `*args`."""
+        if self._readonly:
+            raise AttributeError
+
         if len(args) == 0:
             return None
         if len(args) == 1:
@@ -97,9 +101,6 @@ class EquivalenceMap(object):
         return result
 
     def _union_pair(self, a, b):
-        if self._readonly:
-            raise AttributeError
-
         a = self._get_representative(a)
         b = self._get_representative(b)
         if a == b:
@@ -131,7 +132,10 @@ class EquivalenceMap(object):
         return self._min_values[a]
 
     def members(self, x):
-        x = self[x]
+        """Yields the members of the equivalence class containing `x`."""
+        if x not in self._parents:
+            yield x
+            return
         cur_x = x
         while True:
             yield cur_x
@@ -140,12 +144,14 @@ class EquivalenceMap(object):
                 break
 
     def sets(self):
+        """Returns the equivalence classes as a set of sets."""
         sets = {}
         for x in self._parents:
             sets.setdefault(self[x], set()).add(x)
         return frozenset(frozenset(v) for v in six.viewvalues(sets))
 
     def to_json(self):
+        """Returns the equivalence classes a sorted list of sorted lists."""
         sets = self.sets()
         return sorted(sorted(x) for x in sets)
 
@@ -163,9 +169,13 @@ class EquivalenceMap(object):
         return result
 
     def copy(self):
+        """Returns a copy of the equivalence map."""
         return EquivalenceMap(self)
 
     def delete_set(self, x):
+        """Removes the equivalence class containing `x`."""
+        if x not in self._parents:
+            return
         members = list(self.members(x))
         for v in members:
             del self._parents[v]
@@ -174,6 +184,7 @@ class EquivalenceMap(object):
             del self._min_values[v]
 
     def isolate_element(self, x):
+        """Isolates `x` from its equivalence class."""
         members = list(self.members(x))
         self.delete_set(x)
-        self.union(v for v in members if v != x)
+        self.union(*(v for v in members if v != x))
