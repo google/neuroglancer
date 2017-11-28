@@ -90,7 +90,7 @@ for convenience during development.
 For example, while developing the Neuroglancer client, you can run the shell command
 
 ```shell
-npm run dev-server
+npm run dev-server-python
 ```
 to start the `webpack-dev-server` on <http://localhost:8080> and then call
 
