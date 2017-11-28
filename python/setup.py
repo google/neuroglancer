@@ -92,7 +92,7 @@ else:
 
 setup(
     name='neuroglancer',
-    version='0.0.6',
+    version='1.0.0',
     description='Python data backend for neuroglancer, a WebGL-based viewer for volumetric data',
     author='Jeremy Maitin-Shepard, Jan Funke',
     author_email='jbms@google.com, jfunke@iri.upc.edu',
