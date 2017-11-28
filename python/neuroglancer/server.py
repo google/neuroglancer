@@ -268,3 +268,8 @@ def start():
 def register_viewer(viewer):
     start()
     global_server.viewers[viewer.token] = viewer
+
+def defer_callback(callback, *args, **kwargs):
+    """Register `callback` to run in the server event loop thread."""
+    start()
+    global_server.ioloop.add_callback(lambda: callback(*args, **kwargs))
