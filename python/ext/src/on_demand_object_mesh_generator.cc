@@ -29,7 +29,13 @@
 
 #include <memory>
 
+#if __APPLE__
+#include <libkern/OSByteOrder.h>
+#define htole32(x) OSSwapHostToLittleInt32(x)
+#else
 #include <endian.h>
+#endif
+
 
 namespace neuroglancer {
 namespace meshing {

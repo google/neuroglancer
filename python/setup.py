@@ -4,6 +4,7 @@ from __future__ import print_function
 import os
 import shutil
 import subprocess
+import platform
 from distutils.command.build import build
 
 from setuptools import Extension, find_packages, setup
@@ -90,6 +91,10 @@ if USE_OMP:
 else:
     openmp_flags = []
 
+extra_compile_args = ['-std=c++11', '-fvisibility=hidden', '-O3'] + openmp_flags
+if platform.system() == 'Darwin':
+    extra_compile_args.insert(0, '-stdlib=libc++')
+
 setup(
     name='neuroglancer',
     version='1.0.1',
@@ -120,7 +125,7 @@ setup(
             sources=[os.path.join(src_dir, name) for name in local_sources],
             language='c++',
             include_dirs=[np.get_include(), openmesh_dir],
-            extra_compile_args=['-std=c++11', '-fvisibility=hidden', '-O3'] + openmp_flags,
+            extra_compile_args=extra_compile_args,
             extra_link_args=openmp_flags),
     ],
     cmdclass={'bundle_client': bundle_client},
