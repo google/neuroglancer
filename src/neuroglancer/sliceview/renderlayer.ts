@@ -122,6 +122,14 @@ export abstract class RenderLayer extends GenericRenderLayer {
     return builder.build();
   }
 
+  setGLBlendMode(gl: WebGLRenderingContext, renderLayerNum: number): void {
+    // Default blend mode for non-blend-mode-aware layers
+    if (renderLayerNum > 0) {
+      gl.enable(gl.BLEND);
+      gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
+    }
+  }
+
   abstract defineShader(builder: ShaderBuilder): void;
   abstract beginSlice(_sliceView: SliceView): ShaderProgram;
   abstract endSlice(shader: ShaderProgram): void;

@@ -22,6 +22,7 @@ import {Overlay} from 'neuroglancer/overlay';
 import {VolumeType} from 'neuroglancer/sliceview/volume/base';
 import {FRAGMENT_MAIN_START, getTrackableFragmentMain, ImageRenderLayer} from 'neuroglancer/sliceview/volume/image_renderlayer';
 import {trackableAlphaValue} from 'neuroglancer/trackable_alpha';
+import {trackableBlendModeValue} from 'neuroglancer/trackable_blend';
 import {mat4} from 'neuroglancer/util/geom';
 import {makeWatchableShaderError} from 'neuroglancer/webgl/dynamic_shader';
 import {RangeWidget} from 'neuroglancer/widget/range';
@@ -34,6 +35,7 @@ require('neuroglancer/maximize_button.css');
 export class ImageUserLayer extends UserLayer {
   volumePath: string;
   opacity = trackableAlphaValue(0.5);
+  blendMode = trackableBlendModeValue();
   fragmentMain = getTrackableFragmentMain();
   shaderError = makeWatchableShaderError();
   renderLayer: ImageRenderLayer;
@@ -45,6 +47,7 @@ export class ImageUserLayer extends UserLayer {
       throw new Error('Invalid image layer specification');
     }
     this.opacity.restoreState(x['opacity']);
+    this.blendMode.restoreState(x['blend']);
     this.fragmentMain.restoreState(x['shader']);
     this.transform.restoreState(x['transform']);
     this.registerDisposer(this.fragmentMain.changed.add(() => {
@@ -56,6 +59,7 @@ export class ImageUserLayer extends UserLayer {
           if (!this.wasDisposed) {
             let renderLayer = this.renderLayer = new ImageRenderLayer(volume, {
               opacity: this.opacity,
+              blendMode: this.blendMode,
               fragmentMain: this.fragmentMain,
               shaderError: this.shaderError,
               sourceOptions: {transform: mat4.clone(this.transform.transform)},
@@ -69,6 +73,7 @@ export class ImageUserLayer extends UserLayer {
     let x: any = {'type': 'image'};
     x['source'] = this.volumePath;
     x['opacity'] = this.opacity.toJSON();
+    x['blend'] = this.blendMode.toJSON();
     x['shader'] = this.fragmentMain.toJSON();
     x['transform'] = this.transform.toJSON();
     return x;
