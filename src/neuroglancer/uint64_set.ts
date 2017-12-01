@@ -91,6 +91,8 @@ export class Uint64Set extends SharedObjectCounterpart {
     for (let id of this) {
       result.push(id.toString());
     }
+    // Need to sort entries, otherwise serialization changes every time.
+    result.sort();
     return result;
   }
 }
