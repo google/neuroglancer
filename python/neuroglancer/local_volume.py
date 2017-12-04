@@ -110,7 +110,7 @@ class LocalVolume(trackable_state.ChangeNotifier):
         if offset is None:
             offset = (0, 0, 0)
         self.offset = tuple(offset)
-        self.data_type = data.dtype.name
+        self.data_type = np.dtype(data.dtype).name
         if self.data_type == 'float64':
             self.data_type = 'float32'
         self.encoding = encoding
