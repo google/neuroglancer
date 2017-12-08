@@ -40,6 +40,22 @@ function modifyViewerOptions(options) {
   return options;
 }
 
-exports.getViewerConfig = function(options) {
+function getViewerConfig(options) {
   return original_webpack_helpers.getViewerConfig(modifyViewerOptions(options));
 };
+
+function getViewerConfigFromEnv(options, env) {
+  env = env || 'dev';
+  const envParts = new Set(env.split('-'));
+  options = Object.assign({}, options);
+  if (envParts.has('min')) {
+    options.minify = true;
+  }
+  if (envParts.has('python')) {
+    options = makePythonClientOptions(options);
+  }
+  return getViewerConfig(options);
+}
+
+exports.getViewerConfig = getViewerConfig;
+exports.getViewerConfigFromEnv=getViewerConfigFromEnv;
