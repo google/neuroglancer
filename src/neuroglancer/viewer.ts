@@ -135,7 +135,8 @@ export class Viewer extends RefCounted implements ViewerState {
   showAxisLines = new TrackableBoolean(true, true);
   showScaleBar = new TrackableBoolean(true, true);
   showPerspectiveSliceViews = new TrackableBoolean(true, true);
-
+  contextMenu: ContextMenu;
+  
   layerPanel: LayerPanel;
   layerSelectedValues =
       this.registerDisposer(new LayerSelectedValues(this.layerManager, this.mouseState));
@@ -294,7 +295,7 @@ export class Viewer extends RefCounted implements ViewerState {
     if (options.showHelpButton || options.showLocation) {
       const topRow = document.createElement('div');
       topRow.title = 'Right click for settings';
-      const contextMenu = this.registerDisposer(makeViewerContextMenu(this));
+      const contextMenu = this.contextMenu = this.registerDisposer(makeViewerContextMenu(this));
       contextMenu.registerParent(topRow);
       topRow.style.display = 'flex';
       topRow.style.flexDirection = 'row';
