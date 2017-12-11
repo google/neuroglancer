@@ -72,6 +72,7 @@
     "json-loader": "^0.5.4",
     "lodash": "^4.13.1",
     "nifti-reader-js": "^0.5.3",
+    "npm": "^5.6.0",
     "pako": "^1.0.6",
     "raw-loader": "^0.5.1",
     "sockjs-client": "^1.1.1",
