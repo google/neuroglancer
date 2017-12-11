@@ -21,5 +21,5 @@ const webpack_helpers = require('./webpack_helpers');
 module.exports = env => {
   env = env || 'dev';
   return webpack_helpers.getViewerConfigFromEnv(
-      {outputPath: path.resolve(__dirname, '../dist/' + outputSuffix)}, env);
+      {outputPath: path.resolve(__dirname, '../dist/' + env)}, env);
 };
