@@ -17,7 +17,7 @@
 'use strict';
 
 const path = require('path');
-const original_webpack_helpers = require('neuroglancer/config/webpack_helpers');
+const originalWebpackHelpers = require('neuroglancer/config/webpack_helpers');
 const resolveReal = require('neuroglancer/config/resolve_real');
 
 function modifyViewerOptions(options) {
@@ -40,6 +40,6 @@ function modifyViewerOptions(options) {
   return options;
 }
 
-exports.getViewerConfig = function(options) {
-  return original_webpack_helpers.getViewerConfig(modifyViewerOptions(options));
+exports.getViewerConfigFromEnv = function(options, env) {
+  return originalWebpackHelpers.getViewerConfigFromEnv(modifyViewerOptions(options), env);
 };
