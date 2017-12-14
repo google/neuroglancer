@@ -64,6 +64,7 @@ const DEFAULT_SUPPORTED_LAYERS = exports.DEFAULT_SUPPORTED_LAYERS = [
   'neuroglancer/segmentation_user_layer',
   'neuroglancer/single_mesh_user_layer',
   'neuroglancer/annotation/user_layer',
+  'neuroglancer/synapse/user_layer',
 ];
 
 /**

@@ -247,6 +247,26 @@ float exactDot(vec3 a, vec3 b) {
 }
 `;
 
+export var gsls_fuzzyEqual = `
+const float FLT_EPSILON = 0.000001;
+bool fuzzyEqual(vec4 a, vec4 b) {
+  const float EPSILON = 0.00001;
+  return all(lessThan(abs(a - b), vec4(EPSILON)));
+}
+bool fuzzyEqual(vec3 a, vec3 b) {
+  const float EPSILON = 0.000001;
+  return all(lessThan(abs(a - b), vec3(EPSILON)));
+}
+bool fuzzyEqual(vec2 a, vec2 b) {
+  const float EPSILON = 0.000001;
+  return all(lessThan(abs(a - b), vec2(EPSILON)));
+}
+bool fuzzyEqual(float a, float b) {
+  const float EPSILON = 0.000001;
+  return abs(a - b) < EPSILON;
+}
+`;
+
 export function fract(x: number) {
   return x - Math.floor(x);
 }
