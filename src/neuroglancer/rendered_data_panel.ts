@@ -15,7 +15,7 @@
  */
 
 import {DisplayContext, RenderedPanel} from 'neuroglancer/display_context';
-import {MouseSelectionState} from 'neuroglancer/layer';
+import {MouseSelectionState, ActionState} from 'neuroglancer/layer';
 import {NavigationState} from 'neuroglancer/navigation_state';
 import {AutomaticallyFocusedElement} from 'neuroglancer/util/automatic_focus';
 import {ActionEvent, EventActionMap, registerActionListener} from 'neuroglancer/util/event_action_map';
@@ -60,6 +60,7 @@ export abstract class RenderedDataPanel extends RenderedPanel {
 
     this.registerEventListener(element, 'mousemove', this.onMousemove.bind(this));
     this.registerEventListener(element, 'mouseleave', this.onMouseout.bind(this));
+    this.registerEventListener(element, 'mousedown', this.onMousedown.bind(this));
 
     registerActionListener(element, 'snap', () => {
       this.navigationState.pose.snap();
@@ -140,6 +141,17 @@ export abstract class RenderedDataPanel extends RenderedPanel {
     let {mouseState} = this.viewer;
     mouseState.updater = this.mouseStateUpdater;
     mouseState.triggerUpdate();
+  }
+
+  onMousedown(event: MouseEvent) {
+    this.onMousemove(event);
+    let {mouseState} = this.viewer;
+    if (event.button === 0) {
+      if (mouseState.actionState !== ActionState.INACTIVE) {
+        let [mode, action] = mouseState.updateAction();
+        this.viewer.layerManager.invokeAction(`${mode}-select-${action}`);
+      }
+    }
   }
 
   disposed() {

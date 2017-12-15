@@ -14,12 +14,14 @@
  * limitations under the License.
  */
 
+import debounce from 'lodash/debounce';
 import {Chunk, ChunkSource} from 'neuroglancer/chunk_manager/backend';
 import {ChunkPriorityTier, ChunkState} from 'neuroglancer/chunk_manager/base';
+import {ChunkedGraph} from 'neuroglancer/chunked_graph/backend';
 import {FRAGMENT_SOURCE_RPC_ID, MESH_LAYER_RPC_ID} from 'neuroglancer/mesh/base';
 import {SegmentationLayerSharedObjectCounterpart} from 'neuroglancer/segmentation_display_state/backend';
 import {getObjectKey} from 'neuroglancer/segmentation_display_state/base';
-import {forEachVisibleSegment, Bounds} from 'neuroglancer/segmentation_display_state/base';
+import {forEachVisibleSegment3D, Bounds} from 'neuroglancer/segmentation_display_state/base';
 import {CancellationToken} from 'neuroglancer/util/cancellation';
 import {convertEndian32, Endianness} from 'neuroglancer/util/endian';
 import {vec3} from 'neuroglancer/util/geom';
@@ -30,6 +32,8 @@ import {registerSharedObject, RPC} from 'neuroglancer/worker_rpc';
 
 const MESH_OBJECT_MANIFEST_CHUNK_PRIORITY = 100;
 const MESH_OBJECT_FRAGMENT_CHUNK_PRIORITY = 50;
+
+const DEBUG = false;
 
 export type FragmentId = string;
 
@@ -65,6 +69,12 @@ export class ManifestChunk extends Chunk {
     if (this.priorityTier < ChunkPriorityTier.RECENT) {
       this.source!.chunkManager.scheduleUpdateChunkPriorities();
     }
+  }
+
+  downloadFailed(error: any) {
+    // Missing manifest means remeshing is in progress. Initiate loading of child chunks.
+    super.downloadFailed(error);
+    this.source!.chunkManager.scheduleUpdateChunkPriorities();
   }
 
   toString() {
@@ -299,13 +309,41 @@ export class FragmentSource extends ChunkSource {
 @registerSharedObject(MESH_LAYER_RPC_ID)
 export class MeshLayer extends SegmentationLayerSharedObjectCounterpart {
   source: MeshSource;
+  chunkedGraph: ChunkedGraph;
+  private requestedChildChunks: Map<string, { add: Uint64[], delete: Uint64[] }>;
+
+  private debouncedHandleChildChunks = debounce(() => {
+    this.handleChildChunks();
+  }, 100);
 
   constructor(rpc: RPC, options: any) {
     super(rpc, options);
     this.source = this.registerDisposer(rpc.getRef<MeshSource>(options['source']));
+    this.chunkedGraph = this.registerDisposer(rpc.getRef<ChunkedGraph>(options['chunkedGraph']));
     this.registerDisposer(this.chunkManager.recomputeChunkPriorities.add(() => {
       this.updateChunkPriorities();
     }));
+
+    this.requestedChildChunks = new Map<string, { add: Uint64[], delete: Uint64[] }>();
+  }
+
+  private handleChildChunks() {
+    for (const [rootId, elements] of this.requestedChildChunks.entries()) {
+      let rootTmp = Uint64.parseString(rootId);
+      if (!this.rootSegments.has(rootTmp)) {
+        console.log('Adding 3D children aborted due to missing root.');
+        continue;
+      }
+
+      for (let e of elements.add) {
+        this.visibleSegments3D.add(e);
+        this.segmentEquivalences.link(rootTmp, e);
+      }
+      for (let e of elements.delete) {
+        this.visibleSegments3D.delete(e);
+      }
+    }
+    this.requestedChildChunks.clear();
   }
 
   private updateChunkPriorities() {
@@ -316,15 +354,50 @@ export class MeshLayer extends SegmentationLayerSharedObjectCounterpart {
     const priorityTier = getPriorityTier(visibility);
     const basePriority = getBasePriority(visibility);
     const {source, chunkManager} = this;
-    forEachVisibleSegment(this, objectId => {
+    forEachVisibleSegment3D(this, (objectId, rootObjectId) => {
       let manifestChunk = source.getChunk(objectId, this.clipBounds.value);
       chunkManager.requestChunk(
           manifestChunk, priorityTier, basePriority + MESH_OBJECT_MANIFEST_CHUNK_PRIORITY);
-      if (manifestChunk.state === ChunkState.SYSTEM_MEMORY_WORKER) {
-        for (let fragmentId of manifestChunk.fragmentIds!) {
-          let fragmentChunk = source.getFragmentChunk(manifestChunk, fragmentId);
-          chunkManager.requestChunk(
-              fragmentChunk, priorityTier, basePriority + MESH_OBJECT_FRAGMENT_CHUNK_PRIORITY);
+      switch(manifestChunk.state) {
+        case ChunkState.SYSTEM_MEMORY_WORKER: {
+          for (let fragmentId of manifestChunk.fragmentIds!) {
+            let fragmentChunk = source.getFragmentChunk(manifestChunk, fragmentId);
+            chunkManager.requestChunk(
+                fragmentChunk, priorityTier, basePriority + MESH_OBJECT_FRAGMENT_CHUNK_PRIORITY);
+          }
+          break;
+        }
+        case ChunkState.FAILED: {
+          if (this.chunkedGraph.url === '') {
+            break;
+          }
+          manifestChunk.state = ChunkState.REQUESTING_CHILDREN;
+          let segmentID = objectId.clone();
+          let rootID = rootObjectId.clone();
+          this.chunkedGraph.getChildren(objectId).then(children => {
+            if (DEBUG) { // with open 3D view, quickly select/deselect some segments
+              if (segmentID.low !== objectId.low || segmentID.high !== objectId.high) {
+                console.log(`SegmentID ${segmentID.toString()} does not match ObjectID ${objectId.toString()}`);
+              }
+              if (rootID.low !== rootObjectId.low || rootID.high !== rootObjectId.high) {
+                console.log(`RootID ${rootID.toString()} does not match RootObjectID ${rootObjectId.toString()}`);
+              }
+            }
+
+            manifestChunk.state = ChunkState.FAILED;
+            if (!this.rootSegments.has(rootID)) {
+              console.log('Adding 3D chunks aborted due to missing root object.');
+              return;
+            }
+            if (!this.requestedChildChunks.has(rootID.toString())) {
+              this.requestedChildChunks.set(rootID.toString(), { add: new Array<Uint64>(), delete: new Array<Uint64>() });
+            }
+            this.requestedChildChunks.get(rootID.toString())!.add.push(...children);
+            this.requestedChildChunks.get(rootID.toString())!.delete.push(segmentID);
+
+            this.debouncedHandleChildChunks();
+          });
+          break;
         }
       }
     });

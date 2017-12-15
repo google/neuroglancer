@@ -63,6 +63,8 @@ export function getDefaultRenderedDataPanelBindings() {
           'shift+arrowup': 'rotate-relative-x+',
           'shift+arrowleft': 'rotate-relative-y-',
           'shift+arrowright': 'rotate-relative-y+',
+          'keym': 'two-point-merge',
+          'keyc': 'two-point-cut',
 
           'at:control+wheel': {action: 'zoom-via-wheel', preventDefault: true},
           'at:wheel': {action: 'z+1-via-wheel', preventDefault: true},

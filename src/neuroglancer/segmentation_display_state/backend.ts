@@ -29,22 +29,25 @@ import {SharedWatchableValue} from 'neuroglancer/shared_watchable_value';
 const Base = withSharedVisibility(withChunkManager(SharedObjectCounterpart));
 
 export class SegmentationLayerSharedObjectCounterpart extends Base implements VisibleSegmentsState {
-  visibleSegments: Uint64Set;
+  rootSegments: Uint64Set;
+  visibleSegments3D: Uint64Set;
   clipBounds: SharedWatchableValue<Bounds>;
   segmentEquivalences: SharedDisjointUint64Sets;
 
   constructor(rpc: RPC, options: any) {
     super(rpc, options);
-    // No need to increase the reference count of visibleSegments or
+    // No need to increase the reference count of rootSegments, visibleSegments3D or
     // segmentEquivalences since our owner will hold a reference to their owners.
-    this.visibleSegments = <Uint64Set>rpc.get(options['visibleSegments']);
+    this.rootSegments = <Uint64Set>rpc.get(options['rootSegments']);
+    this.visibleSegments3D = <Uint64Set>rpc.get(options['visibleSegments3D']);
     this.clipBounds = <SharedWatchableValue<Bounds>>rpc.get(options['clipBounds']);
     this.segmentEquivalences = <SharedDisjointUint64Sets>rpc.get(options['segmentEquivalences']);
 
     const scheduleUpdateChunkPriorities = () => {
       this.chunkManager.scheduleUpdateChunkPriorities();
     };
-    this.registerDisposer(this.visibleSegments.changed.add(scheduleUpdateChunkPriorities));
+    this.registerDisposer(this.rootSegments.changed.add(scheduleUpdateChunkPriorities));
+    this.registerDisposer(this.visibleSegments3D.changed.add(scheduleUpdateChunkPriorities));
     this.registerDisposer(this.segmentEquivalences.changed.add(scheduleUpdateChunkPriorities));
     this.registerDisposer(this.clipBounds.changed.add(scheduleUpdateChunkPriorities));
   }

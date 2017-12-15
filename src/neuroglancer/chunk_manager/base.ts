@@ -35,7 +35,10 @@ export enum ChunkState {
   // Download failed.
   FAILED = 6,
 
-  EXPIRED = 7
+  EXPIRED = 7,
+
+  // Download failed, 
+  REQUESTING_CHILDREN = 8,
 }
 
 export enum ChunkPriorityTier {

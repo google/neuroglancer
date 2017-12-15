@@ -22,13 +22,14 @@ import {DataSourceProvider} from 'neuroglancer/datasource';
 import {getDefaultDataSourceProvider} from 'neuroglancer/datasource/default_provider';
 import {DisplayContext} from 'neuroglancer/display_context';
 import {InputEventBindingHelpDialog} from 'neuroglancer/help/input_event_bindings';
-import {LayerManager, LayerSelectedValues, MouseSelectionState} from 'neuroglancer/layer';
+import {LayerManager, LayerSelectedValues, MouseSelectionState, ActionState, ActionMode} from 'neuroglancer/layer';
 import {LayerDialog} from 'neuroglancer/layer_dialog';
 import {RootLayoutContainer} from 'neuroglancer/layer_groups_layout';
 import {LayerPanel} from 'neuroglancer/layer_panel';
 import {TopLevelLayerListSpecification} from 'neuroglancer/layer_specification';
 import {NavigationState, Pose} from 'neuroglancer/navigation_state';
 import {overlaysOpen} from 'neuroglancer/overlay';
+import {StatusMessage} from 'neuroglancer/status';
 import {TrackableBoolean, TrackableBooleanCheckbox} from 'neuroglancer/trackable_boolean';
 import {TrackableValue} from 'neuroglancer/trackable_value';
 import {ContextMenu} from 'neuroglancer/ui/context_menu';
@@ -376,6 +377,30 @@ export class Viewer extends RefCounted implements ViewerState {
         this.layerManager.invokeAction(action);
       });
     }
+
+    this.bindAction('two-point-merge', () => {
+      this.mouseState.toggleAction();
+      if (this.mouseState.actionState === ActionState.INACTIVE) {
+        this.mouseState.setMode(ActionMode.NONE);
+        StatusMessage.showTemporaryMessage('Merge mode deactivated.');
+      }
+      else {
+        this.mouseState.setMode(ActionMode.MERGE);
+        StatusMessage.showTemporaryMessage('Merge mode activated.');
+      }
+    });
+
+    this.bindAction('two-point-cut', () => {
+      this.mouseState.toggleAction();
+      if (this.mouseState.actionState === ActionState.INACTIVE) {
+        this.mouseState.setMode(ActionMode.NONE);
+        StatusMessage.showTemporaryMessage('Split mode deactivated.');
+      }
+      else {
+        this.mouseState.setMode(ActionMode.SPLIT);
+        StatusMessage.showTemporaryMessage('Split mode activated.');
+      }
+    });
 
     this.bindAction('help', () => this.showHelpDialog());
 

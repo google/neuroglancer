@@ -18,7 +18,7 @@ import {ChunkManager} from 'neuroglancer/chunk_manager/frontend';
 import {CoordinateTransform} from 'neuroglancer/coordinate_transform';
 import {LayerSelectedValues, UserLayer} from 'neuroglancer/layer';
 import {SegmentColorHash} from 'neuroglancer/segment_color';
-import {forEachVisibleSegment, getObjectKey, VisibleSegmentsState} from 'neuroglancer/segmentation_display_state/base';
+import {forEachVisibleSegment2D, forEachVisibleSegment3D, getObjectKey, VisibleSegmentsState, forEachRootSegment} from 'neuroglancer/segmentation_display_state/base';
 import {TrackableAlphaValue} from 'neuroglancer/trackable_alpha';
 import {RefCounted} from 'neuroglancer/util/disposable';
 import {vec4} from 'neuroglancer/util/geom';
@@ -34,8 +34,15 @@ export class Uint64MapEntry {
   }
 }
 
+export interface SegmentSelection {
+  segmentId: Uint64;
+  rootId: Uint64;
+  position: number[];
+}
+
 export class SegmentSelectionState extends RefCounted {
   selectedSegment = new Uint64();
+  rawSelectedSegment = new Uint64();
   hasSelectedSegment = false;
   changed = new NullarySignal();
 
@@ -57,14 +64,26 @@ export class SegmentSelectionState extends RefCounted {
     }
   }
 
+  setRaw(value: Uint64|null|undefined) {
+    if (value == null) {
+      return;
+    }
+    let existingRawValue = this.rawSelectedSegment;
+    if (!this.hasSelectedSegment || value.low !== existingRawValue.low ||
+        value.high !== existingRawValue.high) {
+      existingRawValue.low = value.low;
+      existingRawValue.high = value.high;
+    }
+  }
+
   isSelected(value: Uint64) {
     return this.hasSelectedSegment && Uint64.equal(value, this.selectedSegment);
   }
 
   bindTo(layerSelectedValues: LayerSelectedValues, userLayer: UserLayer) {
     let temp = new Uint64();
-    this.registerDisposer(layerSelectedValues.changed.add(() => {
-      let value = layerSelectedValues.get(userLayer);
+
+    function toUint64(value: any): Uint64 {
       if (typeof value === 'number') {
         temp.low = value;
         temp.high = 0;
@@ -72,7 +91,14 @@ export class SegmentSelectionState extends RefCounted {
       } else if (value instanceof Uint64MapEntry) {
         value = value.value;
       }
-      this.set(value);
+      return value;
+    }
+
+    this.registerDisposer(layerSelectedValues.changed.add(() => {
+      let value = layerSelectedValues.get(userLayer);
+      this.set(toUint64(value));
+      value = layerSelectedValues.getRaw(userLayer);
+      this.setRaw(toUint64(value));
     }));
   }
 }
@@ -94,7 +120,9 @@ export function registerRedrawWhenSegmentationDisplayStateChanged(
     displayState: SegmentationDisplayState, renderLayer: {redrawNeeded: NullarySignal}&RefCounted) {
   const dispatchRedrawNeeded = renderLayer.redrawNeeded.dispatch;
   renderLayer.registerDisposer(displayState.segmentColorHash.changed.add(dispatchRedrawNeeded));
-  renderLayer.registerDisposer(displayState.visibleSegments.changed.add(dispatchRedrawNeeded));
+  renderLayer.registerDisposer(displayState.rootSegments.changed.add(dispatchRedrawNeeded));
+  renderLayer.registerDisposer(displayState.visibleSegments2D!.changed.add(dispatchRedrawNeeded));
+  renderLayer.registerDisposer(displayState.visibleSegments3D.changed.add(dispatchRedrawNeeded));
   renderLayer.registerDisposer(displayState.segmentEquivalences.changed.add(dispatchRedrawNeeded));
   renderLayer.registerDisposer(
       displayState.segmentSelectionState.changed.add(dispatchRedrawNeeded));
@@ -140,10 +168,34 @@ export function getObjectColor(
   return color;
 }
 
-export function forEachSegmentToDraw<SegmentData>(
+export function forEachRootSegmentToDraw<SegmentData>(
+    displayState: SegmentationDisplayState, objects: Map<string, SegmentData>,
+    callback: (rootObjectId: Uint64, segmentData: SegmentData) => void) {
+  forEachRootSegment(displayState, rootObjectId => {
+    const key = getObjectKey(rootObjectId, displayState.clipBounds.value);
+    const segmentData = objects.get(key);
+    if (segmentData !== undefined) {
+      callback(rootObjectId, segmentData);
+    }
+  });
+}
+
+export function forEachSegment2DToDraw<SegmentData>(
     displayState: SegmentationDisplayState, objects: Map<string, SegmentData>,
     callback: (rootObjectId: Uint64, objectId: Uint64, segmentData: SegmentData) => void) {
-  forEachVisibleSegment(displayState, (objectId, rootObjectId) => {
+  forEachVisibleSegment2D(displayState, (objectId, rootObjectId) => {
+    const key = getObjectKey(objectId, displayState.clipBounds.value);
+    const segmentData = objects.get(key);
+    if (segmentData !== undefined) {
+      callback(rootObjectId, objectId, segmentData);
+    }
+  });
+}
+
+export function forEachSegment3DToDraw<SegmentData>(
+    displayState: SegmentationDisplayState, objects: Map<string, SegmentData>,
+    callback: (rootObjectId: Uint64, objectId: Uint64, segmentData: SegmentData) => void) {
+  forEachVisibleSegment3D(displayState, (objectId, rootObjectId) => {
     const key = getObjectKey(objectId, displayState.clipBounds.value);
     const segmentData = objects.get(key);
     if (segmentData !== undefined) {
@@ -162,7 +214,8 @@ export class SegmentationLayerSharedObject extends Base {
   initializeCounterpartWithChunkManager(options: any) {
     let {displayState} = this;
     options['chunkManager'] = this.chunkManager.rpcId;
-    options['visibleSegments'] = displayState.visibleSegments.rpcId;
+    options['rootSegments'] = displayState.rootSegments.rpcId;
+    options['visibleSegments3D'] = displayState.visibleSegments3D.rpcId;
     options['segmentEquivalences'] = displayState.segmentEquivalences.rpcId;
     options['clipBounds'] = displayState.clipBounds.rpcId;
     super.initializeCounterpart(this.chunkManager.rpc!, options);

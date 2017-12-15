@@ -107,9 +107,7 @@ export class UserLayer extends RefCounted {
     let {renderLayers} = this;
     let {pickedRenderLayer} = pickState;
     if (pickedRenderLayer !== null && renderLayers.indexOf(pickedRenderLayer) !== -1) {
-      result =
-          pickedRenderLayer.transformPickedValue(pickState.pickedValue, pickState.pickedOffset);
-      return this.transformPickedValue(result);
+      return pickedRenderLayer.transformPickedValue(pickState.pickedValue, pickState.pickedOffset);
     }
     for (let layer of renderLayers) {
       if (!layer.ready) {
@@ -120,7 +118,7 @@ export class UserLayer extends RefCounted {
         break;
       }
     }
-    return this.transformPickedValue(result);
+    return result;
   }
 
   transformPickedValue(value: any) {
@@ -461,10 +459,24 @@ export class LayerManager extends RefCounted {
 
 const MOUSE_STATE_UPDATE_INTERVAL = 50;
 
+export enum ActionState {
+  INACTIVE,
+  FIRST,  // Selecting elements for the first group.
+  SECOND, // Selecting elements for the second group.
+}
+
+export enum ActionMode {
+  NONE,
+  MERGE,
+  SPLIT,
+}
+
 export interface PickState {
   pickedRenderLayer: RenderLayer|null;
   pickedValue: Uint64;
   pickedOffset: number;
+  actionMode: ActionMode;
+  actionState: ActionState;
 }
 
 export class MouseSelectionState implements PickState {
@@ -474,6 +486,8 @@ export class MouseSelectionState implements PickState {
   pickedRenderLayer: RenderLayer|null = null;
   pickedValue = new Uint64(0, 0);
   pickedOffset = 0;
+  actionMode = ActionMode.NONE;
+  actionState = ActionState.INACTIVE;
 
   updater: ((mouseState: MouseSelectionState) => boolean)|undefined = undefined;
 
@@ -512,10 +526,50 @@ export class MouseSelectionState implements PickState {
       this.changed.dispatch();
     }
   }
+
+  setMode(mode: ActionMode) {
+    this.actionMode = mode;
+  }
+
+  toggleAction() {
+    if (this.actionState === ActionState.INACTIVE) {
+      this.actionState = ActionState.FIRST;
+    } else {
+      this.actionState = ActionState.INACTIVE;
+    }
+  }
+
+  updateAction() {
+    switch (this.actionMode) {
+      case ActionMode.MERGE: {
+        if (this.actionState === ActionState.FIRST) {
+          this.actionState = ActionState.SECOND;
+          return ['merge', 'first'];
+        } else {
+          this.actionState = ActionState.INACTIVE;
+          return ['merge', 'second'];
+        }
+      }
+      case ActionMode.SPLIT: {
+        if (this.actionState === ActionState.FIRST) {
+          this.actionState = ActionState.SECOND;
+          return ['split', 'first'];
+        } else {
+          this.actionState = ActionState.INACTIVE;
+          return ['split', 'second'];
+        }
+      }
+      default: {
+        // Should never happen
+        return [];
+      }
+    }
+  }
 }
 
 export class LayerSelectedValues extends RefCounted {
   values = new Map<UserLayer, any>();
+  rawValues = new Map<UserLayer, any>();
   changed = new NullarySignal();
   needsUpdate = true;
   constructor(public layerManager: LayerManager, public mouseState: MouseSelectionState) {
@@ -549,14 +603,18 @@ export class LayerSelectedValues extends RefCounted {
     }
     this.needsUpdate = false;
     let values = this.values;
+    let rawValues = this.rawValues;
     let mouseState = this.mouseState;
     values.clear();
+    rawValues.clear();
     if (mouseState.active) {
       let position = mouseState.position;
       for (let layer of this.layerManager.managedLayers) {
         let userLayer = layer.layer;
         if (layer.visible && userLayer) {
-          values.set(userLayer, userLayer.getValueAt(position, mouseState));
+          let result = userLayer.getValueAt(position, mouseState);
+          rawValues.set(userLayer, result);
+          values.set(userLayer, userLayer.transformPickedValue(result));
         }
       }
     }
@@ -565,6 +623,11 @@ export class LayerSelectedValues extends RefCounted {
   get(userLayer: UserLayer) {
     this.update();
     return this.values.get(userLayer);
+  }
+
+  getRaw(userLayer: UserLayer) {
+    this.update();
+    return this.rawValues.get(userLayer);
   }
 
   toJSON () {

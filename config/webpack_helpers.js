@@ -308,6 +308,7 @@ function getViewerConfig(options) {
   let chunkWorkerModules = [
     'neuroglancer/worker_rpc_context',
     'neuroglancer/chunk_manager/backend',
+    'neuroglancer/chunked_graph/backend',
     'neuroglancer/sliceview/backend',
     ...backendDataSourceModules,
     ...extraChunkWorkerModules,

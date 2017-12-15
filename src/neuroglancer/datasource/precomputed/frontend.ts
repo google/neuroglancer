@@ -82,7 +82,12 @@ export class MultiscaleVolumeChunkSource implements GenericMultiscaleVolumeChunk
   volumeType: VolumeType;
   mesh: string|undefined;
   skeleton: string|undefined;
+  chunkedGraph: string|undefined;
   scales: ScaleInfo[];
+
+  getChunkedGraphUrl() {
+    return this.chunkedGraph === undefined ? null : this.chunkedGraph;
+  }
 
   getMeshSource() {
     let {mesh} = this;
@@ -110,6 +115,7 @@ export class MultiscaleVolumeChunkSource implements GenericMultiscaleVolumeChunk
     this.volumeType = verifyObjectProperty(obj, 'type', x => verifyEnumString(x, VolumeType));
     this.mesh = verifyObjectProperty(obj, 'mesh', verifyOptionalString);
     this.skeleton = verifyObjectProperty(obj, 'skeletons', verifyOptionalString);
+    this.chunkedGraph = verifyObjectProperty(obj, 'chunkedGraph', verifyOptionalString);
     this.scales = verifyObjectProperty(obj, 'scales', x => parseArray(x, y => new ScaleInfo(y)));
   }
 

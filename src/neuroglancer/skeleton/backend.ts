@@ -15,9 +15,10 @@
  */
 
 import {Chunk, ChunkSource} from 'neuroglancer/chunk_manager/backend';
+import {ChunkedGraph} from 'neuroglancer/chunked_graph/backend';
 import {decodeVertexPositionsAndIndices} from 'neuroglancer/mesh/backend';
 import {SegmentationLayerSharedObjectCounterpart} from 'neuroglancer/segmentation_display_state/backend';
-import {forEachVisibleSegment, getObjectKey} from 'neuroglancer/segmentation_display_state/base';
+import {forEachRootSegment, getObjectKey} from 'neuroglancer/segmentation_display_state/base';
 import {SKELETON_LAYER_RPC_ID} from 'neuroglancer/skeleton/base';
 import {TypedArray} from 'neuroglancer/util/array';
 import {Endianness} from 'neuroglancer/util/endian';
@@ -113,10 +114,12 @@ export class SkeletonSource extends ChunkSource {
 @registerSharedObject(SKELETON_LAYER_RPC_ID)
 export class SkeletonLayer extends SegmentationLayerSharedObjectCounterpart {
   source: SkeletonSource;
+  chunkedGraph: ChunkedGraph;
 
   constructor(rpc: RPC, options: any) {
     super(rpc, options);
     this.source = this.registerDisposer(rpc.getRef<SkeletonSource>(options['source']));
+    this.chunkedGraph = this.registerDisposer(rpc.getRef<ChunkedGraph>(options['chunkedGraph']));
     this.registerDisposer(this.chunkManager.recomputeChunkPriorities.add(() => {
       this.updateChunkPriorities();
     }));
@@ -130,7 +133,7 @@ export class SkeletonLayer extends SegmentationLayerSharedObjectCounterpart {
     const priorityTier = getPriorityTier(visibility);
     const basePriority = getBasePriority(visibility);
     const {source, chunkManager} = this;
-    forEachVisibleSegment(this, objectId => {
+    forEachRootSegment(this, objectId => {
       const chunk = source.getChunk(objectId);
       chunkManager.requestChunk(chunk, priorityTier, basePriority + SKELETON_CHUNK_PRIORITY);
     });

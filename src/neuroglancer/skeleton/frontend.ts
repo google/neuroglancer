@@ -16,10 +16,11 @@
 
 import {ChunkState} from 'neuroglancer/chunk_manager/base';
 import {Chunk, ChunkManager, ChunkSource} from 'neuroglancer/chunk_manager/frontend';
+import {ChunkedGraph} from 'neuroglancer/chunked_graph/frontend';
 import {RenderLayer} from 'neuroglancer/layer';
 import {VoxelSize} from 'neuroglancer/navigation_state';
 import {PerspectiveViewRenderContext, PerspectiveViewRenderLayer} from 'neuroglancer/perspective_view/render_layer';
-import {forEachSegmentToDraw, getObjectColor, registerRedrawWhenSegmentationDisplayState3DChanged, SegmentationDisplayState3D, SegmentationLayerSharedObject} from 'neuroglancer/segmentation_display_state/frontend';
+import {forEachRootSegmentToDraw, getObjectColor, registerRedrawWhenSegmentationDisplayState3DChanged, SegmentationDisplayState3D, SegmentationLayerSharedObject} from 'neuroglancer/segmentation_display_state/frontend';
 import {SKELETON_LAYER_RPC_ID, VertexAttributeInfo} from 'neuroglancer/skeleton/base';
 import {SliceViewPanelRenderContext, SliceViewPanelRenderLayer} from 'neuroglancer/sliceview/panel';
 import {TrackableValue} from 'neuroglancer/trackable_value';
@@ -172,8 +173,11 @@ export class SkeletonLayer extends RefCounted {
   }
 
   constructor(
-      public chunkManager: ChunkManager, public source: SkeletonSource,
-      public voxelSizeObject: VoxelSize, public displayState: SkeletonLayerDisplayState) {
+      public chunkManager: ChunkManager,
+      public chunkedGraph: ChunkedGraph,
+      public source: SkeletonSource,
+      public voxelSizeObject: VoxelSize,
+      public displayState: SkeletonLayerDisplayState) {
     super();
 
     registerRedrawWhenSegmentationDisplayState3DChanged(displayState, this);
@@ -187,6 +191,7 @@ export class SkeletonLayer extends RefCounted {
     sharedObject.RPC_TYPE_ID = SKELETON_LAYER_RPC_ID;
     sharedObject.initializeCounterpartWithChunkManager({
       'source': source.addCounterpartRef(),
+      'chunkedGraph': chunkedGraph.addCounterpartRef(),
     });
 
     const vertexAttributes = this.vertexAttributes = [vertexPositionAttribute];
@@ -267,7 +272,7 @@ export class SkeletonLayer extends RefCounted {
 
     gl.lineWidth(lineWidth);
 
-    forEachSegmentToDraw(displayState, skeletons, (rootObjectId, objectId, skeleton) => {
+    forEachRootSegmentToDraw(displayState, skeletons, (rootObjectId, skeleton) => {
       if (skeleton.state !== ChunkState.GPU_MEMORY) {
         return;
       }
@@ -276,7 +281,7 @@ export class SkeletonLayer extends RefCounted {
             gl, shader, <vec3><Float32Array>getObjectColor(displayState, rootObjectId, alpha));
       }
       if (renderContext.emitPickID) {
-        renderHelper.setPickID(gl, shader, pickIDs.registerUint64(layer, objectId));
+        renderHelper.setPickID(gl, shader, pickIDs.registerUint64(layer, rootObjectId));
       }
       renderHelper.drawSkeleton(gl, shader, skeleton);
     });

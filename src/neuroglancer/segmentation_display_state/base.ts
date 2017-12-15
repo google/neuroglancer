@@ -26,7 +26,9 @@ export interface Bounds {
 }
 
 export interface VisibleSegmentsState {
-  visibleSegments: Uint64Set;
+  rootSegments: Uint64Set;
+  visibleSegments2D?: Uint64Set; // not needed for backend
+  visibleSegments3D: Uint64Set;
   segmentEquivalences: SharedDisjointUint64Sets;
   clipBounds: SharedWatchableValue<Bounds|undefined>;
 }
@@ -40,16 +42,28 @@ export function getObjectKey(objectId: Uint64, bounds?: Bounds): string {
   return `${objectId.low},${objectId.high}${boundsSuffix}`;
 }
 
-export function forEachVisibleSegment(
+export function forEachRootSegment(
+    state: VisibleSegmentsState, callback: (rootObjectId: Uint64) => void) {
+  let {rootSegments} = state;
+  for (let rootObjectId of rootSegments) {
+    callback(rootObjectId);
+  }
+}
+
+export function forEachVisibleSegment2D(
     state: VisibleSegmentsState, callback: (objectId: Uint64, rootObjectId: Uint64) => void) {
-  let {visibleSegments, segmentEquivalences} = state;
-  for (let rootObjectId of visibleSegments) {
-    // TODO(jbms): Remove this check if logic is added to ensure that it always holds.
-    if (!segmentEquivalences.disjointSets.isMinElement(rootObjectId)) {
-      continue;
-    }
-    for (let objectId of segmentEquivalences.setElements(rootObjectId)) {
-      callback(objectId, rootObjectId);
-    }
+  let {visibleSegments2D, segmentEquivalences} = state;
+  for (let objectId of visibleSegments2D!) {
+    let rootObjectId = segmentEquivalences.get(objectId);
+    callback(objectId, rootObjectId);
+  }
+}
+
+export function forEachVisibleSegment3D(
+    state: VisibleSegmentsState, callback: (objectId: Uint64, rootObjectId: Uint64) => void) {
+  let {visibleSegments3D, segmentEquivalences} = state;
+  for (let objectId of visibleSegments3D) {
+    let rootObjectId = segmentEquivalences.get(objectId);
+    callback(objectId, rootObjectId);
   }
 }

@@ -197,4 +197,11 @@ export interface MultiscaleVolumeChunkSource extends MultiscaleSliceViewChunkSou
    * This only makes sense if volumeType === VolumeType.SEGMENTATION.
    */
   getSkeletonSource?: () => SkeletonSource | null;
+
+  /**
+   * Returns the associated chunked graph server url, if there is one.
+   *
+   * This only makes sense if volumeType === VolumeType.SEGMENTATION.
+   */
+  getChunkedGraphUrl?: () => string | null;
 }

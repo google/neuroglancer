@@ -16,9 +16,10 @@
 
 import {ChunkState} from 'neuroglancer/chunk_manager/base';
 import {Chunk, ChunkManager, ChunkSource} from 'neuroglancer/chunk_manager/frontend';
+import {ChunkedGraph} from 'neuroglancer/chunked_graph/frontend';
 import {FRAGMENT_SOURCE_RPC_ID, MESH_LAYER_RPC_ID} from 'neuroglancer/mesh/base';
 import {PerspectiveViewRenderContext, PerspectiveViewRenderLayer} from 'neuroglancer/perspective_view/render_layer';
-import {forEachSegmentToDraw, getObjectColor, registerRedrawWhenSegmentationDisplayState3DChanged, SegmentationDisplayState3D, SegmentationLayerSharedObject} from 'neuroglancer/segmentation_display_state/frontend';
+import {forEachSegment3DToDraw, getObjectColor, registerRedrawWhenSegmentationDisplayState3DChanged, SegmentationDisplayState3D, SegmentationLayerSharedObject} from 'neuroglancer/segmentation_display_state/frontend';
 import {mat4, vec3, vec4} from 'neuroglancer/util/geom';
 import {getObjectId} from 'neuroglancer/util/object_id';
 import {Buffer} from 'neuroglancer/webgl/buffer';
@@ -103,7 +104,9 @@ export class MeshLayer extends PerspectiveViewRenderLayer {
   private sharedObject: SegmentationLayerSharedObject;
 
   constructor(
-      public chunkManager: ChunkManager, public source: MeshSource,
+      public chunkManager: ChunkManager,
+      public chunkedGraph: ChunkedGraph,
+      public source: MeshSource,
       public displayState: SegmentationDisplayState3D) {
     super();
 
@@ -114,6 +117,7 @@ export class MeshLayer extends PerspectiveViewRenderLayer {
     sharedObject.RPC_TYPE_ID = MESH_LAYER_RPC_ID;
     sharedObject.initializeCounterpartWithChunkManager({
       'source': source.addCounterpartRef(),
+      'chunkedGraph': chunkedGraph.addCounterpartRef(),
     });
     this.setReady(true);
     sharedObject.visibility.add(this.visibility);
@@ -158,7 +162,7 @@ export class MeshLayer extends PerspectiveViewRenderLayer {
 
     const objectToDataMatrix = this.displayState.objectToDataTransform.transform;
 
-    forEachSegmentToDraw(displayState, objectChunks, (rootObjectId, objectId, fragments) => {
+    forEachSegment3DToDraw(displayState, objectChunks, (rootObjectId, objectId, fragments) => {
       if (renderContext.emitColor) {
         meshShaderManager.setColor(gl, shader, getObjectColor(displayState, rootObjectId, alpha));
       }
