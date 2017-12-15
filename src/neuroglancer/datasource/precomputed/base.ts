@@ -14,6 +14,8 @@
  * limitations under the License.
  */
 
+import {VertexAttributeInfo} from 'neuroglancer/skeleton/base';
+
 export enum VolumeChunkEncoding {
   RAW,
   JPEG,
@@ -35,4 +37,13 @@ export class MeshSourceParameters {
   lod: number;
 
   static RPC_ID = 'precomputed/MeshSource';
+}
+
+
+export class SkeletonSourceParameters {
+  baseUrls: string[];
+  path: string;
+  vertexAttributes: Map<string, VertexAttributeInfo>;
+
+  static RPC_ID = 'precomputed/SkeletonSource';
 }

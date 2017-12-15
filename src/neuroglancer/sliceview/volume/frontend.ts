@@ -16,6 +16,7 @@
 
 import {ChunkManager} from 'neuroglancer/chunk_manager/frontend';
 import {MeshSource} from 'neuroglancer/mesh/frontend';
+import {SkeletonSource} from 'neuroglancer/skeleton/frontend';
 import {DataType} from 'neuroglancer/sliceview/base';
 import {MultiscaleSliceViewChunkSource, SliceViewChunk, SliceViewChunkSource} from 'neuroglancer/sliceview/frontend';
 import {VolumeChunkSource as VolumeChunkSourceInterface, VolumeChunkSpecification, VolumeSourceOptions, VolumeType} from 'neuroglancer/sliceview/volume/base';
@@ -189,4 +190,11 @@ export interface MultiscaleVolumeChunkSource extends MultiscaleSliceViewChunkSou
    * This only makes sense if volumeType === VolumeType.SEGMENTATION.
    */
   getMeshSource: () => MeshSource | null;
+
+  /**
+   * Returns the associated skeleton source, if there is one.
+   *
+   * This only makes sense if volumeType === VolumeType.SEGMENTATION.
+   */
+  getSkeletonSource?: () => SkeletonSource | null;
 }

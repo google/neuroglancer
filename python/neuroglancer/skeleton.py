@@ -28,14 +28,14 @@ class Skeleton(object):
         self.edges = np.array(edges, dtype='<u4')
         self.vertex_attributes = vertex_attributes
 
-    def encode(self, source):
+    def encode(self, source=None):
         result = io.BytesIO()
         edges = self.edges
         vertex_positions = self.vertex_positions
         vertex_attributes = self.vertex_attributes
         result.write(struct.pack('<II', vertex_positions.shape[0], edges.shape[0] // 2))
         result.write(vertex_positions.tobytes())
-        if len(source.vertex_attributes) > 0:
+        if source and len(source.vertex_attributes) > 0:
             for name, info in six.iteritems(source.vertex_attributes):
 
                 attribute = np.array(vertex_attributes[name],
@@ -72,3 +72,11 @@ class SkeletonSource(object):
         for k, v in six.iteritems(self.vertex_attributes):
             temp[k] = dict(dataType=np.dtype(v.data_type).name, numComponents=v.num_components)
         return temp
+
+if __name__ == '__main__':
+    # example on how to write an skeleton to disk
+    with open('/tmp/3', 'w') as f:
+        vertices = [[0.0, 0.0, 0.0], [1000.0, 0.0, 0.0], [1000.0, 1000.0, 0.0], [0.0, 1000.0, 0.0]]
+        edges = [0, 1, 1, 2, 2, 3, 3, 0]
+        content = Skeleton(vertices, edges).encode()
+        f.write(content)

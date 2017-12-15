@@ -24,7 +24,7 @@ import {Overlay} from 'neuroglancer/overlay';
 import {SegmentColorHash} from 'neuroglancer/segment_color';
 import {SegmentationDisplayState3D, SegmentSelectionState, Uint64MapEntry} from 'neuroglancer/segmentation_display_state/frontend';
 import {SharedDisjointUint64Sets} from 'neuroglancer/shared_disjoint_sets';
-import {FRAGMENT_MAIN_START as SKELETON_FRAGMENT_MAIN_START, getTrackableFragmentMain, PerspectiveViewSkeletonLayer, SkeletonLayer, SkeletonLayerDisplayState, SliceViewPanelSkeletonLayer} from 'neuroglancer/skeleton/frontend';
+import {FRAGMENT_MAIN_START as SKELETON_FRAGMENT_MAIN_START, getTrackableFragmentMain, PerspectiveViewSkeletonLayer, SkeletonLayer, SkeletonLayerDisplayState, SkeletonSource, SliceViewPanelSkeletonLayer} from 'neuroglancer/skeleton/frontend';
 import {VolumeType} from 'neuroglancer/sliceview/volume/base';
 import {SegmentationRenderLayer, SliceViewSegmentationDisplayState} from 'neuroglancer/sliceview/volume/segmentation_renderlayer';
 import {trackableAlphaValue} from 'neuroglancer/trackable_alpha';
@@ -74,7 +74,7 @@ export class SegmentationUserLayer extends UserLayer {
    * meshPath is null, the default mesh source is not used.
    */
   meshPath: string|null|undefined;
-  skeletonsPath: string|undefined;
+  skeletonsPath: string|null|undefined;
   meshLayer: MeshLayer|undefined;
 
   constructor(public manager: LayerListSpecification, x: any) {
@@ -113,7 +113,7 @@ export class SegmentationUserLayer extends UserLayer {
 
     let volumePath = this.volumePath = verifyOptionalString(x['source']);
     let meshPath = this.meshPath = x['mesh'] === null ? null : verifyOptionalString(x['mesh']);
-    let skeletonsPath = this.skeletonsPath = verifyOptionalString(x['skeletons']);
+    let skeletonsPath = this.skeletonsPath = x['skeleton'] === null ? null : verifyOptionalString(x['skeleton']);
     if (volumePath !== undefined) {
       getVolumeWithStatusMessage(manager.dataSourceProvider, manager.chunkManager, volumePath, {
         volumeType: VolumeType.SEGMENTATION
@@ -124,6 +124,15 @@ export class SegmentationUserLayer extends UserLayer {
             let meshSource = volume.getMeshSource();
             if (meshSource != null) {
               this.addMesh(meshSource);
+            }
+          }
+          if (skeletonsPath === undefined) {
+            if (volume.getSkeletonSource != null) {
+              let skeletonSource = volume.getSkeletonSource();
+              if (skeletonSource != null) {
+                this.skeletonsPath = 'from_info_file'; // this makes the dropdown menu visible
+                this.addSkeleton(skeletonSource);
+              }
             }
           }
         }
@@ -139,14 +148,11 @@ export class SegmentationUserLayer extends UserLayer {
           });
     }
 
-    if (skeletonsPath !== undefined) {
+    if (skeletonsPath != null) {
       this.manager.dataSourceProvider.getSkeletonSource(manager.chunkManager, skeletonsPath)
           .then(skeletonSource => {
             if (!this.wasDisposed) {
-              let base = new SkeletonLayer(
-                  manager.chunkManager, skeletonSource, manager.voxelSize, this.displayState);
-              this.addRenderLayer(new PerspectiveViewSkeletonLayer(base.addRef()));
-              this.addRenderLayer(new SliceViewPanelSkeletonLayer(/* transfer ownership */ base));
+              this.addSkeleton(skeletonSource);
             }
           });
     }
@@ -183,6 +189,13 @@ export class SegmentationUserLayer extends UserLayer {
   addMesh(meshSource: MeshSource) {
     this.meshLayer = new MeshLayer(this.manager.chunkManager, meshSource, this.displayState);
     this.addRenderLayer(this.meshLayer);
+  }
+
+  addSkeleton(skeletonSource: SkeletonSource) {
+    let base = new SkeletonLayer(
+              this.manager.chunkManager, skeletonSource, this.manager.voxelSize, this.displayState);
+    this.addRenderLayer(new PerspectiveViewSkeletonLayer(base.addRef()));
+    this.addRenderLayer(new SliceViewPanelSkeletonLayer(/* transfer ownership */ base));
   }
 
   toJSON() {
@@ -274,6 +287,7 @@ function makeSkeletonShaderCodeWidget(layer: SegmentationUserLayer) {
 class SegmentationDropdown extends UserLayerDropdown {
   visibleSegmentWidget = this.registerDisposer(new SegmentSetWidget(this.layer.displayState));
   addSegmentWidget = this.registerDisposer(new Uint64EntryWidget());
+  skeletonDialog: HTMLElement|null|undefined;
   selectedAlphaWidget =
       this.registerDisposer(new RangeWidget(this.layer.displayState.selectedAlpha));
   notSelectedAlphaWidget =
@@ -315,48 +329,53 @@ class SegmentationDropdown extends UserLayerDropdown {
       }
     }));
     element.appendChild(this.registerDisposer(this.visibleSegmentWidget).element);
+  }
 
-    if (this.layer.skeletonsPath !== undefined) {
-      let topRow = document.createElement('div');
-      topRow.className = 'neuroglancer-segmentation-dropdown-skeleton-shader-header';
-      let label = document.createElement('div');
-      label.style.flex = '1';
-      label.textContent = 'Skeleton shader:';
-      let helpLink = document.createElement('a');
-      let helpButton = document.createElement('button');
-      helpButton.type = 'button';
-      helpButton.textContent = '?';
-      helpButton.className = 'help-link';
-      helpLink.appendChild(helpButton);
-      helpLink.title = 'Documentation on skeleton rendering';
-      helpLink.target = '_blank';
-      helpLink.href =
-          'https://github.com/google/neuroglancer/blob/master/src/neuroglancer/sliceview/image_layer_rendering.md';
+  buildSkeletonDialog(element: HTMLDivElement) {
+    let topRow = document.createElement('div');
+    topRow.className = 'neuroglancer-segmentation-dropdown-skeleton-shader-header';
+    let label = document.createElement('div');
+    label.style.flex = '1';
+    label.textContent = 'Skeleton shader:';
+    let helpLink = document.createElement('a');
+    let helpButton = document.createElement('button');
+    helpButton.type = 'button';
+    helpButton.textContent = '?';
+    helpButton.className = 'help-link';
+    helpLink.appendChild(helpButton);
+    helpLink.title = 'Documentation on skeleton rendering';
+    helpLink.target = '_blank';
+    helpLink.href =
+        'https://github.com/seung-lab/neuroglancer/blob/master/src/neuroglancer/sliceview/image_layer_rendering.md';
 
-      let maximizeButton = document.createElement('button');
-      maximizeButton.innerHTML = '&square;';
-      maximizeButton.className = 'maximize-button';
-      maximizeButton.title = 'Show larger editor view';
-      this.registerEventListener(maximizeButton, 'click', () => {
-        new ShaderCodeOverlay(this.layer);
-      });
+    let maximizeButton = document.createElement('button');
+    maximizeButton.innerHTML = '&square;';
+    maximizeButton.className = 'maximize-button';
+    maximizeButton.title = 'Show larger editor view';
+    this.registerEventListener(maximizeButton, 'click', () => {
+      new ShaderCodeOverlay(this.layer);
+    });
 
-      topRow.appendChild(label);
-      topRow.appendChild(maximizeButton);
-      topRow.appendChild(helpLink);
+    topRow.appendChild(label);
+    topRow.appendChild(maximizeButton);
+    topRow.appendChild(helpLink);
 
-      element.appendChild(topRow);
+    element.appendChild(topRow);
 
-      const codeWidget = this.codeWidget =
-          this.registerDisposer(makeSkeletonShaderCodeWidget(this.layer));
-      element.appendChild(codeWidget.element);
-      codeWidget.textEditor.refresh();
-    }
+    const codeWidget = this.codeWidget =
+        this.registerDisposer(makeSkeletonShaderCodeWidget(this.layer));
+    element.appendChild(codeWidget.element);
+    codeWidget.textEditor.refresh();
+    this.skeletonDialog = topRow;
   }
 
   onShow() {
     if (this.codeWidget !== undefined) {
       this.codeWidget.textEditor.refresh();
+    }
+
+    if (this.layer.skeletonsPath !== undefined && this.skeletonDialog == null) {
+      this.buildSkeletonDialog(this.element);
     }
   }
 }
