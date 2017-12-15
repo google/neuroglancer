@@ -85,7 +85,7 @@ void emitRGB(vec3 color) {
   emit(vec4(color * uColor.a, uColor.a), uPickID);
 }
 void emitDefault() {
-  emit(uColor, uPickID);
+  emit(vec4(min(1.5 * uColor.xyz, 1.0), uColor.a), uPickID);
 }
 `);
     builder.addFragmentCode(glsl_COLORMAPS);
@@ -240,7 +240,7 @@ export class SkeletonLayer extends RefCounted {
       lineWidth = renderContext.emitColor ? 1 : 5;
     }
     let {gl, source, displayState} = this;
-    let alpha = Math.min(1.0, displayState.objectAlpha.value);
+    let alpha = 1.0; // Make skeletons visible through transparent object. Math.min(1.0, displayState.objectAlpha.value);
     if (alpha <= 0.0) {
       // Skip drawing.
       return;
@@ -326,7 +326,7 @@ export class SliceViewPanelSkeletonLayer extends SliceViewPanelRenderLayer {
   }
 
   draw(renderContext: SliceViewPanelRenderContext) {
-    this.base.draw(renderContext, this, this.renderHelper, 10);
+    this.base.draw(renderContext, this, this.renderHelper, 5);
   }
 }
 
