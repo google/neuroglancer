@@ -88,12 +88,8 @@ function decodeManifestChunk(chunk: ManifestChunk, response: any) {
 function decodeFragmentChunk(chunk: FragmentChunk, response: ArrayBuffer) {
   let dv = new DataView(response);
   let numVertices = dv.getUint32(0, true);
-  let numVerticesHigh = dv.getUint32(4, true);
-  if (numVerticesHigh !== 0) {
-    throw new Error(`The number of vertices should not exceed 2^32-1.`);
-  }
   decodeTriangleVertexPositionsAndIndices(
-      chunk, response, Endianness.LITTLE, /*vertexByteOffset=*/8, numVertices);
+      chunk, response, Endianness.LITTLE, /*vertexByteOffset=*/4, numVertices);
 }
 
 @registerSharedObject()
