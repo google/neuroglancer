@@ -90,6 +90,7 @@ export function perspectivePanelEmitOIT(builder: ShaderBuilder) {
 }
 
 const tempVec3 = vec3.create();
+const tempVec3b = vec3.create();
 const tempMat4 = mat4.create();
 
 function defineTransparencyCopyShader(builder: ShaderBuilder) {
@@ -414,11 +415,25 @@ export class PerspectivePanel extends RenderedDataPanel {
   }
 
   protected drawAxisLines() {
+    const temp = tempVec3;
+    const temp2 = tempVec3b;
+    const {projectionMat} = this;
+    const {position} = this.viewer.navigationState;
+    const pos = position.spatialCoordinates;
+    vec3.transformMat4(temp, pos, projectionMat);
+    temp[0] = 0.5;
+    vec3.transformMat4(temp2, temp, this.inverseProjectionMat);
+    const length0 = vec3.distance(temp2, pos);
+    temp[0] = 0;
+    temp[1] = 0.5;
+    vec3.transformMat4(temp2, temp, this.inverseProjectionMat);
+    const length1 = vec3.distance(temp2, pos);
+
     let {gl} = this;
     let mat = tempMat4;
     mat4.identity(mat);
     // Draw axes lines.
-    let axisLength = 200 * 8;
+    let axisLength = Math.min(length0, length1);
 
     // Construct matrix that maps [-1, +1] x/y range to the full viewport data
     // coordinates.
