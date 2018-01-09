@@ -559,6 +559,10 @@ class SegmentationDropdown extends UserLayerDropdown {
             StatusMessage.showTemporaryMessage(e.message, 3000);
           });
         }
+      } else {
+        for (const value of values) {
+          this.layer.displayState.rootSegments.add(value);
+        }
       }
     }));
     element.appendChild(this.registerDisposer(this.visibleSegmentWidget).element);
