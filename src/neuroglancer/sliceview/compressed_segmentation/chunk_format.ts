@@ -21,17 +21,17 @@ import {DataType, VolumeChunkSpecification} from 'neuroglancer/sliceview/volume/
 import {ChunkFormatHandler, registerChunkFormatHandler} from 'neuroglancer/sliceview/volume/frontend';
 import {VolumeChunkSource} from 'neuroglancer/sliceview/volume/frontend';
 import {RefCounted} from 'neuroglancer/util/disposable';
-import {vec2, vec3, vec3Key} from 'neuroglancer/util/geom';
+import {vec3, vec3Key} from 'neuroglancer/util/geom';
 import {Uint64} from 'neuroglancer/util/uint64';
 import {GL} from 'neuroglancer/webgl/context';
-import {compute1dTextureFormat, compute1dTextureLayout, OneDimensionalTextureAccessHelper, OneDimensionalTextureFormat, setOneDimensionalTextureData} from 'neuroglancer/webgl/one_dimensional_texture_access';
+import {compute1dTextureFormat, compute1dTextureLayout, OneDimensionalTextureAccessHelper, OneDimensionalTextureFormat, setOneDimensionalTextureData, TextureAccessCoefficients} from 'neuroglancer/webgl/one_dimensional_texture_access';
 import {ShaderBuilder, ShaderProgram} from 'neuroglancer/webgl/shader';
 import {getShaderType, glsl_getFortranOrderIndexFromNormalized, glsl_uint64, glsl_uintleToFloat, glsl_unnormalizeUint8} from 'neuroglancer/webgl/shader_lib';
 
 class TextureLayout extends RefCounted {
   dataWidth: number;
   textureHeight: number;
-  textureAccessCoefficients: vec2;
+  textureAccessCoefficients: TextureAccessCoefficients;
   subchunkGridSize: vec3;
 
   constructor(gl: GL, public chunkDataSize: vec3, public subchunkSize: vec3, dataLength: number) {

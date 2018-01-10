@@ -90,7 +90,7 @@ for convenience during development.
 For example, while developing the Neuroglancer client, you can run the shell command
 
 ```shell
-npm run dev-server
+npm run dev-server-python
 ```
 to start the `webpack-dev-server` on <http://localhost:8080> and then call
 
@@ -109,26 +109,21 @@ To upload a new version, create a `~/.pypirc` file with the following content:
 [distutils]
 index-servers =
   pypi
-  pypitest
+  testpypi
 
 [pypi]
-repository=https://pypi.python.org/pypi
 username=neuroglancer
 password=xxxx
 
 [pypitest]
-repository=https://testpypi.python.org/pypi
+repository=https://test.pypi.org/legacy/
 username=neuroglancer
 password=xxxx
-```
-
-You have to register once with the PyPI server:
-```shell
-python setup.py register -r pypi
 ```
 
 To publish a new version, run the following command:
 
 ```shell
-python setup.py bundle_client sdist upload -r pypi
+python setup.py bundle_client sdist
+twine upload dist/*
 ```

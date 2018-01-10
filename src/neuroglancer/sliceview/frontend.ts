@@ -226,11 +226,8 @@ export class SliceView extends Base {
           /*func=*/gl.GREATER,
           /*ref=*/1,
           /*mask=*/1);
-      if (renderLayerNum === 1) {
-        // Turn on blending after the first layer.
-        gl.enable(gl.BLEND);
-        gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
-      }
+
+      renderLayer.setGLBlendMode(gl, renderLayerNum);
       renderLayer.draw(this);
       ++renderLayerNum;
     }

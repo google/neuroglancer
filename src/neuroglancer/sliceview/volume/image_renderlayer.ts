@@ -19,7 +19,9 @@ import {VolumeSourceOptions} from 'neuroglancer/sliceview/volume/base';
 import {MultiscaleVolumeChunkSource} from 'neuroglancer/sliceview/volume/frontend';
 import {RenderLayer} from 'neuroglancer/sliceview/volume/renderlayer';
 import {TrackableAlphaValue, trackableAlphaValue} from 'neuroglancer/trackable_alpha';
+import {BLEND_FUNCTIONS, BLEND_MODES, TrackableBlendModeValue, trackableBlendModeValue} from 'neuroglancer/trackable_blend';
 import {vec3} from 'neuroglancer/util/geom';
+import {verifyEnumString} from 'neuroglancer/util/json';
 import {makeTrackableFragmentMain, makeWatchableShaderError, TrackableFragmentMain} from 'neuroglancer/webgl/dynamic_shader';
 import {ShaderBuilder} from 'neuroglancer/webgl/shader';
 
@@ -39,8 +41,10 @@ export function getTrackableFragmentMain(value = DEFAULT_FRAGMENT_MAIN) {
 export class ImageRenderLayer extends RenderLayer {
   fragmentMain: TrackableFragmentMain;
   opacity: TrackableAlphaValue;
+  blendMode: TrackableBlendModeValue;
   constructor(multiscaleSource: MultiscaleVolumeChunkSource, {
     opacity = trackableAlphaValue(0.5),
+    blendMode = trackableBlendModeValue(),
     fragmentMain = getTrackableFragmentMain(),
     shaderError = makeWatchableShaderError(),
     sourceOptions = <VolumeSourceOptions>{},
@@ -48,6 +52,7 @@ export class ImageRenderLayer extends RenderLayer {
     super(multiscaleSource, {shaderError, sourceOptions});
     this.fragmentMain = fragmentMain;
     this.opacity = opacity;
+    this.blendMode = blendMode;
     this.registerDisposer(opacity.changed.add(() => {
       this.redrawNeeded.dispatch();
     }));
@@ -99,5 +104,13 @@ void emitTransparent() {
     let {gl} = this;
     gl.uniform1f(shader.uniform('uOpacity'), this.opacity.value);
     return shader;
+  }
+
+  setGLBlendMode(gl: WebGLRenderingContext, renderLayerNum: number) {
+    let blendModeValue = verifyEnumString(this.blendMode.value, BLEND_MODES);
+    if (blendModeValue === BLEND_MODES.ADDITIVE || renderLayerNum > 0) {
+      gl.enable(gl.BLEND);
+      BLEND_FUNCTIONS.get(blendModeValue)!(gl);
+    }
   }
 }

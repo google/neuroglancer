@@ -120,13 +120,13 @@ gl_FragData[${outputChannel++}] = getDataValue(${channel}).value;
                case DataType.UINT64: {
                  let low = tester.readUint32(outputChannel++);
                  let high = tester.readUint32(outputChannel++);
-                 expect(low).toEqual(rawData[curOffset * 2], `${msg} (low)`);
+                 expect(low).toBe(rawData[curOffset * 2], `${msg} (low)`);
                  expect(high).toEqual(rawData[curOffset * 2 + 1], `${msg} (high)`);
                  break;
                }
                case DataType.FLOAT32: {
                  let result = tester.readFloat(outputChannel++);
-                 expect(result).toEqual(rawData[curOffset], msg);
+                 expect(result).toBe(rawData[curOffset], msg);
                  break;
                }
                default: {
@@ -143,6 +143,7 @@ gl_FragData[${outputChannel++}] = getDataValue(${channel}).value;
          checkPosition(vec3.fromValues(0, volumeSize[1], 0));
          checkPosition(vec3.fromValues(0, volumeSize[1], volumeSize[2]));
          checkPosition(vec3.fromValues(volumeSize[0], volumeSize[1], volumeSize[2]));
+         checkPosition(vec3.fromValues(volumeSize[0]-1, 1, 1));
 
          const COUNT = 100;
          for (let iter = 0; iter < COUNT; ++iter) {

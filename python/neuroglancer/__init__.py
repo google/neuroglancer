@@ -18,5 +18,7 @@ from .static import dist_dev_static_content_source
 from .viewer import Viewer, UnsynchronizedViewer
 from .local_volume import LocalVolume
 from .viewer_state import *
+from .viewer_config_state import MapEntry
+from .equivalence_map import EquivalenceMap
 from .url_state import to_url, parse_url
 from . import server

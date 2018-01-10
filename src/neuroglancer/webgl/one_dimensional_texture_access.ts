@@ -25,17 +25,19 @@
 
 import {maybePadArray, TypedArray, TypedArrayConstructor} from 'neuroglancer/util/array';
 import {DataType} from 'neuroglancer/util/data_type';
-import {vec2} from 'neuroglancer/util/geom';
+import {vec3} from 'neuroglancer/util/geom';
 import {GL_FLOAT, GL_LUMINANCE, GL_LUMINANCE_ALPHA, GL_RGB, GL_RGBA, GL_UNPACK_ALIGNMENT, GL_UNSIGNED_BYTE} from 'neuroglancer/webgl/constants';
 import {GL} from 'neuroglancer/webgl/context';
 import {ShaderBuilder, ShaderCodePart, ShaderProgram} from 'neuroglancer/webgl/shader';
 import {getShaderType, glsl_float, glsl_uint16, glsl_uint32, glsl_uint64, glsl_uint8} from 'neuroglancer/webgl/shader_lib';
 import {setRawTextureParameters} from 'neuroglancer/webgl/texture';
 
+export type TextureAccessCoefficients = vec3;
+
 export class OneDimensionalTextureLayout {
   dataWidth: number;
   textureHeight: number;
-  textureAccessCoefficients: vec2;
+  textureAccessCoefficients: TextureAccessCoefficients;
 }
 
 export class OneDimensionalTextureFormat {
@@ -130,6 +132,15 @@ export function compute1dTextureFormat(
   throw new Error(`No supported texture format for ${DataType[dataType]}[${numComponents}].`);
 }
 
+function setTextureAccessCoefficients(
+    layout: OneDimensionalTextureLayout, dataWidth: number, numElements: number) {
+  const dataHeight = Math.ceil(numElements / dataWidth);
+  layout.dataWidth = dataWidth;
+  layout.textureHeight = dataHeight;
+  layout.textureAccessCoefficients =
+    <vec3>Float32Array.of(1.0 / dataWidth, 1.0 / (dataWidth * dataHeight), dataWidth);
+}
+
 /**
  * Computes a texture layout with [width, height] equal to [x, y*z] or [x*y, z] if possible.  This
  * makes 3-d access more likely to be friendly to the texture cache.  If not possible, just uses
@@ -156,11 +167,7 @@ export function compute3dTextureLayout(
           numElements);
     }
   }
-  let dataHeight = Math.ceil(numElements / dataWidth);
-  layout.dataWidth = dataWidth;
-  layout.textureHeight = dataHeight;
-  layout.textureAccessCoefficients =
-      <vec2>Float32Array.of(1.0 / dataWidth, 1.0 / (dataWidth * dataHeight));
+  setTextureAccessCoefficients(layout, dataWidth, numElements);
 }
 
 export function compute1dTextureLayout(
@@ -172,11 +179,7 @@ export function compute1dTextureLayout(
         'Number of elements exceeds maximum texture size: ' + texelsPerElement + ' * ' +
         numElements);
   }
-  let dataHeight = Math.ceil(numElements / dataWidth);
-  layout.dataWidth = dataWidth;
-  layout.textureHeight = dataHeight;
-  layout.textureAccessCoefficients =
-      <vec2>Float32Array.of(1.0 / dataWidth, 1.0 / (dataWidth * dataHeight));
+  setTextureAccessCoefficients(layout, dataWidth, numElements);
 }
 
 export function setOneDimensionalTextureData(
@@ -206,7 +209,7 @@ export class OneDimensionalTextureAccessHelper {
   constructor(public key: string) {}
   defineShader(builder: ShaderBuilder) {
     let {uniformName} = this;
-    builder.addUniform('highp vec2', uniformName);
+    builder.addUniform('highp vec3', uniformName);
   }
 
   getReadTextureValueCode(texelsPerElement: number) {
@@ -217,9 +220,11 @@ void ${this.readTextureValue}(highp sampler2D sampler, float index`;
       code += `, out vec4 output${i}`;
     }
     code += `) {
-  index += ${0.5 / texelsPerElement};
-  vec2 texCoords = vec2(fract(index * ${uniformName}.x),
-                        index * ${uniformName}.y);
+  float offset = ${0.5 / texelsPerElement};
+  float xCoord = fract((index + offset) * ${uniformName}.x);
+  vec2 texCoords = vec2(xCoord,
+                        (index - (xCoord - 0.5 - offset * ${uniformName}.x) * ${uniformName}.z) *
+                        ${uniformName}.y);
 `;
     for (let i = 0; i < texelsPerElement; ++i) {
       code += `
@@ -298,6 +303,6 @@ ${shaderType} ${functionName}(float index) {
   }
 
   setupTextureLayout(gl: GL, shader: ShaderProgram, textureLayout: OneDimensionalTextureLayout) {
-    gl.uniform2fv(shader.uniform(this.uniformName), textureLayout.textureAccessCoefficients);
+    gl.uniform3fv(shader.uniform(this.uniformName), textureLayout.textureAccessCoefficients);
   }
 }

@@ -91,7 +91,7 @@ class PointAnnotationLayer(Layer):
 def volume_source(x):
     if isinstance(x, local_volume.LocalVolume):
         return x
-    if not isinstance(x, basestring):
+    if not isinstance(x, six.string_types):
         raise TypeError
     return text_type(x)
 
@@ -234,14 +234,14 @@ class Layers(object):
 
     def __getitem__(self, k):
         """Indexes into the list of layers by index, slice, or layer name."""
-        if isinstance(k, basestring):
+        if isinstance(k, six.string_types):
             return self._layers[self.index(k)]
         return self._layers[k]
 
     def __setitem__(self, k, v):
         if self._readonly:
             raise AttributeError
-        if isinstance(k, basestring):
+        if isinstance(k, six.string_types):
             i = self.index(k)
             if isinstance(v, Layer):
                 v = ManagedLayer(k, v)
@@ -272,7 +272,7 @@ class Layers(object):
         """Deletes a layer by index, slice, or name."""
         if self._readonly:
             raise AttributeError
-        if isinstance(k, basestring):
+        if isinstance(k, six.string_types):
             k = self.index(k)
         del self._layers[k]
 
@@ -308,7 +308,7 @@ class Layers(object):
 
 
 def layout_specification(x, _readonly=False):
-    if isinstance(x, basestring):
+    if isinstance(x, six.string_types):
         return six.text_type(x)
     if isinstance(x, (StackLayout, LayerGroupViewer)):
         return type(x)(x.to_json(), _readonly=_readonly)

@@ -20,17 +20,17 @@ import {VolumeChunkSource} from 'neuroglancer/sliceview/volume/frontend';
 import {ChunkFormatHandler, registerChunkFormatHandler} from 'neuroglancer/sliceview/volume/frontend';
 import {TypedArray, TypedArrayConstructor} from 'neuroglancer/util/array';
 import {RefCounted} from 'neuroglancer/util/disposable';
-import {vec2, vec3, vec3Key} from 'neuroglancer/util/geom';
+import {vec3, vec3Key} from 'neuroglancer/util/geom';
 import {Uint64} from 'neuroglancer/util/uint64';
 import {GL} from 'neuroglancer/webgl/context';
-import {compute1dTextureFormat, compute3dTextureLayout, OneDimensionalTextureAccessHelper, setOneDimensionalTextureData} from 'neuroglancer/webgl/one_dimensional_texture_access';
+import {compute1dTextureFormat, compute3dTextureLayout, OneDimensionalTextureAccessHelper, setOneDimensionalTextureData, TextureAccessCoefficients} from 'neuroglancer/webgl/one_dimensional_texture_access';
 import {ShaderBuilder, ShaderProgram} from 'neuroglancer/webgl/shader';
 import {getShaderType} from 'neuroglancer/webgl/shader_lib';
 
 class TextureLayout extends RefCounted {
   dataWidth: number;
   textureHeight: number;
-  textureAccessCoefficients: vec2;
+  textureAccessCoefficients: TextureAccessCoefficients;
   channelStride: number;
 
   constructor(gl: GL, public chunkDataSize: vec3, texelsPerElement: number, numChannels: number) {

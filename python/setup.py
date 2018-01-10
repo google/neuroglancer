@@ -4,6 +4,7 @@ from __future__ import print_function
 import os
 import shutil
 import subprocess
+import platform
 from distutils.command.build import build
 
 from setuptools import Extension, find_packages, setup
@@ -90,9 +91,13 @@ if USE_OMP:
 else:
     openmp_flags = []
 
+extra_compile_args = ['-std=c++11', '-fvisibility=hidden', '-O3'] + openmp_flags
+if platform.system() == 'Darwin':
+    extra_compile_args.insert(0, '-stdlib=libc++')
+
 setup(
     name='neuroglancer',
-    version='0.0.6',
+    version='1.0.2',
     description='Python data backend for neuroglancer, a WebGL-based viewer for volumetric data',
     author='Jeremy Maitin-Shepard, Jan Funke',
     author_email='jbms@google.com, jfunke@iri.upc.edu',
@@ -110,18 +115,18 @@ setup(
         'sockjs-tornado',
         'six',
         'google-apitools',
-        'futures',
     ],
+    extras_require={
+        ":python_version<'3.2'": ['futures'],
+    },
     ext_modules=[
         Extension(
             'neuroglancer._neuroglancer',
             sources=[os.path.join(src_dir, name) for name in local_sources],
             language='c++',
             include_dirs=[np.get_include(), openmesh_dir],
-            extra_compile_args=[
-                '-std=c++11', '-fvisibility=hidden', '-O3'
-            ] + openmp_flags,
+            extra_compile_args=extra_compile_args,
             extra_link_args=openmp_flags),
     ],
-    use_2to3=True,
-    cmdclass={'bundle_client': bundle_client}, )
+    cmdclass={'bundle_client': bundle_client},
+)

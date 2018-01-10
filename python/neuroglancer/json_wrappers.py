@@ -158,8 +158,9 @@ def typed_string_map(wrapped_type, validator=None):
         def __init__(self, json_data=None, _readonly=False):
             if isinstance(json_data, MapBase):
                 json_data = json_data.to_json()
-            for v in six.viewvalues(json_data):
-                validator(v)
+            elif json_data is not None:
+                for v in six.viewvalues(json_data):
+                    validator(v)
             super(Map, self).__init__(json_data, _readonly=_readonly)
 
         def clear(self):

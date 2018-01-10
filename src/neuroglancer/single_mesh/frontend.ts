@@ -21,7 +21,7 @@ import {PerspectiveViewRenderContext, PerspectiveViewRenderLayer} from 'neurogla
 import {GET_SINGLE_MESH_INFO_RPC_ID, SINGLE_MESH_CHUNK_KEY, SINGLE_MESH_LAYER_RPC_ID, SingleMeshInfo, SingleMeshSourceParameters, SingleMeshSourceParametersWithInfo, VertexAttributeInfo} from 'neuroglancer/single_mesh/base';
 import {TrackableValue} from 'neuroglancer/trackable_value';
 import {DataType} from 'neuroglancer/util/data_type';
-import {mat4, vec2, vec3} from 'neuroglancer/util/geom';
+import {mat4, vec3} from 'neuroglancer/util/geom';
 import {parseArray, stableStringify, verifyOptionalString, verifyString} from 'neuroglancer/util/json';
 import {getObjectId} from 'neuroglancer/util/object_id';
 import {Uint64} from 'neuroglancer/util/uint64';
@@ -30,7 +30,7 @@ import {Buffer} from 'neuroglancer/webgl/buffer';
 import {GL} from 'neuroglancer/webgl/context';
 import {makeWatchableShaderError} from 'neuroglancer/webgl/dynamic_shader';
 import {CountingBuffer, countingBufferShaderModule, disableCountingBuffer, getCountingBuffer, IndexBufferAttributeHelper, makeIndexBuffer} from 'neuroglancer/webgl/index_emulation';
-import {compute1dTextureFormat, compute1dTextureLayout, OneDimensionalTextureAccessHelper, OneDimensionalTextureFormat, setOneDimensionalTextureData} from 'neuroglancer/webgl/one_dimensional_texture_access';
+import {compute1dTextureFormat, compute1dTextureLayout, OneDimensionalTextureAccessHelper, OneDimensionalTextureFormat, setOneDimensionalTextureData, TextureAccessCoefficients} from 'neuroglancer/webgl/one_dimensional_texture_access';
 import {ShaderBuilder, ShaderModule, ShaderProgram} from 'neuroglancer/webgl/shader';
 import {getShaderType, glsl_addUint32, glsl_divmodUint32, setVec4FromUint32} from 'neuroglancer/webgl/shader_lib';
 import {SharedObject} from 'neuroglancer/worker_rpc';
@@ -259,7 +259,7 @@ export class VertexChunkData {
   // Emulation of buffer as texture.
   dataWidth: number;
   textureHeight: number;
-  textureAccessCoefficients: vec2;
+  textureAccessCoefficients: TextureAccessCoefficients;
 
   copyToGPU(gl: GL, attributeFormats: OneDimensionalTextureFormat[]) {
     let numVertices = this.vertexPositions.length / 3;

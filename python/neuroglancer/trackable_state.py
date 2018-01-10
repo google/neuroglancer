@@ -75,7 +75,7 @@ class TrackableState(ChangeNotifier):
                 self._raw_state = new_state
                 self._wrapped_state = None
                 self._generation = generation
-            self._dispatch_changed_callbacks()
+                self._dispatch_changed_callbacks()
             return self._generation
 
     @property
