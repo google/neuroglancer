@@ -46,10 +46,10 @@ import {WatchableVisibilityPriority} from 'neuroglancer/visibility_priority/fron
 import {GL} from 'neuroglancer/webgl/context';
 import {NumberInputWidget} from 'neuroglancer/widget/number_input_widget';
 import {MousePositionWidget, PositionWidget, VoxelSizeWidget} from 'neuroglancer/widget/position_widget';
+import {makeTextIconButton} from 'neuroglancer/widget/text_icon_button';
 import {RPC} from 'neuroglancer/worker_rpc';
 
 require('./viewer.css');
-require('./help_button.css');
 require('neuroglancer/noselect.css');
 require('neuroglancer/ui/button.css');
 
@@ -314,10 +314,7 @@ export class Viewer extends RefCounted implements ViewerState {
         topRow.appendChild(mousePositionWidget.element);
       }
       if (options.showHelpButton) {
-        let button = document.createElement('div');
-        button.className = 'neuroglancer-help-button neuroglancer-button';
-        button.textContent = '?';
-        button.title = 'Help';
+        const button = makeTextIconButton('?', 'Help');
         this.registerEventListener(button, 'click', () => {
           this.showHelpDialog();
         });

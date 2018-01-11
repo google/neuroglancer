@@ -29,7 +29,6 @@ import {RangeWidget} from 'neuroglancer/widget/range';
 import {ShaderCodeWidget} from 'neuroglancer/widget/shader_code_widget';
 
 require('./image_user_layer.css');
-require('neuroglancer/help_button.css');
 require('neuroglancer/maximize_button.css');
 
 export class ImageUserLayer extends UserLayer {

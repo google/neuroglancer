@@ -31,7 +31,6 @@ import {RangeWidget} from 'neuroglancer/widget/range';
 import {Vec3Widget} from 'neuroglancer/widget/vec3_entry_widget';
 
 require('./image_user_layer.css');
-require('neuroglancer/help_button.css');
 require('neuroglancer/maximize_button.css');
 
 function getVectorGraphicsWithStatusMessage(

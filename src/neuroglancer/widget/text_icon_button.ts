@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2016 Google Inc.
+ * Copyright 2018 Google Inc.
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
@@ -14,6 +14,16 @@
  * limitations under the License.
  */
 
-.neuroglancer-help-button.neuroglancer-button {
-  font-weight: bold;
+import './text_icon_button.css';
+
+export function makeTextIconButton(iconText: string, title?: string) {
+  const element = document.createElement('div');
+  const innerElement = document.createElement('div');
+  innerElement.textContent = iconText;
+  element.className = 'neuroglancer-icon-button';
+  element.appendChild(innerElement);
+  if (title !== undefined) {
+    element.title = title;
+  }
+  return element;
 }
