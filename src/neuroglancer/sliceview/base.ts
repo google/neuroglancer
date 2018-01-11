@@ -14,6 +14,7 @@
  * limitations under the License.
  */
 
+import {CoordinateTransform} from 'neuroglancer/coordinate_transform';
 import {ChunkLayout} from 'neuroglancer/sliceview/chunk_layout';
 import {partitionArray} from 'neuroglancer/util/array';
 import {approxEqual} from 'neuroglancer/util/compare';
@@ -115,9 +116,45 @@ function compareBounds(
   return curResult;
 }
 
-export interface RenderLayer { sources: SliceViewChunkSource[][]|null; }
+interface TransformedSource {
+  source: SliceViewChunkSource;
+  chunkLayout: ChunkLayout;
+}
 
-function pickBestAlternativeSource(zAxis: vec3, alternatives: SliceViewChunkSource[]) {
+export interface RenderLayer {
+  sources: SliceViewChunkSource[][];
+  transform: CoordinateTransform;
+  transformedSources: TransformedSource[][] | undefined;
+  transformedSourcesGeneration: number;
+}
+
+export function getTransformedSources(renderLayer: RenderLayer) {
+  const {transform} = renderLayer;
+  let {transformedSources} = renderLayer;
+  const generation = transform.changed.count;
+  if (generation !== renderLayer.transformedSourcesGeneration) {
+    renderLayer.transformedSourcesGeneration = generation;
+    if (mat4.equals(transform.transform, identityMat4)) {
+      transformedSources = renderLayer.sources.map(
+          alternatives =>
+              alternatives.map(source => ({source, chunkLayout: source.spec.chunkLayout})));
+    } else {
+      transformedSources = renderLayer.sources.map(alternatives => alternatives.map(source => {
+        const chunkLayout = source.spec.chunkLayout;
+        return {
+          chunkLayout: ChunkLayout.get(
+              chunkLayout.size, getCombinedTransform(chunkLayout.transform, transform)),
+          source,
+        };
+      }));
+    }
+    renderLayer.transformedSources = transformedSources;
+  }
+  return transformedSources!;
+}
+
+function pickBestAlternativeSource(
+    zAxis: vec3, alternatives: {source: SliceViewChunkSource, chunkLayout: ChunkLayout}[]) {
   let numAlternatives = alternatives.length;
   let bestAlternativeIndex = 0;
   if (DEBUG_VISIBLE_SOURCES) {
@@ -127,12 +164,10 @@ function pickBestAlternativeSource(zAxis: vec3, alternatives: SliceViewChunkSour
     let bestSliceArea = 0;
     for (let alternativeIndex = 0; alternativeIndex < numAlternatives; ++alternativeIndex) {
       let alternative = alternatives[alternativeIndex];
-      let {chunkLayout} = alternative.spec;
+      const {chunkLayout} = alternative;
       let sliceArea = estimateSliceAreaPerChunk(zAxis, chunkLayout);
       if (DEBUG_VISIBLE_SOURCES) {
-        console.log(`zAxis = ${zAxis}, chunksize = ${
-                                                     alternative.spec.chunkLayout.size
-                                                   }, sliceArea = ${sliceArea}`);
+        console.log(`zAxis = ${zAxis}, chunksize = ${chunkLayout.size}, sliceArea = ${sliceArea}`);
       }
       if (sliceArea > bestSliceArea) {
         bestSliceArea = sliceArea;
@@ -180,7 +215,7 @@ export class SliceViewBase extends SharedObject {
    */
   visibleChunkLayouts = new Map<ChunkLayout, Map<SliceViewChunkSource, number>>();
 
-  visibleLayers = new Map<RenderLayer, SliceViewChunkSource[]>();
+  visibleLayers = new Map<RenderLayer, TransformedSource[]>();
 
   visibleSourcesStale = true;
 
@@ -287,13 +322,13 @@ export class SliceViewBase extends SharedObject {
     visibleChunkLayouts.clear();
     for (let [renderLayer, visibleSources] of visibleLayers) {
       visibleSources.length = 0;
-      let sources = renderLayer.sources!;
-      let numSources = sources.length;
+      let transformedSources = getTransformedSources(renderLayer);
+      let numSources = transformedSources.length;
       let scaleIndex: number;
 
       // At the smallest scale, all alternative sources must have the same voxel size, which is
       // considered to be the base voxel size.
-      let smallestVoxelSize = sources[0][0].spec.voxelSize;
+      let smallestVoxelSize = transformedSources[0][0].source.spec.voxelSize;
 
       /**
        * Determines whether we should continue to look for a finer-resolution source *after* one
@@ -315,10 +350,10 @@ export class SliceViewBase extends SharedObject {
        * Registers a source as being visible.  This should be called with consecutively decreasing
        * values of scaleIndex.
        */
-      const addVisibleSource = (source: SliceViewChunkSource, sourceScaleIndex: number) => {
+      const addVisibleSource = (transformedSource: TransformedSource, sourceScaleIndex: number) => {
         // Add to end of visibleSources list.  We will reverse the list after all sources are added.
-        visibleSources[visibleSources.length++] = source;
-        let chunkLayout = source.spec.chunkLayout;
+        const {source, chunkLayout} = transformedSource;
+        visibleSources[visibleSources.length++] = transformedSource;
         let existingSources = visibleChunkLayouts.get(chunkLayout);
         if (existingSources === undefined) {
           existingSources = new Map<SliceViewChunkSource, number>();
@@ -329,9 +364,9 @@ export class SliceViewBase extends SharedObject {
 
       scaleIndex = numSources - 1;
       while (true) {
-        let source = pickBestAlternativeSource(zAxis, sources[scaleIndex]);
-        addVisibleSource(source, scaleIndex);
-        if (scaleIndex === 0 || !canImproveOnVoxelSize(source.spec.voxelSize)) {
+        const transformedSource = pickBestAlternativeSource(zAxis, transformedSources[scaleIndex]);
+        addVisibleSource(transformedSource, scaleIndex);
+        if (scaleIndex === 0 || !canImproveOnVoxelSize(transformedSource.source.spec.voxelSize)) {
           break;
         }
         --scaleIndex;
@@ -926,3 +961,7 @@ export interface SliceViewChunkSource { spec: SliceViewChunkSpecification; }
 
 export const SLICEVIEW_RPC_ID = 'SliceView';
 export const SLICEVIEW_RENDERLAYER_RPC_ID = 'sliceview/RenderLayer';
+export const SLICEVIEW_ADD_VISIBLE_LAYER_RPC_ID = 'SliceView.addVisibleLayer';
+export const SLICEVIEW_REMOVE_VISIBLE_LAYER_RPC_ID = 'SliceView.removeVisibleLayer';
+export const SLICEVIEW_UPDATE_VIEW_RPC_ID = 'SliceView.updateView';
+export const SLICEVIEW_RENDERLAYER_UPDATE_TRANSFORM_RPC_ID = 'SliceView.updateTransform';

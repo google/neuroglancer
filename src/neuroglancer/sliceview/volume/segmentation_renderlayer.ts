@@ -14,6 +14,7 @@
  * limitations under the License.
  */
 
+import {CoordinateTransform} from 'neuroglancer/coordinate_transform';
 import {HashMapUint64} from 'neuroglancer/gpu_hash/hash_table';
 import {GPUHashTable, HashMapShaderManager, HashSetShaderManager} from 'neuroglancer/gpu_hash/shader';
 import {SegmentColorShaderManager} from 'neuroglancer/segment_color';
@@ -25,7 +26,6 @@ import {RenderLayer} from 'neuroglancer/sliceview/volume/renderlayer';
 import {TrackableAlphaValue} from 'neuroglancer/trackable_alpha';
 import {TrackableBoolean} from 'neuroglancer/trackable_boolean';
 import {DisjointUint64Sets} from 'neuroglancer/util/disjoint_sets';
-import {vec3} from 'neuroglancer/util/geom';
 import {ShaderBuilder, ShaderProgram} from 'neuroglancer/webgl/shader';
 import {glsl_unnormalizeUint8} from 'neuroglancer/webgl/shader_lib';
 
@@ -52,8 +52,9 @@ export class EquivalencesHashMap {
 export interface SliceViewSegmentationDisplayState extends SegmentationDisplayState {
   selectedAlpha: TrackableAlphaValue;
   notSelectedAlpha: TrackableAlphaValue;
-  volumeSourceOptions: VolumeSourceOptions;
+  volumeSourceOptions?: VolumeSourceOptions;
   hideSegmentZero: TrackableBoolean;
+  objectToDataTransform: CoordinateTransform;
 }
 
 export class SegmentationRenderLayer extends RenderLayer {
@@ -70,7 +71,10 @@ export class SegmentationRenderLayer extends RenderLayer {
   constructor(
       multiscaleSource: MultiscaleVolumeChunkSource,
       public displayState: SliceViewSegmentationDisplayState) {
-    super(multiscaleSource, {sourceOptions: displayState.volumeSourceOptions});
+    super(multiscaleSource, {
+      sourceOptions: displayState.volumeSourceOptions,
+      transform: displayState.objectToDataTransform
+    });
     registerRedrawWhenSegmentationDisplayStateChanged(displayState, this);
     this.registerDisposer(displayState.selectedAlpha.changed.add(() => {
       this.redrawNeeded.dispatch();
@@ -92,18 +96,6 @@ export class SegmentationRenderLayer extends RenderLayer {
     this.registerDisposer(displayState.notSelectedAlpha.changed.add(() => {
       this.redrawNeeded.dispatch();
     }));
-  }
-
-  getValueAt(position: vec3) {
-    for (let alternatives of this.sources!) {
-      for (let source of alternatives) {
-        let result = source.getValueAt(position);
-        if (result != null) {
-          return result;
-        }
-      }
-    }
-    return null;
   }
 
   getShaderKey() {

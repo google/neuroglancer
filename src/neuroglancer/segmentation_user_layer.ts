@@ -62,7 +62,6 @@ export class SegmentationUserLayer extends UserLayer {
         hideSegmentZero: new TrackableBoolean(true, true),
         visibleSegments: Uint64Set.makeWithCounterpart(this.manager.worker),
         segmentEquivalences: SharedDisjointUint64Sets.makeWithCounterpart(this.manager.worker),
-        volumeSourceOptions: {},
         objectToDataTransform: new CoordinateTransform(),
         fragmentMain: getTrackableFragmentMain(),
         shaderError: makeWatchableShaderError(),
@@ -107,8 +106,6 @@ export class SegmentationUserLayer extends UserLayer {
     this.displayState.objectAlpha.restoreState(x[OBJECT_ALPHA_JSON_KEY]);
     this.displayState.hideSegmentZero.restoreState(x[HIDE_SEGMENT_ZERO_JSON_KEY]);
     this.displayState.objectToDataTransform.restoreState(x['transform']);
-    this.displayState.volumeSourceOptions.transform =
-        this.displayState.objectToDataTransform.transform;
     this.displayState.fragmentMain.restoreState(x['skeletonShader']);
 
     let volumePath = this.volumePath = verifyOptionalString(x['source']);

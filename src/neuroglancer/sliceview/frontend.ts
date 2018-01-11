@@ -19,7 +19,7 @@ import {ChunkState} from 'neuroglancer/chunk_manager/base';
 import {Chunk, ChunkManager, ChunkSource} from 'neuroglancer/chunk_manager/frontend';
 import {LayerManager} from 'neuroglancer/layer';
 import {NavigationState} from 'neuroglancer/navigation_state';
-import {SLICEVIEW_RPC_ID, SliceViewBase, SliceViewChunkSource as SliceViewChunkSourceInterface, SliceViewChunkSpecification, SliceViewSourceOptions} from 'neuroglancer/sliceview/base';
+import {SLICEVIEW_ADD_VISIBLE_LAYER_RPC_ID, SLICEVIEW_REMOVE_VISIBLE_LAYER_RPC_ID, SLICEVIEW_RPC_ID, SLICEVIEW_UPDATE_VIEW_RPC_ID, SliceViewBase, SliceViewChunkSource as SliceViewChunkSourceInterface, SliceViewChunkSpecification, SliceViewSourceOptions} from 'neuroglancer/sliceview/base';
 import {ChunkLayout} from 'neuroglancer/sliceview/chunk_layout';
 import {RenderLayer} from 'neuroglancer/sliceview/renderlayer';
 import {RefCounted} from 'neuroglancer/util/disposable';
@@ -62,7 +62,7 @@ export class SliceView extends Base {
 
   visibleLayerList = new Array<RenderLayer>();
 
-  visibleLayers: Map<RenderLayer, any[]>;
+  visibleLayers: Map<RenderLayer, {chunkLayout: ChunkLayout, source: SliceViewChunkSource}[]>;
 
   newVisibleLayers = new Set<RenderLayer>();
 
@@ -113,6 +113,21 @@ export class SliceView extends Base {
     this.updateVisibleLayersNow();
   }, 0));
 
+  private invalidateVisibleSources = (() => {
+    this.visibleSourcesStale = true;
+    this.viewChanged.dispatch();
+  });
+
+  private bindVisibleRenderLayer(renderLayer: RenderLayer) {
+    renderLayer.redrawNeeded.add(this.viewChanged.dispatch);
+    renderLayer.transform.changed.add(this.invalidateVisibleSources);
+  }
+
+  private unbindVisibleRenderLayer(renderLayer: RenderLayer) {
+    renderLayer.redrawNeeded.remove(this.viewChanged.dispatch);
+    renderLayer.transform.changed.remove(this.invalidateVisibleSources);
+  }
+
   private updateVisibleLayersNow() {
     if (this.wasDisposed) {
       return false;
@@ -133,9 +148,9 @@ export class SliceView extends Base {
         visibleLayerList.push(renderLayer);
         if (!visibleLayers.has(renderLayer)) {
           visibleLayers.set(renderLayer.addRef(), []);
-          renderLayer.redrawNeeded.add(this.viewChanged.dispatch);
+          this.bindVisibleRenderLayer(renderLayer);
           rpcMessage['layerId'] = renderLayer.rpcId;
-          rpc.invoke('SliceView.addVisibleLayer', rpcMessage);
+          rpc.invoke(SLICEVIEW_ADD_VISIBLE_LAYER_RPC_ID, rpcMessage);
           changed = true;
         }
       }
@@ -143,9 +158,9 @@ export class SliceView extends Base {
     for (let renderLayer of visibleLayers.keys()) {
       if (!newVisibleLayers.has(renderLayer)) {
         visibleLayers.delete(renderLayer);
-        renderLayer.redrawNeeded.remove(this.viewChanged.dispatch);
+        this.unbindVisibleRenderLayer(renderLayer);
         rpcMessage['layerId'] = renderLayer.rpcId;
-        rpc.invoke('SliceView.removeVisibleLayer', rpcMessage);
+        rpc.invoke(SLICEVIEW_REMOVE_VISIBLE_LAYER_RPC_ID, rpcMessage);
         renderLayer.dispose();
         changed = true;
       }
@@ -174,7 +189,7 @@ export class SliceView extends Base {
   }
   setViewportSize(width: number, height: number) {
     if (super.setViewportSize(width, height)) {
-      this.rpc!.invoke('SliceView.updateView', {id: this.rpcId, width: width, height: height});
+      this.rpc!.invoke(SLICEVIEW_UPDATE_VIEW_RPC_ID, {id: this.rpcId, width: width, height: height});
       // this.chunkManager.scheduleUpdateChunkPriorities();
       return true;
     }
@@ -185,7 +200,8 @@ export class SliceView extends Base {
     let {viewportToData, dataToViewport} = this;
     mat4.invert(dataToViewport, viewportToData);
     rectifyTransformMatrixIfAxisAligned(dataToViewport);
-    this.rpc!.invoke('SliceView.updateView', {id: this.rpcId, viewportToData: viewportToData});
+    this.rpc!.invoke(
+        SLICEVIEW_UPDATE_VIEW_RPC_ID, {id: this.rpcId, viewportToData: viewportToData});
   }
 
   onHasValidViewport() {
@@ -268,7 +284,8 @@ export class SliceView extends Base {
   }
 
   disposed() {
-    for (let renderLayer of this.visibleLayers.keys()) {
+    for (const renderLayer of this.visibleLayers.keys()) {
+      this.unbindVisibleRenderLayer(renderLayer);
       renderLayer.dispose();
     }
     this.visibleLayers.clear();

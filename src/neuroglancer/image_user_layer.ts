@@ -61,7 +61,7 @@ export class ImageUserLayer extends UserLayer {
               blendMode: this.blendMode,
               fragmentMain: this.fragmentMain,
               shaderError: this.shaderError,
-              sourceOptions: {transform: mat4.clone(this.transform.transform)},
+              transform: this.transform,
             });
             this.addRenderLayer(renderLayer);
             this.shaderError.changed.dispatch();

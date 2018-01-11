@@ -111,11 +111,10 @@ export class VolumeChunkSource extends SliceViewChunkSource implements VolumeChu
     return this.chunkFormatHandler.chunkFormat;
   }
 
-  getValueAt(position: vec3) {
+  getValueAt(position: vec3, chunkLayout = this.spec.chunkLayout) {
     const chunkGridPosition = tempChunkGridPosition;
     const localPosition = tempLocalPosition;
     let spec = this.spec;
-    let chunkLayout = spec.chunkLayout;
     let chunkSize = chunkLayout.size;
     chunkLayout.globalToLocalSpatial(localPosition, position);
     for (let i = 0; i < 3; ++i) {
