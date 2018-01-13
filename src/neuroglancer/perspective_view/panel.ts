@@ -274,6 +274,7 @@ export class PerspectivePanel extends RenderedDataPanel {
       transparentConfiguration = this.transparentConfiguration_ =
           this.registerDisposer(new FramebufferConfiguration(this.gl, {
             colorBuffers: makeTextureBuffers(this.gl, 2, this.gl.RGBA, this.gl.FLOAT),
+            depthBuffer: this.offscreenFramebuffer.depthBuffer!.addRef(),
           }));
     }
     return transparentConfiguration;
