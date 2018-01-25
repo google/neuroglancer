@@ -22,7 +22,7 @@ import {registerRPC, registerSharedObject, RPC, SharedObjectCounterpart} from 'n
 @registerSharedObject('Uint64Set')
 export class Uint64Set extends SharedObjectCounterpart {
   hashTable = new HashSetUint64();
-  changed = new Signal<(x: Uint64 | null, add: boolean) => void>();
+  changed = new Signal<(x: Uint64 | Uint64[] | null, add: boolean) => void>();
 
   static makeWithCounterpart(rpc: RPC) {
     let obj = new Uint64Set();
@@ -36,15 +36,33 @@ export class Uint64Set extends SharedObjectCounterpart {
     this.changed = <any>undefined;
   }
 
-  add_(x: Uint64) {
-    return this.hashTable.add(x);
+  reserve_(x: number) {
+    return this.hashTable.reserve(x);
   }
 
-  add(x: Uint64) {
-    if (this.add_(x)) {
+  reserve(x: number) {
+    if (this.reserve_(x)) {
       let {rpc} = this;
       if (rpc) {
-        rpc.invoke('Uint64Set.add', {'id': this.rpcId, 'value': x});
+        rpc.invoke('Uint64Set.reserve', {'id': this.rpcId, 'value': x});
+      }
+    }
+  }
+
+  add_(x: Uint64[]) {
+    let changed = false;
+    for (const v of x) {
+      changed = this.hashTable.add(v) || changed;
+    }
+    return changed;
+  }
+
+  add(x: Uint64|Uint64[]) {
+    const tmp = Array<Uint64>().concat(x);
+    if (this.add_(tmp)) {
+      let {rpc} = this;
+      if (rpc) {
+        rpc.invoke('Uint64Set.add', {'id': this.rpcId, 'value': tmp});
       }
       this.changed.dispatch(x, true);
     }
@@ -58,15 +76,20 @@ export class Uint64Set extends SharedObjectCounterpart {
     return this.hashTable.keys();
   }
 
-  delete_(x: Uint64) {
-    return this.hashTable.delete(x);
+  delete_(x: Uint64[]) {
+    let changed = false;
+    for (const v of x) {
+      changed = this.hashTable.delete(v) || changed;
+    }
+    return changed;
   }
 
-  delete(x: Uint64) {
-    if (this.delete_(x)) {
+  delete(x: Uint64|Uint64[]) {
+    const tmp = Array<Uint64>().concat(x);
+    if (this.delete_(Array<Uint64>().concat(x))) {
       let {rpc} = this;
       if (rpc) {
-        rpc.invoke('Uint64Set.delete', {'id': this.rpcId, 'value': x});
+        rpc.invoke('Uint64Set.delete', {'id': this.rpcId, 'value': tmp});
       }
       this.changed.dispatch(x, false);
     }
@@ -96,6 +119,13 @@ export class Uint64Set extends SharedObjectCounterpart {
     return result;
   }
 }
+
+registerRPC('Uint64Set.reserve', function(x) {
+  let obj = this.get(x['id']);
+  if (obj.reserve_(x['value'])) {
+    obj.changed.dispatch();
+  }
+});
 
 registerRPC('Uint64Set.add', function(x) {
   let obj = this.get(x['id']);

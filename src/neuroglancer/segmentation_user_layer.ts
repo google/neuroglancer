@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-import {ChunkedGraph} from 'neuroglancer/chunked_graph/frontend';
+import {ChunkedGraphLayer} from 'neuroglancer/chunked_graph/frontend';
 import {CoordinateTransform} from 'neuroglancer/coordinate_transform';
 import {UserLayer, UserLayerDropdown} from 'neuroglancer/layer';
 import {LayerListSpecification, registerLayerType, registerVolumeLayerType} from 'neuroglancer/layer_specification';
@@ -78,10 +78,10 @@ export class SegmentationUserLayer extends UserLayer {
    * If meshPath is undefined, a default mesh source provided by the volume may be used.  If
    * meshPath is null, the default mesh source is not used.
    */
-  chunkedGraphUrl: string|null|undefined;
   meshPath: string|null|undefined;
   skeletonsPath: string|null|undefined;
-  chunkedGraph: ChunkedGraph;
+  chunkedGraphUrl: string|null|undefined;
+  chunkedGraphLayer: ChunkedGraphLayer | undefined;
   meshLayer: MeshLayer|undefined;
 
   private pendingGraphMod: {
@@ -129,8 +129,9 @@ export class SegmentationUserLayer extends UserLayer {
         this.displayState.objectToDataTransform.transform;
     this.displayState.fragmentMain.restoreState(x['skeletonShader']);
 
+    this.chunkedGraphUrl = x['chunkedGraph'] === null ? null : verifyOptionalString(x['chunkedGraph']);
+
     let volumePath = this.volumePath = verifyOptionalString(x['source']);
-    let chunkedGraphUrl = this.chunkedGraphUrl = x['chunkedGraph'] === null ? null : verifyOptionalString(x['chunkedGraph']);
     let meshPath = this.meshPath = x['mesh'] === null ? null : verifyOptionalString(x['mesh']);
     let skeletonsPath = this.skeletonsPath = x['skeleton'] === null ? null : verifyOptionalString(x['skeleton']);
     if (volumePath !== undefined) {
@@ -139,39 +140,42 @@ export class SegmentationUserLayer extends UserLayer {
       }).then(volume => {
         if (!this.wasDisposed) {
           this.addRenderLayer(new SegmentationRenderLayer(volume, this.displayState));
-          if (chunkedGraphUrl === undefined) {
-            if (volume.getChunkedGraphUrl != null) {
-              this.chunkedGraphUrl = volume.getChunkedGraphUrl();
+          // Chunked Graph Server
+          if (volume.getChunkedGraphSources && volume.getChunkedGraphUrl) {
+            let chunkedGraphSources = volume.getChunkedGraphSources({}, this.displayState.rootSegments);
+            this.chunkedGraphUrl = volume.getChunkedGraphUrl();
+            if (chunkedGraphSources && this.chunkedGraphUrl) {
+              this.chunkedGraphLayer = new ChunkedGraphLayer(manager.chunkManager, this.chunkedGraphUrl, chunkedGraphSources, this.displayState);
+              this.addRenderLayer(this.chunkedGraphLayer);
+
+              // Have to wait for graph server initialization to fetch agglomerations
+              this.displayState.segmentEquivalences.clear();
+              verifyObjectProperty(x, 'segments', y => {
+                if (y !== undefined) {
+                  let {rootSegments} = this.displayState;
+                  parseArray(y, value => {
+                    rootSegments.add(Uint64.parseString(String(value), 10));
+                  });
+                }
+              });
             }
           }
-          this.chunkedGraph = this.registerDisposer(new ChunkedGraph(manager.chunkManager.rpc!, {url: this.chunkedGraphUrl || ''}));
+          // Meshes
           if (meshPath === undefined) {
             let meshSource = volume.getMeshSource();
             if (meshSource != null) {
-              this.addMesh(this.chunkedGraph, meshSource);
+              this.addMesh(meshSource, this.chunkedGraphLayer);
             }
           }
+          // Skeletons
           if (skeletonsPath === undefined) {
             if (volume.getSkeletonSource != null) {
               let skeletonSource = volume.getSkeletonSource();
               if (skeletonSource != null) {
                 this.skeletonsPath = 'from_info_file'; // this makes the dropdown menu visible
-                this.addSkeleton(this.chunkedGraph, skeletonSource);
+                this.addSkeleton(skeletonSource, this.chunkedGraphLayer);
               }
             }
-          }
-
-          // Have to wait for graph server initialization to fetch agglomerations
-          if (this.chunkedGraphUrl) {
-            this.displayState.segmentEquivalences.clear();
-            verifyObjectProperty(x, 'segments', y => {
-              if (y !== undefined) {
-                let {rootSegments} = this.displayState;
-                parseArray(y, value => {
-                  rootSegments.add(Uint64.parseString(String(value), 10));
-                });
-              }
-            });
           }
         }
       });
@@ -181,7 +185,7 @@ export class SegmentationUserLayer extends UserLayer {
       this.manager.dataSourceProvider.getMeshSource(manager.chunkManager, meshPath)
           .then(meshSource => {
             if (!this.wasDisposed) {
-              this.addMesh(this.chunkedGraph, meshSource);
+              this.addMesh(meshSource, this.chunkedGraphLayer);
             }
           });
     }
@@ -190,7 +194,7 @@ export class SegmentationUserLayer extends UserLayer {
       this.manager.dataSourceProvider.getSkeletonSource(manager.chunkManager, skeletonsPath)
           .then(skeletonSource => {
             if (!this.wasDisposed) {
-              this.addSkeleton(this.chunkedGraph, skeletonSource);
+              this.addSkeleton(skeletonSource, this.chunkedGraphLayer);
             }
           });
     }
@@ -226,14 +230,14 @@ export class SegmentationUserLayer extends UserLayer {
     });
   }
 
-  addMesh(chunkedGraph: ChunkedGraph, meshSource: MeshSource) {
-    this.meshLayer = new MeshLayer(this.manager.chunkManager, chunkedGraph, meshSource, this.displayState);
+  addMesh(meshSource: MeshSource, chunkedGraph?: ChunkedGraphLayer) {
+    this.meshLayer = new MeshLayer(this.manager.chunkManager, chunkedGraph ? chunkedGraph : null, meshSource, this.displayState);
     this.addRenderLayer(this.meshLayer);
   }
 
-  addSkeleton(chunkedGraph: ChunkedGraph, skeletonSource: SkeletonSource) {
+  addSkeleton(skeletonSource: SkeletonSource, chunkedGraph?: ChunkedGraphLayer) {
     let base = new SkeletonLayer(
-              this.manager.chunkManager, chunkedGraph, skeletonSource, this.manager.voxelSize, this.displayState);
+              this.manager.chunkManager, chunkedGraph ? chunkedGraph : null, skeletonSource, this.manager.voxelSize, this.displayState);
     this.addRenderLayer(new PerspectiveViewSkeletonLayer(base.addRef()));
     this.addRenderLayer(new SliceViewPanelSkeletonLayer(/* transfer ownership */ base));
   }
@@ -333,13 +337,15 @@ export class SegmentationUserLayer extends UserLayer {
       let {rootSegments} = this.displayState;
       if (rootSegments.has(segment)) {
         rootSegments.delete(segment);
-      } else {
-        this.chunkedGraph.getRoot(segment).then(rootSegment => {
+      } else if (this.chunkedGraphLayer) {
+        this.chunkedGraphLayer.getRoot(segment).then(rootSegment => {
           rootSegments.add(rootSegment);
         }).catch((e: Error) => {
           console.log(e);
           StatusMessage.showTemporaryMessage(e.message, 3000);
         });
+      } else {
+        rootSegments.add(segment);
       }
     }
   }
@@ -373,8 +379,8 @@ export class SegmentationUserLayer extends UserLayer {
       this.pendingGraphMod.sink[0] = {segmentId: segment.clone(), rootId: root.clone(), position: coordinates};
       StatusMessage.showTemporaryMessage(`Selected ${segment} as sink for merge.`, 3000);
 
-      if (this.chunkedGraphUrl) {
-        this.chunkedGraph.mergeSegments(this.pendingGraphMod.source[0], this.pendingGraphMod.sink[0]).then((mergedRoot) => {
+      if (this.chunkedGraphLayer) {
+        this.chunkedGraphLayer.mergeSegments(this.pendingGraphMod.source[0], this.pendingGraphMod.sink[0]).then((mergedRoot) => {
           rootSegments.delete(this.pendingGraphMod.sink[0].rootId);
           rootSegments.delete(this.pendingGraphMod.source[0].rootId);
           rootSegments.add(mergedRoot);
@@ -415,8 +421,8 @@ export class SegmentationUserLayer extends UserLayer {
       this.pendingGraphMod.sink[0] = {segmentId: segment.clone(), rootId: root.clone(), position: coordinates};
       StatusMessage.showTemporaryMessage(`Selected ${segment} as sink for split.`, 3000);
 
-      if (this.chunkedGraphUrl) {
-        this.chunkedGraph.splitSegments(this.pendingGraphMod.source, this.pendingGraphMod.sink).then((splitRoots) => {
+      if (this.chunkedGraphLayer) {
+        this.chunkedGraphLayer.splitSegments(this.pendingGraphMod.source, this.pendingGraphMod.sink).then((splitRoots) => {
           if (splitRoots.length === 0) {
             StatusMessage.showTemporaryMessage(`No split found.`, 3000);
             return;
@@ -444,41 +450,15 @@ export class SegmentationUserLayer extends UserLayer {
       this.displayState.segmentEquivalences.clear();
       StatusMessage.showTemporaryMessage(`Deselected all ${leafSegmentCount} segments.`, 3000);
     } else if (added) {
-      // No Graph Server:
-      if (!this.chunkedGraphUrl) {
-        this.displayState.visibleSegments3D.add(rootSegment!);
-        this.displayState.visibleSegments2D!.add(rootSegment!);
-        return;
-      }
-
-      // Add root to 3D set, and leaves to 2D set
       this.displayState.visibleSegments3D.add(rootSegment!);
-      this.chunkedGraph.getLeaves(rootSegment!).then(leafSegments => {
-        if (!this.displayState.rootSegments.has(rootSegment!)) {
-          console.log('Adding 2D segments canceled due to missing root.');
-          return;
-        }
-
-        for (let e of leafSegments) {
-          this.displayState.visibleSegments2D!.add(e);
-          this.displayState.segmentEquivalences.link(rootSegment!, e);
-        }
-
-        StatusMessage.showTemporaryMessage(`Selected ${leafSegments.length} segments.`, 3000);
-      });
+      this.displayState.visibleSegments2D!.add(rootSegment!);
     } else if (!added) {
       let segments = [...this.displayState.segmentEquivalences.setElements(rootSegment!)];
       let segmentCount = segments.length; // Wrong count, but faster than below
 
-      // let segmentCount = 0;
-      // for (let seg of segments) {
-      //   if (this.displayState.visibleSegments2D.has(seg)) {
-      //     ++segmentCount;
-      //   }
-      // }
+      this.displayState.visibleSegments2D!.delete(rootSegment!);
 
       for (let e of segments) {
-        this.displayState.visibleSegments2D!.delete(e);
         this.displayState.visibleSegments3D.delete(e);
       }
       if (!this.chunkedGraphUrl) {
@@ -550,9 +530,9 @@ class SegmentationDropdown extends UserLayerDropdown {
     this.addSegmentWidget.element.title = 'Add one or more segment IDs';
     element.appendChild(this.registerDisposer(this.addSegmentWidget).element);
     this.registerDisposer(this.addSegmentWidget.valuesEntered.add((values: Uint64[]) => {
-      if (this.layer.chunkedGraphUrl) {
+      if (this.layer.chunkedGraphLayer) {
         for (const value of values) {
-          this.layer.chunkedGraph.getRoot(value).then((rootSegment: Uint64) => {
+          this.layer.chunkedGraphLayer.getRoot(value).then((rootSegment: Uint64) => {
             this.layer.displayState.rootSegments.add(rootSegment);
           }).catch((e: Error) => {
             console.log(e);

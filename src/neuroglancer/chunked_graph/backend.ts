@@ -14,28 +14,149 @@
  * limitations under the License.
  */
 
+import debounce from 'lodash/debounce';
+import {ChunkState, ChunkPriorityTier} from 'neuroglancer/chunk_manager/base';
+import {CHUNKED_GRAPH_LAYER_RPC_ID, ChunkedGraphSource as ChunkedGraphSourceInterface, ChunkedGraphChunkSpecification} from 'neuroglancer/chunked_graph/base';
+import {SharedDisjointUint64Sets} from 'neuroglancer/shared_disjoint_sets';
+import {SliceViewChunk, SliceViewChunkSource} from 'neuroglancer/sliceview/backend';
+import {Uint64Set} from 'neuroglancer/uint64_set';
+import {vec3, vec3Key} from 'neuroglancer/util/geom';
 import {openHttpRequest, sendHttpRequest, HttpError} from 'neuroglancer/util/http_request';
+import {NullarySignal} from 'neuroglancer/util/signal';
 import {Uint64} from 'neuroglancer/util/uint64';
 import {registerSharedObject, RPC, SharedObjectCounterpart} from 'neuroglancer/worker_rpc';
+import {withChunkManager, startChunkDownload, cancelChunkDownload } from 'neuroglancer/chunk_manager/backend';
 
-export const CHUNKED_GRAPH_SERVER_RPC_ID = 'ChunkedGraphServer';
-
-@registerSharedObject(CHUNKED_GRAPH_SERVER_RPC_ID)
-export class ChunkedGraph extends SharedObjectCounterpart {
-  private graphurl: string;
-
-  constructor(rpc: RPC, options: any = {}) {
+// Chunk that contains the list of fragments that make up a single object.
+export class ChunkedGraphChunk extends SliceViewChunk {
+  backendOnly = true;
+  source: ChunkedGraphChunkSource|null = null;
+  mappings: Map<string, Uint64[]|null>|null = null;
+  constructor() {
     super();
+  }
+
+  updateRootSegments(rootSegments: Uint64Set) {
+    let changed = false;
+    for (const rootObjectId of rootSegments) {
+      const key = rootObjectId.toString();
+      if (!this.mappings!.has(key)) {
+        changed = true;
+        this.mappings!.set(key, null);
+      }
+    }
+    return changed;
+  }
+
+  initializeChunkedGraphChunk(key: string, chunkGridPosition: vec3, rootSegments: Uint64Set) {
+    super.initializeVolumeChunk(key, chunkGridPosition);
+
+    this.mappings = new Map<string, Uint64[]|null>();
+    this.updateRootSegments(rootSegments);
+  }
+
+  downloadSucceeded() {
+    this.systemMemoryBytes = 0;
+    for (const supervoxelIds of this.mappings!.values()) {
+      if (supervoxelIds !== null) {
+        // Each supervoxel ID is a Uint64, consisting of two `number`s (8 Byte)
+        this.systemMemoryBytes += 16 * supervoxelIds.length;
+      }
+    }
+    super.downloadSucceeded();
+    if (this.priorityTier < ChunkPriorityTier.RECENT) {
+      this.source!.chunkManager.scheduleUpdateChunkPriorities();
+    }
+  }
+
+  freeSystemMemory() {
+    this.mappings = null;
+  }
+}
+
+export function decodeSupervoxelArray(chunk: ChunkedGraphChunk, rootObjectKey: string, data: ArrayBuffer) {
+  let uint32 = new Uint32Array(data);
+  let final: Uint64[] = new Array(uint32.length / 2);
+  for (let i = 0; i < uint32.length / 2; i++) {
+    final[i] = new Uint64(uint32[2 * i], uint32[2 * i + 1]);
+  }
+  chunk.mappings!.set(rootObjectKey, final);
+}
+
+export class ChunkedGraphChunkSource extends SliceViewChunkSource implements
+    ChunkedGraphSourceInterface {
+  spec: ChunkedGraphChunkSpecification;
+  rootSegments: Uint64Set;
+  chunks: Map<string, ChunkedGraphChunk>;
+
+  constructor(rpc: RPC, options: any) {
+    super(rpc, options);
+    this.spec = ChunkedGraphChunkSpecification.fromObject(options['spec']);
+    this.rootSegments = rpc.get(options['rootSegments']);
+  }
+
+  getChunk(chunkGridPosition: vec3) {
+    let key = vec3Key(chunkGridPosition);
+    let chunk = <ChunkedGraphChunk>this.chunks.get(key);
+
+    if (chunk === undefined) {
+      chunk = this.getNewChunk_(ChunkedGraphChunk);
+      chunk.initializeChunkedGraphChunk(key, chunkGridPosition, this.rootSegments);
+      this.addChunk(chunk);
+    } else {
+      if (chunk.updateRootSegments(this.rootSegments)) {
+        if (chunk.downloadCancellationToken !== undefined) {
+          cancelChunkDownload(chunk);
+        }
+        this.chunkManager.queueManager.updateChunkState(chunk, ChunkState.DOWNLOADING);
+        startChunkDownload(chunk);
+      }
+    }
+    return chunk;
+  }
+}
+
+const Base = withChunkManager(SharedObjectCounterpart);
+
+@registerSharedObject(CHUNKED_GRAPH_LAYER_RPC_ID)
+export class ChunkedGraphLayer extends Base {
+  layerChanged = new NullarySignal();
+  rpcId: number;
+  graphurl: string;
+  rootSegments: Uint64Set;
+  visibleSegments3D: Uint64Set;
+  segmentEquivalences: SharedDisjointUint64Sets;
+  sources: ChunkedGraphChunkSource[][];
+
+  constructor(rpc: RPC, options: any) {
+    super(rpc, options);
     this.graphurl = options['url'];
-    super.initializeSharedObject(rpc, options['id']);
+    this.rootSegments = <Uint64Set>rpc.get(options['rootSegments']);
+    this.visibleSegments3D = <Uint64Set>rpc.get(options['visibleSegments3D']);
+    this.segmentEquivalences = <SharedDisjointUint64Sets>rpc.get(options['segmentEquivalences']);
+
+    this.sources = new Array<ChunkedGraphChunkSource[]>();
+    for (const alternativeIds of options['sources']) {
+      const alternatives = new Array<ChunkedGraphChunkSource>();
+      this.sources.push(alternatives);
+      for (const sourceId of alternativeIds) {
+        const source: ChunkedGraphChunkSource = rpc.get(sourceId);
+        this.registerDisposer(source.addRef());
+        alternatives.push(source);
+      }
+    }
+
+    this.registerDisposer(this.rootSegments.changed.add(() => {
+      this.chunkManager.scheduleUpdateChunkPriorities();
+    }));
+
+    this.registerDisposer(this.chunkManager.recomputeChunkPriorities.add(() => {
+      this.debouncedupdateDisplayState();
+    }));
   }
 
   get url() {
     return this.graphurl;
-  }
-
-  disposed() {
-    super.disposed();
   }
 
   getChildren(segment: Uint64): Promise<Uint64[]> {
@@ -57,5 +178,60 @@ export class ChunkedGraph extends SharedObjectCounterpart {
       console.error(e);
       return Promise.reject(e);
     });
+  }
+
+  private debouncedupdateDisplayState = debounce(() => {
+    this.updateDisplayState();
+  }, 100);
+
+  private forEachSelectedRootWithLeaves(callback: (rootObjectKey: string, leaves: Uint64[]) => void) {
+  for (const alternative of this.sources) {
+    for (const source of alternative) {
+      for (const chunk of source.chunks.values()) {
+        if (chunk.state === ChunkState.SYSTEM_MEMORY_WORKER &&
+            chunk.priorityTier < ChunkPriorityTier.RECENT) {
+          for (const [rootObjectKey, leaves] of chunk.mappings!) {
+            if (this.rootSegments.has(Uint64.parseString(rootObjectKey)) && leaves !== null) {
+              callback(rootObjectKey, leaves);
+            }
+          }
+        }
+      }
+    }
+  }
+}
+
+  private updateDisplayState() {
+    const visibleLeaves = new Map<string, Uint64Set>();
+    const capacities = new Map<string, number>();
+
+    // Reserve
+    this.forEachSelectedRootWithLeaves((rootObjectKey, leaves) => {
+      if (!capacities.has(rootObjectKey)) {
+        capacities.set(rootObjectKey, leaves.length);
+      } else {
+        capacities.set(rootObjectKey, capacities.get(rootObjectKey)! + leaves.length);
+      }
+    });
+
+    // Collect unique leaves
+    this.forEachSelectedRootWithLeaves((rootObjectKey, leaves) => {
+      if (!visibleLeaves.has(rootObjectKey)) {
+        visibleLeaves.set(rootObjectKey, new Uint64Set());
+        visibleLeaves.get(rootObjectKey)!.reserve(capacities.get(rootObjectKey)!);
+        visibleLeaves.get(rootObjectKey)!.add(Uint64.parseString(rootObjectKey));
+      }
+      visibleLeaves.get(rootObjectKey)!.add(leaves);
+    });
+
+    for (const [root, leaves] of visibleLeaves) {
+      // TODO: Delete segments not visible anymore from segmentEquivalences - requires a faster data structure, though.
+
+      /*if (this.segmentEquivalences.has(Uint64.parseString(root))) {
+        this.segmentEquivalences.delete([...this.segmentEquivalences.setElements(Uint64.parseString(root))].filter(x => !leaves.has(x) && !this.visibleSegments3D.has(x)));
+      }*/
+
+      this.segmentEquivalences.link(Uint64.parseString(root), [...leaves].filter(x => !this.segmentEquivalences.has(x)));
+    }
   }
 }

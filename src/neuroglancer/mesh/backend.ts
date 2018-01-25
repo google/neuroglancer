@@ -17,7 +17,7 @@
 import debounce from 'lodash/debounce';
 import {Chunk, ChunkSource} from 'neuroglancer/chunk_manager/backend';
 import {ChunkPriorityTier, ChunkState} from 'neuroglancer/chunk_manager/base';
-import {ChunkedGraph} from 'neuroglancer/chunked_graph/backend';
+import {ChunkedGraphLayer} from 'neuroglancer/chunked_graph/backend';
 import {FRAGMENT_SOURCE_RPC_ID, MESH_LAYER_RPC_ID} from 'neuroglancer/mesh/base';
 import {SegmentationLayerSharedObjectCounterpart} from 'neuroglancer/segmentation_display_state/backend';
 import {getObjectKey} from 'neuroglancer/segmentation_display_state/base';
@@ -309,7 +309,7 @@ export class FragmentSource extends ChunkSource {
 @registerSharedObject(MESH_LAYER_RPC_ID)
 export class MeshLayer extends SegmentationLayerSharedObjectCounterpart {
   source: MeshSource;
-  chunkedGraph: ChunkedGraph;
+  chunkedGraph: ChunkedGraphLayer|null;
   private requestedChildChunks: Map<string, { add: Uint64[], delete: Uint64[] }>;
 
   private debouncedHandleChildChunks = debounce(() => {
@@ -319,7 +319,7 @@ export class MeshLayer extends SegmentationLayerSharedObjectCounterpart {
   constructor(rpc: RPC, options: any) {
     super(rpc, options);
     this.source = this.registerDisposer(rpc.getRef<MeshSource>(options['source']));
-    this.chunkedGraph = this.registerDisposer(rpc.getRef<ChunkedGraph>(options['chunkedGraph']));
+    this.chunkedGraph = this.registerDisposer(rpc.get(options['chunkedGraph']));
     this.registerDisposer(this.chunkManager.recomputeChunkPriorities.add(() => {
       this.updateChunkPriorities();
     }));
@@ -368,7 +368,7 @@ export class MeshLayer extends SegmentationLayerSharedObjectCounterpart {
           break;
         }
         case ChunkState.FAILED: {
-          if (this.chunkedGraph.url === '') {
+          if (this.chunkedGraph === null) {
             break;
           }
           manifestChunk.state = ChunkState.REQUESTING_CHILDREN;

@@ -30,6 +30,13 @@ export class VolumeChunkSourceParameters {
   static RPC_ID = 'precomputed/VolumeChunkSource';
 }
 
+export class ChunkedGraphSourceParameters {
+  baseUrls: string[];
+  path: string;
+
+  static RPC_ID = 'precomputed/ChunkedGraphSource';
+}
+
 
 export class MeshSourceParameters {
   baseUrls: string[];

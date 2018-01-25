@@ -179,7 +179,7 @@ uint64_t getMappedObjectId() {
     let gl = this.gl;
 
     let {displayState} = this;
-    let {segmentSelectionState, visibleSegments2D} = this.displayState;
+    let {segmentSelectionState, rootSegments} = this.displayState;
     if (!segmentSelectionState.hasSelectedSegment) {
       selectedSegmentForShader.fill(0);
     } else {
@@ -193,7 +193,7 @@ uint64_t getMappedObjectId() {
     gl.uniform1f(shader.uniform('uSelectedAlpha'), this.displayState.selectedAlpha.value);
     gl.uniform1f(shader.uniform('uNotSelectedAlpha'), this.displayState.notSelectedAlpha.value);
     gl.uniform4fv(shader.uniform('uSelectedSegment'), selectedSegmentForShader);
-    gl.uniform1f(shader.uniform('uShowAllSegments'), visibleSegments2D!.hashTable.size ? 0.0 : 1.0);
+    gl.uniform1f(shader.uniform('uShowAllSegments'), rootSegments.hashTable.size ? 0.0 : 1.0);
     this.hashTableManager.enable(gl, shader, this.gpuHashTable);
     if (this.hasEquivalences) {
       this.equivalencesHashMap.update();

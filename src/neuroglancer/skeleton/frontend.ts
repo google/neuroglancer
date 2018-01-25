@@ -16,7 +16,7 @@
 
 import {ChunkState} from 'neuroglancer/chunk_manager/base';
 import {Chunk, ChunkManager, ChunkSource} from 'neuroglancer/chunk_manager/frontend';
-import {ChunkedGraph} from 'neuroglancer/chunked_graph/frontend';
+import {ChunkedGraphLayer} from 'neuroglancer/chunked_graph/frontend';
 import {RenderLayer} from 'neuroglancer/layer';
 import {VoxelSize} from 'neuroglancer/navigation_state';
 import {PerspectiveViewRenderContext, PerspectiveViewRenderLayer} from 'neuroglancer/perspective_view/render_layer';
@@ -174,7 +174,7 @@ export class SkeletonLayer extends RefCounted {
 
   constructor(
       public chunkManager: ChunkManager,
-      public chunkedGraph: ChunkedGraph,
+      public chunkedGraph: ChunkedGraphLayer|null,
       public source: SkeletonSource,
       public voxelSizeObject: VoxelSize,
       public displayState: SkeletonLayerDisplayState) {
@@ -191,7 +191,7 @@ export class SkeletonLayer extends RefCounted {
     sharedObject.RPC_TYPE_ID = SKELETON_LAYER_RPC_ID;
     sharedObject.initializeCounterpartWithChunkManager({
       'source': source.addCounterpartRef(),
-      'chunkedGraph': chunkedGraph.addCounterpartRef(),
+      'chunkedGraph': chunkedGraph ? chunkedGraph.rpcId : null,
     });
 
     const vertexAttributes = this.vertexAttributes = [vertexPositionAttribute];

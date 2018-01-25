@@ -25,6 +25,9 @@ const ADD_METHOD_ID = 'DisjointUint64Sets.add';
 const CLEAR_METHOD_ID = 'DisjointUint64Sets.clear';
 const DELETE_SET_METHOD_ID = 'DisjointUint64Sets.deleteSet';
 
+const tempA = new Uint64();
+const tempB = new Uint64();
+
 @registerSharedObject(RPC_TYPE_ID)
 export class SharedDisjointUint64Sets extends SharedObjectCounterpart {
   disjointSets = new DisjointUint64Sets();
@@ -42,13 +45,24 @@ export class SharedDisjointUint64Sets extends SharedObjectCounterpart {
     super.disposed();
   }
 
-  link(a: Uint64, b: Uint64) {
-    if (this.disjointSets.link(a, b)) {
+  link_(a: Uint64, b: Uint64[]) {
+    let changed = false;
+    for (const v of b) {
+      tempB.low = v.low;
+      tempB.high = v.high;
+      changed = this.disjointSets.link(a, tempB) || changed;
+    }
+    return changed;
+  }
+
+  link(a: Uint64, b: Uint64|Uint64[]) {
+    const tmp = Array<Uint64>().concat(b);
+    if (this.link_(a, tmp)) {
       let {rpc} = this;
       if (rpc) {
         rpc.invoke(
             ADD_METHOD_ID,
-            {'id': this.rpcId, 'al': a.low, 'ah': a.high, 'bl': b.low, 'bh': b.high});
+            {'id': this.rpcId, 'al': a.low, 'ah': a.high, 'b': tmp});
       }
       this.changed.dispatch();
     }
@@ -59,11 +73,15 @@ export class SharedDisjointUint64Sets extends SharedObjectCounterpart {
       let {rpc} = this;
       if (rpc) {
         rpc.invoke(
-          DELETE_SET_METHOD_ID,
-          {'id': this.rpcId, 'al': a.low, 'ah': a.high});
+            DELETE_SET_METHOD_ID,
+            {'id': this.rpcId, 'al': a.low, 'ah': a.high});
       }
       this.changed.dispatch();
     }
+  }
+
+  has(x: Uint64): boolean {
+    return this.disjointSets.has(x);
   }
 
   get(x: Uint64): Uint64 {
@@ -111,16 +129,11 @@ export class SharedDisjointUint64Sets extends SharedObjectCounterpart {
   }
 }
 
-const tempA = new Uint64();
-const tempB = new Uint64();
-
 registerRPC(ADD_METHOD_ID, function(x) {
   let obj = <SharedDisjointUint64Sets>this.get(x['id']);
   tempA.low = x['al'];
   tempA.high = x['ah'];
-  tempB.low = x['bl'];
-  tempB.high = x['bh'];
-  if (obj.disjointSets.link(tempA, tempB)) {
+  if (obj.link_(tempA, x['b'])) {
     obj.changed.dispatch();
   }
 });

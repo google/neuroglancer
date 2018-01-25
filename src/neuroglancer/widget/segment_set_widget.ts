@@ -74,7 +74,7 @@ export class SegmentSetWidget extends RefCounted {
     clearButton.style.display = (this.displayState.rootSegments.size > 0) ? '' : 'none';
   }
 
-  private handleSetChanged(x: Uint64|null, added: boolean) {
+  private handleSetChanged(x: Uint64|Uint64[]|null, added: boolean) {
     this.updateClearButtonVisibility();
     let {items} = this;
     if (x === null) {
@@ -89,12 +89,16 @@ export class SegmentSetWidget extends RefCounted {
       }
       items.clear();
     } else if (added) {
-      this.addElement(x.toString());
+      for (const v of Array<Uint64>().concat(x)) {
+        this.addElement(v.toString());
+      }
     } else {
-      let s = x.toString();
-      let itemElement = items.get(s)!;
-      itemElement.parentElement!.removeChild(itemElement);
-      items.delete(s);
+      for (const v of Array<Uint64>().concat(x)) {
+        let s = v.toString();
+        let itemElement = items.get(s)!;
+        itemElement.parentElement!.removeChild(itemElement);
+        items.delete(s);
+      }
     }
   }
 

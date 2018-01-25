@@ -15,20 +15,25 @@
  */
 
 import {ChunkManager, WithParameters} from 'neuroglancer/chunk_manager/frontend';
+import {ChunkedGraphChunkSpecification, ChunkedGraphSourceOptions} from 'neuroglancer/chunked_graph/base';
+import {ChunkedGraphChunkSource} from 'neuroglancer/chunked_graph/frontend';
 import {DataSource} from 'neuroglancer/datasource';
-import {MeshSourceParameters, SkeletonSourceParameters, VolumeChunkEncoding, VolumeChunkSourceParameters} from 'neuroglancer/datasource/precomputed/base';
+import {ChunkedGraphSourceParameters, MeshSourceParameters, SkeletonSourceParameters, VolumeChunkEncoding, VolumeChunkSourceParameters} from 'neuroglancer/datasource/precomputed/base';
 import {MeshSource} from 'neuroglancer/mesh/frontend';
 import {VertexAttributeInfo} from 'neuroglancer/skeleton/base';
 import {SkeletonSource} from 'neuroglancer/skeleton/frontend';
 import {DataType, VolumeChunkSpecification, VolumeSourceOptions, VolumeType} from 'neuroglancer/sliceview/volume/base';
 import {MultiscaleVolumeChunkSource as GenericMultiscaleVolumeChunkSource, VolumeChunkSource} from 'neuroglancer/sliceview/volume/frontend';
+import {Uint64Set} from 'neuroglancer/uint64_set';
 import {mat4, vec3} from 'neuroglancer/util/geom';
 import {openShardedHttpRequest, parseSpecialUrl, sendHttpRequest} from 'neuroglancer/util/http_request';
 import {parseArray, parseFixedLengthArray, parseIntVec, verifyEnumString, verifyFinitePositiveFloat, verifyObject, verifyObjectAsMap, verifyObjectProperty, verifyOptionalString, verifyPositiveInt, verifyString} from 'neuroglancer/util/json';
 
-
 class PrecomputedVolumeChunkSource extends
 (WithParameters(VolumeChunkSource, VolumeChunkSourceParameters)) {}
+
+class PrecomputedChunkedGraphSource extends
+(WithParameters(ChunkedGraphChunkSource, ChunkedGraphSourceParameters)) {}
 
 class PrecomputedMeshSource extends
 (WithParameters(MeshSource, MeshSourceParameters)) {}
@@ -86,7 +91,38 @@ export class MultiscaleVolumeChunkSource implements GenericMultiscaleVolumeChunk
   scales: ScaleInfo[];
 
   getChunkedGraphUrl() {
-    return this.chunkedGraph === undefined ? null : this.chunkedGraph;
+    let {chunkedGraph} = this;
+    if (chunkedGraph === undefined) {
+      return null;
+    }
+    return chunkedGraph;
+  }
+
+  getChunkedGraphSources(chunkedGraphSourceOptions: ChunkedGraphSourceOptions, rootSegments: Uint64Set) {
+    let {chunkedGraph} = this;
+    if (chunkedGraph === undefined) {
+      return null;
+    }
+
+    const spec = ChunkedGraphChunkSpecification.withDefaults({
+      voxelSize: this.scales[0].resolution,
+      transform: mat4.fromTranslation(
+          mat4.create(),
+          vec3.multiply(vec3.create(), this.scales[0].resolution, this.scales[0].voxelOffset)),
+      upperVoxelBound: this.scales[0].size,
+      baseVoxelOffset: this.scales[0].voxelOffset,
+      chunkDataSize: vec3.fromValues(512,512,64),
+      chunkedGraphSourceOptions,
+    });
+
+    return [[this.chunkManager.getChunkSource(PrecomputedChunkedGraphSource, {
+      spec,
+      rootSegments,
+      parameters: {
+        'baseUrls': chunkedGraph,
+        'path': '/1.0/segment',
+      }
+    })]];
   }
 
   getMeshSource() {
@@ -175,7 +211,6 @@ export function getSkeletonSource(chunkManager: ChunkManager, path: string) {
     }
   });
 }
-
 
 export function getShardedMeshSource(chunkManager: ChunkManager, parameters: MeshSourceParameters) {
   return chunkManager.getChunkSource(PrecomputedMeshSource, {parameters});

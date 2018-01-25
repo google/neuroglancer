@@ -14,8 +14,9 @@
  * limitations under the License.
  */
 
+import {ChunkedGraphChunk, decodeSupervoxelArray, ChunkedGraphChunkSource} from 'neuroglancer/chunked_graph/backend';
 import {WithParameters} from 'neuroglancer/chunk_manager/backend';
-import {MeshSourceParameters, SkeletonSourceParameters, VolumeChunkEncoding, VolumeChunkSourceParameters} from 'neuroglancer/datasource/precomputed/base';
+import {MeshSourceParameters, SkeletonSourceParameters, VolumeChunkEncoding, VolumeChunkSourceParameters, ChunkedGraphSourceParameters} from 'neuroglancer/datasource/precomputed/base';
 import {decodeJsonManifestChunk, decodeTriangleVertexPositionsAndIndices, FragmentChunk, ManifestChunk, MeshSource} from 'neuroglancer/mesh/backend';
 import {ChunkDecoder} from 'neuroglancer/sliceview/backend_chunk_decoders';
 import {decodeCompressedSegmentationChunk} from 'neuroglancer/sliceview/backend_chunk_decoders/compressed_segmentation';
@@ -54,6 +55,34 @@ chunkDecoders.set(VolumeChunkEncoding.COMPRESSED_SEGMENTATION, decodeCompressedS
     return sendHttpRequest(
                openShardedHttpRequest(parameters.baseUrls, path), 'arraybuffer', cancellationToken)
         .then(response => this.chunkDecoder(chunk, response));
+  }
+}
+
+export function decodeChunkedGraphChunk(chunk: ChunkedGraphChunk, rootObjectKey: string, response: ArrayBuffer) {
+  return decodeSupervoxelArray(chunk, rootObjectKey, response);
+}
+
+@registerSharedObject() export class PrecomputedChunkedGraphSource extends
+(WithParameters(ChunkedGraphChunkSource, ChunkedGraphSourceParameters)) {
+  download(chunk: ChunkedGraphChunk, cancellationToken: CancellationToken) {
+    let {parameters} = this;
+    let chunkPosition = this.computeChunkBounds(chunk);
+    let chunkDataSize = chunk.chunkDataSize!;
+    let bounds = `${chunkPosition[0]}-${chunkPosition[0] + chunkDataSize[0]}_` +
+        `${chunkPosition[1]}-${chunkPosition[1] + chunkDataSize[1]}_` +
+        `${chunkPosition[2]}-${chunkPosition[2] + chunkDataSize[2]}`;
+
+    let promises = Array< Promise<void> >();
+    for (const [key, val] of chunk.mappings!.entries()) {
+      if (val === null) {
+        let requestPath = `${parameters.path}/${key}/leaves?bounds=${bounds}`;
+        promises.push(
+            sendHttpRequest(
+                openShardedHttpRequest(parameters.baseUrls, requestPath), 'arraybuffer', cancellationToken)
+                .then(response => decodeChunkedGraphChunk(chunk, key, response)));
+      }
+    }
+    return Promise.all(promises).then(() => {return;});
   }
 }
 

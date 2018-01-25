@@ -15,11 +15,14 @@
  */
 
 import {ChunkManager} from 'neuroglancer/chunk_manager/frontend';
+import {ChunkedGraphSourceOptions} from 'neuroglancer/chunked_graph/base';
+import {ChunkedGraphChunkSource} from 'neuroglancer/chunked_graph/frontend';
 import {MeshSource} from 'neuroglancer/mesh/frontend';
 import {SkeletonSource} from 'neuroglancer/skeleton/frontend';
 import {DataType} from 'neuroglancer/sliceview/base';
 import {MultiscaleSliceViewChunkSource, SliceViewChunk, SliceViewChunkSource} from 'neuroglancer/sliceview/frontend';
 import {VolumeChunkSource as VolumeChunkSourceInterface, VolumeChunkSpecification, VolumeSourceOptions, VolumeType} from 'neuroglancer/sliceview/volume/base';
+import {Uint64Set} from 'neuroglancer/uint64_set';
 import {Disposable} from 'neuroglancer/util/disposable';
 import {vec3, vec3Key} from 'neuroglancer/util/geom';
 import {Uint64} from 'neuroglancer/util/uint64';
@@ -192,16 +195,17 @@ export interface MultiscaleVolumeChunkSource extends MultiscaleSliceViewChunkSou
   getMeshSource: () => MeshSource | null;
 
   /**
+   * Returns the associated chunked graph url, if there is one.
+   *
+   * This only makes sense if volumeType === VolumeType.SEGMENTATION.
+   */
+  getChunkedGraphUrl?: () => string | null;
+  getChunkedGraphSources?: (options: ChunkedGraphSourceOptions, rootSegments: Uint64Set) => ChunkedGraphChunkSource[][] | null;
+
+  /**
    * Returns the associated skeleton source, if there is one.
    *
    * This only makes sense if volumeType === VolumeType.SEGMENTATION.
    */
   getSkeletonSource?: () => SkeletonSource | null;
-
-  /**
-   * Returns the associated chunked graph server url, if there is one.
-   *
-   * This only makes sense if volumeType === VolumeType.SEGMENTATION.
-   */
-  getChunkedGraphUrl?: () => string | null;
 }

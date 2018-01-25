@@ -14,12 +14,18 @@
  * limitations under the License.
  */
 
-import {SegmentSelection} from 'neuroglancer/segmentation_display_state/frontend';
+import {ChunkManager} from 'neuroglancer/chunk_manager/frontend';
+import {CHUNKED_GRAPH_LAYER_RPC_ID, ChunkedGraphSource as ChunkedGraphSourceInterface} from 'neuroglancer/chunked_graph/base';
+import {ChunkedGraphChunkSpecification, ChunkedGraphSourceOptions} from 'neuroglancer/chunked_graph/base';
+import {SegmentSelection, SegmentationDisplayState} from 'neuroglancer/segmentation_display_state/frontend';
+import {SliceView, SliceViewChunkSource, MultiscaleSliceViewChunkSource} from 'neuroglancer/sliceview/frontend';
+import {RenderLayer as GenericSliceViewRenderLayer} from 'neuroglancer/sliceview/renderlayer';
+import {Uint64Set} from 'neuroglancer/uint64_set';
 import {openHttpRequest, sendHttpRequest, sendHttpJsonPostRequest, HttpError} from 'neuroglancer/util/http_request';
 import {Uint64} from 'neuroglancer/util/uint64';
-import {registerSharedObject, RPC, SharedObject} from 'neuroglancer/worker_rpc';
+import {ShaderProgram} from 'neuroglancer/webgl/shader';
+import {RPC, SharedObject, RpcId} from 'neuroglancer/worker_rpc';
 
-export const CHUNKED_GRAPH_SERVER_RPC_ID = 'ChunkedGraphServer';
 export const GRAPH_SERVER_NOT_SPECIFIED = Symbol('Graph Server Not Specified.');
 
 export interface SegmentSelection {
@@ -28,27 +34,58 @@ export interface SegmentSelection {
   position: number[];
 }
 
-@registerSharedObject(CHUNKED_GRAPH_SERVER_RPC_ID)
-export class ChunkedGraph extends SharedObject {
-  private graphurl: string;
+export class ChunkedGraphChunkSource extends SliceViewChunkSource implements
+    ChunkedGraphSourceInterface {
+  spec: ChunkedGraphChunkSpecification;
+  rootSegments: Uint64Set;
 
-  constructor(rpc: RPC, options: any = {}) {
-    super();
-    this.graphurl = options['url'];
-    this.initializeCounterpart(rpc, options);
+  constructor(chunkManager: ChunkManager, options: {
+      spec: ChunkedGraphChunkSpecification, rootSegments: Uint64Set}) {
+    super(chunkManager, options);
+    this.rootSegments = options.rootSegments;
+  }
+
+  initializeCounterpart(rpc: RPC, options: any) {
+    options['rootSegments'] = this.rootSegments.rpcId;
+    super.initializeCounterpart(rpc, options);
+  }
+}
+
+export interface MultiscaleChunkedGraphSource extends MultiscaleSliceViewChunkSource {
+  getSources: (options: ChunkedGraphSourceOptions) => ChunkedGraphChunkSource[][];
+}
+
+export class ChunkedGraphLayer extends GenericSliceViewRenderLayer {
+  private graphurl: string;
+  shader: ShaderProgram|undefined = undefined;
+  shaderUpdated = true;
+  rpcId: RpcId|null = null;
+
+  constructor(
+      chunkManager: ChunkManager,
+      graphurl: string,
+      public sources: ChunkedGraphChunkSource[][],
+      displayState: SegmentationDisplayState) {
+    super(chunkManager, sources);
+    this.graphurl = graphurl;
+    let sharedObject = this.registerDisposer(new SharedObject());
+    sharedObject.RPC_TYPE_ID = CHUNKED_GRAPH_LAYER_RPC_ID;
+    sharedObject.initializeCounterpart(this.chunkManager.rpc!, {
+        'chunkManager': this.chunkManager.rpcId,
+        'url': this.url,
+        'sources': this.sourceIds,
+        'rootSegments': displayState.rootSegments.rpcId,
+        'visibleSegments3D': displayState.visibleSegments3D.rpcId,
+        'segmentEquivalences': displayState.segmentEquivalences.rpcId,
+      }
+    );
+    this.rpcId = sharedObject.rpcId;
+
+    this.setReady(true);
   }
 
   get url() {
     return this.graphurl;
-  }
-
-  initializeCounterpart(rpc: RPC, options: any = {}) {
-    options['url'] = this.graphurl;
-    super.initializeCounterpart(rpc, options);
-  }
-
-  disposed() {
-    super.disposed();
   }
 
   getRoot(segment: Uint64): Promise<Uint64> {
@@ -68,28 +105,6 @@ export class ChunkedGraph extends SharedObject {
       }
     }).catch((e: HttpError) => {
       console.log(`Could not retrieve root for segment ${segment}`);
-      console.error(e);
-      return Promise.reject(e);
-    });
-  }
-
-  getLeaves(segment: Uint64): Promise<Uint64[]> {
-    const {url} = this;
-    if (url === '') {
-      return Promise.resolve([segment]);
-    }
-
-    let promise = sendHttpRequest(openHttpRequest(`${url}/1.0/segment/${segment}/leaves`), 'arraybuffer');
-
-    return promise.then(response => {
-      let uint32 = new Uint32Array(response);
-      let final: Uint64[] = new Array(uint32.length / 2);
-      for (let i = 0; i < uint32.length / 2; i++) {
-        final[i] = new Uint64(uint32[2 * i], uint32[2 * i + 1]);
-      }
-      return final;
-    }).catch((e: HttpError) => {
-      console.log(`Could not retrieve connected components for segment ${segment}`);
       console.error(e);
       return Promise.reject(e);
     });
@@ -143,4 +158,16 @@ export class ChunkedGraph extends SharedObject {
       return Promise.reject(e);
     });
   }
+
+  beginSlice(_sliceView: SliceView) {
+    let shader = this.shader!;
+    shader.bind();
+    return shader;
+  }
+
+  endSlice() {}
+
+  defineShader() {}
+
+  draw() {}
 }

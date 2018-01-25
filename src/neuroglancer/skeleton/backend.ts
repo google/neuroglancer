@@ -15,7 +15,7 @@
  */
 
 import {Chunk, ChunkSource} from 'neuroglancer/chunk_manager/backend';
-import {ChunkedGraph} from 'neuroglancer/chunked_graph/backend';
+import {ChunkedGraphLayer} from 'neuroglancer/chunked_graph/backend';
 import {decodeVertexPositionsAndIndices} from 'neuroglancer/mesh/backend';
 import {SegmentationLayerSharedObjectCounterpart} from 'neuroglancer/segmentation_display_state/backend';
 import {forEachRootSegment, getObjectKey} from 'neuroglancer/segmentation_display_state/base';
@@ -114,12 +114,12 @@ export class SkeletonSource extends ChunkSource {
 @registerSharedObject(SKELETON_LAYER_RPC_ID)
 export class SkeletonLayer extends SegmentationLayerSharedObjectCounterpart {
   source: SkeletonSource;
-  chunkedGraph: ChunkedGraph;
+  chunkedGraph: ChunkedGraphLayer | null;
 
   constructor(rpc: RPC, options: any) {
     super(rpc, options);
     this.source = this.registerDisposer(rpc.getRef<SkeletonSource>(options['source']));
-    this.chunkedGraph = this.registerDisposer(rpc.getRef<ChunkedGraph>(options['chunkedGraph']));
+    this.chunkedGraph = this.registerDisposer(rpc.get(options['chunkedGraph']));
     this.registerDisposer(this.chunkManager.recomputeChunkPriorities.add(() => {
       this.updateChunkPriorities();
     }));
