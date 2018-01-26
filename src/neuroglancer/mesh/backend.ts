@@ -324,7 +324,9 @@ export class MeshLayer extends SegmentationLayerSharedObjectCounterpart {
       let manifestChunk = source.getChunk(objectId, this.clipBounds.value);
       chunkManager.requestChunk(
           manifestChunk, priorityTier, basePriority + MESH_OBJECT_MANIFEST_CHUNK_PRIORITY);
-      if (manifestChunk.state === ChunkState.SYSTEM_MEMORY_WORKER) {
+      const state = manifestChunk.state;
+      if (state === ChunkState.SYSTEM_MEMORY_WORKER || state === ChunkState.SYSTEM_MEMORY ||
+          state === ChunkState.GPU_MEMORY) {
         for (let fragmentId of manifestChunk.fragmentIds!) {
           let fragmentChunk = source.getFragmentChunk(manifestChunk, fragmentId);
           chunkManager.requestChunk(
