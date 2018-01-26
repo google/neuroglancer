@@ -460,6 +460,7 @@ export class OrientationState extends RefCounted {
   }
   toJSON() {
     let {orientation} = this;
+    quat.normalize(this.orientation, this.orientation);
     if (quaternionIsIdentity(orientation)) {
       return undefined;
     }
