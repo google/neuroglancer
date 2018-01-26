@@ -21,11 +21,12 @@ import {BrainmapsCredentialsProvider, BrainmapsInstance, Credentials, makeReques
 import {ChangeSpec, MeshSourceParameters, SkeletonSourceParameters, VolumeChunkEncoding, VolumeSourceParameters} from 'neuroglancer/datasource/brainmaps/base';
 import {MeshSource} from 'neuroglancer/mesh/frontend';
 import {SkeletonSource} from 'neuroglancer/skeleton/frontend';
+import {ChunkLayoutPreference} from 'neuroglancer/sliceview/base';
 import {DataType, VolumeChunkSpecification, VolumeSourceOptions, VolumeType} from 'neuroglancer/sliceview/volume/base';
 import {MultiscaleVolumeChunkSource as GenericMultiscaleVolumeChunkSource, VolumeChunkSource} from 'neuroglancer/sliceview/volume/frontend';
 import {StatusMessage} from 'neuroglancer/status';
 import {getPrefixMatches, getPrefixMatchesWithDescriptions} from 'neuroglancer/util/completion';
-import {Owned, Borrowed} from 'neuroglancer/util/disposable';
+import {Borrowed, Owned} from 'neuroglancer/util/disposable';
 import {vec3} from 'neuroglancer/util/geom';
 import {parseArray, parseQueryStringParameters, parseXYZ, verifyEnumString, verifyFinitePositiveFloat, verifyMapKey, verifyObject, verifyObjectProperty, verifyOptionalString, verifyPositiveInt, verifyString} from 'neuroglancer/util/json';
 
@@ -78,6 +79,7 @@ export class MeshInfo {
 
 export interface GetBrainmapsVolumeOptions extends GetVolumeOptions {
   encoding?: VolumeChunkEncoding;
+  chunkLayoutPreference?: ChunkLayoutPreference;
 }
 
 export class MultiscaleVolumeChunkSource implements GenericMultiscaleVolumeChunkSource {
@@ -87,12 +89,14 @@ export class MultiscaleVolumeChunkSource implements GenericMultiscaleVolumeChunk
   numChannels: number;
   meshes: MeshInfo[];
   encoding: VolumeChunkEncoding|undefined;
+  chunkLayoutPreference: ChunkLayoutPreference|undefined;
   constructor(
       public chunkManager: ChunkManager, public instance: BrainmapsInstance,
       public credentialsProvider: Borrowed<BrainmapsCredentialsProvider>, public volumeId: string,
       public changeSpec: ChangeSpec|undefined, volumeInfoResponse: any, meshesResponse: any,
       options: GetBrainmapsVolumeOptions) {
     this.encoding = options.encoding;
+    this.chunkLayoutPreference = options.chunkLayoutPreference;
     try {
       verifyObject(volumeInfoResponse);
       let scales = this.scales = verifyObjectProperty(
@@ -170,6 +174,7 @@ export class MultiscaleVolumeChunkSource implements GenericMultiscaleVolumeChunk
                                           upperVoxelBound: volumeInfo.upperVoxelBound,
                                           volumeType: this.volumeType,
                                           volumeSourceOptions,
+                                          chunkLayoutPreference: this.chunkLayoutPreference,
                                         })
                                         .map(spec => {
                                           return this.chunkManager.getChunkSource(
@@ -206,7 +211,7 @@ export class MultiscaleVolumeChunkSource implements GenericMultiscaleVolumeChunk
 
 
 export function parseVolumeKey(key: string):
-    {volumeId: string, changeSpec: ChangeSpec | undefined, parameters: any} {
+    {volumeId: string, changeSpec: ChangeSpec|undefined, parameters: any} {
   const match = key.match(/^([^:?]+:[^:?]+:[^:?]+)(?::([^:?]+))?(?:\?(.*))?$/);
   if (match === null) {
     throw new Error(`Invalid Brain Maps volume key: ${JSON.stringify(key)}.`);
@@ -345,9 +350,12 @@ export class BrainmapsDataSource extends DataSource {
     verifyObject(parameters);
     const encoding = verifyObjectProperty(
         parameters, 'encoding',
-        x => x === undefined ? undefined :
-                               verifyEnumString(parameters['encoding'], VolumeChunkEncoding));
-    const brainmapsOptions: GetBrainmapsVolumeOptions = {...options, encoding};
+        x => x === undefined ? undefined : verifyEnumString(x, VolumeChunkEncoding));
+    const chunkLayoutPreference = verifyObjectProperty(
+        parameters, 'chunkLayout',
+        x => x === undefined ? undefined : verifyEnumString(x, ChunkLayoutPreference));
+    const brainmapsOptions:
+        GetBrainmapsVolumeOptions = {...options, encoding, chunkLayoutPreference};
     return chunkManager.memoize.getUncounted(
         {
           type: 'brainmaps:getVolume',
