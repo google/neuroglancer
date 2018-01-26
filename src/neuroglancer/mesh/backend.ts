@@ -35,7 +35,6 @@ export type FragmentId = string;
 
 // Chunk that contains the list of fragments that make up a single object.
 export class ManifestChunk extends Chunk {
-  backendOnly = true;
   objectId = new Uint64();
   fragmentIds: FragmentId[]|null;
   clipBounds?: Bounds;
@@ -55,6 +54,11 @@ export class ManifestChunk extends Chunk {
 
   freeSystemMemory() {
     this.fragmentIds = null;
+  }
+
+  serialize(msg: any, transfers: any[]) {
+    super.serialize(msg, transfers);
+    msg.fragmentIds = this.fragmentIds;
   }
 
   downloadSucceeded() {

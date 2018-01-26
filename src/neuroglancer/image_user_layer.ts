@@ -23,7 +23,6 @@ import {VolumeType} from 'neuroglancer/sliceview/volume/base';
 import {FRAGMENT_MAIN_START, getTrackableFragmentMain, ImageRenderLayer} from 'neuroglancer/sliceview/volume/image_renderlayer';
 import {trackableAlphaValue} from 'neuroglancer/trackable_alpha';
 import {trackableBlendModeValue} from 'neuroglancer/trackable_blend';
-import {mat4} from 'neuroglancer/util/geom';
 import {makeWatchableShaderError} from 'neuroglancer/webgl/dynamic_shader';
 import {RangeWidget} from 'neuroglancer/widget/range';
 import {ShaderCodeWidget} from 'neuroglancer/widget/shader_code_widget';
@@ -65,6 +64,7 @@ export class ImageUserLayer extends UserLayer {
             });
             this.addRenderLayer(renderLayer);
             this.shaderError.changed.dispatch();
+            this.isReady = true;
           }
         });
   }

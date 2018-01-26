@@ -182,6 +182,26 @@ export class PerspectivePanel extends RenderedDataPanel {
     return this.viewer.navigationState;
   }
 
+  isReady() {
+    if (!this.visible) {
+      return false;
+    }
+    if (this.viewer.showSliceViews.value) {
+      for (const sliceView of this.sliceViews) {
+        if (!sliceView.isReady()) {
+          return false;
+        }
+      }
+    }
+    let visibleLayers = this.visibleLayerTracker.getVisibleLayers();
+    for (let renderLayer of visibleLayers) {
+      if (!renderLayer.isReady()) {
+        return false;
+      }
+    }
+    return true;
+  }
+
   updateProjectionMatrix() {
     let projectionMat = this.projectionMat;
     mat4.perspective(projectionMat, Math.PI / 4.0, this.width / this.height, 10, 5000);

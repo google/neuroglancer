@@ -34,6 +34,8 @@ export abstract class RenderedPanel extends RefCounted {
     this.context.scheduleRedraw();
   }
 
+  abstract isReady(): boolean;
+
   setGLViewport() {
     let element = this.element;
     const clientRect = element.getBoundingClientRect();
@@ -86,6 +88,18 @@ export class DisplayContext extends RefCounted {
     container.appendChild(canvas);
     this.gl = initializeWebGL(canvas);
     this.registerEventListener(window, 'resize', this.onResize.bind(this));
+  }
+
+  isReady() {
+    for (const panel of this.panels) {
+      if (!panel.visible) {
+        continue;
+      }
+      if (!panel.isReady()) {
+        return false;
+      }
+    }
+    return true;
   }
 
   /**

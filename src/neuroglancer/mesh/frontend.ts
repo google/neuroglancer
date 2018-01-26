@@ -18,6 +18,7 @@ import {ChunkState} from 'neuroglancer/chunk_manager/base';
 import {Chunk, ChunkManager, ChunkSource} from 'neuroglancer/chunk_manager/frontend';
 import {FRAGMENT_SOURCE_RPC_ID, MESH_LAYER_RPC_ID} from 'neuroglancer/mesh/base';
 import {PerspectiveViewRenderContext, PerspectiveViewRenderLayer} from 'neuroglancer/perspective_view/render_layer';
+import {forEachVisibleSegment, getObjectKey} from 'neuroglancer/segmentation_display_state/base';
 import {forEachSegmentToDraw, getObjectColor, registerRedrawWhenSegmentationDisplayState3DChanged, SegmentationDisplayState3D, SegmentationLayerSharedObject} from 'neuroglancer/segmentation_display_state/frontend';
 import {mat4, vec3, vec4} from 'neuroglancer/util/geom';
 import {getObjectId} from 'neuroglancer/util/object_id';
@@ -175,6 +176,37 @@ export class MeshLayer extends PerspectiveViewRenderLayer {
 
     meshShaderManager.endLayer(gl, shader);
   }
+
+  isReady() {
+    const {displayState, source} = this;
+    let ready = true;
+    const fragmentChunks = source.fragmentSource.chunks;
+    forEachVisibleSegment(displayState, objectId => {
+      const key = getObjectKey(objectId, displayState.clipBounds.value);
+      const manifestChunk = source.chunks.get(key);
+      if (manifestChunk === undefined) {
+        ready = false;
+        return;
+      }
+      for (const fragmentId of manifestChunk.fragmentIds) {
+        const fragmentChunk = fragmentChunks.get(`${key}/${fragmentId}`);
+        if (fragmentChunk === undefined || fragmentChunk.state !== ChunkState.GPU_MEMORY) {
+          ready = false;
+          return;
+        }
+      }
+    });
+    return ready;
+  }
+}
+
+export class ManifestChunk extends Chunk {
+  fragmentIds: string[];
+
+  constructor(source: MeshSource, x: any) {
+    super(source);
+    this.fragmentIds = x.fragmentIds;
+  }
 }
 
 export class FragmentChunk extends Chunk {
@@ -214,10 +246,14 @@ export class FragmentChunk extends Chunk {
 
 export class MeshSource extends ChunkSource {
   fragmentSource = this.registerDisposer(new FragmentSource(this.chunkManager, this));
+  chunks: Map<string, ManifestChunk>;
   initializeCounterpart(rpc: RPC, options: any) {
     this.fragmentSource.initializeCounterpart(this.chunkManager.rpc!, {});
     options['fragmentSource'] = this.fragmentSource.addCounterpartRef();
     super.initializeCounterpart(rpc, options);
+  }
+  getChunk(x: any) {
+    return new ManifestChunk(this, x);
   }
 }
 

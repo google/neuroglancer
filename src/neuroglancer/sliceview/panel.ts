@@ -164,6 +164,10 @@ export class SliceViewPanel extends RenderedDataPanel {
     }));
   }
 
+  isReady() {
+    return this.sliceView.isReady();
+  }
+
   draw() {
     let {sliceView} = this;
     if (!sliceView.hasValidViewport) {

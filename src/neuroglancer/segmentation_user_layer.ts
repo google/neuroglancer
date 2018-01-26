@@ -111,7 +111,9 @@ export class SegmentationUserLayer extends UserLayer {
     let volumePath = this.volumePath = verifyOptionalString(x['source']);
     let meshPath = this.meshPath = x['mesh'] === null ? null : verifyOptionalString(x['mesh']);
     let skeletonsPath = this.skeletonsPath = verifyOptionalString(x['skeletons']);
+    let remaining = 0;
     if (volumePath !== undefined) {
+      ++remaining;
       getVolumeWithStatusMessage(manager.dataSourceProvider, manager.chunkManager, volumePath, {
         volumeType: VolumeType.SEGMENTATION
       }).then(volume => {
@@ -123,20 +125,28 @@ export class SegmentationUserLayer extends UserLayer {
               this.addMesh(meshSource);
             }
           }
+          if (--remaining === 0) {
+            this.isReady = true;
+          }
         }
       });
     }
 
     if (meshPath != null) {
+      ++remaining;
       this.manager.dataSourceProvider.getMeshSource(manager.chunkManager, meshPath)
           .then(meshSource => {
             if (!this.wasDisposed) {
               this.addMesh(meshSource);
+              if (--remaining === 0) {
+                this.isReady = true;
+              }
             }
           });
     }
 
     if (skeletonsPath !== undefined) {
+      ++remaining;
       this.manager.dataSourceProvider.getSkeletonSource(manager.chunkManager, skeletonsPath)
           .then(skeletonSource => {
             if (!this.wasDisposed) {
@@ -144,6 +154,9 @@ export class SegmentationUserLayer extends UserLayer {
                   manager.chunkManager, skeletonSource, manager.voxelSize, this.displayState);
               this.addRenderLayer(new PerspectiveViewSkeletonLayer(base.addRef()));
               this.addRenderLayer(new SliceViewPanelSkeletonLayer(/* transfer ownership */ base));
+              if (--remaining === 0) {
+                this.isReady = true;
+              }
             }
           });
     }

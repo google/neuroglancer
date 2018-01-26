@@ -44,6 +44,7 @@ export class AnnotationPointListUserLayer extends UserLayer {
       let value = layerSelectedValues.get(this);
       this.selectedIndex.value = typeof value === 'number' ? value : null;
     }));
+    this.isReady = true;
   }
   toJSON() {
     let x: any = {'type': LAYER_TYPE};

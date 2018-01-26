@@ -100,6 +100,30 @@ export class SliceView extends Base {
     this.updateVisibleLayers();
   }
 
+  isReady() {
+    if (!this.hasValidViewport) {
+      return false;
+    }
+    this.maybeUpdateVisibleChunks();
+    for (const visibleSources of this.visibleLayers.values()) {
+      for (const {chunkLayout, source} of visibleSources) {
+        // FIXME: handle change to chunkLayout
+        const visibleChunks = this.visibleChunks.get(chunkLayout);
+        if (!visibleChunks) {
+          return false;
+        }
+        const {chunks} = source;
+        for (const key of visibleChunks) {
+          const chunk = chunks.get(key);
+          if (!chunk || chunk.state !== ChunkState.GPU_MEMORY) {
+            return false;
+          }
+        }
+      }
+    }
+    return true;
+  }
+
   private updateViewportFromNavigationState() {
     let {navigationState} = this;
     if (!navigationState.valid) {
