@@ -91,3 +91,16 @@ export function makeDerivedWatchableValue<U>(
     f: (...v: any[]) => U, ...ws: WatchableValueInterface<any>[]) {
   return new DerivedWatchableValue(f, ws);
 }
+
+export class ComputedWatchableValue<U> extends RefCounted implements WatchableValueInterface<U> {
+  get value() {
+    return this.f();
+  }
+  changed = new NullarySignal();
+  constructor(public f: () => U, ...signals: NullarySignal[]) {
+    super();
+    for (const signal of signals) {
+      this.registerDisposer(signal.add(this.changed.dispatch));
+    }
+  }
+}

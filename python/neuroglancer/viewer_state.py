@@ -202,6 +202,7 @@ class SegmentationLayer(Layer):
     selected_alpha = selectedAlpha = wrapped_property('selectedAlpha', optional(float, 0.5))
     not_selected_alpha = notSelectedAlpha = wrapped_property('notSelectedAlpha', optional(float, 0))
     object_alpha = objectAlpha = wrapped_property('objectAlpha', optional(float, 1.0))
+    skeleton_shader = skeletonShader = wrapped_property('skeletonShader', text_type)
 
 
 layer_types = {

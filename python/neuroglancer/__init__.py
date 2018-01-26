@@ -22,4 +22,5 @@ from .viewer_config_state import MapEntry
 from .equivalence_map import EquivalenceMap
 from .url_state import to_url, parse_url
 from .screenshot import ScreenshotSaver
+from . import skeleton
 from . import server

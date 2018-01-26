@@ -100,6 +100,7 @@ export class MultiscaleVolumeChunkSource implements GenericMultiscaleVolumeChunk
   encoding: VolumeChunkEncoding;
   scales: ScaleInfo[][];
   generation: number;
+  skeletonVertexAttributes: Map<string, VertexAttributeInfo>|undefined;
 
   // TODO(jbms): Properly handle reference counting of `dataSource`.
   constructor(public dataSource: Borrowed<PythonDataSource>, public chunkManager: ChunkManager, public key: string, public response: any) {
@@ -111,6 +112,9 @@ export class MultiscaleVolumeChunkSource implements GenericMultiscaleVolumeChunk
     this.encoding =
       verifyObjectProperty(response, 'encoding', x => verifyEnumString(x, VolumeChunkEncoding));
     this.generation = verifyObjectProperty(response, 'generation', x => x);
+    this.skeletonVertexAttributes = verifyObjectProperty(
+        response, 'skeletonVertexAttributes',
+        x => x === undefined ? undefined : verifyObjectAsMap(x, parseVertexAttributeInfo));
     let maxVoxelsPerChunkLog2 = verifyObjectProperty(
         response, 'maxVoxelsPerChunkLog2',
         x => x === undefined ? DEFAULT_MAX_VOXELS_PER_CHUNK_LOG2 : verifyPositiveInt(x));
@@ -201,6 +205,17 @@ export class MultiscaleVolumeChunkSource implements GenericMultiscaleVolumeChunk
   }
 
   getMeshSource() {
+    const {skeletonVertexAttributes} = this;
+    if (skeletonVertexAttributes !== undefined) {
+      return this.chunkManager.getChunkSource(PythonSkeletonSource, {
+        dataSource: this.dataSource,
+        generation: this.generation,
+        parameters: {
+          key: this.key,
+          vertexAttributes: skeletonVertexAttributes,
+        }
+      });
+    }
     return this.chunkManager.getChunkSource(PythonMeshSource, {
       dataSource: this.dataSource,
       generation: this.generation,

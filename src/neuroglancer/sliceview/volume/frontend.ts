@@ -16,6 +16,7 @@
 
 import {ChunkManager} from 'neuroglancer/chunk_manager/frontend';
 import {MeshSource} from 'neuroglancer/mesh/frontend';
+import {SkeletonSource} from 'neuroglancer/skeleton/frontend';
 import {DataType} from 'neuroglancer/sliceview/base';
 import {MultiscaleSliceViewChunkSource, SliceViewChunk, SliceViewChunkSource} from 'neuroglancer/sliceview/frontend';
 import {VolumeChunkSource as VolumeChunkSourceInterface, VolumeChunkSpecification, VolumeSourceOptions, VolumeType} from 'neuroglancer/sliceview/volume/base';
@@ -75,7 +76,7 @@ export interface ChunkFormatHandler extends Disposable {
 }
 
 export type ChunkFormatHandlerFactory = (gl: GL, spec: VolumeChunkSpecification) =>
-    ChunkFormatHandler | null;
+    ChunkFormatHandler|null;
 
 var chunkFormatHandlers = new Array<ChunkFormatHandlerFactory>();
 
@@ -183,9 +184,9 @@ export interface MultiscaleVolumeChunkSource extends MultiscaleSliceViewChunkSou
   volumeType: VolumeType;
 
   /**
-   * Returns the associated mesh source, if there is one.
+   * Returns the associated mesh source or skeleton source, if there is one.
    *
    * This only makes sense if volumeType === VolumeType.SEGMENTATION.
    */
-  getMeshSource: () => MeshSource | null;
+  getMeshSource: () => Promise<MeshSource|SkeletonSource|null>| MeshSource | SkeletonSource | null;
 }

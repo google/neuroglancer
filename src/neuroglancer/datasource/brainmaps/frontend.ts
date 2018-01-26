@@ -193,19 +193,30 @@ export class MultiscaleVolumeChunkSource implements GenericMultiscaleVolumeChunk
   }
 
   getMeshSource() {
-    let validMesh = this.meshes.find(x => x.type === 'TRIANGLES');
-    if (validMesh === undefined) {
-      return null;
-    }
-    return this.chunkManager.getChunkSource(BrainmapsMeshSource, {
-      credentialsProvider: this.credentialsProvider,
-      parameters: {
-        'instance': this.instance,
-        'volumeId': this.volumeId,
-        'meshName': validMesh.name,
-        'changeSpec': this.changeSpec,
+    for (const mesh of this.meshes) {
+      if (mesh.type === 'TRIANGLES') {
+        return this.chunkManager.getChunkSource(BrainmapsMeshSource, {
+          credentialsProvider: this.credentialsProvider,
+          parameters: {
+            'instance': this.instance,
+            'volumeId': this.volumeId,
+            'meshName': mesh.name,
+            'changeSpec': this.changeSpec,
+          }
+        });
+      } else if (mesh.type === 'LINE_SEGMENTS') {
+        return this.chunkManager.getChunkSource(BrainmapsSkeletonSource, {
+          credentialsProvider: this.credentialsProvider,
+          parameters: {
+            'instance': this.instance,
+            'volumeId': this.volumeId,
+            'meshName': mesh.name,
+            'changeSpec': this.changeSpec,
+          }
+        });
       }
-    });
+    }
+    return null;
   }
 }
 

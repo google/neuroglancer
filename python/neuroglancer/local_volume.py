@@ -194,6 +194,8 @@ class LocalVolume(trackable_state.ChangeNotifier):
         if self.three_dimensional_scales is not None:
             info['threeDimensionalScales'] = [get_scale_info(s)
                                               for s in self.three_dimensional_scales]
+        if self.skeletons is not None:
+            info['skeletonVertexAttributes'] = self.skeletons.get_vertex_attributes_spec()
         return info
 
     def get_encoded_subvolume(self, data_format, start, end, scale_key='1,1,1'):
