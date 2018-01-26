@@ -16,6 +16,8 @@
 from __future__ import absolute_import
 
 import collections
+import copy
+import math
 
 import numpy as np
 import six
@@ -28,9 +30,11 @@ from .json_wrappers import (JsonObjectWrapper, array_wrapper, optional, text_typ
 
 __all__ = []
 
+
 def export(obj):
     __all__.append(obj.__name__)
     return obj
+
 
 @export
 class SpatialPosition(JsonObjectWrapper):
@@ -41,12 +45,71 @@ class SpatialPosition(JsonObjectWrapper):
     voxel_coordinates = voxelCoordinates = wrapped_property('voxelCoordinates',
                                                             optional(array_wrapper(np.float32, 3)))
 
+    @staticmethod
+    def interpolate(a, b, t):
+        if a.voxel_size is None or a.voxel_coordinates is None or b.voxel_coordinates is None:
+            return a
+        c = copy.deepcopy(a)
+        c.voxel_coordinates = (1 - t) * a.voxel_coordinates + t * b.voxel_coordinates
+        return c
+
+
+def unit_quaternion():
+    return np.array([0, 0, 0, 1], np.float32)
+
+
+def quaternion_slerp(a, b, t):
+    """Spherical linear interpolation for unit quaternions.
+
+    This is based on the implementation in the gl-matrix package:
+    https://github.com/toji/gl-matrix
+    """
+    if a is None:
+        a = unit_quaternion()
+    if b is None:
+        b = unit_quaternion()
+    # calc cosine
+    cosom = np.dot(a, b)
+    # adjust signs (if necessary)
+    if cosom < 0.0:
+        cosom = -cosom
+        b = -b
+
+    # calculate coefficients
+    if (1.0 - cosom) > 0.000001:
+        # standard case (slerp)
+        omega = math.acos(cosom)
+        sinom = math.sin(omega)
+        scale0 = math.sin((1.0 - t) * omega) / sinom
+        scale1 = math.sin(t * omega) / sinom
+    else:
+        # "from" and "to" quaternions are very close
+        #  ... so we can do a linear interpolation
+        scale0 = 1.0 - t
+        scale1 = t
+    return scale0 * a + scale1 * b
+
 
 @export
 class Pose(JsonObjectWrapper):
     __slots__ = ()
     position = wrapped_property('position', SpatialPosition)
-    orientation = wrapped_property('orientation', optional(array_wrapper(np.float32, 4)))
+    orientation = wrapped_property('orientation',
+                                   optional(array_wrapper(np.float32, 4)))
+
+    @staticmethod
+    def interpolate(a, b, t):
+        c = copy.deepcopy(a)
+        c.position = SpatialPosition.interpolate(a.position, b.position, t)
+        c.orientation = quaternion_slerp(a.orientation, b.orientation, t)
+        return c
+
+
+def interpolate_zoom(a, b, t):
+    if a is None or b is None:
+        return a
+    scale_change = math.log(b / a)
+    return a * math.exp(scale_change * t)
 
 
 @export
@@ -70,6 +133,13 @@ class NavigationState(JsonObjectWrapper):
     @voxel_size.setter
     def voxel_size(self, v):
         self.pose.position.voxel_size = v
+
+    @staticmethod
+    def interpolate(a, b, t):
+        c = copy.deepcopy(a)
+        c.pose = Pose.interpolate(a.pose, b.pose, t)
+        c.zoom_factor = interpolate_zoom(a.zoom_factor, b.zoom_factor, t)
+        return c
 
 
 @export
@@ -146,8 +216,7 @@ def make_layer(json_data, _readonly=False):
         return json_data
 
     if isinstance(json_data, local_volume.LocalVolume):
-        json_data = dict(type=json_data.volume_type,
-                         source=json_data)
+        json_data = dict(type=json_data.volume_type, source=json_data)
 
     if not isinstance(json_data, dict):
         raise TypeError
@@ -394,9 +463,11 @@ class LayerGroupViewer(JsonObjectWrapper):
     layers = wrapped_property('layers', typed_list(text_type))
     layout = wrapped_property('layout', text_type)
     position = wrapped_property('position', LinkedSpatialPosition)
-    cross_section_orientation = crossSectionOrientation = wrapped_property('crossSectionOrientation', LinkedOrientationState)
+    cross_section_orientation = crossSectionOrientation = wrapped_property(
+        'crossSectionOrientation', LinkedOrientationState)
     cross_section_zoom = crossSectionZoom = wrapped_property('crossSectionZoom', LinkedZoomFactor)
-    perspective_orientation = perspectiveOrientation = wrapped_property('perspectiveOrientation', LinkedOrientationState)
+    perspective_orientation = perspectiveOrientation = wrapped_property(
+        'perspectiveOrientation', LinkedOrientationState)
     perspective_zoom = perspectiveZoom = wrapped_property('perspectiveZoom', LinkedZoomFactor)
 
     def __init__(self, *args, **kwargs):
@@ -409,13 +480,11 @@ class LayerGroupViewer(JsonObjectWrapper):
         return u'%s(%s)' % (type(self).__name__, encode_json_for_repr(j))
 
 
-
 layout_types = {
     'row': StackLayout,
     'column': StackLayout,
     'viewer': LayerGroupViewer,
 }
-
 
 
 @export
@@ -452,3 +521,12 @@ class ViewerState(JsonObjectWrapper):
     @voxel_size.setter
     def voxel_size(self, v):
         self.navigation.voxel_size = v
+
+    @staticmethod
+    def interpolate(a, b, t):
+        c = copy.deepcopy(a)
+        c.navigation = NavigationState.interpolate(a.navigation, b.navigation, t)
+        c.perspective_zoom = interpolate_zoom(a.perspective_zoom, b.perspective_zoom, t)
+        c.perspective_orientation = quaternion_slerp(a.perspective_orientation,
+                                                     b.perspective_orientation, t)
+        return c

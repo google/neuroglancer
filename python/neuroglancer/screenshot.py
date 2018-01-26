@@ -1,5 +1,5 @@
 # @license
-# Copyright 2016 Google Inc.
+# Copyright 2017 Google Inc.
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
 # You may obtain a copy of the License at
@@ -13,13 +13,25 @@
 # limitations under the License.
 
 from __future__ import absolute_import
-from .server import set_static_content_source, set_server_bind_address, is_server_running, stop
-from .static import dist_dev_static_content_source
-from .viewer import Viewer, UnsynchronizedViewer
-from .local_volume import LocalVolume
-from .viewer_state import *
-from .viewer_config_state import MapEntry
-from .equivalence_map import EquivalenceMap
-from .url_state import to_url, parse_url
-from .screenshot import ScreenshotSaver
-from . import server
+
+import os
+
+
+class ScreenshotSaver(object):
+    def __init__(self, viewer, directory):
+        self.viewer = viewer
+        self.directory = directory
+
+        if not os.path.exists(directory):
+            os.makedirs(directory)
+
+        self.index = 0
+
+    def capture(self):
+        s = self.viewer.screenshot()
+        index = self.index
+        path = os.path.join(self.directory, '%07d.png' % index)
+        with open(path, 'wb') as f:
+            f.write(s.screenshot.image)
+        self.index += 1
+        return index, path
