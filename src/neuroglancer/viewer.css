@@ -14,17 +14,6 @@
  * limitations under the License.
  */
 
-.neuroglancer-panel {
-  border-style: solid;
-  border-color: black;
-  border-width: 2px;
-  flex: 1;
-}
-
-.neuroglancer-panel:focus {
-  border-color: white;
-}
-
 .neuroglancer-viewer {
   outline: 0px;
 }

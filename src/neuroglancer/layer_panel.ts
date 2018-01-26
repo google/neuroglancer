@@ -24,7 +24,7 @@ import {ContextMenu} from 'neuroglancer/ui/context_menu';
 import {DropLayers, endLayerDrag, getDropLayers, getLayerDropEffect, startLayerDrag} from 'neuroglancer/ui/layer_drag_and_drop';
 import {animationFrameDebounce} from 'neuroglancer/util/animation_frame_debounce';
 import {RefCounted, registerEventListener} from 'neuroglancer/util/disposable';
-import {removeChildren} from 'neuroglancer/util/dom';
+import {removeChildren, removeFromParent} from 'neuroglancer/util/dom';
 import {getDropEffect, preventDrag, setDropEffect} from 'neuroglancer/util/drag_and_drop';
 import {makeCloseButton} from 'neuroglancer/widget/close_button';
 import {PositionWidget} from 'neuroglancer/widget/position_widget';
@@ -344,6 +344,7 @@ export class LayerPanel extends RefCounted {
   disposed() {
     this.layerWidgets.forEach(x => x.dispose());
     this.layerWidgets = <any>undefined;
+    removeFromParent(this.element);
     super.disposed();
   }
 
