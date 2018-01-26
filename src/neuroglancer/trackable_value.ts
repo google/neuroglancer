@@ -14,10 +14,16 @@
  * limitations under the License.
  */
 
+import {RefCounted} from 'neuroglancer/util/disposable';
 import {NullarySignal} from 'neuroglancer/util/signal';
 import {Trackable} from 'neuroglancer/util/trackable';
 
-export class WatchableValue<T> {
+export interface WatchableValueInterface<T> {
+  changed: NullarySignal;
+  value: T;
+}
+
+export class WatchableValue<T> implements WatchableValueInterface<T> {
   get value() {
     return this.value_;
   }
@@ -56,4 +62,32 @@ export class TrackableValue<T> extends WatchableValue<T> implements Trackable {
     }
     this.value = this.defaultValue;
   }
+}
+
+class DerivedWatchableValue<U> extends RefCounted implements WatchableValueInterface<U> {
+  changed = new NullarySignal();
+  get value() {
+    return this.f(...this.ws.map(w => w.value));
+  }
+  private f: (...v: any[]) => U;
+  private ws: WatchableValueInterface<any>[];
+
+  constructor(f: (...v: any[]) => U, ws: WatchableValueInterface<any>[]) {
+    super();
+    this.f = f;
+    this.ws = ws;
+    for (const w of ws) {
+      this.registerDisposer(w.changed.add(this.changed.dispatch));
+    }
+  }
+}
+
+export function makeDerivedWatchableValue<U, T0>(
+    f: (v0: T0) => U, w0: WatchableValueInterface<T0>): DerivedWatchableValue<U>;
+export function makeDerivedWatchableValue<U, T0, T1>(
+    f: (v0: T0, v1: T1) => U, w0: WatchableValueInterface<T0>,
+    w1: WatchableValueInterface<T1>): DerivedWatchableValue<U>;
+export function makeDerivedWatchableValue<U>(
+    f: (...v: any[]) => U, ...ws: WatchableValueInterface<any>[]) {
+  return new DerivedWatchableValue(f, ws);
 }
