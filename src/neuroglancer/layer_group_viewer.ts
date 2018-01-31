@@ -18,6 +18,7 @@
  * @file Viewer for a group of layers.
  */
 
+import debounce from 'lodash/debounce';
 import {DataPanelLayoutContainer, InputEventBindings as DataPanelInputEventBindings} from 'neuroglancer/data_panel_layout';
 import {DisplayContext} from 'neuroglancer/display_context';
 import {MouseSelectionState} from 'neuroglancer/layer';
@@ -25,6 +26,7 @@ import {LayerPanel} from 'neuroglancer/layer_panel';
 import {LayerListSpecification, LayerSubsetSpecification, ManagedUserLayerWithSpecification} from 'neuroglancer/layer_specification';
 import {LinkedOrientationState, LinkedSpatialPosition, LinkedZoomState, NavigationState, Pose, TrackableNavigationLink} from 'neuroglancer/navigation_state';
 import {TrackableBoolean} from 'neuroglancer/trackable_boolean';
+import {WatchableValueInterface} from 'neuroglancer/trackable_value';
 import {ContextMenu} from 'neuroglancer/ui/context_menu';
 import {endLayerDrag, startLayerDrag} from 'neuroglancer/ui/layer_drag_and_drop';
 import {setupPositionDropHandlers} from 'neuroglancer/ui/position_drag_and_drop';
@@ -52,7 +54,7 @@ export interface LayerGroupViewerState {
 }
 
 export interface LayerGroupViewerOptions {
-  showLayerPanel: boolean;
+  showLayerPanel: WatchableValueInterface<boolean>;
   showViewerMenu: boolean;
 }
 
@@ -64,8 +66,8 @@ export function hasViewerDrag(event: DragEvent) {
 
 let dragSource: {viewer: LayerGroupViewer, disposer: () => void}|undefined;
 
-export function getCompatibleViewerDragSource(manager: Borrowed<LayerListSpecification>): LayerGroupViewer|
-    undefined {
+export function getCompatibleViewerDragSource(manager: Borrowed<LayerListSpecification>):
+    LayerGroupViewer|undefined {
   if (dragSource && dragSource.viewer.layerSpecification.rootLayers === manager.rootLayers) {
     return dragSource.viewer;
   } else {
@@ -73,7 +75,7 @@ export function getCompatibleViewerDragSource(manager: Borrowed<LayerListSpecifi
   }
 }
 
-function getDefaultViewerDropEffect(manager: Borrowed<LayerListSpecification>): 'move' | 'copy' {
+function getDefaultViewerDropEffect(manager: Borrowed<LayerListSpecification>): 'move'|'copy' {
   if (getCompatibleViewerDragSource(manager) !== undefined) {
     return 'move';
   } else {
@@ -90,7 +92,7 @@ export function getViewerDropEffect(
   } else {
     return getDefaultViewerDropEffect(manager);
   }
-    }
+}
 
 export class LinkedViewerNavigationState extends RefCounted {
   position: LinkedSpatialPosition;
@@ -152,7 +154,7 @@ function makeViewerMenu(parent: HTMLElement, viewer: LayerGroupViewer) {
     viewer.layerSpecification.layerManager.clear();
   });
   const {viewerNavigationState} = viewer;
-  for (const [name, model] of<[string, TrackableNavigationLink][]>[
+  for (const [name, model] of <[string, TrackableNavigationLink][]>[
          ['Position', viewerNavigationState.position.link],
          ['Cross-section orientation', viewerNavigationState.crossSectionOrientation.link],
          ['Cross-section zoom', viewerNavigationState.crossSectionZoom.link],
@@ -217,13 +219,15 @@ export class LayerGroupViewer extends RefCounted {
 
   state = new CompoundTrackable();
 
-  get changed () { return this.state.changed; }
+  get changed() {
+    return this.state.changed;
+  }
 
   constructor(
       public element: HTMLElement, public viewerState: LayerGroupViewerState,
       options: Partial<LayerGroupViewerOptions> = {}) {
     super();
-    this.options = {showLayerPanel: true, showViewerMenu: false, ...options};
+    this.options = {showLayerPanel: new TrackableBoolean(true), showViewerMenu: false, ...options};
     this.layerSpecification = this.registerDisposer(viewerState.layerSpecification);
     this.viewerNavigationState =
         this.registerDisposer(new LinkedViewerNavigationState(viewerState));
@@ -250,6 +254,8 @@ export class LayerGroupViewer extends RefCounted {
     this.registerActionBindings();
     this.registerDisposer(this.layerManager.useDirectly());
     this.registerDisposer(setupPositionDropHandlers(element, this.navigationState.position));
+    this.registerDisposer(this.options.showLayerPanel.changed.add(
+        this.registerCancellable(debounce(() => this.updateUI(), 0))));
     this.makeUI();
   }
 
@@ -281,12 +287,23 @@ export class LayerGroupViewer extends RefCounted {
     this.element.style.flex = '1';
     this.element.style.display = 'flex';
     this.element.style.flexDirection = 'column';
+    this.element.appendChild(this.layout.element);
+    this.updateUI();
+  }
+
+  private updateUI() {
     const {options} = this;
-    if (options.showLayerPanel) {
-      const layerPanel = this.layerPanel = this.registerDisposer(
-          new LayerPanel(this.display, this.layerSpecification, this.viewerNavigationState));
+    const showLayerPanel = options.showLayerPanel.value;
+    if (this.layerPanel !== undefined && showLayerPanel) {
+      this.layerPanel.dispose();
+      this.layerPanel = undefined;
+      return;
+    }
+    if (showLayerPanel && this.layerPanel === undefined) {
+      const layerPanel = this.layerPanel =
+          new LayerPanel(this.display, this.layerSpecification, this.viewerNavigationState);
       if (options.showViewerMenu) {
-        this.registerDisposer(makeViewerMenu(layerPanel.element, this));
+        layerPanel.registerDisposer(makeViewerMenu(layerPanel.element, this));
         layerPanel.element.title = 'Right click for options, drag to move/copy layer group.';
       } else {
         layerPanel.element.title = 'Drag to move/copy layer group.';
@@ -315,14 +332,17 @@ export class LayerGroupViewer extends RefCounted {
           dragSource.disposer();
         }
       });
-      this.element.appendChild(layerPanel.element);
+      this.element.insertBefore(layerPanel.element, this.element.firstChild);
     }
-
-    this.element.appendChild(this.layout.element);
   }
 
   disposed() {
     removeChildren(this.element);
+    const {layerPanel} = this;
+    if (layerPanel !== undefined) {
+      layerPanel.dispose();
+      this.layerPanel = undefined;
+    }
     super.disposed();
   }
 }

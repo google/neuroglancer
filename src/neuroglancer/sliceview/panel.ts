@@ -24,6 +24,7 @@ import {TrackableBoolean} from 'neuroglancer/trackable_boolean';
 import {ActionEvent, registerActionListener} from 'neuroglancer/util/event_action_map';
 import {identityMat4, mat4, vec3, vec4} from 'neuroglancer/util/geom';
 import {startRelativeMouseDrag} from 'neuroglancer/util/mouse_drag';
+import {GL_BLEND, GL_COLOR_BUFFER_BIT, GL_ONE_MINUS_SRC_ALPHA, GL_SCISSOR_TEST, GL_SRC_ALPHA} from 'neuroglancer/webgl/constants';
 import {FramebufferConfiguration, makeTextureBuffers, OffscreenCopyHelper} from 'neuroglancer/webgl/offscreen';
 import {ShaderBuilder, ShaderModule} from 'neuroglancer/webgl/shader';
 import {ScaleBarTexture} from 'neuroglancer/widget/scale_bar';
@@ -163,6 +164,10 @@ export class SliceViewPanel extends RenderedDataPanel {
     }));
   }
 
+  isReady() {
+    return this.sliceView.isReady();
+  }
+
   draw() {
     let {sliceView} = this;
     if (!sliceView.hasValidViewport) {
@@ -175,9 +180,9 @@ export class SliceViewPanel extends RenderedDataPanel {
 
     let {width, height, dataToDevice} = sliceView;
     this.offscreenFramebuffer.bind(width, height);
-    gl.disable(gl.SCISSOR_TEST);
+    gl.disable(GL_SCISSOR_TEST);
     this.gl.clearColor(0.0, 0.0, 0.0, 0.0);
-    gl.clear(gl.COLOR_BUFFER_BIT);
+    gl.clear(GL_COLOR_BUFFER_BIT);
 
     // Draw axes lines.
     // FIXME: avoid use of temporary matrix
@@ -200,12 +205,12 @@ export class SliceViewPanel extends RenderedDataPanel {
       viewportWidth: width,
       viewportHeight: height,
     };
-    gl.enable(gl.BLEND);
-    gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
+    gl.enable(GL_BLEND);
+    gl.blendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
     for (let renderLayer of visibleLayers) {
       renderLayer.draw(renderContext);
     }
-    gl.disable(gl.BLEND);
+    gl.disable(GL_BLEND);
     this.offscreenFramebuffer.bindSingle(OffscreenTextures.PICK);
     renderContext.emitColor = false;
     renderContext.emitPickID = true;
@@ -242,8 +247,8 @@ export class SliceViewPanel extends RenderedDataPanel {
         this.axesLineHelper.draw(mat);
       }
       if (this.viewer.showScaleBar.value) {
-        gl.enable(gl.BLEND);
-        gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
+        gl.enable(GL_BLEND);
+        gl.blendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
         const {scaleBarTexture} = this;
         const {dimensions} = scaleBarTexture;
         dimensions.targetLengthInPixels = Math.min(width / 4, 100);
@@ -251,7 +256,7 @@ export class SliceViewPanel extends RenderedDataPanel {
         scaleBarTexture.update();
         gl.viewport(10, 10, scaleBarTexture.width, scaleBarTexture.height);
         this.scaleBarCopyHelper.draw(scaleBarTexture.texture);
-        gl.disable(gl.BLEND);
+        gl.disable(GL_BLEND);
       }
     }
 

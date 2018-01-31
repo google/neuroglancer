@@ -14,6 +14,8 @@
  * limitations under the License.
  */
 
+import debounce from 'lodash/debounce';
+import {WatchableValueInterface} from 'neuroglancer/trackable_value';
 import {RefCounted} from 'neuroglancer/util/disposable';
 import {NullarySignal} from 'neuroglancer/util/signal';
 import {Trackable} from 'neuroglancer/util/trackable';
@@ -32,7 +34,7 @@ export class TrackableBoolean implements Trackable {
     this.value = !this.value;
   }
   changed = new NullarySignal();
-  constructor(private value_: boolean, public defaultValue: boolean) {}
+  constructor(private value_: boolean, public defaultValue: boolean = value_) {}
   toJSON() {
     let {value_} = this;
     if (value_ === this.defaultValue) {
@@ -87,15 +89,15 @@ export class TrackableBooleanCheckbox extends RefCounted {
 }
 
 export class ElementVisibilityFromTrackableBoolean extends RefCounted {
-  constructor(public model: TrackableBoolean, public element: HTMLElement) {
+  private initialDisplay = this.element.style.display;
+  constructor(public model: WatchableValueInterface<boolean>, public element: HTMLElement) {
     super();
     this.updateVisibility();
-    this.registerDisposer(model.changed.add(() => {
-      this.updateVisibility();
-    }));
+    this.registerDisposer(
+        model.changed.add(this.registerCancellable(debounce(() => this.updateVisibility(), 0))));
   }
 
   updateVisibility() {
-    this.element.style.display = this.model.value ? '' : 'none';
+    this.element.style.display = this.model.value ? this.initialDisplay : 'none';
   }
 }

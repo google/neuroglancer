@@ -17,11 +17,11 @@
 import {MultiscaleSliceViewChunkSource, SliceViewChunk, SliceViewChunkSource} from 'neuroglancer/sliceview/frontend';
 import {SliceView} from 'neuroglancer/sliceview/frontend';
 import {RenderLayer as GenericSliceViewRenderLayer} from 'neuroglancer/sliceview/renderlayer';
-import {VECTOR_GRAPHICS_RENDERLAYER_RPC_ID, VectorGraphicsChunkSource as VectorGraphicsChunkSourceInterface, VectorGraphicsChunkSpecification, VectorGraphicsSourceOptions} from 'neuroglancer/sliceview/vector_graphics/base';
+import {VectorGraphicsChunkSource as VectorGraphicsChunkSourceInterface, VectorGraphicsChunkSpecification, VectorGraphicsSourceOptions} from 'neuroglancer/sliceview/vector_graphics/base';
 import {Buffer} from 'neuroglancer/webgl/buffer';
 import {GL} from 'neuroglancer/webgl/context';
 import {ShaderBuilder, ShaderProgram} from 'neuroglancer/webgl/shader';
-import {RpcId, SharedObject} from 'neuroglancer/worker_rpc';
+import {RpcId} from 'neuroglancer/worker_rpc';
 
 export abstract class RenderLayer extends GenericSliceViewRenderLayer {
   sources: VectorGraphicsChunkSource[][];
@@ -33,11 +33,6 @@ export abstract class RenderLayer extends GenericSliceViewRenderLayer {
     sourceOptions = <VectorGraphicsSourceOptions> {}
   } = {}) {
     super(multiscaleSource.chunkManager, multiscaleSource.getSources(sourceOptions));
-
-    let sharedObject = this.registerDisposer(new SharedObject());
-    sharedObject.RPC_TYPE_ID = VECTOR_GRAPHICS_RENDERLAYER_RPC_ID;
-    sharedObject.initializeCounterpart(this.chunkManager.rpc!, {'sources': this.sourceIds});
-    this.rpcId = sharedObject.rpcId;
   }
 
   defineShader(builder: ShaderBuilder) {

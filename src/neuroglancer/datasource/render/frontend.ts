@@ -354,6 +354,10 @@ export function computeStackHierarchy(stackInfo: StackInfo, tileSize: number) {
                                               maxBound = maxBound;
   }
 
+  if (tileSize >= maxBound) {
+    return 1;
+  }
+
   let counter = 0;
   while (maxBound > tileSize) {
     maxBound = maxBound / 2;

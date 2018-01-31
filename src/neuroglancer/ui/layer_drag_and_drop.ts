@@ -82,18 +82,6 @@ function getCompatibleDragSource(manager: Borrowed<LayerListSpecification>): Lay
   return undefined;
 }
 
-// For layer drag, default is:
-//   if target is same manager, move
-//   if target is same rootLayers, link
-//   otherwise, copy
-
-// Force move, force copy?   can't force link
-
-// shift -> force move
-// control -> force copy
-
-
-
 export class DropLayers {
   dragType: string|undefined;
 

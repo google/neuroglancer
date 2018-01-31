@@ -29,12 +29,12 @@ import {LayerPanel} from 'neuroglancer/layer_panel';
 import {TopLevelLayerListSpecification} from 'neuroglancer/layer_specification';
 import {NavigationState, Pose} from 'neuroglancer/navigation_state';
 import {overlaysOpen} from 'neuroglancer/overlay';
-import {TrackableBoolean, TrackableBooleanCheckbox} from 'neuroglancer/trackable_boolean';
-import {TrackableValue} from 'neuroglancer/trackable_value';
+import {ElementVisibilityFromTrackableBoolean, TrackableBoolean, TrackableBooleanCheckbox} from 'neuroglancer/trackable_boolean';
+import {makeDerivedWatchableValue, TrackableValue, WatchableValueInterface} from 'neuroglancer/trackable_value';
 import {ContextMenu} from 'neuroglancer/ui/context_menu';
 import {setupPositionDropHandlers} from 'neuroglancer/ui/position_drag_and_drop';
 import {AutomaticallyFocusedElement} from 'neuroglancer/util/automatic_focus';
-import {RefCounted} from 'neuroglancer/util/disposable';
+import {Borrowed, Owned, RefCounted} from 'neuroglancer/util/disposable';
 import {removeFromParent} from 'neuroglancer/util/dom';
 import {registerActionListener} from 'neuroglancer/util/event_action_map';
 import {vec3} from 'neuroglancer/util/geom';
@@ -46,10 +46,10 @@ import {WatchableVisibilityPriority} from 'neuroglancer/visibility_priority/fron
 import {GL} from 'neuroglancer/webgl/context';
 import {NumberInputWidget} from 'neuroglancer/widget/number_input_widget';
 import {MousePositionWidget, PositionWidget, VoxelSizeWidget} from 'neuroglancer/widget/position_widget';
+import {makeTextIconButton} from 'neuroglancer/widget/text_icon_button';
 import {RPC} from 'neuroglancer/worker_rpc';
 
 require('./viewer.css');
-require('./help_button.css');
 require('neuroglancer/noselect.css');
 require('neuroglancer/ui/button.css');
 
@@ -77,26 +77,30 @@ export class InputEventBindings extends DataPanelInputEventBindings {
   global = new EventActionMap();
 }
 
-export interface UIOptions {
+interface UIOptions {
+  showUIControls: boolean;
   showHelpButton: boolean;
   showLayerDialog: boolean;
   showLayerPanel: boolean;
   showLocation: boolean;
+  showPanelBorders: boolean;
   inputEventBindings: InputEventBindings;
   resetStateWhenEmpty: boolean;
 }
 
 export interface ViewerOptions extends UIOptions, VisibilityPrioritySpecification {
-  dataContext: DataManagementContext;
+  dataContext: Owned<DataManagementContext>;
   element: HTMLElement;
-  dataSourceProvider: DataSourceProvider;
+  dataSourceProvider: Borrowed<DataSourceProvider>;
 }
 
 const defaultViewerOptions = {
+  showUIControls: true,
   showHelpButton: true,
   showLayerDialog: true,
   showLayerPanel: true,
   showLocation: true,
+  showPanelBorders: true,
   resetStateWhenEmpty: true,
 };
 
@@ -112,7 +116,7 @@ function makeViewerContextMenu(viewer: Viewer) {
   addLimitWidget('GPU memory limit', viewer.chunkQueueManager.capacities.gpuMemory.sizeLimit);
   addLimitWidget('System memory limit', viewer.chunkQueueManager.capacities.systemMemory.sizeLimit);
   addLimitWidget(
-    'Concurrent chunk requests', viewer.chunkQueueManager.capacities.download.itemLimit);
+      'Concurrent chunk requests', viewer.chunkQueueManager.capacities.download.itemLimit);
 
   const addCheckbox = (label: string, value: TrackableBoolean) => {
     const labelElement = document.createElement('label');
@@ -136,7 +140,7 @@ export class Viewer extends RefCounted implements ViewerState {
   showScaleBar = new TrackableBoolean(true, true);
   showPerspectiveSliceViews = new TrackableBoolean(true, true);
   contextMenu: ContextMenu;
-  
+
   layerPanel: LayerPanel;
   layerSelectedValues =
       this.registerDisposer(new LayerSelectedValues(this.layerManager, this.mouseState));
@@ -154,29 +158,35 @@ export class Viewer extends RefCounted implements ViewerState {
 
   state = new CompoundTrackable();
 
-  options: ViewerOptions;
+  dataContext: Owned<DataManagementContext>;
+  visibility: WatchableVisibilityPriority;
+  inputEventBindings: InputEventBindings;
+  element: HTMLElement;
+  dataSourceProvider: Borrowed<DataSourceProvider>;
 
-  get dataContext() {
-    return this.options.dataContext;
-  }
-  get visibility() {
-    return this.options.visibility;
-  }
+  /**
+   * If set to false, all UI controls (controlled individually by the options below) are disabled.
+   */
+  showUIControls: TrackableBoolean;
 
-  get inputEventBindings() {
-    return this.options.inputEventBindings;
-  }
+  showHelpButton: TrackableBoolean;
+  showLayerPanel: TrackableBoolean;
+  showLocation: TrackableBoolean;
+
+  /**
+   * Logical and of each of the above values with the value of showUIControls.
+   */
+  showHelpButtonEffective: WatchableValueInterface<boolean>;
+  showLayerPanelEffective: WatchableValueInterface<boolean>;
+  showLocationEffective: WatchableValueInterface<boolean>;
+
+  showPanelBorders: TrackableBoolean;
+
+  showLayerDialog: boolean;
+  resetStateWhenEmpty: boolean;
 
   get inputEventMap() {
     return this.inputEventBindings.global;
-  }
-
-  get element() {
-    return this.options.element;
-  }
-
-  get dataSourceProvider() {
-    return this.options.dataSourceProvider;
   }
 
   visible = true;
@@ -196,20 +206,49 @@ export class Viewer extends RefCounted implements ViewerState {
       dataSourceProvider =
           getDefaultDataSourceProvider({credentialsManager: defaultCredentialsManager}),
     } = options;
+    this.visibility = visibility;
+    this.inputEventBindings = inputEventBindings;
+    this.element = element;
+    this.dataSourceProvider = dataSourceProvider;
 
     this.registerDisposer(() => removeFromParent(this.element));
 
-    this.registerDisposer(dataContext);
+    this.dataContext = this.registerDisposer(dataContext);
 
-    this.options = {
-      ...defaultViewerOptions,
-      ...options,
-      dataContext,
-      visibility,
-      inputEventBindings,
-      element,
-      dataSourceProvider,
-    };
+    const optionsWithDefaults = {...defaultViewerOptions, ...options};
+    const {
+      showUIControls,
+      showHelpButton,
+      showLayerPanel,
+      showLocation,
+      showPanelBorders,
+      resetStateWhenEmpty,
+      showLayerDialog,
+    } = optionsWithDefaults;
+
+    this.showUIControls = new TrackableBoolean(showUIControls);
+    this.showHelpButton = new TrackableBoolean(showHelpButton);
+    this.showLayerPanel = new TrackableBoolean(showLayerPanel);
+    this.showLocation = new TrackableBoolean(showLocation);
+    this.showPanelBorders = new TrackableBoolean(showPanelBorders);
+
+    this.showHelpButtonEffective =
+        makeDerivedWatchableValue((a, b) => a && b, this.showUIControls, this.showHelpButton);
+
+    this.showLayerPanelEffective =
+        makeDerivedWatchableValue((a, b) => a && b, this.showUIControls, this.showLayerPanel);
+
+    this.showLocationEffective =
+        makeDerivedWatchableValue((a, b) => a && b, this.showUIControls, this.showLocation);
+
+    this.showHelpButtonEffective.changed.add(() => this.display.onResize());
+    this.showLocationEffective.changed.add(() => this.display.onResize());
+    this.showLayerPanelEffective.changed.add(() => this.display.onResize());
+    this.showPanelBorders.changed.add(() => this.updateShowBorders());
+    this.showPanelBorders.changed.add(() => this.display.onResize());
+
+    this.showLayerDialog = showLayerDialog;
+    this.resetStateWhenEmpty = resetStateWhenEmpty;
 
     this.layerSpecification = new TopLevelLayerListSpecification(
         this.dataSourceProvider, this.layerManager, this.chunkManager, this.layerSelectedValues,
@@ -252,13 +291,13 @@ export class Viewer extends RefCounted implements ViewerState {
     // shown.
     const maybeResetState = this.registerCancellable(debounce(() => {
       if (!this.wasDisposed && this.layerManager.managedLayers.length === 0 &&
-          this.options.resetStateWhenEmpty) {
+          this.resetStateWhenEmpty) {
         // No layers, reset state.
         this.navigationState.reset();
         this.perspectiveNavigationState.pose.orientation.reset();
         this.perspectiveNavigationState.zoomFactor.reset();
         this.resetInitiated.dispatch();
-        if (!overlaysOpen && this.options.showLayerDialog && this.visibility.visible) {
+        if (!overlaysOpen && this.showLayerDialog && this.visibility.visible) {
           new LayerDialog(this.layerSpecification);
         }
       }
@@ -277,6 +316,8 @@ export class Viewer extends RefCounted implements ViewerState {
     }));
 
     this.makeUI();
+    this.updateShowBorders();
+
     state.add('layout', this.layout);
 
     this.registerActionListeners();
@@ -285,46 +326,65 @@ export class Viewer extends RefCounted implements ViewerState {
     this.registerDisposer(setupPositionDropHandlers(element, this.navigationState.position));
   }
 
+  private updateShowBorders() {
+    const {element} = this;
+    const className = 'neuroglancer-show-panel-borders';
+    if (this.showPanelBorders.value) {
+      element.classList.add(className);
+    } else {
+      element.classList.remove(className);
+    }
+  }
+
   private makeUI() {
-    const {options} = this;
     const gridContainer = this.element;
     gridContainer.classList.add('neuroglancer-viewer');
     gridContainer.classList.add('neuroglancer-noselect');
     gridContainer.style.display = 'flex';
     gridContainer.style.flexDirection = 'column';
-    if (options.showHelpButton || options.showLocation) {
-      const topRow = document.createElement('div');
-      topRow.title = 'Right click for settings';
-      const contextMenu = this.contextMenu = this.registerDisposer(makeViewerContextMenu(this));
-      contextMenu.registerParent(topRow);
-      topRow.style.display = 'flex';
-      topRow.style.flexDirection = 'row';
-      topRow.style.alignItems = 'stretch';
-      if (options.showLocation) {
-        const voxelSizeWidget = this.registerDisposer(
-            new VoxelSizeWidget(document.createElement('div'), this.navigationState.voxelSize));
-        topRow.appendChild(voxelSizeWidget.element);
-        const positionWidget =
-            this.registerDisposer(new PositionWidget(this.navigationState.position));
-        topRow.appendChild(positionWidget.element);
-        const mousePositionWidget = this.registerDisposer(new MousePositionWidget(
-            document.createElement('div'), this.mouseState, this.navigationState.voxelSize));
-        mousePositionWidget.element.style.flex = '1';
-        mousePositionWidget.element.style.alignSelf = 'center';
-        topRow.appendChild(mousePositionWidget.element);
-      }
-      if (options.showHelpButton) {
-        let button = document.createElement('div');
-        button.className = 'neuroglancer-help-button neuroglancer-button';
-        button.textContent = '?';
-        button.title = 'Help';
-        this.registerEventListener(button, 'click', () => {
-          this.showHelpDialog();
-        });
-        topRow.appendChild(button);
-      }
-      gridContainer.appendChild(topRow);
-    }
+
+    const topRow = document.createElement('div');
+    topRow.title = 'Right click for settings';
+    const contextMenu = this.contextMenu = this.registerDisposer(makeViewerContextMenu(this));
+    contextMenu.registerParent(topRow);
+    topRow.style.display = 'flex';
+    topRow.style.flexDirection = 'row';
+    topRow.style.alignItems = 'stretch';
+
+    const voxelSizeWidget = this.registerDisposer(
+        new VoxelSizeWidget(document.createElement('div'), this.navigationState.voxelSize));
+    this.registerDisposer(new ElementVisibilityFromTrackableBoolean(
+        this.showLocationEffective, voxelSizeWidget.element));
+    topRow.appendChild(voxelSizeWidget.element);
+
+    const positionWidget = this.registerDisposer(new PositionWidget(this.navigationState.position));
+    this.registerDisposer(new ElementVisibilityFromTrackableBoolean(
+        this.showLocationEffective, positionWidget.element));
+    topRow.appendChild(positionWidget.element);
+
+    const mousePositionWidget = this.registerDisposer(new MousePositionWidget(
+        document.createElement('div'), this.mouseState, this.navigationState.voxelSize));
+    mousePositionWidget.element.style.flex = '1';
+    mousePositionWidget.element.style.alignSelf = 'center';
+    this.registerDisposer(new ElementVisibilityFromTrackableBoolean(
+        this.showLocationEffective, mousePositionWidget.element));
+    topRow.appendChild(mousePositionWidget.element);
+
+
+    const button = makeTextIconButton('?', 'Help');
+    this.registerEventListener(button, 'click', () => {
+      this.showHelpDialog();
+    });
+    this.registerDisposer(
+        new ElementVisibilityFromTrackableBoolean(this.showHelpButtonEffective, button));
+
+    this.registerDisposer(new ElementVisibilityFromTrackableBoolean(
+        makeDerivedWatchableValue(
+            (a, b) => a && b, this.showHelpButtonEffective, this.showLocationEffective),
+        topRow));
+    topRow.appendChild(button);
+
+    gridContainer.appendChild(topRow);
 
     this.layout = this.registerDisposer(new RootLayoutContainer(this, '4panel'));
     gridContainer.appendChild(this.layout.element);

@@ -14,6 +14,7 @@
 
 from __future__ import absolute_import
 
+import base64
 import collections
 import numbers
 import traceback
@@ -42,6 +43,13 @@ def layer_selected_value(x):
 
 LayerSelectedValues = typed_string_map(layer_selected_value)
 
+
+class ScreenshotReply(JsonObjectWrapper):
+    __slots__ = ()
+    id = wrapped_property('id', text_type)
+    image = wrapped_property('image', base64.b64decode)
+    image_type = imageType = wrapped_property('imageType', text_type)
+
 class ActionState(JsonObjectWrapper):
     __slots__ = ()
     viewer_state = viewerState = wrapped_property('viewerState', viewer_state.ViewerState)
@@ -50,6 +58,7 @@ class ActionState(JsonObjectWrapper):
         'mouseSpatialCoordinates', optional(array_wrapper(np.float32, 3)))
     mouse_voxel_coordinates = mouseVoxelCoordinates = wrapped_property(
         'mouseVoxelCoordinates', optional(array_wrapper(np.float32, 3)))
+    screenshot = wrapped_property('screenshot', optional(ScreenshotReply))
 
 
 class Actions(object):
@@ -103,6 +112,13 @@ class ConfigState(JsonObjectWrapper):
     input_event_bindings = inputEventBindings = wrapped_property('inputEventBindings', InputEventBindings)
     status_messages = statusMessages = wrapped_property('statusMessages', typed_string_map(text_type))
     source_generations = sourceGenerations = wrapped_property('sourceGenerations', typed_string_map(int))
+    screenshot = wrapped_property('screenshot', optional(text_type))
+    show_ui_controls = showUIControls = wrapped_property('showUIControls', optional(bool, True))
+    show_location = showLocation = wrapped_property('showLocation', optional(bool, True))
+    show_layer_panel = showLayerPanel = wrapped_property('showLayerPanel', optional(bool, True))
+    show_help_button = showHelpButton = wrapped_property('showHelpButton', optional(bool, True))
+    show_panel_borders = showPanelBorders = wrapped_property('showPanelBorders', optional(bool, True))
+    viewer_size = viewerSize = wrapped_property('viewerSize', optional(array_wrapper(np.int64, 2)))
 
 class PrivateState(JsonObjectWrapper):
     __slots__ = ()

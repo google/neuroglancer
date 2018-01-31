@@ -175,4 +175,3 @@ export class VolumeChunkSpecification extends SliceViewChunkSpecification {
 export interface VolumeChunkSource extends SliceViewChunkSource { spec: VolumeChunkSpecification; }
 
 export const VOLUME_RPC_ID = 'volume';
-export const VOLUME_RENDERLAYER_RPC_ID = 'volume/RenderLayer';

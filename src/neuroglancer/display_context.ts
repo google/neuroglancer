@@ -14,6 +14,7 @@
  * limitations under the License.
  */
 
+import debounce from 'lodash/debounce';
 import {RefCounted} from 'neuroglancer/util/disposable';
 import {NullarySignal} from 'neuroglancer/util/signal';
 import {WatchableVisibilityPriority} from 'neuroglancer/visibility_priority/frontend';
@@ -32,6 +33,8 @@ export abstract class RenderedPanel extends RefCounted {
   scheduleRedraw() {
     this.context.scheduleRedraw();
   }
+
+  abstract isReady(): boolean;
 
   setGLViewport() {
     let element = this.element;
@@ -70,7 +73,6 @@ export class DisplayContext extends RefCounted {
   updateFinished = new NullarySignal();
   panels = new Set<RenderedPanel>();
   private updatePending: number|null = null;
-  private needsRedraw = false;
   canvasRect: ClientRect|undefined;
 
   constructor(public container: HTMLElement) {
@@ -86,6 +88,18 @@ export class DisplayContext extends RefCounted {
     container.appendChild(canvas);
     this.gl = initializeWebGL(canvas);
     this.registerEventListener(window, 'resize', this.onResize.bind(this));
+  }
+
+  isReady() {
+    for (const panel of this.panels) {
+      if (!panel.visible) {
+        continue;
+      }
+      if (!panel.isReady()) {
+        return false;
+      }
+    }
+    return true;
   }
 
   /**
@@ -119,56 +133,50 @@ export class DisplayContext extends RefCounted {
     panel.dispose();
   }
 
-  onResize() {
+  onResize = this.registerCancellable(debounce(() => {
     this.scheduleRedraw();
     for (let panel of this.panels) {
       panel.onResize();
     }
-  }
+  }, 0));
 
-  scheduleUpdate() {
+  scheduleRedraw() {
     if (this.updatePending === null) {
       this.updatePending = requestAnimationFrame(this.update.bind(this));
     }
   }
 
-  scheduleRedraw() {
-    if (!this.needsRedraw) {
-      this.needsRedraw = true;
-      this.scheduleUpdate();
+  draw() {
+    this.updateStarted.dispatch();
+    let gl = this.gl;
+    let canvas = this.canvas;
+    canvas.width = canvas.offsetWidth;
+    canvas.height = canvas.offsetHeight;
+    this.canvasRect = canvas.getBoundingClientRect();
+    this.gl.clearColor(0.0, 0.0, 0.0, 0.0);
+    gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+    for (let panel of this.panels) {
+      let {element} = panel;
+      if (!panel.visible || element.clientWidth === 0 || element.clientHeight === 0 ||
+          element.offsetWidth === 0 || element.offsetHeight === 0) {
+        // Skip drawing if the panel has zero client area.
+        continue;
+      }
+      panel.setGLViewport();
+      panel.draw();
     }
+
+    // Ensure the alpha buffer is set to 1.
+    gl.disable(gl.SCISSOR_TEST);
+    this.gl.clearColor(1.0, 1.0, 1.0, 1.0);
+    this.gl.colorMask(false, false, false, true);
+    gl.clear(gl.COLOR_BUFFER_BIT);
+    this.gl.colorMask(true, true, true, true);
+    this.updateFinished.dispatch();
   }
 
   private update() {
     this.updatePending = null;
-    this.updateStarted.dispatch();
-    if (this.needsRedraw) {
-      this.needsRedraw = false;
-      let gl = this.gl;
-      let canvas = this.canvas;
-      canvas.width = canvas.offsetWidth;
-      canvas.height = canvas.offsetHeight;
-      this.canvasRect = canvas.getBoundingClientRect();
-      this.gl.clearColor(0.0, 0.0, 0.0, 0.0);
-      gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
-      for (let panel of this.panels) {
-        let {element} = panel;
-        if (!panel.visible || element.clientWidth === 0 || element.clientHeight === 0 ||
-            element.offsetWidth === 0 || element.offsetHeight === 0) {
-          // Skip drawing if the panel has zero client area.
-          continue;
-        }
-        panel.setGLViewport();
-        panel.draw();
-      }
-
-      // Ensure the alpha buffer is set to 1.
-      gl.disable(gl.SCISSOR_TEST);
-      this.gl.clearColor(1.0, 1.0, 1.0, 1.0);
-      this.gl.colorMask(false, false, false, true);
-      gl.clear(gl.COLOR_BUFFER_BIT);
-      this.gl.colorMask(true, true, true, true);
-    }
-    this.updateFinished.dispatch();
+    this.draw();
   }
 }

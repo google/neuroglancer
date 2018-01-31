@@ -15,9 +15,10 @@
  */
 
 import {Chunk, ChunkSource, withChunkManager} from 'neuroglancer/chunk_manager/backend';
-import {RenderLayer as RenderLayerInterface, SLICEVIEW_RPC_ID, SliceViewBase, SliceViewChunkSource as SliceViewChunkSourceInterface, SliceViewChunkSpecification} from 'neuroglancer/sliceview/base';
+import {CoordinateTransform} from 'neuroglancer/coordinate_transform';
+import {RenderLayer as RenderLayerInterface, SLICEVIEW_ADD_VISIBLE_LAYER_RPC_ID, SLICEVIEW_REMOVE_VISIBLE_LAYER_RPC_ID, SLICEVIEW_RENDERLAYER_RPC_ID, SLICEVIEW_RENDERLAYER_UPDATE_TRANSFORM_RPC_ID, SLICEVIEW_RPC_ID, SLICEVIEW_UPDATE_VIEW_RPC_ID, SliceViewBase, SliceViewChunkSource as SliceViewChunkSourceInterface, SliceViewChunkSpecification} from 'neuroglancer/sliceview/base';
 import {ChunkLayout} from 'neuroglancer/sliceview/chunk_layout';
-import {vec3, vec3Key} from 'neuroglancer/util/geom';
+import {mat4, vec3, vec3Key} from 'neuroglancer/util/geom';
 import {NullarySignal} from 'neuroglancer/util/signal';
 import {getBasePriority, getPriorityTier, withSharedVisibility} from 'neuroglancer/visibility_priority/backend';
 import {registerRPC, registerSharedObject, RPC, SharedObjectCounterpart} from 'neuroglancer/worker_rpc';
@@ -40,7 +41,7 @@ class SliceViewCounterpartBase extends SliceViewBase {
 const SliceViewIntermediateBase = withSharedVisibility(withChunkManager(SliceViewCounterpartBase));
 @registerSharedObject(SLICEVIEW_RPC_ID)
 export class SliceView extends SliceViewIntermediateBase {
-  visibleLayers: Map<RenderLayer, SliceViewChunkSource[]>;
+  visibleLayers: Map<RenderLayer, {chunkLayout: ChunkLayout, source: SliceViewChunkSource}[]>;
 
   constructor(rpc: RPC, options: any) {
     super(rpc, options);
@@ -97,10 +98,15 @@ export class SliceView extends SliceViewIntermediateBase {
   removeVisibleLayer(layer: RenderLayer) {
     this.visibleLayers.delete(layer);
     layer.layerChanged.remove(this.handleLayerChanged);
-    this.visibleSourcesStale = true;
-    if (this.hasValidViewport) {
-      this.chunkManager.scheduleUpdateChunkPriorities();
-    }
+    layer.transform.changed.remove(this.invalidateVisibleSources);
+    this.invalidateVisibleSources();
+  }
+
+  addVisibleLayer(layer: RenderLayer) {
+    this.visibleLayers.set(layer, []);
+    layer.layerChanged.add(this.handleLayerChanged);
+    layer.transform.changed.add(this.invalidateVisibleSources);
+    this.invalidateVisibleSources();
   }
 
   disposed() {
@@ -109,9 +115,16 @@ export class SliceView extends SliceViewIntermediateBase {
     }
     super.disposed();
   }
+
+  private invalidateVisibleSources = (() => {
+    this.visibleSourcesStale = true;
+    if (this.hasValidViewport) {
+      this.chunkManager.scheduleUpdateChunkPriorities();
+    }
+  });
 }
 
-registerRPC('SliceView.updateView', function(x) {
+registerRPC(SLICEVIEW_UPDATE_VIEW_RPC_ID, function(x) {
   let obj = this.get(x.id);
   if (x.width) {
     obj.setViewportSize(x.width, x.height);
@@ -120,17 +133,12 @@ registerRPC('SliceView.updateView', function(x) {
     obj.setViewportToDataMatrix(x.viewportToData);
   }
 });
-registerRPC('SliceView.addVisibleLayer', function(x) {
+registerRPC(SLICEVIEW_ADD_VISIBLE_LAYER_RPC_ID, function(x) {
   let obj = <SliceView>this.get(x['id']);
   let layer = <RenderLayer>this.get(x['layerId']);
-  obj.visibleLayers.set(layer, []);
-  layer.layerChanged.add(obj.handleLayerChanged);
-  obj.visibleSourcesStale = true;
-  if (obj.hasValidViewport) {
-    obj.chunkManager.scheduleUpdateChunkPriorities();
-  }
+  obj.addVisibleLayer(layer);
 });
-registerRPC('SliceView.removeVisibleLayer', function(x) {
+registerRPC(SLICEVIEW_REMOVE_VISIBLE_LAYER_RPC_ID, function(x) {
   let obj = <SliceView>this.get(x['id']);
   let layer = <RenderLayer>this.get(x['layerId']);
   obj.removeVisibleLayer(layer);
@@ -180,8 +188,7 @@ export interface SliceViewChunkSource {
   getChunk(chunkGridPosition: vec3): SliceViewChunk;
 }
 
-export class SliceViewChunkSource extends ChunkSource implements
-    SliceViewChunkSourceInterface {
+export class SliceViewChunkSource extends ChunkSource implements SliceViewChunkSourceInterface {
   spec: SliceViewChunkSpecification;
   constructor(rpc: RPC, options: any) {
     super(rpc, options);
@@ -235,10 +242,14 @@ export class SliceViewChunkSource extends ChunkSource implements
   }
 }
 
-export abstract class RenderLayer extends SharedObjectCounterpart implements RenderLayerInterface {
+@registerSharedObject(SLICEVIEW_RENDERLAYER_RPC_ID)
+export class RenderLayer extends SharedObjectCounterpart implements RenderLayerInterface {
   rpcId: number;
   sources: SliceViewChunkSource[][];
   layerChanged = new NullarySignal();
+  transform = new CoordinateTransform();
+  transformedSources: {source: SliceViewChunkSource, chunkLayout: ChunkLayout}[][];
+  transformedSourcesGeneration = -1;
 
   constructor(rpc: RPC, options: any) {
     super(rpc, options);
@@ -252,5 +263,16 @@ export abstract class RenderLayer extends SharedObjectCounterpart implements Ren
         alternatives.push(source);
       }
     }
+    mat4.copy(this.transform.transform, options['transform']);
+    this.transform.changed.add(this.layerChanged.dispatch);
   }
 }
+registerRPC(SLICEVIEW_RENDERLAYER_UPDATE_TRANSFORM_RPC_ID, function(x) {
+  const layer = <RenderLayer>this.get(x['id']);
+  const newValue: mat4 = x['value'];
+  const oldValue = layer.transform.transform;
+  if (!mat4.equals(newValue, oldValue)) {
+    mat4.copy(oldValue, newValue);
+    layer.transform.changed.dispatch();
+  }
+});

@@ -15,64 +15,86 @@
  */
 
 import {ChunkManager} from 'neuroglancer/chunk_manager/frontend';
+import {CoordinateTransform} from 'neuroglancer/coordinate_transform';
 import {RenderLayer as GenericRenderLayer} from 'neuroglancer/layer';
+import {getTransformedSources, SLICEVIEW_RENDERLAYER_RPC_ID, SLICEVIEW_RENDERLAYER_UPDATE_TRANSFORM_RPC_ID} from 'neuroglancer/sliceview/base';
+import {ChunkLayout} from 'neuroglancer/sliceview/chunk_layout';
 import {SliceView, SliceViewChunkSource} from 'neuroglancer/sliceview/frontend';
 import {BoundingBox, vec3} from 'neuroglancer/util/geom';
 import {makeWatchableShaderError, WatchableShaderError} from 'neuroglancer/webgl/dynamic_shader';
 import {ShaderBuilder, ShaderProgram} from 'neuroglancer/webgl/shader';
 import {RpcId} from 'neuroglancer/worker_rpc';
+import {SharedObject} from 'neuroglancer/worker_rpc';
 
 const tempVec3 = vec3.create();
 
+export interface RenderLayerOptions {
+  transform: CoordinateTransform;
+  shaderError: WatchableShaderError;
+}
+
 export abstract class RenderLayer extends GenericRenderLayer {
-  chunkManager: ChunkManager;
-  sources: SliceViewChunkSource[][]|null = null;
-  sourceIds: number[][] = [];
   shader: ShaderProgram|undefined = undefined;
   shaderUpdated = true;
   rpcId: RpcId|null = null;
   shaderError: WatchableShaderError;
-  constructor(chunkManager: ChunkManager, sources: SliceViewChunkSource[][], {
-    shaderError = makeWatchableShaderError(),
-  } = {}) {
+  transform: CoordinateTransform;
+  transformedSources: {source: SliceViewChunkSource, chunkLayout: ChunkLayout}[][];
+  transformedSourcesGeneration = -1;
+
+  constructor(
+      public chunkManager: ChunkManager, public sources: SliceViewChunkSource[][],
+      options: Partial<RenderLayerOptions> = {}) {
     super();
 
+    const {transform = new CoordinateTransform(), shaderError = makeWatchableShaderError()} =
+        options;
+
+    this.transform = transform;
     this.shaderError = shaderError;
     shaderError.value = undefined;
-    this.chunkManager = chunkManager;
-    this.sources = sources;
 
-    for (let alternatives of sources) {
-      let alternativeIds: number[] = [];
-      this.sourceIds.push(alternativeIds);
-      for (let source of alternatives) {
-        alternativeIds.push(source.rpcId!);
-      }
-    }
+    const transformedSources = getTransformedSources(this);
 
-    let spec = this.sources[0][0].spec;
-    let {chunkLayout} = spec;
-
-    const voxelSize = this.voxelSize =
-        chunkLayout.localSpatialVectorToGlobal(vec3.create(), spec.voxelSize);
-    for (let i = 0; i < 3; ++i) {
-      voxelSize[i] = Math.abs(voxelSize[i]);
-    }
-
-    const boundingBox = this.boundingBox = new BoundingBox(
-        vec3.fromValues(Infinity, Infinity, Infinity),
-        vec3.fromValues(-Infinity, -Infinity, -Infinity));
-    const globalCorner = vec3.create();
-    const localCorner = tempVec3;
-
-    for (let cornerIndex = 0; cornerIndex < 8; ++cornerIndex) {
+    {
+      const {source, chunkLayout} = transformedSources[0][0];
+      const {spec} = source;
+      const voxelSize = this.voxelSize =
+          chunkLayout.localSpatialVectorToGlobal(vec3.create(), spec.voxelSize);
       for (let i = 0; i < 3; ++i) {
-        localCorner[i] = cornerIndex & (1 << i) ? spec.upperClipBound[i] : spec.lowerClipBound[i];
+        voxelSize[i] = Math.abs(voxelSize[i]);
       }
-      chunkLayout.localSpatialToGlobal(globalCorner, localCorner);
-      vec3.min(boundingBox.lower, boundingBox.lower, globalCorner);
-      vec3.max(boundingBox.upper, boundingBox.upper, globalCorner);
+
+      const boundingBox = this.boundingBox = new BoundingBox(
+          vec3.fromValues(Infinity, Infinity, Infinity),
+          vec3.fromValues(-Infinity, -Infinity, -Infinity));
+      const globalCorner = vec3.create();
+      const localCorner = tempVec3;
+
+      for (let cornerIndex = 0; cornerIndex < 8; ++cornerIndex) {
+        for (let i = 0; i < 3; ++i) {
+          localCorner[i] = cornerIndex & (1 << i) ? spec.upperClipBound[i] : spec.lowerClipBound[i];
+        }
+        chunkLayout.localSpatialToGlobal(globalCorner, localCorner);
+        vec3.min(boundingBox.lower, boundingBox.lower, globalCorner);
+        vec3.max(boundingBox.upper, boundingBox.upper, globalCorner);
+      }
     }
+
+    const sharedObject = this.registerDisposer(new SharedObject());
+    const rpc = this.chunkManager.rpc!;
+    sharedObject.RPC_TYPE_ID = SLICEVIEW_RENDERLAYER_RPC_ID;
+    const sourceIds = sources.map(alternatives => alternatives.map(source => source.rpcId!));
+    sharedObject.initializeCounterpart(
+        rpc, {'sources': sourceIds, 'transform': transform.transform});
+    this.rpcId = sharedObject.rpcId;
+
+    this.registerDisposer(transform.changed.add(() => {
+      rpc.invoke(
+          SLICEVIEW_RENDERLAYER_UPDATE_TRANSFORM_RPC_ID,
+          {id: this.rpcId, value: transform.transform});
+    }));
+
     this.setReady(true);
   }
 

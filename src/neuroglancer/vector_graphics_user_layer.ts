@@ -31,7 +31,6 @@ import {RangeWidget} from 'neuroglancer/widget/range';
 import {Vec3Widget} from 'neuroglancer/widget/vec3_entry_widget';
 
 require('./image_user_layer.css');
-require('neuroglancer/help_button.css');
 require('neuroglancer/maximize_button.css');
 
 function getVectorGraphicsWithStatusMessage(
@@ -72,7 +71,9 @@ export class VectorGraphicsUserLayer extends UserLayer {
     this.vectorGraphicsLayerType = verifyEnumString(x['type'], VectorGraphicsType);
 
     let vectorGraphicsPath = this.vectorGraphicsPath = verifyOptionalString(x['source']);
+    let remaining = 0;
     if (vectorGraphicsPath !== undefined) {
+      ++remaining;
       if (this.vectorGraphicsLayerType === VectorGraphicsType.LINE) {
         getVectorGraphicsWithStatusMessage(
             manager.dataSourceProvider, manager.chunkManager, vectorGraphicsPath)
@@ -86,6 +87,9 @@ export class VectorGraphicsUserLayer extends UserLayer {
                       sourceOptions: {}
                     });
                 this.addRenderLayer(renderLayer);
+                if (--remaining === 0) {
+                  this.isReady = true;
+                }
               }
             });
       }

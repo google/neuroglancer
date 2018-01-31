@@ -296,7 +296,7 @@ export class SingletonLayerGroupViewer extends RefCounted implements LayoutCompo
           inputEventBindings: viewer.inputEventBindings,
           visibility: viewer.visibility,
         },
-        {showLayerPanel: viewer.options.showLayerPanel, showViewerMenu: false}));
+        {showLayerPanel: viewer.showLayerPanelEffective, showViewerMenu: false}));
     this.layerGroupViewer.layout.name = layout;
   }
 
@@ -514,7 +514,7 @@ function makeComponent(container: LayoutComponentContainer, spec: any) {
             inputEventBindings: viewer.inputEventBindings,
             visibility: viewer.visibility,
           },
-          {showLayerPanel: viewer.options.showLayerPanel, showViewerMenu: true});
+          {showLayerPanel: viewer.showLayerPanelEffective, showViewerMenu: true});
       try {
         layerGroupViewer.restoreState(spec);
       } catch (e) {

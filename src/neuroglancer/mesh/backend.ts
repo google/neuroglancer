@@ -35,7 +35,6 @@ export type FragmentId = string;
 
 // Chunk that contains the list of fragments that make up a single object.
 export class ManifestChunk extends Chunk {
-  backendOnly = true;
   objectId = new Uint64();
   fragmentIds: FragmentId[]|null;
   clipBounds?: Bounds;
@@ -55,6 +54,11 @@ export class ManifestChunk extends Chunk {
 
   freeSystemMemory() {
     this.fragmentIds = null;
+  }
+
+  serialize(msg: any, transfers: any[]) {
+    super.serialize(msg, transfers);
+    msg.fragmentIds = this.fragmentIds;
   }
 
   downloadSucceeded() {
@@ -320,7 +324,9 @@ export class MeshLayer extends SegmentationLayerSharedObjectCounterpart {
       let manifestChunk = source.getChunk(objectId, this.clipBounds.value);
       chunkManager.requestChunk(
           manifestChunk, priorityTier, basePriority + MESH_OBJECT_MANIFEST_CHUNK_PRIORITY);
-      if (manifestChunk.state === ChunkState.SYSTEM_MEMORY_WORKER) {
+      const state = manifestChunk.state;
+      if (state === ChunkState.SYSTEM_MEMORY_WORKER || state === ChunkState.SYSTEM_MEMORY ||
+          state === ChunkState.GPU_MEMORY) {
         for (let fragmentId of manifestChunk.fragmentIds!) {
           let fragmentChunk = source.getFragmentChunk(manifestChunk, fragmentId);
           chunkManager.requestChunk(

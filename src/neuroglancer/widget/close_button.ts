@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2016 Google Inc.
+ * Copyright 2018 Google Inc.
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
@@ -14,26 +14,8 @@
  * limitations under the License.
  */
 
-.neuroglancer-viewer {
-  outline: 0px;
-}
+import {makeTextIconButton} from 'neuroglancer/widget/text_icon_button';
 
-.neuroglancer-viewer-context-menu > label {
-  display: flex;
-  flex-direction: row;
-  justify-content: space-between;
-}
-
-.neuroglancer-viewer-context-menu > label > input::before {
-  flex: 1;
-  content: " ";
-}
-
-.neuroglancer-viewer-context-menu > label > input {
-  margin-left: 5px;
-  width: 11ch;
-}
-
-.neuroglancer-viewer-context-menu-limit-widget > input {
-  width: 11ch;
+export function makeCloseButton() {
+  return makeTextIconButton('❌');
 }
