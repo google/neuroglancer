@@ -34,6 +34,7 @@ void main() {
     s.layers.append(
         name='b', layer=neuroglancer.LocalVolume(
             data=b,
+            offset=(200, 300, 150),
             voxel_size=s.voxel_size,
         ))
 print(viewer)
