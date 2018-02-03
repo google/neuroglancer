@@ -70,6 +70,8 @@ export class SliceView extends Base {
       this.gl,
       {colorBuffers: makeTextureBuffers(this.gl, 1), depthBuffer: new StencilBuffer(this.gl)}));
 
+  numVisibleChunks = 0;
+
   constructor(
       public chunkManager: ChunkManager, public layerManager: LayerManager,
       public navigationState: NavigationState) {
@@ -105,6 +107,7 @@ export class SliceView extends Base {
       return false;
     }
     this.maybeUpdateVisibleChunks();
+    let numValidChunks = 0;
     for (const visibleSources of this.visibleLayers.values()) {
       for (const {chunkLayout, source} of visibleSources) {
         // FIXME: handle change to chunkLayout
@@ -115,13 +118,13 @@ export class SliceView extends Base {
         const {chunks} = source;
         for (const key of visibleChunks) {
           const chunk = chunks.get(key);
-          if (!chunk || chunk.state !== ChunkState.GPU_MEMORY) {
-            return false;
+          if (chunk && chunk.state === ChunkState.GPU_MEMORY) {
+            ++numValidChunks;
           }
         }
       }
     }
-    return true;
+    return numValidChunks === this.numVisibleChunks;
   }
 
   private updateViewportFromNavigationState() {
@@ -257,7 +260,6 @@ export class SliceView extends Base {
         /*face=*/gl.FRONT_AND_BACK, /*sfail=*/gl.KEEP, /*dpfail=*/gl.KEEP,
         /*dppass=*/gl.REPLACE);
 
-    // console.log("Drawing sliceview");
     let renderLayerNum = 0;
     for (let renderLayer of this.visibleLayerList) {
       gl.clear(gl.STENCIL_BUFFER_BIT);
@@ -279,10 +281,8 @@ export class SliceView extends Base {
   maybeUpdateVisibleChunks() {
     this.updateVisibleLayers.flush();
     if (!this.visibleChunksStale && !this.visibleSourcesStale) {
-      // console.log("Not updating visible chunks");
       return false;
     }
-    // console.log("Updating visible");
     this.visibleChunksStale = false;
     this.updateVisibleChunks();
     return true;
@@ -300,11 +300,16 @@ export class SliceView extends Base {
       }
       return visibleChunks;
     }
-    function addChunk(_chunkLayout: ChunkLayout, visibleChunks: string[], positionInChunks: vec3) {
+    let numVisibleChunks = 0;
+    function addChunk(
+        _chunkLayout: ChunkLayout, visibleChunks: string[], positionInChunks: vec3,
+        fullyVisibleSources: SliceViewChunkSource[]) {
       let key = vec3Key(positionInChunks);
       visibleChunks[visibleChunks.length] = key;
+      numVisibleChunks += fullyVisibleSources.length;
     }
     this.computeVisibleChunks(getLayoutObject, addChunk);
+    this.numVisibleChunks = numVisibleChunks;
   }
 
   disposed() {
