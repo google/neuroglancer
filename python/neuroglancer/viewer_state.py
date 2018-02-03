@@ -496,6 +496,11 @@ class ViewerState(JsonObjectWrapper):
     perspective_orientation = perspectiveOrientation = wrapped_property(
         'perspectiveOrientation', optional(array_wrapper(np.float32, 4)))
     show_slices = showSlices = wrapped_property('showSlices', optional(bool, True))
+    show_axis_lines = showAxisLines = wrapped_property('showAxisLines', optional(bool, True))
+    show_scale_bar = showScaleBar = wrapped_property('showScaleBar', optional(bool, True))
+    gpu_memory_limit = gpuMemoryLimit = wrapped_property('gpuMemoryLimit', optional(int))
+    system_memory_limit = systemMemoryLimit = wrapped_property('systemMemoryLimit', optional(int))
+    concurrent_downloads = concurrentDownloads = wrapped_property('concurrentDownloads', optional(int))
     layers = wrapped_property('layers', Layers)
     layout = wrapped_property('layout', optional(layout_specification, u'4panel'))
 
