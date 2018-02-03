@@ -62,6 +62,7 @@ be rendered in several ways:
 from __future__ import print_function, division
 
 import argparse
+import math
 import os
 import threading
 import time
@@ -137,6 +138,14 @@ def load_script(script_path, transition_duration=1):
             })
     return keypoints
 
+def save_script(script_path, keypoints):
+    temp_path = script_path + '.tmp'
+    with open(temp_path, 'w') as f:
+        for x in keypoints:
+            f.write(neuroglancer.to_url(x['state']) + '\n')
+            f.write(str(x['transition_duration']) + '\n')
+    os.rename(temp_path, script_path)
+
 
 class ScriptEditor(object):
     def __init__(self, script_path, transition_duration):
@@ -209,12 +218,7 @@ class ScriptEditor(object):
         self._update_status()
 
     def save(self):
-        temp_path = self.script_path + '.tmp'
-        with open(temp_path, 'w') as f:
-            for x in self.keypoints:
-                f.write(neuroglancer.to_url(x['state']) + '\n')
-                f.write(str(x['transition_duration']) + '\n')
-        os.rename(temp_path, self.script_path)
+        save_script(self.script_path, self.keypoints)
 
     def _increase_duration(self, s):
         self._set_transition_duration(self.transition_duration + 0.1)
@@ -307,29 +311,71 @@ def run_edit(args):
 
 def run_render(args):
     keypoints = load_script(args.script)
-    viewer = neuroglancer.Viewer()
-    print('Open the specified URL to begin rendering')
-    print(viewer)
-    if args.browser:
-        webbrowser.open_new(viewer.get_viewer_url())
+    for keypoint in keypoints:
+      keypoint['state'].gpu_memory_limit = args.gpu_memory_limit
+      keypoint['state'].system_memory_limit = args.system_memory_limit
+      keypoint['state'].concurrent_downloads = args.concurrent_downloads
+    viewers = [neuroglancer.Viewer() for _ in range(args.shards)]
+    for viewer in viewers:
+        with viewer.config_state.txn() as s:
+            s.show_ui_controls = False
+            s.show_panel_borders = False
+            s.viewer_size = [args.width, args.height]
+
+        print('Open the specified URL to begin rendering')
+        print(viewer)
+        if args.browser:
+            webbrowser.open_new(viewer.get_viewer_url())
+    lock = threading.Lock()
+    num_frames_written = [0]
     fps = args.fps
-    with viewer.config_state.txn() as s:
-        s.show_ui_controls = False
-        s.show_panel_borders = False
-        s.viewer_size = [args.width, args.height]
-    saver = neuroglancer.ScreenshotSaver(viewer, args.output_directory)
     total_frames = sum(max(1, k['transition_duration'] * fps) for k in keypoints[:-1])
-    for i in range(len(keypoints) - 1):
-        a = keypoints[i]['state']
-        b = keypoints[i + 1]['state']
-        duration = keypoints[i]['transition_duration']
-        num_frames = max(1, int(duration * fps))
-        for frame_i in range(num_frames):
-            t = frame_i / num_frames
-            cur_state = neuroglancer.ViewerState.interpolate(a, b, t)
-            viewer.set_state(cur_state)
-            index, path = saver.capture()
-            print('[%07d/%07d] keypoint %.3f/%5d: %s' % (index, total_frames, i + t, len(keypoints), path))
+    def render_func(viewer, start_frame, end_frame):
+        with lock:
+            saver = neuroglancer.ScreenshotSaver(viewer, args.output_directory)
+        for i in range(len(keypoints) - 1):
+            a = keypoints[i]['state']
+            b = keypoints[i + 1]['state']
+            duration = keypoints[i]['transition_duration']
+            num_frames = max(1, int(duration * fps))
+            for frame_i in range(num_frames):
+                t = frame_i / num_frames
+                index, path = saver.get_next_path()
+                if index >= end_frame:
+                    return
+
+                if index < start_frame:
+                    saver.index += 1
+                    continue
+
+                if args.resume and os.path.exists(path):
+                    saver.index += 1
+                    with lock:
+                        num_frames_written[0] += 1
+                else:
+                    cur_state = neuroglancer.ViewerState.interpolate(a, b, t)
+                    viewer.set_state(cur_state)
+                    index, path = saver.capture()
+                    with lock:
+                        num_frames_written[0] += 1
+                        cur_num_frames_written = num_frames_written[0]
+                        print('[%07d/%07d] keypoint %.3f/%5d: %s' %
+                              (cur_num_frames_written, total_frames, i + t, len(keypoints), path))
+
+    shard_frames = []
+    frames_per_shard = int(math.ceil(total_frames / args.shards))
+    for shard in range(args.shards):
+        start_frame = frames_per_shard * shard
+        end_frame = min(total_frames, start_frame + frames_per_shard)
+        shard_frames.append((start_frame, end_frame))
+    render_threads = [
+        threading.Thread(target=render_func, args=(viewer, start_frame, end_frame))
+        for viewer, (start_frame, end_frame) in zip(viewers, shard_frames)
+    ]
+    for t in render_threads:
+        t.start()
+    for t in render_threads:
+        t.join()
 
 
 if __name__ == '__main__':
@@ -361,6 +407,11 @@ if __name__ == '__main__':
     ap_render.add_argument('--width', type=int, help='Frame width', default=1920)
     ap_render.add_argument('--height', type=int, help='Frame height', default=1080)
     ap_render.add_argument('--browser', action='store_true', help='Open web browser automatically.')
+    ap_render.add_argument('--resume', action='store_true', help='Skip already rendered frames.')
+    ap_render.add_argument('--shards', type=int, default=1, help='Number of browsers to use concurrently.')
+    ap_render.add_argument('--system-memory-limit', type=int, default=3000000000, help='System memory limit')
+    ap_render.add_argument('--gpu-memory-limit', type=int, default=3000000000, help='GPU memory limit')
+    ap_render.add_argument('--concurrent-downloads', type=int, default=32, help='Concurrent downloads')
 
     args = ap.parse_args()
     if args.bind_address:
