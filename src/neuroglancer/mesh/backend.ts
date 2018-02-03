@@ -65,6 +65,7 @@ export class ManifestChunk extends Chunk {
     // We can't easily determine the memory usage of the JSON manifest.  Just use 100 bytes as a
     // default value.
     this.systemMemoryBytes = 100;
+    this.gpuMemoryBytes = 0;
     super.downloadSucceeded();
     if (this.priorityTier < ChunkPriorityTier.RECENT) {
       this.source!.chunkManager.scheduleUpdateChunkPriorities();
