@@ -177,6 +177,12 @@ class ImageLayer(Layer):
     shader = wrapped_property('shader', text_type)
     opacity = wrapped_property('opacity', optional(float, 0.5))
 
+    @staticmethod
+    def interpolate(a, b, t):
+        c = copy.deepcopy(a)
+        c.opacity = a.opacity * (1 - t) + b.opacity * t
+        return c
+
 
 def uint64_equivalence_map(obj, _readonly=False):
     if isinstance(obj, EquivalenceMap):
@@ -203,6 +209,13 @@ class SegmentationLayer(Layer):
     not_selected_alpha = notSelectedAlpha = wrapped_property('notSelectedAlpha', optional(float, 0))
     object_alpha = objectAlpha = wrapped_property('objectAlpha', optional(float, 1.0))
     skeleton_shader = skeletonShader = wrapped_property('skeletonShader', text_type)
+
+    @staticmethod
+    def interpolate(a, b, t):
+        c = copy.deepcopy(a)
+        for k in ['selected_alpha', 'not_selected_alpha', 'object_alpha']:
+            setattr(c, k, getattr(a, k) * (1 - t) + getattr(b, k) * t)
+        return c
 
 
 layer_types = {
@@ -376,6 +389,19 @@ class Layers(object):
     def __repr__(self):
         return repr(self._layers)
 
+    @staticmethod
+    def interpolate(a, b, t):
+        c = copy.deepcopy(a)
+        for layer in c:
+            index = b.index(layer.name)
+            if index == -1:
+                continue
+            other_layer = b[index]
+            if type(other_layer.layer) != type(layer.layer):  # pylint: disable=unidiomatic-typecheck
+                continue
+            layer.layer = type(layer.layer).interpolate(layer.layer, other_layer.layer, t)
+        return c
+
 
 def layout_specification(x, _readonly=False):
     if isinstance(x, six.string_types):
@@ -535,4 +561,5 @@ class ViewerState(JsonObjectWrapper):
         c.perspective_zoom = interpolate_zoom(a.perspective_zoom, b.perspective_zoom, t)
         c.perspective_orientation = quaternion_slerp(a.perspective_orientation,
                                                      b.perspective_orientation, t)
+        c.layers = Layers.interpolate(a.layers, b.layers, t)
         return c
