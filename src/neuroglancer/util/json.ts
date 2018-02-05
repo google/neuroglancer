@@ -435,6 +435,10 @@ export function verifyOptionalBoolean(obj: any): boolean|undefined {
   }
 }
 
+export function valueOr<T>(value: T|undefined, defaultValue: T) {
+  return value === undefined ? defaultValue : value;
+}
+
 export function verifyObjectProperty<T>(
     obj: any, propertyName: string, validator: (value: any) => T): T {
   let value = obj.hasOwnProperty(propertyName) ? obj[propertyName] : undefined;
