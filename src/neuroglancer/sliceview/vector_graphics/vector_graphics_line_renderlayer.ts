@@ -63,12 +63,13 @@ export class VectorGraphicsLineRenderLayer extends GenericVectorGraphicsRenderLa
 
     let vertexIndex = new Float32Array([1, 0, 0, 1, 1, 0, 0, 1]);
 
-    this.vertexIndexBuffer = Buffer.fromData(gl, vertexIndex, gl.ARRAY_BUFFER, gl.STATIC_DRAW);
+    this.vertexIndexBuffer =
+        this.registerDisposer(Buffer.fromData(gl, vertexIndex, gl.ARRAY_BUFFER, gl.STATIC_DRAW));
 
     let normalDirection = new Float32Array([1, 1, -1, -1]);
 
-    this.normalDirectionBuffer =
-        Buffer.fromData(gl, normalDirection, gl.ARRAY_BUFFER, gl.STATIC_DRAW);
+    this.normalDirectionBuffer = this.registerDisposer(
+        Buffer.fromData(gl, normalDirection, gl.ARRAY_BUFFER, gl.STATIC_DRAW));
   }
 
   getShaderKey() {
