@@ -206,7 +206,7 @@ registerRPC('Chunk.update', function(x) {
   }
 });
 
-export interface ChunkSourceConstructor<Options, T extends ChunkSource = ChunkSource> {
+export interface ChunkSourceConstructor<Options, T extends SharedObject = ChunkSource> {
   new(...args: any[]): T;
   encodeOptions(options: Options): {[key: string]: any};
 }
@@ -226,7 +226,7 @@ export class ChunkManager extends SharedObject {
         chunkQueueManager.rpc!, {'chunkQueueManager': chunkQueueManager.rpcId});
   }
 
-  getChunkSource<T extends ChunkSource, Options>(
+  getChunkSource<T extends SharedObject, Options>(
       constructorFunction: ChunkSourceConstructor<Options, T>, options: any): T {
     const keyObject = constructorFunction.encodeOptions(options);
     keyObject['constructorId'] = getObjectId(constructorFunction);
@@ -287,7 +287,7 @@ export class ChunkSource extends SharedObject {
 }
 
 export function
-WithParameters<Parameters, BaseOptions, TBase extends ChunkSourceConstructor<BaseOptions>>(
+WithParameters<Parameters, BaseOptions, TBase extends ChunkSourceConstructor<BaseOptions, SharedObject>>(
     Base: TBase, parametersConstructor: ChunkSourceParametersConstructor<Parameters>) {
   type Options = BaseOptions&{parameters: Parameters};
   @registerSharedObjectOwner(parametersConstructor.RPC_ID)
