@@ -21,12 +21,12 @@
 import debounce from 'lodash/debounce';
 import {DataPanelLayoutContainer, InputEventBindings as DataPanelInputEventBindings} from 'neuroglancer/data_panel_layout';
 import {DisplayContext} from 'neuroglancer/display_context';
-import {MouseSelectionState} from 'neuroglancer/layer';
+import {MouseSelectionState, RenderLayerRole} from 'neuroglancer/layer';
 import {LayerPanel} from 'neuroglancer/layer_panel';
 import {LayerListSpecification, LayerSubsetSpecification, ManagedUserLayerWithSpecification} from 'neuroglancer/layer_specification';
 import {LinkedOrientationState, LinkedSpatialPosition, LinkedZoomState, NavigationState, Pose, TrackableNavigationLink} from 'neuroglancer/navigation_state';
 import {TrackableBoolean} from 'neuroglancer/trackable_boolean';
-import {WatchableValueInterface} from 'neuroglancer/trackable_value';
+import {WatchableSet, WatchableValueInterface} from 'neuroglancer/trackable_value';
 import {ContextMenu} from 'neuroglancer/ui/context_menu';
 import {endLayerDrag, startLayerDrag} from 'neuroglancer/ui/layer_drag_and_drop';
 import {setupPositionDropHandlers} from 'neuroglancer/ui/position_drag_and_drop';
@@ -52,6 +52,7 @@ export interface LayerGroupViewerState {
   layerSpecification: Owned<LayerListSpecification>;
   inputEventBindings: DataPanelInputEventBindings;
   visibility: WatchableVisibilityPriority;
+  visibleLayerRoles: WatchableSet<RenderLayerRole>;
   crossSectionBackgroundColor: TrackableRGB;
 }
 
@@ -213,6 +214,9 @@ export class LayerGroupViewer extends RefCounted {
   }
   get visibility() {
     return this.viewerState.visibility;
+  }
+  get visibleLayerRoles() {
+    return this.viewerState.visibleLayerRoles;
   }
   get crossSectionBackgroundColor() {
     return this.viewerState.crossSectionBackgroundColor;

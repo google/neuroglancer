@@ -286,6 +286,7 @@ function getCommonViewerState(viewer: Viewer) {
     showPerspectiveSliceViews: viewer.showPerspectiveSliceViews,
     inputEventBindings: viewer.inputEventBindings,
     visibility: viewer.visibility,
+    visibleLayerRoles: viewer.visibleLayerRoles,
     navigationState: viewer.navigationState.addRef(),
     perspectiveNavigationState: viewer.perspectiveNavigationState.addRef(),
     crossSectionBackgroundColor: viewer.crossSectionBackgroundColor,

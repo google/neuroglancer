@@ -105,7 +105,7 @@ export class SliceViewPanel extends RenderedDataPanel {
   private pickIDs = new PickIDManager();
 
   private visibleLayerTracker = makeRenderedPanelVisibleLayerTracker(
-      this.viewer.layerManager, SliceViewPanelRenderLayer, this);
+      this.viewer.layerManager, SliceViewPanelRenderLayer, this.viewer.visibleLayerRoles, this);
 
   private offscreenFramebuffer = this.registerDisposer(new FramebufferConfiguration(
       this.gl, {colorBuffers: makeTextureBuffers(this.gl, OffscreenTextures.NUM_TEXTURES)}));

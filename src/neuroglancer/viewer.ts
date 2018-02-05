@@ -22,7 +22,7 @@ import {DataSourceProvider} from 'neuroglancer/datasource';
 import {getDefaultDataSourceProvider} from 'neuroglancer/datasource/default_provider';
 import {DisplayContext} from 'neuroglancer/display_context';
 import {InputEventBindingHelpDialog} from 'neuroglancer/help/input_event_bindings';
-import {LayerManager, LayerSelectedValues, MouseSelectionState} from 'neuroglancer/layer';
+import {allRenderLayerRoles, LayerManager, LayerSelectedValues, MouseSelectionState} from 'neuroglancer/layer';
 import {LayerDialog} from 'neuroglancer/layer_dialog';
 import {RootLayoutContainer} from 'neuroglancer/layer_groups_layout';
 import {LayerPanel} from 'neuroglancer/layer_panel';
@@ -140,6 +140,7 @@ export class Viewer extends RefCounted implements ViewerState {
   showAxisLines = new TrackableBoolean(true, true);
   showScaleBar = new TrackableBoolean(true, true);
   showPerspectiveSliceViews = new TrackableBoolean(true, true);
+  visibleLayerRoles = allRenderLayerRoles();
   crossSectionBackgroundColor = new TrackableRGB(vec3.fromValues(0.5, 0.5, 0.5));
   contextMenu: ContextMenu;
 

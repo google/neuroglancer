@@ -17,7 +17,7 @@
 import debounce from 'lodash/debounce';
 import {ChunkManager} from 'neuroglancer/chunk_manager/frontend';
 import {DisplayContext} from 'neuroglancer/display_context';
-import {LayerManager, MouseSelectionState} from 'neuroglancer/layer';
+import {LayerManager, MouseSelectionState, RenderLayerRole} from 'neuroglancer/layer';
 import * as L from 'neuroglancer/layout';
 import {LinkedOrientationState, LinkedSpatialPosition, LinkedZoomState, NavigationState, OrientationState, Pose} from 'neuroglancer/navigation_state';
 import {PerspectivePanel} from 'neuroglancer/perspective_view/panel';
@@ -25,7 +25,7 @@ import {RenderedDataPanel} from 'neuroglancer/rendered_data_panel';
 import {SliceView} from 'neuroglancer/sliceview/frontend';
 import {SliceViewerState, SliceViewPanel} from 'neuroglancer/sliceview/panel';
 import {TrackableBoolean} from 'neuroglancer/trackable_boolean';
-import {TrackableValue} from 'neuroglancer/trackable_value';
+import {TrackableValue, WatchableSet} from 'neuroglancer/trackable_value';
 import {TrackableRGB} from 'neuroglancer/util/color';
 import {Borrowed, Owned, RefCounted} from 'neuroglancer/util/disposable';
 import {removeChildren} from 'neuroglancer/util/dom';
@@ -57,6 +57,7 @@ export interface ViewerUIState extends SliceViewViewerState, VisibilityPriorityS
   showPerspectiveSliceViews: TrackableBoolean;
   showAxisLines: TrackableBoolean;
   showScaleBar: TrackableBoolean;
+  visibleLayerRoles: WatchableSet<RenderLayerRole>;
   inputEventBindings: InputEventBindings;
   crossSectionBackgroundColor: TrackableRGB;
 }
@@ -66,7 +67,7 @@ export interface DataDisplayLayout extends RefCounted {
   container: DataPanelLayoutContainer;
 }
 
-type NamedAxes = 'xy' | 'xz' | 'yz';
+type NamedAxes = 'xy'|'xz'|'yz';
 
 const AXES_RELATIVE_ORIENTATION = new Map<NamedAxes, quat|undefined>([
   ['xy', undefined],
@@ -107,6 +108,7 @@ export function getCommonViewerState(viewer: ViewerUIState) {
     mouseState: viewer.mouseState,
     layerManager: viewer.layerManager,
     showAxisLines: viewer.showAxisLines,
+    visibleLayerRoles: viewer.visibleLayerRoles,
     visibility: viewer.visibility,
   };
 }
@@ -535,7 +537,7 @@ export class DataPanelLayoutContainer extends RefCounted {
     this.specification.type.value = value;
   }
 
-  constructor (public viewer: ViewerUIState, defaultLayout: string = 'xy') {
+  constructor(public viewer: ViewerUIState, defaultLayout: string = 'xy') {
     super();
     this.specification = this.registerDisposer(
         new DataPanelLayoutSpecification(this.viewer.navigationState.addRef(), defaultLayout));

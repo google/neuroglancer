@@ -113,7 +113,7 @@ export class PerspectivePanel extends RenderedDataPanel {
   viewer: PerspectiveViewerState;
 
   protected visibleLayerTracker = makeRenderedPanelVisibleLayerTracker(
-      this.viewer.layerManager, PerspectiveViewRenderLayer, this);
+      this.viewer.layerManager, PerspectiveViewRenderLayer, this.viewer.visibleLayerRoles, this);
 
   /**
    * If boolean value is true, sliceView is shown unconditionally, regardless of the value of

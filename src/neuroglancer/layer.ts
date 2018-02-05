@@ -19,14 +19,27 @@ import throttle from 'lodash/throttle';
 import {RenderedPanel} from 'neuroglancer/display_context';
 import {SpatialPosition} from 'neuroglancer/navigation_state';
 import {Borrowed, RefCounted} from 'neuroglancer/util/disposable';
+import {WatchableSet} from 'neuroglancer/trackable_value';
 import {BoundingBox, vec3} from 'neuroglancer/util/geom';
 import {NullarySignal} from 'neuroglancer/util/signal';
 import {addSignalBinding, removeSignalBinding, SignalBindingUpdater} from 'neuroglancer/util/signal_binding_updater';
 import {Uint64} from 'neuroglancer/util/uint64';
 import {VisibilityPriorityAggregator, WatchableVisibilityPriority} from 'neuroglancer/visibility_priority/frontend';
 
+export enum RenderLayerRole {
+  DATA,
+  ANNOTATION,
+  DEFAULT_ANNOTATION,
+}
+
+export function allRenderLayerRoles() {
+  return new WatchableSet(
+      [RenderLayerRole.DATA, RenderLayerRole.ANNOTATION, RenderLayerRole.DEFAULT_ANNOTATION]);
+}
+
 export class RenderLayer extends RefCounted {
   ready = false;
+  role: RenderLayerRole = RenderLayerRole.DATA;
   layerChanged = new NullarySignal();
   redrawNeeded = new NullarySignal();
   readyStateChanged = new NullarySignal();
@@ -601,37 +614,32 @@ export class VisibleRenderLayerTracker<RenderLayerType extends VisibilityTracked
    */
   private visibleLayers = new Map<RenderLayerType, () => void>();
   private newVisibleLayers = new Set<RenderLayerType>();
-  private throttledUpdateVisibleLayers = throttle(() => {
-    this.updateVisibleLayers();
-  }, 0);
+
+  private debouncedUpdateVisibleLayers =
+      this.registerCancellable(debounce(() => this.updateVisibleLayers(), 0));
 
   constructor(
       public layerManager: LayerManager,
       public renderLayerType: {new(...args: any[]): RenderLayerType},
+      public roles: WatchableSet<RenderLayerRole>,
       private layerAdded: (layer: RenderLayerType) => (() => void),
       public visibility: WatchableVisibilityPriority) {
     super();
-    this.registerDisposer(layerManager.layersChanged.add(() => {
-      this.handleLayersChanged();
-    }));
+    this.registerDisposer(layerManager.layersChanged.add(this.debouncedUpdateVisibleLayers));
+    this.registerDisposer(roles.changed.add(this.debouncedUpdateVisibleLayers));
     this.updateVisibleLayers();
   }
 
-  private handleLayersChanged() {
-    this.throttledUpdateVisibleLayers();
-  }
-
   disposed() {
-    this.throttledUpdateVisibleLayers.cancel();
     this.visibleLayers.forEach(disposer => disposer());
     this.visibleLayers.clear();
     super.disposed();
   }
 
   private updateVisibleLayers() {
-    let {visibleLayers, newVisibleLayers, renderLayerType, layerAdded} = this;
+    let {visibleLayers, newVisibleLayers, renderLayerType, layerAdded, roles} = this;
     for (let renderLayer of this.layerManager.readyRenderLayers()) {
-      if (renderLayer instanceof renderLayerType) {
+      if (renderLayer instanceof renderLayerType && roles.has(renderLayer.role)) {
         let typedLayer = <RenderLayerType>renderLayer;
         newVisibleLayers.add(typedLayer);
         if (!visibleLayers.has(typedLayer)) {
@@ -655,7 +663,7 @@ export class VisibleRenderLayerTracker<RenderLayerType extends VisibilityTracked
   }
 
   getVisibleLayers() {
-    (<any>this.throttledUpdateVisibleLayers).flush();
+    (<any>this.debouncedUpdateVisibleLayers).flush();
     return [...this.visibleLayers.keys()];
   }
 }
@@ -663,9 +671,9 @@ export class VisibleRenderLayerTracker<RenderLayerType extends VisibilityTracked
 export function
 makeRenderedPanelVisibleLayerTracker<RenderLayerType extends VisibilityTrackedRenderLayer>(
     layerManager: LayerManager, renderLayerType: {new (...args: any[]): RenderLayerType},
-    panel: RenderedPanel) {
+    roles: WatchableSet<RenderLayerRole>, panel: RenderedPanel) {
   return panel.registerDisposer(
-      new VisibleRenderLayerTracker(layerManager, renderLayerType, layer => {
+      new VisibleRenderLayerTracker(layerManager, renderLayerType, roles, layer => {
         const disposer = layer.redrawNeeded.add(() => panel.scheduleRedraw());
         panel.scheduleRedraw();
         return () => {
