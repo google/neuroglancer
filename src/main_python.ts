@@ -132,7 +132,8 @@ window.addEventListener('DOMContentLoaded', () => {
   configState.add('showPanelBorders', viewer.showPanelBorders);
 
   const size = new TrackableValue<[number, number]|undefined>(
-      undefined, x => parseFixedLengthArray(<[number, number]>[0, 0], x, verifyInt));
+      undefined,
+      x => x == null ? undefined : parseFixedLengthArray(<[number, number]>[0, 0], x, verifyInt));
   configState.add('viewerSize', size);
 
   const updateSize = () => {
