@@ -294,7 +294,7 @@ export class LayerGroupViewer extends RefCounted {
   private updateUI() {
     const {options} = this;
     const showLayerPanel = options.showLayerPanel.value;
-    if (this.layerPanel !== undefined && showLayerPanel) {
+    if (this.layerPanel !== undefined && !showLayerPanel) {
       this.layerPanel.dispose();
       this.layerPanel = undefined;
       return;

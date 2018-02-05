@@ -269,7 +269,7 @@ export class SliceViewPanel extends RenderedDataPanel {
   }
 
   onResize() {
-    this.sliceView.setViewportSize(this.element.clientWidth, this.element.clientHeight);
+    this.sliceView.setViewportSizeDebounced(this.element.clientWidth, this.element.clientHeight);
   }
 
   updateMouseState(mouseState: MouseSelectionState) {

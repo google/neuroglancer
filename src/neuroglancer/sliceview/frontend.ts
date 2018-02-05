@@ -103,6 +103,7 @@ export class SliceView extends Base {
   }
 
   isReady() {
+    this.setViewportSizeDebounced.flush();
     if (!this.hasValidViewport) {
       return false;
     }
@@ -214,7 +215,10 @@ export class SliceView extends Base {
     this.visibleChunksStale = true;
     this.viewChanged.dispatch();
   }
+  setViewportSizeDebounced = this.registerCancellable(
+      debounce((width: number, height: number) => this.setViewportSize(width, height), 0));
   setViewportSize(width: number, height: number) {
+    this.setViewportSizeDebounced.cancel();
     if (super.setViewportSize(width, height)) {
       this.rpc!.invoke(SLICEVIEW_UPDATE_VIEW_RPC_ID, {id: this.rpcId, width: width, height: height});
       // this.chunkManager.scheduleUpdateChunkPriorities();
@@ -236,6 +240,7 @@ export class SliceView extends Base {
   }
 
   updateRendering() {
+    this.setViewportSizeDebounced.flush();
     if (!this.renderingStale || !this.hasValidViewport || this.width === 0 || this.height === 0) {
       return;
     }
