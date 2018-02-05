@@ -23,6 +23,8 @@ export class PickIDManager {
    */
   private renderLayers: (RenderLayer|null)[] = [null];
 
+  private pickData: any[] = [null];
+
   /**
    * This contains 3 consecutive values, specifying (startPickID, low, high), for each registered
    * entry.  startPickID specifies the first uint32 pick ID corresponding to the entry.  low and
@@ -36,6 +38,7 @@ export class PickIDManager {
 
   clear() {
     this.renderLayers.length = 1;
+    this.pickData.length = 1;
     this.values.length = 3;
     this.nextPickID = 1;
   }
@@ -44,7 +47,7 @@ export class PickIDManager {
     return this.register(renderLayer, count, x.low, x.high);
   }
 
-  register(renderLayer: RenderLayer, count = 1, low = 0, high = 0): number {
+  register(renderLayer: RenderLayer, count = 1, low = 0, high = 0, data: any = null): number {
     let {renderLayers, values} = this;
     let pickID = this.nextPickID;
     this.nextPickID += count;
@@ -54,6 +57,7 @@ export class PickIDManager {
     values[valuesOffset] = pickID;
     values[valuesOffset + 1] = low;
     values[valuesOffset + 2] = high;
+    this.pickData[index] = data;
     return pickID;
   }
 
@@ -79,7 +83,7 @@ export class PickIDManager {
     pickedValue.low = values[valuesOffset + 1];
     pickedValue.high = values[valuesOffset + 2];
     if (pickedRenderLayer !== null) {
-      pickedRenderLayer.updateMouseState(mouseState, pickedValue, pickedOffset);
+      pickedRenderLayer.updateMouseState(mouseState, pickedValue, pickedOffset, this.pickData[lower]);
     }
   }
 }

@@ -66,7 +66,8 @@ export class RenderLayer extends RefCounted {
    * Optionally updates the mouse state based on the retrived pick information.  This might snap the
    * 3-d position to the center of the picked point.
    */
-  updateMouseState(_mouseState: MouseSelectionState, _pickedValue: Uint64, _pickedOffset: number) {}
+  updateMouseState(
+      _mouseState: MouseSelectionState, _pickedValue: Uint64, _pickedOffset: number, _data: any) {}
 }
 
 /**
