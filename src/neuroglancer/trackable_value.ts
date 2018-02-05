@@ -15,12 +15,12 @@
  */
 
 import {RefCounted} from 'neuroglancer/util/disposable';
-import {NullarySignal} from 'neuroglancer/util/signal';
+import {NullaryReadonlySignal, NullarySignal} from 'neuroglancer/util/signal';
 import {Trackable} from 'neuroglancer/util/trackable';
 
 export interface WatchableValueInterface<T> {
-  changed: NullarySignal;
   value: T;
+  changed: NullaryReadonlySignal;
 }
 
 export class WatchableValue<T> implements WatchableValueInterface<T> {
