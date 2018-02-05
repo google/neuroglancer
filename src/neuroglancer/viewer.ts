@@ -34,6 +34,7 @@ import {makeDerivedWatchableValue, TrackableValue, WatchableValueInterface} from
 import {ContextMenu} from 'neuroglancer/ui/context_menu';
 import {setupPositionDropHandlers} from 'neuroglancer/ui/position_drag_and_drop';
 import {AutomaticallyFocusedElement} from 'neuroglancer/util/automatic_focus';
+import {TrackableRGB} from 'neuroglancer/util/color';
 import {Borrowed, Owned, RefCounted} from 'neuroglancer/util/disposable';
 import {removeFromParent} from 'neuroglancer/util/dom';
 import {registerActionListener} from 'neuroglancer/util/event_action_map';
@@ -139,6 +140,7 @@ export class Viewer extends RefCounted implements ViewerState {
   showAxisLines = new TrackableBoolean(true, true);
   showScaleBar = new TrackableBoolean(true, true);
   showPerspectiveSliceViews = new TrackableBoolean(true, true);
+  crossSectionBackgroundColor = new TrackableRGB(vec3.fromValues(0.5, 0.5, 0.5));
   contextMenu: ContextMenu;
 
   layerPanel: LayerPanel;
@@ -275,6 +277,7 @@ export class Viewer extends RefCounted implements ViewerState {
         'systemMemoryLimit', this.dataContext.chunkQueueManager.capacities.systemMemory.sizeLimit);
     state.add(
         'concurrentDownloads', this.dataContext.chunkQueueManager.capacities.download.itemLimit);
+    state.add('crossSectionBackgroundColor', this.crossSectionBackgroundColor);
 
     this.registerDisposer(this.navigationState.changed.add(() => {
       this.handleNavigationStateChanged();

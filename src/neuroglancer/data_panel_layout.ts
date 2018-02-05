@@ -26,6 +26,7 @@ import {SliceView} from 'neuroglancer/sliceview/frontend';
 import {SliceViewerState, SliceViewPanel} from 'neuroglancer/sliceview/panel';
 import {TrackableBoolean} from 'neuroglancer/trackable_boolean';
 import {TrackableValue} from 'neuroglancer/trackable_value';
+import {TrackableRGB} from 'neuroglancer/util/color';
 import {Borrowed, Owned, RefCounted} from 'neuroglancer/util/disposable';
 import {removeChildren} from 'neuroglancer/util/dom';
 import {EventActionMap, registerActionListener} from 'neuroglancer/util/event_action_map';
@@ -57,6 +58,7 @@ export interface ViewerUIState extends SliceViewViewerState, VisibilityPriorityS
   showAxisLines: TrackableBoolean;
   showScaleBar: TrackableBoolean;
   inputEventBindings: InputEventBindings;
+  crossSectionBackgroundColor: TrackableRGB;
 }
 
 export interface DataDisplayLayout extends RefCounted {
@@ -101,6 +103,7 @@ export function makeOrthogonalSliceViews(viewerState: SliceViewViewerState) {
 
 export function getCommonViewerState(viewer: ViewerUIState) {
   return {
+    crossSectionBackgroundColor: viewer.crossSectionBackgroundColor,
     mouseState: viewer.mouseState,
     layerManager: viewer.layerManager,
     showAxisLines: viewer.showAxisLines,

@@ -31,6 +31,7 @@ import {ContextMenu} from 'neuroglancer/ui/context_menu';
 import {endLayerDrag, startLayerDrag} from 'neuroglancer/ui/layer_drag_and_drop';
 import {setupPositionDropHandlers} from 'neuroglancer/ui/position_drag_and_drop';
 import {AutomaticallyFocusedElement} from 'neuroglancer/util/automatic_focus';
+import {TrackableRGB} from 'neuroglancer/util/color';
 import {Borrowed, Owned, RefCounted} from 'neuroglancer/util/disposable';
 import {removeChildren} from 'neuroglancer/util/dom';
 import {registerActionListener} from 'neuroglancer/util/event_action_map';
@@ -51,6 +52,7 @@ export interface LayerGroupViewerState {
   layerSpecification: Owned<LayerListSpecification>;
   inputEventBindings: DataPanelInputEventBindings;
   visibility: WatchableVisibilityPriority;
+  crossSectionBackgroundColor: TrackableRGB;
 }
 
 export interface LayerGroupViewerOptions {
@@ -211,6 +213,9 @@ export class LayerGroupViewer extends RefCounted {
   }
   get visibility() {
     return this.viewerState.visibility;
+  }
+  get crossSectionBackgroundColor() {
+    return this.viewerState.crossSectionBackgroundColor;
   }
   layerPanel: LayerPanel|undefined;
   layout: DataPanelLayoutContainer;

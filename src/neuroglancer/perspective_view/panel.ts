@@ -22,6 +22,7 @@ import {PerspectiveViewRenderContext, PerspectiveViewRenderLayer} from 'neurogla
 import {RenderedDataPanel, RenderedDataViewerState} from 'neuroglancer/rendered_data_panel';
 import {SliceView, SliceViewRenderHelper} from 'neuroglancer/sliceview/frontend';
 import {TrackableBoolean, TrackableBooleanCheckbox} from 'neuroglancer/trackable_boolean';
+import {TrackableRGB} from 'neuroglancer/util/color';
 import {ActionEvent, registerActionListener} from 'neuroglancer/util/event_action_map';
 import {kAxes, mat4, transformVectorByMat4, vec3, vec4} from 'neuroglancer/util/geom';
 import {startRelativeMouseDrag} from 'neuroglancer/util/mouse_drag';
@@ -37,6 +38,7 @@ require('./panel.css');
 export interface PerspectiveViewerState extends RenderedDataViewerState {
   showSliceViews: TrackableBoolean;
   showSliceViewsCheckbox?: boolean;
+  crossSectionBackgroundColor: TrackableRGB;
 }
 
 export enum OffscreenTextures {
@@ -93,6 +95,7 @@ export function perspectivePanelEmitOIT(builder: ShaderBuilder) {
 
 const tempVec3 = vec3.create();
 const tempVec3b = vec3.create();
+const tempVec4 = vec4.create();
 const tempMat4 = mat4.create();
 
 function defineTransparencyCopyShader(builder: ShaderBuilder) {
@@ -192,13 +195,12 @@ export class PerspectivePanel extends RenderedDataPanel {
       showSliceViewsLabel.appendChild(showSliceViewsCheckbox.element);
       this.element.appendChild(showSliceViewsLabel);
     }
-    this.registerDisposer(viewer.showSliceViews.changed.add(() => {
-      this.scheduleRedraw();
-    }));
-    this.registerDisposer(viewer.showAxisLines.changed.add(() => {
-      this.scheduleRedraw();
-    }));
+    this.registerDisposer(viewer.showSliceViews.changed.add(() => this.scheduleRedraw()));
+    this.registerDisposer(viewer.showAxisLines.changed.add(() => this.scheduleRedraw()));
+    this.registerDisposer(
+      viewer.crossSectionBackgroundColor.changed.add(() => this.scheduleRedraw()));
   }
+
   get navigationState() {
     return this.viewer.navigationState;
   }
@@ -450,11 +452,15 @@ export class PerspectivePanel extends RenderedDataPanel {
       mat[5] = -sliceView.height / 2.0;
       mat4.multiply(mat, sliceView.viewportToData, mat);
       mat4.multiply(mat, dataToDevice, mat);
-
+      const backgroundColor = tempVec4;
+      const crossSectionBackgroundColor = this.viewer.crossSectionBackgroundColor.value;
+      backgroundColor[0] = crossSectionBackgroundColor[0];
+      backgroundColor[1] = crossSectionBackgroundColor[1];
+      backgroundColor[2] = crossSectionBackgroundColor[2];
+      backgroundColor[3] = 1;
       sliceViewRenderHelper.draw(
           sliceView.offscreenFramebuffer.colorBuffers[0].texture, mat,
-          vec4.fromValues(factor, factor, factor, 1), vec4.fromValues(0.5, 0.5, 0.5, 1), 0, 0, 1,
-          1);
+          vec4.fromValues(factor, factor, factor, 1), tempVec4, 0, 0, 1, 1);
     }
   }
 

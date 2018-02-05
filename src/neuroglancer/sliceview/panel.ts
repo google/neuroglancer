@@ -21,6 +21,7 @@ import {PickIDManager} from 'neuroglancer/object_picking';
 import {RenderedDataPanel, RenderedDataViewerState} from 'neuroglancer/rendered_data_panel';
 import {SliceView, SliceViewRenderHelper} from 'neuroglancer/sliceview/frontend';
 import {TrackableBoolean} from 'neuroglancer/trackable_boolean';
+import {TrackableRGB} from 'neuroglancer/util/color';
 import {ActionEvent, registerActionListener} from 'neuroglancer/util/event_action_map';
 import {identityMat4, mat4, vec3, vec4} from 'neuroglancer/util/geom';
 import {startRelativeMouseDrag} from 'neuroglancer/util/mouse_drag';
@@ -31,6 +32,7 @@ import {ScaleBarTexture} from 'neuroglancer/widget/scale_bar';
 
 export interface SliceViewerState extends RenderedDataViewerState {
   showScaleBar: TrackableBoolean;
+  crossSectionBackgroundColor: TrackableRGB;
 }
 
 export enum OffscreenTextures {
@@ -87,6 +89,8 @@ export class SliceViewPanelRenderLayer extends VisibilityTrackedRenderLayer {
   }
 }
 
+const tempVec4 = vec4.create();
+
 export class SliceViewPanel extends RenderedDataPanel {
   viewer: SliceViewerState;
 
@@ -94,7 +98,6 @@ export class SliceViewPanel extends RenderedDataPanel {
   private sliceViewRenderHelper =
       this.registerDisposer(SliceViewRenderHelper.get(this.gl, sliceViewPanelEmitColor));
   private colorFactor = vec4.fromValues(1, 1, 1, 1);
-  private backgroundColor = vec4.fromValues(0.5, 0.5, 0.5, 1.0);
   private pickIDs = new PickIDManager();
 
   private visibleLayerTracker = makeRenderedPanelVisibleLayerTracker(
@@ -145,6 +148,7 @@ export class SliceViewPanel extends RenderedDataPanel {
     });
 
     this.registerDisposer(sliceView);
+    this.registerDisposer(viewer.crossSectionBackgroundColor.changed.add(() => this.scheduleRedraw()));
     this.registerDisposer(sliceView.visibility.add(this.visibility));
     this.registerDisposer(sliceView.viewChanged.add(() => {
       if (this.visible) {
@@ -188,9 +192,16 @@ export class SliceViewPanel extends RenderedDataPanel {
     // FIXME: avoid use of temporary matrix
     let mat = mat4.create();
 
+    const backgroundColor = tempVec4;
+    const crossSectionBackgroundColor = this.viewer.crossSectionBackgroundColor.value;
+    backgroundColor[0] = crossSectionBackgroundColor[0];
+    backgroundColor[1] = crossSectionBackgroundColor[1];
+    backgroundColor[2] = crossSectionBackgroundColor[2];
+    backgroundColor[3] = 1;
+
     this.sliceViewRenderHelper.draw(
         sliceView.offscreenFramebuffer.colorBuffers[0].texture, identityMat4, this.colorFactor,
-        this.backgroundColor, 0, 0, 1, 1);
+        backgroundColor, 0, 0, 1, 1);
 
     let visibleLayers = this.visibleLayerTracker.getVisibleLayers();
     let {pickIDs} = this;
