@@ -278,6 +278,19 @@ export class LayoutComponentContainer extends RefCounted {
   }
 }
 
+function getCommonViewerState(viewer: Viewer) {
+  return {
+    mouseState: viewer.mouseState,
+    showAxisLines: viewer.showAxisLines,
+    showScaleBar: viewer.showScaleBar,
+    showPerspectiveSliceViews: viewer.showPerspectiveSliceViews,
+    inputEventBindings: viewer.inputEventBindings,
+    visibility: viewer.visibility,
+    navigationState: viewer.navigationState.addRef(),
+    perspectiveNavigationState: viewer.perspectiveNavigationState.addRef(),
+  };
+}
+
 export class SingletonLayerGroupViewer extends RefCounted implements LayoutComponent {
   layerGroupViewer: LayerGroupViewer;
 
@@ -286,15 +299,8 @@ export class SingletonLayerGroupViewer extends RefCounted implements LayoutCompo
     this.layerGroupViewer = this.registerDisposer(new LayerGroupViewer(
         element, {
           display: viewer.display,
-          navigationState: viewer.navigationState.addRef(),
-          perspectiveNavigationState: viewer.perspectiveNavigationState.addRef(),
-          mouseState: viewer.mouseState,
-          showAxisLines: viewer.showAxisLines,
-          showScaleBar: viewer.showScaleBar,
-          showPerspectiveSliceViews: viewer.showPerspectiveSliceViews,
           layerSpecification: viewer.layerSpecification.addRef(),
-          inputEventBindings: viewer.inputEventBindings,
-          visibility: viewer.visibility,
+          ...getCommonViewerState(viewer),
         },
         {showLayerPanel: viewer.showLayerPanelEffective, showViewerMenu: false}));
     this.layerGroupViewer.layout.restoreState(layout);
@@ -504,15 +510,8 @@ function makeComponent(container: LayoutComponentContainer, spec: any) {
       const layerGroupViewer = new LayerGroupViewer(
           element, {
             display: viewer.display,
-            navigationState: viewer.navigationState.addRef(),
-            perspectiveNavigationState: viewer.perspectiveNavigationState.addRef(),
-            mouseState: viewer.mouseState,
-            showAxisLines: viewer.showAxisLines,
-            showScaleBar: viewer.showScaleBar,
-            showPerspectiveSliceViews: viewer.showPerspectiveSliceViews,
             layerSpecification,
-            inputEventBindings: viewer.inputEventBindings,
-            visibility: viewer.visibility,
+            ...getCommonViewerState(viewer),
           },
           {showLayerPanel: viewer.showLayerPanelEffective, showViewerMenu: true});
       try {
