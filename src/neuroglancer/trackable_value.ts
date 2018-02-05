@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-import {RefCounted} from 'neuroglancer/util/disposable';
+import {Borrowed, Owned, RefCounted} from 'neuroglancer/util/disposable';
 import {NullaryReadonlySignal, NullarySignal} from 'neuroglancer/util/signal';
 import {Trackable} from 'neuroglancer/util/trackable';
 
@@ -102,5 +102,70 @@ export class ComputedWatchableValue<U> extends RefCounted implements WatchableVa
     for (const signal of signals) {
       this.registerDisposer(signal.add(this.changed.dispatch));
     }
+  }
+}
+
+export class WatchableRefCounted<T extends RefCounted> extends RefCounted implements
+    WatchableValueInterface<T|undefined> {
+  changed = new NullarySignal();
+
+  private value_: Owned<T>|undefined;
+  private valueHandler: (() => void)|undefined;
+
+  get value(): Borrowed<T>|undefined {
+    return this.value_;
+  }
+
+  set value(value: Owned<T>|undefined) {
+    const {value_} = this;
+    this.value_ = value;
+    if (value_ !== undefined) {
+      value_.dispose();
+      this.valueHandler = undefined;
+    }
+    if (value !== undefined) {
+      const valueHandler = this.valueHandler = () => {
+        if (this.value_ === value) {
+          this.value_ = undefined;
+          this.changed.dispatch();
+        }
+      };
+      value.registerDisposer(valueHandler);
+    }
+
+    if (value !== value_) {
+      this.changed.dispatch();
+    }
+  }
+
+  reset() {
+    this.value = undefined;
+  }
+
+  disposed() {
+    if (this.value_ !== undefined) {
+      this.value_.dispose();
+    }
+    this.value_ = undefined;
+    super.disposed();
+  }
+}
+
+
+export interface TrackableValueInterface<T> extends WatchableValueInterface<T>, Trackable {}
+
+export class TrackableRefCounted<T extends RefCounted> extends WatchableRefCounted<T> implements
+    TrackableValueInterface<T|undefined> {
+  constructor(
+      public validator: (value: any) => T | undefined, public jsonConverter: (value: T) => any) {
+    super();
+  }
+  toJSON() {
+    const {value} = this;
+    return value && this.jsonConverter(value);
+  }
+
+  restoreState(x: any) {
+    this.value = this.validator(x);
   }
 }
