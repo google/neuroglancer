@@ -156,15 +156,14 @@ gl_Position = uProjection * (pos + delta);
       return;
     }
 
-    this.initializeShader();
-    if (this.shader === undefined) {
+    let gl = this.gl;
+
+    let shader = this.beginSlice(sliceView);
+    if (shader === undefined) {
       console.log('error: shader undefined');
       return;
     }
 
-    let gl = this.gl;
-
-    let shader = this.beginSlice(sliceView);
 
     for (let transformedSource of visibleSources) {
       const chunkLayout = transformedSource.chunkLayout;

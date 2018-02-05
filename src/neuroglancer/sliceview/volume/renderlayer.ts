@@ -22,8 +22,10 @@ import {SliceView} from 'neuroglancer/sliceview/frontend';
 import {RenderLayer as SliceViewRenderLayer, RenderLayerOptions as SliceViewRenderLayerOptions} from 'neuroglancer/sliceview/renderlayer';
 import {VolumeChunkSpecification, VolumeSourceOptions} from 'neuroglancer/sliceview/volume/base';
 import {MultiscaleVolumeChunkSource, VolumeChunkSource} from 'neuroglancer/sliceview/volume/frontend';
-import {mat4, vec3, vec3Key} from 'neuroglancer/util/geom';
+import {Owned} from 'neuroglancer/util/disposable';
+import {BoundingBox, mat4, vec3, vec3Key} from 'neuroglancer/util/geom';
 import {GL} from 'neuroglancer/webgl/context';
+import {ShaderGetter, WatchableShaderError} from 'neuroglancer/webgl/dynamic_shader';
 import {ShaderBuilder, ShaderProgram} from 'neuroglancer/webgl/shader';
 import {getShaderType} from 'neuroglancer/webgl/shader_lib';
 
@@ -50,6 +52,7 @@ vec3 getPositionWithinChunk () {
 
 
 const tempMat4 = mat4.create();
+const tempVec3 = vec3.create();
 
 class VolumeSliceVertexComputationManager extends BoundingBoxCrossSectionRenderHelper {
   static get(gl: GL) {
@@ -86,7 +89,8 @@ class VolumeSliceVertexComputationManager extends BoundingBoxCrossSectionRenderH
 vec3 chunkSize = uChunkDataSize * uVoxelSize;
 vec3 position = getBoundingBoxPlaneIntersectionVertexPosition(chunkSize, uTranslation, uLowerClipBound, uUpperClipBound, int(aVertexIndexFloat));
 gl_Position = uProjectionMatrix * vec4(position, 1.0);
-vChunkPosition = (position - uTranslation) / uVoxelSize + ${CHUNK_POSITION_EPSILON} * abs(uPlaneNormal);
+vChunkPosition = (position - uTranslation) / uVoxelSize +
+    ${CHUNK_POSITION_EPSILON} * abs(uPlaneNormal);
 `);
 
     builder.addFragmentCode(glsl_getPositionWithinChunk);
@@ -179,17 +183,44 @@ vChunkPosition = (position - uTranslation) / uVoxelSize + ${CHUNK_POSITION_EPSIL
 
 export interface RenderLayerOptions extends SliceViewRenderLayerOptions {
   sourceOptions: VolumeSourceOptions;
+  shaderError: WatchableShaderError;
 }
 
 export class RenderLayer extends SliceViewRenderLayer {
   sources: VolumeChunkSource[][];
   vertexComputationManager: VolumeSliceVertexComputationManager;
+  protected shaderGetter: Owned<ShaderGetter>;
   constructor(
       multiscaleSource: MultiscaleVolumeChunkSource, options: Partial<RenderLayerOptions> = {}) {
-    const {sourceOptions = {}} = options;
+    const {sourceOptions = {}, shaderError} = options;
     super(multiscaleSource.chunkManager, multiscaleSource.getSources(sourceOptions), options);
-    let gl = this.gl;
+    const {gl} = this;
+    this.shaderGetter = this.registerDisposer(new ShaderGetter(
+        gl, builder => this.defineShader(builder),
+        () => `${this.getShaderKey()}/${this.chunkFormat.shaderKey}`, shaderError));
     this.vertexComputationManager = VolumeSliceVertexComputationManager.get(gl);
+
+    const transformedSources = getTransformedSources(this);
+
+    {
+      const {source, chunkLayout} = transformedSources[0][0];
+      const spec = <VolumeChunkSpecification>source.spec;
+
+      const boundingBox = this.boundingBox = new BoundingBox(
+          vec3.fromValues(Infinity, Infinity, Infinity),
+          vec3.fromValues(-Infinity, -Infinity, -Infinity));
+      const globalCorner = vec3.create();
+      const localCorner = tempVec3;
+
+      for (let cornerIndex = 0; cornerIndex < 8; ++cornerIndex) {
+        for (let i = 0; i < 3; ++i) {
+          localCorner[i] = cornerIndex & (1 << i) ? spec.upperClipBound[i] : spec.lowerClipBound[i];
+        }
+        chunkLayout.localSpatialToGlobal(globalCorner, localCorner);
+        vec3.min(boundingBox.lower, boundingBox.lower, globalCorner);
+        vec3.max(boundingBox.upper, boundingBox.upper, globalCorner);
+      }
+    }
   }
 
   get dataType() {
@@ -213,12 +244,11 @@ export class RenderLayer extends SliceViewRenderLayer {
     return null;
   }
 
-  getShader() {
-    let key = this.getShaderKey() + '/' + this.chunkFormat.shaderKey;
-    return this.gl.memoize.get(key, () => this.buildShader());
+  protected getShaderKey() {
+    return this.chunkFormat.shaderKey;
   }
 
-  defineShader(builder: ShaderBuilder) {
+  protected defineShader(builder: ShaderBuilder) {
     this.vertexComputationManager.defineShader(builder);
     builder.addFragmentCode(`
 void emit(vec4 color) {
@@ -234,7 +264,10 @@ ${getShaderType(this.dataType)} getDataValue() { return getDataValue(0); }
   beginSlice(_sliceView: SliceView) {
     let gl = this.gl;
 
-    let shader = this.shader!;
+    let shader = this.shaderGetter.get();
+    if (shader === undefined) {
+      return;
+    }
     shader.bind();
     this.vertexComputationManager.beginSlice(gl, shader);
     return shader;
@@ -251,15 +284,14 @@ ${getShaderType(this.dataType)} getDataValue() { return getDataValue(0); }
       return;
     }
 
-    this.initializeShader();
-    if (this.shader === undefined) {
+    let gl = this.gl;
+
+    const shader = this.beginSlice(sliceView);
+    if (shader === undefined) {
       return;
     }
 
-    let gl = this.gl;
-
     let chunkPosition = vec3.create();
-    let shader = this.beginSlice(sliceView);
     let vertexComputationManager = this.vertexComputationManager;
 
     // All sources are required to have the same texture format.

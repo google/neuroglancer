@@ -142,7 +142,7 @@ export class Chunk implements Disposable {
   }
 }
 
-interface ChunkConstructor<T extends Chunk> {
+export interface ChunkConstructor<T extends Chunk> {
   new(): T;
 }
 

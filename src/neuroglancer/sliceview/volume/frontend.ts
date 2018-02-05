@@ -160,6 +160,7 @@ export class VolumeChunkSource extends SliceViewChunkSource implements VolumeChu
 
 export abstract class VolumeChunk extends SliceViewChunk {
   source: VolumeChunkSource;
+  chunkDataSize: vec3;
 
   get chunkFormat() {
     return this.source.chunkFormat;
@@ -167,6 +168,7 @@ export abstract class VolumeChunk extends SliceViewChunk {
 
   constructor(source: VolumeChunkSource, x: any) {
     super(source, x);
+    this.chunkDataSize = x['chunkDataSize'] || source.spec.chunkDataSize;
   }
   abstract getChannelValueAt(dataPosition: vec3, channel: number): any;
 }

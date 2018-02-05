@@ -16,8 +16,10 @@
 
 import {WatchableValue} from 'neuroglancer/trackable_value';
 import {TrackableValue} from 'neuroglancer/trackable_value';
+import {RefCounted} from 'neuroglancer/util/disposable';
 import {verifyString} from 'neuroglancer/util/json';
-import {ShaderCompilationError, ShaderLinkError} from 'neuroglancer/webgl/shader';
+import {GL} from 'neuroglancer/webgl/context';
+import {ShaderBuilder, ShaderCompilationError, ShaderLinkError, ShaderProgram} from 'neuroglancer/webgl/shader';
 
 /**
  * undefined means shader has not been compiled.  null means shader was compiled successfully.
@@ -33,4 +35,58 @@ export type TrackableFragmentMain = TrackableValue<string>;
 
 export function makeTrackableFragmentMain(value: string) {
   return new TrackableValue<string>(value, verifyString);
+}
+
+
+export class ShaderGetter extends RefCounted {
+  shaderUpdated = true;
+  shader: ShaderProgram|undefined = undefined;
+
+  invalidateShader() {
+    this.shaderUpdated = true;
+  }
+  constructor(
+      public gl: GL, private defineShader: (builder: ShaderBuilder) => void,
+      private getShaderKey: () => string,
+      public shaderError: WatchableShaderError = makeWatchableShaderError()) {
+    super();
+    shaderError.value = undefined;
+  }
+
+  get(): ShaderProgram|undefined {
+    if (!this.shaderUpdated) {
+      return this.shader;
+    }
+    this.shaderUpdated = false;
+    try {
+      let newShader = this.getShader();
+      this.disposeShader();
+      this.shader = newShader;
+      this.shaderError.value = null;
+    } catch (shaderError) {
+      this.shaderError.value = shaderError;
+    }
+    return this.shader;
+  }
+
+  private getShader() {
+    let key = this.getShaderKey();
+    return this.gl.memoize.get(key, () => this.buildShader());
+  }
+
+  private buildShader() {
+    let builder = new ShaderBuilder(this.gl);
+    this.defineShader(builder);
+    return builder.build();
+  }
+  disposed() {
+    super.disposed();
+    this.disposeShader();
+  }
+  private disposeShader() {
+    if (this.shader) {
+      this.shader.dispose();
+      this.shader = undefined;
+    }
+  }
 }

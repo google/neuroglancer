@@ -16,7 +16,7 @@
 
 import {SliceViewChunk, SliceViewChunkSource} from 'neuroglancer/sliceview/backend';
 import {VectorGraphicsChunkSource as VectorGraphicsChunkSourceInterface, VectorGraphicsChunkSpecification} from 'neuroglancer/sliceview/vector_graphics/base';
-import {vec3, vec3Key} from 'neuroglancer/util/geom';
+import {vec3} from 'neuroglancer/util/geom';
 import {RPC} from 'neuroglancer/worker_rpc';
 
 export class VectorGraphicsChunk extends SliceViewChunk {
@@ -82,15 +82,5 @@ export class VectorGraphicsChunkSource extends SliceViewChunkSource implements
     super(rpc, options);
     this.spec = VectorGraphicsChunkSpecification.fromObject(options['spec']);
   }
-
-  getChunk(chunkGridPosition: vec3) {
-    let key = vec3Key(chunkGridPosition);
-    let chunk = <VectorGraphicsChunk>this.chunks.get(key);
-    if (chunk === undefined) {
-      chunk = this.getNewChunk_(VectorGraphicsChunk);
-      chunk.initializeVolumeChunk(key, chunkGridPosition);
-      this.addChunk(chunk);
-    }
-    return chunk;
-  }
 }
+VectorGraphicsChunkSource.prototype.chunkConstructor = VectorGraphicsChunk;

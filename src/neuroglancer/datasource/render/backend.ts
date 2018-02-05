@@ -180,14 +180,10 @@ function downloadPointMatchChunk(
   download(chunk: VectorGraphicsChunk, cancellationToken: CancellationToken): Promise<void> {
     let {parameters} = this;
     let {chunkGridPosition} = chunk;
-    // Convert grid position to global coordinates
-    let chunkPosition = vec3.create();
-    chunkPosition[2] = chunkGridPosition[2];
-
     // Get section IDs
     let path = `/render-ws/v1/owner/${parameters.owner}/project/${parameters.project}/` +
-        `stack/${parameters.stack}/sectionData?minZ=${chunkPosition[2]}&` +
-        `maxZ=${chunkPosition[2] + parameters.zoffset}`;
+        `stack/${parameters.stack}/sectionData?minZ=${chunkGridPosition[2]}&` +
+        `maxZ=${chunkGridPosition[2] + parameters.zoffset}`;
 
     return downloadPointMatchChunk(chunk, path, parameters, cancellationToken);
   }

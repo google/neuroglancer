@@ -322,18 +322,22 @@ export class SliceView extends Base {
   }
 }
 
+export interface SliceViewChunkSourceOptions {
+  spec: SliceViewChunkSpecification;
+}
+
 export abstract class SliceViewChunkSource extends ChunkSource implements
     SliceViewChunkSourceInterface {
   chunks: Map<string, SliceViewChunk>;
 
   spec: SliceViewChunkSpecification;
 
-  constructor(chunkManager: ChunkManager, options: {spec: SliceViewChunkSpecification}) {
+  constructor(chunkManager: ChunkManager, options: SliceViewChunkSourceOptions) {
     super(chunkManager, options);
     this.spec = options.spec;
   }
 
-  static encodeOptions(options: {spec: SliceViewChunkSpecification}) {
+  static encodeOptions(options: SliceViewChunkSourceOptions) {
     const encoding = super.encodeOptions(options);
     encoding.spec = options.spec.toObject();
     return encoding;
@@ -352,14 +356,12 @@ export interface SliceViewChunkSource {
 }
 
 export abstract class SliceViewChunk extends Chunk {
-  chunkDataSize: vec3;
   chunkGridPosition: vec3;
   source: SliceViewChunkSource;
 
   constructor(source: SliceViewChunkSource, x: any) {
     super(source);
     this.chunkGridPosition = x['chunkGridPosition'];
-    this.chunkDataSize = x['chunkDataSize'] || source.spec.chunkDataSize;
     this.state = ChunkState.SYSTEM_MEMORY;
   }
 }

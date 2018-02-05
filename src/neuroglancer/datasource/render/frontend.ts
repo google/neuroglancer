@@ -540,28 +540,20 @@ export class MultiscaleVectorGraphicsChunkSource implements
     this.dims[2] = 1;
   }
   getSources(vectorGraphicsSourceOptions: VectorGraphicsSourceOptions) {
-    let voxelSize = vec3.clone(this.stackInfo.voxelResolution);
+    const voxelSize = this.stackInfo.voxelResolution;
+    const chunkSize = vec3.subtract(
+        vec3.create(), this.stackInfo.upperVoxelBound, this.stackInfo.lowerVoxelBound);
+    vec3.multiply(chunkSize, chunkSize, voxelSize);
+    chunkSize[2] = voxelSize[2];
 
-    let lowerVoxelBound = vec3.create(), upperVoxelBound = vec3.create();
-
-    for (let i = 0; i < 3; i++) {
-      lowerVoxelBound[i] = Math.floor(
-          this.stackInfo.lowerVoxelBound[i] * (this.stackInfo.voxelResolution[i] / voxelSize[i]));
-      upperVoxelBound[i] = Math.ceil(
-          this.stackInfo.upperVoxelBound[i] * (this.stackInfo.voxelResolution[i] / voxelSize[i]));
-    }
-
-    // For now we set the chunkDataSize to be the size of an entire slab, pending possible bug fix
-    // in render point match service
-    let chunkDataSize = vec3.clone(upperVoxelBound);
-    chunkDataSize[0] += Math.abs(lowerVoxelBound[0]);
-    chunkDataSize[1] += Math.abs(lowerVoxelBound[1]);
-    chunkDataSize[2] = 1;
-
-
-    let spec = VectorGraphicsChunkSpecification.make(
-        {voxelSize, lowerVoxelBound, upperVoxelBound, chunkDataSize, vectorGraphicsSourceOptions});
-    let source = this.chunkManager.getChunkSource(PointMatchSource, {
+    const spec = VectorGraphicsChunkSpecification.make({
+      voxelSize,
+      chunkSize,
+      lowerChunkBound: vec3.fromValues(0, 0, this.stackInfo.lowerVoxelBound[2]),
+      upperChunkBound: vec3.fromValues(1, 1, this.stackInfo.upperVoxelBound[2]),
+      vectorGraphicsSourceOptions
+    });
+    const source = this.chunkManager.getChunkSource(PointMatchSource, {
       spec,
       parameters: {
         'baseUrls': this.baseUrls,
