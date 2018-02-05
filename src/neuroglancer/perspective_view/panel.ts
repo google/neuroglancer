@@ -25,6 +25,8 @@ import {TrackableBoolean, TrackableBooleanCheckbox} from 'neuroglancer/trackable
 import {ActionEvent, registerActionListener} from 'neuroglancer/util/event_action_map';
 import {kAxes, mat4, transformVectorByMat4, vec3, vec4} from 'neuroglancer/util/geom';
 import {startRelativeMouseDrag} from 'neuroglancer/util/mouse_drag';
+import {WatchableMap} from 'neuroglancer/util/watchable_map';
+import {GL_BLEND, GL_COLOR_BUFFER_BIT, GL_DEPTH_TEST, GL_LEQUAL, GL_LESS, GL_ONE, GL_ONE_MINUS_SRC_ALPHA, GL_POLYGON_OFFSET_FILL, GL_SRC_ALPHA, GL_ZERO} from 'neuroglancer/webgl/constants';
 import {DepthBuffer, FramebufferConfiguration, makeTextureBuffers, OffscreenCopyHelper, TextureBuffer} from 'neuroglancer/webgl/offscreen';
 import {ShaderBuilder} from 'neuroglancer/webgl/shader';
 import {glsl_packFloat01ToFixedPoint, unpackFloat01FromFixedPoint} from 'neuroglancer/webgl/shader_lib';
@@ -110,7 +112,26 @@ export class PerspectivePanel extends RenderedDataPanel {
   protected visibleLayerTracker = makeRenderedPanelVisibleLayerTracker(
       this.viewer.layerManager, PerspectiveViewRenderLayer, this);
 
-  sliceViews = new Set<SliceView>();
+  /**
+   * If boolean value is true, sliceView is shown unconditionally, regardless of the value of
+   * this.viewer.showSliceViews.value.
+   */
+  sliceViews = (() => {
+    const sliceViewDisposers = new Map<SliceView, () => void>();
+    return this.registerDisposer(new WatchableMap<SliceView, boolean>(
+        (_unconditional, sliceView) => {
+          const disposer = sliceView.visibility.add(this.visibility);
+          sliceViewDisposers.set(sliceView, disposer);
+          this.scheduleRedraw();
+        },
+        (_unconditional, sliceView) => {
+          const disposer = sliceViewDisposers.get(sliceView)!;
+          sliceViewDisposers.delete(sliceView);
+          disposer();
+          sliceView.dispose();
+          this.scheduleRedraw();
+        }));
+  })();
   projectionMat = mat4.create();
   inverseProjectionMat = mat4.create();
   modelViewMat = mat4.create();
@@ -186,8 +207,8 @@ export class PerspectivePanel extends RenderedDataPanel {
     if (!this.visible) {
       return false;
     }
-    if (this.viewer.showSliceViews.value) {
-      for (const sliceView of this.sliceViews) {
+    for (const [sliceView, unconditional] of this.sliceViews) {
+      if (unconditional || this.viewer.showSliceViews.value) {
         if (!sliceView.isReady()) {
           return false;
         }
@@ -234,7 +255,7 @@ export class PerspectivePanel extends RenderedDataPanel {
   }
 
   disposed() {
-    for (let sliceView of this.sliceViews) {
+    for (let sliceView of this.sliceViews.keys()) {
       sliceView.dispose();
     }
     this.sliceViews.clear();
@@ -290,8 +311,9 @@ export class PerspectivePanel extends RenderedDataPanel {
       return;
     }
 
-    if (this.viewer.showSliceViews.value) {
-      for (let sliceView of this.sliceViews) {
+    const showSliceViews = this.viewer.showSliceViews.value;
+    for (const [sliceView, unconditional] of this.sliceViews) {
+      if (unconditional || showSliceViews) {
         sliceView.updateRendering();
       }
     }
@@ -343,10 +365,7 @@ export class PerspectivePanel extends RenderedDataPanel {
         hasTransparent = true;
       }
     }
-
-    if (this.viewer.showSliceViews.value) {
-      this.drawSliceViews(renderContext);
-    }
+    this.drawSliceViews(renderContext);
 
     if (this.viewer.showAxisLines.value) {
       this.drawAxisLines();
@@ -414,8 +433,12 @@ export class PerspectivePanel extends RenderedDataPanel {
     let {sliceViewRenderHelper} = this;
     let {lightDirection, ambientLighting, directionalLighting, dataToDevice} = renderContext;
 
-    for (let sliceView of this.sliceViews) {
-      if (sliceView.width === 0 || sliceView.height === 0) {
+    const showSliceViews = this.viewer.showSliceViews.value;
+    for (const [sliceView, unconditional] of this.sliceViews) {
+      if (!unconditional && !showSliceViews) {
+        continue;
+      }
+      if (sliceView.width === 0 || sliceView.height === 0 || !sliceView.hasValidViewport) {
         continue;
       }
       let scalar = Math.abs(vec3.dot(lightDirection, sliceView.viewportAxes[2]));

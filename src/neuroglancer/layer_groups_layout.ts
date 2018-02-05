@@ -88,7 +88,7 @@ export class LayoutComponentContainer extends RefCounted {
           const childComponent = component.get(0).component;
           let spec: any;
           if (this.parent === undefined && childComponent instanceof LayerGroupViewer) {
-            spec = childComponent.layout.name;
+            spec = childComponent.layout.specification.toJSON();
             childComponent.viewerNavigationState.copyToParent();
             const layersToKeep = new Set(childComponent.layerManager.managedLayers);
             const {layerSpecification} = childComponent;
@@ -281,7 +281,7 @@ export class LayoutComponentContainer extends RefCounted {
 export class SingletonLayerGroupViewer extends RefCounted implements LayoutComponent {
   layerGroupViewer: LayerGroupViewer;
 
-  constructor(public element: HTMLElement, layout: string, viewer: Viewer) {
+  constructor(public element: HTMLElement, layout: any, viewer: Viewer) {
     super();
     this.layerGroupViewer = this.registerDisposer(new LayerGroupViewer(
         element, {
@@ -297,11 +297,11 @@ export class SingletonLayerGroupViewer extends RefCounted implements LayoutCompo
           visibility: viewer.visibility,
         },
         {showLayerPanel: viewer.showLayerPanelEffective, showViewerMenu: false}));
-    this.layerGroupViewer.layout.name = layout;
+    this.layerGroupViewer.layout.restoreState(layout);
   }
 
   toJSON() {
-    return this.layerGroupViewer.layout.name;
+    return this.layerGroupViewer.layout.specification.toJSON();
   }
 
   get changed() {
@@ -523,8 +523,11 @@ function makeComponent(container: LayoutComponentContainer, spec: any) {
       }
       return layerGroupViewer;
     }
+    default: {
+      // Treat it as a singleton layer group.
+      return new SingletonLayerGroupViewer(element, spec, container.viewer);
+    }
   }
-  throw new Error(`Invalid layout component specification: ${JSON.stringify(spec)}`);
 }
 
 export class RootLayoutContainer extends RefCounted implements Trackable {
