@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-import {mat4, quat, vec3} from 'gl-matrix';
+import {mat3, mat4, quat, vec3} from 'gl-matrix';
 import {Uint64} from 'neuroglancer/util/uint64';
 
 export {mat2, mat3, mat4, quat, vec2, vec3, vec4} from 'gl-matrix';
@@ -207,5 +207,20 @@ export function projectPointToLineSegment(out: vec3, a: vec3, b: vec3, p: vec3) 
     const aValue = a[i];
     out[i] = aValue + t * (b[i] - aValue);
   }
+  return out;
+}
+
+export function mat3FromMat4(out: mat3, m: mat4) {
+  const m00 = m[0], m01 = m[1], m02 = m[2], m10 = m[4], m11 = m[5], m12 = m[6], m20 = m[8],
+        m21 = m[9], m22 = m[10];
+  out[0] = m00;
+  out[1] = m01;
+  out[2] = m02;
+  out[3] = m10;
+  out[4] = m11;
+  out[5] = m12;
+  out[6] = m20;
+  out[7] = m21;
+  out[8] = m22;
   return out;
 }
