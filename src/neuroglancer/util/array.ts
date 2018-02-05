@@ -116,3 +116,20 @@ export function tile2dArray<T extends TypedArray>(
   }
   return result;
 }
+
+export function binarySearch<T>(
+    haystack: ArrayLike<T>, needle: T, compare: (a: T, b: T) => number, low = 0,
+    high = haystack.length) {
+  while (low < high) {
+    const mid = (low + high - 1) >> 1;
+    const compareResult = compare(needle, haystack[mid]);
+    if (compareResult > 0) {
+      low = mid + 1;
+    } else if (compareResult < 0) {
+      high = mid;
+    } else {
+      return mid;
+    }
+  }
+  return ~low;
+}
