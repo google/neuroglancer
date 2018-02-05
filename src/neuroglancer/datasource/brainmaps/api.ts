@@ -51,7 +51,9 @@ export interface ChangeSpecPayload {
   skip_equivalences?: boolean;
 }
 
-export interface ChangeStackAwarePayload { change_spec?: ChangeSpecPayload; }
+export interface ChangeStackAwarePayload {
+  change_spec?: ChangeSpecPayload;
+}
 
 export interface GeometryPayload {
   corner: string;
@@ -59,7 +61,9 @@ export interface GeometryPayload {
   scale: number;
 }
 
-export interface GeometryAwarePayload { geometry: GeometryPayload; }
+export interface GeometryAwarePayload {
+  geometry: GeometryPayload;
+}
 
 export interface ImageFormatOptionsPayload {
   image_format?: 'AUTO'|'JPEG'|'PNG'|'JSON';
@@ -72,7 +76,9 @@ export interface SubvolumePayload extends ChangeStackAwarePayload, GeometryAware
   subvolume_format?: 'RAW'|'SINGLE_IMAGE';
 }
 
-export interface SkeletonPayload extends ChangeStackAwarePayload { object_id: string; }
+export interface SkeletonPayload extends ChangeStackAwarePayload {
+  object_id: string;
+}
 
 export interface MeshFragmentPayload extends ChangeStackAwarePayload {
   fragment_key: string;
@@ -82,23 +88,24 @@ export interface MeshFragmentPayload extends ChangeStackAwarePayload {
 export interface HttpCall {
   method: 'GET'|'POST';
   path: string;
-  responseType: XMLHttpRequestResponseType;
   payload?: string;
 }
 
 export function makeRequest(
     instance: BrainmapsInstance, credentialsProvider: BrainmapsCredentialsProvider,
-    httpCall: HttpCall, cancellationToken?: CancellationToken): Promise<ArrayBuffer>;
+    httpCall: HttpCall&{responseType: 'arraybuffer'},
+    cancellationToken?: CancellationToken): Promise<ArrayBuffer>;
 export function makeRequest(
     instance: BrainmapsInstance, credentialsProvider: BrainmapsCredentialsProvider,
-    httpCall: HttpCall, cancellationToken?: CancellationToken): Promise<any>;
+    httpCall: HttpCall&{responseType: 'json'}, cancellationToken?: CancellationToken): Promise<any>;
 // export function makeRequest(
 //     instance: BrainmapsInstance, credentialsProvider: BrainmapsCredentialsProvider,
 //     httpCall: HttpCall, cancellationToken?: CancellationToken): any;
 
 export function makeRequest(
     instance: BrainmapsInstance, credentialsProvider: BrainmapsCredentialsProvider,
-    httpCall: HttpCall, cancellationToken: CancellationToken = uncancelableToken): any {
+    httpCall: HttpCall&{responseType: XMLHttpRequestResponseType},
+    cancellationToken: CancellationToken = uncancelableToken): any {
   /**
    * undefined means request not yet attempted.  null means request
    * cancelled.

@@ -17,8 +17,8 @@
 import {WithParameters} from 'neuroglancer/chunk_manager/backend';
 import {ChunkSourceParametersConstructor} from 'neuroglancer/chunk_manager/base';
 import {WithSharedCredentialsProviderCounterpart} from 'neuroglancer/credentials_provider/shared_counterpart';
-import {ChangeStackAwarePayload, Credentials, HttpCall, makeRequest, MeshFragmentPayload, SkeletonPayload, SubvolumePayload} from 'neuroglancer/datasource/brainmaps/api';
 import {ChangeSpec, MeshSourceParameters, SkeletonSourceParameters, VolumeChunkEncoding, VolumeSourceParameters} from 'neuroglancer/datasource/brainmaps/base';
+import {ChangeStackAwarePayload, Credentials, makeRequest, MeshFragmentPayload, SkeletonPayload, SubvolumePayload} from 'neuroglancer/datasource/brainmaps/api';
 import {decodeJsonManifestChunk, decodeTriangleVertexPositionsAndIndices, FragmentChunk, ManifestChunk, MeshSource} from 'neuroglancer/mesh/backend';
 import {Bounds} from 'neuroglancer/segmentation_display_state/base';
 import {decodeSkeletonVertexPositionsAndIndices, SkeletonChunk, SkeletonSource} from 'neuroglancer/skeleton/backend';
@@ -116,15 +116,14 @@ export class BrainmapsVolumeChunkSource extends
     this.applyEncodingParams(payload);
     applyChangeStack(parameters.changeSpec, payload);
 
-    let httpCall: HttpCall = {
-      method: 'POST',
-      payload: JSON.stringify(payload),
-      path,
-      responseType: 'arraybuffer',
-    };
-
     return makeRequest(
-               parameters['instance'], this.credentialsProvider, httpCall, cancellationToken)
+               parameters['instance'], this.credentialsProvider, {
+                 method: 'POST',
+                 payload: JSON.stringify(payload),
+                 path,
+                 responseType: 'arraybuffer',
+               },
+               cancellationToken)
         .then(response => this.chunkDecoder(chunk, response));
   }
 }
@@ -249,13 +248,13 @@ function decodeFragmentChunk(chunk: FragmentChunk, response: ArrayBuffer) {
     const path = `/v1/objects/${parameters['volumeId']}/meshes/` +
         `${parameters['meshName']}:listfragments?object_id=${chunk.objectId}` +
         this.listFragmentsParams;
-    let httpCall: HttpCall = {
-      method: 'GET',
-      path,
-      responseType: 'json',
-    };
     return makeRequest(
-               parameters['instance'], this.credentialsProvider, httpCall, cancellationToken)
+               parameters['instance'], this.credentialsProvider, {
+                 method: 'GET',
+                 path,
+                 responseType: 'json',
+               },
+               cancellationToken)
         .then(response => this.manifestDecoder(chunk, response));
   }
 
@@ -282,15 +281,14 @@ function decodeFragmentChunk(chunk: FragmentChunk, response: ArrayBuffer) {
 
     applyChangeStack(parameters.changeSpec, payload);
 
-    let httpCall: HttpCall = {
-      method: 'POST',
-      path,
-      payload: JSON.stringify(payload),
-      responseType: 'arraybuffer',
-    };
-
     return makeRequest(
-               parameters['instance'], this.credentialsProvider, httpCall, cancellationToken)
+               parameters['instance'], this.credentialsProvider, {
+                 method: 'POST',
+                 path,
+                 payload: JSON.stringify(payload),
+                 responseType: 'arraybuffer',
+               },
+               cancellationToken)
         .then(response => decodeFragmentChunk(chunk, response));
   }
 }
@@ -323,14 +321,14 @@ function decodeSkeletonChunk(chunk: SkeletonChunk, response: ArrayBuffer) {
         `/meshes/${parameters['meshName']}` +
         '/skeleton:binary';
     applyChangeStack(parameters.changeSpec, payload);
-    let httpCall: HttpCall = {
-      method: 'POST',
-      path,
-      payload: JSON.stringify(payload),
-      responseType: 'arraybuffer',
-    };
     return makeRequest(
-               parameters['instance'], this.credentialsProvider, httpCall, cancellationToken)
+               parameters['instance'], this.credentialsProvider, {
+                 method: 'POST',
+                 path,
+                 payload: JSON.stringify(payload),
+                 responseType: 'arraybuffer',
+               },
+               cancellationToken)
         .then(response => decodeSkeletonChunk(chunk, response));
   }
 }
