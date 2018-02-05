@@ -18,6 +18,7 @@
  * @file Defines a generic interface for a simple state tracking mechanism.
  */
 
+import {RefCounted} from 'neuroglancer/util/disposable';
 import {verifyObject} from 'neuroglancer/util/json';
 import {NullaryReadonlySignal, NullarySignal} from 'neuroglancer/util/signal';
 
@@ -28,7 +29,7 @@ export interface Trackable {
   toJSON: () => any;
 }
 
-export class CompoundTrackable implements Trackable {
+export class CompoundTrackable extends RefCounted implements Trackable {
   children = new Map<string, Trackable>();
   changed = new NullarySignal();
 
@@ -56,12 +57,13 @@ export class CompoundTrackable implements Trackable {
     this.changed.dispatch();
   }
 
-  dispose() {
+  disposed() {
     const {changed} = this;
     for (let value of this.children.values()) {
       value.changed.remove(changed.dispatch);
     }
     this.children = <any>undefined;
+    super.disposed();
   }
 
   toJSON() {
