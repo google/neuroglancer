@@ -118,6 +118,7 @@ function getCommonPerspectiveViewerState(viewer: ViewerUIState) {
     ...getCommonViewerState(viewer),
     navigationState: viewer.perspectiveNavigationState,
     inputEventMap: viewer.inputEventBindings.perspectiveView,
+    rpc: viewer.chunkManager.rpc!,
   };
 }
 

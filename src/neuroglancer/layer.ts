@@ -671,12 +671,17 @@ export class VisibleRenderLayerTracker<RenderLayerType extends VisibilityTracked
 export function
 makeRenderedPanelVisibleLayerTracker<RenderLayerType extends VisibilityTrackedRenderLayer>(
     layerManager: LayerManager, renderLayerType: {new (...args: any[]): RenderLayerType},
-    roles: WatchableSet<RenderLayerRole>, panel: RenderedPanel) {
+    roles: WatchableSet<RenderLayerRole>, panel: RenderedPanel,
+    layerAdded?: (layer: RenderLayerType) => ((() => void) | void)) {
   return panel.registerDisposer(
       new VisibleRenderLayerTracker(layerManager, renderLayerType, roles, layer => {
         const disposer = layer.redrawNeeded.add(() => panel.scheduleRedraw());
+        const disposer2 = layerAdded && layerAdded(layer);
         panel.scheduleRedraw();
         return () => {
+          if (disposer2 !== undefined) {
+            disposer2();
+          }
           disposer();
           panel.scheduleRedraw();
         };

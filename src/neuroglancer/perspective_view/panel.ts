@@ -16,21 +16,25 @@
 
 import {AxesLineHelper} from 'neuroglancer/axes_lines';
 import {DisplayContext} from 'neuroglancer/display_context';
-import {makeRenderedPanelVisibleLayerTracker, MouseSelectionState} from 'neuroglancer/layer';
+import {makeRenderedPanelVisibleLayerTracker, MouseSelectionState, VisibleRenderLayerTracker} from 'neuroglancer/layer';
 import {PickIDManager} from 'neuroglancer/object_picking';
+import {PERSPECTIVE_VIEW_ADD_LAYER_RPC_ID, PERSPECTIVE_VIEW_REMOVE_LAYER_RPC_ID, PERSPECTIVE_VIEW_RPC_ID} from 'neuroglancer/perspective_view/base';
 import {PerspectiveViewRenderContext, PerspectiveViewRenderLayer} from 'neuroglancer/perspective_view/render_layer';
 import {RenderedDataPanel, RenderedDataViewerState} from 'neuroglancer/rendered_data_panel';
 import {SliceView, SliceViewRenderHelper} from 'neuroglancer/sliceview/frontend';
 import {TrackableBoolean, TrackableBooleanCheckbox} from 'neuroglancer/trackable_boolean';
 import {TrackableRGB} from 'neuroglancer/util/color';
+import {Owned} from 'neuroglancer/util/disposable';
 import {ActionEvent, registerActionListener} from 'neuroglancer/util/event_action_map';
 import {kAxes, mat4, transformVectorByMat4, vec3, vec4} from 'neuroglancer/util/geom';
 import {startRelativeMouseDrag} from 'neuroglancer/util/mouse_drag';
 import {WatchableMap} from 'neuroglancer/util/watchable_map';
+import {withSharedVisibility} from 'neuroglancer/visibility_priority/frontend';
 import {GL_BLEND, GL_COLOR_BUFFER_BIT, GL_DEPTH_TEST, GL_LEQUAL, GL_LESS, GL_ONE, GL_ONE_MINUS_SRC_ALPHA, GL_POLYGON_OFFSET_FILL, GL_SRC_ALPHA, GL_ZERO} from 'neuroglancer/webgl/constants';
 import {DepthBuffer, FramebufferConfiguration, makeTextureBuffers, OffscreenCopyHelper, TextureBuffer} from 'neuroglancer/webgl/offscreen';
 import {ShaderBuilder} from 'neuroglancer/webgl/shader';
 import {glsl_packFloat01ToFixedPoint, unpackFloat01FromFixedPoint} from 'neuroglancer/webgl/shader_lib';
+import {RPC, SharedObject} from 'neuroglancer/worker_rpc';
 
 require('neuroglancer/noselect.css');
 require('./panel.css');
@@ -39,6 +43,7 @@ export interface PerspectiveViewerState extends RenderedDataViewerState {
   showSliceViews: TrackableBoolean;
   showSliceViewsCheckbox?: boolean;
   crossSectionBackgroundColor: TrackableRGB;
+  rpc: RPC;
 }
 
 export enum OffscreenTextures {
@@ -109,11 +114,13 @@ gl_FragColor = vec4(accum.rgb / accum.a, revealage);
 `);
 }
 
+const PerspectiveViewStateBase = withSharedVisibility(SharedObject);
+class PerspectiveViewState extends PerspectiveViewStateBase {}
+
 export class PerspectivePanel extends RenderedDataPanel {
   viewer: PerspectiveViewerState;
 
-  protected visibleLayerTracker = makeRenderedPanelVisibleLayerTracker(
-      this.viewer.layerManager, PerspectiveViewRenderLayer, this.viewer.visibleLayerRoles, this);
+  protected visibleLayerTracker: Owned<VisibleRenderLayerTracker<PerspectiveViewRenderLayer>>;
 
   /**
    * If boolean value is true, sliceView is shown unconditionally, regardless of the value of
@@ -156,11 +163,35 @@ export class PerspectivePanel extends RenderedDataPanel {
   protected transparencyCopyHelper =
       this.registerDisposer(OffscreenCopyHelper.get(this.gl, defineTransparencyCopyShader, 2));
 
+  private sharedObject: PerspectiveViewState;
+
   constructor(context: DisplayContext, element: HTMLElement, viewer: PerspectiveViewerState) {
     super(context, element, viewer);
     this.registerDisposer(this.navigationState.changed.add(() => {
       this.viewportChanged();
     }));
+
+    const sharedObject = this.sharedObject = this.registerDisposer(new PerspectiveViewState());
+    sharedObject.RPC_TYPE_ID = PERSPECTIVE_VIEW_RPC_ID;
+    sharedObject.initializeCounterpart(viewer.rpc, {});
+    sharedObject.visibility.add(this.visibility);
+
+    this.visibleLayerTracker = makeRenderedPanelVisibleLayerTracker(
+        this.viewer.layerManager, PerspectiveViewRenderLayer, this.viewer.visibleLayerRoles, this,
+        layer => {
+          const {backend} = layer;
+          if (backend) {
+            backend.rpc!.invoke(
+                PERSPECTIVE_VIEW_ADD_LAYER_RPC_ID,
+                {layer: backend.rpcId, view: this.sharedObject.rpcId});
+            return () => {
+              backend.rpc!.invoke(
+                  PERSPECTIVE_VIEW_REMOVE_LAYER_RPC_ID,
+                  {layer: backend.rpcId, view: this.sharedObject.rpcId});
+            };
+          }
+          return undefined;
+        });
 
     registerActionListener(element, 'translate-via-mouse-drag', (e: ActionEvent<MouseEvent>) => {
       startRelativeMouseDrag(e.detail, (_event, deltaX, deltaY) => {
@@ -244,6 +275,7 @@ export class PerspectivePanel extends RenderedDataPanel {
   }
 
   viewportChanged() {
+    // FIXME: update viewport information on backend
     this.context.scheduleRedraw();
   }
 
