@@ -169,3 +169,47 @@ export class TrackableRefCounted<T extends RefCounted> extends WatchableRefCount
     this.value = this.validator(x);
   }
 }
+
+export class WatchableSet<T> {
+  changed = new NullarySignal();
+  values: Set<T>;
+  constructor(values?: Iterable<T>) {
+    if (values === undefined) {
+      this.values = new Set();
+    } else {
+      this.values = new Set(values);
+    }
+  }
+  add(x: T) {
+    const {values} = this;
+    if (!values.has(x)) {
+      values.add(x);
+      this.changed.dispatch();
+    }
+    return this;
+  }
+  delete(x: T) {
+    const {values} = this;
+    if (values.delete(x)) {
+      this.changed.dispatch();
+      return true;
+    }
+    return false;
+  }
+  has(x: T) {
+    return this.values.has(x);
+  }
+  get size() {
+    return this.values.size;
+  }
+  [Symbol.iterator]() {
+    return this.values[Symbol.iterator]();
+  }
+  clear() {
+    const {values} = this;
+    if (values.size > 0) {
+      values.clear();
+      this.changed.dispatch();
+    }
+  }
+}
