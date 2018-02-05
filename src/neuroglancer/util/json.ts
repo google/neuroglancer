@@ -47,15 +47,23 @@ export function verifyFinitePositiveFloat(obj: any): number {
 export function parseXYZ<A extends WritableArrayLike<number>>(
     out: A, obj: any, validator: (x: any) => number = verifyFloat): A {
   verifyObject(obj);
-  let keys = Object.keys(obj);
-  keys.sort();
-  if (keys.length !== 3 || keys[0] !== 'x' || keys[1] !== 'y' || keys[2] !== 'z') {
-    throw new Error(
-        `Expected object to have keys ['x', 'y', 'z'], but received: ${JSON.stringify(obj)}.`);
+  out[0] = out[1] = out[2] = 0;
+  for (const key of Object.keys(obj)) {
+    switch (key) {
+    case 'x':
+      out[0] = validator(obj[key]);
+      break;
+    case 'y':
+      out[1] = validator(obj[key]);
+      break;
+    case 'z':
+      out[2] = validator(obj[key]);
+      break;
+    default:
+      throw new Error(
+          `Expected object to have keys ['x', 'y', 'z'], but received: ${JSON.stringify(obj)}.`);
+    }
   }
-  out[0] = validator(obj['x']);
-  out[1] = validator(obj['y']);
-  out[2] = validator(obj['z']);
   return out;
 }
 
