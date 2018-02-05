@@ -174,11 +174,11 @@ export class SliceViewPanel extends RenderedDataPanel {
 
   draw() {
     let {sliceView} = this;
+    this.onResize();
+    sliceView.updateRendering();
     if (!sliceView.hasValidViewport) {
       return;
     }
-    this.onResize();
-    sliceView.updateRendering();
 
     let {gl} = this;
 
