@@ -87,6 +87,10 @@ export class SliceViewPanelRenderLayer extends VisibilityTrackedRenderLayer {
   draw(_renderContext: SliceViewPanelRenderContext) {
     // Must be overridden by subclasses.
   }
+
+  isReady() {
+    return true;
+  }
 }
 
 const tempVec4 = vec4.create();
@@ -169,7 +173,21 @@ export class SliceViewPanel extends RenderedDataPanel {
   }
 
   isReady() {
-    return this.sliceView.isReady();
+    if (!this.visible) {
+      return false;
+    }
+
+    if (!this.sliceView.isReady()) {
+      return false;
+    }
+
+    let visibleLayers = this.visibleLayerTracker.getVisibleLayers();
+    for (let renderLayer of visibleLayers) {
+      if (!renderLayer.isReady()) {
+        return false;
+      }
+    }
+    return true;
   }
 
   draw() {
