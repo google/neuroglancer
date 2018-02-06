@@ -25,7 +25,6 @@ import {InputEventBindingHelpDialog} from 'neuroglancer/help/input_event_binding
 import {allRenderLayerRoles, LayerManager, LayerSelectedValues, MouseSelectionState} from 'neuroglancer/layer';
 import {LayerDialog} from 'neuroglancer/layer_dialog';
 import {RootLayoutContainer} from 'neuroglancer/layer_groups_layout';
-import {LayerPanel} from 'neuroglancer/layer_panel';
 import {TopLevelLayerListSpecification} from 'neuroglancer/layer_specification';
 import {NavigationState, Pose} from 'neuroglancer/navigation_state';
 import {overlaysOpen} from 'neuroglancer/overlay';
@@ -144,7 +143,6 @@ export class Viewer extends RefCounted implements ViewerState {
   crossSectionBackgroundColor = new TrackableRGB(vec3.fromValues(0.5, 0.5, 0.5));
   contextMenu: ContextMenu;
 
-  layerPanel: LayerPanel;
   layerSelectedValues =
       this.registerDisposer(new LayerSelectedValues(this.layerManager, this.mouseState));
   resetInitiated = new NullarySignal();
