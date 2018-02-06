@@ -16,7 +16,7 @@
 
 import {vec4} from 'neuroglancer/util/geom';
 import {getRandomValues} from 'neuroglancer/util/random';
-import {glsl_addUint32, glsl_divmodUint32, setVec4FromUint32} from 'neuroglancer/webgl/shader_lib';
+import {glsl_addUint32, glsl_divmodUint32, glsl_equalUint32, glsl_multiplyUint32, setVec4FromUint32} from 'neuroglancer/webgl/shader_lib';
 import {fragmentShaderTest} from 'neuroglancer/webgl/shader_testing';
 
 /**
@@ -31,7 +31,7 @@ function getRandomInts(count: number, min: number, max: number) {
 }
 
 describe('webgl/shader_lib', () => {
-  it('addUint32', () => {
+  it('addUint32Uint32', () => {
     fragmentShaderTest(1, tester => {
       let {gl, builder} = tester;
       builder.addFragmentCode(glsl_addUint32);
@@ -65,7 +65,93 @@ gl_FragData[0] = add(a, b).value;
 
       const count = 50;
       testPairs(getRandomValues(new Uint32Array(count * 2)));
+    });
+  });
 
+  it('addUint32', () => {
+    fragmentShaderTest(1, tester => {
+      let {gl, builder} = tester;
+      builder.addFragmentCode(glsl_addUint32);
+      builder.addUniform('highp vec4', 'uValue1');
+      builder.addUniform('highp float', 'uValue2');
+      builder.setFragmentMain(`
+uint32_t a; a.value = uValue1;
+gl_FragData[0] = add(a, uValue2).value;
+`);
+
+      tester.build();
+      let {shader} = tester;
+      shader.bind();
+
+      function testPair(a: number, b: number) {
+        let result = (a + b) >>> 0;
+        gl.uniform4fv(shader.uniform('uValue1'), setVec4FromUint32(vec4.create(), a));
+        gl.uniform1f(shader.uniform('uValue2'), b);
+        tester.execute();
+        let value = tester.readUint32();
+        expect(value).toBe(result, `${a} + ${b}`);
+      }
+
+      function testPairs(values: Uint32Array, scalars: number[]) {
+        for (let i = 0; i < values.length; ++i) {
+          testPair(values[i], scalars[i]);
+        }
+      }
+
+      testPairs(
+          Uint32Array.of(0, 1, 3, 2, 3, 17, (1 << 32) - 1), [1, 2, 3, 4, 5, 6, (1 << 16) - 1]);
+
+      const count = 50;
+      testPairs(getRandomValues(new Uint32Array(count)), getRandomInts(count, 0, (1 << 16) - 1));
+    });
+  });
+
+  it('multiplyUint32', () => {
+    fragmentShaderTest(2, tester => {
+      let {gl, builder} = tester;
+      builder.addFragmentCode(glsl_multiplyUint32);
+      builder.addFragmentCode(glsl_equalUint32);
+      builder.addUniform('highp vec4', 'uValue1');
+      builder.addUniform('highp float', 'uValue2');
+      builder.addUniform('highp vec4', 'uResult');
+      builder.setFragmentMain(`
+uint32_t a; a.value = uValue1;
+uint32_t result = multiply(a, uValue2);
+uint32_t expected; expected.value = uResult;
+gl_FragData[0] = result.value;
+float areEqual = equal(result, expected) ? 1.0 : 0.0;
+gl_FragData[1] = vec4(areEqual, areEqual, areEqual, areEqual);
+`);
+
+      tester.build();
+      let {shader} = tester;
+      shader.bind();
+
+      function testPair(a: number, b: number) {
+        let result = (a * b) >>> 0;
+        gl.uniform4fv(shader.uniform('uValue1'), setVec4FromUint32(vec4.create(), a));
+        gl.uniform1f(shader.uniform('uValue2'), b);
+        gl.uniform4fv(shader.uniform('uResult'), setVec4FromUint32(vec4.create(), result));
+        tester.execute();
+        let value = tester.readUint32(0);
+        let areEqual = tester.readBytes(1);
+        expect(value).toBe(result, `${a} * ${b}`);
+        for (let i = 0; i < 4; ++i) {
+          expect(areEqual[i]).toBe(0xFF, `${a} * ${b}, equal test byte ${i}`);
+        }
+      }
+
+      function testPairs(values: Uint32Array, scalars: number[]) {
+        for (let i = 0; i < values.length; ++i) {
+          testPair(values[i], scalars[i]);
+        }
+      }
+
+      testPairs(
+          Uint32Array.of(0, 1, 3, 2, 3, 17, (1 << 32) - 1), [1, 2, 3, 4, 5, 6, (1 << 16) - 1]);
+
+      const count = 50;
+      testPairs(getRandomValues(new Uint32Array(count)), getRandomInts(count, 0, 1023));
     });
   });
 
