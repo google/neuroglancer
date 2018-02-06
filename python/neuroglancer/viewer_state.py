@@ -195,7 +195,7 @@ class SegmentationLayer(Layer):
 
     source = wrapped_property('source', optional(volume_source))
     mesh = wrapped_property('mesh', optional(text_type))
-    skeleton = wrapped_property('skeleton', optional(text_type))
+    skeletons = wrapped_property('skeletons', optional(text_type))
     segments = wrapped_property('segments', typed_set(np.uint64))
     equivalences = wrapped_property('equivalences', uint64_equivalence_map)
     hide_segment_zero = hideSegmentZero = wrapped_property('hideSegmentZero', optional(bool, True))
