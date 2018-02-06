@@ -16,6 +16,7 @@
 
 import {RefCounted} from 'neuroglancer/util/disposable';
 import {GL_FRAGMENT_SHADER, GL_VERTEX_SHADER} from 'neuroglancer/webgl/constants';
+import {GL} from 'neuroglancer/webgl/context';
 
 const DEBUG_SHADER = false;
 
@@ -130,7 +131,7 @@ export class ShaderProgram extends RefCounted {
   textureUnits: Map<any, number>;
 
   constructor(
-      public gl: WebGLRenderingContext, public vertexSource: string, public fragmentSource: string,
+      public gl: GL, public vertexSource: string, public fragmentSource: string,
       uniformNames?: string[], attributeNames?: string[]) {
     super();
     let vertexShader = this.vertexShader = getShader(gl, vertexSource, gl.VERTEX_SHADER);
@@ -200,7 +201,7 @@ export class ShaderProgram extends RefCounted {
   }
 }
 
-export type ShaderCodePart = string | ShaderCodePartArray | ShaderCodePartFunction;
+export type ShaderCodePart = string|ShaderCodePartArray|ShaderCodePartFunction;
 interface ShaderCodePartFunction {
   (): ShaderCodePart;
 }
@@ -259,7 +260,7 @@ export class ShaderBuilder {
   private attributes = new Array<string>();
   private initializers: Array<ShaderInitializer> = [];
   private textureUnits = new Map<Symbol, number>();
-  constructor(public gl: WebGLRenderingContext) {}
+  constructor(public gl: GL) {}
 
   allocateTextureUnit(symbol: Symbol, count: number = 1) {
     if (this.textureUnits.has(symbol)) {
