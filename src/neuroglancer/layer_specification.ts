@@ -66,6 +66,7 @@ export class ManagedUserLayerWithSpecification extends ManagedUserLayer {
 export interface LayerListSpecification extends RefCounted, Trackable {
   changed: NullarySignal;
   voxelCoordinatesSet: Signal<(coordinates: vec3) => void>;
+  spatialCoordinatesSet: Signal<(coordinates: vec3) => void>;
 
   /**
    * @deprecated
@@ -91,6 +92,7 @@ export interface LayerListSpecification extends RefCounted, Trackable {
    * Called by user layers to indicate that a voxel position has been selected interactively.
    */
   setVoxelCoordinates(voxelCoordinates: vec3): void;
+  setSpatialCoordinates(spatialCoordinates: vec3): void;
 
   rootLayers: Borrowed<LayerManager>;
 }
@@ -98,6 +100,7 @@ export interface LayerListSpecification extends RefCounted, Trackable {
 export class TopLevelLayerListSpecification extends RefCounted implements LayerListSpecification {
   changed = new NullarySignal();
   voxelCoordinatesSet = new Signal<(coordinates: vec3) => void>();
+  spatialCoordinatesSet = new Signal<(coordinates: vec3) => void>();
 
   /**
    * @deprecated
@@ -215,7 +218,13 @@ export class TopLevelLayerListSpecification extends RefCounted implements LayerL
     this.voxelCoordinatesSet.dispatch(voxelCoordinates);
   }
 
-  get rootLayers () { return this.layerManager; }
+  setSpatialCoordinates(spatialCoordinates: vec3) {
+    this.spatialCoordinatesSet.dispatch(spatialCoordinates);
+  }
+
+  get rootLayers() {
+    return this.layerManager;
+  }
 }
 
 /**
@@ -225,6 +234,7 @@ export class LayerSubsetSpecification extends RefCounted implements LayerListSpe
   changed = new NullarySignal();
 
   get voxelCoordinatesSet() { return this.master.voxelCoordinatesSet; }
+  get spatialCoordinatesSet() { return this.master.spatialCoordinatesSet; }
 
   get worker() { return this.master.rpc; }
   get rpc() { return this.master.rpc; }
@@ -286,6 +296,10 @@ export class LayerSubsetSpecification extends RefCounted implements LayerListSpe
 
   setVoxelCoordinates(voxelCoordinates: vec3) {
     this.master.setVoxelCoordinates(voxelCoordinates);
+  }
+
+  setSpatialCoordinates(spatialCoordinates: vec3) {
+    this.master.setSpatialCoordinates(spatialCoordinates);
   }
 
   get rootLayers () { return this.master.rootLayers; }
