@@ -361,6 +361,7 @@ export class Viewer extends RefCounted implements ViewerState {
 
     const topRow = document.createElement('div');
     topRow.title = 'Right click for settings';
+    topRow.classList.add('neuroglancer-viewer-top-row');
     const contextMenu = this.contextMenu = this.registerDisposer(makeViewerContextMenu(this));
     contextMenu.registerParent(topRow);
     topRow.style.display = 'flex';

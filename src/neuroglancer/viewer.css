@@ -37,3 +37,12 @@
 .neuroglancer-viewer-context-menu-limit-widget > input {
   width: 11ch;
 }
+
+.neuroglancer-viewer-top-row {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  background-color: #222;
+  margin-bottom: 3px;
+  padding-right: 2px;
+}
