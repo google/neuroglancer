@@ -26,19 +26,21 @@ require('./user_layer.css');
 
 const LAYER_TYPE = 'pointAnnotation';
 
+const POINTS_JSON_KEY = 'points';
 export class AnnotationPointListUserLayer extends UserLayer {
   selectedIndex = new WatchableValue<number|null>(null);
-  layer = new AnnotationPointListLayer(
+  pointsLayer = new AnnotationPointListLayer(
       this.manager.chunkManager, new AnnotationPointList(), this.manager.voxelSize,
       this.selectedIndex);
   constructor(public manager: LayerListSpecification, x: any) {
-    super([]);
-    this.layer.pointList.restoreState(x['points']);
-    this.registerDisposer(this.layer.pointList.changed.add(() => {
+    super(manager, x);
+    this.pointsLayer.pointList.restoreState(x[POINTS_JSON_KEY]);
+    this.registerDisposer(this.pointsLayer.pointList.changed.add(() => {
       this.specificationChanged.dispatch();
     }));
-    this.addRenderLayer(new PerspectiveViewAnnotationPointListLayer(this.layer));
-    this.addRenderLayer(new SliceViewAnnotationPointListLayer(this.layer));
+    this.addRenderLayer(new PerspectiveViewAnnotationPointListLayer(this.pointsLayer));
+    this.addRenderLayer(new SliceViewAnnotationPointListLayer(this.pointsLayer));
+
     const {layerSelectedValues} = manager;
     this.registerDisposer(layerSelectedValues.changed.add(() => {
       let value = layerSelectedValues.get(this);
@@ -48,7 +50,7 @@ export class AnnotationPointListUserLayer extends UserLayer {
   }
   toJSON() {
     let x: any = {'type': LAYER_TYPE};
-    x['points'] = this.layer.pointList.toJSON();
+    x[POINTS_JSON_KEY] = this.pointsLayer.pointList.toJSON();
     return x;
   }
 
@@ -57,9 +59,9 @@ export class AnnotationPointListUserLayer extends UserLayer {
       case 'annotate': {
         let selectedValue = this.manager.layerSelectedValues.get(this);
         if (selectedValue !== undefined) {
-          this.layer.pointList.delete(selectedValue);
+          this.pointsLayer.pointList.delete(selectedValue);
         } else if (this.manager.layerSelectedValues.mouseState.active) {
-          this.layer.pointList.append(this.manager.voxelSize.voxelFromSpatial(
+          this.pointsLayer.pointList.append(this.manager.voxelSize.voxelFromSpatial(
               vec3.create(), this.manager.layerSelectedValues.mouseState.position));
         }
         break;

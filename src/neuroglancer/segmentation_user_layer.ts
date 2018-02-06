@@ -88,13 +88,9 @@ export class SegmentationUserLayer extends UserLayer {
   objectLayerStateChanged = new NullarySignal();
 
   constructor(public manager: LayerListSpecification, x: any) {
-    super([]);
-    this.displayState.visibleSegments.changed.add(() => {
-      this.specificationChanged.dispatch();
-    });
-    this.displayState.segmentEquivalences.changed.add(() => {
-      this.specificationChanged.dispatch();
-    });
+    super(manager, x);
+    this.displayState.visibleSegments.changed.add(() => this.specificationChanged.dispatch());
+    this.displayState.segmentEquivalences.changed.add(() => this.specificationChanged.dispatch());
     this.displayState.segmentSelectionState.bindTo(manager.layerSelectedValues, this);
     this.displayState.selectedAlpha.changed.add(() => {
       this.specificationChanged.dispatch();

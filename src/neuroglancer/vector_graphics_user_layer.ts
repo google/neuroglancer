@@ -55,7 +55,7 @@ export class VectorGraphicsUserLayer extends UserLayer {
   color = trackableVec3(vec3.fromValues(1.0, 1.0, 1.0));
   renderLayer: RenderLayer;
   constructor(manager: LayerListSpecification, x: any) {
-    super();
+    super(manager, x);
 
     this.opacity.restoreState(x['opacity']);
     this.lineWidth.restoreState(x['linewidth']);

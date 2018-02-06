@@ -102,9 +102,9 @@ export class UserLayer extends RefCounted {
   specificationChanged = new NullarySignal();
   renderLayers = new Array<RenderLayer>();
   isReady = false;
-  constructor(renderLayers: RenderLayer[] = []) {
+  constructor(public manager: Borrowed<LayerListSpecification>, specification: any) {
     super();
-    renderLayers.forEach(this.addRenderLayer.bind(this));
+    specification;
   }
 
   addRenderLayer(layer: RenderLayer) {

@@ -54,7 +54,7 @@ export class SingleMeshUserLayer extends UserLayer {
   userSpecifiedAttributeNames: (string|undefined)[]|undefined;
   defaultAttributeNames: string[]|undefined;
   constructor(public manager: LayerListSpecification, x: any) {
-    super([]);
+    super(manager, x);
     this.parameters = {
       meshSourceUrl: verifyObjectProperty(x, 'source', verifyString),
       attributeSourceUrls: verifyObjectProperty(

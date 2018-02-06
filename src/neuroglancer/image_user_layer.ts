@@ -39,10 +39,10 @@ export class ImageUserLayer extends UserLayer {
   renderLayer: ImageRenderLayer;
   transform = new CoordinateTransform();
   constructor(manager: LayerListSpecification, x: any) {
-    super();
     let volumePath = x['source'];
     if (typeof volumePath !== 'string') {
       throw new Error('Invalid image layer specification');
+    super(manager, x);
     }
     this.opacity.restoreState(x['opacity']);
     this.blendMode.restoreState(x['blend']);
