@@ -77,30 +77,55 @@ export class InputEventBindings extends DataPanelInputEventBindings {
   global = new EventActionMap();
 }
 
-interface UIOptions {
+const viewerOptionKeys: (keyof ViewerUIOptions)[] = [
+  'showUIControls',
+  'showHelpButton',
+  'showLayerPanel',
+  'showLocation',
+  'showPanelBorders',
+];
+
+export class ViewerUIConfiguration {
+  /**
+   * If set to false, all UI controls (controlled individually by the options below) are disabled.
+   */
+  showUIControls = new TrackableBoolean(true);
+
+  showHelpButton = new TrackableBoolean(true);
+  showLayerPanel = new TrackableBoolean(true);
+  showLocation = new TrackableBoolean(true);
+  showPanelBorders = new TrackableBoolean(true);
+
+  set(options: Partial<ViewerUIOptions>) {
+    for (const key of viewerOptionKeys) {
+      const value = options[key];
+      if (value !== undefined) {
+        this[key].value = value;
+      }
+    }
+  }
+}
+
+interface ViewerUIOptions {
   showUIControls: boolean;
   showHelpButton: boolean;
-  showLayerDialog: boolean;
   showLayerPanel: boolean;
   showLocation: boolean;
   showPanelBorders: boolean;
+}
+
+export interface ViewerOptions extends ViewerUIOptions, VisibilityPrioritySpecification {
+  dataContext: Owned<DataManagementContext>;
+  element: HTMLElement;
+  dataSourceProvider: Borrowed<DataSourceProvider>;
+  uiConfiguration: ViewerUIConfiguration;
+  showLayerDialog: boolean;
   inputEventBindings: InputEventBindings;
   resetStateWhenEmpty: boolean;
 }
 
-export interface ViewerOptions extends UIOptions, VisibilityPrioritySpecification {
-  dataContext: Owned<DataManagementContext>;
-  element: HTMLElement;
-  dataSourceProvider: Borrowed<DataSourceProvider>;
-}
-
 const defaultViewerOptions = {
-  showUIControls: true,
-  showHelpButton: true,
   showLayerDialog: true,
-  showLayerPanel: true,
-  showLocation: true,
-  showPanelBorders: true,
   resetStateWhenEmpty: true,
 };
 
@@ -165,14 +190,7 @@ export class Viewer extends RefCounted implements ViewerState {
   element: HTMLElement;
   dataSourceProvider: Borrowed<DataSourceProvider>;
 
-  /**
-   * If set to false, all UI controls (controlled individually by the options below) are disabled.
-   */
-  showUIControls: TrackableBoolean;
-
-  showHelpButton: TrackableBoolean;
-  showLayerPanel: TrackableBoolean;
-  showLocation: TrackableBoolean;
+  uiConfiguration: ViewerUIConfiguration;
 
   /**
    * Logical and of each of the above values with the value of showUIControls.
@@ -180,8 +198,6 @@ export class Viewer extends RefCounted implements ViewerState {
   showHelpButtonEffective: WatchableValueInterface<boolean>;
   showLayerPanelEffective: WatchableValueInterface<boolean>;
   showLocationEffective: WatchableValueInterface<boolean>;
-
-  showPanelBorders: TrackableBoolean;
 
   showLayerDialog: boolean;
   resetStateWhenEmpty: boolean;
@@ -206,47 +222,45 @@ export class Viewer extends RefCounted implements ViewerState {
       element = display.makeCanvasOverlayElement(),
       dataSourceProvider =
           getDefaultDataSourceProvider({credentialsManager: defaultCredentialsManager}),
+      uiConfiguration = new ViewerUIConfiguration(),
     } = options;
     this.visibility = visibility;
     this.inputEventBindings = inputEventBindings;
     this.element = element;
     this.dataSourceProvider = dataSourceProvider;
+    this.uiConfiguration = uiConfiguration;
 
     this.registerDisposer(() => removeFromParent(this.element));
 
     this.dataContext = this.registerDisposer(dataContext);
 
+    uiConfiguration.set(options);
+
     const optionsWithDefaults = {...defaultViewerOptions, ...options};
     const {
-      showUIControls,
-      showHelpButton,
-      showLayerPanel,
-      showLocation,
-      showPanelBorders,
       resetStateWhenEmpty,
       showLayerDialog,
     } = optionsWithDefaults;
 
-    this.showUIControls = new TrackableBoolean(showUIControls);
-    this.showHelpButton = new TrackableBoolean(showHelpButton);
-    this.showLayerPanel = new TrackableBoolean(showLayerPanel);
-    this.showLocation = new TrackableBoolean(showLocation);
-    this.showPanelBorders = new TrackableBoolean(showPanelBorders);
+    this.showHelpButtonEffective = this.registerDisposer(makeDerivedWatchableValue(
+        (a, b) => a && b, this.uiConfiguration.showUIControls,
+        this.uiConfiguration.showHelpButton));
 
-    this.showHelpButtonEffective =
-        makeDerivedWatchableValue((a, b) => a && b, this.showUIControls, this.showHelpButton);
+    this.showLayerPanelEffective = this.registerDisposer(makeDerivedWatchableValue(
+        (a, b) => a && b, this.uiConfiguration.showUIControls,
+        this.uiConfiguration.showLayerPanel));
 
-    this.showLayerPanelEffective =
-        makeDerivedWatchableValue((a, b) => a && b, this.showUIControls, this.showLayerPanel);
+    this.showLocationEffective = this.registerDisposer(makeDerivedWatchableValue(
+        (a, b) => a && b, this.uiConfiguration.showUIControls, this.uiConfiguration.showLocation));
 
-    this.showLocationEffective =
-        makeDerivedWatchableValue((a, b) => a && b, this.showUIControls, this.showLocation);
 
     this.showHelpButtonEffective.changed.add(() => this.display.onResize());
     this.showLocationEffective.changed.add(() => this.display.onResize());
     this.showLayerPanelEffective.changed.add(() => this.display.onResize());
-    this.showPanelBorders.changed.add(() => this.updateShowBorders());
-    this.showPanelBorders.changed.add(() => this.display.onResize());
+    this.registerDisposer(this.uiConfiguration.showPanelBorders.changed.add(() => {
+      this.updateShowBorders();
+      this.display.onResize();
+    }));
 
     this.showLayerDialog = showLayerDialog;
     this.resetStateWhenEmpty = resetStateWhenEmpty;
@@ -331,7 +345,7 @@ export class Viewer extends RefCounted implements ViewerState {
   private updateShowBorders() {
     const {element} = this;
     const className = 'neuroglancer-show-panel-borders';
-    if (this.showPanelBorders.value) {
+    if (this.uiConfiguration.showPanelBorders.value) {
       element.classList.add(className);
     } else {
       element.classList.remove(className);

@@ -125,11 +125,11 @@ window.addEventListener('DOMContentLoaded', () => {
     sharedState = undefined;
   }
 
-  configState.add('showUIControls', viewer.showUIControls);
-  configState.add('showLayerPanel', viewer.showLayerPanel);
-  configState.add('showHelpButton', viewer.showHelpButton);
-  configState.add('showLocation', viewer.showLocation);
-  configState.add('showPanelBorders', viewer.showPanelBorders);
+  configState.add('showUIControls', viewer.uiConfiguration.showUIControls);
+  configState.add('showLayerPanel', viewer.uiConfiguration.showLayerPanel);
+  configState.add('showHelpButton', viewer.uiConfiguration.showHelpButton);
+  configState.add('showLocation', viewer.uiConfiguration.showLocation);
+  configState.add('showPanelBorders', viewer.uiConfiguration.showPanelBorders);
 
   const size = new TrackableValue<[number, number]|undefined>(
       undefined,
