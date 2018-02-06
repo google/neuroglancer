@@ -184,6 +184,9 @@ export class TopLevelLayerListSpecification extends RefCounted implements LayerL
   }
 
   add(layer: ManagedUserLayer, index?: number|undefined) {
+    if (this.layerManager.managedLayers.indexOf(layer) === -1) {
+      layer.name = this.layerManager.getUniqueLayerName(layer.name);
+    }
     this.layerManager.addManagedLayer(layer, index);
   }
 
