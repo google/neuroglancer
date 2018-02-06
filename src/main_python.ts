@@ -25,6 +25,7 @@ import {getDefaultDataSourceProvider} from 'neuroglancer/datasource/default_prov
 import {PythonDataSource} from 'neuroglancer/datasource/python/frontend';
 import {TrackableBasedCredentialsManager} from 'neuroglancer/python_integration/credentials_provider';
 import {TrackableBasedEventActionMap} from 'neuroglancer/python_integration/event_action_map';
+import {PrefetchManager} from 'neuroglancer/python_integration/prefetch';
 import {RemoteActionHandler} from 'neuroglancer/python_integration/remote_actions';
 import {TrackableBasedStatusMessages} from 'neuroglancer/python_integration/remote_status_messages';
 import {ScreenshotHandler} from 'neuroglancer/python_integration/screenshots';
@@ -124,6 +125,10 @@ window.addEventListener('DOMContentLoaded', () => {
     hashBinding.updateFromUrlHash();
     sharedState = undefined;
   }
+
+  const prefetchManager = new PrefetchManager(
+      viewer.display, dataSourceProvider, viewer.dataContext.addRef(), viewer.uiConfiguration);
+  configState.add('prefetch', prefetchManager);
 
   configState.add('showUIControls', viewer.uiConfiguration.showUIControls);
   configState.add('showLayerPanel', viewer.uiConfiguration.showLayerPanel);
