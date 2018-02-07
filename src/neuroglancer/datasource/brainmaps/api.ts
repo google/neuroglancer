@@ -85,6 +85,17 @@ export interface MeshFragmentPayload extends ChangeStackAwarePayload {
   object_id: string;
 }
 
+export interface BatchMeshFragment {
+  object_id: string;
+  fragment_keys: string[];
+}
+
+export interface BatchMeshFragmentPayload {
+  volume_id: string;
+  mesh_name: string;
+  batches: BatchMeshFragment[];
+}
+
 export interface HttpCall {
   method: 'GET'|'POST';
   path: string;

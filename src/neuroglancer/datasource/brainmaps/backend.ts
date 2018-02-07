@@ -18,8 +18,8 @@ import {WithParameters} from 'neuroglancer/chunk_manager/backend';
 import {ChunkSourceParametersConstructor} from 'neuroglancer/chunk_manager/base';
 import {WithSharedCredentialsProviderCounterpart} from 'neuroglancer/credentials_provider/shared_counterpart';
 import {ChangeSpec, MeshSourceParameters, SkeletonSourceParameters, VolumeChunkEncoding, VolumeSourceParameters} from 'neuroglancer/datasource/brainmaps/base';
-import {ChangeStackAwarePayload, Credentials, makeRequest, MeshFragmentPayload, SkeletonPayload, SubvolumePayload} from 'neuroglancer/datasource/brainmaps/api';
-import {decodeJsonManifestChunk, decodeTriangleVertexPositionsAndIndices, FragmentChunk, ManifestChunk, MeshSource} from 'neuroglancer/mesh/backend';
+import {BatchMeshFragment, BatchMeshFragmentPayload, ChangeStackAwarePayload, Credentials, makeRequest, SkeletonPayload, SubvolumePayload} from 'neuroglancer/datasource/brainmaps/api';
+import {computeVertexNormals, decodeJsonManifestChunk, FragmentChunk, ManifestChunk, MeshSource} from 'neuroglancer/mesh/backend';
 import {Bounds} from 'neuroglancer/segmentation_display_state/base';
 import {decodeSkeletonVertexPositionsAndIndices, SkeletonChunk, SkeletonSource} from 'neuroglancer/skeleton/backend';
 import {decodeCompressedSegmentationChunk} from 'neuroglancer/sliceview/backend_chunk_decoders/compressed_segmentation';
@@ -27,9 +27,9 @@ import {decodeJpegChunk} from 'neuroglancer/sliceview/backend_chunk_decoders/jpe
 import {decodeRawChunk} from 'neuroglancer/sliceview/backend_chunk_decoders/raw';
 import {VolumeChunk, VolumeChunkSource} from 'neuroglancer/sliceview/volume/backend';
 import {CancellationToken} from 'neuroglancer/util/cancellation';
-import {Endianness} from 'neuroglancer/util/endian';
 import {decodeMorton, vec3, vec3Key} from 'neuroglancer/util/geom';
 import {verifyObject, verifyObjectProperty, verifyStringArray} from 'neuroglancer/util/json';
+import {convertEndian32, Endianness} from 'neuroglancer/util/endian';
 import {Uint64} from 'neuroglancer/util/uint64';
 import {registerSharedObject, SharedObject} from 'neuroglancer/worker_rpc';
 
@@ -131,12 +131,13 @@ export class BrainmapsVolumeChunkSource extends
 function decodeManifestChunk(chunk: ManifestChunk, response: any) {
   decodeJsonManifestChunk(chunk, response, 'fragmentKey');
   if (chunk.clipBounds) {
-    chunk.fragmentIds = filterFragments(chunk.fragmentIds, chunk.clipBounds);
+    chunk.fragmentIds = filterFragments(chunk.fragmentIds!, chunk.clipBounds);
   }
+  chunk.fragmentIds = groupFragmentsIntoBatches(chunk.fragmentIds!);
   return chunk;
 }
 
-function filterFragments(fragmentIds: string[]|null, clipBounds: Bounds) {
+function filterFragments(fragmentIds: string[], clipBounds: Bounds) {
   clipBounds;
   if (!fragmentIds) {
     return fragmentIds;
@@ -210,22 +211,25 @@ function decodeManifestChunkWithSupervoxelIds(chunk: ManifestChunk, response: an
   if (length !== supervoxelIds.length) {
     throw new Error('Expected fragmentKey and supervoxelId arrays to have the same length.');
   }
-  chunk.fragmentIds =
+  let fragmentIds =
       supervoxelIds.map((supervoxelId, index) => supervoxelId + '\0' + fragmentKeys[index]);
   if (chunk.clipBounds) {
-    chunk.fragmentIds = filterFragments(chunk.fragmentIds, chunk.clipBounds);
+    fragmentIds = filterFragments(fragmentIds, chunk.clipBounds);
   }
+  chunk.fragmentIds = groupFragmentsIntoBatches(fragmentIds);
 }
 
-function decodeFragmentChunk(chunk: FragmentChunk, response: ArrayBuffer) {
-  let dv = new DataView(response);
-  let numVertices = dv.getUint32(0, true);
-  let numVerticesHigh = dv.getUint32(4, true);
-  if (numVerticesHigh !== 0) {
-    throw new Error(`The number of vertices should not exceed 2^32-1.`);
+const batchSize = 100;
+
+function groupFragmentsIntoBatches(ids: string[]) {
+  const batches = [];
+  let index = 0;
+  const length = ids.length;
+  while (index < length) {
+    batches.push(JSON.stringify(ids.slice(index, index + batchSize)));
+    index += batchSize;
   }
-  decodeTriangleVertexPositionsAndIndices(
-      chunk, response, Endianness.LITTLE, /*vertexByteOffset=*/8, numVertices);
+  return batches;
 }
 
 @registerSharedObject() export class BrainmapsMeshSource extends
@@ -260,36 +264,147 @@ function decodeFragmentChunk(chunk: FragmentChunk, response: ArrayBuffer) {
 
   downloadFragment(chunk: FragmentChunk, cancellationToken: CancellationToken) {
     let {parameters} = this;
-    let objectId: string;
-    let fragmentId = chunk.fragmentId!;
-    if (parameters.changeSpec !== undefined) {
-      const splitIndex = fragmentId.indexOf('\0');
-      objectId = fragmentId.substring(0, splitIndex);
-      fragmentId = fragmentId.substring(splitIndex + 1);
-    } else {
-      objectId = chunk.manifestChunk!.objectId.toString();
+
+    const path = `/v1/objects/meshes:batch`;
+
+    const ids = new Set<string>(JSON.parse(chunk.fragmentId!));
+
+    let totalVertices = 0;
+    let totalIndices = 0;
+    let fragments: {
+      buffer: ArrayBuffer,
+      verticesOffset: number,
+      indicesOffset: number,
+      numVertices: number,
+      numIndices: number
+    }[] = [];
+
+    function copyMeshData() {
+      const vertexBuffer = new Float32Array(totalVertices * 3);
+      const indexBuffer = new Uint32Array(totalIndices);
+      let vertexOffset = 0;
+      let indexOffset = 0;
+      for (const fragment of fragments) {
+        vertexBuffer.set(
+            new Float32Array(fragment.buffer, fragment.verticesOffset, fragment.numVertices * 3),
+            vertexOffset * 3);
+        const {numIndices} = fragment;
+        const sourceIndices = new Uint32Array(fragment.buffer, fragment.indicesOffset, numIndices);
+        convertEndian32(sourceIndices, Endianness.LITTLE);
+        for (let i = 0; i < numIndices; ++i) {
+          indexBuffer[indexOffset++] = sourceIndices[i] + vertexOffset;
+        }
+        vertexOffset += fragment.numVertices;
+      }
+      convertEndian32(vertexBuffer, Endianness.LITTLE);
+      chunk.vertexPositions = vertexBuffer;
+      chunk.indices = indexBuffer;
+      chunk.vertexNormals = computeVertexNormals(vertexBuffer, indexBuffer);
+    }
+    function decodeResponse(response: ArrayBuffer): Promise<void>|void {
+      let length = response.byteLength;
+      let index = 0;
+      const dataView = new DataView(response);
+      const headerSize =
+          /*object id*/ 8 + /*fragment key length*/ 8 + /*num vertices*/ 8 + /*num triangles*/ 8;
+      while (index < length) {
+        if (index + headerSize > length) {
+          throw new Error(`Invalid batch mesh fragment response.`);
+        }
+        let prefix: string;
+        if (parameters.changeSpec !== undefined) {
+          const objectIdLow = dataView.getUint32(index, /*littleEndian=*/true);
+          const objectIdHigh = dataView.getUint32(index + 4, /*littleEndian=*/true);
+          const objectIdString = new Uint64(objectIdLow, objectIdHigh).toString();
+          prefix = objectIdString + '\0';
+        } else {
+          prefix = '';
+        }
+        index += 8;
+        const fragmentKeyLength = dataView.getUint32(index, /*littleEndian=*/true);
+        const fragmentKeyLengthHigh = dataView.getUint32(index + 4, /*littleEndian=*/true);
+        index += 8;
+        if (fragmentKeyLengthHigh !== 0) {
+          throw new Error(`Invalid batch mesh fragment response.`);
+        }
+        if (index + fragmentKeyLength + /* num vertices */ 8 + /*num indices*/ 8 > length) {
+          throw new Error(`Invalid batch mesh fragment response.`);
+        }
+        const fragmentKey =
+            new TextDecoder().decode(new Uint8Array(response, index, fragmentKeyLength));
+        const fullKey = prefix + fragmentKey;
+        if (!ids.delete(fullKey)) {
+          throw new Error(`Received unexpected fragment key: ${JSON.stringify(fullKey)}.`);
+        }
+        index += fragmentKeyLength;
+        const numVertices = dataView.getUint32(index, /*littleEndian=*/true);
+        const numVerticesHigh = dataView.getUint32(index + 4, /*littleEndian=*/true);
+        index += 8;
+        const numTriangles = dataView.getUint32(index, /*littleEndian=*/true);
+        const numTrianglesHigh = dataView.getUint32(index + 4, /*littleEndian=*/true);
+        index += 8;
+        if (numVerticesHigh !== 0 || numTrianglesHigh !== 0) {
+          throw new Error(`Invalid batch mesh fragment response.`);
+        }
+        const endOffset = index + numTriangles * 12 + numVertices * 12;
+        if (endOffset > length) {
+          throw new Error(`Invalid batch mesh fragment response.`);
+        }
+        totalVertices += numVertices;
+        totalIndices += numTriangles * 3;
+        fragments.push({
+          buffer: response,
+          verticesOffset: index,
+          numVertices,
+          indicesOffset: index + 12 * numVertices,
+          numIndices: numTriangles * 3,
+        });
+        index = endOffset;
+      }
+
+      if (ids.size !== 0) {
+        // Partial response received.
+        return makeBatchRequest();
+      }
+      copyMeshData();
     }
 
-    const path = `/v1/objects/${parameters['volumeId']}` +
-        `/meshes/${parameters['meshName']}` +
-        '/fragment:binary';
+    const {credentialsProvider} = this;
 
-    let payload: MeshFragmentPayload = {
-      fragment_key: fragmentId,
-      object_id: objectId,
-    };
+    function makeBatchRequest(): Promise<void> {
+      const batches: BatchMeshFragment[] = [];
 
-    applyChangeStack(parameters.changeSpec, payload);
-
-    return makeRequest(
-               parameters['instance'], this.credentialsProvider, {
-                 method: 'POST',
-                 path,
-                 payload: JSON.stringify(payload),
-                 responseType: 'arraybuffer',
-               },
-               cancellationToken)
-        .then(response => decodeFragmentChunk(chunk, response));
+      if (parameters.changeSpec !== undefined) {
+        let prevObjectId: string|undefined;
+        for (const id of ids) {
+          const splitIndex = id.indexOf('\0');
+          const objectId = id.substring(0, splitIndex);
+          const fragmentId = id.substring(splitIndex + 1);
+          if (objectId !== prevObjectId) {
+            batches.push({object_id: objectId, fragment_keys: []});
+          }
+          batches[batches.length - 1].fragment_keys.push(fragmentId);
+        }
+      } else {
+        batches.push(
+            {object_id: chunk.manifestChunk!.objectId.toString(), fragment_keys: Array.from(ids)});
+      }
+      const payload: BatchMeshFragmentPayload = {
+        volume_id: parameters.volumeId,
+        mesh_name: parameters.meshName,
+        batches: batches,
+      };
+      return makeRequest(
+                 parameters['instance'], credentialsProvider, {
+                   method: 'POST',
+                   path,
+                   payload: JSON.stringify(payload),
+                   responseType: 'arraybuffer',
+                 },
+                 cancellationToken)
+          .then(decodeResponse);
+    }
+    return makeBatchRequest();
   }
 }
 
