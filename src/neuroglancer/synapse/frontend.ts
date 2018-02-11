@@ -72,7 +72,7 @@ export class SynapseAnnotationPointListLayer extends RefCounted {
   }
 
   updateMouseState(mouseState: MouseSelectionState, pickedOffset: number) {
-    vec3.multiply(mouseState.position, this.pointList.get(pickedOffset), this.voxelSizeObject.size);
+    vec3.multiply(mouseState.position, this.pointList.get(2*pickedOffset), this.voxelSizeObject.size);
   }
 }
 
