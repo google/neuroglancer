@@ -79,7 +79,7 @@ export interface ChunkFormatHandler extends Disposable {
 }
 
 export type ChunkFormatHandlerFactory = (gl: GL, spec: VolumeChunkSpecification) =>
-    ChunkFormatHandler | null;
+    ChunkFormatHandler|null;
 
 var chunkFormatHandlers = new Array<ChunkFormatHandlerFactory>();
 
@@ -115,11 +115,10 @@ export class VolumeChunkSource extends SliceViewChunkSource implements VolumeChu
     return this.chunkFormatHandler.chunkFormat;
   }
 
-  getValueAt(position: vec3) {
+  getValueAt(position: vec3, chunkLayout = this.spec.chunkLayout) {
     const chunkGridPosition = tempChunkGridPosition;
     const localPosition = tempLocalPosition;
     let spec = this.spec;
-    let chunkLayout = spec.chunkLayout;
     let chunkSize = chunkLayout.size;
     chunkLayout.globalToLocalSpatial(localPosition, position);
     for (let i = 0; i < 3; ++i) {
@@ -192,20 +191,21 @@ export interface MultiscaleVolumeChunkSource extends MultiscaleSliceViewChunkSou
    *
    * This only makes sense if volumeType === VolumeType.SEGMENTATION.
    */
-  getMeshSource: () => MeshSource | null;
-
-  /**
-   * Returns the associated chunked graph url, if there is one.
-   *
-   * This only makes sense if volumeType === VolumeType.SEGMENTATION.
-   */
-  getChunkedGraphUrl?: () => string | null;
-  getChunkedGraphSources?: (options: ChunkedGraphSourceOptions, rootSegments: Uint64Set) => ChunkedGraphChunkSource[][] | null;
+  getMeshSource: () => Promise<MeshSource|null> | MeshSource | null;
 
   /**
    * Returns the associated skeleton source, if there is one.
    *
    * This only makes sense if volumeType === VolumeType.SEGMENTATION.
    */
-  getSkeletonSource?: () => SkeletonSource | null;
+  getSkeletonSource?: () => Promise<SkeletonSource|null> | SkeletonSource | null;
+
+  /**
+   * Returns the associated chunked graph url, if there is one.
+   *
+   * This only makes sense if volumeType === VolumeType.SEGMENTATION.
+   */
+
+  getChunkedGraphUrl?: () => string | null;
+  getChunkedGraphSources?: (options: ChunkedGraphSourceOptions, rootSegments: Uint64Set) => ChunkedGraphChunkSource[][] | null;
 }

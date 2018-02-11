@@ -17,6 +17,7 @@ from __future__ import absolute_import
 import contextlib
 import json
 import re
+import threading
 
 import six
 
@@ -73,6 +74,38 @@ class ViewerCommonBase(object):
         self.__watched_volumes = dict()
 
         self.volume_manager.add_changed_callback(self._handle_volumes_changed)
+
+        self._next_screenshot_id = 0
+        self._screenshot_callbacks = {}
+        self.actions.add('screenshot', self._handle_screenshot_reply)
+
+    def async_screenshot(self, callback):
+        screenshot_id = str(self._next_screenshot_id)
+        self._next_screenshot_id += 1
+        def set_screenshot_id(s):
+            s.screenshot = screenshot_id
+        self.config_state.retry_txn(set_screenshot_id)
+        self._screenshot_callbacks[screenshot_id] = callback
+
+    def screenshot(self):
+        event = threading.Event()
+        result = [None]
+        def handler(s):
+            result[0] = s
+            event.set()
+        self.async_screenshot(handler)
+        event.wait()
+        return result[0]
+
+    def _handle_screenshot_reply(self, s):
+        def set_screenshot_id(s):
+            s.screenshot = None
+
+        self.config_state.retry_txn(set_screenshot_id)
+        screenshot_id = s.screenshot.id
+        callback = self._screenshot_callbacks.pop(screenshot_id, None)
+        if callback is not None:
+            callback(s)
 
     def _handle_volumes_changed(self):
         volumes = self.volume_manager.volumes

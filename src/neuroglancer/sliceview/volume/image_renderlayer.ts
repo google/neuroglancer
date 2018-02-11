@@ -15,14 +15,12 @@
  */
 
 import {SliceView} from 'neuroglancer/sliceview/frontend';
-import {VolumeSourceOptions} from 'neuroglancer/sliceview/volume/base';
 import {MultiscaleVolumeChunkSource} from 'neuroglancer/sliceview/volume/frontend';
-import {RenderLayer} from 'neuroglancer/sliceview/volume/renderlayer';
+import {RenderLayer, RenderLayerOptions} from 'neuroglancer/sliceview/volume/renderlayer';
 import {TrackableAlphaValue, trackableAlphaValue} from 'neuroglancer/trackable_alpha';
 import {BLEND_FUNCTIONS, BLEND_MODES, TrackableBlendModeValue, trackableBlendModeValue} from 'neuroglancer/trackable_blend';
-import {vec3} from 'neuroglancer/util/geom';
 import {verifyEnumString} from 'neuroglancer/util/json';
-import {makeTrackableFragmentMain, makeWatchableShaderError, TrackableFragmentMain} from 'neuroglancer/webgl/dynamic_shader';
+import {makeTrackableFragmentMain, TrackableFragmentMain} from 'neuroglancer/webgl/dynamic_shader';
 import {ShaderBuilder} from 'neuroglancer/webgl/shader';
 
 export const FRAGMENT_MAIN_START = '//NEUROGLANCER_IMAGE_RENDERLAYER_FRAGMENT_MAIN_START';
@@ -38,18 +36,25 @@ export function getTrackableFragmentMain(value = DEFAULT_FRAGMENT_MAIN) {
   return makeTrackableFragmentMain(value);
 }
 
+export interface ImageRenderLayerOptions extends RenderLayerOptions {
+  opacity: TrackableAlphaValue;
+  blendMode: TrackableBlendModeValue;
+  fragmentMain: TrackableFragmentMain;
+}
+
 export class ImageRenderLayer extends RenderLayer {
   fragmentMain: TrackableFragmentMain;
   opacity: TrackableAlphaValue;
   blendMode: TrackableBlendModeValue;
-  constructor(multiscaleSource: MultiscaleVolumeChunkSource, {
-    opacity = trackableAlphaValue(0.5),
-    blendMode = trackableBlendModeValue(),
-    fragmentMain = getTrackableFragmentMain(),
-    shaderError = makeWatchableShaderError(),
-    sourceOptions = <VolumeSourceOptions>{},
-  } = {}) {
-    super(multiscaleSource, {shaderError, sourceOptions});
+  constructor(
+      multiscaleSource: MultiscaleVolumeChunkSource,
+      options: Partial<ImageRenderLayerOptions> = {}) {
+    super(multiscaleSource, options);
+    const {
+      opacity = trackableAlphaValue(0.5),
+      blendMode = trackableBlendModeValue(),
+      fragmentMain = getTrackableFragmentMain(),
+    } = options;
     this.fragmentMain = fragmentMain;
     this.opacity = opacity;
     this.blendMode = blendMode;
@@ -64,18 +69,6 @@ export class ImageRenderLayer extends RenderLayer {
 
   getShaderKey() {
     return `volume.ImageRenderLayer:${JSON.stringify(this.fragmentMain.value)}`;
-  }
-
-  getValueAt(position: vec3) {
-    for (let alternatives of this.sources!) {
-      for (let source of alternatives) {
-        let result = source.getValueAt(position);
-        if (result != null) {
-          return result;
-        }
-      }
-    }
-    return null;
   }
 
   defineShader(builder: ShaderBuilder) {

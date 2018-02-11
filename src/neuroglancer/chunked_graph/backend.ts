@@ -19,13 +19,16 @@ import {ChunkState, ChunkPriorityTier} from 'neuroglancer/chunk_manager/base';
 import {CHUNKED_GRAPH_LAYER_RPC_ID, ChunkedGraphSource as ChunkedGraphSourceInterface, ChunkedGraphChunkSpecification} from 'neuroglancer/chunked_graph/base';
 import {SharedDisjointUint64Sets} from 'neuroglancer/shared_disjoint_sets';
 import {SliceViewChunk, SliceViewChunkSource} from 'neuroglancer/sliceview/backend';
+import {RenderLayer as RenderLayerInterface} from 'neuroglancer/sliceview/base';
 import {Uint64Set} from 'neuroglancer/uint64_set';
-import {vec3, vec3Key} from 'neuroglancer/util/geom';
+import {mat4, vec3, vec3Key} from 'neuroglancer/util/geom';
 import {openHttpRequest, sendHttpRequest, HttpError} from 'neuroglancer/util/http_request';
 import {NullarySignal} from 'neuroglancer/util/signal';
 import {Uint64} from 'neuroglancer/util/uint64';
 import {registerSharedObject, RPC, SharedObjectCounterpart} from 'neuroglancer/worker_rpc';
 import {withChunkManager, startChunkDownload, cancelChunkDownload } from 'neuroglancer/chunk_manager/backend';
+import { CoordinateTransform } from 'neuroglancer/coordinate_transform';
+import { ChunkLayout } from 'neuroglancer/sliceview/chunk_layout';
 
 // Chunk that contains the list of fragments that make up a single object.
 export class ChunkedGraphChunk extends SliceViewChunk {
@@ -119,14 +122,19 @@ export class ChunkedGraphChunkSource extends SliceViewChunkSource implements
 const Base = withChunkManager(SharedObjectCounterpart);
 
 @registerSharedObject(CHUNKED_GRAPH_LAYER_RPC_ID)
-export class ChunkedGraphLayer extends Base {
-  layerChanged = new NullarySignal();
+export class ChunkedGraphLayer extends Base implements RenderLayerInterface {
   rpcId: number;
+  sources: ChunkedGraphChunkSource[][];
+  layerChanged = new NullarySignal();
+  transform = new CoordinateTransform();
+  transformedSources: {source: SliceViewChunkSource, chunkLayout: ChunkLayout}[][];
+  transformedSourcesGeneration = -1;
+
   graphurl: string;
   rootSegments: Uint64Set;
   visibleSegments3D: Uint64Set;
   segmentEquivalences: SharedDisjointUint64Sets;
-  sources: ChunkedGraphChunkSource[][];
+
 
   constructor(rpc: RPC, options: any) {
     super(rpc, options);
@@ -145,6 +153,8 @@ export class ChunkedGraphLayer extends Base {
         alternatives.push(source);
       }
     }
+    mat4.copy(this.transform.transform, options['transform']);
+    this.transform.changed.add(this.layerChanged.dispatch);
 
     this.registerDisposer(this.rootSegments.changed.add(() => {
       this.chunkManager.scheduleUpdateChunkPriorities();

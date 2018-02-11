@@ -24,8 +24,9 @@ import {ContextMenu} from 'neuroglancer/ui/context_menu';
 import {DropLayers, endLayerDrag, getDropLayers, getLayerDropEffect, startLayerDrag} from 'neuroglancer/ui/layer_drag_and_drop';
 import {animationFrameDebounce} from 'neuroglancer/util/animation_frame_debounce';
 import {RefCounted, registerEventListener} from 'neuroglancer/util/disposable';
-import {removeChildren} from 'neuroglancer/util/dom';
+import {removeChildren, removeFromParent} from 'neuroglancer/util/dom';
 import {getDropEffect, preventDrag, setDropEffect} from 'neuroglancer/util/drag_and_drop';
+import {makeCloseButton} from 'neuroglancer/widget/close_button';
 import {PositionWidget} from 'neuroglancer/widget/position_widget';
 
 require('neuroglancer/noselect.css');
@@ -179,9 +180,8 @@ class LayerWidget extends RefCounted {
     layerNumberElement.className = 'neuroglancer-layer-item-number';
     let valueElement = this.valueElement = document.createElement('span');
     valueElement.className = 'neuroglancer-layer-item-value';
-    let closeElement = document.createElement('span');
+    const closeElement = makeCloseButton();
     closeElement.title = 'Delete layer';
-    closeElement.className = 'neuroglancer-layer-item-close';
     this.registerEventListener(closeElement, 'click', (event: MouseEvent) => {
       this.panel.layerManager.removeManagedLayer(this.layer);
       event.stopPropagation();
@@ -344,6 +344,7 @@ export class LayerPanel extends RefCounted {
   disposed() {
     this.layerWidgets.forEach(x => x.dispose());
     this.layerWidgets = <any>undefined;
+    removeFromParent(this.element);
     super.disposed();
   }
 

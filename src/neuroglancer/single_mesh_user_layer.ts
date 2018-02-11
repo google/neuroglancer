@@ -99,6 +99,7 @@ export class SingleMeshUserLayer extends UserLayer {
       }
       this.displayState.attributeNames.value = initialAttributeNames;
       this.addRenderLayer(new SingleMeshLayer(source, this.displayState));
+      this.isReady = true;
     });
     this.registerDisposer(this.displayState.fragmentMain.changed.add(() => {
       this.specificationChanged.dispatch();

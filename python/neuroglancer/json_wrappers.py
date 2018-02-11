@@ -58,10 +58,13 @@ class JsonObjectWrapper(object):
         object.__setattr__(self, '_readonly', _readonly)
 
     def to_json(self):
+        if self._readonly:
+            return self._json_data
         with self._lock:
             r = self._json_data.copy()
             for k, (wrapper, _) in six.iteritems(self._cached_wrappers):
-                r[k] = to_json(wrapper)
+                if wrapper is not None:
+                    r[k] = to_json(wrapper)
             return r
 
     def __deepcopy__(self, memo):

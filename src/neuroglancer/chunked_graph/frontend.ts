@@ -23,8 +23,7 @@ import {RenderLayer as GenericSliceViewRenderLayer} from 'neuroglancer/sliceview
 import {Uint64Set} from 'neuroglancer/uint64_set';
 import {openHttpRequest, sendHttpRequest, sendHttpJsonPostRequest, HttpError} from 'neuroglancer/util/http_request';
 import {Uint64} from 'neuroglancer/util/uint64';
-import {ShaderProgram} from 'neuroglancer/webgl/shader';
-import {RPC, SharedObject, RpcId} from 'neuroglancer/worker_rpc';
+import {RPC} from 'neuroglancer/worker_rpc';
 
 export const GRAPH_SERVER_NOT_SPECIFIED = Symbol('Graph Server Not Specified.');
 
@@ -57,31 +56,23 @@ export interface MultiscaleChunkedGraphSource extends MultiscaleSliceViewChunkSo
 
 export class ChunkedGraphLayer extends GenericSliceViewRenderLayer {
   private graphurl: string;
-  shader: ShaderProgram|undefined = undefined;
-  shaderUpdated = true;
-  rpcId: RpcId|null = null;
 
   constructor(
       chunkManager: ChunkManager,
-      graphurl: string,
+      url: string,
       public sources: ChunkedGraphChunkSource[][],
       displayState: SegmentationDisplayState) {
-    super(chunkManager, sources);
-    this.graphurl = graphurl;
-    let sharedObject = this.registerDisposer(new SharedObject());
-    sharedObject.RPC_TYPE_ID = CHUNKED_GRAPH_LAYER_RPC_ID;
-    sharedObject.initializeCounterpart(this.chunkManager.rpc!, {
-        'chunkManager': this.chunkManager.rpcId,
-        'url': this.url,
-        'sources': this.sourceIds,
+    super(chunkManager, sources, {
+      rpcTransfer: {
+        'chunkManager': chunkManager.rpcId,
+        'url': url,
         'rootSegments': displayState.rootSegments.rpcId,
         'visibleSegments3D': displayState.visibleSegments3D.rpcId,
-        'segmentEquivalences': displayState.segmentEquivalences.rpcId,
-      }
-    );
-    this.rpcId = sharedObject.rpcId;
-
-    this.setReady(true);
+        'segmentEquivalences': displayState.segmentEquivalences.rpcId
+      },
+      rpcType: CHUNKED_GRAPH_LAYER_RPC_ID
+    });
+    this.graphurl = url;
   }
 
   get url() {

@@ -90,28 +90,6 @@
   text-align: center;
 }
 
-.neuroglancer-layer-item-close::before {
-  content: "\274c"; /* CROSS MARK */
-}
-
-.neuroglancer-layer-item-close {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 16px;
-  border-radius: 50%;
-  width: 1.7ex;
-  height: 1.7ex;
-  font-family: sans-serif;
-  padding: 1px;
-  color: white;
-  position: relative;
-}
-
-.neuroglancer-layer-item-close:hover {
-  background-color: #db4437;
-}
-
 .neuroglancer-layer-item[layer-visible=false] .neuroglancer-layer-item-label {
   text-decoration: line-through;
 }

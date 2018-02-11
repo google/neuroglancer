@@ -14,10 +14,10 @@
  * limitations under the License.
  */
 
-import {RenderLayer as SliceViewRenderLayer, SliceViewChunk, SliceViewChunkSource} from 'neuroglancer/sliceview/backend';
-import {RenderLayer as RenderLayerInterface, VECTOR_GRAPHICS_RENDERLAYER_RPC_ID, VectorGraphicsChunkSource as VectorGraphicsChunkSourceInterface, VectorGraphicsChunkSpecification} from 'neuroglancer/sliceview/vector_graphics/base';
+import {SliceViewChunk, SliceViewChunkSource} from 'neuroglancer/sliceview/backend';
+import {VectorGraphicsChunkSource as VectorGraphicsChunkSourceInterface, VectorGraphicsChunkSpecification} from 'neuroglancer/sliceview/vector_graphics/base';
 import {vec3, vec3Key} from 'neuroglancer/util/geom';
-import {registerSharedObject, RPC} from 'neuroglancer/worker_rpc';
+import {RPC} from 'neuroglancer/worker_rpc';
 
 export class VectorGraphicsChunk extends SliceViewChunk {
   source: VectorGraphicsChunkSource|null = null;
@@ -93,9 +93,4 @@ export class VectorGraphicsChunkSource extends SliceViewChunkSource implements
     }
     return chunk;
   }
-}
-
-@registerSharedObject(VECTOR_GRAPHICS_RENDERLAYER_RPC_ID)
-export class RenderLayer extends SliceViewRenderLayer implements RenderLayerInterface {
-  sources: VectorGraphicsChunkSource[][];
 }

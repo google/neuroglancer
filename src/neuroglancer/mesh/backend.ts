@@ -39,7 +39,6 @@ export type FragmentId = string;
 
 // Chunk that contains the list of fragments that make up a single object.
 export class ManifestChunk extends Chunk {
-  backendOnly = true;
   objectId = new Uint64();
   fragmentIds: FragmentId[]|null;
   clipBounds?: Bounds;
@@ -59,6 +58,11 @@ export class ManifestChunk extends Chunk {
 
   freeSystemMemory() {
     this.fragmentIds = null;
+  }
+
+  serialize(msg: any, transfers: any[]) {
+    super.serialize(msg, transfers);
+    msg.fragmentIds = this.fragmentIds;
   }
 
   downloadSucceeded() {
@@ -282,9 +286,9 @@ export class MeshSource extends ChunkSource {
     // the frontend's fragmentSource.chunks is only updated when the chunkManager detects a chunk
     // has been updated. This results in the "inverse" fragments showing up, i.e. going from
     // clipBounds=>none shows all the fragments that were not contained within the starting clipping
-    // bounds. 
+    // bounds.
     //
-    // let bareKey = getObjectKey(manifestChunk.objectId); 
+    // let bareKey = getObjectKey(manifestChunk.objectId);
     // let key = `${bareKey}/${fragmentId}`;
     let key = `${manifestChunk.key}/${fragmentId}`;
     let fragmentSource = this.fragmentSource;
@@ -358,8 +362,11 @@ export class MeshLayer extends SegmentationLayerSharedObjectCounterpart {
       let manifestChunk = source.getChunk(objectId, this.clipBounds.value);
       chunkManager.requestChunk(
           manifestChunk, priorityTier, basePriority + MESH_OBJECT_MANIFEST_CHUNK_PRIORITY);
-      switch(manifestChunk.state) {
-        case ChunkState.SYSTEM_MEMORY_WORKER: {
+      const state = manifestChunk.state;
+      switch(state) {
+        case ChunkState.SYSTEM_MEMORY_WORKER:
+        case ChunkState.SYSTEM_MEMORY:
+        case ChunkState.GPU_MEMORY: {
           for (let fragmentId of manifestChunk.fragmentIds!) {
             let fragmentChunk = source.getFragmentChunk(manifestChunk, fragmentId);
             chunkManager.requestChunk(

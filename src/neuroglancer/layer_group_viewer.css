@@ -15,10 +15,13 @@
  */
 
 .neuroglancer-panel {
+  flex: 1;
+}
+
+.neuroglancer-panel.neuroglancer-show-panel-borders {
   border-style: solid;
   border-color: black;
   border-width: 2px;
-  flex: 1;
 }
 
 .neuroglancer-panel:focus {

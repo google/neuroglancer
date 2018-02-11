@@ -87,6 +87,7 @@ export class UserLayer extends RefCounted {
   readyStateChanged = new NullarySignal();
   specificationChanged = new NullarySignal();
   renderLayers = new Array<RenderLayer>();
+  isReady = false;
   constructor(renderLayers: RenderLayer[] = []) {
     super();
     renderLayers.forEach(this.addRenderLayer.bind(this));
@@ -169,6 +170,11 @@ export class ManagedUserLayer extends RefCounted {
       this.readyStateChanged.dispatch();
       this.handleLayerChanged();
     }
+  }
+
+  isReady() {
+    const {layer} = this;
+    return layer !== null && layer.isReady;
   }
 
   /**
