@@ -6,3 +6,4 @@
 *.pyc
 __pycache__
 *.sw[pmn]
+.vscode
