@@ -74,6 +74,10 @@ export abstract class RenderedDataPanel extends RenderedPanel {
       this.navigationState.zoomBy(2.0);
     });
 
+    registerActionListener(element, 'highlight', () => {
+      this.viewer.layerManager.invokeAction('highlight');
+    });
+
     for (let axis = 0; axis < 3; ++axis) {
       let axisName = AXES_NAMES[axis];
       for (let sign of [-1, +1]) {

@@ -30,6 +30,7 @@ export interface VisibleSegmentsState {
   visibleSegments2D?: Uint64Set; // not needed for backend
   visibleSegments3D: Uint64Set;
   segmentEquivalences: SharedDisjointUint64Sets;
+  highlightedSegments: Uint64Set;
   clipBounds: SharedWatchableValue<Bounds|undefined>;
 }
 

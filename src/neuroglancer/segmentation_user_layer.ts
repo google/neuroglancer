@@ -53,6 +53,7 @@ require('./segmentation_user_layer.css');
 const SELECTED_ALPHA_JSON_KEY = 'selectedAlpha';
 const NOT_SELECTED_ALPHA_JSON_KEY = 'notSelectedAlpha';
 const OBJECT_ALPHA_JSON_KEY = 'objectAlpha';
+const SATURATION_JSON_KEY = 'saturation';
 const HIDE_SEGMENT_ZERO_JSON_KEY = 'hideSegmentZero';
 
 
@@ -62,6 +63,7 @@ export class SegmentationUserLayer extends UserLayer {
         segmentColorHash: SegmentColorHash.getDefault(),
         segmentSelectionState: new SegmentSelectionState(),
         selectedAlpha: trackableAlphaValue(0.5),
+        saturation: trackableAlphaValue(1.0),
         notSelectedAlpha: trackableAlphaValue(0),
         objectAlpha: trackableAlphaValue(1.0),
         clipBounds: SharedWatchableValue.make<Bounds|undefined>(this.manager.worker, undefined),
@@ -69,7 +71,9 @@ export class SegmentationUserLayer extends UserLayer {
         rootSegments: Uint64Set.makeWithCounterpart(this.manager.worker),
         visibleSegments2D: new Uint64Set(),
         visibleSegments3D: Uint64Set.makeWithCounterpart(this.manager.worker),
+        highlightedSegments: Uint64Set.makeWithCounterpart(this.manager.worker),
         segmentEquivalences: SharedDisjointUint64Sets.makeWithCounterpart(this.manager.worker),
+        volumeSourceOptions: {},
         objectToDataTransform: new CoordinateTransform(),
         fragmentMain: getTrackableFragmentMain(),
         shaderError: makeWatchableShaderError(),
@@ -125,9 +129,13 @@ export class SegmentationUserLayer extends UserLayer {
     this.displayState.fragmentMain.changed.add(() => {
       this.specificationChanged.dispatch();
     });
+    this.displayState.highlightedSegments.changed.add(() => {
+      this.specificationChanged.dispatch();
+    });
 
     this.displayState.selectedAlpha.restoreState(x[SELECTED_ALPHA_JSON_KEY]);
     this.displayState.notSelectedAlpha.restoreState(x[NOT_SELECTED_ALPHA_JSON_KEY]);
+    this.displayState.saturation.restoreState(x[SATURATION_JSON_KEY]);
     this.displayState.objectAlpha.restoreState(x[OBJECT_ALPHA_JSON_KEY]);
     this.displayState.hideSegmentZero.restoreState(x[HIDE_SEGMENT_ZERO_JSON_KEY]);
     this.displayState.objectToDataTransform.restoreState(x['transform']);
@@ -252,6 +260,15 @@ export class SegmentationUserLayer extends UserLayer {
       });
     }
 
+    verifyObjectProperty(x, 'highlights', y => {
+      if (y !== undefined) {
+        parseArray(y, value => {
+          let id = Uint64.parseString(String(value), 10);
+          this.displayState.highlightedSegments.add(id);
+        });
+      }
+    });
+
     verifyObjectProperty(x, 'clipBounds', y => {
       if (y === undefined) {
         return;
@@ -288,11 +305,16 @@ export class SegmentationUserLayer extends UserLayer {
     x['chunkedGraph'] = this.chunkedGraphUrl;
     x[SELECTED_ALPHA_JSON_KEY] = this.displayState.selectedAlpha.toJSON();
     x[NOT_SELECTED_ALPHA_JSON_KEY] = this.displayState.notSelectedAlpha.toJSON();
+    x[SATURATION_JSON_KEY] = this.displayState.saturation.toJSON();
     x[OBJECT_ALPHA_JSON_KEY] = this.displayState.objectAlpha.toJSON();
     x[HIDE_SEGMENT_ZERO_JSON_KEY] = this.displayState.hideSegmentZero.toJSON();
     let {rootSegments} = this.displayState;
     if (rootSegments.size > 0) {
       x['segments'] = rootSegments.toJSON();
+    }
+    let {highlightedSegments} = this.displayState;
+    if (highlightedSegments.size > 0) {
+      x['highlights'] = highlightedSegments.toJSON();
     }
     let {segmentEquivalences} = this.displayState;
     if (segmentEquivalences.size > 0 && !this.chunkedGraphUrl) { // Too many equivalences when using Chunked Graph
@@ -301,8 +323,8 @@ export class SegmentationUserLayer extends UserLayer {
     let {clipBounds} = this.displayState;
     if (clipBounds.value) {
       x['clipBounds'] = {
-        center: clipBounds.value.center,
-        size: clipBounds.value.size,
+        center: Array.from(clipBounds.value.center),
+        size: Array.from(clipBounds.value.size),
       };
     }
     x['transform'] = this.displayState.objectToDataTransform.toJSON();
@@ -349,6 +371,10 @@ export class SegmentationUserLayer extends UserLayer {
         this.selectSegment();
         break;
       }
+      case 'highlight': {
+        this.highlightSegment();
+        break;
+      }
       case 'merge-select-first': {
         this.mergeSelectFirst();
         break;
@@ -384,6 +410,19 @@ export class SegmentationUserLayer extends UserLayer {
         });
       } else {
         rootSegments.add(segment);
+      }
+    }
+  }
+
+  highlightSegment() {
+    let {segmentSelectionState} = this.displayState;
+    if (segmentSelectionState.hasSelectedSegment) {
+      let segment = segmentSelectionState.selectedSegment;
+      let {highlightedSegments} = this.displayState;
+      if (highlightedSegments.has(segment)) {
+        highlightedSegments.delete(segment);
+      } else {
+        highlightedSegments.add(segment);
       }
     }
   }
@@ -528,6 +567,7 @@ class SegmentationDropdown extends UserLayerDropdown {
       this.registerDisposer(new RangeWidget(this.layer.displayState.selectedAlpha));
   notSelectedAlphaWidget =
       this.registerDisposer(new RangeWidget(this.layer.displayState.notSelectedAlpha));
+  saturationWidget = this.registerDisposer(new RangeWidget(this.layer.displayState.saturation));
   objectAlphaWidget = this.registerDisposer(new RangeWidget(this.layer.displayState.objectAlpha));
   codeWidget: ShaderCodeWidget|undefined;
   chunkedGraphWidget: ChunkedGraphWidget|undefined;
@@ -535,14 +575,16 @@ class SegmentationDropdown extends UserLayerDropdown {
   constructor(public element: HTMLDivElement, public layer: SegmentationUserLayer) {
     super();
     element.classList.add('segmentation-dropdown');
-    let {selectedAlphaWidget, notSelectedAlphaWidget, objectAlphaWidget} = this;
+    let {selectedAlphaWidget, notSelectedAlphaWidget, saturationWidget, objectAlphaWidget} = this;
     selectedAlphaWidget.promptElement.textContent = 'Opacity (on)';
     notSelectedAlphaWidget.promptElement.textContent = 'Opacity (off)';
+    saturationWidget.promptElement.textContent = 'Saturation';
     objectAlphaWidget.promptElement.textContent = 'Opacity (3d)';
 
     if (this.layer.volumePath !== undefined) {
       element.appendChild(this.selectedAlphaWidget.element);
       element.appendChild(this.notSelectedAlphaWidget.element);
+      element.appendChild(this.saturationWidget.element);
     }
     this.registerDisposer(new ElementVisibilityFromTrackableBoolean(
         this.registerDisposer(new ComputedWatchableValue(
