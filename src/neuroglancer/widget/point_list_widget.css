@@ -53,3 +53,33 @@
   text-decoration: underline;
   cursor: pointer;
 }
+
+.neuroglancer-defaultsize-input-container {
+  line-height: 1.5em;
+  text-align: middle;
+}
+
+#neuroglancer-defaultsize-input {
+  padding: 1px;
+  height: 1em;
+  width: 5em;
+  margin: 2px;
+  float: right;
+}
+
+.neuroglancer-defaultcolor-input-container {
+  line-height: 1.5em;
+  text-align: middle;
+}
+
+#neuroglancer-defaultcolor-input {
+  padding: 1px;
+  height: 1em;
+  width: 1em;
+  margin: 2px;
+  float: right;
+}
+
+#neuroglancer-defaultcolor-input::-webkit-color-swatch-wrapper {
+  padding: 0px;
+}
