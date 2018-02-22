@@ -67,32 +67,69 @@ export function hsvToRgb(out: Float32Array, h: number, s: number, v: number): Fl
  *
  * Based on goog/color/color.js in the Google Closure library.
  */
-export function rgbToHsv(out: Float32Array, r: number, g: number, b:number): Float32Array {
+export function rgbToHsv(out: Float32Array, r: number, g: number, b: number): Float32Array {
+  const max = Math.max(Math.max(r, g), b);
+  const min = Math.min(Math.min(r, g), b);
+  out[2] = max;
+  if (min === max) {
+    out[0] = 0;
+    out[1] = 0;
+  } else {
+    const delta = (max - min);
+    out[1] = delta / max;
 
-    const max = Math.max(Math.max(r, g), b);
-    const min = Math.min(Math.min(r, g), b);
-    out[2] = max;
-    if (min === max) {
-      out[0] = 0;
-      out[1] = 0;
+    if (r === max) {
+      out[0] = (g - b) / delta;
+    } else if (g === max) {
+      out[0] = 2 + ((b - r) / delta);
     } else {
-      const delta = (max - min);
-      out[1] = delta / max;
-
-      if (r === max) {
-        out[0] = (g - b) / delta;
-      } else if (g === max) {
-        out[0] = 2 + ((b - r) / delta);
-      } else {
-        out[0] = 4 + ((r - g) / delta);
-      }
-      out[0] /= 6.0;
-      if (out[0] < 0.0) {
-        out[0] += 1.0;
-      }
-      if (out[0] > 1.0) {
-        out[0] -= 1.0;
-      }
+      out[0] = 4 + ((r - g) / delta);
     }
+    out[0] /= 6.0;
+    if (out[0] < 0.0) {
+      out[0] += 1.0;
+    }
+    if (out[0] > 1.0) {
+      out[0] -= 1.0;
+    }
+  }
+  return out;
+}
+
+/**
+ * Convert hex sixtet or shorthand triplet to RGB (in range [0,1]).
+ * Returns null if conversion fails
+ *
+ * Based on https://stackoverflow.com/questions/5623838/rgb-to-hex-and-hex-to-rgb
+ */
+export function hexToRgb(out: Float32Array, hex: string): Float32Array|null {
+  // Expand shorthand form (e.g. "03F") to full form (e.g. "0033FF")
+  const shorthandRegex = /^#?([a-f\d])([a-f\d])([a-f\d])$/i;
+  hex = hex.replace(shorthandRegex, function(_, r, g, b) {
+    return r + r + g + g + b + b;
+  });
+
+  const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
+  if (result) {
+    out[0] = parseInt(result[1], 16) / 255.0;
+    out[1] = parseInt(result[2], 16) / 255.0;
+    out[2] = parseInt(result[3], 16) / 255.0;
     return out;
-  };
+  }
+  return null;
+}
+
+/**
+ * Convert RGB (in range [0,1]) to 7 letter string (e.g. '#0033FF').
+ * Returns null if conversion fails
+ */
+export function rgbToHex(rgb: ArrayLike<number>): string|null {
+  if (rgb.length < 3) {
+    return null;
+  }
+
+  const r = Math.max(0, Math.min(Math.round(rgb[0] * 255), 255));
+  const g = Math.max(0, Math.min(Math.round(rgb[1] * 255), 255));
+  const b = Math.max(0, Math.min(Math.round(rgb[2] * 255), 255));
+  return '#' + ((1 << 24) + (r << 16) + (g << 8) + b).toString(16).slice(1);
+}

@@ -38,7 +38,7 @@ export class TrackableVec3 implements Trackable {
   constructor(private value_: vec3, public defaultValue: vec3) {}
   toJSON() {
     let {value_} = this;
-    if (value_ === this.defaultValue) {
+    if (vec3.equals(value_, this.defaultValue)) {
       return undefined;
     }
     return this.value_.toString();
@@ -47,10 +47,10 @@ export class TrackableVec3 implements Trackable {
     try {
       this.value = verify3dVec(x.split(','));
     } catch (e) {
-      this.value = this.defaultValue;
+      this.value = vec3.clone(this.defaultValue);
     }
   }
   reset() {
-    this.value = this.defaultValue;
+    this.value = vec3.clone(this.defaultValue);
   }
 }
