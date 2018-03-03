@@ -194,6 +194,13 @@ class LayerWidget extends RefCounted {
       }
     });
 
+    this.registerEventListener(element, 'contextmenu', (event: MouseEvent) => {
+      panel.selectedLayer.layer = layer;
+      panel.selectedLayer.visible = true;
+      event.stopPropagation();
+      event.preventDefault();
+    });
+
     element.draggable = true;
     this.registerEventListener(element, 'dragstart', (event: DragEvent) => {
       startLayerDrag(event, {manager: panel.manager, layers: [this.layer]});
