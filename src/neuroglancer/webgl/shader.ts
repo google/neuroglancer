@@ -401,3 +401,21 @@ export function shaderContainsIdentifiers(code: string, identifiers: Iterable<st
   }
   return found;
 }
+
+export function dependentShaderGetter(
+    refCounted: RefCounted, gl: GL,
+    defineShader: (builder: ShaderBuilder) => void): ((emitter: ShaderModule) => ShaderProgram) {
+  const shaders = new Map<ShaderModule, ShaderProgram>();
+  function getter(emitter: ShaderModule) {
+    let shader = shaders.get(emitter);
+    if (shader === undefined) {
+      const builder = new ShaderBuilder(gl);
+      builder.require(emitter);
+      defineShader(builder);
+      shader = refCounted.registerDisposer(builder.build());
+      shaders.set(emitter, shader);
+    }
+    return shader;
+  }
+  return getter;
+}

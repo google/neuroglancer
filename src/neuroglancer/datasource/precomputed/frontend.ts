@@ -14,6 +14,7 @@
  * limitations under the License.
  */
 
+import {AnnotationSource, makeDataBoundsBoundingBox} from 'neuroglancer/annotation';
 import {ChunkManager, WithParameters} from 'neuroglancer/chunk_manager/frontend';
 import {DataSource} from 'neuroglancer/datasource';
 import {MeshSourceParameters, VolumeChunkEncoding, VolumeChunkSourceParameters} from 'neuroglancer/datasource/precomputed/base';
@@ -115,6 +116,15 @@ export class MultiscaleVolumeChunkSource implements GenericMultiscaleVolumeChunk
             }
           }));
     });
+  }
+
+  getStaticAnnotations() {
+    const baseScale = this.scales[0];
+    const annotationSet =
+      new AnnotationSource(mat4.fromScaling(mat4.create(), baseScale.resolution));
+    annotationSet.readonly = true;
+    annotationSet.add(makeDataBoundsBoundingBox(baseScale.voxelOffset, baseScale.size));
+    return annotationSet;
   }
 }
 

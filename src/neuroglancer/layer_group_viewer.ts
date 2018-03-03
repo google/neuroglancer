@@ -21,7 +21,7 @@
 import debounce from 'lodash/debounce';
 import {DataPanelLayoutContainer, InputEventBindings as DataPanelInputEventBindings} from 'neuroglancer/data_panel_layout';
 import {DisplayContext} from 'neuroglancer/display_context';
-import {MouseSelectionState, RenderLayerRole} from 'neuroglancer/layer';
+import {MouseSelectionState, RenderLayerRole, SelectedLayerState} from 'neuroglancer/layer';
 import {LayerPanel} from 'neuroglancer/layer_panel';
 import {LayerListSpecification, LayerSubsetSpecification, ManagedUserLayerWithSpecification} from 'neuroglancer/layer_specification';
 import {LinkedOrientationState, LinkedSpatialPosition, LinkedZoomState, NavigationState, Pose, TrackableNavigationLink} from 'neuroglancer/navigation_state';
@@ -52,6 +52,7 @@ export interface LayerGroupViewerState {
   layerSpecification: Owned<LayerListSpecification>;
   inputEventBindings: DataPanelInputEventBindings;
   visibility: WatchableVisibilityPriority;
+  selectedLayer: SelectedLayerState;
   visibleLayerRoles: WatchableSet<RenderLayerRole>;
   crossSectionBackgroundColor: TrackableRGB;
 }
@@ -190,6 +191,9 @@ export class LayerGroupViewer extends RefCounted {
   get display() {
     return this.viewerState.display;
   }
+  get selectedLayer() {
+    return this.viewerState.selectedLayer;
+  }
   get layerManager() {
     return this.layerSpecification.layerManager;
   }
@@ -309,8 +313,9 @@ export class LayerGroupViewer extends RefCounted {
       return;
     }
     if (showLayerPanel && this.layerPanel === undefined) {
-      const layerPanel = this.layerPanel =
-          new LayerPanel(this.display, this.layerSpecification, this.viewerNavigationState);
+      const layerPanel = this.layerPanel = new LayerPanel(
+          this.display, this.layerSpecification, this.viewerNavigationState,
+          this.viewerState.selectedLayer);
       if (options.showViewerMenu) {
         layerPanel.registerDisposer(makeViewerMenu(layerPanel.element, this));
         layerPanel.element.title = 'Right click for options, drag to move/copy layer group.';

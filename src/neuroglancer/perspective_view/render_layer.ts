@@ -59,16 +59,11 @@ export class PerspectiveViewRenderLayer extends VisibilityTrackedRenderLayer {
     // Must be overridden by subclasses.
   }
 
-  /**
-   * Should be rendered as transparent.
-   */
-  get isTransparent() {
-    return false;
-  }
-
   isReady() {
     return true;
   }
 
+  isTransparent: boolean|undefined;
+  isAnnotation: boolean|undefined;
   backend: SharedObject|undefined;
 }

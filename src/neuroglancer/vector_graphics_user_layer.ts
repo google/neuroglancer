@@ -16,7 +16,7 @@
 
 import {ChunkManager} from 'neuroglancer/chunk_manager/frontend';
 import {DataSourceProvider, GetVectorGraphicsOptions} from 'neuroglancer/datasource';
-import {UserLayer, UserLayerDropdown} from 'neuroglancer/layer';
+import {UserLayer} from 'neuroglancer/layer';
 import {LayerListSpecification, registerLayerType} from 'neuroglancer/layer_specification';
 import {VectorGraphicsType} from 'neuroglancer/sliceview/vector_graphics/base';
 import {MultiscaleVectorGraphicsChunkSource, RenderLayer} from 'neuroglancer/sliceview/vector_graphics/frontend';
@@ -28,6 +28,7 @@ import {trackableVec3, TrackableVec3} from 'neuroglancer/trackable_vec3';
 import {vec3} from 'neuroglancer/util/geom';
 import {verifyEnumString, verifyFiniteFloat, verifyOptionalString} from 'neuroglancer/util/json';
 import {RangeWidget} from 'neuroglancer/widget/range';
+import {Tab} from 'neuroglancer/widget/tab_view';
 import {Vec3Widget} from 'neuroglancer/widget/vec3_entry_widget';
 
 require('./image_user_layer.css');
@@ -94,10 +95,14 @@ export class VectorGraphicsUserLayer extends UserLayer {
             });
       }
     }
+    this.tabs.add(
+        'rendering', {label: 'Rendering', order: -100, getter: () => new DisplayOptionsTab(this)});
+    this.tabs.default = 'rendering';
   }
 
   toJSON() {
-    let x: any = {'type': this.getLayerType()};
+    const x = super.toJSON();
+    x['type'] = this.getLayerType();
     x['source'] = this.vectorGraphicsPath;
     x['opacity'] = this.opacity.toJSON();
     x['linewidth'] = this.lineWidth.toJSON();
@@ -109,20 +114,17 @@ export class VectorGraphicsUserLayer extends UserLayer {
     let typeStr = VectorGraphicsType[this.vectorGraphicsLayerType];
     return typeStr.toLowerCase();
   }
-
-  makeDropdown(element: HTMLDivElement) {
-    return new VectorGraphicsDropDown(element, this);
-  }
 }
 
-class VectorGraphicsDropDown extends UserLayerDropdown {
+class DisplayOptionsTab extends Tab {
   opacityWidget = this.registerDisposer(new RangeWidget(this.layer.opacity));
   lineWidthWidget =
       this.registerDisposer(new RangeWidget(this.layer.lineWidth, {min: 0, max: 50, step: 1}));
   colorWidget = this.registerDisposer(new VectorGraphicsColorWidget(this.layer.color));
 
-  constructor(public element: HTMLDivElement, public layer: VectorGraphicsUserLayer) {
+  constructor(public layer: VectorGraphicsUserLayer) {
     super();
+    const {element} = this;
     element.classList.add('image-dropdown');
     let {opacityWidget, lineWidthWidget, colorWidget} = this;
     let topRow = document.createElement('div');

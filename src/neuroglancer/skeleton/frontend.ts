@@ -104,7 +104,8 @@ void emitDefault() {
   }
 
   beginLayer(
-      gl: GL, shader: ShaderProgram, renderContext: SliceViewPanelRenderContext,
+      gl: GL, shader: ShaderProgram,
+      renderContext: SliceViewPanelRenderContext|PerspectiveViewRenderContext,
       objectToDataMatrix: mat4) {
     let {dataToDevice} = renderContext;
     let mat = mat4.multiply(tempMat2, dataToDevice, objectToDataMatrix);
@@ -234,8 +235,8 @@ export class SkeletonLayer extends RefCounted {
   }
 
   draw(
-      renderContext: SliceViewPanelRenderContext, layer: RenderLayer, renderHelper: RenderHelper,
-      lineWidth?: number) {
+      renderContext: SliceViewPanelRenderContext|PerspectiveViewRenderContext, layer: RenderLayer,
+      renderHelper: RenderHelper, lineWidth?: number) {
     if (lineWidth === undefined) {
       lineWidth = renderContext.emitColor ? 1 : 5;
     }

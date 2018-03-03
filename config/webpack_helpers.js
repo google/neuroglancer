@@ -308,6 +308,8 @@ function getViewerConfig(options) {
     'neuroglancer/worker_rpc_context',
     'neuroglancer/chunk_manager/backend',
     'neuroglancer/sliceview/backend',
+    'neuroglancer/perspective_view/backend',
+    'neuroglancer/annotation/backend',
     ...backendDataSourceModules,
     ...extraChunkWorkerModules,
   ];

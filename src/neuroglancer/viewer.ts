@@ -22,16 +22,20 @@ import {DataSourceProvider} from 'neuroglancer/datasource';
 import {getDefaultDataSourceProvider} from 'neuroglancer/datasource/default_provider';
 import {DisplayContext} from 'neuroglancer/display_context';
 import {InputEventBindingHelpDialog} from 'neuroglancer/help/input_event_bindings';
-import {allRenderLayerRoles, LayerManager, LayerSelectedValues, MouseSelectionState} from 'neuroglancer/layer';
+import {allRenderLayerRoles, LayerManager, LayerSelectedValues, MouseSelectionState, RenderLayerRole, SelectedLayerState} from 'neuroglancer/layer';
 import {LayerDialog} from 'neuroglancer/layer_dialog';
 import {RootLayoutContainer} from 'neuroglancer/layer_groups_layout';
 import {TopLevelLayerListSpecification} from 'neuroglancer/layer_specification';
 import {NavigationState, Pose} from 'neuroglancer/navigation_state';
 import {overlaysOpen} from 'neuroglancer/overlay';
+import {StatusMessage} from 'neuroglancer/status';
 import {ElementVisibilityFromTrackableBoolean, TrackableBoolean, TrackableBooleanCheckbox} from 'neuroglancer/trackable_boolean';
 import {makeDerivedWatchableValue, TrackableValue, WatchableValueInterface} from 'neuroglancer/trackable_value';
 import {ContextMenu} from 'neuroglancer/ui/context_menu';
+import {LayerInfoPanelContainer} from 'neuroglancer/ui/layer_side_panel';
+import {MouseSelectionStateTooltipManager} from 'neuroglancer/ui/mouse_selection_state_tooltip';
 import {setupPositionDropHandlers} from 'neuroglancer/ui/position_drag_and_drop';
+import {StateEditorDialog} from 'neuroglancer/ui/state_editor';
 import {AutomaticallyFocusedElement} from 'neuroglancer/util/automatic_focus';
 import {TrackableRGB} from 'neuroglancer/util/color';
 import {Borrowed, Owned, RefCounted} from 'neuroglancer/util/disposable';
@@ -44,6 +48,7 @@ import {CompoundTrackable} from 'neuroglancer/util/trackable';
 import {ViewerState, VisibilityPrioritySpecification} from 'neuroglancer/viewer_state';
 import {WatchableVisibilityPriority} from 'neuroglancer/visibility_priority/frontend';
 import {GL} from 'neuroglancer/webgl/context';
+import {AnnotationToolStatusWidget} from 'neuroglancer/widget/annotation_tool_status';
 import {NumberInputWidget} from 'neuroglancer/widget/number_input_widget';
 import {MousePositionWidget, PositionWidget, VoxelSizeWidget} from 'neuroglancer/widget/position_widget';
 import {makeTextIconButton} from 'neuroglancer/widget/text_icon_button';
@@ -77,31 +82,39 @@ export class InputEventBindings extends DataPanelInputEventBindings {
   global = new EventActionMap();
 }
 
-const viewerOptionKeys: (keyof ViewerUIOptions)[] = [
-  'showUIControls',
+const viewerUiControlOptionKeys: (keyof ViewerUIControlConfiguration)[] = [
   'showHelpButton',
+  'showEditStateButton',
   'showLayerPanel',
   'showLocation',
-  'showPanelBorders',
+  'showAnnotationToolStatus',
 ];
 
-export class ViewerUIConfiguration {
+const viewerOptionKeys: (keyof ViewerUIOptions)[] =
+    ['showUIControls', 'showPanelBorders', ...viewerUiControlOptionKeys];
+
+export class ViewerUIControlConfiguration {
+  showHelpButton = new TrackableBoolean(true);
+  showEditStateButton = new TrackableBoolean(true);
+  showLayerPanel = new TrackableBoolean(true);
+  showLocation = new TrackableBoolean(true);
+  showAnnotationToolStatus = new TrackableBoolean(true);
+}
+
+export class ViewerUIConfiguration extends ViewerUIControlConfiguration {
   /**
    * If set to false, all UI controls (controlled individually by the options below) are disabled.
    */
   showUIControls = new TrackableBoolean(true);
-
-  showHelpButton = new TrackableBoolean(true);
-  showLayerPanel = new TrackableBoolean(true);
-  showLocation = new TrackableBoolean(true);
   showPanelBorders = new TrackableBoolean(true);
+}
 
-  set(options: Partial<ViewerUIOptions>) {
-    for (const key of viewerOptionKeys) {
-      const value = options[key];
-      if (value !== undefined) {
-        this[key].value = value;
-      }
+function setViewerUiConfiguration(
+    config: ViewerUIConfiguration, options: Partial<ViewerUIOptions>) {
+  for (const key of viewerOptionKeys) {
+    const value = options[key];
+    if (value !== undefined) {
+      config[key].value = value;
     }
   }
 }
@@ -109,9 +122,11 @@ export class ViewerUIConfiguration {
 interface ViewerUIOptions {
   showUIControls: boolean;
   showHelpButton: boolean;
+  showEditStateButton: boolean;
   showLayerPanel: boolean;
   showLocation: boolean;
   showPanelBorders: boolean;
+  showAnnotationToolStatus: boolean;
 }
 
 export interface ViewerOptions extends ViewerUIOptions, VisibilityPrioritySpecification {
@@ -153,6 +168,7 @@ function makeViewerContextMenu(viewer: Viewer) {
   addCheckbox('Show axis lines', viewer.showAxisLines);
   addCheckbox('Show scale bar', viewer.showScaleBar);
   addCheckbox('Show cross sections in 3-d', viewer.showPerspectiveSliceViews);
+  addCheckbox('Show default annotations', viewer.showDefaultAnnotations);
   return menu;
 }
 
@@ -161,10 +177,12 @@ export class Viewer extends RefCounted implements ViewerState {
   perspectiveNavigationState = new NavigationState(new Pose(this.navigationState.position), 1);
   mouseState = new MouseSelectionState();
   layerManager = this.registerDisposer(new LayerManager());
+  selectedLayer = this.registerDisposer(new SelectedLayerState(this.layerManager.addRef()));
   showAxisLines = new TrackableBoolean(true, true);
   showScaleBar = new TrackableBoolean(true, true);
   showPerspectiveSliceViews = new TrackableBoolean(true, true);
   visibleLayerRoles = allRenderLayerRoles();
+  showDefaultAnnotations = new TrackableBoolean(true, true);
   crossSectionBackgroundColor = new TrackableRGB(vec3.fromValues(0.5, 0.5, 0.5));
   contextMenu: ContextMenu;
 
@@ -192,12 +210,24 @@ export class Viewer extends RefCounted implements ViewerState {
 
   uiConfiguration: ViewerUIConfiguration;
 
+  private makeUiControlVisibilityState(key: keyof ViewerUIOptions) {
+    const showUIControls = this.uiConfiguration.showUIControls;
+    const option = this.uiConfiguration[key];
+    return this.registerDisposer(
+        makeDerivedWatchableValue((a, b) => a && b, showUIControls, option));
+  }
+
   /**
    * Logical and of each of the above values with the value of showUIControls.
    */
-  showHelpButtonEffective: WatchableValueInterface<boolean>;
-  showLayerPanelEffective: WatchableValueInterface<boolean>;
-  showLocationEffective: WatchableValueInterface<boolean>;
+  uiControlVisibility:
+      {[key in keyof ViewerUIControlConfiguration]: WatchableValueInterface<boolean>} = <any>{};
+
+  // showHelpButtonEffective: WatchableValueInterface<boolean>;
+  // showEditStateButtonEffective: WatchableValueInterface<boolean>;
+  // showLayerPanelEffective: WatchableValueInterface<boolean>;
+  // showLocationEffective: WatchableValueInterface<boolean>;
+  // showAnnotationToolStatusEffective: WatchableValueInterface<boolean>;
 
   showLayerDialog: boolean;
   resetStateWhenEmpty: boolean;
@@ -234,7 +264,7 @@ export class Viewer extends RefCounted implements ViewerState {
 
     this.dataContext = this.registerDisposer(dataContext);
 
-    uiConfiguration.set(options);
+    setViewerUiConfiguration(uiConfiguration, options);
 
     const optionsWithDefaults = {...defaultViewerOptions, ...options};
     const {
@@ -242,21 +272,9 @@ export class Viewer extends RefCounted implements ViewerState {
       showLayerDialog,
     } = optionsWithDefaults;
 
-    this.showHelpButtonEffective = this.registerDisposer(makeDerivedWatchableValue(
-        (a, b) => a && b, this.uiConfiguration.showUIControls,
-        this.uiConfiguration.showHelpButton));
-
-    this.showLayerPanelEffective = this.registerDisposer(makeDerivedWatchableValue(
-        (a, b) => a && b, this.uiConfiguration.showUIControls,
-        this.uiConfiguration.showLayerPanel));
-
-    this.showLocationEffective = this.registerDisposer(makeDerivedWatchableValue(
-        (a, b) => a && b, this.uiConfiguration.showUIControls, this.uiConfiguration.showLocation));
-
-
-    this.showHelpButtonEffective.changed.add(() => this.display.onResize());
-    this.showLocationEffective.changed.add(() => this.display.onResize());
-    this.showLayerPanelEffective.changed.add(() => this.display.onResize());
+    for (const key of viewerUiControlOptionKeys) {
+      this.uiControlVisibility[key] = this.makeUiControlVisibilityState(key);
+    }
     this.registerDisposer(this.uiConfiguration.showPanelBorders.changed.add(() => {
       this.updateShowBorders();
       this.display.onResize();
@@ -276,11 +294,20 @@ export class Viewer extends RefCounted implements ViewerState {
       this.onUpdateDisplayFinished();
     }));
 
+    this.showDefaultAnnotations.changed.add(() => {
+      if (this.showDefaultAnnotations.value) {
+        this.visibleLayerRoles.add(RenderLayerRole.DEFAULT_ANNOTATION);
+      } else {
+        this.visibleLayerRoles.delete(RenderLayerRole.DEFAULT_ANNOTATION);
+      }
+    });
+
     const {state} = this;
     state.add('layers', this.layerSpecification);
     state.add('navigation', this.navigationState);
     state.add('showAxisLines', this.showAxisLines);
     state.add('showScaleBar', this.showScaleBar);
+    state.add('showDefaultAnnotations', this.showDefaultAnnotations);
 
     state.add('perspectiveOrientation', this.perspectiveNavigationState.pose.orientation);
     state.add('perspectiveZoom', this.perspectiveNavigationState.zoomFactor);
@@ -290,6 +317,7 @@ export class Viewer extends RefCounted implements ViewerState {
         'systemMemoryLimit', this.dataContext.chunkQueueManager.capacities.systemMemory.sizeLimit);
     state.add(
         'concurrentDownloads', this.dataContext.chunkQueueManager.capacities.download.itemLimit);
+    state.add('selectedLayer', this.selectedLayer);
     state.add('crossSectionBackgroundColor', this.crossSectionBackgroundColor);
 
     this.registerDisposer(this.navigationState.changed.add(() => {
@@ -302,6 +330,14 @@ export class Viewer extends RefCounted implements ViewerState {
         this.layerSpecification.voxelCoordinatesSet.add((voxelCoordinates: vec3) => {
           this.navigationState.position.setVoxelCoordinates(voxelCoordinates);
         }));
+
+    this.registerDisposer(
+        this.layerSpecification.spatialCoordinatesSet.add((spatialCoordinates: vec3) => {
+          const {position} = this.navigationState;
+          vec3.copy(position.spatialCoordinates, spatialCoordinates);
+          position.markSpatialCoordinatesChanged();
+        }));
+
 
     // Debounce this call to ensure that a transient state does not result in the layer dialog being
     // shown.
@@ -340,6 +376,9 @@ export class Viewer extends RefCounted implements ViewerState {
     this.registerEventActionBindings();
 
     this.registerDisposer(setupPositionDropHandlers(element, this.navigationState.position));
+
+    this.registerDisposer(new MouseSelectionStateTooltipManager(
+        this.mouseState, this.layerManager, this.navigationState.voxelSize));
   }
 
   private updateShowBorders() {
@@ -371,12 +410,12 @@ export class Viewer extends RefCounted implements ViewerState {
     const voxelSizeWidget = this.registerDisposer(
         new VoxelSizeWidget(document.createElement('div'), this.navigationState.voxelSize));
     this.registerDisposer(new ElementVisibilityFromTrackableBoolean(
-        this.showLocationEffective, voxelSizeWidget.element));
+        this.uiControlVisibility.showLocation, voxelSizeWidget.element));
     topRow.appendChild(voxelSizeWidget.element);
 
     const positionWidget = this.registerDisposer(new PositionWidget(this.navigationState.position));
     this.registerDisposer(new ElementVisibilityFromTrackableBoolean(
-        this.showLocationEffective, positionWidget.element));
+        this.uiControlVisibility.showLocation, positionWidget.element));
     topRow.appendChild(positionWidget.element);
 
     const mousePositionWidget = this.registerDisposer(new MousePositionWidget(
@@ -384,27 +423,56 @@ export class Viewer extends RefCounted implements ViewerState {
     mousePositionWidget.element.style.flex = '1';
     mousePositionWidget.element.style.alignSelf = 'center';
     this.registerDisposer(new ElementVisibilityFromTrackableBoolean(
-        this.showLocationEffective, mousePositionWidget.element));
+        this.uiControlVisibility.showLocation, mousePositionWidget.element));
     topRow.appendChild(mousePositionWidget.element);
 
+    const annotationToolStatus =
+        this.registerDisposer(new AnnotationToolStatusWidget(this.selectedLayer));
+    topRow.appendChild(annotationToolStatus.element);
+    this.registerDisposer(new ElementVisibilityFromTrackableBoolean(
+        this.uiControlVisibility.showAnnotationToolStatus, annotationToolStatus.element));
 
-    const button = makeTextIconButton('?', 'Help');
-    this.registerEventListener(button, 'click', () => {
-      this.showHelpDialog();
-    });
-    this.registerDisposer(
-        new ElementVisibilityFromTrackableBoolean(this.showHelpButtonEffective, button));
+    {
+      const button = makeTextIconButton('{}', 'Edit JSON state');
+      this.registerEventListener(button, 'click', () => {
+        this.editJsonState();
+      });
+      this.registerDisposer(new ElementVisibilityFromTrackableBoolean(
+          this.uiControlVisibility.showEditStateButton, button));
+      topRow.appendChild(button);
+    }
+
+
+    {
+      const button = makeTextIconButton('?', 'Help');
+      this.registerEventListener(button, 'click', () => {
+        this.showHelpDialog();
+      });
+      this.registerDisposer(new ElementVisibilityFromTrackableBoolean(
+          this.uiControlVisibility.showHelpButton, button));
+      topRow.appendChild(button);
+    }
 
     this.registerDisposer(new ElementVisibilityFromTrackableBoolean(
         makeDerivedWatchableValue(
-            (a, b) => a && b, this.showHelpButtonEffective, this.showLocationEffective),
+            (...values: boolean[]) => values.reduce((a, b) => a || b, false),
+            this.uiControlVisibility.showHelpButton, this.uiControlVisibility.showEditStateButton,
+            this.uiControlVisibility.showLocation,
+            this.uiControlVisibility.showAnnotationToolStatus),
         topRow));
-    topRow.appendChild(button);
 
     gridContainer.appendChild(topRow);
 
+    const layoutAndSidePanel = document.createElement('div');
+    layoutAndSidePanel.style.display = 'flex';
+    layoutAndSidePanel.style.flex = '1';
+    layoutAndSidePanel.style.flexDirection = 'row';
     this.layout = this.registerDisposer(new RootLayoutContainer(this, '4panel'));
-    gridContainer.appendChild(this.layout.element);
+    layoutAndSidePanel.appendChild(this.layout.element);
+    layoutAndSidePanel.appendChild(
+        this.registerDisposer(new LayerInfoPanelContainer(this.selectedLayer.addRef())).element);
+    this.registerDisposer(this.selectedLayer.changed.add(() => this.display.onResize()));
+    gridContainer.appendChild(layoutAndSidePanel);
     this.display.onResize();
 
     const updateVisibility = () => {
@@ -441,7 +509,7 @@ export class Viewer extends RefCounted implements ViewerState {
       });
     }
 
-    for (const action of ['select', 'annotate', ]) {
+    for (const action of ['select']) {
       this.bindAction(action, () => {
         this.mouseState.updateUnconditionally();
         this.layerManager.invokeAction(action);
@@ -459,10 +527,35 @@ export class Viewer extends RefCounted implements ViewerState {
           layer.setVisible(!layer.visible);
         }
       });
+      this.bindAction(`select-layer-${i}`, () => {
+        const layerIndex = i - 1;
+        const layers = this.layerManager.managedLayers;
+        if (layerIndex < layers.length) {
+          const layer = layers[layerIndex];
+          this.selectedLayer.layer = layer;
+          this.selectedLayer.visible = true;
+        }
+      });
     }
+
+    this.bindAction('annotate', () => {
+      const selectedLayer = this.selectedLayer.layer;
+      if (selectedLayer === undefined) {
+        StatusMessage.showTemporaryMessage('The annotate command requires a layer to be selected.');
+        return;
+      }
+      const userLayer = selectedLayer.layer;
+      if (userLayer === null || userLayer.tool.value === undefined) {
+        StatusMessage.showTemporaryMessage(`The selected layer (${
+            JSON.stringify(selectedLayer.name)}) does not have an active annotation tool.`);
+        return;
+      }
+      userLayer.tool.value.trigger(this.mouseState);
+    });
 
     this.bindAction('toggle-axis-lines', () => this.showAxisLines.toggle());
     this.bindAction('toggle-scale-bar', () => this.showScaleBar.toggle());
+    this.bindAction('toggle-default-annotations', () => this.showDefaultAnnotations.toggle());
     this.bindAction('toggle-show-slices', () => this.showPerspectiveSliceViews.toggle());
   }
 
@@ -473,6 +566,10 @@ export class Viewer extends RefCounted implements ViewerState {
       ['Slice View', inputEventBindings.sliceView],
       ['Perspective View', inputEventBindings.perspectiveView],
     ]);
+  }
+
+  editJsonState() {
+    new StateEditorDialog(this);
   }
 
   get gl() {

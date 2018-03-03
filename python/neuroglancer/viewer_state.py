@@ -221,10 +221,102 @@ class SegmentationLayer(Layer):
         return c
 
 
+class AnnotationBase(JsonObjectWrapper):
+    __slots__ = ()
+
+    id = wrapped_property('id', optional(text_type))  # pylint: disable=invalid-name
+    type = wrapped_property('type', text_type)
+    description = wrapped_property('description', optional(text_type))
+
+
+@export
+class PointAnnotation(AnnotationBase):
+    __slots__ = ()
+
+    def __init__(self, *args, **kwargs):
+        super(PointAnnotation, self).__init__(*args, type='point', **kwargs)
+
+    point = wrapped_property('point', array_wrapper(np.float32, 3))
+
+
+@export
+class LineAnnotation(AnnotationBase):
+    __slots__ = ()
+
+    def __init__(self, *args, **kwargs):
+        super(LineAnnotation, self).__init__(*args, type='line', **kwargs)
+
+    point_a = pointA = wrapped_property('pointA', array_wrapper(np.float32, 3))
+    point_b = pointB = wrapped_property('pointB', array_wrapper(np.float32, 3))
+
+
+@export
+class AxisAlignedBoundingBoxAnnotation(AnnotationBase):
+    __slots__ = ()
+
+    def __init__(self, *args, **kwargs):
+        super(AxisAlignedBoundingBoxAnnotation, self).__init__(
+            *args, type='axis_aligned_bounding_box', **kwargs)
+
+    point_a = pointA = wrapped_property('pointA', array_wrapper(np.float32, 3))
+    point_b = pointB = wrapped_property('pointB', array_wrapper(np.float32, 3))
+
+
+@export
+class EllipsoidAnnotation(AnnotationBase):
+    __slots__ = ()
+
+    def __init__(self, *args, **kwargs):
+        super(EllipsoidAnnotation, self).__init__(*args, type='ellipsoid', **kwargs)
+
+    center = wrapped_property('center', array_wrapper(np.float32, 3))
+    radii = wrapped_property('radii', array_wrapper(np.float32, 3))
+
+
+annotation_types = {
+    'point': PointAnnotation,
+    'line': LineAnnotation,
+    'axis_aligned_bounding_box': AxisAlignedBoundingBoxAnnotation,
+    'ellipsoid': EllipsoidAnnotation,
+}
+
+
+def annotation(obj, _readonly=False):
+    if isinstance(obj, AnnotationBase):
+        obj = obj.to_json()
+    elif not isinstance(obj, dict):
+        raise TypeError
+    t = obj.get('type')
+    return annotation_types[t](obj, _readonly=_readonly)
+
+
+annotation.supports_readonly = True
+
+
+@export
+class AnnotationLayer(Layer):
+    __slots__ = ()
+
+    def __init__(self, *args, **kwargs):
+        super(AnnotationLayer, self).__init__(*args, type='annotation', **kwargs)
+
+    source = wrapped_property('source', optional(volume_source))
+    annotation_color = annotationColor = wrapped_property('annotationColor', optional(text_type))
+    voxel_size = voxelSize = wrapped_property('voxelSize', optional(array_wrapper(np.float32, 3)))
+    annotations = wrapped_property('annotations', optional(typed_list(annotation)))
+
+    @staticmethod
+    def interpolate(a, b, t):
+        del b
+        del t
+        return a
+
+
 layer_types = {
     'image': ImageLayer,
     'segmentation': SegmentationLayer,
     'pointAnnotation': PointAnnotationLayer,
+    'annotation': AnnotationLayer,
 }
 
 
@@ -651,6 +743,7 @@ class ViewerState(JsonObjectWrapper):
     show_slices = showSlices = wrapped_property('showSlices', optional(bool, True))
     show_axis_lines = showAxisLines = wrapped_property('showAxisLines', optional(bool, True))
     show_scale_bar = showScaleBar = wrapped_property('showScaleBar', optional(bool, True))
+    show_default_annotations = showDefaultAnnotations = wrapped_property('showDefaultAnnotations', optional(bool, True))
     gpu_memory_limit = gpuMemoryLimit = wrapped_property('gpuMemoryLimit', optional(int))
     system_memory_limit = systemMemoryLimit = wrapped_property('systemMemoryLimit', optional(int))
     concurrent_downloads = concurrentDownloads = wrapped_property('concurrentDownloads', optional(int))

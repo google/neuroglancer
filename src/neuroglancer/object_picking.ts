@@ -17,6 +17,8 @@
 import {MouseSelectionState, RenderLayer} from 'neuroglancer/layer';
 import {Uint64} from 'neuroglancer/util/uint64';
 
+const DEBUG_PICKING = false;
+
 export class PickIDManager {
   /**
    * This specifies the render layer corresponding to each registered entry.
@@ -79,9 +81,14 @@ export class PickIDManager {
     const pickedRenderLayer = mouseState.pickedRenderLayer = renderLayers[lower];
     const valuesOffset = lower * 3;
     const pickedOffset = mouseState.pickedOffset = pickID - values[valuesOffset];
+    if (DEBUG_PICKING) {
+      console.log(`Looking up pick ID ${pickID}: renderLayer`, pickedRenderLayer, `offset=${pickedOffset}`);
+    }
     let {pickedValue} = mouseState;
     pickedValue.low = values[valuesOffset + 1];
     pickedValue.high = values[valuesOffset + 2];
+    mouseState.pickedAnnotationId = undefined;
+    mouseState.pickedAnnotationLayer = undefined;
     if (pickedRenderLayer !== null) {
       pickedRenderLayer.updateMouseState(mouseState, pickedValue, pickedOffset, this.pickData[lower]);
     }

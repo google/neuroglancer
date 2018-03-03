@@ -72,6 +72,19 @@ export function pickLengthUnit(lengthInNanometers: number) {
   return unit;
 }
 
+export function pickVolumeUnit(volumeInCubicNanometers: number) {
+  const numAllowedUnits = ALLOWED_UNITS.length;
+  let unit = ALLOWED_UNITS[numAllowedUnits - 1];
+  for (let i = 0; i < numAllowedUnits; ++i) {
+    const allowedUnit = ALLOWED_UNITS[i];
+    if (volumeInCubicNanometers >= Math.pow(allowedUnit.lengthInNanometers, 3)) {
+      unit = allowedUnit;
+      break;
+    }
+  }
+  return unit;
+}
+
 export class ScaleBarDimensions {
   /**
    * Allowed significand values.  1 is not included, but is always considered

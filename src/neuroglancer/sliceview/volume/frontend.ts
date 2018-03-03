@@ -14,6 +14,7 @@
  * limitations under the License.
  */
 
+import {AnnotationSource} from 'neuroglancer/annotation';
 import {ChunkManager} from 'neuroglancer/chunk_manager/frontend';
 import {MeshSource} from 'neuroglancer/mesh/frontend';
 import {SkeletonSource} from 'neuroglancer/skeleton/frontend';
@@ -191,4 +192,6 @@ export interface MultiscaleVolumeChunkSource extends MultiscaleSliceViewChunkSou
    * This only makes sense if volumeType === VolumeType.SEGMENTATION.
    */
   getMeshSource: () => Promise<MeshSource|SkeletonSource|null>| MeshSource | SkeletonSource | null;
+
+  getStaticAnnotations?: () => AnnotationSource;
 }

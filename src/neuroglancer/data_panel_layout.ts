@@ -17,7 +17,7 @@
 import debounce from 'lodash/debounce';
 import {ChunkManager} from 'neuroglancer/chunk_manager/frontend';
 import {DisplayContext} from 'neuroglancer/display_context';
-import {LayerManager, MouseSelectionState, RenderLayerRole} from 'neuroglancer/layer';
+import {LayerManager, MouseSelectionState, RenderLayerRole, SelectedLayerState} from 'neuroglancer/layer';
 import * as L from 'neuroglancer/layout';
 import {LinkedOrientationState, LinkedSpatialPosition, LinkedZoomState, NavigationState, OrientationState, Pose} from 'neuroglancer/navigation_state';
 import {PerspectivePanel} from 'neuroglancer/perspective_view/panel';
@@ -58,6 +58,7 @@ export interface ViewerUIState extends SliceViewViewerState, VisibilityPriorityS
   showAxisLines: TrackableBoolean;
   showScaleBar: TrackableBoolean;
   visibleLayerRoles: WatchableSet<RenderLayerRole>;
+  selectedLayer: SelectedLayerState;
   inputEventBindings: InputEventBindings;
   crossSectionBackgroundColor: TrackableRGB;
 }
@@ -109,6 +110,7 @@ export function getCommonViewerState(viewer: ViewerUIState) {
     layerManager: viewer.layerManager,
     showAxisLines: viewer.showAxisLines,
     visibleLayerRoles: viewer.visibleLayerRoles,
+    selectedLayer: viewer.selectedLayer,
     visibility: viewer.visibility,
   };
 }
@@ -516,10 +518,10 @@ export class DataPanelLayoutSpecification extends RefCounted implements Trackabl
   toJSON() {
     const {type, crossSections} = this;
     if (crossSections.size === 0) {
-      return type;
+      return type.toJSON();
     }
     return {
-      type,
+      type: type.toJSON(),
       crossSections,
     };
   }

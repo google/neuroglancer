@@ -81,6 +81,8 @@ export interface SliceViewPanelRenderContext {
    * Height of GL viewport in pixels.
    */
   viewportHeight: number;
+
+  sliceView: SliceView;
 }
 
 export class SliceViewPanelRenderLayer extends VisibilityTrackedRenderLayer {
@@ -233,6 +235,7 @@ export class SliceViewPanel extends RenderedDataPanel {
       emitPickID: false,
       viewportWidth: width,
       viewportHeight: height,
+      sliceView,
     };
     gl.enable(GL_BLEND);
     gl.blendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);

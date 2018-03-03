@@ -87,6 +87,15 @@ export function makeDerivedWatchableValue<U, T0>(
 export function makeDerivedWatchableValue<U, T0, T1>(
     f: (v0: T0, v1: T1) => U, w0: WatchableValueInterface<T0>,
     w1: WatchableValueInterface<T1>): DerivedWatchableValue<U>;
+export function makeDerivedWatchableValue<U, T0, T1, T2>(
+    f: (v0: T0, v1: T1, v2: T2) => U, w0: WatchableValueInterface<T0>,
+    w1: WatchableValueInterface<T1>, w2: WatchableValueInterface<T2>): DerivedWatchableValue<U>;
+export function makeDerivedWatchableValue<U, T0, T1, T2, T3>(
+    f: (v0: T0, v1: T1, v2: T2, v3: T3) => U, w0: WatchableValueInterface<T0>,
+    w1: WatchableValueInterface<T1>, w2: WatchableValueInterface<T2>,
+    w3: WatchableValueInterface<T3>): DerivedWatchableValue<U>;
+export function makeDerivedWatchableValue<U, T>(
+    f: (...values: T[]) => U, ...ws: WatchableValueInterface<T>[]): DerivedWatchableValue<U>;
 export function makeDerivedWatchableValue<U>(
     f: (...v: any[]) => U, ...ws: WatchableValueInterface<any>[]) {
   return new DerivedWatchableValue(f, ws);

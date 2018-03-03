@@ -15,16 +15,15 @@
  */
 
 import {DisplayContext} from 'neuroglancer/display_context';
-import {ManagedUserLayer, UserLayer, UserLayerDropdown} from 'neuroglancer/layer';
+import {ManagedUserLayer, SelectedLayerState,} from 'neuroglancer/layer';
 import {LayerDialog} from 'neuroglancer/layer_dialog';
 import {LinkedViewerNavigationState} from 'neuroglancer/layer_group_viewer';
 import {LayerListSpecification, ManagedUserLayerWithSpecification} from 'neuroglancer/layer_specification';
 import {NavigationLinkType} from 'neuroglancer/navigation_state';
-import {ContextMenu} from 'neuroglancer/ui/context_menu';
 import {DropLayers, endLayerDrag, getDropLayers, getLayerDropEffect, startLayerDrag} from 'neuroglancer/ui/layer_drag_and_drop';
 import {animationFrameDebounce} from 'neuroglancer/util/animation_frame_debounce';
 import {RefCounted, registerEventListener} from 'neuroglancer/util/disposable';
-import {removeChildren, removeFromParent} from 'neuroglancer/util/dom';
+import {removeFromParent} from 'neuroglancer/util/dom';
 import {getDropEffect, preventDrag, setDropEffect} from 'neuroglancer/util/drag_and_drop';
 import {makeCloseButton} from 'neuroglancer/widget/close_button';
 import {PositionWidget} from 'neuroglancer/widget/position_widget';
@@ -84,7 +83,6 @@ function registerDropHandlers(
       if (targetLayer !== undefined) {
         newIndex = panel.manager.layerManager.managedLayers.indexOf(targetLayer);
       }
-
       for (const newLayer of dropLayers.layers.keys()) {
         panel.manager.add(newLayer, newIndex);
       }
@@ -165,14 +163,11 @@ class LayerWidget extends RefCounted {
   layerNumberElement: HTMLSpanElement;
   labelElement: HTMLSpanElement;
   valueElement: HTMLSpanElement;
-  dropdown: UserLayerDropdown|undefined;
-  userLayer: UserLayer|null;
-  contextMenu: ContextMenu;
 
   constructor(public layer: ManagedUserLayerWithSpecification, public panel: LayerPanel) {
     super();
     let element = this.element = document.createElement('div');
-    element.title = 'Right click for layer options, drag to move/copy.';
+    element.title = 'Control+click for layer options, drag to move/copy.';
     element.className = 'neuroglancer-layer-item neuroglancer-noselect';
     let labelElement = this.labelElement = document.createElement('span');
     labelElement.className = 'neuroglancer-layer-item-label';
@@ -190,21 +185,12 @@ class LayerWidget extends RefCounted {
     element.appendChild(labelElement);
     element.appendChild(valueElement);
     element.appendChild(closeElement);
-    this.registerEventListener(element, 'click', (_event: MouseEvent) => {
-      layer.setVisible(!layer.visible);
-    });
-
-    const contextMenu = this.contextMenu =
-      this.registerDisposer(new ContextMenu(element));
-    contextMenu.element.classList.add('neuroglancer-layer-dropdown');
-    contextMenu.opened.add(() => {
-      if (this.dropdown !== undefined) {
-        this.dropdown.onShow();
-      }
-    });
-    contextMenu.closed.add(() => {
-      if (this.dropdown !== undefined) {
-        this.dropdown.onHide();
+    this.registerEventListener(element, 'click', (event: MouseEvent) => {
+      if (event.ctrlKey) {
+        panel.selectedLayer.layer = layer;
+        panel.selectedLayer.visible = true;
+      } else {
+        layer.setVisible(!layer.visible);
       }
     });
 
@@ -225,42 +211,17 @@ class LayerWidget extends RefCounted {
         new LayerDialog(this.panel.manager, layer);
       }
     });
-    this.handleLayerChanged();
-    this.registerDisposer(layer.layerChanged.add(() => {
-      this.handleLayerChanged();
-    }));
   }
 
   update() {
     let {layer} = this;
     this.labelElement.textContent = layer.name;
     this.element.setAttribute('layer-visible', layer.visible.toString());
-  }
-
-  private handleLayerChanged() {
-    let {layer} = this;
-    let userLayer = layer.layer;
-    if (userLayer !== this.userLayer) {
-      if (this.dropdown) {
-        this.dropdown.dispose();
-        removeChildren(this.contextMenu.element);
-      }
-      this.userLayer = userLayer;
-      if (userLayer) {
-        const childElement = document.createElement('div');
-        this.contextMenu.element.appendChild(childElement);
-        this.dropdown = userLayer.makeDropdown(childElement);
-      } else {
-        this.dropdown = undefined;
-      }
-    }
-    this.contextMenu.disabled = this.dropdown === undefined;
+    this.element.setAttribute(
+        'layer-selected', (layer === this.panel.selectedLayer.layer).toString());
   }
 
   disposed() {
-    if (this.dropdown) {
-      this.dropdown.dispose();
-    }
     this.element.parentElement!.removeChild(this.element);
     super.disposed();
   }
@@ -286,8 +247,12 @@ export class LayerPanel extends RefCounted {
     return this.manager.layerManager;
   }
 
-  constructor(public display: DisplayContext, public manager: LayerListSpecification, public viewerNavigationState: LinkedViewerNavigationState) {
+  constructor(
+      public display: DisplayContext, public manager: LayerListSpecification,
+      public viewerNavigationState: LinkedViewerNavigationState,
+      public selectedLayer: SelectedLayerState) {
     super();
+    this.registerDisposer(selectedLayer);
     const {element} = this;
     element.className = 'neuroglancer-layer-panel';
     this.registerDisposer(manager.layerSelectedValues.changed.add(() => {
@@ -296,18 +261,28 @@ export class LayerPanel extends RefCounted {
     this.registerDisposer(manager.layerManager.layersChanged.add(() => {
       this.handleLayersChanged();
     }));
+    this.registerDisposer(selectedLayer.changed.add(() => {
+      this.handleLayersChanged();
+    }));
     this.layerWidgetInsertionPoint.style.display = 'none';
     this.element.appendChild(this.layerWidgetInsertionPoint);
 
     let addButton = this.addButton = document.createElement('div');
     addButton.className = 'neuroglancer-layer-add-button neuroglancer-button';
-    addButton.title = 'Add layer';
+    addButton.title = 'Click to add layer, control+click to add local annotation layer.';
     addButton.textContent = '+';
+
     let dropZone = this.dropZone = document.createElement('div');
     dropZone.className = 'neuroglancer-layer-panel-drop-zone';
 
-    this.registerEventListener(addButton, 'click', () => {
-      this.addLayerMenu();
+    this.registerEventListener(addButton, 'click', (event: MouseEvent) => {
+      if (event.ctrlKey) {
+        const layer = new ManagedUserLayerWithSpecification('annotation', {}, this.manager);
+        this.manager.initializeLayerFromSpec(layer, {type: 'annotation'});
+        this.manager.add(layer);
+      } else {
+        this.addLayerMenu();
+      }
     });
     element.appendChild(addButton);
     element.appendChild(dropZone);
@@ -316,9 +291,11 @@ export class LayerPanel extends RefCounted {
     element.appendChild(this.positionWidget.element);
     const updatePositionWidgetVisibility = () => {
       const linkValue = this.viewerNavigationState.position.link.value;
-      this.positionWidget.element.style.display = linkValue === NavigationLinkType.LINKED ? 'none' : null;
+      this.positionWidget.element.style.display =
+          linkValue === NavigationLinkType.LINKED ? 'none' : null;
     };
-    this.registerDisposer(this.viewerNavigationState.position.link.changed.add(updatePositionWidgetVisibility));
+    this.registerDisposer(
+        this.viewerNavigationState.position.link.changed.add(updatePositionWidgetVisibility));
     updatePositionWidgetVisibility();
 
     this.update();

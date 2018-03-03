@@ -45,6 +45,15 @@
   margin-left: 5px;
 }
 
+.neuroglancer-layer-item[layer-selected=true] {
+  border-color: #8c8;
+}
+
+.neuroglancer-layer-item[layer-selected=true]:hover {
+  border-color: #3c3;
+}
+
+
 .neuroglancer-layer-item:hover {
   border-color: #daa520;
 }

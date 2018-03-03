@@ -286,6 +286,7 @@ function getCommonViewerState(viewer: Viewer) {
     showPerspectiveSliceViews: viewer.showPerspectiveSliceViews,
     inputEventBindings: viewer.inputEventBindings,
     visibility: viewer.visibility,
+    selectedLayer: viewer.selectedLayer,
     visibleLayerRoles: viewer.visibleLayerRoles,
     navigationState: viewer.navigationState.addRef(),
     perspectiveNavigationState: viewer.perspectiveNavigationState.addRef(),
@@ -304,7 +305,7 @@ export class SingletonLayerGroupViewer extends RefCounted implements LayoutCompo
           layerSpecification: viewer.layerSpecification.addRef(),
           ...getCommonViewerState(viewer),
         },
-        {showLayerPanel: viewer.showLayerPanelEffective, showViewerMenu: false}));
+        {showLayerPanel: viewer.uiControlVisibility.showLayerPanel, showViewerMenu: false}));
     this.layerGroupViewer.layout.restoreState(layout);
   }
 
@@ -515,7 +516,7 @@ function makeComponent(container: LayoutComponentContainer, spec: any) {
             layerSpecification,
             ...getCommonViewerState(viewer),
           },
-          {showLayerPanel: viewer.showLayerPanelEffective, showViewerMenu: true});
+          {showLayerPanel: viewer.uiControlVisibility.showLayerPanel, showViewerMenu: true});
       try {
         layerGroupViewer.restoreState(spec);
       } catch (e) {

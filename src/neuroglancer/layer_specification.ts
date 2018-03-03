@@ -150,6 +150,12 @@ export class TopLevelLayerListSpecification extends RefCounted implements LayerL
       }
       throw new Error(`Expected boolean, but received: ${JSON.stringify(x)}.`);
     });
+
+    const makeUserLayer = (layerConstructor: UserLayerConstructor, spec: any) => {
+      const userLayer = new layerConstructor(this, spec);
+      userLayer.restoreState(spec);
+      managedLayer.layer = userLayer;
+    };
     let sourceUrl = managedLayer.sourceUrl =
         verifyObjectProperty(spec, 'source', verifyOptionalString);
     if (layerType === undefined) {
@@ -165,7 +171,7 @@ export class TopLevelLayerListSpecification extends RefCounted implements LayerL
         }
         let layerConstructor = volumeLayerTypes.get(source.volumeType);
         if (layerConstructor !== undefined) {
-          managedLayer.layer = new layerConstructor(this, spec);
+          makeUserLayer(layerConstructor, spec);
         } else {
           throw new Error(`Unsupported volume type: ${VolumeType[source.volumeType]}.`);
         }
@@ -173,7 +179,7 @@ export class TopLevelLayerListSpecification extends RefCounted implements LayerL
     } else {
       let layerConstructor = layerTypes.get(layerType);
       if (layerConstructor !== undefined) {
-        managedLayer.layer = new layerConstructor(this, spec);
+        makeUserLayer(layerConstructor, spec);
       } else {
         throw new Error(`Unsupported layer type: ${JSON.stringify(layerType)}.`);
       }
