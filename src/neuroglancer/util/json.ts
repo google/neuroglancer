@@ -221,11 +221,11 @@ const SINGLE_OR_DOUBLE_QUOTE_STRING_PATTERN =
 const DOUBLE_OR_SINGLE_QUOTE_STRING_PATTERN =
     new RegExp(`${DOUBLE_QUOTE_STRING_PATTERN.source}|${SINGLE_QUOTE_STRING_PATTERN.source}`);
 
-const DOUBLE_QUOTE_PATTERN = /^((?:[^"'\\]|(?:\\.))*)"/;
+const DOUBLE_QUOTE_PATTERN = /^((?:[^"'\\]|(?:\\[^']))*)("|\\')/;
 const SINGLE_QUOTE_PATTERN = /^((?:[^"'\\]|(?:\\.))*)'/;
 
 function convertStringLiteral(
-    x: string, quoteInitial: string, quoteReplace: string, quoteSearch: RegExp) {
+  x: string, quoteInitial: string, quoteReplace: string, quoteSearch: RegExp) {
   if (x.length >= 2 && x.charAt(0) === quoteInitial && x.charAt(x.length - 1) === quoteInitial) {
     let inner = x.substr(1, x.length - 2);
     let s = quoteReplace;
@@ -236,8 +236,14 @@ function convertStringLiteral(
         break;
       }
       s += m[1];
-      s += '\\';
-      s += quoteReplace;
+      if (m[2] === quoteReplace) {
+        // We received a single unescaped quoteReplace character.
+        s += '\\';
+        s += quoteReplace;
+      } else {
+        // We received "\\" + quoteInitial.  We need to remove the escaping.
+        s += quoteInitial;
+      }
       inner = inner.substr(m.index! + m[0].length);
     }
     s += quoteReplace;
