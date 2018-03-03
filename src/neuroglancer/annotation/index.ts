@@ -263,9 +263,7 @@ export class AnnotationSource extends RefCounted {
 
   commit(reference: AnnotationReference): void {
     const id = reference.id;
-    if (!this.pending.delete(id)) {
-      throw new Error('Invalid commit');
-    }
+    this.pending.delete(id);
   }
 
   update(reference: AnnotationReference, annotation: Annotation) {
