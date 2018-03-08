@@ -17,12 +17,21 @@
 import debounce from 'lodash/debounce';
 import {WatchableValue} from 'neuroglancer/trackable_value';
 import {RefCounted} from 'neuroglancer/util/disposable';
-import {urlSafeParse, urlSafeStringify, verifyObject} from 'neuroglancer/util/json';
+import {urlSafeParse, verifyObject} from 'neuroglancer/util/json';
 import {getCachedJson, Trackable} from 'neuroglancer/util/trackable';
 
 /**
  * @file Implements a binding between a Trackable value and the URL hash state.
  */
+
+/**
+ * Encodes a fragment string robustly.
+ */
+function encodeFragment(fragment: string) {
+  return encodeURI(fragment).replace(/[!'()*;,]/g, function(c) {
+    return '%' + c.charCodeAt(0).toString(16).toUpperCase();
+  });
+}
 
 /**
  * An instance of this class manages a binding between a Trackable value and the URL hash state.
@@ -60,10 +69,10 @@ export class UrlHashBinding extends RefCounted {
     const {generation} = cacheState;
     if (generation !== this.prevStateGeneration) {
       this.prevStateGeneration = cacheState.generation;
-      let stateString = urlSafeStringify(cacheState.value);
+      let stateString = encodeFragment(JSON.stringify(cacheState.value));
       if (stateString !== this.prevStateString) {
         this.prevStateString = stateString;
-        if (stateString === '{}') {
+        if (decodeURIComponent(stateString) === '{}') {
           history.replaceState(null, '', '#');
         } else {
           history.replaceState(null, '', '#!' + stateString);
@@ -85,14 +94,14 @@ export class UrlHashBinding extends RefCounted {
       if (s.startsWith('#!+')) {
         s = s.slice(3);
         // Firefox always %-encodes the URL even if it is not typed that way.
-        s = decodeURI(s);
+        s = decodeURIComponent(s);
         let state = urlSafeParse(s);
         verifyObject(state);
         this.root.restoreState(state);
         this.prevStateString = undefined;
       } else if (s.startsWith('#!')) {
         s = s.slice(2);
-        s = decodeURI(s);
+        s = decodeURIComponent(s);
         if (s === this.prevStateString) {
           return;
         }
