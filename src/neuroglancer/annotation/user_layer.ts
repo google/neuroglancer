@@ -66,21 +66,19 @@ export class AnnotationUserLayer extends Base {
           vec3.copy(this.voxelSize.size, manager.voxelSize.size);
           this.voxelSize.setValid();
         }
-        if (this.voxelSize.valid) {
+        if (this.voxelSize.valid && voxelSizeValid === false) {
           const derivedTransform = new CoordinateTransform();
           this.registerDisposer(
               makeDerivedCoordinateTransform(derivedTransform, this.transform, (output, input) => {
                 const voxelScalingMatrix = mat4.fromScaling(mat4.create(), this.voxelSize.size);
                 mat4.multiply(output, input, voxelScalingMatrix);
               }));
-          if (voxelSizeValid === false) {
-            this.annotationLayerState.value = new AnnotationLayerState({
-              transform: this.transform,
-              source: this.localAnnotations.addRef(),
-              color: this.annotationColor,
-            });
-            voxelSizeValid = true;
-          }
+          this.annotationLayerState.value = new AnnotationLayerState({
+            transform: derivedTransform,
+            source: this.localAnnotations.addRef(),
+            color: this.annotationColor,
+          });
+          voxelSizeValid = true;
         }
       };
       this.registerDisposer(this.localAnnotations.changed.add(this.specificationChanged.dispatch));
