@@ -61,8 +61,10 @@ class Server(object):
         sockjs_router = sockjs.tornado.SockJSRouter(
             SockJSHandler, SOCKET_PATH_REGEX_WITHOUT_GROUP, io_loop=ioloop)
         sockjs_router.neuroglancer_server = self
-        def log_function(request_handler):
-            pass
+        def log_function(handler):
+            if debug:
+                print("%d %s %.2fs" % (handler.get_status(),
+                                       handler.request.uri, handler.request.request_time()))
         app = self.app = tornado.web.Application([
             (STATIC_PATH_REGEX, StaticPathHandler, dict(server=self)),
             (INFO_PATH_REGEX, VolumeInfoHandler, dict(server=self)),
