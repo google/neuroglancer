@@ -206,6 +206,10 @@ export class MultiscaleVolumeChunkSource implements GenericMultiscaleVolumeChunk
       encoding = VolumeChunkEncoding.JPEG;
     }
 
+    const baseScale = this.scales[0];
+    const upperClipBound =
+        vec3.multiply(vec3.create(), baseScale.upperVoxelBound, baseScale.voxelSize);
+
     return this.scales.map(
         (volumeInfo, scaleIndex) => VolumeChunkSpecification
                                         .getDefaults({
@@ -213,6 +217,7 @@ export class MultiscaleVolumeChunkSource implements GenericMultiscaleVolumeChunk
                                           dataType: volumeInfo.dataType,
                                           numChannels: volumeInfo.numChannels,
                                           upperVoxelBound: volumeInfo.upperVoxelBound,
+                                          upperClipBound,
                                           volumeType: this.volumeType,
                                           volumeSourceOptions,
                                           chunkLayoutPreference: this.chunkLayoutPreference,
