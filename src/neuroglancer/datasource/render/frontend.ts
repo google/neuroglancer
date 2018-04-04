@@ -131,9 +131,9 @@ function parseUpperVoxelBounds(stackStatsObj: any): vec3 {
 
   let upperVoxelBound: vec3 = vec3.create();
 
-  upperVoxelBound[0] = verifyObjectProperty(stackBounds, 'maxX', verifyFloat);
-  upperVoxelBound[1] = verifyObjectProperty(stackBounds, 'maxY', verifyFloat);
-  upperVoxelBound[2] = verifyObjectProperty(stackBounds, 'maxZ', verifyFloat);
+  upperVoxelBound[0] = verifyObjectProperty(stackBounds, 'maxX', verifyFloat)+1;
+  upperVoxelBound[1] = verifyObjectProperty(stackBounds, 'maxY', verifyFloat)+1;
+  upperVoxelBound[2] = verifyObjectProperty(stackBounds, 'maxZ', verifyFloat)+1;
 
   return upperVoxelBound;
 }
