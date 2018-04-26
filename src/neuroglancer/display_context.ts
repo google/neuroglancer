@@ -31,7 +31,9 @@ export abstract class RenderedPanel extends RefCounted {
   }
 
   scheduleRedraw() {
-    this.context.scheduleRedraw();
+    if (this.visible) {
+      this.context.scheduleRedraw();
+    }
   }
 
   abstract isReady(): boolean;

@@ -34,13 +34,16 @@ import {GL_BLEND, GL_COLOR_BUFFER_BIT, GL_DEPTH_TEST, GL_LEQUAL, GL_LESS, GL_ONE
 import {DepthBuffer, FramebufferConfiguration, makeTextureBuffers, OffscreenCopyHelper, TextureBuffer} from 'neuroglancer/webgl/offscreen';
 import {ShaderBuilder} from 'neuroglancer/webgl/shader';
 import {glsl_packFloat01ToFixedPoint, unpackFloat01FromFixedPoint} from 'neuroglancer/webgl/shader_lib';
+import {ScaleBarTexture} from 'neuroglancer/widget/scale_bar';
 import {RPC, SharedObject} from 'neuroglancer/worker_rpc';
 
 require('neuroglancer/noselect.css');
 require('./panel.css');
 
 export interface PerspectiveViewerState extends RenderedDataViewerState {
+  orthographicProjection: TrackableBoolean;
   showSliceViews: TrackableBoolean;
+  showScaleBar: TrackableBoolean;
   showSliceViewsCheckbox?: boolean;
   crossSectionBackgroundColor: TrackableRGB;
   rpc: RPC;
@@ -164,6 +167,11 @@ export class PerspectivePanel extends RenderedDataPanel {
 
   private sharedObject: PerspectiveViewState;
 
+  private scaleBarCopyHelper = this.registerDisposer(OffscreenCopyHelper.get(this.gl));
+  private scaleBarTexture = this.registerDisposer(new ScaleBarTexture(this.gl));
+
+  private nanometersPerPixel = 1;
+
   constructor(context: DisplayContext, element: HTMLElement, viewer: PerspectiveViewerState) {
     super(context, element, viewer);
     this.registerDisposer(this.navigationState.changed.add(() => {
@@ -226,10 +234,12 @@ export class PerspectivePanel extends RenderedDataPanel {
       showSliceViewsLabel.appendChild(showSliceViewsCheckbox.element);
       this.element.appendChild(showSliceViewsLabel);
     }
+    this.registerDisposer(viewer.orthographicProjection.changed.add(() => this.scheduleRedraw()));
+    this.registerDisposer(viewer.showScaleBar.changed.add(() => this.scheduleRedraw()));
     this.registerDisposer(viewer.showSliceViews.changed.add(() => this.scheduleRedraw()));
     this.registerDisposer(viewer.showAxisLines.changed.add(() => this.scheduleRedraw()));
     this.registerDisposer(
-      viewer.crossSectionBackgroundColor.changed.add(() => this.scheduleRedraw()));
+        viewer.crossSectionBackgroundColor.changed.add(() => this.scheduleRedraw()));
   }
 
   get navigationState() {
@@ -258,13 +268,36 @@ export class PerspectivePanel extends RenderedDataPanel {
 
   updateProjectionMatrix() {
     let projectionMat = this.projectionMat;
-    mat4.perspective(projectionMat, Math.PI / 4.0, this.width / this.height, 10, 5000);
+    const zOffsetAmount = 100;
+    const widthOverHeight = this.width / this.height;
+    const fovy = Math.PI / 4.0;
+    const nearBound = 10, farBound = 5000;
+    if (this.viewer.orthographicProjection.value) {
+      // Pick orthographic projection to match perspective projection at plane parallel to image
+      // plane containing the center position.
+      const f = 1.0 / Math.tan(fovy / 2);
+      // We need -2 / (left - right) == f / widthOverHeight.
+      // left - right = - 2 * widthOverHeight * orthoScalar
+      // -2 / (left - right) = 1 / (widthOverHeight * orthoScalar).
+      // 1 / orthoScalar == f.
+      // orthoScalar = 1 / f
+      const orthoScalar = zOffsetAmount / f;
+      mat4.ortho(
+          projectionMat, -widthOverHeight * orthoScalar, widthOverHeight * orthoScalar,
+          -orthoScalar, orthoScalar, nearBound, farBound);
+      this.nanometersPerPixel = 1 / (2 * projectionMat[0]) * this.navigationState.zoomFactor.value;
+      this.nanometersPerPixel =
+          2 * widthOverHeight * orthoScalar / this.width * this.navigationState.zoomFactor.value;
+    } else {
+      mat4.perspective(projectionMat, fovy, widthOverHeight, nearBound, farBound);
+    }
+
     let modelViewMat = this.modelViewMat;
     this.navigationState.toMat4(modelViewMat);
     vec3.set(tempVec3, 1, -1, -1);
     mat4.scale(modelViewMat, modelViewMat, tempVec3);
 
-    let viewOffset = vec3.set(tempVec3, 0, 0, 100);
+    let viewOffset = vec3.set(tempVec3, 0, 0, zOffsetAmount);
     mat4.translate(modelViewMat, modelViewMat, viewOffset);
 
     let modelViewMatInv = tempMat4;
@@ -492,6 +525,25 @@ export class PerspectivePanel extends RenderedDataPanel {
       renderLayer.draw(renderContext);
     }
     gl.disable(GL_POLYGON_OFFSET_FILL);
+
+    if (this.viewer.showScaleBar.value && this.viewer.orthographicProjection.value) {
+      // Only modify color buffer.
+      gl.WEBGL_draw_buffers.drawBuffersWEBGL([
+        gl.WEBGL_draw_buffers.COLOR_ATTACHMENT0_WEBGL,
+      ]);
+
+      gl.disable(GL_DEPTH_TEST);
+      gl.enable(GL_BLEND);
+      gl.blendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+      const {scaleBarTexture} = this;
+      const {dimensions} = scaleBarTexture;
+      dimensions.targetLengthInPixels = Math.min(width / 4, 100);
+      dimensions.nanometersPerPixel = this.nanometersPerPixel;
+      scaleBarTexture.update();
+      gl.viewport(10, 10, scaleBarTexture.width, scaleBarTexture.height);
+      this.scaleBarCopyHelper.draw(scaleBarTexture.texture);
+      gl.disable(GL_BLEND);
+    }
     this.offscreenFramebuffer.unbind();
 
     // Draw the texture over the whole viewport.

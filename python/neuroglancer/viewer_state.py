@@ -590,6 +590,8 @@ class DataPanelLayout(JsonObjectWrapper):
     type = wrapped_property('type', text_type)
     cross_sections = crossSections = wrapped_property('crossSections',
                                                       CrossSectionMap)
+    orthographic_projection = orthographicProjection = wrapped_property(
+        'orthographicProjection', optional(bool, False))
 
     def __init__(self, json_data=None, _readonly=False, **kwargs):
         if isinstance(json_data, six.string_types):
@@ -597,7 +599,7 @@ class DataPanelLayout(JsonObjectWrapper):
         super(DataPanelLayout, self).__init__(json_data, _readonly=_readonly, **kwargs)
 
     def to_json(self):
-        if len(self.cross_sections) == 0:
+        if len(self.cross_sections) == 0 and not self.orthographic_projection:
             return self.type
         return super(DataPanelLayout, self).to_json()
 

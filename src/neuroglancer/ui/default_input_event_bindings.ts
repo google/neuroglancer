@@ -28,6 +28,7 @@ export function getDefaultGlobalBindings() {
     map.set('keyb', 'toggle-scale-bar');
     map.set('shift+keyb', 'toggle-default-annotations');
     map.set('keya', 'toggle-axis-lines');
+    map.set('keyo', 'toggle-orthographic-projection');
 
     for (let i = 1; i <= 9; ++i) {
       map.set('digit' + i, 'toggle-layer-' + i);

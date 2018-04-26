@@ -115,11 +115,14 @@ export function getCommonViewerState(viewer: ViewerUIState) {
   };
 }
 
-function getCommonPerspectiveViewerState(viewer: ViewerUIState) {
+function getCommonPerspectiveViewerState(container: DataPanelLayoutContainer) {
+  const {viewer} = container;
   return {
     ...getCommonViewerState(viewer),
     navigationState: viewer.perspectiveNavigationState,
     inputEventMap: viewer.inputEventBindings.perspectiveView,
+    orthographicProjection: container.specification.orthographicProjection,
+    showScaleBar: viewer.showScaleBar,
     rpc: viewer.chunkManager.rpc!,
   };
 }
@@ -194,7 +197,7 @@ export class FourPanelLayout extends RefCounted {
     let {display} = viewer;
 
     const perspectiveViewerState = {
-      ...getCommonPerspectiveViewerState(viewer),
+      ...getCommonPerspectiveViewerState(container),
       showSliceViews: viewer.showPerspectiveSliceViews,
       showSliceViewsCheckbox: true,
     };
@@ -262,7 +265,7 @@ export class SliceViewPerspectiveTwoPanelLayout extends RefCounted {
     let {display} = viewer;
 
     const perspectiveViewerState = {
-      ...getCommonPerspectiveViewerState(viewer),
+      ...getCommonPerspectiveViewerState(container),
       showSliceViews: viewer.showPerspectiveSliceViews,
       showSliceViewsCheckbox: true,
     };
@@ -330,7 +333,7 @@ export class SinglePerspectiveLayout extends RefCounted {
       public viewer: ViewerUIState, crossSections: Borrowed<CrossSectionSpecificationMap>) {
     super();
     let perspectiveViewerState = {
-      ...getCommonPerspectiveViewerState(viewer),
+      ...getCommonPerspectiveViewerState(container),
       showSliceViews: new TrackableBoolean(false, false),
     };
 
@@ -487,6 +490,7 @@ export class DataPanelLayoutSpecification extends RefCounted implements Trackabl
   changed = new NullarySignal();
   type: TrackableValue<string>;
   crossSections: CrossSectionSpecificationMap;
+  orthographicProjection = new TrackableBoolean(false);
 
   constructor(parentNavigationState: Owned<NavigationState>, defaultLayout: string) {
     super();
@@ -495,34 +499,41 @@ export class DataPanelLayoutSpecification extends RefCounted implements Trackabl
     this.crossSections =
         this.registerDisposer(new CrossSectionSpecificationMap(parentNavigationState));
     this.crossSections.changed.add(this.changed.dispatch);
+    this.orthographicProjection.changed.add(this.changed.dispatch);
     this.registerDisposer(parentNavigationState);
   }
 
   reset() {
     this.crossSections.clear();
+    this.orthographicProjection.reset();
     this.type.reset();
   }
 
   restoreState(obj: any) {
     this.crossSections.clear();
+    this.orthographicProjection.reset();
     if (typeof obj === 'string') {
       this.type.restoreState(obj);
     } else {
       verifyObject(obj);
       verifyObjectProperty(obj, 'type', x => this.type.restoreState(x));
       verifyObjectProperty(
+          obj, 'orthographicProjection', x => this.orthographicProjection.restoreState(x));
+      verifyObjectProperty(
           obj, 'crossSections', x => x !== undefined && this.crossSections.restoreState(x));
     }
   }
 
   toJSON() {
-    const {type, crossSections} = this;
-    if (crossSections.size === 0) {
+    const {type, crossSections, orthographicProjection} = this;
+    const orthographicProjectionJson = orthographicProjection.toJSON();
+    if (crossSections.size === 0 && orthographicProjectionJson === undefined) {
       return type.toJSON();
     }
     return {
       type: type.toJSON(),
       crossSections,
+      orthographicProjection: orthographicProjectionJson,
     };
   }
 }
@@ -547,6 +558,10 @@ export class DataPanelLayoutContainer extends RefCounted {
     this.element.style.flex = '1';
     const scheduleUpdateLayout = this.registerCancellable(debounce(() => this.updateLayout(), 0));
     this.specification.type.changed.add(scheduleUpdateLayout);
+
+    registerActionListener(
+        this.element, 'toggle-orthographic-projection',
+        () => this.specification.orthographicProjection.toggle());
 
     // Ensure the layout is updated before drawing begins to avoid flicker.
     this.registerDisposer(
