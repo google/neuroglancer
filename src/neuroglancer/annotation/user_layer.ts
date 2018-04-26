@@ -21,7 +21,7 @@ import {UserLayer} from 'neuroglancer/layer';
 import {LayerListSpecification, registerLayerType} from 'neuroglancer/layer_specification';
 import {VoxelSize} from 'neuroglancer/navigation_state';
 import {StatusMessage} from 'neuroglancer/status';
-import {UserLayerWithAnnotationsMixin} from 'neuroglancer/ui/annotations';
+import {getAnnotationRenderOptions, UserLayerWithAnnotationsMixin} from 'neuroglancer/ui/annotations';
 import {UserLayerWithCoordinateTransformMixin} from 'neuroglancer/user_layer_with_coordinate_transform';
 import {mat4, vec3} from 'neuroglancer/util/geom';
 import {parseArray, verify3dVec} from 'neuroglancer/util/json';
@@ -76,7 +76,7 @@ export class AnnotationUserLayer extends Base {
           this.annotationLayerState.value = new AnnotationLayerState({
             transform: derivedTransform,
             source: this.localAnnotations.addRef(),
-            color: this.annotationColor,
+            ...getAnnotationRenderOptions(this)
           });
           voxelSizeValid = true;
         }
@@ -103,7 +103,7 @@ export class AnnotationUserLayer extends Base {
             this.annotationLayerState.value = new AnnotationLayerState({
               transform: this.transform,
               source,
-              color: this.annotationColor,
+              ...getAnnotationRenderOptions(this)
             });
             this.isReady = true;
           });

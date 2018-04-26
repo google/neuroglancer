@@ -169,8 +169,14 @@ def volume_source(x):
     return text_type(x)
 
 
+class _AnnotationLayerOptions(object):
+    __slots__ = ()
+    annotation_color = annotationColor = wrapped_property('annotationColor', optional(text_type))
+    annotation_fill_opacity = annotationFillOpacity = wrapped_property('annotationFillOpacity', optional(float, 0))
+
+
 @export
-class ImageLayer(Layer):
+class ImageLayer(Layer, _AnnotationLayerOptions):
     __slots__ = ()
 
     def __init__(self, *args, **kwargs):
@@ -196,7 +202,7 @@ def uint64_equivalence_map(obj, _readonly=False):
 
 
 @export
-class SegmentationLayer(Layer):
+class SegmentationLayer(Layer, _AnnotationLayerOptions):
     __slots__ = ()
 
     def __init__(self, *args, **kwargs):
@@ -294,16 +300,15 @@ annotation.supports_readonly = True
 
 
 @export
-class AnnotationLayer(Layer):
+class AnnotationLayer(Layer, _AnnotationLayerOptions):
     __slots__ = ()
 
     def __init__(self, *args, **kwargs):
         super(AnnotationLayer, self).__init__(*args, type='annotation', **kwargs)
 
     source = wrapped_property('source', optional(volume_source))
-    annotation_color = annotationColor = wrapped_property('annotationColor', optional(text_type))
     voxel_size = voxelSize = wrapped_property('voxelSize', optional(array_wrapper(np.float32, 3)))
-    annotations = wrapped_property('annotations', optional(typed_list(annotation)))
+    annotations = wrapped_property('annotations', typed_list(annotation))
 
     @staticmethod
     def interpolate(a, b, t):

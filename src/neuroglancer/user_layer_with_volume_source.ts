@@ -19,7 +19,7 @@ import {GetVolumeOptions} from 'neuroglancer/datasource';
 import {RenderLayerRole, UserLayer} from 'neuroglancer/layer';
 import {getVolumeWithStatusMessage} from 'neuroglancer/layer_specification';
 import {MultiscaleVolumeChunkSource} from 'neuroglancer/sliceview/volume/frontend';
-import {UserLayerWithAnnotations, UserLayerWithAnnotationsMixin} from 'neuroglancer/ui/annotations';
+import {getAnnotationRenderOptions, UserLayerWithAnnotations, UserLayerWithAnnotationsMixin} from 'neuroglancer/ui/annotations';
 import {UserLayerWithCoordinateTransform, UserLayerWithCoordinateTransformMixin} from 'neuroglancer/user_layer_with_coordinate_transform';
 import {verifyObjectProperty, verifyOptionalString} from 'neuroglancer/util/json';
 
@@ -51,7 +51,7 @@ function helper<TBase extends BaseConstructor>(Base: TBase) {
                 transform: this.transform,
                 source: staticAnnotations,
                 role: RenderLayerRole.DEFAULT_ANNOTATION,
-                color: this.annotationColor,
+                ...getAnnotationRenderOptions(this),
               });
             }
           }

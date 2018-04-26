@@ -18,6 +18,7 @@ import {AnnotationSource} from 'neuroglancer/annotation';
 import {MultiscaleAnnotationSource} from 'neuroglancer/annotation/frontend_source';
 import {CoordinateTransform} from 'neuroglancer/coordinate_transform';
 import {RenderLayerRole} from 'neuroglancer/layer';
+import {TrackableAlphaValue} from 'neuroglancer/trackable_alpha';
 import {WatchableValue} from 'neuroglancer/trackable_value';
 import {TrackableRGB} from 'neuroglancer/util/color';
 import {Owned, RefCounted} from 'neuroglancer/util/disposable';
@@ -32,6 +33,7 @@ export class AnnotationLayerState extends RefCounted {
   hoverState: AnnotationHoverState;
   role: RenderLayerRole;
   color: TrackableRGB;
+  fillOpacity: TrackableAlphaValue;
 
   private transformCacheGeneration = -1;
   private cachedObjectToGlobal = mat4.create();
@@ -61,7 +63,7 @@ export class AnnotationLayerState extends RefCounted {
   constructor(options: {
     transform?: CoordinateTransform, source: Owned<AnnotationSource|MultiscaleAnnotationSource>,
     hoverState?: AnnotationHoverState,
-    role?: RenderLayerRole, color: TrackableRGB,
+    role?: RenderLayerRole, color: TrackableRGB, fillOpacity: TrackableAlphaValue,
   }) {
     super();
     const {
@@ -70,11 +72,13 @@ export class AnnotationLayerState extends RefCounted {
       hoverState = new AnnotationHoverState(undefined),
       role = RenderLayerRole.ANNOTATION,
       color,
+      fillOpacity,
     } = options;
     this.transform = transform;
     this.source = this.registerDisposer(source);
     this.hoverState = hoverState;
     this.role = role;
     this.color = color;
+    this.fillOpacity = fillOpacity;
   }
 }

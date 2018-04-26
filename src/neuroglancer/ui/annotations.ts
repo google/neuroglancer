@@ -27,6 +27,7 @@ import {DataFetchSliceViewRenderLayer, MultiscaleAnnotationSource} from 'neurogl
 import {setAnnotationHoverStateFromMouseState} from 'neuroglancer/annotation/selection';
 import {MouseSelectionState, UserLayer} from 'neuroglancer/layer';
 import {VoxelSize} from 'neuroglancer/navigation_state';
+import {TrackableAlphaValue, trackableAlphaValue} from 'neuroglancer/trackable_alpha';
 import {TrackableValueInterface, WatchableRefCounted, WatchableValue} from 'neuroglancer/trackable_value';
 import {registerTool, Tool} from 'neuroglancer/ui/tool';
 import {TrackableRGB} from 'neuroglancer/util/color';
@@ -39,6 +40,7 @@ import {formatBoundingBoxVolume, formatIntegerBounds, formatIntegerPoint, format
 import {WatchableVisibilityPriority} from 'neuroglancer/visibility_priority/frontend';
 import {makeCloseButton} from 'neuroglancer/widget/close_button';
 import {ColorWidget} from 'neuroglancer/widget/color';
+import {RangeWidget} from 'neuroglancer/widget/range';
 import {StackView, Tab} from 'neuroglancer/widget/tab_view';
 import {makeTextIconButton} from 'neuroglancer/widget/text_icon_button';
 
@@ -274,6 +276,13 @@ class AnnotationLayerView extends Tab {
 
     const toolbox = document.createElement('div');
     toolbox.className = 'neuroglancer-annotation-toolbox';
+
+    {
+      const widget = this.registerDisposer(new RangeWidget(this.annotationLayer.fillOpacity));
+      widget.promptElement.textContent = 'Fill opacity';
+      this.element.appendChild(widget.element);
+    }
+
     const colorPicker = this.registerDisposer(new ColorWidget(this.annotationLayer.color));
     colorPicker.element.title = 'Change annotation display color';
     toolbox.appendChild(colorPicker.element);
@@ -693,9 +702,10 @@ function getMousePositionInAnnotationCoordinates(
 abstract class TwoStepAnnotationTool extends PlaceAnnotationTool {
   inProgressAnnotation:
       {annotationLayer: AnnotationLayerState, reference: AnnotationReference, disposer: () => void}|
-    undefined;
+      undefined;
 
-  abstract getInitialAnnotation(mouseState: MouseSelectionState, annotationLayer: AnnotationLayerState): Annotation;
+  abstract getInitialAnnotation(
+      mouseState: MouseSelectionState, annotationLayer: AnnotationLayerState): Annotation;
   abstract getUpdatedAnnotation(
       oldAnnotation: Annotation, mouseState: MouseSelectionState,
       annotationLayer: AnnotationLayerState): Annotation;
@@ -710,7 +720,8 @@ abstract class TwoStepAnnotationTool extends PlaceAnnotationTool {
       const updatePointB = () => {
         const state = this.inProgressAnnotation!;
         const reference = state.reference;
-        const newAnnotation = this.getUpdatedAnnotation(reference.value!, mouseState, annotationLayer);
+        const newAnnotation =
+            this.getUpdatedAnnotation(reference.value!, mouseState, annotationLayer);
         state.annotationLayer.source.update(reference, newAnnotation);
         this.layer.selectedAnnotation.value = {id: reference.id};
       };
@@ -731,7 +742,8 @@ abstract class TwoStepAnnotationTool extends PlaceAnnotationTool {
         };
       } else {
         updatePointB();
-        this.inProgressAnnotation.annotationLayer.source.commit(this.inProgressAnnotation.reference);
+        this.inProgressAnnotation.annotationLayer.source.commit(
+            this.inProgressAnnotation.reference);
         this.inProgressAnnotation.disposer();
         this.inProgressAnnotation = undefined;
       }
@@ -856,16 +868,22 @@ registerTool(
     (layer, options) => new PlaceLineTool(<UserLayerWithAnnotations>layer, options));
 registerTool(
     ANNOTATE_ELLIPSOID_TOOL_ID,
-    (layer, options) => new PlaceSphereTool(<UserLayerWithAnnotations>layer, options));
+  (layer, options) => new PlaceSphereTool(<UserLayerWithAnnotations>layer, options));
 
 export interface UserLayerWithAnnotations extends UserLayer {
   annotationLayerState: WatchableRefCounted<AnnotationLayerState>;
   selectedAnnotation: SelectedAnnotationState;
   annotationColor: TrackableRGB;
+  annotationFillOpacity: TrackableAlphaValue;
+}
+
+export function getAnnotationRenderOptions(userLayer: UserLayerWithAnnotations) {
+  return {color: userLayer.annotationColor, fillOpacity: userLayer.annotationFillOpacity};
 }
 
 const SELECTED_ANNOTATION_JSON_KEY = 'selectedAnnotation';
 const ANNOTATION_COLOR_JSON_KEY = 'annotationColor';
+const ANNOTATION_FILL_OPACITY_JSON_KEY = 'annotationFillOpacity';
 export function UserLayerWithAnnotationsMixin<TBase extends {new (...args: any[]): UserLayer}>(
     Base: TBase) {
   abstract class C extends Base implements UserLayerWithAnnotations {
@@ -873,6 +891,7 @@ export function UserLayerWithAnnotationsMixin<TBase extends {new (...args: any[]
     selectedAnnotation =
         this.registerDisposer(new SelectedAnnotationState(this.annotationLayerState.addRef()));
     annotationColor = new TrackableRGB(vec3.fromValues(1, 1, 0));
+    annotationFillOpacity = trackableAlphaValue(0.0);
 
     constructor(...args: any[]) {
       super(...args);
@@ -903,12 +922,14 @@ export function UserLayerWithAnnotationsMixin<TBase extends {new (...args: any[]
       super.restoreState(specification);
       this.selectedAnnotation.restoreState(specification[SELECTED_ANNOTATION_JSON_KEY]);
       this.annotationColor.restoreState(specification[ANNOTATION_COLOR_JSON_KEY]);
+      this.annotationFillOpacity.restoreState(specification[ANNOTATION_FILL_OPACITY_JSON_KEY]);
     }
 
     toJSON() {
       const x = super.toJSON();
       x[SELECTED_ANNOTATION_JSON_KEY] = this.selectedAnnotation.toJSON();
       x[ANNOTATION_COLOR_JSON_KEY] = this.annotationColor.toJSON();
+      x[ANNOTATION_FILL_OPACITY_JSON_KEY] = this.annotationFillOpacity.toJSON();
       return x;
     }
   }
