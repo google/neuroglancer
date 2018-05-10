@@ -89,7 +89,11 @@ export class CompoundTrackable extends RefCounted implements Trackable {
     for (let [key, value] of this.children) {
       try {
         if (x.hasOwnProperty(key)) {
-          value.restoreState(x[key]);
+          const subValue = x[key];
+          if (subValue === undefined) {
+            continue;
+          }
+          value.restoreState(subValue);
         }
       } catch (restoreError) {
         throw new Error(`Error restoring property ${JSON.stringify(key)}: ${restoreError.message}`);
