@@ -15,7 +15,7 @@
  */
 
 import {Annotation, AnnotationId, AnnotationSerializer, AnnotationType} from 'neuroglancer/annotation';
-import {AnnotationGeometryChunk, AnnotationMetadataChunk, AnnotationSource} from 'neuroglancer/annotation/backend';
+import {AnnotationGeometryChunk, AnnotationGeometryData, AnnotationMetadataChunk, AnnotationSource, AnnotationSubsetGeometryChunk} from 'neuroglancer/annotation/backend';
 import {WithParameters} from 'neuroglancer/chunk_manager/backend';
 import {ChunkSourceParametersConstructor} from 'neuroglancer/chunk_manager/base';
 import {WithSharedCredentialsProviderCounterpart} from 'neuroglancer/credentials_provider/shared_counterpart';
@@ -31,7 +31,7 @@ import {VolumeChunk, VolumeChunkSource} from 'neuroglancer/sliceview/volume/back
 import {CancellationToken} from 'neuroglancer/util/cancellation';
 import {convertEndian32, Endianness} from 'neuroglancer/util/endian';
 import {decodeMorton, kZeroVec, vec3, vec3Key} from 'neuroglancer/util/geom';
-import {parseFixedLengthArray, verifyObject, verifyObjectProperty, verifyOptionalString, verifyString, verifyStringArray} from 'neuroglancer/util/json';
+import {parseArray, parseFixedLengthArray, verifyObject, verifyObjectProperty, verifyOptionalString, verifyString, verifyStringArray} from 'neuroglancer/util/json';
 import {Uint64} from 'neuroglancer/util/uint64';
 import {registerSharedObject, SharedObject} from 'neuroglancer/worker_rpc';
 
@@ -475,6 +475,13 @@ function parseBrainmapsAnnotationId(idPrefix: string, fullId: string) {
   return id;
 }
 
+function parseObjectLabels(obj: any): Uint64[]|undefined {
+  if (obj == null) {
+    return undefined;
+  }
+  return parseArray(obj, x => Uint64.parseString('' + x, 10));
+}
+
 function parseAnnotation(entry: any, idPrefix: string, expectedId?: string): Annotation {
   const corner =
       verifyObjectProperty(entry, 'corner', x => parseCommaSeparatedPoint(verifyString(x)));
@@ -483,6 +490,7 @@ function parseAnnotation(entry: any, idPrefix: string, expectedId?: string): Ann
   const spatialAnnotationType = verifyObjectProperty(entry, 'type', verifyString);
   const fullId = verifyObjectProperty(entry, 'id', verifyString);
   const id = parseBrainmapsAnnotationId(idPrefix, fullId);
+  const segments = verifyObjectProperty(entry, 'objectLabels', parseObjectLabels);
   if (expectedId !== undefined && id !== expectedId) {
     throw new Error(`Received annotation has unexpected id ${JSON.stringify(fullId)}.`);
   }
@@ -494,6 +502,7 @@ function parseAnnotation(entry: any, idPrefix: string, expectedId?: string): Ann
           id,
           point: corner,
           description,
+          segments,
         };
       } else {
         const radii = vec3.scale(vec3.create(), size, 0.5);
@@ -504,6 +513,7 @@ function parseAnnotation(entry: any, idPrefix: string, expectedId?: string): Ann
           center,
           radii,
           description,
+          segments,
         };
       }
     case 'LINE':
@@ -513,6 +523,7 @@ function parseAnnotation(entry: any, idPrefix: string, expectedId?: string): Ann
         pointA: corner,
         pointB: vec3.add(vec3.create(), corner, size),
         description,
+        segments,
       };
     case 'VOLUME':
       return {
@@ -521,6 +532,7 @@ function parseAnnotation(entry: any, idPrefix: string, expectedId?: string): Ann
         pointA: corner,
         pointB: vec3.add(vec3.create(), corner, size),
         description,
+        segments,
       };
     default:
       throw new Error(`Unknown spatial annotation type: ${JSON.stringify(spatialAnnotationType)}.`);
@@ -534,7 +546,8 @@ function parseAnnotationResponse(response: any, idPrefix: string, expectedId?: s
   return parseAnnotation(entry, idPrefix, expectedId);
 }
 
-function parseAnnotations(chunk: AnnotationGeometryChunk, responses: any[]) {
+function parseAnnotations(
+    chunk: AnnotationGeometryChunk|AnnotationSubsetGeometryChunk, responses: any[]) {
   const serializer = new AnnotationSerializer();
   const source = <BrainmapsAnnotationSource>chunk.source.parent;
   const idPrefix = getIdPrefix(source.parameters);
@@ -558,7 +571,7 @@ function parseAnnotations(chunk: AnnotationGeometryChunk, responses: any[]) {
           parseError.message}`);
     }
   });
-  Object.assign(chunk, serializer.serialize());
+  chunk.data = Object.assign(new AnnotationGeometryData(), serializer.serialize());
 }
 
 function getSpatialAnnotationTypeFromId(id: string) {
@@ -576,6 +589,8 @@ function getFullSpatialAnnotationId(parameters: AnnotationSourceParameters, id: 
 
 function annotationToBrainmaps(annotation: Annotation): any {
   const payload = annotation.description || '';
+  const objectLabels =
+      annotation.segments === undefined ? undefined : annotation.segments.map(x => x.toString());
   switch (annotation.type) {
     case AnnotationType.LINE:
     case AnnotationType.AXIS_ALIGNED_BOUNDING_BOX: {
@@ -587,6 +602,7 @@ function annotationToBrainmaps(annotation: Annotation): any {
         type: annotation.type === AnnotationType.LINE ? 'LINE' : 'VOLUME',
         corner: toCommaSeparated(minPoint),
         size: toCommaSeparated(size),
+        object_labels: objectLabels,
         payload,
       };
     }
@@ -595,6 +611,7 @@ function annotationToBrainmaps(annotation: Annotation): any {
         type: 'LOCATION',
         corner: toCommaSeparated(annotation.point),
         size: '0,0,0',
+        object_labels: objectLabels,
         payload,
       };
     }
@@ -605,6 +622,7 @@ function annotationToBrainmaps(annotation: Annotation): any {
         type: 'LOCATION',
         corner: toCommaSeparated(corner),
         size: toCommaSeparated(size),
+        object_labels: objectLabels,
         payload,
       };
     }
@@ -631,6 +649,28 @@ function annotationToBrainmaps(annotation: Annotation): any {
           parseAnnotations(chunk, values);
         });
   }
+
+  downloadSegmentFilteredGeometry(chunk: AnnotationSubsetGeometryChunk, cancellationToken: CancellationToken) {
+    const {parameters} = this;
+    return Promise
+        .all(spatialAnnotationTypes.map(
+            spatialAnnotationType => makeRequest(
+                parameters.instance, this.credentialsProvider, {
+                  method: 'POST',
+                  path: `/v1/changes/${parameters.volumeId}/${parameters.changestack}/spatials:get`,
+                  payload: JSON.stringify({
+                    type: spatialAnnotationType,
+                    object_labels: [chunk.objectId.toString()],
+                    ignore_payload: true,
+                  }),
+                  responseType: 'json',
+                },
+                cancellationToken)))
+        .then(values => {
+          parseAnnotations(chunk, values);
+        });
+  }
+
   downloadMetadata(chunk: AnnotationMetadataChunk, cancellationToken: CancellationToken) {
     const {parameters} = this;
     const id = chunk.key!;

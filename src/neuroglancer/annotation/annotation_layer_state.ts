@@ -18,7 +18,9 @@ import {AnnotationSource} from 'neuroglancer/annotation';
 import {MultiscaleAnnotationSource} from 'neuroglancer/annotation/frontend_source';
 import {CoordinateTransform} from 'neuroglancer/coordinate_transform';
 import {RenderLayerRole} from 'neuroglancer/layer';
+import {SegmentationDisplayState} from 'neuroglancer/segmentation_display_state/frontend';
 import {TrackableAlphaValue} from 'neuroglancer/trackable_alpha';
+import {TrackableBoolean} from 'neuroglancer/trackable_boolean';
 import {WatchableValue} from 'neuroglancer/trackable_value';
 import {TrackableRGB} from 'neuroglancer/util/color';
 import {Owned, RefCounted} from 'neuroglancer/util/disposable';
@@ -34,6 +36,12 @@ export class AnnotationLayerState extends RefCounted {
   role: RenderLayerRole;
   color: TrackableRGB;
   fillOpacity: TrackableAlphaValue;
+
+  /**
+   * undefined means may have a segmentation state.  null means no segmentation state is supported.
+   */
+  segmentationState: WatchableValue<SegmentationDisplayState|undefined|null>;
+  filterBySegmentation: TrackableBoolean;
 
   private transformCacheGeneration = -1;
   private cachedObjectToGlobal = mat4.create();
@@ -64,6 +72,8 @@ export class AnnotationLayerState extends RefCounted {
     transform?: CoordinateTransform, source: Owned<AnnotationSource|MultiscaleAnnotationSource>,
     hoverState?: AnnotationHoverState,
     role?: RenderLayerRole, color: TrackableRGB, fillOpacity: TrackableAlphaValue,
+    segmentationState?: WatchableValue<SegmentationDisplayState|undefined|null>,
+    filterBySegmentation?: TrackableBoolean,
   }) {
     super();
     const {
@@ -73,6 +83,8 @@ export class AnnotationLayerState extends RefCounted {
       role = RenderLayerRole.ANNOTATION,
       color,
       fillOpacity,
+      segmentationState = new WatchableValue(null),
+      filterBySegmentation = new TrackableBoolean(false),
     } = options;
     this.transform = transform;
     this.source = this.registerDisposer(source);
@@ -80,5 +92,7 @@ export class AnnotationLayerState extends RefCounted {
     this.role = role;
     this.color = color;
     this.fillOpacity = fillOpacity;
+    this.segmentationState = segmentationState;
+    this.filterBySegmentation = filterBySegmentation;
   }
 }

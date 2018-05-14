@@ -121,6 +121,27 @@ export class MouseSelectionStateTooltipManager extends RefCounted {
     tooltip.element.appendChild(description);
 
     if (annotation != null) {
+      const {segments} = annotation;
+      if (segments !== undefined && segments.length > 0) {
+        const segmentContainer = document.createElement('div');
+        segmentContainer.className = 'neuroglancer-annotation-segment-list';
+
+        const segmentationState = state.annotationLayer.segmentationState.value;
+        const segmentColorHash = segmentationState ? segmentationState.segmentColorHash : undefined;
+        segments.forEach((segment, index) => {
+          if (index !== 0) {
+            segmentContainer.appendChild(document.createTextNode(' '));
+          }
+          const child = document.createElement('span');
+          child.className = 'neuroglancer-annotation-segment-item';
+          child.textContent = segment.toString();
+          if (segmentationState !== undefined) {
+            child.style.backgroundColor = segmentColorHash!.computeCssColor(segment);
+          }
+          segmentContainer.appendChild(child);
+        });
+        tooltip.element.appendChild(segmentContainer);
+      }
       const combinedTransform = state.annotationLayer.objectToGlobal;
 
       const typeHandler = getAnnotationTypeHandler(annotation.type);

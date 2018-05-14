@@ -14,7 +14,8 @@
  * limitations under the License.
  */
 
-import {Borrowed, Owned, RefCounted} from 'neuroglancer/util/disposable';
+import debounce from 'lodash/debounce';
+import {Borrowed, Disposer, Owned, RefCounted} from 'neuroglancer/util/disposable';
 import {NullaryReadonlySignal, NullarySignal} from 'neuroglancer/util/signal';
 import {Trackable} from 'neuroglancer/util/trackable';
 
@@ -221,4 +222,33 @@ export class WatchableSet<T> {
       this.changed.dispatch();
     }
   }
+}
+
+export function registerNested<T>(
+    baseState: WatchableValueInterface<T>, f: (context: RefCounted, value: T) => void): Disposer {
+  let value: T;
+  let context: RefCounted;
+
+  function updateValue() {
+    value = baseState.value;
+    context = new RefCounted();
+    f(context, value);
+  }
+
+  const handleChange = debounce(() => {
+    if (baseState.value !== value) {
+      context.dispose();
+      updateValue();
+    }
+  }, 0);
+
+  const signalDisposer = baseState.changed.add(handleChange);
+
+  updateValue();
+
+  return () => {
+    handleChange.cancel();
+    signalDisposer();
+    context.dispose();
+  };
 }

@@ -14,19 +14,27 @@
  * limitations under the License.
  */
 
-import {Annotation, AnnotationId} from 'neuroglancer/annotation';
-import {ANNOTATION_COMMIT_UPDATE_RESULT_RPC_ID, ANNOTATION_COMMIT_UPDATE_RPC_ID, ANNOTATION_GEOMETRY_CHUNK_SOURCE_RPC_ID, ANNOTATION_METADATA_CHUNK_SOURCE_RPC_ID, ANNOTATION_PERSPECTIVE_RENDER_LAYER_RPC_ID, ANNOTATION_REFERENCE_ADD_RPC_ID, ANNOTATION_REFERENCE_DELETE_RPC_ID, AnnotationGeometryChunkSpecification} from 'neuroglancer/annotation/base';
-import {Chunk, ChunkManager, ChunkSource} from 'neuroglancer/chunk_manager/backend';
+import {Annotation, AnnotationId, deserializeAnnotation, SerializedAnnotations} from 'neuroglancer/annotation';
+import {ANNOTATION_COMMIT_UPDATE_RESULT_RPC_ID, ANNOTATION_COMMIT_UPDATE_RPC_ID, ANNOTATION_GEOMETRY_CHUNK_SOURCE_RPC_ID, ANNOTATION_METADATA_CHUNK_SOURCE_RPC_ID, ANNOTATION_PERSPECTIVE_RENDER_LAYER_RPC_ID, ANNOTATION_REFERENCE_ADD_RPC_ID, ANNOTATION_REFERENCE_DELETE_RPC_ID, ANNOTATION_RENDER_LAYER_RPC_ID, ANNOTATION_RENDER_LAYER_UPDATE_SEGMENTATION_RPC_ID, ANNOTATION_SUBSET_GEOMETRY_CHUNK_SOURCE_RPC_ID, AnnotationGeometryChunkSpecification} from 'neuroglancer/annotation/base';
+import {Chunk, ChunkManager, ChunkSource, withChunkManager} from 'neuroglancer/chunk_manager/backend';
 import {ChunkPriorityTier} from 'neuroglancer/chunk_manager/base';
 import {PerspectiveViewRenderLayer} from 'neuroglancer/perspective_view/backend';
+import {forEachVisibleSegment, getObjectKey} from 'neuroglancer/segmentation_display_state/base';
+import {SharedDisjointUint64Sets} from 'neuroglancer/shared_disjoint_sets';
+import {SharedWatchableValue} from 'neuroglancer/shared_watchable_value';
 import {SliceViewChunk, SliceViewChunkSource} from 'neuroglancer/sliceview/backend';
+import {registerNested, WatchableValue} from 'neuroglancer/trackable_value';
+import {Uint64Set} from 'neuroglancer/uint64_set';
 import {CancellationToken} from 'neuroglancer/util/cancellation';
 import {Borrowed} from 'neuroglancer/util/disposable';
 import {kZeroVec} from 'neuroglancer/util/geom';
+import {Uint64} from 'neuroglancer/util/uint64';
 import {getBasePriority, getPriorityTier} from 'neuroglancer/visibility_priority/backend';
+import {withSharedVisibility} from 'neuroglancer/visibility_priority/backend';
 import {registerRPC, registerSharedObject, RPC, SharedObjectCounterpart} from 'neuroglancer/worker_rpc';
 
 const ANNOTATION_METADATA_CHUNK_PRIORITY = 200;
+const ANNOTATION_SEGMENT_FILTERED_CHUNK_PRIORITY = 60;
 
 export class AnnotationMetadataChunk extends Chunk {
   annotation: Annotation|undefined|null;
@@ -43,32 +51,55 @@ export class AnnotationMetadataChunk extends Chunk {
   }
 }
 
-export class AnnotationGeometryChunk extends SliceViewChunk {
-  source: AnnotationGeometryChunkSource;
-  data: Uint8Array|undefined;
-  typeToOffset: number[]|undefined;
-  typeToIds: string[][]|undefined;
+export class AnnotationGeometryData implements SerializedAnnotations {
+  data: Uint8Array;
+  typeToOffset: number[];
+  typeToIds: string[][];
+  segmentListIndex: Uint32Array;
+  segmentList: Uint32Array;
+
   serialize(msg: any, transfers: any[]) {
-    super.serialize(msg, transfers);
     msg.data = this.data;
     msg.typeToOffset = this.typeToOffset;
     msg.typeToIds = this.typeToIds;
-    transfers.push(this.data!.buffer);
-    this.typeToOffset = undefined;
-    this.typeToIds = undefined;
-    this.data = undefined;
+    msg.segmentList = this.segmentList;
+    msg.segmentListIndex = this.segmentListIndex;
+    transfers.push(this.data.buffer, this.segmentList.buffer, this.segmentListIndex.buffer);
   }
 
-  downloadSucceeded() {
-    this.systemMemoryBytes = this.gpuMemoryBytes = this.data!.byteLength;
-    super.downloadSucceeded();
+  get numBytes() {
+    return this.data.byteLength;
   }
+}
 
-  freeSystemMemory() {
-    this.typeToOffset = undefined;
-    this.typeToIds = undefined;
-    this.data = undefined;
+function GeometryChunkMixin<TBase extends { new (...args: any[]): Chunk }>(Base: TBase) {
+  class C extends Base {
+    data: AnnotationGeometryData|undefined;
+    serialize(msg: any, transfers: any[]) {
+      super.serialize(msg, transfers);
+      this.data!.serialize(msg, transfers);
+      this.data = undefined;
+    }
+
+    downloadSucceeded() {
+      this.systemMemoryBytes = this.gpuMemoryBytes = this.data!.numBytes;
+      super.downloadSucceeded();
+    }
+
+    freeSystemMemory() {
+      this.data = undefined;
+    }
   }
+  return C;
+}
+
+export class AnnotationGeometryChunk extends GeometryChunkMixin(SliceViewChunk) {
+  source: AnnotationGeometryChunkSource;
+}
+
+export class AnnotationSubsetGeometryChunk extends GeometryChunkMixin(Chunk) {
+  source: AnnotationSubsetGeometryChunkSource;
+  objectId: Uint64;
 }
 
 @registerSharedObject(ANNOTATION_METADATA_CHUNK_SOURCE_RPC_ID)
@@ -104,6 +135,31 @@ class AnnotationGeometryChunkSource extends SliceViewChunkSource {
 }
 AnnotationGeometryChunkSource.prototype.chunkConstructor = AnnotationGeometryChunk;
 
+
+@registerSharedObject(ANNOTATION_SUBSET_GEOMETRY_CHUNK_SOURCE_RPC_ID)
+class AnnotationSubsetGeometryChunkSource extends ChunkSource {
+  parent: Borrowed<AnnotationSource>|undefined = undefined;
+  chunks: Map<string, AnnotationSubsetGeometryChunk>;
+  constructor(rpc: RPC, options: any) {
+    super(rpc, options);
+  }
+  getChunk(objectId: Uint64) {
+    const key = getObjectKey(objectId);
+    const {chunks} = this;
+    let chunk = chunks.get(key);
+    if (chunk === undefined) {
+      chunk = this.getNewChunk_(AnnotationSubsetGeometryChunk);
+      chunk.initialize(key);
+      chunk.objectId = objectId.clone();
+      this.addChunk(chunk);
+    }
+    return chunk;
+  }
+  download(chunk: AnnotationSubsetGeometryChunk, cancellationToken: CancellationToken) {
+    return this.parent!.downloadSegmentFilteredGeometry(chunk, cancellationToken);
+  }
+}
+
 export interface AnnotationSource {
   // TODO(jbms): Move this declaration to class definition below and declare abstract once
   // TypeScript supports mixins with abstract classes.
@@ -111,6 +167,8 @@ export interface AnnotationSource {
       Promise<void>;
   downloadGeometry(chunk: AnnotationGeometryChunk, cancellationToken: CancellationToken):
       Promise<void>;
+  downloadSegmentFilteredGeometry(
+      chunk: AnnotationSubsetGeometryChunk, cancellationToken: CancellationToken): Promise<void>;
 }
 
 export class AnnotationSource extends SharedObjectCounterpart {
@@ -118,6 +176,7 @@ export class AnnotationSource extends SharedObjectCounterpart {
   chunkManager: Borrowed<ChunkManager>;
   metadataChunkSource: AnnotationMetadataChunkSource;
   sources: AnnotationGeometryChunkSource[][];
+  segmentFilteredSource: AnnotationSubsetGeometryChunkSource;
   constructor(rpc: RPC, options: any) {
     super(rpc, options);
     const chunkManager = this.chunkManager = <ChunkManager>rpc.get(options.chunkManager);
@@ -128,6 +187,9 @@ export class AnnotationSource extends SharedObjectCounterpart {
       source.parent = this;
       return source;
     }));
+    this.segmentFilteredSource = this.registerDisposer(
+        rpc.getRef<AnnotationSubsetGeometryChunkSource>(options.segmentFilteredSource));
+    this.segmentFilteredSource.parent = this;
     metadataChunkSource.parent = this;
     this.registerDisposer(
         chunkManager.recomputeChunkPriorities.add(() => this.recomputeChunkPriorities()));
@@ -172,7 +234,7 @@ registerRPC(ANNOTATION_REFERENCE_DELETE_RPC_ID, function(x: any) {
 registerRPC(ANNOTATION_COMMIT_UPDATE_RPC_ID, function(x: any) {
   const obj = <AnnotationSource>this.get(x.id);
   const annotationId: AnnotationId|undefined = x.annotationId;
-  const newAnnotation: Annotation|null = x.newAnnotation;
+  const newAnnotation: Annotation|null = deserializeAnnotation(x.newAnnotation);
 
   let promise: Promise<Annotation|null>;
   if (annotationId === undefined) {
@@ -205,15 +267,24 @@ registerRPC(ANNOTATION_COMMIT_UPDATE_RPC_ID, function(x: any) {
 @registerSharedObject(ANNOTATION_PERSPECTIVE_RENDER_LAYER_RPC_ID)
 class AnnotationPerspectiveRenderLayer extends PerspectiveViewRenderLayer {
   source: AnnotationSource;
+  filterBySegmentation: SharedWatchableValue<boolean>;
+
   constructor(rpc: RPC, options: any) {
     super(rpc, options);
     this.source = rpc.get(options.source);
+    this.filterBySegmentation = rpc.get(options.filterBySegmentation);
     this.viewStates.changed.add(() => this.source.chunkManager.scheduleUpdateChunkPriorities());
+    this.filterBySegmentation.changed.add(
+        () => this.source.chunkManager.scheduleUpdateChunkPriorities());
     this.registerDisposer(this.source.chunkManager.recomputeChunkPriorities.add(
         () => this.recomputeChunkPriorities()));
   }
+
   private recomputeChunkPriorities() {
     const {source} = this;
+    if (this.filterBySegmentation.value) {
+      return;
+    }
     for (const state of this.viewStates) {
       const visibility = state.visibility.value;
       if (visibility === Number.NEGATIVE_INFINITY) {
@@ -232,3 +303,66 @@ class AnnotationPerspectiveRenderLayer extends PerspectiveViewRenderLayer {
   }
 }
 AnnotationPerspectiveRenderLayer;
+
+
+@registerSharedObject(ANNOTATION_RENDER_LAYER_RPC_ID)
+class AnnotationLayerSharedObjectCounterpart extends withSharedVisibility(withChunkManager(SharedObjectCounterpart)) {
+  source: AnnotationSource;
+
+  segmentationState = new WatchableValue<
+      {visibleSegments: Uint64Set, segmentEquivalences: SharedDisjointUint64Sets}|undefined|null>(
+      undefined);
+
+  constructor(rpc: RPC, options: any) {
+    super(rpc, options);
+    this.source = rpc.get(options.source);
+    this.segmentationState.value = this.getSegmentationState(options.segmentationState);
+
+    const scheduleUpdateChunkPriorities = () => this.chunkManager.scheduleUpdateChunkPriorities();
+    this.registerDisposer(registerNested(this.segmentationState, (context, state) => {
+      if (state != null) {
+        context.registerDisposer(state.visibleSegments.changed.add(scheduleUpdateChunkPriorities));
+        context.registerDisposer(
+            state.segmentEquivalences.changed.add(scheduleUpdateChunkPriorities));
+      }
+    }));
+    this.registerDisposer(this.chunkManager.recomputeChunkPriorities.add(
+        () => this.recomputeChunkPriorities()));
+  }
+
+  private recomputeChunkPriorities() {
+    const state = this.segmentationState.value;
+    if (state == null) {
+      return;
+    }
+    const visibility = this.visibility.value;
+    if (visibility === Number.NEGATIVE_INFINITY) {
+      return;
+    }
+    const priorityTier = getPriorityTier(visibility);
+    const basePriority = getBasePriority(visibility);
+    const {chunkManager} = this;
+    const source = this.source.segmentFilteredSource;
+    forEachVisibleSegment(state, objectId => {
+      const chunk = source.getChunk(objectId);
+      chunkManager.requestChunk(
+          chunk, priorityTier, basePriority + ANNOTATION_SEGMENT_FILTERED_CHUNK_PRIORITY);
+    });
+  }
+
+  getSegmentationState(msg: any) {
+    if (msg == null) {
+      return msg;
+    }
+    return {
+      visibleSegments: this.rpc!.get(msg.visibleSegments),
+      segmentEquivalences: this.rpc!.get(msg.segmentEquivalences)
+    };
+  }
+}
+AnnotationLayerSharedObjectCounterpart;
+
+registerRPC(ANNOTATION_RENDER_LAYER_UPDATE_SEGMENTATION_RPC_ID, function(x) {
+  const obj = <AnnotationLayerSharedObjectCounterpart>this.get(x.id);
+  obj.segmentationState.value = obj.getSegmentationState(x.segmentationState);
+});

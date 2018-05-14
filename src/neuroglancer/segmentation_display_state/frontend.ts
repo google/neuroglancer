@@ -20,13 +20,14 @@ import {LayerSelectedValues, UserLayer} from 'neuroglancer/layer';
 import {SegmentColorHash} from 'neuroglancer/segment_color';
 import {forEachVisibleSegment, getObjectKey, VisibleSegmentsState} from 'neuroglancer/segmentation_display_state/base';
 import {TrackableAlphaValue} from 'neuroglancer/trackable_alpha';
+import {Uint64Set} from 'neuroglancer/uint64_set';
+import {hsvToRgb, rgbToHsv} from 'neuroglancer/util/colorspace';
 import {RefCounted} from 'neuroglancer/util/disposable';
 import {vec4} from 'neuroglancer/util/geom';
 import {NullarySignal} from 'neuroglancer/util/signal';
 import {Uint64} from 'neuroglancer/util/uint64';
 import {withSharedVisibility} from 'neuroglancer/visibility_priority/frontend';
 import {SharedObject} from 'neuroglancer/worker_rpc';
-import {rgbToHsv, hsvToRgb} from 'neuroglancer/util/colorspace';
 
 export class Uint64MapEntry {
   constructor(public key: Uint64, public value: Uint64) {}
@@ -82,6 +83,7 @@ export interface SegmentationDisplayState extends VisibleSegmentsState {
   segmentSelectionState: SegmentSelectionState;
   segmentColorHash: SegmentColorHash;
   saturation: TrackableAlphaValue;
+  highlightedSegments: Uint64Set;
 }
 
 export interface SegmentationDisplayStateWithAlpha extends SegmentationDisplayState {
@@ -179,7 +181,6 @@ const Base = withSharedVisibility(SharedObject);
 export class SegmentationLayerSharedObject extends Base {
   constructor(public chunkManager: ChunkManager, public displayState: SegmentationDisplayState) {
     super();
-    this.registerDisposer(displayState.clipBounds.changed.add(() => chunkManager.chunkQueueManager.scheduleChunkUpdate()));
   }
 
   initializeCounterpartWithChunkManager(options: any) {

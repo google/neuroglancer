@@ -20,34 +20,154 @@
 
 import './annotations.css';
 
-import {mat3} from 'gl-matrix';
+import debounce from 'lodash/debounce';
 import {Annotation, AnnotationReference, AnnotationType, AxisAlignedBoundingBox, Ellipsoid, getAnnotationTypeHandler, Line} from 'neuroglancer/annotation';
 import {AnnotationLayer, AnnotationLayerState, PerspectiveViewAnnotationLayer, SliceViewAnnotationLayer} from 'neuroglancer/annotation/frontend';
 import {DataFetchSliceViewRenderLayer, MultiscaleAnnotationSource} from 'neuroglancer/annotation/frontend_source';
 import {setAnnotationHoverStateFromMouseState} from 'neuroglancer/annotation/selection';
 import {MouseSelectionState, UserLayer} from 'neuroglancer/layer';
 import {VoxelSize} from 'neuroglancer/navigation_state';
+import {SegmentationDisplayState} from 'neuroglancer/segmentation_display_state/frontend';
 import {TrackableAlphaValue, trackableAlphaValue} from 'neuroglancer/trackable_alpha';
-import {TrackableValueInterface, WatchableRefCounted, WatchableValue} from 'neuroglancer/trackable_value';
+import {registerNested, TrackableValueInterface, WatchableRefCounted, WatchableValue} from 'neuroglancer/trackable_value';
 import {registerTool, Tool} from 'neuroglancer/ui/tool';
 import {TrackableRGB} from 'neuroglancer/util/color';
 import {Borrowed, Owned, RefCounted} from 'neuroglancer/util/disposable';
 import {removeChildren} from 'neuroglancer/util/dom';
-import {mat3FromMat4, mat4, transformVectorByMat4, vec3} from 'neuroglancer/util/geom';
+import {mat3, mat3FromMat4, mat4, transformVectorByMat4, vec3} from 'neuroglancer/util/geom';
 import {verifyObject, verifyObjectProperty, verifyOptionalInt, verifyOptionalString, verifyString} from 'neuroglancer/util/json';
 import {NullarySignal} from 'neuroglancer/util/signal';
 import {formatBoundingBoxVolume, formatIntegerBounds, formatIntegerPoint, formatLength} from 'neuroglancer/util/spatial_units';
+import {Uint64} from 'neuroglancer/util/uint64';
 import {WatchableVisibilityPriority} from 'neuroglancer/visibility_priority/frontend';
 import {makeCloseButton} from 'neuroglancer/widget/close_button';
 import {ColorWidget} from 'neuroglancer/widget/color';
 import {RangeWidget} from 'neuroglancer/widget/range';
 import {StackView, Tab} from 'neuroglancer/widget/tab_view';
 import {makeTextIconButton} from 'neuroglancer/widget/text_icon_button';
+import {Uint64EntryWidget} from 'neuroglancer/widget/uint64_entry_widget';
 
 type AnnotationIdAndPart = {
   id: string,
   partIndex?: number
 };
+
+export class AnnotationSegmentListWidget extends RefCounted {
+  element = document.createElement('div');
+  private addSegmentWidget = this.registerDisposer(new Uint64EntryWidget());
+  private segmentationState: SegmentationDisplayState|undefined|null;
+  private debouncedUpdateView = debounce(() => this.updateView(), 0);
+  constructor(
+      public reference: Borrowed<AnnotationReference>,
+      public annotationLayer: AnnotationLayerState) {
+    super();
+    this.element.className = 'neuroglancer-annotation-segment-list';
+    const {addSegmentWidget} = this;
+    addSegmentWidget.element.style.display = 'inline-block';
+    addSegmentWidget.element.title = 'Associate segments';
+    this.element.appendChild(addSegmentWidget.element);
+    this.registerDisposer(annotationLayer.segmentationState.changed.add(this.debouncedUpdateView));
+    this.registerDisposer(() => this.unregisterSegmentationState());
+    this.registerDisposer(this.addSegmentWidget.valuesEntered.add(values => {
+      const annotation = this.reference.value;
+      if (annotation == null) {
+        return;
+      }
+      const existingSegments = annotation.segments;
+      const segments = [...(existingSegments || []), ...values];
+      const newAnnotation = {...annotation, segments};
+      this.annotationLayer.source.update(this.reference, newAnnotation);
+      this.annotationLayer.source.commit(this.reference);
+    }));
+    this.registerDisposer(reference.changed.add(this.debouncedUpdateView));
+    this.updateView();
+  }
+
+  private unregisterSegmentationState() {
+    const {segmentationState} = this;
+    if (segmentationState != null) {
+      segmentationState.visibleSegments.changed.remove(this.debouncedUpdateView);
+      segmentationState.segmentColorHash.changed.remove(this.debouncedUpdateView);
+      segmentationState.segmentSelectionState.changed.remove(this.debouncedUpdateView);
+      this.segmentationState = undefined;
+    }
+  }
+
+  private updateView() {
+    const segmentationState = this.annotationLayer.segmentationState.value;
+    if (segmentationState !== this.segmentationState) {
+      this.unregisterSegmentationState();
+      this.segmentationState = segmentationState;
+      if (segmentationState != null) {
+        segmentationState.visibleSegments.changed.add(this.debouncedUpdateView);
+        segmentationState.segmentColorHash.changed.add(this.debouncedUpdateView);
+        segmentationState.segmentSelectionState.changed.add(this.debouncedUpdateView);
+      }
+    }
+
+    const {element} = this;
+    // Remove existing segment representations.
+    for (let child = this.addSegmentWidget.element.nextElementSibling; child !== null;) {
+      const next = child.nextElementSibling;
+      element.removeChild(child);
+      child = next;
+    }
+    element.style.display = 'none';
+    const annotation = this.reference.value;
+    if (annotation == null) {
+      return;
+    }
+    const segments = annotation.segments;
+    if (segmentationState === null) {
+      return;
+    }
+    element.style.display = '';
+    if (segments === undefined || segments.length === 0) {
+      return;
+    }
+    const segmentColorHash = segmentationState ? segmentationState.segmentColorHash : undefined;
+    segments.forEach((segment, index) => {
+      if (index !== 0) {
+        element.appendChild(document.createTextNode(' '));
+      }
+      const child = document.createElement('span');
+      child.title =
+          'Double click to toggle segment visibility, control+click to disassociate segment from annotation.';
+      child.className = 'neuroglancer-annotation-segment-item';
+      child.textContent = segment.toString();
+      if (segmentationState !== undefined) {
+        child.style.backgroundColor = segmentColorHash!.computeCssColor(segment);
+        child.addEventListener('mouseenter', () => {
+          segmentationState.segmentSelectionState.set(segment);
+        });
+        child.addEventListener('mouseleave', () => {
+          segmentationState.segmentSelectionState.set(null);
+        });
+        child.addEventListener('dblclick', (event: MouseEvent) => {
+          if (event.ctrlKey) {
+            return;
+          }
+          if (segmentationState.visibleSegments.has(segment)) {
+            segmentationState.visibleSegments.delete(segment);
+          } else {
+            segmentationState.visibleSegments.add(segment);
+          }
+        });
+      }
+      child.addEventListener('click', (event: MouseEvent) => {
+        if (!event.ctrlKey) {
+          return;
+        }
+        const existingSegments = annotation.segments || [];
+        const newSegments = existingSegments.filter(x => !Uint64.equal(segment, x));
+        const newAnnotation = {...annotation, segments: newSegments ? newSegments : undefined};
+        this.annotationLayer.source.update(this.reference, newAnnotation);
+        this.annotationLayer.source.commit(this.reference);
+      });
+      element.appendChild(child);
+    });
+  }
+}
 
 export class SelectedAnnotationState extends RefCounted implements
     TrackableValueInterface<AnnotationIdAndPart|undefined> {
@@ -80,6 +200,12 @@ export class SelectedAnnotationState extends RefCounted implements
 
   set value(value: AnnotationIdAndPart|undefined) {
     this.value_ = value;
+    const reference = this.reference_;
+    if (reference !== undefined) {
+      if (value === undefined || reference.id !== value.id) {
+        this.unbindReference();
+      }
+    }
     this.validate();
     this.changed.dispatch();
   }
@@ -131,10 +257,9 @@ export class SelectedAnnotationState extends RefCounted implements
       if (value !== undefined) {
         let reference = this.reference_;
         if (reference !== undefined && reference.id !== value.id) {
-          this.unbindReference();
-          reference = undefined;
-        }
-        if (reference === undefined) {
+          // Id changed.
+          value.id = reference.id;
+        } else if (reference === undefined) {
           reference = this.reference_ = annotationLayer.source.getReference(value.id);
           reference.changed.add(this.referenceChanged);
         }
@@ -246,7 +371,7 @@ function getCenterPosition(annotation: Annotation, transform: mat4) {
   return vec3.transformMat4(center, center, transform);
 }
 
-class AnnotationLayerView extends Tab {
+export class AnnotationLayerView extends Tab {
   private annotationListContainer = document.createElement('ul');
   private annotationListElements = new Map<string, HTMLElement>();
   private previousSelectedId: string|undefined;
@@ -276,6 +401,8 @@ class AnnotationLayerView extends Tab {
 
     const toolbox = document.createElement('div');
     toolbox.className = 'neuroglancer-annotation-toolbox';
+
+    layer.initializeAnnotationLayerViewTab(this);
 
     {
       const widget = this.registerDisposer(new RangeWidget(this.annotationLayer.fillOpacity));
@@ -451,6 +578,7 @@ export class AnnotationDetailsTab extends Tab {
   private valid = false;
   private mouseEntered = false;
   private hoverState: WatchableValue<{id: string, partIndex?: number}|undefined>|undefined;
+  private segmentListWidget: AnnotationSegmentListWidget|undefined;
   constructor(
       public state: Owned<SelectedAnnotationState>, public voxelSize: VoxelSize,
       public setSpatialCoordinates: (point: vec3) => void) {
@@ -531,11 +659,11 @@ export class AnnotationDetailsTab extends Tab {
     if (!annotationLayer.source.readonly) {
       const deleteButton = makeTextIconButton('🗑', 'Delete annotation');
       deleteButton.addEventListener('click', () => {
-        const reference = annotationLayer.source.getReference(value.id);
+        const ref = annotationLayer.source.getReference(value.id);
         try {
-          annotationLayer.source.delete(reference);
+          annotationLayer.source.delete(ref);
         } finally {
-          reference.dispose();
+          ref.dispose();
         }
       });
       title.appendChild(deleteButton);
@@ -584,6 +712,20 @@ export class AnnotationDetailsTab extends Tab {
       length.textContent = spatialLengthText + voxelLengthText;
       element.appendChild(length);
     }
+
+    let {segmentListWidget} = this;
+    if (segmentListWidget !== undefined) {
+      if (segmentListWidget.reference !== reference) {
+        segmentListWidget.dispose();
+        this.unregisterDisposer(segmentListWidget);
+        segmentListWidget = this.segmentListWidget = undefined;
+      }
+    }
+    if (segmentListWidget === undefined) {
+      this.segmentListWidget = segmentListWidget =
+          this.registerDisposer(new AnnotationSegmentListWidget(reference, annotationLayer));
+    }
+    element.appendChild(segmentListWidget.element);
 
     const description = document.createElement('textarea');
     description.value = annotation.description || '';
@@ -639,6 +781,17 @@ export class AnnotationTab extends Tab {
   }
 }
 
+function getSelectedAssocatedSegment(annotationLayer: AnnotationLayerState) {
+  let segments: Uint64[]|undefined;
+  const segmentationState = annotationLayer.segmentationState.value;
+  if (segmentationState != null) {
+    if (segmentationState.segmentSelectionState.hasSelectedSegment) {
+      segments = [segmentationState.segmentSelectionState.selectedSegment.clone()];
+    }
+  }
+  return segments;
+}
+
 abstract class PlaceAnnotationTool extends Tool {
   group: string;
   annotationDescription: string|undefined;
@@ -675,6 +828,7 @@ export class PlacePointTool extends PlaceAnnotationTool {
       const annotation: Annotation = {
         id: '',
         description: '',
+        segments: getSelectedAssocatedSegment(annotationLayer),
         point:
             vec3.transformMat4(vec3.create(), mouseState.position, annotationLayer.globalToObject),
         type: AnnotationType.POINT,
@@ -804,6 +958,28 @@ export class PlaceLineTool extends PlaceTwoCornerAnnotationTool {
     return `annotate line`;
   }
 
+  getInitialAnnotation(mouseState: MouseSelectionState, annotationLayer: AnnotationLayerState): Annotation {
+    const result = super.getInitialAnnotation(mouseState, annotationLayer);
+    result.segments = getSelectedAssocatedSegment(annotationLayer);
+    return result;
+  }
+
+  getUpdatedAnnotation(
+      oldAnnotation: Line|AxisAlignedBoundingBox, mouseState: MouseSelectionState,
+      annotationLayer: AnnotationLayerState) {
+    const result = super.getUpdatedAnnotation(oldAnnotation, mouseState, annotationLayer);
+    const segments = result.segments;
+    if (segments !== undefined && segments.length > 0) {
+      segments.length = 1;
+    }
+    let newSegments = getSelectedAssocatedSegment(annotationLayer);
+    if (newSegments && segments) {
+      newSegments = newSegments.filter(x => segments.findIndex(y => Uint64.equal(x, y)) === -1);
+    }
+    result.segments = [...(segments || []), ...(newSegments || [])] || undefined;
+    return result;
+  }
+
   toJSON() {
     return ANNOTATE_LINE_TOOL_ID;
   }
@@ -819,6 +995,7 @@ class PlaceSphereTool extends TwoStepAnnotationTool {
       type: AnnotationType.ELLIPSOID,
       id: '',
       description: '',
+      segments: getSelectedAssocatedSegment(annotationLayer),
       center: point,
       radii: vec3.fromValues(0, 0, 0),
     };
@@ -875,6 +1052,7 @@ export interface UserLayerWithAnnotations extends UserLayer {
   selectedAnnotation: SelectedAnnotationState;
   annotationColor: TrackableRGB;
   annotationFillOpacity: TrackableAlphaValue;
+  initializeAnnotationLayerViewTab(tab: AnnotationLayerView): void;
 }
 
 export function getAnnotationRenderOptions(userLayer: UserLayerWithAnnotations) {
@@ -912,7 +1090,14 @@ export function UserLayerWithAnnotationsMixin<TBase extends {new (...args: any[]
           this.addRenderLayer(new SliceViewAnnotationLayer(annotationLayer));
           this.addRenderLayer(new PerspectiveViewAnnotationLayer(annotationLayer.addRef()));
           if (annotationLayer.source instanceof MultiscaleAnnotationSource) {
-            this.addRenderLayer(new DataFetchSliceViewRenderLayer(annotationLayer.source.addRef()));
+            const dataFetchLayer = this.registerDisposer(
+                new DataFetchSliceViewRenderLayer(annotationLayer.source.addRef()));
+            this.registerDisposer(registerNested(state.filterBySegmentation, (context, value) => {
+              if (!value) {
+                this.addRenderLayer(dataFetchLayer.addRef());
+                context.registerDisposer(() => this.removeRenderLayer(dataFetchLayer));
+              }
+            }));
           }
         }
       });
@@ -931,6 +1116,10 @@ export function UserLayerWithAnnotationsMixin<TBase extends {new (...args: any[]
       x[ANNOTATION_COLOR_JSON_KEY] = this.annotationColor.toJSON();
       x[ANNOTATION_FILL_OPACITY_JSON_KEY] = this.annotationFillOpacity.toJSON();
       return x;
+    }
+
+    initializeAnnotationLayerViewTab(tab: AnnotationLayerView) {
+      tab;
     }
   }
   return C;

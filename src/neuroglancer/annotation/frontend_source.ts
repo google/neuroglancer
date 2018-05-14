@@ -14,8 +14,8 @@
  * limitations under the License.
  */
 
-import {Annotation, AnnotationId, AnnotationReference, AnnotationType, annotationTypes, getAnnotationTypeHandler, makeAnnotationId} from 'neuroglancer/annotation';
-import {ANNOTATION_COMMIT_UPDATE_RESULT_RPC_ID, ANNOTATION_COMMIT_UPDATE_RPC_ID, ANNOTATION_GEOMETRY_CHUNK_SOURCE_RPC_ID, ANNOTATION_METADATA_CHUNK_SOURCE_RPC_ID, ANNOTATION_REFERENCE_ADD_RPC_ID, ANNOTATION_REFERENCE_DELETE_RPC_ID, AnnotationGeometryChunkSpecification} from 'neuroglancer/annotation/base';
+import {Annotation, AnnotationId, AnnotationReference, AnnotationType, annotationTypes, deserializeAnnotation, getAnnotationTypeHandler, makeAnnotationId} from 'neuroglancer/annotation';
+import {ANNOTATION_COMMIT_UPDATE_RESULT_RPC_ID, ANNOTATION_COMMIT_UPDATE_RPC_ID, ANNOTATION_GEOMETRY_CHUNK_SOURCE_RPC_ID, ANNOTATION_METADATA_CHUNK_SOURCE_RPC_ID, ANNOTATION_REFERENCE_ADD_RPC_ID, ANNOTATION_REFERENCE_DELETE_RPC_ID, ANNOTATION_SUBSET_GEOMETRY_CHUNK_SOURCE_RPC_ID, AnnotationGeometryChunkSpecification} from 'neuroglancer/annotation/base';
 import {getAnnotationTypeRenderHandler} from 'neuroglancer/annotation/type_handler';
 import {Chunk, ChunkManager, ChunkSource} from 'neuroglancer/chunk_manager/frontend';
 import {SliceViewSourceOptions} from 'neuroglancer/sliceview/base';
@@ -29,11 +29,79 @@ import {NullarySignal} from 'neuroglancer/util/signal';
 import {Buffer} from 'neuroglancer/webgl/buffer';
 import {GL} from 'neuroglancer/webgl/context';
 import {registerRPC, registerSharedObjectOwner, RPC, SharedObject} from 'neuroglancer/worker_rpc';
+import { getObjectKey } from 'neuroglancer/segmentation_display_state/base';
 
 interface AnnotationGeometryChunkSourceOptions extends SliceViewChunkSourceOptions {
   spec: AnnotationGeometryChunkSpecification;
   parameters: any;
   parent: Borrowed<MultiscaleAnnotationSource>;
+}
+
+export class AnnotationGeometryData {
+  buffer: Buffer|undefined;
+  bufferValid = false;
+  data: Uint8Array|undefined;
+  typeToOffset: number[]|undefined;
+  numPickIds: number;
+  typeToIds: string[][]|undefined;
+
+  constructor(x: any) {
+    this.data = x.data;
+    const typeToIds = this.typeToIds = x.typeToIds;
+    let numPickIds = 0;
+    for (const annotationType of annotationTypes) {
+      numPickIds += getAnnotationTypeRenderHandler(annotationType).pickIdsPerInstance *
+          typeToIds[annotationType].length;
+    }
+    this.numPickIds = numPickIds;
+    this.typeToOffset = x.typeToOffset;
+  }
+  freeGPUMemory(gl: GL) {
+    gl;
+    const {buffer} = this;
+    if (buffer !== undefined) {
+      buffer.dispose();
+      this.bufferValid = false;
+      this.buffer = undefined;
+    }
+  }
+}
+
+export class AnnotationSubsetGeometryChunk extends Chunk {
+  source: AnnotationSubsetGeometryChunkSource;
+  data: AnnotationGeometryData;
+  constructor(source: AnnotationSubsetGeometryChunkSource, x: any) {
+    super(source);
+    this.data = new AnnotationGeometryData(x);
+  }
+
+  freeGPUMemory(gl: GL) {
+    super.freeGPUMemory(gl);
+    this.data.freeGPUMemory(gl);
+  }
+
+  dispose() {
+    this.data = <any>undefined;
+  }
+}
+
+export class AnnotationGeometryChunk extends SliceViewChunk {
+  source: AnnotationGeometryChunkSource;
+  data: AnnotationGeometryData;
+
+  constructor(source: AnnotationGeometryChunkSource, x: any) {
+    super(source, x);
+    this.data = new AnnotationGeometryData(x);
+  }
+
+  freeGPUMemory(gl: GL) {
+    super.freeGPUMemory(gl);
+    this.data.freeGPUMemory(gl);
+  }
+
+  dispose() {
+    this.data = <any>undefined;
+  }
 }
 
 @registerSharedObjectOwner(ANNOTATION_GEOMETRY_CHUNK_SOURCE_RPC_ID)
@@ -42,6 +110,8 @@ export class AnnotationGeometryChunkSource extends SliceViewChunkSource {
   chunks: Map<string, AnnotationGeometryChunk>;
   spec: AnnotationGeometryChunkSpecification;
   parameters: any;
+  immediateChunkUpdates = true;
+
   constructor(chunkManager: Borrowed<ChunkManager>, options: AnnotationGeometryChunkSourceOptions) {
     super(chunkManager, options);
     this.parent = options.parent;
@@ -65,46 +135,28 @@ export class AnnotationGeometryChunkSource extends SliceViewChunkSource {
   }
 }
 
-export class AnnotationGeometryChunk extends SliceViewChunk {
-  buffer: Buffer|undefined;
-  bufferValid = false;
-  data: Uint8Array|undefined;
-  typeToOffset: number[]|undefined;
-  numPickIds: number;
-  typeToIds: string[][]|undefined;
-  typeToDescription: string[][]|undefined;
-  spec: AnnotationGeometryChunkSpecification;
-
+@registerSharedObjectOwner(ANNOTATION_SUBSET_GEOMETRY_CHUNK_SOURCE_RPC_ID)
+export class AnnotationSubsetGeometryChunkSource extends ChunkSource {
   immediateChunkUpdates = true;
+  chunks: Map<string, AnnotationSubsetGeometryChunk>;
 
-  constructor(source: AnnotationGeometryChunkSource, x: any) {
-    super(source, x);
-    this.data = x.data;
-    const typeToIds = this.typeToIds = x.typeToIds;
-    let numPickIds = 0;
-    for (const annotationType of annotationTypes) {
-      numPickIds += getAnnotationTypeRenderHandler(annotationType).pickIdsPerInstance *
-          typeToIds[annotationType].length;
-    }
-    this.numPickIds = numPickIds;
-    this.typeToOffset = x.typeToOffset;
+  constructor(
+      chunkManager: Borrowed<ChunkManager>, public parent: Borrowed<MultiscaleAnnotationSource>) {
+    super(chunkManager, {});
   }
 
-  freeGPUMemory(gl: GL) {
-    super.freeGPUMemory(gl);
-    const {buffer} = this;
-    if (buffer !== undefined) {
-      buffer.dispose();
-      this.bufferValid = false;
-      this.buffer = undefined;
-    }
+  initializeCounterpart(rpc: RPC, options: any) {
+    options['parent'] = this.parent.rpcId;
+    super.initializeCounterpart(rpc, options);
   }
 
-  dispose() {
-    this.data = undefined;
-    this.typeToIds = undefined;
-    this.typeToDescription = undefined;
-    this.typeToOffset = undefined;
+  addChunk(key: string, chunk: AnnotationSubsetGeometryChunk) {
+    super.addChunk(key, chunk);
+    // TODO: process local deletions
+  }
+
+  getChunk(x: any): AnnotationSubsetGeometryChunk {
+    return new AnnotationSubsetGeometryChunk(this, x);
   }
 }
 
@@ -112,7 +164,7 @@ export class AnnotationMetadataChunk extends Chunk {
   annotation: Annotation|null;
   constructor(source: Borrowed<AnnotationMetadataChunkSource>, x: any) {
     super(source);
-    this.annotation = x.annotation;
+    this.annotation = deserializeAnnotation(x.annotation);
   }
 }
 
@@ -149,7 +201,7 @@ export class AnnotationMetadataChunkSource extends ChunkSource {
   }
 }
 
-function updateAnnotation(chunk: AnnotationGeometryChunk, annotation: Annotation) {
+function updateAnnotation(chunk: AnnotationGeometryData, annotation: Annotation) {
   // Find insertion point.
   const type = annotation.type;
   let ids = chunk.typeToIds![type];
@@ -181,7 +233,7 @@ function updateAnnotation(chunk: AnnotationGeometryChunk, annotation: Annotation
   chunk.bufferValid = false;
 }
 
-function deleteAnnotation(chunk: AnnotationGeometryChunk, type: AnnotationType, id: AnnotationId) {
+function deleteAnnotation(chunk: AnnotationGeometryData, type: AnnotationType, id: AnnotationId) {
   let ids = chunk.typeToIds![type];
   const handler = getAnnotationTypeRenderHandler(type);
   const numBytes = handler.bytes;
@@ -204,15 +256,6 @@ function deleteAnnotation(chunk: AnnotationGeometryChunk, type: AnnotationType, 
   chunk.bufferValid = false;
   return true;
 }
-
-///  send add operation to backend   -->   does source-specific thing on backend   -->
-///      if success: backend sends chunk update (frontend adds    -->  backend sends add completion
-///      notification if failure: backend sends add failure notification  -->  delete from
-///      temporary, display message
-
-//   send update operation
-//       if success: backend sends chunk update   -->  backend sends update completion notification
-
 
 interface LocalUpdateUndoState {
   /**
@@ -253,6 +296,7 @@ export class MultiscaleAnnotationSource extends SharedObject implements
   metadataChunkSource =
       this.registerDisposer(new AnnotationMetadataChunkSource(this.chunkManager, this));
   sources: Owned<AnnotationGeometryChunkSource>[][];
+  segmentFilteredSource: Owned<AnnotationSubsetGeometryChunkSource>;
   objectToLocal = mat4.create();
   constructor(public chunkManager: Borrowed<ChunkManager>, options: {
     sourceSpecifications: {parameters: any, spec: AnnotationGeometryChunkSpecification}[][]
@@ -261,7 +305,9 @@ export class MultiscaleAnnotationSource extends SharedObject implements
     this.sources = options.sourceSpecifications.map(
         alternatives => alternatives.map(
             ({parameters, spec}) => this.registerDisposer(new AnnotationGeometryChunkSource(
-                chunkManager, {spec, parameters, parent: this}))));
+              chunkManager, {spec, parameters, parent: this}))));
+    this.segmentFilteredSource =
+        this.registerDisposer(new AnnotationSubsetGeometryChunkSource(chunkManager, this));
   }
 
   getSources(_options: SliceViewSourceOptions): AnnotationGeometryChunkSource[][] {
@@ -283,6 +329,8 @@ export class MultiscaleAnnotationSource extends SharedObject implements
         source.initializeCounterpart(rpc, {});
       }
     }
+    this.segmentFilteredSource.initializeCounterpart(rpc, {});
+    options.segmentFilteredSource = this.segmentFilteredSource.addCounterpartRef();
     options.metadataChunkSource = this.metadataChunkSource.addCounterpartRef();
     options.sources =
         this.sources.map(alternatives => alternatives.map(source => source.addCounterpartRef()));
@@ -290,30 +338,14 @@ export class MultiscaleAnnotationSource extends SharedObject implements
     super.initializeCounterpart(rpc, options);
   }
 
-  // methods supported by backend:
-  //   delete annotation (id)
-  //   add annotation (Annotation)
-  //   update annotation (generation, Annotation)
-  //   get annotation (id)
-
-  // messages supported by frontend:
-  //   update chunk (source, chunk, modified annotations, deleted ids, ids moved to another chunk)
-  //     this needs to update any annotation references
-
-  // frontend keeps list of local deletions
-  ///  to apply a local deletion, we need to know which source/chunk it applies to, which requires
-  ///  knowing its position.
-
-  // To process local deletions:
-  //   when we add the local deletion, we immediately apply it to chunks known to the frontend
-  //   additionally, whenever we receive a chunk from the backend that was received prior to
-  //   confirmation of the operation, we also need to apply them if the deletion fails, we need to
-  //   go ahead
-
   add(annotation: Annotation, commit: boolean = true): AnnotationReference {
     annotation.id = makeAnnotationId();
     const reference = new AnnotationReference(annotation.id);
     reference.value = annotation;
+    this.references.set(reference.id, reference);
+    reference.registerDisposer(() => {
+      this.references.delete(reference.id);
+    });
     this.applyLocalUpdate(
         reference, /*existing=*/false, /*commit=*/commit, /*newAnnotation=*/annotation);
     return reference;
@@ -338,22 +370,22 @@ export class MultiscaleAnnotationSource extends SharedObject implements
         commitInProgress: undefined,
       };
       localUpdates.set(id, localUpdate);
-      this.forEachPossibleChunk(annotation, (key, chunk) => {
-        key;
-        deleteAnnotation(chunk, annotation.type, id);
+      this.forEachPossibleChunk(annotation, chunk => {
+        deleteAnnotation(chunk.data, annotation.type, id);
       });
       if (newAnnotation !== null) {
         // Add to temporary chunk.
-        updateAnnotation(this.temporary, newAnnotation);
+        updateAnnotation(this.temporary.data, newAnnotation);
       }
     } else {
       if (newAnnotation === null) {
         // Annotation has a local update already, so we need to delete it from the temporary chunk.
-        deleteAnnotation(this.temporary, annotation.type, annotation.id);
+        deleteAnnotation(this.temporary.data, annotation.type, annotation.id);
       } else {
         // Modify existing entry in temporary chunk.
-        updateAnnotation(this.temporary, newAnnotation);
+        updateAnnotation(this.temporary.data, newAnnotation);
       }
+      reference.value = newAnnotation;
     }
     if (commit) {
       if (localUpdate.commitInProgress !== undefined) {
@@ -382,7 +414,7 @@ export class MultiscaleAnnotationSource extends SharedObject implements
     });
   }
 
-  delete(reference: AnnotationReference) {
+  delete(reference: Borrowed<AnnotationReference>) {
     this.applyLocalUpdate(reference, /*existing=*/true, /*commit=*/true, /*newAnnotation=*/null);
   }
 
@@ -407,11 +439,11 @@ export class MultiscaleAnnotationSource extends SharedObject implements
   /**
    * Must be called after `add` or `update` to commit the result.
    */
-  commit(reference: AnnotationReference) {
+  commit(reference: Borrowed<AnnotationReference>) {
     this.applyLocalUpdate(reference, /*existing=*/true, /*commit=*/true, reference.value!);
   }
 
-  getReference(id: AnnotationId): AnnotationReference {
+  getReference(id: AnnotationId): Owned<AnnotationReference> {
     let existing = this.references.get(id);
     if (existing !== undefined) {
       return existing.addRef();
@@ -432,7 +464,7 @@ export class MultiscaleAnnotationSource extends SharedObject implements
 
   private forEachPossibleChunk(
       annotation: Annotation,
-      callback: (chunkKey: string, chunk: AnnotationGeometryChunk) => void) {
+      callback: (chunk: AnnotationGeometryChunk|AnnotationSubsetGeometryChunk) => void) {
     const {sources} = this;
     if (sources.length !== 1 || sources[0].length !== 1) {
       throw new Error('Not implemented');
@@ -442,8 +474,21 @@ export class MultiscaleAnnotationSource extends SharedObject implements
       throw new Error('Not implemented');
     }
     annotation;
-    for (const [chunkKey, chunk] of source.chunks) {
-      callback(chunkKey, chunk);
+    for (const chunk of source.chunks.values()) {
+      callback(chunk);
+    }
+
+    const {segments} = annotation;
+    if (segments === undefined || segments.length === 0) {
+      return;
+    }
+    const {segmentFilteredSource} = this;
+    for (const segment of segments) {
+      const chunk = segmentFilteredSource.chunks.get(getObjectKey(segment));
+      if (chunk === undefined) {
+        continue;
+      }
+      callback(chunk);
     }
   }
 
@@ -462,12 +507,14 @@ export class MultiscaleAnnotationSource extends SharedObject implements
         throw new Error(`Received invalid successful update notification`);
       }
       localUpdate.reference.id = newAnnotation.id;
+      this.references.delete(id);
+      this.references.set(newAnnotation.id, localUpdate.reference);
       this.localUpdates.delete(id);
       this.localUpdates.set(newAnnotation.id, localUpdate);
       if (localUpdate.reference.value !== null) {
         localUpdate.reference.value!.id = newAnnotation.id;
-        deleteAnnotation(this.temporary, localUpdate.type, id);
-        updateAnnotation(this.temporary, localUpdate.reference.value!);
+        deleteAnnotation(this.temporary.data, localUpdate.type, id);
+        updateAnnotation(this.temporary.data, localUpdate.reference.value!);
       }
       localUpdate.reference.changed.dispatch();
     }
@@ -524,12 +571,11 @@ export class MultiscaleAnnotationSource extends SharedObject implements
   }
 
   private revertLocalUpdate(localUpdate: LocalUpdateUndoState) {
-    deleteAnnotation(this.temporary, localUpdate.type, localUpdate.reference.id);
+    deleteAnnotation(this.temporary.data, localUpdate.type, localUpdate.reference.id);
     const {existingAnnotation} = localUpdate;
     if (existingAnnotation !== undefined) {
-      this.forEachPossibleChunk(existingAnnotation, (chunkKey, chunk) => {
-        chunkKey;
-        updateAnnotation(chunk, existingAnnotation);
+      this.forEachPossibleChunk(existingAnnotation, chunk => {
+        updateAnnotation(chunk.data, existingAnnotation);
       });
     }
     const {reference} = localUpdate;
@@ -556,7 +602,7 @@ registerRPC(ANNOTATION_COMMIT_UPDATE_RESULT_RPC_ID, function(x) {
   if (error !== undefined) {
     source.handleFailedUpdate(annotationId, error);
   } else {
-    const newAnnotation: Annotation|null = x.newAnnotation;
+    const newAnnotation: Annotation|null = deserializeAnnotation(x.newAnnotation);
     source.handleSuccessfulUpdate(annotationId, newAnnotation);
   }
 });

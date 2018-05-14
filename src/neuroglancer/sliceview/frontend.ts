@@ -360,7 +360,7 @@ export interface SliceViewChunkSource {
   getChunk(x: any): any;
 }
 
-export abstract class SliceViewChunk extends Chunk {
+export class SliceViewChunk extends Chunk {
   chunkGridPosition: vec3;
   source: SliceViewChunkSource;
 

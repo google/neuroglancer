@@ -25,10 +25,12 @@ export interface Bounds {
   size: vec3;
 }
 
-export interface VisibleSegmentsState {
+export interface VisibleSegmentsStateWithoutClipBounds {
   visibleSegments: Uint64Set;
   segmentEquivalences: SharedDisjointUint64Sets;
-  highlightedSegments: Uint64Set;
+}
+
+export interface VisibleSegmentsState extends VisibleSegmentsStateWithoutClipBounds {
   clipBounds: SharedWatchableValue<Bounds|undefined>;
 }
 
@@ -42,7 +44,8 @@ export function getObjectKey(objectId: Uint64, bounds?: Bounds): string {
 }
 
 export function forEachVisibleSegment(
-    state: VisibleSegmentsState, callback: (objectId: Uint64, rootObjectId: Uint64) => void) {
+    state: VisibleSegmentsStateWithoutClipBounds,
+    callback: (objectId: Uint64, rootObjectId: Uint64) => void) {
   let {visibleSegments, segmentEquivalences} = state;
   for (let rootObjectId of visibleSegments) {
     // TODO(jbms): Remove this check if logic is added to ensure that it always holds.

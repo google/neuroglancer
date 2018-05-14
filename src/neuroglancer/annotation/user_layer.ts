@@ -17,14 +17,19 @@
 import {AnnotationType, LocalAnnotationSource} from 'neuroglancer/annotation';
 import {AnnotationLayerState} from 'neuroglancer/annotation/frontend';
 import {CoordinateTransform, makeDerivedCoordinateTransform} from 'neuroglancer/coordinate_transform';
-import {UserLayer} from 'neuroglancer/layer';
+import {LayerReference, ManagedUserLayer, UserLayer} from 'neuroglancer/layer';
 import {LayerListSpecification, registerLayerType} from 'neuroglancer/layer_specification';
 import {VoxelSize} from 'neuroglancer/navigation_state';
+import {SegmentationDisplayState} from 'neuroglancer/segmentation_display_state/frontend';
+import {SegmentationUserLayer} from 'neuroglancer/segmentation_user_layer';
 import {StatusMessage} from 'neuroglancer/status';
-import {getAnnotationRenderOptions, UserLayerWithAnnotationsMixin} from 'neuroglancer/ui/annotations';
+import {ElementVisibilityFromTrackableBoolean, TrackableBoolean, TrackableBooleanCheckbox} from 'neuroglancer/trackable_boolean';
+import {makeDerivedWatchableValue, WatchableValue} from 'neuroglancer/trackable_value';
+import {AnnotationLayerView, getAnnotationRenderOptions, UserLayerWithAnnotationsMixin} from 'neuroglancer/ui/annotations';
 import {UserLayerWithCoordinateTransformMixin} from 'neuroglancer/user_layer_with_coordinate_transform';
 import {mat4, vec3} from 'neuroglancer/util/geom';
 import {parseArray, verify3dVec} from 'neuroglancer/util/json';
+import {LayerReferenceWidget} from 'neuroglancer/widget/layer_reference';
 
 require('./user_layer.css');
 
@@ -44,16 +49,70 @@ function addPointAnnotations(annotations: LocalAnnotationSource, obj: any) {
   });
 }
 
+function isValidLinkedSegmentationLayer(layer: ManagedUserLayer) {
+  const userLayer = layer.layer;
+  if (userLayer === null) {
+    return true;
+  }
+  if (userLayer instanceof SegmentationUserLayer) {
+    return true;
+  }
+  return false;
+}
+
+function getSegmentationDisplayState(layer: ManagedUserLayer|undefined): SegmentationDisplayState|undefined {
+  if (layer === undefined) {
+    return undefined;
+  }
+  const userLayer = layer.layer;
+  if (userLayer === null) {
+    return undefined;
+  }
+  if (!(userLayer instanceof SegmentationUserLayer)) {
+    return undefined;
+  }
+  return userLayer.displayState;
+}
+
 const VOXEL_SIZE_JSON_KEY = 'voxelSize';
 const SOURCE_JSON_KEY = 'source';
+const LINKED_SEGMENTATION_LAYER_JSON_KEY = 'linkedSegmentationLayer';
+const FILTER_BY_SEGMENTATION_JSON_KEY = 'filterBySegmentation';
 const Base = UserLayerWithAnnotationsMixin(UserLayerWithCoordinateTransformMixin(UserLayer));
 export class AnnotationUserLayer extends Base {
   localAnnotations = this.registerDisposer(new LocalAnnotationSource());
   voxelSize = new VoxelSize();
   sourceUrl: string|undefined;
+  linkedSegmentationLayer = this.registerDisposer(
+      new LayerReference(this.manager.rootLayers.addRef(), isValidLinkedSegmentationLayer));
+  filterBySegmentation = new TrackableBoolean(false);
+
+  getAnnotationRenderOptions() {
+    const segmentationState =
+        new WatchableValue<SegmentationDisplayState|undefined|null>(undefined);
+    const setSegmentationState = () => {
+      const {linkedSegmentationLayer} = this;
+      if (linkedSegmentationLayer.layerName === undefined) {
+        segmentationState.value = null;
+      } else {
+        const {layer} = linkedSegmentationLayer;
+        segmentationState.value = getSegmentationDisplayState(layer);
+      }
+    };
+    this.registerDisposer(this.linkedSegmentationLayer.changed.add(setSegmentationState));
+    setSegmentationState();
+    return {
+      segmentationState,
+      filterBySegmentation: this.filterBySegmentation,
+      ...getAnnotationRenderOptions(this)
+    };
+  }
+
   constructor(manager: LayerListSpecification, specification: any) {
     super(manager, specification);
     const sourceUrl = this.sourceUrl = specification[SOURCE_JSON_KEY];
+    this.linkedSegmentationLayer.restoreState(specification[LINKED_SEGMENTATION_LAYER_JSON_KEY]);
+    this.filterBySegmentation.restoreState(specification[FILTER_BY_SEGMENTATION_JSON_KEY]);
     if (sourceUrl === undefined) {
       this.isReady = true;
       this.voxelSize.restoreState(specification[VOXEL_SIZE_JSON_KEY]);
@@ -76,13 +135,14 @@ export class AnnotationUserLayer extends Base {
           this.annotationLayerState.value = new AnnotationLayerState({
             transform: derivedTransform,
             source: this.localAnnotations.addRef(),
-            ...getAnnotationRenderOptions(this)
+            ...this.getAnnotationRenderOptions()
           });
           voxelSizeValid = true;
         }
       };
       this.registerDisposer(this.localAnnotations.changed.add(this.specificationChanged.dispatch));
       this.registerDisposer(this.voxelSize.changed.add(this.specificationChanged.dispatch));
+      this.registerDisposer(this.filterBySegmentation.changed.add(this.specificationChanged.dispatch));
       this.registerDisposer(this.voxelSize.changed.add(handleVoxelSizeChanged));
       this.registerDisposer(this.manager.voxelSize.changed.add(handleVoxelSizeChanged));
       handleVoxelSizeChanged();
@@ -103,12 +163,32 @@ export class AnnotationUserLayer extends Base {
             this.annotationLayerState.value = new AnnotationLayerState({
               transform: this.transform,
               source,
-              ...getAnnotationRenderOptions(this)
+              ...this.getAnnotationRenderOptions()
             });
             this.isReady = true;
           });
     }
     this.tabs.default = 'annotations';
+  }
+
+  initializeAnnotationLayerViewTab(tab: AnnotationLayerView) {
+    const widget = tab.registerDisposer(new LayerReferenceWidget(this.linkedSegmentationLayer));
+    widget.element.insertBefore(
+        document.createTextNode('Linked segmentation: '), widget.element.firstChild);
+    tab.element.appendChild(widget.element);
+
+    {
+      const checkboxWidget = this.registerDisposer(
+          new TrackableBooleanCheckbox(tab.annotationLayer.filterBySegmentation));
+      const label = document.createElement('label');
+      label.textContent = 'Filter by segmentation: ';
+      label.appendChild(checkboxWidget.element);
+      tab.element.appendChild(label);
+      tab.registerDisposer(new ElementVisibilityFromTrackableBoolean(
+          this.registerDisposer(makeDerivedWatchableValue(
+              v => v !== undefined, tab.annotationLayer.segmentationState)),
+          label));
+    }
   }
 
   toJSON() {
@@ -119,6 +199,8 @@ export class AnnotationUserLayer extends Base {
       x[ANNOTATIONS_JSON_KEY] = this.localAnnotations.toJSON();
       x[VOXEL_SIZE_JSON_KEY] = this.voxelSize.toJSON();
     }
+    x[LINKED_SEGMENTATION_LAYER_JSON_KEY] = this.linkedSegmentationLayer.toJSON();
+    x[FILTER_BY_SEGMENTATION_JSON_KEY] = this.filterBySegmentation.toJSON();
     return x;
   }
 }

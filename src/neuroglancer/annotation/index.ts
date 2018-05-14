@@ -23,6 +23,7 @@ import {mat4, vec3} from 'neuroglancer/util/geom';
 import {parseArray, verify3dScale, verify3dVec, verifyEnumString, verifyObject, verifyObjectProperty, verifyOptionalString, verifyString} from 'neuroglancer/util/json';
 import {getRandomHexString} from 'neuroglancer/util/random';
 import {NullarySignal} from 'neuroglancer/util/signal';
+import {Uint64} from 'neuroglancer/util/uint64';
 
 export type AnnotationId = string;
 
@@ -63,6 +64,8 @@ export interface AnnotationBase {
 
   id: AnnotationId;
   type: AnnotationType;
+
+  segments?: Uint64[];
 }
 
 export interface Line extends AnnotationBase {
@@ -218,6 +221,10 @@ export function annotationToJson(annotation: Annotation) {
   result.type = AnnotationType[annotation.type].toLowerCase();
   result.id = annotation.id;
   result.description = annotation.description || undefined;
+  const {segments} = annotation;
+  if (segments !== undefined && segments.length > 0) {
+    result.segments = segments.map(x => x.toString());
+  }
   return result;
 }
 
@@ -230,6 +237,9 @@ export function restoreAnnotation(obj: any, allowMissingId = false): Annotation 
   const result: Annotation = <any>{
     id,
     description: verifyObjectProperty(obj, 'description', verifyOptionalString),
+    segments: verifyObjectProperty(
+        obj, 'segments',
+        x => x === undefined ? undefined : parseArray(x, y => Uint64.parseString(y))),
     type,
   };
   getAnnotationTypeHandler(type).restoreState(result, obj);
@@ -377,29 +387,64 @@ function compare3WayById(a: Annotation, b: Annotation) {
   return a.id < b.id ? -1 : a.id === b.id ? 0 : 1;
 }
 
-export function serializeAnnotations(allAnnotations: Annotation[][]):
-    {data: Uint8Array, typeToIds: string[][], typeToOffset: number[]} {
+export interface SerializedAnnotations {
+  data: Uint8Array;
+  typeToIds: string[][];
+  typeToOffset: number[];
+  segmentListIndex: Uint32Array;
+  segmentList: Uint32Array;
+}
+
+export function serializeAnnotations(allAnnotations: Annotation[][]): SerializedAnnotations {
   let totalBytes = 0;
   const typeToOffset: number[] = [];
+  const typeToSegmentListIndexOffset: number[] = [];
+  let totalNumSegments = 0;
+  let totalNumAnnotations = 0;
   for (const annotationType of annotationTypes) {
     typeToOffset[annotationType] = totalBytes;
+    typeToSegmentListIndexOffset[annotationType] = totalNumAnnotations;
     const annotations: Annotation[] = allAnnotations[annotationType];
+    let numSegments = 0;
+    for (const annotation of annotations) {
+      const {segments} = annotation;
+      if (segments !== undefined) {
+        numSegments += segments.length;
+      }
+    }
+    totalNumAnnotations += annotations.length;
+    totalNumSegments += numSegments;
     annotations.sort(compare3WayById);
     const count = annotations.length;
     const handler = getAnnotationTypeHandler(annotationType);
     totalBytes += handler.serializedBytes * count;
   }
+  const segmentListIndex = new Uint32Array(totalNumAnnotations + 1);
+  const segmentList = new Uint32Array(totalNumSegments * 2);
   const typeToIds: string[][] = [];
   const data = new ArrayBuffer(totalBytes);
+  let segmentListOffset = 0;
+  let segmentListIndexOffset = 0;
   for (const annotationType of annotationTypes) {
     const annotations: Annotation[] = allAnnotations[annotationType];
     typeToIds[annotationType] = annotations.map(x => x.id);
     const count = annotations.length;
     const handler = getAnnotationTypeHandler(annotationType);
     const serializer = handler.serializer(data, typeToOffset[annotationType], count);
-    annotations.forEach(serializer);
+    annotations.forEach((annotation, index) => {
+      serializer(annotation, index);
+      segmentListIndex[segmentListIndexOffset++] = segmentListOffset;
+      const {segments} = annotation;
+      if (segments !== undefined) {
+        for (const segment of segments) {
+          segmentList[segmentListOffset * 2] = segment.low;
+          segmentList[segmentListOffset * 2 + 1] = segment.high;
+          ++segmentListOffset;
+        }
+      }
+    });
   }
-  return {data: new Uint8Array(data), typeToIds, typeToOffset};
+  return {data: new Uint8Array(data), typeToIds, typeToOffset, segmentListIndex, segmentList};
 }
 
 export class AnnotationSerializer {
@@ -410,4 +455,15 @@ export class AnnotationSerializer {
   serialize() {
     return serializeAnnotations(this.annotations);
   }
+}
+
+export function deserializeAnnotation(obj: any) {
+  if (obj == null) {
+    return obj;
+  }
+  const segments = obj.segments;
+  if (segments !== undefined) {
+    obj.segments = segments.map((x: {low: number, high: number}) => new Uint64(x.low, x.high));
+  }
+  return obj;
 }

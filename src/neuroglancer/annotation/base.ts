@@ -18,6 +18,7 @@ import {SliceViewChunkSpecification} from 'neuroglancer/sliceview/base';
 
 export const ANNOTATION_METADATA_CHUNK_SOURCE_RPC_ID = 'annotation.MetadataChunkSource';
 export const ANNOTATION_GEOMETRY_CHUNK_SOURCE_RPC_ID = 'annotation.GeometryChunkSource';
+export const ANNOTATION_SUBSET_GEOMETRY_CHUNK_SOURCE_RPC_ID = 'annotation.SubsetGeometryChunkSource';
 export const ANNOTATION_REFERENCE_ADD_RPC_ID = 'annotation.reference.add';
 export const ANNOTATION_REFERENCE_DELETE_RPC_ID = 'annotation.reference.delete';
 export const ANNOTATION_COMMIT_UPDATE_RPC_ID = 'annotation.commit';
@@ -26,3 +27,6 @@ export const ANNOTATION_COMMIT_UPDATE_RESULT_RPC_ID = 'annotation.commit';
 export class AnnotationGeometryChunkSpecification extends SliceViewChunkSpecification {}
 
 export const ANNOTATION_PERSPECTIVE_RENDER_LAYER_RPC_ID = 'annotation/PerspectiveRenderLayer';
+export const ANNOTATION_RENDER_LAYER_RPC_ID = 'annotation/RenderLayer';
+export const ANNOTATION_RENDER_LAYER_UPDATE_SEGMENTATION_RPC_ID =
+    'annotation/RenderLayer.updateSegmentation';

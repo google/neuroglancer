@@ -124,3 +124,11 @@
   display: flex;
   align-items: stretch;
 }
+
+.neuroglancer-annotation-segment-list {
+}
+
+
+.neuroglancer-annotation-segment-item {
+  color: black;
+}

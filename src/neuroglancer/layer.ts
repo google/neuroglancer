@@ -123,12 +123,35 @@ export class UserLayer extends RefCounted {
 
   addRenderLayer(layer: RenderLayer) {
     this.renderLayers.push(layer);
-    let {layersChanged, readyStateChanged} = this;
-    this.registerDisposer(layer);
-    this.registerDisposer(layer.layerChanged.add(layersChanged.dispatch));
-    this.registerDisposer(layer.readyStateChanged.add(readyStateChanged.dispatch));
+    const {layersChanged, readyStateChanged} = this;
+    layer.layerChanged.add(layersChanged.dispatch);
+    layer.readyStateChanged.add(readyStateChanged.dispatch);
     readyStateChanged.dispatch();
     layersChanged.dispatch();
+  }
+
+  removeRenderLayer(layer: RenderLayer) {
+    const {renderLayers, layersChanged, readyStateChanged} = this;
+    const index = renderLayers.indexOf(layer);
+    if (index === -1) {
+      throw new Error('Attempted to remove invalid RenderLayer');
+    }
+    renderLayers.splice(index, 1);
+    layer.layerChanged.remove(layersChanged.dispatch);
+    layer.readyStateChanged.remove(readyStateChanged.dispatch);
+    layer.dispose();
+    readyStateChanged.dispatch();
+    layersChanged.dispatch();
+  }
+
+  disposed () {
+    const {layersChanged, readyStateChanged} = this;
+    for (const layer of this.renderLayers) {
+      layer.layerChanged.remove(layersChanged.dispatch);
+      layer.readyStateChanged.remove(readyStateChanged.dispatch);
+      layer.dispose();
+    }
+    super.disposed();
   }
 
   getValueAt(position: Float32Array, pickState: PickState) {
@@ -833,5 +856,99 @@ export class SelectedLayerState extends RefCounted implements Trackable {
 
   reset() {
     this.layer = undefined;
+  }
+}
+
+export class LayerReference extends RefCounted implements Trackable {
+  private layerName_: string|undefined;
+  private layer_: ManagedUserLayer|undefined;
+  changed = new NullarySignal();
+  constructor(
+      public layerManager: Owned<LayerManager>,
+      public filter: (layer: ManagedUserLayer) => boolean) {
+    super();
+    this.registerDisposer(layerManager);
+    this.registerDisposer(layerManager.specificationChanged.add(() => {
+      const {layer_} = this;
+      if (layer_ !== undefined) {
+        if (!this.layerManager.layerSet.has(layer_) || !this.filter(layer_)) {
+          this.layer_ = undefined;
+          this.layerName_ = undefined;
+          this.changed.dispatch();
+        } else {
+          const {name} = layer_;
+          if (name !== this.layerName_) {
+            this.layerName_ = name;
+            this.changed.dispatch();
+          }
+        }
+      }
+    }));
+  }
+
+  get layer () {
+    return this.layer_;
+  }
+
+  get layerName () {
+    return this.layerName_;
+  }
+
+  set layer(value: ManagedUserLayer|undefined) {
+    if (this.layer_ === value) {
+      return;
+    }
+    if (value !== undefined && this.layerManager.layerSet.has(value) && this.filter(value)) {
+      this.layer_ = value;
+      this.layerName_ = value.name;
+    } else {
+      this.layer_ = undefined;
+      this.layerName_ = undefined;
+    }
+    this.changed.dispatch();
+  }
+
+  set layerName(value: string|undefined) {
+    if (value === this.layerName_) {
+      return;
+    }
+    this.layer_ = undefined;
+    this.layerName_ = value;
+    this.changed.dispatch();
+    this.validate();
+  }
+
+  private validate = debounce(() => {
+    const {layerName_} = this;
+    if (layerName_ !== undefined) {
+      const layer = this.layerManager.getLayerByName(layerName_);
+      if (layer !== undefined && this.filter(layer)) {
+        this.layer_ = layer;
+        this.changed.dispatch();
+      } else {
+        this.layer_ = undefined;
+        this.layerName_ = undefined;
+        this.changed.dispatch();
+      }
+    }
+  }, 0);
+
+  restoreState(obj: any) {
+    const layerName = verifyOptionalString(obj);
+    this.layerName = layerName;
+  }
+
+  toJSON() {
+    const {layer_} = this;
+    if (layer_ !== undefined) {
+      return layer_.name;
+    }
+    return this.layerName_;
+  }
+
+  reset() {
+    this.layerName_ = undefined;
+    this.layer_ = undefined;
+    this.changed.dispatch();
   }
 }

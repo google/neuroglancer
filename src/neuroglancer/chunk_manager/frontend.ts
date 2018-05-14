@@ -27,7 +27,7 @@ import {registerRPC, registerSharedObjectOwner, RPC, SharedObject} from 'neurogl
 
 const DEBUG_CHUNK_UPDATES = false;
 
-export abstract class Chunk {
+export class Chunk {
   state = ChunkState.SYSTEM_MEMORY;
   constructor(public source: ChunkSource) {}
 
@@ -202,7 +202,9 @@ registerRPC('Chunk.update', function(x) {
   }
   let queueManager = source.chunkManager.chunkQueueManager;
   if (source.immediateChunkUpdates) {
-    queueManager.applyChunkUpdate(x);
+    if (queueManager.applyChunkUpdate(x)) {
+      queueManager.visibleChunksChanged.dispatch();
+    }
     return;
   }
 
