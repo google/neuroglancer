@@ -148,14 +148,24 @@ window.addEventListener('DOMContentLoaded', () => {
       element.style.position = 'relative';
       element.style.width = null;
       element.style.height = null;
+      element.style.transform = null;
+      element.style.transformOrigin = null;
     } else {
       element.style.position = 'absolute';
       element.style.width = `${value[0]}px`;
       element.style.height = `${value[1]}px`;
+      const screenWidth = document.documentElement.clientWidth;
+      const screenHeight = document.documentElement.clientHeight;
+      const scaleX = screenWidth/value[0];
+      const scaleY = screenHeight/value[1];
+      const scale = Math.min(scaleX, scaleY);
+      element.style.transform = `scale(${scale})`;
+      element.style.transformOrigin = 'top left';
     }
     viewer.display.onResize();
   };
   updateSize();
+  window.addEventListener('resize', updateSize);
   size.changed.add(debounce(() => updateSize(), 0));
 
   const serverConnection = new ServerConnection(sharedState, privateState, configState);
