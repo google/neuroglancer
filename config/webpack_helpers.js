@@ -154,7 +154,8 @@ function getBaseConfig(options) {
   let baseConfig = {
     resolve: {
       extensions: ['.ts', '.js'],
-      /** Don't use the built-in alias mechanism because of a bug in the normalize function defined
+      /**
+       * Don't use the built-in alias mechanism because of a bug in the normalize function defined
        * in the memory-fs package it depends on.
        */
       // alias: aliasMappings,
@@ -170,7 +171,9 @@ function getBaseConfig(options) {
           options.resolveLoaderAliases || []),
       modules: [
         ...(options.resolveLoaderRoots || []),
-        resolveReal(__dirname, '../node_modules'),
+        ...(fs.existsSync(path.join(__dirname, '../node_modules')) ?
+                [resolveReal(__dirname, '../node_modules')] :
+                []),
       ],
     },
     devtool: 'source-map',
@@ -178,8 +181,7 @@ function getBaseConfig(options) {
       rules: [
         tsLoaderEntry, {test: /\.json$/, loader: require.resolve('json-loader')}, {
           test: /\.css$/,
-          loader:
-              ExtractTextPlugin.extract({fallback: 'style-loader', use: 'css-loader'})
+          loader: ExtractTextPlugin.extract({fallback: 'style-loader', use: 'css-loader'})
         },
         {
           test: /\.glsl$/,
