@@ -27,22 +27,24 @@ export class BossSourceParameters {
 
 export class VolumeChunkSourceParameters extends BossSourceParameters {
   encoding: string;
-  window: vec2 | undefined;
+  window: vec2|undefined;
 
   static RPC_ID = 'boss/VolumeChunkSource';
 
   static stringify(parameters: VolumeChunkSourceParameters) {
-    return `boss:volume:${parameters.baseUrls[0]}/${parameters.collection}/${parameters.experiment}/${parameters.channel}/${parameters.resolution}/${parameters.encoding}`;
+    return `boss:volume:${parameters.baseUrls[0]}/${parameters.collection}/${
+        parameters.experiment}/${parameters.channel}/${parameters.resolution}/${
+        parameters.encoding}`;
   }
-};
+}
 
 export class MeshSourceParameters {
   baseUrls: string[];
   path: string;
-  
+
   static RPC_ID = 'boss/MeshChunkSource';
 
   static stringify(parameters: MeshSourceParameters) {
     return `boss:mesh:${parameters.baseUrls[0]}/${parameters.path}/`;
   }
-};
+}
