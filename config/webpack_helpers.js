@@ -24,6 +24,7 @@ const ClosureCompilerPlugin = require('webpack-closure-compiler');
 const fs = require('fs');
 const AliasPlugin = require('./webpack_alias_plugin');
 const resolveReal = require('./resolve_real');
+const CopyWebpackPlugin = require('copy-webpack-plugin');
 
 // Note: We use require.resolve below to ensure the plugins are resolved
 // relative to this configuration file, rather than relative to the source
@@ -328,7 +329,7 @@ function getViewerConfig(options) {
       options.htmlPlugin || new HtmlWebpackPlugin({template: resolveReal(srcDir, 'index.html')});
   let cssPlugin =
       options.cssPlugin || new ExtractTextPlugin({filename: 'styles.css', allChunks: true});
-  return [
+      return [
     Object.assign(
         {
           entry:
@@ -341,6 +342,9 @@ function getViewerConfig(options) {
             ...extraFrontendPlugins,
             ...commonPlugins,
             ...extraCommonPlugins,
+            new CopyWebpackPlugin([
+              { from: resolveReal(srcDir, 'neuroglancer/datasource/boss/bossauth.html'), to: 'bossauth.html' }
+            ])
           ],
         },
         baseConfig),
