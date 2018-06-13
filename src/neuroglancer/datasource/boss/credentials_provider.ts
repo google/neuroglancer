@@ -18,7 +18,8 @@
  * @file
  * This implements a CredentialsProvider based on Keycloak.
  * The current implementation uses the implicit flow for ease of implementation.
- * TODO: Implement the authorization or hybrid flows (w/ iframes).
+ * TODO: Implement the authorization or hybrid flows.
+ * TODO: Use an iframe to test for immediate login (active session).
  */
 
 import {CredentialsProvider, makeCredentialsGetter} from 'neuroglancer/credentials_provider';
@@ -222,7 +223,7 @@ export class BossCredentialsProvider extends CredentialsProvider<BossToken> {
                   }
                 });
       }
-      login();
+      writeLoginStatus();
     });
   });
 }
