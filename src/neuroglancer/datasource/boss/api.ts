@@ -28,8 +28,6 @@ export type BossToken = string;
  */
 export const credentialsKey = 'boss';
 
-// export type BossCredentialsProvider = CredentialsProvider<BossToken>;
-
 export interface HttpHeader {
   key: string;
   value: string;
@@ -97,11 +95,9 @@ export function makeRequest(
         } else if (status === 403 || status === 401) {
           // Authorization needed.
           credentialsProvider.get(credentials, cancellationToken).then(start);
-          // getToken(authServer).then(start);
         } else if (status === 504) {
           // Gateway timeout can occur if the server takes too long to reply.  Retry.
           credentialsProvider.get(credentials, cancellationToken).then(start);
-          // getToken(authServer).then(start);
         } else {
           --numPendingRequests;
           cancellationToken.remove(abort);
@@ -110,7 +106,6 @@ export function makeRequest(
       };
       xhr.send(httpCall.payload);
     }
-    // getToken(authServer).then(start);
     credentialsProvider.get(/*invalidToken=*/undefined, cancellationToken).then(start);
   });
 }

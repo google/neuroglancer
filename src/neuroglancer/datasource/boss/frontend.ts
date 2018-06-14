@@ -298,17 +298,6 @@ export class MultiscaleVolumeChunkSource implements GenericMultiscaleVolumeChunk
       this.meshPath = meshPath;
     }
 
-    /*
-    this.cuboidSize = DEFAULT_CUBOID_SIZE;
-    let cuboidXY = verifyOptionalString(parameters['xySize']);
-    if (cuboidXY !== undefined) {
-      this.cuboidSize[0] = this.cuboidSize[1] = verifyInt(cuboidXY);
-    }
-    let cuboidZ = verifyOptionalString(parameters['zSize']);
-    if (cuboidZ !== undefined) {
-      this.cuboidSize[2] = verifyInt(cuboidZ);
-    }
-    */
     let encoding = verifyOptionalString(parameters['encoding']);
     if (encoding === undefined) {
       encoding = this.volumeType === VolumeType.IMAGE ? 'jpeg' : 'npz';
