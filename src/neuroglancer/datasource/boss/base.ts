@@ -40,11 +40,10 @@ export class VolumeChunkSourceParameters extends BossSourceParameters {
 
 export class MeshSourceParameters {
   baseUrls: string[];
-  path: string;
 
   static RPC_ID = 'boss/MeshChunkSource';
 
   static stringify(parameters: MeshSourceParameters) {
-    return `boss:mesh:${parameters.baseUrls[0]}/${parameters.path}/`;
+    return `boss:mesh:${parameters.baseUrls[0]}`;
   }
 }

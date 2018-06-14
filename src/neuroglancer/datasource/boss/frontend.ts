@@ -290,13 +290,6 @@ export class MultiscaleVolumeChunkSource implements GenericMultiscaleVolumeChunk
     if (meshUrl !== undefined) {
       this.meshUrl = meshUrl;
     }
-    let meshPath = verifyOptionalString(parameters['meshpath']);
-    if (meshPath !== undefined) {
-      if (meshPath[0] !== '/') {
-        meshPath = `/${meshPath}`;
-      }
-      this.meshPath = meshPath;
-    }
 
     let encoding = verifyOptionalString(parameters['encoding']);
     if (encoding === undefined) {
@@ -347,13 +340,10 @@ export class MultiscaleVolumeChunkSource implements GenericMultiscaleVolumeChunk
   }
 
   getMeshSource() {
-    if (this.meshPath !== undefined) {
-      if (this.meshUrl === undefined) {
-        this.meshUrl = 'https://api.theboss.io';
-      }
+    if (this.meshUrl !== undefined) {
       return this.chunkManager.getChunkSource(BossMeshSource, {
         credentialsProvider: this.credentialsProvider,
-        parameters: {'baseUrls': [this.meshUrl], 'path': this.meshPath}
+        parameters: {'baseUrls': [this.meshUrl]}
       });
     }
     return null;

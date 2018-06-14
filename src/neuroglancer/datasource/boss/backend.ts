@@ -88,7 +88,7 @@ function decodeFragmentChunk(chunk: FragmentChunk, response: ArrayBuffer) {
 export class BossMeshSource extends (BossSource(MeshSource, MeshSourceParameters)) {
   download(chunk: ManifestChunk, cancellationToken: CancellationToken) {
     let {parameters} = this;
-    let requestPath = `${parameters.path}/${chunk.objectId}`;
+    let requestPath = `${chunk.objectId}`;
     return sendHttpRequest(
                openShardedHttpRequest(parameters.baseUrls, requestPath), 'json', cancellationToken)
         .then(response => decodeManifestChunk(chunk, response));
@@ -96,7 +96,7 @@ export class BossMeshSource extends (BossSource(MeshSource, MeshSourceParameters
 
   downloadFragment(chunk: FragmentChunk, cancellationToken: CancellationToken) {
     let {parameters} = this;
-    let requestPath = `${parameters.path}/${chunk.fragmentId}`;
+    let requestPath = `${chunk.fragmentId}`;
     return sendHttpRequest(
                openShardedHttpRequest(parameters.baseUrls, requestPath), 'arraybuffer',
                cancellationToken)
