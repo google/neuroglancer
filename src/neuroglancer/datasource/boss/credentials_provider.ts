@@ -52,7 +52,6 @@ class AuthHandler {
       }
       try {
         let data = verifyObject(JSON.parse(event.data));
-        console.log(data);
         let service = verifyString(data['service']);
         if (service === this.oidcCallbackService) {
           let accessToken = verifyString(data['access_token']);
