@@ -65,13 +65,19 @@ class Server(object):
             if debug:
                 print("%d %s %.2fs" % (handler.get_status(),
                                        handler.request.uri, handler.request.request_time()))
-        app = self.app = tornado.web.Application([
-            (STATIC_PATH_REGEX, StaticPathHandler, dict(server=self)),
-            (INFO_PATH_REGEX, VolumeInfoHandler, dict(server=self)),
-            (DATA_PATH_REGEX, SubvolumeHandler, dict(server=self)),
-            (SKELETON_PATH_REGEX, SkeletonHandler, dict(server=self)),
-            (MESH_PATH_REGEX, MeshHandler, dict(server=self)),
-        ] + sockjs_router.urls, log_function=log_function)
+
+        app = self.app = tornado.web.Application(
+            [
+                (STATIC_PATH_REGEX, StaticPathHandler, dict(server=self)),
+                (INFO_PATH_REGEX, VolumeInfoHandler, dict(server=self)),
+                (DATA_PATH_REGEX, SubvolumeHandler, dict(server=self)),
+                (SKELETON_PATH_REGEX, SkeletonHandler, dict(server=self)),
+                (MESH_PATH_REGEX, MeshHandler, dict(server=self)),
+            ] + sockjs_router.urls,
+            log_function=log_function,
+            # Set a large maximum message size to accommodate large screenshot
+            # messages.
+            websocket_max_message_size=100 * 1024 * 1024)
         http_server = tornado.httpserver.HTTPServer(app)
         sockets = tornado.netutil.bind_sockets(port=bind_port, address=bind_address)
         http_server.add_sockets(sockets)
