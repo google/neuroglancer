@@ -453,7 +453,7 @@ function decodeSkeletonChunk(chunk: SkeletonChunk, response: ArrayBuffer) {
 const spatialAnnotationTypes = ['LOCATION', 'LINE', 'VOLUME'];
 
 function parseCommaSeparatedPoint(x: string) {
-  const pattern = /([0-9]+),([0-9]+),([0-9]+)/;
+  const pattern = /(-?[0-9]+),(-?[0-9]+),(-?[0-9]+)/;
   const cornerParts = x.match(pattern);
   if (cornerParts === null) {
     throw new Error(`Error parsing number triplet: ${JSON.stringify(x)}.`);
