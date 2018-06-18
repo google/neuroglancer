@@ -237,13 +237,15 @@ def save_script(script_path, keypoints):
 
 
 class ScriptEditor(object):
-    def __init__(self, script_path, transition_duration, fullscreen_width, fullscreen_height, frames_per_second):
+    def __init__(self, script_path, transition_duration, fullscreen_width, fullscreen_height,
+                 fullscreen_scale_bar_scale, frames_per_second):
         self.script_path = script_path
         self.viewer = neuroglancer.Viewer()
         self.frames_per_second = frames_per_second
         self.default_transition_duration = transition_duration
         self.fullscreen_width = fullscreen_width
         self.fullscreen_height = fullscreen_height
+        self.fullscreen_scale_bar_scale = fullscreen_scale_bar_scale
         self.keypoint_index = 0
         if os.path.exists(script_path):
             self.keypoints = load_script(script_path, self.default_transition_duration)
@@ -309,10 +311,12 @@ class ScriptEditor(object):
                 s.show_ui_controls = False
                 s.show_panel_borders = False
                 s.viewer_size = [self.fullscreen_width, self.fullscreen_height]
+                s.scale_bar_options.scale_factor = self.fullscreen_scale_bar_scale
             else:
                 s.show_ui_controls = True
                 s.show_panel_borders = True
                 s.viewer_size = None
+                s.scale_bar_options.scale_factor = 1
 
     def _next_frame(self, s):
         if self.playback_manager is None:
@@ -436,7 +440,13 @@ class ScriptEditor(object):
 
 
 def run_edit(args):
-    editor = ScriptEditor(script_path=args.script, transition_duration=args.duration, fullscreen_width=args.width, fullscreen_height=args.height, frames_per_second=args.fps)
+    editor = ScriptEditor(
+        script_path=args.script,
+        transition_duration=args.duration,
+        fullscreen_width=args.width,
+        fullscreen_height=args.height,
+        fullscreen_scale_bar_scale=args.scale_bar_scale,
+        frames_per_second=args.fps)
     print(editor.viewer)
     if args.browser:
         webbrowser.open_new(editor.viewer.get_viewer_url())
@@ -445,6 +455,7 @@ def run_edit(args):
 
 def run_render(args):
     keypoints = load_script(args.script)
+    num_prefetch_frames = args.prefetch_frames
     for keypoint in keypoints:
         keypoint['state'].gpu_memory_limit = args.gpu_memory_limit
         keypoint['state'].system_memory_limit = args.system_memory_limit
@@ -455,6 +466,7 @@ def run_render(args):
             s.show_ui_controls = False
             s.show_panel_borders = False
             s.viewer_size = [args.width, args.height]
+            s.scale_bar_options.scale_factor = args.scale_bar_scale
 
         print('Open the specified URL to begin rendering')
         print(viewer)
@@ -468,6 +480,8 @@ def run_render(args):
     def render_func(viewer, start_frame, end_frame):
         with lock:
             saver = neuroglancer.ScreenshotSaver(viewer, args.output_directory)
+        states_to_capture = []
+        frame_number = 0
         for i in range(len(keypoints) - 1):
             a = keypoints[i]['state']
             b = keypoints[i + 1]['state']
@@ -475,27 +489,41 @@ def run_render(args):
             num_frames = max(1, int(duration * fps))
             for frame_i in range(num_frames):
                 t = frame_i / num_frames
-                index, path = saver.get_next_path()
-                if index >= end_frame:
+                if frame_number >= end_frame:
                     return
 
-                if index < start_frame:
-                    saver.index += 1
+                if frame_number < start_frame:
+                    frame_number += 1
                     continue
 
+                frame_number, path = saver.get_next_path(frame_number)
+
                 if args.resume and os.path.exists(path):
-                    saver.index += 1
+                    frame_number += 1
                     with lock:
                         num_frames_written[0] += 1
                 else:
                     cur_state = neuroglancer.ViewerState.interpolate(a, b, t)
-                    viewer.set_state(cur_state)
-                    index, path = saver.capture()
-                    with lock:
-                        num_frames_written[0] += 1
-                        cur_num_frames_written = num_frames_written[0]
-                        print('[%07d/%07d] keypoint %.3f/%5d: %s' %
-                              (cur_num_frames_written, total_frames, i + t, len(keypoints), path))
+                    states_to_capture.append((frame_number, i + t, cur_state))
+                    frame_number += 1
+        for frame_number, t, cur_state in states_to_capture:
+            prefetch_states = [
+                x[2]
+                for x in states_to_capture[frame_number + 1:frame_number + 1 + num_prefetch_frames]
+            ]
+            viewer.set_state(cur_state)
+            if num_prefetch_frames > 0:
+                with viewer.config_state.txn() as s:
+                    del s.prefetch[:]
+                    for i, state in enumerate(prefetch_states[1:]):
+                        s.prefetch.append(
+                            neuroglancer.PrefetchState(state=state, priority=num_prefetch_frames - i))
+            frame_number, path = saver.capture(frame_number)
+            with lock:
+                num_frames_written[0] += 1
+                cur_num_frames_written = num_frames_written[0]
+                print('[%07d/%07d] keypoint %.3f/%5d: %s' %
+                      (cur_num_frames_written, total_frames, t, len(keypoints), path))
 
     shard_frames = []
     frames_per_shard = int(math.ceil(total_frames / args.shards))
@@ -537,6 +565,8 @@ if __name__ == '__main__':
     ap_edit.add_argument('--browser', action='store_true', help='Open web browser automatically.')
     ap_edit.add_argument('--width', type=int, help='Frame width', default=1920)
     ap_edit.add_argument('--height', type=int, help='Frame height', default=1080)
+    ap_edit.add_argument(
+        '--scale-bar-scale', type=float, help='Scale factor for scale bar', default=1)
     ap_edit.add_argument('-f', '--fps', type=float, help='Frames per second.', default=5)
 
     ap_render.add_argument(
@@ -544,6 +574,8 @@ if __name__ == '__main__':
     ap_render.add_argument('-f', '--fps', type=float, help='Frames per second.', default=24)
     ap_render.add_argument('--width', type=int, help='Frame width', default=1920)
     ap_render.add_argument('--height', type=int, help='Frame height', default=1080)
+    ap_render.add_argument(
+        '--scale-bar-scale', type=float, help='Scale factor for scale bar', default=1)
     ap_render.add_argument('--browser', action='store_true', help='Open web browser automatically.')
     ap_render.add_argument('--resume', action='store_true', help='Skip already rendered frames.')
     ap_render.add_argument(
@@ -554,6 +586,11 @@ if __name__ == '__main__':
         '--gpu-memory-limit', type=int, default=3000000000, help='GPU memory limit')
     ap_render.add_argument(
         '--concurrent-downloads', type=int, default=32, help='Concurrent downloads')
+    ap_render.add_argument(
+        '--prefetch-frames',
+        type=int,
+        default=10,
+        help='Number of frames to prefetch when rendering.')
 
     args = ap.parse_args()
     if args.bind_address:
