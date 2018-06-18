@@ -38,6 +38,7 @@ import {registerActionListener} from 'neuroglancer/util/event_action_map';
 import {CompoundTrackable} from 'neuroglancer/util/trackable';
 import {WatchableVisibilityPriority} from 'neuroglancer/visibility_priority/frontend';
 import {EnumSelectWidget} from 'neuroglancer/widget/enum_widget';
+import {TrackableScaleBarOptions} from 'neuroglancer/widget/scale_bar';
 
 require('./layer_group_viewer.css');
 
@@ -48,6 +49,7 @@ export interface LayerGroupViewerState {
   mouseState: MouseSelectionState;
   showAxisLines: TrackableBoolean;
   showScaleBar: TrackableBoolean;
+  scaleBarOptions: TrackableScaleBarOptions;
   showPerspectiveSliceViews: TrackableBoolean;
   layerSpecification: Owned<LayerListSpecification>;
   inputEventBindings: DataPanelInputEventBindings;
@@ -224,6 +226,9 @@ export class LayerGroupViewer extends RefCounted {
   }
   get crossSectionBackgroundColor() {
     return this.viewerState.crossSectionBackgroundColor;
+  }
+  get scaleBarOptions() {
+    return this.viewerState.scaleBarOptions;
   }
   layerPanel: LayerPanel|undefined;
   layout: DataPanelLayoutContainer;

@@ -112,6 +112,27 @@ class PrefetchState(JsonObjectWrapper):
     state = wrapped_property('state', viewer_state.ViewerState)
 
 
+class ScaleBarOptions(JsonObjectWrapper):
+    __slots__ = ()
+    supports_validation = True
+    scale_factor = scaleFactor = wrapped_property('scaleFactor', optional(float, 1))
+    text_height_in_pixels = textHeightInPixels = wrapped_property('textHeightInPixels',
+                                                                  optional(float, 15))
+    bar_height_in_pixels = barHeightInPixels = wrapped_property('barHeightInPixels',
+                                                                optional(float, 8))
+    bar_top_margin_in_pixels = barTopMarginInPixels = wrapped_property(
+        'barTopMarginInPixels', optional(float, 5))
+    font_name = fontName = wrapped_property('fontName', optional(text_type, 'sans-serif'))
+    padding_in_pixels = paddingInPixels = wrapped_property('paddingInPixels', optional(float, 2))
+    max_width_in_pixels = maxWidthInPixels = wrapped_property('maxWidthInPixels', optional(
+        int, 100))
+    max_width_fraction = maxWidthFraction = wrapped_property('maxWidthFraction',
+                                                             optional(float, 0.25))
+    left_pixel_offset = leftPixelOffset = wrapped_property('leftPixelOffset', optional(int, 10))
+    bottom_pixel_offset = bottomPixelOffset = wrapped_property('bottomPixelOffset', optional(
+        int, 10))
+
+
 class ConfigState(JsonObjectWrapper):
     __slots__ = ()
     credentials = wrapped_property('credentials', typed_string_map(dict))
@@ -129,6 +150,7 @@ class ConfigState(JsonObjectWrapper):
     show_help_button = showHelpButton = wrapped_property('showHelpButton', optional(bool, True))
     show_panel_borders = showPanelBorders = wrapped_property('showPanelBorders',
                                                              optional(bool, True))
+    scale_bar_options = scaleBarOptions = wrapped_property('scaleBarOptions', ScaleBarOptions)
     viewer_size = viewerSize = wrapped_property('viewerSize', optional(array_wrapper(np.int64, 2)))
     prefetch = wrapped_property('prefetch', typed_list(PrefetchState))
 

@@ -29,7 +29,9 @@
  * understand.
  */
 
+import {TrackableValue} from 'neuroglancer/trackable_value';
 import {RefCounted} from 'neuroglancer/util/disposable';
+import {verifyFloat, verifyObjectProperty, verifyString} from 'neuroglancer/util/json';
 import {GL} from 'neuroglancer/webgl/context';
 import {setTextureFromCanvas} from 'neuroglancer/webgl/texture';
 
@@ -160,20 +162,22 @@ export class ScaleBarDimensions {
   }
 }
 
-function makeScaleBarTexture(dimensions: ScaleBarDimensions, gl: GL, texture: WebGLTexture|null) {
+function makeScaleBarTexture(
+    dimensions: ScaleBarDimensions, gl: GL, texture: WebGLTexture|null,
+    options: ScaleBarTextureOptions = defaultScaleBarTextureOptions) {
   const canvas = document.createElement('canvas');
   const ctx = canvas.getContext('2d')!;
-  const textHeight = 15;
-  const font = `bold ${textHeight}px sans-serif`;
+  const textHeight = options.textHeightInPixels * options.scaleFactor;
+  const font = `bold ${textHeight}px ${options.fontName}`;
   ctx.font = font;
   ctx.fillStyle = 'white';
   const text = `${dimensions.physicalLength} ${dimensions.physicalUnit}`;
   const textMetrics = ctx.measureText(text);
   const innerWidth = Math.max(dimensions.lengthInPixels, textMetrics.width);
-  const barHeight = 8;
-  const barTopMargin = 5;
+  const barHeight = options.barHeightInPixels * options.scaleFactor;
+  const barTopMargin = options.barTopMarginInPixels * options.scaleFactor;
   const innerHeight = barHeight + barTopMargin + textHeight;
-  const padding = 2;
+  const padding = options.paddingInPixels * options.scaleFactor;
   const totalHeight = innerHeight + 2 * padding;
   const totalWidth = innerWidth + 2 * padding;
   canvas.width = totalWidth;
@@ -193,20 +197,23 @@ export class ScaleBarTexture extends RefCounted {
   texture: WebGLTexture|null = null;
   width = 0;
   height = 0;
+  private priorOptions: ScaleBarTextureOptions|undefined = undefined;
+
   constructor(public gl: GL, public dimensions = new ScaleBarDimensions()) {
     super();
   }
 
-  update() {
+  update(options: ScaleBarTextureOptions) {
     let {dimensions} = this;
     let {texture} = this;
-    if (!dimensions.update() && texture !== null) {
+    if (!dimensions.update() && texture !== null && options === this.priorOptions) {
       return;
     }
     if (texture === null) {
       texture = this.texture = this.gl.createTexture();
     }
-    const {width, height} = makeScaleBarTexture(dimensions, this.gl, texture);
+    const {width, height} = makeScaleBarTexture(dimensions, this.gl, texture, options);
+    this.priorOptions = options;
     this.width = width;
     this.height = height;
   }
@@ -215,5 +222,67 @@ export class ScaleBarTexture extends RefCounted {
     this.gl.deleteTexture(this.texture);
     this.texture = null;
     super.disposed();
+  }
+}
+
+export interface ScaleBarTextureOptions {
+  textHeightInPixels: number;
+  barTopMarginInPixels: number;
+  fontName: string;
+  barHeightInPixels: number;
+  paddingInPixels: number;
+  scaleFactor: number;
+}
+
+export interface ScaleBarOptions extends ScaleBarTextureOptions {
+  maxWidthInPixels: number;
+  maxWidthFraction: number;
+  leftPixelOffset: number;
+  bottomPixelOffset: number;
+}
+
+export const defaultScaleBarTextureOptions: ScaleBarTextureOptions = {
+  scaleFactor: 1,
+  textHeightInPixels: 15,
+  barHeightInPixels: 8,
+  barTopMarginInPixels: 5,
+  fontName: 'sans-serif',
+  paddingInPixels: 2,
+};
+
+export const defaultScaleBarOptions: ScaleBarOptions = {
+  ...defaultScaleBarTextureOptions,
+  maxWidthInPixels: 100,
+  maxWidthFraction: 0.25,
+  leftPixelOffset: 10,
+  bottomPixelOffset: 10,
+};
+
+function parseScaleBarOptions(obj: any): ScaleBarOptions {
+  const result = {
+    ...defaultScaleBarOptions,
+  };
+  for (const k of <(keyof ScaleBarOptions)[]>[
+         'textHeightInPixels', 'barTopMarginInPixels', 'barHeightInPixels', 'paddingInPixels',
+         'scaleFactor', 'maxWidthInPixels', 'maxWidthFraction', 'leftPixelOffset',
+         'bottomPixelOffset'
+       ]) {
+    verifyObjectProperty(obj, k, x => {
+      if (x !== undefined) {
+        result[k] = verifyFloat(x);
+      }
+    });
+  }
+  verifyObjectProperty(obj, 'fontName', x => {
+    if (x !== undefined) {
+      result.fontName = verifyString(x);
+    }
+  });
+  return result;
+}
+
+export class TrackableScaleBarOptions extends TrackableValue<ScaleBarOptions> {
+  constructor() {
+    super(defaultScaleBarOptions, parseScaleBarOptions);
   }
 }
