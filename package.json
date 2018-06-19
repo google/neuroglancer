@@ -71,7 +71,6 @@
     "glsl-strip-comments-loader": "^1.0.0",
     "html-webpack-plugin": "^2.24.1",
     "json-loader": "^0.5.4",
-    "keycloak-js": "^3.4.3",
     "lodash": "^4.13.1",
     "nifti-reader-js": "^0.5.3",
     "pako": "^1.0.6",
