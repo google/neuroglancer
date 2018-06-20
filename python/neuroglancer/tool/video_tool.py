@@ -496,7 +496,7 @@ def run_render(args):
                     frame_number += 1
                     continue
 
-                frame_number, path = saver.get_next_path(frame_number)
+                path = saver.get_path(frame_number)
 
                 if args.resume and os.path.exists(path):
                     frame_number += 1

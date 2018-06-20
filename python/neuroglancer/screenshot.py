@@ -27,11 +27,13 @@ class ScreenshotSaver(object):
 
         self.index = 0
 
+    def get_path(self, index):
+        return os.path.join(self.directory, '%07d.png' % index)
+
     def get_next_path(self, index=None):
         if index is None:
             index = self.index
-        path = os.path.join(self.directory, '%07d.png' % index)
-        return index, path
+        return index, self.get_path(index)
 
     def capture(self, index=None):
         s = self.viewer.screenshot()
