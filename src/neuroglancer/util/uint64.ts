@@ -137,7 +137,7 @@ export class Uint64 {
     let high = Math.floor(highConverted / trueBase);
 
     let low = lowPrime + (((highPrime % trueBase) * lowBase1) % trueBase) * lowBase2 % trueBase;
-    if (low > trueBase) {
+    if (low >= trueBase) {
       ++high;
       low -= trueBase;
     }
