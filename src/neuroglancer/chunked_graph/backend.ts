@@ -66,7 +66,7 @@ export class ChunkedGraphChunk extends VolumeChunk {
         this.systemMemoryBytes += 16 * supervoxelIds.length;
       }
     }
-    super.downloadSucceeded();
+    this.queueManager.updateChunkState(this, ChunkState.SYSTEM_MEMORY_WORKER);
     if (this.priorityTier < ChunkPriorityTier.RECENT) {
       this.source!.chunkManager.scheduleUpdateChunkPriorities();
     }

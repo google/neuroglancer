@@ -21,7 +21,7 @@ import {DataType} from 'neuroglancer/sliceview/base';
 import {MultiscaleSliceViewChunkSource} from 'neuroglancer/sliceview/frontend';
 import {RenderLayer as GenericSliceViewRenderLayer} from 'neuroglancer/sliceview/renderlayer';
 import {Uint64Set} from 'neuroglancer/uint64_set';
-import {openHttpRequest, sendHttpRequest, sendHttpJsonPostRequest, HttpError} from 'neuroglancer/util/http_request';
+import {openHttpRequest, sendHttpJsonPostRequest, HttpError} from 'neuroglancer/util/http_request';
 import {Uint64} from 'neuroglancer/util/uint64';
 import {RPC} from 'neuroglancer/worker_rpc';
 import {VolumeChunkSource as VolumeChunkSourceInterface, VolumeChunkSpecification, VolumeSourceOptions} from 'neuroglancer/sliceview/volume/base';
@@ -82,23 +82,21 @@ export class ChunkedGraphLayer extends GenericSliceViewRenderLayer {
     return this.graphurl;
   }
 
-  getRoot(segment: Uint64): Promise<Uint64> {
+  getRoot(selection: SegmentSelection): Promise<Uint64> {
     const {url} = this;
     if (url === '') {
-      return Promise.resolve(segment);
+      return Promise.resolve(selection.segmentId);
     }
 
-    let promise = sendHttpRequest(openHttpRequest(`${url}/1.0/segment/${segment}/root`), 'arraybuffer');
+    let promise = sendHttpJsonPostRequest(openHttpRequest(`${url}/1.0/graph/root`, 'POST'),
+        [String(selection.segmentId), ...selection.position],
+        'arraybuffer');
 
     return promise.then(response => {
-      if (response.byteLength === 0) {
-        throw new Error(`Agglomeration for segment ${segment} is too large to show.`);
-      } else {
-        let uint32 = new Uint32Array(response);
-        return new Uint64(uint32[0], uint32[1]);
-      }
+      let uint32 = new Uint32Array(response);
+      return new Uint64(uint32[0], uint32[1]);
     }).catch((e: HttpError) => {
-      console.log(`Could not retrieve root for segment ${segment}`);
+      console.log(`Could not retrieve root for segment ${selection.segmentId}`);
       console.error(e);
       return Promise.reject(e);
     });

@@ -465,7 +465,13 @@ export class SegmentationUserLayer extends Base {
       if (rootSegments.has(segment)) {
         rootSegments.delete(segment);
       } else if (this.chunkedGraphLayer) {
-        this.chunkedGraphLayer.getRoot(segment).then(rootSegment => {
+        let coordinates = [...this.manager.layerSelectedValues.mouseState.position.values()].map((v, i) => {
+          return Math.round(v / this.manager.voxelSize.size[i]);
+        });
+
+        let selection = {segmentId: segment.clone(), rootId: segment.clone(), position: coordinates};
+
+        this.chunkedGraphLayer.getRoot(selection).then(rootSegment => {
           rootSegments.add(rootSegment);
         }).catch((e: Error) => {
           console.log(e);
@@ -683,19 +689,8 @@ class DisplayOptionsTab extends Tab {
     this.addSegmentWidget.element.title = 'Add one or more segment IDs';
     element.appendChild(this.registerDisposer(this.addSegmentWidget).element);
     this.registerDisposer(this.addSegmentWidget.valuesEntered.add((values: Uint64[]) => {
-      if (this.layer.chunkedGraphLayer) {
-        for (const value of values) {
-          this.layer.chunkedGraphLayer.getRoot(value).then((rootSegment: Uint64) => {
-            this.layer.displayState.rootSegments.add(rootSegment);
-          }).catch((e: Error) => {
-            console.log(e);
-            StatusMessage.showTemporaryMessage(e.message, 3000);
-          });
-        }
-      } else {
-        for (const value of values) {
-          this.layer.displayState.rootSegments.add(value);
-        }
+      for (const value of values) {
+        this.layer.displayState.rootSegments.add(value);
       }
     }));
     element.appendChild(this.registerDisposer(this.visibleSegmentWidget).element);
