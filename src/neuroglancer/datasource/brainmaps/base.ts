@@ -54,3 +54,11 @@ export class MeshSourceParameters {
 export class SkeletonSourceParameters extends MeshSourceParameters {
   static RPC_ID = 'brainmaps/SkeletonSource';
 }
+
+export class AnnotationSourceParameters {
+  instance: BrainmapsInstance;
+  volumeId: string;
+  changestack: string;
+
+  static RPC_ID = 'brainmaps/Annotation';
+}

@@ -83,7 +83,7 @@ export class SegmentationRenderLayer extends RenderLayer {
     }));
     this.registerDisposer(displayState.hideSegmentZero.changed.add(() => {
       this.redrawNeeded.dispatch();
-      this.shaderUpdated = true;
+      this.shaderGetter.invalidateShader();
     }));
     this.hasEquivalences = this.displayState.segmentEquivalences.size !== 0;
     displayState.segmentEquivalences.changed.add(() => {
@@ -91,7 +91,7 @@ export class SegmentationRenderLayer extends RenderLayer {
       let hasEquivalences = segmentEquivalences.size !== 0;
       if (hasEquivalences !== this.hasEquivalences) {
         this.hasEquivalences = hasEquivalences;
-        this.shaderUpdated = true;
+        this.shaderGetter.invalidateShader();
         // No need to trigger redraw, since that will happen anyway.
       }
     });
@@ -183,6 +183,9 @@ uint64_t getMappedObjectId() {
 
   beginSlice(sliceView: SliceView) {
     let shader = super.beginSlice(sliceView);
+    if (shader === undefined) {
+      return undefined;
+    }
     let gl = this.gl;
 
     let {displayState} = this;

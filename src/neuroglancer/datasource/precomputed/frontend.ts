@@ -14,8 +14,8 @@
  * limitations under the License.
  */
 
+import {AnnotationSource, makeDataBoundsBoundingBox} from 'neuroglancer/annotation';
 import {ChunkManager, WithParameters} from 'neuroglancer/chunk_manager/frontend';
-import {ChunkedGraphChunkSpecification, ChunkedGraphSourceOptions} from 'neuroglancer/chunked_graph/base';
 import {ChunkedGraphChunkSource} from 'neuroglancer/chunked_graph/frontend';
 import {DataSource} from 'neuroglancer/datasource';
 import {ChunkedGraphSourceParameters, MeshSourceParameters, SkeletonSourceParameters, VolumeChunkEncoding, VolumeChunkSourceParameters} from 'neuroglancer/datasource/precomputed/base';
@@ -98,22 +98,25 @@ export class MultiscaleVolumeChunkSource implements GenericMultiscaleVolumeChunk
     return chunkedGraph;
   }
 
-  getChunkedGraphSources(chunkedGraphSourceOptions: ChunkedGraphSourceOptions, rootSegments: Uint64Set) {
+  getChunkedGraphSources(chunkedGraphSourceOptions: VolumeSourceOptions, rootSegments: Uint64Set) {
     let {chunkedGraph} = this;
     if (chunkedGraph === undefined) {
       return null;
     }
 
-    const spec = ChunkedGraphChunkSpecification.withDefaults({
+    const spec = VolumeChunkSpecification.getDefaults({
       voxelSize: this.scales[0].resolution,
+      dataType: this.dataType,
+      numChannels: 1,
       transform: mat4.fromTranslation(
           mat4.create(),
           vec3.multiply(vec3.create(), this.scales[0].resolution, this.scales[0].voxelOffset)),
       upperVoxelBound: this.scales[0].size,
+      volumeType: VolumeType.CHUNKEDGRAPHLEAVES,
+      chunkDataSizes: [vec3.fromValues(512,512,64)],
       baseVoxelOffset: this.scales[0].voxelOffset,
-      chunkDataSize: vec3.fromValues(512,512,64),
-      chunkedGraphSourceOptions,
-    });
+      volumeSourceOptions: chunkedGraphSourceOptions,
+    })[0];
 
     return [[this.chunkManager.getChunkSource(PrecomputedChunkedGraphSource, {
       spec,
@@ -181,6 +184,16 @@ export class MultiscaleVolumeChunkSource implements GenericMultiscaleVolumeChunk
             }
           }));
     });
+  }
+
+  getStaticAnnotations() {
+    const baseScale = this.scales[0];
+    const annotationSet =
+      new AnnotationSource(mat4.fromScaling(mat4.create(), baseScale.resolution));
+    annotationSet.readonly = true;
+    annotationSet.add(makeDataBoundsBoundingBox(
+        baseScale.voxelOffset, vec3.add(vec3.create(), baseScale.voxelOffset, baseScale.size)));
+    return annotationSet;
   }
 }
 

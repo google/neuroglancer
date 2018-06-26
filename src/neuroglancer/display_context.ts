@@ -31,7 +31,9 @@ export abstract class RenderedPanel extends RefCounted {
   }
 
   scheduleRedraw() {
-    this.context.scheduleRedraw();
+    if (this.visible) {
+      this.context.scheduleRedraw();
+    }
   }
 
   abstract isReady(): boolean;
@@ -40,9 +42,11 @@ export abstract class RenderedPanel extends RefCounted {
     let element = this.element;
     const clientRect = element.getBoundingClientRect();
     const canvasRect = this.context.canvasRect!;
-    let left = element.clientLeft + clientRect.left - canvasRect.left;
+    const scaleX = element.clientWidth / clientRect.width;
+    const scaleY = element.clientHeight / clientRect.height;
+    let left = (element.clientLeft + clientRect.left - canvasRect.left) * scaleX;
     let width = element.clientWidth;
-    let top = clientRect.top - canvasRect.top + element.clientTop;
+    let top = (clientRect.top - canvasRect.top + element.clientTop) * scaleY;
     let height = element.clientHeight;
     let bottom = top + height;
     let gl = this.gl;

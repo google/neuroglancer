@@ -119,3 +119,13 @@ export class CoordinateTransform {
     return new CoordinateTransform(mat4.clone(this.transform));
   }
 }
+
+export function makeDerivedCoordinateTransform(
+    derivedTransform: CoordinateTransform, baseTransform: CoordinateTransform,
+    update: (output: mat4, input: mat4) => void): () => void {
+  update(derivedTransform.transform, baseTransform.transform);
+  return baseTransform.changed.add(() => {
+    update(derivedTransform.transform, baseTransform.transform);
+    derivedTransform.changed.dispatch();
+  });
+}

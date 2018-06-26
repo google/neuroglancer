@@ -14,19 +14,19 @@
  * limitations under the License.
  */
 
-import {LayerManager, MouseSelectionState} from 'neuroglancer/layer';
+import {LayerManager, MouseSelectionState, RenderLayerRole, SelectedLayerState} from 'neuroglancer/layer';
 import {NavigationState} from 'neuroglancer/navigation_state';
 import {TrackableBoolean} from 'neuroglancer/trackable_boolean';
+import {WatchableSet} from 'neuroglancer/trackable_value';
 import {VisibilityPrioritySpecification} from 'neuroglancer/visibility_priority/frontend';
-
-export interface ViewerPositionState {
-  navigationState: NavigationState;
-  mouseState: MouseSelectionState;
-  showAxisLines: TrackableBoolean;
-}
 
 export {VisibilityPrioritySpecification};
 
-export interface ViewerState extends ViewerPositionState, VisibilityPrioritySpecification {
+export interface ViewerState extends VisibilityPrioritySpecification {
+  visibleLayerRoles: WatchableSet<RenderLayerRole>;
+  navigationState: NavigationState;
+  mouseState: MouseSelectionState;
+  showAxisLines: TrackableBoolean;
   layerManager: LayerManager;
+  selectedLayer: SelectedLayerState;
 }

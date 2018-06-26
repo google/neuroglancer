@@ -398,7 +398,7 @@ abstract class LinkedBase<T extends RefCounted&Trackable&{assign(other: T): void
   }
 
   restoreState(obj: any) {
-    if (obj === undefined) {
+    if (obj === undefined || Object.keys(obj).length === 0) {
       this.link.value = NavigationLinkType.LINKED;
       return;
     }

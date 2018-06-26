@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-import {mat4, quat, vec3} from 'gl-matrix';
+import {mat3, mat4, quat, vec3} from 'gl-matrix';
 import {Uint64} from 'neuroglancer/util/uint64';
 
 export {mat2, mat3, mat4, quat, vec2, vec3, vec4} from 'gl-matrix';
@@ -180,4 +180,47 @@ export function decodeMorton(input: Uint64) {
   const y = compactMorton(input.rshift(1));
   const z = compactMorton(input.rshift(2));
   return vec3.clone([x.low, y.low, z.low]);
+}
+
+/**
+ * Returns the value of `t` that minimizes `(p - (a + t * (b - a)))`.
+ */
+export function findClosestParameterizedLinePosition(a: vec3, b: vec3, p: vec3) {
+  // http://mathworld.wolfram.com/Point-LineDistance3-Dimensional.html
+  // Compute t: -dot(a-p, b-a) / |b - a|^2
+  const denominator = vec3.squaredDistance(a, b);
+  let numerator = 0;
+  for (let i = 0; i < 3; ++i) {
+    const aValue = a[i];
+    numerator -= (aValue - p[i]) * (b[i] - aValue);
+  }
+  return numerator / Math.max(denominator, 1e-6);
+}
+
+/**
+ * Sets `out` to the position on the line segment `[a, b]` closest to `p`.
+ */
+export function projectPointToLineSegment(out: vec3, a: vec3, b: vec3, p: vec3) {
+  let t = findClosestParameterizedLinePosition(a, b, p);
+  t = Math.max(0.0, Math.min(1.0, t));
+  for (let i = 0; i < 3; ++i) {
+    const aValue = a[i];
+    out[i] = aValue + t * (b[i] - aValue);
+  }
+  return out;
+}
+
+export function mat3FromMat4(out: mat3, m: mat4) {
+  const m00 = m[0], m01 = m[1], m02 = m[2], m10 = m[4], m11 = m[5], m12 = m[6], m20 = m[8],
+        m21 = m[9], m22 = m[10];
+  out[0] = m00;
+  out[1] = m01;
+  out[2] = m02;
+  out[3] = m10;
+  out[4] = m11;
+  out[5] = m12;
+  out[6] = m20;
+  out[7] = m21;
+  out[8] = m22;
+  return out;
 }

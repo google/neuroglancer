@@ -16,7 +16,7 @@
 
 .image-dropdown .neuroglancer-shader-code-widget {
   height: 6em;
-  width: 60ch;
+  /* width: 60ch; */
   border: 1px solid transparent;
 }
 

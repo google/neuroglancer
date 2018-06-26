@@ -18,22 +18,28 @@ import {MultiscaleSliceViewChunkSource, SliceViewChunk, SliceViewChunkSource} fr
 import {SliceView} from 'neuroglancer/sliceview/frontend';
 import {RenderLayer as GenericSliceViewRenderLayer} from 'neuroglancer/sliceview/renderlayer';
 import {VectorGraphicsChunkSource as VectorGraphicsChunkSourceInterface, VectorGraphicsChunkSpecification, VectorGraphicsSourceOptions} from 'neuroglancer/sliceview/vector_graphics/base';
+import {Owned} from 'neuroglancer/util/disposable';
 import {Buffer} from 'neuroglancer/webgl/buffer';
 import {GL} from 'neuroglancer/webgl/context';
+import {ShaderGetter} from 'neuroglancer/webgl/dynamic_shader';
 import {ShaderBuilder, ShaderProgram} from 'neuroglancer/webgl/shader';
 import {RpcId} from 'neuroglancer/worker_rpc';
 
 export abstract class RenderLayer extends GenericSliceViewRenderLayer {
   sources: VectorGraphicsChunkSource[][];
   shader: ShaderProgram|undefined = undefined;
-  shaderUpdated = true;
   rpcId: RpcId|null = null;
+  protected shaderGetter: Owned<ShaderGetter>;
 
   constructor(multiscaleSource: MultiscaleVectorGraphicsChunkSource, {
     sourceOptions = <VectorGraphicsSourceOptions> {}
   } = {}) {
     super(multiscaleSource.chunkManager, multiscaleSource.getSources(sourceOptions));
+    this.shaderGetter = this.registerDisposer(new ShaderGetter(
+        this.gl, builder => this.defineShader(builder), () => this.getShaderKey()));
   }
+
+  protected abstract getShaderKey(): string;
 
   defineShader(builder: ShaderBuilder) {
     builder.addFragmentCode(`
@@ -56,7 +62,10 @@ void emitTransparent() {
   }
 
   beginSlice(_sliceView: SliceView) {
-    let shader = this.shader!;
+    let shader = this.shaderGetter.get();
+    if (shader === undefined) {
+      return undefined;
+    }
     shader.bind();
     return shader;
   }

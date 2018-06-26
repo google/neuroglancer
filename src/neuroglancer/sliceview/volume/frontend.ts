@@ -14,8 +14,8 @@
  * limitations under the License.
  */
 
+import {AnnotationSource} from 'neuroglancer/annotation';
 import {ChunkManager} from 'neuroglancer/chunk_manager/frontend';
-import {ChunkedGraphSourceOptions} from 'neuroglancer/chunked_graph/base';
 import {ChunkedGraphChunkSource} from 'neuroglancer/chunked_graph/frontend';
 import {MeshSource} from 'neuroglancer/mesh/frontend';
 import {SkeletonSource} from 'neuroglancer/skeleton/frontend';
@@ -163,6 +163,7 @@ export class VolumeChunkSource extends SliceViewChunkSource implements VolumeChu
 
 export abstract class VolumeChunk extends SliceViewChunk {
   source: VolumeChunkSource;
+  chunkDataSize: vec3;
 
   get chunkFormat() {
     return this.source.chunkFormat;
@@ -170,6 +171,7 @@ export abstract class VolumeChunk extends SliceViewChunk {
 
   constructor(source: VolumeChunkSource, x: any) {
     super(source, x);
+    this.chunkDataSize = x['chunkDataSize'] || source.spec.chunkDataSize;
   }
   abstract getChannelValueAt(dataPosition: vec3, channel: number): any;
 }
@@ -207,5 +209,7 @@ export interface MultiscaleVolumeChunkSource extends MultiscaleSliceViewChunkSou
    */
 
   getChunkedGraphUrl?: () => string | null;
-  getChunkedGraphSources?: (options: ChunkedGraphSourceOptions, rootSegments: Uint64Set) => ChunkedGraphChunkSource[][] | null;
+  getChunkedGraphSources?: (options: VolumeSourceOptions, rootSegments: Uint64Set) => ChunkedGraphChunkSource[][] | null;
+
+  getStaticAnnotations?: () => AnnotationSource;
 }

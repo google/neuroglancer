@@ -36,6 +36,17 @@ describe('uint64', () => {
     expect(new Uint64(4294967295, 4294967295).toString(36)).toEqual('3w5e11264sgsf');
   });
 
+  it('conversion from string', () => {
+    expect(new Uint64(0, 0).tryParseString('0')).toBe(true);
+    expect(new Uint64(1, 0).tryParseString('1')).toBe(true);
+    expect(new Uint64(0, 1).tryParseString('4294967296')).toBe(true);
+    expect(new Uint64(0, 1).tryParseString('102002022201221111211', 3)).toBe(true);
+    expect(new Uint64(0, 1).tryParseString('100000000000000000000000000000000', 2)).toBe(true);
+    expect(new Uint64(0, 1).tryParseString('1z141z4', 36)).toBe(true);
+    expect(new Uint64(4294967295, 4294967295).tryParseString('18446744073709551615')).toBe(true);
+    expect(new Uint64(4294967295, 4294967295).tryParseString('3w5e11264sgsf', 36)).toBe(true);
+  });
+
   it('equal', () => {
     let a = new Uint64(1, 2);
     let b = new Uint64(1, 2);

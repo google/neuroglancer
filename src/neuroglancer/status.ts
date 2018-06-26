@@ -85,16 +85,20 @@ export class StatusMessage {
         msg = '' + reason;
       }
       let {errorPrefix = ''} = options;
-      status.element.textContent = errorPrefix + msg + '  ';
-      let button = document.createElement('button');
-      button.textContent = 'Dismiss';
-      button.addEventListener('click', () => {
-        status.dispose();
-      });
-      status.element.appendChild(button);
+      status.setErrorMessage(errorPrefix + msg);
       status.setVisible(true);
     });
     return promise;
+  }
+
+  setErrorMessage(message: string) {
+    this.element.textContent = message + ' ';
+    let button = document.createElement('button');
+    button.textContent = 'Dismiss';
+    button.addEventListener('click', () => {
+      this.dispose();
+    });
+    this.element.appendChild(button);
   }
 
   static showMessage(message: string): StatusMessage {

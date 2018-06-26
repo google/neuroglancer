@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-import {partitionArray, transposeArray2d} from 'neuroglancer/util/array';
+import {partitionArray, tile2dArray, transposeArray2d} from 'neuroglancer/util/array';
 
 describe('partitionArray', () => {
   it('basic test', () => {
@@ -55,4 +55,34 @@ describe('transposeArray2d', () => {
     expect(transposeArray2d(arr, 3, 1)).toEqual(out);
   });
 
+});
+
+describe('tile2dArray', () => {
+  it('majorDimension=1, majorTiles work', () => {
+    const input = Uint8Array.of(0, 1, 2, 3, 4);
+    const expected = Uint8Array.of(0, 0, 1, 1, 2, 2, 3, 3, 4, 4);
+    const result = tile2dArray(input, /*majorDimension=*/1, /*minorTiles=*/1, /*majorTiles=*/2);
+    expect(result).toEqual(expected);
+  });
+
+  it('majorDimension=1, minorTiles work', () => {
+    const input = Uint8Array.of(0, 1, 2, 3, 4);
+    const expected = Uint8Array.of(0, 1, 2, 3, 4, 0, 1, 2, 3, 4);
+    const result = tile2dArray(input, /*majorDimension=*/1, /*minorTiles=*/2, /*majorTiles=*/1);
+    expect(result).toEqual(expected);
+  });
+
+  it('majorDimension=2, majorTiles work', () => {
+    const input = Uint8Array.of(0, 1, 2, 3);
+    const expected = Uint8Array.of(0, 1, 0, 1, 2, 3, 2, 3);
+    const result = tile2dArray(input, /*majorDimension=*/2, /*minorTiles=*/1, /*majorTiles=*/2);
+    expect(result).toEqual(expected);
+  });
+
+  it('majorDimension=2, majorTiles work, minorTiles work', () => {
+    const input = Uint8Array.of(0, 1, 2, 3);
+    const expected = Uint8Array.of(0, 1, 0, 1, 2, 3, 2, 3, 0, 1, 0, 1, 2, 3, 2, 3);
+    const result = tile2dArray(input, /*majorDimension=*/2, /*minorTiles=*/2, /*majorTiles=*/2);
+    expect(result).toEqual(expected);
+  });
 });

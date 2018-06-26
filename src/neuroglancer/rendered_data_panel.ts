@@ -14,9 +14,11 @@
  * limitations under the License.
  */
 
+import {getSelectedAnnotation} from 'neuroglancer/annotation/selection';
 import {DisplayContext, RenderedPanel} from 'neuroglancer/display_context';
 import {MouseSelectionState, ActionState} from 'neuroglancer/layer';
 import {NavigationState} from 'neuroglancer/navigation_state';
+import {UserLayerWithAnnotations} from 'neuroglancer/ui/annotations';
 import {AutomaticallyFocusedElement} from 'neuroglancer/util/automatic_focus';
 import {ActionEvent, EventActionMap, registerActionListener} from 'neuroglancer/util/event_action_map';
 import {AXES_NAMES, kAxes, vec3} from 'neuroglancer/util/geom';
@@ -30,7 +32,9 @@ require('neuroglancer/noselect.css');
 
 const tempVec3 = vec3.create();
 
-export interface RenderedDataViewerState extends ViewerState { inputEventMap: EventActionMap; }
+export interface RenderedDataViewerState extends ViewerState {
+  inputEventMap: EventActionMap;
+}
 
 export abstract class RenderedDataPanel extends RenderedPanel {
   // Last mouse position within the panel.
@@ -127,6 +131,24 @@ export abstract class RenderedDataPanel extends RenderedPanel {
     });
 
     registerActionListener(element, 'snap', () => this.navigationState.pose.snap());
+
+    registerActionListener(element, 'select-annotation', () => {
+      const {mouseState, layerManager} = this.viewer;
+      const state = getSelectedAnnotation(mouseState, layerManager);
+      if (state === undefined) {
+        return;
+      }
+      const userLayer = state.layer.layer;
+      if (userLayer !== null) {
+        this.viewer.selectedLayer.layer = state.layer;
+        this.viewer.selectedLayer.visible = true;
+        userLayer.tabs.value = 'annotations';
+        (<UserLayerWithAnnotations>userLayer).selectedAnnotation.value = {
+          id: state.id,
+          partIndex: state.partIndex
+        };
+      }
+    });
   }
 
   onMouseout(_event: MouseEvent) {
@@ -143,6 +165,8 @@ export abstract class RenderedDataPanel extends RenderedPanel {
     this.mouseX = event.offsetX - element.clientLeft;
     this.mouseY = event.offsetY - element.clientTop;
     let {mouseState} = this.viewer;
+    mouseState.pageX = event.pageX;
+    mouseState.pageY = event.pageY;
     mouseState.updater = this.mouseStateUpdater;
     mouseState.triggerUpdate();
   }

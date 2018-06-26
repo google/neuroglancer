@@ -39,7 +39,8 @@ const PointMatchSourceBase =
     WithParameters(VectorGraphicsChunkSource, PointMatchChunkSourceParameters);
 class PointMatchSource extends PointMatchSourceBase {}
 
-const VALID_STACK_STATES = new Set<string>(['COMPLETE']);
+const VALID_STACK_STATES = new Set<string>(['COMPLETE', 'READ_ONLY']);
+const PARTIAL_STACK_STATES = new Set<string>(['LOADING']);
 
 interface OwnerInfo {
   owner: string;
@@ -104,18 +105,25 @@ function parseStackInfo(obj: any): StackInfo|undefined {
   verifyObject(obj);
 
   let state = verifyObjectProperty(obj, 'state', verifyString);
-  if (!VALID_STACK_STATES.has(state)) {
-    return undefined;
-  }
-
-  let stackStatsObj = verifyObjectProperty(obj, 'stats', verifyObject);
-
-  let lowerVoxelBound: vec3 = parseLowerVoxelBounds(stackStatsObj);
-  let upperVoxelBound: vec3 = parseUpperVoxelBounds(stackStatsObj);
 
   let channels: string[] = [];
-  if (stackStatsObj.hasOwnProperty('channelNames')) {
-    channels = parseChannelNames(stackStatsObj);
+  let lowerVoxelBound: vec3 = vec3.create();
+  let upperVoxelBound: vec3 = vec3.create();
+
+  if (VALID_STACK_STATES.has(state)) {
+    let stackStatsObj = verifyObjectProperty(obj, 'stats', verifyObject);
+
+    lowerVoxelBound = parseLowerVoxelBounds(stackStatsObj);
+    upperVoxelBound = parseUpperVoxelBounds(stackStatsObj);
+
+    if (stackStatsObj.hasOwnProperty('channelNames')) {
+      channels = parseChannelNames(stackStatsObj);
+    }
+  } else if (PARTIAL_STACK_STATES.has(state)) {
+    // Stacks in LOADING state will not have a 'stats' object.
+    // Values will be populated from command arguments in MultiscaleVolumeChunkSource()
+  } else {
+    return undefined;
   }
 
   let voxelResolution: vec3 = verifyObjectProperty(obj, 'currentVersion', parseStackVersionInfo);
@@ -131,9 +139,9 @@ function parseUpperVoxelBounds(stackStatsObj: any): vec3 {
 
   let upperVoxelBound: vec3 = vec3.create();
 
-  upperVoxelBound[0] = verifyObjectProperty(stackBounds, 'maxX', verifyFloat);
-  upperVoxelBound[1] = verifyObjectProperty(stackBounds, 'maxY', verifyFloat);
-  upperVoxelBound[2] = verifyObjectProperty(stackBounds, 'maxZ', verifyFloat);
+  upperVoxelBound[0] = verifyObjectProperty(stackBounds, 'maxX', verifyFloat)+1;
+  upperVoxelBound[1] = verifyObjectProperty(stackBounds, 'maxY', verifyFloat)+1;
+  upperVoxelBound[2] = verifyObjectProperty(stackBounds, 'maxZ', verifyFloat)+1;
 
   return upperVoxelBound;
 }
@@ -205,6 +213,14 @@ export class MultiscaleVolumeChunkSource implements GenericMultiscaleVolumeChunk
   minIntensity: number|undefined;
   maxIntensity: number|undefined;
 
+  // Bounding box override parameters
+  minX: number|undefined;
+  minY: number|undefined;
+  minZ: number|undefined;
+  maxX: number|undefined;
+  maxY: number|undefined;
+  maxZ: number|undefined;
+
   // Force limited number of tile specs to render for downsampled views of large projects
   maxTileSpecsToRender: number|undefined;
 
@@ -245,6 +261,20 @@ export class MultiscaleVolumeChunkSource implements GenericMultiscaleVolumeChunk
     this.maxIntensity = verifyOptionalInt(parameters['maxIntensity']);
     this.maxTileSpecsToRender = verifyOptionalInt(parameters['maxTileSpecsToRender']);
     this.filter = verifyOptionalBoolean(parameters['filter']);
+
+    this.minX = verifyOptionalInt(parameters['minX']);
+    this.minY = verifyOptionalInt(parameters['minY']);
+    this.minZ = verifyOptionalInt(parameters['minZ']);
+    this.maxX = verifyOptionalInt(parameters['maxX']);
+    this.maxY = verifyOptionalInt(parameters['maxY']);
+    this.maxZ = verifyOptionalInt(parameters['maxZ']);
+
+    if (this.minX !== undefined) { stackInfo.lowerVoxelBound[0] = this.minX; }
+    if (this.minY !== undefined) { stackInfo.lowerVoxelBound[1] = this.minY; }
+    if (this.minZ !== undefined) { stackInfo.lowerVoxelBound[2] = this.minZ; }
+    if (this.maxX !== undefined) { stackInfo.upperVoxelBound[0] = this.maxX; }
+    if (this.maxY !== undefined) { stackInfo.upperVoxelBound[1] = this.maxY; }
+    if (this.maxZ !== undefined) { stackInfo.upperVoxelBound[2] = this.maxZ; }
 
     let encoding = verifyOptionalString(parameters['encoding']);
     if (encoding === undefined) {
@@ -540,28 +570,20 @@ export class MultiscaleVectorGraphicsChunkSource implements
     this.dims[2] = 1;
   }
   getSources(vectorGraphicsSourceOptions: VectorGraphicsSourceOptions) {
-    let voxelSize = vec3.clone(this.stackInfo.voxelResolution);
+    const voxelSize = this.stackInfo.voxelResolution;
+    const chunkSize = vec3.subtract(
+        vec3.create(), this.stackInfo.upperVoxelBound, this.stackInfo.lowerVoxelBound);
+    vec3.multiply(chunkSize, chunkSize, voxelSize);
+    chunkSize[2] = voxelSize[2];
 
-    let lowerVoxelBound = vec3.create(), upperVoxelBound = vec3.create();
-
-    for (let i = 0; i < 3; i++) {
-      lowerVoxelBound[i] = Math.floor(
-          this.stackInfo.lowerVoxelBound[i] * (this.stackInfo.voxelResolution[i] / voxelSize[i]));
-      upperVoxelBound[i] = Math.ceil(
-          this.stackInfo.upperVoxelBound[i] * (this.stackInfo.voxelResolution[i] / voxelSize[i]));
-    }
-
-    // For now we set the chunkDataSize to be the size of an entire slab, pending possible bug fix
-    // in render point match service
-    let chunkDataSize = vec3.clone(upperVoxelBound);
-    chunkDataSize[0] += Math.abs(lowerVoxelBound[0]);
-    chunkDataSize[1] += Math.abs(lowerVoxelBound[1]);
-    chunkDataSize[2] = 1;
-
-
-    let spec = VectorGraphicsChunkSpecification.make(
-        {voxelSize, lowerVoxelBound, upperVoxelBound, chunkDataSize, vectorGraphicsSourceOptions});
-    let source = this.chunkManager.getChunkSource(PointMatchSource, {
+    const spec = VectorGraphicsChunkSpecification.make({
+      voxelSize,
+      chunkSize,
+      lowerChunkBound: vec3.fromValues(0, 0, this.stackInfo.lowerVoxelBound[2]),
+      upperChunkBound: vec3.fromValues(1, 1, this.stackInfo.upperVoxelBound[2]),
+      vectorGraphicsSourceOptions
+    });
+    const source = this.chunkManager.getChunkSource(PointMatchSource, {
       spec,
       parameters: {
         'baseUrls': this.baseUrls,

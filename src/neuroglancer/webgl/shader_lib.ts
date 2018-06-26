@@ -385,8 +385,50 @@ export function getShaderType(dataType: DataType, numComponents: number = 1) {
   throw new Error(`No shader type for ${DataType[dataType]}[${numComponents}].`);
 }
 
+export const glsl_equalUint32 = [
+  glsl_uint32, `
+bool equal(uint32_t a, uint32_t b) {
+  return all(lessThan(abs(a.value - b.value), vec4(1.0 / 256.0, 1.0 / 256.0, 1.0 / 256.0, 1.0 / 256.0)));
+}
+`
+];
+
 export const glsl_addUint32 = [
   glsl_uint32, `
+uint32_t add(uint32_t a, float b) {
+  uint32_t result;
+  float partial = 0.0;
+
+  partial += a.value.x * 255.0 + b;
+  {
+    float byte0 = mod(partial, 256.0);
+    result.value.x = byte0 / 255.0;
+    partial = (partial - byte0) / 256.0;
+  }
+
+  partial += a.value.y * 255.0;
+  {
+    float byte1 = mod(partial, 256.0);
+    result.value.y = byte1 / 255.0;
+    partial = (partial - byte1) / 256.0;
+  }
+
+  partial += a.value.z * 255.0;
+  {
+    float byte2 = mod(partial, 256.0);
+    result.value.z = byte2 / 255.0;
+    partial = (partial - byte2) / 256.0;
+  }
+
+  partial += a.value.w * 255.0;
+  {
+    float byte3 = mod(partial, 256.0);
+    result.value.w = byte3 / 255.0;
+    partial = (partial - byte3) / 256.0;
+  }
+  return result;
+}
+
 uint32_t add(uint32_t a, uint32_t b) {
   uint32_t result;
   float partial = 0.0;
@@ -422,6 +464,44 @@ uint32_t add(uint32_t a, uint32_t b) {
 }
 `
 ];
+
+export const glsl_multiplyUint32 = [
+  glsl_uint32, `
+uint32_t multiply(uint32_t a, float b) {
+  uint32_t result;
+  float partial = 0.0;
+  partial += a.value.x * 255.0 * b;
+  {
+    float byte0 = mod(floor(partial + 0.5), 256.0);
+    result.value.x = byte0 / 255.0;
+    partial = (partial - byte0) / 256.0;
+  }
+
+  partial += a.value.y * 255.0 * b;
+  {
+    float byte1 = mod(floor(partial + 0.5), 256.0);
+    result.value.y = byte1 / 255.0;
+    partial = (partial - byte1) / 256.0;
+  }
+
+  partial += a.value.z * 255.0 * b;
+  {
+    float byte2 = mod(floor(partial + 0.5), 256.0);
+    result.value.z = byte2 / 255.0;
+    partial = (partial - byte2) / 256.0;
+  }
+
+  partial += a.value.w * 255.0 * b;
+  {
+    float byte3 = mod(floor(partial + 0.5), 256.0);
+    result.value.w = byte3 / 255.0;
+    partial = (partial - byte3) / 256.0;
+  }
+  return result;
+}
+`
+];
+
 
 export const glsl_floatToUint32 = [
   glsl_uint32, `

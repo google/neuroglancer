@@ -14,8 +14,11 @@
  * limitations under the License.
  */
 
-import {Disposable} from 'neuroglancer/util/disposable';
+import {Disposable, RefCountedValue} from 'neuroglancer/util/disposable';
+import {stableStringify} from 'neuroglancer/util/json';
+import {getObjectId} from 'neuroglancer/util/object_id';
 import {GL_ARRAY_BUFFER, GL_FLOAT, GL_STATIC_DRAW} from 'neuroglancer/webgl/constants';
+import {GL} from 'neuroglancer/webgl/context';
 import {AttributeIndex} from 'neuroglancer/webgl/shader';
 
 export type BufferType = number;
@@ -61,4 +64,15 @@ export class Buffer implements Disposable {
     buffer.setData(data, usage);
     return buffer;
   }
+}
+
+export function getMemoizedBuffer(
+    gl: GL, bufferType: number, getter: (...args: any[]) => ArrayBufferView, ...args: any[]) {
+  return gl.memoize.get(
+      stableStringify({id: 'getMemoizedBuffer', getter: getObjectId(getter), args}), () => {
+        const result =
+            new RefCountedValue(Buffer.fromData(gl, getter(...args), bufferType, GL_STATIC_DRAW));
+        result.registerDisposer(result.value);
+        return result;
+      });
 }

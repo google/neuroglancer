@@ -69,6 +69,7 @@ export class ManifestChunk extends Chunk {
     // We can't easily determine the memory usage of the JSON manifest.  Just use 100 bytes as a
     // default value.
     this.systemMemoryBytes = 100;
+    this.gpuMemoryBytes = 0;
     super.downloadSucceeded();
     if (this.priorityTier < ChunkPriorityTier.RECENT) {
       this.source!.chunkManager.scheduleUpdateChunkPriorities();
@@ -162,13 +163,7 @@ export function computeVertexNormals(positions: Float32Array, indices: Uint32Arr
   const v1v0 = vec3.create();
   const v2v1 = vec3.create();
   let vertexNormals = new Float32Array(positions.length);
-  let vertexFaceCount = new Float32Array(positions.length / 3);
   let numIndices = indices.length;
-  for (let i = 0; i < numIndices; i += 3) {
-    for (let j = 0; j < 3; ++j) {
-      vertexFaceCount[indices[i + j]] += 1;
-    }
-  }
   for (let i = 0; i < numIndices; i += 3) {
     let i0 = indices[i] * 3, i1 = indices[i + 1] * 3, i2 = indices[i + 2] * 3;
     for (let j = 0; j < 3; ++j) {
@@ -180,17 +175,16 @@ export function computeVertexNormals(positions: Float32Array, indices: Uint32Arr
 
     for (let k = 0; k < 3; ++k) {
       let index = indices[i + k];
-      let scalar = 1.0 / vertexFaceCount[index];
       let offset = index * 3;
       for (let j = 0; j < 3; ++j) {
-        vertexNormals[offset + j] += scalar * faceNormal[j];
+        vertexNormals[offset + j] += faceNormal[j];
       }
     }
   }
   // Normalize all vertex normals.
   let numVertices = vertexNormals.length;
   for (let i = 0; i < numVertices; i += 3) {
-    let vec = <vec3>vertexNormals.subarray(i, 3);
+    let vec = <vec3>vertexNormals.subarray(i, i + 3);
     vec3.normalize(vec, vec);
   }
   return vertexNormals;
