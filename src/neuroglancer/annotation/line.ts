@@ -57,7 +57,8 @@ emitLine(uProjection, aEndpointA, aEndpointB);
 ${this.setPartIndex(builder)};
 `);
     builder.setFragmentMain(`
-emitAnnotation(vec4(vColor.rgb, vColor.a * getLineAlpha() * ${this.getCrossSectionFadeFactor()}));
+vec4 borderColor = vec4(1.0, 1.0, 1.0, 1.0);
+emitAnnotation(vec4(borderColor.rgb, borderColor.a * getLineAlpha() * ${this.getCrossSectionFadeFactor()}));
 `);
   });
 
@@ -73,6 +74,9 @@ emitAnnotation(vec4(vColor.rgb, vColor.a * getLineAlpha() * ${this.getCrossSecti
 vec3 vertexPosition = mix(aEndpointA, aEndpointB, aEndpointIndex);
 emitCircle(uProjection * vec4(vertexPosition, 1.0));
 ${this.setPartIndex(builder, 'aEndpointIndex + 1.0')};
+if (aEndpointIndex > 0.99) {
+  vColor.rgb = vColor.bgr;
+}
 `);
     builder.setFragmentMain(`
 vec4 borderColor = vec4(0.0, 0.0, 0.0, 1.0);
