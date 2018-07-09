@@ -23,6 +23,7 @@ import {PerspectiveViewRenderContext, PerspectiveViewRenderLayer} from 'neurogla
 import {RenderedDataPanel, RenderedDataViewerState} from 'neuroglancer/rendered_data_panel';
 import {SliceView, SliceViewRenderHelper} from 'neuroglancer/sliceview/frontend';
 import {TrackableBoolean, TrackableBooleanCheckbox} from 'neuroglancer/trackable_boolean';
+import {TrackableValue} from 'neuroglancer/trackable_value';
 import {TrackableRGB} from 'neuroglancer/util/color';
 import {Owned} from 'neuroglancer/util/disposable';
 import {ActionEvent, registerActionListener} from 'neuroglancer/util/event_action_map';
@@ -34,7 +35,7 @@ import {GL_BLEND, GL_COLOR_BUFFER_BIT, GL_DEPTH_TEST, GL_LEQUAL, GL_LESS, GL_ONE
 import {DepthBuffer, FramebufferConfiguration, makeTextureBuffers, OffscreenCopyHelper, TextureBuffer} from 'neuroglancer/webgl/offscreen';
 import {ShaderBuilder} from 'neuroglancer/webgl/shader';
 import {glsl_packFloat01ToFixedPoint, unpackFloat01FromFixedPoint} from 'neuroglancer/webgl/shader_lib';
-import {ScaleBarTexture} from 'neuroglancer/widget/scale_bar';
+import {ScaleBarOptions, ScaleBarTexture} from 'neuroglancer/widget/scale_bar';
 import {RPC, SharedObject} from 'neuroglancer/worker_rpc';
 
 require('neuroglancer/noselect.css');
@@ -44,6 +45,7 @@ export interface PerspectiveViewerState extends RenderedDataViewerState {
   orthographicProjection: TrackableBoolean;
   showSliceViews: TrackableBoolean;
   showScaleBar: TrackableBoolean;
+  scaleBarOptions: TrackableValue<ScaleBarOptions>;
   showSliceViewsCheckbox?: boolean;
   crossSectionBackgroundColor: TrackableRGB;
   rpc: RPC;
@@ -236,6 +238,7 @@ export class PerspectivePanel extends RenderedDataPanel {
     }
     this.registerDisposer(viewer.orthographicProjection.changed.add(() => this.scheduleRedraw()));
     this.registerDisposer(viewer.showScaleBar.changed.add(() => this.scheduleRedraw()));
+    this.registerDisposer(viewer.scaleBarOptions.changed.add(() => this.scheduleRedraw()));
     this.registerDisposer(viewer.showSliceViews.changed.add(() => this.scheduleRedraw()));
     this.registerDisposer(viewer.showAxisLines.changed.add(() => this.scheduleRedraw()));
     this.registerDisposer(
@@ -536,11 +539,16 @@ export class PerspectivePanel extends RenderedDataPanel {
       gl.enable(GL_BLEND);
       gl.blendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
       const {scaleBarTexture} = this;
+      const options = this.viewer.scaleBarOptions.value;
       const {dimensions} = scaleBarTexture;
-      dimensions.targetLengthInPixels = Math.min(width / 4, 100);
+      dimensions.targetLengthInPixels = Math.min(
+          options.maxWidthFraction * width, options.maxWidthInPixels * options.scaleFactor);
       dimensions.nanometersPerPixel = this.nanometersPerPixel;
-      scaleBarTexture.update();
-      gl.viewport(10, 10, scaleBarTexture.width, scaleBarTexture.height);
+      scaleBarTexture.update(options);
+      gl.viewport(
+          options.leftPixelOffset * options.scaleFactor,
+          options.bottomPixelOffset * options.scaleFactor, scaleBarTexture.width,
+          scaleBarTexture.height);
       this.scaleBarCopyHelper.draw(scaleBarTexture.texture);
       gl.disable(GL_BLEND);
     }

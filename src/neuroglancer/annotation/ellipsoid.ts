@@ -160,7 +160,11 @@ CenterOrientEllipse centerOrient = computeCenterOrientEllipse(quadraticForm);
 vec2 viewportCorner = centerOrient.k +
   centerOrient.u1 * aCornerOffset.x * centerOrient.a +
   centerOrient.u2 * aCornerOffset.y * centerOrient.b;
-gl_Position = uViewportToDevice * vec4(viewportCorner, 0.0, 1.0);
+if (centerOrient.valid) {
+  gl_Position = uViewportToDevice * vec4(viewportCorner, 0.0, 1.0);
+} else {
+  gl_Position = vec4(1.0, 1.0, 0.0, -100.0);
+}
 vCircleCoord = aCornerOffset;
 ${this.setPartIndex(builder)};
 `);

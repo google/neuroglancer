@@ -309,6 +309,8 @@ class AnnotationLayer(Layer, _AnnotationLayerOptions):
     source = wrapped_property('source', optional(volume_source))
     voxel_size = voxelSize = wrapped_property('voxelSize', optional(array_wrapper(np.float32, 3)))
     annotations = wrapped_property('annotations', typed_list(annotation))
+    linked_segmentation_layer = linkedSegmentationLayer = wrapped_property('linkedSegmentationLayer', optional(text_type))
+    filter_by_segmentation = filterBySegmentation = wrapped_property('filterBySegmentation', optional(bool, False))
 
     @staticmethod
     def interpolate(a, b, t):

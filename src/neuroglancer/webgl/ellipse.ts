@@ -77,6 +77,7 @@ struct CenterOrientEllipse {
   vec2 u2;  // major axis direction
   float a;  // semimajor axis
   float b;  // semiminor axis
+  bool valid; // indicates if the ellipse is valid
 };
 `;
 
@@ -108,6 +109,7 @@ CenterOrientEllipse computeCenterOrientEllipse(EllipseQuadraticForm p) {
   float lambda2 = ((lambdaTerm1 - lambdaTerm2) / 2.0);
   r.a = 1.0 / sqrt(lambda1);
   r.b = 1.0 / sqrt(lambda2);
+  r.valid = lambda1 > 0.0 && lambda2 > 0.0;
   if (abs(m12) < 1e-10) {
     r.u1 = vec2(1.0, 0.0);
   } else if (m11 >= m22) {

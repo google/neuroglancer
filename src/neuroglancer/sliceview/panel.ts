@@ -28,10 +28,11 @@ import {startRelativeMouseDrag} from 'neuroglancer/util/mouse_drag';
 import {GL_BLEND, GL_COLOR_BUFFER_BIT, GL_ONE_MINUS_SRC_ALPHA, GL_SCISSOR_TEST, GL_SRC_ALPHA} from 'neuroglancer/webgl/constants';
 import {FramebufferConfiguration, makeTextureBuffers, OffscreenCopyHelper} from 'neuroglancer/webgl/offscreen';
 import {ShaderBuilder, ShaderModule} from 'neuroglancer/webgl/shader';
-import {ScaleBarTexture} from 'neuroglancer/widget/scale_bar';
+import {ScaleBarTexture, TrackableScaleBarOptions} from 'neuroglancer/widget/scale_bar';
 
 export interface SliceViewerState extends RenderedDataViewerState {
   showScaleBar: TrackableBoolean;
+  scaleBarOptions: TrackableScaleBarOptions;
   crossSectionBackgroundColor: TrackableRGB;
 }
 
@@ -172,6 +173,11 @@ export class SliceViewPanel extends RenderedDataPanel {
         this.context.scheduleRedraw();
       }
     }));
+    this.registerDisposer(viewer.scaleBarOptions.changed.add(() => {
+      if (this.visible) {
+        this.context.scheduleRedraw();
+      }
+    }));
   }
 
   isReady() {
@@ -281,12 +287,17 @@ export class SliceViewPanel extends RenderedDataPanel {
       if (this.viewer.showScaleBar.value) {
         gl.enable(GL_BLEND);
         gl.blendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+        const options = this.viewer.scaleBarOptions.value;
         const {scaleBarTexture} = this;
         const {dimensions} = scaleBarTexture;
-        dimensions.targetLengthInPixels = Math.min(width / 4, 100);
+        dimensions.targetLengthInPixels = Math.min(
+            options.maxWidthFraction * width, options.maxWidthInPixels * options.scaleFactor);
         dimensions.nanometersPerPixel = sliceView.pixelSize;
-        scaleBarTexture.update();
-        gl.viewport(10, 10, scaleBarTexture.width, scaleBarTexture.height);
+        scaleBarTexture.update(options);
+        gl.viewport(
+            options.leftPixelOffset * options.scaleFactor,
+            options.bottomPixelOffset * options.scaleFactor, scaleBarTexture.width,
+            scaleBarTexture.height);
         this.scaleBarCopyHelper.draw(scaleBarTexture.texture);
         gl.disable(GL_BLEND);
       }

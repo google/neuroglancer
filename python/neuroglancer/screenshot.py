@@ -27,15 +27,20 @@ class ScreenshotSaver(object):
 
         self.index = 0
 
-    def get_next_path(self):
-        index = self.index
-        path = os.path.join(self.directory, '%07d.png' % index)
-        return index, path
+    def get_path(self, index):
+        return os.path.join(self.directory, '%07d.png' % index)
 
-    def capture(self):
+    def get_next_path(self, index=None):
+        if index is None:
+            index = self.index
+        return index, self.get_path(index)
+
+    def capture(self, index=None):
         s = self.viewer.screenshot()
-        index, path = self.get_next_path()
+        increment_index = index is None
+        index, path = self.get_next_path(index)
         with open(path, 'wb') as f:
             f.write(s.screenshot.image)
-        self.index += 1
+        if increment_index:
+            self.index += 1
         return index, path

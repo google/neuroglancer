@@ -36,6 +36,7 @@ import {NullarySignal} from 'neuroglancer/util/signal';
 import {Trackable} from 'neuroglancer/util/trackable';
 import {WatchableMap} from 'neuroglancer/util/watchable_map';
 import {VisibilityPrioritySpecification} from 'neuroglancer/viewer_state';
+import {ScaleBarOptions} from 'neuroglancer/widget/scale_bar';
 
 require('neuroglancer/ui/button.css');
 
@@ -57,6 +58,7 @@ export interface ViewerUIState extends SliceViewViewerState, VisibilityPriorityS
   showPerspectiveSliceViews: TrackableBoolean;
   showAxisLines: TrackableBoolean;
   showScaleBar: TrackableBoolean;
+  scaleBarOptions: TrackableValue<ScaleBarOptions>;
   visibleLayerRoles: WatchableSet<RenderLayerRole>;
   selectedLayer: SelectedLayerState;
   inputEventBindings: InputEventBindings;
@@ -112,6 +114,7 @@ export function getCommonViewerState(viewer: ViewerUIState) {
     visibleLayerRoles: viewer.visibleLayerRoles,
     selectedLayer: viewer.selectedLayer,
     visibility: viewer.visibility,
+    scaleBarOptions: viewer.scaleBarOptions,
   };
 }
 

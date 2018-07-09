@@ -283,6 +283,7 @@ function getCommonViewerState(viewer: Viewer) {
     mouseState: viewer.mouseState,
     showAxisLines: viewer.showAxisLines,
     showScaleBar: viewer.showScaleBar,
+    scaleBarOptions: viewer.scaleBarOptions,
     showPerspectiveSliceViews: viewer.showPerspectiveSliceViews,
     inputEventBindings: viewer.inputEventBindings,
     visibility: viewer.visibility,
