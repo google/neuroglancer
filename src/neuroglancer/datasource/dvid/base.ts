@@ -16,6 +16,7 @@
 
 export enum VolumeChunkEncoding {
   JPEG,
+  RAW,
   COMPRESSED_SEGMENTATION
 }
 
