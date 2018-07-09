@@ -111,15 +111,25 @@ export class VolumeDataInstanceInfo extends DataInstanceInfo {
       volumeSourceOptions: VolumeSourceOptions) {
     let {encoding} = this;
     let sources: VolumeChunkSource[][] = [];
+
+    // must be 64 block size to work with neuroglancer properly
+    let blocksize = 64; 
     for (let level = 0; level < this.numLevels; ++level) {
       let voxelSize = vec3.scale(vec3.create(), this.voxelSize, Math.pow(2, level));
       let lowerVoxelBound = vec3.create();
       let upperVoxelBound = vec3.create();
       for (let i = 0; i < 3; ++i) {
-        lowerVoxelBound[i] =
-            Math.floor(this.lowerVoxelBound[i] * (this.voxelSize[i] / voxelSize[i]));
-        upperVoxelBound[i] =
-            Math.ceil(this.upperVoxelBound[i] * (this.voxelSize[i] / voxelSize[i]));
+        let lowerVoxelNotAligned = 
+          Math.floor(this.lowerVoxelBound[i] * (this.voxelSize[i] / voxelSize[i]));
+        // adjust min to be a multiple of blocksize
+        lowerVoxelBound[i] = lowerVoxelNotAligned - (lowerVoxelNotAligned % blocksize);
+        let upperVoxelNotAligned =
+          Math.ceil((this.upperVoxelBound[i]+1) * (this.voxelSize[i] / voxelSize[i]));
+        upperVoxelBound[i] = upperVoxelNotAligned;
+        // adjust max to be a multiple of blocksize
+        if ((upperVoxelNotAligned % blocksize) != 0) {
+          upperVoxelBound[i] += (blocksize - (upperVoxelNotAligned % blocksize));
+        }
       }
       let dataInstanceKey = parameters.dataInstanceKey;
 
