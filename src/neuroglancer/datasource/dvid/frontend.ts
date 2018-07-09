@@ -321,6 +321,7 @@ export function parseDataInstance(
       return new VolumeDataInstanceInfo(
           obj, name, baseInfo, VolumeChunkEncoding.COMPRESSED_SEGMENTATION, instanceNames);
     case 'labelarray':
+    case 'labelmap':
       return new VolumeDataInstanceInfo(
           obj, name, baseInfo, VolumeChunkEncoding.COMPRESSED_SEGMENTATIONARRAY, instanceNames);
     default:
