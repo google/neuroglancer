@@ -54,11 +54,15 @@ const TILE_CHUNK_DECODERS = new Map<TileEncoding, ChunkDecoder>([
       return `/api/node/${params['nodeKey']}/${params['dataInstanceKey']}/subvolblocks/` +
           `${chunkDataSize[0]}_${chunkDataSize[1]}_${chunkDataSize[2]}/` +
           `${chunkPosition[0]}_${chunkPosition[1]}_${chunkPosition[2]}`;
-    } else if (params.encoding === VolumeChunkEncoding.RAW)  { 
+    } else if (params.encoding === VolumeChunkEncoding.RAW) { 
       return `/api/node/${params['nodeKey']}/${params['dataInstanceKey']}/raw/0_1_2/` +
           `${chunkDataSize[0]}_${chunkDataSize[1]}_${chunkDataSize[2]}/` +
           `${chunkPosition[0]}_${chunkPosition[1]}_${chunkPosition[2]}/jpeg`;
-    } else {
+    } else if (params.encoding === VolumeChunkEncoding.COMPRESSED_SEGMENTATIONARRAY) {
+      return `/api/node/${params['nodeKey']}/${params['dataInstanceKey']}/raw/0_1_2/` +
+          `${chunkDataSize[0]}_${chunkDataSize[1]}_${chunkDataSize[2]}/` +
+          `${chunkPosition[0]}_${chunkPosition[1]}_${chunkPosition[2]}?compression=googlegzip&scale=${params['dataScale']}`;
+     } else {
       // encoding is COMPRESSED_SEGMENTATION
       return `/api/node/${params['nodeKey']}/${params['dataInstanceKey']}/raw/0_1_2/` +
           `${chunkDataSize[0]}_${chunkDataSize[1]}_${chunkDataSize[2]}/` +

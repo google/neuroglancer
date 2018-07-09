@@ -17,7 +17,8 @@
 export enum VolumeChunkEncoding {
   JPEG,
   RAW,
-  COMPRESSED_SEGMENTATION
+  COMPRESSED_SEGMENTATION,
+  COMPRESSED_SEGMENTATIONARRAY
 }
 
 export class DVIDSourceParameters {
@@ -27,6 +28,7 @@ export class DVIDSourceParameters {
 }
 
 export class VolumeChunkSourceParameters extends DVIDSourceParameters {
+  dataScale: string;
   encoding: VolumeChunkEncoding;
   static RPC_ID = 'dvid/VolumeChunkSource';
 }
