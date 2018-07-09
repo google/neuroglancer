@@ -45,14 +45,15 @@ const TILE_CHUNK_DECODERS = new Map<TileEncoding, ChunkDecoder>([
     let decoder = this.getDecoder(params);
     return sendHttpRequest(
                openShardedHttpRequest(params.baseUrls, path), 'arraybuffer', cancellationToken)
-        .then(response => decoder(chunk, response));
+               .then(response => decoder(chunk, (params.encoding === VolumeChunkEncoding.JPEG) 
+                                                    ? response.slice(16) : response));
   }
   getPath(chunkPosition: Float32Array, chunkDataSize: Float32Array) {
     let params = this.parameters;
     if (params.encoding === VolumeChunkEncoding.JPEG) {
-      return `/api/node/${params['nodeKey']}/${params['dataInstanceKey']}/raw/0_1_2/` +
+    return `/api/node/${params['nodeKey']}/${params['dataInstanceKey']}/subvolblocks/` +
           `${chunkDataSize[0]}_${chunkDataSize[1]}_${chunkDataSize[2]}/` +
-          `${chunkPosition[0]}_${chunkPosition[1]}_${chunkPosition[2]}/jpeg`;
+          `${chunkPosition[0]}_${chunkPosition[1]}_${chunkPosition[2]}`;
     } else {
       // encoding is COMPRESSED_SEGMENTATION
       return `/api/node/${params['nodeKey']}/${params['dataInstanceKey']}/raw/0_1_2/` +
