@@ -15,18 +15,36 @@
  */
 
 import {WithParameters} from 'neuroglancer/chunk_manager/backend';
-import {TileChunkSourceParameters, TileEncoding, VolumeChunkEncoding, VolumeChunkSourceParameters} from 'neuroglancer/datasource/dvid/base';
+import {TileChunkSourceParameters, SkeletonSourceParameters, TileEncoding, VolumeChunkEncoding, VolumeChunkSourceParameters} from 'neuroglancer/datasource/dvid/base';
 import {ChunkDecoder} from 'neuroglancer/sliceview/backend_chunk_decoders';
 import {decodeCompressedSegmentationChunk} from 'neuroglancer/sliceview/backend_chunk_decoders/compressed_segmentation';
 import {decodeJpegChunk} from 'neuroglancer/sliceview/backend_chunk_decoders/jpeg';
 import {VolumeChunk, VolumeChunkSource} from 'neuroglancer/sliceview/volume/backend';
 import {CancellationToken} from 'neuroglancer/util/cancellation';
 import {openShardedHttpRequest, sendHttpRequest} from 'neuroglancer/util/http_request';
+import {SkeletonChunk, SkeletonSource} from 'neuroglancer/skeleton/backend';
+import {decodeSwcSkeletonChunk} from 'neuroglancer/skeleton/decode_swc_skeleton';
 import {registerSharedObject} from 'neuroglancer/worker_rpc';
 
 const TILE_CHUNK_DECODERS = new Map<TileEncoding, ChunkDecoder>([
   [TileEncoding.JPEG, decodeJpegChunk],
 ]);
+
+@registerSharedObject() export class DVIDSkeletonSource extends
+(WithParameters(SkeletonSource, SkeletonSourceParameters)) {
+  download(chunk: SkeletonChunk, cancellationToken: CancellationToken) {
+    const {parameters} = this;
+    let bodyid = `${chunk.objectId}`;
+    const path = `/api/node/${parameters['nodeKey']}/${parameters['dataInstanceKey']}/key/` + bodyid + "_swc";
+  
+    return sendHttpRequest(
+               openShardedHttpRequest(parameters.baseUrls, path), 'arraybuffer', cancellationToken)
+                .then(response => {
+                  let enc = new TextDecoder("utf-8");
+                  decodeSwcSkeletonChunk(chunk, enc.decode(response));
+                });
+  }
+}
 
 @registerSharedObject() export class DVIDVolumeChunkSource extends
 (WithParameters(VolumeChunkSource, VolumeChunkSourceParameters)) {

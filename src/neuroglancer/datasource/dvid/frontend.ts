@@ -21,7 +21,8 @@
 
 import {ChunkManager, WithParameters} from 'neuroglancer/chunk_manager/frontend';
 import {CompletionResult, DataSource} from 'neuroglancer/datasource';
-import {DVIDSourceParameters, TileChunkSourceParameters, TileEncoding, VolumeChunkEncoding, VolumeChunkSourceParameters} from 'neuroglancer/datasource/dvid/base';
+import {DVIDSourceParameters, SkeletonSourceParameters, TileChunkSourceParameters, TileEncoding, VolumeChunkEncoding, VolumeChunkSourceParameters} from 'neuroglancer/datasource/dvid/base';
+import {SkeletonSource} from 'neuroglancer/skeleton/frontend';
 import {DataType, VolumeChunkSpecification, VolumeSourceOptions, VolumeType} from 'neuroglancer/sliceview/volume/base';
 import {MultiscaleVolumeChunkSource as GenericMultiscaleVolumeChunkSource, VolumeChunkSource} from 'neuroglancer/sliceview/volume/frontend';
 import {StatusMessage} from 'neuroglancer/status';
@@ -57,6 +58,9 @@ export class DataInstanceInfo {
 class DVIDVolumeChunkSource extends
 (WithParameters(VolumeChunkSource, VolumeChunkSourceParameters)) {}
 
+class DVIDSkeletonSource extends
+(WithParameters(SkeletonSource, SkeletonSourceParameters)) {}
+
 export class VolumeDataInstanceInfo extends DataInstanceInfo {
   dataType: DataType;
   lowerVoxelBound: vec3;
@@ -64,6 +68,7 @@ export class VolumeDataInstanceInfo extends DataInstanceInfo {
   voxelSize: vec3;
   numChannels: number;
   numLevels: number;
+  skeletonSrc: string;
 
   constructor(
       obj: any, name: string, base: DataInstanceBaseInfo, public encoding: VolumeChunkEncoding,
@@ -77,6 +82,7 @@ export class VolumeDataInstanceInfo extends DataInstanceInfo {
     }
     this.numLevels = 1;
 
+    let instSet = new Set<string>(instanceNames);
     if (encoding === VolumeChunkEncoding.COMPRESSED_SEGMENTATIONARRAY) {
       // retrieve maximum downres level
       let maxdownreslevel = verifyObjectProperty(extended, 'MaxDownresLevel', verifyPositiveInt);
@@ -85,10 +91,14 @@ export class VolumeDataInstanceInfo extends DataInstanceInfo {
       // labelblk does not have explicit datatype support for multiscale but
       // by convention different levels are specified with unique
       // instances where levels are distinguished by the suffix '_LEVELNUM'
-      let instSet = new Set<string>(instanceNames);
       while (instSet.has(name + '_' + this.numLevels.toString())) {
         this.numLevels += 1;
       }
+    }
+
+    this.skeletonSrc = "";
+    if (instSet.has(name + "_skeletons")) {
+      this.skeletonSrc = name + "_skeletons";
     }
 
     this.dataType =
@@ -172,6 +182,21 @@ export class VolumeDataInstanceInfo extends DataInstanceInfo {
     }
     return sources;
   }
+  
+  getSkeletonSource(
+      chunkManager: ChunkManager, parameters: DVIDSourceParameters) {
+    if (this.skeletonSrc !== "") {
+      alert(this.skeletonSrc);
+      return chunkManager.getChunkSource(
+        DVIDSkeletonSource, {parameters: {
+          'baseUrls': parameters.baseUrls,
+          'nodeKey': parameters.nodeKey,
+          'dataInstanceKey': this.skeletonSrc, 
+        }});
+    } else {
+      return null;
+    }
+  }
 }
 
 export class TileLevelInfo {
@@ -224,6 +249,7 @@ export class TileDataInstanceInfo extends DataInstanceInfo {
    */
   voxelSize: vec3;
 
+  skeletonSrc: string;
   levels: Map<string, TileLevelInfo>;
 
   lowerVoxelBound: vec3;
@@ -238,6 +264,9 @@ export class TileDataInstanceInfo extends DataInstanceInfo {
     if (baseLevel === undefined) {
       throw new Error(`Level 0 is not defined.`);
     }
+    // do not allow skeletons for tiles interface for now
+    this.skeletonSrc = "";
+
     this.voxelSize = baseLevel.resolution;
     let minTileCoord = verifyObjectProperty(
         extended, 'MinTileCoord', x => parseFixedLengthArray(vec3.create(), x, verifyInt));
@@ -302,6 +331,21 @@ export class TileDataInstanceInfo extends DataInstanceInfo {
     }
     return sources;
   }
+  
+  getSkeletonSource(
+      chunkManager: ChunkManager, parameters: DVIDSourceParameters) {
+    if (this.skeletonSrc !== "") {
+      return chunkManager.getChunkSource(
+      DVIDSkeletonSource, {parameters: {
+        'baseUrls': parameters.baseUrls,
+        'nodeKey': parameters.nodeKey,
+        'dataInstanceKey': this.skeletonSrc, 
+        }});
+    } else {
+      return null;
+    }
+  }
+
 }
 
 export function parseDataInstance(
@@ -489,11 +533,14 @@ export class MultiscaleVolumeChunkSource implements GenericMultiscaleVolumeChunk
         volumeSourceOptions);
   }
 
-  /**
-   * Meshes are not supported.
-   */
-  getMeshSource(): null {
-    return null;
+  getMeshSource() {
+    alert(this.dataInstanceKey);
+    return this.info.getSkeletonSource(
+        this.chunkManager, {
+          'baseUrls': this.baseUrls,
+          'nodeKey': this.nodeKey,
+          'dataInstanceKey': this.dataInstanceKey,
+        });
   }
 }
 
