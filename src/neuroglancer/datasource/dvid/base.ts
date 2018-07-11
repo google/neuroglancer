@@ -16,7 +16,9 @@
 
 export enum VolumeChunkEncoding {
   JPEG,
-  COMPRESSED_SEGMENTATION
+  RAW,
+  COMPRESSED_SEGMENTATION,
+  COMPRESSED_SEGMENTATIONARRAY
 }
 
 export class DVIDSourceParameters {
@@ -26,18 +28,11 @@ export class DVIDSourceParameters {
 }
 
 export class VolumeChunkSourceParameters extends DVIDSourceParameters {
+  dataScale: string;
   encoding: VolumeChunkEncoding;
   static RPC_ID = 'dvid/VolumeChunkSource';
 }
 
-export enum TileEncoding {
-  JPEG
-}
-
-export class TileChunkSourceParameters extends DVIDSourceParameters {
-  dims: string;
-  level: string;
-  encoding: TileEncoding;
-
-  static RPC_ID = 'dvid/TileChunkSource';
+export class SkeletonSourceParameters extends DVIDSourceParameters {
+  static RPC_ID = 'dvid/SkeletonSource';
 }
