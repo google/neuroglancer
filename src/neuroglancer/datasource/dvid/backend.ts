@@ -15,34 +15,30 @@
  */
 
 import {WithParameters} from 'neuroglancer/chunk_manager/backend';
-import {TileChunkSourceParameters, SkeletonSourceParameters, TileEncoding, VolumeChunkEncoding, VolumeChunkSourceParameters} from 'neuroglancer/datasource/dvid/base';
-import {ChunkDecoder} from 'neuroglancer/sliceview/backend_chunk_decoders';
+import {SkeletonSourceParameters, VolumeChunkEncoding, VolumeChunkSourceParameters} from 'neuroglancer/datasource/dvid/base';
+import {SkeletonChunk, SkeletonSource} from 'neuroglancer/skeleton/backend';
+import {decodeSwcSkeletonChunk} from 'neuroglancer/skeleton/decode_swc_skeleton';
 import {decodeCompressedSegmentationChunk} from 'neuroglancer/sliceview/backend_chunk_decoders/compressed_segmentation';
 import {decodeJpegChunk} from 'neuroglancer/sliceview/backend_chunk_decoders/jpeg';
 import {VolumeChunk, VolumeChunkSource} from 'neuroglancer/sliceview/volume/backend';
 import {CancellationToken} from 'neuroglancer/util/cancellation';
 import {openShardedHttpRequest, sendHttpRequest} from 'neuroglancer/util/http_request';
-import {SkeletonChunk, SkeletonSource} from 'neuroglancer/skeleton/backend';
-import {decodeSwcSkeletonChunk} from 'neuroglancer/skeleton/decode_swc_skeleton';
 import {registerSharedObject} from 'neuroglancer/worker_rpc';
-
-const TILE_CHUNK_DECODERS = new Map<TileEncoding, ChunkDecoder>([
-  [TileEncoding.JPEG, decodeJpegChunk],
-]);
 
 @registerSharedObject() export class DVIDSkeletonSource extends
 (WithParameters(SkeletonSource, SkeletonSourceParameters)) {
   download(chunk: SkeletonChunk, cancellationToken: CancellationToken) {
     const {parameters} = this;
     let bodyid = `${chunk.objectId}`;
-    const path = `/api/node/${parameters['nodeKey']}/${parameters['dataInstanceKey']}/key/` + bodyid + "_swc";
-  
+    const path = `/api/node/${parameters['nodeKey']}/${parameters['dataInstanceKey']}/key/` +
+        bodyid + '_swc';
+
     return sendHttpRequest(
                openShardedHttpRequest(parameters.baseUrls, path), 'arraybuffer', cancellationToken)
-                .then(response => {
-                  let enc = new TextDecoder("utf-8");
-                  decodeSwcSkeletonChunk(chunk, enc.decode(response));
-                });
+        .then(response => {
+          let enc = new TextDecoder('utf-8');
+          decodeSwcSkeletonChunk(chunk, enc.decode(response));
+        });
   }
 }
 
@@ -63,8 +59,10 @@ const TILE_CHUNK_DECODERS = new Map<TileEncoding, ChunkDecoder>([
     let decoder = this.getDecoder(params);
     return sendHttpRequest(
                openShardedHttpRequest(params.baseUrls, path), 'arraybuffer', cancellationToken)
-               .then(response => decoder(chunk, (params.encoding === VolumeChunkEncoding.JPEG) 
-                                                    ? response.slice(16) : response));
+        .then(
+            response => decoder(
+                chunk,
+                (params.encoding === VolumeChunkEncoding.JPEG) ? response.slice(16) : response));
   }
   getPath(chunkPosition: Float32Array, chunkDataSize: Float32Array) {
     let params = this.parameters;
@@ -72,15 +70,16 @@ const TILE_CHUNK_DECODERS = new Map<TileEncoding, ChunkDecoder>([
       return `/api/node/${params['nodeKey']}/${params['dataInstanceKey']}/subvolblocks/` +
           `${chunkDataSize[0]}_${chunkDataSize[1]}_${chunkDataSize[2]}/` +
           `${chunkPosition[0]}_${chunkPosition[1]}_${chunkPosition[2]}`;
-    } else if (params.encoding === VolumeChunkEncoding.RAW) { 
+    } else if (params.encoding === VolumeChunkEncoding.RAW) {
       return `/api/node/${params['nodeKey']}/${params['dataInstanceKey']}/raw/0_1_2/` +
           `${chunkDataSize[0]}_${chunkDataSize[1]}_${chunkDataSize[2]}/` +
           `${chunkPosition[0]}_${chunkPosition[1]}_${chunkPosition[2]}/jpeg`;
     } else if (params.encoding === VolumeChunkEncoding.COMPRESSED_SEGMENTATIONARRAY) {
       return `/api/node/${params['nodeKey']}/${params['dataInstanceKey']}/raw/0_1_2/` +
           `${chunkDataSize[0]}_${chunkDataSize[1]}_${chunkDataSize[2]}/` +
-          `${chunkPosition[0]}_${chunkPosition[1]}_${chunkPosition[2]}?compression=googlegzip&scale=${params['dataScale']}`;
-     } else {
+          `${chunkPosition[0]}_${chunkPosition[1]}_${
+                 chunkPosition[2]}?compression=googlegzip&scale=${params['dataScale']}`;
+    } else {
       // encoding is COMPRESSED_SEGMENTATION
       return `/api/node/${params['nodeKey']}/${params['dataInstanceKey']}/raw/0_1_2/` +
           `${chunkDataSize[0]}_${chunkDataSize[1]}_${chunkDataSize[2]}/` +
@@ -88,31 +87,12 @@ const TILE_CHUNK_DECODERS = new Map<TileEncoding, ChunkDecoder>([
     }
   }
   getDecoder(params: any) {
-    if ((params.encoding === VolumeChunkEncoding.JPEG) || 
+    if ((params.encoding === VolumeChunkEncoding.JPEG) ||
         (params.encoding === VolumeChunkEncoding.RAW)) {
       return decodeJpegChunk;
     } else {
       // encoding is COMPRESSED_SEGMENTATION
       return decodeCompressedSegmentationChunk;
     }
-  }
-}
-
-@registerSharedObject() export class TileChunkSource extends
-(WithParameters(VolumeChunkSource, TileChunkSourceParameters)) {
-  chunkDecoder = TILE_CHUNK_DECODERS.get(this.parameters['encoding'])!;
-
-  download(chunk: VolumeChunk, cancellationToken: CancellationToken) {
-    let params = this.parameters;
-    let {chunkGridPosition} = chunk;
-
-    // Needed by decoder.
-    chunk.chunkDataSize = this.spec.chunkDataSize;
-    let path = `/api/node/${params['nodeKey']}/${params['dataInstanceKey']}/tile/` +
-        `${params['dims']}/${params['level']}/` +
-        `${chunkGridPosition[0]}_${chunkGridPosition[1]}_${chunkGridPosition[2]}`;
-    return sendHttpRequest(
-               openShardedHttpRequest(params.baseUrls, path), 'arraybuffer', cancellationToken)
-        .then(response => this.chunkDecoder(chunk, response));
   }
 }

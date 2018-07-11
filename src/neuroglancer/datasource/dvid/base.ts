@@ -36,15 +36,3 @@ export class VolumeChunkSourceParameters extends DVIDSourceParameters {
 export class SkeletonSourceParameters extends DVIDSourceParameters {
   static RPC_ID = 'dvid/SkeletonSource';
 }
-
-export enum TileEncoding {
-  JPEG
-}
-
-export class TileChunkSourceParameters extends DVIDSourceParameters {
-  dims: string;
-  level: string;
-  encoding: TileEncoding;
-
-  static RPC_ID = 'dvid/TileChunkSource';
-}
