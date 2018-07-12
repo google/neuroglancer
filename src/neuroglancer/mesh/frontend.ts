@@ -99,6 +99,7 @@ vColor = vec4(lightingFactor * uColor.rgb, uColor.a);
 export class MeshLayer extends PerspectiveViewRenderLayer {
   protected meshShaderManager = new MeshShaderManager();
   private shaders = new Map<ShaderModule, ShaderProgram>();
+  backend: SegmentationLayerSharedObject;
 
   constructor(
       public chunkManager: ChunkManager, public source: MeshSource,
@@ -107,7 +108,7 @@ export class MeshLayer extends PerspectiveViewRenderLayer {
 
     registerRedrawWhenSegmentationDisplayState3DChanged(displayState, this);
 
-    let sharedObject =
+    let sharedObject = this.backend =
         this.registerDisposer(new SegmentationLayerSharedObject(chunkManager, displayState));
     sharedObject.RPC_TYPE_ID = MESH_LAYER_RPC_ID;
     sharedObject.initializeCounterpartWithChunkManager({
