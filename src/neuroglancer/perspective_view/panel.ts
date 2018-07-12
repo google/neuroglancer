@@ -14,11 +14,12 @@
  * limitations under the License.
  */
 
+import throttle from 'lodash/throttle';
 import {AxesLineHelper} from 'neuroglancer/axes_lines';
 import {DisplayContext} from 'neuroglancer/display_context';
 import {makeRenderedPanelVisibleLayerTracker, MouseSelectionState, VisibleRenderLayerTracker} from 'neuroglancer/layer';
 import {PickIDManager} from 'neuroglancer/object_picking';
-import {PERSPECTIVE_VIEW_ADD_LAYER_RPC_ID, PERSPECTIVE_VIEW_REMOVE_LAYER_RPC_ID, PERSPECTIVE_VIEW_RPC_ID} from 'neuroglancer/perspective_view/base';
+import {PERSPECTIVE_VIEW_ADD_LAYER_RPC_ID, PERSPECTIVE_VIEW_REMOVE_LAYER_RPC_ID, PERSPECTIVE_VIEW_RPC_ID, PERSPECTIVE_VIEW_UPDATE_VIEWPORT_RPC_ID} from 'neuroglancer/perspective_view/base';
 import {PerspectiveViewRenderContext, PerspectiveViewRenderLayer} from 'neuroglancer/perspective_view/render_layer';
 import {RenderedDataPanel, RenderedDataViewerState} from 'neuroglancer/rendered_data_panel';
 import {SliceView, SliceViewRenderHelper} from 'neuroglancer/sliceview/frontend';
@@ -336,8 +337,25 @@ export class PerspectivePanel extends RenderedDataPanel {
     mat4.invert(this.inverseProjectionMat, projectionMat);
   }
 
+  private throttledSendViewportUpdate = this.registerCancellable(throttle(() => {
+    const {sharedObject} = this;
+    const {valid} = this.navigationState;
+    if (valid) {
+      this.updateProjectionMatrix();
+    }
+    sharedObject.rpc!.invoke(PERSPECTIVE_VIEW_UPDATE_VIEWPORT_RPC_ID, {
+      view: sharedObject.rpcId,
+      viewport: {
+        width: valid ? this.width : 0,
+        height: valid ? this.height : 0,
+        modelViewMat: this.modelViewMat,
+        projectionMat: this.projectionMat,
+      },
+    });
+  }, 10));
+
   viewportChanged() {
-    // FIXME: update viewport information on backend
+    this.throttledSendViewportUpdate();
     this.context.scheduleRedraw();
   }
 
