@@ -27,6 +27,7 @@ import {RangeWidget} from 'neuroglancer/widget/range';
 import {ShaderCodeWidget} from 'neuroglancer/widget/shader_code_widget';
 import {Tab} from 'neuroglancer/widget/tab_view';
 import {TrackableRGB} from 'neuroglancer/util/color';
+import {TrackableBoolean, TrackableBooleanCheckbox} from 'neuroglancer/trackable_boolean';
 import {ColorWidget} from 'neuroglancer/widget/color';
 import {vec3} from 'neuroglancer/util/geom';
 
@@ -37,6 +38,7 @@ const OPACITY_JSON_KEY = 'opacity';
 const BLEND_JSON_KEY = 'blend';
 const SHADER_JSON_KEY = 'shader';
 const COLOR_JSON_KEY = 'color';
+const USE_CUSTOM_SHADER_JSON_KEY = 'use_custom_shader';
 
 const Base = UserLayerWithVolumeSourceMixin(UserLayer);
 export class ImageUserLayer extends Base {
@@ -45,7 +47,9 @@ export class ImageUserLayer extends Base {
   fragmentMain = getTrackableFragmentMain();
   shaderError = makeWatchableShaderError();
   color: TrackableRGB;
+  useCustomShader: TrackableBoolean;
   renderLayer: ImageRenderLayer;
+  shaderEditorUpdate: () => void;
   constructor(manager: LayerListSpecification, x: any) {
     super(manager, x);
     this.registerDisposer(this.fragmentMain.changed.add(this.specificationChanged.dispatch));
@@ -54,22 +58,28 @@ export class ImageUserLayer extends Base {
         {label: 'Rendering', order: -100, getter: () => new RenderingOptionsTab(this)});
     this.tabs.default = 'rendering';
     this.color = new TrackableRGB(vec3.fromValues(1, 1, 1));
+    this.useCustomShader = new TrackableBoolean(false);
+
+
+    this.shaderEditorUpdate = () => {
+      if (!this.useCustomShader.value) {
+        let shaderString = `
+        void main() {
+          emitRGB(
+            vec3(
+              toNormalized(getDataValue())*${this.color.value[0].toPrecision(3)},
+              toNormalized(getDataValue())*${this.color.value[1].toPrecision(3)},
+              toNormalized(getDataValue())*${this.color.value[2].toPrecision(3)}
+            )
+          );
+        }
+        `;
+        this.fragmentMain.value = shaderString;
+      }
+    };
 
     // EAP: Kludge to update the shader & trigger a change event
-    this.color.changed.add(() => {
-      let shaderString = `
-      void main() {
-        emitRGB(
-          vec3(
-            toNormalized(getDataValue())*${this.color.value[0].toPrecision(3)},
-            toNormalized(getDataValue())*${this.color.value[1].toPrecision(3)},
-            toNormalized(getDataValue())*${this.color.value[2].toPrecision(3)}
-          )
-        );
-      }
-      `;
-      this.fragmentMain.value = shaderString;
-    });
+    this.color.changed.add(this.shaderEditorUpdate);
   }
 
   restoreState(specification: any) {
@@ -78,6 +88,7 @@ export class ImageUserLayer extends Base {
     this.blendMode.restoreState(specification[BLEND_JSON_KEY]);
     this.fragmentMain.restoreState(specification[SHADER_JSON_KEY]);
     this.color.restoreState(specification[COLOR_JSON_KEY]);
+    this.useCustomShader.restoreState(specification[USE_CUSTOM_SHADER_JSON_KEY]);
     const {multiscaleSource} = this;
     if (multiscaleSource === undefined) {
       throw new Error(`source property must be specified`);
@@ -104,6 +115,7 @@ export class ImageUserLayer extends Base {
     x[BLEND_JSON_KEY] = this.blendMode.toJSON();
     x[SHADER_JSON_KEY] = this.fragmentMain.toJSON();
     x[COLOR_JSON_KEY] = this.color.toJSON();
+    x[USE_CUSTOM_SHADER_JSON_KEY] = this.useCustomShader.toJSON();
     return x;
   }
 }
@@ -164,6 +176,12 @@ class RenderingOptionsTab extends Tab {
         this.codeWidget.textEditor.refresh();
       }
     });
+
+    const checkbox = this.registerDisposer(new TrackableBooleanCheckbox(layer.useCustomShader));
+    const label = document.createElement('label');
+    label.appendChild(document.createTextNode('Use custom shader'));
+    label.appendChild(checkbox.element);
+    element.appendChild(label);
 
     this.colorPicker.element.title = 'Change layer display color';
     element.appendChild(this.colorPicker.element);
