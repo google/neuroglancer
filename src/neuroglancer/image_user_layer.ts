@@ -63,14 +63,18 @@ export class ImageUserLayer extends Base {
     this.tabs.default = 'rendering';
     this.shaderEditorUpdate = () => {
       if (!this.useCustomShader.value) {
-        let scale = 1 / (this.max.value - this.min.value);
         let shaderString = `
+float scale(float x) {
+  float min = ${this.min.value.toPrecision(2)};
+  float max = ${this.max.value.toPrecision(2)};
+  return (x - min) / (max - min);
+}
 void main() {
   emitRGB(
     vec3(
-      (toNormalized(getDataValue())-${this.min.value.toPrecision(2)})*${scale.toPrecision(2)}*${this.color.value[0].toPrecision(3)},
-      (toNormalized(getDataValue())-${this.min.value.toPrecision(2)})*${scale.toPrecision(2)}*${this.color.value[1].toPrecision(3)},
-      (toNormalized(getDataValue())-${this.min.value.toPrecision(2)})*${scale.toPrecision(2)}*${this.color.value[2].toPrecision(3)}
+      scale(toNormalized(getDataValue()))*${this.color.value[0].toPrecision(3)},
+      scale(toNormalized(getDataValue()))*${this.color.value[1].toPrecision(3)},
+      scale(toNormalized(getDataValue()))*${this.color.value[2].toPrecision(3)}
     )
   );
 }`;
