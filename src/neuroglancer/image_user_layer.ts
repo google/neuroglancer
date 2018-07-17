@@ -26,6 +26,9 @@ import {makeWatchableShaderError} from 'neuroglancer/webgl/dynamic_shader';
 import {RangeWidget} from 'neuroglancer/widget/range';
 import {ShaderCodeWidget} from 'neuroglancer/widget/shader_code_widget';
 import {Tab} from 'neuroglancer/widget/tab_view';
+import {TrackableRGB} from 'neuroglancer/util/color';
+import {ColorWidget} from 'neuroglancer/widget/color';
+import {vec3} from 'neuroglancer/util/geom';
 
 require('./image_user_layer.css');
 require('neuroglancer/maximize_button.css');
@@ -33,6 +36,7 @@ require('neuroglancer/maximize_button.css');
 const OPACITY_JSON_KEY = 'opacity';
 const BLEND_JSON_KEY = 'blend';
 const SHADER_JSON_KEY = 'shader';
+const COLOR_JSON_KEY = 'color';
 
 const Base = UserLayerWithVolumeSourceMixin(UserLayer);
 export class ImageUserLayer extends Base {
@@ -40,6 +44,7 @@ export class ImageUserLayer extends Base {
   blendMode = trackableBlendModeValue();
   fragmentMain = getTrackableFragmentMain();
   shaderError = makeWatchableShaderError();
+  color: TrackableRGB;
   renderLayer: ImageRenderLayer;
   constructor(manager: LayerListSpecification, x: any) {
     super(manager, x);
@@ -48,6 +53,24 @@ export class ImageUserLayer extends Base {
         'rendering',
         {label: 'Rendering', order: -100, getter: () => new RenderingOptionsTab(this)});
     this.tabs.default = 'rendering';
+    this.color = new TrackableRGB(vec3.fromValues(1, 1, 1));
+
+    // EAP: Kludge to update the shader & trigger a change event
+    this.color.changed.add(() => {
+      let shaderString = `
+      void main() {
+        emitRGB(
+          vec3(
+            toNormalized(getDataValue())*${this.color.value[0].toPrecision(3)},
+            toNormalized(getDataValue())*${this.color.value[1].toPrecision(3)},
+            toNormalized(getDataValue())*${this.color.value[2].toPrecision(3)}
+          )
+        );
+      }
+      `;
+      this.fragmentMain.value = shaderString;
+      this.specificationChanged.dispatch();
+    });
   }
 
   restoreState(specification: any) {
@@ -55,6 +78,7 @@ export class ImageUserLayer extends Base {
     this.opacity.restoreState(specification[OPACITY_JSON_KEY]);
     this.blendMode.restoreState(specification[BLEND_JSON_KEY]);
     this.fragmentMain.restoreState(specification[SHADER_JSON_KEY]);
+    this.color.restoreState(specification[COLOR_JSON_KEY]);
     const {multiscaleSource} = this;
     if (multiscaleSource === undefined) {
       throw new Error(`source property must be specified`);
@@ -80,6 +104,7 @@ export class ImageUserLayer extends Base {
     x[OPACITY_JSON_KEY] = this.opacity.toJSON();
     x[BLEND_JSON_KEY] = this.blendMode.toJSON();
     x[SHADER_JSON_KEY] = this.fragmentMain.toJSON();
+    x[COLOR_JSON_KEY] = this.color.toJSON();
     return x;
   }
 }
@@ -95,6 +120,8 @@ function makeShaderCodeWidget(layer: ImageUserLayer) {
 class RenderingOptionsTab extends Tab {
   opacityWidget = this.registerDisposer(new RangeWidget(this.layer.opacity));
   codeWidget = this.registerDisposer(makeShaderCodeWidget(this.layer));
+  colorPicker = this.registerDisposer(new ColorWidget(this.layer.color));
+
   constructor(public layer: ImageUserLayer) {
     super();
     const {element} = this;
@@ -138,6 +165,9 @@ class RenderingOptionsTab extends Tab {
         this.codeWidget.textEditor.refresh();
       }
     });
+
+    this.colorPicker.element.title = 'Change layer display color';
+    element.appendChild(this.colorPicker.element);
   }
 }
 
