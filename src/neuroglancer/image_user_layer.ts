@@ -69,7 +69,6 @@ export class ImageUserLayer extends Base {
       }
       `;
       this.fragmentMain.value = shaderString;
-      this.specificationChanged.dispatch();
     });
   }
 
