@@ -39,6 +39,8 @@ const BLEND_JSON_KEY = 'blend';
 const SHADER_JSON_KEY = 'shader';
 const COLOR_JSON_KEY = 'color';
 const USE_CUSTOM_SHADER_JSON_KEY = 'use_custom_shader';
+const MIN_JSON_KEY = 'min';
+const MAX_JSON_KEY = 'max';
 
 const Base = UserLayerWithVolumeSourceMixin(UserLayer);
 export class ImageUserLayer extends Base {
@@ -46,9 +48,11 @@ export class ImageUserLayer extends Base {
   blendMode = trackableBlendModeValue();
   fragmentMain = getTrackableFragmentMain();
   shaderError = makeWatchableShaderError();
-  color: TrackableRGB;
-  useCustomShader: TrackableBoolean;
+  color = new TrackableRGB(vec3.fromValues(1, 1, 1));;
+  useCustomShader = new TrackableBoolean(false);
   renderLayer: ImageRenderLayer;
+  min = trackableAlphaValue(0.0);
+  max = trackableAlphaValue(1.0);
   shaderEditorUpdate: () => void;
   constructor(manager: LayerListSpecification, x: any) {
     super(manager, x);
@@ -57,29 +61,27 @@ export class ImageUserLayer extends Base {
         'rendering',
         {label: 'Rendering', order: -100, getter: () => new RenderingOptionsTab(this)});
     this.tabs.default = 'rendering';
-    this.color = new TrackableRGB(vec3.fromValues(1, 1, 1));
-    this.useCustomShader = new TrackableBoolean(false);
-
-
     this.shaderEditorUpdate = () => {
       if (!this.useCustomShader.value) {
+        let scale = 1 / (this.max.value - this.min.value);
         let shaderString = `
-        void main() {
-          emitRGB(
-            vec3(
-              toNormalized(getDataValue())*${this.color.value[0].toPrecision(3)},
-              toNormalized(getDataValue())*${this.color.value[1].toPrecision(3)},
-              toNormalized(getDataValue())*${this.color.value[2].toPrecision(3)}
-            )
-          );
-        }
-        `;
+void main() {
+  emitRGB(
+    vec3(
+      (toNormalized(getDataValue())-${this.min.value.toPrecision(2)})*${scale.toPrecision(2)}*${this.color.value[0].toPrecision(3)},
+      (toNormalized(getDataValue())-${this.min.value.toPrecision(2)})*${scale.toPrecision(2)}*${this.color.value[1].toPrecision(3)},
+      (toNormalized(getDataValue())-${this.min.value.toPrecision(2)})*${scale.toPrecision(2)}*${this.color.value[2].toPrecision(3)}
+    )
+  );
+}`;
         this.fragmentMain.value = shaderString;
       }
     };
 
     // EAP: Kludge to update the shader & trigger a change event
     this.color.changed.add(this.shaderEditorUpdate);
+    this.min.changed.add(this.shaderEditorUpdate);
+    this.max.changed.add(this.shaderEditorUpdate);
   }
 
   restoreState(specification: any) {
@@ -89,6 +91,8 @@ export class ImageUserLayer extends Base {
     this.fragmentMain.restoreState(specification[SHADER_JSON_KEY]);
     this.color.restoreState(specification[COLOR_JSON_KEY]);
     this.useCustomShader.restoreState(specification[USE_CUSTOM_SHADER_JSON_KEY]);
+    this.min.restoreState(specification[MAX_JSON_KEY]);
+    this.max.restoreState(specification[MAX_JSON_KEY]);
     const {multiscaleSource} = this;
     if (multiscaleSource === undefined) {
       throw new Error(`source property must be specified`);
@@ -116,6 +120,8 @@ export class ImageUserLayer extends Base {
     x[SHADER_JSON_KEY] = this.fragmentMain.toJSON();
     x[COLOR_JSON_KEY] = this.color.toJSON();
     x[USE_CUSTOM_SHADER_JSON_KEY] = this.useCustomShader.toJSON();
+    x[MIN_JSON_KEY] = this.min.toJSON;
+    x[MAX_JSON_KEY] = this.max.toJSON;
     return x;
   }
 }
@@ -132,6 +138,8 @@ class RenderingOptionsTab extends Tab {
   opacityWidget = this.registerDisposer(new RangeWidget(this.layer.opacity));
   codeWidget = this.registerDisposer(makeShaderCodeWidget(this.layer));
   colorPicker = this.registerDisposer(new ColorWidget(this.layer.color));
+  minWidget = this.registerDisposer(new RangeWidget(this.layer.min));
+  maxWidget = this.registerDisposer(new RangeWidget(this.layer.max));
 
   constructor(public layer: ImageUserLayer) {
     super();
@@ -179,12 +187,19 @@ class RenderingOptionsTab extends Tab {
 
     const checkbox = this.registerDisposer(new TrackableBooleanCheckbox(layer.useCustomShader));
     const label = document.createElement('label');
-    label.appendChild(document.createTextNode('Use custom shader'));
+    label.appendChild(document.createTextNode('Use custom shader '));
     label.appendChild(checkbox.element);
     element.appendChild(label);
 
+    element.appendChild(document.createElement('br'));
+    element.appendChild(document.createTextNode('Color: '));
     this.colorPicker.element.title = 'Change layer display color';
     element.appendChild(this.colorPicker.element);
+    element.appendChild(document.createElement('br'));
+    this.minWidget.promptElement.textContent = 'Min: ';
+    element.appendChild(this.minWidget.element);
+    this.maxWidget.promptElement.textContent = 'Max: ';
+    element.appendChild(this.maxWidget.element);
   }
 }
 
