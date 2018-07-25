@@ -63,8 +63,7 @@ export class ImageUserLayer extends Base {
     this.tabs.default = 'rendering';
     this.shaderEditorUpdate = () => {
       if (!this.useCustomShader.value) {
-        let shaderString = `
-float scale(float x) {
+        let shaderString = `float scale(float x) {
   float min = ${this.min.value.toPrecision(2)};
   float max = ${this.max.value.toPrecision(2)};
   return (x - min) / (max - min);
@@ -121,11 +120,14 @@ void main() {
     x['type'] = 'image';
     x[OPACITY_JSON_KEY] = this.opacity.toJSON();
     x[BLEND_JSON_KEY] = this.blendMode.toJSON();
-    x[SHADER_JSON_KEY] = this.fragmentMain.toJSON();
-    x[COLOR_JSON_KEY] = this.color.toJSON();
     x[USE_CUSTOM_SHADER_JSON_KEY] = this.useCustomShader.toJSON();
-    x[MIN_JSON_KEY] = this.min.toJSON;
-    x[MAX_JSON_KEY] = this.max.toJSON;
+    if (this.useCustomShader.value) {
+      x[SHADER_JSON_KEY] = this.fragmentMain.toJSON();
+    } else {
+      x[COLOR_JSON_KEY] = this.color.toJSON();
+      x[MIN_JSON_KEY] = this.min.toJSON;
+      x[MAX_JSON_KEY] = this.max.toJSON;
+    }
     return x;
   }
 }
