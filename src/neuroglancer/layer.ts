@@ -16,17 +16,36 @@
 
 import debounce from 'lodash/debounce';
 import throttle from 'lodash/throttle';
+import {AnnotationLayerState} from 'neuroglancer/annotation/frontend';
 import {RenderedPanel} from 'neuroglancer/display_context';
+import {LayerListSpecification} from 'neuroglancer/layer_specification';
 import {SpatialPosition} from 'neuroglancer/navigation_state';
-import {Borrowed, RefCounted} from 'neuroglancer/util/disposable';
+import {TrackableRefCounted, WatchableSet} from 'neuroglancer/trackable_value';
+import {restoreTool, Tool} from 'neuroglancer/ui/tool';
+import {Borrowed, Owned, RefCounted} from 'neuroglancer/util/disposable';
 import {BoundingBox, vec3} from 'neuroglancer/util/geom';
+import {verifyObject, verifyObjectProperty, verifyOptionalBoolean, verifyOptionalString} from 'neuroglancer/util/json';
 import {NullarySignal} from 'neuroglancer/util/signal';
 import {addSignalBinding, removeSignalBinding, SignalBindingUpdater} from 'neuroglancer/util/signal_binding_updater';
+import {Trackable} from 'neuroglancer/util/trackable';
 import {Uint64} from 'neuroglancer/util/uint64';
 import {VisibilityPriorityAggregator, WatchableVisibilityPriority} from 'neuroglancer/visibility_priority/frontend';
+import {TabSpecification} from 'neuroglancer/widget/tab_view';
+
+export enum RenderLayerRole {
+  DATA,
+  ANNOTATION,
+  DEFAULT_ANNOTATION,
+}
+
+export function allRenderLayerRoles() {
+  return new WatchableSet(
+      [RenderLayerRole.DATA, RenderLayerRole.ANNOTATION, RenderLayerRole.DEFAULT_ANNOTATION]);
+}
 
 export class RenderLayer extends RefCounted {
   ready = false;
+  role: RenderLayerRole = RenderLayerRole.DATA;
   layerChanged = new NullarySignal();
   redrawNeeded = new NullarySignal();
   readyStateChanged = new NullarySignal();
@@ -66,7 +85,8 @@ export class RenderLayer extends RefCounted {
    * Optionally updates the mouse state based on the retrived pick information.  This might snap the
    * 3-d position to the center of the picked point.
    */
-  updateMouseState(_mouseState: MouseSelectionState, _pickedValue: Uint64, _pickedOffset: number) {}
+  updateMouseState(
+      _mouseState: MouseSelectionState, _pickedValue: Uint64, _pickedOffset: number, _data: any) {}
 }
 
 /**
@@ -77,10 +97,8 @@ export class VisibilityTrackedRenderLayer extends RenderLayer {
   visibility = new VisibilityPriorityAggregator();
 }
 
-export class UserLayerDropdown extends RefCounted {
-  onShow() {}
-  onHide() {}
-}
+const TAB_JSON_KEY = 'tab';
+const TOOL_JSON_KEY = 'tool';
 
 export class UserLayer extends RefCounted {
   layersChanged = new NullarySignal();
@@ -88,19 +106,52 @@ export class UserLayer extends RefCounted {
   specificationChanged = new NullarySignal();
   renderLayers = new Array<RenderLayer>();
   isReady = false;
-  constructor(renderLayers: RenderLayer[] = []) {
+  tabs = this.registerDisposer(new TabSpecification());
+  tool = this.registerDisposer(
+      new TrackableRefCounted<Tool>(value => restoreTool(this, value), value => value.toJSON()));
+  constructor(public manager: Borrowed<LayerListSpecification>, specification: any) {
     super();
-    renderLayers.forEach(this.addRenderLayer.bind(this));
+    specification;
+    this.tabs.changed.add(this.specificationChanged.dispatch);
+    this.tool.changed.add(this.specificationChanged.dispatch);
+  }
+
+  restoreState(specification: any) {
+    this.tool.restoreState(specification[TOOL_JSON_KEY]);
+    this.tabs.restoreState(specification[TAB_JSON_KEY]);
   }
 
   addRenderLayer(layer: RenderLayer) {
     this.renderLayers.push(layer);
-    let {layersChanged, readyStateChanged} = this;
-    this.registerDisposer(layer);
-    this.registerDisposer(layer.layerChanged.add(layersChanged.dispatch));
-    this.registerDisposer(layer.readyStateChanged.add(readyStateChanged.dispatch));
+    const {layersChanged, readyStateChanged} = this;
+    layer.layerChanged.add(layersChanged.dispatch);
+    layer.readyStateChanged.add(readyStateChanged.dispatch);
     readyStateChanged.dispatch();
     layersChanged.dispatch();
+  }
+
+  removeRenderLayer(layer: RenderLayer) {
+    const {renderLayers, layersChanged, readyStateChanged} = this;
+    const index = renderLayers.indexOf(layer);
+    if (index === -1) {
+      throw new Error('Attempted to remove invalid RenderLayer');
+    }
+    renderLayers.splice(index, 1);
+    layer.layerChanged.remove(layersChanged.dispatch);
+    layer.readyStateChanged.remove(readyStateChanged.dispatch);
+    layer.dispose();
+    readyStateChanged.dispatch();
+    layersChanged.dispatch();
+  }
+
+  disposed () {
+    const {layersChanged, readyStateChanged} = this;
+    for (const layer of this.renderLayers) {
+      layer.layerChanged.remove(layersChanged.dispatch);
+      layer.readyStateChanged.remove(readyStateChanged.dispatch);
+      layer.dispose();
+    }
+    super.disposed();
   }
 
   getValueAt(position: Float32Array, pickState: PickState) {
@@ -127,11 +178,10 @@ export class UserLayer extends RefCounted {
   }
 
   toJSON(): any {
-    return null;
-  }
-
-  makeDropdown(_element: HTMLDivElement): UserLayerDropdown|undefined {
-    return undefined;
+    return {
+      [TAB_JSON_KEY]: this.tabs.toJSON(),
+      [TOOL_JSON_KEY]: this.tool.toJSON(),
+    };
   }
 
   handleAction(_action: string): void {}
@@ -177,11 +227,25 @@ export class ManagedUserLayer extends RefCounted {
     return layer !== null && layer.isReady;
   }
 
+  private name_: string;
+
+  get name() {
+    return this.name_;
+  }
+
+  set name(value: string) {
+    if (value !== this.name_) {
+      this.name_ = value;
+      this.layerChanged.dispatch();
+    }
+  }
+
   /**
    * If layer is not null, tranfers ownership of a reference.
    */
-  constructor(public name: string, layer: UserLayer|null = null, public visible: boolean = true) {
+  constructor(name: string, layer: UserLayer|null = null, public visible: boolean = true) {
     super();
+    this.name_ = name;
     this.layer = layer;
   }
 
@@ -205,12 +269,15 @@ export class ManagedUserLayer extends RefCounted {
 }
 
 export class LayerManager extends RefCounted {
-  managedLayers = new Array<ManagedUserLayer>();
+  managedLayers = new Array<Owned<ManagedUserLayer>>();
+  layerSet = new Set<Borrowed<ManagedUserLayer>>();
   layersChanged = new NullarySignal();
   readyStateChanged = new NullarySignal();
   specificationChanged = new NullarySignal();
   boundPositions = new WeakSet<SpatialPosition>();
   numDirectUsers = 0;
+  private renderLayerToManagedLayerMapGeneration = -1;
+  private renderLayerToManagedLayerMap_ = new Map<RenderLayer, ManagedUserLayer>();
 
   constructor() {
     super();
@@ -218,13 +285,32 @@ export class LayerManager extends RefCounted {
   }
 
   private scheduleRemoveLayersWithSingleRef =
-    this.registerCancellable(debounce(() => this.removeLayersWithSingleRef(), 0));
+      this.registerCancellable(debounce(() => this.removeLayersWithSingleRef(), 0));
+
+  get renderLayerToManagedLayerMap() {
+    const generation = this.layersChanged.count;
+    const map = this.renderLayerToManagedLayerMap_;
+    if (this.renderLayerToManagedLayerMapGeneration !== generation) {
+      this.renderLayerToManagedLayerMapGeneration = generation;
+      map.clear();
+      for (const managedLayer of this.managedLayers) {
+        const userLayer = managedLayer.layer;
+        if (userLayer !== null) {
+          for (const renderLayer of userLayer.renderLayers) {
+            map.set(renderLayer, managedLayer);
+          }
+        }
+      }
+    }
+    return map;
+  }
 
   filter(predicate: (layer: ManagedUserLayer) => boolean) {
     let changed = false;
     this.managedLayers = this.managedLayers.filter(layer => {
       if (!predicate(layer)) {
         this.unbindManagedLayer(layer);
+        this.layerSet.delete(layer);
         changed = true;
         return false;
       }
@@ -249,7 +335,7 @@ export class LayerManager extends RefCounted {
     callback(layer.specificationChanged, this.specificationChanged.dispatch);
   }
 
-  useDirectly () {
+  useDirectly() {
     if (++this.numDirectUsers === 1) {
       this.layersChanged.remove(this.scheduleRemoveLayersWithSingleRef);
     }
@@ -266,6 +352,7 @@ export class LayerManager extends RefCounted {
    */
   addManagedLayer(managedLayer: ManagedUserLayer, index?: number|undefined) {
     this.updateSignalBindings(managedLayer, addSignalBinding);
+    this.layerSet.add(managedLayer);
     if (index === undefined) {
       index = this.managedLayers.length;
     }
@@ -307,12 +394,15 @@ export class LayerManager extends RefCounted {
       this.unbindManagedLayer(managedLayer);
     }
     this.managedLayers.length = 0;
+    this.layerSet.clear();
     this.layersChanged.dispatch();
   }
 
   remove(index: number) {
-    this.unbindManagedLayer(this.managedLayers[index]);
+    const layer = this.managedLayers[index];
+    this.unbindManagedLayer(layer);
     this.managedLayers.splice(index, 1);
+    this.layerSet.delete(layer);
     this.layersChanged.dispatch();
   }
 
@@ -355,7 +445,7 @@ export class LayerManager extends RefCounted {
   }
 
   has(layer: Borrowed<ManagedUserLayer>) {
-    return this.managedLayers.indexOf(layer) !== -1;
+    return this.layerSet.has(layer);
   }
 
   /**
@@ -489,11 +579,15 @@ export class MouseSelectionState implements PickState {
   changed = new NullarySignal();
   position = vec3.create();
   active = false;
+  actionMode = ActionMode.NONE;
+  actionState = ActionState.INACTIVE;
   pickedRenderLayer: RenderLayer|null = null;
   pickedValue = new Uint64(0, 0);
   pickedOffset = 0;
-  actionMode = ActionMode.NONE;
-  actionState = ActionState.INACTIVE;
+  pickedAnnotationLayer: AnnotationLayerState|undefined = undefined;
+  pickedAnnotationId: string|undefined = undefined;
+  pageX: number;
+  pageY: number;
 
   updater: ((mouseState: MouseSelectionState) => boolean)|undefined = undefined;
 
@@ -636,7 +730,7 @@ export class LayerSelectedValues extends RefCounted {
     return this.rawValues.get(userLayer);
   }
 
-  toJSON () {
+  toJSON() {
     this.update();
     const result: {[key: string]: any} = {};
     const {values} = this;
@@ -663,37 +757,32 @@ export class VisibleRenderLayerTracker<RenderLayerType extends VisibilityTracked
    */
   private visibleLayers = new Map<RenderLayerType, () => void>();
   private newVisibleLayers = new Set<RenderLayerType>();
-  private throttledUpdateVisibleLayers = throttle(() => {
-    this.updateVisibleLayers();
-  }, 0);
+
+  private debouncedUpdateVisibleLayers =
+      this.registerCancellable(debounce(() => this.updateVisibleLayers(), 0));
 
   constructor(
       public layerManager: LayerManager,
       public renderLayerType: {new(...args: any[]): RenderLayerType},
+      public roles: WatchableSet<RenderLayerRole>,
       private layerAdded: (layer: RenderLayerType) => (() => void),
       public visibility: WatchableVisibilityPriority) {
     super();
-    this.registerDisposer(layerManager.layersChanged.add(() => {
-      this.handleLayersChanged();
-    }));
+    this.registerDisposer(layerManager.layersChanged.add(this.debouncedUpdateVisibleLayers));
+    this.registerDisposer(roles.changed.add(this.debouncedUpdateVisibleLayers));
     this.updateVisibleLayers();
   }
 
-  private handleLayersChanged() {
-    this.throttledUpdateVisibleLayers();
-  }
-
   disposed() {
-    this.throttledUpdateVisibleLayers.cancel();
     this.visibleLayers.forEach(disposer => disposer());
     this.visibleLayers.clear();
     super.disposed();
   }
 
   private updateVisibleLayers() {
-    let {visibleLayers, newVisibleLayers, renderLayerType, layerAdded} = this;
+    let {visibleLayers, newVisibleLayers, renderLayerType, layerAdded, roles} = this;
     for (let renderLayer of this.layerManager.readyRenderLayers()) {
-      if (renderLayer instanceof renderLayerType) {
+      if (renderLayer instanceof renderLayerType && roles.has(renderLayer.role)) {
         let typedLayer = <RenderLayerType>renderLayer;
         newVisibleLayers.add(typedLayer);
         if (!visibleLayers.has(typedLayer)) {
@@ -717,7 +806,7 @@ export class VisibleRenderLayerTracker<RenderLayerType extends VisibilityTracked
   }
 
   getVisibleLayers() {
-    (<any>this.throttledUpdateVisibleLayers).flush();
+    (<any>this.debouncedUpdateVisibleLayers).flush();
     return [...this.visibleLayers.keys()];
   }
 }
@@ -725,14 +814,204 @@ export class VisibleRenderLayerTracker<RenderLayerType extends VisibilityTracked
 export function
 makeRenderedPanelVisibleLayerTracker<RenderLayerType extends VisibilityTrackedRenderLayer>(
     layerManager: LayerManager, renderLayerType: {new (...args: any[]): RenderLayerType},
-    panel: RenderedPanel) {
+    roles: WatchableSet<RenderLayerRole>, panel: RenderedPanel,
+    layerAdded?: (layer: RenderLayerType) => ((() => void) | void)) {
   return panel.registerDisposer(
-      new VisibleRenderLayerTracker(layerManager, renderLayerType, layer => {
+      new VisibleRenderLayerTracker(layerManager, renderLayerType, roles, layer => {
         const disposer = layer.redrawNeeded.add(() => panel.scheduleRedraw());
+        const disposer2 = layerAdded && layerAdded(layer);
         panel.scheduleRedraw();
         return () => {
+          if (disposer2 !== undefined) {
+            disposer2();
+          }
           disposer();
           panel.scheduleRedraw();
         };
       }, panel.visibility));
+}
+
+export class SelectedLayerState extends RefCounted implements Trackable {
+  changed = new NullarySignal();
+  visible_ = false;
+  layer_: ManagedUserLayer|undefined;
+
+  get layer() {
+    return this.layer_;
+  }
+
+  get visible() {
+    return this.visible_;
+  }
+
+  set visible(value: boolean) {
+    if (this.layer_ === undefined) {
+      value = false;
+    }
+    if (this.visible_ !== value) {
+      this.visible_ = value;
+      this.changed.dispatch();
+    }
+  }
+
+  private existingLayerDisposer?: () => void;
+
+  constructor(public layerManager: Owned<LayerManager>) {
+    super();
+    this.registerDisposer(layerManager);
+  }
+
+  set layer(layer: ManagedUserLayer|undefined) {
+    if (layer === this.layer_) {
+      return;
+    }
+    if (this.layer_ !== undefined) {
+      this.existingLayerDisposer!();
+      this.existingLayerDisposer = undefined;
+    }
+    this.layer_ = layer;
+    if (layer !== undefined) {
+      const layerDisposed = () => {
+        this.layer_ = undefined;
+        this.visible = false;
+        this.existingLayerDisposer = undefined;
+        this.changed.dispatch();
+      };
+      layer.registerDisposer(layerDisposed);
+      const layerChangedDisposer = layer.specificationChanged.add(() => {
+        this.changed.dispatch();
+      });
+      this.existingLayerDisposer = () => {
+        const userLayer = layer.layer;
+        if (userLayer !== null) {
+          const tool = userLayer.tool.value;
+          if (tool !== undefined) {
+            tool.deactivate();
+          }
+        }
+        layer.unregisterDisposer(layerDisposed);
+        layerChangedDisposer();
+      };
+    } else {
+      this.visible_ = false;
+    }
+    this.changed.dispatch();
+  }
+
+  toJSON() {
+    if (this.layer === undefined) {
+      return undefined;
+    }
+    return {'layer': this.layer.name, 'visible': this.visible === true ? true : undefined};
+  }
+
+  restoreState(obj: any) {
+    if (obj === undefined) {
+      this.reset();
+      return;
+    }
+    verifyObject(obj);
+    const layerName = verifyObjectProperty(obj, 'layer', verifyOptionalString);
+    const layer = layerName !== undefined ? this.layerManager.getLayerByName(layerName) : undefined;
+    this.layer = layer;
+    this.visible = verifyObjectProperty(obj, 'visible', verifyOptionalBoolean) ? true : false;
+  }
+
+  reset() {
+    this.layer = undefined;
+  }
+}
+
+export class LayerReference extends RefCounted implements Trackable {
+  private layerName_: string|undefined;
+  private layer_: ManagedUserLayer|undefined;
+  changed = new NullarySignal();
+  constructor(
+      public layerManager: Owned<LayerManager>,
+      public filter: (layer: ManagedUserLayer) => boolean) {
+    super();
+    this.registerDisposer(layerManager);
+    this.registerDisposer(layerManager.specificationChanged.add(() => {
+      const {layer_} = this;
+      if (layer_ !== undefined) {
+        if (!this.layerManager.layerSet.has(layer_) || !this.filter(layer_)) {
+          this.layer_ = undefined;
+          this.layerName_ = undefined;
+          this.changed.dispatch();
+        } else {
+          const {name} = layer_;
+          if (name !== this.layerName_) {
+            this.layerName_ = name;
+            this.changed.dispatch();
+          }
+        }
+      }
+    }));
+  }
+
+  get layer () {
+    return this.layer_;
+  }
+
+  get layerName () {
+    return this.layerName_;
+  }
+
+  set layer(value: ManagedUserLayer|undefined) {
+    if (this.layer_ === value) {
+      return;
+    }
+    if (value !== undefined && this.layerManager.layerSet.has(value) && this.filter(value)) {
+      this.layer_ = value;
+      this.layerName_ = value.name;
+    } else {
+      this.layer_ = undefined;
+      this.layerName_ = undefined;
+    }
+    this.changed.dispatch();
+  }
+
+  set layerName(value: string|undefined) {
+    if (value === this.layerName_) {
+      return;
+    }
+    this.layer_ = undefined;
+    this.layerName_ = value;
+    this.changed.dispatch();
+    this.validate();
+  }
+
+  private validate = debounce(() => {
+    const {layerName_} = this;
+    if (layerName_ !== undefined) {
+      const layer = this.layerManager.getLayerByName(layerName_);
+      if (layer !== undefined && this.filter(layer)) {
+        this.layer_ = layer;
+        this.changed.dispatch();
+      } else {
+        this.layer_ = undefined;
+        this.layerName_ = undefined;
+        this.changed.dispatch();
+      }
+    }
+  }, 0);
+
+  restoreState(obj: any) {
+    const layerName = verifyOptionalString(obj);
+    this.layerName = layerName;
+  }
+
+  toJSON() {
+    const {layer_} = this;
+    if (layer_ !== undefined) {
+      return layer_.name;
+    }
+    return this.layerName_;
+  }
+
+  reset() {
+    this.layerName_ = undefined;
+    this.layer_ = undefined;
+    this.changed.dispatch();
+  }
 }

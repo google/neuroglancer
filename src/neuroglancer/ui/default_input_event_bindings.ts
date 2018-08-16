@@ -26,10 +26,13 @@ export function getDefaultGlobalBindings() {
     map.set('keyx', 'clear-segments');
     map.set('keys', 'toggle-show-slices');
     map.set('keyb', 'toggle-scale-bar');
+    map.set('shift+keyb', 'toggle-default-annotations');
     map.set('keya', 'toggle-axis-lines');
+    map.set('keyo', 'toggle-orthographic-projection');
 
     for (let i = 1; i <= 9; ++i) {
       map.set('digit' + i, 'toggle-layer-' + i);
+      map.set('control+digit' + i, 'select-layer-' + i);
     }
 
     map.set('keyn', 'add-layer');
@@ -72,6 +75,7 @@ export function getDefaultRenderedDataPanelBindings() {
           'at:dblclick0': 'select',
           'at:control+mousedown0': 'annotate',
           'at:mousedown2': 'move-to-mouse-position',
+          'at:control+mousedown2': 'select-annotation',
         },
         {label: 'All Data Panels'});
   }

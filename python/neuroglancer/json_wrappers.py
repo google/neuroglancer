@@ -47,6 +47,8 @@ class JsonObjectWrapper(object):
     def __init__(self, json_data=None, _readonly=False, **kwargs):
         if json_data is None:
             json_data = collections.OrderedDict()
+        elif isinstance(json_data, type(self)):
+            json_data = json_data.to_json()
         elif not isinstance(json_data, dict):
             raise TypeError
         object.__setattr__(self, '_json_data', json_data)
@@ -65,6 +67,8 @@ class JsonObjectWrapper(object):
             for k, (wrapper, _) in six.iteritems(self._cached_wrappers):
                 if wrapper is not None:
                     r[k] = to_json(wrapper)
+                else:
+                    r.pop(k, None)
             return r
 
     def __deepcopy__(self, memo):
@@ -162,8 +166,11 @@ def typed_string_map(wrapped_type, validator=None):
             if isinstance(json_data, MapBase):
                 json_data = json_data.to_json()
             elif json_data is not None:
-                for v in six.viewvalues(json_data):
+                new_map = collections.OrderedDict()
+                for k, v in six.viewitems(json_data):
                     validator(v)
+                    new_map[k] = to_json(v)
+                json_data = new_map
             super(Map, self).__init__(json_data, _readonly=_readonly)
 
         def clear(self):
@@ -190,6 +197,9 @@ def typed_string_map(wrapped_type, validator=None):
 
         def __len__(self):
             return len(self._json_data)
+
+        def __contains__(self, key):
+            return key in self._json_data
 
         def __getitem__(self, key):
             with self._lock:

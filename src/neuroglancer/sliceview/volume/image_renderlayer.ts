@@ -62,16 +62,16 @@ export class ImageRenderLayer extends RenderLayer {
       this.redrawNeeded.dispatch();
     }));
     this.registerDisposer(fragmentMain.changed.add(() => {
-      this.shaderUpdated = true;
+      this.shaderGetter.invalidateShader();
       this.redrawNeeded.dispatch();
     }));
   }
 
-  getShaderKey() {
+  protected getShaderKey() {
     return `volume.ImageRenderLayer:${JSON.stringify(this.fragmentMain.value)}`;
   }
 
-  defineShader(builder: ShaderBuilder) {
+  protected defineShader(builder: ShaderBuilder) {
     super.defineShader(builder);
     builder.addUniform('highp float', 'uOpacity');
     builder.addFragmentCode(`
@@ -94,6 +94,9 @@ void emitTransparent() {
 
   beginSlice(sliceView: SliceView) {
     let shader = super.beginSlice(sliceView);
+    if (shader === undefined) {
+      return undefined;
+    }
     let {gl} = this;
     gl.uniform1f(shader.uniform('uOpacity'), this.opacity.value);
     return shader;

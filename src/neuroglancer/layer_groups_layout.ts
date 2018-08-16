@@ -88,7 +88,7 @@ export class LayoutComponentContainer extends RefCounted {
           const childComponent = component.get(0).component;
           let spec: any;
           if (this.parent === undefined && childComponent instanceof LayerGroupViewer) {
-            spec = childComponent.layout.name;
+            spec = childComponent.layout.specification.toJSON();
             childComponent.viewerNavigationState.copyToParent();
             const layersToKeep = new Set(childComponent.layerManager.managedLayers);
             const {layerSpecification} = childComponent;
@@ -278,30 +278,40 @@ export class LayoutComponentContainer extends RefCounted {
   }
 }
 
+function getCommonViewerState(viewer: Viewer) {
+  return {
+    mouseState: viewer.mouseState,
+    showAxisLines: viewer.showAxisLines,
+    showScaleBar: viewer.showScaleBar,
+    scaleBarOptions: viewer.scaleBarOptions,
+    showPerspectiveSliceViews: viewer.showPerspectiveSliceViews,
+    inputEventBindings: viewer.inputEventBindings,
+    visibility: viewer.visibility,
+    selectedLayer: viewer.selectedLayer,
+    visibleLayerRoles: viewer.visibleLayerRoles,
+    navigationState: viewer.navigationState.addRef(),
+    perspectiveNavigationState: viewer.perspectiveNavigationState.addRef(),
+    crossSectionBackgroundColor: viewer.crossSectionBackgroundColor,
+  };
+}
+
 export class SingletonLayerGroupViewer extends RefCounted implements LayoutComponent {
   layerGroupViewer: LayerGroupViewer;
 
-  constructor(public element: HTMLElement, layout: string, viewer: Viewer) {
+  constructor(public element: HTMLElement, layout: any, viewer: Viewer) {
     super();
     this.layerGroupViewer = this.registerDisposer(new LayerGroupViewer(
         element, {
           display: viewer.display,
-          navigationState: viewer.navigationState.addRef(),
-          perspectiveNavigationState: viewer.perspectiveNavigationState.addRef(),
-          mouseState: viewer.mouseState,
-          showAxisLines: viewer.showAxisLines,
-          showScaleBar: viewer.showScaleBar,
-          showPerspectiveSliceViews: viewer.showPerspectiveSliceViews,
           layerSpecification: viewer.layerSpecification.addRef(),
-          inputEventBindings: viewer.inputEventBindings,
-          visibility: viewer.visibility,
+          ...getCommonViewerState(viewer),
         },
-        {showLayerPanel: viewer.showLayerPanelEffective, showViewerMenu: false}));
-    this.layerGroupViewer.layout.name = layout;
+        {showLayerPanel: viewer.uiControlVisibility.showLayerPanel, showViewerMenu: false}));
+    this.layerGroupViewer.layout.restoreState(layout);
   }
 
   toJSON() {
-    return this.layerGroupViewer.layout.name;
+    return this.layerGroupViewer.layout.specification.toJSON();
   }
 
   get changed() {
@@ -504,17 +514,10 @@ function makeComponent(container: LayoutComponentContainer, spec: any) {
       const layerGroupViewer = new LayerGroupViewer(
           element, {
             display: viewer.display,
-            navigationState: viewer.navigationState.addRef(),
-            perspectiveNavigationState: viewer.perspectiveNavigationState.addRef(),
-            mouseState: viewer.mouseState,
-            showAxisLines: viewer.showAxisLines,
-            showScaleBar: viewer.showScaleBar,
-            showPerspectiveSliceViews: viewer.showPerspectiveSliceViews,
             layerSpecification,
-            inputEventBindings: viewer.inputEventBindings,
-            visibility: viewer.visibility,
+            ...getCommonViewerState(viewer),
           },
-          {showLayerPanel: viewer.showLayerPanelEffective, showViewerMenu: true});
+          {showLayerPanel: viewer.uiControlVisibility.showLayerPanel, showViewerMenu: true});
       try {
         layerGroupViewer.restoreState(spec);
       } catch (e) {
@@ -523,8 +526,11 @@ function makeComponent(container: LayoutComponentContainer, spec: any) {
       }
       return layerGroupViewer;
     }
+    default: {
+      // Treat it as a singleton layer group.
+      return new SingletonLayerGroupViewer(element, spec, container.viewer);
+    }
   }
-  throw new Error(`Invalid layout component specification: ${JSON.stringify(spec)}`);
 }
 
 export class RootLayoutContainer extends RefCounted implements Trackable {

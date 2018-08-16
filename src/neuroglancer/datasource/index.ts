@@ -14,6 +14,7 @@
  * limitations under the License.
  */
 
+import {MultiscaleAnnotationSource} from 'neuroglancer/annotation/frontend_source';
 import {ChunkManager} from 'neuroglancer/chunk_manager/frontend';
 import {MeshSource} from 'neuroglancer/mesh/frontend';
 import {SkeletonSource} from 'neuroglancer/skeleton/frontend';
@@ -23,7 +24,7 @@ import {VolumeType} from 'neuroglancer/sliceview/volume/base';
 import {MultiscaleVolumeChunkSource} from 'neuroglancer/sliceview/volume/frontend';
 import {CancellationToken, uncancelableToken} from 'neuroglancer/util/cancellation';
 import {applyCompletionOffset, CompletionWithDescription} from 'neuroglancer/util/completion';
-import {RefCounted, Owned} from 'neuroglancer/util/disposable';
+import {Owned, RefCounted} from 'neuroglancer/util/disposable';
 
 export type Completion = CompletionWithDescription;
 
@@ -88,7 +89,11 @@ export interface DataSource {
       (chunkManager: ChunkManager, path: string, cancellationToken: CancellationToken):
           Promise<SkeletonSource>|SkeletonSource;
   volumeCompleter?(value: string, chunkManager: ChunkManager, cancellationToken: CancellationToken):
-      Promise<CompletionResult>;
+    Promise<CompletionResult>;
+
+  getAnnotationSource?
+      (chunkManager: ChunkManager, path: string, cancellationToken: CancellationToken):
+          Promise<MultiscaleAnnotationSource>|MultiscaleAnnotationSource;
 
   /**
    * Returns a suggested layer name for the given volume source.
@@ -134,6 +139,14 @@ export class DataSourceProvider extends RefCounted {
     let [dataSource, path] = this.getDataSource(url);
     return new Promise<MultiscaleVolumeChunkSource>(resolve => {
       resolve(dataSource.getVolume!(chunkManager, path, options, cancellationToken));
+    });
+  }
+
+  getAnnotationSource(
+      chunkManager: ChunkManager, url: string, cancellationToken = uncancelableToken) {
+    let [dataSource, path] = this.getDataSource(url);
+    return new Promise<MultiscaleAnnotationSource>(resolve => {
+      resolve(dataSource.getAnnotationSource!(chunkManager, path, cancellationToken));
     });
   }
 

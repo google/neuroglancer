@@ -846,55 +846,36 @@ export function getChunkDataSizes(options: ChunkLayoutOptions&BaseChunkLayoutOpt
 export abstract class SliceViewChunkSpecification {
   chunkLayout: ChunkLayout;
   voxelSize: vec3;
-  chunkDataSize: vec3;
-
-  // chunkBytes: number; // See if we can live without this for now
 
   // All valid chunks are in the range [lowerChunkBound, upperChunkBound).
   lowerChunkBound: vec3;
   upperChunkBound: vec3;
 
-  lowerClipBound: vec3;
-  upperClipBound: vec3;
-
-  lowerVoxelBound: vec3;
-  upperVoxelBound: vec3;
-
-  baseVoxelOffset: vec3;
-
   constructor(options: SliceViewChunkSpecificationOptions) {
     let {
-      lowerVoxelBound = kZeroVec,
-      upperVoxelBound,
-      chunkDataSize,
+      chunkSize,
       voxelSize,
       transform,
-      baseVoxelOffset = kZeroVec
-    } = options;
-    let {
-      lowerClipBound = vec3.multiply(vec3.create(), voxelSize, lowerVoxelBound),
-      upperClipBound = vec3.multiply(vec3.create(), voxelSize, upperVoxelBound)
+      lowerChunkBound = kZeroVec,
+      upperChunkBound,
     } = options;
     this.voxelSize = voxelSize;
-    this.chunkDataSize = chunkDataSize;
     this.chunkLayout =
-        ChunkLayout.get(vec3.multiply(vec3.create(), options.chunkDataSize, voxelSize), transform);
+        ChunkLayout.get(chunkSize, transform);
 
-    this.lowerClipBound = lowerClipBound;
-    this.upperClipBound = upperClipBound;
-    this.lowerVoxelBound = lowerVoxelBound;
-    this.upperVoxelBound = upperVoxelBound;
-    this.baseVoxelOffset = baseVoxelOffset;
-
-    let lowerChunkBound = this.lowerChunkBound = vec3.create();
-    let upperChunkBound = this.upperChunkBound = vec3.create();
-    for (let i = 0; i < 3; ++i) {
-      lowerChunkBound[i] = Math.floor(lowerVoxelBound[i] / chunkDataSize[i]);
-      upperChunkBound[i] = Math.floor((upperVoxelBound[i] - 1) / chunkDataSize[i] + 1);
-    }
+    this.lowerChunkBound = lowerChunkBound;
+    this.upperChunkBound = upperChunkBound;
   }
 
-  abstract toObject(): SliceViewChunkSpecificationOptions;
+  toObject(): SliceViewChunkSpecificationOptions {
+    return {
+      transform: this.chunkLayout.transform,
+      chunkSize: this.chunkLayout.size,
+      voxelSize: this.voxelSize,
+      lowerChunkBound: this.lowerChunkBound,
+      upperChunkBound: this.upperChunkBound,
+    };
+  }
 }
 
 /**
@@ -910,50 +891,14 @@ export interface SliceViewChunkSpecificationBaseOptions {
    * Voxel size in local spatial coordinates.
    */
   voxelSize: vec3;
-
-  /**
-   * Lower clipping bound (in nanometers), relative to chunkLayout coordinates.  If not specified,
-   * defaults to lowerVoxelBound * voxelSize.
-   *
-   * Both lowerClipBound and upperClipBound are applied during rendering but do not affect which
-   * chunks/voxels are actually retrieved.  That is determined by lowerVoxelBound and
-   * upperVoxelBound.
-   */
-  lowerClipBound?: vec3;
-
-  /**
-   * Upper clipping bound (in nanometers), relative to chunkLayout coordinates.  If not specified,
-   * defaults to upperVoxelBound * voxelSize.
-   */
-  upperClipBound?: vec3;
-
-  /**
-   * If not specified, defaults to (0, 0, 0).  This determines lowerChunkBound.  If this is not a
-   * multiple of chunkDataSize, then voxels at lower positions may still be requested.
-   */
-  lowerVoxelBound?: vec3;
-
-  /**
-   * Upper voxel bound, relative to chunkLayout coordinates.  This determines upperChunkBound.
-   */
-  upperVoxelBound: vec3;
-
-  /**
-   * Specifies offset for use by backend.ts:GenericVolumeChunkSource.computeChunkBounds in
-   * calculating chunk voxel coordinates.  The calculated chunk coordinates will be equal to the
-   * voxel position (in chunkLayout coordinates) plus this value.
-   *
-   * Defaults to kZeroVec if not specified.
-   */
-  baseVoxelOffset?: vec3;
 }
 
 
 export interface SliceViewChunkSpecificationOptions extends SliceViewChunkSpecificationBaseOptions {
-  /**
-   * Chunk size in voxels.
-   */
-  chunkDataSize: vec3;
+  lowerChunkBound?: vec3;
+  upperChunkBound: vec3;
+
+  chunkSize: vec3;
 }
 
 

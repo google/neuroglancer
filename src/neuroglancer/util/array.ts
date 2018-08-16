@@ -93,3 +93,43 @@ export function transposeArray2d<T extends TypedArray>(
   }
   return transpose;
 }
+
+export function tile2dArray<T extends TypedArray>(
+    array: T, majorDimension: number, minorTiles: number, majorTiles: number) {
+  const minorDimension = array.length / majorDimension;
+  const length = array.length * minorTiles * majorTiles;
+  const result: T = new (<any>array.constructor)(length);
+  const minorTileStride = array.length * majorTiles;
+  const majorTileStride = majorDimension;
+  const minorStride = majorDimension * majorTiles;
+  for (let minor = 0; minor < minorDimension; ++minor) {
+    for (let major = 0; major < majorDimension; ++major) {
+      const inputValue = array[minor * majorDimension + major];
+      const baseOffset = minor * minorStride + major;
+      for (let minorTile = 0; minorTile < minorTiles; ++minorTile) {
+        for (let majorTile = 0; majorTile < majorTiles; ++majorTile) {
+          result[minorTile * minorTileStride + majorTile * majorTileStride + baseOffset] =
+              inputValue;
+        }
+      }
+    }
+  }
+  return result;
+}
+
+export function binarySearch<T>(
+    haystack: ArrayLike<T>, needle: T, compare: (a: T, b: T) => number, low = 0,
+    high = haystack.length) {
+  while (low < high) {
+    const mid = (low + high - 1) >> 1;
+    const compareResult = compare(needle, haystack[mid]);
+    if (compareResult > 0) {
+      low = mid + 1;
+    } else if (compareResult < 0) {
+      high = mid;
+    } else {
+      return mid;
+    }
+  }
+  return ~low;
+}

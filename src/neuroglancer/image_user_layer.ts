@@ -14,71 +14,73 @@
  * limitations under the License.
  */
 
-import {CoordinateTransform} from 'neuroglancer/coordinate_transform';
-import {UserLayer, UserLayerDropdown} from 'neuroglancer/layer';
+import {UserLayer} from 'neuroglancer/layer';
 import {LayerListSpecification, registerLayerType, registerVolumeLayerType} from 'neuroglancer/layer_specification';
-import {getVolumeWithStatusMessage} from 'neuroglancer/layer_specification';
 import {Overlay} from 'neuroglancer/overlay';
 import {VolumeType} from 'neuroglancer/sliceview/volume/base';
 import {FRAGMENT_MAIN_START, getTrackableFragmentMain, ImageRenderLayer} from 'neuroglancer/sliceview/volume/image_renderlayer';
 import {trackableAlphaValue} from 'neuroglancer/trackable_alpha';
 import {trackableBlendModeValue} from 'neuroglancer/trackable_blend';
+import {UserLayerWithVolumeSourceMixin} from 'neuroglancer/user_layer_with_volume_source';
 import {makeWatchableShaderError} from 'neuroglancer/webgl/dynamic_shader';
 import {RangeWidget} from 'neuroglancer/widget/range';
 import {ShaderCodeWidget} from 'neuroglancer/widget/shader_code_widget';
+import {Tab} from 'neuroglancer/widget/tab_view';
 
 require('./image_user_layer.css');
 require('neuroglancer/maximize_button.css');
 
-export class ImageUserLayer extends UserLayer {
-  volumePath: string;
+const OPACITY_JSON_KEY = 'opacity';
+const BLEND_JSON_KEY = 'blend';
+const SHADER_JSON_KEY = 'shader';
+
+const Base = UserLayerWithVolumeSourceMixin(UserLayer);
+export class ImageUserLayer extends Base {
   opacity = trackableAlphaValue(0.5);
   blendMode = trackableBlendModeValue();
   fragmentMain = getTrackableFragmentMain();
   shaderError = makeWatchableShaderError();
   renderLayer: ImageRenderLayer;
-  transform = new CoordinateTransform();
   constructor(manager: LayerListSpecification, x: any) {
-    super();
-    let volumePath = x['source'];
-    if (typeof volumePath !== 'string') {
-      throw new Error('Invalid image layer specification');
+    super(manager, x);
+    this.registerDisposer(this.fragmentMain.changed.add(this.specificationChanged.dispatch));
+    this.tabs.add(
+        'rendering',
+        {label: 'Rendering', order: -100, getter: () => new RenderingOptionsTab(this)});
+    this.tabs.default = 'rendering';
+  }
+
+  restoreState(specification: any) {
+    super.restoreState(specification);
+    this.opacity.restoreState(specification[OPACITY_JSON_KEY]);
+    this.blendMode.restoreState(specification[BLEND_JSON_KEY]);
+    this.fragmentMain.restoreState(specification[SHADER_JSON_KEY]);
+    const {multiscaleSource} = this;
+    if (multiscaleSource === undefined) {
+      throw new Error(`source property must be specified`);
     }
-    this.opacity.restoreState(x['opacity']);
-    this.blendMode.restoreState(x['blend']);
-    this.fragmentMain.restoreState(x['shader']);
-    this.transform.restoreState(x['transform']);
-    this.registerDisposer(this.fragmentMain.changed.add(() => {
-      this.specificationChanged.dispatch();
-    }));
-    this.volumePath = volumePath;
-    getVolumeWithStatusMessage(manager.dataSourceProvider, manager.chunkManager, volumePath)
-        .then(volume => {
-          if (!this.wasDisposed) {
-            let renderLayer = this.renderLayer = new ImageRenderLayer(volume, {
-              opacity: this.opacity,
-              blendMode: this.blendMode,
-              fragmentMain: this.fragmentMain,
-              shaderError: this.shaderError,
-              transform: this.transform,
-            });
-            this.addRenderLayer(renderLayer);
-            this.shaderError.changed.dispatch();
-            this.isReady = true;
-          }
+    multiscaleSource.then(volume => {
+      if (!this.wasDisposed) {
+        let renderLayer = this.renderLayer = new ImageRenderLayer(volume, {
+          opacity: this.opacity,
+          blendMode: this.blendMode,
+          fragmentMain: this.fragmentMain,
+          shaderError: this.shaderError,
+          transform: this.transform,
         });
+        this.addRenderLayer(renderLayer);
+        this.shaderError.changed.dispatch();
+        this.isReady = true;
+      }
+    });
   }
   toJSON() {
-    let x: any = {'type': 'image'};
-    x['source'] = this.volumePath;
-    x['opacity'] = this.opacity.toJSON();
-    x['blend'] = this.blendMode.toJSON();
-    x['shader'] = this.fragmentMain.toJSON();
-    x['transform'] = this.transform.toJSON();
+    const x = super.toJSON();
+    x['type'] = 'image';
+    x[OPACITY_JSON_KEY] = this.opacity.toJSON();
+    x[BLEND_JSON_KEY] = this.blendMode.toJSON();
+    x[SHADER_JSON_KEY] = this.fragmentMain.toJSON();
     return x;
-  }
-  makeDropdown(element: HTMLDivElement) {
-    return new ImageDropdown(element, this);
   }
 }
 
@@ -90,11 +92,12 @@ function makeShaderCodeWidget(layer: ImageUserLayer) {
   });
 }
 
-class ImageDropdown extends UserLayerDropdown {
+class RenderingOptionsTab extends Tab {
   opacityWidget = this.registerDisposer(new RangeWidget(this.layer.opacity));
   codeWidget = this.registerDisposer(makeShaderCodeWidget(this.layer));
-  constructor(public element: HTMLDivElement, public layer: ImageUserLayer) {
+  constructor(public layer: ImageUserLayer) {
     super();
+    const {element} = this;
     element.classList.add('image-dropdown');
     let {opacityWidget} = this;
     let topRow = document.createElement('div');
@@ -130,10 +133,11 @@ class ImageDropdown extends UserLayerDropdown {
     element.appendChild(topRow);
     element.appendChild(this.codeWidget.element);
     this.codeWidget.textEditor.refresh();
-  }
-
-  onShow() {
-    this.codeWidget.textEditor.refresh();
+    this.visibility.changed.add(() => {
+      if (this.visible) {
+        this.codeWidget.textEditor.refresh();
+      }
+    });
   }
 }
 

@@ -16,9 +16,10 @@
 
 import debounce from 'lodash/debounce';
 import {ChunkState, ChunkPriorityTier} from 'neuroglancer/chunk_manager/base';
-import {CHUNKED_GRAPH_LAYER_RPC_ID, ChunkedGraphSource as ChunkedGraphSourceInterface, ChunkedGraphChunkSpecification} from 'neuroglancer/chunked_graph/base';
+import {CHUNKED_GRAPH_LAYER_RPC_ID} from 'neuroglancer/chunked_graph/base';
 import {SharedDisjointUint64Sets} from 'neuroglancer/shared_disjoint_sets';
-import {SliceViewChunk, SliceViewChunkSource} from 'neuroglancer/sliceview/backend';
+import {VolumeChunkSource as VolumeChunkSourceInterface} from 'neuroglancer/sliceview/volume/base';
+import {VolumeChunk, VolumeChunkSource} from 'neuroglancer/sliceview/volume/backend';
 import {RenderLayer as RenderLayerInterface} from 'neuroglancer/sliceview/base';
 import {Uint64Set} from 'neuroglancer/uint64_set';
 import {mat4, vec3, vec3Key} from 'neuroglancer/util/geom';
@@ -31,9 +32,8 @@ import { CoordinateTransform } from 'neuroglancer/coordinate_transform';
 import { ChunkLayout } from 'neuroglancer/sliceview/chunk_layout';
 
 // Chunk that contains the list of fragments that make up a single object.
-export class ChunkedGraphChunk extends SliceViewChunk {
+export class ChunkedGraphChunk extends VolumeChunk {
   backendOnly = true;
-  source: ChunkedGraphChunkSource|null = null;
   mappings: Map<string, Uint64[]|null>|null = null;
   constructor() {
     super();
@@ -66,7 +66,7 @@ export class ChunkedGraphChunk extends SliceViewChunk {
         this.systemMemoryBytes += 16 * supervoxelIds.length;
       }
     }
-    super.downloadSucceeded();
+    this.queueManager.updateChunkState(this, ChunkState.SYSTEM_MEMORY_WORKER);
     if (this.priorityTier < ChunkPriorityTier.RECENT) {
       this.source!.chunkManager.scheduleUpdateChunkPriorities();
     }
@@ -86,15 +86,13 @@ export function decodeSupervoxelArray(chunk: ChunkedGraphChunk, rootObjectKey: s
   chunk.mappings!.set(rootObjectKey, final);
 }
 
-export class ChunkedGraphChunkSource extends SliceViewChunkSource implements
-    ChunkedGraphSourceInterface {
-  spec: ChunkedGraphChunkSpecification;
+export class ChunkedGraphChunkSource extends VolumeChunkSource implements
+  VolumeChunkSourceInterface {
   rootSegments: Uint64Set;
   chunks: Map<string, ChunkedGraphChunk>;
 
   constructor(rpc: RPC, options: any) {
     super(rpc, options);
-    this.spec = ChunkedGraphChunkSpecification.fromObject(options['spec']);
     this.rootSegments = rpc.get(options['rootSegments']);
   }
 
@@ -127,7 +125,7 @@ export class ChunkedGraphLayer extends Base implements RenderLayerInterface {
   sources: ChunkedGraphChunkSource[][];
   layerChanged = new NullarySignal();
   transform = new CoordinateTransform();
-  transformedSources: {source: SliceViewChunkSource, chunkLayout: ChunkLayout}[][];
+  transformedSources: {source: VolumeChunkSource, chunkLayout: ChunkLayout}[][];
   transformedSourcesGeneration = -1;
 
   graphurl: string;

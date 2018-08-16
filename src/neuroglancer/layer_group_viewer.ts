@@ -21,22 +21,24 @@
 import debounce from 'lodash/debounce';
 import {DataPanelLayoutContainer, InputEventBindings as DataPanelInputEventBindings} from 'neuroglancer/data_panel_layout';
 import {DisplayContext} from 'neuroglancer/display_context';
-import {MouseSelectionState} from 'neuroglancer/layer';
+import {MouseSelectionState, RenderLayerRole, SelectedLayerState} from 'neuroglancer/layer';
 import {LayerPanel} from 'neuroglancer/layer_panel';
 import {LayerListSpecification, LayerSubsetSpecification, ManagedUserLayerWithSpecification} from 'neuroglancer/layer_specification';
 import {LinkedOrientationState, LinkedSpatialPosition, LinkedZoomState, NavigationState, Pose, TrackableNavigationLink} from 'neuroglancer/navigation_state';
 import {TrackableBoolean} from 'neuroglancer/trackable_boolean';
-import {WatchableValueInterface} from 'neuroglancer/trackable_value';
+import {WatchableSet, WatchableValueInterface} from 'neuroglancer/trackable_value';
 import {ContextMenu} from 'neuroglancer/ui/context_menu';
 import {endLayerDrag, startLayerDrag} from 'neuroglancer/ui/layer_drag_and_drop';
 import {setupPositionDropHandlers} from 'neuroglancer/ui/position_drag_and_drop';
 import {AutomaticallyFocusedElement} from 'neuroglancer/util/automatic_focus';
+import {TrackableRGB} from 'neuroglancer/util/color';
 import {Borrowed, Owned, RefCounted} from 'neuroglancer/util/disposable';
 import {removeChildren} from 'neuroglancer/util/dom';
 import {registerActionListener} from 'neuroglancer/util/event_action_map';
 import {CompoundTrackable} from 'neuroglancer/util/trackable';
 import {WatchableVisibilityPriority} from 'neuroglancer/visibility_priority/frontend';
 import {EnumSelectWidget} from 'neuroglancer/widget/enum_widget';
+import {TrackableScaleBarOptions} from 'neuroglancer/widget/scale_bar';
 
 require('./layer_group_viewer.css');
 
@@ -47,10 +49,14 @@ export interface LayerGroupViewerState {
   mouseState: MouseSelectionState;
   showAxisLines: TrackableBoolean;
   showScaleBar: TrackableBoolean;
+  scaleBarOptions: TrackableScaleBarOptions;
   showPerspectiveSliceViews: TrackableBoolean;
   layerSpecification: Owned<LayerListSpecification>;
   inputEventBindings: DataPanelInputEventBindings;
   visibility: WatchableVisibilityPriority;
+  selectedLayer: SelectedLayerState;
+  visibleLayerRoles: WatchableSet<RenderLayerRole>;
+  crossSectionBackgroundColor: TrackableRGB;
 }
 
 export interface LayerGroupViewerOptions {
@@ -187,6 +193,9 @@ export class LayerGroupViewer extends RefCounted {
   get display() {
     return this.viewerState.display;
   }
+  get selectedLayer() {
+    return this.viewerState.selectedLayer;
+  }
   get layerManager() {
     return this.layerSpecification.layerManager;
   }
@@ -211,6 +220,15 @@ export class LayerGroupViewer extends RefCounted {
   }
   get visibility() {
     return this.viewerState.visibility;
+  }
+  get visibleLayerRoles() {
+    return this.viewerState.visibleLayerRoles;
+  }
+  get crossSectionBackgroundColor() {
+    return this.viewerState.crossSectionBackgroundColor;
+  }
+  get scaleBarOptions() {
+    return this.viewerState.scaleBarOptions;
   }
   layerPanel: LayerPanel|undefined;
   layout: DataPanelLayoutContainer;
@@ -294,14 +312,15 @@ export class LayerGroupViewer extends RefCounted {
   private updateUI() {
     const {options} = this;
     const showLayerPanel = options.showLayerPanel.value;
-    if (this.layerPanel !== undefined && showLayerPanel) {
+    if (this.layerPanel !== undefined && !showLayerPanel) {
       this.layerPanel.dispose();
       this.layerPanel = undefined;
       return;
     }
     if (showLayerPanel && this.layerPanel === undefined) {
-      const layerPanel = this.layerPanel =
-          new LayerPanel(this.display, this.layerSpecification, this.viewerNavigationState);
+      const layerPanel = this.layerPanel = new LayerPanel(
+          this.display, this.layerSpecification, this.viewerNavigationState,
+          this.viewerState.selectedLayer);
       if (options.showViewerMenu) {
         layerPanel.registerDisposer(makeViewerMenu(layerPanel.element, this));
         layerPanel.element.title = 'Right click for options, drag to move/copy layer group.';

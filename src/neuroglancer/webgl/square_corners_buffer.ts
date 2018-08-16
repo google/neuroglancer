@@ -14,22 +14,44 @@
  * limitations under the License.
  */
 
-import {RefCountedValue} from 'neuroglancer/util/disposable';
-import {Buffer} from 'neuroglancer/webgl/buffer';
-import {GL_ARRAY_BUFFER, GL_STATIC_DRAW} from 'neuroglancer/webgl/constants';
+import {tile2dArray} from 'neuroglancer/util/array';
+import {getMemoizedBuffer} from 'neuroglancer/webgl/buffer';
+import {GL_ARRAY_BUFFER} from 'neuroglancer/webgl/constants';
 import {GL} from 'neuroglancer/webgl/context';
 
-export function getSquareCornersBuffer(gl: GL, startX = -1, startY = -1, endX = 1, endY = 1) {
-  return gl.memoize
-      .get(
-          `SquareCornersBuffer:${startX},${startY},${endX},${endY}`,
-          () => new RefCountedValue(Buffer.fromData(
-              gl, new Float32Array([
-                startX, startY,  //
-                startX, endY,    //
-                endX, endY,      //
-                endX, startY,    //
-              ]),
-              GL_ARRAY_BUFFER, GL_STATIC_DRAW)))
+export function getSquareCornersArray(
+    startX = -1, startY = -1, endX = 1, endY = 1, minorTiles = 1, majorTiles = 1) {
+  return tile2dArray(
+      new Float32Array([
+        startX, startY,  //
+        startX, endY,    //
+        endX, endY,      //
+        endX, startY,    //
+      ]),
+      /*majorDimension=*/2, minorTiles, majorTiles);
+}
+
+export function getCubeCornersArray(
+    startX = -1, startY = -1, startZ = -1, endX = 1, endY = 1, endZ = 1, minorTiles = 1,
+    majorTiles = 1) {
+  return tile2dArray(
+      new Float32Array([
+        startX, startY, startZ,  //
+        endX,   startY, startZ,  //
+        startX, endY,   startZ,  //
+        endX,   endY,   startZ,  //
+        startX, startY, endZ,    //
+        endX,   startY, endZ,    //
+        startX, endY,   endZ,    //
+        endX,   endY,   endZ,    //
+      ]),
+      /*majorDimension=*/3, minorTiles, majorTiles);
+}
+
+export function getSquareCornersBuffer(
+    gl: GL, startX = -1, startY = -1, endX = 1, endY = 1, minorTiles = 1, majorTiles = 1) {
+  return getMemoizedBuffer(
+             gl, GL_ARRAY_BUFFER, getSquareCornersArray, startX, startY, endX, endY, minorTiles,
+             majorTiles)
       .value;
 }

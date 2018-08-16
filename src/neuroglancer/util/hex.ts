@@ -14,8 +14,12 @@
  * limitations under the License.
  */
 
+export function hexEncodeByte(x: number) {
+  return ('0' + x.toString(16)).slice(-2);
+}
+
 export function hexEncode(arr: Uint8Array) {
-  return Array.prototype.map.call(arr, (x: number) => ('0' + x.toString(16)).slice(-2)).join('');
+  return Array.prototype.map.call(arr, hexEncodeByte).join('');
 }
 
 export function hexDecode(x: string) {

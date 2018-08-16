@@ -70,6 +70,8 @@ export class SliceView extends Base {
       this.gl,
       {colorBuffers: makeTextureBuffers(this.gl, 1), depthBuffer: new StencilBuffer(this.gl)}));
 
+  numVisibleChunks = 0;
+
   constructor(
       public chunkManager: ChunkManager, public layerManager: LayerManager,
       public navigationState: NavigationState) {
@@ -101,10 +103,12 @@ export class SliceView extends Base {
   }
 
   isReady() {
+    this.setViewportSizeDebounced.flush();
     if (!this.hasValidViewport) {
       return false;
     }
     this.maybeUpdateVisibleChunks();
+    let numValidChunks = 0;
     for (const visibleSources of this.visibleLayers.values()) {
       for (const {chunkLayout, source} of visibleSources) {
         // FIXME: handle change to chunkLayout
@@ -115,13 +119,13 @@ export class SliceView extends Base {
         const {chunks} = source;
         for (const key of visibleChunks) {
           const chunk = chunks.get(key);
-          if (!chunk || chunk.state !== ChunkState.GPU_MEMORY) {
-            return false;
+          if (chunk && chunk.state === ChunkState.GPU_MEMORY) {
+            ++numValidChunks;
           }
         }
       }
     }
-    return true;
+    return numValidChunks === this.numVisibleChunks;
   }
 
   private updateViewportFromNavigationState() {
@@ -211,7 +215,10 @@ export class SliceView extends Base {
     this.visibleChunksStale = true;
     this.viewChanged.dispatch();
   }
+  setViewportSizeDebounced = this.registerCancellable(
+      debounce((width: number, height: number) => this.setViewportSize(width, height), 0));
   setViewportSize(width: number, height: number) {
+    this.setViewportSizeDebounced.cancel();
     if (super.setViewportSize(width, height)) {
       this.rpc!.invoke(SLICEVIEW_UPDATE_VIEW_RPC_ID, {id: this.rpcId, width: width, height: height});
       // this.chunkManager.scheduleUpdateChunkPriorities();
@@ -233,6 +240,7 @@ export class SliceView extends Base {
   }
 
   updateRendering() {
+    this.setViewportSizeDebounced.flush();
     if (!this.renderingStale || !this.hasValidViewport || this.width === 0 || this.height === 0) {
       return;
     }
@@ -257,7 +265,6 @@ export class SliceView extends Base {
         /*face=*/gl.FRONT_AND_BACK, /*sfail=*/gl.KEEP, /*dpfail=*/gl.KEEP,
         /*dppass=*/gl.REPLACE);
 
-    // console.log("Drawing sliceview");
     let renderLayerNum = 0;
     for (let renderLayer of this.visibleLayerList) {
       gl.clear(gl.STENCIL_BUFFER_BIT);
@@ -279,10 +286,8 @@ export class SliceView extends Base {
   maybeUpdateVisibleChunks() {
     this.updateVisibleLayers.flush();
     if (!this.visibleChunksStale && !this.visibleSourcesStale) {
-      // console.log("Not updating visible chunks");
       return false;
     }
-    // console.log("Updating visible");
     this.visibleChunksStale = false;
     this.updateVisibleChunks();
     return true;
@@ -300,11 +305,16 @@ export class SliceView extends Base {
       }
       return visibleChunks;
     }
-    function addChunk(_chunkLayout: ChunkLayout, visibleChunks: string[], positionInChunks: vec3) {
+    let numVisibleChunks = 0;
+    function addChunk(
+        _chunkLayout: ChunkLayout, visibleChunks: string[], positionInChunks: vec3,
+        fullyVisibleSources: SliceViewChunkSource[]) {
       let key = vec3Key(positionInChunks);
       visibleChunks[visibleChunks.length] = key;
+      numVisibleChunks += fullyVisibleSources.length;
     }
     this.computeVisibleChunks(getLayoutObject, addChunk);
+    this.numVisibleChunks = numVisibleChunks;
   }
 
   disposed() {
@@ -317,18 +327,22 @@ export class SliceView extends Base {
   }
 }
 
+export interface SliceViewChunkSourceOptions {
+  spec: SliceViewChunkSpecification;
+}
+
 export abstract class SliceViewChunkSource extends ChunkSource implements
     SliceViewChunkSourceInterface {
   chunks: Map<string, SliceViewChunk>;
 
   spec: SliceViewChunkSpecification;
 
-  constructor(chunkManager: ChunkManager, options: {spec: SliceViewChunkSpecification}) {
+  constructor(chunkManager: ChunkManager, options: SliceViewChunkSourceOptions) {
     super(chunkManager, options);
     this.spec = options.spec;
   }
 
-  static encodeOptions(options: {spec: SliceViewChunkSpecification}) {
+  static encodeOptions(options: SliceViewChunkSourceOptions) {
     const encoding = super.encodeOptions(options);
     encoding.spec = options.spec.toObject();
     return encoding;
@@ -346,15 +360,13 @@ export interface SliceViewChunkSource {
   getChunk(x: any): any;
 }
 
-export abstract class SliceViewChunk extends Chunk {
-  chunkDataSize: vec3;
+export class SliceViewChunk extends Chunk {
   chunkGridPosition: vec3;
   source: SliceViewChunkSource;
 
   constructor(source: SliceViewChunkSource, x: any) {
     super(source);
     this.chunkGridPosition = x['chunkGridPosition'];
-    this.chunkDataSize = x['chunkDataSize'] || source.spec.chunkDataSize;
     this.state = ChunkState.SYSTEM_MEMORY;
   }
 }

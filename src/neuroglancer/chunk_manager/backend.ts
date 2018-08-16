@@ -142,7 +142,7 @@ export class Chunk implements Disposable {
   }
 }
 
-interface ChunkConstructor<T extends Chunk> {
+export interface ChunkConstructor<T extends Chunk> {
   new(): T;
 }
 
@@ -776,8 +776,11 @@ export class ChunkManager extends SharedObjectCounterpart {
     if (chunk.newPriorityTier === ChunkPriorityTier.RECENT) {
       this.newTierChunks.push(chunk);
     }
-    chunk.newPriorityTier = tier;
-    chunk.newPriority = priority;
+    const newPriorityTier = chunk.newPriorityTier;
+    if (tier < newPriorityTier || (tier === newPriorityTier && priority > chunk.newPriority)) {
+      chunk.newPriorityTier = tier;
+      chunk.newPriority = priority;
+    }
   }
 
   /**

@@ -39,7 +39,7 @@
 
 input.neuroglancer-position-widget-input {
   color: white;
-  background-color: black;
+  background-color: transparent;
   position: relative;
   vertical-align: top;
 }
@@ -70,7 +70,6 @@ input.neuroglancer-position-widget-input {
 }
 
 .neuroglancer-voxel-size-widget {
-  background-color: #333;
   vertical-align: center;
   margin-right: 2px;
 }

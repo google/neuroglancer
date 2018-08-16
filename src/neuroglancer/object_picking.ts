@@ -17,11 +17,15 @@
 import {MouseSelectionState, RenderLayer} from 'neuroglancer/layer';
 import {Uint64} from 'neuroglancer/util/uint64';
 
+const DEBUG_PICKING = false;
+
 export class PickIDManager {
   /**
    * This specifies the render layer corresponding to each registered entry.
    */
   private renderLayers: (RenderLayer|null)[] = [null];
+
+  private pickData: any[] = [null];
 
   /**
    * This contains 3 consecutive values, specifying (startPickID, low, high), for each registered
@@ -36,6 +40,7 @@ export class PickIDManager {
 
   clear() {
     this.renderLayers.length = 1;
+    this.pickData.length = 1;
     this.values.length = 3;
     this.nextPickID = 1;
   }
@@ -44,7 +49,7 @@ export class PickIDManager {
     return this.register(renderLayer, count, x.low, x.high);
   }
 
-  register(renderLayer: RenderLayer, count = 1, low = 0, high = 0): number {
+  register(renderLayer: RenderLayer, count = 1, low = 0, high = 0, data: any = null): number {
     let {renderLayers, values} = this;
     let pickID = this.nextPickID;
     this.nextPickID += count;
@@ -54,6 +59,7 @@ export class PickIDManager {
     values[valuesOffset] = pickID;
     values[valuesOffset + 1] = low;
     values[valuesOffset + 2] = high;
+    this.pickData[index] = data;
     return pickID;
   }
 
@@ -75,11 +81,16 @@ export class PickIDManager {
     const pickedRenderLayer = mouseState.pickedRenderLayer = renderLayers[lower];
     const valuesOffset = lower * 3;
     const pickedOffset = mouseState.pickedOffset = pickID - values[valuesOffset];
+    if (DEBUG_PICKING) {
+      console.log(`Looking up pick ID ${pickID}: renderLayer`, pickedRenderLayer, `offset=${pickedOffset}`);
+    }
     let {pickedValue} = mouseState;
     pickedValue.low = values[valuesOffset + 1];
     pickedValue.high = values[valuesOffset + 2];
+    mouseState.pickedAnnotationId = undefined;
+    mouseState.pickedAnnotationLayer = undefined;
     if (pickedRenderLayer !== null) {
-      pickedRenderLayer.updateMouseState(mouseState, pickedValue, pickedOffset);
+      pickedRenderLayer.updateMouseState(mouseState, pickedValue, pickedOffset, this.pickData[lower]);
     }
   }
 }

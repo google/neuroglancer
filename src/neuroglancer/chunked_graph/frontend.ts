@@ -15,15 +15,17 @@
  */
 
 import {ChunkManager} from 'neuroglancer/chunk_manager/frontend';
-import {CHUNKED_GRAPH_LAYER_RPC_ID, ChunkedGraphSource as ChunkedGraphSourceInterface} from 'neuroglancer/chunked_graph/base';
-import {ChunkedGraphChunkSpecification, ChunkedGraphSourceOptions} from 'neuroglancer/chunked_graph/base';
+import {CHUNKED_GRAPH_LAYER_RPC_ID} from 'neuroglancer/chunked_graph/base';
 import {SegmentSelection, SegmentationDisplayState} from 'neuroglancer/segmentation_display_state/frontend';
-import {SliceView, SliceViewChunkSource, MultiscaleSliceViewChunkSource} from 'neuroglancer/sliceview/frontend';
+import {DataType} from 'neuroglancer/sliceview/base';
+import {MultiscaleSliceViewChunkSource} from 'neuroglancer/sliceview/frontend';
 import {RenderLayer as GenericSliceViewRenderLayer} from 'neuroglancer/sliceview/renderlayer';
 import {Uint64Set} from 'neuroglancer/uint64_set';
-import {openHttpRequest, sendHttpRequest, sendHttpJsonPostRequest, HttpError} from 'neuroglancer/util/http_request';
+import {openHttpRequest, sendHttpJsonPostRequest, HttpError} from 'neuroglancer/util/http_request';
 import {Uint64} from 'neuroglancer/util/uint64';
 import {RPC} from 'neuroglancer/worker_rpc';
+import {VolumeChunkSource as VolumeChunkSourceInterface, VolumeChunkSpecification, VolumeSourceOptions} from 'neuroglancer/sliceview/volume/base';
+import {VolumeChunkSource} from 'neuroglancer/sliceview/volume/frontend';
 
 export const GRAPH_SERVER_NOT_SPECIFIED = Symbol('Graph Server Not Specified.');
 
@@ -33,13 +35,12 @@ export interface SegmentSelection {
   position: number[];
 }
 
-export class ChunkedGraphChunkSource extends SliceViewChunkSource implements
-    ChunkedGraphSourceInterface {
-  spec: ChunkedGraphChunkSpecification;
+export class ChunkedGraphChunkSource extends VolumeChunkSource implements
+    VolumeChunkSourceInterface {
   rootSegments: Uint64Set;
 
   constructor(chunkManager: ChunkManager, options: {
-      spec: ChunkedGraphChunkSpecification, rootSegments: Uint64Set}) {
+      spec: VolumeChunkSpecification, rootSegments: Uint64Set}) {
     super(chunkManager, options);
     this.rootSegments = options.rootSegments;
   }
@@ -51,7 +52,9 @@ export class ChunkedGraphChunkSource extends SliceViewChunkSource implements
 }
 
 export interface MultiscaleChunkedGraphSource extends MultiscaleSliceViewChunkSource {
-  getSources: (options: ChunkedGraphSourceOptions) => ChunkedGraphChunkSource[][];
+  getSources: (options: VolumeSourceOptions) => VolumeChunkSource[][];
+
+  dataType: DataType;
 }
 
 export class ChunkedGraphLayer extends GenericSliceViewRenderLayer {
@@ -79,23 +82,21 @@ export class ChunkedGraphLayer extends GenericSliceViewRenderLayer {
     return this.graphurl;
   }
 
-  getRoot(segment: Uint64): Promise<Uint64> {
+  getRoot(selection: SegmentSelection): Promise<Uint64> {
     const {url} = this;
     if (url === '') {
-      return Promise.resolve(segment);
+      return Promise.resolve(selection.segmentId);
     }
 
-    let promise = sendHttpRequest(openHttpRequest(`${url}/1.0/segment/${segment}/root`), 'arraybuffer');
+    let promise = sendHttpJsonPostRequest(openHttpRequest(`${url}/1.0/graph/root`, 'POST'),
+        [String(selection.segmentId), ...selection.position],
+        'arraybuffer');
 
     return promise.then(response => {
-      if (response.byteLength === 0) {
-        throw new Error(`Agglomeration for segment ${segment} is too large to show.`);
-      } else {
-        let uint32 = new Uint32Array(response);
-        return new Uint64(uint32[0], uint32[1]);
-      }
+      let uint32 = new Uint32Array(response);
+      return new Uint64(uint32[0], uint32[1]);
     }).catch((e: HttpError) => {
-      console.log(`Could not retrieve root for segment ${segment}`);
+      console.log(`Could not retrieve root for segment ${selection.segmentId}`);
       console.error(e);
       return Promise.reject(e);
     });
@@ -149,16 +150,6 @@ export class ChunkedGraphLayer extends GenericSliceViewRenderLayer {
       return Promise.reject(e);
     });
   }
-
-  beginSlice(_sliceView: SliceView) {
-    let shader = this.shader!;
-    shader.bind();
-    return shader;
-  }
-
-  endSlice() {}
-
-  defineShader() {}
 
   draw() {}
 }

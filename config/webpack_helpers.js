@@ -64,7 +64,7 @@ const DEFAULT_SUPPORTED_LAYERS = exports.DEFAULT_SUPPORTED_LAYERS = [
   'neuroglancer/segmentation_user_layer',
   'neuroglancer/single_mesh_user_layer',
   'neuroglancer/annotation/user_layer',
-  'neuroglancer/synapse/user_layer',
+  // 'neuroglancer/synapse/user_layer',
 ];
 
 /**
@@ -155,7 +155,8 @@ function getBaseConfig(options) {
   let baseConfig = {
     resolve: {
       extensions: ['.ts', '.js'],
-      /** Don't use the built-in alias mechanism because of a bug in the normalize function defined
+      /**
+       * Don't use the built-in alias mechanism because of a bug in the normalize function defined
        * in the memory-fs package it depends on.
        */
       // alias: aliasMappings,
@@ -171,7 +172,9 @@ function getBaseConfig(options) {
           options.resolveLoaderAliases || []),
       modules: [
         ...(options.resolveLoaderRoots || []),
-        resolveReal(__dirname, '../node_modules'),
+        ...(fs.existsSync(path.join(__dirname, '../node_modules')) ?
+                [resolveReal(__dirname, '../node_modules')] :
+                []),
       ],
     },
     devtool: 'source-map',
@@ -179,8 +182,7 @@ function getBaseConfig(options) {
       rules: [
         tsLoaderEntry, {test: /\.json$/, loader: require.resolve('json-loader')}, {
           test: /\.css$/,
-          loader:
-              ExtractTextPlugin.extract({fallback: 'style-loader', use: 'css-loader'})
+          loader: ExtractTextPlugin.extract({fallback: 'style-loader', use: 'css-loader'})
         },
         {
           test: /\.glsl$/,
@@ -310,6 +312,8 @@ function getViewerConfig(options) {
     'neuroglancer/chunk_manager/backend',
     'neuroglancer/chunked_graph/backend',
     'neuroglancer/sliceview/backend',
+    'neuroglancer/perspective_view/backend',
+    'neuroglancer/annotation/backend',
     ...backendDataSourceModules,
     ...extraChunkWorkerModules,
   ];

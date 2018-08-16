@@ -52,7 +52,7 @@ class Server(HTTPServer):
 
 if __name__ == '__main__':
     ap = argparse.ArgumentParser()
-    ap.add_argument('-p', '--port', default=9000, help='TCP port to listen on')
+    ap.add_argument('-p', '--port', type=int, default=9000, help='TCP port to listen on')
     ap.add_argument('-a', '--bind', default='127.0.0.1', help='Bind address')
     ap.add_argument('-d', '--directory', default='.', help='Directory to serve')
 

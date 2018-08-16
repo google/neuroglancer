@@ -17,20 +17,26 @@
 import debounce from 'lodash/debounce';
 import {ChunkManager} from 'neuroglancer/chunk_manager/frontend';
 import {DisplayContext} from 'neuroglancer/display_context';
-import {LayerManager, MouseSelectionState} from 'neuroglancer/layer';
+import {LayerManager, MouseSelectionState, RenderLayerRole, SelectedLayerState} from 'neuroglancer/layer';
 import * as L from 'neuroglancer/layout';
-import {NavigationState, OrientationState, Pose} from 'neuroglancer/navigation_state';
+import {LinkedOrientationState, LinkedSpatialPosition, LinkedZoomState, NavigationState, OrientationState, Pose} from 'neuroglancer/navigation_state';
 import {PerspectivePanel} from 'neuroglancer/perspective_view/panel';
 import {RenderedDataPanel} from 'neuroglancer/rendered_data_panel';
 import {SliceView} from 'neuroglancer/sliceview/frontend';
 import {SliceViewerState, SliceViewPanel} from 'neuroglancer/sliceview/panel';
 import {TrackableBoolean} from 'neuroglancer/trackable_boolean';
-import {TrackableValue} from 'neuroglancer/trackable_value';
-import {RefCounted} from 'neuroglancer/util/disposable';
+import {TrackableValue, WatchableSet} from 'neuroglancer/trackable_value';
+import {TrackableRGB} from 'neuroglancer/util/color';
+import {Borrowed, Owned, RefCounted} from 'neuroglancer/util/disposable';
 import {removeChildren} from 'neuroglancer/util/dom';
 import {EventActionMap, registerActionListener} from 'neuroglancer/util/event_action_map';
 import {quat} from 'neuroglancer/util/geom';
+import {verifyObject, verifyObjectProperty, verifyPositiveInt} from 'neuroglancer/util/json';
+import {NullarySignal} from 'neuroglancer/util/signal';
+import {Trackable} from 'neuroglancer/util/trackable';
+import {WatchableMap} from 'neuroglancer/util/watchable_map';
 import {VisibilityPrioritySpecification} from 'neuroglancer/viewer_state';
+import {ScaleBarOptions} from 'neuroglancer/widget/scale_bar';
 
 require('neuroglancer/ui/button.css');
 
@@ -52,7 +58,11 @@ export interface ViewerUIState extends SliceViewViewerState, VisibilityPriorityS
   showPerspectiveSliceViews: TrackableBoolean;
   showAxisLines: TrackableBoolean;
   showScaleBar: TrackableBoolean;
+  scaleBarOptions: TrackableValue<ScaleBarOptions>;
+  visibleLayerRoles: WatchableSet<RenderLayerRole>;
+  selectedLayer: SelectedLayerState;
   inputEventBindings: InputEventBindings;
+  crossSectionBackgroundColor: TrackableRGB;
 }
 
 export interface DataDisplayLayout extends RefCounted {
@@ -60,7 +70,7 @@ export interface DataDisplayLayout extends RefCounted {
   container: DataPanelLayoutContainer;
 }
 
-type NamedAxes = 'xy' | 'xz' | 'yz';
+type NamedAxes = 'xy'|'xz'|'yz';
 
 const AXES_RELATIVE_ORIENTATION = new Map<NamedAxes, quat|undefined>([
   ['xy', undefined],
@@ -97,18 +107,26 @@ export function makeOrthogonalSliceViews(viewerState: SliceViewViewerState) {
 
 export function getCommonViewerState(viewer: ViewerUIState) {
   return {
+    crossSectionBackgroundColor: viewer.crossSectionBackgroundColor,
     mouseState: viewer.mouseState,
     layerManager: viewer.layerManager,
     showAxisLines: viewer.showAxisLines,
+    visibleLayerRoles: viewer.visibleLayerRoles,
+    selectedLayer: viewer.selectedLayer,
     visibility: viewer.visibility,
+    scaleBarOptions: viewer.scaleBarOptions,
   };
 }
 
-function getCommonPerspectiveViewerState(viewer: ViewerUIState) {
+function getCommonPerspectiveViewerState(container: DataPanelLayoutContainer) {
+  const {viewer} = container;
   return {
     ...getCommonViewerState(viewer),
     navigationState: viewer.perspectiveNavigationState,
     inputEventMap: viewer.inputEventBindings.perspectiveView,
+    orthographicProjection: container.specification.orthographicProjection,
+    showScaleBar: viewer.showScaleBar,
+    rpc: viewer.chunkManager.rpc!,
   };
 }
 
@@ -132,17 +150,57 @@ function registerRelatedLayouts(
   }
 }
 
+function makeSliceViewFromSpecification(
+    viewer: SliceViewViewerState, specification: Borrowed<CrossSectionSpecification>) {
+  const sliceView = new SliceView(
+      viewer.chunkManager, viewer.layerManager, specification.navigationState.addRef());
+  const updateViewportSize = () => {
+    sliceView.setViewportSizeDebounced(specification.width.value, specification.height.value);
+  };
+  sliceView.registerDisposer(specification.width.changed.add(updateViewportSize));
+  sliceView.registerDisposer(specification.height.changed.add(updateViewportSize));
+  updateViewportSize();
+  return sliceView;
+}
+
+function addUnconditionalSliceViews(
+    viewer: SliceViewViewerState, panel: PerspectivePanel,
+    crossSections: Borrowed<CrossSectionSpecificationMap>) {
+  const previouslyAdded = new Map<Borrowed<CrossSectionSpecification>, Borrowed<SliceView>>();
+  const update = () => {
+    const currentCrossSections = new Set<Borrowed<CrossSectionSpecification>>();
+    // Add missing cross sections.
+    for (const crossSection of crossSections.values()) {
+      currentCrossSections.add(crossSection);
+      if (previouslyAdded.has(crossSection)) {
+        continue;
+      }
+      const sliceView = makeSliceViewFromSpecification(viewer, crossSection);
+      panel.sliceViews.set(sliceView, true);
+      previouslyAdded.set(crossSection, sliceView);
+    }
+    // Remove extra cross sections.
+    for (const [crossSection, sliceView] of previouslyAdded) {
+      if (currentCrossSections.has(crossSection)) {
+        continue;
+      }
+      panel.sliceViews.delete(sliceView);
+    }
+  };
+  update();
+}
+
 export class FourPanelLayout extends RefCounted {
   constructor(
       public container: DataPanelLayoutContainer, public rootElement: HTMLElement,
-      public viewer: ViewerUIState) {
+      public viewer: ViewerUIState, crossSections: Borrowed<CrossSectionSpecificationMap>) {
     super();
 
     let sliceViews = makeOrthogonalSliceViews(viewer);
     let {display} = viewer;
 
     const perspectiveViewerState = {
-      ...getCommonPerspectiveViewerState(viewer),
+      ...getCommonPerspectiveViewerState(container),
       showSliceViews: viewer.showPerspectiveSliceViews,
       showSliceViewsCheckbox: true,
     };
@@ -178,8 +236,9 @@ export class FourPanelLayout extends RefCounted {
             let panel = this.registerDisposer(
                 new PerspectivePanel(display, element, perspectiveViewerState));
             for (let sliceView of sliceViews.values()) {
-              panel.sliceViews.add(sliceView.addRef());
+              panel.sliceViews.set(sliceView.addRef(), false);
             }
+            addUnconditionalSliceViews(viewer, panel, crossSections);
             registerRelatedLayouts(this, panel, ['3d']);
           }),
           L.withFlex(1, element => {
@@ -201,14 +260,15 @@ export class FourPanelLayout extends RefCounted {
 export class SliceViewPerspectiveTwoPanelLayout extends RefCounted {
   constructor(
       public container: DataPanelLayoutContainer, public rootElement: HTMLElement,
-      public viewer: ViewerUIState, public direction: 'row'|'column', axes: NamedAxes) {
+      public viewer: ViewerUIState, public direction: 'row'|'column', axes: NamedAxes,
+      crossSections: Borrowed<CrossSectionSpecificationMap>) {
     super();
 
     let sliceView = makeNamedSliceView(viewer, axes);
     let {display} = viewer;
 
     const perspectiveViewerState = {
-      ...getCommonPerspectiveViewerState(viewer),
+      ...getCommonPerspectiveViewerState(container),
       showSliceViews: viewer.showPerspectiveSliceViews,
       showSliceViewsCheckbox: true,
     };
@@ -231,7 +291,8 @@ export class SliceViewPerspectiveTwoPanelLayout extends RefCounted {
           element => {
             let panel = this.registerDisposer(
                 new PerspectivePanel(display, element, perspectiveViewerState));
-            panel.sliceViews.add(sliceView.addRef());
+            panel.sliceViews.set(sliceView.addRef(), false);
+            addUnconditionalSliceViews(viewer, panel, crossSections);
             registerRelatedLayouts(this, panel, ['3d', '4panel']);
           }),
     ]))(rootElement);
@@ -270,10 +331,12 @@ export class SinglePanelLayout extends RefCounted {
 }
 
 export class SinglePerspectiveLayout extends RefCounted {
-  constructor(public container: DataPanelLayoutContainer, public rootElement: HTMLElement, public viewer: ViewerUIState) {
+  constructor(
+      public container: DataPanelLayoutContainer, public rootElement: HTMLElement,
+      public viewer: ViewerUIState, crossSections: Borrowed<CrossSectionSpecificationMap>) {
     super();
     let perspectiveViewerState = {
-      ...getCommonPerspectiveViewerState(viewer),
+      ...getCommonPerspectiveViewerState(container),
       showSliceViews: new TrackableBoolean(false, false),
     };
 
@@ -281,6 +344,7 @@ export class SinglePerspectiveLayout extends RefCounted {
     L.box('row', [L.withFlex(1, element => {
             const panel = this.registerDisposer(
                 new PerspectivePanel(viewer.display, element, perspectiveViewerState));
+            addUnconditionalSliceViews(viewer, panel, crossSections);
             registerRelatedLayouts(this, panel, ['4panel']);
           })])(rootElement);
     viewer.display.onResize();
@@ -293,19 +357,21 @@ export class SinglePerspectiveLayout extends RefCounted {
 }
 
 export const LAYOUTS = new Map<string, {
-  factory: (container: DataPanelLayoutContainer, element: HTMLElement, viewer: ViewerUIState) =>
-      DataDisplayLayout
+  factory:
+      (container: DataPanelLayoutContainer, element: HTMLElement, viewer: ViewerUIState,
+       crossSections: Borrowed<CrossSectionSpecificationMap>) => DataDisplayLayout
 }>(
     [
       [
         '4panel', {
-          factory: (container, element, viewer) => new FourPanelLayout(container, element, viewer)
+          factory: (container, element, viewer, crossSections) =>
+              new FourPanelLayout(container, element, viewer, crossSections)
         }
       ],
       [
         '3d', {
-          factory: (container, element, viewer) =>
-              new SinglePerspectiveLayout(container, element, viewer)
+          factory: (container, element, viewer, crossSections) =>
+              new SinglePerspectiveLayout(container, element, viewer, crossSections)
         }
       ],
     ],
@@ -317,8 +383,8 @@ for (const axes of AXES_RELATIVE_ORIENTATION.keys()) {
         new SinglePanelLayout(container, element, viewer, <NamedAxes>axes)
   });
   LAYOUTS.set(`${axes}-3d`, {
-    factory: (container, element, viewer) =>
-        new SliceViewPerspectiveTwoPanelLayout(container, element, viewer, 'row', <NamedAxes>axes)
+    factory: (container, element, viewer, crossSections) => new SliceViewPerspectiveTwoPanelLayout(
+        container, element, viewer, 'row', <NamedAxes>axes, crossSections)
   });
 }
 
@@ -335,33 +401,187 @@ export function validateLayoutName(obj: any) {
   return <string>obj;
 }
 
+export class CrossSectionSpecification extends RefCounted implements Trackable {
+  width = new TrackableValue<number>(1000, verifyPositiveInt);
+  height = new TrackableValue<number>(1000, verifyPositiveInt);
+  position: LinkedSpatialPosition;
+  orientation: LinkedOrientationState;
+  zoom: LinkedZoomState;
+  navigationState: NavigationState;
+  changed = new NullarySignal();
+  constructor(parent: Borrowed<NavigationState>) {
+    super();
+    this.position = new LinkedSpatialPosition(parent.position.addRef());
+    this.position.changed.add(this.changed.dispatch);
+    this.orientation = new LinkedOrientationState(parent.pose.orientation.addRef());
+    this.orientation.changed.add(this.changed.dispatch);
+    this.width.changed.add(this.changed.dispatch);
+    this.height.changed.add(this.changed.dispatch);
+    this.zoom = new LinkedZoomState(parent.zoomFactor.addRef());
+    this.zoom.changed.add(this.changed.dispatch);
+    this.navigationState = this.registerDisposer(new NavigationState(
+        new Pose(this.position.value, this.orientation.value), this.zoom.value));
+  }
+
+  restoreState(obj: any) {
+    verifyObject(obj);
+    verifyObjectProperty(obj, 'width', x => x !== undefined && this.width.restoreState(x));
+    verifyObjectProperty(obj, 'height', x => x !== undefined && this.height.restoreState(x));
+    verifyObjectProperty(obj, 'position', x => x !== undefined && this.position.restoreState(x));
+    verifyObjectProperty(
+        obj, 'orientation', x => x !== undefined && this.orientation.restoreState(x));
+    verifyObjectProperty(obj, 'zoom', x => x !== undefined && this.zoom.restoreState(x));
+  }
+
+  reset() {
+    this.width.reset();
+    this.height.reset();
+    this.position.reset();
+    this.orientation.reset();
+    this.zoom.reset();
+  }
+
+  toJSON() {
+    return {
+      width: this.width,
+      height: this.height,
+      position: this.position,
+      orientation: this.orientation,
+      zoom: this.zoom,
+    };
+  }
+}
+
+export class CrossSectionSpecificationMap extends WatchableMap<string, CrossSectionSpecification> {
+  constructor(private parentNavigationState: Owned<NavigationState>) {
+    super(
+        v => this.registerDisposer(this.registerDisposer(v).changed.add(this.changed.dispatch)),
+        v => {
+          v.changed.remove(this.changed.dispatch);
+          v.dispose();
+        });
+    this.registerDisposer(parentNavigationState);
+  }
+
+  restoreState(obj: any) {
+    verifyObject(obj);
+    for (const key of Object.keys(obj)) {
+      const state = new CrossSectionSpecification(this.parentNavigationState);
+      try {
+        this.set(key, state.addRef());
+        state.restoreState(obj[key]);
+      } finally {
+        state.dispose();
+      }
+    }
+  }
+
+  reset() {
+    this.clear();
+  }
+
+  toJSON() {
+    const obj: {[key: string]: CrossSectionSpecification} = {};
+    for (const [k, v] of this) {
+      obj[k] = v;
+    }
+    return obj;
+  }
+}
+
+export class DataPanelLayoutSpecification extends RefCounted implements Trackable {
+  changed = new NullarySignal();
+  type: TrackableValue<string>;
+  crossSections: CrossSectionSpecificationMap;
+  orthographicProjection = new TrackableBoolean(false);
+
+  constructor(parentNavigationState: Owned<NavigationState>, defaultLayout: string) {
+    super();
+    this.type = new TrackableValue<string>(defaultLayout, validateLayoutName);
+    this.type.changed.add(this.changed.dispatch);
+    this.crossSections =
+        this.registerDisposer(new CrossSectionSpecificationMap(parentNavigationState));
+    this.crossSections.changed.add(this.changed.dispatch);
+    this.orthographicProjection.changed.add(this.changed.dispatch);
+    this.registerDisposer(parentNavigationState);
+  }
+
+  reset() {
+    this.crossSections.clear();
+    this.orthographicProjection.reset();
+    this.type.reset();
+  }
+
+  restoreState(obj: any) {
+    this.crossSections.clear();
+    this.orthographicProjection.reset();
+    if (typeof obj === 'string') {
+      this.type.restoreState(obj);
+    } else {
+      verifyObject(obj);
+      verifyObjectProperty(obj, 'type', x => this.type.restoreState(x));
+      verifyObjectProperty(
+          obj, 'orthographicProjection', x => this.orthographicProjection.restoreState(x));
+      verifyObjectProperty(
+          obj, 'crossSections', x => x !== undefined && this.crossSections.restoreState(x));
+    }
+  }
+
+  toJSON() {
+    const {type, crossSections, orthographicProjection} = this;
+    const orthographicProjectionJson = orthographicProjection.toJSON();
+    if (crossSections.size === 0 && orthographicProjectionJson === undefined) {
+      return type.toJSON();
+    }
+    return {
+      type: type.toJSON(),
+      crossSections,
+      orthographicProjection: orthographicProjectionJson,
+    };
+  }
+}
+
 export class DataPanelLayoutContainer extends RefCounted {
   element = document.createElement('div');
-  layoutName: TrackableValue<string>;
+  specification: Owned<DataPanelLayoutSpecification>;
+
   private layout: DataDisplayLayout|undefined;
 
-  get name () { return this.layoutName.value; }
-  set name(value: string) { this.layoutName.value = value; }
+  get name() {
+    return this.specification.type.value;
+  }
+  set name(value: string) {
+    this.specification.type.value = value;
+  }
 
-  constructor (public viewer: ViewerUIState, defaultLayout: string = 'xy') {
+  constructor(public viewer: ViewerUIState, defaultLayout: string = 'xy') {
     super();
+    this.specification = this.registerDisposer(
+        new DataPanelLayoutSpecification(this.viewer.navigationState.addRef(), defaultLayout));
     this.element.style.flex = '1';
-    this.layoutName = new TrackableValue<string>(defaultLayout, validateLayoutName);
     const scheduleUpdateLayout = this.registerCancellable(debounce(() => this.updateLayout(), 0));
-    this.layoutName.changed.add(scheduleUpdateLayout);
+    this.specification.type.changed.add(scheduleUpdateLayout);
+
+    registerActionListener(
+        this.element, 'toggle-orthographic-projection',
+        () => this.specification.orthographicProjection.toggle());
 
     // Ensure the layout is updated before drawing begins to avoid flicker.
     this.registerDisposer(
         this.viewer.display.updateStarted.add(() => scheduleUpdateLayout.flush()));
     scheduleUpdateLayout();
   }
-  get changed () { return this.layoutName.changed; }
-  toJSON () { return this.layoutName.toJSON(); }
-  restoreState(obj: any) {
-    this.layoutName.restoreState(obj);
+  get changed() {
+    return this.specification.changed;
   }
-  reset () {
-    this.layoutName.reset();
+  toJSON() {
+    return this.specification.toJSON();
+  }
+  restoreState(obj: any) {
+    this.specification.restoreState(obj);
+  }
+  reset() {
+    this.specification.reset();
   }
   private disposeLayout() {
     let {layout} = this;
@@ -372,7 +592,8 @@ export class DataPanelLayoutContainer extends RefCounted {
   }
   private updateLayout() {
     this.disposeLayout();
-    this.layout = getLayoutByName(this.layoutName.value).factory(this, this.element, this.viewer);
+    this.layout = getLayoutByName(this.name).factory(
+        this, this.element, this.viewer, this.specification.crossSections);
   }
   disposed() {
     this.disposeLayout();
