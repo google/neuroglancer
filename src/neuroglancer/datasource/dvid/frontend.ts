@@ -381,7 +381,14 @@ export class MultiscaleVolumeChunkSource implements GenericMultiscaleVolumeChunk
         volumeSourceOptions);
   }
 
-  getMeshSource() {
+  /**
+   * Meshes are not supported.
+   */
+  getMeshSource(): null {
+    return null;
+  }
+
+  getSkeletonSource() {
     return this.info.getSkeletonSource(this.chunkManager, {
       'baseUrls': this.baseUrls,
       'nodeKey': this.nodeKey,
