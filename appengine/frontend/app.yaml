@@ -21,12 +21,12 @@ handlers:
 - url: /$
   static_files: static/index.html
   upload: static/index.html
-  login: required
+  login: optional
   secure: always
   redirect_http_response_code: 301
 
 - url: /
   static_dir: static
-  login: required
+  login: optional
   secure: always
   redirect_http_response_code: 301

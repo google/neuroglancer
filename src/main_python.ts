@@ -166,7 +166,11 @@ window.addEventListener('DOMContentLoaded', () => {
 
   let serverConnection: ServerConnection;
   if (viewer.stateServer.value === '') {
-    serverConnection = new ServerConnection(undefined, privateState, configState);
+    if (window.location.hash) {
+      serverConnection = new ServerConnection(undefined, privateState, configState);
+    } else {
+      serverConnection = new ServerConnection(viewer.state, privateState, configState);
+    }
   }
   else {
     serverConnection = new ServerConnection(viewer.state, privateState, configState,
