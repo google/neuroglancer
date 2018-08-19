@@ -267,7 +267,7 @@ export class LayerGroupViewer extends RefCounted {
     element.classList.add('neuroglancer-layer-group-viewer');
     this.registerDisposer(new AutomaticallyFocusedElement(element));
 
-    this.layout = this.registerDisposer(new DataPanelLayoutContainer(this, 'xy'));
+    this.layout = this.registerDisposer(new DataPanelLayoutContainer(this, '4panel'));
     this.state.add('layout', this.layout);
     this.registerActionBindings();
     this.registerDisposer(this.layerManager.useDirectly());
