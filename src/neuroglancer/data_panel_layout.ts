@@ -534,7 +534,7 @@ export class DataPanelLayoutSpecification extends RefCounted implements Trackabl
       return type.toJSON();
     }
     return {
-      type: type.toJSON(),
+      type: type.value,
       crossSections,
       orthographicProjection: orthographicProjectionJson,
     };
@@ -554,7 +554,7 @@ export class DataPanelLayoutContainer extends RefCounted {
     this.specification.type.value = value;
   }
 
-  constructor(public viewer: ViewerUIState, defaultLayout: string = 'xy') {
+  constructor(public viewer: ViewerUIState, defaultLayout: string) {
     super();
     this.specification = this.registerDisposer(
         new DataPanelLayoutSpecification(this.viewer.navigationState.addRef(), defaultLayout));

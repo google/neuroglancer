@@ -203,7 +203,9 @@ class LayerWidget extends RefCounted {
 
     element.draggable = true;
     this.registerEventListener(element, 'dragstart', (event: DragEvent) => {
-      startLayerDrag(event, {manager: panel.manager, layers: [this.layer]});
+      startLayerDrag(
+          event,
+          {manager: panel.manager, layers: [this.layer], layoutSpec: panel.getLayoutSpecForDrag()});
       event.stopPropagation();
     });
 
@@ -257,7 +259,7 @@ export class LayerPanel extends RefCounted {
   constructor(
       public display: DisplayContext, public manager: LayerListSpecification,
       public viewerNavigationState: LinkedViewerNavigationState,
-      public selectedLayer: SelectedLayerState) {
+      public selectedLayer: SelectedLayerState, public getLayoutSpecForDrag: () => any) {
     super();
     this.registerDisposer(selectedLayer);
     const {element} = this;
