@@ -50,31 +50,31 @@ export class SegmentSelectionState extends RefCounted {
 
   set(value: Uint64|null|undefined) {
     if (value == null) {
-      if (this.hasSelectedSegment) {
-        this.hasSelectedSegment = false;
-        this.changed.dispatch();
-      }
-    } else {
-      let existingValue = this.selectedSegment;
-      if (!this.hasSelectedSegment || value.low !== existingValue.low ||
-          value.high !== existingValue.high) {
-        existingValue.low = value.low;
-        existingValue.high = value.high;
-        this.hasSelectedSegment = true;
-        this.changed.dispatch();
-      }
+      return;
+    }
+    let existingValue = this.selectedSegment;
+    if (!this.hasSelectedSegment || value.low !== existingValue.low ||
+        value.high !== existingValue.high) {
+      existingValue.low = value.low;
+      existingValue.high = value.high;
     }
   }
 
   setRaw(value: Uint64|null|undefined) {
     if (value == null) {
-      return;
-    }
-    let existingRawValue = this.rawSelectedSegment;
-    if (!this.hasSelectedSegment || value.low !== existingRawValue.low ||
-        value.high !== existingRawValue.high) {
-      existingRawValue.low = value.low;
-      existingRawValue.high = value.high;
+      if (this.hasSelectedSegment) {
+        this.hasSelectedSegment = false;
+        this.changed.dispatch();
+      }
+    } else {
+      let existingRawValue = this.rawSelectedSegment;
+      if (!this.hasSelectedSegment || value.low !== existingRawValue.low ||
+          value.high !== existingRawValue.high) {
+        existingRawValue.low = value.low;
+        existingRawValue.high = value.high;
+        this.hasSelectedSegment = true;
+        this.changed.dispatch();
+      }
     }
   }
 

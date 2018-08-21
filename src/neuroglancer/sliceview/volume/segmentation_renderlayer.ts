@@ -30,6 +30,7 @@ import {ShaderBuilder, ShaderProgram} from 'neuroglancer/webgl/shader';
 import {glsl_unnormalizeUint8} from 'neuroglancer/webgl/shader_lib';
 
 const selectedSegmentForShader = new Float32Array(8);
+const rawSelectedSegmentForShader = new Float32Array(8);
 
 export class EquivalencesHashMap {
   generation = Number.NaN;
@@ -137,6 +138,7 @@ uint64_t getMappedObjectId() {
     }
     this.segmentColorShaderManager.defineShader(builder);
     builder.addUniform('highp vec4', 'uSelectedSegment', 2);
+    builder.addUniform('highp vec4', 'uRawSelectedSegment', 2);
     builder.addUniform('highp float', 'uShowAllSegments');
     builder.addUniform('highp float', 'uSelectedAlpha');
     builder.addUniform('highp float', 'uNotSelectedAlpha');
@@ -144,6 +146,7 @@ uint64_t getMappedObjectId() {
     builder.addFragmentCode(glsl_unnormalizeUint8);
     let fragmentMain = `
   uint64_t value = getMappedObjectId();
+  uint64_t rawValue = getUint64DataValue();
 
   float alpha = uSelectedAlpha;
   float saturation = uSaturation;
@@ -161,11 +164,15 @@ uint64_t getMappedObjectId() {
   if (uSelectedSegment[0] == unnormalizeUint8(value.low) &&
       uSelectedSegment[1] == unnormalizeUint8(value.high)) {
     saturation = has ? 0.5 : 0.75;
+    if (uRawSelectedSegment[0] == unnormalizeUint8(rawValue.low) &&
+        uRawSelectedSegment[1] == unnormalizeUint8(rawValue.high)) {
+      saturation *= 1.0/4.0;
+    }
   } else if (!has) {
     alpha = uNotSelectedAlpha;
   }
   vec3 rgb = segmentColorHash(value);
-  `;
+`;
 
   // Override color for all highlighted segments.
     fragmentMain += `
@@ -192,6 +199,7 @@ uint64_t getMappedObjectId() {
     let {segmentSelectionState, rootSegments} = this.displayState;
     if (!segmentSelectionState.hasSelectedSegment) {
       selectedSegmentForShader.fill(0);
+      rawSelectedSegmentForShader.fill(0);
     } else {
       let seg = segmentSelectionState.selectedSegment;
       let low = seg.low, high = seg.high;
@@ -199,11 +207,18 @@ uint64_t getMappedObjectId() {
         selectedSegmentForShader[i] = ((low >> (8 * i)) & 0xFF);
         selectedSegmentForShader[4 + i] = ((high >> (8 * i)) & 0xFF);
       }
+      seg = segmentSelectionState.rawSelectedSegment;
+      low = seg.low, high = seg.high;
+      for (let i = 0; i < 4; ++i) {
+        rawSelectedSegmentForShader[i] = ((low >> (8 * i)) & 0xFF);
+        rawSelectedSegmentForShader[4 + i] = ((high >> (8 * i)) & 0xFF);
+      }
     }
     gl.uniform1f(shader.uniform('uSelectedAlpha'), this.displayState.selectedAlpha.value);
     gl.uniform1f(shader.uniform('uSaturation'), this.displayState.saturation.value);
     gl.uniform1f(shader.uniform('uNotSelectedAlpha'), this.displayState.notSelectedAlpha.value);
     gl.uniform4fv(shader.uniform('uSelectedSegment'), selectedSegmentForShader);
+    gl.uniform4fv(shader.uniform('uRawSelectedSegment'), rawSelectedSegmentForShader);
     gl.uniform1f(shader.uniform('uShowAllSegments'), rootSegments.hashTable.size ? 0.0 : 1.0);
     this.hashTableManager.enable(gl, shader, this.gpuHashTable);
     this.hashTableManagerHighlighted.enable(gl, shader, this.gpuHashTableHighlighted);
