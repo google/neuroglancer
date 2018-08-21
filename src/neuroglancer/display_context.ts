@@ -42,8 +42,8 @@ export abstract class RenderedPanel extends RefCounted {
     let element = this.element;
     const clientRect = element.getBoundingClientRect();
     const canvasRect = this.context.canvasRect!;
-    const scaleX = element.clientWidth / clientRect.width;
-    const scaleY = element.clientHeight / clientRect.height;
+    const scaleX = canvasRect.width / this.context.canvas.width;
+    const scaleY = canvasRect.height / this.context.canvas.height;
     let left = (element.clientLeft + clientRect.left - canvasRect.left) * scaleX;
     let width = element.clientWidth;
     let top = (clientRect.top - canvasRect.top + element.clientTop) * scaleY;
