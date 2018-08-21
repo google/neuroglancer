@@ -531,7 +531,7 @@ export class DataPanelLayoutSpecification extends RefCounted implements Trackabl
     const {type, crossSections, orthographicProjection} = this;
     const orthographicProjectionJson = orthographicProjection.toJSON();
     if (crossSections.size === 0 && orthographicProjectionJson === undefined) {
-      return type.toJSON();
+      return type.value;
     }
     return {
       type: type.value,
