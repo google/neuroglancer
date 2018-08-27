@@ -365,6 +365,25 @@ export class SegmentationUserLayer extends Base {
         this.displayState.segmentEquivalences.clear();
         break;
       }
+      case 'merge-selected': {
+        if (this.chunkedGraphLayer) {
+          StatusMessage.showTemporaryMessage(`Graph-enabled segmentation layers only support 2-point-merge.`, 3000);
+        } else {
+          const firstSeg = this.displayState.rootSegments.hashTable.keys().next().value;
+          for (const seg of this.displayState.rootSegments) {
+            this.displayState.segmentEquivalences.link(firstSeg, seg);
+          }
+        }
+        break;
+      }
+      case 'cut-selected': {
+        if (this.chunkedGraphLayer) {
+          StatusMessage.showTemporaryMessage(`Graph-enabled segmentation layers only support 2-point-split.`, 3000);
+        } else {
+          this.displayState.segmentEquivalences.clear();
+        }
+        break;
+      }
       case 'select': {
         this.selectSegment();
         break;
