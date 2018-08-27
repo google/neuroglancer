@@ -365,7 +365,7 @@ export class SliceViewBase extends SharedObject {
       scaleIndex = numSources - 1;
       while (true) {
         const transformedSource = pickBestAlternativeSource(zAxis, transformedSources[scaleIndex]);
-        addVisibleSource(transformedSource, scaleIndex);
+        addVisibleSource(transformedSource, (scaleIndex + 1) / numSources);
         if (scaleIndex === 0 || !canImproveOnVoxelSize(transformedSource.source.spec.voxelSize)) {
           break;
         }
