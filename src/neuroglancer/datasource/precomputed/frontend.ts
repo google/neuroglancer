@@ -81,26 +81,37 @@ class ScaleInfo {
   }
 }
 
+class GraphInfo {
+  rootUri: string;
+  chunkSize: vec3;
+  constructor(obj: any) {
+    verifyObject(obj);
+    this.chunkSize = verifyObjectProperty(
+      obj, 'chunk_size', x => parseFixedLengthArray(vec3.create(), x, verifyPositiveInt));
+    this.rootUri = verifyObjectProperty(obj, 'root_uri', verifyString);
+  }
+}
+
 export class MultiscaleVolumeChunkSource implements GenericMultiscaleVolumeChunkSource {
   dataType: DataType;
   numChannels: number;
   volumeType: VolumeType;
   mesh: string|undefined;
   skeleton: string|undefined;
-  chunkedGraph: string|undefined;
+  graph: GraphInfo;
   scales: ScaleInfo[];
 
   getChunkedGraphUrl() {
-    let {chunkedGraph} = this;
-    if (chunkedGraph === undefined) {
+    let {graph} = this;
+    if (graph === undefined) {
       return null;
     }
-    return chunkedGraph;
+    return graph.rootUri;
   }
 
   getChunkedGraphSources(chunkedGraphSourceOptions: VolumeSourceOptions, rootSegments: Uint64Set) {
-    let {chunkedGraph} = this;
-    if (chunkedGraph === undefined) {
+    let {graph} = this;
+    if (graph === undefined) {
       return null;
     }
 
@@ -113,7 +124,7 @@ export class MultiscaleVolumeChunkSource implements GenericMultiscaleVolumeChunk
           vec3.multiply(vec3.create(), this.scales[0].resolution, this.scales[0].voxelOffset)),
       upperVoxelBound: this.scales[0].size,
       volumeType: VolumeType.CHUNKEDGRAPHLEAVES,
-      chunkDataSizes: [vec3.fromValues(512,512,64)],
+      chunkDataSizes: [graph.chunkSize],
       baseVoxelOffset: this.scales[0].voxelOffset,
       volumeSourceOptions: chunkedGraphSourceOptions,
     })[0];
@@ -122,7 +133,7 @@ export class MultiscaleVolumeChunkSource implements GenericMultiscaleVolumeChunk
       spec,
       rootSegments,
       parameters: {
-        'baseUrls': chunkedGraph,
+        'baseUrls': graph.rootUri,
         'path': '/1.0/segment',
       }
     })]];
@@ -154,7 +165,7 @@ export class MultiscaleVolumeChunkSource implements GenericMultiscaleVolumeChunk
     this.volumeType = verifyObjectProperty(obj, 'type', x => verifyEnumString(x, VolumeType));
     this.mesh = verifyObjectProperty(obj, 'mesh', verifyOptionalString);
     this.skeleton = verifyObjectProperty(obj, 'skeletons', verifyOptionalString);
-    this.chunkedGraph = verifyObjectProperty(obj, 'chunkedGraph', verifyOptionalString);
+    this.graph = verifyObjectProperty(obj, 'graph', x => x === undefined ? x : new GraphInfo(x));
     this.scales = verifyObjectProperty(obj, 'scales', x => parseArray(x, y => new ScaleInfo(y)));
   }
 
