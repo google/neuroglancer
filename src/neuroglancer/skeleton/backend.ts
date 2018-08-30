@@ -15,7 +15,7 @@
  */
 
 import {Chunk, ChunkSource} from 'neuroglancer/chunk_manager/backend';
-import {ChunkedGraphLayer} from 'neuroglancer/chunked_graph/backend';
+import {ChunkedGraphLayer} from 'neuroglancer/sliceview/chunked_graph/backend';
 import {decodeVertexPositionsAndIndices} from 'neuroglancer/mesh/backend';
 import {SegmentationLayerSharedObjectCounterpart} from 'neuroglancer/segmentation_display_state/backend';
 import {forEachRootSegment, getObjectKey} from 'neuroglancer/segmentation_display_state/base';

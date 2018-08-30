@@ -36,12 +36,6 @@ export class Uint64MapEntry {
   }
 }
 
-export interface SegmentSelection {
-  segmentId: Uint64;
-  rootId: Uint64;
-  position: number[];
-}
-
 export class SegmentSelectionState extends RefCounted {
   selectedSegment = new Uint64();
   rawSelectedSegment = new Uint64();

@@ -64,7 +64,6 @@ const DEFAULT_SUPPORTED_LAYERS = exports.DEFAULT_SUPPORTED_LAYERS = [
   'neuroglancer/segmentation_user_layer',
   'neuroglancer/single_mesh_user_layer',
   'neuroglancer/annotation/user_layer',
-  // 'neuroglancer/synapse/user_layer',
 ];
 
 /**
@@ -310,7 +309,6 @@ function getViewerConfig(options) {
   let chunkWorkerModules = [
     'neuroglancer/worker_rpc_context',
     'neuroglancer/chunk_manager/backend',
-    'neuroglancer/chunked_graph/backend',
     'neuroglancer/sliceview/backend',
     'neuroglancer/perspective_view/backend',
     'neuroglancer/annotation/backend',

@@ -16,12 +16,13 @@
 
 import {AnnotationSource, makeDataBoundsBoundingBox} from 'neuroglancer/annotation';
 import {ChunkManager, WithParameters} from 'neuroglancer/chunk_manager/frontend';
-import {ChunkedGraphChunkSource} from 'neuroglancer/chunked_graph/frontend';
 import {DataSource} from 'neuroglancer/datasource';
 import {ChunkedGraphSourceParameters, MeshSourceParameters, SkeletonSourceParameters, VolumeChunkEncoding, VolumeChunkSourceParameters} from 'neuroglancer/datasource/precomputed/base';
 import {MeshSource} from 'neuroglancer/mesh/frontend';
 import {VertexAttributeInfo} from 'neuroglancer/skeleton/base';
 import {SkeletonSource} from 'neuroglancer/skeleton/frontend';
+import {ChunkedGraphChunkSpecification, ChunkedGraphSourceOptions} from 'neuroglancer/sliceview/chunked_graph/base';
+import {ChunkedGraphChunkSource} from 'neuroglancer/sliceview/chunked_graph/frontend';
 import {DataType, VolumeChunkSpecification, VolumeSourceOptions, VolumeType} from 'neuroglancer/sliceview/volume/base';
 import {MultiscaleVolumeChunkSource as GenericMultiscaleVolumeChunkSource, VolumeChunkSource} from 'neuroglancer/sliceview/volume/frontend';
 import {Uint64Set} from 'neuroglancer/uint64_set';
@@ -32,7 +33,7 @@ import {parseArray, parseFixedLengthArray, parseIntVec, verifyEnumString, verify
 class PrecomputedVolumeChunkSource extends
 (WithParameters(VolumeChunkSource, VolumeChunkSourceParameters)) {}
 
-class PrecomputedChunkedGraphSource extends
+class PrecomputedChunkedGraphChunkSource extends
 (WithParameters(ChunkedGraphChunkSource, ChunkedGraphSourceParameters)) {}
 
 class PrecomputedMeshSource extends
@@ -98,7 +99,7 @@ export class MultiscaleVolumeChunkSource implements GenericMultiscaleVolumeChunk
   volumeType: VolumeType;
   mesh: string|undefined;
   skeleton: string|undefined;
-  graph: GraphInfo;
+  graph: GraphInfo|undefined;
   scales: ScaleInfo[];
 
   getChunkedGraphUrl() {
@@ -109,27 +110,23 @@ export class MultiscaleVolumeChunkSource implements GenericMultiscaleVolumeChunk
     return graph.rootUri;
   }
 
-  getChunkedGraphSources(chunkedGraphSourceOptions: VolumeSourceOptions, rootSegments: Uint64Set) {
+  getChunkedGraphSources(options: ChunkedGraphSourceOptions, rootSegments: Uint64Set) {
     let {graph} = this;
     if (graph === undefined) {
       return null;
     }
-
-    const spec = VolumeChunkSpecification.getDefaults({
+    const spec = ChunkedGraphChunkSpecification.getDefaults({
       voxelSize: this.scales[0].resolution,
-      dataType: this.dataType,
-      numChannels: 1,
       transform: mat4.fromTranslation(
           mat4.create(),
           vec3.multiply(vec3.create(), this.scales[0].resolution, this.scales[0].voxelOffset)),
       upperVoxelBound: this.scales[0].size,
-      volumeType: VolumeType.CHUNKEDGRAPHLEAVES,
       chunkDataSizes: [graph.chunkSize],
       baseVoxelOffset: this.scales[0].voxelOffset,
-      volumeSourceOptions: chunkedGraphSourceOptions,
-    })[0];
+      chunkedGraphSourceOptions: options,
+    });
 
-    return [[this.chunkManager.getChunkSource(PrecomputedChunkedGraphSource, {
+    return [[this.chunkManager.getChunkSource(PrecomputedChunkedGraphChunkSource, {
       spec,
       rootSegments,
       parameters: {

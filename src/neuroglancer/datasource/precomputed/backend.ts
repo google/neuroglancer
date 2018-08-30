@@ -14,7 +14,6 @@
  * limitations under the License.
  */
 
-import {ChunkedGraphChunk, decodeSupervoxelArray, ChunkedGraphChunkSource} from 'neuroglancer/chunked_graph/backend';
 import {WithParameters} from 'neuroglancer/chunk_manager/backend';
 import {MeshSourceParameters, SkeletonSourceParameters, VolumeChunkEncoding, VolumeChunkSourceParameters, ChunkedGraphSourceParameters} from 'neuroglancer/datasource/precomputed/base';
 import {decodeJsonManifestChunk, decodeTriangleVertexPositionsAndIndices, FragmentChunk, ManifestChunk, MeshSource} from 'neuroglancer/mesh/backend';
@@ -24,6 +23,7 @@ import {decodeJpegChunk} from 'neuroglancer/sliceview/backend_chunk_decoders/jpe
 import {decodeRawChunk} from 'neuroglancer/sliceview/backend_chunk_decoders/raw';
 import {decodeSkeletonVertexPositionsAndIndices, SkeletonChunk, SkeletonSource} from 'neuroglancer/skeleton/backend';
 import {VertexAttributeInfo} from 'neuroglancer/skeleton/base';
+import {ChunkedGraphChunk, decodeSupervoxelArray, ChunkedGraphChunkSource} from 'neuroglancer/sliceview/chunked_graph/backend';
 import {VolumeChunk, VolumeChunkSource} from 'neuroglancer/sliceview/volume/backend';
 import {CancellationToken} from 'neuroglancer/util/cancellation';
 import {convertEndian16, convertEndian32, Endianness} from 'neuroglancer/util/endian';
@@ -62,7 +62,7 @@ export function decodeChunkedGraphChunk(chunk: ChunkedGraphChunk, rootObjectKey:
   return decodeSupervoxelArray(chunk, rootObjectKey, response);
 }
 
-@registerSharedObject() export class PrecomputedChunkedGraphSource extends
+@registerSharedObject() export class PrecomputedChunkedGraphChunkSource extends
 (WithParameters(ChunkedGraphChunkSource, ChunkedGraphSourceParameters)) {
   download(chunk: ChunkedGraphChunk, cancellationToken: CancellationToken) {
     let {parameters} = this;

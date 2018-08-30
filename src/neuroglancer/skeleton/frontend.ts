@@ -16,7 +16,7 @@
 
 import {ChunkState} from 'neuroglancer/chunk_manager/base';
 import {Chunk, ChunkManager, ChunkSource} from 'neuroglancer/chunk_manager/frontend';
-import {ChunkedGraphLayer} from 'neuroglancer/chunked_graph/frontend';
+import {ChunkedGraphLayer} from 'neuroglancer/sliceview/chunked_graph/frontend';
 import {RenderLayer} from 'neuroglancer/layer';
 import {VoxelSize} from 'neuroglancer/navigation_state';
 import {PerspectiveViewRenderContext, PerspectiveViewRenderLayer} from 'neuroglancer/perspective_view/render_layer';

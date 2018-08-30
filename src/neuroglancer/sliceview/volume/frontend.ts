@@ -16,11 +16,11 @@
 
 import {AnnotationSource} from 'neuroglancer/annotation';
 import {ChunkManager} from 'neuroglancer/chunk_manager/frontend';
-import {ChunkedGraphChunkSource} from 'neuroglancer/chunked_graph/frontend';
 import {MeshSource} from 'neuroglancer/mesh/frontend';
 import {SkeletonSource} from 'neuroglancer/skeleton/frontend';
 import {DataType} from 'neuroglancer/sliceview/base';
 import {MultiscaleSliceViewChunkSource, SliceViewChunk, SliceViewChunkSource} from 'neuroglancer/sliceview/frontend';
+import {ChunkedGraphChunkSource} from 'neuroglancer/sliceview/chunked_graph/frontend';
 import {VolumeChunkSource as VolumeChunkSourceInterface, VolumeChunkSpecification, VolumeSourceOptions, VolumeType} from 'neuroglancer/sliceview/volume/base';
 import {Uint64Set} from 'neuroglancer/uint64_set';
 import {Disposable} from 'neuroglancer/util/disposable';

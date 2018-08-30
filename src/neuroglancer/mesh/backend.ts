@@ -17,7 +17,7 @@
 import debounce from 'lodash/debounce';
 import {Chunk, ChunkSource} from 'neuroglancer/chunk_manager/backend';
 import {ChunkPriorityTier, ChunkState} from 'neuroglancer/chunk_manager/base';
-import {ChunkedGraphLayer} from 'neuroglancer/chunked_graph/backend';
+import {ChunkedGraphLayer} from 'neuroglancer/sliceview/chunked_graph/backend';
 import {FRAGMENT_SOURCE_RPC_ID, MESH_LAYER_RPC_ID} from 'neuroglancer/mesh/base';
 import {SegmentationLayerSharedObjectCounterpart} from 'neuroglancer/segmentation_display_state/backend';
 import {getObjectKey} from 'neuroglancer/segmentation_display_state/base';

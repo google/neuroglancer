@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2017 The Neuroglancer Authors
+ * Copyright 2018 The Neuroglancer Authors
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
@@ -15,32 +15,30 @@
  */
 
 import {ChunkManager} from 'neuroglancer/chunk_manager/frontend';
-import {CHUNKED_GRAPH_LAYER_RPC_ID} from 'neuroglancer/chunked_graph/base';
-import {SegmentSelection, SegmentationDisplayState} from 'neuroglancer/segmentation_display_state/frontend';
-import {DataType} from 'neuroglancer/sliceview/base';
-import {MultiscaleSliceViewChunkSource} from 'neuroglancer/sliceview/frontend';
+import {SegmentationDisplayState} from 'neuroglancer/segmentation_display_state/frontend';
+import {SliceViewChunkSource} from 'neuroglancer/sliceview/frontend';
 import {RenderLayer as GenericSliceViewRenderLayer} from 'neuroglancer/sliceview/renderlayer';
+import {ChunkedGraphChunkSource as ChunkedGraphChunkSourceInterface, ChunkedGraphChunkSpecification, CHUNKED_GRAPH_LAYER_RPC_ID} from 'neuroglancer/sliceview/chunked_graph/base';
 import {Uint64Set} from 'neuroglancer/uint64_set';
-import {openHttpRequest, sendHttpJsonPostRequest, HttpError} from 'neuroglancer/util/http_request';
+import {sendHttpJsonPostRequest, openHttpRequest, HttpError} from 'neuroglancer/util/http_request';
 import {Uint64} from 'neuroglancer/util/uint64';
 import {RPC} from 'neuroglancer/worker_rpc';
-import {VolumeChunkSource as VolumeChunkSourceInterface, VolumeChunkSpecification, VolumeSourceOptions} from 'neuroglancer/sliceview/volume/base';
-import {VolumeChunkSource} from 'neuroglancer/sliceview/volume/frontend';
 
 export const GRAPH_SERVER_NOT_SPECIFIED = Symbol('Graph Server Not Specified.');
 
 export interface SegmentSelection {
-  segment: Uint64;
-  root: Uint64;
+  segmentId: Uint64;
+  rootId: Uint64;
   position: number[];
 }
 
-export class ChunkedGraphChunkSource extends VolumeChunkSource implements
-    VolumeChunkSourceInterface {
+export class ChunkedGraphChunkSource extends SliceViewChunkSource implements
+    ChunkedGraphChunkSourceInterface {
   rootSegments: Uint64Set;
+  spec: ChunkedGraphChunkSpecification;
 
   constructor(chunkManager: ChunkManager, options: {
-      spec: VolumeChunkSpecification, rootSegments: Uint64Set}) {
+      spec: ChunkedGraphChunkSpecification, rootSegments: Uint64Set}) {
     super(chunkManager, options);
     this.rootSegments = options.rootSegments;
   }
@@ -49,12 +47,6 @@ export class ChunkedGraphChunkSource extends VolumeChunkSource implements
     options['rootSegments'] = this.rootSegments.rpcId;
     super.initializeCounterpart(rpc, options);
   }
-}
-
-export interface MultiscaleChunkedGraphSource extends MultiscaleSliceViewChunkSource {
-  getSources: (options: VolumeSourceOptions) => VolumeChunkSource[][];
-
-  dataType: DataType;
 }
 
 export class ChunkedGraphLayer extends GenericSliceViewRenderLayer {
