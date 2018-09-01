@@ -102,6 +102,7 @@ export function getDefaultSliceViewPanelBindings() {
         {
           'at:mousedown0': {action: 'translate-via-mouse-drag', stopPropagation: true},
           'at:shift+mousedown0': {action: 'rotate-via-mouse-drag', stopPropagation: true},
+          'at:control+mousedown2': {action: 'translate-annoation-via-mouse-drag', stopPropagation: true}
         },
         {
           parents: [[getDefaultRenderedDataPanelBindings(), Number.NEGATIVE_INFINITY]]

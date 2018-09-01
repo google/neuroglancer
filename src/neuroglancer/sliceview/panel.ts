@@ -28,6 +28,8 @@ import {startRelativeMouseDrag} from 'neuroglancer/util/mouse_drag';
 import {FramebufferConfiguration, makeTextureBuffers, OffscreenCopyHelper} from 'neuroglancer/webgl/offscreen';
 import {ShaderBuilder, ShaderModule} from 'neuroglancer/webgl/shader';
 import {ScaleBarTexture, TrackableScaleBarOptions} from 'neuroglancer/widget/scale_bar';
+import {Annotation, Point} from 'neuroglancer/annotation';
+
 
 export interface SliceViewerState extends RenderedDataViewerState {
   showScaleBar: TrackableBoolean;
@@ -141,6 +143,32 @@ export class SliceViewPanel extends RenderedDataPanel {
       }
     });
 
+    registerActionListener(element, 'translate-annoation-via-mouse-drag', (e: ActionEvent<MouseEvent>) => {
+      const {mouseState} = this.viewer;
+      const selectedAnnotationId = mouseState.pickedAnnotationId;
+      const annotationLayer = mouseState.pickedAnnotationLayer;
+      if (typeof(annotationLayer) != 'undefined'){
+        if (typeof(selectedAnnotationId) != 'undefined'){
+          if (mouseState.updateUnconditionally()) {
+            startRelativeMouseDrag(e.detail, (_event, deltaX, deltaY) => {
+                  let annotationRef = annotationLayer.source.getReference(selectedAnnotationId)!;
+                  let point = <Point>(<Annotation>annotationRef.value)!;
+            
+                  this.viewer.navigationState.voxelSize.spatialFromVoxel(point.point,point.point)
+                  vec3.transformMat4(point.point, point.point, this.sliceView.dataToViewport)
+                  vec3.set(point.point, point.point[0]-deltaX, point.point[1]-deltaY, point.point[2]);
+                  vec3.transformMat4(point.point, point.point, this.sliceView.viewportToData);
+                  this.viewer.navigationState.voxelSize.voxelFromSpatial(point.point,point.point)
+
+                  annotationRef.changed.dispatch();
+                  annotationLayer.source.changed.dispatch();
+
+            });
+         }
+       }
+    }
+    });
+  
     registerActionListener(element, 'rotate-via-mouse-drag', (e: ActionEvent<MouseEvent>) => {
       const {mouseState} = this.viewer;
       if (mouseState.updateUnconditionally()) {
