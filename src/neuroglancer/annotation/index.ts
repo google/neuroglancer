@@ -24,7 +24,7 @@ import {parseArray, verify3dScale, verify3dVec, verifyEnumString, verifyObject, 
 import {getRandomHexString} from 'neuroglancer/util/random';
 import {NullarySignal} from 'neuroglancer/util/signal';
 import {Uint64} from 'neuroglancer/util/uint64';
-
+import {VoxelSize} from 'neuroglancer/navigation_state';
 export type AnnotationId = string;
 
 export class AnnotationReference extends RefCounted {
@@ -99,6 +99,7 @@ export interface AnnotationTypeHandler<T extends Annotation> {
   toJSON: (annotation: T) => any;
   restoreState: (annotation: T, obj: any) => void;
   serializedBytes: number;
+  getClosestPoint: (annotation: T, voxelSize?: VoxelSize, pt?: vec3) => vec3;
   serializer:
       (buffer: ArrayBuffer, offset: number,
        numAnnotations: number) => ((annotation: T, index: number) => void);
@@ -123,6 +124,18 @@ typeHandlers.set(AnnotationType.LINE, {
     annotation.pointB = verifyObjectProperty(obj, 'pointB', verify3dVec);
   },
   serializedBytes: 6 * 4,
+  getClosestPoint: (annotation: Line, voxelSize: VoxelSize, pt: vec3) => {
+    let pA = vec3.create()
+    let pB = vec3.create()
+    voxelSize.spatialFromVoxel(pA, annotation.pointA)
+    voxelSize.spatialFromVoxel(pB, annotation.pointB)
+    if (vec3.sqrDist(pt, pA)<vec3.sqrDist(pt, pB)){
+      return annotation.pointA
+    }
+    else{
+      return annotation.pointB
+    }
+  },
   serializer: (buffer: ArrayBuffer, offset: number, numAnnotations: number) => {
     const coordinates = new Float32Array(buffer, offset, numAnnotations * 6);
     return (annotation: Line, index: number) => {
@@ -150,6 +163,9 @@ typeHandlers.set(AnnotationType.POINT, {
     annotation.point = verifyObjectProperty(obj, 'point', verify3dVec);
   },
   serializedBytes: 3 * 4,
+  getClosestPoint: (annotation: Point) => {
+    return annotation.point
+  },
   serializer: (buffer: ArrayBuffer, offset: number, numAnnotations: number) => {
     const coordinates = new Float32Array(buffer, offset, numAnnotations * 3);
     return (annotation: Point, index: number) => {
@@ -176,6 +192,18 @@ typeHandlers.set(AnnotationType.AXIS_ALIGNED_BOUNDING_BOX, {
     annotation.pointB = verifyObjectProperty(obj, 'pointB', verify3dVec);
   },
   serializedBytes: 6 * 4,
+  getClosestPoint: (annotation: AxisAlignedBoundingBox, voxelSize: VoxelSize, pt: vec3) => {
+    let pA = vec3.create()
+    let pB = vec3.create()
+    voxelSize.spatialFromVoxel(pA, annotation.pointA)
+    voxelSize.spatialFromVoxel(pB, annotation.pointB)
+    if (vec3.sqrDist(pt, pA)<vec3.sqrDist(pt, pB)){
+      return annotation.pointA
+    }
+    else{
+      return annotation.pointB
+    }
+  },
   serializer: (buffer: ArrayBuffer, offset: number, numAnnotations: number) => {
     const coordinates = new Float32Array(buffer, offset, numAnnotations * 6);
     return (annotation: AxisAlignedBoundingBox, index: number) => {
@@ -205,6 +233,9 @@ typeHandlers.set(AnnotationType.ELLIPSOID, {
     annotation.radii = verifyObjectProperty(obj, 'radii', verify3dScale);
   },
   serializedBytes: 6 * 4,
+  getClosestPoint: (annotation: Ellipsoid) => {
+    return annotation.center
+  },
   serializer: (buffer: ArrayBuffer, offset: number, numAnnotations: number) => {
     const coordinates = new Float32Array(buffer, offset, numAnnotations * 6);
     return (annotation: Ellipsoid, index: number) => {
