@@ -36,6 +36,7 @@ import {ShaderBuilder} from 'neuroglancer/webgl/shader';
 import {glsl_packFloat01ToFixedPoint, unpackFloat01FromFixedPoint} from 'neuroglancer/webgl/shader_lib';
 import {ScaleBarOptions, ScaleBarTexture} from 'neuroglancer/widget/scale_bar';
 import {RPC, SharedObject} from 'neuroglancer/worker_rpc';
+import {Annotation, getAnnotationTypeHandler} from 'neuroglancer/annotation';
 
 require('neuroglancer/noselect.css');
 require('./panel.css');
@@ -229,6 +230,39 @@ export class PerspectivePanel extends RenderedDataPanel {
       });
     });
 
+    registerActionListener(element, 'translate-annoation-via-mouse-drag', (e: ActionEvent<MouseEvent>) => {
+      const {mouseState} = this.viewer;
+      const selectedAnnotationId = mouseState.pickedAnnotationId;
+      const annotationLayer = mouseState.pickedAnnotationLayer;
+
+      let voxelSize = this.viewer.navigationState.voxelSize
+      if (typeof(annotationLayer) != 'undefined'){
+        if (typeof(selectedAnnotationId) != 'undefined'){
+          
+          let annotationRef = annotationLayer.source.getReference(selectedAnnotationId)!;
+          let ann = <Annotation>annotationRef.value
+          
+          const handler = getAnnotationTypeHandler(ann.type)
+          let point = handler.getClosestPoint(ann, voxelSize, mouseState.position)
+
+          if (mouseState.updateUnconditionally()) {
+            startRelativeMouseDrag(e.detail, (_event, deltaX, deltaY) => {
+              const temp = tempVec3;
+              const {projectionMat} = this;
+              const {width, height} = this;
+      
+              voxelSize.spatialFromVoxel(point,point)
+              vec3.transformMat4(temp, point, projectionMat);
+              temp[0] -= 2 * deltaX / width;
+              temp[1] -= -2 * deltaY / height;
+              vec3.transformMat4(point, temp, this.inverseProjectionMat);
+              voxelSize.voxelFromSpatial(point,point)
+              annotationLayer.source.changed.dispatch();
+            });
+         }
+       }
+    }
+    });
     if (viewer.showSliceViewsCheckbox) {
       let showSliceViewsCheckbox =
           this.registerDisposer(new TrackableBooleanCheckbox(viewer.showSliceViews));
