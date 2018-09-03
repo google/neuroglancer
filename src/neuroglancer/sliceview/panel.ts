@@ -157,15 +157,15 @@ export class SliceViewPanel extends RenderedDataPanel {
           let ann = <Annotation>annotationRef.value
           
           const handler = getAnnotationTypeHandler(ann.type)
-          let point = handler.getClosestPoint(ann, voxelSize, mouseState.position)
+          let point = handler.getClosestPoint(ann, voxelSize, mouseState.position);
 
           if (mouseState.updateUnconditionally()) {
             startRelativeMouseDrag(e.detail, (_event, deltaX, deltaY) => {
-              voxelSize.spatialFromVoxel(point,point)
-              vec3.transformMat4(point, point, this.sliceView.dataToViewport)
+              voxelSize.spatialFromVoxel(point,point);
+              vec3.transformMat4(point, point, this.sliceView.dataToViewport);
               vec3.set(point, point[0]-deltaX, point[1]-deltaY, point[2]);
               vec3.transformMat4(point, point, this.sliceView.viewportToData);
-              voxelSize.voxelFromSpatial(point,point)
+              voxelSize.voxelFromSpatial(point,point);
               annotationLayer.source.changed.dispatch();
             });
          }
