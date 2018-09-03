@@ -33,7 +33,6 @@ export class FragmentShaderTester extends RefCounted {
     super();
     let {builder} = this;
     this.offscreenFramebuffer = new FramebufferConfiguration(this.gl, {colorBuffers});
-    builder.addFragmentExtension('GL_EXT_draw_buffers');
     builder.addAttribute('vec4', 'shader_testing_aVertexPosition');
     builder.setVertexMain(`gl_Position = shader_testing_aVertexPosition;`);
     builder.addFragmentCode(glsl_debugFunctions);

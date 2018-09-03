@@ -102,7 +102,7 @@ void emitTransparent() {
     return shader;
   }
 
-  setGLBlendMode(gl: WebGLRenderingContext, renderLayerNum: number) {
+  setGLBlendMode(gl: WebGL2RenderingContext, renderLayerNum: number) {
     let blendModeValue = verifyEnumString(this.blendMode.value, BLEND_MODES);
     if (blendModeValue === BLEND_MODES.ADDITIVE || renderLayerNum > 0) {
       gl.enable(gl.BLEND);

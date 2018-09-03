@@ -146,11 +146,11 @@ abstract class RenderHelper extends AnnotationRenderHelper {
           aUpper, /*components=*/3, /*attributeType=*/GL_FLOAT, /*normalized=*/false,
           /*stride=*/4 * 6, /*offset=*/context.bufferOffset + 4 * 3);
 
-      gl.ANGLE_instanced_arrays.vertexAttribDivisorANGLE(aLower, 1);
-      gl.ANGLE_instanced_arrays.vertexAttribDivisorANGLE(aUpper, 1);
+      gl.vertexAttribDivisor(aLower, 1);
+      gl.vertexAttribDivisor(aUpper, 1);
       callback();
-      gl.ANGLE_instanced_arrays.vertexAttribDivisorANGLE(aLower, 0);
-      gl.ANGLE_instanced_arrays.vertexAttribDivisorANGLE(aUpper, 0);
+      gl.vertexAttribDivisor(aLower, 0);
+      gl.vertexAttribDivisor(aUpper, 0);
       gl.disableVertexAttribArray(aLower);
       gl.disableVertexAttribArray(aUpper);
     });
@@ -337,7 +337,7 @@ emitAnnotation(vec4(vColor.rgb, uFillOpacity));
 
       if (fillOpacity) {
         gl.uniform1f(shader.uniform('uFillOpacity'), fillOpacity);
-        gl.ANGLE_instanced_arrays.drawArraysInstancedANGLE(GL_TRIANGLE_FAN, 0, 6, context.count);
+        gl.drawArraysInstanced(GL_TRIANGLE_FAN, 0, 6, context.count);
       } else {
         const lineWidth = context.renderContext.emitColor ? 1 : 5;
         this.lineShader.draw(shader, context.renderContext, lineWidth, 1.0, context.count);

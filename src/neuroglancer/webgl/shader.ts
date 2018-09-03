@@ -89,7 +89,7 @@ export class ShaderLinkError extends Error {
   }
 }
 
-export function getShader(gl: WebGLRenderingContext, source: string, shaderType: ShaderType) {
+export function getShader(gl: WebGL2RenderingContext, source: string, shaderType: ShaderType) {
   var shader = gl.createShader(shaderType);
   gl.shaderSource(shader, source);
   gl.compileShader(shader);
@@ -248,12 +248,14 @@ export class ShaderBuilder {
   private nextTextureUnit = 0;
   private uniformsCode = '';
   private attributesCode = '';
-  private varyingsCode = '';
+  private varyingsCodeVS = '';
+  private varyingsCodeFS = '';
   private fragmentExtensionsSet = new Set<string>();
   private fragmentExtensions = '';
   private vertexCode = new ShaderCode();
   private vertexMain = '';
   private fragmentCode = new ShaderCode();
+  private outputBufferCode = '';
   private fragmentMain = '';
   private required = new Set<ShaderModule>();
   private uniforms = new Array<string>();
@@ -295,12 +297,20 @@ export class ShaderBuilder {
 
   addAttribute(typeName: string, name: string) {
     this.attributes.push(name);
-    this.attributesCode += `attribute ${typeName} ${name};\n`;
+    this.attributesCode += `in ${typeName} ${name};\n`;
     return name;
   }
 
   addVarying(typeName: string, name: string) {
-    this.varyingsCode += `varying ${typeName} ${name};\n`;
+    this.varyingsCodeVS += `out ${typeName} ${name};\n`;
+    this.varyingsCodeFS += `in ${typeName} ${name};\n`;
+  }
+
+  addOutputBuffer(typeName: string, name: string, location: number|null) {
+    if (location !== null) {
+      this.outputBufferCode += `layout(location = ${location}) `;
+    }
+    this.outputBufferCode += `out ${typeName} ${name};\n`;
   }
 
   addUniform(typeName: string, name: string, extent?: number) {
@@ -359,21 +369,22 @@ ${code}
   }
 
   build() {
-    let vertexSource = `
+    let vertexSource = `#version 300 es
 precision highp float;
 ${this.uniformsCode}
 ${this.attributesCode}
-${this.varyingsCode}
+${this.varyingsCodeVS}
 ${this.vertexCode}
 void main() {
 ${this.vertexMain}
 }
 `;
-    let fragmentSource = `
+    let fragmentSource = `#version 300 es
 ${this.fragmentExtensions}
 precision highp float;
 ${this.uniformsCode}
-${this.varyingsCode}
+${this.varyingsCodeFS}
+${this.outputBufferCode}
 ${this.fragmentCode}
 ${this.fragmentMain}
 `;

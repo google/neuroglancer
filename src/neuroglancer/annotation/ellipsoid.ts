@@ -53,11 +53,11 @@ abstract class RenderHelper extends AnnotationRenderHelper {
       context.buffer.bindToVertexAttrib(
           aRadii, /*components=*/3, /*attributeType=*/GL_FLOAT, /*normalized=*/false,
           /*stride=*/4 * 6, /*offset=*/context.bufferOffset + 4 * 3);
-      gl.ANGLE_instanced_arrays.vertexAttribDivisorANGLE(aCenter, 1);
-      gl.ANGLE_instanced_arrays.vertexAttribDivisorANGLE(aRadii, 1);
+      gl.vertexAttribDivisor(aCenter, 1);
+      gl.vertexAttribDivisor(aRadii, 1);
       callback();
-      gl.ANGLE_instanced_arrays.vertexAttribDivisorANGLE(aCenter, 0);
-      gl.ANGLE_instanced_arrays.vertexAttribDivisorANGLE(aRadii, 0);
+      gl.vertexAttribDivisor(aCenter, 0);
+      gl.vertexAttribDivisor(aRadii, 0);
       gl.disableVertexAttribArray(aCenter);
       gl.disableVertexAttribArray(aRadii);
     });

@@ -106,7 +106,7 @@ void emitSphere(mat4 projectionMatrix, mat4 normalTransformMatrix, vec3 centerPo
     this.vertexBuffer.bindToVertexAttrib(
         aSphereVertex, /*components=*/3, /*attributeType=*/GL_FLOAT, /*normalized=*/false);
     this.indexBuffer.bind();
-    shader.gl.ANGLE_instanced_arrays.drawElementsInstancedANGLE(
+    shader.gl.drawElementsInstanced(
         GL_TRIANGLES, this.numIndices, GL_UNSIGNED_SHORT, /*offset=*/0, numInstances);
     shader.gl.disableVertexAttribArray(aSphereVertex);
   }

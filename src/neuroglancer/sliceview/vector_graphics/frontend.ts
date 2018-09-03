@@ -44,7 +44,7 @@ export abstract class RenderLayer extends GenericSliceViewRenderLayer {
   defineShader(builder: ShaderBuilder) {
     builder.addFragmentCode(`
 void emit(vec4 color) {
-  gl_FragColor = color;
+  v4f_fragColor = color;
 }
 void emitRGBA(vec4 rgba) {
   emit(vec4(rgba.rgb, rgba.a * uOpacity));
