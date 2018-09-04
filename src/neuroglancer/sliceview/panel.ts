@@ -23,7 +23,7 @@ import {SliceView, SliceViewRenderHelper} from 'neuroglancer/sliceview/frontend'
 import {TrackableBoolean} from 'neuroglancer/trackable_boolean';
 import {TrackableRGB} from 'neuroglancer/util/color';
 import {ActionEvent, registerActionListener} from 'neuroglancer/util/event_action_map';
-import {identityMat4, mat4, vec3, vec4} from 'neuroglancer/util/geom';
+import {identityMat4, mat4, vec2, vec3, vec4} from 'neuroglancer/util/geom';
 import {startRelativeMouseDrag} from 'neuroglancer/util/mouse_drag';
 import {FramebufferConfiguration, makeTextureBuffers, OffscreenCopyHelper} from 'neuroglancer/webgl/offscreen';
 import {ShaderBuilder, ShaderModule} from 'neuroglancer/webgl/shader';
@@ -147,31 +147,51 @@ export class SliceViewPanel extends RenderedDataPanel {
 
     registerActionListener(element, 'translate-annoation-via-mouse-drag', (e: ActionEvent<MouseEvent>) => {
       const {mouseState} = this.viewer;
+
       const selectedAnnotationId = mouseState.pickedAnnotationId;
       const annotationLayer = mouseState.pickedAnnotationLayer;
-
-      let voxelSize = this.viewer.navigationState.voxelSize
+      
+      //let voxelSize = this.viewer.navigationState.voxelSize
       if (typeof(annotationLayer) != 'undefined'){
         if (typeof(selectedAnnotationId) != 'undefined'){
-          
           let annotationRef = annotationLayer.source.getReference(selectedAnnotationId)!;
-          let ann = <Annotation>annotationRef.value
-          
-          //const renderHandler = getAnnotationTypeRenderHandler(ann.type)
-          console.log(mouseState.pickedOffset)
-          
-          // if (mouseState.updateUnconditionally()) {
-          //   startRelativeMouseDrag(e.detail, (_event, deltaX, deltaY) => {
-          //     voxelSize.spatialFromVoxel(point,point);
-          //     vec3.transformMat4(point, point, this.sliceView.dataToViewport);
-          //     vec3.set(point, point[0]-deltaX, point[1]-deltaY, point[2]);
-          //     vec3.transformMat4(point, point, this.sliceView.viewportToData);
-          //     voxelSize.voxelFromSpatial(point,point);
-          //     annotationLayer.source.changed.dispatch();
-          //   },
-          //   (_event) => {
+          let ann = <Annotation>annotationRef.value;
+         
+          const handler = getAnnotationTypeRenderHandler(ann.type);
+          const pickedOffset = mouseState.pickedOffset;
+          let repPoint = handler.getRepresentativePoint(annotationLayer.objectToGlobal,
+                                                        <ArrayBuffer> mouseState.pickedAnnotationBuffer,
+                                                        <number> mouseState.pickedAnnotationBufferOffset,
+                                                        mouseState.pickedOffset);
+          console.log(repPoint, mouseState.pickedValue);
+          let totDeltaVec = vec2.create()
+          totDeltaVec[0]=0
+          totDeltaVec[1]=0
+
+          if (mouseState.updateUnconditionally()) {
+            startRelativeMouseDrag(e.detail, (_event, deltaX, deltaY) => {
               
-          //   });
+              vec2.add(totDeltaVec, totDeltaVec, [deltaX, deltaY])
+              
+              let newRepPt= vec3.transformMat4(vec3.create(), repPoint, this.sliceView.dataToViewport);
+              vec3.set(newRepPt, newRepPt[0]-totDeltaVec[0], newRepPt[1]-totDeltaVec[1], newRepPt[2]);
+              vec3.transformMat4(newRepPt, newRepPt, this.sliceView.viewportToData);
+              
+              let newAnnotation = handler.updateViaRepresentativePoint(<Annotation> annotationRef.value,
+                                                                       newRepPt,
+                                                                       annotationLayer.globalToObject,
+                                                                       pickedOffset,
+                                                                       <ArrayBuffer> mouseState.pickedAnnotationBuffer,
+                                                                       <number> mouseState.pickedAnnotationBufferOffset,
+                                                                       );
+              annotationLayer.source.delete(annotationRef);
+              annotationRef.dispose();
+              annotationRef = annotationLayer.source.add(newAnnotation, false);
+              
+            },
+            (_event) => {
+              annotationLayer.source.commit(annotationRef);
+            });
          }
        }
     }

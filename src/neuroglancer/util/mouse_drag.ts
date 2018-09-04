@@ -33,9 +33,7 @@ export function startRelativeMouseDrag(initialEvent: MouseEvent,
     if (e.button === button) {
       document.removeEventListener('mousemove', mouseMoveHandler, true);
       document.removeEventListener('mouseup', mouseUpHandler, false);
-      if (typeof(finishDragHandler) != 'undefined'){
-        finishDragHandler(e);
-      }
+      finishDragHandler?(e):null;
     }
   };
   document.addEventListener('mousemove', mouseMoveHandler, true);

@@ -354,21 +354,24 @@ emitAnnotation(vec4(vColor.rgb, uFillOpacity));
     });
   }
 }
-
-function snapPositionToEdge(
-    position: vec3, objectToData: mat4, corners: Float32Array, edgeIndex: number) {
+function getEdgeCorners(objectToData: mat4, corners: Float32Array, edgeIndex: number){
   const i = edgeIndex * 7;
-  const cornerA = vec3.create(), cornerB = vec3.create();
+  const cA = vec3.create(), cB = vec3.create();
   for (let j = 0; j < 3; ++j) {
     const ma = edgeBoxCornerOffsetData[i + j];
     const mb = edgeBoxCornerOffsetData[i + j + 3];
     const a = Math.min(corners[j], corners[j + 3]), b = Math.max(corners[j], corners[j + 3]);
-    cornerA[j] = (1 - ma) * a + ma * b;
-    cornerB[j] = (1 - mb) * a + mb * b;
+    cA[j] = (1 - ma) * a + ma * b;
+    cB[j] = (1 - mb) * a + mb * b;
   }
-  vec3.transformMat4(cornerA, cornerA, objectToData);
-  vec3.transformMat4(cornerB, cornerB, objectToData);
-  projectPointToLineSegment(position, cornerA, cornerB, position);
+  vec3.transformMat4(cA, cA, objectToData);
+  vec3.transformMat4(cB, cB, objectToData);
+  return {cornerA: cA, cornerB: cB}
+}
+function snapPositionToEdge(
+    position: vec3, objectToData: mat4, corners: Float32Array, edgeIndex: number) {
+  let edgeCorners = getEdgeCorners(objectToData, corners, edgeIndex);
+  projectPointToLineSegment(position, edgeCorners.cornerA, edgeCorners.cornerB, position);
 }
 
 function snapPositionToCorner(
@@ -410,4 +413,54 @@ registerAnnotationTypeRenderHandler(AnnotationType.AXIS_ALIGNED_BOUNDING_BOX, {
       // vec3.transformMat4(position, annotation.point, objectToData);
     }
   },
+  getRepresentativePoint: (objectToData, data, offset, partIndex) => {
+    let repPoint= vec3.create();
+    const corners = new Float32Array(data, offset, 6);
+    // if the full object is selected pick the first corner as representative
+    if (partIndex==FULL_OBJECT_PICK_OFFSET){
+      snapPositionToCorner(repPoint, objectToData, corners, 0);
+    }
+    else if (partIndex >= CORNERS_PICK_OFFSET && partIndex < EDGES_PICK_OFFSET) {
+      // picked a corner
+      snapPositionToCorner(repPoint, objectToData, corners, partIndex);
+    } else if (partIndex >= EDGES_PICK_OFFSET && partIndex < FACES_PICK_OFFSET) {
+      // for edges we will pick cornerA to move
+      let edgeCorners = getEdgeCorners(objectToData, corners, partIndex - EDGES_PICK_OFFSET); 
+      vec3.transformMat4(repPoint, edgeCorners.cornerA, objectToData);
+    }
+    else{ // for now faces will move the whole object so pick the first corner
+      snapPositionToCorner(repPoint, objectToData, corners, 0);
+    }
+    return repPoint
+  }, 
+  updateViaRepresentativePoint: (oldAnnotation: AxisAlignedBoundingBox, position: vec3, dataToObject: mat4, partIndex: number) => {
+    let newPt = vec3.transformMat4(vec3.create(), position, dataToObject);
+    let baseBox = <AxisAlignedBoundingBox>{
+      id: '',
+      type: AnnotationType.AXIS_ALIGNED_BOUNDING_BOX,
+      description: oldAnnotation.description,
+      segments: oldAnnotation.segments,
+      pointA: newPt,
+      pointB: newPt
+    }
+    // if the full object is selected pick the first corner as representative
+    if (partIndex==FULL_OBJECT_PICK_OFFSET){
+      let delta = vec3.sub(vec3.create(), oldAnnotation.pointB, oldAnnotation.pointA);
+      baseBox.pointA = newPt;
+      baseBox.pointB = vec3.add(vec3.create(), newPt, delta);
+    }
+    else if (partIndex >= CORNERS_PICK_OFFSET && partIndex < EDGES_PICK_OFFSET) {
+      // picked a corner
+      console.log('move corner')
+    } else if (partIndex >= EDGES_PICK_OFFSET && partIndex < FACES_PICK_OFFSET) {
+      // for edges we will pick cornerA to move
+      console.log('move edge')
+    }
+    else{ // for now faces will move the whole object so pick the first corner
+      let delta = vec3.sub(vec3.create(), oldAnnotation.pointB, oldAnnotation.pointA);
+      baseBox.pointA = newPt;
+      baseBox.pointB = vec3.add(vec3.create(), newPt, delta);
+    }
+    return baseBox;
+  }
 });

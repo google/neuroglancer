@@ -241,4 +241,20 @@ registerAnnotationTypeRenderHandler(AnnotationType.ELLIPSOID, {
   snapPosition: (/*position, objectToData, annotation, partIndex*/) => {
     // FIXME: snap to nearest point on ellipsoid surface
   },
+  getRepresentativePoint: (objectToData, data, offset) => {
+    let repPoint= vec3.create();
+    vec3.transformMat4(repPoint, <vec3>new Float32Array(data, offset, 3), objectToData);
+    return repPoint;
+  }, 
+  updateViaRepresentativePoint: (oldAnnotation: Ellipsoid, position: vec3, dataToObject: mat4) => {
+    const annotation: Ellipsoid = {
+      id: '',
+      description: oldAnnotation.description,
+      center:
+          vec3.transformMat4(vec3.create(), position, dataToObject),
+      radii: oldAnnotation.radii,
+      type: AnnotationType.ELLIPSOID,
+    };
+    return annotation;
+  }
 });
