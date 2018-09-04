@@ -109,13 +109,13 @@ export class Framebuffer extends RefCounted {
 export class TextureBuffer extends SizeManaged {
   texture: WebGLTexture|null;
 
-  constructor(public gl: GL, public format: number, public dataType: number) {
+  constructor(public gl: GL, public internalFormat: number, public format: number, public dataType: number) {
     super();
     this.texture = gl.createTexture();
   }
 
   protected performResize() {
-    resizeTexture(this.gl, this.texture, this.width, this.height, this.format, this.dataType);
+    resizeTexture(this.gl, this.texture, this.width, this.height, this.internalFormat, this.format, this.dataType);
   }
 
   disposed() {
@@ -129,10 +129,10 @@ export class TextureBuffer extends SizeManaged {
 }
 
 export function makeTextureBuffers(
-    gl: GL, count: number, format: number = gl.RGBA, dataType: number = gl.UNSIGNED_BYTE) {
+    gl: GL, count: number, internalFormat: number = gl.RGBA8, format: number = gl.RGBA, dataType: number = gl.UNSIGNED_BYTE) {
   let result = new Array<TextureBuffer>();
   for (let i = 0; i < count; ++i) {
-    result[i] = new TextureBuffer(gl, format, dataType);
+    result[i] = new TextureBuffer(gl, internalFormat, format, dataType);
   }
   return result;
 }
@@ -187,7 +187,7 @@ export class FramebufferConfiguration<ColorBuffer extends TextureBuffer|Renderbu
       buffer.resize(width, height);
       buffer.attachToFramebuffer(gl.COLOR_ATTACHMENT0 + i);
     });
-    gl.WEBGL_draw_buffers.drawBuffersWEBGL(this.fullAttachmentList);
+    gl.drawBuffers(this.fullAttachmentList);
     this.verifyAttachment();
     gl.viewport(0, 0, width, height);
   }
@@ -206,7 +206,7 @@ export class FramebufferConfiguration<ColorBuffer extends TextureBuffer|Renderbu
 
     gl.bindTexture(gl.TEXTURE_2D, null);
     this.colorBuffers[textureIndex].attachToFramebuffer(gl.COLOR_ATTACHMENT0);
-    gl.WEBGL_draw_buffers.drawBuffersWEBGL(this.singleAttachmentList);
+    gl.drawBuffers(this.singleAttachmentList);
   }
 
   unbind() {

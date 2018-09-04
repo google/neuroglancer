@@ -27,6 +27,7 @@ const textureLayoutSymbol = Symbol('SingleTextureVolumeChunk.textureLayout');
 export abstract class SingleTextureChunkFormat<TextureLayout extends Disposable> extends RefCounted
     implements ChunkFormat {
   arrayElementsPerTexel: number;
+  textureInternalFormat: number;
   texelType: number;
   textureFormat: number;
 

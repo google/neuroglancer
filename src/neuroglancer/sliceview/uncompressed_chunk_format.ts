@@ -52,6 +52,7 @@ class TextureLayout extends RefCounted {
 
 export class ChunkFormat extends SingleTextureChunkFormat<TextureLayout> {
   texelsPerElement: number;
+  textureInternalFormat: number;
   textureFormat: number;
   texelType: number;
   arrayElementsPerTexel: number;

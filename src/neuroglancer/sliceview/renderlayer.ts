@@ -88,7 +88,7 @@ export abstract class RenderLayer extends GenericRenderLayer {
     return this.chunkManager.chunkQueueManager.gl;
   }
 
-  setGLBlendMode(gl: WebGLRenderingContext, renderLayerNum: number): void {
+  setGLBlendMode(gl: WebGL2RenderingContext, renderLayerNum: number): void {
     // Default blend mode for non-blend-mode-aware layers
     if (renderLayerNum > 0) {
       gl.enable(gl.BLEND);

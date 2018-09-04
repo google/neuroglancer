@@ -26,7 +26,6 @@ import {tile2dArray} from 'neuroglancer/util/array';
 import {mat4, projectPointToLineSegment, vec3} from 'neuroglancer/util/geom';
 import {Buffer, getMemoizedBuffer} from 'neuroglancer/webgl/buffer';
 import {CircleShader, VERTICES_PER_CIRCLE} from 'neuroglancer/webgl/circles';
-import {GL_ARRAY_BUFFER, GL_FLOAT, GL_TRIANGLE_FAN} from 'neuroglancer/webgl/constants';
 import {GL} from 'neuroglancer/webgl/context';
 import {LineShader, VERTICES_PER_LINE} from 'neuroglancer/webgl/lines';
 import {dependentShaderGetter, ShaderBuilder, ShaderProgram} from 'neuroglancer/webgl/shader';
@@ -140,17 +139,19 @@ abstract class RenderHelper extends AnnotationRenderHelper {
       const aLower = shader.attribute('aLower');
       const aUpper = shader.attribute('aUpper');
       context.buffer.bindToVertexAttrib(
-          aLower, /*components=*/3, /*attributeType=*/GL_FLOAT, /*normalized=*/false,
+          aLower, /*components=*/3, /*attributeType=*/WebGL2RenderingContext.FLOAT,
+          /*normalized=*/false,
           /*stride=*/4 * 6, /*offset=*/context.bufferOffset);
       context.buffer.bindToVertexAttrib(
-          aUpper, /*components=*/3, /*attributeType=*/GL_FLOAT, /*normalized=*/false,
+          aUpper, /*components=*/3, /*attributeType=*/WebGL2RenderingContext.FLOAT,
+          /*normalized=*/false,
           /*stride=*/4 * 6, /*offset=*/context.bufferOffset + 4 * 3);
 
-      gl.ANGLE_instanced_arrays.vertexAttribDivisorANGLE(aLower, 1);
-      gl.ANGLE_instanced_arrays.vertexAttribDivisorANGLE(aUpper, 1);
+      gl.vertexAttribDivisor(aLower, 1);
+      gl.vertexAttribDivisor(aUpper, 1);
       callback();
-      gl.ANGLE_instanced_arrays.vertexAttribDivisorANGLE(aLower, 0);
-      gl.ANGLE_instanced_arrays.vertexAttribDivisorANGLE(aUpper, 0);
+      gl.vertexAttribDivisor(aLower, 0);
+      gl.vertexAttribDivisor(aUpper, 0);
       gl.disableVertexAttribArray(aLower);
       gl.disableVertexAttribArray(aUpper);
     });
@@ -222,11 +223,13 @@ emitAnnotation(getCircleColor(vColor, borderColor));
       const aBoxCornerOffset2 = shader.attribute('aBoxCornerOffset2');
 
       this.edgeBoxCornerOffsetsBuffer.bindToVertexAttrib(
-          aBoxCornerOffset1, /*components=*/3, /*attributeType=*/GL_FLOAT, /*normalized=*/false,
+          aBoxCornerOffset1, /*components=*/3, /*attributeType=*/WebGL2RenderingContext.FLOAT,
+          /*normalized=*/false,
           /*stride=*/4 * 7, /*offset=*/0);
 
       this.edgeBoxCornerOffsetsBuffer.bindToVertexAttrib(
-          aBoxCornerOffset2, /*components=*/4, /*attributeType=*/GL_FLOAT, /*normalized=*/false,
+          aBoxCornerOffset2, /*components=*/4, /*attributeType=*/WebGL2RenderingContext.FLOAT,
+          /*normalized=*/false,
           /*stride=*/4 * 7, /*offset=*/4 * 3);
 
       const lineWidth = context.renderContext.emitColor ? 1 : 5;
@@ -242,7 +245,8 @@ emitAnnotation(getCircleColor(vColor, borderColor));
     this.enable(shader, context, () => {
       const aBoxCornerOffset = shader.attribute('aBoxCornerOffset');
       this.boxCornerOffsetsBuffer.bindToVertexAttrib(
-          aBoxCornerOffset, /*components=*/3, /*attributeType=*/GL_FLOAT, /*normalized=*/false);
+          aBoxCornerOffset, /*components=*/3, /*attributeType=*/WebGL2RenderingContext.FLOAT,
+          /*normalized=*/false);
       this.circleShader.draw(
           shader, context.renderContext,
           {interiorRadiusInPixels: 1, borderWidthInPixels: 0, featherWidthInPixels: 1},
@@ -273,9 +277,13 @@ function getIntersectionVertexIndexArray() {
 class SliceViewRenderHelper extends RenderHelper {
   private lineShader = new LineShader(this.gl, 6);
   private intersectionVertexIndexBuffer =
-      getMemoizedBuffer(this.gl, GL_ARRAY_BUFFER, getIntersectionVertexIndexArray).value;
+      getMemoizedBuffer(
+          this.gl, WebGL2RenderingContext.ARRAY_BUFFER, getIntersectionVertexIndexArray)
+          .value;
   private filledIntersectionVertexIndexBuffer =
-      getMemoizedBuffer(this.gl, GL_ARRAY_BUFFER, getBaseIntersectionVertexIndexArray).value;
+      getMemoizedBuffer(
+          this.gl, WebGL2RenderingContext.ARRAY_BUFFER, getBaseIntersectionVertexIndexArray)
+          .value;
   private boundingBoxCrossSectionHelper =
       this.registerDisposer(new BoundingBoxCrossSectionRenderHelper(this.gl));
 
@@ -320,8 +328,8 @@ emitAnnotation(vec4(vColor.rgb, uFillOpacity));
 
   draw(context: AnnotationRenderContext&{renderContext: SliceViewPanelRenderContext}) {
     const fillOpacity = context.annotationLayer.state.fillOpacity.value;
-    const shader =
-        (fillOpacity ? this.fillShaderGetter : this.faceShaderGetter)(context.renderContext.emitter);
+    const shader = (fillOpacity ? this.fillShaderGetter : this.faceShaderGetter)(
+        context.renderContext.emitter);
     let {gl} = this;
     this.enable(shader, context, () => {
       this.boundingBoxCrossSectionHelper.setViewportPlane(
@@ -332,12 +340,12 @@ emitAnnotation(vec4(vColor.rgb, uFillOpacity));
 
       (fillOpacity ? this.filledIntersectionVertexIndexBuffer : this.intersectionVertexIndexBuffer)
           .bindToVertexAttrib(
-              aVertexIndexFloat, /*components=*/1, /*attributeType=*/GL_FLOAT,
+              aVertexIndexFloat, /*components=*/1, /*attributeType=*/WebGL2RenderingContext.FLOAT,
               /*normalized=*/false);
 
       if (fillOpacity) {
         gl.uniform1f(shader.uniform('uFillOpacity'), fillOpacity);
-        gl.ANGLE_instanced_arrays.drawArraysInstancedANGLE(GL_TRIANGLE_FAN, 0, 6, context.count);
+        gl.drawArraysInstanced(WebGL2RenderingContext.TRIANGLE_FAN, 0, 6, context.count);
       } else {
         const lineWidth = context.renderContext.emitColor ? 1 : 5;
         this.lineShader.draw(shader, context.renderContext, lineWidth, 1.0, context.count);

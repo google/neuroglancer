@@ -64,7 +64,7 @@ ${partIndexExpressions.map((_, i) => `uint32_t pickOffset${i} = add(pickBaseOffs
     s += `
   vPickID = add(pickID, pickOffset0).value;
   uint32_t selectedIndex; selectedIndex.value = uSelectedIndex;
-if (equal(selectedIndex, pickBaseOffset)${partIndexExpressions.map((_, i) => ` || equal(selectedIndex, pickOffset${i})`).join('')}) {
+if (equals(selectedIndex, pickBaseOffset)${partIndexExpressions.map((_, i) => ` || equals(selectedIndex, pickOffset${i})`).join('')}) {
     vColor = uColorSelected;
   } else {
     vColor = uColor;
@@ -103,7 +103,7 @@ uint32_t getPickBaseOffset() { return getPrimitiveIndex(); }
     } else {
       builder.addVertexCode(glsl_multiplyUint32);
       builder.addVertexCode(`
-uint32_t getPickBaseOffset() {       
+uint32_t getPickBaseOffset() {
   return multiply(getPrimitiveIndex(), ${this.pickIdsPerInstance.toFixed(1)});
 }
 `);

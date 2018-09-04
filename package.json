@@ -58,6 +58,7 @@
     "@types/pako": "^1.0.0",
     "@types/sockjs-client": "^1.0.32",
     "@types/text-encoding": "0.0.31",
+    "@types/webgl2": "^0.0.4",
     "@types/webpack-env": "^1.13.2",
     "babel-core": "^6.26.0",
     "babel-loader": "^7.1.2",

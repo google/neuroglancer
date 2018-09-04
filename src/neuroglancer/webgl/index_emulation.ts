@@ -16,7 +16,6 @@
 
 import {RefCounted} from 'neuroglancer/util/disposable';
 import {Buffer} from 'neuroglancer/webgl/buffer';
-import {GL_ARRAY_BUFFER, GL_STATIC_DRAW, GL_UNSIGNED_BYTE} from 'neuroglancer/webgl/constants';
 import {GL} from 'neuroglancer/webgl/context';
 import {ShaderBuilder, ShaderProgram} from 'neuroglancer/webgl/shader';
 import {glsl_uint32} from 'neuroglancer/webgl/shader_lib';
@@ -78,7 +77,7 @@ export class CountingBuffer extends RefCounted {
 
   bindToVertexAttrib(location: number) {
     this.buffer.bindToVertexAttrib(
-        location, this.numComponents!, GL_UNSIGNED_BYTE, /*normalized=*/true);
+        location, this.numComponents!, WebGL2RenderingContext.UNSIGNED_BYTE, /*normalized=*/true);
   }
 
   bind(shader: ShaderProgram, divisor = 0) {
@@ -86,7 +85,7 @@ export class CountingBuffer extends RefCounted {
     if (location >= 0) {
       this.bindToVertexAttrib(location);
       if (divisor !== 0) {
-        this.gl.ANGLE_instanced_arrays.vertexAttribDivisorANGLE(location, divisor);
+        this.gl.vertexAttribDivisor(location, divisor);
       }
     }
   }
@@ -96,7 +95,7 @@ export function disableCountingBuffer(gl: GL, shader: ShaderProgram, instanced =
   const location = shader.attribute('aIndexRaw');
   if (location >= 0) {
     if (instanced) {
-      gl.ANGLE_instanced_arrays.vertexAttribDivisorANGLE(location, 0);
+      gl.vertexAttribDivisor(location, 0);
     }
     gl.disableVertexAttribArray(location);
   }
@@ -138,7 +137,8 @@ float ${this.getterName} () {
 
   bind(buffer: Buffer, shader: ShaderProgram) {
     buffer.bindToVertexAttrib(
-        shader.attribute(this.attributeName), /*components=*/4, GL_UNSIGNED_BYTE,
+        shader.attribute(this.attributeName), /*components=*/4,
+        WebGL2RenderingContext.UNSIGNED_BYTE,
         /*normalized=*/false);
   }
 
@@ -147,8 +147,8 @@ float ${this.getterName} () {
   }
 }
 
-export function makeIndexBuffer(gl: WebGLRenderingContext, data: Uint32Array) {
+export function makeIndexBuffer(gl: WebGL2RenderingContext, data: Uint32Array) {
   return Buffer.fromData(
-      gl, new Uint8Array(data.buffer, data.byteOffset, data.byteLength), GL_ARRAY_BUFFER,
-      GL_STATIC_DRAW);
+      gl, new Uint8Array(data.buffer, data.byteOffset, data.byteLength),
+      WebGL2RenderingContext.ARRAY_BUFFER, WebGL2RenderingContext.STATIC_DRAW);
 }

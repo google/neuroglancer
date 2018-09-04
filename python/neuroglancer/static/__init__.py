@@ -65,11 +65,11 @@ class HttpSource(StaticContentSource):
 
 
 class FileSource(StaticContentSource):
-    def __init__(self, path=None, file_open=open):
+    def __init__(self, path=None, file_open=None):
         if path is None:
             path = os.path.join(os.path.dirname(__file__), '../../../dist/dev-python')
         self.file_path = path
-        self.file_open = file_open
+        self.file_open = file_open or open
 
     def get_content(self, name):
         full_path = os.path.join(self.file_path, name)

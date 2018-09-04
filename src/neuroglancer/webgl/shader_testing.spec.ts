@@ -23,7 +23,8 @@ describe('FragmentShaderTester', () => {
     fragmentShaderTest(1, tester => {
       let {gl, builder} = tester;
       builder.addUniform('vec4', 'inputValue');
-      builder.setFragmentMain(`gl_FragData[0] = inputValue;`);
+      builder.addOutputBuffer('vec4', 'v4f_fragData0', 0);
+      builder.setFragmentMain(`v4f_fragData0 = inputValue;`);
       tester.build();
       let {shader} = tester;
       let inputValue = vec4.fromValues(0, 64 / 255, 128 / 255, 192 / 255);
@@ -40,7 +41,8 @@ describe('FragmentShaderTester', () => {
       let {gl, builder} = tester;
       builder.addUniform('highp float', 'inputValue');
       builder.addFragmentCode(glsl_packFloat);
-      builder.setFragmentMain(`gl_FragData[0] = packFloatIntoVec4(inputValue);`);
+      builder.addOutputBuffer('vec4', 'v4f_fragData0', 0);
+      builder.setFragmentMain(`v4f_fragData0 = packFloatIntoVec4(inputValue);`);
       tester.build();
       function generateRandomNumber() {
         let buf = new Uint32Array(1);
@@ -74,9 +76,11 @@ describe('FragmentShaderTester', () => {
       builder.addUniform('highp float', 'inputValue1');
       builder.addUniform('highp float', 'inputValue2');
       builder.addFragmentCode(glsl_packFloat);
+      builder.addOutputBuffer('vec4', 'v4f_fragData0', 0);
+      builder.addOutputBuffer('vec4', 'v4f_fragData1', 1);
       builder.setFragmentMain(`
-  gl_FragData[0] = packFloatIntoVec4(inputValue1);
-  gl_FragData[1] = packFloatIntoVec4(inputValue2);
+  v4f_fragData0 = packFloatIntoVec4(inputValue1);
+  v4f_fragData1 = packFloatIntoVec4(inputValue2);
 `);
       tester.build();
       function generateRandomNumber() {
@@ -114,7 +118,8 @@ describe('FragmentShaderTester', () => {
       let {gl, builder} = tester;
       builder.addUniform('highp float', 'inputValue');
       builder.addFragmentCode(glsl_packFloat01ToFixedPoint);
-      builder.setFragmentMain(`gl_FragData[0] = packFloat01ToFixedPoint(inputValue);`);
+      builder.addOutputBuffer('vec4', 'v4f_fragData0', 0);
+      builder.setFragmentMain(`v4f_fragData0 = packFloat01ToFixedPoint(inputValue);`);
       tester.build();
       function generateRandomNumber() {
         let buf = new Uint32Array(1);

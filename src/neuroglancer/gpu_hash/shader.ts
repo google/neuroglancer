@@ -105,12 +105,13 @@ export class GPUHashTable<HashTable extends HashTableBase> extends RefCounted {
     gl.pixelStorei(gl.UNPACK_ALIGNMENT, 1);
     setRawTextureParameters(gl);
 
+    const internalFormat = gl.RGBA8;
     const format = gl.RGBA;
 
     hashTable.tableWithMungedEmptyKey(table => {
       gl.texImage2D(
           gl.TEXTURE_2D,
-          /*level=*/0, format,
+          /*level=*/0, internalFormat,
           /*width=*/width * hashTable.entryStride,
           /*height=*/height,
           /*border=*/0, format, gl.UNSIGNED_BYTE, new Uint8Array(table.buffer));
@@ -180,8 +181,8 @@ bool ${this.hasFunctionName}(uint64_t x) {
       s += `
   {
     vec2 v = ${this.prefix}_computeHash_${alt}(x);
-    vec4 lowResult = texture2D(${samplerName}, v);
-    vec4 highResult = texture2D(${samplerName}, vec2(v.x + highOffset, v.y));
+    vec4 lowResult = texture(${samplerName}, v);
+    vec4 highResult = texture(${samplerName}, vec2(v.x + highOffset, v.y));
     if (lowResult == x.low && highResult == x.high) {
       return true;
     }
@@ -228,11 +229,11 @@ bool ${this.getFunctionName}(uint64_t x, out uint64_t value) {
       s += `
   {
     vec2 v = ${this.prefix}_computeHash_${alt}(x);
-    vec4 lowResult = texture2D(${samplerName}, v);
-    vec4 highResult = texture2D(${samplerName}, vec2(v.x + highOffset, v.y));
+    vec4 lowResult = texture(${samplerName}, v);
+    vec4 highResult = texture(${samplerName}, vec2(v.x + highOffset, v.y));
     if (lowResult == x.low && highResult == x.high) {
-      value.low = texture2D(${samplerName}, vec2(v.x + 2.0 * highOffset, v.y));
-      value.high = texture2D(${samplerName}, vec2(v.x + 3.0 * highOffset, v.y));
+      value.low = texture(${samplerName}, vec2(v.x + 2.0 * highOffset, v.y));
+      value.high = texture(${samplerName}, vec2(v.x + 3.0 * highOffset, v.y));
       return true;
     }
   }

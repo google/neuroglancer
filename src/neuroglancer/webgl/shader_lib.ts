@@ -299,13 +299,13 @@ export function exp2(x: number) {
  */
 export var glsl_packFloat = `
 vec4 packFloatIntoVec4(float f) {
-  float magnitude = abs(f); 
+  float magnitude = abs(f);
   if (magnitude == 0.0) {
      return vec4(0,0,0,0);
   }
   float sign =  step(0.0, -f);
-  float exponent = floor(log2(magnitude)); 
-  float mantissa = magnitude / exp2(exponent); 
+  float exponent = floor(log2(magnitude));
+  float mantissa = magnitude / exp2(exponent);
   // Denormalized values if all exponent bits are zero
   if (mantissa < 1.0) {
      exponent -= 1.0;
@@ -387,7 +387,7 @@ export function getShaderType(dataType: DataType, numComponents: number = 1) {
 
 export const glsl_equalUint32 = [
   glsl_uint32, `
-bool equal(uint32_t a, uint32_t b) {
+bool equals(uint32_t a, uint32_t b) {
   return all(lessThan(abs(a.value - b.value), vec4(1.0 / 256.0, 1.0 / 256.0, 1.0 / 256.0, 1.0 / 256.0)));
 }
 `
@@ -508,7 +508,7 @@ export const glsl_floatToUint32 = [
 uint32_t floatToUint32(float x) {
   uint32_t result;
   float v;
-  
+
   v = mod(x, 256.0);
   result.x = v / 255.0;
   x = (x - v) / 256.0;
@@ -520,7 +520,7 @@ uint32_t floatToUint32(float x) {
   v = mod(x, 256.0);
   result.z = v / 255.0;
   result.w = 0.0;
-  
+
   return result;
 }
 `
