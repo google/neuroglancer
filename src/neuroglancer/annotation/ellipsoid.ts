@@ -28,7 +28,6 @@ import {QuadRenderHelper} from 'neuroglancer/webgl/quad';
 import {dependentShaderGetter, ShaderBuilder, ShaderProgram} from 'neuroglancer/webgl/shader';
 import {SphereRenderHelper} from 'neuroglancer/webgl/spheres';
 import {getSquareCornersBuffer} from 'neuroglancer/webgl/square_corners_buffer';
-import {glsl_transposeMat3} from 'neuroglancer/webgl/transpose';
 
 const tempMat4 = mat4.create();
 
@@ -143,7 +142,6 @@ class SliceViewRenderHelper extends RenderHelper {
     builder.addUniform('highp mat4', 'uViewportToDevice');
     builder.addAttribute('highp vec2', 'aCornerOffset');
     builder.addVarying('highp vec2', 'vCircleCoord');
-    builder.addVertexCode(glsl_transposeMat3);
     builder.addVertexCode(glsl_computeCrossSectionEllipse);
     builder.addVertexCode(glsl_computeCenterOrientEllipse);
     builder.setVertexMain(`
