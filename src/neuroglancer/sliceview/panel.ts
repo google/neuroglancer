@@ -162,11 +162,9 @@ export class SliceViewPanel extends RenderedDataPanel {
           let repPoint = handler.getRepresentativePoint(annotationLayer.objectToGlobal,
                                                         <ArrayBuffer> mouseState.pickedAnnotationBuffer,
                                                         <number> mouseState.pickedAnnotationBufferOffset,
-                                                        mouseState.pickedOffset);
-          console.log(repPoint, mouseState.pickedValue);
-          let totDeltaVec = vec2.create()
-          totDeltaVec[0]=0
-          totDeltaVec[1]=0
+                                                        mouseState.pickedOffset,
+                                                        ann);
+          let totDeltaVec = vec2.set(vec2.create(), 0, 0)
 
           if (mouseState.updateUnconditionally()) {
             startRelativeMouseDrag(e.detail, (_event, deltaX, deltaY) => {
@@ -187,10 +185,10 @@ export class SliceViewPanel extends RenderedDataPanel {
               annotationLayer.source.delete(annotationRef);
               annotationRef.dispose();
               annotationRef = annotationLayer.source.add(newAnnotation, false);
-              
             },
             (_event) => {
               annotationLayer.source.commit(annotationRef);
+              annotationRef.dispose();
             });
          }
        }

@@ -27,7 +27,7 @@ import {TrackableValue} from 'neuroglancer/trackable_value';
 import {TrackableRGB} from 'neuroglancer/util/color';
 import {Owned} from 'neuroglancer/util/disposable';
 import {ActionEvent, registerActionListener} from 'neuroglancer/util/event_action_map';
-import {kAxes, mat4, transformVectorByMat4, vec3, vec4} from 'neuroglancer/util/geom';
+import {kAxes, mat4, transformVectorByMat4, vec2, vec3, vec4} from 'neuroglancer/util/geom';
 import {startRelativeMouseDrag} from 'neuroglancer/util/mouse_drag';
 import {WatchableMap} from 'neuroglancer/util/watchable_map';
 import {withSharedVisibility} from 'neuroglancer/visibility_priority/frontend';
@@ -240,25 +240,41 @@ export class PerspectivePanel extends RenderedDataPanel {
       if (typeof(annotationLayer) != 'undefined'){
         if (typeof(selectedAnnotationId) != 'undefined'){
           let annotationRef = annotationLayer.source.getReference(selectedAnnotationId)!;
-          let ann = <Annotation>annotationRef.value
-          const handler = getAnnotationTypeRenderHandler(ann.type)
+          let ann = <Annotation>annotationRef.value;
+         
+          const handler = getAnnotationTypeRenderHandler(ann.type);
+          const pickedOffset = mouseState.pickedOffset;
           let repPoint = handler.getRepresentativePoint(annotationLayer.objectToGlobal,
-            <ArrayBuffer> mouseState.pickedAnnotationBuffer,
-            <number> mouseState.pickedAnnotationBufferOffset,
-            mouseState.pickedOffset);
+                                                        <ArrayBuffer> mouseState.pickedAnnotationBuffer,
+                                                        <number> mouseState.pickedAnnotationBufferOffset,
+                                                        mouseState.pickedOffset,
+                                                      ann);
+          let totDeltaVec = vec2.set(vec2.create(), 0, 0)
+    
           if (mouseState.updateUnconditionally()) {
             startRelativeMouseDrag(e.detail, (_event, deltaX, deltaY) => {
               const temp = tempVec3;
               const {projectionMat} = this;
               const {width, height} = this;
-      
-              //voxelSize.spatialFromVoxel(repPoint,repPoint)
+              vec2.add(totDeltaVec, totDeltaVec, [deltaX, deltaY])
               vec3.transformMat4(temp, repPoint, projectionMat);
-              temp[0] -= 2 * deltaX / width;
-              temp[1] -= -2 * deltaY / height;
-              vec3.transformMat4(repPoint, temp, this.inverseProjectionMat);
-              //voxelSize.voxelFromSpatial(repPoint,repPoint)
-              //annotationLayer.source.changed.dispatch();
+              temp[0] -= 2 * totDeltaVec[0] / width;
+              temp[1] -= -2 * totDeltaVec[1] / height;
+              let newRepPt = vec3.transformMat4(vec3.create(), temp, this.inverseProjectionMat);
+              let newAnnotation = handler.updateViaRepresentativePoint(<Annotation> annotationRef.value,
+                                                                        newRepPt,
+                                                                        annotationLayer.globalToObject,
+                                                                        pickedOffset,
+                                                                        <ArrayBuffer> mouseState.pickedAnnotationBuffer,
+                                                                        <number> mouseState.pickedAnnotationBufferOffset,
+                                                                        );
+              annotationLayer.source.delete(annotationRef);
+              annotationRef.dispose();
+              annotationRef = annotationLayer.source.add(newAnnotation, false);
+            },
+            (_event) => {
+              annotationLayer.source.commit(annotationRef);
+              annotationRef.dispose();
             });
          }
        }

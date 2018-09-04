@@ -354,7 +354,7 @@ emitAnnotation(vec4(vColor.rgb, uFillOpacity));
     });
   }
 }
-function getEdgeCorners(objectToData: mat4, corners: Float32Array, edgeIndex: number){
+function getEdgeCorners(corners: Float32Array, edgeIndex: number){
   const i = edgeIndex * 7;
   const cA = vec3.create(), cB = vec3.create();
   for (let j = 0; j < 3; ++j) {
@@ -364,13 +364,15 @@ function getEdgeCorners(objectToData: mat4, corners: Float32Array, edgeIndex: nu
     cA[j] = (1 - ma) * a + ma * b;
     cB[j] = (1 - mb) * a + mb * b;
   }
-  vec3.transformMat4(cA, cA, objectToData);
-  vec3.transformMat4(cB, cB, objectToData);
+
   return {cornerA: cA, cornerB: cB}
 }
 function snapPositionToEdge(
     position: vec3, objectToData: mat4, corners: Float32Array, edgeIndex: number) {
-  let edgeCorners = getEdgeCorners(objectToData, corners, edgeIndex);
+  let edgeCorners = getEdgeCorners(corners, edgeIndex);
+  vec3.transformMat4(edgeCorners.cornerA, edgeCorners.cornerA, objectToData);
+  vec3.transformMat4(edgeCorners.cornerB, edgeCorners.cornerB, objectToData);
+
   projectPointToLineSegment(position, edgeCorners.cornerA, edgeCorners.cornerB, position);
 }
 
@@ -413,23 +415,28 @@ registerAnnotationTypeRenderHandler(AnnotationType.AXIS_ALIGNED_BOUNDING_BOX, {
       // vec3.transformMat4(position, annotation.point, objectToData);
     }
   },
-  getRepresentativePoint: (objectToData, data, offset, partIndex) => {
+  getRepresentativePoint: (objectToData, data, offset, partIndex, ann) => {
     let repPoint= vec3.create();
     const corners = new Float32Array(data, offset, 6);
+    console.log(partIndex)
     // if the full object is selected pick the first corner as representative
     if (partIndex==FULL_OBJECT_PICK_OFFSET){
-      snapPositionToCorner(repPoint, objectToData, corners, 0);
+      vec3.transformMat4(repPoint, ann.pointA, objectToData);
     }
     else if (partIndex >= CORNERS_PICK_OFFSET && partIndex < EDGES_PICK_OFFSET) {
       // picked a corner
       snapPositionToCorner(repPoint, objectToData, corners, partIndex);
     } else if (partIndex >= EDGES_PICK_OFFSET && partIndex < FACES_PICK_OFFSET) {
       // for edges we will pick cornerA to move
-      let edgeCorners = getEdgeCorners(objectToData, corners, partIndex - EDGES_PICK_OFFSET); 
-      vec3.transformMat4(repPoint, edgeCorners.cornerA, objectToData);
+      // let edgeCorners = getEdgeCorners(corners, partIndex - EDGES_PICK_OFFSET);
+      // }
+      //
+      // FIXME: can't figure out how to resize based upon edge grabbed
+      vec3.transformMat4(repPoint, ann.pointA, objectToData);
+      // snapPositionToCorner(repPoint, objectToData, corners, 5);
     }
     else{ // for now faces will move the whole object so pick the first corner
-      snapPositionToCorner(repPoint, objectToData, corners, 0);
+      vec3.transformMat4(repPoint, ann.pointA, objectToData);
     }
     return repPoint
   }, 
@@ -454,7 +461,38 @@ registerAnnotationTypeRenderHandler(AnnotationType.AXIS_ALIGNED_BOUNDING_BOX, {
       console.log('move corner')
     } else if (partIndex >= EDGES_PICK_OFFSET && partIndex < FACES_PICK_OFFSET) {
       // for edges we will pick cornerA to move
-      console.log('move edge')
+      // switch (partIndex - EDGES_PICK_OFFSET) {
+      //   case 1:
+      //     baseBox.pointA = newPt;
+      //     baseBox.pointB = oldAnnotation.pointB;
+      //     break;
+      //   case 5:
+      //     baseBox.pointA = newPt;
+      //     baseBox.pointB = oldAnnotation.pointB;
+      //     break;
+      //   case 9: 
+      //     baseBox.pointA = newPt;
+      //     baseBox.pointB = oldAnnotation.pointB;
+      //     break;
+      //   case 6:
+      //     baseBox.pointA = oldAnnotation.pointA;
+      //     baseBox.pointB = newPt;
+      //     break;
+      //   case 3:
+      //     baseBox.pointA = oldAnnotation.pointA;
+      //     baseBox.pointB = newPt;
+      //     break;
+      //   case 10: 
+      //     baseBox.pointA = oldAnnotation.pointA;
+      //     baseBox.pointB = newPt;
+      //     break;
+      //   default:
+      //     baseBox.pointA = newPt;
+      //     baseBox.pointB = oldAnnotation.pointB;
+      // }
+      let delta = vec3.sub(vec3.create(), oldAnnotation.pointB, oldAnnotation.pointA);
+      baseBox.pointA = newPt;
+      baseBox.pointB = vec3.add(vec3.create(), newPt, delta);
     }
     else{ // for now faces will move the whole object so pick the first corner
       let delta = vec3.sub(vec3.create(), oldAnnotation.pointB, oldAnnotation.pointA);

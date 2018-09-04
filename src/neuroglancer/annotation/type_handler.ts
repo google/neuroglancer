@@ -163,7 +163,7 @@ interface AnnotationTypeRenderHandler<T extends Annotation> {
   };
   sliceViewRenderHelper: {new(gl: GL): AnnotationRenderHelper;};
   pickIdsPerInstance: number;
-  getRepresentativePoint: (objectToData: mat4, data: ArrayBuffer, offset: number, partIndex: number) => vec3;
+  getRepresentativePoint: (objectToData: mat4, data: ArrayBuffer, offset: number, partIndex: number, annotation: T) => vec3;
   updateViaRepresentativePoint: (oldAnnotation: T, position: vec3, dataToObject: mat4, partIndex: number, data: ArrayBuffer, offset: number) => T;
   snapPosition: (position: vec3, objectToData: mat4, data: ArrayBuffer, offset: number, partIndex: number) => void;
 }
