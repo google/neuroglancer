@@ -86,7 +86,7 @@ export class CountingBuffer extends RefCounted {
     if (location >= 0) {
       this.bindToVertexAttrib(location);
       if (divisor !== 0) {
-        this.gl.ANGLE_instanced_arrays.vertexAttribDivisorANGLE(location, divisor);
+        this.gl.vertexAttribDivisor(location, divisor);
       }
     }
   }
@@ -96,7 +96,7 @@ export function disableCountingBuffer(gl: GL, shader: ShaderProgram, instanced =
   const location = shader.attribute('aIndexRaw');
   if (location >= 0) {
     if (instanced) {
-      gl.ANGLE_instanced_arrays.vertexAttribDivisorANGLE(location, 0);
+      gl.vertexAttribDivisor(location, 0);
     }
     gl.disableVertexAttribArray(location);
   }
@@ -147,7 +147,7 @@ float ${this.getterName} () {
   }
 }
 
-export function makeIndexBuffer(gl: WebGLRenderingContext, data: Uint32Array) {
+export function makeIndexBuffer(gl: WebGL2RenderingContext, data: Uint32Array) {
   return Buffer.fromData(
       gl, new Uint8Array(data.buffer, data.byteOffset, data.byteLength), GL_ARRAY_BUFFER,
       GL_STATIC_DRAW);

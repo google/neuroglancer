@@ -19,7 +19,8 @@ import {GL} from 'neuroglancer/webgl/context';
 import {ShaderBuilder, ShaderModule, ShaderProgram} from 'neuroglancer/webgl/shader';
 
 export function defineCopyFragmentShader(builder: ShaderBuilder) {
-  builder.setFragmentMain('gl_FragColor = getValue0();');
+  builder.addOutputBuffer('vec4', 'v4f_fragColor', null);
+  builder.setFragmentMain('v4f_fragColor = getValue0();');
 }
 
 export function elementWiseTextureShader(
@@ -40,7 +41,7 @@ export function elementWiseTextureShader(
         for (let i = 0; i < numTextures; ++i) {
           builder.addFragmentCode(`
 vec4 getValue${i}() {
-  return texture2D(uSampler[${i}], vTexCoord);
+  return texture(uSampler[${i}], vTexCoord);
 }
 `);
         }
@@ -62,7 +63,8 @@ export function trivialColorShader(gl: GL): ShaderProgram {
   return gl.memoize.get('trivialColorShader', () => {
     let builder = new ShaderBuilder(gl);
     builder.addVarying('vec4', 'vColor');
-    builder.setFragmentMain('gl_FragColor = vColor;');
+    builder.addOutputBuffer('vec4', 'v4f_fragColor', null);
+    builder.setFragmentMain('v4f_fragColor = vColor;');
     builder.addAttribute('vec4', 'aVertexPosition');
     builder.addAttribute('vec4', 'aColor');
     builder.addUniform('mat4', 'uProjectionMatrix');
@@ -77,7 +79,8 @@ export function trivialUniformColorShader(gl: GL): ShaderProgram {
     builder.addUniform('mat4', 'uProjectionMatrix');
     builder.addAttribute('vec4', 'aVertexPosition');
     builder.addUniform('vec4', 'uColor');
-    builder.setFragmentMain('gl_FragColor = uColor;');
+    builder.addOutputBuffer('vec4', 'v4f_fragColor', null);
+    builder.setFragmentMain('v4f_fragColor = uColor;');
     builder.setVertexMain('gl_Position = uProjectionMatrix * aVertexPosition;');
     return builder.build();
   });

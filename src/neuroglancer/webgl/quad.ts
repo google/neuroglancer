@@ -59,10 +59,10 @@ export class QuadRenderHelper extends RefCounted {
 
   draw(gl: GL, numInstances: number) {
     if (this.quadsPerInstance === 1) {
-      gl.ANGLE_instanced_arrays.drawArraysInstancedANGLE(GL_TRIANGLE_FAN, 0, 4, numInstances);
+      gl.drawArraysInstanced(GL_TRIANGLE_FAN, 0, 4, numInstances);
     } else {
       this.quadIndexBuffer.bind();
-      gl.ANGLE_instanced_arrays.drawElementsInstancedANGLE(
+      gl.drawElementsInstanced(
           GL_TRIANGLES, INDICES_PER_QUAD * this.quadsPerInstance, GL_UNSIGNED_SHORT, /*offset=*/0,
           numInstances);
     }

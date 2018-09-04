@@ -17,10 +17,8 @@
 import {RefCounted} from 'neuroglancer/util/disposable';
 import {Memoize} from 'neuroglancer/util/memoize';
 
-export interface GL extends WebGLRenderingContext {
+export interface GL extends WebGL2RenderingContext {
   memoize: Memoize<any, RefCounted>;
-  WEBGL_draw_buffers: any;
-  ANGLE_instanced_arrays: any;
   maxTextureSize: number;
   maxTextureImageUnits: number;
   tempTextureUnit: number;
@@ -38,7 +36,7 @@ export function initializeWebGL(canvas: HTMLCanvasElement) {
     options['preserveDrawingBuffer'] = true;
   }
   let gl =
-      <GL>(canvas.getContext('webgl', options) || canvas.getContext('experimental-webgl', options));
+      <GL>canvas.getContext('webgl2', options);
   if (gl == null) {
     throw new Error('WebGL not supported.');
   }
@@ -51,21 +49,10 @@ export function initializeWebGL(canvas: HTMLCanvasElement) {
   // var contextAttributes = gl.getContextAttributes();
   // var haveStencilBuffer = contextAttributes.stencil;
 
-  gl.WEBGL_draw_buffers = gl.getExtension('WEBGL_draw_buffers');
-  if (!gl.WEBGL_draw_buffers) {
-    throw new Error('WEBGL_draw_buffers extension not available');
-  }
-
-  gl.ANGLE_instanced_arrays = gl.getExtension('ANGLE_instanced_arrays');
-  if (!gl.ANGLE_instanced_arrays) {
-    throw new Error('ANGLE_instanced_ararys extension not available');
-  }
-
-  for (let extension of ['OES_texture_float', 'OES_element_index_uint']) {
+  for (let extension of ['EXT_color_buffer_float']) {
     if (!gl.getExtension(extension)) {
       throw new Error(`${extension} extension not available`);
     }
   }
-
   return gl;
 }

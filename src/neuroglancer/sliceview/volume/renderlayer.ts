@@ -250,9 +250,10 @@ export class RenderLayer extends SliceViewRenderLayer {
 
   protected defineShader(builder: ShaderBuilder) {
     this.vertexComputationManager.defineShader(builder);
+    builder.addOutputBuffer('vec4', 'v4f_fragData0', 0);
     builder.addFragmentCode(`
 void emit(vec4 color) {
-  gl_FragData[0] = color;
+  v4f_fragData0 = color;
 }
 `);
     this.chunkFormat.defineShader(builder);

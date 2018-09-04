@@ -43,17 +43,19 @@ export enum OffscreenTextures {
 }
 
 function sliceViewPanelEmitColor(builder: ShaderBuilder) {
+  builder.addOutputBuffer('vec4', 'v4f_fragColor', null);
   builder.addFragmentCode(`
 void emit(vec4 color, vec4 pickId) {
-  gl_FragColor = color;
+  v4f_fragColor = color;
 }
 `);
 }
 
 function sliceViewPanelEmitPickID(builder: ShaderBuilder) {
+  builder.addOutputBuffer('vec4', 'v4f_fragColor', null);
   builder.addFragmentCode(`
 void emit(vec4 color, vec4 pickId) {
-  gl_FragColor = pickId;
+  v4f_fragColor = pickId;
 }
 `);
 }

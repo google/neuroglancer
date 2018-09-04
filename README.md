@@ -50,7 +50,7 @@ or within Neuroglancer, press `h` or click on the button labeled `?` in the uppe
 
 - Neuroglancer doesn't appear to load properly.
 
-  Neuroglancer requires WebGL (1.0) and the `WEBGL_draw_buffers`, `OES_texture_float`, and `OES_element_index_uint` extensions.
+  Neuroglancer requires WebGL (2.0) and the `EXT_color_buffer_float` extension.
   
   To troubleshoot, check the developer console, which is accessed by the keyboard shortcut `control-shift-i` in Firefox and Chrome.  If there is a message regarding failure to initialize WebGL, you can take the following steps:
   

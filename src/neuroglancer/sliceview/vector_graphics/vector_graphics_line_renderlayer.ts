@@ -202,7 +202,7 @@ gl_Position = uProjection * (pos + delta);
               /*normalized=*/false,
               /*stride=*/6 * 4,
               /*offset=*/0);
-          gl.ANGLE_instanced_arrays.vertexAttribDivisorANGLE(aVertexFirst, 1);
+          gl.vertexAttribDivisor(aVertexFirst, 1);
 
           const aVertexSecond = shader.attribute('aVertexSecond');
           chunk.vertexBuffer.bindToVertexAttrib(
@@ -212,12 +212,12 @@ gl_Position = uProjection * (pos + delta);
               /*normalized=*/false,
               /*stride=*/6 * 4,
               /*offset=*/3 * 4);
-          gl.ANGLE_instanced_arrays.vertexAttribDivisorANGLE(aVertexSecond, 1);
+          gl.vertexAttribDivisor(aVertexSecond, 1);
 
-          gl.ANGLE_instanced_arrays.drawArraysInstancedANGLE(gl.TRIANGLE_STRIP, 0, 4, numInstances);
+          gl.drawArraysInstanced(gl.TRIANGLE_STRIP, 0, 4, numInstances);
 
-          gl.ANGLE_instanced_arrays.vertexAttribDivisorANGLE(aVertexFirst, 0);
-          gl.ANGLE_instanced_arrays.vertexAttribDivisorANGLE(aVertexSecond, 0);
+          gl.vertexAttribDivisor(aVertexFirst, 0);
+          gl.vertexAttribDivisor(aVertexSecond, 0);
         }
       }
     }

@@ -93,11 +93,11 @@ emitAnnotation(getCircleColor(vColor, borderColor));
           aUpper, /*components=*/3, /*attributeType=*/GL_FLOAT, /*normalized=*/false,
           /*stride=*/4 * 6, /*offset=*/context.bufferOffset + 4 * 3);
 
-      gl.ANGLE_instanced_arrays.vertexAttribDivisorANGLE(aLower, 1);
-      gl.ANGLE_instanced_arrays.vertexAttribDivisorANGLE(aUpper, 1);
+      gl.vertexAttribDivisor(aLower, 1);
+      gl.vertexAttribDivisor(aUpper, 1);
       callback();
-      gl.ANGLE_instanced_arrays.vertexAttribDivisorANGLE(aLower, 0);
-      gl.ANGLE_instanced_arrays.vertexAttribDivisorANGLE(aUpper, 0);
+      gl.vertexAttribDivisor(aLower, 0);
+      gl.vertexAttribDivisor(aUpper, 0);
       gl.disableVertexAttribArray(aLower);
       gl.disableVertexAttribArray(aUpper);
     });

@@ -30,6 +30,12 @@ describe('gpu_hash.shader', () => {
       let hashTableShaderManager = new HashSetShaderManager('h');
       hashTableShaderManager.defineShader(builder);
       builder.addUniform('vec4', 'inputValue', 2);
+      builder.addOutputBuffer('vec4', 'v4f_fragData0', 0);
+      builder.addOutputBuffer('vec4', 'v4f_fragData1', 1);
+      builder.addOutputBuffer('vec4', 'v4f_fragData2', 2);
+      builder.addOutputBuffer('vec4', 'v4f_fragData3', 3);
+      builder.addOutputBuffer('vec4', 'v4f_fragData4', 4);
+      builder.addOutputBuffer('vec4', 'v4f_fragData5', 5);
       builder.addFragmentCode(glsl_exactDot);
       {
         let alt = 0, i = 0;
@@ -57,12 +63,12 @@ float c = ${bName}[${bIndex + 1}];
   float y = imod(dotResult2 * c, modulus);
   float modResult = imod(dotResult + y + b, modulus);
 
-gl_FragData[4] = packFloatIntoVec4(dotResult0);
-gl_FragData[0] = packFloatIntoVec4(dotResult);
-gl_FragData[1] = packFloatIntoVec4(dotResult2);
-gl_FragData[5] = packFloatIntoVec4(dotResult * dotResult);
-gl_FragData[2] = packFloatIntoVec4(y);
-gl_FragData[3] = packFloatIntoVec4(modResult);
+v4f_fragData4 = packFloatIntoVec4(dotResult0);
+v4f_fragData0 = packFloatIntoVec4(dotResult);
+v4f_fragData1 = packFloatIntoVec4(dotResult2);
+v4f_fragData5 = packFloatIntoVec4(dotResult * dotResult);
+v4f_fragData2 = packFloatIntoVec4(y);
+v4f_fragData3 = packFloatIntoVec4(modResult);
 `;
 
         builder.setFragmentMain(s);
@@ -131,8 +137,9 @@ x.high = inputValue[1];
         let outputNumber = 0;
         for (let alt = 0; alt < 3; ++alt) {
           for (let i = 0; i < 2; ++i) {
+            builder.addOutputBuffer('vec4', `v4f_fragData${outputNumber}`, outputNumber);
             s += `
-gl_FragData[${outputNumber++}] = packFloatIntoVec4(h_computeHash_${alt}_${i}(x));
+v4f_fragData${outputNumber++} = packFloatIntoVec4(h_computeHash_${alt}_${i}(x));
 `;
           }
         }
@@ -176,22 +183,25 @@ gl_FragData[${outputNumber++}] = packFloatIntoVec4(h_computeHash_${alt}_${i}(x))
       let hashTableShaderManager = new HashSetShaderManager('h');
       hashTableShaderManager.defineShader(builder);
       builder.addUniform('vec4', 'inputValue', 2);
+      builder.addOutputBuffer('vec4', 'v4f_fragData0', 0);
       let {bName, samplerName} = hashTableShaderManager;
       let s = `
 uint64_t x;
 x.low = inputValue[0];
 x.high = inputValue[1];
-gl_FragData[0] = h_has(x) ? vec4(1.0, 1.0, 1.0, 1.0) : vec4(0.0, 0.0, 0.0, 0.0);
+v4f_fragData0 = h_has(x) ? vec4(1.0, 1.0, 1.0, 1.0) : vec4(0.0, 0.0, 0.0, 0.0);
 float highOffset = ${bName}[${numAlternatives * 4 + 2}];
 `;
       {
         let outputNumber = 1;
         for (let alt = 0; alt < NUM_ALTERNATIVES; ++alt) {
+          builder.addOutputBuffer('vec4', `v4f_fragData${outputNumber}`, outputNumber);
+          builder.addOutputBuffer('vec4', `v4f_fragData${outputNumber + 1}`, outputNumber + 1);
           s += `
 {
   vec2 v = h_computeHash_${alt}(x);
-  gl_FragData[${outputNumber++}] = texture2D(${samplerName}, v);
-  gl_FragData[${outputNumber++}] = texture2D(${samplerName}, vec2(v.x + highOffset, v.y));
+  v4f_fragData${outputNumber++} = texture(${samplerName}, v);
+  v4f_fragData${outputNumber++} = texture(${samplerName}, vec2(v.x + highOffset, v.y));
 }
 `;
         }
@@ -269,14 +279,17 @@ float highOffset = ${bName}[${numAlternatives * 4 + 2}];
       let shaderManager = new HashMapShaderManager('h');
       shaderManager.defineShader(builder);
       builder.addUniform('vec4', 'inputValue', 2);
+      builder.addOutputBuffer('vec4', 'v4f_fragData0', 0);
+      builder.addOutputBuffer('vec4', 'v4f_fragData1', 1);
+      builder.addOutputBuffer('vec4', 'v4f_fragData2', 2);
       builder.setFragmentMain(`
 uint64_t x;
 x.low = inputValue[0];
 x.high = inputValue[1];
 uint64_t y;
-gl_FragData[0] = h_get(x, y) ? vec4(1.0, 1.0, 1.0, 1.0) : vec4(0.0, 0.0, 0.0, 0.0);
-gl_FragData[1] = y.low;
-gl_FragData[2] = y.high;
+v4f_fragData0 = h_get(x, y) ? vec4(1.0, 1.0, 1.0, 1.0) : vec4(0.0, 0.0, 0.0, 0.0);
+v4f_fragData1 = y.low;
+v4f_fragData2 = y.high;
 `);
       tester.build();
       let {shader} = tester;
