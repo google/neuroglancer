@@ -30,7 +30,6 @@ import {stableStringify, verifyString} from 'neuroglancer/util/json';
 import {getObjectId} from 'neuroglancer/util/object_id';
 import {NullarySignal} from 'neuroglancer/util/signal';
 import {Buffer} from 'neuroglancer/webgl/buffer';
-import {GL_FLOAT} from 'neuroglancer/webgl/constants';
 import {GL} from 'neuroglancer/webgl/context';
 import {WatchableShaderError} from 'neuroglancer/webgl/dynamic_shader';
 import {ShaderBuilder, ShaderModule, ShaderProgram} from 'neuroglancer/webgl/shader';
@@ -334,7 +333,7 @@ export class SliceViewPanelSkeletonLayer extends SliceViewPanelRenderLayer {
 function getWebglDataType(dataType: DataType) {
   switch (dataType) {
     case DataType.FLOAT32:
-      return GL_FLOAT;
+      return WebGL2RenderingContext.FLOAT;
     default:
       throw new Error('Data type not supported by WebGL: ${DataType[dataType]}');
   }
@@ -344,7 +343,7 @@ const vertexPositionAttribute: VertexAttributeRenderInfo = {
   dataType: DataType.FLOAT32,
   numComponents: 3,
   name: '',
-  webglDataType: GL_FLOAT,
+  webglDataType: WebGL2RenderingContext.FLOAT,
   glslDataType: 'vec3',
 };
 

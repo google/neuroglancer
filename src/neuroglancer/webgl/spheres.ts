@@ -20,7 +20,6 @@
 
 import {RefCounted} from 'neuroglancer/util/disposable';
 import {Buffer, getMemoizedBuffer} from 'neuroglancer/webgl/buffer';
-import {GL_ARRAY_BUFFER, GL_ELEMENT_ARRAY_BUFFER, GL_FLOAT, GL_TRIANGLES, GL_UNSIGNED_SHORT} from 'neuroglancer/webgl/constants';
 import {GL} from 'neuroglancer/webgl/context';
 import {ShaderBuilder, ShaderProgram} from 'neuroglancer/webgl/shader';
 
@@ -69,14 +68,16 @@ export class SphereRenderHelper extends RefCounted {
 
   constructor(gl: GL, latitudeBands: number, longitudeBands: number) {
     super();
-    this.vertexBuffer = this.registerDisposer(getMemoizedBuffer(
-                                                  gl, GL_ARRAY_BUFFER, getSphereVertexArray,
-                                                  latitudeBands, longitudeBands))
-                            .value;
-    this.indexBuffer = this.registerDisposer(getMemoizedBuffer(
-                                                 gl, GL_ELEMENT_ARRAY_BUFFER, getSphereIndexArray,
-                                                 latitudeBands, longitudeBands))
-                           .value;
+    this.vertexBuffer =
+        this.registerDisposer(getMemoizedBuffer(
+                                  gl, WebGL2RenderingContext.ARRAY_BUFFER, getSphereVertexArray,
+                                  latitudeBands, longitudeBands))
+            .value;
+    this.indexBuffer =
+        this.registerDisposer(getMemoizedBuffer(
+                                  gl, WebGL2RenderingContext.ELEMENT_ARRAY_BUFFER,
+                                  getSphereIndexArray, latitudeBands, longitudeBands))
+            .value;
     this.numIndices = latitudeBands * longitudeBands * 6;
   }
 
@@ -104,10 +105,12 @@ void emitSphere(mat4 projectionMatrix, mat4 normalTransformMatrix, vec3 centerPo
   draw(shader: ShaderProgram, numInstances: number) {
     const aSphereVertex = shader.attribute('aSphereVertex');
     this.vertexBuffer.bindToVertexAttrib(
-        aSphereVertex, /*components=*/3, /*attributeType=*/GL_FLOAT, /*normalized=*/false);
+        aSphereVertex, /*components=*/3, /*attributeType=*/WebGL2RenderingContext.FLOAT,
+        /*normalized=*/false);
     this.indexBuffer.bind();
     shader.gl.drawElementsInstanced(
-        GL_TRIANGLES, this.numIndices, GL_UNSIGNED_SHORT, /*offset=*/0, numInstances);
+        WebGL2RenderingContext.TRIANGLES, this.numIndices, WebGL2RenderingContext.UNSIGNED_SHORT,
+        /*offset=*/0, numInstances);
     shader.gl.disableVertexAttribArray(aSphereVertex);
   }
 }

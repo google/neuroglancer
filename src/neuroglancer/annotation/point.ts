@@ -22,7 +22,6 @@ import {AnnotationType, Point} from 'neuroglancer/annotation';
 import {AnnotationRenderContext, AnnotationRenderHelper, registerAnnotationTypeRenderHandler} from 'neuroglancer/annotation/type_handler';
 import {vec3} from 'neuroglancer/util/geom';
 import {CircleShader} from 'neuroglancer/webgl/circles';
-import {GL_FLOAT} from 'neuroglancer/webgl/constants';
 import {dependentShaderGetter, ShaderBuilder} from 'neuroglancer/webgl/shader';
 
 class RenderHelper extends AnnotationRenderHelper {
@@ -51,7 +50,8 @@ emitAnnotation(getCircleColor(vColor, borderColor));
       const {gl} = this;
       const aVertexPosition = shader.attribute('aVertexPosition');
       context.buffer.bindToVertexAttrib(
-          aVertexPosition, /*components=*/3, /*attributeType=*/GL_FLOAT, /*normalized=*/false,
+          aVertexPosition, /*components=*/3, /*attributeType=*/WebGL2RenderingContext.FLOAT,
+          /*normalized=*/false,
           /*stride=*/0, /*offset=*/context.bufferOffset);
       gl.vertexAttribDivisor(aVertexPosition, 1);
       this.circleShader.draw(

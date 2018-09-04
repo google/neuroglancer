@@ -16,7 +16,6 @@
 
 import {tile2dArray} from 'neuroglancer/util/array';
 import {getMemoizedBuffer} from 'neuroglancer/webgl/buffer';
-import {GL_ARRAY_BUFFER} from 'neuroglancer/webgl/constants';
 import {GL} from 'neuroglancer/webgl/context';
 
 export function getSquareCornersArray(
@@ -51,7 +50,7 @@ export function getCubeCornersArray(
 export function getSquareCornersBuffer(
     gl: GL, startX = -1, startY = -1, endX = 1, endY = 1, minorTiles = 1, majorTiles = 1) {
   return getMemoizedBuffer(
-             gl, GL_ARRAY_BUFFER, getSquareCornersArray, startX, startY, endX, endY, minorTiles,
-             majorTiles)
+             gl, WebGL2RenderingContext.ARRAY_BUFFER, getSquareCornersArray, startX, startY, endX,
+             endY, minorTiles, majorTiles)
       .value;
 }

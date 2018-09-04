@@ -23,7 +23,6 @@ import {AnnotationRenderContext, AnnotationRenderHelper, registerAnnotationTypeR
 import {PerspectiveViewRenderContext} from 'neuroglancer/perspective_view/render_layer';
 import {SliceViewPanelRenderContext} from 'neuroglancer/sliceview/panel';
 import {mat3, mat4, vec3} from 'neuroglancer/util/geom';
-import {GL_FLOAT} from 'neuroglancer/webgl/constants';
 import {computeCenterOrientEllipseDebug, computeCrossSectionEllipseDebug, glsl_computeCenterOrientEllipse, glsl_computeCrossSectionEllipse} from 'neuroglancer/webgl/ellipse';
 import {QuadRenderHelper} from 'neuroglancer/webgl/quad';
 import {dependentShaderGetter, ShaderBuilder, ShaderProgram} from 'neuroglancer/webgl/shader';
@@ -48,10 +47,12 @@ abstract class RenderHelper extends AnnotationRenderHelper {
       const aRadii = shader.attribute('aRadii');
       const {gl} = shader;
       context.buffer.bindToVertexAttrib(
-          aCenter, /*components=*/3, /*attributeType=*/GL_FLOAT, /*normalized=*/false,
+          aCenter, /*components=*/3, /*attributeType=*/WebGL2RenderingContext.FLOAT,
+          /*normalized=*/false,
           /*stride=*/4 * 6, /*offset=*/context.bufferOffset);
       context.buffer.bindToVertexAttrib(
-          aRadii, /*components=*/3, /*attributeType=*/GL_FLOAT, /*normalized=*/false,
+          aRadii, /*components=*/3, /*attributeType=*/WebGL2RenderingContext.FLOAT,
+          /*normalized=*/false,
           /*stride=*/4 * 6, /*offset=*/context.bufferOffset + 4 * 3);
       gl.vertexAttribDivisor(aCenter, 1);
       gl.vertexAttribDivisor(aRadii, 1);

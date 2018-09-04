@@ -15,14 +15,13 @@
  */
 
 import {RefCounted} from 'neuroglancer/util/disposable';
-import {GL_FRAGMENT_SHADER, GL_VERTEX_SHADER} from 'neuroglancer/webgl/constants';
 import {GL} from 'neuroglancer/webgl/context';
 
 const DEBUG_SHADER = false;
 
 export enum ShaderType {
-  VERTEX = GL_VERTEX_SHADER,
-  FRAGMENT = GL_FRAGMENT_SHADER
+  VERTEX = WebGL2RenderingContext.VERTEX_SHADER,
+  FRAGMENT = WebGL2RenderingContext.FRAGMENT_SHADER
 }
 
 export interface ShaderErrorMessage {

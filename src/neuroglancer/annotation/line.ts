@@ -24,7 +24,6 @@ import {tile2dArray} from 'neuroglancer/util/array';
 import {mat4, projectPointToLineSegment, vec3} from 'neuroglancer/util/geom';
 import {getMemoizedBuffer} from 'neuroglancer/webgl/buffer';
 import {CircleShader, VERTICES_PER_CIRCLE} from 'neuroglancer/webgl/circles';
-import {GL_ARRAY_BUFFER, GL_FLOAT} from 'neuroglancer/webgl/constants';
 import {LineShader} from 'neuroglancer/webgl/lines';
 import {dependentShaderGetter, ShaderBuilder, ShaderProgram} from 'neuroglancer/webgl/shader';
 
@@ -62,7 +61,9 @@ emitAnnotation(vec4(vColor.rgb, vColor.a * getLineAlpha() * ${this.getCrossSecti
   });
 
   private endpointIndexBuffer =
-      this.registerDisposer(getMemoizedBuffer(this.gl, GL_ARRAY_BUFFER, getEndpointIndexArray))
+      this
+          .registerDisposer(getMemoizedBuffer(
+              this.gl, WebGL2RenderingContext.ARRAY_BUFFER, getEndpointIndexArray))
           .value;
 
   private endpointShaderGetter = dependentShaderGetter(this, this.gl, (builder: ShaderBuilder) => {
@@ -87,10 +88,12 @@ emitAnnotation(getCircleColor(vColor, borderColor));
       const aUpper = shader.attribute('aEndpointB');
 
       context.buffer.bindToVertexAttrib(
-          aLower, /*components=*/3, /*attributeType=*/GL_FLOAT, /*normalized=*/false,
+          aLower, /*components=*/3, /*attributeType=*/WebGL2RenderingContext.FLOAT,
+          /*normalized=*/false,
           /*stride=*/4 * 6, /*offset=*/context.bufferOffset);
       context.buffer.bindToVertexAttrib(
-          aUpper, /*components=*/3, /*attributeType=*/GL_FLOAT, /*normalized=*/false,
+          aUpper, /*components=*/3, /*attributeType=*/WebGL2RenderingContext.FLOAT,
+          /*normalized=*/false,
           /*stride=*/4 * 6, /*offset=*/context.bufferOffset + 4 * 3);
 
       gl.vertexAttribDivisor(aLower, 1);
@@ -116,7 +119,8 @@ emitAnnotation(getCircleColor(vColor, borderColor));
     this.enable(shader, context, () => {
       const aEndpointIndex = shader.attribute('aEndpointIndex');
       this.endpointIndexBuffer.bindToVertexAttrib(
-          aEndpointIndex, /*components=*/1, /*attributeType=*/GL_FLOAT, /*normalized=*/false);
+          aEndpointIndex, /*components=*/1, /*attributeType=*/WebGL2RenderingContext.FLOAT,
+          /*normalized=*/false);
       this.circleShader.draw(
           shader, context.renderContext,
           {interiorRadiusInPixels: 6, borderWidthInPixels: 2, featherWidthInPixels: 1},
@@ -138,7 +142,7 @@ function snapPositionToLine(position: vec3, objectToData: mat4, endpoints: Float
 }
 
 function snapPositionToEndpoint(
-  position: vec3, objectToData: mat4, endpoints: Float32Array, endpointIndex: number) {
+    position: vec3, objectToData: mat4, endpoints: Float32Array, endpointIndex: number) {
   const startOffset = 3 * endpointIndex;
   const point = <vec3>endpoints.subarray(startOffset, startOffset + 3);
   vec3.transformMat4(position, point, objectToData);

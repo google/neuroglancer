@@ -17,7 +17,6 @@
 import {Disposable, RefCountedValue} from 'neuroglancer/util/disposable';
 import {stableStringify} from 'neuroglancer/util/json';
 import {getObjectId} from 'neuroglancer/util/object_id';
-import {GL_ARRAY_BUFFER, GL_FLOAT, GL_STATIC_DRAW} from 'neuroglancer/webgl/constants';
 import {GL} from 'neuroglancer/webgl/context';
 import {AttributeIndex} from 'neuroglancer/webgl/shader';
 
@@ -26,7 +25,9 @@ export type WebGLDataType = number;
 export type WebGLBufferUsage = number;
 export class Buffer implements Disposable {
   buffer: WebGLBuffer|null;
-  constructor(public gl: WebGL2RenderingContext, public bufferType: BufferType = GL_ARRAY_BUFFER) {
+  constructor(
+      public gl: WebGL2RenderingContext,
+      public bufferType: BufferType = WebGL2RenderingContext.ARRAY_BUFFER) {
     this.gl = gl;
     // This should never return null.
     this.buffer = gl.createBuffer();
@@ -38,14 +39,15 @@ export class Buffer implements Disposable {
 
   bindToVertexAttrib(
       location: AttributeIndex, componentsPerVertexAttribute: number,
-      attributeType: WebGLDataType = GL_FLOAT, normalized = false, stride = 0, offset = 0) {
+      attributeType: WebGLDataType = WebGL2RenderingContext.FLOAT, normalized = false, stride = 0,
+      offset = 0) {
     this.bind();
     this.gl.enableVertexAttribArray(location);
     this.gl.vertexAttribPointer(
         location, componentsPerVertexAttribute, attributeType, normalized, stride, offset);
   }
 
-  setData(data: ArrayBufferView, usage: WebGLBufferUsage = GL_STATIC_DRAW) {
+  setData(data: ArrayBufferView, usage: WebGLBufferUsage = WebGL2RenderingContext.STATIC_DRAW) {
     let gl = this.gl;
     this.bind();
     gl.bufferData(this.bufferType, data, usage);
@@ -70,8 +72,8 @@ export function getMemoizedBuffer(
     gl: GL, bufferType: number, getter: (...args: any[]) => ArrayBufferView, ...args: any[]) {
   return gl.memoize.get(
       stableStringify({id: 'getMemoizedBuffer', getter: getObjectId(getter), args}), () => {
-        const result =
-            new RefCountedValue(Buffer.fromData(gl, getter(...args), bufferType, GL_STATIC_DRAW));
+        const result = new RefCountedValue(
+            Buffer.fromData(gl, getter(...args), bufferType, WebGL2RenderingContext.STATIC_DRAW));
         result.registerDisposer(result.value);
         return result;
       });
