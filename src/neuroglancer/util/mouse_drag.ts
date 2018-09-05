@@ -26,7 +26,8 @@ export function startRelativeMouseDrag(initialEvent: MouseEvent,
     let deltaY = prevScreenY - e.screenY;
     prevScreenX = e.screenX;
     prevScreenY = e.screenY;
-    handler(e, deltaX, deltaY);
+    const pixelfactor = Math.floor(window.devicePixelRatio)/window.devicePixelRatio;
+    handler(e, deltaX*pixelfactor, deltaY*pixelfactor);
   };
   let button = initialEvent.button;
   let mouseUpHandler = (e: MouseEvent) => {
