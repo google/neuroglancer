@@ -145,7 +145,7 @@ export class SliceViewPanel extends RenderedDataPanel {
       }
     });
 
-    registerActionListener(element, 'translate-annotation-via-mouse-drag', (e: ActionEvent<MouseEvent>) => {
+    registerActionListener(element, 'select', (e: ActionEvent<MouseEvent>) => {
       const {mouseState} = this.viewer;
 
       const selectedAnnotationId = mouseState.pickedAnnotationId;
@@ -154,6 +154,7 @@ export class SliceViewPanel extends RenderedDataPanel {
       //let voxelSize = this.viewer.navigationState.voxelSize
       if (typeof(annotationLayer) != 'undefined'){
         if (typeof(selectedAnnotationId) != 'undefined'){
+          e.stopPropagation()
           let annotationRef = annotationLayer.source.getReference(selectedAnnotationId)!;
           let ann = <Annotation>annotationRef.value;
          
