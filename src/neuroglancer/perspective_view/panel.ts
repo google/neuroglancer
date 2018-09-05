@@ -231,7 +231,7 @@ export class PerspectivePanel extends RenderedDataPanel {
       });
     });
 
-    registerActionListener(element, 'translate-annoation-via-mouse-drag', (e: ActionEvent<MouseEvent>) => {
+    registerActionListener(element, 'translate-annotation-via-mouse-drag', (e: ActionEvent<MouseEvent>) => {
       const {mouseState} = this.viewer;
       const selectedAnnotationId = mouseState.pickedAnnotationId;
       const annotationLayer = mouseState.pickedAnnotationLayer;
@@ -248,7 +248,7 @@ export class PerspectivePanel extends RenderedDataPanel {
                                                         <ArrayBuffer> mouseState.pickedAnnotationBuffer,
                                                         <number> mouseState.pickedAnnotationBufferOffset,
                                                         mouseState.pickedOffset,
-                                                      ann);
+                                                        ann);
           let totDeltaVec = vec2.set(vec2.create(), 0, 0)
     
           if (mouseState.updateUnconditionally()) {

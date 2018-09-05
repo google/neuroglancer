@@ -145,7 +145,7 @@ export class SliceViewPanel extends RenderedDataPanel {
       }
     });
 
-    registerActionListener(element, 'translate-annoation-via-mouse-drag', (e: ActionEvent<MouseEvent>) => {
+    registerActionListener(element, 'translate-annotation-via-mouse-drag', (e: ActionEvent<MouseEvent>) => {
       const {mouseState} = this.viewer;
 
       const selectedAnnotationId = mouseState.pickedAnnotationId;
