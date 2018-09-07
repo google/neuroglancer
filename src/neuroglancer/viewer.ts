@@ -604,7 +604,8 @@ export class Viewer extends RefCounted implements ViewerState {
             .replace(new RegExp('[?&]' + parameter + '=[^&#]*(#.*)?$'), '$1')
             .replace(new RegExp('([?&])' + parameter + '=[^&]*&'), '$1');
         }
-        RemoveParameterFromUrl(window.location.search, 'json_url');
+        
+        history.replaceState(null, '', RemoveParameterFromUrl(window.location.search, 'json_url'));
       }
       catch (HttpError){
         console.log('failed to load from: ' + json_url)
