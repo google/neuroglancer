@@ -64,7 +64,6 @@ export function validateStateServer(obj: any) {
   return obj;
 }
 
-
 export class DataManagementContext extends RefCounted {
   worker = new Worker('chunk_worker.bundle.js');
   chunkQueueManager = this.registerDisposer(new ChunkQueueManager(new RPC(this.worker), this.gl, {
@@ -332,7 +331,7 @@ export class Viewer extends RefCounted implements ViewerState {
     state.add('jsonStateServer', this.jsonStateServer);
     state.add('selectedLayer', this.selectedLayer);
     state.add('crossSectionBackgroundColor', this.crossSectionBackgroundColor);
-    
+
     this.registerDisposer(this.navigationState.changed.add(() => {
       this.handleNavigationStateChanged();
     }));
@@ -444,7 +443,6 @@ export class Viewer extends RefCounted implements ViewerState {
     topRow.appendChild(annotationToolStatus.element);
     this.registerDisposer(new ElementVisibilityFromTrackableBoolean(
         this.uiControlVisibility.showAnnotationToolStatus, annotationToolStatus.element));
-    
     
     {
       const button = makeTextIconButton('{}', 'Edit JSON state');
