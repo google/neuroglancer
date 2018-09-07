@@ -211,7 +211,6 @@ export class Viewer extends RefCounted implements ViewerState {
   layerSpecification: TopLevelLayerListSpecification;
   layout: RootLayoutContainer;
 
-  stateServer = new TrackableValue<string>('', validateStateServer);
   jsonStateServer = new TrackableValue<string>('', validateStateServer)
   state = new CompoundTrackable();
 
@@ -330,7 +329,6 @@ export class Viewer extends RefCounted implements ViewerState {
         'systemMemoryLimit', this.dataContext.chunkQueueManager.capacities.systemMemory.sizeLimit);
     state.add(
         'concurrentDownloads', this.dataContext.chunkQueueManager.capacities.download.itemLimit);
-    state.add('stateServer', this.stateServer);
     state.add('jsonStateServer', this.jsonStateServer);
     state.add('selectedLayer', this.selectedLayer);
     state.add('crossSectionBackgroundColor', this.crossSectionBackgroundColor);
@@ -623,7 +621,6 @@ export class Viewer extends RefCounted implements ViewerState {
                               console.log(response);
                               var short_url =window.location.origin+"/?json_url="+this.jsonStateServer.value.replace(/\/$/,"")+"/"+response;
                               alert(short_url);
-                              //="?json_url="+this.jsonStateServer.value+response;
                             })
 
   }
