@@ -458,7 +458,7 @@ export class Viewer extends RefCounted implements ViewerState {
       topRow.appendChild(button);
     }
     {
-      const button = makeTextIconButton('post', 'Post JSON to state server');
+      const button = makeTextIconButton('🔗', 'Post JSON to state server');
       this.registerEventListener(button, 'click', () => {
         this.postJsonState();
       });
