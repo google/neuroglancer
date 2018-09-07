@@ -177,4 +177,6 @@ window.addEventListener('DOMContentLoaded', () => {
 
   bindDefaultCopyHandler(viewer);
   bindDefaultPasteHandler(viewer);
+
+
 });
