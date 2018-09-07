@@ -54,10 +54,16 @@ import {MousePositionWidget, PositionWidget, VoxelSizeWidget} from 'neuroglancer
 import {TrackableScaleBarOptions} from 'neuroglancer/widget/scale_bar';
 import {makeTextIconButton} from 'neuroglancer/widget/text_icon_button';
 import {RPC} from 'neuroglancer/worker_rpc';
+import {openHttpRequest, sendHttpRequest, sendHttpJsonPostRequest} from 'neuroglancer/util/http_request';
 
 require('./viewer.css');
 require('neuroglancer/noselect.css');
 require('neuroglancer/ui/button.css');
+
+export function validateStateServer(obj: any) {
+  return obj;
+}
+
 
 export class DataManagementContext extends RefCounted {
   worker = new Worker('chunk_worker.bundle.js');
@@ -89,6 +95,7 @@ const viewerUiControlOptionKeys: (keyof ViewerUIControlConfiguration)[] = [
   'showLayerPanel',
   'showLocation',
   'showAnnotationToolStatus',
+  'showJsonPostButton'
 ];
 
 const viewerOptionKeys: (keyof ViewerUIOptions)[] =
@@ -97,6 +104,7 @@ const viewerOptionKeys: (keyof ViewerUIOptions)[] =
 export class ViewerUIControlConfiguration {
   showHelpButton = new TrackableBoolean(true);
   showEditStateButton = new TrackableBoolean(true);
+  showJsonPostButton = new TrackableBoolean(true);
   showLayerPanel = new TrackableBoolean(true);
   showLocation = new TrackableBoolean(true);
   showAnnotationToolStatus = new TrackableBoolean(true);
@@ -128,6 +136,7 @@ interface ViewerUIOptions {
   showLocation: boolean;
   showPanelBorders: boolean;
   showAnnotationToolStatus: boolean;
+  showJsonPostButton: boolean;
 }
 
 export interface ViewerOptions extends ViewerUIOptions, VisibilityPrioritySpecification {
@@ -202,6 +211,8 @@ export class Viewer extends RefCounted implements ViewerState {
   layerSpecification: TopLevelLayerListSpecification;
   layout: RootLayoutContainer;
 
+  stateServer = new TrackableValue<string>('', validateStateServer);
+  jsonStateServer = new TrackableValue<string>('', validateStateServer)
   state = new CompoundTrackable();
 
   dataContext: Owned<DataManagementContext>;
@@ -319,9 +330,11 @@ export class Viewer extends RefCounted implements ViewerState {
         'systemMemoryLimit', this.dataContext.chunkQueueManager.capacities.systemMemory.sizeLimit);
     state.add(
         'concurrentDownloads', this.dataContext.chunkQueueManager.capacities.download.itemLimit);
+    state.add('stateServer', this.stateServer);
+    state.add('jsonStateServer', this.jsonStateServer);
     state.add('selectedLayer', this.selectedLayer);
     state.add('crossSectionBackgroundColor', this.crossSectionBackgroundColor);
-
+    
     this.registerDisposer(this.navigationState.changed.add(() => {
       this.handleNavigationStateChanged();
     }));
@@ -433,7 +446,8 @@ export class Viewer extends RefCounted implements ViewerState {
     topRow.appendChild(annotationToolStatus.element);
     this.registerDisposer(new ElementVisibilityFromTrackableBoolean(
         this.uiControlVisibility.showAnnotationToolStatus, annotationToolStatus.element));
-
+    
+    
     {
       const button = makeTextIconButton('{}', 'Edit JSON state');
       this.registerEventListener(button, 'click', () => {
@@ -443,7 +457,15 @@ export class Viewer extends RefCounted implements ViewerState {
           this.uiControlVisibility.showEditStateButton, button));
       topRow.appendChild(button);
     }
-
+    {
+      const button = makeTextIconButton('post', 'Post JSON to state server');
+      this.registerEventListener(button, 'click', () => {
+        this.postJsonState();
+      });
+      this.registerDisposer(new ElementVisibilityFromTrackableBoolean(
+          this.uiControlVisibility.showJsonPostButton, button));
+      topRow.appendChild(button);
+    }
 
     {
       const button = makeTextIconButton('?', 'Help');
@@ -570,6 +592,41 @@ export class Viewer extends RefCounted implements ViewerState {
     ]);
   }
 
+  loadFromJsonUrl(){
+
+    var urlParams = new URLSearchParams(window.location.search);
+    if (urlParams.has('json_url')){
+      
+      let json_url = urlParams.get('json_url')
+      console.log(json_url)
+      try{
+        sendHttpRequest( openHttpRequest(json_url!), 'json').then(response => {
+          this.state.restoreState(response)
+        })
+        function RemoveParameterFromUrl(url: string, parameter: string) {
+          return url
+            .replace(new RegExp('[?&]' + parameter + '=[^&#]*(#.*)?$'), '$1')
+            .replace(new RegExp('([?&])' + parameter + '=[^&]*&'), '$1');
+        }
+        RemoveParameterFromUrl(window.location.search, 'json_url');
+      }
+      catch (HttpError){
+        console.log('failed to load from: ' + json_url)
+      }
+
+    }
+  }
+  postJsonState() {
+    
+    sendHttpJsonPostRequest(openHttpRequest(this.jsonStateServer.value, 'POST'),
+                            this.state.toJSON(),"json").then(response => {
+                              console.log(response);
+                              var short_url =window.location.origin+"/?json_url="+this.jsonStateServer.value.replace(/\/$/,"")+"/"+response;
+                              alert(short_url);
+                              //="?json_url="+this.jsonStateServer.value+response;
+                            })
+
+  }
   editJsonState() {
     new StateEditorDialog(this);
   }
