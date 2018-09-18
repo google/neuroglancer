@@ -27,7 +27,7 @@ import {TrackableValue} from 'neuroglancer/trackable_value';
 import {TrackableRGB} from 'neuroglancer/util/color';
 import {Owned} from 'neuroglancer/util/disposable';
 import {ActionEvent, registerActionListener} from 'neuroglancer/util/event_action_map';
-import {kAxes, mat4, transformVectorByMat4, vec2, vec3, vec4} from 'neuroglancer/util/geom';
+import {kAxes, mat4, transformVectorByMat4, vec3, vec4} from 'neuroglancer/util/geom';
 import {startRelativeMouseDrag} from 'neuroglancer/util/mouse_drag';
 import {WatchableMap} from 'neuroglancer/util/watchable_map';
 import {withSharedVisibility} from 'neuroglancer/visibility_priority/frontend';
@@ -36,8 +36,6 @@ import {ShaderBuilder} from 'neuroglancer/webgl/shader';
 import {glsl_packFloat01ToFixedPoint, unpackFloat01FromFixedPoint} from 'neuroglancer/webgl/shader_lib';
 import {ScaleBarOptions, ScaleBarTexture} from 'neuroglancer/widget/scale_bar';
 import {RPC, SharedObject} from 'neuroglancer/worker_rpc';
-import {Annotation} from 'neuroglancer/annotation';
-import {getAnnotationTypeRenderHandler} from 'neuroglancer/annotation/type_handler'
 
 require('neuroglancer/noselect.css');
 require('./panel.css');
@@ -180,6 +178,8 @@ export class PerspectivePanel extends RenderedDataPanel {
 
   private nanometersPerPixel = 1;
 
+ 
+
   constructor(context: DisplayContext, element: HTMLElement, viewer: PerspectiveViewerState) {
     super(context, element, viewer);
     this.registerDisposer(this.navigationState.changed.add(() => {
@@ -231,52 +231,7 @@ export class PerspectivePanel extends RenderedDataPanel {
       });
     });
 
-    registerActionListener(element, 'move-annotation', (e: ActionEvent<MouseEvent>) => {
-      const {mouseState} = this.viewer;
-      const selectedAnnotationId = mouseState.pickedAnnotationId;
-      const annotationLayer = mouseState.pickedAnnotationLayer;
-
-      //let voxelSize = this.viewer.navigationState.voxelSize
-      if (typeof(annotationLayer) != 'undefined'){
-        if (typeof(selectedAnnotationId) != 'undefined'){
-          e.stopPropagation();
-          let annotationRef = annotationLayer.source.getReference(selectedAnnotationId)!;
-          let ann = <Annotation>annotationRef.value;
-         
-          const handler = getAnnotationTypeRenderHandler(ann.type);
-          const pickedOffset = mouseState.pickedOffset;
-          let repPoint = handler.getRepresentativePoint(annotationLayer.objectToGlobal,
-                                                        ann,
-                                                        mouseState.pickedOffset);
-          let totDeltaVec = vec2.set(vec2.create(), 0, 0)
     
-          if (mouseState.updateUnconditionally()) {
-            startRelativeMouseDrag(e.detail, (_event, deltaX, deltaY) => {
-              const temp = tempVec3;
-              const {projectionMat} = this;
-              const {width, height} = this;
-              vec2.add(totDeltaVec, totDeltaVec, [deltaX, deltaY])
-              vec3.transformMat4(temp, repPoint, projectionMat);
-              temp[0] -= 2 * totDeltaVec[0] / width;
-              temp[1] -= -2 * totDeltaVec[1] / height;
-              let newRepPt = vec3.transformMat4(vec3.create(), temp, this.inverseProjectionMat);
-              let newAnnotation = handler.updateViaRepresentativePoint(<Annotation> annotationRef.value,
-                                                                        newRepPt,
-                                                                        annotationLayer.globalToObject,
-                                                                        pickedOffset
-                                                                        );
-              annotationLayer.source.delete(annotationRef);
-              annotationRef.dispose();
-              annotationRef = annotationLayer.source.add(newAnnotation, false);
-            },
-            (_event) => {
-              annotationLayer.source.commit(annotationRef);
-              annotationRef.dispose();
-            });
-         }
-       }
-    }
-    });
     if (viewer.showSliceViewsCheckbox) {
       let showSliceViewsCheckbox =
           this.registerDisposer(new TrackableBooleanCheckbox(viewer.showSliceViews));
@@ -409,6 +364,16 @@ export class PerspectivePanel extends RenderedDataPanel {
         mouseState,
         offscreenFramebuffer.readPixelAsUint32(OffscreenTextures.PICK, glWindowX, glWindowY));
     return true;
+  }
+
+  translateDataPointByViewportPixels(out: vec3, orig: vec3, deltaX: number, deltaY: number):vec3{
+    const temp = tempVec3;
+    const {projectionMat} = this;
+    const {width, height} = this;
+    vec3.transformMat4(temp, orig, projectionMat);
+    temp[0] -= 2 * deltaX / width;
+    temp[1] -= -2 * deltaY / height;
+    return vec3.transformMat4(out, temp, this.inverseProjectionMat);     
   }
 
   private get transparentConfiguration() {

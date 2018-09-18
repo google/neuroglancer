@@ -23,14 +23,11 @@ import {SliceView, SliceViewRenderHelper} from 'neuroglancer/sliceview/frontend'
 import {TrackableBoolean} from 'neuroglancer/trackable_boolean';
 import {TrackableRGB} from 'neuroglancer/util/color';
 import {ActionEvent, registerActionListener} from 'neuroglancer/util/event_action_map';
-import {identityMat4, mat4, vec2, vec3, vec4} from 'neuroglancer/util/geom';
+import {identityMat4, mat4, vec3, vec4} from 'neuroglancer/util/geom';
 import {startRelativeMouseDrag} from 'neuroglancer/util/mouse_drag';
 import {FramebufferConfiguration, makeTextureBuffers, OffscreenCopyHelper} from 'neuroglancer/webgl/offscreen';
 import {ShaderBuilder, ShaderModule} from 'neuroglancer/webgl/shader';
 import {ScaleBarTexture, TrackableScaleBarOptions} from 'neuroglancer/widget/scale_bar';
-import {Annotation} from 'neuroglancer/annotation';
-import {getAnnotationTypeRenderHandler} from 'neuroglancer/annotation/type_handler'
-
 
 export interface SliceViewerState extends RenderedDataViewerState {
   showScaleBar: TrackableBoolean;
@@ -145,54 +142,6 @@ export class SliceViewPanel extends RenderedDataPanel {
       }
     });
 
-    registerActionListener(element, 'move-annotation', (e: ActionEvent<MouseEvent>) => {
-      const {mouseState} = this.viewer;
-
-      const selectedAnnotationId = mouseState.pickedAnnotationId;
-      const annotationLayer = mouseState.pickedAnnotationLayer;
-      
-      //let voxelSize = this.viewer.navigationState.voxelSize
-      if (typeof(annotationLayer) != 'undefined'){
-        if (typeof(selectedAnnotationId) != 'undefined'){
-          e.stopPropagation()
-          let annotationRef = annotationLayer.source.getReference(selectedAnnotationId)!;
-          let ann = <Annotation>annotationRef.value;
-         
-          const handler = getAnnotationTypeRenderHandler(ann.type);
-          const pickedOffset = mouseState.pickedOffset;
-          let repPoint = handler.getRepresentativePoint(annotationLayer.objectToGlobal,
-                                                        ann,
-                                                        mouseState.pickedOffset
-                                                       );
-          let totDeltaVec = vec2.set(vec2.create(), 0, 0)
-
-          if (mouseState.updateUnconditionally()) {
-            startRelativeMouseDrag(e.detail, (_event, deltaX, deltaY) => {
-              
-              vec2.add(totDeltaVec, totDeltaVec, [deltaX, deltaY])
-              
-              let newRepPt= vec3.transformMat4(vec3.create(), repPoint, this.sliceView.dataToViewport);
-              vec3.set(newRepPt, newRepPt[0]-totDeltaVec[0], newRepPt[1]-totDeltaVec[1], newRepPt[2]);
-              vec3.transformMat4(newRepPt, newRepPt, this.sliceView.viewportToData);
-              
-              let newAnnotation = handler.updateViaRepresentativePoint(<Annotation> annotationRef.value,
-                                                                       newRepPt,
-                                                                       annotationLayer.globalToObject,
-                                                                       pickedOffset
-                                                                       );
-              annotationLayer.source.delete(annotationRef);
-              annotationRef.dispose();
-              annotationRef = annotationLayer.source.add(newAnnotation, false);
-            },
-            (_event) => {
-              annotationLayer.source.commit(annotationRef);
-              annotationRef.dispose();
-            });
-         }
-       }
-    }
-    });
-  
     registerActionListener(element, 'rotate-via-mouse-drag', (e: ActionEvent<MouseEvent>) => {
       const {mouseState} = this.viewer;
       if (mouseState.updateUnconditionally()) {
@@ -232,6 +181,13 @@ export class SliceViewPanel extends RenderedDataPanel {
         this.context.scheduleRedraw();
       }
     }));
+  }
+
+  translateDataPointByViewportPixels(out: vec3, orig: vec3, deltaX: number, deltaY: number):vec3{
+    vec3.transformMat4(out, orig, this.sliceView.dataToViewport);
+    vec3.set(out, out[0]-deltaX, out[1]-deltaY, out[2]);
+    vec3.transformMat4(out, out, this.sliceView.viewportToData);
+    return out;     
   }
 
   isReady() {

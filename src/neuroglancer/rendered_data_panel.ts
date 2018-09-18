@@ -21,11 +21,15 @@ import {NavigationState} from 'neuroglancer/navigation_state';
 import {UserLayerWithAnnotations} from 'neuroglancer/ui/annotations';
 import {AutomaticallyFocusedElement} from 'neuroglancer/util/automatic_focus';
 import {ActionEvent, EventActionMap, registerActionListener} from 'neuroglancer/util/event_action_map';
-import {AXES_NAMES, kAxes, vec3} from 'neuroglancer/util/geom';
+import {AXES_NAMES, kAxes, vec2, vec3} from 'neuroglancer/util/geom';
 import {KeyboardEventBinder} from 'neuroglancer/util/keyboard_bindings';
 import {MouseEventBinder} from 'neuroglancer/util/mouse_bindings';
 import {getWheelZoomAmount} from 'neuroglancer/util/wheel_zoom';
 import {ViewerState} from 'neuroglancer/viewer_state';
+import {Annotation} from 'neuroglancer/annotation';
+import {getAnnotationTypeRenderHandler} from 'neuroglancer/annotation/type_handler'
+import {startRelativeMouseDrag} from 'neuroglancer/util/mouse_drag';
+
 
 require('./rendered_data_panel.css');
 require('neuroglancer/noselect.css');
@@ -48,6 +52,7 @@ export abstract class RenderedDataPanel extends RenderedPanel {
   inputEventMap: EventActionMap;
 
   navigationState: NavigationState;
+
 
   constructor(
       context: DisplayContext, element: HTMLElement, public viewer: RenderedDataViewerState) {
@@ -148,7 +153,49 @@ export abstract class RenderedDataPanel extends RenderedPanel {
         };
       }
     });
+    registerActionListener(element, 'move-annotation', (e: ActionEvent<MouseEvent>) => {
+      const {mouseState} = this.viewer;
+      const selectedAnnotationId = mouseState.pickedAnnotationId;
+      const annotationLayer = mouseState.pickedAnnotationLayer;
+  
+      //let voxelSize = this.viewer.navigationState.voxelSize
+      if (typeof(annotationLayer) != 'undefined'){
+        if (typeof(selectedAnnotationId) != 'undefined'){
+          e.stopPropagation();
+          let annotationRef = annotationLayer.source.getReference(selectedAnnotationId)!;
+          let ann = <Annotation>annotationRef.value;
+         
+          const handler = getAnnotationTypeRenderHandler(ann.type);
+          const pickedOffset = mouseState.pickedOffset;
+          let repPoint = handler.getRepresentativePoint(annotationLayer.objectToGlobal,
+                                                        ann,
+                                                        mouseState.pickedOffset);
+          let totDeltaVec = vec2.set(vec2.create(), 0, 0)
+    
+          if (mouseState.updateUnconditionally()) {
+            startRelativeMouseDrag(e.detail, (_event, deltaX, deltaY) => {
+              vec2.add(totDeltaVec, totDeltaVec, [deltaX, deltaY])
+              let newRepPt = this.translateDataPointByViewportPixels(vec3.create(), repPoint, totDeltaVec[0], totDeltaVec[1]);
+              let newAnnotation = handler.updateViaRepresentativePoint(<Annotation> annotationRef.value,
+                                                                        newRepPt,
+                                                                        annotationLayer.globalToObject,
+                                                                        pickedOffset
+                                                                        );
+              annotationLayer.source.delete(annotationRef);
+              annotationRef.dispose();
+              annotationRef = annotationLayer.source.add(newAnnotation, false);
+            },
+            (_event) => {
+              annotationLayer.source.commit(annotationRef);
+              annotationRef.dispose();
+            });
+         }
+       }
+    }
+    });
   }
+
+  
 
   onMouseout(_event: MouseEvent) {
     let {mouseState} = this.viewer;
