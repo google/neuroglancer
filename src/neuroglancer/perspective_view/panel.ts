@@ -231,7 +231,7 @@ export class PerspectivePanel extends RenderedDataPanel {
       });
     });
 
-    registerActionListener(element, 'select', (e: ActionEvent<MouseEvent>) => {
+    registerActionListener(element, 'move-annotation', (e: ActionEvent<MouseEvent>) => {
       const {mouseState} = this.viewer;
       const selectedAnnotationId = mouseState.pickedAnnotationId;
       const annotationLayer = mouseState.pickedAnnotationLayer;
@@ -246,10 +246,8 @@ export class PerspectivePanel extends RenderedDataPanel {
           const handler = getAnnotationTypeRenderHandler(ann.type);
           const pickedOffset = mouseState.pickedOffset;
           let repPoint = handler.getRepresentativePoint(annotationLayer.objectToGlobal,
-                                                        <ArrayBuffer> mouseState.pickedAnnotationBuffer,
-                                                        <number> mouseState.pickedAnnotationBufferOffset,
-                                                        mouseState.pickedOffset,
-                                                        ann);
+                                                        ann,
+                                                        mouseState.pickedOffset);
           let totDeltaVec = vec2.set(vec2.create(), 0, 0)
     
           if (mouseState.updateUnconditionally()) {
@@ -265,9 +263,7 @@ export class PerspectivePanel extends RenderedDataPanel {
               let newAnnotation = handler.updateViaRepresentativePoint(<Annotation> annotationRef.value,
                                                                         newRepPt,
                                                                         annotationLayer.globalToObject,
-                                                                        pickedOffset,
-                                                                        <ArrayBuffer> mouseState.pickedAnnotationBuffer,
-                                                                        <number> mouseState.pickedAnnotationBufferOffset,
+                                                                        pickedOffset
                                                                         );
               annotationLayer.source.delete(annotationRef);
               annotationRef.dispose();

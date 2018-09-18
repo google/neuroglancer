@@ -82,9 +82,9 @@ registerAnnotationTypeRenderHandler(AnnotationType.POINT, {
   snapPosition: (position: vec3, objectToData, data, offset) => {
     vec3.transformMat4(position, <vec3>new Float32Array(data, offset, 3), objectToData);
   },
-  getRepresentativePoint: (objectToData, data, offset) => {
+  getRepresentativePoint: (objectToData, ann) => {
     let repPoint= vec3.create();
-    vec3.transformMat4(repPoint, <vec3>new Float32Array(data, offset, 3), objectToData);
+    vec3.transformMat4(repPoint, ann.point, objectToData);
     return repPoint;
   }, 
   updateViaRepresentativePoint: (oldAnnotation: Point, position: vec3, dataToObject: mat4) => {

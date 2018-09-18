@@ -73,7 +73,8 @@ export function getDefaultRenderedDataPanelBindings() {
           'at:dblclick0': 'select',
           'at:control+mousedown0': 'annotate',
           'at:mousedown2': 'move-to-mouse-position',
-          'at:control+mousedown2': 'select-annotation'
+          'at:control+mousedown2': 'select-annotation',
+          'at:alt+mousedown0':'move-annotation'
         },
         {label: 'All Data Panels'});
   }
