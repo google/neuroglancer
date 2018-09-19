@@ -248,7 +248,6 @@ registerAnnotationTypeRenderHandler(AnnotationType.ELLIPSOID, {
   },
   updateViaRepresentativePoint: (oldAnnotation: Ellipsoid, position: vec3, dataToObject: mat4) => {
     let annotation = {...oldAnnotation};
-    annotation.id = '';
     annotation.center = vec3.transformMat4(vec3.create(), position, dataToObject);
     return annotation;
   }

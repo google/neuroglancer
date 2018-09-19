@@ -439,7 +439,6 @@ registerAnnotationTypeRenderHandler(AnnotationType.AXIS_ALIGNED_BOUNDING_BOX, {
        partIndex: number) => {
         let newPt = vec3.transformMat4(vec3.create(), position, dataToObject);
         let baseBox = {...oldAnnotation};
-        baseBox.id = '';
         // if the full object is selected pick the first corner as representative
         let delta = vec3.sub(vec3.create(), oldAnnotation.pointB, oldAnnotation.pointA);
         if (partIndex === FULL_OBJECT_PICK_OFFSET) {

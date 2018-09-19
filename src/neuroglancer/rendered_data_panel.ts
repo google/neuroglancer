@@ -176,11 +176,8 @@ export abstract class RenderedDataPanel extends RenderedPanel {
                   let newRepPt = this.translateDataPointByViewportPixels(
                       vec3.create(), repPoint, totDeltaVec[0], totDeltaVec[1]);
                   let newAnnotation = handler.updateViaRepresentativePoint(
-                      <Annotation>annotationRef.value, newRepPt, annotationLayer.globalToObject,
-                      pickedOffset);
-                  annotationLayer.source.delete(annotationRef);
-                  annotationRef.dispose();
-                  annotationRef = annotationLayer.source.add(newAnnotation, true);
+                      ann, newRepPt, annotationLayer.globalToObject, pickedOffset);
+                  annotationLayer.source.update(annotationRef, newAnnotation);
                 },
                 (_event) => {
                   annotationRef.dispose();

@@ -90,7 +90,7 @@ registerAnnotationTypeRenderHandler(AnnotationType.POINT, {
   updateViaRepresentativePoint: (oldAnnotation: Point, position: vec3, dataToObject: mat4) => {
     let annotation = {...oldAnnotation};
     annotation.point = vec3.transformMat4(vec3.create(), position, dataToObject);
-    annotation.id = '';
+    // annotation.id = '';
     return annotation;
   }
 });

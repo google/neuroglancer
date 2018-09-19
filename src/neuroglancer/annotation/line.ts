@@ -191,7 +191,6 @@ registerAnnotationTypeRenderHandler(AnnotationType.LINE, {
   updateViaRepresentativePoint: (oldAnnotation, position, dataToObject, partIndex) => {
     let newPt = vec3.transformMat4(vec3.create(), position, dataToObject);
     let baseLine = {...oldAnnotation};
-    baseLine.id = '';
     switch (partIndex) {
       case FULL_OBJECT_PICK_OFFSET:
         let delta = vec3.sub(vec3.create(), oldAnnotation.pointB, oldAnnotation.pointA);
