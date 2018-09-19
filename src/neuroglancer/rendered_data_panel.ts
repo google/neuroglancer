@@ -27,7 +27,7 @@ import {MouseEventBinder} from 'neuroglancer/util/mouse_bindings';
 import {getWheelZoomAmount} from 'neuroglancer/util/wheel_zoom';
 import {ViewerState} from 'neuroglancer/viewer_state';
 import {Annotation} from 'neuroglancer/annotation';
-import {getAnnotationTypeRenderHandler} from 'neuroglancer/annotation/type_handler'
+import {getAnnotationTypeRenderHandler} from 'neuroglancer/annotation/type_handler';
 import {startRelativeMouseDrag} from 'neuroglancer/util/mouse_drag';
 
 
@@ -157,24 +157,23 @@ export abstract class RenderedDataPanel extends RenderedPanel {
       const {mouseState} = this.viewer;
       const selectedAnnotationId = mouseState.pickedAnnotationId;
       const annotationLayer = mouseState.pickedAnnotationLayer;
-  
-      //let voxelSize = this.viewer.navigationState.voxelSize
-      if (typeof(annotationLayer) != 'undefined'){
-        if (typeof(selectedAnnotationId) != 'undefined'){
+      if (annotationLayer !== undefined) {
+
+        if (selectedAnnotationId !== undefined) {
+
           e.stopPropagation();
           let annotationRef = annotationLayer.source.getReference(selectedAnnotationId)!;
           let ann = <Annotation>annotationRef.value;
-         
+
           const handler = getAnnotationTypeRenderHandler(ann.type);
           const pickedOffset = mouseState.pickedOffset;
           let repPoint = handler.getRepresentativePoint(annotationLayer.objectToGlobal,
                                                         ann,
                                                         mouseState.pickedOffset);
-          let totDeltaVec = vec2.set(vec2.create(), 0, 0)
-    
+          let totDeltaVec = vec2.set(vec2.create(), 0, 0);
           if (mouseState.updateUnconditionally()) {
             startRelativeMouseDrag(e.detail, (_event, deltaX, deltaY) => {
-              vec2.add(totDeltaVec, totDeltaVec, [deltaX, deltaY])
+              vec2.add(totDeltaVec, totDeltaVec, [deltaX, deltaY]);
               let newRepPt = this.translateDataPointByViewportPixels(vec3.create(), repPoint, totDeltaVec[0], totDeltaVec[1]);
               let newAnnotation = handler.updateViaRepresentativePoint(<Annotation> annotationRef.value,
                                                                         newRepPt,
@@ -186,6 +185,7 @@ export abstract class RenderedDataPanel extends RenderedPanel {
               annotationRef = annotationLayer.source.add(newAnnotation, false);
             },
             (_event) => {
+              console.log('committing annotationRef', annotationRef.id);
               annotationLayer.source.commit(annotationRef);
               annotationRef.dispose();
             });
@@ -195,7 +195,6 @@ export abstract class RenderedDataPanel extends RenderedPanel {
     });
   }
 
-  
 
   onMouseout(_event: MouseEvent) {
     let {mouseState} = this.viewer;

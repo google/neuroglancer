@@ -60,9 +60,9 @@ export abstract class RenderedPanel extends RefCounted {
   abstract onResize(): void;
 
   abstract draw(): void;
-  
+
   abstract translateDataPointByViewportPixels(out: vec3, orig: vec3, deltaX: number, deltaY: number): vec3;
-  
+
   disposed() {
     this.context.removePanel(this);
     super.disposed();

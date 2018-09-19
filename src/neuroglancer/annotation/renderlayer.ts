@@ -410,7 +410,6 @@ function AnnotationRenderLayer<TBase extends {
           mouseState.pickedOffset = partIndex;
           mouseState.pickedAnnotationBuffer = chunk.data!.buffer;
           mouseState.pickedAnnotationBufferOffset = chunk.data!.byteOffset + typeToOffset[annotationType] + instanceIndex * handler.bytes;
-    
           handler.snapPosition(
               mouseState.position, this.base.state.objectToGlobal, mouseState.pickedAnnotationBuffer,
               mouseState.pickedAnnotationBufferOffset,

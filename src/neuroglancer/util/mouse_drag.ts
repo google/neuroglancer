@@ -33,7 +33,7 @@ export function startRelativeMouseDrag(initialEvent: MouseEvent,
       document.removeEventListener('mousemove', mouseMoveHandler, true);
       document.removeEventListener('mouseup', mouseUpHandler, false);
 
-      if (typeof(finishDragHandler) != 'undefined') finishDragHandler(e, prevScreenX - e.clientX, prevScreenY - e.clientY);
+      if (finishDragHandler !== undefined) { finishDragHandler(e, prevScreenX - e.clientX, prevScreenY - e.clientY); }
     }
   };
   document.addEventListener('mousemove', mouseMoveHandler, true);

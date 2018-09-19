@@ -178,7 +178,6 @@ export class PerspectivePanel extends RenderedDataPanel {
 
   private nanometersPerPixel = 1;
 
- 
 
   constructor(context: DisplayContext, element: HTMLElement, viewer: PerspectiveViewerState) {
     super(context, element, viewer);
@@ -231,7 +230,6 @@ export class PerspectivePanel extends RenderedDataPanel {
       });
     });
 
-    
     if (viewer.showSliceViewsCheckbox) {
       let showSliceViewsCheckbox =
           this.registerDisposer(new TrackableBooleanCheckbox(viewer.showSliceViews));
@@ -366,14 +364,14 @@ export class PerspectivePanel extends RenderedDataPanel {
     return true;
   }
 
-  translateDataPointByViewportPixels(out: vec3, orig: vec3, deltaX: number, deltaY: number):vec3{
+  translateDataPointByViewportPixels(out: vec3, orig: vec3, deltaX: number, deltaY: number):vec3 {
     const temp = tempVec3;
     const {projectionMat} = this;
     const {width, height} = this;
     vec3.transformMat4(temp, orig, projectionMat);
     temp[0] -= 2 * deltaX / width;
     temp[1] -= -2 * deltaY / height;
-    return vec3.transformMat4(out, temp, this.inverseProjectionMat);     
+    return vec3.transformMat4(out, temp, this.inverseProjectionMat);
   }
 
   private get transparentConfiguration() {

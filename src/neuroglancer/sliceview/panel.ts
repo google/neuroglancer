@@ -59,7 +59,7 @@ void emit(vec4 color, vec4 pickId) {
 `);
 }
 
- 
+
 export interface SliceViewPanelRenderContext {
   dataToDevice: mat4;
   pickIDs: PickIDManager;
@@ -183,11 +183,11 @@ export class SliceViewPanel extends RenderedDataPanel {
     }));
   }
 
-  translateDataPointByViewportPixels(out: vec3, orig: vec3, deltaX: number, deltaY: number):vec3{
+  translateDataPointByViewportPixels(out: vec3, orig: vec3, deltaX: number, deltaY: number):vec3 {
     vec3.transformMat4(out, orig, this.sliceView.dataToViewport);
     vec3.set(out, out[0]-deltaX, out[1]-deltaY, out[2]);
     vec3.transformMat4(out, out, this.sliceView.viewportToData);
-    return out;     
+    return out;
   }
 
   isReady() {
