@@ -57,12 +57,8 @@ export function decodeFragmentChunk(chunk: FragmentChunk, response: ArrayBuffer)
     // DVID does not currently store meshes chunked, the main
     // use-case is for low-resolution 3D views.
     // for now, fragmentId is the body id
-    return new Promise(function(resolve) {
-             resolve();
-           })
-        .then(() => {
-          chunk.fragmentIds = [`${chunk.objectId}`];
-        });
+    chunk.fragmentIds = [`${chunk.objectId}`];
+    return Promise.resolve(undefined);
   }
 
   downloadFragment(chunk: FragmentChunk, cancellationToken: CancellationToken) {
