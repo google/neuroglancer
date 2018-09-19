@@ -416,12 +416,11 @@ registerAnnotationTypeRenderHandler(AnnotationType.AXIS_ALIGNED_BOUNDING_BOX, {
     }
   },
   getRepresentativePoint: (objectToData, ann, partIndex) => {
-    let repPoint= vec3.create();
+    let repPoint = vec3.create();
     // if the full object is selected pick the first corner as representative
-    if (partIndex===FULL_OBJECT_PICK_OFFSET) {
+    if (partIndex === FULL_OBJECT_PICK_OFFSET) {
       vec3.transformMat4(repPoint, ann.pointA, objectToData);
-    }
-    else if (partIndex >= CORNERS_PICK_OFFSET && partIndex < EDGES_PICK_OFFSET) {
+    } else if (partIndex >= CORNERS_PICK_OFFSET && partIndex < EDGES_PICK_OFFSET) {
       // picked a corner
       // FIXME: figure out how to return corner point
       vec3.transformMat4(repPoint, ann.pointA, objectToData);
@@ -429,35 +428,34 @@ registerAnnotationTypeRenderHandler(AnnotationType.AXIS_ALIGNED_BOUNDING_BOX, {
       // FIXME: can't figure out how to resize based upon edge grabbed
       vec3.transformMat4(repPoint, ann.pointA, objectToData);
       // snapPositionToCorner(repPoint, objectToData, corners, 5);
-    }
-    else { // for now faces will move the whole object so pick the first corner
+    } else {  // for now faces will move the whole object so pick the first corner
       vec3.transformMat4(repPoint, ann.pointA, objectToData);
     }
     return repPoint;
   },
 
-  updateViaRepresentativePoint: (oldAnnotation: AxisAlignedBoundingBox, position: vec3, dataToObject: mat4, partIndex: number) => {
-    let newPt = vec3.transformMat4(vec3.create(), position, dataToObject);
-    let baseBox = {...oldAnnotation};
-    baseBox.id = '';
-    // if the full object is selected pick the first corner as representative
-    let delta = vec3.sub(vec3.create(), oldAnnotation.pointB, oldAnnotation.pointA);
-    if (partIndex===FULL_OBJECT_PICK_OFFSET) {
-      baseBox.pointA = newPt;
-      baseBox.pointB = vec3.add(vec3.create(), newPt, delta);
-    }
-    else if (partIndex >= CORNERS_PICK_OFFSET && partIndex < EDGES_PICK_OFFSET) {
-      // picked a corner
-      baseBox.pointA = newPt;
-      baseBox.pointB = vec3.add(vec3.create(), newPt, delta);
-    } else if (partIndex >= EDGES_PICK_OFFSET && partIndex < FACES_PICK_OFFSET) {
-      baseBox.pointA = newPt;
-      baseBox.pointB = vec3.add(vec3.create(), newPt, delta);
-    }
-    else { // for now faces will move the whole object so pick the first corner
-      baseBox.pointA = newPt;
-      baseBox.pointB = vec3.add(vec3.create(), newPt, delta);
-    }
-    return baseBox;
-  }
+  updateViaRepresentativePoint:
+      (oldAnnotation: AxisAlignedBoundingBox, position: vec3, dataToObject: mat4,
+       partIndex: number) => {
+        let newPt = vec3.transformMat4(vec3.create(), position, dataToObject);
+        let baseBox = {...oldAnnotation};
+        baseBox.id = '';
+        // if the full object is selected pick the first corner as representative
+        let delta = vec3.sub(vec3.create(), oldAnnotation.pointB, oldAnnotation.pointA);
+        if (partIndex === FULL_OBJECT_PICK_OFFSET) {
+          baseBox.pointA = newPt;
+          baseBox.pointB = vec3.add(vec3.create(), newPt, delta);
+        } else if (partIndex >= CORNERS_PICK_OFFSET && partIndex < EDGES_PICK_OFFSET) {
+          // picked a corner
+          baseBox.pointA = newPt;
+          baseBox.pointB = vec3.add(vec3.create(), newPt, delta);
+        } else if (partIndex >= EDGES_PICK_OFFSET && partIndex < FACES_PICK_OFFSET) {
+          baseBox.pointA = newPt;
+          baseBox.pointB = vec3.add(vec3.create(), newPt, delta);
+        } else {  // for now faces will move the whole object so pick the first corner
+          baseBox.pointA = newPt;
+          baseBox.pointB = vec3.add(vec3.create(), newPt, delta);
+        }
+        return baseBox;
+      }
 });

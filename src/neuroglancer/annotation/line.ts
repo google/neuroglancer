@@ -175,21 +175,20 @@ registerAnnotationTypeRenderHandler(AnnotationType.LINE, {
     }
   },
   getRepresentativePoint: (objectToData, ann, partIndex) => {
-    let repPoint= vec3.create();
+    let repPoint = vec3.create();
     // if the full object is selected just pick the first point as representative
     if (partIndex === FULL_OBJECT_PICK_OFFSET) {
       vec3.transformMat4(repPoint, ann.pointA, objectToData);
     } else {
-      if ((partIndex-ENDPOINTS_PICK_OFFSET)===0) {
+      if ((partIndex - ENDPOINTS_PICK_OFFSET) === 0) {
         vec3.transformMat4(repPoint, ann.pointA, objectToData);
-      }
-      else {
+      } else {
         vec3.transformMat4(repPoint, ann.pointB, objectToData);
       }
     }
     return repPoint;
   },
-  updateViaRepresentativePoint: (oldAnnotation, position, dataToObject, partIndex)  => {
+  updateViaRepresentativePoint: (oldAnnotation, position, dataToObject, partIndex) => {
     let newPt = vec3.transformMat4(vec3.create(), position, dataToObject);
     let baseLine = {...oldAnnotation};
     baseLine.id = '';
@@ -199,11 +198,11 @@ registerAnnotationTypeRenderHandler(AnnotationType.LINE, {
         baseLine.pointA = newPt;
         baseLine.pointB = vec3.add(vec3.create(), newPt, delta);
         break;
-      case FULL_OBJECT_PICK_OFFSET+1:
+      case FULL_OBJECT_PICK_OFFSET + 1:
         baseLine.pointA = newPt;
         baseLine.pointB = oldAnnotation.pointB;
         break;
-      case FULL_OBJECT_PICK_OFFSET+2:
+      case FULL_OBJECT_PICK_OFFSET + 2:
         baseLine.pointA = oldAnnotation.pointA;
         baseLine.pointB = newPt;
     }

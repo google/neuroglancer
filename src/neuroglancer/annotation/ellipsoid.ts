@@ -242,7 +242,7 @@ registerAnnotationTypeRenderHandler(AnnotationType.ELLIPSOID, {
     // FIXME: snap to nearest point on ellipsoid surface
   },
   getRepresentativePoint: (objectToData, ann) => {
-    let repPoint= vec3.create();
+    let repPoint = vec3.create();
     vec3.transformMat4(repPoint, ann.center, objectToData);
     return repPoint;
   },

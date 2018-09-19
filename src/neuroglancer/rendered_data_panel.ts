@@ -14,7 +14,9 @@
  * limitations under the License.
  */
 
+import {Annotation} from 'neuroglancer/annotation';
 import {getSelectedAnnotation} from 'neuroglancer/annotation/selection';
+import {getAnnotationTypeRenderHandler} from 'neuroglancer/annotation/type_handler';
 import {DisplayContext, RenderedPanel} from 'neuroglancer/display_context';
 import {MouseSelectionState} from 'neuroglancer/layer';
 import {NavigationState} from 'neuroglancer/navigation_state';
@@ -24,11 +26,9 @@ import {ActionEvent, EventActionMap, registerActionListener} from 'neuroglancer/
 import {AXES_NAMES, kAxes, vec2, vec3} from 'neuroglancer/util/geom';
 import {KeyboardEventBinder} from 'neuroglancer/util/keyboard_bindings';
 import {MouseEventBinder} from 'neuroglancer/util/mouse_bindings';
+import {startRelativeMouseDrag} from 'neuroglancer/util/mouse_drag';
 import {getWheelZoomAmount} from 'neuroglancer/util/wheel_zoom';
 import {ViewerState} from 'neuroglancer/viewer_state';
-import {Annotation} from 'neuroglancer/annotation';
-import {getAnnotationTypeRenderHandler} from 'neuroglancer/annotation/type_handler';
-import {startRelativeMouseDrag} from 'neuroglancer/util/mouse_drag';
 
 
 require('./rendered_data_panel.css');
@@ -158,40 +158,38 @@ export abstract class RenderedDataPanel extends RenderedPanel {
       const selectedAnnotationId = mouseState.pickedAnnotationId;
       const annotationLayer = mouseState.pickedAnnotationLayer;
       if (annotationLayer !== undefined) {
-
         if (selectedAnnotationId !== undefined) {
-
           e.stopPropagation();
           let annotationRef = annotationLayer.source.getReference(selectedAnnotationId)!;
           let ann = <Annotation>annotationRef.value;
 
           const handler = getAnnotationTypeRenderHandler(ann.type);
           const pickedOffset = mouseState.pickedOffset;
-          let repPoint = handler.getRepresentativePoint(annotationLayer.objectToGlobal,
-                                                        ann,
-                                                        mouseState.pickedOffset);
+          let repPoint = handler.getRepresentativePoint(
+              annotationLayer.objectToGlobal, ann, mouseState.pickedOffset);
           let totDeltaVec = vec2.set(vec2.create(), 0, 0);
           if (mouseState.updateUnconditionally()) {
-            startRelativeMouseDrag(e.detail, (_event, deltaX, deltaY) => {
-              vec2.add(totDeltaVec, totDeltaVec, [deltaX, deltaY]);
-              let newRepPt = this.translateDataPointByViewportPixels(vec3.create(), repPoint, totDeltaVec[0], totDeltaVec[1]);
-              let newAnnotation = handler.updateViaRepresentativePoint(<Annotation> annotationRef.value,
-                                                                        newRepPt,
-                                                                        annotationLayer.globalToObject,
-                                                                        pickedOffset
-                                                                        );
-              annotationLayer.source.delete(annotationRef);
-              annotationRef.dispose();
-              annotationRef = annotationLayer.source.add(newAnnotation, false);
-            },
-            (_event) => {
-              console.log('committing annotationRef', annotationRef.id);
-              annotationLayer.source.commit(annotationRef);
-              annotationRef.dispose();
-            });
-         }
-       }
-    }
+            startRelativeMouseDrag(
+                e.detail,
+                (_event, deltaX, deltaY) => {
+                  vec2.add(totDeltaVec, totDeltaVec, [deltaX, deltaY]);
+                  let newRepPt = this.translateDataPointByViewportPixels(
+                      vec3.create(), repPoint, totDeltaVec[0], totDeltaVec[1]);
+                  let newAnnotation = handler.updateViaRepresentativePoint(
+                      <Annotation>annotationRef.value, newRepPt, annotationLayer.globalToObject,
+                      pickedOffset);
+                  annotationLayer.source.delete(annotationRef);
+                  annotationRef.dispose();
+                  annotationRef = annotationLayer.source.add(newAnnotation, false);
+                },
+                (_event) => {
+                  console.log('committing annotationRef', annotationRef.id);
+                  annotationLayer.source.commit(annotationRef);
+                  annotationRef.dispose();
+                });
+          }
+        }
+      }
     });
   }
 

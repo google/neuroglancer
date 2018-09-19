@@ -73,7 +73,7 @@ export function getDefaultRenderedDataPanelBindings() {
           'at:control+mousedown0': 'annotate',
           'at:mousedown2': 'move-to-mouse-position',
           'at:control+mousedown2': 'select-annotation',
-          'at:alt+mousedown0':'move-annotation'
+          'at:alt+mousedown0': 'move-annotation'
         },
         {label: 'All Data Panels'});
   }
@@ -88,9 +88,7 @@ export function getDefaultPerspectivePanelBindings() {
           'at:mousedown0': {action: 'rotate-via-mouse-drag', stopPropagation: true},
           'at:shift+mousedown0': {action: 'translate-via-mouse-drag', stopPropagation: true}
         },
-        {
-          parents: [[getDefaultRenderedDataPanelBindings(), Number.NEGATIVE_INFINITY]]
-        });
+        {parents: [[getDefaultRenderedDataPanelBindings(), Number.NEGATIVE_INFINITY]]});
   }
   return defaultPerspectivePanelBindings;
 }
@@ -103,9 +101,7 @@ export function getDefaultSliceViewPanelBindings() {
           'at:mousedown0': {action: 'translate-via-mouse-drag', stopPropagation: true},
           'at:shift+mousedown0': {action: 'rotate-via-mouse-drag', stopPropagation: true}
         },
-        {
-          parents: [[getDefaultRenderedDataPanelBindings(), Number.NEGATIVE_INFINITY]]
-        });
+        {parents: [[getDefaultRenderedDataPanelBindings(), Number.NEGATIVE_INFINITY]]});
   }
   return defaultSliceViewPanelBindings;
 }

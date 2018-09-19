@@ -15,9 +15,9 @@
  */
 
 export type RelativeDragHandler = (event: MouseEvent, deltaX: number, deltaY: number) => void;
-export function startRelativeMouseDrag(initialEvent: MouseEvent,
-                                       handler: RelativeDragHandler,
-                                       finishDragHandler?: RelativeDragHandler ) {
+export function startRelativeMouseDrag(
+    initialEvent: MouseEvent, handler: RelativeDragHandler,
+    finishDragHandler?: RelativeDragHandler) {
   let {document} = initialEvent.view;
   let prevScreenX = initialEvent.clientX, prevScreenY = initialEvent.clientY;
   let mouseMoveHandler = (e: MouseEvent) => {
@@ -33,7 +33,9 @@ export function startRelativeMouseDrag(initialEvent: MouseEvent,
       document.removeEventListener('mousemove', mouseMoveHandler, true);
       document.removeEventListener('mouseup', mouseUpHandler, false);
 
-      if (finishDragHandler !== undefined) { finishDragHandler(e, prevScreenX - e.clientX, prevScreenY - e.clientY); }
+      if (finishDragHandler !== undefined) {
+        finishDragHandler(e, prevScreenX - e.clientX, prevScreenY - e.clientY);
+      }
     }
   };
   document.addEventListener('mousemove', mouseMoveHandler, true);

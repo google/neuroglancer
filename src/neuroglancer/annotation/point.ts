@@ -20,7 +20,7 @@
 
 import {AnnotationType, Point} from 'neuroglancer/annotation';
 import {AnnotationRenderContext, AnnotationRenderHelper, registerAnnotationTypeRenderHandler} from 'neuroglancer/annotation/type_handler';
-import {vec3, mat4} from 'neuroglancer/util/geom';
+import {mat4, vec3} from 'neuroglancer/util/geom';
 import {CircleShader} from 'neuroglancer/webgl/circles';
 import {dependentShaderGetter, ShaderBuilder} from 'neuroglancer/webgl/shader';
 
@@ -83,7 +83,7 @@ registerAnnotationTypeRenderHandler(AnnotationType.POINT, {
     vec3.transformMat4(position, <vec3>new Float32Array(data, offset, 3), objectToData);
   },
   getRepresentativePoint: (objectToData, ann) => {
-    let repPoint= vec3.create();
+    let repPoint = vec3.create();
     vec3.transformMat4(repPoint, ann.point, objectToData);
     return repPoint;
   },

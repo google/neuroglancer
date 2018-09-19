@@ -364,7 +364,7 @@ export class PerspectivePanel extends RenderedDataPanel {
     return true;
   }
 
-  translateDataPointByViewportPixels(out: vec3, orig: vec3, deltaX: number, deltaY: number):vec3 {
+  translateDataPointByViewportPixels(out: vec3, orig: vec3, deltaX: number, deltaY: number): vec3 {
     const temp = tempVec3;
     const {projectionMat} = this;
     const {width, height} = this;

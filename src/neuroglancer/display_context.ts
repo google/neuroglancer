@@ -16,10 +16,10 @@
 
 import debounce from 'lodash/debounce';
 import {RefCounted} from 'neuroglancer/util/disposable';
+import {vec3} from 'neuroglancer/util/geom';
 import {NullarySignal} from 'neuroglancer/util/signal';
 import {WatchableVisibilityPriority} from 'neuroglancer/visibility_priority/frontend';
 import {GL, initializeWebGL} from 'neuroglancer/webgl/context';
-import {vec3} from 'neuroglancer/util/geom';
 
 export abstract class RenderedPanel extends RefCounted {
   gl: GL;
@@ -61,7 +61,8 @@ export abstract class RenderedPanel extends RefCounted {
 
   abstract draw(): void;
 
-  abstract translateDataPointByViewportPixels(out: vec3, orig: vec3, deltaX: number, deltaY: number): vec3;
+  abstract translateDataPointByViewportPixels(
+      out: vec3, orig: vec3, deltaX: number, deltaY: number): vec3;
 
   disposed() {
     this.context.removePanel(this);
