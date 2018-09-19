@@ -36,3 +36,7 @@ export class VolumeChunkSourceParameters extends DVIDSourceParameters {
 export class SkeletonSourceParameters extends DVIDSourceParameters {
   static RPC_ID = 'dvid/SkeletonSource';
 }
+
+export class MeshSourceParameters extends DVIDSourceParameters {
+  static RPC_ID = 'dvid/MeshSource';
+}
