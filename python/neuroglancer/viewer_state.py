@@ -185,6 +185,7 @@ class ImageLayer(Layer, _AnnotationLayerOptions):
     source = wrapped_property('source', volume_source)
     shader = wrapped_property('shader', text_type)
     opacity = wrapped_property('opacity', optional(float, 0.5))
+    blend = wrapped_property('blend', optional(str))
 
     @staticmethod
     def interpolate(a, b, t):
