@@ -245,16 +245,11 @@ registerAnnotationTypeRenderHandler(AnnotationType.ELLIPSOID, {
     let repPoint= vec3.create();
     vec3.transformMat4(repPoint, ann.center, objectToData);
     return repPoint;
-  }, 
+  },
   updateViaRepresentativePoint: (oldAnnotation: Ellipsoid, position: vec3, dataToObject: mat4) => {
-    const annotation: Ellipsoid = {
-      id: '',
-      description: oldAnnotation.description,
-      center:
-          vec3.transformMat4(vec3.create(), position, dataToObject),
-      radii: oldAnnotation.radii,
-      type: AnnotationType.ELLIPSOID,
-    };
+    let annotation = {...oldAnnotation};
+    annotation.id = '';
+    annotation.center = vec3.transformMat4(vec3.create(), position, dataToObject);
     return annotation;
   }
 });

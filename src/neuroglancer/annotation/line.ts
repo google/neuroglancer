@@ -179,25 +179,21 @@ registerAnnotationTypeRenderHandler(AnnotationType.LINE, {
     // if the full object is selected just pick the first point as representative
     if (partIndex === FULL_OBJECT_PICK_OFFSET) {
       vec3.transformMat4(repPoint, ann.pointA, objectToData);
-    } else { 
-      if ((partIndex-ENDPOINTS_PICK_OFFSET)==0){
+    } else {
+      if ((partIndex-ENDPOINTS_PICK_OFFSET)===0) {
         vec3.transformMat4(repPoint, ann.pointA, objectToData);
       }
-      else{
+      else {
         vec3.transformMat4(repPoint, ann.pointB, objectToData);
       }
     }
-    return repPoint
-  }, 
+    return repPoint;
+  },
   updateViaRepresentativePoint: (oldAnnotation, position, dataToObject, partIndex)  => {
     let newPt = vec3.transformMat4(vec3.create(), position, dataToObject);
-    let baseLine = <Line>{
-      id: '',
-      type: AnnotationType.LINE,
-      description: oldAnnotation.description,
-      segments: oldAnnotation.segments
-    }
-    switch (partIndex){
+    let baseLine = {...oldAnnotation};
+    baseLine.id = '';
+    switch (partIndex) {
       case FULL_OBJECT_PICK_OFFSET:
         let delta = vec3.sub(vec3.create(), oldAnnotation.pointB, oldAnnotation.pointA);
         baseLine.pointA = newPt;
