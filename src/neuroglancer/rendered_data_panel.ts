@@ -180,11 +180,9 @@ export abstract class RenderedDataPanel extends RenderedPanel {
                       pickedOffset);
                   annotationLayer.source.delete(annotationRef);
                   annotationRef.dispose();
-                  annotationRef = annotationLayer.source.add(newAnnotation, false);
+                  annotationRef = annotationLayer.source.add(newAnnotation, true);
                 },
                 (_event) => {
-                  console.log('committing annotationRef', annotationRef.id);
-                  annotationLayer.source.commit(annotationRef);
                   annotationRef.dispose();
                 });
           }
