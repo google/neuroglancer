@@ -36,6 +36,7 @@ import {LayerInfoPanelContainer} from 'neuroglancer/ui/layer_side_panel';
 import {MouseSelectionStateTooltipManager} from 'neuroglancer/ui/mouse_selection_state_tooltip';
 import {setupPositionDropHandlers} from 'neuroglancer/ui/position_drag_and_drop';
 import {StateEditorDialog} from 'neuroglancer/ui/state_editor';
+import {removeParameterFromUrl} from 'neuroglancer/ui/url_hash_binding';
 import {AutomaticallyFocusedElement} from 'neuroglancer/util/automatic_focus';
 import {TrackableRGB} from 'neuroglancer/util/color';
 import {Borrowed, Owned, RefCounted} from 'neuroglancer/util/disposable';
@@ -55,7 +56,7 @@ import {MousePositionWidget, PositionWidget, VoxelSizeWidget} from 'neuroglancer
 import {TrackableScaleBarOptions} from 'neuroglancer/widget/scale_bar';
 import {makeTextIconButton} from 'neuroglancer/widget/text_icon_button';
 import {RPC} from 'neuroglancer/worker_rpc';
-import {removeParameterFromUrl} from 'neuroglancer/ui/url_hash_binding';
+
 require('./viewer.css');
 require('neuroglancer/noselect.css');
 require('neuroglancer/ui/button.css');
@@ -207,7 +208,7 @@ export class Viewer extends RefCounted implements ViewerState {
   layerSpecification: TopLevelLayerListSpecification;
   layout: RootLayoutContainer;
 
-  jsonStateServer = new TrackableValue<string>('https://api.myjson.com/bins', validateStateServer);
+  jsonStateServer = new TrackableValue<string>('', validateStateServer);
   state = new CompoundTrackable();
 
   dataContext: Owned<DataManagementContext>;
@@ -591,25 +592,54 @@ export class Viewer extends RefCounted implements ViewerState {
       let json_url = urlParams.get('json_url');
       console.log(json_url);
       history.replaceState(null, '', removeParameterFromUrl(window.location.href, 'json_url'));
-      try {
-        sendHttpRequest(openHttpRequest(json_url!), 'json').then(response => {
-          this.state.restoreState(response);
-        });
-      } catch (HttpError) {
-        console.log('failed to load from: ' + json_url);
-      }
+      sendHttpRequest(openHttpRequest(json_url!), 'json')
+          .then(response => {
+            this.state.restoreState(response);
+          })
+          .catch(() => {
+            console.log('failed to load from: ' + json_url);
+          });
     }
   }
-  postJsonState() {
-    sendHttpJsonPostRequest(
-        openHttpRequest(this.jsonStateServer.value, 'POST'), this.state.toJSON(), 'json')
-        .then(response => {
-          console.log(response);
-           // var short_url = window.location.origin +
-          //    '/?json_url=' + response;
-          history.replaceState(null, '', window.location.origin+window.location.pathname+'?json_url='+response.uri);
-        });
+
+  promptJsonStateServer(message: string): void {
+    let json_server_input = prompt(message, 'https://api.myjson.com/bins');
+    if (json_server_input !== null) {
+      this.jsonStateServer.value = json_server_input;
+      console.log('entered for JSON server:', this.jsonStateServer.value);
+    } else {
+      this.jsonStateServer.reset();
+      console.log('cancelled');
+    }
   }
+
+  postJsonState() {
+    // if jsonStateServer is not present prompt for value and store it in state
+    if (!this.jsonStateServer.value) {
+      console.log('no state server found');
+      this.promptJsonStateServer('no state server found');
+    }
+    // upload state to jsonStateServer (only if it's defined)
+    if (this.jsonStateServer.value) {
+      sendHttpJsonPostRequest(
+          openHttpRequest(this.jsonStateServer.value, 'POST'), this.state.toJSON(), 'json')
+          .then(response => {
+            console.log(response.uri);
+            history.replaceState(
+                null, '',
+                window.location.origin + window.location.pathname + '?json_url=' + response.uri);
+          })
+          // catch errors with upload and prompt the user if there was an error
+          .catch(() => {
+            console.log('entered state server not responding:', this.jsonStateServer.value);
+            this.promptJsonStateServer('state server not responding, enter a new one?');
+            if (this.jsonStateServer.value) {
+              this.postJsonState();
+            }
+          });
+    }
+  }
+
   editJsonState() {
     new StateEditorDialog(this);
   }
