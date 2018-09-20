@@ -55,7 +55,7 @@ import {MousePositionWidget, PositionWidget, VoxelSizeWidget} from 'neuroglancer
 import {TrackableScaleBarOptions} from 'neuroglancer/widget/scale_bar';
 import {makeTextIconButton} from 'neuroglancer/widget/text_icon_button';
 import {RPC} from 'neuroglancer/worker_rpc';
-
+import {removeParameterFromUrl} from 'neuroglancer/ui/url_hash_binding';
 require('./viewer.css');
 require('neuroglancer/noselect.css');
 require('neuroglancer/ui/button.css');
@@ -112,10 +112,7 @@ export class ViewerUIConfiguration extends ViewerUIControlConfiguration {
   showUIControls = new TrackableBoolean(true);
   showPanelBorders = new TrackableBoolean(true);
 }
-function removeParameterFromUrl(url: string, parameter: string) {
-  return url.replace(new RegExp('[?&]' + parameter + '=[^&#]*(#.*)?$'), '$1')
-      .replace(new RegExp('([?&])' + parameter + '=[^&]*&'), '$1');
-}
+
 
 function setViewerUiConfiguration(
     config: ViewerUIConfiguration, options: Partial<ViewerUIOptions>) {
@@ -210,7 +207,7 @@ export class Viewer extends RefCounted implements ViewerState {
   layerSpecification: TopLevelLayerListSpecification;
   layout: RootLayoutContainer;
 
-  jsonStateServer = new TrackableValue<string>('', validateStateServer);
+  jsonStateServer = new TrackableValue<string>('https://api.myjson.com/bins', validateStateServer);
   state = new CompoundTrackable();
 
   dataContext: Owned<DataManagementContext>;
@@ -454,7 +451,7 @@ export class Viewer extends RefCounted implements ViewerState {
       topRow.appendChild(button);
     }
     {
-      const button = makeTextIconButton('🔗', 'Post JSON to state server');
+      const button = makeTextIconButton('⇧', 'Post JSON to state server');
       this.registerEventListener(button, 'click', () => {
         this.postJsonState();
       });
@@ -593,13 +590,11 @@ export class Viewer extends RefCounted implements ViewerState {
     if (urlParams.has('json_url')) {
       let json_url = urlParams.get('json_url');
       console.log(json_url);
+      history.replaceState(null, '', removeParameterFromUrl(window.location.href, 'json_url'));
       try {
         sendHttpRequest(openHttpRequest(json_url!), 'json').then(response => {
           this.state.restoreState(response);
         });
-
-
-        history.replaceState(null, '', removeParameterFromUrl(window.location.search, 'json_url'));
       } catch (HttpError) {
         console.log('failed to load from: ' + json_url);
       }
@@ -610,9 +605,9 @@ export class Viewer extends RefCounted implements ViewerState {
         openHttpRequest(this.jsonStateServer.value, 'POST'), this.state.toJSON(), 'json')
         .then(response => {
           console.log(response);
-          var short_url = window.location.origin +
-              '/?json_url=' + this.jsonStateServer.value.replace(/\/$/, '') + '/' + response;
-          alert(short_url);
+           // var short_url = window.location.origin +
+          //    '/?json_url=' + response;
+          history.replaceState(null, '', window.location.origin+window.location.pathname+'?json_url='+response.uri);
         });
   }
   editJsonState() {
