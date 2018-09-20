@@ -178,6 +178,7 @@ export class PerspectivePanel extends RenderedDataPanel {
 
   private nanometersPerPixel = 1;
 
+
   constructor(context: DisplayContext, element: HTMLElement, viewer: PerspectiveViewerState) {
     super(context, element, viewer);
     this.registerDisposer(this.navigationState.changed.add(() => {
@@ -361,6 +362,16 @@ export class PerspectivePanel extends RenderedDataPanel {
         mouseState,
         offscreenFramebuffer.readPixelAsUint32(OffscreenTextures.PICK, glWindowX, glWindowY));
     return true;
+  }
+
+  translateDataPointByViewportPixels(out: vec3, orig: vec3, deltaX: number, deltaY: number): vec3 {
+    const temp = tempVec3;
+    const {projectionMat} = this;
+    const {width, height} = this;
+    vec3.transformMat4(temp, orig, projectionMat);
+    temp[0] -= 2 * deltaX / width;
+    temp[1] -= -2 * deltaY / height;
+    return vec3.transformMat4(out, temp, this.inverseProjectionMat);
   }
 
   private get transparentConfiguration() {

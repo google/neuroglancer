@@ -60,7 +60,8 @@ function isValidLinkedSegmentationLayer(layer: ManagedUserLayer) {
   return false;
 }
 
-function getSegmentationDisplayState(layer: ManagedUserLayer|undefined): SegmentationDisplayState|undefined {
+function getSegmentationDisplayState(layer: ManagedUserLayer|undefined): SegmentationDisplayState|
+    undefined {
   if (layer === undefined) {
     return undefined;
   }
@@ -142,7 +143,8 @@ export class AnnotationUserLayer extends Base {
       };
       this.registerDisposer(this.localAnnotations.changed.add(this.specificationChanged.dispatch));
       this.registerDisposer(this.voxelSize.changed.add(this.specificationChanged.dispatch));
-      this.registerDisposer(this.filterBySegmentation.changed.add(this.specificationChanged.dispatch));
+      this.registerDisposer(
+          this.filterBySegmentation.changed.add(this.specificationChanged.dispatch));
       this.registerDisposer(this.voxelSize.changed.add(handleVoxelSizeChanged));
       this.registerDisposer(this.manager.voxelSize.changed.add(handleVoxelSizeChanged));
       handleVoxelSizeChanged();
@@ -160,11 +162,8 @@ export class AnnotationUserLayer extends Base {
             if (this.wasDisposed) {
               return;
             }
-            this.annotationLayerState.value = new AnnotationLayerState({
-              transform: this.transform,
-              source,
-              ...this.getAnnotationRenderOptions()
-            });
+            this.annotationLayerState.value = new AnnotationLayerState(
+                {transform: this.transform, source, ...this.getAnnotationRenderOptions()});
             this.isReady = true;
           });
     }

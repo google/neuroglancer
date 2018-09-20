@@ -66,7 +66,6 @@ export function getDefaultRenderedDataPanelBindings() {
           'shift+arrowup': 'rotate-relative-x+',
           'shift+arrowleft': 'rotate-relative-y-',
           'shift+arrowright': 'rotate-relative-y+',
-
           'at:control+wheel': {action: 'zoom-via-wheel', preventDefault: true},
           'at:wheel': {action: 'z+1-via-wheel', preventDefault: true},
           'at:shift+wheel': {action: 'z+10-via-wheel', preventDefault: true},
@@ -74,6 +73,7 @@ export function getDefaultRenderedDataPanelBindings() {
           'at:control+mousedown0': 'annotate',
           'at:mousedown2': 'move-to-mouse-position',
           'at:control+mousedown2': 'select-annotation',
+          'at:alt+mousedown0': 'move-annotation'
         },
         {label: 'All Data Panels'});
   }
@@ -86,11 +86,9 @@ export function getDefaultPerspectivePanelBindings() {
     defaultPerspectivePanelBindings = EventActionMap.fromObject(
         {
           'at:mousedown0': {action: 'rotate-via-mouse-drag', stopPropagation: true},
-          'at:shift+mousedown0': {action: 'translate-via-mouse-drag', stopPropagation: true},
+          'at:shift+mousedown0': {action: 'translate-via-mouse-drag', stopPropagation: true}
         },
-        {
-          parents: [[getDefaultRenderedDataPanelBindings(), Number.NEGATIVE_INFINITY]]
-        });
+        {parents: [[getDefaultRenderedDataPanelBindings(), Number.NEGATIVE_INFINITY]]});
   }
   return defaultPerspectivePanelBindings;
 }
@@ -101,11 +99,9 @@ export function getDefaultSliceViewPanelBindings() {
     defaultSliceViewPanelBindings = EventActionMap.fromObject(
         {
           'at:mousedown0': {action: 'translate-via-mouse-drag', stopPropagation: true},
-          'at:shift+mousedown0': {action: 'rotate-via-mouse-drag', stopPropagation: true},
+          'at:shift+mousedown0': {action: 'rotate-via-mouse-drag', stopPropagation: true}
         },
-        {
-          parents: [[getDefaultRenderedDataPanelBindings(), Number.NEGATIVE_INFINITY]]
-        });
+        {parents: [[getDefaultRenderedDataPanelBindings(), Number.NEGATIVE_INFINITY]]});
   }
   return defaultSliceViewPanelBindings;
 }
