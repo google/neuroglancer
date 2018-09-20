@@ -234,6 +234,7 @@ class AnnotationBase(JsonObjectWrapper):
     id = wrapped_property('id', optional(text_type))  # pylint: disable=invalid-name
     type = wrapped_property('type', text_type)
     description = wrapped_property('description', optional(text_type))
+    segments = wrapped_property('segments', optional(typed_list(np.uint64)))
 
 
 @export
