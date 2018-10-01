@@ -18,12 +18,18 @@
 const tempArray = new Float32Array(1);
 
 /**
- * Return a minimum-length string representation of `x` that round-trips.
+ * Converts `x` into its nearest single precision float representation and
+ * returns a minimal string representation, with as many digits as necessary
+ * to uniquely distinguish single precision `x` from its adjacent single
+ * precision values.
+ *
+ * E.g.: 0.299999999000000017179701217174d → 0.30000001192092896f → '0.3')
  */
-export function floatToMinimalString(x: number) {
-  x = (tempArray[0] = x);
-  for (let digits = 0; digits < 9; ++digits) {
-    let result = x.toFixed(digits);
+export function float32ToString(x: number) {
+  tempArray[0] = x;
+  x = tempArray[0];
+  for (let digits = 1; digits < 21; ++digits) {
+    let result = x.toPrecision(digits);
     tempArray[0] = parseFloat(result);
     if (tempArray[0] === x) {
       return result;
