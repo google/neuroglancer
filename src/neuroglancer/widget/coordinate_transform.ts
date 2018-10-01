@@ -21,8 +21,8 @@
 import './coordinate_transform.css';
 
 import {CoordinateTransform} from 'neuroglancer/coordinate_transform';
+import {float32ToString} from 'neuroglancer/util/float32_to_string';
 import {Tab} from 'neuroglancer/widget/tab_view';
-import { floatToMinimalString } from 'neuroglancer/util/float_to_minimal_string';
 
 export class CoordinateTransformTab extends Tab {
   private textArea = document.createElement('textarea');
@@ -67,7 +67,7 @@ export class CoordinateTransformTab extends Tab {
           if (j !== 0) {
             value += ' ';
           }
-          value += floatToMinimalString(x);
+          value += float32ToString(x);
         }
       }
       this.textArea.value = value;

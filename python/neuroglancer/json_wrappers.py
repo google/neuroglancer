@@ -97,10 +97,12 @@ class JsonObjectWrapper(object):
         with self._lock:
             self._cached_wrappers[key] = (value, self._json_data.get(key))
 
+_types_supporting_validation = frozenset([np.uint64])
 
 def _normalize_validator(wrapped_type, validator):
     if validator is None:
-        if inspect.isroutine(wrapped_type) or hasattr(wrapped_type, 'supports_validation'):
+        if (inspect.isroutine(wrapped_type) or hasattr(wrapped_type, 'supports_validation')
+                or wrapped_type in _types_supporting_validation):
             validator = wrapped_type
         else:
             def validator_func(x):

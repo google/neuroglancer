@@ -19,7 +19,7 @@
  */
 
 import {WatchableValue} from 'neuroglancer/trackable_value';
-import {floatToMinimalString} from 'neuroglancer/util/float_to_minimal_string';
+import {float32ToString} from 'neuroglancer/util/float32_to_string';
 import {vec3, vec4} from 'neuroglancer/util/geom';
 import {hexEncodeByte} from 'neuroglancer/util/hex';
 
@@ -81,7 +81,7 @@ export function serializeColor(x: vec3|vec4) {
       }
       result += Math.min(255, Math.max(0, Math.round(x[i] * 255)));
     }
-    result += `, ${floatToMinimalString(x[3])})`;
+    result += `, ${float32ToString(x[3])})`;
     return result;
   }
 }

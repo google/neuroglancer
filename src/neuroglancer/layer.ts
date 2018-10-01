@@ -144,7 +144,7 @@ export class UserLayer extends RefCounted {
     layersChanged.dispatch();
   }
 
-  disposed () {
+  disposed() {
     const {layersChanged, readyStateChanged} = this;
     for (const layer of this.renderLayers) {
       layer.layerChanged.remove(layersChanged.dispatch);
@@ -586,6 +586,8 @@ export class MouseSelectionState implements PickState {
   pickedOffset = 0;
   pickedAnnotationLayer: AnnotationLayerState|undefined = undefined;
   pickedAnnotationId: string|undefined = undefined;
+  pickedAnnotationBuffer: ArrayBuffer|undefined = undefined;
+  pickedAnnotationBufferOffset: number|undefined = undefined;
   pageX: number;
   pageY: number;
 
@@ -949,11 +951,11 @@ export class LayerReference extends RefCounted implements Trackable {
     }));
   }
 
-  get layer () {
+  get layer() {
     return this.layer_;
   }
 
-  get layerName () {
+  get layerName() {
     return this.layerName_;
   }
 

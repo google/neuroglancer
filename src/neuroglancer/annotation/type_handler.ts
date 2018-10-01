@@ -54,7 +54,10 @@ export abstract class AnnotationRenderHelper extends RefCounted {
 void setPartIndex(${partIndexExpressions.map((_, i) => `float partIndex${i}`).join()}) {
   uint32_t pickID; pickID.value = uPickID;
   uint32_t pickBaseOffset = getPickBaseOffset();
-${partIndexExpressions.map((_, i) => `uint32_t pickOffset${i} = add(pickBaseOffset, partIndex${i});`).join('\n')}
+${
+        partIndexExpressions
+            .map((_, i) => `uint32_t pickOffset${i} = add(pickBaseOffset, partIndex${i});`)
+            .join('\n')}
 `;
     if (partIndexExpressions.length === 0) {
       s += `
@@ -64,7 +67,8 @@ ${partIndexExpressions.map((_, i) => `uint32_t pickOffset${i} = add(pickBaseOffs
     s += `
   vPickID = add(pickID, pickOffset0).value;
   uint32_t selectedIndex; selectedIndex.value = uSelectedIndex;
-if (equals(selectedIndex, pickBaseOffset)${partIndexExpressions.map((_, i) => ` || equals(selectedIndex, pickOffset${i})`).join('')}) {
+if (equals(selectedIndex, pickBaseOffset)${
+        partIndexExpressions.map((_, i) => ` || equals(selectedIndex, pickOffset${i})`).join('')}) {
     vColor = uColorSelected;
   } else {
     vColor = uColor;
@@ -163,16 +167,23 @@ interface AnnotationTypeRenderHandler<T extends Annotation> {
   };
   sliceViewRenderHelper: {new(gl: GL): AnnotationRenderHelper;};
   pickIdsPerInstance: number;
-  snapPosition: (position: vec3, objectToData: mat4, data: ArrayBuffer, offset: number, partIndex: number) => void;
+  getRepresentativePoint: (objectToData: mat4, annotation: T, partIndex: number) => vec3;
+  updateViaRepresentativePoint:
+      (oldAnnotation: T, position: vec3, dataToObject: mat4, partIndex: number) => T;
+  snapPosition:
+      (position: vec3, objectToData: mat4, data: ArrayBuffer, offset: number,
+       partIndex: number) => void;
 }
 
-const annotationTypeRenderHandlers = new Map<AnnotationType, AnnotationTypeRenderHandler<Annotation>>();
+const annotationTypeRenderHandlers =
+    new Map<AnnotationType, AnnotationTypeRenderHandler<Annotation>>();
 
 export function registerAnnotationTypeRenderHandler<T extends Annotation>(
     type: AnnotationType, handler: AnnotationTypeRenderHandler<T>) {
   annotationTypeRenderHandlers.set(type, handler);
 }
 
-export function getAnnotationTypeRenderHandler(type: AnnotationType): AnnotationTypeRenderHandler<Annotation> {
+export function getAnnotationTypeRenderHandler(type: AnnotationType):
+    AnnotationTypeRenderHandler<Annotation> {
   return annotationTypeRenderHandlers.get(type)!;
 }

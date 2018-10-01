@@ -21,7 +21,8 @@
 
 import {ChunkManager, WithParameters} from 'neuroglancer/chunk_manager/frontend';
 import {CompletionResult, DataSource} from 'neuroglancer/datasource';
-import {DVIDSourceParameters, SkeletonSourceParameters, VolumeChunkEncoding, VolumeChunkSourceParameters} from 'neuroglancer/datasource/dvid/base';
+import {DVIDSourceParameters, MeshSourceParameters, SkeletonSourceParameters, VolumeChunkEncoding, VolumeChunkSourceParameters} from 'neuroglancer/datasource/dvid/base';
+import {MeshSource} from 'neuroglancer/mesh/frontend';
 import {SkeletonSource} from 'neuroglancer/skeleton/frontend';
 import {DataType, VolumeChunkSpecification, VolumeSourceOptions, VolumeType} from 'neuroglancer/sliceview/volume/base';
 import {MultiscaleVolumeChunkSource as GenericMultiscaleVolumeChunkSource, VolumeChunkSource} from 'neuroglancer/sliceview/volume/frontend';
@@ -61,6 +62,9 @@ class DVIDVolumeChunkSource extends
 class DVIDSkeletonSource extends
 (WithParameters(SkeletonSource, SkeletonSourceParameters)) {}
 
+class DVIDMeshSource extends
+(WithParameters(MeshSource, MeshSourceParameters)) {}
+
 export class VolumeDataInstanceInfo extends DataInstanceInfo {
   dataType: DataType;
   lowerVoxelBound: vec3;
@@ -68,6 +72,7 @@ export class VolumeDataInstanceInfo extends DataInstanceInfo {
   voxelSize: vec3;
   numChannels: number;
   numLevels: number;
+  meshSrc: string;
   skeletonSrc: string;
 
   constructor(
@@ -96,10 +101,19 @@ export class VolumeDataInstanceInfo extends DataInstanceInfo {
       }
     }
 
-    this.skeletonSrc = '';
-    if (instSet.has(name + '_skeletons')) {
-      this.skeletonSrc = name + '_skeletons';
+    // only allow mesh or skeletons as sources but not both
+    this.meshSrc = '';
+    if (instSet.has(name + '_meshes')) {
+      this.meshSrc = name + '_meshes';
     }
+
+    this.skeletonSrc = '';
+    if (this.meshSrc !== '') {
+      if (instSet.has(name + '_skeletons')) {
+        this.skeletonSrc = name + '_skeletons';
+      }
+    }
+
 
     this.dataType =
         verifyObjectProperty(extendedValues[0], 'DataType', x => verifyMapKey(x, serverDataTypes));
@@ -182,6 +196,20 @@ export class VolumeDataInstanceInfo extends DataInstanceInfo {
       sources.push(alternatives);
     }
     return sources;
+  }
+
+  getMeshSource(chunkManager: ChunkManager, parameters: DVIDSourceParameters) {
+    if (this.meshSrc !== '') {
+      return chunkManager.getChunkSource(DVIDMeshSource, {
+        parameters: {
+          'baseUrls': parameters.baseUrls,
+          'nodeKey': parameters.nodeKey,
+          'dataInstanceKey': this.meshSrc,
+        }
+      });
+    } else {
+      return null;
+    }
   }
 
   getSkeletonSource(chunkManager: ChunkManager, parameters: DVIDSourceParameters) {
@@ -381,19 +409,22 @@ export class MultiscaleVolumeChunkSource implements GenericMultiscaleVolumeChunk
         volumeSourceOptions);
   }
 
-  /**
-   * Meshes are not supported.
-   */
-  getMeshSource(): null {
-    return null;
-  }
-
-  getSkeletonSource() {
-    return this.info.getSkeletonSource(this.chunkManager, {
+  getMeshSource() {
+    let meshSource = this.info.getMeshSource(this.chunkManager, {
       'baseUrls': this.baseUrls,
       'nodeKey': this.nodeKey,
       'dataInstanceKey': this.dataInstanceKey,
     });
+    return meshSource;
+  }
+
+  getSkeletonSource() {
+    let skeletonSource = this.info.getSkeletonSource(this.chunkManager, {
+      'baseUrls': this.baseUrls,
+      'nodeKey': this.nodeKey,
+      'dataInstanceKey': this.dataInstanceKey,
+    });
+    return skeletonSource;
   }
 }
 

@@ -15,13 +15,15 @@
  */
 
 import {WithParameters} from 'neuroglancer/chunk_manager/backend';
-import {SkeletonSourceParameters, VolumeChunkEncoding, VolumeChunkSourceParameters} from 'neuroglancer/datasource/dvid/base';
+import {MeshSourceParameters, SkeletonSourceParameters, VolumeChunkEncoding, VolumeChunkSourceParameters} from 'neuroglancer/datasource/dvid/base';
+import {decodeTriangleVertexPositionsAndIndices, FragmentChunk, ManifestChunk, MeshSource} from 'neuroglancer/mesh/backend';
 import {SkeletonChunk, SkeletonSource} from 'neuroglancer/skeleton/backend';
 import {decodeSwcSkeletonChunk} from 'neuroglancer/skeleton/decode_swc_skeleton';
 import {decodeCompressedSegmentationChunk} from 'neuroglancer/sliceview/backend_chunk_decoders/compressed_segmentation';
 import {decodeJpegChunk} from 'neuroglancer/sliceview/backend_chunk_decoders/jpeg';
 import {VolumeChunk, VolumeChunkSource} from 'neuroglancer/sliceview/volume/backend';
 import {CancellationToken} from 'neuroglancer/util/cancellation';
+import {Endianness} from 'neuroglancer/util/endian';
 import {openShardedHttpRequest, sendHttpRequest} from 'neuroglancer/util/http_request';
 import {registerSharedObject} from 'neuroglancer/worker_rpc';
 
@@ -39,6 +41,34 @@ import {registerSharedObject} from 'neuroglancer/worker_rpc';
           let enc = new TextDecoder('utf-8');
           decodeSwcSkeletonChunk(chunk, enc.decode(response));
         });
+  }
+}
+
+export function decodeFragmentChunk(chunk: FragmentChunk, response: ArrayBuffer) {
+  let dv = new DataView(response);
+  let numVertices = dv.getUint32(0, true);
+  decodeTriangleVertexPositionsAndIndices(
+      chunk, response, Endianness.LITTLE, /*vertexByteOffset=*/4, numVertices);
+}
+
+@registerSharedObject() export class DVIDMeshSource extends
+(WithParameters(MeshSource, MeshSourceParameters)) {
+  download(chunk: ManifestChunk) {
+    // DVID does not currently store meshes chunked, the main
+    // use-case is for low-resolution 3D views.
+    // for now, fragmentId is the body id
+    chunk.fragmentIds = [`${chunk.objectId}`];
+    return Promise.resolve(undefined);
+  }
+
+  downloadFragment(chunk: FragmentChunk, cancellationToken: CancellationToken) {
+    const {parameters} = this;
+    const requestPath = `/api/node/${parameters['nodeKey']}/${parameters['dataInstanceKey']}/key/${
+        chunk.fragmentId}.ngmesh`;
+    return sendHttpRequest(
+               openShardedHttpRequest(parameters.baseUrls, requestPath), 'arraybuffer',
+               cancellationToken)
+        .then(response => decodeFragmentChunk(chunk, response));
   }
 }
 

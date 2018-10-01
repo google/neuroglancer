@@ -185,6 +185,7 @@ class ImageLayer(Layer, _AnnotationLayerOptions):
     source = wrapped_property('source', volume_source)
     shader = wrapped_property('shader', text_type)
     opacity = wrapped_property('opacity', optional(float, 0.5))
+    blend = wrapped_property('blend', optional(str))
 
     @staticmethod
     def interpolate(a, b, t):
@@ -233,6 +234,7 @@ class AnnotationBase(JsonObjectWrapper):
     id = wrapped_property('id', optional(text_type))  # pylint: disable=invalid-name
     type = wrapped_property('type', text_type)
     description = wrapped_property('description', optional(text_type))
+    segments = wrapped_property('segments', optional(typed_list(np.uint64)))
 
 
 @export
