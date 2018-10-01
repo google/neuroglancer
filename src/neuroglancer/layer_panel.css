@@ -86,7 +86,7 @@
 .neuroglancer-layer-item-value {
   display: inline-block;
   min-width: 10ch;
-  max-width: 30ch;
+  max-width: 50ch;
   margin-left: 1ch;
   white-space: nowrap;
   overflow: hidden;
