@@ -153,6 +153,7 @@ export abstract class RenderedDataPanel extends RenderedPanel {
         };
       }
     });
+
     registerActionListener(element, 'move-annotation', (e: ActionEvent<MouseEvent>) => {
       const {mouseState} = this.viewer;
       const selectedAnnotationId = mouseState.pickedAnnotationId;
@@ -184,6 +185,21 @@ export abstract class RenderedDataPanel extends RenderedPanel {
                 });
           }
         }
+      }
+    });
+
+    registerActionListener(element, 'delete-annotation', () => {
+      const {mouseState} = this.viewer;
+      const selectedAnnotationId = mouseState.pickedAnnotationId;
+      const annotationLayer = mouseState.pickedAnnotationLayer;
+      if (annotationLayer !== undefined && !annotationLayer.source.readonly &&
+        selectedAnnotationId !== undefined) {
+          const ref = annotationLayer.source.getReference(selectedAnnotationId);
+          try {
+            annotationLayer.source.delete(ref);
+          } finally {
+            ref.dispose();
+          }
       }
     });
   }
