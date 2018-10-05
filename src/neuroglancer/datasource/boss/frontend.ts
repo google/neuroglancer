@@ -121,8 +121,7 @@ function parseCoordinateFrame(coordFrame: any, experimentInfo: ExperimentInfo): 
   let voxelUnit =
       verifyObjectProperty(coordFrame, 'voxel_unit', x => verifyEnumString(x, VoxelUnitType));
 
-  let voxelSizeBaseNanometers: vec3 = vec3.create();
-  vec3.scale(voxelSizeBaseNanometers, voxelSizeBase, getVoxelUnitInNanometers(voxelUnit));
+  let voxelSizeBaseNanometers: vec3 = vec3.scale(vec3.create(), voxelSizeBase, getVoxelUnitInNanometers(voxelUnit));
 
   experimentInfo.coordFrame = {voxelSizeBaseNanometers, voxelOffsetBase, imageSizeBase, voxelUnit};
   return experimentInfo;
@@ -429,8 +428,7 @@ export function parseDownsampleScales(downsampleObj: any, voxelUnit: VoxelUnitTy
     if (voxelSize === undefined || imageSize === undefined) {
       throw new Error(`Missing voxel_size/extent for resolution ${key}.`);
     }
-    let voxelSizeNanometers = vec3.create();
-    vec3.scale(voxelSizeNanometers, voxelSize, getVoxelUnitInNanometers(voxelUnit));
+    let voxelSizeNanometers = vec3.scale(vec3.create(), voxelSize, getVoxelUnitInNanometers(voxelUnit));
     scaleInfo[i] = {voxelSizeNanometers, imageSize, key};
   }
   return scaleInfo;
