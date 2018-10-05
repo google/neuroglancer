@@ -36,7 +36,7 @@ class PendingRequest {
 }
 
 class AuthHandler {
-  oidcCallbackService = `oidcCallback`;
+  oidcCallbackService = `bossAuthCallback`;
   relayReadyPromise: Promise<void>;
   pendingRequests = new Map<string, PendingRequest>();
 
@@ -47,7 +47,7 @@ class AuthHandler {
   registerListener() {
     addEventListener('message', (event: MessageEvent) => {
       if (event.origin !== location.origin) {
-        console.log('Message receied from unexpected origin: ${event.origin}');
+        // Ignore messages from different origins.
         return;
       }
       try {
@@ -55,26 +55,16 @@ class AuthHandler {
         let service = verifyString(data['service']);
         if (service === this.oidcCallbackService) {
           let accessToken = verifyString(data['access_token']);
-          let tokenType = verifyString(data['token_type']);
-          let expiresIn = verifyString(data['expires_in']);
           let state = verifyString(data['state']);
-          if (accessToken === undefined || tokenType === undefined || expiresIn === undefined ||
-              state === undefined) {
-            throw new Error(`oidcCallback: URL lacks expected parameters.`);
-          }
           let request = this.pendingRequests.get(state);
           if (request === undefined) {
             // Request may have been cancelled.
             return;
           }
           request.finished.dispatch(accessToken);
-        } else {
-          // Ignore message.
         }
       } catch (parseError) {
-        throw new Error(
-            `Invalid message received from ${event.origin}: ${JSON.stringify(event.data)}: ` +
-            `${parseError.message}.`);
+        // Ignore invalid message.
       }
     });
   }
@@ -108,10 +98,6 @@ class AuthHandler {
     }
     return url;
   }
-
-  updateToken(_minValidity = 5) {
-    return new Promise((_resolve, _reject) => {});
-  }
 }
 
 let authHandlerInstance: AuthHandler;
@@ -137,7 +123,7 @@ export function authenticateKeycloakOIDC(
   const url = handler.makeAuthRequestUrl({
     state: state,
     clientId: options.clientId,
-    redirect_uri: location.origin + '/bossauth.html',
+    redirect_uri: new URL('bossauth.html', window.location.href).href,
     authServer: options.authServer,
     nonce: nonce
   });

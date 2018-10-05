@@ -9,7 +9,7 @@
                 .split("&")
                 .map( el => el.split("=") )
                 .reduce( (pre, cur) => { pre[cur[0]] = cur[1]; return pre; }, {} );
-            auth.service = 'oidcCallback';
+            auth.service = 'bossAuthCallback';
             opener.postMessage(JSON.stringify(auth), location.origin);
         </script>
     </head>

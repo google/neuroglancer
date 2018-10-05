@@ -329,7 +329,7 @@ function getViewerConfig(options) {
       options.htmlPlugin || new HtmlWebpackPlugin({template: resolveReal(srcDir, 'index.html')});
   let cssPlugin =
       options.cssPlugin || new ExtractTextPlugin({filename: 'styles.css', allChunks: true});
-      return [
+  return [
     Object.assign(
         {
           entry:

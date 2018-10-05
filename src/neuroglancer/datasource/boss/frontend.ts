@@ -85,25 +85,17 @@ interface ExperimentInfo {
   collection: string;
 }
 
-function scaleVoxelSize(voxelSizeInput: vec3, voxelUnit: VoxelUnitType): vec3 {
+function getVoxelUnitInNanometers(voxelUnit: VoxelUnitType): number {
   switch (voxelUnit) {
     case VoxelUnitType.MICROMETERS:
-      for (let i = 0; i < 3; i++) {
-        voxelSizeInput[i] *= 1.e3;
-      }
-      break;
+      return 1.e3;
     case VoxelUnitType.MILLIMETERS:
-      for (let i = 0; i < 3; i++) {
-        voxelSizeInput[i] *= 1.e6;
-      }
-      break;
+      return 1.e6;
     case VoxelUnitType.CENTIMETERS:
-      for (let i = 0; i < 3; i++) {
-        voxelSizeInput[i] *= 1.e7;
-      }
-      break;
+      return 1.e7;
+    default:
+      return 1.0;
   }
-  return voxelSizeInput;
 }
 
 /**
@@ -129,7 +121,8 @@ function parseCoordinateFrame(coordFrame: any, experimentInfo: ExperimentInfo): 
   let voxelUnit =
       verifyObjectProperty(coordFrame, 'voxel_unit', x => verifyEnumString(x, VoxelUnitType));
 
-  let voxelSizeBaseNanometers: vec3 = scaleVoxelSize(voxelSizeBase, voxelUnit);
+  let voxelSizeBaseNanometers: vec3 = vec3.create();
+  vec3.scale(voxelSizeBaseNanometers, voxelSizeBase, getVoxelUnitInNanometers(voxelUnit));
 
   experimentInfo.coordFrame = {voxelSizeBaseNanometers, voxelOffsetBase, imageSizeBase, voxelUnit};
   return experimentInfo;
@@ -436,7 +429,8 @@ export function parseDownsampleScales(downsampleObj: any, voxelUnit: VoxelUnitTy
     if (voxelSize === undefined || imageSize === undefined) {
       throw new Error(`Missing voxel_size/extent for resolution ${key}.`);
     }
-    let voxelSizeNanometers = scaleVoxelSize(voxelSize, voxelUnit);
+    let voxelSizeNanometers = vec3.create();
+    vec3.scale(voxelSizeNanometers, voxelSize, getVoxelUnitInNanometers(voxelUnit));
     scaleInfo[i] = {voxelSizeNanometers, imageSize, key};
   }
   return scaleInfo;
