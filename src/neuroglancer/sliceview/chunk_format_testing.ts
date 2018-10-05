@@ -48,32 +48,38 @@ export function chunkFormatTest<TextureLayout extends Disposable>(
            for (let channel = 0; channel < numChannels; ++channel) {
              switch (dataType) {
                case DataType.UINT64:
+                 builder.addOutputBuffer('vec4', `v4f_fragData${outputChannel}`, outputChannel);
+                 builder.addOutputBuffer('vec4', `v4f_fragData${outputChannel + 1}`, outputChannel + 1);
                  fragmentMain += `
 {
   uint64_t value = getDataValue(${channel});
-  gl_FragData[${outputChannel++}] = value.low;
-  gl_FragData[${outputChannel++}] = value.high;
+  v4f_fragData${outputChannel++} = value.low;
+  v4f_fragData${outputChannel++} = value.high;
 }
 `;
                  break;
                case DataType.UINT8:
+                 builder.addOutputBuffer('vec4', `v4f_fragData${outputChannel}`, outputChannel);
                  fragmentMain += `
-gl_FragData[${outputChannel++}] = vec4(getDataValue(${channel}).value, 0, 0, 0);
+v4f_fragData${outputChannel++} = vec4(getDataValue(${channel}).value, 0, 0, 0);
 `;
                  break;
                case DataType.FLOAT32:
+                 builder.addOutputBuffer('vec4', `v4f_fragData${outputChannel}`, outputChannel);
                  fragmentMain += `
-gl_FragData[${outputChannel++}] = packFloatIntoVec4(getDataValue(${channel}));
+v4f_fragData${outputChannel++} = packFloatIntoVec4(getDataValue(${channel}));
 `;
                  break;
                case DataType.UINT16:
+                 builder.addOutputBuffer('vec4', `v4f_fragData${outputChannel}`, outputChannel);
                  fragmentMain += `
-gl_FragData[${outputChannel++}] = vec4(getDataValue(${channel}).value, 0, 0);
+v4f_fragData${outputChannel++} = vec4(getDataValue(${channel}).value, 0, 0);
 `;
                  break;
                case DataType.UINT32:
+                 builder.addOutputBuffer('vec4', `v4f_fragData${outputChannel}`, outputChannel);
                  fragmentMain += `
-gl_FragData[${outputChannel++}] = getDataValue(${channel}).value;
+v4f_fragData${outputChannel++} = getDataValue(${channel}).value;
 `;
                  break;
              }

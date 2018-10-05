@@ -31,7 +31,6 @@ import {kAxes, mat4, transformVectorByMat4, vec3, vec4} from 'neuroglancer/util/
 import {startRelativeMouseDrag} from 'neuroglancer/util/mouse_drag';
 import {WatchableMap} from 'neuroglancer/util/watchable_map';
 import {withSharedVisibility} from 'neuroglancer/visibility_priority/frontend';
-import {GL_BLEND, GL_COLOR_BUFFER_BIT, GL_DEPTH_TEST, GL_LEQUAL, GL_LESS, GL_ONE, GL_ONE_MINUS_SRC_ALPHA, GL_POLYGON_OFFSET_FILL, GL_SRC_ALPHA, GL_ZERO} from 'neuroglancer/webgl/constants';
 import {DepthBuffer, FramebufferConfiguration, makeTextureBuffers, OffscreenCopyHelper, TextureBuffer} from 'neuroglancer/webgl/offscreen';
 import {ShaderBuilder} from 'neuroglancer/webgl/shader';
 import {glsl_packFloat01ToFixedPoint, unpackFloat01FromFixedPoint} from 'neuroglancer/webgl/shader_lib';
@@ -61,9 +60,9 @@ export enum OffscreenTextures {
 export const glsl_perspectivePanelEmit = [
   glsl_packFloat01ToFixedPoint, `
 void emit(vec4 color, vec4 pickId) {
-  gl_FragData[${OffscreenTextures.COLOR}] = color;
-  gl_FragData[${OffscreenTextures.Z}] = packFloat01ToFixedPoint(1.0 - gl_FragCoord.z);
-  gl_FragData[${OffscreenTextures.PICK}] = pickId;
+  v4f_fragData${OffscreenTextures.COLOR} = color;
+  v4f_fragData${OffscreenTextures.Z} = packFloat01ToFixedPoint(1.0 - gl_FragCoord.z);
+  v4f_fragData${OffscreenTextures.PICK} = pickId;
 }
 `
 ];
@@ -86,19 +85,23 @@ export const glsl_perspectivePanelEmitOIT = [
 void emit(vec4 color, vec4 pickId) {
   float weight = computeOITWeight(color.a);
   vec4 accum = color * weight;
-  gl_FragData[0] = vec4(accum.rgb, color.a);
-  gl_FragData[1] = vec4(accum.a, 0.0, 0.0, 0.0);
+  v4f_fragData0 = vec4(accum.rgb, color.a);
+  v4f_fragData1 = vec4(accum.a, 0.0, 0.0, 0.0);
 }
 `
 ];
 
 export function perspectivePanelEmit(builder: ShaderBuilder) {
-  builder.addFragmentExtension('GL_EXT_draw_buffers');
+  builder.addOutputBuffer(
+      'vec4', `v4f_fragData${OffscreenTextures.COLOR}`, OffscreenTextures.COLOR);
+  builder.addOutputBuffer('vec4', `v4f_fragData${OffscreenTextures.Z}`, OffscreenTextures.Z);
+  builder.addOutputBuffer('vec4', `v4f_fragData${OffscreenTextures.PICK}`, OffscreenTextures.PICK);
   builder.addFragmentCode(glsl_perspectivePanelEmit);
 }
 
 export function perspectivePanelEmitOIT(builder: ShaderBuilder) {
-  builder.addFragmentExtension('GL_EXT_draw_buffers');
+  builder.addOutputBuffer('vec4', 'v4f_fragData0', 0);
+  builder.addOutputBuffer('vec4', 'v4f_fragData1', 1);
   builder.addFragmentCode(glsl_perspectivePanelEmitOIT);
 }
 
@@ -108,13 +111,14 @@ const tempVec4 = vec4.create();
 const tempMat4 = mat4.create();
 
 function defineTransparencyCopyShader(builder: ShaderBuilder) {
+  builder.addOutputBuffer('vec4', 'v4f_fragColor', null);
   builder.setFragmentMain(`
 vec4 v0 = getValue0();
 vec4 v1 = getValue1();
 vec4 accum = vec4(v0.rgb, v1.r);
 float revealage = v0.a;
 
-gl_FragColor = vec4(accum.rgb / accum.a, revealage);
+v4f_fragColor = vec4(accum.rgb / accum.a, revealage);
 `);
 }
 
@@ -173,6 +177,7 @@ export class PerspectivePanel extends RenderedDataPanel {
   private scaleBarTexture = this.registerDisposer(new ScaleBarTexture(this.gl));
 
   private nanometersPerPixel = 1;
+
 
   constructor(context: DisplayContext, element: HTMLElement, viewer: PerspectiveViewerState) {
     super(context, element, viewer);
@@ -359,12 +364,23 @@ export class PerspectivePanel extends RenderedDataPanel {
     return true;
   }
 
+  translateDataPointByViewportPixels(out: vec3, orig: vec3, deltaX: number, deltaY: number): vec3 {
+    const temp = tempVec3;
+    const {projectionMat} = this;
+    const {width, height} = this;
+    vec3.transformMat4(temp, orig, projectionMat);
+    temp[0] -= 2 * deltaX / width;
+    temp[1] -= -2 * deltaY / height;
+    return vec3.transformMat4(out, temp, this.inverseProjectionMat);
+  }
+
   private get transparentConfiguration() {
     let transparentConfiguration = this.transparentConfiguration_;
     if (transparentConfiguration === undefined) {
       transparentConfiguration = this.transparentConfiguration_ =
           this.registerDisposer(new FramebufferConfiguration(this.gl, {
-            colorBuffers: makeTextureBuffers(this.gl, 2, this.gl.RGBA, this.gl.FLOAT),
+            colorBuffers:
+                makeTextureBuffers(this.gl, 2, this.gl.RGBA32F, this.gl.RGBA, this.gl.FLOAT),
             depthBuffer: this.offscreenFramebuffer.depthBuffer!.addRef(),
           }));
     }
@@ -444,13 +460,13 @@ export class PerspectivePanel extends RenderedDataPanel {
     this.drawSliceViews(renderContext);
 
     if (hasAnnotation) {
-      gl.enable(GL_BLEND);
-      gl.depthFunc(GL_LEQUAL);
-      gl.blendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+      gl.enable(WebGL2RenderingContext.BLEND);
+      gl.depthFunc(WebGL2RenderingContext.LEQUAL);
+      gl.blendFunc(WebGL2RenderingContext.SRC_ALPHA, WebGL2RenderingContext.ONE_MINUS_SRC_ALPHA);
       // Render only to the color buffer, but not the pick or z buffer.  With blending enabled, the
       // z and color values would be corrupted.
-      gl.WEBGL_draw_buffers.drawBuffersWEBGL([
-        gl.WEBGL_draw_buffers.COLOR_ATTACHMENT0_WEBGL,
+      gl.drawBuffers([
+        gl.COLOR_ATTACHMENT0,
         gl.NONE,
         gl.NONE,
       ]);
@@ -461,12 +477,12 @@ export class PerspectivePanel extends RenderedDataPanel {
           renderLayer.draw(renderContext);
         }
       }
-      gl.depthFunc(GL_LESS);
-      gl.disable(GL_BLEND);
-      gl.WEBGL_draw_buffers.drawBuffersWEBGL([
-        gl.WEBGL_draw_buffers.COLOR_ATTACHMENT0_WEBGL,
-        gl.WEBGL_draw_buffers.COLOR_ATTACHMENT1_WEBGL,
-        gl.WEBGL_draw_buffers.COLOR_ATTACHMENT2_WEBGL,
+      gl.depthFunc(WebGL2RenderingContext.LESS);
+      gl.disable(WebGL2RenderingContext.BLEND);
+      gl.drawBuffers([
+        gl.COLOR_ATTACHMENT0,
+        gl.COLOR_ATTACHMENT1,
+        gl.COLOR_ATTACHMENT2,
       ]);
       renderContext.emitPickID = true;
     }
@@ -478,15 +494,17 @@ export class PerspectivePanel extends RenderedDataPanel {
     if (hasTransparent) {
       // Draw transparent objects.
       gl.depthMask(false);
-      gl.enable(GL_BLEND);
+      gl.enable(WebGL2RenderingContext.BLEND);
 
       // Compute accumulate and revealage textures.
       const {transparentConfiguration} = this;
       transparentConfiguration.bind(width, height);
       this.gl.clearColor(0.0, 0.0, 0.0, 1.0);
-      gl.clear(GL_COLOR_BUFFER_BIT);
+      gl.clear(WebGL2RenderingContext.COLOR_BUFFER_BIT);
       renderContext.emitter = perspectivePanelEmitOIT;
-      gl.blendFuncSeparate(GL_ONE, GL_ONE, GL_ZERO, GL_ONE_MINUS_SRC_ALPHA);
+      gl.blendFuncSeparate(
+          WebGL2RenderingContext.ONE, WebGL2RenderingContext.ONE, WebGL2RenderingContext.ZERO,
+          WebGL2RenderingContext.ONE_MINUS_SRC_ALPHA);
       renderContext.emitPickID = false;
       for (let renderLayer of visibleLayers) {
         if (renderLayer.isTransparent) {
@@ -495,49 +513,46 @@ export class PerspectivePanel extends RenderedDataPanel {
       }
 
       // Copy transparent rendering result back to primary buffer.
-      gl.disable(GL_DEPTH_TEST);
+      gl.disable(WebGL2RenderingContext.DEPTH_TEST);
       this.offscreenFramebuffer.bindSingle(OffscreenTextures.COLOR);
-      gl.blendFunc(GL_ONE_MINUS_SRC_ALPHA, GL_SRC_ALPHA);
+      gl.blendFunc(WebGL2RenderingContext.ONE_MINUS_SRC_ALPHA, WebGL2RenderingContext.SRC_ALPHA);
       this.transparencyCopyHelper.draw(
           transparentConfiguration.colorBuffers[0].texture,
           transparentConfiguration.colorBuffers[1].texture);
 
       gl.depthMask(true);
-      gl.disable(GL_BLEND);
-      gl.enable(GL_DEPTH_TEST);
+      gl.disable(WebGL2RenderingContext.BLEND);
+      gl.enable(WebGL2RenderingContext.DEPTH_TEST);
 
       // Restore framebuffer attachments.
       this.offscreenFramebuffer.bind(width, height);
     }
 
     // Do picking only rendering pass.
-    gl.WEBGL_draw_buffers.drawBuffersWEBGL([
-      gl.NONE, gl.WEBGL_draw_buffers.COLOR_ATTACHMENT1_WEBGL,
-      gl.WEBGL_draw_buffers.COLOR_ATTACHMENT2_WEBGL
-    ]);
+    gl.drawBuffers([gl.NONE, gl.COLOR_ATTACHMENT1, gl.COLOR_ATTACHMENT2]);
     renderContext.emitter = perspectivePanelEmit;
     renderContext.emitPickID = true;
     renderContext.emitColor = false;
 
     // Offset z values forward so that we reliably write pick IDs and depth information even though
     // we've already done one drawing pass.
-    gl.enable(GL_POLYGON_OFFSET_FILL);
+    gl.enable(WebGL2RenderingContext.POLYGON_OFFSET_FILL);
     gl.polygonOffset(-1, -1);
     for (let renderLayer of visibleLayers) {
       renderContext.alreadyEmittedPickID = !renderLayer.isTransparent && !renderLayer.isAnnotation;
       renderLayer.draw(renderContext);
     }
-    gl.disable(GL_POLYGON_OFFSET_FILL);
+    gl.disable(WebGL2RenderingContext.POLYGON_OFFSET_FILL);
 
     if (this.viewer.showScaleBar.value && this.viewer.orthographicProjection.value) {
       // Only modify color buffer.
-      gl.WEBGL_draw_buffers.drawBuffersWEBGL([
-        gl.WEBGL_draw_buffers.COLOR_ATTACHMENT0_WEBGL,
+      gl.drawBuffers([
+        gl.COLOR_ATTACHMENT0,
       ]);
 
-      gl.disable(GL_DEPTH_TEST);
-      gl.enable(GL_BLEND);
-      gl.blendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+      gl.disable(WebGL2RenderingContext.DEPTH_TEST);
+      gl.enable(WebGL2RenderingContext.BLEND);
+      gl.blendFunc(WebGL2RenderingContext.SRC_ALPHA, WebGL2RenderingContext.ONE_MINUS_SRC_ALPHA);
       const {scaleBarTexture} = this;
       const options = this.viewer.scaleBarOptions.value;
       const {dimensions} = scaleBarTexture;
@@ -550,7 +565,7 @@ export class PerspectivePanel extends RenderedDataPanel {
           options.bottomPixelOffset * options.scaleFactor, scaleBarTexture.width,
           scaleBarTexture.height);
       this.scaleBarCopyHelper.draw(scaleBarTexture.texture);
-      gl.disable(GL_BLEND);
+      gl.disable(WebGL2RenderingContext.BLEND);
     }
     this.offscreenFramebuffer.unbind();
 
@@ -626,7 +641,7 @@ export class PerspectivePanel extends RenderedDataPanel {
     mat[15] = 1;
     mat4.multiply(mat, this.projectionMat, mat);
 
-    gl.WEBGL_draw_buffers.drawBuffersWEBGL([gl.WEBGL_draw_buffers.COLOR_ATTACHMENT0_WEBGL]);
+    gl.drawBuffers([gl.COLOR_ATTACHMENT0]);
     this.axesLineHelper.draw(mat, false);
   }
 

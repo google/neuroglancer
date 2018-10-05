@@ -20,7 +20,6 @@
 
 import {RefCounted} from 'neuroglancer/util/disposable';
 import {Buffer, getMemoizedBuffer} from 'neuroglancer/webgl/buffer';
-import {GL_ELEMENT_ARRAY_BUFFER, GL_TRIANGLES, GL_UNSIGNED_SHORT, GL_TRIANGLE_FAN} from 'neuroglancer/webgl/constants';
 import {GL} from 'neuroglancer/webgl/context';
 
 export const VERTICES_PER_QUAD = 4;
@@ -28,7 +27,8 @@ export const TRIANGLES_PER_QUAD = 2;
 export const INDICES_PER_QUAD = TRIANGLES_PER_QUAD * 3;
 
 /**
- * Returns a GL_TRIANGLES index array for drawing an instance containing `quadsPerInstance` quads.
+ * Returns a WebGL2RenderingContext.TRIANGLES index array for drawing an instance containing
+ * `quadsPerInstance` quads.
  */
 function getQuadIndexArray(quadsPerInstance: number) {
   const result = new Uint16Array(quadsPerInstance * INDICES_PER_QUAD);
@@ -50,21 +50,22 @@ export class QuadRenderHelper extends RefCounted {
   constructor(gl: GL, public quadsPerInstance: number) {
     super();
     if (quadsPerInstance !== 1) {
-      this.quadIndexBuffer = this.registerDisposer(getMemoizedBuffer(
-                                                       gl, GL_ELEMENT_ARRAY_BUFFER,
-                                                       getQuadIndexArray, quadsPerInstance))
-                                 .value;
+      this.quadIndexBuffer =
+          this.registerDisposer(getMemoizedBuffer(
+                                    gl, WebGL2RenderingContext.ELEMENT_ARRAY_BUFFER,
+                                    getQuadIndexArray, quadsPerInstance))
+              .value;
     }
   }
 
   draw(gl: GL, numInstances: number) {
     if (this.quadsPerInstance === 1) {
-      gl.ANGLE_instanced_arrays.drawArraysInstancedANGLE(GL_TRIANGLE_FAN, 0, 4, numInstances);
+      gl.drawArraysInstanced(WebGL2RenderingContext.TRIANGLE_FAN, 0, 4, numInstances);
     } else {
       this.quadIndexBuffer.bind();
-      gl.ANGLE_instanced_arrays.drawElementsInstancedANGLE(
-          GL_TRIANGLES, INDICES_PER_QUAD * this.quadsPerInstance, GL_UNSIGNED_SHORT, /*offset=*/0,
-          numInstances);
+      gl.drawElementsInstanced(
+          WebGL2RenderingContext.TRIANGLES, INDICES_PER_QUAD * this.quadsPerInstance,
+          WebGL2RenderingContext.UNSIGNED_SHORT, /*offset=*/0, numInstances);
     }
   }
 }

@@ -25,7 +25,6 @@ import {TrackableRGB} from 'neuroglancer/util/color';
 import {ActionEvent, registerActionListener} from 'neuroglancer/util/event_action_map';
 import {identityMat4, mat4, vec3, vec4} from 'neuroglancer/util/geom';
 import {startRelativeMouseDrag} from 'neuroglancer/util/mouse_drag';
-import {GL_BLEND, GL_COLOR_BUFFER_BIT, GL_ONE_MINUS_SRC_ALPHA, GL_SCISSOR_TEST, GL_SRC_ALPHA} from 'neuroglancer/webgl/constants';
 import {FramebufferConfiguration, makeTextureBuffers, OffscreenCopyHelper} from 'neuroglancer/webgl/offscreen';
 import {ShaderBuilder, ShaderModule} from 'neuroglancer/webgl/shader';
 import {ScaleBarTexture, TrackableScaleBarOptions} from 'neuroglancer/widget/scale_bar';
@@ -43,20 +42,23 @@ export enum OffscreenTextures {
 }
 
 function sliceViewPanelEmitColor(builder: ShaderBuilder) {
+  builder.addOutputBuffer('vec4', 'v4f_fragColor', null);
   builder.addFragmentCode(`
 void emit(vec4 color, vec4 pickId) {
-  gl_FragColor = color;
+  v4f_fragColor = color;
 }
 `);
 }
 
 function sliceViewPanelEmitPickID(builder: ShaderBuilder) {
+  builder.addOutputBuffer('vec4', 'v4f_fragColor', null);
   builder.addFragmentCode(`
 void emit(vec4 color, vec4 pickId) {
-  gl_FragColor = pickId;
+  v4f_fragColor = pickId;
 }
 `);
 }
+
 
 export interface SliceViewPanelRenderContext {
   dataToDevice: mat4;
@@ -155,7 +157,8 @@ export class SliceViewPanel extends RenderedDataPanel {
     });
 
     this.registerDisposer(sliceView);
-    this.registerDisposer(viewer.crossSectionBackgroundColor.changed.add(() => this.scheduleRedraw()));
+    this.registerDisposer(
+        viewer.crossSectionBackgroundColor.changed.add(() => this.scheduleRedraw()));
     this.registerDisposer(sliceView.visibility.add(this.visibility));
     this.registerDisposer(sliceView.viewChanged.add(() => {
       if (this.visible) {
@@ -178,6 +181,13 @@ export class SliceViewPanel extends RenderedDataPanel {
         this.context.scheduleRedraw();
       }
     }));
+  }
+
+  translateDataPointByViewportPixels(out: vec3, orig: vec3, deltaX: number, deltaY: number): vec3 {
+    vec3.transformMat4(out, orig, this.sliceView.dataToViewport);
+    vec3.set(out, out[0] - deltaX, out[1] - deltaY, out[2]);
+    vec3.transformMat4(out, out, this.sliceView.viewportToData);
+    return out;
   }
 
   isReady() {
@@ -210,9 +220,9 @@ export class SliceViewPanel extends RenderedDataPanel {
 
     let {width, height, dataToDevice} = sliceView;
     this.offscreenFramebuffer.bind(width, height);
-    gl.disable(GL_SCISSOR_TEST);
+    gl.disable(WebGL2RenderingContext.SCISSOR_TEST);
     this.gl.clearColor(0.0, 0.0, 0.0, 0.0);
-    gl.clear(GL_COLOR_BUFFER_BIT);
+    gl.clear(WebGL2RenderingContext.COLOR_BUFFER_BIT);
 
     // Draw axes lines.
     // FIXME: avoid use of temporary matrix
@@ -243,12 +253,12 @@ export class SliceViewPanel extends RenderedDataPanel {
       viewportHeight: height,
       sliceView,
     };
-    gl.enable(GL_BLEND);
-    gl.blendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+    gl.enable(WebGL2RenderingContext.BLEND);
+    gl.blendFunc(WebGL2RenderingContext.SRC_ALPHA, WebGL2RenderingContext.ONE_MINUS_SRC_ALPHA);
     for (let renderLayer of visibleLayers) {
       renderLayer.draw(renderContext);
     }
-    gl.disable(GL_BLEND);
+    gl.disable(WebGL2RenderingContext.BLEND);
     this.offscreenFramebuffer.bindSingle(OffscreenTextures.PICK);
     renderContext.emitColor = false;
     renderContext.emitPickID = true;
@@ -285,8 +295,8 @@ export class SliceViewPanel extends RenderedDataPanel {
         this.axesLineHelper.draw(mat);
       }
       if (this.viewer.showScaleBar.value) {
-        gl.enable(GL_BLEND);
-        gl.blendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+        gl.enable(WebGL2RenderingContext.BLEND);
+        gl.blendFunc(WebGL2RenderingContext.SRC_ALPHA, WebGL2RenderingContext.ONE_MINUS_SRC_ALPHA);
         const options = this.viewer.scaleBarOptions.value;
         const {scaleBarTexture} = this;
         const {dimensions} = scaleBarTexture;
@@ -299,7 +309,7 @@ export class SliceViewPanel extends RenderedDataPanel {
             options.bottomPixelOffset * options.scaleFactor, scaleBarTexture.width,
             scaleBarTexture.height);
         this.scaleBarCopyHelper.draw(scaleBarTexture.texture);
-        gl.disable(GL_BLEND);
+        gl.disable(WebGL2RenderingContext.BLEND);
       }
     }
 

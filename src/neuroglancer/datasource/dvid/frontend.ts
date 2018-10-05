@@ -21,14 +21,16 @@
 
 import {ChunkManager, WithParameters} from 'neuroglancer/chunk_manager/frontend';
 import {CompletionResult, DataSource} from 'neuroglancer/datasource';
-import {DVIDSourceParameters, TileChunkSourceParameters, TileEncoding, VolumeChunkEncoding, VolumeChunkSourceParameters} from 'neuroglancer/datasource/dvid/base';
+import {DVIDSourceParameters, MeshSourceParameters, SkeletonSourceParameters, VolumeChunkEncoding, VolumeChunkSourceParameters} from 'neuroglancer/datasource/dvid/base';
+import {MeshSource} from 'neuroglancer/mesh/frontend';
+import {SkeletonSource} from 'neuroglancer/skeleton/frontend';
 import {DataType, VolumeChunkSpecification, VolumeSourceOptions, VolumeType} from 'neuroglancer/sliceview/volume/base';
 import {MultiscaleVolumeChunkSource as GenericMultiscaleVolumeChunkSource, VolumeChunkSource} from 'neuroglancer/sliceview/volume/frontend';
 import {StatusMessage} from 'neuroglancer/status';
 import {applyCompletionOffset, getPrefixMatchesWithDescriptions} from 'neuroglancer/util/completion';
 import {mat4, vec3} from 'neuroglancer/util/geom';
 import {openShardedHttpRequest, sendHttpRequest} from 'neuroglancer/util/http_request';
-import {parseArray, parseFixedLengthArray, parseIntVec, verifyFinitePositiveFloat, verifyInt, verifyMapKey, verifyObject, verifyObjectAsMap, verifyObjectProperty, verifyPositiveInt, verifyString} from 'neuroglancer/util/json';
+import {parseArray, parseFixedLengthArray, parseIntVec, verifyFinitePositiveFloat, verifyMapKey, verifyObject, verifyObjectAsMap, verifyObjectProperty, verifyPositiveInt, verifyString} from 'neuroglancer/util/json';
 
 let serverDataTypes = new Map<string, DataType>();
 serverDataTypes.set('uint8', DataType.UINT8);
@@ -38,6 +40,10 @@ serverDataTypes.set('uint64', DataType.UINT64);
 export class DataInstanceBaseInfo {
   get typeName(): string {
     return this.obj['TypeName'];
+  }
+
+  get compressionName(): string {
+    return this.obj['Compression'];
   }
 
   constructor(public obj: any) {
@@ -53,6 +59,12 @@ export class DataInstanceInfo {
 class DVIDVolumeChunkSource extends
 (WithParameters(VolumeChunkSource, VolumeChunkSourceParameters)) {}
 
+class DVIDSkeletonSource extends
+(WithParameters(SkeletonSource, SkeletonSourceParameters)) {}
+
+class DVIDMeshSource extends
+(WithParameters(MeshSource, MeshSourceParameters)) {}
+
 export class VolumeDataInstanceInfo extends DataInstanceInfo {
   dataType: DataType;
   lowerVoxelBound: vec3;
@@ -60,6 +72,8 @@ export class VolumeDataInstanceInfo extends DataInstanceInfo {
   voxelSize: vec3;
   numChannels: number;
   numLevels: number;
+  meshSrc: string;
+  skeletonSrc: string;
 
   constructor(
       obj: any, name: string, base: DataInstanceBaseInfo, public encoding: VolumeChunkEncoding,
@@ -73,13 +87,33 @@ export class VolumeDataInstanceInfo extends DataInstanceInfo {
     }
     this.numLevels = 1;
 
-    // dvid does not have explicit datatype support for multiscale but
-    // by convention different levels are specified with unique
-    // instances where levels are distinguished by the suffix '_LEVELNUM'
     let instSet = new Set<string>(instanceNames);
-    while (instSet.has(name + '_' + this.numLevels.toString())) {
-      this.numLevels += 1;
+    if (encoding === VolumeChunkEncoding.COMPRESSED_SEGMENTATIONARRAY) {
+      // retrieve maximum downres level
+      let maxdownreslevel = verifyObjectProperty(extended, 'MaxDownresLevel', verifyPositiveInt);
+      this.numLevels = maxdownreslevel + 1;
+    } else {
+      // labelblk does not have explicit datatype support for multiscale but
+      // by convention different levels are specified with unique
+      // instances where levels are distinguished by the suffix '_LEVELNUM'
+      while (instSet.has(name + '_' + this.numLevels.toString())) {
+        this.numLevels += 1;
+      }
     }
+
+    // only allow mesh or skeletons as sources but not both
+    this.meshSrc = '';
+    if (instSet.has(name + '_meshes')) {
+      this.meshSrc = name + '_meshes';
+    }
+
+    this.skeletonSrc = '';
+    if (this.meshSrc !== '') {
+      if (instSet.has(name + '_skeletons')) {
+        this.skeletonSrc = name + '_skeletons';
+      }
+    }
+
 
     this.dataType =
         verifyObjectProperty(extendedValues[0], 'DataType', x => verifyMapKey(x, serverDataTypes));
@@ -91,8 +125,10 @@ export class VolumeDataInstanceInfo extends DataInstanceInfo {
 
   get volumeType() {
     return (
-        this.encoding === VolumeChunkEncoding.COMPRESSED_SEGMENTATION ? VolumeType.SEGMENTATION :
-                                                                        VolumeType.IMAGE);
+        (this.encoding === VolumeChunkEncoding.COMPRESSED_SEGMENTATION ||
+         this.encoding === VolumeChunkEncoding.COMPRESSED_SEGMENTATIONARRAY) ?
+            VolumeType.SEGMENTATION :
+            VolumeType.IMAGE);
   }
 
   getSources(
@@ -100,25 +136,39 @@ export class VolumeDataInstanceInfo extends DataInstanceInfo {
       volumeSourceOptions: VolumeSourceOptions) {
     let {encoding} = this;
     let sources: VolumeChunkSource[][] = [];
+
+    // must be 64 block size to work with neuroglancer properly
+    let blocksize = 64;
     for (let level = 0; level < this.numLevels; ++level) {
       let voxelSize = vec3.scale(vec3.create(), this.voxelSize, Math.pow(2, level));
       let lowerVoxelBound = vec3.create();
       let upperVoxelBound = vec3.create();
       for (let i = 0; i < 3; ++i) {
-        lowerVoxelBound[i] =
+        let lowerVoxelNotAligned =
             Math.floor(this.lowerVoxelBound[i] * (this.voxelSize[i] / voxelSize[i]));
-        upperVoxelBound[i] =
-            Math.ceil(this.upperVoxelBound[i] * (this.voxelSize[i] / voxelSize[i]));
+        // adjust min to be a multiple of blocksize
+        lowerVoxelBound[i] = lowerVoxelNotAligned - (lowerVoxelNotAligned % blocksize);
+        let upperVoxelNotAligned =
+            Math.ceil((this.upperVoxelBound[i] + 1) * (this.voxelSize[i] / voxelSize[i]));
+        upperVoxelBound[i] = upperVoxelNotAligned;
+        // adjust max to be a multiple of blocksize
+        if ((upperVoxelNotAligned % blocksize) !== 0) {
+          upperVoxelBound[i] += (blocksize - (upperVoxelNotAligned % blocksize));
+        }
       }
       let dataInstanceKey = parameters.dataInstanceKey;
-      if (level > 0) {
-        dataInstanceKey += '_' + level.toString();
+
+      if (encoding !== VolumeChunkEncoding.COMPRESSED_SEGMENTATIONARRAY) {
+        if (level > 0) {
+          dataInstanceKey += '_' + level.toString();
+        }
       }
 
       let volParameters: VolumeChunkSourceParameters = {
         'baseUrls': parameters.baseUrls,
         'nodeKey': parameters.nodeKey,
         'dataInstanceKey': dataInstanceKey,
+        'dataScale': level.toString(),
         'encoding': encoding,
       };
       let alternatives =
@@ -134,7 +184,8 @@ export class VolumeDataInstanceInfo extends DataInstanceInfo {
                 volumeType: this.volumeType,
                 volumeSourceOptions,
                 compressedSegmentationBlockSize:
-                    (encoding === VolumeChunkEncoding.COMPRESSED_SEGMENTATION ?
+                    ((encoding === VolumeChunkEncoding.COMPRESSED_SEGMENTATION ||
+                      encoding === VolumeChunkEncoding.COMPRESSED_SEGMENTATIONARRAY) ?
                          vec3.fromValues(8, 8, 8) :
                          undefined)
               })
@@ -146,135 +197,33 @@ export class VolumeDataInstanceInfo extends DataInstanceInfo {
     }
     return sources;
   }
-}
 
-export class TileLevelInfo {
-  /**
-   * Resolution of the two downsampled dimensions in the tile plane.  The tile depth is equal to the
-   * base voxel size in that dimension.
-   */
-  resolution: vec3;
-  tileSize: vec3;
-
-  constructor(obj: any) {
-    verifyObject(obj);
-    this.resolution = verifyObjectProperty(
-        obj, 'Resolution', x => parseFixedLengthArray(vec3.create(), x, verifyFinitePositiveFloat));
-    this.tileSize = verifyObjectProperty(
-        obj, 'TileSize', x => parseFixedLengthArray(vec3.create(), x, verifyPositiveInt));
-  }
-}
-
-/**
- * Dimensions for which tiles are computed.
- *
- * DVID does not indicate which dimensions are available but it
- * provides blank tiles if the dimension asked for is not there.
- */
-const TILE_DIMS = [
-  [0, 1],
-  [0, 2],
-  [1, 2],
-];
-
-class TileChunkSource extends
-(WithParameters(VolumeChunkSource, TileChunkSourceParameters)) {}
-
-export class TileDataInstanceInfo extends DataInstanceInfo {
-  get dataType() {
-    return DataType.UINT8;
-  }
-  get volumeType() {
-    return VolumeType.IMAGE;
-  }
-  get numChannels() {
-    return 1;
-  }
-
-  encoding: TileEncoding;
-
-  /**
-   * Base voxel size (nm).
-   */
-  voxelSize: vec3;
-
-  levels: Map<string, TileLevelInfo>;
-
-  lowerVoxelBound: vec3;
-  upperVoxelBound: vec3;
-
-  constructor(obj: any, name: string, base: DataInstanceBaseInfo) {
-    super(obj, name, base);
-    let extended = verifyObjectProperty(obj, 'Extended', verifyObject);
-    this.levels = verifyObjectProperty(
-        extended, 'Levels', x => verifyObjectAsMap(x, y => new TileLevelInfo(y)));
-    let baseLevel = this.levels.get('0');
-    if (baseLevel === undefined) {
-      throw new Error(`Level 0 is not defined.`);
-    }
-    this.voxelSize = baseLevel.resolution;
-    let minTileCoord = verifyObjectProperty(
-        extended, 'MinTileCoord', x => parseFixedLengthArray(vec3.create(), x, verifyInt));
-    let maxTileCoord = verifyObjectProperty(
-        extended, 'MaxTileCoord', x => parseFixedLengthArray(vec3.create(), x, verifyInt));
-    this.lowerVoxelBound = vec3.multiply(vec3.create(), baseLevel.tileSize, minTileCoord);
-    this.upperVoxelBound = vec3.multiply(vec3.create(), baseLevel.tileSize, maxTileCoord);
-
-    let encodingNumber = verifyObjectProperty(extended, 'Encoding', x => x);
-    switch (encodingNumber) {
-      case 2:
-        this.encoding = TileEncoding.JPEG;
-        break;
-      default:
-        throw new Error(`Unsupported tile encoding: ${JSON.stringify(encodingNumber)}.`);
-    }
-  }
-
-  getSources(
-      chunkManager: ChunkManager, parameters: DVIDSourceParameters,
-      volumeSourceOptions: VolumeSourceOptions) {
-    let sources: VolumeChunkSource[][] = [];
-    let {numChannels, dataType, encoding} = this;
-    for (let [level, levelInfo] of this.levels) {
-      let alternatives = TILE_DIMS.map(dims => {
-        let voxelSize = vec3.clone(this.voxelSize);
-        let chunkDataSize = vec3.fromValues(1, 1, 1);
-        // tiles are always NxMx1
-        for (let i = 0; i < 2; ++i) {
-          voxelSize[dims[i]] = levelInfo.resolution[dims[i]];
-          chunkDataSize[dims[i]] = levelInfo.tileSize[dims[i]];
+  getMeshSource(chunkManager: ChunkManager, parameters: DVIDSourceParameters) {
+    if (this.meshSrc !== '') {
+      return chunkManager.getChunkSource(DVIDMeshSource, {
+        parameters: {
+          'baseUrls': parameters.baseUrls,
+          'nodeKey': parameters.nodeKey,
+          'dataInstanceKey': this.meshSrc,
         }
-        let lowerVoxelBound = vec3.create(), upperVoxelBound = vec3.create();
-        for (let i = 0; i < 3; ++i) {
-          lowerVoxelBound[i] =
-              Math.floor(this.lowerVoxelBound[i] * (this.voxelSize[i] / voxelSize[i]));
-          upperVoxelBound[i] =
-              Math.ceil(this.upperVoxelBound[i] * (this.voxelSize[i] / voxelSize[i]));
-        }
-        let spec = VolumeChunkSpecification.make({
-          voxelSize,
-          chunkDataSize,
-          numChannels: numChannels,
-          dataType: dataType,
-          lowerVoxelBound,
-          upperVoxelBound,
-          volumeSourceOptions,
-        });
-        return chunkManager.getChunkSource(TileChunkSource, {
-          spec,
-          parameters: {
-            'baseUrls': parameters.baseUrls,
-            'nodeKey': parameters.nodeKey,
-            'dataInstanceKey': parameters.dataInstanceKey,
-            'encoding': encoding,
-            'level': level,
-            'dims': `${dims[0]}_${dims[1]}`,
-          }
-        });
       });
-      sources.push(alternatives);
+    } else {
+      return null;
     }
-    return sources;
+  }
+
+  getSkeletonSource(chunkManager: ChunkManager, parameters: DVIDSourceParameters) {
+    if (this.skeletonSrc !== '') {
+      return chunkManager.getChunkSource(DVIDSkeletonSource, {
+        parameters: {
+          'baseUrls': parameters.baseUrls,
+          'nodeKey': parameters.nodeKey,
+          'dataInstanceKey': this.skeletonSrc,
+        }
+      });
+    } else {
+      return null;
+    }
   }
 }
 
@@ -285,14 +234,18 @@ export function parseDataInstance(
   switch (baseInfo.typeName) {
     case 'uint8blk':
     case 'grayscale8':
+      let isjpegcompress = baseInfo.compressionName.indexOf('jpeg') !== -1;
       return new VolumeDataInstanceInfo(
-          obj, name, baseInfo, VolumeChunkEncoding.JPEG, instanceNames);
-    case 'imagetile':
-      return new TileDataInstanceInfo(obj, name, baseInfo);
+          obj, name, baseInfo,
+          (isjpegcompress ? VolumeChunkEncoding.JPEG : VolumeChunkEncoding.RAW), instanceNames);
     case 'labels64':
     case 'labelblk':
       return new VolumeDataInstanceInfo(
           obj, name, baseInfo, VolumeChunkEncoding.COMPRESSED_SEGMENTATION, instanceNames);
+    case 'labelarray':
+    case 'labelmap':
+      return new VolumeDataInstanceInfo(
+          obj, name, baseInfo, VolumeChunkEncoding.COMPRESSED_SEGMENTATIONARRAY, instanceNames);
     default:
       throw new Error(`DVID data type ${JSON.stringify(baseInfo.typeName)} is not supported.`);
   }
@@ -404,8 +357,7 @@ export function getServerInfo(chunkManager: ChunkManager, baseUrls: string[]) {
  * this requires an extra api call
  */
 export function getDataInstanceDetails(
-    chunkManager: ChunkManager, baseUrls: string[], nodeKey: string,
-    info: VolumeDataInstanceInfo|TileDataInstanceInfo) {
+    chunkManager: ChunkManager, baseUrls: string[], nodeKey: string, info: VolumeDataInstanceInfo) {
   return chunkManager.memoize.getUncounted(
       {type: 'dvid:getInstanceDetails', baseUrls, nodeKey, name: info.name}, () => {
         let result = sendHttpRequest(
@@ -428,7 +380,6 @@ export function getDataInstanceDetails(
               verifyObjectProperty(extended, 'MaxPoint', x => parseIntVec(vec3.create(), x));
           return info;
         });
-
       });
 }
 
@@ -446,7 +397,7 @@ export class MultiscaleVolumeChunkSource implements GenericMultiscaleVolumeChunk
 
   constructor(
       public chunkManager: ChunkManager, public baseUrls: string[], public nodeKey: string,
-      public dataInstanceKey: string, public info: VolumeDataInstanceInfo|TileDataInstanceInfo) {}
+      public dataInstanceKey: string, public info: VolumeDataInstanceInfo) {}
 
   getSources(volumeSourceOptions: VolumeSourceOptions) {
     return this.info.getSources(
@@ -458,11 +409,20 @@ export class MultiscaleVolumeChunkSource implements GenericMultiscaleVolumeChunk
         volumeSourceOptions);
   }
 
-  /**
-   * Meshes are not supported.
-   */
-  getMeshSource(): null {
-    return null;
+  getMeshSource() {
+    let meshSource = this.info.getMeshSource(this.chunkManager, {
+      'baseUrls': this.baseUrls,
+      'nodeKey': this.nodeKey,
+      'dataInstanceKey': this.dataInstanceKey,
+    });
+    if (meshSource === null) {
+      return this.info.getSkeletonSource(this.chunkManager, {
+        'baseUrls': this.baseUrls,
+        'nodeKey': this.nodeKey,
+        'dataInstanceKey': this.dataInstanceKey,
+      });
+    }
+    return meshSource;
   }
 }
 
@@ -475,14 +435,12 @@ export function getShardedVolume(
           throw new Error(`Invalid node: ${JSON.stringify(nodeKey)}.`);
         }
         const dataInstanceInfo = repositoryInfo.dataInstances.get(dataInstanceKey);
-        if (!(dataInstanceInfo instanceof VolumeDataInstanceInfo) &&
-            !(dataInstanceInfo instanceof TileDataInstanceInfo)) {
+        if (!(dataInstanceInfo instanceof VolumeDataInstanceInfo)) {
           throw new Error(`Invalid data instance ${dataInstanceKey}.`);
         }
         return getDataInstanceDetails(chunkManager, baseUrls, nodeKey, dataInstanceInfo);
       })
-      .then((info: VolumeDataInstanceInfo | TileDataInstanceInfo) => {
-
+      .then((info: VolumeDataInstanceInfo) => {
         return chunkManager.memoize.getUncounted(
             {
               type: 'dvid:MultiscaleVolumeChunkSource',
@@ -532,8 +490,8 @@ export function completeNodeAndInstance(serverInfo: ServerInfo, prefix: string):
     };
   }
   let nodeKey = match[1];
-  let repository = serverInfo.getNode(nodeKey);
-  return applyCompletionOffset(nodeKey.length + 1, completeInstanceName(repository, match[2]));
+  let repositoryInfo = serverInfo.getNode(nodeKey);
+  return applyCompletionOffset(nodeKey.length + 1, completeInstanceName(repositoryInfo, match[2]));
 }
 
 export function volumeCompleter(

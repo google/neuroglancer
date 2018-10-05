@@ -24,7 +24,6 @@ import {tile2dArray} from 'neuroglancer/util/array';
 import {mat4, projectPointToLineSegment, vec3} from 'neuroglancer/util/geom';
 import {getMemoizedBuffer} from 'neuroglancer/webgl/buffer';
 import {CircleShader, VERTICES_PER_CIRCLE} from 'neuroglancer/webgl/circles';
-import {GL_ARRAY_BUFFER, GL_FLOAT} from 'neuroglancer/webgl/constants';
 import {LineShader} from 'neuroglancer/webgl/lines';
 import {dependentShaderGetter, ShaderBuilder, ShaderProgram} from 'neuroglancer/webgl/shader';
 
@@ -62,7 +61,9 @@ emitAnnotation(vec4(vColor.rgb, vColor.a * getLineAlpha() * ${this.getCrossSecti
   });
 
   private endpointIndexBuffer =
-      this.registerDisposer(getMemoizedBuffer(this.gl, GL_ARRAY_BUFFER, getEndpointIndexArray))
+      this
+          .registerDisposer(getMemoizedBuffer(
+              this.gl, WebGL2RenderingContext.ARRAY_BUFFER, getEndpointIndexArray))
           .value;
 
   private endpointShaderGetter = dependentShaderGetter(this, this.gl, (builder: ShaderBuilder) => {
@@ -87,17 +88,19 @@ emitAnnotation(getCircleColor(vColor, borderColor));
       const aUpper = shader.attribute('aEndpointB');
 
       context.buffer.bindToVertexAttrib(
-          aLower, /*components=*/3, /*attributeType=*/GL_FLOAT, /*normalized=*/false,
+          aLower, /*components=*/3, /*attributeType=*/WebGL2RenderingContext.FLOAT,
+          /*normalized=*/false,
           /*stride=*/4 * 6, /*offset=*/context.bufferOffset);
       context.buffer.bindToVertexAttrib(
-          aUpper, /*components=*/3, /*attributeType=*/GL_FLOAT, /*normalized=*/false,
+          aUpper, /*components=*/3, /*attributeType=*/WebGL2RenderingContext.FLOAT,
+          /*normalized=*/false,
           /*stride=*/4 * 6, /*offset=*/context.bufferOffset + 4 * 3);
 
-      gl.ANGLE_instanced_arrays.vertexAttribDivisorANGLE(aLower, 1);
-      gl.ANGLE_instanced_arrays.vertexAttribDivisorANGLE(aUpper, 1);
+      gl.vertexAttribDivisor(aLower, 1);
+      gl.vertexAttribDivisor(aUpper, 1);
       callback();
-      gl.ANGLE_instanced_arrays.vertexAttribDivisorANGLE(aLower, 0);
-      gl.ANGLE_instanced_arrays.vertexAttribDivisorANGLE(aUpper, 0);
+      gl.vertexAttribDivisor(aLower, 0);
+      gl.vertexAttribDivisor(aUpper, 0);
       gl.disableVertexAttribArray(aLower);
       gl.disableVertexAttribArray(aUpper);
     });
@@ -116,7 +119,8 @@ emitAnnotation(getCircleColor(vColor, borderColor));
     this.enable(shader, context, () => {
       const aEndpointIndex = shader.attribute('aEndpointIndex');
       this.endpointIndexBuffer.bindToVertexAttrib(
-          aEndpointIndex, /*components=*/1, /*attributeType=*/GL_FLOAT, /*normalized=*/false);
+          aEndpointIndex, /*components=*/1, /*attributeType=*/WebGL2RenderingContext.FLOAT,
+          /*normalized=*/false);
       this.circleShader.draw(
           shader, context.renderContext,
           {interiorRadiusInPixels: 6, borderWidthInPixels: 2, featherWidthInPixels: 1},
@@ -138,7 +142,7 @@ function snapPositionToLine(position: vec3, objectToData: mat4, endpoints: Float
 }
 
 function snapPositionToEndpoint(
-  position: vec3, objectToData: mat4, endpoints: Float32Array, endpointIndex: number) {
+    position: vec3, objectToData: mat4, endpoints: Float32Array, endpointIndex: number) {
   const startOffset = 3 * endpointIndex;
   const point = <vec3>endpoints.subarray(startOffset, startOffset + 3);
   vec3.transformMat4(position, point, objectToData);
@@ -170,4 +174,37 @@ registerAnnotationTypeRenderHandler(AnnotationType.LINE, {
       snapPositionToEndpoint(position, objectToData, endpoints, partIndex - ENDPOINTS_PICK_OFFSET);
     }
   },
+  getRepresentativePoint: (objectToData, ann, partIndex) => {
+    let repPoint = vec3.create();
+    // if the full object is selected just pick the first point as representative
+    if (partIndex === FULL_OBJECT_PICK_OFFSET) {
+      vec3.transformMat4(repPoint, ann.pointA, objectToData);
+    } else {
+      if ((partIndex - ENDPOINTS_PICK_OFFSET) === 0) {
+        vec3.transformMat4(repPoint, ann.pointA, objectToData);
+      } else {
+        vec3.transformMat4(repPoint, ann.pointB, objectToData);
+      }
+    }
+    return repPoint;
+  },
+  updateViaRepresentativePoint: (oldAnnotation, position, dataToObject, partIndex) => {
+    let newPt = vec3.transformMat4(vec3.create(), position, dataToObject);
+    let baseLine = {...oldAnnotation};
+    switch (partIndex) {
+      case FULL_OBJECT_PICK_OFFSET:
+        let delta = vec3.sub(vec3.create(), oldAnnotation.pointB, oldAnnotation.pointA);
+        baseLine.pointA = newPt;
+        baseLine.pointB = vec3.add(vec3.create(), newPt, delta);
+        break;
+      case FULL_OBJECT_PICK_OFFSET + 1:
+        baseLine.pointA = newPt;
+        baseLine.pointB = oldAnnotation.pointB;
+        break;
+      case FULL_OBJECT_PICK_OFFSET + 2:
+        baseLine.pointA = oldAnnotation.pointA;
+        baseLine.pointB = newPt;
+    }
+    return baseLine;
+  }
 });

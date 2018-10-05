@@ -20,9 +20,8 @@
 
 import {AnnotationType, Point} from 'neuroglancer/annotation';
 import {AnnotationRenderContext, AnnotationRenderHelper, registerAnnotationTypeRenderHandler} from 'neuroglancer/annotation/type_handler';
-import {vec3} from 'neuroglancer/util/geom';
+import {mat4, vec3} from 'neuroglancer/util/geom';
 import {CircleShader} from 'neuroglancer/webgl/circles';
-import {GL_FLOAT} from 'neuroglancer/webgl/constants';
 import {dependentShaderGetter, ShaderBuilder} from 'neuroglancer/webgl/shader';
 
 class RenderHelper extends AnnotationRenderHelper {
@@ -51,14 +50,15 @@ emitAnnotation(getCircleColor(vColor, borderColor));
       const {gl} = this;
       const aVertexPosition = shader.attribute('aVertexPosition');
       context.buffer.bindToVertexAttrib(
-          aVertexPosition, /*components=*/3, /*attributeType=*/GL_FLOAT, /*normalized=*/false,
+          aVertexPosition, /*components=*/3, /*attributeType=*/WebGL2RenderingContext.FLOAT,
+          /*normalized=*/false,
           /*stride=*/0, /*offset=*/context.bufferOffset);
-      gl.ANGLE_instanced_arrays.vertexAttribDivisorANGLE(aVertexPosition, 1);
+      gl.vertexAttribDivisor(aVertexPosition, 1);
       this.circleShader.draw(
           shader, context.renderContext,
           {interiorRadiusInPixels: 6, borderWidthInPixels: 2, featherWidthInPixels: 1},
           context.count);
-      gl.ANGLE_instanced_arrays.vertexAttribDivisorANGLE(aVertexPosition, 0);
+      gl.vertexAttribDivisor(aVertexPosition, 0);
       gl.disableVertexAttribArray(aVertexPosition);
     });
   }
@@ -79,7 +79,18 @@ registerAnnotationTypeRenderHandler(AnnotationType.POINT, {
   sliceViewRenderHelper: RenderHelper,
   perspectiveViewRenderHelper: RenderHelper,
   pickIdsPerInstance: 1,
-  snapPosition: (position, objectToData, data, offset) => {
+  snapPosition: (position: vec3, objectToData, data, offset) => {
     vec3.transformMat4(position, <vec3>new Float32Array(data, offset, 3), objectToData);
   },
+  getRepresentativePoint: (objectToData, ann) => {
+    let repPoint = vec3.create();
+    vec3.transformMat4(repPoint, ann.point, objectToData);
+    return repPoint;
+  },
+  updateViaRepresentativePoint: (oldAnnotation: Point, position: vec3, dataToObject: mat4) => {
+    let annotation = {...oldAnnotation};
+    annotation.point = vec3.transformMat4(vec3.create(), position, dataToObject);
+    // annotation.id = '';
+    return annotation;
+  }
 });

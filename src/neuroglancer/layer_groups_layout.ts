@@ -109,6 +109,7 @@ export class LayoutComponentContainer extends RefCounted {
       }));
       scheduleMaybeDelete();
     }
+    this.changed.dispatch();
   }
   element = document.createElement('div');
 
@@ -383,6 +384,12 @@ function setupDropZone(
         for (const newLayer of dropLayers.layers.keys()) {
           layerGroupViewer.layerSpecification.add(newLayer);
         }
+        try {
+          layerGroupViewer.layout.restoreState(dropLayers.layoutSpec);
+        } catch {
+          layerGroupViewer.layout.reset();
+          // Ignore error restoring layout.
+        }
         return;
       }
     }
@@ -560,10 +567,6 @@ export class RootLayoutContainer extends RefCounted implements Trackable {
   }
 
   toJSON() {
-    const result = this.container.toJSON();
-    if (result === this.defaultSpecification) {
-      return undefined;
-    }
-    return result;
+    return this.container.toJSON();
   }
 }

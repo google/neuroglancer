@@ -135,7 +135,7 @@ export class MouseSelectionStateTooltipManager extends RefCounted {
           const child = document.createElement('span');
           child.className = 'neuroglancer-annotation-segment-item';
           child.textContent = segment.toString();
-          if (segmentationState !== undefined) {
+          if (segmentColorHash !== undefined) {
             child.style.backgroundColor = segmentColorHash!.computeCssColor(segment);
           }
           segmentContainer.appendChild(child);

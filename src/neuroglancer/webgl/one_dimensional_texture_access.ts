@@ -26,7 +26,6 @@
 import {maybePadArray, TypedArray, TypedArrayConstructor} from 'neuroglancer/util/array';
 import {DataType} from 'neuroglancer/util/data_type';
 import {vec3} from 'neuroglancer/util/geom';
-import {GL_FLOAT, GL_LUMINANCE, GL_LUMINANCE_ALPHA, GL_RGB, GL_RGBA, GL_UNPACK_ALIGNMENT, GL_UNSIGNED_BYTE} from 'neuroglancer/webgl/constants';
 import {GL} from 'neuroglancer/webgl/context';
 import {ShaderBuilder, ShaderCodePart, ShaderProgram} from 'neuroglancer/webgl/shader';
 import {getShaderType, glsl_float, glsl_uint16, glsl_uint32, glsl_uint64, glsl_uint8} from 'neuroglancer/webgl/shader_lib';
@@ -45,6 +44,11 @@ export class OneDimensionalTextureFormat {
    * Number of texels per multi-channel element.
    */
   texelsPerElement: number;
+
+  /**
+   * Texture internal format to specify when uploading the texture data.
+   */
+  textureInternalFormat: number;
 
   /**
    * Texture format to specify when uploading the texture data.
@@ -67,9 +71,25 @@ export class OneDimensionalTextureFormat {
   arrayConstructor: TypedArrayConstructor;
 }
 
-export const textureFormatForNumComponents =
-    [-1, GL_LUMINANCE, GL_LUMINANCE_ALPHA, GL_RGB, GL_RGBA];
-export const textureSelectorForNumComponents = ['', 'r', 'ra', 'rgb', 'rgba'];
+export const textureFormatForNumComponents = [
+    -1,
+    WebGL2RenderingContext.RED,
+    WebGL2RenderingContext.RG,
+    WebGL2RenderingContext.RGB,
+    WebGL2RenderingContext.RGBA];
+export const textureSelectorForNumComponents = ['', 'r', 'rg', 'rgb', 'rgba'];
+export const internalUnsignedBytesFormatForNumComponents = [
+    -1,
+    WebGL2RenderingContext.R8,
+    WebGL2RenderingContext.RG8,
+    WebGL2RenderingContext.RGB8,
+    WebGL2RenderingContext.RGBA8];
+export const internalFloatFormatForNumComponents = [
+    -1,
+    WebGL2RenderingContext.R32F,
+    WebGL2RenderingContext.RG32F,
+    WebGL2RenderingContext.RGB32F,
+    WebGL2RenderingContext.RGBA32F];
 
 /**
  * Fills in a OneDimensionalTextureFormat object with the suitable texture format for the specified
@@ -83,8 +103,9 @@ export function compute1dTextureFormat(
         break;
       }
       format.texelsPerElement = 1;
+      format.textureInternalFormat = internalUnsignedBytesFormatForNumComponents[numComponents];
       format.textureFormat = textureFormatForNumComponents[numComponents];
-      format.texelType = GL_UNSIGNED_BYTE;
+      format.texelType = WebGL2RenderingContext.UNSIGNED_BYTE;
       format.arrayElementsPerTexel = numComponents;
       format.arrayConstructor = Uint8Array;
       return format;
@@ -93,8 +114,9 @@ export function compute1dTextureFormat(
         break;
       }
       format.texelsPerElement = 1;
+      format.textureInternalFormat = internalUnsignedBytesFormatForNumComponents[numComponents * 2];
       format.textureFormat = textureFormatForNumComponents[numComponents * 2];
-      format.texelType = GL_UNSIGNED_BYTE;
+      format.texelType = WebGL2RenderingContext.UNSIGNED_BYTE;
       format.arrayElementsPerTexel = 2 * numComponents;
       format.arrayConstructor = Uint8Array;
       return format;
@@ -103,8 +125,9 @@ export function compute1dTextureFormat(
         break;
       }
       format.texelsPerElement = 2;
-      format.textureFormat = GL_RGBA;
-      format.texelType = GL_UNSIGNED_BYTE;
+      format.textureInternalFormat = WebGL2RenderingContext.RGBA8;
+      format.textureFormat = WebGL2RenderingContext.RGBA;
+      format.texelType = WebGL2RenderingContext.UNSIGNED_BYTE;
       format.arrayElementsPerTexel = 4;
       format.arrayConstructor = Uint8Array;
       return format;
@@ -113,8 +136,9 @@ export function compute1dTextureFormat(
         break;
       }
       format.texelsPerElement = 1;
-      format.textureFormat = GL_RGBA;
-      format.texelType = GL_UNSIGNED_BYTE;
+      format.textureInternalFormat = WebGL2RenderingContext.RGBA8;
+      format.textureFormat = WebGL2RenderingContext.RGBA;
+      format.texelType = WebGL2RenderingContext.UNSIGNED_BYTE;
       format.arrayElementsPerTexel = 4;
       format.arrayConstructor = Uint8Array;
       return format;
@@ -123,8 +147,9 @@ export function compute1dTextureFormat(
         break;
       }
       format.texelsPerElement = 1;
+      format.textureInternalFormat = internalFloatFormatForNumComponents[numComponents];
       format.textureFormat = textureFormatForNumComponents[numComponents];
-      format.texelType = GL_FLOAT;
+      format.texelType = WebGL2RenderingContext.FLOAT;
       format.arrayElementsPerTexel = numComponents;
       format.arrayConstructor = Float32Array;
       return format;
@@ -185,7 +210,7 @@ export function compute1dTextureLayout(
 export function setOneDimensionalTextureData(
     gl: GL, textureLayout: OneDimensionalTextureLayout, format: OneDimensionalTextureFormat,
     data: TypedArray) {
-  const {arrayConstructor, arrayElementsPerTexel, textureFormat, texelsPerElement} = format;
+  const {arrayConstructor, arrayElementsPerTexel, textureInternalFormat, textureFormat, texelsPerElement} = format;
   const {dataWidth, textureHeight} = textureLayout;
   const requiredSize = dataWidth * textureHeight * arrayElementsPerTexel * texelsPerElement;
   if (data.constructor !== arrayConstructor) {
@@ -193,11 +218,11 @@ export function setOneDimensionalTextureData(
         data.buffer, data.byteOffset, data.byteLength / arrayConstructor.BYTES_PER_ELEMENT);
   }
   let padded = maybePadArray(data, requiredSize);
-  gl.pixelStorei(GL_UNPACK_ALIGNMENT, 1);
+  gl.pixelStorei(WebGL2RenderingContext.UNPACK_ALIGNMENT, 1);
   setRawTextureParameters(gl);
   gl.texImage2D(
       gl.TEXTURE_2D,
-      /*level=*/0, textureFormat,
+      /*level=*/0,textureInternalFormat,
       /*width=*/dataWidth * texelsPerElement,
       /*height=*/textureHeight,
       /*border=*/0, textureFormat, format.texelType, padded);
@@ -228,7 +253,7 @@ void ${this.readTextureValue}(highp sampler2D sampler, float index`;
 `;
     for (let i = 0; i < texelsPerElement; ++i) {
       code += `
-  output${i} = texture2D(sampler,
+  output${i} = texture(sampler,
                         vec2(texCoords.x +
                              ${uniformName}.x * ${(i / texelsPerElement).toFixed(8)},
                              texCoords.y));

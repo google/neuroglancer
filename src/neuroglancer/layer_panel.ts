@@ -25,6 +25,7 @@ import {animationFrameDebounce} from 'neuroglancer/util/animation_frame_debounce
 import {RefCounted, registerEventListener} from 'neuroglancer/util/disposable';
 import {removeFromParent} from 'neuroglancer/util/dom';
 import {getDropEffect, preventDrag, setDropEffect} from 'neuroglancer/util/drag_and_drop';
+import {float32ToString} from 'neuroglancer/util/float32_to_string';
 import {makeCloseButton} from 'neuroglancer/widget/close_button';
 import {PositionWidget} from 'neuroglancer/widget/position_widget';
 
@@ -203,7 +204,9 @@ class LayerWidget extends RefCounted {
 
     element.draggable = true;
     this.registerEventListener(element, 'dragstart', (event: DragEvent) => {
-      startLayerDrag(event, {manager: panel.manager, layers: [this.layer]});
+      startLayerDrag(
+          event,
+          {manager: panel.manager, layers: [this.layer], layoutSpec: panel.getLayoutSpecForDrag()});
       event.stopPropagation();
     });
 
@@ -257,7 +260,7 @@ export class LayerPanel extends RefCounted {
   constructor(
       public display: DisplayContext, public manager: LayerListSpecification,
       public viewerNavigationState: LinkedViewerNavigationState,
-      public selectedLayer: SelectedLayerState) {
+      public selectedLayer: SelectedLayerState, public getLayoutSpecForDrag: () => any) {
     super();
     this.registerDisposer(selectedLayer);
     const {element} = this;
@@ -356,7 +359,18 @@ export class LayerPanel extends RefCounted {
       if (userLayer !== null) {
         let value = values.get(userLayer);
         if (value !== undefined) {
-          text = '' + value;
+          value = Array().concat(value);
+          value = value.map((x: any) => {
+            if (x === null) {
+              return 'null';
+            } else if (Math.fround(x) === x) {
+              // FIXME: Verify actual layer data type
+              return float32ToString(x);
+            } else {
+              return x;
+            }
+          });
+          text += value.join(', ');
         }
       }
       widget.valueElement.textContent = text;

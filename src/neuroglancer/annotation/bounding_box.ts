@@ -26,7 +26,6 @@ import {tile2dArray} from 'neuroglancer/util/array';
 import {mat4, projectPointToLineSegment, vec3} from 'neuroglancer/util/geom';
 import {Buffer, getMemoizedBuffer} from 'neuroglancer/webgl/buffer';
 import {CircleShader, VERTICES_PER_CIRCLE} from 'neuroglancer/webgl/circles';
-import {GL_ARRAY_BUFFER, GL_FLOAT, GL_TRIANGLE_FAN} from 'neuroglancer/webgl/constants';
 import {GL} from 'neuroglancer/webgl/context';
 import {LineShader, VERTICES_PER_LINE} from 'neuroglancer/webgl/lines';
 import {dependentShaderGetter, ShaderBuilder, ShaderProgram} from 'neuroglancer/webgl/shader';
@@ -140,17 +139,19 @@ abstract class RenderHelper extends AnnotationRenderHelper {
       const aLower = shader.attribute('aLower');
       const aUpper = shader.attribute('aUpper');
       context.buffer.bindToVertexAttrib(
-          aLower, /*components=*/3, /*attributeType=*/GL_FLOAT, /*normalized=*/false,
+          aLower, /*components=*/3, /*attributeType=*/WebGL2RenderingContext.FLOAT,
+          /*normalized=*/false,
           /*stride=*/4 * 6, /*offset=*/context.bufferOffset);
       context.buffer.bindToVertexAttrib(
-          aUpper, /*components=*/3, /*attributeType=*/GL_FLOAT, /*normalized=*/false,
+          aUpper, /*components=*/3, /*attributeType=*/WebGL2RenderingContext.FLOAT,
+          /*normalized=*/false,
           /*stride=*/4 * 6, /*offset=*/context.bufferOffset + 4 * 3);
 
-      gl.ANGLE_instanced_arrays.vertexAttribDivisorANGLE(aLower, 1);
-      gl.ANGLE_instanced_arrays.vertexAttribDivisorANGLE(aUpper, 1);
+      gl.vertexAttribDivisor(aLower, 1);
+      gl.vertexAttribDivisor(aUpper, 1);
       callback();
-      gl.ANGLE_instanced_arrays.vertexAttribDivisorANGLE(aLower, 0);
-      gl.ANGLE_instanced_arrays.vertexAttribDivisorANGLE(aUpper, 0);
+      gl.vertexAttribDivisor(aLower, 0);
+      gl.vertexAttribDivisor(aUpper, 0);
       gl.disableVertexAttribArray(aLower);
       gl.disableVertexAttribArray(aUpper);
     });
@@ -222,11 +223,13 @@ emitAnnotation(getCircleColor(vColor, borderColor));
       const aBoxCornerOffset2 = shader.attribute('aBoxCornerOffset2');
 
       this.edgeBoxCornerOffsetsBuffer.bindToVertexAttrib(
-          aBoxCornerOffset1, /*components=*/3, /*attributeType=*/GL_FLOAT, /*normalized=*/false,
+          aBoxCornerOffset1, /*components=*/3, /*attributeType=*/WebGL2RenderingContext.FLOAT,
+          /*normalized=*/false,
           /*stride=*/4 * 7, /*offset=*/0);
 
       this.edgeBoxCornerOffsetsBuffer.bindToVertexAttrib(
-          aBoxCornerOffset2, /*components=*/4, /*attributeType=*/GL_FLOAT, /*normalized=*/false,
+          aBoxCornerOffset2, /*components=*/4, /*attributeType=*/WebGL2RenderingContext.FLOAT,
+          /*normalized=*/false,
           /*stride=*/4 * 7, /*offset=*/4 * 3);
 
       const lineWidth = context.renderContext.emitColor ? 1 : 5;
@@ -242,7 +245,8 @@ emitAnnotation(getCircleColor(vColor, borderColor));
     this.enable(shader, context, () => {
       const aBoxCornerOffset = shader.attribute('aBoxCornerOffset');
       this.boxCornerOffsetsBuffer.bindToVertexAttrib(
-          aBoxCornerOffset, /*components=*/3, /*attributeType=*/GL_FLOAT, /*normalized=*/false);
+          aBoxCornerOffset, /*components=*/3, /*attributeType=*/WebGL2RenderingContext.FLOAT,
+          /*normalized=*/false);
       this.circleShader.draw(
           shader, context.renderContext,
           {interiorRadiusInPixels: 1, borderWidthInPixels: 0, featherWidthInPixels: 1},
@@ -273,9 +277,13 @@ function getIntersectionVertexIndexArray() {
 class SliceViewRenderHelper extends RenderHelper {
   private lineShader = new LineShader(this.gl, 6);
   private intersectionVertexIndexBuffer =
-      getMemoizedBuffer(this.gl, GL_ARRAY_BUFFER, getIntersectionVertexIndexArray).value;
+      getMemoizedBuffer(
+          this.gl, WebGL2RenderingContext.ARRAY_BUFFER, getIntersectionVertexIndexArray)
+          .value;
   private filledIntersectionVertexIndexBuffer =
-      getMemoizedBuffer(this.gl, GL_ARRAY_BUFFER, getBaseIntersectionVertexIndexArray).value;
+      getMemoizedBuffer(
+          this.gl, WebGL2RenderingContext.ARRAY_BUFFER, getBaseIntersectionVertexIndexArray)
+          .value;
   private boundingBoxCrossSectionHelper =
       this.registerDisposer(new BoundingBoxCrossSectionRenderHelper(this.gl));
 
@@ -320,8 +328,8 @@ emitAnnotation(vec4(vColor.rgb, uFillOpacity));
 
   draw(context: AnnotationRenderContext&{renderContext: SliceViewPanelRenderContext}) {
     const fillOpacity = context.annotationLayer.state.fillOpacity.value;
-    const shader =
-        (fillOpacity ? this.fillShaderGetter : this.faceShaderGetter)(context.renderContext.emitter);
+    const shader = (fillOpacity ? this.fillShaderGetter : this.faceShaderGetter)(
+        context.renderContext.emitter);
     let {gl} = this;
     this.enable(shader, context, () => {
       this.boundingBoxCrossSectionHelper.setViewportPlane(
@@ -332,12 +340,12 @@ emitAnnotation(vec4(vColor.rgb, uFillOpacity));
 
       (fillOpacity ? this.filledIntersectionVertexIndexBuffer : this.intersectionVertexIndexBuffer)
           .bindToVertexAttrib(
-              aVertexIndexFloat, /*components=*/1, /*attributeType=*/GL_FLOAT,
+              aVertexIndexFloat, /*components=*/1, /*attributeType=*/WebGL2RenderingContext.FLOAT,
               /*normalized=*/false);
 
       if (fillOpacity) {
         gl.uniform1f(shader.uniform('uFillOpacity'), fillOpacity);
-        gl.ANGLE_instanced_arrays.drawArraysInstancedANGLE(GL_TRIANGLE_FAN, 0, 6, context.count);
+        gl.drawArraysInstanced(WebGL2RenderingContext.TRIANGLE_FAN, 0, 6, context.count);
       } else {
         const lineWidth = context.renderContext.emitColor ? 1 : 5;
         this.lineShader.draw(shader, context.renderContext, lineWidth, 1.0, context.count);
@@ -346,21 +354,26 @@ emitAnnotation(vec4(vColor.rgb, uFillOpacity));
     });
   }
 }
-
-function snapPositionToEdge(
-    position: vec3, objectToData: mat4, corners: Float32Array, edgeIndex: number) {
+function getEdgeCorners(corners: Float32Array, edgeIndex: number) {
   const i = edgeIndex * 7;
-  const cornerA = vec3.create(), cornerB = vec3.create();
+  const cA = vec3.create(), cB = vec3.create();
   for (let j = 0; j < 3; ++j) {
     const ma = edgeBoxCornerOffsetData[i + j];
     const mb = edgeBoxCornerOffsetData[i + j + 3];
     const a = Math.min(corners[j], corners[j + 3]), b = Math.max(corners[j], corners[j + 3]);
-    cornerA[j] = (1 - ma) * a + ma * b;
-    cornerB[j] = (1 - mb) * a + mb * b;
+    cA[j] = (1 - ma) * a + ma * b;
+    cB[j] = (1 - mb) * a + mb * b;
   }
-  vec3.transformMat4(cornerA, cornerA, objectToData);
-  vec3.transformMat4(cornerB, cornerB, objectToData);
-  projectPointToLineSegment(position, cornerA, cornerB, position);
+
+  return {cornerA: cA, cornerB: cB};
+}
+function snapPositionToEdge(
+    position: vec3, objectToData: mat4, corners: Float32Array, edgeIndex: number) {
+  let edgeCorners = getEdgeCorners(corners, edgeIndex);
+  vec3.transformMat4(edgeCorners.cornerA, edgeCorners.cornerA, objectToData);
+  vec3.transformMat4(edgeCorners.cornerB, edgeCorners.cornerB, objectToData);
+
+  projectPointToLineSegment(position, edgeCorners.cornerA, edgeCorners.cornerB, position);
 }
 
 function snapPositionToCorner(
@@ -402,4 +415,46 @@ registerAnnotationTypeRenderHandler(AnnotationType.AXIS_ALIGNED_BOUNDING_BOX, {
       // vec3.transformMat4(position, annotation.point, objectToData);
     }
   },
+  getRepresentativePoint: (objectToData, ann, partIndex) => {
+    let repPoint = vec3.create();
+    // if the full object is selected pick the first corner as representative
+    if (partIndex === FULL_OBJECT_PICK_OFFSET) {
+      vec3.transformMat4(repPoint, ann.pointA, objectToData);
+    } else if (partIndex >= CORNERS_PICK_OFFSET && partIndex < EDGES_PICK_OFFSET) {
+      // picked a corner
+      // FIXME: figure out how to return corner point
+      vec3.transformMat4(repPoint, ann.pointA, objectToData);
+    } else if (partIndex >= EDGES_PICK_OFFSET && partIndex < FACES_PICK_OFFSET) {
+      // FIXME: can't figure out how to resize based upon edge grabbed
+      vec3.transformMat4(repPoint, ann.pointA, objectToData);
+      // snapPositionToCorner(repPoint, objectToData, corners, 5);
+    } else {  // for now faces will move the whole object so pick the first corner
+      vec3.transformMat4(repPoint, ann.pointA, objectToData);
+    }
+    return repPoint;
+  },
+
+  updateViaRepresentativePoint:
+      (oldAnnotation: AxisAlignedBoundingBox, position: vec3, dataToObject: mat4,
+       partIndex: number) => {
+        let newPt = vec3.transformMat4(vec3.create(), position, dataToObject);
+        let baseBox = {...oldAnnotation};
+        // if the full object is selected pick the first corner as representative
+        let delta = vec3.sub(vec3.create(), oldAnnotation.pointB, oldAnnotation.pointA);
+        if (partIndex === FULL_OBJECT_PICK_OFFSET) {
+          baseBox.pointA = newPt;
+          baseBox.pointB = vec3.add(vec3.create(), newPt, delta);
+        } else if (partIndex >= CORNERS_PICK_OFFSET && partIndex < EDGES_PICK_OFFSET) {
+          // picked a corner
+          baseBox.pointA = newPt;
+          baseBox.pointB = vec3.add(vec3.create(), newPt, delta);
+        } else if (partIndex >= EDGES_PICK_OFFSET && partIndex < FACES_PICK_OFFSET) {
+          baseBox.pointA = newPt;
+          baseBox.pointB = vec3.add(vec3.create(), newPt, delta);
+        } else {  // for now faces will move the whole object so pick the first corner
+          baseBox.pointA = newPt;
+          baseBox.pointB = vec3.add(vec3.create(), newPt, delta);
+        }
+        return baseBox;
+      }
 });

@@ -320,7 +320,7 @@ export class LayerGroupViewer extends RefCounted {
     if (showLayerPanel && this.layerPanel === undefined) {
       const layerPanel = this.layerPanel = new LayerPanel(
           this.display, this.layerSpecification, this.viewerNavigationState,
-          this.viewerState.selectedLayer);
+          this.viewerState.selectedLayer, () => this.layout.toJSON());
       if (options.showViewerMenu) {
         layerPanel.registerDisposer(makeViewerMenu(layerPanel.element, this));
         layerPanel.element.title = 'Right click for options, drag to move/copy layer group.';
@@ -331,7 +331,8 @@ export class LayerGroupViewer extends RefCounted {
       this.registerEventListener(layerPanel.element, 'dragstart', (event: DragEvent) => {
         startLayerDrag(event, {
           manager: this.layerSpecification,
-          layers: <ManagedUserLayerWithSpecification[]>this.layerManager.managedLayers
+          layers: <ManagedUserLayerWithSpecification[]>this.layerManager.managedLayers,
+          layoutSpec: this.layout.toJSON(),
         });
         const disposer = () => {
           if (dragSource && dragSource.viewer === this) {

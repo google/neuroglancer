@@ -24,7 +24,6 @@ import {parseArray, verify3dScale, verify3dVec, verifyEnumString, verifyObject, 
 import {getRandomHexString} from 'neuroglancer/util/random';
 import {NullarySignal} from 'neuroglancer/util/signal';
 import {Uint64} from 'neuroglancer/util/uint64';
-
 export type AnnotationId = string;
 
 export class AnnotationReference extends RefCounted {

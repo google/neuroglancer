@@ -23,7 +23,6 @@ import {TrackableFiniteFloat, trackableFiniteFloat} from 'neuroglancer/trackable
 import {trackableVec3, TrackableVec3} from 'neuroglancer/trackable_vec3';
 import {mat4, vec3} from 'neuroglancer/util/geom';
 import {Buffer} from 'neuroglancer/webgl/buffer';
-import {GL_FLOAT} from 'neuroglancer/webgl/constants';
 import {ShaderBuilder, ShaderProgram} from 'neuroglancer/webgl/shader';
 
 const tempMat4 = mat4.create();
@@ -198,26 +197,26 @@ gl_Position = uProjection * (pos + delta);
           chunk.vertexBuffer.bindToVertexAttrib(
               aVertexFirst,
               /*components=*/3,
-              /*attributeType=*/GL_FLOAT,
+              /*attributeType=*/WebGL2RenderingContext.FLOAT,
               /*normalized=*/false,
               /*stride=*/6 * 4,
               /*offset=*/0);
-          gl.ANGLE_instanced_arrays.vertexAttribDivisorANGLE(aVertexFirst, 1);
+          gl.vertexAttribDivisor(aVertexFirst, 1);
 
           const aVertexSecond = shader.attribute('aVertexSecond');
           chunk.vertexBuffer.bindToVertexAttrib(
               aVertexSecond,
               /*components=*/3,
-              /*attributeType=*/GL_FLOAT,
+              /*attributeType=*/WebGL2RenderingContext.FLOAT,
               /*normalized=*/false,
               /*stride=*/6 * 4,
               /*offset=*/3 * 4);
-          gl.ANGLE_instanced_arrays.vertexAttribDivisorANGLE(aVertexSecond, 1);
+          gl.vertexAttribDivisor(aVertexSecond, 1);
 
-          gl.ANGLE_instanced_arrays.drawArraysInstancedANGLE(gl.TRIANGLE_STRIP, 0, 4, numInstances);
+          gl.drawArraysInstanced(gl.TRIANGLE_STRIP, 0, 4, numInstances);
 
-          gl.ANGLE_instanced_arrays.vertexAttribDivisorANGLE(aVertexFirst, 0);
-          gl.ANGLE_instanced_arrays.vertexAttribDivisorANGLE(aVertexSecond, 0);
+          gl.vertexAttribDivisor(aVertexFirst, 0);
+          gl.vertexAttribDivisor(aVertexSecond, 0);
         }
       }
     }

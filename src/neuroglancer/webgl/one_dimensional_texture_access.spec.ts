@@ -48,15 +48,21 @@ function testTextureAccess(
         accessHelper.getAccessor('readValue', 'uSampler', dataType, numComponents));
     builder.addFragmentCode(glsl_unnormalizeUint8);
     builder.addFragmentCode(glsl_uintleToFloat);
+    builder.addOutputBuffer('vec4', 'v4f_fragData0', 0);
+    builder.addOutputBuffer('vec4', 'v4f_fragData1', 1);
+    builder.addOutputBuffer('vec4', 'v4f_fragData2', 2);
+    builder.addOutputBuffer('vec4', 'v4f_fragData3', 3);
+    builder.addOutputBuffer('vec4', 'v4f_fragData4', 4);
+    builder.addOutputBuffer('vec4', 'v4f_fragData5', 5);
     builder.setFragmentMain(`
 uint32_t value = readValue(uOffset);
-gl_FragData[4] = packFloatIntoVec4(uintleToFloat(value.value.xyz));
-gl_FragData[5] = packFloatIntoVec4(all(equal(value.value, uExpected)) ? 1.0 : 0.0);
+v4f_fragData4 = packFloatIntoVec4(uintleToFloat(value.value.xyz));
+v4f_fragData5 = packFloatIntoVec4(all(equal(value.value, uExpected)) ? 1.0 : 0.0);
 value.value = unnormalizeUint8(value.value);
-gl_FragData[0] = packFloatIntoVec4(value.value.x);
-gl_FragData[1] = packFloatIntoVec4(value.value.y);
-gl_FragData[2] = packFloatIntoVec4(value.value.z);
-gl_FragData[3] = packFloatIntoVec4(value.value.w);
+v4f_fragData0 = packFloatIntoVec4(value.value.x);
+v4f_fragData1 = packFloatIntoVec4(value.value.y);
+v4f_fragData2 = packFloatIntoVec4(value.value.z);
+v4f_fragData3 = packFloatIntoVec4(value.value.w);
 `);
 
     tester.build();

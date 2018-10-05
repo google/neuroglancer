@@ -23,13 +23,11 @@ import {AnnotationRenderContext, AnnotationRenderHelper, registerAnnotationTypeR
 import {PerspectiveViewRenderContext} from 'neuroglancer/perspective_view/render_layer';
 import {SliceViewPanelRenderContext} from 'neuroglancer/sliceview/panel';
 import {mat3, mat4, vec3} from 'neuroglancer/util/geom';
-import {GL_FLOAT} from 'neuroglancer/webgl/constants';
 import {computeCenterOrientEllipseDebug, computeCrossSectionEllipseDebug, glsl_computeCenterOrientEllipse, glsl_computeCrossSectionEllipse} from 'neuroglancer/webgl/ellipse';
 import {QuadRenderHelper} from 'neuroglancer/webgl/quad';
 import {dependentShaderGetter, ShaderBuilder, ShaderProgram} from 'neuroglancer/webgl/shader';
 import {SphereRenderHelper} from 'neuroglancer/webgl/spheres';
 import {getSquareCornersBuffer} from 'neuroglancer/webgl/square_corners_buffer';
-import {glsl_transposeMat3} from 'neuroglancer/webgl/transpose';
 
 const tempMat4 = mat4.create();
 
@@ -48,16 +46,18 @@ abstract class RenderHelper extends AnnotationRenderHelper {
       const aRadii = shader.attribute('aRadii');
       const {gl} = shader;
       context.buffer.bindToVertexAttrib(
-          aCenter, /*components=*/3, /*attributeType=*/GL_FLOAT, /*normalized=*/false,
+          aCenter, /*components=*/3, /*attributeType=*/WebGL2RenderingContext.FLOAT,
+          /*normalized=*/false,
           /*stride=*/4 * 6, /*offset=*/context.bufferOffset);
       context.buffer.bindToVertexAttrib(
-          aRadii, /*components=*/3, /*attributeType=*/GL_FLOAT, /*normalized=*/false,
+          aRadii, /*components=*/3, /*attributeType=*/WebGL2RenderingContext.FLOAT,
+          /*normalized=*/false,
           /*stride=*/4 * 6, /*offset=*/context.bufferOffset + 4 * 3);
-      gl.ANGLE_instanced_arrays.vertexAttribDivisorANGLE(aCenter, 1);
-      gl.ANGLE_instanced_arrays.vertexAttribDivisorANGLE(aRadii, 1);
+      gl.vertexAttribDivisor(aCenter, 1);
+      gl.vertexAttribDivisor(aRadii, 1);
       callback();
-      gl.ANGLE_instanced_arrays.vertexAttribDivisorANGLE(aCenter, 0);
-      gl.ANGLE_instanced_arrays.vertexAttribDivisorANGLE(aRadii, 0);
+      gl.vertexAttribDivisor(aCenter, 0);
+      gl.vertexAttribDivisor(aRadii, 0);
       gl.disableVertexAttribArray(aCenter);
       gl.disableVertexAttribArray(aRadii);
     });
@@ -142,7 +142,6 @@ class SliceViewRenderHelper extends RenderHelper {
     builder.addUniform('highp mat4', 'uViewportToDevice');
     builder.addAttribute('highp vec2', 'aCornerOffset');
     builder.addVarying('highp vec2', 'vCircleCoord');
-    builder.addVertexCode(glsl_transposeMat3);
     builder.addVertexCode(glsl_computeCrossSectionEllipse);
     builder.addVertexCode(glsl_computeCenterOrientEllipse);
     builder.setVertexMain(`
@@ -242,4 +241,14 @@ registerAnnotationTypeRenderHandler(AnnotationType.ELLIPSOID, {
   snapPosition: (/*position, objectToData, annotation, partIndex*/) => {
     // FIXME: snap to nearest point on ellipsoid surface
   },
+  getRepresentativePoint: (objectToData, ann) => {
+    let repPoint = vec3.create();
+    vec3.transformMat4(repPoint, ann.center, objectToData);
+    return repPoint;
+  },
+  updateViaRepresentativePoint: (oldAnnotation: Ellipsoid, position: vec3, dataToObject: mat4) => {
+    let annotation = {...oldAnnotation};
+    annotation.center = vec3.transformMat4(vec3.create(), position, dataToObject);
+    return annotation;
+  }
 });

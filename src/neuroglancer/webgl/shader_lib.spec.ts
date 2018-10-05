@@ -37,9 +37,10 @@ describe('webgl/shader_lib', () => {
       builder.addFragmentCode(glsl_addUint32);
       builder.addUniform('highp vec4', 'uValue1');
       builder.addUniform('highp vec4', 'uValue2');
+      builder.addOutputBuffer('vec4', 'v4f_fragData0', 0);
       builder.setFragmentMain(`
 uint32_t a, b; a.value = uValue1; b.value = uValue2;
-gl_FragData[0] = add(a, b).value;
+v4f_fragData0 = add(a, b).value;
 `);
 
       tester.build();
@@ -74,9 +75,10 @@ gl_FragData[0] = add(a, b).value;
       builder.addFragmentCode(glsl_addUint32);
       builder.addUniform('highp vec4', 'uValue1');
       builder.addUniform('highp float', 'uValue2');
+      builder.addOutputBuffer('vec4', 'v4f_fragData0', 0);
       builder.setFragmentMain(`
 uint32_t a; a.value = uValue1;
-gl_FragData[0] = add(a, uValue2).value;
+v4f_fragData0 = add(a, uValue2).value;
 `);
 
       tester.build();
@@ -114,13 +116,15 @@ gl_FragData[0] = add(a, uValue2).value;
       builder.addUniform('highp vec4', 'uValue1');
       builder.addUniform('highp float', 'uValue2');
       builder.addUniform('highp vec4', 'uResult');
+      builder.addOutputBuffer('vec4', 'v4f_fragData0', 0);
+      builder.addOutputBuffer('vec4', 'v4f_fragData1', 1);
       builder.setFragmentMain(`
 uint32_t a; a.value = uValue1;
 uint32_t result = multiply(a, uValue2);
 uint32_t expected; expected.value = uResult;
-gl_FragData[0] = result.value;
-float areEqual = equal(result, expected) ? 1.0 : 0.0;
-gl_FragData[1] = vec4(areEqual, areEqual, areEqual, areEqual);
+v4f_fragData0 = result.value;
+float areEqual = equals(result, expected) ? 1.0 : 0.0;
+v4f_fragData1 = vec4(areEqual, areEqual, areEqual, areEqual);
 `);
 
       tester.build();
@@ -161,11 +165,13 @@ gl_FragData[1] = vec4(areEqual, areEqual, areEqual, areEqual);
       builder.addFragmentCode(glsl_divmodUint32);
       builder.addUniform('highp vec4', 'uDividend');
       builder.addUniform('highp float', 'uDivisor');
+      builder.addOutputBuffer('vec4', 'v4f_fragData0', 0);
+      builder.addOutputBuffer('vec4', 'v4f_fragData1', 1);
       builder.setFragmentMain(`
 uint32_t a; a.value = uDividend;
 uint32_t quotient;
-gl_FragData[0] = packFloatIntoVec4(divmod(a, uDivisor, quotient));
-gl_FragData[1] = quotient.value;
+v4f_fragData0 = packFloatIntoVec4(divmod(a, uDivisor, quotient));
+v4f_fragData1 = quotient.value;
 `);
 
       tester.build();
