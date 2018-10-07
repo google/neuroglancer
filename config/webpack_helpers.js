@@ -24,6 +24,7 @@ const ClosureCompilerPlugin = require('webpack-closure-compiler');
 const fs = require('fs');
 const AliasPlugin = require('./webpack_alias_plugin');
 const resolveReal = require('./resolve_real');
+const CopyWebpackPlugin = require('copy-webpack-plugin');
 
 // Note: We use require.resolve below to ensure the plugins are resolved
 // relative to this configuration file, rather than relative to the source
@@ -47,6 +48,10 @@ const DEFAULT_DATA_SOURCES = exports.DEFAULT_DATA_SOURCES = [
   {
     source: 'neuroglancer/datasource/brainmaps',
     registerCredentials: 'neuroglancer/datasource/brainmaps/register_credentials_provider'
+  },
+  {
+    source: 'neuroglancer/datasource/boss',
+    registerCredentials: 'neuroglancer/datasource/boss/register_credentials_provider'
   },
   'neuroglancer/datasource/ndstore',
   'neuroglancer/datasource/dvid',
@@ -337,6 +342,9 @@ function getViewerConfig(options) {
             ...extraFrontendPlugins,
             ...commonPlugins,
             ...extraCommonPlugins,
+            new CopyWebpackPlugin([
+              { from: resolveReal(srcDir, 'neuroglancer/datasource/boss/bossauth.html'), to: 'bossauth.html' }
+            ])
           ],
         },
         baseConfig),

@@ -30,6 +30,7 @@
     "@types/jasmine": "^2.6.3",
     "babel-plugin-istanbul": "^4.1.5",
     "clang-format": "^1.1.0",
+    "copy-webpack-plugin": "^4.5.1",
     "gulp": "^3.9.1",
     "gulp-clang-format": "^1.0.23",
     "gulp-tslint": "^8.1.2",
