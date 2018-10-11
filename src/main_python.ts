@@ -118,6 +118,8 @@ window.addEventListener('DOMContentLoaded', () => {
   const screenshotHandler = new ScreenshotHandler(viewer);
   configState.add('screenshot', screenshotHandler.requestState);
 
+  viewer.loadFromJsonUrl();
+
   const prefetchManager = new PrefetchManager(
       viewer.display, dataSourceProvider, viewer.dataContext.addRef(), viewer.uiConfiguration);
   configState.add('prefetch', prefetchManager);

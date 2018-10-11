@@ -36,12 +36,14 @@ import {LayerInfoPanelContainer} from 'neuroglancer/ui/layer_side_panel';
 import {MouseSelectionStateTooltipManager} from 'neuroglancer/ui/mouse_selection_state_tooltip';
 import {setupPositionDropHandlers} from 'neuroglancer/ui/position_drag_and_drop';
 import {StateEditorDialog} from 'neuroglancer/ui/state_editor';
+import {removeParameterFromUrl} from 'neuroglancer/ui/url_hash_binding';
 import {AutomaticallyFocusedElement} from 'neuroglancer/util/automatic_focus';
 import {TrackableRGB} from 'neuroglancer/util/color';
 import {Borrowed, Owned, RefCounted} from 'neuroglancer/util/disposable';
 import {removeFromParent} from 'neuroglancer/util/dom';
 import {registerActionListener} from 'neuroglancer/util/event_action_map';
 import {vec3} from 'neuroglancer/util/geom';
+import {openHttpRequest, sendHttpJsonPostRequest, sendHttpRequest} from 'neuroglancer/util/http_request';
 import {EventActionMap, KeyboardEventBinder} from 'neuroglancer/util/keyboard_bindings';
 import {NullarySignal} from 'neuroglancer/util/signal';
 import {CompoundTrackable} from 'neuroglancer/util/trackable';
@@ -88,11 +90,8 @@ export class InputEventBindings extends DataPanelInputEventBindings {
 }
 
 const viewerUiControlOptionKeys: (keyof ViewerUIControlConfiguration)[] = [
-  'showHelpButton',
-  'showEditStateButton',
-  'showLayerPanel',
-  'showLocation',
-  'showAnnotationToolStatus',
+  'showHelpButton', 'showEditStateButton', 'showLayerPanel', 'showLocation',
+  'showAnnotationToolStatus', 'showJsonPostButton'
 ];
 
 const viewerOptionKeys: (keyof ViewerUIOptions)[] =
@@ -101,6 +100,7 @@ const viewerOptionKeys: (keyof ViewerUIOptions)[] =
 export class ViewerUIControlConfiguration {
   showHelpButton = new TrackableBoolean(true);
   showEditStateButton = new TrackableBoolean(true);
+  showJsonPostButton = new TrackableBoolean(true);
   showLayerPanel = new TrackableBoolean(true);
   showLocation = new TrackableBoolean(true);
   showAnnotationToolStatus = new TrackableBoolean(true);
@@ -113,6 +113,7 @@ export class ViewerUIConfiguration extends ViewerUIControlConfiguration {
   showUIControls = new TrackableBoolean(true);
   showPanelBorders = new TrackableBoolean(true);
 }
+
 
 function setViewerUiConfiguration(
     config: ViewerUIConfiguration, options: Partial<ViewerUIOptions>) {
@@ -132,6 +133,7 @@ interface ViewerUIOptions {
   showLocation: boolean;
   showPanelBorders: boolean;
   showAnnotationToolStatus: boolean;
+  showJsonPostButton: boolean;
 }
 
 export interface ViewerOptions extends ViewerUIOptions, VisibilityPrioritySpecification {
@@ -207,6 +209,7 @@ export class Viewer extends RefCounted implements ViewerState {
   layout: RootLayoutContainer;
 
   stateServer = new TrackableValue<string>('', validateStateServer);
+  jsonStateServer = new TrackableValue<string>('', validateStateServer)
   state = new CompoundTrackable();
 
   dataContext: Owned<DataManagementContext>;
@@ -325,6 +328,7 @@ export class Viewer extends RefCounted implements ViewerState {
     state.add(
         'concurrentDownloads', this.dataContext.chunkQueueManager.capacities.download.itemLimit);
     state.add('stateServer', this.stateServer);
+    state.add('jsonStateServer', this.jsonStateServer);
     state.add('selectedLayer', this.selectedLayer);
     state.add('crossSectionBackgroundColor', this.crossSectionBackgroundColor);
 
@@ -449,7 +453,15 @@ export class Viewer extends RefCounted implements ViewerState {
           this.uiControlVisibility.showEditStateButton, button));
       topRow.appendChild(button);
     }
-
+    {
+      const button = makeTextIconButton('⇧', 'Post JSON to state server');
+      this.registerEventListener(button, 'click', () => {
+        this.postJsonState();
+      });
+      this.registerDisposer(new ElementVisibilityFromTrackableBoolean(
+          this.uiControlVisibility.showJsonPostButton, button));
+      topRow.appendChild(button);
+    }
 
     {
       const button = makeTextIconButton('?', 'Help');
@@ -598,6 +610,61 @@ export class Viewer extends RefCounted implements ViewerState {
       ['Slice View', inputEventBindings.sliceView],
       ['Perspective View', inputEventBindings.perspectiveView],
     ]);
+  }
+
+  loadFromJsonUrl() {
+    var urlParams = new URLSearchParams(window.location.search);
+    if (urlParams.has('json_url')) {
+      let json_url = urlParams.get('json_url');
+      history.replaceState(null, '', removeParameterFromUrl(window.location.href, 'json_url'));
+      StatusMessage
+      .forPromise(
+        sendHttpRequest(openHttpRequest(json_url!), 'json')
+          .then(response => {
+            this.state.restoreState(response);
+          }),
+              {
+                initialMessage: `Retrieving state from json_url: ${json_url}.`,
+                delay: true,
+                errorPrefix: `Error retrieving state: `,
+              });
+      }
+
+  }
+
+  promptJsonStateServer(message: string): void {
+    let json_server_input = prompt(message, 'https://www.dynamicannotationframework.com/nglstate/post');
+    if (json_server_input !== null) {
+      this.jsonStateServer.value = json_server_input;
+    } else {
+      this.jsonStateServer.reset();
+    }
+  }
+
+  postJsonState() {
+    // if jsonStateServer is not present prompt for value and store it in state
+    if (!this.jsonStateServer.value) {
+      this.promptJsonStateServer('no state server found');
+    }
+
+    // upload state to jsonStateServer (only if it's defined)
+    if (this.jsonStateServer.value) {
+        StatusMessage.showTemporaryMessage(`Posting state to ${this.jsonStateServer.value}.`);
+        sendHttpJsonPostRequest(
+          openHttpRequest(this.jsonStateServer.value, 'POST'), this.state.toJSON(), 'json')
+          .then(response => {
+            history.replaceState(
+                null, '',
+                window.location.origin + window.location.pathname + '?json_url=' + response);
+          })
+          // catch errors with upload and prompt the user if there was an error
+          .catch(() => {
+            this.promptJsonStateServer('state server not responding, enter a new one?');
+            if (this.jsonStateServer.value) {
+              this.postJsonState();
+            }
+          });
+    }
   }
 
   editJsonState() {
