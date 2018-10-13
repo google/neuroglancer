@@ -14,7 +14,10 @@
  * limitations under the License.
  */
 
-import {CANCELED, uncancelableToken} from 'neuroglancer/util/cancellation';
+import {CredentialsProvider, CredentialsWithGeneration, makeCredentialsGetter} from 'neuroglancer/credentials_provider';
+import {StatusMessage} from 'neuroglancer/status';
+import {CANCELED, CancellationTokenSource, uncancelableToken} from 'neuroglancer/util/cancellation';
+import {Owned} from 'neuroglancer/util/disposable';
 import {removeFromParent} from 'neuroglancer/util/dom';
 import {parseArray, verifyObject, verifyString} from 'neuroglancer/util/json';
 import {getRandomHexString} from 'neuroglancer/util/random';
@@ -202,7 +205,7 @@ export function authenticateGoogleOAuth2(
     options: {
       clientId: string,
       scopes: string[],
-      approvalPrompt?: 'force' | 'auto',
+      approvalPrompt?: 'force'|'auto',
       loginHint?: string,
       immediate?: boolean,
       authUser?: number,
@@ -257,5 +260,100 @@ export function authenticateGoogleOAuth2(
       }
     }
   }
+  return promise;
+}
+
+export class GoogleOAuth2CredentialsProvider extends CredentialsProvider<OAuth2Token> {
+  constructor(public options: {clientId: string, scopes: string[], description: string}) {
+    super();
+  }
+
+  get = makeCredentialsGetter(cancellationToken => {
+    const {options} = this;
+    const status = new StatusMessage(/*delay=*/ true);
+    let cancellationSource: CancellationTokenSource|undefined;
+    return new Promise<OAuth2Token>((resolve, reject) => {
+      const dispose = () => {
+        cancellationSource = undefined;
+        status.dispose();
+      };
+      cancellationToken.add(() => {
+        if (cancellationSource !== undefined) {
+          cancellationSource.cancel();
+          cancellationSource = undefined;
+          status.dispose();
+          reject(CANCELED);
+        }
+      });
+      function writeLoginStatus(
+          msg = `${options.description} authorization required.`,
+          linkMessage = 'Request authorization.') {
+        status.setText(msg + '  ');
+        let button = document.createElement('button');
+        button.textContent = linkMessage;
+        status.element.appendChild(button);
+        button.addEventListener('click', () => {
+          login(/*immediate=*/ false);
+        });
+        status.setVisible(true);
+      }
+      function login(immediate: boolean) {
+        if (cancellationSource !== undefined) {
+          cancellationSource.cancel();
+        }
+        cancellationSource = new CancellationTokenSource();
+        writeLoginStatus(`Waiting for ${options.description} authorization...`, 'Retry');
+        authenticateGoogleOAuth2(
+            {
+              clientId: options.clientId,
+              scopes: options.scopes,
+              immediate: immediate,
+              authUser: 0,
+            },
+            cancellationSource)
+            .then(
+                token => {
+                  if (cancellationSource !== undefined) {
+                    dispose();
+                    resolve(token);
+                  }
+                },
+                reason => {
+                  if (cancellationSource !== undefined) {
+                    cancellationSource = undefined;
+                    if (immediate) {
+                      writeLoginStatus();
+                    } else {
+                      writeLoginStatus(
+                          `${options.description} authorization failed: ${reason}.`, 'Retry');
+                    }
+                  }
+                });
+      }
+      login(/*immediate=*/ true);
+    });
+  });
+}
+
+export function fetchWithGoogleCredentials(
+    credentialsProvider: Owned<CredentialsProvider<OAuth2Token>>, input: string|Request,
+    init: RequestInit = {}): Promise<Response> {
+  function start(credentials: CredentialsWithGeneration<OAuth2Token>): Promise<Response> {
+    const token = credentials.credentials;
+    const headers = new Headers(init.headers);
+    headers.append('Authorization', `${token.tokenType} ${token.accessToken}`);
+    return fetch(input, {...init, mode: 'cors', headers}).then(response => {
+      if (response.status === 401) {
+        // 401: Authorization needed.  OAuth2 token may have expired.
+        return credentialsProvider.get(credentials).then(start);
+      }
+      return response;
+    });
+  }
+  const promise = credentialsProvider.get(/*invalidToken=*/ undefined).then(start);
+  const disposeRef = () => {
+    credentialsProvider.dispose();
+  };
+  promise.then(disposeRef, disposeRef);
   return promise;
 }
