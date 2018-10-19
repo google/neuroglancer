@@ -364,7 +364,7 @@ export class PerspectivePanel extends RenderedDataPanel {
 
     const field_width = ReceptiveField.width;
     const field_height = ReceptiveField.height;
-    const pixels = field_width * field_height;
+    const pixels = RFSpiral.length;
 
     offscreenFramebuffer.readPixels(
       OffscreenTextures.Z, glWindowX, glWindowY,
