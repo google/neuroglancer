@@ -227,6 +227,58 @@ export class FramebufferConfiguration<ColorBuffer extends TextureBuffer|Renderbu
     return tempPixel;
   }
 
+  readPixels(
+    textureIndex: number, glWindowX: number, glWindowY: number,
+    width: number, height: number, buffer?: Uint8Array
+  ) : Uint8Array {
+
+    let {gl} = this;
+
+    if (!buffer) {
+      buffer = new Uint8Array(width * height * 4);
+    }
+
+    // Appearently WebGL supports reading pixels off the
+    // edge of the texture so we don't need to do anything
+    // fancy to correct for it.
+    let left = glWindowX - (width >> 1);
+    let bottom = glWindowY - (height >> 1);
+
+    try {
+      this.bindSingle(textureIndex);
+      gl.readPixels(left, bottom, width, height, gl.RGBA, gl.UNSIGNED_BYTE, buffer);
+    } finally {
+      this.framebuffer.unbind();
+    }
+
+    if (glWindowX >= 0 
+        && glWindowX < gl.drawingBufferWidth
+        && glWindowY >= 0
+        && glWindowY < gl.drawingBufferHeight) {
+
+      return buffer;
+    }
+
+    // According to the WebGL spec, if we are reading outside of the 
+    // texture, those values are undefined so let's zero them out.
+    // https://www.khronos.org/registry/OpenGL-Refpages/es2.0/xhtml/glReadPixels.xml
+    // "Values for pixels that lie outside the window connected to the current GL context are undefined."
+
+    let buff32 = new Uint32Array(buffer.buffer);
+
+    let i = 0;
+    for (let y = glWindowY; y < glWindowY + height; y++) {
+      for (let x = glWindowX; x < glWindowX + width; x++) {
+        if (x < 0 || y < 0 || x >= gl.drawingBufferWidth || y >= gl.drawingBufferHeight) {
+          buff32[i] = 0;
+        }
+        i++;
+      }
+    }
+
+    return buffer;
+  }
+
   /**
    * Calls readPixel, but interprets the RGBA result as a little-endian uint32 value.
    */
