@@ -223,10 +223,15 @@ export class SegmentationUserLayer extends Base {
         if (!this.wasDisposed) {
           this.addRenderLayer(new SegmentationRenderLayer(volume, this.displayState));
           // Chunked Graph Server
-          if (volume.getChunkedGraphSources && volume.getChunkedGraphUrl) {
-            let chunkedGraphSources = volume.getChunkedGraphSources({}, this.displayState.rootSegments);
+          if (this.chunkedGraphUrl === undefined && volume.getChunkedGraphUrl) {
             this.chunkedGraphUrl = volume.getChunkedGraphUrl();
-            if (chunkedGraphSources && this.chunkedGraphUrl) {
+          }
+          // Chunked Graph Supervoxels
+          if (this.chunkedGraphUrl && volume.getChunkedGraphSources) {
+            let chunkedGraphSources = volume.getChunkedGraphSources(
+              {rootUri: this.chunkedGraphUrl}, this.displayState.rootSegments);
+
+            if (chunkedGraphSources) {
               this.chunkedGraphLayer = new ChunkedGraphLayer(this.manager.chunkManager, this.chunkedGraphUrl, chunkedGraphSources, this.displayState);
               this.addRenderLayer(this.chunkedGraphLayer);
 

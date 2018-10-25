@@ -19,8 +19,9 @@ import {ChunkManager} from 'neuroglancer/chunk_manager/frontend';
 import {MeshSource} from 'neuroglancer/mesh/frontend';
 import {SkeletonSource} from 'neuroglancer/skeleton/frontend';
 import {DataType} from 'neuroglancer/sliceview/base';
-import {MultiscaleSliceViewChunkSource, SliceViewChunk, SliceViewChunkSource} from 'neuroglancer/sliceview/frontend';
+import {ChunkedGraphSourceOptions} from 'neuroglancer/sliceview/chunked_graph/base';
 import {ChunkedGraphChunkSource} from 'neuroglancer/sliceview/chunked_graph/frontend';
+import {MultiscaleSliceViewChunkSource, SliceViewChunk, SliceViewChunkSource} from 'neuroglancer/sliceview/frontend';
 import {VolumeChunkSource as VolumeChunkSourceInterface, VolumeChunkSpecification, VolumeSourceOptions, VolumeType} from 'neuroglancer/sliceview/volume/base';
 import {Uint64Set} from 'neuroglancer/uint64_set';
 import {Disposable} from 'neuroglancer/util/disposable';
@@ -209,7 +210,7 @@ export interface MultiscaleVolumeChunkSource extends MultiscaleSliceViewChunkSou
    */
 
   getChunkedGraphUrl?: () => string | null;
-  getChunkedGraphSources?: (options: VolumeSourceOptions, rootSegments: Uint64Set) => ChunkedGraphChunkSource[][] | null;
+  getChunkedGraphSources?: (options: ChunkedGraphSourceOptions, rootSegments: Uint64Set) => ChunkedGraphChunkSource[][] | null;
 
   getStaticAnnotations?: () => AnnotationSource;
 }

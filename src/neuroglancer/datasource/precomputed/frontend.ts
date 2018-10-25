@@ -111,17 +111,22 @@ export class MultiscaleVolumeChunkSource implements GenericMultiscaleVolumeChunk
   }
 
   getChunkedGraphSources(options: ChunkedGraphSourceOptions, rootSegments: Uint64Set) {
-    let {graph} = this;
-    if (graph === undefined) {
+    const {graph} = this;
+    if (graph === undefined ||
+        (graph.rootUri === undefined && options.rootUri === undefined)) {
       return null;
     }
+
+    const {chunkSize} = graph;
+    const rootUri = options.rootUri || graph.rootUri;
+
     const spec = ChunkedGraphChunkSpecification.getDefaults({
       voxelSize: this.scales[0].resolution,
       transform: mat4.fromTranslation(
           mat4.create(),
           vec3.multiply(vec3.create(), this.scales[0].resolution, this.scales[0].voxelOffset)),
       upperVoxelBound: this.scales[0].size,
-      chunkDataSizes: [graph.chunkSize],
+      chunkDataSizes: [chunkSize],
       baseVoxelOffset: this.scales[0].voxelOffset,
       chunkedGraphSourceOptions: options,
     });
@@ -130,7 +135,7 @@ export class MultiscaleVolumeChunkSource implements GenericMultiscaleVolumeChunk
       spec,
       rootSegments,
       parameters: {
-        'baseUrls': graph.rootUri,
+        'baseUrls': rootUri,
         'path': '/1.0/segment',
       }
     })]];

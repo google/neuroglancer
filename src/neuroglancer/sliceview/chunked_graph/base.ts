@@ -14,14 +14,16 @@
  * limitations under the License.
  */
 
-import {SliceViewChunkSource, SliceViewChunkSpecification, SliceViewChunkSpecificationBaseOptions, SliceViewChunkSpecificationOptions, SliceViewSourceOptions, ChunkLayoutOptions, getChunkDataSizes} from 'neuroglancer/sliceview/base';
+import {ChunkLayoutOptions, getChunkDataSizes, SliceViewChunkSource, SliceViewChunkSpecification, SliceViewChunkSpecificationBaseOptions, SliceViewChunkSpecificationOptions, SliceViewSourceOptions} from 'neuroglancer/sliceview/base';
 import {getCombinedTransform} from 'neuroglancer/sliceview/base';
 import {kZeroVec, vec3} from 'neuroglancer/util/geom';
 
 export const CHUNKED_GRAPH_LAYER_RPC_ID = 'ChunkedGraphLayer';
 
 
-export interface ChunkedGraphSourceOptions extends SliceViewSourceOptions {}
+export interface ChunkedGraphSourceOptions extends SliceViewSourceOptions {
+  rootUri: string;
+}
 
 export interface ChunkedGraphChunkSpecificationBaseOptions extends
     SliceViewChunkSpecificationBaseOptions {
@@ -62,7 +64,8 @@ export interface ChunkedGraphChunkSpecificationBaseOptions extends
   baseVoxelOffset?: vec3;
 }
 
-export interface ChunkedGraphChunkSpecificationOptions extends ChunkedGraphChunkSpecificationBaseOptions {
+export interface ChunkedGraphChunkSpecificationOptions extends
+    ChunkedGraphChunkSpecificationBaseOptions {
   /**
    * Chunk size in voxels.
    */
@@ -152,7 +155,7 @@ export class ChunkedGraphChunkSpecification extends SliceViewChunkSpecification 
 
     let {chunkDataSizes = getChunkDataSizes(adjustedOptions)} = options;
     return new ChunkedGraphChunkSpecification(
-            Object.assign({}, options, {chunkDataSize: chunkDataSizes[0]}));
+        Object.assign({}, options, {chunkDataSize: chunkDataSizes[0]}));
   }
 }
 
