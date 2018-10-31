@@ -27,8 +27,9 @@ export class HttpError extends Error {
   url: string;
   code: number;
   statusMessage: string;
+  response: any;
 
-  constructor(method: string, url: string, code: number, statusMessage: string) {
+  constructor(method: string, url: string, code: number, statusMessage: string, response: any) {
     let message = `${method} ${JSON.stringify(url)} resulted in HTTP error ${code}`;
     if (statusMessage) {
       message += `: ${statusMessage}`;
@@ -41,11 +42,13 @@ export class HttpError extends Error {
     this.url = url;
     this.code = code;
     this.statusMessage = statusMessage;
+    this.response = response;
   }
 
   static fromXhr(xhr: XMLHttpRequest) {
     return new HttpError(
-        (<any>xhr)[METHOD_SYMBOL], (<any>xhr)[URL_SYMBOL], xhr.status, xhr.statusText);
+        (<any>xhr)[METHOD_SYMBOL], (<any>xhr)[URL_SYMBOL], xhr.status, xhr.statusText,
+        xhr.response);
   }
 }
 
