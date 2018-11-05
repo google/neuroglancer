@@ -675,18 +675,23 @@ export interface BaseChunkLayoutOptions {
   transform?: mat4;
 }
 
+export interface GetNearIsotropicBlockSizeOptions extends BaseChunkLayoutOptions {
+  maxBlockSize?: vec3;
+}
+
 /**
  * Determines a near-isotropic (in global spatial coordinates) block size.  All dimensions will be
  * powers of 2, and will not exceed upperVoxelBound - lowerVoxelBound.  The total number of voxels
  * will not exceed maxVoxelsPerChunkLog2.
  */
-export function getNearIsotropicBlockSize(options: BaseChunkLayoutOptions) {
+export function getNearIsotropicBlockSize(options: GetNearIsotropicBlockSizeOptions) {
   let {
     voxelSize,
     lowerVoxelBound = kZeroVec,
     upperVoxelBound,
     maxVoxelsPerChunkLog2 = DEFAULT_MAX_VOXELS_PER_CHUNK_LOG2,
-    transform = identityMat4
+    transform = identityMat4,
+    maxBlockSize = kInfinityVec,
   } = options;
 
   // Adjust voxelSize by effective scaling factor.
@@ -696,13 +701,14 @@ export function getNearIsotropicBlockSize(options: BaseChunkLayoutOptions) {
   let chunkDataSize = vec3.fromValues(1, 1, 1);
   let maxChunkDataSize: vec3;
   if (upperVoxelBound === undefined) {
-    maxChunkDataSize = kInfinityVec;
+    maxChunkDataSize = maxBlockSize;
   } else {
     maxChunkDataSize = vec3.create();
     for (let i = 0; i < 3; ++i) {
       maxChunkDataSize[i] =
           Math.pow(2, Math.floor(Math.log2(upperVoxelBound[i] - lowerVoxelBound[i])));
     }
+    vec3.min(maxChunkDataSize, maxChunkDataSize, maxBlockSize);
   }
 
   // Determine the dimension in which chunkDataSize should be increased.  This is the smallest

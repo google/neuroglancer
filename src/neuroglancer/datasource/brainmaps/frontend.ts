@@ -221,6 +221,8 @@ export class MultiscaleVolumeChunkSource implements GenericMultiscaleVolumeChunk
                                           volumeType: this.volumeType,
                                           volumeSourceOptions,
                                           chunkLayoutPreference: this.chunkLayoutPreference,
+                                          maxCompressedSegmentationBlockSize:
+                                              vec3.fromValues(64, 64, 64),
                                         })
                                         .map(spec => {
                                           return this.chunkManager.getChunkSource(
