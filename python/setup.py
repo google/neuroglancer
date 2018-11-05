@@ -125,6 +125,9 @@ setup(
             sources=[os.path.join(src_dir, name) for name in local_sources],
             language='c++',
             include_dirs=[np.get_include(), openmesh_dir],
+            define_macros=[
+                ('_USE_MATH_DEFINES', None),  # Needed by OpenMesh when used with MSVC
+            ],
             extra_compile_args=extra_compile_args,
             extra_link_args=openmp_flags),
     ],
