@@ -278,7 +278,7 @@ export function dispatchEventAction(originalEvent: Event, eventAction: EventActi
   }
   const actionEvent = new CustomEvent(
       'action:' + eventAction.action, {'bubbles': true, detail: originalEvent, cancelable: true});
-  const cancelled = !originalEvent.target.dispatchEvent(actionEvent);
+  const cancelled = !originalEvent.target!.dispatchEvent(actionEvent);
   if (eventAction.preventDefault !== false || cancelled) {
     originalEvent.preventDefault();
   }

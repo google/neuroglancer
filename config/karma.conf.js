@@ -30,10 +30,9 @@ module.exports = function(config) {
   let newRegExp = new RegExp(pattern + patternSuffix);
 
   let webpackConfig = webpackHelpers.getBaseConfig({
-    useBabel: true,
-    babelPlugins: [...webpackHelpers.DEFAULT_BABEL_PLUGINS, 'babel-plugin-istanbul'],
     noOutput: true
   });
+  webpackConfig.mode = 'development';
   webpackConfig.devtool = 'inline-source-map';
   webpackConfig.plugins = [
     new webpack.ContextReplacementPlugin(
@@ -61,7 +60,8 @@ module.exports = function(config) {
         // This empty object is required to work around a bug in karma-browserstack-launcher.
     },
     browsers: [
-      'Chrome',
+      'ChromeHeadless',
+      // 'Chrome',
       // 'ChromeCanary',
     ],
     customLaunchers: {

@@ -89,7 +89,7 @@ export class ShaderLinkError extends Error {
 }
 
 export function getShader(gl: WebGL2RenderingContext, source: string, shaderType: ShaderType) {
-  var shader = gl.createShader(shaderType);
+  var shader = gl.createShader(shaderType)!;
   gl.shaderSource(shader, source);
   gl.compileShader(shader);
 
@@ -136,7 +136,7 @@ export class ShaderProgram extends RefCounted {
     let vertexShader = this.vertexShader = getShader(gl, vertexSource, gl.VERTEX_SHADER);
     let fragmentShader = this.fragmentShader = getShader(gl, fragmentSource, gl.FRAGMENT_SHADER);
 
-    let shaderProgram = gl.createProgram();
+    let shaderProgram = gl.createProgram()!;
     gl.attachShader(shaderProgram, vertexShader);
     gl.attachShader(shaderProgram, fragmentShader);
     gl.linkProgram(shaderProgram);

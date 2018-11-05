@@ -89,7 +89,7 @@ registerRPC(PROMISE_RESPONSE_ID, function(this: RPC, x: any) {
 
 interface RPCTarget {
   postMessage(message?: any, ports?: any): void;
-  onmessage: (ev: MessageEvent) => any;
+  onmessage: ((ev: MessageEvent) => any)|null;
 }
 
 const INITIAL_RPC_ID = IS_WORKER ? -1 : 0;

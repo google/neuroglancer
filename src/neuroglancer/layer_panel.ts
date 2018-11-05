@@ -136,7 +136,7 @@ function registerDropHandlers(
       if (!dropLayers.finalize(event)) {
         destroyDropLayers(dropLayers);
       } else {
-        event.dataTransfer.dropEffect = getDropEffect();
+        event.dataTransfer!.dropEffect = getDropEffect();
         endLayerDrag(dropLayers.method === 'move' ? undefined : event);
       }
     }
@@ -242,7 +242,6 @@ export class LayerPanel extends RefCounted {
   element = document.createElement('div');
   private layerUpdateNeeded = true;
   private valueUpdateNeeded = false;
-  private addButton: HTMLElement;
   dropZone: HTMLDivElement;
   private layerWidgetInsertionPoint = document.createElement('div');
   private positionWidget =
@@ -277,7 +276,7 @@ export class LayerPanel extends RefCounted {
     this.layerWidgetInsertionPoint.style.display = 'none';
     this.element.appendChild(this.layerWidgetInsertionPoint);
 
-    let addButton = this.addButton = document.createElement('div');
+    let addButton = document.createElement('div');
     addButton.className = 'neuroglancer-layer-add-button neuroglancer-button';
     addButton.title = 'Click to add layer, control+click to add local annotation layer.';
     addButton.textContent = '+';

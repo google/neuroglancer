@@ -22,16 +22,16 @@ export function setupPositionDropHandlers(
     target: EventTarget, position: Borrowed<SpatialPosition>) {
   const dropDisposer = registerEventListener(target, 'drop', (event: DragEvent) => {
     event.preventDefault();
-    if (event.dataTransfer.types.indexOf(positionDragType) !== -1) {
-      const positionState = JSON.parse(event.dataTransfer.getData(positionDragType));
+    if (event.dataTransfer!.types.indexOf(positionDragType) !== -1) {
+      const positionState = JSON.parse(event.dataTransfer!.getData(positionDragType));
       position.restoreState(positionState);
       event.stopPropagation();
     }
   });
   const dragoverDisposer = registerEventListener(target, 'dragover', (event: DragEvent) => {
-    if (event.dataTransfer.types.indexOf(positionDragType) !== -1) {
+    if (event.dataTransfer!.types.indexOf(positionDragType) !== -1) {
       // Permit drag.
-      event.dataTransfer.dropEffect = 'link';
+      event.dataTransfer!.dropEffect = 'link';
       event.preventDefault();
       event.stopPropagation();
     }

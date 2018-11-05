@@ -107,14 +107,10 @@ node.js is required to build the viewer.
 
   https://github.com/creationix/nvm
 
-2. Install a version of Node.js >= v5.9.0:
+2. Install a recent version of Node.js if you haven't already done so:
 
-    `nvm install <version>`
+    `nvm install stable`
     
-    `<version>` could be 6.1.0 for example.
-    
-    Use `nvm ls-remote` to see available versions.
-
 3. Install the dependencies required by this project:
 
    (From within this directory)

@@ -64,7 +64,8 @@ export interface DragInfo {
   parameters: any;
 }
 
-export function decodeParametersFromDragTypeList(dragTypes: string[], prefix: string): DragInfo|undefined {
+export function decodeParametersFromDragTypeList(
+    dragTypes: ReadonlyArray<string>, prefix: string): DragInfo|undefined {
   for (const dragType of dragTypes) {
     const parameters = decodeParametersFromDragType(dragType, prefix);
     if (parameters !== undefined) {
@@ -85,7 +86,7 @@ let savedDropEffect: string;
  * key states are not set in the 'drop' event.
  */
 export function setDropEffect<T extends string>(event: DragEvent, dropEffect: T) {
-  event.dataTransfer.dropEffect = dropEffect;
+  event.dataTransfer!.dropEffect = dropEffect;
   savedDropEffect = dropEffect;
   return dropEffect;
 }

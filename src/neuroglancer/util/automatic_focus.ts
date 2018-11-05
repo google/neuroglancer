@@ -60,7 +60,8 @@ export class AutomaticallyFocusedElement extends RefCounted {
       // Never steal focus from descendant.
       return;
     }
-    if (activeElement === this.lastFocusedElement || activeElement.contains(element)) {
+    if (activeElement != null &&
+        (activeElement === this.lastFocusedElement || activeElement.contains(element))) {
       this.element.focus();
     }
     this.lastFocusedElement = null;

@@ -60,12 +60,12 @@ export function setTextureFromCanvas(
   // Prevents t-coordinate wrapping (repeating).  Repeating not
   // permitted for non-power-of-2 textures.
   gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
-  gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, true);
+  gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, 1);
   gl.pixelStorei(gl.UNPACK_ALIGNMENT, 4);
   gl.texImage2D(
       gl.TEXTURE_2D, /*level=*/0,
       /*internalformat=*/gl.RGBA8,
       /*format=*/gl.RGBA, gl.UNSIGNED_BYTE, canvas);
-  gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, false);
+  gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, 0);
   gl.bindTexture(gl.TEXTURE_2D, null);
 }
