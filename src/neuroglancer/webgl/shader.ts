@@ -242,6 +242,22 @@ export class ShaderCode {
 export type ShaderInitializer = ((x: ShaderProgram) => void);
 export type ShaderModule = ((x: ShaderBuilder) => void);
 
+export type ShaderSamplerPrefix = 'i' | 'u' | '';
+
+export type ShaderSamplerType =
+  'sampler2D'|'usampler2D'|'isampler2D'|'sampler3D'|'usampler3D'|'isampler3D';
+
+export type ShaderInterpolationMode = '' | 'centroid' | 'flat centroid' | 'smooth centroid' | 'flat' | 'smooth';
+
+export const textureTargetForSamplerType = {
+  'sampler2D': WebGL2RenderingContext.TEXTURE_2D,
+  'isampler2D': WebGL2RenderingContext.TEXTURE_2D,
+  'usampler2D': WebGL2RenderingContext.TEXTURE_2D,
+  'sampler3D': WebGL2RenderingContext.TEXTURE_3D,
+  'isampler3D': WebGL2RenderingContext.TEXTURE_3D,
+  'usampler3D': WebGL2RenderingContext.TEXTURE_3D,
+};
+
 export class ShaderBuilder {
   private nextSymbolID = 0;
   private nextTextureUnit = 0;
@@ -273,9 +289,9 @@ export class ShaderBuilder {
     return old;
   }
 
-  addTextureSampler2D(name: string, symbol: Symbol, extent?: number) {
+  addTextureSampler(samplerType: ShaderSamplerType, name: string, symbol: Symbol, extent?: number) {
     let textureUnit = this.allocateTextureUnit(symbol, extent);
-    this.addUniform('highp sampler2D', name, extent);
+    this.addUniform(`highp ${samplerType}`, name, extent);
     this.addInitializer(shader => {
       if (extent) {
         let textureUnits = new Int32Array(extent);
@@ -300,9 +316,9 @@ export class ShaderBuilder {
     return name;
   }
 
-  addVarying(typeName: string, name: string) {
-    this.varyingsCodeVS += `out ${typeName} ${name};\n`;
-    this.varyingsCodeFS += `in ${typeName} ${name};\n`;
+  addVarying(typeName: string, name: string, interpolationMode: ShaderInterpolationMode = '') {
+    this.varyingsCodeVS += `${interpolationMode} out ${typeName} ${name};\n`;
+    this.varyingsCodeFS += `${interpolationMode} in ${typeName} ${name};\n`;
   }
 
   addOutputBuffer(typeName: string, name: string, location: number|null) {
@@ -370,6 +386,7 @@ ${code}
   build() {
     let vertexSource = `#version 300 es
 precision highp float;
+precision highp int;
 ${this.uniformsCode}
 ${this.attributesCode}
 ${this.varyingsCodeVS}
@@ -381,6 +398,7 @@ ${this.vertexMain}
     let fragmentSource = `#version 300 es
 ${this.fragmentExtensions}
 precision highp float;
+precision highp int;
 ${this.uniformsCode}
 ${this.varyingsCodeFS}
 ${this.outputBufferCode}

@@ -33,7 +33,7 @@ const PICK_IDS_PER_INSTANCE = ENDPOINTS_PICK_OFFSET + 2;
 
 function getEndpointIndexArray() {
   return tile2dArray(
-      new Float32Array([0, 1]), /*majorDimension=*/1, /*minorTiles=*/1,
+      new Uint8Array([0, 1]), /*majorDimension=*/1, /*minorTiles=*/1,
       /*majorTiles=*/VERTICES_PER_CIRCLE);
 }
 
@@ -69,11 +69,11 @@ emitAnnotation(vec4(vColor.rgb, vColor.a * getLineAlpha() * ${this.getCrossSecti
   private endpointShaderGetter = dependentShaderGetter(this, this.gl, (builder: ShaderBuilder) => {
     this.defineShader(builder);
     this.circleShader.defineShader(builder, this.targetIsSliceView);
-    builder.addAttribute('highp float', 'aEndpointIndex');
+    builder.addAttribute('highp uint', 'aEndpointIndex');
     builder.setVertexMain(`
-vec3 vertexPosition = mix(aEndpointA, aEndpointB, aEndpointIndex);
+vec3 vertexPosition = mix(aEndpointA, aEndpointB, float(aEndpointIndex));
 emitCircle(uProjection * vec4(vertexPosition, 1.0));
-${this.setPartIndex(builder, 'aEndpointIndex + 1.0')};
+${this.setPartIndex(builder, 'aEndpointIndex + 1u')};
 `);
     builder.setFragmentMain(`
 vec4 borderColor = vec4(0.0, 0.0, 0.0, 1.0);
@@ -118,9 +118,9 @@ emitAnnotation(getCircleColor(vColor, borderColor));
     const shader = this.endpointShaderGetter(context.renderContext.emitter);
     this.enable(shader, context, () => {
       const aEndpointIndex = shader.attribute('aEndpointIndex');
-      this.endpointIndexBuffer.bindToVertexAttrib(
-          aEndpointIndex, /*components=*/1, /*attributeType=*/WebGL2RenderingContext.FLOAT,
-          /*normalized=*/false);
+      this.endpointIndexBuffer.bindToVertexAttribI(
+          aEndpointIndex, /*components=*/ 1,
+          /*attributeType=*/ WebGL2RenderingContext.UNSIGNED_BYTE);
       this.circleShader.draw(
           shader, context.renderContext,
           {interiorRadiusInPixels: 6, borderWidthInPixels: 2, featherWidthInPixels: 1},

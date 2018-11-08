@@ -19,34 +19,31 @@ import {ChunkFormat} from 'neuroglancer/sliceview/volume/frontend';
 import {TypedArray} from 'neuroglancer/util/array';
 import {Disposable, RefCounted} from 'neuroglancer/util/disposable';
 import {GL} from 'neuroglancer/webgl/context';
-import {ShaderBuilder, ShaderProgram} from 'neuroglancer/webgl/shader';
+import {ShaderBuilder, ShaderProgram, ShaderSamplerType, textureTargetForSamplerType} from 'neuroglancer/webgl/shader';
 
 const textureUnitSymbol = Symbol('SingleTextureVolumeChunk.textureUnit');
 const textureLayoutSymbol = Symbol('SingleTextureVolumeChunk.textureLayout');
 
 export abstract class SingleTextureChunkFormat<TextureLayout extends Disposable> extends RefCounted
     implements ChunkFormat {
-  arrayElementsPerTexel: number;
-  textureInternalFormat: number;
-  texelType: number;
-  textureFormat: number;
-
   constructor(public shaderKey: string) {
     super();
   }
 
   defineShader(builder: ShaderBuilder) {
-    builder.addTextureSampler2D('uVolumeChunkSampler', textureUnitSymbol);
+    builder.addTextureSampler(this.shaderSamplerType, 'uVolumeChunkSampler', textureUnitSymbol);
   }
+
+  abstract get shaderSamplerType(): ShaderSamplerType;
 
   beginDrawing(gl: GL, shader: ShaderProgram) {
     let textureUnit = shader.textureUnit(textureUnitSymbol);
-    gl.activeTexture(gl.TEXTURE0 + textureUnit);
+    gl.activeTexture(WebGL2RenderingContext.TEXTURE0 + textureUnit);
     (<any>shader)[textureLayoutSymbol] = null;
   }
 
   endDrawing(gl: GL, shader: ShaderProgram) {
-    gl.bindTexture(gl.TEXTURE_2D, null);
+    gl.bindTexture(textureTargetForSamplerType[this.shaderSamplerType], null);
     (<any>shader)[textureLayoutSymbol] = null;
   }
 
@@ -63,7 +60,7 @@ export abstract class SingleTextureChunkFormat<TextureLayout extends Disposable>
       (<any>shader)[textureLayoutSymbol] = textureLayout;
       this.setupTextureLayout(gl, shader, textureLayout);
     }
-    gl.bindTexture(gl.TEXTURE_2D, chunk.texture);
+    gl.bindTexture(textureTargetForSamplerType[this.shaderSamplerType], chunk.texture);
   }
 
   abstract setTextureData(gl: GL, textureLayout: TextureLayout, data: TypedArray): void;
@@ -79,6 +76,7 @@ export abstract class SingleTextureVolumeChunk<Data, TextureLayout extends Dispo
   texture: WebGLTexture|null = null;
   data: Data;
   textureLayout: TextureLayout|null;
+  chunkFormat: SingleTextureChunkFormat<TextureLayout>;
 
   constructor(source: VolumeChunkSource, x: any) {
     super(source, x);
@@ -90,9 +88,10 @@ export abstract class SingleTextureVolumeChunk<Data, TextureLayout extends Dispo
   copyToGPU(gl: GL) {
     super.copyToGPU(gl);
     let texture = this.texture = gl.createTexture();
-    gl.bindTexture(gl.TEXTURE_2D, texture);
+    const textureTarget = textureTargetForSamplerType[this.chunkFormat.shaderSamplerType];
+    gl.bindTexture(textureTarget, texture);
     this.setTextureData(gl);
-    gl.bindTexture(gl.TEXTURE_2D, null);
+    gl.bindTexture(textureTarget, null);
   }
 
   freeGPUMemory(gl: GL) {

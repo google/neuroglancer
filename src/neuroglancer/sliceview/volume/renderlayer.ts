@@ -45,8 +45,8 @@ const DEBUG_VERTICES = false;
 const CHUNK_POSITION_EPSILON = 1e-3;
 
 export const glsl_getPositionWithinChunk = `
-vec3 getPositionWithinChunk () {
-  return floor(min(vChunkPosition, uChunkDataSize - 1.0));
+highp ivec3 getPositionWithinChunk () {
+  return ivec3(min(vChunkPosition, uChunkDataSize - 1.0));
 }
 `;
 

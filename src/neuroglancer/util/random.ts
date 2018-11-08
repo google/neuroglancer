@@ -38,3 +38,9 @@ export function getRandomValues<T extends TypedArray>(array: T): T {
   }
   return array;
 }
+
+export function getRandomUint32() {
+  const data = new Uint32Array(1);
+  crypto.getRandomValues(data);
+  return data[0];
+}

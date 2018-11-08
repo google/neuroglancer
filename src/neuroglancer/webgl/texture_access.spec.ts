@@ -16,20 +16,19 @@
 
 import {DataType} from 'neuroglancer/util/data_type';
 import {GL} from 'neuroglancer/webgl/context';
-import {compute1dTextureFormat, compute1dTextureLayout, compute3dTextureLayout, OneDimensionalTextureAccessHelper, OneDimensionalTextureFormat, OneDimensionalTextureLayout, setOneDimensionalTextureData} from 'neuroglancer/webgl/one_dimensional_texture_access';
-import {glsl_uintleToFloat, glsl_unnormalizeUint8, setVec4FromUint32} from 'neuroglancer/webgl/shader_lib';
 import {fragmentShaderTest} from 'neuroglancer/webgl/shader_testing';
+import {compute1dTextureLayout, computeTextureFormat, OneDimensionalTextureAccessHelper, OneDimensionalTextureLayout, setOneDimensionalTextureData, TextureFormat} from 'neuroglancer/webgl/texture_access';
 
 function testTextureAccess(
     dataLength: number,
     setLayout: (layout: OneDimensionalTextureLayout, gl: GL, texelsPerElement: number) => void) {
-  fragmentShaderTest(6, tester => {
+  fragmentShaderTest({outputValue: 'uint'}, tester => {
     let {gl, builder} = tester;
     const dataType = DataType.UINT32;
     const numComponents = 1;
-    const format = new OneDimensionalTextureFormat();
+    const format = new TextureFormat();
     const layout = new OneDimensionalTextureLayout();
-    compute1dTextureFormat(format, dataType, numComponents);
+    computeTextureFormat(format, dataType, numComponents);
 
     const data = new Uint32Array(dataLength);
     for (let i = 0; i < data.length; ++i) {
@@ -41,28 +40,12 @@ function testTextureAccess(
     const accessHelper = new OneDimensionalTextureAccessHelper('textureAccess');
     const textureUnitSymbol = Symbol('textureUnit');
     accessHelper.defineShader(builder);
-    builder.addUniform('highp float', 'uOffset');
-    builder.addUniform('highp vec4', 'uExpected');
-    builder.addTextureSampler2D('uSampler', textureUnitSymbol);
+    builder.addUniform('highp uint', 'uOffset');
+    builder.addTextureSampler('usampler2D', 'uSampler', textureUnitSymbol);
     builder.addFragmentCode(
         accessHelper.getAccessor('readValue', 'uSampler', dataType, numComponents));
-    builder.addFragmentCode(glsl_unnormalizeUint8);
-    builder.addFragmentCode(glsl_uintleToFloat);
-    builder.addOutputBuffer('vec4', 'v4f_fragData0', 0);
-    builder.addOutputBuffer('vec4', 'v4f_fragData1', 1);
-    builder.addOutputBuffer('vec4', 'v4f_fragData2', 2);
-    builder.addOutputBuffer('vec4', 'v4f_fragData3', 3);
-    builder.addOutputBuffer('vec4', 'v4f_fragData4', 4);
-    builder.addOutputBuffer('vec4', 'v4f_fragData5', 5);
     builder.setFragmentMain(`
-uint32_t value = readValue(uOffset);
-v4f_fragData4 = packFloatIntoVec4(uintleToFloat(value.value.xyz));
-v4f_fragData5 = packFloatIntoVec4(all(equal(value.value, uExpected)) ? 1.0 : 0.0);
-value.value = unnormalizeUint8(value.value);
-v4f_fragData0 = packFloatIntoVec4(value.value.x);
-v4f_fragData1 = packFloatIntoVec4(value.value.y);
-v4f_fragData2 = packFloatIntoVec4(value.value.z);
-v4f_fragData3 = packFloatIntoVec4(value.value.w);
+outputValue = readValue(uOffset).value;
 `);
 
     tester.build();
@@ -82,30 +65,14 @@ v4f_fragData3 = packFloatIntoVec4(value.value.w);
 
     function testOffset(x: number) {
       let value = data[x];
-      gl.uniform1f(shader.uniform('uOffset'), x);
-      gl.uniform4fv(shader.uniform('uExpected'), setVec4FromUint32(new Float32Array(4), value));
+      gl.uniform1ui(shader.uniform('uOffset'), x);
 
       gl.activeTexture(gl.TEXTURE0 + textureUnit);
       gl.bindTexture(gl.TEXTURE_2D, texture);
       tester.execute();
       gl.bindTexture(gl.TEXTURE_2D, null);
-
-      let actual = new Float32Array(4);
-      let expected = new Float32Array(4);
-      for (let i = 0; i < 4; ++i) {
-        actual[i] = tester.readFloat(i);
-        expected[i] = (value >>> (8 * i)) & 0xFF;
-      }
-      for (let i = 0; i < 4; ++i) {
-        expect(actual[i]).toBe(
-            expected[i],
-            `offset = ${x}, value = ${x}, actual = ${Array.from(actual)}, expected = ${
-                Array.from(expected)}`);
-      }
-      expect(tester.readFloat(4))
-          .toBe(value, `uint24le value != expected, offset = ${x}, value = ${x}`);
-      expect(tester.readFloat(5))
-          .toBe(1.0, `uExpected != value in shader, offset = ${x}, value = ${x}`);
+      expect(tester.values.outputValue).toBe(value,
+            `offset = ${x}, value = ${value}`);
     }
 
     testOffset(255 /*+ 256 * 256 * 9*/);
@@ -127,17 +94,8 @@ function test1dTextureAccess(dataLength: number) {
   });
 }
 
-function test3dTextureAccess(x: number, y: number, z: number) {
-  testTextureAccess(x* y * z, (layout, gl, texelsPerElement) => {
-    compute3dTextureLayout(layout, gl, texelsPerElement, x, y, z);
-  });
-}
-
 describe('one_dimensional_texture_access', () => {
   it('uint32 access works correctly for 1-D 128*128*128', () => {
     test1dTextureAccess(128 * 128 * 128);
-  });
-  it('uint32 access works correctly for 3-D 256*256*10', () => {
-    test3dTextureAccess(256, 256, 10);
   });
 });

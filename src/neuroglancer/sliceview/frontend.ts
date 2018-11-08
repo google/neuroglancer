@@ -398,7 +398,7 @@ vec4 sampledColor = texture(uSampler, vTexCoord);
 if (sampledColor.a == 0.0) {
   sampledColor = uBackgroundColor;
 }
-emit(sampledColor * uColorFactor, vec4(0,0,0,0));
+emit(sampledColor * uColorFactor, 0u);
 `);
     builder.addAttribute('vec4', 'aVertexPosition');
     builder.setVertexMain(`

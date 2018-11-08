@@ -47,6 +47,15 @@ export class Buffer implements Disposable {
         location, componentsPerVertexAttribute, attributeType, normalized, stride, offset);
   }
 
+  bindToVertexAttribI(
+      location: AttributeIndex, componentsPerVertexAttribute: number,
+      attributeType: WebGLDataType = WebGL2RenderingContext.UNSIGNED_INT, stride = 0, offset = 0) {
+    this.bind();
+    this.gl.enableVertexAttribArray(location);
+    this.gl.vertexAttribIPointer(
+        location, componentsPerVertexAttribute, attributeType, stride, offset);
+  }
+
   setData(data: ArrayBufferView, usage: WebGLBufferUsage = WebGL2RenderingContext.STATIC_DRAW) {
     let gl = this.gl;
     this.bind();

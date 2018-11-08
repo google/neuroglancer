@@ -33,7 +33,6 @@ import {WatchableMap} from 'neuroglancer/util/watchable_map';
 import {withSharedVisibility} from 'neuroglancer/visibility_priority/frontend';
 import {DepthBuffer, FramebufferConfiguration, makeTextureBuffers, OffscreenCopyHelper, TextureBuffer} from 'neuroglancer/webgl/offscreen';
 import {ShaderBuilder} from 'neuroglancer/webgl/shader';
-import {glsl_packFloat01ToFixedPoint, unpackFloat01FromFixedPoint} from 'neuroglancer/webgl/shader_lib';
 import {ScaleBarOptions, ScaleBarTexture} from 'neuroglancer/widget/scale_bar';
 import {RPC, SharedObject} from 'neuroglancer/worker_rpc';
 
@@ -57,15 +56,13 @@ export enum OffscreenTextures {
   NUM_TEXTURES
 }
 
-export const glsl_perspectivePanelEmit = [
-  glsl_packFloat01ToFixedPoint, `
-void emit(vec4 color, vec4 pickId) {
-  v4f_fragData${OffscreenTextures.COLOR} = color;
-  v4f_fragData${OffscreenTextures.Z} = packFloat01ToFixedPoint(1.0 - gl_FragCoord.z);
-  v4f_fragData${OffscreenTextures.PICK} = pickId;
+export const glsl_perspectivePanelEmit = `
+void emit(vec4 color, highp uint pickId) {
+  out_color = color;
+  out_z = 1.0 - gl_FragCoord.z;
+  out_pickId = float(pickId);
 }
-`
-];
+`;
 
 /**
  * http://jcgt.org/published/0002/02/09/paper.pdf
@@ -82,7 +79,7 @@ float computeOITWeight(float alpha) {
 // Color must be premultiplied by alpha.
 export const glsl_perspectivePanelEmitOIT = [
   glsl_computeOITWeight, `
-void emit(vec4 color, vec4 pickId) {
+void emit(vec4 color, highp uint pickId) {
   float weight = computeOITWeight(color.a);
   vec4 accum = color * weight;
   v4f_fragData0 = vec4(accum.rgb, color.a);
@@ -92,10 +89,9 @@ void emit(vec4 color, vec4 pickId) {
 ];
 
 export function perspectivePanelEmit(builder: ShaderBuilder) {
-  builder.addOutputBuffer(
-      'vec4', `v4f_fragData${OffscreenTextures.COLOR}`, OffscreenTextures.COLOR);
-  builder.addOutputBuffer('vec4', `v4f_fragData${OffscreenTextures.Z}`, OffscreenTextures.Z);
-  builder.addOutputBuffer('vec4', `v4f_fragData${OffscreenTextures.PICK}`, OffscreenTextures.PICK);
+  builder.addOutputBuffer('vec4', `out_color`, OffscreenTextures.COLOR);
+  builder.addOutputBuffer('highp float', `out_z`, OffscreenTextures.Z);
+  builder.addOutputBuffer('highp float', `out_pickId`, OffscreenTextures.PICK);
   builder.addFragmentCode(glsl_perspectivePanelEmit);
 }
 
@@ -161,7 +157,17 @@ export class PerspectivePanel extends RenderedDataPanel {
       this.registerDisposer(SliceViewRenderHelper.get(this.gl, perspectivePanelEmit));
 
   protected offscreenFramebuffer = this.registerDisposer(new FramebufferConfiguration(this.gl, {
-    colorBuffers: makeTextureBuffers(this.gl, OffscreenTextures.NUM_TEXTURES),
+    colorBuffers: [
+      new TextureBuffer(
+          this.gl, WebGL2RenderingContext.RGBA8, WebGL2RenderingContext.RGBA,
+          WebGL2RenderingContext.UNSIGNED_BYTE),
+      new TextureBuffer(
+          this.gl, WebGL2RenderingContext.R32F, WebGL2RenderingContext.RED,
+          WebGL2RenderingContext.FLOAT),
+      new TextureBuffer(
+          this.gl, WebGL2RenderingContext.R32F, WebGL2RenderingContext.RED,
+          WebGL2RenderingContext.FLOAT),
+    ],
     depthBuffer: new DepthBuffer(this.gl)
   }));
 
@@ -349,8 +355,7 @@ export class PerspectivePanel extends RenderedDataPanel {
     }
     let glWindowX = this.mouseX;
     let glWindowY = height - this.mouseY;
-    let zData = offscreenFramebuffer.readPixel(OffscreenTextures.Z, glWindowX, glWindowY);
-    let glWindowZ = 1.0 - unpackFloat01FromFixedPoint(zData);
+    let glWindowZ = 1.0 - offscreenFramebuffer.readPixelFloat32(OffscreenTextures.Z, glWindowX, glWindowY);
     if (glWindowZ === 1.0) {
       return false;
     }
@@ -360,7 +365,7 @@ export class PerspectivePanel extends RenderedDataPanel {
     vec3.transformMat4(out, out, this.inverseProjectionMat);
     this.pickIDs.setMouseState(
         mouseState,
-        offscreenFramebuffer.readPixelAsUint32(OffscreenTextures.PICK, glWindowX, glWindowY));
+        offscreenFramebuffer.readPixelFloat32(OffscreenTextures.PICK, glWindowX, glWindowY));
     return true;
   }
 

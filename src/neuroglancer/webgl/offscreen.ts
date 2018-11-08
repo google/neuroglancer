@@ -129,7 +129,9 @@ export class TextureBuffer extends SizeManaged {
 }
 
 export function makeTextureBuffers(
-    gl: GL, count: number, internalFormat: number = gl.RGBA8, format: number = gl.RGBA, dataType: number = gl.UNSIGNED_BYTE) {
+    gl: GL, count: number, internalFormat: number = WebGL2RenderingContext.RGBA8,
+    format: number = WebGL2RenderingContext.RGBA,
+    dataType: number = WebGL2RenderingContext.UNSIGNED_BYTE) {
   let result = new Array<TextureBuffer>();
   for (let i = 0; i < count; ++i) {
     result[i] = new TextureBuffer(gl, internalFormat, format, dataType);
@@ -138,6 +140,8 @@ export function makeTextureBuffers(
 }
 
 const tempPixel = new Uint8Array(4);
+const tempPixelUint32 = new Uint32Array(1);
+const tempPixelFloat32 = new Float32Array(4);
 export class FramebufferConfiguration<ColorBuffer extends TextureBuffer|Renderbuffer> extends
     RefCounted {
   width = Number.NaN;
@@ -227,12 +231,32 @@ export class FramebufferConfiguration<ColorBuffer extends TextureBuffer|Renderbu
     return tempPixel;
   }
 
-  /**
-   * Calls readPixel, but interprets the RGBA result as a little-endian uint32 value.
-   */
-  readPixelAsUint32(textureIndex: number, glWindowX: number, glWindowY: number) {
-    let result = this.readPixel(textureIndex, glWindowX, glWindowY);
-    return result[0] + (result[1] << 8) + (result[2] << 16) + (result[3] << 24);
+  readPixelUint32(textureIndex: number, glWindowX: number, glWindowY: number): number {
+    let {gl} = this;
+    try {
+      this.bindSingle(textureIndex);
+      gl.readPixels(
+          glWindowX, glWindowY, 1, 1, WebGL2RenderingContext.RED_INTEGER,
+        WebGL2RenderingContext.UNSIGNED_INT, tempPixelUint32);
+    } finally {
+      this.framebuffer.unbind();
+    }
+    return tempPixelUint32[0];
+  }
+
+  readPixelFloat32(textureIndex: number, glWindowX: number, glWindowY: number): number {
+    let {gl} = this;
+    try {
+      this.bindSingle(textureIndex);
+      // Reading just the red channel using a format of RED fails with certain WebGL
+      // implementations.  Using RGBA seems to have better compatibility.
+      gl.readPixels(
+          glWindowX, glWindowY, 1, 1, WebGL2RenderingContext.RGBA, WebGL2RenderingContext.FLOAT,
+          tempPixelFloat32);
+    } finally {
+      this.framebuffer.unbind();
+    }
+    return tempPixelFloat32[0];
   }
 
   verifyAttachment() {

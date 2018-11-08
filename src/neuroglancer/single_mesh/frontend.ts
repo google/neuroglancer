@@ -30,9 +30,9 @@ import {Buffer} from 'neuroglancer/webgl/buffer';
 import {GL} from 'neuroglancer/webgl/context';
 import {makeWatchableShaderError} from 'neuroglancer/webgl/dynamic_shader';
 import {CountingBuffer, countingBufferShaderModule, disableCountingBuffer, getCountingBuffer, IndexBufferAttributeHelper, makeIndexBuffer} from 'neuroglancer/webgl/index_emulation';
-import {compute1dTextureFormat, compute1dTextureLayout, OneDimensionalTextureAccessHelper, OneDimensionalTextureFormat, setOneDimensionalTextureData, TextureAccessCoefficients} from 'neuroglancer/webgl/one_dimensional_texture_access';
-import {ShaderBuilder, ShaderModule, ShaderProgram} from 'neuroglancer/webgl/shader';
-import {getShaderType, glsl_addUint32, glsl_divmodUint32, setVec4FromUint32} from 'neuroglancer/webgl/shader_lib';
+import {ShaderBuilder, ShaderModule, ShaderProgram, ShaderSamplerType} from 'neuroglancer/webgl/shader';
+import {getShaderType} from 'neuroglancer/webgl/shader_lib';
+import {compute1dTextureLayout, computeTextureFormat, getSamplerPrefixForDataType, OneDimensionalTextureAccessHelper, setOneDimensionalTextureData, TextureFormat} from 'neuroglancer/webgl/texture_access';
 import {SharedObject} from 'neuroglancer/worker_rpc';
 
 export const FRAGMENT_MAIN_START = '//NEUROGLANCER_SINGLE_MESH_LAYER_FRAGMENT_MAIN_START';
@@ -67,18 +67,16 @@ export function getShaderAttributeType(info: {dataType: DataType, numComponents:
   return getShaderType(info.dataType, info.numComponents);
 }
 
-const vertexAttributeSamplerSymbol = Symbol('SingleMeshShaderManager.vertexAttributeTextureUnit');
+const vertexAttributeSamplerSymbols: Symbol[] = [];
 
-const vertexPositionTextureFormat =
-    compute1dTextureFormat(new OneDimensionalTextureFormat(), DataType.FLOAT32, 3);
+const vertexPositionTextureFormat = computeTextureFormat(new TextureFormat(), DataType.FLOAT32, 3);
 const vertexNormalTextureFormat = vertexPositionTextureFormat;
 
 export class SingleMeshShaderManager {
   private tempLightVec = new Float32Array(4);
-  private tempPickID = new Float32Array(4);
 
   private textureAccessHelper = new OneDimensionalTextureAccessHelper('vertexData');
-  private indexBufferHelper = new IndexBufferAttributeHelper('VertexIndex');
+  private indexBufferHelper = new IndexBufferAttributeHelper('vertexIndex');
 
   constructor(
       public attributeNames: (string|undefined)[], public attributeInfo: VertexAttributeInfo[],
@@ -87,33 +85,52 @@ export class SingleMeshShaderManager {
   defineAttributeAccess(builder: ShaderBuilder, vertexIndexVariable: string) {
     let {textureAccessHelper} = this;
     textureAccessHelper.defineShader(builder);
-    builder.addVertexCode(textureAccessHelper.getAccessor(
-        'readVertexPosition', 'uVertexAttributeSampler[0]', DataType.FLOAT32, 3));
-    builder.addVertexCode(textureAccessHelper.getAccessor(
-        'readVertexNormal', 'uVertexAttributeSampler[1]', DataType.FLOAT32, 3));
     let numAttributes = 2;
+    const {attributeNames} = this;
+    for (const attributeName of attributeNames) {
+      if (attributeName !== undefined) {
+        ++numAttributes;
+      }
+    }
+    for (let j = vertexAttributeSamplerSymbols.length; j < numAttributes; ++j) {
+      vertexAttributeSamplerSymbols[j] =
+          Symbol(`SingleMeshShaderManager.vertexAttributeTextureUnit${j}`);
+    }
+    numAttributes = 0;
+
+    builder.addTextureSampler(
+        `sampler2D`, 'uVertexAttributeSampler0', vertexAttributeSamplerSymbols[numAttributes++]);
+    builder.addTextureSampler(
+        `sampler2D`, 'uVertexAttributeSampler1', vertexAttributeSamplerSymbols[numAttributes++]);
+
+    builder.addVertexCode(textureAccessHelper.getAccessor(
+        'readVertexPosition', 'uVertexAttributeSampler0', DataType.FLOAT32, 3));
+    builder.addVertexCode(textureAccessHelper.getAccessor(
+        'readVertexNormal', 'uVertexAttributeSampler1', DataType.FLOAT32, 3));
     let vertexMain = `
 vec3 vertexPosition = readVertexPosition(${vertexIndexVariable});
 vec3 vertexNormal = readVertexNormal(${vertexIndexVariable});
 `;
-    const {attributeNames} = this;
     this.attributeInfo.forEach((info, i) => {
       const attributeName = attributeNames[i];
       if (attributeName !== undefined) {
+        builder.addTextureSampler(
+            `${getSamplerPrefixForDataType(info.dataType)}sampler2D` as ShaderSamplerType,
+            `uVertexAttributeSampler${numAttributes}`,
+            vertexAttributeSamplerSymbols[numAttributes]);
+
         const attributeType = getShaderAttributeType(info);
         builder.addVarying(`highp ${attributeType}`, `vCustom${i}`);
         builder.addFragmentCode(`
 #define ${attributeNames[i]} vCustom${i}
 `);
         builder.addVertexCode(textureAccessHelper.getAccessor(
-            `readAttribute${i}`, `uVertexAttributeSampler[${numAttributes}]`, info.dataType,
+            `readAttribute${i}`, `uVertexAttributeSampler${numAttributes}`, info.dataType,
             info.numComponents));
         vertexMain += `vCustom${i} = readAttribute${i}(${vertexIndexVariable});\n`;
-        numAttributes += 1;
+        ++numAttributes;
       }
     });
-    builder.addTextureSampler2D(
-        'uVertexAttributeSampler', vertexAttributeSamplerSymbol, numAttributes);
     builder.addVertexMain(vertexMain);
   }
 
@@ -125,16 +142,11 @@ vec3 vertexNormal = readVertexNormal(${vertexIndexVariable});
     builder.addUniform('highp vec4', 'uColor');
     builder.addUniform('highp mat4', 'uModelMatrix');
     builder.addUniform('highp mat4', 'uProjection');
-    builder.addUniform('highp vec4', 'uPickID');
-    builder.addVarying('highp vec4', 'vPickID');
-    builder.addVertexCode(glsl_addUint32);
-    builder.addVertexCode(glsl_divmodUint32);
+    builder.addUniform('highp uint', 'uPickID');
+    builder.addVarying('highp uint', 'vPickID', 'flat');
     builder.addVertexMain(`
-float vertexIndex = getVertexIndex();
-uint32_t triangleIndex;
-divmod(getPrimitiveIndex(), 3.0, triangleIndex);
-uint32_t pickID; pickID.value = uPickID;
-vPickID = add(pickID, triangleIndex).value;
+uint triangleIndex = getPrimitiveIndex() / 3u;
+vPickID = uPickID + triangleIndex;
 `);
     builder.addFragmentCode(`
 void emitPremultipliedRGBA(vec4 color) {
@@ -176,7 +188,7 @@ vLightingFactor = abs(dot(normal, uLightDirection.xyz)) + uLightDirection.w;
   }
 
   setPickID(gl: GL, shader: ShaderProgram, pickID: number) {
-    gl.uniform4fv(shader.uniform('uPickID'), setVec4FromUint32(this.tempPickID, pickID));
+    gl.uniform1ui(shader.uniform('uPickID'), pickID);
   }
 
   beginObject(gl: GL, shader: ShaderProgram, objectToDataMatrix: mat4) {
@@ -201,11 +213,13 @@ vLightingFactor = abs(dot(normal, uLightDirection.xyz)) + uLightDirection.w;
 
   bindVertexData(gl: GL, shader: ShaderProgram, data: VertexChunkData) {
     this.textureAccessHelper.setupTextureLayout(gl, shader, data);
-    let textureUnit = shader.textureUnit(vertexAttributeSamplerSymbol);
-    let curTextureUnit = textureUnit + gl.TEXTURE0;
-    const bindTexture = (texture: WebGLTexture | null) => {
-      gl.activeTexture(curTextureUnit++);
-      gl.bindTexture(gl.TEXTURE_2D, texture);
+    let index = 0;
+    const bindTexture = (texture: WebGLTexture|null) => {
+      const textureUnit = WebGL2RenderingContext.TEXTURE0 +
+          shader.textureUnit(vertexAttributeSamplerSymbols[index]);
+      gl.activeTexture(textureUnit);
+      gl.bindTexture(WebGL2RenderingContext.TEXTURE_2D, texture);
+      ++index;
     };
     bindTexture(data.vertexTexture);
     bindTexture(data.normalTexture);
@@ -226,9 +240,10 @@ vLightingFactor = abs(dot(normal, uLightDirection.xyz)) + uLightDirection.w;
         ++numTextures;
       }
     }
-    let curTextureUnit = shader.textureUnit(vertexAttributeSamplerSymbol) + gl.TEXTURE0;
     for (let i = 0; i < numTextures; ++i) {
-      gl.activeTexture(curTextureUnit++);
+      let curTextureUnit =
+          shader.textureUnit(vertexAttributeSamplerSymbols[i]) + WebGL2RenderingContext.TEXTURE0;
+      gl.activeTexture(curTextureUnit);
       gl.bindTexture(gl.TEXTURE_2D, null);
     }
   }
@@ -238,7 +253,7 @@ vLightingFactor = abs(dot(normal, uLightDirection.xyz)) + uLightDirection.w;
     countingBuffer.ensure(chunk.numIndices).bind(shader);
     this.bindVertexData(gl, shader, chunk.vertexData);
     this.indexBufferHelper.bind(chunk.indexBuffer, shader);
-    gl.drawArrays(gl.TRIANGLES, 0, chunk.numIndices);
+    gl.drawArrays(WebGL2RenderingContext.TRIANGLES, 0, chunk.numIndices);
   }
 
   endLayer(gl: GL, shader: ShaderProgram) {
@@ -257,16 +272,16 @@ export class VertexChunkData {
   vertexAttributeTextures: (WebGLTexture|null)[];
 
   // Emulation of buffer as texture.
-  dataWidth: number;
+  textureXBits: number;
+  textureWidth: number;
   textureHeight: number;
-  textureAccessCoefficients: TextureAccessCoefficients;
 
-  copyToGPU(gl: GL, attributeFormats: OneDimensionalTextureFormat[]) {
+  copyToGPU(gl: GL, attributeFormats: TextureFormat[]) {
     let numVertices = this.vertexPositions.length / 3;
-    compute1dTextureLayout(this, gl, /*texelsPerElement=*/1, numVertices);
-    const getBufferTexture = (data: Float32Array, format: OneDimensionalTextureFormat) => {
+    compute1dTextureLayout(this, gl, /*texelsPerElement=*/ 1, numVertices);
+    const getBufferTexture = (data: Float32Array, format: TextureFormat) => {
       let texture = gl.createTexture();
-      gl.bindTexture(gl.TEXTURE_2D, texture);
+      gl.bindTexture(WebGL2RenderingContext.TEXTURE_2D, texture);
       setOneDimensionalTextureData(gl, this, format, data);
       return texture;
     };
@@ -274,7 +289,7 @@ export class VertexChunkData {
     this.normalTexture = getBufferTexture(this.vertexNormals, vertexNormalTextureFormat);
     this.vertexAttributeTextures =
         this.vertexAttributes.map((data, i) => getBufferTexture(data, attributeFormats[i]));
-    gl.bindTexture(gl.TEXTURE_2D, null);
+    gl.bindTexture(WebGL2RenderingContext.TEXTURE_2D, null);
   }
 
   freeGPUMemory(gl: GL) {
@@ -321,7 +336,7 @@ export class SingleMeshChunk extends Chunk {
 
 export function getAttributeTextureFormats(vertexAttributes: VertexAttributeInfo[]) {
   return vertexAttributes.map(
-      x => compute1dTextureFormat(new OneDimensionalTextureFormat(), x.dataType, x.numComponents));
+      x => computeTextureFormat(new TextureFormat(), x.dataType, x.numComponents));
 }
 
 export class SingleMeshSource extends

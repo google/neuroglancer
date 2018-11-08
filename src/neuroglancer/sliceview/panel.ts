@@ -25,7 +25,7 @@ import {TrackableRGB} from 'neuroglancer/util/color';
 import {ActionEvent, registerActionListener} from 'neuroglancer/util/event_action_map';
 import {identityMat4, mat4, vec3, vec4} from 'neuroglancer/util/geom';
 import {startRelativeMouseDrag} from 'neuroglancer/util/mouse_drag';
-import {FramebufferConfiguration, makeTextureBuffers, OffscreenCopyHelper} from 'neuroglancer/webgl/offscreen';
+import {FramebufferConfiguration, OffscreenCopyHelper, TextureBuffer} from 'neuroglancer/webgl/offscreen';
 import {ShaderBuilder, ShaderModule} from 'neuroglancer/webgl/shader';
 import {ScaleBarTexture, TrackableScaleBarOptions} from 'neuroglancer/widget/scale_bar';
 
@@ -42,19 +42,19 @@ export enum OffscreenTextures {
 }
 
 function sliceViewPanelEmitColor(builder: ShaderBuilder) {
-  builder.addOutputBuffer('vec4', 'v4f_fragColor', null);
+  builder.addOutputBuffer('vec4', 'out_fragColor', null);
   builder.addFragmentCode(`
-void emit(vec4 color, vec4 pickId) {
-  v4f_fragColor = color;
+void emit(vec4 color, highp uint pickId) {
+  out_fragColor = color;
 }
 `);
 }
 
 function sliceViewPanelEmitPickID(builder: ShaderBuilder) {
-  builder.addOutputBuffer('vec4', 'v4f_fragColor', null);
+  builder.addOutputBuffer('highp float', 'out_pickId', null);
   builder.addFragmentCode(`
-void emit(vec4 color, vec4 pickId) {
-  v4f_fragColor = pickId;
+void emit(vec4 color, highp uint pickId) {
+  out_pickId = float(pickId);
 }
 `);
 }
@@ -112,8 +112,16 @@ export class SliceViewPanel extends RenderedDataPanel {
   private visibleLayerTracker = makeRenderedPanelVisibleLayerTracker(
       this.viewer.layerManager, SliceViewPanelRenderLayer, this.viewer.visibleLayerRoles, this);
 
-  private offscreenFramebuffer = this.registerDisposer(new FramebufferConfiguration(
-      this.gl, {colorBuffers: makeTextureBuffers(this.gl, OffscreenTextures.NUM_TEXTURES)}));
+  private offscreenFramebuffer = this.registerDisposer(new FramebufferConfiguration(this.gl, {
+    colorBuffers: [
+      new TextureBuffer(
+          this.gl, WebGL2RenderingContext.RGBA8, WebGL2RenderingContext.RGBA,
+          WebGL2RenderingContext.UNSIGNED_BYTE),
+      new TextureBuffer(
+          this.gl, WebGL2RenderingContext.R32F, WebGL2RenderingContext.RED,
+          WebGL2RenderingContext.FLOAT),
+    ]
+  }));
 
   private offscreenCopyHelper = this.registerDisposer(OffscreenCopyHelper.get(this.gl));
   private scaleBarCopyHelper = this.registerDisposer(OffscreenCopyHelper.get(this.gl));
@@ -343,9 +351,9 @@ export class SliceViewPanel extends RenderedDataPanel {
     vec3.transformMat4(out, out, sliceView.viewportToData);
 
     let glWindowY = height - y;
-    this.pickIDs.setMouseState(
-        mouseState,
-        offscreenFramebuffer.readPixelAsUint32(OffscreenTextures.PICK, glWindowX, glWindowY));
+    const pickValue =
+        offscreenFramebuffer.readPixelFloat32(OffscreenTextures.PICK, glWindowX, glWindowY);
+    this.pickIDs.setMouseState(mouseState, pickValue);
     return true;
   }
 

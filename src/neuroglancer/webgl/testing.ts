@@ -19,10 +19,17 @@ import {GL, initializeWebGL} from 'neuroglancer/webgl/context';
 export function webglTest(f: (gl: GL, canvas: HTMLCanvasElement) => void) {
   let canvas = document.createElement('canvas');
   document.body.appendChild(canvas);
+  let gl: GL|undefined;
   try {
-    let gl = initializeWebGL(canvas);
+    gl = initializeWebGL(canvas);
     f(gl, canvas);
   } finally {
+    if (gl != null) {
+      const loseContext = gl.getExtension('WEBGL_lose_context');
+      if (loseContext !== null) {
+        loseContext.loseContext();
+      }
+    }
     document.body.removeChild(canvas);
   }
 }

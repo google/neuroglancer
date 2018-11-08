@@ -25,12 +25,10 @@ import {getObjectId} from 'neuroglancer/util/object_id';
 import {Buffer} from 'neuroglancer/webgl/buffer';
 import {GL} from 'neuroglancer/webgl/context';
 import {ShaderBuilder, ShaderModule, ShaderProgram} from 'neuroglancer/webgl/shader';
-import {setVec4FromUint32} from 'neuroglancer/webgl/shader_lib';
 import {registerSharedObjectOwner, RPC} from 'neuroglancer/worker_rpc';
 
 export class MeshShaderManager {
   private tempLightVec = new Float32Array(4);
-  private tempPickID = new Float32Array(4);
   constructor() {}
 
   defineShader(builder: ShaderBuilder) {
@@ -41,7 +39,7 @@ export class MeshShaderManager {
     builder.addUniform('highp vec4', 'uColor');
     builder.addUniform('highp mat4', 'uModelMatrix');
     builder.addUniform('highp mat4', 'uProjection');
-    builder.addUniform('highp vec4', 'uPickID');
+    builder.addUniform('highp uint', 'uPickID');
     builder.setVertexMain(`
 gl_Position = uProjection * (uModelMatrix * vec4(aVertexPosition, 1.0));
 vec3 normal = (uModelMatrix * vec4(aVertexNormal, 0.0)).xyz;
@@ -65,7 +63,7 @@ vColor = vec4(lightingFactor * uColor.rgb, uColor.a);
   }
 
   setPickID(gl: GL, shader: ShaderProgram, pickID: number) {
-    gl.uniform4fv(shader.uniform('uPickID'), setVec4FromUint32(this.tempPickID, pickID));
+    gl.uniform1ui(shader.uniform('uPickID'), pickID);
   }
 
   beginObject(gl: GL, shader: ShaderProgram, objectToDataMatrix: mat4) {

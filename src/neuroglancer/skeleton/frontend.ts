@@ -33,12 +33,10 @@ import {Buffer} from 'neuroglancer/webgl/buffer';
 import {GL} from 'neuroglancer/webgl/context';
 import {WatchableShaderError} from 'neuroglancer/webgl/dynamic_shader';
 import {ShaderBuilder, ShaderModule, ShaderProgram} from 'neuroglancer/webgl/shader';
-import {setVec4FromUint32} from 'neuroglancer/webgl/shader_lib';
 
 const glsl_COLORMAPS = require<string>('neuroglancer/webgl/colormaps.glsl');
 
 const tempMat2 = mat4.create();
-const tempPickID = new Float32Array(4);
 
 const DEFAULT_FRAGMENT_MAIN = `void main() {
   emitDefault();
@@ -71,7 +69,7 @@ class RenderHelper extends RefCounted {
   defineShader(builder: ShaderBuilder, fragmentMain: string) {
     builder.addUniform('highp vec4', 'uColor');
     builder.addUniform('highp mat4', 'uProjection');
-    builder.addUniform('highp vec4', 'uPickID');
+    builder.addUniform('highp uint', 'uPickID');
     let vertexMain = `
 gl_Position = uProjection * vec4(aVertex0, 1.0);
 `;
@@ -128,7 +126,7 @@ void emitDefault() {
   }
 
   setPickID(gl: GL, shader: ShaderProgram, pickID: number) {
-    gl.uniform4fv(shader.uniform('uPickID'), setVec4FromUint32(tempPickID, pickID));
+    gl.uniform1ui(shader.uniform('uPickID'), pickID);
   }
 
   drawSkeleton(gl: GL, shader: ShaderProgram, skeletonChunk: SkeletonChunk) {
