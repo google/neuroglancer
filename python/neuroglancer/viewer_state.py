@@ -219,6 +219,7 @@ class SegmentationLayer(Layer, _AnnotationLayerOptions):
     not_selected_alpha = notSelectedAlpha = wrapped_property('notSelectedAlpha', optional(float, 0))
     object_alpha = objectAlpha = wrapped_property('objectAlpha', optional(float, 1.0))
     skeleton_shader = skeletonShader = wrapped_property('skeletonShader', text_type)
+    color_seed = colorSeed = wrapped_property('colorSeed', optional(int, 0))
 
     @staticmethod
     def interpolate(a, b, t):
