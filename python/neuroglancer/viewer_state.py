@@ -228,6 +228,22 @@ class SegmentationLayer(Layer, _AnnotationLayerOptions):
             setattr(c, k, interpolate_linear(getattr(a, k), getattr(b, k), t))
         return c
 
+@export
+class SingleMeshLayer(Layer):
+    __slots__ = ()
+
+    def __init__(self, *args, **kwargs):
+        super(SingleMeshLayer, self).__init__(*args, type='mesh', **kwargs)
+
+    source = wrapped_property('source', text_type)
+    vertex_attribute_sources = vertexAttributeSources = wrapped_property(
+        'vertexAttributeSources', optional(typed_list(text_type)))
+    shader = wrapped_property('shader', text_type)
+    vertex_attribute_names = vertexAttributeNames = wrapped_property('vertexAttributeNames',
+                                                                     optional(
+                                                                         typed_list(
+                                                                             optional(text_type))))
+
 
 class AnnotationBase(JsonObjectWrapper):
     __slots__ = ()
@@ -327,6 +343,7 @@ layer_types = {
     'segmentation': SegmentationLayer,
     'pointAnnotation': PointAnnotationLayer,
     'annotation': AnnotationLayer,
+    'mesh': SingleMeshLayer,
 }
 
 
