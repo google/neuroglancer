@@ -1075,6 +1075,7 @@ export function UserLayerWithAnnotationsMixin<TBase extends {new (...args: any[]
       super(...args);
       this.selectedAnnotation.changed.add(this.specificationChanged.dispatch);
       this.annotationColor.changed.add(this.specificationChanged.dispatch);
+      this.annotationFillOpacity.changed.add(this.specificationChanged.dispatch);
       this.tabs.add('annotations', {
         label: 'Annotations',
         order: 10,
