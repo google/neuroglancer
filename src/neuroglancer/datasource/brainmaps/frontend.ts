@@ -334,6 +334,16 @@ function parseProjectList(obj: any) {
   }
 }
 
+function parseAPIResponseList(obj: any, propertyName: string) {
+  try {
+    verifyObject(obj);
+    return verifyObjectProperty(
+      obj, propertyName, x => x === undefined ? [] : parseArray(x, verifyString));
+  } catch (parseError) {
+    throw new Error(`Error parsing dataset list: ${parseError.message}`);
+  }
+}
+
 export class VolumeList {
   volumeIds: string[];
   projects = new Map<string, ProjectMetadata>();
@@ -527,34 +537,76 @@ export class BrainmapsDataSource extends DataSource {
                     })));
   }
 
-  getVolumeList(chunkManager: ChunkManager) {
+  getProjectList(chunkManager: ChunkManager) {
     return chunkManager.memoize.getUncounted(
-        {instance: this.instance, type: 'brainmaps:getVolumeList'}, () => {
-          let promise = Promise
-                            .all([
-                              makeRequest(
-                                  this.instance, this.credentialsProvider,
-                                  {method: 'GET', path: '/v1beta2/projects', responseType: 'json'}),
-                              makeRequest(
-                                  this.instance, this.credentialsProvider,
-                                  {method: 'GET', path: '/v1beta2/volumes', responseType: 'json'})
-                            ])
-                            .then(
-                                ([projectsResponse, volumesResponse]) =>
-                                    new VolumeList(projectsResponse, volumesResponse));
-          const description = `${this.instance.description} volume list`;
-          StatusMessage.forPromise(promise, {
-            delay: true,
-            initialMessage: `Retrieving ${description}.`,
-            errorPrefix: `Error retrieving ${description}: `,
-          });
-          return promise;
+      {instance: this.instance, type: 'brainmaps:getProjectList'}, () => {
+        let promise = makeRequest(
+          this.instance, this.credentialsProvider,
+          {method: 'GET', path: '/v1beta2/projects', responseType: 'json'}).then(
+            (projectsResponse) => {
+              return parseProjectList(projectsResponse);
+            });
+        const description = `${this.instance.description} project list`;
+        StatusMessage.forPromise(promise, {
+          delay: true,
+          initialMessage: `Retrieving ${description}.`,
+          errorPrefix: `Error retrieving ${description}: `,
         });
+        return promise;
+      });
+  }
+
+  getDatasetList(chunkManager: ChunkManager, project: string) {
+    return chunkManager.memoize.getUncounted(
+      {instance: this.instance, type: `brainmaps:${project}:getDatasetList`}, () => {
+        let promise = makeRequest(
+          this.instance, this.credentialsProvider,
+          {
+            method: 'GET', path: `/v1beta2/datasets?project_id=${project}`, responseType: 'json'
+          }).then(
+            (datasetsResponse) => {
+              return parseAPIResponseList(datasetsResponse, 'datasetIds');
+          });
+        const description = `${this.instance.description} dataset list`;
+        StatusMessage.forPromise(promise, {
+          delay: true,
+          initialMessage: `Retrieving ${description}`,
+          errorPrefix: `Error retrieving ${description}`
+        });
+        return promise;
+      });
+  }
+
+  getVolumeList(chunkManager: ChunkManager, project: string, dataset: string) {
+    return chunkManager.memoize.getUncounted(
+      {instance: this.instance, type: `brainmaps:${project}:${dataset}:getVolumeList`}, () => {
+        let promise = makeRequest(
+          this.instance, this.credentialsProvider,
+          {
+            method: 'GET', path: `/v1beta2/volumes?project_id=${project}&dataset_id=${dataset}`,
+            responseType: 'json'
+          }).then(
+            (volumesResponse) => {
+              const fullyQualifyiedVolumeList = parseAPIResponseList(volumesResponse, 'volumeId');
+              const splitPoint = project.length + dataset.length + 2;
+              const volumeList = [];
+              for (const volume of fullyQualifyiedVolumeList) {
+                volumeList.push(volume.substring(splitPoint));
+              }
+              return volumeList;
+          });
+        const description = `${this.instance.description} volume list`;
+        StatusMessage.forPromise(promise, {
+          delay: true,
+          initialMessage: `Retrieving ${description}`,
+          errorPrefix: `Error retrieving ${description}`
+        });
+        return promise;
+      });
   }
 
   getChangeStackList(chunkManager: ChunkManager, volumeId: string) {
-    return chunkManager.memoize.getUncounted(
-        {instance: this.instance, type: 'brainmaps:getChangeStackList', volumeId}, () => {
+    return chunkManager.memoize.getUncounted(        {instance: this.instance, type: 'brainmaps:getChangeStackList', volumeId}, () => {
           let promise: Promise<string[]|undefined> =
               makeRequest(this.instance, this.credentialsProvider, {
                 method: 'GET',
@@ -572,50 +624,90 @@ export class BrainmapsDataSource extends DataSource {
   }
 
   volumeCompleter(url: string, chunkManager: ChunkManager) {
-    return this.getVolumeList(chunkManager).then(volumeList => {
-      // Check if there is a valid 3-part volume id followed by a colon, in which case we complete
-      // the change stack name.
-      const changeStackMatch = url.match(/^([^:]+:[^:]+:[^:]+):(.*)$/);
-      if (changeStackMatch !== null) {
-        const volumeId = changeStackMatch[1];
-        const matchString = changeStackMatch[2];
+    let colonCount = 0;
+    const colonIndices = [];
+    for (let lastColon = url.indexOf(':'); lastColon >= 0; lastColon = url.indexOf(':', lastColon + 1)) {
+      colonIndices.push(lastColon);
+      ++colonCount;
+    }
+    switch(colonCount) {
+      case 0: {  // Fetch project names
+        return this.getProjectList(chunkManager).then((projectMetadata) => {
+          let projectList: string[] = [];
+          let descriptionMap = new Map<String, string>();
+
+          for (const projectDatum of projectMetadata) {
+            const projectColon = projectDatum.id + ':';
+            projectList.push(projectColon);
+            descriptionMap.set(projectColon, projectDatum.label);
+          }
+
+          return {
+            offset: 0,
+            completions: getPrefixMatchesWithDescriptions(
+              url,
+              projectList,
+              x => x,
+              x => descriptionMap.get(x)
+            )
+          };
+        });
+      }
+
+      case 1: {  // Fetch dataset names, under the current project
+        const colonLocation = colonIndices[0];
+        const projectId = url.substring(0, colonLocation);
+        return this.getDatasetList(chunkManager, projectId).then((datasetList) => {
+          const splitPoint = colonLocation + 1;
+          const matchString = url.substring(splitPoint);
+          const possibleMatches = [];
+          for (const datasetName of datasetList) {
+            possibleMatches.push(datasetName + ':');
+          }
+          possibleMatches.sort();
+
+          return {
+            offset: splitPoint,
+            completions: getPrefixMatches(matchString, possibleMatches)
+          };
+        });
+      }
+
+      case 2: {  // Fetch volume names, under the current project and dataset
+        const projectId = url.substring(0, colonIndices[0]);
+        const datasetId = url.substring(colonIndices[0] + 1, colonIndices[1]);
+        const splitPoint = colonIndices[1] + 1;
+        return this.getVolumeList(chunkManager, projectId, datasetId).then((volumeList) => {
+          const matchString = url.substring(splitPoint);
+
+          return {
+            offset: splitPoint,
+            completions: getPrefixMatches(matchString, volumeList)
+          };
+        });
+      }
+
+      default: {  // Fetch changestack names, under the current volume
+        const volumeId = url.substring(0, colonIndices[2]);
+        const splitPoint = colonIndices[2] + 1;
+        const matchString = url.substring(splitPoint);
         return this.getChangeStackList(chunkManager, volumeId).then(changeStacks => {
           if (changeStacks === undefined) {
             throw null;
           }
           return {
-            offset: volumeId.length + 1,
+            offset: splitPoint,
             completions: getPrefixMatches(matchString, changeStacks)
           };
         });
       }
-      let lastColon = url.lastIndexOf(':');
-      let splitPoint = lastColon + 1;
-      let prefix = url.substring(0, splitPoint);
-      let matchString = url.substring(splitPoint);
-      let possibleMatches = volumeList.hierarchicalVolumeIds.get(prefix);
-      if (possibleMatches === undefined) {
-        throw null;
-      }
-      if (prefix) {
-        // Project id already matched.
-        return {offset: prefix.length, completions: getPrefixMatches(matchString, possibleMatches)};
-      } else {
-        return {
-          offset: 0,
-          completions: getPrefixMatchesWithDescriptions(
-              matchString, possibleMatches, x => x,
-              x => {
-                const metadata = volumeList.projects.get(x.substring(0, x.length - 1));
-                return metadata && metadata.label;
-              })
-        };
-      }
-    });
+    }
   }
+
 }
 
 export const productionInstance: BrainmapsInstance = {
   description: 'Google Brain Maps',
   serverUrls: ['https://brainmaps.googleapis.com'],
 };
+
