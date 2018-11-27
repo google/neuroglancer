@@ -211,33 +211,32 @@ export class MultiscaleVolumeChunkSource implements GenericMultiscaleVolumeChunk
         vec3.multiply(vec3.create(), baseScale.upperVoxelBound, baseScale.voxelSize);
 
     return this.scales.map(
-        (volumeInfo, scaleIndex) => VolumeChunkSpecification
-                                        .getDefaults({
-                                          voxelSize: volumeInfo.voxelSize,
-                                          dataType: volumeInfo.dataType,
-                                          numChannels: volumeInfo.numChannels,
-                                          upperVoxelBound: volumeInfo.upperVoxelBound,
-                                          upperClipBound,
-                                          volumeType: this.volumeType,
-                                          volumeSourceOptions,
-                                          chunkLayoutPreference: this.chunkLayoutPreference,
-                                          maxCompressedSegmentationBlockSize:
-                                              vec3.fromValues(64, 64, 64),
-                                        })
-                                        .map(spec => {
-                                          return this.chunkManager.getChunkSource(
-                                              BrainmapsVolumeChunkSource, {
-                                                credentialsProvider: this.credentialsProvider,
-                                                spec,
-                                                parameters: {
-                                                  'instance': this.instance,
-                                                  'volumeId': this.volumeId,
-                                                  'changeSpec': this.changeSpec,
-                                                  'scaleIndex': scaleIndex,
-                                                  'encoding': encoding,
-                                                }
-                                              });
-                                        }));
+        (volumeInfo, scaleIndex) =>
+            VolumeChunkSpecification
+                .getDefaults({
+                  voxelSize: volumeInfo.voxelSize,
+                  dataType: volumeInfo.dataType,
+                  numChannels: volumeInfo.numChannels,
+                  upperVoxelBound: volumeInfo.upperVoxelBound,
+                  upperClipBound,
+                  volumeType: this.volumeType,
+                  volumeSourceOptions,
+                  chunkLayoutPreference: this.chunkLayoutPreference,
+                  maxCompressedSegmentationBlockSize: vec3.fromValues(64, 64, 64),
+                })
+                .map(spec => {
+                  return this.chunkManager.getChunkSource(BrainmapsVolumeChunkSource, {
+                    credentialsProvider: this.credentialsProvider,
+                    spec,
+                    parameters: {
+                      'instance': this.instance,
+                      'volumeId': this.volumeId,
+                      'changeSpec': this.changeSpec,
+                      'scaleIndex': scaleIndex,
+                      'encoding': encoding,
+                    }
+                  });
+                }));
   }
 
   getMeshSource() {
@@ -338,7 +337,7 @@ function parseAPIResponseList(obj: any, propertyName: string) {
   try {
     verifyObject(obj);
     return verifyObjectProperty(
-      obj, propertyName, x => x === undefined ? [] : parseArray(x, verifyString));
+        obj, propertyName, x => x === undefined ? [] : parseArray(x, verifyString));
   } catch (parseError) {
     throw new Error(`Error parsing dataset list: ${parseError.message}`);
   }
@@ -539,74 +538,73 @@ export class BrainmapsDataSource extends DataSource {
 
   getProjectList(chunkManager: ChunkManager) {
     return chunkManager.memoize.getUncounted(
-      {instance: this.instance, type: 'brainmaps:getProjectList'}, () => {
-        let promise = makeRequest(
-          this.instance, this.credentialsProvider,
-          {method: 'GET', path: '/v1beta2/projects', responseType: 'json'}).then(
-            (projectsResponse) => {
-              return parseProjectList(projectsResponse);
-            });
-        const description = `${this.instance.description} project list`;
-        StatusMessage.forPromise(promise, {
-          delay: true,
-          initialMessage: `Retrieving ${description}.`,
-          errorPrefix: `Error retrieving ${description}: `,
+        {instance: this.instance, type: 'brainmaps:getProjectList'}, () => {
+          let promise = makeRequest(this.instance, this.credentialsProvider, {
+                          method: 'GET',
+                          path: '/v1beta2/projects',
+                          responseType: 'json'
+                        }).then((projectsResponse) => {
+            return parseProjectList(projectsResponse);
+          });
+          const description = `${this.instance.description} project list`;
+          StatusMessage.forPromise(promise, {
+            delay: true,
+            initialMessage: `Retrieving ${description}.`,
+            errorPrefix: `Error retrieving ${description}: `,
+          });
+          return promise;
         });
-        return promise;
-      });
   }
 
   getDatasetList(chunkManager: ChunkManager, project: string) {
     return chunkManager.memoize.getUncounted(
-      {instance: this.instance, type: `brainmaps:${project}:getDatasetList`}, () => {
-        let promise = makeRequest(
-          this.instance, this.credentialsProvider,
-          {
-            method: 'GET', path: `/v1beta2/datasets?project_id=${project}`, responseType: 'json'
-          }).then(
-            (datasetsResponse) => {
-              return parseAPIResponseList(datasetsResponse, 'datasetIds');
+        {instance: this.instance, type: `brainmaps:${project}:getDatasetList`}, () => {
+          let promise = makeRequest(this.instance, this.credentialsProvider, {
+                          method: 'GET',
+                          path: `/v1beta2/datasets?project_id=${project}`,
+                          responseType: 'json'
+                        }).then((datasetsResponse) => {
+            return parseAPIResponseList(datasetsResponse, 'datasetIds');
           });
-        const description = `${this.instance.description} dataset list`;
-        StatusMessage.forPromise(promise, {
-          delay: true,
-          initialMessage: `Retrieving ${description}`,
-          errorPrefix: `Error retrieving ${description}`
+          const description = `${this.instance.description} dataset list`;
+          StatusMessage.forPromise(promise, {
+            delay: true,
+            initialMessage: `Retrieving ${description}`,
+            errorPrefix: `Error retrieving ${description}`
+          });
+          return promise;
         });
-        return promise;
-      });
   }
 
   getVolumeList(chunkManager: ChunkManager, project: string, dataset: string) {
     return chunkManager.memoize.getUncounted(
-      {instance: this.instance, type: `brainmaps:${project}:${dataset}:getVolumeList`}, () => {
-        let promise = makeRequest(
-          this.instance, this.credentialsProvider,
-          {
-            method: 'GET', path: `/v1beta2/volumes?project_id=${project}&dataset_id=${dataset}`,
-            responseType: 'json'
-          }).then(
-            (volumesResponse) => {
-              const fullyQualifyiedVolumeList = parseAPIResponseList(volumesResponse, 'volumeId');
-              const splitPoint = project.length + dataset.length + 2;
-              const volumeList = [];
-              for (const volume of fullyQualifyiedVolumeList) {
-                volumeList.push(volume.substring(splitPoint));
-              }
-              return volumeList;
+        {instance: this.instance, type: `brainmaps:${project}:${dataset}:getVolumeList`}, () => {
+          let promise = makeRequest(this.instance, this.credentialsProvider, {
+                          method: 'GET',
+                          path: `/v1beta2/volumes?project_id=${project}&dataset_id=${dataset}`,
+                          responseType: 'json'
+                        }).then((volumesResponse) => {
+            const fullyQualifyiedVolumeList = parseAPIResponseList(volumesResponse, 'volumeId');
+            const splitPoint = project.length + dataset.length + 2;
+            const volumeList = [];
+            for (const volume of fullyQualifyiedVolumeList) {
+              volumeList.push(volume.substring(splitPoint));
+            }
+            return volumeList;
           });
-        const description = `${this.instance.description} volume list`;
-        StatusMessage.forPromise(promise, {
-          delay: true,
-          initialMessage: `Retrieving ${description}`,
-          errorPrefix: `Error retrieving ${description}`
+          const description = `${this.instance.description} volume list`;
+          StatusMessage.forPromise(promise, {
+            delay: true,
+            initialMessage: `Retrieving ${description}`,
+            errorPrefix: `Error retrieving ${description}`
+          });
+          return promise;
         });
-        return promise;
-      });
   }
 
   getChangeStackList(chunkManager: ChunkManager, volumeId: string) {
-    return chunkManager.memoize.getUncounted(        {instance: this.instance, type: 'brainmaps:getChangeStackList', volumeId}, () => {
+    return chunkManager.memoize.getUncounted(
+        {instance: this.instance, type: 'brainmaps:getChangeStackList', volumeId}, () => {
           let promise: Promise<string[]|undefined> =
               makeRequest(this.instance, this.credentialsProvider, {
                 method: 'GET',
@@ -626,11 +624,12 @@ export class BrainmapsDataSource extends DataSource {
   volumeCompleter(url: string, chunkManager: ChunkManager) {
     let colonCount = 0;
     const colonIndices = [];
-    for (let lastColon = url.indexOf(':'); lastColon >= 0; lastColon = url.indexOf(':', lastColon + 1)) {
+    for (let lastColon = url.indexOf(':'); lastColon >= 0;
+         lastColon = url.indexOf(':', lastColon + 1)) {
       colonIndices.push(lastColon);
       ++colonCount;
     }
-    switch(colonCount) {
+    switch (colonCount) {
       case 0: {  // Fetch project names
         return this.getProjectList(chunkManager).then((projectMetadata) => {
           let projectList: string[] = [];
@@ -645,11 +644,7 @@ export class BrainmapsDataSource extends DataSource {
           return {
             offset: 0,
             completions: getPrefixMatchesWithDescriptions(
-              url,
-              projectList,
-              x => x,
-              x => descriptionMap.get(x)
-            )
+                url, projectList, x => x, x => descriptionMap.get(x))
           };
         });
       }
@@ -666,10 +661,7 @@ export class BrainmapsDataSource extends DataSource {
           }
           possibleMatches.sort();
 
-          return {
-            offset: splitPoint,
-            completions: getPrefixMatches(matchString, possibleMatches)
-          };
+          return {offset: splitPoint, completions: getPrefixMatches(matchString, possibleMatches)};
         });
       }
 
@@ -680,10 +672,7 @@ export class BrainmapsDataSource extends DataSource {
         return this.getVolumeList(chunkManager, projectId, datasetId).then((volumeList) => {
           const matchString = url.substring(splitPoint);
 
-          return {
-            offset: splitPoint,
-            completions: getPrefixMatches(matchString, volumeList)
-          };
+          return {offset: splitPoint, completions: getPrefixMatches(matchString, volumeList)};
         });
       }
 
@@ -695,19 +684,14 @@ export class BrainmapsDataSource extends DataSource {
           if (changeStacks === undefined) {
             throw null;
           }
-          return {
-            offset: splitPoint,
-            completions: getPrefixMatches(matchString, changeStacks)
-          };
+          return {offset: splitPoint, completions: getPrefixMatches(matchString, changeStacks)};
         });
       }
     }
   }
-
 }
 
 export const productionInstance: BrainmapsInstance = {
   description: 'Google Brain Maps',
   serverUrls: ['https://brainmaps.googleapis.com'],
 };
-
