@@ -89,15 +89,7 @@ export function decodeFragmentChunk(chunk: FragmentChunk, response: ArrayBuffer)
 function decodeSkeletonChunk(chunk: SkeletonChunk, response: ArrayBuffer) {
   let dv = new DataView(response);
   let numVertices = dv.getUint32(0, true);
-  // let numVerticesHigh = dv.getUint32(4, true);
-  // if (numVerticesHigh !== 0) {
-  //   throw new Error(`The number of vertices should not exceed 2^32-1.`);
-  // }
   let numEdges = dv.getUint32(4, true);
-  // let numEdgesHigh = dv.getUint32(12, true);
-  // if (numEdgesHigh !== 0) {
-  //   throw new Error(`The number of edges should not exceed 2^32-1.`);
-  // }
   decodeSkeletonVertexPositionsAndIndices(
       chunk, response, Endianness.LITTLE, /*vertexByteOffset=*/8, numVertices,
       /*indexByteOffset=*/undefined, /*numEdges=*/numEdges);
