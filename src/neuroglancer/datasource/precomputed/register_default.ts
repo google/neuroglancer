@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-import {registerProvider} from 'neuroglancer/datasource/default_provider';
 import {PrecomputedDataSource} from 'neuroglancer/datasource/precomputed/frontend';
+import {registerProvider} from 'neuroglancer/datasource/default_provider';
 
 registerProvider('precomputed', () => new PrecomputedDataSource());
