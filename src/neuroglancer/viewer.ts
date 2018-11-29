@@ -626,7 +626,7 @@ export class Viewer extends RefCounted implements ViewerState {
   }
 
   promptJsonStateServer(message: string): void {
-    let json_server_input = prompt(message, 'https://api.myjson.com/bins');
+    let json_server_input = prompt(message, 'https://json.neurodata.io/v1');
     if (json_server_input !== null) {
       this.jsonStateServer.value = json_server_input;
       console.log('entered for JSON server:', this.jsonStateServer.value);
