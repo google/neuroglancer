@@ -34,8 +34,6 @@ Neuroglancer itself is purely a client-side program, but it depends on data bein
 - DVID <https://github.com/janelia-flyem/dvid>
 - Render <https://github.com/saalfeldlab/render>
 - [Precomputed chunk/mesh fragments exposed over HTTP](src/neuroglancer/datasource/precomputed)
-- [BigArrays.jl](https://github.com/seung-lab/BigArrays.jl)
-- [cloudvolume](https://github.com/seung-lab/cloud-volume)
 - Single NIfTI files <https://www.nitrc.org/projects/nifti>
 - [Python in-memory volumes](python/README.md) (with automatic mesh generation)
 
@@ -167,6 +165,8 @@ There is a Google Group/mailing list for discussion related to Neuroglancer:
   Scripts for converting the [BigBrain](https://bigbrain.loris.ca) dataset to the
   Neuroglancer [precomputed data format](src/neuroglancer/datasource/precomputed), which may serve
   as a useful example for converting other datasets.
+- [BigArrays.jl](https://github.com/seung-lab/BigArrays.jl) - Julia interface of neuroglancer precomputed data format.
+- [cloudvolume](https://github.com/seung-lab/cloud-volume) - Python interface of neuroglancer precomputed data format.
 
 # Contributing
 
