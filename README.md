@@ -34,6 +34,8 @@ Neuroglancer itself is purely a client-side program, but it depends on data bein
 - DVID <https://github.com/janelia-flyem/dvid>
 - Render <https://github.com/saalfeldlab/render>
 - [Precomputed chunk/mesh fragments exposed over HTTP](src/neuroglancer/datasource/precomputed)
+- [BigArrays.jl](https://github.com/seung-lab/BigArrays.jl)
+- [cloudvolume](https://github.com/seung-lab/cloud-volume)
 - Single NIfTI files <https://www.nitrc.org/projects/nifti>
 - [Python in-memory volumes](python/README.md) (with automatic mesh generation)
 
