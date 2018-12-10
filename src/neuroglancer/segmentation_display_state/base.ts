@@ -27,6 +27,7 @@ export interface Bounds {
 
 export interface VisibleSegmentsStateWithoutClipBounds {
   rootSegments: Uint64Set;
+  hiddenRootSegments?: Uint64Set; // not needed for backend, for segment_set_widget.ts
   visibleSegments2D?: Uint64Set; // not needed for backend
   visibleSegments3D: Uint64Set;
   segmentEquivalences: SharedDisjointUint64Sets;

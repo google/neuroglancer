@@ -78,6 +78,7 @@ export class SegmentationUserLayer extends Base {
         clipBounds: SharedWatchableValue.make<Bounds|undefined>(this.manager.worker, undefined),
         hideSegmentZero: new TrackableBoolean(true, true),
         rootSegments: Uint64Set.makeWithCounterpart(this.manager.worker),
+        hiddenRootSegments: new Uint64Set(),
         visibleSegments2D: new Uint64Set(),
         visibleSegments3D: Uint64Set.makeWithCounterpart(this.manager.worker),
         highlightedSegments: Uint64Set.makeWithCounterpart(this.manager.worker),
