@@ -59,6 +59,7 @@ const CHUNKED_GRAPH_JSON_KEY = 'chunkedGraph';
 const MESH_JSON_KEY = 'mesh';
 const SKELETONS_JSON_KEY = 'skeletons';
 const ROOT_SEGMENTS_JSON_KEY = 'segments';
+const HIDDEN_ROOT_SEGMENTS_JSON_KEY = 'hiddenSegments';
 const HIGHLIGHTS_JSON_KEY = 'highlights';
 const EQUIVALENCES_JSON_KEY = 'equivalences';
 const CLIP_BOUNDS_JSON_KEY = 'clipBounds';
@@ -162,6 +163,7 @@ export class SegmentationUserLayer extends Base {
     };
 
     restoreSegmentsList(ROOT_SEGMENTS_JSON_KEY, this.displayState.rootSegments);
+    restoreSegmentsList(HIDDEN_ROOT_SEGMENTS_JSON_KEY, this.displayState.hiddenRootSegments!);
     restoreSegmentsList(HIGHLIGHTS_JSON_KEY, this.displayState.highlightedSegments);
 
     verifyObjectProperty(specification, CLIP_BOUNDS_JSON_KEY, y => {
@@ -320,6 +322,10 @@ export class SegmentationUserLayer extends Base {
     let {rootSegments} = this.displayState;
     if (rootSegments.size > 0) {
       x[ROOT_SEGMENTS_JSON_KEY] = rootSegments.toJSON();
+    }
+    const {hiddenRootSegments} = this.displayState;
+    if (hiddenRootSegments!.size > 0) {
+      x[HIDDEN_ROOT_SEGMENTS_JSON_KEY] = hiddenRootSegments!.toJSON();
     }
     let {highlightedSegments} = this.displayState;
     if (highlightedSegments.size > 0) {
