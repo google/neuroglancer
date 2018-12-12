@@ -262,7 +262,6 @@ export class SegmentSetWidget extends RefCounted {
         const itemCopyIDButton = document.createElement('button');
         itemCopyIDButton.className = 'segment-copy-button';
         itemCopyIDButton.title = `Copy segment ID ${segmentIDString}`;
-        // itemCopyIDButton.textContent = '\u2702';
         itemCopyIDButton.innerHTML = copyIcon;
         SegmentSetWidget.addCopyToClipboardEventToButton(itemCopyIDButton, () => segmentIDString);
         return itemCopyIDButton;
@@ -326,17 +325,20 @@ export class SegmentSetWidget extends RefCounted {
     const toggleItemsCheckbox = document.createElement('input');
     toggleItemsCheckbox.type = 'checkbox';
     toggleItemsCheckbox.className = 'segment-checkbox';
+    toggleItemsCheckbox.title = 'Uncheck to hide all segments';
     toggleItemsCheckbox.checked = true;
     toggleItemsCheckbox.addEventListener('change', function(this: HTMLInputElement) {
       if (this.checked) {
         for (const x of widget.hiddenRootSegments!) {
           widget.rootSegments.add(x);
         }
+        toggleItemsCheckbox.title = 'Uncheck to hide all segments';
       }
       else {
         for (const x of widget.rootSegments) {
           widget.hiddenRootSegments!.add(x);
         }
+        toggleItemsCheckbox.title = 'Check to hide all segments';
       }
     });
     return toggleItemsCheckbox;
