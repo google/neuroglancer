@@ -35,24 +35,9 @@
   vertical-align: bottom;
 }
 
-.copy-visible-segment-IDs-button {
-  height: 21px;
-  vertical-align: bottom;
-}
-
 .segment-copy-button {
   height: 21px;
-  font-size: 1.1em;
   vertical-align: bottom;
-}
-
-.for-all-symbol-for-button {
-  position: relative;
-  bottom: 1px;
-}
-
-.copy-all-symbol-for-button {
-  font-size: 1.25em;
 }
 
 .eyes-symbol-for-button {
@@ -64,4 +49,10 @@
 .copy-visible-segment-IDs-button {
   padding-left: 4px;
   padding-right: 4px;
+}
+
+.segment-checkbox {
+  width: 1.2em;
+  height: 1.2em;
+  vertical-align: bottom;
 }

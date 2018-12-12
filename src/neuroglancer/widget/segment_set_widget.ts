@@ -21,6 +21,8 @@ import {Uint64} from 'neuroglancer/util/uint64';
 require('neuroglancer/noselect.css');
 require('./segment_set_widget.css');
 
+const copyIcon = require('neuroglancer/../../assets/icons/copySegment.svg');
+
 type ItemElement = HTMLDivElement;
 
 const temp = new Uint64();
@@ -81,10 +83,10 @@ export class SegmentSetWidget extends RefCounted {
     const {element, topButtons, itemContainer} = this;
     element.className = 'segment-set-widget neuroglancer-noselect';
     topButtons.className = 'top-buttons';
-
     topButtons.appendChild(this.createClearButton());
     topButtons.appendChild(this.createCopyAllSegmentIDsButton());
-    topButtons.appendChild(this.createDisplayedSegmentIDsButton());
+    topButtons.appendChild(this.createCopyVisibleSegmentIDsButton());
+    topButtons.appendChild(this.createToggleItemsCheckbox());
     itemContainer.className = 'item-container';
     element.appendChild(itemContainer);
 
@@ -139,7 +141,7 @@ export class SegmentSetWidget extends RefCounted {
           // Preparing to enable or disable an element
           enabledItems.set(segmentIDString, disabledItem);
           hiddenRootSegments!.delete(x);
-          this.setItemsToggleButtonToHideSegment(disabledItem, segmentIDString);
+          this.checkItemsCheckbox(disabledItem, segmentIDString);
         }
       }
     } else {
@@ -175,7 +177,7 @@ export class SegmentSetWidget extends RefCounted {
           // Preparing to enable or disable an element
           disabledItems.set(segmentIDString, enabledItem);
           rootSegments.delete(x);
-          this.setItemsToggleButtonToShowSegment(enabledItem, segmentIDString);
+          this.uncheckItemsCheckbox(enabledItem, segmentIDString);
         }
       }
     } else {
@@ -192,22 +194,19 @@ export class SegmentSetWidget extends RefCounted {
   }
 
   private addElement(segmentIDString: string, segmentEnabled: boolean) {
-    // Wrap buttons in div so node button and its hide button appear on same line
+    // Wrap buttons in div so node button and its hide and copy buttons appear on same line
     const itemElement = document.createElement('div');
     itemElement.className = 'segment-div';
-    const itemsToggleButton = this.createItemToggleButton(segmentIDString);
-    if (segmentEnabled) {
-      SegmentSetWidget.setToggleButtonToHideSegment(itemsToggleButton, segmentIDString);
-      this.enabledItems.set(segmentIDString, itemElement);
-    } else {
-      SegmentSetWidget.setToggleButtonToShowSegment(itemsToggleButton, segmentIDString);
-      this.disabledItems.set(segmentIDString, itemElement);
-    }
     itemElement.appendChild(this.createItemButton(segmentIDString));
-    itemElement.appendChild(itemsToggleButton);
     itemElement.appendChild(this.createItemCopyIDButton(segmentIDString));
+    itemElement.appendChild(this.createItemCheckbox(segmentEnabled, segmentIDString));
     this.setItemButtonColor(itemElement);
     this.itemContainer.appendChild(itemElement);
+    if (segmentEnabled) {
+      this.enabledItems.set(segmentIDString, itemElement);
+    } else {
+      this.disabledItems.set(segmentIDString, itemElement);
+    }
   }
 
   private createItemButton = (segmentIDString: string):
@@ -233,12 +232,18 @@ export class SegmentSetWidget extends RefCounted {
         return itemButton;
       }
 
-  private createItemToggleButton = (segmentIDString: string):
-      HTMLButtonElement => {
+  private createItemCheckbox = (segmentEnabled: boolean, segmentIDString: string):
+      HTMLInputElement => {
         const widget = this;
-        const itemToggleButton = document.createElement('button');
-        itemToggleButton.className = 'segment-toggle-button';
-        itemToggleButton.addEventListener('click', function(this: HTMLButtonElement) {
+        const itemCheckbox = document.createElement('input');
+        itemCheckbox.type = 'checkbox';
+        itemCheckbox.className = 'segment-checkbox';
+        if (segmentEnabled) {
+          SegmentSetWidget.checkCheckbox(itemCheckbox, segmentIDString);
+        } else {
+          SegmentSetWidget.uncheckCheckbox(itemCheckbox, segmentIDString);
+        }
+        itemCheckbox.addEventListener('change', function(this: HTMLInputElement) {
           temp.tryParseString(segmentIDString);
           if (widget.enabledItems.get(segmentIDString)) {
             // Add to hiddenRootSegments. handleSetChanged will delete segment from rootSegments
@@ -248,7 +253,7 @@ export class SegmentSetWidget extends RefCounted {
             widget.rootSegments.add(temp);
           }
         });
-        return itemToggleButton;
+        return itemCheckbox;
       }
 
   private createItemCopyIDButton = (segmentIDString: string):
@@ -257,7 +262,8 @@ export class SegmentSetWidget extends RefCounted {
         const itemCopyIDButton = document.createElement('button');
         itemCopyIDButton.className = 'segment-copy-button';
         itemCopyIDButton.title = `Copy segment ID ${segmentIDString}`;
-        itemCopyIDButton.textContent = '\u2702';
+        // itemCopyIDButton.textContent = '\u2702';
+        itemCopyIDButton.innerHTML = copyIcon;
         SegmentSetWidget.addCopyToClipboardEventToButton(itemCopyIDButton, () => segmentIDString);
         return itemCopyIDButton;
       }
@@ -290,34 +296,47 @@ export class SegmentSetWidget extends RefCounted {
     const copyAllSegmentIDsButton = document.createElement('button');
     copyAllSegmentIDsButton.className = 'copy-all-segment-IDs-button';
     copyAllSegmentIDsButton.title = 'Copy all segment IDs';
-    const forAllSymbol = document.createElement('span');
-    forAllSymbol.className = 'for-all-symbol-for-button';
-    forAllSymbol.textContent = '\u2200 ';
-    const copySymbol = document.createElement('span');
-    copySymbol.className = 'copy-all-symbol-for-button';
-    copySymbol.textContent = '\u2702';
-    copyAllSegmentIDsButton.appendChild(forAllSymbol);
-    copyAllSegmentIDsButton.appendChild(copySymbol);
+    copyAllSegmentIDsButton.innerHTML = copyIcon;
     SegmentSetWidget.addCopyToClipboardEventToButton(copyAllSegmentIDsButton, segmentIDsToCSV);
     return copyAllSegmentIDsButton;
   }
 
-  private createDisplayedSegmentIDsButton(): HTMLButtonElement {
+  private createCopyVisibleSegmentIDsButton(): HTMLButtonElement {
     const {segmentIDsToCSV} = this;
     const copyVisibleSegmentIDsButton = document.createElement('button');
-    copyVisibleSegmentIDsButton.className = 'copy-visible-segment-IDs-button';
+    copyVisibleSegmentIDsButton.className = 'segment-copy-button copy-visible-segment-IDs-button';
     copyVisibleSegmentIDsButton.title = 'Copy visible segment IDs';
     const eyesSymbol = document.createElement('span');
     eyesSymbol.className = 'eyes-symbol-for-button';
-    eyesSymbol.textContent = '👀 ';
+    eyesSymbol.textContent = ' 👀';
     const copySymbol = document.createElement('span');
-    copySymbol.className = 'copy-all-symbol-for-button';
-    copySymbol.textContent = '\u2702';
-    copyVisibleSegmentIDsButton.appendChild(eyesSymbol);
+    copySymbol.innerHTML = copyIcon;
     copyVisibleSegmentIDsButton.appendChild(copySymbol);
+    copyVisibleSegmentIDsButton.appendChild(eyesSymbol);
     SegmentSetWidget.addCopyToClipboardEventToButton(
         copyVisibleSegmentIDsButton, () => segmentIDsToCSV(true));
     return copyVisibleSegmentIDsButton;
+  }
+
+  private createToggleItemsCheckbox(): HTMLInputElement {
+    const widget = this;
+    const toggleItemsCheckbox = document.createElement('input');
+    toggleItemsCheckbox.type = 'checkbox';
+    toggleItemsCheckbox.className = 'segment-checkbox';
+    toggleItemsCheckbox.checked = true;
+    toggleItemsCheckbox.addEventListener('change', function(this: HTMLInputElement) {
+      if (this.checked) {
+        for (const x of widget.hiddenRootSegments!) {
+          widget.rootSegments.add(x);
+        }
+      }
+      else {
+        for (const x of widget.rootSegments) {
+          widget.hiddenRootSegments!.add(x);
+        }
+      }
+    });
+    return toggleItemsCheckbox;
   }
 
   private segmentIDsToCSV = (displayedOnly: boolean = false):
@@ -368,32 +387,26 @@ export class SegmentSetWidget extends RefCounted {
     });
   }
 
-  private setItemsToggleButtonToHideSegment(itemElement: ItemElement, segmentIDString: string) {
-    const itemToggleButton =
-        <HTMLButtonElement>(itemElement.getElementsByClassName('segment-toggle-button')[0]);
-    SegmentSetWidget.setToggleButtonToHideSegment(itemToggleButton, segmentIDString);
+  private checkItemsCheckbox(itemElement: ItemElement, segmentIDString: string) {
+    const itemCheckbox =
+        <HTMLInputElement>(itemElement.getElementsByClassName('segment-checkbox')[0]);
+    SegmentSetWidget.checkCheckbox(itemCheckbox, segmentIDString);
   }
 
-  private static setToggleButtonToHideSegment(
-      itemToggleButton: HTMLButtonElement, segmentIDString: string) {
-    itemToggleButton.textContent = 'Hide';
-    itemToggleButton.title = `Hide segment ID ${segmentIDString}`;
-    itemToggleButton.style.borderStyle = 'outset';
-    itemToggleButton.style.backgroundColor = 'rgb(240, 240, 240)';
+  private static checkCheckbox(checkbox: HTMLInputElement, segmentIDString: string) {
+    checkbox.checked = true;
+    checkbox.title = `Uncheck to hide segment ID ${segmentIDString}`;
   }
 
-  private setItemsToggleButtonToShowSegment(itemElement: ItemElement, segmentIDString: string) {
-    const itemToggleButton =
-        <HTMLButtonElement>(itemElement.getElementsByClassName('segment-toggle-button')[0]);
-    SegmentSetWidget.setToggleButtonToShowSegment(itemToggleButton, segmentIDString);
+  private uncheckItemsCheckbox(itemElement: ItemElement, segmentIDString: string) {
+    const itemCheckbox =
+        <HTMLInputElement>(itemElement.getElementsByClassName('segment-checkbox')[0]);
+    SegmentSetWidget.uncheckCheckbox(itemCheckbox, segmentIDString);
   }
 
-  private static setToggleButtonToShowSegment(
-      itemToggleButton: HTMLButtonElement, segmentIDString: string) {
-    itemToggleButton.textContent = 'Show';
-    itemToggleButton.title = `Show segment ID ${segmentIDString}`;
-    itemToggleButton.style.borderStyle = 'inset';
-    itemToggleButton.style.backgroundColor = 'rgb(210, 210, 210)';
+  private static uncheckCheckbox(checkbox: HTMLInputElement, segmentIDString: string) {
+    checkbox.checked = false;
+    checkbox.title = `Check to show segment ID ${segmentIDString}`;
   }
 
   disposed() {

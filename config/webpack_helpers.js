@@ -185,6 +185,11 @@ function getBaseConfig(options) {
     module: {
       rules: [
         tsLoaderEntry, {test: /\.json$/, loader: require.resolve('json-loader')}, {
+          test: /\.svg$/,
+          loader: require.resolve('svg-inline-loader'),
+          options: {removeSVGTagAttrs: false}
+        },
+        {
           test: /\.css$/,
           loader: ExtractTextPlugin.extract({fallback: 'style-loader', use: 'css-loader'})
         },
