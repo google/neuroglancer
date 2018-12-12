@@ -278,6 +278,9 @@ export class SegmentSetWidget extends RefCounted {
     this.enabledItems.forEach(itemElement => {
       this.setItemButtonColor(itemElement);
     });
+    this.disabledItems.forEach(itemElement => {
+      this.setItemButtonColor(itemElement);
+    });
   }
 
   private createClearButton(): HTMLButtonElement {
