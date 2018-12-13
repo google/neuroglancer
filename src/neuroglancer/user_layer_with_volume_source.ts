@@ -40,9 +40,14 @@ function helper<TBase extends BaseConstructor>(Base: TBase) {
       const volumePath = this.volumePath =
           verifyObjectProperty(specification, SOURCE_JSON_KEY, verifyOptionalString);
       if (volumePath !== undefined) {
+        const volumeOptions = this.volumeOptions ?
+            this.volumeOptions :
+            {dataSourceProvider: this.manager.dataSourceProvider};
+        if (!volumeOptions.dataSourceProvider) {
+          volumeOptions.dataSourceProvider = this.manager.dataSourceProvider;
+        }
         const multiscaleSource = this.multiscaleSource = getVolumeWithStatusMessage(
-            this.manager.dataSourceProvider, this.manager.chunkManager, volumePath,
-            this.volumeOptions);
+            this.manager.dataSourceProvider, this.manager.chunkManager, volumePath, volumeOptions);
         multiscaleSource.then(volume => {
           if (!this.wasDisposed) {
             const staticAnnotations = volume.getStaticAnnotations && volume.getStaticAnnotations();

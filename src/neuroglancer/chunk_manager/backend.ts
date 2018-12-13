@@ -31,6 +31,10 @@ import {initializeSharedObjectCounterpart, registerRPC, registerSharedObject, re
 
 const DEBUG_CHUNK_UPDATES = false;
 
+export interface ChunkStateListener {
+  stateChanged(chunk: Chunk, oldState: ChunkState): void;
+}
+
 export class Chunk implements Disposable {
   // Node properties used for eviction/promotion heaps and LRU linked lists.
   child0: Chunk|null = null;
@@ -43,7 +47,8 @@ export class Chunk implements Disposable {
   source: ChunkSource|null = null;
 
   key: string|null = null;
-  state = ChunkState.NEW;
+
+  private state_ = ChunkState.NEW;
 
   error: any = null;
 
@@ -69,6 +74,7 @@ export class Chunk implements Disposable {
   systemMemoryBytes: number;
   gpuMemoryBytes: number;
   backendOnly = false;
+  isComputational = false;
 
   /**
    * Cancellation token used to cancel the pending download.  Set to undefined except when state !==
@@ -78,12 +84,12 @@ export class Chunk implements Disposable {
 
   initialize(key: string) {
     this.key = key;
-    this.state = ChunkState.NEW;
     this.priority = Number.NEGATIVE_INFINITY;
     this.priorityTier = ChunkPriorityTier.RECENT;
     this.newPriority = Number.NEGATIVE_INFINITY;
     this.newPriorityTier = ChunkPriorityTier.RECENT;
     this.error = null;
+    this.state = ChunkState.NEW;
   }
 
   /**
@@ -133,6 +139,33 @@ export class Chunk implements Disposable {
     return this.key;
   }
 
+  set state(newState: ChunkState) {
+    if (newState === this.state_) {
+      return;
+    }
+    const oldState = this.state_;
+    this.state_ = newState;
+    this.source!.chunkStateChanged(this, oldState);
+  }
+
+  get state() {
+    return this.state_;
+  }
+
+  registerListener(listener: ChunkStateListener) {
+    if (!this.source) {
+      return false;
+    }
+    return this.source.registerChunkListener(this.key!, listener);
+  }
+
+  unregisterListener(listener: ChunkStateListener) {
+    if (!this.source) {
+      return false;
+    }
+    return this.source.unregisterChunkListener(this.key!, listener);
+  }
+
   static priorityLess(a: Chunk, b: Chunk) {
     return a.priority < b.priority;
   }
@@ -152,6 +185,7 @@ export interface ChunkConstructor<T extends Chunk> {
  * has only a backend part.
  */
 export class ChunkSourceBase extends SharedObject {
+  private listeners_ = new Map<string, ChunkStateListener[]>();
   chunks: Map<string, Chunk> = new Map<string, Chunk>();
   freeChunks: Chunk[] = new Array<Chunk>();
 
@@ -199,6 +233,43 @@ export class ChunkSourceBase extends SharedObject {
     freeChunks[freeChunks.length] = chunk;
     if (chunks.size === 0) {
       this.dispose();
+    }
+  }
+
+  registerChunkListener(key: string, listener: ChunkStateListener) {
+    if (!this.listeners_.has(key)) {
+      this.listeners_.set(key, [listener]);
+    } else {
+      this.listeners_.get(key)!.push(listener);
+    }
+    return true;
+  }
+
+  unregisterChunkListener(key: string, listener: ChunkStateListener) {
+    if (!this.listeners_.has(key)) {
+      return false;
+    }
+    const keyListeners = this.listeners_.get(key)!;
+    const idx = keyListeners.indexOf(listener);
+    if (idx < 0) {
+      return false;
+    }
+    keyListeners.splice(idx, 1);
+    if (keyListeners.length === 0) {
+      this.listeners_.delete(key);
+    }
+    return true;
+  }
+
+  chunkStateChanged(chunk: Chunk, oldState: ChunkState) {
+    if (!chunk.key) {
+      return;
+    }
+    if (!this.listeners_.has(chunk.key)) {
+      return;
+    }
+    for (const listener of [...this.listeners_.get(chunk.key)!]) {
+      listener.stateChanged(chunk, oldState);
     }
   }
 }
@@ -412,16 +483,27 @@ export class ChunkQueueManager extends SharedObjectCounterpart {
   gpuMemoryCapacity: AvailableCapacity;
   systemMemoryCapacity: AvailableCapacity;
   downloadCapacity: AvailableCapacity;
+  computeCapacity: AvailableCapacity;
 
   /**
-   * Contains all chunks in QUEUED state.
+   * Contains all chunks in QUEUED state pending download.
    */
-  private queuedPromotionQueue = makeChunkPriorityQueue1(Chunk.priorityGreater);
+  private queuedDownloadPromotionQueue = makeChunkPriorityQueue1(Chunk.priorityGreater);
+
+  /**
+   * Contains all chunks in QUEUED state pending compute.
+   */
+  private queuedComputePromotionQueue = makeChunkPriorityQueue1(Chunk.priorityGreater);
 
   /**
    * Contains all chunks in DOWNLOADING state.
    */
   private downloadEvictionQueue = makeChunkPriorityQueue1(Chunk.priorityLess);
+
+  /**
+   * Contains all chunks in COMPUTING state.
+   */
+  private computeEvictionQueue = makeChunkPriorityQueue1(Chunk.priorityLess);
 
   /**
    * Contains all chunks that take up memory (DOWNLOADING, SYSTEM_MEMORY,
@@ -455,6 +537,7 @@ export class ChunkQueueManager extends SharedObjectCounterpart {
     this.gpuMemoryCapacity = getCapacity(options['gpuMemoryCapacity']);
     this.systemMemoryCapacity = getCapacity(options['systemMemoryCapacity']);
     this.downloadCapacity = getCapacity(options['downloadCapacity']);
+    this.computeCapacity = getCapacity(options['computeCapacity']);
   }
 
   scheduleUpdate() {
@@ -466,11 +549,20 @@ export class ChunkQueueManager extends SharedObjectCounterpart {
   * chunkQueuesForChunk(chunk: Chunk) {
     switch (chunk.state) {
       case ChunkState.QUEUED:
-        yield this.queuedPromotionQueue;
+        if (chunk.isComputational) {
+          yield this.queuedComputePromotionQueue;
+        } else {
+          yield this.queuedDownloadPromotionQueue;
+        }
         break;
 
       case ChunkState.DOWNLOADING:
         yield this.downloadEvictionQueue;
+        yield this.systemMemoryEvictionQueue;
+        break;
+
+      case ChunkState.COMPUTING:
+        yield this.computeEvictionQueue;
         yield this.systemMemoryEvictionQueue;
         break;
 
@@ -503,6 +595,11 @@ export class ChunkQueueManager extends SharedObjectCounterpart {
       case ChunkState.DOWNLOADING:
         this.downloadCapacity.adjust(factor, 0);
         this.systemMemoryCapacity.adjust(factor, 0);
+        break;
+
+      case ChunkState.COMPUTING:
+        this.computeCapacity.adjust(factor, factor * chunk.systemMemoryBytes);
+        this.systemMemoryCapacity.adjust(factor, factor * chunk.systemMemoryBytes);
         break;
 
       case ChunkState.SYSTEM_MEMORY:
@@ -637,6 +734,7 @@ export class ChunkQueueManager extends SharedObjectCounterpart {
     const evict = (chunk: Chunk) => {
       switch (chunk.state) {
         case ChunkState.DOWNLOADING:
+        case ChunkState.COMPUTING:
           cancelChunkDownload(chunk);
           break;
         case ChunkState.GPU_MEMORY:
@@ -649,15 +747,15 @@ export class ChunkQueueManager extends SharedObjectCounterpart {
       // Note: After calling this, chunk may no longer be valid.
       this.updateChunkState(chunk, ChunkState.QUEUED);
     };
-    let promotionCandidates = this.queuedPromotionQueue.candidates();
+    let downloadPromotionCandidates = this.queuedDownloadPromotionQueue.candidates();
     let downloadEvictionCandidates = this.downloadEvictionQueue.candidates();
     let systemMemoryEvictionCandidates = this.systemMemoryEvictionQueue.candidates();
     let downloadCapacity = this.downloadCapacity;
     let systemMemoryCapacity = this.systemMemoryCapacity;
     while (true) {
-      let promotionCandidateResult = promotionCandidates.next();
+      let promotionCandidateResult = downloadPromotionCandidates.next();
       if (promotionCandidateResult.done) {
-        return;
+        break;
       }
       let promotionCandidate = promotionCandidateResult.value;
       const size = 0; /* unknown size, since it hasn't been downloaded yet. */
@@ -666,6 +764,32 @@ export class ChunkQueueManager extends SharedObjectCounterpart {
       // console.log("Download capacity: " + downloadCapacity);
       if (!tryToFreeCapacity(
               size, downloadCapacity, priorityTier, priority, downloadEvictionCandidates, evict)) {
+        break;
+      }
+      if (!tryToFreeCapacity(
+              size, systemMemoryCapacity, priorityTier, priority, systemMemoryEvictionCandidates,
+              evict)) {
+        break;
+      }
+      this.updateChunkState(promotionCandidate, ChunkState.DOWNLOADING);
+      startChunkDownload(promotionCandidate);
+    }
+
+    let computePromotionCandidates = this.queuedComputePromotionQueue.candidates();
+    let computeEvictionCandidates = this.computeEvictionQueue.candidates();
+    let computeCapacity = this.computeCapacity;
+
+    while (true) {
+      let promotionCandidateResult = computePromotionCandidates.next();
+      if (promotionCandidateResult.done) {
+        return;
+      }
+      let promotionCandidate = promotionCandidateResult.value;
+      const size = 0; /* unknown size, since it hasn't been computed yet. */
+      let priorityTier = promotionCandidate.priorityTier;
+      let priority = promotionCandidate.priority;
+      if (!tryToFreeCapacity(
+              size, computeCapacity, priorityTier, priority, computeEvictionCandidates, evict)) {
         return;
       }
       if (!tryToFreeCapacity(
@@ -673,7 +797,7 @@ export class ChunkQueueManager extends SharedObjectCounterpart {
               evict)) {
         return;
       }
-      this.updateChunkState(promotionCandidate, ChunkState.DOWNLOADING);
+      this.updateChunkState(promotionCandidate, ChunkState.COMPUTING);
       startChunkDownload(promotionCandidate);
     }
   }
@@ -773,6 +897,9 @@ export class ChunkManager extends SharedObjectCounterpart {
    * @param priority Priority within tier.
    */
   requestChunk(chunk: Chunk, tier: ChunkPriorityTier, priority: number) {
+    if (tier === ChunkPriorityTier.RECENT) {
+      throw new Error('Not going to request a chunk with the RECENT tier');
+    }
     if (chunk.newPriorityTier === ChunkPriorityTier.RECENT) {
       this.newTierChunks.push(chunk);
     }
@@ -836,7 +963,9 @@ export function WithParameters<Parameters, TBase extends {new (...args: any[]): 
 /**
  * Interface that represents shared objects that request chunks from a ChunkManager.
  */
-export interface ChunkRequester extends SharedObject { chunkManager: ChunkManager; }
+export interface ChunkRequester extends SharedObject {
+  chunkManager: ChunkManager;
+}
 
 /**
  * Mixin that adds a chunkManager property initialized from the RPC-supplied options.

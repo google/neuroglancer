@@ -80,7 +80,8 @@ export class ChunkQueueManager extends SharedObject {
   constructor(rpc: RPC, public gl: GL, public capacities: {
     gpuMemory: CapacitySpecification,
     systemMemory: CapacitySpecification,
-    download: CapacitySpecification
+    download: CapacitySpecification,
+    compute: CapacitySpecification
   }) {
     super();
 
@@ -99,6 +100,7 @@ export class ChunkQueueManager extends SharedObject {
       'gpuMemoryCapacity': makeCapacityCounterparts(capacities.gpuMemory),
       'systemMemoryCapacity': makeCapacityCounterparts(capacities.systemMemory),
       'downloadCapacity': makeCapacityCounterparts(capacities.download),
+      'computeCapacity': makeCapacityCounterparts(capacities.compute)
     });
   }
 
@@ -210,7 +212,7 @@ registerRPC('Chunk.update', function(x) {
 
   let pendingTail = queueManager.pendingChunkUpdatesTail;
   if (++(<any>window).numPendingChunkUpdates > 3) {
-    //console.log(`numPendingChunkUpdates=${(<any>window).numPendingChunkUpdates}`);
+    // console.log(`numPendingChunkUpdates=${(<any>window).numPendingChunkUpdates}`);
   }
   if (pendingTail == null) {
     queueManager.pendingChunkUpdates = x;
@@ -309,8 +311,8 @@ export class ChunkSource extends SharedObject {
   }
 }
 
-export function
-WithParameters<Parameters, BaseOptions, TBase extends ChunkSourceConstructor<BaseOptions, SharedObject>>(
+export function WithParameters<Parameters, BaseOptions,
+                               TBase extends ChunkSourceConstructor<BaseOptions, SharedObject>>(
     Base: TBase, parametersConstructor: ChunkSourceParametersConstructor<Parameters>) {
   type Options = BaseOptions&{parameters: Parameters};
   @registerSharedObjectOwner(parametersConstructor.RPC_ID)

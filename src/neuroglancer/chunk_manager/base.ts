@@ -14,7 +14,6 @@
  * limitations under the License.
  */
 
-
 export enum ChunkState {
   // Chunk is stored in GPU memory in addition to system memory.
   GPU_MEMORY = 0,
@@ -35,8 +34,22 @@ export enum ChunkState {
   // Download failed.
   FAILED = 6,
 
-  EXPIRED = 7
+  EXPIRED = 7,
+
+  COMPUTING = 8
 }
+
+export const CHUNK_STATE_NAMES = [
+  'GPU',
+  'SYSTEM',
+  'WORKER',
+  'DOWNLOADING',
+  'QUEUED',
+  'NEW',
+  'FAILED',
+  'EXPIRED',
+  'COMPUTING'
+];
 
 export enum ChunkPriorityTier {
   FIRST_TIER = 0,
