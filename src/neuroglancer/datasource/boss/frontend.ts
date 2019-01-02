@@ -195,7 +195,7 @@ export class MultiscaleVolumeChunkSource implements GenericMultiscaleVolumeChunk
   get dataType() {
     if (this.channelInfo.dataType === DataType.UINT16) {
       // 16-bit channels automatically rescaled to uint8 by The Boss
-      return DataType.UINT8;
+      return DataType.UINT16;
     }
     return this.channelInfo.dataType;
   }
