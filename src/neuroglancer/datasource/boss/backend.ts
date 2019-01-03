@@ -22,7 +22,7 @@ import {VolumeChunkSourceParameters, MeshSourceParameters} from 'neuroglancer/da
 import {VolumeChunkSource, VolumeChunk} from 'neuroglancer/sliceview/volume/backend';
 import {decodeJsonManifestChunk, decodeTriangleVertexPositionsAndIndices, FragmentChunk, ManifestChunk, MeshSource} from 'neuroglancer/mesh/backend';
 import {ChunkDecoder} from 'neuroglancer/sliceview/backend_chunk_decoders';
-import {decodeJpegChunk} from 'neuroglancer/sliceview/backend_chunk_decoders/jpeg';
+// import {decodeJpegChunk} from 'neuroglancer/sliceview/backend_chunk_decoders/jpeg';
 import {decodeBossNpzChunk} from 'neuroglancer/sliceview/backend_chunk_decoders/bossNpz';
 import {openShardedHttpRequest, sendHttpRequest} from 'neuroglancer/util/http_request';
 import {CancellationToken} from 'neuroglancer/util/cancellation';
@@ -31,11 +31,11 @@ import {registerSharedObject, SharedObject} from 'neuroglancer/worker_rpc';
 
 let chunkDecoders = new Map<string, ChunkDecoder>();
 chunkDecoders.set('npz', decodeBossNpzChunk);
-chunkDecoders.set('jpeg', decodeJpegChunk);
+// chunkDecoders.set('jpeg', decodeJpegChunk);
 
 let acceptHeaders = new Map<string, string>();
 acceptHeaders.set('npz', 'application/npygz');
-acceptHeaders.set('jpeg', 'image/jpeg');
+// acceptHeaders.set('jpeg', 'image/jpeg');
 
 function BossSource<Parameters, TBase extends {new (...args: any[]): SharedObject}>(
   Base: TBase, parametersConstructor: ChunkSourceParametersConstructor<Parameters>) {
@@ -66,9 +66,10 @@ export class BossVolumeChunkSource extends (BossSource(VolumeChunkSource, Volume
       path += `?window=${parameters.window[0]},${parameters.window[1]}`;
     }
 
+    // We will only use the npygz renderer provided by the boss server so that both uint16 and uint 8 are supported
     let acceptHeader: HttpHeader = {
         key: 'Accept',
-        value: acceptHeaders.get(parameters.encoding)!
+        value: 'application/npygz'
     }; 
     let httpCall: HttpCall = {
         method: 'GET',
@@ -77,7 +78,7 @@ export class BossVolumeChunkSource extends (BossSource(VolumeChunkSource, Volume
         headers: [acceptHeader]
     };
     return makeRequest(parameters.baseUrls, this.credentialsProvider, httpCall, cancellationToken)
-      .then(response => this.chunkDecoder(chunk, response));
+      .then(response => decodeBossNpzChunk(chunk, response));
   }
 };
 
