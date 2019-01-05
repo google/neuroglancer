@@ -193,10 +193,10 @@ function parseExperimentInfo(
 
 export class MultiscaleVolumeChunkSource implements GenericMultiscaleVolumeChunkSource {
   get dataType() {
-    if (this.channelInfo.dataType === DataType.UINT16) {
-      // 16-bit channels automatically rescaled to uint8 by The Boss
-      return DataType.UINT16;
-    }
+    // if (this.channelInfo.dataType === DataType.UINT16) {
+    //   16-bit channels automatically rescaled to uint8 by The Boss
+    //   return DataType.UINT16;
+    // }
     return this.channelInfo.dataType;
   }
   get numChannels() {
