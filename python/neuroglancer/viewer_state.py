@@ -441,6 +441,8 @@ class Layers(object):
                     self._layers.append(ManagedLayer(layer.name, layer, _readonly=_readonly))
                 elif isinstance(layer, dict):
                     self._layers.append(ManagedLayer(text_type(layer['name']), layer, _readonly=_readonly))
+                else:
+                    raise TypeError
 
     def index(self, k):
         for i, u in enumerate(self._layers):
