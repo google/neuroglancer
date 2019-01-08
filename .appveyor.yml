@@ -16,7 +16,7 @@ install:
 
 build_script:
   - cd python
-  - python setup.py develop
+  - pip install -e .
 
 test_script:
   - cd tests

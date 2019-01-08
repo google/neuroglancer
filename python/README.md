@@ -60,7 +60,7 @@ Mesh generation for segmentation volumes depends on a C++ extension module.  To
 build it, activate a suitable Python virtual environment and run:
 
 ```shell
-python setup.py develop
+pip install -e .
 ```
 
 ### Serving the Neuroglancer client code
