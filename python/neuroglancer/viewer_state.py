@@ -431,8 +431,15 @@ class Layers(object):
             json_data = collections.OrderedDict()
         self._layers = []
         self._readonly = _readonly
-        for k, v in six.iteritems(json_data):
-            self._layers.append(ManagedLayer(k, v, _readonly=_readonly))
+        if isinstance(json_data, collections.Mapping):
+            for k, v in six.iteritems(json_data):
+                self._layers.append(ManagedLayer(k, v, _readonly=_readonly))
+        else:
+            # layers property can also be an array in JSON now. each layer has a name property
+            for layer in six.iteritems(json_data):
+                name = text_type(layer.name)
+                del layer[name]
+                self._layers.append(ManagedLayer(name, layer, _readonly=_readonly))
 
     def index(self, k):
         for i, u in enumerate(self._layers):
