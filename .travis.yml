@@ -41,4 +41,4 @@ install:
   - pip install tox-travis
 script:
   - cd python
-  - tox
+  - tox -vvvvvvv
