@@ -149,11 +149,13 @@ export class SliceView extends Base {
   private bindVisibleRenderLayer(renderLayer: RenderLayer) {
     renderLayer.redrawNeeded.add(this.viewChanged.dispatch);
     renderLayer.transform.changed.add(this.invalidateVisibleSources);
+    renderLayer.mipLevelConstraints.changed.add(this.invalidateVisibleSources);
   }
 
   private unbindVisibleRenderLayer(renderLayer: RenderLayer) {
     renderLayer.redrawNeeded.remove(this.viewChanged.dispatch);
     renderLayer.transform.changed.remove(this.invalidateVisibleSources);
+    renderLayer.mipLevelConstraints.changed.remove(this.invalidateVisibleSources);
   }
 
   private updateVisibleLayersNow() {
