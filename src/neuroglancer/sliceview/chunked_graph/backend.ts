@@ -233,7 +233,7 @@ export class ChunkedGraphLayer extends Base implements RenderLayerInterface {
       return Promise.resolve([segment]);
     }
 
-    let promise = sendHttpRequest(openHttpRequest(`${url}/1.0/segment/${segment}/children`), 'arraybuffer');
+    let promise = sendHttpRequest(openHttpRequest(`${url}/segment/${segment}/children`), 'arraybuffer');
     return promise.then(response => {
       let uint32 = new Uint32Array(response);
       let final: Uint64[] = new Array(uint32.length / 2);

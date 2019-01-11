@@ -21,7 +21,7 @@ import {SliceViewChunkSource} from 'neuroglancer/sliceview/frontend';
 import {RenderLayer as GenericSliceViewRenderLayer} from 'neuroglancer/sliceview/renderlayer';
 import {StatusMessage} from 'neuroglancer/status';
 import {Uint64Set} from 'neuroglancer/uint64_set';
-import {openHttpRequest, sendHttpJsonPostRequest} from 'neuroglancer/util/http_request';
+import {openHttpRequest, sendHttpJsonPostRequest, sendHttpRequest} from 'neuroglancer/util/http_request';
 import {Uint64} from 'neuroglancer/util/uint64';
 import {RPC} from 'neuroglancer/worker_rpc';
 
@@ -81,9 +81,8 @@ export class ChunkedGraphLayer extends GenericSliceViewRenderLayer {
       return Promise.resolve(selection.segmentId);
     }
 
-    let promise = sendHttpJsonPostRequest(
-        openHttpRequest(`${url}/1.0/graph/root`, 'POST'),
-        [String(selection.segmentId), ...selection.position], 'arraybuffer');
+    let promise = sendHttpRequest(
+        openHttpRequest(`${url}/graph/${String(selection.segmentId)}/root`, 'GET'), 'arraybuffer');
 
     return this
         .withErrorMessage(promise, {
@@ -103,7 +102,7 @@ export class ChunkedGraphLayer extends GenericSliceViewRenderLayer {
     }
 
     let promise = sendHttpJsonPostRequest(
-        openHttpRequest(`${url}/1.0/graph/merge`, 'POST'),
+        openHttpRequest(`${url}/graph/merge`, 'POST'),
         [
           [String(first.segmentId), ...first.position],
           [String(second.segmentId), ...second.position]
@@ -128,7 +127,7 @@ export class ChunkedGraphLayer extends GenericSliceViewRenderLayer {
     }
 
     let promise = sendHttpJsonPostRequest(
-        openHttpRequest(`${url}/1.0/graph/split`, 'POST'), {
+        openHttpRequest(`${url}/graph/split`, 'POST'), {
           'sources': first.map(x => [String(x.segmentId), ...x.position]),
           'sinks': second.map(x => [String(x.segmentId), ...x.position])
         },
@@ -162,7 +161,7 @@ export class ChunkedGraphLayer extends GenericSliceViewRenderLayer {
         const errorResponse =
             JSON.parse(String.fromCharCode.apply(null, new Uint8Array(reason.response)));
         console.error(errorResponse);
-        msg += '<br />' + errorResponse['message'];
+        msg += errorResponse['message'];
       } catch {
       }  // Doesn't matter
       let {errorPrefix = ''} = options;

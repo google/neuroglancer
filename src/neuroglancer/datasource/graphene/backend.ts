@@ -15,7 +15,7 @@
  */
 
 import {WithParameters} from 'neuroglancer/chunk_manager/backend';
-import {MeshSourceParameters, SkeletonSourceParameters, VolumeChunkEncoding, VolumeChunkSourceParameters} from 'neuroglancer/datasource/precomputed/base';
+import {ChunkedGraphSourceParameters, MeshSourceParameters, SkeletonSourceParameters, VolumeChunkEncoding, VolumeChunkSourceParameters} from 'neuroglancer/datasource/graphene/base';
 import {decodeJsonManifestChunk, decodeTriangleVertexPositionsAndIndices, FragmentChunk, ManifestChunk, MeshSource} from 'neuroglancer/mesh/backend';
 import {decodeSkeletonVertexPositionsAndIndices, SkeletonChunk, SkeletonSource} from 'neuroglancer/skeleton/backend';
 import {VertexAttributeInfo} from 'neuroglancer/skeleton/base';
@@ -23,6 +23,7 @@ import {ChunkDecoder} from 'neuroglancer/sliceview/backend_chunk_decoders';
 import {decodeCompressedSegmentationChunk} from 'neuroglancer/sliceview/backend_chunk_decoders/compressed_segmentation';
 import {decodeJpegChunk} from 'neuroglancer/sliceview/backend_chunk_decoders/jpeg';
 import {decodeRawChunk} from 'neuroglancer/sliceview/backend_chunk_decoders/raw';
+import {ChunkedGraphChunk, ChunkedGraphChunkSource, decodeSupervoxelArray} from 'neuroglancer/sliceview/chunked_graph/backend';
 import {VolumeChunk, VolumeChunkSource} from 'neuroglancer/sliceview/volume/backend';
 import {CancellationToken} from 'neuroglancer/util/cancellation';
 import {DATA_TYPE_BYTES} from 'neuroglancer/util/data_type';
@@ -35,7 +36,7 @@ chunkDecoders.set(VolumeChunkEncoding.RAW, decodeRawChunk);
 chunkDecoders.set(VolumeChunkEncoding.JPEG, decodeJpegChunk);
 chunkDecoders.set(VolumeChunkEncoding.COMPRESSED_SEGMENTATION, decodeCompressedSegmentationChunk);
 
-@registerSharedObject() export class PrecomputedVolumeChunkSource extends
+@registerSharedObject() export class GrapheneVolumeChunkSource extends
 (WithParameters(VolumeChunkSource, VolumeChunkSourceParameters)) {
   chunkDecoder = chunkDecoders.get(this.parameters.encoding)!;
 
@@ -57,6 +58,37 @@ chunkDecoders.set(VolumeChunkEncoding.COMPRESSED_SEGMENTATION, decodeCompressedS
   }
 }
 
+export function decodeChunkedGraphChunk(
+    chunk: ChunkedGraphChunk, rootObjectKey: string, response: ArrayBuffer) {
+  return decodeSupervoxelArray(chunk, rootObjectKey, response);
+}
+
+@registerSharedObject() export class GrapheneChunkedGraphChunkSource extends
+(WithParameters(ChunkedGraphChunkSource, ChunkedGraphSourceParameters)) {
+  download(chunk: ChunkedGraphChunk, cancellationToken: CancellationToken) {
+    let {parameters} = this;
+    let chunkPosition = this.computeChunkBounds(chunk);
+    let chunkDataSize = chunk.chunkDataSize!;
+    let bounds = `${chunkPosition[0]}-${chunkPosition[0] + chunkDataSize[0]}_` +
+        `${chunkPosition[1]}-${chunkPosition[1] + chunkDataSize[1]}_` +
+        `${chunkPosition[2]}-${chunkPosition[2] + chunkDataSize[2]}`;
+
+    let promises = Array<Promise<void>>();
+    for (const [key, val] of chunk.mappings!.entries()) {
+      if (val === null) {
+        let requestPath = `${parameters.path}/${key}/leaves?bounds=${bounds}`;
+        promises.push(sendHttpRequest(
+                          openShardedHttpRequest(parameters.baseUrls, requestPath), 'arraybuffer',
+                          cancellationToken)
+                          .then(response => decodeChunkedGraphChunk(chunk, key, response)));
+      }
+    }
+    return Promise.all(promises).then(() => {
+      return;
+    });
+  }
+}
+
 export function decodeManifestChunk(chunk: ManifestChunk, response: any) {
   return decodeJsonManifestChunk(chunk, response, 'fragments');
 }
@@ -68,21 +100,22 @@ export function decodeFragmentChunk(chunk: FragmentChunk, response: ArrayBuffer)
       chunk, response, Endianness.LITTLE, /*vertexByteOffset=*/4, numVertices);
 }
 
-@registerSharedObject() export class PrecomputedMeshSource extends
+@registerSharedObject() export class GrapheneMeshSource extends
 (WithParameters(MeshSource, MeshSourceParameters)) {
   download(chunk: ManifestChunk, cancellationToken: CancellationToken) {
     let {parameters} = this;
-    let requestPath = `${parameters.path}/${chunk.objectId}:${parameters.lod}`;
+    let requestPath = `/manifest/${chunk.objectId}:${parameters.lod}?verify=True`;
     return sendHttpRequest(
-               openShardedHttpRequest(parameters.baseUrls, requestPath), 'json', cancellationToken)
+               openShardedHttpRequest(parameters.meshManifestBaseUrls, requestPath), 'json',
+               cancellationToken)
         .then(response => decodeManifestChunk(chunk, response));
   }
 
   downloadFragment(chunk: FragmentChunk, cancellationToken: CancellationToken) {
     let {parameters} = this;
-    let requestPath = `${parameters.path}/${chunk.fragmentId}`;
+    let requestPath = `${parameters.meshFragmentPath}/${chunk.fragmentId}`;
     return sendHttpRequest(
-               openShardedHttpRequest(parameters.baseUrls, requestPath), 'arraybuffer',
+               openShardedHttpRequest(parameters.meshFragmentBaseUrls, requestPath), 'arraybuffer',
                cancellationToken)
         .then(response => decodeFragmentChunk(chunk, response));
   }
@@ -121,7 +154,7 @@ function decodeSkeletonChunk(
       /*indexByteOffset=*/curOffset, /*numEdges=*/numEdges);
 }
 
-@registerSharedObject() export class PrecomputedSkeletonSource extends
+@registerSharedObject() export class GrapheneSkeletonSource extends
   (WithParameters(SkeletonSource, SkeletonSourceParameters)) {
   download(chunk: SkeletonChunk, cancellationToken: CancellationToken) {
     const {parameters} = this;

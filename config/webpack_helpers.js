@@ -55,6 +55,7 @@ const DEFAULT_DATA_SOURCES = exports.DEFAULT_DATA_SOURCES = [
   },
   'neuroglancer/datasource/ndstore',
   'neuroglancer/datasource/dvid',
+  'neuroglancer/datasource/graphene',
   'neuroglancer/datasource/render',
   'neuroglancer/datasource/openconnectome',
   'neuroglancer/datasource/precomputed',
