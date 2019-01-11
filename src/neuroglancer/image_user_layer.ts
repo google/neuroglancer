@@ -67,7 +67,9 @@ export class ImageUserLayer extends Base {
           fragmentMain: this.fragmentMain,
           shaderError: this.shaderError,
           transform: this.transform,
+          mipLevelConstraints: this.mipLevelConstraints
         });
+        this.setupVoxelSelectionWidget(renderLayer);
         this.addRenderLayer(renderLayer);
         this.shaderError.changed.dispatch();
         this.isReady = true;
@@ -138,6 +140,8 @@ class RenderingOptionsTab extends Tab {
         this.codeWidget.textEditor.refresh();
       }
     });
+
+    element.appendChild(layer.voxelSizeSelectionWidget.element);
   }
 }
 

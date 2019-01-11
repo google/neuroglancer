@@ -1,0 +1,33 @@
+.voxel-size-selection {
+    margin-bottom: 0.15em;
+}
+
+.voxel-selection-dropdown {
+    height: 1.3em;
+    font-size: 12px;
+}
+
+#minVoxelSizeLabel {
+    margin-right: 3px;
+}
+
+#activeLevelsTextbox {
+    font-size: 11px;
+    width: 70%;
+    height: 10%;
+    resize: none;
+}
+
+#activeLevelsHeader {
+    margin-top: 14px;
+    margin-bottom: 4px;
+}
+
+#voxelLimitsHeader {
+    margin-top: 5px;
+    margin-bottom: 3px;
+}
+
+.voxel-size-label {
+    vertical-align: bottom;
+}

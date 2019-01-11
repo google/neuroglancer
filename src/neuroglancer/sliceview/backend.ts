@@ -16,12 +16,13 @@
 
 import {Chunk, ChunkConstructor, ChunkSource, withChunkManager} from 'neuroglancer/chunk_manager/backend';
 import {CoordinateTransform} from 'neuroglancer/coordinate_transform';
-import {RenderLayer as RenderLayerInterface, SLICEVIEW_ADD_VISIBLE_LAYER_RPC_ID, SLICEVIEW_REMOVE_VISIBLE_LAYER_RPC_ID, SLICEVIEW_RENDERLAYER_RPC_ID, SLICEVIEW_RENDERLAYER_UPDATE_TRANSFORM_RPC_ID, SLICEVIEW_RPC_ID, SLICEVIEW_UPDATE_VIEW_RPC_ID, SliceViewBase, SliceViewChunkSource as SliceViewChunkSourceInterface, SliceViewChunkSpecification} from 'neuroglancer/sliceview/base';
+import {RenderLayer as RenderLayerInterface, SLICEVIEW_ADD_VISIBLE_LAYER_RPC_ID, SLICEVIEW_REMOVE_VISIBLE_LAYER_RPC_ID, SLICEVIEW_RENDERLAYER_RPC_ID, SLICEVIEW_RENDERLAYER_UPDATE_TRANSFORM_RPC_ID, SLICEVIEW_RPC_ID, SLICEVIEW_UPDATE_VIEW_RPC_ID, SLICEVIEW_RENDERLAYER_UPDATE_MIP_LEVEL_CONSTRAINTS_RPC_ID, SliceViewBase, SliceViewChunkSource as SliceViewChunkSourceInterface, SliceViewChunkSpecification} from 'neuroglancer/sliceview/base';
 import {ChunkLayout} from 'neuroglancer/sliceview/chunk_layout';
 import {mat4, vec3, vec3Key} from 'neuroglancer/util/geom';
 import {NullarySignal} from 'neuroglancer/util/signal';
 import {getBasePriority, getPriorityTier, withSharedVisibility} from 'neuroglancer/visibility_priority/backend';
 import {registerRPC, registerSharedObject, RPC, SharedObjectCounterpart} from 'neuroglancer/worker_rpc';
+import {TrackableMIPLevelConstraints} from 'neuroglancer/trackable_mip_level_constraints';
 
 const BASE_PRIORITY = -1e12;
 const SCALE_PRIORITY_MULTIPLIER = 1e9;
@@ -98,6 +99,7 @@ export class SliceView extends SliceViewIntermediateBase {
     this.visibleLayers.delete(layer);
     layer.layerChanged.remove(this.handleLayerChanged);
     layer.transform.changed.remove(this.invalidateVisibleSources);
+    layer.mipLevelConstraints.changed.remove(this.invalidateVisibleSources);
     this.invalidateVisibleSources();
   }
 
@@ -105,6 +107,7 @@ export class SliceView extends SliceViewIntermediateBase {
     this.visibleLayers.set(layer, []);
     layer.layerChanged.add(this.handleLayerChanged);
     layer.transform.changed.add(this.invalidateVisibleSources);
+    layer.mipLevelConstraints.changed.add(this.invalidateVisibleSources);
     this.invalidateVisibleSources();
   }
 
@@ -208,6 +211,7 @@ export class RenderLayer extends SharedObjectCounterpart implements RenderLayerI
   transform = new CoordinateTransform();
   transformedSources: {source: SliceViewChunkSource, chunkLayout: ChunkLayout}[][];
   transformedSourcesGeneration = -1;
+  mipLevelConstraints: TrackableMIPLevelConstraints;
 
   constructor(rpc: RPC, options: any) {
     super(rpc, options);
@@ -223,6 +227,7 @@ export class RenderLayer extends SharedObjectCounterpart implements RenderLayerI
     }
     mat4.copy(this.transform.transform, options['transform']);
     this.transform.changed.add(this.layerChanged.dispatch);
+    this.mipLevelConstraints = new TrackableMIPLevelConstraints(options['minMIPLevel'], options['maxMIPLevel'], options['numberOfMIPLevels']);
   }
 }
 registerRPC(SLICEVIEW_RENDERLAYER_UPDATE_TRANSFORM_RPC_ID, function(x) {
@@ -233,4 +238,10 @@ registerRPC(SLICEVIEW_RENDERLAYER_UPDATE_TRANSFORM_RPC_ID, function(x) {
     mat4.copy(oldValue, newValue);
     layer.transform.changed.dispatch();
   }
+});
+registerRPC(SLICEVIEW_RENDERLAYER_UPDATE_MIP_LEVEL_CONSTRAINTS_RPC_ID, function(x) {
+  const layer = <RenderLayer>this.get(x.id);
+  const newMinMIPLevelValue: number|undefined = x.minMIPLevel;
+  const newMaxMIPLevelValue: number|undefined = x.maxMIPLevel;
+  layer.mipLevelConstraints.restoreState(newMinMIPLevelValue, newMaxMIPLevelValue);
 });

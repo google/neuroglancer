@@ -21,6 +21,8 @@ import {approxEqual} from 'neuroglancer/util/compare';
 import {DATA_TYPE_BYTES, DataType} from 'neuroglancer/util/data_type';
 import {effectiveScalingFactorFromMat4, identityMat4, kAxes, kInfinityVec, kZeroVec, mat4, rectifyTransformMatrixIfAxisAligned, transformVectorByMat4, vec3} from 'neuroglancer/util/geom';
 import {SharedObject} from 'neuroglancer/worker_rpc';
+import {TrackableMIPLevelConstraints} from 'neuroglancer/trackable_mip_level_constraints';
+import {TrackableValue} from 'neuroglancer/trackable_value';
 
 export {DATA_TYPE_BYTES, DataType};
 
@@ -124,8 +126,10 @@ interface TransformedSource {
 export interface RenderLayer {
   sources: SliceViewChunkSource[][];
   transform: CoordinateTransform;
-  transformedSources: TransformedSource[][] | undefined;
+  transformedSources: TransformedSource[][]|undefined;
   transformedSourcesGeneration: number;
+  mipLevelConstraints: TrackableMIPLevelConstraints;
+  activeMinMIPLevel?: TrackableValue<number|undefined>; // not needed for backend
 }
 
 export function getTransformedSources(renderLayer: RenderLayer) {
@@ -304,7 +308,7 @@ export class SliceViewBase extends SharedObject {
 
   /**
    * Computes the list of sources to use for each visible layer, based on the
-   * current pixelSize.
+   * current pixelSize, and the user specified integers minMIPLevelRendered and maxMIPLevelRendered.
    */
   updateVisibleSources() {
     if (!this.visibleSourcesStale) {
@@ -312,23 +316,29 @@ export class SliceViewBase extends SharedObject {
     }
     this.visibleSourcesStale = false;
     // Increase pixel size by a small margin.
-    let pixelSize = this.pixelSize * 1.1;
+    const pixelSize = this.pixelSize * 1.1;
     // console.log("pixelSize", pixelSize);
 
-    let visibleChunkLayouts = this.visibleChunkLayouts;
+    const visibleChunkLayouts = this.visibleChunkLayouts;
     const zAxis = this.viewportAxes[2];
 
-    let visibleLayers = this.visibleLayers;
+    const visibleLayers = this.visibleLayers;
     visibleChunkLayouts.clear();
-    for (let [renderLayer, visibleSources] of visibleLayers) {
+    for (const [renderLayer, visibleSources] of visibleLayers) {
       visibleSources.length = 0;
-      let transformedSources = getTransformedSources(renderLayer);
-      let numSources = transformedSources.length;
+      const transformedSources = getTransformedSources(renderLayer);
+      const numSources = transformedSources.length;
+      const {mipLevelConstraints} = renderLayer;
+      const { minScaleIndex, maxScaleIndex } = (mipLevelConstraints.numberLevels === undefined) ?
+        { minScaleIndex: 0, maxScaleIndex: numSources - 1 } : {
+          minScaleIndex: mipLevelConstraints.getDeFactoMinMIPLevel(),
+          maxScaleIndex: mipLevelConstraints.getDeFactoMaxMIPLevel()
+        };
       let scaleIndex: number;
 
       // At the smallest scale, all alternative sources must have the same voxel size, which is
       // considered to be the base voxel size.
-      let smallestVoxelSize = transformedSources[0][0].source.spec.voxelSize;
+      const smallestVoxelSize = transformedSources[0][0].source.spec.voxelSize;
 
       /**
        * Determines whether we should continue to look for a finer-resolution source *after* one
@@ -346,6 +356,8 @@ export class SliceViewBase extends SharedObject {
         return false;
       };
 
+      let highestResolutionIndex;
+
       /**
        * Registers a source as being visible.  This should be called with consecutively decreasing
        * values of scaleIndex.
@@ -360,17 +372,31 @@ export class SliceViewBase extends SharedObject {
           visibleChunkLayouts.set(chunkLayout, existingSources);
         }
         existingSources.set(source, sourceScaleIndex);
+        highestResolutionIndex = scaleIndex;
       };
 
-      scaleIndex = numSources - 1;
-      while (true) {
+      // Here we start iterating from numSources - 1, instead of from the user
+      // specified maxMIPRendered, just in case the maxMIPRendered resolution
+      // is wasteful. In this case we only retrieve the min MIP level that is not
+      // wasteful. Otherwise we retrieve all the useful/not wasteful levels between
+      // minMIPLevelRendered and maxMIPLevelRendered.
+      for (scaleIndex = numSources - 1; scaleIndex >= minScaleIndex; --scaleIndex) {
         const transformedSource = pickBestAlternativeSource(zAxis, transformedSources[scaleIndex]);
-        addVisibleSource(transformedSource, (scaleIndex + 1) / numSources);
-        if (scaleIndex === 0 || !canImproveOnVoxelSize(transformedSource.source.spec.voxelSize)) {
+        if (scaleIndex <= maxScaleIndex) {
+          addVisibleSource(transformedSource, (scaleIndex + 1) / numSources);
+        }
+        if (!canImproveOnVoxelSize(transformedSource.source.spec.voxelSize)) {
+          if (scaleIndex > maxScaleIndex) {
+            addVisibleSource(transformedSource, (scaleIndex + 1) / numSources);
+          }
           break;
         }
-        --scaleIndex;
       }
+
+      if (renderLayer.activeMinMIPLevel) {
+        renderLayer.activeMinMIPLevel.value = highestResolutionIndex;
+      }
+
       // Reverse visibleSources list since we added sources from coarsest to finest resolution, but
       // we want them ordered from finest to coarsest.
       visibleSources.reverse();
@@ -422,9 +448,8 @@ export class SliceViewBase extends SharedObject {
       computeSourcesChunkBounds(
           sourcesLowerChunkBound, sourcesUpperChunkBound, visibleSources.keys());
       if (DEBUG_CHUNK_INTERSECTIONS) {
-        console.log(`Initial sources chunk bounds: ${
-                                                     vec3.str(sourcesLowerChunkBound)
-                                                   }, ${vec3.str(sourcesUpperChunkBound)}`);
+        console.log(`Initial sources chunk bounds: ${vec3.str(sourcesLowerChunkBound)}, ${
+            vec3.str(sourcesUpperChunkBound)}`);
       }
 
       vec3.set(
@@ -860,8 +885,7 @@ export abstract class SliceViewChunkSpecification {
       upperChunkBound,
     } = options;
     this.voxelSize = voxelSize;
-    this.chunkLayout =
-        ChunkLayout.get(chunkSize, transform);
+    this.chunkLayout = ChunkLayout.get(chunkSize, transform);
 
     this.lowerChunkBound = lowerChunkBound;
     this.upperChunkBound = upperChunkBound;
@@ -902,7 +926,9 @@ export interface SliceViewChunkSpecificationOptions extends SliceViewChunkSpecif
 }
 
 
-export interface SliceViewChunkSource { spec: SliceViewChunkSpecification; }
+export interface SliceViewChunkSource {
+  spec: SliceViewChunkSpecification;
+}
 
 export const SLICEVIEW_RPC_ID = 'SliceView';
 export const SLICEVIEW_RENDERLAYER_RPC_ID = 'sliceview/RenderLayer';
@@ -910,3 +936,5 @@ export const SLICEVIEW_ADD_VISIBLE_LAYER_RPC_ID = 'SliceView.addVisibleLayer';
 export const SLICEVIEW_REMOVE_VISIBLE_LAYER_RPC_ID = 'SliceView.removeVisibleLayer';
 export const SLICEVIEW_UPDATE_VIEW_RPC_ID = 'SliceView.updateView';
 export const SLICEVIEW_RENDERLAYER_UPDATE_TRANSFORM_RPC_ID = 'SliceView.updateTransform';
+export const SLICEVIEW_RENDERLAYER_UPDATE_MIP_LEVEL_CONSTRAINTS_RPC_ID =
+  'SliceView.updateMIPLevelConstraints';

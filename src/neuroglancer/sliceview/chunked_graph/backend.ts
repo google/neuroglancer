@@ -29,6 +29,7 @@ import {sendHttpRequest, openHttpRequest, HttpError } from 'neuroglancer/util/ht
 import {NullarySignal} from 'neuroglancer/util/signal';
 import {Uint64} from 'neuroglancer/util/uint64';
 import {RPC, SharedObjectCounterpart, registerSharedObject} from 'neuroglancer/worker_rpc';
+import {TrackableMIPLevelConstraints} from 'neuroglancer/trackable_mip_level_constraints';
 
 const tempChunkDataSize = vec3.create();
 const tempChunkPosition = vec3.create();
@@ -185,6 +186,7 @@ export class ChunkedGraphLayer extends Base implements RenderLayerInterface {
   transform = new CoordinateTransform();
   transformedSources: {source: ChunkedGraphChunkSource, chunkLayout: ChunkLayout}[][];
   transformedSourcesGeneration = -1;
+  mipLevelConstraints = new TrackableMIPLevelConstraints();
 
   graphurl: string;
   rootSegments: Uint64Set;

@@ -87,6 +87,7 @@ export class SegmentationUserLayer extends Base {
         objectToDataTransform: this.transform,
         fragmentMain: getTrackableFragmentMain(),
         shaderError: makeWatchableShaderError(),
+        mipLevelConstraints: this.mipLevelConstraints
       };
 
   /**
@@ -224,7 +225,9 @@ export class SegmentationUserLayer extends Base {
       ++remaining;
       multiscaleSource.then(volume => {
         if (!this.wasDisposed) {
-          this.addRenderLayer(new SegmentationRenderLayer(volume, this.displayState));
+          const segmentationRenderLayer = new SegmentationRenderLayer(volume, this.displayState);
+          this.setupVoxelSelectionWidget(segmentationRenderLayer);
+          this.addRenderLayer(segmentationRenderLayer);
           // Chunked Graph Server
           if (this.chunkedGraphUrl === undefined && volume.getChunkedGraphUrl) {
             this.chunkedGraphUrl = volume.getChunkedGraphUrl();
@@ -713,6 +716,8 @@ class DisplayOptionsTab extends Tab {
         }
       }
     });
+
+    element.appendChild(layer.voxelSizeSelectionWidget.element);
   }
 }
 

@@ -388,9 +388,17 @@ export function verifyInt(obj: any) {
 }
 
 export function verifyPositiveInt(obj: any) {
-  let result = verifyInt(obj);
+  const result = verifyInt(obj);
   if (result <= 0) {
     throw new Error(`Expected positive integer, but received: ${result}.`);
+  }
+  return result;
+}
+
+export function verifyNonnegativeInt(obj: any) {
+  const result = verifyInt(obj);
+  if (result < 0) {
+    throw new Error(`Expected non-negative integer, but received: ${result}.`);
   }
   return result;
 }
@@ -424,6 +432,20 @@ export function verifyOptionalInt(obj: any): number|undefined {
     return undefined;
   }
   return verifyInt(obj);
+}
+
+export function verifyOptionalNonnegativeInt(obj: any): number|undefined {
+  if (obj === undefined) {
+    return undefined;
+  }
+  return verifyNonnegativeInt(obj);
+}
+
+export function verifyOptionalPositiveInt(obj: any): number|undefined {
+  if (obj === undefined) {
+    return undefined;
+  }
+  return verifyPositiveInt(obj);
 }
 
 export function verifyOptionalBoolean(obj: any): boolean|undefined {
