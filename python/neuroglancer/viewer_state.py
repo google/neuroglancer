@@ -412,6 +412,7 @@ class ManagedLayer(JsonObjectWrapper):
 
     def to_json(self):
         r = self.layer.to_json()
+        r['name'] = self.name
         visible = self.visible
         if visible is not None:
             r['visible'] = visible

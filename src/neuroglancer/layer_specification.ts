@@ -134,8 +134,6 @@ export class TopLevelLayerListSpecification extends RefCounted implements LayerL
       for (const layerObj of x) {
         verifyObject(layerObj);
         const name = verifyObjectProperty(layerObj, 'name', verifyString);
-        // Delete name property so that layerObj specification object is identical to what it used to be
-        delete layerObj.name;
         this.layerManager.addManagedLayer(this.getLayer(name, layerObj));
       }
     } else {
