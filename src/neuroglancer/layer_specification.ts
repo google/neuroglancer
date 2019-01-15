@@ -56,6 +56,7 @@ export class ManagedUserLayerWithSpecification extends ManagedUserLayer {
       return this.initialSpecification;
     }
     let layerSpec = userLayer.toJSON();
+    layerSpec.name = this.name;
     if (!this.visible) {
       layerSpec['visible'] = false;
     }
@@ -127,10 +128,20 @@ export class TopLevelLayerListSpecification extends RefCounted implements LayerL
   }
 
   restoreState(x: any) {
-    verifyObject(x);
     this.layerManager.clear();
-    for (let key of Object.keys(x)) {
-      this.layerManager.addManagedLayer(this.getLayer(key, x[key]));
+    if (Array.isArray(x)) {
+      // If array, layers have an order
+      for (const layerObj of x) {
+        verifyObject(layerObj);
+        const name = this.layerManager.getUniqueLayerName(verifyObjectProperty(layerObj, 'name', verifyString));
+        this.layerManager.addManagedLayer(this.getLayer(name, layerObj));
+      }
+    } else {
+      // Keep for backwards compatibility
+      verifyObject(x);
+      for (let key of Object.keys(x)) {
+        this.layerManager.addManagedLayer(this.getLayer(key, x[key]));
+      }
     }
   }
 
@@ -200,14 +211,14 @@ export class TopLevelLayerListSpecification extends RefCounted implements LayerL
   }
 
   toJSON() {
-    let result: any = {};
+    const result = [];
     let numResults = 0;
     for (let managedLayer of this.layerManager.managedLayers) {
       const layerJson = (<ManagedUserLayerWithSpecification>managedLayer).toJSON();
       // A `null` layer specification is used to indicate a transient drag target, and should not be
       // serialized.
       if (layerJson != null) {
-        result[managedLayer.name] = layerJson;
+        result.push(layerJson);
         ++numResults;
       }
     }
