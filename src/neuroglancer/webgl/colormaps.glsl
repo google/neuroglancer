@@ -37,5 +37,5 @@ vec3 colormapCubehelix(float x) {
     result.g = -0.29227 * cosangle + -0.90649 * sinangle;
     result.b = 1.97294 * cosangle;
     result = clamp(xclamp + amp * result, 0.0, 1.0);
-    emitRGB(result);
+    return result;
 }
