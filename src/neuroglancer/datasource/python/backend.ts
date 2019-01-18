@@ -21,7 +21,6 @@ import {decodeSkeletonVertexPositionsAndIndices, SkeletonChunk, SkeletonSource} 
 import {VertexAttributeInfo} from 'neuroglancer/skeleton/base';
 import {ChunkDecoder} from 'neuroglancer/sliceview/backend_chunk_decoders';
 import {decodeJpegChunk} from 'neuroglancer/sliceview/backend_chunk_decoders/jpeg';
-import {decodeNdstoreNpzChunk} from 'neuroglancer/sliceview/backend_chunk_decoders/ndstoreNpz';
 import {decodeRawChunk} from 'neuroglancer/sliceview/backend_chunk_decoders/raw';
 import {VolumeChunk, VolumeChunkSource} from 'neuroglancer/sliceview/volume/backend';
 import {CancellationToken} from 'neuroglancer/util/cancellation';
@@ -31,7 +30,6 @@ import {openHttpRequest, sendHttpRequest} from 'neuroglancer/util/http_request';
 import {registerSharedObject} from 'neuroglancer/worker_rpc';
 
 let chunkDecoders = new Map<VolumeChunkEncoding, ChunkDecoder>();
-chunkDecoders.set(VolumeChunkEncoding.NPZ, decodeNdstoreNpzChunk);
 chunkDecoders.set(VolumeChunkEncoding.JPEG, decodeJpegChunk);
 chunkDecoders.set(VolumeChunkEncoding.RAW, decodeRawChunk);
 

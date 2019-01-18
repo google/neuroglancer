@@ -30,7 +30,7 @@ The four-pane view consists of 3 orthogonal cross-sectional views as well as a 3
 
 Neuroglancer itself is purely a client-side program, but it depends on data being accessible via HTTP in a suitable format.  It is designed to easily support many different data sources, and there is existing support for the following data APIs/formats:
 
-- NDstore/Open Connectome <https://github.com/neurodata/ndstore>
+- BOSS <https://bossdb.org/>
 - DVID <https://github.com/janelia-flyem/dvid>
 - Render <https://github.com/saalfeldlab/render>
 - [Precomputed chunk/mesh fragments exposed over HTTP](src/neuroglancer/datasource/precomputed)
