@@ -63,6 +63,7 @@ export interface ViewerUIState extends SliceViewViewerState, VisibilityPriorityS
   selectedLayer: SelectedLayerState;
   inputEventBindings: InputEventBindings;
   crossSectionBackgroundColor: TrackableRGB;
+  perspectiveViewBackgroundColor: TrackableRGB;
 }
 
 export interface DataDisplayLayout extends RefCounted {
@@ -108,6 +109,7 @@ export function makeOrthogonalSliceViews(viewerState: SliceViewViewerState) {
 export function getCommonViewerState(viewer: ViewerUIState) {
   return {
     crossSectionBackgroundColor: viewer.crossSectionBackgroundColor,
+    perspectiveViewBackgroundColor: viewer.perspectiveViewBackgroundColor,
     mouseState: viewer.mouseState,
     layerManager: viewer.layerManager,
     showAxisLines: viewer.showAxisLines,

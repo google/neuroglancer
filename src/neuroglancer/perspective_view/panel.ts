@@ -46,6 +46,7 @@ export interface PerspectiveViewerState extends RenderedDataViewerState {
   scaleBarOptions: TrackableValue<ScaleBarOptions>;
   showSliceViewsCheckbox?: boolean;
   crossSectionBackgroundColor: TrackableRGB;
+  perspectiveViewBackgroundColor: TrackableRGB;
   rpc: RPC;
 }
 
@@ -254,6 +255,8 @@ export class PerspectivePanel extends RenderedDataPanel {
     this.registerDisposer(viewer.showAxisLines.changed.add(() => this.scheduleRedraw()));
     this.registerDisposer(
         viewer.crossSectionBackgroundColor.changed.add(() => this.scheduleRedraw()));
+    this.registerDisposer(
+        viewer.perspectiveViewBackgroundColor.changed.add(() => this.scheduleRedraw()));
   }
 
   get navigationState() {
@@ -413,7 +416,8 @@ export class PerspectivePanel extends RenderedDataPanel {
     this.offscreenFramebuffer.bind(width, height);
 
     gl.disable(gl.SCISSOR_TEST);
-    this.gl.clearColor(0.0, 0.0, 0.0, 0.0);
+    const backgroundColor = this.viewer.perspectiveViewBackgroundColor.value;
+    this.gl.clearColor(backgroundColor[0], backgroundColor[1], backgroundColor[2], 0.0);
     gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
 
     gl.enable(gl.DEPTH_TEST);

@@ -185,6 +185,7 @@ export class Viewer extends RefCounted implements ViewerState {
   visibleLayerRoles = allRenderLayerRoles();
   showDefaultAnnotations = new TrackableBoolean(true, true);
   crossSectionBackgroundColor = new TrackableRGB(vec3.fromValues(0.5, 0.5, 0.5));
+  perspectiveViewBackgroundColor = new TrackableRGB(vec3.fromValues(0, 0, 0));
   scaleBarOptions = new TrackableScaleBarOptions();
   contextMenu: ContextMenu;
 
@@ -321,6 +322,7 @@ export class Viewer extends RefCounted implements ViewerState {
         'concurrentDownloads', this.dataContext.chunkQueueManager.capacities.download.itemLimit);
     state.add('selectedLayer', this.selectedLayer);
     state.add('crossSectionBackgroundColor', this.crossSectionBackgroundColor);
+    state.add('perspectiveViewBackgroundColor', this.perspectiveViewBackgroundColor);
 
     this.registerDisposer(this.navigationState.changed.add(() => {
       this.handleNavigationStateChanged();

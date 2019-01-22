@@ -789,7 +789,10 @@ class ViewerState(JsonObjectWrapper):
     concurrent_downloads = concurrentDownloads = wrapped_property('concurrentDownloads', optional(int))
     layers = wrapped_property('layers', Layers)
     layout = wrapped_property('layout', layout_specification)
-    cross_section_background_color = crossSectionBackgroundColor = wrapped_property('crossSectionBackgroundColor', optional(text_type))
+    cross_section_background_color = crossSectionBackgroundColor = wrapped_property(
+        'crossSectionBackgroundColor', optional(text_type))
+    perspective_view_background_color = perspectiveViewBackgroundColor = wrapped_property(
+        'perspectiveViewBackgroundColor', optional(text_type))
 
     @property
     def position(self):
