@@ -379,6 +379,13 @@ export function verifyObject(obj: any) {
   return obj;
 }
 
+export function verifyArray(obj: any) {
+  if (!Array.isArray(obj)) {
+    throw new Error(`Expected array, but received: ${JSON.stringify(obj)}.`);
+  }
+  return obj;
+}
+
 export function verifyInt(obj: any) {
   let result = parseInt(obj, 10);
   if (!Number.isInteger(result)) {

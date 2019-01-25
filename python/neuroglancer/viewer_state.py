@@ -394,6 +394,7 @@ class ManagedLayer(JsonObjectWrapper):
 
     def to_json(self):
         r = self.layer.to_json()
+        r['name'] = self.name
         visible = self.visible
         if visible is not None:
             r['visible'] = visible
@@ -413,8 +414,18 @@ class Layers(object):
             json_data = collections.OrderedDict()
         self._layers = []
         self._readonly = _readonly
-        for k, v in six.iteritems(json_data):
-            self._layers.append(ManagedLayer(k, v, _readonly=_readonly))
+        if isinstance(json_data, collections.Mapping):
+            for k, v in six.iteritems(json_data):
+                self._layers.append(ManagedLayer(k, v, _readonly=_readonly))
+        else:
+            # layers property can also be an array in JSON now. each layer has a name property
+            for layer in json_data:
+                if isinstance(layer, ManagedLayer):
+                    self._layers.append(ManagedLayer(layer.name, layer, _readonly=_readonly))
+                elif isinstance(layer, dict):
+                    self._layers.append(ManagedLayer(text_type(layer['name']), layer, _readonly=_readonly))
+                else:
+                    raise TypeError
 
     def index(self, k):
         for i, u in enumerate(self._layers):
@@ -488,9 +499,9 @@ class Layers(object):
         return iter(self._layers)
 
     def to_json(self):
-        r = collections.OrderedDict()
+        r = []
         for x in self._layers:
-            r[x.name] = x.to_json()
+            r.append(x.to_json())
         return r
 
     def __repr__(self):

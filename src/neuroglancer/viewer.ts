@@ -644,7 +644,7 @@ export class Viewer extends RefCounted implements ViewerState {
   postJsonState() {
     // if jsonStateServer is not present prompt for value and store it in state
     if (!this.jsonStateServer.value) {
-      this.promptJsonStateServer('no state server found');
+      this.promptJsonStateServer('No state server found. Please enter a server URL, or hit OK to use the default server.');
     }
 
     // upload state to jsonStateServer (only if it's defined)

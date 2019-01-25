@@ -1,6 +1,6 @@
 import {parseSpecialUrl} from 'neuroglancer/util/http_request';
 
-describe('Prasing Special URLs', () => {
+describe('Parsing Special URLs', () => {
   let ezParseSpecialUrl = (url: string) => parseSpecialUrl(url)[0][0];
 
   it('Parse Normal URL', () => {
