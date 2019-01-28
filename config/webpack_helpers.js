@@ -41,10 +41,8 @@ const DEFAULT_DATA_SOURCES = exports.DEFAULT_DATA_SOURCES = [
     source: 'neuroglancer/datasource/boss',
     registerCredentials: 'neuroglancer/datasource/boss/register_credentials_provider'
   },
-  'neuroglancer/datasource/ndstore',
   'neuroglancer/datasource/dvid',
   'neuroglancer/datasource/render',
-  'neuroglancer/datasource/openconnectome',
   'neuroglancer/datasource/precomputed',
   'neuroglancer/datasource/nifti',
   {source: 'neuroglancer/datasource/vtk', register: null},

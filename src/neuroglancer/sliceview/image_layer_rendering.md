@@ -91,7 +91,7 @@ If a discontinuous color mapping is applied to a volume that is stored or retrie
 
 | Data source | Behavior |
 | -------- | ------- |
-| `ndstore` | JPEG compression is used by default for image volumes.  To override this, append a `?encoding=npz` or `?encoding=raw` query string parameter to the data source URL. |
+| `boss` | JPEG compression is used by default for image volumes.  For 16 bit images, append a `?window=INT,INT` to request scaled images in 8 bit space. |
 | `brainmaps` | JPEG compression is used by default for single-channel uint8 volumes.  To override this, append a `?encoding=raw` query string parameter to the data source URL. |
 
 ### Examples
