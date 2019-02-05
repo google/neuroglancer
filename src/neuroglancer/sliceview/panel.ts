@@ -25,6 +25,7 @@ import {TrackableRGB} from 'neuroglancer/util/color';
 import {ActionEvent, registerActionListener} from 'neuroglancer/util/event_action_map';
 import {identityMat4, mat4, vec3, vec4} from 'neuroglancer/util/geom';
 import {startRelativeMouseDrag} from 'neuroglancer/util/mouse_drag';
+import {TouchRotateInfo} from 'neuroglancer/util/touch_bindings';
 import {FramebufferConfiguration, OffscreenCopyHelper, TextureBuffer} from 'neuroglancer/webgl/offscreen';
 import {ShaderBuilder, ShaderModule} from 'neuroglancer/webgl/shader';
 import {ScaleBarTexture, TrackableScaleBarOptions} from 'neuroglancer/widget/scale_bar';
@@ -137,19 +138,6 @@ export class SliceViewPanel extends RenderedDataPanel {
       viewer: SliceViewerState) {
     super(context, element, viewer);
 
-    registerActionListener(element, 'translate-via-mouse-drag', (e: ActionEvent<MouseEvent>) => {
-      const {mouseState} = this.viewer;
-      if (mouseState.updateUnconditionally()) {
-        startRelativeMouseDrag(e.detail, (_event, deltaX, deltaY) => {
-          const {position} = this.viewer.navigationState;
-          const pos = position.spatialCoordinates;
-          vec3.set(pos, deltaX, deltaY, 0);
-          vec3.transformMat4(pos, pos, this.sliceView.viewportToData);
-          position.changed.dispatch();
-        });
-      }
-    });
-
     registerActionListener(element, 'rotate-via-mouse-drag', (e: ActionEvent<MouseEvent>) => {
       const {mouseState} = this.viewer;
       if (mouseState.updateUnconditionally()) {
@@ -157,12 +145,24 @@ export class SliceViewPanel extends RenderedDataPanel {
         startRelativeMouseDrag(e.detail, (_event, deltaX, deltaY) => {
           let {viewportAxes} = this.sliceView;
           this.viewer.navigationState.pose.rotateAbsolute(
-              viewportAxes[1], deltaX / 4.0 * Math.PI / 180.0, initialPosition);
+              viewportAxes[1], -deltaX / 4.0 * Math.PI / 180.0, initialPosition);
           this.viewer.navigationState.pose.rotateAbsolute(
-              viewportAxes[0], deltaY / 4.0 * Math.PI / 180.0, initialPosition);
+              viewportAxes[0], -deltaY / 4.0 * Math.PI / 180.0, initialPosition);
         });
       }
     });
+
+    registerActionListener(
+        element, 'rotate-in-plane-via-touchrotate', (e: ActionEvent<TouchRotateInfo>) => {
+          const {detail} = e;
+          const {mouseState} = this.viewer;
+          this.handleMouseMove(detail.centerX, detail.centerY);
+          if (mouseState.updateUnconditionally()) {
+            const {viewportAxes} = this.sliceView;
+            this.navigationState.pose.rotateAbsolute(
+                viewportAxes[2], detail.angle - detail.prevAngle, mouseState.position);
+          }
+        });
 
     this.registerDisposer(sliceView);
     this.registerDisposer(
@@ -191,9 +191,17 @@ export class SliceViewPanel extends RenderedDataPanel {
     }));
   }
 
+  translateByViewportPixels(deltaX: number, deltaY: number): void {
+    const {position} = this.viewer.navigationState;
+    const pos = position.spatialCoordinates;
+    vec3.set(pos, -deltaX, -deltaY, 0);
+    vec3.transformMat4(pos, pos, this.sliceView.viewportToData);
+    position.changed.dispatch();
+  }
+
   translateDataPointByViewportPixels(out: vec3, orig: vec3, deltaX: number, deltaY: number): vec3 {
     vec3.transformMat4(out, orig, this.sliceView.dataToViewport);
-    vec3.set(out, out[0] - deltaX, out[1] - deltaY, out[2]);
+    vec3.set(out, out[0] + deltaX, out[1] + deltaY, out[2]);
     vec3.transformMat4(out, out, this.sliceView.viewportToData);
     return out;
   }

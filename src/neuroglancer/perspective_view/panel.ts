@@ -29,6 +29,7 @@ import {Owned} from 'neuroglancer/util/disposable';
 import {ActionEvent, registerActionListener} from 'neuroglancer/util/event_action_map';
 import {kAxes, mat4, transformVectorByMat4, vec3, vec4} from 'neuroglancer/util/geom';
 import {startRelativeMouseDrag} from 'neuroglancer/util/mouse_drag';
+import {TouchRotateInfo, TouchTranslateInfo} from 'neuroglancer/util/touch_bindings';
 import {WatchableMap} from 'neuroglancer/util/watchable_map';
 import {withSharedVisibility} from 'neuroglancer/visibility_priority/frontend';
 import {DepthBuffer, FramebufferConfiguration, makeTextureBuffers, OffscreenCopyHelper, TextureBuffer} from 'neuroglancer/webgl/offscreen';
@@ -214,28 +215,26 @@ export class PerspectivePanel extends RenderedDataPanel {
           return undefined;
         });
 
-    registerActionListener(element, 'translate-via-mouse-drag', (e: ActionEvent<MouseEvent>) => {
+    registerActionListener(element, 'rotate-via-mouse-drag', (e: ActionEvent<MouseEvent>) => {
       startRelativeMouseDrag(e.detail, (_event, deltaX, deltaY) => {
-        const temp = tempVec3;
-        const {projectionMat} = this;
-        const {width, height} = this;
-        const {position} = this.viewer.navigationState;
-        const pos = position.spatialCoordinates;
-        vec3.transformMat4(temp, pos, projectionMat);
-        temp[0] = 2 * deltaX / width;
-        temp[1] = -2 * deltaY / height;
-        vec3.transformMat4(pos, temp, this.inverseProjectionMat);
-        position.changed.dispatch();
+        this.navigationState.pose.rotateRelative(kAxes[1], deltaX / 4.0 * Math.PI / 180.0);
+        this.navigationState.pose.rotateRelative(kAxes[0], -deltaY / 4.0 * Math.PI / 180.0);
       });
     });
 
-    registerActionListener(element, 'rotate-via-mouse-drag', (e: ActionEvent<MouseEvent>) => {
-      startRelativeMouseDrag(e.detail, (_event, deltaX, deltaY) => {
-        this.navigationState.pose.rotateRelative(kAxes[1], -deltaX / 4.0 * Math.PI / 180.0);
-        this.navigationState.pose.rotateRelative(kAxes[0], deltaY / 4.0 * Math.PI / 180.0);
-        this.viewer.navigationState.changed.dispatch();
-      });
-    });
+    registerActionListener(
+        element, 'rotate-in-plane-via-touchrotate', (e: ActionEvent<TouchRotateInfo>) => {
+          const {detail} = e;
+          this.navigationState.pose.rotateRelative(kAxes[2], detail.angle - detail.prevAngle);
+        });
+
+    registerActionListener(
+        element, 'rotate-out-of-plane-via-touchtranslate', (e: ActionEvent<TouchTranslateInfo>) => {
+          const {detail} = e;
+          this.navigationState.pose.rotateRelative(kAxes[1], detail.deltaX / 4.0 * Math.PI / 180.0);
+          this.navigationState.pose.rotateRelative(
+              kAxes[0], -detail.deltaY / 4.0 * Math.PI / 180.0);
+        });
 
     if (viewer.showSliceViewsCheckbox) {
       let showSliceViewsCheckbox =
@@ -257,6 +256,19 @@ export class PerspectivePanel extends RenderedDataPanel {
         viewer.crossSectionBackgroundColor.changed.add(() => this.scheduleRedraw()));
     this.registerDisposer(
         viewer.perspectiveViewBackgroundColor.changed.add(() => this.scheduleRedraw()));
+  }
+
+  translateByViewportPixels(deltaX: number, deltaY: number): void {
+    const temp = tempVec3;
+    const {projectionMat} = this;
+    const {width, height} = this;
+    const {position} = this.viewer.navigationState;
+    const pos = position.spatialCoordinates;
+    vec3.transformMat4(temp, pos, projectionMat);
+    temp[0] = -2 * deltaX / width;
+    temp[1] = 2 * deltaY / height;
+    vec3.transformMat4(pos, temp, this.inverseProjectionMat);
+    position.changed.dispatch();
   }
 
   get navigationState() {
@@ -358,7 +370,8 @@ export class PerspectivePanel extends RenderedDataPanel {
     }
     let glWindowX = this.mouseX;
     let glWindowY = height - this.mouseY;
-    let glWindowZ = 1.0 - offscreenFramebuffer.readPixelFloat32(OffscreenTextures.Z, glWindowX, glWindowY);
+    let glWindowZ =
+        1.0 - offscreenFramebuffer.readPixelFloat32(OffscreenTextures.Z, glWindowX, glWindowY);
     if (glWindowZ === 1.0) {
       return false;
     }
@@ -377,8 +390,8 @@ export class PerspectivePanel extends RenderedDataPanel {
     const {projectionMat} = this;
     const {width, height} = this;
     vec3.transformMat4(temp, orig, projectionMat);
-    temp[0] -= 2 * deltaX / width;
-    temp[1] -= -2 * deltaY / height;
+    temp[0] += 2 * deltaX / width;
+    temp[1] += -2 * deltaY / height;
     return vec3.transformMat4(out, temp, this.inverseProjectionMat);
   }
 

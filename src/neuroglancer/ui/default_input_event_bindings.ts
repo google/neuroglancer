@@ -74,7 +74,13 @@ export function getDefaultRenderedDataPanelBindings() {
           'at:mousedown2': 'move-to-mouse-position',
           'at:control+mousedown2': 'select-annotation',
           'at:alt+mousedown0': 'move-annotation',
-          'at:control+alt+mousedown2': 'delete-annotation'
+          'at:control+alt+mousedown2': 'delete-annotation',
+          'at:touchpinch': 'zoom-via-touchpinch',
+          'at:touchrotate': 'rotate-in-plane-via-touchrotate',
+          'at:touchtranslate2': 'translate-in-plane-via-touchtranslate',
+          'at:touchhold1': 'move-to-mouse-position',
+          'at:touchtap1x2': 'select',
+          'at:touchtap2x3': 'snap',
         },
         {label: 'All Data Panels'});
   }
@@ -87,7 +93,8 @@ export function getDefaultPerspectivePanelBindings() {
     defaultPerspectivePanelBindings = EventActionMap.fromObject(
         {
           'at:mousedown0': {action: 'rotate-via-mouse-drag', stopPropagation: true},
-          'at:shift+mousedown0': {action: 'translate-via-mouse-drag', stopPropagation: true}
+          'at:shift+mousedown0': {action: 'translate-via-mouse-drag', stopPropagation: true},
+          'at:touchtranslate1': 'rotate-out-of-plane-via-touchtranslate',
         },
         {parents: [[getDefaultRenderedDataPanelBindings(), Number.NEGATIVE_INFINITY]]});
   }
@@ -100,7 +107,8 @@ export function getDefaultSliceViewPanelBindings() {
     defaultSliceViewPanelBindings = EventActionMap.fromObject(
         {
           'at:mousedown0': {action: 'translate-via-mouse-drag', stopPropagation: true},
-          'at:shift+mousedown0': {action: 'rotate-via-mouse-drag', stopPropagation: true}
+          'at:shift+mousedown0': {action: 'rotate-via-mouse-drag', stopPropagation: true},
+          'at:touchtranslate1': 'translate-z-via-touchtranslate',
         },
         {parents: [[getDefaultRenderedDataPanelBindings(), Number.NEGATIVE_INFINITY]]});
   }

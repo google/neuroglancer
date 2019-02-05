@@ -18,4 +18,5 @@
   cursor: crosshair;
   position: relative;
   outline: 0;
+  touch-action: none;
 }

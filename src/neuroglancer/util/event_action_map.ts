@@ -269,7 +269,8 @@ export class EventActionMap extends HierarchicalMap<NormalizedEventIdentifier, E
   }
 }
 
-export function dispatchEventAction(originalEvent: Event, eventAction: EventAction|undefined) {
+export function dispatchEventAction(
+      originalEvent: Event, detail: any, eventAction: EventAction|undefined) {
   if (eventAction === undefined) {
     return;
   }
@@ -277,7 +278,7 @@ export function dispatchEventAction(originalEvent: Event, eventAction: EventActi
     originalEvent.stopPropagation();
   }
   const actionEvent = new CustomEvent(
-      'action:' + eventAction.action, {'bubbles': true, detail: originalEvent, cancelable: true});
+      'action:' + eventAction.action, {'bubbles': true, detail: detail, cancelable: true});
   const cancelled = !originalEvent.target!.dispatchEvent(actionEvent);
   if (eventAction.preventDefault !== false || cancelled) {
     originalEvent.preventDefault();
@@ -289,26 +290,29 @@ eventPhaseNames[Event.AT_TARGET] = 'at';
 eventPhaseNames[Event.CAPTURING_PHASE] = 'capture';
 eventPhaseNames[Event.BUBBLING_PHASE] = 'bubble';
 
-export function getPhaseName(event: Event) {
-  return eventPhaseNames[event.eventPhase];
+export function dispatchEvent(
+  baseIdentifier: EventIdentifier, originalEvent: Event, eventPhase: number, detail: any,
+    eventMap: EventActionMapInterface) {
+  const eventIdentifier = eventPhaseNames[eventPhase] + ':' + baseIdentifier;
+  const eventAction = eventMap.get(eventIdentifier);
+  dispatchEventAction(originalEvent, detail, eventAction);
 }
 
-export function dispatchEvent(
-    baseIdentifier: EventIdentifier, originalEvent: Event&EventModifierKeyState,
+export function dispatchEventWithModifiers(
+    baseIdentifier: EventIdentifier, originalEvent: Event&EventModifierKeyState, detail: any,
     eventMap: EventActionMapInterface) {
-  const eventIdentifier = getPhaseName(originalEvent) + ':' +
-      getStrokeIdentifier(baseIdentifier, getEventModifierMask(originalEvent));
-  const eventAction = eventMap.get(eventIdentifier);
-  dispatchEventAction(originalEvent, eventAction);
+  dispatchEvent(
+      getStrokeIdentifier(baseIdentifier, getEventModifierMask(originalEvent)), originalEvent,
+      originalEvent.eventPhase, detail, eventMap);
 }
 
 /**
  * DOM Event type used for dispatching actions.
  *
- * The original input event that triggered the action is specified as the `detail` property.
+ * Additional information relevant to the acction is specified as the `detail` property.
  */
-export interface ActionEvent<TriggerEvent extends Event> extends CustomEvent {
-  detail: TriggerEvent;
+export interface ActionEvent<Info> extends CustomEvent {
+  detail: Info;
 }
 
 /**
@@ -319,9 +323,8 @@ export interface ActionEvent<TriggerEvent extends Event> extends CustomEvent {
  *
  * @returns A nullary disposer function that unregisters the listener when called.
  */
-export function registerActionListener<TriggerEvent extends Event>(
-    target: EventTarget, action: ActionIdentifier,
-    listener: (event: ActionEvent<TriggerEvent>) => void,
+export function registerActionListener<Info>(
+    target: EventTarget, action: ActionIdentifier, listener: (event: ActionEvent<Info>) => void,
     options?: boolean|AddEventListenerOptions) {
   return registerEventListener(target, `action:${action}`, listener, options);
 }

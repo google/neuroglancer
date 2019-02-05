@@ -19,25 +19,29 @@ export function startRelativeMouseDrag(
     initialEvent: MouseEvent, handler: RelativeDragHandler,
     finishDragHandler?: RelativeDragHandler) {
   let {document} = initialEvent.view;
-  let prevScreenX = initialEvent.clientX, prevScreenY = initialEvent.clientY;
-  let mouseMoveHandler = (e: MouseEvent) => {
-    let deltaX = prevScreenX - e.clientX;
-    let deltaY = prevScreenY - e.clientY;
-    prevScreenX = e.clientX;
-    prevScreenY = e.clientY;
+  let prevClientX = initialEvent.clientX, prevClientY = initialEvent.clientY;
+  const mouseMoveHandler = (e: PointerEvent) => {
+    const deltaX = e.clientX - prevClientX;
+    const deltaY = e.clientY - prevClientY;
+    prevClientX = e.clientX;
+    prevClientY = e.clientY;
     handler(e, deltaX, deltaY);
   };
-  let button = initialEvent.button;
-  let mouseUpHandler = (e: MouseEvent) => {
-    if (e.button === button) {
-      document.removeEventListener('mousemove', mouseMoveHandler, true);
-      document.removeEventListener('mouseup', mouseUpHandler, false);
+  const button = initialEvent.button;
+  const cancel = (e: PointerEvent) => {
+    document.removeEventListener('pointermove', mouseMoveHandler, true);
+    document.removeEventListener('pointerup', mouseUpHandler, false);
 
-      if (finishDragHandler !== undefined) {
-        finishDragHandler(e, prevScreenX - e.clientX, prevScreenY - e.clientY);
-      }
+    if (finishDragHandler !== undefined) {
+      finishDragHandler(e, e.clientX - prevClientX, e.clientY - prevClientY);
     }
   };
-  document.addEventListener('mousemove', mouseMoveHandler, true);
-  document.addEventListener('mouseup', mouseUpHandler, false);
+  const mouseUpHandler = (e: PointerEvent) => {
+    if (e.button === button) {
+      cancel(e);
+    }
+  };
+  document.addEventListener('pointermove', mouseMoveHandler, true);
+  document.addEventListener('pointerup', mouseUpHandler, false);
+  document.addEventListener('pointercancel', cancel, false);
 }
