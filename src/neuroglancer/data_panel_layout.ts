@@ -14,6 +14,9 @@
  * limitations under the License.
  */
 
+import 'neuroglancer/ui/button.css';
+import 'neuroglancer/data_panel_layout.css';
+
 import debounce from 'lodash/debounce';
 import {ChunkManager} from 'neuroglancer/chunk_manager/frontend';
 import {DisplayContext} from 'neuroglancer/display_context';
@@ -28,7 +31,7 @@ import {TrackableBoolean} from 'neuroglancer/trackable_boolean';
 import {TrackableValue, WatchableSet} from 'neuroglancer/trackable_value';
 import {TrackableRGB} from 'neuroglancer/util/color';
 import {Borrowed, Owned, RefCounted} from 'neuroglancer/util/disposable';
-import {removeChildren} from 'neuroglancer/util/dom';
+import {removeChildren, removeFromParent} from 'neuroglancer/util/dom';
 import {EventActionMap, registerActionListener} from 'neuroglancer/util/event_action_map';
 import {quat} from 'neuroglancer/util/geom';
 import {verifyObject, verifyObjectProperty, verifyPositiveInt} from 'neuroglancer/util/json';
@@ -37,8 +40,6 @@ import {Trackable} from 'neuroglancer/util/trackable';
 import {WatchableMap} from 'neuroglancer/util/watchable_map';
 import {VisibilityPrioritySpecification} from 'neuroglancer/viewer_state';
 import {ScaleBarOptions} from 'neuroglancer/widget/scale_bar';
-
-require('neuroglancer/ui/button.css');
 
 export interface SliceViewViewerState {
   chunkManager: ChunkManager;
@@ -77,6 +78,13 @@ const AXES_RELATIVE_ORIENTATION = new Map<NamedAxes, quat|undefined>([
   ['xy', undefined],
   ['xz', quat.rotateX(quat.create(), quat.create(), Math.PI / 2)],
   ['yz', quat.rotateY(quat.create(), quat.create(), Math.PI / 2)],
+]);
+
+const oneSquareSymbol = '◻';
+
+const LAYOUT_SYMBOLS = new Map<string, string>([
+  ['4panel', '◱'],
+  ['3d', oneSquareSymbol],
 ]);
 
 export function makeSliceView(viewerState: SliceViewViewerState, baseToSelf?: quat) {
@@ -141,7 +149,10 @@ function getCommonSliceViewerState(viewer: ViewerUIState) {
 }
 
 function registerRelatedLayouts(
-    layout: DataDisplayLayout, panel: RenderedDataPanel, relatedLayouts: string[]) {
+  layout: DataDisplayLayout, panel: RenderedDataPanel, relatedLayouts: string[]) {
+  const controls = document.createElement('div');
+  controls.className = 'neuroglancer-data-panel-layout-controls';
+  layout.registerDisposer(() => removeFromParent(controls));
   for (let i = 0; i < 2; ++i) {
     const relatedLayout = relatedLayouts[Math.min(relatedLayouts.length - 1, i)];
     layout.registerDisposer(registerActionListener(
@@ -150,6 +161,18 @@ function registerRelatedLayouts(
           event.stopPropagation();
         }));
   }
+  for (const relatedLayout of relatedLayouts) {
+    const button = document.createElement('button');
+    const innerDiv = document.createElement('div');
+    button.appendChild(innerDiv);
+    innerDiv.textContent = LAYOUT_SYMBOLS.get(relatedLayout)!;
+    button.title = `Switch to ${relatedLayout} layout.`;
+    button.addEventListener('click', () => {
+      layout.container.name = relatedLayout;
+    });
+    controls.appendChild(button);
+  }
+  panel.element.appendChild(controls);
 }
 
 function makeSliceViewFromSpecification(
@@ -384,7 +407,10 @@ for (const axes of AXES_RELATIVE_ORIENTATION.keys()) {
     factory: (container, element, viewer) =>
         new SinglePanelLayout(container, element, viewer, <NamedAxes>axes)
   });
-  LAYOUTS.set(`${axes}-3d`, {
+  const splitLayout = `${axes}-3d`;
+  LAYOUT_SYMBOLS.set(axes, oneSquareSymbol);
+  LAYOUT_SYMBOLS.set(splitLayout, '◫');
+  LAYOUTS.set(splitLayout, {
     factory: (container, element, viewer, crossSections) => new SliceViewPerspectiveTwoPanelLayout(
         container, element, viewer, 'row', <NamedAxes>axes, crossSections)
   });
