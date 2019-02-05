@@ -27,6 +27,7 @@ import {AXES_NAMES, kAxes, vec2, vec3} from 'neuroglancer/util/geom';
 import {KeyboardEventBinder} from 'neuroglancer/util/keyboard_bindings';
 import {MouseEventBinder} from 'neuroglancer/util/mouse_bindings';
 import {startRelativeMouseDrag} from 'neuroglancer/util/mouse_drag';
+import {TouchEventBinder, TouchPinchInfo, TouchTranslateInfo} from 'neuroglancer/util/touch_bindings';
 import {getWheelZoomAmount} from 'neuroglancer/util/wheel_zoom';
 import {ViewerState} from 'neuroglancer/viewer_state';
 
@@ -66,8 +67,10 @@ export abstract class RenderedDataPanel extends RenderedPanel {
     this.registerDisposer(new AutomaticallyFocusedElement(element));
     this.registerDisposer(new KeyboardEventBinder(element, this.inputEventMap));
     this.registerDisposer(new MouseEventBinder(element, this.inputEventMap));
+    this.registerDisposer(new TouchEventBinder(element, this.inputEventMap));
 
     this.registerEventListener(element, 'mousemove', this.onMousemove.bind(this));
+    this.registerEventListener(element, 'touchstart', this.onTouchstart.bind(this));
     this.registerEventListener(element, 'mouseleave', this.onMouseout.bind(this));
 
     registerActionListener(element, 'snap', () => {
@@ -111,6 +114,32 @@ export abstract class RenderedDataPanel extends RenderedPanel {
       this.onMousemove(e);
       this.zoomByMouse(getWheelZoomAmount(e));
     });
+
+    registerActionListener(element, 'translate-via-mouse-drag', (e: ActionEvent<MouseEvent>) => {
+      const {mouseState} = this.viewer;
+      if (mouseState.updateUnconditionally()) {
+        startRelativeMouseDrag(e.detail, (_event, deltaX, deltaY) => {
+          this.translateByViewportPixels(deltaX, deltaY);
+        });
+      }
+    });
+
+    registerActionListener(
+        element, 'translate-in-plane-via-touchtranslate', (e: ActionEvent<TouchTranslateInfo>) => {
+          const {detail} = e;
+          this.translateByViewportPixels(detail.deltaX, detail.deltaY);
+        });
+
+    registerActionListener(
+        element, 'translate-z-via-touchtranslate', (e: ActionEvent<TouchTranslateInfo>) => {
+          const {detail} = e;
+          let {navigationState} = this;
+          let offset = tempVec3;
+          offset[0] = 0;
+          offset[1] = 0;
+          offset[2] = detail.deltaY + detail.deltaX;
+          navigationState.pose.translateVoxelsRelative(offset);
+        });
 
     for (const amount of [1, 10]) {
       registerActionListener(element, `z+${amount}-via-wheel`, (event: ActionEvent<WheelEvent>) => {
@@ -193,13 +222,22 @@ export abstract class RenderedDataPanel extends RenderedPanel {
       const selectedAnnotationId = mouseState.pickedAnnotationId;
       const annotationLayer = mouseState.pickedAnnotationLayer;
       if (annotationLayer !== undefined && !annotationLayer.source.readonly &&
-        selectedAnnotationId !== undefined) {
-          const ref = annotationLayer.source.getReference(selectedAnnotationId);
-          try {
-            annotationLayer.source.delete(ref);
-          } finally {
-            ref.dispose();
-          }
+          selectedAnnotationId !== undefined) {
+        const ref = annotationLayer.source.getReference(selectedAnnotationId);
+        try {
+          annotationLayer.source.delete(ref);
+        } finally {
+          ref.dispose();
+        }
+      }
+    });
+
+    registerActionListener(element, 'zoom-via-touchpinch', (e: ActionEvent<TouchPinchInfo>) => {
+      const {detail} = e;
+      this.handleMouseMove(detail.centerX, detail.centerY);
+      const ratio = detail.prevDistance / detail.distance;
+      if (ratio > 0.1 && ratio < 10) {
+        this.zoomByMouse(ratio);
       }
     });
   }
@@ -211,18 +249,35 @@ export abstract class RenderedDataPanel extends RenderedPanel {
     mouseState.setActive(false);
   }
 
+  abstract translateByViewportPixels(deltaX: number, deltaY: number): void;
+
+  handleMouseMove(clientX: number, clientY: number) {
+    let {element} = this;
+    const bounds = element.getBoundingClientRect();
+    this.mouseX = clientX - bounds.left;
+    this.mouseY = clientY - bounds.top;
+    let {mouseState} = this.viewer;
+    mouseState.pageX = clientX + window.scrollX;
+    mouseState.pageY = clientY + window.scrollY;
+    mouseState.updater = this.mouseStateUpdater;
+    mouseState.triggerUpdate();
+  }
+
   onMousemove(event: MouseEvent) {
     let {element} = this;
     if (event.target !== element) {
       return;
     }
-    this.mouseX = event.offsetX - element.clientLeft;
-    this.mouseY = event.offsetY - element.clientTop;
-    let {mouseState} = this.viewer;
-    mouseState.pageX = event.pageX;
-    mouseState.pageY = event.pageY;
-    mouseState.updater = this.mouseStateUpdater;
-    mouseState.triggerUpdate();
+    this.handleMouseMove(event.clientX, event.clientY);
+  }
+
+  onTouchstart(event: TouchEvent) {
+    let {element} = this;
+    if (event.target !== element || event.targetTouches.length !== 1) {
+      return;
+    }
+    const {clientX, clientY} = event.targetTouches[0];
+    this.handleMouseMove(clientX, clientY);
   }
 
   disposed() {
