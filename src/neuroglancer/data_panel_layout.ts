@@ -44,6 +44,7 @@ export interface SliceViewViewerState {
   chunkManager: ChunkManager;
   navigationState: NavigationState;
   layerManager: LayerManager;
+  sliceViewPrefetchingEnabled: TrackableBoolean;
 }
 
 export class InputEventBindings {
@@ -90,7 +91,9 @@ export function makeSliceView(viewerState: SliceViewViewerState, baseToSelf?: qu
                 viewerState.navigationState.pose.orientation, baseToSelf)),
         viewerState.navigationState.zoomFactor);
   }
-  return new SliceView(viewerState.chunkManager, viewerState.layerManager, navigationState);
+  return new SliceView(
+      viewerState.chunkManager, viewerState.layerManager, navigationState,
+      viewerState.sliceViewPrefetchingEnabled);
 }
 
 export function makeNamedSliceView(viewerState: SliceViewViewerState, axes: NamedAxes) {
@@ -153,7 +156,8 @@ function registerRelatedLayouts(
 function makeSliceViewFromSpecification(
     viewer: SliceViewViewerState, specification: Borrowed<CrossSectionSpecification>) {
   const sliceView = new SliceView(
-      viewer.chunkManager, viewer.layerManager, specification.navigationState.addRef());
+      viewer.chunkManager, viewer.layerManager, specification.navigationState.addRef(),
+      viewer.sliceViewPrefetchingEnabled);
   const updateViewportSize = () => {
     sliceView.setViewportSizeDebounced(specification.width.value, specification.height.value);
   };

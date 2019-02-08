@@ -176,6 +176,7 @@ function makeViewerContextMenu(viewer: Viewer) {
   addCheckbox('Show scale bar', viewer.showScaleBar);
   addCheckbox('Show cross sections in 3-d', viewer.showPerspectiveSliceViews);
   addCheckbox('Show default annotations', viewer.showDefaultAnnotations);
+  addCheckbox('Prefetch sliceview chunks', viewer.sliceViewPrefetchingEnabled);
   return menu;
 }
 
@@ -190,6 +191,7 @@ export class Viewer extends RefCounted implements ViewerState {
   showPerspectiveSliceViews = new TrackableBoolean(true, true);
   visibleLayerRoles = allRenderLayerRoles();
   showDefaultAnnotations = new TrackableBoolean(true, true);
+  sliceViewPrefetchingEnabled = new TrackableBoolean(true, true);
   crossSectionBackgroundColor = new TrackableRGB(vec3.fromValues(0.5, 0.5, 0.5));
   scaleBarOptions = new TrackableScaleBarOptions();
   contextMenu: ContextMenu;

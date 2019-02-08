@@ -57,6 +57,7 @@ export interface LayerGroupViewerState {
   selectedLayer: SelectedLayerState;
   visibleLayerRoles: WatchableSet<RenderLayerRole>;
   crossSectionBackgroundColor: TrackableRGB;
+  sliceViewPrefetchingEnabled: TrackableBoolean;
 }
 
 export interface LayerGroupViewerOptions {
@@ -229,6 +230,9 @@ export class LayerGroupViewer extends RefCounted {
   }
   get scaleBarOptions() {
     return this.viewerState.scaleBarOptions;
+  }
+  get sliceViewPrefetchingEnabled() {
+    return this.viewerState.sliceViewPrefetchingEnabled;
   }
   layerPanel: LayerPanel|undefined;
   layout: DataPanelLayoutContainer;

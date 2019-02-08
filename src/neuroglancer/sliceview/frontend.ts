@@ -19,7 +19,7 @@ import {ChunkState} from 'neuroglancer/chunk_manager/base';
 import {Chunk, ChunkManager, ChunkSource} from 'neuroglancer/chunk_manager/frontend';
 import {LayerManager} from 'neuroglancer/layer';
 import {NavigationState} from 'neuroglancer/navigation_state';
-import {SLICEVIEW_ADD_VISIBLE_LAYER_RPC_ID, SLICEVIEW_REMOVE_VISIBLE_LAYER_RPC_ID, SLICEVIEW_RPC_ID, SLICEVIEW_UPDATE_VIEW_RPC_ID, SliceViewBase, SliceViewChunkSource as SliceViewChunkSourceInterface, SliceViewChunkSpecification, SliceViewSourceOptions} from 'neuroglancer/sliceview/base';
+import {SLICEVIEW_ADD_VISIBLE_LAYER_RPC_ID, SLICEVIEW_REMOVE_VISIBLE_LAYER_RPC_ID, SLICEVIEW_RPC_ID, SLICEVIEW_UPDATE_VIEW_RPC_ID, SLICEVIEW_UPDATE_PREFETCHING_RPC_ID, SliceViewBase, SliceViewChunkSource as SliceViewChunkSourceInterface, SliceViewChunkSpecification, SliceViewSourceOptions} from 'neuroglancer/sliceview/base';
 import {ChunkLayout} from 'neuroglancer/sliceview/chunk_layout';
 import {RenderLayer} from 'neuroglancer/sliceview/renderlayer';
 import {RefCounted} from 'neuroglancer/util/disposable';
@@ -32,6 +32,7 @@ import {FramebufferConfiguration, makeTextureBuffers, StencilBuffer} from 'neuro
 import {ShaderBuilder, ShaderModule, ShaderProgram} from 'neuroglancer/webgl/shader';
 import {getSquareCornersBuffer} from 'neuroglancer/webgl/square_corners_buffer';
 import {registerSharedObjectOwner, RPC} from 'neuroglancer/worker_rpc';
+import {TrackableBoolean} from 'neuroglancer/trackable_boolean';
 
 export type GenericChunkKey = string;
 
@@ -74,7 +75,7 @@ export class SliceView extends Base {
 
   constructor(
       public chunkManager: ChunkManager, public layerManager: LayerManager,
-      public navigationState: NavigationState) {
+      public navigationState: NavigationState, prefetchingEnabled: TrackableBoolean) {
     super();
     mat4.identity(this.dataToViewport);
     const rpc = this.chunkManager.rpc!;
@@ -90,6 +91,12 @@ export class SliceView extends Base {
       if (this.hasValidViewport) {
         this.updateVisibleLayers();
       }
+    }));
+
+    this.registerDisposer(prefetchingEnabled.changed.add(() => {
+      rpc.invoke(
+        SLICEVIEW_UPDATE_PREFETCHING_RPC_ID,
+        {id: this.rpcId, prefetchingEnabled: prefetchingEnabled.value});
     }));
 
     this.viewChanged.add(() => {

@@ -764,7 +764,7 @@ export class ChunkManager extends SharedObjectCounterpart {
     this.updatePending = null;
     this.recomputeChunkPriorities.dispatch();
     this.recomputeChunkPrioritiesLate.dispatch();
-    this.updateQueueState([ChunkPriorityTier.VISIBLE]);
+    this.updateQueueState([ChunkPriorityTier.VISIBLE, ChunkPriorityTier.PREFETCH]);
   }
 
   /**

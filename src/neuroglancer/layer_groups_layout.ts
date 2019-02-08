@@ -293,6 +293,7 @@ function getCommonViewerState(viewer: Viewer) {
     navigationState: viewer.navigationState.addRef(),
     perspectiveNavigationState: viewer.perspectiveNavigationState.addRef(),
     crossSectionBackgroundColor: viewer.crossSectionBackgroundColor,
+    sliceViewPrefetchingEnabled: viewer.sliceViewPrefetchingEnabled
   };
 }
 
