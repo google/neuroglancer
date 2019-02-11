@@ -17,7 +17,7 @@
 import {ChunkStateListener, WithParameters} from 'neuroglancer/chunk_manager/backend';
 import {Chunk} from 'neuroglancer/chunk_manager/backend';
 import {ChunkPriorityTier, ChunkState} from 'neuroglancer/chunk_manager/base';
-import {ArrayType, ComputationParameters, getArrayView, REQUEST_FRONTEND_CHUNK, RETURN_FRONTEND_CHUNK} from 'neuroglancer/datasource/computed/base';
+import {ArrayType, ComputationParameters, getArrayView} from 'neuroglancer/datasource/computed/base';
 import {ComputedVolumeChunkSourceParameters} from 'neuroglancer/datasource/computed/base';
 import {decodeRawChunk} from 'neuroglancer/sliceview/backend_chunk_decoders/raw';
 import {decodeChannels as decodeChannels32} from 'neuroglancer/sliceview/compressed_segmentation/decode_uint32';
@@ -26,7 +26,7 @@ import {VolumeChunk, VolumeChunkSource} from 'neuroglancer/sliceview/volume/back
 import {CANCELED, CancellationToken} from 'neuroglancer/util/cancellation';
 import {DATA_TYPE_BYTES, DataType} from 'neuroglancer/util/data_type';
 import {prod3 as prod, vec3} from 'neuroglancer/util/geom';
-import {registerRPC, registerSharedObject, RPC, SharedObjectCounterpart} from 'neuroglancer/worker_rpc';
+import {registerSharedObject, RPC, SharedObjectCounterpart} from 'neuroglancer/worker_rpc';
 
 export abstract class VolumeComputationBackend extends SharedObjectCounterpart {
   constructor(rpc: RPC, public params: ComputationParameters) {
@@ -116,6 +116,8 @@ export class ComputedVolumeChunk extends VolumeChunk implements ChunkStateListen
   private inputLower_?: vec3;
   private inputBuffer_?: ArrayBuffer;
 
+  private initialized_ = false;
+
   isComputational = true;
 
   // Sets up computation parameters, computes overlapping origin chunks and
@@ -163,6 +165,7 @@ export class ComputedVolumeChunk extends VolumeChunk implements ChunkStateListen
     this.inputBuffer_ = new ArrayBuffer(this.systemMemoryBytes);
 
     this.setupSourceChunks_();
+    this.initialized_ = true;
   }
 
   getPromise() {
@@ -239,6 +242,9 @@ export class ComputedVolumeChunk extends VolumeChunk implements ChunkStateListen
   }
 
   private cleanup_() {
+    if (!this.initialized_) {
+      return;
+    }
     const outputSource = this.outputSource_!;
     for (const chunkGridPosition of this.originGridPositions_.values()) {
       outputSource.originSource.getChunk(chunkGridPosition).unregisterListener(this);
@@ -464,12 +470,7 @@ export class ComputedVolumeChunk extends VolumeChunk implements ChunkStateListen
     const callbackMap = new Map<String, (array: ArrayType, error: any) => void>();
     callbackMap.set(key, callback);
     this.frontendChunkRequests_.set(originGridKey, callbackMap);
-    this.rpc!.invoke(REQUEST_FRONTEND_CHUNK, {
-      originGridKey,
-      chunkKey: chunk.key!,
-      originSourceRef: chunk.source!.addCounterpartRef(),
-      requestorSourceRef: this.addCounterpartRef()
-    });
+    this.chunkManager.queueManager.retrieveChunkData(chunk, originGridKey, this);
   }
 
   cancelChunkDataRequest(originGridKey: string, requestKey: string) {
@@ -505,8 +506,3 @@ export class ComputedVolumeChunk extends VolumeChunk implements ChunkStateListen
   }
 }
 ComputedVolumeChunkSource.prototype.chunkConstructor = ComputedVolumeChunk;
-
-registerRPC(RETURN_FRONTEND_CHUNK, function(x) {
-  const source: ComputedVolumeChunkSource = this.getRef(x.requestorSourceRef);
-  source.updateChunkData(x.originGridKey, x.data, x.error);
-});

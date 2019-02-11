@@ -67,6 +67,3 @@ export function getArrayView(buffer: ArrayBuffer, type: DataType) {
       return new Float32Array(buffer);
   }
 }
-
-export const REQUEST_FRONTEND_CHUNK = 'computed/RequestFrontendChunkData';
-export const RETURN_FRONTEND_CHUNK = 'computed/ReturnFrontendChunkData';

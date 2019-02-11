@@ -16,13 +16,12 @@
 
 import {ChunkManager, WithParameters} from 'neuroglancer/chunk_manager/frontend';
 import {DataSource, DataSourceProvider, GetVolumeOptions} from 'neuroglancer/datasource';
-import {ComputationParameters, ComputedVolumeChunkSourceParameters, REQUEST_FRONTEND_CHUNK, RETURN_FRONTEND_CHUNK} from 'neuroglancer/datasource/computed/base';
-import {UncompressedVolumeChunk} from 'neuroglancer/sliceview/uncompressed_chunk_format';
+import {ComputationParameters, ComputedVolumeChunkSourceParameters} from 'neuroglancer/datasource/computed/base';
 import {DataType, VolumeChunkSpecification, VolumeSourceOptions, VolumeType} from 'neuroglancer/sliceview/volume/base';
 import {MultiscaleVolumeChunkSource as GenericMultiscaleVolumeChunkSource, VolumeChunkSource} from 'neuroglancer/sliceview/volume/frontend';
 import {CancellationToken} from 'neuroglancer/util/cancellation';
 import {mat4, vec3} from 'neuroglancer/util/geom';
-import {registerRPC, RPC, SharedObject} from 'neuroglancer/worker_rpc';
+import {SharedObject} from 'neuroglancer/worker_rpc';
 
 
 class ComputedVolumeChunkSource extends
@@ -257,53 +256,3 @@ export class ComputedDataSource extends DataSource {
     this.computationMap.set(key, computationProvider);
   }
 }
-
-const MAX_FETCH_TRIES = 5;
-const FETCH_DELAY = 50;  // ms
-
-function fetchFrontendChunkData(rpc: RPC, x: any) {
-  const source: VolumeChunkSource = rpc.getRef(x['originSourceRef']);
-  const chunkKey: string = x['chunkKey'];
-  const originGridKey: string = x['originGridKey'];
-  const requestorSourceRef: any = x['requestorSourceRef'];
-  if (!x.hasOwnProperty('try')) {
-    x['try'] = 1;
-  }
-  const nTry = x['try'];
-
-  if (source.chunks.has(chunkKey)) {
-    const chunk = <UncompressedVolumeChunk>source.chunks.get(chunkKey);
-    rpc.invoke(
-        RETURN_FRONTEND_CHUNK,
-        {requestorSourceRef, chunkKey, originGridKey, error: undefined, data: chunk.data});
-    return;
-  }
-
-  // When we can't find data on the frontend, it usually means that we're in a
-  // race condition: we started listening just after the origin chunk's data
-  // was sent to the frontend, but this request arrived before the data was
-  // fully transferred. This is a fairly rare occurrence, but it does happen.
-  // Here, we wait for progressively longer periods of time, giving up after
-  // about 1.25s.
-  //
-  // This is simpler than a listener-callback structure, but is not
-  // deterministic.
-
-  if (nTry > MAX_FETCH_TRIES) {
-    console.log('Requested source does not have data for chunk', originGridKey);
-    rpc.invoke(
-        RETURN_FRONTEND_CHUNK,
-        {requestorSourceRef, chunkKey, originGridKey, error: 'Does Not Exist', data: undefined});
-    return;
-  }
-
-  const timeout = FETCH_DELAY * (2 ** nTry);
-  ++x['try'];
-  setTimeout(() => {
-    fetchFrontendChunkData(rpc, x);
-  }, timeout);
-}
-
-registerRPC(REQUEST_FRONTEND_CHUNK, function(x) {
-  fetchFrontendChunkData(this, x);
-});

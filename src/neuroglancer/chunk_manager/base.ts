@@ -39,18 +39,6 @@ export enum ChunkState {
   COMPUTING = 8
 }
 
-export const CHUNK_STATE_NAMES = [
-  'GPU',
-  'SYSTEM',
-  'WORKER',
-  'DOWNLOADING',
-  'QUEUED',
-  'NEW',
-  'FAILED',
-  'EXPIRED',
-  'COMPUTING'
-];
-
 export enum ChunkPriorityTier {
   FIRST_TIER = 0,
   FIRST_ORDERED_TIER = 0,
@@ -66,6 +54,7 @@ export const PREFETCH_PRIORITY_MULTIPLIER = 1e13;
 export const CHUNK_QUEUE_MANAGER_RPC_ID = 'ChunkQueueManager';
 export const CHUNK_MANAGER_RPC_ID = 'ChunkManager';
 export const CHUNK_SOURCE_INVALIDATE_RPC_ID = 'ChunkSource.invalidate';
+export const CHUNK_SOURCE_FETCH_RPC_ID = 'ChunkSource.fetch';
 
 export interface ChunkSourceParametersConstructor<T> {
   new(): T;

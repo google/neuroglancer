@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-import {CHUNK_MANAGER_RPC_ID, CHUNK_QUEUE_MANAGER_RPC_ID, CHUNK_SOURCE_INVALIDATE_RPC_ID, ChunkPriorityTier, ChunkSourceParametersConstructor, ChunkState} from 'neuroglancer/chunk_manager/base';
+import {CHUNK_MANAGER_RPC_ID, CHUNK_QUEUE_MANAGER_RPC_ID, CHUNK_SOURCE_FETCH_RPC_ID, CHUNK_SOURCE_INVALIDATE_RPC_ID, ChunkPriorityTier, ChunkSourceParametersConstructor, ChunkState} from 'neuroglancer/chunk_manager/base';
 import {SharedWatchableValue} from 'neuroglancer/shared_watchable_value';
 import {CancellationToken, CancellationTokenSource} from 'neuroglancer/util/cancellation';
 import {Disposable, RefCounted} from 'neuroglancer/util/disposable';
@@ -478,6 +478,10 @@ class AvailableCapacity extends RefCounted {
   }
 }
 
+export interface FrontendChunkDataListener extends SharedObject {
+  updateChunkData(requestorChunkKey: string, data: any, message: string|undefined): void;
+}
+
 @registerSharedObject(CHUNK_QUEUE_MANAGER_RPC_ID)
 export class ChunkQueueManager extends SharedObjectCounterpart {
   gpuMemoryCapacity: AvailableCapacity;
@@ -712,6 +716,15 @@ export class ChunkQueueManager extends SharedObjectCounterpart {
           'Chunk.update',
           {'id': chunk.key, 'state': ChunkState.EXPIRED, 'source': chunk.source!.rpcId});
     }
+  }
+
+  retrieveChunkData(chunk: Chunk, requestorChunkKey: string, requestor: FrontendChunkDataListener) {
+    this.rpc!.invoke('Chunk.update', {
+      id: chunk.key,
+      requestorChunkKey,
+      requestorRef: requestor.rpcId,
+      source: chunk.source!.rpcId
+    });
   }
 
   copyChunkToGPU(chunk: Chunk) {
@@ -989,4 +1002,9 @@ export function withChunkManager<T extends {new (...args: any[]): SharedObject}>
 registerRPC(CHUNK_SOURCE_INVALIDATE_RPC_ID, function(x) {
   const source = <ChunkSource>this.get(x['id']);
   source.chunkManager.queueManager.invalidateSourceCache(source);
+});
+
+registerRPC(CHUNK_SOURCE_FETCH_RPC_ID, function(x) {
+  const listener = <FrontendChunkDataListener>this.get(x['requestorRef']);
+  listener.updateChunkData(x['requestorChunkKey'], x['data'], x['message']);
 });

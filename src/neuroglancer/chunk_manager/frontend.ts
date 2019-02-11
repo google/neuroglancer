@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-import {CHUNK_MANAGER_RPC_ID, CHUNK_QUEUE_MANAGER_RPC_ID, CHUNK_SOURCE_INVALIDATE_RPC_ID, ChunkSourceParametersConstructor, ChunkState} from 'neuroglancer/chunk_manager/base';
+import {CHUNK_MANAGER_RPC_ID, CHUNK_QUEUE_MANAGER_RPC_ID, CHUNK_SOURCE_FETCH_RPC_ID, CHUNK_SOURCE_INVALIDATE_RPC_ID, ChunkSourceParametersConstructor, ChunkState} from 'neuroglancer/chunk_manager/base';
 import {SharedWatchableValue} from 'neuroglancer/shared_watchable_value';
 import {TrackableValue} from 'neuroglancer/trackable_value';
 import {Borrowed} from 'neuroglancer/util/disposable';
@@ -158,6 +158,26 @@ export class ChunkQueueManager extends SharedObject {
         source.deleteChunk(chunkKey);
       }
       visibleChunksChanged = true;
+    } else if (update['requestorChunkKey'] !== undefined) {
+      const rpc = this.rpc!;
+      const source: ChunkSource = rpc.get(update['source']);
+      const requestorChunkKey: string = update['requestorChunkKey'];
+      const requestorRef: any = update['requestorRef'];
+      const key = update['id'];
+
+      const chunk = source.chunks.get(key);
+      const data = chunk ? (<any>chunk)['data'] : undefined;
+      let message: string|undefined = undefined;
+      if (!data) {
+        if (chunk) {
+          message = 'Chunk has no data';
+        } else {
+          message = `No chunk found at ${key} for source ${source.constructor.name}`;
+        }
+      }
+
+      rpc.invoke(
+          CHUNK_SOURCE_FETCH_RPC_ID, {id: key, requestorChunkKey, requestorRef, data, message});
     } else {
       let newState: number = update['state'];
       if (newState === ChunkState.EXPIRED) {

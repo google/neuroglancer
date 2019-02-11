@@ -16,6 +16,6 @@
 import {ComputedDataSource} from 'neuroglancer/datasource/computed/frontend';
 import {registerProvider} from 'neuroglancer/datasource/default_provider';
 
-if (false) {
+if (true) {
   registerProvider('computed', () => new ComputedDataSource());
 }

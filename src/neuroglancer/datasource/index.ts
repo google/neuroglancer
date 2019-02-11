@@ -141,6 +141,10 @@ export class DataSourceProvider extends RefCounted {
       chunkManager: ChunkManager, url: string, options: GetVolumeOptions = {},
       cancellationToken = uncancelableToken) {
     let [dataSource, path] = this.getDataSource(url);
+    if (options === undefined) {
+      options = {};
+    }
+    options.dataSourceProvider = this;
     return new Promise<MultiscaleVolumeChunkSource>(resolve => {
       resolve(dataSource.getVolume!(chunkManager, path, options, cancellationToken));
     });
