@@ -18,8 +18,6 @@ import {VolumeType} from 'neuroglancer/sliceview/volume/base';
 import {DataType} from 'neuroglancer/util/data_type';
 import {vec3} from 'neuroglancer/util/geom';
 
-export type ArrayType = Uint8Array|Uint16Array|Uint32Array|Float32Array;
-
 export class ComputedVolumeChunkSourceParameters {
   computationRef: any;
   sourceRef: any;

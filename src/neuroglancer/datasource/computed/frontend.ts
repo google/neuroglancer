@@ -21,32 +21,33 @@ import {DataType, VolumeChunkSpecification, VolumeSourceOptions, VolumeType} fro
 import {MultiscaleVolumeChunkSource as GenericMultiscaleVolumeChunkSource, VolumeChunkSource} from 'neuroglancer/sliceview/volume/frontend';
 import {CancellationToken} from 'neuroglancer/util/cancellation';
 import {mat4, vec3} from 'neuroglancer/util/geom';
+import {verifyObject, verifyString} from 'neuroglancer/util/json';
 import {SharedObject} from 'neuroglancer/worker_rpc';
 
 
 class ComputedVolumeChunkSource extends
 (WithParameters(VolumeChunkSource, ComputedVolumeChunkSourceParameters)) {}
 
-export abstract class VolumeComputationFrontend<T extends ComputationParameters> extends
-    SharedObject {
+export abstract class VolumeComputationFrontend extends SharedObject {
+  constructor(public params: ComputationParameters) {
+    super();
+  }
+}
+
+export interface VolumeComputationFrontendProvider {
   /**
    * Modifes the ComputedVolumeDataSourceParameters as needed and returns
-   * parameters for the backend computation.
-   * @param config Config data supplied from the URL
+   * a VolumeComputationFrontend in a Promise.
+   * @param config a JSON object parsed from the URL
    * @param volumes A volumes array as returned by
    *   GenericMultiscaleVolumeChunkSource.getSources()
    * @param params volume data source parameters, populated with defaults
    *   from the native resolution origin source. These are to be modified.
-   * @returns a Promise containing parameters passed to the backend
-   *   computation.
+   * @returns a Promise containing containg the frontend computation.
    */
-  abstract initialize(
-      config: string, volumes: VolumeChunkSource[][],
-      params: ComputedVolumeDataSourceParameters): Promise<T>;
-}
-
-export interface VolumeComputationFrontendProvider<T extends ComputationParameters> {
-  makeComputation(): VolumeComputationFrontend<T>;
+  getComputation(
+      config: any, volumes: VolumeChunkSource[][],
+      params: ComputedVolumeDataSourceParameters): Promise<VolumeComputationFrontend>;
 }
 
 export interface ComputedVolumeDataSourceParameters {
@@ -82,7 +83,7 @@ export class ComputedMultiscaleVolumeChunkSource implements GenericMultiscaleVol
 
   constructor(
       public params: ComputedVolumeDataSourceParameters, public sources: VolumeChunkSource[][],
-      public computation: VolumeComputationFrontend<any>, public chunkManager: ChunkManager) {
+      public computation: VolumeComputationFrontend, public chunkManager: ChunkManager) {
     this.numChannels = params.computationParameters.outputSpec.numChannels;
     this.dataType = params.computationParameters.outputSpec.dataType;
     this.volumeType = params.computationParameters.outputSpec.volumeType;
@@ -126,36 +127,15 @@ export class ComputedMultiscaleVolumeChunkSource implements GenericMultiscaleVol
 
 
 export class ComputedDataSource extends DataSource {
-  parseConfig(config: string, {} /*dataSourceProvider: DataSourceProvider*/) {
-    // config is expected to be like computeName(computeParams)source(url)
-    // In which case, matches will be ['(computeParams)', '(url)']
-    const re = /\([^)]*\)/g;
-    const matches = config.match(re);
-    if (!matches || matches.length < 1) {
-      return [[], []];
-    }
-
-    const sourceNames = [];
-    const sourceConfigs = [];
-    let lastEnd = 0;
-    for (const match of matches) {
-      const tokenEnd = config.indexOf(match);
-      sourceNames.push(config.substring(lastEnd, tokenEnd));
-      sourceConfigs.push(match.substring(1, match.length - 1));
-      lastEnd = tokenEnd + match.length;
-    }
-
-    return [sourceNames, sourceConfigs];
-  }
-
   getOriginVolumes(
-      dataSourceProvider: DataSourceProvider, originUrl: string, config: string,
-      chunkManager: ChunkManager,
+      dataSourceProvider: DataSourceProvider, originUrl: string, chunkManager: ChunkManager,
       cancellationToken: CancellationToken): Promise<ComputedVolumeSpecs> {
+    const slashPosition = originUrl.indexOf('://');
+    const config = originUrl.substring(slashPosition + 3);
     return new Promise((resolve, reject) => {
              const dataSource = dataSourceProvider.getDataSource(originUrl)[0];
              if (!dataSource || !dataSource.getVolume) {
-               reject();
+               reject(`Unable to fetch data source for URL ${originUrl}`);
              }
              resolve(dataSource.getVolume!(chunkManager, config, {}, cancellationToken));
            })
@@ -215,44 +195,55 @@ export class ComputedDataSource extends DataSource {
   getVolume(
       chunkManager: ChunkManager, config: string, options: GetVolumeOptions,
       cancellationToken: CancellationToken) {
+    console.log('Computed datasource config:', config);
     if (!options.dataSourceProvider) {
       return Promise.reject('Need a DataSourceProvider');
     }
 
     const dataSourceProvider = options.dataSourceProvider!;
-    const [sourceNames, sourceConfigs] = this.parseConfig(config, dataSourceProvider);
-
-    if (sourceNames.length < 2) {
-      return Promise.reject();
+    let configObj: any;
+    try {
+      configObj = verifyObject(JSON.parse(config));
+    } catch (error) {
+      return Promise.reject(
+          `Could not parse JSON configuration while initializing computational datasource: ${
+              error}`);
     }
 
-    // The first source name should be the key to a VolumeComputation
-    const computationProvider = ComputedDataSource.computationMap.get(sourceNames[0]);
-    const originUrl = sourceNames[1] + '://' + sourceConfigs[1];
+    if (!configObj) {
+      return Promise.reject('Could not verify configuration JSON');
+    }
+    if (configObj['origin'] === undefined) {
+      return Promise.reject('Config is missing origin');
+    }
+    if (configObj['computation'] === undefined) {
+      return Promise.reject('Config is missing computation');
+    }
+
+    const computationName = verifyString(configObj['computation']);
+    const computationProvider = ComputedDataSource.computationMap.get(computationName);
+
+    const originUrl = verifyString(configObj['origin']);
 
     if (!computationProvider) {
-      return Promise.reject();
+      return Promise.reject(`Unable to find computation ${computationName}`);
     }
 
-    return this
-        .getOriginVolumes(
-            dataSourceProvider, originUrl, sourceConfigs[1], chunkManager, cancellationToken)
+    return this.getOriginVolumes(dataSourceProvider, originUrl, chunkManager, cancellationToken)
         .then((volumes) => {
           const dataSourceParams = this.defaultParams(volumes, originUrl, dataSourceProvider);
-          const computation = computationProvider.makeComputation();
-          return computation.initialize(sourceConfigs[0], volumes.sources, dataSourceParams)
-              .then((computationParams: ComputationParameters) => {
-                computation.initializeCounterpart(chunkManager.rpc!, computationParams);
+          return computationProvider.getComputation(configObj, volumes.sources, dataSourceParams)
+              .then((computation: VolumeComputationFrontend) => {
+                computation.initializeCounterpart(chunkManager.rpc!, computation.params);
                 return new ComputedMultiscaleVolumeChunkSource(
                     dataSourceParams, volumes.sources, computation, chunkManager);
               });
         });
   }
 
-  static computationMap = new Map<string, VolumeComputationFrontendProvider<any>>();
+  static computationMap = new Map<string, VolumeComputationFrontendProvider>();
 
-  static registerComputation(
-      key: string, computationProvider: VolumeComputationFrontendProvider<any>) {
+  static registerComputation(key: string, computationProvider: VolumeComputationFrontendProvider) {
     this.computationMap.set(key, computationProvider);
   }
 }

@@ -760,59 +760,42 @@ export class ChunkQueueManager extends SharedObjectCounterpart {
       // Note: After calling this, chunk may no longer be valid.
       this.updateChunkState(chunk, ChunkState.QUEUED);
     };
-    let downloadPromotionCandidates = this.queuedDownloadPromotionQueue.candidates();
-    let downloadEvictionCandidates = this.downloadEvictionQueue.candidates();
-    let systemMemoryEvictionCandidates = this.systemMemoryEvictionQueue.candidates();
-    let downloadCapacity = this.downloadCapacity;
-    let systemMemoryCapacity = this.systemMemoryCapacity;
-    while (true) {
-      let promotionCandidateResult = downloadPromotionCandidates.next();
-      if (promotionCandidateResult.done) {
-        break;
-      }
-      let promotionCandidate = promotionCandidateResult.value;
-      const size = 0; /* unknown size, since it hasn't been downloaded yet. */
-      let priorityTier = promotionCandidate.priorityTier;
-      let priority = promotionCandidate.priority;
-      // console.log("Download capacity: " + downloadCapacity);
-      if (!tryToFreeCapacity(
-              size, downloadCapacity, priorityTier, priority, downloadEvictionCandidates, evict)) {
-        break;
-      }
-      if (!tryToFreeCapacity(
-              size, systemMemoryCapacity, priorityTier, priority, systemMemoryEvictionCandidates,
-              evict)) {
-        break;
-      }
-      this.updateChunkState(promotionCandidate, ChunkState.DOWNLOADING);
-      startChunkDownload(promotionCandidate);
-    }
 
-    let computePromotionCandidates = this.queuedComputePromotionQueue.candidates();
-    let computeEvictionCandidates = this.computeEvictionQueue.candidates();
-    let computeCapacity = this.computeCapacity;
+    const promotionLambda =
+        (promotionCandidates: Iterator<Chunk>, evictionCandidates: Iterator<Chunk>,
+         capacity: AvailableCapacity) => {
+          let systemMemoryEvictionCandidates = this.systemMemoryEvictionQueue.candidates();
+          let systemMemoryCapacity = this.systemMemoryCapacity;
+          while (true) {
+            let promotionCandidateResult = promotionCandidates.next();
+            if (promotionCandidateResult.done) {
+              return;
+            }
+            let promotionCandidate = promotionCandidateResult.value;
+            const size = 0; /* unknown size, since it hasn't been downloaded yet. */
+            let priorityTier = promotionCandidate.priorityTier;
+            let priority = promotionCandidate.priority;
+            // console.log("Download capacity: " + downloadCapacity);
+            if (!tryToFreeCapacity(
+                    size, capacity, priorityTier, priority, evictionCandidates, evict)) {
+              return;
+            }
+            if (!tryToFreeCapacity(
+                    size, systemMemoryCapacity, priorityTier, priority,
+                    systemMemoryEvictionCandidates, evict)) {
+              return;
+            }
+            this.updateChunkState(promotionCandidate, ChunkState.DOWNLOADING);
+            startChunkDownload(promotionCandidate);
+          }
+        };
 
-    while (true) {
-      let promotionCandidateResult = computePromotionCandidates.next();
-      if (promotionCandidateResult.done) {
-        return;
-      }
-      let promotionCandidate = promotionCandidateResult.value;
-      const size = 0; /* unknown size, since it hasn't been computed yet. */
-      let priorityTier = promotionCandidate.priorityTier;
-      let priority = promotionCandidate.priority;
-      if (!tryToFreeCapacity(
-              size, computeCapacity, priorityTier, priority, computeEvictionCandidates, evict)) {
-        return;
-      }
-      if (!tryToFreeCapacity(
-              size, systemMemoryCapacity, priorityTier, priority, systemMemoryEvictionCandidates,
-              evict)) {
-        return;
-      }
-      this.updateChunkState(promotionCandidate, ChunkState.COMPUTING);
-      startChunkDownload(promotionCandidate);
-    }
+    promotionLambda(
+        this.queuedDownloadPromotionQueue.candidates(), this.downloadEvictionQueue.candidates(),
+        this.downloadCapacity);
+    promotionLambda(
+        this.queuedComputePromotionQueue.candidates(), this.computeEvictionQueue.candidates(),
+        this.computeCapacity);
   }
 
   process() {

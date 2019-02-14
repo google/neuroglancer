@@ -17,12 +17,13 @@
 import {ChunkStateListener, WithParameters} from 'neuroglancer/chunk_manager/backend';
 import {Chunk} from 'neuroglancer/chunk_manager/backend';
 import {ChunkPriorityTier, ChunkState} from 'neuroglancer/chunk_manager/base';
-import {ArrayType, ComputationParameters, getArrayView} from 'neuroglancer/datasource/computed/base';
+import {ComputationParameters, getArrayView} from 'neuroglancer/datasource/computed/base';
 import {ComputedVolumeChunkSourceParameters} from 'neuroglancer/datasource/computed/base';
 import {decodeRawChunk} from 'neuroglancer/sliceview/backend_chunk_decoders/raw';
 import {decodeChannels as decodeChannels32} from 'neuroglancer/sliceview/compressed_segmentation/decode_uint32';
 import {decodeChannels as decodeChannels64} from 'neuroglancer/sliceview/compressed_segmentation/decode_uint64';
 import {VolumeChunk, VolumeChunkSource} from 'neuroglancer/sliceview/volume/backend';
+import {TypedArray} from 'neuroglancer/util/array';
 import {CANCELED, CancellationToken} from 'neuroglancer/util/cancellation';
 import {DATA_TYPE_BYTES, DataType} from 'neuroglancer/util/data_type';
 import {prod3 as prod, vec3} from 'neuroglancer/util/geom';
@@ -33,23 +34,31 @@ export abstract class VolumeComputationBackend extends SharedObjectCounterpart {
     super(rpc, params);
   }
 
+  createOutputBuffer() {
+    const {outputSpec} = this.params;
+    return new ArrayBuffer(
+        prod(outputSpec.size) * outputSpec.numChannels * DATA_TYPE_BYTES[outputSpec.dataType]);
+  }
+
   /**
-   * Performs a computation on the given buffer.
-   * @param inputSize the geometry of the input buffer.
-   * @param inputDataType DataType corresponding to the input buffer.
+   * Performs a computation on the given buffer, returning the result via a
+   * Promise.
    * @param inputBuffer the input buffer
-   * @param outputSize the geometry of the output buffer.
-   * @param outputDataType DataType corresponding to the output buffer.
-   * @param outputBuffer the instantiated outputBuffer. This function should
-   *   write its output directly into this object.
-   * @param cancellationToken indicates whether this chunk has been cancelled.
+   * @param cancellationToken cancellation token
    */
-  abstract compute(
-      inputSize: vec3, inputDataType: DataType, inputBuffer: ArrayBuffer, outputSize: vec3,
-      outputDataType: DataType, outputBuffer: ArrayBuffer,
-      cancellationToken: CancellationToken): Promise<void>;
+  abstract compute(inputBuffer: ArrayBuffer, cancellationToken: CancellationToken):
+      Promise<ArrayBuffer>;
 }
 
+/**
+ * Computes the index relative to the origin of a larger 4d volume given the
+ * index relative to a fully contained sub volume. In particular this allows
+ * for iteration along a subregion of a volume using linear indices.
+ * @param idx the linear index into a subregion
+ * @param offset the subregion's offset relative to the overall volume
+ * @param cropSize the subregion's size
+ * @param size the overal volume's size
+ */
 function subBoxIndex(idx: number, offset: vec3, cropSize: vec3, size: vec3) {
   return idx % cropSize[0] + offset[0] +
       (Math.floor(idx / cropSize[0]) % cropSize[1] + offset[1]) * size[0] +
@@ -58,9 +67,21 @@ function subBoxIndex(idx: number, offset: vec3, cropSize: vec3, size: vec3) {
       (Math.floor(idx / (cropSize[0] * cropSize[1] * cropSize[2]))) * size[0] * size[1] * size[2];
 }
 
+/**
+ * Copies the overlapping region of the source array into the destination
+ * array.
+ * @param sourceCorner the corner (lower-bound) corresponding to the source
+ *   array, in global coordinates.
+ * @param sourceSize the source array's size
+ * @param sourceView the source array
+ * @param destCorner the corner corresponding to the destination array
+ * @param destSize the destination array's size
+ * @param destView the destination array
+ * @param dataType the data type of both source and destintation arrays.
+ */
 export function copyBufferOverlap(
-    sourceCorner: vec3, sourceSize: vec3, sourceView: ArrayType, destCorner: vec3, destSize: vec3,
-    destView: ArrayType, dataType: DataType) {
+    sourceCorner: vec3, sourceSize: vec3, sourceView: TypedArray, destCorner: vec3, destSize: vec3,
+    destView: TypedArray, dataType: DataType) {
   // UINT64 data is packed two-at-a-time into a UINT32 array, so we handle it as a special case.
   let copyFunction = dataType === DataType.UINT64 ? (j: number, k: number) => {
     destView[2 * k] = sourceView[2 * j];
@@ -87,12 +108,17 @@ export function copyBufferOverlap(
   }
 }
 
-// Computes a consistent key string from a chunk grid position.
-//
-// It's tempting to use chunk.key, in particular because these values will
-// often be the same, but we won't always have access to a fully-specified
-// chunk, and there's no contractual guarantee that its key will be equal to
-// the value returned here.
+
+
+/**
+ * Computes a consistent key string from a chunk grid position.
+ *
+ * It's tempting to use chunk.key, in particular because these values will
+ * often be the same, but we won't always have access to a fully-specified
+ * chunk, and there's no contractual guarantee that its key will be equal to
+ * the value returned here.
+ * @param gridPosition chunk grid position
+ */
 function gridPositionKey(gridPosition: vec3) {
   return gridPosition.toLocaleString();
 }
@@ -102,26 +128,56 @@ function gridPositionKey(gridPosition: vec3) {
 // used as input by the computation that provides its data. This includes
 // fetching chunk data from other datasources.
 export class ComputedVolumeChunk extends VolumeChunk implements ChunkStateListener {
+  // Defines the input and output geometry and datatypes.
   private computationParams_?: ComputationParameters;
 
+  // Inidicates a cancellation of this chunk's computation.
   private cancellationToken_?: CancellationToken;
+
+  // Resolve and reject functions correspond to a Promise, returned by getPromise().
   private resolve_?: () => void;
   private reject_?: (reason: any) => void;
+
+  // -- STATE VARIABLES: Only one of succes_, failure_, and computing_ should
+  //    resolve to true at a given time --
+
+  // If true, indicates that the computation here has been completed
+  // successfully, and data is available on this VolumeChunk.
   private success_ = false;
+
+  // If computation failed for any reason, an indication of its cause will be
+  // stored in the failure_ variable.
   private failure_?: any;
+
+  // True iff this chunk is actively computing.
   private computing_ = false;
 
-  private outputSource_?: ComputedVolumeChunkSource;
-  private originGridPositions_ = new Map<String, vec3>();
-  private inputLower_?: vec3;
-  private inputBuffer_?: ArrayBuffer;
-
+  // True iff this chunk has been initialized for computation.
   private initialized_ = false;
 
+  // A map from grid position string keys, as returned by gridPositionKey to
+  // vec3 grid positions. This is used as an indirection to avoid storing
+  // explicit references to VolumeChunks belonging to the origin source.
+  private originGridPositions_ = new Map<String, vec3>();
+
+  // The lower bound of the input patch.
+  private inputLower_?: vec3;
+
+  // Represents the input patch.
+  private inputBuffer_?: ArrayBuffer;
+
+  // Indicate to the ChunkManager that this is a computational Chunk.
   isComputational = true;
 
-  // Sets up computation parameters, computes overlapping origin chunks and
-  // initializes the input buffer.
+  // Our source is a ComputedVolumeChunkSource.
+  source: ComputedVolumeChunkSource;
+
+  /**
+   * Sets up computation parameters, computes overlapping origin chunks and
+   * initializes the input buffer.
+   * @param computationParams computation parameters
+   * @param cancellationToken cancellation token
+   */
   initializeComputation(
       computationParams: ComputationParameters, cancellationToken: CancellationToken) {
     if (!this.source) {
@@ -131,12 +187,12 @@ export class ComputedVolumeChunk extends VolumeChunk implements ChunkStateListen
       throw new Error('initializeComputation must be called after computeChunkBounds.');
     }
     this.computationParams_ = computationParams;
+    this.cancellationToken_ = cancellationToken;
 
+    // Reset state variables.
     this.failure_ = undefined;
     this.computing_ = false;
     this.success_ = false;
-    this.outputSource_ = <ComputedVolumeChunkSource>this.source;
-    this.cancellationToken_ = cancellationToken;
 
     this.cancellationToken_.add(() => {
       if (this.reject_) {
@@ -151,7 +207,7 @@ export class ComputedVolumeChunk extends VolumeChunk implements ChunkStateListen
     const outBoxLower = vec3.multiply(vec3.create(), this.chunkGridPosition, outputSpec.size);
     const outputCenter =
         vec3.add(vec3.create(), outBoxLower, vec3.divide(vec3.create(), outputSpec.size, twos));
-    const scaleFactor = this.outputSource_.parameters.scaleFactor;
+    const scaleFactor = this.source.parameters.scaleFactor;
     const inputCenter = vec3.divide(vec3.create(), outputCenter, scaleFactor);
     const inputSize = inputSpec.size;
     this.inputLower_ =
@@ -168,6 +224,10 @@ export class ComputedVolumeChunk extends VolumeChunk implements ChunkStateListen
     this.initialized_ = true;
   }
 
+  /**
+   * Returns a Promise that will resolve when computation completes, or reject
+   * if computation fails or is cancelled.
+   */
   getPromise() {
     return new Promise<void>((resolve, reject) => {
       if (this.success_) {
@@ -183,6 +243,10 @@ export class ComputedVolumeChunk extends VolumeChunk implements ChunkStateListen
     });
   }
 
+  /**
+   * Listens to state changes on origin Chunks.
+   * @param chunk an origin Chunk.
+   */
   stateChanged(chunk: Chunk) {
     const volumeChunk = <VolumeChunk>chunk;
     switch (volumeChunk.state) {
@@ -201,37 +265,40 @@ export class ComputedVolumeChunk extends VolumeChunk implements ChunkStateListen
         // request it to be sent back.
         const gridKey = gridPositionKey(volumeChunk.chunkGridPosition);
         const chunkSize = volumeChunk.chunkDataSize!;
-        const originSource = this.outputSource_!.originSource;
+        const originSource = this.source.originSource;
         const chunkCorner = vec3.multiply(
             vec3.create(), volumeChunk.chunkGridPosition, originSource.spec.chunkDataSize);
 
-        this.outputSource_!.requestChunkData(
-            volumeChunk, this.key!, (source: ArrayType, error: any) => {
-              if (error) {
-                console.log(this.key!, 'unable to retrieve frontend data for', volumeChunk.key!);
-                this.fail_(error);
-                return;
-              }
-              const originGridPosition = this.originGridPositions_.get(gridKey)!;
-              const originChunk = <VolumeChunk>originSource.getChunk(originGridPosition);
-              originChunk.unregisterListener(this);
-              this.originGridPositions_.delete(gridKey);
+        this.source.requestChunkData(volumeChunk, this.key!, (source: TypedArray, error: any) => {
+          if (error) {
+            console.log(this.key!, 'unable to retrieve frontend data for', volumeChunk.key!);
+            this.fail_(error);
+            return;
+          }
+          const originGridPosition = this.originGridPositions_.get(gridKey)!;
+          const originChunk = <VolumeChunk>originSource.getChunk(originGridPosition);
+          originChunk.unregisterListener(this);
+          this.originGridPositions_.delete(gridKey);
 
-              const inputSpec = this.computationParams_!.inputSpec;
-              const destination = getArrayView(this.inputBuffer_!, inputSpec.dataType);
-              const numChannels = originSource.spec.numChannels;
-              const rawSource = this.maybeDecodeBuffer_(
-                  source, inputSpec.dataType, originChunk.chunkDataSize!, numChannels);
-              copyBufferOverlap(
-                  chunkCorner, chunkSize, rawSource, this.inputLower_!, inputSpec.size, destination,
-                  inputSpec.dataType);
-              setTimeout(() => this.checkDone_(), 0);
-            });
+          const inputSpec = this.computationParams_!.inputSpec;
+          const destination = getArrayView(this.inputBuffer_!, inputSpec.dataType);
+          const numChannels = originSource.spec.numChannels;
+          const rawSource = this.maybeDecodeBuffer_(
+              source, inputSpec.dataType, originChunk.chunkDataSize!, numChannels);
+          copyBufferOverlap(
+              chunkCorner, chunkSize, rawSource, this.inputLower_!, inputSpec.size, destination,
+              inputSpec.dataType);
+          setTimeout(() => this.checkDone_(), 0);
+        });
         break;
       }
     }
   }
 
+  /**
+   * Returns a list of the grid positions corresponding to chunks on the origin
+   * source that this chunk overlaps.
+   */
   getOverlappingOriginGridPositions() {
     return this.originGridPositions_.values();
   }
@@ -241,19 +308,27 @@ export class ComputedVolumeChunk extends VolumeChunk implements ChunkStateListen
     this.cleanup_();
   }
 
+  /**
+   * Unregisters listeners and so forth that were originally registered by this
+   * chunk.
+   */
   private cleanup_() {
-    if (!this.initialized_) {
+    if (!this.initialized_ || !this.source) {
       return;
     }
-    const outputSource = this.outputSource_!;
     for (const chunkGridPosition of this.originGridPositions_.values()) {
-      outputSource.originSource.getChunk(chunkGridPosition).unregisterListener(this);
-      outputSource.cancelChunkDataRequest(gridPositionKey(chunkGridPosition), this.key!);
+      this.source.originSource.getChunk(chunkGridPosition).unregisterListener(this);
+      this.source.cancelChunkDataRequest(gridPositionKey(chunkGridPosition), this.key!);
     }
     this.originGridPositions_.clear();
-    outputSource.unregisterChunk(this);
+    this.source.unregisterChunk(this);
   }
 
+  /**
+   * Handles failure conditions encountered while fetching data from the origin
+   * source.
+   * @param reason reason for failure
+   */
   private fail_(reason: any) {
     if (this.failure_ !== undefined || this.success_) {
       return;
@@ -268,10 +343,17 @@ export class ComputedVolumeChunk extends VolumeChunk implements ChunkStateListen
     }
   }
 
-  // Decompresses a compressed segmentation buffer, or simply pass back if raw.
+  /**
+   * Decompresses a compressed segmentation buffer, or simply passes it back if
+   * raw.
+   * @param buffer the possibly-compressed data buffer
+   * @param dataType the buffer's datatype
+   * @param size the buffer's size
+   * @param numChannels the number of channels in the buffer
+   */
   private maybeDecodeBuffer_(
-      buffer: ArrayType, dataType: DataType, size: vec3, numChannels: number) {
-    const originSource = this.outputSource_!.originSource;
+      buffer: TypedArray, dataType: DataType, size: vec3, numChannels: number) {
+    const originSource = this.source.originSource;
     if (!originSource.spec.compressedSegmentationBlockSize) {
       return buffer;
     }
@@ -294,8 +376,11 @@ export class ComputedVolumeChunk extends VolumeChunk implements ChunkStateListen
     throw new Error(`Compression is unsupported for datatypes other than UINT32 and UINT64`);
   }
 
-  // Copies an origin chunk's data into the appropriate location in the input
-  // buffer.
+  /**
+   * Copies an origin chunk's data into the appropriate location in the input
+   * buffer.
+   * @param originChunk origin Chunk
+   */
   private copyOriginChunk_(originChunk: VolumeChunk) {
     const inputSpec = this.computationParams_!.inputSpec;
     const gridKey = gridPositionKey(originChunk.chunkGridPosition);
@@ -304,13 +389,12 @@ export class ComputedVolumeChunk extends VolumeChunk implements ChunkStateListen
     const chunkSize = originChunk.chunkDataSize!;
     const numChannels = inputSpec.numChannels;
     const chunkCorner = vec3.multiply(
-        vec3.create(), originChunk.chunkGridPosition,
-        this.outputSource_!.originSource.spec.chunkDataSize);
+        vec3.create(), originChunk.chunkGridPosition, this.source.originSource.spec.chunkDataSize);
 
     let destination = getArrayView(this.inputBuffer_!, inputSpec.dataType);
 
     const source = this.maybeDecodeBuffer_(
-        <ArrayType>(originChunk.data!), inputSpec.dataType, chunkSize, numChannels);
+        <TypedArray>(originChunk.data!), inputSpec.dataType, chunkSize, numChannels);
 
     copyBufferOverlap(
         chunkCorner, chunkSize, source, this.inputLower_!, inputSpec.size, destination,
@@ -319,24 +403,24 @@ export class ComputedVolumeChunk extends VolumeChunk implements ChunkStateListen
     setTimeout(() => this.checkDone_(), 0);
   }
 
+  /**
+   * Peforms the computation over the input buffer, ensuring validity of the
+   * eventual output data that will be set for this chunk. This includes
+   * handling volume-boundary effects.
+   */
   private performComputation_() {
-    const computation = this.outputSource_!.computation;
-    const {inputSpec, outputSpec} = this.computationParams_!;
+    const computation = this.source.computation;
+    const {outputSpec} = this.computationParams_!;
     const outputSize = outputSpec.size;
     const outputDataType = outputSpec.dataType;
-    const outputBuffer = new ArrayBuffer(
-        prod(outputSize) * outputSpec.numChannels * DATA_TYPE_BYTES[outputDataType]);
 
     // Most of the time, the chunk data size corresponds to the output buffer
     // size, but a chunk at the upper bound of a volume will be clipped to the
     // volume bounds. Computations are guaranteed the same buffer sizes each
     // time, so we check for this situation and perform a crop-and-copy when
     // necessary.
-    return computation
-        .compute(
-            inputSpec.size, inputSpec.dataType, this.inputBuffer_!, outputSize, outputDataType,
-            outputBuffer, this.cancellationToken_!)
-        .then(() => {
+    return computation.compute(this.inputBuffer_!, this.cancellationToken_!)
+        .then((outputBuffer) => {
           this.inputBuffer_ = undefined;
           if (vec3.equals(outputSize, this.chunkDataSize!)) {
             decodeRawChunk(this, outputBuffer);
@@ -354,9 +438,11 @@ export class ComputedVolumeChunk extends VolumeChunk implements ChunkStateListen
         });
   }
 
-  // Idempotently performs the computation, if the input buffer is ready. This
-  // function should be called after a timeout in most cases, because it may
-  // take a long time to return.
+  /**
+   * Idempotently performs the computation, if the input buffer is ready. This
+   * function should be called after a timeout in most cases, because it may
+   * take a long time to return.
+   */
   private checkDone_() {
     if (this.failure_ || this.success_ || this.computing_) {
       return;
@@ -375,11 +461,14 @@ export class ComputedVolumeChunk extends VolumeChunk implements ChunkStateListen
     }
   }
 
-  // Computes the chunkGridPosition for each valid origin chunk that the input
-  // field of this computational chunk overlaps, populating the origin grid
-  // positions map.
+  /**
+   * Computes the chunkGridPosition for each valid origin chunk that the input
+   * field of this computational chunk overlaps, populating the origin grid
+   * positions map. Also registers this chunk as a listener on the state
+   * changes of the origin chunks.
+   */
   private setupSourceChunks_() {
-    const originSource = this.outputSource_!.originSource;
+    const originSource = this.source.originSource;
     const originChunkSize = originSource.spec.chunkDataSize;
     const inputSpec = this.computationParams_!.inputSpec;
     const inputLower = this.inputLower_!;
@@ -413,10 +502,19 @@ export class ComputedVolumeChunk extends VolumeChunk implements ChunkStateListen
 
 @registerSharedObject() export class ComputedVolumeChunkSource extends
 (WithParameters(VolumeChunkSource, ComputedVolumeChunkSourceParameters)) {
+  // The VolumeChunkSource representing the input data over which computations
+  // are performed.
   originSource: VolumeChunkSource;
-  private activeComputations_ = new Map<String, ComputedVolumeChunk>();
+
+  // Computations that are waiting for input data.
+  private pendingComputations_ = new Map<String, ComputedVolumeChunk>();
+
+  // Callbacks for pending data requests that were made to the front-end, which
+  // are necessary when source data has been previously downloaded and moved to
+  // the GPU. The top-level map is keyed by the origin chunk keys. The inner
+  // maps are keyed by the requestor.
   private frontendChunkRequests_ =
-      new Map<String, Map<String, (array: ArrayType, error: any) => void>>();
+      new Map<String, Map<String, (array: TypedArray, error: any) => void>>();
   public computation: VolumeComputationBackend;
 
   constructor(rpc: RPC, options: any) {
@@ -429,50 +527,55 @@ export class ComputedVolumeChunk extends VolumeChunk implements ChunkStateListen
     }));
   }
 
+  /**
+   * Requests that the relevant chunks on the origin source are downloaded, so
+   * their data may be available for computation.
+   */
   updateChunkPriorities() {
-    const priorityMap = new Map<String, {priority: number, tier: number, pos: vec3}>();
-
-    for (const outputChunk of this.activeComputations_.values()) {
-      for (const gridPosition of outputChunk.getOverlappingOriginGridPositions()) {
-        const gridString = gridPosition.toLocaleString();
-        if (!priorityMap.has(gridString)) {
-          priorityMap.set(
-              gridString,
-              {priority: outputChunk.priority, tier: outputChunk.priorityTier, pos: gridPosition});
-        } else {
-          const currentPriority = priorityMap.get(gridString)!;
-          currentPriority.priority = Math.max(currentPriority.priority, outputChunk.priority);
-          currentPriority.tier = Math.min(currentPriority.tier, outputChunk.priorityTier);
-        }
+    for (const outputChunk of this.pendingComputations_.values()) {
+      if (outputChunk.priorityTier === ChunkPriorityTier.RECENT) {
+        continue;
       }
-    }
-
-    for (const priorityInfo of priorityMap.values()) {
-      const chunk = this.originSource.getChunk(priorityInfo.pos);
-      if (priorityInfo.tier !== ChunkPriorityTier.RECENT) {
-        this.chunkManager.requestChunk(chunk, priorityInfo.tier, priorityInfo.priority);
+      for (const gridPosition of outputChunk.getOverlappingOriginGridPositions()) {
+        const sourceChunk = this.originSource.getChunk(gridPosition);
+        this.chunkManager.requestChunk(sourceChunk, outputChunk.priorityTier, outputChunk.priority);
       }
     }
   }
 
+  /**
+   * Unregisters a ComputedVolumeChunk from the list of pending computations.
+   * @param chunk the computed volume chunk to unregister
+   */
   unregisterChunk(chunk: ComputedVolumeChunk) {
     const key = chunk.key!;
-    this.activeComputations_.delete(key);
+    this.pendingComputations_.delete(key);
   }
 
+  /**
+   * Requests chunk data that has already been moved to the frontend.
+   * @param chunk the chunk whose data is requested
+   * @param key a key referencing the requestor
+   * @param callback a function that takes a data array and error as arguments
+   */
   requestChunkData(
-      chunk: VolumeChunk, key: string, callback: (array: ArrayType, error: any) => void) {
+      chunk: VolumeChunk, key: string, callback: (array: TypedArray, error: any) => void) {
     const originGridKey = gridPositionKey(chunk.chunkGridPosition);
     if (this.frontendChunkRequests_.has(originGridKey)) {
       this.frontendChunkRequests_.get(originGridKey)!.set(key, callback);
       return;
     }
-    const callbackMap = new Map<String, (array: ArrayType, error: any) => void>();
+    const callbackMap = new Map<String, (array: TypedArray, error: any) => void>();
     callbackMap.set(key, callback);
     this.frontendChunkRequests_.set(originGridKey, callbackMap);
     this.chunkManager.queueManager.retrieveChunkData(chunk, originGridKey, this);
   }
 
+  /**
+   * Cancels an outstanding chunk data request.
+   * @param originGridKey the key corresponding to the requested chunk
+   * @param requestKey the key corresponding to the requestor
+   */
   cancelChunkDataRequest(originGridKey: string, requestKey: string) {
     if (this.frontendChunkRequests_.has(originGridKey)) {
       const map = this.frontendChunkRequests_.get(originGridKey)!;
@@ -483,6 +586,12 @@ export class ComputedVolumeChunk extends VolumeChunk implements ChunkStateListen
     }
   }
 
+  /**
+   * Triggers callback functions awaiting data from the frontend.
+   * @param originGridKey the key corresponding to the requested chunk
+   * @param data the chunk's data, if it was fetched
+   * @param error an error message, if there was one
+   */
   updateChunkData(originGridKey: string, data: any, error: any) {
     const map = this.frontendChunkRequests_.get(originGridKey);
     if (!map) {
@@ -492,14 +601,14 @@ export class ComputedVolumeChunk extends VolumeChunk implements ChunkStateListen
     this.frontendChunkRequests_.delete(originGridKey);
 
     for (const callback of map.values()) {
-      callback(<ArrayType>data, error);
+      callback(<TypedArray>data, error);
     }
   }
 
   download(chunk: VolumeChunk, cancellationToken: CancellationToken) {
     const outputChunk = <ComputedVolumeChunk>chunk;
     this.computeChunkBounds(outputChunk);
-    this.activeComputations_.set(chunk.key!, outputChunk);
+    this.pendingComputations_.set(chunk.key!, outputChunk);
     outputChunk.initializeComputation(this.computation.params, cancellationToken);
     this.chunkManager.scheduleUpdateChunkPriorities();
     return outputChunk.getPromise();

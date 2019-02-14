@@ -9,13 +9,11 @@ import {registerSharedObject} from 'neuroglancer/worker_rpc';
 export class ExampleComputation extends VolumeComputationBackend {
   params: ExampleComputationParameters;
 
-  compute(
-      {}, inputDataType: DataType, inputBuffer: ArrayBuffer, {}, outputDataType: DataType,
-      outputBuffer: ArrayBuffer, {}) {
-    const inputBufferView = getArrayView(inputBuffer, inputDataType);
-    const outputBufferView = getArrayView(outputBuffer, outputDataType);
-
+  compute(inputBuffer: ArrayBuffer) {
     const {inputSpec, outputSpec} = this.params;
+    const inputBufferView = getArrayView(inputBuffer, inputSpec.dataType);
+    const outputBuffer = this.createOutputBuffer();
+    const outputBufferView = getArrayView(outputBuffer, outputSpec.dataType);
 
     // const offset = vec3.floor(vec3.create(), vec3.divide(vec3.create(),
     // vec3.subtract(vec3.create(), inputSpec.size, outputSpec.size), [2, 2, 2]));
@@ -26,12 +24,12 @@ export class ExampleComputation extends VolumeComputationBackend {
         zeros, inputSpec.size, inputBufferView, zeros, outputSpec.size, outputBufferView,
         outputSpec.dataType);
 
-    if (inputDataType === DataType.UINT8) {
+    if (inputSpec.dataType === DataType.UINT8) {
       for (let i = 0; i < outputBufferView.length; ++i) {
         outputBufferView[i] = 255 - outputBufferView[i];
       }
     }
 
-    return Promise.resolve();
+    return Promise.resolve(outputBuffer);
   }
 }
