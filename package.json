@@ -52,6 +52,7 @@
     "webpack-dev-server": ">=3.1.11"
   },
   "dependencies": {
+    "@tensorflow/tfjs": "0.14.2",
     "@types/codemirror": "0.0.65",
     "@types/gl-matrix": "^2.4.4",
     "@types/lodash": "^4.14.118",

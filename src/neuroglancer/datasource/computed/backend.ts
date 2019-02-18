@@ -46,8 +46,9 @@ export abstract class VolumeComputationBackend extends SharedObjectCounterpart {
    * @param inputBuffer the input buffer
    * @param cancellationToken cancellation token
    */
-  abstract compute(inputBuffer: ArrayBuffer, cancellationToken: CancellationToken):
-      Promise<ArrayBuffer>;
+  abstract compute(
+      inputBuffer: ArrayBuffer, cancellationToken: CancellationToken,
+      chunk: ComputedVolumeChunk): Promise<ArrayBuffer>;
 }
 
 /**
@@ -390,7 +391,7 @@ export class ComputedVolumeChunk extends VolumeChunk implements ChunkStateListen
     // volume bounds. Computations are guaranteed the same buffer sizes each
     // time, so we check for this situation and perform a crop-and-copy when
     // necessary.
-    return computation.compute(this.inputBuffer_!, this.cancellationToken_!)
+    return computation.compute(this.inputBuffer_!, this.cancellationToken_!, this)
         .then((outputBuffer) => {
           this.inputBuffer_ = undefined;
           if (vec3.equals(outputSize, this.chunkDataSize!)) {
