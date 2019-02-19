@@ -14,8 +14,9 @@
  * limitations under the License.
  */
 
-import {CHUNK_MANAGER_RPC_ID, CHUNK_QUEUE_MANAGER_RPC_ID, CHUNK_SOURCE_FETCH_RPC_ID, CHUNK_SOURCE_INVALIDATE_RPC_ID, ChunkPriorityTier, ChunkSourceParametersConstructor, ChunkState} from 'neuroglancer/chunk_manager/base';
+import {CHUNK_MANAGER_RPC_ID, CHUNK_QUEUE_MANAGER_RPC_ID, CHUNK_SOURCE_INVALIDATE_RPC_ID, ChunkPriorityTier, ChunkSourceParametersConstructor, ChunkState} from 'neuroglancer/chunk_manager/base';
 import {SharedWatchableValue} from 'neuroglancer/shared_watchable_value';
+import {TypedArray} from 'neuroglancer/util/array';
 import {CancellationToken, CancellationTokenSource} from 'neuroglancer/util/cancellation';
 import {Disposable, RefCounted} from 'neuroglancer/util/disposable';
 import {Borrowed} from 'neuroglancer/util/disposable';
@@ -75,6 +76,8 @@ export class Chunk implements Disposable {
   gpuMemoryBytes: number;
   backendOnly = false;
   isComputational = false;
+  newlyRequestedToFrontend = false;
+  requestedToFrontend = false;
 
   /**
    * Cancellation token used to cancel the pending download.  Set to undefined except when state !==
@@ -90,6 +93,8 @@ export class Chunk implements Disposable {
     this.newPriorityTier = ChunkPriorityTier.RECENT;
     this.error = null;
     this.state = ChunkState.NEW;
+    this.requestedToFrontend = false;
+    this.newlyRequestedToFrontend = false;
   }
 
   /**
@@ -103,6 +108,7 @@ export class Chunk implements Disposable {
     this.priority = this.newPriority;
     this.newPriorityTier = ChunkPriorityTier.RECENT;
     this.newPriority = Number.NEGATIVE_INFINITY;
+    this.requestedToFrontend = this.newlyRequestedToFrontend;
   }
 
   dispose() {
@@ -478,10 +484,6 @@ class AvailableCapacity extends RefCounted {
   }
 }
 
-export interface FrontendChunkDataListener extends SharedObject {
-  updateChunkData(requestorChunkKey: string, data: any, message: string|undefined): void;
-}
-
 @registerSharedObject(CHUNK_QUEUE_MANAGER_RPC_ID)
 export class ChunkQueueManager extends SharedObjectCounterpart {
   gpuMemoryCapacity: AvailableCapacity;
@@ -573,7 +575,8 @@ export class ChunkQueueManager extends SharedObjectCounterpart {
       case ChunkState.SYSTEM_MEMORY_WORKER:
       case ChunkState.SYSTEM_MEMORY:
         yield this.systemMemoryEvictionQueue;
-        if (chunk.priorityTier !== ChunkPriorityTier.RECENT && !chunk.backendOnly) {
+        if (chunk.priorityTier !== ChunkPriorityTier.RECENT && !chunk.backendOnly &&
+            chunk.requestedToFrontend) {
           yield this.gpuMemoryPromotionQueue;
         }
         break;
@@ -718,13 +721,9 @@ export class ChunkQueueManager extends SharedObjectCounterpart {
     }
   }
 
-  retrieveChunkData(chunk: Chunk, requestorChunkKey: string, requestor: FrontendChunkDataListener) {
-    this.rpc!.invoke('Chunk.update', {
-      id: chunk.key,
-      requestorChunkKey,
-      requestorRef: requestor.rpcId,
-      source: chunk.source!.rpcId
-    });
+  retrieveChunkData(chunk: Chunk) {
+    return this.rpc!.promiseInvoke<TypedArray>(
+        'Chunk.retrieve', {key: chunk.key!, source: chunk.source!.rpcId});
   }
 
   copyChunkToGPU(chunk: Chunk) {
@@ -891,11 +890,13 @@ export class ChunkManager extends SharedObjectCounterpart {
    * @param chunk
    * @param tier New priority tier.  Must not equal ChunkPriorityTier.RECENT.
    * @param priority Priority within tier.
+   * @param toFrontend true if the chunk should be moved to the frontend when ready.
    */
-  requestChunk(chunk: Chunk, tier: ChunkPriorityTier, priority: number) {
+  requestChunk(chunk: Chunk, tier: ChunkPriorityTier, priority: number, toFrontend = true) {
     if (tier === ChunkPriorityTier.RECENT) {
       throw new Error('Not going to request a chunk with the RECENT tier');
     }
+    chunk.newlyRequestedToFrontend = chunk.newlyRequestedToFrontend || toFrontend;
     if (chunk.newPriorityTier === ChunkPriorityTier.RECENT) {
       this.newTierChunks.push(chunk);
     }
@@ -985,9 +986,4 @@ export function withChunkManager<T extends {new (...args: any[]): SharedObject}>
 registerRPC(CHUNK_SOURCE_INVALIDATE_RPC_ID, function(x) {
   const source = <ChunkSource>this.get(x['id']);
   source.chunkManager.queueManager.invalidateSourceCache(source);
-});
-
-registerRPC(CHUNK_SOURCE_FETCH_RPC_ID, function(x) {
-  const listener = <FrontendChunkDataListener>this.get(x['requestorRef']);
-  listener.updateChunkData(x['requestorChunkKey'], x['data'], x['message']);
 });

@@ -135,7 +135,7 @@ export class ComputedDataSource extends DataSource {
     return new Promise((resolve, reject) => {
              const dataSource = dataSourceProvider.getDataSource(originUrl)[0];
              if (!dataSource || !dataSource.getVolume) {
-               reject(`Unable to fetch data source for URL ${originUrl}`);
+               reject(new Error(`Unable to fetch data source for URL ${originUrl}`));
              }
              resolve(dataSource.getVolume!(chunkManager, config, {}, cancellationToken));
            })
@@ -195,9 +195,12 @@ export class ComputedDataSource extends DataSource {
   getVolume(
       chunkManager: ChunkManager, config: string, options: GetVolumeOptions,
       cancellationToken: CancellationToken) {
+    // Config is expected to be a json string, for example:
+    //   {"origin":"brainmaps://p:d:v","computation":"example","inputSize":
+    //     [36,36,32],"outputSize":[32,32,32]}
     console.log('Computed datasource config:', config);
     if (!options.dataSourceProvider) {
-      return Promise.reject('Need a DataSourceProvider');
+      return Promise.reject(new Error('Need a DataSourceProvider'));
     }
 
     const dataSourceProvider = options.dataSourceProvider!;
@@ -205,19 +208,19 @@ export class ComputedDataSource extends DataSource {
     try {
       configObj = verifyObject(JSON.parse(config));
     } catch (error) {
-      return Promise.reject(
+      return Promise.reject(new Error(
           `Could not parse JSON configuration while initializing computational datasource: ${
-              error}`);
+              error}`));
     }
 
     if (!configObj) {
-      return Promise.reject('Could not verify configuration JSON');
+      return Promise.reject(new Error('Could not verify configuration JSON'));
     }
     if (configObj['origin'] === undefined) {
-      return Promise.reject('Config is missing origin');
+      return Promise.reject(new Error('Config is missing origin'));
     }
     if (configObj['computation'] === undefined) {
-      return Promise.reject('Config is missing computation');
+      return Promise.reject(new Error('Config is missing computation'));
     }
 
     const computationName = verifyString(configObj['computation']);
@@ -226,7 +229,7 @@ export class ComputedDataSource extends DataSource {
     const originUrl = verifyString(configObj['origin']);
 
     if (!computationProvider) {
-      return Promise.reject(`Unable to find computation ${computationName}`);
+      return Promise.reject(new Error(`Unable to find computation ${computationName}`));
     }
 
     return this.getOriginVolumes(dataSourceProvider, originUrl, chunkManager, cancellationToken)
