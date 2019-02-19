@@ -471,11 +471,11 @@ export class CrossSectionSpecification extends RefCounted implements Trackable {
 
   toJSON() {
     return {
-      width: this.width,
-      height: this.height,
-      position: this.position,
-      orientation: this.orientation,
-      zoom: this.zoom,
+      width: this.width.toJSON(),
+      height: this.height.toJSON(),
+      position: this.position.toJSON(),
+      orientation: this.orientation.toJSON(),
+      zoom: this.zoom.toJSON(),
     };
   }
 }
@@ -509,9 +509,10 @@ export class CrossSectionSpecificationMap extends WatchableMap<string, CrossSect
   }
 
   toJSON() {
-    const obj: {[key: string]: CrossSectionSpecification} = {};
+    if (this.size === 0) return undefined;
+    const obj: {[key: string]: any} = {};
     for (const [k, v] of this) {
-      obj[k] = v;
+      obj[k] = v.toJSON();
     }
     return obj;
   }
@@ -563,7 +564,7 @@ export class DataPanelLayoutSpecification extends RefCounted implements Trackabl
     }
     return {
       type: type.value,
-      crossSections,
+      crossSections: crossSections.toJSON(),
       orthographicProjection: orthographicProjectionJson,
     };
   }
