@@ -38,6 +38,8 @@ export function setupDefaultViewer() {
     hashBinding.parseError;
   }));
   hashBinding.updateFromUrlHash();
+  
+  viewer.loadFromJsonUrl();
 
   bindDefaultCopyHandler(viewer);
   bindDefaultPasteHandler(viewer);

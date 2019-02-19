@@ -33,6 +33,10 @@ function encodeFragment(fragment: string) {
   });
 }
 
+export function removeParameterFromUrl(url: string, parameter: string) {
+  return url.replace(new RegExp('[?&]' + parameter + '=[^&#]*(#.*)?$'), '$1')
+      .replace(new RegExp('([?&])' + parameter + '=[^&]*&'), '$1');
+}
 /**
  * An instance of this class manages a binding between a Trackable value and the URL hash state.
  * The binding is initialized in the constructor, and is removed when dispose is called.
@@ -75,7 +79,7 @@ export class UrlHashBinding extends RefCounted {
         if (decodeURIComponent(stateString) === '{}') {
           history.replaceState(null, '', '#');
         } else {
-          history.replaceState(null, '', '#!' + stateString);
+          history.replaceState(null, '', removeParameterFromUrl(window.location.href, 'json_url')+'#!' + stateString);
         }
       }
     }
