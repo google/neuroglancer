@@ -111,7 +111,7 @@ export class DataSource extends RefCounted {
   description?: string;
 }
 
-const protocolPattern = /^(?:([a-zA-Z-+_]+):\/\/)?(.*)$/;
+const protocolPattern = /^(?:([a-zA-Z][a-zA-Z0-9-+_]*):\/\/)?(.*)$/;
 
 export class DataSourceProvider extends RefCounted {
   dataSources = new Map<string, Owned<DataSource>>();
