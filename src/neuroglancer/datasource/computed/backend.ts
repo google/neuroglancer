@@ -197,12 +197,6 @@ export class ComputedVolumeChunk extends VolumeChunk implements ChunkStateListen
     const inputSize = inputSpec.size;
     this.inputLower_ =
         vec3.subtract(vec3.create(), inputCenter, vec3.divide(vec3.create(), inputSize, twos));
-    const bufferLength = prod(inputSize) * inputSpec.numChannels;
-    const originDataType = inputSpec.dataType;
-
-    // Signal that we're now taking up memory. This value will be overwritten
-    // post-computation by a call to decodeRawChunk.
-    this.systemMemoryBytes = bufferLength * DATA_TYPE_BYTES[originDataType];
     this.inputBuffer_ = new ArrayBuffer(this.systemMemoryBytes);
 
     this.setupSourceChunks_();
@@ -212,6 +206,18 @@ export class ComputedVolumeChunk extends VolumeChunk implements ChunkStateListen
       this.resolve_ = resolve;
       this.reject_ = reject;
     });
+  }
+
+  initializeVolumeChunk(key: string, chunkGridPosition: vec3) {
+    super.initializeVolumeChunk(key, chunkGridPosition);
+    const {inputSpec} = this.source.computation.params;
+    const inputSize = inputSpec.size;
+    const bufferLength = prod(inputSize) * inputSpec.numChannels;
+    const originDataType = inputSpec.dataType;
+
+    // Signal that we're about to take up memory. This value will be overwritten
+    // post-computation by a call to decodeRawChunk.
+    this.systemMemoryBytes = bufferLength * DATA_TYPE_BYTES[originDataType];
   }
 
   /**
