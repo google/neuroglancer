@@ -130,15 +130,7 @@ export class ComputedDataSource extends DataSource {
   getOriginVolumes(
       dataSourceProvider: DataSourceProvider, originUrl: string, chunkManager: ChunkManager,
       cancellationToken: CancellationToken): Promise<ComputedVolumeSpecs> {
-    const slashPosition = originUrl.indexOf('://');
-    const config = originUrl.substring(slashPosition + 3);
-    return new Promise((resolve, reject) => {
-             const dataSource = dataSourceProvider.getDataSource(originUrl)[0];
-             if (!dataSource || !dataSource.getVolume) {
-               reject(new Error(`Unable to fetch data source for URL ${originUrl}`));
-             }
-             resolve(dataSource.getVolume!(chunkManager, config, {}, cancellationToken));
-           })
+    return dataSourceProvider.getVolume(chunkManager, originUrl, {}, cancellationToken)
         .then((multiScaleVolumeChunkSource: GenericMultiscaleVolumeChunkSource) => {
           const sources = multiScaleVolumeChunkSource.getSources({});
           const specs = sources.map((volumeChunkSources) => {
@@ -235,12 +227,14 @@ export class ComputedDataSource extends DataSource {
     return this.getOriginVolumes(dataSourceProvider, originUrl, chunkManager, cancellationToken)
         .then((volumes) => {
           const dataSourceParams = this.defaultParams(volumes, originUrl, dataSourceProvider);
-          return computationProvider.getComputation(configObj, volumes.sources, dataSourceParams)
-              .then((computation: VolumeComputationFrontend) => {
-                computation.initializeCounterpart(chunkManager.rpc!, computation.params);
-                return new ComputedMultiscaleVolumeChunkSource(
-                    dataSourceParams, volumes.sources, computation, chunkManager);
-              });
+          return chunkManager.memoize.getUncounted(
+              {type: 'computed:getVolume', config: configObj},
+              () => computationProvider.getComputation(configObj, volumes.sources, dataSourceParams)
+                        .then((computation: VolumeComputationFrontend) => {
+                          computation.initializeCounterpart(chunkManager.rpc!, computation.params);
+                          return new ComputedMultiscaleVolumeChunkSource(
+                              dataSourceParams, volumes.sources, computation, chunkManager);
+                        }));
         });
   }
 

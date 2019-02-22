@@ -179,11 +179,10 @@ export class ComputedVolumeChunk extends VolumeChunk implements ChunkStateListen
     this.computationParams_ = computationParams;
     this.cancellationToken_ = cancellationToken;
     this.computing_ = false;
+    this.inputBuffer_ = undefined;
 
     this.cancellationToken_.add(() => {
-      if (this.reject_) {
-        this.fail_(CANCELED);
-      }
+      this.fail_(CANCELED);
     });
     // Compute the input bounding box for this manager
     // These computations happen without regard for edge effects, which are
@@ -303,10 +302,7 @@ export class ComputedVolumeChunk extends VolumeChunk implements ChunkStateListen
    */
   private fail_(reason: Error) {
     this.cleanup_();
-
-    if (this.reject_) {
-      this.reject_(reason);
-    }
+    this.reject_!(reason);
   }
 
   /**
@@ -418,18 +414,15 @@ export class ComputedVolumeChunk extends VolumeChunk implements ChunkStateListen
     }
     if (this.originGridPositions_.size === 0) {
       this.computing_ = true;
+      this.cleanup_();
       this.performComputation_()
           .then(() => {
-            this.cleanup_();
-
             if (this.resolve_) {
               this.resolve_();
             }
           })
           .catch((error: Error) => {
-            if (this.reject_) {
-              this.reject_(error);
-            }
+            this.reject_!(error);
           });
     }
   }
