@@ -46,6 +46,8 @@ const DEFAULT_DATA_SOURCES = exports.DEFAULT_DATA_SOURCES = [
   'neuroglancer/datasource/precomputed',
   'neuroglancer/datasource/nifti',
   'neuroglancer/datasource/n5',
+  'neuroglancer/datasource/computed',
+  'neuroglancer/datasource/computed/example',
   {source: 'neuroglancer/datasource/vtk', register: null},
   {source: 'neuroglancer/datasource/csv', register: null},
 ];
@@ -222,8 +224,8 @@ function getViewerConfig(options) {
   if (options.modifyBaseConfig) {
     options.modifyBaseConfig(baseConfig);
   }
-  let dataSources = [...(options.dataSources || DEFAULT_DATA_SOURCES),
-                     ...(options.extraDataSources || [])];
+  let dataSources =
+      [...(options.dataSources || DEFAULT_DATA_SOURCES), ...(options.extraDataSources || [])];
   let supportedLayers = options.supportedLayers || DEFAULT_SUPPORTED_LAYERS;
   let frontendDataSourceModules = [];
   let backendDataSourceModules = [];
@@ -330,9 +332,10 @@ function getViewerConfig(options) {
 function makePythonClientOptions(options) {
   const srcDir = resolveReal(__dirname, '../src');
   options = Object.assign({}, options);
-  options.extraDataSources = [...(options.extraDataSources || []),
-                              {source: 'neuroglancer/datasource/python', register: null},
-                             ];
+  options.extraDataSources = [
+    ...(options.extraDataSources || []),
+    {source: 'neuroglancer/datasource/python', register: null},
+  ];
   options.frontendModules = options.frontendModules || [resolveReal(srcDir, 'main_python.ts')];
   options.registerCredentials = false;
   return options;

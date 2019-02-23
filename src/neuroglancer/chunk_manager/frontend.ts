@@ -17,13 +17,14 @@
 import {CHUNK_MANAGER_RPC_ID, CHUNK_QUEUE_MANAGER_RPC_ID, CHUNK_SOURCE_INVALIDATE_RPC_ID, ChunkSourceParametersConstructor, ChunkState} from 'neuroglancer/chunk_manager/base';
 import {SharedWatchableValue} from 'neuroglancer/shared_watchable_value';
 import {TrackableValue} from 'neuroglancer/trackable_value';
+import {CANCELED, CancellationToken} from 'neuroglancer/util/cancellation';
 import {Borrowed} from 'neuroglancer/util/disposable';
 import {stableStringify} from 'neuroglancer/util/json';
 import {StringMemoize} from 'neuroglancer/util/memoize';
 import {getObjectId} from 'neuroglancer/util/object_id';
 import {NullarySignal} from 'neuroglancer/util/signal';
 import {GL} from 'neuroglancer/webgl/context';
-import {registerRPC, registerSharedObjectOwner, RPC, SharedObject} from 'neuroglancer/worker_rpc';
+import {registerPromiseRPC, registerRPC, registerSharedObjectOwner, RPC, RPCPromise, SharedObject} from 'neuroglancer/worker_rpc';
 
 const DEBUG_CHUNK_UPDATES = false;
 
@@ -80,7 +81,8 @@ export class ChunkQueueManager extends SharedObject {
   constructor(rpc: RPC, public gl: GL, public capacities: {
     gpuMemory: CapacitySpecification,
     systemMemory: CapacitySpecification,
-    download: CapacitySpecification
+    download: CapacitySpecification,
+    compute: CapacitySpecification
   }) {
     super();
 
@@ -99,6 +101,7 @@ export class ChunkQueueManager extends SharedObject {
       'gpuMemoryCapacity': makeCapacityCounterparts(capacities.gpuMemory),
       'systemMemoryCapacity': makeCapacityCounterparts(capacities.systemMemory),
       'downloadCapacity': makeCapacityCounterparts(capacities.download),
+      'computeCapacity': makeCapacityCounterparts(capacities.compute)
     });
   }
 
@@ -141,6 +144,29 @@ export class ChunkQueueManager extends SharedObject {
     }
   }
 
+  private handleFetch_(source: ChunkSource, update: any) {
+    const {resolve, reject, cancellationToken} = update['promise'];
+    if ((<CancellationToken>cancellationToken).isCanceled) {
+      reject(CANCELED);
+      return;
+    }
+
+    const key = update['key'];
+    const chunk = source.chunks.get(key);
+    if (!chunk) {
+      reject(new Error(`No chunk found at ${key} for source ${source.constructor.name}`));
+      return;
+    }
+
+    const data = (<any>chunk)['data'];
+    if (!data) {
+      reject(new Error(`At ${key} for source ${source.constructor.name}: chunk has no data`));
+      return;
+    }
+
+    resolve({value: data});
+  }
+
   applyChunkUpdate(update: any) {
     let visibleChunksChanged = false;
     let {rpc} = this;
@@ -150,7 +176,9 @@ export class ChunkQueueManager extends SharedObject {
           `${Date.now()} Chunk.update processed: ${source.rpcId} ` +
           `${update['id']} ${update['state']}`);
     }
-    if (update['id'] === undefined) {
+    if (update['promise'] !== undefined) {
+      this.handleFetch_(source, update);
+    } else if (update['id'] === undefined) {
       // Invalidate source.
       for (const chunkKey of source.chunks.keys()) {
         source.deleteChunk(chunkKey);
@@ -193,8 +221,8 @@ export class ChunkQueueManager extends SharedObject {
 
 (<any>window).numPendingChunkUpdates = 0;
 
-registerRPC('Chunk.update', function(x) {
-  let source: ChunkSource = this.get(x['source']);
+function updateChunk(rpc: RPC, x: any) {
+  let source: ChunkSource = rpc.get(x['source']);
   if (DEBUG_CHUNK_UPDATES) {
     console.log(
         `${Date.now()} Chunk.update received: ` +
@@ -210,7 +238,7 @@ registerRPC('Chunk.update', function(x) {
 
   let pendingTail = queueManager.pendingChunkUpdatesTail;
   if (++(<any>window).numPendingChunkUpdates > 3) {
-    //console.log(`numPendingChunkUpdates=${(<any>window).numPendingChunkUpdates}`);
+    // console.log(`numPendingChunkUpdates=${(<any>window).numPendingChunkUpdates}`);
   }
   if (pendingTail == null) {
     queueManager.pendingChunkUpdates = x;
@@ -220,6 +248,17 @@ registerRPC('Chunk.update', function(x) {
     pendingTail.nextUpdate = x;
     queueManager.pendingChunkUpdatesTail = x;
   }
+}
+
+registerRPC('Chunk.update', function(x) {
+  updateChunk(this, x);
+});
+
+registerPromiseRPC('Chunk.retrieve', function(x, cancellationToken): RPCPromise<any> {
+  return new Promise<{value: any}>((resolve, reject) => {
+    x['promise'] = {resolve, reject, cancellationToken};
+    updateChunk(this, x);
+  });
 });
 
 export interface ChunkSourceConstructor<Options, T extends SharedObject = ChunkSource> {
@@ -309,8 +348,8 @@ export class ChunkSource extends SharedObject {
   }
 }
 
-export function
-WithParameters<Parameters, BaseOptions, TBase extends ChunkSourceConstructor<BaseOptions, SharedObject>>(
+export function WithParameters<Parameters, BaseOptions,
+                               TBase extends ChunkSourceConstructor<BaseOptions, SharedObject>>(
     Base: TBase, parametersConstructor: ChunkSourceParametersConstructor<Parameters>) {
   type Options = BaseOptions&{parameters: Parameters};
   @registerSharedObjectOwner(parametersConstructor.RPC_ID)

@@ -67,8 +67,11 @@ export function registerPromiseRPC<T>(
 
 registerRPC(PROMISE_CANCEL_ID, function(this: RPC, x: any) {
   let id = <number>x['id'];
-  let {cancellationToken} = this.get(id);
-  cancellationToken.cancel();
+  const request = this.get(id);
+  if (request !== undefined) {
+    let {cancellationToken} = request;
+    cancellationToken.cancel();
+  }
 });
 
 registerRPC(PROMISE_RESPONSE_ID, function(this: RPC, x: any) {

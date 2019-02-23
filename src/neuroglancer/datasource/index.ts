@@ -70,9 +70,13 @@ export interface GetVolumeOptions {
    * Hint regarding the usage of the volume.
    */
   volumeType?: VolumeType;
+
+  dataSourceProvider?: DataSourceProvider;
 }
 
-export interface GetVectorGraphicsOptions { vectorGraphicsType?: VectorGraphicsType; }
+export interface GetVectorGraphicsOptions {
+  vectorGraphicsType?: VectorGraphicsType;
+}
 
 export interface DataSource {
   getVolume?
@@ -89,7 +93,7 @@ export interface DataSource {
       (chunkManager: ChunkManager, path: string, cancellationToken: CancellationToken):
           Promise<SkeletonSource>|SkeletonSource;
   volumeCompleter?(value: string, chunkManager: ChunkManager, cancellationToken: CancellationToken):
-    Promise<CompletionResult>;
+      Promise<CompletionResult>;
 
   getAnnotationSource?
       (chunkManager: ChunkManager, path: string, cancellationToken: CancellationToken):
@@ -137,6 +141,10 @@ export class DataSourceProvider extends RefCounted {
       chunkManager: ChunkManager, url: string, options: GetVolumeOptions = {},
       cancellationToken = uncancelableToken) {
     let [dataSource, path] = this.getDataSource(url);
+    if (options === undefined) {
+      options = {};
+    }
+    options.dataSourceProvider = this;
     return new Promise<MultiscaleVolumeChunkSource>(resolve => {
       resolve(dataSource.getVolume!(chunkManager, path, options, cancellationToken));
     });
