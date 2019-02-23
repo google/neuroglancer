@@ -48,7 +48,7 @@ export function decodeRawChunk(
       convertEndian32(data, endianness);
       break;
     case DataType.FLOAT32:
-      data = new Float32Array(response, byteOffset, byteLength / 2);
+      data = new Float32Array(response, byteOffset, byteLength / 4);
       convertEndian32(data, endianness);
       break;
     default:
