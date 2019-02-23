@@ -72,8 +72,8 @@ export class Chunk implements Disposable {
    */
   newPriorityTier = ChunkPriorityTier.RECENT;
 
-  systemMemoryBytes: number;
-  gpuMemoryBytes: number;
+  private systemMemoryBytes_: number;
+  private gpuMemoryBytes_: number;
   backendOnly = false;
   isComputational = false;
   newlyRequestedToFrontend = false;
@@ -156,6 +156,28 @@ export class Chunk implements Disposable {
 
   get state() {
     return this.state_;
+  }
+
+  set systemMemoryBytes(bytes: number) {
+    this.chunkManager.queueManager.adjustCapacitiesForChunk(this, false);
+    this.systemMemoryBytes_ = bytes;
+    this.chunkManager.queueManager.adjustCapacitiesForChunk(this, true);
+    this.chunkManager.queueManager.scheduleUpdate();
+  }
+
+  get systemMemoryBytes() {
+    return this.systemMemoryBytes_;
+  }
+
+  set gpuMemoryBytes(bytes: number) {
+    this.chunkManager.queueManager.adjustCapacitiesForChunk(this, false);
+    this.gpuMemoryBytes_ = bytes;
+    this.chunkManager.queueManager.adjustCapacitiesForChunk(this, true);
+    this.chunkManager.queueManager.scheduleUpdate();
+  }
+
+  get gpuMemoryBytes() {
+    return this.gpuMemoryBytes_;
   }
 
   registerListener(listener: ChunkStateListener) {
