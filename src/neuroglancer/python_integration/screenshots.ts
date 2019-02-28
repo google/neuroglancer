@@ -25,14 +25,20 @@ import {Viewer} from 'neuroglancer/viewer';
 export class ScreenshotHandler extends RefCounted {
   sendScreenshotRequested = new Signal<(state: any) => void>();
   requestState = new TrackableValue<string|undefined>(undefined, verifyOptionalString);
+  /**
+   * To reduce the risk of taking a screenshot while deferred code is still registering layers,
+   * require that the viewer be in a ready state once, and still remain ready while all pending
+   * events are handled, before a screenshot is taken.
+   */
+  private wasAlreadyVisible = false;
   private previousRequest: string|undefined = undefined;
+  private debouncedMaybeSendScreenshot =
+      this.registerCancellable(debounce(() => this.maybeSendScreenshot(), 0));
+
   constructor(public viewer: Viewer) {
     super();
-
-    const debouncedMaybeSendScreenshot =
-        this.registerCancellable(debounce(() => this.maybeSendScreenshot(), 0));
-    this.requestState.changed.add(debouncedMaybeSendScreenshot);
-    this.registerDisposer(viewer.display.updateFinished.add(debouncedMaybeSendScreenshot));
+    this.requestState.changed.add(this.debouncedMaybeSendScreenshot);
+    this.registerDisposer(viewer.display.updateFinished.add(this.debouncedMaybeSendScreenshot));
   }
 
   private maybeSendScreenshot() {
@@ -40,17 +46,26 @@ export class ScreenshotHandler extends RefCounted {
     const {previousRequest} = this;
     const {layerSelectedValues} = this.viewer;
     if (requestState === undefined || requestState === previousRequest) {
+      this.wasAlreadyVisible = false;
       return;
     }
     const {viewer} = this;
     if (!viewer.display.isReady()) {
+      this.wasAlreadyVisible = false;
       return;
     }
     for (const layer of viewer.layerManager.managedLayers) {
       if (!layer.isReady()) {
+        this.wasAlreadyVisible = false;
         return;
       }
     }
+    if (!this.wasAlreadyVisible) {
+      this.wasAlreadyVisible = true;
+      this.debouncedMaybeSendScreenshot();
+      return;
+    }
+    this.wasAlreadyVisible = false;
     this.previousRequest = requestState;
     viewer.display.draw();
     const screenshotData = viewer.display.canvas.toDataURL();
