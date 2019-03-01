@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-import {VolumeComputationBackend, ComputedVolumeChunk} from 'neuroglancer/datasource/computed/backend';
+import {ComputedVolumeChunk, VolumeComputationBackend} from 'neuroglancer/datasource/computed/backend';
 import {getArrayView} from 'neuroglancer/datasource/computed/base';
 import {InferenceRequest, InferenceResult, TENSORFLOW_COMPUTATION_RPC_ID, TENSORFLOW_INFERENCE_RPC_ID, TensorflowArray, TensorflowComputationParameters} from 'neuroglancer/datasource/computed/tensorflow/base';
 import {registerSharedObject} from 'neuroglancer/worker_rpc';

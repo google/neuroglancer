@@ -158,10 +158,7 @@ function getBaseConfig(options) {
     module: {
       rules: [
         tsLoaderEntry,
-        {
-          test: /\.css$/,
-          loader: ExtractTextPlugin.extract({fallback: 'style-loader', use: 'css-loader'})
-        },
+        {test: /\.css$/, loader: 'style-loader!css-loader'},
         {
           test: /\.glsl$/,
           loader: [
@@ -177,7 +174,12 @@ function getBaseConfig(options) {
     if (options.outputPath === undefined) {
       throw new Error('options.outputPath must be specified.');
     }
-    baseConfig.output = {filename: '[name].bundle.js', path: options.outputPath, sourcePrefix: ''};
+    baseConfig.output = {
+      filename: '[name].bundle.js',
+      chunkFilename: '[name].bundle.js',
+      path: options.outputPath,
+      sourcePrefix: ''
+    };
   }
   return baseConfig;
 }
@@ -290,8 +292,8 @@ function getViewerConfig(options) {
   }
   let htmlPlugin =
       options.htmlPlugin || new HtmlWebpackPlugin({template: resolveReal(srcDir, 'index.html')});
-  let cssPlugin =
-      options.cssPlugin || new ExtractTextPlugin({filename: 'styles.css', allChunks: true});
+  // let cssPlugin =
+  //     options.cssPlugin || new ExtractTextPlugin({filename: 'styles.css', allChunks: true});
   return [
     Object.assign(
         {
@@ -301,7 +303,7 @@ function getViewerConfig(options) {
           target: 'web',
           plugins: [
             htmlPlugin,
-            cssPlugin,
+            // cssPlugin,
             new webpack.DefinePlugin(Object.assign({}, defaultDefines, extraDefines)),
             ...extraFrontendPlugins,
             ...commonPlugins,

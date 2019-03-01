@@ -19,7 +19,8 @@
       "*": ["*"],
       "neuroglancer/*": ["src/neuroglancer/*"]
     },
-    "typeRoots": []
+    "typeRoots": [],
+    "module": "esNext"
   },
   "exclude": [
     "node_modules",

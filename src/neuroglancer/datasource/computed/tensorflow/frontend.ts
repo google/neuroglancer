@@ -14,13 +14,29 @@
  * limitations under the License.
  */
 
-import {InferenceModel, loadFrozenModel, ones as tfOnes, Tensor, tensor, tidy as tfTidy} from '@tensorflow/tfjs';
+// import * as tfjs from '@tensorflow/tfjs';
 import {ComputedVolumeDataSourceParameters, VolumeComputationFrontend, VolumeComputationFrontendProvider} from 'neuroglancer/datasource/computed/frontend';
 import {InferenceRequest, InferenceResult, TENSORFLOW_COMPUTATION_RPC_ID, TENSORFLOW_INFERENCE_RPC_ID, TensorflowArray, TensorflowComputationParameters} from 'neuroglancer/datasource/computed/tensorflow/base';
 import {DataType, VolumeType} from 'neuroglancer/sliceview/volume/base';
 import {CANCELED, CancellationToken} from 'neuroglancer/util/cancellation';
 import {verifyFloat, verifyString} from 'neuroglancer/util/json';
 import {registerPromiseRPC, registerSharedObjectOwner, RPCPromise} from 'neuroglancer/worker_rpc';
+
+let tfjs: any = null;
+export default tfjs;
+
+// Dynamic import type definitions.
+type InferenceModel = import('@tensorflow/tfjs').InferenceModel;
+type Tensor = import('@tensorflow/tfjs').Tensor;
+
+export function loadTFjs() {
+  if (tfjs) {
+    return Promise.resolve();
+  }
+  return import(/* webpackChunkName: "@tensorflow/tfjs" */ '@tensorflow/tfjs').then((module) => {
+    tfjs = module;
+  });
+}
 
 /**
  * Dict-style object that represents a pending inference request.
@@ -124,8 +140,8 @@ export class TensorflowComputation extends VolumeComputationFrontend {
       return Promise.resolve();
     }
 
-    const prediction = tfTidy(() => {
-      const modelInput = tensor(inferenceRequest.array).reshape(this.params.inputTensorShape!);
+    const prediction = tfjs.tidy(() => {
+      const modelInput = tfjs.tensor(inferenceRequest.array).reshape(this.params.inputTensorShape!);
       const model = this.model_!;
       return <Tensor>model.predict(modelInput, {});
     });
@@ -151,7 +167,7 @@ export class TensorflowComputationProvider implements VolumeComputationFrontendP
       modelPath += '/';
     }
 
-    let model: InferenceModel;
+    let model: import(/* webpackChunkName: "@tensorflow/tfjs" */ '@tensorflow/tfjs').InferenceModel;
     let stdDev = 1.0;
     let mean = 0.0;
     let outputType = VolumeType.SEGMENTATION;
@@ -178,68 +194,79 @@ export class TensorflowComputationProvider implements VolumeComputationFrontendP
     // Load the model, then do a dummy inference run. This allows us to
     // explicitly discover the output dimensions, and to compile the
     // model on the gpu.
-    return loadFrozenModel(modelPath + 'tensorflowjs_model.pb', modelPath + 'weights_manifest.json')
-        .then((tfModel: InferenceModel) => {
-          model = tfModel;
-          if (model.inputs.length !== 1) {
-            throw new Error('Only models with exactly one input are supported');
-          }
-          if (model.outputs.length !== 1) {
-            // Todo: support for multiple-output models.
-            throw new Error('Only models with exactly one output are supported');
-          }
-
-          // Create a blank tensor, run prediction, check output size
-          const dummyOutput = tfTidy(() => {
-            const dummyInput: Tensor = tfOnes(<number[]>model.inputs[0].shape);
-            return <Tensor>model.predict(dummyInput, {});
-          });
-
-          return dummyOutput.data().then(() => {
-            return dummyOutput;
-          });
+    return loadTFjs()
+        .then(() => {
+          return tfjs.loadFrozenModel(
+              modelPath + 'tensorflowjs_model.pb', modelPath + 'weights_manifest.json');
         })
-        .then((outputTensor: Tensor) => {
-          const inputShape = [1, 1, 1];
-          const outputShape = [1, 1, 1];
-          const inputTensor = model.inputs[0];
-          const inputDType = inputTensor.dtype;
+        .then(
+            (tfModel: import(/* webpackChunkName: "@tensorflow/tfjs" */ '@tensorflow/tfjs')
+                 .InferenceModel) => {
+              model = tfModel;
+              if (model.inputs.length !== 1) {
+                throw new Error('Only models with exactly one input are supported');
+              }
+              if (model.outputs.length !== 1) {
+                // Todo: support for multiple-output models.
+                throw new Error('Only models with exactly one output are supported');
+              }
 
-          let idx = 0;
-          for (let dim of inputTensor.shape!) {
-            if (dim > 1) {
-              inputShape[idx] = dim;
-              ++idx;
-            }
-          }
+              // Create a blank tensor, run prediction, check output size
+              const dummyOutput = tfjs.tidy(() => {
+                const dummyInput:
+                    import(/* webpackChunkName: "@tensorflow/tfjs" */ '@tensorflow/tfjs').Tensor =
+                    tfjs.ones(<number[]>model.inputs[0].shape);
+                return <import(/* webpackChunkName: "@tensorflow/tfjs" */ '@tensorflow/tfjs')
+                            .Tensor>model.predict(dummyInput, {});
+              });
 
-          idx = 0;
-          for (let dim of outputTensor.shape!) {
-            if (dim > 1) {
-              outputShape[idx] = dim;
-              ++idx;
-            }
-          }
-          outputTensor.dispose();
+              return dummyOutput.data().then(() => {
+                return dummyOutput;
+              });
+            })
+        .then(
+            (outputTensor:
+                 import(/* webpackChunkName: "@tensorflow/tfjs" */ '@tensorflow/tfjs').Tensor) => {
+              const inputShape = [1, 1, 1];
+              const outputShape = [1, 1, 1];
+              const inputTensor = model.inputs[0];
+              const inputDType = inputTensor.dtype;
 
-          let numElements = 1.0;
-          for (const dim of inputTensor.shape!) {
-            numElements *= dim;
-          }
+              let idx = 0;
+              for (let dim of inputTensor.shape!) {
+                if (dim > 1) {
+                  inputShape[idx] = dim;
+                  ++idx;
+                }
+              }
 
-          const tfParams: TensorflowComputationParameters = params.computationParameters;
-          tfParams.inputSpec.size.set(inputShape);
-          tfParams.outputSpec.size.set(outputShape);
-          tfParams.outputSpec.dataType = DataType.UINT32;
-          tfParams.outputSpec.volumeType = outputType;
-          tfParams.inputDType = inputDType;
-          tfParams.mean = mean;
-          tfParams.stdDev = stdDev;
-          tfParams.inputTensorShape = inputTensor.shape;
-          tfParams.inputTensorNumElements = numElements;
+              idx = 0;
+              for (let dim of outputTensor.shape!) {
+                if (dim > 1) {
+                  outputShape[idx] = dim;
+                  ++idx;
+                }
+              }
+              outputTensor.dispose();
 
-          return new TensorflowComputation(tfParams, model);
-        });
+              let numElements = 1.0;
+              for (const dim of inputTensor.shape!) {
+                numElements *= dim;
+              }
+
+              const tfParams: TensorflowComputationParameters = params.computationParameters;
+              tfParams.inputSpec.size.set(inputShape);
+              tfParams.outputSpec.size.set(outputShape);
+              tfParams.outputSpec.dataType = DataType.UINT32;
+              tfParams.outputSpec.volumeType = outputType;
+              tfParams.inputDType = inputDType;
+              tfParams.mean = mean;
+              tfParams.stdDev = stdDev;
+              tfParams.inputTensorShape = inputTensor.shape;
+              tfParams.inputTensorNumElements = numElements;
+
+              return new TensorflowComputation(tfParams, model);
+            });
   }
 }
 
