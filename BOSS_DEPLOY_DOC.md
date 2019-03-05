@@ -28,6 +28,9 @@ https://console.aws.amazon.com/quickstart-website/website/aws-website-thebossneu
 
 Upload the zip file usig the Source code widget on the web page
 
+If you are unable to update the website, request access to the AWS Group aplNeuroglancerWebsite 
+
 Update the Confluence page with the date and commit that you just deployed:
 
-https://confluence.rcs.jhuapl.edu/display/MICRONS/Neuroglancer+Docs
+https://confluence.xrcs.jhuapl.edu/display/MICRONS/Neuroglancer+Docs
+
