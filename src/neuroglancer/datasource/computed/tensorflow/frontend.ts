@@ -92,7 +92,7 @@ export class TensorflowComputation extends VolumeComputationFrontend {
              this.startInference();
            })
         .then((result: InferenceResult) => {
-          return {value: result};
+          return {value: result, transfers: [result.outputBuffer.buffer]};
         });
   }
 
