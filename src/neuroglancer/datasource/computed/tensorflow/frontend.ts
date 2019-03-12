@@ -22,7 +22,7 @@ import {CANCELED, CancellationToken} from 'neuroglancer/util/cancellation';
 import {verifyFloat, verifyString} from 'neuroglancer/util/json';
 import {registerPromiseRPC, registerSharedObjectOwner, RPCPromise} from 'neuroglancer/worker_rpc';
 
-let tfjs: any = null;
+let tfjs: null|typeof import('@tensorflow/tfjs') = null;
 export default tfjs;
 
 // Dynamic import type definitions.
@@ -33,7 +33,7 @@ export function loadTFjs() {
   if (tfjs) {
     return Promise.resolve();
   }
-  return import(/* webpackChunkName: "@tensorflow/tfjs" */ '@tensorflow/tfjs').then((module) => {
+  return import(/* webpackChunkName: "tfjs-library" */ '@tensorflow/tfjs').then((module) => {
     tfjs = module;
   });
 }
@@ -110,20 +110,21 @@ export class TensorflowComputation extends VolumeComputationFrontend {
   /**
    * Run the inference loop recursively.
    */
-  private runInference_(): Promise<void> {
+  private runInference_() {
     if (this.inferenceQueue_.length === 0) {
       this.running_ = false;
-      return Promise.resolve();
+      return;
     }
 
     const pendingInference = this.inferenceQueue_.pop()!;
 
     if (pendingInference.cancellationToken.isCanceled) {
       pendingInference.reject(CANCELED);
-      return this.runInference_();
+      this.runInference_();
+      return;
     }
 
-    return this.modelInference_(pendingInference).then(() => this.runInference_());
+    this.modelInference_(pendingInference).then(() => this.runInference_());
   }
 
   /**
@@ -140,8 +141,9 @@ export class TensorflowComputation extends VolumeComputationFrontend {
       return Promise.resolve();
     }
 
-    const prediction = tfjs.tidy(() => {
-      const modelInput = tfjs.tensor(inferenceRequest.array).reshape(this.params.inputTensorShape!);
+    const prediction = tfjs!.tidy(() => {
+      const modelInput =
+          tfjs!.tensor(inferenceRequest.array).reshape(this.params.inputTensorShape!);
       const model = this.model_!;
       return <Tensor>model.predict(modelInput, {});
     });
@@ -167,7 +169,7 @@ export class TensorflowComputationProvider implements VolumeComputationFrontendP
       modelPath += '/';
     }
 
-    let model: import(/* webpackChunkName: "@tensorflow/tfjs" */ '@tensorflow/tfjs').InferenceModel;
+    let model: InferenceModel;
     let stdDev = 1.0;
     let mean = 0.0;
     let outputType = VolumeType.SEGMENTATION;
@@ -196,83 +198,86 @@ export class TensorflowComputationProvider implements VolumeComputationFrontendP
     // model on the gpu.
     return loadTFjs()
         .then(() => {
-          return tfjs.loadFrozenModel(
+          return tfjs!.loadFrozenModel(
               modelPath + 'tensorflowjs_model.pb', modelPath + 'weights_manifest.json');
         })
-        .then(
-            (tfModel: import(/* webpackChunkName: "@tensorflow/tfjs" */ '@tensorflow/tfjs')
-                 .InferenceModel) => {
-              model = tfModel;
-              if (model.inputs.length !== 1) {
-                throw new Error('Only models with exactly one input are supported');
-              }
-              if (model.outputs.length !== 1) {
-                // Todo: support for multiple-output models.
-                throw new Error('Only models with exactly one output are supported');
-              }
+        .then((tfModel: InferenceModel) => {
+          model = tfModel;
+          if (model.inputs.length !== 1) {
+            throw new Error('Only models with exactly one input are supported');
+          }
+          if (model.outputs.length !== 1) {
+            // Todo: support for multiple-output models.
+            throw new Error('Only models with exactly one output are supported');
+          }
 
-              // Create a blank tensor, run prediction, check output size
-              const dummyOutput = tfjs.tidy(() => {
-                const dummyInput:
-                    import(/* webpackChunkName: "@tensorflow/tfjs" */ '@tensorflow/tfjs').Tensor =
-                    tfjs.ones(<number[]>model.inputs[0].shape);
-                return <import(/* webpackChunkName: "@tensorflow/tfjs" */ '@tensorflow/tfjs')
-                            .Tensor>model.predict(dummyInput, {});
-              });
+          // Create a blank tensor, run prediction, check output size
+          const dummyOutput = tfjs!.tidy(() => {
+            const dummyInput: Tensor = tfjs!.ones(<number[]>model.inputs[0].shape);
+            return <Tensor>model.predict(dummyInput, {});
+          });
 
-              return dummyOutput.data().then(() => {
-                return dummyOutput;
-              });
-            })
-        .then(
-            (outputTensor:
-                 import(/* webpackChunkName: "@tensorflow/tfjs" */ '@tensorflow/tfjs').Tensor) => {
-              const inputShape = [1, 1, 1];
-              const outputShape = [1, 1, 1];
-              const inputTensor = model.inputs[0];
-              const inputDType = inputTensor.dtype;
+          return dummyOutput.data().then(() => {
+            return dummyOutput;
+          });
+        })
+        .then((outputTensor: Tensor) => {
+          const inputShape = [1, 1, 1];
+          const outputShape = [1, 1, 1];
+          const inputTensor = model.inputs[0];
+          const inputDType = inputTensor.dtype;
 
-              let idx = 0;
-              for (let dim of inputTensor.shape!) {
-                if (dim > 1) {
-                  inputShape[idx] = dim;
-                  ++idx;
-                }
-              }
+          let idx = 0;
+          for (let dim of inputTensor.shape!) {
+            if (dim > 1) {
+              inputShape[idx] = dim;
+              ++idx;
+            }
 
-              idx = 0;
-              for (let dim of outputTensor.shape!) {
-                if (dim > 1) {
-                  outputShape[idx] = dim;
-                  ++idx;
-                }
-              }
-              outputTensor.dispose();
+            if (idx >= 3) {
+              throw new Error(
+                  `Cannot support tensorflow model with input ndim > 3: ${inputTensor.shape!}`);
+            }
+          }
 
-              let numElements = 1.0;
-              for (const dim of inputTensor.shape!) {
-                numElements *= dim;
-              }
+          idx = 0;
+          for (let dim of outputTensor.shape!) {
+            if (dim > 1) {
+              outputShape[idx] = dim;
+              ++idx;
+            }
 
-              const tfParams: TensorflowComputationParameters = params.computationParameters;
-              tfParams.inputSpec.size.set(inputShape);
-              tfParams.outputSpec.size.set(outputShape);
-              tfParams.outputSpec.dataType = DataType.UINT32;
-              tfParams.outputSpec.volumeType = outputType;
-              tfParams.inputDType = inputDType;
-              tfParams.mean = mean;
-              tfParams.stdDev = stdDev;
-              tfParams.inputTensorShape = inputTensor.shape;
-              tfParams.inputTensorNumElements = numElements;
+            if (idx >= 3) {
+              throw new Error(
+                  `Cannot support tensorflow model with output ndim > 3: ${outputTensor.shape!}`);
+            }
+          }
+          outputTensor.dispose();
 
-              return new TensorflowComputation(tfParams, model);
-            });
+          let numElements = 1.0;
+          for (const dim of inputTensor.shape!) {
+            numElements *= dim;
+          }
+
+          const tfParams: TensorflowComputationParameters = params.computationParameters;
+          tfParams.inputSpec.size.set(inputShape);
+          tfParams.outputSpec.size.set(outputShape);
+          tfParams.outputSpec.dataType = DataType.UINT32;
+          tfParams.outputSpec.volumeType = outputType;
+          tfParams.inputDType = inputDType;
+          tfParams.mean = mean;
+          tfParams.stdDev = stdDev;
+          tfParams.inputTensorShape = inputTensor.shape;
+          tfParams.inputTensorNumElements = numElements;
+
+          return new TensorflowComputation(tfParams, model);
+        });
   }
 }
 
 registerPromiseRPC(
     TENSORFLOW_INFERENCE_RPC_ID, function(x, cancellationToken): RPCPromise<InferenceResult> {
       const request = <InferenceRequest>x.inferenceRequest;
-      const computation = this.getRef<TensorflowComputation>(request.computationRef);
+      const computation = <TensorflowComputation>this.get(request.computationRef);
       return computation.predict(request.inputBuffer, request.priority, cancellationToken);
     });

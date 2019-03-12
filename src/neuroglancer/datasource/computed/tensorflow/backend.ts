@@ -18,6 +18,7 @@ import {ComputedVolumeChunk, VolumeComputationBackend} from 'neuroglancer/dataso
 import {getArrayView} from 'neuroglancer/datasource/computed/base';
 import {InferenceRequest, InferenceResult, TENSORFLOW_COMPUTATION_RPC_ID, TENSORFLOW_INFERENCE_RPC_ID, TensorflowArray, TensorflowComputationParameters} from 'neuroglancer/datasource/computed/tensorflow/base';
 import {registerSharedObject} from 'neuroglancer/worker_rpc';
+import {CancellationToken} from 'src/neuroglancer/util/cancellation';
 
 @registerSharedObject(TENSORFLOW_COMPUTATION_RPC_ID)
 export class TensorflowComputation extends VolumeComputationBackend {
@@ -58,22 +59,29 @@ export class TensorflowComputation extends VolumeComputationBackend {
   convertOutputBuffer_(inputArray: TensorflowArray) {
     const buffer = this.createOutputBuffer();
     const outputArray = getArrayView(buffer, this.params.outputSpec.dataType);
-    for (let i = 0; i < inputArray.length; ++i) {
-      outputArray[i] = inputArray[i];
-    }
+    outputArray.set(inputArray);
     return buffer;
   }
 
-  compute(inputBuffer: ArrayBuffer, {}, chunk: ComputedVolumeChunk) {
+  compute(
+      inputBuffer: ArrayBuffer, cancellationToken: CancellationToken, chunk: ComputedVolumeChunk) {
+    this.addRef();
     const inferenceRequest: InferenceRequest = {
       inputBuffer: this.convertInputBuffer_(inputBuffer, this.params.inputDType!),
-      computationRef: this.addCounterpartRef(),
+      computationRef: this.rpcId,
       priority: chunk.priority
     };
 
-    return this.rpc!.promiseInvoke<InferenceResult>(TENSORFLOW_INFERENCE_RPC_ID, {inferenceRequest})
+    return this.rpc!
+        .promiseInvoke<InferenceResult>(
+            TENSORFLOW_INFERENCE_RPC_ID, {inferenceRequest}, cancellationToken)
         .then((result) => {
+          this.dispose();
           return this.convertOutputBuffer_(result.outputBuffer);
+        })
+        .catch((e) => {
+          this.dispose();
+          throw e;
         });
   }
 }
