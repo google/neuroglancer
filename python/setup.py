@@ -117,7 +117,7 @@ setup(
         "Pillow>=3.2.0",
         "numpy>=1.11.0",
         'requests',
-        'tornado',
+        'tornado<6',
         'sockjs-tornado',
         'six',
         'google-apitools',
