@@ -14,7 +14,6 @@
  * limitations under the License.
  */
 
-// import * as tfjs from '@tensorflow/tfjs';
 import {ComputedVolumeDataSourceParameters, VolumeComputationFrontend, VolumeComputationFrontendProvider} from 'neuroglancer/datasource/computed/frontend';
 import {InferenceRequest, InferenceResult, TENSORFLOW_COMPUTATION_RPC_ID, TENSORFLOW_INFERENCE_RPC_ID, TensorflowArray, TensorflowComputationParameters} from 'neuroglancer/datasource/computed/tensorflow/base';
 import {DataType, VolumeType} from 'neuroglancer/sliceview/volume/base';
