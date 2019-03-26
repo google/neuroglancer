@@ -16,7 +16,7 @@
 
 import debounce from 'lodash/debounce';
 import {RefCounted} from 'neuroglancer/util/disposable';
-import LinkedListOperations from 'neuroglancer/util/linked_list.0.ts';
+import LinkedListOperations from 'neuroglancer/util/linked_list.0';
 
 class AutomaticFocusList {
   next0: AutomaticallyFocusedElement|null;

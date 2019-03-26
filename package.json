@@ -16,7 +16,6 @@
     "build": "webpack --config ./config/webpack.config.js --env=dev",
     "build-python": "webpack --config ./config/webpack.config.js --env=python-dev",
     "build-python-min": "webpack --config ./config/webpack.config.js --env=python-min",
-    "build-key_name_logger": "webpack --config ./config/webpack.key_name_logger.js",
     "build:watch": "webpack --config ./config/webpack.config.js --watch",
     "dev-server": "webpack-dev-server --config ./config/webpack.config.js",
     "dev-server-python": "webpack-dev-server --config ./config/webpack.config.js --env=python-dev",
