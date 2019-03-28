@@ -20,7 +20,7 @@ import {FRAGMENT_SOURCE_RPC_ID, MESH_LAYER_RPC_ID} from 'neuroglancer/mesh/base'
 import {PerspectiveViewRenderLayer, PerspectiveViewState} from 'neuroglancer/perspective_view/backend';
 import {SegmentationLayerSharedObjectCounterpart} from 'neuroglancer/segmentation_display_state/backend';
 import {getObjectKey} from 'neuroglancer/segmentation_display_state/base';
-import {Bounds, forEachVisibleSegment} from 'neuroglancer/segmentation_display_state/base';
+import {forEachVisibleSegment} from 'neuroglancer/segmentation_display_state/base';
 import {WatchableSet} from 'neuroglancer/trackable_value';
 import {CancellationToken} from 'neuroglancer/util/cancellation';
 import {convertEndian32, Endianness} from 'neuroglancer/util/endian';
@@ -39,19 +39,15 @@ export type FragmentId = string;
 export class ManifestChunk extends Chunk {
   objectId = new Uint64();
   fragmentIds: FragmentId[]|null;
-  clipBounds?: Bounds;
 
   constructor() {
     super();
   }
   // We can't save a reference to objectId, because it may be a temporary
   // object.
-  initializeManifestChunk(key: string, objectId: Uint64, clipBounds?: Bounds) {
+  initializeManifestChunk(key: string, objectId: Uint64) {
     super.initialize(key);
     this.objectId.assign(objectId);
-    if (clipBounds) {
-      this.clipBounds = clipBounds;
-    }
   }
 
   freeSystemMemory() {
@@ -254,28 +250,18 @@ export class MeshSource extends ChunkSource {
     fragmentSource.meshSource = this;
   }
 
-  getChunk(objectId: Uint64, clipBounds?: Bounds) {
-    const key = getObjectKey(objectId, clipBounds);
+  getChunk(objectId: Uint64) {
+    const key = getObjectKey(objectId);
     let chunk = <ManifestChunk>this.chunks.get(key);
     if (chunk === undefined) {
       chunk = this.getNewChunk_(ManifestChunk);
-      chunk.initializeManifestChunk(key, objectId, clipBounds);
+      chunk.initializeManifestChunk(key, objectId);
       this.addChunk(chunk);
     }
     return chunk;
   }
 
   getFragmentChunk(manifestChunk: ManifestChunk, fragmentId: FragmentId) {
-    // TODO(blakely): This ends up storing two copies of the fragment if the manifestChunk's key was
-    // generated with a clipBounds. Ideally we'd key the fragments by "objectId/fragmentId" since it
-    // doesn't matter what manifest chunk it was requested from, but we can't at the moment since
-    // the frontend's fragmentSource.chunks is only updated when the chunkManager detects a chunk
-    // has been updated. This results in the "inverse" fragments showing up, i.e. going from
-    // clipBounds=>none shows all the fragments that were not contained within the starting clipping
-    // bounds.
-    //
-    // let bareKey = getObjectKey(manifestChunk.objectId);
-    // let key = `${bareKey}/${fragmentId}`;
     let key = `${manifestChunk.key}/${fragmentId}`;
     let fragmentSource = this.fragmentSource;
     let chunk = <FragmentChunk>fragmentSource.chunks.get(key);
@@ -347,7 +333,7 @@ export class MeshLayer extends SegmentationLayerSharedObjectCounterpart implemen
     const basePriority = getBasePriority(visibility);
     const {source, chunkManager} = this;
     forEachVisibleSegment(this, objectId => {
-      let manifestChunk = source.getChunk(objectId, this.clipBounds.value);
+      let manifestChunk = source.getChunk(objectId);
       chunkManager.requestChunk(
           manifestChunk, priorityTier, basePriority + MESH_OBJECT_MANIFEST_CHUNK_PRIORITY);
       const state = manifestChunk.state;

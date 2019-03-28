@@ -169,7 +169,7 @@ export function forEachSegmentToDraw<SegmentData>(
     displayState: SegmentationDisplayState, objects: Map<string, SegmentData>,
     callback: (rootObjectId: Uint64, objectId: Uint64, segmentData: SegmentData) => void) {
   forEachVisibleSegment(displayState, (objectId, rootObjectId) => {
-    const key = getObjectKey(objectId, displayState.clipBounds.value);
+    const key = getObjectKey(objectId);
     const segmentData = objects.get(key);
     if (segmentData !== undefined) {
       callback(rootObjectId, objectId, segmentData);
@@ -188,7 +188,6 @@ export class SegmentationLayerSharedObject extends Base {
     options['chunkManager'] = this.chunkManager.rpcId;
     options['visibleSegments'] = displayState.visibleSegments.rpcId;
     options['segmentEquivalences'] = displayState.segmentEquivalences.rpcId;
-    options['clipBounds'] = displayState.clipBounds.rpcId;
     super.initializeCounterpart(this.chunkManager.rpc!, options);
   }
 }

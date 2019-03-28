@@ -17,35 +17,22 @@
 import {SharedDisjointUint64Sets} from 'neuroglancer/shared_disjoint_sets';
 import {Uint64Set} from 'neuroglancer/uint64_set';
 import {Uint64} from 'neuroglancer/util/uint64';
-import {vec3} from 'neuroglancer/util/geom';
-import {SharedWatchableValue} from 'neuroglancer/shared_watchable_value';
 
-export interface Bounds {
-  center: vec3;
-  size: vec3;
-}
-
-export interface VisibleSegmentsStateWithoutClipBounds {
+export interface VisibleSegmentsState {
   visibleSegments: Uint64Set;
   segmentEquivalences: SharedDisjointUint64Sets;
-}
-
-export interface VisibleSegmentsState extends VisibleSegmentsStateWithoutClipBounds {
-  clipBounds: SharedWatchableValue<Bounds|undefined>;
 }
 
 /**
  * Returns a string key for identifying a uint64 object id.  This is faster than
  * Uint64.prototype.toString().
  */
-export function getObjectKey(objectId: Uint64, bounds?: Bounds): string {
-  let boundsSuffix = bounds ? `_${bounds.center.toString()}_${bounds.size.toString()}` : '';
-  return `${objectId.low},${objectId.high}${boundsSuffix}`;
+export function getObjectKey(objectId: Uint64): string {
+  return `${objectId.low},${objectId.high}`;
 }
 
 export function forEachVisibleSegment(
-    state: VisibleSegmentsStateWithoutClipBounds,
-    callback: (objectId: Uint64, rootObjectId: Uint64) => void) {
+    state: VisibleSegmentsState, callback: (objectId: Uint64, rootObjectId: Uint64) => void) {
   let {visibleSegments, segmentEquivalences} = state;
   for (let rootObjectId of visibleSegments) {
     // TODO(jbms): Remove this check if logic is added to ensure that it always holds.
