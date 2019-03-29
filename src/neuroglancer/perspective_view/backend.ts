@@ -35,15 +35,34 @@ export interface PerspectiveViewportInfo {
    * Height of the viewport in pixels, or 0 if there is no viewport yet.
    */
   height: number;
+
+  /**
+   * Transform from camera coordinates to OpenGL clip coordinates.
+   */
   projectionMat: mat4;
-  modelViewMat: mat4;
+
+  /**
+   * Transform from world coordinates to camera coordinates.
+   */
+  viewMat: mat4;
+
+  /**
+   * Transform from world coordinates to OpenGL clip coordinates.  Equal to:
+   * `projectionMat * viewMat`.
+   */
+  viewProjectionMat: mat4;
 }
 
 @registerSharedObject(PERSPECTIVE_VIEW_RPC_ID)
 export class PerspectiveViewState extends SharedObjectCounterpart {
   visibility: SharedWatchableValue<number>;
-  viewport = new WatchableValue<PerspectiveViewportInfo>(
-      {width: 0, height: 0, projectionMat: mat4.create(), modelViewMat: mat4.create()});
+  viewport = new WatchableValue<PerspectiveViewportInfo>({
+    width: 0,
+    height: 0,
+    projectionMat: mat4.create(),
+    viewMat: mat4.create(),
+    viewProjectionMat: mat4.create()
+  });
   constructor(...args: any[]) {
     super(...args);
     const rpc: RPC = args[0];

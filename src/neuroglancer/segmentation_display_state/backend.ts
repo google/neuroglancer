@@ -21,7 +21,9 @@ import 'neuroglancer/uint64_set';
 import {withChunkManager} from 'neuroglancer/chunk_manager/backend';
 import {VisibleSegmentsState} from 'neuroglancer/segmentation_display_state/base';
 import {SharedDisjointUint64Sets} from 'neuroglancer/shared_disjoint_sets';
+import {SharedWatchableValue} from 'neuroglancer/shared_watchable_value';
 import {Uint64Set} from 'neuroglancer/uint64_set';
+import {mat4} from 'neuroglancer/util/geom';
 import {withSharedVisibility} from 'neuroglancer/visibility_priority/backend';
 import {RPC, SharedObjectCounterpart} from 'neuroglancer/worker_rpc';
 
@@ -30,6 +32,8 @@ const Base = withSharedVisibility(withChunkManager(SharedObjectCounterpart));
 export class SegmentationLayerSharedObjectCounterpart extends Base implements VisibleSegmentsState {
   visibleSegments: Uint64Set;
   segmentEquivalences: SharedDisjointUint64Sets;
+  objectToDataTransform: SharedWatchableValue<mat4>;
+  renderScaleTarget: SharedWatchableValue<number>;
 
   constructor(rpc: RPC, options: any) {
     super(rpc, options);
@@ -37,11 +41,15 @@ export class SegmentationLayerSharedObjectCounterpart extends Base implements Vi
     // segmentEquivalences since our owner will hold a reference to their owners.
     this.visibleSegments = <Uint64Set>rpc.get(options['visibleSegments']);
     this.segmentEquivalences = <SharedDisjointUint64Sets>rpc.get(options['segmentEquivalences']);
+    this.objectToDataTransform = rpc.get(options['objectToDataTransform']);
+    this.renderScaleTarget = rpc.get(options['renderScaleTarget']);
 
     const scheduleUpdateChunkPriorities = () => {
       this.chunkManager.scheduleUpdateChunkPriorities();
     };
     this.registerDisposer(this.visibleSegments.changed.add(scheduleUpdateChunkPriorities));
     this.registerDisposer(this.segmentEquivalences.changed.add(scheduleUpdateChunkPriorities));
+    this.registerDisposer(this.objectToDataTransform.changed.add(scheduleUpdateChunkPriorities));
+    this.registerDisposer(this.renderScaleTarget.changed.add(scheduleUpdateChunkPriorities));
   }
 }

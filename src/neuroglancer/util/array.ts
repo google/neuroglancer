@@ -133,3 +133,26 @@ export function binarySearch<T>(
   }
   return ~low;
 }
+
+
+/**
+ * Returns the first index in `[begin, end)` for which `predicate` is `true`, or returns `end` if no
+ * such index exists.
+ *
+ * For any index `i` in `(begin, end)`, it must be the case that `predicate(i) >= predicate(i - 1)`.
+ */
+export function binarySearchLowerBound(
+    begin: number, end: number, predicate: (index: number) => boolean): number {
+  let count = end - begin;
+  while (count > 0) {
+    let step = Math.floor(count / 2);
+    let i = begin + step;
+    if (predicate(i)) {
+      count = step;
+    } else {
+      begin = i + 1;
+      count -= step + 1;
+    }
+  }
+  return begin;
+}

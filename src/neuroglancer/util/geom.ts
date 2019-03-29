@@ -15,7 +15,6 @@
  */
 
 import {mat3, mat4, quat, vec3} from 'gl-matrix';
-import {Uint64} from 'neuroglancer/util/uint64';
 
 export {mat2, mat3, mat4, quat, vec2, vec3, vec4} from 'gl-matrix';
 
@@ -150,38 +149,6 @@ export function translationRotationScaleZReflectionToMat4(
   return mat4.fromRotationTranslationScale(out, rotation, translation, <vec3>temp);
 }
 
-
-/**
- * Transforms a z-index to/from Morton Codes (i.e. z-indices).
- */
-const magicBits = [
-  new Uint64(0x49249249, 0x12492492), // AND step
-  new Uint64(0xc30c30c3, 0x30c30c30), // XOR steps
-  new Uint64(0x0f00f00f, 0xf00f00f0),
-  new Uint64(0xff0000ff, 0x00ff0000),
-  new Uint64(0x0000ffff, 0x00ff0000),
-  new Uint64(0x001fffff, 0x00000000),
-];
-
-export function compactMorton(input: Uint64) {
-  let x = input;
-  x = x.and(magicBits[0]);
-  for (let i = 1; i < magicBits.length; ++i) {
-    x = x.xor(x.rshift(Math.pow(2,i))).and(magicBits[i]);
-  }
-  return x;
-}
-
-export function decodeMorton(input: Uint64) {
-  if (input.high) {
-    throw new Error('Fragment ids >= 2^32 not supported yet');
-  }
-  const x = compactMorton(input.rshift(0));
-  const y = compactMorton(input.rshift(1));
-  const z = compactMorton(input.rshift(2));
-  return vec3.clone([x.low, y.low, z.low]);
-}
-
 /**
  * Returns the value of `t` that minimizes `(p - (a + t * (b - a)))`.
  */
@@ -223,4 +190,79 @@ export function mat3FromMat4(out: mat3, m: mat4) {
   out[7] = m21;
   out[8] = m22;
   return out;
+}
+
+/**
+ * Extracts the left, right, bottom, top, near, far clipping planes from `projectionMat`.
+ * @param out Row-major array of shape `(6, 4)` specifying for each of the left, right, bottom, top,
+ *     near, far clipping planes the `a`, `b`, `c`, `d` coefficients such that
+ *     `0 < a * x + b * y + c * z + d` if the point `x, y, z` is inside the half-space of the
+ * clipping plane.
+ * @param m Projection matrix
+ */
+export function getFrustrumPlanes(out: Float32Array, m: mat4): Float32Array {
+  // http://web.archive.org/web/20120531231005/http://crazyjoke.free.fr/doc/3D/plane%20extraction.pdf
+  const m00 = m[0], m10 = m[1], m20 = m[2], m30 = m[3], m01 = m[4], m11 = m[5], m21 = m[6],
+        m31 = m[7], m02 = m[8], m12 = m[9], m22 = m[10], m32 = m[11], m03 = m[12], m13 = m[13],
+        m23 = m[14], m33 = m[15];
+
+  out[0] = m30 + m00;  // left: a
+  out[1] = m31 + m01;  // left: b
+  out[2] = m32 + m02;  // left: c
+  out[3] = m33 + m03;  // left: d
+
+  out[4] = m30 - m00;  // right: a
+  out[5] = m31 - m01;  // right: b
+  out[6] = m32 - m02;  // right: c
+  out[7] = m33 - m03;  // right: d
+
+  out[8] = m30 + m10;   // bottom: a
+  out[9] = m31 + m11;   // bottom: b
+  out[10] = m32 + m12;  // bottom: c
+  out[11] = m33 + m13;  // bottom: d
+
+  out[12] = m30 - m10;  // top: a
+  out[13] = m31 - m11;  // top: b
+  out[14] = m32 - m12;  // top: c
+  out[15] = m33 - m13;  // top: d
+
+  const nearA = m30 + m20;  // near: a
+  const nearB = m31 + m21;  // near: b
+  const nearC = m32 + m22;  // near: c
+  const nearD = m33 + m23;  // near: d
+
+  // Normalize near plane
+  const nearNorm = Math.sqrt(nearA ** 2 + nearB ** 2 + nearC ** 2);
+  out[16] = nearA / nearNorm;
+  out[17] = nearB / nearNorm;
+  out[18] = nearC / nearNorm;
+  out[19] = nearD / nearNorm;
+
+  out[20] = m30 - m20;  // far: a
+  out[21] = m31 - m21;  // far: b
+  out[22] = m32 - m22;  // far: c
+  out[23] = m33 - m23;  // far: d
+
+  return out;
+}
+
+/**
+ * Checks whether the specified axis-aligned bounding box (AABB) intersects the view frustrum.
+ *
+ * @param clippingPlanes Array of length 24 specifying the clipping planes of the view frustrum, as
+ *     computed by `getFrustrumPlanes`
+ */
+export function isAABBVisible(
+    xLower: number, yLower: number, zLower: number, xUpper: number, yUpper: number, zUpper: number,
+    clippingPlanes: Float32Array) {
+  for (let i = 0; i < 6; ++i) {
+    const a = clippingPlanes[i * 4], b = clippingPlanes[i * 4 + 1], c = clippingPlanes[i * 4 + 2],
+          d = clippingPlanes[i * 4 + 3];
+    const sum = Math.max(a * xLower, a * xUpper) + Math.max(b * yLower, b * yUpper) +
+        Math.max(c * zLower, c * zUpper) + d;
+    if (sum < 0) {
+      return false;
+    }
+  }
+  return true;
 }
