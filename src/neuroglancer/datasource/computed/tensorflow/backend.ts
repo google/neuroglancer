@@ -17,8 +17,8 @@
 import {ComputedVolumeChunk, VolumeComputationBackend} from 'neuroglancer/datasource/computed/backend';
 import {getArrayView} from 'neuroglancer/datasource/computed/base';
 import {InferenceRequest, InferenceResult, TENSORFLOW_COMPUTATION_RPC_ID, TENSORFLOW_INFERENCE_RPC_ID, TensorflowArray, TensorflowComputationParameters} from 'neuroglancer/datasource/computed/tensorflow/base';
+import {CancellationToken} from 'neuroglancer/util/cancellation';
 import {registerSharedObject} from 'neuroglancer/worker_rpc';
-import {CancellationToken} from 'src/neuroglancer/util/cancellation';
 
 @registerSharedObject(TENSORFLOW_COMPUTATION_RPC_ID)
 export class TensorflowComputation extends VolumeComputationBackend {
