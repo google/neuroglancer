@@ -273,7 +273,6 @@ export class FourPanelLayout extends RefCounted {
       ]))
     ];
     L.box('row', mainDisplayContents)(rootElement);
-    display.onResize();
   }
 
   disposed() {
@@ -321,7 +320,6 @@ export class SliceViewPerspectiveTwoPanelLayout extends RefCounted {
             registerRelatedLayouts(this, panel, ['3d', '4panel']);
           }),
     ]))(rootElement);
-    display.onResize();
   }
 
   disposed() {
@@ -346,7 +344,6 @@ export class SinglePanelLayout extends RefCounted {
                 new SliceViewPanel(viewer.display, element, sliceView, sliceViewerState));
             registerRelatedLayouts(this, panel, ['4panel', `${axes}-3d`]);
           })])(rootElement);
-    viewer.display.onResize();
   }
 
   disposed() {
@@ -372,7 +369,6 @@ export class SinglePerspectiveLayout extends RefCounted {
             addUnconditionalSliceViews(viewer, panel, crossSections);
             registerRelatedLayouts(this, panel, ['4panel']);
           })])(rootElement);
-    viewer.display.onResize();
   }
 
   disposed() {
