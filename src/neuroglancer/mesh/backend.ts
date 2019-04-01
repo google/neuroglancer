@@ -236,6 +236,58 @@ export function decodeTriangleVertexPositionsAndIndices(
   chunk.vertexNormals = computeVertexNormals(chunk.vertexPositions!, chunk.indices!);
 }
 
+export function decodeTriangleVertexPositionsAndIndicesDraco(
+  chunk: FragmentChunk, data: ArrayBuffer, decoderModule: any) {
+  const decoder = new decoderModule.Decoder();
+  const buffer = new decoderModule.DecoderBuffer();
+  buffer.Init(new Int8Array(data), data.byteLength);
+  const mesh = new decoderModule.Mesh();
+  const decodeStatus = decoder.DecodeBufferToMesh(buffer, mesh);
+  if (!decodeStatus.ok()) {
+    // Not a draco mesh
+    throw new TypeError('Draco decoding failed');
+  }
+  const decoderAttr = decoderModule.POSITION;
+  const attrId = decoder.GetAttributeId(mesh, decoderAttr);
+  if (attrId < 0) {
+    // Draco mesh has no position attribute, which we need
+    throw new Error('Invalid Draco mesh');
+  }
+  decoderModule.destroy(buffer);
+  const numFaces = mesh.num_faces();
+  const numIndices = numFaces * 3;
+  const numPoints = mesh.num_points();
+  const indices = new Uint32Array(numIndices);
+
+  // Add Faces to mesh
+  const ia = new decoderModule.DracoInt32Array();
+  for (let i = 0; i < numFaces; ++i) {
+    decoder.GetFaceFromMesh(mesh, i, ia);
+    const index = i * 3;
+    indices[index] = ia.GetValue(0);
+    indices[index + 1] = ia.GetValue(1);
+    indices[index + 2] = ia.GetValue(2);
+  }
+  decoderModule.destroy(ia);
+  const stride = 3;
+  const numValues = numPoints * stride;
+
+  const attribute = decoder.GetAttribute(mesh, attrId);
+  const attributeData = new decoderModule.DracoFloat32Array();
+  decoder.GetAttributeFloatForAllPoints(mesh, attribute, attributeData);
+
+  // Get vertex coordinates from mesh
+  const attributeDataArray = new Float32Array(numValues);
+  for (let i = 0; i < numValues; ++i) {
+    attributeDataArray[i] = attributeData.GetValue(i);
+  }
+  decoderModule.destroy(attributeData);
+
+  chunk.vertexPositions = attributeDataArray;
+  chunk.indices = indices;
+  chunk.vertexNormals = computeVertexNormals(chunk.vertexPositions!, chunk.indices!);
+}
+
 export interface MeshSource {
   // TODO(jbms): Move this declaration to class definition below and declare abstract once
   // TypeScript supports mixins with abstract classes.

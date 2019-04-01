@@ -16,7 +16,7 @@
 
 import {WithParameters} from 'neuroglancer/chunk_manager/backend';
 import {MeshSourceParameters, VolumeChunkEncoding, VolumeChunkSourceParameters} from 'neuroglancer/datasource/precomputed/base';
-import {decodeJsonManifestChunk, decodeTriangleVertexPositionsAndIndices, FragmentChunk, ManifestChunk, MeshSource} from 'neuroglancer/mesh/backend';
+import {decodeJsonManifestChunk, decodeTriangleVertexPositionsAndIndices, decodeTriangleVertexPositionsAndIndicesDraco, FragmentChunk, ManifestChunk, MeshSource} from 'neuroglancer/mesh/backend';
 import {ChunkDecoder} from 'neuroglancer/sliceview/backend_chunk_decoders';
 import {decodeCompressedSegmentationChunk} from 'neuroglancer/sliceview/backend_chunk_decoders/compressed_segmentation';
 import {decodeJpegChunk} from 'neuroglancer/sliceview/backend_chunk_decoders/jpeg';
@@ -26,6 +26,7 @@ import {CancellationToken} from 'neuroglancer/util/cancellation';
 import {Endianness} from 'neuroglancer/util/endian';
 import {openShardedHttpRequest, sendHttpRequest} from 'neuroglancer/util/http_request';
 import {registerSharedObject} from 'neuroglancer/worker_rpc';
+const DracoLoader = require('dracoloader');
 
 const chunkDecoders = new Map<VolumeChunkEncoding, ChunkDecoder>();
 chunkDecoders.set(VolumeChunkEncoding.RAW, decodeRawChunk);
@@ -65,6 +66,10 @@ export function decodeFragmentChunk(chunk: FragmentChunk, response: ArrayBuffer)
       chunk, response, Endianness.LITTLE, /*vertexByteOffset=*/4, numVertices);
 }
 
+export function decodeDracoFragmentChunk(chunk: FragmentChunk, response: ArrayBuffer, decoderModule: any) {
+  decodeTriangleVertexPositionsAndIndicesDraco(chunk, response, decoderModule);
+}
+
 @registerSharedObject() export class PrecomputedMeshSource extends
 (WithParameters(MeshSource, MeshSourceParameters)) {
   download(chunk: ManifestChunk, cancellationToken: CancellationToken) {
@@ -78,9 +83,21 @@ export function decodeFragmentChunk(chunk: FragmentChunk, response: ArrayBuffer)
   downloadFragment(chunk: FragmentChunk, cancellationToken: CancellationToken) {
     let {parameters} = this;
     let requestPath = `${parameters.path}/${chunk.fragmentId}`;
-    return sendHttpRequest(
-               openShardedHttpRequest(parameters.baseUrls, requestPath), 'arraybuffer',
-               cancellationToken)
-        .then(response => decodeFragmentChunk(chunk, response));
+    const fragmentDownloadPromise = sendHttpRequest(openShardedHttpRequest(parameters.baseUrls, requestPath), 'arraybuffer', cancellationToken);
+    const dracoModulePromise = DracoLoader.default;
+    const readyToDecode = Promise.all([fragmentDownloadPromise, dracoModulePromise]);
+    return readyToDecode
+      .then(response => {
+        try {
+          decodeDracoFragmentChunk(chunk, response[0], response[1].decoderModule);
+        } catch (err) {
+          if (err instanceof TypeError) {
+            // not a draco mesh
+            decodeFragmentChunk(chunk, response[0]);
+          }
+        }
+      }, error => {
+        Promise.reject(error);
+      });
   }
 }

@@ -127,6 +127,9 @@ function getBaseConfig(options) {
 
         // Patched version of jpgjs.
         'jpgjs': resolveReal(__dirname, '../third_party/jpgjs/jpg.js'),
+        'draco_wasm_wrapper.js': resolveReal(__dirname, '../third_party/draco/draco_wasm_wrapper.js'),
+        'dracoloader': resolveReal(__dirname, '../third_party/draco/draco_loader.js'),
+        'draco_decoder.wasm': resolveReal(__dirname, '../third_party/draco/draco_decoder.wasm')
       },
       extraResolveAliases, options.resolveAliases || {});
   let baseConfig = {
@@ -166,9 +169,18 @@ function getBaseConfig(options) {
             {loader: require.resolve('glsl-strip-comments-loader')},
           ],
         },
+        {
+          test: /\.wasm$/,
+          loader: require.resolve('file-loader'),
+          type: 'javascript/auto',
+          options: {
+            name: '[name].[ext]'
+          }
+        }
       ],
     },
-    node: {'Buffer': false},
+    // node fs used server-side to serve draco decoder, do this so webpack doesn't complain that fs doesn't exist client-side
+    node: {'Buffer': false, 'fs': "empty"},
   };
   if (!options.noOutput) {
     if (options.outputPath === undefined) {
