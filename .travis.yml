@@ -9,15 +9,14 @@ cache:
   directories:
   - node_modules
 before_install:
-- openssl aes-256-cbc -K $encrypted_5d2bae8122b8_key -iv $encrypted_5d2bae8122b8_iv -in credentials.tar.gz.enc -out credentials.tar.gz -d
+- openssl aes-256-cbc -K $encrypted_f46babd475e4_key -iv $encrypted_f46babd475e4_iv
+  -in credentials.tar.gz.enc -out credentials.tar.gz -d
 - tar -xzf credentials.tar.gz
 - sudo mv secrets /secrets && sudo chown $USER /secrets
 - rm credentials.tar.gz
-- $(python version.py) #sets APPVERSION
+- "$(python version.py)"
 script:
 - npm install
-#- google-chrome-stable --headless --disable-gpu --remote-debugging-port=9876 http://localhost &
-#- npm run test
 after_success:
 - sudo apt-get -qq update;
 - sudo apt-get install -y oracle-java8-set-default
