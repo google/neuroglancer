@@ -20,11 +20,11 @@ import {AnnotationLayerState} from 'neuroglancer/annotation/frontend';
 import {RenderedPanel} from 'neuroglancer/display_context';
 import {LayerListSpecification} from 'neuroglancer/layer_specification';
 import {SpatialPosition} from 'neuroglancer/navigation_state';
-import {TrackableRefCounted, WatchableSet} from 'neuroglancer/trackable_value';
+import {TrackableRefCounted, TrackableValue, WatchableSet} from 'neuroglancer/trackable_value';
 import {restoreTool, Tool} from 'neuroglancer/ui/tool';
 import {Borrowed, Owned, RefCounted} from 'neuroglancer/util/disposable';
 import {BoundingBox, vec3} from 'neuroglancer/util/geom';
-import {verifyObject, verifyObjectProperty, verifyOptionalBoolean, verifyOptionalString} from 'neuroglancer/util/json';
+import {verifyObject, verifyObjectProperty, verifyOptionalBoolean, verifyOptionalString, verifyPositiveInt} from 'neuroglancer/util/json';
 import {NullarySignal} from 'neuroglancer/util/signal';
 import {addSignalBinding, removeSignalBinding, SignalBindingUpdater} from 'neuroglancer/util/signal_binding_updater';
 import {Trackable} from 'neuroglancer/util/trackable';
@@ -774,6 +774,7 @@ export class SelectedLayerState extends RefCounted implements Trackable {
   changed = new NullarySignal();
   visible_ = false;
   layer_: ManagedUserLayer|undefined;
+  size = new TrackableValue<number>(300, verifyPositiveInt)
 
   get layer() {
     return this.layer_;
@@ -798,6 +799,7 @@ export class SelectedLayerState extends RefCounted implements Trackable {
   constructor(public layerManager: Owned<LayerManager>) {
     super();
     this.registerDisposer(layerManager);
+    this.size.changed.add(this.changed.dispatch);
   }
 
   set layer(layer: ManagedUserLayer|undefined) {
@@ -841,7 +843,11 @@ export class SelectedLayerState extends RefCounted implements Trackable {
     if (this.layer === undefined) {
       return undefined;
     }
-    return {'layer': this.layer.name, 'visible': this.visible === true ? true : undefined};
+    return {
+      'layer': this.layer.name,
+      'visible': this.visible === true ? true : undefined,
+      'size': this.size.toJSON(),
+    };
   }
 
   restoreState(obj: any) {
@@ -854,6 +860,7 @@ export class SelectedLayerState extends RefCounted implements Trackable {
     const layer = layerName !== undefined ? this.layerManager.getLayerByName(layerName) : undefined;
     this.layer = layer;
     this.visible = verifyObjectProperty(obj, 'visible', verifyOptionalBoolean) ? true : false;
+    verifyObjectProperty(obj, 'size', x => this.size.restoreState(x));
   }
 
   reset() {

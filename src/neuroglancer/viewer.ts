@@ -32,6 +32,7 @@ import {StatusMessage} from 'neuroglancer/status';
 import {ElementVisibilityFromTrackableBoolean, TrackableBoolean, TrackableBooleanCheckbox} from 'neuroglancer/trackable_boolean';
 import {makeDerivedWatchableValue, TrackableValue, WatchableValueInterface} from 'neuroglancer/trackable_value';
 import {ContextMenu} from 'neuroglancer/ui/context_menu';
+import {DragResizablePanel} from 'neuroglancer/ui/drag_resize';
 import {LayerInfoPanelContainer} from 'neuroglancer/ui/layer_side_panel';
 import {MouseSelectionStateTooltipManager} from 'neuroglancer/ui/mouse_selection_state_tooltip';
 import {setupPositionDropHandlers} from 'neuroglancer/ui/position_drag_and_drop';
@@ -473,8 +474,22 @@ export class Viewer extends RefCounted implements ViewerState {
     layoutAndSidePanel.style.flexDirection = 'row';
     this.layout = this.registerDisposer(new RootLayoutContainer(this, '4panel'));
     layoutAndSidePanel.appendChild(this.layout.element);
-    layoutAndSidePanel.appendChild(
-        this.registerDisposer(new LayerInfoPanelContainer(this.selectedLayer.addRef())).element);
+    const layerInfoPanel =
+        this.registerDisposer(new LayerInfoPanelContainer(this.selectedLayer.addRef()));
+    layoutAndSidePanel.appendChild(layerInfoPanel.element);
+    const self = this;
+    layerInfoPanel.registerDisposer(new DragResizablePanel(
+        layerInfoPanel.element, {
+          changed: self.selectedLayer.changed,
+          get value() {
+            return self.selectedLayer.visible;
+          },
+          set value(visible: boolean) {
+            self.selectedLayer.visible = visible;
+          }
+        },
+        this.selectedLayer.size, 'horizontal', 290));
+
     gridContainer.appendChild(layoutAndSidePanel);
 
     const updateVisibility = () => {
