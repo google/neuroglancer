@@ -31,6 +31,7 @@ import {kAxes, mat4, transformVectorByMat4, vec3, vec4} from 'neuroglancer/util/
 import {startRelativeMouseDrag} from 'neuroglancer/util/mouse_drag';
 import {TouchRotateInfo, TouchTranslateInfo} from 'neuroglancer/util/touch_bindings';
 import {WatchableMap} from 'neuroglancer/util/watchable_map';
+import {maybeTriggerActiveTool} from 'neuroglancer/viewer_state';
 import {withSharedVisibility} from 'neuroglancer/visibility_priority/frontend';
 import {DepthBuffer, FramebufferConfiguration, makeTextureBuffers, OffscreenCopyHelper, TextureBuffer} from 'neuroglancer/webgl/offscreen';
 import {ShaderBuilder} from 'neuroglancer/webgl/shader';
@@ -246,12 +247,21 @@ export class PerspectivePanel extends RenderedDataPanel {
           return undefined;
         });
 
-    registerActionListener(element, 'rotate-via-mouse-drag', (e: ActionEvent<MouseEvent>) => {
+    const rotateLambda = (e: ActionEvent<MouseEvent>) => {
       startRelativeMouseDrag(e.detail, (_event, deltaX, deltaY) => {
         this.navigationState.pose.rotateRelative(kAxes[1], deltaX / 4.0 * Math.PI / 180.0);
         this.navigationState.pose.rotateRelative(kAxes[0], -deltaY / 4.0 * Math.PI / 180.0);
       });
-    });
+    };
+
+    registerActionListener(element, 'rotate-via-mouse-drag', rotateLambda);
+    registerActionListener(
+        element, 'rotate-via-mouse-drag-or-annotate', (e: ActionEvent<MouseEvent>) => {
+          if (maybeTriggerActiveTool(this.viewer)) {
+            return;
+          }
+          rotateLambda(e);
+        });
 
     registerActionListener(
         element, 'rotate-in-plane-via-touchrotate', (e: ActionEvent<TouchRotateInfo>) => {

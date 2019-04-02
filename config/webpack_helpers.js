@@ -166,6 +166,15 @@ function getBaseConfig(options) {
             {loader: require.resolve('glsl-strip-comments-loader')},
           ],
         },
+        {
+          test: /\.(png|jpg|gif)$/,
+          use: [
+            {
+              loader: 'file-loader',
+              options: {},
+            },
+          ],
+        }
       ],
     },
     node: {'Buffer': false},

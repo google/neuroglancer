@@ -30,3 +30,22 @@ export interface ViewerState extends VisibilityPrioritySpecification {
   layerManager: LayerManager;
   selectedLayer: SelectedLayerState;
 }
+
+/**
+ * Triggers the active tool, if there is one, on the active, selected layer,
+ * if there is one.
+ *
+ * @returns true if a tool was activated, false otherwise.
+ */
+export function maybeTriggerActiveTool(viewer: ViewerState) {
+  const selectedLayer = viewer.selectedLayer.layer;
+  if (!selectedLayer) {
+    return false;
+  }
+  const userLayer = selectedLayer.layer;
+  if (!userLayer || !userLayer.tool.value) {
+    return false;
+  }
+  userLayer.tool.value.trigger(viewer.mouseState);
+  return true;
+}
