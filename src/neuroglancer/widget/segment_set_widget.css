@@ -21,6 +21,7 @@
 .segment-set-widget {
   flex: 1;
   overflow-y: auto;
+  height: 0px;
 }
 
 .segment-set-widget .item-container {

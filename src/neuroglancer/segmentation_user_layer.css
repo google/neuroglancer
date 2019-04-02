@@ -19,6 +19,11 @@
   font-weight: bold;
 }
 
+.segmentation-dropdown {
+  display: flex;
+  flex-direction: column;
+}
+
 .segmentation-dropdown .add-segment {
   margin-bottom: 5px;
 }
