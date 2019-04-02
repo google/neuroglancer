@@ -37,7 +37,8 @@ export type GenericChunkKey = string;
 
 const tempMat = mat4.create();
 
-const Base = withSharedVisibility(SliceViewBase);
+class FrontendSliceViewBase extends SliceViewBase<SliceViewChunkSource, RenderLayer> {}
+const Base = withSharedVisibility(FrontendSliceViewBase);
 
 @registerSharedObjectOwner(SLICEVIEW_RPC_ID)
 export class SliceView extends Base {
@@ -61,8 +62,6 @@ export class SliceView extends Base {
   visibleChunksStale = true;
 
   visibleLayerList = new Array<RenderLayer>();
-
-  visibleLayers: Map<RenderLayer, {chunkLayout: ChunkLayout, source: SliceViewChunkSource}[]>;
 
   newVisibleLayers = new Set<RenderLayer>();
 

@@ -17,8 +17,7 @@
 import {ChunkManager} from 'neuroglancer/chunk_manager/frontend';
 import {CoordinateTransform} from 'neuroglancer/coordinate_transform';
 import {RenderLayer as GenericRenderLayer} from 'neuroglancer/layer';
-import {getTransformedSources, SLICEVIEW_RENDERLAYER_RPC_ID, SLICEVIEW_RENDERLAYER_UPDATE_TRANSFORM_RPC_ID} from 'neuroglancer/sliceview/base';
-import {ChunkLayout} from 'neuroglancer/sliceview/chunk_layout';
+import {getTransformedSources, SLICEVIEW_RENDERLAYER_RPC_ID, SLICEVIEW_RENDERLAYER_UPDATE_TRANSFORM_RPC_ID, TransformedSource} from 'neuroglancer/sliceview/base';
 import {SliceView, SliceViewChunkSource} from 'neuroglancer/sliceview/frontend';
 import {vec3} from 'neuroglancer/util/geom';
 import {RpcId} from 'neuroglancer/worker_rpc';
@@ -31,7 +30,7 @@ export interface RenderLayerOptions {
 export abstract class RenderLayer extends GenericRenderLayer {
   rpcId: RpcId|null = null;
   transform: CoordinateTransform;
-  transformedSources: {source: SliceViewChunkSource, chunkLayout: ChunkLayout}[][];
+  transformedSources: TransformedSource<SliceViewChunkSource>[][];
   transformedSourcesGeneration = -1;
 
   constructor(
