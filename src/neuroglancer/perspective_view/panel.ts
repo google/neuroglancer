@@ -17,11 +17,10 @@
 import throttle from 'lodash/throttle';
 import {AxesLineHelper} from 'neuroglancer/axes_lines';
 import {DisplayContext} from 'neuroglancer/display_context';
-import {makeRenderedPanelVisibleLayerTracker, MouseSelectionState, VisibleRenderLayerTracker} from 'neuroglancer/layer';
-import {PickIDManager} from 'neuroglancer/object_picking';
+import {makeRenderedPanelVisibleLayerTracker, VisibleRenderLayerTracker} from 'neuroglancer/layer';
 import {PERSPECTIVE_VIEW_ADD_LAYER_RPC_ID, PERSPECTIVE_VIEW_REMOVE_LAYER_RPC_ID, PERSPECTIVE_VIEW_RPC_ID, PERSPECTIVE_VIEW_UPDATE_VIEWPORT_RPC_ID} from 'neuroglancer/perspective_view/base';
 import {PerspectiveViewReadyRenderContext, PerspectiveViewRenderContext, PerspectiveViewRenderLayer} from 'neuroglancer/perspective_view/render_layer';
-import {RenderedDataPanel, RenderedDataViewerState} from 'neuroglancer/rendered_data_panel';
+import {FramePickingData, RenderedDataPanel, RenderedDataViewerState} from 'neuroglancer/rendered_data_panel';
 import {SliceView, SliceViewRenderHelper} from 'neuroglancer/sliceview/frontend';
 import {TrackableBoolean, TrackableBooleanCheckbox} from 'neuroglancer/trackable_boolean';
 import {TrackableValue} from 'neuroglancer/trackable_value';
@@ -185,7 +184,6 @@ export class PerspectivePanel extends RenderedDataPanel {
    */
   height = 0;
 
-  protected pickIDs = new PickIDManager();
   private axesLineHelper = this.registerDisposer(AxesLineHelper.get(this.gl));
   sliceViewRenderHelper =
       this.registerDisposer(SliceViewRenderHelper.get(this.gl, perspectivePanelEmit));
@@ -222,7 +220,8 @@ export class PerspectivePanel extends RenderedDataPanel {
   constructor(context: DisplayContext, element: HTMLElement, viewer: PerspectiveViewerState) {
     super(context, element, viewer);
     this.registerDisposer(this.navigationState.changed.add(() => {
-      this.viewportChanged();
+      this.throttledSendViewportUpdate();
+      this.context.scheduleRedraw();
     }));
 
     const sharedObject = this.sharedObject = this.registerDisposer(new PerspectiveViewState());
@@ -318,8 +317,8 @@ export class PerspectivePanel extends RenderedDataPanel {
         }
       }
     }
-    this.onResize();
-    let {width, height} = this;
+    this.checkForResize();
+    const {width, height} = this;
     if (width === 0 || height === 0) {
       return true;
     }
@@ -399,18 +398,8 @@ export class PerspectivePanel extends RenderedDataPanel {
     });
   }, 10));
 
-  viewportChanged() {
+  panelSizeChanged() {
     this.throttledSendViewportUpdate();
-    this.context.scheduleRedraw();
-  }
-
-  onResize() {
-    const {clientWidth, clientHeight} = this.element;
-    if (clientWidth !== this.width || clientHeight !== this.height) {
-      this.width = this.element.clientWidth;
-      this.height = this.element.clientHeight;
-      this.viewportChanged();
-    }
   }
 
   disposed() {
@@ -421,31 +410,29 @@ export class PerspectivePanel extends RenderedDataPanel {
     super.disposed();
   }
 
-  updateMouseState(mouseState: MouseSelectionState): boolean {
+  issuePickRequest(glWindowX: number, glWindowY: number) {
+    const {offscreenFramebuffer} = this;
+    offscreenFramebuffer.readPixelFloat32IntoBuffer(OffscreenTextures.Z, glWindowX, glWindowY, 0);
+    offscreenFramebuffer.readPixelFloat32IntoBuffer(
+        OffscreenTextures.PICK, glWindowX, glWindowY, 16);
+  }
+
+  completePickRequest(
+      glWindowX: number, glWindowY: number, data: Float32Array, pickingData: FramePickingData) {
+    const {mouseState} = this.viewer;
     mouseState.pickedRenderLayer = null;
-    if (!this.navigationState.valid) {
-      return false;
-    }
-    let out = mouseState.position;
-    let {offscreenFramebuffer, width, height} = this;
-    if (!offscreenFramebuffer.hasSize(width, height)) {
-      return false;
-    }
-    let glWindowX = this.mouseX;
-    let glWindowY = height - this.mouseY;
-    let glWindowZ =
-        1.0 - offscreenFramebuffer.readPixelFloat32(OffscreenTextures.Z, glWindowX, glWindowY);
+    let glWindowZ = 1.0 - data[0];
     if (glWindowZ === 1.0) {
-      return false;
+      mouseState.setActive(false);
+      return;
     }
-    out[0] = 2.0 * glWindowX / width - 1.0;
-    out[1] = 2.0 * glWindowY / height - 1.0;
+    const out = mouseState.position;
+    out[0] = 2.0 * glWindowX / pickingData.viewportWidth - 1.0;
+    out[1] = 2.0 * glWindowY / pickingData.viewportHeight - 1.0;
     out[2] = 2.0 * glWindowZ - 1.0;
-    vec3.transformMat4(out, out, this.viewProjectionMatInverse);
-    this.pickIDs.setMouseState(
-        mouseState,
-        offscreenFramebuffer.readPixelFloat32(OffscreenTextures.PICK, glWindowX, glWindowY));
-    return true;
+    vec3.transformMat4(out, out, pickingData.invTransform);
+    pickingData.pickIDs.setMouseState(mouseState, data[4]);
+    mouseState.setActive(true);
   }
 
   translateDataPointByViewportPixels(out: vec3, orig: vec3, deltaX: number, deltaY: number): vec3 {
@@ -471,15 +458,11 @@ export class PerspectivePanel extends RenderedDataPanel {
     return transparentConfiguration;
   }
 
-  draw() {
+  drawWithPicking(pickingData: FramePickingData): boolean {
     if (!this.navigationState.valid) {
-      return;
+      return false;
     }
-    this.onResize();
-    let {width, height} = this;
-    if (width === 0 || height === 0) {
-      return;
-    }
+    const {width, height} = this;
 
     const showSliceViews = this.viewer.showSliceViews.value;
     for (const [sliceView, unconditional] of this.sliceViews) {
@@ -508,14 +491,12 @@ export class PerspectivePanel extends RenderedDataPanel {
     let ambient = 0.2;
     let directional = 1 - ambient;
 
-    let pickIDs = this.pickIDs;
-    pickIDs.clear();
-    let renderContext: PerspectiveViewRenderContext = {
+    const renderContext: PerspectiveViewRenderContext = {
       dataToDevice: viewProjectionMat,
       lightDirection: lightingDirection,
       ambientLighting: ambient,
       directionalLighting: directional,
-      pickIDs: pickIDs,
+      pickIDs: pickingData.pickIDs,
       emitter: perspectivePanelEmit,
       emitColor: true,
       emitPickID: true,
@@ -523,6 +504,8 @@ export class PerspectivePanel extends RenderedDataPanel {
       viewportWidth: width,
       viewportHeight: height,
     };
+
+    mat4.copy(pickingData.invTransform, this.viewProjectionMatInverse);
 
     let visibleLayers = this.visibleLayerTracker.getVisibleLayers();
 
@@ -658,6 +641,7 @@ export class PerspectivePanel extends RenderedDataPanel {
     this.setGLViewport();
     this.offscreenCopyHelper.draw(
         this.offscreenFramebuffer.colorBuffers[OffscreenTextures.COLOR].texture);
+    return true;
   }
 
   protected drawSliceViews(renderContext: PerspectiveViewRenderContext) {

@@ -16,9 +16,9 @@
 
 import {AxesLineHelper} from 'neuroglancer/axes_lines';
 import {DisplayContext} from 'neuroglancer/display_context';
-import {makeRenderedPanelVisibleLayerTracker, MouseSelectionState, VisibilityTrackedRenderLayer} from 'neuroglancer/layer';
+import {makeRenderedPanelVisibleLayerTracker, VisibilityTrackedRenderLayer} from 'neuroglancer/layer';
 import {PickIDManager} from 'neuroglancer/object_picking';
-import {RenderedDataPanel, RenderedDataViewerState} from 'neuroglancer/rendered_data_panel';
+import {FramePickingData, RenderedDataPanel, RenderedDataViewerState} from 'neuroglancer/rendered_data_panel';
 import {SliceView, SliceViewRenderHelper} from 'neuroglancer/sliceview/frontend';
 import {TrackableBoolean} from 'neuroglancer/trackable_boolean';
 import {TrackableRGB} from 'neuroglancer/util/color';
@@ -224,17 +224,17 @@ export class SliceViewPanel extends RenderedDataPanel {
     return true;
   }
 
-  draw() {
+  drawWithPicking(pickingData: FramePickingData): boolean {
     let {sliceView} = this;
-    this.onResize();
+    sliceView.setViewportSize(this.width, this.height);
     sliceView.updateRendering();
     if (!sliceView.hasValidViewport) {
-      return;
+      return false;
     }
+    mat4.copy(pickingData.invTransform, sliceView.viewportToData);
+    const {gl} = this;
 
-    let {gl} = this;
-
-    let {width, height, dataToDevice} = sliceView;
+    const {width, height, dataToDevice} = sliceView;
     this.offscreenFramebuffer.bind(width, height);
     gl.disable(WebGL2RenderingContext.SCISSOR_TEST);
     this.gl.clearColor(0.0, 0.0, 0.0, 0.0);
@@ -335,34 +335,30 @@ export class SliceViewPanel extends RenderedDataPanel {
     this.setGLViewport();
     this.offscreenCopyHelper.draw(
         this.offscreenFramebuffer.colorBuffers[OffscreenTextures.COLOR].texture);
-  }
-
-  onResize() {
-    this.sliceView.setViewportSizeDebounced(this.element.clientWidth, this.element.clientHeight);
-  }
-
-  updateMouseState(mouseState: MouseSelectionState) {
-    mouseState.pickedRenderLayer = null;
-    let sliceView = this.sliceView;
-    if (!sliceView.hasValidViewport) {
-      return false;
-    }
-    let {width, height} = sliceView;
-    let {offscreenFramebuffer} = this;
-    if (!offscreenFramebuffer.hasSize(width, height)) {
-      return false;
-    }
-    let out = mouseState.position;
-    let glWindowX = this.mouseX;
-    let y = this.mouseY;
-    vec3.set(out, glWindowX - width / 2, y - height / 2, 0);
-    vec3.transformMat4(out, out, sliceView.viewportToData);
-
-    let glWindowY = height - y;
-    const pickValue =
-        offscreenFramebuffer.readPixelFloat32(OffscreenTextures.PICK, glWindowX, glWindowY);
-    this.pickIDs.setMouseState(mouseState, pickValue);
     return true;
+  }
+
+  panelSizeChanged() {
+    this.sliceView.setViewportSizeDebounced(this.width, this.height);
+  }
+
+  issuePickRequest(glWindowX: number, glWindowY: number) {
+    const {offscreenFramebuffer} = this;
+    offscreenFramebuffer.readPixelFloat32IntoBuffer(
+        OffscreenTextures.PICK, glWindowX, glWindowY, 0);
+  }
+
+  completePickRequest(
+      glWindowX: number, glWindowY: number, data: Float32Array, pickingData: FramePickingData) {
+    const {mouseState} = this.viewer;
+    mouseState.pickedRenderLayer = null;
+    const out = mouseState.position;
+    const {viewportWidth, viewportHeight} = pickingData;
+    const y = pickingData.viewportHeight - glWindowY;
+    vec3.set(out, glWindowX - viewportWidth / 2, y - viewportHeight / 2, 0);
+    vec3.transformMat4(out, out, pickingData.invTransform);
+    this.pickIDs.setMouseState(mouseState, data[0]);
+    mouseState.setActive(true);
   }
 
   /**
