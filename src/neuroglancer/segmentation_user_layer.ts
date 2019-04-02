@@ -36,6 +36,7 @@ import {NullarySignal} from 'neuroglancer/util/signal';
 import {Uint64} from 'neuroglancer/util/uint64';
 import {makeWatchableShaderError} from 'neuroglancer/webgl/dynamic_shader';
 import {RangeWidget} from 'neuroglancer/widget/range';
+import {RenderScaleWidget} from 'neuroglancer/widget/render_scale_widget';
 import {SegmentSetWidget} from 'neuroglancer/widget/segment_set_widget';
 import {ShaderCodeWidget} from 'neuroglancer/widget/shader_code_widget';
 import {Tab} from 'neuroglancer/widget/tab_view';
@@ -180,7 +181,13 @@ export class SegmentationUserLayer extends Base {
       ++remaining;
       multiscaleSource.then(volume => {
         if (!this.wasDisposed) {
-          this.addRenderLayer(new SegmentationRenderLayer(volume, this.displayState));
+          const {displayState} = this;
+          this.addRenderLayer(new SegmentationRenderLayer(volume, {
+            ...displayState,
+            transform: displayState.objectToDataTransform,
+            renderScaleHistogram: this.sliceViewRenderScaleHistogram,
+            renderScaleTarget: this.sliceViewRenderScaleTarget,
+          }));
           if (meshPath === undefined && skeletonsPath === undefined) {
             ++remaining;
             Promise.resolve(volume.getMeshSource()).then(objectSource => {
@@ -340,6 +347,13 @@ class DisplayOptionsTab extends Tab {
       element.appendChild(this.selectedAlphaWidget.element);
       element.appendChild(this.notSelectedAlphaWidget.element);
       element.appendChild(this.saturationWidget.element);
+
+      {
+        const renderScaleWidget = this.registerDisposer(new RenderScaleWidget(
+            this.layer.sliceViewRenderScaleHistogram, this.layer.sliceViewRenderScaleTarget));
+        renderScaleWidget.label.textContent = 'Resolution (slice)';
+        element.appendChild(renderScaleWidget.element);
+      }
     }
     this.registerDisposer(new ElementVisibilityFromTrackableBoolean(
         this.registerDisposer(new ComputedWatchableValue(

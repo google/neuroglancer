@@ -46,9 +46,7 @@ export class ImageRenderLayer extends RenderLayer {
   fragmentMain: TrackableFragmentMain;
   opacity: TrackableAlphaValue;
   blendMode: TrackableBlendModeValue;
-  constructor(
-      multiscaleSource: MultiscaleVolumeChunkSource,
-      options: Partial<ImageRenderLayerOptions> = {}) {
+  constructor(multiscaleSource: MultiscaleVolumeChunkSource, options: ImageRenderLayerOptions) {
     super(multiscaleSource, options);
     const {
       opacity = trackableAlphaValue(0.5),

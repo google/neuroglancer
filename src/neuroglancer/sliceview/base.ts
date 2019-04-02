@@ -16,6 +16,7 @@
 
 import {CoordinateTransform} from 'neuroglancer/coordinate_transform';
 import {ChunkLayout} from 'neuroglancer/sliceview/chunk_layout';
+import {WatchableValueInterface} from 'neuroglancer/trackable_value';
 import {partitionArray} from 'neuroglancer/util/array';
 import {approxEqual} from 'neuroglancer/util/compare';
 import {DATA_TYPE_BYTES, DataType} from 'neuroglancer/util/data_type';
@@ -127,6 +128,7 @@ export interface RenderLayer<Source extends SliceViewChunkSource> {
   transform: CoordinateTransform;
   transformedSources: TransformedSource<Source>[][]|undefined;
   transformedSourcesGeneration: number;
+  renderScaleTarget: WatchableValueInterface<number>;
 }
 
 export function getTransformedSources<Source extends SliceViewChunkSource>(
@@ -342,6 +344,8 @@ export class SliceViewBase<Source extends SliceViewChunkSource,
       // considered to be the base voxel size.
       let smallestVoxelSize = transformedSources[0][0].voxelSize;
 
+      const renderScaleTarget = renderLayer.renderScaleTarget.value;
+
       /**
        * Determines whether we should continue to look for a finer-resolution source *after* one
        * with the specified voxelSize.
@@ -351,7 +355,7 @@ export class SliceViewBase<Source extends SliceViewChunkSource,
           let size = voxelSize[i];
           // If size <= pixelSize, no need for improvement.
           // If size === smallestVoxelSize, also no need for improvement.
-          if (size > pixelSize && size > smallestVoxelSize[i]) {
+          if (size > pixelSize * renderScaleTarget && size > 1.01 * smallestVoxelSize[i]) {
             return true;
           }
         }

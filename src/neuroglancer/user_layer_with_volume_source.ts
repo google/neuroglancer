@@ -18,12 +18,15 @@ import {AnnotationLayerState} from 'neuroglancer/annotation/frontend';
 import {GetVolumeOptions} from 'neuroglancer/datasource';
 import {RenderLayerRole, UserLayer} from 'neuroglancer/layer';
 import {getVolumeWithStatusMessage} from 'neuroglancer/layer_specification';
+import {RenderScaleHistogram, trackableRenderScaleTarget} from 'neuroglancer/render_scale_statistics';
 import {MultiscaleVolumeChunkSource} from 'neuroglancer/sliceview/volume/frontend';
+import {TrackableValue} from 'neuroglancer/trackable_value';
 import {getAnnotationRenderOptions, UserLayerWithAnnotations, UserLayerWithAnnotationsMixin} from 'neuroglancer/ui/annotations';
 import {UserLayerWithCoordinateTransform, UserLayerWithCoordinateTransformMixin} from 'neuroglancer/user_layer_with_coordinate_transform';
 import {verifyObjectProperty, verifyOptionalString} from 'neuroglancer/util/json';
 
 const SOURCE_JSON_KEY = 'source';
+const CROSS_SECTION_RENDER_SCALE_JSON_KEY = 'crossSectionRenderScale';
 
 interface BaseConstructor {
   new(...args: any[]): UserLayerWithAnnotations&UserLayerWithCoordinateTransform;
@@ -34,11 +37,20 @@ function helper<TBase extends BaseConstructor>(Base: TBase) {
     volumePath: string|undefined;
     multiscaleSource: Promise<MultiscaleVolumeChunkSource>|undefined;
     volumeOptions: GetVolumeOptions|undefined;
+    sliceViewRenderScaleHistogram = new RenderScaleHistogram();
+    sliceViewRenderScaleTarget = (() => {
+      const target = trackableRenderScaleTarget(1);
+      target.changed.add(this.specificationChanged.dispatch);
+      return target;
+    })();
 
     restoreState(specification: any) {
       super.restoreState(specification);
       const volumePath = this.volumePath =
           verifyObjectProperty(specification, SOURCE_JSON_KEY, verifyOptionalString);
+      this.sliceViewRenderScaleTarget.restoreState(
+          specification[CROSS_SECTION_RENDER_SCALE_JSON_KEY]);
+
       if (volumePath !== undefined) {
         const multiscaleSource = this.multiscaleSource = getVolumeWithStatusMessage(
             this.manager.dataSourceProvider, this.manager.chunkManager, volumePath,
@@ -62,6 +74,7 @@ function helper<TBase extends BaseConstructor>(Base: TBase) {
     toJSON() {
       const result = super.toJSON();
       result[SOURCE_JSON_KEY] = this.volumePath;
+      result[CROSS_SECTION_RENDER_SCALE_JSON_KEY] = this.sliceViewRenderScaleTarget.toJSON();
       return result;
     }
   }
@@ -72,6 +85,8 @@ export interface UserLayerWithVolumeSource extends UserLayerWithAnnotations,
                                                    UserLayerWithCoordinateTransform {
   volumePath: string|undefined;
   multiscaleSource: Promise<MultiscaleVolumeChunkSource>|undefined;
+  sliceViewRenderScaleHistogram: RenderScaleHistogram;
+  sliceViewRenderScaleTarget: TrackableValue<number>;
 }
 
 /**

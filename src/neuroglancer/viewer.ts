@@ -15,7 +15,7 @@
  */
 
 import debounce from 'lodash/debounce';
-import {CapacitySpecification, ChunkManager, ChunkQueueManager} from 'neuroglancer/chunk_manager/frontend';
+import {CapacitySpecification, ChunkManager, ChunkQueueManager, FrameNumberCounter} from 'neuroglancer/chunk_manager/frontend';
 import {defaultCredentialsManager} from 'neuroglancer/credentials_provider/default_manager';
 import {InputEventBindings as DataPanelInputEventBindings} from 'neuroglancer/data_panel_layout';
 import {DataSourceProvider} from 'neuroglancer/datasource';
@@ -63,20 +63,21 @@ require('neuroglancer/ui/button.css');
 
 export class DataManagementContext extends RefCounted {
   worker = new Worker('chunk_worker.bundle.js');
-  chunkQueueManager = this.registerDisposer(new ChunkQueueManager(new RPC(this.worker), this.gl, {
-    gpuMemory: new CapacitySpecification({defaultItemLimit: 1e6, defaultSizeLimit: 1e9}),
-    systemMemory: new CapacitySpecification({defaultItemLimit: 1e7, defaultSizeLimit: 2e9}),
-    download: new CapacitySpecification(
-        {defaultItemLimit: 32, defaultSizeLimit: Number.POSITIVE_INFINITY}),
-    compute: new CapacitySpecification({defaultItemLimit: 128, defaultSizeLimit: 5e8}),
-  }));
+  chunkQueueManager = this.registerDisposer(
+      new ChunkQueueManager(new RPC(this.worker), this.gl, this.frameNumberCounter, {
+        gpuMemory: new CapacitySpecification({defaultItemLimit: 1e6, defaultSizeLimit: 1e9}),
+        systemMemory: new CapacitySpecification({defaultItemLimit: 1e7, defaultSizeLimit: 2e9}),
+        download: new CapacitySpecification(
+            {defaultItemLimit: 32, defaultSizeLimit: Number.POSITIVE_INFINITY}),
+        compute: new CapacitySpecification({defaultItemLimit: 128, defaultSizeLimit: 5e8}),
+      }));
   chunkManager = this.registerDisposer(new ChunkManager(this.chunkQueueManager));
 
   get rpc(): RPC {
     return this.chunkQueueManager.rpc!;
   }
 
-  constructor(public gl: GL) {
+  constructor(public gl: GL, public frameNumberCounter: FrameNumberCounter) {
     super();
     this.chunkQueueManager.registerDisposer(() => this.worker.terminate());
   }
@@ -244,7 +245,7 @@ export class Viewer extends RefCounted implements ViewerState {
     super();
 
     const {
-      dataContext = new DataManagementContext(display.gl),
+      dataContext = new DataManagementContext(display.gl, display),
       visibility = new WatchableVisibilityPriority(WatchableVisibilityPriority.VISIBLE),
       inputEventBindings = {
         global: new EventActionMap(),

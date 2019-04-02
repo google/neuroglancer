@@ -14,6 +14,7 @@
  * limitations under the License.
  */
 
+import {FrameNumberCounter} from 'neuroglancer/chunk_manager/frontend';
 import {RefCounted} from 'neuroglancer/util/disposable';
 import {vec3} from 'neuroglancer/util/geom';
 import {NullarySignal} from 'neuroglancer/util/signal';
@@ -72,14 +73,20 @@ export abstract class RenderedPanel extends RefCounted {
   }
 }
 
-export class DisplayContext extends RefCounted {
+export class DisplayContext extends RefCounted implements FrameNumberCounter {
   canvas = document.createElement('canvas');
   gl: GL;
   updateStarted = new NullarySignal();
   updateFinished = new NullarySignal();
+  changed = this.updateFinished;
   panels = new Set<RenderedPanel>();
   private updatePending: number|null = null;
   canvasRect: ClientRect|undefined;
+
+  /**
+   * Unique number of the next frame.  Incremented once each time a frame is drawn.
+   */
+  frameNumber = 0;
 
   private resizeObserver = new ResizeObserver(() => this.scheduleRedraw());
 
@@ -153,6 +160,7 @@ export class DisplayContext extends RefCounted {
   }
 
   draw() {
+    ++this.frameNumber;
     this.updateStarted.dispatch();
     let gl = this.gl;
     let canvas = this.canvas;

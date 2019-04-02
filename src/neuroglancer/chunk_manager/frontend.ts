@@ -64,6 +64,11 @@ export class CapacitySpecification {
   }
 }
 
+export interface FrameNumberCounter {
+  frameNumber: number;
+  changed: NullarySignal;
+}
+
 @registerSharedObjectOwner(CHUNK_QUEUE_MANAGER_RPC_ID)
 export class ChunkQueueManager extends SharedObject {
   visibleChunksChanged = new NullarySignal();
@@ -78,12 +83,13 @@ export class ChunkQueueManager extends SharedObject {
 
   chunkUpdateDelay: number = 30;
 
-  constructor(rpc: RPC, public gl: GL, public capacities: {
-    gpuMemory: CapacitySpecification,
-    systemMemory: CapacitySpecification,
-    download: CapacitySpecification,
-    compute: CapacitySpecification
-  }) {
+  constructor(
+      rpc: RPC, public gl: GL, public frameNumberCounter: FrameNumberCounter, public capacities: {
+        gpuMemory: CapacitySpecification,
+        systemMemory: CapacitySpecification,
+        download: CapacitySpecification,
+        compute: CapacitySpecification
+      }) {
     super();
 
     const makeCapacityCounterparts = (capacity: CapacitySpecification) => {
