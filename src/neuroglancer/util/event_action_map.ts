@@ -267,6 +267,19 @@ export class EventActionMap extends HierarchicalMap<NormalizedEventIdentifier, E
       super.delete(normalizedIdentifier);
     }
   }
+
+  describe(): string {
+    const bindings = [];
+    const uniqueBindings = new Map<string, string>();
+    for (const [key, value] of this.entries()) {
+      const split = key.indexOf(':');
+      uniqueBindings.set(key.substring(split+1), value.action);
+    }
+    for (const [key, value] of uniqueBindings) {
+      bindings.push(`${key}→${value}`);
+    }
+    return bindings.join(', ');
+  }
 }
 
 export function dispatchEventAction(
