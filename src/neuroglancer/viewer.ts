@@ -37,6 +37,7 @@ import {LayerInfoPanelContainer} from 'neuroglancer/ui/layer_side_panel';
 import {MouseSelectionStateTooltipManager} from 'neuroglancer/ui/mouse_selection_state_tooltip';
 import {setupPositionDropHandlers} from 'neuroglancer/ui/position_drag_and_drop';
 import {StateEditorDialog} from 'neuroglancer/ui/state_editor';
+import {StatisticsDisplayState, StatisticsPanel} from 'neuroglancer/ui/statistics';
 import {AutomaticallyFocusedElement} from 'neuroglancer/util/automatic_focus';
 import {TrackableRGB} from 'neuroglancer/util/color';
 import {Borrowed, Owned, RefCounted} from 'neuroglancer/util/disposable';
@@ -172,6 +173,7 @@ function makeViewerContextMenu(viewer: Viewer) {
   addCheckbox('Show scale bar', viewer.showScaleBar);
   addCheckbox('Show cross sections in 3-d', viewer.showPerspectiveSliceViews);
   addCheckbox('Show default annotations', viewer.showDefaultAnnotations);
+  addCheckbox('Show chunk statistics', viewer.statisticsDisplayState.visible);
   return menu;
 }
 
@@ -190,6 +192,7 @@ export class Viewer extends RefCounted implements ViewerState {
   perspectiveViewBackgroundColor = new TrackableRGB(vec3.fromValues(0, 0, 0));
   scaleBarOptions = new TrackableScaleBarOptions();
   contextMenu: ContextMenu;
+  statisticsDisplayState = new StatisticsDisplayState();
 
   layerSelectedValues =
       this.registerDisposer(new LayerSelectedValues(this.layerManager, this.mouseState));
@@ -227,12 +230,6 @@ export class Viewer extends RefCounted implements ViewerState {
    */
   uiControlVisibility:
       {[key in keyof ViewerUIControlConfiguration]: WatchableValueInterface<boolean>} = <any>{};
-
-  // showHelpButtonEffective: WatchableValueInterface<boolean>;
-  // showEditStateButtonEffective: WatchableValueInterface<boolean>;
-  // showLayerPanelEffective: WatchableValueInterface<boolean>;
-  // showLocationEffective: WatchableValueInterface<boolean>;
-  // showAnnotationToolStatusEffective: WatchableValueInterface<boolean>;
 
   showLayerDialog: boolean;
   resetStateWhenEmpty: boolean;
@@ -377,6 +374,9 @@ export class Viewer extends RefCounted implements ViewerState {
 
     state.add('layout', this.layout);
 
+
+    state.add('statistics', this.statisticsDisplayState);
+
     this.registerActionListeners();
     this.registerEventActionBindings();
 
@@ -492,6 +492,13 @@ export class Viewer extends RefCounted implements ViewerState {
 
     gridContainer.appendChild(layoutAndSidePanel);
 
+    const statisticsPanel = this.registerDisposer(
+        new StatisticsPanel(this.chunkQueueManager, this.statisticsDisplayState));
+    gridContainer.appendChild(statisticsPanel.element);
+    statisticsPanel.registerDisposer(new DragResizablePanel(
+        statisticsPanel.element, this.statisticsDisplayState.visible,
+        this.statisticsDisplayState.size, 'vertical'));
+
     const updateVisibility = () => {
       const shouldBeVisible = this.visibility.visible;
       if (shouldBeVisible !== this.visible) {
@@ -574,6 +581,7 @@ export class Viewer extends RefCounted implements ViewerState {
     this.bindAction('toggle-scale-bar', () => this.showScaleBar.toggle());
     this.bindAction('toggle-default-annotations', () => this.showDefaultAnnotations.toggle());
     this.bindAction('toggle-show-slices', () => this.showPerspectiveSliceViews.toggle());
+    this.bindAction('toggle-show-statistics', () => this.showStatistics());
   }
 
   showHelpDialog() {
@@ -587,6 +595,13 @@ export class Viewer extends RefCounted implements ViewerState {
 
   editJsonState() {
     new StateEditorDialog(this);
+  }
+
+  showStatistics(value: boolean|undefined = undefined) {
+    if (value === undefined) {
+      value = !this.statisticsDisplayState.visible.value;
+    }
+    this.statisticsDisplayState.visible.value = value;
   }
 
   get gl() {

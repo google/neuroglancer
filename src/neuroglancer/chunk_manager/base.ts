@@ -36,8 +36,10 @@ export enum ChunkState {
 
   EXPIRED = 7,
 
-  COMPUTING = 8
+  COMPUTING = 8,
 }
+
+export const numChunkStates = 9;
 
 export enum ChunkPriorityTier {
   FIRST_TIER = 0,
@@ -49,11 +51,41 @@ export enum ChunkPriorityTier {
   LAST_TIER = 2
 }
 
+export const numChunkPriorityTiers = 3;
+
+export enum ChunkDownloadStatistics {
+  totalTime = 0,
+  totalChunks = 1,
+}
+
+export enum ChunkMemoryStatistics {
+  numChunks = 0,
+  systemMemoryBytes = 1,
+  gpuMemoryBytes = 2,
+}
+
+export const numChunkMemoryStatistics = 3;
+
+export const numChunkDownloadStatistics = 2;
+
+export const numChunkStatistics =
+    numChunkStates * numChunkPriorityTiers * numChunkMemoryStatistics + numChunkDownloadStatistics;
+
+export function getChunkStateStatisticIndex(state: ChunkState, priorityTier: ChunkPriorityTier) {
+  return state * numChunkPriorityTiers + priorityTier;
+}
+
+export function getChunkDownloadStatisticIndex(statistic: ChunkDownloadStatistics) {
+  return numChunkStates * numChunkPriorityTiers * numChunkMemoryStatistics + statistic;
+}
+
 export const PREFETCH_PRIORITY_MULTIPLIER = 1e13;
 
 export const CHUNK_QUEUE_MANAGER_RPC_ID = 'ChunkQueueManager';
 export const CHUNK_MANAGER_RPC_ID = 'ChunkManager';
 export const CHUNK_SOURCE_INVALIDATE_RPC_ID = 'ChunkSource.invalidate';
+
+export const REQUEST_CHUNK_STATISTICS_RPC_ID = 'ChunkQueueManager.requestChunkStatistics';
 
 export interface ChunkSourceParametersConstructor<T> {
   new(): T;
