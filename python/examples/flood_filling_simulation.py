@@ -40,7 +40,8 @@ class InteractiveInference(object):
             'https://storage.googleapis.com/neuroglancer-public-data/flyem_fib-25/ground_truth',
             mip=0,
             bounded=True,
-            progress=False)
+            progress=False,
+            provenance={})
         viewer.actions.add('start-fill', self._start_fill_action)
         viewer.actions.add('stop-fill', self._stop_fill_action)
         with viewer.config_state.txn() as s:

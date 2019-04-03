@@ -34,7 +34,8 @@ class InteractiveInference(object):
             'https://storage.googleapis.com/neuroglancer-public-data/flyem_fib-25/ground_truth',
             mip=0,
             bounded=True,
-            progress=False)
+            progress=False,
+            provenance={})
         self.inf_results = zarr.zeros(
             self.gt_vol.bounds.to_list()[3:][::-1], chunks=(64, 64, 64), dtype=np.uint8)
         self.inf_volume = neuroglancer.LocalVolume(
