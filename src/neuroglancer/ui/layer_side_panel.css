@@ -16,6 +16,7 @@
 
 .neuroglancer-layer-side-panel {
   display: flex;
+  color: #fff;
   flex-direction: column;
   align-items: stretch;
 }

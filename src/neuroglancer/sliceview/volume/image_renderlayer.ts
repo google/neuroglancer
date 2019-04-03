@@ -19,10 +19,10 @@ import {MultiscaleVolumeChunkSource} from 'neuroglancer/sliceview/volume/fronten
 import {RenderLayer, RenderLayerOptions} from 'neuroglancer/sliceview/volume/renderlayer';
 import {TrackableAlphaValue} from 'neuroglancer/trackable_alpha';
 import {BLEND_FUNCTIONS, BLEND_MODES, TrackableBlendModeValue} from 'neuroglancer/trackable_blend';
-import glsl_COLORMAPS from 'neuroglancer/webgl/colormaps.glsl';
 import {makeTrackableFragmentMain} from 'neuroglancer/webgl/dynamic_shader';
 import {ShaderBuilder} from 'neuroglancer/webgl/shader';
 import {addControlsToBuilder, setControlsInShader, ShaderControlState} from 'neuroglancer/webgl/shader_ui_controls';
+import {glsl_COLORMAPS} from 'neuroglancer/webgl/colormaps';
 
 export const FRAGMENT_MAIN_START = '//NEUROGLANCER_IMAGE_RENDERLAYER_FRAGMENT_MAIN_START';
 
@@ -30,7 +30,6 @@ const DEFAULT_FRAGMENT_MAIN = `void main() {
   emitGrayscale(toNormalized(getDataValue()));
 }
 `;
-
 
 export function getTrackableFragmentMain(value = DEFAULT_FRAGMENT_MAIN) {
   return makeTrackableFragmentMain(value);

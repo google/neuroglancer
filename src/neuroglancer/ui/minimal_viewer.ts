@@ -14,11 +14,18 @@
  * limitations under the License.
  */
 
-.neuroglancer-rendered-data-panel {
-  cursor: crosshair;
-  position: relative;
-  outline: 0;
-  touch-action: none;
-  color: #fff;
-  text-align:left;
+import 'neuroglancer/sliceview/chunk_format_handlers';
+
+import {StatusMessage} from 'neuroglancer/status';
+import {DisplayContext} from 'neuroglancer/display_context';
+import {Viewer, ViewerOptions} from 'neuroglancer/viewer';
+
+export function makeMinimalViewer(options?: Partial<ViewerOptions>, target = document.getElementById('neuroglancer-container')! ) {
+  try {
+    let display = new DisplayContext(target);
+    return new Viewer(display, options);
+  } catch (error) {
+    StatusMessage.showMessage(`Error: ${error.message}`);
+    throw error;
+  }
 }
