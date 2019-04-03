@@ -84,7 +84,7 @@ export class FragmentChunk extends Chunk {
   fragmentId: FragmentId|null = null;
   vertexPositions: Float32Array|null = null;
   indices: Uint32Array|null = null;
-  vertexNormals: Float32Array|null = null;
+  vertexNormals: Uint8Array|null = null;
   constructor() {
     super();
   }
@@ -180,6 +180,49 @@ export function computeVertexNormals(positions: Float32Array, indices: Uint32Arr
 }
 
 /**
+ * Converts a floating-point number in the range `[-1, 1]` to an integer in the range `[-127, 127]`.
+ */
+function snorm8(x: number) {
+  return Math.min(Math.max(-127, x * 127 + 0.5), 127) >>> 0;
+}
+
+function signNotZero(x: number) {
+  return x < 0 ? -1 : 1;
+}
+
+/**
+ * Encodes normal vectors represented as 3x32-bit floating vectors into a 2x8-bit octahedron
+ * representation.
+ *
+ * Zina H. Cigolle, Sam Donow, Daniel Evangelakos, Michael Mara, Morgan McGuire, and Quirin Meyer,
+ * Survey of Efficient Representations for Independent Unit Vectors, Journal of Computer Graphics
+ * Techniques (JCGT), vol. 3, no. 2, 1-30, 2014
+ *
+ * Available online http://jcgt.org/published/0003/02/01/
+ *
+ * @param out[out] Row-major array of shape `[n, 2]` set to octahedron representation.
+ * @param normals[in] Row-major array of shape `[n, 3]` specifying unit normal vectors.
+ */
+export function encodeNormals32fx3ToOctahedron8x2(out: Uint8Array, normals: Float32Array) {
+  const length = normals.length;
+  let outIndex = 0;
+  for (let i = 0; i < length; i += 3) {
+    const x = normals[i], y = normals[i + 1], z = normals[i + 2];
+
+    const invL1Norm = 1 / (Math.abs(x) + Math.abs(y) + Math.abs(z));
+
+    if (z < 0) {
+      out[outIndex] = snorm8((1 - Math.abs(y * invL1Norm)) * signNotZero(x));
+      out[outIndex + 1] = snorm8((1 - Math.abs(x * invL1Norm)) * signNotZero(y));
+    } else {
+      out[outIndex] = snorm8(x * invL1Norm);
+      out[outIndex+1] = snorm8(y * invL1Norm);
+    }
+    outIndex += 2;
+  }
+}
+
+/**
  * Extracts vertex positions and indices of the specified endianness from `data'.
  *
  * The vertexByteOffset specifies the byte offset into `data' of the start of the vertex position
@@ -231,8 +274,10 @@ export function decodeTriangleVertexPositionsAndIndices(
     numVertices: number, indexByteOffset?: number, numTriangles?: number) {
   decodeVertexPositionsAndIndices(
       chunk, /*verticesPerPrimitive=*/ 3, data, endianness, vertexByteOffset, numVertices,
-      indexByteOffset, numTriangles);
-  chunk.vertexNormals = computeVertexNormals(chunk.vertexPositions!, chunk.indices!);
+    indexByteOffset, numTriangles);
+  const normals = computeVertexNormals(chunk.vertexPositions!, chunk.indices!);
+  const encodedNormals = chunk.vertexNormals = new Uint8Array(normals.length / 3 * 2);
+  encodeNormals32fx3ToOctahedron8x2(encodedNormals, normals);
 }
 
 export interface MeshSource {
@@ -397,7 +442,7 @@ export class MultiscaleFragmentChunk extends Chunk {
   subChunkOffsets: Uint32Array|null = null;
   vertexPositions: Float32Array|null = null;
   indices: Uint32Array|null = null;
-  vertexNormals: Float32Array|null = null;
+  vertexNormals: Uint8Array|null = null;
   lod: number = 0;
   chunkIndex: number = 0;
   manifestChunk: MultiscaleManifestChunk|null = null;

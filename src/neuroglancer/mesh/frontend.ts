@@ -33,22 +33,40 @@ const tempMat3 = mat3.create();
 
 const DEBUG_MULTISCALE_FRAGMENTS = false;
 
+/**
+ * Decodes normal vectors in 2xSnorm8 octahedron encoding into normalized 3x32f vector.
+ *
+ * Zina H. Cigolle, Sam Donow, Daniel Evangelakos, Michael Mara, Morgan McGuire, and Quirin Meyer,
+ * Survey of Efficient Representations for Independent Unit Vectors, Journal of Computer Graphics
+ * Techniques (JCGT), vol. 3, no. 2, 1-30, 2014
+ *
+ * Available online http://jcgt.org/published/0003/02/01/
+ */
+const glsl_decodeNormalOctahedronSnorm8 = `
+highp vec3 decodeNormalOctahedronSnorm8(highp vec2 e) {
+  vec3 v = vec3(e.xy, 1.0 - abs(e.x) - abs(e.y));
+  if (v.z < 0.0) v.xy = (1.0 - abs(v.yx)) * vec2(v.x > 0.0 ? 1.0 : -1.0, v.y > 0.0 ? 1.0 : -1.0);
+  return normalize(v);
+}
+`;
+
 export class MeshShaderManager {
   private tempLightVec = new Float32Array(4);
   constructor() {}
 
   defineShader(builder: ShaderBuilder) {
     builder.addAttribute('highp vec3', 'aVertexPosition');
-    builder.addAttribute('highp vec3', 'aVertexNormal');
+    builder.addAttribute('highp vec2', 'aVertexNormal');
     builder.addVarying('highp vec4', 'vColor');
     builder.addUniform('highp vec4', 'uLightDirection');
     builder.addUniform('highp vec4', 'uColor');
     builder.addUniform('highp mat3', 'uNormalMatrix');
     builder.addUniform('highp mat4', 'uModelViewProjection');
     builder.addUniform('highp uint', 'uPickID');
+    builder.addVertexCode(glsl_decodeNormalOctahedronSnorm8);
     builder.setVertexMain(`
 gl_Position = uModelViewProjection * vec4(aVertexPosition, 1.0);
-vec3 normal = uNormalMatrix * aVertexNormal;
+vec3 normal = uNormalMatrix * decodeNormalOctahedronSnorm8(aVertexNormal);
 float lightingFactor = abs(dot(normal, uLightDirection.xyz)) + uLightDirection.w;
 vColor = vec4(lightingFactor * uColor.rgb, uColor.a);
 `);
@@ -99,7 +117,7 @@ vColor = vec4(lightingFactor * uColor.rgb, uColor.a);
 
     fragmentChunk.normalBuffer.bindToVertexAttrib(
         shader.attribute('aVertexNormal'),
-        /*components=*/ 3);
+        /*components=*/ 2, WebGL2RenderingContext.BYTE, /*normalized=*/ true);
     fragmentChunk.indexBuffer.bind();
     gl.drawElements(gl.TRIANGLES, fragmentChunk.numIndices, gl.UNSIGNED_INT, 0);
   }
@@ -113,7 +131,7 @@ vColor = vec4(lightingFactor * uColor.rgb, uColor.a);
 
     fragmentChunk.normalBuffer.bindToVertexAttrib(
         shader.attribute('aVertexNormal'),
-        /*components=*/ 3);
+        /*components=*/ 2, WebGL2RenderingContext.BYTE, /*normalized=*/ true);
     fragmentChunk.indexBuffer.bind();
     const indexBegin = fragmentChunk.subChunkOffsets[subChunkBegin];
     const indexEnd = fragmentChunk.subChunkOffsets[subChunkEnd];
@@ -257,7 +275,7 @@ export class ManifestChunk extends Chunk {
 export class FragmentChunk extends Chunk {
   vertexPositions: Float32Array;
   indices: Uint32Array;
-  vertexNormals: Float32Array;
+  vertexNormals: Uint8Array;
   objectKey: string;
   source: FragmentSource;
   vertexBuffer: Buffer;
@@ -503,7 +521,7 @@ export class MultiscaleFragmentChunk extends Chunk {
   subChunkOffsets: Uint32Array;
   vertexPositions: Float32Array;
   indices: Uint32Array;
-  vertexNormals: Float32Array;
+  vertexNormals: Uint8Array;
   source: MultiscaleFragmentSource;
   vertexBuffer: Buffer;
   indexBuffer: Buffer;
