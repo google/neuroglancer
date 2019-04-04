@@ -35,10 +35,6 @@ interface StringConversionData {
 
   lowBase: number;
 
-  // lowBase = lowBase1 * lowBase2.
-  lowBase1: number;
-  lowBase2: number;
-
   pattern: RegExp;
 }
 
@@ -46,9 +42,6 @@ let stringConversionData: StringConversionData[] = [];
 for (let base = 2; base <= 36; ++base) {
   let lowDigits = Math.floor(32 / Math.log2(base));
   let lowBase = Math.pow(base, lowDigits);
-  let lowDigits1 = Math.floor(lowDigits / 2);
-  let lowBase1 = Math.pow(base, lowDigits1);
-  let lowBase2 = Math.pow(base, lowDigits - lowDigits1);
   let patternString = `^[0-${String.fromCharCode('0'.charCodeAt(0) + Math.min(9, base - 1))}`;
   if (base > 10) {
     patternString += `a-${String.fromCharCode('a'.charCodeAt(0) + base - 11)}`;
@@ -57,7 +50,31 @@ for (let base = 2; base <= 36; ++base) {
   let maxDigits = Math.ceil(64 / Math.log2(base));
   patternString += `]{1,${maxDigits}}$`;
   let pattern = new RegExp(patternString);
-  stringConversionData[base] = {lowDigits, lowBase, lowBase1, lowBase2, pattern};
+  stringConversionData[base] = {lowDigits, lowBase, pattern};
+}
+
+/**
+ * Returns the high 32 bits of the result of the 32-bit integer multiply `a` and `b`.
+ *
+ * The low 32-bits can be obtained using the built-in `Math.imul` function.
+ */
+function uint32MultiplyHigh(a: number, b: number) {
+  a >>>= 0;
+  b >>>= 0;
+
+  const a00 = a & 0xFFFF, a16 = a >>> 16;
+  const b00 = b & 0xFFFF, b16 = b >>> 16;
+
+  let c00 = a00 * b00;
+  let c16 = (c00 >>> 16) + (a16 * b00);
+  let c32 = c16 >>> 16;
+  c16 = (c16 & 0xFFFF) + (a00 * b16);
+  c32 += c16 >>> 16;
+  let c48 = c32 >>> 16;
+  c32 = (c32 & 0xFFFF) + (a16 * b16);
+  c48 += c32 >>> 16;
+
+  return (((c48 & 0xFFFF) << 16) | (c32 & 0xFFFF)) >>> 0;
 }
 
 export class Uint64 {
@@ -119,7 +136,7 @@ export class Uint64 {
   }
 
   tryParseString(s: string, base = 10) {
-    let {lowDigits, lowBase, lowBase1, lowBase2, pattern} = stringConversionData[base];
+    const {lowDigits, lowBase, pattern} = stringConversionData[base];
     if (!pattern.test(s)) {
       return false;
     }
@@ -128,18 +145,24 @@ export class Uint64 {
       this.high = 0;
       return true;
     }
-    let splitPoint = s.length - lowDigits;
-    let lowPrime = parseInt(s.substr(splitPoint), base);
-    let highPrime = parseInt(s.substr(0, splitPoint), base);
+    const splitPoint = s.length - lowDigits;
+    const lowPrime = parseInt(s.substr(splitPoint), base);
+    const highPrime = parseInt(s.substr(0, splitPoint), base);
 
-    let highConverted = highPrime * lowBase;
+    let high: number, low: number;
 
-    let high = Math.floor(highConverted / trueBase);
-
-    let low = lowPrime + (((highPrime % trueBase) * lowBase1) % trueBase) * lowBase2 % trueBase;
-    if (low >= trueBase) {
-      ++high;
-      low -= trueBase;
+    if (lowBase === trueBase) {
+      high = highPrime;
+      low = lowPrime;
+    } else {
+      const highRemainder = Math.imul(highPrime, lowBase) >>> 0;
+      high = uint32MultiplyHigh(highPrime, lowBase) +
+          (Math.imul(Math.floor(highPrime / trueBase), lowBase) >>> 0);
+      low = lowPrime + highRemainder;
+      if (low >= trueBase) {
+        ++high;
+        low -= trueBase;
+      }
     }
     if ((low >>> 0) !== low || ((high >>> 0) !== high)) {
       return false;
