@@ -80,6 +80,7 @@ export class SegmentationUserLayer extends Base {
         objectToDataTransform: this.transform,
         fragmentMain: getTrackableFragmentMain(),
         shaderError: makeWatchableShaderError(),
+        mipLevelConstraints: this.mipLevelConstraints
       };
 
   /**
@@ -198,7 +199,9 @@ export class SegmentationUserLayer extends Base {
       ++remaining;
       multiscaleSource.then(volume => {
         if (!this.wasDisposed) {
-          this.addRenderLayer(new SegmentationRenderLayer(volume, this.displayState));
+          const segmentationRenderLayer = new SegmentationRenderLayer(volume, this.displayState);
+          this.setupVoxelSelectionWidget(segmentationRenderLayer);
+          this.addRenderLayer(segmentationRenderLayer);
           if (meshPath === undefined && skeletonsPath === undefined) {
             ++remaining;
             Promise.resolve(volume.getMeshSource()).then(objectSource => {
@@ -451,6 +454,8 @@ class DisplayOptionsTab extends Tab {
         }
       }
     });
+
+    element.appendChild(layer.voxelSizeSelectionWidget.element);
   }
 }
 

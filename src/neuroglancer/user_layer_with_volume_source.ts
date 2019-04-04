@@ -22,21 +22,36 @@ import {MultiscaleVolumeChunkSource} from 'neuroglancer/sliceview/volume/fronten
 import {getAnnotationRenderOptions, UserLayerWithAnnotations, UserLayerWithAnnotationsMixin} from 'neuroglancer/ui/annotations';
 import {UserLayerWithCoordinateTransform, UserLayerWithCoordinateTransformMixin} from 'neuroglancer/user_layer_with_coordinate_transform';
 import {verifyObjectProperty, verifyOptionalString} from 'neuroglancer/util/json';
+import {TrackableMIPLevelConstraints} from 'neuroglancer/trackable_mip_level_constraints';
+import {RenderLayer as GenericSliceViewRenderLayer} from 'neuroglancer/sliceview/renderlayer.ts';
+import {VoxelSizeSelectionWidget} from 'neuroglancer/widget/voxel_size_selection_widget';
+import {vec3} from 'neuroglancer/util/geom';
 
 const SOURCE_JSON_KEY = 'source';
+const MIN_MIP_LEVEL_JSON_KEY = 'minMIPLevel';
+const MAX_MIP_LEVEL_JSON_KEY = 'maxMIPLevel';
 
 interface BaseConstructor {
   new(...args: any[]): UserLayerWithAnnotations&UserLayerWithCoordinateTransform;
 }
 
+// Only called by UserLayerWithVolumeSourceMixin in this file.
 function helper<TBase extends BaseConstructor>(Base: TBase) {
   class C extends Base implements UserLayerWithVolumeSource {
     volumePath: string|undefined;
     multiscaleSource: Promise<MultiscaleVolumeChunkSource>|undefined;
     volumeOptions: GetVolumeOptions|undefined;
+    mipLevelConstraints = new TrackableMIPLevelConstraints();
+    voxelSizeSelectionWidget = this.registerDisposer(new VoxelSizeSelectionWidget(this.mipLevelConstraints));
+
+    constructor(...args:any[]) {
+      super(...args);
+      this.registerDisposer(this.mipLevelConstraints.changed.add(this.specificationChanged.dispatch));
+    }
 
     restoreState(specification: any) {
       super.restoreState(specification);
+      this.mipLevelConstraints.restoreState(specification[MIN_MIP_LEVEL_JSON_KEY], specification[MAX_MIP_LEVEL_JSON_KEY], false);
       const volumePath = this.volumePath =
           verifyObjectProperty(specification, SOURCE_JSON_KEY, verifyOptionalString);
       if (volumePath !== undefined) {
@@ -62,7 +77,19 @@ function helper<TBase extends BaseConstructor>(Base: TBase) {
     toJSON() {
       const result = super.toJSON();
       result[SOURCE_JSON_KEY] = this.volumePath;
+      result[MIN_MIP_LEVEL_JSON_KEY] = this.mipLevelConstraints.minMIPLevel.value;
+      result[MAX_MIP_LEVEL_JSON_KEY] = this.mipLevelConstraints.maxMIPLevel.value;
       return result;
+    }
+
+    // Called after user layer's render layer is created
+    protected setupVoxelSelectionWidget(renderlayer: GenericSliceViewRenderLayer) {
+      const voxelSizePerMIPLevel: vec3[] = [];
+      renderlayer.transformedSources.forEach(transformedSource => {
+        voxelSizePerMIPLevel.push(transformedSource[0].source.spec.voxelSize);
+      });
+      this.voxelSizeSelectionWidget.setup(
+        voxelSizePerMIPLevel, renderlayer.activeMinMIPLevel);
     }
   }
   return C;
@@ -72,6 +99,7 @@ export interface UserLayerWithVolumeSource extends UserLayerWithAnnotations,
                                                    UserLayerWithCoordinateTransform {
   volumePath: string|undefined;
   multiscaleSource: Promise<MultiscaleVolumeChunkSource>|undefined;
+  mipLevelConstraints: TrackableMIPLevelConstraints;
 }
 
 /**
