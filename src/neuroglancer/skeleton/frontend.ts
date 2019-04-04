@@ -19,6 +19,7 @@ import {Chunk, ChunkManager, ChunkSource} from 'neuroglancer/chunk_manager/front
 import {RenderLayer} from 'neuroglancer/layer';
 import {VoxelSize} from 'neuroglancer/navigation_state';
 import {PerspectiveViewRenderContext, PerspectiveViewRenderLayer} from 'neuroglancer/perspective_view/render_layer';
+import {forEachVisibleSegment, getObjectKey} from 'neuroglancer/segmentation_display_state/base';
 import {getObjectColor, registerRedrawWhenSegmentationDisplayState3DChanged, SegmentationDisplayState3D, SegmentationLayerSharedObject} from 'neuroglancer/segmentation_display_state/frontend';
 import {SKELETON_LAYER_RPC_ID, VertexAttributeInfo} from 'neuroglancer/skeleton/base';
 import {SliceViewPanelRenderContext, SliceViewPanelRenderLayer} from 'neuroglancer/sliceview/panel';
@@ -30,12 +31,10 @@ import {stableStringify, verifyString} from 'neuroglancer/util/json';
 import {getObjectId} from 'neuroglancer/util/object_id';
 import {NullarySignal} from 'neuroglancer/util/signal';
 import {Buffer} from 'neuroglancer/webgl/buffer';
+import glsl_COLORMAPS from 'neuroglancer/webgl/colormaps.glsl';
 import {GL} from 'neuroglancer/webgl/context';
 import {WatchableShaderError} from 'neuroglancer/webgl/dynamic_shader';
 import {ShaderBuilder, ShaderModule, ShaderProgram} from 'neuroglancer/webgl/shader';
-import {forEachVisibleSegment, getObjectKey} from '../segmentation_display_state/base';
-
-const glsl_COLORMAPS = require<string>('neuroglancer/webgl/colormaps.glsl');
 
 const tempMat2 = mat4.create();
 
