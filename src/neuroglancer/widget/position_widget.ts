@@ -110,7 +110,10 @@ export class PositionWidget extends RefCounted {
       const {selectionStart, selectionEnd} = inputElement;
       let selection = inputElement.value.substring(selectionStart || 0, selectionEnd || 0);
       selection = selection.trim().replace(/\s+/g, ' ');
-      event.clipboardData.setData('text/plain', selection);
+      const {clipboardData} = event;
+      if (clipboardData !== null) {
+        clipboardData.setData('text/plain', selection);
+      }
       event.stopPropagation();
       event.preventDefault();
     });
