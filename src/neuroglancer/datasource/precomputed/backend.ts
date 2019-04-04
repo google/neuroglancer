@@ -16,7 +16,7 @@
 
 import {WithParameters} from 'neuroglancer/chunk_manager/backend';
 import {MeshSourceParameters, VolumeChunkEncoding, VolumeChunkSourceParameters} from 'neuroglancer/datasource/precomputed/base';
-import {decodeJsonManifestChunk, decodeTriangleVertexPositionsAndIndices, FragmentChunk, ManifestChunk, MeshSource} from 'neuroglancer/mesh/backend';
+import { decodeJsonManifestChunk, decodeTriangleVertexPositionsAndIndices, FragmentChunk, ManifestChunk, MeshSource, assignMeshFragmentData} from 'neuroglancer/mesh/backend';
 import {ChunkDecoder} from 'neuroglancer/sliceview/backend_chunk_decoders';
 import {decodeCompressedSegmentationChunk} from 'neuroglancer/sliceview/backend_chunk_decoders/compressed_segmentation';
 import {decodeJpegChunk} from 'neuroglancer/sliceview/backend_chunk_decoders/jpeg';
@@ -61,8 +61,10 @@ export function decodeManifestChunk(chunk: ManifestChunk, response: any) {
 export function decodeFragmentChunk(chunk: FragmentChunk, response: ArrayBuffer) {
   let dv = new DataView(response);
   let numVertices = dv.getUint32(0, true);
-  decodeTriangleVertexPositionsAndIndices(
-      chunk, response, Endianness.LITTLE, /*vertexByteOffset=*/4, numVertices);
+  assignMeshFragmentData(
+      chunk,
+      decodeTriangleVertexPositionsAndIndices(
+          response, Endianness.LITTLE, /*vertexByteOffset=*/ 4, numVertices));
 }
 
 @registerSharedObject() export class PrecomputedMeshSource extends

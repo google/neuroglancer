@@ -16,8 +16,9 @@
 
 import {Chunk, ChunkSource} from 'neuroglancer/chunk_manager/backend';
 import {ChunkPriorityTier, ChunkState} from 'neuroglancer/chunk_manager/base';
-import {FRAGMENT_SOURCE_RPC_ID, MESH_LAYER_RPC_ID, MULTISCALE_FRAGMENT_SOURCE_RPC_ID, MULTISCALE_MESH_LAYER_RPC_ID} from 'neuroglancer/mesh/base';
+import {EncodedMeshData, FRAGMENT_SOURCE_RPC_ID, MESH_LAYER_RPC_ID, MULTISCALE_FRAGMENT_SOURCE_RPC_ID, MULTISCALE_MESH_LAYER_RPC_ID} from 'neuroglancer/mesh/base';
 import {getDesiredMultiscaleMeshChunks, MultiscaleMeshManifest} from 'neuroglancer/mesh/multiscale';
+import {computeTriangleStrips} from 'neuroglancer/mesh/triangle_strips';
 import {PerspectiveViewRenderLayer, PerspectiveViewState} from 'neuroglancer/perspective_view/backend';
 import {SegmentationLayerSharedObjectCounterpart} from 'neuroglancer/segmentation_display_state/backend';
 import {getObjectKey} from 'neuroglancer/segmentation_display_state/base';
@@ -33,6 +34,8 @@ import {registerSharedObject, RPC} from 'neuroglancer/worker_rpc';
 
 const MESH_OBJECT_MANIFEST_CHUNK_PRIORITY = 100;
 const MESH_OBJECT_FRAGMENT_CHUNK_PRIORITY = 50;
+
+const CONVERT_TO_TRIANGLE_STRIPS = false;
 
 export type FragmentId = string;
 
@@ -76,15 +79,38 @@ export class ManifestChunk extends Chunk {
   }
 }
 
+interface RawMeshData {
+  vertexPositions: Float32Array;
+  indices: Uint32Array|Uint16Array;
+}
+
+function serializeMeshData(data: EncodedMeshData, msg: any, transfers: any[]) {
+  const {vertexPositions, indices, vertexNormals, strips} = data;
+  msg['vertexPositions'] = vertexPositions;
+  msg['indices'] = indices;
+  msg['strips'] = strips;
+  msg['vertexNormals'] = vertexNormals;
+  let vertexPositionsBuffer = vertexPositions!.buffer;
+  transfers.push(vertexPositionsBuffer);
+  let indicesBuffer = indices!.buffer;
+  if (indicesBuffer !== vertexPositionsBuffer) {
+    transfers.push(indicesBuffer);
+  }
+  transfers.push(vertexNormals!.buffer);
+}
+
+function getMeshDataSize(data: EncodedMeshData) {
+  let {vertexPositions, indices, vertexNormals} = data;
+  return vertexPositions!.byteLength + indices!.byteLength + vertexNormals!.byteLength;
+}
+
 /**
  * Chunk that contains the mesh for a single fragment of a single object.
  */
 export class FragmentChunk extends Chunk {
   manifestChunk: ManifestChunk|null = null;
   fragmentId: FragmentId|null = null;
-  vertexPositions: Float32Array|null = null;
-  indices: Uint32Array|null = null;
-  vertexNormals: Uint8Array|null = null;
+  meshData: EncodedMeshData|null = null;
   constructor() {
     super();
   }
@@ -95,32 +121,16 @@ export class FragmentChunk extends Chunk {
   }
   freeSystemMemory() {
     this.manifestChunk = null;
-    this.vertexPositions = this.indices = this.vertexNormals = null;
+    this.meshData = null;
     this.fragmentId = null;
   }
   serialize(msg: any, transfers: any[]) {
     super.serialize(msg, transfers);
-    msg['objectKey'] = this.manifestChunk!.key;
-    let {vertexPositions, indices, vertexNormals} = this;
-    msg['vertexPositions'] = vertexPositions;
-    msg['indices'] = indices;
-    msg['vertexNormals'] = vertexNormals;
-    let vertexPositionsBuffer = vertexPositions!.buffer;
-    transfers.push(vertexPositionsBuffer);
-    let indicesBuffer = indices!.buffer;
-    if (indicesBuffer !== vertexPositionsBuffer) {
-      transfers.push(indicesBuffer);
-    }
-    let vertexNormalsBuffer = vertexNormals!.buffer;
-    if (vertexNormalsBuffer !== vertexPositionsBuffer && vertexNormalsBuffer !== indicesBuffer) {
-      transfers.push(vertexNormalsBuffer);
-    }
-    this.vertexPositions = this.indices = this.vertexNormals = null;
+    serializeMeshData(this.meshData!, msg, transfers);
+    this.meshData = null;
   }
   downloadSucceeded() {
-    let {vertexPositions, indices, vertexNormals} = this;
-    this.systemMemoryBytes = this.gpuMemoryBytes =
-        vertexPositions!.byteLength + indices!.byteLength + vertexNormals!.byteLength;
+    this.systemMemoryBytes = this.gpuMemoryBytes = getMeshDataSize(this.meshData!);
     super.downloadSucceeded();
   }
 }
@@ -147,7 +157,7 @@ export function decodeJsonManifestChunk(
  * @param indices The indices of the triangle vertices.  Each triplet of consecutive values
  *     specifies a triangle.
  */
-export function computeVertexNormals(positions: Float32Array, indices: Uint32Array) {
+export function computeVertexNormals(positions: Float32Array, indices: Uint16Array|Uint32Array) {
   const faceNormal = vec3.create();
   const v1v0 = vec3.create();
   const v2v1 = vec3.create();
@@ -216,7 +226,7 @@ export function encodeNormals32fx3ToOctahedron8x2(out: Uint8Array, normals: Floa
       out[outIndex + 1] = snorm8((1 - Math.abs(x * invL1Norm)) * signNotZero(y));
     } else {
       out[outIndex] = snorm8(x * invL1Norm);
-      out[outIndex+1] = snorm8(y * invL1Norm);
+      out[outIndex + 1] = snorm8(y * invL1Norm);
     }
     outIndex += 2;
   }
@@ -233,10 +243,9 @@ export function encodeNormals32fx3ToOctahedron8x2(out: Uint8Array, normals: Floa
  * array.
  */
 export function decodeVertexPositionsAndIndices(
-    chunk: {vertexPositions: Float32Array|null, indices: Uint32Array|null},
     verticesPerPrimitive: number, data: ArrayBuffer, endianness: Endianness,
     vertexByteOffset: number, numVertices: number, indexByteOffset?: number,
-    numPrimitives?: number) {
+    numPrimitives?: number): RawMeshData {
   let vertexPositions = new Float32Array(data, vertexByteOffset, numVertices * 3);
   convertEndian32(vertexPositions, endianness);
 
@@ -258,8 +267,7 @@ export function decodeVertexPositionsAndIndices(
   }
   convertEndian32(indices, endianness);
 
-  chunk.vertexPositions = vertexPositions;
-  chunk.indices = indices;
+  return {vertexPositions, indices};
 }
 
 /**
@@ -270,14 +278,11 @@ export function decodeVertexPositionsAndIndices(
  * See decodeVertexPositionsAndIndices above.
  */
 export function decodeTriangleVertexPositionsAndIndices(
-    chunk: FragmentChunk, data: ArrayBuffer, endianness: Endianness, vertexByteOffset: number,
-    numVertices: number, indexByteOffset?: number, numTriangles?: number) {
-  decodeVertexPositionsAndIndices(
-      chunk, /*verticesPerPrimitive=*/ 3, data, endianness, vertexByteOffset, numVertices,
-    indexByteOffset, numTriangles);
-  const normals = computeVertexNormals(chunk.vertexPositions!, chunk.indices!);
-  const encodedNormals = chunk.vertexNormals = new Uint8Array(normals.length / 3 * 2);
-  encodeNormals32fx3ToOctahedron8x2(encodedNormals, normals);
+    data: ArrayBuffer, endianness: Endianness, vertexByteOffset: number, numVertices: number,
+    indexByteOffset?: number, numTriangles?: number) {
+  return decodeVertexPositionsAndIndices(
+      /*verticesPerPrimitive=*/ 3, data, endianness, vertexByteOffset, numVertices, indexByteOffset,
+      numTriangles);
 }
 
 export interface MeshSource {
@@ -440,9 +445,7 @@ export class MultiscaleManifestChunk extends Chunk {
  */
 export class MultiscaleFragmentChunk extends Chunk {
   subChunkOffsets: Uint32Array|null = null;
-  vertexPositions: Float32Array|null = null;
-  indices: Uint32Array|null = null;
-  vertexNormals: Uint8Array|null = null;
+  meshData: EncodedMeshData|null = null;
   lod: number = 0;
   chunkIndex: number = 0;
   manifestChunk: MultiscaleManifestChunk|null = null;
@@ -450,31 +453,19 @@ export class MultiscaleFragmentChunk extends Chunk {
     super();
   }
   freeSystemMemory() {
-    this.vertexPositions = this.indices = this.vertexNormals = this.subChunkOffsets = null;
+    this.meshData = this.subChunkOffsets = null;
   }
   serialize(msg: any, transfers: any[]) {
     super.serialize(msg, transfers);
-    let {vertexPositions, indices, vertexNormals, subChunkOffsets} = this;
+    serializeMeshData(this.meshData!, msg, transfers);
+    const {subChunkOffsets} = this;
     msg['subChunkOffsets'] = subChunkOffsets;
-    msg['vertexPositions'] = vertexPositions;
-    msg['indices'] = indices;
-    msg['vertexNormals'] = vertexNormals;
-    let vertexPositionsBuffer = vertexPositions!.buffer;
-    transfers.push(vertexPositionsBuffer);
-    let indicesBuffer = indices!.buffer;
-    if (indicesBuffer !== vertexPositionsBuffer) {
-      transfers.push(indicesBuffer);
-    }
-    let vertexNormalsBuffer = vertexNormals!.buffer;
-    if (vertexNormalsBuffer !== vertexPositionsBuffer && vertexNormalsBuffer !== indicesBuffer) {
-      transfers.push(vertexNormalsBuffer);
-    }
-    this.vertexPositions = this.indices = this.vertexNormals = null;
+    transfers.push(subChunkOffsets!.buffer);
+    this.meshData = this.subChunkOffsets = null;
   }
   downloadSucceeded() {
-    let {vertexPositions, indices, vertexNormals, subChunkOffsets} = this;
-    this.systemMemoryBytes = this.gpuMemoryBytes =
-        vertexPositions!.byteLength + indices!.byteLength + vertexNormals!.byteLength;
+    const {subChunkOffsets} = this;
+    this.systemMemoryBytes = this.gpuMemoryBytes = getMeshDataSize(this.meshData!);
     this.systemMemoryBytes += subChunkOffsets!.byteLength;
     super.downloadSucceeded();
   }
@@ -625,4 +616,44 @@ export class MultiscaleMeshLayer extends SegmentationLayerSharedObjectCounterpar
       }
     }
   }
+}
+
+function convertMeshData(data: {
+  vertexPositions: Float32Array,
+  indices: Uint32Array|Uint16Array,
+  subChunkOffsets?: Uint32Array
+}): EncodedMeshData {
+  const normals = computeVertexNormals(data.vertexPositions, data.indices);
+  const encodedNormals = new Uint8Array(normals.length / 3 * 2);
+  encodeNormals32fx3ToOctahedron8x2(encodedNormals, normals);
+  let encodedIndices: Uint16Array| Uint32Array;
+  let strips: boolean;
+  if (CONVERT_TO_TRIANGLE_STRIPS) {
+    encodedIndices = computeTriangleStrips(data.indices, data.subChunkOffsets);
+    strips = true;
+  } else {
+    if (data.indices.BYTES_PER_ELEMENT === 4 && data.vertexPositions.length / 3 < 65535) {
+      encodedIndices = new Uint16Array(data.indices.length);
+      encodedIndices.set(data.indices);
+    } else {
+      encodedIndices = data.indices;
+    }
+    strips = false;
+  }
+  return {
+    vertexPositions: data.vertexPositions,
+    vertexNormals: encodedNormals,
+    indices: encodedIndices,
+    strips,
+  };
+}
+
+export function assignMeshFragmentData(chunk: FragmentChunk, data: RawMeshData) {
+  chunk.meshData = convertMeshData(data);
+}
+
+export function assignMultiscaleMeshFragmentData(
+    chunk: MultiscaleFragmentChunk, data: RawMeshData&{subChunkOffsets: Uint32Array}) {
+  chunk.meshData = convertMeshData(data);
+  chunk.subChunkOffsets = data.subChunkOffsets;
 }

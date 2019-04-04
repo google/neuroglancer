@@ -16,7 +16,7 @@
 
 import {ChunkState} from 'neuroglancer/chunk_manager/base';
 import {Chunk, ChunkManager, ChunkSource} from 'neuroglancer/chunk_manager/frontend';
-import {FRAGMENT_SOURCE_RPC_ID, MESH_LAYER_RPC_ID, MULTISCALE_FRAGMENT_SOURCE_RPC_ID, MULTISCALE_MESH_LAYER_RPC_ID} from 'neuroglancer/mesh/base';
+import {EncodedMeshData, FRAGMENT_SOURCE_RPC_ID, MESH_LAYER_RPC_ID, MULTISCALE_FRAGMENT_SOURCE_RPC_ID, MULTISCALE_MESH_LAYER_RPC_ID} from 'neuroglancer/mesh/base';
 import {getMultiscaleChunksToDraw, getMultiscaleFragmentKey, MultiscaleMeshManifest} from 'neuroglancer/mesh/multiscale';
 import {PerspectiveViewReadyRenderContext, PerspectiveViewRenderContext, PerspectiveViewRenderLayer} from 'neuroglancer/perspective_view/render_layer';
 import {forEachVisibleSegment, getObjectKey} from 'neuroglancer/segmentation_display_state/base';
@@ -32,6 +32,21 @@ const tempMat4 = mat4.create();
 const tempMat3 = mat3.create();
 
 const DEBUG_MULTISCALE_FRAGMENTS = false;
+
+function copyMeshDataToGpu(gl: GL, chunk: FragmentChunk|MultiscaleFragmentChunk) {
+  chunk.vertexBuffer =
+      Buffer.fromData(gl, chunk.meshData.vertexPositions, gl.ARRAY_BUFFER, gl.STATIC_DRAW);
+  chunk.indexBuffer =
+      Buffer.fromData(gl, chunk.meshData.indices, gl.ELEMENT_ARRAY_BUFFER, gl.STATIC_DRAW);
+  chunk.normalBuffer =
+      Buffer.fromData(gl, chunk.meshData.vertexNormals, gl.ARRAY_BUFFER, gl.STATIC_DRAW);
+}
+
+function freeGpuMeshData(chunk: FragmentChunk|MultiscaleFragmentChunk) {
+  chunk.vertexBuffer.dispose();
+  chunk.indexBuffer.dispose();
+  chunk.normalBuffer.dispose();
+}
 
 /**
  * Decodes normal vectors in 2xSnorm8 octahedron encoding into normalized 3x32f vector.
@@ -119,7 +134,14 @@ vColor = vec4(lightingFactor * uColor.rgb, uColor.a);
         shader.attribute('aVertexNormal'),
         /*components=*/ 2, WebGL2RenderingContext.BYTE, /*normalized=*/ true);
     fragmentChunk.indexBuffer.bind();
-    gl.drawElements(gl.TRIANGLES, fragmentChunk.numIndices, gl.UNSIGNED_INT, 0);
+    const {meshData} = fragmentChunk;
+    const {indices} = meshData;
+    gl.drawElements(
+        meshData.strips ? WebGL2RenderingContext.TRIANGLE_STRIP : WebGL2RenderingContext.TRIANGLES,
+        indices.length,
+        indices.BYTES_PER_ELEMENT === 2 ? WebGL2RenderingContext.UNSIGNED_SHORT :
+                                          WebGL2RenderingContext.UNSIGNED_INT,
+        0);
   }
 
   drawMultiscaleFragment(
@@ -133,9 +155,16 @@ vColor = vec4(lightingFactor * uColor.rgb, uColor.a);
         shader.attribute('aVertexNormal'),
         /*components=*/ 2, WebGL2RenderingContext.BYTE, /*normalized=*/ true);
     fragmentChunk.indexBuffer.bind();
-    const indexBegin = fragmentChunk.subChunkOffsets[subChunkBegin];
-    const indexEnd = fragmentChunk.subChunkOffsets[subChunkEnd];
-    gl.drawElements(gl.TRIANGLES, indexEnd - indexBegin, gl.UNSIGNED_INT, indexBegin * 4);
+    const indexBegin = fragmentChunk.meshData.subChunkOffsets[subChunkBegin];
+    const indexEnd = fragmentChunk.meshData.subChunkOffsets[subChunkEnd];
+    const {meshData} = fragmentChunk;
+    const {indices} = meshData;
+    gl.drawElements(
+        meshData.strips ? WebGL2RenderingContext.TRIANGLE_STRIP : WebGL2RenderingContext.TRIANGLES,
+        indexEnd - indexBegin,
+        indices.BYTES_PER_ELEMENT === 2 ? WebGL2RenderingContext.UNSIGNED_SHORT :
+                                          WebGL2RenderingContext.UNSIGNED_INT,
+        indexBegin * indices.BYTES_PER_ELEMENT);
   }
 
   endLayer(gl: GL, shader: ShaderProgram) {
@@ -273,37 +302,25 @@ export class ManifestChunk extends Chunk {
 }
 
 export class FragmentChunk extends Chunk {
-  vertexPositions: Float32Array;
-  indices: Uint32Array;
-  vertexNormals: Uint8Array;
-  objectKey: string;
   source: FragmentSource;
   vertexBuffer: Buffer;
   indexBuffer: Buffer;
   normalBuffer: Buffer;
-  numIndices: number;
+  meshData: EncodedMeshData;
 
   constructor(source: FragmentSource, x: any) {
     super(source);
-    this.objectKey = x['objectKey'];
-    this.vertexPositions = x['vertexPositions'];
-    let indices = this.indices = x['indices'];
-    this.numIndices = indices.length;
-    this.vertexNormals = x['vertexNormals'];
+    this.meshData = x;
   }
 
   copyToGPU(gl: GL) {
     super.copyToGPU(gl);
-    this.vertexBuffer = Buffer.fromData(gl, this.vertexPositions, gl.ARRAY_BUFFER, gl.STATIC_DRAW);
-    this.indexBuffer = Buffer.fromData(gl, this.indices, gl.ELEMENT_ARRAY_BUFFER, gl.STATIC_DRAW);
-    this.normalBuffer = Buffer.fromData(gl, this.vertexNormals, gl.ARRAY_BUFFER, gl.STATIC_DRAW);
+    copyMeshDataToGpu(gl, this);
   }
 
   freeGPUMemory(gl: GL) {
     super.freeGPUMemory(gl);
-    this.vertexBuffer.dispose();
-    this.indexBuffer.dispose();
-    this.normalBuffer.dispose();
+    freeGpuMeshData(this);
   }
 }
 
@@ -518,37 +535,25 @@ export class MultiscaleManifestChunk extends Chunk {
 }
 
 export class MultiscaleFragmentChunk extends Chunk {
-  subChunkOffsets: Uint32Array;
-  vertexPositions: Float32Array;
-  indices: Uint32Array;
-  vertexNormals: Uint8Array;
+  meshData: EncodedMeshData&{subChunkOffsets: Uint32Array};
   source: MultiscaleFragmentSource;
   vertexBuffer: Buffer;
   indexBuffer: Buffer;
   normalBuffer: Buffer;
-  numIndices: number;
 
   constructor(source: MultiscaleFragmentSource, x: any) {
     super(source);
-    this.subChunkOffsets = x['subChunkOffsets'];
-    this.vertexPositions = x['vertexPositions'];
-    let indices = this.indices = x['indices'];
-    this.numIndices = indices.length;
-    this.vertexNormals = x['vertexNormals'];
+    this.meshData = x;
   }
 
   copyToGPU(gl: GL) {
     super.copyToGPU(gl);
-    this.vertexBuffer = Buffer.fromData(gl, this.vertexPositions, gl.ARRAY_BUFFER, gl.STATIC_DRAW);
-    this.indexBuffer = Buffer.fromData(gl, this.indices, gl.ELEMENT_ARRAY_BUFFER, gl.STATIC_DRAW);
-    this.normalBuffer = Buffer.fromData(gl, this.vertexNormals, gl.ARRAY_BUFFER, gl.STATIC_DRAW);
+    copyMeshDataToGpu(gl, this);
   }
 
   freeGPUMemory(gl: GL) {
     super.freeGPUMemory(gl);
-    this.vertexBuffer.dispose();
-    this.indexBuffer.dispose();
-    this.normalBuffer.dispose();
+    freeGpuMeshData(this);
   }
 }
 
