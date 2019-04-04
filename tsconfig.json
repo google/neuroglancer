@@ -11,7 +11,6 @@
     "allowSyntheticDefaultImports": true,
     "sourceMap": true,
     "moduleResolution": "node",
-    "module": "es2015",
     "target": "ES2015",
     "newLine": "LF",
     "baseUrl": ".",
@@ -20,12 +19,15 @@
       "neuroglancer/*": ["src/neuroglancer/*"]
     },
     "typeRoots": [],
-    "module": "esNext"
+    "module": "ESNext"
   },
   "exclude": [
     "node_modules",
     "dist",
     "templates",
-    "examples"
+    "python",
+    "testdata",
+    "examples",
+    "config"
   ]
 }
