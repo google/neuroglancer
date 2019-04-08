@@ -351,11 +351,25 @@ export class SliceViewBase<Source extends SliceViewChunkSource,
        * with the specified voxelSize.
        */
       const canImproveOnVoxelSize = (voxelSize: vec3) => {
+        const targetSize = pixelSize * renderScaleTarget;
         for (let i = 0; i < 3; ++i) {
-          let size = voxelSize[i];
+          const size = voxelSize[i];
           // If size <= pixelSize, no need for improvement.
           // If size === smallestVoxelSize, also no need for improvement.
-          if (size > pixelSize * renderScaleTarget && size > 1.01 * smallestVoxelSize[i]) {
+          if (size > targetSize && size > 1.01 * smallestVoxelSize[i]) {
+            return true;
+          }
+        }
+        return false;
+      };
+
+      const improvesOnPrevVoxelSize = (voxelSize: vec3, prevVoxelSize: vec3) => {
+        const targetSize = pixelSize * renderScaleTarget;
+        for (let i = 0; i < 3; ++i) {
+          const size = voxelSize[i];
+          const prevSize = prevVoxelSize[i];
+          if (Math.abs(targetSize - size) < Math.abs(targetSize - prevSize) &&
+              size < 1.01 * prevSize) {
             return true;
           }
         }
@@ -381,12 +395,19 @@ export class SliceViewBase<Source extends SliceViewChunkSource,
           };
 
       scaleIndex = numSources - 1;
+      let prevVoxelSize: vec3|undefined;
       while (true) {
         const transformedSource = pickBestAlternativeSource(zAxis, transformedSources[scaleIndex]);
+        if (prevVoxelSize !== undefined &&
+            !improvesOnPrevVoxelSize(transformedSource.voxelSize, prevVoxelSize)) {
+          break;
+        }
         addVisibleSource(transformedSource, scaleIndex);
+
         if (scaleIndex === 0 || !canImproveOnVoxelSize(transformedSource.voxelSize)) {
           break;
         }
+        prevVoxelSize = transformedSource.voxelSize;
         --scaleIndex;
       }
       // Reverse visibleSources list since we added sources from coarsest to finest resolution, but
