@@ -17,30 +17,40 @@
 import {ChunkManager} from 'neuroglancer/chunk_manager/frontend';
 import {CoordinateTransform} from 'neuroglancer/coordinate_transform';
 import {RenderLayer as GenericRenderLayer} from 'neuroglancer/layer';
-import {getTransformedSources, SLICEVIEW_RENDERLAYER_RPC_ID, SLICEVIEW_RENDERLAYER_UPDATE_TRANSFORM_RPC_ID} from 'neuroglancer/sliceview/base';
-import {ChunkLayout} from 'neuroglancer/sliceview/chunk_layout';
+import {RenderScaleHistogram, trackableRenderScaleTarget} from 'neuroglancer/render_scale_statistics';
+import {SharedWatchableValue} from 'neuroglancer/shared_watchable_value';
+import {getTransformedSources, SLICEVIEW_RENDERLAYER_RPC_ID, SLICEVIEW_RENDERLAYER_UPDATE_TRANSFORM_RPC_ID, TransformedSource} from 'neuroglancer/sliceview/base';
 import {SliceView, SliceViewChunkSource} from 'neuroglancer/sliceview/frontend';
+import {WatchableValueInterface} from 'neuroglancer/trackable_value';
 import {vec3} from 'neuroglancer/util/geom';
 import {RpcId} from 'neuroglancer/worker_rpc';
 import {SharedObject} from 'neuroglancer/worker_rpc';
 
 export interface RenderLayerOptions {
-  transform: CoordinateTransform;
+  transform?: CoordinateTransform;
+  renderScaleTarget?: WatchableValueInterface<number>;
+  renderScaleHistogram?: RenderScaleHistogram;
 }
 
 export abstract class RenderLayer extends GenericRenderLayer {
   rpcId: RpcId|null = null;
   transform: CoordinateTransform;
-  transformedSources: {source: SliceViewChunkSource, chunkLayout: ChunkLayout}[][];
+  transformedSources: TransformedSource<SliceViewChunkSource>[][];
   transformedSourcesGeneration = -1;
+  renderScaleTarget: WatchableValueInterface<number>;
+  renderScaleHistogram?: RenderScaleHistogram;
 
   constructor(
       public chunkManager: ChunkManager, public sources: SliceViewChunkSource[][],
-      options: Partial<RenderLayerOptions> = {}) {
+      options: RenderLayerOptions) {
     super();
 
-    const {transform = new CoordinateTransform()} = options;
-
+    const {
+      transform = new CoordinateTransform(),
+      renderScaleTarget = trackableRenderScaleTarget(1)
+    } = options;
+    this.renderScaleTarget = renderScaleTarget;
+    this.renderScaleHistogram = options.renderScaleHistogram;
     this.transform = transform;
     const transformedSources = getTransformedSources(this);
 
@@ -58,8 +68,13 @@ export abstract class RenderLayer extends GenericRenderLayer {
     const rpc = this.chunkManager.rpc!;
     sharedObject.RPC_TYPE_ID = SLICEVIEW_RENDERLAYER_RPC_ID;
     const sourceIds = sources.map(alternatives => alternatives.map(source => source.rpcId!));
-    sharedObject.initializeCounterpart(
-        rpc, {'sources': sourceIds, 'transform': transform.transform});
+    sharedObject.initializeCounterpart(rpc, {
+      sources: sourceIds,
+      transform: transform.transform,
+      renderScaleTarget:
+          this.registerDisposer(SharedWatchableValue.makeFromExisting(rpc, this.renderScaleTarget))
+              .rpcId
+    });
     this.rpcId = sharedObject.rpcId;
 
     this.registerDisposer(transform.changed.add(() => {

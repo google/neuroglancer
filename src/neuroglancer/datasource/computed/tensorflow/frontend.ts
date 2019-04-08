@@ -14,6 +14,8 @@
  * limitations under the License.
  */
 
+import * as tfjsModule from '@tensorflow/tfjs';
+import {InferenceModel, Tensor} from '@tensorflow/tfjs';
 import {ComputedVolumeDataSourceParameters, VolumeComputationFrontend, VolumeComputationFrontendProvider} from 'neuroglancer/datasource/computed/frontend';
 import {InferenceRequest, InferenceResult, TENSORFLOW_COMPUTATION_RPC_ID, TENSORFLOW_INFERENCE_RPC_ID, TensorflowArray, TensorflowComputationParameters} from 'neuroglancer/datasource/computed/tensorflow/base';
 import {DataType, VolumeType} from 'neuroglancer/sliceview/volume/base';
@@ -21,12 +23,7 @@ import {CANCELED, CancellationToken} from 'neuroglancer/util/cancellation';
 import {verifyFloat, verifyString} from 'neuroglancer/util/json';
 import {registerPromiseRPC, registerSharedObjectOwner, RPCPromise} from 'neuroglancer/worker_rpc';
 
-let tfjs: null|typeof import('@tensorflow/tfjs') = null;
-export default tfjs;
-
-// Dynamic import type definitions.
-type InferenceModel = import('@tensorflow/tfjs').InferenceModel;
-type Tensor = import('@tensorflow/tfjs').Tensor;
+let tfjs: null|typeof tfjsModule = null;
 
 export function loadTFjs() {
   if (tfjs) {

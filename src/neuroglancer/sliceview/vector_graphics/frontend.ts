@@ -34,7 +34,7 @@ export abstract class RenderLayer extends GenericSliceViewRenderLayer {
   constructor(multiscaleSource: MultiscaleVectorGraphicsChunkSource, {
     sourceOptions = <VectorGraphicsSourceOptions> {}
   } = {}) {
-    super(multiscaleSource.chunkManager, multiscaleSource.getSources(sourceOptions));
+    super(multiscaleSource.chunkManager, multiscaleSource.getSources(sourceOptions), {});
     this.shaderGetter = this.registerDisposer(new ShaderGetter(
         this.gl, builder => this.defineShader(builder), () => this.getShaderKey()));
   }

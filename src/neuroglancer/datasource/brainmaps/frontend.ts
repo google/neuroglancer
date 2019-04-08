@@ -22,8 +22,8 @@ import {CredentialsProvider} from 'neuroglancer/credentials_provider';
 import {WithCredentialsProvider} from 'neuroglancer/credentials_provider/chunk_source_frontend';
 import {DataSource, GetVolumeOptions} from 'neuroglancer/datasource';
 import {BrainmapsCredentialsProvider, BrainmapsInstance, Credentials, makeRequest} from 'neuroglancer/datasource/brainmaps/api';
-import {AnnotationSourceParameters, ChangeSpec, MeshSourceParameters, SkeletonSourceParameters, VolumeChunkEncoding, VolumeSourceParameters} from 'neuroglancer/datasource/brainmaps/base';
-import {MeshSource} from 'neuroglancer/mesh/frontend';
+import {AnnotationSourceParameters, ChangeSpec, MeshSourceParameters, MultiscaleMeshInfo, MultiscaleMeshSourceParameters, SingleMeshInfo, SkeletonSourceParameters, VolumeChunkEncoding, VolumeSourceParameters} from 'neuroglancer/datasource/brainmaps/base';
+import {MeshSource, MultiscaleMeshSource} from 'neuroglancer/mesh/frontend';
 import {SkeletonSource} from 'neuroglancer/skeleton/frontend';
 import {ChunkLayoutPreference} from 'neuroglancer/sliceview/base';
 import {DataType, VolumeChunkSpecification, VolumeSourceOptions, VolumeType} from 'neuroglancer/sliceview/volume/base';
@@ -38,6 +38,9 @@ import {getObjectId} from 'neuroglancer/util/object_id';
 class BrainmapsVolumeChunkSource extends
 (WithParameters(
     WithCredentialsProvider<Credentials>()(VolumeChunkSource), VolumeSourceParameters)) {}
+
+class BrainmapsMultiscaleMeshSource extends
+(WithParameters(WithCredentialsProvider<Credentials>()(MultiscaleMeshSource), MultiscaleMeshSourceParameters)) {}
 
 class BrainmapsMeshSource extends
 (WithParameters(WithCredentialsProvider<Credentials>()(MeshSource), MeshSourceParameters)) {}
@@ -93,6 +96,72 @@ export class VolumeInfo {
   }
 }
 
+function parseMeshInfo(obj: any): SingleMeshInfo {
+  verifyObject(obj);
+  return {
+    name: verifyObjectProperty(obj, 'name', verifyString),
+    type: verifyObjectProperty(obj, 'type', verifyString)
+  };
+}
+
+function parseMeshesResponse(meshesResponse: any): SingleMeshInfo[] {
+  try {
+    verifyObject(meshesResponse);
+    return verifyObjectProperty(meshesResponse, 'meshes', y => {
+      if (y === undefined) {
+        return [];
+      }
+      return parseArray(y, parseMeshInfo);
+    });
+  } catch (parseError) {
+    throw new Error(`Failed to parse BrainMaps meshes specification: ${parseError.message}`);
+  }
+}
+
+const floatPattern = '([0-9]*\\.?[0-9]+(?:[eE][-+]?[0-9]+)?)';
+const intPattern = '([0-9]+)';
+const lodPattern =
+    new RegExp(`^((.*)_${intPattern}x${intPattern}x${intPattern})_lod([0-9]+)_${floatPattern}$`);
+
+function getMultiscaleMeshes(volumeInfo: MultiscaleVolumeInfo, meshes: SingleMeshInfo[]): MultiscaleMeshInfo[] {
+  const lodMeshes = new Map<string, MultiscaleMeshInfo>();
+  const baseVolume = volumeInfo.scales[0];
+
+  for (const mesh of meshes) {
+    // Only triangular meshes supported currently.
+    if (mesh.type !== 'TRIANGLES') continue;
+
+    const m = mesh.name.match(lodPattern);
+    if (m === null) continue;
+
+    const key = m[1];
+    let info = lodMeshes.get(key);
+    if (info === undefined) {
+      const chunkShapeInVoxels =
+        vec3.fromValues(parseInt(m[3], 10), parseInt(m[4], 10), parseInt(m[5], 10));
+      const gridShape = new Uint32Array(3);
+      for (let i = 0; i < 3; ++i) {
+        gridShape[i] = Math.ceil(baseVolume.upperVoxelBound[i] / chunkShapeInVoxels[i]);
+      }
+      info = {
+        key,
+        chunkShape: vec3.multiply(vec3.create(), baseVolume.voxelSize, chunkShapeInVoxels),
+        gridShape,
+        lods: []
+      };
+      lodMeshes.set(key, info);
+    }
+    const lod = parseInt(m[6]);
+    info.lods.push({info: mesh, scale: parseFloat(m[7]), lod});
+  }
+
+  for (const lodMesh of lodMeshes.values()) {
+    lodMesh.lods.sort((a, b) => a.lod - b.lod);
+  }
+
+  return Array.from(lodMeshes.values());
+}
+
 export class MultiscaleVolumeInfo {
   scales: VolumeInfo[];
   numChannels: number;
@@ -128,16 +197,6 @@ export class MultiscaleVolumeInfo {
   }
 }
 
-export class MeshInfo {
-  name: string;
-  type: string;
-  constructor(obj: any) {
-    verifyObject(obj);
-    this.name = verifyObjectProperty(obj, 'name', verifyString);
-    this.type = verifyObjectProperty(obj, 'type', verifyString);
-  }
-}
-
 export interface GetBrainmapsVolumeOptions extends GetVolumeOptions {
   encoding?: VolumeChunkEncoding;
   chunkLayoutPreference?: ChunkLayoutPreference;
@@ -154,7 +213,7 @@ export class MultiscaleVolumeChunkSource implements GenericMultiscaleVolumeChunk
   get numChannels() {
     return this.multiscaleVolumeInfo.numChannels;
   }
-  meshes: MeshInfo[];
+  meshes: SingleMeshInfo[];
   encoding: VolumeChunkEncoding|undefined;
   chunkLayoutPreference: ChunkLayoutPreference|undefined;
   constructor(
@@ -182,18 +241,7 @@ export class MultiscaleVolumeChunkSource implements GenericMultiscaleVolumeChunk
       }
     }
     this.volumeType = volumeType;
-
-    try {
-      verifyObject(meshesResponse);
-      this.meshes = verifyObjectProperty(meshesResponse, 'meshes', y => {
-        if (y === undefined) {
-          return [];
-        }
-        return parseArray(y, x => new MeshInfo(x));
-      });
-    } catch (parseError) {
-      throw new Error(`Failed to parse BrainMaps meshes specification: ${parseError.message}`);
-    }
+    this.meshes = parseMeshesResponse(meshesResponse);
   }
 
   getSources(volumeSourceOptions: VolumeSourceOptions) {
@@ -229,17 +277,29 @@ export class MultiscaleVolumeChunkSource implements GenericMultiscaleVolumeChunk
                     credentialsProvider: this.credentialsProvider,
                     spec,
                     parameters: {
-                      'instance': this.instance,
                       'volumeId': this.volumeId,
                       'changeSpec': this.changeSpec,
                       'scaleIndex': scaleIndex,
                       'encoding': encoding,
+                      'instance': this.instance,
                     }
                   });
                 }));
   }
 
   getMeshSource() {
+    const multiscaleMeshes = getMultiscaleMeshes(this.multiscaleVolumeInfo, this.meshes);
+    for (const mesh of multiscaleMeshes) {
+      return this.chunkManager.getChunkSource(BrainmapsMultiscaleMeshSource, {
+        credentialsProvider: this.credentialsProvider,
+        parameters: {
+          'instance': this.instance,
+          'volumeId': this.volumeId,
+          'info': mesh,
+          'changeSpec': this.changeSpec,
+        }
+      });
+    }
     for (const mesh of this.meshes) {
       if (mesh.type === 'TRIANGLES') {
         return this.chunkManager.getChunkSource(BrainmapsMeshSource, {
@@ -411,6 +471,7 @@ const MultiscaleAnnotationSourceBase = (WithParameters(
     AnnotationSourceParameters));
 
 export class BrainmapsAnnotationSource extends MultiscaleAnnotationSourceBase {
+  key: any;
   constructor(chunkManager: ChunkManager, options: {
     credentialsProvider: CredentialsProvider<Credentials>,
     parameters: AnnotationSourceParameters,
@@ -515,9 +576,9 @@ export class BrainmapsDataSource extends DataSource {
       throw new Error(`A changestack must be specified.`);
     }
     const parameters = {
-      instance: this.instance,
       volumeId,
       changestack: changeSpec.changeStackId,
+      instance: this.instance,
     };
     return chunkManager.memoize.getUncounted(
         {

@@ -20,6 +20,7 @@ import {RenderLayer, RenderLayerOptions} from 'neuroglancer/sliceview/volume/ren
 import {TrackableAlphaValue, trackableAlphaValue} from 'neuroglancer/trackable_alpha';
 import {BLEND_FUNCTIONS, BLEND_MODES, TrackableBlendModeValue, trackableBlendModeValue} from 'neuroglancer/trackable_blend';
 import {verifyEnumString} from 'neuroglancer/util/json';
+import glsl_COLORMAPS from 'neuroglancer/webgl/colormaps.glsl';
 import {makeTrackableFragmentMain, TrackableFragmentMain} from 'neuroglancer/webgl/dynamic_shader';
 import {ShaderBuilder} from 'neuroglancer/webgl/shader';
 
@@ -30,7 +31,6 @@ const DEFAULT_FRAGMENT_MAIN = `void main() {
 }
 `;
 
-const glsl_COLORMAPS = require<string>('neuroglancer/webgl/colormaps.glsl');
 
 export function getTrackableFragmentMain(value = DEFAULT_FRAGMENT_MAIN) {
   return makeTrackableFragmentMain(value);
@@ -46,9 +46,7 @@ export class ImageRenderLayer extends RenderLayer {
   fragmentMain: TrackableFragmentMain;
   opacity: TrackableAlphaValue;
   blendMode: TrackableBlendModeValue;
-  constructor(
-      multiscaleSource: MultiscaleVolumeChunkSource,
-      options: Partial<ImageRenderLayerOptions> = {}) {
+  constructor(multiscaleSource: MultiscaleVolumeChunkSource, options: ImageRenderLayerOptions) {
     super(multiscaleSource, options);
     const {
       opacity = trackableAlphaValue(0.5),

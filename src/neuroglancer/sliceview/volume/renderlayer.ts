@@ -182,16 +182,19 @@ vChunkPosition = (position - uTranslation) / uVoxelSize +
 }
 
 export interface RenderLayerOptions extends SliceViewRenderLayerOptions {
-  sourceOptions: VolumeSourceOptions;
-  shaderError: WatchableShaderError;
+  sourceOptions?: VolumeSourceOptions;
+  shaderError?: WatchableShaderError;
+}
+
+function medianOf3(a: number, b: number, c: number) {
+  return a > b ? (c > a ? a : (b > c ? b : c)) : (c > b ? b : (a > c ? a : c));
 }
 
 export class RenderLayer extends SliceViewRenderLayer {
   sources: VolumeChunkSource[][];
   vertexComputationManager: VolumeSliceVertexComputationManager;
   protected shaderGetter: Owned<ShaderGetter>;
-  constructor(
-      multiscaleSource: MultiscaleVolumeChunkSource, options: Partial<RenderLayerOptions> = {}) {
+  constructor(multiscaleSource: MultiscaleVolumeChunkSource, options: RenderLayerOptions) {
     const {sourceOptions = {}, shaderError} = options;
     super(multiscaleSource.chunkManager, multiscaleSource.getSources(sourceOptions), options);
     const {gl} = this;
@@ -293,11 +296,16 @@ ${getShaderType(this.dataType)} getDataValue() { return getDataValue(0); }
     }
 
     let chunkPosition = vec3.create();
-    let vertexComputationManager = this.vertexComputationManager;
+    const {renderScaleHistogram, vertexComputationManager} = this;
 
     // All sources are required to have the same texture format.
     let chunkFormat = this.chunkFormat;
     chunkFormat.beginDrawing(gl, shader);
+
+    if (renderScaleHistogram !== undefined) {
+      renderScaleHistogram.begin(
+          this.chunkManager.chunkQueueManager.frameNumberCounter.frameNumber);
+    }
 
     for (let transformedSource of visibleSources) {
       const chunkLayout = transformedSource.chunkLayout;
@@ -322,6 +330,8 @@ ${getShaderType(this.dataType)} getDataValue() { return getDataValue(0); }
         vertexComputationManager.setupChunkDataSize(gl, shader, chunkDataSize);
       };
 
+      let presentCount = 0, notPresentCount = 0;
+
       for (let key of visibleChunks) {
         let chunk = chunks.get(key);
         if (chunk && chunk.state === ChunkState.GPU_MEMORY) {
@@ -333,7 +343,19 @@ ${getShaderType(this.dataType)} getDataValue() { return getDataValue(0); }
           vec3.multiply(chunkPosition, originalChunkSize, chunk.chunkGridPosition);
           sourceChunkFormat.bindChunk(gl, shader, chunk);
           vertexComputationManager.drawChunk(gl, shader, chunkPosition);
+          ++presentCount;
+        } else {
+          ++notPresentCount;
         }
+      }
+
+      if ((presentCount !== 0 || notPresentCount !== 0) && renderScaleHistogram !== undefined) {
+        const {voxelSize} = transformedSource;
+        // TODO(jbms): replace median hack with more accurate estimate, e.g. based on ellipsoid
+        // cross section.
+        const medianVoxelSize = medianOf3(voxelSize[0], voxelSize[1], voxelSize[2]);
+        renderScaleHistogram.add(
+            medianVoxelSize, medianVoxelSize / sliceView.pixelSize, presentCount, notPresentCount);
       }
     }
     chunkFormat.endDrawing(gl, shader);

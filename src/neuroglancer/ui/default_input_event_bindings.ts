@@ -40,6 +40,7 @@ export function getDefaultGlobalBindings() {
 
     map.set('space', 'toggle-layout');
     map.set('shift+space', 'toggle-layout-alternative');
+    map.set('backslash', 'toggle-show-statistics');
     defaultGlobalBindings = map;
   }
   return defaultGlobalBindings;

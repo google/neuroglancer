@@ -15,6 +15,7 @@
  */
 
 import {BrainmapsInstance} from 'neuroglancer/datasource/brainmaps/api';
+import {vec3} from 'neuroglancer/util/geom';
 
 export enum VolumeChunkEncoding {
   RAW,
@@ -42,16 +43,60 @@ export class VolumeSourceParameters {
   static RPC_ID = 'brainmaps/VolumeChunkSource';
 }
 
-export class MeshSourceParameters {
+export interface SingleMeshInfo {
+  name: string;
+  type: string;
+}
+
+export interface MultiscaleMeshLOD {
+  info: SingleMeshInfo;
+  scale: number;
+  lod: number;
+}
+
+export interface MultiscaleMeshInfo {
+  /**
+   * Prefix
+   */
+  key: string;
+
+  /**
+   * Chunk shape in spatial units (nm).
+   */
+  chunkShape: vec3;
+
+  /**
+   * Size of chunk grid, in chunks.
+   */
+  gridShape: Uint32Array;
+
+  lods: MultiscaleMeshLOD[];
+}
+
+export class MultiscaleMeshSourceParameters {
+  instance: BrainmapsInstance;
+  volumeId: string;
+  info: MultiscaleMeshInfo;
+  changeSpec: ChangeSpec|undefined;
+
+  static RPC_ID = 'brainmaps/MultiscaleMeshSource';
+}
+
+export class MeshSourceParameters  {
   instance: BrainmapsInstance;
   volumeId: string;
   meshName: string;
   changeSpec: ChangeSpec|undefined;
-
+  
   static RPC_ID = 'brainmaps/MeshSource';
 }
 
-export class SkeletonSourceParameters extends MeshSourceParameters {
+export class SkeletonSourceParameters  {
+  instance: BrainmapsInstance;
+  volumeId: string;
+  meshName: string;
+  changeSpec: ChangeSpec|undefined;
+  
   static RPC_ID = 'brainmaps/SkeletonSource';
 }
 

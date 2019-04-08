@@ -145,7 +145,9 @@ export class SkeletonLayer extends SegmentationLayerSharedObjectCounterpart {
 export function decodeSkeletonVertexPositionsAndIndices(
     chunk: SkeletonChunk, data: ArrayBuffer, endianness: Endianness, vertexByteOffset: number,
     numVertices: number, indexByteOffset?: number, numEdges?: number) {
-  decodeVertexPositionsAndIndices(
-      chunk, /*verticesPerPrimitive=*/2, data, endianness, vertexByteOffset, numVertices,
-      indexByteOffset, numEdges);
+  const meshData = decodeVertexPositionsAndIndices(
+      /*verticesPerPrimitive=*/2, data, endianness, vertexByteOffset, numVertices,
+    indexByteOffset, numEdges);
+  chunk.vertexPositions = meshData.vertexPositions;
+  chunk.indices = meshData.indices as Uint32Array;
 }

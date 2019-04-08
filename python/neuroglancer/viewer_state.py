@@ -186,6 +186,8 @@ class ImageLayer(Layer, _AnnotationLayerOptions):
     shader = wrapped_property('shader', text_type)
     opacity = wrapped_property('opacity', optional(float, 0.5))
     blend = wrapped_property('blend', optional(str))
+    cross_section_render_scale = crossSectionRenderScale = wrapped_property(
+        'crossSectionRenderScale', optional(float, 1))
 
     @staticmethod
     def interpolate(a, b, t):
@@ -220,6 +222,9 @@ class SegmentationLayer(Layer, _AnnotationLayerOptions):
     object_alpha = objectAlpha = wrapped_property('objectAlpha', optional(float, 1.0))
     skeleton_shader = skeletonShader = wrapped_property('skeletonShader', text_type)
     color_seed = colorSeed = wrapped_property('colorSeed', optional(int, 0))
+    cross_section_render_scale = crossSectionRenderScale = wrapped_property(
+        'crossSectionRenderScale', optional(float, 1))
+    mesh_render_scale = meshRenderScale = wrapped_property('meshRenderScale', optional(float, 10))
 
     @staticmethod
     def interpolate(a, b, t):
@@ -774,6 +779,19 @@ add_data_panel_layout_types()
 
 
 @export
+class SelectedLayerState(JsonObjectWrapper):
+    visible = wrapped_property('visible', optional(bool, False))
+    size = wrapped_property('size', optional(int))
+    layer = wrapped_property('layer', optional(text_type))
+
+
+@export
+class StatisticsDisplayState(JsonObjectWrapper):
+    visible = wrapped_property('visible', optional(bool, False))
+    size = wrapped_property('size', optional(int))
+
+
+@export
 class ViewerState(JsonObjectWrapper):
     __slots__ = ()
     navigation = wrapped_property('navigation', NavigationState)
@@ -793,6 +811,8 @@ class ViewerState(JsonObjectWrapper):
         'crossSectionBackgroundColor', optional(text_type))
     perspective_view_background_color = perspectiveViewBackgroundColor = wrapped_property(
         'perspectiveViewBackgroundColor', optional(text_type))
+    selected_layer = selectedLayer = wrapped_property('selectedLayer', SelectedLayerState)
+    statistics = wrapped_property('statistics', StatisticsDisplayState)
 
     @property
     def position(self):

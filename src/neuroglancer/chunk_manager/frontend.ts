@@ -64,6 +64,11 @@ export class CapacitySpecification {
   }
 }
 
+export interface FrameNumberCounter {
+  frameNumber: number;
+  changed: NullarySignal;
+}
+
 @registerSharedObjectOwner(CHUNK_QUEUE_MANAGER_RPC_ID)
 export class ChunkQueueManager extends SharedObject {
   visibleChunksChanged = new NullarySignal();
@@ -78,12 +83,13 @@ export class ChunkQueueManager extends SharedObject {
 
   chunkUpdateDelay: number = 30;
 
-  constructor(rpc: RPC, public gl: GL, public capacities: {
-    gpuMemory: CapacitySpecification,
-    systemMemory: CapacitySpecification,
-    download: CapacitySpecification,
-    compute: CapacitySpecification
-  }) {
+  constructor(
+      rpc: RPC, public gl: GL, public frameNumberCounter: FrameNumberCounter, public capacities: {
+        gpuMemory: CapacitySpecification,
+        systemMemory: CapacitySpecification,
+        download: CapacitySpecification,
+        compute: CapacitySpecification
+      }) {
     super();
 
     const makeCapacityCounterparts = (capacity: CapacitySpecification) => {
@@ -281,7 +287,7 @@ export class ChunkManager extends SharedObject {
         chunkQueueManager.rpc!, {'chunkQueueManager': chunkQueueManager.rpcId});
   }
 
-  getChunkSource<T extends SharedObject, Options>(
+  getChunkSource<T extends SharedObject&{key: any}, Options>(
       constructorFunction: ChunkSourceConstructor<Options, T>, options: any): T {
     const keyObject = constructorFunction.encodeOptions(options);
     keyObject['constructorId'] = getObjectId(constructorFunction);
@@ -289,6 +295,7 @@ export class ChunkManager extends SharedObject {
     return this.memoize.get(key, () => {
       const newSource = new constructorFunction(this, options);
       newSource.initializeCounterpart(this.rpc!, {});
+      newSource.key = keyObject;
       return newSource;
     }) as T;
   }
@@ -296,6 +303,7 @@ export class ChunkManager extends SharedObject {
 
 export class ChunkSource extends SharedObject {
   chunks = new Map<string, Chunk>();
+  key: any;
 
   /**
    * If set to true, chunk updates will be applied to this source immediately, rather than queueing
@@ -365,9 +373,7 @@ export function WithParameters<Parameters, BaseOptions,
       super.initializeCounterpart(rpc, options);
     }
     static encodeOptions(options: Options) {
-      const encoding = super.encodeOptions(options);
-      encoding['parameters'] = options.parameters;
-      return encoding;
+      return Object.assign({parameters: options.parameters}, super.encodeOptions(options));
     }
   }
   return C;

@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-import {CHUNK_MANAGER_RPC_ID, CHUNK_QUEUE_MANAGER_RPC_ID, CHUNK_SOURCE_INVALIDATE_RPC_ID, ChunkPriorityTier, ChunkSourceParametersConstructor, ChunkState} from 'neuroglancer/chunk_manager/base';
+import {CHUNK_MANAGER_RPC_ID, CHUNK_QUEUE_MANAGER_RPC_ID, CHUNK_SOURCE_INVALIDATE_RPC_ID, ChunkDownloadStatistics, ChunkMemoryStatistics, ChunkPriorityTier, ChunkSourceParametersConstructor, ChunkState, getChunkDownloadStatisticIndex, getChunkStateStatisticIndex, numChunkMemoryStatistics, numChunkStatistics, REQUEST_CHUNK_STATISTICS_RPC_ID} from 'neuroglancer/chunk_manager/base';
 import {SharedWatchableValue} from 'neuroglancer/shared_watchable_value';
 import {TypedArray} from 'neuroglancer/util/array';
 import {CancellationToken, CancellationTokenSource} from 'neuroglancer/util/cancellation';
@@ -28,7 +28,7 @@ import {ComparisonFunction, PairingHeapOperations} from 'neuroglancer/util/pairi
 import PairingHeap0 from 'neuroglancer/util/pairing_heap.0';
 import PairingHeap1 from 'neuroglancer/util/pairing_heap.1';
 import {NullarySignal} from 'neuroglancer/util/signal';
-import {initializeSharedObjectCounterpart, registerRPC, registerSharedObject, registerSharedObjectOwner, RPC, SharedObject, SharedObjectCounterpart} from 'neuroglancer/worker_rpc';
+import {initializeSharedObjectCounterpart, registerPromiseRPC, registerRPC, registerSharedObject, registerSharedObjectOwner, RPC, SharedObject, SharedObjectCounterpart} from 'neuroglancer/worker_rpc';
 
 const DEBUG_CHUNK_UPDATES = false;
 
@@ -159,9 +159,11 @@ export class Chunk implements Disposable {
   }
 
   set systemMemoryBytes(bytes: number) {
+    updateChunkStatistics(this, -1);
     this.chunkManager.queueManager.adjustCapacitiesForChunk(this, false);
     this.systemMemoryBytes_ = bytes;
     this.chunkManager.queueManager.adjustCapacitiesForChunk(this, true);
+    updateChunkStatistics(this, 1);
     this.chunkManager.queueManager.scheduleUpdate();
   }
 
@@ -170,9 +172,11 @@ export class Chunk implements Disposable {
   }
 
   set gpuMemoryBytes(bytes: number) {
+    updateChunkStatistics(this, -1);
     this.chunkManager.queueManager.adjustCapacitiesForChunk(this, false);
     this.gpuMemoryBytes_ = bytes;
     this.chunkManager.queueManager.adjustCapacitiesForChunk(this, true);
+    updateChunkStatistics(this, 1);
     this.chunkManager.queueManager.scheduleUpdate();
   }
 
@@ -216,9 +220,16 @@ export class ChunkSourceBase extends SharedObject {
   private listeners_ = new Map<string, ChunkStateListener[]>();
   chunks: Map<string, Chunk> = new Map<string, Chunk>();
   freeChunks: Chunk[] = new Array<Chunk>();
+  statistics = new Float64Array(numChunkStatistics);
 
-  constructor(public chunkManager: ChunkManager) {
+  constructor(public chunkManager: Borrowed<ChunkManager>) {
     super();
+    chunkManager.queueManager.sources.add(this);
+  }
+
+  disposed() {
+    this.chunkManager.queueManager.sources.delete(this);
+    super.disposed();
   }
 
   getNewChunk_<T extends Chunk>(chunkType: ChunkConstructor<T>): T {
@@ -247,6 +258,7 @@ export class ChunkSourceBase extends SharedObject {
       this.addRef();
     }
     chunks.set(chunk.key!, chunk);
+    updateChunkStatistics(chunk, 1);
   }
 
   /**
@@ -302,6 +314,17 @@ export class ChunkSourceBase extends SharedObject {
   }
 }
 
+function updateChunkStatistics(chunk: Chunk, sign: number) {
+  const {statistics} = chunk.source!;
+  const {systemMemoryBytes, gpuMemoryBytes} = chunk;
+  const index = getChunkStateStatisticIndex(chunk.state, chunk.priorityTier);
+  statistics[index * numChunkMemoryStatistics + ChunkMemoryStatistics.numChunks] += sign;
+  statistics[index * numChunkMemoryStatistics + ChunkMemoryStatistics.systemMemoryBytes] +=
+      sign * systemMemoryBytes;
+  statistics[index * numChunkMemoryStatistics + ChunkMemoryStatistics.gpuMemoryBytes] +=
+      sign * gpuMemoryBytes;
+}
+
 export interface ChunkSourceBase {
   /**
    * Begin downloading the specified the chunk.  The returned promise should resolve when the
@@ -332,11 +355,17 @@ export class ChunkSource extends ChunkSourceBase {
 
 function startChunkDownload(chunk: Chunk) {
   const downloadCancellationToken = chunk.downloadCancellationToken = new CancellationTokenSource();
+  const startTime = Date.now();
   chunk.source!.download(chunk, downloadCancellationToken)
       .then(
           () => {
             if (chunk.downloadCancellationToken === downloadCancellationToken) {
               chunk.downloadCancellationToken = undefined;
+              const endTime = Date.now();
+              const {statistics} = chunk.source!;
+              statistics[getChunkDownloadStatisticIndex(ChunkDownloadStatistics.totalTime)] +=
+                  (endTime - startTime);
+              ++statistics[getChunkDownloadStatisticIndex(ChunkDownloadStatistics.totalChunks)];
               chunk.downloadSucceeded();
             }
           },
@@ -514,6 +543,11 @@ export class ChunkQueueManager extends SharedObjectCounterpart {
   computeCapacity: AvailableCapacity;
 
   /**
+   * Set of chunk sources associated with this queue manager.
+   */
+  sources = new Set<Borrowed<ChunkSource>>();
+
+  /**
    * Contains all chunks in QUEUED state pending download.
    */
   private queuedDownloadPromotionQueue = makeChunkPriorityQueue1(Chunk.priorityGreater);
@@ -644,6 +678,7 @@ export class ChunkQueueManager extends SharedObjectCounterpart {
   }
 
   private removeChunkFromQueues_(chunk: Chunk) {
+    updateChunkStatistics(chunk, -1);
     for (let queue of this.chunkQueuesForChunk(chunk)) {
       queue.delete(chunk);
     }
@@ -658,6 +693,7 @@ export class ChunkQueueManager extends SharedObjectCounterpart {
       this.adjustCapacitiesForChunk(chunk, false);
       return false;
     } else {
+      updateChunkStatistics(chunk, 1);
       for (let queue of this.chunkQueuesForChunk(chunk)) {
         queue.add(chunk);
       }
@@ -1008,4 +1044,13 @@ export function withChunkManager<T extends {new (...args: any[]): SharedObject}>
 registerRPC(CHUNK_SOURCE_INVALIDATE_RPC_ID, function(x) {
   const source = <ChunkSource>this.get(x['id']);
   source.chunkManager.queueManager.invalidateSourceCache(source);
+});
+
+registerPromiseRPC(REQUEST_CHUNK_STATISTICS_RPC_ID, function(x: {queue: number}) {
+  const queue = this.get(x.queue) as ChunkQueueManager;
+  const results = new Map<number, Float64Array>();
+  for (const source of queue.sources) {
+    results.set(source.rpcId!, source.statistics);
+  }
+  return Promise.resolve({value: results});
 });

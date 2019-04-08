@@ -14,12 +14,12 @@
  * limitations under the License.
  */
 
-import {CoordinateTransform} from 'neuroglancer/coordinate_transform';
 import {HashMapUint64} from 'neuroglancer/gpu_hash/hash_table';
 import {GPUHashTable, HashMapShaderManager, HashSetShaderManager} from 'neuroglancer/gpu_hash/shader';
 import {SegmentColorShaderManager} from 'neuroglancer/segment_color';
 import {registerRedrawWhenSegmentationDisplayStateChanged, SegmentationDisplayState} from 'neuroglancer/segmentation_display_state/frontend';
 import {SliceView} from 'neuroglancer/sliceview/frontend';
+import {RenderLayerOptions} from 'neuroglancer/sliceview/renderlayer';
 import {VolumeSourceOptions} from 'neuroglancer/sliceview/volume/base';
 import {MultiscaleVolumeChunkSource} from 'neuroglancer/sliceview/volume/frontend';
 import {RenderLayer} from 'neuroglancer/sliceview/volume/renderlayer';
@@ -46,12 +46,12 @@ export class EquivalencesHashMap {
   }
 }
 
-export interface SliceViewSegmentationDisplayState extends SegmentationDisplayState {
+export interface SliceViewSegmentationDisplayState extends SegmentationDisplayState,
+                                                           RenderLayerOptions {
   selectedAlpha: TrackableAlphaValue;
   notSelectedAlpha: TrackableAlphaValue;
   volumeSourceOptions?: VolumeSourceOptions;
   hideSegmentZero: TrackableBoolean;
-  objectToDataTransform: CoordinateTransform;
 }
 
 export class SegmentationRenderLayer extends RenderLayer {
@@ -59,7 +59,8 @@ export class SegmentationRenderLayer extends RenderLayer {
   private hashTableManager = new HashSetShaderManager('visibleSegments');
   private gpuHashTable = GPUHashTable.get(this.gl, this.displayState.visibleSegments.hashTable);
   private hashTableManagerHighlighted = new HashSetShaderManager('highlightedSegments');
-  private gpuHashTableHighlighted = GPUHashTable.get(this.gl, this.displayState.highlightedSegments.hashTable);
+  private gpuHashTableHighlighted =
+      GPUHashTable.get(this.gl, this.displayState.highlightedSegments.hashTable);
 
   private equivalencesShaderManager = new HashMapShaderManager('equivalences');
   private equivalencesHashMap =
@@ -72,7 +73,9 @@ export class SegmentationRenderLayer extends RenderLayer {
       public displayState: SliceViewSegmentationDisplayState) {
     super(multiscaleSource, {
       sourceOptions: displayState.volumeSourceOptions,
-      transform: displayState.objectToDataTransform
+      transform: displayState.transform,
+      renderScaleHistogram: displayState.renderScaleHistogram,
+      renderScaleTarget: displayState.renderScaleTarget,
     });
     registerRedrawWhenSegmentationDisplayStateChanged(displayState, this);
     this.registerDisposer(displayState.selectedAlpha.changed.add(() => {

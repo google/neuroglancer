@@ -25,6 +25,7 @@ import {EventActionMap, registerActionListener} from 'neuroglancer/util/event_ac
 import {vec3} from 'neuroglancer/util/geom';
 import {KeyboardEventBinder} from 'neuroglancer/util/keyboard_bindings';
 import {MouseEventBinder} from 'neuroglancer/util/mouse_bindings';
+import {numberToStringFixed} from 'neuroglancer/util/number_to_string';
 import {pickLengthUnit} from 'neuroglancer/widget/scale_bar';
 
 require('./position_widget.css');
@@ -109,7 +110,10 @@ export class PositionWidget extends RefCounted {
       const {selectionStart, selectionEnd} = inputElement;
       let selection = inputElement.value.substring(selectionStart || 0, selectionEnd || 0);
       selection = selection.trim().replace(/\s+/g, ' ');
-      event.clipboardData.setData('text/plain', selection);
+      const {clipboardData} = event;
+      if (clipboardData !== null) {
+        clipboardData.setData('text/plain', selection);
+      }
       event.stopPropagation();
       event.preventDefault();
     });
@@ -383,14 +387,7 @@ export class VoxelSizeWidget extends RefCounted {
     const unit = pickLengthUnit(minVoxelSize);
     unitsElement.textContent = unit.unit;
     for (let i = 0; i < 3; ++i) {
-      const v = size[i] / unit.lengthInNanometers;
-      let s = '';
-      for (let digits = 0; digits <= 2; ++digits) {
-        s = v.toFixed(digits);
-        if (parseFloat(s) === v) {
-          break;
-        }
-      }
+      const s = numberToStringFixed(size[i] / unit.lengthInNanometers, 2);
       const dimElement = document.createElement('span');
       dimElement.className = 'neuroglancer-voxel-size-dimension';
       dimElement.textContent = s;

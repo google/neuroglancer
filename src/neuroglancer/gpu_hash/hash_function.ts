@@ -15,23 +15,16 @@
  */
 
 const k1 = 0xcc9e2d51;
-const k1Low = k1 & 0xFFFF;
-const k1High = k1 - k1Low;
-
 const k2 = 0x1b873593;
-const k2Low = k2 & 0xFFFF;
-const k2High = k2 - k2Low;
 
 // MurmurHash excluding the final mixing steps.
 export function hashCombine(state: number, value: number) {
   value >>>= 0;
   state >>>= 0;
 
-  // JavaScript can't perform 32-bit modular multiplication directly, because only 53-bits of
-  // precision are retained for the intermediate result.
-  value = ((k1High * value >>> 0) + (k1Low * value)) >>> 0;
+  value = Math.imul(value, k1) >>> 0;
   value = ((value << 15) | (value >>> 17)) >>> 0;
-  value = ((k2High * value >>> 0) + (k2Low * value)) >>> 0;
+  value = Math.imul(value, k2) >>> 0;
   state = (state ^ value) >>> 0;
   state = ((state << 13) | (state >>> 19)) >>> 0;
   state = ((state * 5) + 0xe6546b64) >>> 0;

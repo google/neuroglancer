@@ -15,7 +15,7 @@
  */
 
 import debounce from 'lodash/debounce';
-import {CapacitySpecification, ChunkManager, ChunkQueueManager} from 'neuroglancer/chunk_manager/frontend';
+import {CapacitySpecification, ChunkManager, ChunkQueueManager, FrameNumberCounter} from 'neuroglancer/chunk_manager/frontend';
 import {defaultCredentialsManager} from 'neuroglancer/credentials_provider/default_manager';
 import {InputEventBindings as DataPanelInputEventBindings} from 'neuroglancer/data_panel_layout';
 import {DataSourceProvider} from 'neuroglancer/datasource';
@@ -32,10 +32,12 @@ import {StatusMessage} from 'neuroglancer/status';
 import {ElementVisibilityFromTrackableBoolean, TrackableBoolean, TrackableBooleanCheckbox} from 'neuroglancer/trackable_boolean';
 import {makeDerivedWatchableValue, TrackableValue, WatchableValueInterface} from 'neuroglancer/trackable_value';
 import {ContextMenu} from 'neuroglancer/ui/context_menu';
+import {DragResizablePanel} from 'neuroglancer/ui/drag_resize';
 import {LayerInfoPanelContainer} from 'neuroglancer/ui/layer_side_panel';
 import {MouseSelectionStateTooltipManager} from 'neuroglancer/ui/mouse_selection_state_tooltip';
 import {setupPositionDropHandlers} from 'neuroglancer/ui/position_drag_and_drop';
 import {StateEditorDialog} from 'neuroglancer/ui/state_editor';
+import {StatisticsDisplayState, StatisticsPanel} from 'neuroglancer/ui/statistics';
 import {AutomaticallyFocusedElement} from 'neuroglancer/util/automatic_focus';
 import {TrackableRGB} from 'neuroglancer/util/color';
 import {Borrowed, Owned, RefCounted} from 'neuroglancer/util/disposable';
@@ -61,20 +63,21 @@ require('neuroglancer/ui/button.css');
 
 export class DataManagementContext extends RefCounted {
   worker = new Worker('chunk_worker.bundle.js');
-  chunkQueueManager = this.registerDisposer(new ChunkQueueManager(new RPC(this.worker), this.gl, {
-    gpuMemory: new CapacitySpecification({defaultItemLimit: 1e6, defaultSizeLimit: 1e9}),
-    systemMemory: new CapacitySpecification({defaultItemLimit: 1e7, defaultSizeLimit: 2e9}),
-    download: new CapacitySpecification(
-        {defaultItemLimit: 32, defaultSizeLimit: Number.POSITIVE_INFINITY}),
-    compute: new CapacitySpecification({defaultItemLimit: 128, defaultSizeLimit: 5e8}),
-  }));
+  chunkQueueManager = this.registerDisposer(
+      new ChunkQueueManager(new RPC(this.worker), this.gl, this.frameNumberCounter, {
+        gpuMemory: new CapacitySpecification({defaultItemLimit: 1e6, defaultSizeLimit: 1e9}),
+        systemMemory: new CapacitySpecification({defaultItemLimit: 1e7, defaultSizeLimit: 2e9}),
+        download: new CapacitySpecification(
+            {defaultItemLimit: 32, defaultSizeLimit: Number.POSITIVE_INFINITY}),
+        compute: new CapacitySpecification({defaultItemLimit: 128, defaultSizeLimit: 5e8}),
+      }));
   chunkManager = this.registerDisposer(new ChunkManager(this.chunkQueueManager));
 
   get rpc(): RPC {
     return this.chunkQueueManager.rpc!;
   }
 
-  constructor(public gl: GL) {
+  constructor(public gl: GL, public frameNumberCounter: FrameNumberCounter) {
     super();
     this.chunkQueueManager.registerDisposer(() => this.worker.terminate());
   }
@@ -171,6 +174,7 @@ function makeViewerContextMenu(viewer: Viewer) {
   addCheckbox('Show scale bar', viewer.showScaleBar);
   addCheckbox('Show cross sections in 3-d', viewer.showPerspectiveSliceViews);
   addCheckbox('Show default annotations', viewer.showDefaultAnnotations);
+  addCheckbox('Show chunk statistics', viewer.statisticsDisplayState.visible);
   return menu;
 }
 
@@ -189,6 +193,7 @@ export class Viewer extends RefCounted implements ViewerState {
   perspectiveViewBackgroundColor = new TrackableRGB(vec3.fromValues(0, 0, 0));
   scaleBarOptions = new TrackableScaleBarOptions();
   contextMenu: ContextMenu;
+  statisticsDisplayState = new StatisticsDisplayState();
 
   layerSelectedValues =
       this.registerDisposer(new LayerSelectedValues(this.layerManager, this.mouseState));
@@ -227,12 +232,6 @@ export class Viewer extends RefCounted implements ViewerState {
   uiControlVisibility:
       {[key in keyof ViewerUIControlConfiguration]: WatchableValueInterface<boolean>} = <any>{};
 
-  // showHelpButtonEffective: WatchableValueInterface<boolean>;
-  // showEditStateButtonEffective: WatchableValueInterface<boolean>;
-  // showLayerPanelEffective: WatchableValueInterface<boolean>;
-  // showLocationEffective: WatchableValueInterface<boolean>;
-  // showAnnotationToolStatusEffective: WatchableValueInterface<boolean>;
-
   showLayerDialog: boolean;
   resetStateWhenEmpty: boolean;
 
@@ -246,7 +245,7 @@ export class Viewer extends RefCounted implements ViewerState {
     super();
 
     const {
-      dataContext = new DataManagementContext(display.gl),
+      dataContext = new DataManagementContext(display.gl, display),
       visibility = new WatchableVisibilityPriority(WatchableVisibilityPriority.VISIBLE),
       inputEventBindings = {
         global: new EventActionMap(),
@@ -281,7 +280,6 @@ export class Viewer extends RefCounted implements ViewerState {
     }
     this.registerDisposer(this.uiConfiguration.showPanelBorders.changed.add(() => {
       this.updateShowBorders();
-      this.display.onResize();
     }));
 
     this.showLayerDialog = showLayerDialog;
@@ -293,9 +291,6 @@ export class Viewer extends RefCounted implements ViewerState {
 
     this.registerDisposer(display.updateStarted.add(() => {
       this.onUpdateDisplay();
-    }));
-    this.registerDisposer(display.updateFinished.add(() => {
-      this.onUpdateDisplayFinished();
     }));
 
     this.showDefaultAnnotations.changed.add(() => {
@@ -376,6 +371,9 @@ export class Viewer extends RefCounted implements ViewerState {
     this.updateShowBorders();
 
     state.add('layout', this.layout);
+
+
+    state.add('statistics', this.statisticsDisplayState);
 
     this.registerActionListeners();
     this.registerEventActionBindings();
@@ -474,11 +472,30 @@ export class Viewer extends RefCounted implements ViewerState {
     layoutAndSidePanel.style.flexDirection = 'row';
     this.layout = this.registerDisposer(new RootLayoutContainer(this, '4panel'));
     layoutAndSidePanel.appendChild(this.layout.element);
-    layoutAndSidePanel.appendChild(
-        this.registerDisposer(new LayerInfoPanelContainer(this.selectedLayer.addRef())).element);
-    this.registerDisposer(this.selectedLayer.changed.add(() => this.display.onResize()));
+    const layerInfoPanel =
+        this.registerDisposer(new LayerInfoPanelContainer(this.selectedLayer.addRef()));
+    layoutAndSidePanel.appendChild(layerInfoPanel.element);
+    const self = this;
+    layerInfoPanel.registerDisposer(new DragResizablePanel(
+        layerInfoPanel.element, {
+          changed: self.selectedLayer.changed,
+          get value() {
+            return self.selectedLayer.visible;
+          },
+          set value(visible: boolean) {
+            self.selectedLayer.visible = visible;
+          }
+        },
+        this.selectedLayer.size, 'horizontal', 290));
+
     gridContainer.appendChild(layoutAndSidePanel);
-    this.display.onResize();
+
+    const statisticsPanel = this.registerDisposer(
+        new StatisticsPanel(this.chunkQueueManager, this.statisticsDisplayState));
+    gridContainer.appendChild(statisticsPanel.element);
+    statisticsPanel.registerDisposer(new DragResizablePanel(
+        statisticsPanel.element, this.statisticsDisplayState.visible,
+        this.statisticsDisplayState.size, 'vertical'));
 
     const updateVisibility = () => {
       const shouldBeVisible = this.visibility.visible;
@@ -562,6 +579,7 @@ export class Viewer extends RefCounted implements ViewerState {
     this.bindAction('toggle-scale-bar', () => this.showScaleBar.toggle());
     this.bindAction('toggle-default-annotations', () => this.showDefaultAnnotations.toggle());
     this.bindAction('toggle-show-slices', () => this.showPerspectiveSliceViews.toggle());
+    this.bindAction('toggle-show-statistics', () => this.showStatistics());
   }
 
   showHelpDialog() {
@@ -577,6 +595,13 @@ export class Viewer extends RefCounted implements ViewerState {
     new StateEditorDialog(this);
   }
 
+  showStatistics(value: boolean|undefined = undefined) {
+    if (value === undefined) {
+      value = !this.statisticsDisplayState.visible.value;
+    }
+    this.statisticsDisplayState.visible.value = value;
+  }
+
   get gl() {
     return this.display.gl;
   }
@@ -587,12 +612,6 @@ export class Viewer extends RefCounted implements ViewerState {
     }
   }
 
-  onUpdateDisplayFinished() {
-    if (this.visible) {
-      this.mouseState.updateIfStale();
-    }
-  }
-
   private handleNavigationStateChanged() {
     if (this.visible) {
       let {chunkQueueManager} = this.dataContext;
@@ -600,6 +619,5 @@ export class Viewer extends RefCounted implements ViewerState {
         chunkQueueManager.chunkUpdateDeadline = Date.now() + 10;
       }
     }
-    this.mouseState.stale = true;
   }
 }
