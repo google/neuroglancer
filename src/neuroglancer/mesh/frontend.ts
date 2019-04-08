@@ -238,7 +238,7 @@ export class MeshLayer extends PerspectiveViewRenderLayer {
     const {renderScaleHistogram} = this.displayState;
     const fragmentChunks = this.source.fragmentSource.chunks;
 
-    forEachVisibleSegment(displayState, (rootObjectId, objectId) => {
+    forEachVisibleSegment(displayState, (objectId, rootObjectId) => {
       const key = getObjectKey(objectId);
       const manifestChunk = manifestChunks.get(key);
       if (manifestChunk === undefined) return;
