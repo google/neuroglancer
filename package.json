@@ -8,7 +8,7 @@
     "url": "git+https://github.com/google/neuroglancer.git"
   },
   "engines": {
-    "node": ">=5.9.0"
+    "node": ">=8"
   },
   "scripts": {
     "generate-code": "node ./config/generate_code.js",
