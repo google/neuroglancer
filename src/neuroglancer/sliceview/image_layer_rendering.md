@@ -29,16 +29,16 @@ float getDataValue(int channelIndex = 0);
 If no `channelIndex` is specified, the value for the first channel is returned.  (The default value of 0 is shown in the above declarations for exposition only.  As GLSL does not support default values for function parameters, the default value is actually implemented as a separate function overload.)  The return type depends on the data type of the volume.  Note that only `float` is a builtin GLSL type.  The remaining types are defined as simple structs in order to avoid ambiguity regarding the nature of the value:
 ```glsl
 struct uint8_t {
-  float value;
+  highp uint value;
 };
 struct uint16_t {
-  vec2 value;
+  highp uint value;
 };
 struct uint32_t {
-  vec4 value;
+  highp uint value;
 };
 struct uint64_t {
-  vec4 low, high;
+  highp uvec2 value;
 };
 ```
 For all of these struct types, the contained float values each specify a single byte as a normalized value in [0, 1].  To obtain the raw byte value, you must multiply by 255.
@@ -46,15 +46,17 @@ For all of these struct types, the contained float values each specify a single 
 To obtain the raw value as a float, call the `toRaw` function:
 ```glsl
 float toRaw(float x) { return x; }
-float toRaw(uint8_t x) { return x.value * 255.0; }
-float toRaw(uint16_t x) { return x.value.x * 255.0 + x.value.y * 65280.0; }
+highp uint toRaw(uint8_t x) { return x.value; }
+highp uint toRaw(uint16_t x) { return x.value; }
+highp uint toRaw(uint32_t x) { return x.value; }
 ```
 
 To obtain a normalized value that maps the full range of integer types to [0,1], call the `toNormalized` function:
 ```glsl
-float toNormalized(float x) { return x; }
-float toNormalized(uint8_t x) { return x.value; }
-float toNormalized(uint16_t x) { return toRaw(x) / 65535.0; }
+highp float toNormalized(float x) { return x; }
+highp float toNormalized(uint8_t x) { return float(x.value) / 255.0; }
+highp float toNormalized(uint16_t x) { return float(x.value) / 65535.0; }
+highp float toNormalized(uint32_t x) { return float(x.value) / 4294967295.0; }
 ```
 
 ### Emitting pixel values

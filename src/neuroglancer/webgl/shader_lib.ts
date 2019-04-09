@@ -131,6 +131,8 @@ export const glsl_uint32 = [
 struct uint32_t {
   highp uint value;
 };
+highp float toNormalized(uint32_t x) { return float(x.value) / 4294967295.0; }
+highp uint toRaw(uint32_t x) { return x.value; }
 uint64_t toUint64(uint32_t x) {
   uint64_t result;
   result.value[0] = x.value;
