@@ -41,6 +41,7 @@ export function getDefaultGlobalBindings() {
     map.set('space', 'toggle-layout');
     map.set('shift+space', 'toggle-layout-alternative');
     map.set('backslash', 'toggle-show-statistics');
+    map.set('escape', 'escape-tool');
     defaultGlobalBindings = map;
   }
   return defaultGlobalBindings;
@@ -71,7 +72,6 @@ export function getDefaultRenderedDataPanelBindings() {
           'at:wheel': {action: 'z+1-via-wheel', preventDefault: true},
           'at:shift+wheel': {action: 'z+10-via-wheel', preventDefault: true},
           'at:dblclick0': 'select',
-          'at:control+mousedown0': 'annotate',
           'at:mousedown2': 'move-to-mouse-position',
           'at:control+mousedown2': 'select-annotation',
           'at:alt+mousedown0': 'move-annotation',
@@ -93,7 +93,8 @@ export function getDefaultPerspectivePanelBindings() {
   if (defaultPerspectivePanelBindings === undefined) {
     defaultPerspectivePanelBindings = EventActionMap.fromObject(
         {
-          'at:mousedown0': {action: 'rotate-via-mouse-drag', stopPropagation: true},
+          'at:mousedown0': {action: 'rotate-via-mouse-drag-or-annotate', stopPropagation: true},
+          'at:mousedown1': {action: 'rotate-via-mouse-drag', stopPropagation: true},
           'at:shift+mousedown0': {action: 'translate-via-mouse-drag', stopPropagation: true},
           'at:touchtranslate1': 'rotate-out-of-plane-via-touchtranslate',
         },
@@ -107,7 +108,8 @@ export function getDefaultSliceViewPanelBindings() {
   if (defaultSliceViewPanelBindings === undefined) {
     defaultSliceViewPanelBindings = EventActionMap.fromObject(
         {
-          'at:mousedown0': {action: 'translate-via-mouse-drag', stopPropagation: true},
+          'at:mousedown0': {action: 'translate-via-mouse-drag-or-annotate', stopPropagation: true},
+          'at:mousedown1': {action: 'translate-via-mouse-drag', stopPropagation: true},
           'at:shift+mousedown0': {action: 'rotate-via-mouse-drag', stopPropagation: true},
           'at:touchtranslate1': 'translate-z-via-touchtranslate',
         },

@@ -28,7 +28,6 @@ import {RootLayoutContainer} from 'neuroglancer/layer_groups_layout';
 import {TopLevelLayerListSpecification} from 'neuroglancer/layer_specification';
 import {NavigationState, Pose} from 'neuroglancer/navigation_state';
 import {overlaysOpen} from 'neuroglancer/overlay';
-import {StatusMessage} from 'neuroglancer/status';
 import {ElementVisibilityFromTrackableBoolean, TrackableBoolean, TrackableBooleanCheckbox} from 'neuroglancer/trackable_boolean';
 import {makeDerivedWatchableValue, TrackableValue, WatchableValueInterface} from 'neuroglancer/trackable_value';
 import {ContextMenu} from 'neuroglancer/ui/context_menu';
@@ -540,6 +539,14 @@ export class Viewer extends RefCounted implements ViewerState {
 
     this.bindAction('help', () => this.showHelpDialog());
 
+    this.bindAction('escape-tool', () => {
+      for (const managedLayer of this.layerManager.managedLayers) {
+        if (managedLayer.layer) {
+          managedLayer.layer.tool.value = undefined;
+        }
+      }
+    });
+
     for (let i = 1; i <= 9; ++i) {
       this.bindAction(`toggle-layer-${i}`, () => {
         const layerIndex = i - 1;
@@ -559,21 +566,6 @@ export class Viewer extends RefCounted implements ViewerState {
         }
       });
     }
-
-    this.bindAction('annotate', () => {
-      const selectedLayer = this.selectedLayer.layer;
-      if (selectedLayer === undefined) {
-        StatusMessage.showTemporaryMessage('The annotate command requires a layer to be selected.');
-        return;
-      }
-      const userLayer = selectedLayer.layer;
-      if (userLayer === null || userLayer.tool.value === undefined) {
-        StatusMessage.showTemporaryMessage(`The selected layer (${
-            JSON.stringify(selectedLayer.name)}) does not have an active annotation tool.`);
-        return;
-      }
-      userLayer.tool.value.trigger(this.mouseState);
-    });
 
     this.bindAction('toggle-axis-lines', () => this.showAxisLines.toggle());
     this.bindAction('toggle-scale-bar', () => this.showScaleBar.toggle());

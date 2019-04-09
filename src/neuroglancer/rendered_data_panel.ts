@@ -32,7 +32,7 @@ import {MouseEventBinder} from 'neuroglancer/util/mouse_bindings';
 import {startRelativeMouseDrag} from 'neuroglancer/util/mouse_drag';
 import {TouchEventBinder, TouchPinchInfo, TouchTranslateInfo} from 'neuroglancer/util/touch_bindings';
 import {getWheelZoomAmount} from 'neuroglancer/util/wheel_zoom';
-import {ViewerState} from 'neuroglancer/viewer_state';
+import {maybeTriggerActiveTool, ViewerState} from 'neuroglancer/viewer_state';
 
 const tempVec3 = vec3.create();
 
@@ -395,14 +395,23 @@ export abstract class RenderedDataPanel extends RenderedPanel {
       this.zoomByMouse(getWheelZoomAmount(e));
     });
 
-    registerActionListener(element, 'translate-via-mouse-drag', (e: ActionEvent<MouseEvent>) => {
+    const translateLambda = (e: ActionEvent<MouseEvent>) => {
       const {mouseState} = this.viewer;
       if (mouseState.updateUnconditionally()) {
         startRelativeMouseDrag(e.detail, (_event, deltaX, deltaY) => {
           this.translateByViewportPixels(deltaX, deltaY);
         });
       }
-    });
+    };
+
+    registerActionListener(element, 'translate-via-mouse-drag', translateLambda);
+    registerActionListener(
+        element, 'translate-via-mouse-drag-or-annotate', (e: ActionEvent<MouseEvent>) => {
+          if (maybeTriggerActiveTool(this.viewer)) {
+            return;
+          }
+          translateLambda(e);
+        });
 
     registerActionListener(
         element, 'translate-in-plane-via-touchtranslate', (e: ActionEvent<TouchTranslateInfo>) => {

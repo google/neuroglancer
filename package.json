@@ -30,6 +30,7 @@
     "benchmark": "^2.1.4",
     "clang-format": "^1.2.4",
     "copy-webpack-plugin": "^5.0.2",
+    "file-loader": "^3.0.1",
     "gulp": "^4.0.0",
     "gulp-clang-format": "^1.0.27",
     "gulp-tslint": "^8.1.4",

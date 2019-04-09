@@ -47,6 +47,9 @@ import {StackView, Tab} from 'neuroglancer/widget/tab_view';
 import {makeTextIconButton} from 'neuroglancer/widget/text_icon_button';
 import {Uint64EntryWidget} from 'neuroglancer/widget/uint64_entry_widget';
 
+const IMAGE_CROSSHAIRS = require('neuroglancer/static/crosshairs.png');
+const ACTIVE_BACKGROUND_COLOR = '#505050';
+
 type AnnotationIdAndPart = {
   id: string,
   partIndex?: number
@@ -449,6 +452,33 @@ export class AnnotationLayerView extends Tab {
         this.layer.tool.value = new PlaceSphereTool(this.layer, {});
       });
       toolbox.appendChild(ellipsoidButton);
+
+      const buttonMap: Map<AnnotationType, HTMLButtonElement> = new Map([
+        [AnnotationType.POINT, pointButton],
+        [AnnotationType.LINE, lineButton],
+        [AnnotationType.AXIS_ALIGNED_BOUNDING_BOX, boundingBoxButton],
+        [AnnotationType.ELLIPSOID, ellipsoidButton],
+      ]);
+
+      this.layer.tool.changed.add(() => {
+        for (const button of buttonMap.values()) {
+          button.style.background = '';
+        }
+        if (this.layer.tool.value === undefined) {
+          for (const element of document.getElementsByClassName('neuroglancer-panel')) {
+            (<HTMLElement>element).style.cursor = '';
+          }
+          return;
+        }
+
+        const toolType = <AnnotationType>this.layer.tool.value.toolType;
+        const activeButton = buttonMap.get(toolType)!;
+        activeButton.style.background = ACTIVE_BACKGROUND_COLOR;
+
+        for (const element of document.getElementsByClassName('neuroglancer-panel')) {
+          (<HTMLElement>element).style.cursor = `url('./${IMAGE_CROSSHAIRS}') 15 15, auto`;
+        }
+      });
     }
     this.element.appendChild(toolbox);
 
@@ -846,6 +876,8 @@ export class PlacePointTool extends PlaceAnnotationTool {
   toJSON() {
     return ANNOTATE_POINT_TOOL_ID;
   }
+
+  toolType = AnnotationType.POINT;
 }
 
 function getMousePositionInAnnotationCoordinates(
@@ -950,6 +982,8 @@ export class PlaceBoundingBoxTool extends PlaceTwoCornerAnnotationTool {
   toJSON() {
     return ANNOTATE_BOUNDING_BOX_TOOL_ID;
   }
+
+  toolType = AnnotationType.AXIS_ALIGNED_BOUNDING_BOX;
 }
 PlaceBoundingBoxTool.prototype.annotationType = AnnotationType.AXIS_ALIGNED_BOUNDING_BOX;
 
@@ -958,7 +992,8 @@ export class PlaceLineTool extends PlaceTwoCornerAnnotationTool {
     return `annotate line`;
   }
 
-  getInitialAnnotation(mouseState: MouseSelectionState, annotationLayer: AnnotationLayerState): Annotation {
+  getInitialAnnotation(mouseState: MouseSelectionState, annotationLayer: AnnotationLayerState):
+      Annotation {
     const result = super.getInitialAnnotation(mouseState, annotationLayer);
     result.segments = getSelectedAssocatedSegment(annotationLayer);
     return result;
@@ -983,6 +1018,8 @@ export class PlaceLineTool extends PlaceTwoCornerAnnotationTool {
   toJSON() {
     return ANNOTATE_LINE_TOOL_ID;
   }
+
+  toolType = AnnotationType.LINE;
 }
 PlaceLineTool.prototype.annotationType = AnnotationType.LINE;
 
@@ -1032,6 +1069,8 @@ class PlaceSphereTool extends TwoStepAnnotationTool {
   toJSON() {
     return ANNOTATE_ELLIPSOID_TOOL_ID;
   }
+
+  toolType = AnnotationType.ELLIPSOID;
 }
 
 registerTool(
@@ -1045,7 +1084,7 @@ registerTool(
     (layer, options) => new PlaceLineTool(<UserLayerWithAnnotations>layer, options));
 registerTool(
     ANNOTATE_ELLIPSOID_TOOL_ID,
-  (layer, options) => new PlaceSphereTool(<UserLayerWithAnnotations>layer, options));
+    (layer, options) => new PlaceSphereTool(<UserLayerWithAnnotations>layer, options));
 
 export interface UserLayerWithAnnotations extends UserLayer {
   annotationLayerState: WatchableRefCounted<AnnotationLayerState>;
