@@ -22,7 +22,7 @@ import {Borrowed, RefCounted} from 'neuroglancer/util/disposable';
 import {mat4, vec3} from 'neuroglancer/util/geom';
 import {parseArray, verify3dScale, verify3dVec, verifyEnumString, verifyObject, verifyObjectProperty, verifyOptionalString, verifyString} from 'neuroglancer/util/json';
 import {getRandomHexString} from 'neuroglancer/util/random';
-import {NullarySignal} from 'neuroglancer/util/signal';
+import {Signal, NullarySignal} from 'neuroglancer/util/signal';
 import {Uint64} from 'neuroglancer/util/uint64';
 export type AnnotationId = string;
 
@@ -245,10 +245,20 @@ export function restoreAnnotation(obj: any, allowMissingId = false): Annotation 
   return result;
 }
 
-export class AnnotationSource extends RefCounted {
+export interface AnnotationSourceSignals {
+  changed:NullarySignal;
+  childAdded:Signal<(annotation: Annotation) => void>;
+  childUpdated:Signal<(annotation: Annotation) => void>;
+  childDeleted:Signal<(annotationId: string) => void>;
+}
+
+export class AnnotationSource extends RefCounted implements AnnotationSourceSignals {
   private annotationMap = new Map<AnnotationId, Annotation>();
   changed = new NullarySignal();
   readonly = false;
+  childAdded = new Signal<(annotation: Annotation) => void>();
+  childUpdated = new Signal<(annotation: Annotation) => void>();
+  childDeleted = new Signal<(annotationId: string) => void>();
 
   private pending = new Set<AnnotationId>();
 
@@ -264,6 +274,7 @@ export class AnnotationSource extends RefCounted {
     }
     this.annotationMap.set(annotation.id, annotation);
     this.changed.dispatch();
+    this.childAdded.dispatch(annotation);
     if (!commit) {
       this.pending.add(annotation.id);
     }
@@ -283,6 +294,7 @@ export class AnnotationSource extends RefCounted {
     this.annotationMap.set(annotation.id, annotation);
     reference.changed.dispatch();
     this.changed.dispatch();
+    this.childUpdated.dispatch(annotation);
   }
 
   [Symbol.iterator]() {
@@ -302,6 +314,7 @@ export class AnnotationSource extends RefCounted {
     this.pending.delete(reference.id);
     reference.changed.dispatch();
     this.changed.dispatch();
+    this.childDeleted.dispatch(reference.id);
   }
 
   getReference(id: AnnotationId): AnnotationReference {
