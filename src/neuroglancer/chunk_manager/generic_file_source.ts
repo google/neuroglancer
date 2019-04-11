@@ -107,7 +107,7 @@ export class GenericFileSource<Data> extends ChunkSourceBase {
   getData(key: string, getPriority: PriorityGetter, cancellationToken: CancellationToken) {
     let chunk = this.chunks.get(key);
     if (chunk === undefined) {
-      chunk = this.getNewChunk_(GenericFileChunk);
+      chunk = this.getNewChunk_<GenericFileChunk<Data>>(GenericFileChunk);
       chunk.initialize(key);
       this.addChunk(chunk);
     }

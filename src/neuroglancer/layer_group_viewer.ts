@@ -57,6 +57,7 @@ export interface LayerGroupViewerState {
   selectedLayer: SelectedLayerState;
   visibleLayerRoles: WatchableSet<RenderLayerRole>;
   crossSectionBackgroundColor: TrackableRGB;
+  perspectiveViewBackgroundColor: TrackableRGB;
   sliceViewPrefetchingEnabled: TrackableBoolean;
 }
 
@@ -68,7 +69,7 @@ export interface LayerGroupViewerOptions {
 export const viewerDragType = 'neuroglancer-layer-group-viewer';
 
 export function hasViewerDrag(event: DragEvent) {
-  return event.dataTransfer.types.indexOf(viewerDragType) !== -1;
+  return event.dataTransfer!.types.indexOf(viewerDragType) !== -1;
 }
 
 let dragSource: {viewer: LayerGroupViewer, disposer: () => void}|undefined;
@@ -228,6 +229,9 @@ export class LayerGroupViewer extends RefCounted {
   get crossSectionBackgroundColor() {
     return this.viewerState.crossSectionBackgroundColor;
   }
+  get perspectiveViewBackgroundColor() {
+    return this.viewerState.perspectiveViewBackgroundColor;
+  }
   get scaleBarOptions() {
     return this.viewerState.scaleBarOptions;
   }
@@ -348,7 +352,7 @@ export class LayerGroupViewer extends RefCounted {
         this.registerDisposer(disposer);
         const dragData = this.toJSON();
         delete dragData['layers'];
-        event.dataTransfer.setData(viewerDragType, JSON.stringify(dragData));
+        event.dataTransfer!.setData(viewerDragType, JSON.stringify(dragData));
       });
       this.registerEventListener(layerPanel.element, 'dragend', (event: DragEvent) => {
         endLayerDrag(event);

@@ -22,9 +22,7 @@ import {RefCounted} from 'neuroglancer/util/disposable';
 import {mat4, vec3} from 'neuroglancer/util/geom';
 import {Buffer} from 'neuroglancer/webgl/buffer';
 import {GL} from 'neuroglancer/webgl/context';
-import {countingBufferShaderModule, disableCountingBuffer, getCountingBuffer} from 'neuroglancer/webgl/index_emulation';
 import {ShaderBuilder, ShaderProgram} from 'neuroglancer/webgl/shader';
-import {glsl_addUint32, glsl_equalUint32, glsl_multiplyUint32, setVec4FromUint32} from 'neuroglancer/webgl/shader_lib';
 
 export interface AnnotationRenderContext {
   buffer: Buffer;
@@ -40,8 +38,6 @@ export interface AnnotationRenderContext {
 const tempPickID = new Float32Array(4);
 
 export abstract class AnnotationRenderHelper extends RefCounted {
-  private countingBuffer = this.registerDisposer(getCountingBuffer(this.gl));
-
   pickIdsPerInstance: number;
   targetIsSliceView: boolean;
 
@@ -51,32 +47,30 @@ export abstract class AnnotationRenderHelper extends RefCounted {
 
   setPartIndex(builder: ShaderBuilder, ...partIndexExpressions: string[]) {
     let s = `
-void setPartIndex(${partIndexExpressions.map((_, i) => `float partIndex${i}`).join()}) {
-  uint32_t pickID; pickID.value = uPickID;
-  uint32_t pickBaseOffset = getPickBaseOffset();
+void setPartIndex(${partIndexExpressions.map((_, i) => `highp uint partIndex${i}`).join()}) {
+  highp uint pickID = uPickID;
+  highp uint pickBaseOffset = getPickBaseOffset();
 ${
         partIndexExpressions
-            .map((_, i) => `uint32_t pickOffset${i} = add(pickBaseOffset, partIndex${i});`)
+            .map((_, i) => `highp uint pickOffset${i} = pickBaseOffset + partIndex${i};`)
             .join('\n')}
 `;
     if (partIndexExpressions.length === 0) {
       s += `
-  uint32_t pickOffset0 = pickBaseOffset;
+  highp uint pickOffset0 = pickBaseOffset;
 `;
     }
     s += `
-  vPickID = add(pickID, pickOffset0).value;
-  uint32_t selectedIndex; selectedIndex.value = uSelectedIndex;
-if (equals(selectedIndex, pickBaseOffset)${
-        partIndexExpressions.map((_, i) => ` || equals(selectedIndex, pickOffset${i})`).join('')}) {
+  vPickID = pickID + pickOffset0;
+  highp uint selectedIndex = uSelectedIndex;
+if (selectedIndex == pickBaseOffset${
+        partIndexExpressions.map((_, i) => ` || selectedIndex == pickOffset${i}`).join('')}) {
     vColor = uColorSelected;
   } else {
     vColor = uColor;
   }
 }
 `;
-    builder.addVertexCode(glsl_equalUint32);
-    builder.addVertexCode(glsl_addUint32);
     builder.addVertexCode(s);
     return `setPartIndex(${partIndexExpressions.join()})`;
   }
@@ -92,26 +86,16 @@ if (equals(selectedIndex, pickBaseOffset)${
   defineShader(builder: ShaderBuilder) {
     builder.addUniform('highp vec4', 'uColor');
     builder.addUniform('highp vec4', 'uColorSelected');
-    builder.addUniform('highp vec4', 'uSelectedIndex');
+    builder.addUniform('highp uint', 'uSelectedIndex');
     builder.addVarying('highp vec4', 'vColor');
     // Transform from camera to clip coordinates.
     builder.addUniform('highp mat4', 'uProjection');
-    builder.addUniform('highp vec4', 'uPickID');
-    builder.addVarying('highp vec4', 'vPickID');
-    builder.require(countingBufferShaderModule);
+    builder.addUniform('highp uint', 'uPickID');
+    builder.addVarying('highp uint', 'vPickID', 'flat');
 
-    if (this.pickIdsPerInstance === 1) {
-      builder.addVertexCode(`
-uint32_t getPickBaseOffset() { return getPrimitiveIndex(); }
+    builder.addVertexCode(`
+highp uint getPickBaseOffset() { return uint(gl_InstanceID) * ${this.pickIdsPerInstance}u; }
 `);
-    } else {
-      builder.addVertexCode(glsl_multiplyUint32);
-      builder.addVertexCode(`
-uint32_t getPickBaseOffset() {
-  return multiply(getPrimitiveIndex(), ${this.pickIdsPerInstance.toFixed(1)});
-}
-`);
-    }
 
     builder.addFragmentCode(`
 void emitAnnotation(vec4 color) {
@@ -125,11 +109,9 @@ void emitAnnotation(vec4 color) {
     const {gl} = this;
     const {renderContext} = context;
     const {annotationLayer} = context;
-    this.countingBuffer.ensure(context.count).bind(shader, 1);
-
     gl.uniformMatrix4fv(shader.uniform('uProjection'), false, context.projectionMatrix);
     if (renderContext.emitPickID) {
-      gl.uniform4fv(shader.uniform('uPickID'), setVec4FromUint32(tempPickID, context.basePickId));
+      gl.uniform1ui(shader.uniform('uPickID'), context.basePickId);
     }
     if (renderContext.emitColor) {
       const colorVec4 = tempPickID;
@@ -144,12 +126,10 @@ void emitAnnotation(vec4 color) {
         colorVec4[i] = saturationAmount + (1 - saturationAmount) * colorVec4[i];
       }
       gl.uniform4fv(shader.uniform('uColorSelected'), colorVec4);
-      gl.uniform4fv(
-          shader.uniform('uSelectedIndex'), setVec4FromUint32(tempPickID, context.selectedIndex));
+      gl.uniform1ui(shader.uniform('uSelectedIndex'), context.selectedIndex);
     }
 
     callback();
-    disableCountingBuffer(this.gl, shader, /*instanced=*/true);
   }
 
   abstract draw(context: AnnotationRenderContext): void;

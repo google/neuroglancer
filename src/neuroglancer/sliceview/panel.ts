@@ -16,16 +16,17 @@
 
 import {AxesLineHelper} from 'neuroglancer/axes_lines';
 import {DisplayContext} from 'neuroglancer/display_context';
-import {makeRenderedPanelVisibleLayerTracker, MouseSelectionState, VisibilityTrackedRenderLayer} from 'neuroglancer/layer';
+import {makeRenderedPanelVisibleLayerTracker, VisibilityTrackedRenderLayer} from 'neuroglancer/layer';
 import {PickIDManager} from 'neuroglancer/object_picking';
-import {RenderedDataPanel, RenderedDataViewerState} from 'neuroglancer/rendered_data_panel';
+import {FramePickingData, RenderedDataPanel, RenderedDataViewerState} from 'neuroglancer/rendered_data_panel';
 import {SliceView, SliceViewRenderHelper} from 'neuroglancer/sliceview/frontend';
 import {TrackableBoolean} from 'neuroglancer/trackable_boolean';
 import {TrackableRGB} from 'neuroglancer/util/color';
 import {ActionEvent, registerActionListener} from 'neuroglancer/util/event_action_map';
 import {identityMat4, mat4, vec3, vec4} from 'neuroglancer/util/geom';
 import {startRelativeMouseDrag} from 'neuroglancer/util/mouse_drag';
-import {FramebufferConfiguration, makeTextureBuffers, OffscreenCopyHelper} from 'neuroglancer/webgl/offscreen';
+import {TouchRotateInfo} from 'neuroglancer/util/touch_bindings';
+import {FramebufferConfiguration, OffscreenCopyHelper, TextureBuffer} from 'neuroglancer/webgl/offscreen';
 import {ShaderBuilder, ShaderModule} from 'neuroglancer/webgl/shader';
 import {ScaleBarTexture, TrackableScaleBarOptions} from 'neuroglancer/widget/scale_bar';
 
@@ -42,19 +43,19 @@ export enum OffscreenTextures {
 }
 
 function sliceViewPanelEmitColor(builder: ShaderBuilder) {
-  builder.addOutputBuffer('vec4', 'v4f_fragColor', null);
+  builder.addOutputBuffer('vec4', 'out_fragColor', null);
   builder.addFragmentCode(`
-void emit(vec4 color, vec4 pickId) {
-  v4f_fragColor = color;
+void emit(vec4 color, highp uint pickId) {
+  out_fragColor = color;
 }
 `);
 }
 
 function sliceViewPanelEmitPickID(builder: ShaderBuilder) {
-  builder.addOutputBuffer('vec4', 'v4f_fragColor', null);
+  builder.addOutputBuffer('highp float', 'out_pickId', null);
   builder.addFragmentCode(`
-void emit(vec4 color, vec4 pickId) {
-  v4f_fragColor = pickId;
+void emit(vec4 color, highp uint pickId) {
+  out_pickId = float(pickId);
 }
 `);
 }
@@ -112,8 +113,16 @@ export class SliceViewPanel extends RenderedDataPanel {
   private visibleLayerTracker = makeRenderedPanelVisibleLayerTracker(
       this.viewer.layerManager, SliceViewPanelRenderLayer, this.viewer.visibleLayerRoles, this);
 
-  private offscreenFramebuffer = this.registerDisposer(new FramebufferConfiguration(
-      this.gl, {colorBuffers: makeTextureBuffers(this.gl, OffscreenTextures.NUM_TEXTURES)}));
+  private offscreenFramebuffer = this.registerDisposer(new FramebufferConfiguration(this.gl, {
+    colorBuffers: [
+      new TextureBuffer(
+          this.gl, WebGL2RenderingContext.RGBA8, WebGL2RenderingContext.RGBA,
+          WebGL2RenderingContext.UNSIGNED_BYTE),
+      new TextureBuffer(
+          this.gl, WebGL2RenderingContext.R32F, WebGL2RenderingContext.RED,
+          WebGL2RenderingContext.FLOAT),
+    ]
+  }));
 
   private offscreenCopyHelper = this.registerDisposer(OffscreenCopyHelper.get(this.gl));
   private scaleBarCopyHelper = this.registerDisposer(OffscreenCopyHelper.get(this.gl));
@@ -129,19 +138,6 @@ export class SliceViewPanel extends RenderedDataPanel {
       viewer: SliceViewerState) {
     super(context, element, viewer);
 
-    registerActionListener(element, 'translate-via-mouse-drag', (e: ActionEvent<MouseEvent>) => {
-      const {mouseState} = this.viewer;
-      if (mouseState.updateUnconditionally()) {
-        startRelativeMouseDrag(e.detail, (_event, deltaX, deltaY) => {
-          const {position} = this.viewer.navigationState;
-          const pos = position.spatialCoordinates;
-          vec3.set(pos, deltaX, deltaY, 0);
-          vec3.transformMat4(pos, pos, this.sliceView.viewportToData);
-          position.changed.dispatch();
-        });
-      }
-    });
-
     registerActionListener(element, 'rotate-via-mouse-drag', (e: ActionEvent<MouseEvent>) => {
       const {mouseState} = this.viewer;
       if (mouseState.updateUnconditionally()) {
@@ -149,12 +145,24 @@ export class SliceViewPanel extends RenderedDataPanel {
         startRelativeMouseDrag(e.detail, (_event, deltaX, deltaY) => {
           let {viewportAxes} = this.sliceView;
           this.viewer.navigationState.pose.rotateAbsolute(
-              viewportAxes[1], deltaX / 4.0 * Math.PI / 180.0, initialPosition);
+              viewportAxes[1], -deltaX / 4.0 * Math.PI / 180.0, initialPosition);
           this.viewer.navigationState.pose.rotateAbsolute(
-              viewportAxes[0], deltaY / 4.0 * Math.PI / 180.0, initialPosition);
+              viewportAxes[0], -deltaY / 4.0 * Math.PI / 180.0, initialPosition);
         });
       }
     });
+
+    registerActionListener(
+        element, 'rotate-in-plane-via-touchrotate', (e: ActionEvent<TouchRotateInfo>) => {
+          const {detail} = e;
+          const {mouseState} = this.viewer;
+          this.handleMouseMove(detail.centerX, detail.centerY);
+          if (mouseState.updateUnconditionally()) {
+            const {viewportAxes} = this.sliceView;
+            this.navigationState.pose.rotateAbsolute(
+                viewportAxes[2], detail.angle - detail.prevAngle, mouseState.position);
+          }
+        });
 
     this.registerDisposer(sliceView);
     this.registerDisposer(
@@ -183,9 +191,17 @@ export class SliceViewPanel extends RenderedDataPanel {
     }));
   }
 
+  translateByViewportPixels(deltaX: number, deltaY: number): void {
+    const {position} = this.viewer.navigationState;
+    const pos = position.spatialCoordinates;
+    vec3.set(pos, -deltaX, -deltaY, 0);
+    vec3.transformMat4(pos, pos, this.sliceView.viewportToData);
+    position.changed.dispatch();
+  }
+
   translateDataPointByViewportPixels(out: vec3, orig: vec3, deltaX: number, deltaY: number): vec3 {
     vec3.transformMat4(out, orig, this.sliceView.dataToViewport);
-    vec3.set(out, out[0] - deltaX, out[1] - deltaY, out[2]);
+    vec3.set(out, out[0] + deltaX, out[1] + deltaY, out[2]);
     vec3.transformMat4(out, out, this.sliceView.viewportToData);
     return out;
   }
@@ -208,17 +224,17 @@ export class SliceViewPanel extends RenderedDataPanel {
     return true;
   }
 
-  draw() {
+  drawWithPicking(pickingData: FramePickingData): boolean {
     let {sliceView} = this;
-    this.onResize();
+    sliceView.setViewportSize(this.width, this.height);
     sliceView.updateRendering();
     if (!sliceView.hasValidViewport) {
-      return;
+      return false;
     }
+    mat4.copy(pickingData.invTransform, sliceView.viewportToData);
+    const {gl} = this;
 
-    let {gl} = this;
-
-    let {width, height, dataToDevice} = sliceView;
+    const {width, height, dataToDevice} = sliceView;
     this.offscreenFramebuffer.bind(width, height);
     gl.disable(WebGL2RenderingContext.SCISSOR_TEST);
     this.gl.clearColor(0.0, 0.0, 0.0, 0.0);
@@ -319,34 +335,30 @@ export class SliceViewPanel extends RenderedDataPanel {
     this.setGLViewport();
     this.offscreenCopyHelper.draw(
         this.offscreenFramebuffer.colorBuffers[OffscreenTextures.COLOR].texture);
-  }
-
-  onResize() {
-    this.sliceView.setViewportSizeDebounced(this.element.clientWidth, this.element.clientHeight);
-  }
-
-  updateMouseState(mouseState: MouseSelectionState) {
-    mouseState.pickedRenderLayer = null;
-    let sliceView = this.sliceView;
-    if (!sliceView.hasValidViewport) {
-      return false;
-    }
-    let {width, height} = sliceView;
-    let {offscreenFramebuffer} = this;
-    if (!offscreenFramebuffer.hasSize(width, height)) {
-      return false;
-    }
-    let out = mouseState.position;
-    let glWindowX = this.mouseX;
-    let y = this.mouseY;
-    vec3.set(out, glWindowX - width / 2, y - height / 2, 0);
-    vec3.transformMat4(out, out, sliceView.viewportToData);
-
-    let glWindowY = height - y;
-    this.pickIDs.setMouseState(
-        mouseState,
-        offscreenFramebuffer.readPixelAsUint32(OffscreenTextures.PICK, glWindowX, glWindowY));
     return true;
+  }
+
+  panelSizeChanged() {
+    this.sliceView.setViewportSizeDebounced(this.width, this.height);
+  }
+
+  issuePickRequest(glWindowX: number, glWindowY: number) {
+    const {offscreenFramebuffer} = this;
+    offscreenFramebuffer.readPixelsFloat32IntoBuffer(
+        OffscreenTextures.PICK, glWindowX, glWindowY, 1, 1, 0);
+  }
+
+  completePickRequest(
+      glWindowX: number, glWindowY: number, data: Float32Array, pickingData: FramePickingData) {
+    const {mouseState} = this.viewer;
+    mouseState.pickedRenderLayer = null;
+    const out = mouseState.position;
+    const {viewportWidth, viewportHeight} = pickingData;
+    const y = pickingData.viewportHeight - glWindowY;
+    vec3.set(out, glWindowX - viewportWidth / 2, y - viewportHeight / 2, 0);
+    vec3.transformMat4(out, out, pickingData.invTransform);
+    this.pickIDs.setMouseState(mouseState, data[0]);
+    mouseState.setActive(true);
   }
 
   /**

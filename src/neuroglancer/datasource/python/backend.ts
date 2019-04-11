@@ -16,7 +16,7 @@
 
 import {WithParameters} from 'neuroglancer/chunk_manager/backend';
 import {MeshSourceParameters, SkeletonSourceParameters, VolumeChunkEncoding, VolumeChunkSourceParameters} from 'neuroglancer/datasource/python/base';
-import {decodeTriangleVertexPositionsAndIndices, FragmentChunk, ManifestChunk, MeshSource} from 'neuroglancer/mesh/backend';
+import { decodeTriangleVertexPositionsAndIndices, FragmentChunk, ManifestChunk, MeshSource, assignMeshFragmentData} from 'neuroglancer/mesh/backend';
 import {decodeSkeletonVertexPositionsAndIndices, SkeletonChunk, SkeletonSource} from 'neuroglancer/skeleton/backend';
 import {VertexAttributeInfo} from 'neuroglancer/skeleton/base';
 import {ChunkDecoder} from 'neuroglancer/sliceview/backend_chunk_decoders';
@@ -60,8 +60,10 @@ chunkDecoders.set(VolumeChunkEncoding.RAW, decodeRawChunk);
 export function decodeFragmentChunk(chunk: FragmentChunk, response: ArrayBuffer) {
   let dv = new DataView(response);
   let numVertices = dv.getUint32(0, true);
-  decodeTriangleVertexPositionsAndIndices(
-      chunk, response, Endianness.LITTLE, /*vertexByteOffset=*/4, numVertices);
+  assignMeshFragmentData(
+      chunk,
+      decodeTriangleVertexPositionsAndIndices(
+          response, Endianness.LITTLE, /*vertexByteOffset=*/ 4, numVertices));
 }
 
 @registerSharedObject() export class PythonMeshSource extends

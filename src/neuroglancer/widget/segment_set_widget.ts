@@ -377,7 +377,10 @@ export class SegmentSetWidget extends RefCounted {
     const pressedButtonColor = 'rgb(240, 240, 240)';
     button.addEventListener('click', function(this: HTMLButtonElement) {
       const handleCopy = (e: ClipboardEvent) => {
-        e.clipboardData.setData('text/plain', stringCreator());
+        const {clipboardData} = e;
+        if (clipboardData !== null) {
+          clipboardData.setData('text/plain', stringCreator());
+        }
         e.preventDefault();
         document.removeEventListener('copy', handleCopy);
         this.style.backgroundColor = defaultButtonColor;

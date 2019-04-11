@@ -24,19 +24,19 @@ import {RefCounted} from 'neuroglancer/util/disposable';
 import {vec3, vec3Key} from 'neuroglancer/util/geom';
 import {Uint64} from 'neuroglancer/util/uint64';
 import {GL} from 'neuroglancer/webgl/context';
-import {compute1dTextureFormat, compute1dTextureLayout, OneDimensionalTextureAccessHelper, OneDimensionalTextureFormat, setOneDimensionalTextureData, TextureAccessCoefficients} from 'neuroglancer/webgl/one_dimensional_texture_access';
-import {ShaderBuilder, ShaderProgram} from 'neuroglancer/webgl/shader';
-import {getShaderType, glsl_getFortranOrderIndexFromNormalized, glsl_uint64, glsl_uintleToFloat, glsl_unnormalizeUint8} from 'neuroglancer/webgl/shader_lib';
+import {ShaderBuilder, ShaderProgram, ShaderSamplerType} from 'neuroglancer/webgl/shader';
+import {getShaderType, glsl_getFortranOrderIndex, glsl_uint32, glsl_uint64} from 'neuroglancer/webgl/shader_lib';
+import {compute1dTextureLayout, computeTextureFormat, OneDimensionalTextureAccessHelper, setOneDimensionalTextureData, TextureFormat} from 'neuroglancer/webgl/texture_access';
 
 class TextureLayout extends RefCounted {
-  dataWidth: number;
+  textureXBits: number;
+  textureWidth: number;
   textureHeight: number;
-  textureAccessCoefficients: TextureAccessCoefficients;
   subchunkGridSize: vec3;
 
   constructor(gl: GL, public chunkDataSize: vec3, public subchunkSize: vec3, dataLength: number) {
     super();
-    compute1dTextureLayout(this, gl, /*texelsPerElement=*/1, dataLength);
+    compute1dTextureLayout(this, gl, /*texelsPerElement=*/ 1, dataLength);
     let subchunkGridSize = this.subchunkGridSize = vec3.create();
     for (let i = 0; i < 3; ++i) {
       subchunkGridSize[i] = Math.ceil(chunkDataSize[i] / subchunkSize[i]);
@@ -51,7 +51,7 @@ class TextureLayout extends RefCounted {
   }
 }
 
-const textureFormat = compute1dTextureFormat(new OneDimensionalTextureFormat(), DataType.UINT32);
+const textureFormat = computeTextureFormat(new TextureFormat(), DataType.UINT32);
 
 export class ChunkFormat extends SingleTextureChunkFormat<TextureLayout> {
   static get(gl: GL, dataType: DataType, subchunkSize: vec3, numChannels: number) {
@@ -62,6 +62,10 @@ export class ChunkFormat extends SingleTextureChunkFormat<TextureLayout> {
   }
 
   private textureAccessHelper: OneDimensionalTextureAccessHelper;
+
+  get shaderSamplerType(): ShaderSamplerType {
+    return 'usampler2D';
+  }
 
   constructor(
       public dataType: DataType, public subchunkSize: vec3, public numChannels: number,
@@ -75,72 +79,59 @@ export class ChunkFormat extends SingleTextureChunkFormat<TextureLayout> {
     let {textureAccessHelper} = this;
     textureAccessHelper.defineShader(builder);
     let local = (x: string) => 'compressedSegmentationChunkFormat_' + x;
-    builder.addUniform('highp vec3', 'uSubchunkGridSize');
-    builder.addUniform('highp vec3', 'uSubchunkSize');
-    builder.addFragmentCode(glsl_getFortranOrderIndexFromNormalized);
+    builder.addUniform('highp ivec3', 'uSubchunkGridSize');
+    builder.addUniform('highp ivec3', 'uSubchunkSize');
+    builder.addFragmentCode(glsl_getFortranOrderIndex);
     const {dataType} = this;
     const glslType = getShaderType(dataType);
 
     if (dataType === DataType.UINT64) {
       builder.addFragmentCode(glsl_uint64);
+    } else {
+      builder.addFragmentCode(glsl_uint32);
     }
     builder.addFragmentCode(textureAccessHelper.getAccessor(
-        local('readTextureValue'), 'uVolumeChunkSampler', DataType.UINT32));
-    builder.addFragmentCode(glsl_unnormalizeUint8);
-    builder.addFragmentCode(glsl_uintleToFloat);
-
+        local('readTextureValue'), 'uVolumeChunkSampler', DataType.UINT32, 1));
     let fragmentCode = `
-float ${local('getChannelOffset')}(int channelIndex) {
+uint ${local('getChannelOffset')}(int channelIndex) {
   if (channelIndex == 0) {
-    return ${this.numChannels}.0;
+    return ${this.numChannels}u;
   }
-  vec4 v = ${local('readTextureValue')}(float(channelIndex)).value;
-  return uintleToFloat(v.xyz);
+  return ${local('readTextureValue')}(uint(channelIndex)).value;
 }
 ${glslType} getDataValue (int channelIndex) {
-  vec3 chunkPosition = getPositionWithinChunk();
+  ivec3 chunkPosition = getPositionWithinChunk();
 
   // TODO: maybe premultiply this and store as uniform.
-  vec3 subchunkGridPosition = floor(chunkPosition / uSubchunkSize);
-  float subchunkGridOffset = getFortranOrderIndex(subchunkGridPosition, uSubchunkGridSize);
+  ivec3 subchunkGridPosition = chunkPosition / uSubchunkSize;
+  int subchunkGridOffset = getFortranOrderIndex(subchunkGridPosition, uSubchunkGridSize);
 
-  float channelOffset = ${local('getChannelOffset')}(channelIndex);
+  int channelOffset = int(${local('getChannelOffset')}(channelIndex));
 
   // TODO: Maybe just combine this offset into subchunkGridStrides.
-  float subchunkHeaderOffset = subchunkGridOffset * 2.0 + channelOffset;
+  int subchunkHeaderOffset = subchunkGridOffset * 2 + channelOffset;
 
-  vec4 subchunkHeader0 = ${local('readTextureValue')}(subchunkHeaderOffset).value;
-  vec4 subchunkHeader1 = ${local('readTextureValue')}(subchunkHeaderOffset + 1.0).value;
-
-  float outputValueOffset = uintleToFloat(subchunkHeader0.xyz) + channelOffset;
-  float encodingBits = unnormalizeUint8(subchunkHeader0[3]);
-  if (encodingBits > 0.0) {
-    vec3 subchunkPosition = floor(min(chunkPosition - subchunkGridPosition * uSubchunkSize, uSubchunkSize - 1.0));
-    float subchunkOffset = getFortranOrderIndex(subchunkPosition, uSubchunkSize);
-    highp float encodedValueBaseOffset = uintleToFloat(subchunkHeader1.xyz) + channelOffset;
-    highp float encodedValueOffset = floor(encodedValueBaseOffset + subchunkOffset * encodingBits / 32.0);
-    vec4 encodedValue = ${local('readTextureValue')}(encodedValueOffset).value;
-    float wordOffset = mod(subchunkOffset * encodingBits, 32.0);
-    // If the value is in the first byte, then 0 <= wordOffset < 8.
-    // We need to mod by 2**encodedBits
-    float wordShifter = pow(2.0, -wordOffset);
-    float encodedValueMod = pow(2.0, encodingBits);
-    float encodedValueShifted;
-    if (wordOffset < 16.0) {
-      encodedValueShifted = dot(unnormalizeUint8(encodedValue.xy), vec2(1.0, 256.0));
-    } else {
-      encodedValueShifted = dot(unnormalizeUint8(encodedValue.zw), vec2(256.0 * 256.0, 256.0 * 256.0 * 256.0));
-    }
-    encodedValueShifted = floor(encodedValueShifted * wordShifter);
-    float decodedValue = mod(encodedValueShifted, encodedValueMod);
-    outputValueOffset += decodedValue * ${this.dataType === DataType.UINT64 ? '2.0' : '1.0'};
+  highp uint subchunkHeader0 = ${local('readTextureValue')}(uint(subchunkHeaderOffset)).value;
+  highp uint subchunkHeader1 = ${local('readTextureValue')}(uint(subchunkHeaderOffset + 1)).value;
+  highp uint outputValueOffset = (subchunkHeader0 & 0xFFFFFFu) + uint(channelOffset);
+  highp uint encodingBits = subchunkHeader0 >> 24u;
+  if (encodingBits > 0u) {
+    ivec3 subchunkPosition = chunkPosition - subchunkGridPosition * uSubchunkSize;
+    int subchunkOffset = getFortranOrderIndex(subchunkPosition, uSubchunkSize);
+    uint encodedValueBaseOffset = subchunkHeader1 + uint(channelOffset);
+    uint encodedValueOffset = encodedValueBaseOffset + uint(subchunkOffset) * encodingBits / 32u;
+    uint encodedValue = ${local('readTextureValue')}(encodedValueOffset).value;
+    uint wordOffset = uint(subchunkOffset) * encodingBits % 32u;
+    uint encodedValueShifted = encodedValue >> wordOffset;
+    uint decodedValue = encodedValueShifted - (encodedValueShifted >> encodingBits << encodingBits);
+    outputValueOffset += decodedValue * ${this.dataType === DataType.UINT64 ? '2u' : '1u'};
   }
   ${glslType} result;
 `;
     if (dataType === DataType.UINT64) {
       fragmentCode += `
-  result.low = ${local('readTextureValue')}(outputValueOffset).value;
-  result.high = ${local('readTextureValue')}(outputValueOffset+1.0).value;
+  result.value[0] = ${local('readTextureValue')}(outputValueOffset).value;
+  result.value[1] = ${local('readTextureValue')}(outputValueOffset+1u).value;
 `;
     } else {
       fragmentCode += `
@@ -158,7 +149,10 @@ ${glslType} getDataValue (int channelIndex) {
    * Called each time textureLayout changes while drawing chunks.
    */
   setupTextureLayout(gl: GL, shader: ShaderProgram, textureLayout: TextureLayout) {
-    gl.uniform3fv(shader.uniform('uSubchunkGridSize'), textureLayout.subchunkGridSize);
+    const {subchunkGridSize} = textureLayout;
+    gl.uniform3i(
+        shader.uniform('uSubchunkGridSize'), subchunkGridSize[0], subchunkGridSize[1],
+        subchunkGridSize[2]);
     this.textureAccessHelper.setupTextureLayout(gl, shader, textureLayout);
   }
 
@@ -172,7 +166,9 @@ ${glslType} getDataValue (int channelIndex) {
 
   beginSource(gl: GL, shader: ShaderProgram) {
     super.beginSource(gl, shader);
-    gl.uniform3fv(shader.uniform('uSubchunkSize'), this.subchunkSize);
+    const {subchunkSize} = this;
+    gl.uniform3i(
+        shader.uniform('uSubchunkSize'), subchunkSize[0], subchunkSize[1], subchunkSize[2]);
   }
 }
 
@@ -195,12 +191,12 @@ export class CompressedSegmentationVolumeChunk extends
     if (chunkFormat.dataType === DataType.UINT64) {
       let result = new Uint64();
       readSingleChannelValueUint64(
-          result, data, /*baseOffset=*/offset, chunkDataSize, chunkFormat.subchunkSize,
+          result, data, /*baseOffset=*/ offset, chunkDataSize, chunkFormat.subchunkSize,
           dataPosition);
       return result;
     } else {
       return readSingleChannelValueUint32(
-          data, /*baseOffset=*/offset, chunkDataSize, chunkFormat.subchunkSize, dataPosition);
+          data, /*baseOffset=*/ offset, chunkDataSize, chunkFormat.subchunkSize, dataPosition);
     }
   }
 }

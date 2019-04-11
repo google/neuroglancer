@@ -18,6 +18,7 @@ import {Annotation, AnnotationId, AnnotationReference, AnnotationType, annotatio
 import {ANNOTATION_COMMIT_UPDATE_RESULT_RPC_ID, ANNOTATION_COMMIT_UPDATE_RPC_ID, ANNOTATION_GEOMETRY_CHUNK_SOURCE_RPC_ID, ANNOTATION_METADATA_CHUNK_SOURCE_RPC_ID, ANNOTATION_REFERENCE_ADD_RPC_ID, ANNOTATION_REFERENCE_DELETE_RPC_ID, ANNOTATION_SUBSET_GEOMETRY_CHUNK_SOURCE_RPC_ID, AnnotationGeometryChunkSpecification} from 'neuroglancer/annotation/base';
 import {getAnnotationTypeRenderHandler} from 'neuroglancer/annotation/type_handler';
 import {Chunk, ChunkManager, ChunkSource} from 'neuroglancer/chunk_manager/frontend';
+import {getObjectKey} from 'neuroglancer/segmentation_display_state/base';
 import {SliceViewSourceOptions} from 'neuroglancer/sliceview/base';
 import {MultiscaleSliceViewChunkSource, SliceViewChunk, SliceViewChunkSource, SliceViewChunkSourceOptions} from 'neuroglancer/sliceview/frontend';
 import {RenderLayer} from 'neuroglancer/sliceview/renderlayer';
@@ -29,7 +30,6 @@ import {Signal, NullarySignal} from 'neuroglancer/util/signal';
 import {Buffer} from 'neuroglancer/webgl/buffer';
 import {GL} from 'neuroglancer/webgl/context';
 import {registerRPC, registerSharedObjectOwner, RPC, SharedObject} from 'neuroglancer/worker_rpc';
-import { getObjectKey } from 'neuroglancer/segmentation_display_state/base';
 
 interface AnnotationGeometryChunkSourceOptions extends SliceViewChunkSourceOptions {
   spec: AnnotationGeometryChunkSpecification;
@@ -305,7 +305,7 @@ export class MultiscaleAnnotationSource extends SharedObject implements
     this.sources = options.sourceSpecifications.map(
         alternatives => alternatives.map(
             ({parameters, spec}) => this.registerDisposer(new AnnotationGeometryChunkSource(
-              chunkManager, {spec, parameters, parent: this}))));
+                chunkManager, {spec, parameters, parent: this}))));
     this.segmentFilteredSource =
         this.registerDisposer(new AnnotationSubsetGeometryChunkSource(chunkManager, this));
   }
@@ -347,7 +347,7 @@ export class MultiscaleAnnotationSource extends SharedObject implements
       this.references.delete(reference.id);
     });
     this.applyLocalUpdate(
-        reference, /*existing=*/false, /*commit=*/commit, /*newAnnotation=*/annotation);
+        reference, /*existing=*/ false, /*commit=*/ commit, /*newAnnotation=*/ annotation);
     return reference;
   }
 
@@ -415,12 +415,12 @@ export class MultiscaleAnnotationSource extends SharedObject implements
   }
 
   delete(reference: Borrowed<AnnotationReference>) {
-    this.applyLocalUpdate(reference, /*existing=*/true, /*commit=*/true, /*newAnnotation=*/null);
+    this.applyLocalUpdate(reference, /*existing=*/ true, /*commit=*/ true, /*newAnnotation=*/ null);
   }
 
   update(reference: AnnotationReference, newAnnotation: Annotation) {
     this.applyLocalUpdate(
-        reference, /*existing=*/true, /*commit=*/false, /*newAnnotation=*/newAnnotation);
+        reference, /*existing=*/ true, /*commit=*/ false, /*newAnnotation=*/ newAnnotation);
   }
 
   private notifyChanged(id: AnnotationId, annotation: Annotation|undefined) {
@@ -440,7 +440,7 @@ export class MultiscaleAnnotationSource extends SharedObject implements
    * Must be called after `add` or `update` to commit the result.
    */
   commit(reference: Borrowed<AnnotationReference>) {
-    this.applyLocalUpdate(reference, /*existing=*/true, /*commit=*/true, reference.value!);
+    this.applyLocalUpdate(reference, /*existing=*/ true, /*commit=*/ true, reference.value!);
   }
 
   getReference(id: AnnotationId): Owned<AnnotationReference> {
@@ -554,7 +554,7 @@ export class MultiscaleAnnotationSource extends SharedObject implements
         this.commitStatus = undefined;
       }
     } else if (this.commitStatus === undefined) {
-      const status = this.commitStatus = new StatusMessage(/*delay=*/true);
+      const status = this.commitStatus = new StatusMessage(/*delay=*/ true);
       status.setText('Commiting annotations');
     }
   }
@@ -614,7 +614,7 @@ export class DataFetchSliceViewRenderLayer extends RenderLayer {
   sources: AnnotationGeometryChunkSource[][];
 
   constructor(multiscaleSource: MultiscaleAnnotationSource) {
-    super(multiscaleSource.chunkManager, multiscaleSource.getSources({}));
+    super(multiscaleSource.chunkManager, multiscaleSource.getSources({}), {});
   }
 
   // Does nothing.

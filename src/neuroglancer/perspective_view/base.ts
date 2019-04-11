@@ -17,3 +17,4 @@
 export const PERSPECTIVE_VIEW_RPC_ID = 'perspective_view/PerspectiveView';
 export const PERSPECTIVE_VIEW_ADD_LAYER_RPC_ID = 'perspective_view/addLayer';
 export const PERSPECTIVE_VIEW_REMOVE_LAYER_RPC_ID = 'perspective_view/removeLayer';
+export const PERSPECTIVE_VIEW_UPDATE_VIEWPORT_RPC_ID = 'perspective_view/updateViewport';

@@ -15,7 +15,7 @@
  */
 
 /**
- * This decodes the NDStore (https://github.com/neurodata/ndstore) NPZ format, which is the Python
+ * This decodes the BOSS (https://github.com/jhuapl-boss/) NPZ format, which is the Python
  * NPY binary format with zlib encoding.
  *
  * This is NOT the same as the Python NPZ format, which is a ZIP file containing multiple files

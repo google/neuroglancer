@@ -39,7 +39,7 @@ describe('sliceview/uncompressed_chunk_format', () => {
 
     for (let volumeSize of [vec4.fromValues(13, 17, 23, 1), vec4.fromValues(13, 17, 23, 2), ]) {
       const numElements = prod4(volumeSize);
-      for (let [dataType, arrayConstructor] of<[DataType, TypedArrayConstructor][]>[
+      for (let [dataType, arrayConstructor] of <[DataType, TypedArrayConstructor][]>[
              [DataType.UINT8, Uint8Array], [DataType.UINT16, Uint16Array],
              [DataType.UINT32, Uint32Array], [DataType.UINT64, Uint32Array]
            ]) {

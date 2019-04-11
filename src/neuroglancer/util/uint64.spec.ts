@@ -84,10 +84,16 @@ describe('uint64', () => {
     function check(x: Uint64, base: number) {
       let s = x.toString(base);
       let y = Uint64.parseString(s, base);
-      expect(y.low).toBe(x.low);
-      expect(y.high).toBe(x.high);
+      expect(y.low).toBe(x.low, `s=${s}, x.low=${x.low}, x.high=${x.high}, y.low=${y.low}, y.high=${y.high}, base=${base}`);
+      expect(y.high).toBe(x.high, `s=${s}, x.low=${x.low}, x.high=${x.high}, y.low=${y.low}, y.high=${y.high}, base=${base}`);
     }
     const count = 100;
+    {
+      const u = new Uint64(264762631, 2836123747);
+      expect(u.toString(13)).toEqual('153c9125c642b111b8');
+      check(u, 13);
+    }
+
     for (let base = 2; base <= 36; ++base) {
       for (let i = 0; i < count; ++i) {
         check(Uint64.random(), base);

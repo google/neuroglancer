@@ -14,25 +14,26 @@
  * limitations under the License.
  */
 
+import 'neuroglancer/rendered_data_panel.css';
+import 'neuroglancer/noselect.css';
+
 import {Annotation} from 'neuroglancer/annotation';
 import {getSelectedAnnotation} from 'neuroglancer/annotation/selection';
 import {getAnnotationTypeRenderHandler} from 'neuroglancer/annotation/type_handler';
 import {DisplayContext, RenderedPanel} from 'neuroglancer/display_context';
-import {MouseSelectionState, ActionState} from 'neuroglancer/layer';
+import {ActionState} from 'neuroglancer/layer';
 import {NavigationState} from 'neuroglancer/navigation_state';
+import {PickIDManager} from 'neuroglancer/object_picking';
 import {UserLayerWithAnnotations} from 'neuroglancer/ui/annotations';
 import {AutomaticallyFocusedElement} from 'neuroglancer/util/automatic_focus';
 import {ActionEvent, EventActionMap, registerActionListener} from 'neuroglancer/util/event_action_map';
-import {AXES_NAMES, kAxes, vec2, vec3} from 'neuroglancer/util/geom';
+import {AXES_NAMES, kAxes, mat4, vec2, vec3} from 'neuroglancer/util/geom';
 import {KeyboardEventBinder} from 'neuroglancer/util/keyboard_bindings';
 import {MouseEventBinder} from 'neuroglancer/util/mouse_bindings';
 import {startRelativeMouseDrag} from 'neuroglancer/util/mouse_drag';
+import {TouchEventBinder, TouchPinchInfo, TouchTranslateInfo} from 'neuroglancer/util/touch_bindings';
 import {getWheelZoomAmount} from 'neuroglancer/util/wheel_zoom';
 import {ViewerState} from 'neuroglancer/viewer_state';
-
-
-require('./rendered_data_panel.css');
-require('neuroglancer/noselect.css');
 
 const tempVec3 = vec3.create();
 
@@ -40,19 +41,303 @@ export interface RenderedDataViewerState extends ViewerState {
   inputEventMap: EventActionMap;
 }
 
+export class FramePickingData {
+  pickIDs = new PickIDManager();
+  viewportWidth: number = 0;
+  viewportHeight: number = 0;
+  invTransform = mat4.create();
+  frameNumber: number = -1;
+}
+
+export class PickRequest {
+  buffer: WebGLBuffer|null = null;
+  glWindowX: number = 0;
+  glWindowY: number = 0;
+  frameNumber: number;
+  sync: WebGLSync|null;
+}
+
+const pickRequestInterval = 30;
+
 export abstract class RenderedDataPanel extends RenderedPanel {
-  // Last mouse position within the panel.
-  mouseX = 0;
-  mouseY = 0;
+  /**
+   * Current mouse position within the viewport, or -1 if the mouse is not in the viewport.
+   */
+  mouseX = -1;
+  mouseY = -1;
 
-  abstract updateMouseState(state: MouseSelectionState): boolean;
+  /**
+   * Equal to last-seen value of `this.element.clientWidth` and `this.element.clientHeight`.  If the
+   * size changed since the last frame, may not correspond to the last frame.
+   */
+  width: number;
+  height: number;
 
-  private mouseStateUpdater = this.updateMouseState.bind(this);
+  /**
+   * If `false`, either the mouse is not within the viewport, or a picking request was already
+   * issued for the current mouseX and mouseY after the most recent frame was rendered; when the
+   * current pick requests complete, no additional pick requests will be issued.
+   *
+   * If `true`, a picking request was not issued for the current mouseX and mouseY due to all pick
+   * buffers being in use; when a pick buffer becomes available, an additional pick request will be
+   * issued.
+   */
+  pickRequestPending = false;
+
+  private mouseStateForcer = () => this.blockOnPickRequest();
 
   inputEventMap: EventActionMap;
 
   navigationState: NavigationState;
 
+  pickingData = [new FramePickingData(), new FramePickingData()];
+  pickRequests = [new PickRequest(), new PickRequest()];
+
+  // TODO: Size of buffer depends on receptive field of picking method
+  pickBufferContents: Float32Array = new Float32Array(2 * 4 * 23 * 23);
+
+  /**
+   * Reads pick data for the current mouse position into the currently-bound pixel pack buffer.
+   */
+  abstract issuePickRequest(glWindowX: number, glWindowY: number): void;
+
+  /**
+   * Timer id for checking if outstanding pick requests have completed.
+   */
+  private pickTimerId = -1;
+
+  private cancelPickRequests() {
+    const {gl} = this;
+    for (const request of this.pickRequests) {
+      const {sync} = request;
+      if (sync !== null) {
+        gl.deleteSync(sync);
+      }
+      request.sync = null;
+    }
+    clearTimeout(this.pickTimerId);
+    this.pickTimerId = -1;
+  }
+
+  checkForResize() {
+    const {clientWidth, clientHeight} = this.element;
+    if (clientWidth !== this.width || clientHeight !== this.height) {
+      this.width = clientWidth;
+      this.height = clientHeight;
+      this.panelSizeChanged();
+    }
+  }
+
+  abstract panelSizeChanged(): void;
+
+  private issuePickRequestInternal(pickRequest: PickRequest) {
+    const {gl} = this;
+    let {buffer} = pickRequest;
+    if (buffer === null) {
+      buffer = pickRequest.buffer = gl.createBuffer();
+      gl.bindBuffer(WebGL2RenderingContext.PIXEL_PACK_BUFFER, buffer);
+      // TODO: Size of buffer depends on receptive field of picking method
+      gl.bufferData(
+          WebGL2RenderingContext.PIXEL_PACK_BUFFER, 2*4*4*23*23, WebGL2RenderingContext.DYNAMIC_COPY);
+    } else {
+      gl.bindBuffer(WebGL2RenderingContext.PIXEL_PACK_BUFFER, buffer);
+    }
+    let glWindowX = this.mouseX;
+    let glWindowY = this.height - this.mouseY;
+    this.issuePickRequest(glWindowX, glWindowY);
+    pickRequest.sync = gl.fenceSync(WebGL2RenderingContext.SYNC_GPU_COMMANDS_COMPLETE, 0);
+    pickRequest.frameNumber = this.context.frameNumber;
+    pickRequest.glWindowX = glWindowX;
+    pickRequest.glWindowY = glWindowY;
+    gl.flush();
+    // TODO(jbms): maybe call gl.flush to ensure fence is submitted
+    gl.bindBuffer(WebGL2RenderingContext.PIXEL_PACK_BUFFER, null);
+    if (this.pickTimerId === -1) {
+      this.scheduleCheckForPickRequestCompletion();
+    }
+    this.pickRequestPending = false;
+    const {pickRequests} = this;
+    if (pickRequest !== pickRequests[0]) {
+      pickRequests[1] = pickRequests[0];
+      pickRequests[0] = pickRequest;
+    }
+    this.nextPickRequestTime = Date.now() + pickRequestInterval;
+  }
+
+  abstract completePickRequest(
+      glWindowX: number, glWindowY: number, data: Float32Array,
+      pickingData: FramePickingData): void;
+
+  private completePickInternal(pickRequest: PickRequest) {
+    const {gl} = this;
+    const {pickBufferContents} = this;
+    gl.bindBuffer(WebGL2RenderingContext.PIXEL_PACK_BUFFER, pickRequest.buffer);
+    gl.getBufferSubData(WebGL2RenderingContext.PIXEL_PACK_BUFFER, 0, pickBufferContents);
+    gl.bindBuffer(WebGL2RenderingContext.PIXEL_PACK_BUFFER, null);
+    const {pickingData} = this;
+    const {frameNumber} = pickRequest;
+    this.completePickRequest(
+        pickRequest.glWindowX, pickRequest.glWindowY, pickBufferContents,
+        pickingData[0].frameNumber === frameNumber ? pickingData[0] : pickingData[1]);
+  }
+
+  private scheduleCheckForPickRequestCompletion() {
+    this.pickTimerId = setTimeout(() => {
+      this.pickTimerId = -1;
+      this.checkForPickRequestCompletion();
+    }, 0);
+  }
+
+  private checkForPickRequestCompletion(checkingBeforeDraw = false, block = false) {
+    let currentFrameNumber = this.context.frameNumber;
+    let cancelIfNotReadyFrameNumber = -1;
+    if (checkingBeforeDraw) {
+      --currentFrameNumber;
+      cancelIfNotReadyFrameNumber = currentFrameNumber - 1;
+    }
+    const {pickRequests} = this;
+    const {gl} = this;
+    let remaining = false;
+    let cancelRemaining = false;
+    let available: PickRequest|undefined;
+    for (const pickRequest of pickRequests) {
+      const {sync} = pickRequest;
+      if (sync === null) continue;
+      const {frameNumber} = pickRequest;
+      if (!cancelRemaining && frameNumber >= currentFrameNumber - 1) {
+        if (block ||
+            gl.getSyncParameter(sync, WebGL2RenderingContext.SYNC_STATUS) ===
+                WebGL2RenderingContext.SIGNALED) {
+          this.completePickInternal(pickRequest);
+          cancelRemaining = true;
+        } else if (frameNumber !== cancelIfNotReadyFrameNumber) {
+          remaining = true;
+          continue;
+        }
+      }
+      gl.deleteSync(sync);
+      pickRequest.sync = null;
+      available = pickRequest;
+    }
+    const {pickTimerId} = this;
+    if (remaining && pickTimerId === -1) {
+      this.scheduleCheckForPickRequestCompletion();
+    } else if (!remaining && pickTimerId !== -1) {
+      clearTimeout(pickTimerId);
+      this.pickTimerId = -1;
+    }
+    if (!checkingBeforeDraw && available !== undefined && this.pickRequestPending &&
+        this.canIssuePickRequest()) {
+      this.issuePickRequestInternal(available);
+    }
+  }
+
+  private blockOnPickRequest() {
+    if (this.pickRequestPending) {
+      this.cancelPickRequests();
+      this.nextPickRequestTime = 0;
+      this.attemptToIssuePickRequest();
+    }
+    this.checkForPickRequestCompletion(/*checkingBeforeDraw=*/ false, /*block=*/ true);
+  }
+
+  draw() {
+    this.checkForResize();
+    const {width, height} = this;
+    if (width === 0 || height === 0) return;
+    this.checkForPickRequestCompletion(true);
+    const {pickingData} = this;
+    pickingData[0] = pickingData[1];
+    const currentFrameNumber = this.context.frameNumber;
+    const newPickingData = pickingData[1];
+    newPickingData.frameNumber = currentFrameNumber;
+    newPickingData.viewportWidth = width;
+    newPickingData.viewportHeight = height;
+    newPickingData.pickIDs.clear();
+    if (!this.drawWithPicking(newPickingData)) {
+      newPickingData.frameNumber = -1;
+      return;
+    }
+    // For the new frame, allow new pick requests regardless of interval since last request.
+    this.nextPickRequestTime = 0;
+    if (this.mouseX > 0) {
+      this.attemptToIssuePickRequest();
+    }
+  }
+
+  abstract drawWithPicking(pickingData: FramePickingData): boolean;
+
+  private nextPickRequestTime = 0;
+  private pendingPickRequestTimerId = -1;
+
+  private pendingPickRequestTimerExpired = () => {
+    this.pendingPickRequestTimerId = -1;
+    if (!this.pickRequestPending) return;
+    this.attemptToIssuePickRequest();
+  };
+
+  private canIssuePickRequest(): boolean {
+    const time = Date.now();
+    const {nextPickRequestTime, pendingPickRequestTimerId} = this;
+    if (time < nextPickRequestTime) {
+      if (pendingPickRequestTimerId == -1) {
+        this.pendingPickRequestTimerId =
+            setTimeout(this.pendingPickRequestTimerExpired, nextPickRequestTime - time);
+      }
+      return false;
+    }
+    return true;
+  }
+
+  private attemptToIssuePickRequest() {
+    if (!this.canIssuePickRequest()) return;
+    const currentFrameNumber = this.context.frameNumber;
+    const {gl} = this;
+
+    const {pickRequests} = this;
+
+    // Try to find an available PickRequest object.
+
+    for (const pickRequest of pickRequests) {
+      let {sync} = pickRequest;
+      if (sync !== null) {
+        if (pickRequest.frameNumber < currentFrameNumber - 1) {
+          gl.deleteSync(sync);
+        } else {
+          continue;
+        }
+      }
+      this.issuePickRequestInternal(pickRequest);
+      return;
+    }
+  }
+
+  /**
+   * Called each time the mouse position relative to the top level of the rendered viewport changes.
+   */
+  private updateMousePosition(mouseX: number, mouseY: number): void {
+    if (mouseX === this.mouseX && mouseY === this.mouseY) {
+      return;
+    }
+    this.mouseX = mouseX;
+    this.mouseY = mouseY;
+    if (mouseX < 0) {
+      // Mouse moved out of the viewport.
+      this.pickRequestPending = false;
+      this.cancelPickRequests();
+      return;
+    }
+    const currentFrameNumber = this.context.frameNumber;
+    const pickingData = this.pickingData[1];
+    if (pickingData.frameNumber !== currentFrameNumber ||
+        this.width !== pickingData.viewportWidth || this.height !== pickingData.viewportHeight) {
+      // Viewport size has changed since the last frame, which means a redraw is pending.  Don't
+      // issue pick request now.  Once will be issued automatically after the redraw.
+      return;
+    }
+    this.pickRequestPending = true;
+    this.attemptToIssuePickRequest();
+  }
 
   constructor(
       context: DisplayContext, element: HTMLElement, public viewer: RenderedDataViewerState) {
@@ -66,8 +351,10 @@ export abstract class RenderedDataPanel extends RenderedPanel {
     this.registerDisposer(new AutomaticallyFocusedElement(element));
     this.registerDisposer(new KeyboardEventBinder(element, this.inputEventMap));
     this.registerDisposer(new MouseEventBinder(element, this.inputEventMap));
+    this.registerDisposer(new TouchEventBinder(element, this.inputEventMap));
 
     this.registerEventListener(element, 'mousemove', this.onMousemove.bind(this));
+    this.registerEventListener(element, 'touchstart', this.onTouchstart.bind(this));
     this.registerEventListener(element, 'mouseleave', this.onMouseout.bind(this));
     this.registerEventListener(element, 'mousedown', this.onMousedown.bind(this));
 
@@ -112,6 +399,32 @@ export abstract class RenderedDataPanel extends RenderedPanel {
       this.onMousemove(e);
       this.zoomByMouse(getWheelZoomAmount(e));
     });
+
+    registerActionListener(element, 'translate-via-mouse-drag', (e: ActionEvent<MouseEvent>) => {
+      const {mouseState} = this.viewer;
+      if (mouseState.updateUnconditionally()) {
+        startRelativeMouseDrag(e.detail, (_event, deltaX, deltaY) => {
+          this.translateByViewportPixels(deltaX, deltaY);
+        });
+      }
+    });
+
+    registerActionListener(
+        element, 'translate-in-plane-via-touchtranslate', (e: ActionEvent<TouchTranslateInfo>) => {
+          const {detail} = e;
+          this.translateByViewportPixels(detail.deltaX, detail.deltaY);
+        });
+
+    registerActionListener(
+        element, 'translate-z-via-touchtranslate', (e: ActionEvent<TouchTranslateInfo>) => {
+          const {detail} = e;
+          let {navigationState} = this;
+          let offset = tempVec3;
+          offset[0] = 0;
+          offset[1] = 0;
+          offset[2] = detail.deltaY + detail.deltaX;
+          navigationState.pose.translateVoxelsRelative(offset);
+        });
 
     for (const amount of [1, 10]) {
       registerActionListener(element, `z+${amount}-via-wheel`, (event: ActionEvent<WheelEvent>) => {
@@ -194,22 +507,43 @@ export abstract class RenderedDataPanel extends RenderedPanel {
       const selectedAnnotationId = mouseState.pickedAnnotationId;
       const annotationLayer = mouseState.pickedAnnotationLayer;
       if (annotationLayer !== undefined && !annotationLayer.source.readonly &&
-        selectedAnnotationId !== undefined) {
-          const ref = annotationLayer.source.getReference(selectedAnnotationId);
-          try {
-            annotationLayer.source.delete(ref);
-          } finally {
-            ref.dispose();
-          }
+          selectedAnnotationId !== undefined) {
+        const ref = annotationLayer.source.getReference(selectedAnnotationId);
+        try {
+          annotationLayer.source.delete(ref);
+        } finally {
+          ref.dispose();
+        }
+      }
+    });
+
+    registerActionListener(element, 'zoom-via-touchpinch', (e: ActionEvent<TouchPinchInfo>) => {
+      const {detail} = e;
+      this.handleMouseMove(detail.centerX, detail.centerY);
+      const ratio = detail.prevDistance / detail.distance;
+      if (ratio > 0.1 && ratio < 10) {
+        this.zoomByMouse(ratio);
       }
     });
   }
 
-
   onMouseout(_event: MouseEvent) {
-    let {mouseState} = this.viewer;
-    mouseState.updater = undefined;
-    mouseState.setActive(false);
+    this.updateMousePosition(-1, -1);
+    this.viewer.mouseState.setForcer(undefined);
+  }
+
+  abstract translateByViewportPixels(deltaX: number, deltaY: number): void;
+
+  handleMouseMove(clientX: number, clientY: number) {
+    let {element} = this;
+    const bounds = element.getBoundingClientRect();
+    const mouseX = clientX - bounds.left;
+    const mouseY = clientY - bounds.top;
+    const {mouseState} = this.viewer;
+    mouseState.pageX = clientX + window.scrollX;
+    mouseState.pageY = clientY + window.scrollY;
+    mouseState.setForcer(this.mouseStateForcer);
+    this.updateMousePosition(mouseX, mouseY);
   }
 
   onMousemove(event: MouseEvent) {
@@ -217,13 +551,16 @@ export abstract class RenderedDataPanel extends RenderedPanel {
     if (event.target !== element) {
       return;
     }
-    this.mouseX = event.offsetX - element.clientLeft;
-    this.mouseY = event.offsetY - element.clientTop;
-    let {mouseState} = this.viewer;
-    mouseState.pageX = event.pageX;
-    mouseState.pageY = event.pageY;
-    mouseState.updater = this.mouseStateUpdater;
-    mouseState.triggerUpdate();
+    this.handleMouseMove(event.clientX, event.clientY);
+  }
+
+  onTouchstart(event: TouchEvent) {
+    let {element} = this;
+    if (event.target !== element || event.targetTouches.length !== 1) {
+      return;
+    }
+    const {clientX, clientY} = event.targetTouches[0];
+    this.handleMouseMove(clientX, clientY);
   }
 
   onMousedown(event: MouseEvent) {
@@ -239,9 +576,15 @@ export abstract class RenderedDataPanel extends RenderedPanel {
 
   disposed() {
     let {mouseState} = this.viewer;
-    if (mouseState.updater === this.mouseStateUpdater) {
-      mouseState.updater = undefined;
-      mouseState.setActive(false);
+    mouseState.removeForcer(this.mouseStateForcer);
+    const {gl} = this;
+    this.cancelPickRequests();
+    const {pendingPickRequestTimerId} = this;
+    if (pendingPickRequestTimerId !== -1) {
+      clearTimeout(pendingPickRequestTimerId);
+    }
+    for (const request of this.pickRequests) {
+      gl.deleteBuffer(request.buffer);
     }
     super.disposed();
   }

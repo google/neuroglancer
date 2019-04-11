@@ -15,21 +15,20 @@
  */
 
 import debounce from 'lodash/debounce';
-import {ChunkState, ChunkPriorityTier} from 'neuroglancer/chunk_manager/base';
 import {cancelChunkDownload, startChunkDownload, withChunkManager} from 'neuroglancer/chunk_manager/backend';
+import {ChunkPriorityTier, ChunkState} from 'neuroglancer/chunk_manager/base';
 import {CoordinateTransform} from 'neuroglancer/coordinate_transform';
 import {SharedDisjointUint64Sets} from 'neuroglancer/shared_disjoint_sets';
 import {SliceViewChunk, SliceViewChunkSource} from 'neuroglancer/sliceview/backend';
-import {RenderLayer as RenderLayerInterface} from 'neuroglancer/sliceview/base';
-import {ChunkLayout} from 'neuroglancer/sliceview/chunk_layout';
-import {ChunkedGraphChunkSource as ChunkedGraphChunkSourceInterface, ChunkedGraphChunkSpecification, CHUNKED_GRAPH_LAYER_RPC_ID} from 'neuroglancer/sliceview/chunked_graph/base';
+import {RenderLayer as RenderLayerInterface, TransformedSource} from 'neuroglancer/sliceview/base';
+import {CHUNKED_GRAPH_LAYER_RPC_ID, ChunkedGraphChunkSource as ChunkedGraphChunkSourceInterface, ChunkedGraphChunkSpecification} from 'neuroglancer/sliceview/chunked_graph/base';
 import {Uint64Set} from 'neuroglancer/uint64_set';
 import {mat4, vec3, vec3Key} from 'neuroglancer/util/geom';
-import {sendHttpRequest, openHttpRequest, HttpError } from 'neuroglancer/util/http_request';
+import {HttpError, openHttpRequest, sendHttpRequest} from 'neuroglancer/util/http_request';
 import {NullarySignal} from 'neuroglancer/util/signal';
 import {Uint64} from 'neuroglancer/util/uint64';
-import {RPC, SharedObjectCounterpart, registerSharedObject} from 'neuroglancer/worker_rpc';
-import {TrackableMIPLevelConstraints} from 'neuroglancer/trackable_mip_level_constraints';
+import {registerSharedObject, RPC, SharedObjectCounterpart} from 'neuroglancer/worker_rpc';
+import {WatchableValueInterface} from 'src/neuroglancer/trackable_value';
 
 const tempChunkDataSize = vec3.create();
 const tempChunkPosition = vec3.create();
@@ -179,14 +178,14 @@ ChunkedGraphChunkSource.prototype.chunkConstructor = ChunkedGraphChunk;
 const Base = withChunkManager(SharedObjectCounterpart);
 
 @registerSharedObject(CHUNKED_GRAPH_LAYER_RPC_ID)
-export class ChunkedGraphLayer extends Base implements RenderLayerInterface {
+export class ChunkedGraphLayer extends Base implements RenderLayerInterface<SliceViewChunkSource> {
   rpcId: number;
   sources: ChunkedGraphChunkSource[][];
   layerChanged = new NullarySignal();
   transform = new CoordinateTransform();
-  transformedSources: {source: ChunkedGraphChunkSource, chunkLayout: ChunkLayout}[][];
+  transformedSources: TransformedSource<SliceViewChunkSource>[][];
   transformedSourcesGeneration = -1;
-  mipLevelConstraints = new TrackableMIPLevelConstraints();
+  renderScaleTarget: WatchableValueInterface<number>;
 
   graphurl: string;
   rootSegments: Uint64Set;
@@ -200,6 +199,7 @@ export class ChunkedGraphLayer extends Base implements RenderLayerInterface {
     this.rootSegments = <Uint64Set>rpc.get(options['rootSegments']);
     this.visibleSegments3D = <Uint64Set>rpc.get(options['visibleSegments3D']);
     this.segmentEquivalences = <SharedDisjointUint64Sets>rpc.get(options['segmentEquivalences']);
+    this.renderScaleTarget = rpc.get(options['renderScaleTarget']);
 
     this.sources = new Array<ChunkedGraphChunkSource[]>();
     for (const alternativeIds of options['sources']) {

@@ -18,11 +18,12 @@ import {Annotation, AnnotationId, AnnotationSerializer, AnnotationType} from 'ne
 import {AnnotationGeometryChunk, AnnotationGeometryData, AnnotationMetadataChunk, AnnotationSource, AnnotationSubsetGeometryChunk} from 'neuroglancer/annotation/backend';
 import {WithParameters} from 'neuroglancer/chunk_manager/backend';
 import {ChunkSourceParametersConstructor} from 'neuroglancer/chunk_manager/base';
+import {CredentialsProvider} from 'neuroglancer/credentials_provider';
 import {WithSharedCredentialsProviderCounterpart} from 'neuroglancer/credentials_provider/shared_counterpart';
-import {BatchMeshFragment, BatchMeshFragmentPayload, ChangeStackAwarePayload, Credentials, makeRequest, SkeletonPayload, SubvolumePayload} from 'neuroglancer/datasource/brainmaps/api';
-import {AnnotationSourceParameters, ChangeSpec, MeshSourceParameters, SkeletonSourceParameters, VolumeChunkEncoding, VolumeSourceParameters} from 'neuroglancer/datasource/brainmaps/base';
-import {computeVertexNormals, decodeJsonManifestChunk, FragmentChunk, ManifestChunk, MeshSource} from 'neuroglancer/mesh/backend';
-import {Bounds} from 'neuroglancer/segmentation_display_state/base';
+import {BatchMeshFragment, BatchMeshFragmentPayload, BrainmapsInstance, ChangeStackAwarePayload, Credentials, makeRequest, SkeletonPayload, SubvolumePayload} from 'neuroglancer/datasource/brainmaps/api';
+import {AnnotationSourceParameters, ChangeSpec, MeshSourceParameters, MultiscaleMeshSourceParameters, SkeletonSourceParameters, VolumeChunkEncoding, VolumeSourceParameters} from 'neuroglancer/datasource/brainmaps/base';
+import {assignMeshFragmentData, assignMultiscaleMeshFragmentData, FragmentChunk, ManifestChunk, MeshSource, MultiscaleFragmentChunk, MultiscaleManifestChunk, MultiscaleMeshSource} from 'neuroglancer/mesh/backend';
+import {MultiscaleMeshManifest} from 'neuroglancer/mesh/multiscale';
 import {decodeSkeletonVertexPositionsAndIndices, SkeletonChunk, SkeletonSource} from 'neuroglancer/skeleton/backend';
 import {decodeCompressedSegmentationChunk} from 'neuroglancer/sliceview/backend_chunk_decoders/compressed_segmentation';
 import {decodeJpegChunk} from 'neuroglancer/sliceview/backend_chunk_decoders/jpeg';
@@ -30,9 +31,10 @@ import {decodeRawChunk} from 'neuroglancer/sliceview/backend_chunk_decoders/raw'
 import {VolumeChunk, VolumeChunkSource} from 'neuroglancer/sliceview/volume/backend';
 import {CancellationToken} from 'neuroglancer/util/cancellation';
 import {convertEndian32, Endianness} from 'neuroglancer/util/endian';
-import {decodeMorton, kZeroVec, vec3, vec3Key} from 'neuroglancer/util/geom';
+import {kInfinityVec, kZeroVec, vec3, vec3Key} from 'neuroglancer/util/geom';
 import {parseArray, parseFixedLengthArray, verifyObject, verifyObjectProperty, verifyOptionalString, verifyString, verifyStringArray} from 'neuroglancer/util/json';
 import {Uint64} from 'neuroglancer/util/uint64';
+import {decodeZIndexCompressed, zorder3LessThan} from 'neuroglancer/util/zorder';
 import {registerSharedObject, SharedObject} from 'neuroglancer/worker_rpc';
 
 const CHUNK_DECODERS = new Map([
@@ -130,79 +132,341 @@ export class BrainmapsVolumeChunkSource extends
   }
 }
 
-function decodeManifestChunk(chunk: ManifestChunk, response: any) {
-  decodeJsonManifestChunk(chunk, response, 'fragmentKey');
-  if (chunk.clipBounds) {
-    chunk.fragmentIds = filterFragments(chunk.fragmentIds!, chunk.clipBounds);
-  }
-  chunk.fragmentIds = groupFragmentsIntoBatches(chunk.fragmentIds!);
-  return chunk;
-}
-
-function filterFragments(fragmentIds: string[], clipBounds: Bounds) {
-  clipBounds;
-  if (!fragmentIds) {
-    return fragmentIds;
-  }
-
-  let filteredFragments = [];
-  for (let fragmentId of fragmentIds) {
-    // TODO(blakely): Hardcoded for now, remove when we can filter on the backend.
-    const fragmentSize = 500;
-    let fragmentBounds =
-        getFragmentBounds(fragmentId, vec3.clone([fragmentSize, fragmentSize, fragmentSize]));
-    if (boundsIntersect(fragmentBounds, clipBounds)) {
-      filteredFragments.push(fragmentId);
-    }
-  }
-
-  return filteredFragments;
-}
-
-function getFragmentBounds(fragmentId: string, fragmentSize: vec3): Bounds {
-  let corner = getFragmentCorner(fragmentId, fragmentSize);
-
-  let halfSize = vec3.create();
-  vec3.scale(halfSize, fragmentSize, 0.5);
-  let center = vec3.create();
-  vec3.add(center, corner, halfSize);
-
-  return {
-    center,
-    size: fragmentSize,
-  };
-}
-
-function getFragmentCorner(fragmentId: string, fragmentSize: vec3) {
-  let id = new Uint64();
+function getFragmentCorner(
+    fragmentId: string, xBits: number, yBits: number, zBits: number): Uint32Array {
+  const id = new Uint64();
   if (!id.tryParseString(fragmentId, 16)) {
     throw new Error(`Couldn't parse fragmentId ${fragmentId} as hex-encoded Uint64`);
   }
-  if (id.high) {
-    throw new Error(`Fragment ids > 2^32 not supported yet`);
-  }
-  const chunkCoord = decodeMorton(id);
-  let worldCoord = vec3.create();
-  return vec3.mul(worldCoord, chunkCoord, fragmentSize);
+  return decodeZIndexCompressed(id, xBits, yBits, zBits);
 }
 
-function boundsIntersect(first: Bounds, second: Bounds) {
-  function transformCorner(point: vec3, size: vec3, sign: 1|- 1) {
-    return [...point.map((value, idx) => value + sign * size[idx] / 2).values()];
+interface BrainmapsMultiscaleManifestChunk extends MultiscaleManifestChunk {
+  fragmentSupervoxelIds: {fragmentId: string, supervoxelIds: string[]}[];
+}
+
+function decodeMultiscaleManifestChunk(chunk: BrainmapsMultiscaleManifestChunk, response: any) {
+  verifyObject(response);
+  const source = chunk.source as BrainmapsMultiscaleMeshSource;
+  const fragmentKeys = verifyObjectProperty(response, 'fragmentKey', verifyStringArray);
+  const supervoxelIds = verifyObjectProperty(response, 'supervoxelId', verifyStringArray);
+  const length = fragmentKeys.length;
+  if (length !== supervoxelIds.length) {
+    throw new Error('Expected fragmentKey and supervoxelId arrays to have the same length.');
+  }
+  const fragmentSupervoxelIds = new Map<string, string[]>();
+  fragmentKeys.forEach((fragmentId, i) => {
+    let ids = fragmentSupervoxelIds.get(fragmentId);
+    if (ids === undefined) {
+      ids = [];
+      fragmentSupervoxelIds.set(fragmentId, ids);
+    }
+    ids.push(supervoxelIds[i]);
+  });
+  const {chunkShape, gridShape} = source.parameters.info;
+  const chunkCoordinates = new Uint32Array(3 * fragmentSupervoxelIds.size);
+
+  const xBits = Math.ceil(Math.log2(gridShape[0])), yBits = Math.ceil(Math.log2(gridShape[1])),
+        zBits = Math.ceil(Math.log2(gridShape[2]));
+  const fragmentIdAndCorners =
+      Array.from(fragmentSupervoxelIds.entries()).map(([id, supervoxelIds]) => ({
+                                                        fragmentId: id,
+                                                        corner: getFragmentCorner(
+                                                            id, xBits, yBits, zBits),
+                                                        supervoxelIds
+                                                      }));
+  fragmentIdAndCorners.sort((a, b) => {
+    return zorder3LessThan(
+               a.corner[0], a.corner[1], a.corner[2], b.corner[0], b.corner[1], b.corner[2]) ?
+        -1 :
+        1;
+  });
+  let clipLowerBound: vec3, clipUpperBound: vec3;
+  let minNumLods = 0;
+  if (length === 0) {
+    clipLowerBound = clipUpperBound = kZeroVec;
+  } else {
+    const minCoord = vec3.clone(kInfinityVec);
+    const maxCoord = vec3.clone(kZeroVec);
+    fragmentIdAndCorners.forEach((x, i) => {
+      const {corner} = x;
+      chunkCoordinates.set(corner, i * 3);
+      for (let i = 0; i < 3; ++i) {
+        minCoord[i] = Math.min(minCoord[i], corner[i]);
+        maxCoord[i] = Math.max(maxCoord[i], corner[i]);
+      }
+    });
+    let maxCoordValue = Math.max(...maxCoord);
+    minNumLods = 1;
+    while (maxCoordValue !== 0) {
+      maxCoordValue >>>= 1;
+      ++minNumLods;
+    }
+    clipLowerBound = vec3.multiply(minCoord, minCoord, chunkShape);
+    clipUpperBound = vec3.add(maxCoord, vec3.multiply(maxCoord, maxCoord, chunkShape), chunkShape);
+  }
+  const lodScales: number[] = [];
+  const {lods} = source.parameters.info;
+  for (const lodInfo of lods) {
+    lodScales[lodInfo.lod] = lodInfo.scale;
+  }
+  for (let lod = 0; lod < Math.max(lodScales.length, minNumLods); ++lod) {
+    if (lodScales[lod] === undefined) {
+      lodScales[lod] = 0;
+    }
+  }
+  const manifest: MultiscaleMeshManifest = {
+    chunkShape,
+    chunkGridSpatialOrigin: kZeroVec,
+    clipLowerBound,
+    clipUpperBound,
+    chunkCoordinates,
+    lodScales,
+  };
+  chunk.manifest = manifest;
+  chunk.fragmentSupervoxelIds = fragmentIdAndCorners;
+}
+
+const maxMeshBatchSize = 100;
+
+interface BatchMeshResponseFragment {
+  fullKey: string;
+  buffer: ArrayBuffer;
+  verticesOffset: number;
+  indicesOffset: number;
+  numVertices: number;
+  numIndices: number;
+}
+
+function decodeBatchMeshResponse(
+    response: ArrayBuffer, callback: (fragment: BatchMeshResponseFragment) => void) {
+  let length = response.byteLength;
+  let index = 0;
+  const dataView = new DataView(response);
+  const headerSize =
+      /*object id*/ 8 + /*fragment key length*/ 8 + /*num vertices*/ 8 + /*num triangles*/ 8;
+  while (index < length) {
+    if (index + headerSize > length) {
+      throw new Error(`Invalid batch mesh fragment response.`);
+    }
+    const objectIdLow = dataView.getUint32(index, /*littleEndian=*/ true);
+    const objectIdHigh = dataView.getUint32(index + 4, /*littleEndian=*/ true);
+    const objectIdString = new Uint64(objectIdLow, objectIdHigh).toString();
+    const prefix = objectIdString + '\0';
+    index += 8;
+    const fragmentKeyLength = dataView.getUint32(index, /*littleEndian=*/ true);
+    const fragmentKeyLengthHigh = dataView.getUint32(index + 4, /*littleEndian=*/ true);
+    index += 8;
+    if (fragmentKeyLengthHigh !== 0) {
+      throw new Error(`Invalid batch mesh fragment response.`);
+    }
+    if (index + fragmentKeyLength + /* num vertices */ 8 + /*num indices*/ 8 > length) {
+      throw new Error(`Invalid batch mesh fragment response.`);
+    }
+    const fragmentKey =
+        new TextDecoder().decode(new Uint8Array(response, index, fragmentKeyLength));
+    const fullKey = prefix + fragmentKey;
+    index += fragmentKeyLength;
+    const numVertices = dataView.getUint32(index, /*littleEndian=*/ true);
+    const numVerticesHigh = dataView.getUint32(index + 4, /*littleEndian=*/ true);
+    index += 8;
+    const numTriangles = dataView.getUint32(index, /*littleEndian=*/ true);
+    const numTrianglesHigh = dataView.getUint32(index + 4, /*littleEndian=*/ true);
+    index += 8;
+    if (numVerticesHigh !== 0 || numTrianglesHigh !== 0) {
+      throw new Error(`Invalid batch mesh fragment response.`);
+    }
+    const endOffset = index + numTriangles * 12 + numVertices * 12;
+    if (endOffset > length) {
+      throw new Error(`Invalid batch mesh fragment response.`);
+    }
+    callback({
+      fullKey,
+      buffer: response,
+      verticesOffset: index,
+      numVertices,
+      indicesOffset: index + 12 * numVertices,
+      numIndices: numTriangles * 3,
+    });
+    index = endOffset;
+  }
+}
+
+function combineBatchMeshFragments(fragments: BatchMeshResponseFragment[]) {
+  let totalVertices = 0, totalIndices = 0;
+  for (let fragment of fragments) {
+    totalVertices += fragment.numVertices;
+    totalIndices += fragment.numIndices;
+  }
+  const vertexBuffer = new Float32Array(totalVertices * 3);
+  const indexBuffer = new Uint32Array(totalIndices);
+  let vertexOffset = 0;
+  let indexOffset = 0;
+  for (const fragment of fragments) {
+    vertexBuffer.set(
+        new Float32Array(fragment.buffer, fragment.verticesOffset, fragment.numVertices * 3),
+        vertexOffset * 3);
+    const {numIndices} = fragment;
+    const sourceIndices = new Uint32Array(fragment.buffer, fragment.indicesOffset, numIndices);
+    convertEndian32(sourceIndices, Endianness.LITTLE);
+    for (let i = 0; i < numIndices; ++i) {
+      indexBuffer[indexOffset++] = sourceIndices[i] + vertexOffset;
+    }
+    vertexOffset += fragment.numVertices;
+  }
+  convertEndian32(vertexBuffer, Endianness.LITTLE);
+  return {vertexPositions: vertexBuffer, indices: indexBuffer};
+}
+
+function makeBatchMeshRequest(
+    credentialsProvider: CredentialsProvider<Credentials>,
+    parameters: {instance: BrainmapsInstance, volumeId: string, meshName: string},
+    ids: Iterable<string>, cancellationToken: CancellationToken): Promise<ArrayBuffer> {
+  const path = `/v1/objects/meshes:batch`;
+
+  const batches: BatchMeshFragment[] = [];
+  let prevObjectId: string|undefined;
+  let batchSize = 0;
+  for (const id of ids) {
+    const splitIndex = id.indexOf('\0');
+    const objectId = id.substring(0, splitIndex);
+    const fragmentId = id.substring(splitIndex + 1);
+    if (objectId !== prevObjectId) {
+      batches.push({object_id: objectId, fragment_keys: []});
+    }
+    batches[batches.length - 1].fragment_keys.push(fragmentId);
+    if (++batchSize === maxMeshBatchSize) break;
+  }
+  const payload: BatchMeshFragmentPayload = {
+    volume_id: parameters.volumeId,
+    mesh_name: parameters.meshName,
+    batches: batches,
+  };
+  return makeRequest(
+      parameters['instance'], credentialsProvider, {
+        method: 'POST',
+        path,
+        payload: JSON.stringify(payload),
+        responseType: 'arraybuffer',
+      },
+      cancellationToken);
+}
+
+@registerSharedObject() export class BrainmapsMultiscaleMeshSource extends
+(BrainmapsSource(MultiscaleMeshSource, MultiscaleMeshSourceParameters)) {
+  private listFragmentsParams = (() => {
+    const {parameters} = this;
+    const {changeSpec} = parameters;
+    if (changeSpec !== undefined) {
+      return `&header.changeStackId=${changeSpec.changeStackId}`;
+    }
+    return '';
+  })();
+
+  download(chunk: BrainmapsMultiscaleManifestChunk, cancellationToken: CancellationToken) {
+    let {parameters} = this;
+    const path = `/v1/objects/${parameters['volumeId']}/meshes/` +
+        `${parameters.info.lods[0].info.name}:listfragments?` +
+        `object_id=${chunk.objectId}&return_supervoxel_ids=true` + this.listFragmentsParams;
+    return makeRequest(
+               parameters['instance'], this.credentialsProvider, {
+                 method: 'GET',
+                 path,
+                 responseType: 'json',
+               },
+               cancellationToken)
+        .then(response => decodeMultiscaleManifestChunk(chunk, response));
   }
 
-  function toMaxMinBounds(input: Bounds) {
-    return {
-      min: vec3.clone(transformCorner(input.center, input.size, -1)),
-      max: vec3.clone(transformCorner(input.center, input.size, 1)),
-    };
-  }
+  downloadFragment(chunk: MultiscaleFragmentChunk, cancellationToken: CancellationToken) {
+    let {parameters} = this;
 
-  const a = toMaxMinBounds(first);
-  const b = toMaxMinBounds(second);
-  return (a.min[0] <= b.max[0] && a.max[0] >= b.min[0]) &&
-      (a.min[1] <= b.max[1] && a.max[1] >= b.min[1]) &&
-      (a.min[2] <= b.max[2] && a.max[2] >= b.min[2]);
+    const idArray: [string, number][] = [];
+    const manifestChunk = chunk.manifestChunk! as BrainmapsMultiscaleManifestChunk;
+    const {fragmentSupervoxelIds} = manifestChunk;
+    const manifest = manifestChunk.manifest!;
+    const {lod} = chunk;
+    const startChunkIndex = chunk.chunkIndex;
+    const {chunkCoordinates} = manifest;
+    const xGrid = chunkCoordinates[startChunkIndex * 3] >>> lod,
+          yGrid = chunkCoordinates[startChunkIndex * 3 + 1] >>> lod,
+          zGrid = chunkCoordinates[startChunkIndex * 3 + 2] >>> lod;
+    let endChunkIndex = startChunkIndex;
+    {
+      let chunkIndex, maxChunkIndex = fragmentSupervoxelIds.length;
+      for (chunkIndex = startChunkIndex; chunkIndex < maxChunkIndex; ++chunkIndex) {
+        if ((chunkCoordinates[chunkIndex * 3] >>> lod) != xGrid ||
+            (chunkCoordinates[chunkIndex * 3 + 1] >>> lod) != yGrid ||
+            (chunkCoordinates[chunkIndex * 3 + 2] >>> lod) != zGrid) {
+          break;
+        }
+        const entry = fragmentSupervoxelIds[chunkIndex];
+        for (const supervoxelId of entry.supervoxelIds) {
+          idArray.push([supervoxelId + '\0' + entry.fragmentId, chunkIndex]);
+        }
+      }
+      endChunkIndex = chunkIndex;
+    }
+
+    let fragments: (BatchMeshResponseFragment&{chunkIndex: number})[] = [];
+
+    idArray.sort((a, b) => a[0].localeCompare(b[0]));
+    const ids = new Map(idArray);
+
+    function copyMeshData() {
+      fragments.sort((a, b) => a.chunkIndex - b.chunkIndex);
+      let indexOffset = 0;
+      const subChunkOffsets = new Uint32Array(endChunkIndex - startChunkIndex + 1);
+      for (const fragment of fragments) {
+        indexOffset += fragment.numIndices;
+        subChunkOffsets[fragment.chunkIndex - startChunkIndex + 1] = indexOffset;
+      }
+      assignMultiscaleMeshFragmentData(
+          chunk, {...combineBatchMeshFragments(fragments), subChunkOffsets});
+    }
+    function decodeResponse(response: ArrayBuffer): Promise<void>|void {
+      decodeBatchMeshResponse(
+          response, (fragment: BatchMeshResponseFragment&{chunkIndex: number}) => {
+            const chunkIndex = ids.get(fragment.fullKey)!;
+            if (!ids.delete(fragment.fullKey)) {
+              throw new Error(
+                  `Received unexpected fragment key: ${JSON.stringify(fragment.fullKey)}.`);
+            }
+            fragment.chunkIndex = chunkIndex;
+            fragments.push(fragment);
+          });
+
+      if (ids.size !== 0) {
+        // Partial response received.
+        return makeBatchRequest();
+      }
+      copyMeshData();
+    }
+
+    const {credentialsProvider} = this;
+
+    const meshName = parameters.info.lods.find(x => x.lod === lod)!.info.name;
+
+    function makeBatchRequest(): Promise<void> {
+      return makeBatchMeshRequest(
+                 credentialsProvider,
+                 {instance: parameters.instance, volumeId: parameters.volumeId, meshName},
+                 ids.keys(), cancellationToken)
+          .then(decodeResponse);
+    }
+    return makeBatchRequest();
+  }
+}
+
+function groupFragmentsIntoBatches(ids: string[]) {
+  const batches = [];
+  let index = 0;
+  const length = ids.length;
+  while (index < length) {
+    batches.push(JSON.stringify(ids.slice(index, index + maxMeshBatchSize)));
+    index += maxMeshBatchSize;
+  }
+  return batches;
 }
 
 function decodeManifestChunkWithSupervoxelIds(chunk: ManifestChunk, response: any) {
@@ -215,36 +479,16 @@ function decodeManifestChunkWithSupervoxelIds(chunk: ManifestChunk, response: an
   }
   let fragmentIds =
       supervoxelIds.map((supervoxelId, index) => supervoxelId + '\0' + fragmentKeys[index]);
-  if (chunk.clipBounds) {
-    fragmentIds = filterFragments(fragmentIds, chunk.clipBounds);
-  }
   chunk.fragmentIds = groupFragmentsIntoBatches(fragmentIds);
-}
-
-const batchSize = 100;
-
-function groupFragmentsIntoBatches(ids: string[]) {
-  const batches = [];
-  let index = 0;
-  const length = ids.length;
-  while (index < length) {
-    batches.push(JSON.stringify(ids.slice(index, index + batchSize)));
-    index += batchSize;
-  }
-  return batches;
 }
 
 @registerSharedObject() export class BrainmapsMeshSource extends
 (BrainmapsSource(MeshSource, MeshSourceParameters)) {
-  private manifestDecoder = this.parameters.changeSpec !== undefined ?
-      decodeManifestChunkWithSupervoxelIds :
-      decodeManifestChunk;
-
   private listFragmentsParams = (() => {
     const {parameters} = this;
     const {changeSpec} = parameters;
     if (changeSpec !== undefined) {
-      return `&header.changeStackId=${changeSpec.changeStackId}&return_supervoxel_ids=true`;
+      return `&header.changeStackId=${changeSpec.changeStackId}`;
     }
     return '';
   })();
@@ -252,8 +496,8 @@ function groupFragmentsIntoBatches(ids: string[]) {
   download(chunk: ManifestChunk, cancellationToken: CancellationToken) {
     let {parameters} = this;
     const path = `/v1/objects/${parameters['volumeId']}/meshes/` +
-        `${parameters['meshName']}:listfragments?object_id=${chunk.objectId}` +
-        this.listFragmentsParams;
+        `${parameters['meshName']}:listfragments?` +
+        `object_id=${chunk.objectId}&return_supervoxel_ids=true` + this.listFragmentsParams;
     return makeRequest(
                parameters['instance'], this.credentialsProvider, {
                  method: 'GET',
@@ -261,108 +505,27 @@ function groupFragmentsIntoBatches(ids: string[]) {
                  responseType: 'json',
                },
                cancellationToken)
-        .then(response => this.manifestDecoder(chunk, response));
+        .then(response => decodeManifestChunkWithSupervoxelIds(chunk, response));
   }
 
   downloadFragment(chunk: FragmentChunk, cancellationToken: CancellationToken) {
     let {parameters} = this;
 
-    const path = `/v1/objects/meshes:batch`;
-
     const ids = new Set<string>(JSON.parse(chunk.fragmentId!));
 
-    let totalVertices = 0;
-    let totalIndices = 0;
-    let fragments: {
-      buffer: ArrayBuffer,
-      verticesOffset: number,
-      indicesOffset: number,
-      numVertices: number,
-      numIndices: number
-    }[] = [];
+    let fragments: BatchMeshResponseFragment[] = [];
 
     function copyMeshData() {
-      const vertexBuffer = new Float32Array(totalVertices * 3);
-      const indexBuffer = new Uint32Array(totalIndices);
-      let vertexOffset = 0;
-      let indexOffset = 0;
-      for (const fragment of fragments) {
-        vertexBuffer.set(
-            new Float32Array(fragment.buffer, fragment.verticesOffset, fragment.numVertices * 3),
-            vertexOffset * 3);
-        const {numIndices} = fragment;
-        const sourceIndices = new Uint32Array(fragment.buffer, fragment.indicesOffset, numIndices);
-        convertEndian32(sourceIndices, Endianness.LITTLE);
-        for (let i = 0; i < numIndices; ++i) {
-          indexBuffer[indexOffset++] = sourceIndices[i] + vertexOffset;
-        }
-        vertexOffset += fragment.numVertices;
-      }
-      convertEndian32(vertexBuffer, Endianness.LITTLE);
-      chunk.vertexPositions = vertexBuffer;
-      chunk.indices = indexBuffer;
-      chunk.vertexNormals = computeVertexNormals(vertexBuffer, indexBuffer);
+      assignMeshFragmentData(chunk, combineBatchMeshFragments(fragments));
     }
+
     function decodeResponse(response: ArrayBuffer): Promise<void>|void {
-      let length = response.byteLength;
-      let index = 0;
-      const dataView = new DataView(response);
-      const headerSize =
-          /*object id*/ 8 + /*fragment key length*/ 8 + /*num vertices*/ 8 + /*num triangles*/ 8;
-      while (index < length) {
-        if (index + headerSize > length) {
-          throw new Error(`Invalid batch mesh fragment response.`);
+      decodeBatchMeshResponse(response, fragment => {
+        if (!ids.delete(fragment.fullKey)) {
+          throw new Error(`Received unexpected fragment key: ${JSON.stringify(fragment.fullKey)}.`);
         }
-        let prefix: string;
-        if (parameters.changeSpec !== undefined) {
-          const objectIdLow = dataView.getUint32(index, /*littleEndian=*/true);
-          const objectIdHigh = dataView.getUint32(index + 4, /*littleEndian=*/true);
-          const objectIdString = new Uint64(objectIdLow, objectIdHigh).toString();
-          prefix = objectIdString + '\0';
-        } else {
-          prefix = '';
-        }
-        index += 8;
-        const fragmentKeyLength = dataView.getUint32(index, /*littleEndian=*/true);
-        const fragmentKeyLengthHigh = dataView.getUint32(index + 4, /*littleEndian=*/true);
-        index += 8;
-        if (fragmentKeyLengthHigh !== 0) {
-          throw new Error(`Invalid batch mesh fragment response.`);
-        }
-        if (index + fragmentKeyLength + /* num vertices */ 8 + /*num indices*/ 8 > length) {
-          throw new Error(`Invalid batch mesh fragment response.`);
-        }
-        const fragmentKey =
-            new TextDecoder().decode(new Uint8Array(response, index, fragmentKeyLength));
-        const fullKey = prefix + fragmentKey;
-        if (!ids.delete(fullKey)) {
-          throw new Error(`Received unexpected fragment key: ${JSON.stringify(fullKey)}.`);
-        }
-        index += fragmentKeyLength;
-        const numVertices = dataView.getUint32(index, /*littleEndian=*/true);
-        const numVerticesHigh = dataView.getUint32(index + 4, /*littleEndian=*/true);
-        index += 8;
-        const numTriangles = dataView.getUint32(index, /*littleEndian=*/true);
-        const numTrianglesHigh = dataView.getUint32(index + 4, /*littleEndian=*/true);
-        index += 8;
-        if (numVerticesHigh !== 0 || numTrianglesHigh !== 0) {
-          throw new Error(`Invalid batch mesh fragment response.`);
-        }
-        const endOffset = index + numTriangles * 12 + numVertices * 12;
-        if (endOffset > length) {
-          throw new Error(`Invalid batch mesh fragment response.`);
-        }
-        totalVertices += numVertices;
-        totalIndices += numTriangles * 3;
-        fragments.push({
-          buffer: response,
-          verticesOffset: index,
-          numVertices,
-          indicesOffset: index + 12 * numVertices,
-          numIndices: numTriangles * 3,
-        });
-        index = endOffset;
-      }
+        fragments.push(fragment);
+      });
 
       if (ids.size !== 0) {
         // Partial response received.
@@ -374,36 +537,7 @@ function groupFragmentsIntoBatches(ids: string[]) {
     const {credentialsProvider} = this;
 
     function makeBatchRequest(): Promise<void> {
-      const batches: BatchMeshFragment[] = [];
-
-      if (parameters.changeSpec !== undefined) {
-        let prevObjectId: string|undefined;
-        for (const id of ids) {
-          const splitIndex = id.indexOf('\0');
-          const objectId = id.substring(0, splitIndex);
-          const fragmentId = id.substring(splitIndex + 1);
-          if (objectId !== prevObjectId) {
-            batches.push({object_id: objectId, fragment_keys: []});
-          }
-          batches[batches.length - 1].fragment_keys.push(fragmentId);
-        }
-      } else {
-        batches.push(
-            {object_id: chunk.manifestChunk!.objectId.toString(), fragment_keys: Array.from(ids)});
-      }
-      const payload: BatchMeshFragmentPayload = {
-        volume_id: parameters.volumeId,
-        mesh_name: parameters.meshName,
-        batches: batches,
-      };
-      return makeRequest(
-                 parameters['instance'], credentialsProvider, {
-                   method: 'POST',
-                   path,
-                   payload: JSON.stringify(payload),
-                   responseType: 'arraybuffer',
-                 },
-                 cancellationToken)
+      return makeBatchMeshRequest(credentialsProvider, parameters, ids, cancellationToken)
           .then(decodeResponse);
     }
     return makeBatchRequest();
@@ -423,8 +557,8 @@ function decodeSkeletonChunk(chunk: SkeletonChunk, response: ArrayBuffer) {
     throw new Error(`The number of edges should not exceed 2^32-1.`);
   }
   decodeSkeletonVertexPositionsAndIndices(
-      chunk, response, Endianness.LITTLE, /*vertexByteOffset=*/16, numVertices,
-      /*indexByteOffset=*/undefined, /*numEdges=*/numEdges);
+      chunk, response, Endianness.LITTLE, /*vertexByteOffset=*/ 16, numVertices,
+      /*indexByteOffset=*/ undefined, /*numEdges=*/ numEdges);
 }
 
 @registerSharedObject() export class BrainmapsSkeletonSource extends
@@ -435,7 +569,7 @@ function decodeSkeletonChunk(chunk: SkeletonChunk, response: ArrayBuffer) {
       object_id: `${chunk.objectId}`,
     };
     const path = `/v1/objects/${parameters['volumeId']}` +
-        `/meshes/${parameters['meshName']}` +
+        `/meshes/${parameters.meshName}` +
         '/skeleton:binary';
     applyChangeStack(parameters.changeSpec, payload);
     return makeRequest(
@@ -650,7 +784,8 @@ function annotationToBrainmaps(annotation: Annotation): any {
         });
   }
 
-  downloadSegmentFilteredGeometry(chunk: AnnotationSubsetGeometryChunk, cancellationToken: CancellationToken) {
+  downloadSegmentFilteredGeometry(
+      chunk: AnnotationSubsetGeometryChunk, cancellationToken: CancellationToken) {
     const {parameters} = this;
     return Promise
         .all(spatialAnnotationTypes.map(

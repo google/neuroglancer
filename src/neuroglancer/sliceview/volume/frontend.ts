@@ -16,7 +16,7 @@
 
 import {AnnotationSource} from 'neuroglancer/annotation';
 import {ChunkManager} from 'neuroglancer/chunk_manager/frontend';
-import {MeshSource} from 'neuroglancer/mesh/frontend';
+import {MeshSource, MultiscaleMeshSource} from 'neuroglancer/mesh/frontend';
 import {SkeletonSource} from 'neuroglancer/skeleton/frontend';
 import {DataType} from 'neuroglancer/sliceview/base';
 import {ChunkedGraphSourceOptions} from 'neuroglancer/sliceview/chunked_graph/base';
@@ -177,6 +177,8 @@ export abstract class VolumeChunk extends SliceViewChunk {
   abstract getChannelValueAt(dataPosition: vec3, channel: number): any;
 }
 
+export type OptionalMeshSource = MeshSource|SkeletonSource|MultiscaleMeshSource|null;
+
 
 export interface MultiscaleVolumeChunkSource extends MultiscaleSliceViewChunkSource {
   /**
@@ -194,7 +196,7 @@ export interface MultiscaleVolumeChunkSource extends MultiscaleSliceViewChunkSou
    *
    * This only makes sense if volumeType === VolumeType.SEGMENTATION.
    */
-  getMeshSource: () => Promise<MeshSource|null> | MeshSource | null;
+  getMeshSource: () => Promise<MeshSource|MultiscaleMeshSource|null> | MeshSource | MultiscaleMeshSource | null;
 
   /**
    * Returns the associated skeleton source, if there is one.

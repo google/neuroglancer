@@ -16,7 +16,7 @@
 
 import {WithParameters} from 'neuroglancer/chunk_manager/backend';
 import {MeshSourceParameters, SkeletonSourceParameters, VolumeChunkEncoding, VolumeChunkSourceParameters} from 'neuroglancer/datasource/dvid/base';
-import {decodeTriangleVertexPositionsAndIndices, FragmentChunk, ManifestChunk, MeshSource} from 'neuroglancer/mesh/backend';
+import { decodeTriangleVertexPositionsAndIndices, FragmentChunk, ManifestChunk, MeshSource, assignMeshFragmentData} from 'neuroglancer/mesh/backend';
 import {SkeletonChunk, SkeletonSource} from 'neuroglancer/skeleton/backend';
 import {decodeSwcSkeletonChunk} from 'neuroglancer/skeleton/decode_swc_skeleton';
 import {decodeCompressedSegmentationChunk} from 'neuroglancer/sliceview/backend_chunk_decoders/compressed_segmentation';
@@ -47,8 +47,10 @@ import {registerSharedObject} from 'neuroglancer/worker_rpc';
 export function decodeFragmentChunk(chunk: FragmentChunk, response: ArrayBuffer) {
   let dv = new DataView(response);
   let numVertices = dv.getUint32(0, true);
-  decodeTriangleVertexPositionsAndIndices(
-      chunk, response, Endianness.LITTLE, /*vertexByteOffset=*/4, numVertices);
+  assignMeshFragmentData(
+      chunk,
+      decodeTriangleVertexPositionsAndIndices(
+          response, Endianness.LITTLE, /*vertexByteOffset=*/ 4, numVertices));
 }
 
 @registerSharedObject() export class DVIDMeshSource extends

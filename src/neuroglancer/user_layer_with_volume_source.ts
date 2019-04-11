@@ -18,18 +18,15 @@ import {AnnotationLayerState} from 'neuroglancer/annotation/frontend';
 import {GetVolumeOptions} from 'neuroglancer/datasource';
 import {RenderLayerRole, UserLayer} from 'neuroglancer/layer';
 import {getVolumeWithStatusMessage} from 'neuroglancer/layer_specification';
+import {RenderScaleHistogram, trackableRenderScaleTarget} from 'neuroglancer/render_scale_statistics';
 import {MultiscaleVolumeChunkSource} from 'neuroglancer/sliceview/volume/frontend';
+import {TrackableValue} from 'neuroglancer/trackable_value';
 import {getAnnotationRenderOptions, UserLayerWithAnnotations, UserLayerWithAnnotationsMixin} from 'neuroglancer/ui/annotations';
 import {UserLayerWithCoordinateTransform, UserLayerWithCoordinateTransformMixin} from 'neuroglancer/user_layer_with_coordinate_transform';
 import {verifyObjectProperty, verifyOptionalString} from 'neuroglancer/util/json';
-import {TrackableMIPLevelConstraints} from 'neuroglancer/trackable_mip_level_constraints';
-import {RenderLayer as GenericSliceViewRenderLayer} from 'neuroglancer/sliceview/renderlayer.ts';
-import {VoxelSizeSelectionWidget} from 'neuroglancer/widget/voxel_size_selection_widget';
-import {vec3} from 'neuroglancer/util/geom';
 
 const SOURCE_JSON_KEY = 'source';
-const MIN_MIP_LEVEL_JSON_KEY = 'minMIPLevel';
-const MAX_MIP_LEVEL_JSON_KEY = 'maxMIPLevel';
+const CROSS_SECTION_RENDER_SCALE_JSON_KEY = 'crossSectionRenderScale';
 
 interface BaseConstructor {
   new(...args: any[]): UserLayerWithAnnotations&UserLayerWithCoordinateTransform;
@@ -41,19 +38,20 @@ function helper<TBase extends BaseConstructor>(Base: TBase) {
     volumePath: string|undefined;
     multiscaleSource: Promise<MultiscaleVolumeChunkSource>|undefined;
     volumeOptions: GetVolumeOptions|undefined;
-    mipLevelConstraints = new TrackableMIPLevelConstraints();
-    voxelSizeSelectionWidget = this.registerDisposer(new VoxelSizeSelectionWidget(this.mipLevelConstraints));
-
-    constructor(...args:any[]) {
-      super(...args);
-      this.registerDisposer(this.mipLevelConstraints.changed.add(this.specificationChanged.dispatch));
-    }
+    sliceViewRenderScaleHistogram = new RenderScaleHistogram();
+    sliceViewRenderScaleTarget = (() => {
+      const target = trackableRenderScaleTarget(1);
+      target.changed.add(this.specificationChanged.dispatch);
+      return target;
+    })();
 
     restoreState(specification: any) {
       super.restoreState(specification);
-      this.mipLevelConstraints.restoreState(specification[MIN_MIP_LEVEL_JSON_KEY], specification[MAX_MIP_LEVEL_JSON_KEY], false);
       const volumePath = this.volumePath =
           verifyObjectProperty(specification, SOURCE_JSON_KEY, verifyOptionalString);
+      this.sliceViewRenderScaleTarget.restoreState(
+          specification[CROSS_SECTION_RENDER_SCALE_JSON_KEY]);
+
       if (volumePath !== undefined) {
         const multiscaleSource = this.multiscaleSource = getVolumeWithStatusMessage(
             this.manager.dataSourceProvider, this.manager.chunkManager, volumePath,
@@ -77,19 +75,8 @@ function helper<TBase extends BaseConstructor>(Base: TBase) {
     toJSON() {
       const result = super.toJSON();
       result[SOURCE_JSON_KEY] = this.volumePath;
-      result[MIN_MIP_LEVEL_JSON_KEY] = this.mipLevelConstraints.minMIPLevel.value;
-      result[MAX_MIP_LEVEL_JSON_KEY] = this.mipLevelConstraints.maxMIPLevel.value;
+      result[CROSS_SECTION_RENDER_SCALE_JSON_KEY] = this.sliceViewRenderScaleTarget.toJSON();
       return result;
-    }
-
-    // Called after user layer's render layer is created
-    protected setupVoxelSelectionWidget(renderlayer: GenericSliceViewRenderLayer) {
-      const voxelSizePerMIPLevel: vec3[] = [];
-      renderlayer.transformedSources.forEach(transformedSource => {
-        voxelSizePerMIPLevel.push(transformedSource[0].source.spec.voxelSize);
-      });
-      this.voxelSizeSelectionWidget.setup(
-        voxelSizePerMIPLevel, renderlayer.activeMinMIPLevel);
     }
   }
   return C;
@@ -99,7 +86,8 @@ export interface UserLayerWithVolumeSource extends UserLayerWithAnnotations,
                                                    UserLayerWithCoordinateTransform {
   volumePath: string|undefined;
   multiscaleSource: Promise<MultiscaleVolumeChunkSource>|undefined;
-  mipLevelConstraints: TrackableMIPLevelConstraints;
+  sliceViewRenderScaleHistogram: RenderScaleHistogram;
+  sliceViewRenderScaleTarget: TrackableValue<number>;
 }
 
 /**
