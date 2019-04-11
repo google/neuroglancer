@@ -22,7 +22,7 @@ import {NavigationState} from 'neuroglancer/navigation_state';
 import {SLICEVIEW_ADD_VISIBLE_LAYER_RPC_ID, SLICEVIEW_REMOVE_VISIBLE_LAYER_RPC_ID, SLICEVIEW_RPC_ID, SLICEVIEW_UPDATE_VIEW_RPC_ID, SLICEVIEW_UPDATE_PREFETCHING_RPC_ID, SliceViewBase, SliceViewChunkSource as SliceViewChunkSourceInterface, SliceViewChunkSpecification, SliceViewSourceOptions} from 'neuroglancer/sliceview/base';
 import {ChunkLayout} from 'neuroglancer/sliceview/chunk_layout';
 import {RenderLayer} from 'neuroglancer/sliceview/renderlayer';
-import {RefCounted} from 'neuroglancer/util/disposable';
+import {Disposer, invokeDisposers, RefCounted} from 'neuroglancer/util/disposable';
 import {mat4, rectifyTransformMatrixIfAxisAligned, vec3, vec3Key, vec4} from 'neuroglancer/util/geom';
 import {getObjectId} from 'neuroglancer/util/object_id';
 import {NullarySignal} from 'neuroglancer/util/signal';
@@ -38,7 +38,8 @@ export type GenericChunkKey = string;
 
 const tempMat = mat4.create();
 
-const Base = withSharedVisibility(SliceViewBase);
+class FrontendSliceViewBase extends SliceViewBase<SliceViewChunkSource, RenderLayer> {}
+const Base = withSharedVisibility(FrontendSliceViewBase);
 
 @registerSharedObjectOwner(SLICEVIEW_RPC_ID)
 export class SliceView extends Base {
@@ -62,8 +63,6 @@ export class SliceView extends Base {
   visibleChunksStale = true;
 
   visibleLayerList = new Array<RenderLayer>();
-
-  visibleLayers: Map<RenderLayer, {chunkLayout: ChunkLayout, source: SliceViewChunkSource}[]>;
 
   newVisibleLayers = new Set<RenderLayer>();
 
@@ -153,17 +152,17 @@ export class SliceView extends Base {
     this.viewChanged.dispatch();
   });
 
-  private bindVisibleRenderLayer(renderLayer: RenderLayer) {
-    renderLayer.redrawNeeded.add(this.viewChanged.dispatch);
-    renderLayer.transform.changed.add(this.invalidateVisibleSources);
-    renderLayer.mipLevelConstraints.changed.add(this.invalidateVisibleSources);
+  private bindVisibleRenderLayer(renderLayer: RenderLayer, disposers: Disposer[]) {
+    disposers.push(renderLayer.redrawNeeded.add(this.viewChanged.dispatch));
+    disposers.push(renderLayer.transform.changed.add(this.invalidateVisibleSources));
+    disposers.push(renderLayer.renderScaleTarget.changed.add(this.invalidateVisibleSources));
+    const {renderScaleHistogram} = renderLayer;
+    if (renderScaleHistogram !== undefined) {
+      disposers.push(renderScaleHistogram.visibility.add(this.visibility));
+    }
   }
 
-  private unbindVisibleRenderLayer(renderLayer: RenderLayer) {
-    renderLayer.redrawNeeded.remove(this.viewChanged.dispatch);
-    renderLayer.transform.changed.remove(this.invalidateVisibleSources);
-    renderLayer.mipLevelConstraints.changed.remove(this.invalidateVisibleSources);
-  }
+  private visibleLayerDisposers = new Map<RenderLayer, Disposer[]>();
 
   private updateVisibleLayersNow() {
     if (this.wasDisposed) {
@@ -178,6 +177,7 @@ export class SliceView extends Base {
     let newVisibleLayers = this.newVisibleLayers;
     let changed = false;
     let visibleLayerList = this.visibleLayerList;
+    const {visibleLayerDisposers} = this;
     visibleLayerList.length = 0;
     for (let renderLayer of this.layerManager.readyRenderLayers()) {
       if (renderLayer instanceof RenderLayer) {
@@ -185,7 +185,9 @@ export class SliceView extends Base {
         visibleLayerList.push(renderLayer);
         if (!visibleLayers.has(renderLayer)) {
           visibleLayers.set(renderLayer.addRef(), []);
-          this.bindVisibleRenderLayer(renderLayer);
+          const disposers: Disposer[] = [];
+          visibleLayerDisposers.set(renderLayer, disposers);
+          this.bindVisibleRenderLayer(renderLayer, disposers);
           rpcMessage['layerId'] = renderLayer.rpcId;
           rpc.invoke(SLICEVIEW_ADD_VISIBLE_LAYER_RPC_ID, rpcMessage);
           changed = true;
@@ -195,7 +197,9 @@ export class SliceView extends Base {
     for (let renderLayer of visibleLayers.keys()) {
       if (!newVisibleLayers.has(renderLayer)) {
         visibleLayers.delete(renderLayer);
-        this.unbindVisibleRenderLayer(renderLayer);
+        const disposers = this.visibleLayerDisposers.get(renderLayer)!;
+        this.visibleLayerDisposers.delete(renderLayer);
+        invokeDisposers(disposers);
         rpcMessage['layerId'] = renderLayer.rpcId;
         rpc.invoke(SLICEVIEW_REMOVE_VISIBLE_LAYER_RPC_ID, rpcMessage);
         renderLayer.dispose();
@@ -229,7 +233,8 @@ export class SliceView extends Base {
   setViewportSize(width: number, height: number) {
     this.setViewportSizeDebounced.cancel();
     if (super.setViewportSize(width, height)) {
-      this.rpc!.invoke(SLICEVIEW_UPDATE_VIEW_RPC_ID, {id: this.rpcId, width: width, height: height});
+      this.rpc!.invoke(
+          SLICEVIEW_UPDATE_VIEW_RPC_ID, {id: this.rpcId, width: width, height: height});
       // this.chunkManager.scheduleUpdateChunkPriorities();
       return true;
     }
@@ -271,17 +276,17 @@ export class SliceView extends Base {
     gl.enable(gl.STENCIL_TEST);
     gl.disable(gl.DEPTH_TEST);
     gl.stencilOpSeparate(
-        /*face=*/gl.FRONT_AND_BACK, /*sfail=*/gl.KEEP, /*dpfail=*/gl.KEEP,
-        /*dppass=*/gl.REPLACE);
+        /*face=*/ gl.FRONT_AND_BACK, /*sfail=*/ gl.KEEP, /*dpfail=*/ gl.KEEP,
+        /*dppass=*/ gl.REPLACE);
 
     let renderLayerNum = 0;
     for (let renderLayer of this.visibleLayerList) {
       gl.clear(gl.STENCIL_BUFFER_BIT);
       gl.stencilFuncSeparate(
-          /*face=*/gl.FRONT_AND_BACK,
-          /*func=*/gl.GREATER,
-          /*ref=*/1,
-          /*mask=*/1);
+          /*face=*/ gl.FRONT_AND_BACK,
+          /*func=*/ gl.GREATER,
+          /*ref=*/ 1,
+          /*mask=*/ 1);
 
       renderLayer.setGLBlendMode(gl, renderLayerNum);
       renderLayer.draw(this);
@@ -327,10 +332,11 @@ export class SliceView extends Base {
   }
 
   disposed() {
-    for (const renderLayer of this.visibleLayers.keys()) {
-      this.unbindVisibleRenderLayer(renderLayer);
+    for (const [renderLayer, disposers] of this.visibleLayerDisposers) {
+      invokeDisposers(disposers);
       renderLayer.dispose();
     }
+    this.visibleLayerDisposers.clear();
     this.visibleLayers.clear();
     this.visibleLayerList.length = 0;
   }
@@ -407,7 +413,7 @@ vec4 sampledColor = texture(uSampler, vTexCoord);
 if (sampledColor.a == 0.0) {
   sampledColor = uBackgroundColor;
 }
-emit(sampledColor * uColorFactor, vec4(0,0,0,0));
+emit(sampledColor * uColorFactor, 0u);
 `);
     builder.addAttribute('vec4', 'aVertexPosition');
     builder.setVertexMain(`
@@ -434,7 +440,7 @@ gl_Position = uProjectionMatrix * aVertexPosition;
     gl.uniform4fv(shader.uniform('uTextureCoordinateAdjustment'), textureCoordinateAdjustment);
 
     let aVertexPosition = shader.attribute('aVertexPosition');
-    this.copyVertexPositionsBuffer.bindToVertexAttrib(aVertexPosition, /*components=*/2);
+    this.copyVertexPositionsBuffer.bindToVertexAttrib(aVertexPosition, /*components=*/ 2);
 
     gl.drawArrays(gl.TRIANGLE_FAN, 0, 4);
 

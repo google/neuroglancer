@@ -14,13 +14,13 @@
  * limitations under the License.
  */
 
+import throttle from 'lodash/throttle';
 import {AxesLineHelper} from 'neuroglancer/axes_lines';
 import {DisplayContext} from 'neuroglancer/display_context';
-import {makeRenderedPanelVisibleLayerTracker, MouseSelectionState, VisibleRenderLayerTracker} from 'neuroglancer/layer';
-import {PickIDManager} from 'neuroglancer/object_picking';
-import {PERSPECTIVE_VIEW_ADD_LAYER_RPC_ID, PERSPECTIVE_VIEW_REMOVE_LAYER_RPC_ID, PERSPECTIVE_VIEW_RPC_ID} from 'neuroglancer/perspective_view/base';
-import {PerspectiveViewRenderContext, PerspectiveViewRenderLayer} from 'neuroglancer/perspective_view/render_layer';
-import {RenderedDataPanel, RenderedDataViewerState} from 'neuroglancer/rendered_data_panel';
+import {makeRenderedPanelVisibleLayerTracker, VisibleRenderLayerTracker} from 'neuroglancer/layer';
+import {PERSPECTIVE_VIEW_ADD_LAYER_RPC_ID, PERSPECTIVE_VIEW_REMOVE_LAYER_RPC_ID, PERSPECTIVE_VIEW_RPC_ID, PERSPECTIVE_VIEW_UPDATE_VIEWPORT_RPC_ID} from 'neuroglancer/perspective_view/base';
+import {PerspectiveViewReadyRenderContext, PerspectiveViewRenderContext, PerspectiveViewRenderLayer} from 'neuroglancer/perspective_view/render_layer';
+import {FramePickingData, RenderedDataPanel, RenderedDataViewerState} from 'neuroglancer/rendered_data_panel';
 import {SliceView, SliceViewRenderHelper} from 'neuroglancer/sliceview/frontend';
 import {TrackableBoolean, TrackableBooleanCheckbox} from 'neuroglancer/trackable_boolean';
 import {TrackableValue} from 'neuroglancer/trackable_value';
@@ -29,11 +29,11 @@ import {Owned} from 'neuroglancer/util/disposable';
 import {ActionEvent, registerActionListener} from 'neuroglancer/util/event_action_map';
 import {kAxes, mat4, transformVectorByMat4, vec3, vec4} from 'neuroglancer/util/geom';
 import {startRelativeMouseDrag} from 'neuroglancer/util/mouse_drag';
+import {TouchRotateInfo, TouchTranslateInfo} from 'neuroglancer/util/touch_bindings';
 import {WatchableMap} from 'neuroglancer/util/watchable_map';
 import {withSharedVisibility} from 'neuroglancer/visibility_priority/frontend';
 import {DepthBuffer, FramebufferConfiguration, makeTextureBuffers, OffscreenCopyHelper, TextureBuffer} from 'neuroglancer/webgl/offscreen';
 import {ShaderBuilder} from 'neuroglancer/webgl/shader';
-import {glsl_packFloat01ToFixedPoint, unpackFloat01FromFixedPoint} from 'neuroglancer/webgl/shader_lib';
 import {ScaleBarOptions, ScaleBarTexture} from 'neuroglancer/widget/scale_bar';
 import {RPC, SharedObject} from 'neuroglancer/worker_rpc';
 
@@ -47,6 +47,7 @@ export interface PerspectiveViewerState extends RenderedDataViewerState {
   scaleBarOptions: TrackableValue<ScaleBarOptions>;
   showSliceViewsCheckbox?: boolean;
   crossSectionBackgroundColor: TrackableRGB;
+  perspectiveViewBackgroundColor: TrackableRGB;
   rpc: RPC;
 }
 
@@ -57,15 +58,13 @@ export enum OffscreenTextures {
   NUM_TEXTURES
 }
 
-export const glsl_perspectivePanelEmit = [
-  glsl_packFloat01ToFixedPoint, `
-void emit(vec4 color, vec4 pickId) {
-  v4f_fragData${OffscreenTextures.COLOR} = color;
-  v4f_fragData${OffscreenTextures.Z} = packFloat01ToFixedPoint(1.0 - gl_FragCoord.z);
-  v4f_fragData${OffscreenTextures.PICK} = pickId;
+export const glsl_perspectivePanelEmit = `
+void emit(vec4 color, highp uint pickId) {
+  out_color = color;
+  out_z = 1.0 - gl_FragCoord.z;
+  out_pickId = float(pickId);
 }
-`
-];
+`;
 
 /**
  * http://jcgt.org/published/0002/02/09/paper.pdf
@@ -82,7 +81,7 @@ float computeOITWeight(float alpha) {
 // Color must be premultiplied by alpha.
 export const glsl_perspectivePanelEmitOIT = [
   glsl_computeOITWeight, `
-void emit(vec4 color, vec4 pickId) {
+void emit(vec4 color, highp uint pickId) {
   float weight = computeOITWeight(color.a);
   vec4 accum = color * weight;
   v4f_fragData0 = vec4(accum.rgb, color.a);
@@ -92,10 +91,9 @@ void emit(vec4 color, vec4 pickId) {
 ];
 
 export function perspectivePanelEmit(builder: ShaderBuilder) {
-  builder.addOutputBuffer(
-      'vec4', `v4f_fragData${OffscreenTextures.COLOR}`, OffscreenTextures.COLOR);
-  builder.addOutputBuffer('vec4', `v4f_fragData${OffscreenTextures.Z}`, OffscreenTextures.Z);
-  builder.addOutputBuffer('vec4', `v4f_fragData${OffscreenTextures.PICK}`, OffscreenTextures.PICK);
+  builder.addOutputBuffer('vec4', `out_color`, OffscreenTextures.COLOR);
+  builder.addOutputBuffer('highp float', `out_z`, OffscreenTextures.Z);
+  builder.addOutputBuffer('highp float', `out_pickId`, OffscreenTextures.PICK);
   builder.addFragmentCode(glsl_perspectivePanelEmit);
 }
 
@@ -131,7 +129,6 @@ const ReceptiveField = { // must pick odd numbers
   height: 23,
 };
 const RFSpiral = spiralSequence(ReceptiveField.width, ReceptiveField.height);
-const zData = new Uint8Array(ReceptiveField.width * ReceptiveField.height * 4);
 
 export class PerspectivePanel extends RenderedDataPanel {
   viewer: PerspectiveViewerState;
@@ -158,18 +155,58 @@ export class PerspectivePanel extends RenderedDataPanel {
           this.scheduleRedraw();
         }));
   })();
+
+  /**
+   * Transform from camera space to OpenGL clip space.
+   */
   projectionMat = mat4.create();
-  inverseProjectionMat = mat4.create();
-  modelViewMat = mat4.create();
+
+  /**
+   * Transform from world space to camera space.
+   */
+  viewMat = mat4.create();
+
+  /**
+   * Inverse of `viewMat`.
+   */
+  viewMatInverse = mat4.create();
+
+  /**
+   * Transform from world space to OpenGL clip space.  Equal to `projectionMat * viewMat`.
+   */
+  viewProjectionMat = mat4.create();
+
+  /**
+   * Inverse of `viewProjectionMat`.
+   */
+  viewProjectionMatInverse = mat4.create();
+
+  /**
+   * Width of panel viewport in pixels.
+   */
   width = 0;
+
+  /**
+   * Height of panel viewport in pixels.
+   */
   height = 0;
-  protected pickIDs = new PickIDManager();
+
   private axesLineHelper = this.registerDisposer(AxesLineHelper.get(this.gl));
   sliceViewRenderHelper =
       this.registerDisposer(SliceViewRenderHelper.get(this.gl, perspectivePanelEmit));
 
   protected offscreenFramebuffer = this.registerDisposer(new FramebufferConfiguration(this.gl, {
-    colorBuffers: makeTextureBuffers(this.gl, OffscreenTextures.NUM_TEXTURES),
+    colorBuffers: [
+      new TextureBuffer(
+          this.gl, WebGL2RenderingContext.RGBA8, WebGL2RenderingContext.RGBA,
+          WebGL2RenderingContext.UNSIGNED_BYTE),
+      new TextureBuffer(
+          this.gl, WebGL2RenderingContext.R32F, WebGL2RenderingContext.RED,
+          WebGL2RenderingContext.FLOAT),
+      new TextureBuffer(
+          this.gl, WebGL2RenderingContext.R32F, WebGL2RenderingContext.RED,
+          WebGL2RenderingContext.FLOAT),
+    ],
     depthBuffer: new DepthBuffer(this.gl)
   }));
 
@@ -190,7 +227,8 @@ export class PerspectivePanel extends RenderedDataPanel {
   constructor(context: DisplayContext, element: HTMLElement, viewer: PerspectiveViewerState) {
     super(context, element, viewer);
     this.registerDisposer(this.navigationState.changed.add(() => {
-      this.viewportChanged();
+      this.throttledSendViewportUpdate();
+      this.context.scheduleRedraw();
     }));
 
     const sharedObject = this.sharedObject = this.registerDisposer(new PerspectiveViewState());
@@ -215,28 +253,26 @@ export class PerspectivePanel extends RenderedDataPanel {
           return undefined;
         });
 
-    registerActionListener(element, 'translate-via-mouse-drag', (e: ActionEvent<MouseEvent>) => {
+    registerActionListener(element, 'rotate-via-mouse-drag', (e: ActionEvent<MouseEvent>) => {
       startRelativeMouseDrag(e.detail, (_event, deltaX, deltaY) => {
-        const temp = tempVec3;
-        const {projectionMat} = this;
-        const {width, height} = this;
-        const {position} = this.viewer.navigationState;
-        const pos = position.spatialCoordinates;
-        vec3.transformMat4(temp, pos, projectionMat);
-        temp[0] = 2 * deltaX / width;
-        temp[1] = -2 * deltaY / height;
-        vec3.transformMat4(pos, temp, this.inverseProjectionMat);
-        position.changed.dispatch();
+        this.navigationState.pose.rotateRelative(kAxes[1], deltaX / 4.0 * Math.PI / 180.0);
+        this.navigationState.pose.rotateRelative(kAxes[0], -deltaY / 4.0 * Math.PI / 180.0);
       });
     });
 
-    registerActionListener(element, 'rotate-via-mouse-drag', (e: ActionEvent<MouseEvent>) => {
-      startRelativeMouseDrag(e.detail, (_event, deltaX, deltaY) => {
-        this.navigationState.pose.rotateRelative(kAxes[1], -deltaX / 4.0 * Math.PI / 180.0);
-        this.navigationState.pose.rotateRelative(kAxes[0], deltaY / 4.0 * Math.PI / 180.0);
-        this.viewer.navigationState.changed.dispatch();
-      });
-    });
+    registerActionListener(
+        element, 'rotate-in-plane-via-touchrotate', (e: ActionEvent<TouchRotateInfo>) => {
+          const {detail} = e;
+          this.navigationState.pose.rotateRelative(kAxes[2], detail.angle - detail.prevAngle);
+        });
+
+    registerActionListener(
+        element, 'rotate-out-of-plane-via-touchtranslate', (e: ActionEvent<TouchTranslateInfo>) => {
+          const {detail} = e;
+          this.navigationState.pose.rotateRelative(kAxes[1], detail.deltaX / 4.0 * Math.PI / 180.0);
+          this.navigationState.pose.rotateRelative(
+              kAxes[0], -detail.deltaY / 4.0 * Math.PI / 180.0);
+        });
 
     if (viewer.showSliceViewsCheckbox) {
       let showSliceViewsCheckbox =
@@ -256,6 +292,21 @@ export class PerspectivePanel extends RenderedDataPanel {
     this.registerDisposer(viewer.showAxisLines.changed.add(() => this.scheduleRedraw()));
     this.registerDisposer(
         viewer.crossSectionBackgroundColor.changed.add(() => this.scheduleRedraw()));
+    this.registerDisposer(
+        viewer.perspectiveViewBackgroundColor.changed.add(() => this.scheduleRedraw()));
+  }
+
+  translateByViewportPixels(deltaX: number, deltaY: number): void {
+    const temp = tempVec3;
+    const {viewProjectionMat} = this;
+    const {width, height} = this;
+    const {position} = this.viewer.navigationState;
+    const pos = position.spatialCoordinates;
+    vec3.transformMat4(temp, pos, viewProjectionMat);
+    temp[0] = -2 * deltaX / width;
+    temp[1] = 2 * deltaY / height;
+    vec3.transformMat4(pos, temp, this.viewProjectionMatInverse);
+    position.changed.dispatch();
   }
 
   get navigationState() {
@@ -264,7 +315,7 @@ export class PerspectivePanel extends RenderedDataPanel {
 
   isReady() {
     if (!this.visible) {
-      return false;
+      return true;
     }
     for (const [sliceView, unconditional] of this.sliceViews) {
       if (unconditional || this.viewer.showSliceViews.value) {
@@ -273,9 +324,23 @@ export class PerspectivePanel extends RenderedDataPanel {
         }
       }
     }
+    this.checkForResize();
+    const {width, height} = this;
+    if (width === 0 || height === 0) {
+      return true;
+    }
+    const {viewProjectionMat} = this;
+    this.updateProjectionMatrix();
+
+    const renderContext: PerspectiveViewReadyRenderContext = {
+      viewportWidth: width,
+      viewportHeight: height,
+      dataToDevice: viewProjectionMat,
+    };
+
     let visibleLayers = this.visibleLayerTracker.getVisibleLayers();
     for (let renderLayer of visibleLayers) {
-      if (!renderLayer.isReady()) {
+      if (!renderLayer.isReady(renderContext)) {
         return false;
       }
     }
@@ -283,7 +348,7 @@ export class PerspectivePanel extends RenderedDataPanel {
   }
 
   updateProjectionMatrix() {
-    let projectionMat = this.projectionMat;
+    const {projectionMat, viewProjectionMat} = this;
     const zOffsetAmount = 100;
     const widthOverHeight = this.width / this.height;
     const fovy = Math.PI / 4.0;
@@ -308,33 +373,40 @@ export class PerspectivePanel extends RenderedDataPanel {
       mat4.perspective(projectionMat, fovy, widthOverHeight, nearBound, farBound);
     }
 
-    let modelViewMat = this.modelViewMat;
-    this.navigationState.toMat4(modelViewMat);
+    const {viewMatInverse, viewMat} = this;
+    this.navigationState.toMat4(viewMatInverse);
     vec3.set(tempVec3, 1, -1, -1);
-    mat4.scale(modelViewMat, modelViewMat, tempVec3);
+    mat4.scale(viewMatInverse, viewMatInverse, tempVec3);
 
     let viewOffset = vec3.set(tempVec3, 0, 0, zOffsetAmount);
-    mat4.translate(modelViewMat, modelViewMat, viewOffset);
+    mat4.translate(viewMatInverse, viewMatInverse, viewOffset);
 
-    let modelViewMatInv = tempMat4;
-    mat4.invert(modelViewMatInv, modelViewMat);
+    mat4.invert(viewMat, viewMatInverse);
 
-    mat4.multiply(projectionMat, projectionMat, modelViewMatInv);
-    mat4.invert(this.inverseProjectionMat, projectionMat);
+    mat4.multiply(viewProjectionMat, projectionMat, viewMat);
+    mat4.invert(this.viewProjectionMatInverse, viewProjectionMat);
   }
 
-  viewportChanged() {
-    // FIXME: update viewport information on backend
-    this.context.scheduleRedraw();
-  }
-
-  onResize() {
-    const {clientWidth, clientHeight} = this.element;
-    if (clientWidth !== this.width || clientHeight !== this.height) {
-      this.width = this.element.clientWidth;
-      this.height = this.element.clientHeight;
-      this.viewportChanged();
+  private throttledSendViewportUpdate = this.registerCancellable(throttle(() => {
+    const {sharedObject} = this;
+    const {valid} = this.navigationState;
+    if (valid) {
+      this.updateProjectionMatrix();
     }
+    sharedObject.rpc!.invoke(PERSPECTIVE_VIEW_UPDATE_VIEWPORT_RPC_ID, {
+      view: sharedObject.rpcId,
+      viewport: {
+        width: valid ? this.width : 0,
+        height: valid ? this.height : 0,
+        viewMat: this.viewMat,
+        projectionMat: this.projectionMat,
+        viewProjectionMat: this.viewProjectionMat,
+      },
+    });
+  }, 10));
+
+  panelSizeChanged() {
+    this.throttledSendViewportUpdate();
   }
 
   disposed() {
@@ -345,40 +417,28 @@ export class PerspectivePanel extends RenderedDataPanel {
     super.disposed();
   }
 
-  updateMouseState(mouseState: MouseSelectionState): boolean {
+  issuePickRequest(glWindowX: number, glWindowY: number) {
+    const {offscreenFramebuffer} = this;
+    const {width, height} = ReceptiveField;
+    offscreenFramebuffer.readPixelsFloat32IntoBuffer(
+      OffscreenTextures.Z, glWindowX, glWindowY, width, height, 0);
+    offscreenFramebuffer.readPixelsFloat32IntoBuffer(
+        OffscreenTextures.PICK, glWindowX, glWindowY, width, height, width * height * 16);
+  }
+
+  completePickRequest(
+      glWindowX: number, glWindowY: number, data: Float32Array, pickingData: FramePickingData) {
+    const {mouseState} = this.viewer;
     mouseState.pickedRenderLayer = null;
-    if (!this.navigationState.valid) {
-      return false;
-    }
-    let out = mouseState.position;
-    let {offscreenFramebuffer, width, height} = this;
-    if (!offscreenFramebuffer.hasSize(width, height)) {
-      return false;
-    }
-    let glWindowX = this.mouseX;
-    let glWindowY = height - this.mouseY;
-
-    if (isNaN(glWindowX) || isNaN(glWindowY)) {
-      return false;
-    }
-
     const field_width = ReceptiveField.width;
     const field_height = ReceptiveField.height;
     const pixels = RFSpiral.length;
-
-    offscreenFramebuffer.readPixels(
-      OffscreenTextures.Z, glWindowX, glWindowY,
-      field_width, field_height, zData
-    );
 
     let zDatum = 0;
     let rfindex = 0;
     for (let i = 0; i < pixels; i++) {
       rfindex = RFSpiral[i];
-      zDatum = unpackFloat01FromFixedPoint(
-        zData.slice(rfindex * 4, (rfindex + 1) * 4)
-      );
-
+      zDatum = data[4*rfindex];
       if (zDatum) {
         break;
       }
@@ -386,30 +446,30 @@ export class PerspectivePanel extends RenderedDataPanel {
 
     let glWindowZ = 1.0 - zDatum;
     if (glWindowZ === 1.0) {
-      return false;
+      mouseState.setActive(false);
+      return;
     }
 
     glWindowX += (rfindex % field_width) - (field_width >> 1);
     glWindowY += Math.floor(rfindex / field_height) - (field_height >> 1);
 
-    out[0] = 2.0 * glWindowX / width - 1.0;
-    out[1] = 2.0 * glWindowY / height - 1.0;
+    const out = mouseState.position;
+    out[0] = 2.0 * glWindowX / this.width - 1.0;
+    out[1] = 2.0 * glWindowY / this.height - 1.0;
     out[2] = 2.0 * glWindowZ - 1.0;
-    vec3.transformMat4(out, out, this.inverseProjectionMat);
-    this.pickIDs.setMouseState(
-        mouseState,
-        offscreenFramebuffer.readPixelAsUint32(OffscreenTextures.PICK, glWindowX, glWindowY));
-    return true;
+    vec3.transformMat4(out, out, pickingData.invTransform);
+    pickingData.pickIDs.setMouseState(mouseState, data[4 * (field_width * field_height + rfindex)]);
+    mouseState.setActive(true);
   }
 
   translateDataPointByViewportPixels(out: vec3, orig: vec3, deltaX: number, deltaY: number): vec3 {
     const temp = tempVec3;
-    const {projectionMat} = this;
+    const {viewProjectionMat} = this;
     const {width, height} = this;
-    vec3.transformMat4(temp, orig, projectionMat);
-    temp[0] -= 2 * deltaX / width;
-    temp[1] -= -2 * deltaY / height;
-    return vec3.transformMat4(out, temp, this.inverseProjectionMat);
+    vec3.transformMat4(temp, orig, viewProjectionMat);
+    temp[0] += 2 * deltaX / width;
+    temp[1] += -2 * deltaY / height;
+    return vec3.transformMat4(out, temp, this.viewProjectionMatInverse);
   }
 
   private get transparentConfiguration() {
@@ -425,15 +485,11 @@ export class PerspectivePanel extends RenderedDataPanel {
     return transparentConfiguration;
   }
 
-  draw() {
+  drawWithPicking(pickingData: FramePickingData): boolean {
     if (!this.navigationState.valid) {
-      return;
+      return false;
     }
-    this.onResize();
-    let {width, height} = this;
-    if (width === 0 || height === 0) {
-      return;
-    }
+    const {width, height} = this;
 
     const showSliceViews = this.viewer.showSliceViews.value;
     for (const [sliceView, unconditional] of this.sliceViews) {
@@ -446,29 +502,28 @@ export class PerspectivePanel extends RenderedDataPanel {
     this.offscreenFramebuffer.bind(width, height);
 
     gl.disable(gl.SCISSOR_TEST);
-    this.gl.clearColor(0.0, 0.0, 0.0, 0.0);
+    const backgroundColor = this.viewer.perspectiveViewBackgroundColor.value;
+    this.gl.clearColor(backgroundColor[0], backgroundColor[1], backgroundColor[2], 0.0);
     gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
 
     gl.enable(gl.DEPTH_TEST);
-    let {projectionMat} = this;
+    let {viewProjectionMat} = this;
     this.updateProjectionMatrix();
 
     // FIXME; avoid temporaries
     let lightingDirection = vec3.create();
-    transformVectorByMat4(lightingDirection, kAxes[2], this.modelViewMat);
+    transformVectorByMat4(lightingDirection, kAxes[2], this.viewMatInverse);
     vec3.normalize(lightingDirection, lightingDirection);
 
     let ambient = 0.2;
     let directional = 1 - ambient;
 
-    let pickIDs = this.pickIDs;
-    pickIDs.clear();
-    let renderContext: PerspectiveViewRenderContext = {
-      dataToDevice: projectionMat,
+    const renderContext: PerspectiveViewRenderContext = {
+      dataToDevice: viewProjectionMat,
       lightDirection: lightingDirection,
       ambientLighting: ambient,
       directionalLighting: directional,
-      pickIDs: pickIDs,
+      pickIDs: pickingData.pickIDs,
       emitter: perspectivePanelEmit,
       emitColor: true,
       emitPickID: true,
@@ -476,6 +531,8 @@ export class PerspectivePanel extends RenderedDataPanel {
       viewportWidth: width,
       viewportHeight: height,
     };
+
+    mat4.copy(pickingData.invTransform, this.viewProjectionMatInverse);
 
     let visibleLayers = this.visibleLayerTracker.getVisibleLayers();
 
@@ -611,6 +668,7 @@ export class PerspectivePanel extends RenderedDataPanel {
     this.setGLViewport();
     this.offscreenCopyHelper.draw(
         this.offscreenFramebuffer.colorBuffers[OffscreenTextures.COLOR].texture);
+    return true;
   }
 
   protected drawSliceViews(renderContext: PerspectiveViewRenderContext) {
@@ -649,16 +707,16 @@ export class PerspectivePanel extends RenderedDataPanel {
   protected drawAxisLines() {
     const temp = tempVec3;
     const temp2 = tempVec3b;
-    const {projectionMat} = this;
+    const {viewProjectionMat} = this;
     const {position} = this.viewer.navigationState;
     const pos = position.spatialCoordinates;
-    vec3.transformMat4(temp, pos, projectionMat);
+    vec3.transformMat4(temp, pos, viewProjectionMat);
     temp[0] = 0.5;
-    vec3.transformMat4(temp2, temp, this.inverseProjectionMat);
+    vec3.transformMat4(temp2, temp, this.viewProjectionMatInverse);
     const length0 = vec3.distance(temp2, pos);
     temp[0] = 0;
     temp[1] = 0.5;
-    vec3.transformMat4(temp2, temp, this.inverseProjectionMat);
+    vec3.transformMat4(temp2, temp, this.viewProjectionMatInverse);
     const length1 = vec3.distance(temp2, pos);
 
     let {gl} = this;
@@ -677,7 +735,7 @@ export class PerspectivePanel extends RenderedDataPanel {
     mat[13] = center[1];
     mat[14] = center[2];
     mat[15] = 1;
-    mat4.multiply(mat, this.projectionMat, mat);
+    mat4.multiply(mat, this.viewProjectionMat, mat);
 
     gl.drawBuffers([gl.COLOR_ATTACHMENT0]);
     this.axesLineHelper.draw(mat, false);
@@ -710,20 +768,18 @@ export class PerspectivePanel extends RenderedDataPanel {
     the spiral that are outside a given radius from the center,
     otherwise the cursor will be more sensitive along diagonals.
 */
-function spiralSequence(width: number, height: number) : Uint32Array {
+function spiralSequence(width: number, height: number): Uint32Array {
   const pixels = width * height;
   let sequence = new Uint32Array(pixels);
 
   if (width === 0 || height === 0) {
     return sequence;
-  }
-  else if (width === 1) {
+  } else if (width === 1) {
     for (let i = 0; i < height; i++) {
       sequence[i] = i * width;
     }
     return sequence;
-  }
-  else if (height === 1) {
+  } else if (height === 1) {
     for (let i = 0; i < width; i++) {
       sequence[i] = i;
     }
@@ -731,9 +787,9 @@ function spiralSequence(width: number, height: number) : Uint32Array {
   }
 
   function clockwise_spiral(sequence: Uint32Array) {
-    let bounds = [ width, height - 1 ];
-    let direction = [ 1, 0 ];
-    let pt = [ 0, 0 ];
+    let bounds = [width, height - 1];
+    let direction = [1, 0];
+    let pt = [0, 0];
     let bound_idx = 0;
     let steps = 1;
 
@@ -748,7 +804,7 @@ function spiralSequence(width: number, height: number) : Uint32Array {
         steps = 0;
         bounds[bound_idx] -= 1;
         bound_idx = (bound_idx + 1) % 2;
-        direction = [ -direction[1], direction[0] ];
+        direction = [-direction[1], direction[0]];
       }
     }
 
@@ -761,11 +817,11 @@ function spiralSequence(width: number, height: number) : Uint32Array {
   let r2 = Math.max(width, height) / 2;
   r2 *= r2;
 
-  return sequence.filter( (idx) => {
+  return sequence.filter((idx) => {
     let x = (idx % width) - (width >> 1);
     let y = Math.floor(idx / height) - (height >> 1);
 
-    let dist2 = x*x + y*y;
+    let dist2 = x * x + y * y;
 
     return dist2 <= r2;
   });

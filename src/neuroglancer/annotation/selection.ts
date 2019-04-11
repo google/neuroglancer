@@ -49,10 +49,14 @@ export function setAnnotationHoverStateFromMouseState(
     annotationLayer: AnnotationLayerState, mouseState: MouseSelectionState) {
   annotationLayer.registerDisposer(mouseState.changed.add(() => {
     if (mouseState.active && mouseState.pickedAnnotationLayer === annotationLayer) {
-      annotationLayer.hoverState.value = {
-        id: mouseState.pickedAnnotationId!,
-        partIndex: mouseState.pickedOffset
-      };
+      const existingValue = annotationLayer.hoverState.value;
+      if (existingValue === undefined || existingValue.id !== mouseState.pickedAnnotationId! ||
+          existingValue.partIndex !== mouseState.pickedOffset) {
+        annotationLayer.hoverState.value = {
+          id: mouseState.pickedAnnotationId!,
+          partIndex: mouseState.pickedOffset
+        };
+      }
     } else {
       annotationLayer.hoverState.value = undefined;
     }

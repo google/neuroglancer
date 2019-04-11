@@ -15,4 +15,14 @@
  */
 
 export const MESH_LAYER_RPC_ID = 'mesh/MeshLayer';
+export const MULTISCALE_MESH_LAYER_RPC_ID = 'mesh/MultiscaleMeshLayer';
 export const FRAGMENT_SOURCE_RPC_ID = 'mesh/FragmentSource';
+
+export const MULTISCALE_FRAGMENT_SOURCE_RPC_ID = 'mesh/MultiscaleFragmentSource';
+
+export interface EncodedMeshData {
+  vertexPositions: Float32Array;
+  vertexNormals: Uint8Array;
+  indices: Uint32Array|Uint16Array;
+  strips: boolean;
+}

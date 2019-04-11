@@ -21,33 +21,34 @@ import {convertEndian16, convertEndian32, Endianness, ENDIANNESS} from 'neurogla
 import {prod3} from 'neuroglancer/util/geom';
 
 export function decodeRawChunk(
-    chunk: VolumeChunk, response: ArrayBuffer, endianness: Endianness = ENDIANNESS) {
+    chunk: VolumeChunk, response: ArrayBuffer, endianness: Endianness = ENDIANNESS,
+    byteOffset: number = 0, byteLength: number = response.byteLength) {
   let {spec} = chunk.source!;
   let {dataType} = spec;
   let numElements = prod3(chunk.chunkDataSize!);
   let bytesPerElement = DATA_TYPE_BYTES[dataType];
   let expectedBytes = numElements * bytesPerElement * spec.numChannels;
-  if (expectedBytes !== response.byteLength) {
+  if (expectedBytes !== byteLength) {
     throw new Error(
-        `Raw-format chunk is ${response.byteLength} bytes, ` +
+        `Raw-format chunk is ${byteLength} bytes, ` +
         `but ${numElements} * ${bytesPerElement} = ${expectedBytes} bytes are expected.`);
   }
   let data: ArrayBufferView;
   switch (dataType) {
     case DataType.UINT8:
-      data = new Uint8Array(response);
+      data = new Uint8Array(response, byteOffset, byteLength);
       break;
     case DataType.UINT16:
-      data = new Uint16Array(response);
+      data = new Uint16Array(response, byteOffset, byteLength / 2);
       convertEndian16(data, endianness);
       break;
     case DataType.UINT32:
     case DataType.UINT64:
-      data = new Uint32Array(response);
+      data = new Uint32Array(response, byteOffset, byteLength / 4);
       convertEndian32(data, endianness);
       break;
     case DataType.FLOAT32:
-      data = new Float32Array(response);
+      data = new Float32Array(response, byteOffset, byteLength / 4);
       convertEndian32(data, endianness);
       break;
     default:

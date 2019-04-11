@@ -22,7 +22,8 @@ import {DataType} from 'neuroglancer/util/data_type';
 import {Disposable} from 'neuroglancer/util/disposable';
 import {vec3, vec3Key, vec4} from 'neuroglancer/util/geom';
 import {GL} from 'neuroglancer/webgl/context';
-import {fragmentShaderTest} from 'neuroglancer/webgl/shader_testing';
+import {textureTargetForSamplerType} from 'neuroglancer/webgl/shader';
+import {fragmentShaderTest, FragmentShaderTestOutputs} from 'neuroglancer/webgl/shader_testing';
 
 export function chunkFormatTest<TextureLayout extends Disposable>(
     dataType: DataType, volumeSize: vec4,
@@ -31,55 +32,47 @@ export function chunkFormatTest<TextureLayout extends Disposable>(
     rawData: TypedArray, encodedData: TypedArray) {
   const numChannels = volumeSize[3];
   let strides = getFortranOrderStrides(volumeSize);
-  let outputChannelsPerChannel = dataType === DataType.UINT64 ? 2 : 1;
+  const outputType = dataType === DataType.FLOAT32 ? 'float' : 'uint';
+  const outputs: FragmentShaderTestOutputs = {};
+  for (let channelIndex = 0; channelIndex < numChannels; ++channelIndex) {
+    if (dataType === DataType.UINT64) {
+      outputs[`output${channelIndex}Low`] = outputType;
+      outputs[`output${channelIndex}High`] = outputType;
+    } else {
+      outputs[`output${channelIndex}`] = outputType;
+    }
+  }
   it(`volumeSize = ${vec3Key(volumeSize)}, numChannels = ${volumeSize[3]}, ` +
          `dataType = ${DataType[dataType]}`,
      () => {
-       fragmentShaderTest(outputChannelsPerChannel * numChannels, tester => {
+       fragmentShaderTest(outputs, tester => {
          let {gl, builder} = tester;
          let [chunkFormat, textureLayout] = getChunkFormatAndTextureLayout(gl);
-         builder.addUniform('vec3', 'vChunkPosition');
+         builder.addUniform('highp vec3', 'vChunkPosition');
          builder.addUniform('vec3', 'uChunkDataSize');
          builder.addFragmentCode(glsl_getPositionWithinChunk);
          chunkFormat.defineShader(builder);
          {
            let fragmentMain = '';
-           let outputChannel = 0;
            for (let channel = 0; channel < numChannels; ++channel) {
              switch (dataType) {
                case DataType.UINT64:
-                 builder.addOutputBuffer('vec4', `v4f_fragData${outputChannel}`, outputChannel);
-                 builder.addOutputBuffer('vec4', `v4f_fragData${outputChannel + 1}`, outputChannel + 1);
                  fragmentMain += `
 {
   uint64_t value = getDataValue(${channel});
-  v4f_fragData${outputChannel++} = value.low;
-  v4f_fragData${outputChannel++} = value.high;
+  output${channel}Low = value.value[0];
+  output${channel}High = value.value[1];
 }
 `;
                  break;
-               case DataType.UINT8:
-                 builder.addOutputBuffer('vec4', `v4f_fragData${outputChannel}`, outputChannel);
-                 fragmentMain += `
-v4f_fragData${outputChannel++} = vec4(getDataValue(${channel}).value, 0, 0, 0);
-`;
-                 break;
                case DataType.FLOAT32:
-                 builder.addOutputBuffer('vec4', `v4f_fragData${outputChannel}`, outputChannel);
                  fragmentMain += `
-v4f_fragData${outputChannel++} = packFloatIntoVec4(getDataValue(${channel}));
+output${channel} = getDataValue(${channel});
 `;
                  break;
-               case DataType.UINT16:
-                 builder.addOutputBuffer('vec4', `v4f_fragData${outputChannel}`, outputChannel);
+               default:
                  fragmentMain += `
-v4f_fragData${outputChannel++} = vec4(getDataValue(${channel}).value, 0, 0);
-`;
-                 break;
-               case DataType.UINT32:
-                 builder.addOutputBuffer('vec4', `v4f_fragData${outputChannel}`, outputChannel);
-                 fragmentMain += `
-v4f_fragData${outputChannel++} = getDataValue(${channel}).value;
+output${channel} = getDataValue(${channel}).value;
 `;
                  break;
              }
@@ -95,9 +88,9 @@ v4f_fragData${outputChannel++} = getDataValue(${channel}).value;
          tester.registerDisposer(() => {
            gl.deleteTexture(texture);
          });
-
+         const textureTarget = textureTargetForSamplerType[chunkFormat.shaderSamplerType];
          chunkFormat.beginDrawing(gl, shader);
-         gl.bindTexture(gl.TEXTURE_2D, texture);
+         gl.bindTexture(textureTarget, texture);
          chunkFormat.setTextureData(gl, textureLayout, encodedData);
          chunkFormat.setupTextureLayout(gl, shader, textureLayout);
 
@@ -108,7 +101,7 @@ v4f_fragData${outputChannel++} = getDataValue(${channel}).value;
            chunkFormat.beginDrawing(gl, shader);
            chunkFormat.beginSource(gl, shader);
            chunkFormat.setupTextureLayout(gl, shader, textureLayout);
-           gl.bindTexture(gl.TEXTURE_2D, texture);
+           gl.bindTexture(textureTarget, texture);
            tester.execute();
            chunkFormat.endDrawing(gl, shader);
            let offset = 0;
@@ -116,7 +109,7 @@ v4f_fragData${outputChannel++} = getDataValue(${channel}).value;
              offset += Math.floor(Math.max(0, Math.min(positionInChunk[i], volumeSize[i] - 1))) *
                  strides[i];
            }
-           let outputChannel = 0;
+           const values = tester.values;
            for (let channel = 0; channel < numChannels; ++channel) {
              const curOffset = offset + channel * strides[3];
              const msg = `volumeSize = ${vec3Key(volumeSize)}, ` +
@@ -124,32 +117,27 @@ v4f_fragData${outputChannel++} = getDataValue(${channel}).value;
                  `channel = ${channel}, offset = ${curOffset}`;
              switch (dataType) {
                case DataType.UINT64: {
-                 let low = tester.readUint32(outputChannel++);
-                 let high = tester.readUint32(outputChannel++);
+                 let low = values[`output${channel}Low`];
+                 let high = values[`output${channel}High`];
                  expect(low).toBe(rawData[curOffset * 2], `${msg} (low)`);
                  expect(high).toEqual(rawData[curOffset * 2 + 1], `${msg} (high)`);
                  break;
                }
-               case DataType.FLOAT32: {
-                 let result = tester.readFloat(outputChannel++);
-                 expect(result).toBe(rawData[curOffset], msg);
-                 break;
-               }
                default: {
-                 // uint8, uint16, and uint32 values can all be read as uint32.
-                 let result = tester.readUint32(outputChannel++);
-                 expect(result).toEqual(rawData[curOffset], msg);
+                 let result = values[`output${channel}`];
+                 expect(result).toBe(rawData[curOffset], msg);
                  break;
                }
              }
            }
          }
+         checkPosition(vec3.fromValues(0, 0, 0));
          checkPosition(vec3.fromValues(0, 0, 1));
          checkPosition(vec3.fromValues(0, 1, 0));
          checkPosition(vec3.fromValues(0, volumeSize[1], 0));
          checkPosition(vec3.fromValues(0, volumeSize[1], volumeSize[2]));
          checkPosition(vec3.fromValues(volumeSize[0], volumeSize[1], volumeSize[2]));
-         checkPosition(vec3.fromValues(volumeSize[0]-1, 1, 1));
+         checkPosition(vec3.fromValues(volumeSize[0] - 1, 1, 1));
 
          const COUNT = 100;
          for (let iter = 0; iter < COUNT; ++iter) {

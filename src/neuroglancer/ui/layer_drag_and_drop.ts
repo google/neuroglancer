@@ -34,7 +34,7 @@ interface LayerDragSourceData extends LayerDragSourceInfo {
 let dragSource: LayerDragSourceData|undefined;
 
 export function startLayerDrag(event: DragEvent, sourceInfo: LayerDragSourceInfo) {
-  event.dataTransfer.setData(
+  event.dataTransfer!.setData(
       encodeParametersAsDragType(
           layerDragTypePrefix,
           sourceInfo.layers.map(layer => ({name: layer.name, visible: layer.visible}))),
@@ -64,7 +64,7 @@ export function startLayerDrag(event: DragEvent, sourceInfo: LayerDragSourceInfo
 
 export function endLayerDrag(event?: DragEvent) {
   if (dragSource !== undefined) {
-    if (event && event.dataTransfer.dropEffect === 'move') {
+    if (event && event.dataTransfer!.dropEffect === 'move') {
       const removedLayers = new Set(dragSource.layers);
       dragSource.manager.layerManager.filter(
           (x: ManagedUserLayerWithSpecification) => !removedLayers.has(x));
@@ -75,7 +75,7 @@ export function endLayerDrag(event?: DragEvent) {
 
 
 export function getLayerDragInfo(event: DragEvent): DragInfo|undefined {
-  return decodeParametersFromDragTypeList(event.dataTransfer.types, layerDragTypePrefix);
+  return decodeParametersFromDragTypeList(event.dataTransfer!.types, layerDragTypePrefix);
 }
 
 function getCompatibleDragSource(manager: Borrowed<LayerListSpecification>): LayerDragSourceInfo|undefined {
@@ -111,7 +111,7 @@ export class DropLayers {
     const {dragType} = this;
     if (dragType !== undefined) {
       try {
-        const {layers: spec, layout} = JSON.parse(event.dataTransfer.getData(dragType));
+        const {layers: spec, layout} = JSON.parse(event.dataTransfer!.getData(dragType));
         if (!Array.isArray(spec) || this.numSourceLayers !== spec.length) {
           throw new Error('Invalid layer drop data');
         }

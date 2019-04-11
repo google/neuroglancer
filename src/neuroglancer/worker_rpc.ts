@@ -67,8 +67,11 @@ export function registerPromiseRPC<T>(
 
 registerRPC(PROMISE_CANCEL_ID, function(this: RPC, x: any) {
   let id = <number>x['id'];
-  let {cancellationToken} = this.get(id);
-  cancellationToken.cancel();
+  const request = this.get(id);
+  if (request !== undefined) {
+    let {cancellationToken} = request;
+    cancellationToken.cancel();
+  }
 });
 
 registerRPC(PROMISE_RESPONSE_ID, function(this: RPC, x: any) {
@@ -89,7 +92,7 @@ registerRPC(PROMISE_RESPONSE_ID, function(this: RPC, x: any) {
 
 interface RPCTarget {
   postMessage(message?: any, ports?: any): void;
-  onmessage: (ev: MessageEvent) => any;
+  onmessage: ((ev: MessageEvent) => any)|null;
 }
 
 const INITIAL_RPC_ID = IS_WORKER ? -1 : 0;

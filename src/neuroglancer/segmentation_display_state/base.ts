@@ -17,15 +17,8 @@
 import {SharedDisjointUint64Sets} from 'neuroglancer/shared_disjoint_sets';
 import {Uint64Set} from 'neuroglancer/uint64_set';
 import {Uint64} from 'neuroglancer/util/uint64';
-import {vec3} from 'neuroglancer/util/geom';
-import {SharedWatchableValue} from 'neuroglancer/shared_watchable_value';
 
-export interface Bounds {
-  center: vec3;
-  size: vec3;
-}
-
-export interface VisibleSegmentsStateWithoutClipBounds {
+export interface VisibleSegmentsState {
   rootSegments: Uint64Set;
   hiddenRootSegments?: Uint64Set; // not needed for backend, for segment_set_widget.ts
   visibleSegments2D?: Uint64Set; // not needed for backend
@@ -33,21 +26,16 @@ export interface VisibleSegmentsStateWithoutClipBounds {
   segmentEquivalences: SharedDisjointUint64Sets;
 }
 
-export interface VisibleSegmentsState extends VisibleSegmentsStateWithoutClipBounds {
-  clipBounds: SharedWatchableValue<Bounds|undefined>;
-}
-
 /**
  * Returns a string key for identifying a uint64 object id.  This is faster than
  * Uint64.prototype.toString().
  */
-export function getObjectKey(objectId: Uint64, bounds?: Bounds): string {
-  let boundsSuffix = bounds ? `_${bounds.center.toString()}_${bounds.size.toString()}` : '';
-  return `${objectId.low},${objectId.high}${boundsSuffix}`;
+export function getObjectKey(objectId: Uint64): string {
+  return `${objectId.low},${objectId.high}`;
 }
 
 export function forEachRootSegment(
-    state: VisibleSegmentsStateWithoutClipBounds,
+    state: VisibleSegmentsState,
     callback: (rootObjectId: Uint64) => void) {
   let {rootSegments} = state;
   for (let rootObjectId of rootSegments) {
@@ -56,7 +44,7 @@ export function forEachRootSegment(
 }
 
 export function forEachVisibleSegment2D(
-    state: VisibleSegmentsStateWithoutClipBounds,
+    state: VisibleSegmentsState,
     callback: (objectId: Uint64, rootObjectId: Uint64) => void) {
   let {visibleSegments2D, segmentEquivalences} = state;
   for (let objectId of visibleSegments2D!) {
@@ -66,7 +54,7 @@ export function forEachVisibleSegment2D(
 }
 
 export function forEachVisibleSegment3D(
-    state: VisibleSegmentsStateWithoutClipBounds,
+    state: VisibleSegmentsState,
     callback: (objectId: Uint64, rootObjectId: Uint64) => void) {
   let {visibleSegments3D, segmentEquivalences} = state;
   for (let objectId of visibleSegments3D) {

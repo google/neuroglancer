@@ -25,6 +25,7 @@ import {EventActionMap, registerActionListener} from 'neuroglancer/util/event_ac
 import {vec3} from 'neuroglancer/util/geom';
 import {KeyboardEventBinder} from 'neuroglancer/util/keyboard_bindings';
 import {MouseEventBinder} from 'neuroglancer/util/mouse_bindings';
+import {numberToStringFixed} from 'neuroglancer/util/number_to_string';
 import {pickLengthUnit} from 'neuroglancer/widget/scale_bar';
 
 require('./position_widget.css');
@@ -83,8 +84,8 @@ export class PositionWidget extends RefCounted {
           result ? 'Position copied to clipboard' : 'Failed to copy position to clipboard');
     });
     copyButton.addEventListener('dragstart', event => {
-      event.dataTransfer.setData(positionDragType, JSON.stringify(position.toJSON()));
-      event.dataTransfer.setData('text', this.getPositionText());
+      event.dataTransfer!.setData(positionDragType, JSON.stringify(position.toJSON()));
+      event.dataTransfer!.setData('text', this.getPositionText());
       event.stopPropagation();
     });
     copyButton.draggable = true;
@@ -107,9 +108,12 @@ export class PositionWidget extends RefCounted {
     this.registerEventListener(inputElement, 'keydown', this.updateHintScrollPosition);
     this.registerEventListener(inputElement, 'copy', (event: ClipboardEvent) => {
       const {selectionStart, selectionEnd} = inputElement;
-      let selection = inputElement.value.substring(selectionStart, selectionEnd);
+      let selection = inputElement.value.substring(selectionStart || 0, selectionEnd || 0);
       selection = selection.trim().replace(/\s+/g, ' ');
-      event.clipboardData.setData('text/plain', selection);
+      const {clipboardData} = event;
+      if (clipboardData !== null) {
+        clipboardData.setData('text/plain', selection);
+      }
       event.stopPropagation();
       event.preventDefault();
     });
@@ -130,7 +134,8 @@ export class PositionWidget extends RefCounted {
         }));
 
     this.registerDisposer(registerActionListener(inputElement, 'tab-forward', event => {
-      const selectionStart = Math.min(inputElement.selectionStart, inputElement.selectionEnd);
+      const selectionStart =
+          Math.min(inputElement.selectionStart || 0, inputElement.selectionEnd || 0);
       const valueSubstring = inputElement.value.substring(selectionStart);
       const match = valueSubstring.match(/^([^,\s]*)((?:\s+)|(?:\s*,\s*))?([^,\s]*)/);
       if (match !== null) {
@@ -146,7 +151,8 @@ export class PositionWidget extends RefCounted {
     }));
 
     this.registerDisposer(registerActionListener(inputElement, 'tab-backward', event => {
-      const selectionEnd = Math.max(inputElement.selectionStart, inputElement.selectionEnd);
+      const selectionEnd =
+          Math.max(inputElement.selectionStart || 0, inputElement.selectionEnd || 0);
       const valueSubstring = inputElement.value.substring(0, selectionEnd);
       const match = valueSubstring.match(/([^,\s]*)((?:\s+)|(?:\s*,\s*))?([^,\s]*)$/);
       if (match !== null) {
@@ -205,8 +211,10 @@ export class PositionWidget extends RefCounted {
   private adjustFromCursor(cursorPosition: number|undefined, adjustment: number) {
     const {inputElement} = this;
     if (cursorPosition === undefined) {
-      cursorPosition = inputElement.selectionDirection === 'forward' ? inputElement.selectionEnd :
-                                                                       inputElement.selectionStart;
+      cursorPosition =
+          (inputElement.selectionDirection === 'forward' ? inputElement.selectionEnd :
+                                                           inputElement.selectionStart) ||
+          0;
     }
     if (this.cleanInput() === undefined) {
       return;
@@ -225,7 +233,7 @@ export class PositionWidget extends RefCounted {
 
   private cleanInput(): {position?: vec3}|undefined {
     const s = this.inputElement.value;
-    const cursorPosition = this.inputElement.selectionStart;
+    const cursorPosition = this.inputElement.selectionStart || 0;
     const numberPattern = /(-?\d+(?:\.(?:\d+)?)?)/.source;
     const separatorPattern = /((?:\s+(?![\s,]))|(?:\s*,\s*))/.source;
     const startAndEndPattern = /([\[\]{}()\s]*)/.source;
@@ -329,9 +337,9 @@ export class PositionWidget extends RefCounted {
       const yLen = secondComma - firstComma - 4;
       let hintText = `x ${' '.repeat(xLen)}  y ${' '.repeat(yLen)}  z`;
 
-      const prevSelectionStart = inputElement.selectionStart;
-      const prevSelectionEnd = inputElement.selectionEnd;
-      const prevSelectionDirection = inputElement.selectionDirection;
+      const prevSelectionStart = inputElement.selectionStart || 0;
+      const prevSelectionEnd = inputElement.selectionEnd || 0;
+      const prevSelectionDirection: any = inputElement.selectionDirection || undefined;
       inputElement.value = inputText;
       inputElement.setSelectionRange(prevSelectionStart, prevSelectionEnd, prevSelectionDirection);
       this.hintElement.value = hintText + ' '.repeat(inputText.length - hintText.length);
@@ -379,14 +387,7 @@ export class VoxelSizeWidget extends RefCounted {
     const unit = pickLengthUnit(minVoxelSize);
     unitsElement.textContent = unit.unit;
     for (let i = 0; i < 3; ++i) {
-      const v = size[i] / unit.lengthInNanometers;
-      let s = '';
-      for (let digits = 0; digits <= 2; ++digits) {
-        s = v.toFixed(digits);
-        if (parseFloat(s) === v) {
-          break;
-        }
-      }
+      const s = numberToStringFixed(size[i] / unit.lengthInNanometers, 2);
       const dimElement = document.createElement('span');
       dimElement.className = 'neuroglancer-voxel-size-dimension';
       dimElement.textContent = s;

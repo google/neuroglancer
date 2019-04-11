@@ -25,7 +25,10 @@ export function bindDefaultCopyHandler(viewer: Viewer) {
       return;
     }
     const stateJson = getCachedJson(viewer.state).value;
-    event.clipboardData.setData('text/plain', JSON.stringify(stateJson, undefined, '  '));
+    const {clipboardData} = event;
+    if (clipboardData !== null) {
+      clipboardData.setData('text/plain', JSON.stringify(stateJson, undefined, '  '));
+    }
     event.preventDefault();
   });
 }
@@ -51,10 +54,13 @@ export function bindDefaultPasteHandler(viewer: Viewer) {
     if (eventHasInputTextTarget(event)) {
       return;
     }
-    const data = event.clipboardData.getData('text/plain');
-    const parsedPosition = parsePositionString(data);
-    if (parsedPosition !== undefined) {
-      viewer.navigationState.position.setVoxelCoordinates(parsedPosition);
+    const {clipboardData} = event;
+    if (clipboardData !== null) {
+      const data = clipboardData.getData('text/plain');
+      const parsedPosition = parsePositionString(data);
+      if (parsedPosition !== undefined) {
+        viewer.navigationState.position.setVoxelCoordinates(parsedPosition);
+      }
     }
     event.preventDefault();
   });

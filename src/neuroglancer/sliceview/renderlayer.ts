@@ -17,23 +17,22 @@
 import {ChunkManager} from 'neuroglancer/chunk_manager/frontend';
 import {CoordinateTransform} from 'neuroglancer/coordinate_transform';
 import {RenderLayer as GenericRenderLayer} from 'neuroglancer/layer';
-import {getTransformedSources, SLICEVIEW_RENDERLAYER_RPC_ID, SLICEVIEW_RENDERLAYER_UPDATE_TRANSFORM_RPC_ID, SLICEVIEW_RENDERLAYER_UPDATE_MIP_LEVEL_CONSTRAINTS_RPC_ID} from 'neuroglancer/sliceview/base';
-import {ChunkLayout} from 'neuroglancer/sliceview/chunk_layout';
+import {RenderScaleHistogram, trackableRenderScaleTarget} from 'neuroglancer/render_scale_statistics';
+import {SharedWatchableValue} from 'neuroglancer/shared_watchable_value';
+import {getTransformedSources, SLICEVIEW_RENDERLAYER_RPC_ID, SLICEVIEW_RENDERLAYER_UPDATE_TRANSFORM_RPC_ID, TransformedSource} from 'neuroglancer/sliceview/base';
 import {SliceView, SliceViewChunkSource} from 'neuroglancer/sliceview/frontend';
+import {WatchableValueInterface} from 'neuroglancer/trackable_value';
 import {vec3} from 'neuroglancer/util/geom';
 import {WatchableShaderError} from 'neuroglancer/webgl/dynamic_shader';
 import {RpcId} from 'neuroglancer/worker_rpc';
 import {SharedObject} from 'neuroglancer/worker_rpc';
-import {TrackableMIPLevelConstraints} from 'neuroglancer/trackable_mip_level_constraints';
-import {TrackableValue} from 'neuroglancer/trackable_value';
-import {verifyOptionalNonnegativeInt} from 'neuroglancer/util/json';
 
 export interface RenderLayerOptions {
-  transform: CoordinateTransform;
-  shaderError: WatchableShaderError;
-  rpcType: string;
-  rpcTransfer: { [index:string]: number|string|null };
-  mipLevelConstraints: TrackableMIPLevelConstraints;
+  transform?: CoordinateTransform;
+  rpcType?: string;
+  rpcTransfer?: { [index:string]: number|string|null };
+  renderScaleTarget?: WatchableValueInterface<number>;
+  renderScaleHistogram?: RenderScaleHistogram;
 }
 
 export abstract class RenderLayer extends GenericRenderLayer {
@@ -42,31 +41,28 @@ export abstract class RenderLayer extends GenericRenderLayer {
   rpcTransfer: { [index:string]: number|string|null } = {};
   shaderError: WatchableShaderError;
   transform: CoordinateTransform;
-  transformedSources: {source: SliceViewChunkSource, chunkLayout: ChunkLayout}[][];
+  transformedSources: TransformedSource<SliceViewChunkSource>[][];
   transformedSourcesGeneration = -1;
-  mipLevelConstraints: TrackableMIPLevelConstraints;
-  activeMinMIPLevel: TrackableValue<number|undefined> =
-      new TrackableValue(undefined, verifyOptionalNonnegativeInt);
+  renderScaleTarget: WatchableValueInterface<number>;
+  renderScaleHistogram?: RenderScaleHistogram;
 
   constructor(
       public chunkManager: ChunkManager, public sources: SliceViewChunkSource[][],
-      options: Partial<RenderLayerOptions> = {}) {
+      options: RenderLayerOptions) {
     super();
 
     const {
       rpcType = SLICEVIEW_RENDERLAYER_RPC_ID,
       rpcTransfer = {},
       transform = new CoordinateTransform(),
-      mipLevelConstraints = new TrackableMIPLevelConstraints(),
+      renderScaleTarget = trackableRenderScaleTarget(1)
     } = options;
-    const {minMIPLevel, maxMIPLevel} = mipLevelConstraints;
-
     this.rpcType = rpcType;
     this.rpcTransfer = rpcTransfer;
+    this.renderScaleTarget = renderScaleTarget;
+    this.renderScaleHistogram = options.renderScaleHistogram;
     this.transform = transform;
-    this.mipLevelConstraints = mipLevelConstraints;
     const transformedSources = getTransformedSources(this);
-    mipLevelConstraints.setNumberLevels(this.transformedSources.length);
 
     {
       const {source, chunkLayout} = transformedSources[0][0];
@@ -83,12 +79,12 @@ export abstract class RenderLayer extends GenericRenderLayer {
     sharedObject.RPC_TYPE_ID = this.rpcType;
     const sourceIds = sources.map(alternatives => alternatives.map(source => source.rpcId!));
     sharedObject.initializeCounterpart(rpc, {
-      'sources': sourceIds,
-      'transform': transform.transform,
-      'minMIPLevel': minMIPLevel.value,
-      'maxMIPLevel': maxMIPLevel.value,
-      'numberOfMIPLevels': transformedSources.length,
-      ...rpcTransfer
+      sources: sourceIds,
+      transform: transform.transform,
+      renderScaleTarget:
+          this.registerDisposer(SharedWatchableValue.makeFromExisting(rpc, this.renderScaleTarget))
+              .rpcId,
+      ...this.rpcTransfer,
     });
     this.rpcId = sharedObject.rpcId;
 
@@ -96,12 +92,6 @@ export abstract class RenderLayer extends GenericRenderLayer {
       rpc.invoke(
           SLICEVIEW_RENDERLAYER_UPDATE_TRANSFORM_RPC_ID,
           {id: this.rpcId, value: transform.transform});
-    }));
-
-    this.registerDisposer(mipLevelConstraints.changed.add(() => {
-      rpc.invoke(
-          SLICEVIEW_RENDERLAYER_UPDATE_MIP_LEVEL_CONSTRAINTS_RPC_ID,
-          {id: this.rpcId, minMIPLevel: minMIPLevel.value, maxMIPLevel: maxMIPLevel.value});
     }));
 
     this.setReady(true);

@@ -1,0 +1,50 @@
+/**
+ * @license
+ * Copyright 2019 Google Inc.
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+.neuroglancer-data-panel-layout-controls {
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  display: flex;
+}
+
+.neuroglancer-data-panel-layout-controls > button {
+  display: flex;
+  margin: 2px;
+  border: 0px;
+  background-color: rgba(0, 0, 0, 0.5);
+  flex-direction: row;
+  align-self: center;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid white;
+  font-size: 15px;
+  width: 18px;
+  height: 18px;
+  color: white;
+}
+
+.neuroglancer-data-panel-layout-controls > button > div {
+  display: inline-block;
+  text-align: center;
+  line-height: 12px;
+  width: 15px;
+  height: 15px;
+}
+
+.neuroglancer-data-panel-layout-controls > button:hover {
+  color: #6ff;
+}

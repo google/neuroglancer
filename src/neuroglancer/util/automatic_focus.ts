@@ -16,7 +16,7 @@
 
 import debounce from 'lodash/debounce';
 import {RefCounted} from 'neuroglancer/util/disposable';
-import LinkedListOperations from 'neuroglancer/util/linked_list.0.ts';
+import LinkedListOperations from 'neuroglancer/util/linked_list.0';
 
 class AutomaticFocusList {
   next0: AutomaticallyFocusedElement|null;
@@ -60,7 +60,8 @@ export class AutomaticallyFocusedElement extends RefCounted {
       // Never steal focus from descendant.
       return;
     }
-    if (activeElement === this.lastFocusedElement || activeElement.contains(element)) {
+    if (activeElement != null &&
+        (activeElement === this.lastFocusedElement || activeElement.contains(element))) {
       this.element.focus();
     }
     this.lastFocusedElement = null;

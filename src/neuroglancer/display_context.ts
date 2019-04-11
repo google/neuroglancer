@@ -14,12 +14,13 @@
  * limitations under the License.
  */
 
-import debounce from 'lodash/debounce';
+import {FrameNumberCounter} from 'neuroglancer/chunk_manager/frontend';
 import {RefCounted} from 'neuroglancer/util/disposable';
 import {vec3} from 'neuroglancer/util/geom';
 import {NullarySignal} from 'neuroglancer/util/signal';
 import {WatchableVisibilityPriority} from 'neuroglancer/visibility_priority/frontend';
 import {GL, initializeWebGL} from 'neuroglancer/webgl/context';
+import ResizeObserver from 'resize-observer-polyfill';
 
 export abstract class RenderedPanel extends RefCounted {
   gl: GL;
@@ -57,8 +58,6 @@ export abstract class RenderedPanel extends RefCounted {
     gl.scissor(left, glBottom, width, height);
   }
 
-  abstract onResize(): void;
-
   abstract draw(): void;
 
   abstract translateDataPointByViewportPixels(
@@ -74,18 +73,26 @@ export abstract class RenderedPanel extends RefCounted {
   }
 }
 
-export class DisplayContext extends RefCounted {
+export class DisplayContext extends RefCounted implements FrameNumberCounter {
   canvas = document.createElement('canvas');
   gl: GL;
   updateStarted = new NullarySignal();
   updateFinished = new NullarySignal();
+  changed = this.updateFinished;
   panels = new Set<RenderedPanel>();
   private updatePending: number|null = null;
   canvasRect: ClientRect|undefined;
 
+  /**
+   * Unique number of the next frame.  Incremented once each time a frame is drawn.
+   */
+  frameNumber = 0;
+
+  private resizeObserver = new ResizeObserver(() => this.scheduleRedraw());
+
   constructor(public container: HTMLElement) {
     super();
-    let {canvas} = this;
+    const {canvas, resizeObserver} = this;
     container.style.position = 'relative';
     canvas.style.position = 'absolute';
     canvas.style.top = '0px';
@@ -93,9 +100,9 @@ export class DisplayContext extends RefCounted {
     canvas.style.width = '100%';
     canvas.style.height = '100%';
     canvas.style.zIndex = '0';
+    resizeObserver.observe(canvas);
     container.appendChild(canvas);
     this.gl = initializeWebGL(canvas);
-    this.registerEventListener(window, 'resize', this.onResize.bind(this));
   }
 
   isReady() {
@@ -126,6 +133,7 @@ export class DisplayContext extends RefCounted {
   }
 
   disposed() {
+    this.resizeObserver.disconnect();
     if (this.updatePending != null) {
       cancelAnimationFrame(this.updatePending);
       this.updatePending = null;
@@ -134,19 +142,16 @@ export class DisplayContext extends RefCounted {
 
   addPanel(panel: RenderedPanel) {
     this.panels.add(panel);
+    this.resizeObserver.observe(panel.element);
+    this.scheduleRedraw();
   }
 
   removePanel(panel: RenderedPanel) {
+    this.resizeObserver.unobserve(panel.element);
     this.panels.delete(panel);
     panel.dispose();
-  }
-
-  onResize = this.registerCancellable(debounce(() => {
     this.scheduleRedraw();
-    for (let panel of this.panels) {
-      panel.onResize();
-    }
-  }, 0));
+  }
 
   scheduleRedraw() {
     if (this.updatePending === null) {
@@ -155,6 +160,7 @@ export class DisplayContext extends RefCounted {
   }
 
   draw() {
+    ++this.frameNumber;
     this.updateStarted.dispatch();
     let gl = this.gl;
     let canvas = this.canvas;

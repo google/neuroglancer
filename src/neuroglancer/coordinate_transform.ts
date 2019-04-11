@@ -14,6 +14,7 @@
  * limitations under the License.
  */
 
+import {WatchableValueInterface} from 'neuroglancer/trackable_value';
 import {identityMat4, kOneVec, kZeroVec, mat4, quat, vec3} from 'neuroglancer/util/geom';
 import {parseFiniteVec} from 'neuroglancer/util/json';
 import {NullarySignal} from 'neuroglancer/util/signal';
@@ -29,8 +30,12 @@ export interface RotationTranslationScale {
  *
  * Typically it represents a transform from a local coordinate space to a global coordinate space.
  */
-export class CoordinateTransform {
+export class CoordinateTransform implements WatchableValueInterface<mat4> {
   changed = new NullarySignal();
+
+  get value() {
+    return this.transform;
+  }
 
   constructor(public transform = mat4.create()) {}
 

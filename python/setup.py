@@ -6,17 +6,20 @@ import shutil
 import subprocess
 import platform
 from distutils.command.build import build
+from setuptools.command.build_ext import build_ext
 
 from setuptools import Extension, find_packages, setup
 
-try:
-    import numpy as np
-except ImportError:
-    print('Please install numpy before installing neuroglancer')
-    raise
+class build_ext_subclass(build_ext):
+    def finalize_options(self):
+        build_ext.finalize_options(self)
+        # Prevent numpy from thinking it is still in its setup process:
+        __builtins__.__NUMPY_SETUP__ = False
+        import numpy
+        self.include_dirs.append(numpy.get_include())
 
-static_files = ['main.bundle.js', 'chunk_worker.bundle.js', 'styles.css', 'index.html']
 
+static_files = ['main.bundle.js', 'chunk_worker.bundle.js', 'tfjs-library.bundle.js', 'index.html']
 
 class bundle_client(build):
 
@@ -97,7 +100,7 @@ if platform.system() == 'Darwin':
 
 setup(
     name='neuroglancer',
-    version='1.0.10',
+    version='1.0.14',
     description='Python data backend for neuroglancer, a WebGL-based viewer for volumetric data',
     author='Jeremy Maitin-Shepard, Jan Funke',
     author_email='jbms@google.com, jfunke@iri.upc.edu',
@@ -107,14 +110,20 @@ setup(
     package_data={
         'neuroglancer.static': static_files,
     },
+    setup_requires=[
+        "numpy>=1.11.0",
+    ],
     install_requires=[
         "Pillow>=3.2.0",
         "numpy>=1.11.0",
         'requests',
-        'tornado',
+        'tornado<6',
         'sockjs-tornado',
         'six',
         'google-apitools',
+    ],
+    test_requires=[
+        'pytest',
     ],
     extras_require={
         ":python_version<'3.2'": ['futures'],
@@ -124,9 +133,15 @@ setup(
             'neuroglancer._neuroglancer',
             sources=[os.path.join(src_dir, name) for name in local_sources],
             language='c++',
-            include_dirs=[np.get_include(), openmesh_dir],
+            include_dirs=[openmesh_dir],
+            define_macros=[
+                ('_USE_MATH_DEFINES', None),  # Needed by OpenMesh when used with MSVC
+            ],
             extra_compile_args=extra_compile_args,
             extra_link_args=openmp_flags),
     ],
-    cmdclass={'bundle_client': bundle_client},
+    cmdclass={
+        'bundle_client': bundle_client,
+        'build_ext': build_ext_subclass,
+    },
 )

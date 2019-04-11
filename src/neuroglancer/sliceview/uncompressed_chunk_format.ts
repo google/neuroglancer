@@ -23,41 +23,34 @@ import {RefCounted} from 'neuroglancer/util/disposable';
 import {vec3, vec3Key} from 'neuroglancer/util/geom';
 import {Uint64} from 'neuroglancer/util/uint64';
 import {GL} from 'neuroglancer/webgl/context';
-import {compute1dTextureFormat, compute3dTextureLayout, OneDimensionalTextureAccessHelper, setOneDimensionalTextureData, TextureAccessCoefficients} from 'neuroglancer/webgl/one_dimensional_texture_access';
-import {ShaderBuilder, ShaderProgram} from 'neuroglancer/webgl/shader';
+import {ShaderBuilder, ShaderProgram, ShaderSamplerPrefix, ShaderSamplerType} from 'neuroglancer/webgl/shader';
 import {getShaderType} from 'neuroglancer/webgl/shader_lib';
+import {computeTextureFormat, setThreeDimensionalTextureData, TextureFormat, ThreeDimensionalTextureAccessHelper} from 'neuroglancer/webgl/texture_access';
 
 class TextureLayout extends RefCounted {
-  dataWidth: number;
-  textureHeight: number;
-  textureAccessCoefficients: TextureAccessCoefficients;
-  channelStride: number;
-
-  constructor(gl: GL, public chunkDataSize: vec3, texelsPerElement: number, numChannels: number) {
+  constructor(public chunkDataSize: vec3, public numChannels: number) {
     super();
-    const dataPointsPerChannel = chunkDataSize[0] * chunkDataSize[1] * chunkDataSize[2];
-    this.channelStride = dataPointsPerChannel;
-    compute3dTextureLayout(
-        this, gl, texelsPerElement, chunkDataSize[0], chunkDataSize[1],
-        chunkDataSize[2] * numChannels);
   }
 
-  static get(gl: GL, chunkDataSize: vec3, texelsPerElement: number, numChannels: number) {
+  static get(gl: GL, chunkDataSize: vec3, numChannels: number) {
     return gl.memoize.get(
-        `sliceview.UncompressedTextureLayout:${vec3Key(chunkDataSize)},` +
-            `${texelsPerElement},${numChannels}`,
-        () => new TextureLayout(gl, chunkDataSize, texelsPerElement, numChannels));
+        `sliceview.UncompressedTextureLayout:${vec3Key(chunkDataSize)},${numChannels}`,
+        () => new TextureLayout(chunkDataSize, numChannels));
   }
 }
 
-export class ChunkFormat extends SingleTextureChunkFormat<TextureLayout> {
+export class ChunkFormat extends SingleTextureChunkFormat<TextureLayout> implements TextureFormat {
   texelsPerElement: number;
   textureInternalFormat: number;
   textureFormat: number;
   texelType: number;
   arrayElementsPerTexel: number;
   arrayConstructor: TypedArrayConstructor;
-  private textureAccessHelper: OneDimensionalTextureAccessHelper;
+  samplerPrefix: ShaderSamplerPrefix;
+  get shaderSamplerType() {
+    return `${this.samplerPrefix}sampler3D` as ShaderSamplerType;
+  }
+  private textureAccessHelper: ThreeDimensionalTextureAccessHelper;
 
   static get(gl: GL, dataType: DataType, numChannels: number) {
     let key = `sliceview.UncompressedChunkFormat:${dataType}:${numChannels}`;
@@ -66,39 +59,32 @@ export class ChunkFormat extends SingleTextureChunkFormat<TextureLayout> {
 
   constructor(_gl: GL, public dataType: DataType, public numChannels: number, key: string) {
     super(key);
-    compute1dTextureFormat(this, dataType);
-    this.textureAccessHelper = new OneDimensionalTextureAccessHelper('chunkData');
+    computeTextureFormat(this, dataType);
+    this.textureAccessHelper = new ThreeDimensionalTextureAccessHelper('chunkData');
   }
 
   defineShader(builder: ShaderBuilder) {
     super.defineShader(builder);
     let {textureAccessHelper} = this;
-    textureAccessHelper.defineShader(builder);
     builder.addFragmentCode(
         textureAccessHelper.getAccessor('readVolumeData', 'uVolumeChunkSampler', this.dataType));
 
     let {numChannels} = this;
     if (numChannels > 1) {
-      builder.addUniform('highp float', 'uChannelStride');
+      builder.addUniform('highp int', 'uChannelStride');
       builder.addFragmentCode(`
-float getChannelOffset(int channelIndex) {
-  return float(channelIndex) * uChannelStride;
+highp int getChannelOffset(highp int channelIndex) {
+  return channelIndex * uChannelStride;
 }
 `);
     } else {
-      builder.addFragmentCode(`float getChannelOffset(int channelIndex) { return 0.0; }`);
+      builder.addFragmentCode(`highp int getChannelOffset(highp int channelIndex) { return 0; }`);
     }
-
-    builder.addFragmentCode(`
-float getIndexIntoChunk (int channelIndex) {
-  vec3 chunkDataPosition = getPositionWithinChunk();
-  return chunkDataPosition.x + uChunkDataSize.x * (chunkDataPosition.y + uChunkDataSize.y * chunkDataPosition.z) + getChannelOffset(channelIndex);
-}
-`);
     const shaderType = getShaderType(this.dataType);
     builder.addFragmentCode(`
-${shaderType} getDataValue (int channelIndex) {
-  return readVolumeData(getIndexIntoChunk(channelIndex));
+${shaderType} getDataValue (highp int channelIndex) {
+  highp ivec3 p = getPositionWithinChunk();
+  return readVolumeData(ivec3(p.x, p.y, p.z + getChannelOffset(channelIndex)));
 }
 `);
   }
@@ -108,17 +94,18 @@ ${shaderType} getDataValue (int channelIndex) {
    */
   setupTextureLayout(gl: GL, shader: ShaderProgram, textureLayout: TextureLayout) {
     if (this.numChannels > 1) {
-      gl.uniform1f(shader.uniform('uChannelStride'), textureLayout.channelStride);
+      gl.uniform1i(shader.uniform('uChannelStride'), textureLayout.chunkDataSize[2]);
     }
-    this.textureAccessHelper.setupTextureLayout(gl, shader, textureLayout);
   }
 
   getTextureLayout(gl: GL, chunkDataSize: vec3) {
-    return TextureLayout.get(gl, chunkDataSize, this.texelsPerElement, this.numChannels);
+    return TextureLayout.get(gl, chunkDataSize, this.numChannels);
   }
 
   setTextureData(gl: GL, textureLayout: TextureLayout, data: TypedArray) {
-    setOneDimensionalTextureData(gl, textureLayout, this, data);
+    const {chunkDataSize} = textureLayout;
+    setThreeDimensionalTextureData(
+        gl, this, data, chunkDataSize[0], chunkDataSize[1], chunkDataSize[2] * this.numChannels);
   }
 }
 

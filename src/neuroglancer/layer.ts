@@ -15,16 +15,15 @@
  */
 
 import debounce from 'lodash/debounce';
-import throttle from 'lodash/throttle';
 import {AnnotationLayerState} from 'neuroglancer/annotation/frontend';
 import {RenderedPanel} from 'neuroglancer/display_context';
 import {LayerListSpecification} from 'neuroglancer/layer_specification';
 import {SpatialPosition} from 'neuroglancer/navigation_state';
-import {TrackableRefCounted, WatchableSet} from 'neuroglancer/trackable_value';
+import {TrackableRefCounted, TrackableValue, WatchableSet} from 'neuroglancer/trackable_value';
 import {restoreTool, Tool} from 'neuroglancer/ui/tool';
 import {Borrowed, Owned, RefCounted} from 'neuroglancer/util/disposable';
 import {BoundingBox, vec3} from 'neuroglancer/util/geom';
-import {verifyObject, verifyObjectProperty, verifyOptionalBoolean, verifyOptionalString} from 'neuroglancer/util/json';
+import {verifyObject, verifyObjectProperty, verifyOptionalBoolean, verifyOptionalString, verifyPositiveInt} from 'neuroglancer/util/json';
 import {NullarySignal} from 'neuroglancer/util/signal';
 import {addSignalBinding, removeSignalBinding, SignalBindingUpdater} from 'neuroglancer/util/signal_binding_updater';
 import {Trackable} from 'neuroglancer/util/trackable';
@@ -553,8 +552,6 @@ export class LayerManager extends RefCounted {
   }
 }
 
-const MOUSE_STATE_UPDATE_INTERVAL = 50;
-
 export enum ActionState {
   INACTIVE,
   FIRST,  // Selecting elements for the first group.
@@ -591,38 +588,32 @@ export class MouseSelectionState implements PickState {
   pageX: number;
   pageY: number;
 
-  updater: ((mouseState: MouseSelectionState) => boolean)|undefined = undefined;
+  private forcerFunction: (() => void)|undefined = undefined;
 
-  stale = false;
+  removeForcer(forcer: (() => void)) {
+    if (forcer === this.forcerFunction) {
+      this.forcerFunction = undefined;
+      this.setActive(false);
+    }
+  }
 
-  triggerUpdate = throttle(() => {
-    this.update();
-  }, MOUSE_STATE_UPDATE_INTERVAL, {leading: true, trailing: true});
+  setForcer(forcer: (() => void)|undefined) {
+    this.forcerFunction = forcer;
+    if (forcer === undefined) {
+      this.setActive(false);
+    }
+  }
 
-  updateUnconditionally() {
-    this.triggerUpdate.cancel();
-    this.update();
+  updateUnconditionally(): boolean {
+    const {forcerFunction} = this;
+    if (forcerFunction === undefined) {
+      return false;
+    }
+    forcerFunction();
     return this.active;
   }
 
-  updateIfStale() {
-    if (this.stale) {
-      this.update();
-    }
-  }
-
-  private update() {
-    let {updater} = this;
-    this.stale = false;
-    if (!updater) {
-      this.setActive(false);
-    } else {
-      this.setActive(updater(this));
-    }
-  }
-
   setActive(value: boolean) {
-    this.stale = false;
     if (this.active !== value || value === true) {
       this.active = value;
       this.changed.dispatch();
@@ -837,6 +828,7 @@ export class SelectedLayerState extends RefCounted implements Trackable {
   changed = new NullarySignal();
   visible_ = false;
   layer_: ManagedUserLayer|undefined;
+  size = new TrackableValue<number>(300, verifyPositiveInt);
 
   get layer() {
     return this.layer_;
@@ -861,6 +853,7 @@ export class SelectedLayerState extends RefCounted implements Trackable {
   constructor(public layerManager: Owned<LayerManager>) {
     super();
     this.registerDisposer(layerManager);
+    this.size.changed.add(this.changed.dispatch);
   }
 
   set layer(layer: ManagedUserLayer|undefined) {
@@ -904,7 +897,11 @@ export class SelectedLayerState extends RefCounted implements Trackable {
     if (this.layer === undefined) {
       return undefined;
     }
-    return {'layer': this.layer.name, 'visible': this.visible === true ? true : undefined};
+    return {
+      'layer': this.layer.name,
+      'visible': this.visible === true ? true : undefined,
+      'size': this.size.toJSON(),
+    };
   }
 
   restoreState(obj: any) {
@@ -917,6 +914,7 @@ export class SelectedLayerState extends RefCounted implements Trackable {
     const layer = layerName !== undefined ? this.layerManager.getLayerByName(layerName) : undefined;
     this.layer = layer;
     this.visible = verifyObjectProperty(obj, 'visible', verifyOptionalBoolean) ? true : false;
+    verifyObjectProperty(obj, 'size', x => this.size.restoreState(x));
   }
 
   reset() {

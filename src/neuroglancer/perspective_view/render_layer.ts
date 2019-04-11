@@ -20,8 +20,21 @@ import {mat4, vec3} from 'neuroglancer/util/geom';
 import {ShaderModule} from 'neuroglancer/webgl/shader';
 import {SharedObject} from 'neuroglancer/worker_rpc';
 
-export interface PerspectiveViewRenderContext {
+export interface PerspectiveViewReadyRenderContext {
   dataToDevice: mat4;
+
+  /**
+   * Width of GL viewport in pixels.
+   */
+  viewportWidth: number;
+
+  /**
+   * Height of GL viewport in pixels.
+   */
+  viewportHeight: number;
+}
+
+export interface PerspectiveViewRenderContext extends PerspectiveViewReadyRenderContext {
   lightDirection: vec3;
   ambientLighting: number;
   directionalLighting: number;
@@ -42,16 +55,6 @@ export interface PerspectiveViewRenderContext {
    * Specifies whether there was a previous pick ID pass.
    */
   alreadyEmittedPickID: boolean;
-
-  /**
-   * Width of GL viewport in pixels.
-   */
-  viewportWidth: number;
-
-  /**
-   * Height of GL viewport in pixels.
-   */
-  viewportHeight: number;
 }
 
 export class PerspectiveViewRenderLayer extends VisibilityTrackedRenderLayer {
@@ -59,7 +62,7 @@ export class PerspectiveViewRenderLayer extends VisibilityTrackedRenderLayer {
     // Must be overridden by subclasses.
   }
 
-  isReady() {
+  isReady(_renderContext: PerspectiveViewReadyRenderContext) {
     return true;
   }
 

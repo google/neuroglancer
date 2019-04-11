@@ -24,6 +24,7 @@ import {trackableBlendModeValue} from 'neuroglancer/trackable_blend';
 import {UserLayerWithVolumeSourceMixin} from 'neuroglancer/user_layer_with_volume_source';
 import {makeWatchableShaderError} from 'neuroglancer/webgl/dynamic_shader';
 import {RangeWidget} from 'neuroglancer/widget/range';
+import {RenderScaleWidget} from 'neuroglancer/widget/render_scale_widget';
 import {ShaderCodeWidget} from 'neuroglancer/widget/shader_code_widget';
 import {Tab} from 'neuroglancer/widget/tab_view';
 
@@ -67,9 +68,9 @@ export class ImageUserLayer extends Base {
           fragmentMain: this.fragmentMain,
           shaderError: this.shaderError,
           transform: this.transform,
-          mipLevelConstraints: this.mipLevelConstraints
+          renderScaleTarget: this.sliceViewRenderScaleTarget,
+          renderScaleHistogram: this.sliceViewRenderScaleHistogram,
         });
-        this.setupVoxelSelectionWidget(renderLayer);
         this.addRenderLayer(renderLayer);
         this.shaderError.changed.dispatch();
         this.isReady = true;
@@ -106,6 +107,13 @@ class RenderingOptionsTab extends Tab {
     topRow.className = 'image-dropdown-top-row';
     opacityWidget.promptElement.textContent = 'Opacity';
 
+    {
+      const renderScaleWidget = this.registerDisposer(new RenderScaleWidget(
+          this.layer.sliceViewRenderScaleHistogram, this.layer.sliceViewRenderScaleTarget));
+      renderScaleWidget.label.textContent = 'Resolution (slice)';
+      element.appendChild(renderScaleWidget.element);
+    }
+
     let spacer = document.createElement('div');
     spacer.style.flex = '1';
     let helpLink = document.createElement('a');
@@ -140,8 +148,6 @@ class RenderingOptionsTab extends Tab {
         this.codeWidget.textEditor.refresh();
       }
     });
-
-    element.appendChild(layer.voxelSizeSelectionWidget.element);
   }
 }
 

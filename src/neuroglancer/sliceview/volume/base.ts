@@ -16,7 +16,7 @@
 
 import {ChunkLayoutOptions, getChunkDataSizes, getCombinedTransform, getNearIsotropicBlockSize, SliceViewChunkSource, SliceViewChunkSpecification, SliceViewChunkSpecificationBaseOptions, SliceViewChunkSpecificationOptions, SliceViewSourceOptions} from 'neuroglancer/sliceview/base';
 import {DATA_TYPE_BYTES, DataType} from 'neuroglancer/util/data_type';
-import {kZeroVec, prod3, vec3} from 'neuroglancer/util/geom';
+import {kInfinityVec, kZeroVec, prod3, vec3} from 'neuroglancer/util/geom';
 
 export {DATA_TYPE_BYTES, DataType};
 
@@ -115,6 +115,7 @@ export interface VolumeChunkSpecificationDefaultCompressionOptions {
    * Volume type.
    */
   volumeType: VolumeType;
+  maxCompressedSegmentationBlockSize?: vec3;
 }
 
 /**
@@ -223,8 +224,16 @@ export class VolumeChunkSpecification extends SliceViewChunkSpecification {
     if (compressedSegmentationBlockSize === undefined &&
         options.volumeType === VolumeType.SEGMENTATION &&
         (dataType === DataType.UINT32 || dataType === DataType.UINT64)) {
-      compressedSegmentationBlockSize = getNearIsotropicBlockSize(
-          {voxelSize, transform, lowerVoxelBound, upperVoxelBound, maxVoxelsPerChunkLog2: 9});
+      compressedSegmentationBlockSize = getNearIsotropicBlockSize({
+        voxelSize,
+        transform,
+        lowerVoxelBound,
+        upperVoxelBound,
+        maxVoxelsPerChunkLog2: 9,
+        maxBlockSize: vec3.min(
+            vec3.create(), options.chunkDataSize,
+            options.maxCompressedSegmentationBlockSize || kInfinityVec),
+      });
     }
     return new VolumeChunkSpecification(
         Object.assign({}, options, {compressedSegmentationBlockSize, transform}));

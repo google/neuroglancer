@@ -180,7 +180,7 @@ class PerspectiveViewRenderHelper extends RenderHelper {
 vec3 vertexPosition1 = mix(aLower, aUpper, aBoxCornerOffset1);
 vec3 vertexPosition2 = mix(aLower, aUpper, aBoxCornerOffset2.xyz);
 emitLine(uProjection, vertexPosition1, vertexPosition2);
-${this.setPartIndex(builder, 'aBoxCornerOffset2.w')};
+${this.setPartIndex(builder, 'uint(aBoxCornerOffset2.w)')};
 `);
     builder.setFragmentMain(`
 emitAnnotation(vec4(vColor.rgb, getLineAlpha()));
@@ -205,8 +205,8 @@ emitAnnotation(vec4(vColor.rgb, getLineAlpha()));
     builder.setVertexMain(`
 vec3 vertexPosition = mix(aLower, aUpper, aBoxCornerOffset);
 emitCircle(uProjection * vec4(vertexPosition, 1.0));
-float cornerIndex = aBoxCornerOffset.x + aBoxCornerOffset.y * 2.0 + aBoxCornerOffset.z * 4.0;
-float cornerPickOffset = ${CORNERS_PICK_OFFSET.toFixed(1)} + cornerIndex;
+uint cornerIndex = uint(aBoxCornerOffset.x + aBoxCornerOffset.y * 2.0 + aBoxCornerOffset.z * 4.0);
+uint cornerPickOffset = ${CORNERS_PICK_OFFSET}u + cornerIndex;
 ${this.setPartIndex(builder, 'cornerPickOffset')};
 `);
     builder.setFragmentMain(`
