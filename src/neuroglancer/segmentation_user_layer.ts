@@ -544,7 +544,7 @@ export class SegmentationUserLayer extends Base {
     }
   }
 
-  rootSegmentChange(rootSegment: Uint64 | null, added: boolean) {
+  rootSegmentChange(rootSegment: Uint64|null, added: boolean) {
     if (rootSegment === null && !added) {
       // Clear all segment sets
       let leafSegmentCount = this.displayState.visibleSegments2D!.size;
@@ -555,23 +555,28 @@ export class SegmentationUserLayer extends Base {
     } else if (added) {
       this.displayState.visibleSegments3D.add(rootSegment!);
       this.displayState.visibleSegments2D!.add(rootSegment!);
+      if (!this.chunkedGraphUrl) {
+        // Without graph server, we need to explicitly add equivalent segments
+        // to the set of `visibleSegments3D`.
+        let segments = [...this.displayState.segmentEquivalences.setElements(rootSegment!)];
+        this.displayState.visibleSegments3D.add(segments);
+      }
     } else if (!added) {
       let segments = [...this.displayState.segmentEquivalences.setElements(rootSegment!)];
-      let segmentCount = segments.length; // Wrong count, but faster than below
+      let segmentCount = segments.length;  // Approximation
 
       this.displayState.visibleSegments2D!.delete(rootSegment!);
+      this.displayState.visibleSegments3D.delete(segments);
 
-      for (let e of segments) {
-        this.displayState.visibleSegments3D.delete(e);
-      }
-      if (!this.chunkedGraphUrl) {
-        // Without graph server, equivalent segments are also stored in `rootSegments`
-        for (let e of segments) {
-          this.displayState.rootSegments.delete(e);
-        }
+      if (this.chunkedGraphUrl) {
+        // When using graph server, clean up segment equivalences. Ensures that we always
+        // load the most recent equivalences from the server when user re-selects this object.
+        this.displayState.segmentEquivalences.deleteSet(rootSegment!);
+      } else {
+        // Without graph server, equivalent segments are also stored in `rootSegments`.
+        this.displayState.rootSegments.delete(segments);
       }
 
-      this.displayState.segmentEquivalences.deleteSet(rootSegment!);
       StatusMessage.showTemporaryMessage(`Deselected ${segmentCount} segments.`);
     }
     this.specificationChanged.dispatch();
