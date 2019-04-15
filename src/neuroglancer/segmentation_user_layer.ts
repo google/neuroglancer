@@ -550,7 +550,11 @@ export class SegmentationUserLayer extends Base {
       let leafSegmentCount = this.displayState.visibleSegments2D!.size;
       this.displayState.visibleSegments2D!.clear();
       this.displayState.visibleSegments3D.clear();
-      this.displayState.segmentEquivalences.clear();
+      if (this.chunkedGraphUrl) {
+        // When using graph server, clean up segment equivalences. Ensures that we always
+        // load the most recent equivalences from the server when user re-selects this object.
+        this.displayState.segmentEquivalences.clear();
+      }
       StatusMessage.showTemporaryMessage(`Deselected all ${leafSegmentCount} segments.`, 3000);
     } else if (added) {
       this.displayState.visibleSegments3D.add(rootSegment!);
