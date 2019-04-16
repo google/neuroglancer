@@ -229,6 +229,7 @@ export class ShaderCode {
             this.add(y);
           }
         } else {
+          console.log('Invalid code type', x);
           throw new Error('Invalid code type');
         }
     }
