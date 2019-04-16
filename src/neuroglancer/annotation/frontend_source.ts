@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-import {Annotation, AnnotationId, AnnotationReference, AnnotationType, annotationTypes, deserializeAnnotation, getAnnotationTypeHandler, makeAnnotationId} from 'neuroglancer/annotation';
+import {Annotation, AnnotationId, AnnotationReference, AnnotationType, annotationTypes, deserializeAnnotation, getAnnotationTypeHandler, makeAnnotationId, AnnotationSourceSignals} from 'neuroglancer/annotation';
 import {ANNOTATION_COMMIT_UPDATE_RESULT_RPC_ID, ANNOTATION_COMMIT_UPDATE_RPC_ID, ANNOTATION_GEOMETRY_CHUNK_SOURCE_RPC_ID, ANNOTATION_METADATA_CHUNK_SOURCE_RPC_ID, ANNOTATION_REFERENCE_ADD_RPC_ID, ANNOTATION_REFERENCE_DELETE_RPC_ID, ANNOTATION_SUBSET_GEOMETRY_CHUNK_SOURCE_RPC_ID, AnnotationGeometryChunkSpecification} from 'neuroglancer/annotation/base';
 import {getAnnotationTypeRenderHandler} from 'neuroglancer/annotation/type_handler';
 import {Chunk, ChunkManager, ChunkSource} from 'neuroglancer/chunk_manager/frontend';
@@ -26,7 +26,7 @@ import {StatusMessage} from 'neuroglancer/status';
 import {binarySearch} from 'neuroglancer/util/array';
 import {Borrowed, Owned} from 'neuroglancer/util/disposable';
 import {mat4} from 'neuroglancer/util/geom';
-import {NullarySignal} from 'neuroglancer/util/signal';
+import {Signal, NullarySignal} from 'neuroglancer/util/signal';
 import {Buffer} from 'neuroglancer/webgl/buffer';
 import {GL} from 'neuroglancer/webgl/context';
 import {registerRPC, registerSharedObjectOwner, RPC, SharedObject} from 'neuroglancer/worker_rpc';
@@ -292,7 +292,7 @@ function makeTemporaryChunk() {
 }
 
 export class MultiscaleAnnotationSource extends SharedObject implements
-    MultiscaleSliceViewChunkSource {
+    MultiscaleSliceViewChunkSource, AnnotationSourceSignals {
   metadataChunkSource =
       this.registerDisposer(new AnnotationMetadataChunkSource(this.chunkManager, this));
   sources: Owned<AnnotationGeometryChunkSource>[][];
@@ -593,6 +593,9 @@ export class MultiscaleAnnotationSource extends SharedObject implements
   changed = new NullarySignal();
   * [Symbol.iterator](): Iterator<Annotation> {}
   readonly = false;
+  childAdded: Signal<(annotation: Annotation) => void>;
+  childUpdated: Signal<(annotation: Annotation) => void>;
+  childDeleted: Signal<(annotationId: string) => void>;
 }
 
 registerRPC(ANNOTATION_COMMIT_UPDATE_RESULT_RPC_ID, function(x) {
