@@ -14,17 +14,18 @@
  * limitations under the License.
  */
 
-import {SegmentSelection, ChunkedGraphLayer} from 'neuroglancer/sliceview/chunked_graph/frontend';
 import {UserLayer} from 'neuroglancer/layer';
 import {LayerListSpecification, registerLayerType, registerVolumeLayerType} from 'neuroglancer/layer_specification';
 import {MeshSource, MultiscaleMeshSource} from 'neuroglancer/mesh/frontend';
 import {MeshLayer, MultiscaleMeshLayer} from 'neuroglancer/mesh/frontend';
 import {Overlay} from 'neuroglancer/overlay';
+import {getRenderMeshByDefault} from 'neuroglancer/preferences/user_preferences';
 import {RenderScaleHistogram, trackableRenderScaleTarget} from 'neuroglancer/render_scale_statistics';
 import {SegmentColorHash} from 'neuroglancer/segment_color';
 import {SegmentSelectionState, Uint64MapEntry} from 'neuroglancer/segmentation_display_state/frontend';
 import {SharedDisjointUint64Sets} from 'neuroglancer/shared_disjoint_sets';
 import {FRAGMENT_MAIN_START as SKELETON_FRAGMENT_MAIN_START, getTrackableFragmentMain, PerspectiveViewSkeletonLayer, SkeletonLayer, SkeletonSource, SliceViewPanelSkeletonLayer} from 'neuroglancer/skeleton/frontend';
+import {ChunkedGraphLayer, SegmentSelection} from 'neuroglancer/sliceview/chunked_graph/frontend';
 import {VolumeType} from 'neuroglancer/sliceview/volume/base';
 import {SegmentationRenderLayer} from 'neuroglancer/sliceview/volume/segmentation_renderlayer';
 import {StatusMessage} from 'neuroglancer/status';
@@ -178,11 +179,11 @@ export class SegmentationUserLayer extends Base {
         null :
         verifyOptionalString(specification[SKELETONS_JSON_KEY]);
     let remaining = 0;
-    if (meshPath != null) {
+    if (meshPath != null && getRenderMeshByDefault()) {
       ++remaining;
       this.manager.dataSourceProvider.getMeshSource(this.manager.chunkManager, meshPath)
           .then(meshSource => {
-            if (!this.wasDisposed) {
+            if (!this.wasDisposed && getRenderMeshByDefault()) {
               this.addMesh(meshSource);
               if (--remaining === 0) {
                 this.isReady = true;
@@ -241,7 +242,7 @@ export class SegmentationUserLayer extends Base {
             }
           }
           // Meshes
-          if (meshPath === undefined) {
+          if (meshPath === undefined && getRenderMeshByDefault()) {
             ++remaining;
             Promise.resolve(volume.getMeshSource()).then(meshSource => {
               if (this.wasDisposed) {

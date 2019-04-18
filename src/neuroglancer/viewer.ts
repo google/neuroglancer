@@ -28,6 +28,7 @@ import {RootLayoutContainer} from 'neuroglancer/layer_groups_layout';
 import {TopLevelLayerListSpecification} from 'neuroglancer/layer_specification';
 import {NavigationState, Pose} from 'neuroglancer/navigation_state';
 import {overlaysOpen} from 'neuroglancer/overlay';
+import {UserPreferencesDialog} from 'neuroglancer/preferences/user_preferences';
 import {StatusMessage} from 'neuroglancer/status';
 import {ElementVisibilityFromTrackableBoolean, TrackableBoolean, TrackableBooleanCheckbox} from 'neuroglancer/trackable_boolean';
 import {makeDerivedWatchableValue, TrackableValue, WatchableValueInterface} from 'neuroglancer/trackable_value';
@@ -95,7 +96,7 @@ export class InputEventBindings extends DataPanelInputEventBindings {
 
 const viewerUiControlOptionKeys: (keyof ViewerUIControlConfiguration)[] = [
   'showHelpButton', 'showEditStateButton', 'showLayerPanel', 'showLocation',
-  'showAnnotationToolStatus', 'showJsonPostButton'
+  'showAnnotationToolStatus', 'showJsonPostButton', 'showUserPreferencesButton'
 ];
 
 const viewerOptionKeys: (keyof ViewerUIOptions)[] =
@@ -105,6 +106,7 @@ export class ViewerUIControlConfiguration {
   showHelpButton = new TrackableBoolean(true);
   showEditStateButton = new TrackableBoolean(true);
   showJsonPostButton = new TrackableBoolean(true);
+  showUserPreferencesButton = new TrackableBoolean(true);
   showLayerPanel = new TrackableBoolean(true);
   showLocation = new TrackableBoolean(true);
   showAnnotationToolStatus = new TrackableBoolean(true);
@@ -138,6 +140,7 @@ interface ViewerUIOptions {
   showPanelBorders: boolean;
   showAnnotationToolStatus: boolean;
   showJsonPostButton: boolean;
+  showUserPreferencesButton: boolean;
 }
 
 export interface ViewerOptions extends ViewerUIOptions, VisibilityPrioritySpecification {
@@ -218,7 +221,7 @@ export class Viewer extends RefCounted implements ViewerState {
   layout: RootLayoutContainer;
 
   stateServer = new TrackableValue<string>('', validateStateServer);
-  jsonStateServer = new TrackableValue<string>('', validateStateServer)
+  jsonStateServer = new TrackableValue<string>('', validateStateServer);
   state = new CompoundTrackable();
 
   dataContext: Owned<DataManagementContext>;
@@ -467,6 +470,16 @@ export class Viewer extends RefCounted implements ViewerState {
     }
 
     {
+      const button = makeTextIconButton('⚙', 'Preferences');
+      this.registerEventListener(button, 'click', () => {
+        this.showPreferencesModal();
+      });
+      this.registerDisposer(new ElementVisibilityFromTrackableBoolean(
+          this.uiControlVisibility.showUserPreferencesButton, button));
+      topRow.appendChild(button);
+    }
+
+    {
       const button = makeTextIconButton('?', 'Help');
       this.registerEventListener(button, 'click', () => {
         this.showHelpDialog();
@@ -633,6 +646,10 @@ export class Viewer extends RefCounted implements ViewerState {
       ['Slice View', inputEventBindings.sliceView],
       ['Perspective View', inputEventBindings.perspectiveView],
     ]);
+  }
+
+  showPreferencesModal() {
+    new UserPreferencesDialog(this);
   }
 
   loadFromJsonUrl() {

@@ -1,0 +1,29 @@
+.user-preferences-container {
+  position: relative;
+  z-index: 100;
+  background-color: white;
+  /*box-shadow: 5px 5px 2px 1px rgba(0, 0, 0, 0.5);*/
+  font-family: sans-serif;
+  font-size: 11pt;
+  padding: 0 5px 5px 5px;
+  color: black;
+  outline: 0px;
+}
+
+
+.user-preferences-container > label {
+  display: flex;
+  flex-direction: row;
+  justify-content: space-between;
+}
+
+.user-preferences-container > label > input::before {
+  flex: 1;
+  content: " ";
+}
+
+.user-preferences-container > label > input {
+  margin-left: 5px;
+  width: 11ch;
+  border: 1px solid grey;
+}
