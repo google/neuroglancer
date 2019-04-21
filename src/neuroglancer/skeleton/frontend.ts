@@ -266,7 +266,7 @@ export class SkeletonLayer extends RefCounted {
 
     gl.lineWidth(lineWidth);
 
-    forEachVisibleSegment(displayState, (rootObjectId, objectId) => {
+    forEachVisibleSegment(displayState, (objectId, rootObjectId) => {
       const key = getObjectKey(objectId);
       const skeleton = skeletons.get(key);
 
