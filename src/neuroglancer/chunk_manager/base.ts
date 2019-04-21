@@ -37,11 +37,9 @@ export enum ChunkState {
   EXPIRED = 7,
 
   COMPUTING = 8,
-
-  REQUESTING_CHILDREN = 9,
 }
 
-export const numChunkStates = 10;
+export const numChunkStates = 9;
 
 export enum ChunkPriorityTier {
   FIRST_TIER = 0,

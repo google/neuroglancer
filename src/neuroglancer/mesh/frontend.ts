@@ -16,11 +16,10 @@
 
 import {ChunkState} from 'neuroglancer/chunk_manager/base';
 import {Chunk, ChunkManager, ChunkSource} from 'neuroglancer/chunk_manager/frontend';
-import {ChunkedGraphLayer} from 'neuroglancer/sliceview/chunked_graph/frontend';
 import {EncodedMeshData, FRAGMENT_SOURCE_RPC_ID, MESH_LAYER_RPC_ID, MULTISCALE_FRAGMENT_SOURCE_RPC_ID, MULTISCALE_MESH_LAYER_RPC_ID} from 'neuroglancer/mesh/base';
 import {getMultiscaleChunksToDraw, getMultiscaleFragmentKey, MultiscaleMeshManifest} from 'neuroglancer/mesh/multiscale';
 import {PerspectiveViewReadyRenderContext, PerspectiveViewRenderContext, PerspectiveViewRenderLayer} from 'neuroglancer/perspective_view/render_layer';
-import {forEachRootSegment, forEachVisibleSegment3D, getObjectKey} from 'neuroglancer/segmentation_display_state/base';
+import {forEachVisibleSegment3D, getObjectKey} from 'neuroglancer/segmentation_display_state/base';
 import {getObjectColor, registerRedrawWhenSegmentationDisplayState3DChanged, SegmentationDisplayState3D, SegmentationLayerSharedObject} from 'neuroglancer/segmentation_display_state/frontend';
 import {getFrustrumPlanes, mat3, mat3FromMat4, mat4, vec3, vec4} from 'neuroglancer/util/geom';
 import {getObjectId} from 'neuroglancer/util/object_id';
@@ -180,9 +179,7 @@ export class MeshLayer extends PerspectiveViewRenderLayer {
   backend: SegmentationLayerSharedObject;
 
   constructor(
-      public chunkManager: ChunkManager,
-      public chunkedGraph: ChunkedGraphLayer|null,
-      public source: MeshSource,
+      public chunkManager: ChunkManager, public source: MeshSource,
       public displayState: SegmentationDisplayState3D) {
     super();
 
@@ -193,7 +190,6 @@ export class MeshLayer extends PerspectiveViewRenderLayer {
     sharedObject.RPC_TYPE_ID = MESH_LAYER_RPC_ID;
     sharedObject.initializeCounterpartWithChunkManager({
       'source': source.addCounterpartRef(),
-      'chunkedGraph': chunkedGraph ? chunkedGraph.rpcId : null,
     });
     this.setReady(true);
     sharedObject.visibility.add(this.visibility);
@@ -371,9 +367,7 @@ export class MultiscaleMeshLayer extends PerspectiveViewRenderLayer {
   backend: SegmentationLayerSharedObject;
 
   constructor(
-      public chunkManager: ChunkManager,
-      public chunkedGraph: ChunkedGraphLayer|null,
-      public source: MultiscaleMeshSource,
+      public chunkManager: ChunkManager, public source: MultiscaleMeshSource,
       public displayState: SegmentationDisplayState3D) {
     super();
 
@@ -514,7 +508,7 @@ export class MultiscaleMeshLayer extends PerspectiveViewRenderLayer {
 
     let hasAllChunks = true;
 
-    forEachRootSegment(displayState, (objectId) => {
+    forEachVisibleSegment3D(displayState, (objectId) => {
       if (!hasAllChunks) {
         return;
       }

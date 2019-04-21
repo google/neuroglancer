@@ -256,7 +256,7 @@ export class SegmentationUserLayer extends Base {
               }
               if ((meshSource instanceof MeshSource) ||
                   (meshSource instanceof MultiscaleMeshSource)) {
-                this.addMesh(meshSource, this.chunkedGraphLayer);
+                this.addMesh(meshSource);
                 this.objectLayerStateChanged.dispatch();
               }
             });
@@ -274,7 +274,7 @@ export class SegmentationUserLayer extends Base {
                 this.isReady = true;
               }
               if (skeletonSource) {
-                this.addSkeleton(skeletonSource, this.chunkedGraphLayer);
+                this.addSkeleton(skeletonSource);
                 this.objectLayerStateChanged.dispatch();
               }
             });
@@ -287,19 +287,19 @@ export class SegmentationUserLayer extends Base {
     }
   }
 
-  addMesh(meshSource: MeshSource|MultiscaleMeshSource, chunkedGraph?: ChunkedGraphLayer) {
+  addMesh(meshSource: MeshSource|MultiscaleMeshSource) {
     if (meshSource instanceof MeshSource) {
-      this.meshLayer = new MeshLayer(this.manager.chunkManager, chunkedGraph ? chunkedGraph : null, meshSource, this.displayState);
+      this.meshLayer = new MeshLayer(this.manager.chunkManager, meshSource, this.displayState);
     } else {
       this.meshLayer =
-          new MultiscaleMeshLayer(this.manager.chunkManager, chunkedGraph ? chunkedGraph : null, meshSource, this.displayState);
+          new MultiscaleMeshLayer(this.manager.chunkManager, meshSource, this.displayState);
     }
     this.addRenderLayer(this.meshLayer);
   }
 
-  addSkeleton(skeletonSource: SkeletonSource, chunkedGraph?: ChunkedGraphLayer) {
+  addSkeleton(skeletonSource: SkeletonSource) {
     let base = new SkeletonLayer(
-        this.manager.chunkManager, chunkedGraph ? chunkedGraph : null, skeletonSource, this.manager.voxelSize, this.displayState);
+        this.manager.chunkManager, skeletonSource, this.manager.voxelSize, this.displayState);
     this.skeletonLayer = base;
     this.addRenderLayer(new PerspectiveViewSkeletonLayer(base.addRef()));
     this.addRenderLayer(new SliceViewPanelSkeletonLayer(/* transfer ownership */ base));

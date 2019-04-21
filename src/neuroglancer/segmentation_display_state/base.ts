@@ -35,27 +35,15 @@ export function getObjectKey(objectId: Uint64): string {
 }
 
 export function forEachRootSegment(
-    state: VisibleSegmentsState,
-    callback: (rootObjectId: Uint64) => void) {
+    state: VisibleSegmentsState, callback: (rootObjectId: Uint64) => void) {
   let {rootSegments} = state;
   for (let rootObjectId of rootSegments) {
     callback(rootObjectId);
   }
 }
 
-export function forEachVisibleSegment2D(
-    state: VisibleSegmentsState,
-    callback: (objectId: Uint64, rootObjectId: Uint64) => void) {
-  let {visibleSegments2D, segmentEquivalences} = state;
-  for (let objectId of visibleSegments2D!) {
-    let rootObjectId = segmentEquivalences.get(objectId);
-    callback(objectId, rootObjectId);
-  }
-}
-
 export function forEachVisibleSegment3D(
-    state: VisibleSegmentsState,
-    callback: (objectId: Uint64, rootObjectId: Uint64) => void) {
+    state: VisibleSegmentsState, callback: (objectId: Uint64, rootObjectId: Uint64) => void) {
   let {visibleSegments3D, segmentEquivalences} = state;
   for (let objectId of visibleSegments3D) {
     let rootObjectId = segmentEquivalences.get(objectId);

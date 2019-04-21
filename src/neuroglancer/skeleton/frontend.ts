@@ -16,7 +16,6 @@
 
 import {ChunkState} from 'neuroglancer/chunk_manager/base';
 import {Chunk, ChunkManager, ChunkSource} from 'neuroglancer/chunk_manager/frontend';
-import {ChunkedGraphLayer} from 'neuroglancer/sliceview/chunked_graph/frontend';
 import {RenderLayer} from 'neuroglancer/layer';
 import {VoxelSize} from 'neuroglancer/navigation_state';
 import {PerspectiveViewRenderContext, PerspectiveViewRenderLayer} from 'neuroglancer/perspective_view/render_layer';
@@ -172,11 +171,8 @@ export class SkeletonLayer extends RefCounted {
   }
 
   constructor(
-      public chunkManager: ChunkManager,
-      public chunkedGraph: ChunkedGraphLayer|null,
-      public source: SkeletonSource,
-      public voxelSizeObject: VoxelSize,
-      public displayState: SkeletonLayerDisplayState) {
+      public chunkManager: ChunkManager, public source: SkeletonSource,
+      public voxelSizeObject: VoxelSize, public displayState: SkeletonLayerDisplayState) {
     super();
 
     registerRedrawWhenSegmentationDisplayState3DChanged(displayState, this);
@@ -190,7 +186,6 @@ export class SkeletonLayer extends RefCounted {
     sharedObject.RPC_TYPE_ID = SKELETON_LAYER_RPC_ID;
     sharedObject.initializeCounterpartWithChunkManager({
       'source': source.addCounterpartRef(),
-      'chunkedGraph': chunkedGraph ? chunkedGraph.rpcId : null,
     });
 
     const vertexAttributes = this.vertexAttributes = [vertexPositionAttribute];
@@ -271,7 +266,7 @@ export class SkeletonLayer extends RefCounted {
 
     gl.lineWidth(lineWidth);
 
-    forEachVisibleSegment3D(displayState, (rootObjectId, objectId) => {
+    forEachVisibleSegment3D(displayState, (objectId, rootObjectId) => {
       const key = getObjectKey(objectId);
       const skeleton = skeletons.get(key);
 
