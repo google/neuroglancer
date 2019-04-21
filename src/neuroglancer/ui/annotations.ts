@@ -33,7 +33,7 @@ import {registerNested, TrackableValueInterface, WatchableRefCounted, WatchableV
 import {registerTool, Tool} from 'neuroglancer/ui/tool';
 import {TrackableRGB} from 'neuroglancer/util/color';
 import {Borrowed, Owned, RefCounted} from 'neuroglancer/util/disposable';
-import {removeChildren} from 'neuroglancer/util/dom';
+import {removeChildren, removeFromParent} from 'neuroglancer/util/dom';
 import {mat3, mat3FromMat4, mat4, transformVectorByMat4, vec3} from 'neuroglancer/util/geom';
 import {verifyObject, verifyObjectProperty, verifyOptionalInt, verifyOptionalString, verifyString} from 'neuroglancer/util/json';
 import {NullarySignal} from 'neuroglancer/util/signal';
@@ -381,7 +381,8 @@ export class AnnotationLayerView extends Tab {
   constructor(
       public layer: Borrowed<UserLayerWithAnnotations>,
       public state: Owned<SelectedAnnotationState>,
-      public annotationLayer: Owned<AnnotationLayerState>, public voxelSize: Owned<VoxelSize>,
+      public annotationLayer: Owned<AnnotationLayerState>,
+      public voxelSize: Owned<VoxelSize>,
       public setSpatialCoordinates: (point: vec3) => void) {
     super();
     this.element.classList.add('neuroglancer-annotation-layer-view');
@@ -394,7 +395,9 @@ export class AnnotationLayerView extends Tab {
       this.updated = false;
       this.updateView();
     };
-    this.registerDisposer(source.changed.add(updateView));
+    this.registerDisposer(source.childAdded.add((annotation) => this.addAnnotationElement(annotation)));
+    this.registerDisposer(source.childUpdated.add((annotation) => this.updateAnnotationElement(annotation)));
+    this.registerDisposer(source.childDeleted.add((annotationId) => this.deleteAnnotationElement(annotationId)));
     this.registerDisposer(this.visibility.changed.add(() => this.updateView()));
     this.registerDisposer(annotationLayer.transform.changed.add(updateView));
     this.updateView();
@@ -513,6 +516,29 @@ export class AnnotationLayerView extends Tab {
     this.previousHoverId = newHoverId;
   }
 
+  private addAnnotationElementHelper(annotation: Annotation) {
+    const {annotationLayer, annotationListContainer, annotationListElements} = this;
+    const {objectToGlobal} = annotationLayer;
+
+    const element = this.makeAnnotationListElement(annotation, objectToGlobal);
+    annotationListContainer.appendChild(element);
+    annotationListElements.set(annotation.id, element);
+
+    element.addEventListener('mouseenter', () => {
+      this.annotationLayer.hoverState.value = {id: annotation.id, partIndex: 0};
+    });
+    element.addEventListener('click', () => {
+      this.state.value = {id: annotation.id, partIndex: 0};
+    });
+
+    element.addEventListener('mouseup', (event: MouseEvent) => {
+      if (event.button === 2) {
+        this.setSpatialCoordinates(
+            getCenterPosition(annotation, this.annotationLayer.objectToGlobal));
+      }
+    });
+  }
+
   private updateView() {
     if (!this.visible) {
       return;
@@ -523,26 +549,59 @@ export class AnnotationLayerView extends Tab {
     const {annotationLayer, annotationListContainer, annotationListElements} = this;
     const {source} = annotationLayer;
     removeChildren(annotationListContainer);
-    this.annotationListElements.clear();
-    const {objectToGlobal} = annotationLayer;
-    for (const annotation of source) {
-      const element = this.makeAnnotationListElement(annotation, objectToGlobal);
-      annotationListContainer.appendChild(element);
-      annotationListElements.set(annotation.id, element);
-      element.addEventListener('mouseenter', () => {
-        this.annotationLayer.hoverState.value = {id: annotation.id, partIndex: 0};
-      });
-      element.addEventListener('click', () => {
-        this.state.value = {id: annotation.id, partIndex: 0};
-      });
-
-      element.addEventListener('mouseup', (event: MouseEvent) => {
-        if (event.button === 2) {
-          this.setSpatialCoordinates(
-              getCenterPosition(annotation, this.annotationLayer.objectToGlobal));
-        }
-      });
+    annotationListElements.clear();
+    for(const annotation of source) {
+      this.addAnnotationElementHelper(annotation);
     }
+    this.resetOnUpdate();
+  }
+
+  private addAnnotationElement(annotation:Annotation) {
+    if(!this.visible) {
+      return;
+    }
+    this.addAnnotationElementHelper(annotation);
+    this.resetOnUpdate();
+  }
+
+  private updateAnnotationElement(annotation:Annotation) {
+    if (!this.visible) {
+      return;
+    }
+    var element = this.annotationListElements.get(annotation.id);
+    if (!element) {
+      return;
+    }
+    if (element.lastElementChild && element.children.length === 3) {
+      if (!annotation.description) {
+        element.removeChild(element.lastElementChild);
+      }
+      else {
+        element.lastElementChild.innerHTML = annotation.description;
+      }
+    }
+    else {
+      const description = document.createElement('div');
+      description.className = 'neuroglancer-annotation-description';
+      description.textContent = annotation.description || '';
+      element.appendChild(description);
+    }
+    this.resetOnUpdate();
+  }
+
+  private deleteAnnotationElement(annotationId: string) {
+    if (!this.visible) {
+      return;
+    }
+    let element = this.annotationListElements.get(annotationId);
+    if (element) {
+      removeFromParent(element);
+      this.annotationListElements.delete(annotationId);
+    }
+    this.resetOnUpdate();
+  }
+
+  private resetOnUpdate() {
     this.previousSelectedId = undefined;
     this.previousHoverId = undefined;
     this.updated = true;
