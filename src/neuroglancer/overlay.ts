@@ -47,7 +47,7 @@ export class Overlay extends RefCounted {
     this.registerEventListener(container, 'action:close', () => {
       this.dispose();
     });
-    container.onclick = (event) => {
+    container.onmousedown = (event) => {
       if (event.target === container) {
         this.dispose();
       }
