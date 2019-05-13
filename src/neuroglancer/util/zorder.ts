@@ -68,6 +68,42 @@ export function decodeZIndexCompressed(
   return Uint32Array.of(x, y, z);
 }
 
+export function encodeZIndexCompressed(
+    zindex: Uint64, xBits: number, yBits: number, zBits: number, x: number, y: number,
+    z: number): Uint64 {
+  const maxBits = Math.max(xBits, yBits, zBits);
+  let outputBit = 0;
+  let outputNum = 0;
+  let isHigh = false;
+  function writeBit(b: number): void {
+    outputNum |= (b & 1) << outputBit;
+    if (++outputBit === 32) {
+      zindex.low = outputNum;
+      outputNum = 0;
+      outputBit = 0;
+      isHigh = true;
+    }
+  }
+  for (let bit = 0; bit < maxBits; ++bit) {
+    if (bit < xBits) {
+      writeBit((x >> bit) & 1);
+    }
+    if (bit < yBits) {
+      writeBit((y >> bit) & 1);
+    }
+    if (bit < zBits) {
+      writeBit((z >> bit) & 1);
+    }
+  }
+  if (isHigh) {
+    zindex.high = outputNum;
+  } else {
+    zindex.high = 0;
+    zindex.low = outputNum;
+  }
+  return zindex;
+}
+
 function lessMsb(a: number, b: number) {
   return a < b && a < (a ^ b);
 }

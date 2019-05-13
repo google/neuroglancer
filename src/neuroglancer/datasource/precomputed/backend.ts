@@ -14,18 +14,196 @@
  * limitations under the License.
  */
 
-import {WithParameters} from 'neuroglancer/chunk_manager/backend';
-import {MeshSourceParameters, VolumeChunkEncoding, VolumeChunkSourceParameters} from 'neuroglancer/datasource/precomputed/base';
-import { decodeJsonManifestChunk, decodeTriangleVertexPositionsAndIndices, FragmentChunk, ManifestChunk, MeshSource, assignMeshFragmentData} from 'neuroglancer/mesh/backend';
+import {Chunk, ChunkManager, WithParameters} from 'neuroglancer/chunk_manager/backend';
+import {GenericSharedDataSource} from 'neuroglancer/chunk_manager/generic_file_source';
+import {DataEncoding, MeshSourceParameters, MultiscaleMeshSourceParameters, ShardingHashFunction, ShardingParameters, SkeletonSourceParameters, VolumeChunkEncoding, VolumeChunkSourceParameters} from 'neuroglancer/datasource/precomputed/base';
+import {assignMeshFragmentData, assignMultiscaleMeshFragmentData, computeOctreeChildOffsets, decodeJsonManifestChunk, decodeTriangleVertexPositionsAndIndices, FragmentChunk, generateHigherOctreeLevel, ManifestChunk, MeshSource, MultiscaleFragmentChunk, MultiscaleManifestChunk, MultiscaleMeshSource} from 'neuroglancer/mesh/backend';
+import {SkeletonChunk, SkeletonSource} from 'neuroglancer/skeleton/backend';
+import {decodeSkeletonChunk} from 'neuroglancer/skeleton/decode_precomputed_skeleton';
 import {ChunkDecoder} from 'neuroglancer/sliceview/backend_chunk_decoders';
 import {decodeCompressedSegmentationChunk} from 'neuroglancer/sliceview/backend_chunk_decoders/compressed_segmentation';
 import {decodeJpegChunk} from 'neuroglancer/sliceview/backend_chunk_decoders/jpeg';
 import {decodeRawChunk} from 'neuroglancer/sliceview/backend_chunk_decoders/raw';
 import {VolumeChunk, VolumeChunkSource} from 'neuroglancer/sliceview/volume/backend';
 import {CancellationToken} from 'neuroglancer/util/cancellation';
-import {Endianness} from 'neuroglancer/util/endian';
+import {Borrowed} from 'neuroglancer/util/disposable';
+import {convertEndian32, Endianness} from 'neuroglancer/util/endian';
+import {vec3} from 'neuroglancer/util/geom';
+import {murmurHash3_x86_128Hash64Bits} from 'neuroglancer/util/hash';
 import {openShardedHttpRequest, sendHttpRequest} from 'neuroglancer/util/http_request';
+import {stableStringify} from 'neuroglancer/util/json';
+import {Uint64} from 'neuroglancer/util/uint64';
+import {encodeZIndexCompressed} from 'neuroglancer/util/zorder';
 import {registerSharedObject} from 'neuroglancer/worker_rpc';
+import {inflate} from 'pako';
+
+const shardingHashFunctions: Map<ShardingHashFunction, (out: Uint64) => void> = new Map([
+  [
+    ShardingHashFunction.MURMURHASH3_X86_128,
+    (out) => {
+      murmurHash3_x86_128Hash64Bits(out, 0, out.low, out.high);
+    }
+  ],
+  [ShardingHashFunction.IDENTITY, (_out) => {}],
+]);
+
+interface ShardInfo {
+  shardPath: string;
+  offset: Uint64;
+}
+
+interface DecodedMinishardIndex {
+  data: Uint32Array;
+  shardPath: string;
+}
+
+interface MinishardIndexSource extends GenericSharedDataSource<Uint64, DecodedMinishardIndex> {
+  baseUrls: string[];
+  sharding: ShardingParameters;
+}
+
+function getMinishardIndexDataSource(
+    chunkManager: Borrowed<ChunkManager>,
+    parameters: {baseUrls: string[], path: string, sharding?: ShardingParameters}):
+    MinishardIndexSource|undefined {
+  const {baseUrls, path, sharding} = parameters;
+  if (sharding === undefined) return undefined;
+  const source =
+      GenericSharedDataSource.get<Uint64, DecodedMinishardIndex>(
+          chunkManager,
+          stableStringify({type: 'precomputed:shardedDataSource', baseUrls, path, sharding}), {
+            download: async function(key: Uint64, cancellationToken: CancellationToken) {
+              const hashFunction = shardingHashFunctions.get(sharding.hash)!;
+              const hashCode = Uint64.rshift(new Uint64(), key, sharding.preshiftBits);
+              hashFunction(hashCode);
+              const minishard = Uint64.lowMask(new Uint64(), sharding.minishardBits);
+              Uint64.and(minishard, minishard, hashCode);
+              const shard = Uint64.lowMask(new Uint64(), sharding.shardBits);
+              Uint64.rshift(hashCode, hashCode, sharding.minishardBits);
+              Uint64.and(shard, shard, hashCode);
+              const shardPathPrefix =
+                  `${path}/${shard.toString(16).padStart(Math.ceil(sharding.shardBits / 4), '0')}`;
+              // Retrive minishard index start/end offsets.
+              const indexPath = shardPathPrefix + '.index';
+
+              // Multiply minishard by 16.
+              const shardIndexStart = Uint64.lshift(new Uint64(), minishard, 4);
+              const shardIndexEnd = Uint64.addUint32(new Uint64(), shardIndexStart, 15);
+              const shardIndexReq = openShardedHttpRequest(baseUrls, indexPath);
+              shardIndexReq.setRequestHeader('Range', `bytes=${shardIndexStart}-${shardIndexEnd}`);
+              const shardIndexResponse =
+                  await sendHttpRequest(shardIndexReq, 'arraybuffer', cancellationToken);
+              if (shardIndexResponse.byteLength !== 16) {
+                throw new Error(`Failed to retrieve minishard offset`);
+              }
+              const shardIndexDv = new DataView(shardIndexResponse);
+              const minishardStartOffset = new Uint64(
+                  shardIndexDv.getUint32(0, /*littleEndian=*/ true),
+                  shardIndexDv.getUint32(4, /*littleEndian=*/ true));
+              const minishardEndOffset = new Uint64(
+                  shardIndexDv.getUint32(8, /*littleEndian=*/ true),
+                  shardIndexDv.getUint32(12, /*littleEndian=*/ true));
+              if (Uint64.equal(minishardStartOffset, minishardEndOffset)) {
+                throw new Error('Object not found')
+              }
+              Uint64.decrement(minishardEndOffset, minishardEndOffset);
+
+              const dataPath = shardPathPrefix + '.data';
+              const minishardIndexReq = openShardedHttpRequest(baseUrls, dataPath);
+              minishardIndexReq.setRequestHeader(
+                  'Range', `bytes=${minishardStartOffset}-${minishardEndOffset}`);
+              let minishardIndexResponse =
+                  await sendHttpRequest(minishardIndexReq, 'arraybuffer', cancellationToken);
+              if (sharding.minishardIndexEncoding === DataEncoding.GZIP) {
+                minishardIndexResponse = inflate(new Uint8Array(minishardIndexResponse)).buffer;
+              }
+              if ((minishardIndexResponse.byteLength % 24) !== 0) {
+                throw new Error(
+                    `Invalid minishard index length: ${minishardIndexResponse.byteLength}`);
+              }
+              const minishardIndex = new Uint32Array(minishardIndexResponse);
+              convertEndian32(minishardIndex, Endianness.LITTLE);
+
+              const minishardIndexSize = minishardIndex.byteLength / 24;
+              let prevEntryKeyLow = 0, prevEntryKeyHigh = 0, prevStartLow = 0, prevStartHigh = 0;
+              for (let i = 0; i < minishardIndexSize; ++i) {
+                let entryKeyLow = prevEntryKeyLow + minishardIndex[i * 2];
+                let entryKeyHigh = prevEntryKeyHigh + minishardIndex[i * 2 + 1];
+                if (entryKeyLow >= 4294967296) {
+                  entryKeyLow -= 4294967296;
+                  entryKeyHigh += 1;
+                }
+                prevEntryKeyLow = minishardIndex[i * 2] = entryKeyLow;
+                prevEntryKeyHigh = minishardIndex[i * 2 + 1] = entryKeyHigh;
+                let startLow = prevStartLow + minishardIndex[(minishardIndexSize + i) * 2];
+                let startHigh = prevStartHigh + minishardIndex[(minishardIndexSize + i) * 2 + 1];
+                if (startLow >= 4294967296) {
+                  startLow -= 4294967296;
+                  startHigh += 1;
+                }
+                minishardIndex[(minishardIndexSize + i) * 2] = startLow;
+                minishardIndex[(minishardIndexSize + i) * 2 + 1] = startHigh;
+                const sizeLow = minishardIndex[(2 * minishardIndexSize + i) * 2];
+                const sizeHigh = minishardIndex[(2 * minishardIndexSize + i) * 2 + 1];
+                let endLow = startLow + sizeLow;
+                let endHigh = startHigh + sizeHigh;
+                if (endLow >= 4294967296) {
+                  endLow -= 4294967296;
+                  endHigh += 1;
+                }
+                prevStartLow = endLow;
+                prevStartHigh = endHigh;
+                minishardIndex[(2 * minishardIndexSize + i) * 2] = endLow;
+                minishardIndex[(2 * minishardIndexSize + i) * 2 + 1] = endHigh;
+              }
+              return {
+                data: {data: minishardIndex, shardPath: dataPath, baseUrls},
+                size: minishardIndex.byteLength
+              };
+            },
+            encodeKey: (key: Uint64) => key.toString(),
+            sourceQueueLevel: 1,
+          }) as MinishardIndexSource;
+  source.baseUrls = baseUrls;
+  source.sharding = sharding;
+  return source;
+}
+
+function findMinishardEntry(minishardIndex: DecodedMinishardIndex, key: Uint64) {
+  const minishardIndexData = minishardIndex.data;
+  const minishardIndexSize = minishardIndexData.length / 6;
+  const keyLow = key.low, keyHigh = key.high;
+  for (let i = 0; i < minishardIndexSize; ++i) {
+    if (minishardIndexData[i * 2] !== keyLow || minishardIndexData[i * 2 + 1] !== keyHigh) {
+      continue;
+    }
+    const startOffset = new Uint64(
+        minishardIndexData[(minishardIndexSize + i) * 2],
+        minishardIndexData[(minishardIndexSize + i) * 2 + 1]);
+    const endOffset = new Uint64(
+        minishardIndexData[(2 * minishardIndexSize + i) * 2],
+        minishardIndexData[(2 * minishardIndexSize + i) * 2 + 1]);
+    return {startOffset, endOffset};
+  }
+  throw new Error(`Object not found in minishard: ${key}`);
+}
+
+async function getShardedData(
+    minishardIndexSource: MinishardIndexSource, chunk: Chunk, key: Uint64,
+    cancellationToken: CancellationToken): Promise<{shardInfo: ShardInfo, data: ArrayBuffer}> {
+  const getPriority = () => ({priorityTier: chunk.priorityTier, priority: chunk.priority});
+  const minishardIndex = await minishardIndexSource.getData(key, getPriority, cancellationToken);
+  const {startOffset, endOffset} = findMinishardEntry(minishardIndex, key);
+  Uint64.decrement(endOffset, endOffset);
+  const dataReq = openShardedHttpRequest(minishardIndexSource.baseUrls, minishardIndex.shardPath);
+  dataReq.setRequestHeader('Range', `bytes=${startOffset}-${endOffset}`);
+  let data = await sendHttpRequest(dataReq, 'arraybuffer', cancellationToken);
+  if (minishardIndexSource.sharding.dataEncoding === DataEncoding.GZIP) {
+    data = inflate(new Uint8Array(data)).buffer;
+  }
+  return {data, shardInfo: {shardPath: minishardIndex.shardPath, offset: startOffset}};
+}
+
 
 const chunkDecoders = new Map<VolumeChunkEncoding, ChunkDecoder>();
 chunkDecoders.set(VolumeChunkEncoding.RAW, decodeRawChunk);
@@ -35,22 +213,48 @@ chunkDecoders.set(VolumeChunkEncoding.COMPRESSED_SEGMENTATION, decodeCompressedS
 @registerSharedObject() export class PrecomputedVolumeChunkSource extends
 (WithParameters(VolumeChunkSource, VolumeChunkSourceParameters)) {
   chunkDecoder = chunkDecoders.get(this.parameters.encoding)!;
+  private minishardIndexSource = getMinishardIndexDataSource(this.chunkManager, this.parameters);
 
-  download(chunk: VolumeChunk, cancellationToken: CancellationToken) {
-    let {parameters} = this;
-    let path: string;
-    {
-      // chunkPosition must not be captured, since it will be invalidated by the next call to
-      // computeChunkBounds.
-      let chunkPosition = this.computeChunkBounds(chunk);
-      let chunkDataSize = chunk.chunkDataSize!;
-      path = `${parameters.path}/${chunkPosition[0]}-${chunkPosition[0] + chunkDataSize[0]}_` +
-          `${chunkPosition[1]}-${chunkPosition[1] + chunkDataSize[1]}_` +
-          `${chunkPosition[2]}-${chunkPosition[2] + chunkDataSize[2]}`;
+  gridShape = (() => {
+    const gridShape = new Uint32Array(3);
+    const {upperVoxelBound, chunkDataSize} = this.spec;
+    for (let i = 0; i < 3; ++i) {
+      gridShape[i] = Math.ceil(upperVoxelBound[i] / chunkDataSize[i]);
     }
-    return sendHttpRequest(
-               openShardedHttpRequest(parameters.baseUrls, path), 'arraybuffer', cancellationToken)
-        .then(response => this.chunkDecoder(chunk, response));
+    return gridShape;
+  })();
+
+  async download(chunk: VolumeChunk, cancellationToken: CancellationToken): Promise<void> {
+    const {parameters} = this;
+
+    const {minishardIndexSource} = this;
+    let response: ArrayBuffer;
+    if (minishardIndexSource === undefined) {
+      let path: string;
+      {
+        // chunkPosition must not be captured, since it will be invalidated by the next call to
+        // computeChunkBounds.
+        let chunkPosition = this.computeChunkBounds(chunk);
+        let chunkDataSize = chunk.chunkDataSize!;
+        path = `${parameters.path}/${chunkPosition[0]}-${chunkPosition[0] + chunkDataSize[0]}_` +
+            `${chunkPosition[1]}-${chunkPosition[1] + chunkDataSize[1]}_` +
+            `${chunkPosition[2]}-${chunkPosition[2] + chunkDataSize[2]}`;
+      }
+      response = await sendHttpRequest(
+          openShardedHttpRequest(parameters.baseUrls, path), 'arraybuffer', cancellationToken);
+    } else {
+      this.computeChunkBounds(chunk);
+      const {gridShape} = this;
+      const {chunkGridPosition} = chunk;
+      const xBits = Math.ceil(Math.log2(gridShape[0])), yBits = Math.ceil(Math.log2(gridShape[1])),
+            zBits = Math.ceil(Math.log2(gridShape[2]));
+      const chunkIndex = encodeZIndexCompressed(
+          new Uint64(), xBits, yBits, zBits, chunkGridPosition[0], chunkGridPosition[1],
+          chunkGridPosition[2]);
+      response =
+          (await getShardedData(minishardIndexSource, chunk, chunkIndex, cancellationToken)).data;
+    }
+    this.chunkDecoder(chunk, response);
   }
 }
 
@@ -84,5 +288,255 @@ export function decodeFragmentChunk(chunk: FragmentChunk, response: ArrayBuffer)
                openShardedHttpRequest(parameters.baseUrls, requestPath), 'arraybuffer',
                cancellationToken)
         .then(response => decodeFragmentChunk(chunk, response));
+  }
+}
+
+interface PrecomputedMultiscaleManifestChunk extends MultiscaleManifestChunk {
+  /**
+   * Byte offsets into data file for each octree node.
+   *
+   * Stored as Float64Array to allow 53-bit integer values.
+   */
+  offsets: Float64Array;
+  shardInfo?: ShardInfo;
+}
+
+function decodeMultiscaleManifestChunk(
+    chunk: PrecomputedMultiscaleManifestChunk, response: ArrayBuffer) {
+  if (response.byteLength < 28 || response.byteLength % 4 !== 0) {
+    throw new Error(`Invalid index file size: ${response.byteLength}`);
+  }
+  const dv = new DataView(response);
+  let offset = 0;
+  const chunkShape = vec3.fromValues(
+      dv.getFloat32(offset, /*littleEndian=*/ true),
+      dv.getFloat32(offset + 4, /*littleEndian=*/ true),
+      dv.getFloat32(offset + 8, /*littleEndian=*/ true));
+  offset += 12;
+  const gridOrigin = vec3.fromValues(
+      dv.getFloat32(offset, /*littleEndian=*/ true),
+      dv.getFloat32(offset + 4, /*littleEndian=*/ true),
+      dv.getFloat32(offset + 8, /*littleEndian=*/ true));
+  offset += 12;
+  const numStoredLods = dv.getUint32(offset, /*littleEndian=*/ true);
+  offset += 4
+  if (response.byteLength < offset + 8 * numStoredLods) {
+    throw new Error(`Invalid index file size for ${numStoredLods} lods: ${response.byteLength}`);
+  }
+  const storedLodScales = new Float32Array(response, offset, numStoredLods);
+  offset += 4 * numStoredLods;
+  convertEndian32(storedLodScales, Endianness.LITTLE);
+  const numFragmentsPerLod = new Uint32Array(response, offset, numStoredLods);
+  offset += 4 * numStoredLods;
+  convertEndian32(numFragmentsPerLod, Endianness.LITTLE);
+  const totalFragments = numFragmentsPerLod.reduce((a, b) => a + b);
+  if (response.byteLength !== offset + 16 * totalFragments) {
+    throw new Error(
+        `Invalid index file size for ${numStoredLods} lods and ` +
+        `${totalFragments} total fragments: ${response.byteLength}`);
+  }
+  const fragmentInfo = new Uint32Array(response, offset);
+  convertEndian32(fragmentInfo, Endianness.LITTLE);
+  const clipUpperBound =
+      vec3.fromValues(Number.POSITIVE_INFINITY, Number.POSITIVE_INFINITY, Number.POSITIVE_INFINITY);
+  const clipLowerBound =
+      vec3.fromValues(Number.NEGATIVE_INFINITY, Number.NEGATIVE_INFINITY, Number.NEGATIVE_INFINITY);
+  let numLods = Math.max(1, storedLodScales.length);
+  {
+    let fragmentBase = 0;
+    for (let lodIndex = 0; lodIndex < numStoredLods; ++lodIndex) {
+      const numFragments = numFragmentsPerLod[lodIndex];
+      for (let i = 0; i < 3; ++i) {
+        let upperBoundValue = Number.NEGATIVE_INFINITY;
+        let lowerBoundValue = Number.POSITIVE_INFINITY;
+        const base = fragmentBase + numFragments * i;
+        for (let j = 0; j < numFragments; ++j) {
+          const v = fragmentInfo[base + j];
+          upperBoundValue = Math.max(upperBoundValue, v);
+          lowerBoundValue = Math.min(lowerBoundValue, v);
+        }
+        if (numFragments != 0) {
+          while ((upperBoundValue >>> (numLods - lodIndex - 1)) !=
+                 (lowerBoundValue >>> (numLods - lodIndex - 1))) {
+            ++numLods;
+          }
+          if (lodIndex === 0) {
+            clipLowerBound[i] = Math.min(clipLowerBound[i], (1 << lodIndex) * lowerBoundValue);
+            clipUpperBound[i] =
+                Math.max(clipUpperBound[i], (1 << lodIndex) * (upperBoundValue + 1));
+          }
+        }
+      }
+      fragmentBase += numFragments * 4;
+    }
+  }
+
+  let maxFragments = 0;
+  {
+    let prevNumFragments = 0;
+    let prevLodIndex = 0;
+    for (let lodIndex = 0; lodIndex < numStoredLods; ++lodIndex) {
+      const numFragments = numFragmentsPerLod[lodIndex];
+      maxFragments += prevNumFragments * (lodIndex - prevLodIndex);
+      prevLodIndex = lodIndex;
+      prevNumFragments = numFragments;
+      maxFragments += numFragments;
+    }
+    maxFragments += (numLods - 1 - prevLodIndex) * prevNumFragments;
+  }
+  const octreeTemp = new Uint32Array(5 * maxFragments);
+  const offsetsTemp = new Float64Array(maxFragments + 1);
+  let octree: Uint32Array;
+  {
+    let priorStart = 0;
+    let baseRow = 0;
+    let dataOffset = 0;
+    let fragmentBase = 0;
+    for (let lodIndex = 0; lodIndex < numStoredLods; ++lodIndex) {
+      const numFragments = numFragmentsPerLod[lodIndex];
+      // Copy in indices
+      for (let j = 0; j < numFragments; ++j) {
+        for (let i = 0; i < 3; ++i) {
+          octreeTemp[5 * (baseRow + j) + i] = fragmentInfo[fragmentBase + j + i * numFragments];
+        }
+        const dataSize = fragmentInfo[fragmentBase + j + 3 * numFragments];
+        dataOffset += dataSize;
+        offsetsTemp[baseRow + j + 1] = dataOffset;
+        if (dataSize === 0) {
+          // Mark node as empty.
+          octreeTemp[5 * (baseRow + j) + 4] = 0x80000000;
+        }
+      }
+
+      fragmentBase += 4 * numFragments;
+
+      if (lodIndex !== 0) {
+        // Connect with prior level
+        computeOctreeChildOffsets(octreeTemp, priorStart, baseRow, baseRow + numFragments);
+      }
+
+      priorStart = baseRow;
+      baseRow += numFragments;
+      while (lodIndex + 1 < numLods &&
+             (lodIndex + 1 >= storedLodScales.length || storedLodScales[lodIndex + 1] === 0)) {
+        const curEnd = generateHigherOctreeLevel(octreeTemp, priorStart, baseRow);
+        offsetsTemp.fill(dataOffset, baseRow + 1, curEnd + 1);
+        priorStart = baseRow;
+        baseRow = curEnd;
+        ++lodIndex;
+      }
+    }
+    octree = octreeTemp.slice(0, 5 * baseRow);
+    chunk.offsets = offsetsTemp.slice(0, baseRow + 1);
+  }
+  const source = chunk.source! as PrecomputedMultiscaleMeshSource;
+  const {lodScaleMultiplier} = source.parameters.metadata;
+  const lodScales = new Float32Array(numLods);
+  lodScales.set(storedLodScales, 0);
+  for (let i = 0; i < storedLodScales.length; ++i) {
+    lodScales[i] *= lodScaleMultiplier;
+  }
+  chunk.manifest = {
+    chunkShape,
+    chunkGridSpatialOrigin: gridOrigin,
+    clipLowerBound: vec3.add(
+        clipLowerBound, gridOrigin, vec3.multiply(clipLowerBound, clipLowerBound, chunkShape)),
+    clipUpperBound: vec3.add(
+        clipUpperBound, gridOrigin, vec3.multiply(clipUpperBound, clipUpperBound, chunkShape)),
+    octree,
+    lodScales,
+  };
+}
+
+async function decodeMultiscaleFragmentChunk(
+    chunk: MultiscaleFragmentChunk, response: ArrayBuffer) {
+  const {lod} = chunk;
+  const source = chunk.manifestChunk!.source! as PrecomputedMultiscaleMeshSource;
+  const m = await import(/* webpackChunkName: "draco" */ 'neuroglancer/mesh/draco');
+  const rawMesh = await m.decodeDracoPartitioned(
+      new Uint8Array(response), source.parameters.metadata.vertexQuantizationBits, lod !== 0);
+  assignMultiscaleMeshFragmentData(chunk, rawMesh, source.format.vertexPositionFormat);
+}
+
+@registerSharedObject() //
+export class PrecomputedMultiscaleMeshSource extends
+(WithParameters(MultiscaleMeshSource, MultiscaleMeshSourceParameters)) {
+  private minishardIndexSource = getMinishardIndexDataSource(this.chunkManager, this.parameters);
+
+  async download(chunk: PrecomputedMultiscaleManifestChunk, cancellationToken: CancellationToken):
+      Promise<void> {
+    const {parameters, minishardIndexSource} = this;
+    let data: ArrayBuffer;
+    if (minishardIndexSource === undefined) {
+      data = await sendHttpRequest(
+          openShardedHttpRequest(parameters.baseUrls, `${parameters.path}/${chunk.objectId}.index`),
+          'arraybuffer', cancellationToken);
+    } else {
+      ({data, shardInfo: chunk.shardInfo} =
+           await getShardedData(minishardIndexSource, chunk, chunk.objectId, cancellationToken));
+    }
+    await decodeMultiscaleManifestChunk(chunk, data);
+  }
+
+  async downloadFragment(
+      chunk: MultiscaleFragmentChunk, cancellationToken: CancellationToken): Promise<void> {
+    const {parameters} = this;
+    const manifestChunk = chunk.manifestChunk! as PrecomputedMultiscaleManifestChunk;
+    const chunkIndex = chunk.chunkIndex;
+    const {shardInfo, offsets} = manifestChunk;
+    const startOffset = offsets[chunkIndex];
+    const endOffset = offsets[chunkIndex + 1];
+    let requestPath: string;
+    let startOffsetStr: string, endOffsetStr: string;
+    if (shardInfo !== undefined) {
+      requestPath = shardInfo.shardPath;
+      const fullDataSize = offsets[offsets.length - 1];
+      let startLow = shardInfo.offset.low - fullDataSize + startOffset;
+      let startHigh = shardInfo.offset.high;
+      let endLow = startLow + endOffset - startOffset - 1;
+      let endHigh = startHigh;
+      while (startLow < 0) {
+        startLow += 4294967296;
+        startHigh -= 1;
+      }
+      while (endLow < 0) {
+        endLow += 4294967296;
+        endHigh -= 1;
+      }
+      while (endLow > 4294967296) {
+        endLow -= 4294967296;
+        endHigh += 1;
+      }
+      startOffsetStr = new Uint64(startLow, startHigh).toString();
+      endOffsetStr = new Uint64(endLow, endHigh).toString();
+    } else {
+      requestPath = `${parameters.path}/${manifestChunk.objectId}`;
+      startOffsetStr = startOffset.toString();
+      endOffsetStr = (endOffset - 1).toString();
+    }
+    const req = openShardedHttpRequest(parameters.baseUrls, requestPath);
+    req.setRequestHeader('Range', `bytes=${startOffsetStr}-${endOffsetStr}`);
+    const response = await sendHttpRequest(req, 'arraybuffer', cancellationToken);
+    await decodeMultiscaleFragmentChunk(chunk, response);
+  }
+}
+
+@registerSharedObject() //
+export class PrecomputedSkeletonSource extends
+(WithParameters(SkeletonSource, SkeletonSourceParameters)) {
+  private minishardIndexSource = getMinishardIndexDataSource(this.chunkManager, this.parameters);
+  async download(chunk: SkeletonChunk, cancellationToken: CancellationToken) {
+    const {minishardIndexSource, parameters} = this;
+    let response: ArrayBuffer;
+    if (minishardIndexSource === undefined) {
+      response = await sendHttpRequest(
+          openShardedHttpRequest(parameters.baseUrls, `${parameters.path}/${chunk.objectId}`),
+          'arraybuffer', cancellationToken);
+    } else {
+      response =
+          (await getShardedData(minishardIndexSource, chunk, chunk.objectId, cancellationToken))
+              .data;
+    }
+    decodeSkeletonChunk(chunk, response, parameters.metadata.vertexAttributes);
   }
 }
