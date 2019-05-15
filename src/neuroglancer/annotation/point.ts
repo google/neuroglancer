@@ -22,12 +22,12 @@ import {AnnotationType, Point} from 'neuroglancer/annotation';
 import {AnnotationRenderContext, AnnotationRenderHelper, registerAnnotationTypeRenderHandler} from 'neuroglancer/annotation/type_handler';
 import {mat4, vec3} from 'neuroglancer/util/geom';
 import {CircleShader} from 'neuroglancer/webgl/circles';
-import {dependentShaderGetter, ShaderBuilder} from 'neuroglancer/webgl/shader';
+import {emitterDependentShaderGetter, ShaderBuilder} from 'neuroglancer/webgl/shader';
 
 class RenderHelper extends AnnotationRenderHelper {
   private circleShader = this.registerDisposer(new CircleShader(this.gl));
   private shaderGetter =
-      dependentShaderGetter(this, this.gl, (builder: ShaderBuilder) => this.defineShader(builder));
+      emitterDependentShaderGetter(this, this.gl, (builder: ShaderBuilder) => this.defineShader(builder));
 
   defineShader(builder: ShaderBuilder) {
     super.defineShader(builder);

@@ -243,12 +243,13 @@ export class ShaderCode {
 export type ShaderInitializer = ((x: ShaderProgram) => void);
 export type ShaderModule = ((x: ShaderBuilder) => void);
 
-export type ShaderSamplerPrefix = 'i' | 'u' | '';
+export type ShaderSamplerPrefix = 'i'|'u'|'';
 
 export type ShaderSamplerType =
-  'sampler2D'|'usampler2D'|'isampler2D'|'sampler3D'|'usampler3D'|'isampler3D';
+    'sampler2D'|'usampler2D'|'isampler2D'|'sampler3D'|'usampler3D'|'isampler3D';
 
-export type ShaderInterpolationMode = '' | 'centroid' | 'flat centroid' | 'smooth centroid' | 'flat' | 'smooth';
+export type ShaderInterpolationMode =
+    ''|'centroid'|'flat centroid'|'smooth centroid'|'flat'|'smooth';
 
 export const textureTargetForSamplerType = {
   'sampler2D': WebGL2RenderingContext.TEXTURE_2D,
@@ -431,7 +432,7 @@ export function shaderContainsIdentifiers(code: string, identifiers: Iterable<st
   return found;
 }
 
-export function dependentShaderGetter(
+export function emitterDependentShaderGetter(
     refCounted: RefCounted, gl: GL,
     defineShader: (builder: ShaderBuilder) => void): ((emitter: ShaderModule) => ShaderProgram) {
   const shaders = new Map<ShaderModule, ShaderProgram>();

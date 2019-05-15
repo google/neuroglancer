@@ -59,6 +59,7 @@ const EQUIVALENCES_JSON_KEY = 'equivalences';
 const SKELETON_SHADER_JSON_KEY = 'skeletonShader';
 const COLOR_SEED_JSON_KEY = 'colorSeed';
 const MESH_RENDER_SCALE_JSON_KEY = 'meshRenderScale';
+const SKELETONS_SHOW_NODES_JSON_KEY = 'showSkeletonNodes';
 
 const Base = UserLayerWithVolumeSourceMixin(UserLayer);
 export class SegmentationUserLayer extends Base {
@@ -78,6 +79,7 @@ export class SegmentationUserLayer extends Base {
     shaderError: makeWatchableShaderError(),
     renderScaleHistogram: new RenderScaleHistogram(),
     renderScaleTarget: trackableRenderScaleTarget(1),
+    showSkeletonNodes: new TrackableBoolean(true, true),
   };
 
   /**
@@ -105,6 +107,7 @@ export class SegmentationUserLayer extends Base {
     this.displayState.fragmentMain.changed.add(this.specificationChanged.dispatch);
     this.displayState.segmentColorHash.changed.add(this.specificationChanged.dispatch);
     this.displayState.renderScaleTarget.changed.add(this.specificationChanged.dispatch);
+    this.displayState.showSkeletonNodes.changed.add(this.specificationChanged.dispatch);
     this.tabs.add(
         'rendering', {label: 'Rendering', order: -100, getter: () => new DisplayOptionsTab(this)});
     this.tabs.default = 'rendering';
@@ -124,6 +127,7 @@ export class SegmentationUserLayer extends Base {
     this.displayState.fragmentMain.restoreState(specification[SKELETON_SHADER_JSON_KEY]);
     this.displayState.segmentColorHash.restoreState(specification[COLOR_SEED_JSON_KEY]);
     this.displayState.renderScaleTarget.restoreState(specification[MESH_RENDER_SCALE_JSON_KEY]);
+    this.displayState.showSkeletonNodes.restoreState(specification[SKELETONS_SHOW_NODES_JSON_KEY]);
 
     verifyObjectProperty(specification, EQUIVALENCES_JSON_KEY, y => {
       this.displayState.segmentEquivalences.restoreState(y);
@@ -208,10 +212,8 @@ export class SegmentationUserLayer extends Base {
               if ((objectSource instanceof MeshSource) ||
                   (objectSource instanceof MultiscaleMeshSource)) {
                 this.addMesh(objectSource);
-                this.objectLayerStateChanged.dispatch();
               } else if (objectSource instanceof SkeletonSource) {
                 this.addSkeletonSource(objectSource);
-                this.objectLayerStateChanged.dispatch();
               }
             });
           }
@@ -231,6 +233,7 @@ export class SegmentationUserLayer extends Base {
           new MultiscaleMeshLayer(this.manager.chunkManager, meshSource, this.displayState);
     }
     this.addRenderLayer(this.meshLayer);
+    this.objectLayerStateChanged.dispatch();
   }
 
   addSkeletonSource(skeletonSource: SkeletonSource) {
@@ -239,6 +242,7 @@ export class SegmentationUserLayer extends Base {
     this.skeletonLayer = base;
     this.addRenderLayer(new PerspectiveViewSkeletonLayer(base.addRef()));
     this.addRenderLayer(new SliceViewPanelSkeletonLayer(/* transfer ownership */ base));
+    this.objectLayerStateChanged.dispatch();
   }
 
   toJSON() {
@@ -266,6 +270,7 @@ export class SegmentationUserLayer extends Base {
     }
     x[SKELETON_SHADER_JSON_KEY] = this.displayState.fragmentMain.toJSON();
     x[MESH_RENDER_SCALE_JSON_KEY] = this.displayState.renderScaleTarget.toJSON();
+    x[SKELETONS_SHOW_NODES_JSON_KEY] = this.displayState.showSkeletonNodes.toJSON();
     return x;
   }
 
@@ -416,6 +421,19 @@ class DisplayOptionsTab extends Tab {
       if (this.layer.skeletonsPath === null || this.layer.skeletonLayer === undefined) {
         return;
       }
+      {
+        const checkbox = this.registerDisposer(
+            new TrackableBooleanCheckbox(layer.displayState.showSkeletonNodes));
+        checkbox.element.className =
+            'neuroglancer-segmentation-dropdown-show-skeleton-nodes neuroglancer-noselect';
+        const label = document.createElement('label');
+        label.className =
+            'neuroglancer-segmentation-dropdown-show-skeleton-nodes neuroglancer-noselect';
+        label.appendChild(document.createTextNode('Show skeleton nodes'));
+        label.appendChild(checkbox.element);
+        element.appendChild(label);
+      }
+
       let topRow = document.createElement('div');
       topRow.className = 'neuroglancer-segmentation-dropdown-skeleton-shader-header';
       let label = document.createElement('div');

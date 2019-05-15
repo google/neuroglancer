@@ -60,6 +60,7 @@ export class SkeletonChunk extends Chunk {
     super.serialize(msg, transfers);
     const vertexPositions = this.vertexPositions!;
     const indices = this.indices!;
+    msg['numVertices'] = vertexPositions.length / 3;
     msg['indices'] = indices;
     transfers.push(indices.buffer);
 

@@ -25,7 +25,7 @@ import {mat4, projectPointToLineSegment, vec3} from 'neuroglancer/util/geom';
 import {getMemoizedBuffer} from 'neuroglancer/webgl/buffer';
 import {CircleShader, VERTICES_PER_CIRCLE} from 'neuroglancer/webgl/circles';
 import {LineShader} from 'neuroglancer/webgl/lines';
-import {dependentShaderGetter, ShaderBuilder, ShaderProgram} from 'neuroglancer/webgl/shader';
+import {emitterDependentShaderGetter, ShaderBuilder, ShaderProgram} from 'neuroglancer/webgl/shader';
 
 const FULL_OBJECT_PICK_OFFSET = 0;
 const ENDPOINTS_PICK_OFFSET = FULL_OBJECT_PICK_OFFSET + 1;
@@ -33,8 +33,8 @@ const PICK_IDS_PER_INSTANCE = ENDPOINTS_PICK_OFFSET + 2;
 
 function getEndpointIndexArray() {
   return tile2dArray(
-      new Uint8Array([0, 1]), /*majorDimension=*/1, /*minorTiles=*/1,
-      /*majorTiles=*/VERTICES_PER_CIRCLE);
+      new Uint8Array([0, 1]), /*majorDimension=*/ 1, /*minorTiles=*/ 1,
+      /*majorTiles=*/ VERTICES_PER_CIRCLE);
 }
 
 class RenderHelper extends AnnotationRenderHelper {
@@ -48,17 +48,18 @@ class RenderHelper extends AnnotationRenderHelper {
     builder.addAttribute('highp vec3', 'aEndpointB');
   }
 
-  private edgeShaderGetter = dependentShaderGetter(this, this.gl, (builder: ShaderBuilder) => {
-    this.defineShader(builder);
-    this.lineShader.defineShader(builder);
-    builder.setVertexMain(`
+  private edgeShaderGetter =
+      emitterDependentShaderGetter(this, this.gl, (builder: ShaderBuilder) => {
+        this.defineShader(builder);
+        this.lineShader.defineShader(builder);
+        builder.setVertexMain(`
 emitLine(uProjection, aEndpointA, aEndpointB);
 ${this.setPartIndex(builder)};
 `);
-    builder.setFragmentMain(`
+        builder.setFragmentMain(`
 emitAnnotation(vec4(vColor.rgb, vColor.a * getLineAlpha() * ${this.getCrossSectionFadeFactor()}));
 `);
-  });
+      });
 
   private endpointIndexBuffer =
       this
@@ -66,20 +67,21 @@ emitAnnotation(vec4(vColor.rgb, vColor.a * getLineAlpha() * ${this.getCrossSecti
               this.gl, WebGL2RenderingContext.ARRAY_BUFFER, getEndpointIndexArray))
           .value;
 
-  private endpointShaderGetter = dependentShaderGetter(this, this.gl, (builder: ShaderBuilder) => {
-    this.defineShader(builder);
-    this.circleShader.defineShader(builder, this.targetIsSliceView);
-    builder.addAttribute('highp uint', 'aEndpointIndex');
-    builder.setVertexMain(`
+  private endpointShaderGetter =
+      emitterDependentShaderGetter(this, this.gl, (builder: ShaderBuilder) => {
+        this.defineShader(builder);
+        this.circleShader.defineShader(builder, this.targetIsSliceView);
+        builder.addAttribute('highp uint', 'aEndpointIndex');
+        builder.setVertexMain(`
 vec3 vertexPosition = mix(aEndpointA, aEndpointB, float(aEndpointIndex));
 emitCircle(uProjection * vec4(vertexPosition, 1.0));
 ${this.setPartIndex(builder, 'aEndpointIndex + 1u')};
 `);
-    builder.setFragmentMain(`
+        builder.setFragmentMain(`
 vec4 borderColor = vec4(0.0, 0.0, 0.0, 1.0);
 emitAnnotation(getCircleColor(vColor, borderColor));
 `);
-  });
+      });
 
   enable(shader: ShaderProgram, context: AnnotationRenderContext, callback: () => void) {
     super.enable(shader, context, () => {
@@ -88,13 +90,13 @@ emitAnnotation(getCircleColor(vColor, borderColor));
       const aUpper = shader.attribute('aEndpointB');
 
       context.buffer.bindToVertexAttrib(
-          aLower, /*components=*/3, /*attributeType=*/WebGL2RenderingContext.FLOAT,
-          /*normalized=*/false,
-          /*stride=*/4 * 6, /*offset=*/context.bufferOffset);
+          aLower, /*components=*/ 3, /*attributeType=*/ WebGL2RenderingContext.FLOAT,
+          /*normalized=*/ false,
+          /*stride=*/ 4 * 6, /*offset=*/ context.bufferOffset);
       context.buffer.bindToVertexAttrib(
-          aUpper, /*components=*/3, /*attributeType=*/WebGL2RenderingContext.FLOAT,
-          /*normalized=*/false,
-          /*stride=*/4 * 6, /*offset=*/context.bufferOffset + 4 * 3);
+          aUpper, /*components=*/ 3, /*attributeType=*/ WebGL2RenderingContext.FLOAT,
+          /*normalized=*/ false,
+          /*stride=*/ 4 * 6, /*offset=*/ context.bufferOffset + 4 * 3);
 
       gl.vertexAttribDivisor(aLower, 1);
       gl.vertexAttribDivisor(aUpper, 1);
