@@ -16,7 +16,7 @@
 
 import {ChunkManager, WithParameters} from 'neuroglancer/chunk_manager/backend';
 import {ChunkPriorityTier} from 'neuroglancer/chunk_manager/base';
-import {GenericFileSource, PriorityGetter} from 'neuroglancer/chunk_manager/generic_file_source';
+import {GenericSharedDataSource, PriorityGetter} from 'neuroglancer/chunk_manager/generic_file_source';
 import {GET_NIFTI_VOLUME_INFO_RPC_ID, NiftiDataType, NiftiVolumeInfo, VolumeSourceParameters} from 'neuroglancer/datasource/nifti/base';
 import {decodeRawChunk} from 'neuroglancer/sliceview/backend_chunk_decoders/raw';
 import {VolumeChunk, VolumeChunkSource} from 'neuroglancer/sliceview/volume/backend';
@@ -26,6 +26,7 @@ import {Endianness} from 'neuroglancer/util/endian';
 import {mat4, quat, vec3} from 'neuroglancer/util/geom';
 import {registerPromiseRPC, registerSharedObject, RPCPromise} from 'neuroglancer/worker_rpc';
 import {decompress, isCompressed, NIFTI1, NIFTI2, readHeader, readImage} from 'nifti-reader-js';
+import {Borrowed} from 'src/neuroglancer/util/disposable';
 
 export class NiftiFileData {
   uncompressedData: ArrayBuffer;
@@ -43,23 +44,20 @@ function decodeNiftiFile(buffer: ArrayBuffer) {
     throw new Error('Failed to parse NIFTI header.');
   }
   data.header = header;
-  return data;
+  return {data, size: buffer.byteLength};
 }
 
 function getNiftiFileData(
-    chunkManager: ChunkManager, url: string, getPriority: PriorityGetter,
+    chunkManager: Borrowed<ChunkManager>, url: string, getPriority: PriorityGetter,
     cancellationToken: CancellationToken) {
-  return GenericFileSource.getData(
+  return GenericSharedDataSource.getUrl(
       chunkManager, decodeNiftiFile, url, getPriority, cancellationToken);
 }
 
 const NIFTI_HEADER_INFO_PRIORITY = 1000;
 
-/**
- * Caller must increment ref count of chunkManager.
- */
 function getNiftiHeaderInfo(
-    chunkManager: ChunkManager, url: string, cancellationToken: CancellationToken) {
+    chunkManager: Borrowed<ChunkManager>, url: string, cancellationToken: CancellationToken) {
   return getNiftiFileData(
              chunkManager, url,
              () =>
@@ -89,55 +87,56 @@ const DATA_TYPE_CONVERSIONS = new Map([
 
 registerPromiseRPC(
     GET_NIFTI_VOLUME_INFO_RPC_ID, function(x, cancellationToken): RPCPromise<NiftiVolumeInfo> {
-      return getNiftiHeaderInfo(
-                 this.getRef<ChunkManager>(x['chunkManager']), x['url'], cancellationToken)
-          .then(header => {
-            let dataTypeInfo = DATA_TYPE_CONVERSIONS.get(header.datatypeCode);
-            if (dataTypeInfo === undefined) {
-              throw new Error(
-                  `Unsupported data type: ` +
-                  `${NiftiDataType[header.datatypeCode] || header.datatypeCode}.`);
-            }
-            if (header.dims[4] !== 1) {
-              throw new Error(`Time series data not supported.`);
-            }
-            const spatialUnits = header.xyzt_units & NIFTI1.SPATIAL_UNITS_MASK;
-            let unitsPerNm = 1;
-            switch (spatialUnits) {
-              case NIFTI1.UNITS_METER:
-                unitsPerNm = 1e9;
-                break;
-              case NIFTI1.UNITS_MM:
-                unitsPerNm = 1e6;
-                break;
-              case NIFTI1.UNITS_MICRON:
-                unitsPerNm = 1e3;
-                break;
-            }
-            const {quatern_b, quatern_c, quatern_d} = header;
-            const quatern_a = Math.sqrt(
-                1.0 - quatern_b * quatern_b - quatern_c * quatern_c - quatern_d * quatern_d);
-            const qfac = header.pixDims[0] === -1 ? -1 : 1;
-            let info: NiftiVolumeInfo = {
-              description: header.description,
-              affine: convertAffine(header.affine),
-              dataType: dataTypeInfo.dataType,
-              numChannels: header.dims[5],
-              volumeType: dataTypeInfo.volumeType,
-              voxelSize: vec3.fromValues(
-                  unitsPerNm * header.pixDims[1], unitsPerNm * header.pixDims[2],
-                  unitsPerNm * header.pixDims[3]),
-              volumeSize: vec3.fromValues(header.dims[1], header.dims[2], header.dims[3]),
-              qoffset: vec3.fromValues(
-                  unitsPerNm * header.qoffset_x, unitsPerNm * header.qoffset_y,
-                  unitsPerNm * header.qoffset_z),
-              qform_code: header.qform_code,
-              sform_code: header.sform_code,
-              qfac: qfac,
-              quatern: quat.fromValues(quatern_b, quatern_c, quatern_d, quatern_a),
-            };
-            return {value: info};
-          });
+      const chunkManager = this.getRef<ChunkManager>(x['chunkManager']);
+      const headerPromise = getNiftiHeaderInfo(chunkManager, x['url'], cancellationToken);
+      chunkManager.dispose();
+      return headerPromise.then(header => {
+        let dataTypeInfo = DATA_TYPE_CONVERSIONS.get(header.datatypeCode);
+        if (dataTypeInfo === undefined) {
+          throw new Error(
+              `Unsupported data type: ` +
+              `${NiftiDataType[header.datatypeCode] || header.datatypeCode}.`);
+        }
+        if (header.dims[4] !== 1) {
+          throw new Error(`Time series data not supported.`);
+        }
+        const spatialUnits = header.xyzt_units & NIFTI1.SPATIAL_UNITS_MASK;
+        let unitsPerNm = 1;
+        switch (spatialUnits) {
+          case NIFTI1.UNITS_METER:
+            unitsPerNm = 1e9;
+            break;
+          case NIFTI1.UNITS_MM:
+            unitsPerNm = 1e6;
+            break;
+          case NIFTI1.UNITS_MICRON:
+            unitsPerNm = 1e3;
+            break;
+        }
+        const {quatern_b, quatern_c, quatern_d} = header;
+        const quatern_a =
+            Math.sqrt(1.0 - quatern_b * quatern_b - quatern_c * quatern_c - quatern_d * quatern_d);
+        const qfac = header.pixDims[0] === -1 ? -1 : 1;
+        let info: NiftiVolumeInfo = {
+          description: header.description,
+          affine: convertAffine(header.affine),
+          dataType: dataTypeInfo.dataType,
+          numChannels: header.dims[5],
+          volumeType: dataTypeInfo.volumeType,
+          voxelSize: vec3.fromValues(
+              unitsPerNm * header.pixDims[1], unitsPerNm * header.pixDims[2],
+              unitsPerNm * header.pixDims[3]),
+          volumeSize: vec3.fromValues(header.dims[1], header.dims[2], header.dims[3]),
+          qoffset: vec3.fromValues(
+              unitsPerNm * header.qoffset_x, unitsPerNm * header.qoffset_y,
+              unitsPerNm * header.qoffset_z),
+          qform_code: header.qform_code,
+          sform_code: header.sform_code,
+          qfac: qfac,
+          quatern: quat.fromValues(quatern_b, quatern_c, quatern_d, quatern_a),
+        };
+        return {value: info};
+      });
     });
 
 @registerSharedObject() export class NiftiVolumeChunkSource extends
@@ -145,7 +144,7 @@ registerPromiseRPC(
   download(chunk: VolumeChunk, cancellationToken: CancellationToken) {
     chunk.chunkDataSize = this.spec.chunkDataSize;
     return getNiftiFileData(
-               this.chunkManager.addRef(), this.parameters.url,
+               this.chunkManager, this.parameters.url,
                () => ({priorityTier: chunk.priorityTier, priority: chunk.priority}),
                cancellationToken)
         .then(data => {
