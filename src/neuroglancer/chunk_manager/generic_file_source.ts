@@ -74,6 +74,7 @@ class GenericSharedDataChunk<Key, Data> extends Chunk {
 export interface GenericSharedDataSourceOptions<Key, Data> {
   encodeKey?: (key: Key) => string;
   download: (key: Key, cancellationToken: CancellationToken) => Promise<{size: number, data: Data}>;
+  sourceQueueLevel?: number;
 }
 
 export class GenericSharedDataSource<Key, Data> extends ChunkSourceBase {
@@ -91,6 +92,8 @@ export class GenericSharedDataSource<Key, Data> extends ChunkSourceBase {
     const {encodeKey = stableStringify} = options;
     this.downloadFunction = options.download;
     this.encodeKeyFunction = encodeKey;
+    const {sourceQueueLevel = 0} = options;
+    this.sourceQueueLevel = sourceQueueLevel;
 
     // This source is unusual in that it updates its own chunk priorities.
     this.registerDisposer(this.chunkManager.recomputeChunkPrioritiesLate.add(() => {
