@@ -22,11 +22,11 @@ import {decodeRawChunk} from 'neuroglancer/sliceview/backend_chunk_decoders/raw'
 import {VolumeChunk, VolumeChunkSource} from 'neuroglancer/sliceview/volume/backend';
 import {DataType, VolumeType} from 'neuroglancer/sliceview/volume/base';
 import {CancellationToken} from 'neuroglancer/util/cancellation';
+import {Borrowed} from 'neuroglancer/util/disposable';
 import {Endianness} from 'neuroglancer/util/endian';
 import {mat4, quat, vec3} from 'neuroglancer/util/geom';
 import {registerPromiseRPC, registerSharedObject, RPCPromise} from 'neuroglancer/worker_rpc';
 import {decompress, isCompressed, NIFTI1, NIFTI2, readHeader, readImage} from 'nifti-reader-js';
-import {Borrowed} from 'src/neuroglancer/util/disposable';
 
 export class NiftiFileData {
   uncompressedData: ArrayBuffer;
