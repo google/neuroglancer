@@ -134,9 +134,11 @@ void emitDefault() {
     const numAttributes = vertexAttributes.length;
     const {vertexAttributeOffsets} = skeletonChunk;
     for (let i = 0; i < numAttributes; ++i) {
+      const attributeIndex = shader.attribute(`aVertex${i}`);
+      if (attributeIndex < 0) continue;
       const info = vertexAttributes[i];
       skeletonChunk.vertexBuffer.bindToVertexAttrib(
-          shader.attribute(`aVertex${i}`),
+          attributeIndex,
           /*components=*/ info.numComponents, info.webglDataType, /*normalized=*/ false,
           /*stride=*/ 0,
           /*offset=*/ vertexAttributeOffsets[i]);
@@ -149,7 +151,9 @@ void emitDefault() {
     const {vertexAttributes} = this;
     const numAttributes = vertexAttributes.length;
     for (let i = 0; i < numAttributes; ++i) {
-      gl.disableVertexAttribArray(shader.attribute(`aVertex${i}`));
+      const attributeIndex = shader.attribute(`aVertex${i}`);
+      if (attributeIndex === -1) continue;
+      gl.disableVertexAttribArray(attributeIndex);
     }
   }
 }
