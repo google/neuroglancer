@@ -14,15 +14,32 @@
  * limitations under the License.
  */
 
+import {mat4} from 'neuroglancer/util/geom';
+
 export const MESH_LAYER_RPC_ID = 'mesh/MeshLayer';
 export const MULTISCALE_MESH_LAYER_RPC_ID = 'mesh/MultiscaleMeshLayer';
 export const FRAGMENT_SOURCE_RPC_ID = 'mesh/FragmentSource';
 
 export const MULTISCALE_FRAGMENT_SOURCE_RPC_ID = 'mesh/MultiscaleFragmentSource';
 
+export type EncodedVertexPositions = Float32Array|Uint32Array;
+export type MeshVertexIndices = Uint16Array|Uint32Array;
+export type OctahedronVertexNormals = Uint8Array;
+
 export interface EncodedMeshData {
-  vertexPositions: Float32Array;
-  vertexNormals: Uint8Array;
-  indices: Uint32Array|Uint16Array;
+  vertexPositions: EncodedVertexPositions;
+  vertexNormals: OctahedronVertexNormals;
+  indices: MeshVertexIndices;
   strips: boolean;
+}
+
+export interface MultiscaleFragmentFormat {
+  fragmentRelativeVertices: boolean;
+  transform: mat4;
+  vertexPositionFormat: VertexPositionFormat;
+}
+
+export enum VertexPositionFormat {
+  float32,
+  uint10,
 }

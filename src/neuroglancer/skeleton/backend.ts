@@ -148,6 +148,6 @@ export function decodeSkeletonVertexPositionsAndIndices(
   const meshData = decodeVertexPositionsAndIndices(
       /*verticesPerPrimitive=*/2, data, endianness, vertexByteOffset, numVertices,
     indexByteOffset, numEdges);
-  chunk.vertexPositions = meshData.vertexPositions;
+  chunk.vertexPositions = meshData.vertexPositions as Float32Array;
   chunk.indices = meshData.indices as Uint32Array;
 }

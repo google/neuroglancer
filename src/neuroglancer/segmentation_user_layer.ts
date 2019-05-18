@@ -77,7 +77,7 @@ export class SegmentationUserLayer extends Base {
     fragmentMain: getTrackableFragmentMain(),
     shaderError: makeWatchableShaderError(),
     renderScaleHistogram: new RenderScaleHistogram(),
-    renderScaleTarget: trackableRenderScaleTarget(10),
+    renderScaleTarget: trackableRenderScaleTarget(1),
   };
 
   /**

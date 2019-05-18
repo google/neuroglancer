@@ -16,6 +16,10 @@
 
 import {Uint64} from './uint64';
 
+export function getOctreeChildIndex(x: number, y: number, z: number) {
+  return (x & 1) | ((y << 1) & 2) | ((z << 2) & 4);
+}
+
 /**
  * Decodes a "compressed" 3-d morton index.
  *

@@ -23,6 +23,7 @@ import {WithCredentialsProvider} from 'neuroglancer/credentials_provider/chunk_s
 import {DataSource, GetVolumeOptions} from 'neuroglancer/datasource';
 import {BrainmapsCredentialsProvider, BrainmapsInstance, Credentials, makeRequest} from 'neuroglancer/datasource/brainmaps/api';
 import {AnnotationSourceParameters, ChangeSpec, MeshSourceParameters, MultiscaleMeshInfo, MultiscaleMeshSourceParameters, SingleMeshInfo, SkeletonSourceParameters, VolumeChunkEncoding, VolumeSourceParameters} from 'neuroglancer/datasource/brainmaps/base';
+import {VertexPositionFormat} from 'neuroglancer/mesh/base';
 import {MeshSource, MultiscaleMeshSource} from 'neuroglancer/mesh/frontend';
 import {SkeletonSource} from 'neuroglancer/skeleton/frontend';
 import {ChunkLayoutPreference} from 'neuroglancer/sliceview/base';
@@ -123,7 +124,8 @@ const intPattern = '([0-9]+)';
 const lodPattern =
     new RegExp(`^((.*)_${intPattern}x${intPattern}x${intPattern})_lod([0-9]+)_${floatPattern}$`);
 
-function getMultiscaleMeshes(volumeInfo: MultiscaleVolumeInfo, meshes: SingleMeshInfo[]): MultiscaleMeshInfo[] {
+function getMultiscaleMeshes(
+    volumeInfo: MultiscaleVolumeInfo, meshes: SingleMeshInfo[]): MultiscaleMeshInfo[] {
   const lodMeshes = new Map<string, MultiscaleMeshInfo>();
   const baseVolume = volumeInfo.scales[0];
 
@@ -138,7 +140,7 @@ function getMultiscaleMeshes(volumeInfo: MultiscaleVolumeInfo, meshes: SingleMes
     let info = lodMeshes.get(key);
     if (info === undefined) {
       const chunkShapeInVoxels =
-        vec3.fromValues(parseInt(m[3], 10), parseInt(m[4], 10), parseInt(m[5], 10));
+          vec3.fromValues(parseInt(m[3], 10), parseInt(m[4], 10), parseInt(m[5], 10));
       const gridShape = new Uint32Array(3);
       for (let i = 0; i < 3; ++i) {
         gridShape[i] = Math.ceil(baseVolume.upperVoxelBound[i] / chunkShapeInVoxels[i]);
@@ -292,6 +294,11 @@ export class MultiscaleVolumeChunkSource implements GenericMultiscaleVolumeChunk
     for (const mesh of multiscaleMeshes) {
       return this.chunkManager.getChunkSource(BrainmapsMultiscaleMeshSource, {
         credentialsProvider: this.credentialsProvider,
+        format: {
+          fragmentRelativeVertices: false,
+          transform: mat4.create(),
+          vertexPositionFormat: VertexPositionFormat.float32,
+        },
         parameters: {
           'instance': this.instance,
           'volumeId': this.volumeId,
