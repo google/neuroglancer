@@ -19,7 +19,14 @@ class build_ext_subclass(build_ext):
         self.include_dirs.append(numpy.get_include())
 
 
-static_files = ['main.bundle.js', 'chunk_worker.bundle.js', 'tfjs-library.bundle.js', 'index.html']
+static_files = [
+    'main.bundle.js',
+    'chunk_worker.bundle.js',
+    'tfjs-library.bundle.js',
+    'draco.bundle.js',
+    'index.html',
+]
+
 
 class bundle_client(build):
 
