@@ -25,7 +25,7 @@ import {SKELETON_LAYER_RPC_ID, VertexAttributeInfo} from 'neuroglancer/skeleton/
 import {SliceViewPanelRenderContext, SliceViewPanelRenderLayer} from 'neuroglancer/sliceview/panel';
 import {TrackableValue} from 'neuroglancer/trackable_value';
 import {DataType} from 'neuroglancer/util/data_type';
-import {RefCounted} from 'neuroglancer/util/disposable';
+import {Borrowed, RefCounted} from 'neuroglancer/util/disposable';
 import {mat4, vec3} from 'neuroglancer/util/geom';
 import {stableStringify, verifyString} from 'neuroglancer/util/json';
 import {getObjectId} from 'neuroglancer/util/object_id';
@@ -256,6 +256,7 @@ export class SkeletonLayer extends RefCounted {
     if (source.skeletonVertexCoordinatesInVoxels) {
       mat4.scale(objectToDataMatrix, objectToDataMatrix, this.voxelSizeObject.size);
     }
+    mat4.multiply(objectToDataMatrix, objectToDataMatrix, source.transform);
     mat4.multiply(
         objectToDataMatrix, this.displayState.objectToDataTransform.transform, objectToDataMatrix);
     renderHelper.beginLayer(gl, shader, renderContext, objectToDataMatrix);
@@ -385,6 +386,14 @@ export class SkeletonSource extends ChunkSource {
   chunks: Map<string, SkeletonChunk>;
   getChunk(x: any) {
     return new SkeletonChunk(this, x);
+  }
+
+  transform: mat4;
+
+  constructor(chunkManager: Borrowed<ChunkManager>, options: {transform?: mat4}) {
+    super(chunkManager, options);
+    const {transform = mat4.create()} = options;
+    this.transform = transform;
   }
 
   /**
