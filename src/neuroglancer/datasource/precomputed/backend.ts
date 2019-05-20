@@ -64,7 +64,7 @@ interface MinishardIndexSource extends GenericSharedDataSource<Uint64, DecodedMi
 
 function getMinishardIndexDataSource(
     chunkManager: Borrowed<ChunkManager>,
-    parameters: {baseUrls: string[], path: string, sharding?: ShardingParameters}):
+    parameters: {baseUrls: string[], path: string, sharding: ShardingParameters|undefined}):
     MinishardIndexSource|undefined {
   const {baseUrls, path, sharding} = parameters;
   if (sharding === undefined) return undefined;
@@ -461,7 +461,11 @@ async function decodeMultiscaleFragmentChunk(
 @registerSharedObject() //
 export class PrecomputedMultiscaleMeshSource extends
 (WithParameters(MultiscaleMeshSource, MultiscaleMeshSourceParameters)) {
-  private minishardIndexSource = getMinishardIndexDataSource(this.chunkManager, this.parameters);
+  private minishardIndexSource = getMinishardIndexDataSource(this.chunkManager, {
+    baseUrls: this.parameters.baseUrls,
+    path: this.parameters.path,
+    sharding: this.parameters.metadata.sharding
+  });
 
   async download(chunk: PrecomputedMultiscaleManifestChunk, cancellationToken: CancellationToken):
       Promise<void> {
@@ -524,7 +528,11 @@ export class PrecomputedMultiscaleMeshSource extends
 @registerSharedObject() //
 export class PrecomputedSkeletonSource extends
 (WithParameters(SkeletonSource, SkeletonSourceParameters)) {
-  private minishardIndexSource = getMinishardIndexDataSource(this.chunkManager, this.parameters);
+  private minishardIndexSource = getMinishardIndexDataSource(this.chunkManager, {
+    baseUrls: this.parameters.baseUrls,
+    path: this.parameters.path,
+    sharding: this.parameters.metadata.sharding
+  });
   async download(chunk: SkeletonChunk, cancellationToken: CancellationToken) {
     const {minishardIndexSource, parameters} = this;
     let response: ArrayBuffer;

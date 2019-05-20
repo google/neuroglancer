@@ -27,7 +27,7 @@ export class VolumeChunkSourceParameters {
   baseUrls: string[];
   path: string;
   encoding: VolumeChunkEncoding;
-  sharding?: ShardingParameters;
+  sharding: ShardingParameters|undefined;
 
   static RPC_ID = 'precomputed/VolumeChunkSource';
 }
@@ -64,7 +64,7 @@ export class MultiscaleMeshMetadata {
   transform: mat4;
   lodScaleMultiplier: number;
   vertexQuantizationBits: number;
-  sharding?: ShardingParameters;
+  sharding: ShardingParameters|undefined;
 }
 
 export class MultiscaleMeshSourceParameters {
@@ -78,7 +78,7 @@ export class MultiscaleMeshSourceParameters {
 export interface SkeletonMetadata {
   transform: mat4;
   vertexAttributes: Map<string, VertexAttributeInfo>;
-  sharding?: ShardingParameters;
+  sharding: ShardingParameters|undefined;
 }
 
 export class SkeletonSourceParameters {
