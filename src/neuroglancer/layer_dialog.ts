@@ -129,15 +129,17 @@ export class LayerDialog extends Overlay {
       nameInputElement.focus();
     } else {
       let {managedLayers} = this.manager.layerManager;
-      if (managedLayers.length > 0) {
-        let lastLayer = managedLayers[managedLayers.length - 1];
-        if (lastLayer instanceof ManagedUserLayerWithSpecification) {
-          let {sourceUrl} = lastLayer;
-          if (sourceUrl !== undefined) {
-            let groupIndex = this.manager.dataSourceProvider.findSourceGroup(sourceUrl);
-            sourceInput.value = sourceUrl.substring(0, groupIndex);
-            sourceInput.inputElement.setSelectionRange(0, groupIndex);
-          }
+      for (let hintLayerIndex = managedLayers.length - 1; hintLayerIndex >= 0; --hintLayerIndex) {
+        const hintLayer = managedLayers[hintLayerIndex];
+        if (!(hintLayer instanceof ManagedUserLayerWithSpecification)) continue;
+        const {sourceUrl} = hintLayer;
+        if (sourceUrl === undefined) continue;
+        try {
+          let groupIndex = this.manager.dataSourceProvider.findSourceGroup(sourceUrl);
+          sourceInput.value = sourceUrl.substring(0, groupIndex);
+          sourceInput.inputElement.setSelectionRange(0, groupIndex);
+          break;
+        } catch {
         }
       }
       sourceInput.inputElement.focus();
