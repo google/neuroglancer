@@ -72,15 +72,14 @@ function getMinishardIndexDataSource(
       GenericSharedDataSource.get<Uint64, DecodedMinishardIndex>(
           chunkManager,
           stableStringify({type: 'precomputed:shardedDataSource', baseUrls, path, sharding}), {
-            download: async function(key: Uint64, cancellationToken: CancellationToken) {
-              const hashFunction = shardingHashFunctions.get(sharding.hash)!;
-              const hashCode = Uint64.rshift(new Uint64(), key, sharding.preshiftBits);
-              hashFunction(hashCode);
+            download: async function(
+                shardAndMinishard: Uint64, cancellationToken: CancellationToken) {
               const minishard = Uint64.lowMask(new Uint64(), sharding.minishardBits);
-              Uint64.and(minishard, minishard, hashCode);
+              Uint64.and(minishard, minishard, shardAndMinishard);
               const shard = Uint64.lowMask(new Uint64(), sharding.shardBits);
-              Uint64.rshift(hashCode, hashCode, sharding.minishardBits);
-              Uint64.and(shard, shard, hashCode);
+              const temp = new Uint64();
+              Uint64.rshift(temp, shardAndMinishard, sharding.minishardBits);
+              Uint64.and(shard, shard, temp);
               const shardPathPrefix =
                   `${path}/${shard.toString(16).padStart(Math.ceil(sharding.shardBits / 4), '0')}`;
               // Retrive minishard index start/end offsets.
@@ -190,9 +189,17 @@ function findMinishardEntry(minishardIndex: DecodedMinishardIndex, key: Uint64) 
 
 async function getShardedData(
     minishardIndexSource: MinishardIndexSource, chunk: Chunk, key: Uint64,
-    cancellationToken: CancellationToken): Promise<{shardInfo: ShardInfo, data: ArrayBuffer}> {
+  cancellationToken: CancellationToken): Promise<{shardInfo: ShardInfo, data: ArrayBuffer}> {
+  const {sharding} = minishardIndexSource;
+  const hashFunction = shardingHashFunctions.get(sharding.hash)!;
+  const hashCode = Uint64.rshift(new Uint64(), key, sharding.preshiftBits);
+  hashFunction(hashCode);
+  const shardAndMinishard =
+      Uint64.lowMask(new Uint64(), sharding.minishardBits + sharding.shardBits);
+  Uint64.and(shardAndMinishard, shardAndMinishard, hashCode);
   const getPriority = () => ({priorityTier: chunk.priorityTier, priority: chunk.priority});
-  const minishardIndex = await minishardIndexSource.getData(key, getPriority, cancellationToken);
+  const minishardIndex =
+      await minishardIndexSource.getData(shardAndMinishard, getPriority, cancellationToken);
   const {startOffset, endOffset} = findMinishardEntry(minishardIndex, key);
   Uint64.decrement(endOffset, endOffset);
   const dataReq = openShardedHttpRequest(minishardIndexSource.baseUrls, minishardIndex.shardPath);
