@@ -173,7 +173,7 @@ The `info` file is a JSON-format text file.  The root value must be a JSON objec
 members:
 - `"@type"`: Must be `"neuroglancer_multilod_draco"`.
 - `"vertex_quantization_bits"`: Specifies the number of bits needed to represent each vertex
-  position coordinate within a mesh fragment.  Must be `10`.
+  position coordinate within a mesh fragment.  Must be `10` or `16`.
 - `"transform"`: JSON array of 12 numbers specifying a 4x3 homogeneous coordinate transform from the
   "stored model" coordinate space to a "model" coordinate space.
 - `"lod_scale_multiplier"`: Factor by which the `lod_scales` values in each `<segment-id>.index`

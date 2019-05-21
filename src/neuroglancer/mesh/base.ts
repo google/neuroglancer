@@ -22,7 +22,7 @@ export const FRAGMENT_SOURCE_RPC_ID = 'mesh/FragmentSource';
 
 export const MULTISCALE_FRAGMENT_SOURCE_RPC_ID = 'mesh/MultiscaleFragmentSource';
 
-export type EncodedVertexPositions = Float32Array|Uint32Array;
+export type EncodedVertexPositions = Float32Array|Uint32Array|Uint16Array;
 export type MeshVertexIndices = Uint16Array|Uint32Array;
 export type OctahedronVertexNormals = Uint8Array;
 
@@ -42,4 +42,5 @@ export interface MultiscaleFragmentFormat {
 export enum VertexPositionFormat {
   float32,
   uint10,
+  uint16,
 }

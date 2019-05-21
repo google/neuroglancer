@@ -661,6 +661,14 @@ function convertMeshData(
           ((vertexPositions[inputIndex] & 1023) | ((vertexPositions[inputIndex + 1] & 1023) << 10) |
            ((vertexPositions[inputIndex + 2] & 1023) << 20));
     }
+  } else if (vertexPositionFormat === VertexPositionFormat.uint16) {
+    const vertexPositions = data.vertexPositions;
+    if (vertexPositions.BYTES_PER_ELEMENT === 2) {
+      encodedVertexPositions = vertexPositions;
+    } else {
+      encodedVertexPositions = new Uint16Array(vertexPositions.length);
+      encodedVertexPositions.set(vertexPositions);
+    }
   } else {
     encodedVertexPositions = data.vertexPositions as Float32Array;
   }

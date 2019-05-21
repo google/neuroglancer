@@ -74,8 +74,8 @@ interface VertexPositionFormatHandler {
   endLayer: (gl: GL, shader: ShaderProgram) => void;
 }
 
-const vertexPositionHandlers: {[format: number]: VertexPositionFormatHandler} = {
-  [VertexPositionFormat.float32]: {
+function getFloatPositionHandler(glAttributeType: number): VertexPositionFormatHandler {
+  return {
     defineShader: (builder: ShaderBuilder) => {
       builder.addAttribute('highp vec3', 'aVertexPosition');
       builder.addVertexCode(`highp vec3 getVertexPosition() { return aVertexPosition; }`);
@@ -83,12 +83,17 @@ const vertexPositionHandlers: {[format: number]: VertexPositionFormatHandler} = 
     bind(_gl: GL, shader: ShaderProgram, fragmentChunk: FragmentChunk|MultiscaleFragmentChunk) {
       fragmentChunk.vertexBuffer.bindToVertexAttrib(
           shader.attribute('aVertexPosition'),
-          /*components=*/ 3, WebGL2RenderingContext.FLOAT, /* normalized=*/ false);
+          /*components=*/ 3, glAttributeType, /* normalized=*/ true);
     },
     endLayer: (gl: GL, shader: ShaderProgram) => {
       gl.disableVertexAttribArray(shader.attribute('aVertexPosition'));
     }
-  },
+  };
+}
+
+const vertexPositionHandlers: {[format: number]: VertexPositionFormatHandler} = {
+  [VertexPositionFormat.float32]: getFloatPositionHandler(WebGL2RenderingContext.FLOAT),
+  [VertexPositionFormat.uint16]: getFloatPositionHandler(WebGL2RenderingContext.UNSIGNED_SHORT),
   [VertexPositionFormat.uint10]: {
     defineShader: (builder: ShaderBuilder) => {
       builder.addAttribute('highp uint', 'aVertexPosition');

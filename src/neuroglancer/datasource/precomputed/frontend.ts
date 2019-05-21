@@ -298,6 +298,8 @@ async function getMeshSource(chunkManager: ChunkManager, baseUrls: string[], pat
   const {vertexQuantizationBits} = metadata;
   if (vertexQuantizationBits === 10) {
     vertexPositionFormat = VertexPositionFormat.uint10;
+  } else if (vertexQuantizationBits === 16) {
+    vertexPositionFormat = VertexPositionFormat.uint16;
   } else {
     throw new Error(`Invalid vertex quantization bits: ${vertexQuantizationBits}`);
   }
