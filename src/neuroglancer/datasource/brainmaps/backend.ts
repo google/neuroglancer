@@ -239,6 +239,7 @@ function decodeMultiscaleManifestChunk(chunk: BrainmapsMultiscaleManifestChunk, 
     clipUpperBound,
     octree: octree!,
     lodScales: Float32Array.from(lodScales),
+    vertexOffsets: new Float32Array(lodScales.length * 3),
   };
   chunk.manifest = manifest;
   chunk.fragmentSupervoxelIds = fragmentIdAndCorners;

@@ -56,6 +56,12 @@ export interface MultiscaleMeshManifest {
   lodScales: Float32Array;
 
   /**
+   * C order `[numLods, 3]` array specifying the xyz vertex position offset in object coordinates
+   * for each level of detail.
+   */
+  vertexOffsets: Float32Array;
+
+  /**
    * Row-major `[n, 5]` array where each row is of the form `[x, y, z, start, end_and_empty]`, where
    * `x`, `y`, and `z` are the chunk grid coordinates of the entry at a particular level of detail.
    * Row `n-1` corresponds to level of detail `lodScales.length - 1`, the root of the octree.  Given

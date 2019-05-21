@@ -327,12 +327,15 @@ function decodeMultiscaleManifestChunk(
   offset += 12;
   const numStoredLods = dv.getUint32(offset, /*littleEndian=*/ true);
   offset += 4
-  if (response.byteLength < offset + 8 * numStoredLods) {
+  if (response.byteLength < offset + (4 + 4 + 4 * 3) * numStoredLods) {
     throw new Error(`Invalid index file size for ${numStoredLods} lods: ${response.byteLength}`);
   }
   const storedLodScales = new Float32Array(response, offset, numStoredLods);
   offset += 4 * numStoredLods;
   convertEndian32(storedLodScales, Endianness.LITTLE);
+  const vertexOffsets = new Float32Array(response, offset, numStoredLods * 3);
+  convertEndian32(vertexOffsets, Endianness.LITTLE);
+  offset += 12 * numStoredLods;
   const numFragmentsPerLod = new Uint32Array(response, offset, numStoredLods);
   offset += 4 * numStoredLods;
   convertEndian32(numFragmentsPerLod, Endianness.LITTLE);
@@ -452,6 +455,7 @@ function decodeMultiscaleManifestChunk(
         clipUpperBound, gridOrigin, vec3.multiply(clipUpperBound, clipUpperBound, chunkShape)),
     octree,
     lodScales,
+    vertexOffsets,
   };
 }
 

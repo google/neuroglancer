@@ -509,6 +509,7 @@ export class MultiscaleMeshLayer extends PerspectiveViewRenderLayer {
     const clippingPlanes = getFrustrumPlanes(new Float32Array(24), modelViewProjection);
 
     const detailCutoff = this.displayState.renderScaleTarget.value;
+    const {fragmentRelativeVertices} = this.source.format;
 
     meshShaderManager.beginModel(gl, shader, renderContext, objectToDataMatrix);
 
@@ -517,7 +518,7 @@ export class MultiscaleMeshLayer extends PerspectiveViewRenderLayer {
       const manifestChunk = chunks.get(key);
       if (manifestChunk === undefined) return;
       const {manifest} = manifestChunk;
-      const {octree, chunkShape, chunkGridSpatialOrigin} = manifest;
+      const {octree, chunkShape, chunkGridSpatialOrigin, vertexOffsets} = manifest;
       if (renderContext.emitColor) {
         meshShaderManager.setColor(gl, shader, getObjectColor(displayState, rootObjectId, alpha));
       }
@@ -544,12 +545,15 @@ export class MultiscaleMeshLayer extends PerspectiveViewRenderLayer {
             const x = octree[5 * chunkIndex], y = octree[5 * chunkIndex + 1],
                   z = octree[5 * chunkIndex + 2];
             const scale = 1 << lod;
-            if (this.source.format.fragmentRelativeVertices) {
+            if (fragmentRelativeVertices) {
               gl.uniform3f(
                   shader.uniform('uFragmentOrigin'),
-                  chunkGridSpatialOrigin[0] + x * chunkShape[0] * scale,
-                  chunkGridSpatialOrigin[1] + y * chunkShape[1] * scale,
-                  chunkGridSpatialOrigin[2] + z * chunkShape[2] * scale);
+                  chunkGridSpatialOrigin[0] + (x * chunkShape[0]) * scale +
+                      vertexOffsets[lod * 3 + 0],
+                  chunkGridSpatialOrigin[1] + (y * chunkShape[1]) * scale +
+                      vertexOffsets[lod * 3 + 1],
+                  chunkGridSpatialOrigin[2] + (z * chunkShape[2]) * scale +
+                      vertexOffsets[lod * 3 + 2]);
               gl.uniform3f(
                   shader.uniform('uFragmentShape'), chunkShape[0] * scale, chunkShape[1] * scale,
                   chunkShape[2] * scale);

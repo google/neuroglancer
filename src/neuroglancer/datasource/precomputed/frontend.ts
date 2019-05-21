@@ -17,7 +17,7 @@
 import {AnnotationSource, makeDataBoundsBoundingBox} from 'neuroglancer/annotation';
 import {ChunkManager, WithParameters} from 'neuroglancer/chunk_manager/frontend';
 import {DataSource} from 'neuroglancer/datasource';
-import { DataEncoding, MeshSourceParameters, MultiscaleMeshMetadata, MultiscaleMeshSourceParameters, ShardingParameters, SkeletonMetadata, SkeletonSourceParameters, VolumeChunkEncoding, VolumeChunkSourceParameters, ShardingHashFunction} from 'neuroglancer/datasource/precomputed/base';
+import {DataEncoding, MeshSourceParameters, MultiscaleMeshMetadata, MultiscaleMeshSourceParameters, ShardingHashFunction, ShardingParameters, SkeletonMetadata, SkeletonSourceParameters, VolumeChunkEncoding, VolumeChunkSourceParameters} from 'neuroglancer/datasource/precomputed/base';
 import {VertexPositionFormat} from 'neuroglancer/mesh/base';
 import {MeshSource, MultiscaleMeshSource} from 'neuroglancer/mesh/frontend';
 import {VertexAttributeInfo} from 'neuroglancer/skeleton/base';

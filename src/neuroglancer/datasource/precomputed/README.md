@@ -195,6 +195,9 @@ the following format:
 - `lod_scales`: `num_lods` float32le, specifies the scale in "stored model" spatial units
   corresponding to each level of detail.  Each scale value is multiplied by the
   `lod_scale_multiplier` value from the `info` JSON file.
+- `vertex_offsets`: `num_lods*3` float32le, as a C order `[vertex_offsets, 3]` array specifying an
+  offset (in the "stored model" coordinate space) to add to vertex positions for each level of
+  detail.
 - `num_fragments_per_lod`: `num_lods` uint32le, specifies the number of fragments (octree nodes) for
   each level of detail.
 - For each `lod` in the range `[0, num_lods)`:

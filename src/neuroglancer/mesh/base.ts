@@ -34,7 +34,14 @@ export interface EncodedMeshData {
 }
 
 export interface MultiscaleFragmentFormat {
+  /**
+   * If `true`, vertex positions are specified relative to the fragment bounds, meaning (0, 0, 0) is
+   * the start corner of the fragment and (1, 1, 1) is the end corner.
+   *
+   * If `false`, vertex positions are in "model" coordinates.
+   */
   fragmentRelativeVertices: boolean;
+
   transform: mat4;
   vertexPositionFormat: VertexPositionFormat;
 }

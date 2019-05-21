@@ -69,6 +69,7 @@ describe('multiscale', () => {
       clipLowerBound: vec3.fromValues(20, 23, -50),
       clipUpperBound: vec3.fromValues(40, 45, -20),
       lodScales: Float32Array.of(20, 40),
+      vertexOffsets: new Float32Array(2 * 3),
       octree: Uint32Array.from([
         0, 0, 0, 0, 0,  // row 0, lod 0
         0, 0, 0, 0, 1,  // row 0, lod 1
@@ -113,6 +114,7 @@ describe('multiscale', () => {
       clipLowerBound: vec3.fromValues(5, 6, -50),
       clipUpperBound: vec3.fromValues(100, 200, 10),
       lodScales: Float32Array.of(20, 40),
+      vertexOffsets: new Float32Array(2 * 3),
       octree: Uint32Array.from([
         0, 0, 0, 0, 0,  // row 0, lod 0
         1, 0, 0, 0, 0,  // row 1, lod 0
@@ -223,6 +225,7 @@ describe('multiscale', () => {
       clipLowerBound: vec3.fromValues(5, 6, -50),
       clipUpperBound: vec3.fromValues(100, 200, 10),
       lodScales: Float32Array.of(20, 40),
+      vertexOffsets: new Float32Array(2 * 3),
       octree: Uint32Array.from([
         0, 0, 0, 0, 0,  // row 0, lod 0
         1, 0, 0, 0, 0,  // row 1, lod 0
@@ -290,6 +293,7 @@ describe('multiscale', () => {
       clipLowerBound: vec3.fromValues(5, 6, -50),
       clipUpperBound: vec3.fromValues(100, 200, 10),
       lodScales: Float32Array.of(20, 40),
+      vertexOffsets: new Float32Array(2 * 3),
       octree: Uint32Array.from([
         0, 0, 0, 0, 0,  // row 0, lod 0
         1, 0, 0, 0, 0,  // row 1, lod 0
@@ -320,6 +324,7 @@ describe('multiscale', () => {
       clipLowerBound: vec3.fromValues(5, 6, -50),
       clipUpperBound: vec3.fromValues(100, 200, 10),
       lodScales: Float32Array.of(20, 40),
+      vertexOffsets: new Float32Array(2 * 3),
       octree: Uint32Array.from([
         0, 0, 0, 0, 0,           // row 0, lod 0
         1, 0, 0, 0, 0,           // row 1, lod 0
@@ -377,6 +382,7 @@ describe('multiscale', () => {
       clipLowerBound: vec3.fromValues(5, 6, -50),
       clipUpperBound: vec3.fromValues(100, 200, 10),
       lodScales: Float32Array.of(20, 40),
+      vertexOffsets: new Float32Array(2 * 3),
       octree: Uint32Array.from([
         0, 0, 0, 0, 0,           // row 0, lod 0
         1, 0, 0, 0, 0,           // row 1, lod 0
@@ -427,6 +433,7 @@ describe('multiscale', () => {
       clipLowerBound: vec3.fromValues(5, 6, -50),
       clipUpperBound: vec3.fromValues(100, 200, 10),
       lodScales: Float32Array.of(20, 40, 80, 160, 0),
+      vertexOffsets: new Float32Array(5 * 3),
       octree: Uint32Array.from([
         5,  3, 0, 0,  0,   // row 0: lod=0
         7,  0, 3, 0,  0,   // row 1: lod=0
