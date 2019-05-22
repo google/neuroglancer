@@ -46,12 +46,6 @@
   left: 0px;
 }
 
-.neuroglancer-annotation-description {
-  text-overflow: ellipsis;
-  overflow: hidden;
-  white-space: nowrap;
-}
-
 .neuroglancer-annotation-hover {
   background-color: #333;
 }

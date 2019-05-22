@@ -21,7 +21,7 @@
 import './annotations.css';
 
 import debounce from 'lodash/debounce';
-import {Annotation, AnnotationReference, AnnotationType, AxisAlignedBoundingBox, Ellipsoid, getAnnotationTypeHandler, Line} from 'neuroglancer/annotation';
+import {Annotation, AnnotationTag, AnnotationReference, AnnotationType, AxisAlignedBoundingBox, Ellipsoid, getAnnotationTypeHandler, Line} from 'neuroglancer/annotation';
 import {AnnotationLayer, AnnotationLayerState, PerspectiveViewAnnotationLayer, SliceViewAnnotationLayer} from 'neuroglancer/annotation/frontend';
 import {DataFetchSliceViewRenderLayer, MultiscaleAnnotationSource} from 'neuroglancer/annotation/frontend_source';
 import {setAnnotationHoverStateFromMouseState} from 'neuroglancer/annotation/selection';
@@ -46,6 +46,7 @@ import {RangeWidget} from 'neuroglancer/widget/range';
 import {StackView, Tab} from 'neuroglancer/widget/tab_view';
 import {makeTextIconButton} from 'neuroglancer/widget/text_icon_button';
 import {Uint64EntryWidget} from 'neuroglancer/widget/uint64_entry_widget';
+import {TrackableBooleanCheckbox} from 'neuroglancer/trackable_boolean';
 
 type AnnotationIdAndPart = {
   id: string,
@@ -374,6 +375,7 @@ function getCenterPosition(annotation: Annotation, transform: mat4) {
 export class AnnotationLayerView extends Tab {
   private annotationListContainer = document.createElement('ul');
   private annotationListElements = new Map<string, HTMLElement>();
+  private annotationTags = new Map<number, HTMLOptionElement>();
   private previousSelectedId: string|undefined;
   private previousHoverId: string|undefined;
   private updated = false;
@@ -454,6 +456,59 @@ export class AnnotationLayerView extends Tab {
       toolbox.appendChild(ellipsoidButton);
     }
     this.element.appendChild(toolbox);
+
+    {
+      const jumpingShowsSegmentationCheckbox = this.registerDisposer(
+          new TrackableBooleanCheckbox(this.annotationLayer.annotationJumpingDisplaysSegmentation));
+      const label = document.createElement('label');
+      label.textContent = 'Bracket shortcuts show segmentation: ';
+      label.appendChild(jumpingShowsSegmentationCheckbox.element);
+      this.element.appendChild(label);
+    }
+
+    {
+      const annotationTagFilter = document.createElement('select');
+      annotationTagFilter.id = 'annotation-tag-filter';
+      annotationTagFilter.add(new Option('View all', '0', true, true));
+      const createOptionText = (tag: AnnotationTag) => {
+        return '#' + tag.label + ' (id: ' + tag.id.toString() + ')';
+      };
+      for (const tag of source.getTags()) {
+        const option = new Option(createOptionText(tag), tag.id.toString(), false, false);
+        this.annotationTags.set(tag.id, option);
+        annotationTagFilter.add(option);
+      }
+      this.registerDisposer(source.tagAdded.add((tag) => {
+        const option = new Option(createOptionText(tag), tag.id.toString(), false, false);
+        this.annotationTags.set(tag.id, option);
+        annotationTagFilter.add(option);
+      }));
+      this.registerDisposer(source.tagUpdated.add((tag) => {
+        const option = this.annotationTags.get(tag.id)!;
+        option.text = createOptionText(tag);
+        for (const annotation of source) {
+          if (this.annotationLayer.source.isAnnotationTaggedWithTag(annotation.id, tag.id)) {
+            this.updateAnnotationElement(annotation, false);
+          }
+        }
+      }));
+      this.registerDisposer(source.tagDeleted.add((tagId) => {
+        annotationTagFilter.removeChild(this.annotationTags.get(tagId)!);
+        this.annotationTags.delete(tagId);
+        for (const annotation of source) {
+          this.updateAnnotationElement(annotation, false);
+        }
+      }));
+      annotationTagFilter.addEventListener('change', () => {
+        const tagIdSelected = parseInt(annotationTagFilter.selectedOptions[0].value, 10);
+        this.annotationLayer.selectedAnnotationTagId.value = tagIdSelected;
+        this.filterAnnotationsByTag(tagIdSelected);
+      });
+      const label = document.createElement('label');
+      label.textContent = 'Filter annotation list by tag: ';
+      label.appendChild(annotationTagFilter);
+      this.element.appendChild(label);
+    }
 
     this.element.appendChild(this.annotationListContainer);
 
@@ -564,8 +619,8 @@ export class AnnotationLayerView extends Tab {
     this.resetOnUpdate();
   }
 
-  private updateAnnotationElement(annotation:Annotation) {
-    if (!this.visible) {
+  private updateAnnotationElement(annotation:Annotation, checkVisibility = true) {
+    if (checkVisibility && !this.visible) {
       return;
     }
     var element = this.annotationListElements.get(annotation.id);
@@ -573,18 +628,16 @@ export class AnnotationLayerView extends Tab {
       return;
     }
     if (element.lastElementChild && element.children.length === 3) {
-      if (!annotation.description) {
+      const annotationText = this.layer.getAnnotationText(annotation);
+      if (!annotationText) {
         element.removeChild(element.lastElementChild);
       }
       else {
-        element.lastElementChild.innerHTML = annotation.description;
+        element.lastElementChild.innerHTML = annotationText;
       }
     }
     else {
-      const description = document.createElement('div');
-      description.className = 'neuroglancer-annotation-description';
-      description.textContent = annotation.description || '';
-      element.appendChild(description);
+      this.createAnnotationDescriptionElement(element, annotation);
     }
     this.resetOnUpdate();
   }
@@ -622,14 +675,29 @@ export class AnnotationLayerView extends Tab {
     position.className = 'neuroglancer-annotation-position';
     getPositionSummary(position, annotation, transform, this.voxelSize, this.setSpatialCoordinates);
     element.appendChild(position);
+    this.createAnnotationDescriptionElement(element, annotation);
 
-    if (annotation.description) {
+    return element;
+  }
+
+  private createAnnotationDescriptionElement(annotationElement: HTMLElement, annotation: Annotation) {
+    const annotationText = this.layer.getAnnotationText(annotation);
+    if (annotationText) {
       const description = document.createElement('div');
       description.className = 'neuroglancer-annotation-description';
-      description.textContent = annotation.description;
-      element.appendChild(description);
+      description.textContent = annotationText;
+      annotationElement.appendChild(description);
     }
-    return element;
+  }
+
+  private filterAnnotationsByTag(tagId: number) {
+    for (const [annotationId, annotationElement] of this.annotationListElements) {
+      if (tagId === 0 || this.annotationLayer.source.isAnnotationTaggedWithTag(annotationId, tagId)) {
+        annotationElement.style.display = 'list-item';
+      } else {
+        annotationElement.style.display = 'none';
+      }
+    }
   }
 }
 
@@ -1112,6 +1180,7 @@ export interface UserLayerWithAnnotations extends UserLayer {
   annotationColor: TrackableRGB;
   annotationFillOpacity: TrackableAlphaValue;
   initializeAnnotationLayerViewTab(tab: AnnotationLayerView): void;
+  getAnnotationText(annotation: Annotation): string;
 }
 
 export function getAnnotationRenderOptions(userLayer: UserLayerWithAnnotations) {
@@ -1129,7 +1198,6 @@ export function UserLayerWithAnnotationsMixin<TBase extends {new (...args: any[]
         this.registerDisposer(new SelectedAnnotationState(this.annotationLayerState.addRef()));
     annotationColor = new TrackableRGB(vec3.fromValues(1, 1, 0));
     annotationFillOpacity = trackableAlphaValue(0.0);
-
     constructor(...args: any[]) {
       super(...args);
       this.selectedAnnotation.changed.add(this.specificationChanged.dispatch);
@@ -1180,6 +1248,10 @@ export function UserLayerWithAnnotationsMixin<TBase extends {new (...args: any[]
 
     initializeAnnotationLayerViewTab(tab: AnnotationLayerView) {
       tab;
+    }
+
+    getAnnotationText(annotation: Annotation) {
+      return annotation.description || '';
     }
   }
   return C;

@@ -21,10 +21,11 @@ import {RenderLayerRole} from 'neuroglancer/layer';
 import {SegmentationDisplayState} from 'neuroglancer/segmentation_display_state/frontend';
 import {TrackableAlphaValue} from 'neuroglancer/trackable_alpha';
 import {TrackableBoolean} from 'neuroglancer/trackable_boolean';
-import {WatchableValue} from 'neuroglancer/trackable_value';
+import {WatchableValue, TrackableValue} from 'neuroglancer/trackable_value';
 import {TrackableRGB} from 'neuroglancer/util/color';
 import {Owned, RefCounted} from 'neuroglancer/util/disposable';
 import {mat4} from 'neuroglancer/util/geom';
+import {verifyNonnegativeInt} from 'neuroglancer/util/json';
 
 export class AnnotationHoverState extends
     WatchableValue<{id: string, partIndex: number}|undefined> {}
@@ -42,6 +43,8 @@ export class AnnotationLayerState extends RefCounted {
    */
   segmentationState: WatchableValue<SegmentationDisplayState|undefined|null>;
   filterBySegmentation: TrackableBoolean;
+  annotationJumpingDisplaysSegmentation = new TrackableBoolean(false);
+  selectedAnnotationTagId = new TrackableValue<number>(0, verifyNonnegativeInt, 0);
 
   private transformCacheGeneration = -1;
   private cachedObjectToGlobal = mat4.create();
