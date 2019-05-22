@@ -28,6 +28,8 @@
   overflow-y: auto;
   height: 0px;
   flex: 1;
+  flex-basis: 0px;
+  min-height: 0px;
 }
 
 .neuroglancer-annotation-layer-view {
