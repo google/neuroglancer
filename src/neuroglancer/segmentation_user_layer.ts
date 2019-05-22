@@ -28,7 +28,6 @@ import {SegmentColorHash} from 'neuroglancer/segment_color';
 import {SegmentSelectionState, Uint64MapEntry} from 'neuroglancer/segmentation_display_state/frontend';
 import {SharedDisjointUint64Sets} from 'neuroglancer/shared_disjoint_sets';
 import {FRAGMENT_MAIN_START as SKELETON_FRAGMENT_MAIN_START, PerspectiveViewSkeletonLayer, SkeletonLayer, SkeletonRenderingOptions, SkeletonSource, SliceViewPanelSkeletonLayer, ViewSpecificSkeletonRenderingOptions} from 'neuroglancer/skeleton/frontend';
-import {ChunkedGraphLayer, SegmentSelection} from 'neuroglancer/sliceview/chunked_graph/frontend';
 import {VolumeType} from 'neuroglancer/sliceview/volume/base';
 import {SegmentationRenderLayer} from 'neuroglancer/sliceview/volume/segmentation_renderlayer';
 import {StatusMessage} from 'neuroglancer/status';
@@ -42,7 +41,6 @@ import {parseArray, verifyObjectProperty, verifyOptionalString} from 'neuroglanc
 import {NullarySignal} from 'neuroglancer/util/signal';
 import {Uint64} from 'neuroglancer/util/uint64';
 import {makeWatchableShaderError} from 'neuroglancer/webgl/dynamic_shader';
-import {ChunkedGraphWidget} from 'neuroglancer/widget/chunked_graph_widget';
 import {EnumSelectWidget} from 'neuroglancer/widget/enum_widget';
 import {RangeWidget} from 'neuroglancer/widget/range';
 import {RenderScaleWidget} from 'neuroglancer/widget/render_scale_widget';
@@ -56,7 +54,6 @@ const NOT_SELECTED_ALPHA_JSON_KEY = 'notSelectedAlpha';
 const OBJECT_ALPHA_JSON_KEY = 'objectAlpha';
 const SATURATION_JSON_KEY = 'saturation';
 const HIDE_SEGMENT_ZERO_JSON_KEY = 'hideSegmentZero';
-const CHUNKED_GRAPH_JSON_KEY = 'chunkedGraph';
 const MESH_JSON_KEY = 'mesh';
 const SKELETONS_JSON_KEY = 'skeletons';
 const ROOT_SEGMENTS_JSON_KEY = 'segments';
@@ -68,6 +65,8 @@ const MESH_RENDER_SCALE_JSON_KEY = 'meshRenderScale';
 
 const SKELETON_RENDERING_JSON_KEY = 'skeletonRendering';
 const SKELETON_SHADER_JSON_KEY = 'skeletonShader';
+
+const lastSegmentSelection = new Uint64();
 
 const Base = UserLayerWithVolumeSourceMixin(UserLayer);
 export class SegmentationUserLayer extends Base {
@@ -96,20 +95,13 @@ export class SegmentationUserLayer extends Base {
    * If meshPath is undefined, a default mesh source provided by the volume may be used.  If
    * meshPath is null, the default mesh source is not used.
    */
-  chunkedGraphUrl: string|null|undefined;
   meshPath: string|null|undefined;
   skeletonsPath: string|null|undefined;
-  chunkedGraphLayer: Borrowed<ChunkedGraphLayer>|undefined;
   meshLayer: Borrowed<MeshLayer|MultiscaleMeshLayer>|undefined;
   skeletonLayer: Borrowed<SkeletonLayer>|undefined;
 
   // Dispatched when either meshLayer or skeletonLayer changes.
   objectLayerStateChanged = new NullarySignal();
-
-  private pendingGraphMod: {
-    source: SegmentSelection[],
-    sink: SegmentSelection[],
-  };
 
   constructor(public manager: LayerListSpecification, x: any) {
     super(manager, x);
@@ -179,9 +171,6 @@ export class SegmentationUserLayer extends Base {
     });
 
     const {multiscaleSource} = this;
-    this.chunkedGraphUrl = specification[CHUNKED_GRAPH_JSON_KEY] === null ?
-        null :
-        verifyOptionalString(specification[CHUNKED_GRAPH_JSON_KEY]);
     let meshPath = this.meshPath = specification[MESH_JSON_KEY] === null ?
         null :
         verifyOptionalString(specification[MESH_JSON_KEY]);
@@ -226,31 +215,6 @@ export class SegmentationUserLayer extends Base {
             renderScaleHistogram: this.sliceViewRenderScaleHistogram,
             renderScaleTarget: this.sliceViewRenderScaleTarget,
           }));
-          // Chunked Graph Server
-          if (this.chunkedGraphUrl === undefined && volume.getChunkedGraphUrl) {
-            this.chunkedGraphUrl = volume.getChunkedGraphUrl();
-          }
-          // Chunked Graph Supervoxels
-          if (this.chunkedGraphUrl && volume.getChunkedGraphSources) {
-            let chunkedGraphSources = volume.getChunkedGraphSources(
-              {rootUri: this.chunkedGraphUrl}, this.displayState.rootSegments);
-
-            if (chunkedGraphSources) {
-              this.chunkedGraphLayer = new ChunkedGraphLayer(this.manager.chunkManager, this.chunkedGraphUrl, chunkedGraphSources, this.displayState);
-              this.addRenderLayer(this.chunkedGraphLayer);
-
-              // Have to wait for graph server initialization to fetch agglomerations
-              this.displayState.segmentEquivalences.clear();
-              verifyObjectProperty(specification, ROOT_SEGMENTS_JSON_KEY, y => {
-                if (y !== undefined) {
-                  let {rootSegments} = this.displayState;
-                  parseArray(y, value => {
-                    rootSegments.add(Uint64.parseString(String(value), 10));
-                  });
-                }
-              });
-            }
-          }
           // Meshes
           if (meshPath === undefined && getRenderMeshByDefault()) {
             ++remaining;
@@ -320,7 +284,6 @@ export class SegmentationUserLayer extends Base {
     x['type'] = 'segmentation';
     x[MESH_JSON_KEY] = this.meshPath;
     x[SKELETONS_JSON_KEY] = this.skeletonsPath;
-    x[CHUNKED_GRAPH_JSON_KEY] = this.chunkedGraphUrl;
     x[SELECTED_ALPHA_JSON_KEY] = this.displayState.selectedAlpha.toJSON();
     x[NOT_SELECTED_ALPHA_JSON_KEY] = this.displayState.notSelectedAlpha.toJSON();
     x[SATURATION_JSON_KEY] = this.displayState.saturation.toJSON();
@@ -340,7 +303,7 @@ export class SegmentationUserLayer extends Base {
       x[HIGHLIGHTS_JSON_KEY] = highlightedSegments.toJSON();
     }
     let {segmentEquivalences} = this.displayState;
-    if (segmentEquivalences.size > 0 && !this.chunkedGraphUrl) { // Too many equivalences when using Chunked Graph
+    if (segmentEquivalences.size > 0) {
       x[EQUIVALENCES_JSON_KEY] = segmentEquivalences.toJSON();
     }
     x[SKELETON_RENDERING_JSON_KEY] = this.displayState.skeletonRenderingOptions.toJSON();
@@ -380,22 +343,14 @@ export class SegmentationUserLayer extends Base {
         break;
       }
       case 'merge-selected': {
-        if (this.chunkedGraphLayer) {
-          StatusMessage.showTemporaryMessage(`Graph-enabled segmentation layers only support 2-point-merge.`, 3000);
-        } else {
-          const firstSeg = this.displayState.rootSegments.hashTable.keys().next().value;
-          for (const seg of this.displayState.rootSegments) {
-            this.displayState.segmentEquivalences.link(firstSeg, seg);
-          }
+        const firstSeg = this.displayState.rootSegments.hashTable.keys().next().value;
+        for (const seg of this.displayState.rootSegments) {
+          this.displayState.segmentEquivalences.link(firstSeg, seg);
         }
         break;
       }
       case 'cut-selected': {
-        if (this.chunkedGraphLayer) {
-          StatusMessage.showTemporaryMessage(`Graph-enabled segmentation layers only support 2-point-split.`, 3000);
-        } else {
-          this.displayState.segmentEquivalences.clear();
-        }
+        this.displayState.segmentEquivalences.clear();
         break;
       }
       case 'select': {
@@ -432,19 +387,6 @@ export class SegmentationUserLayer extends Base {
       let {rootSegments} = this.displayState;
       if (rootSegments.has(segment)) {
         rootSegments.delete(segment);
-      } else if (this.chunkedGraphLayer) {
-        let coordinates = [...this.manager.layerSelectedValues.mouseState.position.values()].map((v, i) => {
-          return Math.round(v / this.manager.voxelSize.size[i]);
-        });
-
-        let selection = {segmentId: segment.clone(), rootId: segment.clone(), position: coordinates};
-
-        this.chunkedGraphLayer.getRoot(selection).then(rootSegment => {
-          rootSegments.add(rootSegment);
-        }).catch((e: Error) => {
-          console.log(e);
-          StatusMessage.showTemporaryMessage(e.message, 3000);
-        });
       } else {
         rootSegments.add(segment);
       }
@@ -465,134 +407,44 @@ export class SegmentationUserLayer extends Base {
   }
 
   mergeSelectFirst() {
-    let {segmentSelectionState} = this.displayState;
+    const {segmentSelectionState} = this.displayState;
     if (segmentSelectionState.hasSelectedSegment) {
-      let segment = segmentSelectionState.rawSelectedSegment;
-      let root = segmentSelectionState.selectedSegment;
-      let coordinates = [...this.manager.layerSelectedValues.mouseState.position.values()].map((v, i) => {
-        return Math.round(v / this.manager.voxelSize.size[i]);
-      });
-
-      this.pendingGraphMod = {
-        source: [{segmentId: segment.clone(), rootId: root.clone(), position: coordinates}],
-        sink: [{segmentId: new Uint64(0), rootId: new Uint64(0), position: coordinates}]
-      };
-      StatusMessage.showTemporaryMessage(`Selected ${segment} as source for merge. Pick a sink.`, 3000);
+      lastSegmentSelection.assign(segmentSelectionState.rawSelectedSegment);
+      StatusMessage.showTemporaryMessage(
+          `Selected ${lastSegmentSelection} as source for merge. Pick a sink.`, 3000);
     }
   }
 
   mergeSelectSecond() {
-    let {segmentSelectionState, rootSegments} = this.displayState;
+    const {segmentSelectionState} = this.displayState;
     if (segmentSelectionState.hasSelectedSegment) {
-      let segment = segmentSelectionState.rawSelectedSegment;
-      let root = segmentSelectionState.selectedSegment;
-      let coordinates = [...this.manager.layerSelectedValues.mouseState.position.values()].map((v, i) => {
-        return Math.round(v / this.manager.voxelSize.size[i]);
-      });
-
-      this.pendingGraphMod.sink[0] = {segmentId: segment.clone(), rootId: root.clone(), position: coordinates};
-      StatusMessage.showTemporaryMessage(`Selected ${segment} as sink for merge.`, 3000);
-
-      if (this.chunkedGraphLayer) {
-        this.chunkedGraphLayer.mergeSegments(this.pendingGraphMod.source[0], this.pendingGraphMod.sink[0]).then((mergedRoot) => {
-          rootSegments.delete(this.pendingGraphMod.sink[0].rootId);
-          rootSegments.delete(this.pendingGraphMod.source[0].rootId);
-          rootSegments.add(mergedRoot);
-        });
-      }
-      else {
-        this.displayState.segmentEquivalences.link(this.pendingGraphMod.source[0].segmentId, this.pendingGraphMod.sink[0].segmentId);
-      }
+      const segment = segmentSelectionState.rawSelectedSegment.clone();
+      this.displayState.segmentEquivalences.link(lastSegmentSelection, segment);
     }
   }
 
   splitSelectFirst() {
-    let {segmentSelectionState} = this.displayState;
-    if (segmentSelectionState.hasSelectedSegment) {
-      let segment = segmentSelectionState.rawSelectedSegment;
-      let root = segmentSelectionState.selectedSegment;
-      let coordinates = [...this.manager.layerSelectedValues.mouseState.position.values()].map((v, i) => {
-        return Math.round(v / this.manager.voxelSize.size[i]);
-      });
-
-      this.pendingGraphMod = {
-        source: [{segmentId: segment.clone(), rootId: root.clone(), position: coordinates}],
-        sink: [{segmentId: new Uint64(0), rootId: new Uint64(0), position: coordinates}]
-      };
-      StatusMessage.showTemporaryMessage(`Selected ${segment} as source for split. Pick a sink.`, 3000);
-    }
+    StatusMessage.showTemporaryMessage('Cut without graph server not yet implemented.', 3000);
   }
 
   splitSelectSecond() {
-    let {segmentSelectionState, rootSegments} = this.displayState;
-    if (segmentSelectionState.hasSelectedSegment) {
-      let segment = segmentSelectionState.rawSelectedSegment;
-      let root = segmentSelectionState.selectedSegment;
-      let coordinates = [...this.manager.layerSelectedValues.mouseState.position.values()].map((v, i) => {
-        return Math.round(v / this.manager.voxelSize.size[i]);
-      });
-
-      this.pendingGraphMod.sink[0] = {segmentId: segment.clone(), rootId: root.clone(), position: coordinates};
-      StatusMessage.showTemporaryMessage(`Selected ${segment} as sink for split.`, 3000);
-
-      if (this.chunkedGraphLayer) {
-        this.chunkedGraphLayer.splitSegments(this.pendingGraphMod.source, this.pendingGraphMod.sink).then((splitRoots) => {
-          if (splitRoots.length === 0) {
-            StatusMessage.showTemporaryMessage(`No split found.`, 3000);
-            return;
-          }
-          for (let sink of this.pendingGraphMod.sink) {
-            rootSegments.delete(sink.rootId);
-          }
-          for (let splitRoot of splitRoots) {
-            rootSegments.add(splitRoot);
-          }
-        });
-      }
-      else {
-        StatusMessage.showTemporaryMessage('Cut without graph server not yet implemented.', 3000);
-      }
-    }
+    StatusMessage.showTemporaryMessage('Cut without graph server not yet implemented.', 3000);
   }
 
   rootSegmentChange(rootSegment: Uint64|null, added: boolean) {
     if (rootSegment === null && !added) {
-      // Clear all segment sets
-      let leafSegmentCount = this.displayState.visibleSegments2D!.size;
       this.displayState.visibleSegments2D!.clear();
       this.displayState.visibleSegments3D.clear();
-      if (this.chunkedGraphUrl) {
-        // When using graph server, clean up segment equivalences. Ensures that we always
-        // load the most recent equivalences from the server when user re-selects this object.
-        this.displayState.segmentEquivalences.clear();
-      }
-      StatusMessage.showTemporaryMessage(`Deselected all ${leafSegmentCount} segments.`, 3000);
     } else if (added) {
+      const segments = [...this.displayState.segmentEquivalences.setElements(rootSegment!)];
       this.displayState.visibleSegments3D.add(rootSegment!);
       this.displayState.visibleSegments2D!.add(rootSegment!);
-      if (!this.chunkedGraphUrl) {
-        // Without graph server, we need to explicitly add equivalent segments
-        // to the set of `visibleSegments3D`.
-        let segments = [...this.displayState.segmentEquivalences.setElements(rootSegment!)];
-        this.displayState.visibleSegments3D.add(segments);
-      }
+      this.displayState.visibleSegments3D.add(segments);
     } else if (!added) {
-      let segments = [...this.displayState.segmentEquivalences.setElements(rootSegment!)];
-      let segmentCount = segments.length;  // Approximation
-
+      const segments = [...this.displayState.segmentEquivalences.setElements(rootSegment!)];
       this.displayState.visibleSegments2D!.delete(rootSegment!);
       this.displayState.visibleSegments3D.delete(segments);
-
-      if (this.chunkedGraphUrl) {
-        // When using graph server, clean up segment equivalences. Ensures that we always
-        // load the most recent equivalences from the server when user re-selects this object.
-        this.displayState.segmentEquivalences.deleteSet(rootSegment!);
-      } else {
-        // Without graph server, equivalent segments are also stored in `rootSegments`.
-        this.displayState.rootSegments.delete(segments);
-      }
-
-      StatusMessage.showTemporaryMessage(`Deselected ${segmentCount} segments.`);
+      this.displayState.rootSegments.delete(segments);
     }
     this.specificationChanged.dispatch();
   }
@@ -616,8 +468,6 @@ class DisplayOptionsTab extends Tab {
   saturationWidget = this.registerDisposer(new RangeWidget(this.layer.displayState.saturation));
   objectAlphaWidget = this.registerDisposer(new RangeWidget(this.layer.displayState.objectAlpha));
   codeWidget: ShaderCodeWidget|undefined;
-  chunkedGraphWidget: ChunkedGraphWidget|undefined;
-
   constructor(public layer: SegmentationUserLayer) {
     super();
     const {element} = this;
@@ -670,12 +520,6 @@ class DisplayOptionsTab extends Tab {
       label.appendChild(document.createTextNode('Hide segment ID 0'));
       label.appendChild(checkbox.element);
       element.appendChild(label);
-    }
-
-    if (layer.chunkedGraphUrl && this.chunkedGraphWidget == null) {
-      const chunkedGraphWidget =
-          this.registerDisposer(new ChunkedGraphWidget({url: layer.chunkedGraphUrl || ''}));
-      element.appendChild(chunkedGraphWidget.element);
     }
 
     this.addSegmentWidget.element.classList.add('add-segment');
