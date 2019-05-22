@@ -157,7 +157,9 @@ export function parseSpecialUrl(url: string): [string[], string] {
     const baseUrls = [
       `https://storage.googleapis.com/${bucket}`,
     ];
-    return [baseUrls, match[3]];
+    let path = match[3];
+    if (path === undefined) path = '';
+    return [baseUrls, path];
   }
   return [[url], ''];
 }
