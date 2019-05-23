@@ -27,6 +27,7 @@ import {getObjectId} from 'neuroglancer/util/object_id';
 import {Uint64} from 'neuroglancer/util/uint64';
 import {withSharedVisibility} from 'neuroglancer/visibility_priority/frontend';
 import {Buffer} from 'neuroglancer/webgl/buffer';
+import glsl_COLORMAPS from 'neuroglancer/webgl/colormaps.glsl';
 import {GL} from 'neuroglancer/webgl/context';
 import {makeWatchableShaderError} from 'neuroglancer/webgl/dynamic_shader';
 import {CountingBuffer, countingBufferShaderModule, disableCountingBuffer, getCountingBuffer, IndexBufferAttributeHelper, makeIndexBuffer} from 'neuroglancer/webgl/index_emulation';
@@ -36,8 +37,6 @@ import {compute1dTextureLayout, computeTextureFormat, getSamplerPrefixForDataTyp
 import {SharedObject} from 'neuroglancer/worker_rpc';
 
 export const FRAGMENT_MAIN_START = '//NEUROGLANCER_SINGLE_MESH_LAYER_FRAGMENT_MAIN_START';
-
-const glsl_COLORMAPS = require<string>('neuroglancer/webgl/colormaps.glsl');
 
 const DEFAULT_FRAGMENT_MAIN = `void main() {
   emitGray();
@@ -343,7 +342,9 @@ export class SingleMeshSource extends
 (WithParameters(ChunkSource, SingleMeshSourceParametersWithInfo)) {
   attributeTextureFormats = getAttributeTextureFormats(this.info.vertexAttributes);
 
-  get info () { return this.parameters.info; }
+  get info() {
+    return this.parameters.info;
+  }
 
   getChunk(x: any) {
     return new SingleMeshChunk(this, x);
@@ -517,5 +518,7 @@ function getSingleMeshInfo(chunkManager: ChunkManager, parameters: SingleMeshSou
 export function getSingleMeshSource(
     chunkManager: ChunkManager, parameters: SingleMeshSourceParameters) {
   return getSingleMeshInfo(chunkManager, parameters)
-    .then(info => chunkManager.getChunkSource(SingleMeshSource, {parameters: {...parameters, info}}));
+      .then(
+          info =>
+              chunkManager.getChunkSource(SingleMeshSource, {parameters: {...parameters, info}}));
 }

@@ -15,6 +15,7 @@
  */
 
 import {VertexAttributeInfo} from 'neuroglancer/skeleton/base';
+import {mat4} from 'neuroglancer/util/geom';
 
 export enum VolumeChunkEncoding {
   RAW,
@@ -26,6 +27,7 @@ export class VolumeChunkSourceParameters {
   baseUrls: string[];
   path: string;
   encoding: VolumeChunkEncoding;
+  sharding: ShardingParameters|undefined;
 
   static RPC_ID = 'precomputed/VolumeChunkSource';
 }
@@ -38,11 +40,50 @@ export class MeshSourceParameters {
   static RPC_ID = 'precomputed/MeshSource';
 }
 
+export enum DataEncoding {
+  RAW = 0,
+  GZIP = 1,
+}
+
+export enum ShardingHashFunction {
+  IDENTITY = 0,
+  MURMURHASH3_X86_128 = 1,
+}
+
+export interface ShardingParameters {
+  hash: ShardingHashFunction;
+  preshiftBits: number;
+  minishardBits: number;
+  shardBits: number;
+  minishardIndexEncoding: DataEncoding;
+  dataEncoding: DataEncoding;
+}
+
+export class MultiscaleMeshMetadata {
+  transform: mat4;
+  lodScaleMultiplier: number;
+  vertexQuantizationBits: number;
+  sharding: ShardingParameters|undefined;
+}
+
+export class MultiscaleMeshSourceParameters {
+  baseUrls: string[];
+  path: string;
+  metadata: MultiscaleMeshMetadata;
+
+  static RPC_ID = 'precomputed/MultiscaleMeshSource';
+}
+
+export interface SkeletonMetadata {
+  transform: mat4;
+  vertexAttributes: Map<string, VertexAttributeInfo>;
+  sharding: ShardingParameters|undefined;
+}
 
 export class SkeletonSourceParameters {
   baseUrls: string[];
   path: string;
-  vertexAttributes: Map<string, VertexAttributeInfo>;
+  metadata: SkeletonMetadata;
 
   static RPC_ID = 'precomputed/SkeletonSource';
 }

@@ -177,15 +177,10 @@ export class StatisticsPanel extends RefCounted {
     });
 
     columns.set('Visible chunks/D', (statistics) => {
-      return (
-          statistics
-              [getChunkStateStatisticIndex(ChunkState.DOWNLOADING, ChunkPriorityTier.VISIBLE) *
-                   numChunkMemoryStatistics +
-               ChunkMemoryStatistics.numChunks] +
-          statistics
-              [getChunkStateStatisticIndex(ChunkState.COMPUTING, ChunkPriorityTier.VISIBLE) *
-                   numChunkMemoryStatistics +
-               ChunkMemoryStatistics.numChunks]);
+      return (statistics
+                  [getChunkStateStatisticIndex(ChunkState.DOWNLOADING, ChunkPriorityTier.VISIBLE) *
+                       numChunkMemoryStatistics +
+                   ChunkMemoryStatistics.numChunks]);
     });
 
     columns.set('Visible chunks/M', (statistics) => {

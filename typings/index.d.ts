@@ -1,4 +1,5 @@
 /// <reference path="glsl.d.ts" />
+/// <reference path="url-loader.d.ts" />
 /// <reference path="jpgjs.d.ts" />
 /// <reference path="karma-benchmark.d.ts" />
 /// <reference path="nifti-reader-js.d.ts" />

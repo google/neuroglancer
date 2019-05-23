@@ -401,12 +401,9 @@ export abstract class RenderedDataPanel extends RenderedPanel {
     });
 
     registerActionListener(element, 'translate-via-mouse-drag', (e: ActionEvent<MouseEvent>) => {
-      const {mouseState} = this.viewer;
-      if (mouseState.updateUnconditionally()) {
-        startRelativeMouseDrag(e.detail, (_event, deltaX, deltaY) => {
-          this.translateByViewportPixels(deltaX, deltaY);
-        });
-      }
+      startRelativeMouseDrag(e.detail, (_event, deltaX, deltaY) => {
+        this.translateByViewportPixels(deltaX, deltaY);
+      });
     });
 
     registerActionListener(

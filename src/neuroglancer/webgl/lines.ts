@@ -48,6 +48,10 @@ export class LineShader extends RefCounted {
     builder.addVarying('highp float', 'vLineCoord');
 
     builder.addVertexCode(`
+uint getLineEndpointIndex() { return uint(aLineOffset.x); }
+`);
+
+    builder.addVertexCode(`
 void emitLine(mat4 projection, vec3 vertexA, vec3 vertexB) {
   vec3 vertexPosition = mix(vertexA, vertexB, aLineOffset.x);
   vec3 otherVertexPosition = mix(vertexB, vertexA, aLineOffset.x);
@@ -85,7 +89,7 @@ float getLineAlpha() {
     gl.uniform3f(
         shader.uniform('uLineParams'), lineWidthIncludingFeather * 2 / renderContext.viewportWidth,
         lineWidthIncludingFeather * 2 / renderContext.viewportHeight,
-        featherWidthInPixels / lineWidthIncludingFeather);
+        featherWidthInPixels === 0 ? 1e-6 : featherWidthInPixels / lineWidthIncludingFeather);
     this.quadHelper.draw(gl, numInstances);
     gl.disableVertexAttribArray(aLineOffset);
   }

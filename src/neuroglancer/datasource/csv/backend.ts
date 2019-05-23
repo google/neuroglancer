@@ -14,13 +14,14 @@
  * limitations under the License.
  */
 
-import {GenericFileSource} from 'neuroglancer/chunk_manager/generic_file_source';
+import {GenericSharedDataSource} from 'neuroglancer/chunk_manager/generic_file_source';
 import {registerSingleMeshVertexAttributesFactory, SingleMeshVertexAttributes} from 'neuroglancer/single_mesh/backend';
 import {VertexAttributeInfo} from 'neuroglancer/single_mesh/base';
 import {DataType} from 'neuroglancer/util/data_type';
 import {maybeDecompressGzip} from 'neuroglancer/util/gzip';
 
-function parseCSVFromArrayBuffer(buffer: ArrayBuffer): SingleMeshVertexAttributes {
+function parseCSVFromArrayBuffer(buffer: ArrayBuffer):
+    {data: SingleMeshVertexAttributes, size: number} {
   const decoder = new TextDecoder();
   const text = decoder.decode(maybeDecompressGzip(buffer));
   let lines = text.trim().split(/\n+/);
@@ -40,15 +41,18 @@ function parseCSVFromArrayBuffer(buffer: ArrayBuffer): SingleMeshVertexAttribute
     }
   }
   return {
-    numVertices: numRows,
-    attributeInfo,
-    attributes,
+    data: {
+      numVertices: numRows,
+      attributeInfo,
+      attributes,
+    },
+    size: numRows * numColumns * 4,
   };
 }
 
 registerSingleMeshVertexAttributesFactory('csv', {
   description: 'Comma separated value text file',
   getMeshVertexAttributes: (chunkManager, url, getPriority, cancellationToken) =>
-      GenericFileSource.getData(
-          chunkManager.addRef(), parseCSVFromArrayBuffer, url, getPriority, cancellationToken)
+      GenericSharedDataSource.getUrl(
+          chunkManager, parseCSVFromArrayBuffer, url, getPriority, cancellationToken)
 });

@@ -160,6 +160,15 @@ function getBaseConfig(options) {
     },
     devtool: 'source-map',
     module: {
+      defaultRules: [
+        {
+          type: 'javascript/auto',
+          resolve: {},
+        },
+        {
+          test: /\.json$/i, type: 'json',
+        }
+      ],
       rules: [
         tsLoaderEntry,
         {

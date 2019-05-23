@@ -15,7 +15,13 @@
 import os
 import posixpath
 
-static_content_filenames = set(['main.bundle.js', 'chunk_worker.bundle.js', 'tfjs-library.bundle.js', 'index.html'])
+static_content_filenames = set([
+    'main.bundle.js',
+    'chunk_worker.bundle.js',
+    'tfjs-library.bundle.js',
+    'index.html',
+    'draco.bundle.js',
+])
 
 mime_type_map = {
     '.css': 'text/css',

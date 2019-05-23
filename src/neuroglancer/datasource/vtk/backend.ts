@@ -14,8 +14,8 @@
  * limitations under the License.
  */
 
-import {GenericFileSource} from 'neuroglancer/chunk_manager/generic_file_source';
-import {parseVTK} from 'neuroglancer/datasource/vtk/parse';
+import {GenericSharedDataSource} from 'neuroglancer/chunk_manager/generic_file_source';
+import {getTriangularMeshSize, parseVTK} from 'neuroglancer/datasource/vtk/parse';
 import {registerSingleMeshFactory, SingleMesh} from 'neuroglancer/single_mesh/backend';
 import {DataType} from 'neuroglancer/util/data_type';
 import {maybeDecompressGzip} from 'neuroglancer/util/gzip';
@@ -25,15 +25,15 @@ import {maybeDecompressGzip} from 'neuroglancer/util/gzip';
  * use.
  */
 function parseVTKFromArrayBuffer(buffer: ArrayBuffer) {
-  return parseVTK(maybeDecompressGzip(buffer));
+  const mesh = parseVTK(maybeDecompressGzip(buffer));
+  return {data: mesh, size: getTriangularMeshSize(mesh)};
 }
 
 registerSingleMeshFactory('vtk', {
   description: 'VTK',
   getMesh: (chunkManager, url, getPriority, cancellationToken) =>
-      GenericFileSource
-          .getData(
-              chunkManager.addRef(), parseVTKFromArrayBuffer, url, getPriority, cancellationToken)
+      GenericSharedDataSource
+          .getUrl(chunkManager, parseVTKFromArrayBuffer, url, getPriority, cancellationToken)
           .then(mesh => {
             let result: SingleMesh = {
               info: {

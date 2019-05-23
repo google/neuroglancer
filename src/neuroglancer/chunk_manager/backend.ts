@@ -211,6 +211,8 @@ export interface ChunkConstructor<T extends Chunk> {
   new(): T;
 }
 
+const numSourceQueueLevels = 2;
+
 /**
  * Base class inherited by both ChunkSource, for implementing the backend part of chunk sources that
  * also have a frontend-part, as well as other chunk sources, such as the GenericFileSource, that
@@ -221,6 +223,13 @@ export class ChunkSourceBase extends SharedObject {
   chunks: Map<string, Chunk> = new Map<string, Chunk>();
   freeChunks: Chunk[] = new Array<Chunk>();
   statistics = new Float64Array(numChunkStatistics);
+
+  /**
+   * sourceQueueLevel must be greater than the sourceQueueLevel of any ChunkSource whose download
+   * method depends on chunks from this source.  A normal ChunkSource with no other dependencies
+   * should have a level of 0.
+   */
+  sourceQueueLevel = 0;
 
   constructor(public chunkManager: Borrowed<ChunkManager>) {
     super();
@@ -539,7 +548,11 @@ class AvailableCapacity extends RefCounted {
 export class ChunkQueueManager extends SharedObjectCounterpart {
   gpuMemoryCapacity: AvailableCapacity;
   systemMemoryCapacity: AvailableCapacity;
-  downloadCapacity: AvailableCapacity;
+
+  /**
+   * Download capacity for each sourceQueueLevel.
+   */
+  downloadCapacity: AvailableCapacity[];
   computeCapacity: AvailableCapacity;
 
   /**
@@ -548,9 +561,12 @@ export class ChunkQueueManager extends SharedObjectCounterpart {
   sources = new Set<Borrowed<ChunkSource>>();
 
   /**
-   * Contains all chunks in QUEUED state pending download.
+   * Contains all chunks in QUEUED state pending download, for each sourceQueueLevel.
    */
-  private queuedDownloadPromotionQueue = makeChunkPriorityQueue1(Chunk.priorityGreater);
+  private queuedDownloadPromotionQueue = [
+    makeChunkPriorityQueue1(Chunk.priorityGreater),
+    makeChunkPriorityQueue1(Chunk.priorityGreater),
+  ];
 
   /**
    * Contains all chunks in QUEUED state pending compute.
@@ -558,9 +574,12 @@ export class ChunkQueueManager extends SharedObjectCounterpart {
   private queuedComputePromotionQueue = makeChunkPriorityQueue1(Chunk.priorityGreater);
 
   /**
-   * Contains all chunks in DOWNLOADING state.
+   * Contains all chunks in DOWNLOADING state, for each sourceQueueLevel.
    */
-  private downloadEvictionQueue = makeChunkPriorityQueue1(Chunk.priorityLess);
+  private downloadEvictionQueue = [
+    makeChunkPriorityQueue1(Chunk.priorityLess),
+    makeChunkPriorityQueue1(Chunk.priorityLess),
+  ];
 
   /**
    * Contains all chunks in COMPUTING state.
@@ -598,7 +617,10 @@ export class ChunkQueueManager extends SharedObjectCounterpart {
     };
     this.gpuMemoryCapacity = getCapacity(options['gpuMemoryCapacity']);
     this.systemMemoryCapacity = getCapacity(options['systemMemoryCapacity']);
-    this.downloadCapacity = getCapacity(options['downloadCapacity']);
+    this.downloadCapacity = [
+      getCapacity(options['downloadCapacity']),
+      getCapacity(options['downloadCapacity']),
+    ];
     this.computeCapacity = getCapacity(options['computeCapacity']);
   }
 
@@ -614,18 +636,17 @@ export class ChunkQueueManager extends SharedObjectCounterpart {
         if (chunk.isComputational) {
           yield this.queuedComputePromotionQueue;
         } else {
-          yield this.queuedDownloadPromotionQueue;
+          yield this.queuedDownloadPromotionQueue[chunk.source!.sourceQueueLevel];
         }
         break;
 
       case ChunkState.DOWNLOADING:
-        yield this.downloadEvictionQueue;
-        yield this.systemMemoryEvictionQueue;
-        break;
-
-      case ChunkState.COMPUTING:
-        yield this.computeEvictionQueue;
-        yield this.systemMemoryEvictionQueue;
+        if (chunk.isComputational) {
+          yield this.computeEvictionQueue;
+        } else {
+          yield this.downloadEvictionQueue[chunk.source!.sourceQueueLevel];
+          yield this.systemMemoryEvictionQueue;
+        }
         break;
 
       case ChunkState.SYSTEM_MEMORY_WORKER:
@@ -656,12 +677,9 @@ export class ChunkQueueManager extends SharedObjectCounterpart {
         break;
 
       case ChunkState.DOWNLOADING:
-        this.downloadCapacity.adjust(factor, 0);
-        this.systemMemoryCapacity.adjust(factor, 0);
-        break;
-
-      case ChunkState.COMPUTING:
-        this.computeCapacity.adjust(factor, factor * chunk.systemMemoryBytes);
+        (chunk.isComputational ? this.computeCapacity :
+                                 this.downloadCapacity[chunk.source!.sourceQueueLevel])
+            .adjust(factor, factor * chunk.systemMemoryBytes);
         this.systemMemoryCapacity.adjust(factor, factor * chunk.systemMemoryBytes);
         break;
 
@@ -804,7 +822,6 @@ export class ChunkQueueManager extends SharedObjectCounterpart {
     const evict = (chunk: Chunk) => {
       switch (chunk.state) {
         case ChunkState.DOWNLOADING:
-        case ChunkState.COMPUTING:
           cancelChunkDownload(chunk);
           break;
         case ChunkState.GPU_MEMORY:
@@ -847,9 +864,12 @@ export class ChunkQueueManager extends SharedObjectCounterpart {
           }
         };
 
-    promotionLambda(
-        this.queuedDownloadPromotionQueue.candidates(), this.downloadEvictionQueue.candidates(),
-        this.downloadCapacity);
+    for (let sourceQueueLevel = 0; sourceQueueLevel < numSourceQueueLevels; ++sourceQueueLevel) {
+      promotionLambda(
+          this.queuedDownloadPromotionQueue[sourceQueueLevel].candidates(),
+          this.downloadEvictionQueue[sourceQueueLevel].candidates(),
+          this.downloadCapacity[sourceQueueLevel]);
+    }
     promotionLambda(
         this.queuedComputePromotionQueue.candidates(), this.computeEvictionQueue.candidates(),
         this.computeCapacity);
