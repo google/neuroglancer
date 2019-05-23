@@ -121,6 +121,7 @@ export class Uint64 {
   }
 
   static ZERO = new Uint64(0, 0);
+  static ONE = new Uint64(1, 0);
 
   static equal(a: Uint64, b: Uint64) {
     return a.low === b.low && a.high === b.high;
@@ -193,43 +194,117 @@ export class Uint64 {
     return this.toString();
   }
 
-  lshift(bits: number) {
-    bits &= 63;
-    if (bits == 0) {
-      return this.clone();
+  static lshift(out: Uint64, input: Uint64, bits: number): Uint64 {
+    const {low, high} = input;
+    if (bits === 0) {
+      out.low = low;
+      out.high = high;
+    } else if (bits < 32) {
+      out.low = low << bits;
+      out.high = (high << bits) | (low >>> (32 - bits));
     } else {
-      let {low, high} = this;
-      if (bits < 32) {
-        return new Uint64(low << bits, (high << bits) | (low >>> (32 - bits)));
-      } else {
-        return new Uint64(0, low << (bits - 32));
-      }
+      out.low = 0;
+      out.high = low << (bits - 32);
     }
+    return out;
   }
 
-  rshift(bits: number) {
-    bits &= 63;
-    if (bits == 0) {
-      return this.clone();
+  static rshift(out: Uint64, input: Uint64, bits: number) {
+    const {low, high} = input;
+    if (bits === 0) {
+      out.low = low;
+      out.high = high;
+    } else if (bits < 32) {
+      out.low = (low >>> bits) | (high << (32 - bits));
+      out.high = high >>> bits;
     } else {
-      let {low, high} = this;
-      if (bits < 32) {
-        return new Uint64((low >>> bits) | (high << (32 - bits)), high >> bits);
-      } else {
-        return new Uint64(high >> (bits - 32), high >= 0 ? 0 : -1);
-      }
+      out.low = high >>> (bits - 32);
+      out.high = 0;
     }
+    return out;
   }
 
-  or(other: Uint64) {
-    return new Uint64(this.low | other.low, this.high | other.high);
+  static or(out: Uint64, a: Uint64, b: Uint64): Uint64 {
+    out.low = a.low | b.low;
+    out.high = a.high | b.high;
+    return out;
   }
 
-  xor(other: Uint64) {
-    return new Uint64(this.low ^ other.low, this.high ^ other.high);
+  static xor(out: Uint64, a: Uint64, b: Uint64): Uint64 {
+    out.low = a.low ^ b.low;
+    out.high = a.high ^ b.high;
+    return out;
   }
 
-  and(other: Uint64) {
-    return new Uint64(this.low & other.low, this.high & other.high);
+  static and(out: Uint64, a: Uint64, b: Uint64): Uint64 {
+    out.low = a.low & b.low;
+    out.high = a.high & b.high;
+    return out;
+  }
+
+  static add(out: Uint64, a: Uint64, b: Uint64): Uint64 {
+    let lowSum = a.low + b.low;
+    let highSum = a.high + b.high;
+    const low = lowSum >>> 0;
+    if (low !== lowSum) highSum += 1;
+    out.low = low;
+    out.high = highSum >>> 0;
+    return out;
+  }
+
+  static addUint32(out: Uint64, a: Uint64, b: number): Uint64 {
+    let lowSum = a.low + b;
+    let highSum = a.high;
+    const low = lowSum >>> 0;
+    if (low !== lowSum) highSum += 1;
+    out.low = low;
+    out.high = highSum >>> 0;
+    return out;
+  }
+
+  static decrement(out: Uint64, input: Uint64): Uint64 {
+    let {low, high} = input;
+    if (low === 0) {
+      high -= 1;
+    }
+    out.low = (low - 1) >>> 0;
+    out.high = high >>> 0;
+    return out;
+  }
+
+  static increment(out: Uint64, input: Uint64): Uint64 {
+    let {low, high} = input;
+    if (low === 0xFFFFFFFF) high += 1;
+    out.low = (low + 1) >>> 0;
+    out.high = high >>> 0;
+    return out;
+  }
+
+  static subtract(out: Uint64, a: Uint64, b: Uint64): Uint64 {
+    let lowSum = a.low - b.low;
+    let highSum = a.high - b.high;
+    const low = lowSum >>> 0;
+    if (low !== lowSum) highSum -= 1;
+    out.low = low;
+    out.high = highSum >>> 0;
+    return out;
+  }
+
+  static multiplyUint32(out: Uint64, a: Uint64, b: number): Uint64 {
+    const {low, high} = a;
+    out.low = Math.imul(low, b) >>> 0;
+    out.high = (Math.imul(high, b) + uint32MultiplyHigh(low, b)) >>> 0;
+    return out;
+  }
+
+  static lowMask(out: Uint64, bits: number) {
+    if (bits <= 32) {
+      out.high = 0;
+      out.low = 0xffffffff >>> (32 - bits);
+    } else {
+      out.high = 0xffffffff >>> (bits - 32);
+      out.low = 0xffffffff;
+    }
+    return out;
   }
 }

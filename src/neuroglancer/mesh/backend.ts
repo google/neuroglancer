@@ -16,7 +16,7 @@
 
 import {Chunk, ChunkSource} from 'neuroglancer/chunk_manager/backend';
 import {ChunkPriorityTier, ChunkState} from 'neuroglancer/chunk_manager/base';
-import {EncodedMeshData, FRAGMENT_SOURCE_RPC_ID, MESH_LAYER_RPC_ID, MULTISCALE_FRAGMENT_SOURCE_RPC_ID, MULTISCALE_MESH_LAYER_RPC_ID} from 'neuroglancer/mesh/base';
+import {EncodedMeshData, EncodedVertexPositions, FRAGMENT_SOURCE_RPC_ID, MESH_LAYER_RPC_ID, MeshVertexIndices, MULTISCALE_FRAGMENT_SOURCE_RPC_ID, MULTISCALE_MESH_LAYER_RPC_ID, MultiscaleFragmentFormat, VertexPositionFormat} from 'neuroglancer/mesh/base';
 import {getDesiredMultiscaleMeshChunks, MultiscaleMeshManifest} from 'neuroglancer/mesh/multiscale';
 import {computeTriangleStrips} from 'neuroglancer/mesh/triangle_strips';
 import {PerspectiveViewRenderLayer, PerspectiveViewState} from 'neuroglancer/perspective_view/backend';
@@ -29,6 +29,7 @@ import {convertEndian32, Endianness} from 'neuroglancer/util/endian';
 import {getFrustrumPlanes, mat4, vec3} from 'neuroglancer/util/geom';
 import {verifyObject, verifyObjectProperty, verifyStringArray} from 'neuroglancer/util/json';
 import {Uint64} from 'neuroglancer/util/uint64';
+import {zorder3LessThan} from 'neuroglancer/util/zorder';
 import {getBasePriority, getPriorityTier} from 'neuroglancer/visibility_priority/backend';
 import {registerSharedObject, RPC} from 'neuroglancer/worker_rpc';
 
@@ -79,9 +80,13 @@ export class ManifestChunk extends Chunk {
   }
 }
 
-interface RawMeshData {
-  vertexPositions: Float32Array;
-  indices: Uint32Array|Uint16Array;
+export interface RawMeshData {
+  vertexPositions: Float32Array|Uint32Array;
+  indices: MeshVertexIndices;
+}
+
+export interface RawPartitionedMeshData extends RawMeshData {
+  subChunkOffsets: Uint32Array;
 }
 
 function serializeMeshData(data: EncodedMeshData, msg: any, transfers: any[]) {
@@ -157,7 +162,9 @@ export function decodeJsonManifestChunk(
  * @param indices The indices of the triangle vertices.  Each triplet of consecutive values
  *     specifies a triangle.
  */
-export function computeVertexNormals(positions: Float32Array, indices: Uint16Array|Uint32Array) {
+export function computeVertexNormals(
+    positions: Float32Array|Uint8Array|Uint16Array|Uint32Array,
+    indices: Uint8Array|Uint16Array|Uint32Array) {
   const faceNormal = vec3.create();
   const v1v0 = vec3.create();
   const v2v1 = vec3.create();
@@ -479,7 +486,7 @@ export class MultiscaleManifestChunk extends Chunk {
   }
 
   downloadSucceeded() {
-    this.systemMemoryBytes = this.manifest!.chunkCoordinates.byteLength;
+    this.systemMemoryBytes = this.manifest!.octree.byteLength;
     this.gpuMemoryBytes = 0;
     super.downloadSucceeded();
     if (this.priorityTier < ChunkPriorityTier.RECENT) {
@@ -534,11 +541,13 @@ export interface MultiscaleMeshSource {
 
 export class MultiscaleMeshSource extends ChunkSource {
   fragmentSource: MultiscaleFragmentSource;
+  format: MultiscaleFragmentFormat;
 
   constructor(rpc: RPC, options: any) {
     super(rpc, options);
     let fragmentSource = this.fragmentSource =
         this.registerDisposer(rpc.getRef<MultiscaleFragmentSource>(options['fragmentSource']));
+    this.format = options['format'];
     fragmentSource.meshSource = this;
   }
 
@@ -654,14 +663,17 @@ export class MultiscaleMeshLayer extends SegmentationLayerSharedObjectCounterpar
       const viewport = viewState.viewport.value;
       const modelViewProjection = mat4.create();
       mat4.multiply(
-          modelViewProjection, viewport.viewProjectionMat, this.objectToDataTransform.value);
+          modelViewProjection, viewport.viewProjectionMat,
+          mat4.multiply(
+              modelViewProjection, this.objectToDataTransform.value, source.format.transform));
       const clippingPlanes = getFrustrumPlanes(new Float32Array(24), modelViewProjection);
       const detailCutoff = this.renderScaleTarget.value;
       for (const manifestChunk of manifestChunks) {
         const maxLod = manifestChunk.manifest!.lodScales.length - 1;
         getDesiredMultiscaleMeshChunks(
             manifestChunk.manifest!, modelViewProjection, clippingPlanes, detailCutoff,
-            viewport.width, viewport.height, (lod, chunkIndex) => {
+            viewport.width, viewport.height, (lod, chunkIndex, _renderScale, empty) => {
+              if (empty) return;
               let fragmentChunk = source.getFragmentChunk(manifestChunk, lod, chunkIndex);
               chunkManager.requestChunk(
                   fragmentChunk, priorityTier,
@@ -672,15 +684,13 @@ export class MultiscaleMeshLayer extends SegmentationLayerSharedObjectCounterpar
   }
 }
 
-function convertMeshData(data: {
-  vertexPositions: Float32Array,
-  indices: Uint32Array|Uint16Array,
-  subChunkOffsets?: Uint32Array
-}): EncodedMeshData {
+function convertMeshData(
+    data: RawMeshData&{subChunkOffsets?: Uint32Array},
+    vertexPositionFormat: VertexPositionFormat): EncodedMeshData {
   const normals = computeVertexNormals(data.vertexPositions, data.indices);
   const encodedNormals = new Uint8Array(normals.length / 3 * 2);
   encodeNormals32fx3ToOctahedron8x2(encodedNormals, normals);
-  let encodedIndices: Uint16Array| Uint32Array;
+  let encodedIndices: MeshVertexIndices;
   let strips: boolean;
   if (CONVERT_TO_TRIANGLE_STRIPS) {
     encodedIndices = computeTriangleStrips(data.indices, data.subChunkOffsets);
@@ -694,20 +704,95 @@ function convertMeshData(data: {
     }
     strips = false;
   }
+  let encodedVertexPositions: EncodedVertexPositions;
+  if (vertexPositionFormat === VertexPositionFormat.uint10) {
+    const vertexPositions = data.vertexPositions;
+    const numVertices = vertexPositions.length / 3;
+    encodedVertexPositions = new Uint32Array(numVertices);
+    for (let inputIndex = 0, outputIndex = 0; outputIndex < numVertices;
+         inputIndex += 3, ++outputIndex) {
+      encodedVertexPositions[outputIndex] =
+          ((vertexPositions[inputIndex] & 1023) | ((vertexPositions[inputIndex + 1] & 1023) << 10) |
+           ((vertexPositions[inputIndex + 2] & 1023) << 20));
+    }
+  } else if (vertexPositionFormat === VertexPositionFormat.uint16) {
+    const vertexPositions = data.vertexPositions;
+    if (vertexPositions.BYTES_PER_ELEMENT === 2) {
+      encodedVertexPositions = vertexPositions;
+    } else {
+      encodedVertexPositions = new Uint16Array(vertexPositions.length);
+      encodedVertexPositions.set(vertexPositions);
+    }
+  } else {
+    encodedVertexPositions = data.vertexPositions as Float32Array;
+  }
   return {
-    vertexPositions: data.vertexPositions,
+    vertexPositions: encodedVertexPositions,
     vertexNormals: encodedNormals,
     indices: encodedIndices,
     strips,
   };
 }
 
-export function assignMeshFragmentData(chunk: FragmentChunk, data: RawMeshData) {
-  chunk.meshData = convertMeshData(data);
+export function assignMeshFragmentData(
+    chunk: FragmentChunk, data: RawMeshData,
+    vertexPositionFormat: VertexPositionFormat = VertexPositionFormat.float32) {
+  chunk.meshData = convertMeshData(data, vertexPositionFormat);
 }
 
 export function assignMultiscaleMeshFragmentData(
-    chunk: MultiscaleFragmentChunk, data: RawMeshData&{subChunkOffsets: Uint32Array}) {
-  chunk.meshData = convertMeshData(data);
+    chunk: MultiscaleFragmentChunk, data: RawPartitionedMeshData,
+    vertexPositionFormat: VertexPositionFormat) {
+  chunk.meshData = convertMeshData(data, vertexPositionFormat);
   chunk.subChunkOffsets = data.subChunkOffsets;
+}
+
+export function generateHigherOctreeLevel(
+    octree: Uint32Array, priorStart: number, priorEnd: number): number {
+  let curEnd = priorEnd;
+  for (let i = 0; i < 3; ++i) {
+    octree[curEnd * 5 + i] = octree[priorStart * 5 + i] >>> 1;
+  }
+  octree[curEnd * 5 + 3] = priorStart;
+  for (let i = priorStart + 1; i < priorEnd; ++i) {
+    const x = octree[i * 5] >>> 1, y = octree[i * 5 + 1] >>> 1, z = octree[i * 5 + 2] >>> 1;
+    if (x !== octree[curEnd * 5] || y !== octree[curEnd * 5 + 1] || z !== octree[curEnd * 5 + 2]) {
+      octree[curEnd * 5 + 4] = i;
+      ++curEnd;
+      octree[curEnd * 5] = x;
+      octree[curEnd * 5 + 1] = y;
+      octree[curEnd * 5 + 2] = z;
+      octree[curEnd * 5 + 3] = i;
+    }
+  }
+  octree[curEnd * 5 + 4] = priorEnd;
+  ++curEnd;
+  return curEnd;
+}
+
+export function computeOctreeChildOffsets(
+    octree: Uint32Array, childStart: number, childEnd: number, parentEnd: number) {
+  let childNode = childStart;
+  for (let parentNode = childEnd; parentNode < parentEnd; ++parentNode) {
+    const parentX = octree[parentNode * 5], parentY = octree[parentNode * 5 + 1],
+          parentZ = octree[parentNode * 5 + 2];
+    while (childNode < childEnd) {
+      const childX = octree[childNode * 5] >>> 1, childY = octree[childNode * 5 + 1] >>> 1,
+            childZ = octree[childNode * 5 + 2] >>> 1;
+      if (!zorder3LessThan(childX, childY, childZ, parentX, parentY, parentZ)) {
+        break;
+      }
+      ++childNode;
+    }
+    octree[parentNode * 5 + 3] = childNode;
+    while (childNode < childEnd) {
+      const childX = octree[childNode * 5] >>> 1, childY = octree[childNode * 5 + 1] >>> 1,
+            childZ = octree[childNode * 5 + 2] >>> 1;
+      if (childX != parentX || childY != parentY || childZ != parentZ) {
+        break;
+      }
+      ++childNode;
+    }
+    octree[parentNode * 5 + 4] += childNode;
+  }
 }

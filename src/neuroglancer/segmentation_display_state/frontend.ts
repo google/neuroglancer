@@ -126,6 +126,7 @@ export function registerRedrawWhenSegmentationDisplayStateChanged(
   renderLayer.registerDisposer(displayState.rootSegments.changed.add(dispatchRedrawNeeded));
   renderLayer.registerDisposer(displayState.visibleSegments2D!.changed.add(dispatchRedrawNeeded));
   renderLayer.registerDisposer(displayState.visibleSegments3D.changed.add(dispatchRedrawNeeded));
+  renderLayer.registerDisposer(displayState.saturation.changed.add(dispatchRedrawNeeded));
   renderLayer.registerDisposer(displayState.highlightedSegments.changed.add(dispatchRedrawNeeded));
   renderLayer.registerDisposer(displayState.segmentEquivalences.changed.add(dispatchRedrawNeeded));
   renderLayer.registerDisposer(

@@ -160,13 +160,17 @@ export function parseSpecialUrl(url: string): [string[], string] {
     const baseUrls = [
       `https://storage.googleapis.com/${bucket}`,
     ];
-    return [baseUrls, match[3]];
+    let path = match[3];
+    if (path === undefined) path = '';
+    return [baseUrls, path];
   } else if (protocol === 's3') {
     const bucket = match[2];
     const baseUrls = [
       `https://s3.amazonaws.com/${bucket}`,
     ];
-    return [baseUrls, match[3]];
+    let path = match[3];
+    if (path === undefined) path = '';
+    return [baseUrls, path];
   }
   return [[url], ''];
 }

@@ -35,7 +35,8 @@ class Skeleton(object):
         vertex_attributes = self.vertex_attributes
         result.write(struct.pack('<II', vertex_positions.shape[0], edges.shape[0] // 2))
         result.write(vertex_positions.tobytes())
-        if source and len(source.vertex_attributes) > 0:
+        result.write(edges.tobytes())
+        if len(source.vertex_attributes) > 0:
             for name, info in six.iteritems(source.vertex_attributes):
 
                 attribute = np.array(vertex_attributes[name],
@@ -46,7 +47,6 @@ class Skeleton(object):
                     raise ValueError('Expected attribute %r to have shape %r, but was: %r' %
                                      (name, expected_shape, attribute.shape))
                 result.write(attribute.tobytes())
-        result.write(edges.tobytes())
         return result.getvalue()
 
 

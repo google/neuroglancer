@@ -36,10 +36,10 @@ export enum ChunkState {
 
   EXPIRED = 7,
 
-  COMPUTING = 8,
+  // If new states are added, keep numChangeStates in sync.
 }
 
-export const numChunkStates = 9;
+export const numChunkStates = 8;
 
 export enum ChunkPriorityTier {
   FIRST_TIER = 0,

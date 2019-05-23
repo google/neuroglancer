@@ -14,9 +14,8 @@
  * limitations under the License.
  */
 
-import {binarySearchLowerBound} from 'neuroglancer/util/array';
 import {isAABBVisible, mat4, vec3} from 'neuroglancer/util/geom';
-import {zorder3LessThan} from 'neuroglancer/util/zorder';
+import {getOctreeChildIndex} from 'neuroglancer/util/zorder';
 
 export interface MultiscaleMeshManifest {
   /**
@@ -48,38 +47,31 @@ export interface MultiscaleMeshManifest {
    *
    * Level of detail `0` is the finest resolution.
    *
-   * It must be the case that `(c >>> lodScales.length) == 0` for all coordinates in
-   * `chunkCoordinates`.
-   *
    * The non-zero values must be non-decreasing.
    *
    * For each chunk, the chosen `lod` is the largest value such that
    * `lodScales[lod] <= detailCutoff * pixelSize`, where `pixelSize` is the maximum spatial distance
    * spanned by a single viewport pixel within the projected image of the chunk.
    */
-  lodScales: number[];
+  lodScales: Float32Array;
 
   /**
-   * Row-major array of shape (n, 3) specifying the chunk coordinates (in units of finest-resolution
-   * chunks, not spatial units) of the finest-resolution chunks that are available.  The chunk
-   * coordinates of each lower resolution are obtained by right-shifting the coordinates by the
-   * level of detail index.
-   *
-   * The chunk coordinates must be sorted by morton index.
+   * C order `[numLods, 3]` array specifying the xyz vertex position offset in object coordinates
+   * for each level of detail.
    */
-  chunkCoordinates: Uint32Array;
-}
+  vertexOffsets: Float32Array;
 
-function getChunkEndIndex(
-    x: number, y: number, z: number, lod: number, startIndex: number, endIndexBound: number,
-    chunkCoordinates: Uint32Array) {
-  endIndexBound = Math.min(endIndexBound, startIndex + 2 ** (lod * 3));
-  const lodMask = ~0 << lod >>> 0;
-  return binarySearchLowerBound(
-      startIndex, endIndexBound,
-      i => zorder3LessThan(
-          x, y, z, chunkCoordinates[i * 3] & lodMask, chunkCoordinates[i * 3 + 1] & lodMask,
-          chunkCoordinates[i * 3 + 2] & lodMask));
+  /**
+   * Row-major `[n, 5]` array where each row is of the form `[x, y, z, start, end_and_empty]`, where
+   * `x`, `y`, and `z` are the chunk grid coordinates of the entry at a particular level of detail.
+   * Row `n-1` corresponds to level of detail `lodScales.length - 1`, the root of the octree.  Given
+   * a row corresponding to an octree node at level of detail `lod`, bits `start` specifies the row
+   * number of the first child octree node at level of detail `lod-1`, and bits `[0,30]` of
+   * `end_and_empty` specify one past the row number of the last child octree node.  Bit `31` of
+   * `end_and_empty` is set to `1` if the mesh for the octree node is empty and should not be
+   * requested/rendered.
+   */
+  octree: Uint32Array;
 }
 
 /**
@@ -91,8 +83,8 @@ function getChunkEndIndex(
 export function getDesiredMultiscaleMeshChunks(
     manifest: MultiscaleMeshManifest, modelViewProjection: mat4, clippingPlanes: Float32Array,
     detailCutoff: number, viewportWidth: number, viewportHeight: number,
-    callback: (lod: number, beginIndex: number, endIndex: number, renderScale: number) => void) {
-  const {chunkCoordinates, lodScales, chunkGridSpatialOrigin, chunkShape} = manifest;
+    callback: (lod: number, row: number, renderScale: number, empty: number) => void) {
+  const {octree, lodScales, chunkGridSpatialOrigin, chunkShape} = manifest;
   const maxLod = lodScales.length - 1;
   const m00 = modelViewProjection[0], m01 = modelViewProjection[4], m02 = modelViewProjection[8],
         m10 = modelViewProjection[1], m11 = modelViewProjection[5], m12 = modelViewProjection[9],
@@ -136,25 +128,14 @@ export function getDesiredMultiscaleMeshChunks(
 
   const scaleFactor = Math.max(xScale, yScale, zScale);
 
-  function handleChunk(
-      lod: number, chunkIndex: number, chunkEndIndexBound: number, priorLodScale: number) {
-    const lodMask = ~0 << lod >>> 0;
+  function handleChunk(lod: number, row: number, priorLodScale: number) {
     const size = 1 << lod;
-    const gridX = chunkCoordinates[chunkIndex * 3] & lodMask,
-          gridY = chunkCoordinates[chunkIndex * 3 + 1] & lodMask,
-          gridZ = chunkCoordinates[chunkIndex * 3 + 2] & lodMask;
-    let chunkEndIndex: number;
-    if (lod == maxLod) {
-      chunkEndIndex = chunkEndIndexBound;
-    } else if (lod == 0) {
-      chunkEndIndex = chunkIndex + 1;
-    } else {
-      chunkEndIndex = getChunkEndIndex(
-          gridX, gridY, gridZ, lod, chunkIndex, chunkEndIndexBound, chunkCoordinates);
-    }
-    let xLower = gridX * chunkShape[0] + chunkGridSpatialOrigin[0],
-        yLower = gridY * chunkShape[1] + chunkGridSpatialOrigin[1],
-        zLower = gridZ * chunkShape[2] + chunkGridSpatialOrigin[2];
+    const rowOffset = row * 5;
+    const gridX = octree[rowOffset], gridY = octree[rowOffset + 1], gridZ = octree[rowOffset + 2],
+          childBegin = octree[rowOffset + 3], childEndAndEmpty = octree[rowOffset + 4];
+    let xLower = gridX * size * chunkShape[0] + chunkGridSpatialOrigin[0],
+        yLower = gridY * size * chunkShape[1] + chunkGridSpatialOrigin[1],
+        zLower = gridZ * size * chunkShape[2] + chunkGridSpatialOrigin[2];
     let xUpper = xLower + size * chunkShape[0], yUpper = yLower + size * chunkShape[1],
         zUpper = zLower + size * chunkShape[2];
     xLower = Math.max(xLower, objectXLower);
@@ -171,75 +152,127 @@ export function getDesiredMultiscaleMeshChunks(
       if (priorLodScale === 0 || pixelSize * detailCutoff < priorLodScale) {
         const lodScale = lodScales[lod];
         if (lodScale !== 0) {
-          callback(lod, chunkIndex, chunkEndIndex, lodScale / pixelSize);
+          callback(lod, row, lodScale / pixelSize, (childEndAndEmpty >>> 31));
         }
 
         if (lod > 0 && (lodScale === 0 || pixelSize * detailCutoff < lodScale)) {
           const nextPriorLodScale = lodScale === 0 ? priorLodScale : lodScale;
-          do {
-            chunkIndex = handleChunk(lod - 1, chunkIndex, chunkEndIndex, nextPriorLodScale);
-          } while (chunkIndex < chunkEndIndex);
+          const childEnd = (childEndAndEmpty & 0x7FFFFFFF) >>> 0;
+          for (let childRow = childBegin; childRow < childEnd; ++childRow) {
+            handleChunk(lod - 1, childRow, nextPriorLodScale);
+          }
         }
       }
     }
-    return chunkEndIndex;
   }
-
-  const numChunks = chunkCoordinates.length / 3;
-  handleChunk(maxLod, 0, numChunks, 0);
+  handleChunk(maxLod, octree.length / 5 - 1, 0);
 }
 
 export function getMultiscaleChunksToDraw(
     manifest: MultiscaleMeshManifest, modelViewProjection: mat4, clippingPlanes: Float32Array,
     detailCutoff: number, viewportWidth: number, viewportHeight: number,
-    hasChunk: (lod: number, chunkIndex: number, renderScale: number) => boolean,
+    hasChunk: (lod: number, row: number, renderScale: number) => boolean,
     callback: (
-        lod: number, chunkIndex: number, subChunkBegin: number, subChunkEnd: number,
+        lod: number, row: number, subChunkBegin: number, subChunkEnd: number,
         renderScale: number) => void) {
-  const maxLod = manifest.lodScales.length - 1;
-
+  const {lodScales} = manifest;
+  let maxLod = 0;
+  while (maxLod + 1 < lodScales.length && lodScales[maxLod + 1] !== 0) {
+    ++maxLod;
+  }
   const stackEntryStride = 3;
 
+  // [row, parentSubChunkIndex, renderScale]
   const stack: number[] = [];
   let stackDepth = 0;
+  let priorSubChunkIndex = 0;
+  function emitChunksUpTo(targetStackIndex: number, subChunkIndex: number) {
+    while (true) {
+      if (stackDepth === 0) return;
 
-  let priorChunkIndex = 0;
-
-  function emitChunksUpTo(chunkIndex: number) {
-    while (priorChunkIndex < chunkIndex && stackDepth > 0) {
+      // Finish last chunk of last (finest) lod.
       const stackIndex = stackDepth - 1;
-      const entryStartIndex = stack[stackEntryStride * stackIndex];
-      const entryEndIndex = stack[stackEntryStride * stackIndex + 1];
-      const curBegin = Math.max(entryStartIndex, priorChunkIndex);
-      const curEnd = Math.min(entryEndIndex, chunkIndex);
-      if (curBegin < curEnd) {
-        callback(
-            maxLod - stackIndex, entryStartIndex, curBegin - entryStartIndex,
-            curEnd - entryStartIndex, stack[stackEntryStride * stackIndex + 2]);
+      const entryLod = maxLod - stackIndex;
+      const entryRow = stack[stackIndex * stackEntryStride];
+      const numSubChunks = entryLod === 0 ? 1 : 8;
+      const entrySubChunkIndex = stack[stackIndex * stackEntryStride + 1];
+      const entryRenderScale = stack[stackIndex * stackEntryStride + 2];
+      if (targetStackIndex === stackDepth) {
+        const endSubChunk = subChunkIndex & (numSubChunks - 1);
+
+        if (priorSubChunkIndex !== endSubChunk && entryRow !== -1) {
+          callback(entryLod, entryRow, priorSubChunkIndex, endSubChunk, entryRenderScale);
+        }
+        priorSubChunkIndex = endSubChunk + 1;
+        return;
       }
-      if (curEnd == entryEndIndex) {
-        --stackDepth;
+      if (priorSubChunkIndex !== numSubChunks && entryRow !== -1) {
+        callback(entryLod, entryRow, priorSubChunkIndex, numSubChunks, entryRenderScale);
       }
-      priorChunkIndex = curEnd;
+      priorSubChunkIndex = entrySubChunkIndex + 1;
+      --stackDepth;
     }
-    priorChunkIndex = chunkIndex;
   }
 
+  let priorMissingLod = 0;
+
+  const {octree} = manifest;
   getDesiredMultiscaleMeshChunks(
       manifest, modelViewProjection, clippingPlanes, detailCutoff, viewportWidth, viewportHeight,
-      (lod, chunkBeginIndex, chunkEndIndex, renderScale) => {
-        if (!hasChunk(lod, chunkBeginIndex, renderScale)) {
+      (lod, row, renderScale, empty) => {
+        if (!empty && !hasChunk(lod, row, renderScale)) {
+          priorMissingLod = Math.max(lod, priorMissingLod);
           return;
         }
-        emitChunksUpTo(chunkBeginIndex);
+        if (lod < priorMissingLod) return;
+        priorMissingLod = 0;
+        const rowOffset = row * 5;
+        const x = octree[rowOffset], y = octree[rowOffset + 1], z = octree[rowOffset + 2];
+        const subChunkIndex = getOctreeChildIndex(x, y, z);
         const stackIndex = maxLod - lod;
-        stack[stackIndex * stackEntryStride] = chunkBeginIndex;
-        stack[stackIndex * stackEntryStride + 1] = chunkEndIndex;
-        stack[stackIndex * stackEntryStride + 2] = renderScale;
+        emitChunksUpTo(stackIndex, subChunkIndex);
+        const stackOffset = stackIndex * stackEntryStride;
+        stack[stackOffset] = empty ? -1 : row;
+        stack[stackOffset + 1] = subChunkIndex;
+        stack[stackOffset + 2] = renderScale;
+        priorSubChunkIndex = 0;
         stackDepth = stackIndex + 1;
       });
 
-  emitChunksUpTo(manifest.chunkCoordinates.length / 3);
+  emitChunksUpTo(0, 0);
+}
+
+export function validateOctree(octree: Uint32Array) {
+  if (octree.length % 5 !== 0) {
+    throw new Error('Invalid length');
+  }
+  const numNodes = octree.length / 5;
+  const seenNodes = new Set<number>();
+  function exploreNode(node: number) {
+    if (seenNodes.has(node)) {
+      throw new Error('Previously seen node');
+    }
+    seenNodes.add(node);
+    if (node < 0 || node >= numNodes) {
+      throw new Error('Invalid node reference');
+    }
+    const x = octree[node * 5], y = octree[node * 5 + 1], z = octree[node * 5 + 2],
+          beginChild = octree[node * 5 + 3], endChild = octree[node * 5 + 4];
+    if (beginChild < 0 || endChild < 0 || endChild < beginChild || endChild > numNodes ||
+        beginChild + 8 < endChild) {
+      throw new Error('Invalid child references');
+    }
+    for (let child = beginChild; child < endChild; ++child) {
+      const childX = octree[child * 5], childY = octree[child * 5 + 1],
+            childZ = octree[child * 5 + 2];
+      if ((childX >>> 1) !== x || (childY >>> 1) !== y || (childZ >>> 1) != z) {
+        throw new Error('invalid child');
+      }
+      exploreNode(child);
+    }
+  }
+  if (numNodes === 0) return;
+  exploreNode(numNodes - 1);
 }
 
 export function getMultiscaleFragmentKey(objectKey: string, lod: number, chunkIndex: number) {

@@ -101,7 +101,7 @@ vec4 getCircleColor(vec4 interiorColor, vec4 borderColor) {
     gl.uniform4f(
         shader.uniform('uCircleParams'), totalRadius / renderContext.viewportWidth,
         totalRadius / renderContext.viewportHeight, options.interiorRadiusInPixels / totalRadius,
-        options.featherWidthInPixels / totalRadius);
+        options.featherWidthInPixels === 0 ? 1e-6 : options.featherWidthInPixels / totalRadius);
     this.quadHelper.draw(gl, count);
     shader.gl.disableVertexAttribArray(aCircleCornerOffset);
   }

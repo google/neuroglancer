@@ -21,6 +21,7 @@
  */
 
 import {hashCombine} from 'neuroglancer/gpu_hash/hash_function';
+import {MeshVertexIndices} from 'neuroglancer/mesh/base';
 
 const DEBUG_TIMING = false;
 
@@ -31,7 +32,7 @@ const DEBUG_TIMING = false;
  * orientations, which would normally be a problem, but since we render all faces as double-sided it
  * isn't an issue.
  */
-function normalizeTriangleVertexOrder(indices: Uint32Array|Uint16Array) {
+function normalizeTriangleVertexOrder(indices: MeshVertexIndices) {
   let maxVertex = 0;
   for (let i = 0, length = indices.length; i < length; i += 3) {
     let a = indices[i], b = indices[i + 1], c = indices[i + 2];
@@ -159,7 +160,7 @@ export function getEdgeMapSize(numIndices: number) {
 }
 
 function computeTriangleAdjacencies(
-    triangleAdjacencies: Uint32Array, indices: Uint32Array|Uint16Array,
+    triangleAdjacencies: Uint32Array, indices: MeshVertexIndices,
     edgeMap: Uint32Array): Uint32Array {
   const numTriangles = indices.length / 3;
   // Row-major array of shape `[numTriangles, 3]` specifying the triangles adjacent to each
@@ -201,8 +202,8 @@ function computeTriangleAdjacencies(
 }
 
 function emitTriangleStrips(
-    indices: Uint16Array|Uint32Array, triangleAdjacencies: Uint32Array,
-    output: Uint16Array|Uint32Array, outputIndex: number): number {
+    indices: MeshVertexIndices, triangleAdjacencies: Uint32Array, output: MeshVertexIndices,
+    outputIndex: number): number {
   const invalidVertex = ~0 >>> (32 - 8 * output.BYTES_PER_ELEMENT);
   const numIndices = indices.length;
   const numTriangles = numIndices / 3;
@@ -256,8 +257,8 @@ function emitTriangleStrips(
   return outputIndex;
 }
 
-export function computeTriangleStrips<T extends Uint32Array|Uint16Array>(
-    indices: T, subChunkOffsets?: Uint32Array): Uint16Array|Uint32Array {
+export function computeTriangleStrips<T extends MeshVertexIndices>(
+    indices: T, subChunkOffsets?: Uint32Array): MeshVertexIndices {
   if (indices.length === 0) return indices;
   collisions = 0;
   if (subChunkOffsets === undefined) {

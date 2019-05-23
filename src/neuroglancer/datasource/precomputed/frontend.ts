@@ -17,15 +17,16 @@
 import {AnnotationSource, makeDataBoundsBoundingBox} from 'neuroglancer/annotation';
 import {ChunkManager, WithParameters} from 'neuroglancer/chunk_manager/frontend';
 import {DataSource} from 'neuroglancer/datasource';
-import {MeshSourceParameters, SkeletonSourceParameters, VolumeChunkEncoding, VolumeChunkSourceParameters} from 'neuroglancer/datasource/precomputed/base';
-import {MeshSource} from 'neuroglancer/mesh/frontend';
+import {DataEncoding, MeshSourceParameters, MultiscaleMeshMetadata, MultiscaleMeshSourceParameters, ShardingHashFunction, ShardingParameters, SkeletonMetadata, SkeletonSourceParameters, VolumeChunkEncoding, VolumeChunkSourceParameters} from 'neuroglancer/datasource/precomputed/base';
+import {VertexPositionFormat} from 'neuroglancer/mesh/base';
+import {MeshSource, MultiscaleMeshSource} from 'neuroglancer/mesh/frontend';
 import {VertexAttributeInfo} from 'neuroglancer/skeleton/base';
 import {SkeletonSource} from 'neuroglancer/skeleton/frontend';
 import {DataType, VolumeChunkSpecification, VolumeSourceOptions, VolumeType} from 'neuroglancer/sliceview/volume/base';
 import {MultiscaleVolumeChunkSource as GenericMultiscaleVolumeChunkSource, VolumeChunkSource} from 'neuroglancer/sliceview/volume/frontend';
 import {mat4, vec3} from 'neuroglancer/util/geom';
-import {openShardedHttpRequest, parseSpecialUrl, sendHttpRequest} from 'neuroglancer/util/http_request';
-import {parseArray, parseFixedLengthArray, parseIntVec, verifyEnumString, verifyFinitePositiveFloat, verifyObject, verifyObjectAsMap, verifyObjectProperty, verifyOptionalString, verifyPositiveInt, verifyString} from 'neuroglancer/util/json';
+import {HttpError, openShardedHttpRequest, parseSpecialUrl, sendHttpRequest} from 'neuroglancer/util/http_request';
+import {parseArray, parseFixedLengthArray, parseIntVec, verifyEnumString, verifyFiniteFloat, verifyFinitePositiveFloat, verifyInt, verifyObject, verifyObjectProperty, verifyOptionalString, verifyPositiveInt, verifyString} from 'neuroglancer/util/json';
 
 class PrecomputedVolumeChunkSource extends
 (WithParameters(VolumeChunkSource, VolumeChunkSourceParameters)) {}
@@ -33,14 +34,31 @@ class PrecomputedVolumeChunkSource extends
 class PrecomputedMeshSource extends
 (WithParameters(MeshSource, MeshSourceParameters)) {}
 
-class PrecomputedSkeletonSource extends
+class PrecomputedMultiscaleMeshSource extends
+(WithParameters(MultiscaleMeshSource, MultiscaleMeshSourceParameters)) {}
+
+export class PrecomputedSkeletonSource extends
 (WithParameters(SkeletonSource, SkeletonSourceParameters)) {
   get skeletonVertexCoordinatesInVoxels() {
     return false;
   }
   get vertexAttributes() {
-    return this.parameters.vertexAttributes;
+    return this.parameters.metadata.vertexAttributes;
   }
+}
+
+function resolvePath(a: string, b: string) {
+  const outputParts = a.split('/');
+  for (const part of b.split('/')) {
+    if (part === '..') {
+      if (outputParts.length !== 0) {
+        outputParts.length = outputParts.length - 1;
+        continue;
+      }
+    }
+    outputParts.push(part);
+  }
+  return outputParts.join('/');
 }
 
 class ScaleInfo {
@@ -51,12 +69,13 @@ class ScaleInfo {
   size: vec3;
   chunkSizes: vec3[];
   compressedSegmentationBlockSize: vec3|undefined;
+  sharding: ShardingParameters|undefined;
   constructor(obj: any) {
     verifyObject(obj);
     this.resolution = verifyObjectProperty(
         obj, 'resolution', x => parseFixedLengthArray(vec3.create(), x, verifyFinitePositiveFloat));
-    this.voxelOffset =
-        verifyObjectProperty(obj, 'voxel_offset', x => parseIntVec(vec3.create(), x)),
+    this.voxelOffset = verifyObjectProperty(
+        obj, 'voxel_offset', x => x === undefined ? vec3.create() : parseIntVec(vec3.create(), x));
     this.size = verifyObjectProperty(
         obj, 'size', x => parseFixedLengthArray(vec3.create(), x, verifyPositiveInt));
     this.chunkSizes = verifyObjectProperty(
@@ -64,6 +83,10 @@ class ScaleInfo {
         x => parseArray(x, y => parseFixedLengthArray(vec3.create(), y, verifyPositiveInt)));
     if (this.chunkSizes.length === 0) {
       throw new Error('No chunk sizes specified.');
+    }
+    this.sharding = verifyObjectProperty(obj, 'sharding', parseShardingParameters);
+    if (this.sharding !== undefined && this.chunkSizes.length !== 1) {
+      throw new Error('Sharding requires a single chunk size per scale');
     }
     let encoding = this.encoding =
         verifyObjectProperty(obj, 'encoding', x => verifyEnumString(x, VolumeChunkEncoding));
@@ -81,35 +104,37 @@ export class MultiscaleVolumeChunkSource implements GenericMultiscaleVolumeChunk
   numChannels: number;
   volumeType: VolumeType;
   mesh: string|undefined;
-  skeleton: string|undefined;
+  skeletons: string|undefined;
   scales: ScaleInfo[];
 
   getMeshSource() {
-    let {mesh} = this;
-    if (mesh === undefined) {
-      return null;
+    const {mesh} = this;
+    if (mesh !== undefined) {
+      return getMeshSource(this.chunkManager, this.baseUrls, resolvePath(this.path, mesh));
     }
-    return getShardedMeshSource(
-        this.chunkManager, {baseUrls: this.baseUrls, path: `${this.path}/${mesh}`, lod: 0});
+    return null;
   }
 
   getSkeletonSource() {
-    let {skeleton} = this;
-    if (skeleton === undefined) {
-      return null;
+    const {skeletons} = this;
+    if (skeletons !== undefined) {
+      return getSkeletonSource(this.chunkManager, this.baseUrls, resolvePath(this.path, skeletons));
     }
-    return getSkeletonSource(
-        this.chunkManager, `${this.baseUrls[0]}${this.path}/${this.skeleton}?{}`);
+    return null;
   }
 
   constructor(
       public chunkManager: ChunkManager, public baseUrls: string[], public path: string, obj: any) {
     verifyObject(obj);
+    const t = verifyObjectProperty(obj, '@type', verifyOptionalString);
+    if (t !== undefined && t !== 'neuroglancer_multiscale_volume') {
+      throw new Error(`Invalid type: ${JSON.stringify(t)}`);
+    }
     this.dataType = verifyObjectProperty(obj, 'data_type', x => verifyEnumString(x, DataType));
     this.numChannels = verifyObjectProperty(obj, 'num_channels', verifyPositiveInt);
     this.volumeType = verifyObjectProperty(obj, 'type', x => verifyEnumString(x, VolumeType));
     this.mesh = verifyObjectProperty(obj, 'mesh', verifyOptionalString);
-    this.skeleton = verifyObjectProperty(obj, 'skeletons', verifyOptionalString);
+    this.skeletons = verifyObjectProperty(obj, 'skeletons', verifyOptionalString);
     this.scales = verifyObjectProperty(obj, 'scales', x => parseArray(x, y => new ScaleInfo(y)));
   }
 
@@ -133,9 +158,10 @@ export class MultiscaleVolumeChunkSource implements GenericMultiscaleVolumeChunk
           .map(spec => this.chunkManager.getChunkSource(PrecomputedVolumeChunkSource, {
             spec,
             parameters: {
-              'baseUrls': this.baseUrls,
-              'path': `${this.path}/${scaleInfo.key}`,
-              'encoding': scaleInfo.encoding
+              baseUrls: this.baseUrls,
+              path: resolvePath(this.path, scaleInfo.key),
+              encoding: scaleInfo.encoding,
+              sharding: scaleInfo.sharding,
             }
           }));
     });
@@ -144,40 +170,12 @@ export class MultiscaleVolumeChunkSource implements GenericMultiscaleVolumeChunk
   getStaticAnnotations() {
     const baseScale = this.scales[0];
     const annotationSet =
-      new AnnotationSource(mat4.fromScaling(mat4.create(), baseScale.resolution));
+        new AnnotationSource(mat4.fromScaling(mat4.create(), baseScale.resolution));
     annotationSet.readonly = true;
     annotationSet.add(makeDataBoundsBoundingBox(
         baseScale.voxelOffset, vec3.add(vec3.create(), baseScale.voxelOffset, baseScale.size)));
     return annotationSet;
   }
-}
-
-function parseVertexAttributeInfo(x: any): VertexAttributeInfo {
-  verifyObject(x);
-  return {
-    dataType: verifyObjectProperty(x, 'dataType', y => verifyEnumString(y, DataType)),
-    numComponents: verifyObjectProperty(x, 'numComponents', verifyPositiveInt),
-  };
-}
-
-function parseSkeletonVertexAttributes(spec: string): Map<string, VertexAttributeInfo> {
-  return verifyObjectAsMap(JSON.parse(spec), parseVertexAttributeInfo);
-}
-
-export function getSkeletonSource(chunkManager: ChunkManager, path: string) {
-  const skeletonUrlPattern = /^((?:http|https):\/\/.*\/)([^\/?]+)\?(.*)$/;
-
-  let match = path.match(skeletonUrlPattern);
-  if (match === null) {
-    throw new Error(`Invalid skeleton volume path: ${JSON.stringify(path)}`);
-  }
-  return chunkManager.getChunkSource(PrecomputedSkeletonSource, {
-    parameters: {
-      baseUrls: [match[1]],
-      path: match[2],
-      vertexAttributes: parseSkeletonVertexAttributes(match[3]),
-    }
-  });
 }
 
 export function getShardedMeshSource(chunkManager: ChunkManager, parameters: MeshSourceParameters) {
@@ -193,9 +191,146 @@ export function getShardedVolume(chunkManager: ChunkManager, baseUrls: string[],
                         new MultiscaleVolumeChunkSource(chunkManager, baseUrls, path, response)));
 }
 
-export function getMeshSource(chunkManager: ChunkManager, url: string) {
-  const [baseUrls, path] = parseSpecialUrl(url);
-  return getShardedMeshSource(chunkManager, {baseUrls, path, lod: 0});
+function parseTransform(data: any): mat4 {
+  return verifyObjectProperty(data, 'transform', value => {
+    const transform = mat4.create();
+    if (value !== undefined) {
+      parseFixedLengthArray(transform.subarray(0, 12), value, verifyFiniteFloat);
+    }
+    mat4.transpose(transform, transform);
+    return transform;
+  });
+}
+
+function parseMeshMetadata(data: any): MultiscaleMeshMetadata {
+  verifyObject(data);
+  const t = verifyObjectProperty(data, '@type', verifyString);
+  if (t !== 'neuroglancer_multilod_draco') {
+    throw new Error(`Unsupported mesh type: ${JSON.stringify(t)}`);
+  }
+  const lodScaleMultiplier =
+      verifyObjectProperty(data, 'lod_scale_multiplier', verifyFinitePositiveFloat);
+  const vertexQuantizationBits =
+      verifyObjectProperty(data, 'vertex_quantization_bits', verifyPositiveInt);
+  const transform = parseTransform(data);
+  const sharding = verifyObjectProperty(data, 'sharding', parseShardingParameters);
+  return {lodScaleMultiplier, transform, sharding, vertexQuantizationBits};
+}
+
+function getMeshMetadata(chunkManager: ChunkManager, baseUrls: string[], path: string):
+    Promise<MultiscaleMeshMetadata|undefined> {
+  return chunkManager.memoize.getUncounted(
+      {'type': 'precomputed:MeshSource', baseUrls, path},
+      () => fetch(baseUrls[0] + path + '/info').then(response => {
+        if (!response.ok) {
+          return undefined;
+        }
+        return response.json().then(value => parseMeshMetadata(value));
+      }));
+}
+
+function parseShardingEncoding(y: any): DataEncoding {
+  if (y === undefined) return DataEncoding.RAW;
+  return verifyEnumString(y, DataEncoding);
+}
+
+function parseShardingParameters(shardingData: any): ShardingParameters|undefined {
+  if (shardingData === undefined) return undefined;
+  verifyObject(shardingData);
+  const t = verifyObjectProperty(shardingData, '@type', verifyString);
+  if (t !== 'neuroglancer_uint64_sharded_v1') {
+    throw new Error(`Unsupported sharding format: ${JSON.stringify(t)}`);
+  }
+  const hash =
+      verifyObjectProperty(shardingData, 'hash', y => verifyEnumString(y, ShardingHashFunction));
+  const preshiftBits = verifyObjectProperty(shardingData, 'preshift_bits', verifyInt);
+  const shardBits = verifyObjectProperty(shardingData, 'shard_bits', verifyInt);
+  const minishardBits = verifyObjectProperty(shardingData, 'minishard_bits', verifyInt);
+  const minishardIndexEncoding =
+      verifyObjectProperty(shardingData, 'minishard_index_encoding', parseShardingEncoding);
+  const dataEncoding = verifyObjectProperty(shardingData, 'data_encoding', parseShardingEncoding);
+  return {hash, preshiftBits, shardBits, minishardBits, minishardIndexEncoding, dataEncoding};
+}
+
+function parseSkeletonMetadata(data: any): SkeletonMetadata {
+  verifyObject(data);
+  const t = verifyObjectProperty(data, '@type', verifyString);
+  if (t !== 'neuroglancer_skeletons') {
+    throw new Error(`Unsupported skeleton type: ${JSON.stringify(t)}`);
+  }
+  const transform = parseTransform(data);
+  const vertexAttributes = new Map<string, VertexAttributeInfo>();
+  verifyObjectProperty(data, 'vertex_attributes', attributes => {
+    if (attributes === undefined) return;
+    parseArray(attributes, attributeData => {
+      verifyObject(attributeData);
+      const id = verifyObjectProperty(attributeData, 'id', verifyString);
+      if (id === '') throw new Error('vertex attribute id must not be empty');
+      if (vertexAttributes.has(id)) {
+        throw new Error(`duplicate vertex attribute id ${JSON.stringify(id)}`);
+      }
+      const dataType =
+          verifyObjectProperty(attributeData, 'data_type', y => verifyEnumString(y, DataType));
+      const numComponents =
+          verifyObjectProperty(attributeData, 'num_components', verifyPositiveInt);
+      vertexAttributes.set(id, {dataType, numComponents});
+    });
+  });
+  const sharding = verifyObjectProperty(data, 'sharding', parseShardingParameters);
+  return {transform, vertexAttributes, sharding};
+}
+
+function getSkeletonMetadata(
+    chunkManager: ChunkManager, baseUrls: string[], path: string): Promise<SkeletonMetadata> {
+  return chunkManager.memoize.getUncounted(
+      {'type': 'precomputed:SkeletonSource', baseUrls, path}, async () => {
+        const response = await fetch(baseUrls[0] + path + '/info');
+        if (!response.ok) {
+          return parseSkeletonMetadata({
+            '@type': 'neuroglancer_skeletons'
+          });
+          throw new HttpError('GET', response.url, response.status, response.statusText, response.text);
+        }
+        const value = await response.json();
+        return parseSkeletonMetadata(value);
+      });
+}
+
+async function getMeshSource(chunkManager: ChunkManager, baseUrls: string[], path: string) {
+  const metadata = await getMeshMetadata(chunkManager, baseUrls, path);
+  if (metadata === undefined) {
+    return getShardedMeshSource(chunkManager, {baseUrls: baseUrls, path: path, lod: 0});
+  }
+  let vertexPositionFormat: VertexPositionFormat;
+  const {vertexQuantizationBits} = metadata;
+  if (vertexQuantizationBits === 10) {
+    vertexPositionFormat = VertexPositionFormat.uint10;
+  } else if (vertexQuantizationBits === 16) {
+    vertexPositionFormat = VertexPositionFormat.uint16;
+  } else {
+    throw new Error(`Invalid vertex quantization bits: ${vertexQuantizationBits}`);
+  }
+  return chunkManager.getChunkSource(PrecomputedMultiscaleMeshSource, {
+    parameters: {baseUrls, path, metadata},
+    format: {
+      fragmentRelativeVertices: true,
+      vertexPositionFormat,
+      transform: metadata.transform,
+    }
+  });
+}
+
+export async function getSkeletonSource(
+    chunkManager: ChunkManager, baseUrls: string[], path: string) {
+  const metadata = await getSkeletonMetadata(chunkManager, baseUrls, path);
+  return chunkManager.getChunkSource(PrecomputedSkeletonSource, {
+    parameters: {
+      baseUrls,
+      path,
+      metadata,
+    },
+    transform: metadata.transform,
+  });
 }
 
 export function getVolume(chunkManager: ChunkManager, url: string) {
@@ -211,9 +346,11 @@ export class PrecomputedDataSource extends DataSource {
     return getVolume(chunkManager, url);
   }
   getMeshSource(chunkManager: ChunkManager, url: string) {
-    return getMeshSource(chunkManager, url);
+    const [baseUrls, path] = parseSpecialUrl(url);
+    return getMeshSource(chunkManager, baseUrls, path);
   }
   getSkeletonSource(chunkManager: ChunkManager, url: string) {
-    return getSkeletonSource(chunkManager, url);
+    const [baseUrls, path] = parseSpecialUrl(url);
+    return getSkeletonSource(chunkManager, baseUrls, path);
   }
 }
