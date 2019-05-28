@@ -222,7 +222,7 @@ function getMeshMetadata(chunkManager: ChunkManager, baseUrls: string[], path: s
           return undefined;
         }
         return response.json().then(value => parseMeshMetadata(value));
-      }));
+      }, () => undefined));
 }
 
 function parseShardingEncoding(y: any): DataEncoding {
