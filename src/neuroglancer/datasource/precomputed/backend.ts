@@ -25,12 +25,13 @@ import {decodeCompressedSegmentationChunk} from 'neuroglancer/sliceview/backend_
 import {decodeJpegChunk} from 'neuroglancer/sliceview/backend_chunk_decoders/jpeg';
 import {decodeRawChunk} from 'neuroglancer/sliceview/backend_chunk_decoders/raw';
 import {VolumeChunk, VolumeChunkSource} from 'neuroglancer/sliceview/volume/backend';
+import {fetchHttpByteRange} from 'neuroglancer/util/byte_range_http_requests';
 import {CancellationToken} from 'neuroglancer/util/cancellation';
 import {Borrowed} from 'neuroglancer/util/disposable';
 import {convertEndian32, Endianness} from 'neuroglancer/util/endian';
 import {vec3} from 'neuroglancer/util/geom';
 import {murmurHash3_x86_128Hash64Bits} from 'neuroglancer/util/hash';
-import {openShardedHttpRequest, sendHttpRequest} from 'neuroglancer/util/http_request';
+import {openShardedHttpRequest, pickShard, sendHttpRequest} from 'neuroglancer/util/http_request';
 import {stableStringify} from 'neuroglancer/util/json';
 import {Uint64} from 'neuroglancer/util/uint64';
 import {encodeZIndexCompressed} from 'neuroglancer/util/zorder';
@@ -87,11 +88,10 @@ function getMinishardIndexDataSource(
 
               // Multiply minishard by 16.
               const shardIndexStart = Uint64.lshift(new Uint64(), minishard, 4);
-              const shardIndexEnd = Uint64.addUint32(new Uint64(), shardIndexStart, 15);
-              const shardIndexReq = openShardedHttpRequest(baseUrls, indexPath);
-              shardIndexReq.setRequestHeader('Range', `bytes=${shardIndexStart}-${shardIndexEnd}`);
-              const shardIndexResponse =
-                  await sendHttpRequest(shardIndexReq, 'arraybuffer', cancellationToken);
+              const shardIndexEnd = Uint64.addUint32(new Uint64(), shardIndexStart, 16);
+              const shardIndexResponse = await fetchHttpByteRange(
+                  pickShard(baseUrls, indexPath), shardIndexStart, shardIndexEnd,
+                  cancellationToken);
               if (shardIndexResponse.byteLength !== 16) {
                 throw new Error(`Failed to retrieve minishard offset`);
               }
@@ -105,14 +105,11 @@ function getMinishardIndexDataSource(
               if (Uint64.equal(minishardStartOffset, minishardEndOffset)) {
                 throw new Error('Object not found')
               }
-              Uint64.decrement(minishardEndOffset, minishardEndOffset);
 
               const dataPath = shardPathPrefix + '.data';
-              const minishardIndexReq = openShardedHttpRequest(baseUrls, dataPath);
-              minishardIndexReq.setRequestHeader(
-                  'Range', `bytes=${minishardStartOffset}-${minishardEndOffset}`);
-              let minishardIndexResponse =
-                  await sendHttpRequest(minishardIndexReq, 'arraybuffer', cancellationToken);
+              let minishardIndexResponse = await fetchHttpByteRange(
+                  pickShard(baseUrls, dataPath), minishardStartOffset, minishardEndOffset,
+                  cancellationToken);
               if (sharding.minishardIndexEncoding === DataEncoding.GZIP) {
                 minishardIndexResponse = inflate(new Uint8Array(minishardIndexResponse)).buffer;
               }
@@ -189,7 +186,7 @@ function findMinishardEntry(minishardIndex: DecodedMinishardIndex, key: Uint64) 
 
 async function getShardedData(
     minishardIndexSource: MinishardIndexSource, chunk: Chunk, key: Uint64,
-  cancellationToken: CancellationToken): Promise<{shardInfo: ShardInfo, data: ArrayBuffer}> {
+    cancellationToken: CancellationToken): Promise<{shardInfo: ShardInfo, data: ArrayBuffer}> {
   const {sharding} = minishardIndexSource;
   const hashFunction = shardingHashFunctions.get(sharding.hash)!;
   const hashCode = Uint64.rshift(new Uint64(), key, sharding.preshiftBits);
@@ -201,10 +198,9 @@ async function getShardedData(
   const minishardIndex =
       await minishardIndexSource.getData(shardAndMinishard, getPriority, cancellationToken);
   const {startOffset, endOffset} = findMinishardEntry(minishardIndex, key);
-  Uint64.decrement(endOffset, endOffset);
-  const dataReq = openShardedHttpRequest(minishardIndexSource.baseUrls, minishardIndex.shardPath);
-  dataReq.setRequestHeader('Range', `bytes=${startOffset}-${endOffset}`);
-  let data = await sendHttpRequest(dataReq, 'arraybuffer', cancellationToken);
+  let data = await fetchHttpByteRange(
+      pickShard(minishardIndexSource.baseUrls, minishardIndex.shardPath), startOffset, endOffset,
+      cancellationToken);
   if (minishardIndexSource.sharding.dataEncoding === DataEncoding.GZIP) {
     data = inflate(new Uint8Array(data)).buffer;
   }

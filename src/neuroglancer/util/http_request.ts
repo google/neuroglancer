@@ -16,6 +16,7 @@
 
 import {CancellationToken, uncancelableToken} from 'neuroglancer/util/cancellation';
 import {simpleStringHash} from 'neuroglancer/util/hash';
+import {Uint64} from 'neuroglancer/util/uint64';
 
 export type RequestModifier = (request: XMLHttpRequest) => void;
 
@@ -102,6 +103,13 @@ export function sendHttpRequest(
     };
     xhr.send();
   });
+}
+
+const tempUint64 = new Uint64();
+
+export function setByteRange(xhr: XMLHttpRequest, startOffset: Uint64, endOffset: Uint64) {
+  Uint64.decrement(tempUint64, endOffset);
+  xhr.setRequestHeader('Range', `bytes=${startOffset}-${tempUint64}`);
 }
 
 export function sendHttpJsonPostRequest(
