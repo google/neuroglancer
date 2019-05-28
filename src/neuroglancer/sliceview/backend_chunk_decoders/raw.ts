@@ -16,13 +16,16 @@
 
 import {postProcessRawData} from 'neuroglancer/sliceview/backend_chunk_decoders/postprocess';
 import {VolumeChunk} from 'neuroglancer/sliceview/volume/backend';
+import {CancellationToken} from 'neuroglancer/util/cancellation';
 import {DATA_TYPE_BYTES, DataType} from 'neuroglancer/util/data_type';
 import {convertEndian16, convertEndian32, Endianness, ENDIANNESS} from 'neuroglancer/util/endian';
 import {prod3} from 'neuroglancer/util/geom';
 
-export function decodeRawChunk(
-    chunk: VolumeChunk, response: ArrayBuffer, endianness: Endianness = ENDIANNESS,
-    byteOffset: number = 0, byteLength: number = response.byteLength) {
+export async function decodeRawChunk(
+    chunk: VolumeChunk, cancellationToken: CancellationToken, response: ArrayBuffer,
+    endianness: Endianness = ENDIANNESS, byteOffset: number = 0,
+    byteLength: number = response.byteLength) {
+  cancellationToken;
   let {spec} = chunk.source!;
   let {dataType} = spec;
   let numElements = prod3(chunk.chunkDataSize!);
@@ -54,5 +57,5 @@ export function decodeRawChunk(
     default:
       throw new Error(`Unexpected data type: ${dataType}.`);
   }
-  postProcessRawData(chunk, data);
+  await postProcessRawData(chunk, cancellationToken, data);
 }

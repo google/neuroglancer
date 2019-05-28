@@ -47,7 +47,7 @@ function BossSource<Parameters, TBase extends {new (...args: any[]): SharedObjec
 export class BossVolumeChunkSource extends (BossSource(VolumeChunkSource, VolumeChunkSourceParameters)) {
   chunkDecoder = chunkDecoders.get(this.parameters.encoding)!;
 
-  download(chunk: VolumeChunk, cancellationToken: CancellationToken) {
+  async download(chunk: VolumeChunk, cancellationToken: CancellationToken) {
     let {parameters} = this;
     let path = `/latest/cutout/${parameters.collection}/${parameters.experiment}/${
         parameters.channel}/${parameters.resolution}`;
@@ -66,10 +66,11 @@ export class BossVolumeChunkSource extends (BossSource(VolumeChunkSource, Volume
       path += `?window=${parameters.window[0]},${parameters.window[1]}`;
     }
 
-    let acceptHeader: HttpHeader = {key: 'Accept', value: acceptHeaders.get(parameters.encoding)!};
-    let httpCall: HttpCall = {method: 'GET', path: path, responseType: 'arraybuffer', headers: [acceptHeader]};
-    return makeRequest(parameters.baseUrls, this.credentialsProvider, httpCall, cancellationToken)
-        .then(response => this.chunkDecoder(chunk, response));
+    const acceptHeader: HttpHeader = {key: 'Accept', value: acceptHeaders.get(parameters.encoding)!};
+    const httpCall: HttpCall = {method: 'GET', path: path, responseType: 'arraybuffer', headers: [acceptHeader]};
+    const response = await makeRequest(
+        parameters.baseUrls, this.credentialsProvider, httpCall, cancellationToken);
+    await this.chunkDecoder(chunk, cancellationToken, response);
   }
 }
 

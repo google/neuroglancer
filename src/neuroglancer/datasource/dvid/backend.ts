@@ -16,7 +16,7 @@
 
 import {WithParameters} from 'neuroglancer/chunk_manager/backend';
 import {MeshSourceParameters, SkeletonSourceParameters, VolumeChunkEncoding, VolumeChunkSourceParameters} from 'neuroglancer/datasource/dvid/base';
-import { decodeTriangleVertexPositionsAndIndices, FragmentChunk, ManifestChunk, MeshSource, assignMeshFragmentData} from 'neuroglancer/mesh/backend';
+import {assignMeshFragmentData, decodeTriangleVertexPositionsAndIndices, FragmentChunk, ManifestChunk, MeshSource} from 'neuroglancer/mesh/backend';
 import {SkeletonChunk, SkeletonSource} from 'neuroglancer/skeleton/backend';
 import {decodeSwcSkeletonChunk} from 'neuroglancer/skeleton/decode_swc_skeleton';
 import {decodeCompressedSegmentationChunk} from 'neuroglancer/sliceview/backend_chunk_decoders/compressed_segmentation';
@@ -76,7 +76,7 @@ export function decodeFragmentChunk(chunk: FragmentChunk, response: ArrayBuffer)
 
 @registerSharedObject() export class DVIDVolumeChunkSource extends
 (WithParameters(VolumeChunkSource, VolumeChunkSourceParameters)) {
-  download(chunk: VolumeChunk, cancellationToken: CancellationToken) {
+  async download(chunk: VolumeChunk, cancellationToken: CancellationToken) {
     let params = this.parameters;
     let path: string;
     {
@@ -88,13 +88,12 @@ export function decodeFragmentChunk(chunk: FragmentChunk, response: ArrayBuffer)
       // if the volume is an image, get a jpeg
       path = this.getPath(chunkPosition, chunkDataSize);
     }
-    let decoder = this.getDecoder(params);
-    return sendHttpRequest(
-               openShardedHttpRequest(params.baseUrls, path), 'arraybuffer', cancellationToken)
-        .then(
-            response => decoder(
-                chunk,
-                (params.encoding === VolumeChunkEncoding.JPEG) ? response.slice(16) : response));
+    const decoder = this.getDecoder(params);
+    const response = await sendHttpRequest(
+        openShardedHttpRequest(params.baseUrls, path), 'arraybuffer', cancellationToken);
+    await decoder(
+        chunk, cancellationToken,
+        (params.encoding === VolumeChunkEncoding.JPEG) ? response.slice(16) : response);
   }
   getPath(chunkPosition: Float32Array, chunkDataSize: Float32Array) {
     let params = this.parameters;

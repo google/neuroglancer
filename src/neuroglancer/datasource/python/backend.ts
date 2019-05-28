@@ -39,7 +39,7 @@ chunkDecoders.set(VolumeChunkEncoding.RAW, decodeRawChunk);
   chunkDecoder = chunkDecoders.get(this.parameters['encoding'])!;
   encoding = VolumeChunkEncoding[this.parameters.encoding].toLowerCase();
 
-  download(chunk: VolumeChunk, cancellationToken: CancellationToken) {
+  async download(chunk: VolumeChunk, cancellationToken: CancellationToken) {
     let {parameters} = this;
     let path = `/neuroglancer/${this.encoding}/${parameters.key}/${parameters.scaleKey}`;
     {
@@ -51,8 +51,8 @@ chunkDecoders.set(VolumeChunkEncoding.RAW, decodeRawChunk);
         path += `/${chunkPosition[i]},${chunkPosition[i] + chunkDataSize![i]}`;
       }
     }
-    return sendHttpRequest(openHttpRequest(path), 'arraybuffer', cancellationToken)
-        .then(response => this.chunkDecoder(chunk, response));
+    const response = await sendHttpRequest(openHttpRequest(path), 'arraybuffer', cancellationToken);
+    await this.chunkDecoder(chunk, cancellationToken, response);
   }
 }
 

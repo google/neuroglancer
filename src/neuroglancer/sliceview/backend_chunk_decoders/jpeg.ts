@@ -15,12 +15,16 @@
  */
 
 import {postProcessRawData} from 'neuroglancer/sliceview/backend_chunk_decoders/postprocess';
-import {decodeJpegStack} from 'neuroglancer/sliceview/decode_jpeg_stack';
 import {VolumeChunk} from 'neuroglancer/sliceview/volume/backend';
+import {CancellationToken} from 'neuroglancer/util/cancellation';
+import {decodeJpeg} from 'neuroglancer/async_computation/decode_jpeg_request';
+import {requestAsyncComputation} from 'neuroglancer/async_computation/request';
 
-export function decodeJpegChunk(chunk: VolumeChunk, response: ArrayBuffer) {
-  postProcessRawData(
-      chunk,
-      decodeJpegStack(
-          new Uint8Array(response), chunk.chunkDataSize!, chunk.source!.spec.numChannels));
+export async function decodeJpegChunk(
+    chunk: VolumeChunk, cancellationToken: CancellationToken, response: ArrayBuffer) {
+  const chunkDataSize = chunk.chunkDataSize!;
+  const decoded = await requestAsyncComputation(
+      decodeJpeg, cancellationToken, [response], new Uint8Array(response), chunkDataSize[0],
+      chunkDataSize[1] * chunkDataSize[2], chunk.source!.spec.numChannels);
+  await postProcessRawData(chunk, cancellationToken, decoded);
 }

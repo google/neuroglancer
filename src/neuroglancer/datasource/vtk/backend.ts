@@ -14,26 +14,25 @@
  * limitations under the License.
  */
 
+import {requestAsyncComputation} from 'neuroglancer/async_computation/request';
+import {parseVTKFromArrayBuffer} from 'neuroglancer/async_computation/vtk_mesh_request';
 import {GenericSharedDataSource} from 'neuroglancer/chunk_manager/generic_file_source';
-import {getTriangularMeshSize, parseVTK} from 'neuroglancer/datasource/vtk/parse';
 import {registerSingleMeshFactory, SingleMesh} from 'neuroglancer/single_mesh/backend';
+import {CancellationToken} from 'neuroglancer/util/cancellation';
 import {DataType} from 'neuroglancer/util/data_type';
-import {maybeDecompressGzip} from 'neuroglancer/util/gzip';
 
 /**
- * This needs to be a global function, because it identifies the instance of GenericFileSource to
- * use.
+ * This needs to be a global function, because it identifies the instance of GenericSharedDataSource
+ * to use.
  */
-function parseVTKFromArrayBuffer(buffer: ArrayBuffer) {
-  const mesh = parseVTK(maybeDecompressGzip(buffer));
-  return {data: mesh, size: getTriangularMeshSize(mesh)};
+function parse(buffer: ArrayBuffer, cancellationToken: CancellationToken) {
+  return requestAsyncComputation(parseVTKFromArrayBuffer, cancellationToken, [buffer], buffer);
 }
 
 registerSingleMeshFactory('vtk', {
   description: 'VTK',
   getMesh: (chunkManager, url, getPriority, cancellationToken) =>
-      GenericSharedDataSource
-          .getUrl(chunkManager, parseVTKFromArrayBuffer, url, getPriority, cancellationToken)
+      GenericSharedDataSource.getUrl(chunkManager, parse, url, getPriority, cancellationToken)
           .then(mesh => {
             let result: SingleMesh = {
               info: {

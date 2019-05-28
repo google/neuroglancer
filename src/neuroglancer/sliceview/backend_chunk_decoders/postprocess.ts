@@ -18,38 +18,34 @@
  * Converts raw data volumes to the appropriate format required by the frontend.
  */
 
+import {encodeCompressedSegmentationUint32, encodeCompressedSegmentationUint64} from 'neuroglancer/async_computation/encode_compressed_segmentation_request';
+import {requestAsyncComputation} from 'neuroglancer/async_computation/request';
 import {DataType} from 'neuroglancer/sliceview/base';
-import {encodeChannels as encodeChannelsUint32} from 'neuroglancer/sliceview/compressed_segmentation/encode_uint32';
-import {encodeChannels as encodeChannelsUint64} from 'neuroglancer/sliceview/compressed_segmentation/encode_uint64';
 import {VolumeChunk} from 'neuroglancer/sliceview/volume/backend';
-import {Uint32ArrayBuilder} from 'neuroglancer/util/uint32array_builder';
+import {CancellationToken} from 'neuroglancer/util/cancellation';
 
-const tempBuffer = new Uint32ArrayBuilder(20000);
-const tempVolumeSize = new Array<number>(4);
-
-export function postProcessRawData(chunk: VolumeChunk, data: ArrayBufferView) {
+export async function postProcessRawData(
+    chunk: VolumeChunk, cancellationToken: CancellationToken, data: ArrayBufferView) {
+  cancellationToken;
   const {spec} = chunk.source!;
-  if (spec.compressedSegmentationBlockSize) {
+  if (spec.compressedSegmentationBlockSize !== undefined) {
     const {dataType} = spec;
-    tempBuffer.clear();
-    let chunkDataSize = chunk.chunkDataSize!;
-    tempVolumeSize[0] = chunkDataSize[0];
-    tempVolumeSize[1] = chunkDataSize[1];
-    tempVolumeSize[2] = chunkDataSize[2];
-    tempVolumeSize[3] = spec.numChannels;
+    const chunkDataSize = chunk.chunkDataSize!;
+    const shape = [chunkDataSize[0], chunkDataSize[1], chunkDataSize[2], spec.numChannels];
     switch (dataType) {
       case DataType.UINT32:
-        encodeChannelsUint32(
-            tempBuffer, spec.compressedSegmentationBlockSize, <Uint32Array>data, tempVolumeSize);
+        chunk.data = await requestAsyncComputation(
+            encodeCompressedSegmentationUint32, cancellationToken, [data.buffer],
+            data as Uint32Array, shape, spec.compressedSegmentationBlockSize);
         break;
       case DataType.UINT64:
-        encodeChannelsUint64(
-            tempBuffer, spec.compressedSegmentationBlockSize, <Uint32Array>data, tempVolumeSize);
+        chunk.data = await requestAsyncComputation(
+            encodeCompressedSegmentationUint64, cancellationToken, [data.buffer],
+            data as Uint32Array, shape, spec.compressedSegmentationBlockSize);
         break;
       default:
         throw new Error(`Unsupported data type for compressed segmentation: ${DataType[dataType]}`);
     }
-    chunk.data = new Uint32Array(tempBuffer.view);
   } else {
     chunk.data = data;
   }

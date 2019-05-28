@@ -35,22 +35,67 @@ const CopyWebpackPlugin = require('copy-webpack-plugin');
 const DEFAULT_DATA_SOURCES = exports.DEFAULT_DATA_SOURCES = [
   {
     source: 'neuroglancer/datasource/brainmaps',
-    registerCredentials: 'neuroglancer/datasource/brainmaps/register_credentials_provider'
+    registerCredentials: 'neuroglancer/datasource/brainmaps/register_credentials_provider',
+    asyncComputation: [
+      'neuroglancer/async_computation/decode_jpeg',
+    ],
   },
   {
     source: 'neuroglancer/datasource/boss',
-    registerCredentials: 'neuroglancer/datasource/boss/register_credentials_provider'
+    registerCredentials: 'neuroglancer/datasource/boss/register_credentials_provider',
+    asyncComputation: [
+      'neuroglancer/async_computation/decode_jpeg',
+      'neuroglancer/async_computation/decode_gzip',
+    ],
   },
-  'neuroglancer/datasource/dvid',
-  'neuroglancer/datasource/render',
-  'neuroglancer/datasource/precomputed',
-  'neuroglancer/datasource/nifti',
-  'neuroglancer/datasource/n5',
+  {
+    source: 'neuroglancer/datasource/dvid',
+    asyncComputation: [
+      'neuroglancer/async_computation/decode_jpeg',
+    ],
+  },
+  {
+    source: 'neuroglancer/datasource/render',
+    asyncComputation: [
+      'neuroglancer/async_computation/decode_jpeg',
+    ],
+  },
+  {
+    source: 'neuroglancer/datasource/precomputed',
+    asyncComputation: [
+      'neuroglancer/async_computation/decode_jpeg',
+      'neuroglancer/async_computation/decode_gzip',
+    ],
+  },
+  {
+    source: 'neuroglancer/datasource/nifti',
+    asyncComputation: [
+      'neuroglancer/async_computation/decode_gzip',
+    ],
+  },
+  {
+    source: 'neuroglancer/datasource/n5',
+    asyncComputation: [
+      'neuroglancer/async_computation/decode_gzip',
+    ],
+  },
   'neuroglancer/datasource/computed',
   'neuroglancer/datasource/computed/example',
   'neuroglancer/datasource/computed/tensorflow',
-  {source: 'neuroglancer/datasource/vtk', register: null},
-  {source: 'neuroglancer/datasource/csv', register: null},
+  {
+    source: 'neuroglancer/datasource/vtk',
+    register: null,
+    asyncComputation: [
+      'neuroglancer/async_computation/vtk_mesh',
+    ],
+  },
+  {
+    source: 'neuroglancer/datasource/csv',
+    register: null,
+    asyncComputation: [
+      'neuroglancer/async_computation/csv_vertex_attributes',
+    ],
+  },
 ];
 
 const DEFAULT_SUPPORTED_LAYERS = exports.DEFAULT_SUPPORTED_LAYERS = [
@@ -244,6 +289,7 @@ function getViewerConfig(options) {
   let supportedLayers = options.supportedLayers || DEFAULT_SUPPORTED_LAYERS;
   let frontendDataSourceModules = [];
   let backendDataSourceModules = [];
+  let asyncComputationDataSourceModules = new Set();
   const registerCredentials =
       options.registerCredentials !== undefined ? options.registerCredentials : !options.python;
   for (let datasource of dataSources) {
@@ -263,6 +309,11 @@ function getViewerConfig(options) {
     }
     if (datasource.backend !== null) {
       backendDataSourceModules.push(datasource.backend || `${datasource.source}/backend`);
+    }
+    if (datasource.asyncComputation !== undefined) {
+      for (const m of datasource.asyncComputation) {
+        asyncComputationDataSourceModules.add(m);
+      }
     }
   }
   let defaultDefines = {
@@ -285,9 +336,11 @@ function getViewerConfig(options) {
   let srcDir = resolveReal(__dirname, '../src');
   let commonPlugins = [];
   let extraChunkWorkerModules = options.chunkWorkerModules || [];
+  let extraAsyncComputationModules = options.asyncComputationModules || [];
   let extraCommonPlugins = options.commonPlugins || [];
   let extraFrontendPlugins = options.frontendPlugins || [];
   let extraChunkWorkerPlugins = options.chunkWorkerPlugins || [];
+  let extraAsyncComputationPlugins = options.asyncComputationPlugins || [];
   let chunkWorkerModules = [
     'neuroglancer/worker_rpc_context',
     'neuroglancer/chunk_manager/backend',
@@ -296,6 +349,12 @@ function getViewerConfig(options) {
     'neuroglancer/annotation/backend',
     ...backendDataSourceModules,
     ...extraChunkWorkerModules,
+  ];
+  let asyncComputationModules = [
+    'neuroglancer/async_computation/handler',
+    'neuroglancer/async_computation/encode_compressed_segmentation',
+    ...asyncComputationDataSourceModules,
+    ...extraAsyncComputationModules,
   ];
   let frontendModules = options.frontendModules || [resolveReal(srcDir, 'main.ts')];
   let frontendLayerModules = [];
@@ -332,6 +391,19 @@ function getViewerConfig(options) {
           plugins: [
             new webpack.DefinePlugin(Object.assign({}, defaultDefines, extraDefines)),
             ...extraChunkWorkerPlugins,
+            ...commonPlugins,
+            ...extraCommonPlugins,
+          ],
+        },
+        baseConfig),
+    Object.assign(
+        {
+          mode: minify ? 'production' : 'development',
+          entry: {'async_computation': [...asyncComputationModules]},
+          target: 'webworker',
+          plugins: [
+            new webpack.DefinePlugin(Object.assign({}, defaultDefines, extraDefines)),
+            ...extraAsyncComputationPlugins,
             ...commonPlugins,
             ...extraCommonPlugins,
           ],

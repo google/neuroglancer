@@ -179,13 +179,14 @@ export class GenericSharedDataSource<Key, Data> extends ChunkSourceBase {
 
   static getUrl<Data>(
       chunkManager: Borrowed<ChunkManager>,
-      decodeFunction: (buffer: ArrayBuffer) => {size: number, data: Data}, url: string,
-      getPriority: PriorityGetter, cancellationToken: CancellationToken) {
+      decodeFunction: (buffer: ArrayBuffer, cancellationToken: CancellationToken) =>
+          Promise<{size: number, data: Data}>,
+      url: string, getPriority: PriorityGetter, cancellationToken: CancellationToken) {
     return GenericSharedDataSource.getData<string, Data>(
         chunkManager, `${getObjectId(decodeFunction)}`, {
           download: (url: string, cancellationToken: CancellationToken) =>
               sendHttpRequest(openHttpRequest(url), 'arraybuffer', cancellationToken)
-                  .then(decodeFunction)
+                  .then(response => decodeFunction(response, cancellationToken))
         },
         url, getPriority, cancellationToken);
   }

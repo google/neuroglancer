@@ -14,6 +14,8 @@
  * limitations under the License.
  */
 
+import {decodeGzip} from 'neuroglancer/async_computation/decode_gzip_request';
+import {requestAsyncComputation} from 'neuroglancer/async_computation/request';
 import {Chunk, ChunkManager, WithParameters} from 'neuroglancer/chunk_manager/backend';
 import {GenericSharedDataSource} from 'neuroglancer/chunk_manager/generic_file_source';
 import {DataEncoding, MeshSourceParameters, MultiscaleMeshSourceParameters, ShardingHashFunction, ShardingParameters, SkeletonSourceParameters, VolumeChunkEncoding, VolumeChunkSourceParameters} from 'neuroglancer/datasource/precomputed/base';
@@ -36,7 +38,6 @@ import {stableStringify} from 'neuroglancer/util/json';
 import {Uint64} from 'neuroglancer/util/uint64';
 import {encodeZIndexCompressed} from 'neuroglancer/util/zorder';
 import {registerSharedObject} from 'neuroglancer/worker_rpc';
-import {inflate} from 'pako';
 
 const shardingHashFunctions: Map<ShardingHashFunction, (out: Uint64) => void> = new Map([
   [
@@ -111,7 +112,11 @@ function getMinishardIndexDataSource(
                   pickShard(baseUrls, dataPath), minishardStartOffset, minishardEndOffset,
                   cancellationToken);
               if (sharding.minishardIndexEncoding === DataEncoding.GZIP) {
-                minishardIndexResponse = inflate(new Uint8Array(minishardIndexResponse)).buffer;
+                minishardIndexResponse =
+                    (await requestAsyncComputation(
+                         decodeGzip, cancellationToken, [minishardIndexResponse],
+                         new Uint8Array(minishardIndexResponse)))
+                        .buffer;
               }
               if ((minishardIndexResponse.byteLength % 24) !== 0) {
                 throw new Error(
@@ -202,7 +207,9 @@ async function getShardedData(
       pickShard(minishardIndexSource.baseUrls, minishardIndex.shardPath), startOffset, endOffset,
       cancellationToken);
   if (minishardIndexSource.sharding.dataEncoding === DataEncoding.GZIP) {
-    data = inflate(new Uint8Array(data)).buffer;
+    data =
+        (await requestAsyncComputation(decodeGzip, cancellationToken, [data], new Uint8Array(data)))
+            .buffer;
   }
   return {data, shardInfo: {shardPath: minishardIndex.shardPath, offset: startOffset}};
 }
@@ -257,7 +264,7 @@ chunkDecoders.set(VolumeChunkEncoding.COMPRESSED_SEGMENTATION, decodeCompressedS
       response =
           (await getShardedData(minishardIndexSource, chunk, chunkIndex, cancellationToken)).data;
     }
-    this.chunkDecoder(chunk, response);
+    await this.chunkDecoder(chunk, cancellationToken, response);
   }
 }
 

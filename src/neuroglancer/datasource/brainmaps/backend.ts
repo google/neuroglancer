@@ -100,7 +100,7 @@ export class BrainmapsVolumeChunkSource extends
     }
   }
 
-  download(chunk: VolumeChunk, cancellationToken: CancellationToken) {
+  async download(chunk: VolumeChunk, cancellationToken: CancellationToken) {
     let {parameters} = this;
     let path: string;
 
@@ -121,15 +121,15 @@ export class BrainmapsVolumeChunkSource extends
     this.applyEncodingParams(payload);
     applyChangeStack(parameters.changeSpec, payload);
 
-    return makeRequest(
-               parameters['instance'], this.credentialsProvider, {
-                 method: 'POST',
-                 payload: JSON.stringify(payload),
-                 path,
-                 responseType: 'arraybuffer',
-               },
-               cancellationToken)
-        .then(response => this.chunkDecoder(chunk, response));
+    const response = await makeRequest(
+        parameters['instance'], this.credentialsProvider, {
+          method: 'POST',
+          payload: JSON.stringify(payload),
+          path,
+          responseType: 'arraybuffer',
+        },
+        cancellationToken);
+    await this.chunkDecoder(chunk, cancellationToken, response);
   }
 }
 
