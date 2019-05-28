@@ -131,6 +131,10 @@ export class Uint64 {
     return Uint64.less(a, b) ? a : b;
   }
 
+  static max(a: Uint64, b: Uint64): Uint64 {
+    return Uint64.less(a, b) ? b : a;
+  }
+
   static random() {
     crypto.getRandomValues(randomTempBuffer);
     return new Uint64(randomTempBuffer[0], randomTempBuffer[1]);
