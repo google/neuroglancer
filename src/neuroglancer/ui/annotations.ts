@@ -21,7 +21,7 @@
 import './annotations.css';
 
 import debounce from 'lodash/debounce';
-import {Annotation, AnnotationTag, AnnotationReference, AnnotationType, AxisAlignedBoundingBox, Ellipsoid, getAnnotationTypeHandler, Line} from 'neuroglancer/annotation';
+import {Annotation, AnnotationTag, AnnotationReference, AnnotationType, AxisAlignedBoundingBox, Ellipsoid, getAnnotationTypeHandler, Line, AnnotationSource} from 'neuroglancer/annotation';
 import {AnnotationLayer, AnnotationLayerState, PerspectiveViewAnnotationLayer, SliceViewAnnotationLayer} from 'neuroglancer/annotation/frontend';
 import {DataFetchSliceViewRenderLayer, MultiscaleAnnotationSource} from 'neuroglancer/annotation/frontend_source';
 import {setAnnotationHoverStateFromMouseState} from 'neuroglancer/annotation/selection';
@@ -510,6 +510,16 @@ export class AnnotationLayerView extends Tab {
       this.element.appendChild(label);
     }
 
+    {
+      const exportToCSVButton = document.createElement('button');
+      exportToCSVButton.id = 'exportToCSVButton';
+      exportToCSVButton.textContent = 'Export to CSV';
+      exportToCSVButton.addEventListener('click', () => {
+        this.exportToCSV();
+      });
+      this.element.appendChild(exportToCSVButton);
+    }
+
     this.element.appendChild(this.annotationListContainer);
 
     this.annotationListContainer.addEventListener('mouseleave', () => {
@@ -541,6 +551,8 @@ export class AnnotationLayerView extends Tab {
       if (element !== undefined) {
         element.classList.add('neuroglancer-annotation-selected');
         element.scrollIntoView();
+        // Scrolls just a pixel too far, this makes it look prettier
+        this.annotationListContainer.scrollTop -= 1;
       }
     }
     this.previousSelectedId = newSelectedId;
@@ -698,6 +710,79 @@ export class AnnotationLayerView extends Tab {
         annotationElement.style.display = 'none';
       }
     }
+  }
+
+  private exportToCSV() {
+    const filename = 'annotations.csv';
+    let csvString = 'Coordinates,Tags,Description,Segment IDs\n';
+    const pointToCoordinateText = (point: vec3, transform: mat4) => {
+      const spatialPoint = vec3.transformMat4(vec3.create(), point, transform);
+      return formatIntegerPoint(this.voxelSize.voxelFromSpatial(tempVec3, spatialPoint));
+    };
+    for (const annotation of this.annotationLayer.source) {
+      let annotationString = '';
+      let coordinatesString = '"';
+      switch (annotation.type) {
+        case AnnotationType.AXIS_ALIGNED_BOUNDING_BOX:
+        case AnnotationType.LINE:
+          coordinatesString += pointToCoordinateText(annotation.pointA, this.annotationLayer.objectToGlobal) + '-';
+          coordinatesString += pointToCoordinateText(annotation.pointB, this.annotationLayer.objectToGlobal);
+          break;
+        case AnnotationType.POINT:
+          coordinatesString += pointToCoordinateText(annotation.point, this.annotationLayer.objectToGlobal);
+          break;
+        case AnnotationType.ELLIPSOID:
+          coordinatesString += pointToCoordinateText(annotation.center, this.annotationLayer.objectToGlobal);
+          const transformedRadii = transformVectorByMat4(tempVec3, annotation.radii, this.annotationLayer.objectToGlobal);
+          this.voxelSize.voxelFromSpatial(transformedRadii, transformedRadii);
+          coordinatesString += '±' + formatIntegerBounds(transformedRadii);
+          break;
+      }
+      annotationString += coordinatesString + '",';
+      if (this.annotationLayer.source instanceof AnnotationSource && annotation.tagIds) {
+        let tagString = '"';
+        let firstTag = true;
+        annotation.tagIds.forEach(tagId => {
+          const tag = (<AnnotationSource>this.annotationLayer.source).getTag(tagId);
+          if (tag) {
+            if (firstTag) {
+              firstTag = false;
+            } else {
+              tagString += ',';
+            }
+            tagString += '#' + tag.label;
+          }
+        });
+        annotationString += tagString + '"';
+      }
+      annotationString += ',';
+      if (annotation.description) {
+        annotationString += annotation.description;
+      }
+      annotationString += ',';
+      if (annotation.segments) {
+        let segmentString = '"';
+        let firstSegment = true;
+        annotation.segments.forEach(segmentID => {
+          if (firstSegment) {
+            firstSegment = false;
+          } else {
+            segmentString += ',';
+          }
+          segmentString += segmentID.toString();
+        });
+        annotationString += segmentString + '"';
+      }
+      csvString += annotationString + '\n';
+    }
+    const blob = new Blob([csvString],  { type: 'text/csv;charset=utf-8;'});
+    const link = document.createElement('a');
+    const url = URL.createObjectURL(blob);
+    link.setAttribute('href', url);
+    link.setAttribute('download', filename);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
   }
 }
 

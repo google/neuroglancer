@@ -128,3 +128,11 @@
 .neuroglancer-annotation-segment-item {
   color: black;
 }
+
+#exportToCSVButton {
+  width: 110px;
+}
+
+#annotation-tag-filter {
+  width: 125px;
+}
