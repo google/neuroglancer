@@ -134,7 +134,7 @@ export abstract class RenderedDataPanel extends RenderedPanel {
       buffer = pickRequest.buffer = gl.createBuffer();
       gl.bindBuffer(WebGL2RenderingContext.PIXEL_PACK_BUFFER, buffer);
       gl.bufferData(
-          WebGL2RenderingContext.PIXEL_PACK_BUFFER, 32, WebGL2RenderingContext.DYNAMIC_COPY);
+          WebGL2RenderingContext.PIXEL_PACK_BUFFER, 32, WebGL2RenderingContext.STREAM_READ);
     } else {
       gl.bindBuffer(WebGL2RenderingContext.PIXEL_PACK_BUFFER, buffer);
     }
