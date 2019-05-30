@@ -23,6 +23,7 @@ static_files = [
     'main.bundle.js',
     'chunk_worker.bundle.js',
     'tfjs-library.bundle.js',
+    'async_computation.bundle.js',
     'draco.bundle.js',
     'index.html',
 ]
