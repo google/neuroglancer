@@ -17,7 +17,7 @@
 import {vec2} from 'neuroglancer/util/geom';
 
 export class BossSourceParameters {
-  baseUrls: string[];
+  baseUrl: string;
   authServer: string;
   collection: string;
   experiment: string;
@@ -32,18 +32,18 @@ export class VolumeChunkSourceParameters extends BossSourceParameters {
   static RPC_ID = 'boss/VolumeChunkSource';
 
   static stringify(parameters: VolumeChunkSourceParameters) {
-    return `boss:volume:${parameters.baseUrls[0]}/${parameters.collection}/${
+    return `boss:volume:${parameters.baseUrl}/${parameters.collection}/${
         parameters.experiment}/${parameters.channel}/${parameters.resolution}/${
         parameters.encoding}`;
   }
 }
 
 export class MeshSourceParameters {
-  baseUrls: string[];
+  baseUrl: string;
 
   static RPC_ID = 'boss/MeshChunkSource';
 
   static stringify(parameters: MeshSourceParameters) {
-    return `boss:mesh:${parameters.baseUrls[0]}`;
+    return `boss:mesh:${parameters.baseUrl}`;
   }
 }

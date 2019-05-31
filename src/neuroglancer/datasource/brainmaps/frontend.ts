@@ -789,5 +789,5 @@ export class BrainmapsDataSource extends DataSource {
 
 export const productionInstance: BrainmapsInstance = {
   description: 'Google Brain Maps',
-  serverUrls: ['https://brainmaps.googleapis.com'],
+  serverUrl: 'https://brainmaps.googleapis.com',
 };

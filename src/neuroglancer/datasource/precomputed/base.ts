@@ -24,8 +24,7 @@ export enum VolumeChunkEncoding {
 }
 
 export class VolumeChunkSourceParameters {
-  baseUrls: string[];
-  path: string;
+  url: string;
   encoding: VolumeChunkEncoding;
   sharding: ShardingParameters|undefined;
 
@@ -34,8 +33,7 @@ export class VolumeChunkSourceParameters {
 
 
 export class MeshSourceParameters {
-  baseUrls: string[];
-  path: string;
+  url: string;
   lod: number;
 
   static RPC_ID = 'precomputed/MeshSource';
@@ -68,8 +66,7 @@ export class MultiscaleMeshMetadata {
 }
 
 export class MultiscaleMeshSourceParameters {
-  baseUrls: string[];
-  path: string;
+  url: string;
   metadata: MultiscaleMeshMetadata;
 
   static RPC_ID = 'precomputed/MultiscaleMeshSource';
@@ -82,8 +79,7 @@ export interface SkeletonMetadata {
 }
 
 export class SkeletonSourceParameters {
-  baseUrls: string[];
-  path: string;
+  url: string;
   metadata: SkeletonMetadata;
 
   static RPC_ID = 'precomputed/SkeletonSource';

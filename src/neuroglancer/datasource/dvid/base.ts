@@ -22,7 +22,7 @@ export enum VolumeChunkEncoding {
 }
 
 export class DVIDSourceParameters {
-  baseUrls: string[];
+  baseUrl: string;
   nodeKey: string;
   dataInstanceKey: string;
 }

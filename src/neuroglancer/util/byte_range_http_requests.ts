@@ -15,13 +15,13 @@
  */
 
 import {CancellationToken} from 'neuroglancer/util/cancellation';
-import {openHttpRequest, sendHttpRequest, setByteRange} from 'neuroglancer/util/http_request';
+import {cancellableFetchOk, getByteRangeHeader, responseArrayBuffer} from 'neuroglancer/util/http_request';
 import {Uint64} from 'neuroglancer/util/uint64';
 
 export function fetchHttpByteRange(
     url: string, startOffset: Uint64, endOffset: Uint64,
     cancellationToken: CancellationToken): Promise<ArrayBuffer> {
-  const httpReq = openHttpRequest(url);
-  setByteRange(httpReq, startOffset, endOffset);
-  return sendHttpRequest(httpReq, 'arraybuffer', cancellationToken);
+  return cancellableFetchOk(
+      url, {headers: getByteRangeHeader(startOffset, endOffset)},
+      responseArrayBuffer, cancellationToken);
 }

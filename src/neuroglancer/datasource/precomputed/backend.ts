@@ -33,7 +33,7 @@ import {Borrowed} from 'neuroglancer/util/disposable';
 import {convertEndian32, Endianness} from 'neuroglancer/util/endian';
 import {vec3} from 'neuroglancer/util/geom';
 import {murmurHash3_x86_128Hash64Bits} from 'neuroglancer/util/hash';
-import {openShardedHttpRequest, pickShard, sendHttpRequest} from 'neuroglancer/util/http_request';
+import {cancellableFetchOk, responseArrayBuffer, responseJson} from 'neuroglancer/util/http_request';
 import {stableStringify} from 'neuroglancer/util/json';
 import {Uint64} from 'neuroglancer/util/uint64';
 import {encodeZIndexCompressed} from 'neuroglancer/util/zorder';
@@ -50,30 +50,28 @@ const shardingHashFunctions: Map<ShardingHashFunction, (out: Uint64) => void> = 
 ]);
 
 interface ShardInfo {
-  shardPath: string;
+  shardUrl: string;
   offset: Uint64;
 }
 
 interface DecodedMinishardIndex {
   data: Uint32Array;
-  shardPath: string;
+  shardUrl: string;
 }
 
 interface MinishardIndexSource extends GenericSharedDataSource<Uint64, DecodedMinishardIndex> {
-  baseUrls: string[];
   sharding: ShardingParameters;
 }
 
 function getMinishardIndexDataSource(
     chunkManager: Borrowed<ChunkManager>,
-    parameters: {baseUrls: string[], path: string, sharding: ShardingParameters|undefined}):
-    MinishardIndexSource|undefined {
-  const {baseUrls, path, sharding} = parameters;
+    parameters: {url: string, sharding: ShardingParameters|undefined}): MinishardIndexSource|
+    undefined {
+  const {url, sharding} = parameters;
   if (sharding === undefined) return undefined;
   const source =
       GenericSharedDataSource.get<Uint64, DecodedMinishardIndex>(
-          chunkManager,
-          stableStringify({type: 'precomputed:shardedDataSource', baseUrls, path, sharding}), {
+          chunkManager, stableStringify({type: 'precomputed:shardedDataSource', url, sharding}), {
             download: async function(
                 shardAndMinishard: Uint64, cancellationToken: CancellationToken) {
               const minishard = Uint64.lowMask(new Uint64(), sharding.minishardBits);
@@ -82,17 +80,16 @@ function getMinishardIndexDataSource(
               const temp = new Uint64();
               Uint64.rshift(temp, shardAndMinishard, sharding.minishardBits);
               Uint64.and(shard, shard, temp);
-              const shardPathPrefix =
-                  `${path}/${shard.toString(16).padStart(Math.ceil(sharding.shardBits / 4), '0')}`;
+              const shardUrlPrefix =
+                  `${url}/${shard.toString(16).padStart(Math.ceil(sharding.shardBits / 4), '0')}`;
               // Retrive minishard index start/end offsets.
-              const indexPath = shardPathPrefix + '.index';
+              const indexUrl = shardUrlPrefix + '.index';
 
               // Multiply minishard by 16.
               const shardIndexStart = Uint64.lshift(new Uint64(), minishard, 4);
               const shardIndexEnd = Uint64.addUint32(new Uint64(), shardIndexStart, 16);
               const shardIndexResponse = await fetchHttpByteRange(
-                  pickShard(baseUrls, indexPath), shardIndexStart, shardIndexEnd,
-                  cancellationToken);
+                  indexUrl, shardIndexStart, shardIndexEnd, cancellationToken);
               if (shardIndexResponse.byteLength !== 16) {
                 throw new Error(`Failed to retrieve minishard offset`);
               }
@@ -107,10 +104,9 @@ function getMinishardIndexDataSource(
                 throw new Error('Object not found')
               }
 
-              const dataPath = shardPathPrefix + '.data';
+              const dataUrl = shardUrlPrefix + '.data';
               let minishardIndexResponse = await fetchHttpByteRange(
-                  pickShard(baseUrls, dataPath), minishardStartOffset, minishardEndOffset,
-                  cancellationToken);
+                  dataUrl, minishardStartOffset, minishardEndOffset, cancellationToken);
               if (sharding.minishardIndexEncoding === DataEncoding.GZIP) {
                 minishardIndexResponse =
                     (await requestAsyncComputation(
@@ -158,14 +154,13 @@ function getMinishardIndexDataSource(
                 minishardIndex[(2 * minishardIndexSize + i) * 2 + 1] = endHigh;
               }
               return {
-                data: {data: minishardIndex, shardPath: dataPath, baseUrls},
+                data: {data: minishardIndex, shardUrl: dataUrl},
                 size: minishardIndex.byteLength
               };
             },
             encodeKey: (key: Uint64) => key.toString(),
             sourceQueueLevel: 1,
           }) as MinishardIndexSource;
-  source.baseUrls = baseUrls;
   source.sharding = sharding;
   return source;
 }
@@ -203,15 +198,14 @@ async function getShardedData(
   const minishardIndex =
       await minishardIndexSource.getData(shardAndMinishard, getPriority, cancellationToken);
   const {startOffset, endOffset} = findMinishardEntry(minishardIndex, key);
-  let data = await fetchHttpByteRange(
-      pickShard(minishardIndexSource.baseUrls, minishardIndex.shardPath), startOffset, endOffset,
-      cancellationToken);
+  let data =
+      await fetchHttpByteRange(minishardIndex.shardUrl, startOffset, endOffset, cancellationToken);
   if (minishardIndexSource.sharding.dataEncoding === DataEncoding.GZIP) {
     data =
         (await requestAsyncComputation(decodeGzip, cancellationToken, [data], new Uint8Array(data)))
             .buffer;
   }
-  return {data, shardInfo: {shardPath: minishardIndex.shardPath, offset: startOffset}};
+  return {data, shardInfo: {shardUrl: minishardIndex.shardUrl, offset: startOffset}};
 }
 
 
@@ -240,18 +234,17 @@ chunkDecoders.set(VolumeChunkEncoding.COMPRESSED_SEGMENTATION, decodeCompressedS
     const {minishardIndexSource} = this;
     let response: ArrayBuffer;
     if (minishardIndexSource === undefined) {
-      let path: string;
+      let url: string;
       {
         // chunkPosition must not be captured, since it will be invalidated by the next call to
         // computeChunkBounds.
         let chunkPosition = this.computeChunkBounds(chunk);
         let chunkDataSize = chunk.chunkDataSize!;
-        path = `${parameters.path}/${chunkPosition[0]}-${chunkPosition[0] + chunkDataSize[0]}_` +
+        url = `${parameters.url}/${chunkPosition[0]}-${chunkPosition[0] + chunkDataSize[0]}_` +
             `${chunkPosition[1]}-${chunkPosition[1] + chunkDataSize[1]}_` +
             `${chunkPosition[2]}-${chunkPosition[2] + chunkDataSize[2]}`;
       }
-      response = await sendHttpRequest(
-          openShardedHttpRequest(parameters.baseUrls, path), 'arraybuffer', cancellationToken);
+      response = await cancellableFetchOk(url, {}, responseArrayBuffer, cancellationToken);
     } else {
       this.computeChunkBounds(chunk);
       const {gridShape} = this;
@@ -284,19 +277,17 @@ export function decodeFragmentChunk(chunk: FragmentChunk, response: ArrayBuffer)
 @registerSharedObject() export class PrecomputedMeshSource extends
 (WithParameters(MeshSource, MeshSourceParameters)) {
   download(chunk: ManifestChunk, cancellationToken: CancellationToken) {
-    let {parameters} = this;
-    let requestPath = `${parameters.path}/${chunk.objectId}:${parameters.lod}`;
-    return sendHttpRequest(
-               openShardedHttpRequest(parameters.baseUrls, requestPath), 'json', cancellationToken)
+    const {parameters} = this;
+    return cancellableFetchOk(
+               `${parameters.url}/${chunk.objectId}:${parameters.lod}`, {}, responseJson,
+               cancellationToken)
         .then(response => decodeManifestChunk(chunk, response));
   }
 
   downloadFragment(chunk: FragmentChunk, cancellationToken: CancellationToken) {
-    let {parameters} = this;
-    let requestPath = `${parameters.path}/${chunk.fragmentId}`;
-    return sendHttpRequest(
-               openShardedHttpRequest(parameters.baseUrls, requestPath), 'arraybuffer',
-               cancellationToken)
+    const {parameters} = this;
+    return cancellableFetchOk(
+               `${parameters.url}/${chunk.fragmentId}`, {}, responseArrayBuffer, cancellationToken)
         .then(response => decodeFragmentChunk(chunk, response));
   }
 }
@@ -475,20 +466,16 @@ async function decodeMultiscaleFragmentChunk(
 @registerSharedObject() //
 export class PrecomputedMultiscaleMeshSource extends
 (WithParameters(MultiscaleMeshSource, MultiscaleMeshSourceParameters)) {
-  private minishardIndexSource = getMinishardIndexDataSource(this.chunkManager, {
-    baseUrls: this.parameters.baseUrls,
-    path: this.parameters.path,
-    sharding: this.parameters.metadata.sharding
-  });
+  private minishardIndexSource = getMinishardIndexDataSource(
+      this.chunkManager, {url: this.parameters.url, sharding: this.parameters.metadata.sharding});
 
   async download(chunk: PrecomputedMultiscaleManifestChunk, cancellationToken: CancellationToken):
       Promise<void> {
     const {parameters, minishardIndexSource} = this;
     let data: ArrayBuffer;
     if (minishardIndexSource === undefined) {
-      data = await sendHttpRequest(
-          openShardedHttpRequest(parameters.baseUrls, `${parameters.path}/${chunk.objectId}.index`),
-          'arraybuffer', cancellationToken);
+      data = await cancellableFetchOk(
+          `${parameters.url}/${chunk.objectId}.index`, {}, responseArrayBuffer, cancellationToken);
     } else {
       ({data, shardInfo: chunk.shardInfo} =
            await getShardedData(minishardIndexSource, chunk, chunk.objectId, cancellationToken));
@@ -504,10 +491,10 @@ export class PrecomputedMultiscaleMeshSource extends
     const {shardInfo, offsets} = manifestChunk;
     const startOffset = offsets[chunkIndex];
     const endOffset = offsets[chunkIndex + 1];
-    let requestPath: string;
+    let requestUrl: string;
     let startOffsetStr: string, endOffsetStr: string;
     if (shardInfo !== undefined) {
-      requestPath = shardInfo.shardPath;
+      requestUrl = shardInfo.shardUrl;
       const fullDataSize = offsets[offsets.length - 1];
       let startLow = shardInfo.offset.low - fullDataSize + startOffset;
       let startHigh = shardInfo.offset.high;
@@ -528,13 +515,13 @@ export class PrecomputedMultiscaleMeshSource extends
       startOffsetStr = new Uint64(startLow, startHigh).toString();
       endOffsetStr = new Uint64(endLow, endHigh).toString();
     } else {
-      requestPath = `${parameters.path}/${manifestChunk.objectId}`;
+      requestUrl = `${parameters.url}/${manifestChunk.objectId}`;
       startOffsetStr = startOffset.toString();
       endOffsetStr = (endOffset - 1).toString();
     }
-    const req = openShardedHttpRequest(parameters.baseUrls, requestPath);
-    req.setRequestHeader('Range', `bytes=${startOffsetStr}-${endOffsetStr}`);
-    const response = await sendHttpRequest(req, 'arraybuffer', cancellationToken);
+    const response = await cancellableFetchOk(
+        requestUrl, {headers: {'Range': `bytes=${startOffsetStr}-${endOffsetStr}`}},
+        responseArrayBuffer, cancellationToken);
     await decodeMultiscaleFragmentChunk(chunk, response);
   }
 }
@@ -542,18 +529,14 @@ export class PrecomputedMultiscaleMeshSource extends
 @registerSharedObject() //
 export class PrecomputedSkeletonSource extends
 (WithParameters(SkeletonSource, SkeletonSourceParameters)) {
-  private minishardIndexSource = getMinishardIndexDataSource(this.chunkManager, {
-    baseUrls: this.parameters.baseUrls,
-    path: this.parameters.path,
-    sharding: this.parameters.metadata.sharding
-  });
+  private minishardIndexSource = getMinishardIndexDataSource(
+      this.chunkManager, {url: this.parameters.url, sharding: this.parameters.metadata.sharding});
   async download(chunk: SkeletonChunk, cancellationToken: CancellationToken) {
     const {minishardIndexSource, parameters} = this;
     let response: ArrayBuffer;
     if (minishardIndexSource === undefined) {
-      response = await sendHttpRequest(
-          openShardedHttpRequest(parameters.baseUrls, `${parameters.path}/${chunk.objectId}`),
-          'arraybuffer', cancellationToken);
+      response = await cancellableFetchOk(
+          `${parameters.url}/${chunk.objectId}`, {}, responseArrayBuffer, cancellationToken);
     } else {
       response =
           (await getShardedData(minishardIndexSource, chunk, chunk.objectId, cancellationToken))

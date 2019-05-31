@@ -23,7 +23,7 @@ import {Chunk, ChunkManager, ChunkSourceBase} from 'neuroglancer/chunk_manager/b
 import {ChunkPriorityTier, ChunkState} from 'neuroglancer/chunk_manager/base';
 import {CANCELED, CancellationToken, makeCancelablePromise} from 'neuroglancer/util/cancellation';
 import {Borrowed, Owned} from 'neuroglancer/util/disposable';
-import {openHttpRequest, sendHttpRequest} from 'neuroglancer/util/http_request';
+import {cancellableFetchOk, responseArrayBuffer} from 'neuroglancer/util/http_request';
 import {stableStringify} from 'neuroglancer/util/json';
 import {getObjectId} from 'neuroglancer/util/object_id';
 
@@ -185,7 +185,7 @@ export class GenericSharedDataSource<Key, Data> extends ChunkSourceBase {
     return GenericSharedDataSource.getData<string, Data>(
         chunkManager, `${getObjectId(decodeFunction)}`, {
           download: (url: string, cancellationToken: CancellationToken) =>
-              sendHttpRequest(openHttpRequest(url), 'arraybuffer', cancellationToken)
+              cancellableFetchOk(url, {}, responseArrayBuffer, cancellationToken)
                   .then(response => decodeFunction(response, cancellationToken))
         },
         url, getPriority, cancellationToken);

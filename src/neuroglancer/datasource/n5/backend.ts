@@ -23,7 +23,7 @@ import {VolumeChunk, VolumeChunkSource} from 'neuroglancer/sliceview/volume/back
 import {CancellationToken} from 'neuroglancer/util/cancellation';
 import {Endianness} from 'neuroglancer/util/endian';
 import {vec3} from 'neuroglancer/util/geom';
-import {openHttpRequest, sendHttpRequest} from 'neuroglancer/util/http_request';
+import {cancellableFetchOk, responseArrayBuffer} from 'neuroglancer/util/http_request';
 import {registerSharedObject} from 'neuroglancer/worker_rpc';
 
 async function decodeChunk(
@@ -62,7 +62,7 @@ async function decodeChunk(
     const {chunkGridPosition} = chunk;
     const url =
         `${parameters.url}/${chunkGridPosition[0]}/${chunkGridPosition[1]}/${chunkGridPosition[2]}`;
-    const response = await sendHttpRequest(openHttpRequest(url), 'arraybuffer', cancellationToken);
+    const response = await cancellableFetchOk(url, {}, responseArrayBuffer, cancellationToken);
     await decodeChunk(chunk, cancellationToken, response, parameters.encoding);
   }
 }

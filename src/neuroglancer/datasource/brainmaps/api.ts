@@ -14,9 +14,10 @@
  * limitations under the License.
  */
 
-import {CredentialsProvider, CredentialsWithGeneration} from 'neuroglancer/credentials_provider';
-import {CANCELED, CancellationToken, uncancelableToken} from 'neuroglancer/util/cancellation';
-import {HttpError, openShardedHttpRequest} from 'neuroglancer/util/http_request';
+import {CredentialsProvider} from 'neuroglancer/credentials_provider';
+import {fetchWithCredentials} from 'neuroglancer/credentials_provider/http_request';
+import {CancellationToken, uncancelableToken} from 'neuroglancer/util/cancellation';
+import {responseArrayBuffer, responseJson} from 'neuroglancer/util/http_request';
 
 export type BrainmapsCredentialsProvider = CredentialsProvider<Credentials>;
 
@@ -38,7 +39,7 @@ export interface BrainmapsInstance {
   /**
    * One or more server URLs to use to connect to the instance.
    */
-  serverUrls: string[];
+  serverUrl: string;
 }
 
 /**
@@ -109,60 +110,31 @@ export function makeRequest(
 export function makeRequest(
     instance: BrainmapsInstance, credentialsProvider: BrainmapsCredentialsProvider,
     httpCall: HttpCall&{responseType: 'json'}, cancellationToken?: CancellationToken): Promise<any>;
-// export function makeRequest(
-//     instance: BrainmapsInstance, credentialsProvider: BrainmapsCredentialsProvider,
-//     httpCall: HttpCall, cancellationToken?: CancellationToken): any;
 
 export function makeRequest(
     instance: BrainmapsInstance, credentialsProvider: BrainmapsCredentialsProvider,
     httpCall: HttpCall&{responseType: XMLHttpRequestResponseType},
     cancellationToken: CancellationToken = uncancelableToken): any {
-  /**
-   * undefined means request not yet attempted.  null means request
-   * cancelled.
-   */
-  let xhr: XMLHttpRequest|undefined|null = undefined;
-  return new Promise<any>((resolve, reject) => {
-    const abort = () => {
-      let origXhr = xhr;
-      xhr = null;
-      if (origXhr != null) {
-        origXhr.abort();
-      }
-      reject(CANCELED);
-    };
-    cancellationToken.add(abort);
-    function start(credentials: CredentialsWithGeneration<Credentials>) {
-      if (xhr === null) {
-        return;
-      }
-      xhr = openShardedHttpRequest(instance.serverUrls, httpCall.path, httpCall.method);
-      xhr.responseType = httpCall.responseType;
-      xhr.setRequestHeader(
-          'Authorization',
-          `${credentials.credentials.tokenType} ${credentials.credentials.accessToken}`);
-      xhr.onloadend = function(this: XMLHttpRequest) {
-        if (xhr === null) {
-          return;
-        }
-        let status = this.status;
-        if (status >= 200 && status < 300) {
-          cancellationToken.remove(abort);
-          resolve(this.response);
-        } else if (status === 401) {
+  return fetchWithCredentials(
+      credentialsProvider, `${instance.serverUrl}${httpCall.path}`,
+      {method: httpCall.method, body: httpCall.payload},
+      httpCall.responseType === 'json' ? responseJson : responseArrayBuffer,
+      (credentials, init) => {
+        const headers = new Headers(init.headers);
+        headers.set('Authorization', `${credentials.tokenType} ${credentials.accessToken}`);
+        return {...init, headers};
+      },
+      error => {
+        const {status} = error;
+        if (status === 401) {
           // 401: Authorization needed.  OAuth2 token may have expired.
-          credentialsProvider.get(credentials, cancellationToken).then(start);
+          return 'refresh';
         } else if (status === 504 || status === 503) {
           // 503: Service unavailable.  Retry.
           // 504: Gateway timeout.  Can occur if the server takes too long to reply.  Retry.
-          credentialsProvider.get(/*invalidToken=*/undefined, cancellationToken).then(start);
-        } else {
-          cancellationToken.remove(abort);
-          reject(HttpError.fromXhr(this));
+          return 'retry';
         }
-      };
-      xhr.send(httpCall.payload);
-    }
-    credentialsProvider.get(/*invalidToken=*/undefined, cancellationToken).then(start);
-  });
+        throw error;
+      },
+      cancellationToken);
 }

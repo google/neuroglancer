@@ -24,7 +24,7 @@ import {decodeJpegChunk} from 'neuroglancer/sliceview/backend_chunk_decoders/jpe
 import {VolumeChunk, VolumeChunkSource} from 'neuroglancer/sliceview/volume/backend';
 import {CancellationToken} from 'neuroglancer/util/cancellation';
 import {Endianness} from 'neuroglancer/util/endian';
-import {openShardedHttpRequest, sendHttpRequest} from 'neuroglancer/util/http_request';
+import {cancellableFetchOk, responseArrayBuffer} from 'neuroglancer/util/http_request';
 import {registerSharedObject} from 'neuroglancer/worker_rpc';
 
 @registerSharedObject() export class DVIDSkeletonSource extends
@@ -32,11 +32,9 @@ import {registerSharedObject} from 'neuroglancer/worker_rpc';
   download(chunk: SkeletonChunk, cancellationToken: CancellationToken) {
     const {parameters} = this;
     let bodyid = `${chunk.objectId}`;
-    const path = `/api/node/${parameters['nodeKey']}/${parameters['dataInstanceKey']}/key/` +
-        bodyid + '_swc';
-
-    return sendHttpRequest(
-               openShardedHttpRequest(parameters.baseUrls, path), 'arraybuffer', cancellationToken)
+    const url = `${parameters.baseUrl}/api/node/${parameters['nodeKey']}` +
+        `/${parameters['dataInstanceKey']}/key/` + bodyid + '_swc';
+    return cancellableFetchOk(url, {}, responseArrayBuffer, cancellationToken)
         .then(response => {
           let enc = new TextDecoder('utf-8');
           decodeSwcSkeletonChunk(chunk, enc.decode(response));
@@ -65,11 +63,9 @@ export function decodeFragmentChunk(chunk: FragmentChunk, response: ArrayBuffer)
 
   downloadFragment(chunk: FragmentChunk, cancellationToken: CancellationToken) {
     const {parameters} = this;
-    const requestPath = `/api/node/${parameters['nodeKey']}/${parameters['dataInstanceKey']}/key/${
-        chunk.fragmentId}.ngmesh`;
-    return sendHttpRequest(
-               openShardedHttpRequest(parameters.baseUrls, requestPath), 'arraybuffer',
-               cancellationToken)
+    const url = `${parameters.baseUrl}/api/node/${parameters['nodeKey']}/${
+        parameters['dataInstanceKey']}/key/${chunk.fragmentId}.ngmesh`;
+    return cancellableFetchOk(url, {}, responseArrayBuffer, cancellationToken)
         .then(response => decodeFragmentChunk(chunk, response));
   }
 }
@@ -89,8 +85,8 @@ export function decodeFragmentChunk(chunk: FragmentChunk, response: ArrayBuffer)
       path = this.getPath(chunkPosition, chunkDataSize);
     }
     const decoder = this.getDecoder(params);
-    const response = await sendHttpRequest(
-        openShardedHttpRequest(params.baseUrls, path), 'arraybuffer', cancellationToken);
+    const response = await cancellableFetchOk(
+        `${params.baseUrl}${path}`, {}, responseArrayBuffer, cancellationToken);
     await decoder(
         chunk, cancellationToken,
         (params.encoding === VolumeChunkEncoding.JPEG) ? response.slice(16) : response);

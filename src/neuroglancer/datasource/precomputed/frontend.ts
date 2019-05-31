@@ -25,7 +25,7 @@ import {SkeletonSource} from 'neuroglancer/skeleton/frontend';
 import {DataType, VolumeChunkSpecification, VolumeSourceOptions, VolumeType} from 'neuroglancer/sliceview/volume/base';
 import {MultiscaleVolumeChunkSource as GenericMultiscaleVolumeChunkSource, VolumeChunkSource} from 'neuroglancer/sliceview/volume/frontend';
 import {mat4, vec3} from 'neuroglancer/util/geom';
-import {HttpError, openShardedHttpRequest, parseSpecialUrl, sendHttpRequest} from 'neuroglancer/util/http_request';
+import {fetchOk, parseSpecialUrl} from 'neuroglancer/util/http_request';
 import {parseArray, parseFixedLengthArray, parseIntVec, verifyEnumString, verifyFiniteFloat, verifyFinitePositiveFloat, verifyInt, verifyObject, verifyObjectProperty, verifyOptionalString, verifyPositiveInt, verifyString} from 'neuroglancer/util/json';
 
 class PrecomputedVolumeChunkSource extends
@@ -110,17 +110,16 @@ export class MultiscaleVolumeChunkSource implements GenericMultiscaleVolumeChunk
   getMeshSource() {
     const {mesh} = this;
     if (mesh !== undefined) {
-      return getMeshSource(this.chunkManager, this.baseUrls, resolvePath(this.path, mesh));
+      return getMeshSource(this.chunkManager, resolvePath(this.url, mesh));
     }
     const {skeletons} = this;
     if (skeletons !== undefined) {
-      return getSkeletonSource(this.chunkManager, this.baseUrls, resolvePath(this.path, skeletons));
+      return getSkeletonSource(this.chunkManager, resolvePath(this.url, skeletons));
     }
     return null;
   }
 
-  constructor(
-      public chunkManager: ChunkManager, public baseUrls: string[], public path: string, obj: any) {
+  constructor(public chunkManager: ChunkManager, public url: string, obj: any) {
     verifyObject(obj);
     const t = verifyObjectProperty(obj, '@type', verifyOptionalString);
     if (t !== undefined && t !== 'neuroglancer_multiscale_volume') {
@@ -154,8 +153,7 @@ export class MultiscaleVolumeChunkSource implements GenericMultiscaleVolumeChunk
           .map(spec => this.chunkManager.getChunkSource(PrecomputedVolumeChunkSource, {
             spec,
             parameters: {
-              baseUrls: this.baseUrls,
-              path: resolvePath(this.path, scaleInfo.key),
+              url: resolvePath(this.url, scaleInfo.key),
               encoding: scaleInfo.encoding,
               sharding: scaleInfo.sharding,
             }
@@ -176,15 +174,6 @@ export class MultiscaleVolumeChunkSource implements GenericMultiscaleVolumeChunk
 
 export function getShardedMeshSource(chunkManager: ChunkManager, parameters: MeshSourceParameters) {
   return chunkManager.getChunkSource(PrecomputedMeshSource, {parameters});
-}
-
-export function getShardedVolume(chunkManager: ChunkManager, baseUrls: string[], path: string) {
-  return chunkManager.memoize.getUncounted(
-      {'type': 'precomputed:MultiscaleVolumeChunkSource', baseUrls, path},
-      () => sendHttpRequest(openShardedHttpRequest(baseUrls, path + '/info'), 'json')
-                .then(
-                    response =>
-                        new MultiscaleVolumeChunkSource(chunkManager, baseUrls, path, response)));
 }
 
 function parseTransform(data: any): mat4 {
@@ -213,16 +202,18 @@ function parseMeshMetadata(data: any): MultiscaleMeshMetadata {
   return {lodScaleMultiplier, transform, sharding, vertexQuantizationBits};
 }
 
-function getMeshMetadata(chunkManager: ChunkManager, baseUrls: string[], path: string):
-    Promise<MultiscaleMeshMetadata|undefined> {
+function getMeshMetadata(
+    chunkManager: ChunkManager, url: string): Promise<MultiscaleMeshMetadata|undefined> {
   return chunkManager.memoize.getUncounted(
-      {'type': 'precomputed:MeshSource', baseUrls, path},
-      () => fetch(baseUrls[0] + path + '/info').then(response => {
-        if (!response.ok) {
-          return undefined;
-        }
-        return response.json().then(value => parseMeshMetadata(value));
-      }, () => undefined));
+      {'type': 'precomputed:MeshSource', url},
+      () => fetchOk(`${url}/info`)
+                .then(
+                    response => {
+                      return response.json().then(value => parseMeshMetadata(value));
+                    },
+                    // If we fail to fetch the info file, assume it is the legacy
+                    // single-resolution mesh format.
+                    () => undefined));
 }
 
 function parseShardingEncoding(y: any): DataEncoding {
@@ -277,22 +268,19 @@ function parseSkeletonMetadata(data: any): SkeletonMetadata {
 }
 
 function getSkeletonMetadata(
-    chunkManager: ChunkManager, baseUrls: string[], path: string): Promise<SkeletonMetadata> {
+    chunkManager: ChunkManager, url: string): Promise<SkeletonMetadata> {
   return chunkManager.memoize.getUncounted(
-      {'type': 'precomputed:SkeletonSource', baseUrls, path}, async () => {
-        const response = await fetch(baseUrls[0] + path + '/info');
-        if (!response.ok) {
-          throw new HttpError('GET', response.url, response.status, response.statusText);
-        }
+      {'type': 'precomputed:SkeletonSource', url}, async () => {
+        const response = await fetchOk(`${url}/info`);
         const value = await response.json();
         return parseSkeletonMetadata(value);
       });
 }
 
-async function getMeshSource(chunkManager: ChunkManager, baseUrls: string[], path: string) {
-  const metadata = await getMeshMetadata(chunkManager, baseUrls, path);
+async function getMeshSource(chunkManager: ChunkManager, url: string) {
+  const metadata = await getMeshMetadata(chunkManager, url);
   if (metadata === undefined) {
-    return getShardedMeshSource(chunkManager, {baseUrls: baseUrls, path: path, lod: 0});
+    return getShardedMeshSource(chunkManager, {url, lod: 0});
   }
   let vertexPositionFormat: VertexPositionFormat;
   const {vertexQuantizationBits} = metadata;
@@ -304,7 +292,7 @@ async function getMeshSource(chunkManager: ChunkManager, baseUrls: string[], pat
     throw new Error(`Invalid vertex quantization bits: ${vertexQuantizationBits}`);
   }
   return chunkManager.getChunkSource(PrecomputedMultiscaleMeshSource, {
-    parameters: {baseUrls, path, metadata},
+    parameters: {url, metadata},
     format: {
       fragmentRelativeVertices: true,
       vertexPositionFormat,
@@ -313,13 +301,11 @@ async function getMeshSource(chunkManager: ChunkManager, baseUrls: string[], pat
   });
 }
 
-export async function getSkeletonSource(
-    chunkManager: ChunkManager, baseUrls: string[], path: string) {
-  const metadata = await getSkeletonMetadata(chunkManager, baseUrls, path);
+export async function getSkeletonSource(chunkManager: ChunkManager, url: string) {
+  const metadata = await getSkeletonMetadata(chunkManager, url);
   return chunkManager.getChunkSource(PrecomputedSkeletonSource, {
     parameters: {
-      baseUrls,
-      path,
+      url,
       metadata,
     },
     transform: metadata.transform,
@@ -327,8 +313,12 @@ export async function getSkeletonSource(
 }
 
 export function getVolume(chunkManager: ChunkManager, url: string) {
-  const [baseUrls, path] = parseSpecialUrl(url);
-  return getShardedVolume(chunkManager, baseUrls, path);
+  url = parseSpecialUrl(url);
+  return chunkManager.memoize.getUncounted(
+      {'type': 'precomputed:MultiscaleVolumeChunkSource', url},
+      () => fetchOk(`${url}/info`)
+                .then(response => response.json())
+                .then(response => new MultiscaleVolumeChunkSource(chunkManager, url, response)));
 }
 
 export class PrecomputedDataSource extends DataSource {
@@ -339,11 +329,9 @@ export class PrecomputedDataSource extends DataSource {
     return getVolume(chunkManager, url);
   }
   getMeshSource(chunkManager: ChunkManager, url: string) {
-    const [baseUrls, path] = parseSpecialUrl(url);
-    return getMeshSource(chunkManager, baseUrls, path);
+    return getMeshSource(chunkManager, parseSpecialUrl(url));
   }
   getSkeletonSource(chunkManager: ChunkManager, url: string) {
-    const [baseUrls, path] = parseSpecialUrl(url);
-    return getSkeletonSource(chunkManager, baseUrls, path);
+    return getSkeletonSource(chunkManager, parseSpecialUrl(url));
   }
 }
