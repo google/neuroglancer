@@ -149,9 +149,18 @@ class ScaleMetadata {
     this.size = verifyObjectProperty(
         obj, 'dimensions', x => parseFixedLengthArray(vec3.create(), x, verifyPositiveInt));
     this.chunkSize = verifyObjectProperty(
-        obj, 'blockSize', x => parseFixedLengthArray(vec3.create(), x, verifyPositiveInt));
-    this.encoding =
-        verifyObjectProperty(obj, 'compressionType', x => verifyEnumString(x, VolumeChunkEncoding));
+      obj, 'blockSize', x => parseFixedLengthArray(vec3.create(), x, verifyPositiveInt));
+
+    let encoding: VolumeChunkEncoding|undefined;
+    verifyObjectProperty(obj, 'compression', compression => {
+      encoding =
+          verifyObjectProperty(compression, 'type', x => verifyEnumString(x, VolumeChunkEncoding));
+    });
+    if (encoding === undefined) {
+      encoding = verifyObjectProperty(
+          obj, 'compressionType', x => verifyEnumString(x, VolumeChunkEncoding));
+    }
+    this.encoding = encoding;
   }
 }
 
