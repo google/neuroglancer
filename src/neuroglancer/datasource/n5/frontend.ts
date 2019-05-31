@@ -199,10 +199,12 @@ export class N5DataSource extends DataSource {
   getVolume(chunkManager: ChunkManager, url: string) {
     url = parseSpecialUrl(url);
     const m = url.match(/^(.*)\/(c[0-9]+)$/);
-    if (m === null) {
-      return Promise.reject(new Error('N5 url must end with the pattern "/c[0-9]+".'));
+    let topLevelMetadataUrl: string;
+    if (m !== null) {
+      topLevelMetadataUrl = `${m[1]}/attributes.json`;
+    } else {
+      topLevelMetadataUrl = `${url}/attributes.json`;
     }
-    const topLevelMetadataUrl = `${m[1]}/attributes.json`;
     return chunkManager.memoize.getUncounted(
         {'type': 'n5:MultiscaleVolumeChunkSource', url},
         () =>
