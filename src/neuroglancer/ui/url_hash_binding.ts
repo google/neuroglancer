@@ -79,7 +79,7 @@ export class UrlHashBinding extends RefCounted {
         if (decodeURIComponent(stateString) === '{}') {
           history.replaceState(null, '', '#');
         } else {
-          history.replaceState(null, '', removeParameterFromUrl(window.location.href, 'json_url')+'#!' + stateString);
+          history.replaceState(null, '', '/#!' + stateString);
         }
       }
     }
