@@ -87,7 +87,22 @@ class ViewerCommonBase(object):
         self.config_state.retry_txn(set_screenshot_id)
         self._screenshot_callbacks[screenshot_id] = callback
 
-    def screenshot(self):
+    def screenshot(self, size=None):
+        """Capture a screenshot synchronously.
+
+        :param size: Optional.  List of [width, height] specifying the dimension
+                     in pixels of the canvas to use.  If specified, UI controls
+                     are hidden and the canvas is resized to the specified
+                     dimensions while the screenshot is captured.
+
+        :returns: The screenshot.
+        """
+        if size is not None:
+            prior_state = self.config_state.state
+            with self.config_state.txn() as s:
+                s.show_ui_controls = False
+                s.show_panel_borders = False
+                s.viewer_size = size
         event = threading.Event()
         result = [None]
         def handler(s):
@@ -95,6 +110,8 @@ class ViewerCommonBase(object):
             event.set()
         self.async_screenshot(handler)
         event.wait()
+        if size is not None:
+            self.config_state.set_state(prior_state)
         return result[0]
 
     def _handle_screenshot_reply(self, s):
