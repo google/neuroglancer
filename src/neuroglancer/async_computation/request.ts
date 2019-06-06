@@ -21,7 +21,7 @@ const freeWorkers: Worker[] = [];
 const pendingTasks = new Map<number, {msg: any, transfer: Transferable[] | undefined}>();
 const tasks = new Map<
     number, {resolve: (value: any) => void, reject: (error: any) => void, cleanup: () => void}>();
-const maxWorkers = 8;
+const maxWorkers = Math.min(12, navigator.hardwareConcurrency);
 let nextTaskId = 0;
 
 function returnWorker(worker: Worker) {
