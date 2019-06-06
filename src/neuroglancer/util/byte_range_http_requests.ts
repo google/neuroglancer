@@ -18,10 +18,21 @@ import {CancellationToken} from 'neuroglancer/util/cancellation';
 import {cancellableFetchOk, getByteRangeHeader, responseArrayBuffer} from 'neuroglancer/util/http_request';
 import {Uint64} from 'neuroglancer/util/uint64';
 
+/**
+ * On Chromium, multiple concurrent byte range requests to the same URL are serialized unless the
+ * cache is disabled.  Disabling the cache works around the problem.
+ *
+ * https://bugs.chromium.org/p/chromium/issues/detail?id=969828
+ */
+const cacheMode = navigator.userAgent.indexOf('Chrome') !== -1 ? 'no-store' : 'default';
+
 export function fetchHttpByteRange(
-    url: string, startOffset: Uint64, endOffset: Uint64,
+    url: string, startOffset: Uint64|number, endOffset: Uint64|number,
     cancellationToken: CancellationToken): Promise<ArrayBuffer> {
   return cancellableFetchOk(
-      url, {headers: getByteRangeHeader(startOffset, endOffset)},
+      url, {
+        headers: getByteRangeHeader(startOffset, endOffset),
+        cache: cacheMode,
+      },
       responseArrayBuffer, cancellationToken);
 }

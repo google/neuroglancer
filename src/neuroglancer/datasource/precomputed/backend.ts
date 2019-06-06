@@ -492,13 +492,13 @@ export class PrecomputedMultiscaleMeshSource extends
     const startOffset = offsets[chunkIndex];
     const endOffset = offsets[chunkIndex + 1];
     let requestUrl: string;
-    let startOffsetStr: string, endOffsetStr: string;
+    let adjustedStartOffset: Uint64|number, adjustedEndOffset: Uint64|number;
     if (shardInfo !== undefined) {
       requestUrl = shardInfo.shardUrl;
       const fullDataSize = offsets[offsets.length - 1];
       let startLow = shardInfo.offset.low - fullDataSize + startOffset;
       let startHigh = shardInfo.offset.high;
-      let endLow = startLow + endOffset - startOffset - 1;
+      let endLow = startLow + endOffset - startOffset;
       let endHigh = startHigh;
       while (startLow < 0) {
         startLow += 4294967296;
@@ -512,16 +512,15 @@ export class PrecomputedMultiscaleMeshSource extends
         endLow -= 4294967296;
         endHigh += 1;
       }
-      startOffsetStr = new Uint64(startLow, startHigh).toString();
-      endOffsetStr = new Uint64(endLow, endHigh).toString();
+      adjustedStartOffset = new Uint64(startLow, startHigh);
+      adjustedEndOffset = new Uint64(endLow, endHigh);
     } else {
       requestUrl = `${parameters.url}/${manifestChunk.objectId}`;
-      startOffsetStr = startOffset.toString();
-      endOffsetStr = (endOffset - 1).toString();
+      adjustedStartOffset = startOffset;
+      adjustedEndOffset = endOffset;
     }
-    const response = await cancellableFetchOk(
-        requestUrl, {headers: {'Range': `bytes=${startOffsetStr}-${endOffsetStr}`}},
-        responseArrayBuffer, cancellationToken);
+    const response = await fetchHttpByteRange(
+        requestUrl, adjustedStartOffset, adjustedEndOffset, cancellationToken);
     await decodeMultiscaleFragmentChunk(chunk, response);
   }
 }

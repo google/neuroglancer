@@ -99,9 +99,15 @@ export async function cancellableFetchOk<T>(
 
 const tempUint64 = new Uint64();
 
-export function getByteRangeHeader(startOffset: Uint64, endOffset: Uint64) {
-  Uint64.decrement(tempUint64, endOffset);
-  return {'Range': `bytes=${startOffset}-${tempUint64}`};
+export function getByteRangeHeader(startOffset: Uint64|number, endOffset: Uint64|number) {
+  let endOffsetStr: string;
+  if (typeof endOffset === 'number') {
+    endOffsetStr = `${endOffset - 1}`;
+  } else {
+    Uint64.decrement(tempUint64, endOffset);
+    endOffsetStr = tempUint64.toString();
+  }
+  return {'Range': `bytes=${startOffset}-${endOffsetStr}`};
 }
 
 /**
