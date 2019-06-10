@@ -20,7 +20,7 @@ import {DisplayContext} from 'neuroglancer/display_context';
 import {makeRenderedPanelVisibleLayerTracker, VisibleRenderLayerTracker} from 'neuroglancer/layer';
 import {PERSPECTIVE_VIEW_ADD_LAYER_RPC_ID, PERSPECTIVE_VIEW_REMOVE_LAYER_RPC_ID, PERSPECTIVE_VIEW_RPC_ID, PERSPECTIVE_VIEW_UPDATE_VIEWPORT_RPC_ID} from 'neuroglancer/perspective_view/base';
 import {PerspectiveViewReadyRenderContext, PerspectiveViewRenderContext, PerspectiveViewRenderLayer} from 'neuroglancer/perspective_view/render_layer';
-import {FramePickingData, RenderedDataPanel, RenderedDataViewerState} from 'neuroglancer/rendered_data_panel';
+import {clearOutOfBoundsPickData, FramePickingData, pickDiameter, pickOffsetSequence, pickRadius, RenderedDataPanel, RenderedDataViewerState} from 'neuroglancer/rendered_data_panel';
 import {SliceView, SliceViewRenderHelper} from 'neuroglancer/sliceview/frontend';
 import {TrackableBoolean, TrackableBooleanCheckbox} from 'neuroglancer/trackable_boolean';
 import {TrackableValue} from 'neuroglancer/trackable_value';
@@ -412,27 +412,39 @@ export class PerspectivePanel extends RenderedDataPanel {
 
   issuePickRequest(glWindowX: number, glWindowY: number) {
     const {offscreenFramebuffer} = this;
-    offscreenFramebuffer.readPixelFloat32IntoBuffer(OffscreenTextures.Z, glWindowX, glWindowY, 0);
     offscreenFramebuffer.readPixelFloat32IntoBuffer(
-        OffscreenTextures.PICK, glWindowX, glWindowY, 16);
+        OffscreenTextures.Z, glWindowX - pickRadius, glWindowY - pickRadius, 0, pickDiameter,
+        pickDiameter);
+    offscreenFramebuffer.readPixelFloat32IntoBuffer(
+        OffscreenTextures.PICK, glWindowX - pickRadius, glWindowY - pickRadius,
+        4 * 4 * pickDiameter * pickDiameter, pickDiameter, pickDiameter);
   }
 
   completePickRequest(
       glWindowX: number, glWindowY: number, data: Float32Array, pickingData: FramePickingData) {
     const {mouseState} = this.viewer;
     mouseState.pickedRenderLayer = null;
-    let glWindowZ = 1.0 - data[0];
-    if (glWindowZ === 1.0) {
-      mouseState.setActive(false);
+    clearOutOfBoundsPickData(
+        data, 0, 4, glWindowX, glWindowY, pickingData.viewportWidth, pickingData.viewportHeight);
+    const numOffsets = pickOffsetSequence.length;
+    for (let i = 0; i < numOffsets; ++i) {
+      const offset = pickOffsetSequence[i];
+      let zValue = data[4 * offset];
+      if (zValue === 0) continue;
+      const relativeX = offset % pickDiameter;
+      const relativeY = (offset - relativeX) / pickDiameter;
+      let glWindowZ = 1.0 - zValue;
+      const out = mouseState.position;
+      out[0] = 2.0 * (glWindowX + relativeX - pickRadius) / pickingData.viewportWidth - 1.0;
+      out[1] = 2.0 * (glWindowY + relativeY - pickRadius) / pickingData.viewportHeight - 1.0;
+      out[2] = 2.0 * glWindowZ - 1.0;
+      vec3.transformMat4(out, out, pickingData.invTransform);
+      const pickValue = data[4 * pickDiameter * pickDiameter + 4 * offset];
+      pickingData.pickIDs.setMouseState(mouseState, pickValue);
+      mouseState.setActive(true);
       return;
     }
-    const out = mouseState.position;
-    out[0] = 2.0 * glWindowX / pickingData.viewportWidth - 1.0;
-    out[1] = 2.0 * glWindowY / pickingData.viewportHeight - 1.0;
-    out[2] = 2.0 * glWindowZ - 1.0;
-    vec3.transformMat4(out, out, pickingData.invTransform);
-    pickingData.pickIDs.setMouseState(mouseState, data[4]);
-    mouseState.setActive(true);
+    mouseState.setActive(false);
   }
 
   translateDataPointByViewportPixels(out: vec3, orig: vec3, deltaX: number, deltaY: number): vec3 {

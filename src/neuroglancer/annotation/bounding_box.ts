@@ -234,8 +234,7 @@ emitAnnotation(getCircleColor(vColor, borderColor));
           /*normalized=*/ false,
           /*stride=*/ 4 * 7, /*offset=*/ 4 * 3);
 
-      const lineWidth = context.renderContext.emitColor ? 1 : 10;
-      this.lineShader.draw(shader, context.renderContext, lineWidth, 1, context.count);
+      this.lineShader.draw(shader, context.renderContext, /*lineWidth=*/ 1, 1, context.count);
       gl.disableVertexAttribArray(aBoxCornerOffset1);
       gl.disableVertexAttribArray(aBoxCornerOffset2);
     });
