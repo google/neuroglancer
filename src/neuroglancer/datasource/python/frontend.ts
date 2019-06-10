@@ -30,7 +30,7 @@ import {VolumeChunkSpecification, VolumeSourceOptions, VolumeType} from 'neurogl
 import {MultiscaleVolumeChunkSource as GenericMultiscaleVolumeChunkSource, VolumeChunkSource} from 'neuroglancer/sliceview/volume/frontend';
 import {Borrowed, Owned} from 'neuroglancer/util/disposable';
 import {mat4, vec3} from 'neuroglancer/util/geom';
-import {openHttpRequest, sendHttpRequest} from 'neuroglancer/util/http_request';
+import {fetchOk} from 'neuroglancer/util/http_request';
 import {parseArray, parseFixedLengthArray, verify3dDimensions, verify3dScale, verify3dVec, verifyEnumString, verifyObject, verifyObjectAsMap, verifyObjectProperty, verifyPositiveInt, verifyString} from 'neuroglancer/util/json';
 import {getObjectId} from 'neuroglancer/util/object_id';
 
@@ -306,7 +306,8 @@ export class PythonDataSource extends DataSource {
   getVolume(chunkManager: ChunkManager, key: string) {
     return chunkManager.memoize.getUncounted(
         {'type': 'python:MultiscaleVolumeChunkSource', key},
-        () => sendHttpRequest(openHttpRequest(`/neuroglancer/info/${key}`), 'json')
+        () => fetchOk(`/neuroglancer/info/${key}`)
+                  .then(response => response.json())
                   .then(
                       response =>
                           new MultiscaleVolumeChunkSource(this, chunkManager, key, response)));

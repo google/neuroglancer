@@ -174,8 +174,7 @@ There is a Google Group/mailing list for discussion related to Neuroglancer:
 Want to contribute?  Great!  First, read [CONTRIBUTING.md](CONTRIBUTING.md).
 
 # Acknowledgements
-[<img src="https://neuroglancer-public-data.storage.googleapis.com/website/browserstack-logo-429x92.png" alt="BrowserStack Logo" width=215 height=46 align="middle">](https://www.browserstack.com)
- - Cross-browser testing infrastructure provided by [BrowserStack](https://www.browserstack.com).
+Cross-browser Testing Platform Provided by [Sauce Labs](https://saucelabs.com)
 
 # License
 

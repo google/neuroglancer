@@ -78,7 +78,7 @@
     "style-loader": "^0.23.1",
     "svg-inline-loader": "^0.8.0",
     "ts-loader": "^5.3.3",
-    "typescript": "3.4.1",
+    "typescript": "3.4.5",
     "url-loader": "^1.1.2",
     "webpack": "^4.29.6"
   }

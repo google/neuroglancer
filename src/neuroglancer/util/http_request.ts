@@ -15,140 +15,109 @@
  */
 
 import {CancellationToken, uncancelableToken} from 'neuroglancer/util/cancellation';
-import {simpleStringHash} from 'neuroglancer/util/hash';
-
-export type RequestModifier = (request: XMLHttpRequest) => void;
-
-export const URL_SYMBOL = Symbol('url');
-export const METHOD_SYMBOL = Symbol('method');
+import {Uint64} from 'neuroglancer/util/uint64';
 
 export class HttpError extends Error {
-  method: string;
   url: string;
-  code: number;
-  statusMessage: string;
-  response: any;
+  status: number;
+  statusText: string;
 
-  constructor(method: string, url: string, code: number, statusMessage: string, response: any) {
-    let message = `${method} ${JSON.stringify(url)} resulted in HTTP error ${code}`;
-    if (statusMessage) {
-      message += `: ${statusMessage}`;
+  constructor(url: string, status: number, statusText: string) {
+    let message = `Fetching ${JSON.stringify(url)} resulted in HTTP error ${status}`;
+    if (statusText) {
+      message += `: ${statusText}`;
     }
     message += '.';
     super(message);
     this.name = 'HttpError';
     this.message = message;
-    this.method = method;
     this.url = url;
-    this.code = code;
-    this.statusMessage = statusMessage;
-    this.response = response;
+    this.status = status;
+    this.statusText = statusText;
   }
 
-  static fromXhr(xhr: XMLHttpRequest) {
-    return new HttpError(
-        (<any>xhr)[METHOD_SYMBOL], (<any>xhr)[URL_SYMBOL], xhr.status, xhr.statusText,
-        xhr.response);
+  static fromResponse(response: Response) {
+    return new HttpError(response.url, response.status, response.statusText);
   }
-}
-
-export function openHttpRequest(url: string, method = 'GET') {
-  let xhr = new XMLHttpRequest();
-  (<any>xhr)[METHOD_SYMBOL] = method;
-  (<any>xhr)[URL_SYMBOL] = url;
-  xhr.open(method, url);
-  return xhr;
-}
-
-export function pickShard(baseUrls: string|string[], path: string) {
-  if (Array.isArray(baseUrls)) {
-    let numShards = baseUrls.length;
-    let shard = numShards === 1 ? 0 : Math.abs(simpleStringHash(path)) % numShards;
-    return baseUrls[shard] + path;
-  }
-  return baseUrls + path;
-}
-
-export function openShardedHttpRequest(baseUrls: string|string[], path: string, method = 'GET') {
-  let xhr = new XMLHttpRequest();
-  const url = pickShard(baseUrls, path);
-  (<any>xhr)[METHOD_SYMBOL] = method;
-  (<any>xhr)[URL_SYMBOL] = url;
-  xhr.open(method, url);
-  return xhr;
-}
-
-export function sendHttpRequest(
-    xhr: XMLHttpRequest, responseType: 'arraybuffer',
-    token?: CancellationToken): Promise<ArrayBuffer>;
-export function sendHttpRequest(
-    xhr: XMLHttpRequest, responseType: 'json', token?: CancellationToken): Promise<any>;
-export function sendHttpRequest(
-    xhr: XMLHttpRequest, responseType: XMLHttpRequestResponseType, token?: CancellationToken): any;
-export function sendHttpRequest(
-    xhr: XMLHttpRequest, responseType: XMLHttpRequestResponseType,
-    token: CancellationToken = uncancelableToken) {
-  xhr.responseType = responseType;
-  return new Promise((resolve, reject) => {
-    const abort = () => {
-      xhr.abort();
-    };
-    token.add(abort);
-    xhr.onloadend = function(this: XMLHttpRequest) {
-      let status = this.status;
-      token.remove(abort);
-      if (status >= 200 && status < 300) {
-        resolve(this.response);
-      } else {
-        reject(HttpError.fromXhr(xhr));
-      }
-    };
-    xhr.send();
-  });
-}
-
-export function sendHttpJsonPostRequest(
-    xhr: XMLHttpRequest, payload: any, responseType: 'arraybuffer',
-    token?: CancellationToken): Promise<ArrayBuffer>;
-export function sendHttpJsonPostRequest(
-    xhr: XMLHttpRequest, payload: any, responseType: 'json',
-    token?: CancellationToken): Promise<any>;
-export function sendHttpJsonPostRequest(
-    xhr: XMLHttpRequest, payload: any, responseType: XMLHttpRequestResponseType,
-    token?: CancellationToken): any;
-
-export function sendHttpJsonPostRequest(
-    xhr: XMLHttpRequest, payload: any, responseType: XMLHttpRequestResponseType,
-    token: CancellationToken = uncancelableToken) {
-  xhr.responseType = responseType;
-  xhr.setRequestHeader('Content-Type', `application/json`);
-  return new Promise((resolve, reject) => {
-    const abort = () => {
-      xhr.abort();
-    };
-    token.add(abort);
-    xhr.onloadend = function(this: XMLHttpRequest) {
-      let status = this.status;
-      token.remove(abort);
-      if (status >= 200 && status < 300) {
-        resolve(this.response);
-      } else {
-        reject(HttpError.fromXhr(xhr));
-      }
-    };
-    xhr.send(JSON.stringify(payload));
-  });
 }
 
 /**
- * Parses a URL that may have a special protocol designation into a list of base URLs and a path.
+ * Issues a `fetch` request.
  *
- * If the protocol is 'http' or 'https', the input string is returned as a single base URL, with an
- * empty path.
- *
- * Additionally, 'gs://bucket/path' is supported for accessing Google Storage buckets.
+ * If the request fails due to an HTTP status outside `[200, 300)`, throws an `HttpError`.  If the
+ * request fails due to a network or CORS restriction, throws an `HttpError` with a `status` of `0`.
  */
-export function parseSpecialUrl(url: string): [string[], string] {
+export async function fetchOk(input: RequestInfo, init?: RequestInit): Promise<Response> {
+  let response: Response;
+  try {
+    response = await fetch(input, init);
+  } catch (error) {
+    if (error instanceof TypeError) {
+      throw new HttpError('', 0, '');
+    }
+    throw error;
+  }
+  if (!response.ok) throw HttpError.fromResponse(response);
+  return response;
+}
+
+export function responseArrayBuffer(response: Response): Promise<ArrayBuffer> {
+  return response.arrayBuffer();
+}
+
+export function responseJson(response: Response): Promise<any> {
+  return response.json();
+}
+
+export type ResponseTransform<T> = (response: Response) => Promise<T>;
+
+/**
+ * Issues a `fetch` request in the same way as `fetchOk`, and returns the result of the promise
+ * returned by `transformResponse`.
+ *
+ * Additionally, the request may be cancelled through `cancellationToken`.
+ *
+ * The `transformResponse` function should not do anything with the `Response` object after its
+ * result becomes ready; otherwise, cancellation may not work as expected.
+ */
+export async function cancellableFetchOk<T>(
+    input: RequestInfo, init: RequestInit, transformResponse: ResponseTransform<T>,
+    cancellationToken: CancellationToken = uncancelableToken): Promise<T> {
+  if (cancellationToken === uncancelableToken) {
+    const response = await fetchOk(input, init);
+    return await transformResponse(response);
+  }
+  const abortController = new AbortController();
+  const unregisterCancellation = cancellationToken.add(() => abortController.abort());
+  try {
+    const response = await fetchOk(input, init);
+    return await transformResponse(response);
+  } finally {
+    unregisterCancellation();
+  }
+}
+
+const tempUint64 = new Uint64();
+
+export function getByteRangeHeader(startOffset: Uint64|number, endOffset: Uint64|number) {
+  let endOffsetStr: string;
+  if (typeof endOffset === 'number') {
+    endOffsetStr = `${endOffset - 1}`;
+  } else {
+    Uint64.decrement(tempUint64, endOffset);
+    endOffsetStr = tempUint64.toString();
+  }
+  return {'Range': `bytes=${startOffset}-${endOffsetStr}`};
+}
+
+/**
+ * Parses a URL that may have a special protocol designation into a real URL.
+ *
+ * If the protocol is 'http' or 'https', the input string is returned as is.
+ *
+ * The special 'gs://bucket/path' syntax is supported for accessing Google Storage buckets.
+ */
+export function parseSpecialUrl(url: string): string {
   const urlProtocolPattern = /^([^:\/]+):\/\/([^\/]+)(\/.*)?$/;
   let match = url.match(urlProtocolPattern);
   if (match === null) {
@@ -157,20 +126,14 @@ export function parseSpecialUrl(url: string): [string[], string] {
   const protocol = match[1];
   if (protocol === 'gs') {
     const bucket = match[2];
-    const baseUrls = [
-      `https://storage.googleapis.com/${bucket}`,
-    ];
     let path = match[3];
     if (path === undefined) path = '';
-    return [baseUrls, path];
+    return `https://storage.googleapis.com/${bucket}${path}`;
   } else if (protocol === 's3') {
     const bucket = match[2];
-    const baseUrls = [
-      `https://s3.amazonaws.com/${bucket}`,
-    ];
     let path = match[3];
     if (path === undefined) path = '';
-    return [baseUrls, path];
+    return `https://s3.amazonaws.com/${bucket}${path}`;
   }
-  return [[url], ''];
+  return url;
 }

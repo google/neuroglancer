@@ -122,46 +122,74 @@ function parseMeshesResponse(meshesResponse: any): SingleMeshInfo[] {
 const floatPattern = '([0-9]*\\.?[0-9]+(?:[eE][-+]?[0-9]+)?)';
 const intPattern = '([0-9]+)';
 const lodPattern =
-    new RegExp(`^((.*)_${intPattern}x${intPattern}x${intPattern})_lod([0-9]+)_${floatPattern}$`);
+    new RegExp(`^(.*)_${intPattern}x${intPattern}x${intPattern}_lod([0-9]+)_${floatPattern}$`);
 
 function getMultiscaleMeshes(
-    volumeInfo: MultiscaleVolumeInfo, meshes: SingleMeshInfo[]): MultiscaleMeshInfo[] {
-  const lodMeshes = new Map<string, MultiscaleMeshInfo>();
+  volumeInfo: MultiscaleVolumeInfo, meshes: SingleMeshInfo[]): MultiscaleMeshInfo[] {
+  const multiscaleMeshes = new Map<string, MultiscaleMeshInfo>();
   const baseVolume = volumeInfo.scales[0];
+
+  const invalidLodMeshes = new Set<string>();
 
   for (const mesh of meshes) {
     // Only triangular meshes supported currently.
     if (mesh.type !== 'TRIANGLES') continue;
-
     const m = mesh.name.match(lodPattern);
     if (m === null) continue;
-
     const key = m[1];
-    let info = lodMeshes.get(key);
+    let info = multiscaleMeshes.get(key);
     if (info === undefined) {
-      const chunkShapeInVoxels =
-          vec3.fromValues(parseInt(m[3], 10), parseInt(m[4], 10), parseInt(m[5], 10));
-      const gridShape = new Uint32Array(3);
-      for (let i = 0; i < 3; ++i) {
-        gridShape[i] = Math.ceil(baseVolume.upperVoxelBound[i] / chunkShapeInVoxels[i]);
-      }
       info = {
         key,
-        chunkShape: vec3.multiply(vec3.create(), baseVolume.voxelSize, chunkShapeInVoxels),
-        gridShape,
+        chunkShape: vec3.create(),
         lods: []
       };
-      lodMeshes.set(key, info);
+      multiscaleMeshes.set(key, info);
     }
-    const lod = parseInt(m[6]);
-    info.lods.push({info: mesh, scale: parseFloat(m[7]), lod});
+    const lod = parseInt(m[5]);
+    if (info.lods[lod] !== undefined) {
+      invalidLodMeshes.add(key);
+      continue;
+    }
+    const chunkShapeInVoxels =
+      vec3.fromValues(parseInt(m[2], 10), parseInt(m[3], 10), parseInt(m[4], 10));
+    const gridShape = new Uint32Array(3);
+    for (let i = 0; i < 3; ++i) {
+      gridShape[i] = Math.ceil(baseVolume.upperVoxelBound[i] / chunkShapeInVoxels[i]);
+    }
+
+    info.lods[lod] = {
+      info: mesh,
+      scale: parseFloat(m[6]),
+      // Temporarily use the relativeBlockShape field to store the absolute shape in voxels.
+      relativeBlockShape: chunkShapeInVoxels,
+      gridShape,
+    };
   }
 
-  for (const lodMesh of lodMeshes.values()) {
-    lodMesh.lods.sort((a, b) => a.lod - b.lod);
+  const output: MultiscaleMeshInfo[] = [];
+  meshLoop: for (const mesh of multiscaleMeshes.values()) {
+    if (invalidLodMeshes.has(mesh.key)) continue meshLoop;
+    const baseLod = mesh.lods[0];
+    if (baseLod === undefined) continue meshLoop;
+    const baseBlockShapeInVoxels = baseLod.relativeBlockShape;
+    vec3.multiply(mesh.chunkShape, baseBlockShapeInVoxels, baseVolume.voxelSize);
+    for (let lodIndex = 1; lodIndex < mesh.lods.length; ++lodIndex) {
+      const lod = mesh.lods[lodIndex];
+      if (lod === undefined) continue meshLoop;
+      const {relativeBlockShape} = lod;
+      for (let i = 0; i < 3; ++i) {
+        const curSize = relativeBlockShape[i];
+        const baseSize = baseBlockShapeInVoxels[i];
+        if (curSize < baseSize || (curSize % baseSize) !== 0) continue meshLoop;
+        relativeBlockShape[i] = curSize / baseSize;
+      }
+    }
+    baseBlockShapeInVoxels.fill(1);
+    output.push(mesh);
   }
 
-  return Array.from(lodMeshes.values());
+  return output;
 }
 
 export class MultiscaleVolumeInfo {
@@ -768,5 +796,5 @@ export class BrainmapsDataSource extends DataSource {
 
 export const productionInstance: BrainmapsInstance = {
   description: 'Google Brain Maps',
-  serverUrls: ['https://brainmaps.googleapis.com'],
+  serverUrl: 'https://brainmaps.googleapis.com',
 };

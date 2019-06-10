@@ -46,7 +46,7 @@ import {Borrowed, Owned, RefCounted} from 'neuroglancer/util/disposable';
 import {removeFromParent} from 'neuroglancer/util/dom';
 import {registerActionListener} from 'neuroglancer/util/event_action_map';
 import {vec3} from 'neuroglancer/util/geom';
-import {openHttpRequest, sendHttpJsonPostRequest, sendHttpRequest} from 'neuroglancer/util/http_request';
+import {cancellableFetchOk, responseJson} from 'neuroglancer/util/http_request';
 import {EventActionMap, KeyboardEventBinder} from 'neuroglancer/util/keyboard_bindings';
 import {NullarySignal} from 'neuroglancer/util/signal';
 import {CompoundTrackable} from 'neuroglancer/util/trackable';
@@ -660,11 +660,11 @@ export class Viewer extends RefCounted implements ViewerState {
   loadFromJsonUrl() {
     var urlParams = new URLSearchParams(window.location.search);
     if (urlParams.has('json_url')) {
-      let json_url = urlParams.get('json_url');
+      let json_url = urlParams.get('json_url')!;
       history.replaceState(null, '', removeParameterFromUrl(window.location.href, 'json_url'));
       StatusMessage
       .forPromise(
-        sendHttpRequest(openHttpRequest(json_url!), 'json')
+        cancellableFetchOk(json_url, {}, responseJson)
           .then(response => {
             this.state.restoreState(response);
           }),
@@ -694,9 +694,10 @@ export class Viewer extends RefCounted implements ViewerState {
 
     // upload state to jsonStateServer (only if it's defined)
     if (this.jsonStateServer.value) {
-        StatusMessage.showTemporaryMessage(`Posting state to ${this.jsonStateServer.value}.`);
-        sendHttpJsonPostRequest(
-          openHttpRequest(this.jsonStateServer.value, 'POST'), this.state.toJSON(), 'json')
+      StatusMessage.showTemporaryMessage(`Posting state to ${this.jsonStateServer.value}.`);
+      cancellableFetchOk(
+          this.jsonStateServer.value, {method: 'POST', body: JSON.stringify(this.state.toJSON())},
+          responseJson)
           .then(response => {
             history.replaceState(
                 null, '',
