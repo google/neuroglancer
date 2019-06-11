@@ -14,6 +14,8 @@
  * limitations under the License.
  */
 
+import {decodeGzip} from 'neuroglancer/async_computation/decode_gzip_request';
+import {requestAsyncComputation} from 'neuroglancer/async_computation/request';
 import {ChunkManager, WithParameters} from 'neuroglancer/chunk_manager/backend';
 import {ChunkPriorityTier} from 'neuroglancer/chunk_manager/base';
 import {GenericSharedDataSource, PriorityGetter} from 'neuroglancer/chunk_manager/generic_file_source';
@@ -26,16 +28,18 @@ import {Borrowed} from 'neuroglancer/util/disposable';
 import {Endianness} from 'neuroglancer/util/endian';
 import {mat4, quat, vec3} from 'neuroglancer/util/geom';
 import {registerPromiseRPC, registerSharedObject, RPCPromise} from 'neuroglancer/worker_rpc';
-import {decompress, isCompressed, NIFTI1, NIFTI2, readHeader, readImage} from 'nifti-reader-js';
+import {isCompressed, NIFTI1, NIFTI2, readHeader, readImage} from 'nifti-reader-js';
 
 export class NiftiFileData {
   uncompressedData: ArrayBuffer;
   header: NIFTI1|NIFTI2;
 }
 
-function decodeNiftiFile(buffer: ArrayBuffer) {
+async function decodeNiftiFile(buffer: ArrayBuffer, cancellationToken: CancellationToken) {
   if (isCompressed(buffer)) {
-    buffer = decompress(buffer);
+    buffer = (await requestAsyncComputation(
+                  decodeGzip, cancellationToken, [buffer], new Uint8Array(buffer)))
+                 .buffer;
   }
   let data = new NiftiFileData();
   data.uncompressedData = buffer;
@@ -141,16 +145,14 @@ registerPromiseRPC(
 
 @registerSharedObject() export class NiftiVolumeChunkSource extends
 (WithParameters(VolumeChunkSource, VolumeSourceParameters)) {
-  download(chunk: VolumeChunk, cancellationToken: CancellationToken) {
+  async download(chunk: VolumeChunk, cancellationToken: CancellationToken) {
     chunk.chunkDataSize = this.spec.chunkDataSize;
-    return getNiftiFileData(
-               this.chunkManager, this.parameters.url,
-               () => ({priorityTier: chunk.priorityTier, priority: chunk.priority}),
-               cancellationToken)
-        .then(data => {
-          let imageBuffer = readImage(data.header, data.uncompressedData);
-          decodeRawChunk(
-              chunk, imageBuffer, data.header.littleEndian ? Endianness.LITTLE : Endianness.BIG);
-        });
+    const data = await getNiftiFileData(
+        this.chunkManager, this.parameters.url,
+        () => ({priorityTier: chunk.priorityTier, priority: chunk.priority}), cancellationToken);
+    const imageBuffer = readImage(data.header, data.uncompressedData);
+    await decodeRawChunk(
+        chunk, cancellationToken, imageBuffer,
+        data.header.littleEndian ? Endianness.LITTLE : Endianness.BIG);
   }
 }

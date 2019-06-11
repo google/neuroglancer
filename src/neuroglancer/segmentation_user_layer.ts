@@ -14,6 +14,9 @@
  * limitations under the License.
  */
 
+import 'neuroglancer/noselect.css';
+import 'neuroglancer/segmentation_user_layer.css';
+
 import {UserLayer} from 'neuroglancer/layer';
 import {LayerListSpecification, registerLayerType, registerVolumeLayerType} from 'neuroglancer/layer_specification';
 import {MeshSource, MultiscaleMeshSource} from 'neuroglancer/mesh/frontend';
@@ -24,7 +27,7 @@ import {RenderScaleHistogram, trackableRenderScaleTarget} from 'neuroglancer/ren
 import {SegmentColorHash} from 'neuroglancer/segment_color';
 import {SegmentSelectionState, Uint64MapEntry} from 'neuroglancer/segmentation_display_state/frontend';
 import {SharedDisjointUint64Sets} from 'neuroglancer/shared_disjoint_sets';
-import {FRAGMENT_MAIN_START as SKELETON_FRAGMENT_MAIN_START, getTrackableFragmentMain, PerspectiveViewSkeletonLayer, SkeletonLayer, SkeletonSource, SliceViewPanelSkeletonLayer} from 'neuroglancer/skeleton/frontend';
+import {FRAGMENT_MAIN_START as SKELETON_FRAGMENT_MAIN_START, PerspectiveViewSkeletonLayer, SkeletonLayer, SkeletonRenderingOptions, SkeletonSource, SliceViewPanelSkeletonLayer, ViewSpecificSkeletonRenderingOptions} from 'neuroglancer/skeleton/frontend';
 import {ChunkedGraphLayer, SegmentSelection} from 'neuroglancer/sliceview/chunked_graph/frontend';
 import {VolumeType} from 'neuroglancer/sliceview/volume/base';
 import {SegmentationRenderLayer} from 'neuroglancer/sliceview/volume/segmentation_renderlayer';
@@ -40,15 +43,13 @@ import {NullarySignal} from 'neuroglancer/util/signal';
 import {Uint64} from 'neuroglancer/util/uint64';
 import {makeWatchableShaderError} from 'neuroglancer/webgl/dynamic_shader';
 import {ChunkedGraphWidget} from 'neuroglancer/widget/chunked_graph_widget';
+import {EnumSelectWidget} from 'neuroglancer/widget/enum_widget';
 import {RangeWidget} from 'neuroglancer/widget/range';
 import {RenderScaleWidget} from 'neuroglancer/widget/render_scale_widget';
 import {SegmentSetWidget} from 'neuroglancer/widget/segment_set_widget';
 import {ShaderCodeWidget} from 'neuroglancer/widget/shader_code_widget';
 import {Tab} from 'neuroglancer/widget/tab_view';
 import {Uint64EntryWidget} from 'neuroglancer/widget/uint64_entry_widget';
-
-require('neuroglancer/noselect.css');
-require('./segmentation_user_layer.css');
 
 const SELECTED_ALPHA_JSON_KEY = 'selectedAlpha';
 const NOT_SELECTED_ALPHA_JSON_KEY = 'notSelectedAlpha';
@@ -62,10 +63,11 @@ const ROOT_SEGMENTS_JSON_KEY = 'segments';
 const HIDDEN_ROOT_SEGMENTS_JSON_KEY = 'hiddenSegments';
 const HIGHLIGHTS_JSON_KEY = 'highlights';
 const EQUIVALENCES_JSON_KEY = 'equivalences';
-const SKELETON_SHADER_JSON_KEY = 'skeletonShader';
 const COLOR_SEED_JSON_KEY = 'colorSeed';
 const MESH_RENDER_SCALE_JSON_KEY = 'meshRenderScale';
-const SKELETONS_SHOW_NODES_JSON_KEY = 'showSkeletonNodes';
+
+const SKELETON_RENDERING_JSON_KEY = 'skeletonRendering';
+const SKELETON_SHADER_JSON_KEY = 'skeletonShader';
 
 const Base = UserLayerWithVolumeSourceMixin(UserLayer);
 export class SegmentationUserLayer extends Base {
@@ -84,11 +86,10 @@ export class SegmentationUserLayer extends Base {
     highlightedSegments: Uint64Set.makeWithCounterpart(this.manager.worker),
     segmentEquivalences: SharedDisjointUint64Sets.makeWithCounterpart(this.manager.worker),
     objectToDataTransform: this.transform,
-    fragmentMain: getTrackableFragmentMain(),
+    skeletonRenderingOptions: new SkeletonRenderingOptions(),
     shaderError: makeWatchableShaderError(),
     renderScaleHistogram: new RenderScaleHistogram(),
     renderScaleTarget: trackableRenderScaleTarget(1),
-    showSkeletonNodes: new TrackableBoolean(true, true),
   };
 
   /**
@@ -124,10 +125,9 @@ export class SegmentationUserLayer extends Base {
     this.displayState.notSelectedAlpha.changed.add(this.specificationChanged.dispatch);
     this.displayState.objectAlpha.changed.add(this.specificationChanged.dispatch);
     this.displayState.hideSegmentZero.changed.add(this.specificationChanged.dispatch);
-    this.displayState.fragmentMain.changed.add(this.specificationChanged.dispatch);
+    this.displayState.skeletonRenderingOptions.changed.add(this.specificationChanged.dispatch);
     this.displayState.segmentColorHash.changed.add(this.specificationChanged.dispatch);
     this.displayState.renderScaleTarget.changed.add(this.specificationChanged.dispatch);
-    this.displayState.showSkeletonNodes.changed.add(this.specificationChanged.dispatch);
     this.tabs.add(
         'rendering', {label: 'Rendering', order: -100, getter: () => new DisplayOptionsTab(this)});
     this.tabs.default = 'rendering';
@@ -144,10 +144,15 @@ export class SegmentationUserLayer extends Base {
     this.displayState.notSelectedAlpha.restoreState(specification[NOT_SELECTED_ALPHA_JSON_KEY]);
     this.displayState.objectAlpha.restoreState(specification[OBJECT_ALPHA_JSON_KEY]);
     this.displayState.hideSegmentZero.restoreState(specification[HIDE_SEGMENT_ZERO_JSON_KEY]);
-    this.displayState.fragmentMain.restoreState(specification[SKELETON_SHADER_JSON_KEY]);
+
+    const {skeletonRenderingOptions} = this.displayState;
+    skeletonRenderingOptions.restoreState(specification[SKELETON_RENDERING_JSON_KEY]);
+    const skeletonShader = specification[SKELETON_SHADER_JSON_KEY];
+    if (skeletonShader !== undefined) {
+      skeletonRenderingOptions.shader.restoreState(skeletonShader);
+    }
     this.displayState.segmentColorHash.restoreState(specification[COLOR_SEED_JSON_KEY]);
     this.displayState.renderScaleTarget.restoreState(specification[MESH_RENDER_SCALE_JSON_KEY]);
-    this.displayState.showSkeletonNodes.restoreState(specification[SKELETONS_SHOW_NODES_JSON_KEY]);
 
     verifyObjectProperty(specification, EQUIVALENCES_JSON_KEY, y => {
       this.displayState.segmentEquivalences.restoreState(y);
@@ -338,9 +343,8 @@ export class SegmentationUserLayer extends Base {
     if (segmentEquivalences.size > 0 && !this.chunkedGraphUrl) { // Too many equivalences when using Chunked Graph
       x[EQUIVALENCES_JSON_KEY] = segmentEquivalences.toJSON();
     }
-    x[SKELETON_SHADER_JSON_KEY] = this.displayState.fragmentMain.toJSON();
+    x[SKELETON_RENDERING_JSON_KEY] = this.displayState.skeletonRenderingOptions.toJSON();
     x[MESH_RENDER_SCALE_JSON_KEY] = this.displayState.renderScaleTarget.toJSON();
-    x[SKELETONS_SHOW_NODES_JSON_KEY] = this.displayState.showSkeletonNodes.toJSON();
     return x;
   }
 
@@ -596,7 +600,7 @@ export class SegmentationUserLayer extends Base {
 
 function makeSkeletonShaderCodeWidget(layer: SegmentationUserLayer) {
   return new ShaderCodeWidget({
-    fragmentMain: layer.displayState.fragmentMain,
+    fragmentMain: layer.displayState.skeletonRenderingOptions.shader,
     shaderError: layer.displayState.shaderError,
     fragmentMainStartLine: SKELETON_FRAGMENT_MAIN_START,
   });
@@ -691,19 +695,28 @@ class DisplayOptionsTab extends Tab {
       if (this.layer.skeletonsPath === null || this.layer.skeletonLayer === undefined) {
         return;
       }
-      {
-        const checkbox = this.registerDisposer(
-            new TrackableBooleanCheckbox(layer.displayState.showSkeletonNodes));
-        checkbox.element.className =
-            'neuroglancer-segmentation-dropdown-show-skeleton-nodes neuroglancer-noselect';
-        const label = document.createElement('label');
-        label.className =
-            'neuroglancer-segmentation-dropdown-show-skeleton-nodes neuroglancer-noselect';
-        label.appendChild(document.createTextNode('Show skeleton nodes'));
-        label.appendChild(checkbox.element);
-        element.appendChild(label);
-      }
-
+      const addViewSpecificSkeletonRenderingControls =
+          (options: ViewSpecificSkeletonRenderingOptions, viewName: string) => {
+            {
+              const widget = this.registerDisposer(new EnumSelectWidget(options.mode));
+              const label = document.createElement('label');
+              label.className =
+                  'neuroglancer-segmentation-dropdown-skeleton-render-mode neuroglancer-noselect';
+              label.appendChild(document.createTextNode(`Skeleton mode (${viewName})`));
+              label.appendChild(widget.element);
+              element.appendChild(label);
+            }
+            {
+              const widget = this.registerDisposer(
+                  new RangeWidget(options.lineWidth, {min: 1, max: 40, step: 1}));
+              widget.promptElement.textContent = `Skeleton line width (${viewName})`;
+              element.appendChild(widget.element);
+            }
+          };
+      addViewSpecificSkeletonRenderingControls(
+          layer.displayState.skeletonRenderingOptions.params2d, '2d');
+      addViewSpecificSkeletonRenderingControls(
+          layer.displayState.skeletonRenderingOptions.params3d, '3d');
       let topRow = document.createElement('div');
       topRow.className = 'neuroglancer-segmentation-dropdown-skeleton-shader-header';
       let label = document.createElement('div');

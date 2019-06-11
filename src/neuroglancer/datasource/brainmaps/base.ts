@@ -51,7 +51,16 @@ export interface SingleMeshInfo {
 export interface MultiscaleMeshLOD {
   info: SingleMeshInfo;
   scale: number;
-  lod: number;
+
+  /**
+   * Shape of the chunk for this level of detail, as a multiple of the base chunk shape.
+   */
+  relativeBlockShape: vec3;
+
+  /**
+   * Size of chunk grid, in chunks.
+   */
+  gridShape: Uint32Array;
 }
 
 export interface MultiscaleMeshInfo {
@@ -61,14 +70,9 @@ export interface MultiscaleMeshInfo {
   key: string;
 
   /**
-   * Chunk shape in spatial units (nm).
+   * Chunk shape in spatial units (nm) for lod 0.
    */
   chunkShape: vec3;
-
-  /**
-   * Size of chunk grid, in chunks.
-   */
-  gridShape: Uint32Array;
 
   lods: MultiscaleMeshLOD[];
 }

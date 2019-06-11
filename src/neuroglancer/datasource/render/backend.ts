@@ -23,11 +23,11 @@ import {VolumeChunk, VolumeChunkSource} from 'neuroglancer/sliceview/volume/back
 import {CancellationToken} from 'neuroglancer/util/cancellation';
 import {Float32ArrayBuilder} from 'neuroglancer/util/float32array_builder';
 import {vec3} from 'neuroglancer/util/geom';
-import {openShardedHttpRequest, sendHttpJsonPostRequest, sendHttpRequest} from 'neuroglancer/util/http_request';
+import {cancellableFetchOk, responseArrayBuffer, responseJson} from 'neuroglancer/util/http_request';
 import {parseArray, verify3dVec, verifyObject, verifyString} from 'neuroglancer/util/json';
 import {registerSharedObject} from 'neuroglancer/worker_rpc';
 
-let chunkDecoders = new Map<string, ChunkDecoder>();
+const chunkDecoders = new Map<string, ChunkDecoder>();
 chunkDecoders.set('jpg', decodeJpegChunk);
 
 @registerSharedObject() export class TileChunkSource extends
@@ -55,7 +55,7 @@ chunkDecoders.set('jpg', decodeJpegChunk);
     return query_params.join('&');
   })();
 
-  download(chunk: VolumeChunk, cancellationToken: CancellationToken) {
+  async download(chunk: VolumeChunk, cancellationToken: CancellationToken) {
     let {parameters} = this;
     let {chunkGridPosition} = chunk;
 
@@ -79,10 +79,10 @@ chunkDecoders.set('jpg', decodeJpegChunk);
     // /v1/owner/{owner}/project/{project}/stack/{stack}/z/{z}/box/{x},{y},{width},{height},{scale}/jpeg-image
     let path = `/render-ws/v1/owner/${parameters.owner}/project/${parameters.project}/stack/${parameters.stack}/z/${chunkPosition[2]}/box/${chunkPosition[0]},${chunkPosition[1]},${xTileSize},${yTileSize},${scale}/jpeg-image`;
 
-    return sendHttpRequest(
-               openShardedHttpRequest(parameters.baseUrls, path + '?' + this.queryString),
-               'arraybuffer', cancellationToken)
-        .then(response => this.chunkDecoder(chunk, response));
+    const response = await cancellableFetchOk(
+        `${parameters.baseUrl}${path}?${this.queryString}`, {}, responseArrayBuffer,
+        cancellationToken);
+    await this.chunkDecoder(chunk, cancellationToken, response);
   }
 }
 
@@ -102,11 +102,15 @@ function createConversionObject(tileId: string, xcoord: any, ycoord: any) {
 function conversionObjectToWorld(
     conversionObjectArray: Array<any>, parameters: PointMatchChunkSourceParameters,
     cancellationToken: CancellationToken) {
-  let path = `/render-ws/v1/owner/${parameters.owner}/project/${parameters.project}/` +
+  const url = `${parameters.baseUrl}/render-ws/v1/owner/${parameters.owner}/project/${parameters.project}/` +
       `stack/${parameters.stack}/local-to-world-coordinates`;
-  return sendHttpJsonPostRequest(
-      openShardedHttpRequest(parameters.baseUrls, path, 'PUT'), conversionObjectArray, 'json',
-      cancellationToken);
+  return cancellableFetchOk(
+      url, {
+        method: 'PUT',
+        body: JSON.stringify(conversionObjectArray),
+        headers: {'Content-Type': 'application/json'}
+      },
+      responseJson, cancellationToken);
 }
 
 function decodePointMatches(
@@ -157,8 +161,7 @@ function getPointMatches(
     throw new Error(`Invalid section Id vector of length: ${JSON.stringify(sectionIds.length)}`);
   }
 
-  return sendHttpRequest(
-             openShardedHttpRequest(parameters.baseUrls, path), 'json', cancellationToken)
+  return cancellableFetchOk(`${parameters.baseUrl}${path}`, {}, responseJson, cancellationToken)
       .then(response => {
         return decodePointMatches(chunk, response, parameters, cancellationToken);
       });
@@ -168,8 +171,7 @@ function getPointMatches(
 function downloadPointMatchChunk(
     chunk: VectorGraphicsChunk, path: string, parameters: PointMatchChunkSourceParameters,
     cancellationToken: CancellationToken): Promise<void> {
-  return sendHttpRequest(
-             openShardedHttpRequest(parameters.baseUrls, path), 'json', cancellationToken)
+  return cancellableFetchOk(`${parameters.baseUrl}${path}`, {}, responseJson, cancellationToken)
       .then(response => {
         return getPointMatches(chunk, decodeSectionIDs(response), parameters, cancellationToken);
       });

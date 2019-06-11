@@ -49,10 +49,22 @@ export function initializeWebGL(canvas: HTMLCanvasElement) {
   // var contextAttributes = gl.getContextAttributes();
   // var haveStencilBuffer = contextAttributes.stencil;
 
-  for (let extension of ['EXT_color_buffer_float']) {
+  for (const extension of ['EXT_color_buffer_float']) {
     if (!gl.getExtension(extension)) {
       throw new Error(`${extension} extension not available`);
     }
+  }
+
+  // Extensions to attempt to add but not fail if they are not available.
+  for (const extension of [
+           // Some versions of Firefox 67.0 seem to require this extension being added in addition
+           // to EXT_color_buffer_float, despite the note here indicating it is unnecessary:
+           // https://developer.mozilla.org/en-US/docs/Web/API/EXT_float_blend
+           //
+           // See https://github.com/google/neuroglancer/issues/140
+           'EXT_float_blend',
+  ]) {
+    gl.getExtension(extension);
   }
   return gl;
 }

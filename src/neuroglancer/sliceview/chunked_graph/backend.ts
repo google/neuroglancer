@@ -24,7 +24,7 @@ import {RenderLayer as RenderLayerInterface, TransformedSource} from 'neuroglanc
 import {CHUNKED_GRAPH_LAYER_RPC_ID, ChunkedGraphChunkSource as ChunkedGraphChunkSourceInterface, ChunkedGraphChunkSpecification} from 'neuroglancer/sliceview/chunked_graph/base';
 import {Uint64Set} from 'neuroglancer/uint64_set';
 import {mat4, vec3, vec3Key} from 'neuroglancer/util/geom';
-import {HttpError, openHttpRequest, sendHttpRequest} from 'neuroglancer/util/http_request';
+import {cancellableFetchOk, responseArrayBuffer} from 'neuroglancer/util/http_request';
 import {NullarySignal} from 'neuroglancer/util/signal';
 import {Uint64} from 'neuroglancer/util/uint64';
 import {registerSharedObject, RPC, SharedObjectCounterpart} from 'neuroglancer/worker_rpc';
@@ -227,25 +227,20 @@ export class ChunkedGraphLayer extends Base implements RenderLayerInterface<Slic
     return this.graphurl;
   }
 
-  getChildren(segment: Uint64): Promise<Uint64[]> {
+  async getChildren(segment: Uint64): Promise<Uint64[]> {
     const {url} = this;
     if (url === '') {
       return Promise.resolve([segment]);
     }
 
-    let promise = sendHttpRequest(openHttpRequest(`${url}/segment/${segment}/children`), 'arraybuffer');
-    return promise.then(response => {
-      let uint32 = new Uint32Array(response);
-      let final: Uint64[] = new Array(uint32.length / 2);
-      for (let i = 0; i < uint32.length / 2; i++) {
-        final[i] = new Uint64(uint32[2 * i], uint32[2 * i + 1]);
-      }
-      return final;
-    }).catch((e: HttpError) => {
-      console.log(`Could not retrieve children for segment ${segment}`);
-      console.error(e);
-      return Promise.reject(e);
-    });
+    const response =
+        await cancellableFetchOk(`${url}/segment/${segment}/children`, {}, responseArrayBuffer);
+    let uint32 = new Uint32Array(response);
+    let final: Uint64[] = new Array(uint32.length / 2);
+    for (let i = 0; i < uint32.length / 2; i++) {
+      final[i] = new Uint64(uint32[2 * i], uint32[2 * i + 1]);
+    }
+    return final;
   }
 
   private debouncedupdateDisplayState = debounce(() => {

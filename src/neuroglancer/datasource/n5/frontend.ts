@@ -21,7 +21,7 @@ import {VolumeChunkEncoding, VolumeChunkSourceParameters} from 'neuroglancer/dat
 import {DataType, VolumeChunkSpecification, VolumeSourceOptions, VolumeType} from 'neuroglancer/sliceview/volume/base';
 import {MultiscaleVolumeChunkSource as GenericMultiscaleVolumeChunkSource, VolumeChunkSource} from 'neuroglancer/sliceview/volume/frontend';
 import {mat4, vec3} from 'neuroglancer/util/geom';
-import { openHttpRequest, parseSpecialUrl, sendHttpRequest, HttpError} from 'neuroglancer/util/http_request';
+import {fetchOk, HttpError, parseSpecialUrl} from 'neuroglancer/util/http_request';
 import {parseArray, parseFixedLengthArray, verifyEnumString, verifyFinitePositiveFloat, verifyObject, verifyObjectProperty, verifyPositiveInt} from 'neuroglancer/util/json';
 
 class N5VolumeChunkSource extends
@@ -149,23 +149,34 @@ class ScaleMetadata {
     this.size = verifyObjectProperty(
         obj, 'dimensions', x => parseFixedLengthArray(vec3.create(), x, verifyPositiveInt));
     this.chunkSize = verifyObjectProperty(
-        obj, 'blockSize', x => parseFixedLengthArray(vec3.create(), x, verifyPositiveInt));
-    this.encoding =
-        verifyObjectProperty(obj, 'compressionType', x => verifyEnumString(x, VolumeChunkEncoding));
+      obj, 'blockSize', x => parseFixedLengthArray(vec3.create(), x, verifyPositiveInt));
+
+    let encoding: VolumeChunkEncoding|undefined;
+    verifyObjectProperty(obj, 'compression', compression => {
+      encoding =
+          verifyObjectProperty(compression, 'type', x => verifyEnumString(x, VolumeChunkEncoding));
+    });
+    if (encoding === undefined) {
+      encoding = verifyObjectProperty(
+          obj, 'compressionType', x => verifyEnumString(x, VolumeChunkEncoding));
+    }
+    this.encoding = encoding;
   }
 }
 
 function getTopLevelMetadata(chunkManager: ChunkManager, url: string): Promise<TopLevelMetadata> {
   return chunkManager.memoize.getUncounted(
       {'type': 'n5:topLevelMetadata', url},
-      () => sendHttpRequest(openHttpRequest(url), 'json')
+      () => fetchOk(url)
+                .then(response => response.json())
                 .then(response => new TopLevelMetadata(response)));
 }
 
 function getScaleMetadata(chunkManager: ChunkManager, url: string): Promise<ScaleMetadata> {
   return chunkManager.memoize.getUncounted(
       {'type': 'n5:scaleMetadata', url},
-      () => sendHttpRequest(openHttpRequest(url), 'json')
+      () => fetchOk(url)
+                .then(response => response.json())
                 .then(response => new ScaleMetadata(response)));
 }
 
@@ -173,7 +184,7 @@ function getAllScales(chunkManager: ChunkManager, url: string, topLevelMetadata:
     Promise<(ScaleMetadata | undefined)[]> {
   return Promise.all(topLevelMetadata.scales.map((_scale, i) => {
     return getScaleMetadata(chunkManager, `${url}/s${i}/attributes.json`).catch(e => {
-      if (e instanceof HttpError && e.code === 404) {
+      if (e instanceof HttpError && e.status === 404) {
         return undefined;
       }
       throw e;
@@ -186,13 +197,14 @@ export class N5DataSource extends DataSource {
     return 'N5 data source';
   }
   getVolume(chunkManager: ChunkManager, url: string) {
-    const [baseUrls, path] = parseSpecialUrl(url);
-    url = baseUrls[0] + path;
+    url = parseSpecialUrl(url);
     const m = url.match(/^(.*)\/(c[0-9]+)$/);
-    if (m === null) {
-      return Promise.reject(new Error('N5 url must end with the pattern "/c[0-9]+".'));
+    let topLevelMetadataUrl: string;
+    if (m !== null) {
+      topLevelMetadataUrl = `${m[1]}/attributes.json`;
+    } else {
+      topLevelMetadataUrl = `${url}/attributes.json`;
     }
-    const topLevelMetadataUrl = `${m[1]}/attributes.json`;
     return chunkManager.memoize.getUncounted(
         {'type': 'n5:MultiscaleVolumeChunkSource', url},
         () =>

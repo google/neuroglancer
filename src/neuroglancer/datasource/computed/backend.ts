@@ -395,8 +395,7 @@ export class ComputedVolumeChunk extends VolumeChunk implements ChunkStateListen
         .then((outputBuffer) => {
           this.inputBuffer_ = undefined;
           if (vec3.equals(outputSize, this.chunkDataSize!)) {
-            decodeRawChunk(this, outputBuffer);
-            return;
+            return decodeRawChunk(this, this.cancellationToken_!, outputBuffer);
           }
           const outputBufferView = getArrayView(outputBuffer, outputDataType);
           const chunkBuffer = new ArrayBuffer(
@@ -406,7 +405,7 @@ export class ComputedVolumeChunk extends VolumeChunk implements ChunkStateListen
           copyBufferOverlap(
               outputCorner, outputSize, outputBufferView, outputCorner, this.chunkDataSize!,
               chunkBufferView, outputDataType);
-          decodeRawChunk(this, chunkBuffer);
+          return decodeRawChunk(this, this.cancellationToken_!, chunkBuffer);
         });
   }
 

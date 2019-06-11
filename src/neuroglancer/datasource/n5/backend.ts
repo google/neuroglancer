@@ -14,6 +14,8 @@
  * limitations under the License.
  */
 
+import {decodeGzip} from 'neuroglancer/async_computation/decode_gzip_request';
+import {requestAsyncComputation} from 'neuroglancer/async_computation/request';
 import {WithParameters} from 'neuroglancer/chunk_manager/backend';
 import {VolumeChunkEncoding, VolumeChunkSourceParameters} from 'neuroglancer/datasource/n5/base';
 import {decodeRawChunk} from 'neuroglancer/sliceview/backend_chunk_decoders/raw';
@@ -21,11 +23,12 @@ import {VolumeChunk, VolumeChunkSource} from 'neuroglancer/sliceview/volume/back
 import {CancellationToken} from 'neuroglancer/util/cancellation';
 import {Endianness} from 'neuroglancer/util/endian';
 import {vec3} from 'neuroglancer/util/geom';
-import {openHttpRequest, sendHttpRequest} from 'neuroglancer/util/http_request';
+import {cancellableFetchOk, responseArrayBuffer} from 'neuroglancer/util/http_request';
 import {registerSharedObject} from 'neuroglancer/worker_rpc';
-import {inflate} from 'pako';
 
-function decodeChunk(chunk: VolumeChunk, response: ArrayBuffer, encoding: VolumeChunkEncoding) {
+async function decodeChunk(
+    chunk: VolumeChunk, cancellationToken: CancellationToken, response: ArrayBuffer,
+    encoding: VolumeChunkEncoding) {
   const dv = new DataView(response);
   const mode = dv.getUint16(0, /*littleEndian=*/ false);
   if (mode !== 0) {
@@ -44,20 +47,22 @@ function decodeChunk(chunk: VolumeChunk, response: ArrayBuffer, encoding: Volume
   chunk.chunkDataSize = vec3.fromValues(shape[0], shape[1], shape[2]);
   let buffer = new Uint8Array(response, offset);
   if (encoding === VolumeChunkEncoding.GZIP) {
-    buffer = inflate(buffer);
+    buffer = await requestAsyncComputation(decodeGzip, cancellationToken, [buffer.buffer], buffer);
   }
-  decodeRawChunk(chunk, buffer.buffer, Endianness.BIG, buffer.byteOffset, buffer.byteLength);
+  await decodeRawChunk(
+      chunk, cancellationToken, buffer.buffer, Endianness.BIG, buffer.byteOffset,
+      buffer.byteLength);
 }
 
 
 @registerSharedObject() export class PrecomputedVolumeChunkSource extends
 (WithParameters(VolumeChunkSource, VolumeChunkSourceParameters)) {
-  download(chunk: VolumeChunk, cancellationToken: CancellationToken) {
+  async download(chunk: VolumeChunk, cancellationToken: CancellationToken) {
     const {parameters} = this;
     const {chunkGridPosition} = chunk;
     const url =
         `${parameters.url}/${chunkGridPosition[0]}/${chunkGridPosition[1]}/${chunkGridPosition[2]}`;
-    return sendHttpRequest(openHttpRequest(url), 'arraybuffer', cancellationToken)
-        .then(response => decodeChunk(chunk, response, parameters.encoding));
+    const response = await cancellableFetchOk(url, {}, responseArrayBuffer, cancellationToken);
+    await decodeChunk(chunk, cancellationToken, response, parameters.encoding);
   }
 }

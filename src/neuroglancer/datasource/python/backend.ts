@@ -26,7 +26,7 @@ import {decodeRawChunk} from 'neuroglancer/sliceview/backend_chunk_decoders/raw'
 import {VolumeChunk, VolumeChunkSource} from 'neuroglancer/sliceview/volume/backend';
 import {CancellationToken} from 'neuroglancer/util/cancellation';
 import {Endianness} from 'neuroglancer/util/endian';
-import {openHttpRequest, sendHttpRequest} from 'neuroglancer/util/http_request';
+import {cancellableFetchOk, responseArrayBuffer} from 'neuroglancer/util/http_request';
 import {registerSharedObject} from 'neuroglancer/worker_rpc';
 
 let chunkDecoders = new Map<VolumeChunkEncoding, ChunkDecoder>();
@@ -39,7 +39,7 @@ chunkDecoders.set(VolumeChunkEncoding.RAW, decodeRawChunk);
   chunkDecoder = chunkDecoders.get(this.parameters['encoding'])!;
   encoding = VolumeChunkEncoding[this.parameters.encoding].toLowerCase();
 
-  download(chunk: VolumeChunk, cancellationToken: CancellationToken) {
+  async download(chunk: VolumeChunk, cancellationToken: CancellationToken) {
     let {parameters} = this;
     let path = `/neuroglancer/${this.encoding}/${parameters.key}/${parameters.scaleKey}`;
     {
@@ -51,8 +51,8 @@ chunkDecoders.set(VolumeChunkEncoding.RAW, decodeRawChunk);
         path += `/${chunkPosition[i]},${chunkPosition[i] + chunkDataSize![i]}`;
       }
     }
-    return sendHttpRequest(openHttpRequest(path), 'arraybuffer', cancellationToken)
-        .then(response => this.chunkDecoder(chunk, response));
+    const response = await cancellableFetchOk(path, {}, responseArrayBuffer, cancellationToken);
+    await this.chunkDecoder(chunk, cancellationToken, response);
   }
 }
 
@@ -76,7 +76,7 @@ export function decodeFragmentChunk(chunk: FragmentChunk, response: ArrayBuffer)
   downloadFragment(chunk: FragmentChunk, cancellationToken: CancellationToken) {
     let {parameters} = this;
     let requestPath = `/neuroglancer/mesh/${parameters.key}/${chunk.manifestChunk!.objectId}`;
-    return sendHttpRequest(openHttpRequest(requestPath), 'arraybuffer', cancellationToken)
+    return cancellableFetchOk(requestPath, {}, responseArrayBuffer, cancellationToken)
         .then(response => decodeFragmentChunk(chunk, response));
   }
 }
@@ -86,7 +86,7 @@ export function decodeFragmentChunk(chunk: FragmentChunk, response: ArrayBuffer)
   download(chunk: SkeletonChunk, cancellationToken: CancellationToken) {
     const {parameters} = this;
     let requestPath = `/neuroglancer/skeleton/${parameters.key}/${chunk.objectId}`;
-    return sendHttpRequest(openHttpRequest(requestPath), 'arraybuffer', cancellationToken)
+    return cancellableFetchOk(requestPath, {}, responseArrayBuffer, cancellationToken)
         .then(response => decodeSkeletonChunk(chunk, response, parameters.vertexAttributes));
   }
 }

@@ -87,8 +87,8 @@ float getLineAlpha() {
     const lineWidthIncludingFeather = lineWidthInPixels + featherWidthInPixels;
     const {gl} = shader;
     gl.uniform3f(
-        shader.uniform('uLineParams'), lineWidthIncludingFeather * 2 / renderContext.viewportWidth,
-        lineWidthIncludingFeather * 2 / renderContext.viewportHeight,
+        shader.uniform('uLineParams'), lineWidthIncludingFeather / renderContext.viewportWidth,
+        lineWidthIncludingFeather / renderContext.viewportHeight,
         featherWidthInPixels === 0 ? 1e-6 : featherWidthInPixels / lineWidthIncludingFeather);
     this.quadHelper.draw(gl, numInstances);
     gl.disableVertexAttribArray(aLineOffset);

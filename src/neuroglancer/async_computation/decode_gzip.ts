@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2016 Google Inc.
+ * Copyright 2019 Google Inc.
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
@@ -14,11 +14,11 @@
  * limitations under the License.
  */
 
-import {VolumeChunk} from 'neuroglancer/sliceview/volume/backend';
-import {CancellationToken} from 'neuroglancer/util/cancellation';
+import {decodeGzip} from 'neuroglancer/async_computation/decode_gzip_request';
+import {registerAsyncComputation} from 'neuroglancer/async_computation/handler';
+import {inflate} from 'pako';
 
-export async function decodeCompressedSegmentationChunk(
-    chunk: VolumeChunk, cancellationToken: CancellationToken, response: ArrayBuffer) {
-  cancellationToken;
-  chunk.data = new Uint32Array(response);
-}
+registerAsyncComputation(decodeGzip, async function(data: Uint8Array) {
+  const result = inflate(data);
+  return {value: result, transfer: [result.buffer]};
+});

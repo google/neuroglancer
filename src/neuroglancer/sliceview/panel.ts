@@ -251,6 +251,7 @@ export class SliceViewPanel extends RenderedDataPanel {
     backgroundColor[2] = crossSectionBackgroundColor[2];
     backgroundColor[3] = 1;
 
+    this.offscreenFramebuffer.bindSingle(OffscreenTextures.COLOR);
     this.sliceViewRenderHelper.draw(
         sliceView.offscreenFramebuffer.colorBuffers[0].texture, identityMat4, this.colorFactor,
         backgroundColor, 0, 0, 1, 1);
@@ -258,7 +259,6 @@ export class SliceViewPanel extends RenderedDataPanel {
     let visibleLayers = this.visibleLayerTracker.getVisibleLayers();
     let {pickIDs} = this;
     pickIDs.clear();
-    this.offscreenFramebuffer.bindSingle(OffscreenTextures.COLOR);
     let renderContext: SliceViewPanelRenderContext = {
       dataToDevice: sliceView.dataToDevice,
       pickIDs: pickIDs,
@@ -344,8 +344,8 @@ export class SliceViewPanel extends RenderedDataPanel {
 
   issuePickRequest(glWindowX: number, glWindowY: number) {
     const {offscreenFramebuffer} = this;
-    offscreenFramebuffer.readPixelsFloat32IntoBuffer(
-        OffscreenTextures.PICK, glWindowX, glWindowY, 1, 1, 0);
+    offscreenFramebuffer.readPixelFloat32IntoBuffer(
+        OffscreenTextures.PICK, glWindowX, glWindowY, 0);
   }
 
   completePickRequest(

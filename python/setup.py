@@ -23,6 +23,7 @@ static_files = [
     'main.bundle.js',
     'chunk_worker.bundle.js',
     'tfjs-library.bundle.js',
+    'async_computation.bundle.js',
     'draco.bundle.js',
     'index.html',
 ]
@@ -107,7 +108,7 @@ if platform.system() == 'Darwin':
 
 setup(
     name='neuroglancer',
-    version='1.1.0',
+    version='1.1.2',
     description='Python data backend for neuroglancer, a WebGL-based viewer for volumetric data',
     author='Jeremy Maitin-Shepard, Jan Funke',
     author_email='jbms@google.com, jfunke@iri.upc.edu',

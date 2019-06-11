@@ -21,7 +21,7 @@ import {SliceViewChunkSource} from 'neuroglancer/sliceview/frontend';
 import {RenderLayer as GenericSliceViewRenderLayer} from 'neuroglancer/sliceview/renderlayer';
 import {StatusMessage} from 'neuroglancer/status';
 import {Uint64Set} from 'neuroglancer/uint64_set';
-import {openHttpRequest, sendHttpJsonPostRequest, sendHttpRequest} from 'neuroglancer/util/http_request';
+import {cancellableFetchOk, responseArrayBuffer} from 'neuroglancer/util/http_request';
 import {Uint64} from 'neuroglancer/util/uint64';
 import {RPC} from 'neuroglancer/worker_rpc';
 
@@ -75,77 +75,75 @@ export class ChunkedGraphLayer extends GenericSliceViewRenderLayer {
     return this.graphurl;
   }
 
-  getRoot(selection: SegmentSelection): Promise<Uint64> {
+  async getRoot(selection: SegmentSelection): Promise<Uint64> {
     const {url} = this;
     if (url === '') {
       return Promise.resolve(selection.segmentId);
     }
 
-    let promise = sendHttpRequest(
-        openHttpRequest(`${url}/graph/${String(selection.segmentId)}/root`, 'GET'), 'arraybuffer');
-
-    return this
-        .withErrorMessage(promise, {
+    const response = await this.withErrorMessage(
+        cancellableFetchOk(
+            `${url}/graph/${String(selection.segmentId)}/root`, {}, responseArrayBuffer),
+        {
           initialMessage: `Retrieving root for segment ${selection.segmentId}`,
           errorPrefix: `Could not fetch root: `
-        })
-        .then(response => {
-          let uint32 = new Uint32Array(response);
-          return new Uint64(uint32[0], uint32[1]);
         });
+    const uint32 = new Uint32Array(response);
+    return new Uint64(uint32[0], uint32[1]);
   }
 
-  mergeSegments(first: SegmentSelection, second: SegmentSelection): Promise<Uint64> {
+  async mergeSegments(first: SegmentSelection, second: SegmentSelection): Promise<Uint64> {
     const {url} = this;
     if (url === '') {
       return Promise.reject(GRAPH_SERVER_NOT_SPECIFIED);
     }
 
-    let promise = sendHttpJsonPostRequest(
-        openHttpRequest(`${url}/graph/merge`, 'POST'),
-        [
-          [String(first.segmentId), ...first.position],
-          [String(second.segmentId), ...second.position]
-        ],
-        'arraybuffer');
-
-    return this
-        .withErrorMessage(promise, {
-          initialMessage: `Merging ${first.segmentId} and ${second.segmentId}`,
-          errorPrefix: 'Merge failed: '
-        })
-        .then(response => {
-          let uint32 = new Uint32Array(response);
-          return new Uint64(uint32[0], uint32[1]);
-        });
-  }
-
-  splitSegments(first: SegmentSelection[], second: SegmentSelection[]): Promise<Uint64[]> {
-    const {url} = this;
-    if (url === '') {
-      return Promise.reject(GRAPH_SERVER_NOT_SPECIFIED);
-    }
-
-    let promise = sendHttpJsonPostRequest(
-        openHttpRequest(`${url}/graph/split`, 'POST'), {
-          'sources': first.map(x => [String(x.segmentId), ...x.position]),
-          'sinks': second.map(x => [String(x.segmentId), ...x.position])
+    const promise = cancellableFetchOk(
+        `${url}/graph/merge`, {
+          method: 'POST',
+          body: JSON.stringify([
+            [String(first.segmentId), ...first.position],
+            [String(second.segmentId), ...second.position]
+          ])
         },
-        'arraybuffer');
+        responseArrayBuffer);
 
-    return this
-        .withErrorMessage(promise, {
-          initialMessage: `Splitting ${first.length} sinks from ${second.length} sources`,
-          errorPrefix: 'Split failed: '
-        })
-        .then(response => {
-          let uint32 = new Uint32Array(response);
-          let final: Uint64[] = new Array(uint32.length / 2);
-          for (let i = 0; i < uint32.length / 2; i++) {
-            final[i] = new Uint64(uint32[2 * i], uint32[2 * i + 1]);
-          }
-          return final;
-        });
+    const response = await this.withErrorMessage(promise, {
+      initialMessage: `Merging ${first.segmentId} and ${second.segmentId}`,
+      errorPrefix: 'Merge failed: '
+    });
+
+    const uint32 = new Uint32Array(response);
+    return new Uint64(uint32[0], uint32[1]);
+  }
+
+  async splitSegments(first: SegmentSelection[], second: SegmentSelection[]): Promise<Uint64[]> {
+    const {url} = this;
+    if (url === '') {
+      return Promise.reject(GRAPH_SERVER_NOT_SPECIFIED);
+    }
+
+    const promise = cancellableFetchOk(
+        `${url}/graph/split`, {
+          method: 'POST',
+          body: JSON.stringify({
+            'sources': first.map(x => [String(x.segmentId), ...x.position]),
+            'sinks': second.map(x => [String(x.segmentId), ...x.position])
+          })
+        },
+        responseArrayBuffer);
+
+    const response = await this.withErrorMessage(promise, {
+      initialMessage: `Splitting ${first.length} sinks from ${second.length} sources`,
+      errorPrefix: 'Split failed: '
+    });
+
+    const uint32 = new Uint32Array(response);
+    let final: Uint64[] = new Array(uint32.length / 2);
+    for (let i = 0; i < uint32.length / 2; i++) {
+      final[i] = new Uint64(uint32[2 * i], uint32[2 * i + 1]);
+    }
+    return final;
   }
 
   draw() {}
