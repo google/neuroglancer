@@ -20,7 +20,7 @@ import {DisplayContext} from 'neuroglancer/display_context';
 import {makeRenderedPanelVisibleLayerTracker, VisibleRenderLayerTracker} from 'neuroglancer/layer';
 import {PERSPECTIVE_VIEW_ADD_LAYER_RPC_ID, PERSPECTIVE_VIEW_REMOVE_LAYER_RPC_ID, PERSPECTIVE_VIEW_RPC_ID, PERSPECTIVE_VIEW_UPDATE_VIEWPORT_RPC_ID} from 'neuroglancer/perspective_view/base';
 import {PerspectiveViewReadyRenderContext, PerspectiveViewRenderContext, PerspectiveViewRenderLayer} from 'neuroglancer/perspective_view/render_layer';
-import {FramePickingData, RenderedDataPanel, RenderedDataViewerState} from 'neuroglancer/rendered_data_panel';
+import {clearOutOfBoundsPickData, FramePickingData, pickDiameter, pickOffsetSequence, pickRadius, RenderedDataPanel, RenderedDataViewerState} from 'neuroglancer/rendered_data_panel';
 import {SliceView, SliceViewRenderHelper} from 'neuroglancer/sliceview/frontend';
 import {TrackableBoolean, TrackableBooleanCheckbox} from 'neuroglancer/trackable_boolean';
 import {TrackableValue} from 'neuroglancer/trackable_value';
@@ -122,13 +122,6 @@ v4f_fragColor = vec4(accum.rgb / accum.a, revealage);
 
 const PerspectiveViewStateBase = withSharedVisibility(SharedObject);
 class PerspectiveViewState extends PerspectiveViewStateBase {}
-
-// The following three variables are for cursor state.
-const ReceptiveField = { // must pick odd numbers
-  width: 23,
-  height: 23,
-};
-const RFSpiral = spiralSequence(ReceptiveField.width, ReceptiveField.height);
 
 export class PerspectivePanel extends RenderedDataPanel {
   viewer: PerspectiveViewerState;
@@ -419,47 +412,39 @@ export class PerspectivePanel extends RenderedDataPanel {
 
   issuePickRequest(glWindowX: number, glWindowY: number) {
     const {offscreenFramebuffer} = this;
-    const {width, height} = ReceptiveField;
-    offscreenFramebuffer.readPixelsFloat32IntoBuffer(
-      OffscreenTextures.Z, glWindowX, glWindowY, width, height, 0);
-    offscreenFramebuffer.readPixelsFloat32IntoBuffer(
-        OffscreenTextures.PICK, glWindowX, glWindowY, width, height, width * height * 16);
+    offscreenFramebuffer.readPixelFloat32IntoBuffer(
+        OffscreenTextures.Z, glWindowX - pickRadius, glWindowY - pickRadius, 0, pickDiameter,
+        pickDiameter);
+    offscreenFramebuffer.readPixelFloat32IntoBuffer(
+        OffscreenTextures.PICK, glWindowX - pickRadius, glWindowY - pickRadius,
+        4 * 4 * pickDiameter * pickDiameter, pickDiameter, pickDiameter);
   }
 
   completePickRequest(
       glWindowX: number, glWindowY: number, data: Float32Array, pickingData: FramePickingData) {
     const {mouseState} = this.viewer;
     mouseState.pickedRenderLayer = null;
-    const field_width = ReceptiveField.width;
-    const field_height = ReceptiveField.height;
-    const pixels = RFSpiral.length;
-
-    let zDatum = 0;
-    let rfindex = 0;
-    for (let i = 0; i < pixels; i++) {
-      rfindex = RFSpiral[i];
-      zDatum = data[4*rfindex];
-      if (zDatum) {
-        break;
-      }
-    }
-
-    let glWindowZ = 1.0 - zDatum;
-    if (glWindowZ === 1.0) {
-      mouseState.setActive(false);
+    clearOutOfBoundsPickData(
+        data, 0, 4, glWindowX, glWindowY, pickingData.viewportWidth, pickingData.viewportHeight);
+    const numOffsets = pickOffsetSequence.length;
+    for (let i = 0; i < numOffsets; ++i) {
+      const offset = pickOffsetSequence[i];
+      let zValue = data[4 * offset];
+      if (zValue === 0) continue;
+      const relativeX = offset % pickDiameter;
+      const relativeY = (offset - relativeX) / pickDiameter;
+      let glWindowZ = 1.0 - zValue;
+      const out = mouseState.position;
+      out[0] = 2.0 * (glWindowX + relativeX - pickRadius) / pickingData.viewportWidth - 1.0;
+      out[1] = 2.0 * (glWindowY + relativeY - pickRadius) / pickingData.viewportHeight - 1.0;
+      out[2] = 2.0 * glWindowZ - 1.0;
+      vec3.transformMat4(out, out, pickingData.invTransform);
+      const pickValue = data[4 * pickDiameter * pickDiameter + 4 * offset];
+      pickingData.pickIDs.setMouseState(mouseState, pickValue);
+      mouseState.setActive(true);
       return;
     }
-
-    glWindowX += (rfindex % field_width) - (field_width >> 1);
-    glWindowY += Math.floor(rfindex / field_height) - (field_height >> 1);
-
-    const out = mouseState.position;
-    out[0] = 2.0 * glWindowX / this.width - 1.0;
-    out[1] = 2.0 * glWindowY / this.height - 1.0;
-    out[2] = 2.0 * glWindowZ - 1.0;
-    vec3.transformMat4(out, out, pickingData.invTransform);
-    pickingData.pickIDs.setMouseState(mouseState, data[4 * (field_width * field_height + rfindex)]);
-    mouseState.setActive(true);
+    mouseState.setActive(false);
   }
 
   translateDataPointByViewportPixels(out: vec3, orig: vec3, deltaX: number, deltaY: number): vec3 {
@@ -744,85 +729,4 @@ export class PerspectivePanel extends RenderedDataPanel {
   zoomByMouse(factor: number) {
     this.navigationState.zoomBy(factor);
   }
-}
-
-/*  Generate a clockwise spiral around a 2D rectangular grid.
-    Outputs Vec3s, but only x and y are used. Used for spiraling
-    out of the center of the cursor to look for objects within the
-    receptive field.
-
-      3x3 pattern    3x3 unraveled array
-      | 8, 7, 6 |    | 0, 1, 2 |
-      | 1, 0, 5 |    | 3, 4, 5 |
-      | 2, 3, 4 |    | 6, 7, 8 |
-
-    Renders as [4,3,6,7,8,5,2,1,0] to show how to access the
-    right hand side array in a spiral pattern.
-
-    width: width of array in pixels
-    height: height of array in pixels
-
-    Note: width and height must be odd numbers
-
-    We also apply a circularizing operator to filter out elements of
-    the spiral that are outside a given radius from the center,
-    otherwise the cursor will be more sensitive along diagonals.
-*/
-function spiralSequence(width: number, height: number): Uint32Array {
-  const pixels = width * height;
-  let sequence = new Uint32Array(pixels);
-
-  if (width === 0 || height === 0) {
-    return sequence;
-  } else if (width === 1) {
-    for (let i = 0; i < height; i++) {
-      sequence[i] = i * width;
-    }
-    return sequence;
-  } else if (height === 1) {
-    for (let i = 0; i < width; i++) {
-      sequence[i] = i;
-    }
-    return sequence;
-  }
-
-  function clockwise_spiral(sequence: Uint32Array) {
-    let bounds = [width, height - 1];
-    let direction = [1, 0];
-    let pt = [0, 0];
-    let bound_idx = 0;
-    let steps = 1;
-
-    for (let covered = 0; covered < pixels; covered++) {
-      sequence[covered] = pt[0] + width * pt[1];
-
-      pt[0] += direction[0];
-      pt[1] += direction[1];
-      steps += 1;
-
-      if (steps === bounds[bound_idx]) {
-        steps = 0;
-        bounds[bound_idx] -= 1;
-        bound_idx = (bound_idx + 1) % 2;
-        direction = [-direction[1], direction[0]];
-      }
-    }
-
-    return sequence;
-  }
-
-  sequence = clockwise_spiral(sequence).reverse();
-
-  // Circularize
-  let r2 = Math.max(width, height) / 2;
-  r2 *= r2;
-
-  return sequence.filter((idx) => {
-    let x = (idx % width) - (width >> 1);
-    let y = Math.floor(idx / height) - (height >> 1);
-
-    let dist2 = x * x + y * y;
-
-    return dist2 <= r2;
-  });
 }

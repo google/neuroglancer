@@ -386,11 +386,8 @@ export class SkeletonLayer extends RefCounted {
 
   draw(
       renderContext: SliceViewPanelRenderContext|PerspectiveViewRenderContext, layer: RenderLayer,
-      renderHelper: RenderHelper, renderOptions: ViewSpecificSkeletonRenderingOptions) {
+    renderHelper: RenderHelper, renderOptions: ViewSpecificSkeletonRenderingOptions) {
     let lineWidth = renderOptions.lineWidth.value;
-    if (!renderContext.emitColor && renderHelper.targetIsSliceView) {
-      lineWidth = Math.max(lineWidth, 5);
-    }
     let {gl, source, displayState} = this;
     let alpha = 1.0; // Make skeletons visible through transparent object. Math.min(1.0, displayState.objectAlpha.value);
     if (alpha <= 0.0) {
@@ -479,6 +476,10 @@ export class PerspectiveViewSkeletonLayer extends PerspectiveViewRenderLayer {
   }
 
   draw(renderContext: PerspectiveViewRenderContext) {
+    if (!renderContext.emitColor && renderContext.alreadyEmittedPickID) {
+      // No need for a separate pick ID pass.
+      return;
+    }
     this.base.draw(renderContext, this, this.renderHelper, this.renderOptions);
   }
 }

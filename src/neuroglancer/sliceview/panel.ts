@@ -344,8 +344,8 @@ export class SliceViewPanel extends RenderedDataPanel {
 
   issuePickRequest(glWindowX: number, glWindowY: number) {
     const {offscreenFramebuffer} = this;
-    offscreenFramebuffer.readPixelsFloat32IntoBuffer(
-        OffscreenTextures.PICK, glWindowX, glWindowY, 1, 1, 0);
+    offscreenFramebuffer.readPixelFloat32IntoBuffer(
+        OffscreenTextures.PICK, glWindowX, glWindowY, 0);
   }
 
   completePickRequest(

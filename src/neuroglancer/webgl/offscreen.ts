@@ -259,21 +259,17 @@ export class FramebufferConfiguration<ColorBuffer extends TextureBuffer|Renderbu
     return tempPixelFloat32[0];
   }
 
-  readPixelsFloat32IntoBuffer(
-      textureIndex: number, glWindowX: number, glWindowY: number, width: number, height: number,
-      offset: number) {
+  readPixelFloat32IntoBuffer(
+      textureIndex: number, glWindowX: number, glWindowY: number, offset: number, width: number = 1,
+      height: number = 1) {
     let {gl} = this;
-
-    let left = glWindowX - (width >> 1);
-    let bottom = glWindowY - (height >> 1);
-
     try {
       this.bindSingle(textureIndex);
       // Reading just the red channel using a format of RED fails with certain WebGL
       // implementations.  Using RGBA seems to have better compatibility.
       gl.readPixels(
-          left, bottom, width, height, WebGL2RenderingContext.RGBA, WebGL2RenderingContext.FLOAT,
-          offset);
+          glWindowX, glWindowY, width, height, WebGL2RenderingContext.RGBA,
+          WebGL2RenderingContext.FLOAT, offset);
     } finally {
       this.framebuffer.unbind();
     }

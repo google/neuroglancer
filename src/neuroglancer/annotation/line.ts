@@ -112,8 +112,7 @@ emitAnnotation(getCircleColor(vColor, borderColor));
   drawEdges(context: AnnotationRenderContext) {
     const shader = this.edgeShaderGetter(context.renderContext.emitter);
     this.enable(shader, context, () => {
-      const lineWidth = context.renderContext.emitColor ? 1 : 10;
-      this.lineShader.draw(shader, context.renderContext, lineWidth, 1.0, context.count);
+      this.lineShader.draw(shader, context.renderContext, /*lineWidth=*/ 1, 1.0, context.count);
     });
   }
 
