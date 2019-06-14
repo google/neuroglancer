@@ -33,11 +33,28 @@ export interface RotationTranslationScale {
 export class CoordinateTransform implements WatchableValueInterface<mat4> {
   changed = new NullarySignal();
 
+  private inverseTransform: mat4;
+  private needsUpdate: boolean;
+
   get value() {
     return this.transform;
   }
 
-  constructor(public transform = mat4.create()) {}
+  get inverse() {
+    if (this.needsUpdate) {
+      mat4.invert(this.inverseTransform, this.transform);
+      this.needsUpdate = false;
+    }
+    return this.inverseTransform;
+  }
+
+  constructor(public transform = mat4.create()) {
+    this.inverseTransform = mat4.create();
+    this.needsUpdate = true;
+    this.changed.add(() => {
+      this.needsUpdate = true;
+    });
+  }
 
   /**
    * Resets to the identity transform.
