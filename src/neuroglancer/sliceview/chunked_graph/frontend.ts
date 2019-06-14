@@ -15,10 +15,10 @@
  */
 
 import {ChunkManager} from 'neuroglancer/chunk_manager/frontend';
-import {SegmentationDisplayState} from 'neuroglancer/segmentation_display_state/frontend';
+import {VisibleSegmentsState} from 'neuroglancer/segmentation_display_state/base';
 import {CHUNKED_GRAPH_LAYER_RPC_ID, ChunkedGraphChunkSource as ChunkedGraphChunkSourceInterface, ChunkedGraphChunkSpecification} from 'neuroglancer/sliceview/chunked_graph/base';
 import {SliceViewChunkSource} from 'neuroglancer/sliceview/frontend';
-import {RenderLayer as GenericSliceViewRenderLayer} from 'neuroglancer/sliceview/renderlayer';
+import {RenderLayer as GenericSliceViewRenderLayer, RenderLayerOptions} from 'neuroglancer/sliceview/renderlayer';
 import {StatusMessage} from 'neuroglancer/status';
 import {Uint64Set} from 'neuroglancer/uint64_set';
 import {vec3} from 'neuroglancer/util/geom';
@@ -58,7 +58,7 @@ export class ChunkedGraphLayer extends GenericSliceViewRenderLayer {
 
   constructor(
       chunkManager: ChunkManager, url: string, public sources: ChunkedGraphChunkSource[][],
-      displayState: SegmentationDisplayState) {
+      displayState: VisibleSegmentsState&RenderLayerOptions) {
     super(chunkManager, sources, {
       rpcTransfer: {
         'chunkManager': chunkManager.rpcId,
@@ -67,7 +67,8 @@ export class ChunkedGraphLayer extends GenericSliceViewRenderLayer {
         'visibleSegments3D': displayState.visibleSegments3D.rpcId,
         'segmentEquivalences': displayState.segmentEquivalences.rpcId
       },
-      rpcType: CHUNKED_GRAPH_LAYER_RPC_ID
+      rpcType: CHUNKED_GRAPH_LAYER_RPC_ID,
+      transform: displayState.transform,
     });
     this.graphurl = url;
   }

@@ -69,6 +69,7 @@ function helper<TBase extends BaseConstructor>(Base: TBase) {
       if (multiscaleSource !== undefined) {
         ++remaining;
         multiscaleSource.then(volume => {
+          const {displayState} = this;
           if (!this.wasDisposed) {
             // Chunked Graph Server
             if (this.chunkedGraphUrl === undefined && volume.getChunkedGraphUrl) {
@@ -77,19 +78,19 @@ function helper<TBase extends BaseConstructor>(Base: TBase) {
             // Chunked Graph Supervoxels
             if (this.chunkedGraphUrl && volume.getChunkedGraphSources) {
               let chunkedGraphSources = volume.getChunkedGraphSources(
-                  {rootUri: this.chunkedGraphUrl}, this.displayState.rootSegments);
+                  {rootUri: this.chunkedGraphUrl}, displayState.rootSegments);
 
               if (chunkedGraphSources) {
                 this.chunkedGraphLayer = new ChunkedGraphLayer(
                     this.manager.chunkManager, this.chunkedGraphUrl, chunkedGraphSources,
-                    this.displayState);
+                    {...displayState, transform: displayState.objectToDataTransform});
                 this.addRenderLayer(this.chunkedGraphLayer);
 
                 // Have to wait for graph server initialization to fetch agglomerations
-                this.displayState.segmentEquivalences.clear();
+                displayState.segmentEquivalences.clear();
                 verifyObjectProperty(specification, ROOT_SEGMENTS_JSON_KEY, y => {
                   if (y !== undefined) {
-                    let {rootSegments} = this.displayState;
+                    let {rootSegments} = displayState;
                     parseArray(y, value => {
                       rootSegments.add(Uint64.parseString(String(value), 10));
                     });
