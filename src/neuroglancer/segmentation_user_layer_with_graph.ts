@@ -19,6 +19,7 @@ import {ChunkedGraphLayer, SegmentSelection} from 'neuroglancer/sliceview/chunke
 import {VolumeType} from 'neuroglancer/sliceview/volume/base';
 import {StatusMessage} from 'neuroglancer/status';
 import {Borrowed} from 'neuroglancer/util/disposable';
+import {vec3} from 'neuroglancer/util/geom';
 import {parseArray, verifyObjectProperty, verifyOptionalString} from 'neuroglancer/util/json';
 import {Uint64} from 'neuroglancer/util/uint64';
 import {SegmentationUserLayer} from './segmentation_user_layer';
@@ -32,7 +33,7 @@ const ROOT_SEGMENTS_JSON_KEY = 'segments';
 const lastSegmentSelection: SegmentSelection = {
   segmentId: new Uint64(),
   rootId: new Uint64(),
-  position: []
+  position: vec3.create(),
 };
 
 interface BaseConstructor {
@@ -170,10 +171,9 @@ function helper<TBase extends BaseConstructor>(Base: TBase) {
           const currentSegmentSelection: SegmentSelection = {
             segmentId: segmentSelectionState.selectedSegment.clone(),
             rootId: segmentSelectionState.selectedSegment.clone(),
-            position:
-                [...this.manager.layerSelectedValues.mouseState.position.values()].map((v, i) => {
-                  return Math.round(v / this.manager.voxelSize.size[i]);
-                })
+            position: vec3.transformMat4(
+                vec3.create(), this.manager.layerSelectedValues.mouseState.position,
+                this.transform.inverse)
           };
 
           this.chunkedGraphLayer.getRoot(currentSegmentSelection)
@@ -196,10 +196,9 @@ function helper<TBase extends BaseConstructor>(Base: TBase) {
       if (segmentSelectionState.hasSelectedSegment) {
         lastSegmentSelection.segmentId.assign(segmentSelectionState.rawSelectedSegment);
         lastSegmentSelection.rootId.assign(segmentSelectionState.selectedSegment);
-        lastSegmentSelection.position =
-            [...this.manager.layerSelectedValues.mouseState.position.values()].map((v, i) => {
-              return Math.round(v / this.manager.voxelSize.size[i]);
-            });
+        vec3.transformMat4(
+            lastSegmentSelection.position, this.manager.layerSelectedValues.mouseState.position,
+            this.transform.inverse);
 
         StatusMessage.showTemporaryMessage(
             `Selected ${lastSegmentSelection.segmentId} as source for merge. Pick a sink.`, 3000);
@@ -212,10 +211,9 @@ function helper<TBase extends BaseConstructor>(Base: TBase) {
         const currentSegmentSelection: SegmentSelection = {
           segmentId: segmentSelectionState.rawSelectedSegment.clone(),
           rootId: segmentSelectionState.selectedSegment.clone(),
-          position:
-              [...this.manager.layerSelectedValues.mouseState.position.values()].map((v, i) => {
-                return Math.round(v / this.manager.voxelSize.size[i]);
-              })
+          position: vec3.transformMat4(
+              vec3.create(), this.manager.layerSelectedValues.mouseState.position,
+              this.transform.inverse)
         };
 
         StatusMessage.showTemporaryMessage(
@@ -240,10 +238,10 @@ function helper<TBase extends BaseConstructor>(Base: TBase) {
       if (segmentSelectionState.hasSelectedSegment) {
         lastSegmentSelection.segmentId.assign(segmentSelectionState.rawSelectedSegment);
         lastSegmentSelection.rootId.assign(segmentSelectionState.selectedSegment);
-        lastSegmentSelection.position =
-            [...this.manager.layerSelectedValues.mouseState.position.values()].map((v, i) => {
-              return Math.round(v / this.manager.voxelSize.size[i]);
-            });
+        vec3.transformMat4(
+            lastSegmentSelection.position, this.manager.layerSelectedValues.mouseState.position,
+            this.transform.inverse);
+
         StatusMessage.showTemporaryMessage(
             `Selected ${lastSegmentSelection.segmentId} as source for split. Pick a sink.`, 3000);
       }
@@ -255,11 +253,11 @@ function helper<TBase extends BaseConstructor>(Base: TBase) {
         const currentSegmentSelection: SegmentSelection = {
           segmentId: segmentSelectionState.rawSelectedSegment.clone(),
           rootId: segmentSelectionState.selectedSegment.clone(),
-          position:
-              [...this.manager.layerSelectedValues.mouseState.position.values()].map((v, i) => {
-                return Math.round(v / this.manager.voxelSize.size[i]);
-              })
+          position: vec3.transformMat4(
+              vec3.create(), this.manager.layerSelectedValues.mouseState.position,
+              this.transform.inverse)
         };
+
         StatusMessage.showTemporaryMessage(
             `Selected ${currentSegmentSelection.segmentId} as sink for split.`, 3000);
 
