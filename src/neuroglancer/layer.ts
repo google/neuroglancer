@@ -35,11 +35,14 @@ export enum RenderLayerRole {
   DATA,
   ANNOTATION,
   DEFAULT_ANNOTATION,
+  GRAPH_MODIFICATION_MARKER,
 }
 
 export function allRenderLayerRoles() {
-  return new WatchableSet(
-      [RenderLayerRole.DATA, RenderLayerRole.ANNOTATION, RenderLayerRole.DEFAULT_ANNOTATION]);
+  return new WatchableSet([
+    RenderLayerRole.DATA, RenderLayerRole.ANNOTATION, RenderLayerRole.DEFAULT_ANNOTATION,
+    RenderLayerRole.GRAPH_MODIFICATION_MARKER
+  ]);
 }
 
 export class RenderLayer extends RefCounted {
