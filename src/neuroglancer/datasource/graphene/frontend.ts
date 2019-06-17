@@ -174,7 +174,7 @@ export class MultiscaleVolumeChunkSource implements GenericMultiscaleVolumeChunk
     this.dataUrl = verifyObjectProperty(obj, 'data_dir', (x) => parseSpecialUrl(x));
     this.dataType = verifyObjectProperty(obj, 'data_type', x => verifyEnumString(x, DataType));
     this.numChannels = verifyObjectProperty(obj, 'num_channels', verifyPositiveInt);
-    this.volumeType = verifyObjectProperty(obj, 'type', x => verifyEnumString(x, VolumeType));
+    this.volumeType = VolumeType.SEGMENTATION_WITH_GRAPH;
     this.mesh = verifyObjectProperty(obj, 'mesh', verifyOptionalString);
     this.skeletons = verifyObjectProperty(obj, 'skeletons', verifyOptionalString);
     this.graph = verifyObjectProperty(obj, 'graph', x => new GraphInfo(x));
