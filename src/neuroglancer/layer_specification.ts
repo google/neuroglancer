@@ -169,6 +169,16 @@ export class TopLevelLayerListSpecification extends RefCounted implements LayerL
     };
     let sourceUrl = managedLayer.sourceUrl =
         verifyObjectProperty(spec, 'source', verifyOptionalString);
+
+    // Compatibility for old graphene links with type: `segmentation`
+    if (sourceUrl !== undefined &&
+        this.dataSourceProvider.getDataSource(sourceUrl)[2] === 'graphene' &&
+        layerType === 'segmentation') {
+      spec['type'] = layerType = 'segmentation_with_graph';
+      StatusMessage.showMessage(`The layer specification for ${
+          sourceUrl} is deprecated. Key 'layerType' must be 'segmentation_with_graph'. Please reload this page.`);
+    }
+
     if (layerType === undefined) {
       if (sourceUrl === undefined) {
         throw new Error(`Either layer 'type' or 'source' URL must be specified.`);
