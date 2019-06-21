@@ -1,0 +1,116 @@
+/**
+ * @license
+ * Copyright 2019 The Neuroglancer Authors
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+.omni-segment-table td {
+  text-align: center;
+  vertical-align: middle;
+  padding: 2px 5px;
+}
+
+#omni-segment-category-table-container {
+  height: 20vh;
+  overflow-y: auto;
+}
+
+.omni-segment-table-container {
+  height: 20vh;
+  overflow-y: auto;
+  flex: 1;
+}
+
+.omni-segment-widget-element {
+  flex: 1;
+}
+
+.omni-segment-table th {
+  padding: 2px 5px;
+}
+
+#omni-segment-widget-filter {
+  width: 90px;
+}
+
+.omni-segment-widget-category-dropdown {
+  width: 90px;
+}
+
+#omni-segment-category-table {
+  width: 100%;
+  table-layout: fixed;
+}
+
+.segment-id-input {
+  width: 30%;
+}
+
+.category-name-wrapper {
+  overflow: auto;
+  width: 100%;
+}
+
+#omni-segment-category-table th:nth-child(1) {
+  width: 80%;
+  max-width: 80%;
+  text-align: left;
+  overflow: auto;
+}
+
+#omni-segment-category-table th:nth-child(2) {
+  width: 20%;
+  text-align: left;
+}
+
+#segment-category-input {
+  width: 45%;
+  margin-right: 7px;
+}
+
+#segment-category-input-button {
+  height: 20px;
+  vertical-align: bottom;
+}
+
+#toggle-segment-category-visibility {
+  margin-top: 40px;
+  margin-bottom: 5px;
+}
+
+#toggle-segment-table-visibility {
+  margin-top: 20px;
+}
+
+#toggle-segment-equivalence-visibility {
+  margin-top: 40px;
+  margin-bottom: 5px;
+}
+
+#add-segment-equivalence-label-div {
+  margin-top: 5px;
+  margin-bottom: 4px;
+}
+
+#add-segment-equivalence-input-div {
+  margin-bottom: 5px;
+}
+
+#segment-equivalence-table-div {
+  height: 40vh;
+  overflow-y: auto;
+}
+
+#filter-segment-equivalence-container {
+  margin-bottom: 12px;
+}

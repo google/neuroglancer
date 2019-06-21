@@ -20,13 +20,14 @@ import {DataSource} from 'neuroglancer/datasource';
 import {DataEncoding, MeshSourceParameters, MultiscaleMeshMetadata, MultiscaleMeshSourceParameters, ShardingHashFunction, ShardingParameters, SkeletonMetadata, SkeletonSourceParameters, VolumeChunkEncoding, VolumeChunkSourceParameters} from 'neuroglancer/datasource/precomputed/base';
 import {VertexPositionFormat} from 'neuroglancer/mesh/base';
 import {MeshSource, MultiscaleMeshSource} from 'neuroglancer/mesh/frontend';
+import {SegmentToVoxelCountMap} from 'neuroglancer/segment_metadata';
 import {VertexAttributeInfo} from 'neuroglancer/skeleton/base';
 import {SkeletonSource} from 'neuroglancer/skeleton/frontend';
 import {DataType, VolumeChunkSpecification, VolumeSourceOptions, VolumeType} from 'neuroglancer/sliceview/volume/base';
 import {MultiscaleVolumeChunkSource as GenericMultiscaleVolumeChunkSource, VolumeChunkSource} from 'neuroglancer/sliceview/volume/frontend';
 import {mat4, vec3} from 'neuroglancer/util/geom';
 import {fetchOk, parseSpecialUrl} from 'neuroglancer/util/http_request';
-import {parseArray, parseFixedLengthArray, parseIntVec, verifyEnumString, verifyFiniteFloat, verifyFinitePositiveFloat, verifyInt, verifyObject, verifyObjectProperty, verifyOptionalString, verifyPositiveInt, verifyString} from 'neuroglancer/util/json';
+import {parseArray, parseFixedLengthArray, parseIntVec, verifyArray, verifyEnumString, verifyFiniteFloat, verifyFinitePositiveFloat, verifyInt, verifyObject, verifyObjectProperty, verifyOptionalString, verifyPositiveInt, verifyString} from 'neuroglancer/util/json';
 
 class PrecomputedVolumeChunkSource extends
 (WithParameters(VolumeChunkSource, VolumeChunkSourceParameters)) {}
@@ -105,6 +106,7 @@ export class MultiscaleVolumeChunkSource implements GenericMultiscaleVolumeChunk
   volumeType: VolumeType;
   mesh: string|undefined;
   skeletons: string|undefined;
+  segmentMetadata: string|undefined;
   scales: ScaleInfo[];
 
   getMeshSource() {
@@ -123,6 +125,14 @@ export class MultiscaleVolumeChunkSource implements GenericMultiscaleVolumeChunk
     return null;
   }
 
+  getSegmentToVoxelCountMap() {
+    const {segmentMetadata} = this;
+    if (segmentMetadata !== undefined) {
+      return getSegmentToVoxelCountMap(this.chunkManager, resolvePath(this.url, segmentMetadata));
+    }
+    return null;
+  }
+
   constructor(public chunkManager: ChunkManager, public url: string, obj: any) {
     verifyObject(obj);
     const t = verifyObjectProperty(obj, '@type', verifyOptionalString);
@@ -135,6 +145,7 @@ export class MultiscaleVolumeChunkSource implements GenericMultiscaleVolumeChunk
     this.mesh = verifyObjectProperty(obj, 'mesh', verifyOptionalString);
     this.skeletons = verifyObjectProperty(obj, 'skeletons', verifyOptionalString);
     this.scales = verifyObjectProperty(obj, 'scales', x => parseArray(x, y => new ScaleInfo(y)));
+    this.segmentMetadata = verifyObjectProperty(obj, 'segmentMetadata', verifyOptionalString);
   }
 
   getSources(volumeSourceOptions: VolumeSourceOptions) {
@@ -328,6 +339,29 @@ export function getVolume(chunkManager: ChunkManager, url: string) {
                 .then(response => new MultiscaleVolumeChunkSource(chunkManager, url, response)));
 }
 
+function parseSegmentToVoxelCountMap(data: any) {
+  const segmentToVoxelCountMap = <SegmentToVoxelCountMap>new Map<string, number>();
+  verifyArray(data);
+  data.forEach((segment: any) => {
+    verifyObject(segment);
+    const segmentIDString = verifyObjectProperty(segment, 'segmentId', verifyString);
+    const voxelCount = verifyObjectProperty(segment, 'voxelCount', verifyPositiveInt);
+    segmentToVoxelCountMap.set(segmentIDString, voxelCount);
+  });
+  return segmentToVoxelCountMap;
+}
+
+export function getSegmentToVoxelCountMap(
+    chunkManager: ChunkManager, url: string): Promise<SegmentToVoxelCountMap> {
+  return chunkManager.memoize.getUncounted(
+      {'type': 'precomputed:SegmentToVoxelCountMap', url}, () => fetchOk(url).then(response => {
+        if (!response.ok) {
+          throw new Error('Request for segment to voxel count map failed');
+        }
+        return response.json().then(value => parseSegmentToVoxelCountMap(value));
+      }));
+}
+
 export class PrecomputedDataSource extends DataSource {
   get description() {
     return 'Precomputed file-backed data source';
@@ -340,5 +374,8 @@ export class PrecomputedDataSource extends DataSource {
   }
   getSkeletonSource(chunkManager: ChunkManager, url: string) {
     return getSkeletonSource(chunkManager, parseSpecialUrl(url));
+  }
+  getSegmentToVoxelCountMap(chunkManager: ChunkManager, url: string) {
+    return getSegmentToVoxelCountMap(chunkManager, parseSpecialUrl(url));
   }
 }

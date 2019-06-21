@@ -313,7 +313,11 @@ export class MeshLayer extends PerspectiveViewRenderLayer {
         return;
       }
       if (renderContext.emitColor) {
-        meshShaderManager.setColor(gl, shader, getObjectColor(displayState, rootObjectId, alpha));
+        if (displayState.shatterSegmentEquivalences.value) {
+          meshShaderManager.setColor(gl, shader, getObjectColor(displayState, objectId, alpha));
+        } else {
+          meshShaderManager.setColor(gl, shader, getObjectColor(displayState, rootObjectId, alpha));
+        }
       }
       if (renderContext.emitPickID) {
         meshShaderManager.setPickID(gl, shader, pickIDs.registerUint64(this, objectId));

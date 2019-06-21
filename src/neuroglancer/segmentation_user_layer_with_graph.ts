@@ -155,6 +155,12 @@ function helper<TBase extends BaseConstructor>(Base: TBase) {
           this.splitSelectSecond();
           break;
         }
+        case 'shatter-segment-equivalences': {
+          StatusMessage.showTemporaryMessage(
+              'Shattering segment equivalences not supported for graph-enabled segmentation layers',
+              5000);
+          break;
+        }
         default:
           super.handleAction(action);
           break;

@@ -71,7 +71,7 @@ export function getDefaultRenderedDataPanelBindings() {
           'control+keym': 'merge-selected',
           'keyc': 'two-point-cut',
           'control+keyc': 'cut-selected',
-
+          'control+keys': 'shatter-segment-equivalences',
           'at:control+wheel': {action: 'zoom-via-wheel', preventDefault: true},
           'at:wheel': {action: 'z+1-via-wheel', preventDefault: true},
           'at:shift+wheel': {action: 'z+10-via-wheel', preventDefault: true},

@@ -566,7 +566,9 @@ export class Viewer extends RefCounted implements ViewerState {
    * Called once by the constructor to register the action listeners.
    */
   private registerActionListeners() {
-    for (const action of ['recolor', 'clear-segments', 'merge-selected', 'cut-selected']) {
+    for (const action
+             of ['recolor', 'clear-segments', 'merge-selected', 'cut-selected',
+                 'shatter-segment-equivalences']) {
       this.bindAction(action, () => {
         this.layerManager.invokeAction(action);
       });
@@ -584,8 +586,7 @@ export class Viewer extends RefCounted implements ViewerState {
       if (this.mouseState.actionState === ActionState.INACTIVE) {
         this.mouseState.setMode(ActionMode.NONE);
         StatusMessage.showTemporaryMessage('Merge mode deactivated.');
-      }
-      else {
+      } else {
         this.mouseState.setMode(ActionMode.MERGE);
         StatusMessage.showTemporaryMessage('Merge mode activated.');
       }
@@ -596,8 +597,7 @@ export class Viewer extends RefCounted implements ViewerState {
       if (this.mouseState.actionState === ActionState.INACTIVE) {
         this.mouseState.setMode(ActionMode.NONE);
         StatusMessage.showTemporaryMessage('Split mode deactivated.');
-      }
-      else {
+      } else {
         this.mouseState.setMode(ActionMode.SPLIT);
         StatusMessage.showTemporaryMessage('Split mode activated.');
       }

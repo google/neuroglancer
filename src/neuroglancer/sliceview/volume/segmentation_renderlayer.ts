@@ -85,6 +85,11 @@ export class SegmentationRenderLayer extends RenderLayer {
       this.redrawNeeded.dispatch();
       this.shaderGetter.invalidateShader();
     }));
+    if (displayState.shatterSegmentEquivalences) {
+      this.registerDisposer(displayState.shatterSegmentEquivalences.changed.add(() => {
+        this.redrawNeeded.dispatch();
+      }));
+    }
     this.hasEquivalences = this.displayState.segmentEquivalences.size !== 0;
     displayState.segmentEquivalences.changed.add(() => {
       let {segmentEquivalences} = this.displayState;
@@ -142,6 +147,7 @@ uint64_t getMappedObjectId() {
     builder.addUniform('highp float', 'uSelectedAlpha');
     builder.addUniform('highp float', 'uNotSelectedAlpha');
     builder.addUniform('highp float', 'uSaturation');
+    builder.addUniform('highp uint', 'uShatterSegmentEquivalences');
     let fragmentMain = `
   uint64_t value = getMappedObjectId();
   uint64_t rawValue = getUint64DataValue();
@@ -167,7 +173,12 @@ uint64_t getMappedObjectId() {
   } else if (!has) {
     alpha = uNotSelectedAlpha;
   }
-  vec3 rgb = segmentColorHash(value);
+  vec3 rgb;
+  if (uShatterSegmentEquivalences == 1u) {
+    rgb = segmentColorHash(rawValue);
+  } else {
+    rgb = segmentColorHash(value);
+  }
 `;
 
     // Override color for all highlighted segments.
@@ -207,8 +218,12 @@ uint64_t getMappedObjectId() {
     gl.uniform1f(shader.uniform('uSaturation'), this.displayState.saturation.value);
     gl.uniform1f(shader.uniform('uNotSelectedAlpha'), this.displayState.notSelectedAlpha.value);
     gl.uniform2ui(shader.uniform('uSelectedSegment'), selectedSegmentLow, selectedSegmentHigh);
-    gl.uniform2ui(shader.uniform('uRawSelectedSegment'), rawSelectedSegmentLow, rawSelectedSegmentHigh);
+    gl.uniform2ui(
+        shader.uniform('uRawSelectedSegment'), rawSelectedSegmentLow, rawSelectedSegmentHigh);
     gl.uniform1ui(shader.uniform('uShowAllSegments'), rootSegments.hashTable.size ? 0 : 1);
+    gl.uniform1ui(
+        shader.uniform('uShatterSegmentEquivalences'),
+        this.displayState.shatterSegmentEquivalences.value ? 1 : 0);
     this.hashTableManager.enable(gl, shader, this.gpuHashTable);
     this.hashTableManagerHighlighted.enable(gl, shader, this.gpuHashTableHighlighted);
     if (this.hasEquivalences) {

@@ -25,6 +25,7 @@ import {Overlay} from 'neuroglancer/overlay';
 import {getRenderMeshByDefault} from 'neuroglancer/preferences/user_preferences';
 import {RenderScaleHistogram, trackableRenderScaleTarget} from 'neuroglancer/render_scale_statistics';
 import {SegmentColorHash} from 'neuroglancer/segment_color';
+import {SegmentMetadata, SegmentToVoxelCountMap} from 'neuroglancer/segment_metadata';
 import {SegmentSelectionState, Uint64MapEntry} from 'neuroglancer/segmentation_display_state/frontend';
 import {SharedDisjointUint64Sets} from 'neuroglancer/shared_disjoint_sets';
 import {FRAGMENT_MAIN_START as SKELETON_FRAGMENT_MAIN_START, PerspectiveViewSkeletonLayer, SkeletonLayer, SkeletonRenderingOptions, SkeletonSource, SliceViewPanelSkeletonLayer, ViewSpecificSkeletonRenderingOptions} from 'neuroglancer/skeleton/frontend';
@@ -42,6 +43,7 @@ import {NullarySignal} from 'neuroglancer/util/signal';
 import {Uint64} from 'neuroglancer/util/uint64';
 import {makeWatchableShaderError} from 'neuroglancer/webgl/dynamic_shader';
 import {EnumSelectWidget} from 'neuroglancer/widget/enum_widget';
+import {OmniSegmentWidget} from 'neuroglancer/widget/omni_segment_widget';
 import {RangeWidget} from 'neuroglancer/widget/range';
 import {RenderScaleWidget} from 'neuroglancer/widget/render_scale_widget';
 import {SegmentSetWidget} from 'neuroglancer/widget/segment_set_widget';
@@ -65,6 +67,10 @@ const MESH_RENDER_SCALE_JSON_KEY = 'meshRenderScale';
 
 const SKELETON_RENDERING_JSON_KEY = 'skeletonRendering';
 const SKELETON_SHADER_JSON_KEY = 'skeletonShader';
+const SEGMENTS_TO_VOXEL_COUNT_MAP_PATH_JSON_KEY = 'segmentMetadata';
+const SEGMENT_CATEGORIES_JSON_KEY = 'segmentCategories';
+const CATEGORIZED_SEGMENTS_JSON_KEY = 'categorizedSegments';
+const SHATTER_SEGMENT_EQUIVALENCES_JSON_KEY = 'shatterSegmentEquivalences';
 
 const lastSegmentSelection = new Uint64();
 
@@ -89,6 +95,7 @@ export class SegmentationUserLayer extends Base {
     shaderError: makeWatchableShaderError(),
     renderScaleHistogram: new RenderScaleHistogram(),
     renderScaleTarget: trackableRenderScaleTarget(1),
+    shatterSegmentEquivalences: new TrackableBoolean(false, false)
   };
 
   /**
@@ -97,8 +104,10 @@ export class SegmentationUserLayer extends Base {
    */
   meshPath: string|null|undefined;
   skeletonsPath: string|null|undefined;
+  segmentToVoxelCountMapPath: string|undefined;
   meshLayer: Borrowed<MeshLayer|MultiscaleMeshLayer>|undefined;
   skeletonLayer: Borrowed<SkeletonLayer>|undefined;
+  segmentMetadata: Borrowed<SegmentMetadata>|undefined;
 
   // Dispatched when either meshLayer or skeletonLayer changes.
   objectLayerStateChanged = new NullarySignal();
@@ -120,6 +129,7 @@ export class SegmentationUserLayer extends Base {
     this.displayState.skeletonRenderingOptions.changed.add(this.specificationChanged.dispatch);
     this.displayState.segmentColorHash.changed.add(this.specificationChanged.dispatch);
     this.displayState.renderScaleTarget.changed.add(this.specificationChanged.dispatch);
+    this.displayState.shatterSegmentEquivalences.changed.add(this.specificationChanged.dispatch);
     this.tabs.add(
         'rendering', {label: 'Rendering', order: -100, getter: () => new DisplayOptionsTab(this)});
     this.tabs.default = 'rendering';
@@ -145,6 +155,8 @@ export class SegmentationUserLayer extends Base {
     }
     this.displayState.segmentColorHash.restoreState(specification[COLOR_SEED_JSON_KEY]);
     this.displayState.renderScaleTarget.restoreState(specification[MESH_RENDER_SCALE_JSON_KEY]);
+    this.displayState.shatterSegmentEquivalences.restoreState(
+        specification[SHATTER_SEGMENT_EQUIVALENCES_JSON_KEY]);
 
     verifyObjectProperty(specification, EQUIVALENCES_JSON_KEY, y => {
       this.displayState.segmentEquivalences.restoreState(y);
@@ -177,6 +189,8 @@ export class SegmentationUserLayer extends Base {
     let skeletonsPath = this.skeletonsPath = specification[SKELETONS_JSON_KEY] === null ?
         null :
         verifyOptionalString(specification[SKELETONS_JSON_KEY]);
+    const segmentToVoxelCountMapPath = this.segmentToVoxelCountMapPath =
+        verifyOptionalString(specification[SEGMENTS_TO_VOXEL_COUNT_MAP_PATH_JSON_KEY]);
     let remaining = 0;
     if (meshPath != null && getRenderMeshByDefault()) {
       ++remaining;
@@ -200,6 +214,28 @@ export class SegmentationUserLayer extends Base {
               if (--remaining === 0) {
                 this.isReady = true;
               }
+            }
+          });
+    }
+
+    if (segmentToVoxelCountMapPath) {
+      ++remaining;
+      this.manager.dataSourceProvider
+          .getSegmentToVoxelCountMap(this.manager.chunkManager, segmentToVoxelCountMapPath)
+          .then(segmentToVoxelCountMap => {
+            if (!this.wasDisposed) {
+              if (--remaining === 0) {
+                this.isReady = true;
+              }
+            }
+            if (segmentToVoxelCountMap) {
+              this.restoreSegmentMetadata(
+                  segmentToVoxelCountMap, specification[SEGMENT_CATEGORIES_JSON_KEY],
+                  specification[CATEGORIZED_SEGMENTS_JSON_KEY]);
+            } else {
+              StatusMessage.showTemporaryMessage(
+                  'Segment metadata file specified in JSON state does not exist so omni segment widget won\'t be shown',
+                  6000);
             }
           });
     }
@@ -248,6 +284,22 @@ export class SegmentationUserLayer extends Base {
               }
               if (skeletonSource) {
                 this.addSkeleton(skeletonSource);
+              }
+            });
+          }
+          if (segmentToVoxelCountMapPath === undefined && volume.getSegmentToVoxelCountMap) {
+            ++remaining;
+            Promise.resolve(volume.getSegmentToVoxelCountMap()).then(segmentToVoxelCountMap => {
+              if (this.wasDisposed) {
+                return;
+              }
+              if (--remaining === 0) {
+                this.isReady = true;
+              }
+              if (segmentToVoxelCountMap) {
+                this.restoreSegmentMetadata(
+                    segmentToVoxelCountMap, specification[SEGMENT_CATEGORIES_JSON_KEY],
+                    specification[CATEGORIZED_SEGMENTS_JSON_KEY]);
               }
             });
           }
@@ -308,6 +360,19 @@ export class SegmentationUserLayer extends Base {
     }
     x[SKELETON_RENDERING_JSON_KEY] = this.displayState.skeletonRenderingOptions.toJSON();
     x[MESH_RENDER_SCALE_JSON_KEY] = this.displayState.renderScaleTarget.toJSON();
+    x[SEGMENTS_TO_VOXEL_COUNT_MAP_PATH_JSON_KEY] = this.segmentToVoxelCountMapPath;
+    if (this.segmentMetadata) {
+      const segmentCategories = this.segmentMetadata.segmentCategoriesToJSON();
+      if (segmentCategories.length > 0) {
+        x[SEGMENT_CATEGORIES_JSON_KEY] = segmentCategories;
+        const categorizedSegments = this.segmentMetadata.categorizedSegmentsToJSON();
+        if (categorizedSegments.length > 0) {
+          x[CATEGORIZED_SEGMENTS_JSON_KEY] = categorizedSegments;
+        }
+      }
+    }
+    x[SHATTER_SEGMENT_EQUIVALENCES_JSON_KEY] =
+        this.displayState.shatterSegmentEquivalences.toJSON();
     return x;
   }
 
@@ -375,6 +440,11 @@ export class SegmentationUserLayer extends Base {
       }
       case 'split-select-second': {
         this.splitSelectSecond();
+        break;
+      }
+      case 'shatter-segment-equivalences': {
+        this.displayState.shatterSegmentEquivalences.value =
+            !this.displayState.shatterSegmentEquivalences.value;
         break;
       }
     }
@@ -448,6 +518,15 @@ export class SegmentationUserLayer extends Base {
     }
     this.specificationChanged.dispatch();
   }
+
+  restoreSegmentMetadata(
+      segmentToVoxelCountMap: SegmentToVoxelCountMap, segmentCategoriesObj: any,
+      categorizedSegmentsObj: any) {
+    this.segmentMetadata = SegmentMetadata.restoreState(
+        segmentToVoxelCountMap, segmentCategoriesObj, categorizedSegmentsObj);
+    this.segmentMetadata.changed.add(this.specificationChanged.dispatch);
+    this.objectLayerStateChanged.dispatch();
+  }
 }
 
 function makeSkeletonShaderCodeWidget(layer: SegmentationUserLayer) {
@@ -468,6 +547,8 @@ class DisplayOptionsTab extends Tab {
   saturationWidget = this.registerDisposer(new RangeWidget(this.layer.displayState.saturation));
   objectAlphaWidget = this.registerDisposer(new RangeWidget(this.layer.displayState.objectAlpha));
   codeWidget: ShaderCodeWidget|undefined;
+  omniWidget: OmniSegmentWidget|undefined;
+
   constructor(public layer: SegmentationUserLayer) {
     super();
     const {element} = this;
@@ -531,6 +612,17 @@ class DisplayOptionsTab extends Tab {
       }
     }));
     element.appendChild(this.registerDisposer(this.visibleSegmentWidget).element);
+
+    const maybeAddOmniSegmentWidget = () => {
+      if (this.omniWidget || (!layer.segmentMetadata)) {
+        return;
+      }
+      {
+        this.omniWidget =
+            this.registerDisposer(new OmniSegmentWidget(layer.displayState, layer.segmentMetadata));
+        element.appendChild(this.omniWidget.element);
+      }
+    };
 
     const maybeAddSkeletonShaderUI = () => {
       if (this.codeWidget !== undefined) {
@@ -597,6 +689,7 @@ class DisplayOptionsTab extends Tab {
       codeWidget.textEditor.refresh();
     };
     this.registerDisposer(this.layer.objectLayerStateChanged.add(maybeAddSkeletonShaderUI));
+    this.registerDisposer(this.layer.objectLayerStateChanged.add(maybeAddOmniSegmentWidget));
     maybeAddSkeletonShaderUI();
 
     this.visibility.changed.add(() => {
