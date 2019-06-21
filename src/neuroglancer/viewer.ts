@@ -59,6 +59,7 @@ import {MousePositionWidget, PositionWidget, VoxelSizeWidget} from 'neuroglancer
 import {TrackableScaleBarOptions} from 'neuroglancer/widget/scale_bar';
 import {makeTextIconButton} from 'neuroglancer/widget/text_icon_button';
 import {RPC} from 'neuroglancer/worker_rpc';
+import {initAuthTokenSharedValue} from 'neuroglancer/authentication/frontend';
 import {AnnotationUserLayer} from 'neuroglancer/annotation/user_layer';
 
 require('./viewer.css');
@@ -399,6 +400,8 @@ export class Viewer extends RefCounted implements ViewerState {
 
     this.registerDisposer(new MouseSelectionStateTooltipManager(
         this.mouseState, this.layerManager, this.navigationState.voxelSize));
+
+    initAuthTokenSharedValue(this.dataContext.rpc);
 
     const maybeAddOrRemoveAnnotationShortcuts = this.annotationShortcutControllerFactory();
     this.registerDisposer(this.selectedLayer.changed.add(() => maybeAddOrRemoveAnnotationShortcuts()));

@@ -15,6 +15,7 @@
  */
 
 import {AnnotationSource, makeDataBoundsBoundingBox} from 'neuroglancer/annotation';
+import {authFetch} from 'neuroglancer/authentication/frontend.ts';
 import {ChunkManager, WithParameters} from 'neuroglancer/chunk_manager/frontend';
 import {DataSource} from 'neuroglancer/datasource';
 import {ChunkedGraphSourceParameters, DataEncoding, MeshSourceParameters, MultiscaleMeshMetadata, MultiscaleMeshSourceParameters, ShardingHashFunction, ShardingParameters, SkeletonMetadata, SkeletonSourceParameters, VolumeChunkEncoding, VolumeChunkSourceParameters} from 'neuroglancer/datasource/graphene/base';
@@ -28,7 +29,7 @@ import {DataType, VolumeChunkSpecification, VolumeSourceOptions, VolumeType} fro
 import {MultiscaleVolumeChunkSource as GenericMultiscaleVolumeChunkSource, VolumeChunkSource} from 'neuroglancer/sliceview/volume/frontend';
 import {Uint64Set} from 'neuroglancer/uint64_set';
 import {mat4, vec3} from 'neuroglancer/util/geom';
-import {fetchOk, parseSpecialUrl} from 'neuroglancer/util/http_request';
+import {parseSpecialUrl} from 'neuroglancer/util/http_request';
 import {parseArray, parseFixedLengthArray, parseIntVec, verifyEnumString, verifyFiniteFloat, verifyFinitePositiveFloat, verifyInt, verifyObject, verifyObjectProperty, verifyOptionalString, verifyPositiveInt, verifyString} from 'neuroglancer/util/json';
 
 class GrapheneVolumeChunkSource extends
@@ -254,7 +255,7 @@ function getMeshMetadata(
     chunkManager: ChunkManager, url: string): Promise<MultiscaleMeshMetadata|undefined> {
   return chunkManager.memoize.getUncounted(
       {'type': 'graphene:MeshSource', url},
-      () => fetchOk(`${url}/info`)
+      () => authFetch(`${url}/info`)
                 .then(
                     response => {
                       return response.json().then(value => parseMeshMetadata(value));
@@ -317,7 +318,7 @@ function parseSkeletonMetadata(data: any): SkeletonMetadata {
 
 function getSkeletonMetadata(chunkManager: ChunkManager, url: string): Promise<SkeletonMetadata> {
   return chunkManager.memoize.getUncounted({'type': 'graphene:SkeletonSource', url}, async () => {
-    const response = await fetch(`${url}/info`);
+    const response = await authFetch(`${url}/info`);
     // Remove this once our graphene datasets have a proper skeleton info file
     if (!response.ok) {
       return parseSkeletonMetadata({'@type': 'neuroglancer_skeletons'});
@@ -366,7 +367,7 @@ export function getVolume(chunkManager: ChunkManager, url: string) {
   url = parseSpecialUrl(url);
   return chunkManager.memoize.getUncounted(
       {'type': 'graphene:MultiscaleVolumeChunkSource', url},
-      () => fetchOk(`${url}/info`)
+      () => authFetch(`${url}/info`)
                 .then(response => response.json())
                 .then(response => new MultiscaleVolumeChunkSource(chunkManager, url, response)));
 }

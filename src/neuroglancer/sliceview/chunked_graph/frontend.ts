@@ -14,6 +14,7 @@
  * limitations under the License.
  */
 
+import {authFetch} from 'neuroglancer/authentication/frontend.ts';
 import {ChunkManager} from 'neuroglancer/chunk_manager/frontend';
 import {VisibleSegmentsState} from 'neuroglancer/segmentation_display_state/base';
 import {CHUNKED_GRAPH_LAYER_RPC_ID, ChunkedGraphChunkSource as ChunkedGraphChunkSourceInterface, ChunkedGraphChunkSpecification} from 'neuroglancer/sliceview/chunked_graph/base';
@@ -22,7 +23,6 @@ import {RenderLayer as GenericSliceViewRenderLayer, RenderLayerOptions} from 'ne
 import {StatusMessage} from 'neuroglancer/status';
 import {Uint64Set} from 'neuroglancer/uint64_set';
 import {vec3} from 'neuroglancer/util/geom';
-import {cancellableFetchOk, responseArrayBuffer} from 'neuroglancer/util/http_request';
 import {Uint64} from 'neuroglancer/util/uint64';
 import {RPC} from 'neuroglancer/worker_rpc';
 
@@ -83,13 +83,12 @@ export class ChunkedGraphLayer extends GenericSliceViewRenderLayer {
       return Promise.resolve(selection.segmentId);
     }
 
-    const response = await this.withErrorMessage(
-        cancellableFetchOk(
-            `${url}/graph/${String(selection.segmentId)}/root`, {}, responseArrayBuffer),
-        {
-          initialMessage: `Retrieving root for segment ${selection.segmentId}`,
-          errorPrefix: `Could not fetch root: `
-        });
+    const request = authFetch(`${url}/graph/${String(selection.segmentId)}/root`)
+                        .then(res => res.arrayBuffer());
+    const response = await this.withErrorMessage(request, {
+      initialMessage: `Retrieving root for segment ${selection.segmentId}`,
+      errorPrefix: `Could not fetch root: `
+    });
     const uint32 = new Uint32Array(response);
     return new Uint64(uint32[0], uint32[1]);
   }
@@ -100,15 +99,13 @@ export class ChunkedGraphLayer extends GenericSliceViewRenderLayer {
       return Promise.reject(GRAPH_SERVER_NOT_SPECIFIED);
     }
 
-    const promise = cancellableFetchOk(
-        `${url}/graph/merge`, {
-          method: 'POST',
-          body: JSON.stringify([
-            [String(first.segmentId), ...first.position.values()],
-            [String(second.segmentId), ...second.position.values()]
-          ])
-        },
-        responseArrayBuffer);
+    const promise = authFetch(`${url}/graph/merge`, {
+                      method: 'POST',
+                      body: JSON.stringify([
+                        [String(first.segmentId), ...first.position.values()],
+                        [String(second.segmentId), ...second.position.values()]
+                      ])
+                    }).then(res => res.arrayBuffer());
 
     const response = await this.withErrorMessage(promise, {
       initialMessage: `Merging ${first.segmentId} and ${second.segmentId}`,
@@ -125,15 +122,13 @@ export class ChunkedGraphLayer extends GenericSliceViewRenderLayer {
       return Promise.reject(GRAPH_SERVER_NOT_SPECIFIED);
     }
 
-    const promise = cancellableFetchOk(
-        `${url}/graph/split`, {
-          method: 'POST',
-          body: JSON.stringify({
-            'sources': first.map(x => [String(x.segmentId), ...x.position.values()]),
-            'sinks': second.map(x => [String(x.segmentId), ...x.position.values()])
-          })
-        },
-        responseArrayBuffer);
+    const promise = authFetch(`${url}/graph/split`, {
+                      method: 'POST',
+                      body: JSON.stringify({
+                        'sources': first.map(x => [String(x.segmentId), ...x.position.values()]),
+                        'sinks': second.map(x => [String(x.segmentId), ...x.position.values()])
+                      })
+                    }).then(res => res.arrayBuffer());
 
     const response = await this.withErrorMessage(promise, {
       initialMessage: `Splitting ${first.length} sinks from ${second.length} sources`,

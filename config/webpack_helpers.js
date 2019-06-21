@@ -405,6 +405,10 @@ function getViewerConfig(options) {
               from: resolveReal(srcDir, 'neuroglancer/datasource/boss/bossauth.html'),
               to: 'bossauth.html'
             }]),
+            new CopyWebpackPlugin([{
+              from: resolveReal(srcDir, 'neuroglancer/authentication/auth_redirect.html'),
+              to: 'auth_redirect.html'
+            }]),
           ],
         },
         baseConfig),

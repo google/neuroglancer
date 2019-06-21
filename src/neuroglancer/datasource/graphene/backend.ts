@@ -16,6 +16,7 @@
 
 import {decodeGzip} from 'neuroglancer/async_computation/decode_gzip_request';
 import {requestAsyncComputation} from 'neuroglancer/async_computation/request';
+import {authFetch} from 'neuroglancer/authentication/backend.ts';
 import {Chunk, ChunkManager, WithParameters} from 'neuroglancer/chunk_manager/backend';
 import {GenericSharedDataSource} from 'neuroglancer/chunk_manager/generic_file_source';
 import {ChunkedGraphSourceParameters, DataEncoding, MeshSourceParameters, ShardingHashFunction, ShardingParameters, SkeletonSourceParameters, VolumeChunkEncoding, VolumeChunkSourceParameters} from 'neuroglancer/datasource/graphene/base';
@@ -254,11 +255,10 @@ export function decodeChunkedGraphChunk(
     let promises = Array<Promise<void>>();
     for (const [key, val] of chunk.mappings!.entries()) {
       if (val === null) {
-        const segmentsDownloadPromise = cancellableFetchOk(
-            `${parameters.url}/${key}/leaves?bounds=${bounds}`, {}, responseArrayBuffer,
-            cancellationToken);
-        promises.push(segmentsDownloadPromise.then(
-            response => decodeChunkedGraphChunk(chunk, key, response)));
+        promises.push(
+            authFetch(`${parameters.url}/${key}/leaves?bounds=${bounds}`, {}, cancellationToken)
+                .then(res => res.arrayBuffer())
+                .then(response => decodeChunkedGraphChunk(chunk, key, response)));
       }
     }
     await Promise.all(promises);

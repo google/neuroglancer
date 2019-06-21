@@ -15,6 +15,7 @@
  */
 
 import debounce from 'lodash/debounce';
+import {authFetch} from 'neuroglancer/authentication/backend.ts';
 import {cancelChunkDownload, startChunkDownload, withChunkManager} from 'neuroglancer/chunk_manager/backend';
 import {ChunkPriorityTier, ChunkState} from 'neuroglancer/chunk_manager/base';
 import {CoordinateTransform} from 'neuroglancer/coordinate_transform';
@@ -24,7 +25,6 @@ import {RenderLayer as RenderLayerInterface, TransformedSource} from 'neuroglanc
 import {CHUNKED_GRAPH_LAYER_RPC_ID, ChunkedGraphChunkSource as ChunkedGraphChunkSourceInterface, ChunkedGraphChunkSpecification} from 'neuroglancer/sliceview/chunked_graph/base';
 import {Uint64Set} from 'neuroglancer/uint64_set';
 import {mat4, vec3, vec3Key} from 'neuroglancer/util/geom';
-import {cancellableFetchOk, responseArrayBuffer} from 'neuroglancer/util/http_request';
 import {NullarySignal} from 'neuroglancer/util/signal';
 import {Uint64} from 'neuroglancer/util/uint64';
 import {registerSharedObject, RPC, SharedObjectCounterpart} from 'neuroglancer/worker_rpc';
@@ -84,7 +84,8 @@ export class ChunkedGraphChunk extends SliceViewChunk {
   }
 }
 
-export function decodeSupervoxelArray(chunk: ChunkedGraphChunk, rootObjectKey: string, data: ArrayBuffer) {
+export function decodeSupervoxelArray(
+    chunk: ChunkedGraphChunk, rootObjectKey: string, data: ArrayBuffer) {
   let uint32 = new Uint32Array(data);
   let final: Uint64[] = new Array(uint32.length / 2);
   for (let i = 0; i < uint32.length / 2; i++) {
@@ -234,7 +235,7 @@ export class ChunkedGraphLayer extends Base implements RenderLayerInterface<Slic
     }
 
     const response =
-        await cancellableFetchOk(`${url}/segment/${segment}/children`, {}, responseArrayBuffer);
+        await authFetch(`${url}/segment/${segment}/children`).then(res => res.arrayBuffer());
     let uint32 = new Uint32Array(response);
     let final: Uint64[] = new Array(uint32.length / 2);
     for (let i = 0; i < uint32.length / 2; i++) {
@@ -247,7 +248,8 @@ export class ChunkedGraphLayer extends Base implements RenderLayerInterface<Slic
     this.updateDisplayState();
   }, 100);
 
-  private forEachSelectedRootWithLeaves(callback: (rootObjectKey: string, leaves: Uint64[]) => void) {
+  private forEachSelectedRootWithLeaves(
+      callback: (rootObjectKey: string, leaves: Uint64[]) => void) {
     for (const alternative of this.sources) {
       for (const source of alternative) {
         for (const chunk of source.chunks.values()) {
@@ -288,13 +290,16 @@ export class ChunkedGraphLayer extends Base implements RenderLayerInterface<Slic
     });
 
     for (const [root, leaves] of visibleLeaves) {
-      // TODO: Delete segments not visible anymore from segmentEquivalences - requires a faster data structure, though.
+      // TODO: Delete segments not visible anymore from segmentEquivalences - requires a faster data
+      // structure, though.
 
       /*if (this.segmentEquivalences.has(Uint64.parseString(root))) {
-        this.segmentEquivalences.delete([...this.segmentEquivalences.setElements(Uint64.parseString(root))].filter(x => !leaves.has(x) && !this.visibleSegments3D.has(x)));
+        this.segmentEquivalences.delete([...this.segmentEquivalences.setElements(Uint64.parseString(root))].filter(x
+      => !leaves.has(x) && !this.visibleSegments3D.has(x)));
       }*/
 
-      this.segmentEquivalences.link(Uint64.parseString(root), [...leaves].filter(x => !this.segmentEquivalences.has(x)));
+      this.segmentEquivalences.link(
+          Uint64.parseString(root), [...leaves].filter(x => !this.segmentEquivalences.has(x)));
     }
   }
 }
