@@ -66,7 +66,7 @@ void emitLine(mat4 projection, vec3 vertexA, vec3 vertexB) {
   vec2 lineNormal = vec2(lineDirection.y, -lineDirection.x);
 
   gl_Position = vertexPositionClip;
-  gl_Position.xy += aLineOffset.y * (2.0 * aLineOffset.x - 1.0) * lineNormal * uLineParams.xy * 0.5 * gl_Position.w;
+  gl_Position.xy += aLineOffset.y * (2.0 * aLineOffset.x - 1.0) * lineNormal * uLineParams.xy * gl_Position.w;
   vLineCoord = aLineOffset.y;
 }
 `);
