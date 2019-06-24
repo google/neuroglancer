@@ -71,7 +71,7 @@ function getProperties(obj: any): Map<string, string> {
   return map;
 }
 
-function getDistinguishingProperties(properties: Map<string,string>[]): string[] {
+function getDistinguishingProperties(properties: Map<string, string>[]): string[] {
   const selected = new Set<string>();
   selected.add('.type');
   const allProps = new Set<string>();
@@ -119,7 +119,7 @@ function getDistinguishingProperties(properties: Map<string,string>[]): string[]
   return Array.from(selected);
 }
 
-function getNameFromProps(properties: Map<string,string>, selected: string[]) {
+function getNameFromProps(properties: Map<string, string>, selected: string[]) {
   const result: any = {};
   for (const prop of selected) {
     const value = properties.get(prop);
@@ -210,6 +210,58 @@ export class StatisticsPanel extends RefCounted {
 
     columns.set('Visible memory', (statistics) => {
       return statistics[getChunkStateStatisticIndex(ChunkState.GPU_MEMORY, ChunkPriorityTier.VISIBLE) *
+                   numChunkMemoryStatistics +
+               ChunkMemoryStatistics.gpuMemoryBytes];
+    });
+
+    // Total number of visible-priority chunks
+    //    number in downloading state
+    //    number in other system memory state
+    //    number in gpu memory state
+    //    number in failed state
+    columns.set('Prefetched chunks/T', (statistics) => {
+      let sum = 0;
+      for (let state: ChunkState = 0; state < numChunkStates; ++state) {
+        sum += statistics[getChunkStateStatisticIndex(state, ChunkPriorityTier.PREFETCH) *
+                          numChunkMemoryStatistics + ChunkMemoryStatistics.numChunks];
+      }
+      return sum;
+    });
+
+    columns.set('Prefetched chunks/D', (statistics) => {
+      return (statistics
+                  [getChunkStateStatisticIndex(ChunkState.DOWNLOADING, ChunkPriorityTier.PREFETCH) *
+                       numChunkMemoryStatistics +
+                   ChunkMemoryStatistics.numChunks]);
+    });
+
+    columns.set('Prefetched chunks/M', (statistics) => {
+      return (
+          statistics
+              [getChunkStateStatisticIndex(ChunkState.SYSTEM_MEMORY, ChunkPriorityTier.PREFETCH) *
+                   numChunkMemoryStatistics +
+               ChunkMemoryStatistics.numChunks] +
+          statistics
+              [getChunkStateStatisticIndex(
+                   ChunkState.SYSTEM_MEMORY_WORKER, ChunkPriorityTier.PREFETCH) *
+                   numChunkMemoryStatistics +
+               ChunkMemoryStatistics.numChunks]);
+    });
+
+    columns.set('Prefetched chunks/G', (statistics) => {
+      return statistics[getChunkStateStatisticIndex(ChunkState.GPU_MEMORY, ChunkPriorityTier.PREFETCH) *
+                   numChunkMemoryStatistics +
+               ChunkMemoryStatistics.numChunks];
+    });
+
+    columns.set('Prefetched chunks/F', (statistics) => {
+      return statistics[getChunkStateStatisticIndex(ChunkState.FAILED, ChunkPriorityTier.PREFETCH) *
+                   numChunkMemoryStatistics +
+               ChunkMemoryStatistics.numChunks];
+    });
+
+    columns.set('Prefetched memory', (statistics) => {
+      return statistics[getChunkStateStatisticIndex(ChunkState.GPU_MEMORY, ChunkPriorityTier.PREFETCH) *
                    numChunkMemoryStatistics +
                ChunkMemoryStatistics.gpuMemoryBytes];
     });
@@ -306,7 +358,7 @@ export class StatisticsPanel extends RefCounted {
         const sepIndex = column.indexOf('/');
         let suffix = '';
         if (sepIndex !== -1) {
-          suffix = column.substring(sepIndex+1);
+          suffix = column.substring(sepIndex + 1);
         }
         const td = document.createElement('td');
         td.textContent = suffix;
