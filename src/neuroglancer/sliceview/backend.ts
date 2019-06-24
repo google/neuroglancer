@@ -53,10 +53,11 @@ class SliceViewCounterpartBase extends SliceViewBase<SliceViewChunkSource, Rende
 const SliceViewIntermediateBase = withSharedVisibility(withChunkManager(SliceViewCounterpartBase));
 @registerSharedObject(SLICEVIEW_RPC_ID)
 export class SliceView extends SliceViewIntermediateBase {
-  private prefetchingEnabled = true;
+  private prefetchingEnabled: boolean;
 
   constructor(rpc: RPC, options: any) {
     super(rpc, options);
+    this.prefetchingEnabled = options['prefetchingEnabled'];
     this.registerDisposer(this.chunkManager.recomputeChunkPriorities.add(() => {
       this.updateChunksToRequest();
     }));

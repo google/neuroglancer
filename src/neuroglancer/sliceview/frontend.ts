@@ -19,7 +19,8 @@ import {ChunkState} from 'neuroglancer/chunk_manager/base';
 import {Chunk, ChunkManager, ChunkSource} from 'neuroglancer/chunk_manager/frontend';
 import {LayerManager} from 'neuroglancer/layer';
 import {NavigationState} from 'neuroglancer/navigation_state';
-import {SLICEVIEW_ADD_VISIBLE_LAYER_RPC_ID, SLICEVIEW_REMOVE_VISIBLE_LAYER_RPC_ID, SLICEVIEW_RPC_ID, SLICEVIEW_UPDATE_VIEW_RPC_ID, SLICEVIEW_UPDATE_PREFETCHING_RPC_ID, SliceViewBase, SliceViewChunkSource as SliceViewChunkSourceInterface, SliceViewChunkSpecification, SliceViewSourceOptions} from 'neuroglancer/sliceview/base';
+import {getPrefetchSliceViewChunks} from 'neuroglancer/preferences/user_preferences';
+import {SLICEVIEW_ADD_VISIBLE_LAYER_RPC_ID, SLICEVIEW_REMOVE_VISIBLE_LAYER_RPC_ID, SLICEVIEW_RPC_ID, SLICEVIEW_UPDATE_PREFETCHING_RPC_ID, SLICEVIEW_UPDATE_VIEW_RPC_ID, SliceViewBase, SliceViewChunkSource as SliceViewChunkSourceInterface, SliceViewChunkSpecification, SliceViewSourceOptions} from 'neuroglancer/sliceview/base';
 import {ChunkLayout} from 'neuroglancer/sliceview/chunk_layout';
 import {RenderLayer} from 'neuroglancer/sliceview/renderlayer';
 import {Disposer, invokeDisposers, RefCounted} from 'neuroglancer/util/disposable';
@@ -32,7 +33,6 @@ import {FramebufferConfiguration, makeTextureBuffers, StencilBuffer} from 'neuro
 import {ShaderBuilder, ShaderModule, ShaderProgram} from 'neuroglancer/webgl/shader';
 import {getSquareCornersBuffer} from 'neuroglancer/webgl/square_corners_buffer';
 import {registerSharedObjectOwner, RPC} from 'neuroglancer/worker_rpc';
-import {TrackableBoolean} from 'neuroglancer/trackable_boolean';
 
 export type GenericChunkKey = string;
 
@@ -74,12 +74,14 @@ export class SliceView extends Base {
 
   constructor(
       public chunkManager: ChunkManager, public layerManager: LayerManager,
-      public navigationState: NavigationState, prefetchingEnabled: TrackableBoolean) {
+      public navigationState: NavigationState) {
     super();
     mat4.identity(this.dataToViewport);
     const rpc = this.chunkManager.rpc!;
+    const prefetchingEnabled = getPrefetchSliceViewChunks();
     this.initializeCounterpart(rpc, {
       'chunkManager': chunkManager.rpcId,
+      'prefetchingEnabled': prefetchingEnabled.value,
     });
     this.registerDisposer(navigationState.changed.add(() => {
       this.updateViewportFromNavigationState();
@@ -94,8 +96,8 @@ export class SliceView extends Base {
 
     this.registerDisposer(prefetchingEnabled.changed.add(() => {
       rpc.invoke(
-        SLICEVIEW_UPDATE_PREFETCHING_RPC_ID,
-        {id: this.rpcId, prefetchingEnabled: prefetchingEnabled.value});
+          SLICEVIEW_UPDATE_PREFETCHING_RPC_ID,
+          {id: this.rpcId, prefetchingEnabled: prefetchingEnabled.value});
     }));
 
     this.viewChanged.add(() => {
@@ -276,17 +278,17 @@ export class SliceView extends Base {
     gl.enable(gl.STENCIL_TEST);
     gl.disable(gl.DEPTH_TEST);
     gl.stencilOpSeparate(
-        /*face=*/ gl.FRONT_AND_BACK, /*sfail=*/ gl.KEEP, /*dpfail=*/ gl.KEEP,
-        /*dppass=*/ gl.REPLACE);
+        /*face=*/gl.FRONT_AND_BACK, /*sfail=*/gl.KEEP, /*dpfail=*/gl.KEEP,
+        /*dppass=*/gl.REPLACE);
 
     let renderLayerNum = 0;
     for (let renderLayer of this.visibleLayerList) {
       gl.clear(gl.STENCIL_BUFFER_BIT);
       gl.stencilFuncSeparate(
-          /*face=*/ gl.FRONT_AND_BACK,
-          /*func=*/ gl.GREATER,
-          /*ref=*/ 1,
-          /*mask=*/ 1);
+          /*face=*/gl.FRONT_AND_BACK,
+          /*func=*/gl.GREATER,
+          /*ref=*/1,
+          /*mask=*/1);
 
       renderLayer.setGLBlendMode(gl, renderLayerNum);
       renderLayer.draw(this);
@@ -440,7 +442,7 @@ gl_Position = uProjectionMatrix * aVertexPosition;
     gl.uniform4fv(shader.uniform('uTextureCoordinateAdjustment'), textureCoordinateAdjustment);
 
     let aVertexPosition = shader.attribute('aVertexPosition');
-    this.copyVertexPositionsBuffer.bindToVertexAttrib(aVertexPosition, /*components=*/ 2);
+    this.copyVertexPositionsBuffer.bindToVertexAttrib(aVertexPosition, /*components=*/2);
 
     gl.drawArrays(gl.TRIANGLE_FAN, 0, 4);
 

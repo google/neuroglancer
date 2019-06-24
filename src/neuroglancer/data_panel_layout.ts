@@ -45,7 +45,6 @@ export interface SliceViewViewerState {
   chunkManager: ChunkManager;
   navigationState: NavigationState;
   layerManager: LayerManager;
-  sliceViewPrefetchingEnabled: TrackableBoolean;
 }
 
 export class InputEventBindings {
@@ -100,9 +99,7 @@ export function makeSliceView(viewerState: SliceViewViewerState, baseToSelf?: qu
                 viewerState.navigationState.pose.orientation, baseToSelf)),
         viewerState.navigationState.zoomFactor);
   }
-  return new SliceView(
-      viewerState.chunkManager, viewerState.layerManager, navigationState,
-      viewerState.sliceViewPrefetchingEnabled);
+  return new SliceView(viewerState.chunkManager, viewerState.layerManager, navigationState);
 }
 
 export function makeNamedSliceView(viewerState: SliceViewViewerState, axes: NamedAxes) {
@@ -152,7 +149,7 @@ function getCommonSliceViewerState(viewer: ViewerUIState) {
 }
 
 function registerRelatedLayouts(
-  layout: DataDisplayLayout, panel: RenderedDataPanel, relatedLayouts: string[]) {
+    layout: DataDisplayLayout, panel: RenderedDataPanel, relatedLayouts: string[]) {
   const controls = document.createElement('div');
   controls.className = 'neuroglancer-data-panel-layout-controls';
   layout.registerDisposer(() => removeFromParent(controls));
@@ -181,8 +178,7 @@ function registerRelatedLayouts(
 function makeSliceViewFromSpecification(
     viewer: SliceViewViewerState, specification: Borrowed<CrossSectionSpecification>) {
   const sliceView = new SliceView(
-      viewer.chunkManager, viewer.layerManager, specification.navigationState.addRef(),
-      viewer.sliceViewPrefetchingEnabled);
+      viewer.chunkManager, viewer.layerManager, specification.navigationState.addRef());
   const updateViewportSize = () => {
     sliceView.setViewportSizeDebounced(specification.width.value, specification.height.value);
   };

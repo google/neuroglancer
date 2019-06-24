@@ -8,10 +8,16 @@ require('./user_preferences.css');
 
 class UserPreferences {
   renderMeshByDefault: TrackableBoolean;
+  prefetchSliceViewChunks: TrackableBoolean;
   constructor() {
     // mesh rendering is enabled by default, unless user selects not to
     this.renderMeshByDefault = new TrackableBoolean(true, true, 'renderMeshByDefault');
+    // prefetching disabled by default, as it uses a lot of additional memory/bandwidth
+    this.prefetchSliceViewChunks = new TrackableBoolean(false, false, 'prefetchSliceViewChunks');
+
     this.renderMeshByDefault.restoreState({});
+    this.prefetchSliceViewChunks.restoreState({});
+
     this.renderMeshByDefault.changed.add(() => {
       location.reload(false);
     });
@@ -22,6 +28,10 @@ let userPreferences = new UserPreferences();
 
 export function getRenderMeshByDefault(): boolean {
   return userPreferences.renderMeshByDefault.value;
+}
+
+export function getPrefetchSliceViewChunks(): TrackableBoolean {
+  return userPreferences.prefetchSliceViewChunks;
 }
 
 export class UserPreferencesDialog extends Overlay {
@@ -61,5 +71,6 @@ export class UserPreferencesDialog extends Overlay {
     };
 
     addCheckbox('Render Mesh By Default', userPreferences.renderMeshByDefault);
+    addCheckbox('Prefetch SliceView Chunks', userPreferences.prefetchSliceViewChunks);
   }
 }

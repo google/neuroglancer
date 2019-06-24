@@ -186,7 +186,6 @@ function makeViewerContextMenu(viewer: Viewer) {
   addCheckbox('Show cross sections in 3-d', viewer.showPerspectiveSliceViews);
   addCheckbox('Show default annotations', viewer.showDefaultAnnotations);
   addCheckbox('Show chunk statistics', viewer.statisticsDisplayState.visible);
-  addCheckbox('Prefetch sliceview chunks', viewer.sliceViewPrefetchingEnabled);
   return menu;
 }
 
