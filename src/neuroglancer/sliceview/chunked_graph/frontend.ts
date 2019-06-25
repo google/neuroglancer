@@ -83,13 +83,13 @@ export class ChunkedGraphLayer extends GenericSliceViewRenderLayer {
       return Promise.resolve(selection.segmentId);
     }
 
-    const request = authFetch(`${url}/graph/${String(selection.segmentId)}/root`)
-                        .then(res => res.arrayBuffer());
-    const response = await this.withErrorMessage(request, {
+    const promise = authFetch(`${url}/graph/${String(selection.segmentId)}/root`);
+
+    const response = await this.withErrorMessage(promise, {
       initialMessage: `Retrieving root for segment ${selection.segmentId}`,
       errorPrefix: `Could not fetch root: `
     });
-    const uint32 = new Uint32Array(response);
+    const uint32 = new Uint32Array(await response.arrayBuffer());
     return new Uint64(uint32[0], uint32[1]);
   }
 
@@ -100,19 +100,18 @@ export class ChunkedGraphLayer extends GenericSliceViewRenderLayer {
     }
 
     const promise = authFetch(`${url}/graph/merge`, {
-                      method: 'POST',
-                      body: JSON.stringify([
-                        [String(first.segmentId), ...first.position.values()],
-                        [String(second.segmentId), ...second.position.values()]
-                      ])
-                    }).then(res => res.arrayBuffer());
+      method: 'POST',
+      body: JSON.stringify([
+        [String(first.segmentId), ...first.position.values()],
+        [String(second.segmentId), ...second.position.values()]
+      ])
+    });
 
     const response = await this.withErrorMessage(promise, {
       initialMessage: `Merging ${first.segmentId} and ${second.segmentId}`,
       errorPrefix: 'Merge failed: '
     });
-
-    const uint32 = new Uint32Array(response);
+    const uint32 = new Uint32Array(await response.arrayBuffer());
     return new Uint64(uint32[0], uint32[1]);
   }
 
@@ -123,20 +122,19 @@ export class ChunkedGraphLayer extends GenericSliceViewRenderLayer {
     }
 
     const promise = authFetch(`${url}/graph/split`, {
-                      method: 'POST',
-                      body: JSON.stringify({
-                        'sources': first.map(x => [String(x.segmentId), ...x.position.values()]),
-                        'sinks': second.map(x => [String(x.segmentId), ...x.position.values()])
-                      })
-                    }).then(res => res.arrayBuffer());
+      method: 'POST',
+      body: JSON.stringify({
+        'sources': first.map(x => [String(x.segmentId), ...x.position.values()]),
+        'sinks': second.map(x => [String(x.segmentId), ...x.position.values()])
+      })
+    });
 
     const response = await this.withErrorMessage(promise, {
       initialMessage: `Splitting ${first.length} sinks from ${second.length} sources`,
       errorPrefix: 'Split failed: '
     });
-
-    const uint32 = new Uint32Array(response);
-    let final: Uint64[] = new Array(uint32.length / 2);
+    const uint32 = new Uint32Array(await response.arrayBuffer());
+    const final: Uint64[] = new Array(uint32.length / 2);
     for (let i = 0; i < uint32.length / 2; i++) {
       final[i] = new Uint64(uint32[2 * i], uint32[2 * i + 1]);
     }
@@ -145,24 +143,28 @@ export class ChunkedGraphLayer extends GenericSliceViewRenderLayer {
 
   draw() {}
 
-  withErrorMessage<T>(promise: Promise<T>, options: {initialMessage: string, errorPrefix: string}):
-      Promise<T> {
-    let status = new StatusMessage(true);
+  async withErrorMessage(promise: Promise<Response>, options: {
+    initialMessage: string,
+    errorPrefix: string
+  }): Promise<Response> {
+    const status = new StatusMessage(true);
     status.setText(options.initialMessage);
-    let dispose = status.dispose.bind(status);
-    promise.then(dispose, reason => {
-      let msg = '';
+    const dispose = status.dispose.bind(status);
+    const response = await promise;
+    if (response.ok) {
+      dispose();
+      return response;
+    } else {
+      let msg: string;
       try {
-        const errorResponse =
-            JSON.parse(String.fromCharCode.apply(null, new Uint8Array(reason.response)));
-        console.error(errorResponse);
-        msg += errorResponse['message'];
+        msg = (await response.json())['message'];
       } catch {
-      }  // Doesn't matter
-      let {errorPrefix = ''} = options;
+        msg = await response.text();
+      }
+      const {errorPrefix = ''} = options;
       status.setErrorMessage(errorPrefix + msg);
       status.setVisible(true);
-    });
-    return promise;
+      throw new Error(`[${response.status}] ${errorPrefix}${msg}`);
+    }
   }
 }

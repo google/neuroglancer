@@ -15,7 +15,6 @@
  */
 
 import debounce from 'lodash/debounce';
-import {authFetch} from 'neuroglancer/authentication/backend.ts';
 import {cancelChunkDownload, startChunkDownload, withChunkManager} from 'neuroglancer/chunk_manager/backend';
 import {ChunkPriorityTier, ChunkState} from 'neuroglancer/chunk_manager/base';
 import {CoordinateTransform} from 'neuroglancer/coordinate_transform';
@@ -226,22 +225,6 @@ export class ChunkedGraphLayer extends Base implements RenderLayerInterface<Slic
 
   get url() {
     return this.graphurl;
-  }
-
-  async getChildren(segment: Uint64): Promise<Uint64[]> {
-    const {url} = this;
-    if (url === '') {
-      return Promise.resolve([segment]);
-    }
-
-    const response =
-        await authFetch(`${url}/segment/${segment}/children`).then(res => res.arrayBuffer());
-    let uint32 = new Uint32Array(response);
-    let final: Uint64[] = new Array(uint32.length / 2);
-    for (let i = 0; i < uint32.length / 2; i++) {
-      final[i] = new Uint64(uint32[2 * i], uint32[2 * i + 1]);
-    }
-    return final;
   }
 
   private debouncedupdateDisplayState = debounce(() => {

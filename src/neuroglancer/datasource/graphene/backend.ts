@@ -252,16 +252,34 @@ export function decodeChunkedGraphChunk(
         `${chunkPosition[1]}-${chunkPosition[1] + chunkDataSize[1]}_` +
         `${chunkPosition[2]}-${chunkPosition[2] + chunkDataSize[2]}`;
 
-    let promises = Array<Promise<void>>();
+    let promises = Array<Promise<any>>();
+    let promise: Promise<any>;
     for (const [key, val] of chunk.mappings!.entries()) {
       if (val === null) {
-        promises.push(
-            authFetch(`${parameters.url}/${key}/leaves?bounds=${bounds}`, {}, cancellationToken)
-                .then(res => res.arrayBuffer())
-                .then(response => decodeChunkedGraphChunk(chunk, key, response)));
+        promise =
+            authFetch(`${parameters.url}/${key}/leaves?bounds=${bounds}`, {}, cancellationToken);
+        promises.push(this.withErrorMessage(promise, `Fetching leaves of segment ${key} in region ${bounds}: `)
+                          .then((res) => res.arrayBuffer())
+                          .then(res => decodeChunkedGraphChunk(chunk, key, res))
+                          .catch(err => console.error(err)));
       }
     }
     await Promise.all(promises);
+  }
+
+  async withErrorMessage(promise: Promise<Response>, errorPrefix: string): Promise<Response> {
+    const response = await promise;
+    if (response.ok) {
+      return response;
+    } else {
+      let msg: string;
+      try {
+        msg = (await response.json())['message'];
+      } catch {
+        msg = await response.text();
+      }
+      throw new Error(`[${response.status}] ${errorPrefix}${msg}`);
+    }
   }
 }
 
