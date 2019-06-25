@@ -412,7 +412,7 @@ export class SliceViewBase<Source extends SliceViewChunkSource,
             !improvesOnPrevVoxelSize(transformedSource.voxelSize, prevVoxelSize)) {
           break;
         }
-        addVisibleSource(transformedSource, scaleIndex);
+        addVisibleSource(transformedSource, (scaleIndex + 1) / numSources);
 
         if (scaleIndex === 0 || !canImproveOnVoxelSize(transformedSource.voxelSize)) {
           break;
