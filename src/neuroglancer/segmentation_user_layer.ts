@@ -43,6 +43,7 @@ import {NullarySignal} from 'neuroglancer/util/signal';
 import {Uint64} from 'neuroglancer/util/uint64';
 import {makeWatchableShaderError} from 'neuroglancer/webgl/dynamic_shader';
 import {EnumSelectWidget} from 'neuroglancer/widget/enum_widget';
+import {MinimizableGroupWidget} from 'neuroglancer/widget/minimizable_group';
 import {OmniSegmentWidget} from 'neuroglancer/widget/omni_segment_widget';
 import {RangeWidget} from 'neuroglancer/widget/range';
 import {RenderScaleWidget} from 'neuroglancer/widget/render_scale_widget';
@@ -538,6 +539,10 @@ function makeSkeletonShaderCodeWidget(layer: SegmentationUserLayer) {
 }
 
 class DisplayOptionsTab extends Tab {
+  private group2D = this.registerDisposer(new MinimizableGroupWidget('2D Visualization'));
+  private group3D = this.registerDisposer(new MinimizableGroupWidget('3D Visualization'));
+  private groupSegmentSelection = this.registerDisposer(new MinimizableGroupWidget('Segment Selection'));
+  private groupOmniInfo = this.registerDisposer(new MinimizableGroupWidget('Omni Segment Info'));
   visibleSegmentWidget = this.registerDisposer(new SegmentSetWidget(this.layer.displayState));
   addSegmentWidget = this.registerDisposer(new Uint64EntryWidget());
   selectedAlphaWidget =
@@ -553,6 +558,7 @@ class DisplayOptionsTab extends Tab {
     super();
     const {element} = this;
     element.classList.add('segmentation-dropdown');
+    const {group2D, group3D, groupSegmentSelection, groupOmniInfo} = this;
     let {selectedAlphaWidget, notSelectedAlphaWidget, saturationWidget, objectAlphaWidget} = this;
     selectedAlphaWidget.promptElement.textContent = 'Opacity (on)';
     notSelectedAlphaWidget.promptElement.textContent = 'Opacity (off)';
@@ -560,15 +566,15 @@ class DisplayOptionsTab extends Tab {
     objectAlphaWidget.promptElement.textContent = 'Opacity (3d)';
 
     if (this.layer.volumePath !== undefined) {
-      element.appendChild(this.selectedAlphaWidget.element);
-      element.appendChild(this.notSelectedAlphaWidget.element);
-      element.appendChild(this.saturationWidget.element);
+      group2D.appendFixedChild(this.selectedAlphaWidget.element);
+      group2D.appendFixedChild(this.notSelectedAlphaWidget.element);
+      group2D.appendFixedChild(this.saturationWidget.element);
 
       {
         const renderScaleWidget = this.registerDisposer(new RenderScaleWidget(
             this.layer.sliceViewRenderScaleHistogram, this.layer.sliceViewRenderScaleTarget));
         renderScaleWidget.label.textContent = 'Resolution (slice)';
-        element.appendChild(renderScaleWidget.element);
+        group2D.appendFixedChild(renderScaleWidget.element);
       }
     }
     const has3dLayer = this.registerDisposer(new ComputedWatchableValue(
@@ -584,11 +590,11 @@ class DisplayOptionsTab extends Tab {
       const renderScaleWidget = this.registerDisposer(new RenderScaleWidget(
           this.layer.displayState.renderScaleHistogram, this.layer.displayState.renderScaleTarget));
       renderScaleWidget.label.textContent = 'Resolution (mesh)';
-      element.appendChild(renderScaleWidget.element);
+      group3D.appendFixedChild(renderScaleWidget.element);
       this.registerDisposer(
           new ElementVisibilityFromTrackableBoolean(has3dLayer, renderScaleWidget.element));
     }
-    element.appendChild(this.objectAlphaWidget.element);
+    group3D.appendFixedChild(this.objectAlphaWidget.element);
 
     {
       const checkbox =
@@ -600,18 +606,18 @@ class DisplayOptionsTab extends Tab {
           'neuroglancer-segmentation-dropdown-hide-segment-zero neuroglancer-noselect';
       label.appendChild(document.createTextNode('Hide segment ID 0'));
       label.appendChild(checkbox.element);
-      element.appendChild(label);
+      groupSegmentSelection.appendFixedChild(label);
     }
 
     this.addSegmentWidget.element.classList.add('add-segment');
     this.addSegmentWidget.element.title = 'Add one or more segment IDs';
-    element.appendChild(this.registerDisposer(this.addSegmentWidget).element);
+    groupSegmentSelection.appendFixedChild(this.registerDisposer(this.addSegmentWidget).element);
     this.registerDisposer(this.addSegmentWidget.valuesEntered.add((values: Uint64[]) => {
       for (const value of values) {
         this.layer.displayState.rootSegments.add(value);
       }
     }));
-    element.appendChild(this.registerDisposer(this.visibleSegmentWidget).element);
+    groupSegmentSelection.appendFlexibleChild(this.registerDisposer(this.visibleSegmentWidget).element);
 
     const maybeAddOmniSegmentWidget = () => {
       if (this.omniWidget || (!layer.segmentMetadata)) {
@@ -620,7 +626,7 @@ class DisplayOptionsTab extends Tab {
       {
         this.omniWidget =
             this.registerDisposer(new OmniSegmentWidget(layer.displayState, layer.segmentMetadata));
-        element.appendChild(this.omniWidget.element);
+        groupOmniInfo.appendFlexibleChild(this.omniWidget.element);
       }
     };
 
@@ -640,13 +646,13 @@ class DisplayOptionsTab extends Tab {
                   'neuroglancer-segmentation-dropdown-skeleton-render-mode neuroglancer-noselect';
               label.appendChild(document.createTextNode(`Skeleton mode (${viewName})`));
               label.appendChild(widget.element);
-              element.appendChild(label);
+              group3D.appendFixedChild(label);
             }
             {
               const widget = this.registerDisposer(
                   new RangeWidget(options.lineWidth, {min: 1, max: 40, step: 1}));
               widget.promptElement.textContent = `Skeleton line width (${viewName})`;
-              element.appendChild(widget.element);
+              group3D.appendFixedChild(widget.element);
             }
           };
       addViewSpecificSkeletonRenderingControls(
@@ -681,16 +687,21 @@ class DisplayOptionsTab extends Tab {
       topRow.appendChild(maximizeButton);
       topRow.appendChild(helpLink);
 
-      element.appendChild(topRow);
+      group3D.appendFixedChild(topRow);
 
       const codeWidget = this.codeWidget =
           this.registerDisposer(makeSkeletonShaderCodeWidget(this.layer));
-      element.appendChild(codeWidget.element);
+      group3D.appendFlexibleChild(codeWidget.element);
       codeWidget.textEditor.refresh();
     };
     this.registerDisposer(this.layer.objectLayerStateChanged.add(maybeAddSkeletonShaderUI));
     this.registerDisposer(this.layer.objectLayerStateChanged.add(maybeAddOmniSegmentWidget));
     maybeAddSkeletonShaderUI();
+
+    element.appendChild(group2D.element);
+    element.appendChild(group3D.element);
+    element.appendChild(groupSegmentSelection.element);
+    element.appendChild(groupOmniInfo.element);
 
     this.visibility.changed.add(() => {
       if (this.visible) {

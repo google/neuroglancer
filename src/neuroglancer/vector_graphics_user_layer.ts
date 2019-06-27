@@ -27,6 +27,7 @@ import {trackableFiniteFloat} from 'neuroglancer/trackable_finite_float';
 import {trackableVec3, TrackableVec3} from 'neuroglancer/trackable_vec3';
 import {vec3} from 'neuroglancer/util/geom';
 import {verifyEnumString, verifyFiniteFloat, verifyOptionalString} from 'neuroglancer/util/json';
+import {MinimizableGroupWidget} from 'neuroglancer/widget/minimizable_group';
 import {RangeWidget} from 'neuroglancer/widget/range';
 import {Tab} from 'neuroglancer/widget/tab_view';
 import {Vec3Widget} from 'neuroglancer/widget/vec3_entry_widget';
@@ -117,6 +118,8 @@ export class VectorGraphicsUserLayer extends UserLayer {
 }
 
 class DisplayOptionsTab extends Tab {
+  private groupVisualization =
+      this.registerDisposer(new MinimizableGroupWidget('3D Visualization'));
   opacityWidget = this.registerDisposer(new RangeWidget(this.layer.opacity));
   lineWidthWidget =
       this.registerDisposer(new RangeWidget(this.layer.lineWidth, {min: 0, max: 50, step: 1}));
@@ -124,7 +127,7 @@ class DisplayOptionsTab extends Tab {
 
   constructor(public layer: VectorGraphicsUserLayer) {
     super();
-    const {element} = this;
+    const {groupVisualization, element} = this;
     element.classList.add('image-dropdown');
     let {opacityWidget, lineWidthWidget, colorWidget} = this;
     let topRow = document.createElement('div');
@@ -149,10 +152,11 @@ class DisplayOptionsTab extends Tab {
     topRow.appendChild(spacer);
     topRow.appendChild(helpLink);
 
-    element.appendChild(topRow);
-    element.appendChild(this.opacityWidget.element);
-    element.appendChild(this.lineWidthWidget.element);
-    element.appendChild(this.colorWidget.element);
+    groupVisualization.appendFixedChild(topRow);
+    groupVisualization.appendFixedChild(this.opacityWidget.element);
+    groupVisualization.appendFixedChild(this.lineWidthWidget.element);
+    groupVisualization.appendFixedChild(this.colorWidget.element);
+    element.appendChild(groupVisualization.element);
   }
 }
 

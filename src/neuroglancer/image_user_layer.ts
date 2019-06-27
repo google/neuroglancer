@@ -23,6 +23,7 @@ import {trackableAlphaValue} from 'neuroglancer/trackable_alpha';
 import {trackableBlendModeValue} from 'neuroglancer/trackable_blend';
 import {UserLayerWithVolumeSourceMixin} from 'neuroglancer/user_layer_with_volume_source';
 import {makeWatchableShaderError} from 'neuroglancer/webgl/dynamic_shader';
+import {MinimizableGroupWidget} from 'neuroglancer/widget/minimizable_group';
 import {RangeWidget} from 'neuroglancer/widget/range';
 import {RenderScaleWidget} from 'neuroglancer/widget/render_scale_widget';
 import {ShaderCodeWidget} from 'neuroglancer/widget/shader_code_widget';
@@ -96,11 +97,12 @@ function makeShaderCodeWidget(layer: ImageUserLayer) {
 }
 
 class RenderingOptionsTab extends Tab {
+  private group2D = this.registerDisposer(new MinimizableGroupWidget('2D Visualization'));
   opacityWidget = this.registerDisposer(new RangeWidget(this.layer.opacity));
   codeWidget = this.registerDisposer(makeShaderCodeWidget(this.layer));
   constructor(public layer: ImageUserLayer) {
     super();
-    const {element} = this;
+    const {group2D, element} = this;
     element.classList.add('image-dropdown');
     let {opacityWidget} = this;
     let topRow = document.createElement('div');
@@ -111,7 +113,7 @@ class RenderingOptionsTab extends Tab {
       const renderScaleWidget = this.registerDisposer(new RenderScaleWidget(
           this.layer.sliceViewRenderScaleHistogram, this.layer.sliceViewRenderScaleTarget));
       renderScaleWidget.label.textContent = 'Resolution (slice)';
-      element.appendChild(renderScaleWidget.element);
+      group2D.appendFixedChild(renderScaleWidget.element);
     }
 
     let spacer = document.createElement('div');
@@ -140,9 +142,11 @@ class RenderingOptionsTab extends Tab {
     topRow.appendChild(maximizeButton);
     topRow.appendChild(helpLink);
 
-    element.appendChild(topRow);
-    element.appendChild(this.codeWidget.element);
+    group2D.appendFixedChild(topRow);
+    group2D.appendFlexibleChild(this.codeWidget.element);
+    element.appendChild(group2D.element);
     this.codeWidget.textEditor.refresh();
+
     this.visibility.changed.add(() => {
       if (this.visible) {
         this.codeWidget.textEditor.refresh();

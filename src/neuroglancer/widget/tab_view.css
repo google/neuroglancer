@@ -69,5 +69,6 @@
 }
 
 .neuroglancer-tab-content {
-  flex: 1;
+  flex: 0 1 auto;
+  overflow-y: auto;
 }

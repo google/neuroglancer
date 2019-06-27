@@ -14,10 +14,31 @@
  * limitations under the License.
  */
 
- .neuroglancer-graphoperation-toolbox {
-    display: flex;
-  }
-  
-  .neuroglancer-graphoperation-toolbox button {
-    width: 100%;
-  }
+.neuroglancer-graphoperations-tab {
+  display: flex;
+  align-items: stretch;
+  flex: 1;
+  flex-direction: column;
+}
+
+.neuroglancer-graphoperations-list {
+  list-style-type: none;
+  margin: 0px;
+  padding: 5px;
+  overflow-y: auto;
+  flex: none;
+}
+
+.neuroglancer-graphoperations-list > li {
+  cursor: pointer;
+  position: relative;
+  padding-left: 1.5em;
+}
+
+.neuroglancer-graphoperation-toolbox {
+  display: flex;
+}
+
+.neuroglancer-graphoperation-toolbox button {
+   width: 100%;
+}

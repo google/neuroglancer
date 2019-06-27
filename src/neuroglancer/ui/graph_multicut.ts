@@ -28,6 +28,7 @@ import {GraphOperationLayerState} from 'neuroglancer/graph/graph_operation_layer
 import {MouseSelectionState} from 'neuroglancer/layer';
 import {VoxelSize} from 'neuroglancer/navigation_state';
 import {SegmentationDisplayState} from 'neuroglancer/segmentation_display_state/frontend';
+import {SegmentationUserLayerWithGraph} from 'neuroglancer/segmentation_user_layer_with_graph';
 import {SegmentSelection} from 'neuroglancer/sliceview/chunked_graph/frontend';
 import {StatusMessage} from 'neuroglancer/status';
 import {WatchableRefCounted, WatchableValue} from 'neuroglancer/trackable_value';
@@ -41,9 +42,9 @@ import {NullarySignal} from 'neuroglancer/util/signal';
 import {Uint64} from 'neuroglancer/util/uint64';
 import {WatchableVisibilityPriority} from 'neuroglancer/visibility_priority/frontend';
 import {makeCloseButton} from 'neuroglancer/widget/close_button';
+import {MinimizableGroupWidget} from 'neuroglancer/widget/minimizable_group';
 import {StackView, Tab} from 'neuroglancer/widget/tab_view';
 import {makeTextIconButton} from 'neuroglancer/widget/text_icon_button';
-import {SegmentationUserLayerWithGraph} from '../segmentation_user_layer_with_graph';
 
 type GraphOperationMarkerId = {
   id: string,
@@ -273,6 +274,7 @@ export class GraphOperationLayerView extends Tab {
   private previousSelectedId: string|undefined;
   private previousHoverId: string|undefined;
   private updated = false;
+  multicutGroup = this.registerDisposer(new MinimizableGroupWidget('Multicut'));
 
   constructor(
       public wrapper: Borrowed<SegmentationUserLayerWithGraph>,
@@ -281,7 +283,7 @@ export class GraphOperationLayerView extends Tab {
       public setSpatialCoordinates: (point: vec3) => void) {
     super();
     this.element.classList.add('neuroglancer-annotation-layer-view');
-    this.annotationListContainer.classList.add('neuroglancer-annotation-list');
+    this.annotationListContainer.classList.add('neuroglancer-graphoperations-list');
     this.registerDisposer(state);
     this.registerDisposer(voxelSize);
     this.registerDisposer(annotationLayer);
@@ -388,10 +390,9 @@ export class GraphOperationLayerView extends Tab {
       toolbox.appendChild(cancelButton);
     }
 
-
-    this.element.appendChild(toolbox);
-
-    this.element.appendChild(this.annotationListContainer);
+    this.multicutGroup.appendFixedChild(toolbox);
+    this.multicutGroup.appendFlexibleChild(this.annotationListContainer);
+    this.element.appendChild(this.multicutGroup.element);
 
     this.annotationListContainer.addEventListener('mouseleave', () => {
       this.annotationLayer.hoverState.value = undefined;
@@ -647,8 +648,9 @@ export class GraphOperationTab extends Tab {
     this.registerDisposer(state);
     this.registerDisposer(voxelSize);
     const {element} = this;
-    element.classList.add('neuroglancer-annotations-tab');
+    element.classList.add('neuroglancer-graphoperations-tab');
     this.stack.element.classList.add('neuroglancer-annotations-stack');
+
     element.appendChild(this.stack.element);
     element.appendChild(this.detailsTab.element);
     const updateDetailsVisibility = () => {
