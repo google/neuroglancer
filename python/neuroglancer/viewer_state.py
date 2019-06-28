@@ -178,7 +178,6 @@ class _AnnotationLayerOptions(object):
 @export
 class ImageLayer(Layer, _AnnotationLayerOptions):
     __slots__ = ()
-
     def __init__(self, *args, **kwargs):
         super(ImageLayer, self).__init__(*args, type='image', **kwargs)
 
@@ -203,14 +202,13 @@ def uint64_equivalence_map(obj, _readonly=False):
         obj = [[int(v) for v in group] for group in obj]
     return EquivalenceMap(obj, _readonly=_readonly)
 
-
 @export
-class SegmentationLayer(Layer, _AnnotationLayerOptions):
+class SegmentationLayerBase(Layer, _AnnotationLayerOptions):
     __slots__ = ()
-
-    def __init__(self, *args, **kwargs):
-        super(SegmentationLayer, self).__init__(*args, type='segmentation', **kwargs)
-
+    def __init__(self, *args, type=None, **kwargs):
+        if type not in ['segmentation', 'segmentation_with_graph']:
+            raise ValueError
+        super(SegmentationLayerBase, self).__init__(*args, type=type, **kwargs)
     source = wrapped_property('source', optional(volume_source))
     mesh = wrapped_property('mesh', optional(text_type))
     skeletons = wrapped_property('skeletons', optional(text_type))
@@ -232,6 +230,18 @@ class SegmentationLayer(Layer, _AnnotationLayerOptions):
         for k in ['selected_alpha', 'not_selected_alpha', 'object_alpha']:
             setattr(c, k, interpolate_linear(getattr(a, k), getattr(b, k), t))
         return c
+
+@export
+class SegmentationLayer(SegmentationLayerBase):
+    __slots__ = ()
+    def __init__(self, *args, **kwargs):
+        super(SegmentationLayer, self).__init__(*args, type='segmentation', **kwargs)
+
+@export
+class ChunkedgraphSegmentationLayer(SegmentationLayerBase):
+    __slots__ = ()
+    def __init__(self, *args, **kwargs):
+        super(ChunkedgraphSegmentationLayer, self).__init__(*args, type='segmentation_with_graph', **kwargs)
 
 @export
 class SingleMeshLayer(Layer):
@@ -346,6 +356,7 @@ class AnnotationLayer(Layer, _AnnotationLayerOptions):
 layer_types = {
     'image': ImageLayer,
     'segmentation': SegmentationLayer,
+    'segmentation_with_graph': ChunkedgraphSegmentationLayer,
     'pointAnnotation': PointAnnotationLayer,
     'annotation': AnnotationLayer,
     'mesh': SingleMeshLayer,
