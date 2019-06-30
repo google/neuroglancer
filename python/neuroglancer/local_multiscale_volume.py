@@ -34,14 +34,15 @@ class LocalMultiscaleVolume(LocalVolume):
             tuple(map(operator.truediv, l.voxel_size, self.min_voxel_size)): l
             for l in volume_layers
         }
+        self.reference_layer = self.volume_layers[self.min_voxel_size]
 
     @property
     def volume_type(self):
-        return self.volume_layers[(1,1,1)].volume_type
+        return self.reference_layer.volume_type
 
     @property
     def token(self):
-        return self.volume_layers[(1,1,1)].token
+        return self.reference_layer.token
 
     def info(self):
         scales = []
@@ -52,14 +53,12 @@ class LocalMultiscaleVolume(LocalVolume):
             scale_info['key'] = ','.join('%d'%s for s in scale)
             scales.append(scale_info)
 
-        reference_layer = self.volume_layers[(1, 1, 1)]
-
         info = {
-            'volumeType': reference_layer.volume_type,
-            'dataType': reference_layer.data_type,
-            'encoding': reference_layer.encoding,
-            'numChannels': reference_layer.num_channels,
-            'generation': reference_layer.change_count,
+            'volumeType': self.reference_layer.volume_type,
+            'dataType': self.reference_layer.data_type,
+            'encoding': self.reference_layer.encoding,
+            'numChannels': self.reference_layer.num_channels,
+            'generation': self.reference_layer.change_count,
             'threeDimensionalScales': scales
         }
 
@@ -74,7 +73,7 @@ class LocalMultiscaleVolume(LocalVolume):
             scale_key='1,1,1')
 
     def get_object_mesh(self, object_id):
-        return self.volume_layers[(1,1,1)].get_object_mesh(object_id)
+        return self.reference_layer.get_object_mesh(object_id)
 
     def invalidate(self):
-        return self.volume_layers[(1,1,1)].invalidate()
+        return self.reference_layer.invalidate()

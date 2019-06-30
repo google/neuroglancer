@@ -32,7 +32,6 @@ viewer = neuroglancer.Viewer()
 with viewer.txn() as s:
     s.layers['grid'] = neuroglancer.SegmentationLayer(
         source = neuroglancer.LocalMultiscaleVolume(
-            # TODO: get scale level of a[i]
             [
                 neuroglancer.LocalVolume(data=d0, voxel_size=(1,1,1)),
                 neuroglancer.LocalVolume(data=d1, voxel_size=(2,2,2)),
