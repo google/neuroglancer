@@ -25,6 +25,7 @@ import {UserLayerWithCoordinateTransformMixin} from 'neuroglancer/user_layer_wit
 import {RefCounted} from 'neuroglancer/util/disposable';
 import {removeFromParent} from 'neuroglancer/util/dom';
 import {parseArray, verifyObjectProperty, verifyOptionalString, verifyString} from 'neuroglancer/util/json';
+import {MinimizableGroupWidget} from 'neuroglancer/widget/minimizable_group';
 import {ShaderCodeWidget} from 'neuroglancer/widget/shader_code_widget';
 import {Tab} from 'neuroglancer/widget/tab_view';
 
@@ -263,11 +264,12 @@ function makeVertexAttributeWidget(layer: SingleMeshUserLayer) {
 }
 
 class DisplayOptionsTab extends Tab {
+  private group3D = this.registerDisposer(new MinimizableGroupWidget('3D Visualization'));
   attributeWidget = this.registerDisposer(makeVertexAttributeWidget(this.layer));
   codeWidget = this.registerDisposer(makeShaderCodeWidget(this.layer));
   constructor(public layer: SingleMeshUserLayer) {
     super();
-    const {element} = this;
+    const {group3D, element} = this;
     element.classList.add('neuroglancer-single-mesh-dropdown');
     let topRow = document.createElement('div');
     topRow.className = 'neuroglancer-single-mesh-dropdown-top-row';
@@ -296,9 +298,10 @@ class DisplayOptionsTab extends Tab {
     topRow.appendChild(maximizeButton);
     topRow.appendChild(helpLink);
 
-    element.appendChild(topRow);
-    element.appendChild(this.attributeWidget.element);
-    element.appendChild(this.codeWidget.element);
+    group3D.appendFixedChild(topRow);
+    group3D.appendFixedChild(this.attributeWidget.element);
+    group3D.appendFlexibleChild(this.codeWidget.element);
+    element.appendChild(group3D.element);
     this.codeWidget.textEditor.refresh();
 
     this.visibility.changed.add(() => {

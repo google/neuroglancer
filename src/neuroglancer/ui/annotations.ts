@@ -42,6 +42,7 @@ import {Uint64} from 'neuroglancer/util/uint64';
 import {WatchableVisibilityPriority} from 'neuroglancer/visibility_priority/frontend';
 import {makeCloseButton} from 'neuroglancer/widget/close_button';
 import {ColorWidget} from 'neuroglancer/widget/color';
+import {MinimizableGroupWidget} from 'neuroglancer/widget/minimizable_group';
 import {RangeWidget} from 'neuroglancer/widget/range';
 import {StackView, Tab} from 'neuroglancer/widget/tab_view';
 import {makeTextIconButton} from 'neuroglancer/widget/text_icon_button';
@@ -379,6 +380,8 @@ export class AnnotationLayerView extends Tab {
   private previousSelectedId: string|undefined;
   private previousHoverId: string|undefined;
   private updated = false;
+  groupVisualization = this.registerDisposer(new MinimizableGroupWidget('Visualization'));
+  groupAnnotations = this.registerDisposer(new MinimizableGroupWidget('Annotations'));
 
   constructor(
       public layer: Borrowed<UserLayerWithAnnotations>,
@@ -412,7 +415,7 @@ export class AnnotationLayerView extends Tab {
     {
       const widget = this.registerDisposer(new RangeWidget(this.annotationLayer.fillOpacity));
       widget.promptElement.textContent = 'Fill opacity';
-      this.element.appendChild(widget.element);
+      this.groupVisualization.appendFixedChild(widget.element);
     }
 
     const colorPicker = this.registerDisposer(new ColorWidget(this.annotationLayer.color));
@@ -455,7 +458,6 @@ export class AnnotationLayerView extends Tab {
       });
       toolbox.appendChild(ellipsoidButton);
     }
-    this.element.appendChild(toolbox);
 
     {
       const jumpingShowsSegmentationCheckbox = this.registerDisposer(
@@ -463,7 +465,7 @@ export class AnnotationLayerView extends Tab {
       const label = document.createElement('label');
       label.textContent = 'Bracket shortcuts show segmentation: ';
       label.appendChild(jumpingShowsSegmentationCheckbox.element);
-      this.element.appendChild(label);
+      this.groupVisualization.appendFixedChild(label);
     }
 
     {
@@ -507,7 +509,7 @@ export class AnnotationLayerView extends Tab {
       const label = document.createElement('label');
       label.textContent = 'Filter annotation list by tag: ';
       label.appendChild(annotationTagFilter);
-      this.element.appendChild(label);
+      this.groupVisualization.appendFixedChild(label);
     }
 
     {
@@ -517,10 +519,13 @@ export class AnnotationLayerView extends Tab {
       exportToCSVButton.addEventListener('click', () => {
         this.exportToCSV();
       });
-      this.element.appendChild(exportToCSVButton);
+      this.groupAnnotations.appendFixedChild(exportToCSVButton);
     }
 
-    this.element.appendChild(this.annotationListContainer);
+    this.groupAnnotations.appendFixedChild(toolbox);
+    this.groupAnnotations.appendFlexibleChild(this.annotationListContainer);
+    this.element.appendChild(this.groupVisualization.element);
+    this.element.appendChild(this.groupAnnotations.element);
 
     this.annotationListContainer.addEventListener('mouseleave', () => {
       this.annotationLayer.hoverState.value = undefined;

@@ -206,7 +206,7 @@ export class AnnotationUserLayer extends Base {
     const widget = tab.registerDisposer(new LayerReferenceWidget(this.linkedSegmentationLayer));
     widget.element.insertBefore(
         document.createTextNode('Linked segmentation: '), widget.element.firstChild);
-    tab.element.appendChild(widget.element);
+    tab.groupVisualization.appendFixedChild(widget.element);
 
     {
       const checkboxWidget = this.registerDisposer(
@@ -214,7 +214,7 @@ export class AnnotationUserLayer extends Base {
       const label = document.createElement('label');
       label.textContent = 'Filter by segmentation: ';
       label.appendChild(checkboxWidget.element);
-      tab.element.appendChild(label);
+      tab.groupVisualization.appendFixedChild(label);
       tab.registerDisposer(new ElementVisibilityFromTrackableBoolean(
           this.registerDisposer(makeDerivedWatchableValue(
               v => v !== undefined, tab.annotationLayer.segmentationState)),
