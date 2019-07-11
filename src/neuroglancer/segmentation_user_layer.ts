@@ -412,9 +412,12 @@ export class SegmentationUserLayer extends Base {
         break;
       }
       case 'merge-selected': {
+        // Merge all visible segments
         const {segmentEquivalences, rootSegments} = this.displayState;
         const [firstSegment, ...segments] = rootSegments;
         segmentEquivalences.link(firstSegment, segments);
+
+        // Cleanup by removing all old root segments
         const newRootSegment = segmentEquivalences.get(firstSegment);
         rootSegments.delete([...rootSegments].filter(id => !Uint64.equal(id, newRootSegment)));
         break;
@@ -496,10 +499,25 @@ export class SegmentationUserLayer extends Base {
   }
 
   mergeSelectSecond() {
-    const {segmentSelectionState} = this.displayState;
+    const {segmentSelectionState, segmentEquivalences, rootSegments, visibleSegments3D} =
+        this.displayState;
     if (segmentSelectionState.hasSelectedSegment) {
+      // Merge both selected segments
       const segment = segmentSelectionState.rawSelectedSegment.clone();
-      this.displayState.segmentEquivalences.link(lastSegmentSelection, segment);
+      segmentEquivalences.link(lastSegmentSelection, segment);
+
+      // Cleanup by removing superseded root segments
+      const newRootSegment = segmentEquivalences.get(segment);
+      const equivalentSegments = [...segmentEquivalences.setElements(newRootSegment)];
+      rootSegments.delete(equivalentSegments.filter(
+          id => rootSegments.has(id) && !Uint64.equal(id, newRootSegment)));
+
+      // Ensure merged group will be fully visible
+      if (rootSegments.has(newRootSegment)) {
+        visibleSegments3D.add(equivalentSegments);
+      } else {
+        rootSegments.add(newRootSegment);
+      }
     }
   }
 
