@@ -115,8 +115,11 @@ export class SegmentationUserLayer extends Base {
 
   constructor(public manager: LayerListSpecification, x: any) {
     super(manager, x);
-    this.displayState.rootSegments.changed.add((segmentId: Uint64|null, add: boolean) => {
-      this.rootSegmentChange(segmentId, add);
+    this.displayState.rootSegments.changed.add((segmentIds: Uint64[]|Uint64|null, add: boolean) => {
+      if (segmentIds !== null) {
+        segmentIds = Array<Uint64>().concat(segmentIds);
+      }
+      this.rootSegmentChange(segmentIds, add);
     });
     this.displayState.visibleSegments2D!.changed.add(this.specificationChanged.dispatch);
     this.displayState.visibleSegments3D.changed.add(this.specificationChanged.dispatch);
@@ -409,14 +412,20 @@ export class SegmentationUserLayer extends Base {
         break;
       }
       case 'merge-selected': {
-        const firstSeg = this.displayState.rootSegments.hashTable.keys().next().value;
-        for (const seg of this.displayState.rootSegments) {
-          this.displayState.segmentEquivalences.link(firstSeg, seg);
-        }
+        const {segmentEquivalences, rootSegments} = this.displayState;
+        const [firstSegment, ...segments] = rootSegments;
+        segmentEquivalences.link(firstSegment, segments);
+        const newRootSegment = segmentEquivalences.get(firstSegment);
+        rootSegments.delete([...rootSegments].filter(id => !Uint64.equal(id, newRootSegment)));
         break;
       }
       case 'cut-selected': {
-        this.displayState.segmentEquivalences.clear();
+        const {segmentEquivalences, rootSegments} = this.displayState;
+        for (const rootSegment of rootSegments) {
+          const segments = [...segmentEquivalences.setElements(rootSegment)];
+          segmentEquivalences.deleteSet(rootSegment);
+          rootSegments.add(segments.filter(id => !Uint64.equal(id, rootSegment)));
+        }
         break;
       }
       case 'select': {
@@ -502,20 +511,35 @@ export class SegmentationUserLayer extends Base {
     StatusMessage.showTemporaryMessage('Cut without graph server not yet implemented.', 3000);
   }
 
-  rootSegmentChange(rootSegment: Uint64|null, added: boolean) {
-    if (rootSegment === null && !added) {
-      this.displayState.visibleSegments2D!.clear();
-      this.displayState.visibleSegments3D.clear();
+  rootSegmentChange(rootSegments: Uint64[]|null, added: boolean) {
+    if (rootSegments === null) {
+      if (added) {
+        return;
+      } else {
+        this.displayState.visibleSegments2D!.clear();
+        this.displayState.visibleSegments3D.clear();
+      }
     } else if (added) {
-      const segments = [...this.displayState.segmentEquivalences.setElements(rootSegment!)];
-      this.displayState.visibleSegments3D.add(rootSegment!);
-      this.displayState.visibleSegments2D!.add(rootSegment!);
+      const segments = rootSegments.flatMap(
+          rootSegment => [...this.displayState.segmentEquivalences.setElements(rootSegment)]);
+      this.displayState.visibleSegments2D!.add(rootSegments!);
       this.displayState.visibleSegments3D.add(segments);
     } else if (!added) {
-      const segments = [...this.displayState.segmentEquivalences.setElements(rootSegment!)];
-      this.displayState.visibleSegments2D!.delete(rootSegment!);
-      this.displayState.visibleSegments3D.delete(segments);
-      this.displayState.rootSegments.delete(segments);
+      for (const rootSegment of rootSegments) {
+        const equivalentSegments =
+            [...this.displayState.segmentEquivalences.setElements(rootSegment)];
+        let removeVisibleSegments = true;
+        for (const equivalentSegment of equivalentSegments) {
+          if (this.displayState.rootSegments.has(equivalentSegment)) {
+            removeVisibleSegments = false;
+            break;
+          }
+        }
+        if (removeVisibleSegments) {
+          this.displayState.visibleSegments2D!.delete(rootSegment);
+          this.displayState.visibleSegments3D.delete(equivalentSegments);
+        }
+      }
     }
     this.specificationChanged.dispatch();
   }
@@ -541,7 +565,8 @@ function makeSkeletonShaderCodeWidget(layer: SegmentationUserLayer) {
 class DisplayOptionsTab extends Tab {
   private group2D = this.registerDisposer(new MinimizableGroupWidget('2D Visualization'));
   private group3D = this.registerDisposer(new MinimizableGroupWidget('3D Visualization'));
-  private groupSegmentSelection = this.registerDisposer(new MinimizableGroupWidget('Segment Selection'));
+  private groupSegmentSelection =
+      this.registerDisposer(new MinimizableGroupWidget('Segment Selection'));
   private groupOmniInfo = this.registerDisposer(new MinimizableGroupWidget('Omni Segment Info'));
   visibleSegmentWidget = this.registerDisposer(new SegmentSetWidget(this.layer.displayState));
   addSegmentWidget = this.registerDisposer(new Uint64EntryWidget());
@@ -617,7 +642,8 @@ class DisplayOptionsTab extends Tab {
         this.layer.displayState.rootSegments.add(value);
       }
     }));
-    groupSegmentSelection.appendFlexibleChild(this.registerDisposer(this.visibleSegmentWidget).element);
+    groupSegmentSelection.appendFlexibleChild(
+        this.registerDisposer(this.visibleSegmentWidget).element);
 
     const maybeAddOmniSegmentWidget = () => {
       if (this.omniWidget || (!layer.segmentMetadata)) {

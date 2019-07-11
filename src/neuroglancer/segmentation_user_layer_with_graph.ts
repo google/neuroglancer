@@ -339,24 +339,30 @@ function helper<TBase extends BaseConstructor>(Base: TBase) {
       }
     }
 
-    rootSegmentChange(rootSegment: Uint64|null, added: boolean) {
-      if (rootSegment === null && !added) {
-        // Clear all segment sets
-        let leafSegmentCount = this.displayState.visibleSegments2D!.size;
-        this.displayState.visibleSegments2D!.clear();
-        this.displayState.visibleSegments3D.clear();
-        this.displayState.segmentEquivalences.clear();
-        StatusMessage.showTemporaryMessage(`Deselected all ${leafSegmentCount} segments.`, 3000);
+    rootSegmentChange(rootSegments: Uint64[]|null, added: boolean) {
+      if (rootSegments === null) {
+        if (added) {
+          return;
+        } else {
+          // Clear all segment sets
+          let leafSegmentCount = this.displayState.visibleSegments2D!.size;
+          this.displayState.visibleSegments2D!.clear();
+          this.displayState.visibleSegments3D.clear();
+          this.displayState.segmentEquivalences.clear();
+          StatusMessage.showTemporaryMessage(`Deselected all ${leafSegmentCount} segments.`, 3000);
+        }
       } else if (added) {
-        this.displayState.visibleSegments3D.add(rootSegment!);
-        this.displayState.visibleSegments2D!.add(rootSegment!);
+        this.displayState.visibleSegments3D.add(rootSegments!);
+        this.displayState.visibleSegments2D!.add(rootSegments!);
       } else if (!added) {
-        let segments = [...this.displayState.segmentEquivalences.setElements(rootSegment!)];
-        let segmentCount = segments.length;  // Approximation
-        this.displayState.visibleSegments2D!.delete(rootSegment!);
-        this.displayState.visibleSegments3D.delete(segments);
-        this.displayState.segmentEquivalences.deleteSet(rootSegment!);
-        StatusMessage.showTemporaryMessage(`Deselected ${segmentCount} segments.`);
+        for (const rootSegment of rootSegments) {
+          const segments = [...this.displayState.segmentEquivalences.setElements(rootSegment)];
+          const segmentCount = segments.length;  // Approximation
+          this.displayState.visibleSegments2D!.delete(rootSegment);
+          this.displayState.visibleSegments3D.delete(segments);
+          this.displayState.segmentEquivalences.deleteSet(rootSegment);
+          StatusMessage.showTemporaryMessage(`Deselected ${segmentCount} segments.`);
+        }
       }
       this.specificationChanged.dispatch();
     }
