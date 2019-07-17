@@ -45,7 +45,7 @@ import {Borrowed, Owned, RefCounted} from 'neuroglancer/util/disposable';
 import {removeFromParent} from 'neuroglancer/util/dom';
 import {registerActionListener} from 'neuroglancer/util/event_action_map';
 import {vec3} from 'neuroglancer/util/geom';
-import {openHttpRequest, sendHttpJsonPostRequest, sendHttpRequest} from 'neuroglancer/util/http_request';
+import {cancellableFetchOk, responseJson} from 'neuroglancer/util/http_request';
 import {EventActionMap, KeyboardEventBinder} from 'neuroglancer/util/keyboard_bindings';
 import {NullarySignal} from 'neuroglancer/util/signal';
 import {CompoundTrackable} from 'neuroglancer/util/trackable';
@@ -612,17 +612,20 @@ export class Viewer extends RefCounted implements ViewerState {
   loadFromJsonUrl() {
     var urlParams = new URLSearchParams(window.location.search);
     if (urlParams.has('json_url')) {
-      let json_url = urlParams.get('json_url');
-      console.log(json_url);
+      let json_url = urlParams.get('json_url')!;
       history.replaceState(null, '', removeParameterFromUrl(window.location.href, 'json_url'));
-      sendHttpRequest(openHttpRequest(json_url!), 'json')
+      StatusMessage
+      .forPromise(
+        cancellableFetchOk(json_url, {}, responseJson)
           .then(response => {
             this.state.restoreState(response);
-          })
-          .catch(() => {
-            console.log('failed to load from: ' + json_url);
-          });
-    }
+          }),
+              {
+                initialMessage: `Retrieving state from json_url: ${json_url}.`,
+                delay: true,
+                errorPrefix: `Error retrieving state: `,
+              });
+      }
   }
 
   promptJsonStateServer(message: string): void {
@@ -639,13 +642,14 @@ export class Viewer extends RefCounted implements ViewerState {
   postJsonState() {
     // if jsonStateServer is not present prompt for value and store it in state
     if (!this.jsonStateServer.value) {
-      console.log('no state server found');
-      this.promptJsonStateServer('no state server found');
+      this.promptJsonStateServer('No state server found. Please enter a server URL, or hit OK to use the default server.');
     }
     // upload state to jsonStateServer (only if it's defined)
     if (this.jsonStateServer.value) {
-      sendHttpJsonPostRequest(
-          openHttpRequest(this.jsonStateServer.value, 'POST'), this.state.toJSON(), 'json')
+      StatusMessage.showTemporaryMessage(`Posting state to ${this.jsonStateServer.value}.`);
+      cancellableFetchOk(
+          this.jsonStateServer.value, {method: 'POST', body: JSON.stringify(this.state.toJSON())},
+          responseJson)
           .then(response => {
             console.log(response.uri);
             history.replaceState(
@@ -654,7 +658,6 @@ export class Viewer extends RefCounted implements ViewerState {
           })
           // catch errors with upload and prompt the user if there was an error
           .catch(() => {
-            console.log('entered state server not responding:', this.jsonStateServer.value);
             this.promptJsonStateServer('state server not responding, enter a new one?');
             if (this.jsonStateServer.value) {
               this.postJsonState();

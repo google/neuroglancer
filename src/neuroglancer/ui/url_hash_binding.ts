@@ -71,6 +71,8 @@ export class UrlHashBinding extends RefCounted {
   setUrlHash() {
     const cacheState = getCachedJson(this.root);
     const {generation} = cacheState;
+    history.replaceState(null, '', removeParameterFromUrl(window.location.href, 'json_url'));
+
     if (generation !== this.prevStateGeneration) {
       this.prevStateGeneration = cacheState.generation;
       let stateString = encodeFragment(JSON.stringify(cacheState.value));
@@ -79,7 +81,7 @@ export class UrlHashBinding extends RefCounted {
         if (decodeURIComponent(stateString) === '{}') {
           history.replaceState(null, '', '#');
         } else {
-          history.replaceState(null, '', '/#!' + stateString);
+          history.replaceState(null, '', '#!' + stateString);
         }
       }
     }
