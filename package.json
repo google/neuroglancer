@@ -69,6 +69,7 @@
     "glsl-editor": "^1.0.0",
     "glsl-strip-comments-loader": "^1.1.0",
     "html-webpack-plugin": "^3.2.0",
+    "html2canvas": "^1.0.0-rc.3",
     "lodash": "^4.17.11",
     "nifti-reader-js": "^0.5.4",
     "pako": "^1.0.10",

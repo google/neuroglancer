@@ -15,6 +15,8 @@
  */
 
 import debounce from 'lodash/debounce';
+import {AnnotationUserLayer} from 'neuroglancer/annotation/user_layer';
+import {initAuthTokenSharedValue} from 'neuroglancer/authentication/frontend';
 import {CapacitySpecification, ChunkManager, ChunkQueueManager, FrameNumberCounter} from 'neuroglancer/chunk_manager/frontend';
 import {defaultCredentialsManager} from 'neuroglancer/credentials_provider/default_manager';
 import {InputEventBindings as DataPanelInputEventBindings} from 'neuroglancer/data_panel_layout';
@@ -22,7 +24,7 @@ import {DataSourceProvider} from 'neuroglancer/datasource';
 import {getDefaultDataSourceProvider} from 'neuroglancer/datasource/default_provider';
 import {DisplayContext} from 'neuroglancer/display_context';
 import {InputEventBindingHelpDialog} from 'neuroglancer/help/input_event_bindings';
-import {allRenderLayerRoles, LayerManager, LayerSelectedValues, MouseSelectionState, ActionState, ActionMode, RenderLayerRole, SelectedLayerState, UserLayer, ManagedUserLayer} from 'neuroglancer/layer';
+import {ActionMode, ActionState, allRenderLayerRoles, LayerManager, LayerSelectedValues, ManagedUserLayer, MouseSelectionState, RenderLayerRole, SelectedLayerState, UserLayer} from 'neuroglancer/layer';
 import {LayerDialog} from 'neuroglancer/layer_dialog';
 import {RootLayoutContainer} from 'neuroglancer/layer_groups_layout';
 import {TopLevelLayerListSpecification} from 'neuroglancer/layer_specification';
@@ -40,6 +42,7 @@ import {setupPositionDropHandlers} from 'neuroglancer/ui/position_drag_and_drop'
 import {StateEditorDialog} from 'neuroglancer/ui/state_editor';
 import {StatisticsDisplayState, StatisticsPanel} from 'neuroglancer/ui/statistics';
 import {removeParameterFromUrl} from 'neuroglancer/ui/url_hash_binding';
+import {UserReportDialog} from 'neuroglancer/user_report/user_report';
 import {AutomaticallyFocusedElement} from 'neuroglancer/util/automatic_focus';
 import {TrackableRGB} from 'neuroglancer/util/color';
 import {Borrowed, Owned, RefCounted} from 'neuroglancer/util/disposable';
@@ -59,8 +62,6 @@ import {MousePositionWidget, PositionWidget, VoxelSizeWidget} from 'neuroglancer
 import {TrackableScaleBarOptions} from 'neuroglancer/widget/scale_bar';
 import {makeTextIconButton} from 'neuroglancer/widget/text_icon_button';
 import {RPC} from 'neuroglancer/worker_rpc';
-import {initAuthTokenSharedValue} from 'neuroglancer/authentication/frontend';
-import {AnnotationUserLayer} from 'neuroglancer/annotation/user_layer';
 
 require('./viewer.css');
 require('neuroglancer/noselect.css');
@@ -98,7 +99,7 @@ export class InputEventBindings extends DataPanelInputEventBindings {
 
 const viewerUiControlOptionKeys: (keyof ViewerUIControlConfiguration)[] = [
   'showHelpButton', 'showEditStateButton', 'showLayerPanel', 'showLocation',
-  'showAnnotationToolStatus', 'showJsonPostButton', 'showUserPreferencesButton'
+  'showAnnotationToolStatus', 'showJsonPostButton', 'showUserPreferencesButton', 'showBugButton'
 ];
 
 const viewerOptionKeys: (keyof ViewerUIOptions)[] =
@@ -109,6 +110,7 @@ export class ViewerUIControlConfiguration {
   showEditStateButton = new TrackableBoolean(true);
   showJsonPostButton = new TrackableBoolean(true);
   showUserPreferencesButton = new TrackableBoolean(true);
+  showBugButton = new TrackableBoolean(true);
   showLayerPanel = new TrackableBoolean(true);
   showLocation = new TrackableBoolean(true);
   showAnnotationToolStatus = new TrackableBoolean(true);
@@ -143,6 +145,7 @@ interface ViewerUIOptions {
   showAnnotationToolStatus: boolean;
   showJsonPostButton: boolean;
   showUserPreferencesButton: boolean;
+  showBugButton: boolean;
 }
 
 export interface ViewerOptions extends ViewerUIOptions, VisibilityPrioritySpecification {
@@ -403,7 +406,8 @@ export class Viewer extends RefCounted implements ViewerState {
     initAuthTokenSharedValue(this.dataContext.rpc);
 
     const maybeAddOrRemoveAnnotationShortcuts = this.annotationShortcutControllerFactory();
-    this.registerDisposer(this.selectedLayer.changed.add(() => maybeAddOrRemoveAnnotationShortcuts()));
+    this.registerDisposer(
+        this.selectedLayer.changed.add(() => maybeAddOrRemoveAnnotationShortcuts()));
   }
 
   private updateShowBorders() {
@@ -493,6 +497,19 @@ export class Viewer extends RefCounted implements ViewerState {
       });
       this.registerDisposer(new ElementVisibilityFromTrackableBoolean(
           this.uiControlVisibility.showHelpButton, button));
+      topRow.appendChild(button);
+    }
+
+    {
+      const button = makeTextIconButton('🐞', 'Feedback');
+      this.registerEventListener(button, 'click', async () => {
+        this.display.draw();
+        let raw_ss = (await require('html2canvas')(document.body)).toDataURL();
+        let image = raw_ss.slice(raw_ss.indexOf('data:image/png;base64,') + 22);
+        this.showReportDialog(image);
+      });
+      this.registerDisposer(new ElementVisibilityFromTrackableBoolean(
+          this.uiControlVisibility.showBugButton, button));
       topRow.appendChild(button);
     }
 
@@ -664,23 +681,25 @@ export class Viewer extends RefCounted implements ViewerState {
     if (urlParams.has('json_url')) {
       let json_url = urlParams.get('json_url')!;
       history.replaceState(null, '', removeParameterFromUrl(window.location.href, 'json_url'));
-      StatusMessage
-      .forPromise(
-        cancellableFetchOk(json_url, {}, responseJson)
-          .then(response => {
+      StatusMessage.forPromise(
+          cancellableFetchOk(json_url, {}, responseJson).then(response => {
             this.state.restoreState(response);
           }),
-              {
-                initialMessage: `Retrieving state from json_url: ${json_url}.`,
-                delay: true,
-                errorPrefix: `Error retrieving state: `,
-              });
-      }
+          {
+            initialMessage: `Retrieving state from json_url: ${json_url}.`,
+            delay: true,
+            errorPrefix: `Error retrieving state: `,
+          });
+    }
+  }
 
+  showReportDialog(image: string) {
+    new UserReportDialog(this, image);
   }
 
   promptJsonStateServer(message: string): void {
-    let json_server_input = prompt(message, 'https://www.dynamicannotationframework.com/nglstate/post');
+    let json_server_input =
+        prompt(message, 'https://www.dynamicannotationframework.com/nglstate/post');
     if (json_server_input !== null) {
       this.jsonStateServer.value = json_server_input;
     } else {
@@ -691,7 +710,8 @@ export class Viewer extends RefCounted implements ViewerState {
   postJsonState() {
     // if jsonStateServer is not present prompt for value and store it in state
     if (!this.jsonStateServer.value) {
-      this.promptJsonStateServer('No state server found. Please enter a server URL, or hit OK to use the default server.');
+      this.promptJsonStateServer(
+          'No state server found. Please enter a server URL, or hit OK to use the default server.');
     }
 
     // upload state to jsonStateServer (only if it's defined)
