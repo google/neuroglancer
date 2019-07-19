@@ -146,10 +146,11 @@ export interface ViewerOptions extends ViewerUIOptions, VisibilityPrioritySpecif
   resetStateWhenEmpty: boolean;
 }
 
-const defaultViewerOptions = OVERWRITE_DEFAULT_VIEWER_OPTIONS || {
-  showLayerDialog: true,
-  resetStateWhenEmpty: true,
-};
+const defaultViewerOptions = "undefined" !== typeof OVERWRITE_DEFAULT_VIEWER_OPTIONS ?
+  OVERWRITE_DEFAULT_VIEWER_OPTIONS : {
+    showLayerDialog: true,
+    resetStateWhenEmpty: true,
+  };
 
 function makeViewerContextMenu(viewer: Viewer) {
   const menu = new ContextMenu();
