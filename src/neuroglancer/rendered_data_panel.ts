@@ -298,7 +298,7 @@ export abstract class RenderedDataPanel extends RenderedPanel {
       this.nextPickRequestTime = 0;
       this.attemptToIssuePickRequest();
     }
-    this.checkForPickRequestCompletion(/*checkingBeforeDraw=*/ false, /*block=*/ true);
+    this.checkForPickRequestCompletion(/*checkingBeforeDraw=*/false, /*block=*/true);
   }
 
   draw() {
@@ -461,9 +461,15 @@ export abstract class RenderedDataPanel extends RenderedPanel {
     });
 
     registerActionListener(element, 'translate-via-mouse-drag', (e: ActionEvent<MouseEvent>) => {
-      startRelativeMouseDrag(e.detail, (_event, deltaX, deltaY) => {
-        this.translateByViewportPixels(deltaX, deltaY);
-      });
+      this.element.requestPointerLock();
+      startRelativeMouseDrag(
+          e.detail,
+          (_event, deltaX, deltaY) => {
+            this.translateByViewportPixels(deltaX, deltaY);
+          },
+          () => {
+            document.exitPointerLock();
+          });
     });
 
     registerActionListener(

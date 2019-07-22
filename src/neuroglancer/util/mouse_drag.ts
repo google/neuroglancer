@@ -21,10 +21,9 @@ export function startRelativeMouseDrag(
   let {document} = initialEvent.view;
   let prevClientX = initialEvent.clientX, prevClientY = initialEvent.clientY;
   const mouseMoveHandler = (e: PointerEvent) => {
-    const deltaX = e.clientX - prevClientX;
-    const deltaY = e.clientY - prevClientY;
-    prevClientX = e.clientX;
-    prevClientY = e.clientY;
+    // clientX and screen are constant on pointerlock
+    const deltaX = e.movementX;
+    const deltaY = e.movementY;
     handler(e, deltaX, deltaY);
   };
   const button = initialEvent.button;
