@@ -506,6 +506,7 @@ export class Viewer extends RefCounted implements ViewerState {
         this.display.draw();
         let raw_ss = (await require('html2canvas')(document.body)).toDataURL();
         let image = raw_ss.slice(raw_ss.indexOf('data:image/png;base64,') + 22);
+        this.postJsonState();
         this.showReportDialog(image);
       });
       this.registerDisposer(new ElementVisibilityFromTrackableBoolean(
