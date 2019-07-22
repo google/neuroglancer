@@ -57,7 +57,6 @@ const isVerifier = (s: string, reg: RegExp) => {
 };
 const isAlphaWithSpace = (s: string) => isVerifier(s, /[a-zA-Z][a-zA-Z .']+/g);
 const isAlphaNumWithSpace = (s: string) => isVerifier(s, /[a-zA-Z\d][a-zA-Z\d .'&]+/g);
-const isEmail = (s: string) => isVerifier(s, /[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,4}/);
 const genRow = (elements: (HTMLElement|string)[]) => {
   let parent = document.createElement('tr');
 
@@ -152,18 +151,24 @@ export class UserReportDialog extends Overlay {
     let header = document.createElement('h3');
     header.textContent = 'Send Feedback';
     modal.appendChild(header);
+    let disclaimer = document.createElement('p');
+    let warning = document.createElement('span');
+    let reminder = document.createElement('span');
+    warning.style.color = 'red';
+    warning.innerText = `Do NOT post any sensitive information.\nThis report will be PUBLIC!`;
+    disclaimer.appendChild(warning);
+
+    let lastIssue = localStorage.getItem('lastIssue');
+    if (lastIssue) {
+      reminder.innerHTML =
+          `Please do not post duplicate reports.<br>Your previous report is <a href='${
+              lastIssue}'>here</a>.`;
+      disclaimer.appendChild(br());
+      disclaimer.appendChild(reminder);
+    }
+    modal.appendChild(disclaimer);
 
     simpleInput('Name', 'form_name', {required: true, onblur: genericBlur});
-    simpleInput('Email', 'form_email', {
-      onblur: (e: Event) => {
-        let self: HTMLInputElement = <HTMLInputElement>e.target;
-        let valid = !self.value.length || isEmail(self.value);
-
-        if (!valid) {
-          self.value = self.getAttribute('oldVal') || '';
-        }
-      }
-    });
 
     let issueTypeConfig = {type: 'checkbox', className: 'form_type'};
     labelWrap('Issue Type', [
@@ -214,7 +219,9 @@ export class UserReportDialog extends Overlay {
       br(), simpleItem('', {id: 'form_shot'}), ' Submit Screenshot', br(),
       simpleItem('', {id: 'form_surl'}), ' Submit Url Address', br()
     ]);
-
+    if (!viewer.jsonStateServer.value) {
+      (<HTMLInputElement>document.getElementById('form_surl')).disabled = true;
+    }
     let submit = document.createElement('input');
     submit.id = 'complain';
     submit.type = 'submit';
@@ -238,7 +245,6 @@ export class UserReportDialog extends Overlay {
         },
         body = JSON.stringify({
           name: (<HTMLInputElement>document.querySelector('#form_name')).value,
-          email: (<HTMLInputElement>document.querySelector('#form_email')).value,
           type: Array.from(document.querySelectorAll('.form_type'))
                     .map(
                         e => parseInt((<HTMLInputElement>e).value, 10) *
@@ -250,7 +256,8 @@ export class UserReportDialog extends Overlay {
           image,
           os: (<HTMLInputElement>document.querySelector('#form_os')).value,
           brw: (<HTMLInputElement>document.querySelector('#form_brw')).value,
-          surl: (<HTMLInputElement>document.querySelector('#form_surl')).checked ?
+          surl: ((<HTMLInputElement>document.querySelector('#form_surl')).checked &&
+                 this.viewer.jsonStateServer.value) ?
               window.location.href :
               0
         });
@@ -258,8 +265,10 @@ export class UserReportDialog extends Overlay {
     this.dispose();
 
     try {
-      await fetch(url, {method: 'post', headers, body});
-      alert('Feedback received!');
+      let response = await fetch(url, {method: 'post', headers, body});
+      let ghData = JSON.parse(await response.json());
+      localStorage.setItem('lastIssue', ghData.html_url);
+      alert(`Feedback received!\nYour report is posted here:\n${ghData.html_url}`);
     } catch (e) {
       alert('Ruh roh :(\n' + e);
       throw (e);
