@@ -180,7 +180,8 @@ function getBaseConfig(options) {
 
         // Patched version of jpgjs.
         'jpgjs': resolveReal(__dirname, '../third_party/jpgjs/jpg.js'),
-        'draco_wasm_wrapper.js': resolveReal(__dirname, '../third_party/draco/draco_wasm_wrapper.js'),
+        'draco_wasm_wrapper.js':
+            resolveReal(__dirname, '../third_party/draco/draco_wasm_wrapper.js'),
         'dracoloader': resolveReal(__dirname, '../third_party/draco/draco_loader.js'),
         'draco_decoder.wasm': resolveReal(__dirname, '../third_party/draco/draco_decoder.wasm')
       },
@@ -218,18 +219,17 @@ function getBaseConfig(options) {
           resolve: {},
         },
         {
-          test: /\.json$/i, type: 'json',
+          test: /\.json$/i,
+          type: 'json',
         }
       ],
       rules: [
-        tsLoaderEntry,
-        {
+        tsLoaderEntry, {
           test: /\.svg$/,
           loader: require.resolve('svg-inline-loader'),
-          options: { removeSVGTagAttrs: false }
+          options: {removeSVGTagAttrs: false}
         },
-        {test: /\.css$/, loader: 'style-loader!css-loader'},
-        {
+        {test: /\.css$/, loader: 'style-loader!css-loader'}, {
           test: /\.glsl$/,
           loader: [
             {loader: require.resolve('raw-loader')},
@@ -240,14 +240,14 @@ function getBaseConfig(options) {
           test: /\.wasm$/,
           loader: require.resolve('file-loader'),
           type: 'javascript/auto',
-          options: {
-            name: '[name].[ext]'
-          }
-        }
+          options: {name: '[name].[ext]'}
+        },
+        {test: /\.md$/, use: [{loader: 'html-loader'}, {loader: 'markdown-loader'}]}
       ],
     },
-    // node fs used server-side to serve draco decoder, do this so webpack doesn't complain that fs doesn't exist client-side
-    node: {'Buffer': false, "fs": "empty"},
+    // node fs used server-side to serve draco decoder, do this so webpack doesn't complain that fs
+    // doesn't exist client-side
+    node: {'Buffer': false, 'fs': 'empty'},
     optimization: {
       splitChunks: false,
     },
@@ -472,4 +472,3 @@ exports.getBaseConfig = getBaseConfig;
 exports.getViewerConfig = getViewerConfig;
 exports.makePythonClientOptions = makePythonClientOptions;
 exports.getViewerConfigFromEnv = getViewerConfigFromEnv;
-

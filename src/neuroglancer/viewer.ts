@@ -62,6 +62,7 @@ import {MousePositionWidget, PositionWidget, VoxelSizeWidget} from 'neuroglancer
 import {TrackableScaleBarOptions} from 'neuroglancer/widget/scale_bar';
 import {makeTextIconButton} from 'neuroglancer/widget/text_icon_button';
 import {RPC} from 'neuroglancer/worker_rpc';
+import {findWhatsNew, WhatsNewDialog} from './whats_new/whats_new';
 
 require('./viewer.css');
 require('neuroglancer/noselect.css');
@@ -99,7 +100,8 @@ export class InputEventBindings extends DataPanelInputEventBindings {
 
 const viewerUiControlOptionKeys: (keyof ViewerUIControlConfiguration)[] = [
   'showHelpButton', 'showEditStateButton', 'showLayerPanel', 'showLocation',
-  'showAnnotationToolStatus', 'showJsonPostButton', 'showUserPreferencesButton', 'showBugButton'
+  'showAnnotationToolStatus', 'showJsonPostButton', 'showUserPreferencesButton',
+  'showWhatsNewButton', 'showBugButton'
 ];
 
 const viewerOptionKeys: (keyof ViewerUIOptions)[] =
@@ -114,6 +116,7 @@ export class ViewerUIControlConfiguration {
   showLayerPanel = new TrackableBoolean(true);
   showLocation = new TrackableBoolean(true);
   showAnnotationToolStatus = new TrackableBoolean(true);
+  showWhatsNewButton = new TrackableBoolean(true);
 }
 
 export class ViewerUIConfiguration extends ViewerUIControlConfiguration {
@@ -145,6 +148,7 @@ interface ViewerUIOptions {
   showAnnotationToolStatus: boolean;
   showJsonPostButton: boolean;
   showUserPreferencesButton: boolean;
+  showWhatsNewButton: boolean;
   showBugButton: boolean;
 }
 
@@ -408,6 +412,7 @@ export class Viewer extends RefCounted implements ViewerState {
     const maybeAddOrRemoveAnnotationShortcuts = this.annotationShortcutControllerFactory();
     this.registerDisposer(
         this.selectedLayer.changed.add(() => maybeAddOrRemoveAnnotationShortcuts()));
+    findWhatsNew(this);
   }
 
   private updateShowBorders() {
@@ -497,6 +502,16 @@ export class Viewer extends RefCounted implements ViewerState {
       });
       this.registerDisposer(new ElementVisibilityFromTrackableBoolean(
           this.uiControlVisibility.showHelpButton, button));
+      topRow.appendChild(button);
+    }
+
+    {
+      const button = makeTextIconButton('!', `What's New`);
+      this.registerEventListener(button, 'click', () => {
+        this.showWhatsNewDialog();
+      });
+      this.registerDisposer(new ElementVisibilityFromTrackableBoolean(
+          this.uiControlVisibility.showWhatsNewButton, button));
       topRow.appendChild(button);
     }
 
@@ -675,6 +690,10 @@ export class Viewer extends RefCounted implements ViewerState {
 
   showPreferencesModal() {
     new UserPreferencesDialog(this);
+  }
+
+  showWhatsNewDialog() {
+    new WhatsNewDialog(this);
   }
 
   loadFromJsonUrl() {
