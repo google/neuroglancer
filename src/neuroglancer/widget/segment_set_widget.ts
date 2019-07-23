@@ -16,6 +16,7 @@
 
 import {SegmentationDisplayState} from 'neuroglancer/segmentation_display_state/frontend';
 import {RefCounted} from 'neuroglancer/util/disposable';
+import {vec3} from 'neuroglancer/util/geom';
 import {Uint64} from 'neuroglancer/util/uint64';
 
 require('neuroglancer/noselect.css');
@@ -56,7 +57,6 @@ export class SegmentSetWidget extends RefCounted {
   constructor(public displayState: SegmentationDisplayState) {
     super();
     this.createTopButtons();
-
     this.registerDisposer(displayState.rootSegments.changed.add((x, add) => {
       this.handleEnabledSetChanged(x, add);
     }));
@@ -65,6 +65,31 @@ export class SegmentSetWidget extends RefCounted {
     }));
     this.registerDisposer(displayState.segmentColorHash.changed.add(() => {
       this.handleColorChanged();
+    }));
+    this.registerDisposer(displayState.segmentSelectionState.changed.add(() => {
+      const segmentID = this.segmentSelectionState.selectedSegment.toString();
+      const segmentButton = <HTMLElement>this.element.querySelector(`[data-seg-id="${segmentID}"]`);
+      const existingHighlight = Array.from(this.element.getElementsByClassName('selectedSeg'));
+      const white = vec3.fromValues(255, 255, 255);
+      const saturation = 0.5;
+      let rgbArray = [0, 0, 0];
+
+      if (segmentButton) {
+        const segBtnClass = segmentButton.classList;
+        if (segBtnClass.toggle('selectedSeg')) {
+          let base = segmentButton.style.backgroundColor || '';
+          rgbArray = base.replace(/[^\d,.%]/g, '').split(',').map(v => parseFloat(v));
+          let highlight = vec3.lerp(vec3.fromValues(0, 0, 0), white, rgbArray, saturation);
+          let highFrame = `rgb(${highlight.join(',')})`;
+
+          segmentButton.style.setProperty('--defBtnColor', base);
+          segmentButton.style.setProperty('--actBtnColor', highFrame);
+          segmentButton.style.setProperty('--pulseSpeed', '0.5s');
+        }
+      }
+      if (existingHighlight) {
+        existingHighlight.map(e => e.classList.remove('selectedSeg'));
+      }
     }));
 
     for (const x of displayState.rootSegments) {
@@ -216,6 +241,7 @@ export class SegmentSetWidget extends RefCounted {
         itemButton.className = 'segment-button';
         itemButton.textContent = segmentIDString;
         itemButton.title = `Remove segment ID ${segmentIDString}`;
+        itemButton.dataset.segId = segmentIDString;
         itemButton.addEventListener('click', function(this: HTMLButtonElement) {
           temp.tryParseString(this.textContent!);
           widget.rootSegments.delete(temp);
@@ -224,10 +250,15 @@ export class SegmentSetWidget extends RefCounted {
         itemButton.addEventListener('mouseenter', function(this: HTMLButtonElement) {
           temp.tryParseString(this.textContent!);
           widget.segmentSelectionState.set(temp);
+          widget.segmentSelectionState.setRaw(temp);
+          this.classList.add('selectedSeg');
+          this.style.setProperty('--pulseSpeed', '2.5s');
         });
         itemButton.addEventListener('mouseleave', function(this: HTMLButtonElement) {
           temp.tryParseString(this.textContent!);
           widget.segmentSelectionState.set(null);
+          widget.segmentSelectionState.setRaw(null);
+          this.classList.remove('selectedSeg');
         });
         return itemButton;
       }
@@ -333,8 +364,7 @@ export class SegmentSetWidget extends RefCounted {
           widget.rootSegments.add(x);
         }
         toggleItemsCheckbox.title = 'Uncheck to hide all segments';
-      }
-      else {
+      } else {
         for (const x of widget.rootSegments) {
           widget.hiddenRootSegments!.add(x);
         }

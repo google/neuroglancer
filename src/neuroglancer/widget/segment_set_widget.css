@@ -14,6 +14,12 @@
  * limitations under the License.
  */
 
+@keyframes pulse {
+  from { background-color: var(--defBtnColor); -webkit-box-shadow: 0 0 9px black; }
+  50% { background-color: var(--actBtnColor); -webkit-box-shadow: 0 0 18px var(--actBtnColor); }
+  to { background-color: var(--defBtnColor); -webkit-box-shadow: 0 0 9px black; }
+}
+
 .segment-set-widget button {
   margin: 3px;
   margin-right: 4px;
@@ -53,4 +59,10 @@
   width: 1.2em;
   height: 1.2em;
   vertical-align: bottom;
+}
+
+.segment-set-widget button.segment-button.selectedSeg {
+  animation-name: pulse;
+  animation-duration: var(--pulseSpeed);
+  animation-iteration-count: infinite;
 }
