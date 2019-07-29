@@ -40,3 +40,12 @@
 .neuroglancer-button:active {
   border-style: inset;
 }
+.color-special {
+  border: none;
+  border-color: transparent;
+  -webkit-appearance: none;
+  background-color: transparent;
+  padding: 0;
+  width: 14px;
+  height: 28px;
+}

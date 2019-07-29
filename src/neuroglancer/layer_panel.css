@@ -47,6 +47,7 @@
 
 .neuroglancer-layer-item[layer-selected=true] {
   border-color: #8c8;
+  border-width: 2px;
 }
 
 .neuroglancer-layer-item[layer-selected=true]:hover {

@@ -27,10 +27,12 @@ import {removeFromParent} from 'neuroglancer/util/dom';
 import {getDropEffect, preventDrag, setDropEffect} from 'neuroglancer/util/drag_and_drop';
 import {float32ToString} from 'neuroglancer/util/float32_to_string';
 import {makeCloseButton} from 'neuroglancer/widget/close_button';
+import {ColorWidget} from 'neuroglancer/widget/color';
 import {PositionWidget} from 'neuroglancer/widget/position_widget';
+import {UserLayerWithAnnotations} from './ui/annotations';
 
 require('neuroglancer/noselect.css');
-require('./layer_panel.css');
+require('neuroglancer/layer_panel.css');
 require('neuroglancer/ui/button.css');
 
 function destroyDropLayers(
@@ -182,6 +184,21 @@ class LayerWidget extends RefCounted {
       this.panel.layerManager.removeManagedLayer(this.layer);
       event.stopPropagation();
     });
+    const colorWidget = this.registerDisposer(
+        new ColorWidget((<UserLayerWithAnnotations>this.layer.layer).annotationColor));
+    colorWidget.element.title = layer.initialSpecification.annotationColor || '';
+
+    if (layer.layer !== null) {
+      let managedUserLayer = <UserLayerWithAnnotations>layer.layer;
+      if (colorWidget.element.style.color === '') {
+        colorWidget.element.title = managedUserLayer.annotationColor.toString();
+      }
+    }
+    colorWidget.element.classList.add('color-special');
+    this.registerEventListener(colorWidget.element, 'click', (event: MouseEvent) => {
+      event.stopPropagation();
+    });
+    element.appendChild(colorWidget.element);
     element.appendChild(layerNumberElement);
     element.appendChild(labelElement);
     element.appendChild(valueElement);
