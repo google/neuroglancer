@@ -21,11 +21,11 @@ import SockJS from 'sockjs-client';
 import {StatusMessage} from 'neuroglancer/status';
 
 function getServerConnectionURL() {
-  const match = window.location.pathname.match(/^\/v\/([^\/]+)/);
+  const match = window.location.pathname.match(/^(.*)\/v\/([^\/]+)/);
   if (match === null) {
     throw new Error('Failed to determine token from URL.');
   }
-  return `${window.location.origin}/socket/${match[1]}`;
+  return `${window.location.origin}${match[1]}/socket/${match[2]}`;
 }
 
 const defaultReconnectionDelay = 1000;
