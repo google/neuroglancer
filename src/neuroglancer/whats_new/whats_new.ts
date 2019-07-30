@@ -3,6 +3,7 @@ import {Viewer} from 'neuroglancer/viewer';
 
 require('./whats_new.css');
 
+const updateFName = 'WHATS_NEW.md';
 const generateWhatsNew = (GHCommits: string[] = []) => {
   let WNCommits = JSON.parse(localStorage.getItem('WNCommits') || '[]');
   let newCommits =
@@ -16,8 +17,8 @@ const generateWhatsNew = (GHCommits: string[] = []) => {
   let description: string = `<ul>${newCommits.reduce((acc: string, cur: any, i: number) => {
     return `${acc}\n<li><h4>${(cur.commit) ? cur.commit.message : ''}</h4>\n${
     !i ? `${currentDes}` :
-         `<a target="_blank" href='https://github.com/seung-lab/neuroglancer/blob/${
-             cur.sha}/whats_new.md'>More...</a>`}</li>`;
+         `<a target="_blank" href='https://github.com/seung-lab/neuroglancer/blob/${cur.sha}/${
+             updateFName}'>More...</a>`}</li>`;
   }, '')}</ul>`;
   return description;
 };
@@ -29,7 +30,7 @@ export const findWhatsNew = async (viewer: Viewer) => {
         'Content-Type': 'text/plain;charset=utf-8',
       },
       body = JSON.stringify({
-        path: 'WHATS_NEW.md'
+        path: updateFName
         // since: (WNCommits.length) ? WNCommits[0].commit.author.date : void(0)
       });
 
