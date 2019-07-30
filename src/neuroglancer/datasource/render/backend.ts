@@ -83,12 +83,13 @@ chunkDecoders.set('raw16',
 
     // GET
     // /v1/owner/{owner}/project/{project}/stack/{stack}/z/{z}/box/{x},{y},{width},{height},{scale}/jpeg-image
-    let path:string;
+    let imageMethod:string;
     if (parameters.encoding === 'raw16') {
-      path = `/render-ws/v1/owner/${parameters.owner}/project/${parameters.project}/stack/${parameters.stack}/z/${chunkPosition[2]}/box/${chunkPosition[0]},${chunkPosition[1]},${xTileSize},${yTileSize},${scale}/raw16-image`;
+      imageMethod = 'raw16-image';
     } else {
-      path = `/render-ws/v1/owner/${parameters.owner}/project/${parameters.project}/stack/${parameters.stack}/z/${chunkPosition[2]}/box/${chunkPosition[0]},${chunkPosition[1]},${xTileSize},${yTileSize},${scale}/jpeg-image`;
+      imageMethod = 'jpeg-image';
     }
+    let path = `/render-ws/v1/owner/${parameters.owner}/project/${parameters.project}/stack/${parameters.stack}/z/${chunkPosition[2]}/box/${chunkPosition[0]},${chunkPosition[1]},${xTileSize},${yTileSize},${scale}/${imageMethod}`;
     const response = await cancellableFetchOk(
         `${parameters.baseUrl}${path}?${this.queryString}`, {}, responseArrayBuffer,
         cancellationToken);
