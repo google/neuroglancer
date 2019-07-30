@@ -75,6 +75,7 @@
     "lodash": "^4.17.11",
     "nifti-reader-js": "^0.5.4",
     "pako": "^1.0.10",
+    "papaparse": "^5.0.1",
     "raw-loader": "^2.0.0",
     "resize-observer-polyfill": "^1.5.1",
     "sockjs-client": "^1.3.0",

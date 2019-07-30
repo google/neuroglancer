@@ -21,7 +21,7 @@
 import './annotations.css';
 
 import debounce from 'lodash/debounce';
-import {Annotation, AnnotationTag, AnnotationReference, AnnotationType, AxisAlignedBoundingBox, Ellipsoid, getAnnotationTypeHandler, Line, AnnotationSource} from 'neuroglancer/annotation';
+import {Annotation, AnnotationReference, AnnotationSource, AnnotationTag, AnnotationType, AxisAlignedBoundingBox, Ellipsoid, getAnnotationTypeHandler, Line} from 'neuroglancer/annotation';
 import {AnnotationLayer, AnnotationLayerState, PerspectiveViewAnnotationLayer, SliceViewAnnotationLayer} from 'neuroglancer/annotation/frontend';
 import {DataFetchSliceViewRenderLayer, MultiscaleAnnotationSource} from 'neuroglancer/annotation/frontend_source';
 import {setAnnotationHoverStateFromMouseState} from 'neuroglancer/annotation/selection';
@@ -29,6 +29,7 @@ import {MouseSelectionState, UserLayer} from 'neuroglancer/layer';
 import {VoxelSize} from 'neuroglancer/navigation_state';
 import {SegmentationDisplayState} from 'neuroglancer/segmentation_display_state/frontend';
 import {TrackableAlphaValue, trackableAlphaValue} from 'neuroglancer/trackable_alpha';
+import {TrackableBooleanCheckbox} from 'neuroglancer/trackable_boolean';
 import {registerNested, TrackableValueInterface, WatchableRefCounted, WatchableValue} from 'neuroglancer/trackable_value';
 import {registerTool, Tool} from 'neuroglancer/ui/tool';
 import {TrackableRGB} from 'neuroglancer/util/color';
@@ -47,7 +48,8 @@ import {RangeWidget} from 'neuroglancer/widget/range';
 import {StackView, Tab} from 'neuroglancer/widget/tab_view';
 import {makeTextIconButton} from 'neuroglancer/widget/text_icon_button';
 import {Uint64EntryWidget} from 'neuroglancer/widget/uint64_entry_widget';
-import {TrackableBooleanCheckbox} from 'neuroglancer/trackable_boolean';
+
+const Papa = require('papaparse');
 
 type AnnotationIdAndPart = {
   id: string,
@@ -386,8 +388,7 @@ export class AnnotationLayerView extends Tab {
   constructor(
       public layer: Borrowed<UserLayerWithAnnotations>,
       public state: Owned<SelectedAnnotationState>,
-      public annotationLayer: Owned<AnnotationLayerState>,
-      public voxelSize: Owned<VoxelSize>,
+      public annotationLayer: Owned<AnnotationLayerState>, public voxelSize: Owned<VoxelSize>,
       public setSpatialCoordinates: (point: vec3) => void) {
     super();
     this.element.classList.add('neuroglancer-annotation-layer-view');
@@ -400,9 +401,12 @@ export class AnnotationLayerView extends Tab {
       this.updated = false;
       this.updateView();
     };
-    this.registerDisposer(source.childAdded.add((annotation) => this.addAnnotationElement(annotation)));
-    this.registerDisposer(source.childUpdated.add((annotation) => this.updateAnnotationElement(annotation)));
-    this.registerDisposer(source.childDeleted.add((annotationId) => this.deleteAnnotationElement(annotationId)));
+    this.registerDisposer(
+        source.childAdded.add((annotation) => this.addAnnotationElement(annotation)));
+    this.registerDisposer(
+        source.childUpdated.add((annotation) => this.updateAnnotationElement(annotation)));
+    this.registerDisposer(
+        source.childDeleted.add((annotationId) => this.deleteAnnotationElement(annotationId)));
     this.registerDisposer(this.visibility.changed.add(() => this.updateView()));
     this.registerDisposer(annotationLayer.transform.changed.add(updateView));
     this.updateView();
@@ -628,7 +632,7 @@ export class AnnotationLayerView extends Tab {
     this.resetOnUpdate();
   }
 
-  private addAnnotationElement(annotation:Annotation) {
+  private addAnnotationElement(annotation: Annotation) {
     if (!this.visible) {
       return;
     }
@@ -636,7 +640,7 @@ export class AnnotationLayerView extends Tab {
     this.resetOnUpdate();
   }
 
-  private updateAnnotationElement(annotation:Annotation, checkVisibility = true) {
+  private updateAnnotationElement(annotation: Annotation, checkVisibility = true) {
     if (checkVisibility && !this.visible) {
       return;
     }
@@ -648,12 +652,10 @@ export class AnnotationLayerView extends Tab {
       const annotationText = this.layer.getAnnotationText(annotation);
       if (!annotationText) {
         element.removeChild(element.lastElementChild);
-      }
-      else {
+      } else {
         element.lastElementChild.innerHTML = annotationText;
       }
-    }
-    else {
+    } else {
       this.createAnnotationDescriptionElement(element, annotation);
     }
     this.resetOnUpdate();
@@ -697,7 +699,8 @@ export class AnnotationLayerView extends Tab {
     return element;
   }
 
-  private createAnnotationDescriptionElement(annotationElement: HTMLElement, annotation: Annotation) {
+  private createAnnotationDescriptionElement(
+      annotationElement: HTMLElement, annotation: Annotation) {
     const annotationText = this.layer.getAnnotationText(annotation);
     if (annotationText) {
       const description = document.createElement('div');
@@ -709,7 +712,8 @@ export class AnnotationLayerView extends Tab {
 
   private filterAnnotationsByTag(tagId: number) {
     for (const [annotationId, annotationElement] of this.annotationListElements) {
-      if (tagId === 0 || this.annotationLayer.source.isAnnotationTaggedWithTag(annotationId, tagId)) {
+      if (tagId === 0 ||
+          this.annotationLayer.source.isAnnotationTaggedWithTag(annotationId, tagId)) {
         annotationElement.style.display = 'list-item';
       } else {
         annotationElement.style.display = 'none';
@@ -719,68 +723,84 @@ export class AnnotationLayerView extends Tab {
 
   private exportToCSV() {
     const filename = 'annotations.csv';
-    let csvString = 'Coordinates,Tags,Description,Segment IDs\n';
     const pointToCoordinateText = (point: vec3, transform: mat4) => {
       const spatialPoint = vec3.transformMat4(vec3.create(), point, transform);
       return formatIntegerPoint(this.voxelSize.voxelFromSpatial(tempVec3, spatialPoint));
     };
+    const columnHeaders = [
+      'Coordinate 1', 'Coordinate 2 (if applicable)', 'Ellipsoid Dimensions (if applicable)',
+      'Tags', 'Description', 'Segment IDs'
+    ];
+    const csvData: string[][] = [];
     for (const annotation of this.annotationLayer.source) {
-      let annotationString = '';
-      let coordinatesString = '"';
+      const annotationRow = [];
+      let coordinate1String = '';
+      let coordinate2String = '';
+      let ellipsoidDimensions = '';
       switch (annotation.type) {
         case AnnotationType.AXIS_ALIGNED_BOUNDING_BOX:
         case AnnotationType.LINE:
-          coordinatesString += pointToCoordinateText(annotation.pointA, this.annotationLayer.objectToGlobal) + '-';
-          coordinatesString += pointToCoordinateText(annotation.pointB, this.annotationLayer.objectToGlobal);
+          coordinate1String =
+              pointToCoordinateText(annotation.pointA, this.annotationLayer.objectToGlobal);
+          coordinate2String =
+              pointToCoordinateText(annotation.pointB, this.annotationLayer.objectToGlobal);
           break;
         case AnnotationType.POINT:
-          coordinatesString += pointToCoordinateText(annotation.point, this.annotationLayer.objectToGlobal);
+          coordinate1String =
+              pointToCoordinateText(annotation.point, this.annotationLayer.objectToGlobal);
           break;
         case AnnotationType.ELLIPSOID:
-          coordinatesString += pointToCoordinateText(annotation.center, this.annotationLayer.objectToGlobal);
-          const transformedRadii = transformVectorByMat4(tempVec3, annotation.radii, this.annotationLayer.objectToGlobal);
+          coordinate1String =
+              pointToCoordinateText(annotation.center, this.annotationLayer.objectToGlobal);
+          const transformedRadii = transformVectorByMat4(
+              tempVec3, annotation.radii, this.annotationLayer.objectToGlobal);
           this.voxelSize.voxelFromSpatial(transformedRadii, transformedRadii);
-          coordinatesString += '±' + formatIntegerBounds(transformedRadii);
+          ellipsoidDimensions = formatIntegerBounds(transformedRadii);
           break;
       }
-      annotationString += coordinatesString + '",';
+      annotationRow.push(coordinate1String);
+      annotationRow.push(coordinate2String);
+      annotationRow.push(ellipsoidDimensions);
       if (this.annotationLayer.source instanceof AnnotationSource && annotation.tagIds) {
-        let tagString = '"';
-        let firstTag = true;
+        // Papa.unparse expects an array of arrays even though here we only want to create a csv for
+        // one row of tags
+        const annotationTags: string[][] = [[]];
         annotation.tagIds.forEach(tagId => {
           const tag = (<AnnotationSource>this.annotationLayer.source).getTag(tagId);
           if (tag) {
-            if (firstTag) {
-              firstTag = false;
-            } else {
-              tagString += ',';
-            }
-            tagString += '#' + tag.label;
+            annotationTags[0].push(tag.label);
           }
         });
-        annotationString += tagString + '"';
+        if (annotationTags[0].length > 0) {
+          annotationRow.push(Papa.unparse(annotationTags));
+        } else {
+          annotationRow.push('');
+        }
+      } else {
+        annotationRow.push('');
       }
-      annotationString += ',';
       if (annotation.description) {
-        annotationString += annotation.description;
+        annotationRow.push(annotation.description);
+      } else {
+        annotationRow.push('');
       }
-      annotationString += ',';
       if (annotation.segments) {
-        let segmentString = '"';
-        let firstSegment = true;
+        // Papa.unparse expects an array of arrays even though here we only want to create a csv for
+        // one row of segments
+        const annotationSegments: string[][] = [[]];
         annotation.segments.forEach(segmentID => {
-          if (firstSegment) {
-            firstSegment = false;
-          } else {
-            segmentString += ',';
-          }
-          segmentString += segmentID.toString();
+          annotationSegments[0].push(segmentID.toString());
         });
-        annotationString += segmentString + '"';
+        if (annotationSegments[0].length > 0) {
+          annotationRow.push(Papa.unparse(annotationSegments));
+        } else {
+          annotationRow.push('');
+        }
       }
-      csvString += annotationString + '\n';
+      csvData.push(annotationRow);
     }
-    const blob = new Blob([csvString],  { type: 'text/csv;charset=utf-8;'});
+    const csvString = Papa.unparse({'fields': columnHeaders, 'data': csvData});
+    const blob = new Blob([csvString], {type: 'text/csv;charset=utf-8;'});
     const link = document.createElement('a');
     const url = URL.createObjectURL(blob);
     link.setAttribute('href', url);
@@ -1175,7 +1195,8 @@ export class PlaceLineTool extends PlaceTwoCornerAnnotationTool {
     return `annotate line`;
   }
 
-  getInitialAnnotation(mouseState: MouseSelectionState, annotationLayer: AnnotationLayerState): Annotation {
+  getInitialAnnotation(mouseState: MouseSelectionState, annotationLayer: AnnotationLayerState):
+      Annotation {
     const result = super.getInitialAnnotation(mouseState, annotationLayer);
     result.segments = getSelectedAssocatedSegment(annotationLayer);
     return result;
@@ -1262,7 +1283,7 @@ registerTool(
     (layer, options) => new PlaceLineTool(<UserLayerWithAnnotations>layer, options));
 registerTool(
     ANNOTATE_ELLIPSOID_TOOL_ID,
-  (layer, options) => new PlaceSphereTool(<UserLayerWithAnnotations>layer, options));
+    (layer, options) => new PlaceSphereTool(<UserLayerWithAnnotations>layer, options));
 
 export interface UserLayerWithAnnotations extends UserLayer {
   annotationLayerState: WatchableRefCounted<AnnotationLayerState>;
