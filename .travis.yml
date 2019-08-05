@@ -3,8 +3,8 @@ language: python
 os:
   - linux
 python:
-  - "2.7"
   - "3.5"
+  - "3.7"
 matrix:
   include:
     - name: "C++"
