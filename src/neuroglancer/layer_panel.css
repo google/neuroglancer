@@ -100,7 +100,7 @@
 }
 
 .neuroglancer-layer-item[layer-visible=false] .neuroglancer-layer-item-value {
-  display: none;
+  visibility: hidden;
 }
 
 
