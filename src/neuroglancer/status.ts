@@ -101,6 +101,20 @@ export class StatusMessage {
     this.element.appendChild(button);
   }
 
+  static messageWithAction(
+      message: string, actionMessage: string, action: () => void, closeAfter: number = 10000) {
+    const msg = this.showMessage(message);
+    const actionButton = document.createElement('button');
+    actionButton.textContent = actionMessage;
+    actionButton.addEventListener('click', () => {
+      action();
+      msg.dispose();
+    });
+    msg.element.appendChild(actionButton);
+    setTimeout(() => msg.dispose(), closeAfter);
+    return msg;
+  }
+
   static showMessage(message: string): StatusMessage {
     const msg = new StatusMessage();
     msg.element.textContent = message;

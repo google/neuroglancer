@@ -271,7 +271,7 @@ export class LayerSubsetSpecification extends RefCounted implements LayerListSpe
   get voxelSize () { return this.master.voxelSize; }
   get layerSelectedValues () { return this.master.layerSelectedValues; }
 
-  layerManager = new LayerManager();
+  layerManager = new LayerManager(this.getStateRevertingFunction.bind(this));
 
   constructor (public master: Owned<LayerListSpecification>) {
     super();
@@ -330,6 +330,13 @@ export class LayerSubsetSpecification extends RefCounted implements LayerListSpe
   }
 
   get rootLayers () { return this.master.rootLayers; }
+
+  private getStateRevertingFunction() {
+    const currentState = this.toJSON();
+    return () => {
+      this.restoreState(currentState);
+    };
+  }
 }
 
 interface UserLayerConstructor {
