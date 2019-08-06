@@ -16,7 +16,7 @@
 
 import {HashMapUint64} from 'neuroglancer/gpu_hash/hash_table';
 import {GPUHashTable, HashMapShaderManager, HashSetShaderManager} from 'neuroglancer/gpu_hash/shader';
-import {SegmentColorShaderManager} from 'neuroglancer/segment_color';
+import {SegmentColorShaderManager, SegmentStatedColorShaderManager} from 'neuroglancer/segment_color';
 import {registerRedrawWhenSegmentationDisplayStateChanged, SegmentationDisplayState} from 'neuroglancer/segmentation_display_state/frontend';
 import {SliceView} from 'neuroglancer/sliceview/frontend';
 import {RenderLayerOptions} from 'neuroglancer/sliceview/renderlayer';
@@ -56,6 +56,10 @@ export interface SliceViewSegmentationDisplayState extends SegmentationDisplaySt
 
 export class SegmentationRenderLayer extends RenderLayer {
   protected segmentColorShaderManager = new SegmentColorShaderManager('segmentColorHash');
+  protected segmentStatedColorShaderManager = new SegmentStatedColorShaderManager('segmentStatedColor');
+  private gpuSegmentStatedColorHashTable = GPUHashTable.get(this.gl, this.displayState.segmentStatedColors.hashTable);
+  private hasSegmentStatedColors: boolean;
+
   private hashTableManager = new HashSetShaderManager('visibleSegments');
   private gpuHashTable = GPUHashTable.get(this.gl, this.displayState.visibleSegments.hashTable);
   private hashTableManagerHighlighted = new HashSetShaderManager('highlightedSegments');
@@ -98,12 +102,23 @@ export class SegmentationRenderLayer extends RenderLayer {
     this.registerDisposer(displayState.notSelectedAlpha.changed.add(() => {
       this.redrawNeeded.dispatch();
     }));
+    this.hasSegmentStatedColors = this.displayState.segmentStatedColors.size !== 0;
+    displayState.segmentStatedColors.changed.add(() => {
+      let {segmentStatedColors} = this.displayState;
+      let hasSegmentStatedColors = segmentStatedColors.size !== 0;
+      if (hasSegmentStatedColors !== this.hasSegmentStatedColors) {
+        this.hasSegmentStatedColors = hasSegmentStatedColors;
+        this.shaderGetter.invalidateShader();
+        // No need to trigger redraw, since that will happen anyway.
+      }
+    });
   }
 
   getShaderKey() {
-    // The shader to use depends on whether there are any equivalences, and on whether we are hiding
-    // segment ID 0.
+    // The shader to use depends on whether there are any equivalences, and any color mappings,
+    // and on whether we are hiding segment ID 0.
     return `sliceview.SegmentationRenderLayer/${this.hasEquivalences}/` +
+        `${this.hasSegmentStatedColors}/` +
         this.displayState.hideSegmentZero.value;
   }
 
@@ -136,6 +151,9 @@ uint64_t getMappedObjectId() {
 `);
     }
     this.segmentColorShaderManager.defineShader(builder);
+    if (this.hasSegmentStatedColors) {
+      this.segmentStatedColorShaderManager.defineShader(builder);
+    }
     builder.addUniform('highp uvec2', 'uSelectedSegment');
     builder.addUniform('highp uint', 'uShowAllSegments');
     builder.addUniform('highp float', 'uSelectedAlpha');
@@ -162,12 +180,24 @@ uint64_t getMappedObjectId() {
   } else if (!has) {
     alpha = uNotSelectedAlpha;
   }
+`;
+    // If the value has a mapped color, use it; otherwise, compute the color.
+    if (this.hasSegmentStatedColors) {
+      fragmentMain += `
+  vec3 rgb;
+  if (!${this.segmentStatedColorShaderManager.getFunctionName}(value, rgb)) {
+    rgb = segmentColorHash(value);
+  }
+`;
+    } else {
+      fragmentMain += `
   vec3 rgb = segmentColorHash(value);
-  `;
+`;
+    }
 
     // Override color for all highlighted segments.
     fragmentMain += `
-  if(${this.hashTableManagerHighlighted.hasFunctionName}(value)) {
+  if (${this.hashTableManagerHighlighted.hasFunctionName}(value)) {
     rgb = vec3(0.2,0.2,2.0);
     saturation = 1.0;
   };
@@ -207,6 +237,9 @@ uint64_t getMappedObjectId() {
     }
 
     this.segmentColorShaderManager.enable(gl, shader, displayState.segmentColorHash);
+    if (this.hasSegmentStatedColors) {
+      this.segmentStatedColorShaderManager.enable(gl, shader, this.gpuSegmentStatedColorHashTable);
+    }
     return shader;
   }
   endSlice(shader: ShaderProgram) {
