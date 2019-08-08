@@ -471,7 +471,12 @@ export class OmniSegmentWidget extends RefCounted {
       categoryDropdown.selectedIndex = statusIndex;
       categoryDropdown.addEventListener('change', () => {
         const categoryId = Number(categoryDropdown.selectedOptions[0].value);
-        segmentMetadata.categorizedSegments.set(segmentIDString, categoryId);
+        if (categoryId === 0) {
+          // Segment no longer categorized
+          segmentMetadata.categorizedSegments.delete(segmentIDString);
+        } else {
+          segmentMetadata.categorizedSegments.set(segmentIDString, categoryId);
+        }
         segmentMetadata.changed.dispatch();
       });
       categoryDropdownCell.appendChild(categoryDropdown);

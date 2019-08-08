@@ -15,7 +15,7 @@
  */
 
 import {RefCounted} from 'neuroglancer/util/disposable';
-import {verifyArray, verifyObject, verifyObjectProperty, verifyPositiveInt, verifyString} from 'neuroglancer/util/json';
+import {verifyArray, verifyNonnegativeInt, verifyObject, verifyObjectProperty, verifyPositiveInt, verifyString} from 'neuroglancer/util/json';
 import {NullarySignal, Signal} from 'neuroglancer/util/signal';
 import {Uint64} from 'neuroglancer/util/uint64';
 
@@ -66,12 +66,10 @@ export class SegmentMetadata extends RefCounted {
               `Required key 'id' for categorized segment obj ${categorizedSegmentsObj} is missing`);
         }
         const segmentIdString = String(segment['id']);
-        const categoryId = verifyObjectProperty(segment, 'categoryId', verifyPositiveInt);
-        if (!segmentCategories.has(categoryId)) {
-          throw new Error(`Segment id ${segmentIdString} mapped to unknown category id ${
-              categoryId} in JSON state`);
+        const categoryId = verifyObjectProperty(segment, 'categoryId', verifyNonnegativeInt);
+        if (segmentCategories.has(categoryId)) {
+          categorizedSegments.set(segmentIdString, categoryId);
         }
-        categorizedSegments.set(segmentIdString, categoryId);
       });
     }
     return new SegmentMetadata(
