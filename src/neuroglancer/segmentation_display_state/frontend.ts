@@ -24,6 +24,7 @@ import {SharedWatchableValue} from 'neuroglancer/shared_watchable_value';
 import {TrackableAlphaValue} from 'neuroglancer/trackable_alpha';
 import {TrackableValue} from 'neuroglancer/trackable_value';
 import {Uint64Set} from 'neuroglancer/uint64_set';
+import {Uint64Map} from 'neuroglancer/uint64_map';
 import {hsvToRgb, rgbToHsv} from 'neuroglancer/util/colorspace';
 import {RefCounted} from 'neuroglancer/util/disposable';
 import {vec4} from 'neuroglancer/util/geom';
@@ -85,6 +86,7 @@ export class SegmentSelectionState extends RefCounted {
 export interface SegmentationDisplayState extends VisibleSegmentsState {
   segmentSelectionState: SegmentSelectionState;
   segmentColorHash: SegmentColorHash;
+  segmentStatedColors: Uint64Map;
   saturation: TrackableAlphaValue;
   highlightedSegments: Uint64Set;
 }
@@ -130,9 +132,10 @@ export function registerRedrawWhenSegmentationDisplayState3DChanged(
 }
 
 /**
- * Temporary value used by getObjectColor.
+ * Temporary values used by getObjectColor.
  */
 const tempColor = vec4.create();
+const tempStatedColor = new Uint64();
 
 /**
  * Returns the alpha-premultiplied color to use.
@@ -141,7 +144,16 @@ export function getObjectColor(
     displayState: SegmentationDisplayState, objectId: Uint64, alpha: number = 1) {
   const color = tempColor;
   color[3] = alpha;
-  displayState.segmentColorHash.compute(color, objectId);
+  if (displayState.segmentStatedColors.has(objectId)) {
+    // If displayState maps the ID to a color, use it
+    displayState.segmentStatedColors.get(objectId, tempStatedColor);
+    color[0] = ((tempStatedColor.low & 0xff0000) >>> 16) / 255.0;
+    color[1] = ((tempStatedColor.low & 0x00ff00) >>>  8) / 255.0;
+    color[2] = ((tempStatedColor.low & 0x0000ff))        / 255.0;
+  } else {
+    displayState.segmentColorHash.compute(color, objectId);
+  }
+
   if (displayState.segmentSelectionState.isSelected(objectId)) {
     for (let i = 0; i < 3; ++i) {
       color[i] = color[i] * 0.5 + 0.5;
