@@ -35,6 +35,7 @@ import {ComputedWatchableValue} from 'neuroglancer/trackable_value';
 import {Uint64Set} from 'neuroglancer/uint64_set';
 import {Uint64Map} from 'neuroglancer/uint64_map';
 import {UserLayerWithVolumeSourceMixin} from 'neuroglancer/user_layer_with_volume_source';
+import {parseRGBColorSpecification, packColor} from 'neuroglancer/util/color';
 import {Borrowed} from 'neuroglancer/util/disposable';
 import {parseArray, verifyObjectProperty, verifyOptionalString, verifyObjectAsMap} from 'neuroglancer/util/json';
 import {NullarySignal} from 'neuroglancer/util/signal';
@@ -164,13 +165,10 @@ export class SegmentationUserLayer extends Base {
     verifyObjectProperty(specification, SEGMENT_STATED_COLORS_JSON_KEY, y => {
       if (y !== undefined) {
         let {segmentEquivalences} = this.displayState;
-        // Parse the color as a 32-bit integer here, because the Uint64.parseString()
-        // function does not seem to handle strings of the form '0xRRGGBB'.
-        // And support a CSS color "#RRGGBB" by turning into "0xRRGGBB".
-        let result = verifyObjectAsMap(y, x => parseInt(String(x).replace(/^#/, '0x'), 0));
-        for (let [idStr, colorInt] of result) {
+        let result = verifyObjectAsMap(y, x => parseRGBColorSpecification(String(x)));
+        for (let [idStr, colorVec] of result) {
           const id = Uint64.parseString(String(idStr));
-          const color = new Uint64(colorInt);
+          const color = new Uint64(packColor(colorVec));
           this.displayState.segmentStatedColors.set(segmentEquivalences.get(id), color);
         }
       }
@@ -284,7 +282,7 @@ export class SegmentationUserLayer extends Base {
     if (segmentStatedColors.size > 0) {
       let json = segmentStatedColors.toJSON();
       // Convert colors from decimal integers to CSS "#RRGGBB" format.
-      Object.keys(json).map(k => json[k] = '#' + parseInt(json[k], 10).toString(16));
+      Object.keys(json).map(k => json[k] = '#' + parseInt(json[k], 10).toString(16).padStart(6, '0'));
       x[SEGMENT_STATED_COLORS_JSON_KEY] = json;
     }
     let {visibleSegments} = this.displayState;

@@ -66,6 +66,21 @@ export function parseRGBColorSpecification(x: any) {
   return <vec3>result.subarray(0, 3);
 }
 
+/**
+ * Returns an integer formed by concatenating the channels of the input color vector.
+ * Each channel is clamped to the range [0.0, 1.0] before being converted to 8 bits.
+ * An RGB color is packed into 24 bits, and a RGBA into 32 bits.
+ */
+export function packColor(x: vec3|vec4): number {
+  const size = (x[3] === undefined) ? 3 : 4;
+  let result = 0;
+  for (let i = 0; i < size; i++) {
+    // The ">>> 0" ensures an unsigned value.
+    result = ((result << 8) >>> 0) + Math.min(255, Math.max(0, (Math.round(x[i] * 255))));
+  }
+  return result;
+}
+
 export function serializeColor(x: vec3|vec4) {
   if (x[3] === undefined || x[3] === 1) {
     let result = '#';
