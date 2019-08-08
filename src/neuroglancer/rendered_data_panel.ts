@@ -34,6 +34,7 @@ import {startRelativeMouseDrag} from 'neuroglancer/util/mouse_drag';
 import {TouchEventBinder, TouchPinchInfo, TouchTranslateInfo} from 'neuroglancer/util/touch_bindings';
 import {getWheelZoomAmount} from 'neuroglancer/util/wheel_zoom';
 import {ViewerState} from 'neuroglancer/viewer_state';
+import {getCursorOnMousedrag} from 'neuroglancer/preferences/user_preferences';
 
 const tempVec3 = vec3.create();
 
@@ -298,7 +299,7 @@ export abstract class RenderedDataPanel extends RenderedPanel {
       this.nextPickRequestTime = 0;
       this.attemptToIssuePickRequest();
     }
-    this.checkForPickRequestCompletion(/*checkingBeforeDraw=*/ false, /*block=*/ true);
+    this.checkForPickRequestCompletion(/*checkingBeforeDraw=*/false, /*block=*/true);
   }
 
   draw() {
@@ -461,9 +462,20 @@ export abstract class RenderedDataPanel extends RenderedPanel {
     });
 
     registerActionListener(element, 'translate-via-mouse-drag', (e: ActionEvent<MouseEvent>) => {
-      startRelativeMouseDrag(e.detail, (_event, deltaX, deltaY) => {
-        this.translateByViewportPixels(deltaX, deltaY);
-      });
+      const showCursor = getCursorOnMousedrag().value;
+      if (!showCursor) {
+        this.element.requestPointerLock();
+      }
+      startRelativeMouseDrag(
+          e.detail,
+          (_event, deltaX, deltaY) => {
+            this.translateByViewportPixels(deltaX, deltaY);
+          },
+          () => {
+            if (!showCursor) {
+              document.exitPointerLock();
+            }
+          });
     });
 
     registerActionListener(

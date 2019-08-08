@@ -36,9 +36,10 @@ import {DepthBuffer, FramebufferConfiguration, makeTextureBuffers, OffscreenCopy
 import {ShaderBuilder} from 'neuroglancer/webgl/shader';
 import {ScaleBarOptions, ScaleBarTexture} from 'neuroglancer/widget/scale_bar';
 import {RPC, SharedObject} from 'neuroglancer/worker_rpc';
+import {getCursorOnMousedrag} from 'neuroglancer/preferences/user_preferences';
 
 require('neuroglancer/noselect.css');
-require('./panel.css');
+require('neuroglancer/perspective_view/panel.css');
 
 export interface PerspectiveViewerState extends RenderedDataViewerState {
   orthographicProjection: TrackableBoolean;
@@ -247,10 +248,21 @@ export class PerspectivePanel extends RenderedDataPanel {
         });
 
     registerActionListener(element, 'rotate-via-mouse-drag', (e: ActionEvent<MouseEvent>) => {
-      startRelativeMouseDrag(e.detail, (_event, deltaX, deltaY) => {
-        this.navigationState.pose.rotateRelative(kAxes[1], deltaX / 4.0 * Math.PI / 180.0);
-        this.navigationState.pose.rotateRelative(kAxes[0], -deltaY / 4.0 * Math.PI / 180.0);
-      });
+      const showCursor = getCursorOnMousedrag().value;
+      if (!showCursor) {
+        this.element.requestPointerLock();
+      }
+      startRelativeMouseDrag(
+          e.detail,
+          (_event, deltaX, deltaY) => {
+            this.navigationState.pose.rotateRelative(kAxes[1], deltaX / 4.0 * Math.PI / 180.0);
+            this.navigationState.pose.rotateRelative(kAxes[0], -deltaY / 4.0 * Math.PI / 180.0);
+          },
+          () => {
+            if (!showCursor) {
+              document.exitPointerLock();
+            }
+          });
     });
 
     registerActionListener(
