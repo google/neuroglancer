@@ -1,8 +1,5 @@
-### August 5 2019
-# Undo layer deletion
+### August 8 2019
+# Optional Pointer Lock
 
-* Undo button pops up in bottom when you delete a layer, in case this was accidental
-
-# Fixed width
-
-* Fixed width tabs
+* Enabling pointer lock allowing mousedrag and ctrl + mousedrag without running into borders.
+ * Click the '⚙' icon and uncheck 'Show cursor on mouse drag' to enable.
