@@ -741,6 +741,7 @@ class DisplayOptionsTab extends Tab {
     this.registerDisposer(this.layer.objectLayerStateChanged.add(maybeAddSkeletonShaderUI));
     this.registerDisposer(this.layer.objectLayerStateChanged.add(maybeAddOmniSegmentWidget));
     maybeAddSkeletonShaderUI();
+    maybeAddOmniSegmentWidget();
 
     element.appendChild(group2D.element);
     element.appendChild(group3D.element);
