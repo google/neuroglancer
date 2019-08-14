@@ -278,21 +278,24 @@ export class LayerPanel extends RefCounted {
 
     let addButton = document.createElement('div');
     addButton.className = 'neuroglancer-layer-add-button neuroglancer-button';
-    addButton.title = 'Click to add layer, control+click to add local annotation layer.';
+    addButton.title =
+        'Click to add layer, control+click/right click/⌘+click to add local annotation layer.';
     addButton.textContent = '+';
 
     let dropZone = this.dropZone = document.createElement('div');
     dropZone.className = 'neuroglancer-layer-panel-drop-zone';
 
-    this.registerEventListener(addButton, 'click', (event: MouseEvent) => {
-      if (event.ctrlKey) {
+    const addLayer = (event: MouseEvent) => {
+      if (event.ctrlKey || event.metaKey || event.type === 'contextmenu') {
         const layer = new ManagedUserLayerWithSpecification('annotation', {}, this.manager);
         this.manager.initializeLayerFromSpec(layer, {type: 'annotation'});
         this.manager.add(layer);
       } else {
         this.addLayerMenu();
       }
-    });
+    };
+    this.registerEventListener(addButton, 'click', addLayer);
+    this.registerEventListener(addButton, 'contextmenu', addLayer);
     element.appendChild(addButton);
     element.appendChild(dropZone);
     this.registerDisposer(preventDrag(addButton));
