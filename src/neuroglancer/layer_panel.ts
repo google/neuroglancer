@@ -279,7 +279,7 @@ export class LayerPanel extends RefCounted {
     let addButton = document.createElement('div');
     addButton.className = 'neuroglancer-layer-add-button neuroglancer-button';
     addButton.title =
-        'Click to add layer, control+click/right click to add local annotation layer.';
+        'Click to add layer, control+click/right click/⌘+click to add local annotation layer.';
     addButton.textContent = '+';
 
     let dropZone = this.dropZone = document.createElement('div');
