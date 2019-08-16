@@ -39,6 +39,7 @@ import {removeChildren} from 'neuroglancer/util/dom';
 import {mat4, vec3} from 'neuroglancer/util/geom';
 import {verifyObjectProperty, verifyOptionalString, verifyString} from 'neuroglancer/util/json';
 import {NullarySignal} from 'neuroglancer/util/signal';
+import {formatIntegerPoint} from 'neuroglancer/util/spatial_units';
 import {Uint64} from 'neuroglancer/util/uint64';
 import {WatchableVisibilityPriority} from 'neuroglancer/visibility_priority/frontend';
 import {makeCloseButton} from 'neuroglancer/widget/close_button';
@@ -50,6 +51,9 @@ type GraphOperationMarkerId = {
   id: string,
 };
 
+const sourceAListColor = '#ff0000';
+const sourceBListColor = '#4444ff';
+const tempVec3 = vec3.create();
 export class GraphMultiCutWidget extends RefCounted {
   element = document.createElement('div');
   private segmentationState: SegmentationDisplayState|undefined|null;
@@ -217,7 +221,7 @@ export class SelectedGraphOperationState extends RefCounted {
           // Id changed.
           value.id = reference.id;
         } else if (reference === undefined) {
-          if (annotationLayer.sourceA.references.get(value.id) !== undefined) {
+          if (annotationLayer.sourceA.get(value.id)) {
             reference = this.reference_ = annotationLayer.sourceA.getReference(value.id);
           } else {
             reference = this.reference_ = annotationLayer.sourceB.getReference(value.id);
@@ -314,7 +318,7 @@ export class GraphOperationLayerView extends Tab {
     {
       const toggleGroupButton = document.createElement('button');
       toggleGroupButton.textContent = '🔵↔🔴';
-      toggleGroupButton.title = 'Toggle Mulit-Cut Group';
+      toggleGroupButton.title = 'Toggle Multi-Cut Group';
       toggleGroupButton.addEventListener('click', () => {
         this.annotationLayer.toggleSource();
         this.updateView();
@@ -400,6 +404,28 @@ export class GraphOperationLayerView extends Tab {
     this.registerDisposer(
         this.annotationLayer.hoverState.changed.add(() => this.updateHoverView()));
     this.registerDisposer(this.state.changed.add(() => this.updateSelectionView()));
+
+    // When we hover over a supervoxel that was selected in the multicut, this element
+    // in the list is highlighted.
+    this.registerDisposer(wrapper.displayState.segmentSelectionState.changed.add(() => {
+      const supervoxelID = wrapper.displayState.segmentSelectionState.rawSelectedSegment.toString();
+      const supervoxelListElement = <HTMLElement>this.annotationListContainer.querySelector(
+          `[data-seg-id="${supervoxelID}"]`);
+      const existingHighlight =
+          Array.from(this.annotationListContainer.getElementsByClassName('selectedSupervoxel'));
+      if (supervoxelListElement) {
+        const supervoxelClass = supervoxelListElement.classList;
+        if (supervoxelClass.toggle('selectedSupervoxel')) {
+          supervoxelListElement.style.backgroundColor = '#bbbbbb';
+        }
+      }
+      if (existingHighlight) {
+        existingHighlight.map(e => {
+          e.classList.remove('selectedSupervoxel');
+          (<HTMLElement>e).style.backgroundColor = '#000000';
+        });
+      }
+    }));
   }
 
   private updateSelectionView() {
@@ -465,23 +491,30 @@ export class GraphOperationLayerView extends Tab {
     removeChildren(annotationListContainer);
     this.annotationListElements.clear();
     const {objectToGlobal} = annotationLayer;
-    for (const annotation of [...sourceA, ...sourceB]) {
-      const element = this.makeAnnotationListElement(annotation, objectToGlobal);
-      annotationListContainer.appendChild(element);
-      annotationListElements.set(annotation.id, element);
-      element.addEventListener('mouseenter', () => {
-        this.annotationLayer.hoverState.value = {id: annotation.id};
-      });
-      element.addEventListener('click', () => {
-        this.state.value = {id: annotation.id};
-      });
-
-      element.addEventListener('mouseup', (event: MouseEvent) => {
-        if (event.button === 2) {
-          this.setSpatialCoordinates(
-              getCenterPosition(annotation, this.annotationLayer.objectToGlobal));
-        }
-      });
+    const annotationListElementCreator = (annotation: Annotation, color: string) => {
+      if (annotation.segments && annotation.segments.length >= 2) {
+        const element = this.makeAnnotationListElement(annotation, objectToGlobal, color);
+        annotationListContainer.appendChild(element);
+        annotationListElements.set(annotation.id, element);
+        element.addEventListener('mouseenter', () => {
+          this.annotationLayer.hoverState.value = {id: annotation.id};
+        });
+        element.addEventListener('click', () => {
+          this.state.value = {id: annotation.id};
+        });
+        element.addEventListener('mouseup', (event: MouseEvent) => {
+          if (event.button === 2) {
+            this.setSpatialCoordinates(
+                getCenterPosition(annotation, this.annotationLayer.objectToGlobal));
+          }
+        });
+      }
+    };
+    for (const annotation of [...sourceA]) {
+      annotationListElementCreator(annotation, sourceAListColor);
+    }
+    for (const annotation of [...sourceB]) {
+      annotationListElementCreator(annotation, sourceBListColor);
     }
     this.previousSelectedId = undefined;
     this.previousHoverId = undefined;
@@ -490,7 +523,7 @@ export class GraphOperationLayerView extends Tab {
     this.updateSelectionView();
   }
 
-  private makeAnnotationListElement(annotation: Annotation, transform: mat4) {
+  private makeAnnotationListElement(annotation: Annotation, transform: mat4, color: string) {
     const element = document.createElement('li');
     element.title = 'Click to select, right click to recenter view.';
 
@@ -501,10 +534,62 @@ export class GraphOperationLayerView extends Tab {
 
     const position = document.createElement('div');
     position.className = 'neuroglancer-annotation-position';
-    getPositionSummary(position, annotation, transform, this.voxelSize, this.setSpatialCoordinates);
+    if (annotation.segments && annotation.segments.length >= 2) {
+      this.makePositionElement(
+          position, annotation, transform, this.voxelSize, this.setSpatialCoordinates, color);
+    } else {
+      // Should never happen
+      throw Error('Graph multicut point not associated with both a supervoxel and a root segment');
+    }
     element.appendChild(position);
 
     return element;
+  }
+
+  private makePositionElement(
+      position: HTMLElement, annotation: Annotation, transform: mat4, voxelSize: VoxelSize,
+      setSpatialCoordinates: (point: vec3) => void, color: string) {
+    if (annotation.type === AnnotationType.POINT) {
+      const swapActiveSets = () => {
+        const tempActive = this.annotationLayer.annotationToSupervoxelA.isActive.value;
+        this.annotationLayer.annotationToSupervoxelA.isActive.value =
+            this.annotationLayer.annotationToSupervoxelB.isActive.value;
+        this.annotationLayer.annotationToSupervoxelB.isActive.value = tempActive;
+      };
+      const spatialPoint = vec3.transformMat4(vec3.create(), annotation.point, transform);
+      const positionText = formatIntegerPoint(voxelSize.voxelFromSpatial(tempVec3, spatialPoint));
+      let swapBack = false;
+      const element = document.createElement('span');
+      element.className = 'neuroglancer-multicut-voxel-coordinates-link';
+      element.textContent = positionText;
+      element.style.color = color;
+      element.title = `Center view on voxel coordinates ${positionText}.`;
+      element.dataset.segId = annotation.segments![0].toString();
+      element.addEventListener('click', () => {
+        setSpatialCoordinates(spatialPoint);
+      });
+      element.addEventListener('mouseenter', () => {
+        if ((this.annotationLayer.annotationToSupervoxelA.isActive.value &&
+             color === sourceBListColor) ||
+            (this.annotationLayer.annotationToSupervoxelB.isActive.value &&
+             color === sourceAListColor)) {
+          swapActiveSets();
+          swapBack = true;
+        }
+        this.wrapper.displayState.segmentSelectionState.setRaw(annotation.segments![0]);
+      });
+      element.addEventListener('mouseleave', () => {
+        if (swapBack) {
+          swapActiveSets();
+          swapBack = false;
+        }
+        this.wrapper.displayState.segmentSelectionState.setRaw(null);
+      });
+      position.appendChild(element);
+    } else {
+      // Should never happen
+      throw new Error('Multicut annotation not of type point');
+    }
   }
 }
 
@@ -660,6 +745,19 @@ export class GraphOperationTab extends Tab {
     };
     this.registerDisposer(this.state.changed.add(updateDetailsVisibility));
     this.registerDisposer(this.visibility.changed.add(updateDetailsVisibility));
+
+    this.registerDisposer(this.visibility.changed.add(() => {
+      const graphOperationLayerState = this.layer.graphOperationLayerState.value!;
+      if (this.visibility.visible) {
+        const hasMulticutSegments =
+            graphOperationLayerState.annotationToSupervoxelA.supervoxelSet.size > 0 ||
+            graphOperationLayerState.annotationToSupervoxelB.supervoxelSet.size > 0;
+        this.layer.displayState.performingMulticut!.value = hasMulticutSegments;
+      } else {
+        this.layer.displayState.performingMulticut!.value = false;
+      }
+    }));
+
     const setGraphOperationLayerView = () => {
       this.stack.selected = this.state.annotationLayerState.value;
     };
@@ -668,7 +766,7 @@ export class GraphOperationTab extends Tab {
   }
 }
 
-function getSelectedAssociatedSegment(annotationLayer: GraphOperationLayerState) {
+export function getSelectedAssociatedSegment(annotationLayer: GraphOperationLayerState) {
   let segments: Uint64[]|undefined;
   const segmentationState = annotationLayer.segmentationState.value;
   if (segmentationState != null) {
@@ -710,17 +808,43 @@ export class PlaceGraphOperationMarkerTool extends PlaceGraphOperationTool {
       return;
     }
     if (mouseState.active) {
-      const annotation: Annotation = {
-        id: '',
-        description: '',
-        segments: getSelectedAssociatedSegment(graphOperationLayer),
-        point: vec3.transformMat4(
-            vec3.create(), mouseState.position, graphOperationLayer.globalToObject),
-        type: AnnotationType.POINT,
-      };
-      const reference = graphOperationLayer.activeSource.add(annotation, /*commit=*/true);
-      this.layer.selectedGraphOperationElement.value = {id: reference.id};
-      reference.dispose();
+      const associatedSegments = getSelectedAssociatedSegment(graphOperationLayer);
+      if (!associatedSegments) {
+        StatusMessage.showTemporaryMessage(
+            'The selected point is not associated with any segment', 7000);
+      } else if (associatedSegments.length < 2) {
+        // Should never happen
+        StatusMessage.showTemporaryMessage(
+            'The selected point must be associated with both a supervoxel and a root', 7000);
+      } else if (!this.layer.displayState.rootSegments.has(associatedSegments[1])) {
+        StatusMessage.showTemporaryMessage(
+            'The selected supervoxel is of an unselected segment', 7000);
+      } else if (
+          graphOperationLayer.selectedRoot &&
+          (!Uint64.equal(graphOperationLayer.selectedRoot, associatedSegments[1]))) {
+        StatusMessage.showTemporaryMessage(
+            `The selected supervoxel has root segment ${
+                associatedSegments[1].toString()}, but the supervoxels already selected have root ${
+                graphOperationLayer.selectedRoot.toString()}`,
+            12000);
+      } else if (
+          graphOperationLayer.supervoxelSelected(associatedSegments[0]) &&
+          (!Uint64.equal(graphOperationLayer.selectedRoot!, associatedSegments[0]))) {
+        StatusMessage.showTemporaryMessage(
+            `Supervoxel ${associatedSegments[0].toString()} has already been selected`, 7000);
+      } else {
+        const annotation: Annotation = {
+          id: '',
+          description: associatedSegments[0].toString(),
+          segments: associatedSegments,
+          point: vec3.transformMat4(
+              vec3.create(), mouseState.position, graphOperationLayer.globalToObject),
+          type: AnnotationType.POINT,
+        };
+        const reference = graphOperationLayer.activeSource.add(annotation, /*commit=*/true);
+        this.layer.selectedGraphOperationElement.value = {id: reference.id};
+        reference.dispose();
+      }
     }
   }
 

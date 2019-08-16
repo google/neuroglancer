@@ -42,3 +42,11 @@
 .neuroglancer-graphoperation-toolbox button {
    width: 100%;
 }
+
+.neuroglancer-multicut-voxel-coordinates-link {
+  cursor: pointer;
+}
+
+.neuroglancer-multicut-voxel-coordinates-link:hover {
+  background-color: #bbbbbb;
+}

@@ -1,8 +1,6 @@
-### August 5 2019
-# Undo layer deletion
+### August 15 2019
+# Multicut: supervoxel selection
 
-* Undo button pops up in bottom when you delete a layer, in case this was accidental
-
-# Fixed width
-
-* Fixed width tabs
+* Ability to select individual supervoxels when performing a multicut
+* Once selected, these supervoxels will turn red or blue, corresponding to their multicut group
+* Hovering over a supervoxel will highlight the coordinate in the multicut list, and vice-versa

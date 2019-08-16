@@ -25,6 +25,7 @@ import {MultiscaleVolumeChunkSource} from 'neuroglancer/sliceview/volume/fronten
 import {RenderLayer} from 'neuroglancer/sliceview/volume/renderlayer';
 import {TrackableAlphaValue} from 'neuroglancer/trackable_alpha';
 import {TrackableBoolean} from 'neuroglancer/trackable_boolean';
+import {Uint64Set} from 'neuroglancer/uint64_set';
 import {DisjointUint64Sets} from 'neuroglancer/util/disjoint_sets';
 import {ShaderBuilder, ShaderProgram} from 'neuroglancer/webgl/shader';
 
@@ -52,6 +53,8 @@ export interface SliceViewSegmentationDisplayState extends SegmentationDisplaySt
   notSelectedAlpha: TrackableAlphaValue;
   volumeSourceOptions?: VolumeSourceOptions;
   hideSegmentZero: TrackableBoolean;
+  multicutSegments?: Uint64Set;
+  performingMulticut?: TrackableBoolean;
 }
 
 export class SegmentationRenderLayer extends RenderLayer {
@@ -61,6 +64,10 @@ export class SegmentationRenderLayer extends RenderLayer {
   private hashTableManagerHighlighted = new HashSetShaderManager('highlightedSegments');
   private gpuHashTableHighlighted =
       GPUHashTable.get(this.gl, this.displayState.highlightedSegments.hashTable);
+  private hashTableManagerMulticut = new HashSetShaderManager('multicutSegments');
+  private gpuHashTableMulticut = (this.displayState.multicutSegments) ?
+      GPUHashTable.get(this.gl, this.displayState.multicutSegments.hashTable) :
+      undefined;
 
   private equivalencesShaderManager = new HashMapShaderManager('equivalences');
   private equivalencesHashMap =
@@ -90,6 +97,11 @@ export class SegmentationRenderLayer extends RenderLayer {
         this.redrawNeeded.dispatch();
       }));
     }
+    if (displayState.multicutSegments) {
+      this.registerDisposer(displayState.multicutSegments.changed.add(() => {
+        this.redrawNeeded.dispatch();
+      }));
+    }
     this.hasEquivalences = this.displayState.segmentEquivalences.size !== 0;
     displayState.segmentEquivalences.changed.add(() => {
       let {segmentEquivalences} = this.displayState;
@@ -116,6 +128,7 @@ export class SegmentationRenderLayer extends RenderLayer {
     super.defineShader(builder);
     this.hashTableManager.defineShader(builder);
     this.hashTableManagerHighlighted.defineShader(builder);
+    this.hashTableManagerMulticut.defineShader(builder);
     builder.addFragmentCode(`
 uint64_t getUint64DataValue() {
   return toUint64(getDataValue());
@@ -148,6 +161,7 @@ uint64_t getMappedObjectId() {
     builder.addUniform('highp float', 'uNotSelectedAlpha');
     builder.addUniform('highp float', 'uSaturation');
     builder.addUniform('highp uint', 'uShatterSegmentEquivalences');
+    builder.addUniform('highp uint', 'uPerformingMulticut');
     let fragmentMain = `
   uint64_t value = getMappedObjectId();
   uint64_t rawValue = getUint64DataValue();
@@ -164,33 +178,51 @@ uint64_t getMappedObjectId() {
 `;
     }
     fragmentMain += `
-  bool has = uShowAllSegments != 0u ? true : ${this.hashTableManager.hasFunctionName}(value);
-  if (uSelectedSegment == value.value) {
-    saturation = has ? 0.5 : 0.75;
-    if (uRawSelectedSegment == rawValue.value) {
-      saturation *= 1.0/4.0;
+  if (uPerformingMulticut == 1u) {
+    bool has = uShowAllSegments != 0u ? true : ${
+        this.hashTableManagerMulticut.hasFunctionName}(value);
+    if (!has) {
+      emit(vec4(0.0, 0.0, 0.0, 0.5));
+    } else {
+      emit(vec4(0.0, 0.0, 0.0, 0.0));
     }
-  } else if (!has) {
-    alpha = uNotSelectedAlpha;
-  }
-  vec3 rgb;
-  if (uShatterSegmentEquivalences == 1u) {
-    rgb = segmentColorHash(rawValue);
+    return;
   } else {
-    rgb = segmentColorHash(value);
-  }
 `;
+    fragmentMain += `
+    bool has = uShowAllSegments != 0u ? true : ${this.hashTableManager.hasFunctionName}(value);
+    if (uSelectedSegment == value.value) {
+      saturation = has ? 0.5 : 0.75;
+      if (uRawSelectedSegment == rawValue.value) {
+        saturation *= 1.0/4.0;
+      }
+    } else if (!has) {
+      alpha = uNotSelectedAlpha;
+    }
+    vec3 rgb;
+  `;
+    fragmentMain += `
+    if (uShatterSegmentEquivalences == 1u) {
+      rgb = segmentColorHash(rawValue);
+    } else {
+      rgb = segmentColorHash(value);
+    }
+  `;
 
     // Override color for all highlighted segments.
     fragmentMain += `
-  if(${this.hashTableManagerHighlighted.hasFunctionName}(value)) {
-    rgb = vec3(0.2,0.2,2.0);
-    saturation = 1.0;
-  };
-`;
+    if(${this.hashTableManagerHighlighted.hasFunctionName}(value)) {
+      rgb = vec3(0.2,0.2,2.0);
+      saturation = 1.0;
+    };
+  `;
 
     fragmentMain += `
-  emit(vec4(mix(vec3(1.0,1.0,1.0), rgb, saturation), alpha));
+    emit(vec4(mix(vec3(1.0,1.0,1.0), rgb, saturation), alpha));
+  `;
+
+    fragmentMain += `
+  }
 `;
     builder.setFragmentMain(fragmentMain);
   }
@@ -224,8 +256,19 @@ uint64_t getMappedObjectId() {
     gl.uniform1ui(
         shader.uniform('uShatterSegmentEquivalences'),
         this.displayState.shatterSegmentEquivalences.value ? 1 : 0);
+    // Boolean that represents whether the user is performing a multicut
+    // for a segmentation layer with graph
+    gl.uniform1ui(
+        shader.uniform('uPerformingMulticut'),
+        this.displayState.performingMulticut && this.displayState.performingMulticut.value &&
+                this.displayState.multicutSegments && this.displayState.multicutSegments.size > 0 ?
+            1 :
+            0);
     this.hashTableManager.enable(gl, shader, this.gpuHashTable);
     this.hashTableManagerHighlighted.enable(gl, shader, this.gpuHashTableHighlighted);
+    if (this.gpuHashTableMulticut) {
+      this.hashTableManagerMulticut.enable(gl, shader, this.gpuHashTableMulticut);
+    }
     if (this.hasEquivalences) {
       this.equivalencesHashMap.update();
       this.equivalencesShaderManager.enable(gl, shader, this.gpuEquivalencesHashTable);
@@ -238,6 +281,9 @@ uint64_t getMappedObjectId() {
     let {gl} = this;
     this.hashTableManager.disable(gl, shader);
     this.hashTableManagerHighlighted.disable(gl, shader);
+    if (this.gpuHashTableMulticut) {
+      this.hashTableManagerMulticut.disable(gl, shader);
+    }
     super.endSlice(shader);
   }
 }
