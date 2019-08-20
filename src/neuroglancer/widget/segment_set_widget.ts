@@ -69,14 +69,16 @@ export class SegmentSetWidget extends RefCounted {
     this.registerDisposer(displayState.segmentSelectionState.changed.add(() => {
       const segmentID = this.segmentSelectionState.selectedSegment.toString();
       const segmentButton = <HTMLElement>this.element.querySelector(`[data-seg-id="${segmentID}"]`);
-      const existingHighlight = Array.from(this.element.getElementsByClassName('selectedSeg'));
+      const existingHighlight = Array.from(this.element.getElementsByClassName('selectedSeg'))
+                                    .filter((e) => e !== segmentButton);
       const white = vec3.fromValues(255, 255, 255);
       const saturation = 0.5;
       let rgbArray = [0, 0, 0];
 
       if (segmentButton) {
         const segBtnClass = segmentButton.classList;
-        if (segBtnClass.toggle('selectedSeg')) {
+        if (!segBtnClass.contains('selectedSeg')) {
+          segBtnClass.add('selectedSeg');
           let base = segmentButton.style.backgroundColor || '';
           rgbArray = base.replace(/[^\d,.%]/g, '').split(',').map(v => parseFloat(v));
           let highlight = vec3.lerp(vec3.fromValues(0, 0, 0), white, rgbArray, saturation);
