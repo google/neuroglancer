@@ -1,6 +1,6 @@
-### August 15 2019
-# Multicut: supervoxel selection
-
-* Ability to select individual supervoxels when performing a multicut
-* Once selected, these supervoxels will turn red or blue, corresponding to their multicut group
-* Hovering over a supervoxel will highlight the coordinate in the multicut list, and vice-versa
+### August 20 2019
+# Optional Pointer Lock
+ * Undo button pops up in bottom when you delete a layer, in case this was accidental	* Enabling pointer lock allowing mousedrag and ctrl + mousedrag without running into borders.
+  * Click the '⚙' icon and uncheck 'Show cursor on mouse drag' to enable.
+# Misc
+* Hotfix for segmentation button highlighting
