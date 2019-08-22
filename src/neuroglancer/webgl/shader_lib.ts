@@ -31,6 +31,16 @@ vec3 hsvToRgb(vec3 c) {
 }
 `;
 
+export var glsl_rgbToHsv = `
+vec3 rgbToHsv(vec3 rgb) {
+  vec4 p = rgb.g < rgb.b ? vec4(rgb.bg, -1.0, 2.0/3.0) : vec4(rgb.gb, 0.0, -1.0/3.0);
+  vec4 q = rgb.r < p.x ? vec4(p.xyw, rgb.r) : vec4(rgb.r, p.yzx);
+  float c = q.x - min(q.w, q.y);
+  float h = abs((q.w - q.y) / (6.0 * c + 1e-7) + q.z);
+  return vec3(h, c, q.x);
+}
+`;
+
 export const glsl_uint64 = `
 struct uint64_t {
   highp uvec2 value;
