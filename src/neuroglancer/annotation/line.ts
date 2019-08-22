@@ -26,6 +26,7 @@ import {getMemoizedBuffer} from 'neuroglancer/webgl/buffer';
 import {CircleShader, VERTICES_PER_CIRCLE} from 'neuroglancer/webgl/circles';
 import {LineShader} from 'neuroglancer/webgl/lines';
 import {emitterDependentShaderGetter, ShaderBuilder, ShaderProgram} from 'neuroglancer/webgl/shader';
+import {glsl_hsvToRgb, glsl_rgbToHsv} from 'neuroglancer/webgl/shader_lib';
 
 const FULL_OBJECT_PICK_OFFSET = 0;
 const ENDPOINTS_PICK_OFFSET = FULL_OBJECT_PICK_OFFSET + 1;
@@ -73,10 +74,17 @@ emitAnnotation(vec4(borderColor.rgb, borderColor.a * getLineAlpha() * ${this.get
         this.defineShader(builder);
         this.circleShader.defineShader(builder, this.targetIsSliceView);
         builder.addAttribute('highp uint', 'aEndpointIndex');
+        builder.addVertexCode(glsl_hsvToRgb);
+        builder.addVertexCode(glsl_rgbToHsv);
         builder.setVertexMain(`
 vec3 vertexPosition = mix(aEndpointA, aEndpointB, float(aEndpointIndex));
 emitCircle(uProjection * vec4(vertexPosition, 1.0));
 ${this.setPartIndex(builder, 'aEndpointIndex + 1u')};
+if (aEndpointIndex == 1u) {
+  vec3 hsv = rgbToHsv(vColor.rgb);
+  hsv.x = fract(hsv.x - 0.1667);  // rotate by 60°
+  vColor.rgb = hsvToRgb(hsv);
+}
 `);
         builder.setFragmentMain(`
 vec4 borderColor = vec4(0.0, 0.0, 0.0, 1.0);
