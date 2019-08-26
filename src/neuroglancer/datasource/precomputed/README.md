@@ -44,9 +44,9 @@ The root value must be a JSON object with the following members:
   - `"resolution"`: 3-element array `[x, y, z]` of numeric values specifying the x, y, and z
     dimensions of a voxel in nanometers.  The x, y, and z `"resolution"` values must not decrease as
     the index into the `"scales"` array increases.
-  - `"voxel_offset"`: 3-element array `[x, y, z]` of integer values specifying a translation in
-    voxels of the origin of the data relative to the global coordinate frame.  Typically this is
-    `[0, 0, 0]`.
+  - `"voxel_offset"`: Optional.  If specified, must be a 3-element array `[x, y, z]` of integer
+    values specifying a translation in voxels of the origin of the data relative to the global
+    coordinate frame.  If not specified, defaults to `[0, 0, 0]`.
   - `"chunk_sizes"`: Array of 3-element `[x, y, z]` arrays of integers specifying the x, y, and z
     dimensions in voxels of each supported chunk size.  Typically just a single chunk size will be
     specified as `[[x, y, z]]`.
@@ -363,10 +363,10 @@ The sharded format uses a two-level index hierarchy:
   and minishard.  In the case of meshes and skeletons, the chunk identifier is simply the segment
   ID.  In the case of volumetric data, the chunk identifier is the [compressed Morton
   code](#compressed-morton-code).
-- A fixed size table stored in a `<shard>.index` file specifies for each minishard the start and end
-  offsets within the `<shard>.data` file of the corresponding "minishard index".
+- A fixed size "shard index" stored at the start of each shard file specifies for each minishard the
+  start and end offsets within the shard file of the corresponding "minishard index".
 - The variable-size "minishard index" specifies the list of chunk ids present in the minishard and
-  the corresponding start and end offsets of the data within the `<shard>.data` file.
+  the corresponding start and end offsets of the data within the shard file.
 
 The sharded format requires that the HTTP server support HTTP `Range` requests.
 
@@ -396,39 +396,48 @@ member whose value is a JSON object with the following members:
   `"minishard_index_encoding"`.  In the case of multiscale meshes, this encoding applies to the
   manifests but not to the mesh fragment data.
 
-For each shard number in the range `[0, 2**shard_bits)`, there is a `<shard>.index` file and a
-`<shard>.data` file, where `<shard>` is the lowercase base-16 shard number zero padded to
-`ceil(shard_bits/4)` digits.
+For each shard number in the range `[0, 2**shard_bits)`, there is a `<shard>.shard` file, where
+`<shard>` is the lowercase base-16 shard number zero padded to `ceil(shard_bits/4)` digits.
 
-## `<shard>.index` index file format
+Note that there was an earlier (obselete) version of the sharded format, which also used the same
+`"neuroglancer_uint64_sharded_v1"` identifier.  The earlier format differed only in that there was a
+separate `<shard>.index` file (containing the "shard index") and a `<shard>.data` file (containing
+the remaining data) in place of the single `<shard>.shard` file of the current format; the
+`<shard>.shard` file is equivalent to the concatenation of the `<shard>.index` and `<shard>.data`
+files of the earlier version.
 
-The `<shard>.index` file is an uncompressed binary file of length `2**minishard_bits * 16`,
-consisting of `2**minishard_bits` entries of the form:
+## Shard index format
+
+The first `2**minishard_bits * 16` bytes of each shard file is the "shard index" consisting of
+`2**minishard_bits` entries of the form:
 - `start_offset`: uint64le, specifies the inclusive start byte offset of the "minishard index" in
-  the `<shard>.data` file.
+  the shard file.
 - `end_offset`: uint64le, specifies the exclusive end byte offset of the "minishard index" in the
-  `<shard>.data` file.
+  shard file.
+  
+Both the `start_offset` and `end_offset` are relative to the end of the "shard index",
+i.e. `shard_index_end = 2**minishard_bits * 16` bytes.
 
 That is, the encoded "minishard index" for a given minishard is stored in the byte range
-`[start_offset,end_offset)` of the `<shard>.data` file.  A zero-length byte range indicates that
-there are no chunk IDs in the minishard.
+`[shard_index_end + start_offset, shard_index_end + end_offset)` of the shard file.  A zero-length
+byte range indicates that there are no chunk IDs in the minishard.
 
 ## Minishard index format
 
-The "minishard index" stored in the `<shard>.data` file is encoded according to the
+The "minishard index" stored in the shard file is encoded according to the
 `minishard_index_encoding` metadata value.  The decoded "minishard index" is a binary string of
 `24*n` bytes, specifying a contiguous C-order `array` of `[3, n]` uint64le values.  Values `array[0,
 0], ..., array[0, n-1]` specify the chunk IDs in the minishard, and are delta encoded, such that
 `array[0, 0]` is equal to the ID of the first chunk, and the ID of chunk `i` is equal to the sum of
 `array[0, 0], ..., array[0, i]`.  The size of the data for chunk `i` is stored as `array[2, i]`.
-Values `array[1, 0], ..., array[1, n-1]` specify the starting offsets in the `<shard>.data` file of
-the data corresponding to each chunk, and are also delta encoded relative to the *end* of the prior
-chunk, such that the starting offset of the first chunk is equal to `array[1, 0]`, and the starting
-offset of chunk `i` is the sum of `array[1, 0], ..., array[1, i]` and `array[2, 0], ..., array[2,
-i-1]`.
+Values `array[1, 0], ..., array[1, n-1]` specify the starting offsets in the shard file of the data
+corresponding to each chunk, and are also delta encoded relative to the *end* of the prior chunk,
+such that the starting offset of the first chunk is equal to `shard_index_end + array[1, 0]`, and
+the starting offset of chunk `i` is the sum of `shard_index_end + array[1, 0], ..., array[1, i]` and
+`array[2, 0], ..., array[2, i-1]`.
 
-The start and size values in the minishard index specify the location in the `<shard>.data` file of
-the chunk data, which is encoded according to the `data_encoding` metadata value.
+The start and size values in the minishard index specify the location in the shard file of the chunk
+data, which is encoded according to the `data_encoding` metadata value.
   
 # HTTP Content-Encoding
 

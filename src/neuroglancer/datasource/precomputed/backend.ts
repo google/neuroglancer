@@ -80,16 +80,18 @@ function getMinishardIndexDataSource(
               const temp = new Uint64();
               Uint64.rshift(temp, shardAndMinishard, sharding.minishardBits);
               Uint64.and(shard, shard, temp);
-              const shardUrlPrefix =
-                  `${url}/${shard.toString(16).padStart(Math.ceil(sharding.shardBits / 4), '0')}`;
+              const shardUrl =
+                  `${url}/${shard.toString(16).padStart(Math.ceil(sharding.shardBits / 4), '0')}.shard`;
               // Retrive minishard index start/end offsets.
-              const indexUrl = shardUrlPrefix + '.index';
+
+              const shardIndexSize = new Uint64(16);
+              Uint64.lshift(shardIndexSize, shardIndexSize, sharding.minishardBits);
 
               // Multiply minishard by 16.
               const shardIndexStart = Uint64.lshift(new Uint64(), minishard, 4);
               const shardIndexEnd = Uint64.addUint32(new Uint64(), shardIndexStart, 16);
               const shardIndexResponse = await fetchHttpByteRange(
-                  indexUrl, shardIndexStart, shardIndexEnd, cancellationToken);
+                  shardUrl, shardIndexStart, shardIndexEnd, cancellationToken);
               if (shardIndexResponse.byteLength !== 16) {
                 throw new Error(`Failed to retrieve minishard offset`);
               }
@@ -103,10 +105,13 @@ function getMinishardIndexDataSource(
               if (Uint64.equal(minishardStartOffset, minishardEndOffset)) {
                 throw new Error('Object not found')
               }
+              // The start/end offsets in the shard index are relative to the end of the shard
+              // index.
+              Uint64.add(minishardStartOffset, minishardStartOffset, shardIndexSize);
+              Uint64.add(minishardEndOffset, minishardEndOffset, shardIndexSize);
 
-              const dataUrl = shardUrlPrefix + '.data';
               let minishardIndexResponse = await fetchHttpByteRange(
-                  dataUrl, minishardStartOffset, minishardEndOffset, cancellationToken);
+                  shardUrl, minishardStartOffset, minishardEndOffset, cancellationToken);
               if (sharding.minishardIndexEncoding === DataEncoding.GZIP) {
                 minishardIndexResponse =
                     (await requestAsyncComputation(
@@ -122,7 +127,9 @@ function getMinishardIndexDataSource(
               convertEndian32(minishardIndex, Endianness.LITTLE);
 
               const minishardIndexSize = minishardIndex.byteLength / 24;
-              let prevEntryKeyLow = 0, prevEntryKeyHigh = 0, prevStartLow = 0, prevStartHigh = 0;
+              let prevEntryKeyLow = 0, prevEntryKeyHigh = 0;
+              // Offsets in the minishard index are relative to the end of the shard index.
+              let prevStartLow = shardIndexSize.low, prevStartHigh = shardIndexSize.high;
               for (let i = 0; i < minishardIndexSize; ++i) {
                 let entryKeyLow = prevEntryKeyLow + minishardIndex[i * 2];
                 let entryKeyHigh = prevEntryKeyHigh + minishardIndex[i * 2 + 1];
@@ -153,10 +160,7 @@ function getMinishardIndexDataSource(
                 minishardIndex[(2 * minishardIndexSize + i) * 2] = endLow;
                 minishardIndex[(2 * minishardIndexSize + i) * 2 + 1] = endHigh;
               }
-              return {
-                data: {data: minishardIndex, shardUrl: dataUrl},
-                size: minishardIndex.byteLength
-              };
+              return {data: {data: minishardIndex, shardUrl}, size: minishardIndex.byteLength};
             },
             encodeKey: (key: Uint64) => key.toString(),
             sourceQueueLevel: 1,
