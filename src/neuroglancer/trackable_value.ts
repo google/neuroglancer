@@ -64,6 +64,13 @@ export class TrackableValue<T> extends WatchableValue<T> implements Trackable {
     this.value = this.defaultValue;
   }
 }
+export class LockableValue<T> extends TrackableValue<T> implements Trackable {
+  constructor(
+      value: T, public validator: (value: any) => T, public defaultValue = value,
+      public lock = false) {
+    super(value, validator, defaultValue);
+  }
+}
 
 class DerivedWatchableValue<U> extends RefCounted implements WatchableValueInterface<U> {
   changed = new NullarySignal();
@@ -163,8 +170,11 @@ export class WatchableRefCounted<T extends RefCounted> extends RefCounted implem
   }
 }
 
-
 export interface TrackableValueInterface<T> extends WatchableValueInterface<T>, Trackable {}
+
+export interface LockableValueInterface<T> extends TrackableValueInterface<T> {
+  lock: boolean;
+}
 
 export class TrackableRefCounted<T extends RefCounted> extends WatchableRefCounted<T> implements
     TrackableValueInterface<T|undefined> {

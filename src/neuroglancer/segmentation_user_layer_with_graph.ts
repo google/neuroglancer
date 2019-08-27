@@ -26,7 +26,7 @@ import {VolumeType} from 'neuroglancer/sliceview/volume/base';
 import {SupervoxelRenderLayer} from 'neuroglancer/sliceview/volume/supervoxel_renderlayer';
 import {StatusMessage} from 'neuroglancer/status';
 import {TrackableBoolean} from 'neuroglancer/trackable_boolean';
-import {WatchableRefCounted, WatchableValue} from 'neuroglancer/trackable_value';
+import {TrackableValue, WatchableRefCounted, WatchableValue} from 'neuroglancer/trackable_value';
 import {GraphOperationTab, SelectedGraphOperationState} from 'neuroglancer/ui/graph_multicut';
 import {Uint64Set} from 'neuroglancer/uint64_set';
 import {TrackableRGB} from 'neuroglancer/util/color';
@@ -41,6 +41,7 @@ const EQUIVALENCES_JSON_KEY = 'equivalences';
 const CHUNKED_GRAPH_JSON_KEY = 'chunkedGraph';
 const ROOT_SEGMENTS_JSON_KEY = 'segments';
 const GRAPH_OPERATION_MARKER_JSON_KEY = 'graphOperationMarker';
+const TIMESTAMP_JSON_KEY = 'timestamp';
 
 const lastSegmentSelection: SegmentSelection = {
   segmentId: new Uint64(),
@@ -48,9 +49,11 @@ const lastSegmentSelection: SegmentSelection = {
   position: vec3.create(),
 };
 
-type SegmentationUserLayerWithGraphDisplayState = SegmentationUserLayerDisplayState&{
+export type SegmentationUserLayerWithGraphDisplayState = SegmentationUserLayerDisplayState&{
   multicutSegments: Uint64Set;
   performingMulticut: TrackableBoolean;
+  timestamp: TrackableValue<string>;
+  timestampLimit: TrackableValue<string>;
 };
 
 interface BaseConstructor {
@@ -61,19 +64,27 @@ function helper<TBase extends BaseConstructor>(Base: TBase) {
   class C extends Base implements SegmentationUserLayerWithGraph {
     chunkedGraphUrl: string|null|undefined;
     chunkedGraphLayer: Borrowed<ChunkedGraphLayer>|undefined;
-
     graphOperationLayerState =
         this.registerDisposer(new WatchableRefCounted<GraphOperationLayerState>());
     selectedGraphOperationElement = this.registerDisposer(
         new SelectedGraphOperationState(this.graphOperationLayerState.addRef()));
-    displayState: SegmentationUserLayerWithGraphDisplayState = {
-      ...this.displayState,
-      multicutSegments: new Uint64Set(),
-      performingMulticut: new TrackableBoolean(false, false)
-    };
-
+    displayState: SegmentationUserLayerWithGraphDisplayState;
     constructor(...args: any[]) {
       super(...args);
+      this.displayState = {
+        ...this.displayState,
+        multicutSegments: new Uint64Set(),
+        performingMulticut: new TrackableBoolean(false, false),
+        timestamp: new TrackableValue('', date => ((new Date(date)).valueOf() / 1000).toString()),
+        timestampLimit: new TrackableValue(
+            '',
+            date => {
+              let limit = new Date(date).valueOf().toString();
+              return limit === 'NaN' ? '' : limit;
+            },
+            '')
+      };
+
       this.tabs.add('graph', {
         label: 'Graph',
         order: -75,
@@ -91,6 +102,7 @@ function helper<TBase extends BaseConstructor>(Base: TBase) {
       });
 
       graphOpState.changed.add(() => this.specificationChanged.dispatch());
+      this.displayState.timestamp.changed.add(() => this.specificationChanged.dispatch());
 
       const {stateA, stateB} = graphOpState;
       if (stateA !== undefined) {
@@ -113,6 +125,7 @@ function helper<TBase extends BaseConstructor>(Base: TBase) {
       return {volumeType: VolumeType.SEGMENTATION_WITH_GRAPH};
     }
 
+
     restoreState(specification: any) {
       super.restoreState(specification);
 
@@ -130,6 +143,11 @@ function helper<TBase extends BaseConstructor>(Base: TBase) {
         multiscaleSource.then(volume => {
           const {displayState} = this;
           if (!this.wasDisposed) {
+            if (volume.getTimestampLimit) {
+              volume.getTimestampLimit().then((limit) => {
+                this.displayState.timestampLimit.restoreState(limit);
+              });
+            }
             // Chunked Graph Server
             if (this.chunkedGraphUrl === undefined && volume.getChunkedGraphUrl) {
               this.chunkedGraphUrl = volume.getChunkedGraphUrl();
@@ -192,6 +210,9 @@ function helper<TBase extends BaseConstructor>(Base: TBase) {
         this.graphOperationLayerState.value.restoreState(
             specification[GRAPH_OPERATION_MARKER_JSON_KEY]);
       }
+      if (this.displayState.timestamp && specification[TIMESTAMP_JSON_KEY]) {
+        this.displayState.timestamp.value = (specification[TIMESTAMP_JSON_KEY]);
+      }
     }
 
     toJSON() {
@@ -199,6 +220,9 @@ function helper<TBase extends BaseConstructor>(Base: TBase) {
       x['type'] = 'segmentation_with_graph';
       x[CHUNKED_GRAPH_JSON_KEY] = this.chunkedGraphUrl;
 
+      if (this.displayState.timestamp.value) {
+        x[TIMESTAMP_JSON_KEY] = this.displayState.timestamp.value;
+      }
       if (this.graphOperationLayerState.value) {
         x[GRAPH_OPERATION_MARKER_JSON_KEY] = this.graphOperationLayerState.value.toJSON();
       }
@@ -263,7 +287,8 @@ function helper<TBase extends BaseConstructor>(Base: TBase) {
       let {segmentSelectionState} = this.displayState;
       if (segmentSelectionState.hasSelectedSegment) {
         let segment = segmentSelectionState.selectedSegment;
-        let {rootSegments} = this.displayState;
+        let {rootSegments, timestamp} = this.displayState;
+        let tsValue = (timestamp.value !== '') ? timestamp.value : void (0);
         if (rootSegments.has(segment)) {
           rootSegments.delete(segment);
         } else if (this.chunkedGraphLayer) {
@@ -275,7 +300,7 @@ function helper<TBase extends BaseConstructor>(Base: TBase) {
                 this.transform.inverse)
           };
 
-          this.chunkedGraphLayer.getRoot(currentSegmentSelection)
+          this.chunkedGraphLayer.getRoot(currentSegmentSelection, tsValue)
               .then(rootSegment => {
                 rootSegments.add(rootSegment);
               })
@@ -288,6 +313,15 @@ function helper<TBase extends BaseConstructor>(Base: TBase) {
               `Can't fetch root segment - graph layer not initialized.`, 3000);
         }
       }
+    }
+
+    safeToSubmit(action: string, callback: Function) {
+      if (this.displayState.timestamp.value !== '') {
+        StatusMessage.showTemporaryMessage(
+            `${action} can not be performed with a segmentation at an older state.`);
+        return;
+      }
+      return callback();
     }
 
     mergeSelectFirst() {
@@ -319,12 +353,14 @@ function helper<TBase extends BaseConstructor>(Base: TBase) {
             `Selected ${currentSegmentSelection.segmentId} as sink for merge.`, 3000);
 
         if (this.chunkedGraphLayer) {
-          this.chunkedGraphLayer.mergeSegments(lastSegmentSelection, currentSegmentSelection)
-              .then((mergedRoot) => {
-                rootSegments.delete(lastSegmentSelection.rootId);
-                rootSegments.delete(currentSegmentSelection.rootId);
-                rootSegments.add(mergedRoot);
-              });
+          const cgl = this.chunkedGraphLayer;
+          this.safeToSubmit('Merge', () => {
+            cgl.mergeSegments(lastSegmentSelection, currentSegmentSelection).then((mergedRoot) => {
+              rootSegments.delete(lastSegmentSelection.rootId);
+              rootSegments.delete(currentSegmentSelection.rootId);
+              rootSegments.add(mergedRoot);
+            });
+          });
         } else {
           StatusMessage.showTemporaryMessage(
               `Merge unsuccessful - graph layer not initialized.`, 3000);
@@ -361,17 +397,20 @@ function helper<TBase extends BaseConstructor>(Base: TBase) {
             `Selected ${currentSegmentSelection.segmentId} as sink for split.`, 3000);
 
         if (this.chunkedGraphLayer) {
-          this.chunkedGraphLayer.splitSegments([lastSegmentSelection], [currentSegmentSelection])
-              .then((splitRoots) => {
-                if (splitRoots.length === 0) {
-                  StatusMessage.showTemporaryMessage(`No split found.`, 3000);
-                  return;
-                }
-                rootSegments.delete(currentSegmentSelection.rootId);
-                for (const splitRoot of splitRoots) {
-                  rootSegments.add(splitRoot);
-                }
-              });
+          const cgl = this.chunkedGraphLayer;
+          this.safeToSubmit('Split', () => {
+            cgl.splitSegments([lastSegmentSelection], [currentSegmentSelection])
+                .then((splitRoots) => {
+                  if (splitRoots.length === 0) {
+                    StatusMessage.showTemporaryMessage(`No split found.`, 3000);
+                    return;
+                  }
+                  rootSegments.delete(currentSegmentSelection.rootId);
+                  for (const splitRoot of splitRoots) {
+                    rootSegments.add(splitRoot);
+                  }
+                });
+          });
         } else {
           StatusMessage.showTemporaryMessage(
               `Split unsuccessful - graph layer not initialized.`, 3000);

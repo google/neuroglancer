@@ -271,7 +271,7 @@ export class LayerSubsetSpecification extends RefCounted implements LayerListSpe
   get voxelSize () { return this.master.voxelSize; }
   get layerSelectedValues () { return this.master.layerSelectedValues; }
 
-  layerManager = new LayerManager(this.getStateRevertingFunction.bind(this));
+  layerManager = new LayerManager(this.messageWithUndo.bind(this));
 
   constructor (public master: Owned<LayerListSpecification>) {
     super();
@@ -336,6 +336,10 @@ export class LayerSubsetSpecification extends RefCounted implements LayerListSpe
     return () => {
       this.restoreState(currentState);
     };
+  }
+  messageWithUndo(message: string, actionMessage: string, closeAfter: number = 10000) {
+    const undo = this.getStateRevertingFunction();
+    StatusMessage.messageWithAction(message, actionMessage, undo, closeAfter);
   }
 }
 

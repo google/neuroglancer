@@ -19,7 +19,6 @@ import {AnnotationLayerState} from 'neuroglancer/annotation/frontend';
 import {RenderedPanel} from 'neuroglancer/display_context';
 import {LayerListSpecification} from 'neuroglancer/layer_specification';
 import {SpatialPosition} from 'neuroglancer/navigation_state';
-import {StatusMessage} from 'neuroglancer/status';
 import {TrackableRefCounted, TrackableValue, WatchableSet} from 'neuroglancer/trackable_value';
 import {restoreTool, Tool} from 'neuroglancer/ui/tool';
 import {Borrowed, Owned, RefCounted} from 'neuroglancer/util/disposable';
@@ -282,7 +281,7 @@ export class LayerManager extends RefCounted {
   private renderLayerToManagedLayerMapGeneration = -1;
   private renderLayerToManagedLayerMap_ = new Map<RenderLayer, ManagedUserLayer>();
 
-  constructor(private getStateRevertingFunction: () => (() => void)) {
+  constructor(public messageWithUndo: (message: string, action: string) => void) {
     super();
     this.layersChanged.add(this.scheduleRemoveLayersWithSingleRef);
   }
@@ -402,14 +401,12 @@ export class LayerManager extends RefCounted {
   }
 
   remove(index: number) {
-    const stateRevertingFunction = this.getStateRevertingFunction();
     const layer = this.managedLayers[index];
+    this.messageWithUndo(`${layer.name} layer deleted. `, 'Undo?');
     this.unbindManagedLayer(layer);
     this.managedLayers.splice(index, 1);
     this.layerSet.delete(layer);
     this.layersChanged.dispatch();
-    StatusMessage.messageWithAction(
-        `${layer.name} layer deleted. `, 'Undo?', stateRevertingFunction);
   }
 
   removeManagedLayer(managedLayer: ManagedUserLayer) {

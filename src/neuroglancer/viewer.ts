@@ -65,7 +65,7 @@ import {TrackableScaleBarOptions} from 'neuroglancer/widget/scale_bar';
 import {makeTextIconButton} from 'neuroglancer/widget/text_icon_button';
 import {RPC} from 'neuroglancer/worker_rpc';
 
-require('./viewer.css');
+require('neuroglancer/viewer.css');
 require('neuroglancer/noselect.css');
 require('neuroglancer/ui/button.css');
 
@@ -201,7 +201,7 @@ export class Viewer extends RefCounted implements ViewerState {
   navigationState = this.registerDisposer(new NavigationState());
   perspectiveNavigationState = new NavigationState(new Pose(this.navigationState.position), 1);
   mouseState = new MouseSelectionState();
-  layerManager = this.registerDisposer(new LayerManager(this.getStateRevertingFunction.bind(this)));
+  layerManager = this.registerDisposer(new LayerManager(this.messageWithUndo.bind(this)));
   selectedLayer = this.registerDisposer(new SelectedLayerState(this.layerManager.addRef()));
   showAxisLines = new TrackableBoolean(true, true);
   showScaleBar = new TrackableBoolean(true, true);
@@ -614,26 +614,50 @@ export class Viewer extends RefCounted implements ViewerState {
       });
     }
 
-    this.bindAction('two-point-merge', () => {
+    const handleModeChange = (merge: boolean) => {
       this.mouseState.toggleAction();
-      if (this.mouseState.actionState === ActionState.INACTIVE) {
-        this.mouseState.setMode(ActionMode.NONE);
-        StatusMessage.showTemporaryMessage('Merge mode deactivated.');
-      } else {
+
+      const mergeWhileInSplit = merge && this.mouseState.actionMode === ActionMode.SPLIT;
+      const splitWhileInMerge = !merge && this.mouseState.actionMode === ActionMode.MERGE;
+      const mergeOn = () => StatusMessage.showTemporaryMessage('Merge mode activated.');
+      const splitOn = () => StatusMessage.showTemporaryMessage('Split mode activated.');
+      const mergeOff = () => StatusMessage.showTemporaryMessage('Merge mode deactivated.');
+      const splitOff = () => StatusMessage.showTemporaryMessage('Split mode deactivated.');
+
+      if (mergeWhileInSplit) {
         this.mouseState.setMode(ActionMode.MERGE);
-        StatusMessage.showTemporaryMessage('Merge mode activated.');
+        mergeOn();
+        splitOff();
+        this.mouseState.toggleAction();
+      } else if (splitWhileInMerge) {
+        this.mouseState.setMode(ActionMode.SPLIT);
+        splitOn();
+        mergeOff();
+        this.mouseState.toggleAction();
+      } else if (this.mouseState.actionState === ActionState.INACTIVE) {
+        if (this.mouseState.actionMode === ActionMode.MERGE) {
+          mergeOff();
+        } else {
+          splitOff();
+        }
+        this.mouseState.setMode(ActionMode.NONE);
+      } else {
+        if (merge) {
+          this.mouseState.setMode(ActionMode.MERGE);
+          mergeOn();
+        } else {
+          this.mouseState.setMode(ActionMode.SPLIT);
+          splitOn();
+        }
       }
+    };
+
+    this.bindAction('two-point-merge', () => {
+      handleModeChange(true);
     });
 
     this.bindAction('two-point-cut', () => {
-      this.mouseState.toggleAction();
-      if (this.mouseState.actionState === ActionState.INACTIVE) {
-        this.mouseState.setMode(ActionMode.NONE);
-        StatusMessage.showTemporaryMessage('Split mode deactivated.');
-      } else {
-        this.mouseState.setMode(ActionMode.SPLIT);
-        StatusMessage.showTemporaryMessage('Split mode activated.');
-      }
+      handleModeChange(false);
     });
 
     this.bindAction('help', () => this.showHelpDialog());
@@ -776,6 +800,12 @@ export class Viewer extends RefCounted implements ViewerState {
       this.dataContext.chunkQueueManager.chunkUpdateDeadline = null;
     }
   }
+
+  messageWithUndo(message: string, actionMessage: string, closeAfter: number = 10000) {
+    const undo = this.getStateRevertingFunction();
+    StatusMessage.messageWithAction(message, actionMessage, undo, closeAfter);
+  }
+
 
   private getStateRevertingFunction() {
     const currentState = getCachedJson(this.state).value;

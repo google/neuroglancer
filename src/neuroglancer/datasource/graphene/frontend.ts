@@ -129,6 +129,11 @@ export class MultiscaleVolumeChunkSource implements GenericMultiscaleVolumeChunk
     return this.graphUrl;
   }
 
+  public async getTimestampLimit() {
+    const response = await authFetch(`${this.graphUrl}/graph/oldest_timestamp`);
+    return await response.text();
+  }
+
   getChunkedGraphSources(options: ChunkedGraphSourceOptions, rootSegments: Uint64Set) {
     const spec = ChunkedGraphChunkSpecification.getDefaults({
       voxelSize: this.scales[0].resolution,

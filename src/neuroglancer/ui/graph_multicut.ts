@@ -28,7 +28,7 @@ import {GraphOperationLayerState} from 'neuroglancer/graph/graph_operation_layer
 import {MouseSelectionState} from 'neuroglancer/layer';
 import {VoxelSize} from 'neuroglancer/navigation_state';
 import {SegmentationDisplayState} from 'neuroglancer/segmentation_display_state/frontend';
-import {SegmentationUserLayerWithGraph} from 'neuroglancer/segmentation_user_layer_with_graph';
+import {SegmentationUserLayerWithGraph, SegmentationUserLayerWithGraphDisplayState} from 'neuroglancer/segmentation_user_layer_with_graph';
 import {SegmentSelection} from 'neuroglancer/sliceview/chunked_graph/frontend';
 import {StatusMessage} from 'neuroglancer/status';
 import {WatchableRefCounted, WatchableValue} from 'neuroglancer/trackable_value';
@@ -46,6 +46,7 @@ import {makeCloseButton} from 'neuroglancer/widget/close_button';
 import {MinimizableGroupWidget} from 'neuroglancer/widget/minimizable_group';
 import {StackView, Tab} from 'neuroglancer/widget/tab_view';
 import {makeTextIconButton} from 'neuroglancer/widget/text_icon_button';
+import {TimeSegmentWidget} from 'neuroglancer/widget/time_segment_widget';
 
 type GraphOperationMarkerId = {
   id: string,
@@ -279,6 +280,8 @@ export class GraphOperationLayerView extends Tab {
   private previousHoverId: string|undefined;
   private updated = false;
   multicutGroup = this.registerDisposer(new MinimizableGroupWidget('Multicut'));
+  timectrlGroup = this.registerDisposer(new MinimizableGroupWidget('Time Control'));
+  timeWidget: TimeSegmentWidget|undefined;
 
   constructor(
       public wrapper: Borrowed<SegmentationUserLayerWithGraph>,
@@ -326,8 +329,8 @@ export class GraphOperationLayerView extends Tab {
       toolbox.appendChild(toggleGroupButton);
     }
 
+    const confirmButton = document.createElement('button');
     {
-      const confirmButton = document.createElement('button');
       confirmButton.textContent = '✔️';
       confirmButton.title = 'Perform Multi-Cut';
       confirmButton.addEventListener('click', () => {
@@ -397,6 +400,26 @@ export class GraphOperationLayerView extends Tab {
     this.multicutGroup.appendFixedChild(toolbox);
     this.multicutGroup.appendFlexibleChild(this.annotationListContainer);
     this.element.appendChild(this.multicutGroup.element);
+
+    const displayState =
+        <SegmentationUserLayerWithGraphDisplayState>(<GraphOperationLayerState>annotationLayer)
+            .segmentationState.value;
+
+    if (displayState && displayState.timestamp) {
+      this.timeWidget = this.registerDisposer(
+          new TimeSegmentWidget(displayState, wrapper.manager.layerManager.messageWithUndo));
+      const disableConfirm = () => {
+        if (displayState.timestamp.value === '') {
+          confirmButton.disabled = false;
+        } else {
+          confirmButton.disabled = true;
+        }
+      };
+      disableConfirm();
+      displayState.timestamp.changed.add(disableConfirm);
+      this.timectrlGroup.appendFlexibleChild(this.timeWidget.element);
+      this.element.appendChild(this.timectrlGroup.element);
+    }
 
     this.annotationListContainer.addEventListener('mouseleave', () => {
       this.annotationLayer.hoverState.value = undefined;
@@ -807,6 +830,14 @@ export class PlaceGraphOperationMarkerTool extends PlaceGraphOperationTool {
       // Not yet ready.
       return;
     }
+
+    if ((<SegmentationUserLayerWithGraphDisplayState>this.layer.displayState).timestamp.value !==
+        '') {
+      StatusMessage.showTemporaryMessage(
+          'Operation can not be performed with the segmentation at an older state.');
+      return;
+    }
+
     if (mouseState.active) {
       const associatedSegments = getSelectedAssociatedSegment(graphOperationLayer);
       if (!associatedSegments) {

@@ -67,6 +67,7 @@
     "codemirror": "^5.45.0",
     "css-loader": "^2.1.1",
     "extract-text-webpack-plugin": "^4.0.0-beta.0",
+    "flatpickr": "^4.6.2",
     "gl-matrix": "^3.0.0",
     "glsl-editor": "^1.0.0",
     "glsl-strip-comments-loader": "^1.1.0",

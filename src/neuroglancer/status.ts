@@ -20,7 +20,7 @@ let statusContainer: HTMLElement|null = null;
 
 export var DEFAULT_STATUS_DELAY = 200;
 
-export type Delay = boolean | number;
+export type Delay = boolean|number;
 
 export class StatusMessage {
   element: HTMLElement;
@@ -71,9 +71,10 @@ export class StatusMessage {
     this.element.style.display = value ? 'block' : 'none';
   }
 
-  static forPromise<T>(
-      promise: Promise<T>,
-      options: {initialMessage: string, delay?: Delay, errorPrefix: string}): Promise<T> {
+  static forPromise<T>(promise: Promise<T>, options: {
+    initialMessage: string,
+    delay?: Delay, errorPrefix: string
+  }): Promise<T> {
     let status = new StatusMessage(options.delay);
     status.setText(options.initialMessage);
     let dispose = status.dispose.bind(status);

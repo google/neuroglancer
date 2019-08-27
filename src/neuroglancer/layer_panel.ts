@@ -15,11 +15,13 @@
  */
 
 import {DisplayContext} from 'neuroglancer/display_context';
-import {ManagedUserLayer, SelectedLayerState,} from 'neuroglancer/layer';
+import {ManagedUserLayer, SelectedLayerState} from 'neuroglancer/layer';
 import {LayerDialog} from 'neuroglancer/layer_dialog';
 import {LinkedViewerNavigationState} from 'neuroglancer/layer_group_viewer';
 import {LayerListSpecification, ManagedUserLayerWithSpecification} from 'neuroglancer/layer_specification';
 import {NavigationLinkType} from 'neuroglancer/navigation_state';
+import {SegmentationUserLayerWithGraph, SegmentationUserLayerWithGraphDisplayState} from 'neuroglancer/segmentation_user_layer_with_graph';
+import {UserLayerWithAnnotations} from 'neuroglancer/ui/annotations';
 import {DropLayers, endLayerDrag, getDropLayers, getLayerDropEffect, startLayerDrag} from 'neuroglancer/ui/layer_drag_and_drop';
 import {animationFrameDebounce} from 'neuroglancer/util/animation_frame_debounce';
 import {RefCounted, registerEventListener} from 'neuroglancer/util/disposable';
@@ -29,7 +31,7 @@ import {float32ToString} from 'neuroglancer/util/float32_to_string';
 import {makeCloseButton} from 'neuroglancer/widget/close_button';
 import {ColorWidget} from 'neuroglancer/widget/color';
 import {PositionWidget} from 'neuroglancer/widget/position_widget';
-import {UserLayerWithAnnotations} from './ui/annotations';
+import {makeTextIconButton} from 'neuroglancer/widget/text_icon_button';
 
 require('neuroglancer/noselect.css');
 require('neuroglancer/layer_panel.css');
@@ -172,6 +174,7 @@ class LayerWidget extends RefCounted {
     let element = this.element = document.createElement('div');
     element.title = 'Control+click for layer options, drag to move/copy.';
     element.className = 'neuroglancer-layer-item neuroglancer-noselect';
+    element.dataset.type = layer.initialSpecification.type;
     let labelElement = this.labelElement = document.createElement('span');
     labelElement.className = 'neuroglancer-layer-item-label';
     let layerNumberElement = this.layerNumberElement = document.createElement('span');
@@ -184,6 +187,47 @@ class LayerWidget extends RefCounted {
       this.panel.layerManager.removeManagedLayer(this.layer);
       event.stopPropagation();
     });
+
+    const {type} = element.dataset;
+    let timeWarningElement: HTMLDivElement|undefined;
+    if (['segmentation_with_graph', 'annotation'].includes(type!)) {
+      const useType = type === 'segmentation_with_graph' ? 'segmentation' : type;
+      const tooltip =
+          `This ${useType} is currently in an older state.\nClick to return to current form.`;
+      timeWarningElement = makeTextIconButton('🕘', tooltip);
+      timeWarningElement.classList.add('neuroglancer-layer-time-reset');
+      timeWarningElement.classList.add(`${useType}-time`);
+
+      timeWarningElement.style.display = 'none';
+      if (layer.layer !== null) {
+        let displayState = <SegmentationUserLayerWithGraphDisplayState>(
+                               <SegmentationUserLayerWithGraph>layer.layer)
+                               .displayState;
+        if (displayState && displayState.timestamp) {
+          if (displayState.timestamp.value !== '') {
+            timeWarningElement.style.display = 'inherit';
+            this.element.classList.add('time-displaced');
+          }
+
+          displayState.timestamp.changed.add(() => {
+            if (displayState.timestamp.value !== '') {
+              timeWarningElement!.style.display = 'inherit';
+              this.element.classList.add('time-displaced');
+            } else {
+              timeWarningElement!.style.display = 'none';
+              this.element.classList.remove('time-displaced');
+            }
+          });
+          this.registerEventListener(timeWarningElement, 'click', (event: MouseEvent) => {
+            layer.manager.layerManager.messageWithUndo(
+                'Resetting Timestamp deselects selected segments.', 'Undo?');
+            displayState.timestamp.value = '';
+            event.stopPropagation();
+          });
+        }
+      }
+    }
+
     const colorWidget = this.registerDisposer(
         new ColorWidget((<UserLayerWithAnnotations>this.layer.layer).annotationColor));
     colorWidget.element.title = layer.initialSpecification.annotationColor || '';
@@ -202,6 +246,9 @@ class LayerWidget extends RefCounted {
     element.appendChild(layerNumberElement);
     element.appendChild(labelElement);
     element.appendChild(valueElement);
+    if (timeWarningElement) {
+      element.appendChild(timeWarningElement);
+    }
     element.appendChild(closeElement);
     this.registerEventListener(element, 'click', (event: MouseEvent) => {
       if (event.ctrlKey) {

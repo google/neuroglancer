@@ -116,3 +116,23 @@
   display: inline-block;
   flex: 1;
 }
+
+.annotation-time {
+  color: yellow;
+}
+
+.segmentation-time {
+  color: red;
+}
+
+.time-displaced[data-type="annotation"] {
+  outline-style: solid;
+  outline-color: yellow;
+  outline-width: thick;
+}
+
+.time-displaced[data-type*="segmentation"] {
+  outline-style: solid;
+  outline-color: red;
+  outline-width: thick;
+}
