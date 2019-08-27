@@ -17,10 +17,11 @@
 import {authFetch} from 'neuroglancer/authentication/frontend.ts';
 import {ChunkManager} from 'neuroglancer/chunk_manager/frontend';
 import {VisibleSegmentsState} from 'neuroglancer/segmentation_display_state/base';
-import {CHUNKED_GRAPH_LAYER_RPC_ID, ChunkedGraphChunkSource as ChunkedGraphChunkSourceInterface, ChunkedGraphChunkSpecification} from 'neuroglancer/sliceview/chunked_graph/base';
+import {CHUNKED_GRAPH_LAYER_RPC_ID, ChunkedGraphChunkSource as ChunkedGraphChunkSourceInterface, ChunkedGraphChunkSpecification, RENDER_RATIO_LIMIT} from 'neuroglancer/sliceview/chunked_graph/base';
 import {SliceViewChunkSource} from 'neuroglancer/sliceview/frontend';
 import {RenderLayer as GenericSliceViewRenderLayer, RenderLayerOptions} from 'neuroglancer/sliceview/renderlayer';
 import {StatusMessage} from 'neuroglancer/status';
+import {TrackableBoolean} from 'neuroglancer/trackable_boolean';
 import {Uint64Set} from 'neuroglancer/uint64_set';
 import {vec3} from 'neuroglancer/util/geom';
 import {Uint64} from 'neuroglancer/util/uint64';
@@ -55,6 +56,8 @@ export class ChunkedGraphChunkSource extends SliceViewChunkSource implements
 
 export class ChunkedGraphLayer extends GenericSliceViewRenderLayer {
   private graphurl: string;
+  private leafRequestsStatusMessage: StatusMessage|undefined;
+  leafRequestsActive = new TrackableBoolean(true, true);
 
   constructor(
       chunkManager: ChunkManager, url: string, public sources: ChunkedGraphChunkSource[][],
@@ -65,16 +68,23 @@ export class ChunkedGraphLayer extends GenericSliceViewRenderLayer {
         'url': url,
         'rootSegments': displayState.rootSegments.rpcId,
         'visibleSegments3D': displayState.visibleSegments3D.rpcId,
-        'segmentEquivalences': displayState.segmentEquivalences.rpcId
+        'segmentEquivalences': displayState.segmentEquivalences.rpcId,
       },
       rpcType: CHUNKED_GRAPH_LAYER_RPC_ID,
       transform: displayState.transform,
     });
+    this.registerDisposer(this.leafRequestsActive.changed.add(() => {
+      this.showOrHideMessage(this.leafRequestsActive.value);
+    }));
     this.graphurl = url;
   }
 
   get url() {
     return this.graphurl;
+  }
+
+  get renderRatioLimit() {
+    return RENDER_RATIO_LIMIT;
   }
 
   async getRoot(selection: SegmentSelection, timestamp?: string): Promise<Uint64> {
@@ -166,6 +176,17 @@ export class ChunkedGraphLayer extends GenericSliceViewRenderLayer {
       status.setErrorMessage(errorPrefix + msg);
       status.setVisible(true);
       throw new Error(`[${response.status}] ${errorPrefix}${msg}`);
+    }
+  }
+
+  private showOrHideMessage(leafRequestsActive: boolean) {
+    if (this.leafRequestsStatusMessage && leafRequestsActive) {
+      this.leafRequestsStatusMessage.dispose();
+      this.leafRequestsStatusMessage = undefined;
+      StatusMessage.showTemporaryMessage('Loading chunked graph segmentation...', 3000);
+    } else if ((!this.leafRequestsStatusMessage) && (!leafRequestsActive)) {
+      this.leafRequestsStatusMessage = StatusMessage.showMessage(
+          'At this zoom level, chunked graph segmentation will not be loaded. Please zoom in if you wish to load it.');
     }
   }
 }

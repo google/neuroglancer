@@ -21,7 +21,7 @@ import {CoordinateTransform} from 'neuroglancer/coordinate_transform';
 import {SharedDisjointUint64Sets} from 'neuroglancer/shared_disjoint_sets';
 import {SliceViewChunk, SliceViewChunkSource} from 'neuroglancer/sliceview/backend';
 import {RenderLayer as RenderLayerInterface, TransformedSource} from 'neuroglancer/sliceview/base';
-import {CHUNKED_GRAPH_LAYER_RPC_ID, ChunkedGraphChunkSource as ChunkedGraphChunkSourceInterface, ChunkedGraphChunkSpecification} from 'neuroglancer/sliceview/chunked_graph/base';
+import {CHUNKED_GRAPH_LAYER_RPC_ID, ChunkedGraphChunkSource as ChunkedGraphChunkSourceInterface, ChunkedGraphChunkSpecification, RENDER_RATIO_LIMIT} from 'neuroglancer/sliceview/chunked_graph/base';
 import {Uint64Set} from 'neuroglancer/uint64_set';
 import {mat4, vec3, vec3Key} from 'neuroglancer/util/geom';
 import {NullarySignal} from 'neuroglancer/util/signal';
@@ -192,7 +192,6 @@ export class ChunkedGraphLayer extends Base implements RenderLayerInterface<Slic
   visibleSegments3D: Uint64Set;
   segmentEquivalences: SharedDisjointUint64Sets;
 
-
   constructor(rpc: RPC, options: any) {
     super(rpc, options);
     this.graphurl = options['url'];
@@ -225,6 +224,12 @@ export class ChunkedGraphLayer extends Base implements RenderLayerInterface<Slic
 
   get url() {
     return this.graphurl;
+  }
+
+  // Used for the sliceview to set a limit on when to
+  // make get_leaves to the ChunkedGraph
+  get renderRatioLimit() {
+    return RENDER_RATIO_LIMIT;
   }
 
   private debouncedupdateDisplayState = debounce(() => {
