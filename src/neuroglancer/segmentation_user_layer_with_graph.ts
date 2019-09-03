@@ -21,7 +21,7 @@ import {GraphOperationLayerState} from 'neuroglancer/graph/graph_operation_layer
 import {registerLayerType, registerVolumeLayerType} from 'neuroglancer/layer_specification';
 import {SegmentationDisplayState} from 'neuroglancer/segmentation_display_state/frontend';
 import {SegmentationUserLayer, SegmentationUserLayerDisplayState} from 'neuroglancer/segmentation_user_layer';
-import {ChunkedGraphLayer, SegmentSelection} from 'neuroglancer/sliceview/chunked_graph/frontend';
+import {ChunkedGraphChunkSource, ChunkedGraphLayer, SegmentSelection} from 'neuroglancer/sliceview/chunked_graph/frontend';
 import {VolumeType} from 'neuroglancer/sliceview/volume/base';
 import {SupervoxelRenderLayer} from 'neuroglancer/sliceview/volume/supervoxel_renderlayer';
 import {StatusMessage} from 'neuroglancer/status';
@@ -158,6 +158,7 @@ function helper<TBase extends BaseConstructor>(Base: TBase) {
                   {rootUri: this.chunkedGraphUrl}, displayState.rootSegments);
 
               if (chunkedGraphSources) {
+                this.updateChunkSourceRootSegments(chunkedGraphSources);
                 this.chunkedGraphLayer = new ChunkedGraphLayer(
                     this.manager.chunkManager, this.chunkedGraphUrl, chunkedGraphSources,
                     {...displayState, transform: displayState.objectToDataTransform});
@@ -449,6 +450,17 @@ function helper<TBase extends BaseConstructor>(Base: TBase) {
         }
       }
       this.specificationChanged.dispatch();
+    }
+
+    private updateChunkSourceRootSegments(chunkedGraphChunkSources: ChunkedGraphChunkSource[][]) {
+      chunkedGraphChunkSources.forEach(chunkedGraphChunkSourceList => {
+        chunkedGraphChunkSourceList.forEach(chunkedGraphChunkSource => {
+          if (chunkedGraphChunkSource.rootSegments !== this.displayState.rootSegments) {
+            chunkedGraphChunkSource.updateRootSegments(
+                this.manager.rpc, this.displayState.rootSegments);
+          }
+        });
+      });
     }
   }
   return C;

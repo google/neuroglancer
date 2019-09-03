@@ -19,6 +19,8 @@ import {getCombinedTransform} from 'neuroglancer/sliceview/base';
 import {kZeroVec, vec3} from 'neuroglancer/util/geom';
 
 export const CHUNKED_GRAPH_LAYER_RPC_ID = 'ChunkedGraphLayer';
+export const CHUNKED_GRAPH_SOURCE_UPDATE_ROOT_SEGMENTS_RPC_ID =
+    'ChunkedGraphSourceUpdateRootSegments';
 export const RENDER_RATIO_LIMIT = 5.0;
 
 export interface ChunkedGraphSourceOptions extends SliceViewSourceOptions {
