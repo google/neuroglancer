@@ -36,9 +36,11 @@ import {trackableAlphaValue} from 'neuroglancer/trackable_alpha';
 import {ElementVisibilityFromTrackableBoolean, TrackableBoolean, TrackableBooleanCheckbox} from 'neuroglancer/trackable_boolean';
 import {ComputedWatchableValue} from 'neuroglancer/trackable_value';
 import {Uint64Set} from 'neuroglancer/uint64_set';
+import {Uint64Map} from 'neuroglancer/uint64_map';
 import {UserLayerWithVolumeSourceMixin} from 'neuroglancer/user_layer_with_volume_source';
+import {parseRGBColorSpecification, packColor} from 'neuroglancer/util/color';
 import {Borrowed} from 'neuroglancer/util/disposable';
-import {parseArray, verifyObjectProperty, verifyOptionalString} from 'neuroglancer/util/json';
+import {parseArray, verifyObjectProperty, verifyOptionalString, verifyObjectAsMap} from 'neuroglancer/util/json';
 import {NullarySignal} from 'neuroglancer/util/signal';
 import {Uint64} from 'neuroglancer/util/uint64';
 import {makeWatchableShaderError} from 'neuroglancer/webgl/dynamic_shader';
@@ -64,6 +66,7 @@ const HIDDEN_ROOT_SEGMENTS_JSON_KEY = 'hiddenSegments';
 const HIGHLIGHTS_JSON_KEY = 'highlights';
 const EQUIVALENCES_JSON_KEY = 'equivalences';
 const COLOR_SEED_JSON_KEY = 'colorSeed';
+const SEGMENT_STATED_COLORS_JSON_KEY = 'segmentColors';
 const MESH_RENDER_SCALE_JSON_KEY = 'meshRenderScale';
 
 const SKELETON_RENDERING_JSON_KEY = 'skeletonRendering';
@@ -82,6 +85,7 @@ const Base = UserLayerWithVolumeSourceMixin(UserLayer);
 export class SegmentationUserLayer extends Base {
   displayState: SegmentationUserLayerDisplayState = {
     segmentColorHash: SegmentColorHash.getDefault(),
+    segmentStatedColors: Uint64Map.makeWithCounterpart(this.manager.worker),
     segmentSelectionState: new SegmentSelectionState(),
     selectedAlpha: trackableAlphaValue(0.5),
     saturation: trackableAlphaValue(1.0),
@@ -135,6 +139,7 @@ export class SegmentationUserLayer extends Base {
     this.displayState.hideSegmentZero.changed.add(this.specificationChanged.dispatch);
     this.displayState.skeletonRenderingOptions.changed.add(this.specificationChanged.dispatch);
     this.displayState.segmentColorHash.changed.add(this.specificationChanged.dispatch);
+    this.displayState.segmentStatedColors.changed.add(this.specificationChanged.dispatch);
     this.displayState.renderScaleTarget.changed.add(this.specificationChanged.dispatch);
     this.displayState.shatterSegmentEquivalences.changed.add(this.specificationChanged.dispatch);
     this.tabs.add(
@@ -187,6 +192,18 @@ export class SegmentationUserLayer extends Base {
 
     this.displayState.highlightedSegments.changed.add(() => {
       this.specificationChanged.dispatch();
+    });
+
+    verifyObjectProperty(specification, SEGMENT_STATED_COLORS_JSON_KEY, y => {
+      if (y !== undefined) {
+        let {segmentEquivalences} = this.displayState;
+        let result = verifyObjectAsMap(y, x => parseRGBColorSpecification(String(x)));
+        for (let [idStr, colorVec] of result) {
+          const id = Uint64.parseString(String(idStr));
+          const color = new Uint64(packColor(colorVec));
+          this.displayState.segmentStatedColors.set(segmentEquivalences.get(id), color);
+        }
+      }
     });
 
     const {multiscaleSource} = this;
@@ -349,6 +366,13 @@ export class SegmentationUserLayer extends Base {
     x[OBJECT_ALPHA_JSON_KEY] = this.displayState.objectAlpha.toJSON();
     x[HIDE_SEGMENT_ZERO_JSON_KEY] = this.displayState.hideSegmentZero.toJSON();
     x[COLOR_SEED_JSON_KEY] = this.displayState.segmentColorHash.toJSON();
+    let {segmentStatedColors} = this.displayState;
+    if (segmentStatedColors.size > 0) {
+      let json = segmentStatedColors.toJSON();
+      // Convert colors from decimal integers to CSS "#RRGGBB" format.
+      Object.keys(json).map(k => json[k] = '#' + parseInt(json[k], 10).toString(16).padStart(6, '0'));
+      x[SEGMENT_STATED_COLORS_JSON_KEY] = json;
+    }
     let {rootSegments} = this.displayState;
     if (rootSegments.size > 0) {
       x[ROOT_SEGMENTS_JSON_KEY] = rootSegments.toJSON();

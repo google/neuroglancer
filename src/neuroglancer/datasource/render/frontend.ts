@@ -31,7 +31,7 @@ import {vec3} from 'neuroglancer/util/geom';
 import {fetchOk} from 'neuroglancer/util/http_request';
 import {parseArray, parseQueryStringParameters, verifyFloat, verifyObject, verifyObjectProperty, verifyOptionalBoolean, verifyOptionalInt, verifyOptionalString, verifyString} from 'neuroglancer/util/json';
 
-const VALID_ENCODINGS = new Set<string>(['jpg']);
+const VALID_ENCODINGS = new Set<string>(['jpg', 'raw16']);
 
 const TileChunkSourceBase = WithParameters(VolumeChunkSource, TileChunkSourceParameters);
 class TileChunkSource extends TileChunkSourceBase {}
@@ -191,10 +191,20 @@ function parseStackProject(stackIdObj: any): string {
 
 export class MultiscaleVolumeChunkSource implements GenericMultiscaleVolumeChunkSource {
   get dataType() {
-    return DataType.UINT8;
+    if (this.parameters.encoding === 'raw16') {
+      return DataType.UINT16;
+    } else {
+      // JPEG
+      return DataType.UINT8;
+    }
   }
   get numChannels() {
-    return 3;
+    if (this.parameters.encoding === 'raw16') {
+      return 1;
+    } else {
+      // JPEG
+      return 3;
+    }
   }
   get volumeType() {
     return VolumeType.IMAGE;

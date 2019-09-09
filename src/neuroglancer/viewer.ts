@@ -65,7 +65,9 @@ import {TrackableScaleBarOptions} from 'neuroglancer/widget/scale_bar';
 import {makeTextIconButton} from 'neuroglancer/widget/text_icon_button';
 import {RPC} from 'neuroglancer/worker_rpc';
 
-require('neuroglancer/viewer.css');
+declare var NEUROGLANCER_OVERRIDE_DEFAULT_VIEWER_OPTIONS: any
+
+require('./viewer.css');
 require('neuroglancer/noselect.css');
 require('neuroglancer/ui/button.css');
 
@@ -163,10 +165,11 @@ export interface ViewerOptions extends ViewerUIOptions, VisibilityPrioritySpecif
   resetStateWhenEmpty: boolean;
 }
 
-const defaultViewerOptions = {
-  showLayerDialog: true,
-  resetStateWhenEmpty: true,
-};
+const defaultViewerOptions = "undefined" !== typeof NEUROGLANCER_OVERRIDE_DEFAULT_VIEWER_OPTIONS ?
+  NEUROGLANCER_OVERRIDE_DEFAULT_VIEWER_OPTIONS : {
+    showLayerDialog: true,
+    resetStateWhenEmpty: true,
+  };
 
 function makeViewerContextMenu(viewer: Viewer) {
   const menu = new ContextMenu();

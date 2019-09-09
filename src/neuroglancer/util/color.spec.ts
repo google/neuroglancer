@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-import {parseColorSerialization, parseRGBColorSpecification, serializeColor} from 'neuroglancer/util/color';
+import {parseColorSerialization, parseRGBColorSpecification, packColor, serializeColor} from 'neuroglancer/util/color';
 import {vec3, vec4} from 'neuroglancer/util/geom';
 
 describe('color', () => {
@@ -36,5 +36,29 @@ describe('color', () => {
     expect(parseRGBColorSpecification('red')).toEqual(vec3.fromValues(1, 0, 0));
     expect(parseRGBColorSpecification('lime')).toEqual(vec3.fromValues(0, 1, 0));
     expect(parseRGBColorSpecification('blue')).toEqual(vec3.fromValues(0, 0, 1));
+  });
+
+  it('packColor works', () => {
+    expect(packColor(vec3.fromValues( 0,    0,    0  ))).toEqual(0x000000);
+    expect(packColor(vec3.fromValues( 0.2,  0,    1  ))).toEqual(0x3300ff);
+    expect(packColor(vec3.fromValues( 0,    0.4,  1.0))).toEqual(0x0066ff);
+    expect(packColor(vec3.fromValues( 0.6,  0.4,  0  ))).toEqual(0x996600);
+    expect(packColor(vec3.fromValues( 1,    0.6,  0.8))).toEqual(0xff99cc);
+    expect(packColor(vec3.fromValues( 1,    1,    1  ))).toEqual(0xffffff);
+
+    expect(packColor(vec3.fromValues(-1,    0,    0  ))).toEqual(0x000000);
+    expect(packColor(vec3.fromValues( 0,    0.2,  2  ))).toEqual(0x0033ff);
+    expect(packColor(vec3.fromValues( 0.4,  4.4, -0.4))).toEqual(0x66ff00);
+
+    expect(packColor(vec4.fromValues( 0,    0,    0,    0  ))).toEqual(0x00000000);
+    expect(packColor(vec4.fromValues( 0.2,  0,    1,    0.2))).toEqual(0x3300ff33);
+    expect(packColor(vec4.fromValues( 0,    0.4,  1.0,  0.4))).toEqual(0x0066ff66);
+    expect(packColor(vec4.fromValues( 0.6,  0.4,  0,    0.6))).toEqual(0x99660099);
+    expect(packColor(vec4.fromValues( 1,    0.6,  0.8,  0.8))).toEqual(0xff99cccc);
+    expect(packColor(vec4.fromValues( 1,    1,    1,    1  ))).toEqual(0xffffffff);
+
+    expect(packColor(vec4.fromValues(-1,    0,    0,   -1  ))).toEqual(0x00000000);
+    expect(packColor(vec4.fromValues( 0,    0.2,  2,    1  ))).toEqual(0x0033ffff);
+    expect(packColor(vec4.fromValues( 0.4,  4.4, -0.4,  4  ))).toEqual(0x66ff00ff);
   });
 });

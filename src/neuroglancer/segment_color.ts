@@ -15,7 +15,8 @@
  */
 
 import {hashCombine} from 'neuroglancer/gpu_hash/hash_function';
-import {glsl_hashCombine} from 'neuroglancer/gpu_hash/shader';
+import {glsl_hashCombine, HashMapShaderManager, GPUHashTable} from 'neuroglancer/gpu_hash/shader';
+import {HashTableBase} from 'neuroglancer/gpu_hash/hash_table';
 import {hsvToRgb} from 'neuroglancer/util/colorspace';
 import {NullarySignal} from 'neuroglancer/util/signal';
 import {Uint64} from 'neuroglancer/util/uint64';
@@ -110,5 +111,41 @@ export class SegmentColorHash implements Trackable {
       this.hashSeed = newSeed;
       this.changed.dispatch();
     }
+  }
+}
+
+/**
+ * Adds the shader code to get a segment's color if it is present in the map.
+ */
+export class SegmentStatedColorShaderManager {
+  private hashMapShaderManager = new HashMapShaderManager('segmentStatedColorHash');
+
+  constructor(public prefix: string) {}
+
+  defineShader(builder: ShaderBuilder) {
+    this.hashMapShaderManager.defineShader(builder);
+    let s = `
+bool ${this.getFunctionName}(uint64_t x, out vec3 value) {
+  uint64_t uint64Value;
+  if (${this.hashMapShaderManager.getFunctionName}(x, uint64Value)) {
+    uint uintValue = uint64Value.value[0];
+    value.x = float((uintValue & 0xff0000u) >> 16) / 255.0;
+    value.y = float((uintValue & 0x00ff00u) >>  8) / 255.0;
+    value.z = float((uintValue & 0x0000ffu))       / 255.0;
+    return true;
+  }
+  return false;
+}
+`;
+    builder.addFragmentCode(s);
+  }
+
+  get getFunctionName() {
+    return `${this.prefix}_get`;
+  }
+
+  enable<HashTable extends HashTableBase>(
+    gl: GL, shader: ShaderProgram, hashTable: GPUHashTable<HashTable>) {
+    this.hashMapShaderManager.enable(gl, shader, hashTable);
   }
 }

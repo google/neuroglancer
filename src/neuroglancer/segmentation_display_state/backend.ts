@@ -17,6 +17,7 @@
 // Import to register the shared object types.
 import 'neuroglancer/shared_disjoint_sets';
 import 'neuroglancer/uint64_set';
+import 'neuroglancer/uint64_map';
 
 import {withChunkManager} from 'neuroglancer/chunk_manager/backend';
 import {VisibleSegmentsState} from 'neuroglancer/segmentation_display_state/base';
