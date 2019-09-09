@@ -686,6 +686,11 @@ export const DEFAULT_MAX_VOXELS_PER_CHUNK_LOG2 = 18;
  */
 export interface BaseChunkLayoutOptions {
   /**
+   * Number of channels.
+   */
+  numChannels: number;
+
+  /**
    * Voxel size in nanometers.
    */
   voxelSize: vec3;
@@ -732,6 +737,8 @@ export function getNearIsotropicBlockSize(options: GetNearIsotropicBlockSizeOpti
     transform = identityMat4,
     maxBlockSize = kInfinityVec,
   } = options;
+
+  maxVoxelsPerChunkLog2 -= Math.log2(options.numChannels);
 
   // Adjust voxelSize by effective scaling factor.
   let temp = effectiveScalingFactorFromMat4(vec3.create(), transform);
@@ -797,8 +804,13 @@ export function getTwoDimensionalBlockSize(options: {flatDimension: number}&
   } = options;
   vec3.subtract(tempVec3, upperVoxelBound, lowerVoxelBound);
   tempVec3[flatDimension] = 1;
-  return getNearIsotropicBlockSize(
-      {voxelSize, upperVoxelBound: tempVec3, maxVoxelsPerChunkLog2, transform});
+  return getNearIsotropicBlockSize({
+    voxelSize,
+    upperVoxelBound: tempVec3,
+    maxVoxelsPerChunkLog2,
+    transform,
+    numChannels: options.numChannels
+  });
 }
 
 /**
@@ -808,6 +820,7 @@ export function getTwoDimensionalBlockSizes(options: BaseChunkLayoutOptions) {
   let chunkDataSizes = new Array<vec3>();
   for (let i = 0; i < 3; ++i) {
     chunkDataSizes[i] = getTwoDimensionalBlockSize({
+      numChannels: options.numChannels,
       flatDimension: i,
       voxelSize: options.voxelSize,
       lowerVoxelBound: options.lowerVoxelBound,
