@@ -87,7 +87,7 @@ class Server(object):
         if global_static_content_source is None:
             global_static_content_source = static.get_default_static_content_source()
 
-        if bind_address == '0.0.0.0':
+        if bind_address == '0.0.0.0' or bind_address == '::':
             hostname = socket.getfqdn()
         else:
             hostname = bind_address

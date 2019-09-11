@@ -18,6 +18,7 @@ import {WithParameters} from 'neuroglancer/chunk_manager/backend';
 import {PointMatchChunkSourceParameters, TileChunkSourceParameters} from 'neuroglancer/datasource/render/base';
 import {ChunkDecoder} from 'neuroglancer/sliceview/backend_chunk_decoders';
 import {decodeJpegChunk} from 'neuroglancer/sliceview/backend_chunk_decoders/jpeg';
+import {decodeRawChunk} from 'neuroglancer/sliceview/backend_chunk_decoders/raw';
 import {VectorGraphicsChunk, VectorGraphicsChunkSource} from 'neuroglancer/sliceview/vector_graphics/backend';
 import {VolumeChunk, VolumeChunkSource} from 'neuroglancer/sliceview/volume/backend';
 import {CancellationToken} from 'neuroglancer/util/cancellation';
@@ -26,9 +27,14 @@ import {vec3} from 'neuroglancer/util/geom';
 import {cancellableFetchOk, responseArrayBuffer, responseJson} from 'neuroglancer/util/http_request';
 import {parseArray, verify3dVec, verifyObject, verifyString} from 'neuroglancer/util/json';
 import {registerSharedObject} from 'neuroglancer/worker_rpc';
+import {Endianness} from 'neuroglancer/util/endian';
 
 const chunkDecoders = new Map<string, ChunkDecoder>();
 chunkDecoders.set('jpg', decodeJpegChunk);
+chunkDecoders.set('raw16',
+  (chunk, cancellationToken, response) => {
+    return decodeRawChunk(chunk, cancellationToken, response, Endianness.BIG);
+  } );
 
 @registerSharedObject() export class TileChunkSource extends
 (WithParameters(VolumeChunkSource, TileChunkSourceParameters)) {
@@ -77,8 +83,13 @@ chunkDecoders.set('jpg', decodeJpegChunk);
 
     // GET
     // /v1/owner/{owner}/project/{project}/stack/{stack}/z/{z}/box/{x},{y},{width},{height},{scale}/jpeg-image
-    let path = `/render-ws/v1/owner/${parameters.owner}/project/${parameters.project}/stack/${parameters.stack}/z/${chunkPosition[2]}/box/${chunkPosition[0]},${chunkPosition[1]},${xTileSize},${yTileSize},${scale}/jpeg-image`;
-
+    let imageMethod:string;
+    if (parameters.encoding === 'raw16') {
+      imageMethod = 'raw16-image';
+    } else {
+      imageMethod = 'jpeg-image';
+    }
+    let path = `/render-ws/v1/owner/${parameters.owner}/project/${parameters.project}/stack/${parameters.stack}/z/${chunkPosition[2]}/box/${chunkPosition[0]},${chunkPosition[1]},${xTileSize},${yTileSize},${scale}/${imageMethod}`;
     const response = await cancellableFetchOk(
         `${parameters.baseUrl}${path}?${this.queryString}`, {}, responseArrayBuffer,
         cancellationToken);

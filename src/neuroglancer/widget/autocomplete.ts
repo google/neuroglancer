@@ -239,11 +239,11 @@ export class AutocompleteTextInput extends RefCounted {
   }
 
   get disabled() {
-    return this.inputElement.disabled;
+    return this.inputElement.readOnly;
   }
 
   set disabled(value: boolean) {
-    this.inputElement.disabled = value;
+    this.inputElement.readOnly = value;
   }
 
   private handleDropdownMousedown(event: MouseEvent) {
