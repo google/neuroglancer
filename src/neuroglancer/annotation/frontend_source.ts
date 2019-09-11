@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-import {Annotation, AnnotationId, AnnotationReference, AnnotationType, annotationTypes, deserializeAnnotation, getAnnotationTypeHandler, makeAnnotationId, AnnotationSourceSignals} from 'neuroglancer/annotation';
+import {Annotation, AnnotationId, AnnotationReference, AnnotationTag, AnnotationType, annotationTypes, deserializeAnnotation, getAnnotationTypeHandler, makeAnnotationId, AnnotationSourceSignals} from 'neuroglancer/annotation';
 import {ANNOTATION_COMMIT_UPDATE_RESULT_RPC_ID, ANNOTATION_COMMIT_UPDATE_RPC_ID, ANNOTATION_GEOMETRY_CHUNK_SOURCE_RPC_ID, ANNOTATION_METADATA_CHUNK_SOURCE_RPC_ID, ANNOTATION_REFERENCE_ADD_RPC_ID, ANNOTATION_REFERENCE_DELETE_RPC_ID, ANNOTATION_SUBSET_GEOMETRY_CHUNK_SOURCE_RPC_ID, AnnotationGeometryChunkSpecification} from 'neuroglancer/annotation/base';
 import {getAnnotationTypeRenderHandler} from 'neuroglancer/annotation/type_handler';
 import {Chunk, ChunkManager, ChunkSource} from 'neuroglancer/chunk_manager/frontend';
@@ -592,10 +592,19 @@ export class MultiscaleAnnotationSource extends SharedObject implements
   // FIXME
   changed = new NullarySignal();
   * [Symbol.iterator](): Iterator<Annotation> {}
+  getTags() {
+    return Array<AnnotationTag>();
+  }
+  isAnnotationTaggedWithTag() {
+    return true;
+  }
   readonly = false;
   childAdded: Signal<(annotation: Annotation) => void>;
   childUpdated: Signal<(annotation: Annotation) => void>;
   childDeleted: Signal<(annotationId: string) => void>;
+  tagAdded:Signal<(tag: AnnotationTag) => void>;
+  tagUpdated:Signal<(tag: AnnotationTag) => void>;
+  tagDeleted:Signal<(tagId: number) => void>;
 }
 
 registerRPC(ANNOTATION_COMMIT_UPDATE_RESULT_RPC_ID, function(x) {

@@ -17,3 +17,25 @@
 .neuroglancer-annotation-point-list-dropdown {
   display: flex;
 }
+
+.display-annotation-shortcut-textbox {
+  margin-right: 7%;
+  font-family: monospace;
+}
+
+.neuroglancer-annotation-shortcut {
+  margin-top: 3px;
+}
+
+.annotation-tag-input {
+  margin-right: 3%;
+}
+
+.annotation-key-shortcut-header {
+  margin-right: 15%;
+}
+
+.annotation-shorcut-list-header {
+  margin-top: 3px;
+  margin-bottom: 5px;
+}

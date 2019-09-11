@@ -22,7 +22,7 @@ import {DataSourceProvider} from 'neuroglancer/datasource';
 import {getDefaultDataSourceProvider} from 'neuroglancer/datasource/default_provider';
 import {DisplayContext} from 'neuroglancer/display_context';
 import {InputEventBindingHelpDialog} from 'neuroglancer/help/input_event_bindings';
-import {allRenderLayerRoles, LayerManager, LayerSelectedValues, MouseSelectionState, RenderLayerRole, SelectedLayerState} from 'neuroglancer/layer';
+import {allRenderLayerRoles, LayerManager, LayerSelectedValues, MouseSelectionState, RenderLayerRole, SelectedLayerState, UserLayer, ManagedUserLayer} from 'neuroglancer/layer';
 import {LayerDialog} from 'neuroglancer/layer_dialog';
 import {RootLayoutContainer} from 'neuroglancer/layer_groups_layout';
 import {TopLevelLayerListSpecification} from 'neuroglancer/layer_specification';
@@ -56,6 +56,7 @@ import {MousePositionWidget, PositionWidget, VoxelSizeWidget} from 'neuroglancer
 import {TrackableScaleBarOptions} from 'neuroglancer/widget/scale_bar';
 import {makeTextIconButton} from 'neuroglancer/widget/text_icon_button';
 import {RPC} from 'neuroglancer/worker_rpc';
+import {AnnotationUserLayer} from 'neuroglancer/annotation/user_layer';
 
 declare var NEUROGLANCER_OVERRIDE_DEFAULT_VIEWER_OPTIONS: any
 
@@ -263,6 +264,7 @@ export class Viewer extends RefCounted implements ViewerState {
     this.visibility = visibility;
     this.inputEventBindings = inputEventBindings;
     this.element = element;
+    this.element.id = 'neuroglancerViewer';
     this.dataSourceProvider = dataSourceProvider;
     this.uiConfiguration = uiConfiguration;
 
@@ -385,6 +387,9 @@ export class Viewer extends RefCounted implements ViewerState {
 
     this.registerDisposer(new MouseSelectionStateTooltipManager(
         this.mouseState, this.layerManager, this.navigationState.voxelSize));
+
+    const maybeAddOrRemoveAnnotationShortcuts = this.annotationShortcutControllerFactory();
+    this.registerDisposer(this.selectedLayer.changed.add(() => maybeAddOrRemoveAnnotationShortcuts()));
   }
 
   private updateShowBorders() {
@@ -622,5 +627,27 @@ export class Viewer extends RefCounted implements ViewerState {
         chunkQueueManager.chunkUpdateDeadline = Date.now() + 10;
       }
     }
+  }
+
+  private annotationShortcutControllerFactory() {
+    let lastLayerSelected: UserLayer|null = null;
+    let lastManagerLayerSelected: ManagedUserLayer|undefined;
+    const maybeAddOrRemoveAnnotationShortcuts = () => {
+      if (this.selectedLayer.layer !== lastManagerLayerSelected) {
+        if (lastLayerSelected && lastLayerSelected instanceof AnnotationUserLayer) {
+          lastLayerSelected.disableAnnotationShortcuts();
+        }
+        const selectedLayer = this.selectedLayer.layer;
+        if (selectedLayer) {
+          const userLayer = selectedLayer.layer;
+          if (userLayer instanceof AnnotationUserLayer) {
+            userLayer.enableAnnotationShortcuts();
+          }
+          lastLayerSelected = userLayer;
+        }
+        lastManagerLayerSelected = this.selectedLayer.layer;
+      }
+    };
+    return maybeAddOrRemoveAnnotationShortcuts;
   }
 }
