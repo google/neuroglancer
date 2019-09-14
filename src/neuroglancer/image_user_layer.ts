@@ -23,6 +23,7 @@ import {trackableAlphaValue} from 'neuroglancer/trackable_alpha';
 import {trackableBlendModeValue} from 'neuroglancer/trackable_blend';
 import {UserLayerWithVolumeSourceMixin} from 'neuroglancer/user_layer_with_volume_source';
 import {makeWatchableShaderError} from 'neuroglancer/webgl/dynamic_shader';
+import {EnumSelectWidget} from 'neuroglancer/widget/enum_widget';
 import {RangeWidget} from 'neuroglancer/widget/range';
 import {RenderScaleWidget} from 'neuroglancer/widget/render_scale_widget';
 import {ShaderCodeWidget} from 'neuroglancer/widget/shader_code_widget';
@@ -44,6 +45,7 @@ export class ImageUserLayer extends Base {
   renderLayer: ImageRenderLayer;
   constructor(manager: LayerListSpecification, x: any) {
     super(manager, x);
+    this.registerDisposer(this.blendMode.changed.add(this.specificationChanged.dispatch));
     this.registerDisposer(this.fragmentMain.changed.add(this.specificationChanged.dispatch));
     this.tabs.add(
         'rendering',
@@ -54,7 +56,10 @@ export class ImageUserLayer extends Base {
   restoreState(specification: any) {
     super.restoreState(specification);
     this.opacity.restoreState(specification[OPACITY_JSON_KEY]);
-    this.blendMode.restoreState(specification[BLEND_JSON_KEY]);
+    const blendValue = specification[BLEND_JSON_KEY];
+    if (blendValue !== undefined) {
+      this.blendMode.restoreState(blendValue);
+    }
     this.fragmentMain.restoreState(specification[SHADER_JSON_KEY]);
     const {multiscaleSource} = this;
     if (multiscaleSource === undefined) {
@@ -112,6 +117,13 @@ class RenderingOptionsTab extends Tab {
           this.layer.sliceViewRenderScaleHistogram, this.layer.sliceViewRenderScaleTarget));
       renderScaleWidget.label.textContent = 'Resolution (slice)';
       element.appendChild(renderScaleWidget.element);
+    }
+
+    {
+      const label = document.createElement('label');
+      label.textContent = 'Blending';
+      label.appendChild(this.registerDisposer(new EnumSelectWidget(layer.blendMode)).element);
+      element.appendChild(label);
     }
 
     let spacer = document.createElement('div');

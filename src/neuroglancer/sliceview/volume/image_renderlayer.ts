@@ -19,7 +19,6 @@ import {MultiscaleVolumeChunkSource} from 'neuroglancer/sliceview/volume/fronten
 import {RenderLayer, RenderLayerOptions} from 'neuroglancer/sliceview/volume/renderlayer';
 import {TrackableAlphaValue, trackableAlphaValue} from 'neuroglancer/trackable_alpha';
 import {BLEND_FUNCTIONS, BLEND_MODES, TrackableBlendModeValue, trackableBlendModeValue} from 'neuroglancer/trackable_blend';
-import {verifyEnumString} from 'neuroglancer/util/json';
 import glsl_COLORMAPS from 'neuroglancer/webgl/colormaps.glsl';
 import {makeTrackableFragmentMain, TrackableFragmentMain} from 'neuroglancer/webgl/dynamic_shader';
 import {ShaderBuilder} from 'neuroglancer/webgl/shader';
@@ -60,6 +59,7 @@ export class ImageRenderLayer extends RenderLayer {
       this.redrawNeeded.dispatch();
     }));
     this.registerDisposer(fragmentMain.changed.add(() => {
+    this.registerDisposer(blendMode.changed.add(this.redrawNeeded.dispatch));
       this.shaderGetter.invalidateShader();
       this.redrawNeeded.dispatch();
     }));
@@ -101,7 +101,7 @@ void emitTransparent() {
   }
 
   setGLBlendMode(gl: WebGL2RenderingContext, renderLayerNum: number) {
-    let blendModeValue = verifyEnumString(this.blendMode.value, BLEND_MODES);
+    const blendModeValue = this.blendMode.value;
     if (blendModeValue === BLEND_MODES.ADDITIVE || renderLayerNum > 0) {
       gl.enable(gl.BLEND);
       BLEND_FUNCTIONS.get(blendModeValue)!(gl);
