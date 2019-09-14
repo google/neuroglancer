@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-import {TrackableValue} from 'neuroglancer/trackable_value';
+import {TrackableValueInterface} from 'neuroglancer/trackable_value';
 import {RefCounted} from 'neuroglancer/util/disposable';
 import {removeFromParent} from 'neuroglancer/util/dom';
 
@@ -25,7 +25,7 @@ export class RangeWidget extends RefCounted {
   promptElement = document.createElement('span');
   inputElement = document.createElement('input');
 
-  constructor(public value: TrackableValue<number>, {min = 0, max = 1, step = 0.01} = {}) {
+  constructor(public value: TrackableValueInterface<number>, {min = 0, max = 1, step = 0.01} = {}) {
     super();
     let {element, promptElement, inputElement} = this;
     element.className = 'range-slider';

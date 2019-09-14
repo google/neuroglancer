@@ -23,10 +23,12 @@ import {trackableAlphaValue} from 'neuroglancer/trackable_alpha';
 import {trackableBlendModeValue} from 'neuroglancer/trackable_blend';
 import {UserLayerWithVolumeSourceMixin} from 'neuroglancer/user_layer_with_volume_source';
 import {makeWatchableShaderError} from 'neuroglancer/webgl/dynamic_shader';
+import {ShaderControlState} from 'neuroglancer/webgl/shader_ui_controls';
 import {EnumSelectWidget} from 'neuroglancer/widget/enum_widget';
 import {RangeWidget} from 'neuroglancer/widget/range';
 import {RenderScaleWidget} from 'neuroglancer/widget/render_scale_widget';
 import {ShaderCodeWidget} from 'neuroglancer/widget/shader_code_widget';
+import {ShaderControls} from 'neuroglancer/widget/shader_controls';
 import {Tab} from 'neuroglancer/widget/tab_view';
 
 require('./image_user_layer.css');
@@ -35,6 +37,7 @@ require('neuroglancer/maximize_button.css');
 const OPACITY_JSON_KEY = 'opacity';
 const BLEND_JSON_KEY = 'blend';
 const SHADER_JSON_KEY = 'shader';
+const SHADER_CONTROLS_JSON_KEY = 'shaderControls';
 
 const Base = UserLayerWithVolumeSourceMixin(UserLayer);
 export class ImageUserLayer extends Base {
@@ -43,10 +46,12 @@ export class ImageUserLayer extends Base {
   fragmentMain = getTrackableFragmentMain();
   shaderError = makeWatchableShaderError();
   renderLayer: ImageRenderLayer;
+  shaderControlState = new ShaderControlState(this.fragmentMain);
   constructor(manager: LayerListSpecification, x: any) {
     super(manager, x);
     this.registerDisposer(this.blendMode.changed.add(this.specificationChanged.dispatch));
     this.registerDisposer(this.fragmentMain.changed.add(this.specificationChanged.dispatch));
+    this.registerDisposer(this.shaderControlState.changed.add(this.specificationChanged.dispatch));
     this.tabs.add(
         'rendering',
         {label: 'Rendering', order: -100, getter: () => new RenderingOptionsTab(this)});
@@ -61,6 +66,7 @@ export class ImageUserLayer extends Base {
       this.blendMode.restoreState(blendValue);
     }
     this.fragmentMain.restoreState(specification[SHADER_JSON_KEY]);
+    this.shaderControlState.restoreState(specification[SHADER_CONTROLS_JSON_KEY]);
     const {multiscaleSource} = this;
     if (multiscaleSource === undefined) {
       throw new Error(`source property must be specified`);
@@ -70,7 +76,7 @@ export class ImageUserLayer extends Base {
         let renderLayer = this.renderLayer = new ImageRenderLayer(volume, {
           opacity: this.opacity,
           blendMode: this.blendMode,
-          fragmentMain: this.fragmentMain,
+          shaderControlState: this.shaderControlState,
           shaderError: this.shaderError,
           transform: this.transform,
           renderScaleTarget: this.sliceViewRenderScaleTarget,
@@ -88,6 +94,7 @@ export class ImageUserLayer extends Base {
     x[OPACITY_JSON_KEY] = this.opacity.toJSON();
     x[BLEND_JSON_KEY] = this.blendMode.toJSON();
     x[SHADER_JSON_KEY] = this.fragmentMain.toJSON();
+    x[SHADER_CONTROLS_JSON_KEY] = this.shaderControlState.toJSON();
     return x;
   }
 }
@@ -97,6 +104,7 @@ function makeShaderCodeWidget(layer: ImageUserLayer) {
     shaderError: layer.shaderError,
     fragmentMain: layer.fragmentMain,
     fragmentMainStartLine: FRAGMENT_MAIN_START,
+    shaderControlState: layer.shaderControlState,
   });
 }
 
@@ -154,6 +162,9 @@ class RenderingOptionsTab extends Tab {
 
     element.appendChild(topRow);
     element.appendChild(this.codeWidget.element);
+    element.appendChild(
+        this.registerDisposer(new ShaderControls(layer.shaderControlState)).element);
+
     this.codeWidget.textEditor.refresh();
     this.visibility.changed.add(() => {
       if (this.visible) {
