@@ -66,3 +66,10 @@
   animation-duration: var(--pulseSpeed);
   animation-iteration-count: infinite;
 }
+
+.segment-color-selector {
+  height: 17px;
+  width: 1.6em;
+  margin: 3px;
+  vertical-align: bottom;
+}
