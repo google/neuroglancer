@@ -22,5 +22,6 @@
 }
 
 .range-slider input[type='range'] {
+  width: 129px;
 }
 
