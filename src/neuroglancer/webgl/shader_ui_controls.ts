@@ -55,7 +55,7 @@ export interface ShaderControlsParseResult {
 // directives.
 export function stripComments(code: string) {
   // https://stackoverflow.com/a/241506
-  const commentPattern = /\/\/.*?$|\/\*.*?\*\/|'(?:\\.|[^\\'])*'|"(?:\\.|[^\\"])*"/mgs;
+  const commentPattern = /\/\/.*?$|\/\*(?:.|\n)*?\*\/|'(?:\\.|[^\\'])*'|"(?:\\.|[^\\"])*"/mg;
   return code.replace(commentPattern, m => {
     if (m.startsWith('/')) {
       return m.replace(/[^\s]/g, ' ');
