@@ -119,7 +119,7 @@ class RenderingOptionsTab extends Tab {
     let topRow = document.createElement('div');
     topRow.className = 'image-dropdown-top-row';
     opacityWidget.promptElement.textContent = 'Opacity';
-    opacityWidget.numericInputElement.style.display="None";
+    opacityWidget.numericInputElement.style.width="45px";
 
     {
       const renderScaleWidget = this.registerDisposer(new RenderScaleWidget(

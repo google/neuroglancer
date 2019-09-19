@@ -26,6 +26,17 @@
   align-items: center;
 }
 
+/* for the ? button next to the opacity slider */
+.image-dropdown-top-row a > button {
+  font-weight: bold;
+  margin-right: 2px;
+  margin-left: 2px;
+  width: 20px;
+  padding: 0px;
+  border-left: 2px;
+  border-right: 2px;
+}
+
 /* .image-dropdown-top-row .range-slider {
   flex: 1;
 } */
