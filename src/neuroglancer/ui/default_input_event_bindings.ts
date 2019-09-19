@@ -23,7 +23,7 @@ export function getDefaultGlobalBindings() {
   if (defaultGlobalBindings === undefined) {
     const map = new EventActionMap();
     map.set('keyl', 'recolor');
-    map.set('keyx', 'clear-segments');
+    map.set('control+shift+keyx', 'clear-segments');
     map.set('keys', 'toggle-show-slices');
     map.set('keyb', 'toggle-scale-bar');
     map.set('shift+keyb', 'toggle-default-annotations');
