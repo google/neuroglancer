@@ -381,8 +381,7 @@ export class AnnotationLayerView extends Tab {
   constructor(
       public layer: Borrowed<UserLayerWithAnnotations>,
       public state: Owned<SelectedAnnotationState>,
-      public annotationLayer: Owned<AnnotationLayerState>,
-      public voxelSize: Owned<VoxelSize>,
+      public annotationLayer: Owned<AnnotationLayerState>, public voxelSize: Owned<VoxelSize>,
       public setSpatialCoordinates: (point: vec3) => void) {
     super();
     this.element.classList.add('neuroglancer-annotation-layer-view');
@@ -395,9 +394,12 @@ export class AnnotationLayerView extends Tab {
       this.updated = false;
       this.updateView();
     };
-    this.registerDisposer(source.childAdded.add((annotation) => this.addAnnotationElement(annotation)));
-    this.registerDisposer(source.childUpdated.add((annotation) => this.updateAnnotationElement(annotation)));
-    this.registerDisposer(source.childDeleted.add((annotationId) => this.deleteAnnotationElement(annotationId)));
+    this.registerDisposer(
+        source.childAdded.add((annotation) => this.addAnnotationElement(annotation)));
+    this.registerDisposer(
+        source.childUpdated.add((annotation) => this.updateAnnotationElement(annotation)));
+    this.registerDisposer(
+        source.childDeleted.add((annotationId) => this.deleteAnnotationElement(annotationId)));
     this.registerDisposer(this.visibility.changed.add(() => this.updateView()));
     this.registerDisposer(annotationLayer.transform.changed.add(updateView));
     this.updateView();
@@ -550,21 +552,21 @@ export class AnnotationLayerView extends Tab {
     const {source} = annotationLayer;
     removeChildren(annotationListContainer);
     annotationListElements.clear();
-    for(const annotation of source) {
+    for (const annotation of source) {
       this.addAnnotationElementHelper(annotation);
     }
     this.resetOnUpdate();
   }
 
-  private addAnnotationElement(annotation:Annotation) {
-    if(!this.visible) {
+  private addAnnotationElement(annotation: Annotation) {
+    if (!this.visible) {
       return;
     }
     this.addAnnotationElementHelper(annotation);
     this.resetOnUpdate();
   }
 
-  private updateAnnotationElement(annotation:Annotation) {
+  private updateAnnotationElement(annotation: Annotation) {
     if (!this.visible) {
       return;
     }
@@ -572,15 +574,20 @@ export class AnnotationLayerView extends Tab {
     if (!element) {
       return;
     }
+    {
+      const position = <HTMLElement>element.querySelector('.neuroglancer-annotation-position');
+      position.innerHTML = '';
+      getPositionSummary(
+          position, annotation, this.annotationLayer.objectToGlobal, this.voxelSize,
+          this.setSpatialCoordinates);
+    }
     if (element.lastElementChild && element.children.length === 3) {
       if (!annotation.description) {
         element.removeChild(element.lastElementChild);
-      }
-      else {
+      } else {
         element.lastElementChild.innerHTML = annotation.description;
       }
-    }
-    else {
+    } else {
       const description = document.createElement('div');
       description.className = 'neuroglancer-annotation-description';
       description.textContent = annotation.description || '';
@@ -1017,7 +1024,8 @@ export class PlaceLineTool extends PlaceTwoCornerAnnotationTool {
     return `annotate line`;
   }
 
-  getInitialAnnotation(mouseState: MouseSelectionState, annotationLayer: AnnotationLayerState): Annotation {
+  getInitialAnnotation(mouseState: MouseSelectionState, annotationLayer: AnnotationLayerState):
+      Annotation {
     const result = super.getInitialAnnotation(mouseState, annotationLayer);
     result.segments = getSelectedAssocatedSegment(annotationLayer);
     return result;
@@ -1104,7 +1112,7 @@ registerTool(
     (layer, options) => new PlaceLineTool(<UserLayerWithAnnotations>layer, options));
 registerTool(
     ANNOTATE_ELLIPSOID_TOOL_ID,
-  (layer, options) => new PlaceSphereTool(<UserLayerWithAnnotations>layer, options));
+    (layer, options) => new PlaceSphereTool(<UserLayerWithAnnotations>layer, options));
 
 export interface UserLayerWithAnnotations extends UserLayer {
   annotationLayerState: WatchableRefCounted<AnnotationLayerState>;
