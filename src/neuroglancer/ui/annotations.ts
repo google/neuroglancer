@@ -648,6 +648,13 @@ export class AnnotationLayerView extends Tab {
     if (!element) {
       return;
     }
+    {
+      const position = <HTMLElement>element.querySelector('.neuroglancer-annotation-position');
+      position.innerHTML = '';
+      getPositionSummary(
+          position, annotation, this.annotationLayer.objectToGlobal, this.voxelSize,
+          this.setSpatialCoordinates);
+    }
     if (element.lastElementChild && element.children.length === 3) {
       const annotationText = this.layer.getAnnotationText(annotation);
       if (!annotationText) {
