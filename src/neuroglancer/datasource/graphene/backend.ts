@@ -310,9 +310,10 @@ export function decodeDracoFragmentChunk(
 (WithParameters(MeshSource, MeshSourceParameters)) {
   download(chunk: ManifestChunk, cancellationToken: CancellationToken) {
     const {parameters} = this;
-    return cancellableFetchOk(
+    return authFetch(
                `${parameters.manifestUrl}/manifest/${chunk.objectId}:${parameters.lod}?verify=True`,
-               {}, responseJson, cancellationToken)
+               {}, cancellationToken)
+        .then(responseJson)
         .then(response => decodeManifestChunk(chunk, response));
   }
 
