@@ -16,7 +16,7 @@
 
 import {AnnotationSource, makeDataBoundsBoundingBox} from 'neuroglancer/annotation';
 import {ChunkManager, WithParameters} from 'neuroglancer/chunk_manager/frontend';
-import {DataSource} from 'neuroglancer/datasource';
+import {DataSource, RedirectError} from 'neuroglancer/datasource';
 import {DataEncoding, MeshSourceParameters, MultiscaleMeshMetadata, MultiscaleMeshSourceParameters, ShardingHashFunction, ShardingParameters, SkeletonMetadata, SkeletonSourceParameters, VolumeChunkEncoding, VolumeChunkSourceParameters} from 'neuroglancer/datasource/precomputed/base';
 import {VertexPositionFormat} from 'neuroglancer/mesh/base';
 import {MeshSource, MultiscaleMeshSource} from 'neuroglancer/mesh/frontend';
@@ -135,6 +135,11 @@ export class MultiscaleVolumeChunkSource implements GenericMultiscaleVolumeChunk
 
   constructor(public chunkManager: ChunkManager, public url: string, obj: any) {
     verifyObject(obj);
+    const redirect = verifyObjectProperty(obj, 'redirect', verifyOptionalString);
+    if (redirect !== undefined) {
+      throw new RedirectError(redirect);
+    }
+
     const t = verifyObjectProperty(obj, '@type', verifyOptionalString);
     if (t !== undefined && t !== 'neuroglancer_multiscale_volume') {
       throw new Error(`Invalid type: ${JSON.stringify(t)}`);

@@ -29,6 +29,12 @@ import {Owned, RefCounted} from 'neuroglancer/util/disposable';
 
 export type Completion = CompletionWithDescription;
 
+export class RedirectError extends Error {
+  constructor(public redirect_target: string) {
+    super(`Redirected to: ${redirect_target}`);
+  }
+}
+
 export interface CompletionResult {
   offset: number;
   completions: Completion[];
@@ -144,15 +150,32 @@ export class DataSourceProvider extends RefCounted {
 
   getVolume(
       chunkManager: ChunkManager, url: string, options: GetVolumeOptions = {},
-      cancellationToken = uncancelableToken) {
+      cancellationToken = uncancelableToken,
+      redirect_log = new Set<string>()): Promise<MultiscaleVolumeChunkSource> {
     let [dataSource, path] = this.getDataSource(url);
     if (options === undefined) {
       options = {};
     }
     options.dataSourceProvider = this;
+    redirect_log.add(url);
     return new Promise<MultiscaleVolumeChunkSource>(resolve => {
-      resolve(dataSource.getVolume!(chunkManager, path, options, cancellationToken));
-    });
+             resolve(dataSource.getVolume!(chunkManager, path, options, cancellationToken));
+           })
+        .catch((err: Error) => {
+          if (err instanceof RedirectError) {
+            const redirect = err.redirect_target;
+            if (redirect_log.has(redirect)) {
+              throw Error('Layer source redirection contains loop.');
+            }
+            if (redirect_log.size >= 10) {
+              throw Error('Too many layer source redirections.');
+            }
+            return this.getVolume!
+                (chunkManager, redirect, options, cancellationToken, redirect_log);
+          } else {
+            throw err;
+          }
+        });
   }
 
   getAnnotationSource(
