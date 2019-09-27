@@ -83,12 +83,12 @@ export class ChunkedGraphChunk extends SliceViewChunk {
   }
 }
 
-export function decodeSupervoxelArray(
-    chunk: ChunkedGraphChunk, rootObjectKey: string, data: ArrayBuffer) {
-  let uint32 = new Uint32Array(data);
-  let final: Uint64[] = new Array(uint32.length / 2);
-  for (let i = 0; i < uint32.length / 2; i++) {
-    final[i] = new Uint64(uint32[2 * i], uint32[2 * i + 1]);
+export async function decodeSupervoxelArray(
+    chunk: ChunkedGraphChunk, rootObjectKey: string, data: Response) {
+  const leaves = (await data.json())['leaf_ids'];
+  const final: Uint64[] = new Array(leaves.length);
+  for (let i = 0; i < final.length; ++i) {
+    final[i] = Uint64.parseString(leaves[i]);
   }
   chunk.mappings!.set(rootObjectKey, final);
 }

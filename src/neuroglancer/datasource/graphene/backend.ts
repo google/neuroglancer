@@ -242,7 +242,7 @@ chunkDecoders.set(VolumeChunkEncoding.COMPRESSED_SEGMENTATION, decodeCompressedS
 }
 
 export function decodeChunkedGraphChunk(
-    chunk: ChunkedGraphChunk, rootObjectKey: string, response: ArrayBuffer) {
+    chunk: ChunkedGraphChunk, rootObjectKey: string, response: Response) {
   return decodeSupervoxelArray(chunk, rootObjectKey, response);
 }
 
@@ -260,10 +260,11 @@ export function decodeChunkedGraphChunk(
     let promise: Promise<any>;
     for (const [key, val] of chunk.mappings!.entries()) {
       if (val === null) {
-        promise =
-            authFetch(`${parameters.url}/${key}/leaves?bounds=${bounds}`, {}, cancellationToken);
-        promises.push(this.withErrorMessage(promise, `Fetching leaves of segment ${key} in region ${bounds}: `)
-                          .then((res) => res.arrayBuffer())
+        promise = authFetch(
+            `${parameters.url}/${key}/leaves?int64_as_str=1&bounds=${bounds}`, {},
+            cancellationToken);
+        promises.push(this.withErrorMessage(
+                              promise, `Fetching leaves of segment ${key} in region ${bounds}: `)
                           .then(res => decodeChunkedGraphChunk(chunk, key, res))
                           .catch(err => console.error(err)));
       }

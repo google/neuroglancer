@@ -113,13 +113,14 @@ class AppInfo {
   supported_api_versions: number[];
   constructor(infoUrl: string, obj: any) {
     // .../1.0/... is the legacy link style
+    // .../table/... is the current, version agnostic link style (for retrieving the info file)
     const linkStyle = /^(https?:\/\/[^\/]+)\/segmentation\/(?:1\.0|table)\/([^\/]+)\/?$/;
     let match = infoUrl.match(linkStyle);
     if (match === null) {
       throw Error(`Graph URL invalid: ${infoUrl}`);
     }
-    this.segmentationUrl = `${match[1]}/segmentation/1.0/${match[2]}`;
-    this.meshingUrl = `${match[1]}/meshing/1.0/${match[2]}`;
+    this.segmentationUrl = `${match[1]}/segmentation/api/v${PYCG_APP_VERSION}/table/${match[2]}`;
+    this.meshingUrl = `${match[1]}/meshing/api/v${PYCG_APP_VERSION}/table/${match[2]}`;
 
     try {
       verifyObject(obj);
@@ -171,8 +172,8 @@ export class MultiscaleVolumeChunkSource implements GenericMultiscaleVolumeChunk
   }
 
   public async getTimestampLimit() {
-    const response = await authFetch(`${this.app.segmentationUrl}/graph/oldest_timestamp`);
-    return await response.text();
+    const response = await authFetch(`${this.app.segmentationUrl}/oldest_timestamp`);
+    return verifyObjectProperty(await response.json(), 'iso', verifyString);
   }
 
   getChunkedGraphSources(options: ChunkedGraphSourceOptions, rootSegments: Uint64Set) {
@@ -189,7 +190,7 @@ export class MultiscaleVolumeChunkSource implements GenericMultiscaleVolumeChunk
 
     return [[this.chunkManager.getChunkSource(
         GrapheneChunkedGraphChunkSource,
-        {spec, rootSegments, parameters: {url: `${this.app.segmentationUrl}/segment`}})]];
+        {spec, rootSegments, parameters: {url: `${this.app.segmentationUrl}/node`}})]];
   }
 
   getMeshSource() {

@@ -100,15 +100,15 @@ export class ChunkedGraphLayer extends GenericSliceViewRenderLayer {
       return Promise.resolve(selection.segmentId);
     }
 
-    const promise = authFetch(`${url}/graph/${String(selection.segmentId)}/root${
-        timestamp ? `?timestamp=${timestamp}` : ``}`);
+    const promise = authFetch(`${url}/node/${String(selection.segmentId)}/root?int64_as_str=1${
+        timestamp ? `&timestamp=${timestamp}` : ``}`);
 
     const response = await this.withErrorMessage(promise, {
       initialMessage: `Retrieving root for segment ${selection.segmentId}`,
       errorPrefix: `Could not fetch root: `
     });
-    const uint32 = new Uint32Array(await response.arrayBuffer());
-    return new Uint64(uint32[0], uint32[1]);
+    const jsonResp = await response.json();
+    return Uint64.parseString(jsonResp['root_id']);
   }
 
   async mergeSegments(first: SegmentSelection, second: SegmentSelection): Promise<Uint64> {
@@ -117,7 +117,7 @@ export class ChunkedGraphLayer extends GenericSliceViewRenderLayer {
       return Promise.reject(GRAPH_SERVER_NOT_SPECIFIED);
     }
 
-    const promise = authFetch(`${url}/graph/merge`, {
+    const promise = authFetch(`${url}/merge?int64_as_str=1`, {
       method: 'POST',
       body: JSON.stringify([
         [String(first.segmentId), ...first.position.values()],
@@ -129,8 +129,8 @@ export class ChunkedGraphLayer extends GenericSliceViewRenderLayer {
       initialMessage: `Merging ${first.segmentId} and ${second.segmentId}`,
       errorPrefix: 'Merge failed: '
     });
-    const uint32 = new Uint32Array(await response.arrayBuffer());
-    return new Uint64(uint32[0], uint32[1]);
+    const jsonResp = await response.json();
+    return Uint64.parseString(jsonResp['new_root_ids'][0]);
   }
 
   async splitSegments(first: SegmentSelection[], second: SegmentSelection[]): Promise<Uint64[]> {
@@ -139,7 +139,7 @@ export class ChunkedGraphLayer extends GenericSliceViewRenderLayer {
       return Promise.reject(GRAPH_SERVER_NOT_SPECIFIED);
     }
 
-    const promise = authFetch(`${url}/graph/split`, {
+    const promise = authFetch(`${url}/split?int64_as_str=1`, {
       method: 'POST',
       body: JSON.stringify({
         'sources': first.map(x => [String(x.segmentId), ...x.position.values()]),
@@ -151,10 +151,10 @@ export class ChunkedGraphLayer extends GenericSliceViewRenderLayer {
       initialMessage: `Splitting ${first.length} sinks from ${second.length} sources`,
       errorPrefix: 'Split failed: '
     });
-    const uint32 = new Uint32Array(await response.arrayBuffer());
-    const final: Uint64[] = new Array(uint32.length / 2);
-    for (let i = 0; i < uint32.length / 2; i++) {
-      final[i] = new Uint64(uint32[2 * i], uint32[2 * i + 1]);
+    const jsonResp = await response.json();
+    const final: Uint64[] = new Array(jsonResp['new_root_ids'].length);
+    for (let i = 0; i < final.length; ++i) {
+      final[i] = Uint64.parseString(jsonResp['new_root_ids'][i]);
     }
     return final;
   }
