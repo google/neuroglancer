@@ -18,7 +18,7 @@ import {AnnotationSource, makeDataBoundsBoundingBox} from 'neuroglancer/annotati
 import {authFetch} from 'neuroglancer/authentication/frontend.ts';
 import {ChunkManager, WithParameters} from 'neuroglancer/chunk_manager/frontend';
 import {DataSource} from 'neuroglancer/datasource';
-import {ChunkedGraphSourceParameters, DataEncoding, MeshSourceParameters, MultiscaleMeshMetadata, MultiscaleMeshSourceParameters, ShardingHashFunction, ShardingParameters, SkeletonMetadata, SkeletonSourceParameters, VolumeChunkEncoding, VolumeChunkSourceParameters} from 'neuroglancer/datasource/graphene/base';
+import {ChunkedGraphSourceParameters, DataEncoding, MeshSourceParameters, MultiscaleMeshMetadata, MultiscaleMeshSourceParameters, PYCG_APP_VERSION, ShardingHashFunction, ShardingParameters, SkeletonMetadata, SkeletonSourceParameters, VolumeChunkEncoding, VolumeChunkSourceParameters} from 'neuroglancer/datasource/graphene/base';
 import {VertexPositionFormat} from 'neuroglancer/mesh/base';
 import {MeshSource, MultiscaleMeshSource} from 'neuroglancer/mesh/frontend';
 import {VertexAttributeInfo} from 'neuroglancer/skeleton/base';
@@ -27,10 +27,11 @@ import {ChunkedGraphChunkSpecification, ChunkedGraphSourceOptions} from 'neurogl
 import {ChunkedGraphChunkSource} from 'neuroglancer/sliceview/chunked_graph/frontend';
 import {DataType, VolumeChunkSpecification, VolumeSourceOptions, VolumeType} from 'neuroglancer/sliceview/volume/base';
 import {MultiscaleVolumeChunkSource as GenericMultiscaleVolumeChunkSource, VolumeChunkSource} from 'neuroglancer/sliceview/volume/frontend';
+import {StatusMessage} from 'neuroglancer/status';
 import {Uint64Set} from 'neuroglancer/uint64_set';
 import {mat4, vec3} from 'neuroglancer/util/geom';
 import {parseSpecialUrl} from 'neuroglancer/util/http_request';
-import {parseArray, parseFixedLengthArray, parseIntVec, verifyEnumString, verifyFiniteFloat, verifyFinitePositiveFloat, verifyInt, verifyObject, verifyObjectProperty, verifyOptionalString, verifyPositiveInt, verifyString} from 'neuroglancer/util/json';
+import {parseArray, parseFixedLengthArray, parseIntVec, verifyEnumString, verifyFiniteFloat, verifyFinitePositiveFloat, verifyInt, verifyNonnegativeInt, verifyObject, verifyObjectProperty, verifyOptionalString, verifyPositiveInt, verifyString} from 'neuroglancer/util/json';
 
 class GrapheneVolumeChunkSource extends
 (WithParameters(VolumeChunkSource, VolumeChunkSourceParameters)) {}
@@ -106,6 +107,45 @@ class ScaleInfo {
   }
 }
 
+class AppInfo {
+  segmentationUrl: string;
+  meshingUrl: string;
+  supported_api_versions: number[];
+  constructor(infoUrl: string, obj: any) {
+    // .../1.0/... is the legacy link style
+    const linkStyle = /^(https?:\/\/[^\/]+)\/segmentation\/(?:1\.0|table)\/([^\/]+)\/?$/;
+    let match = infoUrl.match(linkStyle);
+    if (match === null) {
+      throw Error(`Graph URL invalid: ${infoUrl}`);
+    }
+    this.segmentationUrl = `${match[1]}/segmentation/1.0/${match[2]}`;
+    this.meshingUrl = `${match[1]}/meshing/1.0/${match[2]}`;
+
+    try {
+      verifyObject(obj);
+      this.supported_api_versions = verifyObjectProperty(
+          obj, 'supported_api_versions', x => parseArray(x, verifyNonnegativeInt));
+    } catch (error) {
+      // Dealing with a prehistoric graph server with no version information
+      this.supported_api_versions = [0];
+    }
+    if (PYCG_APP_VERSION in this.supported_api_versions === false) {
+      const redirectMsgBox = new StatusMessage();
+      const redirectMsg = `This Neuroglancer branch requires Graph Server version ${
+          PYCG_APP_VERSION}, but the server only supports version(s) ${
+          this.supported_api_versions}.`;
+
+      if (location.hostname.includes('neuromancer-seung-import.appspot.com')) {
+        const redirectLoc = new URL(location.href);
+        redirectLoc.hostname = `graphene-v${
+            this.supported_api_versions.slice(-1)[0]}-dot-neuromancer-seung-import.appspot.com`;
+        redirectMsgBox.setHTML(`Try <a href="${redirectLoc.href}">${redirectLoc.hostname}</a>?`);
+      }
+      throw new Error(redirectMsg);
+    }
+  }
+}
+
 class GraphInfo {
   chunkSize: vec3;
   constructor(obj: any) {
@@ -122,15 +162,16 @@ export class MultiscaleVolumeChunkSource implements GenericMultiscaleVolumeChunk
   volumeType: VolumeType;
   mesh: string|undefined;
   skeletons: string|undefined;
+  app: AppInfo;
   graph: GraphInfo;
   scales: ScaleInfo[];
 
   getChunkedGraphUrl() {
-    return this.graphUrl;
+    return this.app.segmentationUrl;
   }
 
   public async getTimestampLimit() {
-    const response = await authFetch(`${this.graphUrl}/graph/oldest_timestamp`);
+    const response = await authFetch(`${this.app.segmentationUrl}/graph/oldest_timestamp`);
     return await response.text();
   }
 
@@ -148,17 +189,15 @@ export class MultiscaleVolumeChunkSource implements GenericMultiscaleVolumeChunk
 
     return [[this.chunkManager.getChunkSource(
         GrapheneChunkedGraphChunkSource,
-        {spec, rootSegments, parameters: {url: `${this.graphUrl}/segment`}})]];
+        {spec, rootSegments, parameters: {url: `${this.app.segmentationUrl}/segment`}})]];
   }
 
   getMeshSource() {
     const {mesh} = this;
     if (mesh !== undefined) {
-      return getShardedMeshSource(this.chunkManager, {
-        manifestUrl: this.graphUrl.replace('segmentation', 'meshing'),
-        fragmentUrl: resolvePath(this.dataUrl, mesh),
-        lod: 0
-      });
+      return getShardedMeshSource(
+          this.chunkManager,
+          {manifestUrl: this.app.meshingUrl, fragmentUrl: resolvePath(this.dataUrl, mesh), lod: 0});
     }
     return null;
   }
@@ -171,13 +210,14 @@ export class MultiscaleVolumeChunkSource implements GenericMultiscaleVolumeChunk
     return null;
   }
 
-  constructor(public chunkManager: ChunkManager, public graphUrl: string, obj: any) {
+  constructor(public chunkManager: ChunkManager, infoUrl: string, obj: any) {
     verifyObject(obj);
     const t = verifyObjectProperty(obj, '@type', verifyOptionalString);
     if (t !== undefined && t !== 'neuroglancer_multiscale_volume') {
       throw new Error(`Invalid type: ${JSON.stringify(t)}`);
     }
-    this.dataUrl = verifyObjectProperty(obj, 'data_dir', (x) => parseSpecialUrl(x));
+    this.app = verifyObjectProperty(obj, 'app', x => new AppInfo(infoUrl, x));
+    this.dataUrl = verifyObjectProperty(obj, 'data_dir', x => parseSpecialUrl(x));
     this.dataType = verifyObjectProperty(obj, 'data_type', x => verifyEnumString(x, DataType));
     this.numChannels = verifyObjectProperty(obj, 'num_channels', verifyPositiveInt);
     this.volumeType = VolumeType.SEGMENTATION_WITH_GRAPH;
