@@ -113,8 +113,8 @@ class SockJSHandler(sockjs.tornado.SockJSConnection):
         server = self.session.server.neuroglancer_server
         m = re.match(SOCKET_PATH_REGEX, info.path)
         if m is None:
-          self.close()
-          return
+            self.close()
+            return
 
         viewer_token = self.viewer_token = m.group('viewer_token')
         viewer = self.viewer = server.viewers.get(viewer_token)
@@ -127,10 +127,12 @@ class SockJSHandler(sockjs.tornado.SockJSConnection):
             viewer_config_state.PrivateState)
 
         managed_states = [
-            dict(key='s', state=viewer.shared_state, send_updates=True, receive_updates=True),
             dict(key='c', state=viewer.config_state, send_updates=True, receive_updates=False),
             dict(key='p', state=private_state, send_updates=False, receive_updates=True),
         ]
+        if hasattr(viewer, 'shared_state'):
+            managed_states.append(
+                dict(key='s', state=viewer.shared_state, send_updates=True, receive_updates=True))
 
         self._state_handlers = dict()
         from .default_credentials_manager import default_credentials_manager

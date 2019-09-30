@@ -15,7 +15,7 @@
  */
 
 export class RenderBaseSourceParameters {
-  baseUrls: string[];
+  baseUrl: string;
   owner: string;
   project: string;
   stack: string;

@@ -14,41 +14,19 @@
  * limitations under the License.
  */
 
-export const PRIME_MODULUS = 4093;
+const k1 = 0xcc9e2d51;
+const k2 = 0x1b873593;
 
-export class HashFunction {
-  constructor(
-      public a0: Float32Array, public a1: Float32Array, public b: number, public c: number) {}
+// MurmurHash excluding the final mixing steps.
+export function hashCombine(state: number, value: number) {
+  value >>>= 0;
+  state >>>= 0;
 
-  computeDotProduct(low: number, high: number) {
-    let {a0, a1} = this;
-    let a0DotLow = a0[0] * (low & 0xFF) + a0[1] * ((low >> 8) & 0xFF) +
-        a0[2] * ((low >> 16) & 0xFF) + a0[3] * ((low >> 24) & 0xFF);
-    let a1DotHigh = a1[0] * (high & 0xFF) + a1[1] * ((high >> 8) & 0xFF) +
-        a1[2] * ((high >> 16) & 0xFF) + a1[3] * ((high >> 24) & 0xFF);
-    return a0DotLow + a1DotHigh;
-  }
-
-  compute(low: number, high: number) {
-    let {b, c} = this;
-    let x = this.computeDotProduct(low, high);
-    let x2 = (x * x) % PRIME_MODULUS;
-    let result = (x + x2 * c + b) % PRIME_MODULUS;
-    return result;
-  }
-
-  toString() {
-    return `new HashFunction(Float32Array.of(${this.a0}), ` +
-        `Float32Array.of(${this.a1}), ${this.b}, ${this.c})`;
-  }
-
-  static generate() {
-    function genCoeff() {
-      return Math.floor(Math.random() * PRIME_MODULUS);
-    }
-    function genVector() {
-      return Float32Array.of(genCoeff(), genCoeff(), genCoeff(), genCoeff());
-    }
-    return new HashFunction(genVector(), genVector(), genCoeff(), genCoeff());
-  }
+  value = Math.imul(value, k1) >>> 0;
+  value = ((value << 15) | (value >>> 17)) >>> 0;
+  value = Math.imul(value, k2) >>> 0;
+  state = (state ^ value) >>> 0;
+  state = ((state << 13) | (state >>> 19)) >>> 0;
+  state = ((state * 5) + 0xe6546b64) >>> 0;
+  return state;
 }

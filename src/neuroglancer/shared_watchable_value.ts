@@ -18,14 +18,15 @@
  * @file Facility for sharing arbitrary values that support structural cloning between threads.
  */
 
-import {WatchableValue} from 'neuroglancer/trackable_value';
+import {WatchableValue, WatchableValueInterface} from 'neuroglancer/trackable_value';
 import {registerRPC, registerSharedObject, RPC, SharedObjectCounterpart} from 'neuroglancer/worker_rpc';
 
 const CHANGED_RPC_METHOD_ID = 'SharedWatchableValue.changed';
 
 @registerSharedObject('SharedWatchableValue')
-export class SharedWatchableValue<T> extends SharedObjectCounterpart {
-  base: WatchableValue<T>;
+export class SharedWatchableValue<T> extends SharedObjectCounterpart implements
+    WatchableValueInterface<T> {
+  base: WatchableValueInterface<T>;
 
   /**
    * The value is being updated to reflect a remote change.
@@ -59,7 +60,7 @@ export class SharedWatchableValue<T> extends SharedObjectCounterpart {
     }));
   }
 
-  static makeFromExisting<T>(rpc: RPC, base: WatchableValue<T>) {
+  static makeFromExisting<T>(rpc: RPC, base: WatchableValueInterface<T>) {
     let obj = new SharedWatchableValue<T>();
     obj.base = base;
     obj.setupChangedHandler();

@@ -1,0 +1,44 @@
+sudo: false
+language: python
+os:
+  - linux
+python:
+  - "2.7"
+  - "3.5"
+matrix:
+  include:
+    - name: "C++"
+      language: cpp
+      install:
+        - cd python
+        - mkdir build
+      script:
+        - cd build
+        - cmake ..
+        - make
+        - ctest
+    - os: osx
+      osx_image: xcode8.3
+      python: "3.6-dev"
+    - name: "Web client"
+      sudo: required
+      addons:
+        chrome: stable
+      language: node_js
+      node_js: node
+      before_install:
+        - node --version
+      install:
+        - npm install
+      script:
+        - npm run build
+        - npm run build-min
+        - npm run build-python
+        - npm run build-python-min
+        - npm run test
+        - npm run benchmark
+install:
+  - pip install tox-travis
+script:
+  - cd python
+  - tox -vvvvvvv

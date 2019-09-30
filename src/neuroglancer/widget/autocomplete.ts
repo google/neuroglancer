@@ -177,11 +177,11 @@ export class AutocompleteTextInput extends RefCounted {
         this.updateDropdown();
       }
     });
-    this.registerEventListener(element.ownerDocument.defaultView, 'resize', () => {
+    this.registerEventListener(element.ownerDocument!.defaultView!, 'resize', () => {
       this.dropdownStyleStale = true;
     });
 
-    this.registerEventListener(element.ownerDocument.defaultView, 'scroll', () => {
+    this.registerEventListener(element.ownerDocument!.defaultView!, 'scroll', () => {
       this.dropdownStyleStale = true;
     });
 

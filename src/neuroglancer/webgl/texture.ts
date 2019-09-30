@@ -14,58 +14,78 @@
  * limitations under the License.
  */
 
-import {GL_CLAMP_TO_EDGE, GL_LINEAR, GL_NEAREST, GL_RGBA, GL_TEXTURE0, GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_TEXTURE_MIN_FILTER, GL_TEXTURE_WRAP_S, GL_TEXTURE_WRAP_T, GL_UNPACK_ALIGNMENT, GL_UNPACK_FLIP_Y_WEBGL, GL_UNSIGNED_BYTE} from 'neuroglancer/webgl/constants';
 import {GL} from 'neuroglancer/webgl/context';
 
 /**
  * Sets parameters to make a texture suitable for use as a raw array: NEAREST
  * filtering, clamping.
  */
-export function setRawTextureParameters(gl: WebGLRenderingContext) {
-  gl.texParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-  gl.texParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+export function setRawTextureParameters(gl: WebGL2RenderingContext) {
+  gl.texParameteri(WebGL2RenderingContext.TEXTURE_2D, WebGL2RenderingContext.TEXTURE_MIN_FILTER, WebGL2RenderingContext.NEAREST);
+  gl.texParameteri(WebGL2RenderingContext.TEXTURE_2D, WebGL2RenderingContext.TEXTURE_MAG_FILTER, WebGL2RenderingContext.NEAREST);
   // Prevents s-coordinate wrapping (repeating).  Repeating not
   // permitted for non-power-of-2 textures.
-  gl.texParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+  gl.texParameteri(WebGL2RenderingContext.TEXTURE_2D, WebGL2RenderingContext.TEXTURE_WRAP_S, WebGL2RenderingContext.CLAMP_TO_EDGE);
   // Prevents t-coordinate wrapping (repeating).  Repeating not
   // permitted for non-power-of-2 textures.
-  gl.texParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+  gl.texParameteri(WebGL2RenderingContext.TEXTURE_2D, WebGL2RenderingContext.TEXTURE_WRAP_T, WebGL2RenderingContext.CLAMP_TO_EDGE);
+}
+
+export function setRawTexture3DParameters(gl: WebGL2RenderingContext) {
+  gl.texParameteri(WebGL2RenderingContext.TEXTURE_3D, WebGL2RenderingContext.TEXTURE_MIN_FILTER, WebGL2RenderingContext.NEAREST);
+  gl.texParameteri(WebGL2RenderingContext.TEXTURE_3D, WebGL2RenderingContext.TEXTURE_MAG_FILTER, WebGL2RenderingContext.NEAREST);
+  // Prevents s-coordinate wrapping (repeating).  Repeating not
+  // permitted for non-power-of-2 textures.
+  gl.texParameteri(WebGL2RenderingContext.TEXTURE_3D, WebGL2RenderingContext.TEXTURE_WRAP_S, WebGL2RenderingContext.CLAMP_TO_EDGE);
+  // Prevents t-coordinate wrapping (repeating).  Repeating not
+  // permitted for non-power-of-2 textures.
+  gl.texParameteri(WebGL2RenderingContext.TEXTURE_3D, WebGL2RenderingContext.TEXTURE_WRAP_T, WebGL2RenderingContext.CLAMP_TO_EDGE);
+  gl.texParameteri(WebGL2RenderingContext.TEXTURE_3D, WebGL2RenderingContext.TEXTURE_WRAP_R, WebGL2RenderingContext.CLAMP_TO_EDGE);
 }
 
 export function resizeTexture(
-    gl: GL, texture: WebGLTexture|null, width: number, height: number, format: number = GL_RGBA,
-    dataType: number = GL_UNSIGNED_BYTE) {
-  gl.activeTexture(GL_TEXTURE0 + gl.tempTextureUnit);
-  gl.bindTexture(GL_TEXTURE_2D, texture);
+    gl: GL, texture: WebGLTexture|null, width: number, height: number,
+    internalFormat: number = WebGL2RenderingContext.RGBA8, format: number = WebGL2RenderingContext.RGBA,
+    dataType: number = WebGL2RenderingContext.UNSIGNED_BYTE) {
+  gl.activeTexture(WebGL2RenderingContext.TEXTURE0 + gl.tempTextureUnit);
+  gl.bindTexture(WebGL2RenderingContext.TEXTURE_2D, texture);
   setRawTextureParameters(gl);
   gl.texImage2D(
-      GL_TEXTURE_2D, 0,
-      /*internalformat=*/format,
+      WebGL2RenderingContext.TEXTURE_2D, 0,
+      /*internalformat=*/internalFormat,
       /*width=*/width,
       /*height=*/height,
       /*border=*/0,
       /*format=*/format, dataType, <any>null);
-  gl.bindTexture(GL_TEXTURE_2D, null);
+  gl.bindTexture(WebGL2RenderingContext.TEXTURE_2D, null);
 }
 
 export function setTextureFromCanvas(
     gl: GL, texture: WebGLTexture|null, canvas: HTMLCanvasElement) {
-  gl.activeTexture(GL_TEXTURE0 + gl.tempTextureUnit);
-  gl.bindTexture(GL_TEXTURE_2D, texture);
-  gl.texParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-  gl.texParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-  // Prevents s-coordinate wrapping (repeating).  Repeating not
-  // permitted for non-power-of-2 textures.
-  gl.texParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-  // Prevents t-coordinate wrapping (repeating).  Repeating not
-  // permitted for non-power-of-2 textures.
-  gl.texParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-  gl.pixelStorei(GL_UNPACK_FLIP_Y_WEBGL, true);
-  gl.pixelStorei(GL_UNPACK_ALIGNMENT, 4);
+  gl.activeTexture(WebGL2RenderingContext.TEXTURE0 + gl.tempTextureUnit);
+  gl.bindTexture(WebGL2RenderingContext.TEXTURE_2D, texture);
+  gl.texParameteri(
+      WebGL2RenderingContext.TEXTURE_2D, WebGL2RenderingContext.TEXTURE_MIN_FILTER,
+      WebGL2RenderingContext.LINEAR);
+  gl.texParameteri(
+      WebGL2RenderingContext.TEXTURE_2D, WebGL2RenderingContext.TEXTURE_MAG_FILTER,
+      WebGL2RenderingContext.LINEAR);
+  // Prevents s-coordinate wrapping (repeating).  Repeating not permitted for non-power-of-2
+  // textures.
+  gl.texParameteri(
+      WebGL2RenderingContext.TEXTURE_2D, WebGL2RenderingContext.TEXTURE_WRAP_S,
+      WebGL2RenderingContext.CLAMP_TO_EDGE);
+  // Prevents t-coordinate wrapping (repeating).  Repeating not permitted for non-power-of-2
+  // textures.
+  gl.texParameteri(
+      WebGL2RenderingContext.TEXTURE_2D, WebGL2RenderingContext.TEXTURE_WRAP_T,
+      WebGL2RenderingContext.CLAMP_TO_EDGE);
+  gl.pixelStorei(WebGL2RenderingContext.UNPACK_FLIP_Y_WEBGL, 1);
+  gl.pixelStorei(WebGL2RenderingContext.UNPACK_ALIGNMENT, 4);
   gl.texImage2D(
-      GL_TEXTURE_2D, /*level=*/0,
-      /*internalformat=*/GL_RGBA,
-      /*format=*/GL_RGBA, GL_UNSIGNED_BYTE, canvas);
-  gl.pixelStorei(GL_UNPACK_FLIP_Y_WEBGL, false);
-  gl.bindTexture(GL_TEXTURE_2D, null);
+      WebGL2RenderingContext.TEXTURE_2D, /*level=*/ 0,
+      /*internalformat=*/ WebGL2RenderingContext.RGBA8,
+      /*format=*/ WebGL2RenderingContext.RGBA, WebGL2RenderingContext.UNSIGNED_BYTE, canvas);
+  gl.pixelStorei(WebGL2RenderingContext.UNPACK_FLIP_Y_WEBGL, 0);
+  gl.bindTexture(WebGL2RenderingContext.TEXTURE_2D, null);
 }

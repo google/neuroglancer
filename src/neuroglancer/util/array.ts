@@ -93,3 +93,66 @@ export function transposeArray2d<T extends TypedArray>(
   }
   return transpose;
 }
+
+export function tile2dArray<T extends TypedArray>(
+    array: T, majorDimension: number, minorTiles: number, majorTiles: number) {
+  const minorDimension = array.length / majorDimension;
+  const length = array.length * minorTiles * majorTiles;
+  const result: T = new (<any>array.constructor)(length);
+  const minorTileStride = array.length * majorTiles;
+  const majorTileStride = majorDimension;
+  const minorStride = majorDimension * majorTiles;
+  for (let minor = 0; minor < minorDimension; ++minor) {
+    for (let major = 0; major < majorDimension; ++major) {
+      const inputValue = array[minor * majorDimension + major];
+      const baseOffset = minor * minorStride + major;
+      for (let minorTile = 0; minorTile < minorTiles; ++minorTile) {
+        for (let majorTile = 0; majorTile < majorTiles; ++majorTile) {
+          result[minorTile * minorTileStride + majorTile * majorTileStride + baseOffset] =
+              inputValue;
+        }
+      }
+    }
+  }
+  return result;
+}
+
+export function binarySearch<T>(
+    haystack: ArrayLike<T>, needle: T, compare: (a: T, b: T) => number, low = 0,
+    high = haystack.length) {
+  while (low < high) {
+    const mid = (low + high - 1) >> 1;
+    const compareResult = compare(needle, haystack[mid]);
+    if (compareResult > 0) {
+      low = mid + 1;
+    } else if (compareResult < 0) {
+      high = mid;
+    } else {
+      return mid;
+    }
+  }
+  return ~low;
+}
+
+
+/**
+ * Returns the first index in `[begin, end)` for which `predicate` is `true`, or returns `end` if no
+ * such index exists.
+ *
+ * For any index `i` in `(begin, end)`, it must be the case that `predicate(i) >= predicate(i - 1)`.
+ */
+export function binarySearchLowerBound(
+    begin: number, end: number, predicate: (index: number) => boolean): number {
+  let count = end - begin;
+  while (count > 0) {
+    let step = Math.floor(count / 2);
+    let i = begin + step;
+    if (predicate(i)) {
+      count = step;
+    } else {
+      begin = i + 1;
+      count -= step + 1;
+    }
+  }
+  return begin;
+}

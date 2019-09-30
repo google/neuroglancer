@@ -15,6 +15,9 @@
  */
 
 import 'codemirror/addon/lint/lint.js';
+import './shader_code_widget.css';
+import 'codemirror/lib/codemirror.css';
+import 'codemirror/addon/lint/lint.css';
 
 import CodeMirror from 'codemirror';
 import debounce from 'lodash/debounce';
@@ -24,9 +27,6 @@ import {removeFromParent} from 'neuroglancer/util/dom';
 import {WatchableShaderError} from 'neuroglancer/webgl/dynamic_shader';
 import {ShaderCompilationError, ShaderLinkError} from 'neuroglancer/webgl/shader';
 
-require('./shader_code_widget.css');
-require('codemirror/lib/codemirror.css');
-require('codemirror/addon/lint/lint.css');
 require<(codeMirror: typeof CodeMirror) => void>('glsl-editor/glsl')(CodeMirror);
 
 /**

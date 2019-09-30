@@ -1,0 +1,136 @@
+/**
+ * @license
+ * Copyright 2018 Google Inc.
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+.neuroglancer-annotations-tab {
+  display: flex;
+  align-items: flex-start;
+  flex: 1;
+  flex-direction: column;
+}
+
+.neuroglancer-annotation-list { 
+  list-style-type: none;
+  margin: 0px;
+  padding: 5px;
+  overflow-y: auto;
+  height: 0px;
+  flex: 1;
+  flex-basis: 0px;
+  min-height: 0px;
+}
+
+.neuroglancer-annotation-layer-view {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+}
+
+.neuroglancer-annotations-stack {
+  flex: 1;
+  align-self: stretch;
+}
+
+.neuroglancer-annotation-icon {
+  position: absolute;
+  left: 0px;
+}
+
+.neuroglancer-annotation-description {
+  text-overflow: ellipsis;
+  overflow: hidden;
+  white-space: nowrap;
+}
+
+.neuroglancer-annotation-hover {
+  background-color: #333;
+}
+
+.neuroglancer-annotation-selected {
+  outline: 1px solid #ccc;
+}
+
+.neuroglancer-annotation-list > li {
+  cursor: pointer;
+  position: relative;
+  padding-left: 1.5em;
+}
+
+.neuroglancer-tab-content.neuroglancer-annotation-details {
+  flex: 0 0 auto;
+  align-self: stretch;
+  display: flex;
+  flex-direction: column;
+
+  -webkit-touch-callout: default;
+  -webkit-user-select: text;
+  -khtml-user-select: text;
+  -moz-user-select: text;
+  -ms-user-select: text;
+  user-select: text;
+}
+
+.neuroglancer-annotation-details-title {
+  display: flex;
+  flex-direction: row;
+  background-color: #03c;
+  align-self: stretch;
+  padding: 2px;
+}
+
+.neuroglancer-voxel-coordinates-link {
+  cursor: pointer;
+}
+
+.neuroglancer-voxel-coordinates-link:hover {
+  background-color: #db4437;
+}
+
+.neuroglancer-annotation-details-icon {
+  display: inline-block;
+  margin-right: 5px;
+}
+
+.neuroglancer-annotation-details-title-text {
+  display: inline-block;
+  flex: 1;
+}
+
+.neuroglancer-annotation-details-description {
+  align-self: stretch;
+  background-color: #222;
+  color: white;
+  font: 10pt sans-serif;
+  border: 0px;
+  outline: 0px;
+  resize: none;
+  overflow-y: scroll;
+}
+
+.neuroglancer-annotation-details-position {
+}
+
+.neuroglancer-annotation-toolbox {
+  display: flex;
+  align-items: stretch;
+}
+
+.neuroglancer-annotation-segment-list {
+}
+
+
+.neuroglancer-annotation-segment-item {
+  color: black;
+}

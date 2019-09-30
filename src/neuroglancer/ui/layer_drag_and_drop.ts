@@ -24,6 +24,7 @@ const layerDragTypePrefix = 'neuroglancer-layer\0';
 export interface LayerDragSourceInfo {
   manager: Owned<LayerListSpecification>;
   layers: Owned<ManagedUserLayerWithSpecification>[];
+  layoutSpec: any;
 }
 
 interface LayerDragSourceData extends LayerDragSourceInfo {
@@ -33,11 +34,12 @@ interface LayerDragSourceData extends LayerDragSourceInfo {
 let dragSource: LayerDragSourceData|undefined;
 
 export function startLayerDrag(event: DragEvent, sourceInfo: LayerDragSourceInfo) {
-  event.dataTransfer.setData(
+  event.dataTransfer!.setData(
       encodeParametersAsDragType(
           layerDragTypePrefix,
           sourceInfo.layers.map(layer => ({name: layer.name, visible: layer.visible}))),
-      JSON.stringify(sourceInfo.layers.map(layer => layer.toJSON())));
+      JSON.stringify(
+          {layers: sourceInfo.layers.map(layer => layer.toJSON()), layout: sourceInfo.layoutSpec}));
   if (dragSource !== undefined) {
     dragSource.disposer();
   }
@@ -55,13 +57,14 @@ export function startLayerDrag(event: DragEvent, sourceInfo: LayerDragSourceInfo
   dragSource = newDragSource = {
     manager: sourceInfo.manager.addRef(),
     layers: sourceInfo.layers.map(x => x.addRef()),
+    layoutSpec: sourceInfo.layoutSpec,
     disposer,
   };
 }
 
 export function endLayerDrag(event?: DragEvent) {
   if (dragSource !== undefined) {
-    if (event && event.dataTransfer.dropEffect === 'move') {
+    if (event && event.dataTransfer!.dropEffect === 'move') {
       const removedLayers = new Set(dragSource.layers);
       dragSource.manager.layerManager.filter(
           (x: ManagedUserLayerWithSpecification) => !removedLayers.has(x));
@@ -72,7 +75,7 @@ export function endLayerDrag(event?: DragEvent) {
 
 
 export function getLayerDragInfo(event: DragEvent): DragInfo|undefined {
-  return decodeParametersFromDragTypeList(event.dataTransfer.types, layerDragTypePrefix);
+  return decodeParametersFromDragTypeList(event.dataTransfer!.types, layerDragTypePrefix);
 }
 
 function getCompatibleDragSource(manager: Borrowed<LayerListSpecification>): LayerDragSourceInfo|undefined {
@@ -96,6 +99,10 @@ export class DropLayers {
 
   numSourceLayers: number;
 
+  // LayerGroupViewer layout specification associated with these layers.  Only used if the drop
+  // operation creates a new layer group viewer.
+  layoutSpec: any;
+
   /**
    * Called in the 'drop' event handler to actually initialize the layers if they are external.
    * Returns false if any layers failed to initialized.
@@ -104,10 +111,11 @@ export class DropLayers {
     const {dragType} = this;
     if (dragType !== undefined) {
       try {
-        const spec = JSON.parse(event.dataTransfer.getData(dragType));
+        const {layers: spec, layout} = JSON.parse(event.dataTransfer!.getData(dragType));
         if (!Array.isArray(spec) || this.numSourceLayers !== spec.length) {
           throw new Error('Invalid layer drop data');
         }
+        this.layoutSpec = layout;
         for (const [layer, index] of this.layers) {
           this.manager.initializeLayerFromSpec(layer, spec[index]);
         }
@@ -184,6 +192,7 @@ export function getDropLayers(
       result.sourceManager = source.manager;
       result.moveSupported = moveSupported;
       result.layers = new Map();
+      result.layoutSpec = source.layoutSpec;
       if (!newTarget && source.manager === manager) {
         if (allowMove) {
           source.layers.forEach((layer, index) => {

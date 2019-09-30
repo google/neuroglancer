@@ -15,7 +15,10 @@
  */
 
 import {VolumeChunk} from 'neuroglancer/sliceview/volume/backend';
+import {CancellationToken} from 'neuroglancer/util/cancellation';
 
-export function decodeCompressedSegmentationChunk(chunk: VolumeChunk, response: ArrayBuffer) {
+export async function decodeCompressedSegmentationChunk(
+    chunk: VolumeChunk, cancellationToken: CancellationToken, response: ArrayBuffer) {
+  cancellationToken;
   chunk.data = new Uint32Array(response);
 }

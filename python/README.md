@@ -54,19 +54,13 @@ randomly-generated 160-bit secret key.
 
 ## Development
 
-First, make sure NumPy is installed.  If using a virtual environment (which is recommended), run:
-
-```shell
-pip install numpy
-```
-
 ## Building the C++ extension module
 
 Mesh generation for segmentation volumes depends on a C++ extension module.  To
 build it, activate a suitable Python virtual environment and run:
 
 ```shell
-python setup.py develop
+pip install -e .
 ```
 
 ### Serving the Neuroglancer client code

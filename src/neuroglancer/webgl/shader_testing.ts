@@ -17,26 +17,47 @@
 import {RefCounted} from 'neuroglancer/util/disposable';
 import {vec4} from 'neuroglancer/util/geom';
 import {GL} from 'neuroglancer/webgl/context';
-import {FramebufferConfiguration, makeTextureBuffers, TextureBuffer} from 'neuroglancer/webgl/offscreen';
+import {FramebufferConfiguration, TextureBuffer} from 'neuroglancer/webgl/offscreen';
 import {ShaderBuilder, ShaderProgram} from 'neuroglancer/webgl/shader';
-import {glsl_debugFunctions} from 'neuroglancer/webgl/shader_lib';
 import {getSquareCornersBuffer} from 'neuroglancer/webgl/square_corners_buffer';
 import {webglTest} from 'neuroglancer/webgl/testing';
 
-export class FragmentShaderTester extends RefCounted {
+export interface FragmentShaderTestOutputs {
+  [key: string]: 'uint' | 'float';
+}
+
+function makeTextureBuffersForOutputs(gl: GL, outputs: FragmentShaderTestOutputs): TextureBuffer[] {
+  return Object.keys(outputs).map(key => {
+    const t = outputs[key];
+    if (t === 'uint') {
+      return new TextureBuffer(
+          gl, WebGL2RenderingContext.R32UI, WebGL2RenderingContext.RED_INTEGER,
+          WebGL2RenderingContext.UNSIGNED_INT);
+    } else {
+      return new TextureBuffer(
+          gl, WebGL2RenderingContext.R32F, WebGL2RenderingContext.RED,
+          WebGL2RenderingContext.FLOAT);
+    }
+  });
+}
+
+export class FragmentShaderTester<Outputs extends FragmentShaderTestOutputs> extends RefCounted {
   builder = new ShaderBuilder(this.gl);
   shader: ShaderProgram;
   offscreenFramebuffer: FramebufferConfiguration<TextureBuffer>;
   private vertexPositionsBuffer = getSquareCornersBuffer(this.gl, -1, -1, 1, 1);
 
-  constructor(public gl: GL, colorBuffers: TextureBuffer[]) {
+  constructor(public gl: GL, public outputs: Outputs) {
     super();
     let {builder} = this;
-    this.offscreenFramebuffer = new FramebufferConfiguration(this.gl, {colorBuffers});
-    builder.addFragmentExtension('GL_EXT_draw_buffers');
+    this.offscreenFramebuffer = new FramebufferConfiguration(
+        this.gl, {colorBuffers: makeTextureBuffersForOutputs(gl, outputs)});
     builder.addAttribute('vec4', 'shader_testing_aVertexPosition');
     builder.setVertexMain(`gl_Position = shader_testing_aVertexPosition;`);
-    builder.addFragmentCode(glsl_debugFunctions);
+    Object.keys(outputs).forEach((key, index) => {
+      const t = outputs[key];
+      builder.addOutputBuffer(t === 'uint' ? 'highp uint' : 'highp float', key, index);
+    });
   }
   build() {
     this.shader = this.builder.build();
@@ -54,6 +75,25 @@ export class FragmentShaderTester extends RefCounted {
     gl.disableVertexAttribArray(aVertexPosition);
     this.offscreenFramebuffer.unbind();
   }
+
+  get values(): {[P in keyof Outputs]: number} {
+    const values = {} as any;
+    for (const key of Object.keys(this.outputs)) {
+      values[key] = this.read(key);
+    }
+    return values;
+  }
+
+  read(key: keyof Outputs): number {
+    const t = this.outputs[key];
+    const index = Object.keys(this.outputs).indexOf(key as string);
+    if (t === 'uint') {
+      return this.offscreenFramebuffer.readPixelUint32(index, 0, 0);
+    } else {
+      return this.offscreenFramebuffer.readPixelFloat32(index, 0, 0);
+    }
+  }
+
   readBytes(index = 0) {
     return this.offscreenFramebuffer.readPixel(index, 0, 0);
   }
@@ -78,9 +118,10 @@ export class FragmentShaderTester extends RefCounted {
   }
 }
 
-export function fragmentShaderTest(numOutputs: number, f: (tester: FragmentShaderTester) => void) {
+export function fragmentShaderTest<Outputs extends FragmentShaderTestOutputs>(
+    outputs: Outputs, f: (tester: FragmentShaderTester<Outputs>) => void) {
   webglTest(gl => {
-    let tester = new FragmentShaderTester(gl, makeTextureBuffers(gl, numOutputs));
+    let tester = new FragmentShaderTester(gl, outputs);
     try {
       f(tester);
     } finally {

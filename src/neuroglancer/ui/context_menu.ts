@@ -22,12 +22,12 @@ require('./context_menu.css');
 
 export function positionContextMenu(menu: HTMLElement, event: MouseEvent) {
   const {offsetWidth, offsetHeight} = menu;
-  const viewportWidth = document.documentElement.clientWidth;
-  const viewportHeight = document.documentElement.clientHeight;
+  const viewportWidth = document.documentElement!.clientWidth;
+  const viewportHeight = document.documentElement!.clientHeight;
   const posX =
-      document.documentElement.scrollLeft + Math.min(viewportWidth - offsetWidth, event.clientX);
+      document.documentElement!.scrollLeft + Math.min(viewportWidth - offsetWidth, event.clientX);
   const posY =
-      document.documentElement.scrollTop + Math.min(viewportHeight - offsetHeight, event.clientY);
+      document.documentElement!.scrollTop + Math.min(viewportHeight - offsetHeight, event.clientY);
   menu.style.left = posX + 'px';
   menu.style.top = posY + 'px';
   menu.style.visibility = null;

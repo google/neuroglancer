@@ -35,10 +35,6 @@ interface StringConversionData {
 
   lowBase: number;
 
-  // lowBase = lowBase1 * lowBase2.
-  lowBase1: number;
-  lowBase2: number;
-
   pattern: RegExp;
 }
 
@@ -46,9 +42,6 @@ let stringConversionData: StringConversionData[] = [];
 for (let base = 2; base <= 36; ++base) {
   let lowDigits = Math.floor(32 / Math.log2(base));
   let lowBase = Math.pow(base, lowDigits);
-  let lowDigits1 = Math.floor(lowDigits / 2);
-  let lowBase1 = Math.pow(base, lowDigits1);
-  let lowBase2 = Math.pow(base, lowDigits - lowDigits1);
   let patternString = `^[0-${String.fromCharCode('0'.charCodeAt(0) + Math.min(9, base - 1))}`;
   if (base > 10) {
     patternString += `a-${String.fromCharCode('a'.charCodeAt(0) + base - 11)}`;
@@ -57,7 +50,31 @@ for (let base = 2; base <= 36; ++base) {
   let maxDigits = Math.ceil(64 / Math.log2(base));
   patternString += `]{1,${maxDigits}}$`;
   let pattern = new RegExp(patternString);
-  stringConversionData[base] = {lowDigits, lowBase, lowBase1, lowBase2, pattern};
+  stringConversionData[base] = {lowDigits, lowBase, pattern};
+}
+
+/**
+ * Returns the high 32 bits of the result of the 32-bit integer multiply `a` and `b`.
+ *
+ * The low 32-bits can be obtained using the built-in `Math.imul` function.
+ */
+function uint32MultiplyHigh(a: number, b: number) {
+  a >>>= 0;
+  b >>>= 0;
+
+  const a00 = a & 0xFFFF, a16 = a >>> 16;
+  const b00 = b & 0xFFFF, b16 = b >>> 16;
+
+  let c00 = a00 * b00;
+  let c16 = (c00 >>> 16) + (a16 * b00);
+  let c32 = c16 >>> 16;
+  c16 = (c16 & 0xFFFF) + (a00 * b16);
+  c32 += c16 >>> 16;
+  let c48 = c32 >>> 16;
+  c32 = (c32 & 0xFFFF) + (a16 * b16);
+  c48 += c32 >>> 16;
+
+  return (((c48 & 0xFFFF) << 16) | (c32 & 0xFFFF)) >>> 0;
 }
 
 export class Uint64 {
@@ -104,6 +121,7 @@ export class Uint64 {
   }
 
   static ZERO = new Uint64(0, 0);
+  static ONE = new Uint64(1, 0);
 
   static equal(a: Uint64, b: Uint64) {
     return a.low === b.low && a.high === b.high;
@@ -113,13 +131,17 @@ export class Uint64 {
     return Uint64.less(a, b) ? a : b;
   }
 
+  static max(a: Uint64, b: Uint64): Uint64 {
+    return Uint64.less(a, b) ? b : a;
+  }
+
   static random() {
     crypto.getRandomValues(randomTempBuffer);
     return new Uint64(randomTempBuffer[0], randomTempBuffer[1]);
   }
 
   tryParseString(s: string, base = 10) {
-    let {lowDigits, lowBase, lowBase1, lowBase2, pattern} = stringConversionData[base];
+    const {lowDigits, lowBase, pattern} = stringConversionData[base];
     if (!pattern.test(s)) {
       return false;
     }
@@ -128,18 +150,24 @@ export class Uint64 {
       this.high = 0;
       return true;
     }
-    let splitPoint = s.length - lowDigits;
-    let lowPrime = parseInt(s.substr(splitPoint), base);
-    let highPrime = parseInt(s.substr(0, splitPoint), base);
+    const splitPoint = s.length - lowDigits;
+    const lowPrime = parseInt(s.substr(splitPoint), base);
+    const highPrime = parseInt(s.substr(0, splitPoint), base);
 
-    let highConverted = highPrime * lowBase;
+    let high: number, low: number;
 
-    let high = Math.floor(highConverted / trueBase);
-
-    let low = lowPrime + (((highPrime % trueBase) * lowBase1) % trueBase) * lowBase2 % trueBase;
-    if (low > trueBase) {
-      ++high;
-      low -= trueBase;
+    if (lowBase === trueBase) {
+      high = highPrime;
+      low = lowPrime;
+    } else {
+      const highRemainder = Math.imul(highPrime, lowBase) >>> 0;
+      high = uint32MultiplyHigh(highPrime, lowBase) +
+          (Math.imul(Math.floor(highPrime / trueBase), lowBase) >>> 0);
+      low = lowPrime + highRemainder;
+      if (low >= trueBase) {
+        ++high;
+        low -= trueBase;
+      }
     }
     if ((low >>> 0) !== low || ((high >>> 0) !== high)) {
       return false;
@@ -170,43 +198,117 @@ export class Uint64 {
     return this.toString();
   }
 
-  lshift(bits: number) {
-    bits &= 63;
-    if (bits == 0) {
-      return this.clone();
+  static lshift(out: Uint64, input: Uint64, bits: number): Uint64 {
+    const {low, high} = input;
+    if (bits === 0) {
+      out.low = low;
+      out.high = high;
+    } else if (bits < 32) {
+      out.low = low << bits;
+      out.high = (high << bits) | (low >>> (32 - bits));
     } else {
-      let {low, high} = this;
-      if (bits < 32) {
-        return new Uint64(low << bits, (high << bits) | (low >>> (32 - bits)));
-      } else {
-        return new Uint64(0, low << (bits - 32));
-      }
+      out.low = 0;
+      out.high = low << (bits - 32);
     }
+    return out;
   }
 
-  rshift(bits: number) {
-    bits &= 63;
-    if (bits == 0) {
-      return this.clone();
+  static rshift(out: Uint64, input: Uint64, bits: number) {
+    const {low, high} = input;
+    if (bits === 0) {
+      out.low = low;
+      out.high = high;
+    } else if (bits < 32) {
+      out.low = (low >>> bits) | (high << (32 - bits));
+      out.high = high >>> bits;
     } else {
-      let {low, high} = this;
-      if (bits < 32) {
-        return new Uint64((low >>> bits) | (high << (32 - bits)), high >> bits);
-      } else {
-        return new Uint64(high >> (bits - 32), high >= 0 ? 0 : -1);
-      }
+      out.low = high >>> (bits - 32);
+      out.high = 0;
     }
+    return out;
   }
 
-  or(other: Uint64) {
-    return new Uint64(this.low | other.low, this.high | other.high);
+  static or(out: Uint64, a: Uint64, b: Uint64): Uint64 {
+    out.low = a.low | b.low;
+    out.high = a.high | b.high;
+    return out;
   }
 
-  xor(other: Uint64) {
-    return new Uint64(this.low ^ other.low, this.high ^ other.high);
+  static xor(out: Uint64, a: Uint64, b: Uint64): Uint64 {
+    out.low = a.low ^ b.low;
+    out.high = a.high ^ b.high;
+    return out;
   }
 
-  and(other: Uint64) {
-    return new Uint64(this.low & other.low, this.high & other.high);
+  static and(out: Uint64, a: Uint64, b: Uint64): Uint64 {
+    out.low = a.low & b.low;
+    out.high = a.high & b.high;
+    return out;
+  }
+
+  static add(out: Uint64, a: Uint64, b: Uint64): Uint64 {
+    let lowSum = a.low + b.low;
+    let highSum = a.high + b.high;
+    const low = lowSum >>> 0;
+    if (low !== lowSum) highSum += 1;
+    out.low = low;
+    out.high = highSum >>> 0;
+    return out;
+  }
+
+  static addUint32(out: Uint64, a: Uint64, b: number): Uint64 {
+    let lowSum = a.low + b;
+    let highSum = a.high;
+    const low = lowSum >>> 0;
+    if (low !== lowSum) highSum += 1;
+    out.low = low;
+    out.high = highSum >>> 0;
+    return out;
+  }
+
+  static decrement(out: Uint64, input: Uint64): Uint64 {
+    let {low, high} = input;
+    if (low === 0) {
+      high -= 1;
+    }
+    out.low = (low - 1) >>> 0;
+    out.high = high >>> 0;
+    return out;
+  }
+
+  static increment(out: Uint64, input: Uint64): Uint64 {
+    let {low, high} = input;
+    if (low === 0xFFFFFFFF) high += 1;
+    out.low = (low + 1) >>> 0;
+    out.high = high >>> 0;
+    return out;
+  }
+
+  static subtract(out: Uint64, a: Uint64, b: Uint64): Uint64 {
+    let lowSum = a.low - b.low;
+    let highSum = a.high - b.high;
+    const low = lowSum >>> 0;
+    if (low !== lowSum) highSum -= 1;
+    out.low = low;
+    out.high = highSum >>> 0;
+    return out;
+  }
+
+  static multiplyUint32(out: Uint64, a: Uint64, b: number): Uint64 {
+    const {low, high} = a;
+    out.low = Math.imul(low, b) >>> 0;
+    out.high = (Math.imul(high, b) + uint32MultiplyHigh(low, b)) >>> 0;
+    return out;
+  }
+
+  static lowMask(out: Uint64, bits: number) {
+    if (bits <= 32) {
+      out.high = 0;
+      out.low = 0xffffffff >>> (32 - bits);
+    } else {
+      out.high = 0xffffffff >>> (bits - 32);
+      out.low = 0xffffffff;
+    }
+    return out;
   }
 }

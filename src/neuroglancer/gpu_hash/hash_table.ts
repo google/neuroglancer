@@ -14,7 +14,8 @@
  * limitations under the License.
  */
 
-import {HashFunction} from 'neuroglancer/gpu_hash/hash_function';
+import {hashCombine} from 'neuroglancer/gpu_hash/hash_function';
+import {getRandomValues} from 'neuroglancer/util/random';
 import {Uint64} from 'neuroglancer/util/uint64';
 
 export const NUM_ALTERNATIVES = 3;
@@ -28,14 +29,10 @@ const DEBUG = false;
 let pendingLow = 0, pendingHigh = 0, backupPendingLow = 0, backupPendingHigh = 0;
 
 export abstract class HashTableBase {
-  hashFunctions: HashFunction[][];
   loadFactor = DEFAULT_LOAD_FACTOR;
   size = 0;
   table: Uint32Array;
-  growFactor = 1.2;
-  width: number;
-  height: number;
-  maxHeight = 8192;
+  tableSize: number;
   emptyLow = 4294967295;
   emptyHigh = 4294967295;
   maxRehashAttempts = 5;
@@ -47,18 +44,22 @@ export abstract class HashTableBase {
    */
   entryStride: number;
 
-  maxWidth = 4096 / this.entryStride;
   generation = 0;
 
   mungedEmptyKey = -1;
 
-  constructor(hashFunctions = HashTableBase.generateHashFunctions(NUM_ALTERNATIVES)) {
-    this.hashFunctions = hashFunctions;
-    this.allocate(4, 1);
+  constructor(public hashSeeds = HashTableBase.generateHashSeeds(NUM_ALTERNATIVES)) {
+    // Minimum size must be greater than 2 * hashSeeds.length.  Otherwise, tableWithMungedEmptyKey
+    // may loop infinitely.
+    let initialSize = 8;
+    while (initialSize < 2 * hashSeeds.length) {
+      initialSize *= 2;
+    }
+    this.allocate(initialSize);
   }
 
   private updateHashFunctions(numHashes: number) {
-    this.hashFunctions = HashTableBase.generateHashFunctions(numHashes);
+    this.hashSeeds = HashTableBase.generateHashSeeds(numHashes);
     this.mungedEmptyKey = -1;
   }
 
@@ -77,7 +78,7 @@ export abstract class HashTableBase {
    * key.
    */
   tableWithMungedEmptyKey(callback: (table: Uint32Array) => void) {
-    const numHashes = this.hashFunctions.length;
+    const numHashes = this.hashSeeds.length;
     const emptySlots = new Array<number>(numHashes);
     for (let i = 0; i < numHashes; ++i) {
       emptySlots[i] = this.getHash(i, this.emptyLow, this.emptyHigh);
@@ -119,21 +120,15 @@ export abstract class HashTableBase {
     }
   }
 
-  static generateHashFunctions(numAlternatives = NUM_ALTERNATIVES) {
-    let hashFunctions: HashFunction[][] = [];
-    for (let alt = 0; alt < numAlternatives; ++alt) {
-      let curFunctions = [HashFunction.generate(), HashFunction.generate()];
-      hashFunctions.push(curFunctions);
-    }
-    return hashFunctions;
+  static generateHashSeeds(numAlternatives = NUM_ALTERNATIVES) {
+    return getRandomValues(new Uint32Array(numAlternatives));
   }
 
   getHash(hashIndex: number, low: number, high: number) {
-    let hashes = this.hashFunctions[hashIndex];
-    let width = this.width, height = this.height;
-    let x = hashes[0].compute(low, high) % width;
-    let y = hashes[1].compute(low, high) % height;
-    return this.entryStride * (y * this.width + x);
+    let hash = this.hashSeeds[hashIndex];
+    hash = hashCombine(hash, low);
+    hash = hashCombine(hash, high);
+    return this.entryStride * (hash & (this.tableSize - 1));
   }
 
   /**
@@ -159,7 +154,7 @@ export abstract class HashTableBase {
     if (low === emptyLow && high === emptyHigh) {
       return -1;
     }
-    for (let i = 0, numHashes = this.hashFunctions.length; i < numHashes; ++i) {
+    for (let i = 0, numHashes = this.hashSeeds.length; i < numHashes; ++i) {
       let h = this.getHash(i, low, high);
       if (table[h] === low && table[h + 1] === high) {
         return h;
@@ -284,7 +279,7 @@ export abstract class HashTableBase {
     }
     let attempt = 0;
     let {emptyLow, emptyHigh, maxAttempts, table} = this;
-    let numHashes = this.hashFunctions.length;
+    let numHashes = this.hashSeeds.length;
 
     let tableIndex = Math.floor(Math.random() * numHashes);
     while (true) {
@@ -301,10 +296,8 @@ export abstract class HashTableBase {
     return false;
   }
 
-  private allocate(width: number, height: number) {
-    let tableSize = width * height;
-    this.width = width;
-    this.height = height;
+  private allocate(tableSize: number) {
+    this.tableSize = tableSize;
     let {entryStride} = this;
     this.table = new Uint32Array(tableSize * entryStride);
     this.maxAttempts = tableSize;
@@ -313,12 +306,12 @@ export abstract class HashTableBase {
     this.mungedEmptyKey = -1;
   }
 
-  private rehash(oldTable: Uint32Array, width: number, height: number) {
+  private rehash(oldTable: Uint32Array, tableSize: number) {
     if (DEBUG) {
       console.log('rehash begin');
     }
-    this.allocate(width, height);
-    this.updateHashFunctions(this.hashFunctions.length);
+    this.allocate(tableSize);
+    this.updateHashFunctions(this.hashSeeds.length);
     let {emptyLow, emptyHigh, entryStride} = this;
     for (let h = 0, length = oldTable.length; h < length; h += entryStride) {
       let low = oldTable[h], high = oldTable[h + 1];
@@ -343,27 +336,20 @@ export abstract class HashTableBase {
       console.log(`grow: ${desiredTableSize}`);
     }
     let oldTable = this.table;
-    let {width, height, maxWidth, maxHeight} = this;
+    let {tableSize} = this;
+    while (tableSize < desiredTableSize) {
+      tableSize *= 2;
+    }
     while (true) {
-      let origTableSize = width * height;
-      width = Math.min(maxWidth, Math.ceil(desiredTableSize / this.height));
-      if (width * height < desiredTableSize) {
-        height = Math.min(maxHeight, Math.ceil(desiredTableSize / width));
-      }
-      let tableSize = width * height;
-      if (tableSize < desiredTableSize && tableSize === origTableSize) {
-        throw new Error('Maximum table size exceeded');
-      }
-
       for (let rehashAttempt = 0; rehashAttempt < this.maxRehashAttempts; ++rehashAttempt) {
-        if (this.rehash(oldTable, width, height)) {
+        if (this.rehash(oldTable, tableSize)) {
           if (DEBUG) {
             console.log(`grow end`);
           }
           return;
         }
       }
-      desiredTableSize = Math.ceil(this.growFactor * desiredTableSize);
+      tableSize *= 2;
     }
   }
 
@@ -376,13 +362,13 @@ export abstract class HashTableBase {
 
     if (++this.size > this.capacity) {
       this.backupPending();
-      this.grow(Math.ceil(this.growFactor * this.width * this.height));
+      this.grow(this.tableSize * 2);
       this.restorePending();
     }
 
     while (!this.tryToInsert()) {
       this.backupPending();
-      this.grow(this.width * this.height);
+      this.grow(this.tableSize);
       this.restorePending();
     }
   }

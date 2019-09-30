@@ -21,7 +21,7 @@
 // This is based on goog/ui/keyboardshortcuthandler.js in the Google Closure library.
 
 import {RefCounted} from 'neuroglancer/util/disposable';
-import {ActionEvent, dispatchEvent, EventActionMap, EventActionMapInterface, registerActionListener} from 'neuroglancer/util/event_action_map';
+import {ActionEvent, dispatchEventWithModifiers, EventActionMap, EventActionMapInterface, registerActionListener} from 'neuroglancer/util/event_action_map';
 
 const globalKeys = new Set(
     ['f1', 'f2', 'f3', 'f4', 'f5', 'f6', 'f7', 'f8', 'f9', 'f10', 'f11', 'f12', 'escape', 'pause']);
@@ -94,7 +94,7 @@ export class KeyboardEventBinder<EventMap extends EventActionMapInterface> exten
     if (this.shouldIgnoreEvent(key, event)) {
       return;
     }
-    dispatchEvent(key, event, this.eventMap);
+    dispatchEventWithModifiers(key, event, event, this.eventMap);
   }
 }
 

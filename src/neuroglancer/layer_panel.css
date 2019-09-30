@@ -21,14 +21,8 @@
   flex-wrap: wrap;
   background-color: black;
   align-items: stretch;
-}
-
-.neuroglancer-layer-item + .neuroglancer-layer-item {
-  margin-left: 5px;
-}
-
-.neuroglancer-layer-item + .neuroglancer-layer-add-button {
-  margin-left: 5px;
+  margin-left: -5px;
+  margin-top: -1px;
 }
 
 .neuroglancer-layer-item {
@@ -43,11 +37,22 @@
   font-family: sans-serif;
   font-size: 10pt;
   background-color: black;
+  padding: 1px;
 }
 
 .neuroglancer-layer-item, .neuroglancer-layer-add-button {
-  margin: 2px;
+  margin: 1px;
+  margin-left: 5px;
 }
+
+.neuroglancer-layer-item[layer-selected=true] {
+  border-color: #8c8;
+}
+
+.neuroglancer-layer-item[layer-selected=true]:hover {
+  border-color: #3c3;
+}
+
 
 .neuroglancer-layer-item:hover {
   border-color: #daa520;
@@ -76,13 +81,12 @@
   background-color: /*#daa520*/ #9a7518;
   font-weight: bold;
   padding: 1px;
-  margin: 3px;
 }
 
 .neuroglancer-layer-item-value {
   display: inline-block;
   min-width: 10ch;
-  max-width: 30ch;
+  max-width: 50ch;
   margin-left: 1ch;
   white-space: nowrap;
   overflow: hidden;

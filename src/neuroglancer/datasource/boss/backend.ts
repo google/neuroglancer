@@ -17,16 +17,16 @@
 import {WithParameters} from 'neuroglancer/chunk_manager/backend';
 import {ChunkSourceParametersConstructor} from 'neuroglancer/chunk_manager/base';
 import {WithSharedCredentialsProviderCounterpart} from 'neuroglancer/credentials_provider/shared_counterpart';
-import {BossToken, makeRequest, HttpHeader, HttpCall} from 'neuroglancer/datasource/boss/api';
-import {VolumeChunkSourceParameters, MeshSourceParameters} from 'neuroglancer/datasource/boss/base';
-import {VolumeChunkSource, VolumeChunk} from 'neuroglancer/sliceview/volume/backend';
-import {decodeJsonManifestChunk, decodeTriangleVertexPositionsAndIndices, FragmentChunk, ManifestChunk, MeshSource} from 'neuroglancer/mesh/backend';
+import {BossToken, fetchWithBossCredentials} from 'neuroglancer/datasource/boss/api';
+import {MeshSourceParameters, VolumeChunkSourceParameters} from 'neuroglancer/datasource/boss/base';
+import {assignMeshFragmentData, decodeJsonManifestChunk, decodeTriangleVertexPositionsAndIndices, FragmentChunk, ManifestChunk, MeshSource} from 'neuroglancer/mesh/backend';
 import {ChunkDecoder} from 'neuroglancer/sliceview/backend_chunk_decoders';
-import {decodeJpegChunk} from 'neuroglancer/sliceview/backend_chunk_decoders/jpeg';
 import {decodeBossNpzChunk} from 'neuroglancer/sliceview/backend_chunk_decoders/bossNpz';
-import {openShardedHttpRequest, sendHttpRequest} from 'neuroglancer/util/http_request';
+import {decodeJpegChunk} from 'neuroglancer/sliceview/backend_chunk_decoders/jpeg';
+import {VolumeChunk, VolumeChunkSource} from 'neuroglancer/sliceview/volume/backend';
 import {CancellationToken} from 'neuroglancer/util/cancellation';
 import {Endianness} from 'neuroglancer/util/endian';
+import {cancellableFetchOk, responseArrayBuffer} from 'neuroglancer/util/http_request';
 import {registerSharedObject, SharedObject} from 'neuroglancer/worker_rpc';
 
 let chunkDecoders = new Map<string, ChunkDecoder>();
@@ -38,48 +38,40 @@ acceptHeaders.set('npz', 'application/npygz');
 acceptHeaders.set('jpeg', 'image/jpeg');
 
 function BossSource<Parameters, TBase extends {new (...args: any[]): SharedObject}>(
-  Base: TBase, parametersConstructor: ChunkSourceParametersConstructor<Parameters>) {
-return WithParameters(
-    WithSharedCredentialsProviderCounterpart<BossToken>()(Base), parametersConstructor);
+    Base: TBase, parametersConstructor: ChunkSourceParametersConstructor<Parameters>) {
+  return WithParameters(
+      WithSharedCredentialsProviderCounterpart<BossToken>()(Base), parametersConstructor);
 }
 
 @registerSharedObject()
 export class BossVolumeChunkSource extends (BossSource(VolumeChunkSource, VolumeChunkSourceParameters)) {
   chunkDecoder = chunkDecoders.get(this.parameters.encoding)!;
 
-  download(chunk: VolumeChunk, cancellationToken: CancellationToken) {
+  async download(chunk: VolumeChunk, cancellationToken: CancellationToken) {
     let {parameters} = this;
-    let path = 
-      `/latest/cutout/${parameters.collection}/${parameters.experiment}/${parameters.channel}/${parameters.resolution}`;
+    let url = `${parameters.baseUrl}/latest/cutout/${parameters.collection}/${parameters.experiment}/${
+        parameters.channel}/${parameters.resolution}`;
     {
       // chunkPosition must not be captured, since it will be invalidated by the next call to
       // computeChunkBounds.
       let chunkPosition = this.computeChunkBounds(chunk);
       let chunkDataSize = chunk.chunkDataSize!;
       for (let i = 0; i < 3; ++i) {
-        path += `/${chunkPosition[i]}:${chunkPosition[i] + chunkDataSize[i]}`;
+        url += `/${chunkPosition[i]}:${chunkPosition[i] + chunkDataSize[i]}`;
       }
     }
-    path += '/';
+    url += '/';
 
     if (parameters.window !== undefined) {
-      path += `?window=${parameters.window[0]},${parameters.window[1]}`;
+      url += `?window=${parameters.window[0]},${parameters.window[1]}`;
     }
-
-    let acceptHeader: HttpHeader = {
-        key: 'Accept',
-        value: acceptHeaders.get(parameters.encoding)!
-    }; 
-    let httpCall: HttpCall = {
-        method: 'GET',
-        path: path,
-        responseType: 'arraybuffer',
-        headers: [acceptHeader]
-    };
-    return makeRequest(parameters.baseUrls, this.credentialsProvider, httpCall, cancellationToken)
-      .then(response => this.chunkDecoder(chunk, response));
+    const response = await fetchWithBossCredentials(
+        this.credentialsProvider, url,
+        {headers: {'Accept': acceptHeaders.get(parameters.encoding)!}}, responseArrayBuffer,
+        cancellationToken);
+    await this.chunkDecoder(chunk, cancellationToken, response);
   }
-};
+}
 
 function decodeManifestChunk(chunk: ManifestChunk, response: any) {
   return decodeJsonManifestChunk(chunk, response, 'fragments');
@@ -88,26 +80,26 @@ function decodeManifestChunk(chunk: ManifestChunk, response: any) {
 function decodeFragmentChunk(chunk: FragmentChunk, response: ArrayBuffer) {
   let dv = new DataView(response);
   let numVertices = dv.getUint32(0, true);
-  decodeTriangleVertexPositionsAndIndices(
-      chunk, response, Endianness.LITTLE, /*vertexByteOffset=*/4, numVertices);
+  assignMeshFragmentData(
+      chunk,
+      decodeTriangleVertexPositionsAndIndices(
+          response, Endianness.LITTLE, /*vertexByteOffset=*/ 4, numVertices));
 }
 
 @registerSharedObject()
 export class BossMeshSource extends (BossSource(MeshSource, MeshSourceParameters)) {
-  download(chunk: ManifestChunk, cancellationToken: CancellationToken)
-  {
-    let {parameters} = this;
-    let requestPath = `${parameters.path}/${chunk.objectId}`;
-    return sendHttpRequest(
-      openShardedHttpRequest(parameters.baseUrls, requestPath), 'json', cancellationToken)
-      .then(response => decodeManifestChunk(chunk, response));
+  download(chunk: ManifestChunk, cancellationToken: CancellationToken) {
+    const {parameters} = this;
+    return cancellableFetchOk(
+               `${parameters.baseUrl}${chunk.objectId}`, {}, responseArrayBuffer, cancellationToken)
+        .then(response => decodeManifestChunk(chunk, response));
   }
-  
+
   downloadFragment(chunk: FragmentChunk, cancellationToken: CancellationToken) {
-    let {parameters} = this; 
-    let requestPath = `${parameters.path}/${chunk.fragmentId}`;
-    return sendHttpRequest(
-      openShardedHttpRequest(parameters.baseUrls, requestPath), 'arraybuffer', cancellationToken)
-      .then(response => decodeFragmentChunk(chunk, response)); 
+    const {parameters} = this;
+    return cancellableFetchOk(
+               `${parameters.baseUrl}${chunk.fragmentId}`, {}, responseArrayBuffer,
+               cancellationToken)
+        .then(response => decodeFragmentChunk(chunk, response));
   }
 }

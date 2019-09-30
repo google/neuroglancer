@@ -6,7 +6,7 @@ import neuroglancer
 
 viewer = neuroglancer.Viewer()
 with viewer.txn() as s:
-    s.layers['image'] = neuroglancer.ImageUserLayer(
+    s.layers['image'] = neuroglancer.ImageLayer(
         source='brainmaps://1016859101264:janelia-flyem-cx:raw',
     )
 

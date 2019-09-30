@@ -19,6 +19,7 @@
 let webpackHelpers = require('./webpack_helpers');
 const path = require('path');
 const webpack = require('webpack');
+const ExtractTextPlugin = require('extract-text-webpack-plugin');
 const minimist = require('minimist');
 
 module.exports = function(config) {
@@ -29,10 +30,9 @@ module.exports = function(config) {
   let newRegExp = new RegExp(pattern + patternSuffix);
 
   let webpackConfig = webpackHelpers.getBaseConfig({
-    useBabel: true,
-    babelPlugins: [...webpackHelpers.DEFAULT_BABEL_PLUGINS, 'babel-plugin-istanbul'],
     noOutput: true
   });
+  webpackConfig.mode = 'development';
   webpackConfig.devtool = 'inline-source-map';
   webpackConfig.plugins = [
     new webpack.ContextReplacementPlugin(
@@ -42,6 +42,7 @@ module.exports = function(config) {
             result.regExp = newRegExp;
           }
         }),
+    new ExtractTextPlugin({filename: 'styles.css', allChunks: true}),
   ];
 
   config.set({
@@ -59,7 +60,8 @@ module.exports = function(config) {
         // This empty object is required to work around a bug in karma-browserstack-launcher.
     },
     browsers: [
-      'Chrome',
+      'ChromeHeadless',
+      // 'Chrome',
       // 'ChromeCanary',
     ],
     customLaunchers: {

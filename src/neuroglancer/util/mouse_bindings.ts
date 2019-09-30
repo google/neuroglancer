@@ -19,11 +19,11 @@
  */
 
 import {RefCounted} from 'neuroglancer/util/disposable';
-import {ActionEvent, dispatchEvent, EventActionMap, EventActionMapInterface, registerActionListener} from 'neuroglancer/util/event_action_map';
+import {ActionEvent, dispatchEventWithModifiers, EventActionMap, EventActionMapInterface, registerActionListener} from 'neuroglancer/util/event_action_map';
 
 export class MouseEventBinder<EventMap extends EventActionMapInterface> extends RefCounted {
   private dispatch(baseIdentifier: string, event: MouseEvent) {
-    dispatchEvent(baseIdentifier, event, this.eventMap);
+    dispatchEventWithModifiers(baseIdentifier, event, event, this.eventMap);
   }
   constructor(public target: EventTarget, public eventMap: EventMap) {
     super();

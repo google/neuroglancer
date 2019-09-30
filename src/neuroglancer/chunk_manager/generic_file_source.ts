@@ -22,7 +22,9 @@
 import {Chunk, ChunkManager, ChunkSourceBase} from 'neuroglancer/chunk_manager/backend';
 import {ChunkPriorityTier, ChunkState} from 'neuroglancer/chunk_manager/base';
 import {CANCELED, CancellationToken, makeCancelablePromise} from 'neuroglancer/util/cancellation';
-import {openHttpRequest, sendHttpRequest} from 'neuroglancer/util/http_request';
+import {Borrowed, Owned} from 'neuroglancer/util/disposable';
+import {cancellableFetchOk, responseArrayBuffer} from 'neuroglancer/util/http_request';
+import {stableStringify} from 'neuroglancer/util/json';
 import {getObjectId} from 'neuroglancer/util/object_id';
 
 export type PriorityGetter = () => {
@@ -35,7 +37,8 @@ interface FileDataRequester<Data> {
   getPriority: PriorityGetter;
 }
 
-class GenericFileChunk<Data> extends Chunk {
+class GenericSharedDataChunk<Key, Data> extends Chunk {
+  decodedKey?: Key;
   data?: Data;
   requesters?: Set<FileDataRequester<Data>>;
   backendOnly = true;
@@ -68,12 +71,29 @@ class GenericFileChunk<Data> extends Chunk {
   }
 }
 
-export class GenericFileSource<Data> extends ChunkSourceBase {
-  chunks: Map<string, GenericFileChunk<Data>>;
+export interface GenericSharedDataSourceOptions<Key, Data> {
+  encodeKey?: (key: Key) => string;
+  download: (key: Key, cancellationToken: CancellationToken) => Promise<{size: number, data: Data}>;
+  sourceQueueLevel?: number;
+}
 
-  constructor(chunkManager: ChunkManager, public decodeFile: (response: ArrayBuffer) => Data) {
+export class GenericSharedDataSource<Key, Data> extends ChunkSourceBase {
+  chunks: Map<string, GenericSharedDataChunk<Key, Data>>;
+
+  private encodeKeyFunction: (key: Key) => string;
+
+  private downloadFunction:
+      (key: Key, cancellationToken: CancellationToken) => Promise<{size: number, data: Data}>;
+
+  constructor(
+      chunkManager: Owned<ChunkManager>, options: GenericSharedDataSourceOptions<Key, Data>) {
     super(chunkManager);
     this.registerDisposer(chunkManager);
+    const {encodeKey = stableStringify} = options;
+    this.downloadFunction = options.download;
+    this.encodeKeyFunction = encodeKey;
+    const {sourceQueueLevel = 0} = options;
+    this.sourceQueueLevel = sourceQueueLevel;
 
     // This source is unusual in that it updates its own chunk priorities.
     this.registerDisposer(this.chunkManager.recomputeChunkPrioritiesLate.add(() => {
@@ -87,28 +107,30 @@ export class GenericFileSource<Data> extends ChunkSourceBase {
       let {requesters} = chunk;
       if (requesters !== undefined) {
         for (let requester of requesters) {
-          let {priorityTier, priority} = requester.getPriority();
+          const {priorityTier, priority} = requester.getPriority();
+          if (priorityTier === ChunkPriorityTier.RECENT) continue;
           chunkManager.requestChunk(chunk, priorityTier, priority);
         }
       }
     }
   }
 
-  download(chunk: GenericFileChunk<Data>, cancellationToken: CancellationToken) {
-    return sendHttpRequest(openHttpRequest(chunk.key!), 'arraybuffer', cancellationToken)
-        .then(response => {
-          chunk.data = this.decodeFile(response);
-        });
+  async download(chunk: GenericSharedDataChunk<Key, Data>, cancellationToken: CancellationToken) {
+    const {size, data} = await this.downloadFunction(chunk.decodedKey!, cancellationToken);
+    chunk.systemMemoryBytes = size;
+    chunk.data = data;
   }
 
   /**
    * Precondition: priorityTier <= ChunkPriorityTier.LAST_ORDERED_TIER
    */
-  getData(key: string, getPriority: PriorityGetter, cancellationToken: CancellationToken) {
-    let chunk = this.chunks.get(key);
+  getData(key: Key, getPriority: PriorityGetter, cancellationToken: CancellationToken) {
+    const encodedKey = this.encodeKeyFunction(key);
+    let chunk = this.chunks.get(encodedKey);
     if (chunk === undefined) {
-      chunk = this.getNewChunk_(GenericFileChunk);
-      chunk.initialize(key);
+      chunk = this.getNewChunk_<GenericSharedDataChunk<Key, Data>>(GenericSharedDataChunk);
+      chunk.decodedKey = key;
+      chunk.initialize(encodedKey);
       this.addChunk(chunk);
     }
     return makeCancelablePromise<Data>(cancellationToken, (resolve, reject, token) => {
@@ -137,24 +159,35 @@ export class GenericFileSource<Data> extends ChunkSourceBase {
     });
   }
 
-  /**
-   * Reference count of chunkManager should be incremented by the caller.
-   */
-  static get<Data>(chunkManager: ChunkManager, decodeFile: (response: ArrayBuffer) => Data) {
+  static get<Key, Data>(
+      chunkManager: Borrowed<ChunkManager>, memoizeKey: string,
+      options: GenericSharedDataSourceOptions<Key, Data>) {
     return chunkManager.memoize.get(
-        `getFileSource:${getObjectId(decodeFile)}`,
-        () => new GenericFileSource(chunkManager, decodeFile));
+        `getFileSource:${memoizeKey}`,
+        () => new GenericSharedDataSource(chunkManager.addRef(), options));
   }
 
-  /**
-   * Reference count of chunkManager should be incremented by the caller.
-   */
-  static getData<Data>(
-      chunkManager: ChunkManager, decodeFile: (response: ArrayBuffer) => Data, key: string,
-      getPriority: PriorityGetter, cancellationToken: CancellationToken) {
-    const source = GenericFileSource.get(chunkManager, decodeFile);
+  static getData<Key, Data>(
+      chunkManager: Borrowed<ChunkManager>, memoizeKey: string,
+      options: GenericSharedDataSourceOptions<Key, Data>, key: Key, getPriority: PriorityGetter,
+      cancellationToken: CancellationToken) {
+    const source = GenericSharedDataSource.get(chunkManager, memoizeKey, options);
     const result = source.getData(key, getPriority, cancellationToken);
     source.dispose();
     return result;
+  }
+
+  static getUrl<Data>(
+      chunkManager: Borrowed<ChunkManager>,
+      decodeFunction: (buffer: ArrayBuffer, cancellationToken: CancellationToken) =>
+          Promise<{size: number, data: Data}>,
+      url: string, getPriority: PriorityGetter, cancellationToken: CancellationToken) {
+    return GenericSharedDataSource.getData<string, Data>(
+        chunkManager, `${getObjectId(decodeFunction)}`, {
+          download: (url: string, cancellationToken: CancellationToken) =>
+              cancellableFetchOk(url, {}, responseArrayBuffer, cancellationToken)
+                  .then(response => decodeFunction(response, cancellationToken))
+        },
+        url, getPriority, cancellationToken);
   }
 }

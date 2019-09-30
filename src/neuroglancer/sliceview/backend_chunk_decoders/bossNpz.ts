@@ -15,35 +15,39 @@
  */
 
 /**
- * This decodes the NDStore (https://github.com/neurodata/ndstore) NPZ format, which is the Python
+ * This decodes the BOSS (https://github.com/jhuapl-boss/) NPZ format, which is the Python
  * NPY binary format with zlib encoding.
  *
  * This is NOT the same as the Python NPZ format, which is a ZIP file containing multiple files
  * (each corresponding to a different variable) in NPY binary format.
  */
 
-import {VolumeChunk} from 'neuroglancer/sliceview/volume/backend';
+import {decodeGzip} from 'neuroglancer/async_computation/decode_gzip_request';
+import {requestAsyncComputation} from 'neuroglancer/async_computation/request';
 import {postProcessRawData} from 'neuroglancer/sliceview/backend_chunk_decoders/postprocess';
 import {DataType} from 'neuroglancer/sliceview/base';
+import {VolumeChunk} from 'neuroglancer/sliceview/volume/backend';
+import {CancellationToken} from 'neuroglancer/util/cancellation';
 import {vec3Key} from 'neuroglancer/util/geom';
 import {parseNpy} from 'neuroglancer/util/npy';
-import {inflate} from 'pako';
 
-export function decodeBossNpzChunk(chunk: VolumeChunk, response: ArrayBuffer) {
-  let parseResult = parseNpy(inflate(new Uint8Array(response)));
+export async function decodeBossNpzChunk(
+    chunk: VolumeChunk, cancellationToken: CancellationToken, response: ArrayBuffer) {
+  let parseResult = parseNpy(await requestAsyncComputation(
+      decodeGzip, cancellationToken, [response], new Uint8Array(response)));
   let chunkDataSize = chunk.chunkDataSize!;
   let source = chunk.source!;
   let {shape} = parseResult;
-  if (shape.length !== 3 || shape[0] !== chunkDataSize[2] ||
-      shape[1] !== chunkDataSize[1] || shape[2] !== chunkDataSize[0]) {
+  if (shape.length !== 3 || shape[0] !== chunkDataSize[2] || shape[1] !== chunkDataSize[1] ||
+      shape[2] !== chunkDataSize[0]) {
     throw new Error(
         `Shape ${JSON.stringify(shape)} does not match chunkDataSize ${vec3Key(chunkDataSize)}`);
   }
   let parsedDataType = parseResult.dataType.dataType;
   let {spec} = source;
   if (parsedDataType !== spec.dataType) {
-    throw new Error(
-        `Data type ${DataType[parsedDataType]} does not match expected data type ${DataType[spec.dataType]}`);
+    throw new Error(`Data type ${DataType[parsedDataType]} does not match expected data type ${
+        DataType[spec.dataType]}`);
   }
-  postProcessRawData(chunk, parseResult.data);
+  await postProcessRawData(chunk, cancellationToken, parseResult.data);
 }

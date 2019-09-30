@@ -58,6 +58,14 @@ export class TriangularMesh {
       public vertexAttributes: VertexAttribute[]) {}
 }
 
+export function getTriangularMeshSize(mesh: TriangularMesh) {
+  let size = mesh.vertexPositions.byteLength + mesh.indices.byteLength;
+  for (const attribute of mesh.vertexAttributes) {
+    size += attribute.data.byteLength;
+  }
+  return size;
+}
+
 function parsePolydataAscii(header: VTKHeader, data: ArrayBufferView): TriangularMesh {
   let decoder = new TextDecoder();
   const text = decoder.decode(data);
@@ -209,7 +217,7 @@ function parsePolydataAscii(header: VTKHeader, data: ArrayBufferView): Triangula
 
 const asciiFormatParsers = new Map([['POLYDATA', parsePolydataAscii]]);
 
-export function parseVTK(data: ArrayBufferView) {
+export function parseVTK(data: ArrayBufferView): TriangularMesh {
   // Decode start of data as UTF-8 to determine whether it is ASCII or BINARY format.  Decoding
   // errors (as will occur if it is binary format) will be ignored.
   let decoder = new TextDecoder();

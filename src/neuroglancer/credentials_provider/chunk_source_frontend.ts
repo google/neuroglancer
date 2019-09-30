@@ -23,7 +23,7 @@ import {CredentialsProvider} from 'neuroglancer/credentials_provider';
 import {SharedCredentialsProvider} from 'neuroglancer/credentials_provider/shared';
 import {Borrowed, Owned} from 'neuroglancer/util/disposable';
 import {getObjectId} from 'neuroglancer/util/object_id';
-import {RPC} from 'neuroglancer/worker_rpc';
+import {RPC, SharedObject} from 'neuroglancer/worker_rpc';
 
 /**
  * Returns a counterpart ref to be sent to the backend to retrieve a
@@ -43,7 +43,8 @@ export function getCredentialsProviderCounterpart<Credentials>(
  * Mixin for adding a credentialsProvider member to a ChunkSource.
  */
 export function WithCredentialsProvider<Credentials>() {
-  return function<BaseOptions, TBase extends ChunkSourceConstructor<BaseOptions>>(Base: TBase) {
+  return function<BaseOptions, TBase extends ChunkSourceConstructor<
+                      BaseOptions, SharedObject&{chunkManager: ChunkManager}>>(Base: TBase) {
     type Options = BaseOptions&{credentialsProvider: Borrowed<CredentialsProvider<Credentials>>};
     return class extends Base {
       credentialsProvider: Owned<CredentialsProvider<Credentials>>;

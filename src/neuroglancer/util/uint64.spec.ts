@@ -36,6 +36,17 @@ describe('uint64', () => {
     expect(new Uint64(4294967295, 4294967295).toString(36)).toEqual('3w5e11264sgsf');
   });
 
+  it('conversion from string', () => {
+    expect(new Uint64(0, 0).tryParseString('0')).toBe(true);
+    expect(new Uint64(1, 0).tryParseString('1')).toBe(true);
+    expect(new Uint64(0, 1).tryParseString('4294967296')).toBe(true);
+    expect(new Uint64(0, 1).tryParseString('102002022201221111211', 3)).toBe(true);
+    expect(new Uint64(0, 1).tryParseString('100000000000000000000000000000000', 2)).toBe(true);
+    expect(new Uint64(0, 1).tryParseString('1z141z4', 36)).toBe(true);
+    expect(new Uint64(4294967295, 4294967295).tryParseString('18446744073709551615')).toBe(true);
+    expect(new Uint64(4294967295, 4294967295).tryParseString('3w5e11264sgsf', 36)).toBe(true);
+  });
+
   it('equal', () => {
     let a = new Uint64(1, 2);
     let b = new Uint64(1, 2);
@@ -73,10 +84,16 @@ describe('uint64', () => {
     function check(x: Uint64, base: number) {
       let s = x.toString(base);
       let y = Uint64.parseString(s, base);
-      expect(y.low).toBe(x.low);
-      expect(y.high).toBe(x.high);
+      expect(y.low).toBe(x.low, `s=${s}, x.low=${x.low}, x.high=${x.high}, y.low=${y.low}, y.high=${y.high}, base=${base}`);
+      expect(y.high).toBe(x.high, `s=${s}, x.low=${x.low}, x.high=${x.high}, y.low=${y.low}, y.high=${y.high}, base=${base}`);
     }
     const count = 100;
+    {
+      const u = new Uint64(264762631, 2836123747);
+      expect(u.toString(13)).toEqual('153c9125c642b111b8');
+      check(u, 13);
+    }
+
     for (let base = 2; base <= 36; ++base) {
       for (let i = 0; i < count; ++i) {
         check(Uint64.random(), base);

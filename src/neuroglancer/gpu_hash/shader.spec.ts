@@ -14,188 +14,90 @@
  * limitations under the License.
  */
 
-import {PRIME_MODULUS} from 'neuroglancer/gpu_hash/hash_function';
-import {HashMapUint64, HashSetUint64, NUM_ALTERNATIVES} from 'neuroglancer/gpu_hash/hash_table';
+import {HashMapUint64, HashSetUint64} from 'neuroglancer/gpu_hash/hash_table';
 import {GPUHashTable, HashMapShaderManager, HashSetShaderManager} from 'neuroglancer/gpu_hash/shader';
 import {Uint64} from 'neuroglancer/util/uint64';
-import {encodeBytesToFloat32, glsl_exactDot} from 'neuroglancer/webgl/shader_lib';
+import {glsl_unpackUint64leFromUint32} from 'neuroglancer/webgl/shader_lib';
 import {fragmentShaderTest} from 'neuroglancer/webgl/shader_testing';
+import {getRandomUint32} from '../util/random';
+import {hashCombine} from './hash_function';
 
 const COUNT = 100;
 
 describe('gpu_hash.shader', () => {
-  it('hash function part', () => {
-    fragmentShaderTest(6, tester => {
+  it('hashCombineUint32', () => {
+    fragmentShaderTest({outputValue: 'uint'}, tester => {
       let {gl, builder} = tester;
       let hashTableShaderManager = new HashSetShaderManager('h');
       hashTableShaderManager.defineShader(builder);
-      builder.addUniform('vec4', 'inputValue', 2);
-      builder.addFragmentCode(glsl_exactDot);
+      builder.addUniform('highp uint', 'inputValue');
+      builder.addUniform('highp uint', 'hashSeed');
       {
-        let alt = 0, i = 0;
-        let bIndex = alt * 4 + 2 * i;
-        let aIndex = alt * 4 + 2 * i;
-        let {aName, bName, numAlternatives} = hashTableShaderManager;
-
         let s = `
-uint64_t x;
-x.low = inputValue[0];
-x.high = inputValue[1];
-
-x.low *= 255.0;
-x.high *= 255.0;
-float modulus = ${bName}[${numAlternatives * 4 + i}];
-float scalar = ${bName}[${numAlternatives * 4 + 3 + i}];
-vec4 a0 = ${aName}[${aIndex}];
-vec4 a1 = ${aName}[${aIndex + 1}];
-float b = ${bName}[${bIndex}];
-float c = ${bName}[${bIndex + 1}];
-
-  float dotResult0 = exactDot(a0, x.low) + exactDot(a1, x.high);
-  float dotResult = imod(dotResult0, modulus);
-  float dotResult2 = imod(dotResult * dotResult, modulus);
-  float y = imod(dotResult2 * c, modulus);
-  float modResult = imod(dotResult + y + b, modulus);
-
-gl_FragData[4] = packFloatIntoVec4(dotResult0);
-gl_FragData[0] = packFloatIntoVec4(dotResult);
-gl_FragData[1] = packFloatIntoVec4(dotResult2);
-gl_FragData[5] = packFloatIntoVec4(dotResult * dotResult);
-gl_FragData[2] = packFloatIntoVec4(y);
-gl_FragData[3] = packFloatIntoVec4(modResult);
+outputValue = hashCombine(hashSeed, inputValue);
 `;
-
         builder.setFragmentMain(s);
       }
 
       tester.build();
       let {shader} = tester;
       shader.bind();
-
-      for (let k = 0; k < 20; ++k) {
-        let hashTable = new HashSetUint64();
-        let gpuHashTable = tester.registerDisposer(GPUHashTable.get(gl, hashTable));
-
-        for (let iter = 0; iter < COUNT; ++iter) {
-          let x = Uint64.random();
-          let temp = new Uint32Array(2);
-          temp[0] = x.low;
-          temp[1] = x.high;
-          let inputValue = encodeBytesToFloat32(temp);
-          gl.uniform4fv(shader.uniform('inputValue'), inputValue);
-          hashTableShaderManager.enable(gl, shader, gpuHashTable);
-          tester.execute();
-          let alt = 0;
-          let i = 0;
-
-          let dotResult0 = tester.readFloat(4);
-          let dotResult = tester.readFloat(0);
-          let dotResult2 = tester.readFloat(1);
-          let dotResultSquared = tester.readFloat(5);
-          let y = tester.readFloat(2);
-          let modResult = tester.readFloat(3);
-          let modulus = PRIME_MODULUS;
-
-          let h = hashTable.hashFunctions[alt][i];
-          let expectedDotResult0 = h.computeDotProduct(x.low, x.high);
-          let expectedDotResult = expectedDotResult0 % modulus;
-          let expectedDotResultSquared = expectedDotResult * expectedDotResult;
-          let expectedDotResult2 = (expectedDotResult * expectedDotResult) % modulus;
-          let expectedY = (expectedDotResult2 * h.c) % modulus;
-          let expectedModResult = (dotResult + y + h.b + 0.25) % modulus;
-          expect(dotResult0).toEqual(expectedDotResult0);
-          expect(dotResult).toEqual(expectedDotResult);
-          expect(dotResultSquared).toEqual(expectedDotResultSquared);
-          expect((dotResult2 + modulus) % modulus)
-              .toEqual(expectedDotResult2, `dotResult=${dotResult}`);
-          expect((y + modulus) % modulus).toEqual(expectedY);
-          expect(modResult).toEqual(expectedModResult);
-        }
-
-        gpuHashTable.dispose();
+      const testHash = (hashSeed: number, inputValue: number) => {
+        gl.uniform1ui(shader.uniform('hashSeed'), hashSeed);
+        gl.uniform1ui(shader.uniform('inputValue'), inputValue);
+        tester.execute();
+        let expected = hashCombine(hashSeed, inputValue);
+        expect(tester.values.outputValue).toEqual(expected);
+      };
+      for (let k = 0; k < 50; ++k) {
+        testHash(getRandomUint32(), getRandomUint32());
       }
     });
   });
-  it('hash function', () => {
-    fragmentShaderTest(3 * 2, tester => {
+
+
+  it('hashCombine', () => {
+    fragmentShaderTest({outputValue: 'uint'}, tester => {
       let {gl, builder} = tester;
       let hashTableShaderManager = new HashSetShaderManager('h');
       hashTableShaderManager.defineShader(builder);
-      builder.addUniform('vec4', 'inputValue', 2);
-      let s = `
-uint64_t x;
-x.low = inputValue[0];
-x.high = inputValue[1];
-`;
+      builder.addUniform('highp uvec2', 'inputValue');
+      builder.addUniform('highp uint', 'hashSeed');
       {
-        let outputNumber = 0;
-        for (let alt = 0; alt < 3; ++alt) {
-          for (let i = 0; i < 2; ++i) {
-            s += `
-gl_FragData[${outputNumber++}] = packFloatIntoVec4(h_computeHash_${alt}_${i}(x));
+        let s = `
+uint64_t x;
+x.value = inputValue;
+outputValue = hashCombine(hashSeed, x);
 `;
-          }
-        }
+        builder.setFragmentMain(s);
       }
-      builder.setFragmentMain(s);
+
       tester.build();
       let {shader} = tester;
       shader.bind();
-
-      let hashTable = new HashSetUint64();
-      let gpuHashTable = tester.registerDisposer(GPUHashTable.get(gl, hashTable));
-      for (let i = 0; i < COUNT; ++i) {
-        let x = Uint64.random();
-        let temp = new Uint32Array(2);
-        temp[0] = x.low;
-        temp[1] = x.high;
-        let inputValue = encodeBytesToFloat32(temp);
-        gl.uniform4fv(shader.uniform('inputValue'), inputValue);
-        hashTableShaderManager.enable(gl, shader, gpuHashTable);
+      for (let k = 0; k < 20; ++k) {
+        const inputValue = Uint64.random();
+        const hashSeed = getRandomUint32();
+        gl.uniform1ui(shader.uniform('hashSeed'), hashSeed);
+        gl.uniform2ui(shader.uniform('inputValue'), inputValue.low, inputValue.high);
         tester.execute();
-        let outputNumber = 0;
-        for (let alt = 0; alt < 3; ++alt) {
-          let output0 = tester.readFloat(outputNumber++);
-          let output1 = tester.readFloat(outputNumber++);
-          let hashes = hashTable.hashFunctions[alt];
-          let {width, height} = hashTable;
-          let expected0 = ((hashes[0].compute(x.low, x.high) % width) + 0.25) / width;
-          let expected1 = ((hashes[1].compute(x.low, x.high) % height) + 0.5) / height;
-          expect(expected0).toBeCloseTo(output0, 1e-6, `x = ${[x.low, x.high]}, alt = ${alt}`);
-          expect(expected1).toBeCloseTo(output1, 1e-6);
-        }
+        let expected = hashCombine(hashSeed, inputValue.low);
+        expected = hashCombine(expected, inputValue.high);
+        expect(tester.values.outputValue).toEqual(expected);
       }
-
     });
   });
 
   it('GPUHashTable:HashSetUint64', () => {
-    fragmentShaderTest(1 + 2 * NUM_ALTERNATIVES, tester => {
-      let numAlternatives = NUM_ALTERNATIVES;
+    fragmentShaderTest({outputValue: 'uint'}, tester => {
       let {gl, builder} = tester;
       let hashTableShaderManager = new HashSetShaderManager('h');
       hashTableShaderManager.defineShader(builder);
-      builder.addUniform('vec4', 'inputValue', 2);
-      let {bName, samplerName} = hashTableShaderManager;
+      builder.addFragmentCode(glsl_unpackUint64leFromUint32);
+      builder.addUniform('highp uvec2', 'inputValue');
       let s = `
-uint64_t x;
-x.low = inputValue[0];
-x.high = inputValue[1];
-gl_FragData[0] = h_has(x) ? vec4(1.0, 1.0, 1.0, 1.0) : vec4(0.0, 0.0, 0.0, 0.0);
-float highOffset = ${bName}[${numAlternatives * 4 + 2}];
+outputValue = uint(h_has(unpackUint64leFromUint32(inputValue)));
 `;
-      {
-        let outputNumber = 1;
-        for (let alt = 0; alt < NUM_ALTERNATIVES; ++alt) {
-          s += `
-{
-  vec2 v = h_computeHash_${alt}(x);
-  gl_FragData[${outputNumber++}] = texture2D(${samplerName}, v);
-  gl_FragData[${outputNumber++}] = texture2D(${samplerName}, vec2(v.x + highOffset, v.y));
-}
-`;
-        }
-      }
       builder.setFragmentMain(s);
       tester.build();
       let {shader} = tester;
@@ -221,35 +123,11 @@ float highOffset = ${bName}[${numAlternatives * 4 + 2}];
         }
         notPresentValues.push(x);
       }
-      let executeIndex = 0;
-      let mungedTable: Uint32Array;
-      hashTable.tableWithMungedEmptyKey(table => {
-        mungedTable = new Uint32Array(table);
-      });
       function checkPresent(x: Uint64) {
-        let temp = new Uint32Array(2);
-        temp[0] = x.low;
-        temp[1] = x.high;
-        let inputValue = encodeBytesToFloat32(temp);
-        gl.uniform4fv(shader.uniform('inputValue'), inputValue);
+        gl.uniform2ui(shader.uniform('inputValue'), x.low, x.high);
         hashTableShaderManager.enable(gl, shader, gpuHashTable);
         tester.execute();
-        let curIndex = executeIndex;
-        ++executeIndex;
-        let outputNumber = 1;
-        for (let alt = 0; alt < NUM_ALTERNATIVES; ++alt) {
-          let valueLow = tester.readUint32(outputNumber++);
-          let valueHigh = tester.readUint32(outputNumber++);
-          let h = hashTable.getHash(alt, x.low, x.high);
-          let expectedValueLow = mungedTable[h];
-          let expectedValueHigh = mungedTable[h + 1];
-          expect(valueLow).toEqual(
-              expectedValueLow, `curIndex = ${curIndex}, x = ${[x.low, x.high]}, alt = ${alt}`);
-          expect(valueHigh).toEqual(
-              expectedValueHigh, `curIndex = ${curIndex}, x = ${[x.low, x.high]}, alt = ${alt}`);
-        }
-        let resultBytes = tester.readBytes();
-        return resultBytes[0] === 255;
+        return tester.values.outputValue === 1;
       }
       testValues.forEach((x, i) => {
         expect(hashTable.has(x)).toBe(true, `cpu: i = ${i}, x = ${x}`);
@@ -264,19 +142,17 @@ float highOffset = ${bName}[${numAlternatives * 4 + 2}];
   });
 
   it('GPUHashTable:HashMapUint64', () => {
-    fragmentShaderTest(3, tester => {
+    fragmentShaderTest({isPresent: 'uint', outLow: 'uint', outHigh: 'uint'}, tester => {
       let {gl, builder} = tester;
       let shaderManager = new HashMapShaderManager('h');
       shaderManager.defineShader(builder);
-      builder.addUniform('vec4', 'inputValue', 2);
+      builder.addUniform('highp uvec2', 'inputValue');
       builder.setFragmentMain(`
-uint64_t x;
-x.low = inputValue[0];
-x.high = inputValue[1];
-uint64_t y;
-gl_FragData[0] = h_get(x, y) ? vec4(1.0, 1.0, 1.0, 1.0) : vec4(0.0, 0.0, 0.0, 0.0);
-gl_FragData[1] = y.low;
-gl_FragData[2] = y.high;
+uint64_t key = unpackUint64leFromUint32(inputValue);
+uint64_t value;
+isPresent = uint(h_get(key, value));
+outLow = value.value[0];
+outHigh = value.value[1];
 `);
       tester.build();
       let {shader} = tester;
@@ -302,21 +178,17 @@ gl_FragData[2] = y.high;
         notPresentValues.push(x);
       }
       function checkPresent(x: Uint64) {
-        let temp = new Uint32Array(2);
-        temp[0] = x.low;
-        temp[1] = x.high;
-        let inputValue = encodeBytesToFloat32(temp);
-        gl.uniform4fv(shader.uniform('inputValue'), inputValue);
+        gl.uniform2ui(shader.uniform('inputValue'), x.low, x.high);
         shaderManager.enable(gl, shader, gpuHashTable);
         tester.execute();
-        let resultBytes = tester.readBytes();
-        let has = resultBytes[0] === 255;
+        const {values} = tester;
         let expectedValue = new Uint64();
         let expectedHas = hashTable.get(x, expectedValue);
-        expect(has).toEqual(expectedHas);
+        const has = values.isPresent === 1;
+        expect(has).toBe(expectedHas, `x=${x}`);
         if (has) {
-          expect(tester.readUint32(1)).toEqual(expectedValue.low);
-          expect(tester.readUint32(2)).toEqual(expectedValue.high);
+          expect(values.outLow).toBe(expectedValue.low, `x=${x}, low`);
+          expect(values.outHigh).toBe(expectedValue.high, `x=${x}, high`);
         }
       }
       testValues.forEach((x, i) => {

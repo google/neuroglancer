@@ -20,4 +20,7 @@
  */
 
 import {VolumeChunk} from 'neuroglancer/sliceview/volume/backend';
-export type ChunkDecoder = (chunk: VolumeChunk, response: ArrayBuffer) => void;
+import {CancellationToken} from 'neuroglancer/util/cancellation';
+export type ChunkDecoder =
+    (chunk: VolumeChunk, cancellationToken: CancellationToken, response: ArrayBuffer) =>
+        Promise<void>;

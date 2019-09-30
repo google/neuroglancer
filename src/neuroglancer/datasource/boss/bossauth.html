@@ -1,0 +1,20 @@
+<!DOCTYPE html>
+<html>
+    <head>
+        <title>BOSS Auth Response Window</title>
+        <script>
+            // Get code component of query and send back to window opener.
+            let auth = (new URL(document.location)).hash
+                .substring(1)
+                .split("&")
+                .map( el => el.split("=") )
+                .reduce( (pre, cur) => { pre[cur[0]] = cur[1]; return pre; }, {} );
+            auth.service = 'bossAuthCallback';
+            opener.postMessage(JSON.stringify(auth), location.origin);
+        </script>
+    </head>
+    <body>
+        <p>This page is a placeholder for Keycloak redirection.</p>
+        <p><button onclick="window.close()">Close</button></p>
+    </body>
+</html>

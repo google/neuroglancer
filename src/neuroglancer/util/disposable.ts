@@ -18,6 +18,20 @@ export interface Disposable { dispose: () => void; }
 
 export type Disposer = Disposable | (() => void);
 
+export function invokeDisposer(disposer: Disposer) {
+  if (typeof disposer === 'object') {
+    disposer.dispose();
+  } else {
+    disposer();
+  }
+}
+
+export function invokeDisposers(disposers: Disposer[]) {
+  for (let i = disposers.length; i > 0; --i) {
+    invokeDisposer(disposers[i - 1]);
+  }
+}
+
 export function registerEventListener(
     target: EventTarget, type: string, listener: EventListenerOrEventListenerObject,
     options?: boolean|AddEventListenerOptions) {
@@ -43,16 +57,8 @@ export class RefCounted implements Disposable {
   protected refCountReachedZero() {
     this.disposed();
     let {disposers} = this;
-    if (disposers != null) {
-      let numDisposers = disposers.length;
-      for (let i = numDisposers; i > 0; --i) {
-        let disposer = disposers[i - 1];
-        if (typeof disposer === 'object') {
-          (<Disposable>disposer).dispose();
-        } else {
-          (<() => void>disposer).call(this);
-        }
-      }
+    if (disposers !== undefined) {
+      invokeDisposers(disposers);
       this.disposers = <any>undefined;
     }
     this.wasDisposed = true;
@@ -100,9 +106,9 @@ export class RefCountedValue<T> extends RefCounted {
  * A variable of this type is associated with an increment of the reference count.  If a function
  * parameter is declared with this type, then callers must donate a reference count.
  */
-export type Owned<T extends RefCounted> = T;
+export type Owned<T extends Disposable> = T;
 
 /**
  * A variable of this type is not associated with an increment of the reference count.
  */
-export type Borrowed<T extends RefCounted> = T;
+export type Borrowed<T extends Disposable> = T;

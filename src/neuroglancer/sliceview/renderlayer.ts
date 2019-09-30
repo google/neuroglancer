@@ -17,43 +17,41 @@
 import {ChunkManager} from 'neuroglancer/chunk_manager/frontend';
 import {CoordinateTransform} from 'neuroglancer/coordinate_transform';
 import {RenderLayer as GenericRenderLayer} from 'neuroglancer/layer';
-import {getTransformedSources, SLICEVIEW_RENDERLAYER_RPC_ID, SLICEVIEW_RENDERLAYER_UPDATE_TRANSFORM_RPC_ID} from 'neuroglancer/sliceview/base';
-import {ChunkLayout} from 'neuroglancer/sliceview/chunk_layout';
+import {RenderScaleHistogram, trackableRenderScaleTarget} from 'neuroglancer/render_scale_statistics';
+import {SharedWatchableValue} from 'neuroglancer/shared_watchable_value';
+import {getTransformedSources, SLICEVIEW_RENDERLAYER_RPC_ID, SLICEVIEW_RENDERLAYER_UPDATE_TRANSFORM_RPC_ID, TransformedSource} from 'neuroglancer/sliceview/base';
 import {SliceView, SliceViewChunkSource} from 'neuroglancer/sliceview/frontend';
-import {BoundingBox, vec3} from 'neuroglancer/util/geom';
-import {makeWatchableShaderError, WatchableShaderError} from 'neuroglancer/webgl/dynamic_shader';
-import {ShaderBuilder, ShaderProgram} from 'neuroglancer/webgl/shader';
+import {WatchableValueInterface} from 'neuroglancer/trackable_value';
+import {vec3} from 'neuroglancer/util/geom';
 import {RpcId} from 'neuroglancer/worker_rpc';
 import {SharedObject} from 'neuroglancer/worker_rpc';
 
-const tempVec3 = vec3.create();
-
 export interface RenderLayerOptions {
-  transform: CoordinateTransform;
-  shaderError: WatchableShaderError;
+  transform?: CoordinateTransform;
+  renderScaleTarget?: WatchableValueInterface<number>;
+  renderScaleHistogram?: RenderScaleHistogram;
 }
 
 export abstract class RenderLayer extends GenericRenderLayer {
-  shader: ShaderProgram|undefined = undefined;
-  shaderUpdated = true;
   rpcId: RpcId|null = null;
-  shaderError: WatchableShaderError;
   transform: CoordinateTransform;
-  transformedSources: {source: SliceViewChunkSource, chunkLayout: ChunkLayout}[][];
+  transformedSources: TransformedSource<SliceViewChunkSource>[][];
   transformedSourcesGeneration = -1;
+  renderScaleTarget: WatchableValueInterface<number>;
+  renderScaleHistogram?: RenderScaleHistogram;
 
   constructor(
       public chunkManager: ChunkManager, public sources: SliceViewChunkSource[][],
-      options: Partial<RenderLayerOptions> = {}) {
+      options: RenderLayerOptions) {
     super();
 
-    const {transform = new CoordinateTransform(), shaderError = makeWatchableShaderError()} =
-        options;
-
+    const {
+      transform = new CoordinateTransform(),
+      renderScaleTarget = trackableRenderScaleTarget(1)
+    } = options;
+    this.renderScaleTarget = renderScaleTarget;
+    this.renderScaleHistogram = options.renderScaleHistogram;
     this.transform = transform;
-    this.shaderError = shaderError;
-    shaderError.value = undefined;
-
     const transformedSources = getTransformedSources(this);
 
     {
@@ -64,29 +62,19 @@ export abstract class RenderLayer extends GenericRenderLayer {
       for (let i = 0; i < 3; ++i) {
         voxelSize[i] = Math.abs(voxelSize[i]);
       }
-
-      const boundingBox = this.boundingBox = new BoundingBox(
-          vec3.fromValues(Infinity, Infinity, Infinity),
-          vec3.fromValues(-Infinity, -Infinity, -Infinity));
-      const globalCorner = vec3.create();
-      const localCorner = tempVec3;
-
-      for (let cornerIndex = 0; cornerIndex < 8; ++cornerIndex) {
-        for (let i = 0; i < 3; ++i) {
-          localCorner[i] = cornerIndex & (1 << i) ? spec.upperClipBound[i] : spec.lowerClipBound[i];
-        }
-        chunkLayout.localSpatialToGlobal(globalCorner, localCorner);
-        vec3.min(boundingBox.lower, boundingBox.lower, globalCorner);
-        vec3.max(boundingBox.upper, boundingBox.upper, globalCorner);
-      }
     }
 
     const sharedObject = this.registerDisposer(new SharedObject());
     const rpc = this.chunkManager.rpc!;
     sharedObject.RPC_TYPE_ID = SLICEVIEW_RENDERLAYER_RPC_ID;
     const sourceIds = sources.map(alternatives => alternatives.map(source => source.rpcId!));
-    sharedObject.initializeCounterpart(
-        rpc, {'sources': sourceIds, 'transform': transform.transform});
+    sharedObject.initializeCounterpart(rpc, {
+      sources: sourceIds,
+      transform: transform.transform,
+      renderScaleTarget:
+          this.registerDisposer(SharedWatchableValue.makeFromExisting(rpc, this.renderScaleTarget))
+              .rpcId
+    });
     this.rpcId = sharedObject.rpcId;
 
     this.registerDisposer(transform.changed.add(() => {
@@ -102,58 +90,12 @@ export abstract class RenderLayer extends GenericRenderLayer {
     return this.chunkManager.chunkQueueManager.gl;
   }
 
-  initializeShader() {
-    if (!this.shaderUpdated) {
-      return;
-    }
-    this.shaderUpdated = false;
-    try {
-      let newShader = this.getShader();
-      this.disposeShader();
-      this.shader = newShader;
-      this.shaderError.value = null;
-    } catch (shaderError) {
-      this.shaderError.value = shaderError;
-    }
-  }
-
-  disposeShader() {
-    if (this.shader) {
-      this.shader.dispose();
-      this.shader = undefined;
-    }
-  }
-
-  disposed() {
-    super.disposed();
-    this.disposeShader();
-  }
-
-  getShaderKey() {
-    return '';
-  }
-
-  getShader() {
-    let key = this.getShaderKey();
-    return this.gl.memoize.get(key, () => this.buildShader());
-  }
-
-  buildShader() {
-    let builder = new ShaderBuilder(this.gl);
-    this.defineShader(builder);
-    return builder.build();
-  }
-
-  setGLBlendMode(gl: WebGLRenderingContext, renderLayerNum: number): void {
+  setGLBlendMode(gl: WebGL2RenderingContext, renderLayerNum: number): void {
     // Default blend mode for non-blend-mode-aware layers
     if (renderLayerNum > 0) {
       gl.enable(gl.BLEND);
       gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
     }
   }
-
-  abstract defineShader(builder: ShaderBuilder): void;
-  abstract beginSlice(_sliceView: SliceView): ShaderProgram;
-  abstract endSlice(shader: ShaderProgram): void;
   abstract draw(sliceView: SliceView): void;
 }
