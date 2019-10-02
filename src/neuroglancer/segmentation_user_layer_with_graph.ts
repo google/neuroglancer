@@ -32,13 +32,14 @@ import {Uint64Set} from 'neuroglancer/uint64_set';
 import {TrackableRGB} from 'neuroglancer/util/color';
 import {Borrowed} from 'neuroglancer/util/disposable';
 import {vec3} from 'neuroglancer/util/geom';
-import {parseArray, verifyObjectProperty, verifyOptionalString} from 'neuroglancer/util/json';
+import {parseArray, verifyObjectProperty} from 'neuroglancer/util/json';
 import {Uint64} from 'neuroglancer/util/uint64';
 
 // Already defined in segmentation_user_layer.ts
 const EQUIVALENCES_JSON_KEY = 'equivalences';
 
-const CHUNKED_GRAPH_JSON_KEY = 'chunkedGraph';
+// Removed CHUNKED_GRAPH_JSON_KEY due to old links circulating with outdated graphs
+// const CHUNKED_GRAPH_JSON_KEY = 'chunkedGraph';
 const ROOT_SEGMENTS_JSON_KEY = 'segments';
 const GRAPH_OPERATION_MARKER_JSON_KEY = 'graphOperationMarker';
 const TIMESTAMP_JSON_KEY = 'timestamp';
@@ -133,10 +134,6 @@ function helper<TBase extends BaseConstructor>(Base: TBase) {
       this.displayState.segmentEquivalences.clear();
 
       const {multiscaleSource} = this;
-      this.chunkedGraphUrl = specification[CHUNKED_GRAPH_JSON_KEY] === null ?
-          null :
-          verifyOptionalString(specification[CHUNKED_GRAPH_JSON_KEY]);
-
       let remaining = 0;
       if (multiscaleSource !== undefined) {
         ++remaining;
@@ -149,7 +146,7 @@ function helper<TBase extends BaseConstructor>(Base: TBase) {
               });
             }
             // Chunked Graph Server
-            if (this.chunkedGraphUrl === undefined && volume.getChunkedGraphUrl) {
+            if (volume.getChunkedGraphUrl) {
               this.chunkedGraphUrl = volume.getChunkedGraphUrl();
             }
             // Chunked Graph Supervoxels
@@ -219,7 +216,6 @@ function helper<TBase extends BaseConstructor>(Base: TBase) {
     toJSON() {
       const x = super.toJSON();
       x['type'] = 'segmentation_with_graph';
-      x[CHUNKED_GRAPH_JSON_KEY] = this.chunkedGraphUrl;
 
       if (this.displayState.timestamp.value) {
         x[TIMESTAMP_JSON_KEY] = this.displayState.timestamp.value;
