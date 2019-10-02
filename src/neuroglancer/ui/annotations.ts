@@ -381,8 +381,7 @@ export class AnnotationLayerView extends Tab {
   constructor(
       public layer: Borrowed<UserLayerWithAnnotations>,
       public state: Owned<SelectedAnnotationState>,
-      public annotationLayer: Owned<AnnotationLayerState>,
-      public voxelSize: Owned<VoxelSize>,
+      public annotationLayer: Owned<AnnotationLayerState>, public voxelSize: Owned<VoxelSize>,
       public setSpatialCoordinates: (point: vec3) => void) {
     super();
     this.element.classList.add('neuroglancer-annotation-layer-view');
@@ -395,9 +394,12 @@ export class AnnotationLayerView extends Tab {
       this.updated = false;
       this.updateView();
     };
-    this.registerDisposer(source.childAdded.add((annotation) => this.addAnnotationElement(annotation)));
-    this.registerDisposer(source.childUpdated.add((annotation) => this.updateAnnotationElement(annotation)));
-    this.registerDisposer(source.childDeleted.add((annotationId) => this.deleteAnnotationElement(annotationId)));
+    this.registerDisposer(
+        source.childAdded.add((annotation) => this.addAnnotationElement(annotation)));
+    this.registerDisposer(
+        source.childUpdated.add((annotation) => this.updateAnnotationElement(annotation)));
+    this.registerDisposer(
+        source.childDeleted.add((annotationId) => this.deleteAnnotationElement(annotationId)));
     this.registerDisposer(this.visibility.changed.add(() => this.updateView()));
     this.registerDisposer(annotationLayer.transform.changed.add(updateView));
     this.updateView();
@@ -465,6 +467,28 @@ export class AnnotationLayerView extends Tab {
     this.registerDisposer(this.state.changed.add(() => this.updateSelectionView()));
   }
 
+  private clearSelectionClass() {
+    const {previousSelectedId} = this;
+    if (previousSelectedId !== undefined) {
+      const element = this.annotationListElements.get(previousSelectedId);
+      if (element !== undefined) {
+        element.classList.remove('neuroglancer-annotation-selected');
+      }
+      this.previousSelectedId = undefined;
+    }
+  }
+
+  private clearHoverClass() {
+    const {previousHoverId} = this;
+    if (previousHoverId !== undefined) {
+      const element = this.annotationListElements.get(previousHoverId);
+      if (element !== undefined) {
+        element.classList.remove('neuroglancer-annotation-hover');
+      }
+      this.previousHoverId = undefined;
+    }
+  }
+
   private updateSelectionView() {
     const selectedValue = this.state.value;
     let newSelectedId: string|undefined;
@@ -475,12 +499,7 @@ export class AnnotationLayerView extends Tab {
     if (newSelectedId === previousSelectedId) {
       return;
     }
-    if (previousSelectedId !== undefined) {
-      const element = this.annotationListElements.get(previousSelectedId);
-      if (element !== undefined) {
-        element.classList.remove('neuroglancer-annotation-selected');
-      }
-    }
+    this.clearSelectionClass();
     if (newSelectedId !== undefined) {
       const element = this.annotationListElements.get(newSelectedId);
       if (element !== undefined) {
@@ -501,12 +520,7 @@ export class AnnotationLayerView extends Tab {
     if (newHoverId === previousHoverId) {
       return;
     }
-    if (previousHoverId !== undefined) {
-      const element = this.annotationListElements.get(previousHoverId);
-      if (element !== undefined) {
-        element.classList.remove('neuroglancer-annotation-hover');
-      }
-    }
+    this.clearHoverClass();
     if (newHoverId !== undefined) {
       const element = this.annotationListElements.get(newHoverId);
       if (element !== undefined) {
@@ -517,26 +531,7 @@ export class AnnotationLayerView extends Tab {
   }
 
   private addAnnotationElementHelper(annotation: Annotation) {
-    const {annotationLayer, annotationListContainer, annotationListElements} = this;
-    const {objectToGlobal} = annotationLayer;
-
-    const element = this.makeAnnotationListElement(annotation, objectToGlobal);
-    annotationListContainer.appendChild(element);
-    annotationListElements.set(annotation.id, element);
-
-    element.addEventListener('mouseenter', () => {
-      this.annotationLayer.hoverState.value = {id: annotation.id, partIndex: 0};
-    });
-    element.addEventListener('click', () => {
-      this.state.value = {id: annotation.id, partIndex: 0};
-    });
-
-    element.addEventListener('mouseup', (event: MouseEvent) => {
-      if (event.button === 2) {
-        this.setSpatialCoordinates(
-            getCenterPosition(annotation, this.annotationLayer.objectToGlobal));
-      }
-    });
+    this.annotationListContainer.appendChild(this.makeAnnotationListElement(annotation));
   }
 
   private updateView() {
@@ -550,47 +545,53 @@ export class AnnotationLayerView extends Tab {
     const {source} = annotationLayer;
     removeChildren(annotationListContainer);
     annotationListElements.clear();
-    for(const annotation of source) {
+    for (const annotation of source) {
       this.addAnnotationElementHelper(annotation);
     }
     this.resetOnUpdate();
   }
 
-  private addAnnotationElement(annotation:Annotation) {
-    if(!this.visible) {
+  private addAnnotationElement(annotation: Annotation) {
+    if (!this.visible) {
+      this.updated = false;
+      return;
+    }
+    if (!this.updated) {
+      this.updateView();
       return;
     }
     this.addAnnotationElementHelper(annotation);
     this.resetOnUpdate();
   }
 
-  private updateAnnotationElement(annotation:Annotation) {
+  private updateAnnotationElement(annotation: Annotation) {
     if (!this.visible) {
+      this.updated = false;
       return;
     }
-    var element = this.annotationListElements.get(annotation.id);
+    if (!this.updated) {
+      this.updateView();
+      return;
+    }
+    const {annotationListElements} = this;
+    const element = annotationListElements.get(annotation.id);
     if (!element) {
       return;
     }
-    if (element.lastElementChild && element.children.length === 3) {
-      if (!annotation.description) {
-        element.removeChild(element.lastElementChild);
-      }
-      else {
-        element.lastElementChild.innerHTML = annotation.description;
-      }
-    }
-    else {
-      const description = document.createElement('div');
-      description.className = 'neuroglancer-annotation-description';
-      description.textContent = annotation.description || '';
-      element.appendChild(description);
-    }
+    const {annotationListContainer} = this;
+    const newElement = this.makeAnnotationListElement(annotation);
+    annotationListContainer.replaceChild(newElement, element);
+    annotationListElements.set(annotation.id, newElement);
     this.resetOnUpdate();
   }
 
   private deleteAnnotationElement(annotationId: string) {
     if (!this.visible) {
+      this.updated = false;
+      return;
+    }
+    if (!this.updated) {
+      this.updateView();
       return;
     }
     let element = this.annotationListElements.get(annotationId);
@@ -602,14 +603,15 @@ export class AnnotationLayerView extends Tab {
   }
 
   private resetOnUpdate() {
-    this.previousSelectedId = undefined;
-    this.previousHoverId = undefined;
+    this.clearHoverClass();
+    this.clearSelectionClass();
     this.updated = true;
     this.updateHoverView();
     this.updateSelectionView();
   }
 
-  private makeAnnotationListElement(annotation: Annotation, transform: mat4) {
+  private makeAnnotationListElement(annotation: Annotation) {
+    const transform = this.annotationLayer.objectToGlobal;
     const element = document.createElement('li');
     element.title = 'Click to select, right click to recenter view.';
 
@@ -629,6 +631,22 @@ export class AnnotationLayerView extends Tab {
       description.textContent = annotation.description;
       element.appendChild(description);
     }
+
+    this.annotationListElements.set(annotation.id, element);
+    element.addEventListener('mouseenter', () => {
+      this.annotationLayer.hoverState.value = {id: annotation.id, partIndex: 0};
+    });
+    element.addEventListener('click', () => {
+      this.state.value = {id: annotation.id, partIndex: 0};
+    });
+
+    element.addEventListener('mouseup', (event: MouseEvent) => {
+      if (event.button === 2) {
+        this.setSpatialCoordinates(
+            getCenterPosition(annotation, this.annotationLayer.objectToGlobal));
+      }
+    });
+
     return element;
   }
 }
@@ -892,7 +910,7 @@ export class PlacePointTool extends PlaceAnnotationTool {
             vec3.transformMat4(vec3.create(), mouseState.position, annotationLayer.globalToObject),
         type: AnnotationType.POINT,
       };
-      const reference = annotationLayer.source.add(annotation, /*commit=*/true);
+      const reference = annotationLayer.source.add(annotation, /*commit=*/ true);
       this.layer.selectedAnnotation.value = {id: reference.id};
       reference.dispose();
     }
@@ -941,7 +959,7 @@ abstract class TwoStepAnnotationTool extends PlaceAnnotationTool {
 
       if (this.inProgressAnnotation === undefined) {
         const reference = annotationLayer.source.add(
-            this.getInitialAnnotation(mouseState, annotationLayer), /*commit=*/false);
+            this.getInitialAnnotation(mouseState, annotationLayer), /*commit=*/ false);
         this.layer.selectedAnnotation.value = {id: reference.id};
         const mouseDisposer = mouseState.changed.add(updatePointB);
         const disposer = () => {
@@ -1017,7 +1035,8 @@ export class PlaceLineTool extends PlaceTwoCornerAnnotationTool {
     return `annotate line`;
   }
 
-  getInitialAnnotation(mouseState: MouseSelectionState, annotationLayer: AnnotationLayerState): Annotation {
+  getInitialAnnotation(mouseState: MouseSelectionState, annotationLayer: AnnotationLayerState):
+      Annotation {
     const result = super.getInitialAnnotation(mouseState, annotationLayer);
     result.segments = getSelectedAssocatedSegment(annotationLayer);
     return result;
@@ -1104,7 +1123,7 @@ registerTool(
     (layer, options) => new PlaceLineTool(<UserLayerWithAnnotations>layer, options));
 registerTool(
     ANNOTATE_ELLIPSOID_TOOL_ID,
-  (layer, options) => new PlaceSphereTool(<UserLayerWithAnnotations>layer, options));
+    (layer, options) => new PlaceSphereTool(<UserLayerWithAnnotations>layer, options));
 
 export interface UserLayerWithAnnotations extends UserLayer {
   annotationLayerState: WatchableRefCounted<AnnotationLayerState>;
