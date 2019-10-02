@@ -55,6 +55,10 @@ export class RangeWidget extends RefCounted {
     inputElement.type = 'range';
     initInputElement(inputElement);
     numericInputElement.type = 'number';
+    const maxNumberWidth = Math.max(
+        min.toString().length, max.toString().length, Math.min(max, min + step).toString().length,
+        Math.max(min, max - step).toString().length);
+    numericInputElement.style.width = (maxNumberWidth + 2) + 'ch';
     initInputElement(numericInputElement);
     element.appendChild(promptElement);
     element.appendChild(inputElement);
