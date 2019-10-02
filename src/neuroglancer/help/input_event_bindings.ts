@@ -91,26 +91,16 @@ export class InputEventBindingHelpDialog extends Overlay {
       let header = document.createElement('h2');
       header.textContent = list.label;
       scroll.appendChild(header);
-      let dl = document.createElement('div');
-      dl.className = 'dl';
-
       for (const [event, action] of list.entries) {
-        let container = document.createElement('div');
-        let container2 = document.createElement('div');
-        container2.className = 'definition-outer-container';
-        container.className = 'definition-container';
         let dt = document.createElement('div');
         dt.className = 'dt';
         dt.textContent = formatKeyStroke(event);
         let dd = document.createElement('div');
         dd.className = 'dd';
         dd.textContent = action;
-        container.appendChild(dt);
-        container.appendChild(dd);
-        dl.appendChild(container2);
-        container2.appendChild(container);
+        scroll.appendChild(dt);
+        scroll.appendChild(dd);
       }
-      scroll.appendChild(dl);
     }
     content.appendChild(scroll);
   }
