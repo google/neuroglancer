@@ -31,7 +31,7 @@ import {mat4, vec3} from 'neuroglancer/util/geom';
 import {parseArray, verify3dVec} from 'neuroglancer/util/json';
 import {LayerReferenceWidget} from 'neuroglancer/widget/layer_reference';
 
-require('./user_layer.css');
+import './user_layer.css';
 
 const POINTS_JSON_KEY = 'points';
 const ANNOTATIONS_JSON_KEY = 'annotations';

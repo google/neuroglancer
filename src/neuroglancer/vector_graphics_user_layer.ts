@@ -31,8 +31,8 @@ import {RangeWidget} from 'neuroglancer/widget/range';
 import {Tab} from 'neuroglancer/widget/tab_view';
 import {Vec3Widget} from 'neuroglancer/widget/vec3_entry_widget';
 
-require('./image_user_layer.css');
-require('neuroglancer/maximize_button.css');
+import './image_user_layer.css';
+import 'neuroglancer/maximize_button.css';
 
 function getVectorGraphicsWithStatusMessage(
     dataSourceProvider: DataSourceProvider, chunkManager: ChunkManager, x: string,

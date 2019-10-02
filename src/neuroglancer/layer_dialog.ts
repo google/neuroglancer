@@ -22,7 +22,7 @@ import {associateLabelWithElement} from 'neuroglancer/widget/associate_label';
 import {AutocompleteTextInput, makeCompletionElementWithDescription} from 'neuroglancer/widget/autocomplete';
 import {makeHiddenSubmitButton} from 'neuroglancer/widget/hidden_submit_button';
 
-require('./layer_dialog.css');
+import './layer_dialog.css';
 
 export class LayerDialog extends Overlay {
   /**

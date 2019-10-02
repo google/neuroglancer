@@ -17,7 +17,7 @@
 import {Overlay} from 'neuroglancer/overlay';
 import {EventActionMap} from 'neuroglancer/util/event_action_map';
 
-require('./input_event_bindings.css');
+import './input_event_bindings.css';
 
 export function formatKeyName(name: string) {
   if (name.startsWith('key')) {

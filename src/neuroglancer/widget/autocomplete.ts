@@ -28,7 +28,7 @@ import {associateLabelWithElement} from 'neuroglancer/widget/associate_label';
 
 export {Completion, CompletionWithDescription} from 'neuroglancer/util/completion';
 
-require('./autocomplete.css');
+import './autocomplete.css';
 
 const ACTIVE_COMPLETION_CLASS_NAME = 'autocomplete-completion-active';
 

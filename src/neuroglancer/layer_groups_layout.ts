@@ -30,7 +30,7 @@ import {NullarySignal} from 'neuroglancer/util/signal';
 import {Trackable} from 'neuroglancer/util/trackable';
 import {Viewer} from 'neuroglancer/viewer';
 
-require('./layer_groups_layout.css');
+import './layer_groups_layout.css';
 
 interface LayoutComponent extends RefCounted {
   element: HTMLElement;

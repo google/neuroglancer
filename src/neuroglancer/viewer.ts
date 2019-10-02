@@ -59,9 +59,9 @@ import {RPC} from 'neuroglancer/worker_rpc';
 
 declare var NEUROGLANCER_OVERRIDE_DEFAULT_VIEWER_OPTIONS: any
 
-require('./viewer.css');
-require('neuroglancer/noselect.css');
-require('neuroglancer/ui/button.css');
+import './viewer.css';
+import 'neuroglancer/noselect.css';
+import 'neuroglancer/ui/button.css';
 
 export class DataManagementContext extends RefCounted {
   worker = new Worker('chunk_worker.bundle.js');

@@ -18,8 +18,8 @@ import {SegmentationDisplayState} from 'neuroglancer/segmentation_display_state/
 import {RefCounted} from 'neuroglancer/util/disposable';
 import {Uint64} from 'neuroglancer/util/uint64';
 
-require('neuroglancer/noselect.css');
-require('./segment_set_widget.css');
+import 'neuroglancer/noselect.css';
+import './segment_set_widget.css';
 
 type ItemElement = HTMLButtonElement;
 

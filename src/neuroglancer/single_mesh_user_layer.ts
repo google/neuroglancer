@@ -28,7 +28,7 @@ import {parseArray, verifyObjectProperty, verifyOptionalString, verifyString} fr
 import {ShaderCodeWidget} from 'neuroglancer/widget/shader_code_widget';
 import {Tab} from 'neuroglancer/widget/tab_view';
 
-require('./single_mesh_user_layer.css');
+import './single_mesh_user_layer.css';
 
 function makeValidIdentifier(x: string) {
   return x.split(/[^a-zA-Z0-9]+/).filter(y => y).join('_');

@@ -28,8 +28,8 @@ import {MouseEventBinder} from 'neuroglancer/util/mouse_bindings';
 import {numberToStringFixed} from 'neuroglancer/util/number_to_string';
 import {pickLengthUnit} from 'neuroglancer/widget/scale_bar';
 
-require('./position_widget.css');
-require('neuroglancer/ui/button.css');
+import './position_widget.css';
+import 'neuroglancer/ui/button.css';
 
 export const positionDragType = 'neuroglancer-position';
 

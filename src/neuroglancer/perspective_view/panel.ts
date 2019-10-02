@@ -37,8 +37,8 @@ import {ShaderBuilder} from 'neuroglancer/webgl/shader';
 import {ScaleBarOptions, ScaleBarTexture} from 'neuroglancer/widget/scale_bar';
 import {RPC, SharedObject} from 'neuroglancer/worker_rpc';
 
-require('neuroglancer/noselect.css');
-require('./panel.css');
+import 'neuroglancer/noselect.css';
+import './panel.css';
 
 export interface PerspectiveViewerState extends RenderedDataViewerState {
   orthographicProjection: TrackableBoolean;

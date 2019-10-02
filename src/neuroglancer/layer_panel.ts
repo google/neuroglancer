@@ -29,9 +29,9 @@ import {float32ToString} from 'neuroglancer/util/float32_to_string';
 import {makeCloseButton} from 'neuroglancer/widget/close_button';
 import {PositionWidget} from 'neuroglancer/widget/position_widget';
 
-require('neuroglancer/noselect.css');
-require('./layer_panel.css');
-require('neuroglancer/ui/button.css');
+import 'neuroglancer/noselect.css';
+import './layer_panel.css';
+import 'neuroglancer/ui/button.css';
 
 function destroyDropLayers(
     dropLayers: DropLayers, targetLayer?: ManagedUserLayerWithSpecification) {
