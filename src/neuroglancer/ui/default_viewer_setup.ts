@@ -27,8 +27,6 @@ export function setupDefaultViewer() {
   let viewer = (<any>window)['viewer'] = makeDefaultViewer();
   setDefaultInputEventBindings(viewer.inputEventBindings);
 
-  parseHashFromQueryString();
-
   const hashBinding = viewer.registerDisposer(new UrlHashBinding(viewer.state));
   viewer.registerDisposer(hashBinding.parseError.changed.add(() => {
     const {value} = hashBinding.parseError;
