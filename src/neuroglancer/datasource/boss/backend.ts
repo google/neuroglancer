@@ -30,14 +30,13 @@ import {cancellableFetchOk, responseArrayBuffer} from 'neuroglancer/util/http_re
 import {registerSharedObject, SharedObject} from 'neuroglancer/worker_rpc';
 
 // TODO (rodrilm): Add logic to use the jpeg header and decoder if the data is uint8 and use npygz if it is uint16
-// As of right now we will only use the npygz content type to ensure all types are supported.
 let chunkDecoders = new Map<string, ChunkDecoder>();
 chunkDecoders.set('npz', decodeBossNpzChunk);
-// chunkDecoders.set('jpeg', decodeJpegChunk);
+chunkDecoders.set('jpeg', decodeJpegChunk);
 
 let acceptHeaders = new Map<string, string>();
 acceptHeaders.set('npz', 'application/npygz');
-// acceptHeaders.set('jpeg', 'image/jpeg');
+acceptHeaders.set('jpeg', 'image/jpeg');
 
 function BossSource<Parameters, TBase extends {new (...args: any[]): SharedObject}>(
     Base: TBase, parametersConstructor: ChunkSourceParametersConstructor<Parameters>) {
