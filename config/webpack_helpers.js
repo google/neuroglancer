@@ -23,7 +23,7 @@ const webpack = require('webpack');
 const fs = require('fs');
 const AliasPlugin = require('./webpack_alias_plugin');
 const resolveReal = require('./resolve_real');
-const CopyWebpackPlugin = require('copy-webpack-plugin');
+// const CopyWebpackPlugin = require('copy-webpack-plugin');
 
 // Note: We use require.resolve below to ensure the plugins are resolved
 // relative to this configuration file, rather than relative to the source
@@ -375,11 +375,11 @@ function getViewerConfig(options) {
             new webpack.DefinePlugin(Object.assign({}, defaultDefines, extraDefines)),
             ...extraFrontendPlugins,
             ...commonPlugins,
-            ...extraCommonPlugins,
-            new CopyWebpackPlugin([{
-              from: resolveReal(srcDir, 'neuroglancer/datasource/boss/bossauth.html'),
-              to: 'bossauth.html'
-            }]),
+            ...extraCommonPlugins
+            // new CopyWebpackPlugin([{
+            //   from: resolveReal(srcDir, 'neuroglancer/datasource/boss/bossauth.html'),
+            //   to: 'bossauth.html'
+            // }]),
           ],
         },
         baseConfig),
