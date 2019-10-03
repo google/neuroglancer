@@ -22,15 +22,19 @@
  * (each corresponding to a different variable) in NPY binary format.
  */
 
+import {decodeGzip} from 'neuroglancer/async_computation/decode_gzip_request';
+import {requestAsyncComputation} from 'neuroglancer/async_computation/request';
 import {postProcessRawData} from 'neuroglancer/sliceview/backend_chunk_decoders/postprocess';
 import {DataType} from 'neuroglancer/sliceview/base';
 import {VolumeChunk} from 'neuroglancer/sliceview/volume/backend';
+import {CancellationToken} from 'neuroglancer/util/cancellation';
 import {vec3Key} from 'neuroglancer/util/geom';
 import {parseNpy} from 'neuroglancer/util/npy';
-import {inflate} from 'pako';
 
-export function decodeNdstoreNpzChunk(chunk: VolumeChunk, response: ArrayBuffer) {
-  let parseResult = parseNpy(inflate(new Uint8Array(response)));
+export async function decodeNdstoreNpzChunk(
+    chunk: VolumeChunk, cancellationToken: CancellationToken, response: ArrayBuffer) {
+  let parseResult = parseNpy(await requestAsyncComputation(
+      decodeGzip, cancellationToken, [response], new Uint8Array(response)));
   let chunkDataSize = chunk.chunkDataSize!;
   let source = chunk.source!;
   let {numChannels} = source.spec;
@@ -47,5 +51,5 @@ export function decodeNdstoreNpzChunk(chunk: VolumeChunk, response: ArrayBuffer)
         `Data type ${DataType[parsedDataType]} does not match ` +
         `expected data type ${DataType[spec.dataType]}`);
   }
-  postProcessRawData(chunk, parseResult.data);
+  await postProcessRawData(chunk, cancellationToken, parseResult.data);
 }

@@ -39,6 +39,7 @@
 .neuroglancer-stack-layout-drop-placeholder {
   background-clip: content-box;
   background-color: #666;
+  z-index: 1;
 }
 
 .neuroglancer-stack-layout-drop-placeholder.neuroglancer-drag-over {

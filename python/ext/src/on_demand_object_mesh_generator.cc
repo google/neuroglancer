@@ -32,6 +32,8 @@
 #if __APPLE__
 #include <libkern/OSByteOrder.h>
 #define htole32(x) OSSwapHostToLittleInt32(x)
+#elif defined(_WIN32)
+#define htole32(x) (x)
 #else
 #include <endian.h>
 #endif

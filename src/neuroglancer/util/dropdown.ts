@@ -32,7 +32,7 @@ export function positionDropdown(dropdownElement: HTMLElement, associatedElement
   let rect = associatedElement.getBoundingClientRect();
 
   if (horizontal) {
-    let viewportWidth = dropdownElement.ownerDocument.documentElement.clientHeight;
+    let viewportWidth = dropdownElement.ownerDocument!.documentElement!.clientHeight;
     let distanceLeft = rect.right;
     let distanceRight = viewportWidth - rect.left;
     if (distanceLeft > distanceRight) {
@@ -51,7 +51,7 @@ export function positionDropdown(dropdownElement: HTMLElement, associatedElement
   }
 
   if (vertical) {
-    let viewportHeight = dropdownElement.ownerDocument.documentElement.clientHeight;
+    let viewportHeight = dropdownElement.ownerDocument!.documentElement!.clientHeight;
     let distanceToTop = rect.top - topMargin;
     let distanceToBottom = viewportHeight - rect.bottom - bottomMargin;
     if (distanceToTop > distanceToBottom * 3) {

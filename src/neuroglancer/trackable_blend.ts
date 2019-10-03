@@ -23,10 +23,10 @@ export enum BLEND_MODES {
 }
 
 export const BLEND_FUNCTIONS = new Map<BLEND_MODES, Function>();
-BLEND_FUNCTIONS.set(BLEND_MODES.DEFAULT, (gl: WebGLRenderingContext) => {
+BLEND_FUNCTIONS.set(BLEND_MODES.DEFAULT, (gl: WebGL2RenderingContext) => {
   gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
 });
-BLEND_FUNCTIONS.set(BLEND_MODES.ADDITIVE, (gl: WebGLRenderingContext) => {
+BLEND_FUNCTIONS.set(BLEND_MODES.ADDITIVE, (gl: WebGL2RenderingContext) => {
   gl.blendFunc(gl.SRC_ALPHA, gl.ONE);
 });
 

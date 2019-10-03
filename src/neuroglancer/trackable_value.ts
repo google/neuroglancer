@@ -14,13 +14,14 @@
  * limitations under the License.
  */
 
-import {RefCounted} from 'neuroglancer/util/disposable';
-import {NullarySignal} from 'neuroglancer/util/signal';
+import debounce from 'lodash/debounce';
+import {Borrowed, Disposer, Owned, RefCounted} from 'neuroglancer/util/disposable';
+import {NullaryReadonlySignal, NullarySignal} from 'neuroglancer/util/signal';
 import {Trackable} from 'neuroglancer/util/trackable';
 
 export interface WatchableValueInterface<T> {
-  changed: NullarySignal;
   value: T;
+  changed: NullaryReadonlySignal;
 }
 
 export class WatchableValue<T> implements WatchableValueInterface<T> {
@@ -87,6 +88,15 @@ export function makeDerivedWatchableValue<U, T0>(
 export function makeDerivedWatchableValue<U, T0, T1>(
     f: (v0: T0, v1: T1) => U, w0: WatchableValueInterface<T0>,
     w1: WatchableValueInterface<T1>): DerivedWatchableValue<U>;
+export function makeDerivedWatchableValue<U, T0, T1, T2>(
+    f: (v0: T0, v1: T1, v2: T2) => U, w0: WatchableValueInterface<T0>,
+    w1: WatchableValueInterface<T1>, w2: WatchableValueInterface<T2>): DerivedWatchableValue<U>;
+export function makeDerivedWatchableValue<U, T0, T1, T2, T3>(
+    f: (v0: T0, v1: T1, v2: T2, v3: T3) => U, w0: WatchableValueInterface<T0>,
+    w1: WatchableValueInterface<T1>, w2: WatchableValueInterface<T2>,
+    w3: WatchableValueInterface<T3>): DerivedWatchableValue<U>;
+export function makeDerivedWatchableValue<U, T>(
+    f: (...values: T[]) => U, ...ws: WatchableValueInterface<T>[]): DerivedWatchableValue<U>;
 export function makeDerivedWatchableValue<U>(
     f: (...v: any[]) => U, ...ws: WatchableValueInterface<any>[]) {
   return new DerivedWatchableValue(f, ws);
@@ -103,4 +113,144 @@ export class ComputedWatchableValue<U> extends RefCounted implements WatchableVa
       this.registerDisposer(signal.add(this.changed.dispatch));
     }
   }
+}
+
+export class WatchableRefCounted<T extends RefCounted> extends RefCounted implements
+    WatchableValueInterface<T|undefined> {
+  changed = new NullarySignal();
+
+  private value_: Owned<T>|undefined;
+  private valueHandler: (() => void)|undefined;
+
+  get value(): Borrowed<T>|undefined {
+    return this.value_;
+  }
+
+  set value(value: Owned<T>|undefined) {
+    const {value_} = this;
+    this.value_ = value;
+    if (value_ !== undefined) {
+      value_.dispose();
+      value_.unregisterDisposer(this.valueHandler!);
+      this.valueHandler = undefined;
+    }
+    if (value !== undefined) {
+      const valueHandler = this.valueHandler = () => {
+        if (this.value_ === value) {
+          this.value_ = undefined;
+          this.changed.dispatch();
+        }
+      };
+      value.registerDisposer(valueHandler);
+    }
+
+    if (value !== value_) {
+      this.changed.dispatch();
+    }
+  }
+
+  reset() {
+    this.value = undefined;
+  }
+
+  disposed() {
+    if (this.value_ !== undefined) {
+      this.value_.unregisterDisposer(this.valueHandler!);
+      this.value_.dispose();
+    }
+    this.value_ = undefined;
+    super.disposed();
+  }
+}
+
+
+export interface TrackableValueInterface<T> extends WatchableValueInterface<T>, Trackable {}
+
+export class TrackableRefCounted<T extends RefCounted> extends WatchableRefCounted<T> implements
+    TrackableValueInterface<T|undefined> {
+  constructor(
+      public validator: (value: any) => T | undefined, public jsonConverter: (value: T) => any) {
+    super();
+  }
+  toJSON() {
+    const {value} = this;
+    return value && this.jsonConverter(value);
+  }
+
+  restoreState(x: any) {
+    this.value = this.validator(x);
+  }
+}
+
+export class WatchableSet<T> {
+  changed = new NullarySignal();
+  values: Set<T>;
+  constructor(values?: Iterable<T>) {
+    if (values === undefined) {
+      this.values = new Set();
+    } else {
+      this.values = new Set(values);
+    }
+  }
+  add(x: T) {
+    const {values} = this;
+    if (!values.has(x)) {
+      values.add(x);
+      this.changed.dispatch();
+    }
+    return this;
+  }
+  delete(x: T) {
+    const {values} = this;
+    if (values.delete(x)) {
+      this.changed.dispatch();
+      return true;
+    }
+    return false;
+  }
+  has(x: T) {
+    return this.values.has(x);
+  }
+  get size() {
+    return this.values.size;
+  }
+  [Symbol.iterator]() {
+    return this.values[Symbol.iterator]();
+  }
+  clear() {
+    const {values} = this;
+    if (values.size > 0) {
+      values.clear();
+      this.changed.dispatch();
+    }
+  }
+}
+
+export function registerNested<T>(
+    baseState: WatchableValueInterface<T>, f: (context: RefCounted, value: T) => void): Disposer {
+  let value: T;
+  let context: RefCounted;
+
+  function updateValue() {
+    value = baseState.value;
+    context = new RefCounted();
+    f(context, value);
+  }
+
+  const handleChange = debounce(() => {
+    if (baseState.value !== value) {
+      context.dispose();
+      updateValue();
+    }
+  }, 0);
+
+  const signalDisposer = baseState.changed.add(handleChange);
+
+  updateValue();
+
+  return () => {
+    handleChange.cancel();
+    signalDisposer();
+    context.dispose();
+  };
 }

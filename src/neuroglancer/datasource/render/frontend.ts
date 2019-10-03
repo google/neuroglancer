@@ -28,7 +28,7 @@ import {DataType, VolumeChunkSpecification, VolumeSourceOptions, VolumeType} fro
 import {MultiscaleVolumeChunkSource as GenericMultiscaleVolumeChunkSource, VolumeChunkSource} from 'neuroglancer/sliceview/volume/frontend';
 import {applyCompletionOffset, getPrefixMatchesWithDescriptions} from 'neuroglancer/util/completion';
 import {vec3} from 'neuroglancer/util/geom';
-import {openShardedHttpRequest, sendHttpRequest} from 'neuroglancer/util/http_request';
+import {fetchOk} from 'neuroglancer/util/http_request';
 import {parseArray, parseQueryStringParameters, verifyFloat, verifyObject, verifyObjectProperty, verifyOptionalBoolean, verifyOptionalInt, verifyOptionalString, verifyString} from 'neuroglancer/util/json';
 
 const VALID_ENCODINGS = new Set<string>(['jpg']);
@@ -227,7 +227,7 @@ export class MultiscaleVolumeChunkSource implements GenericMultiscaleVolumeChunk
   filter: boolean|undefined;
 
   constructor(
-      public chunkManager: ChunkManager, public baseUrls: string[], public ownerInfo: OwnerInfo,
+      public chunkManager: ChunkManager, public baseUrl: string, public ownerInfo: OwnerInfo,
       stack: string|undefined, public project: string, channel: string|undefined,
       public parameters: {[index: string]: any}) {
     let projectInfo = ownerInfo.projects.get(project);
@@ -349,7 +349,7 @@ export class MultiscaleVolumeChunkSource implements GenericMultiscaleVolumeChunk
       let source = this.chunkManager.getChunkSource(TileChunkSource, {
         spec,
         parameters: {
-          'baseUrls': this.baseUrls,
+          'baseUrl': this.baseUrl,
           'owner': this.ownerInfo.owner,
           'project': this.stackInfo.project,
           'stack': this.stack,
@@ -398,17 +398,27 @@ export function computeStackHierarchy(stackInfo: StackInfo, tileSize: number) {
 }
 
 export function getOwnerInfo(
-    chunkManager: ChunkManager, hostnames: string[], owner: string): Promise<OwnerInfo> {
+    chunkManager: ChunkManager, hostname: string, owner: string): Promise<OwnerInfo> {
   return chunkManager.memoize.getUncounted(
-      {'type': 'render:getOwnerInfo', hostnames, owner},
-      () => sendHttpRequest(
-                openShardedHttpRequest(hostnames, `/render-ws/v1/owner/${owner}/stacks`), 'json')
+      {'type': 'render:getOwnerInfo', hostname, owner},
+      () => fetchOk(`${hostname}/render-ws/v1/owner/${owner}/stacks`)
+                .then(response => response.json())
                 .then(parseOwnerInfo));
 }
 
 const pathPattern = /^([^\/?]+)(?:\/([^\/?]+))?(?:\/([^\/?]+))(?:\/([^\/?]*))?(?:\?(.*))?$/;
+const urlPattern = /^((?:(?:(?:http|https):\/\/[^,\/]+)[^\/?]))\/(.*)$/;
 
-export function getShardedVolume(chunkManager: ChunkManager, hostnames: string[], path: string) {
+export function getVolume(chunkManager: ChunkManager, datasourcePath: string) {
+  let hostname: string, path: string;
+  {
+    let match = datasourcePath.match(urlPattern);
+    if (match === null) {
+      throw new Error(`Invalid render volume path: ${JSON.stringify(datasourcePath)}`);
+    }
+    hostname = match[1];
+    path = match[2];
+  }
   const match = path.match(pathPattern);
   if (match === null) {
     throw new Error(`Invalid volume path ${JSON.stringify(path)}`);
@@ -421,26 +431,15 @@ export function getShardedVolume(chunkManager: ChunkManager, hostnames: string[]
   const parameters = parseQueryStringParameters(match[5] || '');
 
   return chunkManager.memoize.getUncounted(
-      {type: 'render:MultiscaleVolumeChunkSource', hostnames, path},
-      () => getOwnerInfo(chunkManager, hostnames, owner)
+      {type: 'render:MultiscaleVolumeChunkSource', hostname, path},
+      () => getOwnerInfo(chunkManager, hostname, owner)
                 .then(
                     ownerInfo => new MultiscaleVolumeChunkSource(
-                        chunkManager, hostnames, ownerInfo, stack, project, channel, parameters)));
-}
-
-const urlPattern = /^((?:(?:(?:http|https):\/\/[^,\/]+)[^\/?])+)\/(.*)$/;
-
-export function getVolume(chunkManager: ChunkManager, path: string) {
-  let match = path.match(urlPattern);
-  if (match === null) {
-    throw new Error(`Invalid render volume path: ${JSON.stringify(path)}`);
-  }
-  let hostnames: string[] = match[1].split(',');
-  return getShardedVolume(chunkManager, hostnames, match[2]);
+                        chunkManager, hostname, ownerInfo, stack, project, channel, parameters)));
 }
 
 export function stackAndProjectCompleter(
-    chunkManager: ChunkManager, hostnames: string[], path: string): Promise<CompletionResult> {
+    chunkManager: ChunkManager, hostname: string, path: string): Promise<CompletionResult> {
   const stackMatch = path.match(/^(?:([^\/]+)(?:\/([^\/]*))?(?:\/([^\/]*))?(\/.*?)?)?$/);
   if (stackMatch === null) {
     // URL has incorrect format, don't return any results.
@@ -452,7 +451,7 @@ export function stackAndProjectCompleter(
   }
   if (stackMatch[3] === undefined) {
     let projectPrefix = stackMatch[2] || '';
-    return getOwnerInfo(chunkManager, hostnames, stackMatch[1]).then(ownerInfo => {
+    return getOwnerInfo(chunkManager, hostname, stackMatch[1]).then(ownerInfo => {
       let completions = getPrefixMatchesWithDescriptions(
           projectPrefix, ownerInfo.projects, x => x[0] + '/', () => undefined);
       return {offset: stackMatch[1].length + 1, completions};
@@ -460,7 +459,7 @@ export function stackAndProjectCompleter(
   }
   if (stackMatch[4] === undefined) {
     let stackPrefix = stackMatch[3] || '';
-    return getOwnerInfo(chunkManager, hostnames, stackMatch[1]).then(ownerInfo => {
+    return getOwnerInfo(chunkManager, hostname, stackMatch[1]).then(ownerInfo => {
       let projectInfo = ownerInfo.projects.get(stackMatch[2]);
       if (projectInfo === undefined) {
         return Promise.reject<CompletionResult>(null);
@@ -473,7 +472,7 @@ export function stackAndProjectCompleter(
     });
   }
   let channelPrefix = stackMatch[4].substr(1) || '';
-  return getOwnerInfo(chunkManager, hostnames, stackMatch[1]).then(ownerInfo => {
+  return getOwnerInfo(chunkManager, hostname, stackMatch[1]).then(ownerInfo => {
     let projectInfo = ownerInfo.projects.get(stackMatch[2]);
     if (projectInfo === undefined) {
       return Promise.reject<CompletionResult>(null);
@@ -504,10 +503,10 @@ export function volumeCompleter(
     // We don't yet have a full hostname.
     return Promise.reject<CompletionResult>(null);
   }
-  let hostnames: string[] = match[1].split(',');
+  let hostname = match[1];
   let path = match[2];
 
-  return stackAndProjectCompleter(chunkManager, hostnames, path)
+  return stackAndProjectCompleter(chunkManager, hostname, path)
       .then(completions => applyCompletionOffset(match![1].length + 1, completions));
 }
 
@@ -522,7 +521,7 @@ export class MultiscaleVectorGraphicsChunkSource implements
   dims: vec3;
 
   constructor(
-      public chunkManager: ChunkManager, public baseUrls: string[], public ownerInfo: OwnerInfo,
+      public chunkManager: ChunkManager, public baseUrl: string, public ownerInfo: OwnerInfo,
       stack: string|undefined, public project: string, public parameters: {[index: string]: any}) {
     let projectInfo = ownerInfo.projects.get(project);
     if (projectInfo === undefined) {
@@ -570,31 +569,23 @@ export class MultiscaleVectorGraphicsChunkSource implements
     this.dims[2] = 1;
   }
   getSources(vectorGraphicsSourceOptions: VectorGraphicsSourceOptions) {
-    let voxelSize = vec3.clone(this.stackInfo.voxelResolution);
+    const voxelSize = this.stackInfo.voxelResolution;
+    const chunkSize = vec3.subtract(
+        vec3.create(), this.stackInfo.upperVoxelBound, this.stackInfo.lowerVoxelBound);
+    vec3.multiply(chunkSize, chunkSize, voxelSize);
+    chunkSize[2] = voxelSize[2];
 
-    let lowerVoxelBound = vec3.create(), upperVoxelBound = vec3.create();
-
-    for (let i = 0; i < 3; i++) {
-      lowerVoxelBound[i] = Math.floor(
-          this.stackInfo.lowerVoxelBound[i] * (this.stackInfo.voxelResolution[i] / voxelSize[i]));
-      upperVoxelBound[i] = Math.ceil(
-          this.stackInfo.upperVoxelBound[i] * (this.stackInfo.voxelResolution[i] / voxelSize[i]));
-    }
-
-    // For now we set the chunkDataSize to be the size of an entire slab, pending possible bug fix
-    // in render point match service
-    let chunkDataSize = vec3.clone(upperVoxelBound);
-    chunkDataSize[0] += Math.abs(lowerVoxelBound[0]);
-    chunkDataSize[1] += Math.abs(lowerVoxelBound[1]);
-    chunkDataSize[2] = 1;
-
-
-    let spec = VectorGraphicsChunkSpecification.make(
-        {voxelSize, lowerVoxelBound, upperVoxelBound, chunkDataSize, vectorGraphicsSourceOptions});
-    let source = this.chunkManager.getChunkSource(PointMatchSource, {
+    const spec = VectorGraphicsChunkSpecification.make({
+      voxelSize,
+      chunkSize,
+      lowerChunkBound: vec3.fromValues(0, 0, this.stackInfo.lowerVoxelBound[2]),
+      upperChunkBound: vec3.fromValues(1, 1, this.stackInfo.upperVoxelBound[2]),
+      vectorGraphicsSourceOptions
+    });
+    const source = this.chunkManager.getChunkSource(PointMatchSource, {
       spec,
       parameters: {
-        'baseUrls': this.baseUrls,
+        'baseUrl': this.baseUrl,
         'owner': this.ownerInfo.owner,
         'project': this.stackInfo.project,
         'stack': this.stack,
@@ -608,22 +599,21 @@ export class MultiscaleVectorGraphicsChunkSource implements
   }
 }
 
-export function getPointMatches(chunkManager: ChunkManager, path: string) {
-  let match = path.match(urlPattern);
-  if (match === null) {
-    throw new Error(`Invalid render point path: ${JSON.stringify(path)}`);
+export function getPointMatches(chunkManager: ChunkManager, datasourcePath: string) {
+  let hostname: string, path: string;
+  {
+    let match = datasourcePath.match(urlPattern);
+    if (match === null) {
+      throw new Error(`Invalid render point path: ${JSON.stringify(datasourcePath)}`);
+    }
+    hostname = match[1];
+    path = match[2];
   }
-  return getShardedPointMatches(chunkManager, [match[1]], match[2]);
-}
-
-
-export function getShardedPointMatches(
-    chunkManager: ChunkManager, hostnames: string[], path: string) {
   const match = path.match(pathPattern);
   if (match === null) {
     throw new Error(`Invalid point path ${JSON.stringify(path)}`);
   }
-
+  
   const owner = match[1];
   const project = match[2];
   const stack = match[3];
@@ -631,11 +621,11 @@ export function getShardedPointMatches(
   const parameters = parseQueryStringParameters(match[4] || '');
 
   return chunkManager.memoize.getUncounted(
-      {type: 'render:MultiscaleVectorGraphicsChunkSource', hostnames, path},
-      () => getOwnerInfo(chunkManager, hostnames, owner)
+      {type: 'render:MultiscaleVectorGraphicsChunkSource', hostname, path},
+      () => getOwnerInfo(chunkManager, hostname, owner)
                 .then(
                     ownerInfo => new MultiscaleVectorGraphicsChunkSource(
-                        chunkManager, hostnames, ownerInfo, stack, project, parameters)));
+                        chunkManager, hostname, ownerInfo, stack, project, parameters)));
 }
 
 export class RenderDataSource extends DataSource {

@@ -35,49 +35,57 @@ describe('single_mesh/frontend', () => {
 
     vertexData.vertexAttributes = [];
 
-    fragmentShaderTest(6, tester => {
-      let shaderManager =
-          new SingleMeshShaderManager(attributeNames, attributeInfo, /*fragmentMain=*/'');
-      const attributeFormats = getAttributeTextureFormats(attributeInfo);
+    fragmentShaderTest(
+        {
+          posX: 'float',
+          posY: 'float',
+          posZ: 'float',
+          normX: 'float',
+          normY: 'float',
+          normZ: 'float',
+        },
+        tester => {
+          let shaderManager =
+              new SingleMeshShaderManager(attributeNames, attributeInfo, /*fragmentMain=*/ '');
+          const attributeFormats = getAttributeTextureFormats(attributeInfo);
 
-      let {gl, builder} = tester;
-      builder.addUniform('highp float', 'vertexIndex');
-      builder.addVarying('highp vec3', 'vVertexPosition');
-      builder.addVarying('highp vec3', 'vVertexNormal');
-      shaderManager.defineAttributeAccess(builder, 'vertexIndex');
-      builder.addVertexMain(`
+          let {gl, builder} = tester;
+          builder.addUniform('highp uint', 'vertexIndex');
+          builder.addVarying('highp vec3', 'vVertexPosition');
+          builder.addVarying('highp vec3', 'vVertexNormal');
+          shaderManager.defineAttributeAccess(builder, 'vertexIndex');
+          builder.addVertexMain(`
   vVertexPosition = vertexPosition;
   vVertexNormal = vertexNormal;
 `);
-      builder.setFragmentMain(`
-  gl_FragData[0] = packFloatIntoVec4(vVertexPosition.x);
-  gl_FragData[1] = packFloatIntoVec4(vVertexPosition.y);
-  gl_FragData[2] = packFloatIntoVec4(vVertexPosition.z);
-  gl_FragData[3] = packFloatIntoVec4(vVertexNormal.x);
-  gl_FragData[4] = packFloatIntoVec4(vVertexNormal.y);
-  gl_FragData[5] = packFloatIntoVec4(vVertexNormal.z);
+          builder.setFragmentMain(`
+  posX = vVertexPosition.x;
+  posY = vVertexPosition.y;
+  posZ = vVertexPosition.z;
+  normX = vVertexNormal.x;
+  normY = vVertexNormal.y;
+  normZ = vVertexNormal.z;
 `);
-      vertexData.copyToGPU(gl, attributeFormats);
-      tester.build();
-      let {shader} = tester;
-      shader.bind();
+          vertexData.copyToGPU(gl, attributeFormats);
+          tester.build();
+          let {shader} = tester;
+          shader.bind();
 
-      for (let index of [0, 1, 2, 32104, 100201, 143212]) {
-        shaderManager.bindVertexData(gl, shader, vertexData);
-        gl.uniform1f(shader.uniform('vertexIndex'), index);
-        tester.execute();
-        let values = new Float32Array(6);
-        for (let i = 0; i < 6; ++i) {
-          values[i] = tester.readFloat(i);
-        }
-        for (let i = 0; i < 3; ++i) {
-          expect(values[i]).toEqual(
-              vertexData.vertexPositions[index * 3 + i], `vertexPositions: index=${index}, i=${i}`);
-          expect(values[i + 3])
-              .toEqual(
+          for (let index of [0, 1, 2, 32104, 100201, 143212]) {
+            shaderManager.bindVertexData(gl, shader, vertexData);
+            gl.uniform1ui(shader.uniform('vertexIndex'), index);
+            tester.execute();
+            const {values} = tester;
+            const pos = [values.posX, values.posY, values.posZ];
+            const norm = [values.normX, values.normY, values.normZ];
+            for (let i = 0; i < 3; ++i) {
+              expect(pos[i]).toEqual(
+                  vertexData.vertexPositions[index * 3 + i],
+                  `vertexPositions: index=${index}, i=${i}`);
+              expect(norm[i]).toEqual(
                   vertexData.vertexNormals[index * 3 + i], `vertexNormals: index=${index}, i=${i}`);
-        }
-      }
-    });
+            }
+          }
+        });
   });
 });

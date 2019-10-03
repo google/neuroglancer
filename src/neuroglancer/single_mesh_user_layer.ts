@@ -15,16 +15,18 @@
  */
 
 import debounce from 'lodash/debounce';
-import {UserLayer, UserLayerDropdown} from 'neuroglancer/layer';
+import {UserLayer} from 'neuroglancer/layer';
 import {LayerListSpecification, registerLayerType} from 'neuroglancer/layer_specification';
 import {Overlay} from 'neuroglancer/overlay';
 import {SingleMeshSourceParameters} from 'neuroglancer/single_mesh/base';
 import {VertexAttributeInfo} from 'neuroglancer/single_mesh/base';
 import {FRAGMENT_MAIN_START, getShaderAttributeType, getSingleMeshSource, SingleMeshDisplayState, SingleMeshLayer, SingleMeshSource, TrackableAttributeNames} from 'neuroglancer/single_mesh/frontend';
+import {UserLayerWithCoordinateTransformMixin} from 'neuroglancer/user_layer_with_coordinate_transform';
 import {RefCounted} from 'neuroglancer/util/disposable';
 import {removeFromParent} from 'neuroglancer/util/dom';
 import {parseArray, verifyObjectProperty, verifyOptionalString, verifyString} from 'neuroglancer/util/json';
 import {ShaderCodeWidget} from 'neuroglancer/widget/shader_code_widget';
+import {Tab} from 'neuroglancer/widget/tab_view';
 
 require('./single_mesh_user_layer.css');
 
@@ -47,14 +49,17 @@ function pickAttributeNames(existingNames: string[]) {
   return result;
 }
 
-export class SingleMeshUserLayer extends UserLayer {
+const BaseUserLayer = UserLayerWithCoordinateTransformMixin(UserLayer);
+
+export class SingleMeshUserLayer extends BaseUserLayer {
   parameters: SingleMeshSourceParameters;
   meshSource: SingleMeshSource|undefined;
   displayState = new SingleMeshDisplayState();
   userSpecifiedAttributeNames: (string|undefined)[]|undefined;
   defaultAttributeNames: string[]|undefined;
   constructor(public manager: LayerListSpecification, x: any) {
-    super([]);
+    super(manager, x);
+    this.displayState.objectToDataTransform = this.transform;
     this.parameters = {
       meshSourceUrl: verifyObjectProperty(x, 'source', verifyString),
       attributeSourceUrls: verifyObjectProperty(
@@ -67,7 +72,6 @@ export class SingleMeshUserLayer extends UserLayer {
             }
           }),
     };
-    this.displayState.objectToDataTransform.restoreState(x['transform']);
     this.displayState.fragmentMain.restoreState(x['shader']);
     this.userSpecifiedAttributeNames = verifyObjectProperty(x, 'vertexAttributeNames', y => {
       if (y === undefined) {
@@ -107,9 +111,13 @@ export class SingleMeshUserLayer extends UserLayer {
     this.registerDisposer(this.displayState.attributeNames.changed.add(() => {
       this.specificationChanged.dispatch();
     }));
+    this.tabs.add(
+        'rendering', {label: 'Rendering', order: -100, getter: () => new DisplayOptionsTab(this)});
+    this.tabs.default = 'rendering';
   }
   toJSON() {
-    let x: any = {'type': 'mesh'};
+    let x = super.toJSON();
+    x['type'] = 'mesh';
     let {parameters} = this;
     let {attributeSourceUrls} = parameters;
     x['source'] = this.parameters.meshSourceUrl;
@@ -117,7 +125,6 @@ export class SingleMeshUserLayer extends UserLayer {
       x['vertexAttributeSources'] = attributeSourceUrls;
     }
     x['shader'] = this.displayState.fragmentMain.toJSON();
-    x['transform'] = this.displayState.objectToDataTransform.toJSON();
     let persistentAttributeNames: (string|undefined)[]|undefined = undefined;
     if (this.meshSource === undefined) {
       persistentAttributeNames = this.userSpecifiedAttributeNames;
@@ -141,9 +148,6 @@ export class SingleMeshUserLayer extends UserLayer {
     }
     x['vertexAttributeNames'] = persistentAttributeNames;
     return x;
-  }
-  makeDropdown(element: HTMLDivElement) {
-    return new SingleMeshDropdown(element, this);
   }
 }
 
@@ -258,11 +262,12 @@ function makeVertexAttributeWidget(layer: SingleMeshUserLayer) {
       () => layer.meshSource && layer.meshSource.info.vertexAttributes);
 }
 
-class SingleMeshDropdown extends UserLayerDropdown {
+class DisplayOptionsTab extends Tab {
   attributeWidget = this.registerDisposer(makeVertexAttributeWidget(this.layer));
   codeWidget = this.registerDisposer(makeShaderCodeWidget(this.layer));
-  constructor(public element: HTMLDivElement, public layer: SingleMeshUserLayer) {
+  constructor(public layer: SingleMeshUserLayer) {
     super();
+    const {element} = this;
     element.classList.add('neuroglancer-single-mesh-dropdown');
     let topRow = document.createElement('div');
     topRow.className = 'neuroglancer-single-mesh-dropdown-top-row';
@@ -295,10 +300,12 @@ class SingleMeshDropdown extends UserLayerDropdown {
     element.appendChild(this.attributeWidget.element);
     element.appendChild(this.codeWidget.element);
     this.codeWidget.textEditor.refresh();
-  }
 
-  onShow() {
-    this.codeWidget.textEditor.refresh();
+    this.visibility.changed.add(() => {
+      if (this.visible) {
+        this.codeWidget.textEditor.refresh();
+      }
+    });
   }
 }
 

@@ -22,7 +22,7 @@ const minimist = require('minimist');
 
 module.exports = function(config) {
   let webpackConfig = webpack_helpers.getBaseConfig({useBabel: false, noOutput: true});
-  webpackConfig.devtool = 'inline-source-map';
+  webpackConfig.mode = 'development';
 
   const argv = minimist(process.argv);
   let pattern = argv['pattern'] || '';
@@ -45,13 +45,14 @@ module.exports = function(config) {
     ],
     frameworks: ['benchmark'],
     preprocessors: {
-      '../src/benchmark.js': ['webpack', 'sourcemap'],
+      '../src/benchmark.js': ['webpack'],
     },
 
     webpack: webpackConfig,
     webpackServer: {noInfo: true},
     browsers: [
-      'Chrome',
+      'ChromeHeadless',
+      // 'Chrome',
       // 'ChromeCanary',
     ],
     colors: true,

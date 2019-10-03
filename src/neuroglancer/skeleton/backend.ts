@@ -60,6 +60,7 @@ export class SkeletonChunk extends Chunk {
     super.serialize(msg, transfers);
     const vertexPositions = this.vertexPositions!;
     const indices = this.indices!;
+    msg['numVertices'] = vertexPositions.length / 3;
     msg['indices'] = indices;
     transfers.push(indices.buffer);
 
@@ -145,7 +146,9 @@ export class SkeletonLayer extends SegmentationLayerSharedObjectCounterpart {
 export function decodeSkeletonVertexPositionsAndIndices(
     chunk: SkeletonChunk, data: ArrayBuffer, endianness: Endianness, vertexByteOffset: number,
     numVertices: number, indexByteOffset?: number, numEdges?: number) {
-  decodeVertexPositionsAndIndices(
-      chunk, /*verticesPerPrimitive=*/2, data, endianness, vertexByteOffset, numVertices,
-      indexByteOffset, numEdges);
+  const meshData = decodeVertexPositionsAndIndices(
+      /*verticesPerPrimitive=*/2, data, endianness, vertexByteOffset, numVertices,
+    indexByteOffset, numEdges);
+  chunk.vertexPositions = meshData.vertexPositions as Float32Array;
+  chunk.indices = meshData.indices as Uint32Array;
 }

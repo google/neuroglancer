@@ -47,15 +47,23 @@ export function verifyFinitePositiveFloat(obj: any): number {
 export function parseXYZ<A extends WritableArrayLike<number>>(
     out: A, obj: any, validator: (x: any) => number = verifyFloat): A {
   verifyObject(obj);
-  let keys = Object.keys(obj);
-  keys.sort();
-  if (keys.length !== 3 || keys[0] !== 'x' || keys[1] !== 'y' || keys[2] !== 'z') {
-    throw new Error(
-        `Expected object to have keys ['x', 'y', 'z'], but received: ${JSON.stringify(obj)}.`);
+  out[0] = out[1] = out[2] = 0;
+  for (const key of Object.keys(obj)) {
+    switch (key) {
+    case 'x':
+      out[0] = validator(obj[key]);
+      break;
+    case 'y':
+      out[1] = validator(obj[key]);
+      break;
+    case 'z':
+      out[2] = validator(obj[key]);
+      break;
+    default:
+      throw new Error(
+          `Expected object to have keys ['x', 'y', 'z'], but received: ${JSON.stringify(obj)}.`);
+    }
   }
-  out[0] = validator(obj['x']);
-  out[1] = validator(obj['y']);
-  out[2] = validator(obj['z']);
   return out;
 }
 
@@ -213,11 +221,11 @@ const SINGLE_OR_DOUBLE_QUOTE_STRING_PATTERN =
 const DOUBLE_OR_SINGLE_QUOTE_STRING_PATTERN =
     new RegExp(`${DOUBLE_QUOTE_STRING_PATTERN.source}|${SINGLE_QUOTE_STRING_PATTERN.source}`);
 
-const DOUBLE_QUOTE_PATTERN = /^((?:[^"'\\]|(?:\\.))*)"/;
+const DOUBLE_QUOTE_PATTERN = /^((?:[^"'\\]|(?:\\[^']))*)("|\\')/;
 const SINGLE_QUOTE_PATTERN = /^((?:[^"'\\]|(?:\\.))*)'/;
 
 function convertStringLiteral(
-    x: string, quoteInitial: string, quoteReplace: string, quoteSearch: RegExp) {
+  x: string, quoteInitial: string, quoteReplace: string, quoteSearch: RegExp) {
   if (x.length >= 2 && x.charAt(0) === quoteInitial && x.charAt(x.length - 1) === quoteInitial) {
     let inner = x.substr(1, x.length - 2);
     let s = quoteReplace;
@@ -228,8 +236,14 @@ function convertStringLiteral(
         break;
       }
       s += m[1];
-      s += '\\';
-      s += quoteReplace;
+      if (m[2] === quoteReplace) {
+        // We received a single unescaped quoteReplace character.
+        s += '\\';
+        s += quoteReplace;
+      } else {
+        // We received "\\" + quoteInitial.  We need to remove the escaping.
+        s += quoteInitial;
+      }
       inner = inner.substr(m.index! + m[0].length);
     }
     s += quoteReplace;
@@ -425,6 +439,10 @@ export function verifyOptionalBoolean(obj: any): boolean|undefined {
   } else {
     throw new Error(`Expected string or boolean but received: ${JSON.stringify(obj)}`);
   }
+}
+
+export function valueOr<T>(value: T|undefined, defaultValue: T) {
+  return value === undefined ? defaultValue : value;
 }
 
 export function verifyObjectProperty<T>(

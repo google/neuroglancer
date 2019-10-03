@@ -22,7 +22,7 @@ import {registerEventListener} from 'neuroglancer/util/disposable';
  */
 export function eventHasInputTextTarget(event: Event) {
   const selection = window.getSelection();
-  if (!selection.isCollapsed) {
+  if (selection !== null && !selection.isCollapsed) {
     return true;
   }
   const {tagName} = (<HTMLElement>event.target);
@@ -35,8 +35,11 @@ export function eventHasInputTextTarget(event: Event) {
 export function setClipboard(data: string, format = 'text/plain') {
   let success = false;
   const cleanup = registerEventListener(document, 'copy', (event: ClipboardEvent) => {
-    event.clipboardData.setData(format, data);
-    success = true;
+    const {clipboardData} = event;
+    if (clipboardData !== null) {
+      clipboardData.setData(format, data);
+      success = true;
+    }
     event.stopPropagation();
     event.preventDefault();
   }, true);

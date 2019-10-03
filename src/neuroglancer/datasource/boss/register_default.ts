@@ -17,7 +17,4 @@
 import {BossDataSource} from 'neuroglancer/datasource/boss/frontend';
 import {registerProvider} from 'neuroglancer/datasource/default_provider';
 
-registerProvider(
-    'boss',
-    options => new BossDataSource(
-        options.credentialsManager));
+registerProvider('boss', options => new BossDataSource(options.credentialsManager));

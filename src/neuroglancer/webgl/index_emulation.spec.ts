@@ -19,27 +19,26 @@ import {fragmentShaderTest} from 'neuroglancer/webgl/shader_testing';
 
 describe('webgl/index_emulation', () => {
   it('indexBuffer', () => {
-    fragmentShaderTest(1, tester => {
+    fragmentShaderTest({outputValue: 'uint'}, tester => {
       let {gl, builder} = tester;
-      let helper = new IndexBufferAttributeHelper('VertexIndex');
+      let helper = new IndexBufferAttributeHelper('aVertexIndex');
       helper.defineShader(builder);
-      builder.addVarying('highp float', 'vVertexIndex');
-      builder.addVertexMain(`vVertexIndex = getVertexIndex();`);
-      builder.setFragmentMain(`gl_FragData[0] = packFloatIntoVec4(vVertexIndex);`);
+      builder.addVarying('highp uint', 'vVertexIndex', 'flat');
+      builder.addVertexMain(`vVertexIndex = aVertexIndex;`);
+      builder.setFragmentMain(`outputValue = vVertexIndex;`);
 
       tester.build();
       let {shader} = tester;
       shader.bind();
 
-      for (let indexValue of [0, 1, 143210]) {
+      for (let indexValue of [5, 1, 143210]) {
         let indices = Uint32Array.of(indexValue, indexValue, indexValue, indexValue);
         let indexBuffer = makeIndexBuffer(gl, indices);
         try {
           helper.bind(indexBuffer, shader);
           tester.execute();
           helper.disable(shader);
-          let value = tester.readFloat();
-          expect(value).toEqual(indexValue);
+          expect(tester.values.outputValue).toEqual(indexValue);
         } finally {
           indexBuffer.dispose();
         }

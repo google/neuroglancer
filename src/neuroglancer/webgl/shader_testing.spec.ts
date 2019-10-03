@@ -14,41 +14,38 @@
  * limitations under the License.
  */
 
-import {vec4} from 'neuroglancer/util/geom';
-import {glsl_packFloat, glsl_packFloat01ToFixedPoint, unpackFloat01FromFixedPoint} from 'neuroglancer/webgl/shader_lib';
 import {fragmentShaderTest} from 'neuroglancer/webgl/shader_testing';
 
 describe('FragmentShaderTester', () => {
-  it('value passthrough', () => {
-    fragmentShaderTest(1, tester => {
+  it('uint passthrough', () => {
+    fragmentShaderTest({outputValue: 'uint'}, tester => {
       let {gl, builder} = tester;
-      builder.addUniform('vec4', 'inputValue');
-      builder.setFragmentMain(`gl_FragData[0] = inputValue;`);
+      builder.addUniform('highp uint', 'inputValue');
+      builder.setFragmentMain(`outputValue = inputValue;`);
       tester.build();
       let {shader} = tester;
-      let inputValue = vec4.fromValues(0, 64 / 255, 128 / 255, 192 / 255);
       shader.bind();
-      gl.uniform4fv(shader.uniform('inputValue'), inputValue);
-      tester.execute();
-      let outputValue = tester.readVec4();
-      expect(outputValue).toEqual(inputValue);
+      for (const inputValue of [0, 1, 42, 343432, 4294967295]) {
+        gl.uniform1ui(shader.uniform('inputValue'), inputValue);
+        tester.execute();
+        const values = tester.values;
+        expect(values.outputValue).toEqual(inputValue);
+      }
     });
   });
 
-  it('packFloat', () => {
-    fragmentShaderTest(1, tester => {
+  it('float passthrough', () => {
+    fragmentShaderTest({outputValue: 'float'}, tester => {
       let {gl, builder} = tester;
       builder.addUniform('highp float', 'inputValue');
-      builder.addFragmentCode(glsl_packFloat);
-      builder.setFragmentMain(`gl_FragData[0] = packFloatIntoVec4(inputValue);`);
+      builder.setFragmentMain(`outputValue = inputValue;`);
       tester.build();
       function generateRandomNumber() {
         let buf = new Uint32Array(1);
         let temp = new Float32Array(buf.buffer);
         do {
           crypto.getRandomValues(buf);
-        } while (!Number.isFinite(temp[0]) ||
-                 (temp[0] !== 0 && Math.abs(Math.log2(Math.abs(temp[0]))) > 125));
+        } while (!Number.isNaN(temp[0]));
         return temp[0];
       }
 
@@ -59,24 +56,23 @@ describe('FragmentShaderTester', () => {
       for (let i = 0; i < count; ++i) {
         testValues.push(generateRandomNumber());
       }
-      for (let x of testValues) {
-        gl.uniform1f(shader.uniform('inputValue'), x);
+      for (const inputValue of testValues) {
+        gl.uniform1f(shader.uniform('inputValue'), inputValue);
         tester.execute();
-        let outputValue = tester.readFloat();
-        expect(outputValue).toEqual(x);
+        const values = tester.values;
+        expect(values.outputValue).toEqual(inputValue);
       }
     });
   });
 
-  it('packFloat2', () => {
-    fragmentShaderTest(2, tester => {
+  it('float uint passthrough', () => {
+    fragmentShaderTest({floatOutput: 'float', uintOutput: 'uint'}, tester => {
       let {gl, builder} = tester;
-      builder.addUniform('highp float', 'inputValue1');
-      builder.addUniform('highp float', 'inputValue2');
-      builder.addFragmentCode(glsl_packFloat);
+      builder.addUniform('highp float', 'floatInput');
+      builder.addUniform('highp uint', 'uintInput');
       builder.setFragmentMain(`
-  gl_FragData[0] = packFloatIntoVec4(inputValue1);
-  gl_FragData[1] = packFloatIntoVec4(inputValue2);
+  floatOutput = floatInput;
+  uintOutput = uintInput;
 `);
       tester.build();
       function generateRandomNumber() {
@@ -91,52 +87,22 @@ describe('FragmentShaderTester', () => {
 
       let {shader} = tester;
       shader.bind();
-      let testValues = [0, 1, -1, 2, -2, 3, -3, 5, -5, 1.5, -1.5];
+      let testFloatValues = [5, 0, 1, -1, 2, -2, 3, -3, 5, -5, 1.5, -1.5];
+      let testUintValues = [7, 1, 5, 10, 33, 27, 55, 7, 5, 3, 343432, 4294967295];
       let count = 100;
       for (let i = 0; i < count; ++i) {
-        testValues.push(generateRandomNumber());
+        testFloatValues.push(generateRandomNumber());
+        testUintValues.push(i);
       }
-      for (let x of testValues) {
-        let inputValues = Float32Array.of(x, x + 0.5);
-        gl.uniform1f(shader.uniform('inputValue1'), inputValues[0]);
-        gl.uniform1f(shader.uniform('inputValue2'), inputValues[1]);
+      for (let i = 0; i < testUintValues.length; ++i) {
+        const floatInput = testFloatValues[i];
+        const uintInput = testUintValues[i];
+        gl.uniform1f(shader.uniform('floatInput'), floatInput);
+        gl.uniform1ui(shader.uniform('uintInput'), uintInput);
         tester.execute();
-        let outputValue1 = tester.readFloat(0);
-        let outputValue2 = tester.readFloat(1);
-        expect(outputValue1).toEqual(inputValues[0]);
-        expect(outputValue2).toEqual(inputValues[1]);
-      }
-    });
-  });
-
-  it('packFloat01ToFixedPoint', () => {
-    fragmentShaderTest(1, tester => {
-      let {gl, builder} = tester;
-      builder.addUniform('highp float', 'inputValue');
-      builder.addFragmentCode(glsl_packFloat01ToFixedPoint);
-      builder.setFragmentMain(`gl_FragData[0] = packFloat01ToFixedPoint(inputValue);`);
-      tester.build();
-      function generateRandomNumber() {
-        let buf = new Uint32Array(1);
-        crypto.getRandomValues(buf);
-        return buf[0] / (Math.pow(2, 32));
-      }
-
-      let {shader} = tester;
-      shader.bind();
-      let testValues = [0, 0.1, 0.01, 0.003, 0.5, 0.98];
-      let count = 100;
-      for (let i = 0; i < count; ++i) {
-        testValues.push(generateRandomNumber());
-      }
-      for (let x of testValues) {
-        gl.uniform1f(shader.uniform('inputValue'), x);
-        tester.execute();
-        let bytes = tester.readBytes();
-        let outputValue = unpackFloat01FromFixedPoint(bytes);
-        let absDiff = Math.abs(outputValue - x);
-        expect(absDiff).toBeLessThan(
-            Math.pow(2, -23), `x = ${x}, outputValue = ${outputValue}, difference = ${absDiff}`);
+        const values = tester.values;
+        expect(values.floatOutput).toEqual(floatInput);
+        expect(values.uintOutput).toEqual(uintInput);
       }
     });
   });

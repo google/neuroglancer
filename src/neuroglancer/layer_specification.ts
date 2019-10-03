@@ -56,6 +56,7 @@ export class ManagedUserLayerWithSpecification extends ManagedUserLayer {
       return this.initialSpecification;
     }
     let layerSpec = userLayer.toJSON();
+    layerSpec.name = this.name;
     if (!this.visible) {
       layerSpec['visible'] = false;
     }
@@ -66,6 +67,7 @@ export class ManagedUserLayerWithSpecification extends ManagedUserLayer {
 export interface LayerListSpecification extends RefCounted, Trackable {
   changed: NullarySignal;
   voxelCoordinatesSet: Signal<(coordinates: vec3) => void>;
+  spatialCoordinatesSet: Signal<(coordinates: vec3) => void>;
 
   /**
    * @deprecated
@@ -91,6 +93,7 @@ export interface LayerListSpecification extends RefCounted, Trackable {
    * Called by user layers to indicate that a voxel position has been selected interactively.
    */
   setVoxelCoordinates(voxelCoordinates: vec3): void;
+  setSpatialCoordinates(spatialCoordinates: vec3): void;
 
   rootLayers: Borrowed<LayerManager>;
 }
@@ -98,6 +101,7 @@ export interface LayerListSpecification extends RefCounted, Trackable {
 export class TopLevelLayerListSpecification extends RefCounted implements LayerListSpecification {
   changed = new NullarySignal();
   voxelCoordinatesSet = new Signal<(coordinates: vec3) => void>();
+  spatialCoordinatesSet = new Signal<(coordinates: vec3) => void>();
 
   /**
    * @deprecated
@@ -124,10 +128,20 @@ export class TopLevelLayerListSpecification extends RefCounted implements LayerL
   }
 
   restoreState(x: any) {
-    verifyObject(x);
     this.layerManager.clear();
-    for (let key of Object.keys(x)) {
-      this.layerManager.addManagedLayer(this.getLayer(key, x[key]));
+    if (Array.isArray(x)) {
+      // If array, layers have an order
+      for (const layerObj of x) {
+        verifyObject(layerObj);
+        const name = this.layerManager.getUniqueLayerName(verifyObjectProperty(layerObj, 'name', verifyString));
+        this.layerManager.addManagedLayer(this.getLayer(name, layerObj));
+      }
+    } else {
+      // Keep for backwards compatibility
+      verifyObject(x);
+      for (let key of Object.keys(x)) {
+        this.layerManager.addManagedLayer(this.getLayer(key, x[key]));
+      }
     }
   }
 
@@ -147,6 +161,12 @@ export class TopLevelLayerListSpecification extends RefCounted implements LayerL
       }
       throw new Error(`Expected boolean, but received: ${JSON.stringify(x)}.`);
     });
+
+    const makeUserLayer = (layerConstructor: UserLayerConstructor, spec: any) => {
+      const userLayer = new layerConstructor(this, spec);
+      userLayer.restoreState(spec);
+      managedLayer.layer = userLayer;
+    };
     let sourceUrl = managedLayer.sourceUrl =
         verifyObjectProperty(spec, 'source', verifyOptionalString);
     if (layerType === undefined) {
@@ -162,7 +182,7 @@ export class TopLevelLayerListSpecification extends RefCounted implements LayerL
         }
         let layerConstructor = volumeLayerTypes.get(source.volumeType);
         if (layerConstructor !== undefined) {
-          managedLayer.layer = new layerConstructor(this, spec);
+          makeUserLayer(layerConstructor, spec);
         } else {
           throw new Error(`Unsupported volume type: ${VolumeType[source.volumeType]}.`);
         }
@@ -170,7 +190,7 @@ export class TopLevelLayerListSpecification extends RefCounted implements LayerL
     } else {
       let layerConstructor = layerTypes.get(layerType);
       if (layerConstructor !== undefined) {
-        managedLayer.layer = new layerConstructor(this, spec);
+        makeUserLayer(layerConstructor, spec);
       } else {
         throw new Error(`Unsupported layer type: ${JSON.stringify(layerType)}.`);
       }
@@ -184,18 +204,21 @@ export class TopLevelLayerListSpecification extends RefCounted implements LayerL
   }
 
   add(layer: ManagedUserLayer, index?: number|undefined) {
+    if (this.layerManager.managedLayers.indexOf(layer) === -1) {
+      layer.name = this.layerManager.getUniqueLayerName(layer.name);
+    }
     this.layerManager.addManagedLayer(layer, index);
   }
 
   toJSON() {
-    let result: any = {};
+    const result = [];
     let numResults = 0;
     for (let managedLayer of this.layerManager.managedLayers) {
       const layerJson = (<ManagedUserLayerWithSpecification>managedLayer).toJSON();
       // A `null` layer specification is used to indicate a transient drag target, and should not be
       // serialized.
       if (layerJson != null) {
-        result[managedLayer.name] = layerJson;
+        result.push(layerJson);
         ++numResults;
       }
     }
@@ -212,7 +235,13 @@ export class TopLevelLayerListSpecification extends RefCounted implements LayerL
     this.voxelCoordinatesSet.dispatch(voxelCoordinates);
   }
 
-  get rootLayers () { return this.layerManager; }
+  setSpatialCoordinates(spatialCoordinates: vec3) {
+    this.spatialCoordinatesSet.dispatch(spatialCoordinates);
+  }
+
+  get rootLayers() {
+    return this.layerManager;
+  }
 }
 
 /**
@@ -222,6 +251,7 @@ export class LayerSubsetSpecification extends RefCounted implements LayerListSpe
   changed = new NullarySignal();
 
   get voxelCoordinatesSet() { return this.master.voxelCoordinatesSet; }
+  get spatialCoordinatesSet() { return this.master.spatialCoordinatesSet; }
 
   get worker() { return this.master.rpc; }
   get rpc() { return this.master.rpc; }
@@ -283,6 +313,10 @@ export class LayerSubsetSpecification extends RefCounted implements LayerListSpe
 
   setVoxelCoordinates(voxelCoordinates: vec3) {
     this.master.setVoxelCoordinates(voxelCoordinates);
+  }
+
+  setSpatialCoordinates(spatialCoordinates: vec3) {
+    this.master.setSpatialCoordinates(spatialCoordinates);
   }
 
   get rootLayers () { return this.master.rootLayers; }

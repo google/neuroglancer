@@ -25,6 +25,7 @@ import {getDefaultDataSourceProvider} from 'neuroglancer/datasource/default_prov
 import {PythonDataSource} from 'neuroglancer/datasource/python/frontend';
 import {TrackableBasedCredentialsManager} from 'neuroglancer/python_integration/credentials_provider';
 import {TrackableBasedEventActionMap} from 'neuroglancer/python_integration/event_action_map';
+import {PrefetchManager} from 'neuroglancer/python_integration/prefetch';
 import {RemoteActionHandler} from 'neuroglancer/python_integration/remote_actions';
 import {TrackableBasedStatusMessages} from 'neuroglancer/python_integration/remote_status_messages';
 import {ScreenshotHandler} from 'neuroglancer/python_integration/screenshots';
@@ -118,21 +119,27 @@ window.addEventListener('DOMContentLoaded', () => {
   configState.add('screenshot', screenshotHandler.requestState);
 
   let sharedState: Trackable|undefined = viewer.state;
-
+  viewer.loadFromJsonUrl();
   if (window.location.hash) {
     const hashBinding = viewer.registerDisposer(new UrlHashBinding(viewer.state));
     hashBinding.updateFromUrlHash();
     sharedState = undefined;
   }
 
-  configState.add('showUIControls', viewer.showUIControls);
-  configState.add('showLayerPanel', viewer.showLayerPanel);
-  configState.add('showHelpButton', viewer.showHelpButton);
-  configState.add('showLocation', viewer.showLocation);
-  configState.add('showPanelBorders', viewer.showPanelBorders);
+  const prefetchManager = new PrefetchManager(
+      viewer.display, dataSourceProvider, viewer.dataContext.addRef(), viewer.uiConfiguration);
+  configState.add('prefetch', prefetchManager);
+
+  configState.add('showUIControls', viewer.uiConfiguration.showUIControls);
+  configState.add('showLayerPanel', viewer.uiConfiguration.showLayerPanel);
+  configState.add('showHelpButton', viewer.uiConfiguration.showHelpButton);
+  configState.add('showLocation', viewer.uiConfiguration.showLocation);
+  configState.add('showPanelBorders', viewer.uiConfiguration.showPanelBorders);
+  configState.add('scaleBarOptions', viewer.scaleBarOptions);
 
   const size = new TrackableValue<[number, number]|undefined>(
-      undefined, x => parseFixedLengthArray(<[number, number]>[0, 0], x, verifyInt));
+      undefined,
+      x => x == null ? undefined : parseFixedLengthArray(<[number, number]>[0, 0], x, verifyInt));
   configState.add('viewerSize', size);
 
   const updateSize = () => {
@@ -142,14 +149,23 @@ window.addEventListener('DOMContentLoaded', () => {
       element.style.position = 'relative';
       element.style.width = null;
       element.style.height = null;
+      element.style.transform = null;
+      element.style.transformOrigin = null;
     } else {
       element.style.position = 'absolute';
       element.style.width = `${value[0]}px`;
       element.style.height = `${value[1]}px`;
+      const screenWidth = document.documentElement!.clientWidth;
+      const screenHeight = document.documentElement!.clientHeight;
+      const scaleX = screenWidth/value[0];
+      const scaleY = screenHeight/value[1];
+      const scale = Math.min(scaleX, scaleY);
+      element.style.transform = `scale(${scale})`;
+      element.style.transformOrigin = 'top left';
     }
-    viewer.display.onResize();
   };
   updateSize();
+  window.addEventListener('resize', updateSize);
   size.changed.add(debounce(() => updateSize(), 0));
 
   const serverConnection = new ServerConnection(sharedState, privateState, configState);

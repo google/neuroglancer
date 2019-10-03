@@ -20,6 +20,7 @@ import {RenderLayer, RenderLayerOptions} from 'neuroglancer/sliceview/volume/ren
 import {TrackableAlphaValue, trackableAlphaValue} from 'neuroglancer/trackable_alpha';
 import {BLEND_FUNCTIONS, BLEND_MODES, TrackableBlendModeValue, trackableBlendModeValue} from 'neuroglancer/trackable_blend';
 import {verifyEnumString} from 'neuroglancer/util/json';
+import glsl_COLORMAPS from 'neuroglancer/webgl/colormaps.glsl';
 import {makeTrackableFragmentMain, TrackableFragmentMain} from 'neuroglancer/webgl/dynamic_shader';
 import {ShaderBuilder} from 'neuroglancer/webgl/shader';
 
@@ -30,7 +31,6 @@ const DEFAULT_FRAGMENT_MAIN = `void main() {
 }
 `;
 
-const glsl_COLORMAPS = require<string>('neuroglancer/webgl/colormaps.glsl');
 
 export function getTrackableFragmentMain(value = DEFAULT_FRAGMENT_MAIN) {
   return makeTrackableFragmentMain(value);
@@ -46,9 +46,7 @@ export class ImageRenderLayer extends RenderLayer {
   fragmentMain: TrackableFragmentMain;
   opacity: TrackableAlphaValue;
   blendMode: TrackableBlendModeValue;
-  constructor(
-      multiscaleSource: MultiscaleVolumeChunkSource,
-      options: Partial<ImageRenderLayerOptions> = {}) {
+  constructor(multiscaleSource: MultiscaleVolumeChunkSource, options: ImageRenderLayerOptions) {
     super(multiscaleSource, options);
     const {
       opacity = trackableAlphaValue(0.5),
@@ -62,16 +60,16 @@ export class ImageRenderLayer extends RenderLayer {
       this.redrawNeeded.dispatch();
     }));
     this.registerDisposer(fragmentMain.changed.add(() => {
-      this.shaderUpdated = true;
+      this.shaderGetter.invalidateShader();
       this.redrawNeeded.dispatch();
     }));
   }
 
-  getShaderKey() {
+  protected getShaderKey() {
     return `volume.ImageRenderLayer:${JSON.stringify(this.fragmentMain.value)}`;
   }
 
-  defineShader(builder: ShaderBuilder) {
+  protected defineShader(builder: ShaderBuilder) {
     super.defineShader(builder);
     builder.addUniform('highp float', 'uOpacity');
     builder.addFragmentCode(`
@@ -94,12 +92,15 @@ void emitTransparent() {
 
   beginSlice(sliceView: SliceView) {
     let shader = super.beginSlice(sliceView);
+    if (shader === undefined) {
+      return undefined;
+    }
     let {gl} = this;
     gl.uniform1f(shader.uniform('uOpacity'), this.opacity.value);
     return shader;
   }
 
-  setGLBlendMode(gl: WebGLRenderingContext, renderLayerNum: number) {
+  setGLBlendMode(gl: WebGL2RenderingContext, renderLayerNum: number) {
     let blendModeValue = verifyEnumString(this.blendMode.value, BLEND_MODES);
     if (blendModeValue === BLEND_MODES.ADDITIVE || renderLayerNum > 0) {
       gl.enable(gl.BLEND);

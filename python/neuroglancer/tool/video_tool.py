@@ -12,7 +12,6 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-
 """Tool for creating videos (sequences of screenshots) from Neuroglancer.
 
 The video is specified by a "script", which is a text file of the form:
@@ -62,6 +61,8 @@ be rendered in several ways:
 from __future__ import print_function, division
 
 import argparse
+import bisect
+import math
 import os
 import threading
 import time
@@ -69,18 +70,126 @@ import webbrowser
 
 import neuroglancer
 
+
 class PlaybackManager(object):
-    def __init__(self, script_editor):
+    def __init__(self, keypoints, frames_per_second):
+        self.keypoints = keypoints
+        self.frames_per_second = frames_per_second
+
+        self.total_frames = 0
+        self.keypoint_start_frame = []
+        self.keypoint_end_frame = []
+        for k in keypoints[:-1]:
+            duration = k['transition_duration']
+            if duration == 0:
+                cur_frames = 0
+            else:
+                cur_frames = max(1, int(round(k['transition_duration'] * frames_per_second)))
+            self.keypoint_start_frame.append(self.total_frames)
+            self.total_frames += cur_frames
+            self.keypoint_end_frame.append(self.total_frames)
+        self.keypoint_start_frame.append(self.total_frames)
+        self.total_frames += 1
+        self.keypoint_end_frame.append(self.total_frames)
+
+    def get_keypoint_from_frame(self, frame_i):
+        if frame_i < 0 or frame_i >= self.total_frames:
+            raise ValueError
+        return bisect.bisect_right(self.keypoint_start_frame, frame_i) - 1
+
+    def get_frame_from_elapsed_time(self, elapsed_time):
+        return int(math.floor(elapsed_time * self.frames_per_second))
+
+    def get_frame(self, frame_i):
+        start_keypoint = self.get_keypoint_from_frame(frame_i)
+        a = self.keypoints[start_keypoint]['state']
+        if start_keypoint == len(self.keypoints) - 1:
+            return a
+        else:
+            end_keypoint = start_keypoint + 1
+            b = self.keypoints[end_keypoint]['state']
+            start_frame = self.keypoint_start_frame[start_keypoint]
+            end_frame = self.keypoint_end_frame[start_keypoint]
+            t = (frame_i - start_frame) / (end_frame - start_frame)
+            return neuroglancer.ViewerState.interpolate(a, b, t)
+
+    def get_frames(self, start_frame, end_frame):
+        return [
+            self.get_frame(frame_i)
+            for frame_i in range(start_frame, min(end_frame, self.total_frames))
+        ]
+
+    def set_state(self, viewer, frame_i, prefetch_frames):
+        states = self.get_frames(frame_i, frame_i + prefetch_frames)
+        viewer.set_state(states[0])
+        with viewer.config_state.txn() as s:
+            del s.prefetch[:]
+            for i, state in enumerate(states[1:]):
+                s.prefetch.append(
+                    neuroglancer.PrefetchState(state=state, priority=prefetch_frames - i))
+
+
+class EditorPlaybackManager(object):
+    def __init__(self, script_editor, playing=True, frames_per_second=5):
         self.script_editor = script_editor
-        script_editor.playback_manager = self
-        self.start_time = time.time()
+        self.frames_per_second = frames_per_second
+        self.playback_manager = PlaybackManager(script_editor.keypoints, frames_per_second=self.frames_per_second)
         self.current_keypoint_index = max(1, script_editor.keypoint_index)
-        self.cumulative_time = 0
+        self.script_editor._set_keypoint_index(self.current_keypoint_index)
+        self.playing = playing
+        script_editor.playback_manager = self
+        self.current_frame = self.playback_manager.keypoint_start_frame[self.current_keypoint_index - 1]
+        self.start_time = (
+            time.time() - self.current_frame /
+            self.playback_manager.frames_per_second)
         t = threading.Thread(target=self._thread_func)
         t.daemon = True
         t.start()
         self.should_stop = threading.Event()
         self._update()
+
+    def _update_current_frame(self):
+        elapsed_time = time.time() - self.start_time
+        self.current_frame = self.playback_manager.get_frame_from_elapsed_time(elapsed_time)
+
+    def _display_frame(self):
+        frame_i = self.current_frame
+        keypoint_index = self.playback_manager.get_keypoint_from_frame(
+            min(frame_i, self.playback_manager.total_frames - 1)) + 1
+        current_duration = self.script_editor.keypoints[keypoint_index - 1]['transition_duration']
+        transition_time = (frame_i - self.playback_manager.keypoint_start_frame[keypoint_index - 1]
+                           ) / self.playback_manager.frames_per_second
+        self.playback_status = '%s frame %d/%d transition %.1f/%g' % (
+            'PLAYING' if self.playing else 'PAUSED', frame_i, self.playback_manager.total_frames, transition_time, current_duration)
+        if keypoint_index != self.current_keypoint_index:
+            self.script_editor._set_keypoint_index(keypoint_index)
+            self.current_keypoint_index = keypoint_index
+        if frame_i >= self.playback_manager.total_frames:
+            self.script_editor.playback_manager = None
+            self.script_editor._update_status()
+            self.should_stop.set()
+            return
+        self.playback_manager.set_state(self.script_editor.viewer, frame_i, prefetch_frames=10)
+        self.script_editor._update_status()
+
+    def reload(self):
+        self.playback_manager = PlaybackManager(self.script_editor.keypoints, frames_per_second=self.frames_per_second)
+        self.current_keypoint_index = None
+        self.seek_frame(0)
+
+    def pause(self):
+        if self.playing:
+            self.seek_frame(0)
+        else:
+            self.start_time = time.time() - self.current_frame / self.playback_manager.frames_per_second
+            self.playing = True
+    def seek_frame(self, amount):
+        if self.playing:
+            self.playing = False
+            self._update_current_frame()
+        self.current_frame += amount
+        self.current_frame = max(0, min(self.current_frame, self.playback_manager.total_frames - 1))
+        self._display_frame()
 
     def _thread_func(self):
         while True:
@@ -93,30 +202,10 @@ class PlaybackManager(object):
         if self.script_editor.playback_manager is not self:
             self.should_stop.set()
             return
-        elapsed_time = time.time() - self.start_time
-        # Advance keypoint index
-        while True:
-            if self.current_keypoint_index >= len(self.script_editor.keypoints):
-                self.script_editor.playback_manager = None
-                self.script_editor._update_status()
-                self.should_stop.set()
-                return
-            current_duration = self.script_editor.keypoints[self.current_keypoint_index - 1][
-                'transition_duration']
-            if elapsed_time >= self.cumulative_time + current_duration:
-                self.current_keypoint_index += 1
-                self.cumulative_time += current_duration
-                self.script_editor._set_keypoint_index(self.current_keypoint_index)
-            else:
-                break
-        transition_time = elapsed_time - self.cumulative_time
-        new_state = neuroglancer.ViewerState.interpolate(
-            self.script_editor.keypoints[self.current_keypoint_index - 1]['state'],
-            self.script_editor.keypoints[self.current_keypoint_index]['state'],
-            transition_time / current_duration)
-        self.playback_status = 'PLAYING %.1f/%g' % (transition_time, current_duration)
-        self.script_editor.viewer.set_state(new_state)
-        self.script_editor._update_status()
+        if not self.playing:
+            return
+        self._update_current_frame()
+        self._display_frame()
 
 
 def load_script(script_path, transition_duration=1):
@@ -138,13 +227,28 @@ def load_script(script_path, transition_duration=1):
     return keypoints
 
 
+def save_script(script_path, keypoints):
+    temp_path = script_path + '.tmp'
+    with open(temp_path, 'w') as f:
+        for x in keypoints:
+            f.write(neuroglancer.to_url(x['state']) + '\n')
+            f.write(str(x['transition_duration']) + '\n')
+    os.rename(temp_path, script_path)
+
+
 class ScriptEditor(object):
-    def __init__(self, script_path, transition_duration):
+    def __init__(self, script_path, transition_duration, fullscreen_width, fullscreen_height,
+                 fullscreen_scale_bar_scale, frames_per_second):
         self.script_path = script_path
         self.viewer = neuroglancer.Viewer()
+        self.frames_per_second = frames_per_second
+        self.default_transition_duration = transition_duration
+        self.fullscreen_width = fullscreen_width
+        self.fullscreen_height = fullscreen_height
+        self.fullscreen_scale_bar_scale = fullscreen_scale_bar_scale
         self.keypoint_index = 0
         if os.path.exists(script_path):
-            self.keypoints = load_script(script_path, transition_duration)
+            self.keypoints = load_script(script_path, self.default_transition_duration)
         else:
             self.keypoints = []
 
@@ -152,6 +256,7 @@ class ScriptEditor(object):
         self.viewer.shared_state.add_changed_callback(self._viewer_state_changed)
         self.quit_event = threading.Event()
         self.is_dirty = True
+        self.is_fullscreen = False
         keybindings = [
             ('keyk', 'add-keypoint'),
             ('bracketleft', 'prev-keypoint'),
@@ -163,10 +268,16 @@ class ScriptEditor(object):
             ('end', 'last-keypoint'),
             ('keyq', 'quit'),
             ('enter', 'toggle-play'),
+            ('keyf', 'toggle-fullscreen'),
+            ('keyj', 'revert-script'),
+            ('comma', 'prev-frame'),
+            ('period', 'next-frame'),
         ]
         with self.viewer.config_state.txn() as s:
             for k, a in keybindings:
                 s.input_event_bindings.viewer[k] = a
+                s.input_event_bindings.slice_view[k] = a
+                s.input_event_bindings.perspective_view[k] = a
         self._keybinding_message = ' '.join('%s=%s' % x for x in keybindings)
         self.viewer.actions.add('add-keypoint', self._add_keypoint)
         self.viewer.actions.add('prev-keypoint', self._prev_keypoint)
@@ -178,8 +289,44 @@ class ScriptEditor(object):
         self.viewer.actions.add('last-keypoint', self._last_keypoint)
         self.viewer.actions.add('quit', self._quit)
         self.viewer.actions.add('toggle-play', self._toggle_play)
+        self.viewer.actions.add('toggle-fullscreen', self._toggle_fullscreen)
+        self.viewer.actions.add('revert-script', self._revert_script)
+        self.viewer.actions.add('next-frame', self._next_frame)
+        self.viewer.actions.add('prev-frame', self._prev_frame)
         self.playback_manager = None
-        self._set_keypoint_index(len(self.keypoints))
+        self._set_keypoint_index(1)
+
+    def _revert_script(self, s):
+        if os.path.exists(self.script_path):
+            self.keypoints = load_script(self.script_path, self.default_transition_duration)
+            if self.playback_manager is not None:
+                self.playback_manager.reload()
+            else:
+                self._set_keypoint_index(self.keypoint_index)
+
+    def _toggle_fullscreen(self, s):
+        self.is_fullscreen = not self.is_fullscreen
+        with self.viewer.config_state.txn() as s:
+            if self.is_fullscreen:
+                s.show_ui_controls = False
+                s.show_panel_borders = False
+                s.viewer_size = [self.fullscreen_width, self.fullscreen_height]
+                s.scale_bar_options.scale_factor = self.fullscreen_scale_bar_scale
+            else:
+                s.show_ui_controls = True
+                s.show_panel_borders = True
+                s.viewer_size = None
+                s.scale_bar_options.scale_factor = 1
+
+    def _next_frame(self, s):
+        if self.playback_manager is None:
+            EditorPlaybackManager(self, playing=False, frames_per_second=self.frames_per_second)
+        self.playback_manager.seek_frame(1)
+
+    def _prev_frame(self, s):
+        if self.playback_manager is None:
+            EditorPlaybackManager(self, playing=False, frames_per_second=self.frames_per_second)
+        self.playback_manager.seek_frame(-1)
 
     def _add_keypoint(self, s):
         self.keypoints.insert(
@@ -193,9 +340,9 @@ class ScriptEditor(object):
 
     def _toggle_play(self, s):
         if self.playback_manager is not None:
-            self.playback_manager = None
+            self.playback_manager.pause()
         else:
-            PlaybackManager(self)
+            EditorPlaybackManager(self, playing=True)
 
     def _stop_playback(self):
         self.playback_manager = None
@@ -209,12 +356,7 @@ class ScriptEditor(object):
         self._update_status()
 
     def save(self):
-        temp_path = self.script_path + '.tmp'
-        with open(temp_path, 'w') as f:
-            for x in self.keypoints:
-                f.write(neuroglancer.to_url(x['state']) + '\n')
-                f.write(str(x['transition_duration']) + '\n')
-        os.rename(temp_path, self.script_path)
+        save_script(self.script_path, self.keypoints)
 
     def _increase_duration(self, s):
         self._set_transition_duration(self.transition_duration + 0.1)
@@ -298,7 +440,13 @@ class ScriptEditor(object):
 
 
 def run_edit(args):
-    editor = ScriptEditor(script_path=args.script, transition_duration=args.duration)
+    editor = ScriptEditor(
+        script_path=args.script,
+        transition_duration=args.duration,
+        fullscreen_width=args.width,
+        fullscreen_height=args.height,
+        fullscreen_scale_bar_scale=args.scale_bar_scale,
+        frames_per_second=args.fps)
     print(editor.viewer)
     if args.browser:
         webbrowser.open_new(editor.viewer.get_viewer_url())
@@ -307,29 +455,92 @@ def run_edit(args):
 
 def run_render(args):
     keypoints = load_script(args.script)
-    viewer = neuroglancer.Viewer()
-    print('Open the specified URL to begin rendering')
-    print(viewer)
-    if args.browser:
-        webbrowser.open_new(viewer.get_viewer_url())
+    num_prefetch_frames = args.prefetch_frames
+    for keypoint in keypoints:
+        keypoint['state'].gpu_memory_limit = args.gpu_memory_limit
+        keypoint['state'].system_memory_limit = args.system_memory_limit
+        keypoint['state'].concurrent_downloads = args.concurrent_downloads
+        keypoint['state'].cross_section_background_color = args.cross_section_background_color
+    viewers = [neuroglancer.Viewer() for _ in range(args.shards)]
+    for viewer in viewers:
+        with viewer.config_state.txn() as s:
+            s.show_ui_controls = False
+            s.show_panel_borders = False
+            s.viewer_size = [args.width, args.height]
+            s.scale_bar_options.scale_factor = args.scale_bar_scale
+
+        print('Open the specified URL to begin rendering')
+        print(viewer)
+        if args.browser:
+            webbrowser.open_new(viewer.get_viewer_url())
+    lock = threading.Lock()
+    num_frames_written = [0]
     fps = args.fps
-    with viewer.config_state.txn() as s:
-        s.show_ui_controls = False
-        s.show_panel_borders = False
-        s.viewer_size = [args.width, args.height]
-    saver = neuroglancer.ScreenshotSaver(viewer, args.output_directory)
     total_frames = sum(max(1, k['transition_duration'] * fps) for k in keypoints[:-1])
-    for i in range(len(keypoints) - 1):
-        a = keypoints[i]['state']
-        b = keypoints[i + 1]['state']
-        duration = keypoints[i]['transition_duration']
-        num_frames = max(1, int(duration * fps))
-        for frame_i in range(num_frames):
-            t = frame_i / num_frames
-            cur_state = neuroglancer.ViewerState.interpolate(a, b, t)
+
+    def render_func(viewer, start_frame, end_frame):
+        with lock:
+            saver = neuroglancer.ScreenshotSaver(viewer, args.output_directory)
+        states_to_capture = []
+        frame_number = 0
+        for i in range(len(keypoints) - 1):
+            a = keypoints[i]['state']
+            b = keypoints[i + 1]['state']
+            duration = keypoints[i]['transition_duration']
+            num_frames = max(1, int(duration * fps))
+            for frame_i in range(num_frames):
+                t = frame_i / num_frames
+                if frame_number >= end_frame:
+                    return
+
+                if frame_number < start_frame:
+                    frame_number += 1
+                    continue
+
+                path = saver.get_path(frame_number)
+
+                if args.resume and os.path.exists(path):
+                    frame_number += 1
+                    with lock:
+                        num_frames_written[0] += 1
+                else:
+                    cur_state = neuroglancer.ViewerState.interpolate(a, b, t)
+                    states_to_capture.append((frame_number, i + t, cur_state))
+                    frame_number += 1
+        for frame_number, t, cur_state in states_to_capture:
+            prefetch_states = [
+                x[2]
+                for x in states_to_capture[frame_number + 1:frame_number + 1 + num_prefetch_frames]
+            ]
             viewer.set_state(cur_state)
-            index, path = saver.capture()
-            print('[%07d/%07d] keypoint %.3f/%5d: %s' % (index, total_frames, i + t, len(keypoints), path))
+            if num_prefetch_frames > 0:
+                with viewer.config_state.txn() as s:
+                    del s.prefetch[:]
+                    for i, state in enumerate(prefetch_states[1:]):
+                        s.prefetch.append(
+                            neuroglancer.PrefetchState(state=state, priority=num_prefetch_frames - i))
+            frame_number, path = saver.capture(frame_number)
+            with lock:
+                num_frames_written[0] += 1
+                cur_num_frames_written = num_frames_written[0]
+                print('[%07d/%07d] keypoint %.3f/%5d: %s' %
+                      (cur_num_frames_written, total_frames, t, len(keypoints), path))
+
+    shard_frames = []
+    frames_per_shard = int(math.ceil(total_frames / args.shards))
+    for shard in range(args.shards):
+        start_frame = frames_per_shard * shard
+        end_frame = min(total_frames, start_frame + frames_per_shard)
+        shard_frames.append((start_frame, end_frame))
+    render_threads = [
+        threading.Thread(target=render_func, args=(viewer, start_frame, end_frame))
+        for viewer,
+        (start_frame, end_frame) in zip(viewers, shard_frames)
+    ]
+    for t in render_threads:
+        t.start()
+    for t in render_threads:
+        t.join()
 
 
 if __name__ == '__main__':
@@ -341,8 +552,7 @@ if __name__ == '__main__':
         'to browers running on the local machine, use 0.0.0.0 to permit access from remote browsers.'
     )
     ap.add_argument(
-        '--static-content-url',
-        help='Obtain the Neuroglancer client code from the specified URL.')
+        '--static-content-url', help='Obtain the Neuroglancer client code from the specified URL.')
     sub_aps = ap.add_subparsers(help='command to run')
     ap_edit = sub_aps.add_parser('edit', help='Create or edit a script.')
     ap_edit.set_defaults(func=run_edit)
@@ -354,13 +564,39 @@ if __name__ == '__main__':
     ap_edit.add_argument(
         '-d', '--duration', type=float, help='Default transition duration in seconds.', default=1)
     ap_edit.add_argument('--browser', action='store_true', help='Open web browser automatically.')
+    ap_edit.add_argument('--width', type=int, help='Frame width', default=1920)
+    ap_edit.add_argument('--height', type=int, help='Frame height', default=1080)
+    ap_edit.add_argument(
+        '--scale-bar-scale', type=float, help='Scale factor for scale bar', default=1)
+    ap_edit.add_argument('-f', '--fps', type=float, help='Frames per second.', default=5)
 
     ap_render.add_argument(
         'output_directory', help='Directory in which to write screenshot frames.')
     ap_render.add_argument('-f', '--fps', type=float, help='Frames per second.', default=24)
     ap_render.add_argument('--width', type=int, help='Frame width', default=1920)
     ap_render.add_argument('--height', type=int, help='Frame height', default=1080)
+    ap_render.add_argument(
+        '--scale-bar-scale', type=float, help='Scale factor for scale bar', default=1)
     ap_render.add_argument('--browser', action='store_true', help='Open web browser automatically.')
+    ap_render.add_argument('--resume', action='store_true', help='Skip already rendered frames.')
+    ap_render.add_argument(
+        '--shards', type=int, default=1, help='Number of browsers to use concurrently.')
+    ap_render.add_argument(
+        '--system-memory-limit', type=int, default=3000000000, help='System memory limit')
+    ap_render.add_argument(
+        '--gpu-memory-limit', type=int, default=3000000000, help='GPU memory limit')
+    ap_render.add_argument(
+        '--concurrent-downloads', type=int, default=32, help='Concurrent downloads')
+    ap_render.add_argument(
+        '--prefetch-frames',
+        type=int,
+        default=10,
+        help='Number of frames to prefetch when rendering.')
+    ap_render.add_argument(
+        '--cross-section-background-color',
+        type=str,
+        default='black',
+        help='Background color for cross sections.')
 
     args = ap.parse_args()
     if args.bind_address:

@@ -17,3 +17,4 @@
 import {RPC} from 'neuroglancer/worker_rpc';
 
 export var rpc = new RPC(self);
+(<any>self).rpc = rpc;

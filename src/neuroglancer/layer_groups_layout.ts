@@ -88,7 +88,7 @@ export class LayoutComponentContainer extends RefCounted {
           const childComponent = component.get(0).component;
           let spec: any;
           if (this.parent === undefined && childComponent instanceof LayerGroupViewer) {
-            spec = childComponent.layout.name;
+            spec = childComponent.layout.specification.toJSON();
             childComponent.viewerNavigationState.copyToParent();
             const layersToKeep = new Set(childComponent.layerManager.managedLayers);
             const {layerSpecification} = childComponent;
@@ -109,6 +109,7 @@ export class LayoutComponentContainer extends RefCounted {
       }));
       scheduleMaybeDelete();
     }
+    this.changed.dispatch();
   }
   element = document.createElement('div');
 
@@ -278,30 +279,41 @@ export class LayoutComponentContainer extends RefCounted {
   }
 }
 
+function getCommonViewerState(viewer: Viewer) {
+  return {
+    mouseState: viewer.mouseState,
+    showAxisLines: viewer.showAxisLines,
+    showScaleBar: viewer.showScaleBar,
+    scaleBarOptions: viewer.scaleBarOptions,
+    showPerspectiveSliceViews: viewer.showPerspectiveSliceViews,
+    inputEventBindings: viewer.inputEventBindings,
+    visibility: viewer.visibility,
+    selectedLayer: viewer.selectedLayer,
+    visibleLayerRoles: viewer.visibleLayerRoles,
+    navigationState: viewer.navigationState.addRef(),
+    perspectiveNavigationState: viewer.perspectiveNavigationState.addRef(),
+    crossSectionBackgroundColor: viewer.crossSectionBackgroundColor,
+    perspectiveViewBackgroundColor: viewer.perspectiveViewBackgroundColor,
+  };
+}
+
 export class SingletonLayerGroupViewer extends RefCounted implements LayoutComponent {
   layerGroupViewer: LayerGroupViewer;
 
-  constructor(public element: HTMLElement, layout: string, viewer: Viewer) {
+  constructor(public element: HTMLElement, layout: any, viewer: Viewer) {
     super();
     this.layerGroupViewer = this.registerDisposer(new LayerGroupViewer(
         element, {
           display: viewer.display,
-          navigationState: viewer.navigationState.addRef(),
-          perspectiveNavigationState: viewer.perspectiveNavigationState.addRef(),
-          mouseState: viewer.mouseState,
-          showAxisLines: viewer.showAxisLines,
-          showScaleBar: viewer.showScaleBar,
-          showPerspectiveSliceViews: viewer.showPerspectiveSliceViews,
           layerSpecification: viewer.layerSpecification.addRef(),
-          inputEventBindings: viewer.inputEventBindings,
-          visibility: viewer.visibility,
+          ...getCommonViewerState(viewer),
         },
-        {showLayerPanel: viewer.showLayerPanelEffective, showViewerMenu: false}));
-    this.layerGroupViewer.layout.name = layout;
+        {showLayerPanel: viewer.uiControlVisibility.showLayerPanel, showViewerMenu: false}));
+    this.layerGroupViewer.layout.restoreState(layout);
   }
 
   toJSON() {
-    return this.layerGroupViewer.layout.name;
+    return this.layerGroupViewer.layout.specification.toJSON();
   }
 
   get changed() {
@@ -340,7 +352,7 @@ function setupDropZone(
       event.stopPropagation();
       let dropState: any;
       try {
-        dropState = JSON.parse(event.dataTransfer.getData(viewerDragType));
+        dropState = JSON.parse(event.dataTransfer!.getData(viewerDragType));
       } catch (e) {
         return;
       }
@@ -349,7 +361,7 @@ function setupDropZone(
           /*newTarget=*/true);
       if (dropLayers !== undefined && dropLayers.finalize(event)) {
         event.preventDefault();
-        event.dataTransfer.dropEffect = getDropEffect();
+        event.dataTransfer!.dropEffect = getDropEffect();
         endLayerDrag(event);
         const layerGroupViewer = makeLayerGroupViewer();
         for (const newLayer of dropLayers.layers.keys()) {
@@ -367,11 +379,17 @@ function setupDropZone(
           /*newTarget=*/true);
       if (dropLayers !== undefined && dropLayers.finalize(event)) {
         event.preventDefault();
-        event.dataTransfer.dropEffect = getDropEffect();
+        event.dataTransfer!.dropEffect = getDropEffect();
         endLayerDrag(event);
         const layerGroupViewer = makeLayerGroupViewer();
         for (const newLayer of dropLayers.layers.keys()) {
           layerGroupViewer.layerSpecification.add(newLayer);
+        }
+        try {
+          layerGroupViewer.layout.restoreState(dropLayers.layoutSpec);
+        } catch {
+          layerGroupViewer.layout.reset();
+          // Ignore error restoring layout.
         }
         return;
       }
@@ -504,17 +522,10 @@ function makeComponent(container: LayoutComponentContainer, spec: any) {
       const layerGroupViewer = new LayerGroupViewer(
           element, {
             display: viewer.display,
-            navigationState: viewer.navigationState.addRef(),
-            perspectiveNavigationState: viewer.perspectiveNavigationState.addRef(),
-            mouseState: viewer.mouseState,
-            showAxisLines: viewer.showAxisLines,
-            showScaleBar: viewer.showScaleBar,
-            showPerspectiveSliceViews: viewer.showPerspectiveSliceViews,
             layerSpecification,
-            inputEventBindings: viewer.inputEventBindings,
-            visibility: viewer.visibility,
+            ...getCommonViewerState(viewer),
           },
-          {showLayerPanel: viewer.showLayerPanelEffective, showViewerMenu: true});
+          {showLayerPanel: viewer.uiControlVisibility.showLayerPanel, showViewerMenu: true});
       try {
         layerGroupViewer.restoreState(spec);
       } catch (e) {
@@ -523,8 +534,11 @@ function makeComponent(container: LayoutComponentContainer, spec: any) {
       }
       return layerGroupViewer;
     }
+    default: {
+      // Treat it as a singleton layer group.
+      return new SingletonLayerGroupViewer(element, spec, container.viewer);
+    }
   }
-  throw new Error(`Invalid layout component specification: ${JSON.stringify(spec)}`);
 }
 
 export class RootLayoutContainer extends RefCounted implements Trackable {
@@ -554,10 +568,6 @@ export class RootLayoutContainer extends RefCounted implements Trackable {
   }
 
   toJSON() {
-    const result = this.container.toJSON();
-    if (result === this.defaultSpecification) {
-      return undefined;
-    }
-    return result;
+    return this.container.toJSON();
   }
 }

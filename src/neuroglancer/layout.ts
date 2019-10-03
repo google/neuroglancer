@@ -41,7 +41,7 @@ export function box(flexDirection: string, spec: Handler[]) {
     container.style.display = 'flex';
     container.style.flexDirection = flexDirection;
     for (let handler of spec) {
-      let element = container.ownerDocument.createElement('div');
+      let element = container.ownerDocument!.createElement('div');
       container.appendChild(element);
       handler(element);
     }

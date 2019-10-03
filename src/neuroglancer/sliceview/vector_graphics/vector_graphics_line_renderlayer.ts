@@ -23,7 +23,6 @@ import {TrackableFiniteFloat, trackableFiniteFloat} from 'neuroglancer/trackable
 import {trackableVec3, TrackableVec3} from 'neuroglancer/trackable_vec3';
 import {mat4, vec3} from 'neuroglancer/util/geom';
 import {Buffer} from 'neuroglancer/webgl/buffer';
-import {GL_FLOAT} from 'neuroglancer/webgl/constants';
 import {ShaderBuilder, ShaderProgram} from 'neuroglancer/webgl/shader';
 
 const tempMat4 = mat4.create();
@@ -63,12 +62,13 @@ export class VectorGraphicsLineRenderLayer extends GenericVectorGraphicsRenderLa
 
     let vertexIndex = new Float32Array([1, 0, 0, 1, 1, 0, 0, 1]);
 
-    this.vertexIndexBuffer = Buffer.fromData(gl, vertexIndex, gl.ARRAY_BUFFER, gl.STATIC_DRAW);
+    this.vertexIndexBuffer =
+        this.registerDisposer(Buffer.fromData(gl, vertexIndex, gl.ARRAY_BUFFER, gl.STATIC_DRAW));
 
     let normalDirection = new Float32Array([1, 1, -1, -1]);
 
-    this.normalDirectionBuffer =
-        Buffer.fromData(gl, normalDirection, gl.ARRAY_BUFFER, gl.STATIC_DRAW);
+    this.normalDirectionBuffer = this.registerDisposer(
+        Buffer.fromData(gl, normalDirection, gl.ARRAY_BUFFER, gl.STATIC_DRAW));
   }
 
   getShaderKey() {
@@ -156,15 +156,14 @@ gl_Position = uProjection * (pos + delta);
       return;
     }
 
-    this.initializeShader();
-    if (this.shader === undefined) {
+    let gl = this.gl;
+
+    let shader = this.beginSlice(sliceView);
+    if (shader === undefined) {
       console.log('error: shader undefined');
       return;
     }
 
-    let gl = this.gl;
-
-    let shader = this.beginSlice(sliceView);
 
     for (let transformedSource of visibleSources) {
       const chunkLayout = transformedSource.chunkLayout;
@@ -198,26 +197,26 @@ gl_Position = uProjection * (pos + delta);
           chunk.vertexBuffer.bindToVertexAttrib(
               aVertexFirst,
               /*components=*/3,
-              /*attributeType=*/GL_FLOAT,
+              /*attributeType=*/WebGL2RenderingContext.FLOAT,
               /*normalized=*/false,
               /*stride=*/6 * 4,
               /*offset=*/0);
-          gl.ANGLE_instanced_arrays.vertexAttribDivisorANGLE(aVertexFirst, 1);
+          gl.vertexAttribDivisor(aVertexFirst, 1);
 
           const aVertexSecond = shader.attribute('aVertexSecond');
           chunk.vertexBuffer.bindToVertexAttrib(
               aVertexSecond,
               /*components=*/3,
-              /*attributeType=*/GL_FLOAT,
+              /*attributeType=*/WebGL2RenderingContext.FLOAT,
               /*normalized=*/false,
               /*stride=*/6 * 4,
               /*offset=*/3 * 4);
-          gl.ANGLE_instanced_arrays.vertexAttribDivisorANGLE(aVertexSecond, 1);
+          gl.vertexAttribDivisor(aVertexSecond, 1);
 
-          gl.ANGLE_instanced_arrays.drawArraysInstancedANGLE(gl.TRIANGLE_STRIP, 0, 4, numInstances);
+          gl.drawArraysInstanced(gl.TRIANGLE_STRIP, 0, 4, numInstances);
 
-          gl.ANGLE_instanced_arrays.vertexAttribDivisorANGLE(aVertexFirst, 0);
-          gl.ANGLE_instanced_arrays.vertexAttribDivisorANGLE(aVertexSecond, 0);
+          gl.vertexAttribDivisor(aVertexFirst, 0);
+          gl.vertexAttribDivisor(aVertexSecond, 0);
         }
       }
     }

@@ -50,6 +50,16 @@ describe('url safe json', () => {
     expect(urlSafeParse(`["a\\"",true]`)).toEqual(['a"', true]);
   });
 
+  it('urlSafeRoundtrip', () => {
+    function testRoundTrip(x: any) {
+      expect(urlSafeParse(urlSafeStringify(x))).toEqual(x);
+    }
+    testRoundTrip(1);
+    testRoundTrip('hello');
+    testRoundTrip({'key': '\''});
+    testRoundTrip({'key': '\'"Hello"'});
+  });
+
   it('pythonLiteralToJSON', () => {
     expect(pythonLiteralToJSON(`{'a':'b', 'c':True, 'd':(1,2,3,), }`))
         .toBe(`{"a":"b", "c":true, "d":[1,2,3]}`);

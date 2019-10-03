@@ -15,7 +15,14 @@
 import os
 import posixpath
 
-static_content_filenames = set(['main.bundle.js', 'chunk_worker.bundle.js', 'styles.css', 'index.html'])
+static_content_filenames = set([
+    'main.bundle.js',
+    'chunk_worker.bundle.js',
+    'tfjs-library.bundle.js',
+    'async_computation.bundle.js',
+    'index.html',
+    'draco.bundle.js',
+])
 
 mime_type_map = {
     '.css': 'text/css',
@@ -65,11 +72,11 @@ class HttpSource(StaticContentSource):
 
 
 class FileSource(StaticContentSource):
-    def __init__(self, path=None, file_open=open):
+    def __init__(self, path=None, file_open=None):
         if path is None:
             path = os.path.join(os.path.dirname(__file__), '../../../dist/dev-python')
         self.file_path = path
-        self.file_open = file_open
+        self.file_open = file_open or open
 
     def get_content(self, name):
         full_path = os.path.join(self.file_path, name)

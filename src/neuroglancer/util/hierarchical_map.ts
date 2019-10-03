@@ -18,7 +18,10 @@
  * @file Hierarchical mapping from keys to values.
  */
 
-export interface HierarchicalMapInterface<Key, Value> { get(key: Key): Value|undefined; }
+export interface HierarchicalMapInterface<Key, Value> {
+  get(key: Key): Value|undefined;
+  entries(): IterableIterator<[Key, Value]>;
+}
 
 /**
  * Maps string event identifiers to string action identifiers.
@@ -167,6 +170,19 @@ export class HierarchicalMap<Key, Value, Parent extends HierarchicalMapInterface
       if (value !== undefined) {
         yield value;
       }
+    }
+  }
+
+  * entries(): IterableIterator<[Key, Value]> {
+    const {parents, parentPriorities} = this;
+    const numParents = parentPriorities.length;
+    let parentIndex = 0;
+    while (parentIndex < numParents && parentPriorities[parentIndex] > 0) {
+      yield *parents[parentIndex].entries();
+    }
+    yield *this.bindings.entries();
+    while (parentIndex < numParents) {
+      yield *parents[parentIndex].entries();
     }
   }
 }

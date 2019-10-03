@@ -18,4 +18,5 @@ import {defaultCredentialsManager} from 'neuroglancer/credentials_provider/defau
 import {credentialsKey} from 'neuroglancer/datasource/boss/api';
 import {BossCredentialsProvider} from 'neuroglancer/datasource/boss/credentials_provider';
 
-defaultCredentialsManager.register(credentialsKey, (authServer) => new BossCredentialsProvider(authServer));
+defaultCredentialsManager.register(
+    credentialsKey, (authServer) => new BossCredentialsProvider(authServer));

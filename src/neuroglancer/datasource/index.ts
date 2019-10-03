@@ -14,8 +14,9 @@
  * limitations under the License.
  */
 
+import {MultiscaleAnnotationSource} from 'neuroglancer/annotation/frontend_source';
 import {ChunkManager} from 'neuroglancer/chunk_manager/frontend';
-import {MeshSource} from 'neuroglancer/mesh/frontend';
+import {MeshSource, MultiscaleMeshSource} from 'neuroglancer/mesh/frontend';
 import {SkeletonSource} from 'neuroglancer/skeleton/frontend';
 import {VectorGraphicsType} from 'neuroglancer/sliceview/vector_graphics/base';
 import {MultiscaleVectorGraphicsChunkSource} from 'neuroglancer/sliceview/vector_graphics/frontend';
@@ -23,7 +24,7 @@ import {VolumeType} from 'neuroglancer/sliceview/volume/base';
 import {MultiscaleVolumeChunkSource} from 'neuroglancer/sliceview/volume/frontend';
 import {CancellationToken, uncancelableToken} from 'neuroglancer/util/cancellation';
 import {applyCompletionOffset, CompletionWithDescription} from 'neuroglancer/util/completion';
-import {RefCounted, Owned} from 'neuroglancer/util/disposable';
+import {Owned, RefCounted} from 'neuroglancer/util/disposable';
 
 export type Completion = CompletionWithDescription;
 
@@ -69,9 +70,13 @@ export interface GetVolumeOptions {
    * Hint regarding the usage of the volume.
    */
   volumeType?: VolumeType;
+
+  dataSourceProvider?: DataSourceProvider;
 }
 
-export interface GetVectorGraphicsOptions { vectorGraphicsType?: VectorGraphicsType; }
+export interface GetVectorGraphicsOptions {
+  vectorGraphicsType?: VectorGraphicsType;
+}
 
 export interface DataSource {
   getVolume?
@@ -83,12 +88,16 @@ export interface DataSource {
        cancellationToken: CancellationToken):
           Promise<MultiscaleVectorGraphicsChunkSource>|MultiscaleVectorGraphicsChunkSource;
   getMeshSource?(chunkManager: ChunkManager, path: string, cancellationToken: CancellationToken):
-      Promise<MeshSource>|MeshSource;
+      Promise<MeshSource|MultiscaleMeshSource>|MeshSource|MultiscaleMeshSource;
   getSkeletonSource?
       (chunkManager: ChunkManager, path: string, cancellationToken: CancellationToken):
           Promise<SkeletonSource>|SkeletonSource;
   volumeCompleter?(value: string, chunkManager: ChunkManager, cancellationToken: CancellationToken):
       Promise<CompletionResult>;
+
+  getAnnotationSource?
+      (chunkManager: ChunkManager, path: string, cancellationToken: CancellationToken):
+          Promise<MultiscaleAnnotationSource>|MultiscaleAnnotationSource;
 
   /**
    * Returns a suggested layer name for the given volume source.
@@ -106,7 +115,7 @@ export class DataSource extends RefCounted {
   description?: string;
 }
 
-const protocolPattern = /^(?:([a-zA-Z-+_]+):\/\/)?(.*)$/;
+const protocolPattern = /^(?:([a-zA-Z][a-zA-Z0-9-+_]*):\/\/)?(.*)$/;
 
 export class DataSourceProvider extends RefCounted {
   dataSources = new Map<string, Owned<DataSource>>();
@@ -132,8 +141,20 @@ export class DataSourceProvider extends RefCounted {
       chunkManager: ChunkManager, url: string, options: GetVolumeOptions = {},
       cancellationToken = uncancelableToken) {
     let [dataSource, path] = this.getDataSource(url);
+    if (options === undefined) {
+      options = {};
+    }
+    options.dataSourceProvider = this;
     return new Promise<MultiscaleVolumeChunkSource>(resolve => {
       resolve(dataSource.getVolume!(chunkManager, path, options, cancellationToken));
+    });
+  }
+
+  getAnnotationSource(
+      chunkManager: ChunkManager, url: string, cancellationToken = uncancelableToken) {
+    let [dataSource, path] = this.getDataSource(url);
+    return new Promise<MultiscaleAnnotationSource>(resolve => {
+      resolve(dataSource.getAnnotationSource!(chunkManager, path, cancellationToken));
     });
   }
 
@@ -148,7 +169,7 @@ export class DataSourceProvider extends RefCounted {
 
   getMeshSource(chunkManager: ChunkManager, url: string, cancellationToken = uncancelableToken) {
     let [dataSource, path] = this.getDataSource(url);
-    return new Promise<MeshSource>(resolve => {
+    return new Promise<MeshSource|MultiscaleMeshSource>(resolve => {
       resolve(dataSource.getMeshSource!(chunkManager, path, cancellationToken));
     });
   }
