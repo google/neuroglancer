@@ -17,20 +17,13 @@ npm i
 
 # Compile to JS and minify
 npm run build-min
-
-# Create zip for uploading
-zip --junk-paths deploy.zip dist/min/*
 ```
 
-In your browser, go to this site:
+In your browser, go to the S3 bucket where neuroglancer is hosted:
 
-https://console.aws.amazon.com/quickstart-website/website/aws-website-thebossneuroglancer-io2gl
+[neuroglancer.bossdb.org bucket](https://s3.console.aws.amazon.com/s3/buckets/aws-website-bossdbneuroglancer-6v7vl/?region=us-east-1&tab=overview)
 
-Upload the zip file usig the Source code widget on the web page
+Upload the files generated under neuroglancer/dist/min to the bucket making sure to make them public.
 
-If you are unable to update the website, request access to the AWS Group aplNeuroglancerWebsite 
-
-Update the Confluence page with the date and commit that you just deployed:
-
-https://confluence.xrcs.jhuapl.edu/display/MICRONS/Neuroglancer+Docs
-
+Check the site to make sure everything is in order:
+[neuroglancer.bossdb.org](https://neuroglancer.bossdb.org/#!%7B%22layout%22:%224panel%22%7D)
