@@ -215,6 +215,7 @@ class SegmentationLayerBase(Layer, _AnnotationLayerOptions):
     segments = wrapped_property('segments', typed_set(np.uint64))
     equivalences = wrapped_property('equivalences', uint64_equivalence_map)
     hide_segment_zero = hideSegmentZero = wrapped_property('hideSegmentZero', optional(bool, True))
+    ignore_segment_selection = ignoreSegmentSelection = wrapped_property('ignoreSegmentSelection', optional(bool, False))
     selected_alpha = selectedAlpha = wrapped_property('selectedAlpha', optional(float, 0.5))
     not_selected_alpha = notSelectedAlpha = wrapped_property('notSelectedAlpha', optional(float, 0))
     object_alpha = objectAlpha = wrapped_property('objectAlpha', optional(float, 1.0))
