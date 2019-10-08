@@ -282,7 +282,7 @@ function helper<TBase extends BaseConstructor>(Base: TBase) {
 
     selectSegment() {
       let {segmentSelectionState} = this.displayState;
-      if (segmentSelectionState.hasSelectedSegment) {
+      if (segmentSelectionState.hasSelectedSegment && !(this.displayState.ignoreSegmentInteractions.value)) {
         let segment = segmentSelectionState.selectedSegment;
         let {rootSegments, timestamp} = this.displayState;
         let tsValue = (timestamp.value !== '') ? timestamp.value : void (0);
@@ -328,7 +328,7 @@ function helper<TBase extends BaseConstructor>(Base: TBase) {
 
     mergeSelectFirst() {
       const {segmentSelectionState} = this.displayState;
-      if (segmentSelectionState.hasSelectedSegment) {
+      if (segmentSelectionState.hasSelectedSegment && !(this.displayState.ignoreSegmentInteractions.value)) {
         lastSegmentSelection.segmentId.assign(segmentSelectionState.rawSelectedSegment);
         lastSegmentSelection.rootId.assign(segmentSelectionState.selectedSegment);
         vec3.transformMat4(
@@ -342,7 +342,7 @@ function helper<TBase extends BaseConstructor>(Base: TBase) {
 
     mergeSelectSecond() {
       const {segmentSelectionState, rootSegments} = this.displayState;
-      if (segmentSelectionState.hasSelectedSegment) {
+      if (segmentSelectionState.hasSelectedSegment && !(this.displayState.ignoreSegmentInteractions.value)) {
         const currentSegmentSelection: SegmentSelection = {
           segmentId: segmentSelectionState.rawSelectedSegment.clone(),
           rootId: segmentSelectionState.selectedSegment.clone(),
@@ -372,7 +372,7 @@ function helper<TBase extends BaseConstructor>(Base: TBase) {
 
     splitSelectFirst() {
       const {segmentSelectionState} = this.displayState;
-      if (segmentSelectionState.hasSelectedSegment) {
+      if (segmentSelectionState.hasSelectedSegment && !(this.displayState.ignoreSegmentInteractions.value)) {
         lastSegmentSelection.segmentId.assign(segmentSelectionState.rawSelectedSegment);
         lastSegmentSelection.rootId.assign(segmentSelectionState.selectedSegment);
         vec3.transformMat4(
@@ -386,7 +386,7 @@ function helper<TBase extends BaseConstructor>(Base: TBase) {
 
     splitSelectSecond() {
       const {segmentSelectionState, rootSegments} = this.displayState;
-      if (segmentSelectionState.hasSelectedSegment) {
+      if (segmentSelectionState.hasSelectedSegment && !(this.displayState.ignoreSegmentInteractions.value)) {
         const currentSegmentSelection: SegmentSelection = {
           segmentId: segmentSelectionState.rawSelectedSegment.clone(),
           rootId: segmentSelectionState.selectedSegment.clone(),

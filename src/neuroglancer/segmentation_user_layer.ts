@@ -59,7 +59,7 @@ const NOT_SELECTED_ALPHA_JSON_KEY = 'notSelectedAlpha';
 const OBJECT_ALPHA_JSON_KEY = 'objectAlpha';
 const SATURATION_JSON_KEY = 'saturation';
 const HIDE_SEGMENT_ZERO_JSON_KEY = 'hideSegmentZero';
-const IGNORE_SEGMENT_SELECTION_JSON_KEY = 'ignoreSegmentSelection';
+const IGNORE_SEGMENT_INTERACTIONS_JSON_KEY = 'ignoreSegmentInteractions';
 const MESH_JSON_KEY = 'mesh';
 const SKELETONS_JSON_KEY = 'skeletons';
 const ROOT_SEGMENTS_JSON_KEY = 'segments';
@@ -93,7 +93,7 @@ export class SegmentationUserLayer extends Base {
     notSelectedAlpha: trackableAlphaValue(0),
     objectAlpha: trackableAlphaValue(1.0),
     hideSegmentZero: new TrackableBoolean(true, true),
-    ignoreSegmentSelection: new TrackableBoolean(false, false),
+    ignoreSegmentInteractions: new TrackableBoolean(false, false),
     rootSegments: Uint64Set.makeWithCounterpart(this.manager.worker),
     hiddenRootSegments: new Uint64Set(),
     visibleSegments2D: new Uint64Set(),
@@ -139,7 +139,7 @@ export class SegmentationUserLayer extends Base {
     this.displayState.notSelectedAlpha.changed.add(this.specificationChanged.dispatch);
     this.displayState.objectAlpha.changed.add(this.specificationChanged.dispatch);
     this.displayState.hideSegmentZero.changed.add(this.specificationChanged.dispatch);
-    this.displayState.ignoreSegmentSelection.changed.add(this.specificationChanged.dispatch);
+    this.displayState.ignoreSegmentInteractions.changed.add(this.specificationChanged.dispatch);
     this.displayState.skeletonRenderingOptions.changed.add(this.specificationChanged.dispatch);
     this.displayState.segmentColorHash.changed.add(this.specificationChanged.dispatch);
     this.displayState.segmentStatedColors.changed.add(this.specificationChanged.dispatch);
@@ -161,7 +161,7 @@ export class SegmentationUserLayer extends Base {
     this.displayState.notSelectedAlpha.restoreState(specification[NOT_SELECTED_ALPHA_JSON_KEY]);
     this.displayState.objectAlpha.restoreState(specification[OBJECT_ALPHA_JSON_KEY]);
     this.displayState.hideSegmentZero.restoreState(specification[HIDE_SEGMENT_ZERO_JSON_KEY]);
-    this.displayState.ignoreSegmentSelection.restoreState(specification[IGNORE_SEGMENT_SELECTION_JSON_KEY]);
+    this.displayState.ignoreSegmentInteractions.restoreState(specification[IGNORE_SEGMENT_INTERACTIONS_JSON_KEY]);
 
     const {skeletonRenderingOptions} = this.displayState;
     skeletonRenderingOptions.restoreState(specification[SKELETON_RENDERING_JSON_KEY]);
@@ -369,7 +369,7 @@ export class SegmentationUserLayer extends Base {
     x[SATURATION_JSON_KEY] = this.displayState.saturation.toJSON();
     x[OBJECT_ALPHA_JSON_KEY] = this.displayState.objectAlpha.toJSON();
     x[HIDE_SEGMENT_ZERO_JSON_KEY] = this.displayState.hideSegmentZero.toJSON();
-    x[IGNORE_SEGMENT_SELECTION_JSON_KEY] = this.displayState.ignoreSegmentSelection.toJSON();
+    x[IGNORE_SEGMENT_INTERACTIONS_JSON_KEY] = this.displayState.ignoreSegmentInteractions.toJSON();
     x[COLOR_SEED_JSON_KEY] = this.displayState.segmentColorHash.toJSON();
     let {segmentStatedColors} = this.displayState;
     if (segmentStatedColors.size > 0) {
@@ -497,7 +497,7 @@ export class SegmentationUserLayer extends Base {
 
   selectSegment() {
     let {segmentSelectionState} = this.displayState;
-    if (segmentSelectionState.hasSelectedSegment && !(this.displayState.ignoreSegmentSelection.value)) {
+    if (segmentSelectionState.hasSelectedSegment && !(this.displayState.ignoreSegmentInteractions.value)) {
       let segment = segmentSelectionState.selectedSegment;
       let {rootSegments} = this.displayState;
       if (rootSegments.has(segment)) {
@@ -523,7 +523,7 @@ export class SegmentationUserLayer extends Base {
 
   mergeSelectFirst() {
     const {segmentSelectionState} = this.displayState;
-    if (segmentSelectionState.hasSelectedSegment) {
+    if (segmentSelectionState.hasSelectedSegment && !(this.displayState.ignoreSegmentInteractions.value)) {
       lastSegmentSelection.assign(segmentSelectionState.rawSelectedSegment);
       StatusMessage.showTemporaryMessage(
           `Selected ${lastSegmentSelection} as source for merge. Pick a sink.`, 3000);
@@ -533,7 +533,7 @@ export class SegmentationUserLayer extends Base {
   mergeSelectSecond() {
     const {segmentSelectionState, segmentEquivalences, rootSegments, visibleSegments3D} =
         this.displayState;
-    if (segmentSelectionState.hasSelectedSegment) {
+    if (segmentSelectionState.hasSelectedSegment && !(this.displayState.ignoreSegmentInteractions.value)) {
       // Merge both selected segments
       const segment = segmentSelectionState.rawSelectedSegment.clone();
       segmentEquivalences.link(lastSegmentSelection, segment);
@@ -697,13 +697,13 @@ class DisplayOptionsTab extends Tab {
 
     {
       const checkbox =
-          this.registerDisposer(new TrackableBooleanCheckbox(layer.displayState.ignoreSegmentSelection));
+          this.registerDisposer(new TrackableBooleanCheckbox(layer.displayState.ignoreSegmentInteractions));
       checkbox.element.className =
-          'neuroglancer-segmentation-dropdown-ignore-segment-selection neuroglancer-noselect';
+          'neuroglancer-segmentation-dropdown-ignore-segment-interactions neuroglancer-noselect';
       const label = document.createElement('label');
       label.className =
-          'neuroglancer-segmentation-dropdown-ignore-segment-selection neuroglancer-noselect';
-      label.appendChild(document.createTextNode('Ignore double-click for segment selection'));
+          'neuroglancer-segmentation-dropdown-ignore-segment-interactions neuroglancer-noselect';
+      label.appendChild(document.createTextNode('Ignore segment interactions'));
       label.appendChild(checkbox.element);
       groupSegmentSelection.appendFixedChild(label);
     }
