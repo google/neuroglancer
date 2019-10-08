@@ -431,6 +431,9 @@ export class SegmentationUserLayer extends Base {
   }
 
   handleAction(action: string) {
+    if (this.displayState.ignoreSegmentInteractions.value) {
+      return;
+    }
     switch (action) {
       case 'recolor': {
         this.displayState.segmentColorHash.randomize();
@@ -497,7 +500,7 @@ export class SegmentationUserLayer extends Base {
 
   selectSegment() {
     let {segmentSelectionState} = this.displayState;
-    if (segmentSelectionState.hasSelectedSegment && !(this.displayState.ignoreSegmentInteractions.value)) {
+    if (segmentSelectionState.hasSelectedSegment) {
       let segment = segmentSelectionState.selectedSegment;
       let {rootSegments} = this.displayState;
       if (rootSegments.has(segment)) {
@@ -523,7 +526,7 @@ export class SegmentationUserLayer extends Base {
 
   mergeSelectFirst() {
     const {segmentSelectionState} = this.displayState;
-    if (segmentSelectionState.hasSelectedSegment && !(this.displayState.ignoreSegmentInteractions.value)) {
+    if (segmentSelectionState.hasSelectedSegment) {
       lastSegmentSelection.assign(segmentSelectionState.rawSelectedSegment);
       StatusMessage.showTemporaryMessage(
           `Selected ${lastSegmentSelection} as source for merge. Pick a sink.`, 3000);
@@ -533,7 +536,7 @@ export class SegmentationUserLayer extends Base {
   mergeSelectSecond() {
     const {segmentSelectionState, segmentEquivalences, rootSegments, visibleSegments3D} =
         this.displayState;
-    if (segmentSelectionState.hasSelectedSegment && !(this.displayState.ignoreSegmentInteractions.value)) {
+    if (segmentSelectionState.hasSelectedSegment) {
       // Merge both selected segments
       const segment = segmentSelectionState.rawSelectedSegment.clone();
       segmentEquivalences.link(lastSegmentSelection, segment);
