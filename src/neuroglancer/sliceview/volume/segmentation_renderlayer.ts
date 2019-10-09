@@ -53,7 +53,6 @@ export interface SliceViewSegmentationDisplayState extends SegmentationDisplaySt
   notSelectedAlpha: TrackableAlphaValue;
   volumeSourceOptions?: VolumeSourceOptions;
   hideSegmentZero: TrackableBoolean;
-  ignoreSegmentInteractions: TrackableBoolean;
   multicutSegments?: Uint64Set;
   performingMulticut?: TrackableBoolean;
 }
@@ -94,10 +93,6 @@ export class SegmentationRenderLayer extends RenderLayer {
       this.redrawNeeded.dispatch();
     }));
     this.registerDisposer(displayState.hideSegmentZero.changed.add(() => {
-      this.redrawNeeded.dispatch();
-      this.shaderGetter.invalidateShader();
-    }));
-    this.registerDisposer(displayState.ignoreSegmentInteractions.changed.add(() => {
       this.redrawNeeded.dispatch();
       this.shaderGetter.invalidateShader();
     }));

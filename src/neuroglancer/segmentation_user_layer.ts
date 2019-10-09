@@ -93,7 +93,6 @@ export class SegmentationUserLayer extends Base {
     notSelectedAlpha: trackableAlphaValue(0),
     objectAlpha: trackableAlphaValue(1.0),
     hideSegmentZero: new TrackableBoolean(true, true),
-    ignoreSegmentInteractions: new TrackableBoolean(false, false),
     rootSegments: Uint64Set.makeWithCounterpart(this.manager.worker),
     hiddenRootSegments: new Uint64Set(),
     visibleSegments2D: new Uint64Set(),
@@ -122,6 +121,9 @@ export class SegmentationUserLayer extends Base {
   // Dispatched when either meshLayer or skeletonLayer changes.
   objectLayerStateChanged = new NullarySignal();
 
+  // Whether to ignore selection/merge/split operations for this layer.
+  ignoreSegmentInteractions = new TrackableBoolean(false, false);
+
   constructor(public manager: LayerListSpecification, x: any) {
     super(manager, x);
     this.displayState.rootSegments.changed.add((segmentIds: Uint64[]|Uint64|null, add: boolean) => {
@@ -139,12 +141,12 @@ export class SegmentationUserLayer extends Base {
     this.displayState.notSelectedAlpha.changed.add(this.specificationChanged.dispatch);
     this.displayState.objectAlpha.changed.add(this.specificationChanged.dispatch);
     this.displayState.hideSegmentZero.changed.add(this.specificationChanged.dispatch);
-    this.displayState.ignoreSegmentInteractions.changed.add(this.specificationChanged.dispatch);
     this.displayState.skeletonRenderingOptions.changed.add(this.specificationChanged.dispatch);
     this.displayState.segmentColorHash.changed.add(this.specificationChanged.dispatch);
     this.displayState.segmentStatedColors.changed.add(this.specificationChanged.dispatch);
     this.displayState.renderScaleTarget.changed.add(this.specificationChanged.dispatch);
     this.displayState.shatterSegmentEquivalences.changed.add(this.specificationChanged.dispatch);
+    this.ignoreSegmentInteractions.changed.add(this.specificationChanged.dispatch);
     this.tabs.add(
         'rendering', {label: 'Rendering', order: -100, getter: () => new DisplayOptionsTab(this)});
     this.tabs.default = 'rendering';
@@ -161,7 +163,8 @@ export class SegmentationUserLayer extends Base {
     this.displayState.notSelectedAlpha.restoreState(specification[NOT_SELECTED_ALPHA_JSON_KEY]);
     this.displayState.objectAlpha.restoreState(specification[OBJECT_ALPHA_JSON_KEY]);
     this.displayState.hideSegmentZero.restoreState(specification[HIDE_SEGMENT_ZERO_JSON_KEY]);
-    this.displayState.ignoreSegmentInteractions.restoreState(specification[IGNORE_SEGMENT_INTERACTIONS_JSON_KEY]);
+    this.ignoreSegmentInteractions.restoreState(
+        specification[IGNORE_SEGMENT_INTERACTIONS_JSON_KEY]);
 
     const {skeletonRenderingOptions} = this.displayState;
     skeletonRenderingOptions.restoreState(specification[SKELETON_RENDERING_JSON_KEY]);
@@ -369,7 +372,7 @@ export class SegmentationUserLayer extends Base {
     x[SATURATION_JSON_KEY] = this.displayState.saturation.toJSON();
     x[OBJECT_ALPHA_JSON_KEY] = this.displayState.objectAlpha.toJSON();
     x[HIDE_SEGMENT_ZERO_JSON_KEY] = this.displayState.hideSegmentZero.toJSON();
-    x[IGNORE_SEGMENT_INTERACTIONS_JSON_KEY] = this.displayState.ignoreSegmentInteractions.toJSON();
+    x[IGNORE_SEGMENT_INTERACTIONS_JSON_KEY] = this.ignoreSegmentInteractions.toJSON();
     x[COLOR_SEED_JSON_KEY] = this.displayState.segmentColorHash.toJSON();
     let {segmentStatedColors} = this.displayState;
     if (segmentStatedColors.size > 0) {
@@ -431,7 +434,7 @@ export class SegmentationUserLayer extends Base {
   }
 
   handleAction(action: string) {
-    if (this.displayState.ignoreSegmentInteractions.value) {
+    if (this.ignoreSegmentInteractions.value) {
       return;
     }
     switch (action) {
@@ -700,7 +703,7 @@ class DisplayOptionsTab extends Tab {
 
     {
       const checkbox =
-          this.registerDisposer(new TrackableBooleanCheckbox(layer.displayState.ignoreSegmentInteractions));
+          this.registerDisposer(new TrackableBooleanCheckbox(layer.ignoreSegmentInteractions));
       checkbox.element.className =
           'neuroglancer-segmentation-dropdown-ignore-segment-interactions neuroglancer-noselect';
       const label = document.createElement('label');
