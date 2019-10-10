@@ -87,20 +87,50 @@ export class UrlHashBinding extends RefCounted {
     }
   }
 
+
+  /**
+   * Extract the proper URL string after a Keycloak redirect.
+   * Keycloak will place the original fragment in the redirect_fragment
+   * query parameter and add another query parameter.
+   *
+   * Return a tuple with the first value being true if the redirect_fragment
+   * was present.  The second value will contain that fragment with '#'
+   * prepended.
+   */
+  checkRedirectFragment(): [boolean, string] {
+    const justQuery = location.href.replace(/^.*\?/, '');
+    const params = new URLSearchParams(justQuery);
+    if(!params.has('redirect_fragment')) {
+      return [false, ''];
+    }
+
+    return [true, `#${params.get('redirect_fragment')}`];
+  }
+
   /**
    * Sets the current state to match the URL hash.  If it is desired to initialize the state based
    * on the URL hash, then this should be called immediately after construction.
    */
   updateFromUrlHash() {
     try {
-      let s = location.href.replace(/^[^#]+/, '');
-      if (s === '' || s === '#' || s === '#!') {
-        s = '#!{}';
+      let s: string;
+      const [ found, fragment ] = this.checkRedirectFragment();
+      if(!found) {
+        s = location.href.replace(/^[^#]+/, '');
+        if (s === '' || s === '#' || s === '#!') {
+          s = '#!{}';
+        }
+      } else {
+        s = fragment;
       }
       if (s.startsWith('#!+')) {
         s = s.slice(3);
         // Firefox always %-encodes the URL even if it is not typed that way.
         s = decodeURIComponent(s);
+        if(found) {
+          // Keycloak make encode multiple times.
+          s = decodeURIComponent(s);
+        }
         let state = urlSafeParse(s);
         verifyObject(state);
         this.root.restoreState(state);
@@ -108,6 +138,10 @@ export class UrlHashBinding extends RefCounted {
       } else if (s.startsWith('#!')) {
         s = s.slice(2);
         s = decodeURIComponent(s);
+        if(found) {
+          // Keycloak make encode multiple times.
+          s = decodeURIComponent(s);
+        }
         if (s === this.prevStateString) {
           return;
         }
