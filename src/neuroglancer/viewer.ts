@@ -16,18 +16,18 @@
 
 import debounce from 'lodash/debounce';
 import {CapacitySpecification, ChunkManager, ChunkQueueManager, FrameNumberCounter} from 'neuroglancer/chunk_manager/frontend';
+import {makeCoordinateSpace, TrackableCoordinateSpace} from 'neuroglancer/coordinate_transform';
 import {defaultCredentialsManager} from 'neuroglancer/credentials_provider/default_manager';
 import {InputEventBindings as DataPanelInputEventBindings} from 'neuroglancer/data_panel_layout';
-import {DataSourceProvider} from 'neuroglancer/datasource';
+import {DataSourceProviderRegistry} from 'neuroglancer/datasource';
 import {getDefaultDataSourceProvider} from 'neuroglancer/datasource/default_provider';
 import {DisplayContext} from 'neuroglancer/display_context';
 import {InputEventBindingHelpDialog} from 'neuroglancer/help/input_event_bindings';
-import {allRenderLayerRoles, LayerManager, LayerSelectedValues, MouseSelectionState, RenderLayerRole, SelectedLayerState} from 'neuroglancer/layer';
-import {LayerDialog} from 'neuroglancer/layer_dialog';
+import {addNewLayer, LayerManager, LayerSelectedValues, MouseSelectionState, SelectedLayerState, TopLevelLayerListSpecification} from 'neuroglancer/layer';
 import {RootLayoutContainer} from 'neuroglancer/layer_groups_layout';
-import {TopLevelLayerListSpecification} from 'neuroglancer/layer_specification';
-import {NavigationState, Pose} from 'neuroglancer/navigation_state';
+import {NavigationState, OrientationState, DisplayPose, Position, TrackableCrossSectionZoom, TrackableProjectionZoom, TrackableDisplayDimensions, TrackableRelativeDisplayScales} from 'neuroglancer/navigation_state';
 import {overlaysOpen} from 'neuroglancer/overlay';
+import {allRenderLayerRoles, RenderLayerRole} from 'neuroglancer/renderlayer';
 import {StatusMessage} from 'neuroglancer/status';
 import {ElementVisibilityFromTrackableBoolean, TrackableBoolean, TrackableBooleanCheckbox} from 'neuroglancer/trackable_boolean';
 import {makeDerivedWatchableValue, TrackableValue, WatchableValueInterface} from 'neuroglancer/trackable_value';
@@ -44,24 +44,25 @@ import {Borrowed, Owned, RefCounted} from 'neuroglancer/util/disposable';
 import {removeFromParent} from 'neuroglancer/util/dom';
 import {registerActionListener} from 'neuroglancer/util/event_action_map';
 import {vec3} from 'neuroglancer/util/geom';
+import {parseFixedLengthArray, verifyFinitePositiveFloat, verifyObject, verifyOptionalObjectProperty} from 'neuroglancer/util/json';
 import {EventActionMap, KeyboardEventBinder} from 'neuroglancer/util/keyboard_bindings';
 import {NullarySignal} from 'neuroglancer/util/signal';
-import {CompoundTrackable} from 'neuroglancer/util/trackable';
+import {CompoundTrackable, optionallyRestoreFromJsonMember} from 'neuroglancer/util/trackable';
 import {ViewerState, VisibilityPrioritySpecification} from 'neuroglancer/viewer_state';
 import {WatchableVisibilityPriority} from 'neuroglancer/visibility_priority/frontend';
 import {GL} from 'neuroglancer/webgl/context';
 import {AnnotationToolStatusWidget} from 'neuroglancer/widget/annotation_tool_status';
+import {makeIcon} from 'neuroglancer/widget/icon';
 import {NumberInputWidget} from 'neuroglancer/widget/number_input_widget';
-import {MousePositionWidget, PositionWidget, VoxelSizeWidget} from 'neuroglancer/widget/position_widget';
+import {MousePositionWidget, PositionWidget} from 'neuroglancer/widget/position_widget';
 import {TrackableScaleBarOptions} from 'neuroglancer/widget/scale_bar';
-import {makeTextIconButton} from 'neuroglancer/widget/text_icon_button';
 import {RPC} from 'neuroglancer/worker_rpc';
 
 declare var NEUROGLANCER_OVERRIDE_DEFAULT_VIEWER_OPTIONS: any
 
 import './viewer.css';
 import 'neuroglancer/noselect.css';
-import 'neuroglancer/ui/button.css';
+
 
 
 export class DataManagementContext extends RefCounted {
@@ -73,18 +74,19 @@ export class DataManagementContext extends RefCounted {
     return this.chunkQueueManager.rpc!;
   }
 
-  constructor(public gl: GL, public frameNumberCounter: FrameNumberCounter, bundleRoot: string = '') {
+  constructor(
+      public gl: GL, public frameNumberCounter: FrameNumberCounter, bundleRoot: string = '') {
     super();
     const chunk_worker_url = bundleRoot + 'chunk_worker.bundle.js';
     this.worker = new Worker(chunk_worker_url);
     this.chunkQueueManager = this.registerDisposer(
-      new ChunkQueueManager(new RPC(this.worker), this.gl, this.frameNumberCounter, {
-        gpuMemory: new CapacitySpecification({defaultItemLimit: 1e6, defaultSizeLimit: 1e9}),
-        systemMemory: new CapacitySpecification({defaultItemLimit: 1e7, defaultSizeLimit: 2e9}),
-        download: new CapacitySpecification(
-            {defaultItemLimit: 32, defaultSizeLimit: Number.POSITIVE_INFINITY}),
-        compute: new CapacitySpecification({defaultItemLimit: 128, defaultSizeLimit: 5e8}),
-      }));
+        new ChunkQueueManager(new RPC(this.worker), this.gl, this.frameNumberCounter, {
+          gpuMemory: new CapacitySpecification({defaultItemLimit: 1e6, defaultSizeLimit: 1e9}),
+          systemMemory: new CapacitySpecification({defaultItemLimit: 1e7, defaultSizeLimit: 2e9}),
+          download: new CapacitySpecification(
+              {defaultItemLimit: 32, defaultSizeLimit: Number.POSITIVE_INFINITY}),
+          compute: new CapacitySpecification({defaultItemLimit: 128, defaultSizeLimit: 5e8}),
+        }));
     this.chunkQueueManager.registerDisposer(() => this.worker.terminate());
     this.chunkManager = this.registerDisposer(new ChunkManager(this.chunkQueueManager));
   }
@@ -144,7 +146,7 @@ interface ViewerUIOptions {
 export interface ViewerOptions extends ViewerUIOptions, VisibilityPrioritySpecification {
   dataContext: Owned<DataManagementContext>;
   element: HTMLElement;
-  dataSourceProvider: Borrowed<DataSourceProvider>;
+  dataSourceProvider: Borrowed<DataSourceProviderRegistry>;
   uiConfiguration: ViewerUIConfiguration;
   showLayerDialog: boolean;
   inputEventBindings: InputEventBindings;
@@ -152,11 +154,12 @@ export interface ViewerOptions extends ViewerUIOptions, VisibilityPrioritySpecif
   bundleRoot: string;
 }
 
-const defaultViewerOptions = "undefined" !== typeof NEUROGLANCER_OVERRIDE_DEFAULT_VIEWER_OPTIONS ?
-  NEUROGLANCER_OVERRIDE_DEFAULT_VIEWER_OPTIONS : {
-    showLayerDialog: true,
-    resetStateWhenEmpty: true,
-  };
+const defaultViewerOptions = 'undefined' !== typeof NEUROGLANCER_OVERRIDE_DEFAULT_VIEWER_OPTIONS ?
+    NEUROGLANCER_OVERRIDE_DEFAULT_VIEWER_OPTIONS :
+    {
+      showLayerDialog: true,
+      resetStateWhenEmpty: true,
+    };
 
 function makeViewerContextMenu(viewer: Viewer) {
   const menu = new ContextMenu();
@@ -187,9 +190,94 @@ function makeViewerContextMenu(viewer: Viewer) {
   return menu;
 }
 
+class TrackableViewerState extends CompoundTrackable {
+  constructor(public viewer: Borrowed<Viewer>) {
+    super();
+    this.add('dimensions', viewer.coordinateSpace);
+    this.add('relativeDisplayScales', viewer.relativeDisplayScales);
+    this.add('displayDimensions', viewer.displayDimensions);
+    this.add('position', viewer.position);
+    this.add('crossSectionOrientation', viewer.crossSectionOrientation);
+    this.add('crossSectionScale', viewer.crossSectionScale);
+    this.add('projectionOrientation', viewer.projectionOrientation);
+    this.add('projectionScale', viewer.projectionScale);
+    this.add('layers', viewer.layerSpecification);
+    this.add('showAxisLines', viewer.showAxisLines);
+    this.add('showScaleBar', viewer.showScaleBar);
+    this.add('showDefaultAnnotations', viewer.showDefaultAnnotations);
+
+    this.add('showSlices', viewer.showPerspectiveSliceViews);
+    this.add('gpuMemoryLimit', viewer.dataContext.chunkQueueManager.capacities.gpuMemory.sizeLimit);
+    this.add(
+        'systemMemoryLimit',
+        viewer.dataContext.chunkQueueManager.capacities.systemMemory.sizeLimit);
+    this.add(
+        'concurrentDownloads', viewer.dataContext.chunkQueueManager.capacities.download.itemLimit);
+    this.add('selectedLayer', viewer.selectedLayer);
+    this.add('crossSectionBackgroundColor', viewer.crossSectionBackgroundColor);
+    this.add('projectionBackgroundColor', viewer.perspectiveViewBackgroundColor);
+    this.add('layout', viewer.layout);
+    this.add('statistics', viewer.statisticsDisplayState);
+  }
+
+  restoreState(obj: any) {
+    const {viewer} = this;
+    super.restoreState(obj);
+    // Handle legacy properties
+    verifyOptionalObjectProperty(obj, 'navigation', navObj => {
+      verifyObject(navObj);
+      verifyOptionalObjectProperty(navObj, 'pose', poseObj => {
+        verifyObject(poseObj);
+        verifyOptionalObjectProperty(poseObj, 'position', positionObj => {
+          verifyObject(positionObj);
+          optionallyRestoreFromJsonMember(positionObj, 'voxelCoordinates', viewer.position);
+          verifyOptionalObjectProperty(positionObj, 'voxelSize', voxelSizeObj => {
+            // Handle legacy voxelSize representation
+            const voxelSize =
+                parseFixedLengthArray(new Float64Array(3), voxelSizeObj, verifyFinitePositiveFloat);
+            for (let i = 0; i < 3; ++i) {
+              voxelSize[i] *= 1e-9;
+            }
+            viewer.coordinateSpace.value = makeCoordinateSpace({
+              valid: false,
+              names: ['x', 'y', 'z'],
+              units: ['m', 'm', 'm'],
+              scales: voxelSize,
+            });
+          });
+        });
+        optionallyRestoreFromJsonMember(poseObj, 'orientation', viewer.crossSectionOrientation);
+      });
+      optionallyRestoreFromJsonMember(
+          navObj, 'zoomFactor', viewer.crossSectionScale.legacyJsonView);
+    });
+    optionallyRestoreFromJsonMember(obj, 'perspectiveOrientation', viewer.projectionOrientation);
+    optionallyRestoreFromJsonMember(obj, 'perspectiveZoom', viewer.projectionScale.legacyJsonView);
+    optionallyRestoreFromJsonMember(
+        obj, 'perspectiveViewBackgroundColor', viewer.perspectiveViewBackgroundColor);
+  }
+}
+
 export class Viewer extends RefCounted implements ViewerState {
-  navigationState = this.registerDisposer(new NavigationState());
-  perspectiveNavigationState = new NavigationState(new Pose(this.navigationState.position), 1);
+  coordinateSpace = new TrackableCoordinateSpace();
+  position = this.registerDisposer(new Position(this.coordinateSpace));
+  relativeDisplayScales = this.registerDisposer(new TrackableRelativeDisplayScales(this.coordinateSpace));
+  displayDimensions =
+      this.registerDisposer(new TrackableDisplayDimensions(this.relativeDisplayScales.addRef()));
+  crossSectionOrientation = this.registerDisposer(new OrientationState());
+  crossSectionScale = this.registerDisposer(new TrackableCrossSectionZoom(this.displayDimensions));
+  projectionOrientation = this.registerDisposer(new OrientationState());
+  projectionScale = this.registerDisposer(new TrackableProjectionZoom(this.displayDimensions));
+  navigationState = this.registerDisposer(new NavigationState(
+      new DisplayPose(
+          this.position.addRef(), this.displayDimensions.addRef(),
+          this.crossSectionOrientation.addRef()),
+      this.crossSectionScale.addRef()));
+  perspectiveNavigationState = this.registerDisposer(new NavigationState(
+      new DisplayPose(
+          this.position.addRef(), this.displayDimensions.addRef(),
+          this.projectionOrientation.addRef()),
+      this.projectionScale.addRef()));
   mouseState = new MouseSelectionState();
   layerManager = this.registerDisposer(new LayerManager());
   selectedLayer = this.registerDisposer(new SelectedLayerState(this.layerManager.addRef()));
@@ -218,13 +306,13 @@ export class Viewer extends RefCounted implements ViewerState {
   layerSpecification: TopLevelLayerListSpecification;
   layout: RootLayoutContainer;
 
-  state = new CompoundTrackable();
+  state: TrackableViewerState;
 
   dataContext: Owned<DataManagementContext>;
   visibility: WatchableVisibilityPriority;
   inputEventBindings: InputEventBindings;
   element: HTMLElement;
-  dataSourceProvider: Borrowed<DataSourceProvider>;
+  dataSourceProvider: Borrowed<DataSourceProviderRegistry>;
 
   uiConfiguration: ViewerUIConfiguration;
 
@@ -296,7 +384,7 @@ export class Viewer extends RefCounted implements ViewerState {
 
     this.layerSpecification = new TopLevelLayerListSpecification(
         this.dataSourceProvider, this.layerManager, this.chunkManager, this.layerSelectedValues,
-        this.navigationState.voxelSize);
+        this.navigationState.coordinateSpace, this.navigationState.pose.position);
 
     this.registerDisposer(display.updateStarted.add(() => {
       this.onUpdateDisplay();
@@ -310,43 +398,9 @@ export class Viewer extends RefCounted implements ViewerState {
       }
     });
 
-    const {state} = this;
-    state.add('layers', this.layerSpecification);
-    state.add('navigation', this.navigationState);
-    state.add('showAxisLines', this.showAxisLines);
-    state.add('showScaleBar', this.showScaleBar);
-    state.add('showDefaultAnnotations', this.showDefaultAnnotations);
-
-    state.add('perspectiveOrientation', this.perspectiveNavigationState.pose.orientation);
-    state.add('perspectiveZoom', this.perspectiveNavigationState.zoomFactor);
-    state.add('showSlices', this.showPerspectiveSliceViews);
-    state.add('gpuMemoryLimit', this.dataContext.chunkQueueManager.capacities.gpuMemory.sizeLimit);
-    state.add(
-        'systemMemoryLimit', this.dataContext.chunkQueueManager.capacities.systemMemory.sizeLimit);
-    state.add(
-        'concurrentDownloads', this.dataContext.chunkQueueManager.capacities.download.itemLimit);
-    state.add('selectedLayer', this.selectedLayer);
-    state.add('crossSectionBackgroundColor', this.crossSectionBackgroundColor);
-    state.add('perspectiveViewBackgroundColor', this.perspectiveViewBackgroundColor);
-
     this.registerDisposer(this.navigationState.changed.add(() => {
       this.handleNavigationStateChanged();
     }));
-
-    this.layerManager.initializePosition(this.navigationState.position);
-
-    this.registerDisposer(
-        this.layerSpecification.voxelCoordinatesSet.add((voxelCoordinates: vec3) => {
-          this.navigationState.position.setVoxelCoordinates(voxelCoordinates);
-        }));
-
-    this.registerDisposer(
-        this.layerSpecification.spatialCoordinatesSet.add((spatialCoordinates: vec3) => {
-          const {position} = this.navigationState;
-          vec3.copy(position.spatialCoordinates, spatialCoordinates);
-          position.markSpatialCoordinatesChanged();
-        }));
-
 
     // Debounce this call to ensure that a transient state does not result in the layer dialog being
     // shown.
@@ -359,7 +413,7 @@ export class Viewer extends RefCounted implements ViewerState {
         this.perspectiveNavigationState.zoomFactor.reset();
         this.resetInitiated.dispatch();
         if (!overlaysOpen && this.showLayerDialog && this.visibility.visible) {
-          new LayerDialog(this.layerSpecification);
+          addNewLayer(this.layerSpecification, this.selectedLayer);
         }
       }
     }));
@@ -379,10 +433,6 @@ export class Viewer extends RefCounted implements ViewerState {
     this.makeUI();
     this.updateShowBorders();
 
-    state.add('layout', this.layout);
-
-
-    state.add('statistics', this.statisticsDisplayState);
 
     this.registerActionListeners();
     this.registerEventActionBindings();
@@ -390,7 +440,9 @@ export class Viewer extends RefCounted implements ViewerState {
     this.registerDisposer(setupPositionDropHandlers(element, this.navigationState.position));
 
     this.registerDisposer(new MouseSelectionStateTooltipManager(
-        this.mouseState, this.layerManager, this.navigationState.voxelSize));
+        this.mouseState, this.layerManager, this.navigationState.coordinateSpace));
+
+    this.state = new TrackableViewerState(this);
   }
 
   private updateShowBorders() {
@@ -419,19 +471,14 @@ export class Viewer extends RefCounted implements ViewerState {
     topRow.style.flexDirection = 'row';
     topRow.style.alignItems = 'stretch';
 
-    const voxelSizeWidget = this.registerDisposer(
-        new VoxelSizeWidget(document.createElement('div'), this.navigationState.voxelSize));
-    this.registerDisposer(new ElementVisibilityFromTrackableBoolean(
-        this.uiControlVisibility.showLocation, voxelSizeWidget.element));
-    topRow.appendChild(voxelSizeWidget.element);
-
-    const positionWidget = this.registerDisposer(new PositionWidget(this.navigationState.position));
+    const positionWidget = this.registerDisposer(new PositionWidget(
+        this.navigationState.position, this.layerSpecification.coordinateSpaceCombiner));
     this.registerDisposer(new ElementVisibilityFromTrackableBoolean(
         this.uiControlVisibility.showLocation, positionWidget.element));
     topRow.appendChild(positionWidget.element);
 
     const mousePositionWidget = this.registerDisposer(new MousePositionWidget(
-        document.createElement('div'), this.mouseState, this.navigationState.voxelSize));
+        document.createElement('div'), this.mouseState, this.navigationState.coordinateSpace));
     mousePositionWidget.element.style.flex = '1';
     mousePositionWidget.element.style.alignSelf = 'center';
     this.registerDisposer(new ElementVisibilityFromTrackableBoolean(
@@ -445,7 +492,7 @@ export class Viewer extends RefCounted implements ViewerState {
         this.uiControlVisibility.showAnnotationToolStatus, annotationToolStatus.element));
 
     {
-      const button = makeTextIconButton('{}', 'Edit JSON state');
+      const button = makeIcon({text: '{}', title: 'Edit JSON state'});
       this.registerEventListener(button, 'click', () => {
         this.editJsonState();
       });
@@ -456,7 +503,7 @@ export class Viewer extends RefCounted implements ViewerState {
 
 
     {
-      const button = makeTextIconButton('?', 'Help');
+      const button = makeIcon({text: '?', title: 'Help'});
       this.registerEventListener(button, 'click', () => {
         this.showHelpDialog();
       });

@@ -21,15 +21,17 @@ import {transposeArray2d} from 'neuroglancer/util/array';
 
 registerAsyncComputation(
     decodeJpeg,
-    async function(data: Uint8Array, width: number, height: number, numComponents: number) {
+    async function(
+        data: Uint8Array, width: number, height: number, numComponents: number,
+        convertToGrayscale: boolean) {
       let parser = new JpegDecoder();
       parser.parse(data);
       // Just check that the total number pixels matches the expected value.
-      if (parser.width !== width || parser.height !== height) {
+      if (parser.width * parser.height !== width * height) {
         throw new Error(
             `JPEG data does not have the expected dimensions: ` +
             `width=${parser.width}, height=${parser.height}, ` +
-            `expected width=${parser.width}, expected height=${parser.height}`);
+            `expected width=${width}, expected height=${height}`);
       }
       if (parser.numComponents !== numComponents) {
         throw new Error(
@@ -41,7 +43,16 @@ registerAsyncComputation(
         result = parser.getData(parser.width, parser.height, /*forceRGBOutput=*/ false);
       } else if (parser.numComponents === 3) {
         result = parser.getData(parser.width, parser.height, /*forceRGBOutput=*/ false);
-        result = transposeArray2d(result, parser.width * parser.height, 3);
+        if (convertToGrayscale) {
+          const length = width * height;
+          const converted = new Uint8Array(length);
+          for (let i = 0; i < length; ++i) {
+            converted[i] = result[i * 3];
+          }
+          result = converted;
+        } else {
+          result = transposeArray2d(result, parser.width * parser.height, 3);
+        }
       } else {
         throw new Error(`JPEG data has an unsupported number of components: components=${
             parser.numComponents}`);

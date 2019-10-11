@@ -14,17 +14,25 @@
  * limitations under the License.
  */
 
+import {CoordinateSpace, dimensionNamesFromJson, emptyInvalidCoordinateSpace, getBoundingBoxCenter, getCenterBound} from 'neuroglancer/coordinate_transform';
+import {WatchableValueInterface} from 'neuroglancer/trackable_value';
 import {Borrowed, Owned, RefCounted} from 'neuroglancer/util/disposable';
 import {mat3, mat4, quat, vec3} from 'neuroglancer/util/geom';
-import {parseFiniteVec, verifyObject, verifyObjectProperty} from 'neuroglancer/util/json';
+import {parseArray, parseFiniteVec, verifyFiniteFloat, verifyFinitePositiveFloat, verifyObject, verifyObjectProperty} from 'neuroglancer/util/json';
 import {NullarySignal} from 'neuroglancer/util/signal';
-import {Trackable} from 'neuroglancer/util/trackable';
+import {optionallyRestoreFromJsonMember, Trackable} from 'neuroglancer/util/trackable';
 import {TrackableEnum} from 'neuroglancer/util/trackable_enum';
+import * as vector from 'neuroglancer/util/vector';
 
 export enum NavigationLinkType {
-  LINKED,
-  RELATIVE,
-  UNLINKED,
+  LINKED = 0,
+  RELATIVE = 1,
+  UNLINKED = 2,
+}
+
+export enum NavigationSimpleLinkType {
+  LINKED = 0,
+  UNLINKED = 2,
 }
 
 export class TrackableNavigationLink extends TrackableEnum<NavigationLinkType> {
@@ -33,68 +41,9 @@ export class TrackableNavigationLink extends TrackableEnum<NavigationLinkType> {
   }
 }
 
-export class VoxelSize extends RefCounted {
-  size: vec3;
-  valid: boolean;
-  changed = new NullarySignal();
-  constructor(voxelSize?: vec3) {
-    super();
-    let valid = true;
-    if (voxelSize == null) {
-      voxelSize = vec3.create();
-      valid = false;
-    }
-    this.size = voxelSize;
-    this.valid = valid;
-  }
-
-  reset() {
-    this.valid = false;
-    this.changed.dispatch();
-  }
-
-  /**
-   * This should be called after setting the voxel size initially.  The voxel
-   * size should not be changed once it is valid.
-   */
-  setValid() {
-    if (!this.valid) {
-      this.valid = true;
-      this.changed.dispatch();
-    }
-  }
-
-  toJSON() {
-    if (!this.valid) {
-      return undefined;
-    }
-    return Array.prototype.slice.call(this.size);
-  }
-
-  restoreState(obj: any) {
-    try {
-      parseFiniteVec(this.size, obj);
-      this.valid = true;
-      this.changed.dispatch();
-    } catch (e) {
-      this.valid = false;
-      this.changed.dispatch();
-    }
-  }
-
-  toString() {
-    if (!this.valid) {
-      return null;
-    }
-    return this.size.toString();
-  }
-
-  voxelFromSpatial(voxel: vec3, spatial: vec3) {
-    return vec3.divide(voxel, spatial, this.size);
-  }
-
-  spatialFromVoxel(spatial: vec3, voxel: vec3) {
-    return vec3.multiply(spatial, voxel, this.size);
+export class TrackableNavigationSimpleLink extends TrackableEnum<NavigationSimpleLinkType> {
+  constructor(value = NavigationSimpleLinkType.LINKED) {
+    super(NavigationSimpleLinkType, value);
   }
 }
 
@@ -108,7 +57,7 @@ function makeLinked<T extends RefCounted&{changed: NullarySignal}, Difference>(
       difference: (a: T, b: T) => Difference,
       add: (target: T, source: T, amount: Difference) => void,
       subtract: (target: T, source: T, amount: Difference) => void
-    }) {
+    }): T {
   let updatingSelf = false;
   let updatingPeer = false;
   let selfMinusPeer: Difference|undefined;
@@ -176,210 +125,202 @@ function makeLinked<T extends RefCounted&{changed: NullarySignal}, Difference>(
   return self;
 }
 
-interface SpatialPositionOffset {
-  spatialOffset?: vec3;
-  voxelOffset?: vec3;
+function makeSimpleLinked<T extends RefCounted&{changed: NullarySignal}>(
+    self: T, peer: T, link: TrackableNavigationSimpleLink, operations: {
+      assign: (target: T, source: T) => void,
+      isValid: (a: T) => boolean,
+    }) {
+  return makeLinked(self, peer, link as any, operations as any);
 }
 
-export class SpatialPosition extends RefCounted {
-  voxelSize: VoxelSize;
-  spatialCoordinates: vec3;
-  spatialCoordinatesValid: boolean;
-  protected voxelCoordinates: vec3|null = null;
+export class Position extends RefCounted {
+  private coordinates_: Float32Array = vector.kEmptyFloat32Vec;
+  private curCoordinateSpace: CoordinateSpace|undefined;
   changed = new NullarySignal();
-  constructor(voxelSize?: Owned<VoxelSize>, spatialCoordinates?: vec3) {
+  constructor(public coordinateSpace: WatchableValueInterface<CoordinateSpace>) {
     super();
-    if (voxelSize == null) {
-      voxelSize = new VoxelSize();
-    }
-    this.voxelSize = voxelSize;
-
-    let spatialCoordinatesValid = true;
-    if (spatialCoordinates == null) {
-      spatialCoordinates = vec3.create();
-      spatialCoordinatesValid = false;
-    }
-    this.spatialCoordinates = spatialCoordinates;
-    this.spatialCoordinatesValid = spatialCoordinatesValid;
-
-    this.registerDisposer(voxelSize);
-    this.registerDisposer(voxelSize.changed.add(() => {
-      this.handleVoxelSizeChanged();
+    this.registerDisposer(coordinateSpace.changed.add(() => {
+      this.handleCoordinateSpaceChanged();
     }));
   }
 
   get valid() {
-    return this.spatialCoordinatesValid && this.voxelSize.valid;
-  }
-
-  get voxelCoordinatesValid() {
-    return this.valid || this.voxelCoordinates != null;
-  }
-
-  reset() {
-    this.spatialCoordinatesValid = false;
-    this.voxelCoordinates = null;
-    this.voxelSize.reset();
-    this.changed.dispatch();
-  }
-
-  getVoxelCoordinates(out: vec3) {
-    let {voxelCoordinates} = this;
-    if (voxelCoordinates) {
-      vec3.copy(out, voxelCoordinates);
-    } else if (this.valid) {
-      this.voxelSize.voxelFromSpatial(out, this.spatialCoordinates);
-    } else {
-      return false;
-    }
-    return true;
+    return this.coordinateSpace.value.valid;
   }
 
   /**
-   * Sets this position to the spatial coordinats corresponding to the specified
-   * voxelPosition.  If this.voxelSize.valid == false, then this position won't
-   * be set until it is.
+   * Returns the position in voxels.
    */
-  setVoxelCoordinates(voxelCoordinates: vec3) {
-    let voxelSize = this.voxelSize;
-    if (voxelSize.valid) {
-      voxelSize.spatialFromVoxel(this.spatialCoordinates, voxelCoordinates);
-      this.markSpatialCoordinatesChanged();
-    } else {
-      let voxelCoordinates_ = this.voxelCoordinates;
-      if (!voxelCoordinates_) {
-        this.voxelCoordinates = voxelCoordinates_ = vec3.clone(voxelCoordinates);
+  get value() {
+    this.handleCoordinateSpaceChanged();
+    return this.coordinates_;
+  }
+
+  reset() {
+    this.curCoordinateSpace = undefined;
+    this.coordinates_ = vector.kEmptyFloat32Vec;
+    this.changed.dispatch();
+  }
+
+  set value(coordinates: Float32Array) {
+    const {curCoordinateSpace} = this;
+    if (curCoordinateSpace === undefined || !curCoordinateSpace.valid ||
+        curCoordinateSpace.rank !== coordinates.length) {
+      return;
+    }
+    const {coordinates_} = this;
+    coordinates_.set(coordinates);
+    this.changed.dispatch();
+  }
+
+  private handleCoordinateSpaceChanged() {
+    const coordinateSpace = this.coordinateSpace.value;
+    const prevCoordinateSpace = this.curCoordinateSpace;
+    if (coordinateSpace === prevCoordinateSpace) return;
+    this.curCoordinateSpace = coordinateSpace;
+    const {rank} = coordinateSpace;
+    if (!coordinateSpace.valid) return;
+    if (prevCoordinateSpace === undefined || !prevCoordinateSpace.valid) {
+      let {coordinates_} = this;
+      if (coordinates_ !== undefined && coordinates_.length === rank) {
+        // Use the existing voxel coordinates if rank is the same.  Otherwise, ignore.
       } else {
-        vec3.copy(voxelCoordinates_, voxelCoordinates);
+        coordinates_ = this.coordinates_ = new Float32Array(rank);
+        getBoundingBoxCenter(coordinates_, coordinateSpace.bounds);
+      }
+      this.changed.dispatch();
+      return;
+    }
+    // Match dimensions by ID.
+    const newCoordinates = new Float32Array(rank);
+    const prevCoordinates = this.coordinates_;
+    const {ids, scales: newScales} = coordinateSpace;
+    const {ids: prevDimensionIds, scales: oldScales} = prevCoordinateSpace;
+    for (let newDim = 0; newDim < rank; ++newDim) {
+      const newDimId = ids[newDim];
+      const oldDim = prevDimensionIds.indexOf(newDimId);
+      if (oldDim === -1) {
+        newCoordinates[newDim] = getCenterBound(
+            coordinateSpace.bounds.lowerBounds[newDim], coordinateSpace.bounds.upperBounds[newDim]);
+      } else {
+        newCoordinates[newDim] = prevCoordinates[oldDim] * (oldScales[oldDim] / newScales[newDim]);
       }
     }
-    this.changed.dispatch();
-  }
-
-  markSpatialCoordinatesChanged() {
-    this.spatialCoordinatesValid = true;
-    this.voxelCoordinates = null;
-    this.changed.dispatch();
-  }
-
-  private handleVoxelSizeChanged() {
-    if (this.voxelCoordinates != null && !this.spatialCoordinatesValid) {
-      this.voxelSize.spatialFromVoxel(this.spatialCoordinates, this.voxelCoordinates);
-      this.spatialCoordinatesValid = true;
-    }
-    this.voxelCoordinates = null;
+    this.coordinates_ = newCoordinates;
     this.changed.dispatch();
   }
 
   toJSON() {
-    let empty = true;
-    let voxelSizeJson = this.voxelSize.toJSON();
-    let obj: any = {};
-    if (voxelSizeJson !== undefined) {
-      empty = false;
-      obj['voxelSize'] = voxelSizeJson;
-    }
-    if (this.voxelCoordinatesValid) {
-      let voxelCoordinates = tempVec3;
-      this.getVoxelCoordinates(voxelCoordinates);
-      obj['voxelCoordinates'] = Array.prototype.slice.call(voxelCoordinates);
-      empty = false;
-    } else if (this.spatialCoordinatesValid) {
-      obj['spatialCoordinates'] = Array.prototype.slice.call(this.spatialCoordinates);
-      empty = false;
-    }
-    if (empty) {
-      return undefined;
-    }
-    return obj;
+    if (!this.valid) return undefined;
+    this.handleCoordinateSpaceChanged();
+    const {value} = this;
+    if (value.length === 0) return undefined;
+    return Array.from(value);
   }
 
   restoreState(obj: any) {
-    verifyObject(obj);
-    verifyObjectProperty(obj, 'voxelSize', x => {
-      if (x !== undefined) {
-        this.voxelSize.restoreState(x);
-      }
-    });
-    this.spatialCoordinatesValid = false;
-    verifyObjectProperty(obj, 'voxelCoordinates', x => {
-      if (x !== undefined) {
-        this.setVoxelCoordinates(parseFiniteVec(vec3.create(), x));
-      }
-    });
-    verifyObjectProperty(obj, 'spatialCoordinates', x => {
-      if (x !== undefined) {
-        parseFiniteVec(this.spatialCoordinates, x);
-        this.markSpatialCoordinatesChanged();
-      }
-    });
+    if (obj === undefined) {
+      this.reset();
+      return;
+    }
+    this.curCoordinateSpace = undefined;
+    this.coordinates_ = Float32Array.from(parseArray(obj, verifyFiniteFloat));
+    this.handleCoordinateSpaceChanged();
+    this.changed.dispatch();
   }
 
   snapToVoxel() {
-    if (!this.valid) {
-      let {voxelCoordinates} = this;
-      if (voxelCoordinates != null) {
-        for (let i = 0; i < 3; ++i) {
-          voxelCoordinates[i] = Math.round(voxelCoordinates[i]);
-        }
-        this.changed.dispatch();
-      }
-    } else {
-      let spatialCoordinates = this.spatialCoordinates;
-      let voxelSize = this.voxelSize.size;
-      for (let i = 0; i < 3; ++i) {
-        let voxelSizeValue = voxelSize[i];
-        spatialCoordinates[i] = Math.round(spatialCoordinates[i] / voxelSizeValue) * voxelSizeValue;
-      }
-      this.changed.dispatch();
+    this.handleCoordinateSpaceChanged();
+    const {coordinates_} = this;
+    const rank = coordinates_.length;
+    for (let i = 0; i < rank; ++i) {
+      coordinates_[i] = Math.round(coordinates_[i]);
     }
+    this.changed.dispatch();
   }
 
-  assign(other: Borrowed<SpatialPosition>) {
-    this.spatialCoordinatesValid = other.spatialCoordinatesValid;
-    vec3.copy(this.spatialCoordinates, other.spatialCoordinates);
-    const {voxelCoordinates} = other;
-    this.voxelCoordinates = voxelCoordinates && vec3.clone(voxelCoordinates);
+  assign(other: Borrowed<Position>) {
+    other.handleCoordinateSpaceChanged();
+    const {curCoordinateSpace, coordinates_} = other;
+    this.curCoordinateSpace = curCoordinateSpace;
+    this.coordinates_ = Float32Array.from(coordinates_);
     this.changed.dispatch();
   }
 
   /**
    * Get the offset of `a` relative to `b`.
    */
-  static getOffset(a: SpatialPosition, b: SpatialPosition): SpatialPositionOffset {
-    if (a.spatialCoordinatesValid && b.spatialCoordinatesValid) {
-      return {
-        spatialOffset: vec3.subtract(vec3.create(), a.spatialCoordinates, b.spatialCoordinates)
-      };
+  static getOffset(a: Position, b: Position): Float32Array|undefined {
+    const aCoordinates = a.coordinates_;
+    const bCoordinates = b.coordinates_;
+    const rank = aCoordinates.length;
+    if (rank === bCoordinates.length) {
+      return vector.subtract(new Float32Array(aCoordinates.length), aCoordinates, bCoordinates);
     }
-    if (a.voxelCoordinates && b.voxelCoordinates) {
-      if (a.voxelSize !== b.voxelSize) {
-        throw new Error('Voxel offsets are only meaningful with identical voxelSize.');
-      }
-      return {voxelOffset: vec3.subtract(vec3.create(), a.voxelCoordinates, b.voxelCoordinates)};
-    }
-    return {};
+    return undefined;
   }
   static addOffset(
-      target: SpatialPosition, source: SpatialPosition, offset: SpatialPositionOffset,
-      scale: number = 1): void {
-    const {spatialOffset, voxelOffset} = offset;
-    if (spatialOffset !== undefined && source.spatialCoordinatesValid) {
-      vec3.scaleAndAdd(target.spatialCoordinates, source.spatialCoordinates, spatialOffset, scale);
-      target.markSpatialCoordinatesChanged();
-    } else if (voxelOffset !== undefined && source.getVoxelCoordinates(tempVec3)) {
-      target.setVoxelCoordinates(vec3.scaleAndAdd(tempVec3, tempVec3, voxelOffset, scale));
+      target: Position, source: Position, offset: Float32Array|undefined, scale: number = 1): void {
+    target.handleCoordinateSpaceChanged();
+    const {value: sourceCoordinates} = source;
+    if (offset !== undefined && sourceCoordinates.length === offset.length) {
+      vector.scaleAndAdd(target.value, sourceCoordinates, offset, scale);
+      target.changed.dispatch();
     }
+  }
+
+  get legacyJsonView() {
+    const self = this;
+    return {
+      changed: self.changed,
+      toJSON() {
+        return self.toJSON();
+      },
+      reset() {
+        self.reset();
+      },
+      restoreState(obj: unknown) {
+        if (obj === undefined || Array.isArray(obj)) {
+          self.restoreState(obj);
+          return;
+        }
+        verifyObject(obj);
+        optionallyRestoreFromJsonMember(obj, 'voxelCoordinates', self);
+      },
+    };
   }
 }
 
-abstract class LinkedBase<T extends RefCounted&Trackable&{assign(other: T): void}> implements
-    Trackable {
+type TrackableLinkInterface = TrackableNavigationLink|TrackableNavigationSimpleLink;
+
+function restoreLinkedFromJson(
+    link: TrackableLinkInterface, value: {restoreState(obj: unknown): void}, json: any) {
+  if (json === undefined || Object.keys(json).length === 0) {
+    link.value = NavigationLinkType.LINKED;
+    return;
+  }
+  verifyObject(json);
+  link.value = NavigationLinkType.UNLINKED;
+  verifyObjectProperty(json, 'value', x => {
+    if (x !== undefined) {
+      value.restoreState(x);
+    }
+  });
+  verifyObjectProperty(json, 'link', x => link.restoreState(x));
+}
+
+interface LinkableState<T> extends RefCounted, Trackable {
+  assign(other: T): void;
+}
+
+abstract class LinkedBase<T extends LinkableState<T>,
+                                    Link extends TrackableLinkInterface = TrackableNavigationLink>
+    implements Trackable {
   value: T;
   get changed() {
     return this.value.changed;
   }
-  constructor(public peer: Owned<T>, public link = new TrackableNavigationLink()) {}
+  constructor(public peer: Owned<T>, public link: Link = new TrackableNavigationLink() as any) {}
 
   toJSON() {
     const {link} = this;
@@ -398,18 +339,7 @@ abstract class LinkedBase<T extends RefCounted&Trackable&{assign(other: T): void
   }
 
   restoreState(obj: any) {
-    if (obj === undefined || Object.keys(obj).length === 0) {
-      this.link.value = NavigationLinkType.LINKED;
-      return;
-    }
-    verifyObject(obj);
-    this.link.value = NavigationLinkType.UNLINKED;
-    verifyObjectProperty(obj, 'value', x => {
-      if (x !== undefined) {
-        this.value.restoreState(x);
-      }
-    });
-    verifyObjectProperty(obj, 'link', x => this.link.restoreState(x));
+    restoreLinkedFromJson(this.link, this.value, obj);
   }
 
   copyToPeer() {
@@ -421,26 +351,28 @@ abstract class LinkedBase<T extends RefCounted&Trackable&{assign(other: T): void
   }
 }
 
-export class LinkedSpatialPosition extends LinkedBase<SpatialPosition> {
-  value = makeLinked(new SpatialPosition(this.peer.voxelSize.addRef()), this.peer, this.link, {
-    assign: (a: SpatialPosition, b: SpatialPosition) => a.assign(b),
+abstract class SimpleLinkedBase<T extends RefCounted&Trackable&{assign(other: T): void}> extends
+    LinkedBase<T, TrackableNavigationSimpleLink> implements Trackable {
+  constructor(peer: Owned<T>, link = new TrackableNavigationSimpleLink()) {
+    super(peer, link);
+  }
+}
+
+
+export class LinkedPosition extends LinkedBase<Position> {
+  value = makeLinked(new Position(this.peer.coordinateSpace), this.peer, this.link, {
+    assign: (a: Position, b: Position) => a.assign(b),
     isValid:
-        (a: SpatialPosition) => {
-          return a.spatialCoordinatesValid || a.voxelCoordinatesValid;
+        (a: Position) => {
+          return a.valid;
         },
-    difference: SpatialPosition.getOffset,
-    add: SpatialPosition.addOffset,
+    difference: Position.getOffset,
+    add: Position.addOffset,
     subtract:
-        (target: SpatialPosition, source: SpatialPosition, amount: SpatialPositionOffset) => {
-          SpatialPosition.addOffset(target, source, amount, -1);
+        (target: Position, source: Position, amount: Float32Array|undefined) => {
+          Position.addOffset(target, source, amount, -1);
         },
   });
-
-  protected getValueJson() {
-    const value = this.value.toJSON() || {};
-    delete value['voxelSize'];
-    return value;
-  }
 }
 
 function quaternionIsIdentity(q: quat) {
@@ -563,24 +495,397 @@ export class LinkedOrientationState extends LinkedBase<OrientationState> {
   });
 }
 
-export class Pose extends RefCounted {
-  position: SpatialPosition;
-  orientation: OrientationState;
+export interface RelativeDisplayScales {
+  coordinateSpace: CoordinateSpace;
+
+  /**
+   * Array of length `coordinateSpace.rank` specifying scale factors on top of (will be multiply by)
+   * `coordinateSpace.scales` to use for display purposes.  This allows non-uniform zooming.
+   */
+  factors: Float64Array;
+}
+
+export class TrackableRelativeDisplayScales extends RefCounted implements
+    Trackable, WatchableValueInterface<RelativeDisplayScales> {
   changed = new NullarySignal();
-  constructor(position?: Owned<SpatialPosition>, orientation?: Owned<OrientationState>) {
+  private value_: RelativeDisplayScales = {
+    coordinateSpace: emptyInvalidCoordinateSpace,
+    factors: new Float64Array(0)
+  };
+  constructor(public coordinateSpace: WatchableValueInterface<CoordinateSpace>) {
     super();
-    if (position == null) {
-      position = new SpatialPosition();
+    this.registerDisposer(coordinateSpace.changed.add(() => this.update()));
+    this.update();
+  }
+
+  get value() {
+    return this.update();
+  }
+
+  reset() {
+    this.value_ = {coordinateSpace: emptyInvalidCoordinateSpace, factors: new Float64Array(0)};
+    this.changed.dispatch();
+  }
+
+  toJSON() {
+    const json: any = {};
+    let nonEmpty = false;
+    const {value} = this;
+    const {coordinateSpace: {names, rank}, factors} = value;
+    for (let i = 0; i < rank; ++i) {
+      const factor = factors[i];
+      if (factor === 1) continue;
+      json[names[i]] = factor;
+      nonEmpty = true;
     }
-    this.position = position;
-    if (orientation == null) {
-      orientation = new OrientationState();
+    if (nonEmpty) return json;
+    return undefined;
+  }
+
+  restoreState(json: unknown) {
+    const {coordinateSpace: {value: coordinateSpace}} = this;
+    const {names, rank} = coordinateSpace;
+    const factors = new Float64Array(rank);
+    factors.fill(-1);
+    if (json !== undefined) {
+      const obj = verifyObject(json);
+      for (let i = 0; i < rank; ++i) {
+        factors[i] = verifyObjectProperty(
+            obj, names[i], x => x === undefined ? 1 : verifyFinitePositiveFloat(x));
+      }
     }
-    this.orientation = orientation;
-    this.registerDisposer(this.position);
-    this.registerDisposer(this.orientation);
-    this.registerDisposer(this.position.changed.add(this.changed.dispatch));
-    this.registerDisposer(this.orientation.changed.add(this.changed.dispatch));
+    this.value_ = {coordinateSpace, factors};
+    this.changed.dispatch();
+  }
+
+  setFactors(factors: Float64Array) {
+    const {coordinateSpace: {value: coordinateSpace}} = this;
+    if (factors.length !== coordinateSpace.rank) return;
+    this.value_ = {coordinateSpace, factors};
+    this.changed.dispatch();
+  }
+
+  private update() {
+    const {coordinateSpace: {value: coordinateSpace}} = this;
+    let value = this.value_;
+    if (value.coordinateSpace === coordinateSpace) return value;
+    const {ids: oldDimensionIds} = value.coordinateSpace;
+    const {ids: newDimensionIds, rank} = coordinateSpace;
+    const oldFactors = value.factors;
+    const newFactors = new Float64Array(rank);
+    newFactors.fill(1);
+    for (let i = 0; i < rank; ++i) {
+      const id = newDimensionIds[i];
+      const oldIndex = oldDimensionIds.indexOf(id);
+      if (oldIndex === -1) continue;
+      newFactors[i] = oldFactors[oldIndex];
+    }
+    value = this.value_ = {coordinateSpace, factors: newFactors};
+    this.changed.dispatch();
+    return value;
+  }
+
+  assign(other: TrackableRelativeDisplayScales) {
+    this.setFactors(other.value.factors);
+  }
+}
+
+function mapPerDimensionValues<T, A extends {length: number, [index: number]: T},
+                                            C extends {new (n: number): A}>(
+    arrayConstructor: C, input: A, oldCoordinateSpace: CoordinateSpace,
+    newCoordinateSpace: CoordinateSpace, defaultValue: (index: number) => T): A {
+  if (oldCoordinateSpace === newCoordinateSpace) return input;
+  const {ids: oldDimensionIds} = oldCoordinateSpace;
+  const {rank: newRank, ids: newDimensionIds} = newCoordinateSpace;
+  const output = new arrayConstructor(newRank);
+  for (let newDim = 0; newDim < newRank; ++newDim) {
+    const id = newDimensionIds[newDim];
+    const oldDim = oldDimensionIds.indexOf(id);
+    output[newDim] = (oldDim === -1) ? defaultValue(newDim) : input[oldDim];
+  }
+  return output;
+}
+
+export class LinkedRelativeDisplayScales extends LinkedBase<TrackableRelativeDisplayScales> {
+  value = makeLinked(
+      new TrackableRelativeDisplayScales(this.peer.coordinateSpace), this.peer, this.link, {
+        assign: (target, source) => target.assign(source),
+        difference:
+            (a, b) => {
+              const {factors: fa, coordinateSpace} = a.value;
+              const fb = b.value.factors;
+              return {
+                coordinateSpace,
+                offsets: vector.subtract(new Float64Array(fa.length), fa, fb)
+              };
+            },
+        add:
+            (target, source, delta: {offsets: Float64Array, coordinateSpace: CoordinateSpace}) => {
+              const newOffsets = mapPerDimensionValues(
+                  Float64Array, delta.offsets, delta.coordinateSpace, target.coordinateSpace.value,
+                  () => 0);
+              target.setFactors(vector.add(
+                  new Float64Array(newOffsets.length), newOffsets, source.value.factors));
+            },
+        subtract:
+            (target, source, delta: {offsets: Float64Array, coordinateSpace: CoordinateSpace}) => {
+              const newOffsets = mapPerDimensionValues(
+                  Float64Array, delta.offsets, delta.coordinateSpace, target.coordinateSpace.value,
+                  () => 0);
+              target.setFactors(vector.subtract(
+                  new Float64Array(newOffsets.length), source.value.factors, newOffsets));
+            },
+        isValid: () => true,
+      });
+}
+
+export interface DisplayDimensions {
+  /**
+   * Coordinate space with display scale factors that serves as the input.
+   */
+  relativeDisplayScales: RelativeDisplayScales;
+
+  /**
+   * Rank of displayed dimensions.  Must be <= 3.
+   */
+  rank: number;
+
+  /**
+   * Array of length 3.  The first `rank` elements specify the indices of dimensions in
+   * `coordinateSpace` that are displayed.  The remaining elements are `-1`.
+   */
+  dimensionIndices: Int32Array;
+
+  /**
+   * Physical unit corresponding to the canonical voxel.  This is always the unit in
+   * `coordinateSpace` corresponding to `dimensionIndices[0]`, or unitless in the degenerate case of
+   * `raank === 0`.
+   */
+  canonicalVoxelUnit: string;
+
+  /**
+   * Array of length 3.  `voxelPhysicalScales[i]` equals
+   * `relativeDisplayScales[d] * coordinateSpace.scales[d]`,
+   * where `d = dimensionIndices[i]`, or `1` for `i >= rank`.
+   */
+  voxelPhysicalScales: Float64Array;
+
+  /**
+   * Physical scale corresponding to the canonical voxel.  Equal to minimum of
+   * `voxelPhysicalScales.slice(0, rank)`, or `1` if `rank == 0`.
+   */
+  canonicalVoxelPhysicalSize: number;
+
+  /**
+   * Array of length 3.  Amount by which the voxel coordinates of each display dimensions must be
+   * multiplied to convert to canonical voxels.  canonicalVoxelFactors[i] = voxelPhysicalScales[d] /
+   * canonicalVoxelPhysicalSize, where d = dimensionIndices[i], or `1` for `i >= rank`.
+   */
+  canonicalVoxelFactors: Float64Array;
+}
+
+export class TrackableDisplayDimensions extends RefCounted implements Trackable {
+  changed = new NullarySignal();
+  private default_ = true;
+  private value_: DisplayDimensions|undefined = undefined;
+
+  get coordinateSpace() {
+    return this.relativeDisplayScales.coordinateSpace;
+  }
+
+  constructor(public relativeDisplayScales: Owned<TrackableRelativeDisplayScales>) {
+    super();
+    this.registerDisposer(relativeDisplayScales);
+    this.registerDisposer(this.relativeDisplayScales.changed.add(this.changed.dispatch));
+    this.update();
+  }
+
+  get value() {
+    this.update();
+    return this.value_!;
+  }
+
+  private update() {
+    const {relativeDisplayScales: {value: relativeDisplayScales}} = this;
+    const value = this.value_;
+    if (value !== undefined && value.relativeDisplayScales === relativeDisplayScales) {
+      return;
+    }
+    if (value === undefined || this.default_) {
+      this.setToDefault(relativeDisplayScales);
+      return;
+    }
+    const newDimensionIndices = new Int32Array(3);
+    const {ids: oldDimensionIds} = value.relativeDisplayScales.coordinateSpace;
+    const {ids: newDimensionIds} = relativeDisplayScales.coordinateSpace;
+    const oldDimensionIndices = value.dimensionIndices;
+    const oldRank = value.rank;
+    let newRank = 0;
+    for (let i = 0; i < oldRank; ++i) {
+      const newDim = newDimensionIds.indexOf(oldDimensionIds[oldDimensionIndices[i]]);
+      if (newDim === -1) continue;
+      newDimensionIndices[newRank] = newDim;
+      ++newRank;
+    }
+    newDimensionIndices.fill(-1, newRank);
+    if (newRank === 0) {
+      this.default_ = true;
+      this.setToDefault(relativeDisplayScales);
+      return;
+    }
+    this.assignValue(relativeDisplayScales, newRank, newDimensionIndices);
+    this.changed.dispatch();
+  }
+
+  private setToDefault(relativeDisplayScales: RelativeDisplayScales) {
+    const {coordinateSpace} = relativeDisplayScales;
+    const rank = Math.min(coordinateSpace.rank, 3);
+    const dimensionIndices = new Int32Array(3);
+    dimensionIndices.fill(-1);
+    for (let i = 0; i < rank; ++i) {
+      dimensionIndices[i] = i;
+    }
+    this.assignValue(relativeDisplayScales, rank, dimensionIndices);
+  }
+
+  private assignValue(
+      relativeDisplayScales: RelativeDisplayScales, rank: number, dimensionIndices: Int32Array) {
+    let canonicalVoxelUnit: string;
+    const canonicalVoxelFactors = new Float64Array(3);
+    let voxelPhysicalScales = new Float64Array(3);
+    let canonicalVoxelPhysicalSize: number;
+    const {coordinateSpace, factors} = relativeDisplayScales;
+    canonicalVoxelFactors.fill(1);
+    voxelPhysicalScales.fill(1);
+    if (rank === 0) {
+      canonicalVoxelUnit = '';
+      canonicalVoxelPhysicalSize = 1;
+    } else {
+      canonicalVoxelUnit = coordinateSpace.units[dimensionIndices[0]];
+      canonicalVoxelPhysicalSize = Number.POSITIVE_INFINITY;
+      const {scales} = coordinateSpace;
+      for (let i = 0; i < rank; ++i) {
+        const dim = dimensionIndices[i];
+        const s = voxelPhysicalScales[i] = factors[dim] * scales[dim];
+        canonicalVoxelPhysicalSize = Math.min(canonicalVoxelPhysicalSize, s);
+      }
+      for (let i = 0; i < rank; ++i) {
+        canonicalVoxelFactors[i] = voxelPhysicalScales[i] / canonicalVoxelPhysicalSize;
+      }
+    }
+    this.value_ = {
+      relativeDisplayScales,
+      rank,
+      dimensionIndices,
+      canonicalVoxelUnit,
+      canonicalVoxelFactors,
+      voxelPhysicalScales,
+      canonicalVoxelPhysicalSize,
+    };
+    this.changed.dispatch();
+  }
+
+  reset() {
+    this.default_ = true;
+    this.value_ = undefined;
+    this.changed.dispatch();
+  }
+
+  restoreState(obj: any) {
+    if (obj === undefined) {
+      this.reset();
+      return;
+    }
+    const displayDimensionNames = dimensionNamesFromJson(obj);
+    if (displayDimensionNames.length > 3) {
+      throw new Error('Number of spatial dimensions must be <= 3');
+    }
+    const {relativeDisplayScales: {value: relativeDisplayScales}} = this;
+    const {coordinateSpace} = relativeDisplayScales;
+    const dimensionIndices = new Int32Array(3);
+    dimensionIndices.fill(-1);
+    const {names} = coordinateSpace;
+    let rank = 0;
+    for (const name of displayDimensionNames) {
+      const index = names.indexOf(name);
+      if (index === -1) continue;
+      dimensionIndices[rank++] = index;
+    }
+    if (rank === 0) {
+      this.reset();
+      return;
+    }
+    this.default_ = false;
+    this.assignValue(relativeDisplayScales, rank, dimensionIndices);
+  }
+
+  get default() {
+    this.update();
+    return this.default_;
+  }
+
+  set default(value: boolean) {
+    if (this.default_ === value) return;
+    if (value) {
+      this.default_ = true;
+      this.setToDefault(this.relativeDisplayScales.value);
+    } else {
+      this.default_ = false;
+      this.changed.dispatch();
+    }
+  }
+
+  setDimensionIndices(rank: number, dimensionIndices: Int32Array) {
+    this.default_ = false;
+    this.assignValue(this.relativeDisplayScales.value, rank, dimensionIndices);
+  }
+
+  toJSON() {
+    if (this.default_) return undefined;
+    const {value} = this;
+    const displayDimensionNames: string[] = [];
+    const {rank, dimensionIndices, relativeDisplayScales: {coordinateSpace: {names}}} = value;
+    if (rank === 0) return undefined;
+    for (let i = 0; i < rank; ++i) {
+      displayDimensionNames[i] = names[dimensionIndices[i]];
+    }
+    return displayDimensionNames;
+  }
+
+  assign(other: TrackableDisplayDimensions) {
+    if (other.default) {
+      this.default = true;
+    } else {
+      const {rank, dimensionIndices} = other.value;
+      this.setDimensionIndices(rank, dimensionIndices);
+    }
+  }
+}
+
+export class LinkedDisplayDimensions extends SimpleLinkedBase<TrackableDisplayDimensions> {
+  value = makeSimpleLinked(
+      new TrackableDisplayDimensions(this.relativeDisplayScales.addRef()), this.peer, this.link, {
+        assign: (target, source) => target.assign(source),
+        isValid: () => true,
+      });
+  constructor(
+      peer: Owned<TrackableDisplayDimensions>,
+      public relativeDisplayScales: Owned<TrackableRelativeDisplayScales>) {
+    super(peer);
+  }
+}
+
+export class DisplayPose extends RefCounted {
+  changed = new NullarySignal();
+  constructor(
+      public position: Owned<Position>, public displayDimensions: Owned<TrackableDisplayDimensions>,
+      public orientation: Owned<OrientationState>) {
+    super();
+    this.registerDisposer(position);
+    this.registerDisposer(orientation);
+    this.registerDisposer(position.changed.add(this.changed.dispatch));
+    this.registerDisposer(orientation.changed.add(this.changed.dispatch));
+    this.registerDisposer(displayDimensions.changed.add(this.changed.dispatch));
   }
 
   get valid() {
@@ -593,34 +898,53 @@ export class Pose extends RefCounted {
   reset() {
     this.position.reset();
     this.orientation.reset();
+    this.displayDimensions.reset();
   }
 
-  toMat4(mat: mat4) {
-    mat4.fromRotationTranslation(
-        mat, this.orientation.orientation, this.position.spatialCoordinates);
-  }
-
-  toJSON() {
-    let positionJson = this.position.toJSON();
-    let orientationJson = this.orientation.toJSON();
-    if (positionJson === undefined && orientationJson === undefined) {
-      return undefined;
+  updateDisplayPosition(fun: (pos: vec3) => boolean | void, temp: vec3 = tempVec3): boolean {
+    const {coordinateSpace: {value: coordinateSpace}, value: voxelCoordinates} = this.position;
+    const {dimensionIndices, rank} = this.displayDimensions.value;
+    if (coordinateSpace === undefined) return false;
+    temp.fill(0);
+    for (let i = 0; i < rank; ++i) {
+      const dim = dimensionIndices[i];
+      temp[i] = voxelCoordinates[dim];
     }
-    return {'position': positionJson, 'orientation': orientationJson};
+    if (fun(temp) !== false) {
+      for (let i = 0; i < rank; ++i) {
+        const dim = dimensionIndices[i];
+        voxelCoordinates[dim] = temp[i];
+      }
+      this.position.changed.dispatch();
+      return true;
+    }
+    return false;
   }
 
-  restoreState(obj: any) {
-    verifyObject(obj);
-    verifyObjectProperty(obj, 'position', x => {
-      if (x !== undefined) {
-        this.position.restoreState(x);
-      }
-    });
-    verifyObjectProperty(obj, 'orientation', x => {
-      if (x !== undefined) {
-        this.orientation.restoreState(x);
-      }
-    });
+  // Transform from view coordinates to global spatial coordinates.
+  toMat4(mat: mat4, zoom: number) {
+    mat4.fromQuat(mat, this.orientation.orientation);
+    const {value: voxelCoordinates} = this.position;
+    const {canonicalVoxelFactors, dimensionIndices} = this.displayDimensions.value;
+    for (let i = 0; i < 3; ++i) {
+      const dim = dimensionIndices[i];
+      const scale = zoom / canonicalVoxelFactors[i];
+      mat[i] *= scale;
+      mat[4 + i] *= scale;
+      mat[8 + i] *= scale;
+      mat[12 + i] = voxelCoordinates[dim] || 0;
+    }
+  }
+
+  toMat3(mat: mat3, zoom: number) {
+    mat3.fromQuat(mat, this.orientation.orientation);
+    const {canonicalVoxelFactors, rank} = this.displayDimensions.value;
+    for (let i = 0; i < rank; ++i) {
+      const scale = zoom / canonicalVoxelFactors[i];
+      mat[i] *= scale;
+      mat[3 + i] *= scale;
+      mat[6 + i] *= scale;
+    }
   }
 
   /**
@@ -632,29 +956,59 @@ export class Pose extends RefCounted {
     this.position.snapToVoxel();
     this.changed.dispatch();
   }
-  translateAbsolute(translation: vec3) {
-    vec3.add(this.position.spatialCoordinates, this.position.spatialCoordinates, translation);
-    this.position.changed.dispatch();
-  }
-  translateRelative(translation: vec3) {
+
+  translateDimensionRelative(dimensionIndex: number, adjustment: number) {
     if (!this.valid) {
       return;
     }
-    const temp = tempVec3;
-    vec3.transformQuat(temp, translation, this.orientation.orientation);
-    vec3.add(this.position.spatialCoordinates, this.position.spatialCoordinates, temp);
-    this.position.changed.dispatch();
+    const {position} = this;
+    const {value: voxelCoordinates} = position;
+    const {bounds: {lowerBounds, upperBounds}} = position.coordinateSpace.value;
+    let newValue = voxelCoordinates[dimensionIndex] + adjustment;
+    if (adjustment > 0) {
+      const bound = upperBounds[dimensionIndex];
+      if (Number.isFinite(bound)) {
+        newValue = Math.min(newValue, Math.ceil(bound - 1));
+      }
+    } else {
+      const bound = lowerBounds[dimensionIndex];
+      if (Number.isFinite(bound)) {
+        newValue = Math.max(newValue, Math.floor(bound));
+      }
+    }
+    voxelCoordinates[dimensionIndex] = newValue;
+    position.changed.dispatch();
   }
+
   translateVoxelsRelative(translation: vec3) {
     if (!this.valid) {
       return;
     }
-    var temp = vec3.create();
-    vec3.transformQuat(temp, translation, this.orientation.orientation);
-    vec3.multiply(temp, temp, this.position.voxelSize.size);
-    vec3.add(this.position.spatialCoordinates, this.position.spatialCoordinates, temp);
+    const temp = vec3.transformQuat(tempVec3, translation, this.orientation.orientation);
+    const {position} = this;
+    const {value: voxelCoordinates} = position;
+    const {dimensionIndices, rank} = this.displayDimensions.value;
+    const {bounds: {lowerBounds, upperBounds}} = position.coordinateSpace.value;
+    for (let i = 0; i < rank; ++i) {
+      const dim = dimensionIndices[i];
+      const adjustment = temp[i];
+      let newValue = voxelCoordinates[dim] + adjustment;
+      if (adjustment > 0) {
+        const bound = upperBounds[dim];
+        if (Number.isFinite(bound)) {
+          newValue = Math.min(newValue, Math.ceil(bound - 1));
+        }
+      } else {
+        const bound = lowerBounds[dim];
+        if (Number.isFinite(bound)) {
+          newValue = Math.max(newValue, Math.floor(bound));
+        }
+      }
+      voxelCoordinates[dim] = newValue;
+    }
     this.position.changed.dispatch();
   }
+
   rotateRelative(axis: vec3, angle: number) {
     var temp = quat.create();
     quat.setAxisAngle(temp, axis, angle);
@@ -663,138 +1017,292 @@ export class Pose extends RefCounted {
     this.orientation.changed.dispatch();
   }
 
-  rotateAbsolute(axis: vec3, angle: number, fixedPoint?: vec3) {
-    var temp = quat.create();
+  rotateAbsolute(axis: vec3, angle: number, fixedPoint: Float32Array) {
+    const {coordinateSpace: {value: coordinateSpace}, value: voxelCoordinates} = this.position;
+    if (coordinateSpace === undefined) return;
+    const {relativeDisplayScales: {factors: relativeDisplayScales}, dimensionIndices, rank} =
+        this.displayDimensions.value;
+    const {scales} = coordinateSpace;
+    const temp = quat.create();
     quat.setAxisAngle(temp, axis, angle);
-    var orientation = this.orientation.orientation;
-    if (fixedPoint !== undefined) {
-      // We want the coordinates in the transformed coordinate frame of the fixed point to remain
-      // the same after the rotation.
+    const orientation = this.orientation.orientation;
 
-      // We have the invariants:
-      // oldOrienation * fixedPointLocal + oldPosition == fixedPoint.
-      // newOrientation * fixedPointLocal + newPosition == fixedPoint.
+    // We want the coordinates in the transformed coordinate frame of the fixed point to remain
+    // the same after the rotation.
 
-      // Therefore, we compute fixedPointLocal by:
-      // fixedPointLocal == inverse(oldOrientation) * (fixedPoint - oldPosition).
-      let {spatialCoordinates} = this.position;
-      let fixedPointLocal = vec3.subtract(tempVec3, fixedPoint, spatialCoordinates);
-      let invOrientation = quat.invert(tempQuat, orientation);
-      vec3.transformQuat(fixedPointLocal, fixedPointLocal, invOrientation);
+    // We have the invariants:
+    // oldOrienation * fixedPointLocal + oldPosition == fixedPoint.
+    // newOrientation * fixedPointLocal + newPosition == fixedPoint.
 
-      // We then compute the newPosition by:
-      // newPosition := fixedPoint - newOrientation * fixedPointLocal.
-      quat.multiply(orientation, temp, orientation);
-      vec3.transformQuat(spatialCoordinates, fixedPointLocal, orientation);
-      vec3.subtract(spatialCoordinates, fixedPoint, spatialCoordinates);
-
-      this.position.changed.dispatch();
-    } else {
-      quat.multiply(orientation, temp, orientation);
+    // Therefore, we compute fixedPointLocal by:
+    // fixedPointLocal == inverse(oldOrientation) * (fixedPoint - oldPosition).
+    const fixedPointLocal = tempVec3;
+    tempVec3.fill(0);
+    for (let i = 0; i < rank; ++i) {
+      const dim = dimensionIndices[i];
+      const diff = fixedPoint[dim] - voxelCoordinates[dim];
+      fixedPointLocal[i] = diff * scales[dim] * relativeDisplayScales[dim];
     }
+    const invOrientation = quat.invert(tempQuat, orientation);
+    vec3.transformQuat(fixedPointLocal, fixedPointLocal, invOrientation);
+
+    // We then compute the newPosition by:
+    // newPosition := fixedPoint - newOrientation * fixedPointLocal.
+    quat.multiply(orientation, temp, orientation);
+    vec3.transformQuat(fixedPointLocal, fixedPointLocal, orientation);
+
+    for (let i = 0; i < rank; ++i) {
+      const dim = dimensionIndices[i];
+      voxelCoordinates[dim] =
+          fixedPoint[dim] - fixedPointLocal[i] / (scales[dim] * relativeDisplayScales[i]);
+    }
+    this.position.changed.dispatch();
     this.orientation.changed.dispatch();
+  }
+
+  translateNonDisplayDimension(nonSpatialDimensionIndex: number, adjustment: number) {
+    if (!this.valid) return;
+    const {dimensionIndices} = this.displayDimensions.value;
+    const {position} = this;
+    const rank = position.coordinateSpace.value.rank;
+    for (let i = 0; i < rank; ++i) {
+      if (dimensionIndices.indexOf(i) !== -1) continue;
+      if (nonSpatialDimensionIndex-- === 0) {
+        this.translateDimensionRelative(i, adjustment);
+        return;
+      }
+    }
   }
 }
 
-export class TrackableZoomState extends RefCounted {
-  constructor(private value_ = Number.NaN, public defaultValue = value_) {
-    super();
+export type TrackableZoomInterface = TrackableProjectionZoom|TrackableCrossSectionZoom;
+
+export class LinkedZoomState<T extends TrackableProjectionZoom|TrackableCrossSectionZoom> extends
+    LinkedBase<T> {
+  constructor(peer: Owned<T>, displayDimensions: Owned<TrackableDisplayDimensions>) {
+    super(peer);
+    this.value = (() => {
+      const self: T = new (peer.constructor as any)(displayDimensions);
+      const assign = (target: T, source: T) => {
+        target.assign(source);
+      };
+      const difference = (a: T, b: T) => {
+        return (a.value / b.value) * (a.canonicalVoxelPhysicalSize / b.canonicalVoxelPhysicalSize);
+      };
+      const add = (target: T, source: T, amount: number) => {
+        target.setPhysicalScale(source.value * amount, source.canonicalVoxelPhysicalSize);
+      };
+      const subtract = (target: T, source: T, amount: number) => {
+        target.setPhysicalScale(source.value / amount, source.canonicalVoxelPhysicalSize);
+      };
+      const isValid = (x: T) => x.coordinateSpace.value.valid && x.canonicalVoxelPhysicalSize !== 0;
+      makeLinked(self, this.peer, this.link, {assign, isValid, difference, add, subtract});
+      return self;
+    })();
   }
+}
+
+export function
+linkedStateLegacyJsonView<T extends LinkableState<T>&{readonly legacyJsonView: Trackable}>(
+    linked: LinkedBase<T>) {
+  return {
+    changed: linked.changed,
+    toJSON() {
+      return linked.toJSON();
+    },
+    restoreState(obj: unknown) {
+      restoreLinkedFromJson(linked.link, linked.value.legacyJsonView, obj);
+    },
+    reset() {
+      linked.reset();
+    },
+  };
+}
+
+abstract class TrackableZoom extends RefCounted implements Trackable,
+                                                           WatchableValueInterface<number> {
+  readonly changed = new NullarySignal();
+  private curCanonicalVoxelPhysicalSize = 0;
+  private curCoordinateSpace: CoordinateSpace = emptyInvalidCoordinateSpace;
+  private value_: number = Number.NaN;
+  protected legacyValue_: number = Number.NaN;
+
+  /**
+   * Zoom factor.  For cross section views, in canonical voxels per viewport pixel.  For projection
+   * views, in canonical voxels per viewport height (for orthographic projection).
+   */
   get value() {
+    this.handleCoordinateSpaceChanged();
     return this.value_;
   }
-  set value(newValue: number) {
-    if (newValue !== this.value_) {
-      this.value_ = newValue;
-      this.changed.dispatch();
-    }
+
+  set value(value: number) {
+    this.curCanonicalVoxelPhysicalSize = this.displayDimensions.value.canonicalVoxelPhysicalSize;
+    this.legacyValue_ = Number.NaN;
+    this.value_ = value;
+    this.changed.dispatch();
   }
-  changed = new NullarySignal();
+
+  get canonicalVoxelPhysicalSize() {
+    return this.displayDimensions.value.canonicalVoxelPhysicalSize;
+  }
+
+  /**
+   * Sets the zoom factor in the legacy units.  For cross section views, `1e-9` spatial units per
+   * viewport pixel.  For projection views, `2 * 100 * Math.tan(Math.PI / 8) * 1e-9` spatial units
+   * per viewport height (for orthographic projection).
+   */
+  set legacyValue(value: number) {
+    this.curCoordinateSpace = emptyInvalidCoordinateSpace;
+    this.value_ = Number.NaN;
+    this.legacyValue_ = value;
+    this.changed.dispatch();
+  }
+
+  get coordinateSpace() {
+    return this.displayDimensions.coordinateSpace;
+  }
+
+  constructor(public displayDimensions: Owned<TrackableDisplayDimensions>) {
+    super();
+    this.registerDisposer(displayDimensions);
+    this.registerDisposer(displayDimensions.changed.add(() => this.handleCoordinateSpaceChanged()));
+    this.registerDisposer(
+        displayDimensions.coordinateSpace.changed.add(() => this.handleCoordinateSpaceChanged()));
+    this.handleCoordinateSpaceChanged();
+  }
+
+  handleCoordinateSpaceChanged() {
+    const {value_} = this;
+    const {canonicalVoxelPhysicalSize} = this.displayDimensions.value;
+    const {curCanonicalVoxelPhysicalSize} = this;
+    const {curCoordinateSpace} = this;
+    const coordinateSpace = this.coordinateSpace.value;
+    if (canonicalVoxelPhysicalSize === curCanonicalVoxelPhysicalSize &&
+        curCoordinateSpace === coordinateSpace) {
+      return;
+    }
+    this.curCanonicalVoxelPhysicalSize = canonicalVoxelPhysicalSize;
+    this.curCoordinateSpace = coordinateSpace;
+    if (!Number.isNaN(value_)) {
+      if (curCanonicalVoxelPhysicalSize !== 0) {
+        this.value_ = value_ * (curCanonicalVoxelPhysicalSize / canonicalVoxelPhysicalSize);
+        this.changed.dispatch();
+      }
+      return;
+    }
+    if (!coordinateSpace.valid || canonicalVoxelPhysicalSize === 0) return;
+    this.value_ = this.getDefaultValue();
+    this.changed.dispatch();
+  }
+
+  protected abstract getDefaultValue(): number;
 
   toJSON() {
-    let {value_, defaultValue} = this;
-    if (Number.isNaN(value_) && Number.isNaN(defaultValue) || value_ === defaultValue) {
-      return undefined;
-    }
-    return value_;
+    const {value} = this;
+    return Number.isNaN(value) ? undefined : value;
   }
 
   restoreState(obj: any) {
-    if (typeof obj === 'number' && Number.isFinite(obj) && obj > 0) {
-      this.value = obj;
+    this.curCanonicalVoxelPhysicalSize = 0;
+    this.curCoordinateSpace = emptyInvalidCoordinateSpace;
+    this.legacyValue_ = Number.NaN;
+    if (obj === undefined) {
+      this.value_ = Number.NaN;
     } else {
-      this.value = this.defaultValue;
+      this.value_ = verifyFinitePositiveFloat(obj);
     }
+    this.changed.dispatch();
   }
 
   reset() {
-    this.value = this.defaultValue;
+    this.curCanonicalVoxelPhysicalSize = 0;
+    this.curCoordinateSpace = emptyInvalidCoordinateSpace;
+    this.value_ = Number.NaN;
+    this.legacyValue_ = Number.NaN;
+    this.changed.dispatch();
   }
 
-  zoomBy(factor: number) {
-    let {value_} = this;
-    if (Number.isNaN(value_)) {
-      return;
+  get legacyJsonView() {
+    const self = this;
+    return {
+      changed: self.changed,
+      toJSON() {
+        return self.toJSON();
+      },
+      reset() {
+        return self.reset();
+      },
+      restoreState(obj: any) {
+        self.legacyValue = verifyFinitePositiveFloat(obj);
+      },
+    };
+  }
+
+  setPhysicalScale(scaleInCanonicalVoxels: number, canonicalVoxelPhysicalSize: number) {
+    const curCanonicalVoxelPhysicalSize = this.curCanonicalVoxelPhysicalSize =
+        this.displayDimensions.value.canonicalVoxelPhysicalSize;
+    this.legacyValue_ = Number.NaN;
+    this.value_ =
+        scaleInCanonicalVoxels * (canonicalVoxelPhysicalSize / curCanonicalVoxelPhysicalSize);
+    this.changed.dispatch();
+  }
+
+  assign(source: TrackableZoomInterface) {
+    this.setPhysicalScale(source.value, source.canonicalVoxelPhysicalSize);
+  }
+}
+
+export class TrackableCrossSectionZoom extends TrackableZoom {
+  protected getDefaultValue() {
+    const {legacyValue_} = this;
+    if (Number.isNaN(legacyValue_)) {
+      // Default is 1 voxel per viewport pixel.
+      return 1;
     }
-    this.value = value_ * factor;
-  }
-
-  assign(other: TrackableZoomState) {
-    this.value = other.value;
-  }
-
-  get valid() {
-    return !Number.isNaN(this.value);
+    const {canonicalVoxelPhysicalSize} = this.displayDimensions.value;
+    return this.legacyValue_ * 1e-9 / canonicalVoxelPhysicalSize;
   }
 }
 
-export class LinkedZoomState extends LinkedBase<TrackableZoomState> {
-  value = (() => {
-    const self = new TrackableZoomState();
-    const assign = (target: TrackableZoomState, source: TrackableZoomState) =>
-        target.assign(source);
-    const difference = (a: TrackableZoomState, b: TrackableZoomState) => {
-      return a.value / b.value;
-    };
-    const add = (target: TrackableZoomState, source: TrackableZoomState, amount: number) => {
-      target.value = source.value * amount;
-    };
-    const subtract = (target: TrackableZoomState, source: TrackableZoomState, amount: number) => {
-      target.value = source.value / amount;
-    };
-    const isValid = (x: TrackableZoomState) => x.valid;
-    return makeLinked(self, this.peer, this.link, {assign, isValid, difference, add, subtract});
-  })();
-}
-
-export class NavigationState extends RefCounted {
-  changed = new NullarySignal();
-  zoomFactor: TrackableZoomState;
-
-  constructor(
-      public pose: Owned<Pose> = new Pose(),
-      zoomFactor: number|Owned<TrackableZoomState> = Number.NaN) {
-    super();
-    if (typeof zoomFactor === 'number') {
-      this.zoomFactor = new TrackableZoomState(zoomFactor);
+export class TrackableProjectionZoom extends TrackableZoom {
+  protected getDefaultValue() {
+    const {legacyValue_} = this;
+    if (!Number.isNaN(legacyValue_)) {
+      this.legacyValue_ = Number.NaN;
+      const {canonicalVoxelPhysicalSize} = this.displayDimensions.value;
+      return 2 * 100 * Math.tan(Math.PI / 8) * 1e-9 * legacyValue_ / canonicalVoxelPhysicalSize;
+    }
+    const {coordinateSpace: {value: {bounds: {lowerBounds, upperBounds}}}} = this;
+    const {canonicalVoxelFactors, dimensionIndices} = this.displayDimensions.value;
+    let value = canonicalVoxelFactors.reduce((x, factor, i) => {
+      const dim = dimensionIndices[i];
+      const extent = (upperBounds[dim] - lowerBounds[dim]) * factor;
+      return Math.max(x, extent);
+    }, 0);
+    if (!Number.isFinite(value)) {
+      // Default to showing 1024 voxels if there is no bounds information.
+      value = 1024;
     } else {
-      this.zoomFactor = zoomFactor;
+      value = 2 ** Math.ceil(Math.log2(value));
     }
+    return value;
+  }
+}
+
+export class NavigationState<Zoom extends TrackableZoomInterface = TrackableZoomInterface> extends
+    RefCounted {
+  changed = new NullarySignal();
+
+  constructor(public pose: Owned<DisplayPose>, public zoomFactor: Owned<Zoom>) {
+    super();
     this.registerDisposer(this.zoomFactor);
     this.registerDisposer(pose);
-    this.registerDisposer(this.pose.changed.add(() => {
-      this.changed.dispatch();
-    }));
-    this.registerDisposer(this.zoomFactor.changed.add(() => {
-      this.changed.dispatch();
-    }));
-    this.registerDisposer(this.voxelSize.changed.add(() => {
-      this.handleVoxelSizeChanged();
-    }));
-    this.handleVoxelSizeChanged();
+    this.registerDisposer(this.pose.changed.add(this.changed.dispatch));
+    this.registerDisposer(this.zoomFactor.changed.add(this.changed.dispatch));
   }
-  get voxelSize() {
-    return this.pose.position.voxelSize;
+  get coordinateSpace() {
+    return this.pose.position.coordinateSpace;
   }
 
   /**
@@ -805,64 +1313,27 @@ export class NavigationState extends RefCounted {
     this.zoomFactor.reset();
   }
 
-  private setZoomFactorFromVoxelSize() {
-    let {voxelSize} = this;
-    if (voxelSize.valid) {
-      this.zoomFactor.value = Math.min.apply(null, this.voxelSize.size);
-    }
-  }
-
-  /**
-   * Sets the zoomFactor to the minimum voxelSize if it is not already set.
-   */
-  private handleVoxelSizeChanged() {
-    if (!this.zoomFactor.valid) {
-      this.setZoomFactorFromVoxelSize();
-    }
-  }
   get position() {
     return this.pose.position;
   }
+  get displayDimensions() {
+    return this.pose.displayDimensions;
+  }
+  get relativeDisplayScales() {
+    return this.pose.displayDimensions.relativeDisplayScales;
+  }
   toMat4(mat: mat4) {
-    this.pose.toMat4(mat);
-    let zoom = this.zoomFactor.value;
-    mat4.scale(mat, mat, vec3.fromValues(zoom, zoom, zoom));
+    this.pose.toMat4(mat, this.zoomFactor.value);
+  }
+  toMat3(mat: mat3) {
+    this.pose.toMat3(mat, this.zoomFactor.value);
   }
 
   get valid() {
     return this.pose.valid;
   }
 
-  toJSON() {
-    let poseJson = this.pose.toJSON();
-    let zoomFactorJson = this.zoomFactor.toJSON();
-    if (poseJson === undefined && zoomFactorJson === undefined) {
-      return undefined;
-    }
-    return {'pose': poseJson, 'zoomFactor': zoomFactorJson};
-  }
-
-  restoreState(obj: any) {
-    try {
-      verifyObject(obj);
-      verifyObjectProperty(obj, 'pose', x => {
-        if (x !== undefined) {
-          this.pose.restoreState(x);
-        }
-      });
-      verifyObjectProperty(obj, 'zoomFactor', x => {
-        if (x !== undefined) {
-          this.zoomFactor.restoreState(x);
-        }
-      });
-      this.handleVoxelSizeChanged();
-      this.changed.dispatch();
-    } catch (parseError) {
-      this.reset();
-    }
-  }
-
   zoomBy(factor: number) {
-    this.zoomFactor.zoomBy(factor);
+    this.zoomFactor.value *= factor;
   }
 }

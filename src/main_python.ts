@@ -31,7 +31,7 @@ import {TrackableBasedStatusMessages} from 'neuroglancer/python_integration/remo
 import {ScreenshotHandler} from 'neuroglancer/python_integration/screenshots';
 import {ServerConnection} from 'neuroglancer/python_integration/server_connection';
 import {TrackableValue} from 'neuroglancer/trackable_value';
-import {bindDefaultCopyHandler, bindDefaultPasteHandler} from 'neuroglancer/ui/default_clipboard_handling';
+import {bindDefaultCopyHandler} from 'neuroglancer/ui/default_clipboard_handling';
 import {setDefaultInputEventBindings} from 'neuroglancer/ui/default_input_event_bindings';
 import {makeDefaultViewer} from 'neuroglancer/ui/default_viewer';
 import {UrlHashBinding} from 'neuroglancer/ui/url_hash_binding';
@@ -157,8 +157,8 @@ window.addEventListener('DOMContentLoaded', () => {
       element.style.height = `${value[1]}px`;
       const screenWidth = document.documentElement!.clientWidth;
       const screenHeight = document.documentElement!.clientHeight;
-      const scaleX = screenWidth/value[0];
-      const scaleY = screenHeight/value[1];
+      const scaleX = screenWidth / value[0];
+      const scaleY = screenHeight / value[1];
       const scale = Math.min(scaleX, scaleY);
       element.style.transform = `scale(${scale})`;
       element.style.transformOrigin = 'top left';
@@ -175,5 +175,4 @@ window.addEventListener('DOMContentLoaded', () => {
       state => serverConnection.sendActionNotification('screenshot', state));
 
   bindDefaultCopyHandler(viewer);
-  bindDefaultPasteHandler(viewer);
 });

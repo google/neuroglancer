@@ -19,23 +19,28 @@ import 'neuroglancer/annotation/line';
 import 'neuroglancer/annotation/point';
 import 'neuroglancer/annotation/ellipsoid';
 
-import {AnnotationBase, AnnotationSource, annotationTypes} from 'neuroglancer/annotation';
+import {AnnotationBase, AnnotationSource, annotationTypes, getAnnotationTypeHandler} from 'neuroglancer/annotation';
 import {AnnotationLayerState} from 'neuroglancer/annotation/annotation_layer_state';
 import {ANNOTATION_PERSPECTIVE_RENDER_LAYER_RPC_ID, ANNOTATION_RENDER_LAYER_RPC_ID, ANNOTATION_RENDER_LAYER_UPDATE_SEGMENTATION_RPC_ID} from 'neuroglancer/annotation/base';
 import {AnnotationGeometryData, MultiscaleAnnotationSource} from 'neuroglancer/annotation/frontend_source';
 import {AnnotationRenderContext, AnnotationRenderHelper, getAnnotationTypeRenderHandler} from 'neuroglancer/annotation/type_handler';
 import {ChunkState} from 'neuroglancer/chunk_manager/base';
 import {ChunkManager} from 'neuroglancer/chunk_manager/frontend';
-import {MouseSelectionState, VisibilityTrackedRenderLayer} from 'neuroglancer/layer';
+import {MouseSelectionState, VisibleLayerInfo} from 'neuroglancer/layer';
+import {DisplayDimensions} from 'neuroglancer/navigation_state';
 import {PerspectiveViewRenderContext, PerspectiveViewRenderLayer} from 'neuroglancer/perspective_view/render_layer';
+import {ChunkDisplayTransformParameters, ChunkTransformParameters, getChunkPositionFromCombinedGlobalLocalPositions, getChunkDisplayTransformParameters, getLayerDisplayDimensionMapping} from 'neuroglancer/render_coordinate_transform';
+import {ThreeDimensionalRenderContext, VisibilityTrackedRenderLayer} from 'neuroglancer/renderlayer';
 import {forEachVisibleSegment, getObjectKey} from 'neuroglancer/segmentation_display_state/base';
 import {SegmentationDisplayState} from 'neuroglancer/segmentation_display_state/frontend';
 import {SharedWatchableValue} from 'neuroglancer/shared_watchable_value';
-import {SliceViewPanelRenderLayer} from 'neuroglancer/sliceview/panel';
+import {SliceViewPanelRenderLayer} from 'neuroglancer/sliceview/renderlayer';
 import {WatchableValueInterface} from 'neuroglancer/trackable_value';
 import {binarySearch} from 'neuroglancer/util/array';
 import {Borrowed, Owned, RefCounted} from 'neuroglancer/util/disposable';
+import {ValueOrError} from 'neuroglancer/util/error';
 import {mat4} from 'neuroglancer/util/geom';
+import {MessageSeverity} from 'neuroglancer/util/message_list';
 import {NullarySignal} from 'neuroglancer/util/signal';
 import {Uint64} from 'neuroglancer/util/uint64';
 import {withSharedVisibility} from 'neuroglancer/visibility_priority/frontend';
@@ -76,26 +81,29 @@ function serializeAnnotationSet(
   }
   let totalBytes = 0;
   let numPickIds = 0;
+  const {rank} = annotationSet;
   const typeToOffset: number[] = [];
   for (const annotationType of annotationTypes) {
     typeToOffset[annotationType] = totalBytes;
     const count = typeToIds[annotationType].length;
-    const handler = getAnnotationTypeRenderHandler(annotationType);
-    totalBytes += count * handler.bytes;
-    numPickIds += handler.pickIdsPerInstance * count;
+    const renderHandler = getAnnotationTypeRenderHandler(annotationType);
+    const handler = getAnnotationTypeHandler(annotationType);
+    totalBytes += count * handler.serializedBytes(rank);
+    numPickIds += renderHandler.pickIdsPerInstance * count;
   }
   const data = new ArrayBuffer(totalBytes);
   for (const annotationType of annotationTypes) {
     const ids = typeToIds[annotationType];
-    const handler = getAnnotationTypeRenderHandler(annotationType);
-    const serializer = handler.serializer(data, typeToOffset[annotationType], ids.length);
+    const handler = getAnnotationTypeHandler(annotationType);
+    const serializer = handler.serializer(data, typeToOffset[annotationType], ids.length, rank);
     ids.forEach((id, index) => serializer(annotationSet.get(id)!, index));
   }
   return {typeToIds, typeToOffset, data, numPickIds};
 }
 
 @registerSharedObjectOwner(ANNOTATION_RENDER_LAYER_RPC_ID)
-class AnnotationLayerSharedObject extends withSharedVisibility(SharedObject) {
+class AnnotationLayerSharedObject extends withSharedVisibility
+(SharedObject) {
   constructor(
       public chunkManager: Borrowed<ChunkManager>,
       public source: Borrowed<MultiscaleAnnotationSource>,
@@ -157,7 +165,7 @@ export class AnnotationLayer extends RefCounted {
     return this.state.transform;
   }
   get hoverState() {
-    return this.state.hoverState;
+    return this.state.displayState.hoverState;
   }
 
   private segmentationState: SegmentationDisplayState|undefined|null;
@@ -177,7 +185,7 @@ export class AnnotationLayer extends RefCounted {
   }
 
   private handleSegmentationChanged = (() => {
-    if (this.state.filterBySegmentation.value) {
+    if (this.state.displayState.filterBySegmentation.value) {
       this.handleChangeAffectingBuffer();
     }
   });
@@ -197,10 +205,11 @@ export class AnnotationLayer extends RefCounted {
     this.registerDisposer(state);
     this.buffer = this.registerDisposer(new Buffer(chunkManager.gl));
     this.registerDisposer(this.source.changed.add(this.handleChangeAffectingBuffer));
-    this.registerDisposer(state.filterBySegmentation.changed.add(this.handleChangeAffectingBuffer));
+    this.registerDisposer(
+        state.displayState.filterBySegmentation.changed.add(this.handleChangeAffectingBuffer));
     this.registerDisposer(() => this.unregisterSegmentationState());
-    this.registerDisposer(state.segmentationState.changed.add(() => {
-      const segmentationState = state.segmentationState.value;
+    this.registerDisposer(state.displayState.segmentationState.changed.add(() => {
+      const segmentationState = state.displayState.segmentationState.value;
       if (segmentationState !== this.segmentationState) {
         this.unregisterSegmentationState();
         if (segmentationState != null) {
@@ -213,10 +222,12 @@ export class AnnotationLayer extends RefCounted {
     }));
     if (!(this.source instanceof AnnotationSource)) {
       this.sharedObject = this.registerDisposer(new AnnotationLayerSharedObject(
-          chunkManager, this.source, state.segmentationState, state.filterBySegmentation));
+          chunkManager, this.source, state.displayState.segmentationState,
+          state.displayState.filterBySegmentation));
     }
-    this.registerDisposer(this.state.color.changed.add(this.redrawNeeded.dispatch));
-    this.registerDisposer(this.state.fillOpacity.changed.add(this.redrawNeeded.dispatch));
+    this.registerDisposer(this.state.displayState.color.changed.add(this.redrawNeeded.dispatch));
+    this.registerDisposer(
+        this.state.displayState.fillOpacity.changed.add(this.redrawNeeded.dispatch));
     this.registerDisposer(this.hoverState.changed.add(this.redrawNeeded.dispatch));
     this.registerDisposer(this.transform.changed.add(this.redrawNeeded.dispatch));
   }
@@ -233,8 +244,9 @@ export class AnnotationLayer extends RefCounted {
         this.generation = generation;
         const {data, typeToIds, typeToOffset, numPickIds} = serializeAnnotationSet(
             source,
-            this.state.filterBySegmentation.value ? segmentationFilter(this.segmentationState) :
-                                                    undefined);
+            this.state.displayState.filterBySegmentation.value ?
+                segmentationFilter(this.segmentationState) :
+                undefined);
         this.data = new Uint8Array(data);
         this.buffer.setData(this.data);
         this.typeToIds = typeToIds;
@@ -265,6 +277,22 @@ interface AnnotationGeometryDataInterface {
   typeToOffset: number[]|undefined;
 }
 
+interface AttachmentStateBase {
+  chunkTransform: ValueOrError<ChunkTransformParameters>;
+  displayDimensions: DisplayDimensions;
+  valid: boolean;
+}
+
+interface ValidAttachmentState extends AttachmentStateBase {
+  valid: true;
+  chunkTransform: ChunkTransformParameters;
+  chunkRenderTransform: ChunkDisplayTransformParameters;
+  renderSubspaceTransform: Float32Array;
+  modelClipBounds: Float32Array;
+}
+
+type AttachmentState = AttachmentStateBase|ValidAttachmentState;
+
 function AnnotationRenderLayer<TBase extends {
   new (...args: any[]): VisibilityTrackedRenderLayer &
   {
@@ -273,7 +301,28 @@ function AnnotationRenderLayer<TBase extends {
 }>(Base: TBase, renderHelperType: 'sliceViewRenderHelper'|'perspectiveViewRenderHelper') {
   class C extends Base {
     base: AnnotationLayer;
+    private curRank: number = -1;
     private renderHelpers: AnnotationRenderHelper[] = [];
+    private tempChunkPosition: Float32Array;
+
+    private handleRankChanged() {
+      const {rank} = this.base.source;
+      if (rank === this.curRank) return;
+      this.curRank = rank;
+      this.tempChunkPosition = new Float32Array(rank);
+      const {renderHelpers, gl} = this;
+      for (const oldHelper of renderHelpers) {
+        oldHelper.dispose();
+      }
+      for (const annotationType of annotationTypes) {
+        const handler = getAnnotationTypeRenderHandler(annotationType);
+        const renderHelperConstructor = handler[renderHelperType];
+        const helper = renderHelpers[annotationType] = new renderHelperConstructor(gl, rank);
+        helper.pickIdsPerInstance = handler.pickIdsPerInstance;
+        helper.targetIsSliceView = renderHelperType === 'sliceViewRenderHelper';
+      }
+    }
+
     constructor(...args: any[]) {
       super(...args);
       const base = this.registerDisposer(this.base);
@@ -281,20 +330,79 @@ function AnnotationRenderLayer<TBase extends {
       if (baseVisibility !== undefined) {
         this.registerDisposer(baseVisibility.add(this.visibility));
       }
+      this.registerDisposer(() => {
+        for (const helper of this.renderHelpers) {
+          helper.dispose();
+        }
+      });
       this.role = base.state.role;
-      const {renderHelpers, gl} = this;
-      for (const annotationType of annotationTypes) {
-        const handler = getAnnotationTypeRenderHandler(annotationType);
-        const renderHelperConstructor = handler[renderHelperType];
-        const helper = renderHelpers[annotationType] =
-            this.registerDisposer(new renderHelperConstructor(gl));
-        helper.pickIdsPerInstance = handler.pickIdsPerInstance;
-        helper.targetIsSliceView = renderHelperType === 'sliceViewRenderHelper';
+      this.registerDisposer(base.redrawNeeded.add(this.redrawNeeded.dispatch));
+      this.handleRankChanged();
+    }
+
+    get chunkTransform() {
+      return this.base.state.chunkTransform.value;
+    }
+
+    private updateAttachmentState(
+        attachment: VisibleLayerInfo<AttachmentState>,
+        displayDimensions: DisplayDimensions): boolean {
+      this.handleRankChanged();
+      let {state} = attachment;
+      const {chunkTransform} = this;
+      if (state !== undefined && state.chunkTransform === chunkTransform &&
+          state.displayDimensions === displayDimensions) {
+        return state.valid;
       }
-      this.registerDisposer(base.redrawNeeded.add(() => {
-        this.redrawNeeded.dispatch();
-      }));
-      this.setReady(true);
+      attachment.messages.clearMessages();
+      const returnError = (message: string) => {
+        attachment.messages.addMessage({severity: MessageSeverity.error, message});
+        attachment.state = {chunkTransform, displayDimensions, valid: false};
+        return false;
+      };
+      if (chunkTransform.error !== undefined) {
+        return returnError(chunkTransform.error);
+      }
+      const {unpaddedRank} = chunkTransform.modelTransform;
+      const modelClipBounds = new Float32Array(unpaddedRank * 2);
+      const renderSubspaceTransform = new Float32Array(unpaddedRank * 3);
+      const layerRenderDimensionMapping = getLayerDisplayDimensionMapping(
+          chunkTransform.modelTransform, displayDimensions.dimensionIndices);
+      let chunkRenderTransform: ChunkDisplayTransformParameters;
+      try {
+        chunkRenderTransform =
+            getChunkDisplayTransformParameters(chunkTransform, layerRenderDimensionMapping);
+      } catch (e) {
+        return returnError((e as Error).message);
+      }
+      renderSubspaceTransform.fill(0);
+      modelClipBounds.fill(1, unpaddedRank);
+      const {numChunkDisplayDims, chunkDisplayDimensionIndices} = chunkRenderTransform;
+      for (let i = 0; i < numChunkDisplayDims; ++i) {
+        const chunkDim = chunkDisplayDimensionIndices[i];
+        modelClipBounds[unpaddedRank + chunkDim] = 0;
+        renderSubspaceTransform[chunkDim * 3 + i] = 1;
+      }
+      attachment.state = {
+        chunkTransform,
+        displayDimensions,
+        valid: true,
+        modelClipBounds,
+        renderSubspaceTransform,
+        chunkRenderTransform
+      };
+      return true;
+    }
+
+    private updateModelClipBounds(
+        renderContext: ThreeDimensionalRenderContext, state: ValidAttachmentState) {
+      const {modelClipBounds} = state;
+      const rank = this.curRank;
+      const {chunkTransform} = state;
+      getChunkPositionFromCombinedGlobalLocalPositions(
+          modelClipBounds.subarray(0, rank), renderContext.globalPosition,
+          this.base.state.localPosition.value, chunkTransform.layerRank,
+          chunkTransform.combinedGlobalLocalToChunkTransform);
     }
 
     get gl() {
@@ -302,7 +410,8 @@ function AnnotationRenderLayer<TBase extends {
     }
 
     drawGeometryChunkData(
-        chunk: AnnotationGeometryData, renderContext: PerspectiveViewRenderContext) {
+        chunk: AnnotationGeometryData, renderContext: PerspectiveViewRenderContext,
+        state: ValidAttachmentState) {
       if (!chunk.bufferValid) {
         let {buffer} = chunk;
         if (buffer === undefined) {
@@ -311,12 +420,14 @@ function AnnotationRenderLayer<TBase extends {
         buffer.setData(chunk.data!);
         chunk.bufferValid = true;
       }
-      this.drawGeometry(chunk, renderContext);
+      this.drawGeometry(chunk, renderContext, state);
     }
 
     drawGeometry(
-        chunk: AnnotationGeometryDataInterface, renderContext: PerspectiveViewRenderContext) {
+        chunk: AnnotationGeometryDataInterface, renderContext: PerspectiveViewRenderContext,
+        state: ValidAttachmentState) {
       const {base} = this;
+      const {chunkRenderTransform} = state;
       const typeToIds = chunk.typeToIds!;
       const typeToOffset = chunk.typeToOffset!;
       let pickId = 0;
@@ -324,8 +435,23 @@ function AnnotationRenderLayer<TBase extends {
         pickId = renderContext.pickIDs.register(this, chunk.numPickIds, 0, 0, chunk);
       }
       const hoverValue = base.hoverState.value;
-      const projectionMatrix =
-          mat4.multiply(tempMat, renderContext.dataToDevice, base.state.objectToGlobal);
+      const modelViewProjectionMatrix = mat4.multiply(
+          tempMat, renderContext.viewProjectionMat, chunkRenderTransform.displaySubspaceModelMatrix);
+      const context: AnnotationRenderContext = {
+        annotationLayer: base,
+        renderContext,
+        selectedIndex: 0,
+        basePickId: pickId,
+        buffer: chunk.buffer!,
+        bufferOffset: 0,
+        count: 0,
+        modelViewProjectionMatrix,
+        modelClipBounds: state.modelClipBounds,
+        subspaceMatrix: state.renderSubspaceTransform,
+        renderSubspaceModelMatrix: chunkRenderTransform.displaySubspaceModelMatrix,
+        renderSubspaceInvModelMatrix: chunkRenderTransform.displaySubspaceInvModelMatrix,
+      };
+
       for (const annotationType of annotationTypes) {
         const ids = typeToIds[annotationType];
         if (ids.length > 0) {
@@ -340,32 +466,31 @@ function AnnotationRenderLayer<TBase extends {
               // selectedIndex += hoverValue.partIndex;
             }
           }
-          const context: AnnotationRenderContext = {
-            annotationLayer: base,
-            renderContext,
-            selectedIndex,
-            basePickId: pickId,
-            buffer: chunk.buffer!,
-            bufferOffset: typeToOffset[annotationType],
-            count,
-            projectionMatrix,
-          };
+          context.count = count;
+          context.bufferOffset = typeToOffset[annotationType];
+          context.selectedIndex = selectedIndex;
           this.renderHelpers[annotationType].draw(context);
-          pickId += count * handler.pickIdsPerInstance;
+          context.basePickId += count * handler.pickIdsPerInstance;
         }
       }
     }
 
-    draw(renderContext: PerspectiveViewRenderContext) {
+    draw(
+        renderContext: PerspectiveViewRenderContext,
+        attachment: VisibleLayerInfo<AttachmentState>) {
+      if (!this.updateAttachmentState(attachment, renderContext.displayDimensions)) return;
+      if (this.curRank === 0) return;
+      const state = attachment.state as ValidAttachmentState;
+      this.updateModelClipBounds(renderContext, state);
       const {source} = this.base;
       if (source instanceof AnnotationSource) {
         const {base} = this;
         base.updateBuffer();
-        this.drawGeometry(base, renderContext);
+        this.drawGeometry(base, renderContext, state);
       } else {
-        this.drawGeometryChunkData(source.temporary.data!, renderContext);
-        if (this.base.state.filterBySegmentation.value) {
-          const segmentationState = this.base.state.segmentationState.value;
+        this.drawGeometryChunkData(source.temporary.data!, renderContext, state);
+        if (this.base.state.displayState.filterBySegmentation.value) {
+          const segmentationState = this.base.state.displayState.segmentationState.value;
           if (segmentationState == null) {
             return;
           }
@@ -374,17 +499,17 @@ function AnnotationRenderLayer<TBase extends {
             const key = getObjectKey(objectId);
             const chunk = chunks.get(key);
             if (chunk !== undefined) {
-              this.drawGeometryChunkData(chunk.data!, renderContext);
+              this.drawGeometryChunkData(chunk.data!, renderContext, state);
             }
           });
         } else {
           for (const alternatives of source.sources) {
-            for (const geometrySource of alternatives) {
+            for (const {chunkSource: geometrySource} of alternatives) {
               for (const chunk of geometrySource.chunks.values()) {
                 if (chunk.state !== ChunkState.GPU_MEMORY) {
                   continue;
                 }
-                this.drawGeometryChunkData(chunk.data!, renderContext);
+                this.drawGeometryChunkData(chunk.data!, renderContext, state);
               }
             }
           }
@@ -397,10 +522,14 @@ function AnnotationRenderLayer<TBase extends {
       const chunk = <AnnotationGeometryDataInterface>data;
       const typeToIds = chunk.typeToIds!;
       const typeToOffset = chunk.typeToOffset!;
+      const rank = this.curRank;
+      const chunkTransform = this.chunkTransform;
+      if (chunkTransform.error !== undefined) return;
       for (const annotationType of annotationTypes) {
         const ids = typeToIds[annotationType];
-        const handler = getAnnotationTypeRenderHandler(annotationType);
-        const {pickIdsPerInstance} = handler;
+        const renderHandler = getAnnotationTypeRenderHandler(annotationType);
+        const handler = getAnnotationTypeHandler(annotationType);
+        const {pickIdsPerInstance} = renderHandler;
         if (pickedOffset < ids.length * pickIdsPerInstance) {
           const instanceIndex = Math.floor(pickedOffset / pickIdsPerInstance);
           const id = ids[instanceIndex];
@@ -409,11 +538,32 @@ function AnnotationRenderLayer<TBase extends {
           mouseState.pickedAnnotationLayer = this.base.state;
           mouseState.pickedOffset = partIndex;
           mouseState.pickedAnnotationBuffer = chunk.data!.buffer;
-          mouseState.pickedAnnotationBufferOffset = chunk.data!.byteOffset + typeToOffset[annotationType] + instanceIndex * handler.bytes;
-          handler.snapPosition(
-              mouseState.position, this.base.state.objectToGlobal, mouseState.pickedAnnotationBuffer,
-              mouseState.pickedAnnotationBufferOffset,
-              partIndex);
+          mouseState.pickedAnnotationBufferOffset = chunk.data!.byteOffset +
+              typeToOffset[annotationType] + instanceIndex * handler.serializedBytes(rank);
+          const chunkPosition = this.tempChunkPosition;
+          const {chunkToLayerTransform, combinedGlobalLocalToChunkTransform, layerRank} =
+              chunkTransform;
+          const {globalToRenderLayerDimensions} = chunkTransform.modelTransform;
+          const {position: mousePosition} = mouseState;
+          if (!getChunkPositionFromCombinedGlobalLocalPositions(
+                  chunkPosition, mousePosition, this.base.state.localPosition.value, layerRank,
+                  combinedGlobalLocalToChunkTransform)) {
+            return;
+          }
+          renderHandler.snapPosition(
+              chunkPosition, mouseState.pickedAnnotationBuffer,
+              mouseState.pickedAnnotationBufferOffset, partIndex);
+          const globalRank = globalToRenderLayerDimensions.length;
+          for (let globalDim = 0; globalDim < globalRank; ++globalDim) {
+            const layerDim = globalToRenderLayerDimensions[globalDim];
+            if (layerDim === -1) continue;
+            let sum = chunkToLayerTransform[(rank + 1) * rank + layerDim];
+            for (let chunkDim = 0; chunkDim < rank; ++chunkDim) {
+              sum +=
+                  chunkPosition[chunkDim] * chunkToLayerTransform[chunkDim * (layerRank + 1) + layerDim];
+            }
+            mousePosition[globalDim] = sum;
+          }
           return;
         }
         pickedOffset -= ids.length * pickIdsPerInstance;
@@ -430,11 +580,11 @@ function AnnotationRenderLayer<TBase extends {
       if (!(source instanceof MultiscaleAnnotationSource)) {
         return true;
       }
-      if (!base.state.filterBySegmentation.value) {
+      if (!base.state.displayState.filterBySegmentation.value) {
         return true;
       }
 
-      const segmentationState = this.base.state.segmentationState.value;
+      const segmentationState = this.base.state.displayState.segmentationState.value;
       if (segmentationState === undefined) {
         // We are still waiting to attach segmentation.
         return false;
@@ -469,9 +619,10 @@ export class PerspectiveViewAnnotationLayer extends PerspectiveViewAnnotationLay
       sharedObject.RPC_TYPE_ID = ANNOTATION_PERSPECTIVE_RENDER_LAYER_RPC_ID;
       sharedObject.initializeCounterpart(rpc, {
         source: source.rpcId,
-        filterBySegmentation: this.registerDisposer(SharedWatchableValue.makeFromExisting(
-                                                        rpc, this.base.state.filterBySegmentation))
-                                  .rpcId
+        filterBySegmentation:
+            this.registerDisposer(SharedWatchableValue.makeFromExisting(
+                                      rpc, this.base.state.displayState.filterBySegmentation))
+                .rpcId
       });
       return sharedObject;
     }
@@ -484,9 +635,9 @@ export class PerspectiveViewAnnotationLayer extends PerspectiveViewAnnotationLay
     const {base} = this;
     const {source} = base;
     if (source instanceof MultiscaleAnnotationSource) {
-      if (!base.state.filterBySegmentation.value) {
+      if (!base.state.displayState.filterBySegmentation.value) {
         const geometrySource = source.sources[0][0];
-        const chunk = geometrySource.chunks.get('0,0,0');
+        const chunk = geometrySource.chunkSource.chunks.get('0,0,0');
         if (chunk === undefined || chunk.state !== ChunkState.GPU_MEMORY) {
           return false;
         }

@@ -30,7 +30,7 @@
  */
 
 import {RefCounted} from 'neuroglancer/util/disposable';
-import {mat4, transformVectorByMat4, vec3, vec3Key} from 'neuroglancer/util/geom';
+import {mat4, transformVectorByMat4Transpose, vec3, vec3Key} from 'neuroglancer/util/geom';
 import {Buffer} from 'neuroglancer/webgl/buffer';
 import {GL} from 'neuroglancer/webgl/context';
 import {ShaderBuilder, ShaderProgram} from 'neuroglancer/webgl/shader';
@@ -228,20 +228,25 @@ vec3 getBoundingBoxPlaneIntersectionVertexPosition(vec3 chunkSize, vec3 boxLower
       if (Math.abs(denom) > ORTHOGONAL_EPSILON) {
         let lambda = (uPlaneDistance - vec3.dot(v[0], uPlaneNormal)) / denom;
         if ((lambda >= -LAMBDA_EPSILON) && (lambda <= 1.0 + LAMBDA_EPSILON)) {
+          console.log(`vertex ${vertexIndex}, e = ${e}, good, lambda=${lambda}, denom=${denom}, v0=${v[0].join()}, vDir=${vDir.join()}`);
           lambda = Math.max(0, Math.min(1, lambda));
           vec3.scaleAndAdd(position, v[0], vDir, lambda);
           return position;
         } else {
           console.log(
-              `vertex ${vertexIndex}, e = ${e}, skipped, deom = ${denom}, ` +
-              `vDir = ${vec3Key(vDir)}, ` +
+              `vertex ${vertexIndex}, e = ${e}, skipped, denom = ${denom}, ` +
+              `vDir = ${vDir.join()}, v0=${v[0].join()}, v1=${v[1].join()}` +
               `uPlaneNormal = ${vec3Key(uPlaneNormal)}, ` +
               `lambda=${lambda}`);
         }
       } else {
         console.log(
             `vertex ${vertexIndex}, e = ${e}, skipped, deom = ${denom}, ` +
-            `vDir = ${vec3Key(vDir)}, uPlaneNormal = ${vec3Key(uPlaneNormal)}`);
+            `vDir = ${vec3Key(vDir)}, uPlaneNormal = ${vec3Key(uPlaneNormal)}, ` +
+            `uLowerClipBound=${uLowerClipBound.join()}, uUpperClipBound=${uUpperClipBound.join()}, ` +
+            `chunkSize=${chunkSize}, uVertexBasePosition(v0)=${uVertexBasePosition(vidx[0]).join()}, ` +
+            `uVertexBasePosition(v1)=${uVertexBasePosition(vidx[1]).join()}, ` +
+            `uTranslation=${uTranslation.join()}`);
       }
     }
     return undefined;
@@ -259,12 +264,13 @@ vec3 getBoundingBoxPlaneIntersectionVertexPosition(vec3 chunkSize, vec3 boxLower
   }
 
   setViewportPlane(
-      shader: ShaderProgram, viewportZAxis: vec3, viewportCenterPosition: vec3,
-      dataToObjectTransform: mat4) {
-    const localPlaneNormal = transformVectorByMat4(tempVec3, viewportZAxis, dataToObjectTransform);
+      shader: ShaderProgram, viewportNormalInGlobalCoordinates: vec3, viewportCenterPosition: vec3,
+      modelMatrix: mat4, invModelMatrix: mat4) {
+    const localPlaneNormal =
+        transformVectorByMat4Transpose(tempVec3, viewportNormalInGlobalCoordinates, modelMatrix);
+    vec3.normalize(localPlaneNormal, localPlaneNormal);
     const planeDistanceToOrigin = vec3.dot(
-        vec3.transformMat4(tempVec3b, viewportCenterPosition, dataToObjectTransform),
-        localPlaneNormal);
+        vec3.transformMat4(tempVec3b, viewportCenterPosition, invModelMatrix), localPlaneNormal);
     this.setPlane(shader, localPlaneNormal, planeDistanceToOrigin);
   }
 }

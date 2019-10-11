@@ -17,9 +17,9 @@
 import {Annotation, AnnotationType} from 'neuroglancer/annotation';
 import {AnnotationLayer} from 'neuroglancer/annotation/frontend';
 import {PerspectiveViewRenderContext} from 'neuroglancer/perspective_view/render_layer';
-import {SliceViewPanelRenderContext} from 'neuroglancer/sliceview/panel';
+import {SliceViewPanelRenderContext} from 'neuroglancer/sliceview/renderlayer';
 import {RefCounted} from 'neuroglancer/util/disposable';
-import {mat4, vec3} from 'neuroglancer/util/geom';
+import {mat4} from 'neuroglancer/util/geom';
 import {Buffer} from 'neuroglancer/webgl/buffer';
 import {GL} from 'neuroglancer/webgl/context';
 import {ShaderBuilder, ShaderProgram} from 'neuroglancer/webgl/shader';
@@ -32,7 +32,11 @@ export interface AnnotationRenderContext {
   count: number;
   basePickId: number;
   selectedIndex: number;
-  projectionMatrix: mat4;
+  modelViewProjectionMatrix: mat4;
+  subspaceMatrix: Float32Array;
+  renderSubspaceModelMatrix: mat4;
+  renderSubspaceInvModelMatrix: mat4;
+  modelClipBounds: Float32Array;
 }
 
 const tempPickID = new Float32Array(4);
@@ -41,7 +45,7 @@ export abstract class AnnotationRenderHelper extends RefCounted {
   pickIdsPerInstance: number;
   targetIsSliceView: boolean;
 
-  constructor(public gl: GL) {
+  constructor(public gl: GL, public rank: number) {
     super();
   }
 
@@ -84,12 +88,19 @@ if (selectedIndex == pickBaseOffset${
   }
 
   defineShader(builder: ShaderBuilder) {
+    const {rank} = this;
     builder.addUniform('highp vec4', 'uColor');
     builder.addUniform('highp vec4', 'uColorSelected');
     builder.addUniform('highp uint', 'uSelectedIndex');
     builder.addVarying('highp vec4', 'vColor');
-    // Transform from camera to clip coordinates.
-    builder.addUniform('highp mat4', 'uProjection');
+    // Transform from model coordinates to the rendered subspace.
+    builder.addUniform('highp vec3', 'uSubspaceMatrix', rank);
+    // Transform from the rendered subspace of the model coordinate space to clip coordinates.
+    builder.addUniform('highp mat4', 'uModelViewProjection');
+
+    // Specifies center vector and per-dimension scale in model coordinates used for
+    // clipping.
+    builder.addUniform('highp float', 'uModelClipBounds', rank * 2);
     builder.addUniform('highp uint', 'uPickID');
     builder.addVarying('highp uint', 'vPickID', 'flat');
 
@@ -102,6 +113,52 @@ void emitAnnotation(vec4 color) {
   emit(color, vPickID);
 }
 `);
+
+    const glsl_getSubspaceClipCoefficient = `
+float getSubspaceClipCoefficient(float modelPoint[${this.rank}]) {
+  float coefficient = 1.0;
+  for (int i = 0; i < ${rank}; ++i) {
+    float d = abs(modelPoint[i] - uModelClipBounds[i]) * uModelClipBounds[${rank} + i];
+    coefficient *= max(0.0, 1.0 - d);
+  }
+  return coefficient;
+}
+`;
+    builder.addVertexCode(glsl_getSubspaceClipCoefficient);
+    builder.addFragmentCode(glsl_getSubspaceClipCoefficient);
+    builder.addVertexCode(`
+vec3 projectModelVectorToSubspace(float modelPoint[${this.rank}]) {
+  vec3 result = vec3(0.0, 0.0, 0.0);
+  for (int i = 0; i < ${rank}; ++i) {
+    result += uSubspaceMatrix[i] * modelPoint[i];
+  }
+  return result;
+}
+
+float getMaxEndpointSubspaceClipCoefficient(float modelPointA[${this.rank}],  float modelPointB[${this.rank}]) {
+  float coefficient = 1.0;
+  for (int i = 0; i < ${rank}; ++i) {
+    float dA = abs(modelPointA[i] - uModelClipBounds[i]) * uModelClipBounds[${rank} + i];
+    float dB = abs(modelPointB[i] - uModelClipBounds[i]) * uModelClipBounds[${rank} + i];
+    coefficient *= max(0.0, 1.0 - min(dA, dB));
+  }
+  return coefficient;
+}
+
+float getMaxSubspaceClipCoefficient(float modelPointA[${this.rank}],  float modelPointB[${this.rank}]) {
+  float coefficient = 1.0;
+  for (int i = 0; i < ${rank}; ++i) {
+    float a = modelPointA[i];
+    float b = modelPointB[i];
+    float c = uModelClipBounds[i];
+    float x = clamp(c, min(a, b), max(a, b));
+    float d = abs(x - c) * uModelClipBounds[${rank} + i];
+    coefficient *= max(0.0, 1.0 - d);
+  }
+  return coefficient;
+}
+
+`);
   }
 
   enable(shader: ShaderProgram, context: AnnotationRenderContext, callback: () => void) {
@@ -109,13 +166,16 @@ void emitAnnotation(vec4 color) {
     const {gl} = this;
     const {renderContext} = context;
     const {annotationLayer} = context;
-    gl.uniformMatrix4fv(shader.uniform('uProjection'), false, context.projectionMatrix);
+    gl.uniform3fv(shader.uniform('uSubspaceMatrix'), context.subspaceMatrix);
+    gl.uniform1fv(shader.uniform('uModelClipBounds'), context.modelClipBounds);
+    gl.uniformMatrix4fv(
+        shader.uniform('uModelViewProjection'), false, context.modelViewProjectionMatrix);
     if (renderContext.emitPickID) {
       gl.uniform1ui(shader.uniform('uPickID'), context.basePickId);
     }
     if (renderContext.emitColor) {
       const colorVec4 = tempPickID;
-      const color = annotationLayer.state.color.value;
+      const color = annotationLayer.state.displayState.color.value;
       colorVec4[0] = color[0];
       colorVec4[1] = color[1];
       colorVec4[2] = color[2];
@@ -135,24 +195,17 @@ void emitAnnotation(vec4 color) {
   abstract draw(context: AnnotationRenderContext): void;
 }
 
+interface AnnotationRenderHelperConstructor {
+  new(gl: GL, rank: number): AnnotationRenderHelper;
+}
+
 interface AnnotationTypeRenderHandler<T extends Annotation> {
-  bytes: number;
-  serializer:
-      (buffer: ArrayBuffer, offset: number,
-       numAnnotations: number) => ((annotation: T, index: number) => void);
-  perspectiveViewRenderHelper: {
-    new(
-        gl: GL,
-        ): AnnotationRenderHelper;
-  };
-  sliceViewRenderHelper: {new(gl: GL): AnnotationRenderHelper;};
+  perspectiveViewRenderHelper: AnnotationRenderHelperConstructor;
+  sliceViewRenderHelper: AnnotationRenderHelperConstructor;
   pickIdsPerInstance: number;
-  getRepresentativePoint: (objectToData: mat4, annotation: T, partIndex: number) => vec3;
-  updateViaRepresentativePoint:
-      (oldAnnotation: T, position: vec3, dataToObject: mat4, partIndex: number) => T;
-  snapPosition:
-      (position: vec3, objectToData: mat4, data: ArrayBuffer, offset: number,
-       partIndex: number) => void;
+  getRepresentativePoint(out: Float32Array, annotation: T, partIndex: number): void;
+  updateViaRepresentativePoint(oldAnnotation: T, position: Float32Array, partIndex: number): T;
+  snapPosition(position: Float32Array, data: ArrayBuffer, offset: number, partIndex: number): void;
 }
 
 const annotationTypeRenderHandlers =

@@ -16,6 +16,11 @@
 
 label.perspective-panel-show-slice-views {
   pointer-events: none;
+  position: absolute;
+  right: 2px;
+  bottom: 2px;
+  font-family: sans-serif;
+  font-size: small;
 }
 
 input.perspective-panel-show-slice-views {

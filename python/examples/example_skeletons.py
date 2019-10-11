@@ -14,8 +14,8 @@ segmentation = np.arange(np.prod(shape), dtype=np.uint32).reshape(shape)
 
 
 class SkeletonSource(neuroglancer.skeleton.SkeletonSource):
-    def __init__(self):
-        super(SkeletonSource, self).__init__()
+    def __init__(self, dimensions):
+        super(SkeletonSource, self).__init__(dimensions)
         self.vertex_attributes['affinity'] = neuroglancer.skeleton.VertexAttributeInfo(
             data_type=np.float32,
             num_components=1,
@@ -26,8 +26,8 @@ class SkeletonSource(neuroglancer.skeleton.SkeletonSource):
         )
 
     def get_skeleton(self, i):
-        pos = np.unravel_index(i, shape, order='C')[::-1]
-        vertex_positions = [pos * voxel_size, pos * voxel_size + np.random.randn(3) * 300]
+        pos = np.unravel_index(i, shape, order='C')
+        vertex_positions = [pos, pos + np.random.randn(3) * 30]
         edges = [0, 1]
         return neuroglancer.skeleton.Skeleton(
             vertex_positions=vertex_positions,
@@ -36,15 +36,22 @@ class SkeletonSource(neuroglancer.skeleton.SkeletonSource):
 
 
 viewer = neuroglancer.Viewer()
+dimensions = neuroglancer.CoordinateSpace(
+    names=['x', 'y', 'z'],
+    units='nm',
+    scales=[10, 10, 10],
+)
 with viewer.txn() as s:
     s.layers.append(
         name='a',
         layer=neuroglancer.SegmentationLayer(
-            source=neuroglancer.LocalVolume(
-                data=segmentation,
-                voxel_size=voxel_size,
-                skeletons=SkeletonSource(),
-            ),
+            source=[
+                neuroglancer.LocalVolume(
+                    data=segmentation,
+                    dimensions=dimensions,
+                ),
+                SkeletonSource(dimensions),
+            ],
             skeleton_shader='void main() { emitRGB(colormapJet(affinity)); }',
             selected_alpha=0,
             not_selected_alpha=0,

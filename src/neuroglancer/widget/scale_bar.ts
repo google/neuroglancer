@@ -32,8 +32,11 @@
 import {TrackableValue} from 'neuroglancer/trackable_value';
 import {RefCounted} from 'neuroglancer/util/disposable';
 import {verifyFloat, verifyObjectProperty, verifyString} from 'neuroglancer/util/json';
+import {pickSiPrefix} from 'neuroglancer/util/si_units';
 import {GL} from 'neuroglancer/webgl/context';
 import {setTextureFromCanvas} from 'neuroglancer/webgl/texture';
+import {DisplayDimensions} from '../navigation_state';
+import {OffscreenCopyHelper} from '../webgl/offscreen';
 
 /**
  * Default set of allowed significand values.  1 is implicitly part of the set.
@@ -100,9 +103,14 @@ export class ScaleBarDimensions {
   targetLengthInPixels: number = 0;
 
   /**
-   * Pixel size in nanometers.
+   * Pixel size in base physical units.
    */
-  nanometersPerPixel: number = 0;
+  physicalSizePerPixel: number = 0;
+
+  /**
+   * Base physical unit, e.g. "m" (for meters) or "s" (for seconds).
+   */
+  physicalBaseUnit: string;
 
   // The following three fields are computed from the previous three fields.
 
@@ -117,28 +125,29 @@ export class ScaleBarDimensions {
   physicalLength: number;
   physicalUnit: string;
 
-  prevNanometersPerPixel: number = 0;
+  prevPhysicalSizePerPixel: number = 0;
   prevTargetLengthInPixels: number = 0;
+  prevPhysicalUnit: string = '\0';
 
   /**
-   * Updates physicalLength, physicalUnit, and lengthInPixels to be the optimal
-   * values corresponding
-   * to targetLengthInPixels and nanometersPerPixel.
+   * Updates physicalLength, physicalUnit, and lengthInPixels to be the optimal values corresponding
+   * to targetLengthInPixels and physicalSizePerPixel.
    *
    * @returns true if the scale bar has changed, false if it is unchanged.
    */
   update() {
-    let {nanometersPerPixel, targetLengthInPixels} = this;
-    if (this.prevNanometersPerPixel === nanometersPerPixel &&
-        this.prevTargetLengthInPixels === targetLengthInPixels) {
+    let {physicalSizePerPixel, targetLengthInPixels} = this;
+    if (this.prevPhysicalSizePerPixel === physicalSizePerPixel &&
+        this.prevTargetLengthInPixels === targetLengthInPixels &&
+        this.prevPhysicalUnit === this.physicalUnit) {
       return false;
     }
-    this.prevNanometersPerPixel = nanometersPerPixel;
+    this.prevPhysicalSizePerPixel = physicalSizePerPixel;
     this.prevTargetLengthInPixels = targetLengthInPixels;
-    const targetNanometers = targetLengthInPixels * nanometersPerPixel;
-    const exponent = Math.floor(Math.log(targetNanometers) / Math.LN10);
-    const tenToThePowerExponent = Math.pow(10, exponent);
-    const targetSignificand = targetNanometers / tenToThePowerExponent;
+    const targetPhysicalSize = targetLengthInPixels * physicalSizePerPixel;
+    const exponent = Math.floor(Math.log10(targetPhysicalSize));
+    const tenToThePowerExponent = 10 ** exponent;
+    const targetSignificand = targetPhysicalSize / tenToThePowerExponent;
 
     // Determine significand value in this.allowedSignificands that is closest
     // to targetSignificand.
@@ -153,25 +162,25 @@ export class ScaleBarDimensions {
       }
     }
 
-    const physicalNanometers = bestSignificand * tenToThePowerExponent;
-    const unit = pickLengthUnit(physicalNanometers);
-    this.lengthInPixels = Math.round(physicalNanometers / nanometersPerPixel);
-    this.physicalUnit = unit.unit;
-    this.physicalLength = physicalNanometers / unit.lengthInNanometers;
+    const physicalSize = bestSignificand * tenToThePowerExponent;
+    const siPrefix = pickSiPrefix(physicalSize);
+    this.lengthInPixels = Math.round(physicalSize / physicalSizePerPixel);
+    this.physicalUnit = `${siPrefix.prefix}${this.physicalBaseUnit}`;
+    this.physicalLength = bestSignificand * 10 ** (exponent - siPrefix.exponent);
     return true;
   }
 }
 
 function makeScaleBarTexture(
-    dimensions: ScaleBarDimensions, gl: GL, texture: WebGLTexture|null,
-    options: ScaleBarTextureOptions = defaultScaleBarTextureOptions) {
+    dimensions: ScaleBarDimensions, gl: GL, texture: WebGLTexture|null, label: string,
+    options: ScaleBarTextureOptions) {
   const canvas = document.createElement('canvas');
   const ctx = canvas.getContext('2d')!;
   const textHeight = options.textHeightInPixels * options.scaleFactor;
   const font = `bold ${textHeight}px ${options.fontName}`;
   ctx.font = font;
   ctx.fillStyle = 'white';
-  const text = `${dimensions.physicalLength} ${dimensions.physicalUnit}`;
+  const text = `${label}${dimensions.physicalLength} ${dimensions.physicalUnit}`;
   const textMetrics = ctx.measureText(text);
   const innerWidth = Math.max(dimensions.lengthInPixels, textMetrics.width);
   const barHeight = options.barHeightInPixels * options.scaleFactor;
@@ -197,23 +206,28 @@ export class ScaleBarTexture extends RefCounted {
   texture: WebGLTexture|null = null;
   width = 0;
   height = 0;
+  label = '';
+  factor = 1;
   private priorOptions: ScaleBarTextureOptions|undefined = undefined;
+  private prevLabel: string = '';
 
   constructor(public gl: GL, public dimensions = new ScaleBarDimensions()) {
     super();
   }
 
   update(options: ScaleBarTextureOptions) {
-    let {dimensions} = this;
+    const {dimensions, label} = this;
     let {texture} = this;
-    if (!dimensions.update() && texture !== null && options === this.priorOptions) {
+    if (!dimensions.update() && texture !== null && options === this.priorOptions &&
+        label == this.prevLabel) {
       return;
     }
     if (texture === null) {
       texture = this.texture = this.gl.createTexture();
     }
-    const {width, height} = makeScaleBarTexture(dimensions, this.gl, texture, options);
+    const {width, height} = makeScaleBarTexture(dimensions, this.gl, texture, label, options);
     this.priorOptions = options;
+    this.prevLabel = label;
     this.width = width;
     this.height = height;
   }
@@ -222,6 +236,82 @@ export class ScaleBarTexture extends RefCounted {
     this.gl.deleteTexture(this.texture);
     this.texture = null;
     super.disposed();
+  }
+}
+
+export class MultipleScaleBarTextures extends RefCounted {
+  private scaleBarCopyHelper = this.registerDisposer(OffscreenCopyHelper.get(this.gl));
+  private scaleBars: ScaleBarTexture[] = [];
+
+  constructor(public gl: GL) {
+    super();
+    for (let i = 0; i < 3; ++i) {
+      this.scaleBars.push(this.registerDisposer(new ScaleBarTexture(gl)));
+    }
+  }
+
+  draw(
+      viewportWidth: number, displayDimensions: DisplayDimensions, effectiveZoom: number,
+      options: ScaleBarOptions) {
+    const {scaleBars} = this;
+    const {
+      rank,
+      dimensionIndices,
+      relativeDisplayScales: {factors, coordinateSpace: {names, scales, units}},
+      canonicalVoxelFactors
+    } = displayDimensions;
+
+    const targetLengthInPixels = Math.min(
+        options.maxWidthFraction * viewportWidth, options.maxWidthInPixels * options.scaleFactor);
+
+    let numScaleBars = 0;
+
+    for (let i = 0; i < rank; ++i) {
+      const dim = dimensionIndices[i];
+      const unit = units[dim];
+      const factor = factors[dim];
+      let barIndex;
+      let scaleBar: ScaleBarTexture;
+      let scaleBarDimensions: ScaleBarDimensions;
+      for (barIndex = 0; barIndex < numScaleBars; ++barIndex) {
+        scaleBar = scaleBars[barIndex];
+        scaleBarDimensions = scaleBar.dimensions;
+        if (scaleBarDimensions.physicalBaseUnit === unit && scaleBar.factor === factor) {
+          break;
+        }
+      }
+      if (barIndex === numScaleBars) {
+        ++numScaleBars;
+        scaleBar = scaleBars[barIndex];
+        scaleBar.label = '';
+        scaleBarDimensions = scaleBar.dimensions;
+        scaleBar.factor = factor;
+        scaleBarDimensions.physicalBaseUnit = unit;
+        scaleBarDimensions.targetLengthInPixels = targetLengthInPixels;
+        scaleBarDimensions.physicalSizePerPixel =
+            scales[dim] * effectiveZoom / canonicalVoxelFactors[i];
+      }
+      scaleBar!.label += `${names[dim]} `;
+    }
+
+    const {gl, scaleBarCopyHelper} = this;
+
+    let bottomPixelOffset = options.bottomPixelOffset * options.scaleFactor;
+    for (let barIndex = numScaleBars - 1; barIndex >= 0; --barIndex) {
+      const scaleBar = scaleBars[barIndex];
+      if (numScaleBars === 1) {
+        scaleBar.label = '';
+      } else {
+        scaleBar.label += ': ';
+      }
+      scaleBar.update(options);
+      gl.viewport(
+          options.leftPixelOffset * options.scaleFactor, bottomPixelOffset, scaleBar.width,
+          scaleBar.height);
+      scaleBarCopyHelper.draw(scaleBar.texture);
+      bottomPixelOffset +=
+          scaleBar.height + options.marginPixelsBetweenScaleBars * options.scaleFactor;
+    }
   }
 }
 
@@ -239,6 +329,7 @@ export interface ScaleBarOptions extends ScaleBarTextureOptions {
   maxWidthFraction: number;
   leftPixelOffset: number;
   bottomPixelOffset: number;
+  marginPixelsBetweenScaleBars: number;
 }
 
 export const defaultScaleBarTextureOptions: ScaleBarTextureOptions = {
@@ -256,6 +347,7 @@ export const defaultScaleBarOptions: ScaleBarOptions = {
   maxWidthFraction: 0.25,
   leftPixelOffset: 10,
   bottomPixelOffset: 10,
+  marginPixelsBetweenScaleBars: 5,
 };
 
 function parseScaleBarOptions(obj: any): ScaleBarOptions {

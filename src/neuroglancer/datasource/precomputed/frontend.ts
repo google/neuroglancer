@@ -14,19 +14,23 @@
  * limitations under the License.
  */
 
-import {AnnotationSource, makeDataBoundsBoundingBox} from 'neuroglancer/annotation';
+import {makeDataBoundsBoundingBoxAnnotationSet} from 'neuroglancer/annotation';
 import {ChunkManager, WithParameters} from 'neuroglancer/chunk_manager/frontend';
-import {DataSource, RedirectError} from 'neuroglancer/datasource';
+import {BoundingBox, CoordinateSpace, makeCoordinateSpace, makeIdentityTransform, makeIdentityTransformedBoundingBox} from 'neuroglancer/coordinate_transform';
+import {CompleteUrlOptions, ConvertLegacyUrlOptions, DataSource, DataSourceProvider, DataSubsourceEntry, GetDataSourceOptions, NormalizeUrlOptions, RedirectError} from 'neuroglancer/datasource';
 import {DataEncoding, MeshSourceParameters, MultiscaleMeshMetadata, MultiscaleMeshSourceParameters, ShardingHashFunction, ShardingParameters, SkeletonMetadata, SkeletonSourceParameters, VolumeChunkEncoding, VolumeChunkSourceParameters} from 'neuroglancer/datasource/precomputed/base';
 import {VertexPositionFormat} from 'neuroglancer/mesh/base';
 import {MeshSource, MultiscaleMeshSource} from 'neuroglancer/mesh/frontend';
 import {VertexAttributeInfo} from 'neuroglancer/skeleton/base';
 import {SkeletonSource} from 'neuroglancer/skeleton/frontend';
-import {DataType, VolumeChunkSpecification, VolumeSourceOptions, VolumeType} from 'neuroglancer/sliceview/volume/base';
+import {SliceViewSingleResolutionSource} from 'neuroglancer/sliceview/frontend';
+import {DataType, makeDefaultVolumeChunkSpecifications, VolumeSourceOptions, VolumeType} from 'neuroglancer/sliceview/volume/base';
 import {MultiscaleVolumeChunkSource as GenericMultiscaleVolumeChunkSource, VolumeChunkSource} from 'neuroglancer/sliceview/volume/frontend';
+import {transposeNestedArrays} from 'neuroglancer/util/array';
 import {mat4, vec3} from 'neuroglancer/util/geom';
-import {fetchOk, parseSpecialUrl} from 'neuroglancer/util/http_request';
-import {parseArray, parseFixedLengthArray, parseIntVec, verifyEnumString, verifyFiniteFloat, verifyFinitePositiveFloat, verifyInt, verifyObject, verifyObjectProperty, verifyOptionalString, verifyPositiveInt, verifyString} from 'neuroglancer/util/json';
+import {completeHttpPath} from 'neuroglancer/util/http_path_completion';
+import {fetchOk, HttpError, parseSpecialUrl} from 'neuroglancer/util/http_request';
+import {parseArray, parseFixedLengthArray, parseQueryStringParameters, unparseQueryStringParameters, verifyEnumString, verifyFiniteFloat, verifyFinitePositiveFloat, verifyInt, verifyObject, verifyObjectProperty, verifyOptionalObjectProperty, verifyOptionalString, verifyPositiveInt, verifyString} from 'neuroglancer/util/json';
 
 class PrecomputedVolumeChunkSource extends
 (WithParameters(VolumeChunkSource, VolumeChunkSourceParameters)) {}
@@ -37,7 +41,7 @@ class PrecomputedMeshSource extends
 class PrecomputedMultiscaleMeshSource extends
 (WithParameters(MultiscaleMeshSource, MultiscaleMeshSourceParameters)) {}
 
-export class PrecomputedSkeletonSource extends
+class PrecomputedSkeletonSource extends
 (WithParameters(SkeletonSource, SkeletonSourceParameters)) {
   get skeletonVertexCoordinatesInVoxels() {
     return false;
@@ -64,23 +68,36 @@ function resolvePath(a: string, b: string) {
 class ScaleInfo {
   key: string;
   encoding: VolumeChunkEncoding;
-  resolution: vec3;
-  voxelOffset: vec3;
-  size: vec3;
-  chunkSizes: vec3[];
+  resolution: Float64Array;
+  voxelOffset: Float32Array;
+  size: Float32Array;
+  chunkSizes: Uint32Array[];
   compressedSegmentationBlockSize: vec3|undefined;
   sharding: ShardingParameters|undefined;
-  constructor(obj: any) {
+  constructor(obj: any, numChannels: number) {
     verifyObject(obj);
-    this.resolution = verifyObjectProperty(
-        obj, 'resolution', x => parseFixedLengthArray(vec3.create(), x, verifyFinitePositiveFloat));
-    this.voxelOffset = verifyObjectProperty(
-        obj, 'voxel_offset', x => x === undefined ? vec3.create() : parseIntVec(vec3.create(), x));
-    this.size = verifyObjectProperty(
-        obj, 'size', x => parseFixedLengthArray(vec3.create(), x, verifyPositiveInt));
+    const rank = (numChannels === 1) ? 3 : 4;
+    const resolution = this.resolution = new Float64Array(rank);
+    const voxelOffset = this.voxelOffset = new Float32Array(rank);
+    const size = this.size = new Float32Array(rank);
+    if (rank === 4) {
+      resolution[3] = 1;
+      size[3] = numChannels;
+    }
+    verifyObjectProperty(
+        obj, 'resolution',
+        x => parseFixedLengthArray(resolution.subarray(0, 3), x, verifyFinitePositiveFloat));
+    verifyOptionalObjectProperty(
+        obj, 'voxel_offset', x => parseFixedLengthArray(voxelOffset.subarray(0, 3), x, verifyInt));
+    verifyObjectProperty(
+        obj, 'size', x => parseFixedLengthArray(size.subarray(0, 3), x, verifyPositiveInt));
     this.chunkSizes = verifyObjectProperty(
-        obj, 'chunk_sizes',
-        x => parseArray(x, y => parseFixedLengthArray(vec3.create(), y, verifyPositiveInt)));
+        obj, 'chunk_sizes', x => parseArray(x, y => {
+                              const chunkSize = new Uint32Array(rank);
+                              if (rank === 4) chunkSize[3] = numChannels;
+                              parseFixedLengthArray(chunkSize.subarray(0, 3), y, verifyPositiveInt);
+                              return chunkSize;
+                            }));
     if (this.chunkSizes.length === 0) {
       throw new Error('No chunk sizes specified.');
     }
@@ -99,84 +116,115 @@ class ScaleInfo {
   }
 }
 
-export class MultiscaleVolumeChunkSource implements GenericMultiscaleVolumeChunkSource {
+interface MultiscaleVolumeInfo {
   dataType: DataType;
-  numChannels: number;
   volumeType: VolumeType;
   mesh: string|undefined;
   skeletons: string|undefined;
   scales: ScaleInfo[];
+  modelSpace: CoordinateSpace;
+}
 
-  getMeshSource() {
-    const {mesh} = this;
-    if (mesh !== undefined) {
-      return getMeshSource(this.chunkManager, resolvePath(this.url, mesh));
-    }
-    const {skeletons} = this;
-    if (skeletons !== undefined) {
-      return getSkeletonSource(this.chunkManager, resolvePath(this.url, skeletons));
-    }
-    return null;
+function parseMultiscaleVolumeInfo(obj: unknown): MultiscaleVolumeInfo {
+  verifyObject(obj);
+  const dataType = verifyObjectProperty(obj, 'data_type', x => verifyEnumString(x, DataType));
+  const numChannels = verifyObjectProperty(obj, 'num_channels', verifyPositiveInt);
+  const volumeType = verifyObjectProperty(obj, 'type', x => verifyEnumString(x, VolumeType));
+  const mesh = verifyObjectProperty(obj, 'mesh', verifyOptionalString);
+  const skeletons = verifyObjectProperty(obj, 'skeletons', verifyOptionalString);
+  const scaleInfos =
+      verifyObjectProperty(obj, 'scales', x => parseArray(x, y => new ScaleInfo(y, numChannels)));
+  if (scaleInfos.length === 0) throw new Error('Expected at least one scale');
+  const baseScale = scaleInfos[0];
+  const rank = (numChannels === 1) ? 3 : 4;
+  const scales = new Float64Array(rank);
+  const lowerBounds = new Float64Array(rank);
+  const upperBounds = new Float64Array(rank);
+  const names = ['x', 'y', 'z'];
+  const units = ['m', 'm', 'm'];
+
+  for (let i = 0; i < 3; ++i) {
+    scales[i] = baseScale.resolution[i] / 1e9;
+    lowerBounds[i] = baseScale.voxelOffset[i];
+    upperBounds[i] = lowerBounds[i] + baseScale.size[i];
+  }
+  if (rank === 4) {
+    scales[3] = 1;
+    upperBounds[3] = numChannels;
+    names[3] = 'c^';
+    units[3] = '';
+  }
+  const box: BoundingBox = {lowerBounds, upperBounds};
+  const modelSpace = makeCoordinateSpace({
+    rank,
+    names,
+    units,
+    scales,
+    boundingBoxes: [makeIdentityTransformedBoundingBox(box)],
+  });
+  return {dataType, volumeType, mesh, skeletons, scales: scaleInfos, modelSpace};
+}
+
+class MultiscaleVolumeChunkSource extends GenericMultiscaleVolumeChunkSource {
+  get dataType() {
+    return this.info.dataType;
   }
 
-  constructor(public chunkManager: ChunkManager, public url: string, obj: any) {
-    verifyObject(obj);
-    const redirect = verifyObjectProperty(obj, 'redirect', verifyOptionalString);
-    if (redirect !== undefined) {
-      throw new RedirectError(redirect);
-    }
-    const t = verifyObjectProperty(obj, '@type', verifyOptionalString);
-    if (t !== undefined && t !== 'neuroglancer_multiscale_volume') {
-      throw new Error(`Invalid type: ${JSON.stringify(t)}`);
-    }
-    this.dataType = verifyObjectProperty(obj, 'data_type', x => verifyEnumString(x, DataType));
-    this.numChannels = verifyObjectProperty(obj, 'num_channels', verifyPositiveInt);
-    this.volumeType = verifyObjectProperty(obj, 'type', x => verifyEnumString(x, VolumeType));
-    this.mesh = verifyObjectProperty(obj, 'mesh', verifyOptionalString);
-    this.skeletons = verifyObjectProperty(obj, 'skeletons', verifyOptionalString);
-    this.scales = verifyObjectProperty(obj, 'scales', x => parseArray(x, y => new ScaleInfo(y)));
+  get volumeType() {
+    return this.info.volumeType;
+  }
+
+  get rank() {
+    return this.info.modelSpace.rank;
+  }
+
+  constructor(chunkManager: ChunkManager, public url: string, public info: MultiscaleVolumeInfo) {
+    super(chunkManager);
   }
 
   getSources(volumeSourceOptions: VolumeSourceOptions) {
-    return this.scales.map(scaleInfo => {
-      return VolumeChunkSpecification
-          .getDefaults({
-            voxelSize: scaleInfo.resolution,
-            dataType: this.dataType,
-            numChannels: this.numChannels,
-            transform: mat4.fromTranslation(
-                mat4.create(),
-                vec3.multiply(vec3.create(), scaleInfo.resolution, scaleInfo.voxelOffset)),
-            upperVoxelBound: scaleInfo.size,
-            volumeType: this.volumeType,
-            chunkDataSizes: scaleInfo.chunkSizes,
-            baseVoxelOffset: scaleInfo.voxelOffset,
-            compressedSegmentationBlockSize: scaleInfo.compressedSegmentationBlockSize,
-            volumeSourceOptions,
-          })
-          .map(spec => this.chunkManager.getChunkSource(PrecomputedVolumeChunkSource, {
-            spec,
-            parameters: {
-              url: resolvePath(this.url, scaleInfo.key),
-              encoding: scaleInfo.encoding,
-              sharding: scaleInfo.sharding,
-            }
-          }));
-    });
-  }
-
-  getStaticAnnotations() {
-    const baseScale = this.scales[0];
-    const annotationSet =
-        new AnnotationSource(mat4.fromScaling(mat4.create(), baseScale.resolution));
-    annotationSet.readonly = true;
-    annotationSet.add(makeDataBoundsBoundingBox(
-        baseScale.voxelOffset, vec3.add(vec3.create(), baseScale.voxelOffset, baseScale.size)));
-    return annotationSet;
+    const modelResolution = this.info.scales[0].resolution;
+    const {rank} = this;
+    return transposeNestedArrays(this.info.scales.map(scaleInfo => {
+      const {resolution} = scaleInfo;
+      const stride = rank + 1;
+      const chunkToMultiscaleTransform = new Float32Array(stride * stride);
+      chunkToMultiscaleTransform[chunkToMultiscaleTransform.length - 1] = 1;
+      for (let i = 0; i < 3; ++i) {
+        const relativeScale = resolution[i] / modelResolution[i];
+        chunkToMultiscaleTransform[stride * i + i] = relativeScale;
+        chunkToMultiscaleTransform[stride * rank + i] = scaleInfo.voxelOffset[i] * relativeScale;
+      }
+      if (rank === 4) {
+        chunkToMultiscaleTransform[stride * 3 + 3] = 1;
+      }
+      return makeDefaultVolumeChunkSpecifications({
+               rank,
+               dataType: this.dataType,
+               chunkToMultiscaleTransform,
+               upperVoxelBound: scaleInfo.size,
+               volumeType: this.volumeType,
+               chunkDataSizes: scaleInfo.chunkSizes,
+               baseVoxelOffset: scaleInfo.voxelOffset,
+               compressedSegmentationBlockSize: scaleInfo.compressedSegmentationBlockSize,
+               volumeSourceOptions,
+             })
+          .map((spec): SliceViewSingleResolutionSource<VolumeChunkSource> => ({
+                 chunkSource: this.chunkManager.getChunkSource(PrecomputedVolumeChunkSource, {
+                   spec,
+                   parameters: {
+                     url: resolvePath(this.url, scaleInfo.key),
+                     encoding: scaleInfo.encoding,
+                     sharding: scaleInfo.sharding,
+                   }
+                 }),
+                 chunkToMultiscaleTransform,
+               }));
+    }));
   }
 }
 
-export function getShardedMeshSource(chunkManager: ChunkManager, parameters: MeshSourceParameters) {
+function getLegacyMeshSource(chunkManager: ChunkManager, parameters: MeshSourceParameters) {
   return chunkManager.getChunkSource(PrecomputedMeshSource, {parameters});
 }
 
@@ -206,18 +254,20 @@ function parseMeshMetadata(data: any): MultiscaleMeshMetadata {
   return {lodScaleMultiplier, transform, sharding, vertexQuantizationBits};
 }
 
-function getMeshMetadata(
+async function getMeshMetadata(
     chunkManager: ChunkManager, url: string): Promise<MultiscaleMeshMetadata|undefined> {
-  return chunkManager.memoize.getUncounted(
-      {'type': 'precomputed:MeshSource', url},
-      () => fetchOk(`${url}/info`)
-                .then(
-                    response => {
-                      return response.json().then(value => parseMeshMetadata(value));
-                    },
-                    // If we fail to fetch the info file, assume it is the legacy
-                    // single-resolution mesh format.
-                    () => undefined));
+  let metadata: any;
+  try {
+    metadata = await getJsonMetadata(chunkManager, url);
+  } catch (e) {
+    if (e instanceof HttpError && e.status === 404) {
+      // If we fail to fetch the info file, assume it is the legacy
+      // single-resolution mesh format.
+      return undefined;
+    }
+    throw e;
+  }
+  return parseMeshMetadata(metadata);
 }
 
 function parseShardingEncoding(y: any): DataEncoding {
@@ -271,20 +321,21 @@ function parseSkeletonMetadata(data: any): SkeletonMetadata {
   return {transform, vertexAttributes, sharding};
 }
 
-function getSkeletonMetadata(
+async function getSkeletonMetadata(
     chunkManager: ChunkManager, url: string): Promise<SkeletonMetadata> {
-  return chunkManager.memoize.getUncounted(
-      {'type': 'precomputed:SkeletonSource', url}, async () => {
-        const response = await fetchOk(`${url}/info`);
-        const value = await response.json();
-        return parseSkeletonMetadata(value);
-      });
+  const metadata = await getJsonMetadata(chunkManager, url);
+  return parseSkeletonMetadata(metadata);
+}
+
+function getDefaultCoordinateSpace() {
+  return makeCoordinateSpace(
+      {names: ['x', 'y', 'z'], units: ['m', 'm', 'm'], scales: Float64Array.of(1e-9, 1e-9, 1e-9)});
 }
 
 async function getMeshSource(chunkManager: ChunkManager, url: string) {
   const metadata = await getMeshMetadata(chunkManager, url);
   if (metadata === undefined) {
-    return getShardedMeshSource(chunkManager, {url, lod: 0});
+    return {source: getLegacyMeshSource(chunkManager, {url, lod: 0}), transform: mat4.create()};
   }
   let vertexPositionFormat: VertexPositionFormat;
   const {vertexQuantizationBits} = metadata;
@@ -295,47 +346,201 @@ async function getMeshSource(chunkManager: ChunkManager, url: string) {
   } else {
     throw new Error(`Invalid vertex quantization bits: ${vertexQuantizationBits}`);
   }
-  return chunkManager.getChunkSource(PrecomputedMultiscaleMeshSource, {
-    parameters: {url, metadata},
-    format: {
-      fragmentRelativeVertices: true,
-      vertexPositionFormat,
-      transform: metadata.transform,
-    }
-  });
+  return {
+    source: chunkManager.getChunkSource(PrecomputedMultiscaleMeshSource, {
+      parameters: {url, metadata},
+      format: {
+        fragmentRelativeVertices: true,
+        vertexPositionFormat,
+      }
+    }),
+    transform: metadata.transform
+  };
 }
 
-export async function getSkeletonSource(chunkManager: ChunkManager, url: string) {
+async function getSkeletonSource(chunkManager: ChunkManager, url: string) {
   const metadata = await getSkeletonMetadata(chunkManager, url);
-  return chunkManager.getChunkSource(PrecomputedSkeletonSource, {
-    parameters: {
-      url,
-      metadata,
-    },
-    transform: metadata.transform,
+  return {
+    source: chunkManager.getChunkSource(PrecomputedSkeletonSource, {
+      parameters: {
+        url,
+        metadata,
+      },
+    }),
+    transform: metadata.transform
+  };
+}
+
+function getJsonMetadata(chunkManager: ChunkManager, url: string): Promise<any> {
+  url = parseSpecialUrl(url);
+  return chunkManager.memoize.getUncounted({'type': 'precomputed:metadata', url}, async () => {
+    const response = await fetchOk(`${url}/info`);
+    return response.json();
   });
 }
 
-export function getVolume(chunkManager: ChunkManager, url: string) {
-  url = parseSpecialUrl(url);
-  return chunkManager.memoize.getUncounted(
-      {'type': 'precomputed:MultiscaleVolumeChunkSource', url},
-      () => fetchOk(`${url}/info`)
-                .then(response => response.json())
-                .then(response => new MultiscaleVolumeChunkSource(chunkManager, url, response)));
+function getSubsourceToModelSubspaceTransform(info: MultiscaleVolumeInfo) {
+  const m = mat4.create();
+  const resolution = info.scales[0].resolution;
+  for (let i = 0; i < 3; ++i) {
+    m[5 * i] = 1 / resolution[i];
+  }
+  return m;
 }
 
-export class PrecomputedDataSource extends DataSource {
+async function getVolumeDataSource(
+    options: GetDataSourceOptions, url: string, normalizedUrl: string,
+    metadata: any): Promise<DataSource> {
+  const info = parseMultiscaleVolumeInfo(metadata);
+  const volume = new MultiscaleVolumeChunkSource(options.chunkManager, normalizedUrl, info);
+  const {modelSpace} = info;
+  const subsources: DataSubsourceEntry[] = [
+    {
+      id: 'default',
+      default: true,
+      subsource: {volume},
+    },
+    {
+      id: 'bounds',
+      default: true,
+      subsource: {
+        staticAnnotations: makeDataBoundsBoundingBoxAnnotationSet(modelSpace.bounds),
+      },
+    },
+  ];
+  if (info.mesh !== undefined) {
+    const meshUrl = resolvePath(url, info.mesh);
+    const {source: meshSource, transform} =
+        await getMeshSource(options.chunkManager, parseSpecialUrl(meshUrl));
+    const subsourceToModelSubspaceTransform = getSubsourceToModelSubspaceTransform(info);
+    mat4.multiply(subsourceToModelSubspaceTransform, subsourceToModelSubspaceTransform, transform);
+    subsources.push({
+      id: 'mesh',
+      default: true,
+      subsource: {mesh: meshSource},
+      subsourceToModelSubspaceTransform,
+    });
+  }
+  if (info.skeletons !== undefined) {
+    const skeletonsUrl = resolvePath(url, info.skeletons);
+    const {source: skeletonSource, transform} =
+        await getSkeletonSource(options.chunkManager, parseSpecialUrl(skeletonsUrl));
+    const subsourceToModelSubspaceTransform = getSubsourceToModelSubspaceTransform(info);
+    mat4.multiply(subsourceToModelSubspaceTransform, subsourceToModelSubspaceTransform, transform);
+    subsources.push({
+      id: 'skeletons',
+      default: true,
+      subsource: {mesh: skeletonSource},
+      subsourceToModelSubspaceTransform,
+    });
+  }
+  return {modelTransform: makeIdentityTransform(modelSpace), subsources};
+}
+
+async function getSkeletonsDataSource(
+    options: GetDataSourceOptions, url: string): Promise<DataSource> {
+  const {source: skeletons, transform} = await getSkeletonSource(options.chunkManager, url);
+  return {
+    modelTransform: makeIdentityTransform(getDefaultCoordinateSpace()),
+    subsources: [
+      {
+        id: 'default',
+        default: true,
+        subsource: {mesh: skeletons},
+        subsourceToModelSubspaceTransform: transform,
+      },
+    ],
+  };
+}
+
+async function getMeshDataSource(options: GetDataSourceOptions, url: string): Promise<DataSource> {
+  const {source: mesh, transform} = await getMeshSource(options.chunkManager, url);
+  return {
+    modelTransform: makeIdentityTransform(getDefaultCoordinateSpace()),
+    subsources: [
+      {
+        id: 'default',
+        default: true,
+        subsource: {mesh},
+        subsourceToModelSubspaceTransform: transform,
+      },
+    ],
+  };
+}
+
+const urlPattern = /^([^#]*)(?:#(.*))?$/;
+
+function parseProviderUrl(providerUrl: string) {
+  let [, url, fragment] = providerUrl.match(urlPattern)!;
+  if (url.endsWith('/')) {
+    url = url.substring(0, url.length - 1);
+  }
+  const parameters = parseQueryStringParameters(fragment || '');
+  return {url, parameters};
+}
+
+function unparseProviderUrl(url: string, parameters: any) {
+  const fragment = unparseQueryStringParameters(parameters);
+  if (fragment) {
+    url += `#${fragment}`;
+  }
+  return url;
+}
+
+export class PrecomputedDataSource extends DataSourceProvider {
   get description() {
     return 'Precomputed file-backed data source';
   }
-  getVolume(chunkManager: ChunkManager, url: string) {
-    return getVolume(chunkManager, url);
+
+  normalizeUrl(options: NormalizeUrlOptions): string {
+    const {url, parameters} = parseProviderUrl(options.providerUrl);
+    return options.providerProtocol + '://' + unparseProviderUrl(url, parameters);
   }
-  getMeshSource(chunkManager: ChunkManager, url: string) {
-    return getMeshSource(chunkManager, parseSpecialUrl(url));
+
+  convertLegacyUrl(options: ConvertLegacyUrlOptions): string {
+    const {url, parameters} = parseProviderUrl(options.providerUrl);
+    if (options.type === 'mesh') {
+      parameters['type'] = 'mesh';
+    }
+    return options.providerProtocol + '://' + unparseProviderUrl(url, parameters);
   }
-  getSkeletonSource(chunkManager: ChunkManager, url: string) {
-    return getSkeletonSource(chunkManager, parseSpecialUrl(url));
+
+  get(options: GetDataSourceOptions): Promise<DataSource> {
+    const {url, parameters} = parseProviderUrl(options.providerUrl);
+    return options.chunkManager.memoize.getUncounted(
+        {'type': 'precomputed:get', url}, async(): Promise<DataSource> => {
+          const normalizedUrl = parseSpecialUrl(url);
+          let metadata: any;
+          try {
+            metadata = await getJsonMetadata(options.chunkManager, normalizedUrl);
+          } catch (e) {
+            if (e instanceof HttpError && e.status === 404) {
+              if (parameters['type'] === 'mesh') {
+                return await getMeshDataSource(options, normalizedUrl);
+              }
+            }
+            throw e;
+          }
+          verifyObject(metadata);
+          const redirect = verifyOptionalObjectProperty(metadata, 'redirect', verifyString);
+          if (redirect !== undefined) {
+            throw new RedirectError(redirect);
+          }
+          const t = verifyOptionalObjectProperty(metadata, '@type', verifyString);
+          switch (t) {
+            case 'neuroglancer_skeletons':
+              return await getSkeletonsDataSource(options, normalizedUrl);
+            case 'neuroglancer_multilod_draco':
+              return await getMeshDataSource(options, normalizedUrl);
+            case 'neuroglancer_multiscale_volume':
+            case undefined:
+              return await getVolumeDataSource(options, url, normalizedUrl, metadata);
+            default:
+              throw new Error(`Invalid type: ${JSON.stringify(t)}`);
+          }
+        });
+  }
+  completeUrl(options: CompleteUrlOptions) {
+    return completeHttpPath(options.providerUrl, options.cancellationToken);
   }
 }

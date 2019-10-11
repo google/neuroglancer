@@ -14,44 +14,21 @@
  * limitations under the License.
  */
 
-import {DataType, VolumeType} from 'neuroglancer/sliceview/volume/base';
-import {mat4, quat, vec3} from 'neuroglancer/util/geom';
+import {DataType} from 'neuroglancer/sliceview/volume/base';
 
 export const GET_NIFTI_VOLUME_INFO_RPC_ID = 'nifti/getNiftiVolumeInfo';
 
 export interface NiftiVolumeInfo {
-  numChannels: number;
+  rank: number;
+  sourceNames: string[];
+  viewNames: string[];
+  viewScales: Float64Array;
+  sourceScales: Float64Array;
+  units: string[];
   dataType: DataType;
-  volumeType: VolumeType;
-  voxelSize: vec3;
-  affine: mat4;
+  transform: Float64Array;
   description: string;
-  volumeSize: vec3;
-  qoffset: vec3;
-  quatern: quat;
-  qfac: number;
-  qform_code: number;
-  sform_code: number;
-}
-
-export enum NiftiDataType {
-  NONE = 0,
-  BINARY = 1,
-  UINT8 = 2,
-  INT16 = 4,
-  INT32 = 8,
-  FLOAT32 = 16,
-  COMPLEX64 = 32,
-  FLOAT64 = 64,
-  RGB24 = 128,
-  INT8 = 256,
-  UINT16 = 512,
-  UINT32 = 768,
-  INT64 = 1024,
-  UINT64 = 1280,
-  FLOAT128 = 1536,
-  COMPLEX128 = 1792,
-  COMPLEX256 = 2048,
+  volumeSize: Uint32Array;
 }
 
 export class VolumeSourceParameters {

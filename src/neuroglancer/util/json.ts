@@ -36,6 +36,14 @@ export function verifyFiniteFloat(obj: any): number {
   throw new Error(`Expected finite floating-point number, but received: ${x}.`);
 }
 
+export function verifyFiniteNonNegativeFloat(obj: any): number {
+  let x = verifyFloat(obj);
+  if (Number.isFinite(x) && x >= 0) {
+    return x;
+  }
+  throw new Error(`Expected finite non-negative floating-point number, but received: ${x}.`);
+}
+
 export function verifyFinitePositiveFloat(obj: any): number {
   let x = verifyFiniteFloat(obj);
   if (x > 0) {
@@ -215,7 +223,7 @@ export function urlSafeStringify(x: any): string {
 }
 
 const SINGLE_QUOTE_STRING_PATTERN = /('(?:[^'\\]|(?:\\.))*')/;
-const DOUBLE_QUOTE_STRING_PATTERN = /("(?:[^'\\]|(?:\\.))*")/;
+const DOUBLE_QUOTE_STRING_PATTERN = /("(?:[^"\\]|(?:\\.))*")/;
 const SINGLE_OR_DOUBLE_QUOTE_STRING_PATTERN =
     new RegExp(`${SINGLE_QUOTE_STRING_PATTERN.source}|${DOUBLE_QUOTE_STRING_PATTERN.source}`);
 const DOUBLE_OR_SINGLE_QUOTE_STRING_PATTERN =
@@ -352,6 +360,16 @@ export function pythonLiteralParse(x: string) {
   return JSON.parse(pythonLiteralToJSON(x));
 }
 
+export function expectArray(x: unknown, length?: number): any[] {
+  if (!Array.isArray(x)) {
+    throw new Error(`Expected array, but received: ${JSON.stringify(x)}.`);
+  }
+  if (length !== undefined && x.length !== length) {
+    throw new Error(`Expected array of length ${length}, but received: ${JSON.stringify(x)}.`);
+  }
+  return x;
+}
+
 // Checks that `x' is an array, maps each element by parseElement.
 export function parseArray<T>(x: any, parseElement: (x: any, index: number) => T): T[] {
   if (!Array.isArray(x)) {
@@ -447,13 +465,26 @@ export function valueOr<T>(value: T|undefined, defaultValue: T) {
 
 export function verifyObjectProperty<T>(
     obj: any, propertyName: string, validator: (value: any) => T): T {
-  let value = obj.hasOwnProperty(propertyName) ? obj[propertyName] : undefined;
+  let value =
+      Object.prototype.hasOwnProperty.call(obj, propertyName) ? obj[propertyName] : undefined;
   try {
     return validator(value);
   } catch (parseError) {
     throw new Error(
         `Error parsing ${JSON.stringify(propertyName)} property: ${parseError.message}`);
   }
+}
+
+export function verifyOptionalObjectProperty<T>(
+    obj: any, propertyName: string, validator: (value: any) => T): T|undefined;
+
+export function verifyOptionalObjectProperty<T>(
+    obj: any, propertyName: string, validator: (value: any) => T, defaultValue: T): T;
+
+export function verifyOptionalObjectProperty<T>(
+    obj: any, propertyName: string, validator: (value: any) => T, defaultValue?: any) {
+  return verifyObjectProperty(
+      obj, propertyName, x => x === undefined ? defaultValue : validator(x));
 }
 
 export function verifyObjectAsMap<T>(obj: any, validator: (value: any) => T): Map<string, T> {
@@ -500,6 +531,17 @@ export function parseQueryStringParameters(queryString: string) {
     }
     return result;
   }
+}
+
+export function unparseQueryStringParameters(parameters: any) {
+  if (parameters === undefined) return '';
+  const keys = Object.keys(parameters);
+  if (keys.length === 0) return '';
+  if (keys.some(key => typeof parameters[key] !== 'string')) {
+    return JSON.stringify(parameters);
+  }
+  return keys.map(key => `${encodeURIComponent(key)}=${encodeURIComponent(parameters[key])}`)
+      .join('&');
 }
 
 /**

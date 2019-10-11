@@ -1,3 +1,4 @@
+/// <reference path="svg.d.ts" />
 /// <reference path="glsl.d.ts" />
 /// <reference path="url-loader.d.ts" />
 /// <reference path="jpgjs.d.ts" />

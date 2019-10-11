@@ -15,6 +15,7 @@
  */
 
 import {DataType} from 'neuroglancer/util/data_type';
+import {AttributeIndex, ShaderBuilder, VertexShaderInputBinder} from 'neuroglancer/webgl/shader';
 
 // Hue, saturation, and value are in [0, 1] range.
 export var glsl_hsvToRgb = `
@@ -186,4 +187,101 @@ export function getShaderType(dataType: DataType, numComponents: number = 1) {
       break;
   }
   throw new Error(`No shader type for ${DataType[dataType]}[${numComponents}].`);
+}
+
+export function getShaderVectorType(typeName: 'float'|'int'|'uint', n: number) {
+  if (n === 1) return typeName;
+  if (typeName === 'float') return `vec${n}`;
+  return `${typeName[0]}vec${n}`;
+}
+
+export const webglTypeSizeInBytes: {[webglType: number]: number} = {
+  [WebGL2RenderingContext.UNSIGNED_BYTE]: 1,
+  [WebGL2RenderingContext.BYTE]: 1,
+  [WebGL2RenderingContext.UNSIGNED_SHORT]: 2,
+  [WebGL2RenderingContext.SHORT]: 2,
+  [WebGL2RenderingContext.FLOAT]: 4,
+  [WebGL2RenderingContext.INT]: 4,
+  [WebGL2RenderingContext.UNSIGNED_INT]: 4,
+};
+
+export function defineVectorArrayVertexShaderInput(
+    builder: ShaderBuilder, typeName: 'float'|'int'|'uint', name: string, vectorRank: number,
+  arraySize: number = 1) {
+  let numAttributes = 0;
+  let n = vectorRank * arraySize;
+  while (n > 0) {
+    const components = Math.min(4, n);
+    const t = getShaderVectorType(typeName, components);
+    n -= components;
+    builder.addAttribute('highp ' + t, `a${name}${numAttributes}`);
+    ++numAttributes;
+  }
+  n = vectorRank * arraySize;
+  let code = '';
+  for (let arrayIndex = 0; arrayIndex < arraySize; ++arrayIndex) {
+    code += `highp ${typeName}[${vectorRank}] get${name}${arrayIndex}() {
+  highp ${typeName}[${vectorRank}] result;
+`;
+    for (let vectorIndex = 0; vectorIndex < vectorRank; ++vectorIndex) {
+      const i = arrayIndex * vectorRank + vectorIndex;
+      const attributeIndex = Math.floor(i / 4);
+      const componentIndex = i % 4;
+      code += `  result[${vectorIndex}] = a${name}${attributeIndex}`;
+      if (componentIndex !== 0 || i !== n - 1) {
+        code += `[${componentIndex}]`;
+      }
+      code += `;\n`;
+    }
+    code += `  return result;\n`;
+    code += `}\n`;
+  }
+  builder.addVertexCode(code);
+  builder.addInitializer(shader => {
+    const locations: AttributeIndex[] = [];
+    for (let attributeIndex = 0; attributeIndex < numAttributes; ++attributeIndex) {
+      locations[attributeIndex] = shader.attribute(`a${name}${attributeIndex}`);
+    }
+    shader.vertexShaderInputBinders[name] = {
+      enable(divisor: number) {
+        const {gl} = shader;
+        for (let attributeIndex = 0; attributeIndex < numAttributes; ++attributeIndex) {
+          const location = locations[attributeIndex];
+          gl.enableVertexAttribArray(location);
+          gl.vertexAttribDivisor(location, divisor);
+        }
+      },
+      disable() {
+        const {gl} = shader;
+        for (let attributeIndex = 0; attributeIndex < numAttributes; ++attributeIndex) {
+          const location = locations[attributeIndex];
+          gl.vertexAttribDivisor(location, 0);
+          gl.disableVertexAttribArray(location);
+        }
+      },
+      bind(
+          buffer: WebGLBuffer, attributeType: number, normalized: boolean, stride: number = 0,
+          offset: number = 0) {
+        const {gl} = shader;
+        const elementSize = webglTypeSizeInBytes[attributeType];
+        if (stride === 0) {
+          stride = elementSize * n;
+        }
+        for (let attributeIndex = 0; attributeIndex < numAttributes; ++attributeIndex) {
+          const location = locations[attributeIndex];
+          const numComponents = Math.min(4, n - 4 * attributeIndex);
+          gl.bindBuffer(WebGL2RenderingContext.ARRAY_BUFFER, buffer);
+          if (typeName === 'float') {
+            gl.vertexAttribPointer(
+                location, /*size=*/ numComponents, attributeType, normalized, stride, offset);
+          } else {
+            gl.vertexAttribIPointer(
+                location, /*size=*/ Math.min(4, n - 4 * attributeIndex), attributeType, stride,
+                offset);
+          }
+          offset += elementSize * numComponents;
+        }
+      },
+    } as VertexShaderInputBinder;
+  });
 }

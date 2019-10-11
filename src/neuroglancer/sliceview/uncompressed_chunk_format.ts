@@ -20,7 +20,6 @@ import {VolumeChunkSource} from 'neuroglancer/sliceview/volume/frontend';
 import {ChunkFormatHandler, registerChunkFormatHandler} from 'neuroglancer/sliceview/volume/frontend';
 import {TypedArray, TypedArrayConstructor} from 'neuroglancer/util/array';
 import {RefCounted} from 'neuroglancer/util/disposable';
-import {vec3, vec3Key} from 'neuroglancer/util/geom';
 import {Uint64} from 'neuroglancer/util/uint64';
 import {GL} from 'neuroglancer/webgl/context';
 import {ShaderBuilder, ShaderProgram, ShaderSamplerPrefix, ShaderSamplerType} from 'neuroglancer/webgl/shader';
@@ -28,16 +27,49 @@ import {getShaderType} from 'neuroglancer/webgl/shader_lib';
 import {computeTextureFormat, setThreeDimensionalTextureData, TextureFormat, ThreeDimensionalTextureAccessHelper} from 'neuroglancer/webgl/texture_access';
 
 class TextureLayout extends RefCounted {
-  constructor(public chunkDataSize: vec3, public numChannels: number) {
+  strides: Uint32Array;
+  textureShape = new Uint32Array(3);
+  constructor(gl: GL, public chunkDataSize: Uint32Array) {
     super();
+    const rank = chunkDataSize.length;
+    let numRemainingDims = 0;
+    for (const size of chunkDataSize) {
+      if (size !== 1) ++numRemainingDims;
+    }
+    const strides = this.strides = new Uint32Array(rank * 3);
+    const {max3dTextureSize} = gl;
+    let textureDim = 0;
+    let textureDimSize = 1;
+    const {textureShape} = this;
+    textureShape.fill(1);
+    for (let chunkDim = 0; chunkDim < rank; ++chunkDim) {
+      const size = chunkDataSize[chunkDim];
+      if (size === 1) continue;
+      const newSize = size * textureDimSize;
+      let stride: number;
+      if (newSize > max3dTextureSize ||
+          (textureDimSize !== 1 && textureDim + numRemainingDims < 3)) {
+        ++textureDim;
+        textureDimSize = size;
+        stride = 1;
+      } else {
+        stride = textureDimSize;
+        textureDimSize = newSize;
+      }
+      strides[3 * chunkDim + textureDim] = stride;
+      textureShape[textureDim] = textureDimSize;
+    }
   }
 
-  static get(gl: GL, chunkDataSize: vec3, numChannels: number) {
+  static get(
+      gl: GL, chunkSizeInVoxels: Uint32Array) {
     return gl.memoize.get(
-        `sliceview.UncompressedTextureLayout:${vec3Key(chunkDataSize)},${numChannels}`,
-        () => new TextureLayout(chunkDataSize, numChannels));
+        `sliceview.UncompressedTextureLayout:${chunkSizeInVoxels.join()}`,
+        () => new TextureLayout(gl, chunkSizeInVoxels));
   }
 }
+
+let tempStridesUniform = new Uint32Array(3 * 5);
 
 export class ChunkFormat extends SingleTextureChunkFormat<TextureLayout> implements TextureFormat {
   texelsPerElement: number;
@@ -52,60 +84,105 @@ export class ChunkFormat extends SingleTextureChunkFormat<TextureLayout> impleme
   }
   private textureAccessHelper: ThreeDimensionalTextureAccessHelper;
 
-  static get(gl: GL, dataType: DataType, numChannels: number) {
-    let key = `sliceview.UncompressedChunkFormat:${dataType}:${numChannels}`;
-    return gl.memoize.get(key, () => new ChunkFormat(gl, dataType, numChannels, key));
+  static get(gl: GL, dataType: DataType) {
+    const key =
+        `sliceview.UncompressedChunkFormat:${dataType}`;
+    return gl.memoize.get(key, () => new ChunkFormat(gl, dataType, key));
   }
 
-  constructor(_gl: GL, public dataType: DataType, public numChannels: number, key: string) {
+  constructor(
+      _gl: GL, public dataType: DataType, key: string) {
     super(key);
     computeTextureFormat(this, dataType);
     this.textureAccessHelper = new ThreeDimensionalTextureAccessHelper('chunkData');
   }
 
-  defineShader(builder: ShaderBuilder) {
-    super.defineShader(builder);
+  defineShader(builder: ShaderBuilder, numChannelDimensions: number) {
+    super.defineShader(builder, numChannelDimensions);
     let {textureAccessHelper} = this;
+    const stridesUniformLength = (4 + numChannelDimensions) * 3;
+    if (tempStridesUniform.length < stridesUniformLength) {
+      tempStridesUniform = new Uint32Array(stridesUniformLength);
+    }
+    builder.addUniform('highp ivec3', 'uVolumeChunkStrides', 4 + numChannelDimensions);
     builder.addFragmentCode(
         textureAccessHelper.getAccessor('readVolumeData', 'uVolumeChunkSampler', this.dataType));
-
-    let {numChannels} = this;
-    if (numChannels > 1) {
-      builder.addUniform('highp int', 'uChannelStride');
-      builder.addFragmentCode(`
-highp int getChannelOffset(highp int channelIndex) {
-  return channelIndex * uChannelStride;
-}
-`);
-    } else {
-      builder.addFragmentCode(`highp int getChannelOffset(highp int channelIndex) { return 0; }`);
-    }
     const shaderType = getShaderType(this.dataType);
-    builder.addFragmentCode(`
-${shaderType} getDataValue (highp int channelIndex) {
+    let code = `
+${shaderType} getDataValue (`;
+    if (numChannelDimensions === 0) {
+      // Add dummy channel parameter for backward compatibility.
+      code += `highp int ignoredChannel`;
+    }
+    for (let channelDim = 0; channelDim < numChannelDimensions; ++channelDim) {
+      if (channelDim !== 0) code += `, `;
+      code += `highp int channelIndex${channelDim}`;
+    }
+    code += `) {
   highp ivec3 p = getPositionWithinChunk();
-  return readVolumeData(ivec3(p.x, p.y, p.z + getChannelOffset(channelIndex)));
+  highp ivec3 offset = uVolumeChunkStrides[0]
+                     + p.x * uVolumeChunkStrides[1]
+                     + p.y * uVolumeChunkStrides[2]
+                     + p.z * uVolumeChunkStrides[3];
+`;
+    for (let channelDim = 0; channelDim < numChannelDimensions; ++channelDim) {
+      code += `
+  offset += channelIndex${channelDim} * uVolumeChunkStrides[${4 + channelDim}];
+`;
+    }
+    code += `
+  return readVolumeData(offset);
 }
-`);
+`;
+    builder.addFragmentCode(code);
   }
 
   /**
    * Called each time textureLayout changes while drawing chunks.
    */
-  setupTextureLayout(gl: GL, shader: ShaderProgram, textureLayout: TextureLayout) {
-    if (this.numChannels > 1) {
-      gl.uniform1i(shader.uniform('uChannelStride'), textureLayout.chunkDataSize[2]);
+  setupTextureLayout(
+      gl: GL, shader: ShaderProgram, textureLayout: TextureLayout, fixedChunkPosition: Uint32Array,
+      chunkDisplaySubspaceDimensions: readonly number[], channelDimensions: readonly number[]) {
+    const stridesUniform = tempStridesUniform;
+    const numChannelDimensions = channelDimensions.length;
+    const {strides} = textureLayout;
+    const rank = fixedChunkPosition.length;
+    for (let i = 0; i < 3; ++i) {
+      let sum = 0;
+      for (let chunkDim = 0; chunkDim < rank; ++chunkDim) {
+        sum += fixedChunkPosition[chunkDim] * strides[chunkDim * 3 + i];
+      }
+      stridesUniform[i] = sum;
     }
+    for (let i = 0; i < 3; ++i) {
+      const chunkDim = chunkDisplaySubspaceDimensions[i];
+      if (chunkDim >= rank) continue;
+      for (let j = 0; j < 3; ++j) {
+        stridesUniform[i * 3 + 3 + j] = strides[chunkDim * 3 + j];
+      }
+    }
+    for (let channelDim = 0; channelDim < numChannelDimensions; ++channelDim) {
+      const chunkDim = channelDimensions[channelDim];
+      if (chunkDim === -1) {
+        stridesUniform.fill((4 + channelDim) * 3, (4 + channelDim + 1) * 3);
+      } else {
+        for (let i = 0; i < 3; ++i) {
+          stridesUniform[(4 + channelDim) * 3 + i] = strides[chunkDim * 3 + i];
+        }
+      }
+    }
+    gl.uniform3iv(
+        shader.uniform('uVolumeChunkStrides'), stridesUniform, 0, (4 + numChannelDimensions) * 3);
   }
 
-  getTextureLayout(gl: GL, chunkDataSize: vec3) {
-    return TextureLayout.get(gl, chunkDataSize, this.numChannels);
+  getTextureLayout(gl: GL, chunkDataSize: Uint32Array) {
+    return TextureLayout.get(gl, chunkDataSize);
   }
 
   setTextureData(gl: GL, textureLayout: TextureLayout, data: TypedArray) {
-    const {chunkDataSize} = textureLayout;
+    const {textureShape} = textureLayout;
     setThreeDimensionalTextureData(
-        gl, this, data, chunkDataSize[0], chunkDataSize[1], chunkDataSize[2] * this.numChannels);
+        gl, this, data, textureShape[0], textureShape[1], textureShape[2]);
   }
 }
 
@@ -132,12 +209,16 @@ export class UncompressedVolumeChunk extends SingleTextureVolumeChunk<Uint8Array
     this.chunkFormat.setTextureData(gl, textureLayout, this.data);
   }
 
-  getChannelValueAt(dataPosition: vec3, channel: number): number|Uint64 {
+  getValueAt(dataPosition: Uint32Array): number|Uint64 {
     let {chunkFormat} = this;
-    let chunkDataSize = this.chunkDataSize;
-    let index = dataPosition[0] +
-        chunkDataSize[0] *
-            (dataPosition[1] + chunkDataSize[1] * (dataPosition[2] + chunkDataSize[2] * channel));
+    const {chunkDataSize} = this;
+    let index = 0;
+    let stride = 1;
+    const rank = dataPosition.length;
+    for (let i = 0; i < rank; ++i) {
+      index += stride * dataPosition[i];
+      stride *= chunkDataSize[i];
+    }
     let dataType = chunkFormat.dataType;
     let data = this.data;
     switch (dataType) {
@@ -161,7 +242,7 @@ export class UncompressedChunkFormatHandler extends RefCounted implements ChunkF
 
   constructor(gl: GL, spec: VolumeChunkSpecification) {
     super();
-    this.chunkFormat = this.registerDisposer(ChunkFormat.get(gl, spec.dataType, spec.numChannels));
+    this.chunkFormat = this.registerDisposer(ChunkFormat.get(gl, spec.dataType));
     this.textureLayout =
         this.registerDisposer(this.chunkFormat.getTextureLayout(gl, spec.chunkDataSize));
   }

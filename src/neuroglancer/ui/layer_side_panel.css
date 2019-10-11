@@ -19,6 +19,7 @@
   color: #fff;
   flex-direction: column;
   align-items: stretch;
+  max-width: 80%;
 }
 
 .neuroglancer-managed-user-layer-info-panel {
@@ -38,7 +39,7 @@
   flex-direction: row;
   font-family: sans-serif;
   font-size: 10pt;
-  background-color: #3c3;
+  background-color: #393;
   padding: 2px;
 }
 
@@ -61,4 +62,38 @@
   flex: 1;
   display: flex;
   flex-direction: column;
+}
+
+.neuroglancer-layer-side-panel-type-measure {
+  position: absolute;
+  visibility: hidden;
+  top: 0px;
+  height: auto;
+  width: auto;
+  white-space: nowrap;
+}
+
+.neuroglancer-layer-side-panel-type,
+.neuroglancer-layer-side-panel-type-measure {
+  padding-left: 3px;
+  padding-right: 3px;
+  font-weight: bold;
+  font-family: sans-serif;
+  font-size: 10pt;
+  box-sizing: border-box;
+  
+}
+
+.neuroglancer-layer-side-panel-type {
+  -webkit-appearance: none;
+  color: white;
+  cursor: pointer;
+  background-color: #030;
+  margin-right: 5px;
+  border: 0px;
+  outline: 0px;
+}
+
+.neuroglancer-layer-side-panel-type option {
+  background-color: #000;
 }

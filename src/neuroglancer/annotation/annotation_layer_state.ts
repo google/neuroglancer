@@ -16,83 +16,77 @@
 
 import {AnnotationSource} from 'neuroglancer/annotation';
 import {MultiscaleAnnotationSource} from 'neuroglancer/annotation/frontend_source';
-import {CoordinateTransform} from 'neuroglancer/coordinate_transform';
-import {RenderLayerRole} from 'neuroglancer/layer';
+import {LayerDataSource} from 'neuroglancer/layer_data_source';
+import {ChunkTransformParameters, getChunkTransformParameters, RenderLayerTransformOrError} from 'neuroglancer/render_coordinate_transform';
+import {RenderLayerRole} from 'neuroglancer/renderlayer';
 import {SegmentationDisplayState} from 'neuroglancer/segmentation_display_state/frontend';
-import {TrackableAlphaValue} from 'neuroglancer/trackable_alpha';
+import {trackableAlphaValue} from 'neuroglancer/trackable_alpha';
 import {TrackableBoolean} from 'neuroglancer/trackable_boolean';
-import {WatchableValue} from 'neuroglancer/trackable_value';
+import {makeCachedLazyDerivedWatchableValue, WatchableValue, WatchableValueInterface} from 'neuroglancer/trackable_value';
 import {TrackableRGB} from 'neuroglancer/util/color';
 import {Owned, RefCounted} from 'neuroglancer/util/disposable';
-import {mat4} from 'neuroglancer/util/geom';
+import {makeValueOrError, ValueOrError, valueOrThrow} from 'neuroglancer/util/error';
+import {vec3} from 'neuroglancer/util/geom';
 
-export class AnnotationHoverState extends
-    WatchableValue<{id: string, partIndex: number}|undefined> {}
+export class AnnotationHoverState extends WatchableValue<
+    {id: string, partIndex: number, annotationLayerState: AnnotationLayerState}|undefined> {}
 
-export class AnnotationLayerState extends RefCounted {
-  transform: CoordinateTransform;
-  source: Owned<AnnotationSource|MultiscaleAnnotationSource>;
-  hoverState: AnnotationHoverState;
-  role: RenderLayerRole;
-  color: TrackableRGB;
-  fillOpacity: TrackableAlphaValue;
-
+export class AnnotationDisplayState {
+  color = new TrackableRGB(vec3.fromValues(1, 1, 0));
+  fillOpacity = trackableAlphaValue(0.0);
   /**
    * undefined means may have a segmentation state.  null means no segmentation state is supported.
    */
-  segmentationState: WatchableValue<SegmentationDisplayState|undefined|null>;
-  filterBySegmentation: TrackableBoolean;
+  segmentationState: WatchableValue<SegmentationDisplayState|undefined|null> =
+      new WatchableValue(null);
+  filterBySegmentation = new TrackableBoolean(false);
+  hoverState = new AnnotationHoverState(undefined);
+}
 
-  private transformCacheGeneration = -1;
-  private cachedObjectToGlobal = mat4.create();
-  private cachedGlobalToObject = mat4.create();
+export class AnnotationLayerState extends RefCounted {
+  transform: WatchableValueInterface<RenderLayerTransformOrError>;
+  localPosition: WatchableValueInterface<Float32Array>;
+  source: Owned<AnnotationSource|MultiscaleAnnotationSource>;
+  role: RenderLayerRole;
+  dataSource: LayerDataSource;
+  subsourceId: string;
+  subsourceIndex: number;
+  displayState: AnnotationDisplayState;
 
-  private updateTransforms() {
-    const {transform, transformCacheGeneration} = this;
-    const generation = transform.changed.count;
-    if (generation === transformCacheGeneration) {
-      return;
-    }
-    const {cachedObjectToGlobal} = this;
-    mat4.multiply(cachedObjectToGlobal, this.transform.transform, this.source.objectToLocal);
-    mat4.invert(this.cachedGlobalToObject, cachedObjectToGlobal);
-  }
-
-  get objectToGlobal() {
-    this.updateTransforms();
-    return this.cachedObjectToGlobal;
-  }
-
-  get globalToObject() {
-    this.updateTransforms();
-    return this.cachedGlobalToObject;
-  }
-
+  readonly chunkTransform: WatchableValueInterface<ValueOrError<ChunkTransformParameters>>;
   constructor(options: {
-    transform?: CoordinateTransform, source: Owned<AnnotationSource|MultiscaleAnnotationSource>,
-    hoverState?: AnnotationHoverState,
-    role?: RenderLayerRole, color: TrackableRGB, fillOpacity: TrackableAlphaValue,
-    segmentationState?: WatchableValue<SegmentationDisplayState|undefined|null>,
-    filterBySegmentation?: TrackableBoolean,
+    transform: WatchableValueInterface<RenderLayerTransformOrError>,
+    localPosition: WatchableValueInterface<Float32Array>,
+    source: Owned<AnnotationSource|MultiscaleAnnotationSource>,
+    displayState: AnnotationDisplayState,
+    dataSource: LayerDataSource,
+    subsourceId: string,
+    subsourceIndex: number,
+    role?: RenderLayerRole,
   }) {
     super();
     const {
-      transform = new CoordinateTransform(),
+      transform,
+      localPosition,
       source,
-      hoverState = new AnnotationHoverState(undefined),
       role = RenderLayerRole.ANNOTATION,
-      color,
-      fillOpacity,
-      segmentationState = new WatchableValue(null),
-      filterBySegmentation = new TrackableBoolean(false),
     } = options;
     this.transform = transform;
+    this.localPosition = localPosition;
     this.source = this.registerDisposer(source);
-    this.hoverState = hoverState;
     this.role = role;
-    this.color = color;
-    this.fillOpacity = fillOpacity;
-    this.segmentationState = segmentationState;
-    this.filterBySegmentation = filterBySegmentation;
+    this.displayState = options.displayState;
+    this.chunkTransform = this.registerDisposer(makeCachedLazyDerivedWatchableValue(
+        modelTransform =>
+            makeValueOrError(() => getChunkTransformParameters(valueOrThrow(modelTransform))),
+        this.transform));
+    this.dataSource = options.dataSource;
+    this.subsourceId = options.subsourceId;
+    this.subsourceIndex = options.subsourceIndex;
+  }
+
+  get sourceIndex() {
+    const {dataSource} = this;
+    return dataSource.layer.dataSources.indexOf(dataSource);
   }
 }

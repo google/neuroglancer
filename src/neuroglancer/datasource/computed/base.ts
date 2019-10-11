@@ -29,7 +29,7 @@ export class ComputedVolumeChunkSourceParameters {
 
 
 export interface ComputationBufferSpecification {
-  size: vec3;
+  size: Uint32Array;
   dataType: DataType;
   volumeType: VolumeType;
   numChannels: number;

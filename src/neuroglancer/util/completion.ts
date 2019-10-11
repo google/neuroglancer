@@ -18,10 +18,15 @@ export interface Completion { value: string; }
 
 export interface CompletionWithDescription extends Completion { description?: string; }
 
-export interface BasicCompletionResult {
-  completions: Completion[];
+export interface BasicCompletionResult<C extends Completion = Completion> {
+  completions: C[];
   offset: number;
 }
+
+export const emptyCompletionResult = {
+  offset: 0,
+  completions: [],
+};
 
 export function applyCompletionOffset<T extends{offset: number}>(
     offset: number, completionResult: T) {
@@ -36,6 +41,7 @@ export function getPrefixMatches(prefix: string, options: Iterable<string>) {
       result.push({value: option});
     }
   }
+  result.sort((a, b) => defaultStringCompare(a.value, b.value));
   return result;
 }
 
@@ -49,5 +55,61 @@ export function getPrefixMatchesWithDescriptions<T>(
       result.push({value: key, description: getDescription(option)});
     }
   }
+  result.sort((a, b) => defaultStringCompare(a.value, b.value));
   return result;
+}
+
+
+export async function completeQueryStringParameters<T extends Completion>(
+    queryString: string, keyCompleter: (value: string) => Promise<BasicCompletionResult<T>>,
+    valueCompleter: (key: string, value: string) =>
+        Promise<BasicCompletionResult<T>>): Promise<BasicCompletionResult<T>> {
+  if (queryString.startsWith('{')) return emptyCompletionResult;
+  const m = queryString.match(/^(?:(.*)[&;])?([^&;]*)$/);
+  const part = m![2];
+  let offset = queryString.length - part.length;
+  const equalsIndex = part.indexOf('=');
+  if (equalsIndex === -1) {
+    const completions = await keyCompleter(part);
+    return {
+      offset: completions.offset + offset,
+      completions: completions.completions.map(x => ({...x, value: `${x.value}=`}))
+    };
+  }
+  return applyCompletionOffset(
+      offset + equalsIndex + 1,
+      await valueCompleter(part.substring(0, equalsIndex), part.substring(equalsIndex + 1)));
+}
+
+export interface QueryStringCompletionTableEntry<C extends Completion = Completion> {
+  readonly key: C;
+  readonly values: readonly C[];
+}
+
+export type QueryStringCompletionTable<C extends Completion = Completion> =
+    readonly QueryStringCompletionTableEntry<C>[];
+
+export async function completeQueryStringParametersFromTable<C extends Completion>(
+    queryString: string, table: QueryStringCompletionTable<C>) {
+  return completeQueryStringParameters(
+      queryString,
+      async key => {
+        const results: C[] = [];
+        for (const entry of table) {
+          const keyEntry = entry.key;
+          if (keyEntry.value.startsWith(key)) results.push(keyEntry);
+        }
+        return {offset: 0, completions: results};
+      },
+      async (key, value) => {
+        for (const entry of table) {
+          if (entry.key.value !== key) continue;
+          return {offset: 0, completions: entry.values.filter(x => x.value.startsWith(value))};
+        }
+        return emptyCompletionResult;
+      });
+}
+
+export function defaultStringCompare(a: string, b: string) {
+  return (a < b) ? -1 : ((a > b) ? +1 : 0);
 }

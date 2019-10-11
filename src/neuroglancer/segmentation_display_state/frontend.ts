@@ -15,16 +15,16 @@
  */
 
 import {ChunkManager} from 'neuroglancer/chunk_manager/frontend';
-import {CoordinateTransform} from 'neuroglancer/coordinate_transform';
 import {LayerSelectedValues, UserLayer} from 'neuroglancer/layer';
+import {WatchableRenderLayerTransform} from 'neuroglancer/render_coordinate_transform';
 import {RenderScaleHistogram} from 'neuroglancer/render_scale_statistics';
 import {SegmentColorHash} from 'neuroglancer/segment_color';
 import {VisibleSegmentsState} from 'neuroglancer/segmentation_display_state/base';
 import {SharedWatchableValue} from 'neuroglancer/shared_watchable_value';
 import {TrackableAlphaValue} from 'neuroglancer/trackable_alpha';
 import {TrackableValue} from 'neuroglancer/trackable_value';
-import {Uint64Set} from 'neuroglancer/uint64_set';
 import {Uint64Map} from 'neuroglancer/uint64_map';
+import {Uint64Set} from 'neuroglancer/uint64_set';
 import {hsvToRgb, rgbToHsv} from 'neuroglancer/util/colorspace';
 import {RefCounted} from 'neuroglancer/util/disposable';
 import {vec4} from 'neuroglancer/util/geom';
@@ -96,7 +96,7 @@ export interface SegmentationDisplayStateWithAlpha extends SegmentationDisplaySt
 }
 
 export interface SegmentationDisplayState3D extends SegmentationDisplayStateWithAlpha {
-  objectToDataTransform: CoordinateTransform;
+  transform: WatchableRenderLayerTransform;
   renderScaleHistogram: RenderScaleHistogram;
   renderScaleTarget: TrackableValue<number>;
 }
@@ -126,7 +126,7 @@ export function registerRedrawWhenSegmentationDisplayState3DChanged(
     renderLayer: {redrawNeeded: NullarySignal}&RefCounted) {
   registerRedrawWhenSegmentationDisplayStateWithAlphaChanged(displayState, renderLayer);
   renderLayer.registerDisposer(
-      displayState.objectToDataTransform.changed.add(renderLayer.redrawNeeded.dispatch));
+      displayState.transform.changed.add(renderLayer.redrawNeeded.dispatch));
   renderLayer.registerDisposer(
       displayState.renderScaleTarget.changed.add(renderLayer.redrawNeeded.dispatch));
 }
@@ -196,9 +196,9 @@ export class SegmentationLayerSharedObject extends Base {
     options['chunkManager'] = this.chunkManager.rpcId;
     options['visibleSegments'] = displayState.visibleSegments.rpcId;
     options['segmentEquivalences'] = displayState.segmentEquivalences.rpcId;
-    options['objectToDataTransform'] =
+    options['transform'] =
         this.registerDisposer(SharedWatchableValue.makeFromExisting(
-                                  this.chunkManager.rpc!, this.displayState.objectToDataTransform))
+                                  this.chunkManager.rpc!, this.displayState.transform))
             .rpcId;
     options['renderScaleTarget'] =
         this.registerDisposer(SharedWatchableValue.makeFromExisting(

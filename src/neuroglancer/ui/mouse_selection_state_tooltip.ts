@@ -22,26 +22,30 @@
 import './mouse_selection_state_tooltip.css';
 
 import debounce from 'lodash/debounce';
-import { Annotation, AnnotationType, AxisAlignedBoundingBox, AnnotationReference, getAnnotationTypeHandler} from 'neuroglancer/annotation';
+import {Annotation, AnnotationReference, AnnotationType, AxisAlignedBoundingBox, getAnnotationTypeHandler} from 'neuroglancer/annotation';
 import {getSelectedAnnotation} from 'neuroglancer/annotation/selection';
+import {CoordinateSpace} from 'neuroglancer/coordinate_transform';
 import {LayerManager, MouseSelectionState} from 'neuroglancer/layer';
-import {VoxelSize} from 'neuroglancer/navigation_state';
+import {ChunkTransformParameters} from 'neuroglancer/render_coordinate_transform';
+import {WatchableValueInterface} from 'neuroglancer/trackable_value';
 import {getPositionSummary} from 'neuroglancer/ui/annotations';
 import {RefCounted} from 'neuroglancer/util/disposable';
 import {removeChildren} from 'neuroglancer/util/dom';
-import {mat4} from 'neuroglancer/util/geom';
-import {formatBoundingBoxVolume} from 'neuroglancer/util/spatial_units';
 import {Tooltip} from 'neuroglancer/widget/tooltip';
 
 const annotationTooltipHandlers = new Map<
     AnnotationType,
-    (annotation: Annotation, element: HTMLElement, transform: mat4, voxelSize: VoxelSize) => void>([
+    (annotation: Annotation, element: HTMLElement, chunkTransform: ChunkTransformParameters) =>
+        void>([
   [
     AnnotationType.AXIS_ALIGNED_BOUNDING_BOX,
-    (annotation: AxisAlignedBoundingBox, element, transform, _voxelSize) => {
+    (annotation: AxisAlignedBoundingBox, element, chunkTransform) => {
+      chunkTransform;
+      annotation;
       const volume = document.createElement('div');
       volume.className = 'neuroglancer-annotation-details-volume';
-      volume.textContent = formatBoundingBoxVolume(annotation.pointA, annotation.pointB, transform);
+      // volume.textContent =
+      //     formatBoundingBoxVolume(annotation.pointA, annotation.pointB, transform);
       element.appendChild(volume);
     },
   ],
@@ -76,7 +80,7 @@ export class MouseSelectionStateTooltipManager extends RefCounted {
 
   constructor(
       public mouseState: MouseSelectionState, public layerManager: LayerManager,
-      public voxelSize: VoxelSize) {
+      public coordinateSpace: WatchableValueInterface<CoordinateSpace|undefined>) {
     super();
     this.registerDisposer(mouseState.changed.add(() => this.mouseStateChanged()));
   }
@@ -86,7 +90,8 @@ export class MouseSelectionStateTooltipManager extends RefCounted {
     if (state === undefined) {
       return false;
     }
-    if (!this.voxelSize.valid) {
+    const {coordinateSpace: {value: coordinateSpace}} = this;
+    if (coordinateSpace === undefined) {
       return false;
     }
     let {tooltip} = this;
@@ -126,7 +131,7 @@ export class MouseSelectionStateTooltipManager extends RefCounted {
         const segmentContainer = document.createElement('div');
         segmentContainer.className = 'neuroglancer-annotation-segment-list';
 
-        const segmentationState = state.annotationLayer.segmentationState.value;
+        const segmentationState = state.annotationLayer.displayState.segmentationState.value;
         const segmentColorHash = segmentationState ? segmentationState.segmentColorHash : undefined;
         segments.forEach((segment, index) => {
           if (index !== 0) {
@@ -142,19 +147,19 @@ export class MouseSelectionStateTooltipManager extends RefCounted {
         });
         tooltip.element.appendChild(segmentContainer);
       }
-      const combinedTransform = state.annotationLayer.objectToGlobal;
+      const chunkTransform = state.annotationLayer.chunkTransform.value as ChunkTransformParameters; // FIXME
 
       const typeHandler = getAnnotationTypeHandler(annotation.type);
 
       const positionElement = document.createElement('div');
       positionElement.appendChild(document.createTextNode(typeHandler.icon));
-      getPositionSummary(positionElement, annotation, combinedTransform, this.voxelSize);
+      getPositionSummary(positionElement, annotation, chunkTransform);
       positionElement.className = 'neuroglancer-mouse-selection-tooltip-annotation-corners';
       tooltip.element.appendChild(positionElement);
 
       const handler = annotationTooltipHandlers.get(annotation.type);
       if (handler !== undefined) {
-        handler(annotation, tooltip.element, combinedTransform, this.voxelSize);
+        handler(annotation, tooltip.element, chunkTransform);
       }
     }
     return true;

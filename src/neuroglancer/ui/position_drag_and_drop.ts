@@ -14,29 +14,47 @@
  * limitations under the License.
  */
 
-import {SpatialPosition} from 'neuroglancer/navigation_state';
+import {dimensionNamesFromJson} from 'neuroglancer/coordinate_transform';
+import {Position} from 'neuroglancer/navigation_state';
 import {Borrowed, registerEventListener} from 'neuroglancer/util/disposable';
+import {parseArray, verifyFiniteFloat, verifyObject, verifyObjectProperty} from 'neuroglancer/util/json';
 import {positionDragType} from 'neuroglancer/widget/position_widget';
 
-export function setupPositionDropHandlers(
-    target: EventTarget, position: Borrowed<SpatialPosition>) {
+export function setupPositionDropHandlers(target: EventTarget, position: Borrowed<Position>) {
   const dropDisposer = registerEventListener(target, 'drop', (event: DragEvent) => {
     event.preventDefault();
     if (event.dataTransfer!.types.indexOf(positionDragType) !== -1) {
-      const positionState = JSON.parse(event.dataTransfer!.getData(positionDragType));
-      position.restoreState(positionState);
       event.stopPropagation();
+      const obj = verifyObject(JSON.parse(event.dataTransfer!.getData(positionDragType)));
+      const dimensions = verifyObjectProperty(obj, 'dimensions', dimensionNamesFromJson);
+      const positionVec = verifyObjectProperty(
+          obj, 'position', positionObj => parseArray(positionObj, verifyFiniteFloat));
+      if (positionVec.length !== dimensions.length) {
+        throw new Error('length mismatch between position and dimensions');
+      }
+      const rank = positionVec.length;
+      const {coordinateSpace: {value: {names}}, value: coordinates} = position;
+      for (let i = 0; i < rank; ++i) {
+        const dim = names.indexOf(dimensions[i]);
+        if (dim === -1) continue;
+        coordinates[dim] = positionVec[i];
+      }
+      position.changed.dispatch();
     }
   });
-  const dragoverDisposer = registerEventListener(target, 'dragover', (event: DragEvent) => {
+  const handleDragOver = (event: DragEvent) => {
     if (event.dataTransfer!.types.indexOf(positionDragType) !== -1) {
       // Permit drag.
       event.dataTransfer!.dropEffect = 'link';
       event.preventDefault();
       event.stopPropagation();
     }
-  });
+  };
+
+  const dragenterDisposer = registerEventListener(target, 'dragenter', handleDragOver);
+  const dragoverDisposer = registerEventListener(target, 'dragover', handleDragOver);
   return () => {
+    dragenterDisposer();
     dragoverDisposer();
     dropDisposer();
   };

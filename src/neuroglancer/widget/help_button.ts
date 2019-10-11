@@ -13,9 +13,9 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-import {asyncComputation} from 'neuroglancer/async_computation';
-import {SingleMeshVertexAttributes} from 'neuroglancer/single_mesh/backend';
 
-export const parseCSVFromArrayBuffer = asyncComputation<(buffer: ArrayBuffer) => {
-  data: SingleMeshVertexAttributes, size: number
-}>('parseCSVFromArrayBuffer');
+import {makeIcon, MakeIconOptions} from 'neuroglancer/widget/icon';
+
+export function makeHelpButton(options: MakeIconOptions = {}) {
+  return makeIcon({text: '?', ...options});
+}

@@ -19,7 +19,7 @@ import {VolumeChunk} from 'neuroglancer/sliceview/volume/backend';
 import {CancellationToken} from 'neuroglancer/util/cancellation';
 import {DATA_TYPE_BYTES, DataType} from 'neuroglancer/util/data_type';
 import {convertEndian16, convertEndian32, Endianness, ENDIANNESS} from 'neuroglancer/util/endian';
-import {prod3} from 'neuroglancer/util/geom';
+import * as vector from 'neuroglancer/util/vector';
 
 export async function decodeRawChunk(
     chunk: VolumeChunk, cancellationToken: CancellationToken, response: ArrayBuffer,
@@ -28,9 +28,9 @@ export async function decodeRawChunk(
   cancellationToken;
   let {spec} = chunk.source!;
   let {dataType} = spec;
-  let numElements = prod3(chunk.chunkDataSize!);
+  let numElements = vector.prod(chunk.chunkDataSize!);
   let bytesPerElement = DATA_TYPE_BYTES[dataType];
-  let expectedBytes = numElements * bytesPerElement * spec.numChannels;
+  let expectedBytes = numElements * bytesPerElement;
   if (expectedBytes !== byteLength) {
     throw new Error(
         `Raw-format chunk is ${byteLength} bytes, ` +

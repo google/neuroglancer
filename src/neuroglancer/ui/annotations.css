@@ -22,14 +22,29 @@
 }
 
 .neuroglancer-annotation-list { 
-  list-style-type: none;
+  display: grid;
+  grid-auto-rows: min-content;
   margin: 0px;
-  padding: 5px;
+  padding: 0px;
+  margin-top: 2px;
   overflow-y: auto;
   height: 0px;
   flex: 1;
   flex-basis: 0px;
   min-height: 0px;
+}
+
+.neuroglancer-annotation-list-entry {
+  display: contents;
+  cursor: pointer;
+}
+
+.neuroglancer-annotation-position {
+  display: contents;
+}
+
+.neuroglancer-annotation-sublist {
+  display: contents;
 }
 
 .neuroglancer-annotation-layer-view {
@@ -39,29 +54,50 @@
   align-items: stretch;
 }
 
+.neuroglancer-annotation-list-header {
+  display: contents;
+}
+
+.neuroglancer-annotation-list-header > * {
+  position: sticky;
+  top: 0px;
+  background-color: black;
+  padding-bottom: 2px;
+}
+
+.neuroglancer-annotation-coordinate {
+  font-family: monospace;
+  text-align: right;
+}
+
 .neuroglancer-annotation-icon {
-  position: absolute;
-  left: 0px;
+  grid-column: symbol;
+  padding-right: 5px;
 }
 
 .neuroglancer-annotation-description {
+  grid-column: dim / -1;
   text-overflow: ellipsis;
   overflow: hidden;
   white-space: nowrap;
 }
 
-.neuroglancer-annotation-hover {
+.neuroglancer-annotation-list-entry-delete {
+  grid-column: delete;
+  margin-left: 1ch;
+  align-self: start;  
+}
+
+.neuroglancer-annotation-hover .neuroglancer-annotation-list-entry-highlight {
   background-color: #333;
 }
 
-.neuroglancer-annotation-selected {
-  outline: 1px solid #ccc;
+.neuroglancer-annotation-selected .neuroglancer-annotation-list-entry-highlight {
+  background-color: #939;
 }
 
-.neuroglancer-annotation-list > li {
-  cursor: pointer;
-  position: relative;
-  padding-left: 1.5em;
+.neuroglancer-annotation-hover.neuroglancer-annotation-selected .neuroglancer-annotation-list-entry-highlight {
+  background-color: #969;
 }
 
 .neuroglancer-tab-content.neuroglancer-annotation-details {
@@ -129,4 +165,27 @@
 
 .neuroglancer-annotation-segment-item {
   color: black;
+}
+
+.neuroglancer-annotations-view-dimension {
+  font-family: monospace;
+  text-align: right;
+  padding-left: 2ch;
+}
+
+.neuroglancer-annotations-view-dimension-name {
+  color: #ff6;
+}
+
+.neuroglancer-annotations-view-dimension-scale {
+  color: #bbb;
+}
+
+.neuroglancer-annotations-view-dimension-scale:not(:empty)::before {
+  content: "(";
+  margin-left: 1ch;
+}
+
+.neuroglancer-annotations-view-dimension-scale:not(:empty)::after {
+  content: ")";
 }

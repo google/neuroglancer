@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-import {partitionArray, tile2dArray, transposeArray2d} from 'neuroglancer/util/array';
+import { partitionArray, tile2dArray, transposeArray2d, getInsertPermutation} from 'neuroglancer/util/array';
 
 describe('partitionArray', () => {
   it('basic test', () => {
@@ -85,4 +85,32 @@ describe('tile2dArray', () => {
     const result = tile2dArray(input, /*majorDimension=*/2, /*minorTiles=*/2, /*majorTiles=*/2);
     expect(result).toEqual(expected);
   });
+});
+
+describe('getInsertPermutation', () => {
+  it('works for 1 element', () => {
+    expect(getInsertPermutation(1, 0, 0)).toEqual([0]);
+  });
+  it('works for 2 elements', () => {
+    expect(getInsertPermutation(2, 0, 1)).toEqual([1, 0]);
+    expect(getInsertPermutation(2, 1, 0)).toEqual([1, 0]);
+    expect(getInsertPermutation(2, 0, 0)).toEqual([0, 1]);
+    expect(getInsertPermutation(2, 1, 1)).toEqual([0, 1]);
+  });
+  it('works for 3 elements', () => {
+    expect(getInsertPermutation(3, 0, 1)).toEqual([1, 0, 2]);
+    expect(getInsertPermutation(3, 1, 0)).toEqual([1, 0, 2]);
+    expect(getInsertPermutation(3, 0, 2)).toEqual([1, 2, 0]);
+    expect(getInsertPermutation(3, 2, 0)).toEqual([2, 0, 1]);
+    expect(getInsertPermutation(3, 2, 1)).toEqual([0, 2, 1]);
+    expect(getInsertPermutation(3, 0, 0)).toEqual([0, 1, 2]);
+    expect(getInsertPermutation(3, 1, 1)).toEqual([0, 1, 2]);
+    expect(getInsertPermutation(3, 2, 2)).toEqual([0, 1, 2]);
+  });
+
+  it('works for 4 elements', () => {
+    expect(getInsertPermutation(4, 0, 1)).toEqual([1, 0, 2, 3]);
+    expect(getInsertPermutation(4, 0, 2)).toEqual([1, 2, 0, 3]);
+    expect(getInsertPermutation(4, 2, 0)).toEqual([2, 0, 1, 3]);
+  });  
 });

@@ -102,3 +102,13 @@ export interface ReadonlySignal<Callable extends Function> {
 }
 
 export type NullaryReadonlySignal = ReadonlySignal<() => void>;
+
+export const neverSignal: NullaryReadonlySignal = {
+  count: 0,
+  add(_handler: any) {
+    return () => {};
+  },
+  remove(_handler: any) {
+    return false;
+  },
+};

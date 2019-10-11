@@ -18,9 +18,10 @@ import {HashMapUint64} from 'neuroglancer/gpu_hash/hash_table';
 import {GPUHashTable, HashMapShaderManager, HashSetShaderManager} from 'neuroglancer/gpu_hash/shader';
 import {SegmentColorShaderManager, SegmentStatedColorShaderManager} from 'neuroglancer/segment_color';
 import {registerRedrawWhenSegmentationDisplayStateChanged, SegmentationDisplayState} from 'neuroglancer/segmentation_display_state/frontend';
-import {SliceView} from 'neuroglancer/sliceview/frontend';
-import {MultiscaleVolumeChunkSource} from 'neuroglancer/sliceview/volume/frontend';
-import {RenderLayer, RenderLayerBaseOptions} from 'neuroglancer/sliceview/volume/renderlayer';
+import {SliceViewSourceOptions} from 'neuroglancer/sliceview/base';
+import {SliceView, SliceViewSingleResolutionSource} from 'neuroglancer/sliceview/frontend';
+import {MultiscaleVolumeChunkSource, VolumeChunkSource} from 'neuroglancer/sliceview/volume/frontend';
+import {SliceViewVolumeRenderLayer, RenderLayerBaseOptions} from 'neuroglancer/sliceview/volume/renderlayer';
 import {TrackableAlphaValue} from 'neuroglancer/trackable_alpha';
 import {TrackableBoolean} from 'neuroglancer/trackable_boolean';
 import {AggregateWatchableValue, makeCachedDerivedWatchableValue} from 'neuroglancer/trackable_value';
@@ -59,7 +60,7 @@ interface ShaderParameters {
   hideSegmentZero: boolean;
 }
 
-export class SegmentationRenderLayer extends RenderLayer<ShaderParameters> {
+export class SegmentationRenderLayer extends SliceViewVolumeRenderLayer<ShaderParameters> {
   protected segmentColorShaderManager = new SegmentColorShaderManager('segmentColorHash');
   protected segmentStatedColorShaderManager =
       new SegmentStatedColorShaderManager('segmentStatedColor');
@@ -94,11 +95,17 @@ export class SegmentationRenderLayer extends RenderLayer<ShaderParameters> {
       transform: displayState.transform,
       renderScaleHistogram: displayState.renderScaleHistogram,
       renderScaleTarget: displayState.renderScaleTarget,
+      localPosition: displayState.localPosition,
     });
     this.registerDisposer(this.shaderParameters as AggregateWatchableValue<ShaderParameters>);
     registerRedrawWhenSegmentationDisplayStateChanged(displayState, this);
     this.registerDisposer(displayState.selectedAlpha.changed.add(this.redrawNeeded.dispatch));
     this.registerDisposer(displayState.notSelectedAlpha.changed.add(this.redrawNeeded.dispatch));
+  }
+
+  getSources(options: SliceViewSourceOptions):
+      SliceViewSingleResolutionSource<VolumeChunkSource>[][] {
+    return this.multiscaleSource.getSources(options as any);
   }
 
   defineShader(builder: ShaderBuilder, parameters: ShaderParameters) {

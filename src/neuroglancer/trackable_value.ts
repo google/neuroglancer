@@ -16,7 +16,7 @@
 
 import debounce from 'lodash/debounce';
 import {Borrowed, Disposer, Owned, RefCounted} from 'neuroglancer/util/disposable';
-import {NullaryReadonlySignal, NullarySignal} from 'neuroglancer/util/signal';
+import { NullaryReadonlySignal, NullarySignal, neverSignal} from 'neuroglancer/util/signal';
 import {Trackable} from 'neuroglancer/util/trackable';
 
 export interface WatchableValueInterface<T> {
@@ -321,4 +321,8 @@ export function registerNested<T>(
     signalDisposer();
     context.dispose();
   };
+}
+
+export function constantWatchableValue<T>(value: T): WatchableValueInterface<T> {
+  return {changed: neverSignal, value};
 }

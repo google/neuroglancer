@@ -19,47 +19,50 @@
  * volumes.
  */
 
+import {makeDataBoundsBoundingBoxAnnotationSet} from 'neuroglancer/annotation';
 import {ChunkManager, WithParameters} from 'neuroglancer/chunk_manager/frontend';
-import {DataSource} from 'neuroglancer/datasource';
+import {makeCoordinateSpace, makeIdentityTransformedBoundingBox} from 'neuroglancer/coordinate_transform';
+import {CompleteUrlOptions, DataSource, DataSourceProvider, GetDataSourceOptions} from 'neuroglancer/datasource';
 import {GET_NIFTI_VOLUME_INFO_RPC_ID, NiftiVolumeInfo, VolumeSourceParameters} from 'neuroglancer/datasource/nifti/base';
-import {VolumeChunkSpecification, VolumeSourceOptions} from 'neuroglancer/sliceview/volume/base';
-import {VolumeChunkSource, MultiscaleVolumeChunkSource as GenericMultiscaleVolumeChunkSource} from 'neuroglancer/sliceview/volume/frontend';
+import {makeVolumeChunkSpecificationWithDefaultCompression, VolumeSourceOptions, VolumeType} from 'neuroglancer/sliceview/volume/base';
+import {MultiscaleVolumeChunkSource, VolumeChunkSource} from 'neuroglancer/sliceview/volume/frontend';
 import {CancellationToken, uncancelableToken} from 'neuroglancer/util/cancellation';
-import {kOneVec, mat4, translationRotationScaleZReflectionToMat4} from 'neuroglancer/util/geom';
+import {completeHttpPath} from 'neuroglancer/util/http_path_completion';
+import * as matrix from 'neuroglancer/util/matrix';
 
 class NiftiVolumeChunkSource extends
 (WithParameters(VolumeChunkSource, VolumeSourceParameters)) {}
 
-export class MultiscaleVolumeChunkSource implements GenericMultiscaleVolumeChunkSource {
-  constructor(public chunkManager: ChunkManager, public url: string, public info: NiftiVolumeInfo) {
-  }
-  get numChannels() {
-    return this.info.numChannels;
+export class NiftiMultiscaleVolumeChunkSource extends MultiscaleVolumeChunkSource {
+  constructor(chunkManager: ChunkManager, public url: string, public info: NiftiVolumeInfo) {
+    super(chunkManager);
   }
   get dataType() {
     return this.info.dataType;
   }
   get volumeType() {
-    return this.info.volumeType;
+    return VolumeType.UNKNOWN;
+  }
+  get rank() {
+    return this.info.rank;
   }
   getSources(volumeSourceOptions: VolumeSourceOptions) {
     let {info} = this;
-    const spec = VolumeChunkSpecification.withDefaultCompression({
-      volumeType: info.volumeType,
+    const chunkToMultiscaleTransform = matrix.createIdentity(Float32Array, info.rank + 1);
+    const spec = makeVolumeChunkSpecificationWithDefaultCompression({
+      rank: info.rank,
+      volumeType: VolumeType.UNKNOWN,
       chunkDataSize: info.volumeSize,
       dataType: info.dataType,
-      voxelSize: info.voxelSize,
-      numChannels: info.numChannels,
-      upperVoxelBound: info.volumeSize,
-      transform: translationRotationScaleZReflectionToMat4(
-          mat4.create(), info.qoffset, info.quatern, kOneVec, info.qfac),
+      upperVoxelBound: Float32Array.from(info.volumeSize),
+      chunkToMultiscaleTransform,
       volumeSourceOptions,
     });
-    return [[this.chunkManager.getChunkSource(NiftiVolumeChunkSource, {spec, parameters: {url: this.url}})]];
-  }
-
-  getMeshSource(): null {
-    return null;
+    return [[{
+      chunkSource: this.chunkManager.getChunkSource(
+          NiftiVolumeChunkSource, {spec, parameters: {url: this.url}}),
+      chunkToMultiscaleTransform,
+    }]];
   }
 }
 
@@ -70,16 +73,61 @@ function getNiftiVolumeInfo(
       cancellationToken);
 }
 
-export function getVolume(chunkManager: ChunkManager, url: string) {
-  return chunkManager.memoize.getUncounted(
-      {type: 'nifti/getVolume', url},
-      () => getNiftiVolumeInfo(chunkManager, url, uncancelableToken)
-                .then(info => new MultiscaleVolumeChunkSource(chunkManager, url, info)));
+function getDataSource(chunkManager: ChunkManager, url: string) {
+  return chunkManager.memoize.getUncounted({type: 'nifti/getVolume', url}, async () => {
+    const info = await getNiftiVolumeInfo(chunkManager, url, uncancelableToken);
+    const volume = new NiftiMultiscaleVolumeChunkSource(chunkManager, url, info);
+    const box = {
+      lowerBounds: new Float64Array(info.rank),
+      upperBounds: Float64Array.from(info.volumeSize),
+    };
+    const inputSpace = makeCoordinateSpace({
+      rank: info.rank,
+      names: info.sourceNames,
+      scales: info.sourceScales,
+      units: info.units,
+      boundingBoxes: [makeIdentityTransformedBoundingBox(box)],
+    });
+    const outputSpace = makeCoordinateSpace({
+      rank: info.rank,
+      names: info.viewNames,
+      scales: info.viewScales,
+      units: info.units,
+    });
+    const dataSource: DataSource = {
+      subsources: [
+        {
+          id: 'default',
+          default: true,
+          subsource: {volume},
+        },
+        {
+          id: 'bounds',
+          default: true,
+          subsource: {staticAnnotations: makeDataBoundsBoundingBoxAnnotationSet(box)},
+        },
+      ],
+      modelTransform: {
+        sourceRank: info.rank,
+        rank: info.rank,
+        inputSpace,
+        outputSpace,
+        transform: info.transform,
+      },
+    };
+    return dataSource;
+  });
 }
 
-export class NiftiDataSource extends DataSource {
-  get description() { return 'Single NIfTI file'; }
-  getVolume(chunkManager: ChunkManager, url: string) {
-    return getVolume(chunkManager, url);
+export class NiftiDataSource extends DataSourceProvider {
+  get description() {
+    return 'Single NIfTI file';
+  }
+  get(options: GetDataSourceOptions): Promise<DataSource> {
+    return getDataSource(options.chunkManager, options.providerUrl);
+  }
+
+  completeUrl(options: CompleteUrlOptions) {
+    return completeHttpPath(options.providerUrl, options.cancellationToken);
   }
 }

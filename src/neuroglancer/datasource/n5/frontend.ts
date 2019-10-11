@@ -14,36 +14,49 @@
  * limitations under the License.
  */
 
-import {AnnotationSource, makeDataBoundsBoundingBox} from 'neuroglancer/annotation';
+/**
+ * Supports single-resolution and multi-resolution N5 datasets
+ *
+ * The multi-resolution support is compatible with:
+ *
+ * https://github.com/saalfeldlab/n5-viewer
+ * https://github.com/bigdataviewer/bigdataviewer-core/blob/master/BDV%20N5%20format.md
+ */
+
+import {makeDataBoundsBoundingBoxAnnotationSet} from 'neuroglancer/annotation';
 import {ChunkManager, WithParameters} from 'neuroglancer/chunk_manager/frontend';
-import {DataSource} from 'neuroglancer/datasource';
+import {CoordinateSpace, makeCoordinateSpace, makeIdentityTransform} from 'neuroglancer/coordinate_transform';
+import {CompleteUrlOptions, DataSource, DataSourceProvider, GetDataSourceOptions} from 'neuroglancer/datasource';
 import {VolumeChunkEncoding, VolumeChunkSourceParameters} from 'neuroglancer/datasource/n5/base';
-import {DataType, VolumeChunkSpecification, VolumeSourceOptions, VolumeType} from 'neuroglancer/sliceview/volume/base';
+import {SliceViewSingleResolutionSource} from 'neuroglancer/sliceview/frontend';
+import {DataType, makeDefaultVolumeChunkSpecifications, VolumeSourceOptions, VolumeType} from 'neuroglancer/sliceview/volume/base';
 import {MultiscaleVolumeChunkSource as GenericMultiscaleVolumeChunkSource, VolumeChunkSource} from 'neuroglancer/sliceview/volume/frontend';
-import {mat4, vec3} from 'neuroglancer/util/geom';
-import {fetchOk, HttpError, parseSpecialUrl} from 'neuroglancer/util/http_request';
-import {parseArray, parseFixedLengthArray, verifyEnumString, verifyFinitePositiveFloat, verifyObject, verifyObjectProperty, verifyPositiveInt} from 'neuroglancer/util/json';
+import {transposeNestedArrays} from 'neuroglancer/util/array';
+import {Borrowed} from 'neuroglancer/util/disposable';
+import {completeHttpPath} from 'neuroglancer/util/http_path_completion';
+import {fetchOk, HttpError, parseSpecialUrl, parseUrl} from 'neuroglancer/util/http_request';
+import {expectArray, parseArray, parseFixedLengthArray, verifyEnumString, verifyFinitePositiveFloat, verifyObject, verifyObjectProperty, verifyOptionalObjectProperty, verifyPositiveInt, verifyString} from 'neuroglancer/util/json';
+import {createHomogeneousScaleMatrix} from 'neuroglancer/util/matrix';
+import {scaleByExp10, unitFromJson} from 'neuroglancer/util/si_units';
 
 class N5VolumeChunkSource extends
 (WithParameters(VolumeChunkSource, VolumeChunkSourceParameters)) {}
 
-export class MultiscaleVolumeChunkSource implements GenericMultiscaleVolumeChunkSource {
+export class MultiscaleVolumeChunkSource extends GenericMultiscaleVolumeChunkSource {
   dataType: DataType;
   volumeType: VolumeType;
-
-  get numChannels() {
-    return 1;
-  }
-
-  getMeshSource() {
-    return null;
-  }
-
   baseScaleIndex: number;
 
+  modelSpace: CoordinateSpace;
+
+  get rank() {
+    return this.modelSpace.rank;
+  }
+
   constructor(
-      public chunkManager: ChunkManager, public url: string,
-      public topLevelMetadata: TopLevelMetadata, public scales: (ScaleMetadata|undefined)[]) {
+      chunkManager: Borrowed<ChunkManager>, public multiscaleMetadata: MultiscaleMetadata,
+      public scales: (ScaleMetadata|undefined)[]) {
+    super(chunkManager);
     let dataType: DataType|undefined;
     let baseScaleIndex: number|undefined;
     scales.forEach((scale, i) => {
@@ -60,99 +73,87 @@ export class MultiscaleVolumeChunkSource implements GenericMultiscaleVolumeChunk
     if (dataType === undefined) {
       throw new Error(`At least one scale must be specified.`);
     }
+    const baseDownsamplingInfo = multiscaleMetadata.scales[baseScaleIndex!]!;
+    const baseScale = scales[baseScaleIndex!]!;
     this.dataType = dataType;
     this.volumeType = VolumeType.IMAGE;
     this.baseScaleIndex = baseScaleIndex!;
+    const baseModelSpace = multiscaleMetadata.modelSpace;
+    const {rank} = baseModelSpace;
+    this.modelSpace = makeCoordinateSpace({
+      names: baseModelSpace.names,
+      scales: baseModelSpace.scales,
+      units: baseModelSpace.units,
+      boundingBoxes: [
+        {
+          transform: createHomogeneousScaleMatrix(
+              Float64Array, baseDownsamplingInfo.downsamplingFactor, /*square=*/ false),
+          box: {
+            lowerBounds: new Float64Array(rank),
+            upperBounds: new Float64Array(baseScale.size),
+          },
+        },
+      ],
+    });
   }
 
   getSources(volumeSourceOptions: VolumeSourceOptions) {
-    const {topLevelMetadata} = this;
-    const sources: VolumeChunkSource[][] = [];
-    this.scales.forEach((scale, i) => {
-      if (scale === undefined) return;
-      sources.push(
-          VolumeChunkSpecification
-              .getDefaults({
-                voxelSize: vec3.multiply(
-                    vec3.create(), topLevelMetadata.pixelResolution, topLevelMetadata.scales[i]),
-                dataType: scale.dataType,
-                numChannels: 1,
-                upperVoxelBound: scale.size,
-                volumeType: this.volumeType,
-                chunkDataSizes: [scale.chunkSize],
-                volumeSourceOptions,
-              })
-              .map(spec => this.chunkManager.getChunkSource(N5VolumeChunkSource, {
-                spec,
-                parameters: {'url': `${this.url}/s${i}`, 'encoding': scale.encoding}
-              })));
-    });
-    return sources;
-  }
-
-  getStaticAnnotations() {
-    const {topLevelMetadata, baseScaleIndex} = this;
-    const annotationSet = new AnnotationSource(mat4.fromScaling(
-        mat4.create(),
-        vec3.multiply(
-            vec3.create(), topLevelMetadata.pixelResolution,
-            topLevelMetadata.scales[baseScaleIndex])));
-    annotationSet.readonly = true;
-    annotationSet.add(makeDataBoundsBoundingBox(vec3.create(), this.scales[baseScaleIndex]!.size));
-    return annotationSet;
+    const {} = this;
+    const {scales, rank} = this;
+    const scalesDownsamplingInfo = this.multiscaleMetadata.scales;
+    return transposeNestedArrays(
+        (scales.filter(scale => scale !== undefined) as ScaleMetadata[]).map((scale, i) => {
+          const scaleDownsamplingInfo = scalesDownsamplingInfo[i];
+          const transform =
+              createHomogeneousScaleMatrix(Float32Array, scaleDownsamplingInfo.downsamplingFactor);
+          return makeDefaultVolumeChunkSpecifications({
+                   rank,
+                   chunkToMultiscaleTransform: transform,
+                   dataType: scale.dataType,
+                   upperVoxelBound: scale.size,
+                   volumeType: this.volumeType,
+                   chunkDataSizes: [scale.chunkSize],
+                   volumeSourceOptions,
+                 })
+              .map((spec): SliceViewSingleResolutionSource<VolumeChunkSource> => ({
+                     chunkSource: this.chunkManager.getChunkSource(N5VolumeChunkSource, {
+                       spec,
+                       parameters: {
+                         url: parseSpecialUrl(scaleDownsamplingInfo.url),
+                         encoding: scale.encoding
+                       }
+                     }),
+                     chunkToMultiscaleTransform: transform,
+                   }));
+        }));
   }
 }
 
-const pixelResolutionUnits = new Map<string, number>([
-  ['mm', 1e6],
-  ['m', 1e9],
-  ['um', 1000],
-  ['nm', 1],
-]);
-
-class TopLevelMetadata {
-  pixelResolution: vec3;
-  scales: vec3[];
-  constructor(obj: any) {
-    verifyObject(obj);
-    verifyObjectProperty(obj, 'pixelResolution', resObj => {
-      verifyObject(resObj);
-      const unitScale = verifyObjectProperty(resObj, 'unit', x => {
-        const s = pixelResolutionUnits.get(x);
-        if (s === undefined) {
-          throw new Error(`Unsupported unit: ${JSON.stringify(x)}.`);
-        }
-        return s;
-      });
-      const dimensions = verifyObjectProperty(
-          resObj, 'dimensions',
-          x => parseFixedLengthArray(vec3.create(), x, verifyFinitePositiveFloat));
-      this.pixelResolution = vec3.scale(dimensions, dimensions, unitScale);
-    });
-    this.scales = verifyObjectProperty(
-        obj, 'scales',
-        scalesObj => parseArray(
-            scalesObj,
-            scaleObj => parseFixedLengthArray(vec3.create(), scaleObj, verifyFinitePositiveFloat)));
-  }
+interface MultiscaleMetadata {
+  url: string;
+  attributes: any;
+  modelSpace: CoordinateSpace;
+  scales: {readonly url: string; readonly downsamplingFactor: Float64Array;}[];
 }
+;
 
 class ScaleMetadata {
   dataType: DataType;
   encoding: VolumeChunkEncoding;
-  size: vec3;
-  chunkSize: vec3;
+  size: Float32Array;
+  chunkSize: Uint32Array;
 
   constructor(obj: any) {
     verifyObject(obj);
     this.dataType = verifyObjectProperty(obj, 'dataType', x => verifyEnumString(x, DataType));
-    this.size = verifyObjectProperty(
-        obj, 'dimensions', x => parseFixedLengthArray(vec3.create(), x, verifyPositiveInt));
+    this.size = Float32Array.from(
+        verifyObjectProperty(obj, 'dimensions', x => parseArray(x, verifyPositiveInt)));
     this.chunkSize = verifyObjectProperty(
-      obj, 'blockSize', x => parseFixedLengthArray(vec3.create(), x, verifyPositiveInt));
+        obj, 'blockSize',
+        x => parseFixedLengthArray(new Uint32Array(this.size.length), x, verifyPositiveInt));
 
     let encoding: VolumeChunkEncoding|undefined;
-    verifyObjectProperty(obj, 'compression', compression => {
+    verifyOptionalObjectProperty(obj, 'compression', compression => {
       encoding =
           verifyObjectProperty(compression, 'type', x => verifyEnumString(x, VolumeChunkEncoding));
     });
@@ -164,55 +165,245 @@ class ScaleMetadata {
   }
 }
 
-function getTopLevelMetadata(chunkManager: ChunkManager, url: string): Promise<TopLevelMetadata> {
-  return chunkManager.memoize.getUncounted(
-      {'type': 'n5:topLevelMetadata', url},
-      () => fetchOk(url)
-                .then(response => response.json())
-                .then(response => new TopLevelMetadata(response)));
-}
-
-function getScaleMetadata(chunkManager: ChunkManager, url: string): Promise<ScaleMetadata> {
-  return chunkManager.memoize.getUncounted(
-      {'type': 'n5:scaleMetadata', url},
-      () => fetchOk(url)
-                .then(response => response.json())
-                .then(response => new ScaleMetadata(response)));
-}
-
-function getAllScales(chunkManager: ChunkManager, url: string, topLevelMetadata: TopLevelMetadata):
+function getAllScales(chunkManager: ChunkManager, multiscaleMetadata: MultiscaleMetadata):
     Promise<(ScaleMetadata | undefined)[]> {
-  return Promise.all(topLevelMetadata.scales.map((_scale, i) => {
-    return getScaleMetadata(chunkManager, `${url}/s${i}/attributes.json`).catch(e => {
-      if (e instanceof HttpError && e.status === 404) {
-        return undefined;
-      }
-      throw e;
-    });
+  return Promise.all(multiscaleMetadata.scales.map(async scale => {
+    const attributes = await getAttributes(chunkManager, scale.url, true);
+    if (attributes === undefined) return undefined;
+    return new ScaleMetadata(attributes);
   }));
 }
 
-export class N5DataSource extends DataSource {
+function getAttributesJsonUrls(url: string): string[] {
+  let {protocol, host, path} = parseUrl(url);
+  if (path.endsWith('/')) {
+    path = path.substring(0, path.length - 1);
+  }
+  const urls: string[] = [];
+  while (true) {
+    urls.push(`${protocol}://${host}${path}/attributes.json`);
+    const index = path.lastIndexOf('/');
+    if (index === -1) break;
+    path = path.substring(0, index);
+  }
+  return urls;
+}
+
+function getIndividualAttributesJson(
+    chunkManager: ChunkManager, url: string, required: boolean): Promise<any> {
+  url = parseSpecialUrl(url);
+  return chunkManager.memoize.getUncounted(
+      {type: 'n5:attributes.json', url},
+      () => fetchOk(url)
+                .then(response => response.json())
+                .then(j => {
+                  try {
+                    return verifyObject(j);
+                  } catch (e) {
+                    throw new Error(`Error reading attributes from ${url}: ${e.message}`);
+                  }
+                })
+                .catch(e => {
+                  if (e instanceof HttpError && e.status === 404) {
+                    if (required) return undefined;
+                    return {};
+                  }
+                  throw e;
+                }));
+}
+
+async function getAttributes(
+    chunkManager: ChunkManager, url: string, required: boolean): Promise<unknown> {
+  const attributesJsonUrls = getAttributesJsonUrls(url).map(parseSpecialUrl);
+  const metadata = await Promise.all(attributesJsonUrls.map(
+      (u, i) => getIndividualAttributesJson(
+          chunkManager, u, required && i === attributesJsonUrls.length - 1)));
+  if (metadata.indexOf(undefined) !== -1) return undefined;
+  return Object.assign({}, ...metadata);
+}
+
+function verifyRank(existing: number, n: number) {
+  if (existing !== -1 && n !== existing) {
+    throw new Error(`Rank mismatch, received ${n} but expected ${existing}`);
+  }
+  return n;
+}
+
+function parseSingleResolutionDownsamplingFactors(obj: any) {
+  return Float64Array.from(parseArray(obj, verifyFinitePositiveFloat));
+}
+
+function parseMultiResolutionDownsamplingFactors(obj: any) {
+  const a = expectArray(obj);
+  if (a.length === 0) throw new Error('Expected non-empty array');
+  let rank = -1;
+  const allFactors = parseArray(a, x => {
+    const f = parseSingleResolutionDownsamplingFactors(x);
+    rank = verifyRank(rank, f.length);
+    return f;
+  });
+  return {all: allFactors, single: undefined, rank};
+}
+
+function parseDownsamplingFactors(obj: any) {
+  const a = expectArray(obj);
+  if (a.length === 0) throw new Error('Expected non-empty array');
+  if (Array.isArray(a[0])) {
+    return parseMultiResolutionDownsamplingFactors(a);
+  }
+  const f = parseSingleResolutionDownsamplingFactors(obj);
+  return {all: undefined, single: f, rank: f.length};
+}
+
+const defaultAxes = ['x', 'y', 'z', 't', 'c'];
+
+function getDefaultAxes(rank: number) {
+  const axes = defaultAxes.slice(0, rank);
+  while (axes.length < rank) {
+    axes.push(`d${axes.length + 1}`);
+  }
+  return axes;
+}
+
+function getMultiscaleMetadata(url: string, attributes: any): MultiscaleMetadata {
+  verifyObject(attributes);
+  let rank = -1;
+
+  let scales = verifyOptionalObjectProperty(attributes, 'resolution', x => {
+    const scales = Float64Array.from(parseArray(x, verifyFinitePositiveFloat));
+    rank = verifyRank(rank, scales.length);
+    return scales;
+  });
+  let axes = verifyOptionalObjectProperty(attributes, 'axes', x => {
+    const names = parseArray(x, verifyString);
+    rank = verifyRank(rank, names.length);
+    return names;
+  });
+  let units = verifyOptionalObjectProperty(attributes, 'units', x => {
+    const units = parseArray(x, unitFromJson);
+    rank = verifyRank(rank, units.length);
+    return units;
+  });
+  let defaultUnit = {unit: 'm', exponent: -9};
+  let singleDownsamplingFactors: Float64Array|undefined;
+  let allDownsamplingFactors: Float64Array[]|undefined;
+  verifyOptionalObjectProperty(attributes, 'downsamplingFactors', dObj => {
+    const {single, all, rank: curRank} = parseDownsamplingFactors(dObj);
+    rank = verifyRank(rank, curRank);
+    if (single !== undefined) {
+      singleDownsamplingFactors = single;
+    }
+    if (all !== undefined) {
+      allDownsamplingFactors = all;
+    }
+  });
+  // Handle n5-viewer "pixelResolution" attribute
+  verifyOptionalObjectProperty(attributes, 'pixelResolution', resObj => {
+    defaultUnit = verifyObjectProperty(resObj, 'unit', unitFromJson);
+    verifyOptionalObjectProperty(resObj, 'dimensions', scalesObj => {
+      scales = Float64Array.from(parseArray(scalesObj, verifyFinitePositiveFloat));
+      rank = verifyRank(rank, scales.length);
+    });
+  });
+  // Handle n5-viewer "scales" attribute
+  verifyOptionalObjectProperty(attributes, 'scales', scalesObj => {
+    const {all, rank: curRank} = parseMultiResolutionDownsamplingFactors(scalesObj);
+    rank = verifyRank(rank, curRank);
+    allDownsamplingFactors = all;
+  });
+  const dimensions = verifyOptionalObjectProperty(attributes, 'dimensions', x => {
+    const dimensions = parseArray(x, verifyPositiveInt);
+    rank = verifyRank(rank, dimensions.length);
+    return dimensions;
+  });
+
+  if (rank === -1) {
+    throw new Error('Unable to determine rank of dataset');
+  }
+  if (axes === undefined) {
+    axes = getDefaultAxes(rank);
+  }
+  if (units === undefined) {
+    units = new Array(rank);
+    units.fill(defaultUnit);
+  }
+  if (scales === undefined) {
+    scales = new Float64Array(rank);
+    scales.fill(1);
+  }
+  for (let i = 0; i < rank; ++i) {
+    scales[i] = scaleByExp10(scales[i], units[i].exponent);
+  }
+  const modelSpace = makeCoordinateSpace({
+    rank,
+    valid: true,
+    names: axes,
+    scales,
+    units: units.map(x => x.unit),
+  });
+  if (dimensions === undefined) {
+    if (allDownsamplingFactors === undefined) {
+      throw new Error('Not valid single-resolution or multi-resolution dataset');
+    }
+    return {
+      modelSpace,
+      url,
+      attributes,
+      scales: allDownsamplingFactors.map((f, i) => ({url: `${url}/s${i}`, downsamplingFactor: f})),
+    };
+  }
+  if (singleDownsamplingFactors === undefined) {
+    singleDownsamplingFactors = new Float64Array(rank);
+    singleDownsamplingFactors.fill(1);
+  }
+  return {
+    modelSpace,
+    url,
+    attributes,
+    scales: [{url, downsamplingFactor: singleDownsamplingFactors}]
+  };
+}
+
+export class N5DataSource extends DataSourceProvider {
   get description() {
     return 'N5 data source';
   }
-  getVolume(chunkManager: ChunkManager, url: string) {
-    url = parseSpecialUrl(url);
-    const m = url.match(/^(.*)\/(c[0-9]+)$/);
-    let topLevelMetadataUrl: string;
-    if (m !== null) {
-      topLevelMetadataUrl = `${m[1]}/attributes.json`;
-    } else {
-      topLevelMetadataUrl = `${url}/attributes.json`;
+  get(options: GetDataSourceOptions): Promise<DataSource> {
+    let url = options.providerUrl;
+    if (url.endsWith('/')) {
+      url = url.substring(0, url.length - 1);
     }
-    return chunkManager.memoize.getUncounted(
-        {'type': 'n5:MultiscaleVolumeChunkSource', url},
-        () =>
-            getTopLevelMetadata(chunkManager, topLevelMetadataUrl)
-                .then(
-                    topLevelMetadata => getAllScales(chunkManager, url, topLevelMetadata)
-                                            .then(
-                                                scales => new MultiscaleVolumeChunkSource(
-                                                    chunkManager, url, topLevelMetadata, scales))));
+    return options.chunkManager.memoize.getUncounted(
+        {'type': 'n5:MultiscaleVolumeChunkSource', url}, async () => {
+          const attributes = await getAttributes(options.chunkManager, url, false);
+          const multiscaleMetadata = await getMultiscaleMetadata(url, attributes);
+          const scales = await getAllScales(options.chunkManager, multiscaleMetadata);
+          const volume =
+              new MultiscaleVolumeChunkSource(options.chunkManager, multiscaleMetadata, scales);
+          return {
+            modelTransform: makeIdentityTransform(volume.modelSpace),
+            subsources: [
+              {
+                id: 'default',
+                default: true,
+                url: undefined,
+                subsource: {volume},
+              },
+              {
+                id: 'bounds',
+                default: true,
+                url: undefined,
+                subsource: {
+                  staticAnnotations:
+                      makeDataBoundsBoundingBoxAnnotationSet(multiscaleMetadata.modelSpace.bounds)
+                },
+              },
+            ],
+          };
+        })
+  }
+
+  completeUrl(options: CompleteUrlOptions) {
+    return completeHttpPath(options.providerUrl, options.cancellationToken);
   }
 }

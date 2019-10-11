@@ -57,6 +57,8 @@ export function getDefaultRenderedDataPanelBindings() {
           'arrowdown': 'y+',
           'comma': 'z-',
           'period': 'z+',
+          'bracketleft': 't-',
+          'bracketright': 't+',
           'keyz': 'snap',
           'control+equal': 'zoom-in',
           'control+shift+equal': 'zoom-in',

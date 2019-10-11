@@ -27,8 +27,8 @@ import {requestAsyncComputation} from 'neuroglancer/async_computation/request';
 import {postProcessRawData} from 'neuroglancer/sliceview/backend_chunk_decoders/postprocess';
 import {DataType} from 'neuroglancer/sliceview/base';
 import {VolumeChunk} from 'neuroglancer/sliceview/volume/backend';
+import {arraysEqual} from 'neuroglancer/util/array';
 import {CancellationToken} from 'neuroglancer/util/cancellation';
-import {vec3Key} from 'neuroglancer/util/geom';
 import {parseNpy} from 'neuroglancer/util/npy';
 
 export async function decodeNdstoreNpzChunk(
@@ -37,12 +37,10 @@ export async function decodeNdstoreNpzChunk(
       decodeGzip, cancellationToken, [response], new Uint8Array(response)));
   let chunkDataSize = chunk.chunkDataSize!;
   let source = chunk.source!;
-  let {numChannels} = source.spec;
   let {shape} = parseResult;
-  if (shape.length !== 4 || shape[0] !== numChannels || shape[1] !== chunkDataSize[2] ||
-      shape[2] !== chunkDataSize[1] || shape[3] !== chunkDataSize[0]) {
+  if (!arraysEqual(shape, chunkDataSize)) {
     throw new Error(
-        `Shape ${JSON.stringify(shape)} does not match chunkDataSize ${vec3Key(chunkDataSize)}`);
+        `Shape ${JSON.stringify(shape)} does not match chunkDataSize ${chunkDataSize.join()}`);
   }
   let parsedDataType = parseResult.dataType.dataType;
   let {spec} = source;

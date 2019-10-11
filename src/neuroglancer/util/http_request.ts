@@ -53,7 +53,13 @@ export async function fetchOk(input: RequestInfo, init?: RequestInit): Promise<R
     response = await fetch(input, init);
   } catch (error) {
     if (error instanceof TypeError) {
-      throw new HttpError('', 0, '');
+      let url: string;
+      if (typeof input === 'string') {
+        url = input;
+      } else {
+        url = input.url;
+      }
+      throw new HttpError(url, 0, 'Network or CORS error');
     }
     throw error;
   }
@@ -110,6 +116,15 @@ export function getByteRangeHeader(startOffset: Uint64|number, endOffset: Uint64
   return {'Range': `bytes=${startOffset}-${endOffsetStr}`};
 }
 
+export function parseUrl(url: string): {protocol: string, host: string, path: string} {
+  const urlProtocolPattern = /^([^:\/]+):\/\/([^\/]+)((?:\/.*)?)$/;
+  let match = url.match(urlProtocolPattern);
+  if (match === null) {
+    throw new Error(`Invalid URL: ${JSON.stringify(url)}`);
+  }
+  return {protocol: match[1], host: match[2], path: match[3]};
+}
+
 /**
  * Parses a URL that may have a special protocol designation into a real URL.
  *
@@ -118,17 +133,9 @@ export function getByteRangeHeader(startOffset: Uint64|number, endOffset: Uint64
  * The special 'gs://bucket/path' syntax is supported for accessing Google Storage buckets.
  */
 export function parseSpecialUrl(url: string): string {
-  const urlProtocolPattern = /^([^:\/]+):\/\/([^\/]+)(\/.*)?$/;
-  let match = url.match(urlProtocolPattern);
-  if (match === null) {
-    throw new Error(`Invalid URL: ${JSON.stringify(url)}`);
-  }
-  const protocol = match[1];
-  if (protocol === 'gs') {
-    const bucket = match[2];
-    let path = match[3];
-    if (path === undefined) path = '';
-    return `https://storage.googleapis.com/${bucket}${path}`;
+  const u = parseUrl(url);
+  if (u.protocol === 'gs') {
+    return `https://storage.googleapis.com/${u.host}${u.path}`;
   }
   return url;
 }

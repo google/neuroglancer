@@ -46,10 +46,14 @@ chunkDecoders.set(VolumeChunkEncoding.RAW, decodeRawChunk);
       // chunkPosition must not be captured, since it will be invalidated by the next call to
       // computeChunkBounds.
       let chunkPosition = this.computeChunkBounds(chunk);
-      let {chunkDataSize} = chunk;
-      for (let i = 0; i < 3; ++i) {
-        path += `/${chunkPosition[i]},${chunkPosition[i] + chunkDataSize![i]}`;
+      const chunkDataSize = chunk.chunkDataSize!;
+      const length = chunkPosition.length;
+      path += `/${chunkPosition.join()}/`;
+      for (let i = 0; i < length; ++i) {
+        if (i !== 0) path += ',';
+        path += (chunkPosition[i] + chunkDataSize[i]).toString();
       }
+      
     }
     const response = await cancellableFetchOk(path, {}, responseArrayBuffer, cancellationToken);
     await this.chunkDecoder(chunk, cancellationToken, response);

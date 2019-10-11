@@ -15,9 +15,11 @@
 from __future__ import absolute_import, division, print_function
 
 import collections
+import math
 import threading
 
 import numpy as np
+import six
 
 from . import downsample, downsample_scales
 from .chunks import encode_jpeg, encode_npz, encode_raw
@@ -34,34 +36,23 @@ class MeshesNotSupportedForVolume(Exception):
 class InvalidObjectIdForMesh(Exception):
     pass
 
-DownsamplingScaleInfo = collections.namedtuple('DownsamplingScaleInfo', ['key',
-                                                                         'downsample_factor',
-                                                                         'voxel_size',
-                                                                         'shape', ])
-
-
-def get_scale_key(scale):
-    return '%d,%d,%d' % scale
-
-
 class LocalVolume(trackable_state.ChangeNotifier):
     def __init__(self,
                  data,
-                 offset=None,
+                 dimensions,
+                 volume_type=None,
                  voxel_offset=None,
-                 skeletons=None,
-                 voxel_size=(1, 1, 1),
                  encoding='npz',
                  max_voxels_per_chunk_log2=None,
-                 volume_type=None,
                  mesh_options=None,
                  downsampling='3d',
+                 chunk_layout=None,
                  max_downsampling=downsample_scales.DEFAULT_MAX_DOWNSAMPLING,
                  max_downsampled_size=downsample_scales.DEFAULT_MAX_DOWNSAMPLED_SIZE,
                  max_downsampling_scales=downsample_scales.DEFAULT_MAX_DOWNSAMPLING_SCALES):
         """Initializes a LocalVolume.
 
-        @param data: 3-d [z, y, x] array or 4-d [channel, z, y, x] array.
+        @param data: Source data.
 
         @param downsampling: '3d' to use isotropic downsampling, '2d' to downsample separately in
             XY, XZ, and YZ, None to use no downsampling.
@@ -90,43 +81,22 @@ class LocalVolume(trackable_state.ChangeNotifier):
                   which can only occur at the boundary of the volume.  Defaults to true.
         """
         super(LocalVolume, self).__init__()
-        if hasattr(data, 'attrs'):
-            if 'resolution' in data.attrs:
-                if voxel_size is None:
-                    voxel_size = tuple(data.attrs['resolution'])[::-1]
-                if 'offset' in data.attrs:
-                    if offset is None and voxel_offset is None:
-                        offset = tuple(data.attrs['offset'])[::-1]
-        voxel_size = np.array(voxel_size)
         self.token = make_random_token()
-        self.max_voxels_per_chunk_log2 = max_voxels_per_chunk_log2
         self.data = data
-        self.skeletons = skeletons
-        if voxel_offset is not None:
-            if offset is not None:
-                raise ValueError('Must specify at most one of \'offset\' and \'voxel_offset\'.')
-            voxel_offset = np.array(voxel_offset)
-            offset = tuple(voxel_offset * voxel_size)
-        if offset is None:
-            offset = (0, 0, 0)
-        self.offset = tuple(offset)
+        self.shape = data.shape
+        self.rank = len(self.shape)
+        if voxel_offset is None:
+            voxel_offset = np.zeros(self.rank, dtype=np.int64)
+        self.voxel_offset = np.array(voxel_offset, dtype=np.int64)
+        self.dimensions = dimensions
         self.data_type = np.dtype(data.dtype).name
         if self.data_type == 'float64':
             self.data_type = 'float32'
         self.encoding = encoding
-        if len(data.shape) == 3:
-            self.num_channels = 1
-            original_shape = data.shape[::-1]
-        else:
-            if len(data.shape) != 4:
-                raise ValueError('data array must be 3- or 4-dimensional.')
-            self.num_channels = data.shape[0]
-            original_shape = data.shape[1:][::-1]
-        original_shape = np.array(original_shape)
         if volume_type is None:
-            if self.num_channels == 1 and (self.data_type == 'uint16' or
-                                           self.data_type == 'uint32' or
-                                           self.data_type == 'uint64'):
+            if self.rank == 3 and (self.data_type == 'uint16' or
+                                   self.data_type == 'uint32' or
+                                   self.data_type == 'uint64'):
                 volume_type = 'segmentation'
             else:
                 volume_type = 'image'
@@ -137,93 +107,63 @@ class LocalVolume(trackable_state.ChangeNotifier):
         self._mesh_generator_lock = threading.Condition()
         self._mesh_options = mesh_options.copy() if mesh_options is not None else dict()
 
+        self.max_voxels_per_chunk_log2 = max_voxels_per_chunk_log2
 
-        voxel_size = np.array(voxel_size)
-        self.voxel_size = voxel_size
+        self.downsampling_layout = downsampling
+        if chunk_layout is None:
+            if downsampling == '2d':
+                chunk_layout = 'flat'
+            else:
+                chunk_layout = 'isotropic'
+        self.chunk_layout = chunk_layout
 
-        self.two_dimensional_scales = None
-        self.three_dimensional_scales = None
-
-        if downsampling is None:
-            downsampling_scales = self.three_dimensional_scales = [(1, 1, 1)]
-        elif downsampling == '3d':
-            self.three_dimensional_scales = downsample_scales.compute_near_isotropic_downsampling_scales(
-                size=original_shape,
-                voxel_size=voxel_size,
-                dimensions_to_downsample=[0, 1, 2],
-                max_downsampling=max_downsampling,
-                max_downsampled_size=max_downsampled_size,
-                max_scales=max_downsampling_scales)
-            downsampling_scales = self.three_dimensional_scales
-        elif downsampling == '2d':
-            self.two_dimensional_scales = downsample_scales.compute_two_dimensional_near_isotropic_downsampling_scales(
-                size=original_shape,
-                voxel_size=voxel_size,
-                max_downsampling=max_downsampling,
-                max_downsampled_size=max_downsampled_size,
-                max_scales=max_downsampling_scales)
-            downsampling_scales = [s for level in self.two_dimensional_scales for s in level]
-        downsampling_scale_info = self.downsampling_scale_info = {}
-        for scale in downsampling_scales:
-            info = DownsamplingScaleInfo(key=get_scale_key(scale),
-                                         voxel_size=tuple(voxel_size * scale),
-                                         downsample_factor=scale,
-                                         shape=tuple(np.cast[int](np.ceil(original_shape / scale))))
-            downsampling_scale_info[info.key] = info
+        self.max_downsampling = max_downsampling
+        self.max_downsampled_size = max_downsampled_size
+        self.max_downsampling_scales = max_downsampling_scales
 
     def info(self):
-        info = dict(volumeType=self.volume_type,
-                    dataType=self.data_type,
+        info = dict(dataType=self.data_type,
                     encoding=self.encoding,
-                    numChannels=self.num_channels,
                     generation=self.change_count,
+                    coordinateSpace=self.dimensions.to_json(),
+                    shape=self.shape,
+                    volumeType=self.volume_type,
+                    voxelOffset=self.voxel_offset,
+                    chunkLayout=self.chunk_layout,
+                    downsamplingLayout=self.downsampling_layout,
+                    maxDownsampling=None if math.isinf(self.max_downsampling) else self.max_downsampling,
+                    maxDownsampledSize=None if math.isinf(self.max_downsampled_size) else self.max_downsampled_size,
+                    maxDownsamplingScales=None if math.isinf(self.max_downsampling_scales) else self.max_downsampling_scales,
         )
         if self.max_voxels_per_chunk_log2 is not None:
             info['maxVoxelsPerChunkLog2'] = self.max_voxels_per_chunk_log2
 
-        def get_scale_info(s):
-            info = self.downsampling_scale_info[get_scale_key(s)]
-            return dict(key=info.key,
-                        offset=self.offset,
-                        sizeInVoxels=info.shape,
-                        voxelSize=info.voxel_size)
-
-        if self.two_dimensional_scales is not None:
-            info['twoDimensionalScales'] = [[get_scale_info(s) for s in level]
-                                            for level in self.two_dimensional_scales]
-        if self.three_dimensional_scales is not None:
-            info['threeDimensionalScales'] = [get_scale_info(s)
-                                              for s in self.three_dimensional_scales]
-        if self.skeletons is not None:
-            info['skeletonVertexAttributes'] = self.skeletons.get_vertex_attributes_spec()
         return info
 
-    def get_encoded_subvolume(self, data_format, start, end, scale_key='1,1,1'):
-        scale_info = self.downsampling_scale_info.get(scale_key)
-        if scale_info is None:
-            raise ValueError('Invalid scale.')
-        shape = scale_info.shape
-        downsample_factor = scale_info.downsample_factor
-        for i in range(3):
-            if end[i] < start[i] or start[i] < 0 or end[i] > shape[i]:
-                raise ValueError('Out of bounds data request.')
+    def get_encoded_subvolume(self, data_format, start, end, scale_key):
+        rank = self.rank
+        if len(start) != rank or len(end) != rank:
+            raise ValueError('Invalid request')
+        downsample_factor = np.array(scale_key.split(','), dtype=np.int64)
+        if (len(downsample_factor) != rank or np.any(downsample_factor < 1)
+            or np.any(downsample_factor > self.max_downsampling)
+            or np.prod(downsample_factor) > self.max_downsampling):
+            raise ValueError('Invalid downsampling factor.')
+        downsampled_shape = np.cast[np.int64](np.ceil(self.shape / downsample_factor))
+        if np.any(end < start) or np.any(start < 0) or np.any(end > downsampled_shape):
+            raise ValueError('Out of bounds data request.')
 
         indexing_expr = tuple(np.s_[start[i] * downsample_factor[i]:end[i] * downsample_factor[i]]
-                              for i in (2, 1, 0))
-        if len(self.data.shape) == 3:
-            full_downsample_factor = downsample_factor[::-1]
-            subvol = self.data[indexing_expr]
-        else:
-            full_downsample_factor = (1, ) + downsample_factor[::-1]
-            subvol = self.data[(np.s_[:], ) + indexing_expr]
+                              for i in range(rank))
+        subvol = self.data[indexing_expr]
         if subvol.dtype == 'float64':
             subvol = np.cast[np.float32](subvol)
 
-        if downsample_factor != (1, 1, 1):
+        if np.any(downsample_factor != 1):
             if self.volume_type == 'image':
-                subvol = downsample.downsample_with_averaging(subvol, full_downsample_factor)
+                subvol = downsample.downsample_with_averaging(subvol, downsample_factor)
             else:
-                subvol = downsample.downsample_with_striding(subvol, full_downsample_factor)
+                subvol = downsample.downsample_with_striding(subvol, downsample_factor)
         content_type = 'application/octet-stream'
         if data_format == 'jpeg':
             data = encode_jpeg(subvol)
@@ -259,7 +199,7 @@ class LocalVolume(trackable_state.ChangeNotifier):
                     from . import _neuroglancer
                 except ImportError:
                     raise MeshImplementationNotAvailable()
-                if not (self.num_channels == 1 and
+                if not (self.rank == 3 and
                         (self.data_type == 'uint8' or self.data_type == 'uint16' or
                          self.data_type == 'uint32' or self.data_type == 'uint64')):
                     raise MeshesNotSupportedForVolume()
@@ -270,7 +210,7 @@ class LocalVolume(trackable_state.ChangeNotifier):
             else:
                 data = self.data
             new_mesh_generator = _neuroglancer.OnDemandObjectMeshGenerator(
-                data, self.voxel_size, self.offset / self.voxel_size, **self._mesh_options)
+                data, self.dimensions.scales, np.zeros(3), **self._mesh_options)
             with self._mesh_generator_lock:
                 if self._mesh_generator_pending is not pending_obj:
                     continue

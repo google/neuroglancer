@@ -18,6 +18,8 @@ export interface Disposable { dispose: () => void; }
 
 export type Disposer = Disposable | (() => void);
 
+const DEBUG_REF_COUNTS = false;
+
 export function invokeDisposer(disposer: Disposer) {
   if (typeof disposer === 'object') {
     disposer.dispose();
@@ -47,7 +49,14 @@ export class RefCounted implements Disposable {
     ++this.refCount;
     return this;
   }
+  disposedStacks: any;
   dispose() {
+    if (DEBUG_REF_COUNTS) {
+      if (this.refCount === 0) {
+        debugger;
+      }
+      (this.disposedStacks = (this.disposedStacks || [])).push((new Error()).stack);
+    }
     if (--this.refCount !== 0) {
       return;
     }
@@ -112,3 +121,13 @@ export type Owned<T extends Disposable> = T;
  * A variable of this type is not associated with an increment of the reference count.
  */
 export type Borrowed<T extends Disposable> = T;
+
+export function disposableOnce(value: Disposer|undefined) {
+  return () => {
+    if (value !== undefined) {
+      let x = value;
+      value = undefined;
+      invokeDisposer(x);
+    }
+  };
+}

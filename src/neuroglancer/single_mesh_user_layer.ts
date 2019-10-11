@@ -14,252 +14,138 @@
  * limitations under the License.
  */
 
-import debounce from 'lodash/debounce';
-import {UserLayer} from 'neuroglancer/layer';
-import {LayerListSpecification, registerLayerType} from 'neuroglancer/layer_specification';
-import {Overlay} from 'neuroglancer/overlay';
-import {SingleMeshSourceParameters} from 'neuroglancer/single_mesh/base';
-import {VertexAttributeInfo} from 'neuroglancer/single_mesh/base';
-import {FRAGMENT_MAIN_START, getShaderAttributeType, getSingleMeshSource, SingleMeshDisplayState, SingleMeshLayer, SingleMeshSource, TrackableAttributeNames} from 'neuroglancer/single_mesh/frontend';
-import {UserLayerWithCoordinateTransformMixin} from 'neuroglancer/user_layer_with_coordinate_transform';
-import {RefCounted} from 'neuroglancer/util/disposable';
-import {removeFromParent} from 'neuroglancer/util/dom';
-import {parseArray, verifyObjectProperty, verifyOptionalString, verifyString} from 'neuroglancer/util/json';
-import {ShaderCodeWidget} from 'neuroglancer/widget/shader_code_widget';
-import {Tab} from 'neuroglancer/widget/tab_view';
-
 import './single_mesh_user_layer.css';
 
-function makeValidIdentifier(x: string) {
-  return x.split(/[^a-zA-Z0-9]+/).filter(y => y).join('_');
-}
+import {ManagedUserLayer, registerLayerType, registerLayerTypeDetector, UserLayer} from 'neuroglancer/layer';
+import {LoadedDataSubsource} from 'neuroglancer/layer_data_source';
+import {Overlay} from 'neuroglancer/overlay';
+import {VertexAttributeInfo} from 'neuroglancer/single_mesh/base';
+import {getShaderAttributeType, pickAttributeNames, SingleMeshDisplayState, SingleMeshLayer} from 'neuroglancer/single_mesh/frontend';
+import {WatchableValue, WatchableValueInterface} from 'neuroglancer/trackable_value';
+import {Borrowed, RefCounted} from 'neuroglancer/util/disposable';
+import {removeChildren, removeFromParent} from 'neuroglancer/util/dom';
+import {makeHelpButton} from 'neuroglancer/widget/help_button';
+import {makeMaximizeButton} from 'neuroglancer/widget/maximize_button';
+import {ShaderCodeWidget} from 'neuroglancer/widget/shader_code_widget';
+import {Tab} from 'neuroglancer/widget/tab_view';
+import { ShaderControls } from './widget/shader_controls';
 
-function pickAttributeNames(existingNames: string[]) {
-  const seenNames = new Set<string>();
-  let result: string[] = [];
-  for (let existingName of existingNames) {
-    let name = makeValidIdentifier(existingName);
-    let suffix = '';
-    let suffixNumber = 0;
-    while (seenNames.has(name + suffix)) {
-      suffix = '' + (++suffixNumber);
-    }
-    result.push(name + suffix);
-  }
-  return result;
-}
+const SHADER_JSON_KEY = 'shader';
+const SHADER_CONTROLS_JSON_KEY = 'shaderControls';
 
-const BaseUserLayer = UserLayerWithCoordinateTransformMixin(UserLayer);
-
-export class SingleMeshUserLayer extends BaseUserLayer {
-  parameters: SingleMeshSourceParameters;
-  meshSource: SingleMeshSource|undefined;
+export class SingleMeshUserLayer extends UserLayer {
   displayState = new SingleMeshDisplayState();
-  userSpecifiedAttributeNames: (string|undefined)[]|undefined;
-  defaultAttributeNames: string[]|undefined;
-  constructor(public manager: LayerListSpecification, x: any) {
-    super(manager, x);
-    this.displayState.objectToDataTransform = this.transform;
-    this.parameters = {
-      meshSourceUrl: verifyObjectProperty(x, 'source', verifyString),
-      attributeSourceUrls: verifyObjectProperty(
-          x, 'vertexAttributeSources',
-          y => {
-            if (y !== undefined) {
-              return parseArray(y, verifyString);
-            } else {
-              return [];
-            }
-          }),
-    };
-    this.displayState.fragmentMain.restoreState(x['shader']);
-    this.userSpecifiedAttributeNames = verifyObjectProperty(x, 'vertexAttributeNames', y => {
-      if (y === undefined) {
-        return undefined;
-      }
-      return parseArray(y, z => {
-        let result = verifyOptionalString(z);
-        if (result) {
-          return result;
-        }
-        return undefined;
-      });
-    });
-    getSingleMeshSource(manager.chunkManager, this.parameters).then(source => {
-      if (this.wasDisposed) {
-        return;
-      }
-      this.meshSource = source;
-      const defaultAttributeNames = this.defaultAttributeNames =
-          pickAttributeNames(source.info.vertexAttributes.map(a => a.name));
-      const {userSpecifiedAttributeNames} = this;
-      let initialAttributeNames: (string|undefined)[];
-      if (userSpecifiedAttributeNames !== undefined &&
-          userSpecifiedAttributeNames.length === defaultAttributeNames.length) {
-        initialAttributeNames = userSpecifiedAttributeNames;
-        this.userSpecifiedAttributeNames = undefined;
-      } else {
-        initialAttributeNames = Array.from(defaultAttributeNames);
-      }
-      this.displayState.attributeNames.value = initialAttributeNames;
-      this.addRenderLayer(new SingleMeshLayer(source, this.displayState));
-      this.isReady = true;
-    });
-    this.registerDisposer(this.displayState.fragmentMain.changed.add(() => {
-      this.specificationChanged.dispatch();
-    }));
-    this.registerDisposer(this.displayState.attributeNames.changed.add(() => {
-      this.specificationChanged.dispatch();
-    }));
+  vertexAttributes = new WatchableValue<VertexAttributeInfo[]|undefined>(undefined);
+  constructor(public managedLayer: Borrowed<ManagedUserLayer>, specification: any) {
+    super(managedLayer, specification);
+    this.registerDisposer(
+        this.displayState.shaderControlState.changed.add(this.specificationChanged.dispatch));
+    this.registerDisposer(
+        this.displayState.fragmentMain.changed.add(this.specificationChanged.dispatch));
     this.tabs.add(
         'rendering', {label: 'Rendering', order: -100, getter: () => new DisplayOptionsTab(this)});
     this.tabs.default = 'rendering';
   }
+
+  restoreState(specification: any) {
+    super.restoreState(specification);
+    this.displayState.fragmentMain.restoreState(specification[SHADER_JSON_KEY]);
+    this.displayState.shaderControlState.restoreState(specification[SHADER_CONTROLS_JSON_KEY]);
+  }
+
+  activateDataSubsources(subsources: Iterable<LoadedDataSubsource>) {
+    let hasSource = false;
+    for (const loadedSubsource of subsources) {
+      const {subsourceEntry} = loadedSubsource;
+      const {subsource} = subsourceEntry;
+      const {singleMesh} = subsource;
+      if (singleMesh !== undefined) {
+        if (hasSource) {
+          loadedSubsource.deactivate('Only one single-mesh source supported');
+          continue;
+        }
+        hasSource = true;
+        loadedSubsource.activate(refCounted => {
+          loadedSubsource.addRenderLayer(new SingleMeshLayer(
+              singleMesh, this.displayState, loadedSubsource.getRenderLayerTransform()));
+          this.vertexAttributes.value = singleMesh.info.vertexAttributes;
+          refCounted.registerDisposer(() => {
+            this.vertexAttributes.value = undefined;
+          });
+        });
+        continue;
+      }
+      loadedSubsource.deactivate('Not compatible with image layer');
+    }
+  }
+
   toJSON() {
     let x = super.toJSON();
-    x['type'] = 'mesh';
-    let {parameters} = this;
-    let {attributeSourceUrls} = parameters;
-    x['source'] = this.parameters.meshSourceUrl;
-    if (attributeSourceUrls) {
-      x['vertexAttributeSources'] = attributeSourceUrls;
-    }
-    x['shader'] = this.displayState.fragmentMain.toJSON();
-    let persistentAttributeNames: (string|undefined)[]|undefined = undefined;
-    if (this.meshSource === undefined) {
-      persistentAttributeNames = this.userSpecifiedAttributeNames;
-    } else {
-      const defaultAttributeNames = this.defaultAttributeNames!;
-      const attributeNames = this.displayState.attributeNames.value;
-      // Check if equal.
-      let equal = true;
-      const numAttributes = attributeNames.length;
-      for (let i = 0; i < numAttributes; ++i) {
-        if (attributeNames[i] !== defaultAttributeNames[i]) {
-          equal = false;
-          break;
-        }
-      }
-      if (equal) {
-        persistentAttributeNames = undefined;
-      } else {
-        persistentAttributeNames = Array.from(attributeNames);
-      }
-    }
-    x['vertexAttributeNames'] = persistentAttributeNames;
+    x[SHADER_JSON_KEY] = this.displayState.fragmentMain.toJSON();
+    x[SHADER_CONTROLS_JSON_KEY] = this.displayState.shaderControlState.toJSON();
     return x;
   }
+
+  static type = 'mesh';
 }
 
 function makeShaderCodeWidget(layer: SingleMeshUserLayer) {
   return new ShaderCodeWidget({
     fragmentMain: layer.displayState.fragmentMain,
     shaderError: layer.displayState.shaderError,
-    fragmentMainStartLine: FRAGMENT_MAIN_START,
+    shaderControlState: layer.displayState.shaderControlState,
   });
 }
 
-/**
- * Time in milliseconds during which the input field must not be modified before the shader is
- * recompiled.
- */
-const SHADER_UPDATE_DELAY = 500;
-
 class VertexAttributeWidget extends RefCounted {
   element = document.createElement('div');
-
-  attributeNameElements: HTMLInputElement[]|undefined;
-
-  private debouncedValueUpdater = debounce(() => {
-    this.updateAttributeNames();
-  }, SHADER_UPDATE_DELAY);
-
-  constructor(
-      public attributeNames: TrackableAttributeNames,
-      public getAttributeInfo: () => VertexAttributeInfo[] | undefined) {
+  constructor(public attributes: WatchableValueInterface<VertexAttributeInfo[]|undefined>) {
     super();
     this.element.className = 'neuroglancer-single-mesh-attribute-widget';
-
-    this.updateInputElements();
-    this.registerDisposer(attributeNames.changed.add(() => {
-      this.updateInputElements();
+    this.updateView();
+    this.registerDisposer(attributes.changed.add(() => {
+      this.updateView();
     }));
   }
 
-  private updateInputElements() {
-    const attributeNames = this.attributeNames;
-    let {attributeNameElements} = this;
-    if (attributeNameElements === undefined) {
-      let attributeInfo = this.getAttributeInfo();
-      if (attributeInfo === undefined) {
-        return;
-      }
-      attributeNameElements = this.attributeNameElements = new Array<HTMLInputElement>();
-      let previousSource: string|undefined = undefined;
-      let numAttributes = attributeNames.value.length;
-      let {element} = this;
-      for (let i = 0; i < numAttributes; ++i) {
-        let info = attributeInfo[i];
-        let {source} = info;
-        if (source !== previousSource && source !== undefined) {
-          previousSource = source;
-          let div = document.createElement('div');
-          div.className = 'neuroglancer-single-mesh-source-header';
-          div.textContent = source;
-          element.appendChild(div);
-        }
-        let div = document.createElement('div');
-        div.className = 'neuroglancer-single-mesh-attribute';
-        let input = document.createElement('input');
-        input.title = info.name;
-        this.registerEventListener(input, 'input', this.debouncedValueUpdater);
-        input.type = 'text';
-        div.textContent = getShaderAttributeType(info);
-        div.appendChild(input);
-        if (info.min !== undefined && info.max !== undefined) {
-          let minMaxText = document.createElement('span');
-          minMaxText.className = 'neuroglancer-single-mesh-attribute-range';
-          minMaxText.textContent = `[${info.min.toPrecision(6)}, ${info.max.toPrecision(6)}]`;
-          div.appendChild(minMaxText);
-        }
-        attributeNameElements[i] = input;
-        element.appendChild(div);
-      }
+  private updateView() {
+    const {element} = this;
+    const attributeInfo = this.attributes.value;
+    if (attributeInfo === undefined) {
+      removeChildren(element);
+      return;
     }
-    const attributeNamesValue = attributeNames.value;
-    attributeNamesValue.forEach((name, i) => {
-      attributeNameElements![i].value = name || '';
-    });
+    const attributeNames = pickAttributeNames(attributeInfo.map(a => a.name));
+    const numAttributes = attributeInfo.length;
+    for (let i = 0; i < numAttributes; ++i) {
+      const info = attributeInfo[i];
+      const div = document.createElement('div');
+      div.className = 'neuroglancer-single-mesh-attribute';
+      const typeElement = document.createElement('div');
+      typeElement.className = 'neuroglancer-single-mesh-attribute-type';
+      typeElement.textContent = getShaderAttributeType(info);
+      const nameElement = document.createElement('div');
+      nameElement.className = 'neuroglancer-single-mesh-attribute-name';
+      nameElement.textContent = attributeNames[i];
+      div.appendChild(typeElement);
+      div.appendChild(nameElement);
+      if (info.min !== undefined && info.max !== undefined) {
+        const minMaxElement = document.createElement('neuroglancer-single-mesh-attribute-minmax');
+        minMaxElement.className = 'neuroglancer-single-mesh-attribute-range';
+        minMaxElement.textContent = `[${info.min.toPrecision(6)}, ${info.max.toPrecision(6)}]`;
+        div.appendChild(minMaxElement);
+      }
+      element.appendChild(div);
+    }
   }
 
   disposed() {
     removeFromParent(this.element);
   }
-
-  private updateAttributeNames() {
-    const attributeNames = this.attributeNames.value;
-    const attributeNameElements = this.attributeNameElements!;
-    let changed = false;
-    attributeNames.forEach((name, i) => {
-      let newName: string|undefined = attributeNameElements[i].value;
-      if (!newName) {
-        newName = undefined;
-      }
-      if (newName !== name) {
-        changed = true;
-        attributeNames[i] = newName;
-      }
-    });
-    if (changed) {
-      this.attributeNames.changed.dispatch();
-    }
-  }
 }
 
 function makeVertexAttributeWidget(layer: SingleMeshUserLayer) {
-  return new VertexAttributeWidget(
-      layer.displayState.attributeNames,
-      () => layer.meshSource && layer.meshSource.info.vertexAttributes);
+  return new VertexAttributeWidget(layer.vertexAttributes);
 }
 
 class DisplayOptionsTab extends Tab {
@@ -273,39 +159,25 @@ class DisplayOptionsTab extends Tab {
     topRow.className = 'neuroglancer-single-mesh-dropdown-top-row';
     let spacer = document.createElement('div');
     spacer.style.flex = '1';
-    let helpLink = document.createElement('a');
-    let helpButton = document.createElement('button');
-    helpButton.type = 'button';
-    helpButton.textContent = '?';
-    helpButton.className = 'help-link';
-    helpLink.appendChild(helpButton);
-    helpLink.title = 'Documentation on single mesh layer rendering';
-    helpLink.target = '_blank';
-    helpLink.href =
-        'https://github.com/google/neuroglancer/blob/master/src/neuroglancer/sliceview/image_layer_rendering.md';
-
-    let maximizeButton = document.createElement('button');
-    maximizeButton.innerHTML = '&square;';
-    maximizeButton.className = 'maximize-button';
-    maximizeButton.title = 'Show larger editor view';
-    this.registerEventListener(maximizeButton, 'click', () => {
-      new ShaderCodeOverlay(this.layer);
-    });
 
     topRow.appendChild(spacer);
-    topRow.appendChild(maximizeButton);
-    topRow.appendChild(helpLink);
+    topRow.appendChild(makeMaximizeButton({
+      title: 'Show larger editor view',
+      onClick: () => {
+        new ShaderCodeOverlay(this.layer);
+      }
+    }));
+    topRow.appendChild(makeHelpButton({
+      title: 'Documentation on single mesh layer rendering',
+      href:
+          'https://github.com/google/neuroglancer/blob/master/src/neuroglancer/sliceview/image_layer_rendering.md',
+    }));
 
     element.appendChild(topRow);
     element.appendChild(this.attributeWidget.element);
     element.appendChild(this.codeWidget.element);
-    this.codeWidget.textEditor.refresh();
-
-    this.visibility.changed.add(() => {
-      if (this.visible) {
-        this.codeWidget.textEditor.refresh();
-      }
-    });
+    element.appendChild(
+        this.registerDisposer(new ShaderControls(layer.displayState.shaderControlState)).element);
   }
 }
 
@@ -322,3 +194,7 @@ class ShaderCodeOverlay extends Overlay {
 }
 
 registerLayerType('mesh', SingleMeshUserLayer);
+registerLayerTypeDetector(subsource => {
+  if (subsource.singleMesh !== undefined) return SingleMeshUserLayer;
+  return undefined;
+});

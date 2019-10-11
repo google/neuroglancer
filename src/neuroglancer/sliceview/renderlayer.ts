@@ -15,75 +15,130 @@
  */
 
 import {ChunkManager} from 'neuroglancer/chunk_manager/frontend';
-import {CoordinateTransform} from 'neuroglancer/coordinate_transform';
-import {RenderLayer as GenericRenderLayer} from 'neuroglancer/layer';
+import {CoordinateSpace} from 'neuroglancer/coordinate_transform';
+import {VisibleLayerInfo} from 'neuroglancer/layer';
+import {ChunkTransformParameters, RenderLayerTransformOrError} from 'neuroglancer/render_coordinate_transform';
 import {RenderScaleHistogram, trackableRenderScaleTarget} from 'neuroglancer/render_scale_statistics';
+import {RenderLayer, ThreeDimensionalRenderContext, VisibilityTrackedRenderLayer} from 'neuroglancer/renderlayer';
 import {SharedWatchableValue} from 'neuroglancer/shared_watchable_value';
-import {getTransformedSources, SLICEVIEW_RENDERLAYER_RPC_ID, SLICEVIEW_RENDERLAYER_UPDATE_TRANSFORM_RPC_ID, TransformedSource} from 'neuroglancer/sliceview/base';
-import {SliceView, SliceViewChunkSource} from 'neuroglancer/sliceview/frontend';
+import {SLICEVIEW_RENDERLAYER_RPC_ID, SliceViewSourceOptions} from 'neuroglancer/sliceview/base';
+import {MultiscaleSliceViewChunkSource, SliceView, SliceViewChunkSource, SliceViewSingleResolutionSource} from 'neuroglancer/sliceview/frontend';
 import {WatchableValueInterface} from 'neuroglancer/trackable_value';
-import {vec3} from 'neuroglancer/util/geom';
+import {Borrowed} from 'neuroglancer/util/disposable';
+import {ShaderModule} from 'neuroglancer/webgl/shader';
 import {RpcId} from 'neuroglancer/worker_rpc';
 import {SharedObject} from 'neuroglancer/worker_rpc';
 
-export interface RenderLayerOptions {
-  transform?: CoordinateTransform;
+export interface SliceViewRenderLayerOptions {
+  /**
+   * Specifies the transform from the "model" coordinate space (specified by the multiscale source)
+   * to the "render layer" coordinate space.
+   */
+  transform: WatchableValueInterface<RenderLayerTransformOrError>;
   renderScaleTarget?: WatchableValueInterface<number>;
   renderScaleHistogram?: RenderScaleHistogram;
+
+  /**
+   * Specifies the position within the "local" coordinate space.
+   */
+  localPosition: WatchableValueInterface<Float32Array>;
 }
 
-export abstract class RenderLayer extends GenericRenderLayer {
+export interface VisibleSourceInfo<Source extends SliceViewChunkSource> {
+  source: Borrowed<Source>;
+  refCount: number;
+  chunkTransform: ChunkTransformParameters;
+}
+
+export abstract class SliceViewRenderLayer<
+    Source extends SliceViewChunkSource = SliceViewChunkSource, SourceOptions extends
+        SliceViewSourceOptions = SliceViewSourceOptions> extends RenderLayer {
   rpcId: RpcId|null = null;
-  transform: CoordinateTransform;
-  transformedSources: TransformedSource<SliceViewChunkSource>[][];
-  transformedSourcesGeneration = -1;
+
+  localPosition: WatchableValueInterface<Float32Array>;
+  channelCoordinateSpace: WatchableValueInterface<CoordinateSpace>;
+  transform: WatchableValueInterface<RenderLayerTransformOrError>;
+
   renderScaleTarget: WatchableValueInterface<number>;
   renderScaleHistogram?: RenderScaleHistogram;
 
+  /**
+   * Currently visible sources for this render layer.
+   */
+  private visibleSources = new Map<Borrowed<Source>, VisibleSourceInfo<Source>>();
+
+  /**
+   * Cached list of sources in `visibleSources`, ordered by voxel size.
+   *
+   * Truncated to zero length when `visibleSources` changes to indicate that it is invalid.
+   */
+  private visibleSourcesList_: VisibleSourceInfo<Source>[] = [];
+
+  getSources(options: SliceViewSourceOptions): SliceViewSingleResolutionSource<Source>[][] {
+    return this.multiscaleSource.getSources(options as any);
+  }
+
+  addSource(source: Borrowed<Source>, chunkTransform: ChunkTransformParameters) {
+    const {visibleSources} = this;
+    const info = visibleSources.get(source);
+    if (info !== undefined) {
+      ++info.refCount;
+    } else {
+      visibleSources.set(source, {source, refCount: 1, chunkTransform});
+      this.visibleSourcesList_.length = 0;
+    }
+  }
+
+  removeSource(source: Borrowed<Source>) {
+    const {visibleSources} = this;
+    const info = visibleSources.get(source)!;
+    if (info.refCount !== 1) {
+      --info.refCount;
+    } else {
+      visibleSources.delete(source);
+      this.visibleSourcesList_.length = 0;
+    }
+  }
+
+  get visibleSourcesList() {
+    const {visibleSources, visibleSourcesList_} = this;
+    if (visibleSourcesList_.length === 0 && visibleSources.size !== 0) {
+      for (const info of visibleSources.values()) {
+        visibleSourcesList_.push(info);
+      }
+      // Sort by volume scaling factor.
+      visibleSourcesList_.sort((a, b) => {
+        return a.chunkTransform.chunkToLayerTransformDet -
+            b.chunkTransform.chunkToLayerTransformDet;
+      });
+    }
+    return visibleSourcesList_;
+  }
+
+
   constructor(
-      public chunkManager: ChunkManager, public sources: SliceViewChunkSource[][],
-      options: RenderLayerOptions) {
+      public chunkManager: ChunkManager,
+      public multiscaleSource: MultiscaleSliceViewChunkSource<Source, SourceOptions>,
+      options: SliceViewRenderLayerOptions) {
     super();
 
-    const {
-      transform = new CoordinateTransform(),
-      renderScaleTarget = trackableRenderScaleTarget(1)
-    } = options;
+    const {renderScaleTarget = trackableRenderScaleTarget(1)} = options;
     this.renderScaleTarget = renderScaleTarget;
     this.renderScaleHistogram = options.renderScaleHistogram;
-    this.transform = transform;
-    const transformedSources = getTransformedSources(this);
-
-    {
-      const {source, chunkLayout} = transformedSources[0][0];
-      const {spec} = source;
-      const voxelSize = this.voxelSize =
-          chunkLayout.localSpatialVectorToGlobal(vec3.create(), spec.voxelSize);
-      for (let i = 0; i < 3; ++i) {
-        voxelSize[i] = Math.abs(voxelSize[i]);
-      }
-    }
-
+    this.transform = options.transform;
+    this.localPosition = options.localPosition;
     const sharedObject = this.registerDisposer(new SharedObject());
     const rpc = this.chunkManager.rpc!;
     sharedObject.RPC_TYPE_ID = SLICEVIEW_RENDERLAYER_RPC_ID;
-    const sourceIds = sources.map(alternatives => alternatives.map(source => source.rpcId!));
     sharedObject.initializeCounterpart(rpc, {
-      sources: sourceIds,
-      transform: transform.transform,
+      nonGlobalPosition:
+          this.registerDisposer(SharedWatchableValue.makeFromExisting(rpc, this.localPosition))
+              .rpcId,
       renderScaleTarget:
           this.registerDisposer(SharedWatchableValue.makeFromExisting(rpc, this.renderScaleTarget))
-              .rpcId
+              .rpcId,
     });
     this.rpcId = sharedObject.rpcId;
-
-    this.registerDisposer(transform.changed.add(() => {
-      rpc.invoke(
-          SLICEVIEW_RENDERLAYER_UPDATE_TRANSFORM_RPC_ID,
-          {id: this.rpcId, value: transform.transform});
-    }));
-
-    this.setReady(true);
   }
 
   get gl() {
@@ -98,4 +153,34 @@ export abstract class RenderLayer extends GenericRenderLayer {
     }
   }
   abstract draw(sliceView: SliceView): void;
+}
+
+export interface SliceViewPanelRenderContext extends ThreeDimensionalRenderContext {
+  emitter: ShaderModule;
+
+  /**
+   * Specifies whether the emitted color value will be used.
+   */
+  emitColor: boolean;
+
+  /**
+   * Specifies whether the emitted pick ID will be used.
+   */
+  emitPickID: boolean;
+
+  sliceView: SliceView;
+}
+
+export class SliceViewPanelRenderLayer<AttachmentState = unknown> extends
+    VisibilityTrackedRenderLayer {
+  draw(renderContext: SliceViewPanelRenderContext, attachment: VisibleLayerInfo<AttachmentState>) {
+    renderContext;
+    attachment;
+    // Must be overridden by subclasses.
+  }
+
+  isReady(attachment: VisibleLayerInfo<AttachmentState>) {
+    attachment;
+    return true;
+  }
 }

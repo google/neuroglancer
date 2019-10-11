@@ -18,12 +18,14 @@
  * @file Basic annotation data structures.
  */
 
+import {BoundingBox, CoordinateSpaceTransform, WatchableCoordinateSpaceTransform} from 'neuroglancer/coordinate_transform';
+import {arraysEqual} from 'neuroglancer/util/array';
 import {Borrowed, RefCounted} from 'neuroglancer/util/disposable';
-import {mat4, vec3} from 'neuroglancer/util/geom';
-import {parseArray, verify3dScale, verify3dVec, verifyEnumString, verifyObject, verifyObjectProperty, verifyOptionalString, verifyString} from 'neuroglancer/util/json';
+import {parseArray, parseFixedLengthArray, verifyEnumString, verifyFiniteFloat, verifyFiniteNonNegativeFloat, verifyObject, verifyObjectProperty, verifyOptionalObjectProperty, verifyOptionalString, verifyString} from 'neuroglancer/util/json';
 import {getRandomHexString} from 'neuroglancer/util/random';
-import {Signal, NullarySignal} from 'neuroglancer/util/signal';
+import {NullarySignal, Signal} from 'neuroglancer/util/signal';
 import {Uint64} from 'neuroglancer/util/uint64';
+
 export type AnnotationId = string;
 
 export class AnnotationReference extends RefCounted {
@@ -68,25 +70,25 @@ export interface AnnotationBase {
 }
 
 export interface Line extends AnnotationBase {
-  pointA: vec3;
-  pointB: vec3;
+  pointA: Float32Array;
+  pointB: Float32Array;
   type: AnnotationType.LINE;
 }
 
 export interface Point extends AnnotationBase {
-  point: vec3;
+  point: Float32Array;
   type: AnnotationType.POINT;
 }
 
 export interface AxisAlignedBoundingBox extends AnnotationBase {
-  pointA: vec3;
-  pointB: vec3;
+  pointA: Float32Array;
+  pointB: Float32Array;
   type: AnnotationType.AXIS_ALIGNED_BOUNDING_BOX;
 }
 
 export interface Ellipsoid extends AnnotationBase {
-  center: vec3;
-  radii: vec3;
+  center: Float32Array;
+  radii: Float32Array;
   type: AnnotationType.ELLIPSOID;
 }
 
@@ -95,12 +97,12 @@ export type Annotation = Line|Point|AxisAlignedBoundingBox|Ellipsoid;
 export interface AnnotationTypeHandler<T extends Annotation> {
   icon: string;
   description: string;
-  toJSON: (annotation: T) => any;
-  restoreState: (annotation: T, obj: any) => void;
-  serializedBytes: number;
+  toJSON: (annotation: T, rank: number) => any;
+  restoreState: (annotation: T, obj: any, rank: number) => void;
+  serializedBytes: (rank: number) => number;
   serializer:
-      (buffer: ArrayBuffer, offset: number,
-       numAnnotations: number) => ((annotation: T, index: number) => void);
+      (buffer: ArrayBuffer, offset: number, numAnnotations: number,
+       rank: number) => ((annotation: T, index: number) => void);
 }
 
 const typeHandlers = new Map<AnnotationType, AnnotationTypeHandler<Annotation>>();
@@ -111,28 +113,28 @@ export function getAnnotationTypeHandler(type: AnnotationType) {
 typeHandlers.set(AnnotationType.LINE, {
   icon: 'ꕹ',
   description: 'Line',
-  toJSON: (annotation: Line) => {
+  toJSON(annotation: Line) {
     return {
       pointA: Array.from(annotation.pointA),
       pointB: Array.from(annotation.pointB),
     };
   },
-  restoreState: (annotation: Line, obj: any) => {
-    annotation.pointA = verifyObjectProperty(obj, 'pointA', verify3dVec);
-    annotation.pointB = verifyObjectProperty(obj, 'pointB', verify3dVec);
+  restoreState(annotation: Line, obj: any, rank: number) {
+    annotation.pointA = verifyObjectProperty(
+        obj, 'pointA', x => parseFixedLengthArray(new Float32Array(rank), x, verifyFiniteFloat));
+    annotation.pointB = verifyObjectProperty(
+        obj, 'pointB', x => parseFixedLengthArray(new Float32Array(rank), x, verifyFiniteFloat));
   },
-  serializedBytes: 6 * 4,
-  serializer: (buffer: ArrayBuffer, offset: number, numAnnotations: number) => {
-    const coordinates = new Float32Array(buffer, offset, numAnnotations * 6);
+  serializedBytes(rank: number) {
+    return 2 * 4 * rank;
+  },
+  serializer(buffer: ArrayBuffer, offset: number, numAnnotations: number, rank: number) {
+    const coordinates = new Float32Array(buffer, offset, numAnnotations * 2 * rank);
     return (annotation: Line, index: number) => {
       const {pointA, pointB} = annotation;
-      const coordinateOffset = index * 6;
-      coordinates[coordinateOffset] = pointA[0];
-      coordinates[coordinateOffset + 1] = pointA[1];
-      coordinates[coordinateOffset + 2] = pointA[2];
-      coordinates[coordinateOffset + 3] = pointB[0];
-      coordinates[coordinateOffset + 4] = pointB[1];
-      coordinates[coordinateOffset + 5] = pointB[2];
+      const coordinateOffset = index * 2 * rank;
+      coordinates.set(pointA, coordinateOffset);
+      coordinates.set(pointB, coordinateOffset + rank);
     };
   },
 });
@@ -145,18 +147,17 @@ typeHandlers.set(AnnotationType.POINT, {
       point: Array.from(annotation.point),
     };
   },
-  restoreState: (annotation: Point, obj: any) => {
-    annotation.point = verifyObjectProperty(obj, 'point', verify3dVec);
+  restoreState: (annotation: Point, obj: any, rank: number) => {
+    annotation.point = verifyObjectProperty(
+        obj, 'point', x => parseFixedLengthArray(new Float32Array(rank), x, verifyFiniteFloat));
   },
-  serializedBytes: 3 * 4,
-  serializer: (buffer: ArrayBuffer, offset: number, numAnnotations: number) => {
-    const coordinates = new Float32Array(buffer, offset, numAnnotations * 3);
+  serializedBytes: rank => rank * 4,
+  serializer: (buffer: ArrayBuffer, offset: number, numAnnotations: number, rank: number) => {
+    const coordinates = new Float32Array(buffer, offset, numAnnotations * rank);
     return (annotation: Point, index: number) => {
       const {point} = annotation;
-      const coordinateOffset = index * 3;
-      coordinates[coordinateOffset] = point[0];
-      coordinates[coordinateOffset + 1] = point[1];
-      coordinates[coordinateOffset + 2] = point[2];
+      const coordinateOffset = index * rank;
+      coordinates.set(point, coordinateOffset);
     };
   },
 });
@@ -170,22 +171,20 @@ typeHandlers.set(AnnotationType.AXIS_ALIGNED_BOUNDING_BOX, {
       pointB: Array.from(annotation.pointB),
     };
   },
-  restoreState: (annotation: AxisAlignedBoundingBox, obj: any) => {
-    annotation.pointA = verifyObjectProperty(obj, 'pointA', verify3dVec);
-    annotation.pointB = verifyObjectProperty(obj, 'pointB', verify3dVec);
+  restoreState: (annotation: AxisAlignedBoundingBox, obj: any, rank: number) => {
+    annotation.pointA = verifyObjectProperty(
+        obj, 'pointA', x => parseFixedLengthArray(new Float32Array(rank), x, verifyFiniteFloat));
+    annotation.pointB = verifyObjectProperty(
+        obj, 'pointB', x => parseFixedLengthArray(new Float32Array(rank), x, verifyFiniteFloat));
   },
-  serializedBytes: 6 * 4,
-  serializer: (buffer: ArrayBuffer, offset: number, numAnnotations: number) => {
-    const coordinates = new Float32Array(buffer, offset, numAnnotations * 6);
+  serializedBytes: rank => 2 * 4 * rank,
+  serializer: (buffer: ArrayBuffer, offset: number, numAnnotations: number, rank: number) => {
+    const coordinates = new Float32Array(buffer, offset, numAnnotations * 2 * rank);
     return (annotation: AxisAlignedBoundingBox, index: number) => {
       const {pointA, pointB} = annotation;
-      const coordinateOffset = index * 6;
-      coordinates[coordinateOffset] = Math.min(pointA[0], pointB[0]);
-      coordinates[coordinateOffset + 1] = Math.min(pointA[1], pointB[1]);
-      coordinates[coordinateOffset + 2] = Math.min(pointA[2], pointB[2]);
-      coordinates[coordinateOffset + 3] = Math.max(pointA[0], pointB[0]);
-      coordinates[coordinateOffset + 4] = Math.max(pointA[1], pointB[1]);
-      coordinates[coordinateOffset + 5] = Math.max(pointA[2], pointB[2]);
+      const coordinateOffset = index * 2 * rank;
+      coordinates.set(pointA, coordinateOffset);
+      coordinates.set(pointB, coordinateOffset + rank);
     };
   },
 });
@@ -199,24 +198,27 @@ typeHandlers.set(AnnotationType.ELLIPSOID, {
       radii: Array.from(annotation.radii),
     };
   },
-  restoreState: (annotation: Ellipsoid, obj: any) => {
-    annotation.center = verifyObjectProperty(obj, 'center', verify3dVec);
-    annotation.radii = verifyObjectProperty(obj, 'radii', verify3dScale);
+  restoreState: (annotation: Ellipsoid, obj: any, rank: number) => {
+    annotation.center = verifyObjectProperty(
+        obj, 'center', x => parseFixedLengthArray(new Float32Array(rank), x, verifyFiniteFloat));
+    annotation.radii = verifyObjectProperty(
+        obj, 'radii',
+        x => parseFixedLengthArray(new Float32Array(rank), x, verifyFiniteNonNegativeFloat));
   },
-  serializedBytes: 6 * 4,
-  serializer: (buffer: ArrayBuffer, offset: number, numAnnotations: number) => {
-    const coordinates = new Float32Array(buffer, offset, numAnnotations * 6);
+  serializedBytes: rank => 2 * 4 * rank,
+  serializer: (buffer: ArrayBuffer, offset: number, numAnnotations: number, rank: number) => {
+    const coordinates = new Float32Array(buffer, offset, numAnnotations * 2 * rank);
     return (annotation: Ellipsoid, index: number) => {
       const {center, radii} = annotation;
-      const coordinateOffset = index * 6;
+      const coordinateOffset = index * 2 * rank;
       coordinates.set(center, coordinateOffset);
-      coordinates.set(radii, coordinateOffset + 3);
+      coordinates.set(radii, coordinateOffset + rank);
     };
   },
 });
 
-export function annotationToJson(annotation: Annotation) {
-  const result = getAnnotationTypeHandler(annotation.type).toJSON(annotation);
+function annotationToJson(annotation: Annotation, rank: number) {
+  const result = getAnnotationTypeHandler(annotation.type).toJSON(annotation, rank);
   result.type = AnnotationType[annotation.type].toLowerCase();
   result.id = annotation.id;
   result.description = annotation.description || undefined;
@@ -227,7 +229,7 @@ export function annotationToJson(annotation: Annotation) {
   return result;
 }
 
-export function restoreAnnotation(obj: any, allowMissingId = false): Annotation {
+function restoreAnnotation(obj: any, rank: number, allowMissingId = false): Annotation {
   verifyObject(obj);
   const type = verifyObjectProperty(obj, 'type', x => verifyEnumString(x, AnnotationType));
   const id =
@@ -236,24 +238,23 @@ export function restoreAnnotation(obj: any, allowMissingId = false): Annotation 
   const result: Annotation = <any>{
     id,
     description: verifyObjectProperty(obj, 'description', verifyOptionalString),
-    segments: verifyObjectProperty(
-        obj, 'segments',
-        x => x === undefined ? undefined : parseArray(x, y => Uint64.parseString(y))),
+    segments: verifyOptionalObjectProperty(
+        obj, 'segments', x => parseArray(x, y => Uint64.parseString(y))),
     type,
   };
-  getAnnotationTypeHandler(type).restoreState(result, obj);
+  getAnnotationTypeHandler(type).restoreState(result, obj, rank);
   return result;
 }
 
 export interface AnnotationSourceSignals {
-  changed:NullarySignal;
-  childAdded:Signal<(annotation: Annotation) => void>;
-  childUpdated:Signal<(annotation: Annotation) => void>;
-  childDeleted:Signal<(annotationId: string) => void>;
+  changed: NullarySignal;
+  childAdded: Signal<(annotation: Annotation) => void>;
+  childUpdated: Signal<(annotation: Annotation) => void>;
+  childDeleted: Signal<(annotationId: string) => void>;
 }
 
 export class AnnotationSource extends RefCounted implements AnnotationSourceSignals {
-  private annotationMap = new Map<AnnotationId, Annotation>();
+  protected annotationMap = new Map<AnnotationId, Annotation>();
   changed = new NullarySignal();
   readonly = false;
   childAdded = new Signal<(annotation: Annotation) => void>();
@@ -262,11 +263,19 @@ export class AnnotationSource extends RefCounted implements AnnotationSourceSign
 
   private pending = new Set<AnnotationId>();
 
-  constructor(public objectToLocal = mat4.create()) {
+  protected rank_: number;
+
+  get rank() {
+    return this.rank_;
+  }
+
+  constructor(rank: number) {
     super();
+    this.rank_ = rank;
   }
 
   add(annotation: Annotation, commit: boolean = true): AnnotationReference {
+    this.ensureUpdated();
     if (!annotation.id) {
       annotation.id = makeAnnotationId();
     } else if (this.annotationMap.has(annotation.id)) {
@@ -282,11 +291,13 @@ export class AnnotationSource extends RefCounted implements AnnotationSourceSign
   }
 
   commit(reference: AnnotationReference): void {
+    this.ensureUpdated();
     const id = reference.id;
     this.pending.delete(id);
   }
 
   update(reference: AnnotationReference, annotation: Annotation) {
+    this.ensureUpdated();
     if (reference.value === null) {
       throw new Error(`Annotation already deleted.`);
     }
@@ -298,10 +309,12 @@ export class AnnotationSource extends RefCounted implements AnnotationSourceSign
   }
 
   [Symbol.iterator]() {
+    this.ensureUpdated();
     return this.annotationMap.values();
   }
 
   get(id: AnnotationId) {
+    this.ensureUpdated();
     return this.annotationMap.get(id);
   }
 
@@ -333,15 +346,19 @@ export class AnnotationSource extends RefCounted implements AnnotationSourceSign
 
   references = new Map<AnnotationId, Borrowed<AnnotationReference>>();
 
+  protected ensureUpdated() {}
+
   toJSON() {
+    this.ensureUpdated();
     const result: any[] = [];
     const {pending} = this;
+    const {rank} = this;
     for (const annotation of this) {
       if (pending.has(annotation.id)) {
         // Don't serialize uncommitted annotations.
         continue;
       }
-      result.push(annotationToJson(annotation));
+      result.push(annotationToJson(annotation, rank));
     }
     return result;
   }
@@ -353,12 +370,14 @@ export class AnnotationSource extends RefCounted implements AnnotationSourceSign
   }
 
   restoreState(obj: any) {
+    this.ensureUpdated();
     const {annotationMap} = this;
     annotationMap.clear();
     this.pending.clear();
+    const {rank} = this;
     if (obj !== undefined) {
       parseArray(obj, x => {
-        const annotation = restoreAnnotation(x);
+        const annotation = restoreAnnotation(x, rank);
         annotationMap.set(annotation.id, annotation);
       });
     }
@@ -376,7 +395,73 @@ export class AnnotationSource extends RefCounted implements AnnotationSourceSign
   }
 }
 
-export class LocalAnnotationSource extends AnnotationSource {}
+export class LocalAnnotationSource extends AnnotationSource {
+  private curCoordinateTransform: CoordinateSpaceTransform;
+
+  get rank() {
+    this.ensureUpdated();
+    return this.rank_;
+  }
+
+  constructor(public watchableTransform: WatchableCoordinateSpaceTransform) {
+    super(watchableTransform.value.sourceRank);
+    this.curCoordinateTransform = watchableTransform.value;
+    this.registerDisposer(watchableTransform.changed.add(() => this.ensureUpdated()));
+  }
+
+  ensureUpdated() {
+    const transform = this.watchableTransform.value;
+    const {curCoordinateTransform} = this;
+    if (transform === curCoordinateTransform) return;
+    this.curCoordinateTransform = transform;
+    const sourceRank = transform.sourceRank;
+    const oldSourceRank = curCoordinateTransform.sourceRank;
+    if (oldSourceRank === sourceRank &&
+        ((curCoordinateTransform.inputSpace === transform.inputSpace) ||
+         arraysEqual(
+             curCoordinateTransform.inputSpace.ids.slice(0, sourceRank),
+             transform.inputSpace.ids.slice(0, sourceRank)))) {
+      return;
+    }
+    const {ids: newIds} = transform.inputSpace;
+    const oldIds = curCoordinateTransform.inputSpace.ids;
+    const newToOldDims: number[] = [];
+    for (let newDim = 0; newDim < sourceRank; ++newDim) {
+      let oldDim = oldIds.indexOf(newIds[newDim]);
+      if (oldDim >= oldSourceRank) {
+        oldDim = -1;
+      }
+      newToOldDims.push(oldDim);
+    }
+    const mapVector = (radii: Float32Array) => {
+      const newRadii = new Float32Array(sourceRank);
+      for (let i = 0; i < sourceRank; ++i) {
+        const oldDim = newToOldDims[i];
+        newRadii[i] = (oldDim === -1) ? 0 : radii[i];
+      }
+      return newRadii;
+    };
+
+    for (const annotation of this.annotationMap.values()) {
+      switch (annotation.type) {
+        case AnnotationType.POINT:
+          annotation.point = mapVector(annotation.point);
+          break;
+        case AnnotationType.LINE:
+        case AnnotationType.AXIS_ALIGNED_BOUNDING_BOX:
+          annotation.pointA = mapVector(annotation.pointA);
+          annotation.pointB = mapVector(annotation.pointB);
+          break;
+        case AnnotationType.ELLIPSOID:
+          annotation.center = mapVector(annotation.center);
+          annotation.radii = mapVector(annotation.radii);
+          break;
+      }
+    }
+    this.rank_ = sourceRank;
+    this.changed.dispatch();
+  }
+}
 
 export const DATA_BOUNDS_DESCRIPTION = 'Data Bounds';
 
@@ -384,15 +469,21 @@ export function makeAnnotationId() {
   return getRandomHexString(160);
 }
 
-export function makeDataBoundsBoundingBox(
-    lowerVoxelBound: vec3, upperVoxelBound: vec3): AxisAlignedBoundingBox {
+export function makeDataBoundsBoundingBoxAnnotation(box: BoundingBox): AxisAlignedBoundingBox {
   return {
     type: AnnotationType.AXIS_ALIGNED_BOUNDING_BOX,
     id: 'data-bounds',
     description: DATA_BOUNDS_DESCRIPTION,
-    pointA: lowerVoxelBound,
-    pointB: upperVoxelBound
+    pointA: new Float32Array(box.lowerBounds),
+    pointB: new Float32Array(box.upperBounds),
   };
+}
+
+export function makeDataBoundsBoundingBoxAnnotationSet(box: BoundingBox): AnnotationSource {
+  const annotationSource = new AnnotationSource(box.lowerBounds.length);
+  annotationSource.readonly = true;
+  annotationSource.add(makeDataBoundsBoundingBoxAnnotation(box));
+  return annotationSource;
 }
 
 function compare3WayById(a: Annotation, b: Annotation) {
@@ -407,7 +498,7 @@ export interface SerializedAnnotations {
   segmentList: Uint32Array;
 }
 
-export function serializeAnnotations(allAnnotations: Annotation[][]): SerializedAnnotations {
+function serializeAnnotations(allAnnotations: Annotation[][], rank: number): SerializedAnnotations {
   let totalBytes = 0;
   const typeToOffset: number[] = [];
   const typeToSegmentListIndexOffset: number[] = [];
@@ -429,7 +520,7 @@ export function serializeAnnotations(allAnnotations: Annotation[][]): Serialized
     annotations.sort(compare3WayById);
     const count = annotations.length;
     const handler = getAnnotationTypeHandler(annotationType);
-    totalBytes += handler.serializedBytes * count;
+    totalBytes += handler.serializedBytes(rank) * count;
   }
   const segmentListIndex = new Uint32Array(totalNumAnnotations + 1);
   const segmentList = new Uint32Array(totalNumSegments * 2);
@@ -442,7 +533,7 @@ export function serializeAnnotations(allAnnotations: Annotation[][]): Serialized
     typeToIds[annotationType] = annotations.map(x => x.id);
     const count = annotations.length;
     const handler = getAnnotationTypeHandler(annotationType);
-    const serializer = handler.serializer(data, typeToOffset[annotationType], count);
+    const serializer = handler.serializer(data, typeToOffset[annotationType], count, rank);
     annotations.forEach((annotation, index) => {
       serializer(annotation, index);
       segmentListIndex[segmentListIndexOffset++] = segmentListOffset;
@@ -461,11 +552,12 @@ export function serializeAnnotations(allAnnotations: Annotation[][]): Serialized
 
 export class AnnotationSerializer {
   annotations: [Point[], Line[], AxisAlignedBoundingBox[], Ellipsoid[]] = [[], [], [], []];
+  constructor(public rank: number) {}
   add(annotation: Annotation) {
     (<Annotation[]>this.annotations[annotation.type]).push(annotation);
   }
   serialize() {
-    return serializeAnnotations(this.annotations);
+    return serializeAnnotations(this.annotations, this.rank);
   }
 }
 

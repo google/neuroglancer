@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2017 Google Inc.
+ * Copyright 2017-2019 Google Inc.
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
@@ -14,387 +14,862 @@
  * limitations under the License.
  */
 
-import {MouseSelectionState} from 'neuroglancer/layer';
-import {SpatialPosition, VoxelSize} from 'neuroglancer/navigation_state';
-import {StatusMessage} from 'neuroglancer/status';
-import {animationFrameDebounce} from 'neuroglancer/util/animation_frame_debounce';
-import {setClipboard} from 'neuroglancer/util/clipboard';
-import {RefCounted} from 'neuroglancer/util/disposable';
-import {removeChildren, removeFromParent} from 'neuroglancer/util/dom';
-import {EventActionMap, registerActionListener} from 'neuroglancer/util/event_action_map';
-import {vec3} from 'neuroglancer/util/geom';
-import {KeyboardEventBinder} from 'neuroglancer/util/keyboard_bindings';
-import {MouseEventBinder} from 'neuroglancer/util/mouse_bindings';
-import {numberToStringFixed} from 'neuroglancer/util/number_to_string';
-import {pickLengthUnit} from 'neuroglancer/widget/scale_bar';
-
 import './position_widget.css';
-import 'neuroglancer/ui/button.css';
+
+import {computeCombinedLowerUpperBound, CoordinateSpace, CoordinateSpaceCombiner, DimensionId, emptyInvalidCoordinateSpace, insertDimensionAt, makeCoordinateSpace} from 'neuroglancer/coordinate_transform';
+import {MouseSelectionState} from 'neuroglancer/layer';
+import {Position} from 'neuroglancer/navigation_state';
+import {StatusMessage} from 'neuroglancer/status';
+import {WatchableValueInterface} from 'neuroglancer/trackable_value';
+import {animationFrameDebounce} from 'neuroglancer/util/animation_frame_debounce';
+import {arraysEqual, filterArrayInplace} from 'neuroglancer/util/array';
+import {setClipboard} from 'neuroglancer/util/clipboard';
+import {Borrowed, RefCounted} from 'neuroglancer/util/disposable';
+import {removeFromParent, updateChildren, updateInputFieldWidth} from 'neuroglancer/util/dom';
+import {vec3} from 'neuroglancer/util/geom';
+import {ActionEvent, KeyboardEventBinder, registerActionListener} from 'neuroglancer/util/keyboard_bindings';
+import {EventActionMap, MouseEventBinder} from 'neuroglancer/util/mouse_bindings';
+import {startRelativeMouseDrag} from 'neuroglancer/util/mouse_drag';
+import {formatScaleWithUnit, parseScale} from 'neuroglancer/util/si_units';
+import {makeCopyButton} from 'neuroglancer/widget/copy_button';
 
 export const positionDragType = 'neuroglancer-position';
 
 const inputEventMap = EventActionMap.fromObject({
-  'tab': {action: 'tab-forward', preventDefault: false},
   'arrowup': {action: 'adjust-up'},
   'arrowdown': {action: 'adjust-down'},
+  'arrowleft': {action: 'maybe-tab-backward', preventDefault: false},
+  'arrowright': {action: 'maybe-tab-forward', preventDefault: false},
+  'tab': {action: 'tab-forward'},
+  'shift+tab': {action: 'tab-backward'},
   'wheel': {action: 'adjust-via-wheel'},
-  'shift+tab': {action: 'tab-backward', preventDefault: false},
   'backspace': {action: 'delete-backward', preventDefault: false},
+  'enter': {action: 'commit'},
   'escape': {action: 'cancel'},
-  'mouseup0': {action: 'select-all-if-was-not-focused', preventDefault: false},
 });
 
-const normalizedPrefixString = '  ';
-const normalizedSeparatorString = ',   ';
+const widgetFieldGetters: ((widget: DimensionWidget) => HTMLInputElement)[] = [
+  w => w.nameElement,
+  w => w.coordinate,
+  w => w.scaleElement,
+];
+
+class DimensionWidget {
+  container = document.createElement('div');
+  nameContainer = document.createElement('span');
+  nameElement = document.createElement('input');
+  scaleContainer = document.createElement('span');
+  scaleElement = document.createElement('input');
+  coordinate = document.createElement('input');
+  dropdownOwner: RefCounted|undefined = undefined;
+  modified = false;
+  draggingPosition = false;
+  hasFocus = false;
+
+  constructor(public coordinateSpace: CoordinateSpace) {
+    const {container, scaleElement, scaleContainer, coordinate, nameElement, nameContainer} = this;
+    container.title = '';
+    container.classList.add('neuroglancer-position-dimension');
+    container.draggable = true;
+    container.tabIndex = -1;
+    container.appendChild(nameContainer);
+    container.appendChild(scaleElement);
+    nameContainer.appendChild(nameElement);
+    nameContainer.title = `Drag to reorder, double click to rename.  Names ending in ' or ^ indicate dimensions local to the layer; names ending in ^ indicate channel dimensions (image layers only).`;
+    scaleContainer.appendChild(scaleElement);
+    nameElement.classList.add('neuroglancer-position-dimension-name');
+    nameElement.disabled = true;
+    nameElement.spellcheck = false;
+    nameElement.autocomplete = 'off';
+    nameElement.required = true;
+    nameElement.placeholder = ' ';
+    scaleContainer.classList.add('neuroglancer-position-dimension-scale-container');
+    scaleElement.classList.add('neuroglancer-position-dimension-scale');
+    scaleElement.disabled = true;
+    scaleElement.spellcheck = false;
+    scaleElement.autocomplete = 'off';
+    scaleContainer.title = 'Drag to reorder, double click to change scale';
+    container.appendChild(scaleContainer);
+    container.appendChild(coordinate);
+    coordinate.type = 'text';
+    coordinate.classList.add('neuroglancer-position-dimension-coordinate');
+    coordinate.spellcheck = false;
+    coordinate.autocomplete = 'off';
+    coordinate.pattern = String.raw`(-?\d+(?:\.(?:\d+)?)?)`;
+    coordinate.required = true;
+    coordinate.placeholder = ' ';
+  }
+}
+
+interface NormalizedDimensionBounds {
+  lowerBound: number;
+  upperBound: number;
+  normalizedBounds: readonly{lower: number, upper: number}[];
+}
+
+function getNormalizedDimensionBounds(
+    coordinateSpace: CoordinateSpace, dimensionIndex: number,
+    height: number): NormalizedDimensionBounds|undefined {
+  const {boundingBoxes, bounds} = coordinateSpace;
+  const lowerBound = Math.floor(bounds.lowerBounds[dimensionIndex]);
+  const upperBound = Math.ceil(bounds.upperBounds[dimensionIndex] - 1);
+  const extent = upperBound - lowerBound;
+  if (!Number.isFinite(lowerBound) || !Number.isFinite(upperBound)) {
+    return undefined;
+  }
+  const normalizedBounds: {lower: number, upper: number}[] = [];
+  const normalize = (x: number) => {
+    return ((Math.floor(x) - lowerBound) * (height - 1) / extent);
+  };
+  const {rank} = coordinateSpace;
+  for (const boundingBox of boundingBoxes) {
+    const result = computeCombinedLowerUpperBound(boundingBox, dimensionIndex, rank);
+    if (result === undefined) continue;
+    result.lower = normalize(result.lower);
+    result.upper = normalize(result.upper);
+    normalizedBounds.push(result);
+  }
+  normalizedBounds.sort((a, b) => {
+    const lowerDiff = a.lower - b.lower;
+    if (lowerDiff !== 0) return lowerDiff;
+    return b.upper - b.upper;
+  });
+  filterArrayInplace(normalizedBounds, (x, i) => {
+    if (i === 0) return true;
+    const prev = normalizedBounds[i - 1];
+    return (prev.lower !== x.lower || prev.upper !== x.upper);
+  });
+  return {lowerBound, upperBound, normalizedBounds};
+}
+
+const tickWidth = 10;
+const barWidth = 15;
+const barRightMargin = 10;
+const canvasWidth = tickWidth + barWidth + barRightMargin;
+
+function drawDimensionBounds(
+    canvas: HTMLCanvasElement, ctx: CanvasRenderingContext2D, bounds: NormalizedDimensionBounds) {
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  const {normalizedBounds} = bounds;
+  function drawTick(x: number) {
+    ctx.fillRect(0, x, tickWidth, 1);
+  }
+  ctx.fillStyle = '#fff';
+  for (const {lower, upper} of normalizedBounds) {
+    drawTick(lower);
+    drawTick(upper);
+  }
+  const length = normalizedBounds.length;
+  ctx.fillStyle = '#ccc';
+  for (let i = 0; i < length; ++i) {
+    const {lower, upper} = normalizedBounds[i];
+    const startX = Math.floor(i * barWidth / length);
+    const width = Math.max(1, barWidth / length);
+    ctx.fillRect(startX + tickWidth, lower, width, upper + 1 - lower);
+  }
+}
+
+function updateCoordinateFieldWidth(element: HTMLInputElement, value: string) {
+  updateInputFieldWidth(element, value.length + 1);
+}
+
+function updateScaleElementStyle(scaleElement: HTMLInputElement) {
+  const {value} = scaleElement;
+  updateInputFieldWidth(scaleElement);
+  scaleElement.parentElement!.dataset.isEmpty = value === '' ? 'true' : 'false';
+}
 
 export class PositionWidget extends RefCounted {
   element = document.createElement('div');
-  inputContainer = document.createElement('div');
-  inputElement = document.createElement('input');
-  hintElement = document.createElement('input');
+  private dimensionContainer = document.createElement('div');
+  private coordinateSpace: CoordinateSpace|undefined = undefined;
 
-  tempPosition = vec3.create();
+  private dimensionWidgets = new Map<DimensionId, DimensionWidget>();
+  private dimensionWidgetList: DimensionWidget[] = [];
 
-  inputFieldWidth: number;
-
-  constructor(public position: SpatialPosition, public maxNumberWidth = 6) {
-    super();
-    const {element, inputElement, hintElement, inputContainer} = this;
-    inputContainer.className = 'neuroglancer-position-widget-input-container';
-    inputElement.className = 'neuroglancer-position-widget-input';
-    hintElement.className = 'neuroglancer-position-widget-hint';
-
-    this.inputFieldWidth =
-        maxNumberWidth * 3 + normalizedPrefixString.length + normalizedSeparatorString.length * 2 + 1;
-
-    for (const x of [inputElement, hintElement]) {
-      x.spellcheck = false;
-      x.autocomplete = 'off';
-      x.type = 'text';
-      x.style.width = this.inputFieldWidth + 'ch';
-    }
-    hintElement.disabled = true;
-    const copyButton = document.createElement('div');
-    copyButton.textContent = '⧉';
-    copyButton.className = 'neuroglancer-copy-button neuroglancer-button';
-    copyButton.title = 'Copy position to clipboard';
-    copyButton.addEventListener('click', () => {
-      const result = setClipboard(this.getPositionText());
-      StatusMessage.showTemporaryMessage(
-          result ? 'Position copied to clipboard' : 'Failed to copy position to clipboard');
-    });
-    copyButton.addEventListener('dragstart', event => {
-      event.dataTransfer!.setData(positionDragType, JSON.stringify(position.toJSON()));
-      event.dataTransfer!.setData('text', this.getPositionText());
-      event.stopPropagation();
-    });
-    copyButton.draggable = true;
-    element.appendChild(copyButton);
-    element.appendChild(inputContainer);
-    inputContainer.appendChild(inputElement);
-    inputContainer.appendChild(hintElement);
-    element.className = 'neuroglancer-position-widget';
-    this.registerDisposer(position.changed.add(
-        this.registerCancellable(animationFrameDebounce(() => this.updateView()))));
-
-    const keyboardHandler =
-        this.registerDisposer(new KeyboardEventBinder(inputElement, inputEventMap));
-    keyboardHandler.allShortcutsAreGlobal = true;
-    this.registerDisposer(new MouseEventBinder(inputElement, inputEventMap));
-
-    this.registerEventListener(inputElement, 'change', () => this.updatePosition());
-    this.registerEventListener(inputElement, 'blur', () => this.updatePosition());
-    this.registerEventListener(inputElement, 'input', () => this.cleanInput());
-    this.registerEventListener(inputElement, 'keydown', this.updateHintScrollPosition);
-    this.registerEventListener(inputElement, 'copy', (event: ClipboardEvent) => {
-      const {selectionStart, selectionEnd} = inputElement;
-      let selection = inputElement.value.substring(selectionStart || 0, selectionEnd || 0);
-      selection = selection.trim().replace(/\s+/g, ' ');
-      const {clipboardData} = event;
-      if (clipboardData !== null) {
-        clipboardData.setData('text/plain', selection);
-      }
+  private openDropdown(widget: DimensionWidget) {
+    if (widget.dropdownOwner !== undefined) return;
+    this.closeDropdown();
+    const dropdownOwner = widget.dropdownOwner = new RefCounted();
+    const dropdown = document.createElement('div');
+    dropdown.draggable = true;
+    dropdown.addEventListener('dragstart', event => {
       event.stopPropagation();
       event.preventDefault();
     });
-    let wasFocused = false;
-    this.registerEventListener(inputElement, 'mousedown', () => {
-      wasFocused = document.activeElement === inputElement;
+    dropdown.addEventListener('pointerenter', () => {
+      widget.hasFocus = true;
+    });
+    dropdown.tabIndex = -1;
+    dropdown.classList.add('neuroglancer-position-dimension-dropdown');
+    const canvas = document.createElement('canvas');
+    const ctx = canvas.getContext('2d')!;
+
+    const lowerBoundElement = document.createElement('div');
+    const lowerBoundText = document.createTextNode('');
+    lowerBoundElement.appendChild(lowerBoundText);
+    const upperBoundElement = document.createElement('div');
+    const hoverElement = document.createElement('div');
+    lowerBoundElement.classList.add('neuroglancer-position-dimension-dropdown-lowerbound');
+    upperBoundElement.classList.add('neuroglancer-position-dimension-dropdown-upperbound');
+    hoverElement.classList.add('neuroglancer-position-dimension-dropdown-hoverposition');
+    dropdown.appendChild(lowerBoundElement);
+    dropdown.appendChild(upperBoundElement);
+    dropdown.appendChild(canvas);
+    lowerBoundElement.appendChild(hoverElement);
+    widget.container.appendChild(dropdown);
+
+    const canvasHeight = 100;
+
+    canvas.width = canvasWidth;
+    canvas.height = canvasHeight;
+
+    let prevLowerBound: number|undefined, prevUpperBound: number|undefined;
+
+    let hoverPosition: number|undefined = undefined;
+    const updateView = () => {
+      const dimensionIndex = this.dimensionWidgetList.indexOf(widget);
+      if (dimensionIndex === -1) return;
+      const {coordinateSpace} = widget;
+      const normalizedDimensionBounds =
+          getNormalizedDimensionBounds(coordinateSpace, dimensionIndex, canvasHeight);
+      if (normalizedDimensionBounds === undefined ||
+          coordinateSpace.bounds.lowerBounds[dimensionIndex] + 1 ===
+              coordinateSpace.bounds.upperBounds[dimensionIndex]) {
+        dropdown.style.display = 'none';
+        widget.container.dataset.dropdownVisible = undefined;
+        return;
+      }
+      widget.container.dataset.dropdownVisible = 'true';
+      dropdown.style.display = '';
+      const {lowerBound, upperBound} = normalizedDimensionBounds;
+      prevLowerBound = lowerBound;
+      prevUpperBound = upperBound;
+      lowerBoundText.textContent = lowerBound.toString();
+      upperBoundElement.textContent = upperBound.toString();
+      drawDimensionBounds(canvas, ctx, normalizedDimensionBounds);
+
+      const curPosition = this.position.value[dimensionIndex];
+      if (curPosition >= lowerBound && curPosition <= upperBound) {
+        ctx.fillStyle = '#f66';
+        ctx.fillRect(
+            0, Math.floor(curPosition * canvasHeight / (upperBound - lowerBound)), canvasWidth, 1);
+      }
+      if (hoverPosition !== undefined && hoverPosition >= lowerBound &&
+          hoverPosition <= upperBound) {
+        ctx.fillStyle = '#66f';
+        const hoverOffset =
+            Math.floor((hoverPosition - lowerBound) * canvasHeight / (upperBound - lowerBound));
+        ctx.fillRect(0, hoverOffset, canvasWidth, 1);
+        hoverElement.textContent = hoverPosition.toString();
+        const labelHeight = lowerBoundElement.offsetHeight;
+        lowerBoundElement.style.visibility = (hoverOffset > labelHeight) ? '' : 'hidden';
+        upperBoundElement.style.visibility =
+            (hoverOffset < canvasHeight - labelHeight) ? '' : 'hidden';
+        hoverElement.style.display = '';
+        hoverElement.style.position = 'absolute';
+        hoverElement.style.visibility = 'visible';
+        hoverElement.style.top = `${hoverOffset}px`;
+        hoverElement.style.right = '0px';
+      } else {
+        lowerBoundElement.style.visibility = '';
+        hoverElement.style.display = 'none';
+        upperBoundElement.style.visibility = '';
+      }
+    };
+
+    const scheduleUpdateView =
+        dropdownOwner.registerCancellable(animationFrameDebounce(updateView));
+    dropdownOwner.registerDisposer(this.position.changed.add(scheduleUpdateView));
+    const getPositionFromMouseEvent = (event: MouseEvent): number|undefined => {
+      if (prevLowerBound === undefined || prevUpperBound === undefined) return undefined;
+      const canvasBounds = canvas.getBoundingClientRect();
+      let relativeY = (event.clientY - canvasBounds.top) / canvasBounds.height;
+      relativeY = Math.max(0, relativeY);
+      relativeY = Math.min(1, relativeY);
+      return Math.floor(relativeY * (prevUpperBound - prevLowerBound)) + prevLowerBound;
+    };
+    const setPositionFromMouse = (event: MouseEvent) => {
+      const dimensionIndex = this.dimensionWidgetList.indexOf(widget);
+      if (dimensionIndex === -1) return;
+      const x = getPositionFromMouseEvent(event);
+      if (x === undefined) return;
+      const {position} = this;
+      const voxelCoordinates = position.value!;
+      voxelCoordinates[dimensionIndex] = x;
+      widget.modified = false;
+      position.value = voxelCoordinates;
+    };
+
+    canvas.addEventListener('pointermove', (event: MouseEvent) => {
+      const x = getPositionFromMouseEvent(event);
+      hoverPosition = x;
+      scheduleUpdateView();
+    });
+    canvas.addEventListener('pointerleave', () => {
+      hoverPosition = undefined;
+      scheduleUpdateView();
     });
 
-    this.registerDisposer(
-        registerActionListener(inputElement, 'select-all-if-was-not-focused', event => {
-          if (wasFocused) {
-            return;
-          }
-          inputElement.selectionStart = 0;
-          inputElement.selectionEnd = inputElement.value.length;
-          inputElement.selectionDirection = 'forward';
-          event.preventDefault();
-        }));
-
-    this.registerDisposer(registerActionListener(inputElement, 'tab-forward', event => {
-      const selectionStart =
-          Math.min(inputElement.selectionStart || 0, inputElement.selectionEnd || 0);
-      const valueSubstring = inputElement.value.substring(selectionStart);
-      const match = valueSubstring.match(/^([^,\s]*)((?:\s+)|(?:\s*,\s*))?([^,\s]*)/);
-      if (match !== null) {
-        // Already on a field.  Pick the next field.
-        if (match[2] !== undefined) {
-          inputElement.selectionStart = selectionStart + match[1].length + match[2].length;
-          inputElement.selectionEnd = inputElement.selectionStart + match[3].length;
-          inputElement.selectionDirection = 'forward';
-          event.preventDefault();
-          return;
-        }
+    canvas.addEventListener('pointerdown', (event: MouseEvent) => {
+      event.preventDefault();
+      event.stopPropagation();
+      if (event.ctrlKey || event.altKey || event.shiftKey || event.metaKey) {
+        return;
       }
-    }));
+      startRelativeMouseDrag(
+          event,
+          (newEvent: MouseEvent) => {
+            if (widget.dropdownOwner === undefined) return;
+            hoverPosition = undefined;
+            setPositionFromMouse(newEvent);
+            scheduleUpdateView();
+            widget.draggingPosition = true;
+          },
+          () => {
+            widget.draggingPosition = false;
+            this.updateDropdownVisibility(widget);
+          });
+      setPositionFromMouse(event);
+    });
+    updateView();
 
-    this.registerDisposer(registerActionListener(inputElement, 'tab-backward', event => {
-      const selectionEnd =
-          Math.max(inputElement.selectionStart || 0, inputElement.selectionEnd || 0);
-      const valueSubstring = inputElement.value.substring(0, selectionEnd);
-      const match = valueSubstring.match(/([^,\s]*)((?:\s+)|(?:\s*,\s*))?([^,\s]*)$/);
-      if (match !== null) {
-        // Already on a field.  Pick the previous field.
-        if (match[2] !== undefined) {
-          inputElement.selectionStart = match.index!;
-          inputElement.selectionEnd = inputElement.selectionStart + match[1].length;
-          inputElement.selectionDirection = 'forward';
-          event.preventDefault();
-          return;
-        }
+    this.widgetWithOpenDropdown = widget;
+
+    dropdownOwner.registerDisposer(() => {
+      removeFromParent(dropdown);
+      widget.dropdownOwner = undefined;
+      delete widget.container.dataset.dropdownVisible;
+      this.widgetWithOpenDropdown = undefined;
+    });
+
+    dropdownOwner.registerEventListener(document, 'pointerdown', (event: MouseEvent) => {
+      const {target} = event;
+      if (target instanceof Node && widget.container.contains(target)) {
+        return;
       }
-    }));
+      this.closeDropdown(widget);
+    }, {capture: true});
+  }
 
-    this.registerDisposer(registerActionListener(inputElement, 'delete-backward', event => {
-      if (inputElement.selectionStart === inputElement.selectionEnd &&
-          inputElement.selectionStart === inputElement.value.length) {
-        const match = inputElement.value.match(/^(.*)(?![\s])(?:(?:\s+)|(?:\s*,\s*))$/);
-        if (match !== null) {
-          inputElement.value = match[1];
-          this.cleanInput();
-          event.preventDefault();
-          return;
-        }
+  private widgetWithOpenDropdown: DimensionWidget|undefined;
+
+  private closeDropdown(widget = this.widgetWithOpenDropdown) {
+    if (widget === undefined) return;
+    const {dropdownOwner} = widget;
+    if (dropdownOwner === undefined) return;
+    dropdownOwner.dispose();
+  }
+
+  private pasteString(widget: DimensionWidget, s: string) {
+    while (true) {
+      widget.coordinate.focus();
+      const m = s.match(/^\s*(-?\d+(?:\.(?:\d+)?)?)((?:\s+(?![\s,]))|(?:\s*,\s*))?/);
+      if (m === null) break;
+      if (m[1] !== undefined) {
+        document.execCommand('insertText', undefined, m[1]);
       }
-    }));
+      if (m[2] !== undefined) {
+        const {dimensionWidgetList} = this;
+        const dimensionIndex = dimensionWidgetList.indexOf(widget);
+        if (dimensionIndex === -1 || dimensionIndex + 1 === dimensionWidgetList.length) {
+          break;
+        }
+        const remaining = s.substring(m[0].length);
+        const nextWidget = dimensionWidgetList[dimensionIndex + 1];
+        widget = nextWidget;
+        s = remaining;
+        continue;
+      }
+      break;
+    }
+  }
 
-    this.registerDisposer(registerActionListener(inputElement, 'cancel', () => {
+  private dragSource: DimensionWidget|undefined = undefined;
+
+  private reorderDimensionTo(targetIndex: number, sourceIndex: number) {
+    if (targetIndex === sourceIndex) return;
+    const {coordinateSpace} = this.position;
+    coordinateSpace.value = insertDimensionAt(coordinateSpace.value, targetIndex, sourceIndex);
+  }
+
+  private updateDropdownVisibility(widget: DimensionWidget) {
+    if (widget.hasFocus || widget.draggingPosition) {
+      this.openDropdown(widget);
+    } else {
+      this.closeDropdown(widget);
+    }
+  }
+
+  private newDimension(coordinateSpace: CoordinateSpace) {
+    const widget = new DimensionWidget(coordinateSpace);
+    widget.container.addEventListener('dragstart', (event: DragEvent) => {
+      this.dragSource = widget;
+      event.stopPropagation();
+      event.dataTransfer!.setData('neuroglancer-dimension', '');
+    });
+    widget.container.addEventListener('dragenter', (event: DragEvent) => {
+      const {dragSource} = this;
+      if (dragSource === undefined || dragSource === widget) return;
+      const {dimensionWidgetList} = this;
+      const sourceIndex = dimensionWidgetList.indexOf(dragSource);
+      const targetIndex = dimensionWidgetList.indexOf(widget);
+      if (sourceIndex === -1 || targetIndex === -1) return;
+      event.preventDefault();
+      this.reorderDimensionTo(targetIndex, sourceIndex);
+    });
+    widget.container.addEventListener('dragend', (event: DragEvent) => {
+      event;
+      if (this.dragSource === widget) {
+        this.dragSource = undefined;
+      }
+    });
+    widget.nameContainer.addEventListener('dblclick', () => {
+      widget.nameElement.disabled = false;
+      widget.nameElement.focus();
+      widget.nameElement.select();
+    });
+    widget.scaleContainer.addEventListener('dblclick', () => {
+      widget.scaleElement.disabled = false;
+      widget.scaleElement.focus();
+      widget.scaleElement.select();
+    });
+    widget.coordinate.addEventListener('focus', () => {
+      widget.coordinate.select();
+    });
+    widget.container.addEventListener('focusin', () => {
+      widget.hasFocus = true;
+      this.updateDropdownVisibility(widget);
+    });
+    widget.container.addEventListener('focusout', (event: FocusEvent) => {
+      const {relatedTarget} = event;
+      if (relatedTarget instanceof Node && widget.container.contains(relatedTarget)) {
+        return;
+      }
+      widget.hasFocus = false;
+      this.updateDropdownVisibility(widget);
+    });
+    widget.container.addEventListener('click', (event: PointerEvent) => {
+      if (!(event.target instanceof HTMLInputElement) || event.target.disabled) {
+        widget.coordinate.focus();
+      }
+    });
+    widget.coordinate.addEventListener('paste', (event: ClipboardEvent) => {
+      const input = widget.coordinate;
+      const value = input.value;
+      const {clipboardData} = event;
+      if (clipboardData === null) return;
+      let text = clipboardData.getData('text');
+      let {selectionEnd, selectionStart} = input;
+      if (selectionStart !== 0 || selectionEnd !== value.length) {
+        if (selectionStart == null) selectionStart = 0;
+        if (selectionEnd == null) selectionEnd = 0;
+        const invalidMatch = text.match(/[^\-0-9\.]/);
+        if (invalidMatch !== null) {
+          text = text.substring(0, invalidMatch.index);
+        }
+        if (text.length > 0) {
+          document.execCommand('insertText', undefined, text);
+        }
+      } else {
+        this.pasteString(widget, text);
+      }
+      event.preventDefault();
+      event.stopPropagation();
+    });
+    widget.coordinate.addEventListener('input', () => {
+      widget.modified = true;
+      const input = widget.coordinate;
+      const value = input.value;
+      let {selectionDirection, selectionEnd, selectionStart} = input;
+      if (selectionStart === null) selectionStart = 0;
+      if (selectionEnd === null) selectionEnd = selectionStart;
+      let newValue = '';
+      const invalidPattern = /[^\-0-9\.]/g;
+      newValue += value.substring(0, selectionStart).replace(invalidPattern, '');
+      const newSelectionStart = newValue.length;
+      newValue += value.substring(selectionStart, selectionEnd).replace(invalidPattern, '');
+      const newSelectionEnd = newValue.length;
+      newValue += value.substring(selectionEnd).replace(invalidPattern, '');
+      input.value = newValue;
+      input.selectionStart = newSelectionStart;
+      input.selectionEnd = newSelectionEnd;
+      input.selectionDirection = selectionDirection;
+      updateCoordinateFieldWidth(input, newValue);
+      if (selectionEnd === selectionStart && selectionEnd === value.length &&
+          value.match(/^(-?\d+(?:\.(?:\d+)?)?)((?:\s+(?![\s,]))|(?:\s*,\s*))$/)) {
+        this.selectAdjacentCoordinate(widget, 1);
+      }
+    });
+
+    widget.nameElement.addEventListener('input', () => {
+      const {nameElement} = widget;
+      updateInputFieldWidth(nameElement);
+      this.updateNameValidity();
+    });
+
+    widget.scaleElement.addEventListener('input', () => {
+      const {scaleElement} = widget;
+      updateScaleElementStyle(scaleElement);
+      this.updateScaleValidity(widget);
+    });
+
+    widget.coordinate.addEventListener('blur', event => {
+      const {relatedTarget} = event;
+      if (this.dimensionWidgetList.some(widget => widget.coordinate === relatedTarget)) {
+        return;
+      }
+      if (widget.modified) {
+        this.updatePosition();
+      }
+    });
+
+    widget.nameElement.addEventListener('blur', event => {
+      widget.nameElement.disabled = true;
+      const {relatedTarget} = event;
+      if (this.dimensionWidgetList.some(widget => widget.nameElement === relatedTarget)) {
+        return;
+      }
+      if (!this.updateNames()) {
+        this.forceUpdateDimensions();
+      }
+    });
+
+    widget.scaleElement.addEventListener('blur', event => {
+      widget.scaleElement.disabled = true;
+      const {relatedTarget} = event;
+      if (this.dimensionWidgetList.some(widget => widget.scaleElement === relatedTarget)) {
+        return;
+      }
+      if (!this.updateScales()) {
+        this.forceUpdateDimensions();
+      }
+    });
+
+    registerActionListener<WheelEvent>(widget.container, 'adjust-via-wheel', actionEvent => {
+      const event = actionEvent.detail;
+      const {deltaY} = event;
+      if (deltaY === 0) {
+        return;
+      }
+      this.adjustDimension(widget, Math.sign(deltaY));
+    });
+
+    registerActionListener(widget.container, 'adjust-up', () => {
+      this.adjustDimension(widget, -1);
+    });
+    registerActionListener(widget.container, 'adjust-down', () => {
+      this.adjustDimension(widget, 1);
+    });
+
+    for (const getter of widgetFieldGetters) {
+      const e = getter(widget);
+      registerActionListener<Event>(e, 'maybe-tab-forward', event => {
+        this.handleLeftRightMovement(event, widget, 1, getter);
+      });
+      registerActionListener<Event>(e, 'maybe-tab-backward', event => {
+        this.handleLeftRightMovement(event, widget, -1, getter);
+      });
+      registerActionListener<Event>(e, 'tab-forward', () => {
+        this.selectAdjacentField(widget, 1, getter);
+      });
+      registerActionListener<Event>(e, 'tab-backward', () => {
+        this.selectAdjacentField(widget, -1, getter);
+      });
+    }
+
+    registerActionListener(widget.coordinate, 'commit', () => {
+      this.updatePosition();
+    });
+
+    registerActionListener(widget.nameElement, 'commit', () => {
+      this.updateNames();
+    });
+
+    registerActionListener(widget.scaleElement, 'commit', () => {
+      this.updateScales();
+    });
+
+    registerActionListener(widget.coordinate, 'delete-backward', event => {
+      event.stopPropagation();
+      const {coordinate} = widget;
+      if (coordinate.selectionStart === coordinate.selectionEnd &&
+          coordinate.selectionStart === 0) {
+        event.preventDefault();
+        this.selectAdjacentCoordinate(widget, -1);
+      }
+    });
+
+
+    return widget;
+  }
+
+  private forceUpdateDimensions() {
+    let {position: {coordinateSpace: {value: coordinateSpace}}} = this;
+    if (!coordinateSpace.valid) {
+      coordinateSpace = emptyInvalidCoordinateSpace;
+    }
+    this.coordinateSpace = coordinateSpace;
+    const {dimensionWidgets, dimensionWidgetList} = this;
+    dimensionWidgetList.length = 0;
+    const {
+      names,
+      ids,
+      scales,
+      units,
+    } = coordinateSpace;
+    updateChildren(this.dimensionContainer, ids.map((id, i) => {
+      let widget = dimensionWidgets.get(id);
+      if (widget === undefined) {
+        widget = this.newDimension(coordinateSpace);
+        dimensionWidgets.set(id, widget);
+      } else {
+        widget.coordinateSpace = coordinateSpace;
+      }
+      const name = names[i]
+      widget.nameElement.value = name;
+      delete widget.nameElement.dataset.isValid;
+      updateInputFieldWidth(widget.nameElement);
+      const {scale, prefix, unit} = formatScaleWithUnit(scales[i], units[i]);
+      const scaleString = `${scale}${prefix}${unit}`;
+      widget.scaleElement.value = scaleString;
+      delete widget.scaleElement.dataset.isValid;
+      updateScaleElementStyle(widget.scaleElement);
+      dimensionWidgetList.push(widget);
+      return widget.container;
+    }));
+    for (const [id, widget] of dimensionWidgets) {
+      if (widget.coordinateSpace !== coordinateSpace) {
+        this.closeDropdown(widget);
+        dimensionWidgets.delete(id);
+      }
+    }
+  }
+
+  private updateDimensions() {
+    const {position: {coordinateSpace: {value: coordinateSpace}}} = this;
+    if (coordinateSpace === this.coordinateSpace) return;
+    this.forceUpdateDimensions();
+  }
+
+  private selectAdjacentField(
+      widget: DimensionWidget, dir: number,
+      fieldGetter: (widget: DimensionWidget) => HTMLInputElement) {
+    const {dimensionWidgetList} = this;
+    const axisIndex = dimensionWidgetList.indexOf(widget);
+    if (axisIndex === -1) return;
+    const newAxisIndex = axisIndex + dir;
+    if (newAxisIndex < 0 || newAxisIndex >= dimensionWidgetList.length) {
+      return false;
+    }
+    const newWidget = dimensionWidgetList[newAxisIndex];
+    const field = fieldGetter(newWidget);
+    field.disabled = false;
+    field.focus();
+    field.selectionStart = 0;
+    field.selectionEnd = field.value.length;
+    field.selectionDirection = dir === 1 ? 'forward' : 'backward';
+    return true;
+  }
+
+  private selectAdjacentCoordinate(widget: DimensionWidget, dir: number) {
+    return this.selectAdjacentField(widget, dir, w => w.coordinate);
+  }
+
+  private handleLeftRightMovement(
+      event: ActionEvent<Event>, widget: DimensionWidget, dir: number,
+      getter: (widget: DimensionWidget) => HTMLInputElement) {
+    event.stopPropagation();
+    const element = getter(widget);
+    if (element.selectionStart !== element.selectionEnd ||
+        element.selectionStart !== (dir === 1 ? element.value.length : 0)) {
+      return;
+    }
+    if (this.selectAdjacentField(widget, dir, getter)) {
+      event.preventDefault();
+    }
+  }
+
+  private updateNameValidity() {
+    const {dimensionWidgetList} = this;
+    const names = dimensionWidgetList.map(w => w.nameElement.value);
+    const rank = names.length;
+    const isValid = this.combiner.getRenameValidity(names);
+    for (let i = 0; i < rank; ++i) {
+      dimensionWidgetList[i].nameElement.dataset.isValid =
+          (isValid[i] === false) ? 'false' : 'true';
+    }
+  }
+
+  private updateScaleValidity(widget: DimensionWidget) {
+    const isValid = parseScale(widget.scaleElement.value) !== undefined;
+    widget.scaleElement.dataset.isValid = isValid.toString();
+  }
+
+  constructor(
+      public position: Borrowed<Position>, public combiner: CoordinateSpaceCombiner,
+      {copyButton = true} = {}) {
+    super();
+    const {element, dimensionContainer} = this;
+    this.registerDisposer(position.coordinateSpace.changed.add(
+        this.registerCancellable(animationFrameDebounce(() => this.updateDimensions()))));
+    element.className = 'neuroglancer-position-widget';
+    dimensionContainer.style.display = 'contents';
+    element.appendChild(dimensionContainer);
+    if (copyButton) {
+      const copyButton = makeCopyButton({
+        title: 'Copy position to clipboard',
+        onClick: () => {
+          const result = setClipboard(this.getPositionText());
+          StatusMessage.showTemporaryMessage(
+              result ? 'Position copied to clipboard' : 'Failed to copy position to clipboard');
+        }
+      });
+      copyButton.addEventListener('dragstart', event => {
+        event.dataTransfer!.setData(
+            positionDragType,
+            JSON.stringify(
+                {position: position.toJSON(), dimensions: position.coordinateSpace.value.names}));
+        event.dataTransfer!.setData('text', this.getPositionText());
+        event.stopPropagation();
+      });
+      copyButton.draggable = true;
+      element.appendChild(copyButton);
+    }
+    this.registerDisposer(position.changed.add(
+        this.registerCancellable(animationFrameDebounce(() => this.updateView()))));
+
+    const keyboardHandler = this.registerDisposer(new KeyboardEventBinder(element, inputEventMap));
+    keyboardHandler.allShortcutsAreGlobal = true;
+    this.registerDisposer(new MouseEventBinder(element, inputEventMap));
+    this.registerDisposer(registerActionListener(element, 'cancel', event => {
+      this.coordinateSpace = undefined;
       this.updateView();
-      this.inputElement.blur();
-    }));
-
-    this.registerDisposer(
-        registerActionListener<WheelEvent>(inputElement, 'adjust-via-wheel', actionEvent => {
-          const event = actionEvent.detail;
-          const {deltaY} = event;
-          if (deltaY === 0) {
-            return;
-          }
-          const mouseCursorPosition = Math.ceil(
-              (inputElement.scrollLeft + event.offsetX - inputElement.clientLeft) /
-              (inputElement.scrollWidth / this.inputFieldWidth));
-
-          this.adjustFromCursor(mouseCursorPosition, -Math.sign(deltaY));
-        }));
-
-    this.registerDisposer(registerActionListener<WheelEvent>(inputElement, 'adjust-up', () => {
-      this.adjustFromCursor(undefined, 1);
-    }));
-    this.registerDisposer(registerActionListener<WheelEvent>(inputElement, 'adjust-down', () => {
-      this.adjustFromCursor(undefined, -1);
+      this.closeDropdown();
+      const {target} = event;
+      if (target instanceof HTMLElement) {
+        target.blur();
+      }
     }));
     this.updateView();
   }
 
-  private adjustFromCursor(cursorPosition: number|undefined, adjustment: number) {
-    const {inputElement} = this;
-    if (cursorPosition === undefined) {
-      cursorPosition =
-          (inputElement.selectionDirection === 'forward' ? inputElement.selectionEnd :
-                                                           inputElement.selectionStart) ||
-          0;
-    }
-    if (this.cleanInput() === undefined) {
+
+  private adjustDimension(widget: DimensionWidget, adjustment: number) {
+    const axisIndex = this.dimensionWidgetList.indexOf(widget);
+    if (axisIndex === -1) return;
+    this.updatePosition();
+    const {position} = this;
+    if (!position.valid) {
       return;
     }
-
-    const substring = inputElement.value.substring(0, cursorPosition);
-    const axisIndex = substring.split(',').length - 1;
-    this.updatePosition();
-    const voxelCoordinates = this.tempPosition;
-    if (this.position.getVoxelCoordinates(voxelCoordinates)) {
-      voxelCoordinates[axisIndex] += adjustment;
-      this.position.setVoxelCoordinates(voxelCoordinates);
-      this.updateView();
-    }
-  }
-
-  private cleanInput(): {position?: vec3}|undefined {
-    const s = this.inputElement.value;
-    const cursorPosition = this.inputElement.selectionStart || 0;
-    const numberPattern = /(-?\d+(?:\.(?:\d+)?)?)/.source;
-    const separatorPattern = /((?:\s+(?![\s,]))|(?:\s*,\s*))/.source;
-    const startAndEndPattern = /([\[\]{}()\s]*)/.source;
-    const pattern = new RegExp(
-        `^${startAndEndPattern}(?![\\s])${numberPattern}?` +
-        `(?:${separatorPattern}${numberPattern}?(?:${separatorPattern}${numberPattern}?)?)?` +
-        `${startAndEndPattern}$`);
-
-    const match = s.match(pattern);
-    if (match !== null) {
-      let cleanInput = normalizedPrefixString;
-      let hint = 'x ';
-      let cleanCursor = 2;
-      let curFieldStart = match[1].length;
-
-      const processField =
-          (matchText: string|undefined, replacementText: string|undefined = undefined,
-           hintText: string|undefined = undefined) => {
-            if (matchText === undefined) {
-              return;
-            }
-            let curFieldEnd = curFieldStart + matchText.length;
-            if (replacementText === undefined) {
-              replacementText = matchText;
-              hintText = ' '.repeat(replacementText.length);
-            }
-
-            if (cursorPosition >= curFieldStart) {
-              if (cursorPosition === curFieldEnd) {
-                cleanCursor = cleanInput.length + replacementText.length;
-              } else {
-                cleanCursor = cleanInput.length +
-                    Math.min(replacementText.length, cursorPosition - curFieldStart);
-              }
-            }
-            cleanInput += replacementText;
-            hint += hintText;
-            curFieldStart = curFieldEnd;
-          };
-
-      processField(match[2]);
-      processField(match[3], normalizedSeparatorString, '  y ');
-      processField(match[4]);
-      processField(match[5], normalizedSeparatorString, '  z ');
-      processField(match[6]);
-      this.hintElement.value = hint;
-
-      if (this.inputElement.value !== cleanInput) {
-        this.inputElement.value = cleanInput;
-        this.inputElement.selectionEnd = cleanCursor;
-        this.inputElement.selectionStart = cleanCursor;
+    const coordinateSpace = position.coordinateSpace.value!;
+    const {bounds} = coordinateSpace;
+    const voxelCoordinates = Float32Array.from(position.value);
+    let newValue = voxelCoordinates[axisIndex] + adjustment
+    if (adjustment > 0) {
+      const bound = bounds.upperBounds[axisIndex];
+      if (Number.isFinite(bound)) {
+        newValue = Math.min(newValue, Math.ceil(bound - 1));
       }
-
-      this.updateHintScrollPosition();
-
-      if (match[2] !== undefined && match[4] !== undefined && match[6] !== undefined) {
-        return {
-          position: vec3.set(
-              this.tempPosition, parseFloat(match[2]), parseFloat(match[4]), parseFloat(match[6]))
-        };
-      }
-      return {};
-    } else {
-      this.hintElement.value = '';
     }
-    return undefined;
+    else {
+      const bound = bounds.lowerBounds[axisIndex];
+      if (Number.isFinite(bound)) {
+        newValue = Math.max(newValue, Math.floor(bound));
+      }
+    }
+    voxelCoordinates[axisIndex] = newValue;
+    this.position.value = voxelCoordinates;
+    this.updateView();
   }
 
   private updatePosition() {
-    const cleanResult = this.cleanInput();
-    if (cleanResult !== undefined && cleanResult.position !== undefined) {
-      this.position.setVoxelCoordinates(cleanResult.position);
+    const {dimensionWidgetList} = this;
+    const {position} = this;
+    const {value: voxelCoordinates} = position;
+    if (voxelCoordinates === undefined) return;
+    const rank = dimensionWidgetList.length;
+    for (let i = 0; i < rank; ++i) {
+      const widget = dimensionWidgetList[i];
+      widget.modified = false;
+      const value = Number(widget.coordinate.value);
+      if (Number.isFinite(value)) {
+        voxelCoordinates[i] = value;
+      }
     }
+    position.value = voxelCoordinates;
+  }
+
+  private updateNames() {
+    const {dimensionWidgetList} = this;
+    const {position: {coordinateSpace}} = this;
+    const existing = coordinateSpace.value;
+    const names = dimensionWidgetList.map(x => x.nameElement.value);
+    if (this.combiner.getRenameValidity(names).includes(false)) return false;
+    const existingNames = existing.names;
+    if (arraysEqual(existingNames, names)) return false;
+    const timestamps = existing.timestamps.map(
+        (t, i) => (existingNames[i] === names[i]) ? t : Date.now());
+    const newSpace = {...existing, names, timestamps};
+    coordinateSpace.value = newSpace;
+    return true;
+  }
+
+  private updateScales() {
+    const {dimensionWidgetList} = this;
+    const {position: {coordinateSpace}} = this;
+    const existing = coordinateSpace.value;
+    const scalesAndUnits = dimensionWidgetList.map(x => parseScale(x.scaleElement.value));
+    if (scalesAndUnits.includes(undefined)) {
+      return false;
+    }
+    const newScales = Float64Array.from(scalesAndUnits, x => x!.scale);
+    const newUnits = Array.from(scalesAndUnits, x => x!.unit);
+    const {scales, units} = existing;
+    if (arraysEqual(scales, newScales) && arraysEqual(units, newUnits)) return false;
+    const timestamps = existing.timestamps.map(
+        (t, i) => (newScales[i] === scales[i] && newUnits[i] === units[i]) ? t : Date.now());
+    const newSpace = makeCoordinateSpace({
+      valid: existing.valid,
+      rank: existing.rank,
+      scales: newScales,
+      units: newUnits,
+      timestamps,
+      ids: existing.ids,
+      names: existing.names,
+      boundingBoxes: existing.boundingBoxes
+    });
+    coordinateSpace.value = newSpace;
+    return true;
   }
 
   private getPositionText() {
     const {position} = this;
-    const voxelPosition = this.tempPosition;
-    if (position.getVoxelCoordinates(voxelPosition)) {
-      return `${Math.floor(voxelPosition[0])}, ${Math.floor(voxelPosition[1])}, ${
-          Math.floor(voxelPosition[2])}`;
+    if (position.valid) {
+      return position.value.map(x => Math.floor(x)).join(', ');
     } else {
-      return '<unspecified position>';
+      return '';
     }
   }
 
-  private updateHintScrollPosition = this.registerCancellable(animationFrameDebounce(() => {
-    this.hintElement.scrollLeft = this.inputElement.scrollLeft;
-  }));
-
   private updateView() {
-    const {position} = this;
-    const voxelPosition = this.tempPosition;
-    if (position.getVoxelCoordinates(voxelPosition)) {
-      const {inputElement} = this;
-      const inputText = `  ${Math.floor(voxelPosition[0])},   ${Math.floor(voxelPosition[1])},   ${
-          Math.floor(voxelPosition[2])}`;
-      const firstComma = inputText.indexOf(',');
-      const secondComma = inputText.indexOf(',', firstComma + 1);
-      const xLen = firstComma - 2;
-      const yLen = secondComma - firstComma - 4;
-      let hintText = `x ${' '.repeat(xLen)}  y ${' '.repeat(yLen)}  z`;
-
-      const prevSelectionStart = inputElement.selectionStart || 0;
-      const prevSelectionEnd = inputElement.selectionEnd || 0;
-      const prevSelectionDirection: any = inputElement.selectionDirection || undefined;
-      inputElement.value = inputText;
-      inputElement.setSelectionRange(prevSelectionStart, prevSelectionEnd, prevSelectionDirection);
-      this.hintElement.value = hintText + ' '.repeat(inputText.length - hintText.length);
-      this.updateHintScrollPosition();
-    } else {
-      this.inputElement.value = '';
-      this.hintElement.value = '';
+    this.updateDimensions();
+    const {position: {value: voxelCoordinates}, dimensionWidgetList} = this;
+    const rank = dimensionWidgetList.length;
+    if (voxelCoordinates === undefined) {
+      return;
+    }
+    for (let i = 0; i < rank; ++i) {
+      const inputElement = dimensionWidgetList[i].coordinate;
+      const newValue = Math.floor(voxelCoordinates[i]).toString();
+      updateCoordinateFieldWidth(inputElement, newValue);
+      inputElement.value = newValue;
     }
   }
 
   disposed() {
-    removeFromParent(this.element);
-    super.disposed();
-  }
-}
-
-export class VoxelSizeWidget extends RefCounted {
-  dimensionsContainer = document.createElement('span');
-  unitsElement = document.createElement('span');
-
-  constructor (public element: HTMLElement, public voxelSize: VoxelSize) {
-    super();
-    const {dimensionsContainer, unitsElement} = this;
-    element.className = 'neuroglancer-voxel-size-widget';
-    element.title = 'Voxel size';
-    dimensionsContainer.className = 'neuroglancer-voxel-size-dimensions-container';
-    element.appendChild(dimensionsContainer);
-    element.appendChild(unitsElement);
-    unitsElement.className = 'neuroglancer-voxel-size-units';
-    this.registerDisposer(voxelSize.changed.add(
-        this.registerCancellable(animationFrameDebounce(() => this.updateView()))));
-    this.updateView();
-  }
-
-  private updateView() {
-    const {dimensionsContainer, unitsElement} = this;
-    removeChildren(dimensionsContainer);
-    if (!this.voxelSize.valid) {
-      this.element.style.display = 'none';
-    } else {
-      this.element.style.display = null;
-    }
-    const {size} = this.voxelSize;
-    const minVoxelSize = Math.min(size[0], size[1], size[2]);
-    const unit = pickLengthUnit(minVoxelSize);
-    unitsElement.textContent = unit.unit;
-    for (let i = 0; i < 3; ++i) {
-      const s = numberToStringFixed(size[i] / unit.lengthInNanometers, 2);
-      const dimElement = document.createElement('span');
-      dimElement.className = 'neuroglancer-voxel-size-dimension';
-      dimElement.textContent = s;
-      dimensionsContainer.appendChild(dimElement);
-    }
-  }
-  disposed() {
+    this.closeDropdown();
     removeFromParent(this.element);
     super.disposed();
   }
@@ -402,21 +877,26 @@ export class VoxelSizeWidget extends RefCounted {
 
 export class MousePositionWidget extends RefCounted {
   tempPosition = vec3.create();
-  constructor (public element: HTMLElement, public mouseState: MouseSelectionState, public voxelSize: VoxelSize) {
+  constructor(
+      public element: HTMLElement, public mouseState: MouseSelectionState,
+      public coordinateSpace: WatchableValueInterface<CoordinateSpace|undefined>) {
     super();
     element.className = 'neuroglancer-mouse-position-widget';
     const updateViewFunction =
         this.registerCancellable(animationFrameDebounce(() => this.updateView()));
     this.registerDisposer(mouseState.changed.add(updateViewFunction));
-    this.registerDisposer(voxelSize.changed.add(updateViewFunction));
+    this.registerDisposer(coordinateSpace.changed.add(updateViewFunction));
   }
   updateView() {
     let text = '';
-    const {mouseState, voxelSize} = this;
-    if (mouseState.active && voxelSize.valid) {
-      const p = this.tempPosition;
-      voxelSize.voxelFromSpatial(p, mouseState.position);
-      text = `x ${Math.floor(p[0])},  y ${Math.floor(p[1])},  z ${Math.floor(p[2])}`;
+    const {mouseState, coordinateSpace: {value: coordinateSpace}} = this;
+    if (mouseState.active && coordinateSpace !== undefined) {
+      const p = mouseState.position;
+      const {rank, names} = coordinateSpace;
+      for (let i = 0; i < rank; ++i) {
+        if (i !== 0) text += '  ';
+        text += `${names[i]} ${Math.floor(p[i])}`;
+      }
     }
     this.element.textContent = text;
   }

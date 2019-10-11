@@ -21,11 +21,12 @@
 import {AnnotationType, Line} from 'neuroglancer/annotation';
 import {AnnotationRenderContext, AnnotationRenderHelper, registerAnnotationTypeRenderHandler} from 'neuroglancer/annotation/type_handler';
 import {tile2dArray} from 'neuroglancer/util/array';
-import {mat4, projectPointToLineSegment, vec3} from 'neuroglancer/util/geom';
+import {projectPointToLineSegment} from 'neuroglancer/util/geom';
 import {getMemoizedBuffer} from 'neuroglancer/webgl/buffer';
 import {CircleShader, VERTICES_PER_CIRCLE} from 'neuroglancer/webgl/circles';
 import {LineShader} from 'neuroglancer/webgl/lines';
 import {emitterDependentShaderGetter, ShaderBuilder, ShaderProgram} from 'neuroglancer/webgl/shader';
+import {defineVectorArrayVertexShaderInput} from 'neuroglancer/webgl/shader_lib';
 
 const FULL_OBJECT_PICK_OFFSET = 0;
 const ENDPOINTS_PICK_OFFSET = FULL_OBJECT_PICK_OFFSET + 1;
@@ -43,21 +44,32 @@ class RenderHelper extends AnnotationRenderHelper {
 
   defineShader(builder: ShaderBuilder) {
     super.defineShader(builder);
-    // Position of endpoints in camera coordinates.
-    builder.addAttribute('highp vec3', 'aEndpointA');
-    builder.addAttribute('highp vec3', 'aEndpointB');
+    // Position of endpoints in model coordinates.
+    const {rank} = this;
+    defineVectorArrayVertexShaderInput(builder, 'float', 'VertexPosition', rank, 2);
   }
 
   private edgeShaderGetter =
       emitterDependentShaderGetter(this, this.gl, (builder: ShaderBuilder) => {
+        const {rank} = this;
         this.defineShader(builder);
         this.lineShader.defineShader(builder);
+        builder.addVarying(`highp float[${rank}]`, 'vModelPosition');
         builder.setVertexMain(`
-emitLine(uProjection, aEndpointA, aEndpointB);
+float modelPositionA[${rank}] = getVertexPosition0();
+float modelPositionB[${rank}] = getVertexPosition1();
+for (int i = 0; i < ${rank}; ++i) {
+  vModelPosition[i] = mix(modelPositionA[i], modelPositionB[i], getLineEndpointCoefficient());
+}
+emitLine(uModelViewProjection * vec4(projectModelVectorToSubspace(modelPositionA), 1.0),
+         uModelViewProjection * vec4(projectModelVectorToSubspace(modelPositionB), 1.0));
 ${this.setPartIndex(builder)};
 `);
         builder.setFragmentMain(`
-emitAnnotation(vec4(vColor.rgb, vColor.a * getLineAlpha() * ${this.getCrossSectionFadeFactor()}));
+float clipCoefficient = getSubspaceClipCoefficient(vModelPosition);
+emitAnnotation(vec4(vColor.rgb, vColor.a * getLineAlpha() *
+                                ${this.getCrossSectionFadeFactor()} *
+                                clipCoefficient));
 `);
       });
 
@@ -69,42 +81,38 @@ emitAnnotation(vec4(vColor.rgb, vColor.a * getLineAlpha() * ${this.getCrossSecti
 
   private endpointShaderGetter =
       emitterDependentShaderGetter(this, this.gl, (builder: ShaderBuilder) => {
+        const {rank} = this;
         this.defineShader(builder);
         this.circleShader.defineShader(builder, this.targetIsSliceView);
         builder.addAttribute('highp uint', 'aEndpointIndex');
+        builder.addVarying('highp float', 'vClipCoefficient');
         builder.setVertexMain(`
-vec3 vertexPosition = mix(aEndpointA, aEndpointB, float(aEndpointIndex));
-emitCircle(uProjection * vec4(vertexPosition, 1.0));
+float modelPosition[${rank}] = getVertexPosition0();
+float modelPositionB[${rank}] = getVertexPosition1();
+for (int i = 0; i < ${rank}; ++i) {
+  modelPosition[i] = mix(modelPosition[i], modelPositionB[i], float(aEndpointIndex));
+}
+vClipCoefficient = getSubspaceClipCoefficient(modelPosition);
+emitCircle(uModelViewProjection * vec4(projectModelVectorToSubspace(modelPosition), 1.0));
 ${this.setPartIndex(builder, 'aEndpointIndex + 1u')};
 `);
         builder.setFragmentMain(`
 vec4 borderColor = vec4(0.0, 0.0, 0.0, 1.0);
-emitAnnotation(getCircleColor(vColor, borderColor));
+vec4 color = getCircleColor(vColor, borderColor);
+color.a *= vClipCoefficient;
+emitAnnotation(color);
 `);
       });
 
   enable(shader: ShaderProgram, context: AnnotationRenderContext, callback: () => void) {
     super.enable(shader, context, () => {
-      const {gl} = shader;
-      const aLower = shader.attribute('aEndpointA');
-      const aUpper = shader.attribute('aEndpointB');
-
-      context.buffer.bindToVertexAttrib(
-          aLower, /*components=*/ 3, /*attributeType=*/ WebGL2RenderingContext.FLOAT,
-          /*normalized=*/ false,
-          /*stride=*/ 4 * 6, /*offset=*/ context.bufferOffset);
-      context.buffer.bindToVertexAttrib(
-          aUpper, /*components=*/ 3, /*attributeType=*/ WebGL2RenderingContext.FLOAT,
-          /*normalized=*/ false,
-          /*stride=*/ 4 * 6, /*offset=*/ context.bufferOffset + 4 * 3);
-
-      gl.vertexAttribDivisor(aLower, 1);
-      gl.vertexAttribDivisor(aUpper, 1);
+      const binder = shader.vertexShaderInputBinders['VertexPosition'];
+      binder.enable(1);
+      binder.bind(
+          context.buffer.buffer!, WebGL2RenderingContext.FLOAT, /*normalized=*/ false,
+          /*stride=*/ 0, context.bufferOffset);
       callback();
-      gl.vertexAttribDivisor(aLower, 0);
-      gl.vertexAttribDivisor(aUpper, 0);
-      gl.disableVertexAttribArray(aLower);
-      gl.disableVertexAttribArray(aUpper);
+      binder.disable();
     });
   }
 
@@ -136,75 +144,58 @@ emitAnnotation(getCircleColor(vColor, borderColor));
   }
 }
 
-function snapPositionToLine(position: vec3, objectToData: mat4, endpoints: Float32Array) {
-  const cornerA = vec3.transformMat4(vec3.create(), <vec3>endpoints.subarray(0, 3), objectToData);
-  const cornerB = vec3.transformMat4(vec3.create(), <vec3>endpoints.subarray(3, 6), objectToData);
-  projectPointToLineSegment(position, cornerA, cornerB, position);
+function snapPositionToLine(position: Float32Array, endpoints: Float32Array) {
+  const rank = position.length;
+  projectPointToLineSegment(position, endpoints, endpoints.subarray(rank), position);
 }
 
 function snapPositionToEndpoint(
-    position: vec3, objectToData: mat4, endpoints: Float32Array, endpointIndex: number) {
-  const startOffset = 3 * endpointIndex;
-  const point = <vec3>endpoints.subarray(startOffset, startOffset + 3);
-  vec3.transformMat4(position, point, objectToData);
+    position: Float32Array, endpoints: Float32Array, endpointIndex: number) {
+  const rank = position.length;
+  const startOffset = rank * endpointIndex;
+  for (let i = 0; i < rank; ++i) {
+    position[i] = endpoints[startOffset + i];
+  }
 }
 
-registerAnnotationTypeRenderHandler(AnnotationType.LINE, {
-  bytes: 6 * 4,
-  serializer: (buffer: ArrayBuffer, offset: number, numAnnotations: number) => {
-    const coordinates = new Float32Array(buffer, offset, numAnnotations * 6);
-    return (annotation: Line, index: number) => {
-      const {pointA, pointB} = annotation;
-      const coordinateOffset = index * 6;
-      coordinates[coordinateOffset] = pointA[0];
-      coordinates[coordinateOffset + 1] = pointA[1];
-      coordinates[coordinateOffset + 2] = pointA[2];
-      coordinates[coordinateOffset + 3] = pointB[0];
-      coordinates[coordinateOffset + 4] = pointB[1];
-      coordinates[coordinateOffset + 5] = pointB[2];
-    };
-  },
+registerAnnotationTypeRenderHandler<Line>(AnnotationType.LINE, {
   sliceViewRenderHelper: RenderHelper,
   perspectiveViewRenderHelper: RenderHelper,
   pickIdsPerInstance: PICK_IDS_PER_INSTANCE,
-  snapPosition: (position, objectToData, data, offset, partIndex) => {
-    const endpoints = new Float32Array(data, offset, 6);
+  snapPosition(position, data, offset, partIndex) {
+    const rank = position.length;
+    const endpoints = new Float32Array(data, offset, rank * 2);
     if (partIndex === FULL_OBJECT_PICK_OFFSET) {
-      snapPositionToLine(position, objectToData, endpoints);
+      snapPositionToLine(position, endpoints);
     } else {
-      snapPositionToEndpoint(position, objectToData, endpoints, partIndex - ENDPOINTS_PICK_OFFSET);
+      snapPositionToEndpoint(position, endpoints, partIndex - ENDPOINTS_PICK_OFFSET);
     }
   },
-  getRepresentativePoint: (objectToData, ann, partIndex) => {
-    let repPoint = vec3.create();
+  getRepresentativePoint(out, ann, partIndex) {
     // if the full object is selected just pick the first point as representative
-    if (partIndex === FULL_OBJECT_PICK_OFFSET) {
-      vec3.transformMat4(repPoint, ann.pointA, objectToData);
-    } else {
-      if ((partIndex - ENDPOINTS_PICK_OFFSET) === 0) {
-        vec3.transformMat4(repPoint, ann.pointA, objectToData);
-      } else {
-        vec3.transformMat4(repPoint, ann.pointB, objectToData);
-      }
-    }
-    return repPoint;
+    out.set(
+        (partIndex === FULL_OBJECT_PICK_OFFSET || partIndex === ENDPOINTS_PICK_OFFSET) ?
+            ann.pointA :
+            ann.pointB);
   },
-  updateViaRepresentativePoint: (oldAnnotation, position, dataToObject, partIndex) => {
-    let newPt = vec3.transformMat4(vec3.create(), position, dataToObject);
+  updateViaRepresentativePoint(oldAnnotation, position, partIndex) {
     let baseLine = {...oldAnnotation};
+    const rank = position.length;
     switch (partIndex) {
-      case FULL_OBJECT_PICK_OFFSET:
-        let delta = vec3.sub(vec3.create(), oldAnnotation.pointB, oldAnnotation.pointA);
-        baseLine.pointA = newPt;
-        baseLine.pointB = vec3.add(vec3.create(), newPt, delta);
-        break;
+      case FULL_OBJECT_PICK_OFFSET: {
+        const {pointA, pointB} = oldAnnotation;
+        const newPointA = new Float32Array(rank);
+        const newPointB = new Float32Array(rank);
+        for (let i = 0; i < rank; ++i) {
+          const pos = newPointA[i] = position[i];
+          newPointB[i] = pointB[i] + (pos - pointA[i]);
+        }
+        return {...oldAnnotation, pointA: newPointA, pointB: newPointB};
+      }
       case FULL_OBJECT_PICK_OFFSET + 1:
-        baseLine.pointA = newPt;
-        baseLine.pointB = oldAnnotation.pointB;
-        break;
+        return {...oldAnnotation, pointA: new Float32Array(position)};
       case FULL_OBJECT_PICK_OFFSET + 2:
-        baseLine.pointA = oldAnnotation.pointA;
-        baseLine.pointB = newPt;
+        return {...oldAnnotation, pointB: new Float32Array(position)};
     }
     return baseLine;
   }

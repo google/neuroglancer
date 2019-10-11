@@ -14,6 +14,8 @@
  * limitations under the License.
  */
 
+import './multiline_autocomplete.css';
+
 import debounce from 'lodash/debounce';
 import {CancellationToken, CancellationTokenSource} from 'neuroglancer/util/cancellation';
 import {BasicCompletionResult, Completion, CompletionWithDescription} from 'neuroglancer/util/completion';
@@ -24,20 +26,15 @@ import {EventActionMap, KeyboardEventBinder, registerActionListener} from 'neuro
 import {longestCommonPrefix} from 'neuroglancer/util/longest_common_prefix';
 import {scrollIntoViewIfNeeded} from 'neuroglancer/util/scroll_into_view';
 import {Signal} from 'neuroglancer/util/signal';
-import {associateLabelWithElement} from 'neuroglancer/widget/associate_label';
-
+import ResizeObserver from 'resize-observer-polyfill';
 export {Completion, CompletionWithDescription} from 'neuroglancer/util/completion';
 
-import './autocomplete.css';
-
-const ACTIVE_COMPLETION_CLASS_NAME = 'autocomplete-completion-active';
-
-const AUTOCOMPLETE_INDEX_SYMBOL = Symbol('autocompleteIndex');
+const ACTIVE_COMPLETION_CLASS_NAME = 'neuroglancer-multiline-autocomplete-completion-active';
 
 export interface CompletionResult extends BasicCompletionResult {
   showSingleResult?: boolean;
   selectSingleResult?: boolean;
-  makeElement?: (completion: Completion) => HTMLElement;
+  makeElement?: (this: CompletionResult, completion: Completion) => HTMLElement;
 }
 
 export function makeDefaultCompletionElement(completion: Completion) {
@@ -46,12 +43,25 @@ export function makeDefaultCompletionElement(completion: Completion) {
   return element;
 }
 
+function* splitByWordBreaks(value: string) {
+  while (value.length > 0) {
+    const m = value.match(/[:/_]+/);
+    if (m === null) {
+      yield value;
+      return;
+    }
+    const endOffset = m.index! + m[0].length;
+    yield value.substring(0, endOffset);
+    value = value.substring(endOffset);
+  }
+}
+
 export function makeCompletionElementWithDescription(completion: CompletionWithDescription) {
   let element = document.createElement('div');
-  element.className = 'autocomplete-completion-with-description';
+  element.className = 'neuroglancer-multiline-autocomplete-completion-with-description';
   element.textContent = completion.value;
   let descriptionElement = document.createElement('div');
-  descriptionElement.className = 'autocomplete-completion-description';
+  descriptionElement.className = 'neuroglancer-multiline-autocomplete-completion-description';
   descriptionElement.textContent = completion.description || '';
   element.appendChild(descriptionElement);
   return element;
@@ -60,36 +70,112 @@ export function makeCompletionElementWithDescription(completion: CompletionWithD
 const keyMap = EventActionMap.fromObject({
   'arrowdown': {action: 'cycle-next-active-completion'},
   'arrowup': {action: 'cycle-prev-active-completion'},
+  'home': {action: 'home'},
+  'end': {action: 'end'},
   'tab': {action: 'choose-active-completion-or-prefix', preventDefault: false},
-  'enter': {action: 'choose-active-completion', preventDefault: false},
+  'enter': {action: 'commit'},
   'escape': {action: 'cancel', preventDefault: false, stopPropagation: false},
 });
 
-
 export type Completer = (value: string, cancellationToken: CancellationToken) =>
-    Promise<CompletionResult>| null;
+    Promise<CompletionResult>|null;
 
 const DEFAULT_COMPLETION_DELAY = 200;  // milliseconds
 
 export class AutocompleteTextInput extends RefCounted {
-  element: HTMLDivElement;
-  promptElement: HTMLLabelElement;
-  inputWrapperElement: HTMLDivElement;
-  inputElement: HTMLInputElement;
-  hintElement: HTMLInputElement;
-  dropdownElement: HTMLDivElement;
-  inputChanged = new Signal<(value: string) => void>();
-  private prevInputValue = '';
+  element = document.createElement('div');
+  inputElement = document.createElement('span');
+  hintElement = document.createElement('span');
+  dropdownElement = document.createElement('div');
+  onCommit = new Signal<(value: string, explicit: boolean) => void>();
+  onInput = new Signal<(value: string) => void>();
+  private prevInputValue: string|undefined = '';
   private completionsVisible = false;
   private activeCompletionPromise: Promise<CompletionResult>|null = null;
   private activeCompletionCancellationToken: CancellationTokenSource|undefined = undefined;
   private hasFocus = false;
   private completionResult: CompletionResult|null = null;
   private dropdownContentsStale = true;
-  private updateHintScrollPositionTimer: number|null = null;
   private completionElements: HTMLElement[]|null = null;
   private hasResultForDropdown = false;
   private commonPrefix = '';
+  private completionDisabled: number = -1;
+
+  disableCompletion() {
+    const selectionRange = this.getSelectionRange();
+    this.completionDisabled =
+        (selectionRange !== undefined && selectionRange.end === selectionRange.begin) ?
+        selectionRange.end :
+        -1;
+  }
+
+  get placeholder() {
+    return this.inputElement.dataset.placeholder || '';
+  }
+
+
+  set placeholder(value: string) {
+    this.inputElement.dataset.placeholder = value;
+  }
+
+  private getSelectionRange() {
+    const s = window.getSelection();
+    if (s === null) return undefined;
+    if (s.rangeCount === 0) return undefined;
+    const startRange = s.getRangeAt(0);
+    const {inputElement} = this;
+    const beforeRange = document.createRange();
+    beforeRange.setStart(inputElement, 0);
+    beforeRange.setEnd(startRange.startContainer, startRange.startOffset);
+    const begin = beforeRange.toString().length;
+    const length = s.toString().length;
+    return {begin, end: begin + length};
+  }
+
+  setValueAndSelection(
+      value: string, selection: {begin: number, end: number}|undefined = undefined) {
+    const completionDisabled = this.completionDisabled !== -1;
+    this.onInput.dispatch(value);
+    const {inputElement} = this;
+    removeChildren(inputElement);
+    let outputOffset = 0;
+    const r = selection !== undefined ? document.createRange() : undefined;
+    let isFirst = true;
+    for (const text of splitByWordBreaks(value)) {
+      if (!isFirst) {
+        inputElement.appendChild(document.createElement('wbr'));
+      }
+      isFirst = false;
+      const newOutputOffset = outputOffset + text.length;
+      const node = document.createTextNode(text);
+      inputElement.appendChild(node);
+      if (r !== undefined) {
+        const {begin, end} = selection!;
+        if (begin >= outputOffset && begin <= newOutputOffset) {
+          r.setStart(node, begin - outputOffset);
+        }
+        if (end >= outputOffset && end <= newOutputOffset) {
+          r.setEnd(node, end - outputOffset);
+        }
+      }
+      outputOffset = newOutputOffset;
+    };
+    if (r !== undefined) {
+      if (isFirst) {
+        r.setStart(inputElement, 0);
+        r.setEnd(inputElement, 0);
+      }
+      const s = window.getSelection();
+      if (s !== null) {
+        s.removeAllRanges();
+        s.addRange(r);
+      }
+    }
+    this.completionDisabled =
+        (completionDisabled && selection !== undefined && selection.end === selection.begin) ?
+        selection.end :
+        -1;
+  }
 
   /**
    * Index of the active completion.  The active completion is displayed as the hint text and is
@@ -102,10 +188,17 @@ export class AutocompleteTextInput extends RefCounted {
   private scheduleUpdateCompletions: () => void;
   completer: Completer;
 
+  private resizeHandler = () => {
+    if (!this.completionsVisible) return;
+    this.updateDropdownStyle();
+  };
+
+  private resizeObserver = new ResizeObserver(this.resizeHandler);
+
   constructor(options: {completer: Completer, delay?: number}) {
     super();
     this.completer = options.completer;
-    let {delay = DEFAULT_COMPLETION_DELAY} = options;
+    const {delay = DEFAULT_COMPLETION_DELAY} = options;
 
     let debouncedCompleter = this.scheduleUpdateCompletions = debounce(() => {
       const cancellationToken = this.activeCompletionCancellationToken =
@@ -125,50 +218,77 @@ export class AutocompleteTextInput extends RefCounted {
       debouncedCompleter.cancel();
     });
 
-    let element = this.element = document.createElement('div');
-    element.className = 'autocomplete';
+    const {element, inputElement, hintElement, dropdownElement} = this;
+    element.classList.add('neuroglancer-multiline-autocomplete');
+    this.registerEventListener(window, 'resize', this.resizeHandler);
 
-    let dropdownAndInputWrapper = document.createElement('div');
-    dropdownAndInputWrapper.className = 'autocomplete-dropdown-wrapper';
+    this.resizeObserver.observe(element);
+    this.registerDisposer(() => this.resizeObserver.unobserve(inputElement));
 
-    let dropdownElement = this.dropdownElement = document.createElement('div');
-    dropdownElement.className = 'autocomplete-dropdown';
-
-    let promptElement = this.promptElement = document.createElement('label');
-    promptElement.className = 'autocomplete-prompt';
-
-    let inputWrapperElement = this.inputWrapperElement = document.createElement('div');
-    inputWrapperElement.className = 'autocomplete-input-wrapper';
-
-    element.appendChild(promptElement);
-
-    let inputElement = this.inputElement = document.createElement('input');
-    inputElement.type = 'text';
-    inputElement.autocomplete = 'off';
+    inputElement.contentEditable = 'true';
     inputElement.spellcheck = false;
-    inputElement.className = 'autocomplete-input';
-    associateLabelWithElement(promptElement, inputElement);
+    dropdownElement.classList.add('neuroglancer-multiline-autocomplete-dropdown');
+    dropdownElement.style.display = 'none';
+    element.appendChild(document.createTextNode('\u200b'));  // Prevent input area from collapsing
+    element.appendChild(inputElement);
+    element.appendChild(hintElement);
+    element.appendChild(dropdownElement);
+    inputElement.classList.add('neuroglancer-multiline-autocomplete-input');
+    hintElement.classList.add('neuroglancer-multiline-autocomplete-hint');
+    inputElement.addEventListener('input', () => {
+      this.completionDisabled = -1;
+      this.setValueAndSelection(this.value, this.getSelectionRange());
+      this.debouncedUpdateHintState();
+    });
+    this.registerEventListener(document, 'selectionchange', () => {
+      const newSelection = this.getSelectionRange();
+      const {completionDisabled} = this;
+      if (newSelection !== undefined && newSelection.begin === completionDisabled &&
+          newSelection.end === completionDisabled) {
+        return;
+      }
+      this.completionDisabled = -1;
+      this.debouncedUpdateHintState();
+    });
+    this.setValueAndSelection('');
+    this.updateHintState();
 
-    let hintElement = this.hintElement = document.createElement('input');
-    hintElement.type = 'text';
-    hintElement.spellcheck = false;
-    hintElement.className = 'autocomplete-hint';
-    hintElement.disabled = true;
-    inputWrapperElement.appendChild(hintElement);
-    inputWrapperElement.appendChild(inputElement);
+    element.addEventListener('pointerdown', (event: PointerEvent) => {
+      const {target} = event;
+      if (target instanceof Node &&
+          (inputElement.contains(target) || this.dropdownElement.contains(target))) {
+        return;
+      }
+      if (inputElement === document.activeElement) {
+        this.moveCaretToEndOfInput();
+        event.stopPropagation();
+        event.preventDefault();
+      }
+    });
 
-    dropdownAndInputWrapper.appendChild(inputWrapperElement);
-    dropdownAndInputWrapper.appendChild(dropdownElement);
-    element.appendChild(dropdownAndInputWrapper);
-
-    this.registerInputHandler();
-    this.handleInputChanged('');
+    element.addEventListener('click', () => {
+      inputElement.focus();
+    });
 
     this.registerEventListener(this.inputElement, 'focus', () => {
       if (!this.hasFocus) {
         this.hasFocus = true;
         this.dropdownStyleStale = true;
         this.updateDropdown();
+        const r = document.createRange();
+        const {childNodes} = inputElement;
+        r.setStart(inputElement, 0);
+        if (childNodes.length === 0) {
+          r.setEnd(inputElement, 0);
+        } else {
+          r.setEndAfter(childNodes[childNodes.length - 1]);
+        }
+        const s = window.getSelection();
+        if (s !== null) {
+          s.removeAllRanges();
+          s.addRange(r);
+        }
+        this.debouncedUpdateHintState();
       }
     });
     this.registerEventListener(this.inputElement, 'blur', () => {
@@ -176,30 +296,29 @@ export class AutocompleteTextInput extends RefCounted {
         this.hasFocus = false;
         this.updateDropdown();
       }
-    });
-    this.registerEventListener(element.ownerDocument!.defaultView!, 'resize', () => {
-      this.dropdownStyleStale = true;
-    });
-
-    this.registerEventListener(element.ownerDocument!.defaultView!, 'scroll', () => {
-      this.dropdownStyleStale = true;
-    });
-
-    this.registerEventListener(
-        this.dropdownElement, 'mousedown', this.handleDropdownMousedown.bind(this));
-
-    this.registerEventListener(this.inputElement, 'keydown', () => {
-      // User may have used a keyboard shortcut to scroll the input.
-      this.hintScrollPositionMayBeStale();
-    });
-
-    this.registerEventListener(this.inputElement, 'mousemove', (event: MouseEvent) => {
-      if (event.buttons !== 0) {
-        // May be dragging the text, which could cause scrolling.  This is not perfect, because we
-        // don't detect mouse movements outside of the input box.
-        this.hintScrollPositionMayBeStale();
+      this.debouncedUpdateHintState();
+      const s = window.getSelection();
+      if (s !== null) {
+        if (s.containsNode(this.inputElement, true)) {
+          s.removeAllRanges();
+        }
       }
+      this.onCommit.dispatch(this.value, false);
     });
+    this.registerEventListener(window, 'resize', () => {
+      this.dropdownStyleStale = true;
+    });
+
+    this.registerEventListener(window, 'scroll', () => {
+      this.dropdownStyleStale = true;
+    });
+
+    this.dropdownElement.addEventListener('mousedown', event => {
+      this.inputElement.focus();
+      event.preventDefault();
+    });
+    this.registerEventListener(
+        this.dropdownElement, 'mouseup', this.handleDropdownClick.bind(this));
 
     const keyboardHandler = this.registerDisposer(new KeyboardEventBinder(inputElement, keyMap));
     keyboardHandler.allShortcutsAreGlobal = true;
@@ -212,15 +331,29 @@ export class AutocompleteTextInput extends RefCounted {
       this.cycleActiveCompletion(-1);
     });
 
+
+    registerActionListener(inputElement, 'home', () => {
+      this.moveCaretToBeginningOfInput();
+    });
+
+    registerActionListener(inputElement, 'end', () => {
+      this.moveCaretToEndOfInput();
+    });
+
     registerActionListener(
         inputElement, 'choose-active-completion-or-prefix', (event: CustomEvent) => {
-          if (this.selectActiveCompletion(/*allowPrefix=*/true)) {
+          if (this.selectActiveCompletion(/*allowPrefix=*/ true)) {
             event.preventDefault();
           }
         });
-    registerActionListener(inputElement, 'choose-active-completion', (event: CustomEvent) => {
-      if (this.selectActiveCompletion(/*allowPrefix=*/false)) {
-        event.preventDefault();
+    registerActionListener(inputElement, 'commit', (event: CustomEvent) => {
+      if (this.selectActiveCompletion(/*allowPrefix=*/ false)) {
+        event.stopPropagation();
+      } else {
+        let explicit = !this.completionsVisible;
+        this.disableCompletion();
+        this.hideCompletions();
+        this.onCommit.dispatch(this.value, explicit);
       }
     });
     registerActionListener(inputElement, 'cancel', (event: CustomEvent) => {
@@ -232,35 +365,52 @@ export class AutocompleteTextInput extends RefCounted {
     });
   }
 
-  private hintScrollPositionMayBeStale() {
-    if (this.hintElement.value !== '') {
-      this.scheduleUpdateHintScrollPosition();
+  private shouldAttemptCompletion() {
+    const {inputElement} = this;
+    if (document.activeElement !== inputElement) return false;
+    const selection = this.getSelectionRange();
+    return (
+        selection !== undefined && selection.end === selection.begin &&
+        selection.end != this.completionDisabled && selection.end === this.value.length);
+  }
+
+  hideCompletions() {
+    this.cancelActiveCompletion();
+    this.clearCompletions();
+    this.hintElement.textContent = '';
+  }
+
+  private debouncedUpdateHintState =
+      this.registerCancellable(debounce(() => this.updateHintState(), 0));
+
+  private updateHintState() {
+    this.debouncedUpdateHintState.cancel();
+    if (!this.shouldAttemptCompletion()) {
+      this.hideCompletions();
+      return;
+    } else {
+      const {value} = this;
+      if (value === this.prevInputValue) {
+        // Completion already in progress.
+        return;
+      }
+      this.hideCompletions();
+      this.prevInputValue = value;
+      this.scheduleUpdateCompletions();
     }
   }
 
-  get disabled() {
-    return this.inputElement.readOnly;
-  }
-
-  set disabled(value: boolean) {
-    this.inputElement.readOnly = value;
-  }
-
-  private handleDropdownMousedown(event: MouseEvent) {
-    this.inputElement.focus();
+  private handleDropdownClick(event: MouseEvent) {
     let {dropdownElement} = this;
-    for (let target: EventTarget|null = event.target; target instanceof HTMLElement;
+    for (let target: EventTarget|null = event.target;
+         target instanceof HTMLElement && target !== dropdownElement;
          target = target.parentElement) {
-      let index = (<any>target)[AUTOCOMPLETE_INDEX_SYMBOL];
-      if (index !== undefined) {
-        this.selectCompletion(index);
-        break;
-      }
-      if (target === dropdownElement) {
+      const completionIndex = target.dataset.completionIndex;
+      if (completionIndex !== undefined) {
+        this.selectCompletion(Number(completionIndex));
         break;
       }
     }
-    event.preventDefault();
   }
 
   cycleActiveCompletion(delta: number) {
@@ -281,19 +431,6 @@ export class AutocompleteTextInput extends RefCounted {
     this.setActiveIndex(activeIndex);
   }
 
-  private registerInputHandler() {
-    const handler = (_event: Event) => {
-      let value = this.inputElement.value;
-      if (value !== this.prevInputValue) {
-        this.prevInputValue = value;
-        this.handleInputChanged(value);
-      }
-    };
-    for (let eventType of ['input']) {
-      this.registerEventListener(this.inputElement, eventType, handler, /*useCapture=*/false);
-    }
-  }
-
   private shouldShowDropdown() {
     let {completionResult} = this;
     if (completionResult === null || !this.hasFocus) {
@@ -303,8 +440,8 @@ export class AutocompleteTextInput extends RefCounted {
   }
 
   private updateDropdownStyle() {
-    let {dropdownElement, inputElement} = this;
-    positionDropdown(dropdownElement, inputElement, {horizontal: false});
+    const {dropdownElement, element} = this;
+    positionDropdown(dropdownElement, element, {horizontal: false});
     this.dropdownStyleStale = false;
   }
 
@@ -316,9 +453,9 @@ export class AutocompleteTextInput extends RefCounted {
         let completionResult = this.completionResult!;
         let {makeElement = makeDefaultCompletionElement} = completionResult;
         this.completionElements = completionResult.completions.map((completion, index) => {
-          let completionElement = makeElement.call(completionResult, completion);
-          (<any>completionElement)[AUTOCOMPLETE_INDEX_SYMBOL] = index;
-          completionElement.classList.add('autocomplete-completion');
+          let completionElement = makeElement.call(completionResult, completion) as HTMLElement;
+          completionElement.dataset.completionIndex = `${index}`;
+          completionElement.classList.add('neuroglancer-multiline-autocomplete-completion');
           if (activeIndex === index) {
             completionElement.classList.add(ACTIVE_COMPLETION_CLASS_NAME);
           }
@@ -331,7 +468,7 @@ export class AutocompleteTextInput extends RefCounted {
         this.updateDropdownStyle();
       }
       if (!this.completionsVisible) {
-        dropdownElement.style.display = 'block';
+        dropdownElement.style.display = '';
         this.completionsVisible = true;
       }
       if (activeIndex !== -1) {
@@ -350,6 +487,8 @@ export class AutocompleteTextInput extends RefCounted {
     if (completions.length === 0) {
       return;
     }
+    const value = this.prevInputValue;
+    if (value === undefined) return;
     this.completionResult = completionResult;
 
     if (completions.length === 1) {
@@ -357,7 +496,6 @@ export class AutocompleteTextInput extends RefCounted {
       if (completionResult.showSingleResult) {
         this.hasResultForDropdown = true;
       } else {
-        let value = this.prevInputValue;
         if (!completion.value.startsWith(value)) {
           this.hasResultForDropdown = true;
         } else {
@@ -378,7 +516,6 @@ export class AutocompleteTextInput extends RefCounted {
         }
       }());
       let commonPrefix = this.getCompletedValue(commonResultPrefix);
-      let value = this.prevInputValue;
       if (commonPrefix.startsWith(value)) {
         this.commonPrefix = commonPrefix;
         this.setHintValue(commonPrefix);
@@ -387,23 +524,26 @@ export class AutocompleteTextInput extends RefCounted {
     this.updateDropdown();
   }
 
-  private scheduleUpdateHintScrollPosition() {
-    if (this.updateHintScrollPositionTimer === null) {
-      this.updateHintScrollPositionTimer = setTimeout(() => {
-        this.updateHintScrollPosition();
-      }, 0);
-    }
-  }
-
   setHintValue(hintValue: string) {
-    let value = this.prevInputValue;
+    const value = this.prevInputValue;
+    if (value === undefined) return;
     if (hintValue === value || !hintValue.startsWith(value)) {
       // If the hint value is identical to the current value, there is no need to show it.  Also,
       // if it is not a prefix of the current value, then we cannot show it either.
       hintValue = '';
     }
-    this.hintElement.value = hintValue;
-    this.scheduleUpdateHintScrollPosition();
+    hintValue = hintValue.substring(value.length);
+    const {hintElement} = this;
+    removeChildren(hintElement);
+    let isFirst = true;
+    for (const text of splitByWordBreaks(hintValue)) {
+      if (!isFirst) {
+        hintElement.appendChild(document.createElement('wbr'));
+      }
+      isFirst = false;
+      const node = document.createTextNode(text);
+      hintElement.appendChild(node);
+    }
   }
 
   /**
@@ -435,7 +575,41 @@ export class AutocompleteTextInput extends RefCounted {
   private getCompletedValue(completionValue: string) {
     let completionResult = this.completionResult!;
     let value = this.prevInputValue;
+    if (value === undefined) return '';
     return value.substring(0, completionResult.offset) + completionValue;
+  }
+
+  private moveCaretToBeginningOfInput() {
+    const r = document.createRange();
+    const {inputElement} = this;
+    r.setStart(inputElement, 0);
+    r.setEnd(inputElement, 0);
+    const s = window.getSelection();
+    if (s !== null) {
+      s.removeAllRanges();
+      s.addRange(r);
+      this.debouncedUpdateHintState();
+    }
+  }
+
+  private moveCaretToEndOfInput() {
+    const r = document.createRange();
+    const {inputElement} = this;
+    const {childNodes} = inputElement;
+    const lastNode = childNodes[childNodes.length - 1];
+    if (lastNode === undefined) {
+      r.setStart(inputElement, 0);
+      r.setEnd(inputElement, 0);
+    } else {
+      r.setStartAfter(lastNode);
+      r.setEndAfter(lastNode);
+    }
+    const s = window.getSelection();
+    if (s !== null) {
+      s.removeAllRanges();
+      s.addRange(r);
+      this.debouncedUpdateHintState();
+    }
   }
 
   selectActiveCompletion(allowPrefix: boolean) {
@@ -451,6 +625,7 @@ export class AutocompleteTextInput extends RefCounted {
         let {commonPrefix} = this;
         if (commonPrefix.length > this.value.length) {
           this.value = commonPrefix;
+          this.moveCaretToEndOfInput();
           return true;
         }
         return false;
@@ -461,11 +636,13 @@ export class AutocompleteTextInput extends RefCounted {
       return false;
     }
     this.value = newValue;
+    this.moveCaretToEndOfInput();
     return true;
   }
 
   selectCompletion(index: number) {
     this.value = this.getCompletedValueByIndex(index);
+    this.moveCaretToEndOfInput();
   }
 
   /**
@@ -475,32 +652,14 @@ export class AutocompleteTextInput extends RefCounted {
     return false;
   }
 
-  /**
-   * Updates the hintElement scroll position to match the scroll position of inputElement.
-   *
-   * This is called asynchronously after the input changes because automatic scrolling appears to
-   * take place after the 'input' event fires.
-   */
-  private updateHintScrollPosition() {
-    this.updateHintScrollPositionTimer = null;
-    this.hintElement.scrollLeft = this.inputElement.scrollLeft;
-  }
-
   private cancelActiveCompletion() {
+    this.prevInputValue = undefined;
     const token = this.activeCompletionCancellationToken;
     if (token !== undefined) {
       token.cancel();
     }
     this.activeCompletionCancellationToken = undefined;
     this.activeCompletionPromise = null;
-  }
-
-  private handleInputChanged(value: string) {
-    this.cancelActiveCompletion();
-    this.hintElement.value = '';
-    this.clearCompletions();
-    this.inputChanged.dispatch(value);
-    this.scheduleUpdateCompletions();
   }
 
   private clearCompletions() {
@@ -517,24 +676,20 @@ export class AutocompleteTextInput extends RefCounted {
   }
 
   get value() {
-    return this.prevInputValue;
+    return this.inputElement.textContent || '';
   }
 
   set value(value: string) {
-    if (value !== this.prevInputValue) {
-      this.inputElement.value = value;
-      this.prevInputValue = value;
-      this.handleInputChanged(value);
+    if (value !== this.value) {
+      this.completionDisabled = -1;
+      this.setValueAndSelection(value);
+      this.debouncedUpdateHintState();
     }
   }
 
   disposed() {
     removeFromParent(this.element);
     this.cancelActiveCompletion();
-    if (this.updateHintScrollPositionTimer !== null) {
-      clearTimeout(this.updateHintScrollPositionTimer);
-      this.updateHintScrollPositionTimer = null;
-    }
     super.disposed();
   }
 }

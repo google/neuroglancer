@@ -30,9 +30,7 @@ def encode_jpeg(subvol):
 
 def encode_npz(subvol):
     fileobj = io.BytesIO()
-    if len(subvol.shape) == 3:
-        subvol = np.expand_dims(subvol, 0)
-    np.save(fileobj, subvol)
+    np.save(fileobj, np.asfortranarray(subvol))
     cdz = zlib.compress(fileobj.getvalue())
     return cdz
 

@@ -15,16 +15,13 @@
  */
 
 import {mat3, mat4, quat, vec3} from 'gl-matrix';
+import { findMatchingIndices, TypedArray} from 'neuroglancer/util/array';
 
 export {mat2, mat3, mat4, quat, vec2, vec3, vec4} from 'gl-matrix';
 
 export const identityMat4 = mat4.create();
 
 export const AXES_NAMES = ['x', 'y', 'z'];
-
-export class BoundingBox {
-  constructor(public lower: vec3, public upper: vec3) {}
-}
 
 export const kAxes = [
   vec3.fromValues(1, 0, 0),
@@ -51,33 +48,6 @@ export function prod4(x: ArrayLike<number>) {
  */
 export function vec3Key(x: ArrayLike<number>) {
   return `${x[0]},${x[1]},${x[2]}`;
-}
-
-const RECTIFY_EPSILON = 1e-4;
-
-export function rectifyVec3IfAxisAligned(v: Float32Array, offset: number) {
-  let a0 = Math.abs(v[offset]), a1 = Math.abs(v[offset + 1]), a2 = Math.abs(v[offset + 2]);
-  let max = Math.max(a0, a1, a2);
-  if (a0 / max < RECTIFY_EPSILON) {
-    v[offset] = 0;
-  }
-  if (a1 / max < RECTIFY_EPSILON) {
-    v[offset + 1] = 0;
-  }
-  if (a2 / max < RECTIFY_EPSILON) {
-    v[offset + 2] = 0;
-  }
-}
-
-/**
- * Makes columns of m that are approximately axis-aligned exactly axis aligned.
- *
- * Note that mat is stored in Fortran order, and therefore the first column is m[0], m[1], m[2].
- */
-export function rectifyTransformMatrixIfAxisAligned(m: mat4) {
-  rectifyVec3IfAxisAligned(m, 0);
-  rectifyVec3IfAxisAligned(m, 4);
-  rectifyVec3IfAxisAligned(m, 8);
 }
 
 /**
@@ -126,17 +96,15 @@ export function transformVectorByMat4(out: vec3, a: vec3, m: mat4) {
   return out;
 }
 
-
 /**
- * Computes the effective scaling factor of each local spatial dimension by `m`, which is assumed to
- * transform local coordinates to global coordinates.
+ * Transforms a vector `a` by the transpose of a homogenous transformation matrix `m`.  The
+ * translation component of `m` is ignored.
  */
-export function effectiveScalingFactorFromMat4(out: vec3, m: mat4) {
-  const m0 = m[0], m1 = m[1], m2 = m[2], m4 = m[4], m5 = m[5], m6 = m[6], m8 = m[8], m9 = m[9],
-        m10 = m[10];
-  out[0] = Math.sqrt(m0 * m0 + m1 * m1 + m2 * m2);
-  out[1] = Math.sqrt(m4 * m4 + m5 * m5 + m6 * m6);
-  out[2] = Math.sqrt(m8 * m8 + m9 * m9 + m10 * m10);
+export function transformVectorByMat4Transpose(out: vec3, a: vec3, m: mat4) {
+  let x = a[0], y = a[1], z = a[2];
+  out[0] = m[0] * x + m[1] * y + m[2] * z;
+  out[1] = m[4] * x + m[5] * y + m[6] * z;
+  out[2] = m[8] * x + m[9] * y + m[10] * z;
   return out;
 }
 
@@ -152,12 +120,16 @@ export function translationRotationScaleZReflectionToMat4(
 /**
  * Returns the value of `t` that minimizes `(p - (a + t * (b - a)))`.
  */
-export function findClosestParameterizedLinePosition(a: vec3, b: vec3, p: vec3) {
+export function findClosestParameterizedLinePosition(a: Float32Array, b: Float32Array, p: Float32Array) {
   // http://mathworld.wolfram.com/Point-LineDistance3-Dimensional.html
   // Compute t: -dot(a-p, b-a) / |b - a|^2
-  const denominator = vec3.squaredDistance(a, b);
+  const rank = a.length;
+  let denominator = 0;
+  for (let i = 0; i < rank; ++i) {
+    denominator += (a[i] - b[i])**2;
+  }
   let numerator = 0;
-  for (let i = 0; i < 3; ++i) {
+  for (let i = 0; i < rank; ++i) {
     const aValue = a[i];
     numerator -= (aValue - p[i]) * (b[i] - aValue);
   }
@@ -167,10 +139,11 @@ export function findClosestParameterizedLinePosition(a: vec3, b: vec3, p: vec3) 
 /**
  * Sets `out` to the position on the line segment `[a, b]` closest to `p`.
  */
-export function projectPointToLineSegment(out: vec3, a: vec3, b: vec3, p: vec3) {
+export function projectPointToLineSegment(out: Float32Array, a: Float32Array, b: Float32Array, p: Float32Array) {
+  const rank = out.length;
   let t = findClosestParameterizedLinePosition(a, b, p);
   t = Math.max(0.0, Math.min(1.0, t));
-  for (let i = 0; i < 3; ++i) {
+  for (let i = 0; i < rank; ++i) {
     const aValue = a[i];
     out[i] = aValue + t * (b[i] - aValue);
   }
@@ -265,4 +238,46 @@ export function isAABBVisible(
     }
   }
   return true;
+}
+
+/**
+ * Returns the list (in sorted order) of input dimensions that depend on any of the specified output
+ * dimensions.
+ */
+export function getDependentTransformInputDimensions(
+    transform: Float32Array|Float64Array, rank: number, outputDimensions: readonly number[],
+    transpose: boolean = false): number[] {
+  const numOutputDimensions = outputDimensions.length;
+  const isDependentInputDimension: boolean[] = [];
+  const inputStride = transpose ? 1 : rank + 1;
+  const outputStride = transpose ? rank + 1 : 1;
+  for (let i = 0; i < numOutputDimensions; ++i) {
+    const outputDim = outputDimensions[i];
+    for (let inputDim = 0; inputDim < rank; ++inputDim) {
+      if (transform[inputDim * inputStride + outputDim * outputStride] !== 0) {
+        isDependentInputDimension[inputDim] = true;
+      }
+    }
+  }
+  return findMatchingIndices(isDependentInputDimension, true);
+}
+
+export function scaleMat3Input(out: mat3, input: mat3, scales: TypedArray) {
+  for (let j = 0; j < 3; ++j) {
+    const s = scales[j];
+    for (let i = 0; i < 3; ++i) {
+      out[i + j * 3] = s * input[i + j * 3];
+    }
+  }
+  return out;
+}
+
+export function scaleMat3Output(out: mat3, input: mat3, scales: TypedArray) {
+  for (let i = 0; i < 3; ++i) {
+    const s = scales[i];
+    for (let j = 0; j < 3; ++j) {
+      out[i + j * 3] = s * input[i + j * 3];
+    }
+  }
+  return out;
 }

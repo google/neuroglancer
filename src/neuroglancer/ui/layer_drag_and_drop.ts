@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-import {LayerListSpecification, ManagedUserLayerWithSpecification} from 'neuroglancer/layer_specification';
+import {LayerListSpecification, ManagedUserLayer} from 'neuroglancer/layer';
 import {Borrowed, Owned} from 'neuroglancer/util/disposable';
 import {decodeParametersFromDragTypeList, DragInfo, encodeParametersAsDragType, setDropEffect} from 'neuroglancer/util/drag_and_drop';
 import {parseArray, verifyBoolean, verifyObjectProperty, verifyString} from 'neuroglancer/util/json';
@@ -23,7 +23,7 @@ const layerDragTypePrefix = 'neuroglancer-layer\0';
 
 export interface LayerDragSourceInfo {
   manager: Owned<LayerListSpecification>;
-  layers: Owned<ManagedUserLayerWithSpecification>[];
+  layers: Owned<ManagedUserLayer>[];
   layoutSpec: any;
 }
 
@@ -66,8 +66,7 @@ export function endLayerDrag(event?: DragEvent) {
   if (dragSource !== undefined) {
     if (event && event.dataTransfer!.dropEffect === 'move') {
       const removedLayers = new Set(dragSource.layers);
-      dragSource.manager.layerManager.filter(
-          (x: ManagedUserLayerWithSpecification) => !removedLayers.has(x));
+      dragSource.manager.layerManager.filter((x: ManagedUserLayer) => !removedLayers.has(x));
     }
     dragSource.disposer();
   }
@@ -78,7 +77,8 @@ export function getLayerDragInfo(event: DragEvent): DragInfo|undefined {
   return decodeParametersFromDragTypeList(event.dataTransfer!.types, layerDragTypePrefix);
 }
 
-function getCompatibleDragSource(manager: Borrowed<LayerListSpecification>): LayerDragSourceInfo|undefined {
+function getCompatibleDragSource(manager: Borrowed<LayerListSpecification>): LayerDragSourceInfo|
+    undefined {
   if (dragSource !== undefined && dragSource.manager.rootLayers === manager.rootLayers) {
     return dragSource;
   }
@@ -95,7 +95,7 @@ export class DropLayers {
   manager: Borrowed<LayerListSpecification>;
 
   // Maps each layer to its index in the specification.
-  layers: Map<Owned<ManagedUserLayerWithSpecification>, number>;
+  layers: Map<Owned<ManagedUserLayer>, number>;
 
   numSourceLayers: number;
 
@@ -127,7 +127,7 @@ export class DropLayers {
     return true;
   }
 
-  get method () {
+  get method() {
     if (this.sourceManager !== undefined) {
       if (this.manager === this.sourceManager) {
         return 'move';
@@ -150,7 +150,8 @@ export class DropLayers {
   }
 }
 
-export function getDefaultLayerDropEfect(manager: Borrowed<LayerListSpecification>, newTarget = false) {
+export function getDefaultLayerDropEfect(
+    manager: Borrowed<LayerListSpecification>, newTarget = false) {
   const source = getCompatibleDragSource(manager);
   if (source === undefined) {
     return 'copy';
@@ -216,9 +217,9 @@ export function getDropLayers(
       const layers = parseArray(info.parameters, (layerInfo, index) => {
         const name = verifyObjectProperty(layerInfo, 'name', verifyString);
         const visible = verifyObjectProperty(layerInfo, 'visible', verifyBoolean);
-        const newLayer = new ManagedUserLayerWithSpecification(name, null, manager);
+        const newLayer = new ManagedUserLayer(name, null, manager);
         newLayer.visible = visible;
-        return <[ManagedUserLayerWithSpecification, number]>[newLayer, index];
+        return <[ManagedUserLayer, number]>[newLayer, index];
       });
       const result = new DropLayers();
       result.numSourceLayers = layers.length;

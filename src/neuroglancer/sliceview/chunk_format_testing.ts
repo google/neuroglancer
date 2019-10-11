@@ -20,13 +20,13 @@ import {getFortranOrderStrides} from 'neuroglancer/util/array';
 import {TypedArray} from 'neuroglancer/util/array';
 import {DataType} from 'neuroglancer/util/data_type';
 import {Disposable} from 'neuroglancer/util/disposable';
-import {vec3, vec3Key, vec4} from 'neuroglancer/util/geom';
+import {vec3, vec3Key} from 'neuroglancer/util/geom';
 import {GL} from 'neuroglancer/webgl/context';
 import {textureTargetForSamplerType} from 'neuroglancer/webgl/shader';
 import {fragmentShaderTest, FragmentShaderTestOutputs} from 'neuroglancer/webgl/shader_testing';
 
 export function chunkFormatTest<TextureLayout extends Disposable>(
-    dataType: DataType, volumeSize: vec4,
+    dataType: DataType, volumeSize: Uint32Array,
     getChunkFormatAndTextureLayout:
         (gl: GL) => [SingleTextureChunkFormat<TextureLayout>, TextureLayout],
     rawData: TypedArray, encodedData: TypedArray) {
@@ -42,7 +42,7 @@ export function chunkFormatTest<TextureLayout extends Disposable>(
       outputs[`output${channelIndex}`] = outputType;
     }
   }
-  it(`volumeSize = ${vec3Key(volumeSize)}, numChannels = ${volumeSize[3]}, ` +
+  it(`volumeSize = ${volumeSize.join()}, numChannels = ${volumeSize[3]}, ` +
          `dataType = ${DataType[dataType]}`,
      () => {
        fragmentShaderTest(outputs, tester => {
@@ -51,7 +51,7 @@ export function chunkFormatTest<TextureLayout extends Disposable>(
          builder.addUniform('highp vec3', 'vChunkPosition');
          builder.addUniform('vec3', 'uChunkDataSize');
          builder.addFragmentCode(glsl_getPositionWithinChunk);
-         chunkFormat.defineShader(builder);
+         chunkFormat.defineShader(builder, /*numChannelDimensions=*/ 1);
          {
            let fragmentMain = '';
            for (let channel = 0; channel < numChannels; ++channel) {
@@ -92,7 +92,11 @@ output${channel} = getDataValue(${channel}).value;
          chunkFormat.beginDrawing(gl, shader);
          gl.bindTexture(textureTarget, texture);
          chunkFormat.setTextureData(gl, textureLayout, encodedData);
-         chunkFormat.setupTextureLayout(gl, shader, textureLayout);
+         const fixedChunkPosition = Uint32Array.of(0, 0, 0);
+         const chunkDisplaySubspaceDimensions = [0, 1, 2];
+         chunkFormat.setupTextureLayout(
+             gl, shader, textureLayout, fixedChunkPosition, chunkDisplaySubspaceDimensions,
+             /*channelDimensions=*/[3]);
 
 
          // Position within chunk in floating point range [0, chunkDataSize].
@@ -100,7 +104,9 @@ output${channel} = getDataValue(${channel}).value;
            gl.uniform3fv(shader.uniform('vChunkPosition'), positionInChunk);
            chunkFormat.beginDrawing(gl, shader);
            chunkFormat.beginSource(gl, shader);
-           chunkFormat.setupTextureLayout(gl, shader, textureLayout);
+           chunkFormat.setupTextureLayout(
+               gl, shader, textureLayout, fixedChunkPosition, chunkDisplaySubspaceDimensions,
+               /*channelDimensions=*/[3]);
            gl.bindTexture(textureTarget, texture);
            tester.execute();
            chunkFormat.endDrawing(gl, shader);

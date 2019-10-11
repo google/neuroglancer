@@ -27,6 +27,7 @@ import {TypedArray} from 'neuroglancer/util/array';
 import {CANCELED, CancellationToken} from 'neuroglancer/util/cancellation';
 import {DATA_TYPE_BYTES, DataType} from 'neuroglancer/util/data_type';
 import {prod3 as prod, vec3} from 'neuroglancer/util/geom';
+import * as vector from 'neuroglancer/util/vector';
 import {registerSharedObject, RPC, SharedObjectCounterpart} from 'neuroglancer/worker_rpc';
 
 export abstract class VolumeComputationBackend extends SharedObjectCounterpart {
@@ -60,7 +61,7 @@ export abstract class VolumeComputationBackend extends SharedObjectCounterpart {
  * @param cropSize the subregion's size
  * @param size the overal volume's size
  */
-function subBoxIndex(idx: number, offset: vec3, cropSize: vec3, size: vec3) {
+function subBoxIndex(idx: number, offset: vec3, cropSize: vec3, size: Uint32Array) {
   return idx % cropSize[0] + offset[0] +
       (Math.floor(idx / cropSize[0]) % cropSize[1] + offset[1]) * size[0] +
       (Math.floor(idx / (cropSize[0] * cropSize[1])) % cropSize[2] + offset[2]) * size[0] *
@@ -81,8 +82,8 @@ function subBoxIndex(idx: number, offset: vec3, cropSize: vec3, size: vec3) {
  * @param dataType the data type of both source and destintation arrays.
  */
 export function copyBufferOverlap(
-    sourceCorner: vec3, sourceSize: vec3, sourceView: TypedArray, destCorner: vec3, destSize: vec3,
-    destView: TypedArray, dataType: DataType) {
+    sourceCorner: vec3, sourceSize: Uint32Array, sourceView: TypedArray, destCorner: vec3,
+    destSize: Uint32Array, destView: TypedArray, dataType: DataType) {
   // UINT64 data is packed two-at-a-time into a UINT32 array, so we handle it as a special case.
   let copyFunction = dataType === DataType.UINT64 ? (j: number, k: number) => {
     destView[2 * k] = sourceView[2 * j];
@@ -93,8 +94,8 @@ export function copyBufferOverlap(
 
   // Global Coordinates
   const commonLower = vec3.max(vec3.create(), sourceCorner, destCorner);
-  const sourceUpper = vec3.add(vec3.create(), sourceCorner, sourceSize);
-  const destUpper = vec3.add(vec3.create(), destCorner, destSize);
+  const sourceUpper = vector.add(vec3.create(), sourceCorner, sourceSize);
+  const destUpper = vector.add(vec3.create(), destCorner, destSize);
   const commonUpper = vec3.min(vec3.create(), sourceUpper, destUpper);
   const commonSize = vec3.subtract(vec3.create(), commonUpper, commonLower);
 
@@ -120,8 +121,8 @@ export function copyBufferOverlap(
  * the value returned here.
  * @param gridPosition chunk grid position
  */
-function gridPositionKey(gridPosition: vec3) {
-  return gridPosition.toLocaleString();
+function gridPositionKey(gridPosition: TypedArray) {
+  return gridPosition.join();
 }
 
 // In addition to acting as a VolumeChunk for the purposes of a ChunkManager
@@ -189,15 +190,15 @@ export class ComputedVolumeChunk extends VolumeChunk implements ChunkStateListen
     // These computations happen without regard for edge effects, which are
     // handled post-computation by cropping to this VolumeChunk's geometry.
     const {inputSpec, outputSpec} = this.computationParams_;
-    const twos = [2.0, 2.0, 2.0];
-    const outBoxLower = vec3.multiply(vec3.create(), this.chunkGridPosition, outputSpec.size);
+    const twos = Float32Array.of(2, 2, 2);
+    const outBoxLower = vector.multiply(vec3.create(), this.chunkGridPosition, outputSpec.size);
     const outputCenter =
-        vec3.add(vec3.create(), outBoxLower, vec3.divide(vec3.create(), outputSpec.size, twos));
+        vec3.add(vec3.create(), outBoxLower, vector.divide(vec3.create(), outputSpec.size, twos));
     const scaleFactor = this.source.parameters.scaleFactor;
     const inputCenter = vec3.divide(vec3.create(), outputCenter, scaleFactor);
     const inputSize = inputSpec.size;
     this.inputLower_ =
-        vec3.subtract(vec3.create(), inputCenter, vec3.divide(vec3.create(), inputSize, twos));
+        vec3.subtract(vec3.create(), inputCenter, vector.divide(vec3.create(), inputSize, twos));
     this.inputBuffer_ = new ArrayBuffer(this.systemMemoryBytes);
 
     this.setupSourceChunks_();
@@ -244,7 +245,7 @@ export class ComputedVolumeChunk extends VolumeChunk implements ChunkStateListen
         const gridKey = gridPositionKey(volumeChunk.chunkGridPosition);
         const chunkSize = volumeChunk.chunkDataSize!;
         const originSource = this.source.originSource;
-        const chunkCorner = vec3.multiply(
+        const chunkCorner = vector.multiply(
             vec3.create(), volumeChunk.chunkGridPosition, originSource.spec.chunkDataSize);
 
         this.source.requestChunkData(this, volumeChunk)
@@ -321,7 +322,7 @@ export class ComputedVolumeChunk extends VolumeChunk implements ChunkStateListen
    * @param numChannels the number of channels in the buffer
    */
   private maybeDecodeBuffer_(
-      buffer: TypedArray, dataType: DataType, size: vec3, numChannels: number) {
+      buffer: TypedArray, dataType: DataType, size: Uint32Array, numChannels: number) {
     const originSource = this.source.originSource;
     if (!originSource.spec.compressedSegmentationBlockSize) {
       return buffer;
@@ -357,7 +358,7 @@ export class ComputedVolumeChunk extends VolumeChunk implements ChunkStateListen
 
     const chunkSize = originChunk.chunkDataSize!;
     const numChannels = inputSpec.numChannels;
-    const chunkCorner = vec3.multiply(
+    const chunkCorner = vector.multiply(
         vec3.create(), originChunk.chunkGridPosition, this.source.originSource.spec.chunkDataSize);
 
     let destination = getArrayView(this.inputBuffer_!, inputSpec.dataType);
@@ -394,14 +395,14 @@ export class ComputedVolumeChunk extends VolumeChunk implements ChunkStateListen
     return computation.compute(this.inputBuffer_!, this.cancellationToken_!, this)
         .then((outputBuffer) => {
           this.inputBuffer_ = undefined;
-          if (vec3.equals(outputSize, this.chunkDataSize!)) {
+          if (vector.equal(outputSize, this.chunkDataSize!)) {
             return decodeRawChunk(this, this.cancellationToken_!, outputBuffer);
           }
           const outputBufferView = getArrayView(outputBuffer, outputDataType);
           const chunkBuffer = new ArrayBuffer(
               prod(this.chunkDataSize!) * outputSpec.numChannels * DATA_TYPE_BYTES[outputDataType]);
           const chunkBufferView = getArrayView(chunkBuffer, outputDataType);
-          const outputCorner = vec3.multiply(vec3.create(), this.chunkGridPosition, outputSize);
+          const outputCorner = vector.multiply(vec3.create(), this.chunkGridPosition, outputSize);
           copyBufferOverlap(
               outputCorner, outputSize, outputBufferView, outputCorner, this.chunkDataSize!,
               chunkBufferView, outputDataType);
@@ -445,13 +446,14 @@ export class ComputedVolumeChunk extends VolumeChunk implements ChunkStateListen
     const inputSpec = this.computationParams_!.inputSpec;
     const inputLower = this.inputLower_!;
     const gridLower =
-        vec3.floor(vec3.create(), vec3.divide(vec3.create(), inputLower, originChunkSize));
-    const inputSizeMinusOne = vec3.subtract(vec3.create(), inputSpec.size, [1, 1, 1]);
+        vec3.floor(vec3.create(), vector.divide(vec3.create(), inputLower, originChunkSize));
+    const inputSizeMinusOne =
+        vector.subtract(vec3.create(), inputSpec.size, Float32Array.of(1, 1, 1));
     const inBoxUpper = vec3.add(vec3.create(), inputLower, inputSizeMinusOne);
     vec3.max(gridLower, gridLower, [0, 0, 0]);
-    vec3.min(inBoxUpper, inBoxUpper, originSource.spec.upperVoxelBound);
+    vector.min(inBoxUpper, inBoxUpper, originSource.spec.upperVoxelBound);
     const gridUpper =
-        vec3.floor(vec3.create(), vec3.divide(vec3.create(), inBoxUpper, originChunkSize));
+        vec3.floor(vec3.create(), vector.divide(vec3.create(), inBoxUpper, originChunkSize));
 
     const gridPosition = vec3.create();
     for (let z = gridLower[2]; z <= gridUpper[2]; ++z) {

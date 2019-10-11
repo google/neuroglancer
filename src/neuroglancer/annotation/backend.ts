@@ -22,7 +22,7 @@ import {PerspectiveViewRenderLayer} from 'neuroglancer/perspective_view/backend'
 import {forEachVisibleSegment, getObjectKey} from 'neuroglancer/segmentation_display_state/base';
 import {SharedDisjointUint64Sets} from 'neuroglancer/shared_disjoint_sets';
 import {SharedWatchableValue} from 'neuroglancer/shared_watchable_value';
-import {SliceViewChunk, SliceViewChunkSource} from 'neuroglancer/sliceview/backend';
+import {SliceViewChunk, SliceViewChunkSourceBackend} from 'neuroglancer/sliceview/backend';
 import {registerNested, WatchableValue} from 'neuroglancer/trackable_value';
 import {Uint64Set} from 'neuroglancer/uint64_set';
 import {CancellationToken} from 'neuroglancer/util/cancellation';
@@ -122,13 +122,9 @@ class AnnotationMetadataChunkSource extends ChunkSource {
 }
 
 @registerSharedObject(ANNOTATION_GEOMETRY_CHUNK_SOURCE_RPC_ID)
-class AnnotationGeometryChunkSource extends SliceViewChunkSource {
+class AnnotationGeometryChunkSource extends
+    SliceViewChunkSourceBackend<AnnotationGeometryChunkSpecification, AnnotationGeometryChunk> {
   parent: Borrowed<AnnotationSource>|undefined = undefined;
-  spec: AnnotationGeometryChunkSpecification;
-  constructor(rpc: RPC, options: any) {
-    super(rpc, options);
-    this.spec = new AnnotationGeometryChunkSpecification(options.spec);
-  }
   download(chunk: AnnotationGeometryChunk, cancellationToken: CancellationToken) {
     return this.parent!.downloadGeometry(chunk, cancellationToken);
   }

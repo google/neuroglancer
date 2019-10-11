@@ -22,6 +22,7 @@ import socket
 import threading
 import weakref
 
+import numpy as np
 import tornado.httpserver
 import tornado.ioloop
 import tornado.netutil
@@ -29,14 +30,17 @@ import tornado.web
 
 import sockjs.tornado
 
+
 from . import local_volume, static
+from . import skeleton
 from .json_utils import json_encoder_default
 from .random_token import make_random_token
 from .sockjs_handler import SOCKET_PATH_REGEX, SOCKET_PATH_REGEX_WITHOUT_GROUP, SockJSHandler
 
 INFO_PATH_REGEX = r'^/neuroglancer/info/(?P<token>[^/]+)$'
+SKELETON_INFO_PATH_REGEX = r'^/neuroglancer/skeletoninfo/(?P<token>[^/]+)$'
 
-DATA_PATH_REGEX = r'^/neuroglancer/(?P<data_format>[^/]+)/(?P<token>[^/]+)/(?P<scale_key>[^/]+)/(?P<start_x>[0-9]+),(?P<end_x>[0-9]+)/(?P<start_y>[0-9]+),(?P<end_y>[0-9]+)/(?P<start_z>[0-9]+),(?P<end_z>[0-9]+)$'
+DATA_PATH_REGEX = r'^/neuroglancer/(?P<data_format>[^/]+)/(?P<token>[^/]+)/(?P<scale_key>[^/]+)/(?P<start>[0-9]+(?:,[0-9]+)*)/(?P<end>[0-9]+(?:,[0-9]+)*)$'
 
 SKELETON_PATH_REGEX = r'^/neuroglancer/skeleton/(?P<key>[^/]+)/(?P<object_id>[0-9]+)$'
 
@@ -70,6 +74,7 @@ class Server(object):
             [
                 (STATIC_PATH_REGEX, StaticPathHandler, dict(server=self)),
                 (INFO_PATH_REGEX, VolumeInfoHandler, dict(server=self)),
+                (SKELETON_INFO_PATH_REGEX, SkeletonInfoHandler, dict(server=self)),
                 (DATA_PATH_REGEX, SubvolumeHandler, dict(server=self)),
                 (SKELETON_PATH_REGEX, SkeletonHandler, dict(server=self)),
                 (MESH_PATH_REGEX, MeshHandler, dict(server=self)),
@@ -127,19 +132,26 @@ class StaticPathHandler(BaseRequestHandler):
 class VolumeInfoHandler(BaseRequestHandler):
     def get(self, token):
         vol = self.server.get_volume(token)
-        if vol is None:
+        if vol is None or not isinstance(vol, local_volume.LocalVolume):
             self.send_error(404)
             return
         self.finish(json.dumps(vol.info(), default=json_encoder_default).encode())
 
+class SkeletonInfoHandler(BaseRequestHandler):
+    def get(self, token):
+        vol = self.server.get_volume(token)
+        if vol is None or not isinstance(vol, skeleton.SkeletonSource):
+            self.send_error(404)
+            return
+        self.finish(json.dumps(vol.info(), default=json_encoder_default).encode())
 
 class SubvolumeHandler(BaseRequestHandler):
     @tornado.web.asynchronous
-    def get(self, data_format, token, scale_key, start_x, end_x, start_y, end_y, start_z, end_z):
-        start = (int(start_x), int(start_y), int(start_z))
-        end = (int(end_x), int(end_y), int(end_z))
+    def get(self, data_format, token, scale_key, start, end):
+        start_pos = np.array(start.split(','), dtype=np.int64)
+        end_pos = np.array(end.split(','), dtype=np.int64)
         vol = self.server.get_volume(token)
-        if vol is None:
+        if vol is None or not isinstance(vol, local_volume.LocalVolume):
             self.send_error(404)
             return
 
@@ -155,7 +167,7 @@ class SubvolumeHandler(BaseRequestHandler):
 
         self.server.executor.submit(
             vol.get_encoded_subvolume,
-            data_format, start, end, scale_key=scale_key).add_done_callback(
+            data_format=data_format, start=start_pos, end=end_pos, scale_key=scale_key).add_done_callback(
                 lambda f: self.server.ioloop.add_callback(lambda: handle_subvolume_result(f)))
 
 
@@ -164,7 +176,7 @@ class MeshHandler(BaseRequestHandler):
     def get(self, key, object_id):
         object_id = int(object_id)
         vol = self.server.get_volume(key)
-        if vol is None:
+        if vol is None or not isinstance(vol, local_volume.LocalVolume):
             self.send_error(404)
             return
 
@@ -196,11 +208,8 @@ class SkeletonHandler(BaseRequestHandler):
     def get(self, key, object_id):
         object_id = int(object_id)
         vol = self.server.get_volume(key)
-        if vol is None:
+        if vol is None or not isinstance(vol, skeleton.SkeletonSource):
             self.send_error(404)
-        if vol.skeletons is None:
-            self.send_error(405, message='Skeletons not supported for volume')
-            return
 
         def handle_result(f):
             try:
@@ -221,7 +230,7 @@ class SkeletonHandler(BaseRequestHandler):
             return skeleton.encode(skeletons)
 
         self.server.executor.submit(
-            get_encoded_skeleton, vol.skeletons, object_id).add_done_callback(
+            get_encoded_skeleton, vol, object_id).add_done_callback(
                 lambda f: self.server.ioloop.add_callback(lambda: handle_result(f)))
 
 

@@ -121,6 +121,16 @@ export function getShader(gl: WebGL2RenderingContext, source: string, shaderType
 
 export type AttributeIndex = number;
 
+export type AttributeType = number;
+
+export interface VertexShaderInputBinder {
+  enable(divisor: number): void;
+  disable(): void;
+  bind(
+      buffer: WebGLBuffer, attributeType: AttributeType, normalized: boolean, stride?: number,
+      offset?: number): void;
+}
+
 export class ShaderProgram extends RefCounted {
   program: WebGLProgram;
   vertexShader: WebGLShader;
@@ -128,6 +138,7 @@ export class ShaderProgram extends RefCounted {
   attributes = new Map<string, AttributeIndex>();
   uniforms = new Map<string, WebGLUniformLocation|null>();
   textureUnits: Map<any, number>;
+  vertexShaderInputBinders: {[name: string]: VertexShaderInputBinder} = {};
 
   constructor(
       public gl: GL, public vertexSource: string, public fragmentSource: string,

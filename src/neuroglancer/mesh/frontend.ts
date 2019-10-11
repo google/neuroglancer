@@ -16,13 +16,15 @@
 
 import {ChunkState} from 'neuroglancer/chunk_manager/base';
 import {Chunk, ChunkManager, ChunkSource} from 'neuroglancer/chunk_manager/frontend';
+import {VisibleLayerInfo} from 'neuroglancer/layer';
 import {EncodedMeshData, FRAGMENT_SOURCE_RPC_ID, MESH_LAYER_RPC_ID, MULTISCALE_FRAGMENT_SOURCE_RPC_ID, MULTISCALE_MESH_LAYER_RPC_ID, MultiscaleFragmentFormat, VertexPositionFormat} from 'neuroglancer/mesh/base';
 import {getMultiscaleChunksToDraw, getMultiscaleFragmentKey, MultiscaleMeshManifest} from 'neuroglancer/mesh/multiscale';
 import {PerspectiveViewReadyRenderContext, PerspectiveViewRenderContext, PerspectiveViewRenderLayer} from 'neuroglancer/perspective_view/render_layer';
+import {ThreeDimensionalRenderLayerAttachmentState, update3dRenderLayerAttachment} from 'neuroglancer/renderlayer';
 import {forEachVisibleSegment, getObjectKey} from 'neuroglancer/segmentation_display_state/base';
 import {getObjectColor, registerRedrawWhenSegmentationDisplayState3DChanged, SegmentationDisplayState3D, SegmentationLayerSharedObject} from 'neuroglancer/segmentation_display_state/frontend';
 import {Borrowed} from 'neuroglancer/util/disposable';
-import {getFrustrumPlanes, mat3, mat3FromMat4, mat4, vec3, vec4} from 'neuroglancer/util/geom';
+import {getFrustrumPlanes, mat3, mat3FromMat4, mat4, scaleMat3Output, vec3, vec4} from 'neuroglancer/util/geom';
 import {getObjectId} from 'neuroglancer/util/object_id';
 import {Buffer} from 'neuroglancer/webgl/buffer';
 import {GL} from 'neuroglancer/webgl/context';
@@ -30,7 +32,6 @@ import {ShaderBuilder, ShaderModule, ShaderProgram} from 'neuroglancer/webgl/sha
 import {registerSharedObjectOwner, RPC} from 'neuroglancer/worker_rpc';
 
 const tempMat4 = mat4.create();
-const tempModelMatrix = mat4.create();
 const tempMat3 = mat3.create();
 
 const DEBUG_MULTISCALE_FRAGMENTS = false;
@@ -39,7 +40,7 @@ function copyMeshDataToGpu(gl: GL, chunk: FragmentChunk|MultiscaleFragmentChunk)
   chunk.vertexBuffer =
       Buffer.fromData(gl, chunk.meshData.vertexPositions, gl.ARRAY_BUFFER, gl.STATIC_DRAW);
   chunk.indexBuffer =
-      Buffer.fromData(gl, chunk.meshData.indices, gl.ELEMENT_ARRAY_BUFFER, gl.STATIC_DRAW);
+    Buffer.fromData(gl, chunk.meshData.indices, gl.ELEMENT_ARRAY_BUFFER, gl.STATIC_DRAW);
   chunk.normalBuffer =
       Buffer.fromData(gl, chunk.meshData.vertexNormals, gl.ARRAY_BUFFER, gl.STATIC_DRAW);
 }
@@ -66,6 +67,40 @@ highp vec3 decodeNormalOctahedronSnorm8(highp vec2 e) {
   return normalize(v);
 }
 `;
+
+function decodeSnorm8(x: number) {
+  if (x >= 128) {
+    x = x - 256;
+  }
+  return Math.max(-1, x / 127);
+}
+
+/**
+ * Javascript implementation of normal decoding, for debugging.
+ */
+export function decodeNormalOctahedronSnorm8(normals: Uint8Array) {
+  let n = normals.length;
+  n -= 1;
+  let out = new Float32Array(Math.floor(normals.length / 2) * 3);
+  let outIndex  =0;
+  for (let i = 0; i < n; i += 2) {
+    const e0 = decodeSnorm8(normals[i]);
+    const e1 = decodeSnorm8(normals[i + 1]);
+    let v0 = e0;
+    let v1 = e1;
+    let v2 = 1.0 - Math.abs(e0) - Math.abs(e1);
+    if (v2 < 0) {
+      v0 = (1 - Math.abs(v1)) * (v0 > 0 ? 1 : -1);
+      v1 = (1 - Math.abs(v0)) * (v1 > 0 ? 1 : -1);
+    }
+    const len = Math.sqrt(v0**2 + v1**2 + v2**2);
+    out[outIndex] = v0 / len;
+    out[outIndex + 1] = v1 / len;
+    out[outIndex + 2] = v2 / len;
+    outIndex += 3;
+  }
+  return out;
+}
 
 interface VertexPositionFormatHandler {
   defineShader: (builder: ShaderBuilder) => void;
@@ -151,7 +186,8 @@ highp vec3 normalMultiplier = vec3(1.0, 1.0, 1.0);
     }
     vertexMain += `
 gl_Position = uModelViewProjection * vec4(vertexPosition, 1.0);
-vec3 normal = normalize(uNormalMatrix * normalMultiplier * decodeNormalOctahedronSnorm8(aVertexNormal));
+vec3 origNormal = decodeNormalOctahedronSnorm8(aVertexNormal);
+vec3 normal = normalize(uNormalMatrix * (normalMultiplier * origNormal));
 float lightingFactor = abs(dot(normal, uLightDirection.xyz)) + uLightDirection.w;
 vColor = vec4(lightingFactor * uColor.rgb, uColor.a);
 `;
@@ -179,8 +215,9 @@ vColor = vec4(lightingFactor * uColor.rgb, uColor.a);
       gl: GL, shader: ShaderProgram, renderContext: PerspectiveViewRenderContext, modelMat: mat4) {
     gl.uniformMatrix4fv(
         shader.uniform('uModelViewProjection'), false,
-        mat4.multiply(tempMat4, renderContext.dataToDevice, modelMat));
+        mat4.multiply(tempMat4, renderContext.viewProjectionMat, modelMat));
     mat3FromMat4(tempMat3, modelMat);
+    scaleMat3Output(tempMat3, tempMat3, renderContext.displayDimensions.canonicalVoxelFactors);
     mat3.invert(tempMat3, tempMat3);
     mat3.transpose(tempMat3, tempMat3);
     gl.uniformMatrix3fv(shader.uniform('uNormalMatrix'), false, tempMat3);
@@ -240,7 +277,7 @@ vColor = vec4(lightingFactor * uColor.rgb, uColor.a);
   }
 }
 
-export class MeshLayer extends PerspectiveViewRenderLayer {
+export class MeshLayer extends PerspectiveViewRenderLayer<ThreeDimensionalRenderLayerAttachmentState> {
   protected meshShaderManager =
       new MeshShaderManager(/*fragmentRelativeVertices=*/ false, VertexPositionFormat.float32);
   private shaders = new Map<ShaderModule, ShaderProgram>();
@@ -259,7 +296,6 @@ export class MeshLayer extends PerspectiveViewRenderLayer {
     sharedObject.initializeCounterpartWithChunkManager({
       'source': source.addCounterpartRef(),
     });
-    this.setReady(true);
     sharedObject.visibility.add(this.visibility);
     this.registerDisposer(displayState.renderScaleHistogram.visibility.add(this.visibility));
   }
@@ -282,22 +318,25 @@ export class MeshLayer extends PerspectiveViewRenderLayer {
     return this.chunkManager.chunkQueueManager.gl;
   }
 
-  draw(renderContext: PerspectiveViewRenderContext) {
+  draw(renderContext: PerspectiveViewRenderContext, attachment: VisibleLayerInfo<ThreeDimensionalRenderLayerAttachmentState>) {
     if (!renderContext.emitColor && renderContext.alreadyEmittedPickID) {
       // No need for a separate pick ID pass.
       return;
     }
-    let {gl, displayState, meshShaderManager} = this;
-    let alpha = Math.min(1.0, displayState.objectAlpha.value);
+    const {gl, displayState, meshShaderManager} = this;
+    const alpha = Math.min(1.0, displayState.objectAlpha.value);
     if (alpha <= 0.0) {
       // Skip drawing.
       return;
     }
-    let shader = this.getShader(renderContext.emitter);
+    const modelMatrix = update3dRenderLayerAttachment(displayState.transform.value, renderContext.displayDimensions, attachment);
+    if (modelMatrix === undefined) {
+      return;
+    }
+    const shader = this.getShader(renderContext.emitter);
     shader.bind();
-    const objectToDataMatrix = this.displayState.objectToDataTransform.transform;
     meshShaderManager.beginLayer(gl, shader, renderContext);
-    meshShaderManager.beginModel(gl, shader, renderContext, objectToDataMatrix);
+    meshShaderManager.beginModel(gl, shader, renderContext, modelMatrix);
 
     let {pickIDs} = renderContext;
     const manifestChunks = this.source.chunks;
@@ -392,9 +431,16 @@ export class FragmentChunk extends Chunk {
   }
 }
 
+export interface MeshSourceOptions {}
+
 export class MeshSource extends ChunkSource {
   fragmentSource = this.registerDisposer(new FragmentSource(this.chunkManager, this));
   chunks: Map<string, ManifestChunk>;
+
+  constructor(chunkManager: Borrowed<ChunkManager>, options: MeshSourceOptions) {
+    super(chunkManager, options);
+  }
+
   initializeCounterpart(rpc: RPC, options: any) {
     this.fragmentSource.initializeCounterpart(this.chunkManager.rpc!, {});
     options['fragmentSource'] = this.fragmentSource.addCounterpartRef();
@@ -427,7 +473,8 @@ function hasFragmentChunk(
   return fragmentChunk !== undefined && fragmentChunk.state === ChunkState.GPU_MEMORY;
 }
 
-export class MultiscaleMeshLayer extends PerspectiveViewRenderLayer {
+export class MultiscaleMeshLayer extends
+    PerspectiveViewRenderLayer<ThreeDimensionalRenderLayerAttachmentState> {
   protected meshShaderManager = new MeshShaderManager(
       /*fragmentRelativeVertices=*/ this.source.format.fragmentRelativeVertices,
       this.source.format.vertexPositionFormat);
@@ -447,7 +494,6 @@ export class MultiscaleMeshLayer extends PerspectiveViewRenderLayer {
     sharedObject.initializeCounterpartWithChunkManager({
       'source': source.addCounterpartRef(),
     });
-    this.setReady(true);
     sharedObject.visibility.add(this.visibility);
     this.registerDisposer(displayState.renderScaleHistogram.visibility.add(this.visibility));
   }
@@ -470,18 +516,23 @@ export class MultiscaleMeshLayer extends PerspectiveViewRenderLayer {
     return this.chunkManager.chunkQueueManager.gl;
   }
 
-  draw(renderContext: PerspectiveViewRenderContext) {
+  draw(
+      renderContext: PerspectiveViewRenderContext,
+      attachment: VisibleLayerInfo<ThreeDimensionalRenderLayerAttachmentState>) {
     if (!renderContext.emitColor && renderContext.alreadyEmittedPickID) {
       // No need for a separate pick ID pass.
       return;
     }
-    let {gl, displayState, meshShaderManager} = this;
-    let alpha = Math.min(1.0, displayState.objectAlpha.value);
+    const {gl, displayState, meshShaderManager} = this;
+    const alpha = Math.min(1.0, displayState.objectAlpha.value);
     if (alpha <= 0.0) {
       // Skip drawing.
       return;
     }
-    let shader = this.getShader(renderContext.emitter);
+    const modelMatrix = update3dRenderLayerAttachment(
+        displayState.transform.value, renderContext.displayDimensions, attachment);
+    if (modelMatrix === undefined) return;
+    const shader = this.getShader(renderContext.emitter);
     shader.bind();
     meshShaderManager.beginLayer(gl, shader, renderContext);
 
@@ -493,25 +544,22 @@ export class MultiscaleMeshLayer extends PerspectiveViewRenderLayer {
 
     let {pickIDs} = renderContext;
 
-    const objectToDataMatrix = mat4.multiply(
-        tempModelMatrix, this.displayState.objectToDataTransform.transform,
-        this.source.format.transform);
-
-    mat3FromMat4(tempMat3, objectToDataMatrix);
+    mat3FromMat4(tempMat3, modelMatrix);
+    scaleMat3Output(tempMat3, tempMat3, renderContext.displayDimensions.voxelPhysicalScales);
     const scaleMultiplier = Math.pow(mat3.determinant(tempMat3), 1 / 3);
 
     const {chunks} = this.source;
     const fragmentChunks = this.source.fragmentSource.chunks;
 
     const modelViewProjection =
-        mat4.multiply(mat4.create(), renderContext.dataToDevice, objectToDataMatrix);
+        mat4.multiply(mat4.create(), renderContext.viewProjectionMat, modelMatrix);
 
     const clippingPlanes = getFrustrumPlanes(new Float32Array(24), modelViewProjection);
 
     const detailCutoff = this.displayState.renderScaleTarget.value;
     const {fragmentRelativeVertices} = this.source.format;
 
-    meshShaderManager.beginModel(gl, shader, renderContext, objectToDataMatrix);
+    meshShaderManager.beginModel(gl, shader, renderContext, modelMatrix);
 
     forEachVisibleSegment(displayState, (objectId, rootObjectId) => {
       const key = getObjectKey(objectId);
@@ -553,7 +601,7 @@ export class MultiscaleMeshLayer extends PerspectiveViewRenderLayer {
                   chunkGridSpatialOrigin[1] + (y * chunkShape[1]) * scale +
                       vertexOffsets[lod * 3 + 1],
                   chunkGridSpatialOrigin[2] + (z * chunkShape[2]) * scale +
-                      vertexOffsets[lod * 3 + 2]);
+                  vertexOffsets[lod * 3 + 2]);
               gl.uniform3f(
                   shader.uniform('uFragmentShape'), chunkShape[0] * scale, chunkShape[1] * scale,
                   chunkShape[2] * scale);
@@ -571,19 +619,23 @@ export class MultiscaleMeshLayer extends PerspectiveViewRenderLayer {
     meshShaderManager.endLayer(gl, shader);
   }
 
-  isReady(renderContext: PerspectiveViewReadyRenderContext) {
+  isReady(
+      renderContext: PerspectiveViewReadyRenderContext,
+      attachment: VisibleLayerInfo<ThreeDimensionalRenderLayerAttachmentState>) {
     let {displayState} = this;
     let alpha = Math.min(1.0, displayState.objectAlpha.value);
     if (alpha <= 0.0) {
       // Skip drawing.
       return true;
     }
-    const objectToDataMatrix = this.displayState.objectToDataTransform.transform;
+    const modelMatrix = update3dRenderLayerAttachment(
+        displayState.transform.value, renderContext.displayDimensions, attachment);
+    if (modelMatrix === undefined) return false;
     const {chunks} = this.source;
     const fragmentChunks = this.source.fragmentSource.chunks;
 
     const modelViewProjection =
-        mat4.multiply(mat4.create(), renderContext.dataToDevice, objectToDataMatrix);
+        mat4.multiply(mat4.create(), renderContext.viewProjectionMat, modelMatrix);
 
     const clippingPlanes = getFrustrumPlanes(new Float32Array(24), modelViewProjection);
 
@@ -644,14 +696,26 @@ export class MultiscaleFragmentChunk extends Chunk {
   }
 }
 
+export interface MultiscaleMeshSourceOptions extends MeshSourceOptions {
+  format: MultiscaleFragmentFormat;
+}
+
 export class MultiscaleMeshSource extends ChunkSource {
   fragmentSource = this.registerDisposer(new MultiscaleFragmentSource(this.chunkManager, this));
   chunks: Map<string, MultiscaleManifestChunk>;
   format: MultiscaleFragmentFormat;
-  constructor(chunkManager: Borrowed<ChunkManager>, options: {format: MultiscaleFragmentFormat}) {
+  constructor(chunkManager: Borrowed<ChunkManager>, options: MultiscaleMeshSourceOptions) {
     super(chunkManager, options);
     this.format = options.format;
   }
+
+  static encodeOptions(options: MultiscaleMeshSourceOptions) {
+    return {
+      format: options.format,
+      ...super.encodeOptions(options)
+    };
+  }
+
   initializeCounterpart(rpc: RPC, options: any) {
     this.fragmentSource.initializeCounterpart(this.chunkManager.rpc!, {});
     options['fragmentSource'] = this.fragmentSource.addCounterpartRef();

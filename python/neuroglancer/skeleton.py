@@ -21,6 +21,9 @@ import struct
 import numpy as np
 import six
 
+from . import random_token
+from . import trackable_state
+
 
 class Skeleton(object):
     def __init__(self, vertex_positions, edges, vertex_attributes=None):
@@ -52,10 +55,23 @@ class Skeleton(object):
 
 VertexAttributeInfo = collections.namedtuple('VertexAttributeInfo', ['data_type', 'num_components'])
 
-class SkeletonSource(object):
+class SkeletonSource(trackable_state.ChangeNotifier):
 
-    def __init__(self):
+    def __init__(self, dimensions, voxel_offset=None):
+        super(SkeletonSource, self).__init__()
+        self.dimensions = dimensions
+        if voxel_offset is None:
+            voxel_offset = np.zeros(dimensions.rank, dtype=np.float64)
+        self.voxel_offset = voxel_offset
         self.vertex_attributes = collections.OrderedDict()
+        self.token = random_token.make_random_token()
+
+    def info(self):
+        return dict(
+            coordinateSpace=self.dimensions.to_json(),
+            voxelOffset=self.voxel_offset,
+            attributes=self.get_vertex_attributes_spec(),
+        )
 
     def get_skeleton(self, object_id):
         """Retrieves the skeleton corresponding to the specified `object_id`.
@@ -72,3 +88,7 @@ class SkeletonSource(object):
         for k, v in six.iteritems(self.vertex_attributes):
             temp[k] = dict(dataType=np.dtype(v.data_type).name, numComponents=v.num_components)
         return temp
+
+    def invalidate(self):
+        """Mark the data invalidated.  Clients will refetch the data."""
+        self._dispatch_changed_callbacks()

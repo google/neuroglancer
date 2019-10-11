@@ -14,31 +14,19 @@
  * limitations under the License.
  */
 
-import {VisibilityTrackedRenderLayer} from 'neuroglancer/layer';
-import {PickIDManager} from 'neuroglancer/object_picking';
-import {mat4, vec3} from 'neuroglancer/util/geom';
+import {VisibleLayerInfo} from 'neuroglancer/layer';
+import {ThreeDimensionalReadyRenderContext, ThreeDimensionalRenderContext, VisibilityTrackedRenderLayer} from 'neuroglancer/renderlayer';
+import {vec3} from 'neuroglancer/util/geom';
 import {ShaderModule} from 'neuroglancer/webgl/shader';
 import {SharedObject} from 'neuroglancer/worker_rpc';
 
-export interface PerspectiveViewReadyRenderContext {
-  dataToDevice: mat4;
+export interface PerspectiveViewReadyRenderContext extends ThreeDimensionalReadyRenderContext {}
 
-  /**
-   * Width of GL viewport in pixels.
-   */
-  viewportWidth: number;
-
-  /**
-   * Height of GL viewport in pixels.
-   */
-  viewportHeight: number;
-}
-
-export interface PerspectiveViewRenderContext extends PerspectiveViewReadyRenderContext {
+export interface PerspectiveViewRenderContext extends PerspectiveViewReadyRenderContext,
+                                                      ThreeDimensionalRenderContext {
   lightDirection: vec3;
   ambientLighting: number;
   directionalLighting: number;
-  pickIDs: PickIDManager;
   emitter: ShaderModule;
 
   /**
@@ -57,12 +45,20 @@ export interface PerspectiveViewRenderContext extends PerspectiveViewReadyRender
   alreadyEmittedPickID: boolean;
 }
 
-export class PerspectiveViewRenderLayer extends VisibilityTrackedRenderLayer {
-  draw(_renderContext: PerspectiveViewRenderContext) {
+export class PerspectiveViewRenderLayer<AttachmentState = unknown> extends
+    VisibilityTrackedRenderLayer {
+  draw(renderContext: PerspectiveViewRenderContext, attachment: VisibleLayerInfo<AttachmentState>):
+      void {
+    renderContext;
+    attachment;
     // Must be overridden by subclasses.
   }
 
-  isReady(_renderContext: PerspectiveViewReadyRenderContext) {
+  isReady(
+      renderContext: PerspectiveViewReadyRenderContext,
+      attachment: VisibleLayerInfo<AttachmentState>) {
+    renderContext;
+    attachment;
     return true;
   }
 

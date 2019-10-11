@@ -15,7 +15,7 @@
  */
 
 import {ChunkManager, WithParameters} from 'neuroglancer/chunk_manager/frontend';
-import {DataSource, DataSourceProvider, GetVolumeOptions} from 'neuroglancer/datasource';
+import {DataSourceProvider, DataSourceProviderRegistry, GetVolumeOptions} from 'neuroglancer/datasource';
 import {ComputationParameters, ComputedVolumeChunkSourceParameters} from 'neuroglancer/datasource/computed/base';
 import {DataType, VolumeChunkSpecification, VolumeSourceOptions, VolumeType} from 'neuroglancer/sliceview/volume/base';
 import {MultiscaleVolumeChunkSource as GenericMultiscaleVolumeChunkSource, VolumeChunkSource} from 'neuroglancer/sliceview/volume/frontend';
@@ -66,7 +66,7 @@ export interface ComputedVolumeDataSourceParameters {
   // Determines input buffer size as well as output data chunks size, etc.
   computationParameters: ComputationParameters;
 
-  dataSourceProvider: DataSourceProvider;
+  dataSourceProvider: DataSourceProviderRegistry;
 }
 
 interface ComputedVolumeSpecs {
@@ -126,9 +126,9 @@ export class ComputedMultiscaleVolumeChunkSource implements GenericMultiscaleVol
 }
 
 
-export class ComputedDataSource extends DataSource {
+export class ComputedDataSource extends DataSourceProvider {
   getOriginVolumes(
-      dataSourceProvider: DataSourceProvider, originUrl: string, chunkManager: ChunkManager,
+      dataSourceProvider: DataSourceProviderRegistry, originUrl: string, chunkManager: ChunkManager,
       cancellationToken: CancellationToken): Promise<ComputedVolumeSpecs> {
     return dataSourceProvider.getVolume(chunkManager, originUrl, {}, cancellationToken)
         .then((multiScaleVolumeChunkSource: GenericMultiscaleVolumeChunkSource) => {
@@ -159,7 +159,7 @@ export class ComputedDataSource extends DataSource {
    */
   defaultParams(
       volumeSpecs: ComputedVolumeSpecs, originUrl: string,
-      dataSourceProvider: DataSourceProvider): ComputedVolumeDataSourceParameters {
+      dataSourceProvider: DataSourceProviderRegistry): ComputedVolumeDataSourceParameters {
     const spec = volumeSpecs.sources[0][0].spec;
     // Default DataType, VolumeType, channel count
     const {dataType, volumeType, numChannels} = volumeSpecs;

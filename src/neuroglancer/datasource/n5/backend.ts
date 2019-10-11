@@ -22,7 +22,6 @@ import {decodeRawChunk} from 'neuroglancer/sliceview/backend_chunk_decoders/raw'
 import {VolumeChunk, VolumeChunkSource} from 'neuroglancer/sliceview/volume/backend';
 import {CancellationToken} from 'neuroglancer/util/cancellation';
 import {Endianness} from 'neuroglancer/util/endian';
-import {vec3} from 'neuroglancer/util/geom';
 import {cancellableFetchOk, responseArrayBuffer} from 'neuroglancer/util/http_request';
 import {registerSharedObject} from 'neuroglancer/worker_rpc';
 
@@ -35,7 +34,7 @@ async function decodeChunk(
     throw new Error(`Unsupported mode: ${mode}.`);
   }
   const numDimensions = dv.getUint16(2, /*littleEndian=*/ false);
-  if (numDimensions !== 3) {
+  if (numDimensions !== chunk.source!.spec.rank) {
     throw new Error(`Number of dimensions must be 3.`);
   }
   let offset = 4;
@@ -44,7 +43,7 @@ async function decodeChunk(
     shape[i] = dv.getUint32(offset, /*littleEndian=*/ false);
     offset += 4;
   }
-  chunk.chunkDataSize = vec3.fromValues(shape[0], shape[1], shape[2]);
+  chunk.chunkDataSize = shape;
   let buffer = new Uint8Array(response, offset);
   if (encoding === VolumeChunkEncoding.GZIP) {
     buffer = await requestAsyncComputation(decodeGzip, cancellationToken, [buffer.buffer], buffer);
@@ -60,8 +59,11 @@ async function decodeChunk(
   async download(chunk: VolumeChunk, cancellationToken: CancellationToken) {
     const {parameters} = this;
     const {chunkGridPosition} = chunk;
-    const url =
-        `${parameters.url}/${chunkGridPosition[0]}/${chunkGridPosition[1]}/${chunkGridPosition[2]}`;
+    let url = parameters.url;
+    const rank = this.spec.rank;
+    for (let i = 0; i < rank; ++i) {
+      url += `/${chunkGridPosition[i]}`;
+    }
     const response = await cancellableFetchOk(url, {}, responseArrayBuffer, cancellationToken);
     await decodeChunk(chunk, cancellationToken, response, parameters.encoding);
   }

@@ -18,13 +18,15 @@
  * @file Viewer for a group of layers.
  */
 
+import './layer_group_viewer.css';
+
 import debounce from 'lodash/debounce';
 import {DataPanelLayoutContainer, InputEventBindings as DataPanelInputEventBindings} from 'neuroglancer/data_panel_layout';
 import {DisplayContext} from 'neuroglancer/display_context';
-import {MouseSelectionState, RenderLayerRole, SelectedLayerState} from 'neuroglancer/layer';
+import {LayerListSpecification, LayerSubsetSpecification, MouseSelectionState, SelectedLayerState} from 'neuroglancer/layer';
 import {LayerPanel} from 'neuroglancer/layer_panel';
-import {LayerListSpecification, LayerSubsetSpecification, ManagedUserLayerWithSpecification} from 'neuroglancer/layer_specification';
-import {LinkedOrientationState, LinkedSpatialPosition, LinkedZoomState, NavigationState, Pose, TrackableNavigationLink} from 'neuroglancer/navigation_state';
+import {DisplayPose, LinkedDisplayDimensions, LinkedOrientationState, LinkedPosition, LinkedRelativeDisplayScales, linkedStateLegacyJsonView, LinkedZoomState, NavigationState, TrackableCrossSectionZoom, TrackableNavigationLink, TrackableProjectionZoom} from 'neuroglancer/navigation_state';
+import {RenderLayerRole} from 'neuroglancer/renderlayer';
 import {TrackableBoolean} from 'neuroglancer/trackable_boolean';
 import {WatchableSet, WatchableValueInterface} from 'neuroglancer/trackable_value';
 import {ContextMenu} from 'neuroglancer/ui/context_menu';
@@ -35,12 +37,10 @@ import {TrackableRGB} from 'neuroglancer/util/color';
 import {Borrowed, Owned, RefCounted} from 'neuroglancer/util/disposable';
 import {removeChildren} from 'neuroglancer/util/dom';
 import {registerActionListener} from 'neuroglancer/util/event_action_map';
-import {CompoundTrackable} from 'neuroglancer/util/trackable';
+import {CompoundTrackable, optionallyRestoreFromJsonMember} from 'neuroglancer/util/trackable';
 import {WatchableVisibilityPriority} from 'neuroglancer/visibility_priority/frontend';
 import {EnumSelectWidget} from 'neuroglancer/widget/enum_widget';
 import {TrackableScaleBarOptions} from 'neuroglancer/widget/scale_bar';
-
-import './layer_group_viewer.css';
 
 export interface LayerGroupViewerState {
   display: Borrowed<DisplayContext>;
@@ -102,50 +102,70 @@ export function getViewerDropEffect(
 }
 
 export class LinkedViewerNavigationState extends RefCounted {
-  position: LinkedSpatialPosition;
+  position: LinkedPosition;
+  relativeDisplayScales: LinkedRelativeDisplayScales;
+  displayDimensions: LinkedDisplayDimensions;
   crossSectionOrientation: LinkedOrientationState;
-  crossSectionZoom: LinkedZoomState;
-  perspectiveOrientation: LinkedOrientationState;
-  perspectiveZoom: LinkedZoomState;
+  crossSectionScale: LinkedZoomState<TrackableCrossSectionZoom>;
+  projectionOrientation: LinkedOrientationState;
+  projectionScale: LinkedZoomState<TrackableProjectionZoom>;
 
   navigationState: NavigationState;
-  perspectiveNavigationState: NavigationState;
+  projectionNavigationState: NavigationState;
 
   constructor(parent: {
     navigationState: Borrowed<NavigationState>,
     perspectiveNavigationState: Borrowed<NavigationState>
   }) {
     super();
-    this.position = new LinkedSpatialPosition(parent.navigationState.position.addRef());
+    this.relativeDisplayScales = new LinkedRelativeDisplayScales(
+        parent.navigationState.pose.displayDimensions.relativeDisplayScales.addRef());
+    this.displayDimensions = new LinkedDisplayDimensions(
+        parent.navigationState.pose.displayDimensions.addRef(), this.relativeDisplayScales.value);
+    this.position = new LinkedPosition(parent.navigationState.position.addRef());
     this.crossSectionOrientation =
         new LinkedOrientationState(parent.navigationState.pose.orientation.addRef());
-    this.crossSectionZoom = new LinkedZoomState(parent.navigationState.zoomFactor.addRef());
+    this.crossSectionScale = new LinkedZoomState(
+        parent.navigationState.zoomFactor.addRef() as TrackableCrossSectionZoom,
+        this.displayDimensions.value.addRef());
     this.navigationState = this.registerDisposer(new NavigationState(
-        new Pose(this.position.value, this.crossSectionOrientation.value),
-        this.crossSectionZoom.value));
-    this.perspectiveOrientation =
+        new DisplayPose(
+            this.position.value, this.displayDimensions.value, this.crossSectionOrientation.value),
+        this.crossSectionScale.value));
+    this.projectionOrientation =
         new LinkedOrientationState(parent.perspectiveNavigationState.pose.orientation.addRef());
-    this.perspectiveZoom =
-        new LinkedZoomState(parent.perspectiveNavigationState.zoomFactor.addRef());
-    this.perspectiveNavigationState = this.registerDisposer(new NavigationState(
-        new Pose(this.position.value.addRef(), this.perspectiveOrientation.value),
-        this.perspectiveZoom.value));
+    this.projectionScale = new LinkedZoomState(
+        parent.perspectiveNavigationState.zoomFactor.addRef() as TrackableProjectionZoom,
+        this.displayDimensions.value.addRef());
+    this.projectionNavigationState = this.registerDisposer(new NavigationState(
+        new DisplayPose(
+            this.position.value.addRef(), this.displayDimensions.value.addRef(),
+            this.projectionOrientation.value),
+        this.projectionScale.value));
   }
 
   copyToParent() {
     for (const x
-             of [this.position, this.crossSectionOrientation, this.crossSectionZoom,
-                 this.perspectiveOrientation, this.perspectiveZoom]) {
+             of [this.relativeDisplayScales,
+                 this.displayDimensions,
+                 this.position,
+                 this.crossSectionOrientation,
+                 this.crossSectionScale,
+                 this.projectionOrientation,
+                 this.projectionScale,
+    ]) {
       x.copyToPeer();
     }
   }
 
   register(state: CompoundTrackable) {
-    state.add('position', this.position);
+    state.add('dimensionRenderScales', this.relativeDisplayScales);
+    state.add('displayDimensions', this.displayDimensions);
+    state.add('position', linkedStateLegacyJsonView(this.position));
     state.add('crossSectionOrientation', this.crossSectionOrientation);
-    state.add('crossSectionZoom', this.crossSectionZoom);
-    state.add('perspectiveOrientation', this.perspectiveOrientation);
-    state.add('perspectiveZoom', this.perspectiveZoom);
+    state.add('crossSectionScale', this.crossSectionScale);
+    state.add('projectionOrientation', this.projectionOrientation);
+    state.add('projectionScale', this.projectionScale);
   }
 }
 
@@ -162,11 +182,13 @@ function makeViewerMenu(parent: HTMLElement, viewer: LayerGroupViewer) {
   });
   const {viewerNavigationState} = viewer;
   for (const [name, model] of <[string, TrackableNavigationLink][]>[
+         ['Render scale factors', viewerNavigationState.relativeDisplayScales.link],
+         ['Render dimensions', viewerNavigationState.displayDimensions.link],
          ['Position', viewerNavigationState.position.link],
          ['Cross-section orientation', viewerNavigationState.crossSectionOrientation.link],
-         ['Cross-section zoom', viewerNavigationState.crossSectionZoom.link],
-         ['Perspective orientation', viewerNavigationState.perspectiveOrientation.link],
-         ['Perspective zoom', viewerNavigationState.perspectiveZoom.link],
+         ['Cross-section zoom', viewerNavigationState.crossSectionScale.link],
+         ['Perspective orientation', viewerNavigationState.projectionOrientation.link],
+         ['Perspective zoom', viewerNavigationState.projectionScale.link],
        ]) {
     const widget = contextMenu.registerDisposer(new EnumSelectWidget(model));
     const label = document.createElement('label');
@@ -184,7 +206,7 @@ export class LayerGroupViewer extends RefCounted {
   layerSpecification: LayerListSpecification;
   viewerNavigationState: LinkedViewerNavigationState;
   get perspectiveNavigationState() {
-    return this.viewerNavigationState.perspectiveNavigationState;
+    return this.viewerNavigationState.projectionNavigationState;
   }
   get navigationState() {
     return this.viewerNavigationState.navigationState;
@@ -291,6 +313,12 @@ export class LayerGroupViewer extends RefCounted {
         this.layerPanel.addLayerMenu();
       }
     });
+    this.bindAction('t-', () => {
+      this.navigationState.pose.translateNonDisplayDimension(0, -1);
+    });
+    this.bindAction('t+', () => {
+      this.navigationState.pose.translateNonDisplayDimension(0, +1);
+    });
   }
 
   toJSON(): any {
@@ -301,8 +329,17 @@ export class LayerGroupViewer extends RefCounted {
     this.state.reset();
   }
 
-  restoreState(obj: any) {
+  restoreState(obj: unknown) {
     this.state.restoreState(obj);
+    // Handle legacy properties
+    optionallyRestoreFromJsonMember(
+        obj, 'crossSectionZoom',
+        linkedStateLegacyJsonView(this.viewerNavigationState.crossSectionScale));
+    optionallyRestoreFromJsonMember(
+        obj, 'perspectiveZoom',
+        linkedStateLegacyJsonView(this.viewerNavigationState.projectionScale));
+    optionallyRestoreFromJsonMember(
+        obj, 'perspectiveOrientation', this.viewerNavigationState.projectionOrientation);
   }
 
   private makeUI() {
@@ -335,7 +372,7 @@ export class LayerGroupViewer extends RefCounted {
       this.registerEventListener(layerPanel.element, 'dragstart', (event: DragEvent) => {
         startLayerDrag(event, {
           manager: this.layerSpecification,
-          layers: <ManagedUserLayerWithSpecification[]>this.layerManager.managedLayers,
+          layers: this.layerManager.managedLayers,
           layoutSpec: this.layout.toJSON(),
         });
         const disposer = () => {

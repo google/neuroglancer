@@ -49,15 +49,13 @@ export class LineShader extends RefCounted {
 
     builder.addVertexCode(`
 uint getLineEndpointIndex() { return uint(aLineOffset.x); }
+float getLineEndpointCoefficient() { return aLineOffset.x; }
 `);
 
     builder.addVertexCode(`
-void emitLine(mat4 projection, vec3 vertexA, vec3 vertexB) {
-  vec3 vertexPosition = mix(vertexA, vertexB, aLineOffset.x);
-  vec3 otherVertexPosition = mix(vertexB, vertexA, aLineOffset.x);
-
-  vec4 vertexPositionClip = projection * vec4(vertexPosition, 1.0);
-  vec4 otherVertexPositionClip = projection * vec4(otherVertexPosition, 1.0);
+void emitLine(vec4 vertexAClip, vec4 vertexBClip) {
+  vec4 vertexPositionClip = mix(vertexAClip, vertexBClip, aLineOffset.x);
+  vec4 otherVertexPositionClip = mix(vertexBClip, vertexAClip, aLineOffset.x);
 
   vec3 vertexPositionDevice = vertexPositionClip.xyz / vertexPositionClip.w;
   vec3 otherVertexPositionDevice = otherVertexPositionClip.xyz / otherVertexPositionClip.w;
@@ -68,6 +66,9 @@ void emitLine(mat4 projection, vec3 vertexA, vec3 vertexB) {
   gl_Position = vertexPositionClip;
   gl_Position.xy += aLineOffset.y * (2.0 * aLineOffset.x - 1.0) * lineNormal * uLineParams.xy * 0.5 * gl_Position.w;
   vLineCoord = aLineOffset.y;
+}
+void emitLine(mat4 projection, vec3 vertexA, vec3 vertexB) {
+  emitLine(projection * vec4(vertexA, 1.0), projection * vec4(vertexB, 1.0));
 }
 `);
 

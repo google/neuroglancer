@@ -91,7 +91,7 @@ export function decodeFragmentChunk(chunk: FragmentChunk, response: ArrayBuffer)
         chunk, cancellationToken,
         (params.encoding === VolumeChunkEncoding.JPEG) ? response.slice(16) : response);
   }
-  getPath(chunkPosition: Float32Array, chunkDataSize: Float32Array) {
+  getPath(chunkPosition: Float32Array, chunkDataSize: Uint32Array) {
     let params = this.parameters;
     if (params.encoding === VolumeChunkEncoding.JPEG) {
       return `/api/node/${params['nodeKey']}/${params['dataInstanceKey']}/subvolblocks/` +

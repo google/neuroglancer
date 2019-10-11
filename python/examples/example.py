@@ -29,15 +29,21 @@ b = np.cast[np.uint32](np.floor(np.sqrt((ix - 0.5)**2 + (iy - 0.5)**2 + (iz - 0.
 b = np.pad(b, 1, 'constant')
 
 viewer = neuroglancer.Viewer()
+dimensions = neuroglancer.CoordinateSpace(
+    names=['x', 'y', 'z'],
+    units='nm',
+    scales=[10, 10, 10])
 with viewer.txn() as s:
-    s.voxel_size = [10, 10, 10]
+    s.dimensions = dimensions
     s.layers.append(
         name='a',
         layer=neuroglancer.LocalVolume(
             data=a,
-            # offset is in nm, not voxels
-            offset=(200, 300, 150),
-            voxel_size=s.voxel_size,
+            dimensions=neuroglancer.CoordinateSpace(
+                names=['c^', 'x', 'y', 'z'],
+                units=['', 'nm','nm','nm'],
+                scales=[1, 10, 10, 10]),
+            voxel_offset=(0, 20, 30, 15),
         ),
         shader="""
 void main() {
@@ -49,7 +55,7 @@ void main() {
     s.layers.append(
         name='b', layer=neuroglancer.LocalVolume(
             data=b,
-            voxel_size=s.voxel_size,
+            dimensions=dimensions,
         ))
 
 print(viewer)

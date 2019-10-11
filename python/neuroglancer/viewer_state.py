@@ -1,3 +1,4 @@
+# coding=utf-8
 # @license
 # Copyright 2017 Google Inc.
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -23,6 +24,7 @@ import numpy as np
 import six
 
 from . import local_volume
+from . import skeleton
 from .equivalence_map import EquivalenceMap
 from .json_utils import encode_json_for_repr
 from .json_wrappers import (JsonObjectWrapper, array_wrapper, optional, text_type, typed_list,
@@ -39,24 +41,10 @@ def export(obj):
 def interpolate_linear(a, b, t):
     return a * (1 - t) + b * t
 
-
-@export
-class SpatialPosition(JsonObjectWrapper):
-    __slots__ = ()
-    voxel_size = voxelSize = wrapped_property('voxelSize', optional(array_wrapper(np.float32, 3)))
-    spatial_coordinates = spatialCoordinates = wrapped_property(
-        'spatialCoordinates', optional(array_wrapper(np.float32, 3)))
-    voxel_coordinates = voxelCoordinates = wrapped_property('voxelCoordinates',
-                                                            optional(array_wrapper(np.float32, 3)))
-
-    @staticmethod
-    def interpolate(a, b, t):
-        if a.voxel_size is None or a.voxel_coordinates is None or b.voxel_coordinates is None:
-            return a
-        c = copy.deepcopy(a)
-        c.voxel_coordinates = interpolate_linear(a.voxel_coordinates, b.voxel_coordinates, t)
-        return c
-
+def interpolate_linear_optional_vectors(a, b, t):
+    if a is not None and b is not None and len(a) == len(b):
+        return a * (1 - t) + b * t
+    return a
 
 def unit_quaternion():
     return np.array([0, 0, 0, 1], np.float32)
@@ -94,62 +82,122 @@ def quaternion_slerp(a, b, t):
     return scale0 * a + scale1 * b
 
 
-@export
-class Pose(JsonObjectWrapper):
-    __slots__ = ()
-    position = wrapped_property('position', SpatialPosition)
-    orientation = wrapped_property('orientation',
-                                   optional(array_wrapper(np.float32, 4)))
-
-    @staticmethod
-    def interpolate(a, b, t):
-        c = copy.deepcopy(a)
-        c.position = SpatialPosition.interpolate(a.position, b.position, t)
-        c.orientation = quaternion_slerp(a.orientation, b.orientation, t)
-        return c
-
 def interpolate_zoom(a, b, t):
     if a is None or b is None:
         return a
     scale_change = math.log(b / a)
     return a * math.exp(scale_change * t)
 
+si_prefixes = {
+    'Y': 24,
+    'Z': 21,
+    'E': 18,
+    'P': 15,
+    'T': 12,
+    'G': 9,
+    'M': 6,
+    'k': 3,
+    'h': 2,
+    '': 0,
+    'c': -2,
+    'm': -3,
+    'u': -6,
+    'µ': -6,
+    'n': -9,
+    'p': -12,
+    'f': -15,
+    'a': -18,
+    'z': -21,
+    'y': -24,
+}
+
+si_units = ['m', 's', 'rad/s', 'Hz']
+
+si_units_with_prefixes = {
+    '%s%s' % (prefix, unit): (unit, exponent)
+    for (prefix, exponent) in si_prefixes.items()
+    for unit in si_units
+}
+
+si_units_with_prefixes[''] = ('', 0)
+
+def parse_unit(scale, unit):
+    unit, exponent = si_units_with_prefixes[unit]
+    if exponent >= 0:
+        return (scale * 10**exponent, unit)
+    else:
+        return (scale / 10**(-exponent), unit)
+
 
 @export
-class NavigationState(JsonObjectWrapper):
-    __slots__ = ()
-    pose = wrapped_property('pose', Pose)
-    zoom_factor = zoomFactor = wrapped_property('zoomFactor', optional(float))
+class DimensionScale(object):
+    __slots__ = ('scale', 'unit')
+    def __init__(self, scale=1, unit=''):
+        self.scale = scale
+        self.unit = unit
+
+@export
+class CoordinateSpace(object):
+    __slots__ = ('names', 'scales', 'units')
+    def __init__(self, json=None, names=None, scales=None, units=None):
+        if json is None:
+            if names is not None:
+                self.names = tuple(names)
+                scales = np.array(scales, dtype=np.float64)
+                if isinstance(units, six.string_types):
+                    units = tuple(units for _ in names)
+                scales_and_units = tuple(parse_unit(scale, unit)
+                                         for scale, unit in zip(scales, units))
+                scales = np.array([s[0] for s in scales_and_units], dtype=np.float64)
+                units = tuple(s[1] for s in scales_and_units)
+                self.units = units
+                self.scales = scales
+            else:
+                self.names = ()
+                self.scales = np.zeros(0, dtype=np.float64)
+                self.units = ()
+        else:
+            if not isinstance(json, dict): raise TypeError
+            self.names = tuple(json.keys())
+            self.scales = np.array([json[k][0] for k in self.names], dtype=np.float64)
+            self.units = np.array(json[k][1] for k in self.names)
+        self.scales.setflags(write=False)
 
     @property
-    def position(self):
-        return self.pose.position
+    def rank(self):
+        return len(self.names)
 
-    @position.setter
-    def position(self, v):
-        self.pose.position = v
+    def __getitem__(self, i):
+        if isinstance(i, six.string_types):
+            idx = self.names.index(i)
+            return DimensionScale(scale=self.scales[idx], unit=self.units[idx])
+        if isinstance(i, slice):
+            idxs = range(self.rank)[i]
+            return [DimensionScale(scale=self.scales[j], unit=self.units[j])
+                    for j in idxs]
+        return DimensionScale(scale=self.scales[i], unit=self.units[i])
 
-    @property
-    def voxel_size(self):
-        return self.pose.position.voxel_size
+    def __repr__(self):
+        return 'CoordinateSpace(%r)' % (self.to_json(),)
 
-    @voxel_size.setter
-    def voxel_size(self, v):
-        self.pose.position.voxel_size = v
-
-    @staticmethod
-    def interpolate(a, b, t):
-        c = copy.deepcopy(a)
-        c.pose = Pose.interpolate(a.pose, b.pose, t)
-        c.zoom_factor = interpolate_zoom(a.zoom_factor, b.zoom_factor, t)
-        return c
-
+    def to_json(self):
+        d = collections.OrderedDict()
+        for name, scale, unit in zip(self.names, self.scales, self.units):
+            d[name] = [scale, unit]
+        return d
 
 @export
 class Layer(JsonObjectWrapper):
     __slots__ = ()
     type = wrapped_property('type', optional(text_type))
+    layer_dimensions = layerDimensions = wrapped_property('localDimensions', CoordinateSpace)
+    layer_position = layerPosition = wrapped_property('localPosition', optional(array_wrapper(np.float32)))
 
+    @staticmethod
+    def interpolate(a, b, t):
+        c = copy.deepcopy(a)
+        c.layer_position = interpolate_linear_optional_vectors(a.layer_position, b.layer_position, t)
+        return c
 
 @export
 class PointAnnotationLayer(Layer):
@@ -160,14 +208,45 @@ class PointAnnotationLayer(Layer):
 
     points = wrapped_property('points', typed_list(array_wrapper(np.float32, 3)))
 
+@export
+class CoordinateSpaceTransform(JsonObjectWrapper):
+    __slots__ = ()
 
-def volume_source(x):
-    if isinstance(x, local_volume.LocalVolume):
+    output_dimensions = outputDimensions = wrapped_property('outputDimensions', CoordinateSpace)
+    input_dimensions = inputDimensions = wrapped_property('inputDimensions', optional(CoordinateSpace))
+    source_rank = sourceRank = wrapped_property('sourceRank', optional(int))
+
+def data_source_url(x):
+    if isinstance(x, (local_volume.LocalVolume, skeleton.SkeletonSource)):
         return x
     if not isinstance(x, six.string_types):
         raise TypeError
     return text_type(x)
 
+@export
+class LayerDataSource(JsonObjectWrapper):
+    __slots__ = ()
+
+    def __init__(self, json_data=None, *args, **kwargs):
+        if (isinstance(json_data, six.string_types) or
+            isinstance(json_data, (local_volume.LocalVolume, skeleton.SkeletonSource))):
+            json_data = {'url': json_data}
+        super(LayerDataSource, self).__init__(json_data, *args, **kwargs)
+
+    url = wrapped_property('url', data_source_url)
+    transform = wrapped_property('transform', optional(CoordinateSpaceTransform))
+    enable_default_subsources = enableDefaultSubsources = wrapped_property('enableDefaultSubsources', optional(bool, True))
+
+@export
+class LayerDataSources(typed_list(LayerDataSource, validator=LayerDataSource)):
+    __slots__ = ()
+
+    def __init__(self, json_data=None, **kwargs):
+        if (isinstance(json_data, LayerDataSource) or
+            isinstance(json_data, six.string_types) or
+            isinstance(json_data, (local_volume.LocalVolume, skeleton.SkeletonSource))):
+            json_data = [json_data]
+        super(LayerDataSources, self).__init__(json_data, **kwargs)
 
 class _AnnotationLayerOptions(object):
     __slots__ = ()
@@ -182,7 +261,7 @@ class ImageLayer(Layer, _AnnotationLayerOptions):
     def __init__(self, *args, **kwargs):
         super(ImageLayer, self).__init__(*args, type='image', **kwargs)
 
-    source = wrapped_property('source', volume_source)
+    source = wrapped_property('source', LayerDataSources)
     shader = wrapped_property('shader', text_type)
     opacity = wrapped_property('opacity', optional(float, 0.5))
     blend = wrapped_property('blend', optional(str))
@@ -191,7 +270,7 @@ class ImageLayer(Layer, _AnnotationLayerOptions):
 
     @staticmethod
     def interpolate(a, b, t):
-        c = copy.deepcopy(a)
+        c = Layer.interpolate(a, b, t)
         c.opacity = interpolate_linear(a.opacity, b.opacity, t)
         return c
 
@@ -211,9 +290,7 @@ class SegmentationLayer(Layer, _AnnotationLayerOptions):
     def __init__(self, *args, **kwargs):
         super(SegmentationLayer, self).__init__(*args, type='segmentation', **kwargs)
 
-    source = wrapped_property('source', optional(volume_source))
-    mesh = wrapped_property('mesh', optional(text_type))
-    skeletons = wrapped_property('skeletons', optional(text_type))
+    source = wrapped_property('source', LayerDataSources)
     segments = wrapped_property('segments', typed_set(np.uint64))
     equivalences = wrapped_property('equivalences', uint64_equivalence_map)
     hide_segment_zero = hideSegmentZero = wrapped_property('hideSegmentZero', optional(bool, True))
@@ -228,7 +305,7 @@ class SegmentationLayer(Layer, _AnnotationLayerOptions):
 
     @staticmethod
     def interpolate(a, b, t):
-        c = copy.deepcopy(a)
+        c = Layer.interpolate(a, b, t)
         for k in ['selected_alpha', 'not_selected_alpha', 'object_alpha']:
             setattr(c, k, interpolate_linear(getattr(a, k), getattr(b, k), t))
         return c
@@ -240,7 +317,7 @@ class SingleMeshLayer(Layer):
     def __init__(self, *args, **kwargs):
         super(SingleMeshLayer, self).__init__(*args, type='mesh', **kwargs)
 
-    source = wrapped_property('source', text_type)
+    source = wrapped_property('source', LayerDataSources)
     vertex_attribute_sources = vertexAttributeSources = wrapped_property(
         'vertexAttributeSources', optional(typed_list(text_type)))
     shader = wrapped_property('shader', text_type)
@@ -330,8 +407,7 @@ class AnnotationLayer(Layer, _AnnotationLayerOptions):
     def __init__(self, *args, **kwargs):
         super(AnnotationLayer, self).__init__(*args, type='annotation', **kwargs)
 
-    source = wrapped_property('source', optional(volume_source))
-    voxel_size = voxelSize = wrapped_property('voxelSize', optional(array_wrapper(np.float32, 3)))
+    source = wrapped_property('source', LayerDataSources)
     annotations = wrapped_property('annotations', typed_list(annotation))
     linked_segmentation_layer = linkedSegmentationLayer = wrapped_property('linkedSegmentationLayer', optional(text_type))
     filter_by_segmentation = filterBySegmentation = wrapped_property('filterBySegmentation', optional(bool, False))
@@ -342,6 +418,13 @@ class AnnotationLayer(Layer, _AnnotationLayerOptions):
         del t
         return a
 
+@export
+class LocalAnnotationLayer(AnnotationLayer):
+    def __init__(self, dimensions, *args, **kwargs):
+        super(*args, source=LayerDataSource(
+            url='local://annotations',
+            transform=CoordinateSpaceTransform(outputDimensions=dimensions)),
+              **kwargs)
 
 layer_types = {
     'image': ImageLayer,
@@ -575,7 +658,7 @@ def make_linked_navigation_type(value_type, interpolate_function=None):
 
 
 @export
-class LinkedSpatialPosition(make_linked_navigation_type(SpatialPosition)):
+class LinkedPosition(make_linked_navigation_type(array_wrapper(np.float32), interpolate_linear_optional_vectors)):
     __slots__ = ()
 
 
@@ -596,18 +679,18 @@ class CrossSection(JsonObjectWrapper):
     supports_validation = True
     width = wrapped_property('width', optional(int, 1000))
     height = wrapped_property('height', optional(int, 1000))
-    position = wrapped_property('position', LinkedSpatialPosition)
+    position = wrapped_property('position', LinkedPosition)
     orientation = wrapped_property('orientation', LinkedOrientationState)
-    zoom = wrapped_property('zoom', LinkedZoomFactor)
+    scale = wrapped_property('scale', LinkedZoomFactor)
 
     @staticmethod
     def interpolate(a, b, t):
         c = copy.deepcopy(a)
         c.width = interpolate_linear(a.width, b.width, t)
         c.height = interpolate_linear(a.height, b.height, t)
-        c.position = LinkedSpatialPosition.interpolate(a.position, b.position, t)
+        c.position = LinkedPosition.interpolate(a.position, b.position, t)
         c.orientation = LinkedOrientationState.interpolate(a.orientation, b.orientation, t)
-        c.zoom = LinkedZoomFactor.interpolate(a.zoom, b.zoom, t)
+        c.scale = LinkedZoomFactor.interpolate(a.scale, b.scale, t)
         return c
 
 
@@ -738,13 +821,13 @@ class LayerGroupViewer(JsonObjectWrapper):
     type = wrapped_property('type', text_type)
     layers = wrapped_property('layers', typed_list(text_type))
     layout = wrapped_property('layout', data_panel_layout_wrapper('xy'))
-    position = wrapped_property('position', LinkedSpatialPosition)
+    position = wrapped_property('position', LinkedPosition)
     cross_section_orientation = crossSectionOrientation = wrapped_property(
         'crossSectionOrientation', LinkedOrientationState)
-    cross_section_zoom = crossSectionZoom = wrapped_property('crossSectionZoom', LinkedZoomFactor)
-    perspective_orientation = perspectiveOrientation = wrapped_property(
-        'perspectiveOrientation', LinkedOrientationState)
-    perspective_zoom = perspectiveZoom = wrapped_property('perspectiveZoom', LinkedZoomFactor)
+    cross_section_scale = crossSectionScale = wrapped_property('crossSectionZoom', LinkedZoomFactor)
+    projection_orientation = projectionOrientation = wrapped_property(
+        'projectionOrientation', LinkedOrientationState)
+    projection_scale = projectionScale = wrapped_property('projectionScale', LinkedZoomFactor)
 
     def __init__(self, *args, **kwargs):
         super(LayerGroupViewer, self).__init__(*args, **kwargs)
@@ -794,10 +877,16 @@ class StatisticsDisplayState(JsonObjectWrapper):
 @export
 class ViewerState(JsonObjectWrapper):
     __slots__ = ()
-    navigation = wrapped_property('navigation', NavigationState)
-    perspective_zoom = perspectiveZoom = wrapped_property('perspectiveZoom', optional(float))
-    perspective_orientation = perspectiveOrientation = wrapped_property(
-        'perspectiveOrientation', optional(array_wrapper(np.float32, 4)))
+    dimensions = wrapped_property('dimensions', CoordinateSpace)
+    dimensionRenderScales = dimension_render_scales = wrapped_property('dimensionRenderScales', optional(typed_string_map(float)))
+    render_dimensions = renderDimensions = wrapped_property('renderDimensions', optional(typed_list(text_type)))
+    position = voxel_coordinates = wrapped_property('position', optional(array_wrapper(np.float32)))
+    cross_section_orientation = crossSectionOrientation = wrapped_property(
+        'crossSectionOrientation', optional(array_wrapper(np.float32, 4)))
+    cross_section_scale = crossSectionScale = wrapped_property('crossSectionScale', optional(float))
+    projection_scale = projectionScale = wrapped_property('projectionScale', optional(float))
+    projection_orientation = projectionOrientation = perspectiveOrientation = perspective_orientation = wrapped_property(
+        'projectionOrientation', optional(array_wrapper(np.float32, 4)))
     show_slices = showSlices = wrapped_property('showSlices', optional(bool, True))
     show_axis_lines = showAxisLines = wrapped_property('showAxisLines', optional(bool, True))
     show_scale_bar = showScaleBar = wrapped_property('showScaleBar', optional(bool, True))
@@ -809,42 +898,21 @@ class ViewerState(JsonObjectWrapper):
     layout = wrapped_property('layout', layout_specification)
     cross_section_background_color = crossSectionBackgroundColor = wrapped_property(
         'crossSectionBackgroundColor', optional(text_type))
-    perspective_view_background_color = perspectiveViewBackgroundColor = wrapped_property(
-        'perspectiveViewBackgroundColor', optional(text_type))
+    projection_background_color = projectionBackgroundColor = wrapped_property(
+        'projectionBackgroundColor', optional(text_type))
     selected_layer = selectedLayer = wrapped_property('selectedLayer', SelectedLayerState)
     statistics = wrapped_property('statistics', StatisticsDisplayState)
-
-    @property
-    def position(self):
-        return self.navigation.position
-
-    @position.setter
-    def position(self, v):
-        self.navigation.position = v
-
-    @property
-    def voxel_coordinates(self):
-        return self.position.voxel_coordinates
-
-    @voxel_coordinates.setter
-    def voxel_coordinates(self, v):
-        self.position.voxel_coordinates = v
-
-    @property
-    def voxel_size(self):
-        return self.navigation.voxel_size
-
-    @voxel_size.setter
-    def voxel_size(self, v):
-        self.navigation.voxel_size = v
 
     @staticmethod
     def interpolate(a, b, t):
         c = copy.deepcopy(a)
-        c.navigation = NavigationState.interpolate(a.navigation, b.navigation, t)
-        c.perspective_zoom = interpolate_zoom(a.perspective_zoom, b.perspective_zoom, t)
-        c.perspective_orientation = quaternion_slerp(a.perspective_orientation,
-                                                     b.perspective_orientation, t)
+        c.position = interpolate_linear_optional_vectors(a.position, b.position, t)
+        c.projection_scale = interpolate_zoom(a.projection_scale, b.projection_scale, t)
+        c.projection_orientation = quaternion_slerp(a.projection_orientation,
+                                                     b.projection_orientation, t)
+        c.cross_section_scale = interpolate_zoom(a.cross_section_scale, b.cross_section_scale, t)
+        c.cross_section_orientation = quaternion_slerp(a.cross_section_orientation,
+                                                       b.cross_section_orientation, t)
         c.layers = Layers.interpolate(a.layers, b.layers, t)
         c.layout = interpolate_layout(a.layout, b.layout, t)
         return c

@@ -20,14 +20,15 @@
  */
 
 import {ChunkManager, WithParameters} from 'neuroglancer/chunk_manager/frontend';
-import {CompletionResult, DataSource} from 'neuroglancer/datasource';
-import {PointMatchChunkSourceParameters, TileChunkSourceParameters} from 'neuroglancer/datasource/render/base';
-import {VectorGraphicsChunkSpecification, VectorGraphicsSourceOptions} from 'neuroglancer/sliceview/vector_graphics/base';
-import {MultiscaleVectorGraphicsChunkSource as GenericMultiscaleVectorGraphicsChunkSource, VectorGraphicsChunkSource} from 'neuroglancer/sliceview/vector_graphics/frontend';
-import {DataType, VolumeChunkSpecification, VolumeSourceOptions, VolumeType} from 'neuroglancer/sliceview/volume/base';
-import {MultiscaleVolumeChunkSource as GenericMultiscaleVolumeChunkSource, VolumeChunkSource} from 'neuroglancer/sliceview/volume/frontend';
+import {makeCoordinateSpace, makeIdentityTransform} from 'neuroglancer/coordinate_transform';
+import {CompleteUrlOptions, CompletionResult, DataSource, DataSourceProvider, GetDataSourceOptions} from 'neuroglancer/datasource';
+import {TileChunkSourceParameters} from 'neuroglancer/datasource/render/base';
+import {SliceViewSingleResolutionSource} from 'neuroglancer/sliceview/frontend';
+import {DataType, makeVolumeChunkSpecification, VolumeSourceOptions, VolumeType} from 'neuroglancer/sliceview/volume/base';
+import {MultiscaleVolumeChunkSource, VolumeChunkSource} from 'neuroglancer/sliceview/volume/frontend';
+import {transposeNestedArrays} from 'neuroglancer/util/array';
 import {applyCompletionOffset, getPrefixMatchesWithDescriptions} from 'neuroglancer/util/completion';
-import {vec3} from 'neuroglancer/util/geom';
+import {mat4, vec3} from 'neuroglancer/util/geom';
 import {fetchOk} from 'neuroglancer/util/http_request';
 import {parseArray, parseQueryStringParameters, verifyFloat, verifyObject, verifyObjectProperty, verifyOptionalBoolean, verifyOptionalInt, verifyOptionalString, verifyString} from 'neuroglancer/util/json';
 
@@ -35,9 +36,6 @@ const VALID_ENCODINGS = new Set<string>(['jpg', 'raw16']);
 
 const TileChunkSourceBase = WithParameters(VolumeChunkSource, TileChunkSourceParameters);
 class TileChunkSource extends TileChunkSourceBase {}
-const PointMatchSourceBase =
-    WithParameters(VectorGraphicsChunkSource, PointMatchChunkSourceParameters);
-class PointMatchSource extends PointMatchSourceBase {}
 
 const VALID_STACK_STATES = new Set<string>(['COMPLETE', 'READ_ONLY']);
 const PARTIAL_STACK_STATES = new Set<string>(['LOADING']);
@@ -139,9 +137,9 @@ function parseUpperVoxelBounds(stackStatsObj: any): vec3 {
 
   let upperVoxelBound: vec3 = vec3.create();
 
-  upperVoxelBound[0] = verifyObjectProperty(stackBounds, 'maxX', verifyFloat)+1;
-  upperVoxelBound[1] = verifyObjectProperty(stackBounds, 'maxY', verifyFloat)+1;
-  upperVoxelBound[2] = verifyObjectProperty(stackBounds, 'maxZ', verifyFloat)+1;
+  upperVoxelBound[0] = verifyObjectProperty(stackBounds, 'maxX', verifyFloat) + 1;
+  upperVoxelBound[1] = verifyObjectProperty(stackBounds, 'maxY', verifyFloat) + 1;
+  upperVoxelBound[2] = verifyObjectProperty(stackBounds, 'maxZ', verifyFloat) + 1;
 
   return upperVoxelBound;
 }
@@ -189,21 +187,13 @@ function parseStackProject(stackIdObj: any): string {
   return verifyObjectProperty(stackIdObj, 'project', verifyString);
 }
 
-export class MultiscaleVolumeChunkSource implements GenericMultiscaleVolumeChunkSource {
+class RenderMultiscaleVolumeChunkSource extends MultiscaleVolumeChunkSource {
   get dataType() {
     if (this.parameters.encoding === 'raw16') {
       return DataType.UINT16;
     } else {
       // JPEG
       return DataType.UINT8;
-    }
-  }
-  get numChannels() {
-    if (this.parameters.encoding === 'raw16') {
-      return 1;
-    } else {
-      // JPEG
-      return 3;
     }
   }
   get volumeType() {
@@ -236,10 +226,15 @@ export class MultiscaleVolumeChunkSource implements GenericMultiscaleVolumeChunk
 
   filter: boolean|undefined;
 
+  get rank() {
+    return 3;
+  }
+
   constructor(
-      public chunkManager: ChunkManager, public baseUrl: string, public ownerInfo: OwnerInfo,
+      chunkManager: ChunkManager, public baseUrl: string, public ownerInfo: OwnerInfo,
       stack: string|undefined, public project: string, channel: string|undefined,
       public parameters: {[index: string]: any}) {
+    super(chunkManager);
     let projectInfo = ownerInfo.projects.get(project);
     if (projectInfo === undefined) {
       throw new Error(
@@ -279,12 +274,24 @@ export class MultiscaleVolumeChunkSource implements GenericMultiscaleVolumeChunk
     this.maxY = verifyOptionalInt(parameters['maxY']);
     this.maxZ = verifyOptionalInt(parameters['maxZ']);
 
-    if (this.minX !== undefined) { stackInfo.lowerVoxelBound[0] = this.minX; }
-    if (this.minY !== undefined) { stackInfo.lowerVoxelBound[1] = this.minY; }
-    if (this.minZ !== undefined) { stackInfo.lowerVoxelBound[2] = this.minZ; }
-    if (this.maxX !== undefined) { stackInfo.upperVoxelBound[0] = this.maxX; }
-    if (this.maxY !== undefined) { stackInfo.upperVoxelBound[1] = this.maxY; }
-    if (this.maxZ !== undefined) { stackInfo.upperVoxelBound[2] = this.maxZ; }
+    if (this.minX !== undefined) {
+      stackInfo.lowerVoxelBound[0] = this.minX;
+    }
+    if (this.minY !== undefined) {
+      stackInfo.lowerVoxelBound[1] = this.minY;
+    }
+    if (this.minZ !== undefined) {
+      stackInfo.lowerVoxelBound[2] = this.minZ;
+    }
+    if (this.maxX !== undefined) {
+      stackInfo.upperVoxelBound[0] = this.maxX;
+    }
+    if (this.maxY !== undefined) {
+      stackInfo.upperVoxelBound[1] = this.maxY;
+    }
+    if (this.maxZ !== undefined) {
+      stackInfo.upperVoxelBound[2] = this.maxZ;
+    }
 
     let encoding = verifyOptionalString(parameters['encoding']);
     if (encoding === undefined) {
@@ -310,7 +317,8 @@ export class MultiscaleVolumeChunkSource implements GenericMultiscaleVolumeChunk
   }
 
   getSources(volumeSourceOptions: VolumeSourceOptions) {
-    let sources: VolumeChunkSource[][] = [];
+    volumeSourceOptions;
+    let sources: SliceViewSingleResolutionSource<VolumeChunkSource>[][] = [];
 
     let numLevels = this.numLevels;
     if (numLevels === undefined) {
@@ -327,33 +335,28 @@ export class MultiscaleVolumeChunkSource implements GenericMultiscaleVolumeChunk
     }
 
     for (let level = 0; level < numLevels; level++) {
-      let voxelSize = vec3.clone(this.stackInfo.voxelResolution);
-      let chunkDataSize = vec3.fromValues(1, 1, 1);
+      const chunkToMultiscaleTransform = mat4.create();
+      let chunkDataSize = Uint32Array.of(1, 1, 1);
       // tiles are NxMx1
       for (let i = 0; i < 2; ++i) {
-        voxelSize[i] = voxelSize[i] * Math.pow(2, level);
+        chunkToMultiscaleTransform[5 * i] = Math.pow(2, level);
         chunkDataSize[i] = this.dims[i];
       }
 
       let lowerVoxelBound = vec3.create(), upperVoxelBound = vec3.create();
 
       for (let i = 0; i < 3; i++) {
-        lowerVoxelBound[i] = Math.floor(
-            this.stackInfo.lowerVoxelBound[i] * (this.stackInfo.voxelResolution[i] / voxelSize[i]));
-        upperVoxelBound[i] = Math.ceil(
-            this.stackInfo.upperVoxelBound[i] * (this.stackInfo.voxelResolution[i] / voxelSize[i]));
+        const downsampleFactor = chunkToMultiscaleTransform[5 * i];
+        lowerVoxelBound[i] = Math.floor(this.stackInfo.lowerVoxelBound[i] / downsampleFactor);
+        upperVoxelBound[i] = Math.ceil(this.stackInfo.upperVoxelBound[i] / downsampleFactor);
       }
 
-      let spec = VolumeChunkSpecification.make({
-        voxelSize,
+      let spec = makeVolumeChunkSpecification({
+        rank: 3,
         chunkDataSize,
-        numChannels: this.numChannels,
         dataType: this.dataType,
-        lowerClipBound,
-        upperClipBound,
         lowerVoxelBound,
         upperVoxelBound,
-        volumeSourceOptions,
       });
 
       let source = this.chunkManager.getChunkSource(TileChunkSource, {
@@ -374,16 +377,14 @@ export class MultiscaleVolumeChunkSource implements GenericMultiscaleVolumeChunk
         }
       });
 
-      sources.push([source]);
+      sources.push([{
+        chunkSource: source,
+        chunkToMultiscaleTransform,
+        lowerClipBound,
+        upperClipBound,
+      }]);
     }
-    return sources;
-  }
-
-  /**
-   * Meshes are not supported.
-   */
-  getMeshSource(): null {
-    return null;
+    return transposeNestedArrays(sources);
   }
 }
 
@@ -419,7 +420,7 @@ export function getOwnerInfo(
 const pathPattern = /^([^\/?]+)(?:\/([^\/?]+))?(?:\/([^\/?]+))(?:\/([^\/?]*))?(?:\?(.*))?$/;
 const urlPattern = /^((?:(?:(?:http|https):\/\/[^,\/]+)[^\/?]))\/(.*)$/;
 
-export function getVolume(chunkManager: ChunkManager, datasourcePath: string) {
+function getVolume(chunkManager: ChunkManager, datasourcePath: string) {
   let hostname: string, path: string;
   {
     let match = datasourcePath.match(urlPattern);
@@ -441,214 +442,104 @@ export function getVolume(chunkManager: ChunkManager, datasourcePath: string) {
   const parameters = parseQueryStringParameters(match[5] || '');
 
   return chunkManager.memoize.getUncounted(
-      {type: 'render:MultiscaleVolumeChunkSource', hostname, path},
-      () => getOwnerInfo(chunkManager, hostname, owner)
-                .then(
-                    ownerInfo => new MultiscaleVolumeChunkSource(
-                        chunkManager, hostname, ownerInfo, stack, project, channel, parameters)));
+      {type: 'render:MultiscaleVolumeChunkSource', hostname, path}, async () => {
+        const ownerInfo = await getOwnerInfo(chunkManager, hostname, owner);
+        const volume = new RenderMultiscaleVolumeChunkSource(
+            chunkManager, hostname, ownerInfo, stack, project, channel, parameters);
+        const modelSpace = makeCoordinateSpace({
+          rank: 3,
+          names: ['x', 'y', 'z'],
+          units: ['m', 'm', 'm'],
+          scales: Float64Array.from(volume.stackInfo.voxelResolution, x => x / 1e9),
+        });
+        const dataSource: DataSource = {
+          modelTransform: makeIdentityTransform(modelSpace),
+          subsources: [{
+            id: 'default',
+            default: true,
+            subsource: {volume},
+          }],
+        };
+        return dataSource;
+      });
 }
 
-export function stackAndProjectCompleter(
+export async function stackAndProjectCompleter(
     chunkManager: ChunkManager, hostname: string, path: string): Promise<CompletionResult> {
   const stackMatch = path.match(/^(?:([^\/]+)(?:\/([^\/]*))?(?:\/([^\/]*))?(\/.*?)?)?$/);
   if (stackMatch === null) {
     // URL has incorrect format, don't return any results.
-    return Promise.reject<CompletionResult>(null);
+    throw null;
   }
   if (stackMatch[2] === undefined) {
     // Don't autocomplete the owner
-    return Promise.reject<CompletionResult>(null);
+    throw null;
   }
   if (stackMatch[3] === undefined) {
     let projectPrefix = stackMatch[2] || '';
-    return getOwnerInfo(chunkManager, hostname, stackMatch[1]).then(ownerInfo => {
-      let completions = getPrefixMatchesWithDescriptions(
-          projectPrefix, ownerInfo.projects, x => x[0] + '/', () => undefined);
-      return {offset: stackMatch[1].length + 1, completions};
-    });
+    const ownerInfo = await getOwnerInfo(chunkManager, hostname, stackMatch[1]);
+    let completions = getPrefixMatchesWithDescriptions(
+        projectPrefix, ownerInfo.projects, x => x[0] + '/', () => undefined);
+    return {offset: stackMatch[1].length + 1, completions};
   }
   if (stackMatch[4] === undefined) {
     let stackPrefix = stackMatch[3] || '';
-    return getOwnerInfo(chunkManager, hostname, stackMatch[1]).then(ownerInfo => {
-      let projectInfo = ownerInfo.projects.get(stackMatch[2]);
-      if (projectInfo === undefined) {
-        return Promise.reject<CompletionResult>(null);
-      }
-      let completions =
-          getPrefixMatchesWithDescriptions(stackPrefix, projectInfo.stacks, x => x[0] + '/', x => {
-            return `(${x[1].project})`;
-          });
-      return {offset: stackMatch[1].length + stackMatch[2].length + 2, completions};
-    });
-  }
-  let channelPrefix = stackMatch[4].substr(1) || '';
-  return getOwnerInfo(chunkManager, hostname, stackMatch[1]).then(ownerInfo => {
+    const ownerInfo = await getOwnerInfo(chunkManager, hostname, stackMatch[1]);
     let projectInfo = ownerInfo.projects.get(stackMatch[2]);
     if (projectInfo === undefined) {
-      return Promise.reject<CompletionResult>(null);
+      throw null;
     }
-    let stackInfo = projectInfo.stacks.get(stackMatch[3]);
-    if (stackInfo === undefined) {
-      return Promise.reject<CompletionResult>(null);
-    }
-    let channels = stackInfo.channels;
-    if (channels.length === 0) {
-      return Promise.reject<CompletionResult>(null);
-    } else {
-      // Try and complete the channel
-      let completions =
-          getPrefixMatchesWithDescriptions(channelPrefix, channels, x => x, () => undefined);
-      return {
-        offset: stackMatch[1].length + stackMatch[2].length + stackMatch[3].length + 3,
-        completions
-      };
-    }
-  });
+    let completions =
+        getPrefixMatchesWithDescriptions(stackPrefix, projectInfo.stacks, x => x[0] + '/', x => {
+          return x[1].project;
+        });
+    return {offset: stackMatch[1].length + stackMatch[2].length + 2, completions};
+  }
+  let channelPrefix = stackMatch[4].substr(1) || '';
+  const ownerInfo = await getOwnerInfo(chunkManager, hostname, stackMatch[1]);
+  let projectInfo = ownerInfo.projects.get(stackMatch[2]);
+  if (projectInfo === undefined) {
+    throw null;
+  }
+  let stackInfo = projectInfo.stacks.get(stackMatch[3]);
+  if (stackInfo === undefined) {
+    throw null;
+  }
+  let channels = stackInfo.channels;
+  if (channels.length === 0) {
+    throw null;
+  }
+  // Try and complete the channel
+  let completions =
+      getPrefixMatchesWithDescriptions(channelPrefix, channels, x => x, () => undefined);
+  return {
+    offset: stackMatch[1].length + stackMatch[2].length + stackMatch[3].length + 3,
+    completions
+  };
 }
 
-export function volumeCompleter(
+export async function volumeCompleter(
     url: string, chunkManager: ChunkManager): Promise<CompletionResult> {
   let match = url.match(urlPattern);
   if (match === null) {
     // We don't yet have a full hostname.
-    return Promise.reject<CompletionResult>(null);
+    throw null;
   }
   let hostname = match[1];
   let path = match[2];
 
-  return stackAndProjectCompleter(chunkManager, hostname, path)
-      .then(completions => applyCompletionOffset(match![1].length + 1, completions));
+  const completions = await stackAndProjectCompleter(chunkManager, hostname, path);
+  return applyCompletionOffset(match![1].length + 1, completions);
 }
 
-export class MultiscaleVectorGraphicsChunkSource implements
-    GenericMultiscaleVectorGraphicsChunkSource {
-  stack: string;
-  stackInfo: StackInfo;
-
-  matchCollection: string;
-  zoffset: number;
-
-  dims: vec3;
-
-  constructor(
-      public chunkManager: ChunkManager, public baseUrl: string, public ownerInfo: OwnerInfo,
-      stack: string|undefined, public project: string, public parameters: {[index: string]: any}) {
-    let projectInfo = ownerInfo.projects.get(project);
-    if (projectInfo === undefined) {
-      throw new Error(
-          `Specified project ${JSON.stringify(project)} does not exist for ` +
-          `specified owner ${JSON.stringify(ownerInfo.owner)}`);
-    }
-
-    if (stack === undefined) {
-      const stackNames = Array.from(projectInfo.stacks.keys());
-      if (stackNames.length !== 1) {
-        throw new Error(`Dataset contains multiple stacks: ${JSON.stringify(stackNames)}`);
-      }
-      stack = stackNames[0];
-    }
-    const stackInfo = projectInfo.stacks.get(stack);
-    if (stackInfo === undefined) {
-      throw new Error(
-          `Specified stack ${JSON.stringify(stack)} is not one of the supported stacks: ` +
-          JSON.stringify(Array.from(projectInfo.stacks.keys())));
-    }
-    this.stack = stack;
-    this.stackInfo = stackInfo;
-
-    let matchCollection = verifyOptionalString(parameters['matchCollection']);
-    if (matchCollection === undefined) {
-      matchCollection = stack;
-    }
-    this.matchCollection = matchCollection;
-
-    let zoffset = verifyOptionalInt(parameters['zoffset']);
-    if (zoffset === undefined) {
-      zoffset = 1;
-    }
-    this.zoffset = zoffset;
-
-    this.dims = vec3.create();
-
-    let tileSize = verifyOptionalInt(parameters['tilesize']);
-    if (tileSize === undefined) {
-      tileSize = 1024;  // Default tile size is 1024 x 1024
-    }
-    this.dims[0] = tileSize;
-    this.dims[1] = tileSize;
-    this.dims[2] = 1;
-  }
-  getSources(vectorGraphicsSourceOptions: VectorGraphicsSourceOptions) {
-    const voxelSize = this.stackInfo.voxelResolution;
-    const chunkSize = vec3.subtract(
-        vec3.create(), this.stackInfo.upperVoxelBound, this.stackInfo.lowerVoxelBound);
-    vec3.multiply(chunkSize, chunkSize, voxelSize);
-    chunkSize[2] = voxelSize[2];
-
-    const spec = VectorGraphicsChunkSpecification.make({
-      voxelSize,
-      chunkSize,
-      lowerChunkBound: vec3.fromValues(0, 0, this.stackInfo.lowerVoxelBound[2]),
-      upperChunkBound: vec3.fromValues(1, 1, this.stackInfo.upperVoxelBound[2]),
-      vectorGraphicsSourceOptions
-    });
-    const source = this.chunkManager.getChunkSource(PointMatchSource, {
-      spec,
-      parameters: {
-        'baseUrl': this.baseUrl,
-        'owner': this.ownerInfo.owner,
-        'project': this.stackInfo.project,
-        'stack': this.stack,
-        'encoding': 'points',
-        'matchCollection': this.matchCollection,
-        'zoffset': this.zoffset
-      }
-    });
-
-    return [[source]];
-  }
-}
-
-export function getPointMatches(chunkManager: ChunkManager, datasourcePath: string) {
-  let hostname: string, path: string;
-  {
-    let match = datasourcePath.match(urlPattern);
-    if (match === null) {
-      throw new Error(`Invalid render point path: ${JSON.stringify(datasourcePath)}`);
-    }
-    hostname = match[1];
-    path = match[2];
-  }
-  const match = path.match(pathPattern);
-  if (match === null) {
-    throw new Error(`Invalid point path ${JSON.stringify(path)}`);
-  }
-  
-  const owner = match[1];
-  const project = match[2];
-  const stack = match[3];
-
-  const parameters = parseQueryStringParameters(match[4] || '');
-
-  return chunkManager.memoize.getUncounted(
-      {type: 'render:MultiscaleVectorGraphicsChunkSource', hostname, path},
-      () => getOwnerInfo(chunkManager, hostname, owner)
-                .then(
-                    ownerInfo => new MultiscaleVectorGraphicsChunkSource(
-                        chunkManager, hostname, ownerInfo, stack, project, parameters)));
-}
-
-export class RenderDataSource extends DataSource {
+export class RenderDataSource extends DataSourceProvider {
   get description() {
     return 'Render';
   }
-  getVolume(chunkManager: ChunkManager, url: string) {
-    return getVolume(chunkManager, url);
+  get(options: GetDataSourceOptions): Promise<DataSource> {
+    return getVolume(options.chunkManager, options.providerUrl);
   }
-  volumeCompleter(url: string, chunkManager: ChunkManager) {
-    return volumeCompleter(url, chunkManager);
-  }
-  getVectorGraphicsSource(chunkManager: ChunkManager, url: string) {
-    return getPointMatches(chunkManager, url);
+  completeUrl(options: CompleteUrlOptions) {
+    return volumeCompleter(options.providerUrl, options.chunkManager);
   }
 }

@@ -24,6 +24,7 @@ import {SharedWatchableValue} from 'neuroglancer/shared_watchable_value';
 import {WatchableSet, WatchableValue} from 'neuroglancer/trackable_value';
 import {mat4} from 'neuroglancer/util/geom';
 import {registerRPC, registerSharedObject, RPC, SharedObjectCounterpart} from 'neuroglancer/worker_rpc';
+import { DisplayDimensions } from '../navigation_state';
 
 export interface PerspectiveViewportInfo {
   /**
@@ -56,18 +57,20 @@ export interface PerspectiveViewportInfo {
 @registerSharedObject(PERSPECTIVE_VIEW_RPC_ID)
 export class PerspectiveViewState extends SharedObjectCounterpart {
   visibility: SharedWatchableValue<number>;
+  displayDimensions: SharedWatchableValue<DisplayDimensions>;
   viewport = new WatchableValue<PerspectiveViewportInfo>({
     width: 0,
     height: 0,
     projectionMat: mat4.create(),
     viewMat: mat4.create(),
-    viewProjectionMat: mat4.create()
+    viewProjectionMat: mat4.create(),
   });
   constructor(...args: any[]) {
     super(...args);
     const rpc: RPC = args[0];
     const options: any = args[1];
-    this.visibility = rpc.get(options['visibility']);
+    this.visibility = rpc.get(options.visibility);
+    this.displayDimensions = rpc.get(options.displayDimensions);
   }
 }
 

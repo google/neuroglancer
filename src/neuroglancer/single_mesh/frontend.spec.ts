@@ -45,8 +45,7 @@ describe('single_mesh/frontend', () => {
           normZ: 'float',
         },
         tester => {
-          let shaderManager =
-              new SingleMeshShaderManager(attributeNames, attributeInfo, /*fragmentMain=*/ '');
+          let shaderManager = new SingleMeshShaderManager(attributeNames, attributeInfo);
           const attributeFormats = getAttributeTextureFormats(attributeInfo);
 
           let {gl, builder} = tester;

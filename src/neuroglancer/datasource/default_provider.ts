@@ -19,14 +19,14 @@
  */
 
 import {CredentialsManager} from 'neuroglancer/credentials_provider';
-import {DataSource, DataSourceProvider} from 'neuroglancer/datasource';
+import {DataSourceProvider, DataSourceProviderRegistry} from 'neuroglancer/datasource';
 import {Owned} from 'neuroglancer/util/disposable';
 
 export interface ProviderOptions {
   credentialsManager: CredentialsManager;
 }
 
-export type ProviderFactory = (options: ProviderOptions) => Owned<DataSource>;
+export type ProviderFactory = (options: ProviderOptions) => Owned<DataSourceProvider>;
 const providerFactories = new Map<string, ProviderFactory>();
 
 export function registerProvider(name: string, factory: ProviderFactory) {
@@ -34,7 +34,7 @@ export function registerProvider(name: string, factory: ProviderFactory) {
 }
 
 export function getDefaultDataSourceProvider(options: ProviderOptions) {
-  const provider = new DataSourceProvider();
+  const provider = new DataSourceProviderRegistry();
   for (const [name, factory] of providerFactories) {
     provider.register(name, factory(options));
   }

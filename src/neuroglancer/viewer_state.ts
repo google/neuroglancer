@@ -14,8 +14,9 @@
  * limitations under the License.
  */
 
-import {LayerManager, MouseSelectionState, RenderLayerRole, SelectedLayerState} from 'neuroglancer/layer';
+import {LayerManager, MouseSelectionState, SelectedLayerState} from 'neuroglancer/layer';
 import {NavigationState} from 'neuroglancer/navigation_state';
+import {RenderLayerRole} from 'neuroglancer/renderlayer';
 import {TrackableBoolean} from 'neuroglancer/trackable_boolean';
 import {WatchableSet} from 'neuroglancer/trackable_value';
 import {VisibilityPrioritySpecification} from 'neuroglancer/visibility_priority/frontend';

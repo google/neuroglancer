@@ -40,7 +40,7 @@ interface ShaderCodeState {
   shaderError: WatchableShaderError;
   shaderControlState?: ShaderControlState;
   fragmentMain: WatchableValue<string>;
-  fragmentMainStartLine: string;
+  sourceStringNumber?: number;
 }
 
 export class ShaderCodeWidget extends RefCounted {
@@ -85,9 +85,19 @@ export class ShaderCodeWidget extends RefCounted {
       }));
     }
     this.updateErrorState();
+    const intersectionObserver = new IntersectionObserver(entries => {
+      if (entries.some(x => x.isIntersecting)) {
+        this.textEditor.refresh();
+      }
+    }, {
+      root: document.body,
+    });
+    intersectionObserver.observe(this.element);
+    this.registerDisposer(() => intersectionObserver.disconnect());
   }
 
   updateErrorState() {
+    const {sourceStringNumber = 1} = this.state;
     const error = this.state.shaderError.value;
     let controlParseErrors: ShaderControlParseError[];
     const {shaderControlState} = this.state;
@@ -111,16 +121,11 @@ export class ShaderCodeWidget extends RefCounted {
           }
           if (error != null) {
             if (error.name === 'ShaderCompilationError') {
-              const fragmentMainStartLineNumber = (<ShaderCompilationError>error)
-                                                      .source.split('\n')
-                                                      .indexOf(this.state.fragmentMainStartLine) +
-                  2;
               for (const e of (error as ShaderCompilationError).errorMessages) {
                 annotations.push({
                   message: e.message,
                   severity: 'error',
-                  from: CodeMirror.Pos(
-                      e.line === undefined ? 0 : e.line - fragmentMainStartLineNumber),
+                  from: CodeMirror.Pos(e.file === sourceStringNumber ? e.line || 0 : 0),
                 });
               }
             } else if (error!.name === 'ShaderLinkError') {

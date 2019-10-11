@@ -110,7 +110,7 @@ CenterOrientEllipse computeCenterOrientEllipse(EllipseQuadraticForm p) {
   r.a = 1.0 / sqrt(lambda1);
   r.b = 1.0 / sqrt(lambda2);
   r.valid = lambda1 > 0.0 && lambda2 > 0.0;
-  if (abs(m12) < 1e-10) {
+  if (abs(m11 - m22) < 1e-6 && abs(m12) < 1e-6) {
     r.u1 = vec2(1.0, 0.0);
   } else if (m11 >= m22) {
     r.u1 = normalize(vec2(lambda1 - m22, m12));
@@ -145,14 +145,24 @@ export function computeCenterOrientEllipseDebug(
   const a = 1.0 / Math.sqrt(lambda1);
   const b = 1.0 / Math.sqrt(lambda2);
   let u1: vec2;
-  if (Math.abs(m12) < 1e-10) {
-    u1 = vec2.fromValues(1, 0);
-  } else if (m11 >= m22) {
+  if (m11 >= m22) {
     u1 = vec2.fromValues(lambda1 - m22, m12);
   } else {
     u1 = vec2.fromValues(m12, lambda1 - m11);
   }
   vec2.normalize(u1, u1);
   const u2 = vec2.fromValues(-u1[1], u1[0]);
-  return {k: vec2.fromValues(k1, k2), u1, u2, a, b, lambda1, lambda2, m11, m12, m22};
+  return {
+    k: vec2.fromValues(k1, k2),
+    u1,
+    u2,
+    a,
+    b,
+    lambda1,
+    lambda2,
+    m11,
+    m12,
+    m22,
+    valid: lambda1 > 0 && lambda2 > 0,
+  };
 }

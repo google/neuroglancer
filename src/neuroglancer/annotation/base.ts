@@ -24,7 +24,7 @@ export const ANNOTATION_REFERENCE_DELETE_RPC_ID = 'annotation.reference.delete';
 export const ANNOTATION_COMMIT_UPDATE_RPC_ID = 'annotation.commit';
 export const ANNOTATION_COMMIT_UPDATE_RESULT_RPC_ID = 'annotation.commit';
 
-export class AnnotationGeometryChunkSpecification extends SliceViewChunkSpecification {}
+export interface AnnotationGeometryChunkSpecification extends SliceViewChunkSpecification {}
 
 export const ANNOTATION_PERSPECTIVE_RENDER_LAYER_RPC_ID = 'annotation/PerspectiveRenderLayer';
 export const ANNOTATION_RENDER_LAYER_RPC_ID = 'annotation/RenderLayer';

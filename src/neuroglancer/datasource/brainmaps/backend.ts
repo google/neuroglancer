@@ -35,7 +35,8 @@ import {convertEndian32, Endianness} from 'neuroglancer/util/endian';
 import {kInfinityVec, kZeroVec, vec3, vec3Key} from 'neuroglancer/util/geom';
 import {parseArray, parseFixedLengthArray, verifyObject, verifyObjectProperty, verifyOptionalString, verifyString, verifyStringArray} from 'neuroglancer/util/json';
 import {Uint64} from 'neuroglancer/util/uint64';
-import { decodeZIndexCompressed, getOctreeChildIndex, zorder3LessThan, encodeZIndexCompressed} from 'neuroglancer/util/zorder';
+import * as vector from 'neuroglancer/util/vector';
+import {decodeZIndexCompressed, encodeZIndexCompressed, getOctreeChildIndex, zorder3LessThan} from 'neuroglancer/util/zorder';
 import {registerSharedObject, SharedObject} from 'neuroglancer/worker_rpc';
 
 const CHUNK_DECODERS = new Map([
@@ -719,7 +720,7 @@ function parseAnnotationResponse(response: any, idPrefix: string, expectedId?: s
 
 function parseAnnotations(
     chunk: AnnotationGeometryChunk|AnnotationSubsetGeometryChunk, responses: any[]) {
-  const serializer = new AnnotationSerializer();
+  const serializer = new AnnotationSerializer(3);
   const source = <BrainmapsAnnotationSource>chunk.source.parent;
   const idPrefix = getIdPrefix(source.parameters);
   responses.forEach((response, responseIndex) => {
@@ -766,8 +767,8 @@ function annotationToBrainmaps(annotation: Annotation): any {
     case AnnotationType.LINE:
     case AnnotationType.AXIS_ALIGNED_BOUNDING_BOX: {
       const {pointA, pointB} = annotation;
-      const minPoint = vec3.min(vec3.create(), pointA, pointB);
-      const maxPoint = vec3.max(vec3.create(), pointA, pointB);
+      const minPoint = vector.min(vec3.create(), pointA, pointB);
+      const maxPoint = vector.max(vec3.create(), pointA, pointB);
       const size = vec3.subtract(maxPoint, maxPoint, minPoint);
       return {
         type: annotation.type === AnnotationType.LINE ? 'LINE' : 'VOLUME',
@@ -780,15 +781,16 @@ function annotationToBrainmaps(annotation: Annotation): any {
     case AnnotationType.POINT: {
       return {
         type: 'LOCATION',
-        corner: toCommaSeparated(annotation.point),
+        corner: toCommaSeparated(annotation.point as vec3),
         size: '0,0,0',
         object_labels: objectLabels,
         payload,
       };
     }
     case AnnotationType.ELLIPSOID: {
-      const corner = vec3.subtract(vec3.create(), annotation.center, annotation.radii);
-      const size = vec3.scale(vec3.create(), annotation.radii, 2);
+      const corner =
+          vec3.subtract(vec3.create(), annotation.center as vec3, annotation.radii as vec3);
+      const size = vec3.scale(vec3.create(), annotation.radii as vec3, 2);
       return {
         type: 'LOCATION',
         corner: toCommaSeparated(corner),
