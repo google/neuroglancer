@@ -25,6 +25,7 @@ export class DVIDSourceParameters {
   baseUrl: string;
   nodeKey: string;
   dataInstanceKey: string;
+  user?: string;
 }
 
 export class VolumeChunkSourceParameters extends DVIDSourceParameters {
@@ -39,4 +40,8 @@ export class SkeletonSourceParameters extends DVIDSourceParameters {
 
 export class MeshSourceParameters extends DVIDSourceParameters {
   static RPC_ID = 'dvid/MeshSource';
+}
+
+export class AnnotationSourceParameters extends DVIDSourceParameters {
+  static RPC_ID = 'dvid/Annotation';
 }

@@ -21,7 +21,7 @@
 
 import {ChunkManager, WithParameters} from 'neuroglancer/chunk_manager/frontend';
 import {CompletionResult, DataSource} from 'neuroglancer/datasource';
-import {DVIDSourceParameters, MeshSourceParameters, SkeletonSourceParameters, VolumeChunkEncoding, VolumeChunkSourceParameters} from 'neuroglancer/datasource/dvid/base';
+import {AnnotationSourceParameters, DVIDSourceParameters, MeshSourceParameters, SkeletonSourceParameters, VolumeChunkEncoding, VolumeChunkSourceParameters} from 'neuroglancer/datasource/dvid/base';
 import {MeshSource} from 'neuroglancer/mesh/frontend';
 import {SkeletonSource} from 'neuroglancer/skeleton/frontend';
 import {DataType, VolumeChunkSpecification, VolumeSourceOptions, VolumeType} from 'neuroglancer/sliceview/volume/base';
@@ -31,6 +31,12 @@ import {applyCompletionOffset, getPrefixMatchesWithDescriptions} from 'neuroglan
 import {mat4, vec3} from 'neuroglancer/util/geom';
 import {fetchOk} from 'neuroglancer/util/http_request';
 import {parseArray, parseFixedLengthArray, parseIntVec, verifyFinitePositiveFloat, verifyMapKey, verifyObject, verifyObjectAsMap, verifyObjectProperty, verifyPositiveInt, verifyString} from 'neuroglancer/util/json';
+import {DVIDInstance, makeRequest} from 'neuroglancer/datasource/dvid/api';
+import {AnnotationGeometryChunkSpecification} from 'neuroglancer/annotation/base';
+import {MultiscaleAnnotationSource} from 'neuroglancer/annotation/frontend';
+import { AnnotationType, Annotation, AnnotationReference } from 'neuroglancer/annotation';
+import {Signal} from 'neuroglancer/util/signal';
+import {Env, DVIDPointAnnotation, updateAnnotationTypeHandler, updateRenderHelper} from 'neuroglancer/datasource/dvid/utils';
 
 let serverDataTypes = new Map<string, DataType>();
 serverDataTypes.set('uint8', DataType.UINT8);
@@ -246,6 +252,8 @@ export function parseDataInstance(
     case 'labelmap':
       return new VolumeDataInstanceInfo(
           obj, name, baseInfo, VolumeChunkEncoding.COMPRESSED_SEGMENTATIONARRAY, instanceNames);
+    case 'annotation':
+      return new VolumeDataInstanceInfo(obj, name, baseInfo, VolumeChunkEncoding.RAW, instanceNames);
     default:
       throw new Error(`DVID data type ${JSON.stringify(baseInfo.typeName)} is not supported.`);
   }
@@ -508,7 +516,168 @@ export function volumeCompleter(
               applyCompletionOffset(baseUrl.length + 1, completeNodeAndInstance(serverInfo, path)));
 }
 
+const SERVER_DATA_TYPES = new Map<string, DataType>();
+SERVER_DATA_TYPES.set('UINT8', DataType.UINT8);
+SERVER_DATA_TYPES.set('UINT64', DataType.UINT64);
+
+/*
+function parseBoundingBox(obj: any) {
+  verifyObject(obj);
+  try {
+    return {
+      corner:
+          verifyObjectProperty(obj, 'corner', x => parseXYZ(vec3.create(), x, verifyFiniteFloat)),
+      size: verifyObjectProperty(
+          obj, 'size', x => parseXYZ(vec3.create(), x, verifyFinitePositiveFloat)),
+      metadata: verifyObjectProperty(obj, 'metadata', verifyOptionalString),
+    };
+  } catch (parseError) {
+    throw new Error(`Failed to parse bounding box: ${parseError.message}`);
+  }
+}
+*/
+
+export class VolumeInfo {
+  numChannels: number;
+  dataType: DataType;
+  voxelSize: vec3;
+  upperVoxelBound: vec3;
+  boundingBoxes: {corner: vec3, size: vec3, metadata?: string}[];
+  constructor(obj: any) {
+    try {
+      verifyObject(obj);
+      this.numChannels = 1;
+      let baseObj = verifyObjectProperty(obj, 'Base', verifyObject);
+      this.dataType = verifyObjectProperty(baseObj, 'TypeName', x => x === undefined ? 'UINT8' : x.TypeName);
+
+      let extended = verifyObjectProperty(obj, 'Extended', verifyObject);
+
+      this.voxelSize = verifyObjectProperty(extended, 'VoxelSize', x => parseIntVec(vec3.create(), x));
+      this.upperVoxelBound = verifyObjectProperty(extended, 'MaxPoint', x => parseIntVec(vec3.create(), x.map((a:number) => {return ++a;})));
+
+      let lowerVoxelBound = verifyObjectProperty(extended, 'MinPoint', x => parseIntVec(vec3.create(), x));
+
+      this.boundingBoxes = [{
+        corner: lowerVoxelBound,
+        size: this.upperVoxelBound
+      }];
+    } catch (parseError) {
+      throw new Error(`Failed to parse DVID volume geometry: ${parseError.message}`);
+    }
+  }
+}
+
+export class MultiscaleVolumeInfo {
+  scales: VolumeInfo[];
+  numChannels: number;
+  dataType: DataType;
+  constructor(volumeInfoResponse: any) {
+    try {
+      verifyObject(volumeInfoResponse);
+      this.scales = [];
+      this.scales.push(new VolumeInfo(volumeInfoResponse));
+      let baseScale = this.scales[0];
+      this.numChannels = this.numChannels = baseScale.numChannels;
+      this.dataType = this.dataType = baseScale.dataType;
+    } catch (parseError) {
+      throw new Error(
+          `Failed to parse DVID multiscale volume specification: ${parseError.message}`);
+    }
+  }
+}
+
+function makeAnnotationGeometrySourceSpecifications(multiscaleInfo: MultiscaleVolumeInfo) {
+  const baseScale = multiscaleInfo.scales[0];
+  const spec = new AnnotationGeometryChunkSpecification({
+    voxelSize: baseScale.voxelSize,
+    chunkSize: vec3.multiply(vec3.create(), baseScale.upperVoxelBound, baseScale.voxelSize),
+    upperChunkBound: vec3.fromValues(1, 1, 1),
+  });
+  return [[{parameters: undefined, spec}]];
+}
+
+const MultiscaleAnnotationSourceBase = (WithParameters(MultiscaleAnnotationSource, AnnotationSourceParameters));
+
+export class DVIDAnnotationSource extends MultiscaleAnnotationSourceBase {
+  key: any;
+  private updateAnnotationHandlers() {
+    updateRenderHelper();
+    updateAnnotationTypeHandler();
+  }
+
+  constructor(chunkManager: ChunkManager, options: {
+    parameters: AnnotationSourceParameters,
+    multiscaleVolumeInfo: MultiscaleVolumeInfo
+  }) {
+    super(chunkManager, <any>{
+      sourceSpecifications:
+          makeAnnotationGeometrySourceSpecifications(options.multiscaleVolumeInfo),
+      ...options
+    });
+
+    mat4.fromScaling(this.objectToLocal, options.multiscaleVolumeInfo.scales[0].voxelSize);
+    this.updateAnnotationHandlers();
+    this.childAdded = this.childAdded || new Signal<(annotation: Annotation) => void>();
+    this.childUpdated = this.childUpdated || new Signal<(annotation: Annotation) => void>();
+    this.childDeleted = this.childDeleted || new Signal<(annotationId: string) => void>();
+  }
+
+  add(annotation: Annotation, commit: boolean = true): AnnotationReference {
+    if (annotation.type === AnnotationType.POINT) {
+      const { parameters } = this;
+      if (!parameters.user) {
+        throw Error('Cannot add DVID point annotation without specifying a user name.');
+      }
+
+      annotation.point = vec3.round(vec3.create(), annotation.point);
+      let {properties} = <DVIDPointAnnotation>annotation;
+      if (properties) { // Always assume user-defined bookmark
+        if (!('custom'in properties)) {
+          properties['custom'] = '1';
+        }
+      } else {
+        (<DVIDPointAnnotation>annotation).properties = {'custom': '1'};
+      }
+    }
+    return super.add(annotation, commit);
+  }
+}
+
+function parseAnnotationKey(key: string): AnnotationSourceParameters {
+  const match = key.match(/^([^\/]+:\/\/[^\/]+)\/([^\/]+)\/([^\/]+)$/);
+
+  if (match === null) {
+    throw new Error(`Invalid DVID volume key: ${JSON.stringify(key)}.`);
+  }
+
+  return { 'baseUrl': match[1], 'nodeKey': match[2], 'dataInstanceKey': match[3], 'user': Env.getUser() };
+}
+
+async function getSyncedLabel(parameters: AnnotationSourceParameters): Promise<string> {
+  let dataUrl = `${parameters.baseUrl}/api/node/${parameters.nodeKey}/${parameters.dataInstanceKey}`;
+  return fetchOk(`${dataUrl}/info`)
+    .then(response => response.json())
+    .then(response => response['Base'])
+    .then(response => {
+      if (response['TypeName'] !== 'annotation') {
+        throw new Error(`Invalid DVID annotation url: ${dataUrl}`);
+      }
+
+      let syncs: Array<string> = response['Syncs'];
+      if (syncs === undefined || syncs === null || syncs.length !== 1) {
+        throw new Error(`Unexpected label syncs: ${syncs}`);
+      }
+
+      return syncs[0];
+    });
+}
+
 export class DVIDDataSource extends DataSource {
+  dvidAnnotationSourceKey: any;
+  constructor() {
+    super();
+  }
+
   get description() {
     return 'DVID';
   }
@@ -519,5 +688,37 @@ export class DVIDDataSource extends DataSource {
 
   volumeCompleter(url: string, chunkManager: ChunkManager) {
     return volumeCompleter(url, chunkManager);
+  }
+
+  getMultiscaleInfo(chunkManager: ChunkManager, parameters: DVIDSourceParameters) {
+    let volumeId: string = 'segmentation';
+    let instance = new DVIDInstance(parameters.baseUrl, parameters.nodeKey);
+    return chunkManager.memoize.getUncounted(
+        {
+          type: 'dvid:getMultiscaleInfo',
+          volumeId,
+          instance
+        },
+        () => makeRequest(instance, {
+                method: 'GET',
+                path: `/${volumeId}/info`,
+                responseType: 'json'
+              }).then(response => new MultiscaleVolumeInfo(response)));
+  }
+
+  getAnnotationSource(chunkManager: ChunkManager, key: string) {
+    const parameters = parseAnnotationKey(key);
+
+    this.dvidAnnotationSourceKey = {
+      type: 'dvid:getAnnotationSource',
+      parameters
+    };
+
+    return chunkManager.memoize.getUncounted(
+      this.dvidAnnotationSourceKey,
+      () => getSyncedLabel(parameters)
+        .then(label => this.getMultiscaleInfo(chunkManager, { 'baseUrl': parameters.baseUrl, 'nodeKey': parameters.nodeKey, 'dataInstanceKey': label }))
+        .then(multiscaleVolumeInfo => chunkManager.getChunkSource(DVIDAnnotationSource, {parameters,multiscaleVolumeInfo}))
+    );
   }
 }
