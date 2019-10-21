@@ -24,8 +24,8 @@
 .neuroglancer-annotation-list { 
   list-style-type: none;
   margin: 0px;
-  padding: 5px;
   overflow-y: auto;
+  padding: 0px;
   flex: 1;
   min-height: 0px;
 }
@@ -54,7 +54,7 @@
   outline: 1px solid #ccc;
 }
 
-.neuroglancer-annotation-list > li {
+.neuroglancer-annotation-list > li, .neuroglancer-annotation-hiding-list-scrollarea > li {
   cursor: pointer;
   position: relative;
   padding-left: 1.5em;
@@ -125,6 +125,36 @@
 
 .neuroglancer-annotation-segment-item {
   color: black;
+}
+
+.neuroglancer-minimizable-group-flexible.neuroglancer-annotation-hiding-list-parent {
+  overflow-y: hidden;
+}
+
+.neuroglancer-annotation-hiding-list-container {
+  position: relative;
+  overflow: hidden;
+  height: 100%;
+}
+
+.neuroglancer-annotation-hiding-list-scrollarea {
+  position: absolute;
+  padding: 5px;
+  left: 0px;
+}
+
+.neuroglancer-annotation-hiding-list-scrollbar {
+  width: 100%;
+  height: 100%;
+  overflow: auto;
+}
+
+.neuroglancer-annotation-hiding-list-hiddenitem {
+  display: none;
+}
+
+.neuroglancer-annotation-hiding-list-tagged-hidden {
+  display: none;
 }
 
 #exportToCSVButton {

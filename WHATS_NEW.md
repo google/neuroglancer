@@ -1,11 +1,8 @@
-### September 10 2019
-# Split Preview
-* Ever wanted to see the results of your actions before you perform them?
-* You're in luck! The new split preview button allows you to see forward in time!
-* The split preview button is available for ChunkedGraph segmentation layers in the graph tab.
-* In the Multicut group, it is the rightmost button that looks like a crystal ball.
-* When performing a split, the split preview will show you what changes your split will make in 2D, without actually changing the underlying segmentation.
-* Hit the crystall ball to toggle between split preview mode and regular multicut mode.
+### October 21 2019
+# Lock layers to ignore interactions
+* In the Segment Selection widget, the "Ignore segment interactions" checkbox will lock a layer so that it will ignore selection, split, and merge operations.
+* This can be used for more easily editing multiple layers at once.
 
-# Multicut surrounding segment opacity
-* You can now control the opacity of the surrounding segments while performing a multicut, if you wish to view more context. Use the range slider in the "Multicut Opacity" group to do so.
+#Decrease lag from multiple annotations
+* Previously, having many annotations (1000+) would cause editing and rotating the 3D view to be slow.
+* This change uses a virtual list to hide annotation information that is offscreen. All functionality should be the same, just with better performance.
