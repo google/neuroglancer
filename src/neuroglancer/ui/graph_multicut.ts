@@ -29,11 +29,14 @@ import {MouseSelectionState} from 'neuroglancer/layer';
 import {VoxelSize} from 'neuroglancer/navigation_state';
 import {SegmentationDisplayState} from 'neuroglancer/segmentation_display_state/frontend';
 import {SegmentationUserLayerWithGraph, SegmentationUserLayerWithGraphDisplayState} from 'neuroglancer/segmentation_user_layer_with_graph';
-import {SegmentSelection} from 'neuroglancer/sliceview/chunked_graph/frontend';
+import {SupervoxelRenderLayer} from 'neuroglancer/sliceview/volume/supervoxel_renderlayer';
 import {StatusMessage} from 'neuroglancer/status';
+import {TrackableBoolean} from 'neuroglancer/trackable_boolean';
 import {WatchableRefCounted, WatchableValue} from 'neuroglancer/trackable_value';
 import {getPositionSummary} from 'neuroglancer/ui/annotations';
 import {Tool} from 'neuroglancer/ui/tool';
+import {Uint64Set} from 'neuroglancer/uint64_set';
+import {TrackableRGB} from 'neuroglancer/util/color';
 import {Borrowed, Owned, RefCounted} from 'neuroglancer/util/disposable';
 import {removeChildren} from 'neuroglancer/util/dom';
 import {mat4, vec3} from 'neuroglancer/util/geom';
@@ -44,6 +47,7 @@ import {Uint64} from 'neuroglancer/util/uint64';
 import {WatchableVisibilityPriority} from 'neuroglancer/visibility_priority/frontend';
 import {makeCloseButton} from 'neuroglancer/widget/close_button';
 import {MinimizableGroupWidget} from 'neuroglancer/widget/minimizable_group';
+import {RangeWidget} from 'neuroglancer/widget/range';
 import {StackView, Tab} from 'neuroglancer/widget/tab_view';
 import {makeTextIconButton} from 'neuroglancer/widget/text_icon_button';
 import {TimeSegmentWidget} from 'neuroglancer/widget/time_segment_widget';
@@ -280,6 +284,7 @@ export class GraphOperationLayerView extends Tab {
   private previousHoverId: string|undefined;
   private updated = false;
   multicutGroup = this.registerDisposer(new MinimizableGroupWidget('Multicut'));
+  multicutOpacityGroup = this.registerDisposer(new MinimizableGroupWidget('Multicut Opacity'));
   timectrlGroup = this.registerDisposer(new MinimizableGroupWidget('Time Control'));
   timeWidget: TimeSegmentWidget|undefined;
 
@@ -329,34 +334,15 @@ export class GraphOperationLayerView extends Tab {
       toolbox.appendChild(toggleGroupButton);
     }
 
+    const splitPreviewWrapper = new SplitPreview(this.wrapper, this.annotationLayer);
     const confirmButton = document.createElement('button');
     {
       confirmButton.textContent = '✔️';
       confirmButton.title = 'Perform Multi-Cut';
       confirmButton.addEventListener('click', () => {
-        const {objectToLocal} = annotationLayer.sourceA;
-        let sources = Array<SegmentSelection>();
-        let sinks = Array<SegmentSelection>();
-        for (const annotation of sourceA) {
-          if (annotation.type === AnnotationType.POINT && annotation.segments &&
-              annotation.segments.length === 2) {
-            const spatialPoint = vec3.transformMat4(vec3.create(), annotation.point, objectToLocal);
-            const segment = annotation.segments[0];
-            const root = annotation.segments[1];
-            sources.push({segmentId: segment, rootId: root, position: spatialPoint});
-          }
-        }
-        for (const annotation of sourceB) {
-          if (annotation.type === AnnotationType.POINT && annotation.segments &&
-              annotation.segments.length === 2) {
-            const spatialPoint = vec3.transformMat4(vec3.create(), annotation.point, objectToLocal);
-            const segment = annotation.segments[0];
-            const root = annotation.segments[1];
-            sinks.push({segmentId: segment, rootId: root, position: spatialPoint});
-          }
-        }
-
+        const {sources, sinks} = this.annotationLayer.getSourcesAndSinks();
         this.wrapper.chunkedGraphLayer!.splitSegments(sources, sinks).then((splitRoots) => {
+          splitPreviewWrapper.disablePreview();
           if (splitRoots.length === 0) {
             StatusMessage.showTemporaryMessage(`No split found.`, 3000);
           } else {
@@ -397,29 +383,33 @@ export class GraphOperationLayerView extends Tab {
       toolbox.appendChild(cancelButton);
     }
 
+    { toolbox.appendChild(splitPreviewWrapper.button); }
+
     this.multicutGroup.appendFixedChild(toolbox);
     this.multicutGroup.appendFlexibleChild(this.annotationListContainer);
     this.element.appendChild(this.multicutGroup.element);
 
-    const displayState =
-        <SegmentationUserLayerWithGraphDisplayState>(<GraphOperationLayerState>annotationLayer)
-            .segmentationState.value;
+    const displayState = <SegmentationUserLayerWithGraphDisplayState>(this.wrapper.displayState);
 
-    if (displayState && displayState.timestamp) {
-      this.timeWidget = this.registerDisposer(
-          new TimeSegmentWidget(displayState, wrapper.manager.layerManager.messageWithUndo));
-      const disableConfirm = () => {
-        if (displayState.timestamp.value === '') {
-          confirmButton.disabled = false;
-        } else {
-          confirmButton.disabled = true;
-        }
-      };
-      disableConfirm();
-      displayState.timestamp.changed.add(disableConfirm);
-      this.timectrlGroup.appendFlexibleChild(this.timeWidget.element);
-      this.element.appendChild(this.timectrlGroup.element);
-    }
+    const otherSegmentsAlphaWidget = this.registerDisposer(
+        new RangeWidget(displayState.multicutDisplayInformation.otherSegmentsAlpha));
+    otherSegmentsAlphaWidget.promptElement.textContent = 'Surrounding segments: ';
+    this.multicutOpacityGroup.appendFixedChild(otherSegmentsAlphaWidget.element);
+    this.element.appendChild(this.multicutOpacityGroup.element);
+
+    this.timeWidget = this.registerDisposer(
+        new TimeSegmentWidget(displayState, wrapper.manager.layerManager.messageWithUndo));
+    const disableConfirm = () => {
+      if (displayState.timestamp.value === '') {
+        confirmButton.disabled = false;
+      } else {
+        confirmButton.disabled = true;
+      }
+    };
+    disableConfirm();
+    displayState.timestamp.changed.add(disableConfirm);
+    this.timectrlGroup.appendFlexibleChild(this.timeWidget.element);
+    this.element.appendChild(this.timectrlGroup.element);
 
     this.annotationListContainer.addEventListener('mouseleave', () => {
       this.annotationLayer.hoverState.value = undefined;
@@ -616,6 +606,154 @@ export class GraphOperationLayerView extends Tab {
   }
 }
 
+/**
+ * Wrapper class for split preview UI logic
+ */
+class SplitPreview extends RefCounted {
+  button: HTMLButtonElement;
+  private inPreviewMode = false;
+  private splitPreviewRenderLayers: SupervoxelRenderLayer[] = [];
+  private cachedPreviewConnectedComponents: Uint64Set[] = [];
+  private removeStatusMessages: (() => void)|undefined;
+  private previewPending = false;
+  private cachedPreview = false;
+  private cachedLegality = false;
+
+  constructor(
+      public wrapper: Borrowed<SegmentationUserLayerWithGraph>,
+      public annotationLayer: Borrowed<GraphOperationLayerState>) {
+    super();
+    this.button = this.createPreviewButton();
+    const {sourceA, sourceB} = annotationLayer;
+    this.registerDisposer(sourceA.changed.add(() => {
+      this.cachedPreview = false;
+    }));
+    this.registerDisposer(sourceB.changed.add(() => {
+      this.cachedPreview = false;
+    }));
+  }
+
+  private createPreviewButton() {
+    const button = document.createElement('button');
+    button.textContent = '🔮';
+    button.title = 'Split preview';
+    const enablePreviewStyles = () => {
+      this.inPreviewMode = true;
+      button.title = 'Turn off split preview';
+      button.style.borderStyle = 'inset';
+      button.style.filter = 'invert(0.15)';
+      button.style.webkitFilter = 'invert(0.15)';
+    };
+    button.addEventListener('click', () => {
+      if (!this.previewPending) {
+        if (this.inPreviewMode) {
+          this.disablePreview();
+        } else {
+          if (this.cachedPreview) {
+            enablePreviewStyles();
+            this.enablePreview();
+          } else {
+            const {sources, sinks} = this.annotationLayer.getSourcesAndSinks();
+            if (sources.length && sinks.length) {
+              this.previewPending = true;
+              enablePreviewStyles();
+              this.wrapper.chunkedGraphLayer!.splitPreview(sources, sinks)
+                  .then(({supervoxelConnectedComponents, isSplitIllegal}) => {
+                    this.previewPending = false;
+                    // Cache results in case the user wants to toggle looking at preview and
+                    // multicut
+                    this.cachedPreview = true;
+                    this.cachedPreviewConnectedComponents = supervoxelConnectedComponents;
+                    this.cachedLegality = isSplitIllegal;
+                    this.enablePreview();
+                  })
+                  .catch(() => {
+                    this.revertPreviewButton();
+                    this.previewPending = false;
+                  });
+            } else {
+              StatusMessage.showTemporaryMessage(
+                  'You must select at least one source and one sink to perform a split preview.', 5000);
+            }
+          }
+        }
+      }
+    });
+    return button;
+  }
+
+  private enablePreview =
+      () => {
+        if (this.cachedLegality) {
+          const illegalSplitWarning = StatusMessage.showMessage(
+              'This split is illegal because it separates either the sources or the sinks. You can view the preview, but the split won\'t be accepted.');
+          const userGuidanceWarning = StatusMessage.showMessage(
+              'The uncolored supervoxels in the preview form a separate group. It may help to select more of them in the multicut process.');
+          const statusMessage = StatusMessage.messageWithAction(
+              'In split preview mode. Exit and return to multicut tool? ', 'Yes', () => {
+                this.disablePreview();
+                illegalSplitWarning.dispose();
+                userGuidanceWarning.dispose();
+              });
+          this.removeStatusMessages = () => {
+            illegalSplitWarning.dispose();
+            userGuidanceWarning.dispose();
+            statusMessage.dispose();
+          };
+        } else {
+          const statusMessage = StatusMessage.messageWithAction(
+              'In split preview mode. Exit and return to multicut tool? ', 'Yes',
+              this.disablePreview);
+          this.removeStatusMessages = () => {
+            statusMessage.dispose();
+          };
+        }
+        // Disable multicut layers while in preview
+        this.wrapper.graphOperationLayerState.value!.performingMulticut.value = false;
+        this.wrapper.displayState.multicutDisplayInformation!.focusMulticutSegments!.value = true;
+        const supervoxelCCColors: number[][] = [[1, 0, 0], [0, 0, 1]];
+        this.cachedPreviewConnectedComponents.forEach((connectedComponent, i) => {
+          // Usually we will only have two supervoxel groups but occasionally we will have more,
+          // those won't be colored
+          if (i < 2) {
+            const currentColor = supervoxelCCColors[i];
+            this.splitPreviewRenderLayers.push(this.wrapper.addSupervoxelRenderLayer({
+              supervoxelSet: connectedComponent,
+              supervoxelColor: new TrackableRGB(
+                  vec3.fromValues(currentColor[0], currentColor[1], currentColor[2])),
+              isActive: new TrackableBoolean(false, false),
+              performingMulticut: new TrackableBoolean(true, true)
+            }));
+          }
+        });
+      }
+
+  public disablePreview =
+      () => {
+        this.inPreviewMode = false;
+        this.revertPreviewButton();
+        // Remove preview render layers
+        this.splitPreviewRenderLayers.forEach(renderLayer => {
+          this.wrapper.removeRenderLayer(renderLayer);
+        });
+        this.splitPreviewRenderLayers = [];
+        // Exiting preview, renable multicut layers
+        this.wrapper.graphOperationLayerState.value!.performingMulticut.value = true;
+        if (this.removeStatusMessages) {
+          this.removeStatusMessages();
+          this.removeStatusMessages = undefined;
+        }
+      }
+
+  private revertPreviewButton = () => {
+    const {button} = this;
+    button.title = 'Split preview';
+    button.style.borderStyle = '';
+    button.style.filter = '';
+    button.style.webkitFilter = '';
+  }
+}
+
 export class GraphOperationDetailsTab extends Tab {
   private valid = false;
   private mouseEntered = false;
@@ -775,9 +913,9 @@ export class GraphOperationTab extends Tab {
         const hasMulticutSegments =
             graphOperationLayerState.annotationToSupervoxelA.supervoxelSet.size > 0 ||
             graphOperationLayerState.annotationToSupervoxelB.supervoxelSet.size > 0;
-        this.layer.displayState.performingMulticut!.value = hasMulticutSegments;
+        this.layer.graphOperationLayerState.value!.performingMulticut.value = hasMulticutSegments;
       } else {
-        this.layer.displayState.performingMulticut!.value = false;
+        this.layer.graphOperationLayerState.value!.performingMulticut.value = false;
       }
     }));
 

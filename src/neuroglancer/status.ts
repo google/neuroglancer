@@ -103,7 +103,7 @@ export class StatusMessage {
   }
 
   static messageWithAction(
-      message: string, actionMessage: string, action: () => void, closeAfter: number = 10000) {
+      message: string, actionMessage: string, action: () => void, closeAfter?: number) {
     const msg = this.showMessage(message);
     const actionButton = document.createElement('button');
     actionButton.textContent = actionMessage;
@@ -112,7 +112,9 @@ export class StatusMessage {
       msg.dispose();
     });
     msg.element.appendChild(actionButton);
-    setTimeout(() => msg.dispose(), closeAfter);
+    if (closeAfter !== undefined) {
+      setTimeout(() => msg.dispose(), closeAfter);
+    }
     return msg;
   }
 

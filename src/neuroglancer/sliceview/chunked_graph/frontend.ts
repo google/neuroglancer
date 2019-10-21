@@ -148,7 +148,7 @@ export class ChunkedGraphLayer extends GenericSliceViewRenderLayer {
     });
 
     const response = await this.withErrorMessage(promise, {
-      initialMessage: `Splitting ${first.length} sinks from ${second.length} sources`,
+      initialMessage: `Splitting ${first.length} sources from ${second.length} sinks`,
       errorPrefix: 'Split failed: '
     });
     const jsonResp = await response.json();
@@ -157,6 +157,42 @@ export class ChunkedGraphLayer extends GenericSliceViewRenderLayer {
       final[i] = Uint64.parseString(jsonResp['new_root_ids'][i]);
     }
     return final;
+  }
+
+  async splitPreview(first: SegmentSelection[], second: SegmentSelection[]):
+      Promise<{supervoxelConnectedComponents: Uint64Set[], isSplitIllegal: boolean}> {
+    const {url} = this;
+    if (url === '') {
+      return Promise.reject(GRAPH_SERVER_NOT_SPECIFIED);
+    }
+
+    const promise = authFetch(`${url}/graph/split_preview?int64_as_str=1`, {
+      method: 'POST',
+      body: JSON.stringify({
+        'sources': first.map(x => [String(x.segmentId), ...x.position.values()]),
+        'sinks': second.map(x => [String(x.segmentId), ...x.position.values()])
+      })
+    });
+
+    const response = await this.withErrorMessage(promise, {
+      initialMessage:
+          `Calculating split preview: ${first.length} sources, and ${second.length} sinks`,
+      errorPrefix: 'Split preview failed: '
+    });
+    const jsonResp = await response.json();
+    const jsonCCKey = 'supervoxel_connected_components';
+    const supervoxelConnectedComponents: Uint64Set[] = new Array(jsonResp[jsonCCKey].length);
+    for (let i = 0; i < supervoxelConnectedComponents.length; i++) {
+      const connectedComponent = new Array(jsonResp[jsonCCKey][i].length);
+      for (let j = 0; j < jsonResp[jsonCCKey][i].length; j++) {
+        connectedComponent[j] = Uint64.parseString(jsonResp[jsonCCKey][i][j], 10);
+      }
+      const connectedComponentSet = new Uint64Set();
+      connectedComponentSet.add(connectedComponent);
+      supervoxelConnectedComponents[i] = connectedComponentSet;
+    }
+    const jsonIllegalSplitKey = 'illegal_split';
+    return {supervoxelConnectedComponents, isSplitIllegal: jsonResp[jsonIllegalSplitKey]};
   }
 
   draw() {}

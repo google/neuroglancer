@@ -23,17 +23,20 @@ import {SegmentationDisplayState} from 'neuroglancer/segmentation_display_state/
 import {SegmentationUserLayer, SegmentationUserLayerDisplayState} from 'neuroglancer/segmentation_user_layer';
 import {ChunkedGraphChunkSource, ChunkedGraphLayer, SegmentSelection} from 'neuroglancer/sliceview/chunked_graph/frontend';
 import {VolumeType} from 'neuroglancer/sliceview/volume/base';
+import {MultiscaleVolumeChunkSource} from 'neuroglancer/sliceview/volume/frontend';
 import {SupervoxelRenderLayer} from 'neuroglancer/sliceview/volume/supervoxel_renderlayer';
 import {StatusMessage} from 'neuroglancer/status';
+import {trackableAlphaValue} from 'neuroglancer/trackable_alpha';
 import {TrackableBoolean} from 'neuroglancer/trackable_boolean';
 import {TrackableValue, WatchableRefCounted, WatchableValue} from 'neuroglancer/trackable_value';
 import {GraphOperationTab, SelectedGraphOperationState} from 'neuroglancer/ui/graph_multicut';
 import {Uint64Set} from 'neuroglancer/uint64_set';
 import {TrackableRGB} from 'neuroglancer/util/color';
-import {Borrowed} from 'neuroglancer/util/disposable';
+import {Borrowed, RefCounted} from 'neuroglancer/util/disposable';
 import {vec3} from 'neuroglancer/util/geom';
 import {parseArray, verifyObjectProperty} from 'neuroglancer/util/json';
 import {Uint64} from 'neuroglancer/util/uint64';
+import {NullarySignal} from './util/signal';
 
 // Already defined in segmentation_user_layer.ts
 const EQUIVALENCES_JSON_KEY = 'equivalences';
@@ -50,9 +53,22 @@ const lastSegmentSelection: SegmentSelection = {
   position: vec3.create(),
 };
 
+export class MulticutDisplayInformation extends RefCounted {
+  changed = new NullarySignal();
+
+  constructor(
+      public multicutSegments = new Uint64Set(),
+      public focusMulticutSegments = new TrackableBoolean(false, false),
+      public otherSegmentsAlpha = trackableAlphaValue(0.5)) {
+    super();
+    this.registerDisposer(multicutSegments.changed.add(this.changed.dispatch));
+    this.registerDisposer(focusMulticutSegments.changed.add(this.changed.dispatch));
+    this.registerDisposer(otherSegmentsAlpha.changed.add(this.changed.dispatch));
+  }
+}
+
 export type SegmentationUserLayerWithGraphDisplayState = SegmentationUserLayerDisplayState&{
-  multicutSegments: Uint64Set;
-  performingMulticut: TrackableBoolean;
+  multicutDisplayInformation: MulticutDisplayInformation;
   timestamp: TrackableValue<string>;
   timestampLimit: TrackableValue<string>;
 };
@@ -70,12 +86,12 @@ function helper<TBase extends BaseConstructor>(Base: TBase) {
     selectedGraphOperationElement = this.registerDisposer(
         new SelectedGraphOperationState(this.graphOperationLayerState.addRef()));
     displayState: SegmentationUserLayerWithGraphDisplayState;
+    private multiscaleVolumeChunkSource: MultiscaleVolumeChunkSource|undefined;
     constructor(...args: any[]) {
       super(...args);
       this.displayState = {
         ...this.displayState,
-        multicutSegments: new Uint64Set(),
-        performingMulticut: new TrackableBoolean(false, false),
+        multicutDisplayInformation: new MulticutDisplayInformation(),
         timestamp: new TrackableValue('', date => ((new Date(date)).valueOf() / 1000).toString()),
         timestampLimit: new TrackableValue(
             '',
@@ -98,12 +114,19 @@ function helper<TBase extends BaseConstructor>(Base: TBase) {
       const graphOpState = this.graphOperationLayerState.value = new GraphOperationLayerState({
         transform: this.transform,
         segmentationState: segmentationState,
-        multicutSegments: this.displayState.multicutSegments,
-        performingMulticut: this.displayState.performingMulticut
+        multicutSegments: this.displayState.multicutDisplayInformation.multicutSegments,
+        performingMulticut: new TrackableBoolean(false, false)
       });
 
-      graphOpState.changed.add(() => this.specificationChanged.dispatch());
-      this.displayState.timestamp.changed.add(() => this.specificationChanged.dispatch());
+      graphOpState.registerDisposer(graphOpState.performingMulticut.changed.add(() => {
+        this.displayState.multicutDisplayInformation.focusMulticutSegments.value =
+            graphOpState.performingMulticut.value;
+      }));
+
+      graphOpState.registerDisposer(
+          graphOpState.changed.add(() => this.specificationChanged.dispatch()));
+      this.registerDisposer(
+          this.displayState.timestamp.changed.add(() => this.specificationChanged.dispatch()));
 
       const {stateA, stateB} = graphOpState;
       if (stateA !== undefined) {
@@ -138,6 +161,7 @@ function helper<TBase extends BaseConstructor>(Base: TBase) {
       if (multiscaleSource !== undefined) {
         ++remaining;
         multiscaleSource.then(volume => {
+          this.multiscaleVolumeChunkSource = volume;
           const {displayState} = this;
           if (!this.wasDisposed) {
             if (volume.getTimestampLimit) {
@@ -173,30 +197,20 @@ function helper<TBase extends BaseConstructor>(Base: TBase) {
                 });
               }
             }
-            this.addRenderLayer(new SupervoxelRenderLayer(volume, {
-              ...this.displayState,
-              visibleSegments2D:
+            this.addSupervoxelRenderLayer({
+              supervoxelSet:
                   this.graphOperationLayerState.value!.annotationToSupervoxelA.supervoxelSet,
               supervoxelColor: new TrackableRGB(vec3.fromValues(1.0, 0.0, 0.0)),
-              shatterSegmentEquivalences: new TrackableBoolean(true, true),
-              transform: this.displayState.objectToDataTransform,
-              renderScaleHistogram: this.sliceViewRenderScaleHistogram,
-              renderScaleTarget: this.sliceViewRenderScaleTarget,
               isActive: this.graphOperationLayerState.value!.annotationToSupervoxelA.isActive,
               performingMulticut: this.graphOperationLayerState.value!.performingMulticut
-            }));
-            this.addRenderLayer(new SupervoxelRenderLayer(volume, {
-              ...this.displayState,
-              visibleSegments2D:
+            });
+            this.addSupervoxelRenderLayer({
+              supervoxelSet:
                   this.graphOperationLayerState.value!.annotationToSupervoxelB.supervoxelSet,
               supervoxelColor: new TrackableRGB(vec3.fromValues(0.0, 0.0, 1.0)),
-              shatterSegmentEquivalences: new TrackableBoolean(true, true),
-              transform: this.displayState.objectToDataTransform,
-              renderScaleHistogram: this.sliceViewRenderScaleHistogram,
-              renderScaleTarget: this.sliceViewRenderScaleTarget,
               isActive: this.graphOperationLayerState.value!.annotationToSupervoxelB.isActive,
               performingMulticut: this.graphOperationLayerState.value!.performingMulticut
-            }));
+            });
             if (--remaining === 0) {
               this.isReady = true;
             }
@@ -461,6 +475,32 @@ function helper<TBase extends BaseConstructor>(Base: TBase) {
         });
       });
     }
+
+    addSupervoxelRenderLayer({supervoxelSet, supervoxelColor, isActive, performingMulticut}: {
+      supervoxelSet: Uint64Set,
+      supervoxelColor: TrackableRGB,
+      isActive: TrackableBoolean,
+      performingMulticut: TrackableBoolean
+    }): SupervoxelRenderLayer {
+      if (!this.multiscaleVolumeChunkSource) {
+        // Should never happen
+        throw new Error(
+            'Attempt to add Supervoxel Render Layer before segmentation volume retrieved');
+      }
+      const supervoxelRenderLayer = new SupervoxelRenderLayer(this.multiscaleVolumeChunkSource, {
+        ...this.displayState,
+        visibleSegments2D: supervoxelSet,
+        supervoxelColor,
+        shatterSegmentEquivalences: new TrackableBoolean(true, true),
+        transform: this.displayState.objectToDataTransform,
+        renderScaleHistogram: this.sliceViewRenderScaleHistogram,
+        renderScaleTarget: this.sliceViewRenderScaleTarget,
+        isActive,
+        performingMulticut
+      });
+      this.addRenderLayer(supervoxelRenderLayer);
+      return supervoxelRenderLayer;
+    }
   }
   return C;
 }
@@ -470,6 +510,12 @@ export interface SegmentationUserLayerWithGraph extends SegmentationUserLayer {
   chunkedGraphLayer: Borrowed<ChunkedGraphLayer>|undefined;
   graphOperationLayerState: WatchableRefCounted<GraphOperationLayerState>;
   selectedGraphOperationElement: SelectedGraphOperationState;
+  addSupervoxelRenderLayer: ({supervoxelSet, supervoxelColor, isActive, performingMulticut}: {
+    supervoxelSet: Uint64Set,
+    supervoxelColor: TrackableRGB,
+    isActive: TrackableBoolean,
+    performingMulticut: TrackableBoolean
+  }) => SupervoxelRenderLayer;
 }
 
 /**

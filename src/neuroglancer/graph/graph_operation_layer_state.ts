@@ -14,12 +14,13 @@
  * limitations under the License.
  */
 
-import {AnnotationId, AnnotationReference, LocalAnnotationSource, restoreAnnotation} from 'neuroglancer/annotation';
+import {AnnotationId, AnnotationReference, AnnotationType, LocalAnnotationSource, restoreAnnotation} from 'neuroglancer/annotation';
 import {AnnotationLayerState} from 'neuroglancer/annotation/frontend';
 import {Annotation} from 'neuroglancer/annotation/index';
 import {CoordinateTransform} from 'neuroglancer/coordinate_transform';
 import {RenderLayerRole} from 'neuroglancer/layer';
 import {SegmentationDisplayState} from 'neuroglancer/segmentation_display_state/frontend';
+import {SegmentSelection} from 'neuroglancer/sliceview/chunked_graph/frontend';
 import {trackableAlphaValue} from 'neuroglancer/trackable_alpha';
 import {TrackableBoolean} from 'neuroglancer/trackable_boolean';
 import {WatchableRefCounted, WatchableValue} from 'neuroglancer/trackable_value';
@@ -310,5 +311,31 @@ export class GraphOperationLayerState extends RefCounted {
       processAnnotation(x, annotationMapB);
     });
     return [annotationMapA.get(maxRootSegment) || [], annotationMapB.get(maxRootSegment) || []];
+  }
+
+  getSourcesAndSinks() {
+    let sources = Array<SegmentSelection>();
+    let sinks = Array<SegmentSelection>();
+    const {sourceA, sourceB} = this;
+    const {objectToLocal} = sourceA;
+    for (const annotation of sourceA) {
+      if (annotation.type === AnnotationType.POINT && annotation.segments &&
+          annotation.segments.length === 2) {
+        const spatialPoint = vec3.transformMat4(vec3.create(), annotation.point, objectToLocal);
+        const segment = annotation.segments[0];
+        const root = annotation.segments[1];
+        sources.push({segmentId: segment, rootId: root, position: spatialPoint});
+      }
+    }
+    for (const annotation of sourceB) {
+      if (annotation.type === AnnotationType.POINT && annotation.segments &&
+          annotation.segments.length === 2) {
+        const spatialPoint = vec3.transformMat4(vec3.create(), annotation.point, objectToLocal);
+        const segment = annotation.segments[0];
+        const root = annotation.segments[1];
+        sinks.push({segmentId: segment, rootId: root, position: spatialPoint});
+      }
+    }
+    return {sources, sinks};
   }
 }

@@ -80,7 +80,7 @@ export class SupervoxelRenderLayer extends RenderLayer {
     if (this.displayState.hideSegmentZero.value) {
       fragmentMain += `
     if ((value.value[0] == 0u && value.value[1] == 0u) || uPerformingMulticut == 0u) {
-      emit(vec4(vec4(0, 0, 0, 0)));
+      emit(vec4(0, 0, 0, 0));
       return;
     }
   `;
