@@ -1,7 +1,7 @@
 import {Overlay} from 'neuroglancer/overlay';
 import {Viewer} from 'neuroglancer/viewer';
 
-require('./whats_new.css');
+import 'neuroglancer/whats_new/whats_new.css';
 
 const updateFName = 'WHATS_NEW.md';
 const generateWhatsNew = (GHCommits: string[] = []) => {

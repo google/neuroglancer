@@ -17,8 +17,8 @@
 import {RefCounted} from 'neuroglancer/util/disposable';
 import {removeFromParent} from 'neuroglancer/util/dom';
 
-require('neuroglancer/noselect.css');
-require('./chunked_graph_widget.css');
+import 'neuroglancer/noselect.css';
+import 'neuroglancer/widget/chunked_graph_widget.css';
 
 interface ChunkedGraphState {
   url: string;

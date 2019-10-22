@@ -18,7 +18,7 @@ import {RefCounted, registerEventListener} from 'neuroglancer/util/disposable';
 import {removeFromParent} from 'neuroglancer/util/dom';
 import {NullarySignal} from 'neuroglancer/util/signal';
 
-require('./context_menu.css');
+import './context_menu.css';
 
 export function positionContextMenu(menu: HTMLElement, event: MouseEvent) {
   const {offsetWidth, offsetHeight} = menu;

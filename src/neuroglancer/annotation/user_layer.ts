@@ -35,7 +35,7 @@ import {KeyboardEventBinder} from 'neuroglancer/util/keyboard_bindings';
 import {LayerReferenceWidget} from 'neuroglancer/widget/layer_reference';
 import {Tab} from 'neuroglancer/widget/tab_view';
 
-require('./user_layer.css');
+import './user_layer.css';
 
 const POINTS_JSON_KEY = 'points';
 const ANNOTATIONS_JSON_KEY = 'annotations';

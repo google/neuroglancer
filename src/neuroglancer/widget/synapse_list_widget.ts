@@ -25,8 +25,8 @@ import {RefCounted} from 'neuroglancer/util/disposable';
 import {removeChildren, removeFromParent} from 'neuroglancer/util/dom';
 import {Signal} from 'neuroglancer/util/signal';
 
-require('neuroglancer/noselect.css');
-require('./synapse_list_widget.css');
+import 'neuroglancer/noselect.css';
+import 'neuroglancer/widget/synapse_list_widget.css';
 
 export class SynapsePointListWidget extends RefCounted {
   element = document.createElement('div');

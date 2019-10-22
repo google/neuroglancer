@@ -5,7 +5,7 @@ import {TrackableValue} from 'neuroglancer/trackable_value';
 import {RefCounted} from 'neuroglancer/util/disposable';
 import {removeFromParent} from 'neuroglancer/util/dom';
 
-require('flatpickr/dist/flatpickr.min.css');
+import 'flatpickr/dist/flatpickr.min.css';
 
 export class TimeSegmentWidget extends RefCounted {
   element = document.createElement('div');

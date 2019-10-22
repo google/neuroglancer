@@ -30,6 +30,11 @@ export interface ChunkedGraphSourceOptions extends SliceViewSourceOptions {
 export interface ChunkedGraphChunkSpecificationBaseOptions extends
     SliceViewChunkSpecificationBaseOptions {
   /**
+   * Number of channels.
+   */
+  numChannels: number;
+
+  /**
    * Lower clipping bound (in nanometers), relative to chunkLayout coordinates.  If not specified,
    * defaults to lowerVoxelBound * voxelSize.
    *
@@ -89,6 +94,8 @@ export interface ChunkedGraphChunkSpecificationGetDefaultsOptions extends
  * Specifies a chunk layout and voxel size.
  */
 export class ChunkedGraphChunkSpecification extends SliceViewChunkSpecification {
+  numChannels: number;
+
   lowerClipBound: vec3;
   upperClipBound: vec3;
 
@@ -105,7 +112,8 @@ export class ChunkedGraphChunkSpecification extends SliceViewChunkSpecification 
       chunkDataSize,
       voxelSize,
       transform,
-      baseVoxelOffset = kZeroVec
+      baseVoxelOffset = kZeroVec,
+      numChannels
     } = options;
     let {
       lowerClipBound = vec3.multiply(vec3.create(), voxelSize, lowerVoxelBound),
@@ -125,6 +133,7 @@ export class ChunkedGraphChunkSpecification extends SliceViewChunkSpecification 
     this.lowerVoxelBound = lowerVoxelBound;
     this.upperVoxelBound = upperVoxelBound;
     this.chunkDataSize = chunkDataSize;
+    this.numChannels = numChannels;
   }
 
   static make(options: ChunkedGraphChunkSpecificationOptions&
@@ -141,6 +150,7 @@ export class ChunkedGraphChunkSpecification extends SliceViewChunkSpecification 
   toObject(): ChunkedGraphChunkSpecificationOptions&SliceViewChunkSpecificationOptions {
     return {
       ...super.toObject(),
+      numChannels: this.numChannels,
       chunkDataSize: this.chunkDataSize,
       lowerVoxelBound: this.lowerVoxelBound,
       upperVoxelBound: this.upperVoxelBound,

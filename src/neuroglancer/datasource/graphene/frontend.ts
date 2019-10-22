@@ -178,6 +178,7 @@ export class MultiscaleVolumeChunkSource implements GenericMultiscaleVolumeChunk
 
   getChunkedGraphSources(options: ChunkedGraphSourceOptions, rootSegments: Uint64Set) {
     const spec = ChunkedGraphChunkSpecification.getDefaults({
+      numChannels: 1,
       voxelSize: this.scales[0].resolution,
       transform: mat4.fromTranslation(
           mat4.create(),

@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-require('./default_viewer.css');
+import './default_viewer.css';
 
 import 'neuroglancer/sliceview/chunk_format_handlers';
 

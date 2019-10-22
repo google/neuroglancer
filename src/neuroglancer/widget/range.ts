@@ -14,46 +14,58 @@
  * limitations under the License.
  */
 
-import {TrackableValue} from 'neuroglancer/trackable_value';
+import {TrackableValueInterface} from 'neuroglancer/trackable_value';
 import {RefCounted} from 'neuroglancer/util/disposable';
 import {removeFromParent} from 'neuroglancer/util/dom';
 
-require('./range.css');
+import './range.css';
 
 export class RangeWidget extends RefCounted {
   element = document.createElement('label');
   promptElement = document.createElement('span');
   inputElement = document.createElement('input');
+  numericInputElement = document.createElement('input');
 
-  constructor(public value: TrackableValue<number>, {min = 0, max = 1, step = 0.01} = {}) {
+  constructor(public value: TrackableValueInterface<number>, {min = 0, max = 1, step = 0.01} = {}) {
     super();
-    let {element, promptElement, inputElement} = this;
+    let {element, promptElement, inputElement, numericInputElement} = this;
     element.className = 'range-slider';
     promptElement.className = 'range-prompt';
+    const initInputElement = (el: HTMLInputElement) => {
+      el.min = '' + min;
+      el.max = '' + max;
+      el.step = '' + step;
+      el.valueAsNumber = this.value.value;
+      const inputValueChanged = () => {
+        this.value.value = el.valueAsNumber;
+      };
+      this.registerEventListener(el, 'change', inputValueChanged);
+      this.registerEventListener(el, 'input', inputValueChanged);
+      this.registerEventListener(el, 'wheel', (event: WheelEvent) => {
+        let {deltaY} = event;
+        if (deltaY > 0) {
+          el.stepUp();
+          inputValueChanged();
+        } else if (deltaY < 0) {
+          el.stepDown();
+          inputValueChanged();
+        }
+      });
+    };
     inputElement.type = 'range';
-    inputElement.min = '' + min;
-    inputElement.max = '' + max;
-    inputElement.step = '' + step;
-    inputElement.valueAsNumber = this.value.value;
+    initInputElement(inputElement);
+    numericInputElement.type = 'number';
+    const maxNumberWidth = Math.max(
+        min.toString().length, max.toString().length, Math.min(max, min + step).toString().length,
+        Math.max(min, max - step).toString().length);
+    numericInputElement.style.width = (maxNumberWidth + 2) + 'ch';
+    initInputElement(numericInputElement);
     element.appendChild(promptElement);
     element.appendChild(inputElement);
-    const inputValueChanged = () => {
-      this.value.value = this.inputElement.valueAsNumber;
-    };
-    this.registerEventListener(inputElement, 'change', inputValueChanged);
-    this.registerEventListener(inputElement, 'input', inputValueChanged);
-    this.registerEventListener(inputElement, 'wheel', (event: WheelEvent) => {
-      let {deltaY} = event;
-      if (deltaY > 0) {
-        this.inputElement.stepUp();
-        inputValueChanged();
-      } else if (deltaY < 0) {
-        this.inputElement.stepDown();
-        inputValueChanged();
-      }
-    });
+    element.appendChild(numericInputElement);
     value.changed.add(() => {
       this.inputElement.valueAsNumber = this.value.value;
+      this.numericInputElement.valueAsNumber = this.value.value;
     });
   }
   disposed() {

@@ -144,6 +144,30 @@ export class HidingList {
     this.updateScrollAreaPos();
   }
 
+  replaceElement(newElement: HTMLElement, oldElement: HTMLElement) {
+    this.resizeObserver.unobserve(oldElement);
+    this.unhideElement(oldElement);
+    const oldHeight = oldElement.offsetHeight;
+
+    const elementIndex = this.elementIndices.get(oldElement)!;
+    this.elementIndices.delete(oldElement);
+    this.elementIndices.set(newElement, elementIndex);
+    this.elementYs[elementIndex][0] = newElement;
+
+    this.scrollArea.replaceChild(newElement, oldElement);
+    const newHeight = newElement.offsetHeight;
+    const delta = newHeight - oldHeight;
+
+    if (delta !== 0) {
+      this.shiftYsAfter(elementIndex + 1, delta);
+      this.totalHeight += delta;
+      this.updateScrollbarHeight();
+    }
+
+    this.resizeObserver.observe(newElement);
+    this.updateScrollAreaPos();
+  }
+
   removeAll() {
     for (const [element] of this.elementIndices) {
       this.scrollArea.removeChild(element);

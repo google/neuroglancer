@@ -556,6 +556,28 @@ export class AnnotationLayerView extends Tab {
         new HidingList(scrollArea, scrollbar, scrollbarFiller, this.groupAnnotations.element);
   }
 
+  private clearSelectionClass() {
+    const {previousSelectedId} = this;
+    if (previousSelectedId !== undefined) {
+      const element = this.annotationListElements.get(previousSelectedId);
+      if (element !== undefined) {
+        element.classList.remove('neuroglancer-annotation-selected');
+      }
+      this.previousSelectedId = undefined;
+    }
+  }
+
+  private clearHoverClass() {
+    const {previousHoverId} = this;
+    if (previousHoverId !== undefined) {
+      const element = this.annotationListElements.get(previousHoverId);
+      if (element !== undefined) {
+        element.classList.remove('neuroglancer-annotation-hover');
+      }
+      this.previousHoverId = undefined;
+    }
+  }
+
   private updateSelectionView() {
     const selectedValue = this.state.value;
     let newSelectedId: string|undefined;
@@ -566,12 +588,7 @@ export class AnnotationLayerView extends Tab {
     if (newSelectedId === previousSelectedId) {
       return;
     }
-    if (previousSelectedId !== undefined) {
-      const element = this.annotationListElements.get(previousSelectedId);
-      if (element !== undefined) {
-        element.classList.remove('neuroglancer-annotation-selected');
-      }
-    }
+    this.clearSelectionClass();
     if (newSelectedId !== undefined) {
       const element = this.annotationListElements.get(newSelectedId);
       if (element !== undefined) {
@@ -592,12 +609,7 @@ export class AnnotationLayerView extends Tab {
     if (newHoverId === previousHoverId) {
       return;
     }
-    if (previousHoverId !== undefined) {
-      const element = this.annotationListElements.get(previousHoverId);
-      if (element !== undefined) {
-        element.classList.remove('neuroglancer-annotation-hover');
-      }
-    }
+    this.clearHoverClass();
     if (newHoverId !== undefined) {
       const element = this.annotationListElements.get(newHoverId);
       if (element !== undefined) {
@@ -608,26 +620,7 @@ export class AnnotationLayerView extends Tab {
   }
 
   private addAnnotationElementHelper(annotation: Annotation) {
-    const {annotationLayer, annotationListElements} = this;
-    const {objectToGlobal} = annotationLayer;
-
-    const element = this.makeAnnotationListElement(annotation, objectToGlobal);
-    this.annotationsToAdd.push(element);
-    annotationListElements.set(annotation.id, element);
-
-    element.addEventListener('mouseenter', () => {
-      this.annotationLayer.hoverState.value = {id: annotation.id, partIndex: 0};
-    });
-    element.addEventListener('click', () => {
-      this.state.value = {id: annotation.id, partIndex: 0};
-    });
-
-    element.addEventListener('mouseup', (event: MouseEvent) => {
-      if (event.button === 2) {
-        this.setSpatialCoordinates(
-            getCenterPosition(annotation, this.annotationLayer.objectToGlobal));
-      }
-    });
+    this.annotationsToAdd.push(this.makeAnnotationListElement(annotation));
   }
 
   private updateView() {
@@ -651,6 +644,11 @@ export class AnnotationLayerView extends Tab {
 
   private addAnnotationElement(annotation: Annotation) {
     if (!this.visible) {
+      this.updated = false;
+      return;
+    }
+    if (!this.updated) {
+      this.updateView();
       return;
     }
     this.annotationsToAdd = [];
@@ -661,34 +659,32 @@ export class AnnotationLayerView extends Tab {
 
   private updateAnnotationElement(annotation: Annotation, checkVisibility = true) {
     if (checkVisibility && !this.visible) {
+      this.updated = false;
       return;
     }
-    var element = this.annotationListElements.get(annotation.id);
+    if (!this.updated) {
+      this.updateView();
+      return;
+    }
+    const {annotationListElements} = this;
+    const element = annotationListElements.get(annotation.id);
     if (!element) {
       return;
     }
-    {
-      const position = <HTMLElement>element.querySelector('.neuroglancer-annotation-position');
-      position.innerHTML = '';
-      getPositionSummary(
-          position, annotation, this.annotationLayer.objectToGlobal, this.voxelSize,
-          this.setSpatialCoordinates);
-    }
-    if (element.lastElementChild && element.children.length === 3) {
-      const annotationText = this.layer.getAnnotationText(annotation);
-      if (!annotationText) {
-        element.removeChild(element.lastElementChild);
-      } else {
-        element.lastElementChild.innerHTML = annotationText;
-      }
-    } else {
-      this.createAnnotationDescriptionElement(element, annotation);
-    }
+    const {annotationHidingList} = this;
+    const newElement = this.makeAnnotationListElement(annotation);
+    annotationHidingList.replaceElement(newElement, element);
+    annotationListElements.set(annotation.id, newElement);
     this.resetOnUpdate();
   }
 
   private deleteAnnotationElement(annotationId: string) {
     if (!this.visible) {
+      this.updated = false;
+      return;
+    }
+    if (!this.updated) {
+      this.updateView();
       return;
     }
     let element = this.annotationListElements.get(annotationId);
@@ -700,14 +696,15 @@ export class AnnotationLayerView extends Tab {
   }
 
   private resetOnUpdate() {
-    this.previousSelectedId = undefined;
-    this.previousHoverId = undefined;
+    this.clearHoverClass();
+    this.clearSelectionClass();
     this.updated = true;
     this.updateHoverView();
     this.updateSelectionView();
   }
 
-  private makeAnnotationListElement(annotation: Annotation, transform: mat4) {
+  private makeAnnotationListElement(annotation: Annotation) {
+    const transform = this.annotationLayer.objectToGlobal;
     const element = document.createElement('li');
     element.title = 'Click to select, right click to recenter view.';
 
@@ -720,8 +717,24 @@ export class AnnotationLayerView extends Tab {
     position.className = 'neuroglancer-annotation-position';
     getPositionSummary(position, annotation, transform, this.voxelSize, this.setSpatialCoordinates);
     element.appendChild(position);
+
     this.createAnnotationDescriptionElement(element, annotation);
 
+    this.annotationListElements.set(annotation.id, element);
+
+    element.addEventListener('mouseenter', () => {
+      this.annotationLayer.hoverState.value = {id: annotation.id, partIndex: 0};
+    });
+    element.addEventListener('click', () => {
+      this.state.value = {id: annotation.id, partIndex: 0};
+    });
+
+    element.addEventListener('mouseup', (event: MouseEvent) => {
+      if (event.button === 2) {
+        this.setSpatialCoordinates(
+            getCenterPosition(annotation, this.annotationLayer.objectToGlobal));
+      }
+    });
     return element;
   }
 
@@ -1097,7 +1110,7 @@ export class PlacePointTool extends PlaceAnnotationTool {
             vec3.transformMat4(vec3.create(), mouseState.position, annotationLayer.globalToObject),
         type: AnnotationType.POINT,
       };
-      const reference = annotationLayer.source.add(annotation, /*commit=*/true);
+      const reference = annotationLayer.source.add(annotation, /*commit=*/ true);
       this.layer.selectedAnnotation.value = {id: reference.id};
       reference.dispose();
     }
@@ -1146,7 +1159,7 @@ abstract class TwoStepAnnotationTool extends PlaceAnnotationTool {
 
       if (this.inProgressAnnotation === undefined) {
         const reference = annotationLayer.source.add(
-            this.getInitialAnnotation(mouseState, annotationLayer), /*commit=*/false);
+            this.getInitialAnnotation(mouseState, annotationLayer), /*commit=*/ false);
         this.layer.selectedAnnotation.value = {id: reference.id};
         const mouseDisposer = mouseState.changed.add(updatePointB);
         const disposer = () => {
