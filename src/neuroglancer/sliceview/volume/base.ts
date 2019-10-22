@@ -226,6 +226,7 @@ export class VolumeChunkSpecification extends SliceViewChunkSpecification {
         options.volumeType === VolumeType.SEGMENTATION &&
         (dataType === DataType.UINT32 || dataType === DataType.UINT64)) {
       compressedSegmentationBlockSize = getNearIsotropicBlockSize({
+        numChannels: options.numChannels,
         voxelSize,
         transform,
         lowerVoxelBound,

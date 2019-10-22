@@ -1,8 +1,4 @@
-### October 21 2019
-# Lock layers to ignore interactions
-* In the Segment Selection widget, the "Ignore segment interactions" checkbox will lock a layer so that it will ignore selection, split, and merge operations.
-* This can be used for more easily editing multiple layers at once.
-
-# Decrease lag from multiple annotations
-* Previously, having many annotations (1000+) would cause editing and rotating the 3D view to be slow.
-* This change uses a virtual list to hide annotation information that is offscreen. All functionality should be the same, just with better performance.
+### October 22 2019
+## Sync with google/neuroglancer
+* Thanks to @jbms and @lutzroeder
+* Detailed changelog on [github.com/google/neuroglancer](https://github.com/google/neuroglancer/compare/efd558799a54db917498819798d1e66e98bfbd71...google:ebb893928bc00ee61508f2c6ce23e01fe0e650c9)

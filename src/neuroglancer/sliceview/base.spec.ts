@@ -19,19 +19,25 @@ import {vec3} from 'neuroglancer/util/geom';
 
 describe('sliceview/base', () => {
   it('getNearIsotropicBlockSize', () => {
-    expect(
-        getNearIsotropicBlockSize({voxelSize: vec3.fromValues(1, 1, 1), maxVoxelsPerChunkLog2: 18}))
+    expect(getNearIsotropicBlockSize(
+               {voxelSize: vec3.fromValues(1, 1, 1), maxVoxelsPerChunkLog2: 18, numChannels: 1}))
         .toEqual(vec3.fromValues(64, 64, 64));
 
-    expect(
-        getNearIsotropicBlockSize({voxelSize: vec3.fromValues(2, 1, 1), maxVoxelsPerChunkLog2: 17}))
+    expect(getNearIsotropicBlockSize(
+               {voxelSize: vec3.fromValues(2, 1, 1), maxVoxelsPerChunkLog2: 17, numChannels: 1}))
         .toEqual(vec3.fromValues(32, 64, 64));
 
-    expect(
-        getNearIsotropicBlockSize({voxelSize: vec3.fromValues(3, 3, 30), maxVoxelsPerChunkLog2: 9}))
-        .toEqual(vec3.fromValues(16, 16, 2));
+    expect(getNearIsotropicBlockSize(
+               {voxelSize: vec3.fromValues(3, 3, 30), maxVoxelsPerChunkLog2: 9, numChannels: 1}))
+      .toEqual(vec3.fromValues(16, 16, 2));
+
+    expect(getNearIsotropicBlockSize(
+               {voxelSize: vec3.fromValues(3, 3, 30), maxVoxelsPerChunkLog2: 9, numChannels: 8}))
+        .toEqual(vec3.fromValues(8, 8, 1));
+
 
     expect(getNearIsotropicBlockSize({
+      numChannels: 1,
       voxelSize: vec3.fromValues(3, 3, 30),
       upperVoxelBound: vec3.fromValues(1, 128, 128),
       maxVoxelsPerChunkLog2: 8

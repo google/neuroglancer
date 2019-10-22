@@ -2,7 +2,7 @@ import {Overlay} from 'neuroglancer/overlay';
 import {Viewer} from 'neuroglancer/viewer';
 
 // TODO: css
-// require('./user_report.css');
+// import 'neuroglancer/user_report/user_report.css';
 
 interface LooseObject {
   [key: string]: any;

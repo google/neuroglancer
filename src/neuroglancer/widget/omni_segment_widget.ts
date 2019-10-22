@@ -20,7 +20,7 @@ import {RefCounted} from 'neuroglancer/util/disposable';
 import {Uint64} from 'neuroglancer/util/uint64';
 import {StatusMessage} from '../status';
 
-require('./omni_segment_widget.css');
+import 'neuroglancer/widget/omni_segment_widget.css';
 
 export class OmniSegmentWidget extends RefCounted {
   element = document.createElement('div');

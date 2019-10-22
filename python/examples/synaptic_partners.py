@@ -17,6 +17,8 @@ the top N synaptic partners in common between the selected segments.
 import collections
 import json
 
+import six
+
 import neuroglancer
 
 
@@ -123,7 +125,7 @@ class Demo(object):
             s.layers['partners'].segments = top_partners
             annotations = s.layers['synapses'].annotations
             del annotations[:]
-            for synapse in synapses.itervalues():
+            for synapse in six.itervalues(synapses):
                 tbar = synapse['T-bar']
                 for partner in synapse['partners']:
                     annotations.append(

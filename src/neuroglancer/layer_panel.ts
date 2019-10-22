@@ -33,9 +33,9 @@ import {ColorWidget} from 'neuroglancer/widget/color';
 import {PositionWidget} from 'neuroglancer/widget/position_widget';
 import {makeTextIconButton} from 'neuroglancer/widget/text_icon_button';
 
-require('neuroglancer/noselect.css');
-require('neuroglancer/layer_panel.css');
-require('neuroglancer/ui/button.css');
+import 'neuroglancer/noselect.css';
+import 'neuroglancer/layer_panel.css';
+import 'neuroglancer/ui/button.css';
 
 function destroyDropLayers(
     dropLayers: DropLayers, targetLayer?: ManagedUserLayerWithSpecification) {

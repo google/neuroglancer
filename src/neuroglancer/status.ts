@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-require('./status.css');
+import './status.css';
 
 let statusContainer: HTMLElement|null = null;
 

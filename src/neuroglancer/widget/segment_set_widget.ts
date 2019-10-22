@@ -21,8 +21,8 @@ import {vec3} from 'neuroglancer/util/geom';
 import {Uint64} from 'neuroglancer/util/uint64';
 import {ColorWidget} from 'neuroglancer/widget/color';
 
-require('neuroglancer/noselect.css');
-require('./segment_set_widget.css');
+import 'neuroglancer/noselect.css';
+import 'neuroglancer/widget/segment_set_widget.css';
 
 const copyIcon = require('neuroglancer/../../assets/icons/copySegment.svg');
 

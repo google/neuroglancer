@@ -17,12 +17,12 @@
 import {SliceView} from 'neuroglancer/sliceview/frontend';
 import {MultiscaleVolumeChunkSource} from 'neuroglancer/sliceview/volume/frontend';
 import {RenderLayer, RenderLayerOptions} from 'neuroglancer/sliceview/volume/renderlayer';
-import {TrackableAlphaValue, trackableAlphaValue} from 'neuroglancer/trackable_alpha';
-import {BLEND_FUNCTIONS, BLEND_MODES, TrackableBlendModeValue, trackableBlendModeValue} from 'neuroglancer/trackable_blend';
-import {verifyEnumString} from 'neuroglancer/util/json';
+import {TrackableAlphaValue} from 'neuroglancer/trackable_alpha';
+import {BLEND_FUNCTIONS, BLEND_MODES, TrackableBlendModeValue} from 'neuroglancer/trackable_blend';
 import glsl_COLORMAPS from 'neuroglancer/webgl/colormaps.glsl';
-import {makeTrackableFragmentMain, TrackableFragmentMain} from 'neuroglancer/webgl/dynamic_shader';
+import {makeTrackableFragmentMain} from 'neuroglancer/webgl/dynamic_shader';
 import {ShaderBuilder} from 'neuroglancer/webgl/shader';
+import {addControlsToBuilder, setControlsInShader, ShaderControlState} from 'neuroglancer/webgl/shader_ui_controls';
 
 export const FRAGMENT_MAIN_START = '//NEUROGLANCER_IMAGE_RENDERLAYER_FRAGMENT_MAIN_START';
 
@@ -39,34 +39,30 @@ export function getTrackableFragmentMain(value = DEFAULT_FRAGMENT_MAIN) {
 export interface ImageRenderLayerOptions extends RenderLayerOptions {
   opacity: TrackableAlphaValue;
   blendMode: TrackableBlendModeValue;
-  fragmentMain: TrackableFragmentMain;
+  shaderControlState: ShaderControlState;
 }
 
 export class ImageRenderLayer extends RenderLayer {
-  fragmentMain: TrackableFragmentMain;
   opacity: TrackableAlphaValue;
   blendMode: TrackableBlendModeValue;
+  shaderControlState: ShaderControlState;
   constructor(multiscaleSource: MultiscaleVolumeChunkSource, options: ImageRenderLayerOptions) {
     super(multiscaleSource, options);
-    const {
-      opacity = trackableAlphaValue(0.5),
-      blendMode = trackableBlendModeValue(),
-      fragmentMain = getTrackableFragmentMain(),
-    } = options;
-    this.fragmentMain = fragmentMain;
+    const {opacity, blendMode, shaderControlState} = options;
+    this.shaderControlState = shaderControlState;
     this.opacity = opacity;
     this.blendMode = blendMode;
-    this.registerDisposer(opacity.changed.add(() => {
-      this.redrawNeeded.dispatch();
-    }));
-    this.registerDisposer(fragmentMain.changed.add(() => {
+    this.registerDisposer(opacity.changed.add(this.redrawNeeded.dispatch));
+    this.registerDisposer(blendMode.changed.add(this.redrawNeeded.dispatch));
+    this.registerDisposer(shaderControlState.fragmentMain.changed.add(() => {
       this.shaderGetter.invalidateShader();
       this.redrawNeeded.dispatch();
     }));
+    this.registerDisposer(shaderControlState.changed.add(this.redrawNeeded.dispatch));
   }
 
   protected getShaderKey() {
-    return `volume.ImageRenderLayer:${JSON.stringify(this.fragmentMain.value)}`;
+    return `volume.ImageRenderLayer:${JSON.stringify(this.shaderControlState.fragmentMain.value)}`;
   }
 
   protected defineShader(builder: ShaderBuilder) {
@@ -87,7 +83,12 @@ void emitTransparent() {
 }
 `);
     builder.addFragmentCode(glsl_COLORMAPS);
-    builder.setFragmentMainFunction(FRAGMENT_MAIN_START + '\n' + this.fragmentMain.value);
+    const controls = this.shaderControlState.controls.value;
+    if (controls !== undefined) {
+      addControlsToBuilder(controls, builder);
+    }
+    builder.setFragmentMainFunction(
+        FRAGMENT_MAIN_START + '\n' + this.shaderControlState.processedFragmentMain.value);
   }
 
   beginSlice(sliceView: SliceView) {
@@ -97,11 +98,12 @@ void emitTransparent() {
     }
     let {gl} = this;
     gl.uniform1f(shader.uniform('uOpacity'), this.opacity.value);
+    setControlsInShader(gl, shader, this.shaderControlState);
     return shader;
   }
 
   setGLBlendMode(gl: WebGL2RenderingContext, renderLayerNum: number) {
-    let blendModeValue = verifyEnumString(this.blendMode.value, BLEND_MODES);
+    const blendModeValue = this.blendMode.value;
     if (blendModeValue === BLEND_MODES.ADDITIVE || renderLayerNum > 0) {
       gl.enable(gl.BLEND);
       BLEND_FUNCTIONS.get(blendModeValue)!(gl);

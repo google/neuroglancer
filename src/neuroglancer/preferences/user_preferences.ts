@@ -4,7 +4,7 @@ import {TrackableValue} from 'neuroglancer/trackable_value';
 import {Viewer} from 'neuroglancer/viewer';
 import {NumberInputWidget} from 'neuroglancer/widget/number_input_widget';
 
-require('./user_preferences.css');
+import 'neuroglancer/preferences/user_preferences.css';
 
 class UserPreferences {
   renderMeshByDefault: TrackableBoolean;

@@ -40,7 +40,7 @@ import {WatchableVisibilityPriority} from 'neuroglancer/visibility_priority/fron
 import {EnumSelectWidget} from 'neuroglancer/widget/enum_widget';
 import {TrackableScaleBarOptions} from 'neuroglancer/widget/scale_bar';
 
-require('./layer_group_viewer.css');
+import './layer_group_viewer.css';
 
 export interface LayerGroupViewerState {
   display: Borrowed<DisplayContext>;

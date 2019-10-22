@@ -148,10 +148,13 @@ export class MultiscaleVolumeChunkSource implements GenericMultiscaleVolumeChunk
       this.scales = twoDimensionalScales.map(levelScales => levelScales.map((scale, index) => {
         const {voxelSize, sizeInVoxels} = scale;
         const flatDimension = 2 - index;
-        let {
-            chunkDataSize = getTwoDimensionalBlockSize(
-                {voxelSize, upperVoxelBound: sizeInVoxels, flatDimension, maxVoxelsPerChunkLog2})} =
-            scale;
+        let {chunkDataSize = getTwoDimensionalBlockSize({
+               voxelSize,
+               upperVoxelBound: sizeInVoxels,
+               flatDimension,
+               maxVoxelsPerChunkLog2,
+               numChannels: this.numChannels
+             })} = scale;
         return {
           key: scale.key,
           offset: scale.offset,
@@ -171,8 +174,12 @@ export class MultiscaleVolumeChunkSource implements GenericMultiscaleVolumeChunk
       }
       this.scales = threeDimensionalScales.map(scale => {
         let {voxelSize, sizeInVoxels} = scale;
-        let {chunkDataSize = getNearIsotropicBlockSize(
-                 {voxelSize, upperVoxelBound: sizeInVoxels, maxVoxelsPerChunkLog2})} = scale;
+        let {chunkDataSize = getNearIsotropicBlockSize({
+               voxelSize,
+               upperVoxelBound: sizeInVoxels,
+               maxVoxelsPerChunkLog2,
+               numChannels: this.numChannels
+             })} = scale;
         return [{key: scale.key, offset: scale.offset, sizeInVoxels, voxelSize, chunkDataSize}];
       });
     }

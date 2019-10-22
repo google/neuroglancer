@@ -9,9 +9,66 @@ The fragment shader code can be entered interactively from the dropdown menu for
 
 ## Shader language
 
-The shader code must conform to the OpenGL ES Shading Language (GLSL) version 1.0, specified at <https://www.khronos.org/files/opengles_shading_language.pdf>.
+The shader code must conform to the OpenGL ES Shading Language (GLSL) version 3.0, specified at <https://www.khronos.org/registry/OpenGL/specs/es/3.0/GLSL_ES_Specification_3.00.pdf>.
 
-You may find the WebGL reference card helpful: <https://www.khronos.org/files/webgl/webgl-reference-card-1_0.pdf>.
+You may find the WebGL reference card helpful: <https://www.khronos.org/files/webgl20-reference-guide.pdf>.
+
+## UI Controls
+
+Rendering may depend on values specified by custom UI controls, specified by special `#uicontrol`
+directives supported by Neuroglancer as an extension to GLSL.
+
+For example:
+
+```glsl
+#uicontrol int channel slider(min=0, max=4)
+#uicontrol vec3 color color(default="red")
+#uicontrol float brightness slider(min=-1, max=1)
+#uicontrol float contrast slider(min=-3, max=3, step=0.01)
+void main() {
+  emitRGB(color *
+          (toNormalized(getDataValue(channel)) + brightness) *
+          exp(contrast));
+}
+```
+
+The directive syntax is:
+
+``` glsl
+#uicontrol <type> <name> <control>
+#uicontrol <type> <name> <control>(<parameter>=<value>, ...)
+```
+
+which has the effect of defining a variable `<name>` of GLSL type `<type>` whose value is set by a
+UI control of type `<control>`.  The valid parameters and `<type>` values depend on the `<control>`
+type.  If no parameters are specified, the parentheses may be omitted.
+
+### `slider` controls
+
+The `slider` control type specifies a slider control over an integer or float range.  Directive
+syntax:
+
+```glsl
+#uicontrol <type> <name> slider(min=<min>, max=<max>, default=<default>, step=<step>)
+```
+
+The `<type>` must be `float`, `int`, or `uint`.  The `min` and `max` parameters are required.  The
+`step` parameter is optional; if not specified, defaults to `1` for integer ranges and `(<max> -
+<min>) / 100` for float ranges.  The `default` parameter indicates the initial value and is
+optional; if not specified, defaults to `<min>` for integer ranges and to `(<min> + <max>)/2` for
+float ranges.
+
+### `color` controls
+
+The `color` control type specifies a color picker.  Directive syntax:
+
+```glsl
+#uicontrol vec3 <name> color(default="<color>")
+```
+
+The `<type>` must be `vec3`, which is set to the RGB `[0, 1]` representation of the color.  The
+`default` parameter indicates the initial value as a CSS color string (must be quoted), and defaults
+to `"white"` if not specified.
 
 ## API
 

@@ -19,8 +19,8 @@ import {removeFromParent} from 'neuroglancer/util/dom';
 import {Signal} from 'neuroglancer/util/signal';
 import {Uint64} from 'neuroglancer/util/uint64';
 
-require('neuroglancer/noselect.css');
-require('./uint64_entry_widget.css');
+import 'neuroglancer/noselect.css';
+import './uint64_entry_widget.css';
 
 export class Uint64EntryWidget extends RefCounted {
   element = document.createElement('form');

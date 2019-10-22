@@ -38,8 +38,8 @@ import {ScaleBarOptions, ScaleBarTexture} from 'neuroglancer/widget/scale_bar';
 import {RPC, SharedObject} from 'neuroglancer/worker_rpc';
 import {getCursorOnMousedrag} from 'neuroglancer/preferences/user_preferences';
 
-require('neuroglancer/noselect.css');
-require('neuroglancer/perspective_view/panel.css');
+import 'neuroglancer/noselect.css';
+import 'neuroglancer/perspective_view//panel.css';
 
 export interface PerspectiveViewerState extends RenderedDataViewerState {
   orthographicProjection: TrackableBoolean;
