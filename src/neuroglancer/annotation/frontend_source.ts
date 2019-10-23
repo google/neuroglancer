@@ -210,6 +210,7 @@ function updateAnnotation(chunk: AnnotationGeometryData, annotation: Annotation)
   const renderHandler = getAnnotationTypeRenderHandler(type);
   let insertionPoint = binarySearch(ids, annotation.id, (a, b) => a < b ? -1 : a === b ? 0 : 1);
   let offset = 0;
+  let updateOffsets = () => {};
   if (insertionPoint < 0) {
     // Doesn't already exist.
     insertionPoint = ~insertionPoint;
@@ -220,16 +221,19 @@ function updateAnnotation(chunk: AnnotationGeometryData, annotation: Annotation)
     newData.set(chunk.data!.subarray(0, offset), 0);
     newData.set(chunk.data!.subarray(offset), offset + numBytes);
     chunk.data = newData;
+    updateOffsets = () => {
+      for (const otherType of annotationTypes) {
+        if (otherType > type) {
+          chunk.typeToOffset![otherType] += numBytes;
+        }
+      }
+    };
   } else {
     offset = chunk.typeToOffset![type] + handler.serializedBytes * insertionPoint;
   }
   const serializer = handler.serializer(chunk.data!.buffer, chunk.typeToOffset![type], ids.length);
   serializer(annotation, insertionPoint);
-  for (const otherType of annotationTypes) {
-    if (otherType > type) {
-      chunk.typeToOffset![otherType] += numBytes;
-    }
-  }
+  updateOffsets();
   chunk.bufferValid = false;
 }
 
