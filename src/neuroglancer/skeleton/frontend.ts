@@ -511,7 +511,7 @@ function getWebglDataType(dataType: DataType) {
     case DataType.FLOAT32:
       return WebGL2RenderingContext.FLOAT;
     default:
-      throw new Error('Data type not supported by WebGL: ${DataType[dataType]}');
+      throw new Error(`Data type not supported by WebGL: ${DataType[dataType]}`);
   }
 }
 
