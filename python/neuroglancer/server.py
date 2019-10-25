@@ -262,16 +262,23 @@ def get_server_url():
     return global_server.server_url
 
 
+_global_server_lock = threading.Lock()
+
 def start():
     global global_server
-    if global_server is None:
-        ioloop = tornado.ioloop.IOLoop()
-        ioloop.make_current()
-        global_server = Server(ioloop=ioloop, **global_server_args)
-        thread = threading.Thread(target=ioloop.start)
+    with _global_server_lock:
+        if global_server is not None: return
+        done = threading.Event()
+        def start_server():
+            global global_server
+            ioloop = tornado.ioloop.IOLoop(make_current=True)
+            global_server = Server(ioloop=ioloop, **global_server_args)
+            done.set()
+            ioloop.start()
+        thread = threading.Thread(target=start_server)
         thread.daemon = True
         thread.start()
-
+        done.wait()
 
 def register_viewer(viewer):
     start()
