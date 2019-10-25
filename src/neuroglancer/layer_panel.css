@@ -98,11 +98,6 @@
   text-decoration: line-through;
 }
 
-.neuroglancer-layer-item[layer-visible=false] .neuroglancer-layer-item-value {
-  display: none;
-}
-
-
 .neuroglancer-layer-add-button.neuroglancer-button {
   font-weight: bold;
 }
