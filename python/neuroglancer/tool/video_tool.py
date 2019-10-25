@@ -233,7 +233,12 @@ def save_script(script_path, keypoints):
         for x in keypoints:
             f.write(neuroglancer.to_url(x['state']) + '\n')
             f.write(str(x['transition_duration']) + '\n')
-    os.rename(temp_path, script_path)
+    if hasattr(os, 'replace'):
+        # Only available on Python3
+        os.replace(temp_path, script_path)
+    else:
+        # Fails on Windows if script_path already exists
+        os.rename(temp_path, script_path)
 
 
 class ScriptEditor(object):
