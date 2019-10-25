@@ -22,7 +22,8 @@ debug_graph = False
 verbose_merging = False
 
 
-def normalize_edge((id_a, id_b)):
+def normalize_edge(e):
+    id_a, id_b = e
     if id_a > id_b:
         id_a, id_b = id_b, id_a
     return id_a, id_b
@@ -44,7 +45,8 @@ class GreedyMulticut(object):
         self.num_valid_edges = 0
         self._initialized = False
 
-    def add_edge(self, (id_a, id_b), edge):
+    def add_edge(self, e, edge):
+        id_a, id_b = e
         id_a, id_b = normalize_edge((id_a, id_b))
         self.regions.setdefault(id_a, set()).add(id_b)
         self.regions.setdefault(id_b, set()).add(id_a)
@@ -94,7 +96,8 @@ class GreedyMulticut(object):
                 num_valid_edges += 1
         assert num_valid_edges == self.num_valid_edges
 
-    def merge(self, (id_a, id_b)):
+    def merge(self, e):
+        id_a, id_b = e
         self._initialize_heap()
         id_a, id_b = normalize_edge((id_a, id_b))
         if (id_a, id_b) not in self.edge_map:
@@ -133,8 +136,7 @@ class GreedyMulticut(object):
         expected_entry = self.edge_map.get(entry[1])
         if entry is not expected_entry or entry[0] is not score:
             return None
-        else:
-            return entry
+        return entry
 
     def get_next_edge(self):
         self._initialize_heap()
@@ -205,8 +207,7 @@ class AgglomerationGraph(object):
         result = c.fetchone()
         if result is None:
             return supervoxel_id
-        else:
-            return result[0]
+        return result[0]
 
     def get_agglo_members(self, agglo_id):
         result = self.agglo_members_cache.get(agglo_id)
@@ -627,14 +628,17 @@ class InteractiveSplitter(object):
 
 
     def _make_new_component(self, s):
+        del s
         self.state.make_new_component()
         self._update_view()
 
     def _next_component(self, s):
+        del s
         self.state.cycle_selected_component(1)
         self._update_view()
 
     def _prev_component(self, s):
+        del s
         self.state.cycle_selected_component(-1)
         self._update_view()
 
@@ -703,7 +707,6 @@ class InteractiveSplitter(object):
             self._show_split_result(
                 s,
                 cur_eqs=split_result['cur_eqs'],
-                supervoxel_map=split_result['supervoxel_map'],
             )
         s.layout = neuroglancer.row_layout([
             neuroglancer.LayerGroupViewer(
@@ -714,7 +717,7 @@ class InteractiveSplitter(object):
                                      'exclusive-seeds']),
         ])
 
-    def _show_split_result(self, s, cur_eqs, supervoxel_map):
+    def _show_split_result(self, s, cur_eqs):
         split_layer = s.layers['split-result']
         split_layer.equivalences = cur_eqs
         split_layer.segments = set(cur_eqs[x] for x in self.cached_split_result.supervoxels)
@@ -755,7 +758,7 @@ def run_interactive(args, graph):
 def open_graph(path, agglo_id):
     # Check if graph_db is sharded
     graph_db = path
-    m = re.match('(.*)@([0-9]+)((?:\..*)?)$', graph_db)
+    m = re.match(r'(.*)@([0-9]+)((?:\..*)?)$', graph_db)
     if m is not None:
         num_shards = int(m.group(2))
         shard = agglo_id % num_shards
