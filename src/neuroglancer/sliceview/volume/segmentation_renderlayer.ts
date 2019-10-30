@@ -27,7 +27,7 @@ import {TrackableAlphaValue} from 'neuroglancer/trackable_alpha';
 import {TrackableBoolean} from 'neuroglancer/trackable_boolean';
 import {DisjointUint64Sets} from 'neuroglancer/util/disjoint_sets';
 import {ShaderBuilder, ShaderProgram} from 'neuroglancer/webgl/shader';
-import {MulticutDisplayInformation} from 'src/neuroglancer/segmentation_user_layer_with_graph';
+import {MulticutDisplayInformation} from 'neuroglancer/segmentation_user_layer_with_graph';
 
 export class EquivalencesHashMap {
   generation = Number.NaN;

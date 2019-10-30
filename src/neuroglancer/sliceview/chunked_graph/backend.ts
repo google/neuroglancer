@@ -27,7 +27,7 @@ import {mat4, vec3, vec3Key} from 'neuroglancer/util/geom';
 import {NullarySignal} from 'neuroglancer/util/signal';
 import {Uint64} from 'neuroglancer/util/uint64';
 import {registerRPC, registerSharedObject, RPC, SharedObjectCounterpart} from 'neuroglancer/worker_rpc';
-import {WatchableValueInterface} from 'src/neuroglancer/trackable_value';
+import {WatchableValueInterface} from 'neuroglancer/trackable_value';
 
 const tempChunkDataSize = vec3.create();
 const tempChunkPosition = vec3.create();
