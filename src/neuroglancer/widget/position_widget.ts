@@ -18,6 +18,7 @@ import {MouseSelectionState} from 'neuroglancer/layer';
 import {SpatialPosition, VoxelSize} from 'neuroglancer/navigation_state';
 import {StatusMessage} from 'neuroglancer/status';
 import {animationFrameDebounce} from 'neuroglancer/util/animation_frame_debounce';
+import {AutomaticallyFocusedElement} from 'neuroglancer/util/automatic_focus';
 import {setClipboard} from 'neuroglancer/util/clipboard';
 import {RefCounted} from 'neuroglancer/util/disposable';
 import {removeChildren, removeFromParent} from 'neuroglancer/util/dom';
@@ -103,7 +104,10 @@ export class PositionWidget extends RefCounted {
     this.registerDisposer(new MouseEventBinder(inputElement, inputEventMap));
 
     this.registerEventListener(inputElement, 'change', () => this.updatePosition());
-    this.registerEventListener(inputElement, 'blur', () => this.updatePosition());
+    this.registerEventListener(inputElement, 'blur', () => {
+      this.updatePosition();
+      AutomaticallyFocusedElement.anyTextboxSelected = false;
+    });
     this.registerEventListener(inputElement, 'input', () => this.cleanInput());
     this.registerEventListener(inputElement, 'keydown', this.updateHintScrollPosition);
     this.registerEventListener(inputElement, 'copy', (event: ClipboardEvent) => {
@@ -120,6 +124,7 @@ export class PositionWidget extends RefCounted {
     let wasFocused = false;
     this.registerEventListener(inputElement, 'mousedown', () => {
       wasFocused = document.activeElement === inputElement;
+      AutomaticallyFocusedElement.anyTextboxSelected = true;
     });
 
     this.registerDisposer(
@@ -183,6 +188,7 @@ export class PositionWidget extends RefCounted {
     this.registerDisposer(registerActionListener(inputElement, 'cancel', () => {
       this.updateView();
       this.inputElement.blur();
+      AutomaticallyFocusedElement.anyTextboxSelected = false;
     }));
 
     this.registerDisposer(

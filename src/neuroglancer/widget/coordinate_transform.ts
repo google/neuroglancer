@@ -21,6 +21,7 @@
 import './coordinate_transform.css';
 
 import {CoordinateTransform} from 'neuroglancer/coordinate_transform';
+import {AutomaticallyFocusedElement} from 'neuroglancer/util/automatic_focus';
 import {float32ToString} from 'neuroglancer/util/float32_to_string';
 import {Tab} from 'neuroglancer/widget/tab_view';
 
@@ -40,7 +41,11 @@ export class CoordinateTransformTab extends Tab {
     this.registerDisposer(transform.changed.add(() => this.updateView()));
     this.registerDisposer(this.visibility.changed.add(() => this.updateView()));
     textArea.addEventListener('change', () => this.updateModel());
-    textArea.addEventListener('blur', () => this.updateModel());
+    textArea.addEventListener('focus', () => AutomaticallyFocusedElement.anyTextboxSelected = true);
+    textArea.addEventListener('blur', () => {
+      this.updateModel();
+      AutomaticallyFocusedElement.anyTextboxSelected = false;
+    });
     textArea.title = 'Homogeneous transformation matrix';
     textArea.rows = 3;
     const resetButton = document.createElement('button');

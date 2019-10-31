@@ -48,6 +48,8 @@ window.addEventListener('blur', () => {
 }, true);
 
 export class AutomaticallyFocusedElement extends RefCounted {
+  static anyTextboxSelected: boolean;
+
   prev0: AutomaticallyFocusedElement|null = null;
   next0: AutomaticallyFocusedElement|null = null;
 
@@ -58,6 +60,10 @@ export class AutomaticallyFocusedElement extends RefCounted {
     const {element} = this;
     if (element.contains(activeElement)) {
       // Never steal focus from descendant.
+      return;
+    }
+    if (AutomaticallyFocusedElement.anyTextboxSelected) {
+      // Don't steal focus from a widget currently being typed in.
       return;
     }
     if (activeElement != null &&
@@ -76,6 +82,12 @@ export class AutomaticallyFocusedElement extends RefCounted {
     });
     this.registerEventListener(element, 'mouseleave', () => {
       this.scheduleUpdateFocus.cancel();
+    });
+    this.registerEventListener(element, 'mousedown', () => {
+      if (element.classList.contains('neuroglancer-panel')) {
+        AutomaticallyFocusedElement.anyTextboxSelected = false;
+        this.scheduleUpdateFocus();
+      }
     });
     // Insert at the end of the list.
     LinkedListOperations.insertBefore(<any>automaticFocusList, this);

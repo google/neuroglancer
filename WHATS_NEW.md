@@ -1,4 +1,4 @@
-### October 30 2019
-## Option to not load meshes for single layers
-* Under 3D Visualization, uncheck "Load layer meshes (requires refresh)" then refresh the page to stop that mesh's layers from being loaded.
-* The same option exists for skeletons.
+### October 31 2019
+## Keep focus when moving mouse off of textboxes
+* For the navigation coordinates at the top, the shader code, and the transformation matrix, focus will no longer be lost when moving the mouse off the text and onto another area.
+* Elements will still be unfocused when clicking on another panel.

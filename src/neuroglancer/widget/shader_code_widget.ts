@@ -22,6 +22,7 @@ import 'codemirror/addon/lint/lint.css';
 import CodeMirror from 'codemirror';
 import debounce from 'lodash/debounce';
 import {WatchableValue} from 'neuroglancer/trackable_value';
+import {AutomaticallyFocusedElement} from 'neuroglancer/util/automatic_focus';
 import {RefCounted} from 'neuroglancer/util/disposable';
 import {removeFromParent} from 'neuroglancer/util/dom';
 import {WatchableShaderError} from 'neuroglancer/webgl/dynamic_shader';
@@ -69,6 +70,8 @@ export class ShaderCodeWidget extends RefCounted {
       this.setValidState(undefined);
       this.debouncedValueUpdater();
     });
+    this.textEditor.on('focus', () => AutomaticallyFocusedElement.anyTextboxSelected = true);
+    this.textEditor.on('blur', () => AutomaticallyFocusedElement.anyTextboxSelected = false);
     this.registerDisposer(this.state.fragmentMain.changed.add(() => {
       if (!this.changingValue) {
         this.textEditor.setValue(this.state.fragmentMain.value);
