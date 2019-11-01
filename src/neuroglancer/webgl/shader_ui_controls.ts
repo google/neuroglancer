@@ -483,9 +483,15 @@ export class ShaderControlState extends RefCounted implements Trackable {
     const {unparsedJson} = this;
     if (unparsedJson !== undefined) return unparsedJson;
     const obj: any = {};
+    let empty = true;
     for (const [key, value] of state) {
-      obj[key] = value.trackable.toJSON();
+      const valueJson = value.trackable.toJSON();;
+      if (valueJson !== undefined) {
+        obj[key] = valueJson;
+        empty = false;
+      }
     }
+    if (empty) return undefined;
     return obj;
   }
 }
