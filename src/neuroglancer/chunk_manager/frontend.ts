@@ -130,7 +130,8 @@ export class ChunkQueueManager extends SharedObject {
     while (true) {
       if (Date.now() > deadline) {
         // No time to perform chunk update now, we will wait some more.
-        setTimeout(this.processPendingChunkUpdates.bind(this), this.chunkUpdateDelay);
+        this.chunkUpdateDeadline = null;
+        setTimeout(() => this.processPendingChunkUpdates(), this.chunkUpdateDelay);
         break;
       }
       let update = this.pendingChunkUpdates;
@@ -139,7 +140,6 @@ export class ChunkQueueManager extends SharedObject {
       }
       // FIXME: do chunk update
       let nextUpdate = this.pendingChunkUpdates = update.nextUpdate;
-      --(<any>window).numPendingChunkUpdates;
       if (nextUpdate == null) {
         this.pendingChunkUpdatesTail = null;
         break;
@@ -225,8 +225,6 @@ export class ChunkQueueManager extends SharedObject {
   }
 }
 
-(<any>window).numPendingChunkUpdates = 0;
-
 function updateChunk(rpc: RPC, x: any) {
   let source: ChunkSource = rpc.get(x['source']);
   if (DEBUG_CHUNK_UPDATES) {
@@ -243,9 +241,6 @@ function updateChunk(rpc: RPC, x: any) {
   }
 
   let pendingTail = queueManager.pendingChunkUpdatesTail;
-  if (++(<any>window).numPendingChunkUpdates > 3) {
-    // console.log(`numPendingChunkUpdates=${(<any>window).numPendingChunkUpdates}`);
-  }
   if (pendingTail == null) {
     queueManager.pendingChunkUpdates = x;
     queueManager.pendingChunkUpdatesTail = x;
