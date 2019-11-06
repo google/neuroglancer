@@ -70,4 +70,7 @@
 
 .neuroglancer-tab-content {
   flex: 1;
+  flex-basis: 0px;
+  height: 0px;
+  min-height: 0px;
 }
