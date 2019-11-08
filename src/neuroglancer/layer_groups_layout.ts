@@ -196,7 +196,7 @@ export class LayoutComponentContainer extends RefCounted {
       for (const {element: dropZone} of dropZones) {
         dropZone.style.display = 'none';
       }
-    });
+    }, /*capture=*/ true);
     this.registerEventListener(element, 'dragleave', (event: DragEvent) => {
       const {relatedTarget} = event;
       if (!dropZonesVisible) {
