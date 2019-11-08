@@ -227,7 +227,7 @@ export class StatisticsPanel extends RefCounted {
   }
 
   private requestData() {
-    if (!this.displayState.visible) return;
+    if (!this.displayState.visible.value) return;
     if (this.dataRequested) return;
     const {chunkQueueManager} = this;
     const rpc = chunkQueueManager.rpc!;
