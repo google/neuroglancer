@@ -63,9 +63,21 @@ import './viewer.css';
 import 'neuroglancer/noselect.css';
 import 'neuroglancer/ui/button.css';
 
+
 export class DataManagementContext extends RefCounted {
-  worker = new Worker('chunk_worker.bundle.js');
-  chunkQueueManager = this.registerDisposer(
+  worker: Worker;
+  chunkQueueManager: ChunkQueueManager;
+  chunkManager: ChunkManager;
+
+  get rpc(): RPC {
+    return this.chunkQueueManager.rpc!;
+  }
+
+  constructor(public gl: GL, public frameNumberCounter: FrameNumberCounter, bundleRoot: string = '') {
+    super();
+    const chunk_worker_url = bundleRoot + 'chunk_worker.bundle.js';
+    this.worker = new Worker(chunk_worker_url);
+    this.chunkQueueManager = this.registerDisposer(
       new ChunkQueueManager(new RPC(this.worker), this.gl, this.frameNumberCounter, {
         gpuMemory: new CapacitySpecification({defaultItemLimit: 1e6, defaultSizeLimit: 1e9}),
         systemMemory: new CapacitySpecification({defaultItemLimit: 1e7, defaultSizeLimit: 2e9}),
@@ -73,15 +85,8 @@ export class DataManagementContext extends RefCounted {
             {defaultItemLimit: 32, defaultSizeLimit: Number.POSITIVE_INFINITY}),
         compute: new CapacitySpecification({defaultItemLimit: 128, defaultSizeLimit: 5e8}),
       }));
-  chunkManager = this.registerDisposer(new ChunkManager(this.chunkQueueManager));
-
-  get rpc(): RPC {
-    return this.chunkQueueManager.rpc!;
-  }
-
-  constructor(public gl: GL, public frameNumberCounter: FrameNumberCounter) {
-    super();
     this.chunkQueueManager.registerDisposer(() => this.worker.terminate());
+    this.chunkManager = this.registerDisposer(new ChunkManager(this.chunkQueueManager));
   }
 }
 
@@ -144,6 +149,7 @@ export interface ViewerOptions extends ViewerUIOptions, VisibilityPrioritySpecif
   showLayerDialog: boolean;
   inputEventBindings: InputEventBindings;
   resetStateWhenEmpty: boolean;
+  bundleRoot: string;
 }
 
 const defaultViewerOptions = "undefined" !== typeof NEUROGLANCER_OVERRIDE_DEFAULT_VIEWER_OPTIONS ?
@@ -248,7 +254,7 @@ export class Viewer extends RefCounted implements ViewerState {
     super();
 
     const {
-      dataContext = new DataManagementContext(display.gl, display),
+      dataContext = new DataManagementContext(display.gl, display, options.bundleRoot),
       visibility = new WatchableVisibilityPriority(WatchableVisibilityPriority.VISIBLE),
       inputEventBindings = {
         global: new EventActionMap(),

@@ -29,7 +29,12 @@ export class StatusMessage {
     if (statusContainer === null) {
       statusContainer = document.createElement('ul');
       statusContainer.id = 'statusContainer';
-      document.body.appendChild(statusContainer);
+      const el: HTMLElement | null = document.getElementById('neuroglancer-container');
+      if (el) {
+        el.appendChild(statusContainer);
+      } else {
+        document.body.appendChild(statusContainer);
+      }
     }
     let element = document.createElement('li');
     this.element = element;

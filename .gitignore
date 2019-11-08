@@ -1,5 +1,7 @@
 /node_modules/
 /dist/
+/lib
+/trans
 /build/
 /coverage/
 /npm-debug.log

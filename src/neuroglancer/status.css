@@ -15,7 +15,7 @@
  */
 
 #statusContainer {
-  position: fixed;
+  position: absolute;
   bottom: 0px;
   z-index: 100;
   background-color: grey;

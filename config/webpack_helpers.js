@@ -19,6 +19,7 @@
 const path = require('path');
 const HtmlWebpackPlugin = require('html-webpack-plugin');
 const ExtractTextPlugin = require('extract-text-webpack-plugin');
+const MiniCssExtractPlugin = require('mini-css-extract-plugin');
 const webpack = require('webpack');
 const fs = require('fs');
 const AliasPlugin = require('./webpack_alias_plugin');
@@ -166,6 +167,24 @@ function getBaseConfig(options) {
   options = options || {};
   let {loaderEntry: tsLoaderEntry, extraResolveAliases} = getTypescriptLoaderEntry(options);
   console.log(extraResolveAliases);
+
+  const cssLoaderEntry = options.noOutput ?
+    {test: /\.css$/, loader: 'style-loader!css-loader'} :
+    {
+      test: /\.css$/,
+      loader: [
+        {
+          loader: MiniCssExtractPlugin.loader,
+          options: {
+            hmr: process.env.NODE_ENV === 'development',
+          }
+        },
+        {
+          loader: 'css-loader',
+        },
+      ],
+    }
+
   let aliasMappings = Object.assign(
       {
         'neuroglancer-testdata': resolveReal(__dirname, '../testdata'),
@@ -212,7 +231,7 @@ function getBaseConfig(options) {
       ],
       rules: [
         tsLoaderEntry,
-        {test: /\.css$/, loader: 'style-loader!css-loader'},
+        cssLoaderEntry,
         {
           test: /\.glsl$/,
           loader: [
@@ -372,6 +391,10 @@ function getViewerConfig(options) {
           target: 'web',
           plugins: [
             htmlPlugin,
+            new MiniCssExtractPlugin({
+              filename: '[name].css',
+              chunkFilename: '[id].css'
+            }),
             new webpack.DefinePlugin(Object.assign({}, defaultDefines, extraDefines)),
             ...extraFrontendPlugins,
             ...commonPlugins,
@@ -434,6 +457,10 @@ function getViewerConfigFromEnv(options, env) {
   }
   if (envParts.has('python')) {
     options = makePythonClientOptions(options);
+  }
+  if (envParts.has('module')) {
+    const srcDir = resolveReal(__dirname, '../src');
+    options.frontendModules = [resolveReal(srcDir, 'main_module.ts')];
   }
   return getViewerConfig(options);
 }

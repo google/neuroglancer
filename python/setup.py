@@ -21,6 +21,7 @@ class build_ext_subclass(build_ext):
 
 static_files = [
     'main.bundle.js',
+    'main.css',
     'chunk_worker.bundle.js',
     'tfjs-library.bundle.js',
     'async_computation.bundle.js',
