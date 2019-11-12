@@ -13,19 +13,19 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-export const glsl_COLORMAPS = `vec3 colormapJet(float x) {
+export const glsl_COLORMAPS = (`vec3 colormapJet(float x) {
   vec3 result;
   result.r = x < 0.89 ? ((x - 0.35) / 0.31) : (1.0 - (x - 0.89) / 0.11 * 0.5);
   result.g = x < 0.64 ? ((x - 0.125) * 4.0) : (1.0 - (x - 0.64) / 0.27);
   result.b = x < 0.34 ? (0.5 + x * 0.5 / 0.11) : (1.0 - (x - 0.34) / 0.31);
   return clamp(result, 0.0, 1.0);
 }
-
+` +
 /*
  * Adapted from http://www.mrao.cam.ac.uk/~dag/CUBEHELIX/CubeHelix.m
  * which is licensed under http://unlicense.org/
  */
-vec3 colormapCubehelix(float x) {
+`vec3 colormapCubehelix(float x) {
   float xclamp = clamp(x, 0.0, 1.0);
   float angle = 2.0 * 3.1415926 * (4.0 / 3.0 + xclamp);
   float amp = xclamp * (1.0 - xclamp) / 2.0;
@@ -37,4 +37,5 @@ vec3 colormapCubehelix(float x) {
   result.b = 1.97294 * cosangle;
   result = clamp(xclamp + amp * result, 0.0, 1.0);
   return result;
-}`;
+}
+`);
