@@ -54,23 +54,13 @@
 }
 
 .neuroglancer-stack-view {
-  display: flex;
-  flex-direction: column;
+  display: contents;
 }
 
-.neuroglancer-tab-view > .neuroglancer-stack-view {
-  flex: 1;
-  /*
-  border-left: 1px solid white;
-  border-right: 1px solid white;
-  border-bottom: 1px solid white;
-  */
-  padding: 2px;
-}
-
-.neuroglancer-tab-content {
+.neuroglancer-tab-view > .neuroglancer-stack-view > .neuroglancer-tab-content {
   flex: 1;
   flex-basis: 0px;
   height: 0px;
   min-height: 0px;
+  padding: 2px;
 }

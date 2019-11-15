@@ -840,7 +840,6 @@ export class AnnotationTab extends Tab {
     this.registerDisposer(voxelSize);
     const {element} = this;
     element.classList.add('neuroglancer-annotations-tab');
-    this.stack.element.classList.add('neuroglancer-annotations-stack');
     element.appendChild(this.stack.element);
     element.appendChild(this.detailsTab.element);
     const updateDetailsVisibility = () => {
