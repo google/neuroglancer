@@ -21,11 +21,12 @@ import {ChunkLayout} from 'neuroglancer/sliceview/chunk_layout';
 import {SliceView} from 'neuroglancer/sliceview/frontend';
 import {RenderLayer as SliceViewRenderLayer, RenderLayerOptions as SliceViewRenderLayerOptions} from 'neuroglancer/sliceview/renderlayer';
 import {VolumeChunkSpecification, VolumeSourceOptions} from 'neuroglancer/sliceview/volume/base';
-import {MultiscaleVolumeChunkSource, VolumeChunkSource} from 'neuroglancer/sliceview/volume/frontend';
-import {Owned} from 'neuroglancer/util/disposable';
+import {ChunkFormat, MultiscaleVolumeChunkSource, VolumeChunkSource} from 'neuroglancer/sliceview/volume/frontend';
+import {WatchableValueInterface} from 'neuroglancer/trackable_value';
 import {BoundingBox, mat4, vec3, vec3Key} from 'neuroglancer/util/geom';
+import {getObjectId} from 'neuroglancer/util/object_id';
 import {GL} from 'neuroglancer/webgl/context';
-import {ShaderGetter, WatchableShaderError} from 'neuroglancer/webgl/dynamic_shader';
+import {makeWatchableShaderError, ParameterizedContextDependentShaderGetter, parameterizedContextDependentShaderGetter, ParameterizedShaderGetterResult, WatchableShaderError} from 'neuroglancer/webgl/dynamic_shader';
 import {ShaderBuilder, ShaderProgram} from 'neuroglancer/webgl/shader';
 import {getShaderType} from 'neuroglancer/webgl/shader_lib';
 
@@ -181,26 +182,58 @@ vChunkPosition = (position - uTranslation) / uVoxelSize +
   }
 }
 
-export interface RenderLayerOptions extends SliceViewRenderLayerOptions {
+export interface RenderLayerBaseOptions extends SliceViewRenderLayerOptions {
   sourceOptions?: VolumeSourceOptions;
   shaderError?: WatchableShaderError;
+}
+
+export interface RenderLayerOptions<ShaderParameters> extends RenderLayerBaseOptions {
+  fallbackShaderParameters?: WatchableValueInterface<ShaderParameters>;
+  shaderParameters: WatchableValueInterface<ShaderParameters>;
+  encodeShaderParameters?: (parameters: ShaderParameters) => any;
 }
 
 function medianOf3(a: number, b: number, c: number) {
   return a > b ? (c > a ? a : (b > c ? b : c)) : (c > b ? b : (a > c ? a : c));
 }
 
-export class RenderLayer extends SliceViewRenderLayer {
+export abstract class RenderLayer<ShaderParameters = any> extends SliceViewRenderLayer {
   sources: VolumeChunkSource[][];
   vertexComputationManager: VolumeSliceVertexComputationManager;
-  protected shaderGetter: Owned<ShaderGetter>;
-  constructor(multiscaleSource: MultiscaleVolumeChunkSource, options: RenderLayerOptions) {
-    const {sourceOptions = {}, shaderError} = options;
+  protected shaderGetter: ParameterizedContextDependentShaderGetter<ChunkFormat, ShaderParameters>;
+  shaderParameters: WatchableValueInterface<ShaderParameters>;
+  constructor(
+      multiscaleSource: MultiscaleVolumeChunkSource,
+      options: RenderLayerOptions<ShaderParameters>) {
+    const {shaderError = makeWatchableShaderError(), shaderParameters} = options;
+    const {sourceOptions = {}} = options;
     super(multiscaleSource.chunkManager, multiscaleSource.getSources(sourceOptions), options);
     const {gl} = this;
-    this.shaderGetter = this.registerDisposer(new ShaderGetter(
-        gl, builder => this.defineShader(builder),
-        () => `${this.getShaderKey()}/${this.chunkFormat.shaderKey}`, shaderError));
+    this.shaderParameters = shaderParameters;
+    this.registerDisposer(shaderParameters.changed.add(this.redrawNeeded.dispatch));
+    this.shaderGetter = parameterizedContextDependentShaderGetter(this, gl, {
+      memoizeKey: `volume/RenderLayer:${getObjectId(this.constructor)}`,
+      fallbackParameters: options.fallbackShaderParameters,
+      parameters: shaderParameters,
+      encodeParameters: options.encodeShaderParameters,
+      shaderError,
+      defineShader:
+          (builder: ShaderBuilder, parameters: ShaderParameters, chunkFormat: ChunkFormat) => {
+            this.vertexComputationManager.defineShader(builder);
+            builder.addOutputBuffer('vec4', 'v4f_fragData0', 0);
+            builder.addFragmentCode(`
+void emit(vec4 color) {
+  v4f_fragData0 = color;
+}
+`);
+            chunkFormat.defineShader(builder);
+            builder.addFragmentCode(`
+${getShaderType(this.dataType)} getDataValue() { return getDataValue(0); }
+`);
+            this.defineShader(builder, parameters);
+          },
+      getContextKey: context => context.shaderKey,
+    });
     this.vertexComputationManager = VolumeSliceVertexComputationManager.get(gl);
 
     const transformedSources = getTransformedSources(this);
@@ -230,10 +263,6 @@ export class RenderLayer extends SliceViewRenderLayer {
     return this.sources![0][0].spec.dataType;
   }
 
-  get chunkFormat() {
-    return this.sources![0][0].chunkFormat;
-  }
-
   getValueAt(position: vec3) {
     for (let alternatives of getTransformedSources(this)) {
       for (let transformedSource of alternatives) {
@@ -247,38 +276,29 @@ export class RenderLayer extends SliceViewRenderLayer {
     return null;
   }
 
-  protected getShaderKey() {
-    return this.chunkFormat.shaderKey;
-  }
 
-  protected defineShader(builder: ShaderBuilder) {
-    this.vertexComputationManager.defineShader(builder);
-    builder.addOutputBuffer('vec4', 'v4f_fragData0', 0);
-    builder.addFragmentCode(`
-void emit(vec4 color) {
-  v4f_fragData0 = color;
-}
-`);
-    this.chunkFormat.defineShader(builder);
-    builder.addFragmentCode(`
-${getShaderType(this.dataType)} getDataValue() { return getDataValue(0); }
-`);
-  }
-
-  beginSlice(_sliceView: SliceView) {
-    let gl = this.gl;
-
-    let shader = this.shaderGetter.get();
-    if (shader === undefined) {
-      return;
+  beginChunkFormat(sliceView: SliceView, chunkFormat: ChunkFormat):
+      ParameterizedShaderGetterResult<ShaderParameters> {
+    const {gl} = this;
+    const shaderResult = this.shaderGetter(chunkFormat);
+    const {shader, parameters, fallback} = shaderResult;
+    if (shader !== null) {
+      shader.bind();
+      this.vertexComputationManager.beginSlice(gl, shader);
+      this.initializeShader(sliceView, shader, parameters, fallback);
+      chunkFormat.beginDrawing(gl, shader);
     }
-    shader.bind();
-    this.vertexComputationManager.beginSlice(gl, shader);
-    return shader;
+    return shaderResult;
   }
 
-  endSlice(shader: ShaderProgram) {
-    let gl = this.gl;
+  abstract initializeShader(
+      sliceView: SliceView, shader: ShaderProgram, parameters: ShaderParameters,
+      fallback: boolean): void;
+
+  abstract defineShader(builder: ShaderBuilder, parameters: ShaderParameters): void;
+
+  endSlice(_sliceView: SliceView, shader: ShaderProgram, _parameters: ShaderParameters) {
+    const {gl} = this;
     this.vertexComputationManager.endSlice(gl, shader);
   }
 
@@ -288,29 +308,27 @@ ${getShaderType(this.dataType)} getDataValue() { return getDataValue(0); }
       return;
     }
 
-    let gl = this.gl;
-
-    const shader = this.beginSlice(sliceView);
-    if (shader === undefined) {
-      return;
-    }
+    const {gl} = this;
 
     let chunkPosition = vec3.create();
     const {renderScaleHistogram, vertexComputationManager} = this;
-
-    // All sources are required to have the same texture format.
-    let chunkFormat = this.chunkFormat;
-    chunkFormat.beginDrawing(gl, shader);
 
     if (renderScaleHistogram !== undefined) {
       renderScaleHistogram.begin(
           this.chunkManager.chunkQueueManager.frameNumberCounter.frameNumber);
     }
 
+    let shaderResult: ParameterizedShaderGetterResult<ShaderParameters>;
+    let shader: ShaderProgram|null = null;
+    let prevChunkFormat: ChunkFormat|undefined;
+    const endShader = () => {
+      if (shader === null) return;
+      prevChunkFormat!.endDrawing(gl, shader);
+      this.endSlice(sliceView, shader, shaderResult.parameters);
+    };
     for (let transformedSource of visibleSources) {
       const chunkLayout = transformedSource.chunkLayout;
       const source = transformedSource.source as VolumeChunkSource;
-      const chunks = source.chunks;
 
       let originalChunkSize = chunkLayout.size;
 
@@ -319,29 +337,30 @@ ${getShaderType(this.dataType)} getDataValue() { return getDataValue(0); }
       if (!visibleChunks) {
         continue;
       }
+      const chunkFormat = source.chunkFormat;
+      if (chunkFormat !== prevChunkFormat) {
+        prevChunkFormat = chunkFormat;
+        endShader();
+        shaderResult = this.beginChunkFormat(sliceView, chunkFormat);
+        shader = shaderResult.shader;
+      }
+      if (shader === null) continue;
+      const chunks = source.chunks;
 
       vertexComputationManager.beginSource(
           gl, shader, sliceView, sliceView.dataToDevice, source.spec, chunkLayout);
-      let sourceChunkFormat = source.chunkFormat;
-      sourceChunkFormat.beginSource(gl, shader);
-
-      let setChunkDataSize = (newChunkDataSize: vec3) => {
-        chunkDataSize = newChunkDataSize;
-        vertexComputationManager.setupChunkDataSize(gl, shader, chunkDataSize);
-      };
-
+      chunkFormat.beginSource(gl, shader);
       let presentCount = 0, notPresentCount = 0;
-
       for (let key of visibleChunks) {
         let chunk = chunks.get(key);
         if (chunk && chunk.state === ChunkState.GPU_MEMORY) {
           let newChunkDataSize = chunk.chunkDataSize;
-          if (newChunkDataSize !== chunkDataSize) {
-            setChunkDataSize(newChunkDataSize);
+          if (chunkDataSize === undefined || !vec3.equals(chunkDataSize, newChunkDataSize)) {
+            chunkDataSize = newChunkDataSize;
+            vertexComputationManager.setupChunkDataSize(gl, shader, chunkDataSize);
           }
-
           vec3.multiply(chunkPosition, originalChunkSize, chunk.chunkGridPosition);
-          sourceChunkFormat.bindChunk(gl, shader, chunk);
+          chunkFormat.bindChunk(gl, shader, chunk);
           vertexComputationManager.drawChunk(gl, shader, chunkPosition);
           ++presentCount;
         } else {
@@ -358,7 +377,6 @@ ${getShaderType(this.dataType)} getDataValue() { return getDataValue(0); }
             medianVoxelSize, medianVoxelSize / sliceView.pixelSize, presentCount, notPresentCount);
       }
     }
-    chunkFormat.endDrawing(gl, shader);
-    this.endSlice(shader);
+    endShader();
   }
 }

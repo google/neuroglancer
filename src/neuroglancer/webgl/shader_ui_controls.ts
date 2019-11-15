@@ -17,6 +17,7 @@
 import {TrackableValue, TrackableValueInterface, WatchableValueInterface} from 'neuroglancer/trackable_value';
 import {parseRGBColorSpecification, TrackableRGB} from 'neuroglancer/util/color';
 import {RefCounted} from 'neuroglancer/util/disposable';
+import {vec3} from 'neuroglancer/util/geom';
 import {verifyFiniteFloat, verifyInt, verifyObject} from 'neuroglancer/util/json';
 import {NullarySignal} from 'neuroglancer/util/signal';
 import {Trackable} from 'neuroglancer/util/trackable';
@@ -35,7 +36,8 @@ export interface ShaderSliderControl {
 export interface ShaderColorControl {
   type: 'color';
   valueType: 'vec3';
-  default: string;
+  defaultString: string;
+  default: vec3;
 }
 
 export type ShaderUiControl = ShaderSliderControl|ShaderColorControl;
@@ -46,6 +48,7 @@ export interface ShaderControlParseError {
 }
 
 export interface ShaderControlsParseResult {
+  source: string;
   code: string;
   controls: Map<string, ShaderUiControl>;
   errors: ShaderControlParseError[];
@@ -209,7 +212,12 @@ function parseColorDirective(
     return {errors};
   }
   return {
-    control: {type: 'color', valueType, default: defaultColor} as ShaderColorControl,
+    control: {
+      type: 'color',
+      valueType,
+      defaultString: defaultColor,
+      default: parseRGBColorSpecification(defaultColor)
+    } as ShaderColorControl,
     errors: undefined
   };
 }
@@ -270,7 +278,7 @@ export function parseShaderUiControls(code: string): ShaderControlsParseResult {
     controls.set(variableName, result.control);
     return '';
   });
-  return {code: newCode, errors, controls};
+  return {source: code, code: newCode, errors, controls};
 }
 
 export type Controls = Map<string, ShaderUiControl>;
@@ -331,7 +339,7 @@ function getControlTrackable(control: ShaderUiControl): TrackableValueInterface<
         return v;
       });
     case 'color':
-      return new TrackableRGB(parseRGBColorSpecification(control.default));
+      return new TrackableRGB(control.default);
   }
 }
 
@@ -340,16 +348,18 @@ export class ShaderControlState extends RefCounted implements Trackable {
   controls = new WatchableShaderUiControls();
   parseErrors: WatchableValueInterface<ShaderControlParseError[]>;
   processedFragmentMain: WatchableValueInterface<string>;
+  parseResult: WatchableValueInterface<ShaderControlsParseResult>;
   private fragmentMainGeneration = -1;
   private parseErrors_: ShaderControlParseError[] = [];
   private processedFragmentMain_ = '';
-
+  private parseResult_: ShaderControlsParseResult;
   private controlsGeneration = -1;
 
   constructor(public fragmentMain: WatchableValueInterface<string>) {
     super();
     this.registerDisposer(fragmentMain.changed.add(() => this.handleFragmentMainChanged()));
     this.registerDisposer(this.controls.changed.add(() => this.handleControlsChanged()));
+    this.handleFragmentMainChanged();
     const self = this;
     this.parseErrors = {
       changed: fragmentMain.changed,
@@ -365,13 +375,19 @@ export class ShaderControlState extends RefCounted implements Trackable {
         return self.processedFragmentMain_;
       }
     };
+    this.parseResult = {
+      changed: fragmentMain.changed,
+      get value() {
+        return self.parseResult_;
+      }
+    };
   }
 
   private handleFragmentMainChanged() {
     const generation = this.fragmentMain.changed.count;
     if (generation === this.fragmentMainGeneration) return;
     this.fragmentMainGeneration = generation;
-    const result = parseShaderUiControls(this.fragmentMain.value);
+    const result = this.parseResult_ = parseShaderUiControls(this.fragmentMain.value);
     this.parseErrors_ = result.errors;
     this.processedFragmentMain_ = result.code;
     if (result.errors.length === 0) {
@@ -496,26 +512,43 @@ export class ShaderControlState extends RefCounted implements Trackable {
   }
 }
 
+function setControlInShader(gl: GL, shader: ShaderProgram, name: string, control: ShaderUiControl, value: any) {
+  const uniform = shader.uniform(uniformName(name));
+  switch (control.type) {
+    case 'slider':
+      switch (control.valueType) {
+        case 'int':
+        case 'uint':
+          gl.uniform1i(uniform, value);
+          break;
+        case 'float':
+          gl.uniform1f(uniform, value);
+      }
+      break;
+    case 'color':
+      gl.uniform3fv(uniform, value);
+      break;
+  }
+}
+
 export function setControlsInShader(
-    gl: GL, shader: ShaderProgram, shaderControlState: ShaderControlState) {
-  for (const [name, controlState] of shaderControlState.state) {
-    const uniform = shader.uniform(uniformName(name));
-    const {value} = controlState.trackable;
-    const {control} = controlState;
-    switch (control.type) {
-      case 'slider':
-        switch (control.valueType) {
-          case 'int':
-          case 'uint':
-            gl.uniform1i(uniform, value);
-            break;
-          case 'float':
-            gl.uniform1f(uniform, value);
-        }
-        break;
-      case 'color':
-        gl.uniform3fv(uniform, value);
-        break;
+    gl: GL, shader: ShaderProgram, shaderControlState: ShaderControlState, controls: Controls) {
+  const {state} = shaderControlState;
+  if (shaderControlState.controls.value === controls) {
+    // Case when shader doesn't have any errors.
+    for (const [name, controlState] of state) {
+      setControlInShader(gl, shader, name, controlState.control, controlState.trackable.value);
+    }
+  } else {
+    // Case when shader does have errors and we are using the fallback shader, which may have a
+    // different/incompatible set of controls.
+    for (const [name, control] of controls) {
+      const controlState = state.get(name);
+      const value = (controlState !== undefined &&
+                     JSON.stringify(controlState.control) === JSON.stringify(control)) ?
+          controlState.trackable.value :
+          control.default;
+      setControlInShader(gl, shader, name, control, value);
     }
   }
 }

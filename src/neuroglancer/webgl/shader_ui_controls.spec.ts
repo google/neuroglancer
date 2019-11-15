@@ -14,8 +14,8 @@
  * limitations under the License.
  */
 
+import {vec3} from 'neuroglancer/util/geom';
 import {parseShaderUiControls, stripComments} from 'neuroglancer/webgl/shader_ui_controls';
-
 
 describe('stripComments', () => {
   it('handles code without comments', () => {
@@ -70,7 +70,8 @@ void main() {
   emitRGB(vec3(1.0, 1.0, 1.0));
 }
 `;
-    expect(parseShaderUiControls(code)).toEqual({code, errors: [], controls: new Map()});
+    expect(parseShaderUiControls(code))
+        .toEqual({source: code, code, errors: [], controls: new Map()});
   });
 
   it('handles slider control', () => {
@@ -87,6 +88,7 @@ void main() {
 }
 `;
     expect(parseShaderUiControls(code)).toEqual({
+      source: code,
       code: newCode,
       errors: [],
       controls: new Map([[
@@ -109,11 +111,13 @@ void main() {
 }
 `;
     expect(parseShaderUiControls(code)).toEqual({
+      source: code,
       code: newCode,
       errors: [],
-      controls: new Map(
-          [['color', {type: 'color', valueType: 'vec3', default: 'red'}]])
+      controls: new Map([[
+        'color',
+        {type: 'color', valueType: 'vec3', default: vec3.fromValues(1, 0, 0), defaultString: 'red'}
+      ]])
     });
-  });  
-  
+  });
 });

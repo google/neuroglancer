@@ -83,23 +83,91 @@ class DerivedWatchableValue<U> extends RefCounted implements WatchableValueInter
   }
 }
 
-export function makeDerivedWatchableValue<U, T0>(
-    f: (v0: T0) => U, w0: WatchableValueInterface<T0>): DerivedWatchableValue<U>;
-export function makeDerivedWatchableValue<U, T0, T1>(
-    f: (v0: T0, v1: T1) => U, w0: WatchableValueInterface<T0>,
-    w1: WatchableValueInterface<T1>): DerivedWatchableValue<U>;
-export function makeDerivedWatchableValue<U, T0, T1, T2>(
-    f: (v0: T0, v1: T1, v2: T2) => U, w0: WatchableValueInterface<T0>,
-    w1: WatchableValueInterface<T1>, w2: WatchableValueInterface<T2>): DerivedWatchableValue<U>;
-export function makeDerivedWatchableValue<U, T0, T1, T2, T3>(
-    f: (v0: T0, v1: T1, v2: T2, v3: T3) => U, w0: WatchableValueInterface<T0>,
-    w1: WatchableValueInterface<T1>, w2: WatchableValueInterface<T2>,
-    w3: WatchableValueInterface<T3>): DerivedWatchableValue<U>;
-export function makeDerivedWatchableValue<U, T>(
-    f: (...values: T[]) => U, ...ws: WatchableValueInterface<T>[]): DerivedWatchableValue<U>;
-export function makeDerivedWatchableValue<U>(
-    f: (...v: any[]) => U, ...ws: WatchableValueInterface<any>[]) {
+export function makeDerivedWatchableValue<U, T extends any[]>(
+    f: (...v: T) => U, ...ws: {[K in keyof T]: WatchableValueInterface<T[K]>}) {
   return new DerivedWatchableValue(f, ws);
+}
+
+class CachedLazyDerivedWatchableValue<U> extends RefCounted implements WatchableValueInterface<U> {
+  changed = new NullarySignal();
+  private value_: U|undefined;
+  private valueGeneration = -1;
+  get value() {
+    const generation = this.changed.count;
+    if (generation !== this.valueGeneration) {
+      this.value_ = this.f(...this.ws.map(w => w.value));
+      this.valueGeneration = generation;
+    }
+    return this.value_ as U;
+  }
+  private f: (...v: any[]) => U;
+  private ws: WatchableValueInterface<any>[];
+
+  constructor(f: (...v: any[]) => U, ws: WatchableValueInterface<any>[]) {
+    super();
+    this.f = f;
+    this.ws = ws;
+    for (const w of ws) {
+      this.registerDisposer(w.changed.add(this.changed.dispatch));
+    }
+  }
+}
+
+export function makeCachedLazyDerivedWatchableValue<U, T extends any[]>(
+    f: (...v: T) => U, ...ws: {[K in keyof T]: WatchableValueInterface<T[K]>}) {
+  return new CachedLazyDerivedWatchableValue(f, ws);
+}
+
+export class CachedWatchableValue<T> extends RefCounted implements WatchableValueInterface<T> {
+  changed = new NullarySignal();
+  value: T;
+  constructor(
+      base: WatchableValueInterface<T>, isEqual: (a: T, b: T) => boolean = (a, b) => a === b) {
+    super();
+    this.value = base.value;
+    this.registerDisposer(base.changed.add(() => {
+      const newValue = base.value;
+      if (!isEqual(this.value, newValue)) {
+        this.value = newValue;
+        this.changed.dispatch();
+      }
+    }));
+  }
+}
+
+export function makeCachedDerivedWatchableValue<U, T extends any[]>(
+    f: (...v: T) => U, ws: {[K in keyof T]: WatchableValueInterface<T[K]>},
+    isEqual?: (a: U, b: U) => boolean) {
+  const derived = new DerivedWatchableValue(f, ws);
+  const cached = new CachedWatchableValue(derived, isEqual);
+  cached.registerDisposer(derived);
+  return cached;
+}
+
+export class AggregateWatchableValue<T> extends RefCounted implements WatchableValueInterface<T> {
+  changed = new NullarySignal();
+  value: T;
+  constructor(
+      getWatchables: (self: RefCounted) => {[k in keyof T]: WatchableValueInterface<T[k]>}) {
+    super();
+    const watchables = getWatchables(this);
+    const keys = Object.keys(watchables) as (keyof T)[];
+    const updateValue = () => {
+      const obj = {} as T;
+      for (const k of keys) {
+        obj[k] = watchables[k].value;
+      }
+      this.value = obj;
+      this.changed.dispatch();
+    };
+    updateValue();
+    for (const k of keys) {
+      const watchable = watchables[k];
+      // Ensure a unique function is used each time in case the same watchable is assigned to
+      // multiple properties.
+      this.registerDisposer(watchable.changed.add(() => updateValue()));
+    }
+  }
 }
 
 export class ComputedWatchableValue<U> extends RefCounted implements WatchableValueInterface<U> {

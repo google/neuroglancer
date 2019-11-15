@@ -148,4 +148,8 @@ bool ${this.getFunctionName}(uint64_t x, out vec3 value) {
     gl: GL, shader: ShaderProgram, hashTable: GPUHashTable<HashTable>) {
     this.hashMapShaderManager.enable(gl, shader, hashTable);
   }
+
+  disable(gl: GL, shader: ShaderProgram) {
+    this.hashMapShaderManager.disable(gl, shader);
+  }
 }
