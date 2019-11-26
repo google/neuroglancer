@@ -1,0 +1,23 @@
+#find-path-widget {
+  margin-top: 10px;
+}
+
+#find-path-label {
+  margin-top: 5px;
+}
+
+#find-path-source-target {
+  margin-top: 5px;
+}
+
+.find-path-source-or-target-prefix {
+  margin-right: 3px;
+}
+
+.find-path-source-or-target-item {
+  margin-top: 2px;
+}
+
+#path-finder-color-widget {
+  width: 60%;
+}

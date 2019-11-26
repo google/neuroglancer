@@ -18,6 +18,7 @@ import {AnnotationLayer, SliceViewAnnotationLayer} from 'neuroglancer/annotation
 import {PerspectiveViewAnnotationLayer} from 'neuroglancer/annotation/renderlayer';
 import {setAnnotationHoverStateFromMouseState} from 'neuroglancer/annotation/selection';
 import {GraphOperationLayerState} from 'neuroglancer/graph/graph_operation_layer_state';
+import {PathFinderState} from 'neuroglancer/graph/path_finder_state';
 import {registerLayerType, registerVolumeLayerType} from 'neuroglancer/layer_specification';
 import {SegmentationDisplayState} from 'neuroglancer/segmentation_display_state/frontend';
 import {SegmentationUserLayer, SegmentationUserLayerDisplayState} from 'neuroglancer/segmentation_user_layer';
@@ -46,6 +47,7 @@ const EQUIVALENCES_JSON_KEY = 'equivalences';
 const ROOT_SEGMENTS_JSON_KEY = 'segments';
 const GRAPH_OPERATION_MARKER_JSON_KEY = 'graphOperationMarker';
 const TIMESTAMP_JSON_KEY = 'timestamp';
+const PATH_FINDER_JSON_KEY = 'pathFinder';
 
 const lastSegmentSelection: SegmentSelection = {
   segmentId: new Uint64(),
@@ -83,6 +85,7 @@ function helper<TBase extends BaseConstructor>(Base: TBase) {
     chunkedGraphLayer: Borrowed<ChunkedGraphLayer>|undefined;
     graphOperationLayerState =
         this.registerDisposer(new WatchableRefCounted<GraphOperationLayerState>());
+    pathFinderState = this.registerDisposer(new PathFinderState(this.transform));
     selectedGraphOperationElement = this.registerDisposer(
         new SelectedGraphOperationState(this.graphOperationLayerState.addRef()));
     displayState: SegmentationUserLayerWithGraphDisplayState;
@@ -140,6 +143,17 @@ function helper<TBase extends BaseConstructor>(Base: TBase) {
         setAnnotationHoverStateFromMouseState(stateB, this.manager.layerSelectedValues.mouseState);
         this.addRenderLayer(new SliceViewAnnotationLayer(annotationLayer));
         this.addRenderLayer(new PerspectiveViewAnnotationLayer(annotationLayer.addRef()));
+      }
+
+      {
+        const pathFinderAnnotationLayer = new AnnotationLayer(
+            this.manager.chunkManager, this.pathFinderState.annotationLayerState.value!.addRef());
+        setAnnotationHoverStateFromMouseState(
+            this.pathFinderState.annotationLayerState.value!,
+            this.manager.layerSelectedValues.mouseState);
+        this.addRenderLayer(new SliceViewAnnotationLayer(pathFinderAnnotationLayer));
+        this.addRenderLayer(new PerspectiveViewAnnotationLayer(pathFinderAnnotationLayer.addRef()));
+        this.registerDisposer(this.pathFinderState.changed.add(this.specificationChanged.dispatch));
       }
 
       this.tabs.default = 'rendering';
@@ -225,6 +239,9 @@ function helper<TBase extends BaseConstructor>(Base: TBase) {
       if (this.displayState.timestamp && specification[TIMESTAMP_JSON_KEY]) {
         this.displayState.timestamp.value = (specification[TIMESTAMP_JSON_KEY]);
       }
+      if (specification[PATH_FINDER_JSON_KEY] !== undefined) {
+        this.pathFinderState.restoreState(specification[PATH_FINDER_JSON_KEY]);
+      }
     }
 
     toJSON() {
@@ -237,6 +254,7 @@ function helper<TBase extends BaseConstructor>(Base: TBase) {
       if (this.graphOperationLayerState.value) {
         x[GRAPH_OPERATION_MARKER_JSON_KEY] = this.graphOperationLayerState.value.toJSON();
       }
+      x[PATH_FINDER_JSON_KEY] = this.pathFinderState.toJSON();
 
       // Graph equivalences can contain million of supervoxel IDs - don't store them in the state.
       delete x[EQUIVALENCES_JSON_KEY];
@@ -516,6 +534,7 @@ export interface SegmentationUserLayerWithGraph extends SegmentationUserLayer {
     isActive: TrackableBoolean,
     performingMulticut: TrackableBoolean
   }) => SupervoxelRenderLayer;
+  pathFinderState: PathFinderState;
 }
 
 /**

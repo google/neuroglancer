@@ -24,15 +24,28 @@ import {StatusMessage} from 'neuroglancer/status';
 import {TrackableBoolean} from 'neuroglancer/trackable_boolean';
 import {Uint64Set} from 'neuroglancer/uint64_set';
 import {vec3} from 'neuroglancer/util/geom';
+import {verify3dVec, verifyObjectProperty} from 'neuroglancer/util/json';
 import {Uint64} from 'neuroglancer/util/uint64';
 import {RPC} from 'neuroglancer/worker_rpc';
 
 export const GRAPH_SERVER_NOT_SPECIFIED = Symbol('Graph Server Not Specified.');
 
+const SEGMENT_SELECTION_SEGMENT_ID_JSON_KEY = 'segmentId';
+const SEGMENT_SELECTION_ROOT_ID_JSON_KEY = 'rootId';
+const SEGMENT_SELECTION_POSITION_JSON_KEY = 'position';
+
 export interface SegmentSelection {
   segmentId: Uint64;
   rootId: Uint64;
   position: vec3;
+}
+
+export function restoreSegmentSelection(x: any): SegmentSelection {
+  return {
+    segmentId: Uint64.parseString(x[SEGMENT_SELECTION_SEGMENT_ID_JSON_KEY], 10),
+    rootId: Uint64.parseString(x[SEGMENT_SELECTION_ROOT_ID_JSON_KEY], 10),
+    position: verifyObjectProperty(x, SEGMENT_SELECTION_POSITION_JSON_KEY, verify3dVec)
+  };
 }
 
 export class ChunkedGraphChunkSource extends SliceViewChunkSource implements
@@ -193,6 +206,36 @@ export class ChunkedGraphLayer extends GenericSliceViewRenderLayer {
     }
     const jsonIllegalSplitKey = 'illegal_split';
     return {supervoxelConnectedComponents, isSplitIllegal: jsonResp[jsonIllegalSplitKey]};
+  }
+
+  async findPath(first: SegmentSelection, second: SegmentSelection): Promise<number[][]> {
+    const {url} = this;
+    if (url === '') {
+      return Promise.reject(GRAPH_SERVER_NOT_SPECIFIED);
+    }
+
+    const promise = authFetch(`${url}/graph/find_path?int64_as_str=1`, {
+      method: 'POST',
+      body: JSON.stringify([
+        [String(first.segmentId), ...first.position.values()],
+        [String(second.segmentId), ...second.position.values()]
+      ])
+    });
+
+    const response = await this.withErrorMessage(promise, {
+      initialMessage: `Finding path between ${first.segmentId} and ${second.segmentId}`,
+      errorPrefix: 'Path finding failed: '
+    });
+    const jsonResponse = await response.json();
+    const supervoxelCentroidsKey = 'centroids_list';
+    const centroids = jsonResponse[supervoxelCentroidsKey];
+    const missingL2IdsKey = 'failed_l2_ids';
+    const missingL2Ids = jsonResponse[missingL2IdsKey];
+    if (missingL2Ids && missingL2Ids.length > 0) {
+      StatusMessage.showTemporaryMessage(
+          'Some level 2 meshes are missing, so the path shown may have a poor level of detail.');
+    }
+    return centroids;
   }
 
   draw() {}
