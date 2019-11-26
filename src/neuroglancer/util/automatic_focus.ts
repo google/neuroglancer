@@ -56,7 +56,9 @@ export class AutomaticallyFocusedElement extends RefCounted {
   private scheduleUpdateFocus = this.registerCancellable(debounce(() => {
     const {activeElement} = document;
     const {element} = this;
-    if (element.contains(activeElement)) {
+    if (element.contains(activeElement) || activeElement instanceof HTMLInputElement ||
+        (activeElement instanceof HTMLElement && activeElement.isContentEditable) ||
+        activeElement instanceof HTMLTextAreaElement) {
       // Never steal focus from descendant.
       return;
     }
@@ -70,6 +72,11 @@ export class AutomaticallyFocusedElement extends RefCounted {
   constructor(public element: HTMLElement) {
     super();
     element.tabIndex = -1;
+    this.registerEventListener(element, 'pointerdown', event => {
+      if (event.target !== element) return;
+      this.lastFocusedElement = null;
+      element.focus();
+    });
     this.registerEventListener(element, 'mouseenter', () => {
       this.lastFocusedElement = document.activeElement;
       this.scheduleUpdateFocus();
