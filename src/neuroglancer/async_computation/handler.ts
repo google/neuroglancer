@@ -23,7 +23,10 @@ const handlers = new Map<string, (...args: any[]) => Promise<{value: any, transf
   const handler = handlers.get(t)!;
   handler(...args).then(
       ({value, transfer}) => (self as any).postMessage({id, value}, transfer),
-      error => (self as any).postMessage({id, error: error.message}));
+      error => (self as any).postMessage({
+        id,
+        error: (error instanceof Error) ? error.message : error.toString()
+      }));
 };
 
 export function registerAsyncComputation<Signature extends(...args: any) => any>(
