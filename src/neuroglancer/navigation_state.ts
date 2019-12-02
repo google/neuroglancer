@@ -1137,10 +1137,15 @@ abstract class TrackableZoom extends RefCounted implements Trackable,
   }
 
   set value(value: number) {
-    this.curCanonicalVoxelPhysicalSize = this.displayDimensions.value.canonicalVoxelPhysicalSize;
-    this.legacyValue_ = Number.NaN;
-    this.value_ = value;
-    this.changed.dispatch();
+    if (Number.isNaN(value)) {
+      if (Number.isNaN(this.value_)) return;
+      this.value_ = Number.NaN;
+    } else {
+      this.curCanonicalVoxelPhysicalSize = this.displayDimensions.value.canonicalVoxelPhysicalSize;
+      this.legacyValue_ = Number.NaN;
+      this.value_ = value;
+      this.changed.dispatch();
+    }
   }
 
   get canonicalVoxelPhysicalSize() {
