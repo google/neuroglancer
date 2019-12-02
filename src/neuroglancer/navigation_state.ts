@@ -1137,15 +1137,15 @@ abstract class TrackableZoom extends RefCounted implements Trackable,
   }
 
   set value(value: number) {
-    if (Number.isNaN(value)) {
-      if (Number.isNaN(this.value_)) return;
-      this.value_ = Number.NaN;
-    } else {
-      this.curCanonicalVoxelPhysicalSize = this.displayDimensions.value.canonicalVoxelPhysicalSize;
-      this.legacyValue_ = Number.NaN;
-      this.value_ = value;
-      this.changed.dispatch();
+    const {canonicalVoxelPhysicalSize} = this.displayDimensions.value;
+    if (Object.is(value, this.value_) &&
+        canonicalVoxelPhysicalSize === this.curCanonicalVoxelPhysicalSize) {
+      return;
     }
+    this.curCanonicalVoxelPhysicalSize = canonicalVoxelPhysicalSize;
+    this.legacyValue_ = Number.NaN;
+    this.value_ = value;
+    this.changed.dispatch();
   }
 
   get canonicalVoxelPhysicalSize() {
@@ -1158,10 +1158,15 @@ abstract class TrackableZoom extends RefCounted implements Trackable,
    * per viewport height (for orthographic projection).
    */
   set legacyValue(value: number) {
+    if (Object.is(value, this.legacyValue_)) return;
     this.curCoordinateSpace = emptyInvalidCoordinateSpace;
     this.value_ = Number.NaN;
     this.legacyValue_ = value;
     this.changed.dispatch();
+  }
+
+  get legacyValue() {
+    return this.legacyValue_;
   }
 
   get coordinateSpace() {
@@ -1247,14 +1252,17 @@ abstract class TrackableZoom extends RefCounted implements Trackable,
   setPhysicalScale(scaleInCanonicalVoxels: number, canonicalVoxelPhysicalSize: number) {
     const curCanonicalVoxelPhysicalSize = this.curCanonicalVoxelPhysicalSize =
         this.displayDimensions.value.canonicalVoxelPhysicalSize;
-    this.legacyValue_ = Number.NaN;
-    this.value_ =
+    this.value =
         scaleInCanonicalVoxels * (canonicalVoxelPhysicalSize / curCanonicalVoxelPhysicalSize);
-    this.changed.dispatch();
   }
 
   assign(source: TrackableZoomInterface) {
-    this.setPhysicalScale(source.value, source.canonicalVoxelPhysicalSize);
+    const {legacyValue} = source;
+    if (!Number.isNaN(legacyValue)) {
+      this.legacyValue = legacyValue;
+    } else {
+      this.setPhysicalScale(source.value, source.canonicalVoxelPhysicalSize);
+    }
   }
 }
 
