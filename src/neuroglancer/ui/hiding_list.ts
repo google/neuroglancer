@@ -48,6 +48,11 @@ export class HidingList {
 
     this.resizeObserver =
         new ResizeObserver(function(this: HidingList, entries: ResizeObserverEntry[]) {
+          if (this.sizeParent.offsetWidth === 0) {
+            // Panel was hidden, don't resize
+            return;
+          }
+          
           for (const entry of entries) {
             // On annotation resize, update all subsequent annotation Ys
 
