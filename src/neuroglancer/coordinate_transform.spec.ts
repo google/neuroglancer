@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-import {boundingBoxesEqual, CoordinateSpaceCombiner, coordinateSpacesEqual, emptyInvalidCoordinateSpace, homogeneousTransformSubmatrix, makeCoordinateSpace, newDimensionId, TransformedBoundingBox, WatchableCoordinateSpaceTransform} from 'neuroglancer/coordinate_transform';
+import {boundingBoxesEqual, CoordinateSpaceCombiner, coordinateSpacesEqual, emptyInvalidCoordinateSpace, homogeneousTransformSubmatrix, makeCoordinateSpace, makeIdentityTransform, newDimensionId, TransformedBoundingBox, WatchableCoordinateSpaceTransform} from 'neuroglancer/coordinate_transform';
 import {WatchableValue} from 'neuroglancer/trackable_value';
 
 describe('newDimensionId', () => {
@@ -183,7 +183,8 @@ describe('getOutputSpaceWithTransformedBoundingBoxes', () => {
       units: ['m', 'm', 'm'],
       names: ['a', 'b', 'c'],
     });
-    const watchableTransform = new WatchableCoordinateSpaceTransform(inputSpace);
+    const watchableTransform =
+        new WatchableCoordinateSpaceTransform(makeIdentityTransform(inputSpace));
     watchableTransform.outputSpace.value = outputSpace;
     expect(watchableTransform.value.outputSpace.boundingBoxes).toEqual([{
       box: {lowerBounds: Float64Array.of(1, 2), upperBounds: Float64Array.of(5, 10)},
