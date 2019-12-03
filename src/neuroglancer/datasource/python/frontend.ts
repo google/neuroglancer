@@ -101,13 +101,15 @@ function computeNearIsotropicDownsamplingLevels(
       }
     }
     curDownsampleFactors[curSmallestScaleDim] *= 2;
+    curDownsampleProduct *= 2;
     const targetScale = getEffectiveScale(curSmallestScaleDim);
-    for (let i = 0; i < numDownsampleDims; ++i) {
+    for (let i = 0; i < numDownsampleDims && curDownsampleProduct < maxDownsampling; ++i) {
       const dim = downsampleDims[i];
       if (dim === curSmallestScaleDim) continue;
       const effectiveScale = getEffectiveScale(dim);
       if (Math.abs(effectiveScale - targetScale) > Math.abs(effectiveScale * 2 - targetScale)) {
         curDownsampleFactors[dim] *= 2;
+        curDownsampleProduct *= 2;
       }
     }
     downsampleLevels.push(new Float32Array(curDownsampleFactors));
