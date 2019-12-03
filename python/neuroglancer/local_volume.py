@@ -212,12 +212,10 @@ class LocalVolume(trackable_state.ChangeNotifier):
                     raise MeshesNotSupportedForVolume()
                 pending_obj = object()
                 self._mesh_generator_pending = pending_obj
-            if len(self.data.shape) == 4:
-                data = self.data[0, :, :, :]
-            else:
-                data = self.data
+            data = self.data
             new_mesh_generator = _neuroglancer.OnDemandObjectMeshGenerator(
-                data, self.dimensions.scales, np.zeros(3), **self._mesh_options)
+                data.transpose(),
+                self.dimensions.scales, np.zeros(3), **self._mesh_options)
             with self._mesh_generator_lock:
                 if self._mesh_generator_pending is not pending_obj:
                     continue
