@@ -19,8 +19,9 @@
  * Support for Render (https://github.com/saalfeldlab/render) servers.
  */
 
+import {makeDataBoundsBoundingBoxAnnotationSet} from 'neuroglancer/annotation';
 import {ChunkManager, WithParameters} from 'neuroglancer/chunk_manager/frontend';
-import {makeCoordinateSpace, makeIdentityTransform} from 'neuroglancer/coordinate_transform';
+import {makeCoordinateSpace, makeIdentityTransform, makeIdentityTransformedBoundingBox} from 'neuroglancer/coordinate_transform';
 import {CompleteUrlOptions, CompletionResult, DataSource, DataSourceProvider, GetDataSourceOptions} from 'neuroglancer/datasource';
 import {TileChunkSourceParameters} from 'neuroglancer/datasource/render/base';
 import {SliceViewSingleResolutionSource} from 'neuroglancer/sliceview/frontend';
@@ -318,40 +319,37 @@ class RenderMultiscaleVolumeChunkSource extends MultiscaleVolumeChunkSource {
 
   getSources(volumeSourceOptions: VolumeSourceOptions) {
     volumeSourceOptions;
-    let sources: SliceViewSingleResolutionSource<VolumeChunkSource>[][] = [];
+    const sources: SliceViewSingleResolutionSource<VolumeChunkSource>[][] = [];
 
     let numLevels = this.numLevels;
     if (numLevels === undefined) {
       numLevels = computeStackHierarchy(this.stackInfo, this.dims[0]);
     }
 
-    let lowerClipBound = vec3.create(), upperClipBound = vec3.create();
-    // Generate and set the clip bounds based on the highest resolution (lowest scale) data in
-    // render. Otherwise, rounding errors can cause inconsistencies in clip bounds between scaling
-    // levels.
-    for (let i = 0; i < 3; i++) {
-      lowerClipBound[i] = this.stackInfo.lowerVoxelBound[i] * this.stackInfo.voxelResolution[i];
-      upperClipBound[i] = this.stackInfo.upperVoxelBound[i] * this.stackInfo.voxelResolution[i];
-    }
+    const {lowerVoxelBound: baseLowerVoxelBound, upperVoxelBound: baseUpperVoxelBound} =
+        this.stackInfo;
 
     for (let level = 0; level < numLevels; level++) {
       const chunkToMultiscaleTransform = mat4.create();
-      let chunkDataSize = Uint32Array.of(1, 1, 1);
+      const chunkDataSize = Uint32Array.of(1, 1, 1);
       // tiles are NxMx1
       for (let i = 0; i < 2; ++i) {
         chunkToMultiscaleTransform[5 * i] = Math.pow(2, level);
         chunkDataSize[i] = this.dims[i];
       }
 
-      let lowerVoxelBound = vec3.create(), upperVoxelBound = vec3.create();
+      const lowerVoxelBound = vec3.create(), upperVoxelBound = vec3.create();
+      const lowerClipBound = vec3.create(), upperClipBound = vec3.create();
 
       for (let i = 0; i < 3; i++) {
         const downsampleFactor = chunkToMultiscaleTransform[5 * i];
-        lowerVoxelBound[i] = Math.floor(this.stackInfo.lowerVoxelBound[i] / downsampleFactor);
-        upperVoxelBound[i] = Math.ceil(this.stackInfo.upperVoxelBound[i] / downsampleFactor);
+        const lower = lowerClipBound[i] = baseLowerVoxelBound[i] / downsampleFactor;
+        const upper = upperClipBound[i] = baseUpperVoxelBound[i] / downsampleFactor;
+        lowerVoxelBound[i] = Math.floor(lower);
+        upperVoxelBound[i] = Math.ceil(upper);
       }
 
-      let spec = makeVolumeChunkSpecification({
+      const spec = makeVolumeChunkSpecification({
         rank: 3,
         chunkDataSize,
         dataType: this.dataType,
@@ -359,7 +357,7 @@ class RenderMultiscaleVolumeChunkSource extends MultiscaleVolumeChunkSource {
         upperVoxelBound,
       });
 
-      let source = this.chunkManager.getChunkSource(TileChunkSource, {
+      const source = this.chunkManager.getChunkSource(TileChunkSource, {
         spec,
         parameters: {
           'baseUrl': this.baseUrl,
@@ -451,14 +449,26 @@ function getVolume(chunkManager: ChunkManager, datasourcePath: string) {
           names: ['x', 'y', 'z'],
           units: ['m', 'm', 'm'],
           scales: Float64Array.from(volume.stackInfo.voxelResolution, x => x / 1e9),
+          boundingBoxes: [makeIdentityTransformedBoundingBox({
+            lowerBounds: new Float64Array(volume.stackInfo.lowerVoxelBound),
+            upperBounds: new Float64Array(volume.stackInfo.upperVoxelBound)
+          })],
         });
         const dataSource: DataSource = {
           modelTransform: makeIdentityTransform(modelSpace),
-          subsources: [{
-            id: 'default',
-            default: true,
-            subsource: {volume},
-          }],
+          subsources: [
+            {
+              id: 'default',
+              default: true,
+              subsource: {volume},
+            },
+            {
+              id: 'bounds',
+              default: true,
+              subsource:
+                  {staticAnnotations: makeDataBoundsBoundingBoxAnnotationSet(modelSpace.bounds)},
+            }
+          ],
         };
         return dataSource;
       });
