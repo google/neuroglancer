@@ -356,7 +356,6 @@ def display_split_result(graph, agglo_id, cur_eqs, supervoxel_map, split_seeds, 
         seed['position'] for component in six.viewvalues(split_seeds) for seed in component
     ]
     state.voxel_coordinates = np.mean(all_seed_points, axis=0)
-    state.perspective_zoom = 140
     return state
 
 
@@ -547,7 +546,6 @@ class InteractiveSplitter(object):
         ]
 
         with viewer.txn() as s:
-            s.perspective_zoom = 140
             s.layers.append(
                 name='image',
                 layer=neuroglancer.ImageLayer(source=self.image_url),

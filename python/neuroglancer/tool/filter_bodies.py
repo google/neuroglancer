@@ -44,8 +44,6 @@ class Tool(object):
         with self.viewer.txn() as s:
             s.layers['image'] = neuroglancer.ImageLayer(source=image_url)
             s.layers['segmentation'] = neuroglancer.SegmentationLayer(source=segmentation_url)
-            s.navigation.zoom_factor = 66
-            s.perspective_zoom = 1280
             s.show_slices = False
             s.concurrent_downloads = 256
             s.gpu_memory_limit = 2 * 1024 * 1024 * 1024

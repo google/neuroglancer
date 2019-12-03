@@ -22,6 +22,7 @@ computed inference results that are displayed in neuroglancer.
 
 """
 
+import argparse
 import random
 import time
 import threading
@@ -44,6 +45,11 @@ class InteractiveInference(object):
             provenance={})
         viewer.actions.add('start-fill', self._start_fill_action)
         viewer.actions.add('stop-fill', self._stop_fill_action)
+        self.dimensions = neuroglancer.CoordinateSpace(
+            names=['x', 'y', 'z'],
+            units='nm',
+            scales=[8, 8, 8],
+        )
         with viewer.config_state.txn() as s:
             s.input_event_bindings.data_view['shift+mousedown0'] = 'start-fill'
             s.input_event_bindings.data_view['keyt'] = 'stop-fill'
@@ -62,7 +68,7 @@ class InteractiveInference(object):
         initial_pos = (int(initial_pos[0]), int(initial_pos[1]), int(initial_pos[2]))
 
         gt_vol_zarr = zarr.zeros(
-            self.gt_vol.bounds.to_list()[3:][::-1], chunks=(64, 64, 64), dtype=np.uint64)
+            self.gt_vol.bounds.to_list()[3:], chunks=(64, 64, 64), dtype=np.uint64)
 
         gt_blocks_seen = set()
 
@@ -74,11 +80,8 @@ class InteractiveInference(object):
             slice_expr = np.s_[int(spos[0]):int(epos[0]),
                                int(spos[1]):int(epos[1]),
                                int(spos[2]):int(epos[2])]
-            rev_slice_expr = np.s_[int(spos[2]):int(epos[2]),
-                                   int(spos[1]):int(epos[1]),
-                                   int(spos[0]):int(epos[0])]
-            gt_data = np.transpose(self.gt_vol[slice_expr][..., 0], (2, 1, 0))
-            gt_vol_zarr[rev_slice_expr] = gt_data
+            gt_data = self.gt_vol[slice_expr][..., 0]
+            gt_vol_zarr[slice_expr] = gt_data
 
         def get_patch(spos, epos):
             spos = np.array(spos)
@@ -91,10 +94,10 @@ class InteractiveInference(object):
                 if block_tuple in gt_blocks_seen: continue
                 gt_blocks_seen.add(block_tuple)
                 fetch_gt_block(block)
-            rev_slice_expr = np.s_[int(spos[2]):int(epos[2]),
-                                   int(spos[1]):int(epos[1]),
-                                   int(spos[0]):int(epos[0])]
-            result = gt_vol_zarr[rev_slice_expr]
+            slice_expr = np.s_[int(spos[0]):int(epos[0]),
+                               int(spos[1]):int(epos[1]),
+                               int(spos[2]):int(epos[2])]
+            result = gt_vol_zarr[slice_expr]
             return result
 
         segment_id = self.gt_vol[initial_pos][0]
@@ -132,9 +135,9 @@ class InteractiveInference(object):
         def process_pos(pos):
             spos = pos - patch_size // 2
             epos = spos + patch_size
-            rev_slice_expr = np.s_[int(spos[2]):int(epos[2]),
-                                   int(spos[1]):int(epos[1]),
-                                   int(spos[0]):int(epos[0])]
+            slice_expr = np.s_[int(spos[0]):int(epos[0]),
+                               int(spos[1]):int(epos[1]),
+                               int(spos[2]):int(epos[2])]
             gt_data = get_patch(spos, epos)
             mask = gt_data == segment_id
             for offset in ((0, 0, d), (0, 0, -d), (0, d, 0), (0, -d, 0), (d, 0, 0), (-d, 0, 0)):
@@ -143,7 +146,7 @@ class InteractiveInference(object):
                 enqueue(tuple(new_pos))
 
             dist_transform = scipy.ndimage.morphology.distance_transform_edt(~mask)
-            inf_results[rev_slice_expr] = 1 + np.cast[np.uint8](
+            inf_results[slice_expr] = 1 + np.cast[np.uint8](
                 np.minimum(dist_transform, 5) / 5.0 * 254)
 
             self.viewer.defer_callback(update_view)
@@ -166,12 +169,12 @@ class InteractiveInference(object):
     def _start_flood_fill(self, pos):
         self._stop_flood_fill()
         inf_results = zarr.zeros(
-            self.gt_vol.bounds.to_list()[3:][::-1], chunks=(64, 64, 64), dtype=np.uint8)
+            self.gt_vol.bounds.to_list()[3:], chunks=(64, 64, 64), dtype=np.uint8)
         inf_volume = neuroglancer.LocalVolume(
-            data=inf_results, voxel_size=list(self.gt_vol.resolution))
+            data=inf_results, dimensions=self.dimensions)
 
         with self.viewer.txn() as s:
-            s.layers['points'] = neuroglancer.AnnotationLayer()
+            s.layers['points'] = neuroglancer.LocalAnnotationLayer(self.dimensions)
             s.layers['inference'] = neuroglancer.ImageLayer(
                 source=inf_volume,
                 shader='''
@@ -208,6 +211,20 @@ void main() {
 
 
 if __name__ == '__main__':
+    ap = argparse.ArgumentParser()
+    ap.add_argument(
+        '-a',
+        '--bind-address',
+        help='Bind address for Python web server.  Use 127.0.0.1 (the default) to restrict access '
+        'to browers running on the local machine, use 0.0.0.0 to permit access from remote browsers.')
+    ap.add_argument(
+        '--static-content-url', help='Obtain the Neuroglancer client code from the specified URL.')
+    args = ap.parse_args()
+    if args.bind_address:
+        neuroglancer.set_server_bind_address(args.bind_address)
+    if args.static_content_url:
+        neuroglancer.set_static_content_source(url=args.static_content_url)
+
     inf = InteractiveInference()
     print(inf.viewer)
 

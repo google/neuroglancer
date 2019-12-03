@@ -45,14 +45,20 @@ class Demo(object):
         self.top_method = top_method
         self.num_top_partners = num_top_partners
 
+        dimensions = neuroglancer.CoordinateSpace(
+            names=['x', 'y', 'z'],
+            units='nm',
+            scales=[8, 8, 8],
+        )
+
         viewer = self.viewer = neuroglancer.Viewer()
         viewer.actions.add('select-custom', self._handle_select)
         with viewer.config_state.txn() as s:
             s.input_event_bindings.data_view['dblclick0'] = 'select-custom'
         with viewer.txn() as s:
-            s.perspective_zoom = 1024
-            s.perspective_orientation = [0.63240087, 0.01582051, 0.05692779, 0.77238464]
-            s.navigation.zoom_factor = 32
+            s.projection_orientation = [0.63240087, 0.01582051, 0.05692779, 0.77238464]
+            s.dimensions = dimensions
+            s.position = [3000, 3000, 3000]
             s.layers['image'] = neuroglancer.ImageLayer(
                 source='precomputed://gs://neuroglancer-public-data/flyem_fib-25/image',
             )
@@ -62,7 +68,8 @@ class Demo(object):
             s.layers['partners'] = neuroglancer.SegmentationLayer(
                 source='precomputed://gs://neuroglancer-public-data/flyem_fib-25/ground_truth',
             )
-            s.layers['synapses'] = neuroglancer.AnnotationLayer(
+            s.layers['synapses'] = neuroglancer.LocalAnnotationLayer(
+                dimensions=dimensions,
                 linked_segmentation_layer='ground_truth')
             s.layout = neuroglancer.row_layout([
                 neuroglancer.LayerGroupViewer(
@@ -135,6 +142,7 @@ class Demo(object):
                             point_b=partner['location'],
                             segments=[tbar['body ID'], partner['body ID']],
                         ))
+            print('annotations', annotations)
 
 
 if __name__ == '__main__':
@@ -156,7 +164,19 @@ if __name__ == '__main__':
         choices=['min', 'sum'],
         default='min',
         help='Method by which to combine synaptic partner counts from multiple segments.')
+    ap.add_argument(
+        '-a',
+        '--bind-address',
+        help='Bind address for Python web server.  Use 127.0.0.1 (the default) to restrict access '
+        'to browers running on the local machine, use 0.0.0.0 to permit access from remote browsers.')
+    ap.add_argument(
+        '--static-content-url', help='Obtain the Neuroglancer client code from the specified URL.')
     args = ap.parse_args()
+    if args.bind_address:
+        neuroglancer.set_server_bind_address(args.bind_address)
+    if args.static_content_url:
+        neuroglancer.set_static_content_source(url=args.static_content_url)
+
     demo = Demo(
         synapse_path=args.synapses,
         num_top_partners=args.num_partners,
