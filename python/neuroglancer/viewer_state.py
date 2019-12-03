@@ -420,11 +420,14 @@ class AnnotationLayer(Layer, _AnnotationLayerOptions):
 
 @export
 class LocalAnnotationLayer(AnnotationLayer):
+    __slots__ = ()
     def __init__(self, dimensions, *args, **kwargs):
-        super(*args, source=LayerDataSource(
-            url='local://annotations',
-            transform=CoordinateSpaceTransform(outputDimensions=dimensions)),
-              **kwargs)
+        super(LocalAnnotationLayer, self).__init__(
+            *args,
+            source=LayerDataSource(
+                url='local://annotations',
+                transform=CoordinateSpaceTransform(outputDimensions=dimensions)),
+            **kwargs)
 
 layer_types = {
     'image': ImageLayer,
