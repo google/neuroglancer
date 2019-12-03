@@ -181,21 +181,22 @@ registerRPC(SLICEVIEW_ADD_VISIBLE_LAYER_RPC_ID, function(x) {
                 const source = this.getRef<SliceViewChunkSourceBackend>(serializedSource.source);
                 const chunkLayout = serializedSource.chunkLayout;
                 const {rank} = source.spec;
-                const tsource = {
-                  renderLayer: layer,
-                  source,
-                  chunkLayout: ChunkLayout.fromObject(chunkLayout),
-                  layerRank: serializedSource.layerRank,
-                  lowerClipBound: serializedSource.lowerClipBound,
-                  upperClipBound: serializedSource.upperClipBound,
-                  lowerChunkDisplayBound: serializedSource.lowerChunkDisplayBound,
-                  upperChunkDisplayBound: serializedSource.upperChunkDisplayBound,
-                  effectiveVoxelSize: serializedSource.effectiveVoxelSize,
-                  chunkDisplayDimensionIndices: serializedSource.chunkDisplayDimensionIndices,
-                  fixedLayerToChunkTransform: serializedSource.fixedLayerToChunkTransform,
-                  curPositionInChunks: new Float32Array(rank),
-                  fixedPositionWithinChunk: new Uint32Array(rank),
-                };
+                const tsource:
+                    TransformedSource<SliceViewRenderLayerBackend, SliceViewChunkSourceBackend> = {
+                      renderLayer: layer,
+                      source,
+                      chunkLayout: ChunkLayout.fromObject(chunkLayout),
+                      layerRank: serializedSource.layerRank,
+                      nonDisplayLowerClipBound: serializedSource.nonDisplayLowerClipBound,
+                      nonDisplayUpperClipBound: serializedSource.nonDisplayUpperClipBound,
+                      lowerChunkDisplayBound: serializedSource.lowerChunkDisplayBound,
+                      upperChunkDisplayBound: serializedSource.upperChunkDisplayBound,
+                      effectiveVoxelSize: serializedSource.effectiveVoxelSize,
+                      chunkDisplayDimensionIndices: serializedSource.chunkDisplayDimensionIndices,
+                      fixedLayerToChunkTransform: serializedSource.fixedLayerToChunkTransform,
+                      curPositionInChunks: new Float32Array(rank),
+                      fixedPositionWithinChunk: new Uint32Array(rank),
+                    };
                 return tsource;
               }));
   obj.addVisibleLayer(layer, sources);

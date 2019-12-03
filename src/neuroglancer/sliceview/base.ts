@@ -55,7 +55,7 @@ export function estimateSliceAreaPerChunk(chunkLayout: ChunkLayout, viewMatrix: 
     viewZProjection += Math.abs(sum) * s;
     chunkVolume *= s;
   }
-  return chunkVolume / viewZProjection ;
+  return chunkVolume / viewZProjection;
 }
 
 /**
@@ -136,8 +136,13 @@ export interface TransformedSource<RLayer extends SliceViewRenderLayer,
 
   chunkLayout: ChunkLayout;
 
-  lowerClipBound: Float32Array;
-  upperClipBound: Float32Array;
+  /**
+   * Arrays of length `rank` specifying the clip bounds (in voxels) for dimensions not in
+   * `chunkDisplayDimensionIndices` and not channel dimensions.  The values for display/channel
+   * dimensions are set to -/+infinity.
+   */
+  nonDisplayLowerClipBound: Float32Array;
+  nonDisplayUpperClipBound: Float32Array;
 
   // Lower bound (in chunks) within the "display" subspace of the chunk coordinate space.
   lowerChunkDisplayBound: vec3;
@@ -159,8 +164,8 @@ export interface TransformedSource<RLayer extends SliceViewRenderLayer,
    *
    * Matrix has dimensions `(globalRank + localRank + 1) * layerRank`.
    *
-   * Input space is `[global dimensions, local dimensions]`.  Output space is the "chunk clip" coordinate
-   * space, in units of voxels.
+   * Input space is `[global dimensions, local dimensions]`.  Output space is the "chunk clip"
+   * coordinate space, in units of voxels.
    */
   fixedLayerToChunkTransform: Float32Array;
 
@@ -185,7 +190,7 @@ function updateFixedCurPositionInChunks(
     tsource: TransformedSource<SliceViewRenderLayer, SliceViewChunkSource>,
     globalPosition: Float32Array): boolean {
   const {curPositionInChunks, fixedPositionWithinChunk} = tsource;
-  const {lowerClipBound, upperClipBound} = tsource;
+  const {nonDisplayLowerClipBound, nonDisplayUpperClipBound} = tsource;
   const {rank, chunkDataSize} = tsource.source.spec;
   if (!getChunkPositionFromCombinedGlobalLocalPositions(
           curPositionInChunks, globalPosition, tsource.renderLayer.localPosition.value,
@@ -194,11 +199,11 @@ function updateFixedCurPositionInChunks(
   }
   for (let chunkDim = 0; chunkDim < rank; ++chunkDim) {
     const x = curPositionInChunks[chunkDim];
-    if (x < lowerClipBound[chunkDim] || x >= upperClipBound[chunkDim]) {
+    if (x < nonDisplayLowerClipBound[chunkDim] || x >= nonDisplayUpperClipBound[chunkDim]) {
       if (DEBUG_VISIBLE_SOURCES) {
         console.log(
             'excluding source', tsource, `because of chunkDim=${chunkDim}, sum=${x}`,
-            lowerClipBound, upperClipBound, tsource.fixedLayerToChunkTransform);
+            nonDisplayLowerClipBound, nonDisplayUpperClipBound, tsource.fixedLayerToChunkTransform);
       }
       return false;
     }
@@ -332,7 +337,7 @@ export class SliceViewBase<
     const invTransform = mat4.copy(tempChunkLayout.invTransform, chunkLayout.invTransform);
     tempChunkLayout.detTransform = chunkLayout.detTransform;
     const {invViewMatrix, width, height} = this;
-    for (let chunkRenderDim = finiteRank; chunkRenderDim < 3; ++chunkRenderDim){
+    for (let chunkRenderDim = finiteRank; chunkRenderDim < 3; ++chunkRenderDim) {
       // we want to ensure chunk [0] fully covers the viewport
       const offset = invViewMatrix[12 + chunkRenderDim];
       let lower = offset, upper = offset;
@@ -657,7 +662,7 @@ export class SliceViewBase<
       function checkSourceVisibility(tsource: Transformed) {
         const result = compareBounds(
             lowerChunkBound, upperChunkBound, tsource.lowerChunkDisplayBound,
-          tsource.upperChunkDisplayBound);
+            tsource.upperChunkDisplayBound);
         if (DEBUG_CHUNK_INTERSECTIONS) {
           console.log('checkSourceVisibility', tsource, lowerChunkBound, upperChunkBound);
         }
