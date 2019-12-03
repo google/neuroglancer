@@ -84,10 +84,17 @@ class LocalVolume(trackable_state.ChangeNotifier):
         self.token = make_random_token()
         self.data = data
         self.shape = data.shape
-        self.rank = len(self.shape)
+        rank = self.rank = len(self.shape)
+        if rank != dimensions.rank:
+            raise ValueError('rank of data (%d) must match rank of coordinate space (%d)' %
+                             (rank, dimensions.rank))
         if voxel_offset is None:
-            voxel_offset = np.zeros(self.rank, dtype=np.int64)
-        self.voxel_offset = np.array(voxel_offset, dtype=np.int64)
+            voxel_offset = np.zeros(rank, dtype=np.int64)
+        else:
+            voxel_offset = np.array(voxel_offset, dtype=np.int64)
+        if voxel_offset.shape != (rank,):
+            raise ValueError('voxel_offset must have shape of (%d,)' % (rank,))
+        self.voxel_offset = voxel_offset
         self.dimensions = dimensions
         self.data_type = np.dtype(data.dtype).name
         if self.data_type == 'float64':
