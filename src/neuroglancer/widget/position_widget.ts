@@ -107,26 +107,31 @@ interface NormalizedDimensionBounds {
   normalizedBounds: readonly{lower: number, upper: number}[];
 }
 
+
+function getCanvasYFromCoordinate(
+    coordinate: number, lowerBound: number, upperBound: number, canvasHeight: number) {
+  return Math.floor((coordinate - lowerBound) * (canvasHeight - 1) / (upperBound - lowerBound));
+}
+
 function getNormalizedDimensionBounds(
     coordinateSpace: CoordinateSpace, dimensionIndex: number,
     height: number): NormalizedDimensionBounds|undefined {
   const {boundingBoxes, bounds} = coordinateSpace;
   const lowerBound = Math.floor(bounds.lowerBounds[dimensionIndex]);
   const upperBound = Math.ceil(bounds.upperBounds[dimensionIndex] - 1);
-  const extent = upperBound - lowerBound;
   if (!Number.isFinite(lowerBound) || !Number.isFinite(upperBound)) {
     return undefined;
   }
   const normalizedBounds: {lower: number, upper: number}[] = [];
   const normalize = (x: number) => {
-    return ((Math.floor(x) - lowerBound) * (height - 1) / extent);
+    return getCanvasYFromCoordinate(x, lowerBound, upperBound, height);
   };
   const {rank} = coordinateSpace;
   for (const boundingBox of boundingBoxes) {
     const result = computeCombinedLowerUpperBound(boundingBox, dimensionIndex, rank);
     if (result === undefined) continue;
     result.lower = normalize(result.lower);
-    result.upper = normalize(result.upper);
+    result.upper = normalize(Math.ceil(result.upper - 1));
     normalizedBounds.push(result);
   }
   normalizedBounds.sort((a, b) => {
@@ -206,23 +211,26 @@ export class PositionWidget extends RefCounted {
     const ctx = canvas.getContext('2d')!;
 
     const lowerBoundElement = document.createElement('div');
+    const lowerBoundContainer = document.createElement('div');
+    lowerBoundContainer.appendChild(lowerBoundElement);
     const lowerBoundText = document.createTextNode('');
     lowerBoundElement.appendChild(lowerBoundText);
     const upperBoundElement = document.createElement('div');
     const hoverElement = document.createElement('div');
-    lowerBoundElement.classList.add('neuroglancer-position-dimension-dropdown-lowerbound');
+    lowerBoundContainer.classList.add('neuroglancer-position-dimension-dropdown-lowerbound');
     upperBoundElement.classList.add('neuroglancer-position-dimension-dropdown-upperbound');
     hoverElement.classList.add('neuroglancer-position-dimension-dropdown-hoverposition');
-    dropdown.appendChild(lowerBoundElement);
+    dropdown.appendChild(lowerBoundContainer);
     dropdown.appendChild(upperBoundElement);
+    dropdown.appendChild(hoverElement);
     dropdown.appendChild(canvas);
-    lowerBoundElement.appendChild(hoverElement);
     widget.container.appendChild(dropdown);
 
     const canvasHeight = 100;
 
     canvas.width = canvasWidth;
     canvas.height = canvasHeight;
+    upperBoundElement.style.marginTop = `${canvasHeight-1}px`;
 
     let prevLowerBound: number|undefined, prevUpperBound: number|undefined;
 
@@ -248,29 +256,27 @@ export class PositionWidget extends RefCounted {
       lowerBoundText.textContent = lowerBound.toString();
       upperBoundElement.textContent = upperBound.toString();
       drawDimensionBounds(canvas, ctx, normalizedDimensionBounds);
-
       const curPosition = this.position.value[dimensionIndex];
       if (curPosition >= lowerBound && curPosition <= upperBound) {
         ctx.fillStyle = '#f66';
         ctx.fillRect(
-            0, Math.floor(curPosition * canvasHeight / (upperBound - lowerBound)), canvasWidth, 1);
+            0, getCanvasYFromCoordinate(curPosition, lowerBound, upperBound, canvasHeight),
+            canvasWidth, 1);
       }
       if (hoverPosition !== undefined && hoverPosition >= lowerBound &&
           hoverPosition <= upperBound) {
         ctx.fillStyle = '#66f';
         const hoverOffset =
-            Math.floor((hoverPosition - lowerBound) * canvasHeight / (upperBound - lowerBound));
+            getCanvasYFromCoordinate(hoverPosition, lowerBound, upperBound, canvasHeight);
         ctx.fillRect(0, hoverOffset, canvasWidth, 1);
         hoverElement.textContent = hoverPosition.toString();
-        const labelHeight = lowerBoundElement.offsetHeight;
+        const labelHeight = lowerBoundElement.clientHeight;
         lowerBoundElement.style.visibility = (hoverOffset > labelHeight) ? '' : 'hidden';
         upperBoundElement.style.visibility =
             (hoverOffset < canvasHeight - labelHeight) ? '' : 'hidden';
         hoverElement.style.display = '';
-        hoverElement.style.position = 'absolute';
         hoverElement.style.visibility = 'visible';
-        hoverElement.style.top = `${hoverOffset}px`;
-        hoverElement.style.right = '0px';
+        hoverElement.style.marginTop = `${hoverOffset}px`;
       } else {
         lowerBoundElement.style.visibility = '';
         hoverElement.style.display = 'none';
@@ -287,7 +293,7 @@ export class PositionWidget extends RefCounted {
       let relativeY = (event.clientY - canvasBounds.top) / canvasBounds.height;
       relativeY = Math.max(0, relativeY);
       relativeY = Math.min(1, relativeY);
-      return Math.floor(relativeY * (prevUpperBound - prevLowerBound)) + prevLowerBound;
+      return Math.round(relativeY * (prevUpperBound - prevLowerBound)) + prevLowerBound;
     };
     const setPositionFromMouse = (event: MouseEvent) => {
       const dimensionIndex = this.dimensionWidgetList.indexOf(widget);

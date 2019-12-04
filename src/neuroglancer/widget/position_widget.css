@@ -74,10 +74,8 @@ interferes with our click handling.  Setting `pointer-events: none;` avoids that
   background-color: black;
   display: grid;
   grid-template-areas:
-    "lower . graph"
-    "  .   . graph"
-    "upper . graph";
-  grid-template-rows: 0fr 1fr 0fr;
+    "labels . graph";
+  grid-template-rows: 1fr;
   grid-template-columns: 0fr 3px 0fr;
 }
 
@@ -85,19 +83,10 @@ interferes with our click handling.  Setting `pointer-events: none;` avoids that
   outline: 0px;
 }
 
-.neuroglancer-position-dimension-dropdown-lowerbound {
-  position: relative;
-  grid-area: lower;
-  text-align: right;
-}
-
+.neuroglancer-position-dimension-dropdown-lowerbound,
+.neuroglancer-position-dimension-dropdown-upperbound,
 .neuroglancer-position-dimension-dropdown-hoverposition {
-  text-align: right;
-}
-
-
-.neuroglancer-position-dimension-dropdown-upperbound {
-  grid-area: upper;
+  grid-area: labels;
   text-align: right;
 }
 
