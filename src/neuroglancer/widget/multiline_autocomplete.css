@@ -65,8 +65,8 @@
 }
 
 
-.neuroglancer-multiline-autocomplete-completion {
-  
+.neuroglancer-multiline-autocomplete-completion:nth-child(even):not(.neuroglancer-multiline-autocomplete-completion-active) {
+  background-color: #272727;
 }
 
 .neuroglancer-multiline-autocomplete-completion:hover {
