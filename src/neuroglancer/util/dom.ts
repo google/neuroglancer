@@ -58,3 +58,12 @@ export function updateChildren(element: HTMLElement, children: Iterable<HTMLElem
     nextChild = next;
   }
 }
+
+export function isInputTextTarget(target: EventTarget|null) {
+  if (!(target instanceof HTMLElement)) return false;
+  if ((target instanceof HTMLInputElement) || (target instanceof HTMLTextAreaElement) ||
+      target.isContentEditable) {
+    return true;
+  }
+  return false;
+}
