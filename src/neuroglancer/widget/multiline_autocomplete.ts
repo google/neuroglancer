@@ -24,12 +24,15 @@ import {removeChildren, removeFromParent} from 'neuroglancer/util/dom';
 import {positionDropdown} from 'neuroglancer/util/dropdown';
 import {EventActionMap, KeyboardEventBinder, registerActionListener} from 'neuroglancer/util/keyboard_bindings';
 import {longestCommonPrefix} from 'neuroglancer/util/longest_common_prefix';
-import {scrollIntoViewIfNeeded} from 'neuroglancer/util/scroll_into_view';
 import {Signal} from 'neuroglancer/util/signal';
+import {VirtualList} from 'neuroglancer/widget/virtual_list';
 import ResizeObserver from 'resize-observer-polyfill';
+
 export {Completion, CompletionWithDescription} from 'neuroglancer/util/completion';
 
 const ACTIVE_COMPLETION_CLASS_NAME = 'neuroglancer-multiline-autocomplete-completion-active';
+
+const DEBUG_DROPDOWN = false;
 
 export interface CompletionResult extends BasicCompletionResult {
   showSingleResult?: boolean;
@@ -86,7 +89,7 @@ export class AutocompleteTextInput extends RefCounted {
   element = document.createElement('div');
   inputElement = document.createElement('span');
   hintElement = document.createElement('span');
-  dropdownElement = document.createElement('div');
+  private completionsVirtualList: VirtualList|undefined = undefined;
   onCommit = new Signal<(value: string, explicit: boolean) => void>();
   onInput = new Signal<(value: string) => void>();
   private prevInputValue: string|undefined = '';
@@ -96,7 +99,6 @@ export class AutocompleteTextInput extends RefCounted {
   private hasFocus = false;
   private completionResult: CompletionResult|null = null;
   private dropdownContentsStale = true;
-  private completionElements: HTMLElement[]|null = null;
   private hasResultForDropdown = false;
   private commonPrefix = '';
   private completionDisabled: number = -1;
@@ -218,7 +220,7 @@ export class AutocompleteTextInput extends RefCounted {
       debouncedCompleter.cancel();
     });
 
-    const {element, inputElement, hintElement, dropdownElement} = this;
+    const {element, inputElement, hintElement} = this;
     element.classList.add('neuroglancer-multiline-autocomplete');
     this.registerEventListener(window, 'resize', this.resizeHandler);
 
@@ -227,12 +229,9 @@ export class AutocompleteTextInput extends RefCounted {
 
     inputElement.contentEditable = 'true';
     inputElement.spellcheck = false;
-    dropdownElement.classList.add('neuroglancer-multiline-autocomplete-dropdown');
-    dropdownElement.style.display = 'none';
     element.appendChild(document.createTextNode('\u200b'));  // Prevent input area from collapsing
     element.appendChild(inputElement);
     element.appendChild(hintElement);
-    element.appendChild(dropdownElement);
     inputElement.classList.add('neuroglancer-multiline-autocomplete-input');
     hintElement.classList.add('neuroglancer-multiline-autocomplete-hint');
     inputElement.addEventListener('input', () => {
@@ -255,9 +254,13 @@ export class AutocompleteTextInput extends RefCounted {
 
     element.addEventListener('pointerdown', (event: PointerEvent) => {
       const {target} = event;
-      if (target instanceof Node &&
-          (inputElement.contains(target) || this.dropdownElement.contains(target))) {
-        return;
+      if (target instanceof Node) {
+        if (inputElement.contains(target)) return;
+        const {completionsVirtualList} = this;
+        if (completionsVirtualList !== undefined &&
+            completionsVirtualList.element.contains(target)) {
+          return;
+        }
       }
       if (inputElement === document.activeElement) {
         this.moveCaretToEndOfInput();
@@ -293,6 +296,7 @@ export class AutocompleteTextInput extends RefCounted {
     });
     this.registerEventListener(this.inputElement, 'blur', () => {
       if (this.hasFocus) {
+        if (DEBUG_DROPDOWN) return;
         this.hasFocus = false;
         this.updateDropdown();
       }
@@ -312,13 +316,6 @@ export class AutocompleteTextInput extends RefCounted {
     this.registerEventListener(window, 'scroll', () => {
       this.dropdownStyleStale = true;
     });
-
-    this.dropdownElement.addEventListener('mousedown', event => {
-      this.inputElement.focus();
-      event.preventDefault();
-    });
-    this.registerEventListener(
-        this.dropdownElement, 'mouseup', this.handleDropdownClick.bind(this));
 
     const keyboardHandler = this.registerDisposer(new KeyboardEventBinder(inputElement, keyMap));
     keyboardHandler.allShortcutsAreGlobal = true;
@@ -401,7 +398,9 @@ export class AutocompleteTextInput extends RefCounted {
   }
 
   private handleDropdownClick(event: MouseEvent) {
-    let {dropdownElement} = this;
+    let {completionsVirtualList} = this;
+    if (completionsVirtualList === undefined) return;
+    const dropdownElement = completionsVirtualList.element;
     for (let target: EventTarget|null = event.target;
          target instanceof HTMLElement && target !== dropdownElement;
          target = target.parentElement) {
@@ -440,43 +439,67 @@ export class AutocompleteTextInput extends RefCounted {
   }
 
   private updateDropdownStyle() {
-    const {dropdownElement, element} = this;
-    positionDropdown(dropdownElement, element, {horizontal: false});
+    const {completionsVirtualList, element} = this;
+    if (completionsVirtualList !== undefined) {
+      positionDropdown(completionsVirtualList.element, element, {horizontal: false});
+    }
     this.dropdownStyleStale = false;
   }
 
   private updateDropdown() {
+    let {completionsVirtualList} = this;
     if (this.shouldShowDropdown()) {
-      let {dropdownElement} = this;
-      let {activeIndex} = this;
       if (this.dropdownContentsStale) {
-        let completionResult = this.completionResult!;
-        let {makeElement = makeDefaultCompletionElement} = completionResult;
-        this.completionElements = completionResult.completions.map((completion, index) => {
-          let completionElement = makeElement.call(completionResult, completion) as HTMLElement;
-          completionElement.dataset.completionIndex = `${index}`;
-          completionElement.classList.add('neuroglancer-multiline-autocomplete-completion');
-          if (activeIndex === index) {
-            completionElement.classList.add(ACTIVE_COMPLETION_CLASS_NAME);
-          }
-          dropdownElement.appendChild(completionElement);
-          return completionElement;
+        if (completionsVirtualList !== undefined) {
+          completionsVirtualList.dispose();
+        }
+        const completionResult = this.completionResult!;
+        const {makeElement = makeDefaultCompletionElement} = completionResult;
+        completionsVirtualList = this.completionsVirtualList = new VirtualList({
+          source: {
+            length: completionResult.completions.length,
+            render: (index: number) => {
+              const completion = completionResult.completions[index];
+              const completionElement = makeElement.call(completionResult, completion);
+              completionElement.classList.add('neuroglancer-multiline-autocomplete-completion');
+              completionElement.dataset.completionIndex = `${index}`;
+              if (this.activeIndex === index) {
+                completionElement.classList.add(ACTIVE_COMPLETION_CLASS_NAME);
+              }
+              return completionElement;
+            },
+          },
+          selectedIndex: this.activeIndex === -1 ? undefined : this.activeIndex,
         });
+        completionsVirtualList.element.classList.add(
+            'neuroglancer-multiline-autocomplete-dropdown');
+
+        completionsVirtualList.element.addEventListener('mousedown', event => {
+          this.inputElement.focus();
+          event.preventDefault();
+        });
+        completionsVirtualList.element.addEventListener(
+            'mouseup', this.handleDropdownClick.bind(this));
+
+        this.element.appendChild(completionsVirtualList.element);
         this.dropdownContentsStale = false;
       }
       if (this.dropdownStyleStale) {
         this.updateDropdownStyle();
       }
       if (!this.completionsVisible) {
-        dropdownElement.style.display = '';
         this.completionsVisible = true;
       }
+      const {activeIndex} = this;
       if (activeIndex !== -1) {
-        let completionElement = this.completionElements![activeIndex];
-        scrollIntoViewIfNeeded(completionElement);
+        this.completionsVirtualList!.scrollItemIntoView(activeIndex);
       }
     } else if (this.completionsVisible) {
-      this.dropdownElement.style.display = 'none';
+      if (completionsVirtualList !== undefined) {
+        completionsVirtualList.dispose();
+        this.completionsVirtualList = undefined;
+        this.dropdownContentsStale = true;
+      }
       this.completionsVisible = false;
     }
   }
@@ -553,13 +576,21 @@ export class AutocompleteTextInput extends RefCounted {
   private setActiveIndex(index: number) {
     if (!this.dropdownContentsStale) {
       let {activeIndex} = this;
-      if (activeIndex !== -1) {
-        this.completionElements![activeIndex].classList.remove(ACTIVE_COMPLETION_CLASS_NAME);
-      }
-      if (index !== -1) {
-        let completionElement = this.completionElements![index];
-        completionElement.classList.add(ACTIVE_COMPLETION_CLASS_NAME);
-        scrollIntoViewIfNeeded(completionElement);
+      const {completionsVirtualList} = this;
+      if (completionsVirtualList !== undefined) {
+        if (activeIndex !== -1) {
+          const prevElement = completionsVirtualList.getItemElement(activeIndex);
+          if (prevElement !== undefined) {
+            prevElement.classList.remove(ACTIVE_COMPLETION_CLASS_NAME);
+          }
+        }
+        if (index !== -1) {
+          let completionElement = completionsVirtualList.getItemElement(index);
+          if (completionElement !== undefined) {
+            completionElement.classList.add(ACTIVE_COMPLETION_CLASS_NAME);
+          }
+          completionsVirtualList.scrollItemIntoView(index);
+        }
       }
     }
     if (index !== -1) {
@@ -666,11 +697,14 @@ export class AutocompleteTextInput extends RefCounted {
     if (this.completionResult !== null) {
       this.activeIndex = -1;
       this.completionResult = null;
-      this.completionElements = null;
       this.dropdownContentsStale = true;
       this.dropdownStyleStale = true;
       this.commonPrefix = '';
-      removeChildren(this.dropdownElement);
+      const {completionsVirtualList} = this;
+      if (completionsVirtualList !== undefined) {
+        completionsVirtualList.dispose();
+        this.completionsVirtualList = undefined;
+      }
       this.updateDropdown();
     }
   }
@@ -688,6 +722,10 @@ export class AutocompleteTextInput extends RefCounted {
   }
 
   disposed() {
+    const {completionsVirtualList} = this;
+    if (completionsVirtualList !== undefined) {
+      completionsVirtualList.dispose();
+    }
     removeFromParent(this.element);
     this.cancelActiveCompletion();
     super.disposed();

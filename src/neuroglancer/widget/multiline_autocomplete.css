@@ -64,9 +64,8 @@
   word-wrap: break-word;
 }
 
-
 .neuroglancer-multiline-autocomplete-completion:nth-child(even):not(.neuroglancer-multiline-autocomplete-completion-active) {
-  background-color: #272727;
+  background-color: #2b2b2b;
 }
 
 .neuroglancer-multiline-autocomplete-completion:hover {
@@ -78,13 +77,9 @@
 }
 
 .neuroglancer-multiline-autocomplete-completion-with-description {
-  display: flex;
-  flex-direction: column;
 }
 
 .neuroglancer-multiline-autocomplete-completion-description {
-  display: inline;
-  flex: 1;
   font-style: italic;
   color: #f9f;
 }
