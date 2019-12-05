@@ -19,9 +19,12 @@
  */
 
 import {AnnotationType, AxisAlignedBoundingBox} from 'neuroglancer/annotation';
+import {PlaceTwoCornerAnnotationTool} from 'neuroglancer/annotation/annotation';
 import {AnnotationRenderContext, AnnotationRenderHelper, registerAnnotationTypeRenderHandler} from 'neuroglancer/annotation/type_handler';
 import {BoundingBoxCrossSectionRenderHelper, vertexBasePositions} from 'neuroglancer/sliceview/bounding_box_shader_helper';
 import {SliceViewPanelRenderContext} from 'neuroglancer/sliceview/panel';
+import {UserLayerWithAnnotations} from 'neuroglancer/ui/annotations';
+import {registerTool} from 'neuroglancer/ui/tool';
 import {tile2dArray} from 'neuroglancer/util/array';
 import {mat4, projectPointToLineSegment, vec3} from 'neuroglancer/util/geom';
 import {Buffer, getMemoizedBuffer} from 'neuroglancer/webgl/buffer';
@@ -30,6 +33,7 @@ import {GL} from 'neuroglancer/webgl/context';
 import {LineShader, VERTICES_PER_LINE} from 'neuroglancer/webgl/lines';
 import {emitterDependentShaderGetter, ShaderBuilder, ShaderProgram} from 'neuroglancer/webgl/shader';
 
+const ANNOTATE_BOUNDING_BOX_TOOL_ID = 'annotateBoundingBox';
 const EDGES_PER_BOX = 12;
 const CORNERS_PER_BOX = 8;
 
@@ -139,13 +143,13 @@ abstract class RenderHelper extends AnnotationRenderHelper {
       const aLower = shader.attribute('aLower');
       const aUpper = shader.attribute('aUpper');
       context.buffer.bindToVertexAttrib(
-          aLower, /*components=*/ 3, /*attributeType=*/ WebGL2RenderingContext.FLOAT,
-          /*normalized=*/ false,
-          /*stride=*/ 4 * 6, /*offset=*/ context.bufferOffset);
+          aLower, /*components=*/3, /*attributeType=*/WebGL2RenderingContext.FLOAT,
+          /*normalized=*/false,
+          /*stride=*/4 * 6, /*offset=*/context.bufferOffset);
       context.buffer.bindToVertexAttrib(
-          aUpper, /*components=*/ 3, /*attributeType=*/ WebGL2RenderingContext.FLOAT,
-          /*normalized=*/ false,
-          /*stride=*/ 4 * 6, /*offset=*/ context.bufferOffset + 4 * 3);
+          aUpper, /*components=*/3, /*attributeType=*/WebGL2RenderingContext.FLOAT,
+          /*normalized=*/false,
+          /*stride=*/4 * 6, /*offset=*/context.bufferOffset + 4 * 3);
 
       gl.vertexAttribDivisor(aLower, 1);
       gl.vertexAttribDivisor(aUpper, 1);
@@ -157,15 +161,14 @@ abstract class RenderHelper extends AnnotationRenderHelper {
     });
   }
 }
-
 class PerspectiveViewRenderHelper extends RenderHelper {
   private lineShader = this.registerDisposer(new LineShader(this.gl, EDGES_PER_BOX));
 
   private edgeBoxCornerOffsetsBuffer = this.registerDisposer(Buffer.fromData(
       this.gl,
       tile2dArray(
-          edgeBoxCornerOffsetData, /*majorDimension=*/ 7, /*minorTiles=*/ 1,
-          /*majorTiles=*/ VERTICES_PER_LINE)));
+          edgeBoxCornerOffsetData, /*majorDimension=*/7, /*minorTiles=*/1,
+          /*majorTiles=*/VERTICES_PER_LINE)));
 
   private edgeShaderGetter =
       emitterDependentShaderGetter(this, this.gl, (builder: ShaderBuilder) => {
@@ -193,8 +196,8 @@ emitAnnotation(vec4(vColor.rgb, getLineAlpha()));
   private boxCornerOffsetsBuffer = this.registerDisposer(Buffer.fromData(
       this.gl,
       tile2dArray(
-          vertexBasePositions, /*majorDimension=*/ 3, /*minorTiles=*/ 1,
-          /*majorTiles=*/ VERTICES_PER_CIRCLE)));
+          vertexBasePositions, /*majorDimension=*/3, /*minorTiles=*/1,
+          /*majorTiles=*/VERTICES_PER_CIRCLE)));
 
   private cornerShaderGetter =
       emitterDependentShaderGetter(this, this.gl, (builder: ShaderBuilder) => {
@@ -225,16 +228,16 @@ emitAnnotation(getCircleColor(vColor, borderColor));
       const aBoxCornerOffset2 = shader.attribute('aBoxCornerOffset2');
 
       this.edgeBoxCornerOffsetsBuffer.bindToVertexAttrib(
-          aBoxCornerOffset1, /*components=*/ 3, /*attributeType=*/ WebGL2RenderingContext.FLOAT,
-          /*normalized=*/ false,
-          /*stride=*/ 4 * 7, /*offset=*/ 0);
+          aBoxCornerOffset1, /*components=*/3, /*attributeType=*/WebGL2RenderingContext.FLOAT,
+          /*normalized=*/false,
+          /*stride=*/4 * 7, /*offset=*/0);
 
       this.edgeBoxCornerOffsetsBuffer.bindToVertexAttrib(
-          aBoxCornerOffset2, /*components=*/ 4, /*attributeType=*/ WebGL2RenderingContext.FLOAT,
-          /*normalized=*/ false,
-          /*stride=*/ 4 * 7, /*offset=*/ 4 * 3);
+          aBoxCornerOffset2, /*components=*/4, /*attributeType=*/WebGL2RenderingContext.FLOAT,
+          /*normalized=*/false,
+          /*stride=*/4 * 7, /*offset=*/4 * 3);
 
-      this.lineShader.draw(shader, context.renderContext, /*lineWidth=*/ 1, 1, context.count);
+      this.lineShader.draw(shader, context.renderContext, /*lineWidth=*/1, 1, context.count);
       gl.disableVertexAttribArray(aBoxCornerOffset1);
       gl.disableVertexAttribArray(aBoxCornerOffset2);
     });
@@ -246,8 +249,8 @@ emitAnnotation(getCircleColor(vColor, borderColor));
     this.enable(shader, context, () => {
       const aBoxCornerOffset = shader.attribute('aBoxCornerOffset');
       this.boxCornerOffsetsBuffer.bindToVertexAttrib(
-          aBoxCornerOffset, /*components=*/ 3, /*attributeType=*/ WebGL2RenderingContext.FLOAT,
-          /*normalized=*/ false);
+          aBoxCornerOffset, /*components=*/3, /*attributeType=*/WebGL2RenderingContext.FLOAT,
+          /*normalized=*/false);
       this.circleShader.draw(
           shader, context.renderContext,
           {interiorRadiusInPixels: 1, borderWidthInPixels: 0, featherWidthInPixels: 1},
@@ -269,12 +272,10 @@ function getBaseIntersectionVertexIndexArray() {
 function getIntersectionVertexIndexArray() {
   return tile2dArray(
       getBaseIntersectionVertexIndexArray(),
-      /*majorDimension=*/ 1,
-      /*minorTiles=*/ 1,
-      /*majorTiles=*/ VERTICES_PER_LINE);
+      /*majorDimension=*/1,
+      /*minorTiles=*/1,
+      /*majorTiles=*/VERTICES_PER_LINE);
 }
-
-
 class SliceViewRenderHelper extends RenderHelper {
   private lineShader = new LineShader(this.gl, 6);
   private intersectionVertexIndexBuffer =
@@ -343,8 +344,8 @@ emitAnnotation(vec4(vColor.rgb, uFillOpacity));
 
       (fillOpacity ? this.filledIntersectionVertexIndexBuffer : this.intersectionVertexIndexBuffer)
           .bindToVertexAttrib(
-              aVertexIndexFloat, /*components=*/ 1, /*attributeType=*/ WebGL2RenderingContext.FLOAT,
-              /*normalized=*/ false);
+              aVertexIndexFloat, /*components=*/1, /*attributeType=*/WebGL2RenderingContext.FLOAT,
+              /*normalized=*/false);
 
       if (fillOpacity) {
         gl.uniform1f(shader.uniform('uFillOpacity'), fillOpacity);
@@ -461,3 +462,18 @@ registerAnnotationTypeRenderHandler(AnnotationType.AXIS_ALIGNED_BOUNDING_BOX, {
         return baseBox;
       }
 });
+
+export class PlaceBoundingBoxTool extends PlaceTwoCornerAnnotationTool {
+  get description() {
+    return `annotate bounding box`;
+  }
+
+  toJSON() {
+    return ANNOTATE_BOUNDING_BOX_TOOL_ID;
+  }
+}
+PlaceBoundingBoxTool.prototype.annotationType = AnnotationType.AXIS_ALIGNED_BOUNDING_BOX;
+
+registerTool(
+    ANNOTATE_BOUNDING_BOX_TOOL_ID,
+    (layer, options) => new PlaceBoundingBoxTool(<UserLayerWithAnnotations>layer, options));

@@ -15,6 +15,7 @@
  */
 
 import debounce from 'lodash/debounce';
+import {getUrlAutoSave} from 'neuroglancer/preferences/user_preferences';
 import {WatchableValue} from 'neuroglancer/trackable_value';
 import {RefCounted} from 'neuroglancer/util/disposable';
 import {urlSafeParse, verifyObject} from 'neuroglancer/util/json';
@@ -71,17 +72,22 @@ export class UrlHashBinding extends RefCounted {
   setUrlHash() {
     const cacheState = getCachedJson(this.root);
     const {generation} = cacheState;
-    history.replaceState(null, '', removeParameterFromUrl(window.location.href, 'json_url'));
+    // TODO: Change to recurring, onblur and time, or onunload save and push to state server
+    if (getUrlAutoSave().value) {
+      history.replaceState(null, '', removeParameterFromUrl(window.location.href, 'json_url'));
+    }
 
     if (generation !== this.prevStateGeneration) {
       this.prevStateGeneration = cacheState.generation;
       let stateString = encodeFragment(JSON.stringify(cacheState.value));
       if (stateString !== this.prevStateString) {
         this.prevStateString = stateString;
-        if (decodeURIComponent(stateString) === '{}') {
-          history.replaceState(null, '', '#');
-        } else {
-          history.replaceState(null, '', '#!' + stateString);
+        if (getUrlAutoSave().value) {
+          if (decodeURIComponent(stateString) === '{}') {
+            history.replaceState(null, '', '#');
+          } else {
+            history.replaceState(null, '', '#!' + stateString);
+          }
         }
       }
     }

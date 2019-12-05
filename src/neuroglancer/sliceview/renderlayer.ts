@@ -30,7 +30,7 @@ import {SharedObject} from 'neuroglancer/worker_rpc';
 export interface RenderLayerOptions {
   transform?: CoordinateTransform;
   rpcType?: string;
-  rpcTransfer?: { [index:string]: number|string|null };
+  rpcTransfer?: {[index: string]: number|string|null};
   renderScaleTarget?: WatchableValueInterface<number>;
   renderScaleHistogram?: RenderScaleHistogram;
 }
@@ -38,7 +38,7 @@ export interface RenderLayerOptions {
 export abstract class RenderLayer extends GenericRenderLayer {
   rpcId: RpcId|null = null;
   rpcType: string = SLICEVIEW_RENDERLAYER_RPC_ID;
-  rpcTransfer: { [index:string]: number|string|null } = {};
+  rpcTransfer: {[index: string]: number|string|null} = {};
   shaderError: WatchableShaderError;
   transform: CoordinateTransform;
   transformedSources: TransformedSource<SliceViewChunkSource>[][];

@@ -14,6 +14,8 @@
  * limitations under the License.
  */
 
+import './user_layer.css';
+
 import {Annotation, AnnotationId, AnnotationType, LocalAnnotationSource} from 'neuroglancer/annotation';
 import {AnnotationLayerState} from 'neuroglancer/annotation/frontend';
 import {CoordinateTransform, makeDerivedCoordinateTransform} from 'neuroglancer/coordinate_transform';
@@ -34,8 +36,6 @@ import {parseArray, verify3dVec} from 'neuroglancer/util/json';
 import {KeyboardEventBinder} from 'neuroglancer/util/keyboard_bindings';
 import {LayerReferenceWidget} from 'neuroglancer/widget/layer_reference';
 import {Tab} from 'neuroglancer/widget/tab_view';
-
-import './user_layer.css';
 
 const POINTS_JSON_KEY = 'points';
 const ANNOTATIONS_JSON_KEY = 'annotations';
@@ -80,7 +80,7 @@ function getSegmentationDisplayState(layer: ManagedUserLayer|undefined): Segment
   return userLayer.displayState;
 }
 
-function getPointFromAnnotation(annotation: Annotation) {
+function getPointFromAnnotation(annotation: Annotation): vec3 {
   switch (annotation.type) {
     case AnnotationType.AXIS_ALIGNED_BOUNDING_BOX:
     case AnnotationType.LINE:
@@ -89,6 +89,11 @@ function getPointFromAnnotation(annotation: Annotation) {
       return annotation.point;
     case AnnotationType.ELLIPSOID:
       return annotation.center;
+    // Collection is an array of any annotation
+    case AnnotationType.SPOKE:
+    case AnnotationType.LINE_STRIP:
+    case AnnotationType.COLLECTION:
+      return annotation.source;
   }
 }
 
@@ -302,6 +307,7 @@ export class AnnotationUserLayer extends Base {
         }
       }
     };
+
     return [
       {
         keyCode: 'bracketright',

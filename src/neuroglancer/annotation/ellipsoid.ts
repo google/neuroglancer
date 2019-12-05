@@ -18,19 +18,24 @@
  * @file Support for rendering ellipsoid annotations.
  */
 
-import {AnnotationType, Ellipsoid} from 'neuroglancer/annotation';
+import {Annotation, AnnotationType, Ellipsoid} from 'neuroglancer/annotation';
+import {getMousePositionInAnnotationCoordinates, getSelectedAssocatedSegment, TwoStepAnnotationTool} from 'neuroglancer/annotation/annotation';
+import {AnnotationLayerState} from 'neuroglancer/annotation/frontend';
 import {AnnotationRenderContext, AnnotationRenderHelper, registerAnnotationTypeRenderHandler} from 'neuroglancer/annotation/type_handler';
+import {MouseSelectionState} from 'neuroglancer/layer';
 import {PerspectiveViewRenderContext} from 'neuroglancer/perspective_view/render_layer';
 import {SliceViewPanelRenderContext} from 'neuroglancer/sliceview/panel';
-import {mat3, mat4, vec3} from 'neuroglancer/util/geom';
+import {UserLayerWithAnnotations} from 'neuroglancer/ui/annotations';
+import {registerTool} from 'neuroglancer/ui/tool';
+import {mat3, mat3FromMat4, mat4, vec3} from 'neuroglancer/util/geom';
 import {computeCenterOrientEllipseDebug, computeCrossSectionEllipseDebug, glsl_computeCenterOrientEllipse, glsl_computeCrossSectionEllipse} from 'neuroglancer/webgl/ellipse';
 import {QuadRenderHelper} from 'neuroglancer/webgl/quad';
 import {emitterDependentShaderGetter, ShaderBuilder, ShaderProgram} from 'neuroglancer/webgl/shader';
 import {SphereRenderHelper} from 'neuroglancer/webgl/spheres';
 import {getSquareCornersBuffer} from 'neuroglancer/webgl/square_corners_buffer';
 
+const ANNOTATE_ELLIPSOID_TOOL_ID = 'annotateSphere';
 const tempMat4 = mat4.create();
-
 const DEBUG = false;
 
 abstract class RenderHelper extends AnnotationRenderHelper {
@@ -46,13 +51,13 @@ abstract class RenderHelper extends AnnotationRenderHelper {
       const aRadii = shader.attribute('aRadii');
       const {gl} = shader;
       context.buffer.bindToVertexAttrib(
-          aCenter, /*components=*/ 3, /*attributeType=*/ WebGL2RenderingContext.FLOAT,
-          /*normalized=*/ false,
-          /*stride=*/ 4 * 6, /*offset=*/ context.bufferOffset);
+          aCenter, /*components=*/3, /*attributeType=*/WebGL2RenderingContext.FLOAT,
+          /*normalized=*/false,
+          /*stride=*/4 * 6, /*offset=*/context.bufferOffset);
       context.buffer.bindToVertexAttrib(
-          aRadii, /*components=*/ 3, /*attributeType=*/ WebGL2RenderingContext.FLOAT,
-          /*normalized=*/ false,
-          /*stride=*/ 4 * 6, /*offset=*/ context.bufferOffset + 4 * 3);
+          aRadii, /*components=*/3, /*attributeType=*/WebGL2RenderingContext.FLOAT,
+          /*normalized=*/false,
+          /*stride=*/4 * 6, /*offset=*/context.bufferOffset + 4 * 3);
       gl.vertexAttribDivisor(aCenter, 1);
       gl.vertexAttribDivisor(aRadii, 1);
       callback();
@@ -96,7 +101,7 @@ emitAnnotation(vec4(vColor.rgb * vLightingFactor, vColor.a));
       lightVec[3] = ambientLighting;
       gl.uniform4fv(shader.uniform('uLightDirection'), lightVec);
       gl.uniformMatrix4fv(
-          shader.uniform('uNormalTransform'), /*transpose=*/ false,
+          shader.uniform('uNormalTransform'), /*transpose=*/false,
           mat4.transpose(mat4.create(), context.annotationLayer.state.globalToObject));
       this.sphereRenderHelper.draw(shader, context.count);
     });
@@ -133,7 +138,7 @@ emitAnnotation(vec4(vColor.rgb * vLightingFactor, vColor.a));
 class SliceViewRenderHelper extends RenderHelper {
   private quadRenderHelper = this.registerDisposer(new QuadRenderHelper(this.gl, 1));
   private squareCornersBuffer =
-      getSquareCornersBuffer(this.gl, -1, -1, 1, 1, /*minorTiles=*/ 1, /*majorTiles=*/ 1);
+      getSquareCornersBuffer(this.gl, -1, -1, 1, 1, /*minorTiles=*/1, /*majorTiles=*/1);
 
   private shaderGetter = emitterDependentShaderGetter(this, this.gl, (builder: ShaderBuilder) => {
     this.defineShader(builder);
@@ -180,19 +185,19 @@ emitAnnotation(vec4(vColor.rgb, 0.5));
     this.enable(shader, context, () => {
       const {gl} = shader;
       const aCornerOffset = shader.attribute('aCornerOffset');
-      this.squareCornersBuffer.bindToVertexAttrib(aCornerOffset, /*components=*/ 2);
+      this.squareCornersBuffer.bindToVertexAttrib(aCornerOffset, /*components=*/2);
       const viewportToObject = mat4.multiply(
           tempMat4, context.annotationLayer.state.globalToObject,
           context.renderContext.sliceView.viewportToData);
       gl.uniformMatrix4fv(
-          shader.uniform('uViewportToObject'), /*transpose=*/ false, viewportToObject);
+          shader.uniform('uViewportToObject'), /*transpose=*/false, viewportToObject);
       gl.uniformMatrix4fv(
-          shader.uniform('uViewportToDevice'), /*transpose=*/ false,
+          shader.uniform('uViewportToDevice'), /*transpose=*/false,
           context.renderContext.sliceView.viewportToDevice);
       const objectToViewport = tempMat4;
       mat4.invert(objectToViewport, viewportToObject);
       gl.uniformMatrix4fv(
-          shader.uniform('uObjectToViewport'), /*transpose=*/ false, objectToViewport);
+          shader.uniform('uObjectToViewport'), /*transpose=*/false, objectToViewport);
       this.quadRenderHelper.draw(gl, context.count);
       shader.gl.disableVertexAttribArray(aCornerOffset);
 
@@ -252,3 +257,56 @@ registerAnnotationTypeRenderHandler(AnnotationType.ELLIPSOID, {
     return annotation;
   }
 });
+
+export class PlaceSphereTool extends TwoStepAnnotationTool {
+  getInitialAnnotation(mouseState: MouseSelectionState, annotationLayer: AnnotationLayerState):
+      Annotation {
+    const point = getMousePositionInAnnotationCoordinates(mouseState, annotationLayer);
+
+    return <Ellipsoid>{
+      type: AnnotationType.ELLIPSOID,
+      id: '',
+      description: '',
+      segments: getSelectedAssocatedSegment(annotationLayer),
+      center: point,
+      radii: vec3.fromValues(0, 0, 0),
+    };
+  }
+
+  getUpdatedAnnotation(
+      oldAnnotation: Ellipsoid, mouseState: MouseSelectionState,
+      annotationLayer: AnnotationLayerState) {
+    const spatialCenter =
+        vec3.transformMat4(vec3.create(), oldAnnotation.center, annotationLayer.objectToGlobal);
+
+    const radius = vec3.distance(spatialCenter, mouseState.position);
+
+    const tempMatrix = mat3.create();
+    tempMatrix[0] = tempMatrix[4] = tempMatrix[8] = 1 / (radius * radius);
+
+
+    const objectToGlobalLinearTransform =
+        mat3FromMat4(mat3.create(), annotationLayer.objectToGlobal);
+    mat3.multiply(tempMatrix, tempMatrix, objectToGlobalLinearTransform);
+    mat3.transpose(objectToGlobalLinearTransform, objectToGlobalLinearTransform);
+    mat3.multiply(tempMatrix, objectToGlobalLinearTransform, tempMatrix);
+
+    return <Ellipsoid>{
+      ...oldAnnotation,
+      radii: vec3.fromValues(
+          1 / Math.sqrt(tempMatrix[0]), 1 / Math.sqrt(tempMatrix[4]), 1 / Math.sqrt(tempMatrix[8])),
+    };
+  }
+  get description() {
+    return `annotate ellipsoid`;
+  }
+
+  toJSON() {
+    return ANNOTATE_ELLIPSOID_TOOL_ID;
+  }
+}
+PlaceSphereTool.prototype.annotationType = AnnotationType.ELLIPSOID;
+
+registerTool(
+    ANNOTATE_ELLIPSOID_TOOL_ID,
+    (layer, options) => new PlaceSphereTool(<UserLayerWithAnnotations>layer, options));

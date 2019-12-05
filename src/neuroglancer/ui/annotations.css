@@ -42,8 +42,8 @@
 }
 
 .neuroglancer-annotation-icon {
-  position: absolute;
-  left: 0px;
+  display: inline;
+  margin-right: 10px;
 }
 
 .neuroglancer-annotation-hover {
@@ -57,7 +57,7 @@
 .neuroglancer-annotation-list > li, .neuroglancer-annotation-hiding-list-scrollarea > li {
   cursor: pointer;
   position: relative;
-  padding-left: 1.5em;
+  padding-left: 0.5em;
 }
 
 .neuroglancer-tab-content.neuroglancer-annotation-details {
@@ -163,4 +163,38 @@
 
 #annotation-tag-filter {
   width: 125px;
+}
+
+.neuroglancer-active-tool.neuroglancer-linestrip-looped, .neuroglancer-active-tool.neuroglancer-spoke-wheeled {
+  box-shadow: inset -3px -3px 10px 0px #57c6ca;
+}
+
+.neuroglancer-active-tool {
+  box-shadow: inset -3px -3px 10px 0px #396125;
+}
+
+.neuroglancer-child-tool {
+  box-shadow: inset -3px -3px 10px 0px #dac320;
+}
+
+.neuroglancer-child-tool.neuroglancer-linestrip-looped,.neuroglancer-child-tool.neuroglancer-spoke-wheeled {
+  box-shadow: inset -3px -3px 10px 0px #df5959;
+}
+
+.neuroglancer-annotation-child-hidden {
+  display: none;
+  list-style-type: none;
+}
+
+.neuroglancer-annotation-position {
+  display: inline;
+}
+
+.neuroglancer-annotation-multiple {
+  background-color: blue;
+  color: red;
+}
+
+.neuroglancer-annotation-inprogress {
+  color: #3c3;
 }

@@ -15,6 +15,7 @@
  */
 
 import debounce from 'lodash/debounce';
+import {MultiStepAnnotationTool} from 'neuroglancer/annotation/annotation';
 import {AnnotationUserLayer} from 'neuroglancer/annotation/user_layer';
 import {initAuthTokenSharedValue} from 'neuroglancer/authentication/frontend';
 import {CapacitySpecification, ChunkManager, ChunkQueueManager, FrameNumberCounter} from 'neuroglancer/chunk_manager/frontend';
@@ -165,11 +166,12 @@ export interface ViewerOptions extends ViewerUIOptions, VisibilityPrioritySpecif
   resetStateWhenEmpty: boolean;
 }
 
-const defaultViewerOptions = "undefined" !== typeof NEUROGLANCER_OVERRIDE_DEFAULT_VIEWER_OPTIONS ?
-  NEUROGLANCER_OVERRIDE_DEFAULT_VIEWER_OPTIONS : {
-    showLayerDialog: true,
-    resetStateWhenEmpty: true,
-  };
+const defaultViewerOptions = 'undefined' !== typeof NEUROGLANCER_OVERRIDE_DEFAULT_VIEWER_OPTIONS ?
+    NEUROGLANCER_OVERRIDE_DEFAULT_VIEWER_OPTIONS :
+    {
+      showLayerDialog: true,
+      resetStateWhenEmpty: true,
+    };
 
 function makeViewerContextMenu(viewer: Viewer) {
   const menu = new ContextMenu();
@@ -698,6 +700,22 @@ export class Viewer extends RefCounted implements ViewerState {
         return;
       }
       userLayer.tool.value.trigger(this.mouseState);
+    });
+
+    this.bindAction('complete-annotation', () => {
+      const selectedLayer = this.selectedLayer.layer;
+      if (selectedLayer === undefined) {
+        StatusMessage.showTemporaryMessage(
+            'The complete annotate command requires a layer to be selected.');
+        return;
+      }
+      const userLayer = selectedLayer.layer;
+      if (userLayer === null || userLayer.tool.value === undefined) {
+        StatusMessage.showTemporaryMessage(`The selected layer (${
+            JSON.stringify(selectedLayer.name)}) does not have an active annotation tool.`);
+        return;
+      }
+      (<MultiStepAnnotationTool>userLayer.tool.value).complete(true);
     });
 
     this.bindAction('toggle-axis-lines', () => this.showAxisLines.toggle());

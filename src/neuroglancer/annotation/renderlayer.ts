@@ -18,6 +18,9 @@ import 'neuroglancer/annotation/bounding_box';
 import 'neuroglancer/annotation/line';
 import 'neuroglancer/annotation/point';
 import 'neuroglancer/annotation/ellipsoid';
+import 'neuroglancer/annotation/collection';
+import 'neuroglancer/annotation/line_strip';
+import 'neuroglancer/annotation/spoke';
 
 import {AnnotationBase, AnnotationSource, annotationTypes} from 'neuroglancer/annotation';
 import {AnnotationLayerState} from 'neuroglancer/annotation/annotation_layer_state';
@@ -95,7 +98,8 @@ function serializeAnnotationSet(
 }
 
 @registerSharedObjectOwner(ANNOTATION_RENDER_LAYER_RPC_ID)
-class AnnotationLayerSharedObject extends withSharedVisibility(SharedObject) {
+class AnnotationLayerSharedObject extends
+withSharedVisibility(SharedObject) {
   constructor(
       public chunkManager: Borrowed<ChunkManager>,
       public source: Borrowed<MultiscaleAnnotationSource>,
@@ -409,10 +413,11 @@ function AnnotationRenderLayer<TBase extends {
           mouseState.pickedAnnotationLayer = this.base.state;
           mouseState.pickedOffset = partIndex;
           mouseState.pickedAnnotationBuffer = chunk.data!.buffer;
-          mouseState.pickedAnnotationBufferOffset = chunk.data!.byteOffset + typeToOffset[annotationType] + instanceIndex * handler.bytes;
+          mouseState.pickedAnnotationBufferOffset =
+              chunk.data!.byteOffset + typeToOffset[annotationType] + instanceIndex * handler.bytes;
           handler.snapPosition(
-              mouseState.position, this.base.state.objectToGlobal, mouseState.pickedAnnotationBuffer,
-              mouseState.pickedAnnotationBufferOffset,
+              mouseState.position, this.base.state.objectToGlobal,
+              mouseState.pickedAnnotationBuffer, mouseState.pickedAnnotationBufferOffset,
               partIndex);
           return;
         }

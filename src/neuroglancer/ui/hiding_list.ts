@@ -52,7 +52,7 @@ export class HidingList {
             // Panel was hidden, don't resize
             return;
           }
-          
+
           for (const entry of entries) {
             // On annotation resize, update all subsequent annotation Ys
 
@@ -67,7 +67,7 @@ export class HidingList {
             if (delta === 0 ||
                 element.classList.contains('neuroglancer-annotation-hiding-list-hiddenitem')) {
               // Don't worry about elements that didn't change vertical size, or changed vertical
-              // size because they were hidden
+              // size because they were hidden offscreen
               continue;
             }
 
@@ -75,6 +75,7 @@ export class HidingList {
 
             this.totalHeight += delta;
           }
+
           this.updateScrollbarHeight();
           this.updateScrollAreaPos();
         }.bind(this));
@@ -86,6 +87,9 @@ export class HidingList {
     }
     this.loadedElements = [];
 
+    if (this.elementYs.length === 0) {
+      return;
+    }
     const viewportTop = this.scrollbar.scrollTop;
     const firstOnscreenIndex = this.findIndex(viewportTop);
     const lastOnscreenIndex = this.findIndex(viewportTop + this.sizeParent.offsetHeight);
@@ -122,8 +126,85 @@ export class HidingList {
     this.updateScrollAreaPos();
   }
 
-  addElement(element: HTMLElement) {
-    this.addElementHelper(element);
+  private findFirstNonDescendant(currentElement: HTMLElement, parent: HTMLElement): HTMLElement
+      |undefined {
+    // Returns the first element that is not a descendant of parent. This is necessary so that when
+    // a new element is added to its parent group, it can go at the "end" of the group (after all
+    // existing children of the parent). If there is no such element(i.e. the parent group is at the
+    // end of the list), this will return undefined. currentElement is the one being inserted, in
+    // case it is being moved and has descendants.
+
+    // will be filled with parent & all its descendants
+    const visitedElements = new Set<string>();
+    visitedElements.add(currentElement.dataset.id!);
+    visitedElements.add(parent.dataset.id!);
+    const startIndex = this.elementIndices.get(parent)! + 1;
+    for (let i = startIndex; i < this.elementYs.length; i++) {
+      const element = this.elementYs[i][0];
+      visitedElements.add(element.dataset.id!);
+      if (!element.dataset.parent || !visitedElements.has(element.dataset.parent)) {
+        // element's parent has not yet been visited
+        // try iterating up through the annotation's parent hierarchy, in case they're out of order
+        let isInHierarchy = false;
+        let elementToCheck = element;
+        while (elementToCheck.dataset.parent) {
+          if (visitedElements.has(elementToCheck.dataset.parent)) {
+            isInHierarchy = true;
+            break;
+          }
+          elementToCheck = this.findElementWithId(elementToCheck.dataset.parent)!;
+        }
+        if (!isInHierarchy) {
+          // element is not a descendant of parent- this is the one we want
+          return element;
+        }
+      }
+    }
+
+    return undefined;
+  }
+
+  private findElementWithId(id: string): HTMLElement|undefined {
+    for (const entry of this.elementYs) {
+      const element = entry[0];
+      if (element.dataset.id === id) {
+        return element;
+      }
+    }
+    return undefined;
+  }
+
+  private refreshIndicesAfter(startIndex: number) {
+    for (let i = startIndex; i < this.elementYs.length; i++) {
+      const el = this.elementYs[i][0];
+      this.elementIndices.set(el, i);
+    }
+  }
+
+  private insertElementBefore(element: HTMLElement, nextElement: HTMLElement) {
+    this.scrollArea.insertBefore(element, nextElement);
+    const elementHeight = element.offsetHeight;
+    const elementIndex = this.elementIndices.get(nextElement)!;
+    const elementY = this.elementYs[elementIndex][1];
+    this.elementIndices.set(element, elementIndex);
+    this.elementYs.splice(elementIndex, 0, [element, elementY]);
+    this.shiftYsAfter(elementIndex + 1, elementHeight);
+    this.refreshIndicesAfter(elementIndex + 1);
+    this.totalHeight += elementHeight;
+    this.hideElement(element);
+    this.resizeObserver.observe(element);
+  }
+
+  insertElement(element: HTMLElement, parent: HTMLElement|undefined) {
+    let nextElement = undefined;
+    if (parent) {
+      nextElement = this.findFirstNonDescendant(element, parent);
+    }
+    if (nextElement) {
+      this.insertElementBefore(element, nextElement);
+    } else {
+      this.addElementHelper(element);
+    }
     this.updateScrollbarHeight();
     this.updateScrollAreaPos();
   }
@@ -137,11 +218,7 @@ export class HidingList {
     this.elementYs.splice(elementIndex, 1);
     this.elementIndices.delete(element);
     this.shiftYsAfter(elementIndex, -elementHeight);
-    // Shift indices of elements that came after the removed one
-    for (let j = elementIndex; j < this.elementYs.length; j++) {
-      const el = this.elementYs[j][0];
-      this.elementIndices.set(el, j);
-    }
+    this.refreshIndicesAfter(elementIndex);
 
     this.totalHeight -= elementHeight;
     this.scrollArea.removeChild(element);
@@ -150,27 +227,8 @@ export class HidingList {
   }
 
   replaceElement(newElement: HTMLElement, oldElement: HTMLElement) {
-    this.resizeObserver.unobserve(oldElement);
-    this.unhideElement(oldElement);
-    const oldHeight = oldElement.offsetHeight;
-
-    const elementIndex = this.elementIndices.get(oldElement)!;
-    this.elementIndices.delete(oldElement);
-    this.elementIndices.set(newElement, elementIndex);
-    this.elementYs[elementIndex][0] = newElement;
-
-    this.scrollArea.replaceChild(newElement, oldElement);
-    const newHeight = newElement.offsetHeight;
-    const delta = newHeight - oldHeight;
-
-    if (delta !== 0) {
-      this.shiftYsAfter(elementIndex + 1, delta);
-      this.totalHeight += delta;
-      this.updateScrollbarHeight();
-    }
-
-    this.resizeObserver.observe(newElement);
-    this.updateScrollAreaPos();
+    this.insertElementBefore(newElement, oldElement);
+    this.removeElement(oldElement);
   }
 
   removeAll() {
@@ -194,10 +252,15 @@ export class HidingList {
 
   recalculateHeights() {
     this.totalHeight = 0;
-    this.scrollbar.scrollTop = 0;
-    for (const [element, i] of this.elementIndices) {
+    this.loadedElements = [];
+    // Split up unhide and calculate height to avoid forcing reflow
+    for (let i = 0; i < this.elementYs.length; i++) {
+      const element = this.elementYs[i][0];
       this.unhideElement(element);
-      const elementHeight = element.offsetHeight;
+      this.loadedElements.push(element);
+    }
+    for (let i = 0; i < this.elementYs.length; i++) {
+      const elementHeight = this.elementYs[i][0].offsetHeight;
       this.elementYs[i][1] = this.totalHeight;
       this.totalHeight += elementHeight;
     }

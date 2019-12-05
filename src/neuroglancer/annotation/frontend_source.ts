@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-import {Annotation, AnnotationId, AnnotationReference, AnnotationTag, AnnotationType, annotationTypes, deserializeAnnotation, getAnnotationTypeHandler, makeAnnotationId, AnnotationSourceSignals} from 'neuroglancer/annotation';
+import {Annotation, AnnotationId, AnnotationReference, AnnotationSourceSignals, AnnotationTag, AnnotationType, annotationTypes, deserializeAnnotation, getAnnotationTypeHandler, makeAnnotationId} from 'neuroglancer/annotation';
 import {ANNOTATION_COMMIT_UPDATE_RESULT_RPC_ID, ANNOTATION_COMMIT_UPDATE_RPC_ID, ANNOTATION_GEOMETRY_CHUNK_SOURCE_RPC_ID, ANNOTATION_METADATA_CHUNK_SOURCE_RPC_ID, ANNOTATION_REFERENCE_ADD_RPC_ID, ANNOTATION_REFERENCE_DELETE_RPC_ID, ANNOTATION_SUBSET_GEOMETRY_CHUNK_SOURCE_RPC_ID, AnnotationGeometryChunkSpecification} from 'neuroglancer/annotation/base';
 import {getAnnotationTypeRenderHandler} from 'neuroglancer/annotation/type_handler';
 import {Chunk, ChunkManager, ChunkSource} from 'neuroglancer/chunk_manager/frontend';
@@ -26,7 +26,7 @@ import {StatusMessage} from 'neuroglancer/status';
 import {binarySearch} from 'neuroglancer/util/array';
 import {Borrowed, Owned} from 'neuroglancer/util/disposable';
 import {mat4} from 'neuroglancer/util/geom';
-import {Signal, NullarySignal} from 'neuroglancer/util/signal';
+import {NullarySignal, Signal} from 'neuroglancer/util/signal';
 import {Buffer} from 'neuroglancer/webgl/buffer';
 import {GL} from 'neuroglancer/webgl/context';
 import {registerRPC, registerSharedObjectOwner, RPC, SharedObject} from 'neuroglancer/worker_rpc';
@@ -347,8 +347,14 @@ export class MultiscaleAnnotationSource extends SharedObject implements
       this.references.delete(reference.id);
     });
     this.applyLocalUpdate(
-        reference, /*existing=*/ false, /*commit=*/ commit, /*newAnnotation=*/ annotation);
+        reference, /*existing=*/false, /*commit=*/commit, /*newAnnotation=*/annotation);
     return reference;
+  }
+
+  addAll(annotations: Annotation[], commit: boolean = true) {
+    for (const annotation of annotations) {
+      this.add(annotation, commit);
+    }
   }
 
   private applyLocalUpdate(
@@ -415,12 +421,12 @@ export class MultiscaleAnnotationSource extends SharedObject implements
   }
 
   delete(reference: Borrowed<AnnotationReference>) {
-    this.applyLocalUpdate(reference, /*existing=*/ true, /*commit=*/ true, /*newAnnotation=*/ null);
+    this.applyLocalUpdate(reference, /*existing=*/true, /*commit=*/true, /*newAnnotation=*/null);
   }
 
   update(reference: AnnotationReference, newAnnotation: Annotation) {
     this.applyLocalUpdate(
-        reference, /*existing=*/ true, /*commit=*/ false, /*newAnnotation=*/ newAnnotation);
+        reference, /*existing=*/true, /*commit=*/false, /*newAnnotation=*/newAnnotation);
   }
 
   private notifyChanged(id: AnnotationId, annotation: Annotation|undefined) {
@@ -440,7 +446,11 @@ export class MultiscaleAnnotationSource extends SharedObject implements
    * Must be called after `add` or `update` to commit the result.
    */
   commit(reference: Borrowed<AnnotationReference>) {
-    this.applyLocalUpdate(reference, /*existing=*/ true, /*commit=*/ true, reference.value!);
+    this.applyLocalUpdate(reference, /*existing=*/true, /*commit=*/true, reference.value!);
+  }
+
+  isPending(id: AnnotationId) {
+    return !!this.localUpdates.get(id);
   }
 
   getReference(id: AnnotationId): Owned<AnnotationReference> {
@@ -554,7 +564,7 @@ export class MultiscaleAnnotationSource extends SharedObject implements
         this.commitStatus = undefined;
       }
     } else if (this.commitStatus === undefined) {
-      const status = this.commitStatus = new StatusMessage(/*delay=*/ true);
+      const status = this.commitStatus = new StatusMessage(/*delay=*/true);
       status.setText('Commiting annotations');
     }
   }
@@ -600,11 +610,12 @@ export class MultiscaleAnnotationSource extends SharedObject implements
   }
   readonly = false;
   childAdded: Signal<(annotation: Annotation) => void>;
+  childrenAdded: Signal<(annotations: Annotation[]) => void>;
   childUpdated: Signal<(annotation: Annotation) => void>;
   childDeleted: Signal<(annotationId: string) => void>;
-  tagAdded:Signal<(tag: AnnotationTag) => void>;
-  tagUpdated:Signal<(tag: AnnotationTag) => void>;
-  tagDeleted:Signal<(tagId: number) => void>;
+  tagAdded: Signal<(tag: AnnotationTag) => void>;
+  tagUpdated: Signal<(tag: AnnotationTag) => void>;
+  tagDeleted: Signal<(tagId: number) => void>;
 }
 
 registerRPC(ANNOTATION_COMMIT_UPDATE_RESULT_RPC_ID, function(x) {

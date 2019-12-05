@@ -18,24 +18,31 @@
  * @file Support for rendering line annotations.
  */
 
-import {AnnotationType, Line} from 'neuroglancer/annotation';
+import {Annotation, AnnotationType, AxisAlignedBoundingBox, Line} from 'neuroglancer/annotation';
+import {getSelectedAssocatedSegment, PlaceTwoCornerAnnotationTool} from 'neuroglancer/annotation/annotation';
+import {AnnotationLayerState} from 'neuroglancer/annotation/frontend';
 import {AnnotationRenderContext, AnnotationRenderHelper, registerAnnotationTypeRenderHandler} from 'neuroglancer/annotation/type_handler';
+import {MouseSelectionState} from 'neuroglancer/layer';
+import {UserLayerWithAnnotations} from 'neuroglancer/ui/annotations';
+import {registerTool} from 'neuroglancer/ui/tool';
 import {tile2dArray} from 'neuroglancer/util/array';
 import {mat4, projectPointToLineSegment, vec3} from 'neuroglancer/util/geom';
+import {Uint64} from 'neuroglancer/util/uint64';
 import {getMemoizedBuffer} from 'neuroglancer/webgl/buffer';
 import {CircleShader, VERTICES_PER_CIRCLE} from 'neuroglancer/webgl/circles';
 import {LineShader} from 'neuroglancer/webgl/lines';
 import {emitterDependentShaderGetter, ShaderBuilder, ShaderProgram} from 'neuroglancer/webgl/shader';
 import {glsl_hsvToRgb, glsl_rgbToHsv} from 'neuroglancer/webgl/shader_lib';
 
+const ANNOTATE_LINE_TOOL_ID = 'annotateLine';
 const FULL_OBJECT_PICK_OFFSET = 0;
 const ENDPOINTS_PICK_OFFSET = FULL_OBJECT_PICK_OFFSET + 1;
 const PICK_IDS_PER_INSTANCE = ENDPOINTS_PICK_OFFSET + 2;
 
 function getEndpointIndexArray() {
   return tile2dArray(
-      new Uint8Array([0, 1]), /*majorDimension=*/ 1, /*minorTiles=*/ 1,
-      /*majorTiles=*/ VERTICES_PER_CIRCLE);
+      new Uint8Array([0, 1]), /*majorDimension=*/1, /*minorTiles=*/1,
+      /*majorTiles=*/VERTICES_PER_CIRCLE);
 }
 
 class RenderHelper extends AnnotationRenderHelper {
@@ -59,7 +66,8 @@ ${this.setPartIndex(builder)};
 `);
         builder.setFragmentMain(`
 vec4 borderColor = vec4(1.0, 1.0, 1.0, 1.0);
-emitAnnotation(vec4(borderColor.rgb, borderColor.a * getLineAlpha() * ${this.getCrossSectionFadeFactor()}));
+emitAnnotation(vec4(borderColor.rgb, borderColor.a * getLineAlpha() * ${
+            this.getCrossSectionFadeFactor()}));
 `);
       });
 
@@ -99,13 +107,13 @@ emitAnnotation(getCircleColor(vColor, borderColor));
       const aUpper = shader.attribute('aEndpointB');
 
       context.buffer.bindToVertexAttrib(
-          aLower, /*components=*/ 3, /*attributeType=*/ WebGL2RenderingContext.FLOAT,
-          /*normalized=*/ false,
-          /*stride=*/ 4 * 6, /*offset=*/ context.bufferOffset);
+          aLower, /*components=*/3, /*attributeType=*/WebGL2RenderingContext.FLOAT,
+          /*normalized=*/false,
+          /*stride=*/4 * 6, /*offset=*/context.bufferOffset);
       context.buffer.bindToVertexAttrib(
-          aUpper, /*components=*/ 3, /*attributeType=*/ WebGL2RenderingContext.FLOAT,
-          /*normalized=*/ false,
-          /*stride=*/ 4 * 6, /*offset=*/ context.bufferOffset + 4 * 3);
+          aUpper, /*components=*/3, /*attributeType=*/WebGL2RenderingContext.FLOAT,
+          /*normalized=*/false,
+          /*stride=*/4 * 6, /*offset=*/context.bufferOffset + 4 * 3);
 
       gl.vertexAttribDivisor(aLower, 1);
       gl.vertexAttribDivisor(aUpper, 1);
@@ -120,7 +128,7 @@ emitAnnotation(getCircleColor(vColor, borderColor));
   drawEdges(context: AnnotationRenderContext) {
     const shader = this.edgeShaderGetter(context.renderContext.emitter);
     this.enable(shader, context, () => {
-      this.lineShader.draw(shader, context.renderContext, /*lineWidth=*/ 1, 1.0, context.count);
+      this.lineShader.draw(shader, context.renderContext, /*lineWidth=*/1, 1.0, context.count);
     });
   }
 
@@ -129,8 +137,8 @@ emitAnnotation(getCircleColor(vColor, borderColor));
     this.enable(shader, context, () => {
       const aEndpointIndex = shader.attribute('aEndpointIndex');
       this.endpointIndexBuffer.bindToVertexAttribI(
-          aEndpointIndex, /*components=*/ 1,
-          /*attributeType=*/ WebGL2RenderingContext.UNSIGNED_BYTE);
+          aEndpointIndex, /*components=*/1,
+          /*attributeType=*/WebGL2RenderingContext.UNSIGNED_BYTE);
       this.circleShader.draw(
           shader, context.renderContext,
           {interiorRadiusInPixels: 6, borderWidthInPixels: 2, featherWidthInPixels: 1},
@@ -218,3 +226,42 @@ registerAnnotationTypeRenderHandler(AnnotationType.LINE, {
     return baseLine;
   }
 });
+
+
+export class PlaceLineTool extends PlaceTwoCornerAnnotationTool {
+  get description() {
+    return `annotate line`;
+  }
+
+  getInitialAnnotation(mouseState: MouseSelectionState, annotationLayer: AnnotationLayerState):
+      Annotation {
+    const result = super.getInitialAnnotation(mouseState, annotationLayer);
+    result.segments = getSelectedAssocatedSegment(annotationLayer);
+    return result;
+  }
+
+  getUpdatedAnnotation(
+      oldAnnotation: Line|AxisAlignedBoundingBox, mouseState: MouseSelectionState,
+      annotationLayer: AnnotationLayerState) {
+    const result = super.getUpdatedAnnotation(oldAnnotation, mouseState, annotationLayer);
+    const segments = result.segments;
+    if (segments !== undefined && segments.length > 0) {
+      segments.length = 1;
+    }
+    let newSegments = getSelectedAssocatedSegment(annotationLayer);
+    if (newSegments && segments) {
+      newSegments = newSegments.filter(x => segments.findIndex(y => Uint64.equal(x, y)) === -1);
+    }
+    result.segments = [...(segments || []), ...(newSegments || [])] || undefined;
+    return result;
+  }
+
+  toJSON() {
+    return ANNOTATE_LINE_TOOL_ID;
+  }
+}
+PlaceLineTool.prototype.annotationType = AnnotationType.LINE;
+
+registerTool(
+    ANNOTATE_LINE_TOOL_ID,
+    (layer, options) => new PlaceLineTool(<UserLayerWithAnnotations>layer, options));
