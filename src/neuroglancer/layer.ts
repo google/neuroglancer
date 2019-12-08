@@ -256,7 +256,7 @@ export class UserLayer extends RefCounted {
     }
     for (let layer of renderLayers) {
       result = layer.getValueAt(position);
-      if (result !== undefined) {
+      if (result != null) {
         break;
       }
     }
