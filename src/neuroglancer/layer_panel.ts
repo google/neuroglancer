@@ -31,6 +31,7 @@ import {float32ToString} from 'neuroglancer/util/float32_to_string';
 import {makeCloseButton} from 'neuroglancer/widget/close_button';
 import {makeIcon} from 'neuroglancer/widget/icon';
 import {PositionWidget} from 'neuroglancer/widget/position_widget';
+import {WatchableValueInterface} from 'neuroglancer/trackable_value';
 
 function destroyDropLayers(dropLayers: DropLayers, targetLayer?: ManagedUserLayer) {
   if (dropLayers.method === 'move') {
@@ -245,7 +246,6 @@ export class LayerPanel extends RefCounted {
   private layerWidgetInsertionPoint = document.createElement('div');
   private positionWidget = this.registerDisposer(new PositionWidget(
       this.viewerNavigationState.position.value, this.manager.root.coordinateSpaceCombiner));
-
   /**
    * For use within this module only.
    */
@@ -258,8 +258,9 @@ export class LayerPanel extends RefCounted {
   constructor(
       public display: DisplayContext, public manager: LayerListSpecification,
       public viewerNavigationState: LinkedViewerNavigationState,
-      public selectedLayer: SelectedLayerState, public getLayoutSpecForDrag: () => any) {
-    super();
+      public selectedLayer: SelectedLayerState, public getLayoutSpecForDrag: () => any,
+      public displayLayerItemValue: WatchableValueInterface<boolean>) {
+    super(); 
     this.registerDisposer(selectedLayer);
     const {element} = this;
     element.className = 'neuroglancer-layer-panel';
@@ -354,31 +355,33 @@ export class LayerPanel extends RefCounted {
   private scheduleUpdate = this.registerCancellable(animationFrameDebounce(() => this.update()));
 
   private update() {
-    this.valueUpdateNeeded = false;
-    this.updateLayers();
-    let values = this.manager.layerSelectedValues;
-    for (let [layer, widget] of this.layerWidgets) {
-      let userLayer = layer.layer;
-      let text = '';
-      if (userLayer !== null) {
-        let value = values.get(userLayer);
-        if (value !== undefined) {
-          value = Array().concat(value);
-          value = value.map((x: any) => {
-            if (x === null) {
-              return 'null';
-            } else if (Math.fround(x) === x) {
-              // FIXME: Verify actual layer data type
-              return float32ToString(x);
-            } else {
-              return x;
-            }
-          });
-          text += value.join(', ');
+    if (this.displayLayerItemValue.value === true){
+      this.valueUpdateNeeded = false;
+      this.updateLayers();
+      let values = this.manager.layerSelectedValues;
+      for (let [layer, widget] of this.layerWidgets) {
+        let userLayer = layer.layer;
+        let text = '';
+        if (userLayer !== null) {
+          let value = values.get(userLayer);
+          if (value !== undefined) {
+            value = Array().concat(value);
+            value = value.map((x: any) => {
+              if (x === null) {
+                return 'null';
+              } else if (Math.fround(x) === x) {
+                // FIXME: Verify actual layer data type
+                return float32ToString(x);
+              } else {
+                return x;
+              }
+            });
+            text += value.join(', ');
+          }
         }
+        widget.valueElement.textContent = text;
       }
-      widget.valueElement.textContent = text;
-    }
+  }
   }
 
   updateLayers() {
