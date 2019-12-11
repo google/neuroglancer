@@ -101,7 +101,7 @@ const viewerUiControlOptionKeys: (keyof ViewerUIControlConfiguration)[] = [
   'showEditStateButton',
   'showLayerPanel',
   'showLocation',
-  'displayLayerItemValue',
+  'showLayerHoverValues',
   'showAnnotationToolStatus',
 ];
 
@@ -113,7 +113,7 @@ export class ViewerUIControlConfiguration {
   showEditStateButton = new TrackableBoolean(true);
   showLayerPanel = new TrackableBoolean(true);
   showLocation = new TrackableBoolean(true);
-  displayLayerItemValue = new TrackableBoolean(true);
+  showLayerHoverValues = new TrackableBoolean(true);
   showAnnotationToolStatus = new TrackableBoolean(true);
 }
 
@@ -141,7 +141,7 @@ interface ViewerUIOptions {
   showEditStateButton: boolean;
   showLayerPanel: boolean;
   showLocation: boolean;
-  displayLayerItemValue:boolean;
+  showLayerHoverValues:boolean;
   showPanelBorders: boolean;
   showAnnotationToolStatus: boolean;
 }

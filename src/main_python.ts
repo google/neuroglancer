@@ -135,7 +135,7 @@ window.addEventListener('DOMContentLoaded', () => {
   configState.add('showHelpButton', viewer.uiConfiguration.showHelpButton);
   configState.add('showLocation', viewer.uiConfiguration.showLocation);
   configState.add('showPanelBorders', viewer.uiConfiguration.showPanelBorders);
-  configState.add('displayLayerItemValue', viewer.uiConfiguration.displayLayerItemValue);
+  configState.add('showLayerHoverValues', viewer.uiConfiguration.showLayerHoverValues);
   configState.add('scaleBarOptions', viewer.scaleBarOptions);
   const size = new TrackableValue<[number, number]|undefined>(
       undefined,

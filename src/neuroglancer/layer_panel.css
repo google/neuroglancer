@@ -94,6 +94,10 @@
   text-align: center;
 }
 
+.neuroglancer-layer-item-value.hidden { 
+  display:none;
+}
+
 .neuroglancer-layer-item[layer-visible=false] .neuroglancer-layer-item-label {
   text-decoration: line-through;
 }

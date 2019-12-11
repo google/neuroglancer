@@ -151,7 +151,7 @@ class ConfigState(JsonObjectWrapper):
     show_panel_borders = showPanelBorders = wrapped_property('showPanelBorders',
                                                              optional(bool, True))
     scale_bar_options = scaleBarOptions = wrapped_property('scaleBarOptions', ScaleBarOptions)
-    display_layer_item_value = displayLayerItemValue = wrapped_property('displayLayerItemValue', optional(bool, True))
+    show_layer_hover_values = showLayerHoverValues = wrapped_property('showLayerHoverValues', optional(bool, True))
     viewer_size = viewerSize = wrapped_property('viewerSize', optional(array_wrapper(np.int64, 2)))
     prefetch = wrapped_property('prefetch', typed_list(PrefetchState))
 

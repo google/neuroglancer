@@ -242,6 +242,7 @@ export class LayerPanel extends RefCounted {
   element = document.createElement('div');
   private layerUpdateNeeded = true;
   private valueUpdateNeeded = false;
+  private valueElementUpdateNeeded = false;
   dropZone: HTMLDivElement;
   private layerWidgetInsertionPoint = document.createElement('div');
   private positionWidget = this.registerDisposer(new PositionWidget(
@@ -259,7 +260,7 @@ export class LayerPanel extends RefCounted {
       public display: DisplayContext, public manager: LayerListSpecification,
       public viewerNavigationState: LinkedViewerNavigationState,
       public selectedLayer: SelectedLayerState, public getLayoutSpecForDrag: () => any,
-      public displayLayerItemValue: WatchableValueInterface<boolean>) {
+      public showLayerHoverValues: WatchableValueInterface<boolean>) {
     super(); 
     this.registerDisposer(selectedLayer);
     const {element} = this;
@@ -272,6 +273,9 @@ export class LayerPanel extends RefCounted {
     }));
     this.registerDisposer(selectedLayer.changed.add(() => {
       this.handleLayersChanged();
+    }));
+    this.registerDisposer(showLayerHoverValues.changed.add(() => {
+      this.handleLayerItemValueChanged();
     }));
     this.layerWidgetInsertionPoint.style.display = 'none';
     this.element.appendChild(this.layerWidgetInsertionPoint);
@@ -352,36 +356,42 @@ export class LayerPanel extends RefCounted {
     }
   }
 
+  handleLayerItemValueChanged(){
+    this.valueElementUpdateNeeded = true;
+    this.scheduleUpdate();
+  }
+
   private scheduleUpdate = this.registerCancellable(animationFrameDebounce(() => this.update()));
 
   private update() {
-    if (this.displayLayerItemValue.value === true){
-      this.valueUpdateNeeded = false;
-      this.updateLayers();
-      let values = this.manager.layerSelectedValues;
-      for (let [layer, widget] of this.layerWidgets) {
-        let userLayer = layer.layer;
-        let text = '';
-        if (userLayer !== null) {
-          let value = values.get(userLayer);
-          if (value !== undefined) {
-            value = Array().concat(value);
-            value = value.map((x: any) => {
-              if (x === null) {
-                return 'null';
-              } else if (Math.fround(x) === x) {
-                // FIXME: Verify actual layer data type
-                return float32ToString(x);
-              } else {
-                return x;
-              }
-            });
-            text += value.join(', ');
-          }
+    this.valueUpdateNeeded = false;
+    this.updateLayers();
+    this.updateItemValueDisplay()
+    if (this.showLayerHoverValues.value === false){
+      return}
+    let values = this.manager.layerSelectedValues;
+    for (let [layer, widget] of this.layerWidgets) {
+      let userLayer = layer.layer;
+      let text = '';
+      if (userLayer !== null) {
+        let value = values.get(userLayer);
+        if (value !== undefined) {
+          value = Array().concat(value);
+          value = value.map((x: any) => {
+            if (x === null) {
+              return 'null';
+            } else if (Math.fround(x) === x) {
+              // FIXME: Verify actual layer data type
+              return float32ToString(x);
+            } else {
+              return x;
+            }
+          });
+          text += value.join(', ');
         }
-        widget.valueElement.textContent = text;
       }
-  }
+      widget.valueElement.textContent = text;
+    }
   }
 
   updateLayers() {
@@ -415,8 +425,24 @@ export class LayerPanel extends RefCounted {
       }
     }
   }
-
   addLayerMenu() {
     addNewLayer(this.manager, this.selectedLayer);
   }
+
+  updateItemValueDisplay() {
+    if (!this.valueElementUpdateNeeded){
+      return;
+    }
+    this.valueElementUpdateNeeded = false;
+    console.log(this.layerWidgets)
+    for (let widget of this.layerWidgets.values()){
+      if (this.showLayerHoverValues.value === false){
+        widget.valueElement.classList.add('hidden');
+      }
+      else {
+        widget.valueElement.classList.remove('hidden');
+      }      
+    }
+  }
 }
+

@@ -309,7 +309,7 @@ export class SingletonLayerGroupViewer extends RefCounted implements LayoutCompo
           ...getCommonViewerState(viewer),
         },
         {showLayerPanel: viewer.uiControlVisibility.showLayerPanel, showViewerMenu: false, 
-          displayLayerItemValue: viewer.uiControlVisibility.displayLayerItemValue}));
+          showLayerHoverValues: viewer.uiControlVisibility.showLayerHoverValues}));
     this.layerGroupViewer.layout.restoreState(layout);
   }
 
@@ -527,7 +527,7 @@ function makeComponent(container: LayoutComponentContainer, spec: any) {
             ...getCommonViewerState(viewer),
           },
           {showLayerPanel: viewer.uiControlVisibility.showLayerPanel, showViewerMenu: true,
-            displayLayerItemValue: viewer.uiControlVisibility.displayLayerItemValue});
+            showLayerHoverValues: viewer.uiControlVisibility.showLayerHoverValues});
       try {
         layerGroupViewer.restoreState(spec);
       } catch (e) {
