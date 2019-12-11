@@ -16,7 +16,7 @@ the top N synaptic partners in common between the selected segments.
 
 import collections
 import json
-
+import time
 import six
 
 import neuroglancer
@@ -104,7 +104,8 @@ class Demo(object):
         new_segments = self.viewer.state.layers['ground_truth'].segments
         if new_segments != self.selected_segments:
             self.selected_segments = new_segments
-            self._update_synapses()
+            self.viewer.defer_callback(
+                self._update_synapses)
 
     def _update_synapses(self):
         synapses = {}
@@ -142,8 +143,6 @@ class Demo(object):
                             point_b=partner['location'],
                             segments=[tbar['body ID'], partner['body ID']],
                         ))
-            print('annotations', annotations)
-
 
 if __name__ == '__main__':
     import argparse
