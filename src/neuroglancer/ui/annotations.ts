@@ -539,7 +539,7 @@ export class AnnotationLayerView extends Tab {
       separator.disabled = true;
       separator.style.padding = '1px';
       separator.style.border = '1px';
-      [annotationButtons[0], annotationButtons[4]] = [annotationButtons[4], annotationButtons[0]];
+      annotationButtons.unshift(...annotationButtons.splice(4, 1));
       annotationButtons.splice(1, 0, separator);
 
       if (activeTool) {
