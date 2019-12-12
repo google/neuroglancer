@@ -630,6 +630,7 @@ export class DataFetchSliceViewRenderLayer extends
     SliceViewRenderLayer<AnnotationGeometryChunkSource> {
   constructor(multiscaleSource: MultiscaleAnnotationSource, options: SliceViewRenderLayerOptions) {
     super(multiscaleSource.chunkManager, multiscaleSource, options);
+    this.channelCoordinateSpace = constantWatchableValue(emptyInvalidCoordinateSpace);
   }
 
   // Does nothing.
