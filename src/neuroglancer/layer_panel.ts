@@ -242,7 +242,6 @@ export class LayerPanel extends RefCounted {
   element = document.createElement('div');
   private layerUpdateNeeded = true;
   private valueUpdateNeeded = false;
-  private valueElementUpdateNeeded = false;
   dropZone: HTMLDivElement;
   private layerWidgetInsertionPoint = document.createElement('div');
   private positionWidget = this.registerDisposer(new PositionWidget(
@@ -277,6 +276,7 @@ export class LayerPanel extends RefCounted {
     this.registerDisposer(showLayerHoverValues.changed.add(() => {
       this.handleLayerItemValueChanged();
     }));
+    this.element.dataset.showHoverValues = this.showLayerHoverValues.value.toString()
     this.layerWidgetInsertionPoint.style.display = 'none';
     this.element.appendChild(this.layerWidgetInsertionPoint);
 
@@ -357,8 +357,7 @@ export class LayerPanel extends RefCounted {
   }
 
   handleLayerItemValueChanged(){
-    this.valueElementUpdateNeeded = true;
-    this.scheduleUpdate();
+    this.element.dataset.showHoverValues = this.showLayerHoverValues.value.toString()
   }
 
   private scheduleUpdate = this.registerCancellable(animationFrameDebounce(() => this.update()));
@@ -366,7 +365,6 @@ export class LayerPanel extends RefCounted {
   private update() {
     this.valueUpdateNeeded = false;
     this.updateLayers();
-    this.updateItemValueDisplay()
     if (this.showLayerHoverValues.value === false){
       return}
     let values = this.manager.layerSelectedValues;
@@ -427,22 +425,6 @@ export class LayerPanel extends RefCounted {
   }
   addLayerMenu() {
     addNewLayer(this.manager, this.selectedLayer);
-  }
-
-  updateItemValueDisplay() {
-    if (!this.valueElementUpdateNeeded){
-      return;
-    }
-    this.valueElementUpdateNeeded = false;
-    console.log(this.layerWidgets)
-    for (let widget of this.layerWidgets.values()){
-      if (this.showLayerHoverValues.value === false){
-        widget.valueElement.classList.add('hidden');
-      }
-      else {
-        widget.valueElement.classList.remove('hidden');
-      }      
-    }
   }
 }
 
