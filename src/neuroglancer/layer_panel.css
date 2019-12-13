@@ -83,7 +83,7 @@
   padding: 1px;
 }
 
-.neuroglancer-layer-item-value {
+.neuroglancer-layer-panel[data-show-hover-values="true"] .neuroglancer-layer-item-value {
   display: inline-block;
   min-width: 10ch;
   max-width: 50ch;
@@ -92,6 +92,10 @@
   overflow: hidden;
   text-overflow: ellipses;
   text-align: center;
+}
+
+.neuroglancer-layer-panel[data-show-hover-values="false"] .neuroglancer-layer-item-value { 
+  display:none;
 }
 
 .neuroglancer-layer-item[layer-visible=false] .neuroglancer-layer-item-label {

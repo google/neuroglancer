@@ -31,6 +31,7 @@ import {float32ToString} from 'neuroglancer/util/float32_to_string';
 import {makeCloseButton} from 'neuroglancer/widget/close_button';
 import {makeIcon} from 'neuroglancer/widget/icon';
 import {PositionWidget} from 'neuroglancer/widget/position_widget';
+import {WatchableValueInterface} from 'neuroglancer/trackable_value';
 
 function destroyDropLayers(dropLayers: DropLayers, targetLayer?: ManagedUserLayer) {
   if (dropLayers.method === 'move') {
@@ -245,7 +246,6 @@ export class LayerPanel extends RefCounted {
   private layerWidgetInsertionPoint = document.createElement('div');
   private positionWidget = this.registerDisposer(new PositionWidget(
       this.viewerNavigationState.position.value, this.manager.root.coordinateSpaceCombiner));
-
   /**
    * For use within this module only.
    */
@@ -258,8 +258,9 @@ export class LayerPanel extends RefCounted {
   constructor(
       public display: DisplayContext, public manager: LayerListSpecification,
       public viewerNavigationState: LinkedViewerNavigationState,
-      public selectedLayer: SelectedLayerState, public getLayoutSpecForDrag: () => any) {
-    super();
+      public selectedLayer: SelectedLayerState, public getLayoutSpecForDrag: () => any,
+      public showLayerHoverValues: WatchableValueInterface<boolean>) {
+    super(); 
     this.registerDisposer(selectedLayer);
     const {element} = this;
     element.className = 'neuroglancer-layer-panel';
@@ -272,6 +273,10 @@ export class LayerPanel extends RefCounted {
     this.registerDisposer(selectedLayer.changed.add(() => {
       this.handleLayersChanged();
     }));
+    this.registerDisposer(showLayerHoverValues.changed.add(() => {
+      this.handleLayerItemValueChanged();
+    }));
+    this.element.dataset.showHoverValues = this.showLayerHoverValues.value.toString()
     this.layerWidgetInsertionPoint.style.display = 'none';
     this.element.appendChild(this.layerWidgetInsertionPoint);
 
@@ -351,11 +356,17 @@ export class LayerPanel extends RefCounted {
     }
   }
 
+  handleLayerItemValueChanged(){
+    this.element.dataset.showHoverValues = this.showLayerHoverValues.value.toString()
+  }
+
   private scheduleUpdate = this.registerCancellable(animationFrameDebounce(() => this.update()));
 
   private update() {
     this.valueUpdateNeeded = false;
     this.updateLayers();
+    if (this.showLayerHoverValues.value === false){
+      return}
     let values = this.manager.layerSelectedValues;
     for (let [layer, widget] of this.layerWidgets) {
       let userLayer = layer.layer;
@@ -412,8 +423,8 @@ export class LayerPanel extends RefCounted {
       }
     }
   }
-
   addLayerMenu() {
     addNewLayer(this.manager, this.selectedLayer);
   }
 }
+

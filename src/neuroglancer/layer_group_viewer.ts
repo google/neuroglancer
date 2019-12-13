@@ -63,6 +63,7 @@ export interface LayerGroupViewerState {
 export interface LayerGroupViewerOptions {
   showLayerPanel: WatchableValueInterface<boolean>;
   showViewerMenu: boolean;
+  showLayerHoverValues: WatchableValueInterface<boolean>;
 }
 
 export const viewerDragType = 'neuroglancer-layer-group-viewer';
@@ -271,7 +272,8 @@ export class LayerGroupViewer extends RefCounted {
       public element: HTMLElement, public viewerState: LayerGroupViewerState,
       options: Partial<LayerGroupViewerOptions> = {}) {
     super();
-    this.options = {showLayerPanel: new TrackableBoolean(true), showViewerMenu: false, ...options};
+    this.options = {showLayerPanel: new TrackableBoolean(true), showViewerMenu: false,
+      showLayerHoverValues: new TrackableBoolean(true), ...options};
     this.layerSpecification = this.registerDisposer(viewerState.layerSpecification);
     this.viewerNavigationState =
         this.registerDisposer(new LinkedViewerNavigationState(viewerState));
@@ -361,7 +363,9 @@ export class LayerGroupViewer extends RefCounted {
     if (showLayerPanel && this.layerPanel === undefined) {
       const layerPanel = this.layerPanel = new LayerPanel(
           this.display, this.layerSpecification, this.viewerNavigationState,
-          this.viewerState.selectedLayer, () => this.layout.toJSON());
+          this.viewerState.selectedLayer, () => this.layout.toJSON(),
+          this.options.showLayerHoverValues
+          );
       if (options.showViewerMenu) {
         layerPanel.registerDisposer(makeViewerMenu(layerPanel.element, this));
         layerPanel.element.title = 'Right click for options, drag to move/copy layer group.';
