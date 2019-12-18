@@ -244,7 +244,7 @@ function decodeMultiscaleManifestChunk(chunk: BrainmapsMultiscaleManifestChunk, 
   chunk.fragmentSupervoxelIds = fragmentIdAndCorners;
 }
 
-const maxMeshBatchSize = 100;
+const maxMeshBatchSize = 255;
 
 interface BatchMeshResponseFragment {
   fullKey: string;
