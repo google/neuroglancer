@@ -123,7 +123,7 @@ export function translationRotationScaleZReflectionToMat4(
 export function findClosestParameterizedLinePosition(a: Float32Array, b: Float32Array, p: Float32Array) {
   // http://mathworld.wolfram.com/Point-LineDistance3-Dimensional.html
   // Compute t: -dot(a-p, b-a) / |b - a|^2
-  const rank = a.length;
+  const rank = p.length;
   let denominator = 0;
   for (let i = 0; i < rank; ++i) {
     denominator += (a[i] - b[i])**2;
