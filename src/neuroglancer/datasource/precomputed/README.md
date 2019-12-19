@@ -171,7 +171,7 @@ The actual storage of the manifest and mesh fragment data depends on whether the
 
 The `info` file is a JSON-format text file.  The root value must be a JSON object with the following
 members:
-- `"@type"`: Must be `"neuroglancer_multilod_draco"` or `"neuroglancer_legacy_mesh"`.
+- `"@type"`: Must be `"neuroglancer_multilod_draco"`.
 - `"vertex_quantization_bits"`: Specifies the number of bits needed to represent each vertex
   position coordinate within a mesh fragment.  Must be `10` or `16`.
 - `"transform"`: JSON array of 12 numbers specifying a 4x3 homogeneous coordinate transform from the
