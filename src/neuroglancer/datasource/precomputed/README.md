@@ -254,7 +254,7 @@ and the sum of the mesh fragment sizes specified in the manifest.
 ## Legacy single-resolution mesh format
 
 In addition to the multi-resolution mesh format, an older single-resolution mesh format is also
-supported.
+supported. Legacy format processing is specified by either the absence of an `info` file in the mesh subdirectory or an info file containing `"@type": "neuroglancer_legacy_mesh"` as one of the dictionary keys.
 
 The surface mesh representation for a given segmented object may be split into one or more separate
 fragments (e.g. corresponding to subvolumes).

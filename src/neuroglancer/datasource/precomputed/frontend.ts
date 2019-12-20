@@ -239,10 +239,13 @@ function parseTransform(data: any): mat4 {
   });
 }
 
-function parseMeshMetadata(data: any): MultiscaleMeshMetadata {
+function parseMeshMetadata(data: any): MultiscaleMeshMetadata|undefined {
   verifyObject(data);
   const t = verifyObjectProperty(data, '@type', verifyString);
-  if (t !== 'neuroglancer_multilod_draco') {
+  if (t === 'neuroglancer_legacy_mesh') {
+    return undefined; 
+  }
+  else if (t !== 'neuroglancer_multilod_draco') {
     throw new Error(`Unsupported mesh type: ${JSON.stringify(t)}`);
   }
   const lodScaleMultiplier =
@@ -260,7 +263,7 @@ async function getMeshMetadata(
   try {
     metadata = await getJsonMetadata(chunkManager, url);
   } catch (e) {
-    if (e instanceof HttpError && e.status === 404) {
+    if (e instanceof HttpError && (e.status === 404 || e.status === 403)) {
       // If we fail to fetch the info file, assume it is the legacy
       // single-resolution mesh format.
       return undefined;
