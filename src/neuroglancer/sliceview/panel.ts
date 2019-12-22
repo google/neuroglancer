@@ -43,20 +43,24 @@ export enum OffscreenTextures {
   NUM_TEXTURES
 }
 
+function sliceViewPanelEmitColorAndPickID(builder: ShaderBuilder) {
+  builder.addOutputBuffer('vec4', 'out_fragColor', 0);
+  builder.addOutputBuffer('highp vec4', 'out_pickId', 1);
+  builder.addFragmentCode(`
+void emit(vec4 color, highp uint pickId) {
+  out_fragColor = color;
+  float pickIdFloat = float(pickId);
+  out_pickId = vec4(pickIdFloat, pickIdFloat, pickIdFloat, 1.0);
+}
+`);
+}
+
+
 function sliceViewPanelEmitColor(builder: ShaderBuilder) {
   builder.addOutputBuffer('vec4', 'out_fragColor', null);
   builder.addFragmentCode(`
 void emit(vec4 color, highp uint pickId) {
   out_fragColor = color;
-}
-`);
-}
-
-function sliceViewPanelEmitPickID(builder: ShaderBuilder) {
-  builder.addOutputBuffer('highp float', 'out_pickId', null);
-  builder.addFragmentCode(`
-void emit(vec4 color, highp uint pickId) {
-  out_pickId = float(pickId);
 }
 `);
 }
@@ -206,10 +210,6 @@ export class SliceViewPanel extends RenderedDataPanel {
     this.gl.clearColor(0.0, 0.0, 0.0, 0.0);
     gl.clear(WebGL2RenderingContext.COLOR_BUFFER_BIT);
 
-    // Draw axes lines.
-    // FIXME: avoid use of temporary matrix
-    let mat = mat4.create();
-
     const backgroundColor = tempVec4;
     const crossSectionBackgroundColor = this.viewer.crossSectionBackgroundColor.value;
     backgroundColor[0] = crossSectionBackgroundColor[0];
@@ -233,31 +233,25 @@ export class SliceViewPanel extends RenderedDataPanel {
     const renderContext: SliceViewPanelRenderContext = {
       viewProjectionMat: sliceView.viewProjectionMat,
       pickIDs: pickIDs,
-      emitter: sliceViewPanelEmitColor,
+      emitter: sliceViewPanelEmitColorAndPickID,
       emitColor: true,
-      emitPickID: false,
+      emitPickID: true,
       viewportWidth: width,
       viewportHeight: height,
       sliceView,
       globalPosition,
       displayDimensions,
     };
+    this.offscreenFramebuffer.bind(width, height);
     gl.enable(WebGL2RenderingContext.BLEND);
     gl.blendFunc(WebGL2RenderingContext.SRC_ALPHA, WebGL2RenderingContext.ONE_MINUS_SRC_ALPHA);
     for (const [renderLayer, attachment] of visibleLayers) {
       renderLayer.draw(renderContext, attachment);
     }
     gl.disable(WebGL2RenderingContext.BLEND);
-    this.offscreenFramebuffer.bindSingle(OffscreenTextures.PICK);
-    renderContext.emitColor = false;
-    renderContext.emitPickID = true;
-    renderContext.emitter = sliceViewPanelEmitPickID;
-
-    for (const [renderLayer, attachment] of visibleLayers) {
-      renderLayer.draw(renderContext, attachment);
-    }
-
     if (this.viewer.showAxisLines.value || this.viewer.showScaleBar.value) {
+      // FIXME: avoid use of temporary matrix
+      let mat = mat4.create();
       if (this.viewer.showAxisLines.value) {
         // Construct matrix that maps [-1, +1] x/y range to the full viewport data
         // coordinates.
