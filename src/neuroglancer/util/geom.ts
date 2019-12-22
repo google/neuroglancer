@@ -281,3 +281,23 @@ export function scaleMat3Output(out: mat3, input: mat3, scales: TypedArray) {
   }
   return out;
 }
+
+export function getViewFrustrumVolume(projectionMat: mat4) {
+  if (projectionMat[15] === 1) {
+    // orthographic projection
+    const depth = 2 / Math.abs(projectionMat[10]);
+    const width = 2 / Math.abs(projectionMat[0]);
+    const height = 2 / Math.abs(projectionMat[5]);
+    return width * height * depth;
+  }
+  // perspective projection
+  // a = (far + near) / (near - far);
+  // b = 2 * far * near / (near - far);
+  const a = projectionMat[10];
+  const b = projectionMat[14];
+  const near = 2 * b / (2 * a - 2);
+  const far = ((a - 1) * near) / (a + 1);
+
+  const baseArea = 4 / (projectionMat[0] * projectionMat[5]);
+  return baseArea / 3 * (Math.abs(far)**3 - Math.abs(near)**3);
+}

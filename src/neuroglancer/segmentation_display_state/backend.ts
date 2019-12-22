@@ -19,24 +19,24 @@ import 'neuroglancer/shared_disjoint_sets';
 import 'neuroglancer/uint64_set';
 import 'neuroglancer/uint64_map';
 
-import {withChunkManager} from 'neuroglancer/chunk_manager/backend';
+import {ChunkRequester} from 'neuroglancer/chunk_manager/backend';
 import {RenderLayerTransformOrError} from 'neuroglancer/render_coordinate_transform';
 import {VisibleSegmentsState} from 'neuroglancer/segmentation_display_state/base';
 import {SharedDisjointUint64Sets} from 'neuroglancer/shared_disjoint_sets';
 import {SharedWatchableValue} from 'neuroglancer/shared_watchable_value';
 import {Uint64Set} from 'neuroglancer/uint64_set';
-import {withSharedVisibility} from 'neuroglancer/visibility_priority/backend';
-import {RPC, SharedObjectCounterpart} from 'neuroglancer/worker_rpc';
+import {AnyConstructor} from 'neuroglancer/util/mixin';
+import {RPC} from 'neuroglancer/worker_rpc';
 
-const Base = withSharedVisibility(withChunkManager(SharedObjectCounterpart));
-
-export class SegmentationLayerSharedObjectCounterpart extends Base implements VisibleSegmentsState {
+export const withSegmentationLayerBackendState =
+    <TBase extends AnyConstructor<ChunkRequester>>(Base: TBase) =>
+        class SegmentationLayerState extends Base implements VisibleSegmentsState {
   visibleSegments: Uint64Set;
   segmentEquivalences: SharedDisjointUint64Sets;
   transform: SharedWatchableValue<RenderLayerTransformOrError>;
   renderScaleTarget: SharedWatchableValue<number>;
-
-  constructor(rpc: RPC, options: any) {
+  constructor(...args: any[]) {
+    const [rpc, options] = args as [RPC, any];
     super(rpc, options);
     // No need to increase the reference count of visibleSegments or
     // segmentEquivalences since our owner will hold a reference to their owners.
@@ -53,4 +53,4 @@ export class SegmentationLayerSharedObjectCounterpart extends Base implements Vi
     this.registerDisposer(this.transform.changed.add(scheduleUpdateChunkPriorities));
     this.registerDisposer(this.renderScaleTarget.changed.add(scheduleUpdateChunkPriorities));
   }
-}
+};

@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-import {boundingBoxesEqual, CoordinateSpaceCombiner, coordinateSpacesEqual, emptyInvalidCoordinateSpace, homogeneousTransformSubmatrix, makeCoordinateSpace, makeIdentityTransform, newDimensionId, TransformedBoundingBox, WatchableCoordinateSpaceTransform} from 'neuroglancer/coordinate_transform';
+import {transformedBoundingBoxesEqual, CoordinateSpaceCombiner, coordinateSpacesEqual, emptyInvalidCoordinateSpace, homogeneousTransformSubmatrix, makeCoordinateSpace, makeIdentityTransform, newDimensionId, TransformedBoundingBox, WatchableCoordinateSpaceTransform} from 'neuroglancer/coordinate_transform';
 import {WatchableValue} from 'neuroglancer/trackable_value';
 
 describe('newDimensionId', () => {
@@ -51,7 +51,7 @@ describe('boundingBoxesEqual', () => {
 
     boxes.forEach((x, xIndex) => {
       boxes.forEach((y, yIndex) => {
-        expect(boundingBoxesEqual(x, y))
+        expect(transformedBoundingBoxesEqual(x, y))
             .toBe(
                 x === y,
                 `${xIndex}: ${JSON.stringify(x)}, ` +

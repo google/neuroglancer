@@ -15,7 +15,7 @@
  */
 
 import {DataType} from 'neuroglancer/util/data_type';
-import {AttributeIndex, ShaderBuilder, VertexShaderInputBinder} from 'neuroglancer/webgl/shader';
+import {AttributeIndex, ShaderBuilder} from 'neuroglancer/webgl/shader';
 
 // Hue, saturation, and value are in [0, 1] range.
 export var glsl_hsvToRgb = `
@@ -206,8 +206,8 @@ export const webglTypeSizeInBytes: {[webglType: number]: number} = {
 };
 
 export function defineVectorArrayVertexShaderInput(
-    builder: ShaderBuilder, typeName: 'float'|'int'|'uint', name: string, vectorRank: number,
-  arraySize: number = 1) {
+    builder: ShaderBuilder, typeName: 'float'|'int'|'uint', attributeType: number,
+    normalized: boolean, name: string, vectorRank: number, arraySize: number = 1) {
   let numAttributes = 0;
   let n = vectorRank * arraySize;
   while (n > 0) {
@@ -237,6 +237,7 @@ export function defineVectorArrayVertexShaderInput(
     code += `}\n`;
   }
   builder.addVertexCode(code);
+  const elementSize = webglTypeSizeInBytes[attributeType];
   builder.addInitializer(shader => {
     const locations: AttributeIndex[] = [];
     for (let attributeIndex = 0; attributeIndex < numAttributes; ++attributeIndex) {
@@ -259,18 +260,11 @@ export function defineVectorArrayVertexShaderInput(
           gl.disableVertexAttribArray(location);
         }
       },
-      bind(
-          buffer: WebGLBuffer, attributeType: number, normalized: boolean, stride: number = 0,
-          offset: number = 0) {
+      bind(stride: number, offset: number) {
         const {gl} = shader;
-        const elementSize = webglTypeSizeInBytes[attributeType];
-        if (stride === 0) {
-          stride = elementSize * n;
-        }
         for (let attributeIndex = 0; attributeIndex < numAttributes; ++attributeIndex) {
           const location = locations[attributeIndex];
           const numComponents = Math.min(4, n - 4 * attributeIndex);
-          gl.bindBuffer(WebGL2RenderingContext.ARRAY_BUFFER, buffer);
           if (typeName === 'float') {
             gl.vertexAttribPointer(
                 location, /*size=*/ numComponents, attributeType, normalized, stride, offset);
@@ -282,6 +276,6 @@ export function defineVectorArrayVertexShaderInput(
           offset += elementSize * numComponents;
         }
       },
-    } as VertexShaderInputBinder;
+    };
   });
 }

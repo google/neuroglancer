@@ -15,13 +15,18 @@
  */
 
 import debounce from 'lodash/debounce';
-import {Borrowed, Disposer, Owned, RefCounted} from 'neuroglancer/util/disposable';
-import { NullaryReadonlySignal, NullarySignal, neverSignal} from 'neuroglancer/util/signal';
+import {Borrowed, Disposable, invokeDisposers, Owned, RefCounted} from 'neuroglancer/util/disposable';
+import {neverSignal, NullaryReadonlySignal, NullarySignal, Signal} from 'neuroglancer/util/signal';
 import {Trackable} from 'neuroglancer/util/trackable';
 
 export interface WatchableValueInterface<T> {
   value: T;
   changed: NullaryReadonlySignal;
+}
+
+export interface WatchableValueChangeInterface<T> {
+  readonly value: T;
+  readonly changed: Signal<(oldValue: T, newValue: T) => void>;
 }
 
 export class WatchableValue<T> implements WatchableValueInterface<T> {
@@ -294,32 +299,50 @@ export class WatchableSet<T> {
   }
 }
 
-export function registerNested<T>(
-    baseState: WatchableValueInterface<T>, f: (context: RefCounted, value: T) => void): Disposer {
-  let value: T;
-  let context: RefCounted;
+export interface NestedStateManager<T = undefined> extends Disposable {
+  flush: () => void;
+  value: T;
+}
 
-  function updateValue() {
-    value = baseState.value;
-    context = new RefCounted();
-    f(context, value);
-  }
+export function registerNested<U, T extends any[]>(
+    f: (context: RefCounted, ...values: T) => U,
+    ...watchables: {[K in keyof T]: WatchableValueInterface<T[K]>}): NestedStateManager<U> {
+  let values = watchables.map(w => w.value) as T;
+  const count = watchables.length;
+  let context = new RefCounted();
+  let result = f(context, ...values);
 
   const handleChange = debounce(() => {
-    if (baseState.value !== value) {
-      context.dispose();
-      updateValue();
+    let changed = false;
+    for (let i = 0; i < count; ++i) {
+      const watchable = watchables[i];
+      const value = watchable.value;
+      if (values[i] !== value) {
+        values[i] = value;
+        changed = true;
+      }
     }
+    if (!changed) return;
+    context.dispose();
+    context = new RefCounted();
+    result = f(context, ...values);
   }, 0);
 
-  const signalDisposer = baseState.changed.add(handleChange);
+  const signalDisposers = watchables.map(w => w.changed.add(handleChange));
 
-  updateValue();
-
-  return () => {
-    handleChange.cancel();
-    signalDisposer();
-    context.dispose();
+  return {
+    flush() {
+      handleChange.flush();
+    },
+    dispose() {
+      handleChange.cancel();
+      invokeDisposers(signalDisposers);
+      context.dispose();
+    },
+    get value() {
+      handleChange.flush();
+      return result;
+    },
   };
 }
 

@@ -25,7 +25,7 @@ import {DataPanelLayoutContainer, InputEventBindings as DataPanelInputEventBindi
 import {DisplayContext} from 'neuroglancer/display_context';
 import {LayerListSpecification, LayerSubsetSpecification, MouseSelectionState, SelectedLayerState} from 'neuroglancer/layer';
 import {LayerPanel} from 'neuroglancer/layer_panel';
-import {DisplayPose, LinkedDisplayDimensions, LinkedOrientationState, LinkedPosition, LinkedRelativeDisplayScales, linkedStateLegacyJsonView, LinkedZoomState, NavigationState, TrackableCrossSectionZoom, TrackableNavigationLink, TrackableProjectionZoom} from 'neuroglancer/navigation_state';
+import {DisplayPose, LinkedDisplayDimensions, LinkedOrientationState, LinkedPosition, LinkedRelativeDisplayScales, linkedStateLegacyJsonView, LinkedZoomState, NavigationState, TrackableCrossSectionZoom, TrackableNavigationLink, TrackableProjectionZoom, WatchableDisplayDimensionRenderInfo} from 'neuroglancer/navigation_state';
 import {RenderLayerRole} from 'neuroglancer/renderlayer';
 import {TrackableBoolean} from 'neuroglancer/trackable_boolean';
 import {WatchableSet, WatchableValueInterface} from 'neuroglancer/trackable_value';
@@ -106,6 +106,7 @@ export class LinkedViewerNavigationState extends RefCounted {
   position: LinkedPosition;
   relativeDisplayScales: LinkedRelativeDisplayScales;
   displayDimensions: LinkedDisplayDimensions;
+  displayDimensionRenderInfo: WatchableDisplayDimensionRenderInfo;
   crossSectionOrientation: LinkedOrientationState;
   crossSectionScale: LinkedZoomState<TrackableCrossSectionZoom>;
   projectionOrientation: LinkedOrientationState;
@@ -119,28 +120,31 @@ export class LinkedViewerNavigationState extends RefCounted {
     perspectiveNavigationState: Borrowed<NavigationState>
   }) {
     super();
-    this.relativeDisplayScales = new LinkedRelativeDisplayScales(
-        parent.navigationState.pose.displayDimensions.relativeDisplayScales.addRef());
-    this.displayDimensions = new LinkedDisplayDimensions(
-        parent.navigationState.pose.displayDimensions.addRef(), this.relativeDisplayScales.value);
+    this.relativeDisplayScales =
+        new LinkedRelativeDisplayScales(parent.navigationState.pose.relativeDisplayScales.addRef());
+    this.displayDimensions =
+        new LinkedDisplayDimensions(parent.navigationState.pose.displayDimensions.addRef());
     this.position = new LinkedPosition(parent.navigationState.position.addRef());
     this.crossSectionOrientation =
         new LinkedOrientationState(parent.navigationState.pose.orientation.addRef());
+    this.displayDimensionRenderInfo = this.registerDisposer(new WatchableDisplayDimensionRenderInfo(
+        this.relativeDisplayScales.value, this.displayDimensions.value));
     this.crossSectionScale = new LinkedZoomState(
         parent.navigationState.zoomFactor.addRef() as TrackableCrossSectionZoom,
-        this.displayDimensions.value.addRef());
+        this.displayDimensionRenderInfo.addRef());
     this.navigationState = this.registerDisposer(new NavigationState(
         new DisplayPose(
-            this.position.value, this.displayDimensions.value, this.crossSectionOrientation.value),
+            this.position.value, this.displayDimensionRenderInfo.addRef(),
+            this.crossSectionOrientation.value),
         this.crossSectionScale.value));
     this.projectionOrientation =
         new LinkedOrientationState(parent.perspectiveNavigationState.pose.orientation.addRef());
     this.projectionScale = new LinkedZoomState(
         parent.perspectiveNavigationState.zoomFactor.addRef() as TrackableProjectionZoom,
-        this.displayDimensions.value.addRef());
+        this.displayDimensionRenderInfo.addRef());
     this.projectionNavigationState = this.registerDisposer(new NavigationState(
         new DisplayPose(
-            this.position.value.addRef(), this.displayDimensions.value.addRef(),
+            this.position.value.addRef(), this.displayDimensionRenderInfo.addRef(),
             this.projectionOrientation.value),
         this.projectionScale.value));
   }

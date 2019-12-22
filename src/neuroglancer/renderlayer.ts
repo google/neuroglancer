@@ -14,17 +14,21 @@
  * limitations under the License.
  */
 
-import {MouseSelectionState, VisibleLayerInfo} from 'neuroglancer/layer';
-import {DisplayDimensions} from 'neuroglancer/navigation_state';
+import debounce from 'lodash/debounce';
+import {LayerView, MouseSelectionState, VisibleLayerInfo} from 'neuroglancer/layer';
+import {DisplayDimensionRenderInfo, NavigationState} from 'neuroglancer/navigation_state';
 import {PickIDManager} from 'neuroglancer/object_picking';
+import {ProjectionParameters, projectionParametersEqual} from 'neuroglancer/projection_parameters';
 import {get3dModelToDisplaySpaceMatrix, RenderLayerTransformOrError} from 'neuroglancer/render_coordinate_transform';
-import {WatchableSet} from 'neuroglancer/trackable_value';
-import {RefCounted} from 'neuroglancer/util/disposable';
+import {PROJECTION_PARAMETERS_CHANGED_RPC_METHOD_ID, PROJECTION_PARAMETERS_RPC_ID} from 'neuroglancer/render_layer_common';
+import {WatchableSet, WatchableValueChangeInterface} from 'neuroglancer/trackable_value';
+import {Borrowed, RefCounted} from 'neuroglancer/util/disposable';
 import {mat4} from 'neuroglancer/util/geom';
 import {MessageList, MessageSeverity} from 'neuroglancer/util/message_list';
-import {NullarySignal} from 'neuroglancer/util/signal';
+import {NullarySignal, Signal} from 'neuroglancer/util/signal';
 import {Uint64} from 'neuroglancer/util/uint64';
 import {VisibilityPriorityAggregator} from 'neuroglancer/visibility_priority/frontend';
+import {registerSharedObjectOwner, RPC, SharedObject} from 'neuroglancer/worker_rpc';
 
 export enum RenderLayerRole {
   DATA,
@@ -72,24 +76,17 @@ export class RenderLayer extends RefCounted {
  * Extends RenderLayer with functionality for tracking the number of panels in which the layer is
  * visible.
  */
-export class VisibilityTrackedRenderLayer extends RenderLayer {
+export class VisibilityTrackedRenderLayer<
+    View extends LayerView = LayerView, AttachmentState = unknown> extends RenderLayer {
+  backend: SharedObject|undefined;
   visibility = new VisibilityPriorityAggregator();
+  attach(attachment: VisibleLayerInfo<View, AttachmentState>) {
+    attachment;
+  }
 }
 
 export interface ThreeDimensionalReadyRenderContext {
-  viewProjectionMat: mat4;
-  displayDimensions: DisplayDimensions;
-  globalPosition: Float32Array;
-
-  /**
-   * Width of GL viewport in pixels.
-   */
-  viewportWidth: number;
-
-  /**
-   * Height of GL viewport in pixels.
-   */
-  viewportHeight: number;
+  projectionParameters: ProjectionParameters;
 }
 
 export interface ThreeDimensionalRenderContext extends ThreeDimensionalReadyRenderContext {
@@ -99,25 +96,26 @@ export interface ThreeDimensionalRenderContext extends ThreeDimensionalReadyRend
 
 export interface ThreeDimensionalRenderLayerAttachmentState {
   transform: RenderLayerTransformOrError;
-  displayDimensions: DisplayDimensions;
+  displayDimensionRenderInfo: DisplayDimensionRenderInfo;
   modelTransform: mat4|undefined;
 }
 
 export function update3dRenderLayerAttachment(
-    transform: RenderLayerTransformOrError, displayDimensions: DisplayDimensions,
-    attachment: VisibleLayerInfo<ThreeDimensionalRenderLayerAttachmentState>): mat4|undefined {
+    transform: RenderLayerTransformOrError, displayDimensionRenderInfo: DisplayDimensionRenderInfo,
+    attachment: VisibleLayerInfo<LayerView, ThreeDimensionalRenderLayerAttachmentState>): mat4|
+    undefined {
   let {state} = attachment;
   if (state === undefined || state.transform !== transform ||
-      state.displayDimensions !== displayDimensions) {
+      state.displayDimensionRenderInfo !== displayDimensionRenderInfo) {
     attachment.messages.clearMessages();
-    state = attachment.state = {transform, displayDimensions, modelTransform: undefined};
+    state = attachment.state = {transform, displayDimensionRenderInfo, modelTransform: undefined};
     if (transform.error !== undefined) {
       attachment.messages.addMessage({severity: MessageSeverity.error, message: transform.error});
       return undefined;
     }
     try {
       const modelTransform = mat4.create();
-      get3dModelToDisplaySpaceMatrix(modelTransform, displayDimensions, transform);
+      get3dModelToDisplaySpaceMatrix(modelTransform, displayDimensionRenderInfo, transform);
       state.modelTransform = modelTransform;
     } catch (e) {
       attachment.messages.addMessage(
@@ -125,4 +123,85 @@ export function update3dRenderLayerAttachment(
     }
   }
   return state.modelTransform;
+}
+
+export class DerivedProjectionParameters<Parameters extends ProjectionParameters =
+                                                                ProjectionParameters> extends
+    RefCounted implements WatchableValueChangeInterface<Parameters> {
+  private oldValue_: Parameters;
+  private value_: Parameters;
+  private width: number = 0;
+  private height: number = 0;
+  changed = new Signal<(oldValue: Parameters, newValue: Parameters) => void>();
+  constructor(options: {
+    navigationState: Borrowed<NavigationState>,
+    update: (out: Parameters, navigationState: NavigationState) => void,
+    isEqual?: (a: Parameters, b: Parameters) => boolean,
+    parametersConstructor?: {new(): Parameters},
+  }) {
+    super();
+    const {
+      parametersConstructor = ProjectionParameters as {new (): Parameters},
+      navigationState,
+      update,
+      isEqual = projectionParametersEqual
+    } = options;
+    this.oldValue_ = new parametersConstructor();
+    this.value_ = new parametersConstructor();
+    const performUpdate = () => {
+      const {oldValue_, value_} = this;
+      oldValue_.displayDimensionRenderInfo = navigationState.displayDimensionRenderInfo.value;
+      oldValue_.width = this.width;
+      oldValue_.height = this.height;
+      update(oldValue_, navigationState);
+      if (isEqual(oldValue_, value_)) return;
+      this.value_ = oldValue_;
+      this.oldValue_ = value_;
+      this.changed.dispatch(value_, oldValue_);
+    };
+    const debouncedUpdate = this.update = this.registerCancellable(debounce(performUpdate, 0));
+    this.registerDisposer(navigationState.changed.add(debouncedUpdate));
+    performUpdate();
+  }
+
+  setViewportShape(width: number, height: number) {
+    if (this.width === width && this.height === height) return;
+    this.width = width;
+    this.height = height;
+    this.update();
+  }
+
+  get value() {
+    this.update.flush();
+    return this.value_;
+  }
+
+  readonly update: (() => void)&{flush(): void};
+}
+
+@registerSharedObjectOwner(PROJECTION_PARAMETERS_RPC_ID)
+export class SharedProjectionParameters<T extends ProjectionParameters =
+                                                      ProjectionParameters> extends SharedObject {
+  constructor(
+      rpc: RPC, public base: WatchableValueChangeInterface<T>, public updateInterval: number = 10) {
+    super();
+    this.initializeCounterpart(rpc, {value: base.value});
+    this.registerDisposer(base.changed.add(this.update));
+  }
+
+  flush() {
+    this.update.flush();
+  }
+
+  private update = this.registerCancellable(debounce((oldValue: T, newValue: T) => {
+    let valueUpdate: any;
+    if (newValue.displayDimensionRenderInfo !== oldValue.displayDimensionRenderInfo) {
+      valueUpdate = newValue;
+    } else {
+      const {displayDimensionRenderInfo, ...remainder} = newValue;
+      valueUpdate = remainder;
+    }
+    this.rpc!.invoke(
+        PROJECTION_PARAMETERS_CHANGED_RPC_METHOD_ID, {id: this.rpcId, value: valueUpdate});
+  }, this.updateInterval));
 }

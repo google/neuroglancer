@@ -14,13 +14,15 @@
  * limitations under the License.
  */
 
+import {DisplayDimensionRenderInfo} from 'neuroglancer/navigation_state';
+import {ProjectionParameters} from 'neuroglancer/projection_parameters';
 import {getChunkPositionFromCombinedGlobalLocalPositions} from 'neuroglancer/render_coordinate_transform';
 import {ChunkLayout} from 'neuroglancer/sliceview/chunk_layout';
-import {WatchableValueInterface} from 'neuroglancer/trackable_value';
-import {arraysEqual, filterArrayInplace, partitionArray} from 'neuroglancer/util/array';
+import {WatchableValueChangeInterface, WatchableValueInterface} from 'neuroglancer/trackable_value';
+import {filterArrayInplace, partitionArray} from 'neuroglancer/util/array';
 import {DATA_TYPE_BYTES, DataType} from 'neuroglancer/util/data_type';
 import {Disposable} from 'neuroglancer/util/disposable';
-import {kAxes, mat3, mat4, vec3} from 'neuroglancer/util/geom';
+import {getFrustrumPlanes, isAABBVisible, kAxes, mat4, vec3} from 'neuroglancer/util/geom';
 import * as matrix from 'neuroglancer/util/matrix';
 import * as vector from 'neuroglancer/util/vector';
 import {SharedObject} from 'neuroglancer/worker_rpc';
@@ -123,8 +125,9 @@ function compareBounds(
   return curResult;
 }
 
-export interface TransformedSource<RLayer extends SliceViewRenderLayer,
-                                                  Source extends SliceViewChunkSource> {
+export interface TransformedSource<RLayer extends SliceViewRenderLayer = SliceViewRenderLayer,
+                                                  Source extends SliceViewChunkSource =
+                                                                     SliceViewChunkSource> {
   renderLayer: RLayer;
 
   source: Source;
@@ -143,6 +146,12 @@ export interface TransformedSource<RLayer extends SliceViewRenderLayer,
    */
   nonDisplayLowerClipBound: Float32Array;
   nonDisplayUpperClipBound: Float32Array;
+
+  // Lower clip bound (in voxels) in the "display" subspace of the chunk coordinate space.
+  lowerClipDisplayBound: vec3;
+  // Upper clip bound (in voxels) in the "display" subspace of the chunk coordinate space.
+  upperClipDisplayBound: vec3;
+
 
   // Lower bound (in chunks) within the "display" subspace of the chunk coordinate space.
   lowerChunkDisplayBound: vec3;
@@ -184,17 +193,21 @@ export interface SliceViewRenderLayer {
    */
   localPosition: WatchableValueInterface<Float32Array>;
   renderScaleTarget: WatchableValueInterface<number>;
+
+  filterVisibleSources(
+      sliceView: SliceViewBase<SliceViewChunkSource, SliceViewRenderLayer>,
+      sources: readonly TransformedSource[]): Iterable<TransformedSource>;
 }
 
 function updateFixedCurPositionInChunks(
     tsource: TransformedSource<SliceViewRenderLayer, SliceViewChunkSource>,
-    globalPosition: Float32Array): boolean {
+    globalPosition: Float32Array, localPosition: Float32Array): boolean {
   const {curPositionInChunks, fixedPositionWithinChunk} = tsource;
   const {nonDisplayLowerClipBound, nonDisplayUpperClipBound} = tsource;
   const {rank, chunkDataSize} = tsource.source.spec;
   if (!getChunkPositionFromCombinedGlobalLocalPositions(
-          curPositionInChunks, globalPosition, tsource.renderLayer.localPosition.value,
-          tsource.layerRank, tsource.fixedLayerToChunkTransform)) {
+          curPositionInChunks, globalPosition, localPosition, tsource.layerRank,
+          tsource.fixedLayerToChunkTransform)) {
     return false;
   }
   for (let chunkDim = 0; chunkDim < rank; ++chunkDim) {
@@ -248,38 +261,12 @@ export interface VisibleLayerSources<RLayer extends SliceViewRenderLayer, Source
                                          Transformed extends TransformedSource<RLayer, Source>> {
   allSources: Transformed[][];
   visibleSources: Transformed[];
-  globalTransform: SliceViewGlobalTransform;
-}
-
-export interface SliceViewGlobalTransform {
-  globalRank: number;
-  displayRank: number;
-  globalDimensionNames: readonly string[];
-  displayDimensionIndices: Int32Array;
-  voxelPhysicalScales: Float64Array;
-  canonicalVoxelFactors: Float64Array;
-  generation: number;
+  displayDimensionRenderInfo: DisplayDimensionRenderInfo;
 }
 
 const tempChunkLayout = new ChunkLayout(vec3.create(), mat4.create(), 0);
 
-export class SliceViewBase<
-    Source extends SliceViewChunkSource, RLayer extends SliceViewRenderLayer, Transformed extends
-        TransformedSource<RLayer, Source> = TransformedSource<RLayer, Source>> extends
-    SharedObject {
-  width = 0;
-  height = 0;
-
-  // Transforms (x,y) viewport coordinates in the range:
-  //
-  // x=[left: -width/2, right: width/2] and
-  //
-  // y=[top: -height/2, bottom: height/2],
-  //
-  // to data coordinates.
-  invViewMatrix = mat4.create();
-  viewMatrix = mat4.create();
-
+export class SliceViewProjectionParameters extends ProjectionParameters {
   /**
    * Normal vector of cross section in (non-isotropic) global voxel coordinates.
    */
@@ -291,7 +278,37 @@ export class SliceViewBase<
   viewportNormalInCanonicalCoordinates = vec3.create();
 
   centerDataPosition = vec3.create();
-  globalPosition = vector.kEmptyFloat32Vec;
+
+  /**
+   * Size in physical units of a single pixel.
+   */
+  pixelSize: number = 0;
+}
+
+function visibleSourcesInvalidated(oldValue: SliceViewProjectionParameters,
+                                   newValue: SliceViewProjectionParameters) {
+  if (oldValue.displayDimensionRenderInfo !== newValue.displayDimensionRenderInfo) return true;
+  if (oldValue.pixelSize !== newValue.pixelSize) return true;
+  const {viewMatrix: oldViewMatrix} = oldValue;
+  const {viewMatrix: newViewMatrix} = newValue;
+  for (let i = 0; i < 12; ++i) {
+    if (oldViewMatrix[i] !== newViewMatrix[i]) return true;
+  }
+  return false;
+}
+
+export class SliceViewBase<
+    Source extends SliceViewChunkSource = SliceViewChunkSource,
+                   RLayer extends SliceViewRenderLayer = SliceViewRenderLayer, Transformed extends
+        TransformedSource<RLayer, Source> = TransformedSource<RLayer, Source>> extends
+    SharedObject {
+  // View matrix transforms (x,y) viewport coordinates in the range:
+  //
+  // x=[left: -width/2, right: width/2] and
+  //
+  // y=[top: -height/2, bottom: height/2],
+  //
+  // to data coordinates.
 
   /**
    * For each visible ChunkLayout, maps each visible GenericVolumeChunkSource to its priority index.
@@ -304,25 +321,22 @@ export class SliceViewBase<
 
   visibleSourcesStale = true;
 
-  /**
-   * Size in physical units of a single pixel.
-   */
-  pixelSize: number = 0;
-
-  globalTransform: SliceViewGlobalTransform|undefined = undefined;
-
-  get valid() {
-    return this.globalTransform !== undefined;
+  constructor(public projectionParameters:
+                  WatchableValueChangeInterface<SliceViewProjectionParameters>) {
+    super();
+    this.registerDisposer(projectionParameters.changed.add((oldValue, newValue) => {
+      if (visibleSourcesInvalidated(oldValue, newValue)) {
+        this.invalidateVisibleSources();
+      }
+      this.invalidateVisibleChunks();
+    }));
   }
 
-  setViewportSize(width: number, height: number) {
-    if (width !== this.width || height !== this.height) {
-      this.width = width;
-      this.height = height;
-      return true;
-    }
-    return false;
+  invalidateVisibleSources() {
+    this.visibleSourcesStale = true;
   }
+
+  invalidateVisibleChunks() {}
 
   /**
    * For chunk layouts with finiteRank < 3, returns an adjusted chunk layout where chunk 0 in each
@@ -336,7 +350,7 @@ export class SliceViewBase<
     const transform = mat4.copy(tempChunkLayout.transform, chunkLayout.transform);
     const invTransform = mat4.copy(tempChunkLayout.invTransform, chunkLayout.invTransform);
     tempChunkLayout.detTransform = chunkLayout.detTransform;
-    const {invViewMatrix, width, height} = this;
+    const {invViewMatrix, width, height} = this.projectionParameters.value;
     for (let chunkRenderDim = finiteRank; chunkRenderDim < 3; ++chunkRenderDim) {
       // we want to ensure chunk [0] fully covers the viewport
       const offset = invViewMatrix[12 + chunkRenderDim];
@@ -355,63 +369,6 @@ export class SliceViewBase<
     return tempChunkLayout;
   }
 
-  private prevGlobalTransform: SliceViewGlobalTransform|undefined = undefined;
-
-  setViewportToDataMatrix(invViewMatrixLinear: mat3, newGlobalPosition: Float32Array) {
-    let {globalPosition} = this;
-    const globalTransform = this.globalTransform!;
-    const linearTransformChanged =
-        !matrix.equal<Float32Array>(this.invViewMatrix, 4, invViewMatrixLinear, 3, 3, 3);
-    if (!linearTransformChanged && arraysEqual(globalPosition, newGlobalPosition) &&
-        globalTransform === this.prevGlobalTransform) {
-      return false;
-    }
-
-    const {
-      invViewMatrix,
-      centerDataPosition,
-      viewMatrix,
-      viewportNormalInGlobalCoordinates,
-      viewportNormalInCanonicalCoordinates
-    } = this;
-    matrix.copy<Float32Array>(invViewMatrix, 4, invViewMatrixLinear, 3, 3, 3);
-    const {displayDimensionIndices, globalRank, displayRank, canonicalVoxelFactors} =
-        globalTransform;
-    if (globalPosition.length !== globalRank) {
-      globalPosition = this.globalPosition = new Float32Array(globalRank);
-    }
-    this.globalPosition.set(newGlobalPosition);
-    centerDataPosition.fill(0);
-    for (let i = 0; i < displayRank; ++i) {
-      centerDataPosition[i] = invViewMatrix[12 + i] = newGlobalPosition[displayDimensionIndices[i]];
-    }
-    for (let i = displayRank; i < 3; ++i) {
-      centerDataPosition[i] = invViewMatrix[12 + i] = 0;
-    }
-    mat4.invert(viewMatrix, invViewMatrix);
-    for (let i = 0; i < 3; ++i) {
-      const x = viewportNormalInGlobalCoordinates[i] = viewMatrix[i * 4 + 2];
-      viewportNormalInCanonicalCoordinates[i] = x / canonicalVoxelFactors[i];
-    }
-    vec3.normalize(viewportNormalInGlobalCoordinates, viewportNormalInGlobalCoordinates);
-    vec3.normalize(viewportNormalInCanonicalCoordinates, viewportNormalInCanonicalCoordinates);
-
-    let newPixelSize = 0;
-    const {voxelPhysicalScales: globalScales} = this.globalTransform!;
-    for (let i = 0; i < 3; ++i) {
-      const s = globalScales[i];
-      if (s === undefined) continue;
-      const x = invViewMatrix[i];
-      newPixelSize += (s * x) ** 2;
-    }
-    newPixelSize = Math.sqrt(newPixelSize);
-    if (newPixelSize !== this.pixelSize || linearTransformChanged) {
-      this.visibleSourcesStale = true;
-      this.pixelSize = newPixelSize;
-    }
-    return true;
-  }
-
   /**
    * Computes the list of sources to use for each visible layer, based on the
    * current pixelSize.
@@ -421,63 +378,22 @@ export class SliceViewBase<
       return;
     }
     this.visibleSourcesStale = false;
-    // Increase pixel size by a small margin.
-    let pixelSize = this.pixelSize * 1.1;
-    // console.log("pixelSize", pixelSize);
-
     let visibleChunkLayouts = this.visibleChunkLayouts;
-    const curGlobalTransform = this.globalTransform;
+    const curDisplayDimensionRenderInfo =
+        this.projectionParameters.value.displayDimensionRenderInfo;
 
     const {visibleLayers} = this;
     visibleChunkLayouts.clear();
-    for (const [renderLayer, {allSources, visibleSources, globalTransform}] of visibleLayers) {
+    for (const [renderLayer, {allSources, visibleSources, displayDimensionRenderInfo}] of
+             visibleLayers) {
       visibleSources.length = 0;
-      if (globalTransform !== curGlobalTransform || allSources.length === 0) {
+      if (displayDimensionRenderInfo !== curDisplayDimensionRenderInfo || allSources.length === 0) {
         continue;
       }
-      let scaleIndex: number;
-
-      const preferredOrientationIndex =
-          pickBestAlternativeSource(this.viewMatrix, allSources.map(x => x[0]));
+      const preferredOrientationIndex = pickBestAlternativeSource(
+          this.projectionParameters.value.viewMatrix, allSources.map(x => x[0]));
 
       const sources = allSources[preferredOrientationIndex];
-
-      // At the smallest scale, all alternative sources must have the same voxel size, which is
-      // considered to be the base voxel size.
-      const smallestVoxelSize = sources[0].effectiveVoxelSize;
-
-      const renderScaleTarget = renderLayer.renderScaleTarget.value;
-
-      /**
-       * Determines whether we should continue to look for a finer-resolution source *after* one
-       * with the specified voxelSize.
-       */
-      const canImproveOnVoxelSize = (voxelSize: vec3) => {
-        const targetSize = pixelSize * renderScaleTarget;
-        for (let i = 0; i < 3; ++i) {
-          const size = voxelSize[i];
-          // If size <= pixelSize, no need for improvement.
-          // If size === smallestVoxelSize, also no need for improvement.
-          if (size > targetSize && size > 1.01 * smallestVoxelSize[i]) {
-            return true;
-          }
-        }
-        return false;
-      };
-
-      const improvesOnPrevVoxelSize = (voxelSize: vec3, prevVoxelSize: vec3) => {
-        const targetSize = pixelSize * renderScaleTarget;
-        for (let i = 0; i < 3; ++i) {
-          const size = voxelSize[i];
-          const prevSize = prevVoxelSize[i];
-          if (Math.abs(targetSize - size) < Math.abs(targetSize - prevSize) &&
-              size < 1.01 * prevSize) {
-            return true;
-          }
-        }
-        return false;
-      };
-
       /**
        * Registers a source as being visible.  This should be called with consecutively decreasing
        * values of scaleIndex.
@@ -495,20 +411,9 @@ export class SliceViewBase<
         existingSources.set(transformedSource, sourceScaleIndex);
       };
 
-      scaleIndex = sources.length - 1;
-      let prevVoxelSize: vec3|undefined;
-      while (true) {
-        const transformedSource = sources[scaleIndex];
-        if (prevVoxelSize !== undefined &&
-            !improvesOnPrevVoxelSize(transformedSource.effectiveVoxelSize, prevVoxelSize)) {
-          break;
-        }
-        addVisibleSource(transformedSource, scaleIndex);
-
-        if (scaleIndex === 0 || !canImproveOnVoxelSize(transformedSource.effectiveVoxelSize)) {
-          break;
-        }
-        prevVoxelSize = transformedSource.effectiveVoxelSize;
+      let scaleIndex = sources.length - 1;
+      for (const source of renderLayer.filterVisibleSources(this, sources)) {
+        addVisibleSource(source as Transformed, scaleIndex);
         --scaleIndex;
       }
       // Reverse visibleSources list since we added sources from coarsest to finest resolution, but
@@ -524,12 +429,13 @@ export class SliceViewBase<
       addChunk:
           (chunkLayout: ChunkLayout, layoutObject: T, positionInChunks: vec3,
            sources: Transformed[]) => void) {
+    const projectionParameters = this.projectionParameters.value;
     this.updateVisibleSources();
     initialize();
 
     // Lower and upper bound in global data coordinates.
     const globalCorners = tempCorners;
-    let {width, height, invViewMatrix} = this;
+    let {width, height, invViewMatrix} = projectionParameters;
     for (let i = 0; i < 3; ++i) {
       globalCorners[0][i] = -kAxes[0][i] * width / 2 - kAxes[1][i] * height / 2;
       globalCorners[1][i] = -kAxes[0][i] * width / 2 + kAxes[1][i] * height / 2;
@@ -561,7 +467,7 @@ export class SliceViewBase<
     // Sources whose bounds fully contain the current bounding box.
     let fullyVisibleSources = new Array<Transformed>();
 
-    const {globalPosition} = this;
+    const {globalPosition} = this.projectionParameters.value;
 
     this.visibleChunkLayouts.forEach((visibleSources, chunkLayout) => {
       let layoutObject = getLayoutObject(chunkLayout);
@@ -571,7 +477,8 @@ export class SliceViewBase<
       partiallyVisibleSources.length = 0;
 
       for (const tsource of visibleSources.keys()) {
-        if (!updateFixedCurPositionInChunks(tsource, globalPosition)) {
+        if (!updateFixedCurPositionInChunks(
+                tsource, globalPosition, tsource.renderLayer.localPosition.value)) {
           continue;
         }
         partiallyVisibleSources.push(tsource);
@@ -591,7 +498,8 @@ export class SliceViewBase<
           upperChunkBound, Number.NEGATIVE_INFINITY, Number.NEGATIVE_INFINITY,
           Number.NEGATIVE_INFINITY);
 
-      chunkLayout.globalToLocalNormal(planeNormal, this.viewportNormalInGlobalCoordinates);
+      chunkLayout.globalToLocalNormal(
+          planeNormal, projectionParameters.viewportNormalInGlobalCoordinates);
       vec3.multiply(planeNormal, planeNormal, chunkLayout.size);
       vec3.normalize(planeNormal, planeNormal);
       for (let i = 0; i < 3; ++i) {
@@ -599,8 +507,9 @@ export class SliceViewBase<
       }
 
       // Center position in chunk grid coordinates.
-      const planeDistanceToOrigin =
-          vec3.dot(chunkLayout.globalToLocalGrid(tempVec3, this.centerDataPosition), planeNormal);
+      const planeDistanceToOrigin = vec3.dot(
+          chunkLayout.globalToLocalGrid(tempVec3, projectionParameters.centerDataPosition),
+          planeNormal);
 
       for (let i = 0; i < 4; ++i) {
         const localCorner = chunkLayout.globalToLocalGrid(tempVec3, globalCorners[i]);
@@ -643,8 +552,8 @@ export class SliceViewBase<
         }
         if (DEBUG_CHUNK_INTERSECTIONS) {
           console.log(`    planeNormal = ${planeNormal}`);
-          console.log(
-              `    planeNormalInVoxelCoordinates = ${this.viewportNormalInGlobalCoordinates}`);
+          console.log(`    planeNormalInVoxelCoordinates = ${
+              projectionParameters.viewportNormalInGlobalCoordinates}`);
           console.log(
               '    {positive,negative}VertexDistanceToOrigin: ', positiveVertexDistanceToOrigin,
               negativeVertexDistanceToOrigin, planeDistanceToOrigin);
@@ -1012,13 +921,14 @@ export function getChunkDataSizes(options: ChunkLayoutOptions&BaseChunkLayoutOpt
 /**
  * Generic specification for SliceView chunks specifying a layout and voxel size.
  */
-export interface SliceViewChunkSpecification {
+export interface SliceViewChunkSpecification<ChunkDataSize extends Uint32Array|Float32Array =
+                                                                       Uint32Array | Float32Array> {
   rank: number;
 
   /**
    * Size of chunk in voxels.
    */
-  chunkDataSize: Uint32Array;
+  chunkDataSize: ChunkDataSize;
 
   /**
    * All valid chunks are in the range [lowerChunkBound, upperChunkBound).
@@ -1032,8 +942,9 @@ export interface SliceViewChunkSpecification {
   upperVoxelBound: Float32Array;
 }
 
-export function makeSliceViewChunkSpecification(options: SliceViewChunkSpecificationOptions):
-    SliceViewChunkSpecification {
+export function makeSliceViewChunkSpecification<ChunkDataSize extends Uint32Array|Float32Array>(
+    options: SliceViewChunkSpecificationOptions<ChunkDataSize>):
+    SliceViewChunkSpecification<ChunkDataSize> {
   const {
     rank,
     chunkDataSize,
@@ -1058,6 +969,64 @@ export function makeSliceViewChunkSpecification(options: SliceViewChunkSpecifica
   };
 }
 
+export function*
+    filterVisibleSources(
+        sliceView: SliceViewBase, renderLayer: SliceViewRenderLayer,
+        sources: readonly TransformedSource[]): Iterable<TransformedSource> {
+  // Increase pixel size by a small margin.
+  const pixelSize = sliceView.projectionParameters.value.pixelSize * 1.1;
+  // At the smallest scale, all alternative sources must have the same voxel size, which is
+  // considered to be the base voxel size.
+  const smallestVoxelSize = sources[0].effectiveVoxelSize;
+
+  const renderScaleTarget = renderLayer.renderScaleTarget.value;
+
+  /**
+   * Determines whether we should continue to look for a finer-resolution source *after* one
+   * with the specified voxelSize.
+   */
+  const canImproveOnVoxelSize = (voxelSize: vec3) => {
+    const targetSize = pixelSize * renderScaleTarget;
+    for (let i = 0; i < 3; ++i) {
+      const size = voxelSize[i];
+      // If size <= pixelSize, no need for improvement.
+      // If size === smallestVoxelSize, also no need for improvement.
+      if (size > targetSize && size > 1.01 * smallestVoxelSize[i]) {
+        return true;
+      }
+    }
+    return false;
+  };
+
+  const improvesOnPrevVoxelSize = (voxelSize: vec3, prevVoxelSize: vec3) => {
+    const targetSize = pixelSize * renderScaleTarget;
+    for (let i = 0; i < 3; ++i) {
+      const size = voxelSize[i];
+      const prevSize = prevVoxelSize[i];
+      if (Math.abs(targetSize - size) < Math.abs(targetSize - prevSize) && size < 1.01 * prevSize) {
+        return true;
+      }
+    }
+    return false;
+  };
+  let scaleIndex = sources.length - 1;
+  let prevVoxelSize: vec3|undefined;
+  while (true) {
+    const transformedSource = sources[scaleIndex];
+    if (prevVoxelSize !== undefined &&
+        !improvesOnPrevVoxelSize(transformedSource.effectiveVoxelSize, prevVoxelSize)) {
+      break;
+    }
+    yield transformedSource;
+
+    if (scaleIndex === 0 || !canImproveOnVoxelSize(transformedSource.effectiveVoxelSize)) {
+      break;
+    }
+    prevVoxelSize = transformedSource.effectiveVoxelSize;
+    --scaleIndex;
+  }
+}
+
 /**
  * Common parameters for SliceView Chunks.
  */
@@ -1076,17 +1045,121 @@ export interface SliceViewChunkSpecificationBaseOptions {
   upperVoxelBound: Float32Array;
 }
 
-export interface SliceViewChunkSpecificationOptions extends SliceViewChunkSpecificationBaseOptions {
-  chunkDataSize: Uint32Array;
+export interface SliceViewChunkSpecificationOptions<
+    ChunkDataSize extends Uint32Array|Float32Array = Uint32Array | Float32Array> extends
+    SliceViewChunkSpecificationBaseOptions {
+  chunkDataSize: ChunkDataSize;
 }
 
 
-export interface SliceViewChunkSource extends Disposable {
-  spec: SliceViewChunkSpecification;
+export interface SliceViewChunkSource<
+    Spec extends SliceViewChunkSpecification = SliceViewChunkSpecification> extends Disposable {
+  spec: Spec;
 }
 
 export const SLICEVIEW_RPC_ID = 'SliceView';
 export const SLICEVIEW_RENDERLAYER_RPC_ID = 'sliceview/RenderLayer';
 export const SLICEVIEW_ADD_VISIBLE_LAYER_RPC_ID = 'SliceView.addVisibleLayer';
 export const SLICEVIEW_REMOVE_VISIBLE_LAYER_RPC_ID = 'SliceView.removeVisibleLayer';
-export const SLICEVIEW_UPDATE_VIEW_RPC_ID = 'SliceView.updateView';
+
+const tempVisibleVolumetricChunkLower = new Float32Array(3);
+const tempVisibleVolumetricChunkUpper = new Float32Array(3);
+const tempVisibleVolumetricModelViewProjection = mat4.create();
+const tempVisibleVolumetricClippingPlanes = new Float32Array(24);
+
+export function forEachVisibleVolumetricChunk(
+    globalPosition: Float32Array, localPosition: Float32Array, viewProjection: mat4,
+    transformedSource: TransformedSource, wLimit: number, callback: (minW: number) => void) {
+  if (!updateFixedCurPositionInChunks(transformedSource, globalPosition, localPosition)) {
+    return;
+  }
+  const {size: chunkSize} = transformedSource.chunkLayout;
+  const modelViewProjection = mat4.multiply(
+      tempVisibleVolumetricModelViewProjection, viewProjection,
+      transformedSource.chunkLayout.transform);
+  for (let i = 0; i < 3; ++i) {
+    const s = chunkSize[i];
+    for (let j = 0; j < 4; ++j) {
+      modelViewProjection[4 * i + j] *= s;
+    }
+  }
+
+  const clippingPlanes = tempVisibleVolumetricClippingPlanes;
+  getFrustrumPlanes(clippingPlanes, modelViewProjection);
+
+  const m30 = modelViewProjection[3], m31 = modelViewProjection[7], m32 = modelViewProjection[11],
+        m33 = modelViewProjection[15];
+
+  const minWXcoeff = m30 > 0 ? 0 : 1;
+  const minWYcoeff = m31 > 0 ? 0 : 1;
+  const minWZcoeff = m32 > 0 ? 0 : 1;
+
+
+  const nearA = clippingPlanes[4 * 4], nearB = clippingPlanes[4 * 4 + 1],
+        nearC = clippingPlanes[4 * 4 + 2], nearD = clippingPlanes[4 * 4 + 3];
+
+  function getPointW(x: number, y: number, z: number) {
+    return m30 * x + m31 * y + m32 * z + m33;
+  }
+
+  function getBoxW(
+      xLower: number, yLower: number, zLower: number, xUpper: number, yUpper: number,
+      zUpper: number) {
+    return getPointW(
+        xLower + minWXcoeff * (xUpper - xLower), yLower + minWYcoeff * (yUpper - yLower),
+        zLower + minWZcoeff * (zUpper - zLower));
+  }
+
+  /**
+   * Minimum value of w within clipping frustrum (under the assumption that the minimum value occurs
+   * on the near clipping plane).
+   */
+  const minWClip = getPointW(-nearD * nearA, -nearD * nearB, -nearD * nearC);
+
+  const lower = tempVisibleVolumetricChunkLower;
+  const upper = tempVisibleVolumetricChunkUpper;
+  lower.set(transformedSource.lowerChunkDisplayBound);
+  upper.set(transformedSource.upperChunkDisplayBound);
+  const {curPositionInChunks, chunkDisplayDimensionIndices} = transformedSource;
+
+  function recurse() {
+    const minW =
+        Math.max(minWClip, getBoxW(lower[0], lower[1], lower[2], upper[0], upper[1], upper[2]));
+    if (minW > wLimit) return;
+
+    if (!isAABBVisible(
+            lower[0], lower[1], lower[2], upper[0], upper[1], upper[2], clippingPlanes)) {
+      return;
+    }
+
+    let splitDim = 0;
+    let splitSize = Math.max(0, upper[0] - lower[0]);
+    let volume = splitSize;
+    for (let i = 1; i < 3; ++i) {
+      const size = Math.max(0, upper[i] - lower[i]);
+      volume *= size;
+      if (size > splitSize) {
+        splitSize = size;
+        splitDim = i;
+      }
+    }
+    if (volume === 0) return;
+    if (volume === 1) {
+      curPositionInChunks[chunkDisplayDimensionIndices[0]] = lower[0];
+      curPositionInChunks[chunkDisplayDimensionIndices[1]] = lower[1];
+      curPositionInChunks[chunkDisplayDimensionIndices[2]] = lower[2];
+      callback(minW);
+      return;
+    }
+    const prevLower = lower[splitDim];
+    const prevUpper = upper[splitDim];
+    const splitPoint = Math.floor(0.5 * (prevLower + prevUpper));
+    upper[splitDim] = splitPoint;
+    recurse();
+    upper[splitDim] = prevUpper;
+    lower[splitDim] = splitPoint;
+    recurse();
+    lower[splitDim] = prevLower;
+  }
+  recurse();
+}

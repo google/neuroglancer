@@ -19,10 +19,11 @@ import {CoordinateSpace} from 'neuroglancer/coordinate_transform';
 import {VisibleLayerInfo} from 'neuroglancer/layer';
 import {ChunkTransformParameters, RenderLayerTransformOrError} from 'neuroglancer/render_coordinate_transform';
 import {RenderScaleHistogram, trackableRenderScaleTarget} from 'neuroglancer/render_scale_statistics';
-import {RenderLayer, ThreeDimensionalRenderContext, VisibilityTrackedRenderLayer} from 'neuroglancer/renderlayer';
+import {RenderLayer, ThreeDimensionalReadyRenderContext, ThreeDimensionalRenderContext, VisibilityTrackedRenderLayer} from 'neuroglancer/renderlayer';
 import {SharedWatchableValue} from 'neuroglancer/shared_watchable_value';
-import {SLICEVIEW_RENDERLAYER_RPC_ID, SliceViewSourceOptions} from 'neuroglancer/sliceview/base';
+import {filterVisibleSources, SLICEVIEW_RENDERLAYER_RPC_ID, SliceViewBase, SliceViewSourceOptions, TransformedSource} from 'neuroglancer/sliceview/base';
 import {MultiscaleSliceViewChunkSource, SliceView, SliceViewChunkSource, SliceViewSingleResolutionSource} from 'neuroglancer/sliceview/frontend';
+import {SliceViewPanel} from 'neuroglancer/sliceview/panel';
 import {WatchableValueInterface} from 'neuroglancer/trackable_value';
 import {Borrowed} from 'neuroglancer/util/disposable';
 import {ShaderModule} from 'neuroglancer/webgl/shader';
@@ -127,11 +128,16 @@ export abstract class SliceViewRenderLayer<
     this.renderScaleHistogram = options.renderScaleHistogram;
     this.transform = options.transform;
     this.localPosition = options.localPosition;
+  }
+
+  RPC_TYPE_ID: string;
+
+  initializeCounterpart() {
     const sharedObject = this.registerDisposer(new SharedObject());
     const rpc = this.chunkManager.rpc!;
-    sharedObject.RPC_TYPE_ID = SLICEVIEW_RENDERLAYER_RPC_ID;
+    sharedObject.RPC_TYPE_ID = this.RPC_TYPE_ID;
     sharedObject.initializeCounterpart(rpc, {
-      nonGlobalPosition:
+      localPosition:
           this.registerDisposer(SharedWatchableValue.makeFromExisting(rpc, this.localPosition))
               .rpcId,
       renderScaleTarget:
@@ -152,10 +158,23 @@ export abstract class SliceViewRenderLayer<
       gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
     }
   }
+
   abstract draw(sliceView: SliceView): void;
+
+  filterVisibleSources(sliceView: SliceViewBase, sources: readonly TransformedSource[]):
+      Iterable<TransformedSource> {
+    return filterVisibleSources(sliceView, this, sources);
+  }
 }
 
-export interface SliceViewPanelRenderContext extends ThreeDimensionalRenderContext {
+SliceViewRenderLayer.prototype.RPC_TYPE_ID = SLICEVIEW_RENDERLAYER_RPC_ID;
+
+export interface SliceViewPanelReadyRenderContext extends ThreeDimensionalReadyRenderContext {
+  sliceView: SliceView;
+}
+
+export interface SliceViewPanelRenderContext extends SliceViewPanelReadyRenderContext,
+                                                     ThreeDimensionalRenderContext {
   emitter: ShaderModule;
 
   /**
@@ -167,20 +186,25 @@ export interface SliceViewPanelRenderContext extends ThreeDimensionalRenderConte
    * Specifies whether the emitted pick ID will be used.
    */
   emitPickID: boolean;
-
-  sliceView: SliceView;
 }
 
 export class SliceViewPanelRenderLayer<AttachmentState = unknown> extends
     VisibilityTrackedRenderLayer {
-  draw(renderContext: SliceViewPanelRenderContext, attachment: VisibleLayerInfo<AttachmentState>) {
+  draw(
+      renderContext: SliceViewPanelRenderContext,
+      attachment: VisibleLayerInfo<SliceViewPanel, AttachmentState>) {
     renderContext;
     attachment;
     // Must be overridden by subclasses.
   }
 
-  isReady(attachment: VisibleLayerInfo<AttachmentState>) {
+  isReady(
+      renderContext: SliceViewPanelReadyRenderContext,
+      attachment: VisibleLayerInfo<SliceViewPanel, AttachmentState>) {
+    renderContext;
     attachment;
     return true;
   }
+
+  backend: SharedObject|undefined;
 }

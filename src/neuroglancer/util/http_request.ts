@@ -139,3 +139,8 @@ export function parseSpecialUrl(url: string): string {
   }
   return url;
 }
+
+export function isNotFoundError(e: any) {
+  if (!(e instanceof HttpError)) return false;
+  return (e.status === 403 || e.status === 404);
+}

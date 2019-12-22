@@ -15,14 +15,15 @@
  */
 
 import debounce from 'lodash/debounce';
-import {AnnotationLayerState} from 'neuroglancer/annotation/frontend';
+import {AnnotationLayerState} from 'neuroglancer/annotation/annotation_layer_state';
 import {ChunkManager} from 'neuroglancer/chunk_manager/frontend';
 import {CoordinateSpace, CoordinateSpaceCombiner, CoordinateTransformSpecification, coordinateTransformSpecificationFromLegacyJson, isGlobalDimension, isLocalDimension, isLocalOrChannelDimension, TrackableCoordinateSpace} from 'neuroglancer/coordinate_transform';
 import {DataSourceSpecification, makeEmptyDataSourceSpecification} from 'neuroglancer/datasource';
 import {DataSourceProviderRegistry, DataSubsource} from 'neuroglancer/datasource';
 import {RenderedPanel} from 'neuroglancer/display_context';
 import {LayerDataSource, layerDataSourceSpecificationFromJson, LoadedDataSubsource} from 'neuroglancer/layer_data_source';
-import {DisplayDimensions, Position} from 'neuroglancer/navigation_state';
+import {DisplayDimensions, Position, WatchableDisplayDimensionRenderInfo} from 'neuroglancer/navigation_state';
+import {RENDERED_VIEW_ADD_LAYER_RPC_ID, RENDERED_VIEW_REMOVE_LAYER_RPC_ID} from 'neuroglancer/render_layer_common';
 import {RenderLayer, RenderLayerRole, VisibilityTrackedRenderLayer} from 'neuroglancer/renderlayer';
 import {VolumeType} from 'neuroglancer/sliceview/volume/base';
 import {TrackableRefCounted, TrackableValue, WatchableSet, WatchableValueInterface} from 'neuroglancer/trackable_value';
@@ -730,29 +731,40 @@ export class LayerSelectedValues extends RefCounted {
   }
 }
 
-export class VisibleLayerInfo<AttachmentState = unknown> extends RefCounted {
+export interface LayerView {
+  displayDimensionRenderInfo: WatchableDisplayDimensionRenderInfo;
+  flushBackendProjectionParameters(): void;
+  rpc: RPC;
+  rpcId: number;
+}
+
+export class VisibleLayerInfo<View extends LayerView = LayerView, AttachmentState = unknown> extends
+    RefCounted {
   messages = new MessageList();
   seenGeneration = -1;
   state: AttachmentState|undefined = undefined;
+  constructor(public view: View) {
+    super();
+  }
 }
 
 let visibleLayerInfoGeneration = 0;
 
-export class VisibleRenderLayerTracker<RenderLayerType extends VisibilityTrackedRenderLayer> extends
-    RefCounted {
+export class VisibleRenderLayerTracker<View extends LayerView, RenderLayerType extends
+                                           VisibilityTrackedRenderLayer<View>> extends RefCounted {
   /**
    * Maps a layer to the disposer to call when it is no longer visible.
    */
-  private visibleLayers_ = new Map<RenderLayerType, VisibleLayerInfo>();
+  private visibleLayers_ = new Map<RenderLayerType, VisibleLayerInfo<View>>();
 
   private debouncedUpdateVisibleLayers =
       this.registerCancellable(debounce(() => this.updateVisibleLayers(), 0));
 
   constructor(
       public layerManager: LayerManager,
-      public renderLayerType: {new(...args: any[]): RenderLayerType},
+      public renderLayerType: {new(...args: any[]): RenderLayerType}, public view: View,
       public roles: WatchableSet<RenderLayerRole>,
-      private layerAdded: (layer: RenderLayerType, info: VisibleLayerInfo) => void,
+      private layerAdded: (layer: RenderLayerType, info: VisibleLayerInfo<View>) => void,
       public visibility: WatchableVisibilityPriority) {
     super();
     this.registerDisposer(layerManager.layersChanged.add(this.debouncedUpdateVisibleLayers));
@@ -774,12 +786,13 @@ export class VisibleRenderLayerTracker<RenderLayerType extends VisibilityTracked
         let typedLayer = <RenderLayerType>renderLayer;
         let info = visibleLayers.get(typedLayer);
         if (info === undefined) {
-          info = new VisibleLayerInfo();
+          info = new VisibleLayerInfo(this.view);
           info.registerDisposer(typedLayer.messages.addChild(info.messages));
           info.registerDisposer(typedLayer.addRef());
           info.registerDisposer(typedLayer.visibility.add(this.visibility));
           visibleLayers.set(typedLayer, info);
           layerAdded(typedLayer, info);
+          typedLayer.attach(info);
         }
         info.seenGeneration = curGeneration;
       }
@@ -799,13 +812,22 @@ export class VisibleRenderLayerTracker<RenderLayerType extends VisibilityTracked
 }
 
 export function
-makeRenderedPanelVisibleLayerTracker<RenderLayerType extends VisibilityTrackedRenderLayer>(
+makeRenderedPanelVisibleLayerTracker<View extends RenderedPanel&LayerView, RenderLayerType extends
+                                         VisibilityTrackedRenderLayer<View>>(
     layerManager: LayerManager, renderLayerType: {new (...args: any[]): RenderLayerType},
-    roles: WatchableSet<RenderLayerRole>, panel: RenderedPanel,
-    layerAdded?: (layer: RenderLayerType, info: VisibleLayerInfo) => void) {
+    roles: WatchableSet<RenderLayerRole>, panel: View,
+    layerAdded?: (layer: RenderLayerType, info: VisibleLayerInfo<View>) => void) {
   return panel.registerDisposer(
-      new VisibleRenderLayerTracker(layerManager, renderLayerType, roles, (layer, info) => {
+      new VisibleRenderLayerTracker(layerManager, renderLayerType, panel, roles, (layer, info) => {
         info.registerDisposer(layer.redrawNeeded.add(() => panel.scheduleRedraw()));
+        const {backend} = layer;
+        if (backend) {
+          backend.rpc!.invoke(
+              RENDERED_VIEW_ADD_LAYER_RPC_ID, {layer: backend.rpcId, view: panel.rpcId});
+          info.registerDisposer(
+              () => backend.rpc!.invoke(
+                  RENDERED_VIEW_REMOVE_LAYER_RPC_ID, {layer: backend.rpcId, view: panel.rpcId}));
+        }
         if (layerAdded !== undefined) {
           layerAdded(layer, info);
         }

@@ -26,7 +26,7 @@
  * void.  Due to limitations in TypeScript, any interface containing a callable signature will be
  * accepted by the compiler, but the resultant signature of `dispatch` will not be correct.
  */
-export class Signal<Callable extends Function> {
+export class Signal<Callable extends Function = () => void> {
   private handlers = new Set<Callable>();
 
   /**

@@ -282,7 +282,7 @@ export class FramebufferConfiguration<ColorBuffer extends TextureBuffer|Renderbu
     let {gl} = this;
     let framebufferStatus = gl.checkFramebufferStatus(gl.FRAMEBUFFER);
     if (framebufferStatus !== gl.FRAMEBUFFER_COMPLETE) {
-      throw new Error(`Framebuffer configuration not supported`);
+      throw new Error(`Framebuffer configuration not supported: ${framebufferStatus}`);
     }
     this.attachmentVerified = true;
   }

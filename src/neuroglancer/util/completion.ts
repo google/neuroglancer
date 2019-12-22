@@ -14,9 +14,15 @@
  * limitations under the License.
  */
 
-export interface Completion { value: string; }
+import {defaultStringCompare} from 'neuroglancer/util/string';
 
-export interface CompletionWithDescription extends Completion { description?: string; }
+export interface Completion {
+  value: string;
+}
+
+export interface CompletionWithDescription extends Completion {
+  description?: string;
+}
 
 export interface BasicCompletionResult<C extends Completion = Completion> {
   completions: C[];
@@ -28,7 +34,7 @@ export const emptyCompletionResult = {
   completions: [],
 };
 
-export function applyCompletionOffset<T extends{offset: number}>(
+export function applyCompletionOffset<T extends {offset: number}>(
     offset: number, completionResult: T) {
   completionResult.offset += offset;
   return completionResult;
@@ -108,8 +114,4 @@ export async function completeQueryStringParametersFromTable<C extends Completio
         }
         return emptyCompletionResult;
       });
-}
-
-export function defaultStringCompare(a: string, b: string) {
-  return (a < b) ? -1 : ((a > b) ? +1 : 0);
 }

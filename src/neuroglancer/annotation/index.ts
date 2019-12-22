@@ -21,7 +21,8 @@
 import {BoundingBox, CoordinateSpaceTransform, WatchableCoordinateSpaceTransform} from 'neuroglancer/coordinate_transform';
 import {arraysEqual} from 'neuroglancer/util/array';
 import {Borrowed, RefCounted} from 'neuroglancer/util/disposable';
-import {parseArray, parseFixedLengthArray, verifyEnumString, verifyFiniteFloat, verifyFiniteNonNegativeFloat, verifyObject, verifyObjectProperty, verifyOptionalObjectProperty, verifyOptionalString, verifyString} from 'neuroglancer/util/json';
+import {Endianness, ENDIANNESS} from 'neuroglancer/util/endian';
+import {expectArray, parseArray, parseFixedLengthArray, verifyEnumString, verifyFiniteFloat, verifyFiniteNonNegativeFloat, verifyObject, verifyObjectProperty, verifyOptionalString, verifyString} from 'neuroglancer/util/json';
 import {getRandomHexString} from 'neuroglancer/util/random';
 import {NullarySignal, Signal} from 'neuroglancer/util/signal';
 import {Uint64} from 'neuroglancer/util/uint64';
@@ -56,6 +57,187 @@ export const annotationTypes = [
   AnnotationType.ELLIPSOID,
 ];
 
+export interface AnnotationPropertySpecBase {
+  identifier: string;
+  description: string|undefined;
+}
+
+export interface AnnotationColorPropertySpec extends AnnotationPropertySpecBase {
+  type: 'rgb'|'rgba';
+  default: number;
+}
+
+export interface AnnotationNumericPropertySpec extends AnnotationPropertySpecBase {
+  type: 'float32'|'uint32'|'int32'|'uint16'|'int16'|'uint8'|'int8';
+  default: number;
+  min?: number;
+  max?: number;
+  step?: number;
+}
+
+export type AnnotationPropertySpec = AnnotationColorPropertySpec|AnnotationNumericPropertySpec;
+
+export interface AnnotationPropertyTypeHandler {
+  serializedBytes(rank: number): number;
+  serializeCode(property: string, rank: number): string;
+  deserializeCode(property: string, rank: number): string;
+}
+
+export const annotationPropertyTypeHandlers:
+    {[K in AnnotationPropertySpec['type']]: AnnotationPropertyTypeHandler} = {
+      'rgb': {
+        serializedBytes() {
+          return 3;
+        },
+        serializeCode(property: string) {
+          return `dv.setUint16(offset, ${property}, true);` +
+              `dv.setUint8(offset + 2, ${property} >>> 16);` +
+              `offset += 3;`;
+        },
+        deserializeCode(property: string) {
+          return `${property} = dv.getUint16(offset, true) | (dv.getUint8(offset + 2) << 16);` +
+              `offset += 3;`;
+        },
+      },
+      'rgba': {
+        serializedBytes() {
+          return 4;
+        },
+        serializeCode(property: string) {
+          return `dv.setUint32(offset, ${property}, true);` +
+              `offset += 4;`;
+        },
+        deserializeCode(property: string) {
+          return `${property} = dv.getUint32(offset, true);` +
+              `offset += 4;`;
+        },
+      },
+      'float32': {
+        serializedBytes() {
+          return 4;
+        },
+        serializeCode(property: string) {
+          return `dv.setFloat32(offset, ${property}, isLittleEndian);` +
+              `offset += 4;`;
+        },
+        deserializeCode(property: string) {
+          return `${property} = dv.getFloat32(offset, isLittleEndian);` +
+              `offset += 4;`;
+        }
+      },
+      'uint32': {
+        serializedBytes() {
+          return 4;
+        },
+        serializeCode(property: string) {
+          return `dv.setUint32(offset, ${property}, isLittleEndian);` +
+              `offset += 4;`;
+        },
+        deserializeCode(property: string) {
+          return `${property} = dv.getUint32(offset, isLittleEndian);` +
+              `offset += 4;`;
+        }
+      },
+      'int32': {
+        serializedBytes() {
+          return 4;
+        },
+        serializeCode(property: string) {
+          return `dv.setInt32(offset, ${property}, isLittleEndian);` +
+              `offset += 4;`;
+        },
+        deserializeCode(property: string) {
+          return `${property} = dv.getInt32(offset, isLittleEndian);` +
+              `offset += 4;`;
+        }
+      },
+      'uint16': {
+        serializedBytes() {
+          return 2;
+        },
+        serializeCode(property: string) {
+          return `dv.setUint16(offset, ${property}, isLittleEndian);` +
+              `offset += 2;`;
+        },
+        deserializeCode(property: string) {
+          return `${property} = dv.getUint16(offset, isLittleEndian);` +
+              `offset += 2;`;
+        }
+      },
+      'int16': {
+        serializedBytes() {
+          return 2;
+        },
+        serializeCode(property: string) {
+          return `dv.setInt16(offset, ${property}, isLittleEndian);` +
+              `offset += 2;`;
+        },
+        deserializeCode(property: string) {
+          return `${property} = dv.getInt16(offset, isLittleEndian);` +
+              `offset += 2;`;
+        }
+      },
+      'uint8': {
+        serializedBytes() {
+          return 1;
+        },
+        serializeCode(property: string) {
+          return `dv.setUint8(offset, ${property});` +
+              `offset += 1;`;
+        },
+        deserializeCode(property: string) {
+          return `${property} = dv.getUint8(offset);` +
+              `offset += 1;`;
+        }
+      },
+      'int8': {
+        serializedBytes() {
+          return 2;
+        },
+        serializeCode(property: string) {
+          return `dv.setInt8(offset, ${property});` +
+              `offset += 1;`;
+        },
+        deserializeCode(property: string) {
+          return `${property} = dv.getInt8(offset);` +
+              `offset += 1;`;
+        }
+      },
+    };
+
+export class AnnotationPropertySerializer {
+  serializedBytes: number;
+  serialize: (buffer: DataView, offset: number, isLittleEndian: boolean, properties: any[]) => void;
+  deserialize:
+      (buffer: DataView, offset: number, isLittleEndian: boolean, properties: any[]) => void;
+  constructor(
+      public rank: number, public propertySpecs: readonly Readonly<AnnotationPropertySpec>[]) {
+    if (propertySpecs.length === 0) {
+      this.serializedBytes = 0;
+      this.serialize = this.deserialize = () => {};
+      return;
+    }
+    let serializedBytes = 0;
+    let serializeCode = '';
+    let deserializeCode = '';
+    let i = 0;
+    for (const spec of propertySpecs) {
+      const handler = annotationPropertyTypeHandlers[spec.type];
+      const numBytes = handler.serializedBytes(rank);
+      const propId = `properties[${i}]`;
+      serializedBytes += numBytes;
+      serializeCode += handler.serializeCode(propId, rank);
+      deserializeCode += handler.deserializeCode(propId, rank);
+      ++i;
+    }
+    this.serializedBytes = serializedBytes;
+    this.serialize =
+        new Function('dv', 'offset', 'isLittleEndian', 'properties', serializeCode) as any;
+    this.deserialize =
+        new Function('dv', 'offset', 'isLittleEndian', 'properties', deserializeCode) as any;
+  }
+}
+
 export interface AnnotationBase {
   /**
    * If equal to `undefined`, then the description is unknown (possibly still being loaded).  If
@@ -66,7 +248,8 @@ export interface AnnotationBase {
   id: AnnotationId;
   type: AnnotationType;
 
-  segments?: Uint64[];
+  relatedSegments?: Uint64[][];
+  properties: any[];
 }
 
 export interface Line extends AnnotationBase {
@@ -100,14 +283,50 @@ export interface AnnotationTypeHandler<T extends Annotation> {
   toJSON: (annotation: T, rank: number) => any;
   restoreState: (annotation: T, obj: any, rank: number) => void;
   serializedBytes: (rank: number) => number;
-  serializer:
-      (buffer: ArrayBuffer, offset: number, numAnnotations: number,
-       rank: number) => ((annotation: T, index: number) => void);
+  serialize:
+      (buffer: DataView, offset: number, isLittleEndian: boolean, rank: number,
+       annotation: T) => void;
+  deserialize:
+      (buffer: DataView, offset: number, isLittleEndian: boolean, rank: number, id: string) => T;
 }
 
 const typeHandlers = new Map<AnnotationType, AnnotationTypeHandler<Annotation>>();
 export function getAnnotationTypeHandler(type: AnnotationType) {
   return typeHandlers.get(type)!;
+}
+
+function serializeFloatVector(
+    buffer: DataView, offset: number, isLittleEndian: boolean, rank: number, vec: Float32Array) {
+  for (let i = 0; i < rank; ++i) {
+    buffer.setFloat32(offset, vec[i], isLittleEndian);
+    offset += 4;
+  }
+  return offset;
+}
+
+function serializeTwoFloatVectors(
+    buffer: DataView, offset: number, isLittleEndian: boolean, rank: number, vecA: Float32Array,
+    vecB: Float32Array) {
+  offset = serializeFloatVector(buffer, offset, isLittleEndian, rank, vecA);
+  offset = serializeFloatVector(buffer, offset, isLittleEndian, rank, vecB);
+  return offset;
+}
+
+function deserializeFloatVector(
+    buffer: DataView, offset: number, isLittleEndian: boolean, rank: number, vec: Float32Array) {
+  for (let i = 0; i < rank; ++i) {
+    vec[i] = buffer.getFloat32(offset, isLittleEndian);
+    offset += 4;
+  }
+  return offset;
+}
+
+function deserializeTwoFloatVectors(
+    buffer: DataView, offset: number, isLittleEndian: boolean, rank: number, vecA: Float32Array,
+  vecB: Float32Array) {
+  offset = deserializeFloatVector(buffer, offset, isLittleEndian, rank, vecA);
+  offset = deserializeFloatVector(buffer, offset, isLittleEndian, rank, vecB);
+  return offset;
 }
 
 typeHandlers.set(AnnotationType.LINE, {
@@ -128,15 +347,17 @@ typeHandlers.set(AnnotationType.LINE, {
   serializedBytes(rank: number) {
     return 2 * 4 * rank;
   },
-  serializer(buffer: ArrayBuffer, offset: number, numAnnotations: number, rank: number) {
-    const coordinates = new Float32Array(buffer, offset, numAnnotations * 2 * rank);
-    return (annotation: Line, index: number) => {
-      const {pointA, pointB} = annotation;
-      const coordinateOffset = index * 2 * rank;
-      coordinates.set(pointA, coordinateOffset);
-      coordinates.set(pointB, coordinateOffset + rank);
-    };
+  serialize(buffer: DataView, offset: number, isLittleEndian: boolean, rank: number, annotation: Line) {
+    serializeTwoFloatVectors(buffer, offset, isLittleEndian, rank, annotation.pointA, annotation.pointB);
   },
+  deserialize:
+      (buffer: DataView, offset: number, isLittleEndian: boolean, rank: number, id: string):
+          Line => {
+            const pointA = new Float32Array(rank);
+            const pointB = new Float32Array(rank);
+            deserializeTwoFloatVectors(buffer, offset, isLittleEndian, rank, pointA, pointB);
+            return {type: AnnotationType.LINE, pointA, pointB, id, properties: []};
+          },
 });
 
 typeHandlers.set(AnnotationType.POINT, {
@@ -152,14 +373,18 @@ typeHandlers.set(AnnotationType.POINT, {
         obj, 'point', x => parseFixedLengthArray(new Float32Array(rank), x, verifyFiniteFloat));
   },
   serializedBytes: rank => rank * 4,
-  serializer: (buffer: ArrayBuffer, offset: number, numAnnotations: number, rank: number) => {
-    const coordinates = new Float32Array(buffer, offset, numAnnotations * rank);
-    return (annotation: Point, index: number) => {
-      const {point} = annotation;
-      const coordinateOffset = index * rank;
-      coordinates.set(point, coordinateOffset);
-    };
-  },
+  serialize:
+      (buffer: DataView, offset: number, isLittleEndian: boolean, rank: number,
+       annotation: Point) => {
+        serializeFloatVector(buffer, offset, isLittleEndian, rank, annotation.point);
+      },
+  deserialize:
+      (buffer: DataView, offset: number, isLittleEndian: boolean, rank: number, id: string):
+          Point => {
+            const point = new Float32Array(rank);
+            deserializeFloatVector(buffer, offset, isLittleEndian, rank, point);
+            return {type: AnnotationType.POINT, point, id, properties: []};
+          },
 });
 
 typeHandlers.set(AnnotationType.AXIS_ALIGNED_BOUNDING_BOX, {
@@ -178,15 +403,17 @@ typeHandlers.set(AnnotationType.AXIS_ALIGNED_BOUNDING_BOX, {
         obj, 'pointB', x => parseFixedLengthArray(new Float32Array(rank), x, verifyFiniteFloat));
   },
   serializedBytes: rank => 2 * 4 * rank,
-  serializer: (buffer: ArrayBuffer, offset: number, numAnnotations: number, rank: number) => {
-    const coordinates = new Float32Array(buffer, offset, numAnnotations * 2 * rank);
-    return (annotation: AxisAlignedBoundingBox, index: number) => {
-      const {pointA, pointB} = annotation;
-      const coordinateOffset = index * 2 * rank;
-      coordinates.set(pointA, coordinateOffset);
-      coordinates.set(pointB, coordinateOffset + rank);
-    };
+  serialize(buffer: DataView, offset: number, isLittleEndian: boolean, rank: number, annotation: AxisAlignedBoundingBox) {
+    serializeTwoFloatVectors(buffer, offset, isLittleEndian, rank, annotation.pointA, annotation.pointB);
   },
+  deserialize: (
+      buffer: DataView, offset: number, isLittleEndian: boolean, rank: number, id: string):
+      AxisAlignedBoundingBox => {
+        const pointA = new Float32Array(rank);
+        const pointB = new Float32Array(rank);
+        deserializeTwoFloatVectors(buffer, offset, isLittleEndian, rank, pointA, pointB);
+        return {type: AnnotationType.AXIS_ALIGNED_BOUNDING_BOX, pointA, pointB, id, properties: []};
+      },
 });
 
 typeHandlers.set(AnnotationType.ELLIPSOID, {
@@ -206,43 +433,76 @@ typeHandlers.set(AnnotationType.ELLIPSOID, {
         x => parseFixedLengthArray(new Float32Array(rank), x, verifyFiniteNonNegativeFloat));
   },
   serializedBytes: rank => 2 * 4 * rank,
-  serializer: (buffer: ArrayBuffer, offset: number, numAnnotations: number, rank: number) => {
-    const coordinates = new Float32Array(buffer, offset, numAnnotations * 2 * rank);
-    return (annotation: Ellipsoid, index: number) => {
-      const {center, radii} = annotation;
-      const coordinateOffset = index * 2 * rank;
-      coordinates.set(center, coordinateOffset);
-      coordinates.set(radii, coordinateOffset + rank);
-    };
+  serialize(
+      buffer: DataView, offset: number, isLittleEndian: boolean, rank: number,
+      annotation: Ellipsoid) {
+    serializeTwoFloatVectors(
+        buffer, offset, isLittleEndian, rank, annotation.center, annotation.radii);
   },
+  deserialize:
+      (buffer: DataView, offset: number, isLittleEndian: boolean, rank: number, id: string):
+          Ellipsoid => {
+            const center = new Float32Array(rank);
+            const radii = new Float32Array(rank);
+            deserializeTwoFloatVectors(buffer, offset, isLittleEndian, rank, center, radii);
+            return {type: AnnotationType.ELLIPSOID, center, radii, id, properties: []};
+          },
 });
 
-function annotationToJson(annotation: Annotation, rank: number) {
-  const result = getAnnotationTypeHandler(annotation.type).toJSON(annotation, rank);
+export interface AnnotationSchema {
+  rank: number;
+  relationships: readonly string[];
+  properties: readonly AnnotationPropertySpec[];
+}
+
+function annotationToJson(annotation: Annotation, schema: AnnotationSchema) {
+  const result = getAnnotationTypeHandler(annotation.type).toJSON(annotation, schema.rank);
   result.type = AnnotationType[annotation.type].toLowerCase();
   result.id = annotation.id;
   result.description = annotation.description || undefined;
-  const {segments} = annotation;
-  if (segments !== undefined && segments.length > 0) {
-    result.segments = segments.map(x => x.toString());
+  const {relatedSegments} = annotation;
+  if (relatedSegments !== undefined && relatedSegments.some(x => x.length !== 0)) {
+    result.segments = relatedSegments.map(segments => segments.map(x => x.toString()));
+  }
+  if (schema.properties.length !== 0) {
+    result.props = annotation.properties.slice();
   }
   return result;
 }
 
-function restoreAnnotation(obj: any, rank: number, allowMissingId = false): Annotation {
+function restoreAnnotation(obj: any, schema: AnnotationSchema, allowMissingId = false): Annotation {
   verifyObject(obj);
   const type = verifyObjectProperty(obj, 'type', x => verifyEnumString(x, AnnotationType));
   const id =
       verifyObjectProperty(obj, 'id', allowMissingId ? verifyOptionalString : verifyString) ||
       makeAnnotationId();
-  const result: Annotation = <any>{
+  const relatedSegments = verifyObjectProperty(obj, 'segments', relObj => {
+    if (relObj === undefined) {
+      return schema.relationships.map(() => []);
+    }
+    const a = expectArray(relObj);
+    if (a.length === 0) {
+      return schema.relationships.map(() => []);
+    }
+    if (schema.relationships.length === 1 && !Array.isArray(a[0])) {
+      return [parseArray(a, x => Uint64.parseString(x))];
+    }
+    return parseArray(
+        expectArray(relObj, schema.relationships.length),
+        segments => parseArray(segments, y => Uint64.parseString(y)));
+  });
+  const properties = verifyObjectProperty(obj, 'props', propsObj => {
+    if (propsObj === undefined) return schema.properties.map(x => x.default);
+    return parseArray(expectArray(propsObj, schema.properties.length), x => Number(x));
+  });
+  const result: Annotation = {
     id,
     description: verifyObjectProperty(obj, 'description', verifyOptionalString),
-    segments: verifyOptionalObjectProperty(
-        obj, 'segments', x => parseArray(x, y => Uint64.parseString(y))),
+    relatedSegments,
+    properties,
     type,
-  };
-  getAnnotationTypeHandler(type).restoreState(result, obj, rank);
+  } as Annotation;
+  getAnnotationTypeHandler(type).restoreState(result, obj, schema.rank);
   return result;
 }
 
@@ -269,9 +529,14 @@ export class AnnotationSource extends RefCounted implements AnnotationSourceSign
     return this.rank_;
   }
 
-  constructor(rank: number) {
+  readonly annotationPropertySerializer: AnnotationPropertySerializer;
+
+  constructor(
+      rank: number, public readonly relationships: readonly string[] = [],
+      public readonly properties: Readonly<AnnotationPropertySpec>[] = []) {
     super();
     this.rank_ = rank;
+    this.annotationPropertySerializer = new AnnotationPropertySerializer(rank, properties);
   }
 
   add(annotation: Annotation, commit: boolean = true): AnnotationReference {
@@ -352,13 +617,12 @@ export class AnnotationSource extends RefCounted implements AnnotationSourceSign
     this.ensureUpdated();
     const result: any[] = [];
     const {pending} = this;
-    const {rank} = this;
     for (const annotation of this) {
       if (pending.has(annotation.id)) {
         // Don't serialize uncommitted annotations.
         continue;
       }
-      result.push(annotationToJson(annotation, rank));
+      result.push(annotationToJson(annotation, this));
     }
     return result;
   }
@@ -374,10 +638,9 @@ export class AnnotationSource extends RefCounted implements AnnotationSourceSign
     const {annotationMap} = this;
     annotationMap.clear();
     this.pending.clear();
-    const {rank} = this;
     if (obj !== undefined) {
       parseArray(obj, x => {
-        const annotation = restoreAnnotation(x, rank);
+        const annotation = restoreAnnotation(x, this);
         annotationMap.set(annotation.id, annotation);
       });
     }
@@ -404,7 +667,7 @@ export class LocalAnnotationSource extends AnnotationSource {
   }
 
   constructor(public watchableTransform: WatchableCoordinateSpaceTransform) {
-    super(watchableTransform.value.sourceRank);
+    super(watchableTransform.value.sourceRank, ['segments']);
     this.curCoordinateTransform = watchableTransform.value;
     this.registerDisposer(watchableTransform.changed.add(() => this.ensureUpdated()));
   }
@@ -476,6 +739,7 @@ export function makeDataBoundsBoundingBoxAnnotation(box: BoundingBox): AxisAlign
     description: DATA_BOUNDS_DESCRIPTION,
     pointA: new Float32Array(box.lowerBounds),
     pointB: new Float32Array(box.upperBounds),
+    properties: [],
   };
 }
 
@@ -486,88 +750,74 @@ export function makeDataBoundsBoundingBoxAnnotationSet(box: BoundingBox): Annota
   return annotationSource;
 }
 
-function compare3WayById(a: Annotation, b: Annotation) {
-  return a.id < b.id ? -1 : a.id === b.id ? 0 : 1;
-}
-
 export interface SerializedAnnotations {
   data: Uint8Array;
   typeToIds: string[][];
   typeToOffset: number[];
-  segmentListIndex: Uint32Array;
-  segmentList: Uint32Array;
+  typeToIdMaps: Map<string, number>[];
 }
 
-function serializeAnnotations(allAnnotations: Annotation[][], rank: number): SerializedAnnotations {
+function serializeAnnotations(
+    allAnnotations: Annotation[][],
+    propertySerializer: AnnotationPropertySerializer): SerializedAnnotations {
+  const {rank} = propertySerializer;
   let totalBytes = 0;
   const typeToOffset: number[] = [];
-  const typeToSegmentListIndexOffset: number[] = [];
-  let totalNumSegments = 0;
-  let totalNumAnnotations = 0;
+  const serializedPropertiesBytes = propertySerializer.serializedBytes;
   for (const annotationType of annotationTypes) {
     typeToOffset[annotationType] = totalBytes;
-    typeToSegmentListIndexOffset[annotationType] = totalNumAnnotations;
     const annotations: Annotation[] = allAnnotations[annotationType];
-    let numSegments = 0;
-    for (const annotation of annotations) {
-      const {segments} = annotation;
-      if (segments !== undefined) {
-        numSegments += segments.length;
-      }
-    }
-    totalNumAnnotations += annotations.length;
-    totalNumSegments += numSegments;
-    annotations.sort(compare3WayById);
     const count = annotations.length;
     const handler = getAnnotationTypeHandler(annotationType);
-    totalBytes += handler.serializedBytes(rank) * count;
+    totalBytes += (handler.serializedBytes(rank) + serializedPropertiesBytes) * count;
   }
-  const segmentListIndex = new Uint32Array(totalNumAnnotations + 1);
-  const segmentList = new Uint32Array(totalNumSegments * 2);
+  const serializeProperties = propertySerializer.serialize;
   const typeToIds: string[][] = [];
+  const typeToIdMaps: Map<string, number>[] = [];
   const data = new ArrayBuffer(totalBytes);
-  let segmentListOffset = 0;
-  let segmentListIndexOffset = 0;
+  const dataView = new DataView(data);
+  const isLittleEndian = ENDIANNESS === Endianness.LITTLE;
   for (const annotationType of annotationTypes) {
     const annotations: Annotation[] = allAnnotations[annotationType];
     typeToIds[annotationType] = annotations.map(x => x.id);
-    const count = annotations.length;
+    typeToIdMaps[annotationType] = new Map(annotations.map((x, i) => [x.id, i]));
     const handler = getAnnotationTypeHandler(annotationType);
-    const serializer = handler.serializer(data, typeToOffset[annotationType], count, rank);
-    annotations.forEach((annotation, index) => {
-      serializer(annotation, index);
-      segmentListIndex[segmentListIndexOffset++] = segmentListOffset;
-      const {segments} = annotation;
-      if (segments !== undefined) {
-        for (const segment of segments) {
-          segmentList[segmentListOffset * 2] = segment.low;
-          segmentList[segmentListOffset * 2 + 1] = segment.high;
-          ++segmentListOffset;
-        }
-      }
-    });
+    const serialize = handler.serialize;
+    const geometryBytes = handler.serializedBytes(rank);
+    let offset = typeToOffset[annotationType];
+    for (const annotation of annotations) {
+      serialize(dataView, offset, isLittleEndian, rank, annotation);
+      offset += geometryBytes;
+      serializeProperties(dataView, offset, isLittleEndian, annotation.properties);
+      offset += serializedPropertiesBytes;
+    }
   }
-  return {data: new Uint8Array(data), typeToIds, typeToOffset, segmentListIndex, segmentList};
+  return {data: new Uint8Array(data), typeToIds, typeToOffset, typeToIdMaps};
 }
 
 export class AnnotationSerializer {
   annotations: [Point[], Line[], AxisAlignedBoundingBox[], Ellipsoid[]] = [[], [], [], []];
-  constructor(public rank: number) {}
+  constructor(public propertySerializer: AnnotationPropertySerializer) {}
   add(annotation: Annotation) {
     (<Annotation[]>this.annotations[annotation.type]).push(annotation);
   }
-  serialize() {
-    return serializeAnnotations(this.annotations, this.rank);
+  serialize(): SerializedAnnotations {
+    return serializeAnnotations(this.annotations, this.propertySerializer);
   }
 }
 
-export function deserializeAnnotation(obj: any) {
+export function fixAnnotationAfterStructuredCloning(obj: Annotation|null) {
   if (obj == null) {
     return obj;
   }
-  const segments = obj.segments;
-  if (segments !== undefined) {
-    obj.segments = segments.map((x: {low: number, high: number}) => new Uint64(x.low, x.high));
+  const {relatedSegments} = obj;
+  if (relatedSegments !== undefined) {
+    for (let i = 0, numRelationships = relatedSegments.length; i < numRelationships; ++i) {
+      const segments = relatedSegments[i];
+      if (segments === undefined) continue;
+      relatedSegments[i] =
+          segments.map((x: {low: number, high: number}) => new Uint64(x.low, x.high));
+    }
   }
   return obj;
 }

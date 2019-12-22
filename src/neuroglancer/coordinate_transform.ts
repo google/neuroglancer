@@ -69,10 +69,13 @@ export interface CoordinateSpace {
   readonly boundingBoxes: readonly TransformedBoundingBox[];
 }
 
-export function boundingBoxesEqual(a: TransformedBoundingBox, b: TransformedBoundingBox) {
-  return arraysEqual(a.transform, b.transform) &&
-      arraysEqual(a.box.lowerBounds, b.box.lowerBounds) &&
-      arraysEqual(a.box.upperBounds, b.box.upperBounds);
+export function boundingBoxesEqual(a: BoundingBox, b: BoundingBox) {
+  return arraysEqual(a.lowerBounds, b.lowerBounds) && arraysEqual(a.upperBounds, b.upperBounds);
+}
+
+export function transformedBoundingBoxesEqual(
+    a: TransformedBoundingBox, b: TransformedBoundingBox) {
+  return arraysEqual(a.transform, b.transform) && boundingBoxesEqual(a.box, b.box);
 }
 
 export function coordinateSpacesEqual(a: CoordinateSpace, b: CoordinateSpace) {
@@ -80,7 +83,7 @@ export function coordinateSpacesEqual(a: CoordinateSpace, b: CoordinateSpace) {
       a.valid === b.valid && a.rank === b.rank && arraysEqual(a.names, b.names) &&
       arraysEqual(a.ids, b.ids) && arraysEqual(a.timestamps, b.timestamps) &&
       arraysEqual(a.units, b.units) && arraysEqual(a.scales, b.scales) &&
-      arraysEqualWithPredicate(a.boundingBoxes, b.boundingBoxes, boundingBoxesEqual));
+      arraysEqualWithPredicate(a.boundingBoxes, b.boundingBoxes, transformedBoundingBoxesEqual));
 }
 
 export function unitsFromJson(units: string[], scaleExponents: Float64Array, obj: any) {

@@ -25,7 +25,7 @@ import {DisplayContext} from 'neuroglancer/display_context';
 import {InputEventBindingHelpDialog} from 'neuroglancer/help/input_event_bindings';
 import {addNewLayer, LayerManager, LayerSelectedValues, MouseSelectionState, SelectedLayerState, TopLevelLayerListSpecification} from 'neuroglancer/layer';
 import {RootLayoutContainer} from 'neuroglancer/layer_groups_layout';
-import {NavigationState, OrientationState, DisplayPose, Position, TrackableCrossSectionZoom, TrackableProjectionZoom, TrackableDisplayDimensions, TrackableRelativeDisplayScales} from 'neuroglancer/navigation_state';
+import {DisplayPose, NavigationState, OrientationState, Position, TrackableCrossSectionZoom, TrackableDisplayDimensions, TrackableProjectionZoom, TrackableRelativeDisplayScales, WatchableDisplayDimensionRenderInfo} from 'neuroglancer/navigation_state';
 import {overlaysOpen} from 'neuroglancer/overlay';
 import {allRenderLayerRoles, RenderLayerRole} from 'neuroglancer/renderlayer';
 import {StatusMessage} from 'neuroglancer/status';
@@ -264,21 +264,25 @@ class TrackableViewerState extends CompoundTrackable {
 export class Viewer extends RefCounted implements ViewerState {
   coordinateSpace = new TrackableCoordinateSpace();
   position = this.registerDisposer(new Position(this.coordinateSpace));
-  relativeDisplayScales = this.registerDisposer(new TrackableRelativeDisplayScales(this.coordinateSpace));
-  displayDimensions =
-      this.registerDisposer(new TrackableDisplayDimensions(this.relativeDisplayScales.addRef()));
+  relativeDisplayScales =
+      this.registerDisposer(new TrackableRelativeDisplayScales(this.coordinateSpace));
+  displayDimensions = this.registerDisposer(new TrackableDisplayDimensions(this.coordinateSpace));
+  displayDimensionRenderInfo = this.registerDisposer(new WatchableDisplayDimensionRenderInfo(
+      this.relativeDisplayScales.addRef(), this.displayDimensions.addRef()));
   crossSectionOrientation = this.registerDisposer(new OrientationState());
-  crossSectionScale = this.registerDisposer(new TrackableCrossSectionZoom(this.displayDimensions));
+  crossSectionScale = this.registerDisposer(
+      new TrackableCrossSectionZoom(this.displayDimensionRenderInfo.addRef()));
   projectionOrientation = this.registerDisposer(new OrientationState());
-  projectionScale = this.registerDisposer(new TrackableProjectionZoom(this.displayDimensions));
+  projectionScale =
+      this.registerDisposer(new TrackableProjectionZoom(this.displayDimensionRenderInfo.addRef()));
   navigationState = this.registerDisposer(new NavigationState(
       new DisplayPose(
-          this.position.addRef(), this.displayDimensions.addRef(),
+          this.position.addRef(), this.displayDimensionRenderInfo.addRef(),
           this.crossSectionOrientation.addRef()),
       this.crossSectionScale.addRef()));
   perspectiveNavigationState = this.registerDisposer(new NavigationState(
       new DisplayPose(
-          this.position.addRef(), this.displayDimensions.addRef(),
+          this.position.addRef(), this.displayDimensionRenderInfo.addRef(),
           this.projectionOrientation.addRef()),
       this.projectionScale.addRef()));
   mouseState = new MouseSelectionState();

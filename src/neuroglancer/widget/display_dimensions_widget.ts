@@ -17,7 +17,7 @@
 import './display_dimensions_widget.css';
 
 import {getDimensionNameValidity, validateDimensionNames} from 'neuroglancer/coordinate_transform';
-import {TrackableDisplayDimensions, TrackableZoomInterface} from 'neuroglancer/navigation_state';
+import {TrackableZoomInterface, WatchableDisplayDimensionRenderInfo} from 'neuroglancer/navigation_state';
 import {animationFrameDebounce} from 'neuroglancer/util/animation_frame_debounce';
 import {arraysEqual} from 'neuroglancer/util/array';
 import {Owned, RefCounted} from 'neuroglancer/util/disposable';
@@ -170,9 +170,9 @@ export class DisplayDimensionsWidget extends RefCounted {
   private zoomDimension(i: number, sign: number) {
     this.updateScaleFactors();
     const {displayDimensions} = this;
-    const {relativeDisplayScales} = displayDimensions;
-    const {dimensionIndices} = displayDimensions.value;
-    const dim = dimensionIndices[i];
+    const {relativeDisplayScales} = this;
+    const {displayDimensionIndices} = displayDimensions.value;
+    const dim = displayDimensionIndices[i];
     if (dim === -1) return;
     const {factors} = relativeDisplayScales.value;
     const newFactors = new Float64Array(factors);
@@ -182,7 +182,7 @@ export class DisplayDimensionsWidget extends RefCounted {
 
   private updateNameValidity() {
     const {dimensionElements} = this;
-    const {dimensionIndices} = this.displayDimensions.value;
+    const {displayDimensionIndices} = this.displayDimensions.value;
     const displayDimensionNames = dimensionElements.map(w => w.name.value);
     const isValid = getDimensionNameValidity(displayDimensionNames);
     const coordinateSpace = this.displayDimensions.coordinateSpace.value;
@@ -202,13 +202,23 @@ export class DisplayDimensionsWidget extends RefCounted {
       }
       const dimElements = dimensionElements[i];
       dimElements.name.dataset.isValid = valid.toString();
-      dimElements.container.dataset.isModified = (newIndex !== dimensionIndices[i]).toString();
+      dimElements.container.dataset.isModified =
+          (newIndex !== displayDimensionIndices[i]).toString();
     }
   }
 
   private scheduleUpdateView = animationFrameDebounce(() => this.updateView());
+
+  get displayDimensions() {
+    return this.displayDimensionRenderInfo.displayDimensions;
+  }
+
+  get relativeDisplayScales() {
+    return this.displayDimensionRenderInfo.relativeDisplayScales;
+  }
+
   constructor(
-      public displayDimensions: Owned<TrackableDisplayDimensions>,
+      public displayDimensionRenderInfo: Owned<WatchableDisplayDimensionRenderInfo>,
       public zoom: TrackableZoomInterface, public displayUnit = 'px') {
     super();
     const {element, defaultCheckbox, defaultCheckboxLabel} = this;
@@ -228,9 +238,9 @@ export class DisplayDimensionsWidget extends RefCounted {
       this.updateDefault();
     });
     element.appendChild(defaultCheckboxLabel);
-    this.registerDisposer(displayDimensions);
+    this.registerDisposer(displayDimensionRenderInfo);
     this.registerDisposer(zoom.changed.add(this.scheduleUpdateView));
-    this.registerDisposer(displayDimensions.changed.add(this.scheduleUpdateView));
+    this.registerDisposer(displayDimensionRenderInfo.changed.add(this.scheduleUpdateView));
     const keyboardHandler = this.registerDisposer(new KeyboardEventBinder(element, inputEventMap));
     keyboardHandler.allShortcutsAreGlobal = true;
     this.registerDisposer(new MouseEventBinder(element, inputEventMap));
@@ -246,9 +256,10 @@ export class DisplayDimensionsWidget extends RefCounted {
   }
 
   private updateNames(): boolean {
-    const displayDimensionNames = this.dimensionElements.map(x => x.name.value).filter(x => x.length > 0);
+    const displayDimensionNames =
+        this.dimensionElements.map(x => x.name.value).filter(x => x.length > 0);
     if (!validateDimensionNames(displayDimensionNames)) return false;
-    const {displayDimensions} = this;
+    const {displayDimensions} = this.displayDimensionRenderInfo;
     if (displayDimensionNames.length === 0) {
       displayDimensions.reset();
       return true;
@@ -263,7 +274,7 @@ export class DisplayDimensionsWidget extends RefCounted {
       if (index === -1) return false;
       dimensionIndices[i] = index;
     }
-    if (arraysEqual(dimensionIndices, displayDimensions.value.dimensionIndices)) {
+    if (arraysEqual(dimensionIndices, displayDimensions.value.displayDimensionIndices)) {
       return true;
     }
     displayDimensions.setDimensionIndices(rank, dimensionIndices);
@@ -276,16 +287,16 @@ export class DisplayDimensionsWidget extends RefCounted {
 
   private updateScaleFactors(): boolean {
     const {displayDimensions} = this;
-    const {relativeDisplayScales} = displayDimensions;
-    const {dimensionIndices, rank} = displayDimensions.value;
+    const {relativeDisplayScales} = this;
+    const {displayDimensionIndices, displayRank} = displayDimensions.value;
     const {factors} = relativeDisplayScales.value;
     const {dimensionElements} = this;
     const newFactors = new Float64Array(factors);
-    for (let i = 0; i < rank; ++i) {
+    for (let i = 0; i < displayRank; ++i) {
       const dimElements = dimensionElements[i];
       if (!dimElements.scaleFactorModified) continue;
       const factor = Number(dimElements.scaleFactor.value);
-      const dim = dimensionIndices[i];
+      const dim = displayDimensionIndices[i];
       if (!Number.isFinite(factor) || factor <= 0) continue;
       newFactors[dim] = factor;
     }
@@ -296,17 +307,16 @@ export class DisplayDimensionsWidget extends RefCounted {
   }
 
   private updateView() {
-    const {dimensionElements, displayDimensions: {value: displayDimensions, default: isDefault}} =
-        this;
+    const {dimensionElements, displayDimensions: {default: isDefault}} = this;
     const {
-      dimensionIndices,
+      displayDimensionIndices,
       canonicalVoxelFactors,
-      relativeDisplayScales: {factors, coordinateSpace: {names, units, scales}}
-    } = displayDimensions;
+    } = this.displayDimensionRenderInfo.value;
+    const {factors, coordinateSpace: {names, units, scales}} = this.relativeDisplayScales.value;
     this.defaultCheckbox.checked = isDefault;
     const zoom = this.zoom.value;
     for (let i = 0; i < 3; ++i) {
-      const dim = dimensionIndices[i];
+      const dim = displayDimensionIndices[i];
       const dimElements = dimensionElements[i];
       delete dimElements.name.dataset.isValid;
       dimElements.container.dataset.isModified = (dim === -1).toString();
@@ -317,7 +327,8 @@ export class DisplayDimensionsWidget extends RefCounted {
       } else {
         dimElements.name.value = names[dim];
         const totalScale = scales[dim] * zoom / canonicalVoxelFactors[i];
-        const formattedScale = formatScaleWithUnitAsString(totalScale, units[dim], {precision: 2, elide1: false});
+        const formattedScale =
+            formatScaleWithUnitAsString(totalScale, units[dim], {precision: 2, elide1: false});
         dimElements.scale.textContent = `${formattedScale}/${this.displayUnit}`;
         dimElements.scaleFactor.value = formatScaleFactor(factors[dim]);
       }

@@ -17,3 +17,24 @@
 .neuroglancer-annotation-point-list-dropdown {
   display: flex;
 }
+
+.neuroglancer-annotation-shader-property {
+  white-space: pre;
+  font-family: monospace;
+  font-size: medium;
+}
+
+
+.neuroglancer-annotation-shader-property-type {
+  color: #c6c;
+  margin-right: 1ch;
+}
+
+.neuroglancer-annotation-shader-property-identifier {
+  user-select: text;
+}
+
+.neuroglancer-annotation-shader-property-identifier::after {
+  content: "()";
+  color: #999;
+}

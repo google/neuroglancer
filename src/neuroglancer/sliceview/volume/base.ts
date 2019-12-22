@@ -70,8 +70,8 @@ export interface VolumeChunkSpecificationBaseOptions extends
   compressedSegmentationBlockSize?: vec3;
 }
 
-export interface VolumeChunkSpecificationOptions extends VolumeChunkSpecificationBaseOptions,
-                                                         SliceViewChunkSpecificationOptions {}
+export interface VolumeChunkSpecificationOptions extends
+    VolumeChunkSpecificationBaseOptions, SliceViewChunkSpecificationOptions<Uint32Array> {}
 
 
 export interface VolumeChunkSpecificationVolumeSourceOptions {
@@ -110,10 +110,9 @@ export interface VolumeChunkSpecificationGetDefaultsOptions extends
     VolumeChunkSpecificationBaseOptions, VolumeChunkSpecificationDefaultCompressionOptions,
     ChunkLayoutOptions, VolumeChunkSpecificationVolumeSourceOptions {}
 
-export interface VolumeChunkSpecification extends SliceViewChunkSpecification {
+export interface VolumeChunkSpecification extends SliceViewChunkSpecification<Uint32Array> {
   baseVoxelOffset: Float32Array;
   dataType: DataType;
-
   compressedSegmentationBlockSize: vec3|undefined;
 }
 

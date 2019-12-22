@@ -14,23 +14,28 @@
  * limitations under the License.
  */
 
-import {makeDataBoundsBoundingBoxAnnotationSet} from 'neuroglancer/annotation';
+import {AnnotationPropertySpec, annotationPropertyTypeHandlers, AnnotationType, makeDataBoundsBoundingBoxAnnotationSet} from 'neuroglancer/annotation';
+import {AnnotationGeometryChunkSpecification} from 'neuroglancer/annotation/base';
+import {MultiscaleAnnotationSource} from 'neuroglancer/annotation/frontend_source';
+import {AnnotationGeometryChunkSource} from 'neuroglancer/annotation/frontend_source';
 import {ChunkManager, WithParameters} from 'neuroglancer/chunk_manager/frontend';
-import {BoundingBox, CoordinateSpace, makeCoordinateSpace, makeIdentityTransform, makeIdentityTransformedBoundingBox} from 'neuroglancer/coordinate_transform';
+import {BoundingBox, CoordinateSpace, coordinateSpaceFromJson, makeCoordinateSpace, makeIdentityTransform, makeIdentityTransformedBoundingBox} from 'neuroglancer/coordinate_transform';
 import {CompleteUrlOptions, ConvertLegacyUrlOptions, DataSource, DataSourceProvider, DataSubsourceEntry, GetDataSourceOptions, NormalizeUrlOptions, RedirectError} from 'neuroglancer/datasource';
-import {DataEncoding, MeshSourceParameters, MultiscaleMeshMetadata, MultiscaleMeshSourceParameters, ShardingHashFunction, ShardingParameters, SkeletonMetadata, SkeletonSourceParameters, VolumeChunkEncoding, VolumeChunkSourceParameters} from 'neuroglancer/datasource/precomputed/base';
+import {AnnotationSourceParameters, AnnotationSpatialIndexSourceParameters, DataEncoding, MeshSourceParameters, MultiscaleMeshMetadata, MultiscaleMeshSourceParameters, ShardingHashFunction, ShardingParameters, SkeletonMetadata, SkeletonSourceParameters, VolumeChunkEncoding, VolumeChunkSourceParameters} from 'neuroglancer/datasource/precomputed/base';
 import {VertexPositionFormat} from 'neuroglancer/mesh/base';
 import {MeshSource, MultiscaleMeshSource} from 'neuroglancer/mesh/frontend';
 import {VertexAttributeInfo} from 'neuroglancer/skeleton/base';
 import {SkeletonSource} from 'neuroglancer/skeleton/frontend';
+import {makeSliceViewChunkSpecification} from 'neuroglancer/sliceview/base';
 import {SliceViewSingleResolutionSource} from 'neuroglancer/sliceview/frontend';
 import {DataType, makeDefaultVolumeChunkSpecifications, VolumeSourceOptions, VolumeType} from 'neuroglancer/sliceview/volume/base';
-import {MultiscaleVolumeChunkSource as GenericMultiscaleVolumeChunkSource, VolumeChunkSource} from 'neuroglancer/sliceview/volume/frontend';
+import {MultiscaleVolumeChunkSource, VolumeChunkSource} from 'neuroglancer/sliceview/volume/frontend';
 import {transposeNestedArrays} from 'neuroglancer/util/array';
 import {mat4, vec3} from 'neuroglancer/util/geom';
 import {completeHttpPath} from 'neuroglancer/util/http_path_completion';
 import {fetchOk, HttpError, parseSpecialUrl} from 'neuroglancer/util/http_request';
 import {parseArray, parseFixedLengthArray, parseQueryStringParameters, unparseQueryStringParameters, verifyEnumString, verifyFiniteFloat, verifyFinitePositiveFloat, verifyInt, verifyObject, verifyObjectProperty, verifyOptionalObjectProperty, verifyOptionalString, verifyPositiveInt, verifyString} from 'neuroglancer/util/json';
+import * as matrix from 'neuroglancer/util/matrix';
 
 class PrecomputedVolumeChunkSource extends
 (WithParameters(VolumeChunkSource, VolumeChunkSourceParameters)) {}
@@ -165,7 +170,7 @@ function parseMultiscaleVolumeInfo(obj: unknown): MultiscaleVolumeInfo {
   return {dataType, volumeType, mesh, skeletons, scales: scaleInfos, modelSpace};
 }
 
-class MultiscaleVolumeChunkSource extends GenericMultiscaleVolumeChunkSource {
+class PrecomputedMultiscaleVolumeChunkSource extends MultiscaleVolumeChunkSource {
   get dataType() {
     return this.info.dataType;
   }
@@ -221,6 +226,47 @@ class MultiscaleVolumeChunkSource extends GenericMultiscaleVolumeChunkSource {
                  chunkToMultiscaleTransform,
                }));
     }));
+  }
+}
+
+const MultiscaleAnnotationSourceBase =
+    (WithParameters(MultiscaleAnnotationSource, AnnotationSourceParameters));
+
+class PrecomputedAnnotationSpatialIndexSource extends
+(WithParameters(AnnotationGeometryChunkSource, AnnotationSpatialIndexSourceParameters)) {}
+
+export class PrecomputedAnnotationSource extends MultiscaleAnnotationSourceBase {
+  key: any;
+  metadata: AnnotationMetadata;
+  constructor(chunkManager: ChunkManager, options: {metadata: AnnotationMetadata}) {
+    const {parameters} = options.metadata;
+    super(chunkManager, {
+      rank: parameters.rank,
+      relationships: parameters.relationships.map(x => x.name),
+      properties: parameters.properties,
+      parameters,
+    } as any);
+    this.readonly = true;
+    this.metadata = options.metadata;
+  }
+
+  getSources(): SliceViewSingleResolutionSource<AnnotationGeometryChunkSource>[][] {
+    const {rank} = this;
+    const {lowerBounds} = this.metadata.coordinateSpace.bounds;
+    return [this.metadata.spatialIndices.map(spatialIndexLevel => {
+      const chunkToMultiscaleTransform = matrix.createIdentity(Float32Array, rank + 1);
+      for (let i = 0; i < rank; ++i) {
+        chunkToMultiscaleTransform[(rank + 1) * rank + i] = lowerBounds[i];
+      }
+      return {
+        chunkSource: this.chunkManager.getChunkSource(PrecomputedAnnotationSpatialIndexSource, {
+          parent: this,
+          spec: spatialIndexLevel.spec,
+          parameters: spatialIndexLevel.parameters,
+        }),
+        chunkToMultiscaleTransform,
+      };
+    })];
   }
 }
 
@@ -395,7 +441,8 @@ async function getVolumeDataSource(
     options: GetDataSourceOptions, url: string, normalizedUrl: string,
     metadata: any): Promise<DataSource> {
   const info = parseMultiscaleVolumeInfo(metadata);
-  const volume = new MultiscaleVolumeChunkSource(options.chunkManager, normalizedUrl, info);
+  const volume =
+      new PrecomputedMultiscaleVolumeChunkSource(options.chunkManager, normalizedUrl, info);
   const {modelSpace} = info;
   const subsources: DataSubsourceEntry[] = [
     {
@@ -454,6 +501,146 @@ async function getSkeletonsDataSource(
       },
     ],
   };
+}
+
+function parseKeyAndShardingSpec(url: string, obj: any) {
+  verifyObject(obj);
+  return {
+    url: resolvePath(url, verifyObjectProperty(obj, 'key', verifyString)),
+    sharding: verifyObjectProperty(obj, 'sharding', parseShardingParameters),
+  };
+}
+
+function parseAnnotationProperty(obj: unknown): AnnotationPropertySpec {
+  verifyObject(obj);
+  const identifier = verifyObjectProperty(obj, 'id', idJson => {
+    const s = verifyString(idJson);
+    if (s.match(/^[a-z][a-zA-Z0-9_]*$/) === null) {
+      throw new Error(`Invalid property identifier: ${JSON.stringify(idJson)}`);
+    }
+    return s;
+  });
+  const type = verifyObjectProperty(obj, 'type', tJson => {
+                 verifyString(tJson);
+                 if (!Object.prototype.hasOwnProperty.call(annotationPropertyTypeHandlers, tJson)) {
+                   throw new Error(`Unsupported property type: $JSON.stringify(tJson)}`);
+                 }
+                 return tJson;
+               }) as AnnotationPropertySpec['type'];
+  const description = verifyOptionalObjectProperty(obj, 'description', verifyString);
+  let defaultValue = 0;
+  return {type, identifier, description, default: defaultValue} as AnnotationPropertySpec;
+}
+
+function parseAnnotationProperties(obj: unknown) {
+  const properties = parseArray(obj, parseAnnotationProperty);
+  const ids = new Set<string>();
+  for (const p of properties) {
+    if (ids.has(p.identifier)) {
+      throw new Error(`Duplicate property identifier: ${p.identifier}`);
+    }
+    ids.add(p.identifier);
+  }
+  return properties;
+}
+
+interface AnnotationSpatialIndexLevelMetadata {
+  parameters: AnnotationSpatialIndexSourceParameters;
+  limit: number;
+  spec: AnnotationGeometryChunkSpecification;
+}
+
+class AnnotationMetadata {
+  coordinateSpace: CoordinateSpace;
+  parameters: AnnotationSourceParameters;
+  spatialIndices: AnnotationSpatialIndexLevelMetadata[];
+  constructor(public url: string, metadata: any) {
+    verifyObject(metadata);
+    const baseCoordinateSpace =
+        verifyObjectProperty(metadata, 'dimensions', coordinateSpaceFromJson);
+    const {rank} = baseCoordinateSpace;
+    const lowerBounds = verifyObjectProperty(
+        metadata, 'lower_bound',
+        boundJson => parseFixedLengthArray(new Float64Array(rank), boundJson, verifyFiniteFloat));
+    const upperBounds = verifyObjectProperty(
+        metadata, 'upper_bound',
+        boundJson => parseFixedLengthArray(new Float64Array(rank), boundJson, verifyFiniteFloat));
+    this.coordinateSpace = makeCoordinateSpace({
+      rank,
+      names: baseCoordinateSpace.names,
+      units: baseCoordinateSpace.units,
+      scales: baseCoordinateSpace.scales,
+      boundingBoxes: [makeIdentityTransformedBoundingBox({lowerBounds, upperBounds})],
+    });
+    this.parameters = {
+      type: verifyObjectProperty(
+          metadata, 'annotation_type', typeObj => verifyEnumString(typeObj, AnnotationType)),
+      rank,
+      relationships: verifyObjectProperty(
+          metadata, 'relationships',
+          relsObj => parseArray(
+              relsObj,
+              relObj => {
+                const common = parseKeyAndShardingSpec(url, relObj);
+                const name = verifyObjectProperty(relObj, 'id', verifyString);
+                return {...common, name};
+              })),
+      properties: verifyObjectProperty(metadata, 'properties', parseAnnotationProperties),
+      byId: verifyObjectProperty(metadata, 'by_id', obj => parseKeyAndShardingSpec(url, obj)),
+    };
+    this.spatialIndices = verifyObjectProperty(
+        metadata, 'spatial',
+        spatialObj => parseArray(spatialObj, levelObj => {
+          const common: AnnotationSpatialIndexSourceParameters =
+              parseKeyAndShardingSpec(url, levelObj);
+          const gridShape = verifyObjectProperty(
+              levelObj, 'grid_shape',
+              j => parseFixedLengthArray(new Float32Array(rank), j, verifyPositiveInt));
+          const chunkShape = verifyObjectProperty(
+              levelObj, 'chunk_size',
+              j => parseFixedLengthArray(new Float32Array(rank), j, verifyFinitePositiveFloat));
+          const limit = verifyObjectProperty(levelObj, 'limit', verifyPositiveInt);
+          const gridShapeInVoxels = new Float32Array(rank);
+          for (let i = 0; i < rank; ++i) {
+            gridShapeInVoxels[i] = gridShape[i] * chunkShape[i];
+          }
+          const spec = {
+            limit,
+            ...makeSliceViewChunkSpecification({
+              rank,
+              chunkDataSize: chunkShape,
+              upperVoxelBound: gridShapeInVoxels,
+            })
+          };
+          spec.upperChunkBound = gridShape;
+          return {
+            parameters: common,
+            spec,
+            limit,
+          };
+        }));
+    this.spatialIndices.reverse();
+  }
+}
+
+async function getAnnotationDataSource(
+    options: GetDataSourceOptions, url: string, metadata: any): Promise<DataSource> {
+  const info = new AnnotationMetadata(url, metadata);
+  const dataSource: DataSource = {
+    modelTransform: makeIdentityTransform(info.coordinateSpace),
+    subsources: [
+      {
+        id: 'default',
+        default: true,
+        subsource: {
+          annotation: options.chunkManager.getChunkSource(PrecomputedAnnotationSource, {
+            metadata: info,
+          }),
+        }
+      },
+    ],
+  };
+  return dataSource;
 }
 
 async function getMeshDataSource(options: GetDataSourceOptions, url: string): Promise<DataSource> {
@@ -535,6 +722,8 @@ export class PrecomputedDataSource extends DataSourceProvider {
               return await getSkeletonsDataSource(options, normalizedUrl);
             case 'neuroglancer_multilod_draco':
               return await getMeshDataSource(options, normalizedUrl);
+            case 'neuroglancer_annotations_v1':
+              return await getAnnotationDataSource(options, normalizedUrl, metadata);
             case 'neuroglancer_multiscale_volume':
             case undefined:
               return await getVolumeDataSource(options, url, normalizedUrl, metadata);

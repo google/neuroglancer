@@ -14,8 +14,8 @@
  * limitations under the License.
  */
 
-import {CoordinateSpace, CoordinateSpaceTransform, homogeneousTransformSubmatrix} from 'neuroglancer/coordinate_transform';
-import {DisplayDimensions} from 'neuroglancer/navigation_state';
+import {BoundingBox, boundingBoxesEqual, CoordinateSpace, CoordinateSpaceTransform, emptyValidCoordinateSpace, homogeneousTransformSubmatrix} from 'neuroglancer/coordinate_transform';
+import {DisplayDimensionRenderInfo} from 'neuroglancer/navigation_state';
 import {CachedWatchableValue, constantWatchableValue, makeCachedDerivedWatchableValue, WatchableValueInterface} from 'neuroglancer/trackable_value';
 import {arraysEqual, scatterUpdate} from 'neuroglancer/util/array';
 import {ValueOrError} from 'neuroglancer/util/error';
@@ -61,6 +61,8 @@ export interface RenderLayerTransform {
 
   channelToModelDimensions: readonly number[];
 
+  channelDimensionBounds: BoundingBox;
+
   /**
    * Homogeneous transform from "model" coordinate space to "render layer" coordinate space.
    */
@@ -98,7 +100,8 @@ export function getRenderLayerTransform(
       subsourceToModelSubspaceTransform: Float32Array,
       modelSubspaceDimensionIndices: readonly number[]
     }|undefined,
-    channelCoordinateSpace?: CoordinateSpace|undefined): RenderLayerTransformOrError {
+    channelCoordinateSpace: CoordinateSpace =
+        emptyValidCoordinateSpace): RenderLayerTransformOrError {
   const {
     inputSpace: modelSpace,
     rank: fullRank,
@@ -146,16 +149,11 @@ export function getRenderLayerTransform(
   scaleTransformSubmatrix(
       newTransform, subspaceRank, modelSpace, requiredInputDims, localCoordinateSpace,
       localToRenderLayerDimensions);
-  let channelToRenderLayerDimensions: number[];
-  if (channelCoordinateSpace === undefined) {
-    channelToRenderLayerDimensions = [];
-  } else {
-    channelToRenderLayerDimensions =
-        channelCoordinateSpace.names.map(x => renderLayerDimensions.indexOf(x));
-    scaleTransformSubmatrix(
-        newTransform, subspaceRank, modelSpace, requiredInputDims, channelCoordinateSpace,
-        channelToRenderLayerDimensions);
-  }
+  const channelToRenderLayerDimensions =
+      channelCoordinateSpace.names.map(x => renderLayerDimensions.indexOf(x));
+  scaleTransformSubmatrix(
+      newTransform, subspaceRank, modelSpace, requiredInputDims, channelCoordinateSpace,
+      channelToRenderLayerDimensions);
   const channelToModelSubspaceDimensions: number[] = [];
   const channelRank = channelToRenderLayerDimensions.length;
   if (subsourceEntry !== undefined) {
@@ -169,7 +167,7 @@ export function getRenderLayerTransform(
         new Float32Array((subspaceRank + 1) ** 2), subspaceRank + 1, newTransform, subspaceRank + 1,
         subsourceToModelSubspaceTransform, subspaceRank + 1, subspaceRank + 1, subspaceRank + 1,
         subspaceRank + 1);
-  }  
+  }
   for (let channelDim = 0; channelDim < channelRank; ++channelDim) {
     const layerDim = channelToRenderLayerDimensions[channelDim];
     let correspondingModelSubspaceDim = -1;
@@ -198,6 +196,7 @@ export function getRenderLayerTransform(
     channelToRenderLayerDimensions,
     modelToRenderLayerTransform: newTransform,
     channelToModelDimensions: channelToModelSubspaceDimensions,
+    channelDimensionBounds: channelCoordinateSpace.bounds,
   };
 }
 
@@ -211,7 +210,8 @@ export function renderLayerTransformsEqual(
       arraysEqual(a.globalToRenderLayerDimensions, b.globalToRenderLayerDimensions) &&
       arraysEqual(a.localToRenderLayerDimensions, b.localToRenderLayerDimensions) &&
       arraysEqual(a.channelToRenderLayerDimensions, b.channelToRenderLayerDimensions) &&
-      arraysEqual(a.modelToRenderLayerTransform, b.modelToRenderLayerTransform));
+      arraysEqual(a.modelToRenderLayerTransform, b.modelToRenderLayerTransform) &&
+      boundingBoxesEqual(a.channelDimensionBounds, b.channelDimensionBounds));
 }
 
 export function getWatchableRenderLayerTransform(
@@ -540,11 +540,12 @@ export function getLayerPositionFromCombinedGlobalLocalPositions(
 }
 
 export function get3dModelToDisplaySpaceMatrix(
-    out: mat4, displayDimensions: DisplayDimensions, transform: RenderLayerTransform) {
+    out: mat4, displayDimensionRenderInfo: DisplayDimensionRenderInfo,
+    transform: RenderLayerTransform) {
   out.fill(0);
   out[15] = 1;
   let fullRank = true;
-  const {dimensionIndices: displayDimensionIndices} = displayDimensions;
+  const {displayDimensionIndices} = displayDimensionRenderInfo;
   const {globalToRenderLayerDimensions, modelToRenderLayerTransform} = transform;
   const layerRank = transform.rank;
   for (let displayDim = 0; displayDim < 3; ++displayDim) {
@@ -565,7 +566,7 @@ export function get3dModelToDisplaySpaceMatrix(
     }
   }
   if (!fullRank) {
-    const {names: globalDimensionNames} = displayDimensions.relativeDisplayScales.coordinateSpace;
+    const {globalDimensionNames} = displayDimensionRenderInfo;
     const displayDimDesc =
         Array.from(displayDimensionIndices.filter(i => i !== -1), i => globalDimensionNames[i])
             .join(',\u00a0');

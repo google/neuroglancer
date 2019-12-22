@@ -14,14 +14,14 @@
  * limitations under the License.
  */
 
-import {Annotation, AnnotationId, AnnotationSerializer, AnnotationType} from 'neuroglancer/annotation';
-import {AnnotationGeometryChunk, AnnotationGeometryData, AnnotationMetadataChunk, AnnotationSource, AnnotationSubsetGeometryChunk} from 'neuroglancer/annotation/backend';
+import {Annotation, AnnotationId, AnnotationPropertySerializer, AnnotationSerializer, AnnotationType} from 'neuroglancer/annotation';
+import {AnnotationGeometryChunk, AnnotationGeometryChunkSourceBackend, AnnotationGeometryData, AnnotationMetadataChunk, AnnotationSource, AnnotationSubsetGeometryChunk} from 'neuroglancer/annotation/backend';
 import {WithParameters} from 'neuroglancer/chunk_manager/backend';
 import {ChunkSourceParametersConstructor} from 'neuroglancer/chunk_manager/base';
 import {CredentialsProvider} from 'neuroglancer/credentials_provider';
 import {WithSharedCredentialsProviderCounterpart} from 'neuroglancer/credentials_provider/shared_counterpart';
 import {BatchMeshFragment, BatchMeshFragmentPayload, BrainmapsInstance, ChangeStackAwarePayload, Credentials, makeRequest, SkeletonPayload, SubvolumePayload} from 'neuroglancer/datasource/brainmaps/api';
-import {AnnotationSourceParameters, ChangeSpec, MeshSourceParameters, MultiscaleMeshSourceParameters, SkeletonSourceParameters, VolumeChunkEncoding, VolumeSourceParameters} from 'neuroglancer/datasource/brainmaps/base';
+import {AnnotationSourceParameters, AnnotationSpatialIndexSourceParameters, ChangeSpec, MeshSourceParameters, MultiscaleMeshSourceParameters, SkeletonSourceParameters, VolumeChunkEncoding, VolumeSourceParameters} from 'neuroglancer/datasource/brainmaps/base';
 import {assignMeshFragmentData, assignMultiscaleMeshFragmentData, FragmentChunk, generateHigherOctreeLevel, ManifestChunk, MeshSource, MultiscaleFragmentChunk, MultiscaleManifestChunk, MultiscaleMeshSource} from 'neuroglancer/mesh/backend';
 import {VertexPositionFormat} from 'neuroglancer/mesh/base';
 import {MultiscaleMeshManifest} from 'neuroglancer/mesh/multiscale';
@@ -34,6 +34,7 @@ import {CancellationToken} from 'neuroglancer/util/cancellation';
 import {convertEndian32, Endianness} from 'neuroglancer/util/endian';
 import {kInfinityVec, kZeroVec, vec3, vec3Key} from 'neuroglancer/util/geom';
 import {parseArray, parseFixedLengthArray, verifyObject, verifyObjectProperty, verifyOptionalString, verifyString, verifyStringArray} from 'neuroglancer/util/json';
+import {defaultStringCompare} from 'neuroglancer/util/string';
 import {Uint64} from 'neuroglancer/util/uint64';
 import * as vector from 'neuroglancer/util/vector';
 import {decodeZIndexCompressed, encodeZIndexCompressed, getOctreeChildIndex, zorder3LessThan} from 'neuroglancer/util/zorder';
@@ -438,7 +439,7 @@ function makeBatchMeshRequest(
     let fragments: (BatchMeshResponseFragment&{chunkIndex: number})[] = [];
 
     const idArray = Array.from(ids);
-    idArray.sort((a, b) => a[0].localeCompare(b[0]));
+    idArray.sort((a, b) => defaultStringCompare(a[0], b[0]));
     ids = new Map(idArray);
 
     function copyMeshData() {
@@ -647,11 +648,11 @@ function parseBrainmapsAnnotationId(idPrefix: string, fullId: string) {
   return id;
 }
 
-function parseObjectLabels(obj: any): Uint64[]|undefined {
+function parseObjectLabels(obj: any): Uint64[][]|undefined {
   if (obj == null) {
     return undefined;
   }
-  return parseArray(obj, x => Uint64.parseString('' + x, 10));
+  return [parseArray(obj, x => Uint64.parseString('' + x, 10))];
 }
 
 function parseAnnotation(entry: any, idPrefix: string, expectedId?: string): Annotation {
@@ -674,7 +675,8 @@ function parseAnnotation(entry: any, idPrefix: string, expectedId?: string): Ann
           id,
           point: corner,
           description,
-          segments,
+          relatedSegments: segments,
+          properties: [],
         };
       } else {
         const radii = vec3.scale(vec3.create(), size, 0.5);
@@ -685,7 +687,8 @@ function parseAnnotation(entry: any, idPrefix: string, expectedId?: string): Ann
           center,
           radii,
           description,
-          segments,
+          relatedSegments: segments,
+          properties: [],
         };
       }
     case 'LINE':
@@ -695,7 +698,8 @@ function parseAnnotation(entry: any, idPrefix: string, expectedId?: string): Ann
         pointA: corner,
         pointB: vec3.add(vec3.create(), corner, size),
         description,
-        segments,
+        relatedSegments: segments,
+        properties: [],
       };
     case 'VOLUME':
       return {
@@ -704,7 +708,8 @@ function parseAnnotation(entry: any, idPrefix: string, expectedId?: string): Ann
         pointA: corner,
         pointB: vec3.add(vec3.create(), corner, size),
         description,
-        segments,
+        relatedSegments: segments,
+        properties: [],
       };
     default:
       throw new Error(`Unknown spatial annotation type: ${JSON.stringify(spatialAnnotationType)}.`);
@@ -718,9 +723,11 @@ function parseAnnotationResponse(response: any, idPrefix: string, expectedId?: s
   return parseAnnotation(entry, idPrefix, expectedId);
 }
 
+const annotationPropertySerializer = new AnnotationPropertySerializer(3, []);
+
 function parseAnnotations(
     chunk: AnnotationGeometryChunk|AnnotationSubsetGeometryChunk, responses: any[]) {
-  const serializer = new AnnotationSerializer(3);
+  const serializer = new AnnotationSerializer(annotationPropertySerializer);
   const source = <BrainmapsAnnotationSource>chunk.source.parent;
   const idPrefix = getIdPrefix(source.parameters);
   responses.forEach((response, responseIndex) => {
@@ -761,8 +768,9 @@ function getFullSpatialAnnotationId(parameters: AnnotationSourceParameters, id: 
 
 function annotationToBrainmaps(annotation: Annotation): any {
   const payload = annotation.description || '';
-  const objectLabels =
-      annotation.segments === undefined ? undefined : annotation.segments.map(x => x.toString());
+  const objectLabels = annotation.relatedSegments === undefined ?
+      undefined :
+      annotation.relatedSegments[0].map(x => x.toString());
   switch (annotation.type) {
     case AnnotationType.LINE:
     case AnnotationType.AXIS_ALIGNED_BOUNDING_BOX: {
@@ -802,8 +810,9 @@ function annotationToBrainmaps(annotation: Annotation): any {
   }
 }
 
-@registerSharedObject() export class BrainmapsAnnotationSource extends (BrainmapsSource(AnnotationSource, AnnotationSourceParameters)) {
-  downloadGeometry(chunk: AnnotationGeometryChunk, cancellationToken: CancellationToken) {
+@registerSharedObject() //
+export class BrainmapsAnnotationGeometryChunkSource extends (BrainmapsSource(AnnotationGeometryChunkSourceBackend, AnnotationSpatialIndexSourceParameters)) {
+  async download(chunk: AnnotationGeometryChunk, cancellationToken: CancellationToken) {
     const {parameters} = this;
     return Promise
         .all(spatialAnnotationTypes.map(
@@ -822,9 +831,12 @@ function annotationToBrainmaps(annotation: Annotation): any {
           parseAnnotations(chunk, values);
         });
   }
+}
 
+@registerSharedObject() export class BrainmapsAnnotationSource extends (BrainmapsSource(AnnotationSource, AnnotationSourceParameters)) {
   downloadSegmentFilteredGeometry(
-      chunk: AnnotationSubsetGeometryChunk, cancellationToken: CancellationToken) {
+      chunk: AnnotationSubsetGeometryChunk, _relationshipIndex: number,
+      cancellationToken: CancellationToken) {
     const {parameters} = this;
     return Promise
         .all(spatialAnnotationTypes.map(

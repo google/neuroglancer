@@ -19,6 +19,7 @@ import {ThreeDimensionalReadyRenderContext, ThreeDimensionalRenderContext, Visib
 import {vec3} from 'neuroglancer/util/geom';
 import {ShaderModule} from 'neuroglancer/webgl/shader';
 import {SharedObject} from 'neuroglancer/worker_rpc';
+import { PerspectivePanel } from './panel';
 
 export interface PerspectiveViewReadyRenderContext extends ThreeDimensionalReadyRenderContext {}
 
@@ -47,8 +48,9 @@ export interface PerspectiveViewRenderContext extends PerspectiveViewReadyRender
 
 export class PerspectiveViewRenderLayer<AttachmentState = unknown> extends
     VisibilityTrackedRenderLayer {
-  draw(renderContext: PerspectiveViewRenderContext, attachment: VisibleLayerInfo<AttachmentState>):
-      void {
+  draw(
+      renderContext: PerspectiveViewRenderContext,
+      attachment: VisibleLayerInfo<PerspectivePanel, AttachmentState>): void {
     renderContext;
     attachment;
     // Must be overridden by subclasses.
@@ -56,7 +58,7 @@ export class PerspectiveViewRenderLayer<AttachmentState = unknown> extends
 
   isReady(
       renderContext: PerspectiveViewReadyRenderContext,
-      attachment: VisibleLayerInfo<AttachmentState>) {
+      attachment: VisibleLayerInfo<PerspectivePanel, AttachmentState>) {
     renderContext;
     attachment;
     return true;

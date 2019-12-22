@@ -16,18 +16,20 @@
 
 import {ChunkState} from 'neuroglancer/chunk_manager/base';
 import {Chunk, ChunkManager, ChunkSource} from 'neuroglancer/chunk_manager/frontend';
-import {VisibleLayerInfo} from 'neuroglancer/layer';
+import {LayerView, VisibleLayerInfo} from 'neuroglancer/layer';
+import {PerspectivePanel} from 'neuroglancer/perspective_view/panel';
 import {PerspectiveViewRenderContext, PerspectiveViewRenderLayer} from 'neuroglancer/perspective_view/render_layer';
 import {RenderLayer, ThreeDimensionalRenderLayerAttachmentState, update3dRenderLayerAttachment} from 'neuroglancer/renderlayer';
 import {forEachVisibleSegment, getObjectKey} from 'neuroglancer/segmentation_display_state/base';
 import {getObjectColor, registerRedrawWhenSegmentationDisplayState3DChanged, SegmentationDisplayState3D, SegmentationLayerSharedObject} from 'neuroglancer/segmentation_display_state/frontend';
 import {SKELETON_LAYER_RPC_ID, VertexAttributeInfo} from 'neuroglancer/skeleton/base';
+import {SliceViewPanel} from 'neuroglancer/sliceview/panel';
 import {SliceViewPanelRenderContext, SliceViewPanelRenderLayer} from 'neuroglancer/sliceview/renderlayer';
 import {TrackableValue, WatchableValue} from 'neuroglancer/trackable_value';
 import {DataType} from 'neuroglancer/util/data_type';
 import {Borrowed, RefCounted} from 'neuroglancer/util/disposable';
 import {mat4, vec3} from 'neuroglancer/util/geom';
-import {verifyFinitePositiveFloat, verifyString} from 'neuroglancer/util/json';
+import {verifyFinitePositiveFloat} from 'neuroglancer/util/json';
 import {NullarySignal} from 'neuroglancer/util/signal';
 import {CompoundTrackable, Trackable} from 'neuroglancer/util/trackable';
 import {TrackableEnum} from 'neuroglancer/util/trackable_enum';
@@ -35,7 +37,7 @@ import {Buffer} from 'neuroglancer/webgl/buffer';
 import {CircleShader} from 'neuroglancer/webgl/circles';
 import {glsl_COLORMAPS} from 'neuroglancer/webgl/colormaps';
 import {GL} from 'neuroglancer/webgl/context';
-import {parameterizedEmitterDependentShaderGetter, shaderCodeWithLineDirective, WatchableShaderError} from 'neuroglancer/webgl/dynamic_shader';
+import {makeTrackableFragmentMain, parameterizedEmitterDependentShaderGetter, shaderCodeWithLineDirective, WatchableShaderError} from 'neuroglancer/webgl/dynamic_shader';
 import {LineShader} from 'neuroglancer/webgl/lines';
 import {ShaderBuilder, ShaderProgram, ShaderSamplerType} from 'neuroglancer/webgl/shader';
 import {addControlsToBuilder, parseShaderUiControls, setControlsInShader, ShaderControlsParseResult, ShaderControlState} from 'neuroglancer/webgl/shader_ui_controls';
@@ -47,12 +49,6 @@ const DEFAULT_FRAGMENT_MAIN = `void main() {
   emitDefault();
 }
 `;
-
-export type TrackableFragmentMain = TrackableValue<string>;
-
-export function getTrackableFragmentMain(value = DEFAULT_FRAGMENT_MAIN) {
-  return new TrackableValue<string>(value, verifyString);
-}
 
 interface VertexAttributeRenderInfo extends VertexAttributeInfo {
   name: string;
@@ -90,11 +86,12 @@ class RenderHelper extends RefCounted {
           this.defineAttributeAccess(builder);
           this.lineShader.defineShader(builder);
           builder.addAttribute('highp uvec2', 'aVertexIndex');
+          builder.addUniform('highp float', 'uLineWidth');
           this.defineCommonShader(builder);
           let vertexMain = `
 highp vec3 vertexA = readAttribute0(aVertexIndex.x);
 highp vec3 vertexB = readAttribute0(aVertexIndex.y);
-emitLine(uProjection, vertexA, vertexB);
+emitLine(uProjection, vertexA, vertexB, uLineWidth);
 highp uint lineEndpointIndex = getLineEndpointIndex();
 highp uint vertexIndex = aVertexIndex.x * lineEndpointIndex + aVertexIndex.y * (1u - lineEndpointIndex);
 `;
@@ -108,7 +105,6 @@ void emitRGB(vec3 color) {
               this.getCrossSectionFadeFactor()}), uPickID);
 }
 void emitDefault() {
-  //emit(vec4(uColor.rgb, uColor.a * ${this.getCrossSectionFadeFactor()}), uPickID);
   emit(vec4(uColor.rgb, uColor.a * getLineAlpha() * ${this.getCrossSectionFadeFactor()}), uPickID);
 }
 `);
@@ -138,10 +134,11 @@ void emitDefault() {
           this.defineAttributeAccess(builder);
           this.circleShader.defineShader(builder, /*crossSectionFade=*/ this.targetIsSliceView);
           this.defineCommonShader(builder);
+          builder.addUniform('highp float', 'uNodeDiameter');
           let vertexMain = `
 highp uint vertexIndex = uint(gl_InstanceID);
 highp vec3 vertexPosition = readAttribute0(vertexIndex);
-emitCircle(uProjection * vec4(vertexPosition, 1.0));
+emitCircle(uProjection * vec4(vertexPosition, 1.0), uNodeDiameter, 0.0);
 `;
 
           builder.addFragmentCode(`
@@ -209,7 +206,7 @@ void emitDefault() {
   beginLayer(
       gl: GL, shader: ShaderProgram,
       renderContext: SliceViewPanelRenderContext|PerspectiveViewRenderContext, modelMatrix: mat4) {
-    let {viewProjectionMat} = renderContext;
+    const {viewProjectionMat} = renderContext.projectionParameters;
     let mat = mat4.multiply(tempMat2, viewProjectionMat, modelMatrix);
     gl.uniformMatrix4fv(shader.uniform('uProjection'), false, mat);
   }
@@ -224,8 +221,7 @@ void emitDefault() {
 
   drawSkeleton(
       gl: GL, edgeShader: ShaderProgram, nodeShader: ShaderProgram|null,
-      skeletonChunk: SkeletonChunk, renderContext: {viewportWidth: number, viewportHeight: number},
-      lineWidth: number, pointDiameter: number) {
+      skeletonChunk: SkeletonChunk, projectionParameters: {width: number, height: number}) {
     const {vertexAttributes} = this;
     const numAttributes = vertexAttributes.length;
     const {vertexAttributeTextures} = skeletonChunk;
@@ -245,7 +241,7 @@ void emitDefault() {
           aVertexIndex, 2, WebGL2RenderingContext.UNSIGNED_INT);
       gl.vertexAttribDivisor(aVertexIndex, 1);
       this.lineShader.draw(
-          edgeShader, renderContext, lineWidth, this.targetIsSliceView ? 1.0 : 0.0,
+        edgeShader, projectionParameters, this.targetIsSliceView ? 1.0 : 0.0,
           skeletonChunk.numIndices / 2);
       gl.vertexAttribDivisor(aVertexIndex, 0);
       gl.disableVertexAttribArray(aVertexIndex);
@@ -255,9 +251,7 @@ void emitDefault() {
       nodeShader.bind();
       this.textureAccessHelper.setupTextureLayout(gl, nodeShader, skeletonChunk);
       this.circleShader.draw(
-          nodeShader, renderContext, {
-            interiorRadiusInPixels: pointDiameter / 2,
-            borderWidthInPixels: 0,
+          nodeShader, projectionParameters, {
             featherWidthInPixels: this.targetIsSliceView ? 1.0 : 0.0,
           },
           skeletonChunk.numVertices);
@@ -304,7 +298,7 @@ export class SkeletonRenderingOptions implements Trackable {
     return this.compound.changed;
   }
 
-  shader = getTrackableFragmentMain();
+  shader = makeTrackableFragmentMain(DEFAULT_FRAGMENT_MAIN);
   shaderControlState = new ShaderControlState(this.shader);
   params2d: ViewSpecificSkeletonRenderingOptions = {
     mode: new TrackableSkeletonRenderMode(SkeletonRenderMode.LINES_AND_POINTS),
@@ -396,7 +390,7 @@ export class SkeletonLayer extends RefCounted {
   draw(
       renderContext: SliceViewPanelRenderContext|PerspectiveViewRenderContext, layer: RenderLayer,
       renderHelper: RenderHelper, renderOptions: ViewSpecificSkeletonRenderingOptions,
-      attachment: VisibleLayerInfo<ThreeDimensionalRenderLayerAttachmentState>) {
+      attachment: VisibleLayerInfo<LayerView, ThreeDimensionalRenderLayerAttachmentState>) {
     let lineWidth = renderOptions.lineWidth.value;
     const {gl, source, displayState} = this;
     const alpha = Math.min(1.0, displayState.objectAlpha.value);
@@ -405,7 +399,8 @@ export class SkeletonLayer extends RefCounted {
       return;
     }
     const modelMatrix = update3dRenderLayerAttachment(
-        displayState.transform.value, renderContext.displayDimensions, attachment);
+        displayState.transform.value, renderContext.projectionParameters.displayDimensionRenderInfo,
+        attachment);
     if (modelMatrix === undefined) return;
     let pointDiameter: number;
     if (renderOptions.mode.value === SkeletonRenderMode.LINES_AND_POINTS) {
@@ -428,9 +423,11 @@ export class SkeletonLayer extends RefCounted {
     edgeShader.bind();
     renderHelper.beginLayer(gl, edgeShader, renderContext, modelMatrix);
     setControlsInShader(gl, edgeShader, shaderControlState, edgeShaderParameters.controls);
+    gl.uniform1f(edgeShader.uniform('uLineWidth'), lineWidth!);
 
     nodeShader.bind();
     renderHelper.beginLayer(gl, nodeShader, renderContext, modelMatrix);
+    gl.uniform1f(nodeShader.uniform('uNodeDiameter'), pointDiameter);
     setControlsInShader(gl, nodeShader, shaderControlState, nodeShaderParameters.controls);
 
     const skeletons = source.chunks;
@@ -457,9 +454,32 @@ export class SkeletonLayer extends RefCounted {
         renderHelper.setPickID(gl, nodeShader, pickIDs.registerUint64(layer, objectId));
       }
       renderHelper.drawSkeleton(
-          gl, edgeShader, nodeShader, skeleton, renderContext, lineWidth!, pointDiameter);
+          gl, edgeShader, nodeShader, skeleton, renderContext.projectionParameters);
     });
     renderHelper.endLayer(gl, edgeShader);
+  }
+
+  isReady() {
+    const {source, displayState} = this;
+    const alpha = Math.min(1.0, displayState.objectAlpha.value);
+    if (alpha <= 0.0) {
+      // Skip drawing.
+      return true;
+    }
+
+    const skeletons = source.chunks;
+
+    let ready = true;
+
+    forEachVisibleSegment(displayState, objectId => {
+      const key = getObjectKey(objectId);
+      const skeleton = skeletons.get(key);
+      if (skeleton === undefined || skeleton.state !== ChunkState.GPU_MEMORY) {
+        ready = false;
+        return;
+      }
+    });
+    return ready;
   }
 }
 
@@ -486,12 +506,16 @@ export class PerspectiveViewSkeletonLayer extends PerspectiveViewRenderLayer {
 
   draw(
       renderContext: PerspectiveViewRenderContext,
-      attachment: VisibleLayerInfo<ThreeDimensionalRenderLayerAttachmentState>) {
+      attachment: VisibleLayerInfo<PerspectivePanel, ThreeDimensionalRenderLayerAttachmentState>) {
     if (!renderContext.emitColor && renderContext.alreadyEmittedPickID) {
       // No need for a separate pick ID pass.
       return;
     }
     this.base.draw(renderContext, this, this.renderHelper, this.renderOptions, attachment);
+  }
+
+  isReady() {
+    return this.base.isReady();
   }
 }
 
@@ -513,8 +537,12 @@ export class SliceViewPanelSkeletonLayer extends SliceViewPanelRenderLayer {
 
   draw(
       renderContext: SliceViewPanelRenderContext,
-      attachment: VisibleLayerInfo<ThreeDimensionalRenderLayerAttachmentState>) {
+      attachment: VisibleLayerInfo<SliceViewPanel, ThreeDimensionalRenderLayerAttachmentState>) {
     this.base.draw(renderContext, this, this.renderHelper, this.renderOptions, attachment);
+  }
+
+  isReady() {
+    return this.base.isReady();
   }
 }
 

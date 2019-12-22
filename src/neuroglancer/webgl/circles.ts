@@ -45,15 +45,18 @@ export class CircleShader extends RefCounted {
     // x and y components: The x and y radii of the point in normalized device coordinates.
     // z component: Starting point of border from [0, 1]..
     // w component: Fraction of total radius that is feathered.
-    builder.addUniform('highp vec4', 'uCircleParams');
+    builder.addUniform('highp vec3', 'uCircleParams');
 
     // 2-D position within circle quad, ranging from [-1, -1] to [1, 1].
-    builder.addVarying('highp vec2', 'vCircleCoord');
+    builder.addVarying('highp vec4', 'vCircleCoord');
     builder.addVertexCode(`
-void emitCircle(vec4 position) {
+void emitCircle(vec4 position, float diameter, float borderWidth) {
   gl_Position = position;
-  gl_Position.xy += aCircleCornerOffset * uCircleParams.xy * gl_Position.w;
-  vCircleCoord = aCircleCornerOffset;
+  float totalDiameter = diameter + 2.0 * (borderWidth + uCircleParams.z);
+  gl_Position.xy += aCircleCornerOffset * uCircleParams.xy * gl_Position.w * totalDiameter;
+  vCircleCoord.xy = aCircleCornerOffset;
+  vCircleCoord.z = diameter / totalDiameter;
+  vCircleCoord.w = uCircleParams.z / totalDiameter;
 }
 `);
     if (crossSectionFade) {
@@ -71,13 +74,13 @@ float getCircleAlphaMultiplier() {
     }
     builder.addFragmentCode(`
 vec4 getCircleColor(vec4 interiorColor, vec4 borderColor) {
-  float radius = length(vCircleCoord);
+  float radius = length(vCircleCoord.xy);
   if (radius > 1.0) {
     discard;
   }
 
-  float borderColorFraction = clamp((radius - uCircleParams.z) / uCircleParams.w, 0.0, 1.0);
-  float feather = clamp((1.0 - radius) / uCircleParams.w, 0.0, 1.0);
+  float borderColorFraction = clamp((radius - vCircleCoord.z) / vCircleCoord.w, 0.0, 1.0);
+  float feather = clamp((1.0 - radius) / vCircleCoord.w, 0.0, 1.0);
   vec4 color = mix(interiorColor, borderColor, borderColorFraction);
 
   return vec4(color.rgb, color.a * feather * getCircleAlphaMultiplier());
@@ -86,22 +89,14 @@ vec4 getCircleColor(vec4 interiorColor, vec4 borderColor) {
   }
 
   draw(
-      shader: ShaderProgram, renderContext: {viewportWidth: number, viewportHeight: number},
-      options: {
-        interiorRadiusInPixels: number,
-        borderWidthInPixels: number,
-        featherWidthInPixels: number
-      },
-      count: number) {
+      shader: ShaderProgram, projectionParameters: {width: number, height: number},
+      options: {featherWidthInPixels: number}, count: number) {
     const {gl} = shader;
     const aCircleCornerOffset = shader.attribute('aCircleCornerOffset');
-    this.squareCornersBuffer.bindToVertexAttrib(aCircleCornerOffset, /*components=*/2);
-    const totalRadius =
-        options.interiorRadiusInPixels + options.borderWidthInPixels + options.featherWidthInPixels;
-    gl.uniform4f(
-        shader.uniform('uCircleParams'), totalRadius / renderContext.viewportWidth,
-        totalRadius / renderContext.viewportHeight, options.interiorRadiusInPixels / totalRadius,
-        options.featherWidthInPixels === 0 ? 1e-6 : options.featherWidthInPixels / totalRadius);
+    this.squareCornersBuffer.bindToVertexAttrib(aCircleCornerOffset, /*components=*/ 2);
+    gl.uniform3f(
+        shader.uniform('uCircleParams'), 1 / projectionParameters.width,
+        1 / projectionParameters.height, Math.max(1e-6, options.featherWidthInPixels));
     this.quadHelper.draw(gl, count);
     shader.gl.disableVertexAttribArray(aCircleCornerOffset);
   }

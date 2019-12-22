@@ -60,7 +60,7 @@ export class PickRequest {
 
 const pickRequestInterval = 30;
 
-export const pickRadius = 12;
+export const pickRadius = 5;
 export const pickDiameter = 1 + pickRadius * 2;
 
 /**
@@ -553,14 +553,14 @@ export abstract class RenderedDataPanel extends RenderedPanel {
                       layerPoint, chunkTransform.chunkToLayerTransform, layerRank + 1, repPoint,
                       layerRank);
                   const renderPt = tempVec3;
-                  const {dimensionIndices: renderDimensionIndices} =
-                    this.navigationState.pose.displayDimensions.value;
+                  const {displayDimensionIndices} =
+                      this.navigationState.pose.displayDimensions.value;
                   layerToDisplayCoordinates(
-                      renderPt, layerPoint, chunkTransform.modelTransform, renderDimensionIndices);
+                      renderPt, layerPoint, chunkTransform.modelTransform, displayDimensionIndices);
                   this.translateDataPointByViewportPixels(
                       renderPt, renderPt, totDeltaVec[0], totDeltaVec[1]);
                   displayToLayerCoordinates(
-                      layerPoint, renderPt, chunkTransform.modelTransform, renderDimensionIndices);
+                      layerPoint, renderPt, chunkTransform.modelTransform, displayDimensionIndices);
                   const newPoint = new Float32Array(layerRank);
                   matrix.transformPoint(
                       newPoint, chunkTransform.layerToChunkTransform, layerRank + 1, layerPoint,

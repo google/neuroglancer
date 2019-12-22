@@ -189,3 +189,7 @@
 .neuroglancer-annotations-view-dimension-scale:not(:empty)::after {
   content: ")";
 }
+
+.neuroglancer-annotation-relationship-label, .neuroglancer-annotation-property-label {
+  margin-right: 5px;
+}

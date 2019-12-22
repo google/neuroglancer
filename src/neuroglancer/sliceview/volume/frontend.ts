@@ -15,7 +15,7 @@
  */
 
 import {ChunkManager} from 'neuroglancer/chunk_manager/frontend';
-import { DataType, SliceViewChunkSpecification} from 'neuroglancer/sliceview/base';
+import {DataType, SliceViewChunkSpecification} from 'neuroglancer/sliceview/base';
 import {MultiscaleSliceViewChunkSource, SliceViewChunk, SliceViewChunkSource} from 'neuroglancer/sliceview/frontend';
 import {VolumeChunkSource as VolumeChunkSourceInterface, VolumeChunkSpecification, VolumeSourceOptions, VolumeType} from 'neuroglancer/sliceview/volume/base';
 import {Disposable} from 'neuroglancer/util/disposable';
@@ -89,7 +89,8 @@ export function getChunkFormatHandler(gl: GL, spec: VolumeChunkSpecification) {
   throw new Error('No chunk format handler found.');
 }
 
-export class VolumeChunkSource extends SliceViewChunkSource<VolumeChunkSpecification, VolumeChunk> implements VolumeChunkSourceInterface {
+export class VolumeChunkSource extends SliceViewChunkSource<VolumeChunkSpecification, VolumeChunk>
+    implements VolumeChunkSourceInterface {
   chunkFormatHandler: ChunkFormatHandler;
   private tempChunkGridPosition: Float32Array;
   private tempPositionWithinChunk: Uint32Array;

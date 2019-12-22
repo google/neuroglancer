@@ -20,26 +20,71 @@ import {LayerDataSource} from 'neuroglancer/layer_data_source';
 import {ChunkTransformParameters, getChunkTransformParameters, RenderLayerTransformOrError} from 'neuroglancer/render_coordinate_transform';
 import {RenderLayerRole} from 'neuroglancer/renderlayer';
 import {SegmentationDisplayState} from 'neuroglancer/segmentation_display_state/frontend';
-import {trackableAlphaValue} from 'neuroglancer/trackable_alpha';
 import {TrackableBoolean} from 'neuroglancer/trackable_boolean';
 import {makeCachedLazyDerivedWatchableValue, WatchableValue, WatchableValueInterface} from 'neuroglancer/trackable_value';
 import {TrackableRGB} from 'neuroglancer/util/color';
 import {Owned, RefCounted} from 'neuroglancer/util/disposable';
 import {makeValueOrError, ValueOrError, valueOrThrow} from 'neuroglancer/util/error';
 import {vec3} from 'neuroglancer/util/geom';
+import {WatchableMap} from 'neuroglancer/util/watchable_map';
+import {makeTrackableFragmentMain, makeWatchableShaderError} from 'neuroglancer/webgl/dynamic_shader';
+import {parseShaderUiControls, ShaderControlState} from 'neuroglancer/webgl/shader_ui_controls';
 
 export class AnnotationHoverState extends WatchableValue<
     {id: string, partIndex: number, annotationLayerState: AnnotationLayerState}|undefined> {}
 
-export class AnnotationDisplayState {
+export interface AnnotationRelationshipState {
+  // null means loading
+  // undefined means no attached layer
+  segmentationState: SegmentationDisplayState|null|undefined;
+  showMatches: TrackableBoolean;
+}
+
+export class WatchableAnnotationRelationshipStates extends
+    WatchableMap<string, AnnotationRelationshipState> {
+  constructor() {
+    super(
+        state => {
+          state.showMatches.changed.add(this.changed.dispatch);
+        },
+        state => {
+          state.showMatches.changed.remove(this.changed.dispatch);
+        });
+  }
+
+  get(name: string): AnnotationRelationshipState {
+    let value = super.get(name);
+    if (value === undefined) {
+      value = {segmentationState: undefined, showMatches: new TrackableBoolean(false)};
+      super.set(name, value);
+    }
+    return value;
+  }
+}
+
+const DEFAULT_FRAGMENT_MAIN = `
+void main() {
+  setColor(defaultColor());
+}
+`;
+
+export class AnnotationDisplayState extends RefCounted {
+  shader = makeTrackableFragmentMain(DEFAULT_FRAGMENT_MAIN);
+  shaderControls = new ShaderControlState(this.shader);
+  fallbackShaderControls = new WatchableValue(parseShaderUiControls(DEFAULT_FRAGMENT_MAIN));
+  shaderError = makeWatchableShaderError();
   color = new TrackableRGB(vec3.fromValues(1, 1, 0));
-  fillOpacity = trackableAlphaValue(0.0);
-  /**
-   * undefined means may have a segmentation state.  null means no segmentation state is supported.
-   */
-  segmentationState: WatchableValue<SegmentationDisplayState|undefined|null> =
-      new WatchableValue(null);
-  filterBySegmentation = new TrackableBoolean(false);
+  relationshipStates = this.registerDisposer(new WatchableAnnotationRelationshipStates());
+  displayUnfiltered = makeCachedLazyDerivedWatchableValue(map => {
+    let value = true;
+    for (const state of map.values()) {
+      if (state.showMatches.value) {
+        value = false;
+        break;
+      }
+    }
+    return value;
+  }, this.relationshipStates);
   hoverState = new AnnotationHoverState(undefined);
 }
 
@@ -54,6 +99,7 @@ export class AnnotationLayerState extends RefCounted {
   displayState: AnnotationDisplayState;
 
   readonly chunkTransform: WatchableValueInterface<ValueOrError<ChunkTransformParameters>>;
+
   constructor(options: {
     transform: WatchableValueInterface<RenderLayerTransformOrError>,
     localPosition: WatchableValueInterface<Float32Array>,

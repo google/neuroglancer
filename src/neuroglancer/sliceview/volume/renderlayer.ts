@@ -131,11 +131,12 @@ vChunkPosition = (position - uTranslation) +
 
   beginSource(
       gl: GL, shader: ShaderProgram, sliceView: SliceView, dataToDeviceMatrix: mat4,
-      tsource: FrontendTransformedSource, chunkLayout: ChunkLayout) {
-    const {centerDataPosition} = sliceView;
+    tsource: FrontendTransformedSource, chunkLayout: ChunkLayout) {
+    const projectionParameters = sliceView.projectionParameters.value;
+    const {centerDataPosition} = projectionParameters;
 
     this.setViewportPlane(
-        shader, sliceView.viewportNormalInGlobalCoordinates, centerDataPosition,
+        shader, projectionParameters.viewportNormalInGlobalCoordinates, centerDataPosition,
         chunkLayout.transform, chunkLayout.invTransform);
 
     // Compute projection matrix that transforms chunk layout coordinates to device coordinates.
@@ -168,6 +169,7 @@ vChunkPosition = (position - uTranslation) +
 
     if (DEBUG_VERTICES) {
       let sliceView: SliceView = (<any>window)['debug_sliceView'];
+      const projectionParameters = sliceView.projectionParameters.value;
       let chunkDataSize: vec3 = (<any>window)['debug_sliceView_chunkDataSize'];
       let lowerClipBound: vec3 = (<any>window)['debug_sliceView_uLowerClipBound'];
       let upperClipBound: vec3 = (<any>window)['debug_sliceView_uUpperClipBound'];
@@ -178,9 +180,10 @@ vChunkPosition = (position - uTranslation) +
               `${chunkDataSize.join()}, projection`,
           dataToDeviceMatrix);
       const localPlaneNormal = chunkLayout.globalToLocalNormal(
-          vec3.create(), sliceView.viewportNormalInGlobalCoordinates);
+          vec3.create(), projectionParameters.viewportNormalInGlobalCoordinates);
       const planeDistanceToOrigin = vec3.dot(
-          vec3.transformMat4(vec3.create(), sliceView.centerDataPosition, chunkLayout.invTransform),
+          vec3.transformMat4(
+              vec3.create(), projectionParameters.centerDataPosition, chunkLayout.invTransform),
           localPlaneNormal);
       this.computeVerticesDebug(
           chunkDataSize, lowerClipBound, upperClipBound, planeDistanceToOrigin, localPlaneNormal,
@@ -258,6 +261,7 @@ ${getShaderType(this.dataType)} getDataValue() { return getDataValue(0); }
     });
     this.vertexComputationManager = VolumeSliceVertexComputationManager.get(gl);
     this.tempChunkPosition = new Float32Array(multiscaleSource.rank);
+    this.initializeCounterpart();
   }
 
   get dataType() {
@@ -327,6 +331,7 @@ ${getShaderType(this.dataType)} getDataValue() { return getDataValue(0); }
     let prevChunkFormat: ChunkFormat|undefined;
     // Size of chunk (in voxels) in the "display" subspace of the chunk coordinate space.
     const chunkDataDisplaySize = vec3.create();
+    const projectionParameters = sliceView.projectionParameters.value;
 
     const endShader = () => {
       if (shader === null) return;
@@ -364,7 +369,8 @@ ${getShaderType(this.dataType)} getDataValue() { return getDataValue(0); }
       const chunkRank = source.spec.rank;
 
       vertexComputationManager.beginSource(
-          gl, shader, sliceView, sliceView.viewProjectionMat, transformedSource, chunkLayout);
+          gl, shader, sliceView, projectionParameters.viewProjectionMat, transformedSource,
+          chunkLayout);
       chunkFormat.beginSource(gl, shader);
       newSource = true;
       let presentCount = 0, notPresentCount = 0;
@@ -406,7 +412,8 @@ ${getShaderType(this.dataType)} getDataValue() { return getDataValue(0); }
         const medianVoxelSize =
             medianOf3(effectiveVoxelSize[0], effectiveVoxelSize[1], effectiveVoxelSize[2]);
         renderScaleHistogram.add(
-            medianVoxelSize, medianVoxelSize / sliceView.pixelSize, presentCount, notPresentCount);
+            medianVoxelSize, medianVoxelSize / projectionParameters.pixelSize, presentCount,
+            notPresentCount);
       }
     }
     endShader();

@@ -290,6 +290,7 @@ function uniformName(controlName: string) {
 export function addControlsToBuilder(controls: Controls, builder: ShaderBuilder) {
   for (const [name, control] of controls) {
     builder.addUniform(`highp ${control.valueType}`, uniformName(name));
+    builder.addVertexCode(`#define ${name} ${uniformName(name)}\n`);
     builder.addFragmentCode(`#define ${name} ${uniformName(name)}\n`);
   }
 }

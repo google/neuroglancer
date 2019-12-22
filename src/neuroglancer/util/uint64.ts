@@ -302,7 +302,9 @@ export class Uint64 {
   }
 
   static lowMask(out: Uint64, bits: number) {
-    if (bits <= 32) {
+    if (bits === 0) {
+      out.high = out.low = 0;
+    } else if (bits <= 32) {
       out.high = 0;
       out.low = 0xffffffff >>> (32 - bits);
     } else {

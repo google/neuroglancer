@@ -17,6 +17,7 @@
 import {ChunkState} from 'neuroglancer/chunk_manager/base';
 import {Chunk, ChunkManager, ChunkSource, WithParameters} from 'neuroglancer/chunk_manager/frontend';
 import {VisibleLayerInfo} from 'neuroglancer/layer';
+import {PerspectivePanel} from 'neuroglancer/perspective_view/panel';
 import {PerspectiveViewRenderContext, PerspectiveViewRenderLayer} from 'neuroglancer/perspective_view/render_layer';
 import {WatchableRenderLayerTransform} from 'neuroglancer/render_coordinate_transform';
 import {ThreeDimensionalRenderLayerAttachmentState, update3dRenderLayerAttachment} from 'neuroglancer/renderlayer';
@@ -170,9 +171,10 @@ vLightingFactor = abs(dot(normal, uLightDirection.xyz)) + uLightDirection.w;
 `);
   }
 
-  beginLayer(
-      gl: GL, shader: ShaderProgram, renderContext: PerspectiveViewRenderContext) {
-    let {viewProjectionMat, lightDirection, ambientLighting, directionalLighting} = renderContext;
+  beginLayer(gl: GL, shader: ShaderProgram, renderContext: PerspectiveViewRenderContext) {
+    const {lightDirection, ambientLighting, directionalLighting, projectionParameters} =
+        renderContext;
+    const {viewProjectionMat} = projectionParameters;
     gl.uniformMatrix4fv(shader.uniform('uProjection'), false, viewProjectionMat);
     let lightVec = <vec3>this.tempLightVec;
     vec3.scale(lightVec, lightDirection, directionalLighting);
@@ -400,13 +402,14 @@ export class SingleMeshLayer extends
 
   draw(
       renderContext: PerspectiveViewRenderContext,
-      attachment: VisibleLayerInfo<ThreeDimensionalRenderLayerAttachmentState>) {
+      attachment: VisibleLayerInfo<PerspectivePanel, ThreeDimensionalRenderLayerAttachmentState>) {
     if (!renderContext.emitColor && renderContext.alreadyEmittedPickID) {
       // No need for a separate pick ID pass.
       return;
     }
     const modelMatrix = update3dRenderLayerAttachment(
-        this.transform.value, renderContext.displayDimensions, attachment);
+        this.transform.value, renderContext.projectionParameters.displayDimensionRenderInfo,
+        attachment);
     if (modelMatrix === undefined) return;
     let chunk = <SingleMeshChunk|undefined>this.source.chunks.get(SINGLE_MESH_CHUNK_KEY);
     if (chunk === undefined || chunk.state !== ChunkState.GPU_MEMORY) {

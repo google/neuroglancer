@@ -111,3 +111,11 @@ export class AnnotationSourceParameters {
 
   static RPC_ID = 'brainmaps/Annotation';
 }
+
+export class AnnotationSpatialIndexSourceParameters {
+  instance: BrainmapsInstance;
+  volumeId: string;
+  changestack: string;
+
+  static RPC_ID = 'brainmaps/AnnotationSpatialIndex';
+}

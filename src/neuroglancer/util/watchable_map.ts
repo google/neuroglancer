@@ -31,6 +31,11 @@ export class WatchableMap<K, V> extends RefCounted {
       this.map.forEach(this.register);
     }
   }
+
+  get value(): ReadonlyMap<K, V> {
+    return this.map;
+  }
+
   set(key: K, value: V) {
     const {map} = this;
     const existing = map.get(key);
@@ -51,6 +56,9 @@ export class WatchableMap<K, V> extends RefCounted {
       return true;
     }
     return false;
+  }
+  get(key: K) {
+    return this.map.get(key);
   }
   has(key: K) {
     return this.map.has(key);

@@ -31,7 +31,6 @@
 .segmentation-dropdown .neuroglancer-shader-code-widget {
   height: 6em;
   width: 60ch;
-  border: 1px solid transparent;
 }
 
 .neuroglancer-segmentation-layer-skeleton-shader-overlay .neuroglancer-shader-code-widget {

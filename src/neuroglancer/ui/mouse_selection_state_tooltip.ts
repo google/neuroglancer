@@ -23,6 +23,7 @@ import './mouse_selection_state_tooltip.css';
 
 import debounce from 'lodash/debounce';
 import {Annotation, AnnotationReference, AnnotationType, AxisAlignedBoundingBox, getAnnotationTypeHandler} from 'neuroglancer/annotation';
+import {AnnotationLayerState} from 'neuroglancer/annotation/annotation_layer_state';
 import {getSelectedAnnotation} from 'neuroglancer/annotation/selection';
 import {CoordinateSpace} from 'neuroglancer/coordinate_transform';
 import {LayerManager, MouseSelectionState} from 'neuroglancer/layer';
@@ -57,13 +58,14 @@ export class MouseSelectionStateTooltipManager extends RefCounted {
   private tooltip: Tooltip|undefined = undefined;
 
   private debouncedShowTooltip =
-    this.registerCancellable(debounce(() => this.doCreateTooltip(), TOOLTIP_DELAY));
+      this.registerCancellable(debounce(() => this.doCreateTooltip(), TOOLTIP_DELAY));
 
   private debouncedShowTooltip0 =
       this.registerCancellable(debounce(() => this.doCreateTooltip(), 0));
 
 
   private reference: AnnotationReference|undefined;
+  private annotationLayer: AnnotationLayerState|undefined;
 
   private setReference(reference: AnnotationReference|undefined) {
     const existing = this.reference;
@@ -102,6 +104,7 @@ export class MouseSelectionStateTooltipManager extends RefCounted {
 
     const reference = state.annotationLayer.source.getReference(state.id);
     this.setReference(reference);
+    this.annotationLayer = state.annotationLayer;
     if (reference.value === null) {
       return false;
     }
@@ -126,28 +129,57 @@ export class MouseSelectionStateTooltipManager extends RefCounted {
     tooltip.element.appendChild(description);
 
     if (annotation != null) {
-      const {segments} = annotation;
-      if (segments !== undefined && segments.length > 0) {
-        const segmentContainer = document.createElement('div');
-        segmentContainer.className = 'neuroglancer-annotation-segment-list';
-
-        const segmentationState = state.annotationLayer.displayState.segmentationState.value;
-        const segmentColorHash = segmentationState ? segmentationState.segmentColorHash : undefined;
-        segments.forEach((segment, index) => {
-          if (index !== 0) {
-            segmentContainer.appendChild(document.createTextNode(' '));
-          }
-          const child = document.createElement('span');
-          child.className = 'neuroglancer-annotation-segment-item';
-          child.textContent = segment.toString();
-          if (segmentColorHash !== undefined) {
-            child.style.backgroundColor = segmentColorHash!.computeCssColor(segment);
-          }
-          segmentContainer.appendChild(child);
-        });
-        tooltip.element.appendChild(segmentContainer);
+      const {relatedSegments: relatedSegments} = annotation;
+      if (relatedSegments !== undefined && relatedSegments.length > 0) {
+        for (let i = 0, count = relatedSegments.length; i < count; ++i) {
+          const segments = relatedSegments[i];
+          if (segments === undefined || segments.length === 0) continue;
+          const segmentContainer = document.createElement('div');
+          const relationship = state.annotationLayer.source.relationships[i];
+          const label = document.createElement('span');
+          label.textContent = relationship;
+          label.classList.add('neuroglancer-annotation-tooltip-relationship-label');
+          segmentContainer.appendChild(label);
+          segmentContainer.className = 'neuroglancer-annotation-segment-list';
+          const segmentationState =
+              state.annotationLayer.displayState.relationshipStates.get(relationship)
+                  .segmentationState;
+          const segmentColorHash =
+              segmentationState ? segmentationState.segmentColorHash : undefined;
+          segments.forEach((segment, index) => {
+            if (index !== 0) {
+              segmentContainer.appendChild(document.createTextNode(' '));
+            }
+            const child = document.createElement('span');
+            child.className = 'neuroglancer-annotation-tooltip-segment-item';
+            child.textContent = segment.toString();
+            if (segmentColorHash !== undefined) {
+              child.style.backgroundColor = segmentColorHash!.computeCssColor(segment);
+            }
+            segmentContainer.appendChild(child);
+          });
+          tooltip.element.appendChild(segmentContainer);
+        }
       }
-      const chunkTransform = state.annotationLayer.chunkTransform.value as ChunkTransformParameters; // FIXME
+
+      const propertyValues = annotation.properties;
+      const {properties} = state.annotationLayer.source
+      for (let i = 0, count = properties.length; i < count; ++i) {
+        const propContainer = document.createElement('div');
+        propContainer.classList.add('neuroglancer-annotation-tooltip-property');
+        const property = properties[i];
+        const label = document.createElement('span');
+        label.classList.add('neuroglancer-annotation-tooltip-property-label');
+        label.textContent = property.identifier;
+        propContainer.appendChild(label);
+        const valueElement = document.createElement('span');
+        label.classList.add('neuroglancer-annotation-tooltip-property-value');
+        valueElement.textContent = propertyValues[i].toString();
+        propContainer.appendChild(valueElement);
+        tooltip.element.appendChild(propContainer);
+      }
+      const chunkTransform =
+          state.annotationLayer.chunkTransform.value as ChunkTransformParameters;  // FIXME
 
       const typeHandler = getAnnotationTypeHandler(annotation.type);
 
@@ -168,6 +200,12 @@ export class MouseSelectionStateTooltipManager extends RefCounted {
   private mouseStateChanged() {
     const {tooltip} = this;
     if (tooltip !== undefined) {
+      const state = getSelectedAnnotation(this.mouseState, this.layerManager);
+      const {reference} = this;
+      if (state !== undefined && reference !== undefined &&
+          this.annotationLayer === state.annotationLayer && state.id === reference.id) {
+        return;
+      }
       tooltip.dispose();
       this.tooltip = undefined;
     }

@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2018 Google Inc.
+ * Copyright 2019 Google Inc.
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
@@ -14,22 +14,7 @@
  * limitations under the License.
  */
 
-.neuroglancer-mouse-selection-tooltip {
-  color: black;
-  background-color: white;
-  padding: 2px;
-  border: 1px solid black;
-  font-family: sans-serif;
-  font-size: 10pt;
-}
-
-.neuroglancer-mouse-selection-tooltip-title {
-  font-weight: bold;
-}
-
-.neuroglancer-mouse-selection-tooltip-description {
-}
-
-.neuroglancer-annotation-tooltip-property-label, .neuroglancer-annotation-tooltip-relationship-label {
-  margin-right: 5px;
-}
+export const RENDERED_VIEW_ADD_LAYER_RPC_ID = 'rendered_view.addLayer';
+export const RENDERED_VIEW_REMOVE_LAYER_RPC_ID = 'rendered_view.removeLayer';
+export const PROJECTION_PARAMETERS_RPC_ID = 'SharedProjectionParameters';
+export const PROJECTION_PARAMETERS_CHANGED_RPC_METHOD_ID = 'SharedProjectionParameters.changed';

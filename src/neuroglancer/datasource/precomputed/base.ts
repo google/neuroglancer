@@ -14,6 +14,7 @@
  * limitations under the License.
  */
 
+import {AnnotationPropertySpec, AnnotationType} from 'neuroglancer/annotation';
 import {VertexAttributeInfo} from 'neuroglancer/skeleton/base';
 import {mat4} from 'neuroglancer/util/geom';
 
@@ -83,4 +84,19 @@ export class SkeletonSourceParameters {
   metadata: SkeletonMetadata;
 
   static RPC_ID = 'precomputed/SkeletonSource';
+}
+
+export class AnnotationSpatialIndexSourceParameters {
+  url: string;
+  sharding: ShardingParameters|undefined;
+  static RPC_ID = 'precomputed/AnnotationSpatialIndexSource';
+}
+
+export class AnnotationSourceParameters {
+  rank: number;
+  relationships: {url: string; name: string; sharding: ShardingParameters | undefined;}[];
+  properties: AnnotationPropertySpec[];
+  byId: {url: string; sharding: ShardingParameters | undefined;};
+  type: AnnotationType;
+  static RPC_ID = 'precomputed/AnnotationSource';
 }

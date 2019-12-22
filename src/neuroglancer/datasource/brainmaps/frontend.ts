@@ -15,27 +15,30 @@
  */
 
 import {AnnotationType, makeDataBoundsBoundingBoxAnnotationSet} from 'neuroglancer/annotation';
-import {MultiscaleAnnotationSource} from 'neuroglancer/annotation/frontend';
+import {MultiscaleAnnotationSource} from 'neuroglancer/annotation/frontend_source';
+import {AnnotationGeometryChunkSource} from 'neuroglancer/annotation/frontend_source';
 import {ChunkManager, WithParameters} from 'neuroglancer/chunk_manager/frontend';
 import {BoundingBox, CoordinateSpace, makeCoordinateSpace, makeIdentityTransform, makeIdentityTransformedBoundingBox} from 'neuroglancer/coordinate_transform';
 import {CredentialsProvider} from 'neuroglancer/credentials_provider';
 import {WithCredentialsProvider} from 'neuroglancer/credentials_provider/chunk_source_frontend';
 import {CompleteUrlOptions, DataSource, DataSourceProvider, GetDataSourceOptions} from 'neuroglancer/datasource';
 import {BrainmapsCredentialsProvider, BrainmapsInstance, Credentials, makeRequest} from 'neuroglancer/datasource/brainmaps/api';
-import {AnnotationSourceParameters, ChangeSpec, MeshSourceParameters, MultiscaleMeshInfo, MultiscaleMeshSourceParameters, SingleMeshInfo, SkeletonSourceParameters, VolumeChunkEncoding, VolumeSourceParameters} from 'neuroglancer/datasource/brainmaps/base';
+import {AnnotationSourceParameters, AnnotationSpatialIndexSourceParameters, ChangeSpec, MeshSourceParameters, MultiscaleMeshInfo, MultiscaleMeshSourceParameters, SingleMeshInfo, SkeletonSourceParameters, VolumeChunkEncoding, VolumeSourceParameters} from 'neuroglancer/datasource/brainmaps/base';
 import {VertexPositionFormat} from 'neuroglancer/mesh/base';
 import {MeshSource, MultiscaleMeshSource} from 'neuroglancer/mesh/frontend';
 import {SkeletonSource} from 'neuroglancer/skeleton/frontend';
 import {ChunkLayoutPreference, makeSliceViewChunkSpecification} from 'neuroglancer/sliceview/base';
+import {SliceViewSingleResolutionSource} from 'neuroglancer/sliceview/frontend';
 import {DataType, makeDefaultVolumeChunkSpecifications, VolumeSourceOptions, VolumeType} from 'neuroglancer/sliceview/volume/base';
 import {MultiscaleVolumeChunkSource as GenericMultiscaleVolumeChunkSource, VolumeChunkSource} from 'neuroglancer/sliceview/volume/frontend';
 import {StatusMessage} from 'neuroglancer/status';
 import {transposeNestedArrays} from 'neuroglancer/util/array';
-import {applyCompletionOffset, completeQueryStringParametersFromTable, CompletionWithDescription, defaultStringCompare, getPrefixMatches, getPrefixMatchesWithDescriptions} from 'neuroglancer/util/completion';
+import {applyCompletionOffset, completeQueryStringParametersFromTable, CompletionWithDescription, getPrefixMatches, getPrefixMatchesWithDescriptions} from 'neuroglancer/util/completion';
 import {Borrowed, Owned} from 'neuroglancer/util/disposable';
 import {mat4, vec3} from 'neuroglancer/util/geom';
 import {parseArray, parseQueryStringParameters, parseXYZ, verifyEnumString, verifyFiniteFloat, verifyFinitePositiveFloat, verifyMapKey, verifyObject, verifyObjectProperty, verifyOptionalObjectProperty, verifyOptionalString, verifyPositiveInt, verifyString} from 'neuroglancer/util/json';
 import {getObjectId} from 'neuroglancer/util/object_id';
+import {defaultStringCompare} from 'neuroglancer/util/string';
 
 class BrainmapsVolumeChunkSource extends
 (WithParameters(
@@ -48,11 +51,10 @@ class BrainmapsMeshSource extends
 (WithParameters(WithCredentialsProvider<Credentials>()(MeshSource), MeshSourceParameters)) {}
 
 export class BrainmapsSkeletonSource extends
-(WithParameters(WithCredentialsProvider<Credentials>()(SkeletonSource), SkeletonSourceParameters)) {
-  get skeletonVertexCoordinatesInVoxels() {
-    return false;
-  }
-}
+(WithParameters(WithCredentialsProvider<Credentials>()(SkeletonSource), SkeletonSourceParameters)) {}
+
+class BrainmapsAnnotationSpatialIndexSource extends
+(WithParameters(WithCredentialsProvider<Credentials>()(AnnotationGeometryChunkSource), AnnotationSpatialIndexSourceParameters)) {}
 
 const SERVER_DATA_TYPES = new Map<string, DataType>();
 SERVER_DATA_TYPES.set('UINT8', DataType.UINT8);
@@ -512,22 +514,15 @@ export function parseChangeStackList(x: any) {
       x, 'changeStackId', y => y === undefined ? undefined : parseArray(y, verifyString));
 }
 
-function makeAnnotationGeometrySourceSpecifications(multiscaleInfo: MultiscaleVolumeInfo) {
-  const baseScale = multiscaleInfo.scales[0];
-  const spec = makeSliceViewChunkSpecification({
-    rank: 3,
-    chunkDataSize: Uint32Array.from(baseScale.upperVoxelBound),
-    upperVoxelBound: baseScale.upperVoxelBound,
-  });
-  return [[{parameters: undefined, spec, chunkToMultiscaleTransform: mat4.create()}]];
-}
-
 const MultiscaleAnnotationSourceBase = (WithParameters(
     WithCredentialsProvider<Credentials>()(MultiscaleAnnotationSource),
     AnnotationSourceParameters));
 
 export class BrainmapsAnnotationSource extends MultiscaleAnnotationSourceBase {
   key: any;
+  multiscaleVolumeInfo: MultiscaleVolumeInfo;
+  parameters: AnnotationSourceParameters;
+  credentialsProvider: Owned<CredentialsProvider<Credentials>>;
   constructor(chunkManager: ChunkManager, options: {
     credentialsProvider: CredentialsProvider<Credentials>,
     parameters: AnnotationSourceParameters,
@@ -535,10 +530,31 @@ export class BrainmapsAnnotationSource extends MultiscaleAnnotationSourceBase {
   }) {
     super(chunkManager, {
       rank: 3,
-      sourceSpecifications:
-          makeAnnotationGeometrySourceSpecifications(options.multiscaleVolumeInfo),
-      ...options
+      relationships: ['segments'],
+      properties: [],
+      ...options,
     });
+    this.multiscaleVolumeInfo = options.multiscaleVolumeInfo;
+    this.credentialsProvider = this.registerDisposer(options.credentialsProvider.addRef());
+  }
+
+  getSources(): SliceViewSingleResolutionSource<AnnotationGeometryChunkSource>[][] {
+    const baseScale = this.multiscaleVolumeInfo.scales[0];
+    const spec = makeSliceViewChunkSpecification({
+      rank: 3,
+      chunkDataSize: Float32Array.from(baseScale.upperVoxelBound),
+      upperVoxelBound: baseScale.upperVoxelBound,
+    });
+    const chunkToMultiscaleTransform = mat4.create();
+    return [[{
+      chunkSource: this.chunkManager.getChunkSource(BrainmapsAnnotationSpatialIndexSource, {
+        parent: this,
+        spec,
+        parameters: this.parameters,
+        credentialsProvider: this.credentialsProvider,
+      }),
+      chunkToMultiscaleTransform,
+    }]];
   }
 }
 
@@ -640,6 +656,7 @@ export class BrainmapsDataSource extends DataSourceProvider {
               pointA: boundingBox.corner,
               pointB: vec3.add(vec3.create(), boundingBox.corner, boundingBox.size),
               id: `boundingBox${i}`,
+              properties: [],
             });
           });
           dataSource.subsources.push({

@@ -96,7 +96,7 @@ export function makeSliceView(viewerState: SliceViewViewerState, baseToSelf?: qu
     navigationState = new NavigationState(
         new DisplayPose(
             viewerState.navigationState.pose.position.addRef(),
-            viewerState.navigationState.pose.displayDimensions.addRef(),
+            viewerState.navigationState.pose.displayDimensionRenderInfo.addRef(),
             OrientationState.makeRelative(
                 viewerState.navigationState.pose.orientation, baseToSelf)),
         viewerState.navigationState.zoomFactor);
@@ -154,7 +154,7 @@ function addDisplayDimensionsWidget(layout: DataDisplayLayout, panel: RenderedDa
   panel.element.appendChild(
       layout
           .registerDisposer(new DisplayDimensionsWidget(
-              panel.navigationState.pose.displayDimensions.addRef(),
+              panel.navigationState.pose.displayDimensionRenderInfo.addRef(),
               panel.navigationState.zoomFactor, (panel instanceof SliceViewPanel) ? 'px' : 'vh'))
           .element);
 }
@@ -191,7 +191,8 @@ function makeSliceViewFromSpecification(
   const sliceView = new SliceView(
       viewer.chunkManager, viewer.layerManager, specification.navigationState.addRef());
   const updateViewportSize = () => {
-    sliceView.setViewportSizeDebounced(specification.width.value, specification.height.value);
+    sliceView.projectionParameters.setViewportShape(
+        specification.width.value, specification.height.value);
   };
   sliceView.registerDisposer(specification.width.changed.add(updateViewportSize));
   sliceView.registerDisposer(specification.height.changed.add(updateViewportSize));
@@ -463,11 +464,12 @@ export class CrossSectionSpecification extends RefCounted implements Trackable {
     this.width.changed.add(this.changed.dispatch);
     this.height.changed.add(this.changed.dispatch);
     this.scale = new LinkedZoomState(
-        parent.zoomFactor.addRef(), parent.zoomFactor.displayDimensions.addRef());
+        parent.zoomFactor.addRef(), parent.zoomFactor.displayDimensionRenderInfo.addRef());
     this.scale.changed.add(this.changed.dispatch);
     this.navigationState = this.registerDisposer(new NavigationState(
         new DisplayPose(
-            this.position.value, parent.pose.displayDimensions.addRef(), this.orientation.value),
+            this.position.value, parent.pose.displayDimensionRenderInfo.addRef(),
+            this.orientation.value),
         this.scale.value));
   }
 

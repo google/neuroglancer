@@ -30,6 +30,7 @@ import {Buffer} from 'neuroglancer/webgl/buffer';
 import {GL} from 'neuroglancer/webgl/context';
 import {ShaderBuilder, ShaderModule, ShaderProgram} from 'neuroglancer/webgl/shader';
 import {registerSharedObjectOwner, RPC} from 'neuroglancer/worker_rpc';
+import { PerspectivePanel } from '../perspective_view/panel';
 
 const tempMat4 = mat4.create();
 const tempMat3 = mat3.create();
@@ -212,12 +213,14 @@ vColor = vec4(lightingFactor * uColor.rgb, uColor.a);
   }
 
   beginModel(
-      gl: GL, shader: ShaderProgram, renderContext: PerspectiveViewRenderContext, modelMat: mat4) {
+    gl: GL, shader: ShaderProgram, renderContext: PerspectiveViewRenderContext, modelMat: mat4) {
+    const {projectionParameters} = renderContext;
     gl.uniformMatrix4fv(
         shader.uniform('uModelViewProjection'), false,
-        mat4.multiply(tempMat4, renderContext.viewProjectionMat, modelMat));
+        mat4.multiply(tempMat4, projectionParameters.viewProjectionMat, modelMat));
     mat3FromMat4(tempMat3, modelMat);
-    scaleMat3Output(tempMat3, tempMat3, renderContext.displayDimensions.canonicalVoxelFactors);
+    scaleMat3Output(
+        tempMat3, tempMat3, projectionParameters.displayDimensionRenderInfo.canonicalVoxelFactors);
     mat3.invert(tempMat3, tempMat3);
     mat3.transpose(tempMat3, tempMat3);
     gl.uniformMatrix3fv(shader.uniform('uNormalMatrix'), false, tempMat3);
@@ -318,7 +321,9 @@ export class MeshLayer extends PerspectiveViewRenderLayer<ThreeDimensionalRender
     return this.chunkManager.chunkQueueManager.gl;
   }
 
-  draw(renderContext: PerspectiveViewRenderContext, attachment: VisibleLayerInfo<ThreeDimensionalRenderLayerAttachmentState>) {
+  draw(
+      renderContext: PerspectiveViewRenderContext,
+      attachment: VisibleLayerInfo<PerspectivePanel, ThreeDimensionalRenderLayerAttachmentState>) {
     if (!renderContext.emitColor && renderContext.alreadyEmittedPickID) {
       // No need for a separate pick ID pass.
       return;
@@ -329,7 +334,9 @@ export class MeshLayer extends PerspectiveViewRenderLayer<ThreeDimensionalRender
       // Skip drawing.
       return;
     }
-    const modelMatrix = update3dRenderLayerAttachment(displayState.transform.value, renderContext.displayDimensions, attachment);
+    const modelMatrix = update3dRenderLayerAttachment(
+        displayState.transform.value, renderContext.projectionParameters.displayDimensionRenderInfo,
+        attachment);
     if (modelMatrix === undefined) {
       return;
     }
@@ -518,7 +525,7 @@ export class MultiscaleMeshLayer extends
 
   draw(
       renderContext: PerspectiveViewRenderContext,
-      attachment: VisibleLayerInfo<ThreeDimensionalRenderLayerAttachmentState>) {
+      attachment: VisibleLayerInfo<PerspectivePanel, ThreeDimensionalRenderLayerAttachmentState>) {
     if (!renderContext.emitColor && renderContext.alreadyEmittedPickID) {
       // No need for a separate pick ID pass.
       return;
@@ -530,7 +537,8 @@ export class MultiscaleMeshLayer extends
       return;
     }
     const modelMatrix = update3dRenderLayerAttachment(
-        displayState.transform.value, renderContext.displayDimensions, attachment);
+        displayState.transform.value, renderContext.projectionParameters.displayDimensionRenderInfo,
+        attachment);
     if (modelMatrix === undefined) return;
     const shader = this.getShader(renderContext.emitter);
     shader.bind();
@@ -545,14 +553,18 @@ export class MultiscaleMeshLayer extends
     let {pickIDs} = renderContext;
 
     mat3FromMat4(tempMat3, modelMatrix);
-    scaleMat3Output(tempMat3, tempMat3, renderContext.displayDimensions.voxelPhysicalScales);
+    scaleMat3Output(
+        tempMat3, tempMat3,
+        renderContext.projectionParameters.displayDimensionRenderInfo.voxelPhysicalScales);
     const scaleMultiplier = Math.pow(mat3.determinant(tempMat3), 1 / 3);
 
     const {chunks} = this.source;
     const fragmentChunks = this.source.fragmentSource.chunks;
 
+    const {projectionParameters} = renderContext;
+
     const modelViewProjection =
-        mat4.multiply(mat4.create(), renderContext.viewProjectionMat, modelMatrix);
+        mat4.multiply(mat4.create(), projectionParameters.viewProjectionMat, modelMatrix);
 
     const clippingPlanes = getFrustrumPlanes(new Float32Array(24), modelViewProjection);
 
@@ -577,8 +589,8 @@ export class MultiscaleMeshLayer extends
         console.log('drawing object, numChunks=', manifest.octree.length / 5, manifest.octree);
       }
       getMultiscaleChunksToDraw(
-          manifest, modelViewProjection, clippingPlanes, detailCutoff, renderContext.viewportWidth,
-          renderContext.viewportHeight,
+          manifest, modelViewProjection, clippingPlanes, detailCutoff, projectionParameters.width,
+          projectionParameters.height,
           (lod, chunkIndex, renderScale) => {
             const has = hasFragmentChunk(fragmentChunks, key, lod, chunkIndex);
             if (renderContext.emitColor) {
@@ -621,7 +633,7 @@ export class MultiscaleMeshLayer extends
 
   isReady(
       renderContext: PerspectiveViewReadyRenderContext,
-      attachment: VisibleLayerInfo<ThreeDimensionalRenderLayerAttachmentState>) {
+      attachment: VisibleLayerInfo<PerspectivePanel, ThreeDimensionalRenderLayerAttachmentState>) {
     let {displayState} = this;
     let alpha = Math.min(1.0, displayState.objectAlpha.value);
     if (alpha <= 0.0) {
@@ -629,13 +641,15 @@ export class MultiscaleMeshLayer extends
       return true;
     }
     const modelMatrix = update3dRenderLayerAttachment(
-        displayState.transform.value, renderContext.displayDimensions, attachment);
+        displayState.transform.value, renderContext.projectionParameters.displayDimensionRenderInfo,
+        attachment);
     if (modelMatrix === undefined) return false;
     const {chunks} = this.source;
     const fragmentChunks = this.source.fragmentSource.chunks;
 
+    const {projectionParameters} = renderContext;
     const modelViewProjection =
-        mat4.multiply(mat4.create(), renderContext.viewProjectionMat, modelMatrix);
+        mat4.multiply(mat4.create(), projectionParameters.viewProjectionMat, modelMatrix);
 
     const clippingPlanes = getFrustrumPlanes(new Float32Array(24), modelViewProjection);
 
@@ -653,8 +667,8 @@ export class MultiscaleMeshLayer extends
       }
       const {manifest} = manifestChunk;
       getMultiscaleChunksToDraw(
-          manifest, modelViewProjection, clippingPlanes, detailCutoff, renderContext.viewportWidth,
-          renderContext.viewportHeight, (lod, chunkIndex) => {
+          manifest, modelViewProjection, clippingPlanes, detailCutoff, projectionParameters.width,
+          projectionParameters.height, (lod, chunkIndex) => {
             hasAllChunks = hasAllChunks && hasFragmentChunk(fragmentChunks, key, lod, chunkIndex);
             return hasAllChunks;
           }, () => {});

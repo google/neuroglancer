@@ -20,7 +20,7 @@ import {makeRenderedPanelVisibleLayerTracker, VisibleRenderLayerTracker} from 'n
 import {PickIDManager} from 'neuroglancer/object_picking';
 import {clearOutOfBoundsPickData, FramePickingData, pickDiameter, pickOffsetSequence, pickRadius, RenderedDataPanel, RenderedDataViewerState} from 'neuroglancer/rendered_data_panel';
 import {SliceView, SliceViewRenderHelper} from 'neuroglancer/sliceview/frontend';
-import {SliceViewPanelRenderContext, SliceViewPanelRenderLayer} from 'neuroglancer/sliceview/renderlayer';
+import {SliceViewPanelReadyRenderContext, SliceViewPanelRenderContext, SliceViewPanelRenderLayer} from 'neuroglancer/sliceview/renderlayer';
 import {TrackableBoolean} from 'neuroglancer/trackable_boolean';
 import {TrackableRGB} from 'neuroglancer/util/color';
 import {ActionEvent, registerActionListener} from 'neuroglancer/util/event_action_map';
@@ -78,9 +78,23 @@ export class SliceViewPanel extends RenderedDataPanel {
   private colorFactor = vec4.fromValues(1, 1, 1, 1);
   private pickIDs = new PickIDManager();
 
-  private visibleLayerTracker: VisibleRenderLayerTracker<SliceViewPanelRenderLayer> =
-      makeRenderedPanelVisibleLayerTracker(
-          this.viewer.layerManager, SliceViewPanelRenderLayer, this.viewer.visibleLayerRoles, this);
+  flushBackendProjectionParameters() {
+    this.sliceView.flushBackendProjectionParameters();
+  }
+
+  private visibleLayerTracker: VisibleRenderLayerTracker<SliceViewPanel, SliceViewPanelRenderLayer>;
+
+  get displayDimensionRenderInfo() {
+    return this.navigationState.displayDimensionRenderInfo;
+  }
+
+  // FIXME: use separate backend object for the panel
+  get rpc() {
+    return this.sliceView.rpc!;
+  }
+  get rpcId() {
+    return this.sliceView.rpcId!;
+  }
 
   private offscreenFramebuffer = this.registerDisposer(new FramebufferConfiguration(this.gl, {
     colorBuffers: [
@@ -128,12 +142,17 @@ export class SliceViewPanel extends RenderedDataPanel {
           this.handleMouseMove(detail.centerX, detail.centerY);
           if (mouseState.updateUnconditionally()) {
             this.navigationState.pose.rotateAbsolute(
-                this.sliceView.viewportNormalInCanonicalCoordinates,
+                this.sliceView.projectionParameters.value.viewportNormalInCanonicalCoordinates,
                 detail.angle - detail.prevAngle, mouseState.position);
           }
         });
 
     this.registerDisposer(sliceView);
+    // Create visible layer tracker after SliceView, to ensure it is destroyed before SliceView
+    // backend is destroyed.
+    this.visibleLayerTracker = makeRenderedPanelVisibleLayerTracker(
+        this.viewer.layerManager, SliceViewPanelRenderLayer, this.viewer.visibleLayerRoles, this);
+
     this.registerDisposer(
         viewer.crossSectionBackgroundColor.changed.add(() => this.scheduleRedraw()));
     this.registerDisposer(sliceView.visibility.add(this.visibility));
@@ -162,18 +181,17 @@ export class SliceViewPanel extends RenderedDataPanel {
 
   translateByViewportPixels(deltaX: number, deltaY: number): void {
     const {pose} = this.viewer.navigationState;
-    this.sliceView.ensureViewMatrixUpdated();
     pose.updateDisplayPosition(pos => {
       vec3.set(pos, -deltaX, -deltaY, 0);
-      vec3.transformMat4(pos, pos, this.sliceView.invViewMatrix);
+      vec3.transformMat4(pos, pos, this.sliceView.projectionParameters.value.invViewMatrix);
     });
   }
 
   translateDataPointByViewportPixels(out: vec3, orig: vec3, deltaX: number, deltaY: number): vec3 {
-    this.sliceView.ensureViewMatrixUpdated();
-    vec3.transformMat4(out, orig, this.sliceView.viewMatrix);
+    const projectionParameters = this.sliceView.projectionParameters.value;
+    vec3.transformMat4(out, orig, projectionParameters.viewMatrix);
     vec3.set(out, out[0] + deltaX, out[1] + deltaY, out[2]);
-    vec3.transformMat4(out, out, this.sliceView.invViewMatrix);
+    vec3.transformMat4(out, out, projectionParameters.invViewMatrix);
     return out;
   }
 
@@ -182,12 +200,19 @@ export class SliceViewPanel extends RenderedDataPanel {
       return false;
     }
 
-    if (!this.sliceView.isReady()) {
+    const {sliceView} = this;
+
+    if (!sliceView.isReady()) {
       return false;
     }
 
+    const renderContext: SliceViewPanelReadyRenderContext = {
+      projectionParameters: sliceView.projectionParameters.value,
+      sliceView,
+    };
+
     for (const [renderLayer, attachment] of this.visibleLayerTracker.visibleLayers) {
-      if (!renderLayer.isReady(attachment)) {
+      if (!renderLayer.isReady(renderContext, attachment)) {
         return false;
       }
     }
@@ -195,16 +220,17 @@ export class SliceViewPanel extends RenderedDataPanel {
   }
 
   drawWithPicking(pickingData: FramePickingData): boolean {
-    let {sliceView} = this;
-    sliceView.setViewportSize(this.width, this.height);
-    sliceView.updateRendering();
+    const {sliceView} = this;
     if (!sliceView.valid) {
       return false;
     }
-    mat4.copy(pickingData.invTransform, sliceView.invViewMatrix);
+    sliceView.projectionParameters.setViewportShape(this.width, this.height);
+    sliceView.updateRendering();
+    const projectionParameters = sliceView.projectionParameters.value;
+    const {width, height, invViewMatrix, viewProjectionMat} = projectionParameters;
+    mat4.copy(pickingData.invTransform, invViewMatrix);
     const {gl} = this;
 
-    const {width, height, viewProjectionMat} = sliceView;
     this.offscreenFramebuffer.bind(width, height);
     gl.disable(WebGL2RenderingContext.SCISSOR_TEST);
     this.gl.clearColor(0.0, 0.0, 0.0, 0.0);
@@ -225,22 +251,15 @@ export class SliceViewPanel extends RenderedDataPanel {
     const {visibleLayers} = this.visibleLayerTracker;
     let {pickIDs} = this;
     pickIDs.clear();
-    const {
-      navigationState:
-          {pose: {displayDimensions: {value: displayDimensions}, position: {value: globalPosition}}}
-    } = this;
+    const {displayDimensionRenderInfo} = projectionParameters;
 
     const renderContext: SliceViewPanelRenderContext = {
-      viewProjectionMat: sliceView.viewProjectionMat,
+      projectionParameters,
       pickIDs: pickIDs,
       emitter: sliceViewPanelEmitColorAndPickID,
       emitColor: true,
       emitPickID: true,
-      viewportWidth: width,
-      viewportHeight: height,
       sliceView,
-      globalPosition,
-      displayDimensions,
     };
     this.offscreenFramebuffer.bind(width, height);
     gl.enable(WebGL2RenderingContext.BLEND);
@@ -265,8 +284,8 @@ export class SliceViewPanel extends RenderedDataPanel {
         }
 
         const axisLength = Math.min(width, height) / 4 * 1.5;
-        const pixelSize = sliceView.pixelSize;
-        const {voxelPhysicalScales: globalScales, displayRank} = sliceView.globalTransform!;
+        const pixelSize = projectionParameters.pixelSize;
+        const {voxelPhysicalScales: globalScales, displayRank} = displayDimensionRenderInfo;
         for (let j = 0; j < displayRank; ++j) {
           for (let i = 0; i < 2; ++i) {
             mat[4 * j + i] *= axisLength * pixelSize / globalScales[j];
@@ -281,8 +300,9 @@ export class SliceViewPanel extends RenderedDataPanel {
         gl.enable(WebGL2RenderingContext.BLEND);
         gl.blendFunc(WebGL2RenderingContext.SRC_ALPHA, WebGL2RenderingContext.ONE_MINUS_SRC_ALPHA);
         this.scaleBars.draw(
-            this.width, this.navigationState.pose.displayDimensions.value,
-            this.navigationState.zoomFactor.value, this.viewer.scaleBarOptions.value);
+            this.width, this.navigationState.displayDimensionRenderInfo.value,
+            this.navigationState.relativeDisplayScales.value, this.navigationState.zoomFactor.value,
+            this.viewer.scaleBarOptions.value);
         gl.disable(WebGL2RenderingContext.BLEND);
       }
     }
@@ -297,7 +317,7 @@ export class SliceViewPanel extends RenderedDataPanel {
   }
 
   panelSizeChanged() {
-    this.sliceView.setViewportSizeDebounced(this.width, this.height);
+    this.sliceView.projectionParameters.setViewportShape(this.width, this.height);
   }
 
   issuePickRequest(glWindowX: number, glWindowY: number) {
@@ -308,7 +328,7 @@ export class SliceViewPanel extends RenderedDataPanel {
   }
 
   completePickRequest(
-    glWindowX: number, glWindowY: number, data: Float32Array, pickingData: FramePickingData) {
+      glWindowX: number, glWindowY: number, data: Float32Array, pickingData: FramePickingData) {
     const {mouseState} = this.viewer;
     mouseState.pickedRenderLayer = null;
     clearOutOfBoundsPickData(
@@ -331,9 +351,9 @@ export class SliceViewPanel extends RenderedDataPanel {
       }
       mousePosition.set(voxelCoordinates);
       const displayDimensions = this.navigationState.pose.displayDimensions.value;
-      const {rank: renderRank, dimensionIndices} = displayDimensions;
-      for (let i = 0; i < renderRank; ++i) {
-        mousePosition[dimensionIndices[i]] = tempVec3[i];
+      const {displayRank, displayDimensionIndices} = displayDimensions;
+      for (let i = 0; i < displayRank; ++i) {
+        mousePosition[displayDimensionIndices[i]] = tempVec3[i];
       }
       this.pickIDs.setMouseState(mouseState, pickId);
       mouseState.displayDimensions = displayDimensions;
@@ -359,7 +379,12 @@ export class SliceViewPanel extends RenderedDataPanel {
       return;
     }
     const {sliceView} = this;
-    const {width, height} = sliceView;
+    const {
+      width,
+      height,
+      invViewMatrix,
+      displayDimensionRenderInfo: {displayDimensionIndices, displayRank}
+    } = sliceView.projectionParameters.value;
     let {mouseX, mouseY} = this;
     mouseX -= width / 2;
     mouseY -= height / 2;
@@ -368,13 +393,9 @@ export class SliceViewPanel extends RenderedDataPanel {
     // invViewMatrixLinear * [mouseX, mouseY, 0]^T + [oldX, oldY, oldZ]^T =
     // invViewMatrixLinear * factor * [mouseX, mouseY, 0]^T + [newX, newY, newZ]^T
 
-    sliceView.ensureViewMatrixUpdated();
-
-    const {invViewMatrix} = sliceView;
-    const {dimensionIndices, rank: displayRank} = navigationState.pose.displayDimensions.value;
     const position = this.navigationState.position.value;
     for (let i = 0; i < displayRank; ++i) {
-      const dim = dimensionIndices[i];
+      const dim = displayDimensionIndices[i];
       const f = invViewMatrix[i] * mouseX + invViewMatrix[4 + i] * mouseY;
       position[dim] += f * (1 - factor);
     }

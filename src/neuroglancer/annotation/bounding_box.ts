@@ -19,14 +19,14 @@
  */
 
 import {AnnotationType, AxisAlignedBoundingBox} from 'neuroglancer/annotation';
-import {AnnotationRenderContext, AnnotationRenderHelper, registerAnnotationTypeRenderHandler} from 'neuroglancer/annotation/type_handler';
+import {AnnotationRenderContext, AnnotationRenderHelper, AnnotationShaderGetter, registerAnnotationTypeRenderHandler} from 'neuroglancer/annotation/type_handler';
 import {BoundingBoxCrossSectionRenderHelper, vertexBasePositions} from 'neuroglancer/sliceview/bounding_box_shader_helper';
 import {SliceViewPanelRenderContext} from 'neuroglancer/sliceview/renderlayer';
 import {tile2dArray} from 'neuroglancer/util/array';
 import {Buffer, getMemoizedBuffer} from 'neuroglancer/webgl/buffer';
 import {CircleShader, VERTICES_PER_CIRCLE} from 'neuroglancer/webgl/circles';
 import {LineShader, VERTICES_PER_LINE} from 'neuroglancer/webgl/lines';
-import {emitterDependentShaderGetter, ShaderBuilder, ShaderProgram} from 'neuroglancer/webgl/shader';
+import {ShaderBuilder, ShaderProgram} from 'neuroglancer/webgl/shader';
 import {defineVectorArrayVertexShaderInput} from 'neuroglancer/webgl/shader_lib';
 
 const EDGES_PER_BOX = 12;
@@ -126,23 +126,59 @@ const edgeBoxCornerOffsetData = Float32Array.from([
 
 abstract class RenderHelper extends AnnotationRenderHelper {
   defineShader(builder: ShaderBuilder) {
-    super.defineShader(builder);
     // Position of lower/upper in model coordinates.
     const {rank} = this;
-    defineVectorArrayVertexShaderInput(builder, 'float', 'Bounds', rank, 2);
+    defineVectorArrayVertexShaderInput(
+        builder, 'float', WebGL2RenderingContext.FLOAT, /*normalized=*/ false, 'Bounds', rank, 2);
   }
 
-  enable(shader: ShaderProgram, context: AnnotationRenderContext, callback: () => void) {
-    super.enable(shader, context, () => {
+  enable(
+      shaderGetter: AnnotationShaderGetter, context: AnnotationRenderContext,
+      callback: (shader: ShaderProgram) => void) {
+    super.enable(shaderGetter, context, shader => {
       const binder = shader.vertexShaderInputBinders['Bounds'];
       binder.enable(1);
-      binder.bind(
-          context.buffer.buffer!, WebGL2RenderingContext.FLOAT, /*normalized=*/ false,
-          /*stride=*/ 0, context.bufferOffset);
-      callback();
+      this.gl.bindBuffer(WebGL2RenderingContext.ARRAY_BUFFER, context.buffer.buffer);
+      binder.bind(this.serializedBytesPerAnnotation, context.bufferOffset);
+      callback(shader);
       binder.disable();
     });
   }
+}
+
+function addBorderNoOpSetters(builder: ShaderBuilder) {
+  builder.addVertexCode(`
+void setBoundingBoxBorderWidth(float width) {}
+void setBoundingBoxBorderColor(vec4 color) {}
+`);
+}
+
+function addFaceNoOpSetters(builder: ShaderBuilder) {
+  builder.addVertexCode(`
+void setBoundingBoxFillColor(vec4 color) {}
+`);
+}
+
+function addBorderSetters(builder: ShaderBuilder) {
+  addFaceNoOpSetters(builder);
+  builder.addVertexCode(`
+float ng_lineWidth;
+void setBoundingBoxBorderWidth(float size) {
+  ng_lineWidth = size;
+}
+void setBoundingBoxBorderColor(vec4 color) {
+  vColor = color;
+}
+`);
+}
+
+function addFaceSetters(builder: ShaderBuilder) {
+  addBorderNoOpSetters(builder);
+  builder.addVertexCode(`
+void setBoundingBoxFillColor(vec4 color) {
+  vColor = color;
+}
+`);
 }
 
 class PerspectiveViewRenderHelper extends RenderHelper {
@@ -154,8 +190,8 @@ class PerspectiveViewRenderHelper extends RenderHelper {
           edgeBoxCornerOffsetData, /*majorDimension=*/ 7, /*minorTiles=*/ 1,
           /*majorTiles=*/ VERTICES_PER_LINE)));
 
-  private edgeShaderGetter =
-      emitterDependentShaderGetter(this, this.gl, (builder: ShaderBuilder) => {
+  private edgeShaderGetter = this.getDependentShader(
+      'annotation/boundingBox/projection/border', (builder: ShaderBuilder) => {
         const {rank} = this;
         this.defineShader(builder);
         this.lineShader.defineShader(builder);
@@ -168,6 +204,7 @@ class PerspectiveViewRenderHelper extends RenderHelper {
 
         builder.addVarying('highp float', 'vClipCoefficient');
 
+        addBorderSetters(builder);
         builder.setVertexMain(`
 float modelPositionA[${rank}] = getBounds0();
 float modelPositionB[${rank}] = getBounds1();
@@ -180,8 +217,11 @@ if (vClipCoefficient == 0.0) {
   gl_Position = vec4(2.0, 0.0, 0.0, 1.0);
   return;
 }
+ng_lineWidth = 2.0;
+userMain();
 emitLine(uModelViewProjection * vec4(endpointA, 1.0),
-         uModelViewProjection * vec4(endpointB, 1.0));
+         uModelViewProjection * vec4(endpointB, 1.0),
+         ng_lineWidth);
 ${this.setPartIndex(builder, 'uint(aBoxCornerOffset2.w)')};
 `);
         builder.setFragmentMain(`
@@ -197,8 +237,8 @@ emitAnnotation(vec4(vColor.rgb, getLineAlpha() * vClipCoefficient));
           vertexBasePositions, /*majorDimension=*/ 3, /*minorTiles=*/ 1,
           /*majorTiles=*/ VERTICES_PER_CIRCLE)));
 
-  private cornerShaderGetter =
-      emitterDependentShaderGetter(this, this.gl, (builder: ShaderBuilder) => {
+  private cornerShaderGetter = this.getDependentShader(
+      'annotation/boundingBox/projection/corner', (builder: ShaderBuilder) => {
         const {rank} = this;
         this.defineShader(builder);
         this.circleShader.defineShader(builder, this.targetIsSliceView);
@@ -207,7 +247,7 @@ emitAnnotation(vec4(vColor.rgb, getLineAlpha() * vClipCoefficient));
         builder.addAttribute('highp vec3', 'aBoxCornerOffset');
 
         builder.addVarying('highp float', 'vClipCoefficient');
-
+        addBorderSetters(builder);
         builder.setVertexMain(`
 float modelPositionA[${rank}] = getBounds0();
 float modelPositionB[${rank}] = getBounds1();
@@ -219,7 +259,7 @@ if (vClipCoefficient == 0.0) {
 vec3 subspacePositionA = projectModelVectorToSubspace(modelPositionA);
 vec3 subspacePositionB = projectModelVectorToSubspace(modelPositionB);
 vec3 vertexPosition = mix(subspacePositionA, subspacePositionB, aBoxCornerOffset);
-emitCircle(uModelViewProjection * vec4(vertexPosition, 1.0));
+emitCircle(uModelViewProjection * vec4(vertexPosition, 1.0), ng_lineWidth, 0.0);
 uint cornerIndex = uint(aBoxCornerOffset.x + aBoxCornerOffset.y * 2.0 + aBoxCornerOffset.z * 4.0);
 uint cornerPickOffset = ${CORNERS_PICK_OFFSET}u + cornerIndex;
 ${this.setPartIndex(builder, 'cornerPickOffset')};
@@ -233,9 +273,8 @@ emitAnnotation(color);
       });
 
   drawEdges(context: AnnotationRenderContext) {
-    const shader = this.edgeShaderGetter(context.renderContext.emitter);
     const {gl} = this;
-    this.enable(shader, context, () => {
+    this.enable(this.edgeShaderGetter, context, shader => {
       const aBoxCornerOffset1 = shader.attribute('aBoxCornerOffset1');
       const aBoxCornerOffset2 = shader.attribute('aBoxCornerOffset2');
 
@@ -249,23 +288,23 @@ emitAnnotation(color);
           /*normalized=*/ false,
           /*stride=*/ 4 * 7, /*offset=*/ 4 * 3);
 
-      this.lineShader.draw(shader, context.renderContext, /*lineWidth=*/ 2, 1, context.count);
+      this.lineShader.draw(
+          shader, context.renderContext.projectionParameters, /*featherWidthInPixels=*/ 1,
+          context.count);
       gl.disableVertexAttribArray(aBoxCornerOffset1);
       gl.disableVertexAttribArray(aBoxCornerOffset2);
     });
   }
 
   drawCorners(context: AnnotationRenderContext) {
-    const shader = this.cornerShaderGetter(context.renderContext.emitter);
     const {gl} = this;
-    this.enable(shader, context, () => {
+    this.enable(this.cornerShaderGetter, context, shader => {
       const aBoxCornerOffset = shader.attribute('aBoxCornerOffset');
       this.boxCornerOffsetsBuffer.bindToVertexAttrib(
           aBoxCornerOffset, /*components=*/ 3, /*attributeType=*/ WebGL2RenderingContext.FLOAT,
           /*normalized=*/ false);
       this.circleShader.draw(
-          shader, context.renderContext,
-          {interiorRadiusInPixels: 1, borderWidthInPixels: 0, featherWidthInPixels: 1},
+          shader, context.renderContext.projectionParameters, {featherWidthInPixels: 0},
           context.count);
       gl.disableVertexAttribArray(aBoxCornerOffset);
     });
@@ -303,8 +342,8 @@ class SliceViewRenderHelper extends RenderHelper {
   private boundingBoxCrossSectionHelper =
       this.registerDisposer(new BoundingBoxCrossSectionRenderHelper(this.gl));
 
-  private faceShaderGetter =
-      emitterDependentShaderGetter(this, this.gl, (builder: ShaderBuilder) => {
+  private faceShaderGetter = this.getDependentShader(
+      'annotation/boundingBox/crossSection/face', (builder: ShaderBuilder) => {
         const {rank} = this;
         super.defineShader(builder);
         this.boundingBoxCrossSectionHelper.defineShader(builder);
@@ -312,6 +351,7 @@ class SliceViewRenderHelper extends RenderHelper {
 
         builder.addAttribute('highp float', 'aVertexIndexFloat');
         builder.addVarying('highp float', 'vClipCoefficient');
+        addBorderSetters(builder);
         builder.setVertexMain(`
 float modelPositionA[${rank}] = getBounds0();
 float modelPositionB[${rank}] = getBounds1();
@@ -332,8 +372,11 @@ int vertexIndex1 = int(aVertexIndexFloat);
 int vertexIndex2 = vertexIndex1 == 5 ? 0 : vertexIndex1 + 1;
 vec3 vertexPosition1 = getBoundingBoxPlaneIntersectionVertexPosition(subspacePositionB - subspacePositionA, subspacePositionA, subspacePositionA, subspacePositionB, vertexIndex1);
 vec3 vertexPosition2 = getBoundingBoxPlaneIntersectionVertexPosition(subspacePositionB - subspacePositionA, subspacePositionA, subspacePositionA, subspacePositionB, vertexIndex2);
+ng_lineWidth = 2.0;
+userMain();
 emitLine(uModelViewProjection * vec4(vertexPosition1, 1.0),
-         uModelViewProjection * vec4(vertexPosition2, 1.0));
+         uModelViewProjection * vec4(vertexPosition2, 1.0),
+         ng_lineWidth);
 ${this.setPartIndex(builder)};
 `);
         builder.setFragmentMain(`
@@ -341,14 +384,14 @@ emitAnnotation(vec4(vColor.rgb, vColor.a * getLineAlpha() * vClipCoefficient));
 `);
       });
 
-  private fillShaderGetter =
-      emitterDependentShaderGetter(this, this.gl, (builder: ShaderBuilder) => {
+  private fillShaderGetter = this.getDependentShader(
+      'annotation/boundingBox/crossSection/fill', (builder: ShaderBuilder) => {
         const {rank} = this;
         super.defineShader(builder);
         this.boundingBoxCrossSectionHelper.defineShader(builder);
         builder.addAttribute('highp float', 'aVertexIndexFloat');
-        builder.addUniform('highp float', 'uFillOpacity');
         builder.addVarying('highp float', 'vClipCoefficient');
+        addFaceSetters(builder);
         builder.setVertexMain(`
 float modelPositionA[${rank}] = getBounds0();
 float modelPositionB[${rank}] = getBounds1();
@@ -368,40 +411,47 @@ vec3 subspacePositionB = projectModelVectorToSubspace(modelPositionB);
 int vertexIndex = int(aVertexIndexFloat);
 vec3 vertexPosition = getBoundingBoxPlaneIntersectionVertexPosition(subspacePositionB - subspacePositionA, subspacePositionA, subspacePositionA, subspacePositionB, vertexIndex);
 gl_Position = uModelViewProjection * vec4(vertexPosition, 1);
+userMain();
 ${this.setPartIndex(builder)};
 `);
         builder.setFragmentMain(`
-emitAnnotation(vec4(vColor.rgb, uFillOpacity * vClipCoefficient));
+emitAnnotation(vec4(vColor.rgb, vColor.a * vClipCoefficient));
 `);
       });
 
-  draw(context: AnnotationRenderContext&{renderContext: SliceViewPanelRenderContext}) {
-    const fillOpacity = context.annotationLayer.state.displayState.fillOpacity.value;
-    const shader = (fillOpacity ? this.fillShaderGetter : this.faceShaderGetter)(
-        context.renderContext.emitter);
-    let {gl} = this;
-    this.enable(shader, context, () => {
+  enableForBoundingBox(
+      shaderGetter: AnnotationShaderGetter,
+      context: AnnotationRenderContext&{renderContext: SliceViewPanelRenderContext},
+      vertexIndexBuffer: Buffer, callback: (shader: ShaderProgram) => void) {
+    super.enable(shaderGetter, context, shader => {
+      const projectionParameters = context.renderContext.sliceView.projectionParameters.value;
       this.boundingBoxCrossSectionHelper.setViewportPlane(
-          shader, context.renderContext.sliceView.viewportNormalInGlobalCoordinates,
-          context.renderContext.sliceView.centerDataPosition, context.renderSubspaceModelMatrix,
+          shader, projectionParameters.viewportNormalInGlobalCoordinates,
+          projectionParameters.centerDataPosition, context.renderSubspaceModelMatrix,
           context.renderSubspaceInvModelMatrix);
       const aVertexIndexFloat = shader.attribute('aVertexIndexFloat');
-
-      (fillOpacity ? this.filledIntersectionVertexIndexBuffer : this.intersectionVertexIndexBuffer)
-          .bindToVertexAttrib(
-              aVertexIndexFloat, /*components=*/ 1, /*attributeType=*/ WebGL2RenderingContext.FLOAT,
-              /*normalized=*/ false);
-
-      if (fillOpacity) {
-        gl.uniform1f(shader.uniform('uFillOpacity'), fillOpacity);
-        gl.drawArraysInstanced(WebGL2RenderingContext.TRIANGLE_FAN, 0, 6, context.count);
-      } else {
-        this.lineShader.draw(
-            shader, context.renderContext, context.renderContext.emitColor ? 2 : 5, 1.0,
-            context.count);
-      }
-      gl.disableVertexAttribArray(aVertexIndexFloat);
+      vertexIndexBuffer.bindToVertexAttrib(
+          aVertexIndexFloat, /*components=*/ 1,
+          /*attributeType=*/ WebGL2RenderingContext.FLOAT,
+          /*normalized=*/ false);
+      callback(shader);
+      this.gl.disableVertexAttribArray(aVertexIndexFloat);
     });
+  }
+
+  draw(context: AnnotationRenderContext&{renderContext: SliceViewPanelRenderContext}) {
+    if (this.shaderControlState.parseResult.value.code.match(/\bsetBoundingBoxFillColor\b/)) {
+      this.enableForBoundingBox(
+          this.fillShaderGetter, context, this.filledIntersectionVertexIndexBuffer, () => {
+            this.gl.drawArraysInstanced(WebGL2RenderingContext.TRIANGLE_FAN, 0, 6, context.count);
+          });
+    }
+    this.enableForBoundingBox(
+        this.faceShaderGetter, context, this.intersectionVertexIndexBuffer, shader => {
+          this.lineShader.draw(
+              shader, context.renderContext.projectionParameters, /*featherWidthInPixels=*/ 1.0,
+              context.count);
+        });
   }
 }
 // function getEdgeCorners(corners: Float32Array, edgeIndex: number) {
@@ -438,6 +488,10 @@ registerAnnotationTypeRenderHandler<AxisAlignedBoundingBox>(
     AnnotationType.AXIS_ALIGNED_BOUNDING_BOX, {
       sliceViewRenderHelper: SliceViewRenderHelper,
       perspectiveViewRenderHelper: PerspectiveViewRenderHelper,
+      defineShaderNoOpSetters(builder) {
+        addFaceNoOpSetters(builder);
+        addBorderNoOpSetters(builder);
+      },
       pickIdsPerInstance: PICK_IDS_PER_INSTANCE,
       snapPosition(position, data, offset, partIndex) {
         const corners = new Float32Array(data, offset, 6);
