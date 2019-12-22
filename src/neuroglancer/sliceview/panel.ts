@@ -18,7 +18,7 @@ import {AxesLineHelper} from 'neuroglancer/axes_lines';
 import {DisplayContext} from 'neuroglancer/display_context';
 import {makeRenderedPanelVisibleLayerTracker, VisibleRenderLayerTracker} from 'neuroglancer/layer';
 import {PickIDManager} from 'neuroglancer/object_picking';
-import {FramePickingData, RenderedDataPanel, RenderedDataViewerState} from 'neuroglancer/rendered_data_panel';
+import {clearOutOfBoundsPickData, FramePickingData, pickDiameter, pickOffsetSequence, pickRadius, RenderedDataPanel, RenderedDataViewerState} from 'neuroglancer/rendered_data_panel';
 import {SliceView, SliceViewRenderHelper} from 'neuroglancer/sliceview/frontend';
 import {SliceViewPanelRenderContext, SliceViewPanelRenderLayer} from 'neuroglancer/sliceview/renderlayer';
 import {TrackableBoolean} from 'neuroglancer/trackable_boolean';
@@ -303,32 +303,50 @@ export class SliceViewPanel extends RenderedDataPanel {
   issuePickRequest(glWindowX: number, glWindowY: number) {
     const {offscreenFramebuffer} = this;
     offscreenFramebuffer.readPixelFloat32IntoBuffer(
-        OffscreenTextures.PICK, glWindowX, glWindowY, 0);
+        OffscreenTextures.PICK, glWindowX - pickRadius, glWindowY - pickRadius, 0, pickDiameter,
+        pickDiameter);
   }
 
   completePickRequest(
-      glWindowX: number, glWindowY: number, data: Float32Array, pickingData: FramePickingData) {
+    glWindowX: number, glWindowY: number, data: Float32Array, pickingData: FramePickingData) {
     const {mouseState} = this.viewer;
     mouseState.pickedRenderLayer = null;
+    clearOutOfBoundsPickData(
+        data, 0, 4, glWindowX, glWindowY, pickingData.viewportWidth, pickingData.viewportHeight);
     const {viewportWidth, viewportHeight} = pickingData;
-    const y = pickingData.viewportHeight - glWindowY;
-    vec3.set(tempVec3, glWindowX - viewportWidth / 2, y - viewportHeight / 2, 0);
-    vec3.transformMat4(tempVec3, tempVec3, pickingData.invTransform);
-    let {position: mousePosition} = mouseState;
-    const {value: voxelCoordinates} = this.navigationState.position;
-    const rank = voxelCoordinates.length;
-    if (mousePosition.length !== rank) {
-      mousePosition = mouseState.position = new Float32Array(rank);
+    const numOffsets = pickOffsetSequence.length;
+    const setStateFromOffset = (offset: number, pickId: number) => {
+      const relativeX = offset % pickDiameter;
+      const relativeY = (offset - relativeX) / pickDiameter;
+      const y = pickingData.viewportHeight - (glWindowY + relativeY - pickRadius);
+      vec3.set(
+          tempVec3, (glWindowX + relativeX - pickRadius) - viewportWidth / 2,
+          y - viewportHeight / 2, 0);
+      vec3.transformMat4(tempVec3, tempVec3, pickingData.invTransform);
+      let {position: mousePosition} = mouseState;
+      const {value: voxelCoordinates} = this.navigationState.position;
+      const rank = voxelCoordinates.length;
+      if (mousePosition.length !== rank) {
+        mousePosition = mouseState.position = new Float32Array(rank);
+      }
+      mousePosition.set(voxelCoordinates);
+      const displayDimensions = this.navigationState.pose.displayDimensions.value;
+      const {rank: renderRank, dimensionIndices} = displayDimensions;
+      for (let i = 0; i < renderRank; ++i) {
+        mousePosition[dimensionIndices[i]] = tempVec3[i];
+      }
+      this.pickIDs.setMouseState(mouseState, pickId);
+      mouseState.displayDimensions = displayDimensions;
+      mouseState.setActive(true);
+    };
+    for (let i = 0; i < numOffsets; ++i) {
+      const offset = pickOffsetSequence[i];
+      const pickId = data[4 * i];
+      if (pickId === 0) continue;
+      setStateFromOffset(offset, pickId);
+      return;
     }
-    mousePosition.set(voxelCoordinates);
-    const displayDimensions = this.navigationState.pose.displayDimensions.value;
-    const {rank: renderRank, dimensionIndices} = displayDimensions;
-    for (let i = 0; i < renderRank; ++i) {
-      mousePosition[dimensionIndices[i]] = tempVec3[i];
-    }
-    this.pickIDs.setMouseState(mouseState, data[0]);
-    mouseState.displayDimensions = displayDimensions;
-    mouseState.setActive(true);
+    setStateFromOffset(0, 0);
   }
 
   /**
