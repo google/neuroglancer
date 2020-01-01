@@ -319,11 +319,8 @@ class AnnotationSpatiallyIndexedRenderLayerBackend extends withChunkManager
 
       const {chunkManager} = this;
       forEachVisibleAnnotationChunk(
-          projectionParameters.globalPosition, this.localPosition.value,
-          projectionParameters.projectionMat, projectionParameters.viewMatrix,
-          projectionParameters.viewProjectionMat, projectionParameters.width,
-          projectionParameters.height, projectionParameters.displayDimensionRenderInfo,
-          this.renderScaleTarget.value, transformedSources[0], () => {}, (tsource, scaleIndex) => {
+          projectionParameters, this.localPosition.value, this.renderScaleTarget.value,
+          transformedSources[0], () => {}, (tsource, scaleIndex) => {
             const chunk = (tsource.source as AnnotationGeometryChunkSourceBackend)
                               .getChunk(tsource.curPositionInChunks);
             // FIXME: calculate priority

@@ -14,9 +14,9 @@
  * limitations under the License.
  */
 
-import {DisplayDimensionRenderInfo} from 'neuroglancer/navigation_state';
+import {ProjectionParameters} from 'neuroglancer/projection_parameters';
 import {forEachVisibleVolumetricChunk, SliceViewChunkSource, SliceViewChunkSpecification, SliceViewRenderLayer, TransformedSource} from 'neuroglancer/sliceview/base';
-import {getViewFrustrumVolume, mat3, mat3FromMat4, mat4, prod3} from 'neuroglancer/util/geom';
+import {getViewFrustrumVolume, mat3, mat3FromMat4, prod3} from 'neuroglancer/util/geom';
 
 export const ANNOTATION_METADATA_CHUNK_SOURCE_RPC_ID = 'annotation.MetadataChunkSource';
 export const ANNOTATION_GEOMETRY_CHUNK_SOURCE_RPC_ID = 'annotation.GeometryChunkSource';
@@ -45,19 +45,19 @@ export function
 forEachVisibleAnnotationChunk<RLayer extends SliceViewRenderLayer, Source extends
                                   SliceViewChunkSource<AnnotationGeometryChunkSpecification>,
                                   Transformed extends TransformedSource<RLayer, Source>>(
-    globalPosition: Float32Array, localPosition: Float32Array, projectionMatrix: mat4,
-    viewMatrix: mat4, viewProjection: mat4, viewportWidth: number, viewportHeight: number,
-    displayDimensionRenderInfo: DisplayDimensionRenderInfo, renderScaleTarget: number,
-    transformedSources: readonly Transformed[],
+    projectionParameters: ProjectionParameters, localPosition: Float32Array,
+    renderScaleTarget: number, transformedSources: readonly Transformed[],
     beginScale: (source: Transformed, index: number) => void,
     callback: (
         source: Transformed, index: number, maxCount: number, physicalSpacing: number,
         pixelSpacing: number) => void) {
+  const {displayDimensionRenderInfo, viewMatrix, projectionMat, width, height} =
+      projectionParameters;
   const {voxelPhysicalScales} = displayDimensionRenderInfo;
   const viewDet = mat3.determinant(mat3FromMat4(tempMat3, viewMatrix));
   const canonicalToPhysicalScale = prod3(voxelPhysicalScales);
   const viewFrustrumVolume =
-      getViewFrustrumVolume(projectionMatrix) / viewDet * canonicalToPhysicalScale;
+      getViewFrustrumVolume(projectionMat) / viewDet * canonicalToPhysicalScale;
 
   if (transformedSources.length === 0) return;
   const baseSource = transformedSources[0];
@@ -68,7 +68,7 @@ forEachVisibleAnnotationChunk<RLayer extends SliceViewRenderLayer, Source extend
   }
 
   const effectiveVolume = Math.min(sourceVolume, viewFrustrumVolume);
-  const viewportArea = viewportWidth * viewportHeight;
+  const viewportArea = width * height;
   const targetNumAnnotations = viewportArea / (renderScaleTarget ** 2);
   const physicalDensityTarget = targetNumAnnotations / effectiveVolume;
 
@@ -90,48 +90,20 @@ forEachVisibleAnnotationChunk<RLayer extends SliceViewRenderLayer, Source extend
     }
     const physicalDensity = limit * sliceFraction / physicalVolume;
 
-
-    // pixelSize = baseScale * w
-    // totalPixelDensity = totalPhysicalDensity * (pixelSize ** 3)
-
-    // If totalPixelDensity >= pixelDensityTarget, we can stop.
-
-    // i.e.   totalPhysicalDensity * (pixelSize ** 3) >= pixelDensityTarget
-    // i.e.   totalPhysicalDensity * ((baseScale * w) ** 3) >= pixelDensityTarget
-    // i.e.   totalPhysicalDensity * baseScale**3 * w**3 >= pixelDensityTarget
-    // i.e.   w**3 >= pixelDensityTarget / (totalPhysicalDensity * baseScale**3)
-    // i.e.   w >= Math.pow(pixelDensityTarget / (totalPhysicalDensity * baseScale**3), 1/3)
-
-    // let wLimit: number;
-    // if (totalPhysicalDensity === 0) {
-    //   wLimit = Number.POSITIVE_INFINITY;
-    // } else {
-    //   wLimit = Math.pow(pixelDensityTarget / (totalPhysicalDensity * baseScale ** 3), 1 / 3);
-    // }
-
     let firstChunk = true;
     const newTotalPhysicalDensity = totalPhysicalDensity + physicalDensity;
     const totalPhysicalSpacing = Math.pow(1 / newTotalPhysicalDensity, 1 / 3);
     const totalPixelSpacing = Math.sqrt(viewportArea / (newTotalPhysicalDensity * effectiveVolume));
-    // const newTotalPhysicalDensity = totalPhysicalDensity + spec.limit / physicalVolume;
     const maxCount =
         (physicalDensityTarget - totalPhysicalDensity) * physicalVolume / sliceFraction;
-    // const totalPhysicalSpacing = Math.pow(1 / newTotalPhysicalDensity, 1 / 3);
 
-    forEachVisibleVolumetricChunk(
-        globalPosition, localPosition, viewProjection, transformedSource, Number.POSITIVE_INFINITY,
-        () => {
-          // const pixelSize = baseScale * minW;
-          // const pixelSize3 = pixelSize ** 3;
-          // const pixelVolume = physicalVolume / pixelSize3;
-          // const totalPixelDensity = totalPhysicalDensity * pixelSize3;
-          if (firstChunk) {
-            beginScale(transformedSource, scaleIndex);
-            firstChunk = false;
-          }
-          callback(
-              transformedSource, scaleIndex, maxCount, totalPhysicalSpacing, totalPixelSpacing);
-        });
+    forEachVisibleVolumetricChunk(projectionParameters, localPosition, transformedSource, () => {
+      if (firstChunk) {
+        beginScale(transformedSource, scaleIndex);
+        firstChunk = false;
+      }
+      callback(transformedSource, scaleIndex, maxCount, totalPhysicalSpacing, totalPixelSpacing);
+    });
     totalPhysicalDensity = newTotalPhysicalDensity;
   }
 }

@@ -704,12 +704,8 @@ const SpatiallyIndexedAnnotationLayer = <TBase extends AnyConstructor<Annotation
           this.base.chunkManager.chunkQueueManager.frameNumberCounter.frameNumber);
       const {projectionParameters} = renderContext;
       forEachVisibleAnnotationChunk(
-          renderContext.projectionParameters.globalPosition, this.base.state.localPosition.value,
-          projectionParameters.projectionMat, projectionParameters.viewMatrix,
-          projectionParameters.viewProjectionMat, projectionParameters.width,
-          projectionParameters.height,
-          renderContext.projectionParameters.displayDimensionRenderInfo,
-          this.renderScaleTarget.value, transformedSources[0], () => {},
+          projectionParameters, this.base.state.localPosition.value, this.renderScaleTarget.value,
+          transformedSources[0], () => {},
           (tsource, index, maxCount, physicalSpacing, pixelSpacing) => {
             index;
             const chunk = tsource.source.chunks.get(tsource.curPositionInChunks.join());

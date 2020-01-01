@@ -1068,14 +1068,15 @@ const tempVisibleVolumetricModelViewProjection = mat4.create();
 const tempVisibleVolumetricClippingPlanes = new Float32Array(24);
 
 export function forEachVisibleVolumetricChunk(
-    globalPosition: Float32Array, localPosition: Float32Array, viewProjection: mat4,
-    transformedSource: TransformedSource, wLimit: number, callback: (minW: number) => void) {
-  if (!updateFixedCurPositionInChunks(transformedSource, globalPosition, localPosition)) {
+    projectionParameters: ProjectionParameters, localPosition: Float32Array,
+  transformedSource: TransformedSource, callback: () => void) {
+  if (!updateFixedCurPositionInChunks(
+          transformedSource, projectionParameters.globalPosition, localPosition)) {
     return;
   }
   const {size: chunkSize} = transformedSource.chunkLayout;
   const modelViewProjection = mat4.multiply(
-      tempVisibleVolumetricModelViewProjection, viewProjection,
+      tempVisibleVolumetricModelViewProjection, projectionParameters.viewProjectionMat,
       transformedSource.chunkLayout.transform);
   for (let i = 0; i < 3; ++i) {
     const s = chunkSize[i];
@@ -1087,35 +1088,6 @@ export function forEachVisibleVolumetricChunk(
   const clippingPlanes = tempVisibleVolumetricClippingPlanes;
   getFrustrumPlanes(clippingPlanes, modelViewProjection);
 
-  const m30 = modelViewProjection[3], m31 = modelViewProjection[7], m32 = modelViewProjection[11],
-        m33 = modelViewProjection[15];
-
-  const minWXcoeff = m30 > 0 ? 0 : 1;
-  const minWYcoeff = m31 > 0 ? 0 : 1;
-  const minWZcoeff = m32 > 0 ? 0 : 1;
-
-
-  const nearA = clippingPlanes[4 * 4], nearB = clippingPlanes[4 * 4 + 1],
-        nearC = clippingPlanes[4 * 4 + 2], nearD = clippingPlanes[4 * 4 + 3];
-
-  function getPointW(x: number, y: number, z: number) {
-    return m30 * x + m31 * y + m32 * z + m33;
-  }
-
-  function getBoxW(
-      xLower: number, yLower: number, zLower: number, xUpper: number, yUpper: number,
-      zUpper: number) {
-    return getPointW(
-        xLower + minWXcoeff * (xUpper - xLower), yLower + minWYcoeff * (yUpper - yLower),
-        zLower + minWZcoeff * (zUpper - zLower));
-  }
-
-  /**
-   * Minimum value of w within clipping frustrum (under the assumption that the minimum value occurs
-   * on the near clipping plane).
-   */
-  const minWClip = getPointW(-nearD * nearA, -nearD * nearB, -nearD * nearC);
-
   const lower = tempVisibleVolumetricChunkLower;
   const upper = tempVisibleVolumetricChunkUpper;
   lower.set(transformedSource.lowerChunkDisplayBound);
@@ -1123,10 +1095,6 @@ export function forEachVisibleVolumetricChunk(
   const {curPositionInChunks, chunkDisplayDimensionIndices} = transformedSource;
 
   function recurse() {
-    const minW =
-        Math.max(minWClip, getBoxW(lower[0], lower[1], lower[2], upper[0], upper[1], upper[2]));
-    if (minW > wLimit) return;
-
     if (!isAABBVisible(
             lower[0], lower[1], lower[2], upper[0], upper[1], upper[2], clippingPlanes)) {
       return;
@@ -1148,7 +1116,7 @@ export function forEachVisibleVolumetricChunk(
       curPositionInChunks[chunkDisplayDimensionIndices[0]] = lower[0];
       curPositionInChunks[chunkDisplayDimensionIndices[1]] = lower[1];
       curPositionInChunks[chunkDisplayDimensionIndices[2]] = lower[2];
-      callback(minW);
+      callback();
       return;
     }
     const prevLower = lower[splitDim];
