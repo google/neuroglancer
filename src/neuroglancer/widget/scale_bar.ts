@@ -144,6 +144,7 @@ export class ScaleBarDimensions {
     }
     this.prevPhysicalSizePerPixel = physicalSizePerPixel;
     this.prevTargetLengthInPixels = targetLengthInPixels;
+    this.prevPhysicalUnit = this.physicalUnit;
     const targetPhysicalSize = targetLengthInPixels * physicalSizePerPixel;
     const exponent = Math.floor(Math.log10(targetPhysicalSize));
     const tenToThePowerExponent = 10 ** exponent;
