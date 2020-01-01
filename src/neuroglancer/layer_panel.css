@@ -85,7 +85,8 @@
 
 .neuroglancer-layer-panel[data-show-hover-values="true"] .neuroglancer-layer-item-value {
   display: inline-block;
-  min-width: 10ch;
+  font-family: monospace;
+  font-size: medium;
   max-width: 50ch;
   margin-left: 1ch;
   white-space: nowrap;
