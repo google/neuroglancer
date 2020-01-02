@@ -18,7 +18,7 @@ import 'neuroglancer/render_layer_backend';
 
 import {Chunk, ChunkConstructor, ChunkSource, withChunkManager} from 'neuroglancer/chunk_manager/backend';
 import {SharedWatchableValue} from 'neuroglancer/shared_watchable_value';
-import {filterVisibleSources, SLICEVIEW_ADD_VISIBLE_LAYER_RPC_ID, SLICEVIEW_REMOVE_VISIBLE_LAYER_RPC_ID, SLICEVIEW_RENDERLAYER_RPC_ID, SLICEVIEW_RPC_ID, SliceViewBase, SliceViewChunkSource as SliceViewChunkSourceInterface, SliceViewChunkSpecification, SliceViewRenderLayer as SliceViewRenderLayerInterface, TransformedSource} from 'neuroglancer/sliceview/base';
+import {filterVisibleSources, forEachPlaneIntersectingVolumetricChunk, SLICEVIEW_ADD_VISIBLE_LAYER_RPC_ID, SLICEVIEW_REMOVE_VISIBLE_LAYER_RPC_ID, SLICEVIEW_RENDERLAYER_RPC_ID, SLICEVIEW_RPC_ID, SliceViewBase, SliceViewChunkSource as SliceViewChunkSourceInterface, SliceViewChunkSpecification, SliceViewRenderLayer as SliceViewRenderLayerInterface, TransformedSource} from 'neuroglancer/sliceview/base';
 import {ChunkLayout} from 'neuroglancer/sliceview/chunk_layout';
 import {WatchableValueInterface} from 'neuroglancer/trackable_value';
 import {vec3, vec3Key} from 'neuroglancer/util/geom';
@@ -70,13 +70,14 @@ export class SliceViewBackend extends SliceViewIntermediateBase {
   });
 
   updateVisibleChunks() {
-    const globalCenter = this.projectionParameters.value.centerDataPosition;
+    const projectionParameters = this.projectionParameters.value;
     let chunkManager = this.chunkManager;
     const visibility = this.visibility.value;
     if (visibility === Number.NEGATIVE_INFINITY) {
       return;
     }
-
+    this.updateVisibleSources();
+    const {centerDataPosition} = projectionParameters;
     const priorityTier = getPriorityTier(visibility);
     let basePriority = getBasePriority(visibility);
     basePriority += BASE_PRIORITY;
@@ -85,37 +86,30 @@ export class SliceViewBackend extends SliceViewIntermediateBase {
 
     const chunkSize = tempChunkSize;
 
-    let getLayoutObject = (chunkLayout: ChunkLayout) => {
-      chunkLayout.globalToLocalSpatial(localCenter, globalCenter);
-      const {size, finiteRank} = chunkLayout;
-      vec3.copy(chunkSize, size);
-      for (let i = finiteRank; i < 3; ++i) {
-        chunkSize[i] = 0;
-        localCenter[i] = 0;
-      }
-      return this.visibleChunkLayouts.get(chunkLayout);
-    };
-
-    function addChunk(
-        chunkLayout: ChunkLayout,
-        sources:
-            Map<TransformedSource<SliceViewRenderLayerBackend, SliceViewChunkSourceBackend>,
-                number>,
-        positionInChunks: vec3,
-        visibleSources:
-            TransformedSource<SliceViewRenderLayerBackend, SliceViewChunkSourceBackend>[]) {
-      chunkLayout;
-      vec3.multiply(tempChunkPosition, positionInChunks, chunkSize);
-      let priority = -vec3.distance(localCenter, tempChunkPosition);
-      for (const tsource of visibleSources) {
-        let priorityIndex = sources.get(tsource)!;
-        let chunk = tsource.source.getChunk(tsource.curPositionInChunks);
-        chunkManager.requestChunk(
-            chunk, priorityTier,
-            basePriority + priority + SCALE_PRIORITY_MULTIPLIER * priorityIndex);
+    for (const visibleLayerSources of this.visibleLayers.values()) {
+      const {visibleSources} = visibleLayerSources;
+      for (let i = 0, numVisibleSources = visibleSources.length; i < numVisibleSources; ++i) {
+        const tsource = visibleSources[i];
+        const {chunkLayout} = tsource;
+        chunkLayout.globalToLocalSpatial(localCenter, centerDataPosition);
+        const {size, finiteRank} = chunkLayout;
+        vec3.copy(chunkSize, size);
+        for (let i = finiteRank; i < 3; ++i) {
+          chunkSize[i] = 0;
+          localCenter[i] = 0;
+        }
+        const priorityIndex = i;
+        const sourceBasePriority = basePriority + SCALE_PRIORITY_MULTIPLIER * priorityIndex;
+        forEachPlaneIntersectingVolumetricChunk(
+            projectionParameters, tsource.renderLayer.localPosition.value, tsource,
+            positionInChunks => {
+              vec3.multiply(tempChunkPosition, positionInChunks, chunkSize);
+              let priority = -vec3.distance(localCenter, tempChunkPosition);
+              let chunk = tsource.source.getChunk(tsource.curPositionInChunks);
+              chunkManager.requestChunk(chunk, priorityTier, sourceBasePriority + priority);
+            });
       }
     }
-    this.computeVisibleChunks(/*initialize=*/ () => {}, getLayoutObject, addChunk);
   }
 
   removeVisibleLayer(layer: SliceViewRenderLayerBackend) {

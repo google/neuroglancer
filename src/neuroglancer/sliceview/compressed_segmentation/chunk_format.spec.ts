@@ -37,7 +37,7 @@ describe('sliceview/compressed_segmentation/chunk_format', () => {
       chunkFormatTest(dataType, volumeSize, gl => {
         let chunkFormat =
             ChunkFormat.get(gl, dataType, compressedSegmentationBlockSize, volumeSize[3]);
-        let textureLayout = chunkFormat.getTextureLayout(gl, volumeSize, encodedData.length);
+        let textureLayout = chunkFormat.getTextureLayout(gl, volumeSize);
         return [chunkFormat, textureLayout];
       }, rawData, encodedData);
     }

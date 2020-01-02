@@ -15,27 +15,21 @@
  */
 
 import {DataType} from 'neuroglancer/util/data_type';
-import {GL} from 'neuroglancer/webgl/context';
 import {fragmentShaderTest} from 'neuroglancer/webgl/shader_testing';
-import {compute1dTextureLayout, computeTextureFormat, OneDimensionalTextureAccessHelper, OneDimensionalTextureLayout, setOneDimensionalTextureData, TextureFormat} from 'neuroglancer/webgl/texture_access';
+import {computeTextureFormat, OneDimensionalTextureAccessHelper, setOneDimensionalTextureData, TextureFormat} from 'neuroglancer/webgl/texture_access';
 
-function testTextureAccess(
-    dataLength: number,
-    setLayout: (layout: OneDimensionalTextureLayout, gl: GL, texelsPerElement: number) => void) {
+function testTextureAccess(dataLength: number) {
   fragmentShaderTest({outputValue: 'uint'}, tester => {
     let {gl, builder} = tester;
     const dataType = DataType.UINT32;
     const numComponents = 1;
     const format = new TextureFormat();
-    const layout = new OneDimensionalTextureLayout();
     computeTextureFormat(format, dataType, numComponents);
 
     const data = new Uint32Array(dataLength);
     for (let i = 0; i < data.length; ++i) {
       data[i] = i;
     }
-
-    setLayout(layout, gl, format.texelsPerElement);
 
     const accessHelper = new OneDimensionalTextureAccessHelper('textureAccess');
     const textureUnitSymbol = Symbol('textureUnit');
@@ -52,15 +46,13 @@ outputValue = readValue(uOffset).value;
     let {shader} = tester;
     shader.bind();
 
-    accessHelper.setupTextureLayout(gl, shader, layout);
-
     const textureUnit = shader.textureUnit(textureUnitSymbol);
     let texture = gl.createTexture();
     tester.registerDisposer(() => {
       gl.deleteTexture(texture);
     });
     gl.bindTexture(gl.TEXTURE_2D, texture);
-    setOneDimensionalTextureData(gl, layout, format, data);
+    setOneDimensionalTextureData(gl, format, data);
     gl.bindTexture(gl.TEXTURE_2D, null);
 
     function testOffset(x: number) {
@@ -89,9 +81,7 @@ outputValue = readValue(uOffset).value;
 }
 
 function test1dTextureAccess(dataLength: number) {
-  testTextureAccess(dataLength, (layout, gl, texelsPerElement) => {
-    compute1dTextureLayout(layout, gl, texelsPerElement, dataLength);
-  });
+  testTextureAccess(dataLength);
 }
 
 describe('one_dimensional_texture_access', () => {

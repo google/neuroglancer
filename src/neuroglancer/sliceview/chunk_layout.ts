@@ -52,24 +52,12 @@ export class ChunkLayout {
     this.invTransform = invTransform;
     this.detTransform = det;
   }
-  static cache = new Map<string, ChunkLayout>();
   toObject() {
     return {size: this.size, transform: this.transform, finiteRank: this.finiteRank};
   }
 
-  static get(size: vec3, transform: mat4, finiteRank: number) {
-    let cache = ChunkLayout.cache;
-    const key = JSON.stringify([Array.from(size), Array.from(transform), finiteRank]);
-    let obj = cache.get(key);
-    if (obj === undefined) {
-      obj = new ChunkLayout(size, transform, finiteRank);
-      cache.set(key, obj);
-    }
-    return obj;
-  }
-
   static fromObject(msg: any) {
-    return ChunkLayout.get(msg.size, msg.transform, msg.finiteRank);
+    return new ChunkLayout(msg.size, msg.transform, msg.finiteRank);
   }
 
   /**
@@ -77,12 +65,6 @@ export class ChunkLayout {
    */
   globalToLocalSpatial(out: vec3, globalSpatial: vec3): vec3 {
     return vec3.transformMat4(out, globalSpatial, this.invTransform);
-  }
-
-  globalToLocalGrid(out: vec3, globalSpatial: vec3): vec3 {
-    this.globalToLocalSpatial(out, globalSpatial);
-    vec3.divide(out, out, this.size);
-    return out;
   }
 
   localSpatialVectorToGlobal(out: vec3, localVector: vec3): vec3 {

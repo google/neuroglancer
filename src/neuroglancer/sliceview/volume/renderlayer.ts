@@ -340,10 +340,6 @@ ${getShaderType(this.dataType)} getDataValue() { return getDataValue(0); }
     };
     let newSource = true;
     for (const transformedSource of visibleSources) {
-      const {visibleChunks} = transformedSource;
-      if (visibleChunks.length === 0) {
-        continue;
-      }
       const chunkLayout = sliceView.getNormalizedChunkLayout(transformedSource.chunkLayout);
       const {chunkTransform: {chunkChannelDimensionIndices}} = transformedSource;
       const source = transformedSource.source as VolumeChunkSource;
@@ -374,7 +370,7 @@ ${getShaderType(this.dataType)} getDataValue() { return getDataValue(0); }
       chunkFormat.beginSource(gl, shader);
       newSource = true;
       let presentCount = 0, notPresentCount = 0;
-      for (let key of visibleChunks) {
+      sliceView.forEachVisibleChunk(transformedSource, key => {
         let chunk = chunks.get(key);
         if (chunk && chunk.state === ChunkState.GPU_MEMORY) {
           let newChunkDataSize = chunk.chunkDataSize;
@@ -395,15 +391,15 @@ ${getShaderType(this.dataType)} getDataValue() { return getDataValue(0); }
                 originalChunkSize[i] * chunkGridPosition[chunkDim];
           }
           chunkFormat.bindChunk(
-              gl, shader, chunk, fixedPositionWithinChunk, chunkDisplayDimensionIndices,
+              gl, shader!, chunk, fixedPositionWithinChunk, chunkDisplayDimensionIndices,
               chunkChannelDimensionIndices, newSource);
           newSource = false;
-          vertexComputationManager.drawChunk(gl, shader, chunkPosition);
+          vertexComputationManager.drawChunk(gl, shader!, chunkPosition);
           ++presentCount;
         } else {
           ++notPresentCount;
         }
-      }
+      });
 
       if ((presentCount !== 0 || notPresentCount !== 0) && renderScaleHistogram !== undefined) {
         const {effectiveVoxelSize} = transformedSource;

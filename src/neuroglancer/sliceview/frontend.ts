@@ -22,7 +22,7 @@ import {DisplayDimensionRenderInfo, NavigationState} from 'neuroglancer/navigati
 import {updateProjectionParametersFromInverseViewAndProjection} from 'neuroglancer/projection_parameters';
 import {ChunkDisplayTransformParameters, ChunkTransformParameters, getChunkDisplayTransformParameters, getChunkTransformParameters, getLayerDisplayDimensionMapping, RenderLayerTransformOrError} from 'neuroglancer/render_coordinate_transform';
 import {DerivedProjectionParameters, SharedProjectionParameters} from 'neuroglancer/renderlayer';
-import {SLICEVIEW_ADD_VISIBLE_LAYER_RPC_ID, SLICEVIEW_REMOVE_VISIBLE_LAYER_RPC_ID, SLICEVIEW_RPC_ID, SliceViewBase, SliceViewChunkSource as SliceViewChunkSourceInterface, SliceViewChunkSpecification, SliceViewProjectionParameters, SliceViewSourceOptions, TransformedSource, VisibleLayerSources} from 'neuroglancer/sliceview/base';
+import {forEachPlaneIntersectingVolumetricChunk, SLICEVIEW_ADD_VISIBLE_LAYER_RPC_ID, SLICEVIEW_REMOVE_VISIBLE_LAYER_RPC_ID, SLICEVIEW_RPC_ID, SliceViewBase, SliceViewChunkSource as SliceViewChunkSourceInterface, SliceViewChunkSpecification, SliceViewProjectionParameters, SliceViewSourceOptions, TransformedSource, VisibleLayerSources} from 'neuroglancer/sliceview/base';
 import {ChunkLayout} from 'neuroglancer/sliceview/chunk_layout';
 import {SliceViewRenderLayer} from 'neuroglancer/sliceview/renderlayer';
 import {Borrowed, Disposer, invokeDisposers, Owned, RefCounted} from 'neuroglancer/util/disposable';
@@ -46,7 +46,6 @@ const Base = withSharedVisibility(FrontendSliceViewBase);
 export interface FrontendTransformedSource<
     RLayer extends SliceViewRenderLayer = SliceViewRenderLayer, Source extends
         SliceViewChunkSource = SliceViewChunkSource> extends TransformedSource<RLayer, Source> {
-  visibleChunks: GenericChunkKey[];
   chunkTransform: ChunkTransformParameters;
   chunkDisplayTransform: ChunkDisplayTransformParameters;
 }
@@ -110,8 +109,6 @@ export class SliceView extends Base {
   offscreenFramebuffer = this.registerDisposer(new FramebufferConfiguration(
       this.gl,
       {colorBuffers: makeTextureBuffers(this.gl, 1), depthBuffer: new StencilBuffer(this.gl)}));
-
-  numVisibleChunks = 0;
 
   projectionParameters: Owned<DerivedProjectionParameters<SliceViewProjectionParameters>>;
 
@@ -197,25 +194,35 @@ export class SliceView extends Base {
     this.updateVisibleLayers();
   }
 
+  forEachVisibleChunk(tsource: FrontendTransformedSource, callback: (key: string) => void) {
+    forEachPlaneIntersectingVolumetricChunk(
+        this.projectionParameters.value, tsource.renderLayer.localPosition.value, tsource, () => {
+          callback(tsource.curPositionInChunks.join());
+        });
+  }
+
   isReady() {
     if (!this.navigationState.valid) {
       return false;
     }
-    this.maybeUpdateVisibleChunks();
+    this.updateVisibleLayers.flush();
+    this.updateVisibleSources();
     let numValidChunks = 0;
+    let totalChunks = 0;
     for (const {visibleSources} of this.visibleLayers.values()) {
       for (const tsource of visibleSources) {
         const {source} = tsource;
         const {chunks} = source;
-        for (const key of tsource.visibleChunks) {
+        this.forEachVisibleChunk(tsource, key => {
           const chunk = chunks.get(key);
+          ++totalChunks;
           if (chunk && chunk.state === ChunkState.GPU_MEMORY) {
             ++numValidChunks;
           }
-        }
+        });
       }
     }
-    return numValidChunks === this.numVisibleChunks;
+    return numValidChunks === totalChunks;
   }
 
   private updateVisibleLayers = this.registerCancellable(debounce(() => {
@@ -313,7 +320,6 @@ export class SliceView extends Base {
 
   invalidateVisibleChunks() {
     super.invalidateVisibleChunks();
-    this.visibleChunksStale = true;
     this.viewChanged.dispatch();
   }
 
@@ -328,7 +334,8 @@ export class SliceView extends Base {
       return;
     }
     this.renderingStale = false;
-    this.maybeUpdateVisibleChunks();
+    this.updateVisibleLayers.flush();
+    this.updateVisibleSources();
 
     let {gl, offscreenFramebuffer} = this;
 
@@ -364,39 +371,6 @@ export class SliceView extends Base {
     gl.disable(gl.BLEND);
     gl.disable(gl.STENCIL_TEST);
     offscreenFramebuffer.unbind();
-  }
-
-  maybeUpdateVisibleChunks() {
-    this.updateVisibleLayers.flush();
-    if (!this.visibleChunksStale && !this.visibleSourcesStale) {
-      return false;
-    }
-    this.visibleChunksStale = false;
-    this.updateVisibleChunks();
-    return true;
-  }
-
-  updateVisibleChunks() {
-    function getLayoutObject(_chunkLayout: ChunkLayout) {
-      return undefined;
-    }
-    let numVisibleChunks = 0;
-    function addChunk(
-        _chunkLayout: ChunkLayout, _chunkObject: undefined, _positionInChunks: vec3,
-        sources: FrontendTransformedSource[]) {
-      for (const tsource of sources) {
-        tsource.visibleChunks.push(tsource.curPositionInChunks.join());
-      }
-      numVisibleChunks += sources.length;
-    }
-    this.computeVisibleChunks(/*initialize=*/ () => {
-      for (const layerInfo of this.visibleLayers.values()) {
-        for (const tsource of layerInfo.visibleSources) {
-          tsource.visibleChunks.length = 0;
-        }
-      }
-    }, getLayoutObject, addChunk);
-    this.numVisibleChunks = numVisibleChunks;
   }
 
   disposed() {
@@ -700,7 +674,7 @@ export function getVolumetricTransformedSources(
           upperChunkDisplayBound.fill(1, numChunkDisplayDims);
           lowerClipDisplayBound.fill(0, numChunkDisplayDims);
           upperClipDisplayBound.fill(1, numChunkDisplayDims);
-          const chunkLayout = ChunkLayout.get(
+          const chunkLayout = new ChunkLayout(
               chunkDisplaySize, chunkDisplayTransform.displaySubspaceModelMatrix,
               numChunkDisplayDims);
           // This is an approximation of the voxel size (exact only for permutation/scaling
@@ -730,7 +704,6 @@ export function getVolumetricTransformedSources(
             fixedPositionWithinChunk: new Uint32Array(chunkRank),
             chunkTransform,
             chunkDisplayTransform,
-            visibleChunks: [],
           };
         };
     return allSources.map(scales => scales.map(s => getTransformedSource(s)));
