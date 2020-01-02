@@ -149,6 +149,18 @@ highp int getFortranOrderIndex(ivec3 subscripts, ivec3 size) {
 }
 `;
 
+export const glsl_log2Exact = `
+highp uint log2Exact(highp uint i) {
+  highp uint r;
+  r = uint((i & 0xAAAAAAAAu) != 0u);
+  r |= uint((i & 0xFFFF0000u) != 0u) << 4;
+  r |= uint((i & 0xFF00FF00u) != 0u) << 3;
+  r |= uint((i & 0xF0F0F0F0u) != 0u) << 2;
+  r |= uint((i & 0xCCCCCCCCu) != 0u) << 1;
+  return r;
+}
+`;
+
 export function getShaderType(dataType: DataType, numComponents: number = 1) {
   switch (dataType) {
     case DataType.FLOAT32:

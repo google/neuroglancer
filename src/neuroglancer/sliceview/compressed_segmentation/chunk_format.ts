@@ -26,29 +26,24 @@ import {Uint64} from 'neuroglancer/util/uint64';
 import {GL} from 'neuroglancer/webgl/context';
 import {ShaderBuilder, ShaderProgram, ShaderSamplerType} from 'neuroglancer/webgl/shader';
 import {getShaderType, glsl_getFortranOrderIndex, glsl_uint32, glsl_uint64} from 'neuroglancer/webgl/shader_lib';
-import {compute1dTextureLayout, computeTextureFormat, OneDimensionalTextureAccessHelper, setOneDimensionalTextureData, TextureFormat} from 'neuroglancer/webgl/texture_access';
+import {computeTextureFormat, OneDimensionalTextureAccessHelper, setOneDimensionalTextureData, TextureFormat} from 'neuroglancer/webgl/texture_access';
 
 class TextureLayout extends RefCounted {
-  textureXBits: number;
-  textureWidth: number;
-  textureHeight: number;
   subchunkGridSize: vec3;
 
-  constructor(
-      gl: GL, public chunkDataSize: Uint32Array, public subchunkSize: vec3, dataLength: number) {
+  constructor(public chunkDataSize: Uint32Array, public subchunkSize: vec3) {
     super();
-    compute1dTextureLayout(this, gl, /*texelsPerElement=*/ 1, dataLength);
-    let subchunkGridSize = this.subchunkGridSize = vec3.create();
+    const subchunkGridSize = this.subchunkGridSize = vec3.create();
     for (let i = 0; i < 3; ++i) {
       subchunkGridSize[i] = Math.ceil(chunkDataSize[i] / subchunkSize[i]);
     }
   }
 
-  static get(gl: GL, chunkDataSize: Uint32Array, subchunkSize: vec3, dataLength: number) {
+  static get(gl: GL, chunkDataSize: Uint32Array, subchunkSize: vec3) {
     return gl.memoize.get(
         `sliceview.CompressedSegmentationTextureLayout:${vec3Key(chunkDataSize)},` +
-            `${vec3Key(subchunkSize)},${dataLength}`,
-        () => new TextureLayout(gl, chunkDataSize, subchunkSize, dataLength));
+            `${vec3Key(subchunkSize)}`,
+        () => new TextureLayout(chunkDataSize, subchunkSize));
   }
 }
 
@@ -205,15 +200,15 @@ ${glslType} getDataValue (`;
     }
     gl.uniform4iv(
         shader.uniform('uVolumeChunkStrides'), stridesUniform, 0, (numChannelDimensions + 4) * 4);
-    this.textureAccessHelper.setupTextureLayout(gl, shader, textureLayout);
   }
 
   setTextureData(gl: GL, textureLayout: TextureLayout, data: Uint32Array) {
-    setOneDimensionalTextureData(gl, textureLayout, textureFormat, data);
+    textureLayout;
+    setOneDimensionalTextureData(gl, textureFormat, data);
   }
 
-  getTextureLayout(gl: GL, chunkDataSize: Uint32Array, dataLength: number) {
-    return TextureLayout.get(gl, chunkDataSize, this.subchunkSize, dataLength);
+  getTextureLayout(gl: GL, chunkDataSize: Uint32Array) {
+    return TextureLayout.get(gl, chunkDataSize, this.subchunkSize);
   }
 
   beginSource(gl: GL, shader: ShaderProgram) {
@@ -231,8 +226,7 @@ export class CompressedSegmentationVolumeChunk extends
   setTextureData(gl: GL) {
     let {data} = this;
     let {chunkFormat} = this;
-    let textureLayout = this.textureLayout =
-        chunkFormat.getTextureLayout(gl, this.chunkDataSize, data.length);
+    let textureLayout = this.textureLayout = chunkFormat.getTextureLayout(gl, this.chunkDataSize);
     chunkFormat.setTextureData(gl, textureLayout, data);
   }
 

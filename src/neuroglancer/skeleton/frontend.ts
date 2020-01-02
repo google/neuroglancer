@@ -41,7 +41,7 @@ import {makeTrackableFragmentMain, parameterizedEmitterDependentShaderGetter, sh
 import {LineShader} from 'neuroglancer/webgl/lines';
 import {ShaderBuilder, ShaderProgram, ShaderSamplerType} from 'neuroglancer/webgl/shader';
 import {addControlsToBuilder, parseShaderUiControls, setControlsInShader, ShaderControlsParseResult, ShaderControlState} from 'neuroglancer/webgl/shader_ui_controls';
-import {compute1dTextureLayout, computeTextureFormat, getSamplerPrefixForDataType, OneDimensionalTextureAccessHelper, setOneDimensionalTextureData, TextureFormat} from 'neuroglancer/webgl/texture_access';
+import {computeTextureFormat, getSamplerPrefixForDataType, OneDimensionalTextureAccessHelper, setOneDimensionalTextureData, TextureFormat} from 'neuroglancer/webgl/texture_access';
 
 const tempMat2 = mat4.create();
 
@@ -235,7 +235,6 @@ void emitDefault() {
     // Draw edges
     {
       edgeShader.bind();
-      this.textureAccessHelper.setupTextureLayout(gl, edgeShader, skeletonChunk);
       const aVertexIndex = edgeShader.attribute('aVertexIndex');
       skeletonChunk.indexBuffer.bindToVertexAttribI(
           aVertexIndex, 2, WebGL2RenderingContext.UNSIGNED_INT);
@@ -249,7 +248,6 @@ void emitDefault() {
 
     if (nodeShader !== null) {
       nodeShader.bind();
-      this.textureAccessHelper.setupTextureLayout(gl, nodeShader, skeletonChunk);
       this.circleShader.draw(
           nodeShader, projectionParameters, {
             featherWidthInPixels: this.targetIsSliceView ? 1.0 : 0.0,
@@ -573,11 +571,6 @@ export class SkeletonChunk extends Chunk {
   vertexAttributeOffsets: Uint32Array;
   vertexAttributeTextures: (WebGLTexture|null)[];
 
-  // Emulation of buffer as texture.
-  textureXBits: number;
-  textureWidth: number;
-  textureHeight: number;
-
   constructor(source: SkeletonSource, x: any) {
     super(source);
     this.vertexAttributes = x['vertexAttributes'];
@@ -589,7 +582,6 @@ export class SkeletonChunk extends Chunk {
 
   copyToGPU(gl: GL) {
     super.copyToGPU(gl);
-    compute1dTextureLayout(this, gl, /*texelsPerElement=*/ 1, this.numVertices);
     const {attributeTextureFormats} = this.source;
     const {vertexAttributes, vertexAttributeOffsets} = this;
     const vertexAttributeTextures: (WebGLTexture|null)[] = this.vertexAttributeTextures = [];
@@ -597,7 +589,7 @@ export class SkeletonChunk extends Chunk {
       const texture = gl.createTexture();
       gl.bindTexture(WebGL2RenderingContext.TEXTURE_2D, texture);
       setOneDimensionalTextureData(
-          gl, this, attributeTextureFormats[i],
+          gl, attributeTextureFormats[i],
           vertexAttributes.subarray(
               vertexAttributeOffsets[i],
               i + 1 !== numAttributes ? vertexAttributeOffsets[i + 1] : vertexAttributes.length));

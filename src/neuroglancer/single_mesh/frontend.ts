@@ -35,7 +35,7 @@ import {CountingBuffer, countingBufferShaderModule, disableCountingBuffer, getCo
 import {ShaderBuilder, ShaderModule, ShaderProgram, ShaderSamplerType} from 'neuroglancer/webgl/shader';
 import {getShaderType} from 'neuroglancer/webgl/shader_lib';
 import {addControlsToBuilder, parseShaderUiControls, setControlsInShader, ShaderControlsParseResult, ShaderControlState} from 'neuroglancer/webgl/shader_ui_controls';
-import {compute1dTextureLayout, computeTextureFormat, getSamplerPrefixForDataType, OneDimensionalTextureAccessHelper, setOneDimensionalTextureData, TextureFormat} from 'neuroglancer/webgl/texture_access';
+import {computeTextureFormat, getSamplerPrefixForDataType, OneDimensionalTextureAccessHelper, setOneDimensionalTextureData, TextureFormat} from 'neuroglancer/webgl/texture_access';
 import {SharedObject} from 'neuroglancer/worker_rpc';
 
 const DEFAULT_FRAGMENT_MAIN = `void main() {
@@ -191,7 +191,6 @@ vLightingFactor = abs(dot(normal, uLightDirection.xyz)) + uLightDirection.w;
   }
 
   bindVertexData(gl: GL, shader: ShaderProgram, data: VertexChunkData) {
-    this.textureAccessHelper.setupTextureLayout(gl, shader, data);
     let index = 0;
     const bindTexture = (texture: WebGLTexture|null) => {
       const textureUnit = WebGL2RenderingContext.TEXTURE0 +
@@ -250,18 +249,11 @@ export class VertexChunkData {
   vertexAttributes: Float32Array[];
   vertexAttributeTextures: (WebGLTexture|null)[];
 
-  // Emulation of buffer as texture.
-  textureXBits: number;
-  textureWidth: number;
-  textureHeight: number;
-
   copyToGPU(gl: GL, attributeFormats: TextureFormat[]) {
-    let numVertices = this.vertexPositions.length / 3;
-    compute1dTextureLayout(this, gl, /*texelsPerElement=*/ 1, numVertices);
     const getBufferTexture = (data: Float32Array, format: TextureFormat) => {
       let texture = gl.createTexture();
       gl.bindTexture(WebGL2RenderingContext.TEXTURE_2D, texture);
-      setOneDimensionalTextureData(gl, this, format, data);
+      setOneDimensionalTextureData(gl, format, data);
       return texture;
     };
     this.vertexTexture = getBufferTexture(this.vertexPositions, vertexPositionTextureFormat);
