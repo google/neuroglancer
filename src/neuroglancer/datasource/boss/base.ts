@@ -18,7 +18,6 @@ import {vec2} from 'neuroglancer/util/geom';
 
 export class BossSourceParameters {
   baseUrl: string;
-  authServer: string;
   collection: string;
   experiment: string;
   channel: string;

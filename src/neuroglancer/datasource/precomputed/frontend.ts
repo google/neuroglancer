@@ -235,11 +235,16 @@ const MultiscaleAnnotationSourceBase =
 class PrecomputedAnnotationSpatialIndexSource extends
 (WithParameters(AnnotationGeometryChunkSource, AnnotationSpatialIndexSourceParameters)) {}
 
+interface PrecomputedAnnotationSourceOptions {
+  metadata: AnnotationMetadata;
+  parameters: AnnotationSourceParameters;
+}
+
 export class PrecomputedAnnotationSource extends MultiscaleAnnotationSourceBase {
   key: any;
   metadata: AnnotationMetadata;
-  constructor(chunkManager: ChunkManager, options: {metadata: AnnotationMetadata}) {
-    const {parameters} = options.metadata;
+  constructor(chunkManager: ChunkManager, options: PrecomputedAnnotationSourceOptions) {
+    const {parameters} = options;
     super(chunkManager, {
       rank: parameters.rank,
       relationships: parameters.relationships.map(x => x.name),
@@ -248,6 +253,10 @@ export class PrecomputedAnnotationSource extends MultiscaleAnnotationSourceBase 
     } as any);
     this.readonly = true;
     this.metadata = options.metadata;
+  }
+
+  static encodeOptions(options: PrecomputedAnnotationSourceOptions) {
+    return super.encodeOptions(options);
   }
 
   getSources(): SliceViewSingleResolutionSource<AnnotationGeometryChunkSource>[][] {
@@ -635,6 +644,7 @@ async function getAnnotationDataSource(
         subsource: {
           annotation: options.chunkManager.getChunkSource(PrecomputedAnnotationSource, {
             metadata: info,
+            parameters: info.parameters,
           }),
         }
       },

@@ -520,13 +520,11 @@ const MultiscaleAnnotationSourceBase = (WithParameters(
 
 export class BrainmapsAnnotationSource extends MultiscaleAnnotationSourceBase {
   key: any;
-  multiscaleVolumeInfo: MultiscaleVolumeInfo;
   parameters: AnnotationSourceParameters;
   credentialsProvider: Owned<CredentialsProvider<Credentials>>;
   constructor(chunkManager: ChunkManager, options: {
     credentialsProvider: CredentialsProvider<Credentials>,
     parameters: AnnotationSourceParameters,
-    multiscaleVolumeInfo: MultiscaleVolumeInfo
   }) {
     super(chunkManager, {
       rank: 3,
@@ -534,22 +532,21 @@ export class BrainmapsAnnotationSource extends MultiscaleAnnotationSourceBase {
       properties: [],
       ...options,
     });
-    this.multiscaleVolumeInfo = options.multiscaleVolumeInfo;
     this.credentialsProvider = this.registerDisposer(options.credentialsProvider.addRef());
   }
 
   getSources(): SliceViewSingleResolutionSource<AnnotationGeometryChunkSource>[][] {
-    const baseScale = this.multiscaleVolumeInfo.scales[0];
+    const {upperVoxelBound} = this.parameters;
     const spec = makeSliceViewChunkSpecification({
       rank: 3,
-      chunkDataSize: Float32Array.from(baseScale.upperVoxelBound),
-      upperVoxelBound: baseScale.upperVoxelBound,
+      chunkDataSize: upperVoxelBound,
+      upperVoxelBound,
     });
     const chunkToMultiscaleTransform = mat4.create();
     return [[{
       chunkSource: this.chunkManager.getChunkSource(BrainmapsAnnotationSpatialIndexSource, {
         parent: this,
-        spec,
+        spec: {limit: 1e9, ...spec},
         parameters: this.parameters,
         credentialsProvider: this.credentialsProvider,
       }),
@@ -740,9 +737,9 @@ export class BrainmapsDataSource extends DataSourceProvider {
                     volumeId,
                     changestack: changeSpec.changeStackId,
                     instance: this.instance,
+                    upperVoxelBound: multiscaleVolumeInfo.scales[0].upperVoxelBound,
                   },
                   credentialsProvider: this.credentialsProvider,
-                  multiscaleVolumeInfo
                 })
               },
             });

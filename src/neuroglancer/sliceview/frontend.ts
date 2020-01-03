@@ -415,8 +415,7 @@ export abstract class SliceViewChunkSource<
     this.spec = options.spec;
   }
 
-  static encodeSpec<Spec extends SliceViewChunkSpecification = SliceViewChunkSpecification>(
-      spec: Spec) {
+  static encodeSpec(spec: SliceViewChunkSpecification) {
     return {
       chunkDataSize: Array.from(spec.chunkDataSize),
       lowerVoxelBound: Array.from(spec.lowerVoxelBound),
@@ -424,8 +423,7 @@ export abstract class SliceViewChunkSource<
     };
   }
 
-  static encodeOptions<Spec extends SliceViewChunkSpecification = SliceViewChunkSpecification>(
-      options: SliceViewChunkSourceOptions<Spec>) {
+  static encodeOptions(options: SliceViewChunkSourceOptions): any {
     const encoding = super.encodeOptions(options);
     encoding.spec = this.encodeSpec(options.spec);
     return encoding;

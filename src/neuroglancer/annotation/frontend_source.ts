@@ -140,6 +140,10 @@ export class AnnotationGeometryChunkSource extends
     // TODO: process local deletions
   }
 
+  static encodeOptions(options: AnnotationGeometryChunkSourceOptions) {
+    return super.encodeOptions(options);
+  }
+
   getChunk(x: any) {
     return new AnnotationGeometryChunk(this, x);
   }

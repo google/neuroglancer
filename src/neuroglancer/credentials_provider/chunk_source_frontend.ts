@@ -43,10 +43,13 @@ export function getCredentialsProviderCounterpart<Credentials>(
  * Mixin for adding a credentialsProvider member to a ChunkSource.
  */
 export function WithCredentialsProvider<Credentials>() {
-  return function<BaseOptions, TBase extends ChunkSourceConstructor<
-                      BaseOptions, SharedObject&{chunkManager: ChunkManager}>>(Base: TBase) {
+  return function<
+      TBase extends ChunkSourceConstructor<{}, SharedObject&{chunkManager: ChunkManager}>>(
+      Base: TBase) {
+    type BaseOptions =
+        TBase extends {encodeOptions(options: infer BaseOptions): any} ? BaseOptions : never;
     type Options = BaseOptions&{credentialsProvider: Borrowed<CredentialsProvider<Credentials>>};
-    return class extends Base {
+    class C extends Base {
       credentialsProvider: Owned<CredentialsProvider<Credentials>>;
       constructor(...args: any[]) {
         super(...args);
@@ -64,5 +67,6 @@ export function WithCredentialsProvider<Credentials>() {
         return encoding;
       }
     };
+    return C as (typeof C&{encodeOptions(options: Options): any});
   };
 }

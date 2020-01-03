@@ -1650,15 +1650,6 @@ export function UserLayerWithAnnotationsMixin<TBase extends {new (...args: any[]
       refCounted.registerDisposer(this.annotationStates.add(state));
       const annotationLayer = new AnnotationLayer(this.manager.chunkManager, state.addRef());
       if (annotationLayer.source instanceof MultiscaleAnnotationSource) {
-        // dataFetchLayer = refCounted.registerDisposer(
-        //     new DataFetchSliceViewRenderLayer(annotationLayer.source.addRef(), {
-        //       transform: state.transform,
-        //       localPosition: state.localPosition,
-        //       renderScaleTarget: this.annotationCrossSectionRenderScaleTarget,
-        //       renderScaleHistogram: this.annotationCrossSectionRenderScaleHistogram,
-        //     }));
-        // refCounted.registerDisposer(loadedSubsource.messages.addChild(dataFetchLayer.messages));
-
         const crossSectionRenderLayer = new SpatiallyIndexedSliceViewAnnotationLayer({
           annotationLayer: annotationLayer.addRef(),
           renderScaleTarget: this.annotationCrossSectionRenderScaleTarget,

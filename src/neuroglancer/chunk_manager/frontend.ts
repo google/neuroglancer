@@ -264,7 +264,7 @@ registerPromiseRPC('Chunk.retrieve', function(x, cancellationToken): RPCPromise<
 
 export interface ChunkSourceConstructor<Options, T extends SharedObject = ChunkSource> {
   new(...args: any[]): T;
-  encodeOptions(options: Options): {[key: string]: any};
+  encodeOptions(options: Options): any;
 }
 
 @registerSharedObjectOwner(CHUNK_MANAGER_RPC_ID)
@@ -283,7 +283,7 @@ export class ChunkManager extends SharedObject {
   }
 
   getChunkSource<T extends SharedObject&{key: any}, Options>(
-      constructorFunction: ChunkSourceConstructor<Options, T>, options: any): T {
+      constructorFunction: ChunkSourceConstructor<Options, T>, options: Options): T {
     const keyObject = constructorFunction.encodeOptions(options);
     keyObject['constructorId'] = getObjectId(constructorFunction);
     const key = stableStringify(keyObject);
@@ -351,10 +351,12 @@ export class ChunkSource extends SharedObject {
   }
 }
 
-export function WithParameters<Parameters, BaseOptions,
-                               TBase extends ChunkSourceConstructor<BaseOptions, SharedObject>>(
+export function WithParameters<Parameters, TBase extends ChunkSourceConstructor<{}, SharedObject>>(
     Base: TBase, parametersConstructor: ChunkSourceParametersConstructor<Parameters>) {
+  type BaseOptions =
+      TBase extends {encodeOptions(options: infer BaseOptions): any} ? BaseOptions : never;
   type Options = BaseOptions&{parameters: Parameters};
+
   @registerSharedObjectOwner(parametersConstructor.RPC_ID)
   class C extends Base {
     parameters: Parameters;
@@ -371,5 +373,5 @@ export function WithParameters<Parameters, BaseOptions,
       return Object.assign({parameters: options.parameters}, super.encodeOptions(options));
     }
   }
-  return C;
+  return C as (typeof C&{encodeOptions(options: Options): any});
 }
