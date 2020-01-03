@@ -92,7 +92,7 @@ for (int i = 0; i < ${rank}; ++i) {
 }
 ng_LineWidth = 1.0;
 vColor = vec4(0.0, 0.0, 0.0, 0.0);
-userMain();
+${this.invokeUserMain}
 emitLine(uModelViewProjection * vec4(projectModelVectorToSubspace(modelPositionA), 1.0),
          uModelViewProjection * vec4(projectModelVectorToSubspace(modelPositionB), 1.0),
          ng_LineWidth);
@@ -148,7 +148,7 @@ vColor = vec4(0.0, 0.0, 0.0, 0.0);
 vBorderColor = vec4(0.0, 0.0, 0.0, 1.0);
 ng_markerDiameter = 5.0;
 ng_markerBorderWidth = 1.0;
-userMain();
+${this.invokeUserMain}
 emitCircle(uModelViewProjection * vec4(projectModelVectorToSubspace(modelPosition), 1.0), ng_markerDiameter, ng_markerBorderWidth);
 ${this.setPartIndex(builder, 'aEndpointIndex + 1u')};
 `);

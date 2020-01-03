@@ -199,8 +199,6 @@ export abstract class AnnotationRenderHelper extends RefCounted {
         builder.addUniform('highp float', 'uModelClipBounds', rank * 2);
         builder.addUniform('highp uint', 'uPickID');
         builder.addVarying('highp uint', 'vPickID', 'flat');
-        builder.addVertexCode(`const bool PROJECTION_VIEW = ${!this.targetIsSliceView};`);
-
         builder.addVertexCode(`
 vec3 defaultColor() { return uColor; }
 highp uint getPickBaseOffset() { return uint(gl_InstanceID) * ${this.pickIdsPerInstance}u; }
@@ -261,6 +259,12 @@ float getMaxSubspaceClipCoefficient(float modelPointA[${this.rank}],  float mode
 `);
         addControlsToBuilder(parameters.controls, builder);
         builder.addVertexCode(`
+const bool PROJECTION_VIEW = ${!this.targetIsSliceView};
+bool ng_discardValue;
+#define discard ng_discard()
+void ng_discard() {
+  ng_discardValue = true;
+}
 void setLineColor(vec4 startColor, vec4 endColor);
 void setLineWidth(float width);
 
@@ -348,6 +352,17 @@ if (selectedIndex == pickBaseOffset${
 `;
     builder.addVertexCode(s);
     return `setPartIndex(${partIndexExpressions.join()})`;
+  }
+
+  get invokeUserMain() {
+    return `
+ng_discardValue = false;
+userMain();
+if (ng_discardValue) {
+  gl_Position = vec4(2.0, 0.0, 0.0, 1.0);
+  return;
+}
+`;
   }
 
   getCrossSectionFadeFactor() {

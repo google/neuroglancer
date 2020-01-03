@@ -218,7 +218,7 @@ if (vClipCoefficient == 0.0) {
   return;
 }
 ng_lineWidth = 2.0;
-userMain();
+${this.invokeUserMain}
 emitLine(uModelViewProjection * vec4(endpointA, 1.0),
          uModelViewProjection * vec4(endpointB, 1.0),
          ng_lineWidth);
@@ -373,7 +373,7 @@ int vertexIndex2 = vertexIndex1 == 5 ? 0 : vertexIndex1 + 1;
 vec3 vertexPosition1 = getBoundingBoxPlaneIntersectionVertexPosition(subspacePositionB - subspacePositionA, subspacePositionA, subspacePositionA, subspacePositionB, vertexIndex1);
 vec3 vertexPosition2 = getBoundingBoxPlaneIntersectionVertexPosition(subspacePositionB - subspacePositionA, subspacePositionA, subspacePositionA, subspacePositionB, vertexIndex2);
 ng_lineWidth = 2.0;
-userMain();
+${this.invokeUserMain}
 emitLine(uModelViewProjection * vec4(vertexPosition1, 1.0),
          uModelViewProjection * vec4(vertexPosition2, 1.0),
          ng_lineWidth);
@@ -411,7 +411,7 @@ vec3 subspacePositionB = projectModelVectorToSubspace(modelPositionB);
 int vertexIndex = int(aVertexIndexFloat);
 vec3 vertexPosition = getBoundingBoxPlaneIntersectionVertexPosition(subspacePositionB - subspacePositionA, subspacePositionA, subspacePositionA, subspacePositionB, vertexIndex);
 gl_Position = uModelViewProjection * vec4(vertexPosition, 1);
-userMain();
+${this.invokeUserMain}
 ${this.setPartIndex(builder)};
 `);
         builder.setFragmentMain(`

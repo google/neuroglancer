@@ -20,10 +20,15 @@ To retrieve a property named `myProperty`, use the syntax `prop_myProperty()`.
 
 ### Common API
 
-``` glsl
+```glsl
 const bool PROJECTION_VIEW;
 ```
 Set to `true` when rendering a 3-d projection view, set to `false` when rendering a cross section view.
+
+```glsl
+discard;
+```
+Discards the annotation from rendering (the annotation won't be shown).  Use the syntax `discard;`, not `discard();`.
 
 ```glsl
 void setColor(vec4 color) {

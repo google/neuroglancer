@@ -61,7 +61,7 @@ if (vClipCoefficient == 0.0) {
 ng_markerDiameter = 5.0;
 ng_markerBorderWidth = 1.0;
 vBorderColor = vec4(0.0, 0.0, 0.0, 1.0);
-userMain();
+${this.invokeUserMain}
 emitCircle(uModelViewProjection *
            vec4(projectModelVectorToSubspace(modelPosition), 1.0), ng_markerDiameter, ng_markerBorderWidth);
 ${this.setPartIndex(builder)};

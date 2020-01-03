@@ -113,7 +113,7 @@ if (params.cull) {
   return;
 }
 vClipCoefficient = params.clipCoefficient;
-userMain();
+${this.invokeUserMain}
 emitSphere(uModelViewProjection, uNormalTransform, params.subspaceCenter, params.subspaceRadii, uLightDirection);
 ${this.setPartIndex(builder)};
 `);
@@ -211,7 +211,7 @@ if (centerOrient.valid) {
   gl_Position = vec4(2.0, 0.0, 0.0, 1.0);
 }
 vCircleCoord = aCornerOffset;
-userMain();
+${this.invokeUserMain}
 ${this.setPartIndex(builder)};
 `);
         builder.setFragmentMain(`
