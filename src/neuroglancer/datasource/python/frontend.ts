@@ -44,8 +44,11 @@ interface PythonChunkSource extends ChunkSource {
   generation: number;
 }
 
-function WithPythonDataSource<BaseOptions extends {parameters: PythonSourceParameters}, TBase extends ChunkSourceConstructor<BaseOptions>>(
+function
+WithPythonDataSource<TBase extends ChunkSourceConstructor<{parameters: PythonSourceParameters}>>(
     Base: TBase) {
+  type BaseOptions =
+      TBase extends {encodeOptions(options: infer BaseOptions): any} ? BaseOptions : never;
   type Options = BaseOptions&{
     dataSource: Borrowed<PythonDataSource>;
     generation: number;
@@ -69,7 +72,7 @@ function WithPythonDataSource<BaseOptions extends {parameters: PythonSourceParam
       return encoding;
     }
   }
-  return C;
+  return C as (typeof C) & {encodeOptions: (options: Options) => any};
 }
 
 class PythonVolumeChunkSource extends
