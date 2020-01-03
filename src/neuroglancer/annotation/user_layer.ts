@@ -102,20 +102,22 @@ const FILTER_BY_SEGMENTATION_JSON_KEY = 'filterBySegmentation';
 class LinkedSegmentationLayers extends RefCounted {
   changed = new NullarySignal();
   private curGeneration = -1;
+  private wasLoading: boolean|undefined = undefined;
   constructor(
       public layerManager: Borrowed<LayerManager>,
       public annotationStates: Borrowed<MergedAnnotationStates>,
       public annotationDisplayState: Borrowed<AnnotationDisplayState>) {
     super();
-    this.registerDisposer(annotationStates.changed.add(() => {
-      this.update();
-    }));
+    this.registerDisposer(annotationStates.changed.add(() => this.update()));
+    this.registerDisposer(annotationStates.isLoadingChanged.add(() => this.update()));
     this.update();
   }
 
   private update() {
     const generation = this.annotationStates.changed.count;
-    if (this.curGeneration === generation) return;
+    const isLoading = this.annotationStates.isLoading;
+    if (this.curGeneration === generation && isLoading === this.wasLoading) return;
+    this.wasLoading = isLoading;
     this.curGeneration = generation;
     const {map} = this;
     let changed = false;
@@ -127,7 +129,7 @@ class LinkedSegmentationLayers extends RefCounted {
       }
       state.seenGeneration = generation;
     }
-    if (!this.annotationStates.isLoading) {
+    if (!isLoading) {
       for (const [relationship, state] of map) {
         if (state.seenGeneration !== generation) {
           map.delete(relationship);
@@ -204,8 +206,8 @@ class LinkedSegmentationLayers extends RefCounted {
           filterBySegmentation.length === 0 ? undefined : filterBySegmentation,
     };
   }
-
   restoreState(json: any) {
+    const {isLoading} = this.annotationStates;
     verifyOptionalObjectProperty(json, LINKED_SEGMENTATION_LAYER_JSON_KEY, linkedJson => {
       if (typeof linkedJson === 'string') {
         linkedJson = {'segments': linkedJson};
@@ -215,6 +217,7 @@ class LinkedSegmentationLayers extends RefCounted {
         const value = verifyString(linkedJson[key]);
         let state = this.map.get(key);
         if (state === undefined) {
+          if (!isLoading) continue;
           state = this.addRelationship(key);
         }
         state.layerRef.layerName = value;
@@ -232,6 +235,7 @@ class LinkedSegmentationLayers extends RefCounted {
       for (const key of verifyStringArray(filterJson)) {
         let state = this.map.get(key);
         if (state === undefined) {
+          if (!isLoading) continue;
           state = this.addRelationship(key);
         }
         state.showMatches.value = true;
