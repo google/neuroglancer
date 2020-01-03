@@ -79,8 +79,9 @@ export type AnnotationPropertySpec = AnnotationColorPropertySpec|AnnotationNumer
 
 export interface AnnotationPropertyTypeHandler {
   serializedBytes(rank: number): number;
-  serializeCode(property: string, rank: number): string;
-  deserializeCode(property: string, rank: number): string;
+  alignment(rank: number): number;
+  serializeCode(property: string, offset: string, rank: number): string;
+  deserializeCode(property: string, offset: string, rank: number): string;
 }
 
 export const annotationPropertyTypeHandlers:
@@ -89,121 +90,157 @@ export const annotationPropertyTypeHandlers:
         serializedBytes() {
           return 3;
         },
-        serializeCode(property: string) {
-          return `dv.setUint16(offset, ${property}, true);` +
-              `dv.setUint8(offset + 2, ${property} >>> 16);` +
-              `offset += 3;`;
+        alignment() {
+          return 1;
         },
-        deserializeCode(property: string) {
-          return `${property} = dv.getUint16(offset, true) | (dv.getUint8(offset + 2) << 16);` +
-              `offset += 3;`;
+        serializeCode(property: string, offset: string) {
+          return `dv.setUint16(${offset}, ${property}, true);` +
+              `dv.setUint8(${offset} + 2, ${property} >>> 16);`;
+        },
+        deserializeCode(property: string, offset: string) {
+          return `${property} = dv.getUint16(${offset}, true) | (dv.getUint8(${
+              offset} + 2) << 16);`;
         },
       },
       'rgba': {
         serializedBytes() {
           return 4;
         },
-        serializeCode(property: string) {
-          return `dv.setUint32(offset, ${property}, true);` +
-              `offset += 4;`;
+        alignment() {
+          return 1;
         },
-        deserializeCode(property: string) {
-          return `${property} = dv.getUint32(offset, true);` +
-              `offset += 4;`;
+        serializeCode(property: string, offset: string) {
+          return `dv.setUint32(${offset}, ${property}, true);`;
+        },
+        deserializeCode(property: string, offset: string) {
+          return `${property} = dv.getUint32(${offset}, true);`;
         },
       },
       'float32': {
         serializedBytes() {
           return 4;
         },
-        serializeCode(property: string) {
-          return `dv.setFloat32(offset, ${property}, isLittleEndian);` +
-              `offset += 4;`;
+        alignment() {
+          return 4;
         },
-        deserializeCode(property: string) {
-          return `${property} = dv.getFloat32(offset, isLittleEndian);` +
-              `offset += 4;`;
+        serializeCode(property: string, offset: string) {
+          return `dv.setFloat32(${offset}, ${property}, isLittleEndian);`;
+        },
+        deserializeCode(property: string, offset: string) {
+          return `${property} = dv.getFloat32(${offset}, isLittleEndian);`;
         }
       },
       'uint32': {
         serializedBytes() {
           return 4;
         },
-        serializeCode(property: string) {
-          return `dv.setUint32(offset, ${property}, isLittleEndian);` +
-              `offset += 4;`;
+        alignment() {
+          return 4;
         },
-        deserializeCode(property: string) {
-          return `${property} = dv.getUint32(offset, isLittleEndian);` +
-              `offset += 4;`;
+        serializeCode(property: string, offset: string) {
+          return `dv.setUint32(${offset}, ${property}, isLittleEndian);`;
+        },
+        deserializeCode(property: string, offset: string) {
+          return `${property} = dv.getUint32(${offset}, isLittleEndian);`;
         }
       },
       'int32': {
         serializedBytes() {
           return 4;
         },
-        serializeCode(property: string) {
-          return `dv.setInt32(offset, ${property}, isLittleEndian);` +
-              `offset += 4;`;
+        alignment() {
+          return 4;
         },
-        deserializeCode(property: string) {
-          return `${property} = dv.getInt32(offset, isLittleEndian);` +
-              `offset += 4;`;
+        serializeCode(property: string, offset: string) {
+          return `dv.setInt32(${offset}, ${property}, isLittleEndian);`;
+        },
+        deserializeCode(property: string, offset: string) {
+          return `${property} = dv.getInt32(${offset}, isLittleEndian);`;
         }
       },
       'uint16': {
         serializedBytes() {
           return 2;
         },
-        serializeCode(property: string) {
-          return `dv.setUint16(offset, ${property}, isLittleEndian);` +
-              `offset += 2;`;
+        alignment() {
+          return 2;
         },
-        deserializeCode(property: string) {
-          return `${property} = dv.getUint16(offset, isLittleEndian);` +
-              `offset += 2;`;
+        serializeCode(property: string, offset: string) {
+          return `dv.setUint16(${offset}, ${property}, isLittleEndian);`;
+        },
+        deserializeCode(property: string, offset: string) {
+          return `${property} = dv.getUint16(${offset}, isLittleEndian);`;
         }
       },
       'int16': {
         serializedBytes() {
           return 2;
         },
-        serializeCode(property: string) {
-          return `dv.setInt16(offset, ${property}, isLittleEndian);` +
-              `offset += 2;`;
+        alignment() {
+          return 2;
         },
-        deserializeCode(property: string) {
-          return `${property} = dv.getInt16(offset, isLittleEndian);` +
-              `offset += 2;`;
+        serializeCode(property: string, offset: string) {
+          return `dv.setInt16(${offset}, ${property}, isLittleEndian);`;
+        },
+        deserializeCode(property: string, offset: string) {
+          return `${property} = dv.getInt16(${offset}, isLittleEndian);`;
         }
       },
       'uint8': {
         serializedBytes() {
           return 1;
         },
-        serializeCode(property: string) {
-          return `dv.setUint8(offset, ${property});` +
-              `offset += 1;`;
+        alignment() {
+          return 1;
         },
-        deserializeCode(property: string) {
-          return `${property} = dv.getUint8(offset);` +
-              `offset += 1;`;
+        serializeCode(property: string, offset: string) {
+          return `dv.setUint8(${offset}, ${property});`;
+        },
+        deserializeCode(property: string, offset: string) {
+          return `${property} = dv.getUint8(${offset});`;
         }
       },
       'int8': {
         serializedBytes() {
           return 2;
         },
-        serializeCode(property: string) {
-          return `dv.setInt8(offset, ${property});` +
-              `offset += 1;`;
+        alignment() {
+          return 1;
         },
-        deserializeCode(property: string) {
-          return `${property} = dv.getInt8(offset);` +
-              `offset += 1;`;
+        serializeCode(property: string, offset: string) {
+          return `dv.setInt8(${offset}, ${property});`;
+        },
+        deserializeCode(property: string, offset: string) {
+          return `${property} = dv.getInt8(${offset});`;
         }
       },
     };
+
+export function getPropertyOffsets(
+    rank: number, propertySpecs: readonly Readonly<AnnotationPropertySpec>[]) {
+  let serializedBytes = 0;
+  const numProperties = propertySpecs.length;
+  const permutation = new Array<number>(numProperties);
+  for (let i = 0; i < numProperties; ++i) {
+    permutation[i] = i;
+  }
+  const getAlignment = (i: number) =>
+      annotationPropertyTypeHandlers[propertySpecs[i].type].alignment(rank);
+  permutation.sort((i, j) => getAlignment(j) - getAlignment(i));
+  const offsets = new Array<number>(numProperties);
+  for (let outputIndex = 0; outputIndex < numProperties; ++outputIndex) {
+    const propertyIndex = permutation[outputIndex];
+    const spec = propertySpecs[propertyIndex];
+    const handler = annotationPropertyTypeHandlers[spec.type];
+    const numBytes = handler.serializedBytes(rank);
+    const alignment = handler.alignment(rank);
+    serializedBytes += (alignment - (serializedBytes % alignment)) % alignment;
+    offsets[propertyIndex] = serializedBytes;
+    serializedBytes += numBytes;
+  }
+  serializedBytes += (4 - (serializedBytes % 4)) % 4;
+  return {serializedBytes, offsets};
+}
 
 export class AnnotationPropertySerializer {
   serializedBytes: number;
@@ -217,18 +254,17 @@ export class AnnotationPropertySerializer {
       this.serialize = this.deserialize = () => {};
       return;
     }
-    let serializedBytes = 0;
     let serializeCode = '';
     let deserializeCode = '';
-    let i = 0;
-    for (const spec of propertySpecs) {
+    const {serializedBytes, offsets} = getPropertyOffsets(rank, propertySpecs);
+    const numProperties = propertySpecs.length;
+    for (let propertyIndex = 0; propertyIndex < numProperties; ++propertyIndex) {
+      const spec = propertySpecs[propertyIndex];
       const handler = annotationPropertyTypeHandlers[spec.type];
-      const numBytes = handler.serializedBytes(rank);
-      const propId = `properties[${i}]`;
-      serializedBytes += numBytes;
-      serializeCode += handler.serializeCode(propId, rank);
-      deserializeCode += handler.deserializeCode(propId, rank);
-      ++i;
+      const propId = `properties[${propertyIndex}]`;
+      const offsetExpr = `offset + ${offsets[propertyIndex]}`;
+      serializeCode += handler.serializeCode(propId, offsetExpr, rank);
+      deserializeCode += handler.deserializeCode(propId, offsetExpr, rank);
     }
     this.serializedBytes = serializedBytes;
     this.serialize =
@@ -770,6 +806,7 @@ function serializeAnnotations(
     const count = annotations.length;
     const handler = getAnnotationTypeHandler(annotationType);
     totalBytes += (handler.serializedBytes(rank) + serializedPropertiesBytes) * count;
+    totalBytes += (4 - (totalBytes % 4)) % 4;
   }
   const serializeProperties = propertySerializer.serialize;
   const typeToIds: string[][] = [];

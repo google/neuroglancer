@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-import {Annotation, AnnotationPropertySpec, annotationPropertyTypeHandlers, AnnotationType, getAnnotationTypeHandler} from 'neuroglancer/annotation';
+import {Annotation, AnnotationPropertySpec, AnnotationType, getAnnotationTypeHandler, getPropertyOffsets} from 'neuroglancer/annotation';
 import {AnnotationLayer} from 'neuroglancer/annotation/renderlayer';
 import {PerspectiveViewRenderContext} from 'neuroglancer/perspective_view/render_layer';
 import {SliceViewPanelRenderContext} from 'neuroglancer/sliceview/renderlayer';
@@ -126,6 +126,7 @@ export abstract class AnnotationRenderHelper extends RefCounted {
   targetIsSliceView: boolean;
   readonly serializedBytesPerAnnotation: number;
   readonly serializedGeometryBytesPerAnnotation: number;
+  readonly propertyOffsets: number[];
 
   constructor(
       public gl: GL, public annotationType: AnnotationType, public rank: number,
@@ -134,12 +135,13 @@ export abstract class AnnotationRenderHelper extends RefCounted {
       public fallbackShaderParameters: WatchableValueInterface<ShaderControlsParseResult>,
       public shaderError: WatchableShaderError) {
     super();
-    let serializedBytes = this.serializedGeometryBytesPerAnnotation =
+    const serializedGeometryBytesPerAnnotation = this.serializedGeometryBytesPerAnnotation =
         getAnnotationTypeHandler(annotationType).serializedBytes(rank);
-    for (const property of properties) {
-      serializedBytes += annotationPropertyTypeHandlers[property.type].serializedBytes(rank);
-    }
-    this.serializedBytesPerAnnotation = serializedBytes;
+    const {offsets, serializedBytes: serializedPropertyBytes} =
+        getPropertyOffsets(rank, properties);
+    this.serializedBytesPerAnnotation =
+        serializedPropertyBytes + serializedGeometryBytesPerAnnotation;
+    this.propertyOffsets = offsets;
   }
 
   getDependentShader(memoizeKey: any, defineShader: (builder: ShaderBuilder) => void):
@@ -156,13 +158,12 @@ export abstract class AnnotationRenderHelper extends RefCounted {
       parameters: this.shaderControlState.parseResult,
       shaderError: this.shaderError,
       defineShader: (builder, parameters) => {
-        const {rank} = this;
-        for (const property of this.properties) {
+        const {rank, properties} = this;
+        for (const property of properties) {
           const handler = annotationPropertyTypeRenderHandlers[property.type];
           handler.defineShader(builder, property.identifier, rank);
         }
-        const numBytesPerProperty = this.properties.map(
-            property => annotationPropertyTypeHandlers[property.type].serializedBytes(rank));
+        const {propertyOffsets} = this;
         builder.addInitializer(shader => {
           const binders = this.properties.map(
               property => shader.vertexShaderInputBinders[`prop_${property.identifier}`]);
@@ -175,8 +176,7 @@ export abstract class AnnotationRenderHelper extends RefCounted {
             },
             bind(stride: number, offset: number) {
               for (let i = 0; i < numProperties; ++i) {
-                binders[i].bind(stride, offset);
-                offset += numBytesPerProperty[i];
+                binders[i].bind(stride, offset + propertyOffsets[i]);
               }
             },
             disable() {

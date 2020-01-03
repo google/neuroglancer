@@ -101,7 +101,10 @@ Within the annotation id index, each annotation is encoded in the following bina
   - For `"LINE"` type, the first endpoint position followed by the second endpoint position.
   - For `"AXIS_ALIGNED_BOUNDING_BOX"` type, the first position followed by the second position.
   - For `"ELLIPSOID"` type, the center position followed by the radii vector.
-- The properties, encoded as little endian values in the order specified by the info JSON file.
+- For each property of type `uint32`, `int32`, or `float32`: the value encoded as a little endian value.
+- For each property of type `uint16` or `int16`: the value encoded as a little endian value.
+- For each property of type `uint8`, `int8`, `rgb`, or `rgba`: the encoded value.
+- Up to 3 padding bytes (with value of 0) to reach a byte offset that is a multiple of 4.
 - For each relationship specified by the info JSON file:
   - The number of object ids as a uint32le value.
   - Each related object id, as a uint64le value.
@@ -136,7 +139,7 @@ Both the related object id index and the spatial index encode lists of annotatio
 The number of annotations, `count`, as a uint64le value.
 
 Repeated for `i = 0` up to `count - 1`:
-- The position/radii vectors and the property values of the `i`th annotation are encoded exactly as
+- The position/radii vectors, the property values, and padding bytes of the `i`th annotation are encoded exactly as
 in the [single annotation encoding](#single-annotation-encoding).
 
 Repeated for `i = 0` up to `count - 1`:
