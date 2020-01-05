@@ -19,10 +19,13 @@
   cursor: default;
   top: 2px;
   left: 2px;
+  background-color: rgba(0, 0, 0, 0.3);
+}
+
+.neuroglancer-display-dimensions-widget-dimension-grid {
   display: grid;
   grid-template-rows: 0fr 0fr 0fr 0fr;
   grid-template-columns: 0fr 0fr 0fr;
-  background-color: rgba(0, 0, 0, 0.3);
 }
 
 .neuroglancer-display-dimensions-widget input {
@@ -80,9 +83,11 @@
   margin-left: 5px;
 }
 
-.neuroglancer-display-dimensions-widget:not(:hover) .neuroglancer-display-dimensions-widget-scale-factor,
-.neuroglancer-display-dimensions-widget:not(:hover) .neuroglancer-display-dimensions-widget-scale,
-.neuroglancer-display-dimensions-widget:not(:hover) .neuroglancer-display-dimensions-widget-default {
+.neuroglancer-display-dimensions-widget:not(:hover):not(*[data-active="true"]) .neuroglancer-display-dimensions-widget-scale-factor,
+.neuroglancer-display-dimensions-widget:not(:hover):not(*[data-active="true"]) .neuroglancer-display-dimensions-widget-scale,
+.neuroglancer-display-dimensions-widget:not(:hover):not(*[data-active="true"]) .neuroglancer-display-dimensions-widget-default,
+.neuroglancer-display-dimensions-widget:not(:hover):not(*[data-active="true"]) .neuroglancer-depth-range-widget-grid,
+.neuroglancer-display-dimensions-widget:not(:hover):not(*[data-active="true"]) .neuroglancer-depth-range-relative-checkbox-label {
   display: none;
 }
 
@@ -105,4 +110,25 @@
 
 .neuroglancer-display-dimensions-widget-default input {
   margin-right: 3px;
+}
+
+.neuroglancer-depth-range-widget-grid {
+  margin-top: 1em;
+  display: grid;
+  display: grid;
+  grid-template-columns: 0fr 0fr 0fr;
+  grid-auto-rows: 0fr;
+}
+
+.neuroglancer-depth-range-widget-dimension-names:not(:empty)::before {
+  content: "(";
+}
+
+.neuroglancer-depth-range-widget-dimension-names:not(:empty)::after {
+  content: ")";
+}
+
+.neuroglancer-depth-range-widget-dimension-names {
+  margin-left: 1ch;
+  white-space: nowrap;
 }

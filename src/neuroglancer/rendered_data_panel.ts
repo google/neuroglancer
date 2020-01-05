@@ -416,7 +416,12 @@ export abstract class RenderedDataPanel extends RenderedPanel {
 
     this.registerEventListener(element, 'mousemove', this.onMousemove.bind(this));
     this.registerEventListener(element, 'touchstart', this.onTouchstart.bind(this));
-    this.registerEventListener(element, 'mouseleave', this.onMouseout.bind(this));
+    this.registerEventListener(element, 'mouseleave', () => this.onMouseout());
+    this.registerEventListener(element, 'mouseover', event => {
+      if (event.target !== element) {
+        this.onMouseout();
+      }
+    }, /*capture=*/ true);
 
     registerActionListener(element, 'snap', () => {
       this.navigationState.pose.snap();
@@ -428,6 +433,14 @@ export abstract class RenderedDataPanel extends RenderedPanel {
 
     registerActionListener(element, 'zoom-out', () => {
       this.navigationState.zoomBy(2.0);
+    });
+
+    registerActionListener(element, 'depth-range-decrease', () => {
+      this.navigationState.depthRange.value *= 0.5;
+    });
+
+    registerActionListener(element, 'depth-range-increase', () => {
+      this.navigationState.depthRange.value *= 2;
     });
 
     registerActionListener(element, 'highlight', () => {
@@ -456,9 +469,15 @@ export abstract class RenderedDataPanel extends RenderedPanel {
 
     registerActionListener(element, 'zoom-via-wheel', (event: ActionEvent<WheelEvent>) => {
       const e = event.detail;
-      this.onMousemove(e);
+      this.onMousemove(e, false);
       this.zoomByMouse(getWheelZoomAmount(e));
     });
+
+    registerActionListener(
+        element, 'adjust-depth-range-via-wheel', (event: ActionEvent<WheelEvent>) => {
+          const e = event.detail;
+          this.navigationState.depthRange.value *= getWheelZoomAmount(e);
+        });
 
     registerActionListener(element, 'translate-via-mouse-drag', (e: ActionEvent<MouseEvent>) => {
       startRelativeMouseDrag(e.detail, (_event, deltaX, deltaY) => {
@@ -602,7 +621,7 @@ export abstract class RenderedDataPanel extends RenderedPanel {
     });
   }
 
-  onMouseout(_event: MouseEvent) {
+  onMouseout() {
     this.updateMousePosition(-1, -1);
     this.viewer.mouseState.setForcer(undefined);
   }
@@ -621,9 +640,9 @@ export abstract class RenderedDataPanel extends RenderedPanel {
     this.updateMousePosition(mouseX, mouseY);
   }
 
-  onMousemove(event: MouseEvent) {
-    let {element} = this;
-    if (event.target !== element) {
+  onMousemove(event: MouseEvent, atOnly = true) {
+    const {element} = this;
+    if (atOnly && event.target !== element) {
       return;
     }
     this.handleMouseMove(event.clientX, event.clientY);

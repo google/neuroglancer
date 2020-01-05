@@ -25,7 +25,7 @@ import {DisplayContext} from 'neuroglancer/display_context';
 import {InputEventBindingHelpDialog} from 'neuroglancer/help/input_event_bindings';
 import {addNewLayer, LayerManager, LayerSelectedValues, MouseSelectionState, SelectedLayerState, TopLevelLayerListSpecification} from 'neuroglancer/layer';
 import {RootLayoutContainer} from 'neuroglancer/layer_groups_layout';
-import {DisplayPose, NavigationState, OrientationState, Position, TrackableCrossSectionZoom, TrackableDisplayDimensions, TrackableProjectionZoom, TrackableRelativeDisplayScales, WatchableDisplayDimensionRenderInfo} from 'neuroglancer/navigation_state';
+import {DisplayPose, NavigationState, OrientationState, Position, TrackableCrossSectionZoom, TrackableDepthRange, TrackableDisplayDimensions, TrackableProjectionZoom, TrackableRelativeDisplayScales, WatchableDisplayDimensionRenderInfo} from 'neuroglancer/navigation_state';
 import {overlaysOpen} from 'neuroglancer/overlay';
 import {allRenderLayerRoles, RenderLayerRole} from 'neuroglancer/renderlayer';
 import {StatusMessage} from 'neuroglancer/status';
@@ -141,7 +141,7 @@ interface ViewerUIOptions {
   showEditStateButton: boolean;
   showLayerPanel: boolean;
   showLocation: boolean;
-  showLayerHoverValues:boolean;
+  showLayerHoverValues: boolean;
   showPanelBorders: boolean;
   showAnnotationToolStatus: boolean;
 }
@@ -202,8 +202,10 @@ class TrackableViewerState extends CompoundTrackable {
     this.add('position', viewer.position);
     this.add('crossSectionOrientation', viewer.crossSectionOrientation);
     this.add('crossSectionScale', viewer.crossSectionScale);
+    this.add('crossSectionDepth', viewer.crossSectionDepthRange);
     this.add('projectionOrientation', viewer.projectionOrientation);
     this.add('projectionScale', viewer.projectionScale);
+    this.add('projectionDepth', viewer.projectionDepthRange);
     this.add('layers', viewer.layerSpecification);
     this.add('showAxisLines', viewer.showAxisLines);
     this.add('showScaleBar', viewer.showScaleBar);
@@ -273,18 +275,22 @@ export class Viewer extends RefCounted implements ViewerState {
   crossSectionScale = this.registerDisposer(
       new TrackableCrossSectionZoom(this.displayDimensionRenderInfo.addRef()));
   projectionOrientation = this.registerDisposer(new OrientationState());
+  crossSectionDepthRange =
+      this.registerDisposer(new TrackableDepthRange(-10, this.displayDimensionRenderInfo));
+  projectionDepthRange =
+      this.registerDisposer(new TrackableDepthRange(-50, this.displayDimensionRenderInfo));
   projectionScale =
       this.registerDisposer(new TrackableProjectionZoom(this.displayDimensionRenderInfo.addRef()));
   navigationState = this.registerDisposer(new NavigationState(
       new DisplayPose(
           this.position.addRef(), this.displayDimensionRenderInfo.addRef(),
           this.crossSectionOrientation.addRef()),
-      this.crossSectionScale.addRef()));
+      this.crossSectionScale.addRef(), this.crossSectionDepthRange.addRef()));
   perspectiveNavigationState = this.registerDisposer(new NavigationState(
       new DisplayPose(
           this.position.addRef(), this.displayDimensionRenderInfo.addRef(),
           this.projectionOrientation.addRef()),
-      this.projectionScale.addRef()));
+      this.projectionScale.addRef(), this.projectionDepthRange.addRef()));
   mouseState = new MouseSelectionState();
   layerManager = this.registerDisposer(new LayerManager());
   selectedLayer = this.registerDisposer(new SelectedLayerState(this.layerManager.addRef()));
@@ -649,8 +655,8 @@ export class Viewer extends RefCounted implements ViewerState {
     const {inputEventBindings} = this;
     new InputEventBindingHelpDialog([
       ['Global', inputEventBindings.global],
-      ['Slice View', inputEventBindings.sliceView],
-      ['Perspective View', inputEventBindings.perspectiveView],
+      ['Cross section view', inputEventBindings.sliceView],
+      ['3-D projection view', inputEventBindings.perspectiveView],
     ]);
   }
 

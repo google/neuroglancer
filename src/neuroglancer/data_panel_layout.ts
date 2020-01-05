@@ -91,7 +91,7 @@ const LAYOUT_SYMBOLS = new Map<string, string>([
 export function makeSliceView(viewerState: SliceViewViewerState, baseToSelf?: quat) {
   let navigationState: NavigationState;
   if (baseToSelf === undefined) {
-    navigationState = viewerState.navigationState;
+    navigationState = viewerState.navigationState.addRef();
   } else {
     navigationState = new NavigationState(
         new DisplayPose(
@@ -99,7 +99,8 @@ export function makeSliceView(viewerState: SliceViewViewerState, baseToSelf?: qu
             viewerState.navigationState.pose.displayDimensionRenderInfo.addRef(),
             OrientationState.makeRelative(
                 viewerState.navigationState.pose.orientation, baseToSelf)),
-        viewerState.navigationState.zoomFactor);
+        viewerState.navigationState.zoomFactor.addRef(),
+        viewerState.navigationState.depthRange.addRef());
   }
   return new SliceView(viewerState.chunkManager, viewerState.layerManager, navigationState);
 }
@@ -151,11 +152,12 @@ function getCommonSliceViewerState(viewer: ViewerUIState) {
 }
 
 function addDisplayDimensionsWidget(layout: DataDisplayLayout, panel: RenderedDataPanel) {
+  const {navigationState} = panel;
   panel.element.appendChild(
       layout
           .registerDisposer(new DisplayDimensionsWidget(
-              panel.navigationState.pose.displayDimensionRenderInfo.addRef(),
-              panel.navigationState.zoomFactor, (panel instanceof SliceViewPanel) ? 'px' : 'vh'))
+              navigationState.pose.displayDimensionRenderInfo.addRef(), navigationState.zoomFactor,
+              navigationState.depthRange.addRef(), (panel instanceof SliceViewPanel) ? 'px' : 'vh'))
           .element);
 }
 
@@ -470,7 +472,7 @@ export class CrossSectionSpecification extends RefCounted implements Trackable {
         new DisplayPose(
             this.position.value, parent.pose.displayDimensionRenderInfo.addRef(),
             this.orientation.value),
-        this.scale.value));
+        this.scale.value, parent.depthRange.addRef()));
   }
 
   restoreState(obj: any) {

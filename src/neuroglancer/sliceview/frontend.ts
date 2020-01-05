@@ -120,7 +120,7 @@ export class SliceView extends Base {
 
   constructor(
       public chunkManager: ChunkManager, public layerManager: LayerManager,
-      public navigationState: NavigationState) {
+      public navigationState: Owned<NavigationState>) {
     super(new DerivedProjectionParameters({
       parametersConstructor: SliceViewProjectionParameters,
       navigationState,
@@ -145,11 +145,10 @@ export class SliceView extends Base {
           viewportNormalInGlobalCoordinates,
           viewportNormalInCanonicalCoordinates
         } = out;
-        // FIXME: Make this adjustable.
-        const sliceThickness = 10;
+        const {relativeDepthRange} = navigationState;
         mat4.ortho(
-            projectionMat, -width / 2, width / 2, height / 2, -height / 2, -sliceThickness,
-            sliceThickness);
+            projectionMat, -width / 2, width / 2, height / 2, -height / 2, -relativeDepthRange,
+            relativeDepthRange);
         updateProjectionParametersFromInverseViewAndProjection(out);
         const {viewMatrix} = out;
         for (let i = 0; i < 3; ++i) {
@@ -169,6 +168,7 @@ export class SliceView extends Base {
         out.pixelSize = newPixelSize;
       },
     }));
+    this.registerDisposer(navigationState);
     this.registerDisposer(this.projectionParameters);
     this.registerDisposer(this.projectionParameters.changed.add((oldValue, newValue) => {
       if (oldValue.displayDimensionRenderInfo !== newValue.displayDimensionRenderInfo) {

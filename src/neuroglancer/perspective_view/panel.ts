@@ -215,17 +215,22 @@ export class PerspectivePanel extends RenderedDataPanel {
         const {invViewMatrix, projectionMat, width, height} = out;
         const widthOverHeight = width / height;
         const fovy = Math.PI / 4.0;
-        const nearBound = 0.1, farBound = 50;
+        let {relativeDepthRange} = navigationState;
         const baseZoomFactor = navigationState.zoomFactor.value;
         let zoomFactor = baseZoomFactor / 2;
         if (this.viewer.orthographicProjection.value) {
           // Pick orthographic projection to match perspective projection at plane parallel to image
           // plane containing the center position.
+          const nearBound = Math.max(0.1, 1 - relativeDepthRange);
+          const farBound = 1 + relativeDepthRange;
           mat4.ortho(projectionMat, -widthOverHeight, widthOverHeight, -1, 1, nearBound, farBound);
         } else {
           const f = 1.0 / Math.tan(fovy / 2);
-          mat4.perspective(projectionMat, fovy, widthOverHeight, nearBound, farBound);
+          relativeDepthRange /= f;
+          const nearBound = Math.max(0.1, 1 - relativeDepthRange);
+          const farBound = 1 + relativeDepthRange;
           zoomFactor *= f;
+          mat4.perspective(projectionMat, fovy, widthOverHeight, nearBound, farBound);
         }
         navigationState.pose.toMat4(invViewMatrix, zoomFactor);
         mat4.scale(invViewMatrix, invViewMatrix, vec3.set(tempVec3, 1, -1, -1));
