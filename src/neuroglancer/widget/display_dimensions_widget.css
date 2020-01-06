@@ -66,11 +66,11 @@
   padding-left: 10px;
 }
 
-.neuroglancer-display-dimensions-widget-scale::before {
+.neuroglancer-display-dimensions-widget-scale:not(:empty)::before {
   content: "(";
 }
 
-.neuroglancer-display-dimensions-widget-scale::after {
+.neuroglancer-display-dimensions-widget-scale:not(:empty)::after {
   content: ")";
 }
 

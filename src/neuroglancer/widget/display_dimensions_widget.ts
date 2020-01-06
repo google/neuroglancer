@@ -489,6 +489,22 @@ export class DisplayDimensionsWidget extends RefCounted {
     const {factors, coordinateSpace: {names, units, scales}} = this.relativeDisplayScales.value;
     this.defaultCheckbox.checked = isDefault;
     const zoom = this.zoom.value;
+    // Check if all units and factors are the same.
+    const firstDim = displayDimensionIndices[0];
+    let singleScale = true;
+    if (firstDim !== -1) {
+      const unit = units[firstDim];
+      const factor = factors[firstDim];
+      for (let i = 1; i < 3; ++i) {
+        const dim = displayDimensionIndices[i];
+        if (dim === -1) continue;
+        if (units[dim] !== unit ||
+            factors[dim] !== factor) {
+          singleScale = false;
+          break;
+        }
+      }
+    }
     for (let i = 0; i < 3; ++i) {
       const dim = displayDimensionIndices[i];
       const dimElements = dimensionElements[i];
@@ -501,9 +517,13 @@ export class DisplayDimensionsWidget extends RefCounted {
       } else {
         dimElements.name.value = names[dim];
         const totalScale = scales[dim] * zoom / canonicalVoxelFactors[i];
-        const formattedScale =
-            formatScaleWithUnitAsString(totalScale, units[dim], {precision: 2, elide1: false});
-        dimElements.scale.textContent = `${formattedScale}/${this.displayUnit}`;
+        if (i === 0 || !singleScale) {
+          const formattedScale =
+              formatScaleWithUnitAsString(totalScale, units[dim], {precision: 2, elide1: false});
+          dimElements.scale.textContent = `${formattedScale}/${this.displayUnit}`;
+        } else {
+          dimElements.scale.textContent = '';
+        }
         dimElements.scaleFactor.value = formatScaleFactor(factors[dim]);
       }
       updateInputFieldWidth(dimElements.name);
