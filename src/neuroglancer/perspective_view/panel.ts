@@ -63,7 +63,8 @@ export const glsl_perspectivePanelEmit = `
 void emit(vec4 color, highp uint pickId) {
   out_color = color;
   out_z = 1.0 - gl_FragCoord.z;
-  out_pickId = float(pickId);
+  float pickIdFloat = float(pickId);
+  out_pickId = vec4(pickIdFloat, pickIdFloat, pickIdFloat, 1.0);
 }
 `;
 
@@ -94,7 +95,7 @@ void emit(vec4 color, highp uint pickId) {
 export function perspectivePanelEmit(builder: ShaderBuilder) {
   builder.addOutputBuffer('vec4', `out_color`, OffscreenTextures.COLOR);
   builder.addOutputBuffer('highp float', `out_z`, OffscreenTextures.Z);
-  builder.addOutputBuffer('highp float', `out_pickId`, OffscreenTextures.PICK);
+  builder.addOutputBuffer('highp vec4', `out_pickId`, OffscreenTextures.PICK);
   builder.addFragmentCode(glsl_perspectivePanelEmit);
 }
 
@@ -498,13 +499,6 @@ export class PerspectivePanel extends RenderedDataPanel {
       gl.blendFunc(WebGL2RenderingContext.SRC_ALPHA, WebGL2RenderingContext.ONE_MINUS_SRC_ALPHA);
       // Render only to the color buffer, but not the pick or z buffer.  With blending enabled, the
       // z and color values would be corrupted.
-      gl.drawBuffers([
-        gl.COLOR_ATTACHMENT0,
-        gl.NONE,
-        gl.NONE,
-      ]);
-      renderContext.emitPickID = false;
-
       for (const [renderLayer, attachment] of visibleLayers) {
         if (renderLayer.isAnnotation) {
           renderLayer.draw(renderContext, attachment);
@@ -512,12 +506,6 @@ export class PerspectivePanel extends RenderedDataPanel {
       }
       gl.depthFunc(WebGL2RenderingContext.LESS);
       gl.disable(WebGL2RenderingContext.BLEND);
-      gl.drawBuffers([
-        gl.COLOR_ATTACHMENT0,
-        gl.COLOR_ATTACHMENT1,
-        gl.COLOR_ATTACHMENT2,
-      ]);
-      renderContext.emitPickID = true;
     }
 
     if (this.viewer.showAxisLines.value) {
@@ -572,7 +560,8 @@ export class PerspectivePanel extends RenderedDataPanel {
     gl.enable(WebGL2RenderingContext.POLYGON_OFFSET_FILL);
     gl.polygonOffset(-1, -1);
     for (const [renderLayer, attachment] of visibleLayers) {
-      renderContext.alreadyEmittedPickID = !renderLayer.isTransparent && !renderLayer.isAnnotation;
+      if (!renderLayer.isTransparent) continue;
+      renderContext.alreadyEmittedPickID = true;
       renderLayer.draw(renderContext, attachment);
     }
     gl.disable(WebGL2RenderingContext.POLYGON_OFFSET_FILL);
