@@ -420,7 +420,7 @@ function AnnotationRenderLayer<TBase extends {
     drawGeometryChunkData(
         chunk: AnnotationGeometryData,
         renderContext: PerspectiveViewRenderContext|SliceViewPanelRenderContext,
-        state: AnnotationChunkRenderParameters, maxCount: number = Number.POSITIVE_INFINITY) {
+        state: AnnotationChunkRenderParameters, drawFraction = 1) {
       if (!chunk.bufferValid) {
         let {buffer} = chunk;
         if (buffer === undefined) {
@@ -431,13 +431,14 @@ function AnnotationRenderLayer<TBase extends {
         chunk.numPickIds = computeNumPickIds(serializedAnnotations);
         chunk.bufferValid = true;
       }
-      this.drawGeometry(chunk as AnnotationGeometryDataInterface, renderContext, state, maxCount);
+      this.drawGeometry(
+          chunk as AnnotationGeometryDataInterface, renderContext, state, drawFraction);
     }
 
     drawGeometry(
         chunk: AnnotationGeometryDataInterface,
         renderContext: PerspectiveViewRenderContext|SliceViewPanelRenderContext,
-        state: AnnotationChunkRenderParameters, maxCount: number = Number.POSITIVE_INFINITY) {
+        state: AnnotationChunkRenderParameters, drawFraction: number = 1) {
       const {base} = this;
       const {chunkDisplayTransform} = state;
       const {serializedAnnotations} = chunk;
@@ -464,11 +465,6 @@ function AnnotationRenderLayer<TBase extends {
         renderSubspaceModelMatrix: chunkDisplayTransform.displaySubspaceModelMatrix,
         renderSubspaceInvModelMatrix: chunkDisplayTransform.displaySubspaceInvModelMatrix,
       };
-      let totalCount = 0;
-      for (const annotationType of annotationTypes) {
-        totalCount += typeToIdMaps[annotationType].size;
-      }
-      let drawFraction = Number.isFinite(maxCount) ? Math.min(1, maxCount / totalCount) : 1;
       for (const annotationType of annotationTypes) {
         const idMap = typeToIdMaps[annotationType];
         let count = idMap.size;
@@ -733,7 +729,7 @@ const SpatiallyIndexedAnnotationLayer = <TBase extends AnyConstructor<Annotation
       forEachVisibleAnnotationChunk(
           projectionParameters, this.base.state.localPosition.value, this.renderScaleTarget.value,
           transformedSources[0], () => {},
-          (tsource, index, maxCount, physicalSpacing, pixelSpacing) => {
+          (tsource, index, drawFraction, physicalSpacing, pixelSpacing) => {
             index;
             const chunk = tsource.source.chunks.get(tsource.curPositionInChunks.join());
             let present: number;
@@ -749,7 +745,7 @@ const SpatiallyIndexedAnnotationLayer = <TBase extends AnyConstructor<Annotation
                     wireFrameShader, tsource,
                     projectionParameters as SliceViewProjectionParameters);
               } else {
-                this.drawGeometryChunkData(data, renderContext, chunkRenderParameters, maxCount);
+                this.drawGeometryChunkData(data, renderContext, chunkRenderParameters, drawFraction);
               }
               present = 1;
             }

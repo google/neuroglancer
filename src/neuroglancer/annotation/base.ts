@@ -49,7 +49,7 @@ forEachVisibleAnnotationChunk<RLayer extends SliceViewRenderLayer, Source extend
     renderScaleTarget: number, transformedSources: readonly Transformed[],
     beginScale: (source: Transformed, index: number) => void,
     callback: (
-        source: Transformed, index: number, maxCount: number, physicalSpacing: number,
+        source: Transformed, index: number, drawFraction: number, physicalSpacing: number,
         pixelSpacing: number) => void) {
   const {displayDimensionRenderInfo, viewMatrix, projectionMat, width, height} =
       projectionParameters;
@@ -94,15 +94,15 @@ forEachVisibleAnnotationChunk<RLayer extends SliceViewRenderLayer, Source extend
     const newTotalPhysicalDensity = totalPhysicalDensity + physicalDensity;
     const totalPhysicalSpacing = Math.pow(1 / newTotalPhysicalDensity, 1 / 3);
     const totalPixelSpacing = Math.sqrt(viewportArea / (newTotalPhysicalDensity * effectiveVolume));
-    const maxCount =
+    const desiredCount =
         (physicalDensityTarget - totalPhysicalDensity) * physicalVolume / sliceFraction;
-
+    const drawFraction = Math.min(1, desiredCount / spec.limit);
     forEachVisibleVolumetricChunk(projectionParameters, localPosition, transformedSource, () => {
       if (firstChunk) {
         beginScale(transformedSource, scaleIndex);
         firstChunk = false;
       }
-      callback(transformedSource, scaleIndex, maxCount, totalPhysicalSpacing, totalPixelSpacing);
+      callback(transformedSource, scaleIndex, drawFraction, totalPhysicalSpacing, totalPixelSpacing);
     });
     totalPhysicalDensity = newTotalPhysicalDensity;
   }

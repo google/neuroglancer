@@ -146,14 +146,12 @@ Repeated for `i = 0` up to `count - 1`:
 - The annotation id of the `i`th annotation encoded as a uint64le value.
 
 For the related object id index, the order of the annotations does not matter.  For the spatial
-index, the annotations should be ordered by the bit-reversed Morton code of a representative point,
-as described below.
+index, the annotations should be ordered randomly.
 
 ## Spatial index
 
 The spatial index supports efficient retrieval of the set of annotations that intersects a given
-bounding box, with optional (approximately) spatially uniform subsampling down to a desired maximum
-density.
+bounding box, with optional subsampling down to a desired maximum density.
 
 The spatial index is used by Neuroglancer when not filtering by related segment ids.
 
@@ -176,20 +174,15 @@ The spatial index levels should be computed as follows:
   annotations that intersect the cell.  Note that a single annotation may intersect multiple cells.
   
 - Sequentially generate spatial index `level`, starting at `level=0` (the coarsest level):
+  - Define `maxCount(level)` to be the maximum over all `cell` positions of the size of
+    `remaining_annotations(level, cell)`.
   - For each `cell`:
-    - Compute the subset `fully_containing(level, cell)` of annotations within
-      `remaining_annotations(level, cell)` that fully contain the bound of `cell`.  These
-      annotations are included unconditionally within this spatial index level.
-    - Define the subset `subsampled(level, cell)` to be the first `|fully_containing(level, cell)| -
-      limit` annotations within `remaining_annotations(level, cell) - fully_containing(level,
-      cell)`, ordered by the bit-reversed Morton code of a representative point for the annotation.
-      Ordering by bit-reversed Morton code provides an (approximately) spatially uniform subsample.
-      Coordinates specified in floating point can be handled by using an order-preserving conversion
-      to unsigned integers.
-    - This spatial index level maps `cell` to the list `emitted(level, cell)` of annotations contained in
-      `fully_containing(level, cell) + subsampled(level, cell)`.  The annotations are encoded in the
-      [multiple annotation encoding](#multiple-annotation-encoding) also used by the related object
-      id index; the list should be ordered by bit-reserved Morton code.
+    - Compute a subset `emitted(level, cell)` of `remaining_annotations(0, cell)` where each
+      annotation is chosen uniformly at random with probability `min(1, limit / maxCount(level))`.
+    - This spatial index level maps `cell` to the list of annotations in `emitted(level, cell)`.
+      The annotations are encoded in the [multiple annotation
+      encoding](#multiple-annotation-encoding) also used by the related object id index; the list
+      should be ordered by bit-reserved Morton code.
     - For each `child_cell` in level `level+1` contained within `cell`: Compute the set
       `remaining_annotations(level+1, child_cell)` of annotations within
       `remaining_annotations(level, cell) - emitted(level, cell)` that intersect `child_cell`.
