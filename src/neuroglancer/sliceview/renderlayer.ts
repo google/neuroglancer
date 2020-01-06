@@ -21,7 +21,7 @@ import {ChunkTransformParameters, RenderLayerTransformOrError} from 'neuroglance
 import {RenderScaleHistogram, trackableRenderScaleTarget} from 'neuroglancer/render_scale_statistics';
 import {RenderLayer, ThreeDimensionalReadyRenderContext, ThreeDimensionalRenderContext, VisibilityTrackedRenderLayer} from 'neuroglancer/renderlayer';
 import {SharedWatchableValue} from 'neuroglancer/shared_watchable_value';
-import {filterVisibleSources, SLICEVIEW_RENDERLAYER_RPC_ID, SliceViewBase, SliceViewSourceOptions, TransformedSource} from 'neuroglancer/sliceview/base';
+import {filterVisibleSources, SLICEVIEW_RENDERLAYER_RPC_ID, SliceViewBase, SliceViewProjectionParameters, SliceViewSourceOptions, TransformedSource} from 'neuroglancer/sliceview/base';
 import {MultiscaleSliceViewChunkSource, SliceView, SliceViewChunkSource, SliceViewSingleResolutionSource} from 'neuroglancer/sliceview/frontend';
 import {SliceViewPanel} from 'neuroglancer/sliceview/panel';
 import {WatchableValueInterface} from 'neuroglancer/trackable_value';
@@ -49,6 +49,12 @@ export interface VisibleSourceInfo<Source extends SliceViewChunkSource> {
   source: Borrowed<Source>;
   refCount: number;
   chunkTransform: ChunkTransformParameters;
+}
+
+export interface SliceViewRenderContext {
+  sliceView: SliceView;
+  projectionParameters: SliceViewProjectionParameters;
+  wireFrame: boolean;
 }
 
 export abstract class SliceViewRenderLayer<
@@ -159,7 +165,7 @@ export abstract class SliceViewRenderLayer<
     }
   }
 
-  abstract draw(sliceView: SliceView): void;
+  abstract draw(renderContext: SliceViewRenderContext): void;
 
   filterVisibleSources(sliceView: SliceViewBase, sources: readonly TransformedSource[]):
       Iterable<TransformedSource> {

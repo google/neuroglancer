@@ -31,9 +31,11 @@
 
 import {RefCounted} from 'neuroglancer/util/disposable';
 import {mat4, transformVectorByMat4Transpose, vec3, vec3Key} from 'neuroglancer/util/geom';
-import {Buffer} from 'neuroglancer/webgl/buffer';
+import { Buffer, getMemoizedBuffer} from 'neuroglancer/webgl/buffer';
 import {GL} from 'neuroglancer/webgl/context';
 import {ShaderBuilder, ShaderProgram} from 'neuroglancer/webgl/shader';
+import { VERTICES_PER_LINE } from '../webgl/lines';
+import { tile2dArray } from '../util/array';
 
 const tempVec3 = vec3.create();
 const tempVec3b = vec3.create();
@@ -76,13 +78,27 @@ export const vertexBasePositions = new Float32Array([
   1, 1, 1,  //
 ]);
 
+export function getBaseIntersectionVertexIndexArray() {
+  return new Float32Array([0, 1, 2, 3, 4, 5]);
+}
+
+export function getIntersectionVertexIndexArrayForLines() {
+  return tile2dArray(
+      getBaseIntersectionVertexIndexArray(),
+      /*majorDimension=*/ 1,
+      /*minorTiles=*/ 1,
+      /*majorTiles=*/ VERTICES_PER_LINE);
+}
+
 export class SliceViewShaderBuffers extends RefCounted {
   outputVertexIndices: Buffer;
   vertexIndices: Int32Array;
   constructor(gl: GL) {
     super();
-    this.outputVertexIndices = this.registerDisposer(
-        Buffer.fromData(gl, new Float32Array([0, 1, 2, 3, 4, 5]), gl.ARRAY_BUFFER, gl.STATIC_DRAW));
+    this.outputVertexIndices =
+        getMemoizedBuffer(
+            gl, WebGL2RenderingContext.ARRAY_BUFFER, getBaseIntersectionVertexIndexArray)
+            .value;
 
     // This specifies the original, "uncorrected" vertex positions.
     // var vertexBasePositions = [
@@ -159,7 +175,7 @@ export class BoundingBoxCrossSectionRenderHelper extends RefCounted {
         'BoundingBoxCrossSectionRenderHelper',
         () => new BoundingBoxCrossSectionRenderHelper(gl));
   }
-  constructor(gl: GL) {
+  constructor(public gl: GL) {
     super();
     this.data = this.registerDisposer(SliceViewShaderBuffers.get(gl));
   }

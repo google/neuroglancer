@@ -190,6 +190,7 @@ function makeViewerContextMenu(viewer: Viewer) {
   addCheckbox('Show cross sections in 3-d', viewer.showPerspectiveSliceViews);
   addCheckbox('Show default annotations', viewer.showDefaultAnnotations);
   addCheckbox('Show chunk statistics', viewer.statisticsDisplayState.visible);
+  addCheckbox('Wire frame rendering', viewer.wireFrame);
   return menu;
 }
 
@@ -208,6 +209,7 @@ class TrackableViewerState extends CompoundTrackable {
     this.add('projectionDepth', viewer.projectionDepthRange);
     this.add('layers', viewer.layerSpecification);
     this.add('showAxisLines', viewer.showAxisLines);
+    this.add('wireFrame', viewer.wireFrame);
     this.add('showScaleBar', viewer.showScaleBar);
     this.add('showDefaultAnnotations', viewer.showDefaultAnnotations);
 
@@ -295,6 +297,7 @@ export class Viewer extends RefCounted implements ViewerState {
   layerManager = this.registerDisposer(new LayerManager());
   selectedLayer = this.registerDisposer(new SelectedLayerState(this.layerManager.addRef()));
   showAxisLines = new TrackableBoolean(true, true);
+  wireFrame = new TrackableBoolean(false, false);
   showScaleBar = new TrackableBoolean(true, true);
   showPerspectiveSliceViews = new TrackableBoolean(true, true);
   visibleLayerRoles = allRenderLayerRoles();

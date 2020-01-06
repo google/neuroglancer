@@ -48,6 +48,7 @@ export interface LayerGroupViewerState {
   perspectiveNavigationState: Owned<NavigationState>;
   mouseState: MouseSelectionState;
   showAxisLines: TrackableBoolean;
+  wireFrame: TrackableBoolean;
   showScaleBar: TrackableBoolean;
   scaleBarOptions: TrackableScaleBarOptions;
   showPerspectiveSliceViews: TrackableBoolean;
@@ -246,6 +247,9 @@ export class LayerGroupViewer extends RefCounted {
   }
   get showAxisLines() {
     return this.viewerState.showAxisLines;
+  }
+  get wireFrame() {
+    return this.viewerState.wireFrame;
   }
   get showScaleBar() {
     return this.viewerState.showScaleBar;

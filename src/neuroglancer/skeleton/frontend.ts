@@ -239,7 +239,7 @@ void emitDefault() {
       skeletonChunk.indexBuffer.bindToVertexAttribI(
           aVertexIndex, 2, WebGL2RenderingContext.UNSIGNED_INT);
       gl.vertexAttribDivisor(aVertexIndex, 1);
-      this.lineShader.draw(
+      this.lineShader.enableAndDraw(
         edgeShader, projectionParameters, this.targetIsSliceView ? 1.0 : 0.0,
           skeletonChunk.numIndices / 2);
       gl.vertexAttribDivisor(aVertexIndex, 0);

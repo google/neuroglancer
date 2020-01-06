@@ -25,6 +25,7 @@ import {DerivedProjectionParameters, SharedProjectionParameters} from 'neuroglan
 import {forEachPlaneIntersectingVolumetricChunk, SLICEVIEW_ADD_VISIBLE_LAYER_RPC_ID, SLICEVIEW_REMOVE_VISIBLE_LAYER_RPC_ID, SLICEVIEW_RPC_ID, SliceViewBase, SliceViewChunkSource as SliceViewChunkSourceInterface, SliceViewChunkSpecification, SliceViewProjectionParameters, SliceViewSourceOptions, TransformedSource, VisibleLayerSources} from 'neuroglancer/sliceview/base';
 import {ChunkLayout} from 'neuroglancer/sliceview/chunk_layout';
 import {SliceViewRenderLayer} from 'neuroglancer/sliceview/renderlayer';
+import {WatchableValueInterface} from 'neuroglancer/trackable_value';
 import {Borrowed, Disposer, invokeDisposers, Owned, RefCounted} from 'neuroglancer/util/disposable';
 import {kOneVec, mat4, vec3, vec4} from 'neuroglancer/util/geom';
 import {MessageList, MessageSeverity} from 'neuroglancer/util/message_list';
@@ -120,7 +121,8 @@ export class SliceView extends Base {
 
   constructor(
       public chunkManager: ChunkManager, public layerManager: LayerManager,
-      public navigationState: Owned<NavigationState>) {
+      public navigationState: Owned<NavigationState>,
+      public wireFrame: WatchableValueInterface<boolean>) {
     super(new DerivedProjectionParameters({
       parametersConstructor: SliceViewProjectionParameters,
       navigationState,
@@ -185,6 +187,8 @@ export class SliceView extends Base {
     this.registerDisposer(layerManager.layersChanged.add(() => {
       this.updateVisibleLayers();
     }));
+
+    this.wireFrame.changed.add(this.viewChanged.dispatch);
 
     this.viewChanged.add(() => {
       this.renderingStale = true;
@@ -356,6 +360,7 @@ export class SliceView extends Base {
         /*dppass=*/ gl.REPLACE);
 
     let renderLayerNum = 0;
+    const renderContext = {sliceView: this, projectionParameters, wireFrame: this.wireFrame.value};
     for (let renderLayer of this.visibleLayerList) {
       gl.clear(gl.STENCIL_BUFFER_BIT);
       gl.stencilFuncSeparate(
@@ -365,7 +370,7 @@ export class SliceView extends Base {
           /*mask=*/ 1);
 
       renderLayer.setGLBlendMode(gl, renderLayerNum);
-      renderLayer.draw(this);
+      renderLayer.draw(renderContext);
       ++renderLayerNum;
     }
     gl.disable(gl.BLEND);

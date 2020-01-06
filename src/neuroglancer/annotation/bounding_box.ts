@@ -20,17 +20,15 @@
 
 import {AnnotationType, AxisAlignedBoundingBox} from 'neuroglancer/annotation';
 import {AnnotationRenderContext, AnnotationRenderHelper, AnnotationShaderGetter, registerAnnotationTypeRenderHandler} from 'neuroglancer/annotation/type_handler';
-import {BoundingBoxCrossSectionRenderHelper, vertexBasePositions} from 'neuroglancer/sliceview/bounding_box_shader_helper';
+import {BoundingBoxCrossSectionRenderHelper, getBaseIntersectionVertexIndexArray, getIntersectionVertexIndexArrayForLines, vertexBasePositions} from 'neuroglancer/sliceview/bounding_box_shader_helper';
 import {SliceViewPanelRenderContext} from 'neuroglancer/sliceview/renderlayer';
 import {tile2dArray} from 'neuroglancer/util/array';
+import {CORNERS_PER_BOX, EDGES_PER_BOX} from 'neuroglancer/webgl/bounding_box';
 import {Buffer, getMemoizedBuffer} from 'neuroglancer/webgl/buffer';
 import {CircleShader, VERTICES_PER_CIRCLE} from 'neuroglancer/webgl/circles';
 import {LineShader, VERTICES_PER_LINE} from 'neuroglancer/webgl/lines';
 import {ShaderBuilder, ShaderProgram} from 'neuroglancer/webgl/shader';
 import {defineVectorArrayVertexShaderInput} from 'neuroglancer/webgl/shader_lib';
-
-const EDGES_PER_BOX = 12;
-const CORNERS_PER_BOX = 8;
 
 const FULL_OBJECT_PICK_OFFSET = 0;
 const CORNERS_PICK_OFFSET = FULL_OBJECT_PICK_OFFSET + 1;
@@ -288,7 +286,7 @@ emitAnnotation(color);
           /*normalized=*/ false,
           /*stride=*/ 4 * 7, /*offset=*/ 4 * 3);
 
-      this.lineShader.draw(
+      this.lineShader.enableAndDraw(
           shader, context.renderContext.projectionParameters, /*featherWidthInPixels=*/ 1,
           context.count);
       gl.disableVertexAttribArray(aBoxCornerOffset1);
@@ -316,24 +314,11 @@ emitAnnotation(color);
   }
 }
 
-function getBaseIntersectionVertexIndexArray() {
-  return new Float32Array([0, 1, 2, 3, 4, 5]);
-}
-
-function getIntersectionVertexIndexArray() {
-  return tile2dArray(
-      getBaseIntersectionVertexIndexArray(),
-      /*majorDimension=*/ 1,
-      /*minorTiles=*/ 1,
-      /*majorTiles=*/ VERTICES_PER_LINE);
-}
-
-
 class SliceViewRenderHelper extends RenderHelper {
   private lineShader = new LineShader(this.gl, 6);
   private intersectionVertexIndexBuffer =
       getMemoizedBuffer(
-          this.gl, WebGL2RenderingContext.ARRAY_BUFFER, getIntersectionVertexIndexArray)
+          this.gl, WebGL2RenderingContext.ARRAY_BUFFER, getIntersectionVertexIndexArrayForLines)
           .value;
   private filledIntersectionVertexIndexBuffer =
       getMemoizedBuffer(
@@ -448,7 +433,7 @@ emitAnnotation(vec4(vColor.rgb, vColor.a * vClipCoefficient));
     }
     this.enableForBoundingBox(
         this.faceShaderGetter, context, this.intersectionVertexIndexBuffer, shader => {
-          this.lineShader.draw(
+          this.lineShader.enableAndDraw(
               shader, context.renderContext.projectionParameters, /*featherWidthInPixels=*/ 1.0,
               context.count);
         });

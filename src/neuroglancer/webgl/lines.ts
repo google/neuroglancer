@@ -83,9 +83,9 @@ float getLineAlpha() {
 `);
   }
 
-  draw(
+  enable(
       shader: ShaderProgram, projectionParameters: {width: number, height: number},
-      featherWidthInPixels: number, numInstances: number) {
+      featherWidthInPixels: number) {
     const aLineOffset = shader.attribute('aLineOffset');
     this.lineOffsetsBuffer.bindToVertexAttrib(aLineOffset, /*components=*/ 2);
 
@@ -93,7 +93,22 @@ float getLineAlpha() {
     gl.uniform3f(
         shader.uniform('uLineParams'), 1 / projectionParameters.width,
         1 / projectionParameters.height, featherWidthInPixels);
+  }
+
+  disable(shader: ShaderProgram) {
+    const aLineOffset = shader.attribute('aLineOffset');
+    shader.gl.disableVertexAttribArray(aLineOffset);
+  }
+
+  draw(gl: GL, numInstances: number) {
     this.quadHelper.draw(gl, numInstances);
-    gl.disableVertexAttribArray(aLineOffset);
+  }
+
+  enableAndDraw(
+      shader: ShaderProgram, projectionParameters: {width: number, height: number},
+      featherWidthInPixels: number, numInstances: number) {
+    this.enable(shader, projectionParameters, featherWidthInPixels);
+    this.draw(shader.gl, numInstances);
+    this.disable(shader);
   }
 }

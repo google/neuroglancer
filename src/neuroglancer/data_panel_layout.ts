@@ -28,7 +28,7 @@ import {RenderLayerRole} from 'neuroglancer/renderlayer';
 import {SliceView} from 'neuroglancer/sliceview/frontend';
 import {SliceViewerState, SliceViewPanel} from 'neuroglancer/sliceview/panel';
 import {TrackableBoolean} from 'neuroglancer/trackable_boolean';
-import {TrackableValue, WatchableSet} from 'neuroglancer/trackable_value';
+import {TrackableValue, WatchableSet, WatchableValueInterface} from 'neuroglancer/trackable_value';
 import {TrackableRGB} from 'neuroglancer/util/color';
 import {Borrowed, Owned, RefCounted} from 'neuroglancer/util/disposable';
 import {removeChildren, removeFromParent} from 'neuroglancer/util/dom';
@@ -46,6 +46,7 @@ export interface SliceViewViewerState {
   chunkManager: ChunkManager;
   navigationState: NavigationState;
   layerManager: LayerManager;
+  wireFrame: WatchableValueInterface<boolean>;
 }
 
 export class InputEventBindings {
@@ -59,6 +60,7 @@ export interface ViewerUIState extends SliceViewViewerState, VisibilityPriorityS
   perspectiveNavigationState: NavigationState;
   showPerspectiveSliceViews: TrackableBoolean;
   showAxisLines: TrackableBoolean;
+  wireFrame: TrackableBoolean;
   showScaleBar: TrackableBoolean;
   scaleBarOptions: TrackableValue<ScaleBarOptions>;
   visibleLayerRoles: WatchableSet<RenderLayerRole>;
@@ -102,7 +104,8 @@ export function makeSliceView(viewerState: SliceViewViewerState, baseToSelf?: qu
         viewerState.navigationState.zoomFactor.addRef(),
         viewerState.navigationState.depthRange.addRef());
   }
-  return new SliceView(viewerState.chunkManager, viewerState.layerManager, navigationState);
+  return new SliceView(
+      viewerState.chunkManager, viewerState.layerManager, navigationState, viewerState.wireFrame);
 }
 
 export function makeNamedSliceView(viewerState: SliceViewViewerState, axes: NamedAxes) {
@@ -124,6 +127,7 @@ export function getCommonViewerState(viewer: ViewerUIState) {
     mouseState: viewer.mouseState,
     layerManager: viewer.layerManager,
     showAxisLines: viewer.showAxisLines,
+    wireFrame: viewer.wireFrame,
     visibleLayerRoles: viewer.visibleLayerRoles,
     selectedLayer: viewer.selectedLayer,
     visibility: viewer.visibility,
@@ -191,7 +195,8 @@ function registerRelatedLayouts(
 function makeSliceViewFromSpecification(
     viewer: SliceViewViewerState, specification: Borrowed<CrossSectionSpecification>) {
   const sliceView = new SliceView(
-      viewer.chunkManager, viewer.layerManager, specification.navigationState.addRef());
+      viewer.chunkManager, viewer.layerManager, specification.navigationState.addRef(),
+      viewer.wireFrame);
   const updateViewportSize = () => {
     sliceView.projectionParameters.setViewportShape(
         specification.width.value, specification.height.value);

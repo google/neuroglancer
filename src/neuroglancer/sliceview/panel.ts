@@ -33,6 +33,7 @@ import {MultipleScaleBarTextures, TrackableScaleBarOptions} from 'neuroglancer/w
 
 export interface SliceViewerState extends RenderedDataViewerState {
   showScaleBar: TrackableBoolean;
+  wireFrame: TrackableBoolean;
   scaleBarOptions: TrackableScaleBarOptions;
   crossSectionBackgroundColor: TrackableRGB;
 }
@@ -118,7 +119,7 @@ export class SliceViewPanel extends RenderedDataPanel {
       context: DisplayContext, element: HTMLElement, public sliceView: SliceView,
       viewer: SliceViewerState) {
     super(context, element, viewer);
-
+    viewer.wireFrame.changed.add(() => this.scheduleRedraw());
     registerActionListener(element, 'rotate-via-mouse-drag', (e: ActionEvent<MouseEvent>) => {
       const {mouseState} = this.viewer;
       if (mouseState.updateUnconditionally()) {
@@ -254,6 +255,7 @@ export class SliceViewPanel extends RenderedDataPanel {
     const {displayDimensionRenderInfo} = projectionParameters;
 
     const renderContext: SliceViewPanelRenderContext = {
+      wireFrame: this.viewer.wireFrame.value,
       projectionParameters,
       pickIDs: pickIDs,
       emitter: sliceViewPanelEmitColorAndPickID,

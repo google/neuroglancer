@@ -55,18 +55,17 @@ export function parameterizedContextDependentShaderGetter<
     refCounted: RefCounted, gl: GL, options: {
       memoizeKey: any,
       getContextKey: (context: Context) => ContextKey,
-      shaderError: WatchableShaderError,
       defineShader:
           (builder: ShaderBuilder, context: Context, parameters: Parameters,
            extraParameters: ExtraParameters) => void,
       parameters: WatchableValueInterface<Parameters>,
       fallbackParameters?: WatchableValueInterface<Parameters>| undefined,
+      shaderError?: WatchableShaderError | undefined,
       encodeParameters?: (p: Parameters) => any,
       encodeContext?: (context: Context) => any,
       extraParameters?: WatchableValueInterface<ExtraParameters>,
       encodeExtraParameters?: (p: ExtraParameters) => any,
     }): ParameterizedContextDependentShaderGetter<Context, Parameters, ExtraParameters> {
-  options.shaderError.value = undefined;
   const shaders = new Map<ContextKey, ParameterizedShaderGetterResult<Parameters, ExtraParameters>&{
     parametersGeneration: number,
     extraParametersGeneration: number,
@@ -81,6 +80,9 @@ export function parameterizedContextDependentShaderGetter<
     getContextKey,
     defineShader
   } = options;
+  if (shaderError !== undefined) {
+    shaderError.value = undefined;
+  }
   const {encodeContext = getContextKey} = options;
   const stringMemoizeKey = stableStringify(options.memoizeKey);
   function getNewShader(
@@ -129,9 +131,13 @@ export function parameterizedContextDependentShaderGetter<
       if (fallbackParameters !== undefined) {
         fallbackParameters.value = parametersValue;
       }
-      shaderError.value = null;
+      if (shaderError !== undefined) {
+        shaderError.value = null;
+      }
     } catch (e) {
-      shaderError.value = e;
+      if (shaderError !== undefined) {
+        shaderError.value = e;
+      }
       if (fallbackParameters !== undefined) {
         try {
           const fallbackParametersValue = fallbackParameters.value;
@@ -162,11 +168,11 @@ export function parameterizedContextDependentShaderGetter<
 export function parameterizedEmitterDependentShaderGetter<Parameters, ExtraParameters = undefined>(
     refCounted: RefCounted, gl: GL, options: {
       memoizeKey: any,
-      fallbackParameters: WatchableValueInterface<Parameters>,
       parameters: WatchableValueInterface<Parameters>,
-      shaderError: WatchableShaderError,
       defineShader: (
           builder: ShaderBuilder, parameters: Parameters, extraParameters: ExtraParameters) => void,
+      fallbackParameters?: WatchableValueInterface<Parameters>,
+      shaderError?: WatchableShaderError,
       encodeParameters?: (parameters: Parameters) => any,
       extraParameters?: WatchableValueInterface<ExtraParameters>,
       encodeExtraParameters?: (p: ExtraParameters) => any,

@@ -174,7 +174,7 @@ emitAnnotation(color);
 
   drawEdges(context: AnnotationRenderContext) {
     this.enable(this.edgeShaderGetter, context, shader => {
-      this.lineShader.draw(
+      this.lineShader.enableAndDraw(
           shader, context.renderContext.projectionParameters, /*featherWidthInPixels=*/ 1.0,
           context.count);
     });

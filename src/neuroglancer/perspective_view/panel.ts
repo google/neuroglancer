@@ -27,7 +27,7 @@ import {clearOutOfBoundsPickData, FramePickingData, pickDiameter, pickOffsetSequ
 import {DerivedProjectionParameters, SharedProjectionParameters} from 'neuroglancer/renderlayer';
 import {SliceView, SliceViewRenderHelper} from 'neuroglancer/sliceview/frontend';
 import {TrackableBoolean, TrackableBooleanCheckbox} from 'neuroglancer/trackable_boolean';
-import {TrackableValue} from 'neuroglancer/trackable_value';
+import {TrackableValue, WatchableValueInterface} from 'neuroglancer/trackable_value';
 import {TrackableRGB} from 'neuroglancer/util/color';
 import {Owned} from 'neuroglancer/util/disposable';
 import {ActionEvent, registerActionListener} from 'neuroglancer/util/event_action_map';
@@ -42,6 +42,7 @@ import {MultipleScaleBarTextures, ScaleBarOptions} from 'neuroglancer/widget/sca
 import {RPC, SharedObject} from 'neuroglancer/worker_rpc';
 
 export interface PerspectiveViewerState extends RenderedDataViewerState {
+  wireFrame: WatchableValueInterface<boolean>;
   orthographicProjection: TrackableBoolean;
   showSliceViews: TrackableBoolean;
   showScaleBar: TrackableBoolean;
@@ -293,6 +294,7 @@ export class PerspectivePanel extends RenderedDataPanel {
         viewer.crossSectionBackgroundColor.changed.add(() => this.scheduleRedraw()));
     this.registerDisposer(
         viewer.perspectiveViewBackgroundColor.changed.add(() => this.scheduleRedraw()));
+    this.registerDisposer(viewer.wireFrame.changed.add(() => this.scheduleRedraw()));
   }
 
   translateByViewportPixels(deltaX: number, deltaY: number): void {
@@ -460,6 +462,7 @@ export class PerspectivePanel extends RenderedDataPanel {
     let directional = 1 - ambient;
 
     const renderContext: PerspectiveViewRenderContext = {
+      wireFrame: this.viewer.wireFrame.value,
       projectionParameters,
       lightDirection: lightingDirection,
       ambientLighting: ambient,

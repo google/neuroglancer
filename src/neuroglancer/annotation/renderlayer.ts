@@ -36,9 +36,11 @@ import {ThreeDimensionalRenderContext, VisibilityTrackedRenderLayer} from 'neuro
 import {forEachVisibleSegment, getObjectKey} from 'neuroglancer/segmentation_display_state/base';
 import {SegmentationDisplayState} from 'neuroglancer/segmentation_display_state/frontend';
 import {SharedWatchableValue} from 'neuroglancer/shared_watchable_value';
+import {SliceViewProjectionParameters} from 'neuroglancer/sliceview/base';
 import {FrontendTransformedSource, getVolumetricTransformedSources, serializeAllTransformedSources} from 'neuroglancer/sliceview/frontend';
 import {SliceViewPanelRenderContext, SliceViewPanelRenderLayer, SliceViewRenderLayer} from 'neuroglancer/sliceview/renderlayer';
-import {makeCachedDerivedWatchableValue, NestedStateManager, registerNested, WatchableValueInterface} from 'neuroglancer/trackable_value';
+import {ProjectionViewWireFrameRenderHelper, SliceViewWireFrameRenderHelper} from 'neuroglancer/sliceview/wire_frame';
+import {constantWatchableValue, makeCachedDerivedWatchableValue, NestedStateManager, registerNested, WatchableValueInterface} from 'neuroglancer/trackable_value';
 import {arraysEqual} from 'neuroglancer/util/array';
 import {Borrowed, Owned, RefCounted} from 'neuroglancer/util/disposable';
 import {ValueOrError} from 'neuroglancer/util/error';
@@ -49,6 +51,8 @@ import {NullarySignal} from 'neuroglancer/util/signal';
 import {Uint64} from 'neuroglancer/util/uint64';
 import {withSharedVisibility} from 'neuroglancer/visibility_priority/frontend';
 import {Buffer} from 'neuroglancer/webgl/buffer';
+import {parameterizedEmitterDependentShaderGetter} from 'neuroglancer/webgl/dynamic_shader';
+import {ShaderBuilder, ShaderProgram} from 'neuroglancer/webgl/shader';
 import {registerSharedObjectOwner, SharedObject} from 'neuroglancer/worker_rpc';
 
 const tempMat = mat4.create();
@@ -691,6 +695,20 @@ const SpatiallyIndexedAnnotationLayer = <TBase extends AnyConstructor<Annotation
           this.base.state.transform, attachment.view.displayDimensionRenderInfo));
     }
 
+    wireFrameRenderHelper = this.registerDisposer(
+        (this instanceof SliceViewPanelRenderLayer) ?
+            SliceViewWireFrameRenderHelper.get(this.gl) :
+            ProjectionViewWireFrameRenderHelper.get(this.gl));
+
+    wireFrameShaderGetter = parameterizedEmitterDependentShaderGetter(this, this.gl, {
+      memoizeKey: `annotation/wireFrameShader:${this instanceof SliceViewPanelRenderLayer}`,
+      parameters: constantWatchableValue(undefined),
+      defineShader:
+          (builder: ShaderBuilder) => {
+            this.wireFrameRenderHelper.defineShader(builder);
+          },
+    });
+
     draw(
         renderContext: PerspectiveViewRenderContext|SliceViewPanelRenderContext,
         attachment: VisibleLayerInfo<PerspectivePanel, SpatiallyIndexedValidAttachmentState>) {
@@ -703,6 +721,15 @@ const SpatiallyIndexedAnnotationLayer = <TBase extends AnyConstructor<Annotation
       renderScaleHistogram.begin(
           this.base.chunkManager.chunkQueueManager.frameNumberCounter.frameNumber);
       const {projectionParameters} = renderContext;
+      let wireFrameShader: ShaderProgram|undefined;
+      if (renderContext.wireFrame) {
+        const {shader} = this.wireFrameShaderGetter(renderContext.emitter);
+        if (shader === null) return;
+        shader.bind();
+        this.wireFrameRenderHelper.enable(
+            shader, projectionParameters as SliceViewProjectionParameters);
+        wireFrameShader = shader;
+      }
       forEachVisibleAnnotationChunk(
           projectionParameters, this.base.state.localPosition.value, this.renderScaleTarget.value,
           transformedSources[0], () => {},
@@ -717,7 +744,13 @@ const SpatiallyIndexedAnnotationLayer = <TBase extends AnyConstructor<Annotation
               if (data === undefined) {
                 return;
               }
-              this.drawGeometryChunkData(data, renderContext, chunkRenderParameters, maxCount);
+              if (wireFrameShader !== undefined) {
+                this.wireFrameRenderHelper.draw(
+                    wireFrameShader, tsource,
+                    projectionParameters as SliceViewProjectionParameters);
+              } else {
+                this.drawGeometryChunkData(data, renderContext, chunkRenderParameters, maxCount);
+              }
               present = 1;
             }
             renderScaleHistogram.add(physicalSpacing, pixelSpacing, present, 1 - present);
