@@ -63,7 +63,8 @@ export enum OffscreenTextures {
 export const glsl_perspectivePanelEmit = `
 void emit(vec4 color, highp uint pickId) {
   out_color = color;
-  out_z = 1.0 - gl_FragCoord.z;
+  float zValue = 1.0 - gl_FragCoord.z;
+  out_z = vec4(zValue, zValue, zValue, 1.0);
   float pickIdFloat = float(pickId);
   out_pickId = vec4(pickIdFloat, pickIdFloat, pickIdFloat, 1.0);
 }
@@ -95,7 +96,7 @@ void emit(vec4 color, highp uint pickId) {
 
 export function perspectivePanelEmit(builder: ShaderBuilder) {
   builder.addOutputBuffer('vec4', `out_color`, OffscreenTextures.COLOR);
-  builder.addOutputBuffer('highp float', `out_z`, OffscreenTextures.Z);
+  builder.addOutputBuffer('highp vec4', `out_z`, OffscreenTextures.Z);
   builder.addOutputBuffer('highp vec4', `out_pickId`, OffscreenTextures.PICK);
   builder.addFragmentCode(glsl_perspectivePanelEmit);
 }
