@@ -23,9 +23,10 @@ import {getAnnotationTypeRenderHandler} from 'neuroglancer/annotation/type_handl
 import {DisplayContext, RenderedPanel} from 'neuroglancer/display_context';
 import {NavigationState} from 'neuroglancer/navigation_state';
 import {PickIDManager} from 'neuroglancer/object_picking';
-import {layerToDisplayCoordinates, displayToLayerCoordinates} from 'neuroglancer/render_coordinate_transform';
+import {displayToLayerCoordinates, layerToDisplayCoordinates} from 'neuroglancer/render_coordinate_transform';
 import {UserLayerWithAnnotations} from 'neuroglancer/ui/annotations';
 import {AutomaticallyFocusedElement} from 'neuroglancer/util/automatic_focus';
+import {Borrowed} from 'neuroglancer/util/disposable';
 import {ActionEvent, EventActionMap, registerActionListener} from 'neuroglancer/util/event_action_map';
 import {AXES_NAMES, kAxes, mat4, vec2, vec3} from 'neuroglancer/util/geom';
 import {KeyboardEventBinder} from 'neuroglancer/util/keyboard_bindings';
@@ -401,7 +402,8 @@ export abstract class RenderedDataPanel extends RenderedPanel {
   }
 
   constructor(
-      context: DisplayContext, element: HTMLElement, public viewer: RenderedDataViewerState) {
+      context: Borrowed<DisplayContext>, element: HTMLElement,
+      public viewer: RenderedDataViewerState) {
     super(context, element, viewer.visibility);
     this.inputEventMap = viewer.inputEventMap;
 

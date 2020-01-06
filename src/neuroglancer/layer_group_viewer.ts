@@ -385,7 +385,7 @@ export class LayerGroupViewer extends RefCounted {
     if (showLayerPanel && this.layerPanel === undefined) {
       const layerPanel = this.layerPanel = new LayerPanel(
           this.display, this.layerSpecification, this.viewerNavigationState,
-          this.viewerState.selectedLayer, () => this.layout.toJSON(),
+          this.viewerState.selectedLayer.addRef(), () => this.layout.toJSON(),
           this.options.showLayerHoverValues);
       if (options.showViewerMenu) {
         layerPanel.registerDisposer(makeViewerMenu(layerPanel.element, this));

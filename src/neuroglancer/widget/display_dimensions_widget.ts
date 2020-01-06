@@ -513,6 +513,6 @@ export class DisplayDimensionsWidget extends RefCounted {
 
   disposed() {
     removeFromParent(this.element);
-    this.dispose();
+    super.disposed();
   }
 }

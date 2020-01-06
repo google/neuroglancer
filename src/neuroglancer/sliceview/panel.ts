@@ -23,6 +23,7 @@ import {SliceView, SliceViewRenderHelper} from 'neuroglancer/sliceview/frontend'
 import {SliceViewPanelReadyRenderContext, SliceViewPanelRenderContext, SliceViewPanelRenderLayer} from 'neuroglancer/sliceview/renderlayer';
 import {TrackableBoolean} from 'neuroglancer/trackable_boolean';
 import {TrackableRGB} from 'neuroglancer/util/color';
+import {Borrowed, Owned} from 'neuroglancer/util/disposable';
 import {ActionEvent, registerActionListener} from 'neuroglancer/util/event_action_map';
 import {identityMat4, kAxes, mat4, vec3, vec4} from 'neuroglancer/util/geom';
 import {startRelativeMouseDrag} from 'neuroglancer/util/mouse_drag';
@@ -116,7 +117,7 @@ export class SliceViewPanel extends RenderedDataPanel {
   }
 
   constructor(
-      context: DisplayContext, element: HTMLElement, public sliceView: SliceView,
+      context: Borrowed<DisplayContext>, element: HTMLElement, public sliceView: Owned<SliceView>,
       viewer: SliceViewerState) {
     super(context, element, viewer);
     viewer.wireFrame.changed.add(() => this.scheduleRedraw());
@@ -149,8 +150,8 @@ export class SliceViewPanel extends RenderedDataPanel {
         });
 
     this.registerDisposer(sliceView);
-    // Create visible layer tracker after SliceView, to ensure it is destroyed before SliceView
-    // backend is destroyed.
+    // Create visible layer tracker after registering SliceView, to ensure it is destroyed before
+    // SliceView backend is destroyed.
     this.visibleLayerTracker = makeRenderedPanelVisibleLayerTracker(
         this.viewer.layerManager, SliceViewPanelRenderLayer, this.viewer.visibleLayerRoles, this);
 

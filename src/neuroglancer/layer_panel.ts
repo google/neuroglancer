@@ -25,7 +25,7 @@ import {NavigationLinkType} from 'neuroglancer/navigation_state';
 import {WatchableValueInterface} from 'neuroglancer/trackable_value';
 import {DropLayers, endLayerDrag, getDropLayers, getLayerDropEffect, startLayerDrag} from 'neuroglancer/ui/layer_drag_and_drop';
 import {animationFrameDebounce} from 'neuroglancer/util/animation_frame_debounce';
-import {RefCounted, registerEventListener} from 'neuroglancer/util/disposable';
+import {Owned, RefCounted, registerEventListener} from 'neuroglancer/util/disposable';
 import {removeFromParent} from 'neuroglancer/util/dom';
 import {getDropEffect, preventDrag, setDropEffect} from 'neuroglancer/util/drag_and_drop';
 import {makeCloseButton} from 'neuroglancer/widget/close_button';
@@ -259,7 +259,7 @@ export class LayerPanel extends RefCounted {
   constructor(
       public display: DisplayContext, public manager: LayerListSpecification,
       public viewerNavigationState: LinkedViewerNavigationState,
-      public selectedLayer: SelectedLayerState, public getLayoutSpecForDrag: () => any,
+      public selectedLayer: Owned<SelectedLayerState>, public getLayoutSpecForDrag: () => any,
       public showLayerHoverValues: WatchableValueInterface<boolean>) {
     super();
     this.registerDisposer(selectedLayer);

@@ -15,7 +15,7 @@
  */
 
 import {FrameNumberCounter} from 'neuroglancer/chunk_manager/frontend';
-import {RefCounted} from 'neuroglancer/util/disposable';
+import {Borrowed, RefCounted} from 'neuroglancer/util/disposable';
 import {vec3} from 'neuroglancer/util/geom';
 import {NullarySignal} from 'neuroglancer/util/signal';
 import {WatchableVisibilityPriority} from 'neuroglancer/visibility_priority/frontend';
@@ -25,7 +25,7 @@ import ResizeObserver from 'resize-observer-polyfill';
 export abstract class RenderedPanel extends RefCounted {
   gl: GL;
   constructor(
-      public context: DisplayContext, public element: HTMLElement,
+      public context: Borrowed<DisplayContext>, public element: HTMLElement,
       public visibility: WatchableVisibilityPriority) {
     super();
     this.gl = context.gl;
@@ -140,16 +140,15 @@ export class DisplayContext extends RefCounted implements FrameNumberCounter {
     }
   }
 
-  addPanel(panel: RenderedPanel) {
+  addPanel(panel: Borrowed<RenderedPanel>) {
     this.panels.add(panel);
     this.resizeObserver.observe(panel.element);
     this.scheduleRedraw();
   }
 
-  removePanel(panel: RenderedPanel) {
+  removePanel(panel: Borrowed<RenderedPanel>) {
     this.resizeObserver.unobserve(panel.element);
     this.panels.delete(panel);
-    panel.dispose();
     this.scheduleRedraw();
   }
 

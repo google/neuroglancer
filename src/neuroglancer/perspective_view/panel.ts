@@ -160,7 +160,7 @@ export class PerspectivePanel extends RenderedDataPanel {
    * this.viewer.showSliceViews.value.
    */
   sliceViews = (() => {
-    const sliceViewDisposers = new Map<SliceView, () => void>();
+    const sliceViewDisposers = new Map<Owned<SliceView>, () => void>();
     return this.registerDisposer(new WatchableMap<SliceView, boolean>(
         (_unconditional, sliceView) => {
           const disposer = sliceView.visibility.add(this.visibility);
@@ -349,9 +349,6 @@ export class PerspectivePanel extends RenderedDataPanel {
   }
 
   disposed() {
-    for (let sliceView of this.sliceViews.keys()) {
-      sliceView.dispose();
-    }
     this.sliceViews.clear();
     super.disposed();
   }

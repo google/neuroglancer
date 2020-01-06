@@ -773,7 +773,7 @@ export class VisibleRenderLayerTracker<View extends LayerView, RenderLayerType e
   }
 
   disposed() {
-    this.visibleLayers.forEach(x => x.dispose());
+    this.visibleLayers.forEach(attachment => attachment.dispose());
     this.visibleLayers.clear();
     super.disposed();
   }
