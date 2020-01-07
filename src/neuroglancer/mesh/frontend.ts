@@ -355,7 +355,9 @@ export class MeshLayer extends PerspectiveViewRenderLayer<ThreeDimensionalRender
     forEachVisibleSegment(displayState, (objectId, rootObjectId) => {
       const key = getObjectKey(objectId);
       const manifestChunk = manifestChunks.get(key);
+      ++totalChunks;
       if (manifestChunk === undefined) return;
+      ++presentChunks;
       if (renderContext.emitColor) {
         meshShaderManager.setColor(gl, shader, getObjectColor(displayState, rootObjectId, alpha));
       }
@@ -573,10 +575,15 @@ export class MultiscaleMeshLayer extends
 
     meshShaderManager.beginModel(gl, shader, renderContext, modelMatrix);
 
+    let totalManifestChunks = 0;
+    let presentManifestChunks = 0;
+
     forEachVisibleSegment(displayState, (objectId, rootObjectId) => {
       const key = getObjectKey(objectId);
       const manifestChunk = chunks.get(key);
+      ++totalManifestChunks;
       if (manifestChunk === undefined) return;
+      ++presentManifestChunks;
       const {manifest} = manifestChunk;
       const {octree, chunkShape, chunkGridSpatialOrigin, vertexOffsets} = manifest;
       if (renderContext.emitColor) {
@@ -628,6 +635,9 @@ export class MultiscaleMeshLayer extends
             );
           });
     });
+    renderScaleHistogram.add(
+        Number.POSITIVE_INFINITY, Number.POSITIVE_INFINITY, presentManifestChunks,
+        totalManifestChunks - presentManifestChunks);
     meshShaderManager.endLayer(gl, shader);
   }
 
