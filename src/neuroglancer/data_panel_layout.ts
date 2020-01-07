@@ -512,11 +512,9 @@ export class CrossSectionSpecification extends RefCounted implements Trackable {
 export class CrossSectionSpecificationMap extends WatchableMap<string, CrossSectionSpecification> {
   constructor(private parentNavigationState: Owned<NavigationState>) {
     super(
-        v => this.registerDisposer(this.registerDisposer(v).changed.add(this.changed.dispatch)),
-        v => {
-          v.changed.remove(this.changed.dispatch);
-          v.dispose();
-        });
+        (context, spec) => context.registerDisposer(
+            context.registerDisposer(spec).changed.add(this.changed.dispatch)),
+    );
     this.registerDisposer(parentNavigationState);
   }
 

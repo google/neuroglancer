@@ -32,7 +32,7 @@ import {ChunkTransformParameters, getChunkPositionFromCombinedGlobalLocalPositio
 import {RenderScaleHistogram, trackableRenderScaleTarget} from 'neuroglancer/render_scale_statistics';
 import {RenderLayerRole} from 'neuroglancer/renderlayer';
 import {ElementVisibilityFromTrackableBoolean} from 'neuroglancer/trackable_boolean';
-import {makeCachedDerivedWatchableValue, makeCachedLazyDerivedWatchableValue, registerNested, TrackableValue, TrackableValueInterface} from 'neuroglancer/trackable_value';
+import {makeCachedLazyDerivedWatchableValue, registerNested, TrackableValue, TrackableValueInterface, WatchableValueInterface} from 'neuroglancer/trackable_value';
 import {registerTool, Tool} from 'neuroglancer/ui/tool';
 import {animationFrameDebounce} from 'neuroglancer/util/animation_frame_debounce';
 import {arraysEqual, gatherUpdate} from 'neuroglancer/util/array';
@@ -68,11 +68,10 @@ export class AnnotationSegmentListWidget extends RefCounted {
   private containerElement = document.createElement('div');
   private debouncedUpdateView =
       this.registerCancellable(animationFrameDebounce(() => this.updateView()));
-  private segmentationState = this.registerDisposer(makeCachedDerivedWatchableValue(
-      (_) => this.annotationLayer.displayState.relationshipStates
-                 .get(this.annotationLayer.source.relationships[this.relationshipIndex])
-                 .segmentationState,
-      [this.annotationLayer.displayState.relationshipStates]));
+  private segmentationState =
+      this.annotationLayer.displayState.relationshipStates
+          .get(this.annotationLayer.source.relationships[this.relationshipIndex])
+          .segmentationState;
   constructor(
       public reference: Borrowed<AnnotationReference>, public annotationLayer: AnnotationLayerState,
       public relationshipIndex: number) {
@@ -175,12 +174,17 @@ export class AnnotationSegmentListWidget extends RefCounted {
   }
 }
 
-export class MergedAnnotationStates extends RefCounted {
+export class MergedAnnotationStates extends RefCounted implements
+    WatchableValueInterface<readonly AnnotationLayerState[]> {
   changed = new NullarySignal();
   isLoadingChanged = new NullarySignal();
   states: Borrowed<AnnotationLayerState>[] = [];
   relationships: string[] = [];
   private loadingCount = 0;
+
+  get value() {
+    return this.states;
+  }
 
   get isLoading() {
     return this.loadingCount !== 0;
@@ -1241,7 +1245,7 @@ function getSelectedAssociatedSegments(annotationLayer: AnnotationLayerState) {
   const {relationships} = annotationLayer.source;
   const {relationshipStates} = annotationLayer.displayState;
   for (let i = 0, count = relationships.length; i < count; ++i) {
-    const {segmentationState} = relationshipStates.get(relationships[i]);
+    const segmentationState = relationshipStates.get(relationships[i]).segmentationState.value;
     if (segmentationState != null) {
       if (segmentationState.segmentSelectionState.hasSelectedSegment) {
         segments[i] = [segmentationState.segmentSelectionState.selectedSegment.clone()];
@@ -1674,12 +1678,14 @@ export function UserLayerWithAnnotationsMixin<TBase extends {new (...args: any[]
         }, this.annotationDisplayState.displayUnfiltered));
       }
       {
-        const renderLayer = new SliceViewAnnotationLayer(annotationLayer);
+        const renderLayer = new SliceViewAnnotationLayer(
+            annotationLayer, this.annotationCrossSectionRenderScaleHistogram);
         refCounted.registerDisposer(this.addRenderLayer(renderLayer));
         refCounted.registerDisposer(loadedSubsource.messages.addChild(renderLayer.messages));
       }
       {
-        const renderLayer = new PerspectiveViewAnnotationLayer(annotationLayer.addRef());
+        const renderLayer = new PerspectiveViewAnnotationLayer(
+            annotationLayer.addRef(), this.annotationProjectionRenderScaleHistogram);
         refCounted.registerDisposer(this.addRenderLayer(renderLayer));
         refCounted.registerDisposer(loadedSubsource.messages.addChild(renderLayer.messages));
       }

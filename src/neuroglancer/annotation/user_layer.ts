@@ -18,7 +18,7 @@ import './user_layer.css';
 
 import {AnnotationPropertySpec, AnnotationType, LocalAnnotationSource} from 'neuroglancer/annotation';
 import {AnnotationDisplayState, AnnotationLayerState} from 'neuroglancer/annotation/annotation_layer_state';
-import {SpatiallyIndexedPerspectiveViewAnnotationLayer} from 'neuroglancer/annotation/renderlayer';
+import {MultiscaleAnnotationSource} from 'neuroglancer/annotation/frontend_source';
 import {CoordinateTransformSpecification, makeCoordinateSpace} from 'neuroglancer/coordinate_transform';
 import {DataSourceSpecification, localAnnotationsUrl, LocalDataSource} from 'neuroglancer/datasource';
 import {LayerManager, LayerReference, ManagedUserLayer, registerLayerType, registerLayerTypeDetector, UserLayer} from 'neuroglancer/layer';
@@ -146,16 +146,9 @@ class LinkedSegmentationLayers extends RefCounted {
     const relationshipState = this.annotationDisplayState.relationshipStates.get(relationship);
     const layerRef = new LayerReference(this.layerManager.addRef(), isValidLinkedSegmentationLayer);
     layerRef.registerDisposer(layerRef.changed.add(() => {
-      const prevValue = relationshipState.segmentationState;
-      if (layerRef.layerName === undefined) {
-        relationshipState.segmentationState = undefined;
-      } else {
-        const {layer} = layerRef;
-        relationshipState.segmentationState = getSegmentationDisplayState(layer);
-      }
-      if (prevValue !== relationshipState.segmentationState) {
-        this.annotationDisplayState.relationshipStates.changed.dispatch();
-      }
+      relationshipState.segmentationState.value = layerRef.layerName === undefined ?
+          undefined :
+          getSegmentationDisplayState(layerRef.layer);
     }));
     const {showMatches} = relationshipState;
     const state = {
@@ -464,8 +457,8 @@ export class AnnotationUserLayer extends Base {
 
   initializeAnnotationLayerViewTab(tab: AnnotationLayerView) {
     const hasChunkedSource = tab.registerDisposer(makeCachedLazyDerivedWatchableValue(
-        layers => layers.some(x => (x instanceof SpatiallyIndexedPerspectiveViewAnnotationLayer)),
-        {changed: this.layersChanged, value: this.renderLayers}));
+        states => states.some(x => x.source instanceof MultiscaleAnnotationSource),
+        this.annotationStates));
     const renderScaleControls = tab.registerDisposer(
         new DependentViewWidget(hasChunkedSource, (hasChunkedSource, parent, refCounted) => {
           if (!hasChunkedSource) return;

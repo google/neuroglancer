@@ -175,7 +175,7 @@ export class AnnotationLayer extends RefCounted {
             undefined :
             source.relationships.map(relationship => {
               const state = relationshipStates.get(relationship);
-              return state.showMatches.value ? state.segmentationState : undefined;
+              return state.showMatches.value ? state.segmentationState.value : undefined;
             });
       },
       [this.state.displayState.relationshipStates],
@@ -233,18 +233,6 @@ export class AnnotationLayer extends RefCounted {
         this.numPickIds = computeNumPickIds(serializedAnnotations);
       }
     }
-  }
-}
-
-class AnnotationPerspectiveRenderLayerBase extends PerspectiveViewRenderLayer {
-  constructor(public base: Owned<AnnotationLayer>) {
-    super();
-  }
-}
-
-class AnnotationSliceViewRenderLayerBase extends SliceViewPanelRenderLayer {
-  constructor(public base: Owned<AnnotationLayer>) {
-    super();
   }
 }
 
@@ -317,14 +305,9 @@ function getChunkRenderParameters(
 }
 
 
-function AnnotationRenderLayer<TBase extends {
-  new (...args: any[]): VisibilityTrackedRenderLayer &
-  {
-    base: AnnotationLayer
-  }
-}>(Base: TBase, renderHelperType: 'sliceViewRenderHelper'|'perspectiveViewRenderHelper') {
-  class C extends Base {
-    base: AnnotationLayer;
+function AnnotationRenderLayer<TBase extends AnyConstructor<VisibilityTrackedRenderLayer>>(
+    Base: TBase, renderHelperType: 'sliceViewRenderHelper'|'perspectiveViewRenderHelper') {
+  class C extends(Base as AnyConstructor<VisibilityTrackedRenderLayer>) {
     curRank: number = -1;
     private renderHelpers: AnnotationRenderHelper[] = [];
     private tempChunkPosition: Float32Array;
@@ -351,13 +334,14 @@ function AnnotationRenderLayer<TBase extends {
       }
     }
 
-    constructor(...args: any[]) {
-      super(...args);
-      const base = this.registerDisposer(this.base);
+    constructor(
+        public base: Owned<AnnotationLayer>, public renderScaleHistogram: RenderScaleHistogram) {
+      super();
       const baseVisibility = base.visibility;
       if (baseVisibility !== undefined) {
         this.registerDisposer(baseVisibility.add(this.visibility));
       }
+      this.registerDisposer(this.renderScaleHistogram.visibility.add(this.visibility));
       this.registerDisposer(() => {
         for (const helper of this.renderHelpers) {
           helper.dispose();
@@ -578,8 +562,8 @@ function AnnotationRenderLayer<TBase extends {
     }
 
     isAnnotation = true;
-  }
-  return C;
+  };
+  return C as MixinConstructor<typeof C, TBase>;
 }
 
 type AnnotationRenderLayer = InstanceType<ReturnType<typeof AnnotationRenderLayer>>;
@@ -600,8 +584,13 @@ const NonSpatiallyIndexedAnnotationRenderLayer =
       this.drawGeometry(
           base as AnnotationGeometryDataInterface, renderContext, chunkRenderParameters);
     } else {
+      const {renderScaleHistogram} = this;
+      renderScaleHistogram.begin(
+          this.base.chunkManager.chunkQueueManager.frameNumberCounter.frameNumber);
       this.drawGeometryChunkData(source.temporary.data!, renderContext, chunkRenderParameters);
       const {value: segmentationStates} = this.base.segmentationStates;
+      let presentChunks = 0;
+      let notPresentChunks = 0;
       if (segmentationStates !== undefined) {
         for (let i = 0, count = segmentationStates.length; i < count; ++i) {
           const segmentationState = segmentationStates[i];
@@ -614,17 +603,22 @@ const NonSpatiallyIndexedAnnotationRenderLayer =
               const {data} = chunk;
               if (data === undefined) return;
               this.drawGeometryChunkData(data, renderContext, chunkRenderParameters);
+              ++presentChunks;
+            } else {
+              ++notPresentChunks;
             }
           });
         }
       }
+      renderScaleHistogram.add(
+          Number.POSITIVE_INFINITY, Number.POSITIVE_INFINITY, presentChunks, notPresentChunks);
     }
   }
 };
 
 
 const PerspectiveViewAnnotationLayerBase =
-    AnnotationRenderLayer(AnnotationPerspectiveRenderLayerBase, 'perspectiveViewRenderHelper');
+    AnnotationRenderLayer(PerspectiveViewRenderLayer, 'perspectiveViewRenderHelper');
 
 export class PerspectiveViewAnnotationLayer extends NonSpatiallyIndexedAnnotationRenderLayer
 (PerspectiveViewAnnotationLayerBase) {}
@@ -633,17 +627,14 @@ const SpatiallyIndexedAnnotationLayer = <TBase extends AnyConstructor<Annotation
     Base: TBase) => {
   class SpatiallyIndexedAnnotationLayer extends(Base as AnyConstructor<AnnotationRenderLayer>) {
     renderScaleTarget: WatchableValueInterface<number>;
-    renderScaleHistogram: RenderScaleHistogram;
     constructor(options: {
       annotationLayer: AnnotationLayer,
       renderScaleTarget: WatchableValueInterface<number>,
       renderScaleHistogram: RenderScaleHistogram,
     }) {
-      super(options.annotationLayer);
+      super(options.annotationLayer, options.renderScaleHistogram);
       this.renderScaleTarget = options.renderScaleTarget;
-      this.renderScaleHistogram = options.renderScaleHistogram;
       this.registerDisposer(this.renderScaleTarget.changed.add(this.redrawNeeded.dispatch));
-      this.registerDisposer(this.renderScaleHistogram.visibility.add(this.visibility));
       const sharedObject = this.registerDisposer(new SharedObject());
       const rpc = this.base.chunkManager.rpc!;
       sharedObject.RPC_TYPE_ID = ANNOTATION_SPATIALLY_INDEXED_RENDER_LAYER_RPC_ID;
@@ -761,7 +752,7 @@ export const SpatiallyIndexedPerspectiveViewAnnotationLayer =
     SpatiallyIndexedAnnotationLayer(PerspectiveViewAnnotationLayerBase);
 
 export const SpatiallyIndexedSliceViewAnnotationLayer = SpatiallyIndexedAnnotationLayer(
-    AnnotationRenderLayer(AnnotationSliceViewRenderLayerBase, 'sliceViewRenderHelper'));
+    AnnotationRenderLayer(SliceViewPanelRenderLayer, 'sliceViewRenderHelper'));
 
 export const SliceViewAnnotationLayer = NonSpatiallyIndexedAnnotationRenderLayer(
-    AnnotationRenderLayer(AnnotationSliceViewRenderLayerBase, 'sliceViewRenderHelper'));
+    AnnotationRenderLayer(SliceViewPanelRenderLayer, 'sliceViewRenderHelper'));

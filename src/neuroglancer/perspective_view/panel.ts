@@ -160,22 +160,11 @@ export class PerspectivePanel extends RenderedDataPanel {
    * If boolean value is true, sliceView is shown unconditionally, regardless of the value of
    * this.viewer.showSliceViews.value.
    */
-  sliceViews = (() => {
-    const sliceViewDisposers = new Map<Owned<SliceView>, () => void>();
-    return this.registerDisposer(new WatchableMap<SliceView, boolean>(
-        (_unconditional, sliceView) => {
-          const disposer = sliceView.visibility.add(this.visibility);
-          sliceViewDisposers.set(sliceView, disposer);
-          this.scheduleRedraw();
-        },
-        (_unconditional, sliceView) => {
-          const disposer = sliceViewDisposers.get(sliceView)!;
-          sliceViewDisposers.delete(sliceView);
-          disposer();
-          sliceView.dispose();
-          this.scheduleRedraw();
-        }));
-  })();
+  sliceViews = this.registerDisposer(
+      new WatchableMap<SliceView, boolean>((context, _unconditional, sliceView) => {
+        context.registerDisposer(sliceView);
+        context.registerDisposer(sliceView.visibility.add(this.visibility));
+      }));
 
   private axesLineHelper = this.registerDisposer(AxesLineHelper.get(this.gl));
   sliceViewRenderHelper =
@@ -296,6 +285,7 @@ export class PerspectivePanel extends RenderedDataPanel {
     this.registerDisposer(
         viewer.perspectiveViewBackgroundColor.changed.add(() => this.scheduleRedraw()));
     this.registerDisposer(viewer.wireFrame.changed.add(() => this.scheduleRedraw()));
+    this.sliceViews.changed.add(() => this.scheduleRedraw());
   }
 
   translateByViewportPixels(deltaX: number, deltaY: number): void {

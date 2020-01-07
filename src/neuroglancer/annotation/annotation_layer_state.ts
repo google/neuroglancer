@@ -21,7 +21,7 @@ import {ChunkTransformParameters, getChunkTransformParameters, RenderLayerTransf
 import {RenderLayerRole} from 'neuroglancer/renderlayer';
 import {SegmentationDisplayState} from 'neuroglancer/segmentation_display_state/frontend';
 import {TrackableBoolean} from 'neuroglancer/trackable_boolean';
-import {makeCachedLazyDerivedWatchableValue, WatchableValue, WatchableValueInterface} from 'neuroglancer/trackable_value';
+import {makeCachedLazyDerivedWatchableValue, registerNested, WatchableValue, WatchableValueInterface} from 'neuroglancer/trackable_value';
 import {TrackableRGB} from 'neuroglancer/util/color';
 import {Owned, RefCounted} from 'neuroglancer/util/disposable';
 import {makeValueOrError, ValueOrError, valueOrThrow} from 'neuroglancer/util/error';
@@ -33,29 +33,43 @@ import {parseShaderUiControls, ShaderControlState} from 'neuroglancer/webgl/shad
 export class AnnotationHoverState extends WatchableValue<
     {id: string, partIndex: number, annotationLayerState: AnnotationLayerState}|undefined> {}
 
+// null means loading
+// undefined means no attached layer
+type OptionalSegmentationDisplayState = SegmentationDisplayState|null|undefined;
+
 export interface AnnotationRelationshipState {
-  // null means loading
-  // undefined means no attached layer
-  segmentationState: SegmentationDisplayState|null|undefined;
+  segmentationState: WatchableValueInterface<OptionalSegmentationDisplayState>;
   showMatches: TrackableBoolean;
 }
 
 export class WatchableAnnotationRelationshipStates extends
     WatchableMap<string, AnnotationRelationshipState> {
   constructor() {
-    super(
-        state => {
-          state.showMatches.changed.add(this.changed.dispatch);
-        },
-        state => {
-          state.showMatches.changed.remove(this.changed.dispatch);
-        });
+    super((context, {showMatches, segmentationState}) => {
+      context.registerDisposer(showMatches.changed.add(this.changed.dispatch));
+      context.registerDisposer(segmentationState.changed.add(this.changed.dispatch));
+      context.registerDisposer(registerNested((nestedContext, segmentationState) => {
+        if (segmentationState == null) return;
+        const {visibleSegments} = segmentationState;
+        let wasEmpty = visibleSegments.size === 0;
+        nestedContext.registerDisposer(segmentationState.visibleSegments.changed.add(() => {
+          const isEmpty = visibleSegments.size === 0;
+          if (isEmpty !== wasEmpty) {
+            wasEmpty = isEmpty;
+            this.changed.dispatch();
+          }
+        }));
+      }, segmentationState));
+    });
   }
 
   get(name: string): AnnotationRelationshipState {
     let value = super.get(name);
     if (value === undefined) {
-      value = {segmentationState: undefined, showMatches: new TrackableBoolean(false)};
+      value = {
+        segmentationState: new WatchableValue(undefined),
+        showMatches: new TrackableBoolean(false)
+      };
       super.set(name, value);
     }
     return value;
@@ -76,14 +90,17 @@ export class AnnotationDisplayState extends RefCounted {
   color = new TrackableRGB(vec3.fromValues(1, 1, 0));
   relationshipStates = this.registerDisposer(new WatchableAnnotationRelationshipStates());
   displayUnfiltered = makeCachedLazyDerivedWatchableValue(map => {
-    let value = true;
     for (const state of map.values()) {
       if (state.showMatches.value) {
-        value = false;
-        break;
+        const segmentationState = state.segmentationState.value;
+        if (segmentationState != null) {
+          if (segmentationState.visibleSegments.size > 0) {
+            return false;
+          }
+        }
       }
     }
-    return value;
+    return true;
   }, this.relationshipStates);
   hoverState = new AnnotationHoverState(undefined);
 }

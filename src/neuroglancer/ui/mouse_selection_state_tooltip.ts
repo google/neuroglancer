@@ -143,7 +143,7 @@ export class MouseSelectionStateTooltipManager extends RefCounted {
           segmentContainer.className = 'neuroglancer-annotation-segment-list';
           const segmentationState =
               state.annotationLayer.displayState.relationshipStates.get(relationship)
-                  .segmentationState;
+                  .segmentationState.value;
           const segmentColorHash =
               segmentationState ? segmentationState.segmentColorHash : undefined;
           segments.forEach((segment, index) => {
