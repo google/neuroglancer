@@ -147,11 +147,9 @@ class CoordinateSpace(object):
                 if isinstance(units, six.string_types):
                     units = tuple(units for _ in names)
                 scales_and_units = tuple(parse_unit(scale, unit)
-                                         for scale, unit in zip(scales, units))
-                scales = np.array([s[0] for s in scales_and_units], dtype=np.float64)
-                units = tuple(s[1] for s in scales_and_units)
-                self.units = units
-                self.scales = scales
+                self.units = tuple(s[1] for s in scales_and_units)
+                self.scales = np.array([s[0] for s in scales_and_units], 
+                                        dtype=np.float64)
             else:
                 self.names = ()
                 self.scales = np.zeros(0, dtype=np.float64)
@@ -159,8 +157,9 @@ class CoordinateSpace(object):
         else:
             if not isinstance(json, dict): raise TypeError
             self.names = tuple(json.keys())
-            self.scales = np.array([json[k][0] for k in self.names], dtype=np.float64)
-            self.units = np.array(json[k][1] for k in self.names)
+            self.scales = np.array([json[k][0] for k in self.names], 
+                                    dtype=np.float64)
+            self.units = tuple(json[k][1] for k in self.names)
         self.scales.setflags(write=False)
 
     @property
