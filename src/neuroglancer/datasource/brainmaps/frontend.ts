@@ -59,6 +59,7 @@ class BrainmapsAnnotationSpatialIndexSource extends
 const SERVER_DATA_TYPES = new Map<string, DataType>();
 SERVER_DATA_TYPES.set('UINT8', DataType.UINT8);
 SERVER_DATA_TYPES.set('FLOAT', DataType.FLOAT32);
+SERVER_DATA_TYPES.set('UINT32', DataType.UINT32);
 SERVER_DATA_TYPES.set('UINT64', DataType.UINT64);
 
 function parseBoundingBox(obj: any) {
