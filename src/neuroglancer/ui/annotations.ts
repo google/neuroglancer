@@ -1328,7 +1328,7 @@ export class AnnotationLayerView extends Tab {
           case 'Ellipsoid':
             raw.type = AnnotationType.ELLIPSOID;
             (<Ellipsoid>raw).center = textToPoint(annProps[0], this.annotationLayer.globalToObject);
-            (<Ellipsoid>raw).radii = textToPoint(annProps[2], this.annotationLayer.globalToObject);
+            (<Ellipsoid>raw).radii = textToPoint(annProps[2], this.annotationLayer.globalToObject, true);
             break;
           case 'Line Strip':
           case 'Line Strip*':
