@@ -29,13 +29,13 @@
  *
  */
 
+import {tile2dArray} from 'neuroglancer/util/array';
 import {RefCounted} from 'neuroglancer/util/disposable';
 import {mat4, transformVectorByMat4Transpose, vec3, vec3Key} from 'neuroglancer/util/geom';
-import { Buffer, getMemoizedBuffer} from 'neuroglancer/webgl/buffer';
+import {Buffer, getMemoizedBuffer} from 'neuroglancer/webgl/buffer';
 import {GL} from 'neuroglancer/webgl/context';
+import {VERTICES_PER_LINE} from 'neuroglancer/webgl/lines';
 import {ShaderBuilder, ShaderProgram} from 'neuroglancer/webgl/shader';
-import { VERTICES_PER_LINE } from '../webgl/lines';
-import { tile2dArray } from '../util/array';
 
 const tempVec3 = vec3.create();
 const tempVec3b = vec3.create();

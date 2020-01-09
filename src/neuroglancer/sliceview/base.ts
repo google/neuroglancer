@@ -21,7 +21,7 @@ import {ChunkLayout} from 'neuroglancer/sliceview/chunk_layout';
 import {WatchableValueChangeInterface, WatchableValueInterface} from 'neuroglancer/trackable_value';
 import {DATA_TYPE_BYTES, DataType} from 'neuroglancer/util/data_type';
 import {Disposable} from 'neuroglancer/util/disposable';
-import {getFrustrumPlanes, isAABBVisible, mat4, vec3} from 'neuroglancer/util/geom';
+import {getFrustrumPlanes, isAABBIntersectingPlane, isAABBVisible, mat4, vec3} from 'neuroglancer/util/geom';
 import * as matrix from 'neuroglancer/util/matrix';
 import * as vector from 'neuroglancer/util/vector';
 import {SharedObject} from 'neuroglancer/worker_rpc';
@@ -692,7 +692,10 @@ const tempVisibleVolumetricClippingPlanes = new Float32Array(24);
 
 function forEachVolumetricChunkWithinFrustrum(
     clippingPlanes: Float32Array, transformedSource: TransformedSource,
-    callback: (positionInChunks: vec3) => void) {
+    callback: (positionInChunks: vec3) => void,
+    predicate: (
+        xLower: number, yLower: number, zLower: number, xUpper: number, yUpper: number,
+        zUpper: number, clippingPlanes: Float32Array) => boolean) {
   const lower = tempVisibleVolumetricChunkLower;
   const upper = tempVisibleVolumetricChunkUpper;
   const {lowerChunkDisplayBound, upperChunkDisplayBound} = transformedSource;
@@ -700,13 +703,10 @@ function forEachVolumetricChunkWithinFrustrum(
     lower[i] = Math.max(lower[i], lowerChunkDisplayBound[i]);
     upper[i] = Math.min(upper[i], upperChunkDisplayBound[i]);
   }
-  lower.set(transformedSource.lowerChunkDisplayBound);
-  upper.set(transformedSource.upperChunkDisplayBound);
   const {curPositionInChunks, chunkDisplayDimensionIndices} = transformedSource;
 
   function recurse() {
-    if (!isAABBVisible(
-            lower[0], lower[1], lower[2], upper[0], upper[1], upper[2], clippingPlanes)) {
+    if (!predicate(lower[0], lower[1], lower[2], upper[0], upper[1], upper[2], clippingPlanes)) {
       return;
     }
 
@@ -764,9 +764,9 @@ export function forEachVisibleVolumetricChunk(
   getFrustrumPlanes(clippingPlanes, modelViewProjection);
   const lower = tempVisibleVolumetricChunkLower;
   const upper = tempVisibleVolumetricChunkUpper;
-  lower.fill(Number.POSITIVE_INFINITY);
-  upper.fill(Number.NEGATIVE_INFINITY);
-  forEachVolumetricChunkWithinFrustrum(clippingPlanes, transformedSource, callback);
+  lower.fill(Number.NEGATIVE_INFINITY);
+  upper.fill(Number.POSITIVE_INFINITY);
+  forEachVolumetricChunkWithinFrustrum(clippingPlanes, transformedSource, callback, isAABBVisible);
 }
 
 export function forEachPlaneIntersectingVolumetricChunk(
@@ -789,15 +789,14 @@ export function forEachPlaneIntersectingVolumetricChunk(
 
   const invModelViewProjection = tempMat4;
   mat4.invert(invModelViewProjection, modelViewProjection);
-
   const lower = tempVisibleVolumetricChunkLower;
   const upper = tempVisibleVolumetricChunkUpper;
   for (let i = 0; i < 3; ++i) {
     const c = invModelViewProjection[12 + i];
     const xCoeff = Math.abs(invModelViewProjection[i]);
     const yCoeff = Math.abs(invModelViewProjection[4 + i]);
-    lower[i] = c - xCoeff - yCoeff;
-    upper[i] = c + xCoeff + yCoeff;
+    lower[i] = Math.floor(c - xCoeff - yCoeff);
+    upper[i] = Math.floor(c + xCoeff + yCoeff + 1);
   }
 
   const clippingPlanes = tempVisibleVolumetricClippingPlanes;
@@ -825,5 +824,6 @@ export function forEachPlaneIntersectingVolumetricChunk(
     clippingPlanes[20 + i] = -zCoeff;
   }
 
-  forEachVolumetricChunkWithinFrustrum(clippingPlanes, transformedSource, callback);
+  forEachVolumetricChunkWithinFrustrum(
+      clippingPlanes, transformedSource, callback, isAABBIntersectingPlane);
 }

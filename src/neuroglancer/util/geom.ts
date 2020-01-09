@@ -15,7 +15,7 @@
  */
 
 import {mat3, mat4, quat, vec3} from 'gl-matrix';
-import { findMatchingIndices, TypedArray} from 'neuroglancer/util/array';
+import {findMatchingIndices, TypedArray} from 'neuroglancer/util/array';
 
 export {mat2, mat3, mat4, quat, vec2, vec3, vec4} from 'gl-matrix';
 
@@ -120,13 +120,14 @@ export function translationRotationScaleZReflectionToMat4(
 /**
  * Returns the value of `t` that minimizes `(p - (a + t * (b - a)))`.
  */
-export function findClosestParameterizedLinePosition(a: Float32Array, b: Float32Array, p: Float32Array) {
+export function findClosestParameterizedLinePosition(
+    a: Float32Array, b: Float32Array, p: Float32Array) {
   // http://mathworld.wolfram.com/Point-LineDistance3-Dimensional.html
   // Compute t: -dot(a-p, b-a) / |b - a|^2
   const rank = p.length;
   let denominator = 0;
   for (let i = 0; i < rank; ++i) {
-    denominator += (a[i] - b[i])**2;
+    denominator += (a[i] - b[i]) ** 2;
   }
   let numerator = 0;
   for (let i = 0; i < rank; ++i) {
@@ -139,7 +140,8 @@ export function findClosestParameterizedLinePosition(a: Float32Array, b: Float32
 /**
  * Sets `out` to the position on the line segment `[a, b]` closest to `p`.
  */
-export function projectPointToLineSegment(out: Float32Array, a: Float32Array, b: Float32Array, p: Float32Array) {
+export function projectPointToLineSegment(
+    out: Float32Array, a: Float32Array, b: Float32Array, p: Float32Array) {
   const rank = out.length;
   let t = findClosestParameterizedLinePosition(a, b, p);
   t = Math.max(0.0, Math.min(1.0, t));
@@ -240,6 +242,33 @@ export function isAABBVisible(
   return true;
 }
 
+export function isAABBIntersectingPlane(
+    xLower: number, yLower: number, zLower: number, xUpper: number, yUpper: number, zUpper: number,
+    clippingPlanes: Float32Array) {
+  for (let i = 0; i < 4; ++i) {
+    const a = clippingPlanes[i * 4], b = clippingPlanes[i * 4 + 1], c = clippingPlanes[i * 4 + 2],
+          d = clippingPlanes[i * 4 + 3];
+    const sum = Math.max(a * xLower, a * xUpper) + Math.max(b * yLower, b * yUpper) +
+        Math.max(c * zLower, c * zUpper) + d;
+    if (sum < 0) {
+      return false;
+    }
+  }
+  {
+    const i = 5;
+    const a = clippingPlanes[i * 4], b = clippingPlanes[i * 4 + 1], c = clippingPlanes[i * 4 + 2],
+          d = clippingPlanes[i * 4 + 3];
+    const maxSum = Math.max(a * xLower, a * xUpper) + Math.max(b * yLower, b * yUpper) +
+        Math.max(c * zLower, c * zUpper);
+    const minSum = Math.min(a * xLower, a * xUpper) + Math.min(b * yLower, b * yUpper) +
+        Math.min(c * zLower, c * zUpper);
+    const epsilon = Math.abs(d) * 1e-6;
+    if (minSum > -d + epsilon || maxSum < -d - epsilon) return false;
+  }
+  return true;
+}
+
+
 /**
  * Returns the list (in sorted order) of input dimensions that depend on any of the specified output
  * dimensions.
@@ -299,5 +328,5 @@ export function getViewFrustrumVolume(projectionMat: mat4) {
   const far = ((a - 1) * near) / (a + 1);
 
   const baseArea = 4 / (projectionMat[0] * projectionMat[5]);
-  return baseArea / 3 * (Math.abs(far)**3 - Math.abs(near)**3);
+  return baseArea / 3 * (Math.abs(far) ** 3 - Math.abs(near) ** 3);
 }
