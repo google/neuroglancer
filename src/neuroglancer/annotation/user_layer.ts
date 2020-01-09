@@ -98,6 +98,7 @@ interface LinkedSegmentationLayer {
 
 const LINKED_SEGMENTATION_LAYER_JSON_KEY = 'linkedSegmentationLayer';
 const FILTER_BY_SEGMENTATION_JSON_KEY = 'filterBySegmentation';
+const IGNORE_NULL_SEGMENT_FILTER_JSON_KEY = 'ignoreNullSegmentFilter';
 
 class LinkedSegmentationLayers extends RefCounted {
   changed = new NullarySignal();
@@ -328,6 +329,8 @@ export class AnnotationUserLayer extends Base {
     super(managedLayer, specification);
     this.linkedSegmentationLayers.restoreState(specification);
     this.linkedSegmentationLayers.changed.add(this.specificationChanged.dispatch);
+    this.annotationDisplayState.ignoreNullSegmentFilter.changed.add(
+        this.specificationChanged.dispatch);
     this.annotationCrossSectionRenderScaleTarget.changed.add(this.specificationChanged.dispatch);
     this.localAnnotationsJson = specification[ANNOTATIONS_JSON_KEY];
     this.pointAnnotationsJson = specification[POINTS_JSON_KEY];
@@ -335,6 +338,8 @@ export class AnnotationUserLayer extends Base {
         specification[CROSS_SECTION_RENDER_SCALE_JSON_KEY]);
     this.annotationProjectionRenderScaleTarget.restoreState(
         specification[PROJECTION_RENDER_SCALE_JSON_KEY]);
+    this.annotationDisplayState.ignoreNullSegmentFilter.restoreState(
+        specification[IGNORE_NULL_SEGMENT_FILTER_JSON_KEY]);
     this.tabs.add(
         'rendering',
         {label: 'Rendering', order: -100, getter: () => new RenderingOptionsTab(this)});
@@ -478,6 +483,16 @@ export class AnnotationUserLayer extends Base {
           }
         }));
     tab.element.insertBefore(renderScaleControls.element, tab.element.firstChild);
+    {
+      const checkbox = tab.registerDisposer(
+          new TrackableBooleanCheckbox(this.annotationDisplayState.ignoreNullSegmentFilter));
+      const label = document.createElement('label');
+      label.appendChild(document.createTextNode('Ignore null related segment filter'));
+      label.title =
+          'Display all annotations if filtering by related segments is enabled but no segments are selected';
+      label.appendChild(checkbox.element);
+      tab.element.appendChild(label);
+    }
     tab.element.appendChild(
         tab.registerDisposer(new LinkedSegmentationLayersWidget(this.linkedSegmentationLayers))
             .element);
@@ -492,6 +507,8 @@ export class AnnotationUserLayer extends Base {
     } else if (this.localAnnotationsJson !== undefined) {
       x[ANNOTATIONS_JSON_KEY] = this.localAnnotationsJson;
     }
+    x[IGNORE_NULL_SEGMENT_FILTER_JSON_KEY] =
+        this.annotationDisplayState.ignoreNullSegmentFilter.toJSON();
     Object.assign(x, this.linkedSegmentationLayers.toJSON());
     return x;
   }

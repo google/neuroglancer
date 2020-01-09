@@ -89,9 +89,11 @@ export class AnnotationDisplayState extends RefCounted {
   shaderError = makeWatchableShaderError();
   color = new TrackableRGB(vec3.fromValues(1, 1, 0));
   relationshipStates = this.registerDisposer(new WatchableAnnotationRelationshipStates());
-  displayUnfiltered = makeCachedLazyDerivedWatchableValue(map => {
+  ignoreNullSegmentFilter = new TrackableBoolean(true);
+  displayUnfiltered = makeCachedLazyDerivedWatchableValue((map, ignoreNullSegmentFilter) => {
     for (const state of map.values()) {
       if (state.showMatches.value) {
+        if (!ignoreNullSegmentFilter) return false;
         const segmentationState = state.segmentationState.value;
         if (segmentationState != null) {
           if (segmentationState.visibleSegments.size > 0) {
@@ -101,7 +103,7 @@ export class AnnotationDisplayState extends RefCounted {
       }
     }
     return true;
-  }, this.relationshipStates);
+  }, this.relationshipStates, this.ignoreNullSegmentFilter);
   hoverState = new AnnotationHoverState(undefined);
 }
 
