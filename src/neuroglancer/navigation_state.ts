@@ -497,8 +497,6 @@ export class LinkedOrientationState extends LinkedBase<OrientationState> {
 }
 
 export interface RelativeDisplayScales {
-  coordinateSpace: CoordinateSpace;
-
   /**
    * Array of length `coordinateSpace.rank` specifying scale factors on top of (will be multiply by)
    * `coordinateSpace.scales` to use for display purposes.  This allows non-uniform zooming.
@@ -509,10 +507,8 @@ export interface RelativeDisplayScales {
 export class TrackableRelativeDisplayScales extends RefCounted implements
     Trackable, WatchableValueInterface<RelativeDisplayScales> {
   changed = new NullarySignal();
-  private value_: RelativeDisplayScales = {
-    coordinateSpace: emptyInvalidCoordinateSpace,
-    factors: new Float64Array(0)
-  };
+  private curCoordinateSpace = emptyInvalidCoordinateSpace;
+  private value_: RelativeDisplayScales = {factors: new Float64Array(0)};
   constructor(public coordinateSpace: WatchableValueInterface<CoordinateSpace>) {
     super();
     this.registerDisposer(coordinateSpace.changed.add(() => this.update()));
@@ -524,7 +520,8 @@ export class TrackableRelativeDisplayScales extends RefCounted implements
   }
 
   reset() {
-    this.value_ = {coordinateSpace: emptyInvalidCoordinateSpace, factors: new Float64Array(0)};
+    this.value_ = {factors: new Float64Array(0)};
+    this.curCoordinateSpace = emptyInvalidCoordinateSpace;
     this.changed.dispatch();
   }
 
@@ -532,7 +529,8 @@ export class TrackableRelativeDisplayScales extends RefCounted implements
     const json: any = {};
     let nonEmpty = false;
     const {value} = this;
-    const {coordinateSpace: {names, rank}, factors} = value;
+    const {factors} = value;
+    const {names, rank} = this.curCoordinateSpace;
     for (let i = 0; i < rank; ++i) {
       const factor = factors[i];
       if (factor === 1) continue;
@@ -555,22 +553,25 @@ export class TrackableRelativeDisplayScales extends RefCounted implements
             obj, names[i], x => x === undefined ? 1 : verifyFinitePositiveFloat(x));
       }
     }
-    this.value_ = {coordinateSpace, factors};
+    this.value_ = {factors};
+    this.curCoordinateSpace = coordinateSpace;
     this.changed.dispatch();
   }
 
   setFactors(factors: Float64Array) {
     const {coordinateSpace: {value: coordinateSpace}} = this;
     if (factors.length !== coordinateSpace.rank) return;
-    this.value_ = {coordinateSpace, factors};
+    this.value_ = {factors};
+    this.curCoordinateSpace = coordinateSpace;
     this.changed.dispatch();
   }
 
   private update() {
     const {coordinateSpace: {value: coordinateSpace}} = this;
     let value = this.value_;
-    if (value.coordinateSpace === coordinateSpace) return value;
-    const {ids: oldDimensionIds} = value.coordinateSpace;
+    const {curCoordinateSpace} = this;
+    if (curCoordinateSpace === coordinateSpace) return value;
+    const {ids: oldDimensionIds} = curCoordinateSpace;
     const {ids: newDimensionIds, rank} = coordinateSpace;
     const oldFactors = value.factors;
     const newFactors = new Float64Array(rank);
@@ -581,7 +582,9 @@ export class TrackableRelativeDisplayScales extends RefCounted implements
       if (oldIndex === -1) continue;
       newFactors[i] = oldFactors[oldIndex];
     }
-    value = this.value_ = {coordinateSpace, factors: newFactors};
+    if (arraysEqual(newFactors, oldFactors)) return value;
+    value = this.value_ = {factors: newFactors};
+    this.curCoordinateSpace = coordinateSpace;
     this.changed.dispatch();
     return value;
   }
@@ -613,7 +616,8 @@ export class LinkedRelativeDisplayScales extends LinkedBase<TrackableRelativeDis
         assign: (target, source) => target.assign(source),
         difference:
             (a, b) => {
-              const {factors: fa, coordinateSpace} = a.value;
+              const {factors: fa} = a.value;
+              const coordinateSpace = a.coordinateSpace.value;
               const fb = b.value.factors;
               return {
                 coordinateSpace,
@@ -677,6 +681,13 @@ export interface DisplayDimensionRenderInfo {
   displayDimensionUnits: readonly string[];
 
   /**
+   * Scale corresponding to each dimension in `displayDimensionIndices`.
+   * `displayDimensionScales[i]` is equal to `coordinateSpace.scales[displayDimensionIndices[i]]`,
+   * or `1` if `displayDimensionIndices[i] == -1`.
+   */
+  displayDimensionScales: Float64Array;
+
+  /**
    * Physical scale corresponding to the canonical voxel.  Equal to minimum of
    * `voxelPhysicalScales.slice(0, rank)`, or `1` if `rank == 0`.
    */
@@ -691,17 +702,19 @@ export interface DisplayDimensionRenderInfo {
 }
 
 function getDisplayDimensionRenderInfo(
-    displayDimensions: DisplayDimensions,
+    coordinateSpace: CoordinateSpace, displayDimensions: DisplayDimensions,
     relativeDisplayScales: RelativeDisplayScales): DisplayDimensionRenderInfo {
-  const {rank: globalRank, names: globalDimensionNames, units} = relativeDisplayScales.coordinateSpace;
+  const {rank: globalRank, names: globalDimensionNames, units} = coordinateSpace;
   const {displayRank, displayDimensionIndices} = displayDimensions;
   const canonicalVoxelFactors = new Float64Array(3);
   let voxelPhysicalScales = new Float64Array(3);
   let canonicalVoxelPhysicalSize: number;
-  const {coordinateSpace, factors} = relativeDisplayScales;
+  const {factors} = relativeDisplayScales;
   const displayDimensionUnits = new Array<string>(3);
+  const displayDimensionScales = new Float64Array(3);
   canonicalVoxelFactors.fill(1);
   voxelPhysicalScales.fill(1);
+  displayDimensionScales.fill(1);
   displayDimensionUnits.fill('');
   if (displayRank === 0) {
     canonicalVoxelPhysicalSize = 1;
@@ -713,6 +726,7 @@ function getDisplayDimensionRenderInfo(
       const s = voxelPhysicalScales[i] = factors[dim] * scales[dim];
       canonicalVoxelPhysicalSize = Math.min(canonicalVoxelPhysicalSize, s);
       displayDimensionUnits[i] = units[dim];
+      displayDimensionScales[i] = scales[dim];
     }
     for (let i = 0; i < displayRank; ++i) {
       canonicalVoxelFactors[i] = voxelPhysicalScales[i] / canonicalVoxelPhysicalSize;
@@ -724,6 +738,7 @@ function getDisplayDimensionRenderInfo(
     displayRank,
     displayDimensionIndices,
     displayDimensionUnits,
+    displayDimensionScales,
     canonicalVoxelFactors,
     voxelPhysicalScales,
     canonicalVoxelPhysicalSize,
@@ -737,28 +752,34 @@ export function displayDimensionRenderInfosEqual(
       arraysEqual(a.canonicalVoxelFactors, b.canonicalVoxelFactors) &&
       arraysEqual(a.voxelPhysicalScales, b.voxelPhysicalScales) &&
       a.canonicalVoxelPhysicalSize === b.canonicalVoxelPhysicalSize &&
-      arraysEqual(a.displayDimensionUnits, b.displayDimensionUnits);
+      arraysEqual(a.displayDimensionUnits, b.displayDimensionUnits) &&
+      arraysEqual(a.displayDimensionScales, b.displayDimensionScales);
 }
 
 export class WatchableDisplayDimensionRenderInfo extends RefCounted {
   changed = new NullarySignal();
   private curRelativeDisplayScales: RelativeDisplayScales = this.relativeDisplayScales.value;
   private curDisplayDimensions: DisplayDimensions = this.displayDimensions.value;
-  private value_: DisplayDimensionRenderInfo =
-      getDisplayDimensionRenderInfo(this.curDisplayDimensions, this.curRelativeDisplayScales);
+  private curCoordinateSpace: CoordinateSpace = this.relativeDisplayScales.coordinateSpace.value;
+  private value_: DisplayDimensionRenderInfo = getDisplayDimensionRenderInfo(
+      this.curCoordinateSpace, this.curDisplayDimensions, this.curRelativeDisplayScales);
   get value() {
     const {
-      relativeDisplayScales: {value: relativeDisplayScales},
+      relativeDisplayScales:
+          {value: relativeDisplayScales, coordinateSpace: {value: coordinateSpace}},
       displayDimensions: {value: displayDimensions},
       curRelativeDisplayScales,
       curDisplayDimensions,
+      curCoordinateSpace,
     } = this;
     let value = this.value_;
     if (curRelativeDisplayScales !== relativeDisplayScales ||
-        curDisplayDimensions !== displayDimensions) {
+        curDisplayDimensions !== displayDimensions || curCoordinateSpace !== coordinateSpace) {
       this.curRelativeDisplayScales = relativeDisplayScales;
       this.curDisplayDimensions = displayDimensions;
-      const newValue = getDisplayDimensionRenderInfo(displayDimensions, relativeDisplayScales);
+      this.curCoordinateSpace = coordinateSpace;
+      const newValue =
+          getDisplayDimensionRenderInfo(coordinateSpace, displayDimensions, relativeDisplayScales);
       if (!displayDimensionRenderInfosEqual(value, newValue)) {
         this.value_ = value = newValue;
         this.changed.dispatch();
@@ -1203,7 +1224,6 @@ abstract class TrackableZoom extends RefCounted implements Trackable,
                                                            WatchableValueInterface<number> {
   readonly changed = new NullarySignal();
   private curCanonicalVoxelPhysicalSize = 0;
-  private curCoordinateSpace: CoordinateSpace = emptyInvalidCoordinateSpace;
   private value_: number = Number.NaN;
   protected legacyValue_: number = Number.NaN;
 
@@ -1243,9 +1263,9 @@ abstract class TrackableZoom extends RefCounted implements Trackable,
    */
   set legacyValue(value: number) {
     if (Object.is(value, this.legacyValue_)) return;
-    this.curCoordinateSpace = emptyInvalidCoordinateSpace;
     this.value_ = Number.NaN;
     this.legacyValue_ = value;
+    this.curCanonicalVoxelPhysicalSize = 0;
     this.changed.dispatch();
   }
 
@@ -1270,13 +1290,10 @@ abstract class TrackableZoom extends RefCounted implements Trackable,
       }
     } = this;
     const {curCanonicalVoxelPhysicalSize} = this;
-    const {curCoordinateSpace} = this;
-    if (canonicalVoxelPhysicalSize === curCanonicalVoxelPhysicalSize &&
-        curCoordinateSpace === coordinateSpace) {
+    if (canonicalVoxelPhysicalSize === curCanonicalVoxelPhysicalSize) {
       return;
     }
     this.curCanonicalVoxelPhysicalSize = canonicalVoxelPhysicalSize;
-    this.curCoordinateSpace = coordinateSpace;
     if (!Number.isNaN(value_)) {
       if (curCanonicalVoxelPhysicalSize !== 0) {
         this.value_ = value_ * (curCanonicalVoxelPhysicalSize / canonicalVoxelPhysicalSize);
@@ -1298,7 +1315,6 @@ abstract class TrackableZoom extends RefCounted implements Trackable,
 
   restoreState(obj: any) {
     this.curCanonicalVoxelPhysicalSize = 0;
-    this.curCoordinateSpace = emptyInvalidCoordinateSpace;
     this.legacyValue_ = Number.NaN;
     if (obj === undefined) {
       this.value_ = Number.NaN;
@@ -1310,7 +1326,6 @@ abstract class TrackableZoom extends RefCounted implements Trackable,
 
   reset() {
     this.curCanonicalVoxelPhysicalSize = 0;
-    this.curCoordinateSpace = emptyInvalidCoordinateSpace;
     this.value_ = Number.NaN;
     this.legacyValue_ = Number.NaN;
     this.changed.dispatch();

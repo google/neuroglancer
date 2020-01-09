@@ -335,7 +335,7 @@ export class DisplayDimensionsWidget extends RefCounted {
         canonicalVoxelPhysicalSize,
       } = displayDimensionRenderInfoValue;
       const widgets: DepthWidget[] = [];
-      
+
       const updateView = () => {
         relativeCheckbox.checked = this.depthRange.value < 0;
         let rangeValue = this.depthRange.value;
@@ -359,7 +359,7 @@ export class DisplayDimensionsWidget extends RefCounted {
         this.depthRange.value = value;
         return true;
       };
-      
+
       for (let i = 0; i < displayRank; ++i) {
         const dim = displayDimensionIndices[i];
         const name = globalDimensionNames[dim];
@@ -485,21 +485,23 @@ export class DisplayDimensionsWidget extends RefCounted {
     const {
       displayDimensionIndices,
       canonicalVoxelFactors,
+      displayDimensionUnits,
+      displayDimensionScales,
+      globalDimensionNames,
     } = this.displayDimensionRenderInfo.value;
-    const {factors, coordinateSpace: {names, units, scales}} = this.relativeDisplayScales.value;
+    const {factors} = this.relativeDisplayScales.value;
     this.defaultCheckbox.checked = isDefault;
     const zoom = this.zoom.value;
     // Check if all units and factors are the same.
     const firstDim = displayDimensionIndices[0];
     let singleScale = true;
     if (firstDim !== -1) {
-      const unit = units[firstDim];
+      const unit = displayDimensionUnits[0];
       const factor = factors[firstDim];
       for (let i = 1; i < 3; ++i) {
         const dim = displayDimensionIndices[i];
         if (dim === -1) continue;
-        if (units[dim] !== unit ||
-            factors[dim] !== factor) {
+        if (displayDimensionUnits[i] !== unit || factors[dim] !== factor) {
           singleScale = false;
           break;
         }
@@ -515,11 +517,11 @@ export class DisplayDimensionsWidget extends RefCounted {
         dimElements.scale.textContent = '';
         dimElements.scaleFactor.value = '';
       } else {
-        dimElements.name.value = names[dim];
-        const totalScale = scales[dim] * zoom / canonicalVoxelFactors[i];
+        dimElements.name.value = globalDimensionNames[dim];
+        const totalScale = displayDimensionScales[i] * zoom / canonicalVoxelFactors[i];
         if (i === 0 || !singleScale) {
-          const formattedScale =
-              formatScaleWithUnitAsString(totalScale, units[dim], {precision: 2, elide1: false});
+          const formattedScale = formatScaleWithUnitAsString(
+              totalScale, displayDimensionUnits[i], {precision: 2, elide1: false});
           dimElements.scale.textContent = `${formattedScale}/${this.displayUnit}`;
         } else {
           dimElements.scale.textContent = '';

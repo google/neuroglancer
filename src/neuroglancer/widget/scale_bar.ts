@@ -29,7 +29,7 @@
  * understand.
  */
 
-import { DisplayDimensionRenderInfo, RelativeDisplayScales} from 'neuroglancer/navigation_state';
+import {DisplayDimensionRenderInfo, RelativeDisplayScales} from 'neuroglancer/navigation_state';
 import {TrackableValue} from 'neuroglancer/trackable_value';
 import {RefCounted} from 'neuroglancer/util/disposable';
 import {verifyFloat, verifyObjectProperty, verifyString} from 'neuroglancer/util/json';
@@ -257,12 +257,15 @@ export class MultipleScaleBarTextures extends RefCounted {
       options: ScaleBarOptions) {
     const {scaleBars} = this;
     const {
-        displayRank,
-        displayDimensionIndices,
-        canonicalVoxelFactors,
+      displayRank,
+      displayDimensionIndices,
+      canonicalVoxelFactors,
+      globalDimensionNames,
+      displayDimensionUnits,
+      displayDimensionScales,
     } = displayDimensionRenderInfo;
 
-    const {factors, coordinateSpace: {names, scales, units}} = relativeDisplayScales;
+    const {factors} = relativeDisplayScales;
 
     const targetLengthInPixels = Math.min(
         options.maxWidthFraction * viewportWidth, options.maxWidthInPixels * options.scaleFactor);
@@ -271,7 +274,7 @@ export class MultipleScaleBarTextures extends RefCounted {
 
     for (let i = 0; i < displayRank; ++i) {
       const dim = displayDimensionIndices[i];
-      const unit = units[dim];
+      const unit = displayDimensionUnits[i];
       const factor = factors[dim];
       let barIndex;
       let scaleBar: ScaleBarTexture;
@@ -292,9 +295,9 @@ export class MultipleScaleBarTextures extends RefCounted {
         scaleBarDimensions.physicalBaseUnit = unit;
         scaleBarDimensions.targetLengthInPixels = targetLengthInPixels;
         scaleBarDimensions.physicalSizePerPixel =
-            scales[dim] * effectiveZoom / canonicalVoxelFactors[i];
+            displayDimensionScales[i] * effectiveZoom / canonicalVoxelFactors[i];
       }
-      scaleBar!.label += `${names[dim]} `;
+      scaleBar!.label += `${globalDimensionNames[dim]} `;
     }
 
     const {gl, scaleBarCopyHelper} = this;
