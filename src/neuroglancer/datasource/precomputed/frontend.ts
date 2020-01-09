@@ -242,7 +242,7 @@ function parseShardingEncoding(y: any): DataEncoding {
 }
 
 function parseShardingParameters(shardingData: any): ShardingParameters|undefined {
-  if (shardingData === undefined) return undefined;
+  if (shardingData === undefined || shardingData === null) return undefined;
   verifyObject(shardingData);
   const t = verifyObjectProperty(shardingData, '@type', verifyString);
   if (t !== 'neuroglancer_uint64_sharded_v1') {
