@@ -316,7 +316,7 @@ export class ManagedUserLayer extends RefCounted {
     this.layer_ = layer;
     if (layer != null) {
       const removers = [
-        layer.layersChanged.add(() => this.handleLayerChanged()),
+        layer.layersChanged.add(this.layerChanged.dispatch),
         layer.readyStateChanged.add(this.readyStateChanged.dispatch),
         layer.specificationChanged.add(this.specificationChanged.dispatch)
       ];
@@ -324,7 +324,7 @@ export class ManagedUserLayer extends RefCounted {
         removers.forEach(x => x());
       };
       this.readyStateChanged.dispatch();
-      this.handleLayerChanged();
+      this.layerChanged.dispatch();
     }
   }
 
@@ -371,11 +371,6 @@ export class ManagedUserLayer extends RefCounted {
     return layerSpec;
   }
 
-  private handleLayerChanged() {
-    if (this.visible) {
-      this.layerChanged.dispatch();
-    }
-  }
   setVisible(value: boolean) {
     if (value !== this.visible) {
       this.visible = value;
