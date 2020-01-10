@@ -38,7 +38,7 @@ export async function getHtmlDirectoryListing(
       doc.evaluate('//a/@href', doc, null, XPathResult.UNORDERED_NODE_SNAPSHOT_TYPE, null);
   const results: string[] = [];
   for (let i = 0, n = nodes.snapshotLength; i < n; ++i) {
-    const node = nodes.snapshotItem(i);
+    const node = nodes.snapshotItem(i)!;
     const href = node.textContent;
     if (href) {
       results.push(new URL(href, url).toString());

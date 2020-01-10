@@ -1050,7 +1050,7 @@ export class AnnotationDetailsTab extends Tab {
       this.element.style.display = 'none';
       return;
     }
-    this.element.style.display = null;
+    this.element.style.display = '';
     if (this.valid) {
       return;
     }

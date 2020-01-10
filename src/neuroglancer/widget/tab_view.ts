@@ -208,7 +208,7 @@ export class StackView<TabId, TabType extends Tab = Tab> extends RefCounted {
       this.element.appendChild(tab.element);
       tabs.set(id, tab);
     }
-    tab.element.style.display = null;
+    tab.element.style.display = '';
     tab.visibility.value = WatchableVisibilityPriority.VISIBLE;
     this.tabVisibilityChanged.dispatch(id, true);
   }

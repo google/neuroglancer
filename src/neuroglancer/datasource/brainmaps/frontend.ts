@@ -42,7 +42,7 @@ import {defaultStringCompare} from 'neuroglancer/util/string';
 
 class BrainmapsVolumeChunkSource extends
 (WithParameters(
-    WithCredentialsProvider<Credentials>()(VolumeChunkSource), VolumeSourceParameters)) {}
+  WithCredentialsProvider<Credentials>()(VolumeChunkSource), VolumeSourceParameters)) {}
 
 class BrainmapsMultiscaleMeshSource extends
 (WithParameters(WithCredentialsProvider<Credentials>()(MultiscaleMeshSource), MultiscaleMeshSourceParameters)) {}
@@ -690,7 +690,7 @@ export class BrainmapsDataSource extends DataSourceProvider {
                 });
               }
             } else {
-              const {multi} = mesh;
+              const multi = mesh.multi!;
               meshSource = options.chunkManager.getChunkSource(BrainmapsMultiscaleMeshSource, {
                 credentialsProvider: this.credentialsProvider,
                 format: {

@@ -360,7 +360,7 @@ function parseScaleBarOptions(obj: any): ScaleBarOptions {
   const result = {
     ...defaultScaleBarOptions,
   };
-  for (const k of <(keyof ScaleBarOptions)[]>[
+  for (const k of <(Exclude<keyof ScaleBarOptions, 'fontName'>)[]>[
          'textHeightInPixels', 'barTopMarginInPixels', 'barHeightInPixels', 'paddingInPixels',
          'scaleFactor', 'maxWidthInPixels', 'maxWidthFraction', 'leftPixelOffset',
          'bottomPixelOffset'

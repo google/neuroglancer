@@ -262,9 +262,11 @@ registerPromiseRPC('Chunk.retrieve', function(x, cancellationToken): RPCPromise<
   });
 });
 
-export interface ChunkSourceConstructor<Options, T extends SharedObject = ChunkSource> {
+export type GettableChunkSource = (SharedObject&{OPTIONS: {}, key: any});
+
+export interface ChunkSourceConstructor<T extends GettableChunkSource = GettableChunkSource> {
   new(...args: any[]): T;
-  encodeOptions(options: Options): any;
+  encodeOptions(options: T['OPTIONS']): any;
 }
 
 @registerSharedObjectOwner(CHUNK_MANAGER_RPC_ID)
@@ -282,8 +284,8 @@ export class ChunkManager extends SharedObject {
         chunkQueueManager.rpc!, {'chunkQueueManager': chunkQueueManager.rpcId});
   }
 
-  getChunkSource<T extends SharedObject&{key: any}, Options>(
-      constructorFunction: ChunkSourceConstructor<Options, T>, options: Options): T {
+  getChunkSource<T extends GettableChunkSource>(
+      constructorFunction: ChunkSourceConstructor<T>, options: T['OPTIONS']): T {
     const keyObject = constructorFunction.encodeOptions(options);
     keyObject['constructorId'] = getObjectId(constructorFunction);
     const key = stableStringify(keyObject);
@@ -292,11 +294,12 @@ export class ChunkManager extends SharedObject {
       newSource.initializeCounterpart(this.rpc!, {});
       newSource.key = keyObject;
       return newSource;
-    }) as T;
+    });
   }
 }
 
 export class ChunkSource extends SharedObject {
+  OPTIONS: {};
   chunks = new Map<string, Chunk>();
   key: any;
 
@@ -351,27 +354,25 @@ export class ChunkSource extends SharedObject {
   }
 }
 
-export function WithParameters<Parameters, TBase extends ChunkSourceConstructor<{}, SharedObject>>(
+export function WithParameters<Parameters, TBase extends ChunkSourceConstructor>(
     Base: TBase, parametersConstructor: ChunkSourceParametersConstructor<Parameters>) {
-  type BaseOptions =
-      TBase extends {encodeOptions(options: infer BaseOptions): any} ? BaseOptions : never;
-  type Options = BaseOptions&{parameters: Parameters};
-
+  type WithParametersOptions = InstanceType<TBase>['OPTIONS']&{parameters: Parameters};
   @registerSharedObjectOwner(parametersConstructor.RPC_ID)
   class C extends Base {
+    OPTIONS: WithParametersOptions;
     parameters: Parameters;
     constructor(...args: any[]) {
       super(...args);
-      const options: Options = args[1];
+      const options: WithParametersOptions = args[1];
       this.parameters = options.parameters;
     }
     initializeCounterpart(rpc: RPC, options: any) {
       options['parameters'] = this.parameters;
       super.initializeCounterpart(rpc, options);
     }
-    static encodeOptions(options: Options) {
+    static encodeOptions(options: WithParametersOptions) {
       return Object.assign({parameters: options.parameters}, super.encodeOptions(options));
     }
   }
-  return C as (typeof C&{encodeOptions(options: Options): any});
+  return C;
 }

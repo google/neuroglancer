@@ -36,13 +36,13 @@ export async function getS3BucketListing(
       XPathResult.UNORDERED_NODE_SNAPSHOT_TYPE, null);
   const results: string[] = [];
   for (let i = 0, n = commonPrefixNodes.snapshotLength; i < n; ++i) {
-    results.push(commonPrefixNodes.snapshotItem(i).textContent || '');
+    results.push(commonPrefixNodes.snapshotItem(i)!.textContent || '');
   }
   const contents = doc.evaluate(
       '//*[name()="Contents"]/*[name()="Key"]', doc, null,
       XPathResult.UNORDERED_NODE_SNAPSHOT_TYPE, null);
   for (let i = 0, n = contents.snapshotLength; i < n; ++i) {
-    results.push(contents.snapshotItem(i).textContent || '');
+    results.push(contents.snapshotItem(i)!.textContent || '');
   }
   return results;
 }

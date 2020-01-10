@@ -413,6 +413,8 @@ export abstract class SliceViewChunkSource<
     SliceViewChunkSourceInterface {
   chunks: Map<string, ChunkType>;
 
+  OPTIONS: SliceViewChunkSourceOptions<Spec>;
+
   spec: Spec;
 
   constructor(chunkManager: ChunkManager, options: SliceViewChunkSourceOptions<Spec>) {

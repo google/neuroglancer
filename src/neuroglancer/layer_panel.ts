@@ -312,7 +312,7 @@ export class LayerPanel extends RefCounted {
     const updatePositionWidgetVisibility = () => {
       const linkValue = this.viewerNavigationState.position.link.value;
       this.positionWidget.element.style.display =
-          linkValue === NavigationLinkType.LINKED ? 'none' : null;
+          linkValue === NavigationLinkType.LINKED ? 'none' : '';
     };
     this.registerDisposer(
         this.viewerNavigationState.position.link.changed.add(updatePositionWidgetVisibility));

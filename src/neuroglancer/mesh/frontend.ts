@@ -725,6 +725,7 @@ export interface MultiscaleMeshSourceOptions extends MeshSourceOptions {
 }
 
 export class MultiscaleMeshSource extends ChunkSource {
+  OPTIONS: MultiscaleMeshSourceOptions;
   fragmentSource = this.registerDisposer(new MultiscaleFragmentSource(this.chunkManager, this));
   chunks: Map<string, MultiscaleManifestChunk>;
   format: MultiscaleFragmentFormat;

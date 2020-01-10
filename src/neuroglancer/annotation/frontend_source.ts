@@ -121,6 +121,7 @@ export class AnnotationGeometryChunk extends SliceViewChunk {
 @registerSharedObjectOwner(ANNOTATION_GEOMETRY_CHUNK_SOURCE_RPC_ID)
 export class AnnotationGeometryChunkSource extends
     SliceViewChunkSource<AnnotationGeometryChunkSpecification, AnnotationGeometryChunk> {
+  OPTIONS: AnnotationGeometryChunkSourceOptions;
   parent: Borrowed<MultiscaleAnnotationSource>;
   immediateChunkUpdates = true;
 
@@ -138,10 +139,6 @@ export class AnnotationGeometryChunkSource extends
   addChunk(key: string, chunk: AnnotationGeometryChunk) {
     super.addChunk(key, chunk);
     // TODO: process local deletions
-  }
-
-  static encodeOptions(options: AnnotationGeometryChunkSourceOptions) {
-    return super.encodeOptions(options);
   }
 
   getChunk(x: any) {
@@ -322,6 +319,8 @@ function makeTemporaryChunk() {
 
 export class MultiscaleAnnotationSource extends SharedObject implements
     MultiscaleSliceViewChunkSource<AnnotationGeometryChunkSource>, AnnotationSourceSignals {
+  OPTIONS: {};
+  key: any;
   metadataChunkSource =
       this.registerDisposer(new AnnotationMetadataChunkSource(this.chunkManager, this));
   segmentFilteredSources: Owned<AnnotationSubsetGeometryChunkSource>[];

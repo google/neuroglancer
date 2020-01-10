@@ -221,7 +221,7 @@ export class LayerInfoPanelContainer extends RefCounted {
   private handleStateChanged() {
     const {state} = this;
     const {visible} = state;
-    this.element.style.display = visible ? null : 'none';
+    this.element.style.display = visible ? '' : 'none';
     this.stack.visibility.value =
         visible ? WatchableVisibilityPriority.VISIBLE : WatchableVisibilityPriority.IGNORED;
   }

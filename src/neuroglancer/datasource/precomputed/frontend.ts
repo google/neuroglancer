@@ -243,6 +243,7 @@ interface PrecomputedAnnotationSourceOptions {
 export class PrecomputedAnnotationSource extends MultiscaleAnnotationSourceBase {
   key: any;
   metadata: AnnotationMetadata;
+  OPTIONS: PrecomputedAnnotationSourceOptions;
   constructor(chunkManager: ChunkManager, options: PrecomputedAnnotationSourceOptions) {
     const {parameters} = options;
     super(chunkManager, {
@@ -253,10 +254,6 @@ export class PrecomputedAnnotationSource extends MultiscaleAnnotationSourceBase 
     } as any);
     this.readonly = true;
     this.metadata = options.metadata;
-  }
-
-  static encodeOptions(options: PrecomputedAnnotationSourceOptions) {
-    return super.encodeOptions(options);
   }
 
   getSources(): SliceViewSingleResolutionSource<AnnotationGeometryChunkSource>[][] {
@@ -298,9 +295,8 @@ function parseMeshMetadata(data: any): MultiscaleMeshMetadata|undefined {
   verifyObject(data);
   const t = verifyObjectProperty(data, '@type', verifyString);
   if (t === 'neuroglancer_legacy_mesh') {
-    return undefined; 
-  }
-  else if (t !== 'neuroglancer_multilod_draco') {
+    return undefined;
+  } else if (t !== 'neuroglancer_multilod_draco') {
     throw new Error(`Unsupported mesh type: ${JSON.stringify(t)}`);
   }
   const lodScaleMultiplier =

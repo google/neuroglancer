@@ -18,7 +18,7 @@ export type RelativeDragHandler = (event: MouseEvent, deltaX: number, deltaY: nu
 export function startRelativeMouseDrag(
     initialEvent: MouseEvent, handler: RelativeDragHandler,
     finishDragHandler?: RelativeDragHandler) {
-  let {document} = initialEvent.view;
+  const {document} = initialEvent.view!;
   let prevClientX = initialEvent.clientX, prevClientY = initialEvent.clientY;
   const mouseMoveHandler = (e: PointerEvent) => {
     const deltaX = e.clientX - prevClientX;

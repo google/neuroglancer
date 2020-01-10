@@ -18,12 +18,12 @@
  * @file Facilities to simplify defining subclasses of ChunkSource that use a CredentialsProvider.
  */
 
-import {ChunkManager, ChunkSourceConstructor} from 'neuroglancer/chunk_manager/frontend';
+import {ChunkManager, ChunkSourceConstructor, GettableChunkSource} from 'neuroglancer/chunk_manager/frontend';
 import {CredentialsProvider} from 'neuroglancer/credentials_provider';
 import {SharedCredentialsProvider} from 'neuroglancer/credentials_provider/shared';
 import {Borrowed, Owned} from 'neuroglancer/util/disposable';
 import {getObjectId} from 'neuroglancer/util/object_id';
-import {RPC, SharedObject} from 'neuroglancer/worker_rpc';
+import {RPC} from 'neuroglancer/worker_rpc';
 
 /**
  * Returns a counterpart ref to be sent to the backend to retrieve a
@@ -44,16 +44,16 @@ export function getCredentialsProviderCounterpart<Credentials>(
  */
 export function WithCredentialsProvider<Credentials>() {
   return function<
-      TBase extends ChunkSourceConstructor<{}, SharedObject&{chunkManager: ChunkManager}>>(
+      TBase extends ChunkSourceConstructor<GettableChunkSource&{chunkManager: ChunkManager}>>(
       Base: TBase) {
-    type BaseOptions =
-        TBase extends {encodeOptions(options: infer BaseOptions): any} ? BaseOptions : never;
-    type Options = BaseOptions&{credentialsProvider: Borrowed<CredentialsProvider<Credentials>>};
+    type WithCredentialsOptions = InstanceType<TBase>['OPTIONS']&
+        {credentialsProvider: Borrowed<CredentialsProvider<Credentials>>};
     class C extends Base {
       credentialsProvider: Owned<CredentialsProvider<Credentials>>;
+      OPTIONS: WithCredentialsOptions;
       constructor(...args: any[]) {
         super(...args);
-        const options: Options = args[1];
+        const options: WithCredentialsOptions = args[1];
         this.credentialsProvider = options.credentialsProvider.addRef();
       }
       initializeCounterpart(rpc: RPC, options: any) {
@@ -61,12 +61,12 @@ export function WithCredentialsProvider<Credentials>() {
             getCredentialsProviderCounterpart(this.chunkManager, this.credentialsProvider);
         super.initializeCounterpart(rpc, options);
       }
-      static encodeOptions(options: Options) {
+      static encodeOptions(options: WithCredentialsOptions) {
         const encoding = super.encodeOptions(options);
         encoding.credentialsProvider = getObjectId(options.credentialsProvider);
         return encoding;
       }
     };
-    return C as (typeof C&{encodeOptions(options: Options): any});
+    return C;
   };
 }
