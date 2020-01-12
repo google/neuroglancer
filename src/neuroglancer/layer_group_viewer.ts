@@ -228,6 +228,10 @@ export class LayerGroupViewer extends RefCounted {
     return this.viewerNavigationState.navigationState;
   }
 
+  get selectionDetailsState() {
+    return this.layerSpecification.root.selectionState;
+  }
+
   // FIXME: don't make viewerState a property, just make these things properties directly
   get display() {
     return this.viewerState.display;

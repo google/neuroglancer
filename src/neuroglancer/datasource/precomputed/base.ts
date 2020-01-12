@@ -100,3 +100,9 @@ export class AnnotationSourceParameters {
   type: AnnotationType;
   static RPC_ID = 'precomputed/AnnotationSource';
 }
+
+export class IndexedSegmentPropertySourceParameters {
+  url: string;
+  sharding: ShardingParameters|undefined;
+  static RPC_ID = 'precomputed/IndexedSegmentPropertySource';
+}

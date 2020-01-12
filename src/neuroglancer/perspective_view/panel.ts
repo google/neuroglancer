@@ -379,6 +379,7 @@ export class PerspectivePanel extends RenderedDataPanel {
         mousePosition = mouseState.position = new Float32Array(rank);
       }
       mousePosition.set(voxelCoordinates);
+      mouseState.coordinateSpace = this.navigationState.coordinateSpace.value;
       const displayDimensions = this.navigationState.pose.displayDimensions.value;
       const {displayDimensionIndices} = displayDimensions;
       for (let i = 0, spatialRank = displayDimensionIndices.length; i < spatialRank; ++i) {
@@ -550,7 +551,9 @@ export class PerspectivePanel extends RenderedDataPanel {
     gl.enable(WebGL2RenderingContext.POLYGON_OFFSET_FILL);
     gl.polygonOffset(-1, -1);
     for (const [renderLayer, attachment] of visibleLayers) {
-      if (!renderLayer.isTransparent) continue;
+      if (!renderLayer.isTransparent || !renderLayer.transparentPickEnabled) {
+        continue;
+      }
       renderLayer.draw(renderContext, attachment);
     }
     gl.disable(WebGL2RenderingContext.POLYGON_OFFSET_FILL);

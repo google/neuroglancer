@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2018 Google Inc.
+ * Copyright 2020 Google Inc.
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
@@ -14,22 +14,9 @@
  * limitations under the License.
  */
 
-.neuroglancer-mouse-selection-tooltip {
-  color: black;
-  background-color: white;
-  padding: 2px;
-  border: 1px solid black;
-  font-family: sans-serif;
-  font-size: 10pt;
-}
+import svg_filter from 'ikonate/icons/filter.svg';
+import {makeIcon, MakeIconOptions} from 'neuroglancer/widget/icon';
 
-.neuroglancer-mouse-selection-tooltip-title {
-  font-weight: bold;
-}
-
-.neuroglancer-mouse-selection-tooltip-description {
-}
-
-.neuroglancer-annotation-tooltip-property-label, .neuroglancer-annotation-tooltip-relationship-label {
-  margin-right: 5px;
+export function makeFilterButton(options: MakeIconOptions = {}) {
+  return makeIcon({svg: svg_filter, ...options});
 }

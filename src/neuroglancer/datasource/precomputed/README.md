@@ -9,6 +9,7 @@ Several types of data are supported:
 - [Single-resolution](./meshes.md#legacy-single-resolution-mesh-format) or [multi-resolution](./meshes.md#multi-resolution-mesh-format) object surface meshes (keyed by uint64 object ids)
 - [Object skeleton representations (keyed by uint64 object ids)](./skeletons.md)
 - [Collection of point/line/bounding box/ellipsoid annotations](./annotations.md)
+- [Segment property maps](./segment_properties.md)
 
 # HTTP Content-Encoding
 

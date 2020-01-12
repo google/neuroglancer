@@ -621,25 +621,24 @@ export function getVolumetricTransformedSources(
           const chunkTransform = getChunkTransformParameters(
               transform, singleResolutionSource.chunkToMultiscaleTransform);
           const {chunkDataSize} = spec;
-          const {chunkChannelDimensionIndices} = chunkTransform;
+          const {channelToChunkDimensionIndices} = chunkTransform;
           const nonDisplayLowerClipBound = new Float32Array(chunkRank);
           const nonDisplayUpperClipBound = new Float32Array(chunkRank);
           nonDisplayLowerClipBound.set(lowerClipBound);
           nonDisplayUpperClipBound.set(upperClipBound);
-          const channelRank = chunkChannelDimensionIndices.length;
-          const {channelDimensionBounds} = transform;
+          const channelRank = channelToChunkDimensionIndices.length;
+          const {channelSpaceShape} = transform;
           for (let channelDim = 0; channelDim < channelRank; ++channelDim) {
-            const chunkDim = chunkChannelDimensionIndices[channelDim];
+            const chunkDim = channelToChunkDimensionIndices[channelDim];
             if (chunkDim === -1) continue;
-            const lower = channelDimensionBounds.lowerBounds[channelDim];
-            const upper = channelDimensionBounds.upperBounds[channelDim];
-            if (chunkDataSize[chunkDim] !== upper || 0 !== lower) {
+            const size = channelSpaceShape[channelDim];
+            if (chunkDataSize[chunkDim] !== size) {
               throw new Error(
                   `Channel dimension ` +
                   transform
                       .layerDimensionNames[transform.channelToRenderLayerDimensions[channelDim]] +
-                  ` has range [${lower}, ${upper}) but corresponding chunk dimension has range ` +
-                  `[0, ${chunkDataSize[chunkDim]})`);
+                  ` has extent ${size} but corresponding chunk dimension has extent ` +
+                  `${chunkDataSize[chunkDim]}`);
             }
             nonDisplayLowerClipBound[chunkDim] = Number.NEGATIVE_INFINITY;
             nonDisplayUpperClipBound[chunkDim] = Number.POSITIVE_INFINITY;

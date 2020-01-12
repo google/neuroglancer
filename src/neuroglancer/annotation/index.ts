@@ -313,7 +313,7 @@ export interface Ellipsoid extends AnnotationBase {
 
 export type Annotation = Line|Point|AxisAlignedBoundingBox|Ellipsoid;
 
-export interface AnnotationTypeHandler<T extends Annotation> {
+export interface AnnotationTypeHandler<T extends Annotation = Annotation> {
   icon: string;
   description: string;
   toJSON: (annotation: T, rank: number) => any;
@@ -324,11 +324,7 @@ export interface AnnotationTypeHandler<T extends Annotation> {
        annotation: T) => void;
   deserialize:
       (buffer: DataView, offset: number, isLittleEndian: boolean, rank: number, id: string) => T;
-}
-
-const typeHandlers = new Map<AnnotationType, AnnotationTypeHandler<Annotation>>();
-export function getAnnotationTypeHandler(type: AnnotationType) {
-  return typeHandlers.get(type)!;
+  visitGeometry: (annotation: T, callback: (vec: Float32Array, isVector: boolean) => void) => void;
 }
 
 function serializeFloatVector(
@@ -365,125 +361,144 @@ function deserializeTwoFloatVectors(
   return offset;
 }
 
-typeHandlers.set(AnnotationType.LINE, {
-  icon: 'ꕹ',
-  description: 'Line',
-  toJSON(annotation: Line) {
-    return {
-      pointA: Array.from(annotation.pointA),
-      pointB: Array.from(annotation.pointB),
-    };
+export const annotationTypeHandlers: Record<AnnotationType, AnnotationTypeHandler> = {
+  [AnnotationType.LINE]: {
+    icon: 'ꕹ',
+    description: 'Line',
+    toJSON(annotation: Line) {
+      return {
+        pointA: Array.from(annotation.pointA),
+        pointB: Array.from(annotation.pointB),
+      };
+    },
+    restoreState(annotation: Line, obj: any, rank: number) {
+      annotation.pointA = verifyObjectProperty(
+          obj, 'pointA', x => parseFixedLengthArray(new Float32Array(rank), x, verifyFiniteFloat));
+      annotation.pointB = verifyObjectProperty(
+          obj, 'pointB', x => parseFixedLengthArray(new Float32Array(rank), x, verifyFiniteFloat));
+    },
+    serializedBytes(rank: number) {
+      return 2 * 4 * rank;
+    },
+    serialize(
+        buffer: DataView, offset: number, isLittleEndian: boolean, rank: number, annotation: Line) {
+      serializeTwoFloatVectors(
+          buffer, offset, isLittleEndian, rank, annotation.pointA, annotation.pointB);
+    },
+    deserialize:
+        (buffer: DataView, offset: number, isLittleEndian: boolean, rank: number, id: string):
+            Line => {
+              const pointA = new Float32Array(rank);
+              const pointB = new Float32Array(rank);
+              deserializeTwoFloatVectors(buffer, offset, isLittleEndian, rank, pointA, pointB);
+              return {type: AnnotationType.LINE, pointA, pointB, id, properties: []};
+            },
+    visitGeometry(annotation: Line, callback) {
+      callback(annotation.pointA, false);
+      callback(annotation.pointB, false);
+    },
   },
-  restoreState(annotation: Line, obj: any, rank: number) {
-    annotation.pointA = verifyObjectProperty(
-        obj, 'pointA', x => parseFixedLengthArray(new Float32Array(rank), x, verifyFiniteFloat));
-    annotation.pointB = verifyObjectProperty(
-        obj, 'pointB', x => parseFixedLengthArray(new Float32Array(rank), x, verifyFiniteFloat));
+  [AnnotationType.POINT]: {
+    icon: '⚬',
+    description: 'Point',
+    toJSON: (annotation: Point) => {
+      return {
+        point: Array.from(annotation.point),
+      };
+    },
+    restoreState: (annotation: Point, obj: any, rank: number) => {
+      annotation.point = verifyObjectProperty(
+          obj, 'point', x => parseFixedLengthArray(new Float32Array(rank), x, verifyFiniteFloat));
+    },
+    serializedBytes: rank => rank * 4,
+    serialize:
+        (buffer: DataView, offset: number, isLittleEndian: boolean, rank: number,
+         annotation: Point) => {
+          serializeFloatVector(buffer, offset, isLittleEndian, rank, annotation.point);
+        },
+    deserialize:
+        (buffer: DataView, offset: number, isLittleEndian: boolean, rank: number, id: string):
+            Point => {
+              const point = new Float32Array(rank);
+              deserializeFloatVector(buffer, offset, isLittleEndian, rank, point);
+              return {type: AnnotationType.POINT, point, id, properties: []};
+            },
+    visitGeometry(annotation: Point, callback) {
+      callback(annotation.point, false);
+    },
   },
-  serializedBytes(rank: number) {
-    return 2 * 4 * rank;
+  [AnnotationType.AXIS_ALIGNED_BOUNDING_BOX]: {
+    icon: '❑',
+    description: 'Bounding Box',
+    toJSON: (annotation: AxisAlignedBoundingBox) => {
+      return {
+        pointA: Array.from(annotation.pointA),
+        pointB: Array.from(annotation.pointB),
+      };
+    },
+    restoreState: (annotation: AxisAlignedBoundingBox, obj: any, rank: number) => {
+      annotation.pointA = verifyObjectProperty(
+          obj, 'pointA', x => parseFixedLengthArray(new Float32Array(rank), x, verifyFiniteFloat));
+      annotation.pointB = verifyObjectProperty(
+          obj, 'pointB', x => parseFixedLengthArray(new Float32Array(rank), x, verifyFiniteFloat));
+    },
+    serializedBytes: rank => 2 * 4 * rank,
+    serialize(
+        buffer: DataView, offset: number, isLittleEndian: boolean, rank: number,
+        annotation: AxisAlignedBoundingBox) {
+      serializeTwoFloatVectors(
+          buffer, offset, isLittleEndian, rank, annotation.pointA, annotation.pointB);
+    },
+    deserialize: (
+        buffer: DataView, offset: number, isLittleEndian: boolean, rank: number,
+        id: string): AxisAlignedBoundingBox => {
+      const pointA = new Float32Array(rank);
+      const pointB = new Float32Array(rank);
+      deserializeTwoFloatVectors(buffer, offset, isLittleEndian, rank, pointA, pointB);
+      return {type: AnnotationType.AXIS_ALIGNED_BOUNDING_BOX, pointA, pointB, id, properties: []};
+    },
+    visitGeometry(annotation: AxisAlignedBoundingBox, callback) {
+      callback(annotation.pointA, false);
+      callback(annotation.pointB, false);
+    },
   },
-  serialize(buffer: DataView, offset: number, isLittleEndian: boolean, rank: number, annotation: Line) {
-    serializeTwoFloatVectors(buffer, offset, isLittleEndian, rank, annotation.pointA, annotation.pointB);
+  [AnnotationType.ELLIPSOID]: {
+    icon: '◎',
+    description: 'Ellipsoid',
+    toJSON: (annotation: Ellipsoid) => {
+      return {
+        center: Array.from(annotation.center),
+        radii: Array.from(annotation.radii),
+      };
+    },
+    restoreState: (annotation: Ellipsoid, obj: any, rank: number) => {
+      annotation.center = verifyObjectProperty(
+          obj, 'center', x => parseFixedLengthArray(new Float32Array(rank), x, verifyFiniteFloat));
+      annotation.radii = verifyObjectProperty(
+          obj, 'radii',
+          x => parseFixedLengthArray(new Float32Array(rank), x, verifyFiniteNonNegativeFloat));
+    },
+    serializedBytes: rank => 2 * 4 * rank,
+    serialize(
+        buffer: DataView, offset: number, isLittleEndian: boolean, rank: number,
+        annotation: Ellipsoid) {
+      serializeTwoFloatVectors(
+          buffer, offset, isLittleEndian, rank, annotation.center, annotation.radii);
+    },
+    deserialize:
+        (buffer: DataView, offset: number, isLittleEndian: boolean, rank: number, id: string):
+            Ellipsoid => {
+              const center = new Float32Array(rank);
+              const radii = new Float32Array(rank);
+              deserializeTwoFloatVectors(buffer, offset, isLittleEndian, rank, center, radii);
+              return {type: AnnotationType.ELLIPSOID, center, radii, id, properties: []};
+            },
+    visitGeometry(annotation: Ellipsoid, callback) {
+      callback(annotation.center, false);
+      callback(annotation.radii, true);
+    },
   },
-  deserialize:
-      (buffer: DataView, offset: number, isLittleEndian: boolean, rank: number, id: string):
-          Line => {
-            const pointA = new Float32Array(rank);
-            const pointB = new Float32Array(rank);
-            deserializeTwoFloatVectors(buffer, offset, isLittleEndian, rank, pointA, pointB);
-            return {type: AnnotationType.LINE, pointA, pointB, id, properties: []};
-          },
-});
-
-typeHandlers.set(AnnotationType.POINT, {
-  icon: '⚬',
-  description: 'Point',
-  toJSON: (annotation: Point) => {
-    return {
-      point: Array.from(annotation.point),
-    };
-  },
-  restoreState: (annotation: Point, obj: any, rank: number) => {
-    annotation.point = verifyObjectProperty(
-        obj, 'point', x => parseFixedLengthArray(new Float32Array(rank), x, verifyFiniteFloat));
-  },
-  serializedBytes: rank => rank * 4,
-  serialize:
-      (buffer: DataView, offset: number, isLittleEndian: boolean, rank: number,
-       annotation: Point) => {
-        serializeFloatVector(buffer, offset, isLittleEndian, rank, annotation.point);
-      },
-  deserialize:
-      (buffer: DataView, offset: number, isLittleEndian: boolean, rank: number, id: string):
-          Point => {
-            const point = new Float32Array(rank);
-            deserializeFloatVector(buffer, offset, isLittleEndian, rank, point);
-            return {type: AnnotationType.POINT, point, id, properties: []};
-          },
-});
-
-typeHandlers.set(AnnotationType.AXIS_ALIGNED_BOUNDING_BOX, {
-  icon: '❑',
-  description: 'Bounding Box',
-  toJSON: (annotation: AxisAlignedBoundingBox) => {
-    return {
-      pointA: Array.from(annotation.pointA),
-      pointB: Array.from(annotation.pointB),
-    };
-  },
-  restoreState: (annotation: AxisAlignedBoundingBox, obj: any, rank: number) => {
-    annotation.pointA = verifyObjectProperty(
-        obj, 'pointA', x => parseFixedLengthArray(new Float32Array(rank), x, verifyFiniteFloat));
-    annotation.pointB = verifyObjectProperty(
-        obj, 'pointB', x => parseFixedLengthArray(new Float32Array(rank), x, verifyFiniteFloat));
-  },
-  serializedBytes: rank => 2 * 4 * rank,
-  serialize(buffer: DataView, offset: number, isLittleEndian: boolean, rank: number, annotation: AxisAlignedBoundingBox) {
-    serializeTwoFloatVectors(buffer, offset, isLittleEndian, rank, annotation.pointA, annotation.pointB);
-  },
-  deserialize: (
-      buffer: DataView, offset: number, isLittleEndian: boolean, rank: number, id: string):
-      AxisAlignedBoundingBox => {
-        const pointA = new Float32Array(rank);
-        const pointB = new Float32Array(rank);
-        deserializeTwoFloatVectors(buffer, offset, isLittleEndian, rank, pointA, pointB);
-        return {type: AnnotationType.AXIS_ALIGNED_BOUNDING_BOX, pointA, pointB, id, properties: []};
-      },
-});
-
-typeHandlers.set(AnnotationType.ELLIPSOID, {
-  icon: '◎',
-  description: 'Ellipsoid',
-  toJSON: (annotation: Ellipsoid) => {
-    return {
-      center: Array.from(annotation.center),
-      radii: Array.from(annotation.radii),
-    };
-  },
-  restoreState: (annotation: Ellipsoid, obj: any, rank: number) => {
-    annotation.center = verifyObjectProperty(
-        obj, 'center', x => parseFixedLengthArray(new Float32Array(rank), x, verifyFiniteFloat));
-    annotation.radii = verifyObjectProperty(
-        obj, 'radii',
-        x => parseFixedLengthArray(new Float32Array(rank), x, verifyFiniteNonNegativeFloat));
-  },
-  serializedBytes: rank => 2 * 4 * rank,
-  serialize(
-      buffer: DataView, offset: number, isLittleEndian: boolean, rank: number,
-      annotation: Ellipsoid) {
-    serializeTwoFloatVectors(
-        buffer, offset, isLittleEndian, rank, annotation.center, annotation.radii);
-  },
-  deserialize:
-      (buffer: DataView, offset: number, isLittleEndian: boolean, rank: number, id: string):
-          Ellipsoid => {
-            const center = new Float32Array(rank);
-            const radii = new Float32Array(rank);
-            deserializeTwoFloatVectors(buffer, offset, isLittleEndian, rank, center, radii);
-            return {type: AnnotationType.ELLIPSOID, center, radii, id, properties: []};
-          },
-});
+};
 
 export interface AnnotationSchema {
   rank: number;
@@ -492,7 +507,7 @@ export interface AnnotationSchema {
 }
 
 export function annotationToJson(annotation: Annotation, schema: AnnotationSchema) {
-  const result = getAnnotationTypeHandler(annotation.type).toJSON(annotation, schema.rank);
+  const result = annotationTypeHandlers[annotation.type].toJSON(annotation, schema.rank);
   result.type = AnnotationType[annotation.type].toLowerCase();
   result.id = annotation.id;
   result.description = annotation.description || undefined;
@@ -538,7 +553,7 @@ function restoreAnnotation(obj: any, schema: AnnotationSchema, allowMissingId = 
     properties,
     type,
   } as Annotation;
-  getAnnotationTypeHandler(type).restoreState(result, obj, schema.rank);
+  annotationTypeHandlers[type].restoreState(result, obj, schema.rank);
   return result;
 }
 
@@ -804,7 +819,7 @@ function serializeAnnotations(
     typeToOffset[annotationType] = totalBytes;
     const annotations: Annotation[] = allAnnotations[annotationType];
     const count = annotations.length;
-    const handler = getAnnotationTypeHandler(annotationType);
+    const handler = annotationTypeHandlers[annotationType];
     totalBytes += (handler.serializedBytes(rank) + serializedPropertiesBytes) * count;
     totalBytes += (4 - (totalBytes % 4)) % 4;
   }
@@ -818,7 +833,7 @@ function serializeAnnotations(
     const annotations: Annotation[] = allAnnotations[annotationType];
     typeToIds[annotationType] = annotations.map(x => x.id);
     typeToIdMaps[annotationType] = new Map(annotations.map((x, i) => [x.id, i]));
-    const handler = getAnnotationTypeHandler(annotationType);
+    const handler = annotationTypeHandlers[annotationType];
     const serialize = handler.serialize;
     const geometryBytes = handler.serializedBytes(rank);
     let offset = typeToOffset[annotationType];

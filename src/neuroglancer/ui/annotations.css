@@ -140,7 +140,7 @@
   flex: 1;
 }
 
-.neuroglancer-annotation-details-description {
+textarea.neuroglancer-annotation-details-description {
   align-self: stretch;
   background-color: #222;
   color: white;
@@ -149,6 +149,12 @@
   outline: 0px;
   resize: none;
   overflow-y: scroll;
+}
+
+div.neuroglancer-annotation-details-description {
+  align-self: stretch;
+  color: white;
+  font: 10pt sans-serif;
 }
 
 .neuroglancer-annotation-details-position {
@@ -193,4 +199,88 @@
 
 .neuroglancer-annotation-relationship-label, .neuroglancer-annotation-property-label {
   margin-right: 5px;
+}
+
+
+.neuroglancer-selected-annotation-details-position-grid {
+  display: grid;
+  grid-auto-rows: auto;
+  font-family: monospace;
+  font-size: medium;
+  grid-auto-flow: dense;
+}
+
+.neuroglancer-selected-annotation-details-icon {
+  grid-rows: 1 / -1;
+  grid-column: icon;
+  align-self: start;
+}
+
+.neuroglancer-selected-annotation-details-delete {
+  grid-rows: 1 / -1;
+  grid-column: delete;
+  align-self: start;
+}
+
+.neuroglancer-selected-annotation-details-position-dim {
+  color: #ff6;
+  margin-left: 1ch;
+}
+
+.neuroglancer-selected-annotation-details-position-coord {
+  text-align: right;
+  margin-left: 0.5ch;
+}
+
+.neuroglancer-related-segment-list-title {
+  font-family: sans-serif;
+  font-size: small;
+ background-color: #333;
+}
+
+.neuroglancer-related-segment-list-header {
+  display: flex;
+  flex-direction: row;
+}
+
+.neuroglancer-related-segment-list {
+/*  border: 1px solid #333;
+  margin: 3px;*/
+}
+
+.neuroglancer-annotation-property {
+  display: flex;
+  flex-direction: row;
+  font-family: sans-serif;
+  font-size: small;
+}
+
+.neuroglancer-annotation-property-label {
+  color: #999;
+}
+
+.neuroglancer-annotation-property-value {
+  text-align: right;
+  font-family: monospace;
+  font-size: medium;
+  flex: 1;
+}
+
+input.neuroglancer-segment-list-entry-id {
+  outline: 0px;
+  border: 0px;
+  text-align: left;
+}
+
+.neuroglancer-segment-list-entry-new > .neuroglancer-segment-list-entry-copy {
+  visibility: hidden;
+}
+
+.neuroglancer-segment-list-entry-new > input[type="checkbox"] {
+  visibility: hidden;
+}
+
+.neuroglancer-selection-annotation-status {
+  font-family: sans-serif;
+  font-size: small;
 }

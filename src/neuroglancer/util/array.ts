@@ -195,8 +195,7 @@ export function getIndicesComplement(indices: number[], max: number) {
   return findMatchingIndices(mask, undefined);
 }
 
-export function arraysEqual<T>(
-    a: ArrayLike<T>, b: ArrayLike<T>) {
+export function arraysEqual<T>(a: ArrayLike<T>, b: ArrayLike<T>) {
   const length = a.length;
   if (b.length !== length) return false;
   for (let i = 0; i < length; ++i) {
@@ -272,4 +271,78 @@ export function transposeNestedArrays<T>(x: T[][]) {
     }
   }
   return result;
+}
+
+export interface ArraySpliceOp {
+  retainCount: number;
+  deleteCount: number;
+  insertCount: number;
+}
+
+export function spliceArray<T>(array: T[], splices: readonly Readonly<ArraySpliceOp>[]) {
+  const parts: T[][] = [];
+  let origOffset = 0;
+  for (let i = 0, numSplices = splices.length; i < numSplices; ++i) {
+    const {retainCount, deleteCount, insertCount} = splices[i];
+    if (retainCount !== 0) {
+      parts.push(array.slice(origOffset, origOffset + retainCount));
+      origOffset += retainCount;
+    }
+    origOffset += deleteCount;
+    if (insertCount !== 0) {
+      parts.push(new Array<T>(insertCount));
+    }
+  }
+  const origLength = array.length;
+  if (origOffset !== origLength) {
+    parts.push(array.slice(origOffset));
+  }
+  return new Array(0).concat(...parts);
+}
+
+export function getMergeSplices<T>(
+    oldArray: readonly T[], newArray: readonly T[],
+    compare: (a: T, b: T) => number): ArraySpliceOp[] {
+  const splices: ArraySpliceOp[] = [];
+  let oldIndex = 0, newIndex = 0, oldCount = oldArray.length, newCount = newArray.length;
+  while (oldIndex < oldCount && newIndex < newCount) {
+    let c: number;
+    let oldValue = oldArray[oldIndex];
+    let newValue = newArray[newIndex];
+    c = compare(oldValue, newValue);
+    if (c === 0) {
+      let retainCount = 1;
+      ++oldIndex;
+      ++newIndex;
+      while (oldIndex < oldCount && newIndex < newCount &&
+             (c = compare(oldArray[oldIndex], newArray[newIndex])) === 0) {
+        ++retainCount;
+        ++oldIndex;
+        ++newIndex;
+      }
+      splices.push({retainCount, deleteCount: 0, insertCount: 0});
+      continue;
+    }
+    if (c < 0) {
+      let deleteCount = 1;
+      while (++oldIndex < oldCount && (c = compare(oldArray[oldIndex], newValue)) < 0) {
+        ++deleteCount
+      }
+      splices.push({retainCount: 0, deleteCount, insertCount: 0});
+      continue;
+    }
+    if (c > 0) {
+      let insertCount = 1;
+      while (++newIndex < newCount && (c = compare(oldValue, newArray[newIndex])) > 0) {
+        ++insertCount
+      }
+      splices.push({retainCount: 0, deleteCount: 0, insertCount});
+      continue;
+    }
+  }
+  if (oldIndex < oldCount || newIndex < newCount) {
+    splices.push(
+        {retainCount: 0, deleteCount: oldCount - oldIndex, insertCount: newCount - newIndex});
+  }
+  return splices;
 }

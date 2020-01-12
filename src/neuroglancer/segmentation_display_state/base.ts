@@ -44,3 +44,9 @@ export function forEachVisibleSegment(
     }
   }
 }
+
+export interface IndexedSegmentProperty {
+  id: string;
+  type: 'string';
+  description: string|undefined;
+}

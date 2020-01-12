@@ -317,6 +317,10 @@ export class MeshLayer extends PerspectiveViewRenderLayer<ThreeDimensionalRender
     return this.displayState.objectAlpha.value < 1.0;
   }
 
+  get transparentPickEnabled() {
+    return this.displayState.transparentPickEnabled.value;
+  }
+
   get gl() {
     return this.chunkManager.chunkQueueManager.gl;
   }
@@ -519,6 +523,10 @@ export class MultiscaleMeshLayer extends
 
   get isTransparent() {
     return this.displayState.objectAlpha.value < 1.0;
+  }
+
+  get transparentPickEnabled() {
+    return this.displayState.transparentPickEnabled.value;
   }
 
   get gl() {

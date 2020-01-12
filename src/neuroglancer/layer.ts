@@ -15,9 +15,10 @@
  */
 
 import debounce from 'lodash/debounce';
+import throttle from 'lodash/throttle';
 import {AnnotationLayerState} from 'neuroglancer/annotation/annotation_layer_state';
 import {ChunkManager} from 'neuroglancer/chunk_manager/frontend';
-import {CoordinateSpace, CoordinateSpaceCombiner, CoordinateTransformSpecification, coordinateTransformSpecificationFromLegacyJson, isGlobalDimension, isLocalDimension, isLocalOrChannelDimension, TrackableCoordinateSpace} from 'neuroglancer/coordinate_transform';
+import {CoordinateSpace, CoordinateSpaceCombiner, CoordinateTransformSpecification, coordinateTransformSpecificationFromLegacyJson, emptyInvalidCoordinateSpace, isGlobalDimension, isLocalDimension, isLocalOrChannelDimension, TrackableCoordinateSpace} from 'neuroglancer/coordinate_transform';
 import {DataSourceSpecification, makeEmptyDataSourceSpecification} from 'neuroglancer/datasource';
 import {DataSourceProviderRegistry, DataSubsource} from 'neuroglancer/datasource';
 import {RenderedPanel} from 'neuroglancer/display_context';
@@ -26,11 +27,11 @@ import {DisplayDimensions, Position, WatchableDisplayDimensionRenderInfo} from '
 import {RENDERED_VIEW_ADD_LAYER_RPC_ID, RENDERED_VIEW_REMOVE_LAYER_RPC_ID} from 'neuroglancer/render_layer_common';
 import {RenderLayer, RenderLayerRole, VisibilityTrackedRenderLayer} from 'neuroglancer/renderlayer';
 import {VolumeType} from 'neuroglancer/sliceview/volume/base';
-import {TrackableRefCounted, TrackableValue, WatchableSet, WatchableValueInterface} from 'neuroglancer/trackable_value';
+import {registerNested, TrackableRefCounted, TrackableValue, TrackableValueInterface, WatchableSet, WatchableValue, WatchableValueInterface} from 'neuroglancer/trackable_value';
 import {LayerDataSourcesTab} from 'neuroglancer/ui/layer_data_sources_tab';
 import {restoreTool, Tool} from 'neuroglancer/ui/tool';
 import {Borrowed, invokeDisposers, Owned, RefCounted} from 'neuroglancer/util/disposable';
-import {parseArray, verifyBoolean, verifyObject, verifyObjectProperty, verifyOptionalBoolean, verifyOptionalObjectProperty, verifyOptionalString, verifyPositiveInt, verifyString} from 'neuroglancer/util/json';
+import {parseArray, parseFixedLengthArray, verifyBoolean, verifyFiniteFloat, verifyInt, verifyObject, verifyObjectProperty, verifyOptionalBoolean, verifyOptionalObjectProperty, verifyOptionalString, verifyPositiveInt, verifyString} from 'neuroglancer/util/json';
 import {MessageList} from 'neuroglancer/util/message_list';
 import {NullarySignal} from 'neuroglancer/util/signal';
 import {addSignalBinding, removeSignalBinding, SignalBindingUpdater} from 'neuroglancer/util/signal_binding_updater';
@@ -40,6 +41,7 @@ import {kEmptyFloat32Vec} from 'neuroglancer/util/vector';
 import {WatchableVisibilityPriority} from 'neuroglancer/visibility_priority/frontend';
 import {TabSpecification} from 'neuroglancer/widget/tab_view';
 import {RPC} from 'neuroglancer/worker_rpc';
+import { TrackableBoolean } from './trackable_boolean';
 
 const TAB_JSON_KEY = 'tab';
 const TOOL_JSON_KEY = 'tool';
@@ -47,6 +49,23 @@ const LOCAL_POSITION_JSON_KEY = 'localPosition';
 const LOCAL_COORDINATE_SPACE_JSON_KEY = 'localDimensions';
 const SOURCE_JSON_KEY = 'source';
 const TRANSFORM_JSON_KEY = 'transform';
+const PICK_JSON_KEY = 'pick';
+
+export interface UserLayerSelectionState {
+  generation: number;
+
+  // If `false`, selection is not associated with a position.
+  localPositionValid: boolean;
+  localPosition: Float32Array;
+  localCoordinateSpace: CoordinateSpace|undefined;
+
+  annotationId: string|undefined;
+  annotationSourceIndex: number|undefined;
+  annotationSubsource: string|undefined;
+  annotationPartIndex: number|undefined;
+
+  value: any;
+}
 
 export class UserLayer extends RefCounted {
   get localPosition() {
@@ -65,6 +84,117 @@ export class UserLayer extends RefCounted {
 
   get type() {
     return (this.constructor as typeof UserLayer).type;
+  }
+
+  static supportsPickOption = false;
+
+  pick = new TrackableBoolean(true, true);
+
+  selectionState: UserLayerSelectionState;
+
+  initializeSelectionState(state: this['selectionState']) {
+    state.generation = -1;
+    state.localPositionValid = false;
+    state.localPosition = kEmptyFloat32Vec;
+    state.localCoordinateSpace = undefined;
+    state.annotationId = undefined;
+    state.annotationSourceIndex = undefined;
+    state.annotationSubsource = undefined;
+    state.annotationPartIndex = undefined;
+    state.value = undefined;
+  }
+
+  resetSelectionState(state: this['selectionState']) {
+    state.localPositionValid = false;
+    state.annotationId = undefined;
+    state.value = undefined;
+  }
+
+  selectionStateFromJson(state: this['selectionState'], json: any) {
+    const localCoordinateSpace = state.localCoordinateSpace = this.localCoordinateSpace.value;
+    const {rank} = localCoordinateSpace;
+    if (rank !== 0) {
+      const localPosition = verifyOptionalObjectProperty(
+          json, LOCAL_POSITION_JSON_KEY,
+          positionObj =>
+              parseFixedLengthArray(new Float32Array(rank), positionObj, verifyFiniteFloat));
+      if (localPosition === undefined) {
+        state.localPositionValid = false;
+      } else {
+        state.localPositionValid = true;
+        state.localPosition = localPosition;
+      }
+    }
+    const annotationId = state.annotationId =
+        verifyOptionalObjectProperty(json, 'annotationId', verifyString);
+    if (annotationId !== undefined) {
+      state.annotationSourceIndex =
+          verifyOptionalObjectProperty(json, 'annotationSource', verifyInt, 0);
+      state.annotationPartIndex = verifyOptionalObjectProperty(json, 'annotationPart', verifyInt);
+      state.annotationSubsource =
+          verifyOptionalObjectProperty(json, 'annotationSubsource', verifyString);
+    }
+
+    state.value = json.value;
+  }
+
+  // Derived classes should override.
+  displaySelectionState(state: this['selectionState'], parent: HTMLElement, context: RefCounted) {
+    state;
+    parent;
+    context;
+    return false;
+  }
+
+  selectionStateToJson(state: this['selectionState']): any {
+    const json: any = {};
+    if (state.localPositionValid) {
+      const {localPosition} = state;
+      if (localPosition.length > 0) {
+        json.localPosition = Array.from(localPosition);
+      }
+    }
+    if (state.annotationId !== undefined) {
+      json.annotationId = state.annotationId;
+      json.annotationPart = state.annotationPartIndex;
+      json.annotationSource = state.annotationSourceIndex;
+      json.annotationSubsource = state.annotationSubsource;
+    }
+    if (state.value != null) {
+      json.value = state.value;
+    }
+    return json;
+  }
+
+  captureSelectionState(state: this['selectionState'], mouseState: MouseSelectionState) {
+    state.localCoordinateSpace = this.localCoordinateSpace.value;
+    const curLocalPosition = this.localPosition.value;
+    let {localPosition} = state;
+    if (localPosition.length !== curLocalPosition.length) {
+      state.localPosition = curLocalPosition.slice();
+    } else {
+      localPosition.set(curLocalPosition);
+    }
+    state.localPositionValid = true;
+    state.value = this.getValueAt(mouseState.position, mouseState);
+  }
+
+  copySelectionState(dest: this['selectionState'], source: this['selectionState']) {
+    dest.generation = source.generation;
+    dest.localPositionValid = source.localPositionValid;
+    dest.localCoordinateSpace = source.localCoordinateSpace;
+    const curLocalPosition = source.localPosition;
+    let {localPosition} = dest;
+    if (localPosition.length !== curLocalPosition.length) {
+      dest.localPosition = curLocalPosition.slice();
+    } else {
+      dest.localPosition.set(curLocalPosition);
+    }
+    dest.annotationId = source.annotationId;
+    dest.annotationSourceIndex = source.annotationSourceIndex;
+    dest.annotationSubsource = source.annotationSubsource;
+    dest.annotationPartIndex = source.annotationPartIndex;
+    dest.value = source.value;
   }
 
   layersChanged = new NullarySignal();
@@ -94,6 +224,8 @@ export class UserLayer extends RefCounted {
     this.tabs.changed.add(this.specificationChanged.dispatch);
     this.tool.changed.add(this.specificationChanged.dispatch);
     this.localPosition.changed.add(this.specificationChanged.dispatch);
+    this.pick.changed.add(this.specificationChanged.dispatch);
+    this.pick.changed.add(this.layersChanged.dispatch);
     this.dataSourcesChanged.add(this.specificationChanged.dispatch);
     this.dataSourcesChanged.add(() => this.updateDataSubsourceActivations());
     this.tabs.add('source', {
@@ -172,6 +304,8 @@ export class UserLayer extends RefCounted {
   }
 
   initializationDone() {
+    const selectionState = this.selectionState = {} as any;
+    this.initializeSelectionState(selectionState);
     this.decrementLoadingCounter();
   }
 
@@ -210,6 +344,9 @@ export class UserLayer extends RefCounted {
     this.tabs.restoreState(specification[TAB_JSON_KEY]);
     this.localCoordinateSpace.restoreState(specification[LOCAL_COORDINATE_SPACE_JSON_KEY]);
     this.localPosition.restoreState(specification[LOCAL_POSITION_JSON_KEY]);
+    if ((this.constructor as typeof UserLayer).supportsPickOption) {
+      this.pick.restoreState(specification[PICK_JSON_KEY]);
+    }
     for (const spec of this.getDataSourceSpecifications(specification)) {
       this.addDataSource(spec);
     }
@@ -253,7 +390,8 @@ export class UserLayer extends RefCounted {
     if (pickedRenderLayer !== null && renderLayers.indexOf(pickedRenderLayer) !== -1) {
       result =
           pickedRenderLayer.transformPickedValue(pickState.pickedValue, pickState.pickedOffset);
-      return this.transformPickedValue(result);
+      result = this.transformPickedValue(result);
+      if (result != null) return result;
     }
     for (let layer of renderLayers) {
       result = layer.getValueAt(position);
@@ -276,10 +414,20 @@ export class UserLayer extends RefCounted {
       [TOOL_JSON_KEY]: this.tool.toJSON(),
       [LOCAL_COORDINATE_SPACE_JSON_KEY]: this.localCoordinateSpace.toJSON(),
       [LOCAL_POSITION_JSON_KEY]: this.localPosition.toJSON(),
+      [PICK_JSON_KEY]: this.pick.toJSON(),
     };
   }
 
+  // Derived classes should override.
   handleAction(_action: string): void {}
+
+  selectedValueToJson(value: any) {
+    return value;
+  }
+
+  selectedValueFromJson(json: any) {
+    return json;
+  }
 }
 
 function dataSourcesToJson(sources: readonly LayerDataSource[]) {
@@ -347,6 +495,24 @@ export class ManagedUserLayer extends RefCounted {
   }
 
   visible = true;
+
+  get supportsPickOption () {
+    const userLayer = this.layer;
+    return userLayer !== null && (userLayer.constructor as typeof UserLayer).supportsPickOption;
+  }
+
+  get pickEnabled() {
+    const userLayer = this.layer;
+    return userLayer !== null && (userLayer.constructor as typeof UserLayer).supportsPickOption &&
+        userLayer.pick.value;
+  }
+
+  set pickEnabled(value: boolean) {
+    const userLayer = this.layer;
+    if (userLayer !== null && (userLayer.constructor as typeof UserLayer).supportsPickOption) {
+      userLayer.pick.value = value;
+    }
+  }
 
   /**
    * If layer is not null, tranfers ownership of a reference.
@@ -607,6 +773,7 @@ export interface PickState {
 
 export class MouseSelectionState implements PickState {
   changed = new NullarySignal();
+  coordinateSpace: CoordinateSpace = emptyInvalidCoordinateSpace;
   position: Float32Array = kEmptyFloat32Vec;
   active = false;
   displayDimensions: DisplayDimensions|undefined = undefined;
@@ -654,7 +821,6 @@ export class MouseSelectionState implements PickState {
 }
 
 export class LayerSelectedValues extends RefCounted {
-  values = new Map<UserLayer, any>();
   changed = new NullarySignal();
   needsUpdate = true;
   constructor(public layerManager: LayerManager, public mouseState: MouseSelectionState) {
@@ -687,43 +853,250 @@ export class LayerSelectedValues extends RefCounted {
       return;
     }
     this.needsUpdate = false;
-    let values = this.values;
     let mouseState = this.mouseState;
-    values.clear();
+    const generation = this.changed.count;
     if (mouseState.active) {
-      let position = mouseState.position;
-      for (let layer of this.layerManager.managedLayers) {
-        let userLayer = layer.layer;
-        if (layer.visible && userLayer) {
-          values.set(userLayer, userLayer.getValueAt(position, mouseState));
+      for (const layer of this.layerManager.managedLayers) {
+        const userLayer = layer.layer;
+        if (layer.visible && userLayer !== null) {
+          const {selectionState} = userLayer;
+          userLayer.resetSelectionState(selectionState);
+          selectionState.generation = generation;
+          userLayer.captureSelectionState(selectionState, mouseState);
         }
       }
     }
   }
 
-  get(userLayer: UserLayer) {
+  get<T extends UserLayer>(userLayer: T): T['selectionState']|undefined {
     this.update();
-    return this.values.get(userLayer);
+    const {selectionState} = userLayer;
+    if (selectionState.generation !== this.changed.count) return undefined;
+    return selectionState;
   }
 
   toJSON() {
     this.update();
     const result: {[key: string]: any} = {};
-    const {values} = this;
     for (const layer of this.layerManager.managedLayers) {
       const userLayer = layer.layer;
       if (userLayer) {
-        let v = values.get(userLayer);
-        if (v !== undefined) {
-          if (v instanceof Uint64) {
-            v = {'t': 'u64', 'v': v};
-          }
-          result[layer.name] = v;
+        const state = this.get(userLayer);
+        if (state !== undefined) {
+          result[layer.name] = userLayer.selectionStateToJson(state);
         }
       }
     }
     return result;
   }
+}
+
+export interface PersistentLayerSelectionState {
+  layer: UserLayer;
+  state: UserLayerSelectionState;
+}
+
+export interface PersistentViewerSelectionState {
+  layers: PersistentLayerSelectionState[];
+  coordinateSpace: CoordinateSpace;
+  position: Float32Array|undefined;
+}
+
+const maxSelectionHistorySize = 10;
+
+export class TrackableDataSelectionState extends RefCounted implements
+    TrackableValueInterface<PersistentViewerSelectionState|undefined> {
+  changed = new NullarySignal();
+  history: PersistentViewerSelectionState[] = [];
+  historyIndex: number = 0;
+
+  constructor(
+      public coordinateSpace: WatchableValueInterface<CoordinateSpace>,
+      public layerSelectedValues: Borrowed<LayerSelectedValues>) {
+    super();
+    this.registerDisposer(registerNested((context, pin) => {
+      if (pin) return;
+      this.capture(true);
+      context.registerDisposer(layerSelectedValues.changed.add(context.registerCancellable(
+          throttle(() => this.capture(true), 100, {leading: true, trailing: true}))));
+    }, this.pin));
+    this.visible.changed.add(this.changed.dispatch);
+    this.pin.changed.add(this.changed.dispatch);
+  }
+  private value_: PersistentViewerSelectionState|undefined;
+  pin = new WatchableValue<boolean>(true);
+  visible = new WatchableValue<boolean>(false);
+  get value() {
+    return this.value_;
+  }
+
+  goBack() {
+    const curIndex = this.pin.value ? this.historyIndex : this.history.length;
+    if (curIndex > 0) {
+      this.historyIndex = curIndex - 1;
+      this.value_ = this.history[curIndex - 1];
+      this.pin.value = true;
+      this.changed.dispatch();
+    }
+  }
+
+  canGoBack() {
+    const curIndex = this.pin.value ? this.historyIndex : this.history.length;
+    return curIndex > 0;
+  }
+
+  canGoForward() {
+    if (!this.pin.value) return false;
+    const curIndex = this.historyIndex;
+    return curIndex + 1 < this.history.length;
+  }
+
+  goForward() {
+    if (!this.pin.value) return;
+    const curIndex = this.historyIndex;
+    if (curIndex + 1 < this.history.length) {
+      this.historyIndex = curIndex + 1;
+      this.value_ = this.history[curIndex + 1];
+      this.changed.dispatch();
+    }
+  }
+
+  set value(value: PersistentViewerSelectionState|undefined) {
+    if (value !== this.value_) {
+      this.value_ = value;
+      if (value !== undefined && this.pin.value) {
+        // Add to history
+        const {history} = this;
+        history.length = Math.min(history.length, this.historyIndex + 1);
+        history.push(value);
+        if (history.length > maxSelectionHistorySize) {
+          history.splice(0, history.length - maxSelectionHistorySize);
+        }
+        this.historyIndex = history.length - 1;
+      }
+      this.changed.dispatch();
+    }
+  }
+
+  captureSingleLayerState<T extends UserLayer>(
+      userLayer: Borrowed<T>, capture: (state: T['selectionState']) => boolean,
+      pin: boolean|'toggle' = true) {
+    if (pin === false && (!this.visible.value || this.pin.value)) return;
+    const state = {} as UserLayerSelectionState;
+    userLayer.initializeSelectionState(state);
+    if (capture(state)) {
+      this.visible.value = true;
+      if (pin === true) {
+        this.pin.value = true;
+      } else if (pin === 'toggle') {
+        this.pin.value = !this.pin.value;
+      }
+      this.value = {
+        layers: [{layer: userLayer, state}],
+        coordinateSpace: this.coordinateSpace.value,
+        position: undefined
+      };
+    }
+  }
+  reset() {
+    this.visible.value = false;
+    this.pin.value = false;
+    this.value = undefined;
+  }
+  toJSON() {
+    const {value} = this;
+    if (!this.visible.value) return undefined;
+    if (this.pin.value === false) return null;
+    if (value === undefined) return null;
+    const layersJson: any = {};
+    for (const layerData of value.layers) {
+      const {layer} = layerData;
+      let data = layer.selectionStateToJson(layerData.state);
+      if (Object.keys(data).length === 0) data = undefined;
+      layersJson[layerData.layer.managedLayer.name] = data;
+    }
+    return {
+      position: value.position === undefined ? undefined : Array.from(value.position),
+      layers: layersJson,
+    };
+  }
+  select() {
+    const {pin, visible} = this;
+    visible.value = true;
+    pin.value = !pin.value;
+    if (pin.value) {
+      this.capture();
+    }
+  }
+  capture(canRetain = false) {
+    const newValue = capturePersistentViewerSelectionState(this.layerSelectedValues);
+    if (canRetain && newValue === undefined) return;
+    this.value = newValue;
+  }
+  restoreState(obj: unknown) {
+    if (obj === undefined) {
+      this.pin.value = true;
+      this.visible.value = false;
+      this.value = undefined;
+      return;
+    }
+    if (obj === null) {
+      this.pin.value = false;
+      this.visible.value = true;
+      this.value = undefined;
+      return;
+    }
+    verifyObject(obj);
+    const coordinateSpace = this.coordinateSpace.value;
+    const position = verifyOptionalObjectProperty(
+        obj, 'position',
+        positionObj => parseFixedLengthArray(
+            new Float32Array(coordinateSpace.rank), positionObj, verifyFiniteFloat));
+    const layers: PersistentLayerSelectionState[] = [];
+    verifyOptionalObjectProperty(obj, 'layers', layersObj => {
+      verifyObject(layersObj);
+      const {layerManager} = this.layerSelectedValues;
+      for (const [name, entry] of Object.entries(layersObj)) {
+        const managedLayer = layerManager.getLayerByName(name);
+        if (managedLayer === undefined) return;
+        const layer = managedLayer.layer;
+        if (layer === null) return;
+        verifyObject(entry);
+        const state: UserLayerSelectionState = {} as any;
+        layer.initializeSelectionState(state);
+        layer.selectionStateFromJson(state, entry);
+        layers.push({layer, state});
+      }
+    });
+    this.visible.value = true;
+    this.pin.value = true;
+    this.value = {position, coordinateSpace, layers};
+  }
+}
+
+export function capturePersistentViewerSelectionState(
+    layerSelectedValues: Borrowed<LayerSelectedValues>): PersistentViewerSelectionState|undefined {
+  const {mouseState} = layerSelectedValues;
+  if (!mouseState.active) return undefined;
+  const layers: PersistentLayerSelectionState[] = [];
+  for (const layer of layerSelectedValues.layerManager.managedLayers) {
+    const userLayer = layer.layer;
+    if (userLayer === null) continue;
+    const state = layerSelectedValues.get(userLayer);
+    if (state === undefined) continue;
+    const stateCopy = {} as UserLayerSelectionState;
+    userLayer.initializeSelectionState(stateCopy);
+    userLayer.copySelectionState(stateCopy, state);
+    layers.push({
+      layer: userLayer,
+      state: stateCopy,
+    });
+  }
+  return {
+    position: mouseState.position.slice(),
+    coordinateSpace: mouseState.coordinateSpace,
+    layers,
+  };
 }
 
 export interface LayerView {
@@ -1079,10 +1452,13 @@ export class TopLevelLayerListSpecification extends LayerListSpecification {
 
   coordinateSpaceCombiner = new CoordinateSpaceCombiner(this.coordinateSpace, isGlobalDimension);
 
+  layerSelectedValues = this.selectionState.layerSelectedValues;
+
   constructor(
       public dataSourceProviderRegistry: DataSourceProviderRegistry,
       public layerManager: LayerManager, public chunkManager: ChunkManager,
-      public layerSelectedValues: LayerSelectedValues,
+      public selectionState: Borrowed<TrackableDataSelectionState>,
+      public selectedLayer: Borrowed<SelectedLayerState>,
       public coordinateSpace: WatchableValueInterface<CoordinateSpace>,
       public globalPosition: Borrowed<Position>) {
     super();

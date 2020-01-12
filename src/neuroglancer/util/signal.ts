@@ -85,6 +85,20 @@ export class Signal<Callable extends Function = () => void> {
   }
 }
 
+export function observeSignal(
+    callback: () => void,
+    ...signals: {add(callback: () => void): void, remove(callback: () => void): void}[]) {
+  callback();
+  for (let i = 0, count = signals.length; i < count; ++i) {
+    signals[i].add(callback);
+  }
+  return () => {
+    for (let i = 0, count = signals.length; i < count; ++i) {
+      signals[i].remove(callback);
+    }
+  };
+}
+
 /**
  * Simple specialization of Signal for the common case of a nullary handler signature.
  */

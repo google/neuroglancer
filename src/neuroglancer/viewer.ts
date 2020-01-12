@@ -14,6 +14,9 @@
  * limitations under the License.
  */
 
+import './viewer.css';
+import 'neuroglancer/noselect.css';
+
 import debounce from 'lodash/debounce';
 import {CapacitySpecification, ChunkManager, ChunkQueueManager, FrameNumberCounter} from 'neuroglancer/chunk_manager/frontend';
 import {makeCoordinateSpace, TrackableCoordinateSpace} from 'neuroglancer/coordinate_transform';
@@ -23,7 +26,7 @@ import {DataSourceProviderRegistry} from 'neuroglancer/datasource';
 import {getDefaultDataSourceProvider} from 'neuroglancer/datasource/default_provider';
 import {DisplayContext} from 'neuroglancer/display_context';
 import {InputEventBindingHelpDialog} from 'neuroglancer/help/input_event_bindings';
-import {addNewLayer, LayerManager, LayerSelectedValues, MouseSelectionState, SelectedLayerState, TopLevelLayerListSpecification} from 'neuroglancer/layer';
+import {addNewLayer, LayerManager, LayerSelectedValues, MouseSelectionState, SelectedLayerState, TopLevelLayerListSpecification, TrackableDataSelectionState} from 'neuroglancer/layer';
 import {RootLayoutContainer} from 'neuroglancer/layer_groups_layout';
 import {DisplayPose, NavigationState, OrientationState, Position, TrackableCrossSectionZoom, TrackableDepthRange, TrackableDisplayDimensions, TrackableProjectionZoom, TrackableRelativeDisplayScales, WatchableDisplayDimensionRenderInfo} from 'neuroglancer/navigation_state';
 import {overlaysOpen} from 'neuroglancer/overlay';
@@ -34,8 +37,8 @@ import {makeDerivedWatchableValue, TrackableValue, WatchableValueInterface} from
 import {ContextMenu} from 'neuroglancer/ui/context_menu';
 import {DragResizablePanel} from 'neuroglancer/ui/drag_resize';
 import {LayerInfoPanelContainer} from 'neuroglancer/ui/layer_side_panel';
-import {MouseSelectionStateTooltipManager} from 'neuroglancer/ui/mouse_selection_state_tooltip';
 import {setupPositionDropHandlers} from 'neuroglancer/ui/position_drag_and_drop';
+import {SelectionDetailsTab} from 'neuroglancer/ui/selection_details';
 import {StateEditorDialog} from 'neuroglancer/ui/state_editor';
 import {StatisticsDisplayState, StatisticsPanel} from 'neuroglancer/ui/statistics';
 import {AutomaticallyFocusedElement} from 'neuroglancer/util/automatic_focus';
@@ -46,7 +49,7 @@ import {registerActionListener} from 'neuroglancer/util/event_action_map';
 import {vec3} from 'neuroglancer/util/geom';
 import {parseFixedLengthArray, verifyFinitePositiveFloat, verifyObject, verifyOptionalObjectProperty} from 'neuroglancer/util/json';
 import {EventActionMap, KeyboardEventBinder} from 'neuroglancer/util/keyboard_bindings';
-import {NullarySignal} from 'neuroglancer/util/signal';
+import {NullarySignal, Signal} from 'neuroglancer/util/signal';
 import {CompoundTrackable, optionallyRestoreFromJsonMember} from 'neuroglancer/util/trackable';
 import {ViewerState, VisibilityPrioritySpecification} from 'neuroglancer/viewer_state';
 import {WatchableVisibilityPriority} from 'neuroglancer/visibility_priority/frontend';
@@ -59,11 +62,6 @@ import {TrackableScaleBarOptions} from 'neuroglancer/widget/scale_bar';
 import {RPC} from 'neuroglancer/worker_rpc';
 
 declare var NEUROGLANCER_OVERRIDE_DEFAULT_VIEWER_OPTIONS: any
-
-import './viewer.css';
-import 'neuroglancer/noselect.css';
-
-
 
 export class DataManagementContext extends RefCounted {
   worker: Worker;
@@ -225,6 +223,7 @@ class TrackableViewerState extends CompoundTrackable {
     this.add('projectionBackgroundColor', viewer.perspectiveViewBackgroundColor);
     this.add('layout', viewer.layout);
     this.add('statistics', viewer.statisticsDisplayState);
+    this.add('selection', viewer.selectionDetailsState);
   }
 
   restoreState(obj: any) {
@@ -307,9 +306,11 @@ export class Viewer extends RefCounted implements ViewerState {
   scaleBarOptions = new TrackableScaleBarOptions();
   contextMenu: ContextMenu;
   statisticsDisplayState = new StatisticsDisplayState();
-
   layerSelectedValues =
       this.registerDisposer(new LayerSelectedValues(this.layerManager, this.mouseState));
+  selectionDetailsState = this.registerDisposer(
+      new TrackableDataSelectionState(this.coordinateSpace, this.layerSelectedValues));
+
   resetInitiated = new NullarySignal();
 
   get chunkManager() {
@@ -399,8 +400,9 @@ export class Viewer extends RefCounted implements ViewerState {
     this.resetStateWhenEmpty = resetStateWhenEmpty;
 
     this.layerSpecification = new TopLevelLayerListSpecification(
-        this.dataSourceProvider, this.layerManager, this.chunkManager, this.layerSelectedValues,
-        this.navigationState.coordinateSpace, this.navigationState.pose.position);
+        this.dataSourceProvider, this.layerManager, this.chunkManager, this.selectionDetailsState,
+        this.selectedLayer, this.navigationState.coordinateSpace,
+        this.navigationState.pose.position);
 
     this.registerDisposer(display.updateStarted.add(() => {
       this.onUpdateDisplay();
@@ -454,9 +456,6 @@ export class Viewer extends RefCounted implements ViewerState {
     this.registerEventActionBindings();
 
     this.registerDisposer(setupPositionDropHandlers(element, this.navigationState.position));
-
-    this.registerDisposer(new MouseSelectionStateTooltipManager(
-        this.mouseState, this.layerManager, this.navigationState.coordinateSpace));
 
     this.state = new TrackableViewerState(this);
   }
@@ -544,22 +543,44 @@ export class Viewer extends RefCounted implements ViewerState {
     layoutAndSidePanel.style.flexDirection = 'row';
     this.layout = this.registerDisposer(new RootLayoutContainer(this, '4panel'));
     layoutAndSidePanel.appendChild(this.layout.element);
+
+    const sidePanel = document.createElement('div');
+    sidePanel.classList.add('neuroglancer-viewer-side-panel');
+    layoutAndSidePanel.appendChild(sidePanel);
+
+    const self = this;
+    // FIXME: don't use selectedLayer.size/visible to control this
+    const sidePanelVisible = {
+      changed: new Signal(),
+      get value() {
+        return self.selectedLayer.visible || self.selectionDetailsState.visible.value;
+      },
+      set value(visible: boolean) {
+        self.selectedLayer.visible = visible;
+        self.selectionDetailsState.visible.value = visible;
+      }
+    };
+    this.registerDisposer(this.selectedLayer.changed.add(sidePanelVisible.changed.dispatch));
+    this.registerDisposer(
+        this.selectionDetailsState.changed.add(sidePanelVisible.changed.dispatch));
+    this.registerDisposer(new DragResizablePanel(
+        sidePanel, sidePanelVisible, this.selectedLayer.size, 'horizontal', 290));
     const layerInfoPanel =
         this.registerDisposer(new LayerInfoPanelContainer(this.selectedLayer.addRef()));
-    layoutAndSidePanel.appendChild(layerInfoPanel.element);
-    const self = this;
-    layerInfoPanel.registerDisposer(new DragResizablePanel(
-        layerInfoPanel.element, {
+    this.registerDisposer(new ElementVisibilityFromTrackableBoolean(
+        {
           changed: self.selectedLayer.changed,
           get value() {
             return self.selectedLayer.visible;
           },
-          set value(visible: boolean) {
-            self.selectedLayer.visible = visible;
-          }
         },
-        this.selectedLayer.size, 'horizontal', 290));
-
+        layerInfoPanel.element));
+    sidePanel.appendChild(layerInfoPanel.element);
+    const selectionDetailsTab = this.registerDisposer(new SelectionDetailsTab(
+        this.selectionDetailsState, this.layerSpecification, this.selectedLayer));
+    sidePanel.appendChild(selectionDetailsTab.element);
+    this.registerDisposer(new ElementVisibilityFromTrackableBoolean(
+        this.selectionDetailsState.visible, selectionDetailsTab.element));
     gridContainer.appendChild(layoutAndSidePanel);
 
     const statisticsPanel = this.registerDisposer(
@@ -619,6 +640,14 @@ export class Viewer extends RefCounted implements ViewerState {
         if (layerIndex < layers.length) {
           let layer = layers[layerIndex];
           layer.setVisible(!layer.visible);
+        }
+      });
+      this.bindAction(`toggle-pick-layer-${i}`, () => {
+        const layerIndex = i - 1;
+        const layers = this.layerManager.managedLayers;
+        if (layerIndex < layers.length) {
+          let layer = layers[layerIndex];
+          layer.pickEnabled = !layer.pickEnabled;
         }
       });
       this.bindAction(`select-layer-${i}`, () => {

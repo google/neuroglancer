@@ -45,29 +45,20 @@
   margin-left: 5px;
 }
 
-.neuroglancer-layer-item[layer-selected=true] {
+.neuroglancer-layer-item[data-selected=true] {
   border-color: #8c8;
 }
 
-.neuroglancer-layer-item[layer-selected=true]:hover {
+.neuroglancer-layer-item[data-selected=true]:hover {
   border-color: #3c3;
 }
-
 
 .neuroglancer-layer-item:hover {
   border-color: #daa520;
 }
 
-.clear-button::after {
-  content: "x";
-}
-
-.neuroglancer-layer-dropdown {
-  flex-direction: column;
-  background-color: black;
-  padding: 5px;
-  border: 1px solid white;
-  box-sizing: border-box;
+.neuroglancer-layer-item[data-pick="true"] .neuroglancer-layer-item-label {
+  background-color: #939;
 }
 
 .neuroglancer-layer-item-label {
@@ -99,11 +90,11 @@
   display:none;
 }
 
-.neuroglancer-layer-item[layer-visible=false] .neuroglancer-layer-item-label {
+.neuroglancer-layer-item[data-visible=false] .neuroglancer-layer-item-label {
   text-decoration: line-through;
 }
 
-.neuroglancer-layer-item[layer-visible=false] {
+.neuroglancer-layer-item[data-visible=false] {
   color: #bbb;
 }
 

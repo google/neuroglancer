@@ -72,10 +72,10 @@ export function scale<Out extends TypedArray, A extends TypedArray>(out: Out, a:
   return out;
 }
 
-export function prod<T extends TypedArray>(array: T) {
+export function prod(array: ArrayLike<number>) {
   let result = 1;
-  for (const x of array) {
-    result *= x;
+  for (let i = 0, length = array.length; i < length; ++i) {
+    result *= array[i];
   }
   return result;
 }

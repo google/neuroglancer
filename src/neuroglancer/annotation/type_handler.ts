@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-import {Annotation, AnnotationPropertySpec, AnnotationType, getAnnotationTypeHandler, getPropertyOffsets} from 'neuroglancer/annotation';
+import {Annotation, AnnotationPropertySpec, AnnotationType, annotationTypeHandlers, getPropertyOffsets} from 'neuroglancer/annotation';
 import {AnnotationLayer} from 'neuroglancer/annotation/renderlayer';
 import {PerspectiveViewRenderContext} from 'neuroglancer/perspective_view/render_layer';
 import {SliceViewPanelRenderContext} from 'neuroglancer/sliceview/renderlayer';
@@ -136,7 +136,7 @@ export abstract class AnnotationRenderHelper extends RefCounted {
       public shaderError: WatchableShaderError) {
     super();
     const serializedGeometryBytesPerAnnotation = this.serializedGeometryBytesPerAnnotation =
-        getAnnotationTypeHandler(annotationType).serializedBytes(rank);
+        annotationTypeHandlers[annotationType].serializedBytes(rank);
     const {offsets, serializedBytes: serializedPropertyBytes} =
         getPropertyOffsets(rank, properties);
     this.serializedBytesPerAnnotation =

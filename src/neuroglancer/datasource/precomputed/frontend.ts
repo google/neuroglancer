@@ -19,11 +19,13 @@ import {AnnotationGeometryChunkSpecification} from 'neuroglancer/annotation/base
 import {MultiscaleAnnotationSource} from 'neuroglancer/annotation/frontend_source';
 import {AnnotationGeometryChunkSource} from 'neuroglancer/annotation/frontend_source';
 import {ChunkManager, WithParameters} from 'neuroglancer/chunk_manager/frontend';
-import {BoundingBox, CoordinateSpace, coordinateSpaceFromJson, makeCoordinateSpace, makeIdentityTransform, makeIdentityTransformedBoundingBox} from 'neuroglancer/coordinate_transform';
+import {BoundingBox, CoordinateSpace, coordinateSpaceFromJson, emptyValidCoordinateSpace, makeCoordinateSpace, makeIdentityTransform, makeIdentityTransformedBoundingBox} from 'neuroglancer/coordinate_transform';
 import {CompleteUrlOptions, ConvertLegacyUrlOptions, DataSource, DataSourceProvider, DataSubsourceEntry, GetDataSourceOptions, NormalizeUrlOptions, RedirectError} from 'neuroglancer/datasource';
-import {AnnotationSourceParameters, AnnotationSpatialIndexSourceParameters, DataEncoding, MeshSourceParameters, MultiscaleMeshMetadata, MultiscaleMeshSourceParameters, ShardingHashFunction, ShardingParameters, SkeletonMetadata, SkeletonSourceParameters, VolumeChunkEncoding, VolumeChunkSourceParameters} from 'neuroglancer/datasource/precomputed/base';
+import {AnnotationSourceParameters, AnnotationSpatialIndexSourceParameters, DataEncoding, IndexedSegmentPropertySourceParameters, MeshSourceParameters, MultiscaleMeshMetadata, MultiscaleMeshSourceParameters, ShardingHashFunction, ShardingParameters, SkeletonMetadata, SkeletonSourceParameters, VolumeChunkEncoding, VolumeChunkSourceParameters} from 'neuroglancer/datasource/precomputed/base';
 import {VertexPositionFormat} from 'neuroglancer/mesh/base';
 import {MeshSource, MultiscaleMeshSource} from 'neuroglancer/mesh/frontend';
+import {IndexedSegmentProperty} from 'neuroglancer/segmentation_display_state/base';
+import {IndexedSegmentPropertySource, InlineSegmentProperty, InlineSegmentPropertyMap, SegmentPropertyMap} from 'neuroglancer/segmentation_display_state/property_map';
 import {VertexAttributeInfo} from 'neuroglancer/skeleton/base';
 import {SkeletonSource} from 'neuroglancer/skeleton/frontend';
 import {makeSliceViewChunkSpecification} from 'neuroglancer/sliceview/base';
@@ -31,10 +33,11 @@ import {SliceViewSingleResolutionSource} from 'neuroglancer/sliceview/frontend';
 import {DataType, makeDefaultVolumeChunkSpecifications, VolumeSourceOptions, VolumeType} from 'neuroglancer/sliceview/volume/base';
 import {MultiscaleVolumeChunkSource, VolumeChunkSource} from 'neuroglancer/sliceview/volume/frontend';
 import {transposeNestedArrays} from 'neuroglancer/util/array';
+import {Borrowed} from 'neuroglancer/util/disposable';
 import {mat4, vec3} from 'neuroglancer/util/geom';
 import {completeHttpPath} from 'neuroglancer/util/http_path_completion';
 import {fetchOk, HttpError, parseSpecialUrl} from 'neuroglancer/util/http_request';
-import {parseArray, parseFixedLengthArray, parseQueryStringParameters, unparseQueryStringParameters, verifyEnumString, verifyFiniteFloat, verifyFinitePositiveFloat, verifyInt, verifyObject, verifyObjectProperty, verifyOptionalObjectProperty, verifyOptionalString, verifyPositiveInt, verifyString} from 'neuroglancer/util/json';
+import {parseArray, parseFixedLengthArray, parseQueryStringParameters, unparseQueryStringParameters, verifyEnumString, verifyFiniteFloat, verifyFinitePositiveFloat, verifyInt, verifyObject, verifyObjectProperty, verifyOptionalObjectProperty, verifyOptionalString, verifyPositiveInt, verifyString, verifyStringArray} from 'neuroglancer/util/json';
 import * as matrix from 'neuroglancer/util/matrix';
 
 class PrecomputedVolumeChunkSource extends
@@ -126,6 +129,7 @@ interface MultiscaleVolumeInfo {
   volumeType: VolumeType;
   mesh: string|undefined;
   skeletons: string|undefined;
+  segmentPropertyMap: string|undefined;
   scales: ScaleInfo[];
   modelSpace: CoordinateSpace;
 }
@@ -137,6 +141,7 @@ function parseMultiscaleVolumeInfo(obj: unknown): MultiscaleVolumeInfo {
   const volumeType = verifyObjectProperty(obj, 'type', x => verifyEnumString(x, VolumeType));
   const mesh = verifyObjectProperty(obj, 'mesh', verifyOptionalString);
   const skeletons = verifyObjectProperty(obj, 'skeletons', verifyOptionalString);
+  const segmentPropertyMap = verifyObjectProperty(obj, 'segment_properties', verifyOptionalString);
   const scaleInfos =
       verifyObjectProperty(obj, 'scales', x => parseArray(x, y => new ScaleInfo(y, numChannels)));
   if (scaleInfos.length === 0) throw new Error('Expected at least one scale');
@@ -167,7 +172,15 @@ function parseMultiscaleVolumeInfo(obj: unknown): MultiscaleVolumeInfo {
     scales,
     boundingBoxes: [makeIdentityTransformedBoundingBox(box)],
   });
-  return {dataType, volumeType, mesh, skeletons, scales: scaleInfos, modelSpace};
+  return {
+    dataType,
+    volumeType,
+    mesh,
+    skeletons,
+    segmentPropertyMap,
+    scales: scaleInfos,
+    modelSpace
+  };
 }
 
 class PrecomputedMultiscaleVolumeChunkSource extends MultiscaleVolumeChunkSource {
@@ -458,6 +471,18 @@ async function getVolumeDataSource(
       },
     },
   ];
+  if (info.segmentPropertyMap !== undefined) {
+    const mapUrl = resolvePath(url, info.segmentPropertyMap);
+    const normalizedMapUrl = parseSpecialUrl(mapUrl);
+    const metadata = await getJsonMetadata(options.chunkManager, normalizedMapUrl);
+    const segmentPropertyMap =
+        getSegmentPropertyMap(options.chunkManager, metadata, normalizedMapUrl);
+    subsources.push({
+      id: 'properties',
+      default: true,
+      subsource: {segmentPropertyMap},
+    });
+  }
   if (info.mesh !== undefined) {
     const meshUrl = resolvePath(url, info.mesh);
     const {source: meshSource, transform} =
@@ -664,6 +689,93 @@ async function getMeshDataSource(options: GetDataSourceOptions, url: string): Pr
   };
 }
 
+function parseInlinePropertyMap(data: unknown): InlineSegmentPropertyMap {
+  verifyObject(data);
+  const ids = verifyObjectProperty(data, 'ids', verifyStringArray);
+  const properties = verifyObjectProperty(
+      data, 'properties',
+      propertiesObj => parseArray(propertiesObj, (propertyObj): InlineSegmentProperty => {
+        verifyObject(propertyObj);
+        const id = verifyObjectProperty(propertyObj, 'id', verifyString);
+        const description = verifyOptionalObjectProperty(propertyObj, 'description', verifyString);
+        const type = verifyObjectProperty(propertyObj, 'type', type => {
+          if (type !== 'label' && type !== 'description' && type !== 'string') {
+            throw new Error(`Invalid property type: ${JSON.stringify(type)}`);
+          }
+          return type;
+        });
+        const values = verifyObjectProperty(propertyObj, 'values', valuesObj => {
+          verifyStringArray(valuesObj);
+          if (valuesObj.length !== ids.length)
+            throw new Error(`Expected ${ids.length} values, but received: ${valuesObj.length}`);
+          return valuesObj;
+        });
+        return {id, description, type, values};
+      }));
+  return {ids, properties};
+}
+
+export const PrecomputedIndexedSegmentPropertySource =
+    WithParameters(IndexedSegmentPropertySource, IndexedSegmentPropertySourceParameters);
+
+function parseIndexedPropertyMap(data: unknown): {
+  sharding: ShardingParameters|undefined,
+  properties: readonly Readonly<IndexedSegmentProperty>[]
+} {
+  verifyObject(data);
+  const sharding = verifyObjectProperty(data, 'sharding', parseShardingParameters);
+  const properties = verifyObjectProperty(
+      data, 'properties',
+      propertiesObj => parseArray(propertiesObj, (propertyObj): IndexedSegmentProperty => {
+        const id = verifyObjectProperty(propertyObj, 'id', verifyString);
+        const description = verifyOptionalObjectProperty(propertyObj, 'description', verifyString);
+        const type = verifyObjectProperty(propertyObj, 'type', type => {
+          if (type !== 'string') {
+            throw new Error(`Invalid property type: ${JSON.stringify(type)}`);
+          }
+          return type;
+        });
+        return {id, description, type};
+      }));
+  return {sharding, properties};
+}
+
+function getSegmentPropertyMap(
+    chunkManager: Borrowed<ChunkManager>, data: unknown, url: string): SegmentPropertyMap {
+  try {
+    const t = verifyObjectProperty(data, '@type', verifyString);
+    if (t !== 'neuroglancer_segment_properties') {
+      throw new Error(`Unsupported segment property map type: ${JSON.stringify(t)}`);
+    }
+    const inlineProperties = verifyOptionalObjectProperty(data, 'inline', parseInlinePropertyMap);
+    const indexedProperties = verifyOptionalObjectProperty(data, 'indexed', indexedObj => {
+      const {sharding, properties} = parseIndexedPropertyMap(indexedObj);
+      return chunkManager.getChunkSource(
+          PrecomputedIndexedSegmentPropertySource, {properties, parameters: {sharding, url}});
+    });
+    return new SegmentPropertyMap({inlineProperties, indexedProperties});
+  } catch (e) {
+    throw new Error(`Error parsing segment property map: ${e.message}`);
+  }
+}
+
+async function getSegmentNameMapDataSource(
+    options: GetDataSourceOptions, normalizedUrl: string, metadata: unknown): Promise<DataSource> {
+  options;
+  return {
+    modelTransform: makeIdentityTransform(emptyValidCoordinateSpace),
+    subsources: [
+      {
+        id: 'default',
+        default: true,
+        subsource: {
+          segmentPropertyMap: getSegmentPropertyMap(options.chunkManager, metadata, normalizedUrl)
+        },
+      },
+    ],
+  };
+}
+
 const urlPattern = /^([^#]*)(?:#(.*))?$/;
 
 function parseProviderUrl(providerUrl: string) {
@@ -727,9 +839,12 @@ export class PrecomputedDataSource extends DataSourceProvider {
             case 'neuroglancer_skeletons':
               return await getSkeletonsDataSource(options, normalizedUrl);
             case 'neuroglancer_multilod_draco':
+            case 'neuroglancer_legacy_mesh':
               return await getMeshDataSource(options, normalizedUrl);
             case 'neuroglancer_annotations_v1':
               return await getAnnotationDataSource(options, normalizedUrl, metadata);
+            case 'neuroglancer_segment_name_map':
+              return await getSegmentNameMapDataSource(options, normalizedUrl, metadata);
             case 'neuroglancer_multiscale_volume':
             case undefined:
               return await getVolumeDataSource(options, url, normalizedUrl, metadata);

@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-import {BoundingBox, boundingBoxesEqual, CoordinateSpace, CoordinateSpaceTransform, emptyValidCoordinateSpace, homogeneousTransformSubmatrix} from 'neuroglancer/coordinate_transform';
+import {CoordinateSpace, CoordinateSpaceTransform, emptyValidCoordinateSpace, homogeneousTransformSubmatrix} from 'neuroglancer/coordinate_transform';
 import {DisplayDimensionRenderInfo} from 'neuroglancer/navigation_state';
 import {CachedWatchableValue, constantWatchableValue, makeCachedDerivedWatchableValue, WatchableValueInterface} from 'neuroglancer/trackable_value';
 import {arraysEqual, scatterUpdate} from 'neuroglancer/util/array';
@@ -22,6 +22,8 @@ import {ValueOrError} from 'neuroglancer/util/error';
 import {mat4, vec3} from 'neuroglancer/util/geom';
 import {getDependentTransformInputDimensions} from 'neuroglancer/util/geom';
 import * as matrix from 'neuroglancer/util/matrix';
+import * as vector from 'neuroglancer/util/vector';
+import {prod} from 'neuroglancer/util/vector';
 
 /**
  * Specifies coordinate transform information for a RenderLayer.
@@ -61,7 +63,7 @@ export interface RenderLayerTransform {
 
   channelToModelDimensions: readonly number[];
 
-  channelDimensionBounds: BoundingBox;
+  channelSpaceShape: Uint32Array;
 
   /**
    * Homogeneous transform from "model" coordinate space to "render layer" coordinate space.
@@ -70,6 +72,47 @@ export interface RenderLayerTransform {
 
   modelDimensionNames: readonly string[];
   layerDimensionNames: readonly string[];
+}
+
+export interface ChannelSpace {
+  channelCoordinateSpace: CoordinateSpace;
+  // Shape of multi-dimensional channel space.
+  shape: Uint32Array;
+  // Total number of channels, equal to product of `shape`.
+  numChannels: number;
+  // Row-major array of shape `[count, rank]` specifying the coordinates for each flattened channel.
+  // Channels are ordered in Fortran order.
+  coordinates: Uint32Array;
+}
+
+export const zeroRankChannelSpace: ChannelSpace = {
+  channelCoordinateSpace: emptyValidCoordinateSpace,
+  shape: new Uint32Array(0),
+  numChannels: 1,
+  coordinates: new Uint32Array(0),
+};
+
+export function getChannelSpace(channelCoordinateSpace: CoordinateSpace): ChannelSpace {
+  const {rank} = channelCoordinateSpace;
+  const {bounds: {lowerBounds, upperBounds}} = channelCoordinateSpace;
+  if (lowerBounds.some(x => x !== 0)) {
+    throw new Error('Lower bounds of channel coordinate space must all be 0');
+  }
+  if (upperBounds.some(x => !Number.isInteger(x) || x <= 0 || x >= 2 ** 32)) {
+    throw new Error('Upper bounds of channel coordinate space must all be positive integers');
+  }
+  const shape = new Uint32Array(upperBounds);
+  const numChannels = prod(shape);
+  const coordinates = new Uint32Array(numChannels * rank);
+  for (let flatIndex = 0; flatIndex < numChannels; ++flatIndex) {
+    let remainder = flatIndex;
+    for (let dim = 0; dim < rank; ++dim) {
+      const coordinate = remainder % shape[dim];
+      remainder = (remainder - coordinate) / shape[dim];
+      coordinates[flatIndex * rank + dim] = coordinate;
+    }
+  }
+  return {channelCoordinateSpace, shape, numChannels, coordinates};
 }
 
 export type RenderLayerTransformOrError = ValueOrError<RenderLayerTransform>;
@@ -155,7 +198,7 @@ export function getRenderLayerTransform(
       newTransform, subspaceRank, modelSpace, requiredInputDims, channelCoordinateSpace,
       channelToRenderLayerDimensions);
   const channelToModelSubspaceDimensions: number[] = [];
-  const channelRank = channelToRenderLayerDimensions.length;
+  const channelRank = channelCoordinateSpace.rank;
   if (subsourceEntry !== undefined) {
     let {subsourceToModelSubspaceTransform} = subsourceEntry;
     if (unpaddedRank !== subspaceRank) {
@@ -168,7 +211,17 @@ export function getRenderLayerTransform(
         subsourceToModelSubspaceTransform, subspaceRank + 1, subspaceRank + 1, subspaceRank + 1,
         subspaceRank + 1);
   }
+  const channelSpaceShape = new Uint32Array(channelRank);
   for (let channelDim = 0; channelDim < channelRank; ++channelDim) {
+    const lower = channelCoordinateSpace.bounds.lowerBounds[channelDim];
+    const upper = channelCoordinateSpace.bounds.upperBounds[channelDim];
+    if (lower !== 0 || !Number.isInteger(upper) || upper <= 0 || upper >= 2 ** 32) {
+      return {
+        error: `Channel dimension ${channelCoordinateSpace.names[channelDim]} must have ` +
+            `lower bound of 0 and positive integer upper bound`,
+      };
+    }
+    channelSpaceShape[channelDim] = upper;
     const layerDim = channelToRenderLayerDimensions[channelDim];
     let correspondingModelSubspaceDim = -1;
     if (layerDim !== -1) {
@@ -196,7 +249,7 @@ export function getRenderLayerTransform(
     channelToRenderLayerDimensions,
     modelToRenderLayerTransform: newTransform,
     channelToModelDimensions: channelToModelSubspaceDimensions,
-    channelDimensionBounds: channelCoordinateSpace.bounds,
+    channelSpaceShape,
   };
 }
 
@@ -211,7 +264,7 @@ export function renderLayerTransformsEqual(
       arraysEqual(a.localToRenderLayerDimensions, b.localToRenderLayerDimensions) &&
       arraysEqual(a.channelToRenderLayerDimensions, b.channelToRenderLayerDimensions) &&
       arraysEqual(a.modelToRenderLayerTransform, b.modelToRenderLayerTransform) &&
-      boundingBoxesEqual(a.channelDimensionBounds, b.channelDimensionBounds));
+      arraysEqual(a.channelSpaceShape, b.channelSpaceShape));
 }
 
 export function getWatchableRenderLayerTransform(
@@ -252,12 +305,36 @@ export interface LayerDisplayDimensionMapping {
   displayToLayerDimensionIndices: number[];
 }
 
-export interface ChunkTransformParameters {
+export interface ChunkChannelAccessParameters {
+  channelSpaceShape: Uint32Array;
+
+  /**
+   * Equal to the values in `channelToChunkDimensionIndices` not equal to `-1`.
+   */
+  chunkChannelDimensionIndices: readonly number[];
+
+  /**
+   * Product of `modelTransform.channelSpaceShape`.
+   */
+  numChannels: number;
+
+  /**
+   * Row-major array of shape `[numChannels, chunkChannelDimensionIndices.length]`, specifies the
+   * coordinates within the chunk channel dimensions corresponding to each flat channel index.
+   */
+  chunkChannelCoordinates: Uint32Array;
+}
+
+export interface ChunkTransformParameters extends ChunkChannelAccessParameters {
   modelTransform: RenderLayerTransform;
   chunkToLayerTransform: Float32Array;
   layerToChunkTransform: Float32Array;
   chunkToLayerTransformDet: number;
-  chunkChannelDimensionIndices: readonly number[];
+  /**
+   * Maps channel dimension indices in the layer channel coordinate space to the corresponding chunk
+   * dimension index, or `-1` if there is no correpsonding chunk dimension.
+   */
+  channelToChunkDimensionIndices: readonly number[];
   combinedGlobalLocalToChunkTransform: Float32Array;
   combinedGlobalLocalRank: number;
   layerRank: number;
@@ -382,7 +459,8 @@ export function getChunkTransformParameters(
   }
 
   const channelRank = channelToRenderLayerDimensions.length;
-  let chunkChannelDimensionIndices = new Array<number>(channelRank);
+  let channelToChunkDimensionIndices = new Array<number>(channelRank);
+  const chunkChannelDimensionIndices: number[] = [];
   for (let channelDim = 0; channelDim < channelRank; ++channelDim) {
     const layerDim = channelToRenderLayerDimensions[channelDim];
     let correspondingChunkDim = -1;
@@ -403,11 +481,28 @@ export function getChunkTransformParameters(
               `Channel dimension ${modelTransform.layerDimensionNames[layerDim]} ` +
               `must have an offset of 0 in the chunk coordinate space`);
         }
+        chunkChannelDimensionIndices.push(correspondingChunkDim);
       }
     }
-    chunkChannelDimensionIndices[channelDim] = correspondingChunkDim;
+    channelToChunkDimensionIndices[channelDim] = correspondingChunkDim;
   }
-
+  const {channelSpaceShape} = modelTransform;
+  const numChannels = vector.prod(channelSpaceShape);
+  const chunkChannelRank = chunkChannelDimensionIndices.length;
+  const chunkChannelCoordinates = new Uint32Array(numChannels * chunkChannelRank);
+  for (let channelIndex = 0; channelIndex < numChannels; ++channelIndex) {
+    let remainder = channelIndex;
+    let chunkChannelDim = 0;
+    for (let channelDim = 0; channelDim < channelRank; ++channelDim) {
+      const coordinate = remainder % channelSpaceShape[channelDim];
+      remainder = (remainder -  coordinate) / channelSpaceShape[channelDim];
+      const chunkDim = channelToChunkDimensionIndices[channelDim];
+      if (chunkDim !== -1) {
+        chunkChannelCoordinates[channelIndex * chunkChannelRank + chunkChannelDim] = coordinate;
+        ++chunkChannelDim;
+      }
+    }
+  }
   return {
     layerRank: layerRank,
     modelTransform,
@@ -416,7 +511,11 @@ export function getChunkTransformParameters(
     chunkToLayerTransformDet: det,
     combinedGlobalLocalRank,
     combinedGlobalLocalToChunkTransform,
+    channelToChunkDimensionIndices,
     chunkChannelDimensionIndices,
+    numChannels,
+    chunkChannelCoordinates,
+    channelSpaceShape,
   };
 }
 

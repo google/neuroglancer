@@ -19,7 +19,7 @@
   color: #fff;
   flex-direction: column;
   align-items: stretch;
-  max-width: 80%;
+  flex: 1;
 }
 
 .neuroglancer-managed-user-layer-info-panel {
@@ -43,12 +43,14 @@
   padding: 2px;
 }
 
-.neuroglancer-layer-side-panel-title > input {
+.neuroglancer-layer-side-panel-name {
   flex: 1;
   background-color: transparent;
   border: 0px;
   color: white;
   outline: 0px;
+  /* ensure if name gets too long it doesn't push buttons over */
+  width: 0px;
 }
 
 .neuroglancer-layer-side-panel-info-panel {

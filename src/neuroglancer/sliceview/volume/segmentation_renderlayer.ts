@@ -21,7 +21,7 @@ import {registerRedrawWhenSegmentationDisplayStateChanged, SegmentationDisplaySt
 import {SliceViewSourceOptions} from 'neuroglancer/sliceview/base';
 import {SliceView, SliceViewSingleResolutionSource} from 'neuroglancer/sliceview/frontend';
 import {MultiscaleVolumeChunkSource, VolumeChunkSource} from 'neuroglancer/sliceview/volume/frontend';
-import {SliceViewVolumeRenderLayer, RenderLayerBaseOptions} from 'neuroglancer/sliceview/volume/renderlayer';
+import {RenderLayerBaseOptions, SliceViewVolumeRenderLayer} from 'neuroglancer/sliceview/volume/renderlayer';
 import {TrackableAlphaValue} from 'neuroglancer/trackable_alpha';
 import {TrackableBoolean} from 'neuroglancer/trackable_boolean';
 import {AggregateWatchableValue, makeCachedDerivedWatchableValue} from 'neuroglancer/trackable_value';
@@ -80,7 +80,7 @@ export class SegmentationRenderLayer extends SliceViewVolumeRenderLayer<ShaderPa
 
   constructor(
       multiscaleSource: MultiscaleVolumeChunkSource,
-    public displayState: SliceViewSegmentationDisplayState) {
+      public displayState: SliceViewSegmentationDisplayState) {
     super(multiscaleSource, {
       shaderParameters: new AggregateWatchableValue(
           refCounted => ({
@@ -157,7 +157,12 @@ uint64_t getMappedObjectId() {
     fragmentMain += `
   bool has = uShowAllSegments != 0u ? true : ${this.hashTableManager.hasFunctionName}(value);
   if (uSelectedSegment == value.value) {
-    saturation *= has ? 0.5 : 0.75;
+    float adjustment = has ? 0.5 : 0.75;
+    if (saturation > adjustment) {
+      saturation -= adjustment;
+    } else {
+      saturation += adjustment;
+    }
   } else if (!has) {
     alpha = uNotSelectedAlpha;
   }

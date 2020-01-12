@@ -166,7 +166,6 @@ class LayerWidget extends RefCounted {
   constructor(public layer: ManagedUserLayer, public panel: LayerPanel) {
     super();
     let element = this.element = document.createElement('div');
-    element.title = 'Control+click for layer options, drag to move/copy.';
     element.className = 'neuroglancer-layer-item neuroglancer-noselect';
     let labelElement = this.labelElement = document.createElement('span');
     labelElement.className = 'neuroglancer-layer-item-label';
@@ -197,6 +196,8 @@ class LayerWidget extends RefCounted {
       if (event.ctrlKey) {
         panel.selectedLayer.layer = layer;
         panel.selectedLayer.visible = true;
+      } else if (event.altKey) {
+        layer.pickEnabled = !layer.pickEnabled;
       } else {
         layer.setVisible(!layer.visible);
       }
@@ -225,15 +226,21 @@ class LayerWidget extends RefCounted {
   }
 
   update() {
-    let {layer} = this;
+    const {layer, element} = this;
     this.labelElement.textContent = layer.name;
-    this.element.setAttribute('layer-visible', layer.visible.toString());
-    this.element.setAttribute(
-        'layer-selected', (layer === this.panel.selectedLayer.layer).toString());
+    element.dataset.visible = layer.visible.toString();
+    element.dataset.selected = (layer === this.panel.selectedLayer.layer).toString();
+    element.dataset.pick = layer.pickEnabled.toString();
+    let title = `Click to ${layer.visible ? 'hide' : 'show'}, control+click to show side panel`;
+    if (layer.supportsPickOption) {
+      title += `, alt+click to ${layer.pickEnabled ? 'disable' : 'enable'} spatial object selection`;
+    }
+    title += `, drag to move, shift+drag to copy`;
+    element.title = title;
   }
 
   disposed() {
-    this.element.parentElement!.removeChild(this.element);
+    this.element.remove();
     super.disposed();
   }
 }
@@ -374,9 +381,12 @@ export class LayerPanel extends RefCounted {
       let userLayer = layer.layer;
       let text = '';
       if (userLayer !== null) {
-        let value = values.get(userLayer);
-        if (value !== undefined) {
-          text = value.toString();
+        let state = values.get(userLayer);
+        if (state !== undefined) {
+          const {value} = state;
+          if (value !== undefined) {
+            text = value.toString();
+          }
         }
       }
       if (text === widget.prevValueText) continue;

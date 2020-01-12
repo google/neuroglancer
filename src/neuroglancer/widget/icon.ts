@@ -20,7 +20,7 @@ export interface MakeIconOptions {
   text?: string;
   svg?: string;
   title?: string;
-  onClick?: (event: MouseEvent) => void;
+  onClick?: (this: HTMLElement, event: MouseEvent) => void;
   href?: string;
 }
 

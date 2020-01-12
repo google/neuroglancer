@@ -65,6 +65,10 @@ vec3 ${this.prefix}(uint64_t x) {
 
 let tempColor = new Float32Array(3);
 
+export function getCssColor(color: Float32Array) {
+  return `rgb(${color[0] * 100}%,${color[1] * 100}%,${color[2] * 100}%)`;
+}
+
 export class SegmentColorHash implements Trackable {
   changed = new NullarySignal();
 
@@ -85,7 +89,7 @@ export class SegmentColorHash implements Trackable {
 
   computeCssColor(x: Uint64) {
     this.compute(tempColor, x);
-    return `rgb(${tempColor[0] * 100}%,${tempColor[1] * 100}%,${tempColor[2] * 100}%)`;
+    return getCssColor(tempColor);
   }
 
   randomize() {

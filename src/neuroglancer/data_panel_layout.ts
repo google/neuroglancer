@@ -19,7 +19,7 @@ import 'neuroglancer/data_panel_layout.css';
 import debounce from 'lodash/debounce';
 import {ChunkManager} from 'neuroglancer/chunk_manager/frontend';
 import {DisplayContext} from 'neuroglancer/display_context';
-import {LayerManager, MouseSelectionState, SelectedLayerState} from 'neuroglancer/layer';
+import {LayerManager, MouseSelectionState, SelectedLayerState, TrackableDataSelectionState} from 'neuroglancer/layer';
 import * as L from 'neuroglancer/layout';
 import {DisplayPose, LinkedOrientationState, LinkedPosition, linkedStateLegacyJsonView, LinkedZoomState, NavigationState, OrientationState, TrackableZoomInterface} from 'neuroglancer/navigation_state';
 import {PerspectivePanel} from 'neuroglancer/perspective_view/panel';
@@ -58,6 +58,7 @@ export interface ViewerUIState extends SliceViewViewerState, VisibilityPriorityS
   display: DisplayContext;
   mouseState: MouseSelectionState;
   perspectiveNavigationState: NavigationState;
+  selectionDetailsState: TrackableDataSelectionState;
   showPerspectiveSliceViews: TrackableBoolean;
   showAxisLines: TrackableBoolean;
   wireFrame: TrackableBoolean;
@@ -124,6 +125,7 @@ export function getCommonViewerState(viewer: ViewerUIState) {
   return {
     crossSectionBackgroundColor: viewer.crossSectionBackgroundColor,
     perspectiveViewBackgroundColor: viewer.perspectiveViewBackgroundColor,
+    selectionDetailsState: viewer.selectionDetailsState,
     mouseState: viewer.mouseState,
     layerManager: viewer.layerManager,
     showAxisLines: viewer.showAxisLines,

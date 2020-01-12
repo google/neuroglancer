@@ -20,19 +20,22 @@
 
 import 'neuroglancer/ui/layer_side_panel.css';
 
+import svg_cursor from 'ikonate/icons/cursor.svg';
 import {changeLayerName, changeLayerType, deleteLayer, LayerManager, layerTypes, ManagedUserLayer, SelectedLayerState, UserLayer} from 'neuroglancer/layer';
+import {ElementVisibilityFromTrackableBoolean} from 'neuroglancer/trackable_boolean';
 import {animationFrameDebounce} from 'neuroglancer/util/animation_frame_debounce';
 import {Borrowed, RefCounted} from 'neuroglancer/util/disposable';
 import {removeFromParent} from 'neuroglancer/util/dom';
 import {KeyboardEventBinder, registerActionListener} from 'neuroglancer/util/keyboard_bindings';
 import {EventActionMap} from 'neuroglancer/util/mouse_bindings';
 import {WatchableVisibilityPriority} from 'neuroglancer/visibility_priority/frontend';
+import {CheckboxIcon} from 'neuroglancer/widget/checkbox_icon';
 import {makeCloseButton} from 'neuroglancer/widget/close_button';
 import {makeDeleteButton} from 'neuroglancer/widget/delete_button';
 import {StackView, Tab, TabView} from 'neuroglancer/widget/tab_view';
 
 class UserLayerInfoPanel extends Tab {
-  tabView = new TabView(this.layer.tabs.addRef(), this.visibility);
+  tabView = this.registerDisposer(new TabView(this.layer.tabs.addRef(), this.visibility));
   constructor(public layer: UserLayer) {
     super();
     this.element.appendChild(this.tabView.element);
@@ -64,9 +67,6 @@ class ManagedUserLayerInfoPanel extends Tab {
   private typeSelectMeasure = document.createElement('div');
   private title = document.createElement('div');
   private layerName = document.createElement('input');
-  // private userLayerElement = document.createElement('div');
-  // private prevLayer: UserLayer|null|undefined;
-  // private prevLayerPanel: UserLayerInfoPanel|EmptyUserLayerInfoPanel|undefined;
 
   private stack = this.registerDisposer(
       new StackView<UserLayer|null, UserLayerInfoPanel|EmptyUserLayerInfoPanel>(
@@ -123,6 +123,7 @@ class ManagedUserLayerInfoPanel extends Tab {
     });
 
     title.appendChild(layerName);
+    layerName.classList.add('neuroglancer-layer-side-panel-name');
     layerName.spellcheck = false;
     layerName.autocomplete = 'off';
     layerName.addEventListener('focus', () => {
@@ -138,6 +139,30 @@ class ManagedUserLayerInfoPanel extends Tab {
       event.preventDefault();
     });
     layerName.title = 'Rename layer';
+    const pickButton = this.registerDisposer(new CheckboxIcon(
+        {
+          get value() {
+            return layer.pickEnabled;
+          },
+          set value(value: boolean) {
+            layer.pickEnabled = value;
+          },
+          changed: layer.layerChanged,
+        },
+        {
+          svg: svg_cursor,
+          enableTitle: 'Spatial object selection: disabled',
+          disableTitle: 'Spatial object selection: enabled'
+        }));
+    this.registerDisposer(new ElementVisibilityFromTrackableBoolean(
+        {
+          get value() {
+            return layer.supportsPickOption;
+          },
+          changed: layer.layerChanged,
+        },
+        pickButton.element));
+    title.appendChild(pickButton.element);
     title.appendChild(makeDeleteButton({
       title: 'Delete layer',
       onClick: () => {

@@ -19,9 +19,9 @@ import 'neuroglancer/shared_disjoint_sets';
 import 'neuroglancer/uint64_set';
 import 'neuroglancer/uint64_map';
 
-import {ChunkRequester} from 'neuroglancer/chunk_manager/backend';
+import { ChunkRequester, ChunkSource} from 'neuroglancer/chunk_manager/backend';
 import {RenderLayerTransformOrError} from 'neuroglancer/render_coordinate_transform';
-import {VisibleSegmentsState} from 'neuroglancer/segmentation_display_state/base';
+import { VisibleSegmentsState, IndexedSegmentProperty} from 'neuroglancer/segmentation_display_state/base';
 import {SharedDisjointUint64Sets} from 'neuroglancer/shared_disjoint_sets';
 import {SharedWatchableValue} from 'neuroglancer/shared_watchable_value';
 import {Uint64Set} from 'neuroglancer/uint64_set';
@@ -54,3 +54,11 @@ export const withSegmentationLayerBackendState =
     this.registerDisposer(this.renderScaleTarget.changed.add(scheduleUpdateChunkPriorities));
   }
 };
+
+export class IndexedSegmentPropertySourceBackend extends ChunkSource {
+  properties: readonly Readonly<IndexedSegmentProperty>[];
+  constructor(rpc: RPC, options: any) {
+    super(rpc, options);
+    this.properties = options.properties;
+  }
+}

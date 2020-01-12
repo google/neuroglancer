@@ -158,7 +158,7 @@ export class AggregateWatchableValue<T> extends RefCounted implements WatchableV
     const watchables = getWatchables(this);
     const keys = Object.keys(watchables) as (keyof T)[];
     const updateValue = () => {
-      const obj = {} as T;
+      const obj = (Array.isArray(watchables) ? [] : {}) as T;
       for (const k of keys) {
         obj[k] = watchables[k].value;
       }
@@ -348,4 +348,10 @@ export function registerNested<U, T extends any[]>(
 
 export function constantWatchableValue<T>(value: T): WatchableValueInterface<T> {
   return {changed: neverSignal, value};
+}
+
+export function observeWatchable<T>(
+    callback: (value: T) => void, watchable: WatchableValueInterface<T>) {
+  callback(watchable.value);
+  return watchable.changed.add(() => callback(watchable.value));
 }

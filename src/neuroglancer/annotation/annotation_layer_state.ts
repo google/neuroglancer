@@ -35,7 +35,7 @@ export class AnnotationHoverState extends WatchableValue<
 
 // null means loading
 // undefined means no attached layer
-type OptionalSegmentationDisplayState = SegmentationDisplayState|null|undefined;
+export type OptionalSegmentationDisplayState = SegmentationDisplayState|null|undefined;
 
 export interface AnnotationRelationshipState {
   segmentationState: WatchableValueInterface<OptionalSegmentationDisplayState>;

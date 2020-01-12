@@ -19,6 +19,7 @@ import {MultiscaleAnnotationSource} from 'neuroglancer/annotation/frontend_sourc
 import {ChunkManager} from 'neuroglancer/chunk_manager/frontend';
 import {CoordinateSpace, CoordinateSpaceTransform, CoordinateTransformSpecification, emptyValidCoordinateSpace, makeCoordinateSpace, makeIdentityTransform} from 'neuroglancer/coordinate_transform';
 import {MeshSource, MultiscaleMeshSource} from 'neuroglancer/mesh/frontend';
+import {SegmentPropertyMap} from 'neuroglancer/segmentation_display_state/property_map';
 import {SingleMeshSource} from 'neuroglancer/single_mesh/frontend';
 import {SkeletonSource} from 'neuroglancer/skeleton/frontend';
 import {MultiscaleVolumeChunkSource} from 'neuroglancer/sliceview/volume/frontend';
@@ -115,6 +116,7 @@ export interface DataSubsource {
   staticAnnotations?: AnnotationSource;
   local?: LocalDataSource;
   singleMesh?: SingleMeshSource;
+  segmentPropertyMap?: SegmentPropertyMap;
 }
 
 export interface CompleteUrlOptionsBase {

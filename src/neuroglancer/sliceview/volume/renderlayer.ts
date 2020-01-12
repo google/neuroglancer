@@ -318,7 +318,7 @@ ${getShaderType(this.dataType)} getDataValue() { return getDataValue(0); }
               chunkTransform.combinedGlobalLocalToChunkTransform)) {
         continue;
       }
-      const result = source.getValueAt(tempChunkPosition);
+      const result = source.getValueAt(tempChunkPosition, chunkTransform);
       if (result != null) {
         return result;
       }
@@ -394,7 +394,7 @@ ${getShaderType(this.dataType)} getDataValue() { return getDataValue(0); }
     let newSource = true;
     for (const transformedSource of visibleSources) {
       const chunkLayout = sliceView.getNormalizedChunkLayout(transformedSource.chunkLayout);
-      const {chunkTransform: {chunkChannelDimensionIndices}} = transformedSource;
+      const {chunkTransform: {channelToChunkDimensionIndices}} = transformedSource;
       const source = transformedSource.source as VolumeChunkSource;
       const {fixedPositionWithinChunk, chunkDisplayDimensionIndices} = transformedSource;
       for (const chunkDim of chunkDisplayDimensionIndices) {
@@ -448,7 +448,7 @@ ${getShaderType(this.dataType)} getDataValue() { return getDataValue(0); }
           if (chunkFormat !== null) {
             chunkFormat.bindChunk(
                 gl, shader!, chunk, fixedPositionWithinChunk, chunkDisplayDimensionIndices,
-                chunkChannelDimensionIndices, newSource);
+                channelToChunkDimensionIndices, newSource);
           }
           newSource = false;
           vertexComputationManager.drawChunk(gl, shader!, chunkPosition, wireFrame);

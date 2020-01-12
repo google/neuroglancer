@@ -21,6 +21,7 @@ import {VolumeChunkSource as VolumeChunkSourceInterface, VolumeChunkSpecificatio
 import {Disposable} from 'neuroglancer/util/disposable';
 import {GL} from 'neuroglancer/webgl/context';
 import {ShaderBuilder, ShaderProgram} from 'neuroglancer/webgl/shader';
+import { ChunkChannelAccessParameters } from 'src/neuroglancer/render_coordinate_transform';
 
 export type VolumeChunkKey = string;
 
@@ -119,7 +120,7 @@ export class VolumeChunkSource extends SliceViewChunkSource<VolumeChunkSpecifica
     return this.chunkFormatHandler.chunkFormat;
   }
 
-  getValueAt(chunkPosition: Float32Array) {
+  getValueAt(chunkPosition: Float32Array, channelAccess: ChunkChannelAccessParameters) {
     const rank = this.spec.rank;
     const chunkGridPosition = this.tempChunkGridPosition;
     const positionWithinChunk = this.tempPositionWithinChunk;
@@ -144,7 +145,21 @@ export class VolumeChunkSource extends SliceViewChunkSource<VolumeChunkSpecifica
         return undefined;
       }
     }
-    return chunk.getValueAt(positionWithinChunk);
+    if (channelAccess.channelSpaceShape.length === 0) {
+      // Return a single value.
+      return chunk.getValueAt(positionWithinChunk);
+    }
+    const {numChannels, chunkChannelCoordinates, chunkChannelDimensionIndices} = channelAccess;
+    const chunkChannelRank = chunkChannelDimensionIndices.length;
+    let offset = 0;
+    const values = new Array<any>(numChannels);
+    for (let channelIndex = 0; channelIndex < numChannels; ++channelIndex) {
+      for (let i = 0; i < chunkChannelRank; ++i) {
+        positionWithinChunk[chunkChannelDimensionIndices[i]] = chunkChannelCoordinates[offset++];
+      }
+      values[channelIndex] = chunk.getValueAt(positionWithinChunk);
+    }
+    return values;
   }
 
   getChunk(x: any): VolumeChunk {

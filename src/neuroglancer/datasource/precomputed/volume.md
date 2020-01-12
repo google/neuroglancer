@@ -60,7 +60,10 @@ The root value must be a JSON object with the following members:
   must be a string value specifying the name of the subdirectory containing the [mesh
   data](./meshes.md).
 - `"skeletons"`: May be optionally specified if `"volume_type"` is `"segmentation"`.  If specified,
-  it must be a string value specifying the name of the subdirectory containing the skeleton data.
+  it must be a string value specifying the name of the subdirectory containing the [skeleton data](./skeletons.md).
+- `"segment_properties"`: May be optionally spsecified if `"volume_type"` is `"segmentation"`.  If
+  specified, it must be a string value specifying the name of the subdirectory containing a
+  [segment properties](./segment_properties.md) representation.
 
 # Chunked representation of volume data
 

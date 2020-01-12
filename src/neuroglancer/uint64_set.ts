@@ -42,6 +42,14 @@ export class Uint64Set extends SharedObjectCounterpart implements
     this.changed = <any>undefined;
   }
 
+  set(x: Uint64, value: boolean) {
+    if (!value) {
+      this.delete(x);
+    } else {
+      this.add(x);
+    }
+  }
+
   add_(x: Uint64) {
     return this.hashTable.add(x);
   }

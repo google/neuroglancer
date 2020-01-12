@@ -23,6 +23,8 @@ export function bindDefaultCopyHandler(viewer: Viewer) {
     if (isInputTextTarget(event.target)) {
       return;
     }
+    const selection = document.getSelection();
+    if (selection !== null && selection.type === 'Range') return;
     const stateJson = getCachedJson(viewer.state).value;
     const {clipboardData} = event;
     if (clipboardData !== null) {

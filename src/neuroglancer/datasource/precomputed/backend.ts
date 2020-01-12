@@ -14,15 +14,16 @@
  * limitations under the License.
  */
 
-import {Annotation, AnnotationPropertySerializer, annotationTypes, getAnnotationTypeHandler} from 'neuroglancer/annotation';
+import {Annotation, AnnotationPropertySerializer, annotationTypeHandlers, annotationTypes} from 'neuroglancer/annotation';
 import {AnnotationGeometryChunk, AnnotationGeometryData, AnnotationMetadataChunk, AnnotationSource, AnnotationSubsetGeometryChunk} from 'neuroglancer/annotation/backend';
 import {AnnotationGeometryChunkSourceBackend} from 'neuroglancer/annotation/backend';
 import {decodeGzip} from 'neuroglancer/async_computation/decode_gzip_request';
 import {requestAsyncComputation} from 'neuroglancer/async_computation/request';
 import {Chunk, ChunkManager, WithParameters} from 'neuroglancer/chunk_manager/backend';
 import {GenericSharedDataSource} from 'neuroglancer/chunk_manager/generic_file_source';
-import {AnnotationSourceParameters, AnnotationSpatialIndexSourceParameters, DataEncoding, MeshSourceParameters, MultiscaleMeshSourceParameters, ShardingHashFunction, ShardingParameters, SkeletonSourceParameters, VolumeChunkEncoding, VolumeChunkSourceParameters} from 'neuroglancer/datasource/precomputed/base';
+import {AnnotationSourceParameters, AnnotationSpatialIndexSourceParameters, DataEncoding, IndexedSegmentPropertySourceParameters, MeshSourceParameters, MultiscaleMeshSourceParameters, ShardingHashFunction, ShardingParameters, SkeletonSourceParameters, VolumeChunkEncoding, VolumeChunkSourceParameters} from 'neuroglancer/datasource/precomputed/base';
 import {assignMeshFragmentData, assignMultiscaleMeshFragmentData, computeOctreeChildOffsets, decodeJsonManifestChunk, decodeTriangleVertexPositionsAndIndices, FragmentChunk, generateHigherOctreeLevel, ManifestChunk, MeshSource, MultiscaleFragmentChunk, MultiscaleManifestChunk, MultiscaleMeshSource} from 'neuroglancer/mesh/backend';
+import {IndexedSegmentPropertySourceBackend} from 'neuroglancer/segmentation_display_state/backend';
 import {SkeletonChunk, SkeletonSource} from 'neuroglancer/skeleton/backend';
 import {decodeSkeletonChunk} from 'neuroglancer/skeleton/decode_precomputed_skeleton';
 import {ChunkDecoder} from 'neuroglancer/sliceview/backend_chunk_decoders';
@@ -211,7 +212,7 @@ async function getShardedData(
   Uint64.and(shardAndMinishard, shardAndMinishard, hashCode);
   const getPriority = () => ({priorityTier: chunk.priorityTier, priority: chunk.priority});
   const minishardIndex =
-    await minishardIndexSource.getData(shardAndMinishard, getPriority, cancellationToken);
+      await minishardIndexSource.getData(shardAndMinishard, getPriority, cancellationToken);
   if (minishardIndex === undefined) return undefined;
   const minishardEntry = findMinishardEntry(minishardIndex, key);
   if (minishardEntry === undefined) return undefined;
@@ -275,7 +276,7 @@ chunkDecoders.set(VolumeChunkEncoding.COMPRESSED_SEGMENTATION, decodeCompressedS
             zBits = Math.ceil(Math.log2(gridShape[2]));
       const chunkIndex = encodeZIndexCompressed(
           new Uint64(), xBits, yBits, zBits, chunkGridPosition[0], chunkGridPosition[1],
-        chunkGridPosition[2]);
+          chunkGridPosition[2]);
       response = (getOrNotFoundError(await getShardedData(
                       minishardIndexSource, chunk, chunkIndex, cancellationToken)))
                      .data;
@@ -309,8 +310,8 @@ export function decodeFragmentChunk(chunk: FragmentChunk, response: ArrayBuffer)
 
   async downloadFragment(chunk: FragmentChunk, cancellationToken: CancellationToken) {
     const {parameters} = this;
-    const response = await  cancellableFetchOk(
-      `${parameters.url}/${chunk.fragmentId}`, {}, responseArrayBuffer, cancellationToken);
+    const response = await cancellableFetchOk(
+        `${parameters.url}/${chunk.fragmentId}`, {}, responseArrayBuffer, cancellationToken);
     decodeFragmentChunk(chunk, response);
   }
 }
@@ -585,7 +586,7 @@ function parseAnnotations(
   const countLow = dv.getUint32(0, /*littleEndian=*/ true);
   const countHigh = dv.getUint32(4, /*littleEndian=*/ true);
   if (countHigh !== 0) throw new Error('Annotation count too high');
-  const numBytes = getAnnotationTypeHandler(parameters.type).serializedBytes(parameters.rank) +
+  const numBytes = annotationTypeHandlers[parameters.type].serializedBytes(parameters.rank) +
       propertySerializer.serializedBytes;
   const expectedBytes = 8 + (numBytes + 8) * countLow;
   if (buffer.byteLength !== expectedBytes) {
@@ -618,7 +619,7 @@ function parseAnnotations(
 function parseSingleAnnotation(
     buffer: ArrayBuffer, parameters: AnnotationSourceParameters,
     propertySerializer: AnnotationPropertySerializer, id: string): Annotation {
-  const handler = getAnnotationTypeHandler(parameters.type);
+  const handler = annotationTypeHandlers[parameters.type];
   const baseNumBytes = handler.serializedBytes(parameters.rank);
   const numRelationships = parameters.relationships.length;
   const minNumBytes = baseNumBytes + 4 * numRelationships;
@@ -641,7 +642,7 @@ function parseSingleAnnotation(
     offset += 4;
     const segments: Uint64[] = relatedSegments[i] = [];
     for (let j = 0; j < count; ++j) {
-      segments[i] = new Uint64(
+      segments[j] = new Uint64(
           dv.getUint32(offset, /*littleEndian=*/ true),
           dv.getUint32(offset + 4, /*littleEndian=*/ true));
       offset += 8;
@@ -679,7 +680,7 @@ export class PrecomputedAnnotationSpatialIndexSourceBackend extends (WithParamet
             zBits = Math.ceil(Math.log2(upperChunkBound[2]));
       const chunkIndex = encodeZIndexCompressed(
           new Uint64(), xBits, yBits, zBits, chunkGridPosition[0], chunkGridPosition[1],
-        chunkGridPosition[2]);
+          chunkGridPosition[2]);
       const result =
           await getShardedData(minishardIndexSource, chunk, chunkIndex, cancellationToken);
       if (result !== undefined) response = result.data;
@@ -716,7 +717,7 @@ export class PrecomputedAnnotationSourceBackend extends (WithParameters(Annotati
     const {parameters} = this;
     const id = Uint64.parseString(chunk.key!);
     const response = await fetchByUint64(
-      parameters.byId.url, chunk, this.byIdMinishardIndexSource, id, cancellationToken);
+        parameters.byId.url, chunk, this.byIdMinishardIndexSource, id, cancellationToken);
     if (response === undefined) {
       chunk.annotation = null;
     } else {
@@ -724,4 +725,10 @@ export class PrecomputedAnnotationSourceBackend extends (WithParameters(Annotati
           response, this.parameters, this.annotationPropertySerializer, chunk.key!);
     }
   }
+}
+
+@registerSharedObject()
+export class PrecomputedIndexedSegmentPropertySourceBackend extends WithParameters
+(IndexedSegmentPropertySourceBackend, IndexedSegmentPropertySourceParameters) {
+  minishardIndexSource = getMinishardIndexDataSource(this.chunkManager, this.parameters);
 }

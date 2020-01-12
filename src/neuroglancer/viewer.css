@@ -46,3 +46,11 @@
   margin-bottom: 3px;
   padding-right: 2px;
 }
+
+.neuroglancer-viewer-side-panel {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  max-width: 80%;
+  color: #fff;
+}

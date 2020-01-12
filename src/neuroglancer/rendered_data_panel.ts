@@ -18,13 +18,11 @@ import 'neuroglancer/rendered_data_panel.css';
 import 'neuroglancer/noselect.css';
 
 import {Annotation} from 'neuroglancer/annotation';
-import {getSelectedAnnotation} from 'neuroglancer/annotation/selection';
 import {getAnnotationTypeRenderHandler} from 'neuroglancer/annotation/type_handler';
 import {DisplayContext, RenderedPanel} from 'neuroglancer/display_context';
 import {NavigationState} from 'neuroglancer/navigation_state';
 import {PickIDManager} from 'neuroglancer/object_picking';
 import {displayToLayerCoordinates, layerToDisplayCoordinates} from 'neuroglancer/render_coordinate_transform';
-import {UserLayerWithAnnotations} from 'neuroglancer/ui/annotations';
 import {AutomaticallyFocusedElement} from 'neuroglancer/util/automatic_focus';
 import {Borrowed} from 'neuroglancer/util/disposable';
 import {ActionEvent, EventActionMap, registerActionListener} from 'neuroglancer/util/event_action_map';
@@ -425,6 +423,11 @@ export abstract class RenderedDataPanel extends RenderedPanel {
       }
     }, /*capture=*/ true);
 
+
+    registerActionListener(element, 'select-position', () => {
+      this.viewer.selectionDetailsState.select();
+    });
+
     registerActionListener(element, 'snap', () => {
       this.navigationState.pose.snap();
     });
@@ -525,26 +528,6 @@ export abstract class RenderedDataPanel extends RenderedPanel {
     });
 
     registerActionListener(element, 'snap', () => this.navigationState.pose.snap());
-
-    registerActionListener(element, 'select-annotation', () => {
-      const {mouseState, layerManager} = this.viewer;
-      const state = getSelectedAnnotation(mouseState, layerManager);
-      if (state === undefined) {
-        return;
-      }
-      const userLayer = state.layer.layer;
-      if (userLayer !== null) {
-        this.viewer.selectedLayer.layer = state.layer;
-        this.viewer.selectedLayer.visible = true;
-        userLayer.tabs.value = 'annotations';
-        (<UserLayerWithAnnotations>userLayer).selectedAnnotation.value = {
-          id: state.id,
-          partIndex: state.partIndex,
-          sourceIndex: state.annotationLayer.sourceIndex,
-          subsource: state.annotationLayer.subsourceId,
-        };
-      }
-    });
 
     registerActionListener(element, 'move-annotation', (e: ActionEvent<MouseEvent>) => {
       const {mouseState} = this.viewer;

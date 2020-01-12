@@ -353,6 +353,7 @@ export class SliceViewPanel extends RenderedDataPanel {
         mousePosition = mouseState.position = new Float32Array(rank);
       }
       mousePosition.set(voxelCoordinates);
+      mouseState.coordinateSpace = this.navigationState.coordinateSpace.value;
       const displayDimensions = this.navigationState.pose.displayDimensions.value;
       const {displayRank, displayDimensionIndices} = displayDimensions;
       for (let i = 0; i < displayRank; ++i) {

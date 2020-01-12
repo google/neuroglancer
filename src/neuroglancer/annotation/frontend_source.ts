@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-import {Annotation, AnnotationId, AnnotationPropertySerializer, AnnotationPropertySpec, AnnotationReference, AnnotationSourceSignals, AnnotationType, annotationTypes, fixAnnotationAfterStructuredCloning, getAnnotationTypeHandler, makeAnnotationId, SerializedAnnotations} from 'neuroglancer/annotation';
+import {Annotation, AnnotationId, AnnotationPropertySerializer, AnnotationPropertySpec, AnnotationReference, AnnotationSourceSignals, AnnotationType, annotationTypeHandlers, annotationTypes, fixAnnotationAfterStructuredCloning, makeAnnotationId, SerializedAnnotations} from 'neuroglancer/annotation';
 import {ANNOTATION_COMMIT_UPDATE_RESULT_RPC_ID, ANNOTATION_COMMIT_UPDATE_RPC_ID, ANNOTATION_GEOMETRY_CHUNK_SOURCE_RPC_ID, ANNOTATION_METADATA_CHUNK_SOURCE_RPC_ID, ANNOTATION_REFERENCE_ADD_RPC_ID, ANNOTATION_REFERENCE_DELETE_RPC_ID, ANNOTATION_SUBSET_GEOMETRY_CHUNK_SOURCE_RPC_ID, AnnotationGeometryChunkSpecification} from 'neuroglancer/annotation/base';
 import {getAnnotationTypeRenderHandler} from 'neuroglancer/annotation/type_handler';
 import {Chunk, ChunkManager, ChunkSource} from 'neuroglancer/chunk_manager/frontend';
@@ -24,11 +24,11 @@ import {MultiscaleSliceViewChunkSource, SliceViewChunk, SliceViewChunkSource, Sl
 import {StatusMessage} from 'neuroglancer/status';
 import {Borrowed, Owned} from 'neuroglancer/util/disposable';
 import {ENDIANNESS, Endianness} from 'neuroglancer/util/endian';
+import * as matrix from 'neuroglancer/util/matrix';
 import {NullarySignal, Signal} from 'neuroglancer/util/signal';
 import {Buffer} from 'neuroglancer/webgl/buffer';
 import {GL} from 'neuroglancer/webgl/context';
 import {registerRPC, registerSharedObjectOwner, RPC, SharedObject} from 'neuroglancer/worker_rpc';
-import * as matrix from 'neuroglancer/util/matrix';
 
 export interface AnnotationGeometryChunkSourceOptions extends SliceViewChunkSourceOptions {
   spec: AnnotationGeometryChunkSpecification;
@@ -138,7 +138,8 @@ export class AnnotationGeometryChunkSource extends
     const parent = this.parent = options.parent;
     parent.spatiallyIndexedSources.add(this);
     const {rank, chunkDataSize} = this.spec;
-    const multiscaleToChunkTransform = this.multiscaleToChunkTransform = new Float32Array((rank + 1) ** 2);
+    const multiscaleToChunkTransform = this.multiscaleToChunkTransform =
+        new Float32Array((rank + 1) ** 2);
     matrix.inverse(
         multiscaleToChunkTransform, rank + 1, this.spec.chunkToMultiscaleTransform, rank + 1,
         rank + 1);
@@ -236,7 +237,7 @@ export function updateAnnotation(
   const {serializedAnnotations} = chunk;
   const ids = serializedAnnotations.typeToIds[type];
   const idMap = serializedAnnotations.typeToIdMaps[type];
-  const handler = getAnnotationTypeHandler(type);
+  const handler = annotationTypeHandlers[type];
   const numGeometryBytes = handler.serializedBytes(rank);
   const numBytes = numGeometryBytes + propertySerializer.serializedBytes;
   let index = idMap.get(annotation.id);
@@ -280,7 +281,7 @@ export function deleteAnnotation(
     return false;
   }
   const ids = serializedAnnotations.typeToIds[type];
-  const handler = getAnnotationTypeHandler(type);
+  const handler = annotationTypeHandlers[type];
   const {rank} = propertySerializer;
   const numGeometryBytes = handler.serializedBytes(rank);
   const numBytes = numGeometryBytes + propertySerializer.serializedBytes;
@@ -552,21 +553,21 @@ export class MultiscaleAnnotationSource extends SharedObject implements
       switch (annotation.type) {
         case AnnotationType.POINT:
           matrix.transformPoint(
-            tempLower, source.multiscaleToChunkTransform, rank + 1, annotation.point, rank);
+              tempLower, source.multiscaleToChunkTransform, rank + 1, annotation.point, rank);
           tempUpper.set(tempLower);
           break;
         case AnnotationType.LINE:
         case AnnotationType.AXIS_ALIGNED_BOUNDING_BOX:
           matrix.transformPoint(
-            tempLower, source.multiscaleToChunkTransform, rank + 1, annotation.pointA, rank);
+              tempLower, source.multiscaleToChunkTransform, rank + 1, annotation.pointA, rank);
           matrix.transformPoint(
-            tempUpper, source.multiscaleToChunkTransform, rank + 1, annotation.pointB, rank);
+              tempUpper, source.multiscaleToChunkTransform, rank + 1, annotation.pointB, rank);
           break;
         case AnnotationType.ELLIPSOID:
           matrix.transformPoint(
-            tempLower, source.multiscaleToChunkTransform, rank + 1, annotation.center, rank);
+              tempLower, source.multiscaleToChunkTransform, rank + 1, annotation.center, rank);
           matrix.transformVector(
-            tempUpper, source.multiscaleToChunkTransform, rank + 1, annotation.radii, rank);
+              tempUpper, source.multiscaleToChunkTransform, rank + 1, annotation.radii, rank);
           for (let i = 0; i < rank; ++i) {
             const c = tempLower[i];
             const r = tempUpper[i];

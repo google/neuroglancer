@@ -19,7 +19,7 @@ import 'neuroglancer/annotation/line';
 import 'neuroglancer/annotation/point';
 import 'neuroglancer/annotation/ellipsoid';
 
-import {AnnotationBase, AnnotationSerializer, AnnotationSource, annotationTypes, getAnnotationTypeHandler, SerializedAnnotations} from 'neuroglancer/annotation';
+import {AnnotationBase, AnnotationSerializer, AnnotationSource, annotationTypeHandlers, annotationTypes, SerializedAnnotations} from 'neuroglancer/annotation';
 import {AnnotationLayerState} from 'neuroglancer/annotation/annotation_layer_state';
 import {ANNOTATION_PERSPECTIVE_RENDER_LAYER_UPDATE_SOURCES_RPC_ID, ANNOTATION_RENDER_LAYER_RPC_ID, ANNOTATION_RENDER_LAYER_UPDATE_SEGMENTATION_RPC_ID, ANNOTATION_SPATIALLY_INDEXED_RENDER_LAYER_RPC_ID, forEachVisibleAnnotationChunk} from 'neuroglancer/annotation/base';
 import {AnnotationGeometryChunkSource, AnnotationGeometryData, computeNumPickIds, MultiscaleAnnotationSource} from 'neuroglancer/annotation/frontend_source';
@@ -484,7 +484,7 @@ function AnnotationRenderLayer<TBase extends AnyConstructor<VisibilityTrackedRen
       for (const annotationType of annotationTypes) {
         const ids = typeToIds[annotationType];
         const renderHandler = getAnnotationTypeRenderHandler(annotationType);
-        const handler = getAnnotationTypeHandler(annotationType);
+        const handler = annotationTypeHandlers[annotationType];
         const {pickIdsPerInstance} = renderHandler;
         if (pickedOffset < ids.length * pickIdsPerInstance) {
           const instanceIndex = Math.floor(pickedOffset / pickIdsPerInstance);
@@ -736,7 +736,8 @@ const SpatiallyIndexedAnnotationLayer = <TBase extends AnyConstructor<Annotation
                     wireFrameShader, tsource,
                     projectionParameters as SliceViewProjectionParameters);
               } else {
-                this.drawGeometryChunkData(data, renderContext, chunkRenderParameters, drawFraction);
+                this.drawGeometryChunkData(
+                    data, renderContext, chunkRenderParameters, drawFraction);
               }
               present = 1;
             }

@@ -15,8 +15,10 @@
  */
 
 import {animationFrameDebounce} from 'neuroglancer/util/animation_frame_debounce';
+import {ArraySpliceOp, spliceArray} from 'neuroglancer/util/array';
 import {RefCounted} from 'neuroglancer/util/disposable';
 import {removeFromParent, updateChildren} from 'neuroglancer/util/dom';
+import {Signal} from 'neuroglancer/util/signal';
 import ResizeObserver from 'resize-observer-polyfill';
 
 // Must be a multiple of 2.
@@ -31,22 +33,35 @@ export class VirtualListState {
   anchorIndex: number = 0;
 
   /**
-   * Offset in pixels from the top
+   * Offset of start of anchor item in pixels from the top of the visible content.  May be negative
+   * to indicate that the anchor item starts before the visible viewport.
    */
   anchorClientOffset: number = 0;
 
-  anchorOffset: number = 0;
-
-  generation = -1;
+  splice(splices: readonly Readonly<ArraySpliceOp>[]) {
+    let {anchorIndex} = this;
+    let offset = 0;
+    for (const splice of splices) {
+      offset += splice.retainCount;
+      if (anchorIndex < offset) break;
+      const {deleteCount} = splice;
+      if (anchorIndex < offset + deleteCount) {
+        anchorIndex = offset;
+        break;
+      }
+      const {insertCount} = splice;
+      anchorIndex = anchorIndex - deleteCount + insertCount;
+      offset += insertCount - insertCount;
+    }
+    this.anchorIndex = anchorIndex;
+  }
 }
 
-interface ListItemRenderer {
-  (index: number): HTMLElement;
-}
-
-interface VirtualListSource {
+export interface VirtualListSource {
   length: number;
-  render: ListItemRenderer;
+  render(index: number): HTMLElement;
+  changed?: Signal<(splices: ArraySpliceOp[]) => void>|undefined;
+  renderChanged?: Signal|undefined;
 }
 
 class RenderParameters {
@@ -92,12 +107,20 @@ class SizeEstimates {
     }
     return hintOffset;
   }
+
+  splice(splices: readonly Readonly<ArraySpliceOp>[]) {
+    let {itemSize} = this;
+    itemSize = this.itemSize = spliceArray(itemSize, splices);
+    this.totalKnownSize = itemSize.reduce((a, b) => a + b, 0);
+    this.numItemsInTotalKnownSize = itemSize.reduce(a => a + 1, 0);
+  }
 }
 
 function updateRenderParameters(
     newParams: RenderParameters, prevParams: RenderParameters, numItems: number,
     viewportHeight: number, sizes: SizeEstimates, state: VirtualListState) {
-  const {anchorIndex, anchorClientOffset, anchorOffset} = state;
+  let {anchorIndex, anchorClientOffset} = state;
+  let anchorOffset = sizes.getEstimatedOffset(anchorIndex);
 
   let renderStartIndex: number;
   let renderEndIndex: number;
@@ -110,19 +133,24 @@ function updateRenderParameters(
     renderStartIndex = Math.max(0, anchorIndex - defaultNumItemsToRender / 2);
     renderEndIndex = Math.min(numItems, renderStartIndex + defaultNumItemsToRender);
     renderAnchorIndex = anchorIndex;
-    renderAnchorOffset = anchorOffset;
+    renderAnchorOffset = 0;
     renderScrollOffset = anchorClientOffset;
   } else {
-    const minStartOffset =
-        anchorOffset - anchorClientOffset - 2 * overRenderFraction * viewportHeight;
-    const maxStartOffset = anchorOffset - anchorClientOffset - overRenderFraction * viewportHeight;
-    const minEndOffset =
-        anchorOffset - anchorClientOffset + viewportHeight + overRenderFraction * viewportHeight;
+    const totalSize = sizes.getEstimatedTotalSize();
+    const maxScrollOffset = Math.max(0, totalSize - viewportHeight);
+
+    // Restrict anchorOffset and anchorClientOffset to be valid.
+    renderScrollOffset = anchorOffset - anchorClientOffset;
+    renderScrollOffset = Math.max(0, Math.min(maxScrollOffset, renderScrollOffset));
+
+    const minStartOffset = renderScrollOffset - 2 * overRenderFraction * viewportHeight;
+    const maxStartOffset = renderScrollOffset - overRenderFraction * viewportHeight;
+    const minEndOffset = renderScrollOffset + viewportHeight + overRenderFraction * viewportHeight;
     const maxEndOffset = anchorOffset - anchorClientOffset + viewportHeight +
         2 * overRenderFraction * viewportHeight;
 
     // Update renderStartIndex
-    renderStartIndex = prevParams.startIndex;
+    renderStartIndex = Math.min(numItems, prevParams.startIndex);
     let renderStartOffset = sizes.getEstimatedOffset(renderStartIndex, anchorIndex, anchorOffset);
     if (renderStartOffset < minStartOffset) {
       for (; renderStartIndex + 1 < numItems; ++renderStartIndex) {
@@ -139,7 +167,7 @@ function updateRenderParameters(
     }
 
     // Update renderEndIndex
-    renderEndIndex = prevParams.endIndex;
+    renderEndIndex = Math.min(numItems, prevParams.endIndex);
     let renderEndOffset = sizes.getEstimatedOffset(renderEndIndex, anchorIndex, anchorOffset);
     if (renderEndOffset < minEndOffset) {
       for (; renderEndOffset <= maxEndOffset && renderEndIndex + 1 <= numItems; ++renderEndIndex) {
@@ -165,7 +193,6 @@ function updateRenderParameters(
       const itemSize = sizes.getEstimatedSize(renderAnchorIndex - 1);
       renderAnchorOffset -= itemSize;
     }
-    renderScrollOffset = anchorOffset - anchorClientOffset;
   }
   newParams.startIndex = renderStartIndex;
   newParams.endIndex = renderEndIndex;
@@ -191,6 +218,8 @@ export class VirtualList extends RefCounted {
   private topItems = document.createElement('div');
   private bottomItems = document.createElement('div');
   private renderedItems: HTMLElement[] = [];
+  private renderGeneration = -1;
+  private listGeneration = -1;
   private newRenderedItems: HTMLElement[] = [];
 
   state = new VirtualListState();
@@ -209,7 +238,6 @@ export class VirtualList extends RefCounted {
     const {selectedIndex} = options;
     if (selectedIndex !== undefined) {
       this.state.anchorIndex = selectedIndex;
-      this.state.anchorOffset = 0;
       this.state.anchorClientOffset = 0;
     }
     const source = this.source = options.source;
@@ -232,6 +260,17 @@ export class VirtualList extends RefCounted {
       this.renderParams.scrollOffset = scrollOffset;
       this.debouncedUpdateView();
     });
+    if (source.changed !== undefined) {
+      this.registerDisposer(source.changed.add(splices => {
+        this.sizes.splice(splices);
+        this.state.splice(splices);
+        this.renderedItems.length = 0;
+        this.debouncedUpdateView();
+      }));
+    }
+    if (source.renderChanged !== undefined) {
+      this.registerDisposer(source.renderChanged.add(this.debouncedUpdateView));
+    }
   }
 
   private updateView() {
@@ -246,13 +285,24 @@ export class VirtualList extends RefCounted {
     const numItems = source.length;
 
     const {spacer, topItems, bottomItems} = this;
+    const {changed, renderChanged} = source;
     let renderParams: RenderParameters;
     while (true) {
       renderParams = this.newRenderParams;
       const prevRenderParams = this.renderParams;
       updateRenderParameters(
           renderParams, prevRenderParams, numItems, viewportHeight, sizes, state);
-      if (!rerenderNeeded(renderParams, prevRenderParams)) {
+      let forceRender: boolean;
+      if ((renderChanged !== undefined && renderChanged.count !== this.renderGeneration) ||
+          (changed !== undefined && changed.count !== this.listGeneration)) {
+        this.renderGeneration = renderChanged === undefined ? -1 : renderChanged.count;
+        this.listGeneration = changed === undefined ? -1 : changed.count;
+        forceRender = true;
+        this.renderedItems.length = 0;
+      } else {
+        forceRender = false;
+      }
+      if (!forceRender && !rerenderNeeded(renderParams, prevRenderParams)) {
         prevRenderParams.scrollOffset = renderParams.scrollOffset;
         renderParams = prevRenderParams;
         break;
@@ -262,21 +312,20 @@ export class VirtualList extends RefCounted {
 
       const prevRenderedItems = this.renderedItems;
       const renderedItems = this.newRenderedItems;
+      renderedItems.length = 0;
       this.renderedItems = renderedItems;
       this.newRenderedItems = prevRenderedItems;
 
-      const {render} = this.source;
-      const {startIndex: prevStartIndex, endIndex: prevEndIndex} = prevRenderParams;
+      const {source} = this;
+      const {render} = source;
       const {startIndex: curStartIndex, endIndex: curEndIndex, anchorIndex} = renderParams;
       function* getChildren(start: number, end: number) {
         for (let i = start; i < end; ++i) {
-          let item: HTMLElement;
-          if (i >= prevStartIndex && i < prevEndIndex) {
-            item = prevRenderedItems[i - prevStartIndex];
-          } else {
-            item = render(i);
+          let item = prevRenderedItems[i];
+          if (item === undefined) {
+            item = render.call(source, i);
           }
-          renderedItems[i - curStartIndex] = item;
+          renderedItems[i] = item;
           yield item;
         }
       }
@@ -285,7 +334,7 @@ export class VirtualList extends RefCounted {
 
       // Update item size estimates.
       for (let i = curStartIndex; i < curEndIndex; ++i) {
-        const element = renderedItems[i - curStartIndex];
+        const element = renderedItems[i];
         const bounds = element.getBoundingClientRect();
         const newSize = bounds.height;
         const existingSize = sizes.itemSize[i];
@@ -300,7 +349,6 @@ export class VirtualList extends RefCounted {
     }
     normalizeRenderParams(renderParams, sizes);
     state.anchorIndex = renderParams.anchorIndex;
-    state.anchorOffset = renderParams.anchorOffset;
     state.anchorClientOffset = renderParams.anchorOffset - renderParams.scrollOffset;
     spacer.style.height = `${sizes.getEstimatedTotalSize()}px`;
     topItems.style.bottom = `calc(100% - ${renderParams.anchorOffset}px)`;
@@ -309,11 +357,20 @@ export class VirtualList extends RefCounted {
   }
 
   getItemElement(index: number): HTMLElement|undefined {
-    const {renderParams: {startIndex, endIndex}, renderedItems} = this;
-    if (index >= startIndex && index < endIndex) {
-      return renderedItems[index - startIndex];
+    return this.renderedItems[index];
+  }
+
+  forEachRenderedItem(callback: (element: HTMLElement, index: number) => void) {
+    if (this.element.offsetParent === null) {
+      return;
     }
-    return undefined;
+    const {startIndex, endIndex} = this.renderParams;
+    const {renderedItems} = this;
+    for (let i = startIndex; i < endIndex; ++i) {
+      const item = renderedItems[i];
+      if (item === undefined) continue;
+      callback(item, i);
+    }
   }
 
   scrollItemIntoView(index: number) {
@@ -322,12 +379,10 @@ export class VirtualList extends RefCounted {
     const startOffset = this.element.scrollTop;
     if (itemStartOffset < startOffset) {
       this.state.anchorIndex = index;
-      this.state.anchorOffset = itemStartOffset;
       this.state.anchorClientOffset = 0;
     } else if (
         itemStartOffset > startOffset && itemEndOffset > startOffset + this.element.offsetHeight) {
       this.state.anchorIndex = index + 1;
-      this.state.anchorOffset = itemEndOffset;
       this.state.anchorClientOffset = this.element.offsetHeight;
     } else {
       return;

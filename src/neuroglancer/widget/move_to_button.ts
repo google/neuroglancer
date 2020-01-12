@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2016 Google Inc.
+ * Copyright 2020 Google Inc.
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
@@ -14,20 +14,8 @@
  * limitations under the License.
  */
 
-.segment-set-widget button {
-  margin: 3px;
-}
+import {makeIcon, MakeIconOptions} from 'neuroglancer/widget/icon';
 
-.segment-set-widget {
-  flex: 1;
-  overflow-y: auto;
-  height: 0px;
-  min-height: 0px;
-  flex-basis: 0px;
-}
-
-.segment-set-widget .item-container {
-  flex: 1;
-  display: flex;
-  flex-wrap: wrap;
+export function makeMoveToButton(options: MakeIconOptions = {}) {
+  return makeIcon({text: '↗', ...options});
 }

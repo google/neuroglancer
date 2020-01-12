@@ -20,12 +20,12 @@ import {WatchableRenderLayerTransform} from 'neuroglancer/render_coordinate_tran
 import {RenderScaleHistogram} from 'neuroglancer/render_scale_statistics';
 import {SegmentColorHash} from 'neuroglancer/segment_color';
 import {VisibleSegmentsState} from 'neuroglancer/segmentation_display_state/base';
+import {SegmentLabelMap} from 'neuroglancer/segmentation_display_state/property_map';
 import {SharedWatchableValue} from 'neuroglancer/shared_watchable_value';
 import {TrackableAlphaValue} from 'neuroglancer/trackable_alpha';
-import {TrackableValue} from 'neuroglancer/trackable_value';
+import {TrackableValue, WatchableValueInterface} from 'neuroglancer/trackable_value';
 import {Uint64Map} from 'neuroglancer/uint64_map';
 import {Uint64Set} from 'neuroglancer/uint64_set';
-import {hsvToRgb, rgbToHsv} from 'neuroglancer/util/colorspace';
 import {RefCounted} from 'neuroglancer/util/disposable';
 import {vec4} from 'neuroglancer/util/geom';
 import {NullarySignal} from 'neuroglancer/util/signal';
@@ -34,9 +34,16 @@ import {withSharedVisibility} from 'neuroglancer/visibility_priority/frontend';
 import {SharedObject} from 'neuroglancer/worker_rpc';
 
 export class Uint64MapEntry {
-  constructor(public key: Uint64, public value: Uint64) {}
+  constructor(public key: Uint64, public value?: Uint64, public name?: string|undefined) {}
   toString() {
-    return `${this.key}→${this.value}`;
+    const {key, value, name} = this;
+    let baseString: string;
+    if (value === undefined) {
+      baseString = `${key}`;
+    } else {
+      baseString = `${key}→${value}`;
+    }
+    return `${baseString} ${name}`;
   }
 }
 
@@ -44,6 +51,10 @@ export class SegmentSelectionState extends RefCounted {
   selectedSegment = new Uint64();
   hasSelectedSegment = false;
   changed = new NullarySignal();
+
+  get value() {
+    return this.hasSelectedSegment ? this.selectedSegment : undefined;
+  }
 
   set(value: Uint64|null|undefined) {
     if (value == null) {
@@ -70,13 +81,17 @@ export class SegmentSelectionState extends RefCounted {
   bindTo(layerSelectedValues: LayerSelectedValues, userLayer: UserLayer) {
     let temp = new Uint64();
     this.registerDisposer(layerSelectedValues.changed.add(() => {
-      let value = layerSelectedValues.get(userLayer);
-      if (typeof value === 'number') {
-        temp.low = value;
-        temp.high = 0;
-        value = temp;
-      } else if (value instanceof Uint64MapEntry) {
-        value = value.value;
+      const state = layerSelectedValues.get(userLayer);
+      let value: any = undefined;
+      if (state !== undefined) {
+        value = state.value;
+        if (typeof value === 'number') {
+          temp.low = value;
+          temp.high = 0;
+          value = temp;
+        } else if (value instanceof Uint64MapEntry) {
+          value = value.value || value.key;
+        }
       }
       this.set(value);
     }));
@@ -89,6 +104,21 @@ export interface SegmentationDisplayState extends VisibleSegmentsState {
   segmentStatedColors: Uint64Map;
   saturation: TrackableAlphaValue;
   highlightedSegments: Uint64Set;
+  /**
+   * Maximum length of base-10 representation of id seen.
+   */
+  maxIdLength: WatchableValueInterface<number>;
+  segmentLabelMap: WatchableValueInterface<SegmentLabelMap|undefined>;
+
+  selectSegment: (id: Uint64, pin: boolean|'toggle') => void;
+  filterBySegmentLabel: (id: Uint64) => void;
+}
+
+export function updateIdStringWidth(idStringWidth: WatchableValueInterface<number>, idString: string) {
+  const {length} = idString;
+  if (idStringWidth.value < length) {
+    idStringWidth.value = length;
+  }
 }
 
 export interface SegmentationDisplayStateWithAlpha extends SegmentationDisplayState {
@@ -99,6 +129,10 @@ export interface SegmentationDisplayState3D extends SegmentationDisplayStateWith
   transform: WatchableRenderLayerTransform;
   renderScaleHistogram: RenderScaleHistogram;
   renderScaleTarget: TrackableValue<number>;
+  // Specifies whether to write to the pick buffer when rendering with transparency.  This prevents
+  // any object behind the transparent object from being picked.  When not rendering with
+  // transparency, the pick buffer is always written (since there is no downside).
+  transparentPickEnabled: WatchableValueInterface<boolean>;
 }
 
 export function registerRedrawWhenSegmentationDisplayStateChanged(
@@ -129,6 +163,8 @@ export function registerRedrawWhenSegmentationDisplayState3DChanged(
       displayState.transform.changed.add(renderLayer.redrawNeeded.dispatch));
   renderLayer.registerDisposer(
       displayState.renderScaleTarget.changed.add(renderLayer.redrawNeeded.dispatch));
+  renderLayer.registerDisposer(
+      displayState.transparentPickEnabled.changed.add(renderLayer.redrawNeeded.dispatch));
 }
 
 /**
@@ -137,6 +173,21 @@ export function registerRedrawWhenSegmentationDisplayState3DChanged(
 const tempColor = vec4.create();
 const tempStatedColor = new Uint64();
 
+export function getBaseObjectColor(
+    displayState: SegmentationDisplayState, objectId: Uint64, color: Float32Array = tempColor) {
+  const {segmentStatedColors} = displayState;
+  if (segmentStatedColors.size !== 0 && segmentStatedColors.has(objectId)) {
+    // If displayState maps the ID to a color, use it
+    displayState.segmentStatedColors.get(objectId, tempStatedColor);
+    color[0] = ((tempStatedColor.low & 0xff0000) >>> 16) / 255.0;
+    color[1] = ((tempStatedColor.low & 0x00ff00) >>> 8) / 255.0;
+    color[2] = ((tempStatedColor.low & 0x0000ff)) / 255.0;
+  } else {
+    displayState.segmentColorHash.compute(color, objectId);
+  }
+  return color;
+}
+
 /**
  * Returns the alpha-premultiplied color to use.
  */
@@ -144,31 +195,18 @@ export function getObjectColor(
     displayState: SegmentationDisplayState, objectId: Uint64, alpha: number = 1) {
   const color = tempColor;
   color[3] = alpha;
-  if (displayState.segmentStatedColors.has(objectId)) {
-    // If displayState maps the ID to a color, use it
-    displayState.segmentStatedColors.get(objectId, tempStatedColor);
-    color[0] = ((tempStatedColor.low & 0xff0000) >>> 16) / 255.0;
-    color[1] = ((tempStatedColor.low & 0x00ff00) >>>  8) / 255.0;
-    color[2] = ((tempStatedColor.low & 0x0000ff))        / 255.0;
-  } else {
-    displayState.segmentColorHash.compute(color, objectId);
-  }
-
+  getBaseObjectColor(displayState, objectId, color);
+  let saturation = displayState.saturation.value;
   if (displayState.segmentSelectionState.isSelected(objectId)) {
-    for (let i = 0; i < 3; ++i) {
-      color[i] = color[i] * 0.5 + 0.5;
+    if (saturation > 0.5) {
+      saturation = saturation -= 0.5;
+    } else {
+      saturation += 0.5;
     }
   }
-
-  // Apply saturation
-  let hsv = new Float32Array(3);
-  rgbToHsv(hsv, color[0], color[1], color[2]);
-  hsv[1] *= displayState.saturation.value;
-  let rgb = new Float32Array(3);
-  hsvToRgb(rgb, hsv[0], hsv[1], hsv[2]);
-  color[0] = rgb[0];
-  color[1] = rgb[1];
-  color[2] = rgb[2];
+  for (let i = 0; i < 3; ++i) {
+    color[i] = color[i] * saturation + (1 - saturation);
+  }
 
   // Color highlighted segments
   if (displayState.highlightedSegments.has(objectId)) {
