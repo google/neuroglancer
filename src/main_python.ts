@@ -147,10 +147,10 @@ window.addEventListener('DOMContentLoaded', () => {
     const value = size.value;
     if (value === undefined) {
       element.style.position = 'relative';
-      element.style.width = null;
-      element.style.height = null;
-      element.style.transform = null;
-      element.style.transformOrigin = null;
+      element.style.width = '';
+      element.style.height = '';
+      element.style.transform = '';
+      element.style.transformOrigin = '';
     } else {
       element.style.position = 'absolute';
       element.style.width = `${value[0]}px`;

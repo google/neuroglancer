@@ -20,7 +20,7 @@
  */
 
 import {makeDataBoundsBoundingBoxAnnotationSet} from 'neuroglancer/annotation';
-import {ChunkManager, ChunkSource, ChunkSourceConstructor, WithParameters} from 'neuroglancer/chunk_manager/frontend';
+import { ChunkManager, ChunkSource, ChunkSourceConstructor, WithParameters, GettableChunkSource} from 'neuroglancer/chunk_manager/frontend';
 import {CoordinateSpace, coordinateSpaceFromJson, makeCoordinateSpace, makeIdentityTransform, makeIdentityTransformedBoundingBox} from 'neuroglancer/coordinate_transform';
 import {DataSource, DataSourceProvider, GetDataSourceOptions} from 'neuroglancer/datasource';
 import {MeshSourceParameters, PythonSourceParameters, SkeletonSourceParameters, VolumeChunkEncoding, VolumeChunkSourceParameters} from 'neuroglancer/datasource/python/base';
@@ -44,16 +44,16 @@ interface PythonChunkSource extends ChunkSource {
   generation: number;
 }
 
-function
-WithPythonDataSource<TBase extends ChunkSourceConstructor<{parameters: PythonSourceParameters}>>(
+function WithPythonDataSource<
+    TBase extends ChunkSourceConstructor<GettableChunkSource&ChunkSource&
+                                         {OPTIONS: {parameters: PythonSourceParameters}}>>(
     Base: TBase) {
-  type BaseOptions =
-      TBase extends {encodeOptions(options: infer BaseOptions): any} ? BaseOptions : never;
-  type Options = BaseOptions&{
+  type Options = InstanceType<TBase>['OPTIONS']&{
     dataSource: Borrowed<PythonDataSource>;
     generation: number;
   };
   class C extends Base {
+    OPTIONS: Options;
     dataSource: Owned<PythonDataSource>;
     generation: number;
     parameters: PythonSourceParameters;
