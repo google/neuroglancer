@@ -1278,6 +1278,9 @@ abstract class TrackableZoom extends RefCounted implements Trackable,
     this.registerDisposer(displayDimensionRenderInfo);
     this.registerDisposer(
         displayDimensionRenderInfo.changed.add(() => this.handleCoordinateSpaceChanged()));
+    this.registerDisposer(
+        displayDimensionRenderInfo.relativeDisplayScales.coordinateSpace.changed.add(
+            () => this.handleCoordinateSpaceChanged()));
     this.handleCoordinateSpaceChanged();
   }
 
@@ -1290,18 +1293,21 @@ abstract class TrackableZoom extends RefCounted implements Trackable,
       }
     } = this;
     const {curCanonicalVoxelPhysicalSize} = this;
-    if (canonicalVoxelPhysicalSize === curCanonicalVoxelPhysicalSize) {
+    if (!Number.isNaN(value_) && canonicalVoxelPhysicalSize === curCanonicalVoxelPhysicalSize) {
       return;
     }
-    this.curCanonicalVoxelPhysicalSize = canonicalVoxelPhysicalSize;
     if (!Number.isNaN(value_)) {
       if (curCanonicalVoxelPhysicalSize !== 0) {
         this.value_ = value_ * (curCanonicalVoxelPhysicalSize / canonicalVoxelPhysicalSize);
+        this.curCanonicalVoxelPhysicalSize = canonicalVoxelPhysicalSize;
         this.changed.dispatch();
       }
       return;
     }
-    if (!coordinateSpace.valid || canonicalVoxelPhysicalSize === 0) return;
+    if (!coordinateSpace.valid || canonicalVoxelPhysicalSize === 0) {
+      return;
+    }
+    this.curCanonicalVoxelPhysicalSize = canonicalVoxelPhysicalSize;
     this.value_ = this.getDefaultValue();
     this.changed.dispatch();
   }
@@ -1543,7 +1549,7 @@ export class NavigationState<Zoom extends TrackableZoomInterface = TrackableZoom
   }
 
   get valid() {
-    return this.pose.valid;
+    return this.pose.valid && !Number.isNaN(this.zoomFactor.value);
   }
 
   zoomBy(factor: number) {
