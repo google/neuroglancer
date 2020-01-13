@@ -304,7 +304,7 @@ uint64_t getMappedObjectId() {
           this.displayState.multicutDisplayInformation.otherSegmentsAlpha.value);
     } else {
       gl.uniform1ui(shader.uniform('uFocusMulticutSegments'), 0);
-      gl.uniform1ui(shader.uniform('uOtherSegmentsAlpha'), 0);
+      gl.uniform1f(shader.uniform('uOtherSegmentsAlpha'), 0);
     }
     this.hashTableManager.enable(gl, shader, this.gpuHashTable);
     this.hashTableManagerHighlighted.enable(gl, shader, this.gpuHashTableHighlighted);
