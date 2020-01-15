@@ -15,7 +15,7 @@
     "generate-code": "node ./config/generate_code.js",
     "build-min": "webpack --config ./config/webpack.config.js --env=min",
     "build": "webpack --config ./config/webpack.config.js --env=dev",
-    "build-module": "webpack --config ./config/webpack.config.js --env=dev-module && tsc --outDir ./tmp && babel tmp --quiet --out-dir dist/module && copyfiles -u 2 dist/dev-module/*.css dist/module && copyfiles -u 2 dist/dev-module/*.bundle.* dist/module && rimraf ./tmp",
+    "build-module": "webpack --config ./config/webpack.config.js --env=dev-module && rimraf ./tmp && tsc --outDir ./tmp && babel tmp --quiet --out-dir dist/module && copyfiles -u 2 dist/dev-module/*.css dist/module && copyfiles -u 2 dist/dev-module/*.bundle.* dist/module && rimraf ./tmp",
     "build-python": "webpack --config ./config/webpack.config.js --env=python-dev",
     "build-python-min": "webpack --config ./config/webpack.config.js --env=python-min",
     "build:watch": "webpack --config ./config/webpack.config.js --watch",
@@ -63,14 +63,11 @@
     "webpack-dev-server": ">=3.10.1"
   },
   "dependencies": {
-    "@tensorflow/tfjs": "1.5.1",
     "@types/codemirror": "0.0.82",
     "@types/gl-matrix": "^2.4.5",
     "@types/lodash": "^4.14.149",
     "@types/pako": "^1.0.1",
     "@types/sockjs-client": "^1.1.1",
-    "@types/text-encoding": "0.0.35",
-    "@types/webgl2": "^0.0.5",
     "@types/webpack-env": "^1.15.0",
     "acorn": "^7.1.0",
     "codemirror": "^5.50.2",

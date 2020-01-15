@@ -37,6 +37,7 @@ matrix:
         - npm run build-python-min
         - npm run test
         - npm run benchmark
+        - npm run build-module
 install:
   - pip install tox-travis
 script:

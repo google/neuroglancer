@@ -11,7 +11,7 @@
     "allowSyntheticDefaultImports": true,
     "sourceMap": true,
     "moduleResolution": "node",
-    "target": "ES2019",
+    "target": "ES2017",
     "newLine": "LF",
     "baseUrl": ".",
     "paths": {

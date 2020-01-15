@@ -1,7 +1,7 @@
 import {bindDefaultCopyHandler, bindDefaultPasteHandler} from 'neuroglancer/ui/default_clipboard_handling';
 import {setDefaultInputEventBindings} from 'neuroglancer/ui/default_input_event_bindings';
 import {makeMinimalViewer} from 'neuroglancer/ui/minimal_viewer';
-import {registerLayerType, registerVolumeLayerType} from 'neuroglancer/layer_specification';
+import {registerLayerType, registerVolumeLayerType} from 'neuroglancer/layer';
 import {VolumeType} from 'neuroglancer/sliceview/volume/base';
 
 import {ImageUserLayer} from 'neuroglancer/image_user_layer';
