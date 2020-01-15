@@ -28,6 +28,7 @@ import {NullarySignal, Signal} from 'neuroglancer/util/signal';
 import {Buffer} from 'neuroglancer/webgl/buffer';
 import {GL} from 'neuroglancer/webgl/context';
 import {registerRPC, registerSharedObjectOwner, RPC, SharedObject} from 'neuroglancer/worker_rpc';
+import * as matrix from 'neuroglancer/util/matrix';
 
 export interface AnnotationGeometryChunkSourceOptions extends SliceViewChunkSourceOptions {
   spec: AnnotationGeometryChunkSpecification;
@@ -125,10 +126,32 @@ export class AnnotationGeometryChunkSource extends
   parent: Borrowed<MultiscaleAnnotationSource>;
   immediateChunkUpdates = true;
 
+  /**
+   * Transforms positions in the MultiscaleAnnotationSource coordinate space to grid cell
+   * coordinates.  Equal to the inverse of `this.spec.chunkToMultiscaleTransform`, with rows divided
+   * by `this.spec.chunkDataSize`.
+   */
+  multiscaleToChunkTransform: Float32Array;
+
   constructor(chunkManager: Borrowed<ChunkManager>, options: AnnotationGeometryChunkSourceOptions) {
     super(chunkManager, options);
-    this.parent = options.parent;
-    // FIXME: register with parent
+    const parent = this.parent = options.parent;
+    parent.spatiallyIndexedSources.add(this);
+    const {rank, chunkDataSize} = this.spec;
+    const multiscaleToChunkTransform = this.multiscaleToChunkTransform = new Float32Array((rank + 1) ** 2);
+    matrix.inverse(
+        multiscaleToChunkTransform, rank + 1, this.spec.chunkToMultiscaleTransform, rank + 1,
+        rank + 1);
+    for (let i = 0; i < rank; ++i) {
+      for (let j = 0; j < rank + 1; ++j) {
+        multiscaleToChunkTransform[(rank + 1) * j + i] /= chunkDataSize[i];
+      }
+    }
+  }
+
+  disposed() {
+    this.parent.spatiallyIndexedSources.delete(this);
+    super.disposed();
   }
 
   initializeCounterpart(rpc: RPC, options: any) {
@@ -204,7 +227,7 @@ export class AnnotationMetadataChunkSource extends ChunkSource {
   }
 }
 
-function updateAnnotation(
+export function updateAnnotation(
     chunk: AnnotationGeometryData, annotation: Annotation,
     propertySerializer: AnnotationPropertySerializer) {
   // Find insertion point.
@@ -236,7 +259,9 @@ function updateAnnotation(
   } else {
     offset = serializedAnnotations.typeToOffset[type] + numBytes * index;
   }
-  const dv = new DataView(serializedAnnotations.data);
+  const dv = new DataView(
+      serializedAnnotations.data.buffer, serializedAnnotations.data.byteOffset,
+      serializedAnnotations.data.byteLength);
   let bufferOffset = serializedAnnotations.typeToOffset[type] + index * numBytes;
   const isLittleEndian = ENDIANNESS === Endianness.LITTLE;
   handler.serialize(dv, bufferOffset, isLittleEndian, rank, annotation);
@@ -245,7 +270,7 @@ function updateAnnotation(
   chunk.bufferValid = false;
 }
 
-function deleteAnnotation(
+export function deleteAnnotation(
     chunk: AnnotationGeometryData, type: AnnotationType, id: AnnotationId,
     propertySerializer: AnnotationPropertySerializer): boolean {
   const {serializedAnnotations} = chunk;
@@ -260,10 +285,9 @@ function deleteAnnotation(
   const numGeometryBytes = handler.serializedBytes(rank);
   const numBytes = numGeometryBytes + propertySerializer.serializedBytes;
   ids.splice(index, 1);
-  const count = idMap.size;
   idMap.delete(id);
-  for (let i = index + 1; i < count; ++i) {
-    idMap.set(ids[i], i - 1);
+  for (let i = index, count = ids.length; i < count; ++i) {
+    idMap.set(ids[i], i);
   }
   const {typeToOffset} = serializedAnnotations;
   const offset = typeToOffset[type] + numBytes * index;
@@ -303,7 +327,7 @@ interface LocalUpdateUndoState {
   type: AnnotationType;
 }
 
-function makeTemporaryChunk() {
+export function makeTemporaryChunk() {
   const typeToIds: string[][] = [];
   const typeToOffset: number[] = [];
   const typeToIdMaps: Map<string, number>[] = [];
@@ -324,6 +348,7 @@ export class MultiscaleAnnotationSource extends SharedObject implements
   metadataChunkSource =
       this.registerDisposer(new AnnotationMetadataChunkSource(this.chunkManager, this));
   segmentFilteredSources: Owned<AnnotationSubsetGeometryChunkSource>[];
+  spatiallyIndexedSources = new Set<Borrowed<AnnotationGeometryChunkSource>>();
   rank: number;
   readonly relationships: readonly string[];
   readonly properties: Readonly<AnnotationPropertySpec>[];
@@ -501,22 +526,81 @@ export class MultiscaleAnnotationSource extends SharedObject implements
   private forEachPossibleChunk(
       annotation: Annotation,
       callback: (chunk: AnnotationGeometryChunk|AnnotationSubsetGeometryChunk) => void) {
-    // FIXME: also handle spatially-indexed chunks
     annotation;
     const {relatedSegments} = annotation;
-    if (relatedSegments === undefined) return;
-    const numRelationships = relatedSegments.length;
-    const {segmentFilteredSources} = this;
-    for (let i = 0; i < numRelationships; ++i) {
-      const segments = relatedSegments[i];
-      if (segments === undefined) return;
-      const source = segmentFilteredSources[i];
-      for (const segment of segments) {
-        const chunk = source.chunks.get(getObjectKey(segment));
-        if (chunk === undefined) {
-          continue;
+    if (relatedSegments !== undefined) {
+      const numRelationships = relatedSegments.length;
+      const {segmentFilteredSources} = this;
+      for (let i = 0; i < numRelationships; ++i) {
+        const segments = relatedSegments[i];
+        if (segments === undefined) return;
+        const source = segmentFilteredSources[i];
+        for (const segment of segments) {
+          const chunk = source.chunks.get(getObjectKey(segment));
+          if (chunk === undefined) {
+            continue;
+          }
+          callback(chunk);
         }
-        callback(chunk);
+      }
+    }
+    const {rank} = this;
+    const tempLower = new Float32Array(rank);
+    const tempUpper = new Float32Array(rank);
+    const tempChunk = new Float32Array(rank);
+    for (const source of this.spatiallyIndexedSources) {
+      switch (annotation.type) {
+        case AnnotationType.POINT:
+          matrix.transformPoint(
+            tempLower, source.multiscaleToChunkTransform, rank + 1, annotation.point, rank);
+          tempUpper.set(tempLower);
+          break;
+        case AnnotationType.LINE:
+        case AnnotationType.AXIS_ALIGNED_BOUNDING_BOX:
+          matrix.transformPoint(
+            tempLower, source.multiscaleToChunkTransform, rank + 1, annotation.pointA, rank);
+          matrix.transformPoint(
+            tempUpper, source.multiscaleToChunkTransform, rank + 1, annotation.pointB, rank);
+          break;
+        case AnnotationType.ELLIPSOID:
+          matrix.transformPoint(
+            tempLower, source.multiscaleToChunkTransform, rank + 1, annotation.center, rank);
+          matrix.transformVector(
+            tempUpper, source.multiscaleToChunkTransform, rank + 1, annotation.radii, rank);
+          for (let i = 0; i < rank; ++i) {
+            const c = tempLower[i];
+            const r = tempUpper[i];
+            tempLower[i] = c - r;
+            tempUpper[i] = c + r;
+          }
+          break;
+      }
+      let totalChunks = 1;
+      for (let i = 0; i < rank; ++i) {
+        const a = tempLower[i];
+        const b = tempUpper[i];
+        const lower = Math.min(a, b);
+        const upper = Math.max(a, b);
+        // In the case that the point lies directly on a boundary, ensure it is included in both
+        // chunks, since we don't know how the datasource handles this case.
+        tempLower[i] = Math.ceil(lower - 1);
+        tempUpper[i] = Math.floor(upper + 1);
+        totalChunks *= (tempUpper[i] - tempLower[i]);
+      }
+      const {chunks} = source;
+      for (let chunkIndex = 0; chunkIndex < totalChunks; ++chunkIndex) {
+        let remainder = chunkIndex;
+        for (let i = 0; i < rank; ++i) {
+          const lower = tempLower[i];
+          const upper = tempUpper[i];
+          const size = upper - lower;
+          const x = tempChunk[i] = remainder % size;
+          remainder = (remainder - x) / size;
+        }
+        const chunk = chunks.get(tempChunk.join());
+        if (chunk !== undefined) {
+          callback(chunk);
+        }
       }
     }
   }

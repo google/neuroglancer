@@ -591,6 +591,7 @@ export abstract class RenderedDataPanel extends RenderedPanel {
                   annotationLayer.source.update(annotationRef, newAnnotation);
                 },
                 (_event) => {
+                  annotationLayer.source.commit(annotationRef);
                   annotationRef.dispose();
                 });
           }

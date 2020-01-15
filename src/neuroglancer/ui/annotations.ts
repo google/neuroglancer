@@ -20,7 +20,7 @@
 
 import './annotations.css';
 
-import {Annotation, AnnotationReference, AnnotationSource, AnnotationType, AxisAlignedBoundingBox, Ellipsoid, getAnnotationTypeHandler, Line} from 'neuroglancer/annotation';
+import {Annotation, AnnotationReference, AnnotationSource, AnnotationType, AxisAlignedBoundingBox, Ellipsoid, getAnnotationTypeHandler, Line, annotationToJson} from 'neuroglancer/annotation';
 import {AnnotationDisplayState, AnnotationLayerState} from 'neuroglancer/annotation/annotation_layer_state';
 import {MultiscaleAnnotationSource} from 'neuroglancer/annotation/frontend_source';
 import {AnnotationLayer, PerspectiveViewAnnotationLayer, SliceViewAnnotationLayer} from 'neuroglancer/annotation/renderlayer';
@@ -88,11 +88,15 @@ export class AnnotationSegmentListWidget extends RefCounted {
         if (annotation == null) {
           return;
         }
-        const {relatedSegments} = annotation;
-        const segments = relatedSegments === undefined ?
-            [...values] :
-            [...relatedSegments[this.relationshipIndex], ...values];
-        const newAnnotation = {...annotation, segments};
+        let {relatedSegments} = annotation;
+        if (relatedSegments === undefined) {
+          relatedSegments = this.annotationLayer.source.relationships.map(() => []);
+        } else {
+          relatedSegments = relatedSegments.slice();
+        }
+        const existingSegments = relatedSegments[this.relationshipIndex];
+        relatedSegments[this.relationshipIndex] = [...existingSegments, ...values];
+        const newAnnotation = {...annotation, relatedSegments};
         this.annotationLayer.source.update(this.reference, newAnnotation);
         this.annotationLayer.source.commit(this.reference);
       }));
@@ -162,10 +166,16 @@ export class AnnotationSegmentListWidget extends RefCounted {
         if (!event.ctrlKey) {
           return;
         }
-        const {relatedSegments} = annotation;
-        const existingSegments = (relatedSegments && relatedSegments[this.relationshipIndex]) || [];
+        let {relatedSegments} = annotation;
+        if (relatedSegments === undefined) {
+          relatedSegments = this.annotationLayer.source.relationships.map(() => []);
+        } else {
+          relatedSegments = relatedSegments.slice();
+        }
+        const existingSegments = relatedSegments[this.relationshipIndex];
         const newSegments = existingSegments.filter(x => !Uint64.equal(segment, x));
-        const newAnnotation = {...annotation, segments: newSegments ? newSegments : undefined};
+        relatedSegments[this.relationshipIndex] = newSegments;
+        const newAnnotation = {...annotation, relatedSegments};
         this.annotationLayer.source.update(this.reference, newAnnotation);
         this.annotationLayer.source.commit(this.reference);
       });
@@ -1355,7 +1365,11 @@ abstract class TwoStepAnnotationTool extends PlaceAnnotationTool {
         const state = this.inProgressAnnotation!;
         const reference = state.reference;
         const newAnnotation =
-            this.getUpdatedAnnotation(reference.value!, mouseState, annotationLayer);
+          this.getUpdatedAnnotation(reference.value!, mouseState, annotationLayer);
+        if (JSON.stringify(annotationToJson(newAnnotation, annotationLayer.source)) ===
+            JSON.stringify(annotationToJson(reference.value!, annotationLayer.source))) {
+          return;
+        }
         state.annotationLayer.source.update(reference, newAnnotation);
         this.layer.selectedAnnotation.value = {
           id: reference.id,

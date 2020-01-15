@@ -491,7 +491,7 @@ export interface AnnotationSchema {
   properties: readonly AnnotationPropertySpec[];
 }
 
-function annotationToJson(annotation: Annotation, schema: AnnotationSchema) {
+export function annotationToJson(annotation: Annotation, schema: AnnotationSchema) {
   const result = getAnnotationTypeHandler(annotation.type).toJSON(annotation, schema.rank);
   result.type = AnnotationType[annotation.type].toLowerCase();
   result.id = annotation.id;

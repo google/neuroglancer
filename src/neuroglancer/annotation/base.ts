@@ -28,6 +28,16 @@ export const ANNOTATION_COMMIT_UPDATE_RPC_ID = 'annotation.commit';
 export const ANNOTATION_COMMIT_UPDATE_RESULT_RPC_ID = 'annotation.commit';
 
 export interface AnnotationGeometryChunkSpecification extends SliceViewChunkSpecification {
+  /**
+   * Must equal the `chunkToMultiscaleTransform` in the `SliceViewSingleResolutionSource`.
+   */
+  chunkToMultiscaleTransform: Float32Array;
+
+  /**
+   * Specifies the maximum density of annotations provided by this chunk source, as `limit` per the
+   * chunk volume.  The higher the value, the sooner chunks from this source will be subsampled.  To
+   * disable subsampling completely, set `limit` to 0.
+   */
   limit: number;
 }
 

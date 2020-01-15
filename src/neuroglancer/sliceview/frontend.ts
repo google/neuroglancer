@@ -531,6 +531,11 @@ gl_Position = uProjectionMatrix * aVertexPosition;
 export interface SliceViewSingleResolutionSource<Source extends SliceViewChunkSource =
                                                                     SliceViewChunkSource> {
   chunkSource: Source;
+
+  /**
+   * (rank + 1)*(rank + 1) homogeneous transformation matrix from the "chunk" coordinate space to
+   * the MultiscaleSliceViewChunkSource space.
+   */
   chunkToMultiscaleTransform: Float32Array;
 
   /**

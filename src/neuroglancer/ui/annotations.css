@@ -165,6 +165,7 @@
 
 .neuroglancer-annotation-segment-item {
   color: black;
+  background-color: white;
 }
 
 .neuroglancer-annotations-view-dimension {

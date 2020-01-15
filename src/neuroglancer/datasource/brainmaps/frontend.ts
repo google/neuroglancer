@@ -547,7 +547,7 @@ export class BrainmapsAnnotationSource extends MultiscaleAnnotationSourceBase {
     return [[{
       chunkSource: this.chunkManager.getChunkSource(BrainmapsAnnotationSpatialIndexSource, {
         parent: this,
-        spec: {limit: 1e9, ...spec},
+        spec: {limit: 0, chunkToMultiscaleTransform, ...spec},
         parameters: this.parameters,
         credentialsProvider: this.credentialsProvider,
       }),

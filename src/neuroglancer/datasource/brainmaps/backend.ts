@@ -772,14 +772,24 @@ function annotationToBrainmaps(annotation: Annotation): any {
       undefined :
       annotation.relatedSegments[0].map(x => x.toString());
   switch (annotation.type) {
-    case AnnotationType.LINE:
+    case AnnotationType.LINE: {
+      const {pointA, pointB} = annotation;
+      const size = vec3.subtract(vec3.create(), pointB as vec3, pointA as vec3);
+      return {
+        type: 'LINE',
+        corner: toCommaSeparated(pointA as vec3),
+        size: toCommaSeparated(size),
+        object_labels: objectLabels,
+        payload,
+      };
+    }
     case AnnotationType.AXIS_ALIGNED_BOUNDING_BOX: {
       const {pointA, pointB} = annotation;
       const minPoint = vector.min(vec3.create(), pointA, pointB);
       const maxPoint = vector.max(vec3.create(), pointA, pointB);
       const size = vec3.subtract(maxPoint, maxPoint, minPoint);
       return {
-        type: annotation.type === AnnotationType.LINE ? 'LINE' : 'VOLUME',
+        type: 'VOLUME',
         corner: toCommaSeparated(minPoint),
         size: toCommaSeparated(size),
         object_labels: objectLabels,

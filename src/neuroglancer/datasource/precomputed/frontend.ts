@@ -257,20 +257,15 @@ export class PrecomputedAnnotationSource extends MultiscaleAnnotationSourceBase 
   }
 
   getSources(): SliceViewSingleResolutionSource<AnnotationGeometryChunkSource>[][] {
-    const {rank} = this;
-    const {lowerBounds} = this.metadata.coordinateSpace.bounds;
     return [this.metadata.spatialIndices.map(spatialIndexLevel => {
-      const chunkToMultiscaleTransform = matrix.createIdentity(Float32Array, rank + 1);
-      for (let i = 0; i < rank; ++i) {
-        chunkToMultiscaleTransform[(rank + 1) * rank + i] = lowerBounds[i];
-      }
+      const {spec} = spatialIndexLevel;
       return {
         chunkSource: this.chunkManager.getChunkSource(PrecomputedAnnotationSpatialIndexSource, {
           parent: this,
-          spec: spatialIndexLevel.spec,
+          spec,
           parameters: spatialIndexLevel.parameters,
         }),
-        chunkToMultiscaleTransform,
+        chunkToMultiscaleTransform: spec.chunkToMultiscaleTransform,
       };
     })];
   }
@@ -609,8 +604,13 @@ class AnnotationMetadata {
           for (let i = 0; i < rank; ++i) {
             gridShapeInVoxels[i] = gridShape[i] * chunkShape[i];
           }
-          const spec = {
+          const chunkToMultiscaleTransform = matrix.createIdentity(Float32Array, rank + 1);
+          for (let i = 0; i < rank; ++i) {
+            chunkToMultiscaleTransform[(rank + 1) * rank + i] = lowerBounds[i];
+          }
+          const spec: AnnotationGeometryChunkSpecification = {
             limit,
+            chunkToMultiscaleTransform,
             ...makeSliceViewChunkSpecification({
               rank,
               chunkDataSize: chunkShape,
