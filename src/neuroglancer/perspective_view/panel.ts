@@ -485,11 +485,10 @@ export class PerspectivePanel extends RenderedDataPanel {
     this.drawSliceViews(renderContext);
 
     if (hasAnnotation) {
+      // Render annotations with blending enabled.
       gl.enable(WebGL2RenderingContext.BLEND);
       gl.depthFunc(WebGL2RenderingContext.LEQUAL);
       gl.blendFunc(WebGL2RenderingContext.SRC_ALPHA, WebGL2RenderingContext.ONE_MINUS_SRC_ALPHA);
-      // Render only to the color buffer, but not the pick or z buffer.  With blending enabled, the
-      // z and color values would be corrupted.
       for (const [renderLayer, attachment] of visibleLayers) {
         if (renderLayer.isAnnotation) {
           renderLayer.draw(renderContext, attachment);
@@ -552,7 +551,6 @@ export class PerspectivePanel extends RenderedDataPanel {
     gl.polygonOffset(-1, -1);
     for (const [renderLayer, attachment] of visibleLayers) {
       if (!renderLayer.isTransparent) continue;
-      renderContext.alreadyEmittedPickID = true;
       renderLayer.draw(renderContext, attachment);
     }
     gl.disable(WebGL2RenderingContext.POLYGON_OFFSET_FILL);
