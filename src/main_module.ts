@@ -9,6 +9,7 @@ import {SegmentationUserLayer} from 'neuroglancer/segmentation_user_layer';
 // import {UrlHashBinding} from 'neuroglancer/ui/url_hash_binding';
 
 import {DVIDDataSource} from 'neuroglancer/datasource/dvid/frontend';
+import {PrecomputedDataSource} from 'neuroglancer/datasource/precomputed/frontend';
 import {BrainmapsDataSource, productionInstance} from 'neuroglancer/datasource/brainmaps/frontend';
 import {registerProvider} from 'neuroglancer/datasource/default_provider';
 
@@ -44,6 +45,7 @@ export function setupDefaultViewer(options: {
   registerVolumeLayerType(VolumeType.SEGMENTATION, SegmentationUserLayer);
 
   registerProvider('dvid', () => new DVIDDataSource());
+  registerProvider('precomputed', () => new PrecomputedDataSource());
 
   // register_brainmaps
   if (options.brainMapsClientId) {
