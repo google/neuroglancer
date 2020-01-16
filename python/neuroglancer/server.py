@@ -280,7 +280,8 @@ def start():
         done = threading.Event()
         def start_server():
             global global_server
-            ioloop = tornado.ioloop.IOLoop(make_current=True)
+            ioloop = tornado.ioloop.IOLoop()
+            ioloop.make_current()
             global_server = Server(ioloop=ioloop, **global_server_args)
             done.set()
             ioloop.start()
