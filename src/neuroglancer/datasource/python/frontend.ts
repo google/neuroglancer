@@ -20,7 +20,7 @@
  */
 
 import {makeDataBoundsBoundingBoxAnnotationSet} from 'neuroglancer/annotation';
-import { ChunkManager, ChunkSource, ChunkSourceConstructor, WithParameters, GettableChunkSource} from 'neuroglancer/chunk_manager/frontend';
+import {ChunkManager, ChunkSource, ChunkSourceConstructor, GettableChunkSource, WithParameters} from 'neuroglancer/chunk_manager/frontend';
 import {CoordinateSpace, coordinateSpaceFromJson, makeCoordinateSpace, makeIdentityTransform, makeIdentityTransformedBoundingBox} from 'neuroglancer/coordinate_transform';
 import {DataSource, DataSourceProvider, GetDataSourceOptions} from 'neuroglancer/datasource';
 import {MeshSourceParameters, PythonSourceParameters, SkeletonSourceParameters, VolumeChunkEncoding, VolumeChunkSourceParameters} from 'neuroglancer/datasource/python/base';
@@ -81,13 +81,21 @@ class PythonVolumeChunkSource extends
 class PythonMeshSource extends
 (WithPythonDataSource(WithParameters(MeshSource, MeshSourceParameters))) {}
 
-function computeNearIsotropicDownsamplingLevels(
+export function computeNearIsotropicDownsamplingLevels(
     shape: Float32Array, downsampleDims: readonly number[], effectiveVoxelSize: Float32Array,
     maxDownsampling: number, maxDownsamplingScales: number, maxDownsampledSize: number) {
+  console.log({
+    shape,
+    downsampleDims,
+    effectiveVoxelSize,
+    maxDownsampling,
+    maxDownsamplingScales,
+    maxDownsampledSize
+  });
   const rank = shape.length;
   const curDownsampleFactors = new Float32Array(rank);
   curDownsampleFactors.fill(1);
-  const downsampleLevels: Float32Array[] = [curDownsampleFactors];
+  const downsampleLevels: Float32Array[] = [curDownsampleFactors.slice()];
   let curDownsampleProduct = 1;
   const numDownsampleDims = downsampleDims.length;
   if (numDownsampleDims === 0) return downsampleLevels;
@@ -151,23 +159,28 @@ export class PythonMultiscaleVolumeChunkSource extends MultiscaleVolumeChunkSour
   maxVoxelsPerChunkLog2: number;
   subsourceToModelTransform: Float32Array;
 
-  get rank() { return this.modelSpace.rank; }
+  get rank() {
+    return this.modelSpace.rank;
+  }
   skeletonVertexAttributes: Map<string, VertexAttributeInfo>|undefined;
 
   // TODO(jbms): Properly handle reference counting of `dataSource`.
-  constructor(public dataSource: Borrowed<PythonDataSource>, chunkManager: ChunkManager, public key: string, public response: any) {
+  constructor(
+      public dataSource: Borrowed<PythonDataSource>, chunkManager: ChunkManager, public key: string,
+      public response: any) {
     super(chunkManager);
-    const {baseModelSpace, subsourceToModelTransform, voxelOffset} = parseCoordinateSpaceAndVoxelOffset(response);
+    const {baseModelSpace, subsourceToModelTransform, voxelOffset} =
+        parseCoordinateSpaceAndVoxelOffset(response);
     this.dataType = verifyObjectProperty(response, 'dataType', x => verifyEnumString(x, DataType));
     this.volumeType =
         verifyObjectProperty(response, 'volumeType', x => verifyEnumString(x, VolumeType));
     this.encoding =
-      verifyObjectProperty(response, 'encoding', x => verifyEnumString(x, VolumeChunkEncoding));
+        verifyObjectProperty(response, 'encoding', x => verifyEnumString(x, VolumeChunkEncoding));
     const rank = baseModelSpace.rank;
     this.subsourceToModelTransform = subsourceToModelTransform;
     const shape = verifyObjectProperty(
         response, 'shape',
-      x => parseFixedLengthArray(new Float32Array(rank), x, verifyPositiveInt));
+        x => parseFixedLengthArray(new Float32Array(rank), x, verifyPositiveInt));
     this.shape = shape;
 
     this.maxDownsampling = verifyObjectProperty(
@@ -269,8 +282,8 @@ export class PythonMultiscaleVolumeChunkSource extends MultiscaleVolumeChunkSour
                  this.shape, downsampleDims, effectiveDisplayScales, this.maxDownsampling,
                  this.maxDownsamplingScales, this.maxDownsampledSize)
           .map(
-              downsampleFactors =>
-                  getSourcesFromDownsampleFactors(downsampleFactors, downsampleDims, ChunkLayoutPreference.ISOTROPIC)[0]);
+              downsampleFactors => getSourcesFromDownsampleFactors(
+                  downsampleFactors, downsampleDims, ChunkLayoutPreference.ISOTROPIC)[0]);
     };
 
     const {downsamplingLayout} = this;
@@ -287,8 +300,8 @@ export class PythonMultiscaleVolumeChunkSource extends MultiscaleVolumeChunkSour
             this.shape, downsampleDims, effectiveDisplayScales, this.maxDownsampling,
             this.maxDownsamplingScales, this.maxDownsampledSize)
             .map(
-                downsampleFactors =>
-                    getSourcesFromDownsampleFactors(downsampleFactors, downsampleDims, this.chunkLayoutPreference)));
+                downsampleFactors => getSourcesFromDownsampleFactors(
+                    downsampleFactors, downsampleDims, this.chunkLayoutPreference)));
   }
 
   getMeshSource() {
@@ -331,86 +344,90 @@ function parseVertexAttributeInfo(x: any): VertexAttributeInfo {
   };
 }
 
-function getVolumeDataSource(dataSourceProvider: PythonDataSource, options: GetDataSourceOptions, key: string) {
-      return options.chunkManager.memoize.getUncounted(
-          {'type': 'python:VolumeDataSource', key}, async () => {
-            const response = await (await fetchOk(`/neuroglancer/info/${key}`)).json();
-            const volume = new PythonMultiscaleVolumeChunkSource(
-                dataSourceProvider, options.chunkManager, key, response);
-            const dataSource: DataSource = {
-              modelTransform: makeIdentityTransform(volume.modelSpace),
-              subsources: [
-                {
-                  id: 'default',
-                  default: true,
-                  subsource: {volume},
-                  subsourceToModelSubspaceTransform: volume.subsourceToModelTransform,
-                },
-                {
-                  id: 'bounds',
-                  default: true,
-                  subsource: {staticAnnotations: makeDataBoundsBoundingBoxAnnotationSet(volume.modelSpace.bounds)},
-                },
-              ],
-            };
-            if (volume.rank === 3 && volume.dataType !== DataType.FLOAT32) {
-              const subsourceToModelSubspaceTransform =
-                  new Float32Array(volume.subsourceToModelTransform);
-              const {scales, rank} = volume.modelSpace;
-              for (let i = 0; i < rank; ++i) {
-                subsourceToModelSubspaceTransform[(rank + 2) * i] = 1 / scales[i];
-              }
-              dataSource.subsources.push({
-                id: 'meshes',
-                default: true,
-                subsourceToModelSubspaceTransform,
-                subsource: {
-                  mesh: options.chunkManager.getChunkSource(PythonMeshSource, {
-                    dataSource: dataSourceProvider,
-                    generation: volume.generation,
-                    parameters: {
-                      key: key,
-                    }
-                  })
-                },
-              });
-            }
-            return dataSource;
+function getVolumeDataSource(
+    dataSourceProvider: PythonDataSource, options: GetDataSourceOptions, key: string) {
+  return options.chunkManager.memoize.getUncounted(
+      {'type': 'python:VolumeDataSource', key}, async () => {
+        const response = await (await fetchOk(`/neuroglancer/info/${key}`)).json();
+        const volume = new PythonMultiscaleVolumeChunkSource(
+            dataSourceProvider, options.chunkManager, key, response);
+        const dataSource: DataSource = {
+          modelTransform: makeIdentityTransform(volume.modelSpace),
+          subsources: [
+            {
+              id: 'default',
+              default: true,
+              subsource: {volume},
+              subsourceToModelSubspaceTransform: volume.subsourceToModelTransform,
+            },
+            {
+              id: 'bounds',
+              default: true,
+              subsource: {
+                staticAnnotations: makeDataBoundsBoundingBoxAnnotationSet(volume.modelSpace.bounds)
+              },
+            },
+          ],
+        };
+        if (volume.rank === 3 && volume.dataType !== DataType.FLOAT32) {
+          const subsourceToModelSubspaceTransform =
+              new Float32Array(volume.subsourceToModelTransform);
+          const {scales, rank} = volume.modelSpace;
+          for (let i = 0; i < rank; ++i) {
+            subsourceToModelSubspaceTransform[(rank + 2) * i] = 1 / scales[i];
+          }
+          dataSource.subsources.push({
+            id: 'meshes',
+            default: true,
+            subsourceToModelSubspaceTransform,
+            subsource: {
+              mesh: options.chunkManager.getChunkSource(PythonMeshSource, {
+                dataSource: dataSourceProvider,
+                generation: volume.generation,
+                parameters: {
+                  key: key,
+                }
+              })
+            },
           });
+        }
+        return dataSource;
+      });
 }
 
-function getSkeletonDataSource(dataSourceProvider: PythonDataSource, options: GetDataSourceOptions, key: string) {
-      return options.chunkManager.memoize.getUncounted(
-          {'type': 'python:SkeletonDataSource', key}, async () => {
-            const response = await (await fetchOk(`/neuroglancer/skeletoninfo/${key}`)).json();
-            const {baseModelSpace, subsourceToModelTransform} =
-                parseCoordinateSpaceAndVoxelOffset(response);
-            const vertexAttributes = verifyObjectProperty(
-                response, 'attributes', x => verifyObjectAsMap(x, parseVertexAttributeInfo));
-            const generation = verifyObjectProperty(response, 'generation', x => x);
-            const skeletonSource = options.chunkManager.getChunkSource(PythonSkeletonSource, {
-              dataSource: dataSourceProvider,
-              generation,
-              parameters: {
-                key,
-                vertexAttributes,
-              }
-            });
-            const dataSource: DataSource = {
-              modelTransform: makeIdentityTransform(baseModelSpace),
-              subsources: [
-                {
-                  id: 'default',
-                  subsourceToModelSubspaceTransform: subsourceToModelTransform,
-                  default: true,
-                  subsource: {
-                    mesh: skeletonSource,
-                  },
-                },
-              ],
-            };
-            return dataSource;
-          });
+function getSkeletonDataSource(
+    dataSourceProvider: PythonDataSource, options: GetDataSourceOptions, key: string) {
+  return options.chunkManager.memoize.getUncounted(
+      {'type': 'python:SkeletonDataSource', key}, async () => {
+        const response = await (await fetchOk(`/neuroglancer/skeletoninfo/${key}`)).json();
+        const {baseModelSpace, subsourceToModelTransform} =
+            parseCoordinateSpaceAndVoxelOffset(response);
+        const vertexAttributes = verifyObjectProperty(
+            response, 'attributes', x => verifyObjectAsMap(x, parseVertexAttributeInfo));
+        const generation = verifyObjectProperty(response, 'generation', x => x);
+        const skeletonSource = options.chunkManager.getChunkSource(PythonSkeletonSource, {
+          dataSource: dataSourceProvider,
+          generation,
+          parameters: {
+            key,
+            vertexAttributes,
+          }
+        });
+        const dataSource: DataSource = {
+          modelTransform: makeIdentityTransform(baseModelSpace),
+          subsources: [
+            {
+              id: 'default',
+              subsourceToModelSubspaceTransform: subsourceToModelTransform,
+              default: true,
+              subsource: {
+                mesh: skeletonSource,
+              },
+            },
+          ],
+        };
+        return dataSource;
+      });
 }
 
 export class PythonDataSource extends DataSourceProvider {
