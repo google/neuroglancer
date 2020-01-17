@@ -15,6 +15,7 @@
  */
 
 import {FrameNumberCounter} from 'neuroglancer/chunk_manager/frontend';
+import {animationFrameDebounce} from 'neuroglancer/util/animation_frame_debounce';
 import {Borrowed, RefCounted} from 'neuroglancer/util/disposable';
 import {vec3} from 'neuroglancer/util/geom';
 import {NullarySignal} from 'neuroglancer/util/signal';
@@ -80,7 +81,6 @@ export class DisplayContext extends RefCounted implements FrameNumberCounter {
   updateFinished = new NullarySignal();
   changed = this.updateFinished;
   panels = new Set<RenderedPanel>();
-  private updatePending: number|null = null;
   canvasRect: ClientRect|undefined;
 
   /**
@@ -134,10 +134,6 @@ export class DisplayContext extends RefCounted implements FrameNumberCounter {
 
   disposed() {
     this.resizeObserver.disconnect();
-    if (this.updatePending != null) {
-      cancelAnimationFrame(this.updatePending);
-      this.updatePending = null;
-    }
   }
 
   addPanel(panel: Borrowed<RenderedPanel>) {
@@ -152,11 +148,7 @@ export class DisplayContext extends RefCounted implements FrameNumberCounter {
     this.scheduleRedraw();
   }
 
-  scheduleRedraw() {
-    if (this.updatePending === null) {
-      this.updatePending = requestAnimationFrame(this.update.bind(this));
-    }
-  }
+  readonly scheduleRedraw = this.registerCancellable(animationFrameDebounce(() => this.draw()));
 
   draw() {
     ++this.frameNumber;
@@ -186,10 +178,5 @@ export class DisplayContext extends RefCounted implements FrameNumberCounter {
     gl.clear(gl.COLOR_BUFFER_BIT);
     this.gl.colorMask(true, true, true, true);
     this.updateFinished.dispatch();
-  }
-
-  private update() {
-    this.updatePending = null;
-    this.draw();
   }
 }
