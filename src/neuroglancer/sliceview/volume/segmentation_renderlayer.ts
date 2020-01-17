@@ -51,6 +51,7 @@ export interface SliceViewSegmentationDisplayState extends SegmentationDisplaySt
   selectedAlpha: TrackableAlphaValue;
   notSelectedAlpha: TrackableAlphaValue;
   hideSegmentZero: TrackableBoolean;
+  ignoreNullVisibleSet: TrackableBoolean;
 }
 
 interface ShaderParameters {
@@ -101,6 +102,8 @@ export class SegmentationRenderLayer extends SliceViewVolumeRenderLayer<ShaderPa
     registerRedrawWhenSegmentationDisplayStateChanged(displayState, this);
     this.registerDisposer(displayState.selectedAlpha.changed.add(this.redrawNeeded.dispatch));
     this.registerDisposer(displayState.notSelectedAlpha.changed.add(this.redrawNeeded.dispatch));
+    this.registerDisposer(
+        displayState.ignoreNullVisibleSet.changed.add(this.redrawNeeded.dispatch));
   }
 
   getSources(options: SliceViewSourceOptions):
@@ -203,6 +206,7 @@ uint64_t getMappedObjectId() {
     const {gl} = this;
     const {displayState} = this;
     const {segmentSelectionState, visibleSegments} = this.displayState;
+    const ignoreNullSegmentSet = this.displayState.ignoreNullVisibleSet.value;
     let selectedSegmentLow = 0, selectedSegmentHigh = 0;
     if (segmentSelectionState.hasSelectedSegment) {
       let seg = segmentSelectionState.selectedSegment;
@@ -213,7 +217,9 @@ uint64_t getMappedObjectId() {
     gl.uniform1f(shader.uniform('uSaturation'), this.displayState.saturation.value);
     gl.uniform1f(shader.uniform('uNotSelectedAlpha'), this.displayState.notSelectedAlpha.value);
     gl.uniform2ui(shader.uniform('uSelectedSegment'), selectedSegmentLow, selectedSegmentHigh);
-    gl.uniform1ui(shader.uniform('uShowAllSegments'), visibleSegments.hashTable.size ? 0 : 1);
+    gl.uniform1ui(
+        shader.uniform('uShowAllSegments'),
+        visibleSegments.hashTable.size || !ignoreNullSegmentSet ? 0 : 1);
     this.hashTableManager.enable(gl, shader, this.gpuHashTable);
     if (parameters.hasHighlightedSegments) {
       this.hashTableManagerHighlighted.enable(gl, shader, this.gpuHashTableHighlighted);

@@ -69,6 +69,7 @@ const NOT_SELECTED_ALPHA_JSON_KEY = 'notSelectedAlpha';
 const OBJECT_ALPHA_JSON_KEY = 'objectAlpha';
 const SATURATION_JSON_KEY = 'saturation';
 const HIDE_SEGMENT_ZERO_JSON_KEY = 'hideSegmentZero';
+const IGNORE_NULL_VISIBLE_SET_JSON_KEY = 'ignoreNullVisibleSet';
 const MESH_JSON_KEY = 'mesh';
 const SKELETONS_JSON_KEY = 'skeletons';
 const SEGMENTS_JSON_KEY = 'segments';
@@ -130,6 +131,7 @@ export class SegmentationUserLayer extends Base {
     notSelectedAlpha: trackableAlphaValue(0),
     objectAlpha: trackableAlphaValue(1.0),
     hideSegmentZero: new TrackableBoolean(true, true),
+    ignoreNullVisibleSet: new TrackableBoolean(true, true),
     visibleSegments: Uint64Set.makeWithCounterpart(this.manager.worker),
     highlightedSegments: Uint64Set.makeWithCounterpart(this.manager.worker),
     segmentEquivalences: SharedDisjointUint64Sets.makeWithCounterpart(this.manager.worker),
@@ -155,6 +157,7 @@ export class SegmentationUserLayer extends Base {
     this.displayState.notSelectedAlpha.changed.add(this.specificationChanged.dispatch);
     this.displayState.objectAlpha.changed.add(this.specificationChanged.dispatch);
     this.displayState.hideSegmentZero.changed.add(this.specificationChanged.dispatch);
+    this.displayState.ignoreNullVisibleSet.changed.add(this.specificationChanged.dispatch);
     this.displayState.skeletonRenderingOptions.changed.add(this.specificationChanged.dispatch);
     this.displayState.segmentColorHash.changed.add(this.specificationChanged.dispatch);
     this.displayState.segmentStatedColors.changed.add(this.specificationChanged.dispatch);
@@ -284,6 +287,8 @@ export class SegmentationUserLayer extends Base {
     this.displayState.notSelectedAlpha.restoreState(specification[NOT_SELECTED_ALPHA_JSON_KEY]);
     this.displayState.objectAlpha.restoreState(specification[OBJECT_ALPHA_JSON_KEY]);
     this.displayState.hideSegmentZero.restoreState(specification[HIDE_SEGMENT_ZERO_JSON_KEY]);
+    this.displayState.ignoreNullVisibleSet.restoreState(
+        specification[IGNORE_NULL_VISIBLE_SET_JSON_KEY]);
 
     const {skeletonRenderingOptions} = this.displayState;
     skeletonRenderingOptions.restoreState(specification[SKELETON_RENDERING_JSON_KEY]);
@@ -338,6 +343,7 @@ export class SegmentationUserLayer extends Base {
     x[SATURATION_JSON_KEY] = this.displayState.saturation.toJSON();
     x[OBJECT_ALPHA_JSON_KEY] = this.displayState.objectAlpha.toJSON();
     x[HIDE_SEGMENT_ZERO_JSON_KEY] = this.displayState.hideSegmentZero.toJSON();
+    x[IGNORE_NULL_VISIBLE_SET_JSON_KEY] = this.displayState.ignoreNullVisibleSet.toJSON();
     x[COLOR_SEED_JSON_KEY] = this.displayState.segmentColorHash.toJSON();
     let {segmentStatedColors} = this.displayState;
     if (segmentStatedColors.size > 0) {
@@ -679,6 +685,17 @@ class DisplayOptionsTab extends Tab {
       label.className =
           'neuroglancer-segmentation-dropdown-hide-segment-zero neuroglancer-noselect';
       label.appendChild(document.createTextNode('Hide segment ID 0'));
+      label.appendChild(checkbox.element);
+      element.appendChild(label);
+    }
+
+    {
+      const checkbox = this.registerDisposer(
+          new TrackableBooleanCheckbox(layer.displayState.ignoreNullVisibleSet));
+      checkbox.element.className = 'neuroglancer-noselect';
+      const label = document.createElement('label');
+      label.className = 'neuroglancer-noselect';
+      label.appendChild(document.createTextNode('Show all segments if none selected'));
       label.appendChild(checkbox.element);
       element.appendChild(label);
     }
