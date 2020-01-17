@@ -157,7 +157,7 @@ uint64_t getMappedObjectId() {
     fragmentMain += `
   bool has = uShowAllSegments != 0u ? true : ${this.hashTableManager.hasFunctionName}(value);
   if (uSelectedSegment == value.value) {
-    saturation = has ? 0.5 : 0.75;
+    saturation *= has ? 0.5 : 0.75;
   } else if (!has) {
     alpha = uNotSelectedAlpha;
   }
