@@ -15,12 +15,13 @@
  */
 
 import {ChunkManager} from 'neuroglancer/chunk_manager/frontend';
-import {LayerSelectedValues, UserLayer} from 'neuroglancer/layer';
+import {LayerSelectedValues} from 'neuroglancer/layer';
 import {WatchableRenderLayerTransform} from 'neuroglancer/render_coordinate_transform';
 import {RenderScaleHistogram} from 'neuroglancer/render_scale_statistics';
 import {SegmentColorHash} from 'neuroglancer/segment_color';
 import {VisibleSegmentsState} from 'neuroglancer/segmentation_display_state/base';
 import {SegmentLabelMap} from 'neuroglancer/segmentation_display_state/property_map';
+import {SegmentationUserLayer} from 'neuroglancer/segmentation_user_layer';
 import {SharedWatchableValue} from 'neuroglancer/shared_watchable_value';
 import {TrackableAlphaValue} from 'neuroglancer/trackable_alpha';
 import {TrackableValue, WatchableValueInterface} from 'neuroglancer/trackable_value';
@@ -78,7 +79,7 @@ export class SegmentSelectionState extends RefCounted {
     return this.hasSelectedSegment && Uint64.equal(value, this.selectedSegment);
   }
 
-  bindTo(layerSelectedValues: LayerSelectedValues, userLayer: UserLayer) {
+  bindTo(layerSelectedValues: LayerSelectedValues, userLayer: SegmentationUserLayer) {
     let temp = new Uint64();
     this.registerDisposer(layerSelectedValues.changed.add(() => {
       const state = layerSelectedValues.get(userLayer);
@@ -91,6 +92,10 @@ export class SegmentSelectionState extends RefCounted {
           value = temp;
         } else if (value instanceof Uint64MapEntry) {
           value = value.value || value.key;
+        }
+        if (value != null && value.low === 0 && value.high === 0 &&
+            userLayer.displayState.hideSegmentZero.value) {
+          value = undefined;
         }
       }
       this.set(value);
