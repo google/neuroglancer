@@ -130,15 +130,17 @@ def parse_unit(scale, unit):
 
 
 @export
-class DimensionScale(object):
-    __slots__ = ('scale', 'unit')
-    def __init__(self, scale=1, unit=''):
-        self.scale = scale
-        self.unit = unit
+class DimensionScale(collections.namedtuple('DimensionScale', ['scale', 'unit'])):
+    __slots__ = ()
+
+    def __new__(cls, scale=1, unit=''):
+        return super(DimensionScale, cls).__new__(cls, scale, unit)
+
 
 @export
 class CoordinateSpace(object):
     __slots__ = ('names', 'scales', 'units')
+
     def __init__(self, json=None, names=None, scales=None, units=None):
         if json is None:
             if names is not None:
@@ -160,7 +162,7 @@ class CoordinateSpace(object):
             if not isinstance(json, dict): raise TypeError
             self.names = tuple(json.keys())
             self.scales = np.array([json[k][0] for k in self.names], dtype=np.float64)
-            self.units = np.array(json[k][1] for k in self.names)
+            self.units = tuple(json[k][1] for k in self.names)
         self.scales.setflags(write=False)
 
     @property
