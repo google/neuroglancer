@@ -65,11 +65,7 @@ function dataSubsourceSpecificationToJson(spec: DataSubsourceSpecification) {
 }
 
 export function layerDataSourceSpecificationToJson(spec: DataSourceSpecification) {
-  const {subsources} = spec;
   const transform = coordinateTransformSpecificationToJson(spec.transform);
-  if (transform === undefined && subsources === undefined) {
-    return spec.url;
-  }
   const subsourcesJson: any = {};
   let emptySubsources = true;
   for (const [id, subsource] of spec.subsources) {
@@ -78,6 +74,9 @@ export function layerDataSourceSpecificationToJson(spec: DataSourceSpecification
       subsourcesJson[id] = j;
       emptySubsources = false;
     }
+  }
+  if (transform === undefined && emptySubsources && spec.enableDefaultSubsources === true) {
+    return spec.url;
   }
   return {
     url: spec.url,

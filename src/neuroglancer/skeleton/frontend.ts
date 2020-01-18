@@ -328,7 +328,9 @@ export class SkeletonRenderingOptions implements Trackable {
 
   toJSON(): any {
     const obj = this.compound.toJSON();
-    for (const _ in obj) return obj;
+    for (const v of Object.values(obj)) {
+      if (v !== undefined) return obj;
+    }
     return undefined;
   }
 }
