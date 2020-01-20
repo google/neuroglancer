@@ -19,7 +19,6 @@ static_content_filenames = set([
     'main.bundle.js',
     'main.css',
     'chunk_worker.bundle.js',
-    'tfjs-library.bundle.js',
     'async_computation.bundle.js',
     'index.html',
     'draco.bundle.js',
