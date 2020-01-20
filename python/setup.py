@@ -66,8 +66,8 @@ class bundle_client(build):
 
         try:
             t = target[self.client_bundle_type]
-            subprocess.call(['npm', 'i'])
-            res = subprocess.call(['npm', 'run', t])
+            subprocess.call('npm i', shell=True)
+            res = subprocess.call('npm run %s' % t, shell=True)
         except:
             raise RuntimeError(
                 'Could not run \'npm run %s\'. Make sure node.js >= v5.9.0 is installed and in your path.'
