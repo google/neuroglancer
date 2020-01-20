@@ -19,18 +19,19 @@ import {Chunk, ChunkManager, ChunkSource} from 'neuroglancer/chunk_manager/front
 import {VisibleLayerInfo} from 'neuroglancer/layer';
 import {EncodedMeshData, FRAGMENT_SOURCE_RPC_ID, MESH_LAYER_RPC_ID, MULTISCALE_FRAGMENT_SOURCE_RPC_ID, MULTISCALE_MESH_LAYER_RPC_ID, MultiscaleFragmentFormat, VertexPositionFormat} from 'neuroglancer/mesh/base';
 import {getMultiscaleChunksToDraw, getMultiscaleFragmentKey, MultiscaleMeshManifest} from 'neuroglancer/mesh/multiscale';
+import {PerspectivePanel} from 'neuroglancer/perspective_view/panel';
 import {PerspectiveViewReadyRenderContext, PerspectiveViewRenderContext, PerspectiveViewRenderLayer} from 'neuroglancer/perspective_view/render_layer';
 import {ThreeDimensionalRenderLayerAttachmentState, update3dRenderLayerAttachment} from 'neuroglancer/renderlayer';
 import {forEachVisibleSegment, getObjectKey} from 'neuroglancer/segmentation_display_state/base';
 import {getObjectColor, registerRedrawWhenSegmentationDisplayState3DChanged, SegmentationDisplayState3D, SegmentationLayerSharedObject} from 'neuroglancer/segmentation_display_state/frontend';
-import {Borrowed} from 'neuroglancer/util/disposable';
+import {makeCachedDerivedWatchableValue, WatchableValueInterface} from 'neuroglancer/trackable_value';
+import {Borrowed, RefCounted} from 'neuroglancer/util/disposable';
 import {getFrustrumPlanes, mat3, mat3FromMat4, mat4, scaleMat3Output, vec3, vec4} from 'neuroglancer/util/geom';
-import {getObjectId} from 'neuroglancer/util/object_id';
 import {Buffer} from 'neuroglancer/webgl/buffer';
 import {GL} from 'neuroglancer/webgl/context';
-import {ShaderBuilder, ShaderModule, ShaderProgram} from 'neuroglancer/webgl/shader';
+import {parameterizedEmitterDependentShaderGetter} from 'neuroglancer/webgl/dynamic_shader';
+import {ShaderBuilder, ShaderProgram} from 'neuroglancer/webgl/shader';
 import {registerSharedObjectOwner, RPC} from 'neuroglancer/worker_rpc';
-import { PerspectivePanel } from '../perspective_view/panel';
 
 const tempMat4 = mat4.create();
 const tempMat3 = mat3.create();
@@ -41,7 +42,7 @@ function copyMeshDataToGpu(gl: GL, chunk: FragmentChunk|MultiscaleFragmentChunk)
   chunk.vertexBuffer =
       Buffer.fromData(gl, chunk.meshData.vertexPositions, gl.ARRAY_BUFFER, gl.STATIC_DRAW);
   chunk.indexBuffer =
-    Buffer.fromData(gl, chunk.meshData.indices, gl.ELEMENT_ARRAY_BUFFER, gl.STATIC_DRAW);
+      Buffer.fromData(gl, chunk.meshData.indices, gl.ELEMENT_ARRAY_BUFFER, gl.STATIC_DRAW);
   chunk.normalBuffer =
       Buffer.fromData(gl, chunk.meshData.vertexNormals, gl.ARRAY_BUFFER, gl.STATIC_DRAW);
 }
@@ -83,7 +84,7 @@ export function decodeNormalOctahedronSnorm8(normals: Uint8Array) {
   let n = normals.length;
   n -= 1;
   let out = new Float32Array(Math.floor(normals.length / 2) * 3);
-  let outIndex  =0;
+  let outIndex = 0;
   for (let i = 0; i < n; i += 2) {
     const e0 = decodeSnorm8(normals[i]);
     const e1 = decodeSnorm8(normals[i + 1]);
@@ -94,7 +95,7 @@ export function decodeNormalOctahedronSnorm8(normals: Uint8Array) {
       v0 = (1 - Math.abs(v1)) * (v0 > 0 ? 1 : -1);
       v1 = (1 - Math.abs(v0)) * (v1 > 0 ? 1 : -1);
     }
-    const len = Math.sqrt(v0**2 + v1**2 + v2**2);
+    const len = Math.sqrt(v0 ** 2 + v1 ** 2 + v2 ** 2);
     out[outIndex] = v0 / len;
     out[outIndex + 1] = v1 / len;
     out[outIndex + 2] = v2 / len;
@@ -159,49 +160,18 @@ export class MeshShaderManager {
       public fragmentRelativeVertices: boolean, public vertexPositionFormat: VertexPositionFormat) {
   }
 
-  defineShader(builder: ShaderBuilder) {
-    this.vertexPositionHandler.defineShader(builder);
-    builder.addAttribute('highp vec2', 'aVertexNormal');
-    builder.addVarying('highp vec4', 'vColor');
-    builder.addUniform('highp vec4', 'uLightDirection');
-    builder.addUniform('highp vec4', 'uColor');
-    builder.addUniform('highp mat3', 'uNormalMatrix');
-    builder.addUniform('highp mat4', 'uModelViewProjection');
-    builder.addUniform('highp uint', 'uPickID');
-    if (this.fragmentRelativeVertices) {
-      builder.addUniform('highp vec3', 'uFragmentOrigin');
-      builder.addUniform('highp vec3', 'uFragmentShape');
-    }
-    builder.addVertexCode(glsl_decodeNormalOctahedronSnorm8);
-    let vertexMain = ``;
-    if (this.fragmentRelativeVertices) {
-      vertexMain += `
-highp vec3 vertexPosition = uFragmentOrigin + uFragmentShape * getVertexPosition();
-highp vec3 normalMultiplier = 1.0 / uFragmentShape;
-`;
-    } else {
-      vertexMain += `
-highp vec3 vertexPosition = getVertexPosition();
-highp vec3 normalMultiplier = vec3(1.0, 1.0, 1.0);
-`;
-    }
-    vertexMain += `
-gl_Position = uModelViewProjection * vec4(vertexPosition, 1.0);
-vec3 origNormal = decodeNormalOctahedronSnorm8(aVertexNormal);
-vec3 normal = normalize(uNormalMatrix * (normalMultiplier * origNormal));
-float lightingFactor = abs(dot(normal, uLightDirection.xyz)) + uLightDirection.w;
-vColor = vec4(lightingFactor * uColor.rgb, uColor.a);
-`;
-    builder.setVertexMain(vertexMain);
-    builder.setFragmentMain(`emit(vColor, uPickID);`);
-  }
-
-  beginLayer(gl: GL, shader: ShaderProgram, renderContext: PerspectiveViewRenderContext) {
+  beginLayer(
+      gl: GL, shader: ShaderProgram, renderContext: PerspectiveViewRenderContext,
+      displayState: MeshDisplayState) {
     let {lightDirection, ambientLighting, directionalLighting} = renderContext;
     let lightVec = <vec3>this.tempLightVec;
     vec3.scale(lightVec, lightDirection, directionalLighting);
     lightVec[3] = ambientLighting;
     gl.uniform4fv(shader.uniform('uLightDirection'), lightVec);
+    const silhouetteRendering = displayState.silhouetteRendering.value;
+    if (silhouetteRendering > 0) {
+      gl.uniform1f(shader.uniform('uSilhouettePower'), silhouetteRendering);
+    }
   }
 
   setColor(gl: GL, shader: ShaderProgram, color: vec4) {
@@ -213,7 +183,7 @@ vColor = vec4(lightingFactor * uColor.rgb, uColor.a);
   }
 
   beginModel(
-    gl: GL, shader: ShaderProgram, renderContext: PerspectiveViewRenderContext, modelMat: mat4) {
+      gl: GL, shader: ShaderProgram, renderContext: PerspectiveViewRenderContext, modelMat: mat4) {
     const {projectionParameters} = renderContext;
     gl.uniformMatrix4fv(
         shader.uniform('uModelViewProjection'), false,
@@ -224,18 +194,6 @@ vColor = vec4(lightingFactor * uColor.rgb, uColor.a);
     mat3.invert(tempMat3, tempMat3);
     mat3.transpose(tempMat3, tempMat3);
     gl.uniformMatrix3fv(shader.uniform('uNormalMatrix'), false, tempMat3);
-  }
-
-  getShader(gl: GL, emitter: ShaderModule) {
-    return gl.memoize.get(
-        `mesh/MeshShaderManager:${getObjectId(emitter)}/` +
-            `${this.fragmentRelativeVertices}/${this.vertexPositionFormat}`,
-        () => {
-          let builder = new ShaderBuilder(gl);
-          builder.require(emitter);
-          this.defineShader(builder);
-          return builder.build();
-        });
   }
 
   drawFragmentHelper(
@@ -278,20 +236,81 @@ vColor = vec4(lightingFactor * uColor.rgb, uColor.a);
     this.vertexPositionHandler.endLayer(gl, shader);
     gl.disableVertexAttribArray(shader.attribute('aVertexNormal'));
   }
+
+  makeGetter(layer: RefCounted&{gl: GL, displayState: MeshDisplayState}) {
+    const silhouetteRenderingEnabled = layer.registerDisposer(
+        makeCachedDerivedWatchableValue(x => x > 0, [layer.displayState.silhouetteRendering]));
+    return parameterizedEmitterDependentShaderGetter(layer, layer.gl, {
+      memoizeKey:
+          `mesh/MeshShaderManager/${this.fragmentRelativeVertices}/${this.vertexPositionFormat}`,
+      parameters: silhouetteRenderingEnabled,
+      defineShader: (builder, silhouetteRenderingEnabled) => {
+        this.vertexPositionHandler.defineShader(builder);
+        builder.addAttribute('highp vec2', 'aVertexNormal');
+        builder.addVarying('highp vec4', 'vColor');
+        builder.addUniform('highp vec4', 'uLightDirection');
+        builder.addUniform('highp vec4', 'uColor');
+        builder.addUniform('highp mat3', 'uNormalMatrix');
+        builder.addUniform('highp mat4', 'uModelViewProjection');
+        builder.addUniform('highp uint', 'uPickID');
+        if (silhouetteRenderingEnabled) {
+          builder.addUniform('highp float', 'uSilhouettePower');
+        }
+        if (this.fragmentRelativeVertices) {
+          builder.addUniform('highp vec3', 'uFragmentOrigin');
+          builder.addUniform('highp vec3', 'uFragmentShape');
+        }
+        builder.addVertexCode(glsl_decodeNormalOctahedronSnorm8);
+        let vertexMain = ``;
+        if (this.fragmentRelativeVertices) {
+          vertexMain += `
+highp vec3 vertexPosition = uFragmentOrigin + uFragmentShape * getVertexPosition();
+highp vec3 normalMultiplier = 1.0 / uFragmentShape;
+`;
+        } else {
+          vertexMain += `
+highp vec3 vertexPosition = getVertexPosition();
+highp vec3 normalMultiplier = vec3(1.0, 1.0, 1.0);
+`;
+        }
+        vertexMain += `
+gl_Position = uModelViewProjection * vec4(vertexPosition, 1.0);
+vec3 origNormal = decodeNormalOctahedronSnorm8(aVertexNormal);
+vec3 normal = normalize(uNormalMatrix * (normalMultiplier * origNormal));
+float absCosAngle = abs(dot(normal, uLightDirection.xyz));
+float lightingFactor = absCosAngle + uLightDirection.w;
+vColor = vec4(lightingFactor * uColor.rgb, uColor.a);
+`;
+        if (silhouetteRenderingEnabled) {
+          vertexMain += `
+vColor *= pow(1.0 - absCosAngle, uSilhouettePower);
+`;
+        }
+        builder.setVertexMain(vertexMain);
+        builder.setFragmentMain(`emit(vColor, uPickID);`);
+      },
+    });
+  }
 }
 
-export class MeshLayer extends PerspectiveViewRenderLayer<ThreeDimensionalRenderLayerAttachmentState> {
+export interface MeshDisplayState extends SegmentationDisplayState3D {
+  silhouetteRendering: WatchableValueInterface<number>;
+}
+
+export class MeshLayer extends
+    PerspectiveViewRenderLayer<ThreeDimensionalRenderLayerAttachmentState> {
   protected meshShaderManager =
       new MeshShaderManager(/*fragmentRelativeVertices=*/ false, VertexPositionFormat.float32);
-  private shaders = new Map<ShaderModule, ShaderProgram>();
+  private getShader = this.meshShaderManager.makeGetter(this);
   backend: SegmentationLayerSharedObject;
 
   constructor(
       public chunkManager: ChunkManager, public source: MeshSource,
-      public displayState: SegmentationDisplayState3D) {
+      public displayState: MeshDisplayState) {
     super();
 
     registerRedrawWhenSegmentationDisplayState3DChanged(displayState, this);
+    this.registerDisposer(displayState.silhouetteRendering.changed.add(this.redrawNeeded.dispatch));
 
     let sharedObject = this.backend =
         this.registerDisposer(new SegmentationLayerSharedObject(chunkManager, displayState));
@@ -303,18 +322,9 @@ export class MeshLayer extends PerspectiveViewRenderLayer<ThreeDimensionalRender
     this.registerDisposer(displayState.renderScaleHistogram.visibility.add(this.visibility));
   }
 
-  protected getShader(emitter: ShaderModule) {
-    let {shaders} = this;
-    let shader = shaders.get(emitter);
-    if (shader === undefined) {
-      shader = this.registerDisposer(this.meshShaderManager.getShader(this.gl, emitter));
-      shaders.set(emitter, shader);
-    }
-    return shader;
-  }
-
   get isTransparent() {
-    return this.displayState.objectAlpha.value < 1.0;
+    const {displayState} = this;
+    return displayState.objectAlpha.value < 1.0 || displayState.silhouetteRendering.value > 0;
   }
 
   get transparentPickEnabled() {
@@ -344,9 +354,10 @@ export class MeshLayer extends PerspectiveViewRenderLayer<ThreeDimensionalRender
     if (modelMatrix === undefined) {
       return;
     }
-    const shader = this.getShader(renderContext.emitter);
+    const {shader} = this.getShader(renderContext.emitter);
+    if (shader === null) return;
     shader.bind();
-    meshShaderManager.beginLayer(gl, shader, renderContext);
+    meshShaderManager.beginLayer(gl, shader, renderContext, this.displayState);
     meshShaderManager.beginModel(gl, shader, renderContext, modelMatrix);
 
     let {pickIDs} = renderContext;
@@ -491,15 +502,16 @@ export class MultiscaleMeshLayer extends
   protected meshShaderManager = new MeshShaderManager(
       /*fragmentRelativeVertices=*/ this.source.format.fragmentRelativeVertices,
       this.source.format.vertexPositionFormat);
-  private shaders = new Map<ShaderModule, ShaderProgram>();
+  private getShader = this.meshShaderManager.makeGetter(this);
   backend: SegmentationLayerSharedObject;
 
   constructor(
       public chunkManager: ChunkManager, public source: MultiscaleMeshSource,
-      public displayState: SegmentationDisplayState3D) {
+      public displayState: MeshDisplayState) {
     super();
 
     registerRedrawWhenSegmentationDisplayState3DChanged(displayState, this);
+    this.registerDisposer(displayState.silhouetteRendering.changed.add(this.redrawNeeded.dispatch));
 
     let sharedObject = this.backend =
         this.registerDisposer(new SegmentationLayerSharedObject(chunkManager, displayState));
@@ -511,18 +523,9 @@ export class MultiscaleMeshLayer extends
     this.registerDisposer(displayState.renderScaleHistogram.visibility.add(this.visibility));
   }
 
-  protected getShader(emitter: ShaderModule) {
-    let {shaders} = this;
-    let shader = shaders.get(emitter);
-    if (shader === undefined) {
-      shader = this.registerDisposer(this.meshShaderManager.getShader(this.gl, emitter));
-      shaders.set(emitter, shader);
-    }
-    return shader;
-  }
-
   get isTransparent() {
-    return this.displayState.objectAlpha.value < 1.0;
+    const {displayState} = this;
+    return displayState.objectAlpha.value < 1.0 || displayState.silhouetteRendering.value > 0;
   }
 
   get transparentPickEnabled() {
@@ -550,9 +553,10 @@ export class MultiscaleMeshLayer extends
         displayState.transform.value, renderContext.projectionParameters.displayDimensionRenderInfo,
         attachment);
     if (modelMatrix === undefined) return;
-    const shader = this.getShader(renderContext.emitter);
+    const {shader} = this.getShader(renderContext.emitter);
+    if (shader === null) return;
     shader.bind();
-    meshShaderManager.beginLayer(gl, shader, renderContext);
+    meshShaderManager.beginLayer(gl, shader, renderContext, this.displayState);
 
     const {renderScaleHistogram} = this.displayState;
     if (renderContext.emitColor) {
@@ -628,7 +632,7 @@ export class MultiscaleMeshLayer extends
                   chunkGridSpatialOrigin[1] + (y * chunkShape[1]) * scale +
                       vertexOffsets[lod * 3 + 1],
                   chunkGridSpatialOrigin[2] + (z * chunkShape[2]) * scale +
-                  vertexOffsets[lod * 3 + 2]);
+                      vertexOffsets[lod * 3 + 2]);
               gl.uniform3f(
                   shader.uniform('uFragmentShape'), chunkShape[0] * scale, chunkShape[1] * scale,
                   chunkShape[2] * scale);
@@ -743,10 +747,7 @@ export class MultiscaleMeshSource extends ChunkSource {
   }
 
   static encodeOptions(options: MultiscaleMeshSourceOptions) {
-    return {
-      format: options.format,
-      ...super.encodeOptions(options)
-    };
+    return {format: options.format, ...super.encodeOptions(options)};
   }
 
   initializeCounterpart(rpc: RPC, options: any) {

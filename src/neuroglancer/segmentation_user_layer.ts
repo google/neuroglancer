@@ -45,7 +45,7 @@ import {arraysEqual, ArraySpliceOp, binarySearchLowerBound, getMergeSplices} fro
 import {setClipboard} from 'neuroglancer/util/clipboard';
 import {packColor, parseRGBColorSpecification} from 'neuroglancer/util/color';
 import {Borrowed, RefCounted} from 'neuroglancer/util/disposable';
-import {parseArray, verifyObjectAsMap, verifyObjectProperty, verifyOptionalObjectProperty, verifyString} from 'neuroglancer/util/json';
+import {parseArray, verifyFiniteNonNegativeFloat, verifyObjectAsMap, verifyObjectProperty, verifyOptionalObjectProperty, verifyString} from 'neuroglancer/util/json';
 import {ActionEvent, EventActionMap, KeyboardEventBinder, registerActionListener} from 'neuroglancer/util/keyboard_bindings';
 import {MouseEventBinder} from 'neuroglancer/util/mouse_bindings';
 import {observeSignal, Signal} from 'neuroglancer/util/signal';
@@ -82,6 +82,9 @@ const CROSS_SECTION_RENDER_SCALE_JSON_KEY = 'crossSectionRenderScale';
 const SKELETON_RENDERING_JSON_KEY = 'skeletonRendering';
 const SKELETON_SHADER_JSON_KEY = 'skeletonShader';
 const SEGMENT_QUERY_JSON_KEY = 'segmentQuery';
+const MESH_SILHOUETTE_RENDERING_JSON_KEY = 'meshSilhouetteRendering';
+
+const maxSilhouettePower = 10;
 
 const tempUint64 = new Uint64();
 
@@ -129,6 +132,7 @@ export class SegmentationUserLayer extends Base {
     selectedAlpha: trackableAlphaValue(0.5),
     saturation: trackableAlphaValue(1.0),
     notSelectedAlpha: trackableAlphaValue(0),
+    silhouetteRendering: new TrackableValue<number>(0, verifyFiniteNonNegativeFloat, 0),
     objectAlpha: trackableAlphaValue(1.0),
     hideSegmentZero: new TrackableBoolean(true, true),
     ignoreNullVisibleSet: new TrackableBoolean(true, true),
@@ -162,6 +166,7 @@ export class SegmentationUserLayer extends Base {
     this.displayState.segmentColorHash.changed.add(this.specificationChanged.dispatch);
     this.displayState.segmentStatedColors.changed.add(this.specificationChanged.dispatch);
     this.displayState.renderScaleTarget.changed.add(this.specificationChanged.dispatch);
+    this.displayState.silhouetteRendering.changed.add(this.specificationChanged.dispatch);
     this.sliceViewRenderScaleTarget.changed.add(this.specificationChanged.dispatch);
     this.segmentQuery.changed.add(this.specificationChanged.dispatch);
     this.tabs.add(
@@ -287,6 +292,8 @@ export class SegmentationUserLayer extends Base {
     this.displayState.notSelectedAlpha.restoreState(specification[NOT_SELECTED_ALPHA_JSON_KEY]);
     this.displayState.objectAlpha.restoreState(specification[OBJECT_ALPHA_JSON_KEY]);
     this.displayState.hideSegmentZero.restoreState(specification[HIDE_SEGMENT_ZERO_JSON_KEY]);
+    this.displayState.silhouetteRendering.restoreState(
+        specification[MESH_SILHOUETTE_RENDERING_JSON_KEY]);
     this.displayState.ignoreNullVisibleSet.restoreState(
         specification[IGNORE_NULL_VISIBLE_SET_JSON_KEY]);
 
@@ -345,6 +352,7 @@ export class SegmentationUserLayer extends Base {
     x[HIDE_SEGMENT_ZERO_JSON_KEY] = this.displayState.hideSegmentZero.toJSON();
     x[IGNORE_NULL_VISIBLE_SET_JSON_KEY] = this.displayState.ignoreNullVisibleSet.toJSON();
     x[COLOR_SEED_JSON_KEY] = this.displayState.segmentColorHash.toJSON();
+    x[MESH_SILHOUETTE_RENDERING_JSON_KEY] = this.displayState.silhouetteRendering.toJSON();
     let {segmentStatedColors} = this.displayState;
     if (segmentStatedColors.size > 0) {
       let json = segmentStatedColors.toJSON();
@@ -464,7 +472,8 @@ export class SegmentationUserLayer extends Base {
     return json;
   }
 
-  private displaySegmentationSelection(state: this['selectionState'], parent: HTMLElement, context: RefCounted): boolean {
+  private displaySegmentationSelection(
+      state: this['selectionState'], parent: HTMLElement, context: RefCounted): boolean {
     const {value} = state;
     let id: Uint64;
     if (typeof value === 'number' || typeof value === 'string') {
@@ -673,6 +682,13 @@ class DisplayOptionsTab extends Tab {
               refCounted.registerDisposer(new RangeWidget(this.layer.displayState.objectAlpha));
           objectAlphaWidget.promptElement.textContent = 'Opacity (3d)';
           parent.appendChild(objectAlphaWidget.element);
+          const silhouetteWidget = refCounted.registerDisposer(new RangeWidget(
+              this.layer.displayState.silhouetteRendering,
+              {min: 0, max: maxSilhouettePower, step: 0.1}));
+          silhouetteWidget.promptElement.textContent = 'Silhouette (3d)';
+          silhouetteWidget.element.title =
+              'Set to a non-zero value to increase transparency of object faces perpendicular to view direction';
+          parent.appendChild(silhouetteWidget.element);
         }, this.visibility));
     element.appendChild(controls3d.element);
 
