@@ -239,6 +239,19 @@ export class AutocompleteTextInput extends RefCounted {
       this.setValueAndSelection(this.value, this.getSelectionRange());
       this.debouncedUpdateHintState();
     });
+    inputElement.addEventListener('copy', event => {
+      // Ensure selected text is copied as plain text.
+      const {clipboardData} = event;
+      if (clipboardData !== null) {
+        const selection = window.getSelection();
+        if (selection !== null && !selection.isCollapsed &&
+            selection.containsNode(inputElement, /*allowPartialContainment=*/ true)) {
+          clipboardData.setData('text/plain', selection.toString());
+        }
+      }
+      event.preventDefault();
+      event.stopPropagation();
+    });
     this.registerEventListener(document, 'selectionchange', () => {
       const newSelection = this.getSelectionRange();
       const {completionDisabled} = this;
