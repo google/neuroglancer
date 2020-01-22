@@ -15,13 +15,13 @@
  */
 
 import {ChunkManager} from 'neuroglancer/chunk_manager/frontend';
+import {ChunkChannelAccessParameters} from 'neuroglancer/render_coordinate_transform';
 import {DataType, SliceViewChunkSpecification} from 'neuroglancer/sliceview/base';
 import {MultiscaleSliceViewChunkSource, SliceViewChunk, SliceViewChunkSource} from 'neuroglancer/sliceview/frontend';
 import {VolumeChunkSource as VolumeChunkSourceInterface, VolumeChunkSpecification, VolumeSourceOptions, VolumeType} from 'neuroglancer/sliceview/volume/base';
 import {Disposable} from 'neuroglancer/util/disposable';
 import {GL} from 'neuroglancer/webgl/context';
 import {ShaderBuilder, ShaderProgram} from 'neuroglancer/webgl/shader';
-import { ChunkChannelAccessParameters } from 'src/neuroglancer/render_coordinate_transform';
 
 export type VolumeChunkKey = string;
 
