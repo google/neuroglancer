@@ -49,6 +49,8 @@ const POINTS_JSON_KEY = 'points';
 const ANNOTATIONS_JSON_KEY = 'annotations';
 const CROSS_SECTION_RENDER_SCALE_JSON_KEY = 'crossSectionAnnotationSpacing';
 const PROJECTION_RENDER_SCALE_JSON_KEY = 'projectionAnnotationSpacing';
+const SHADER_JSON_KEY = 'shader';
+const SHADER_CONTROLS_JSON_KEY = 'shaderControls';
 
 function addPointAnnotations(annotations: LocalAnnotationSource, obj: any) {
   if (obj === undefined) {
@@ -346,6 +348,13 @@ export class AnnotationUserLayer extends Base {
     this.tabs.default = 'annotations';
   }
 
+  restoreState(specification: any) {
+    super.restoreState(specification);
+    this.annotationDisplayState.shader.restoreState(specification[SHADER_JSON_KEY]);
+    this.annotationDisplayState.shaderControls.restoreState(
+        specification[SHADER_CONTROLS_JSON_KEY]);
+  }
+
   getLegacyDataSourceSpecifications(
       sourceSpec: any, layerSpec: any,
       legacyTransform: CoordinateTransformSpecification|undefined): DataSourceSpecification[] {
@@ -509,6 +518,8 @@ export class AnnotationUserLayer extends Base {
     }
     x[IGNORE_NULL_SEGMENT_FILTER_JSON_KEY] =
         this.annotationDisplayState.ignoreNullSegmentFilter.toJSON();
+    x[SHADER_JSON_KEY] = this.annotationDisplayState.shader.toJSON();
+    x[SHADER_CONTROLS_JSON_KEY] = this.annotationDisplayState.shaderControls.toJSON();
     Object.assign(x, this.linkedSegmentationLayers.toJSON());
     return x;
   }

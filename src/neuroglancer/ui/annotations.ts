@@ -68,9 +68,6 @@ interface AnnotationIdAndPart {
   partIndex?: number
 }
 
-const SHADER_JSON_KEY = 'shader';
-const SHADER_CONTROLS_JSON_KEY = 'shaderControls';
-
 export class MergedAnnotationStates extends RefCounted implements
     WatchableValueInterface<readonly AnnotationLayerState[]> {
   changed = new NullarySignal();
@@ -1514,9 +1511,6 @@ export function UserLayerWithAnnotationsMixin<TBase extends {new (...args: any[]
       super.restoreState(specification);
       this.selectedAnnotation.restoreState(specification[SELECTED_ANNOTATION_JSON_KEY]);
       this.annotationDisplayState.color.restoreState(specification[ANNOTATION_COLOR_JSON_KEY]);
-      this.annotationDisplayState.shader.restoreState(specification[SHADER_JSON_KEY]);
-      this.annotationDisplayState.shaderControls.restoreState(
-          specification[SHADER_CONTROLS_JSON_KEY]);
     }
 
     captureSelectionState(state: this['selectionState'], mouseState: MouseSelectionState) {
@@ -1839,8 +1833,6 @@ export function UserLayerWithAnnotationsMixin<TBase extends {new (...args: any[]
       const x = super.toJSON();
       x[SELECTED_ANNOTATION_JSON_KEY] = this.selectedAnnotation.toJSON();
       x[ANNOTATION_COLOR_JSON_KEY] = this.annotationDisplayState.color.toJSON();
-      x[SHADER_JSON_KEY] = this.annotationDisplayState.shader.toJSON();
-      x[SHADER_CONTROLS_JSON_KEY] = this.annotationDisplayState.shaderControls.toJSON();
       return x;
     }
   }
