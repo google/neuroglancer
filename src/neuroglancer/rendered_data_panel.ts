@@ -495,7 +495,7 @@ export abstract class RenderedDataPanel extends RenderedPanel {
           navigationState.pose.translateVoxelsRelative(offset);
         });
 
-    for (const amount of [1, 10]) {
+    for (const amount of [1, 10, 100, 1000]) {
       registerActionListener(element, `z+${amount}-via-wheel`, (event: ActionEvent<WheelEvent>) => {
         const e = event.detail;
         let {navigationState} = this;
@@ -507,6 +507,19 @@ export abstract class RenderedDataPanel extends RenderedPanel {
         navigationState.pose.translateVoxelsRelative(offset);
       });
     }
+
+    for (const amount of [-10, 10, -100, 100, -1000, 1000]) {
+      registerActionListener(element, `z${(amount > 0) ? "+" + amount : amount}`, (event: ActionEvent<WheelEvent>) => {
+        const e = event.detail;
+        let {navigationState} = this;
+        let offset = tempVec3;
+        let delta = e.deltaY !== 0 ? e.deltaY : e.deltaX;
+        offset[0] = 0;
+        offset[1] = 0;
+        offset[2] = (delta > 0 ? -1 : 1) * amount;
+        navigationState.pose.translateVoxelsRelative(offset);
+      });
+    }    
 
     registerActionListener(element, 'move-to-mouse-position', () => {
       let {mouseState} = this.viewer;
