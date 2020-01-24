@@ -376,7 +376,7 @@ export class N5DataSource extends DataSourceProvider {
     return options.chunkManager.memoize.getUncounted(
         {'type': 'n5:MultiscaleVolumeChunkSource', url}, async () => {
           const attributes = await getAttributes(options.chunkManager, url, false);
-          const multiscaleMetadata = await getMultiscaleMetadata(url, attributes);
+          const multiscaleMetadata = getMultiscaleMetadata(url, attributes);
           const scales = await getAllScales(options.chunkManager, multiscaleMetadata);
           const volume =
               new MultiscaleVolumeChunkSource(options.chunkManager, multiscaleMetadata, scales);
@@ -395,7 +395,7 @@ export class N5DataSource extends DataSourceProvider {
                 url: undefined,
                 subsource: {
                   staticAnnotations:
-                      makeDataBoundsBoundingBoxAnnotationSet(multiscaleMetadata.modelSpace.bounds)
+                      makeDataBoundsBoundingBoxAnnotationSet(volume.modelSpace.bounds)
                 },
               },
             ],
