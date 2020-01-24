@@ -20,15 +20,14 @@
 
 import {AnnotationType, Point} from 'neuroglancer/annotation';
 import {AnnotationRenderContext, AnnotationRenderHelper, registerAnnotationTypeRenderHandler} from 'neuroglancer/annotation/type_handler';
-import {CircleShader} from 'neuroglancer/webgl/circles';
+import {defineCircleShader, drawCircles, initializeCircleShader} from 'neuroglancer/webgl/circles';
 import {ShaderBuilder} from 'neuroglancer/webgl/shader';
 import {defineVectorArrayVertexShaderInput} from 'neuroglancer/webgl/shader_lib';
 
 class RenderHelper extends AnnotationRenderHelper {
-  private circleShader = this.registerDisposer(new CircleShader(this.gl));
   private shaderGetter = this.getDependentShader('annotation/point', (builder: ShaderBuilder) => {
     const {rank} = this;
-    this.circleShader.defineShader(builder, /*crossSectionFade=*/ this.targetIsSliceView);
+    defineCircleShader(builder, /*crossSectionFade=*/ this.targetIsSliceView);
     // Position of point in model coordinates.
     defineVectorArrayVertexShaderInput(
         builder, 'float', WebGL2RenderingContext.FLOAT, /*normalized=*/ false, 'VertexPosition',
@@ -79,9 +78,9 @@ emitAnnotation(color);
       binder.enable(1);
       this.gl.bindBuffer(WebGL2RenderingContext.ARRAY_BUFFER, context.buffer.buffer);
       binder.bind(this.serializedBytesPerAnnotation, context.bufferOffset);
-      this.circleShader.draw(
-          shader, context.renderContext.projectionParameters, {featherWidthInPixels: 1},
-          context.count);
+      initializeCircleShader(
+          shader, context.renderContext.projectionParameters, {featherWidthInPixels: 1});
+      drawCircles(shader.gl, 1, context.count);
       binder.disable();
     });
   }

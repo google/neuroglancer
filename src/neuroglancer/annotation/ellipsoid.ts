@@ -24,11 +24,10 @@ import {PerspectiveViewRenderContext} from 'neuroglancer/perspective_view/render
 import {SliceViewPanelRenderContext} from 'neuroglancer/sliceview/renderlayer';
 import {mat3, mat4, vec3} from 'neuroglancer/util/geom';
 import {computeCenterOrientEllipseDebug, computeCrossSectionEllipseDebug, glsl_computeCenterOrientEllipse, glsl_computeCrossSectionEllipse} from 'neuroglancer/webgl/ellipse';
-import {QuadRenderHelper} from 'neuroglancer/webgl/quad';
+import {drawQuads, glsl_getQuadVertexPosition} from 'neuroglancer/webgl/quad';
 import {ShaderBuilder, ShaderProgram} from 'neuroglancer/webgl/shader';
 import {defineVectorArrayVertexShaderInput} from 'neuroglancer/webgl/shader_lib';
 import {SphereRenderHelper} from 'neuroglancer/webgl/spheres';
-import {getSquareCornersBuffer} from 'neuroglancer/webgl/square_corners_buffer';
 
 const tempMat4 = mat4.create();
 
@@ -168,10 +167,6 @@ emitAnnotation(vec4(vColor.rgb * vLightingFactor, vColor.a * vClipCoefficient));
  * 5. The fragment shader discards fragments outside the bounds of the ellipse.
  */
 class SliceViewRenderHelper extends RenderHelper {
-  private quadRenderHelper = this.registerDisposer(new QuadRenderHelper(this.gl, 1));
-  private squareCornersBuffer =
-      getSquareCornersBuffer(this.gl, -1, -1, 1, 1, /*minorTiles=*/ 1, /*majorTiles=*/ 1);
-
   private shaderGetter =
       this.getDependentShader('annotation/ellipsoid/crossSection', (builder: ShaderBuilder) => {
         this.defineShader(builder);
@@ -183,6 +178,7 @@ class SliceViewRenderHelper extends RenderHelper {
         builder.addVarying('highp float', 'vClipCoefficient');
         builder.addVertexCode(glsl_computeCrossSectionEllipse);
         builder.addVertexCode(glsl_computeCenterOrientEllipse);
+        builder.addVertexCode(glsl_getQuadVertexPosition);
         builder.setVertexMain(`
 SubspaceParams params = getSubspaceParams();
 if (params.cull) {
@@ -202,15 +198,16 @@ EllipseQuadraticForm quadraticForm = computeCrossSectionEllipse(Aviewport, cView
 vec2 u1, u2;
 float a, b;
 CenterOrientEllipse centerOrient = computeCenterOrientEllipse(quadraticForm);
+vec2 cornerOffset = getQuadVertexPosition(vec2(-1.0, -1.0), vec2(1.0, 1.0));
 vec2 viewportCorner = centerOrient.k +
-  centerOrient.u1 * aCornerOffset.x * centerOrient.a +
-  centerOrient.u2 * aCornerOffset.y * centerOrient.b;
+  centerOrient.u1 * cornerOffset.x * centerOrient.a +
+  centerOrient.u2 * cornerOffset.y * centerOrient.b;
 if (centerOrient.valid) {
   gl_Position = uViewportToDevice * vec4(viewportCorner, 0.0, 1.0);
 } else {
   gl_Position = vec4(2.0, 0.0, 0.0, 1.0);
 }
-vCircleCoord = aCornerOffset;
+vCircleCoord = cornerOffset;
 ${this.invokeUserMain}
 ${this.setPartIndex(builder)};
 `);
@@ -225,8 +222,6 @@ emitAnnotation(vec4(vColor.rgb, vColor.a * vClipCoefficient));
   draw(context: AnnotationRenderContext&{renderContext: SliceViewPanelRenderContext}) {
     this.enable(this.shaderGetter, context, shader => {
       const {gl} = shader;
-      const aCornerOffset = shader.attribute('aCornerOffset');
-      this.squareCornersBuffer.bindToVertexAttrib(aCornerOffset, /*components=*/ 2);
       const projectionParameters = context.renderContext.sliceView.projectionParameters.value;
       const viewportToObject = mat4.multiply(
           tempMat4, context.renderSubspaceInvModelMatrix, projectionParameters.invViewMatrix);
@@ -239,9 +234,7 @@ emitAnnotation(vec4(vColor.rgb, vColor.a * vClipCoefficient));
       mat4.invert(objectToViewport, viewportToObject);
       gl.uniformMatrix4fv(
           shader.uniform('uObjectToViewport'), /*transpose=*/ false, objectToViewport);
-      this.quadRenderHelper.draw(gl, context.count);
-      shader.gl.disableVertexAttribArray(aCornerOffset);
-
+      drawQuads(gl, 1, context.count);
 
       if (DEBUG) {
         const center = vec3.fromValues(3406.98779296875, 3234.910400390625, 4045);

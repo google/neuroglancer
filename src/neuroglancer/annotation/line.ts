@@ -20,23 +20,15 @@
 
 import {AnnotationType, Line} from 'neuroglancer/annotation';
 import {AnnotationRenderContext, AnnotationRenderHelper, AnnotationShaderGetter, registerAnnotationTypeRenderHandler} from 'neuroglancer/annotation/type_handler';
-import {tile2dArray} from 'neuroglancer/util/array';
 import {projectPointToLineSegment} from 'neuroglancer/util/geom';
-import {getMemoizedBuffer} from 'neuroglancer/webgl/buffer';
-import {CircleShader, VERTICES_PER_CIRCLE} from 'neuroglancer/webgl/circles';
-import {LineShader} from 'neuroglancer/webgl/lines';
+import {defineCircleShader, drawCircles, initializeCircleShader, VERTICES_PER_CIRCLE} from 'neuroglancer/webgl/circles';
+import {defineLineShader, drawLines, initializeLineShader} from 'neuroglancer/webgl/lines';
 import {ShaderBuilder, ShaderProgram} from 'neuroglancer/webgl/shader';
 import {defineVectorArrayVertexShaderInput} from 'neuroglancer/webgl/shader_lib';
 
 const FULL_OBJECT_PICK_OFFSET = 0;
 const ENDPOINTS_PICK_OFFSET = FULL_OBJECT_PICK_OFFSET + 1;
 const PICK_IDS_PER_INSTANCE = ENDPOINTS_PICK_OFFSET + 2;
-
-function getEndpointIndexArray() {
-  return tile2dArray(
-      new Uint8Array([0, 1]), /*majorDimension=*/ 1, /*minorTiles=*/ 1,
-      /*majorTiles=*/ VERTICES_PER_CIRCLE);
-}
 
 function defineNoOpEndpointMarkerSetters(builder: ShaderBuilder) {
   builder.addVertexCode(`
@@ -55,9 +47,6 @@ void setLineColor(vec4 startColor, vec4 endColor) {}
 }
 
 class RenderHelper extends AnnotationRenderHelper {
-  private lineShader = this.registerDisposer(new LineShader(this.gl, 1));
-  private circleShader = this.registerDisposer(new CircleShader(this.gl, 2));
-
   defineShader(builder: ShaderBuilder) {
     // Position of endpoints in model coordinates.
     const {rank} = this;
@@ -70,7 +59,7 @@ class RenderHelper extends AnnotationRenderHelper {
       this.getDependentShader('annotation/line/edge', (builder: ShaderBuilder) => {
         const {rank} = this;
         this.defineShader(builder);
-        this.lineShader.defineShader(builder);
+        defineLineShader(builder);
         builder.addVarying(`highp float[${rank}]`, 'vModelPosition');
         builder.addVertexCode(`
 float ng_LineWidth;
@@ -106,42 +95,38 @@ emitAnnotation(vec4(vColor.rgb, vColor.a * getLineAlpha() *
 `);
       });
 
-  private endpointIndexBuffer =
-      this
-          .registerDisposer(getMemoizedBuffer(
-              this.gl, WebGL2RenderingContext.ARRAY_BUFFER, getEndpointIndexArray))
-          .value;
-
   private endpointShaderGetter =
       this.getDependentShader('annotation/line/endpoint', (builder: ShaderBuilder) => {
         const {rank} = this;
         this.defineShader(builder);
-        this.circleShader.defineShader(builder, this.targetIsSliceView);
-        builder.addAttribute('highp uint', 'aEndpointIndex');
+        defineCircleShader(builder, this.targetIsSliceView);
         builder.addVarying('highp float', 'vClipCoefficient');
         builder.addVarying('highp vec4', 'vBorderColor');
         defineNoOpLineSetters(builder);
         builder.addVertexCode(`
 float ng_markerDiameter;
 float ng_markerBorderWidth;
+int getEndpointIndex() {
+  return gl_VertexID / ${VERTICES_PER_CIRCLE};
+}
 void setEndpointMarkerSize(float startSize, float endSize) {
-  ng_markerDiameter = mix(startSize, endSize, float(aEndpointIndex));
+  ng_markerDiameter = mix(startSize, endSize, float(getEndpointIndex()));
 }
 void setEndpointMarkerBorderWidth(float startSize, float endSize) {
-  ng_markerBorderWidth = mix(startSize, endSize, float(aEndpointIndex));
+  ng_markerBorderWidth = mix(startSize, endSize, float(getEndpointIndex()));
 }
 void setEndpointMarkerColor(vec4 startColor, vec4 endColor) {
-  vColor = mix(startColor, endColor, float(aEndpointIndex));
+  vColor = mix(startColor, endColor, float(getEndpointIndex()));
 }
 void setEndpointMarkerBorderColor(vec4 startColor, vec4 endColor) {
-  vBorderColor = mix(startColor, endColor, float(aEndpointIndex));
+  vBorderColor = mix(startColor, endColor, float(getEndpointIndex()));
 }
 `);
         builder.setVertexMain(`
 float modelPosition[${rank}] = getVertexPosition0();
 float modelPositionB[${rank}] = getVertexPosition1();
 for (int i = 0; i < ${rank}; ++i) {
-  modelPosition[i] = mix(modelPosition[i], modelPositionB[i], float(aEndpointIndex));
+  modelPosition[i] = mix(modelPosition[i], modelPositionB[i], float(getEndpointIndex()));
 }
 vClipCoefficient = getSubspaceClipCoefficient(modelPosition);
 vColor = vec4(0.0, 0.0, 0.0, 0.0);
@@ -150,7 +135,7 @@ ng_markerDiameter = 5.0;
 ng_markerBorderWidth = 1.0;
 ${this.invokeUserMain}
 emitCircle(uModelViewProjection * vec4(projectModelVectorToSubspace(modelPosition), 1.0), ng_markerDiameter, ng_markerBorderWidth);
-${this.setPartIndex(builder, 'aEndpointIndex + 1u')};
+${this.setPartIndex(builder, 'uint(getEndpointIndex()) + 1u')};
 `);
         builder.setFragmentMain(`
 vec4 color = getCircleColor(vColor, vBorderColor);
@@ -174,22 +159,17 @@ emitAnnotation(color);
 
   drawEdges(context: AnnotationRenderContext) {
     this.enable(this.edgeShaderGetter, context, shader => {
-      this.lineShader.enableAndDraw(
-          shader, context.renderContext.projectionParameters, /*featherWidthInPixels=*/ 1.0,
-          context.count);
+      initializeLineShader(
+          shader, context.renderContext.projectionParameters, /*featherWidthInPixels=*/ 1.0);
+      drawLines(shader.gl, 1, context.count);
     });
   }
 
   drawEndpoints(context: AnnotationRenderContext) {
     this.enable(this.endpointShaderGetter, context, shader => {
-      const aEndpointIndex = shader.attribute('aEndpointIndex');
-      this.endpointIndexBuffer.bindToVertexAttribI(
-          aEndpointIndex, /*components=*/ 1,
-          /*attributeType=*/ WebGL2RenderingContext.UNSIGNED_BYTE);
-      this.circleShader.draw(
-          shader, context.renderContext.projectionParameters, {featherWidthInPixels: 0.5},
-          context.count);
-      shader.gl.disableVertexAttribArray(aEndpointIndex);
+      initializeCircleShader(
+          shader, context.renderContext.projectionParameters, {featherWidthInPixels: 0.5});
+      drawCircles(shader.gl, 2, context.count);
     });
   }
 

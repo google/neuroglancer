@@ -157,7 +157,7 @@ Sets the border color (defaults to transparent).  May also be set by calling the
 ```glsl
 void setBoundingBoxBorderWidth(float widthInScreenPixels);
 ```
-Sets the border width in screen pixels.  Defaults to 2 pixels.
+Sets the border width in screen pixels.  Defaults to 1 pixel.
 
 ```glsl
 void setBoundingBoxFillColor(vec4 rgba);

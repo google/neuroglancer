@@ -34,11 +34,11 @@ import {NullarySignal} from 'neuroglancer/util/signal';
 import {CompoundTrackable, Trackable} from 'neuroglancer/util/trackable';
 import {TrackableEnum} from 'neuroglancer/util/trackable_enum';
 import {Buffer} from 'neuroglancer/webgl/buffer';
-import {CircleShader} from 'neuroglancer/webgl/circles';
+import {defineCircleShader, drawCircles, initializeCircleShader} from 'neuroglancer/webgl/circles';
 import {glsl_COLORMAPS} from 'neuroglancer/webgl/colormaps';
 import {GL} from 'neuroglancer/webgl/context';
 import {makeTrackableFragmentMain, parameterizedEmitterDependentShaderGetter, shaderCodeWithLineDirective, WatchableShaderError} from 'neuroglancer/webgl/dynamic_shader';
-import {LineShader} from 'neuroglancer/webgl/lines';
+import {defineLineShader, drawLines, initializeLineShader} from 'neuroglancer/webgl/lines';
 import {ShaderBuilder, ShaderProgram, ShaderSamplerType} from 'neuroglancer/webgl/shader';
 import {addControlsToBuilder, parseShaderUiControls, setControlsInShader, ShaderControlsParseResult, ShaderControlState} from 'neuroglancer/webgl/shader_ui_controls';
 import {computeTextureFormat, getSamplerPrefixForDataType, OneDimensionalTextureAccessHelper, setOneDimensionalTextureData, TextureFormat} from 'neuroglancer/webgl/texture_access';
@@ -62,9 +62,6 @@ const vertexPositionTextureFormat = computeTextureFormat(new TextureFormat(), Da
 
 class RenderHelper extends RefCounted {
   private textureAccessHelper = new OneDimensionalTextureAccessHelper('vertexData');
-  private lineShader = this.registerDisposer(new LineShader(this.gl, 1));
-  private circleShader = this.registerDisposer(new CircleShader(this.gl, 2));
-
   get vertexAttributes(): VertexAttributeRenderInfo[] {
     return this.base.vertexAttributes;
   }
@@ -84,7 +81,7 @@ class RenderHelper extends RefCounted {
     defineShader:
         (builder: ShaderBuilder, shaderParseResult: ShaderControlsParseResult) => {
           this.defineAttributeAccess(builder);
-          this.lineShader.defineShader(builder);
+          defineLineShader(builder);
           builder.addAttribute('highp uvec2', 'aVertexIndex');
           builder.addUniform('highp float', 'uLineWidth');
           this.defineCommonShader(builder);
@@ -132,7 +129,7 @@ void emitDefault() {
     defineShader:
         (builder: ShaderBuilder, shaderParseResult: ShaderControlsParseResult) => {
           this.defineAttributeAccess(builder);
-          this.circleShader.defineShader(builder, /*crossSectionFade=*/ this.targetIsSliceView);
+          defineCircleShader(builder, /*crossSectionFade=*/ this.targetIsSliceView);
           this.defineCommonShader(builder);
           builder.addUniform('highp float', 'uNodeDiameter');
           let vertexMain = `
@@ -239,20 +236,18 @@ void emitDefault() {
       skeletonChunk.indexBuffer.bindToVertexAttribI(
           aVertexIndex, 2, WebGL2RenderingContext.UNSIGNED_INT);
       gl.vertexAttribDivisor(aVertexIndex, 1);
-      this.lineShader.enableAndDraw(
-        edgeShader, projectionParameters, this.targetIsSliceView ? 1.0 : 0.0,
-          skeletonChunk.numIndices / 2);
+      initializeLineShader(edgeShader, projectionParameters, this.targetIsSliceView ? 1.0 : 0.0);
+      drawLines(gl, 1, skeletonChunk.numIndices / 2);
       gl.vertexAttribDivisor(aVertexIndex, 0);
       gl.disableVertexAttribArray(aVertexIndex);
     }
 
     if (nodeShader !== null) {
       nodeShader.bind();
-      this.circleShader.draw(
-          nodeShader, projectionParameters, {
-            featherWidthInPixels: this.targetIsSliceView ? 1.0 : 0.0,
-          },
-          skeletonChunk.numVertices);
+      initializeCircleShader(
+          nodeShader, projectionParameters,
+          {featherWidthInPixels: this.targetIsSliceView ? 1.0 : 0.0});
+      drawCircles(nodeShader.gl, 2, skeletonChunk.numVertices);
     }
   }
 
@@ -300,11 +295,11 @@ export class SkeletonRenderingOptions implements Trackable {
   shaderControlState = new ShaderControlState(this.shader);
   params2d: ViewSpecificSkeletonRenderingOptions = {
     mode: new TrackableSkeletonRenderMode(SkeletonRenderMode.LINES_AND_POINTS),
-    lineWidth: new TrackableSkeletonLineWidth(5),
+    lineWidth: new TrackableSkeletonLineWidth(2),
   };
   params3d: ViewSpecificSkeletonRenderingOptions = {
     mode: new TrackableSkeletonRenderMode(SkeletonRenderMode.LINES),
-    lineWidth: new TrackableSkeletonLineWidth(2),
+    lineWidth: new TrackableSkeletonLineWidth(1),
   };
 
   constructor() {
@@ -404,7 +399,7 @@ export class SkeletonLayer extends RefCounted {
     if (modelMatrix === undefined) return;
     let pointDiameter: number;
     if (renderOptions.mode.value === SkeletonRenderMode.LINES_AND_POINTS) {
-      pointDiameter = Math.max(10, lineWidth * 2);
+      pointDiameter = Math.max(5, lineWidth * 2);
     } else {
       pointDiameter = lineWidth;
     }

@@ -39,7 +39,7 @@ import {SharedWatchableValue} from 'neuroglancer/shared_watchable_value';
 import {SliceViewProjectionParameters} from 'neuroglancer/sliceview/base';
 import {FrontendTransformedSource, getVolumetricTransformedSources, serializeAllTransformedSources} from 'neuroglancer/sliceview/frontend';
 import {SliceViewPanelRenderContext, SliceViewPanelRenderLayer, SliceViewRenderLayer} from 'neuroglancer/sliceview/renderlayer';
-import {ProjectionViewWireFrameRenderHelper, SliceViewWireFrameRenderHelper} from 'neuroglancer/sliceview/wire_frame';
+import {crossSectionBoxWireFrameShader, projectionViewBoxWireFrameShader} from 'neuroglancer/sliceview/wire_frame';
 import {constantWatchableValue, makeCachedDerivedWatchableValue, NestedStateManager, registerNested, WatchableValueInterface} from 'neuroglancer/trackable_value';
 import {arraysEqual} from 'neuroglancer/util/array';
 import {Borrowed, Owned, RefCounted} from 'neuroglancer/util/disposable';
@@ -682,10 +682,9 @@ const SpatiallyIndexedAnnotationLayer = <TBase extends AnyConstructor<Annotation
           this.base.state.transform, attachment.view.displayDimensionRenderInfo));
     }
 
-    wireFrameRenderHelper = this.registerDisposer(
-        (this instanceof SliceViewPanelRenderLayer) ?
-            SliceViewWireFrameRenderHelper.get(this.gl) :
-            ProjectionViewWireFrameRenderHelper.get(this.gl));
+    wireFrameRenderHelper = (this instanceof SliceViewPanelRenderLayer) ?
+        crossSectionBoxWireFrameShader :
+        projectionViewBoxWireFrameShader;
 
     wireFrameShaderGetter = parameterizedEmitterDependentShaderGetter(this, this.gl, {
       memoizeKey: `annotation/wireFrameShader:${this instanceof SliceViewPanelRenderLayer}`,
@@ -713,7 +712,7 @@ const SpatiallyIndexedAnnotationLayer = <TBase extends AnyConstructor<Annotation
         const {shader} = this.wireFrameShaderGetter(renderContext.emitter);
         if (shader === null) return;
         shader.bind();
-        this.wireFrameRenderHelper.enable(
+        this.wireFrameRenderHelper.initialize(
             shader, projectionParameters as SliceViewProjectionParameters);
         wireFrameShader = shader;
       }
