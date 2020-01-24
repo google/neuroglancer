@@ -206,6 +206,11 @@ export function getFrustrumPlanes(out: Float32Array, m: mat4): Float32Array {
   const nearC = m32 + m22;  // near: c
   const nearD = m33 + m23;  // near: d
 
+  const farA = m30 - m20;  // far: a
+  const farB = m31 - m21;  // far: b
+  const farC = m32 - m22;  // far: c
+  const farD = m33 - m23;  // far: d
+
   // Normalize near plane
   const nearNorm = Math.sqrt(nearA ** 2 + nearB ** 2 + nearC ** 2);
   out[16] = nearA / nearNorm;
@@ -213,10 +218,12 @@ export function getFrustrumPlanes(out: Float32Array, m: mat4): Float32Array {
   out[18] = nearC / nearNorm;
   out[19] = nearD / nearNorm;
 
-  out[20] = m30 - m20;  // far: a
-  out[21] = m31 - m21;  // far: b
-  out[22] = m32 - m22;  // far: c
-  out[23] = m33 - m23;  // far: d
+  // Also normalize far plane
+  const farNorm = Math.sqrt(farA ** 2 + farB ** 2 + farC ** 2);
+  out[20] = farA / farNorm;
+  out[21] = farB / farNorm;
+  out[22] = farC / farNorm;
+  out[23] = farD / farNorm;
 
   return out;
 }
@@ -329,4 +336,21 @@ export function getViewFrustrumVolume(projectionMat: mat4) {
 
   const baseArea = 4 / (projectionMat[0] * projectionMat[5]);
   return baseArea / 3 * (Math.abs(far) ** 3 - Math.abs(near) ** 3);
+}
+
+export function getViewFrustrumDepthRange(projectionMat: mat4) {
+  if (projectionMat[15] === 1) {
+    // orthographic projection
+    const depth = 2 / Math.abs(projectionMat[10]);
+    return depth;
+  }
+  // perspective projection
+  // a = (far + near) / (near - far);
+  // b = 2 * far * near / (near - far);
+  const a = projectionMat[10];
+  const b = projectionMat[14];
+  const near = 2 * b / (2 * a - 2);
+  const far = ((a - 1) * near) / (a + 1);
+  const depth = Math.abs(far - near);
+  return depth;
 }

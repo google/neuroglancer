@@ -5,7 +5,8 @@ shader code for computing an RGBA output value for each pixel of the viewport
 based on the the single- or multi-channel values associated with the
 corresponding voxel.
 
-The fragment shader code can be entered interactively from the dropdown menu for an image layer, or programmatically by specifying a `'shader'` property of the JSON specification of the image layer.
+The fragment shader code can be entered interactively from the side panel for an image layer, or
+programmatically by specifying a `'shader'` property of the JSON specification of the image layer.
 
 ## Shader language
 
@@ -143,6 +144,22 @@ To emit a transparent pixel, call:
 ```glsl
 void emitTransparent();
 ```
+
+### Volume rendering
+
+The same shader code is used both for cross-section rendering and for the experimental volume
+rendering.  Note that while volume rendering remains experimental, it is not guaranteed that future
+Neuroglancer versions will be backwards compatible with JSON states that enable volume rendering.
+To allow the shader code to detect the rendering mode (and possibly alter its behavior), the
+`VOLUME_RENDERING` constant is defined to either `true` or `false`.
+
+```glsl
+#define VOLUME_RENDERING false
+#define VOLUME_RENDERING true
+```
+
+Reasonable volume rendering can be obtained by calling `emitRGBA` with a constant color and
+data-dependent alpha.
 
 ### Color maps
 

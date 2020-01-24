@@ -15,11 +15,11 @@
  */
 
 import {VisibleLayerInfo} from 'neuroglancer/layer';
+import {PerspectivePanel} from 'neuroglancer/perspective_view/panel';
 import {ThreeDimensionalReadyRenderContext, ThreeDimensionalRenderContext, VisibilityTrackedRenderLayer} from 'neuroglancer/renderlayer';
 import {vec3} from 'neuroglancer/util/geom';
 import {ShaderModule} from 'neuroglancer/webgl/shader';
 import {SharedObject} from 'neuroglancer/worker_rpc';
-import { PerspectivePanel } from './panel';
 
 export interface PerspectiveViewReadyRenderContext extends ThreeDimensionalReadyRenderContext {}
 

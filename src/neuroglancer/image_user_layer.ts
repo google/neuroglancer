@@ -27,16 +27,19 @@ import {MultiscaleVolumeChunkSource} from 'neuroglancer/sliceview/volume/fronten
 import {getTrackableFragmentMain, ImageRenderLayer} from 'neuroglancer/sliceview/volume/image_renderlayer';
 import {trackableAlphaValue} from 'neuroglancer/trackable_alpha';
 import {trackableBlendModeValue} from 'neuroglancer/trackable_blend';
-import {makeCachedLazyDerivedWatchableValue, WatchableValueInterface} from 'neuroglancer/trackable_value';
+import {TrackableBoolean, TrackableBooleanCheckbox} from 'neuroglancer/trackable_boolean';
+import {makeCachedLazyDerivedWatchableValue, registerNested, WatchableValueInterface} from 'neuroglancer/trackable_value';
 import {UserLayerWithAnnotationsMixin} from 'neuroglancer/ui/annotations';
 import {setClipboard} from 'neuroglancer/util/clipboard';
 import {Borrowed, RefCounted} from 'neuroglancer/util/disposable';
 import {makeValueOrError} from 'neuroglancer/util/error';
 import {verifyOptionalObjectProperty} from 'neuroglancer/util/json';
+import {VolumeRenderingRenderLayer} from 'neuroglancer/volume_rendering/volume_render_layer';
 import {makeWatchableShaderError} from 'neuroglancer/webgl/dynamic_shader';
 import {ShaderControlState} from 'neuroglancer/webgl/shader_ui_controls';
 import {ChannelDimensionsWidget} from 'neuroglancer/widget/channel_dimensions_widget';
 import {makeCopyButton} from 'neuroglancer/widget/copy_button';
+import {DependentViewWidget} from 'neuroglancer/widget/dependent_view_widget';
 import {EnumSelectWidget} from 'neuroglancer/widget/enum_widget';
 import {makeHelpButton} from 'neuroglancer/widget/help_button';
 import {makeMaximizeButton} from 'neuroglancer/widget/maximize_button';
@@ -52,6 +55,7 @@ const SHADER_JSON_KEY = 'shader';
 const SHADER_CONTROLS_JSON_KEY = 'shaderControls';
 const CROSS_SECTION_RENDER_SCALE_JSON_KEY = 'crossSectionRenderScale';
 const CHANNEL_DIMENSIONS_JSON_KEY = 'channelDimensions';
+const VOLUME_RENDERING_JSON_KEY = 'volumeRendering';
 
 export interface ImageLayerSelectionState extends UserLayerSelectionState {
   value: any;
@@ -66,12 +70,17 @@ export class ImageUserLayer extends Base {
   shaderControlState = new ShaderControlState(this.fragmentMain);
   sliceViewRenderScaleHistogram = new RenderScaleHistogram();
   sliceViewRenderScaleTarget = trackableRenderScaleTarget(1);
+  volumeRenderingRenderScaleHistogram = new RenderScaleHistogram();
+  // unused
+  volumeRenderingRenderScaleTarget = trackableRenderScaleTarget(1);
+
   channelCoordinateSpace = new TrackableCoordinateSpace();
   channelCoordinateSpaceCombiner =
       new CoordinateSpaceCombiner(this.channelCoordinateSpace, isChannelDimension);
   channelSpace = this.registerDisposer(makeCachedLazyDerivedWatchableValue(
       channelCoordinateSpace => makeValueOrError(() => getChannelSpace(channelCoordinateSpace)),
       this.channelCoordinateSpace));
+  volumeRendering = new TrackableBoolean(false, false);
 
   markLoading() {
     const baseDisposer = super.markLoading();
@@ -101,6 +110,7 @@ export class ImageUserLayer extends Base {
     this.fragmentMain.changed.add(this.specificationChanged.dispatch);
     this.shaderControlState.changed.add(this.specificationChanged.dispatch);
     this.sliceViewRenderScaleTarget.changed.add(this.specificationChanged.dispatch);
+    this.volumeRendering.changed.add(this.specificationChanged.dispatch);
     this.tabs.add(
         'rendering',
         {label: 'Rendering', order: -100, getter: () => new RenderingOptionsTab(this)});
@@ -123,7 +133,7 @@ export class ImageUserLayer extends Base {
         continue;
       }
       dataType = volume.dataType;
-      loadedSubsource.activate(() => {
+      loadedSubsource.activate(context => {
         loadedSubsource.addRenderLayer(new ImageRenderLayer(volume, {
           opacity: this.opacity,
           blendMode: this.blendMode,
@@ -135,6 +145,21 @@ export class ImageUserLayer extends Base {
           localPosition: this.localPosition,
           channelCoordinateSpace: this.channelCoordinateSpace,
         }));
+        const volumeRenderLayer = context.registerDisposer(new VolumeRenderingRenderLayer({
+          multiscaleSource: volume,
+          shaderControlState: this.shaderControlState,
+          shaderError: this.shaderError,
+          transform: loadedSubsource.getRenderLayerTransform(this.channelCoordinateSpace),
+          renderScaleTarget: this.volumeRenderingRenderScaleTarget,
+          renderScaleHistogram: this.volumeRenderingRenderScaleHistogram,
+          localPosition: this.localPosition,
+          channelCoordinateSpace: this.channelCoordinateSpace,
+        }));
+        context.registerDisposer(loadedSubsource.messages.addChild(volumeRenderLayer.messages));
+        context.registerDisposer(registerNested((context, volumeRendering) => {
+          if (!volumeRendering) return;
+          context.registerDisposer(this.addRenderLayer(volumeRenderLayer.addRef()));
+        }, this.volumeRendering));
         this.shaderError.changed.dispatch();
       });
     }
@@ -150,6 +175,7 @@ export class ImageUserLayer extends Base {
     this.sliceViewRenderScaleTarget.restoreState(
         specification[CROSS_SECTION_RENDER_SCALE_JSON_KEY]);
     this.channelCoordinateSpace.restoreState(specification[CHANNEL_DIMENSIONS_JSON_KEY]);
+    this.volumeRendering.restoreState(specification[VOLUME_RENDERING_JSON_KEY]);
   }
   toJSON() {
     const x = super.toJSON();
@@ -159,6 +185,7 @@ export class ImageUserLayer extends Base {
     x[SHADER_CONTROLS_JSON_KEY] = this.shaderControlState.toJSON();
     x[CROSS_SECTION_RENDER_SCALE_JSON_KEY] = this.sliceViewRenderScaleTarget.toJSON();
     x[CHANNEL_DIMENSIONS_JSON_KEY] = this.channelCoordinateSpace.toJSON();
+    x[VOLUME_RENDERING_JSON_KEY] = this.volumeRendering.toJSON();
     return x;
   }
 
@@ -249,6 +276,29 @@ class RenderingOptionsTab extends Tab {
       label.appendChild(this.registerDisposer(new EnumSelectWidget(layer.blendMode)).element);
       element.appendChild(label);
     }
+
+    {
+      const checkbox = this.registerDisposer(new TrackableBooleanCheckbox(layer.volumeRendering));
+      checkbox.element.className = 'neuroglancer-noselect';
+      const label = document.createElement('label');
+      label.className = 'neuroglancer-noselect';
+      label.appendChild(document.createTextNode('Volume rendering (experimental)'));
+      label.appendChild(checkbox.element);
+      element.appendChild(label);
+    }
+
+    const controls3d = this.registerDisposer(
+        new DependentViewWidget(layer.volumeRendering, (volumeRendering, parent, context) => {
+          if (!volumeRendering) return;
+          {
+            const renderScaleWidget = context.registerDisposer(new RenderScaleWidget(
+                this.layer.volumeRenderingRenderScaleHistogram,
+                this.layer.volumeRenderingRenderScaleTarget));
+            renderScaleWidget.label.textContent = 'Resolution (3d)';
+            parent.appendChild(renderScaleWidget.element);
+          }
+        }, this.visibility));
+    element.appendChild(controls3d.element);
 
     let spacer = document.createElement('div');
     spacer.style.flex = '1';

@@ -16,7 +16,7 @@
 
 import {SliceView} from 'neuroglancer/sliceview/frontend';
 import {MultiscaleVolumeChunkSource} from 'neuroglancer/sliceview/volume/frontend';
-import {SliceViewVolumeRenderLayer, RenderLayerBaseOptions} from 'neuroglancer/sliceview/volume/renderlayer';
+import {RenderLayerBaseOptions, SliceViewVolumeRenderLayer} from 'neuroglancer/sliceview/volume/renderlayer';
 import {TrackableAlphaValue} from 'neuroglancer/trackable_alpha';
 import {BLEND_FUNCTIONS, BLEND_MODES, TrackableBlendModeValue} from 'neuroglancer/trackable_blend';
 import {WatchableValue} from 'neuroglancer/trackable_value';
@@ -68,6 +68,9 @@ export class ImageRenderLayer extends SliceViewVolumeRenderLayer<ShaderControlsP
     }
     builder.addUniform('highp float', 'uOpacity');
     builder.addFragmentCode(`
+
+#define VOLUME_RENDERING false
+
 void emitRGBA(vec4 rgba) {
   emit(vec4(rgba.rgb, rgba.a * uOpacity));
 }

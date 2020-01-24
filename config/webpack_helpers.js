@@ -362,6 +362,7 @@ function getViewerConfig(options) {
     'neuroglancer/chunk_manager/backend',
     'neuroglancer/sliceview/backend',
     'neuroglancer/perspective_view/backend',
+    'neuroglancer/volume_rendering/backend',
     'neuroglancer/annotation/backend',
     ...backendDataSourceModules,
     ...extraChunkWorkerModules,
