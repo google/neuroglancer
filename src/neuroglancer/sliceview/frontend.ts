@@ -129,14 +129,7 @@ export class SliceView extends Base {
       update: (out, navigationState) => {
         const {invViewMatrix, centerDataPosition} = out;
         navigationState.toMat4(invViewMatrix);
-        let {globalPosition} = out;
         const {canonicalVoxelFactors, voxelPhysicalScales} = out.displayDimensionRenderInfo;
-        const newGlobalPosition = navigationState.position.value;
-        const rank = newGlobalPosition.length;
-        if (globalPosition.length !== rank) {
-          out.globalPosition = globalPosition = new Float32Array(rank);
-        }
-        globalPosition.set(newGlobalPosition);
         for (let i = 0; i < 3; ++i) {
           centerDataPosition[i] = invViewMatrix[12 + i];
         }

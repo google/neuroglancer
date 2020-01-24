@@ -154,6 +154,13 @@ export class DerivedProjectionParameters<Parameters extends ProjectionParameters
       oldValue_.displayDimensionRenderInfo = navigationState.displayDimensionRenderInfo.value;
       oldValue_.width = this.width;
       oldValue_.height = this.height;
+      let {globalPosition} = oldValue_;
+      const newGlobalPosition = navigationState.position.value;
+      const rank = newGlobalPosition.length;
+      if (globalPosition.length !== rank) {
+        oldValue_.globalPosition = globalPosition = new Float32Array(rank);
+      }
+      globalPosition.set(newGlobalPosition);
       update(oldValue_, navigationState);
       if (isEqual(oldValue_, value_)) return;
       this.value_ = oldValue_;
