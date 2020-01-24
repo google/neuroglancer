@@ -19,6 +19,7 @@ import {CoordinateSpace, emptyInvalidCoordinateSpace} from 'neuroglancer/coordin
 import {ProjectionParameters} from 'neuroglancer/projection_parameters';
 import {getChunkPositionFromCombinedGlobalLocalPositions} from 'neuroglancer/render_coordinate_transform';
 import {BoundingBoxCrossSectionRenderHelper, getIntersectionVertexIndexArrayForLines} from 'neuroglancer/sliceview/bounding_box_shader_helper';
+import {getNormalizedChunkLayout} from 'neuroglancer/sliceview/base';
 import {ChunkLayout} from 'neuroglancer/sliceview/chunk_layout';
 import {FrontendTransformedSource, SliceView} from 'neuroglancer/sliceview/frontend';
 import {SliceViewRenderContext, SliceViewRenderLayer, SliceViewRenderLayerOptions} from 'neuroglancer/sliceview/renderlayer';
@@ -379,7 +380,8 @@ void emit(vec4 color) {
     };
     let newSource = true;
     for (const transformedSource of visibleSources) {
-      const chunkLayout = sliceView.getNormalizedChunkLayout(transformedSource.chunkLayout);
+      const chunkLayout =
+          getNormalizedChunkLayout(projectionParameters, transformedSource.chunkLayout);
       const {chunkTransform: {channelToChunkDimensionIndices}} = transformedSource;
       const source = transformedSource.source as VolumeChunkSource;
       const {fixedPositionWithinChunk, chunkDisplayDimensionIndices} = transformedSource;

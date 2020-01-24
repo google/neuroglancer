@@ -18,7 +18,7 @@ import 'neuroglancer/render_layer_backend';
 
 import {Chunk, ChunkConstructor, ChunkSource, withChunkManager} from 'neuroglancer/chunk_manager/backend';
 import {SharedWatchableValue} from 'neuroglancer/shared_watchable_value';
-import {filterVisibleSources, forEachPlaneIntersectingVolumetricChunk, SLICEVIEW_ADD_VISIBLE_LAYER_RPC_ID, SLICEVIEW_REMOVE_VISIBLE_LAYER_RPC_ID, SLICEVIEW_RENDERLAYER_RPC_ID, SLICEVIEW_RPC_ID, SliceViewBase, SliceViewChunkSource as SliceViewChunkSourceInterface, SliceViewChunkSpecification, SliceViewRenderLayer as SliceViewRenderLayerInterface, TransformedSource} from 'neuroglancer/sliceview/base';
+import {filterVisibleSources, forEachPlaneIntersectingVolumetricChunk, MultiscaleVolumetricDataRenderLayer, SLICEVIEW_ADD_VISIBLE_LAYER_RPC_ID, SLICEVIEW_REMOVE_VISIBLE_LAYER_RPC_ID, SLICEVIEW_RENDERLAYER_RPC_ID, SLICEVIEW_RPC_ID, SliceViewBase, SliceViewChunkSource as SliceViewChunkSourceInterface, SliceViewChunkSpecification, SliceViewRenderLayer as SliceViewRenderLayerInterface, TransformedSource} from 'neuroglancer/sliceview/base';
 import {ChunkLayout} from 'neuroglancer/sliceview/chunk_layout';
 import {WatchableValueInterface} from 'neuroglancer/trackable_value';
 import {vec3, vec3Key} from 'neuroglancer/util/geom';
@@ -159,7 +159,7 @@ export class SliceViewBackend extends SliceViewIntermediateBase {
 }
 
 export function deserializeTransformedSources<
-    Source extends SliceViewChunkSourceBackend, RLayer extends SliceViewRenderLayerBackend>(
+    Source extends SliceViewChunkSourceBackend, RLayer extends MultiscaleVolumetricDataRenderLayer>(
     rpc: RPC, serializedSources: any[][], layer: any) {
   const sources = serializedSources.map(
       scales => scales.map((serializedSource): TransformedSource<RLayer, Source> => {
@@ -190,7 +190,9 @@ export function deserializeTransformedSources<
 registerRPC(SLICEVIEW_ADD_VISIBLE_LAYER_RPC_ID, function(x) {
   const obj = <SliceViewBackend>this.get(x['id']);
   const layer = <SliceViewRenderLayerBackend>this.get(x['layerId']);
-  const sources = deserializeTransformedSources(this, x.sources, layer);
+  const sources =
+      deserializeTransformedSources<SliceViewChunkSourceBackend, SliceViewRenderLayerBackend>(
+          this, x.sources, layer);
   obj.addVisibleLayer(layer, sources);
 });
 registerRPC(SLICEVIEW_REMOVE_VISIBLE_LAYER_RPC_ID, function(x) {

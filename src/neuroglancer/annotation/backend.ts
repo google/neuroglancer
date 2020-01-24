@@ -23,7 +23,7 @@ import {RenderedViewBackend, RenderLayerBackend, RenderLayerBackendAttachment} f
 import {forEachVisibleSegment, getObjectKey} from 'neuroglancer/segmentation_display_state/base';
 import {SharedDisjointUint64Sets} from 'neuroglancer/shared_disjoint_sets';
 import {SharedWatchableValue} from 'neuroglancer/shared_watchable_value';
-import {deserializeTransformedSources, SCALE_PRIORITY_MULTIPLIER, SliceViewChunk, SliceViewChunkSourceBackend, SliceViewRenderLayerBackend} from 'neuroglancer/sliceview/backend';
+import {deserializeTransformedSources, SCALE_PRIORITY_MULTIPLIER, SliceViewChunk, SliceViewChunkSourceBackend} from 'neuroglancer/sliceview/backend';
 import {TransformedSource} from 'neuroglancer/sliceview/base';
 import {registerNested, WatchableValue} from 'neuroglancer/trackable_value';
 import {Uint64Set} from 'neuroglancer/uint64_set';
@@ -262,8 +262,8 @@ registerRPC(ANNOTATION_COMMIT_UPDATE_RPC_ID, function(x: any) {
 
 interface AnnotationRenderLayerAttachmentState {
   displayDimensionRenderInfo: DisplayDimensionRenderInfo;
-  transformedSources:
-      TransformedSource<SliceViewRenderLayerBackend, AnnotationGeometryChunkSourceBackend>[][];
+  transformedSources: TransformedSource<
+      AnnotationSpatiallyIndexedRenderLayerBackend, AnnotationGeometryChunkSourceBackend>[][];
 }
 
 @registerSharedObject(ANNOTATION_SPATIALLY_INDEXED_RENDER_LAYER_RPC_ID)
@@ -340,7 +340,8 @@ registerRPC(ANNOTATION_PERSPECTIVE_RENDER_LAYER_UPDATE_SOURCES_RPC_ID, function(
   const attachment = layer.attachments.get(view)! as
       RenderLayerBackendAttachment<RenderedViewBackend, AnnotationRenderLayerAttachmentState>;
   attachment.state!.transformedSources = deserializeTransformedSources<
-      AnnotationGeometryChunkSourceBackend, SliceViewRenderLayerBackend>(this, x.sources, layer);
+      AnnotationGeometryChunkSourceBackend, AnnotationSpatiallyIndexedRenderLayerBackend>(
+      this, x.sources, layer);
   attachment.state!.displayDimensionRenderInfo =
       attachment.view.projectionParameters.value.displayDimensionRenderInfo;
   layer.chunkManager.scheduleUpdateChunkPriorities();

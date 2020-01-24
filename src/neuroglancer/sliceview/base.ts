@@ -58,9 +58,14 @@ export function estimateSliceAreaPerChunk(chunkLayout: ChunkLayout, viewMatrix: 
   return chunkVolume / viewZProjection;
 }
 
-export interface TransformedSource<RLayer extends SliceViewRenderLayer = SliceViewRenderLayer,
-                                                  Source extends SliceViewChunkSource =
-                                                                     SliceViewChunkSource> {
+export interface MultiscaleVolumetricDataRenderLayer {
+  localPosition: WatchableValueInterface<Float32Array>;
+  renderScaleTarget: WatchableValueInterface<number>;
+}
+
+export interface TransformedSource<
+    RLayer extends MultiscaleVolumetricDataRenderLayer = SliceViewRenderLayer,
+                   Source extends SliceViewChunkSource = SliceViewChunkSource> {
   renderLayer: RLayer;
 
   source: Source;
@@ -132,9 +137,9 @@ export interface SliceViewRenderLayer {
       sources: readonly TransformedSource[]): Iterable<TransformedSource>;
 }
 
-function updateFixedCurPositionInChunks(
-    tsource: TransformedSource<SliceViewRenderLayer, SliceViewChunkSource>,
-    globalPosition: Float32Array, localPosition: Float32Array): boolean {
+function updateFixedCurPositionInChunks<RLayer extends MultiscaleVolumetricDataRenderLayer>(
+    tsource: TransformedSource<RLayer, SliceViewChunkSource>, globalPosition: Float32Array,
+    localPosition: Float32Array): boolean {
   const {curPositionInChunks, fixedPositionWithinChunk} = tsource;
   const {nonDisplayLowerClipBound, nonDisplayUpperClipBound} = tsource;
   const {rank, chunkDataSize} = tsource.source.spec;
@@ -160,9 +165,9 @@ function updateFixedCurPositionInChunks(
   return true;
 }
 
-function pickBestAlternativeSource<RLayer extends SliceViewRenderLayer, Source extends
-                                       SliceViewChunkSource,
-                                       Transformed extends TransformedSource<RLayer, Source>>(
+function pickBestAlternativeSource<
+    RLayer extends MultiscaleVolumetricDataRenderLayer, Source extends
+        SliceViewChunkSource, Transformed extends TransformedSource<RLayer, Source>>(
     viewMatrix: mat4, alternatives: Transformed[]) {
   let numAlternatives = alternatives.length;
   let bestAlternativeIndex = 0;
@@ -187,9 +192,9 @@ function pickBestAlternativeSource<RLayer extends SliceViewRenderLayer, Source e
   return bestAlternativeIndex;
 }
 
-export interface VisibleLayerSources<RLayer extends SliceViewRenderLayer, Source extends
-                                         SliceViewChunkSource,
-                                         Transformed extends TransformedSource<RLayer, Source>> {
+export interface VisibleLayerSources<
+    RLayer extends MultiscaleVolumetricDataRenderLayer, Source extends
+        SliceViewChunkSource, Transformed extends TransformedSource<RLayer, Source>> {
   allSources: Transformed[][];
   visibleSources: Transformed[];
   displayDimensionRenderInfo: DisplayDimensionRenderInfo;
@@ -252,37 +257,6 @@ export class SliceViewBase<
   }
 
   invalidateVisibleChunks() {}
-
-  /**
-   * For chunk layouts with finiteRank < 3, returns an adjusted chunk layout where chunk 0 in each
-   * non-finite dimension is guaranteed to cover the viewport.
-   */
-  getNormalizedChunkLayout(chunkLayout: ChunkLayout): ChunkLayout {
-    const {finiteRank} = chunkLayout;
-    if (finiteRank === 3) return chunkLayout;
-    tempChunkLayout.finiteRank = finiteRank;
-    vec3.copy(tempChunkLayout.size, chunkLayout.size);
-    const transform = mat4.copy(tempChunkLayout.transform, chunkLayout.transform);
-    const invTransform = mat4.copy(tempChunkLayout.invTransform, chunkLayout.invTransform);
-    tempChunkLayout.detTransform = chunkLayout.detTransform;
-    const {invViewMatrix, width, height} = this.projectionParameters.value;
-    for (let chunkRenderDim = finiteRank; chunkRenderDim < 3; ++chunkRenderDim) {
-      // we want to ensure chunk [0] fully covers the viewport
-      const offset = invViewMatrix[12 + chunkRenderDim];
-      let lower = offset, upper = offset;
-      const xc = Math.abs(invViewMatrix[chunkRenderDim] * width);
-      lower -= xc;
-      upper += xc;
-      const yc = Math.abs(invViewMatrix[chunkRenderDim + 4] * height);
-      lower -= yc;
-      upper += yc;
-      const scaleFactor = Math.max(1, upper - lower);
-      transform[12 + chunkRenderDim] = lower;
-      transform[5 * chunkRenderDim] = scaleFactor;
-    }
-    mat4.invert(invTransform, transform);
-    return tempChunkLayout;
-  }
 
   /**
    * Computes the list of sources to use for each visible layer, based on the
@@ -538,7 +512,6 @@ export function getChunkDataSizes(options: ChunkLayoutOptions&BaseChunkLayoutOpt
     case ChunkLayoutPreference.FLAT:
       return getTwoDimensionalBlockSizes(options);
   }
-  throw new Error(`Invalid chunk layout preference: ${chunkLayoutPreference}.`);
 }
 
 /**
@@ -690,9 +663,9 @@ const tempVisibleVolumetricChunkUpper = new Float32Array(3);
 const tempVisibleVolumetricModelViewProjection = mat4.create();
 const tempVisibleVolumetricClippingPlanes = new Float32Array(24);
 
-function forEachVolumetricChunkWithinFrustrum(
-    clippingPlanes: Float32Array, transformedSource: TransformedSource,
-    callback: (positionInChunks: vec3) => void,
+function forEachVolumetricChunkWithinFrustrum<RLayer extends MultiscaleVolumetricDataRenderLayer>(
+    clippingPlanes: Float32Array, transformedSource: TransformedSource<RLayer>,
+    callback: (positionInChunks: vec3, clippingPlanes: Float32Array) => void,
     predicate: (
         xLower: number, yLower: number, zLower: number, xUpper: number, yUpper: number,
         zUpper: number, clippingPlanes: Float32Array) => boolean) {
@@ -726,7 +699,7 @@ function forEachVolumetricChunkWithinFrustrum(
       curPositionInChunks[chunkDisplayDimensionIndices[0]] = lower[0];
       curPositionInChunks[chunkDisplayDimensionIndices[1]] = lower[1];
       curPositionInChunks[chunkDisplayDimensionIndices[2]] = lower[2];
-      callback(lower as vec3);
+      callback(lower as vec3, clippingPlanes);
       return;
     }
     const prevLower = lower[splitDim];
@@ -742,9 +715,10 @@ function forEachVolumetricChunkWithinFrustrum(
   recurse();
 }
 
-export function forEachVisibleVolumetricChunk(
+export function forEachVisibleVolumetricChunk<RLayer extends MultiscaleVolumetricDataRenderLayer>(
     projectionParameters: ProjectionParameters, localPosition: Float32Array,
-    transformedSource: TransformedSource, callback: (positionInChunks: vec3) => void) {
+    transformedSource: TransformedSource<RLayer>,
+    callback: (positionInChunks: vec3, clippingPlanes: Float32Array) => void) {
   if (!updateFixedCurPositionInChunks(
           transformedSource, projectionParameters.globalPosition, localPosition)) {
     return;
@@ -769,9 +743,10 @@ export function forEachVisibleVolumetricChunk(
   forEachVolumetricChunkWithinFrustrum(clippingPlanes, transformedSource, callback, isAABBVisible);
 }
 
-export function forEachPlaneIntersectingVolumetricChunk(
+export function
+forEachPlaneIntersectingVolumetricChunk<RLayer extends MultiscaleVolumetricDataRenderLayer>(
     projectionParameters: ProjectionParameters, localPosition: Float32Array,
-    transformedSource: TransformedSource, callback: (positionInChunks: vec3) => void) {
+    transformedSource: TransformedSource<RLayer>, callback: (positionInChunks: vec3) => void) {
   if (!updateFixedCurPositionInChunks(
           transformedSource, projectionParameters.globalPosition, localPosition)) {
     return;
@@ -826,4 +801,36 @@ export function forEachPlaneIntersectingVolumetricChunk(
 
   forEachVolumetricChunkWithinFrustrum(
       clippingPlanes, transformedSource, callback, isAABBIntersectingPlane);
+}
+
+/**
+ * For chunk layouts with finiteRank < 3, returns an adjusted chunk layout where chunk 0 in each
+ * non-finite dimension is guaranteed to cover the viewport.
+ */
+export function getNormalizedChunkLayout(
+    projectionParameters: ProjectionParameters, chunkLayout: ChunkLayout): ChunkLayout {
+  const {finiteRank} = chunkLayout;
+  if (finiteRank === 3) return chunkLayout;
+  tempChunkLayout.finiteRank = finiteRank;
+  vec3.copy(tempChunkLayout.size, chunkLayout.size);
+  const transform = mat4.copy(tempChunkLayout.transform, chunkLayout.transform);
+  const invTransform = mat4.copy(tempChunkLayout.invTransform, chunkLayout.invTransform);
+  tempChunkLayout.detTransform = chunkLayout.detTransform;
+  const {invViewMatrix, width, height} = projectionParameters;
+  for (let chunkRenderDim = finiteRank; chunkRenderDim < 3; ++chunkRenderDim) {
+    // we want to ensure chunk [0] fully covers the viewport
+    const offset = invViewMatrix[12 + chunkRenderDim];
+    let lower = offset, upper = offset;
+    const xc = Math.abs(invViewMatrix[chunkRenderDim] * width);
+    lower -= xc;
+    upper += xc;
+    const yc = Math.abs(invViewMatrix[chunkRenderDim + 4] * height);
+    lower -= yc;
+    upper += yc;
+    const scaleFactor = Math.max(1, upper - lower);
+    transform[12 + chunkRenderDim] = lower;
+    transform[5 * chunkRenderDim] = scaleFactor;
+  }
+  mat4.invert(invTransform, transform);
+  return tempChunkLayout;
 }

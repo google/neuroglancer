@@ -15,7 +15,7 @@
  */
 
 import {ProjectionParameters} from 'neuroglancer/projection_parameters';
-import {forEachVisibleVolumetricChunk, SliceViewChunkSource, SliceViewChunkSpecification, SliceViewRenderLayer, TransformedSource} from 'neuroglancer/sliceview/base';
+import {forEachVisibleVolumetricChunk, MultiscaleVolumetricDataRenderLayer, SliceViewChunkSource, SliceViewChunkSpecification, TransformedSource} from 'neuroglancer/sliceview/base';
 import {getViewFrustrumVolume, mat3, mat3FromMat4, prod3} from 'neuroglancer/util/geom';
 
 export const ANNOTATION_METADATA_CHUNK_SOURCE_RPC_ID = 'annotation.MetadataChunkSource';
@@ -52,7 +52,7 @@ export const ANNOTATION_RENDER_LAYER_UPDATE_SEGMENTATION_RPC_ID =
 const tempMat3 = mat3.create();
 
 export function
-forEachVisibleAnnotationChunk<RLayer extends SliceViewRenderLayer, Source extends
+forEachVisibleAnnotationChunk<RLayer extends MultiscaleVolumetricDataRenderLayer, Source extends
                                   SliceViewChunkSource<AnnotationGeometryChunkSpecification>,
                                   Transformed extends TransformedSource<RLayer, Source>>(
     projectionParameters: ProjectionParameters, localPosition: Float32Array,
@@ -90,7 +90,7 @@ forEachVisibleAnnotationChunk<RLayer extends SliceViewRenderLayer, Source extend
     const spec = transformedSource.source.spec as AnnotationGeometryChunkSpecification;
     const {chunkLayout} = transformedSource;
     const physicalVolume =
-      prod3(chunkLayout.size) * chunkLayout.detTransform * canonicalToPhysicalScale;
+        prod3(chunkLayout.size) * chunkLayout.detTransform * canonicalToPhysicalScale;
     const {limit, rank} = spec;
     const {nonDisplayLowerClipBound, nonDisplayUpperClipBound} = transformedSource;
     let sliceFraction = 1;
@@ -112,7 +112,8 @@ forEachVisibleAnnotationChunk<RLayer extends SliceViewRenderLayer, Source extend
         beginScale(transformedSource, scaleIndex);
         firstChunk = false;
       }
-      callback(transformedSource, scaleIndex, drawFraction, totalPhysicalSpacing, totalPixelSpacing);
+      callback(
+          transformedSource, scaleIndex, drawFraction, totalPhysicalSpacing, totalPixelSpacing);
     });
     totalPhysicalDensity = newTotalPhysicalDensity;
   }
