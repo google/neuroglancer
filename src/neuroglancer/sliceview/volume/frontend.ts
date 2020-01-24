@@ -22,22 +22,23 @@ import {VolumeChunkSource as VolumeChunkSourceInterface, VolumeChunkSpecificatio
 import {Disposable} from 'neuroglancer/util/disposable';
 import {GL} from 'neuroglancer/webgl/context';
 import {ShaderBuilder, ShaderProgram} from 'neuroglancer/webgl/shader';
+import {getShaderType} from 'neuroglancer/webgl/shader_lib';
 
 export type VolumeChunkKey = string;
 
 export interface ChunkFormat {
   shaderKey: string;
 
+  dataType: DataType;
+
   /**
    * Called on the ChunkFormat of the first source of a RenderLayer.
    *
    * This should define a fragment shader function:
    *
-   *   value_type getDataValue(int channelIndex);
+   *   value_type getDataValueAt(ivec3 position, int channelIndex...);
    *
-   * where value_type is the shader data type corresponding to the chunk data type.  This function
-   * should retrieve the value for channel `channelIndex` at position `getPositionWithinChunk()`
-   * within the chunk.
+   * where value_type is `getShaderType(this.dataType)`.
    */
   defineShader: (builder: ShaderBuilder, numChannelDimensions: number) => void;
 
@@ -64,6 +65,59 @@ export interface ChunkFormat {
    * Called just before drawing chunks for the source.
    */
   beginSource: (gl: GL, shader: ShaderProgram) => void;
+}
+
+export function defineChunkDataShaderAccess(
+    builder: ShaderBuilder, chunkFormat: ChunkFormat, numChannelDimensions: number,
+    getPositionWithinChunkExpr: string) {
+  const {dataType} = chunkFormat;
+  chunkFormat.defineShader(builder, numChannelDimensions);
+  let dataAccessChannelParams = ``;
+  let dataAccessChannelArgs = ``;
+  if (numChannelDimensions === 0) {
+    dataAccessChannelParams += `highp int ignoredChannelIndex`;
+  } else {
+    for (let channelDim = 0; channelDim < numChannelDimensions; ++channelDim) {
+      if (channelDim !== 0) dataAccessChannelParams += `, `;
+      dataAccessChannelParams += `highp int channelIndex${channelDim}`;
+      dataAccessChannelArgs += `, channelIndex${channelDim}`;
+    }
+  }
+
+  let dataAccessCode = `
+${getShaderType(dataType)} getDataValue(${dataAccessChannelParams}) {
+  highp ivec3 p = ivec3(max(vec3(0.0, 0.0, 0.0), min(floor(${getPositionWithinChunkExpr}), uChunkDataSize - 1.0)));
+  return getDataValueAt(p${dataAccessChannelArgs});
+}
+${getShaderType(dataType)} getInterpolatedDataValue(${dataAccessChannelParams}) {
+  highp vec3 positionWithinChunk = ${getPositionWithinChunkExpr};
+  highp ivec3[2] points;
+  points[0] = ivec3(max(vec3(0.0, 0.0, 0.0), min(floor(positionWithinChunk - 0.5), uChunkDataSize - 1.0)));
+  points[1] = ivec3(max(vec3(0.0, 0.0, 0.0), min(ceil(positionWithinChunk - 0.5), uChunkDataSize - 1.0)));
+  highp vec3 mixCoeff = fract(positionWithinChunk - 0.5);
+  ${getShaderType(dataType)} xvalues[2];
+  for (int ix = 0; ix < 2; ++ix) {
+    ${getShaderType(dataType)} yvalues[2];
+    for (int iy = 0; iy < 2; ++iy) {
+      ${getShaderType(dataType)} zvalues[2];
+      for (int iz = 0; iz < 2; ++iz) {
+        zvalues[iz] = getDataValueAt(ivec3(points[ix].x, points[iy].y, points[iz].z)
+                                     ${dataAccessChannelArgs});
+      }
+      yvalues[iy] = mix(zvalues[0], zvalues[1], mixCoeff.z);
+    }
+    xvalues[ix] = mix(yvalues[0], yvalues[1], mixCoeff.y);
+  }
+  return mix(xvalues[0], xvalues[1], mixCoeff.x);
+}
+`;
+  builder.addFragmentCode(dataAccessCode);
+  if (numChannelDimensions <= 1) {
+    builder.addFragmentCode(`
+${getShaderType(dataType)} getDataValue() { return getDataValue(0); }
+${getShaderType(dataType)} getInterpolatedDataValue() { return getInterpolatedDataValue(0); }
+`);
+  }
 }
 
 export interface ChunkFormatHandler extends Disposable {

@@ -90,9 +90,8 @@ export class ChunkFormat extends SingleTextureChunkFormat<TextureLayout> impleme
     return gl.memoize.get(key, () => new ChunkFormat(gl, dataType, key));
   }
 
-  constructor(
-      _gl: GL, public dataType: DataType, key: string) {
-    super(key);
+  constructor(_gl: GL, dataType: DataType, key: string) {
+    super(key, dataType);
     computeTextureFormat(this, dataType);
     this.textureAccessHelper = new ThreeDimensionalTextureAccessHelper('chunkData');
   }
@@ -109,17 +108,11 @@ export class ChunkFormat extends SingleTextureChunkFormat<TextureLayout> impleme
         textureAccessHelper.getAccessor('readVolumeData', 'uVolumeChunkSampler', this.dataType));
     const shaderType = getShaderType(this.dataType);
     let code = `
-${shaderType} getDataValue (`;
-    if (numChannelDimensions === 0) {
-      // Add dummy channel parameter for backward compatibility.
-      code += `highp int ignoredChannel`;
-    }
+${shaderType} getDataValueAt(highp ivec3 p`;
     for (let channelDim = 0; channelDim < numChannelDimensions; ++channelDim) {
-      if (channelDim !== 0) code += `, `;
-      code += `highp int channelIndex${channelDim}`;
+      code += `, highp int channelIndex${channelDim}`;
     }
     code += `) {
-  highp ivec3 p = getPositionWithinChunk();
   highp ivec3 offset = uVolumeChunkStrides[0]
                      + p.x * uVolumeChunkStrides[1]
                      + p.y * uVolumeChunkStrides[2]

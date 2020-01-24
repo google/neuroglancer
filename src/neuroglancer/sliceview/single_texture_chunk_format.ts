@@ -17,6 +17,7 @@
 import {VolumeChunk, VolumeChunkSource} from 'neuroglancer/sliceview/volume/frontend';
 import {ChunkFormat} from 'neuroglancer/sliceview/volume/frontend';
 import {TypedArray} from 'neuroglancer/util/array';
+import {DataType} from 'neuroglancer/util/data_type';
 import {Disposable, RefCounted} from 'neuroglancer/util/disposable';
 import {GL} from 'neuroglancer/webgl/context';
 import {ShaderBuilder, ShaderProgram, ShaderSamplerType, textureTargetForSamplerType} from 'neuroglancer/webgl/shader';
@@ -26,7 +27,7 @@ const textureLayoutSymbol = Symbol('SingleTextureVolumeChunk.textureLayout');
 
 export abstract class SingleTextureChunkFormat<TextureLayout extends Disposable> extends RefCounted
     implements ChunkFormat {
-  constructor(public shaderKey: string) {
+  constructor(public shaderKey: string, public dataType: DataType) {
     super();
   }
 

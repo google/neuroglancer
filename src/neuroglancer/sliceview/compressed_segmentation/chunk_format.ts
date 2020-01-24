@@ -67,9 +67,8 @@ export class ChunkFormat extends SingleTextureChunkFormat<TextureLayout> {
   }
 
   constructor(
-      public dataType: DataType, public subchunkSize: vec3, public numChannels: number,
-      key: string) {
-    super(key);
+      dataType: DataType, public subchunkSize: vec3, public numChannels: number, key: string) {
+    super(key, dataType);
     this.textureAccessHelper = new OneDimensionalTextureAccessHelper('chunkData');
   }
 
@@ -103,17 +102,11 @@ uint ${local('getChannelOffset')}(int channelIndex) {
   }
   return ${local('readTextureValue')}(uint(channelIndex)).value;
 }
-${glslType} getDataValue (`;
-    if (numChannelDimensions === 0) {
-      // Add dummy channel parameter for backward compatibility.
-      fragmentCode += `highp int ignoredChannel`;
-    }
+${glslType} getDataValueAt(highp ivec3 p`;
     for (let channelDim = 0; channelDim < numChannelDimensions; ++channelDim) {
-      if (channelDim !== 0) fragmentCode += `, `;
-      fragmentCode += `highp int channelIndex${channelDim}`;
+      fragmentCode += `, highp int channelIndex${channelDim}`;
     }
     fragmentCode += `) {
-  highp ivec3 p = getPositionWithinChunk();
   highp ivec4 chunkPositionFull = uVolumeChunkStrides[0] +
                      + p.x * uVolumeChunkStrides[1]
                      + p.y * uVolumeChunkStrides[2]
@@ -124,7 +117,7 @@ ${glslType} getDataValue (`;
   chunkPositionFull += channelIndex${channelDim} * uVolumeChunkStrides[${4 + channelDim}];
 `;
     }
-    
+
       fragmentCode += `
   highp ivec3 chunkPosition = chunkPositionFull.xyz;
 

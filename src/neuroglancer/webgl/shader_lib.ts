@@ -39,6 +39,9 @@ struct uint64_t {
 struct uint64x2_t {
   highp uvec4 value;
 };
+uint64_t mix(uint64_t x, uint64_t y, float a) {
+  return x;
+}
 uint64_t toUint64(uint64_t x) { return x; }
 `;
 
@@ -78,6 +81,9 @@ struct uint8x3_t {
 struct uint8x4_t {
   highp uvec4 value;
 };
+uint8_t mix(uint8_t x, uint8_t y, float a) {
+  return uint8_t(uint(round(mix(float(x.value), float(y.value), a))));
+}
 highp uint toRaw(uint8_t x) { return x.value; }
 highp float toNormalized(uint8_t x) { return float(x.value) / 255.0; }
 highp uvec2 toRaw(uint8x2_t x) { return x.value; }
@@ -114,6 +120,9 @@ struct uint16_t {
 struct uint16x2_t {
   highp uvec2 value;
 };
+uint16_t mix(uint16_t x, uint16_t y, float a) {
+  return uint16_t(uint(round(mix(float(x.value), float(y.value), a))));
+}
 highp uint toRaw(uint16_t x) { return x.value; }
 highp float toNormalized(uint16_t x) { return float(toRaw(x)) / 65535.0; }
 highp uvec2 toRaw(uint16x2_t x) { return x.value; }
@@ -132,6 +141,9 @@ export const glsl_uint32 = [
 struct uint32_t {
   highp uint value;
 };
+uint32_t mix(uint32_t x, uint32_t y, float a) {
+  return uint32_t(uint(round(mix(float(x.value), float(y.value), a))));
+}
 highp float toNormalized(uint32_t x) { return float(x.value) / 4294967295.0; }
 highp uint toRaw(uint32_t x) { return x.value; }
 uint64_t toUint64(uint32_t x) {

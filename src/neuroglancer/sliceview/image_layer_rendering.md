@@ -74,16 +74,22 @@ to `"white"` if not specified.
 
 ### Retrieving voxel channel value
 
-The raw value for a given channel is obtained by calling the `getDataValue` function:
+The raw value for a given channel is obtained by calling the `getDataValue` or `getInterpolated` function:
 
 ```glsl
-uint8_t getDataValue(int channelIndex = 0);
-uint16_t getDataValue(int channelIndex = 0);
-uint32_t getDataValue(int channelIndex = 0);
-uint64_t getDataValue(int channelIndex = 0);
-float getDataValue(int channelIndex = 0);
+T getDataValue(int channelIndex...);
+T getInterpolated(int channelIndex...);
 ```
-If no `channelIndex` is specified, the value for the first channel is returned.  (The default value of 0 is shown in the above declarations for exposition only.  As GLSL does not support default values for function parameters, the default value is actually implemented as a separate function overload.)  The return type depends on the data type of the volume.  Note that only `float` is a builtin GLSL type.  The remaining types are defined as simple structs in order to avoid ambiguity regarding the nature of the value:
+
+The type `T` is `uint8_t`, `uint16_t`, `uint32_t`, `uint64_t`, or `float` depending on the data
+source.  The `channelIndex...` parameters specifying the coordinates within the channel dimensions,
+if any.  For backward compatibility, if there are no channel dimensions, a single unused
+`channelIndex` argument may still be specified.
+
+The `getDataValue` function returns the nearest value without interpolation, while the
+`getInterpolated` function uses trilinear interpolation.
+
+Note that only `float` is a builtin GLSL type.  The remaining types are defined as simple structs in order to avoid ambiguity regarding the nature of the value:
 ```glsl
 struct uint8_t {
   highp uint value;
@@ -98,14 +104,13 @@ struct uint64_t {
   highp uvec2 value;
 };
 ```
-For all of these struct types, the contained float values each specify a single byte as a normalized value in [0, 1].  To obtain the raw byte value, you must multiply by 255.
 
 To obtain the raw value as a float, call the `toRaw` function:
 ```glsl
 float toRaw(float x) { return x; }
-highp uint toRaw(uint8_t x) { return x.value; }
-highp uint toRaw(uint16_t x) { return x.value; }
-highp uint toRaw(uint32_t x) { return x.value; }
+highp uint toRaw(uint8_t x) { return float(x.value); }
+highp uint toRaw(uint16_t x) { return float(x.value); }
+highp uint toRaw(uint32_t x) { return float(x.value); }
 ```
 
 To obtain a normalized value that maps the full range of integer types to [0,1], call the `toNormalized` function:

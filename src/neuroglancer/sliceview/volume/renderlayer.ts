@@ -23,7 +23,7 @@ import {ChunkLayout} from 'neuroglancer/sliceview/chunk_layout';
 import {FrontendTransformedSource, SliceView} from 'neuroglancer/sliceview/frontend';
 import {SliceViewRenderContext, SliceViewRenderLayer, SliceViewRenderLayerOptions} from 'neuroglancer/sliceview/renderlayer';
 import {VolumeSourceOptions} from 'neuroglancer/sliceview/volume/base';
-import {ChunkFormat, MultiscaleVolumeChunkSource, VolumeChunkSource} from 'neuroglancer/sliceview/volume/frontend';
+import {ChunkFormat, defineChunkDataShaderAccess, MultiscaleVolumeChunkSource, VolumeChunkSource} from 'neuroglancer/sliceview/volume/frontend';
 import {constantWatchableValue, makeCachedDerivedWatchableValue, WatchableValueInterface} from 'neuroglancer/trackable_value';
 import {mat4, vec3} from 'neuroglancer/util/geom';
 import {getObjectId} from 'neuroglancer/util/object_id';
@@ -32,7 +32,6 @@ import {GL} from 'neuroglancer/webgl/context';
 import {makeWatchableShaderError, ParameterizedContextDependentShaderGetter, parameterizedContextDependentShaderGetter, ParameterizedShaderGetterResult, WatchableShaderError} from 'neuroglancer/webgl/dynamic_shader';
 import {LineShader} from 'neuroglancer/webgl/lines';
 import {ShaderBuilder, ShaderProgram} from 'neuroglancer/webgl/shader';
-import {getShaderType} from 'neuroglancer/webgl/shader_lib';
 
 const DEBUG_VERTICES = false;
 
@@ -48,12 +47,6 @@ const DEBUG_VERTICES = false;
  * toward the "next" plane by this small amount.
  */
 const CHUNK_POSITION_EPSILON = 1e-3;
-
-export const glsl_getPositionWithinChunk = `
-highp ivec3 getPositionWithinChunk () {
-  return ivec3(min(vChunkPosition, uChunkDataSize - 1.0));
-}
-`;
 
 const tempMat4 = mat4.create();
 
@@ -114,8 +107,6 @@ gl_Position = uProjectionMatrix * vec4(position, 1.0);
 vChunkPosition = (position - uTranslation) +
     ${CHUNK_POSITION_EPSILON} * abs(uPlaneNormal);
 `);
-
-    builder.addFragmentCode(glsl_getPositionWithinChunk);
   }
 
   computeVerticesDebug(
@@ -278,27 +269,22 @@ export abstract class SliceViewVolumeRenderLayer<ShaderParameters = any> extends
       encodeParameters: options.encodeShaderParameters,
       shaderError,
       extraParameters: numChannelDimensions,
-      defineShader:
-          (builder: ShaderBuilder, chunkFormat: ChunkFormat|null, parameters: ShaderParameters,
-           numChannelDimensions: number) => {
-            this.vertexComputationManager.defineVolumeShader(builder, chunkFormat === null);
-            builder.addOutputBuffer('vec4', 'v4f_fragData0', 0);
-            builder.addFragmentCode(`
+      defineShader: (
+          builder: ShaderBuilder, chunkFormat: ChunkFormat|null, parameters: ShaderParameters,
+          numChannelDimensions: number) => {
+        this.vertexComputationManager.defineVolumeShader(builder, chunkFormat === null);
+        builder.addOutputBuffer('vec4', 'v4f_fragData0', 0);
+        builder.addFragmentCode(`
 void emit(vec4 color) {
   v4f_fragData0 = color;
 }
 `);
-            if (chunkFormat === null) {
-              return;
-            }
-            chunkFormat.defineShader(builder, numChannelDimensions);
-            if (numChannelDimensions <= 1) {
-              builder.addFragmentCode(`
-${getShaderType(this.dataType)} getDataValue() { return getDataValue(0); }
-`);
-            }
-            this.defineShader(builder, parameters);
-          },
+        if (chunkFormat === null) {
+          return;
+        }
+        defineChunkDataShaderAccess(builder, chunkFormat, numChannelDimensions, `vChunkPosition`);
+        this.defineShader(builder, parameters);
+      },
       getContextKey: context => context === null ? null : context.shaderKey,
     });
     this.vertexComputationManager = VolumeSliceVertexComputationManager.get(gl);
