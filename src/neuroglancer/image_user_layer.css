@@ -16,6 +16,8 @@
 
 .neuroglancer-image-dropdown {
   overflow-y: auto;
+  display: flex;
+  flex-direction: column;
 }
 
 .neuroglancer-image-dropdown .neuroglancer-shader-code-widget {
