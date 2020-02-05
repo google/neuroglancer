@@ -132,6 +132,8 @@ setup(
     ],
     test_requires=[
         'pytest',
+        'selenium',
+        'chromedriver-binary',
     ],
     extras_require={
         ":python_version<'3.2'": ['futures'],

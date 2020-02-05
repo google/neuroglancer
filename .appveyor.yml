@@ -11,11 +11,12 @@ install:
   - conda config --set always_yes yes --set changeps1 no
   - conda update -q conda
   - conda info -a
-  - "conda create -q -n test-environment python=%PYTHON_VERSION% numpy pytest"
+  - "conda create -q -n test-environment python=%PYTHON_VERSION% numpy pytest selenium"
   - activate test-environment
 
 build_script:
   - cd python
+  - python setup.py bundle_client
   - pip install -e .
 
 test_script:

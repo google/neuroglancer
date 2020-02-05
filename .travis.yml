@@ -5,6 +5,8 @@ os:
 python:
   - "2.7"
   - "3.5"
+addons:
+  chrome: stable
 matrix:
   include:
     - name: "C++"
@@ -22,8 +24,6 @@ matrix:
       python: "3.6-dev"
     - name: "Web client"
       sudo: required
-      addons:
-        chrome: stable
       language: node_js
       node_js: node
       before_install:
@@ -42,4 +42,5 @@ install:
   - pip install tox-travis
 script:
   - cd python
+  - python setup.py bundle_client
   - tox -vvvvvvv
