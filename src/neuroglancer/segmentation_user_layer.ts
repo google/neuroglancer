@@ -388,7 +388,7 @@ export class SegmentationUserLayer extends Base {
     let id: Uint64;
     let mappedValue: Uint64;
     let mapped: Uint64|undefined;
-    let name: string|undefined;
+    let label: string|undefined;
     if (typeof value === 'number') {
       id = new Uint64(value, 0);
     } else {
@@ -405,12 +405,12 @@ export class SegmentationUserLayer extends Base {
       mappedValue = id;
     }
     if (segmentLabelMap !== undefined) {
-      name = segmentLabelMap.get(mappedValue.toString());
+      label = segmentLabelMap.get(mappedValue.toString());
     }
-    if (name === undefined && mapped === undefined) {
+    if (label === undefined && mapped === undefined) {
       return id;
     }
-    return new Uint64MapEntry(id, mapped, name);
+    return new Uint64MapEntry(id, mapped, label);
   }
 
   handleAction(action: string) {
@@ -461,11 +461,19 @@ export class SegmentationUserLayer extends Base {
       state.value = v;
     }
   }
-  selectionStateToJson(state: this['selectionState']): any {
-    const json = super.selectionStateToJson(state);
+  selectionStateToJson(state: this['selectionState'], forPython: boolean): any {
+    const json = super.selectionStateToJson(state, forPython);
     let {value} = state;
     if (value instanceof Uint64MapEntry) {
-      json.value = (value.value || value.key).toString();
+      if (forPython) {
+        json.value = {
+          key: value.key.toString(),
+          value: value.value ? value.value.toString() : undefined,
+          label: value.label,
+        };
+      } else {
+        json.value = (value.value || value.key).toString();
+      }
     } else if (value instanceof Uint64) {
       json.value = value.toString();
     }
@@ -498,9 +506,9 @@ export class SegmentationUserLayer extends Base {
     const row = document.createElement('div');
     row.classList.add('neuroglancer-selection-details-segment');
     row.classList.add('neuroglancer-segment-list-entry');
-    let name: string|undefined;
+    let label: string|undefined;
     if (segmentLabelMap !== undefined) {
-      name = segmentLabelMap.get(mapped.toString());
+      label = segmentLabelMap.get(mapped.toString());
     }
 
     const watchableHas = context.registerDisposer(makeCachedLazyDerivedWatchableValue(
@@ -577,12 +585,12 @@ export class SegmentationUserLayer extends Base {
     });
     filterElement.classList.add('neuroglancer-segment-list-entry-filter');
     row.appendChild(filterElement);
-    if (!name) {
+    if (!label) {
       filterElement.style.visibility = 'hidden';
     }
     const nameElement = document.createElement('span');
     nameElement.classList.add('neuroglancer-segment-list-entry-name');
-    nameElement.textContent = name || '';
+    nameElement.textContent = label || '';
     row.appendChild(nameElement);
     parent.appendChild(row);
 

@@ -93,6 +93,7 @@ class Demo(object):
     def _handle_select(self, action_state):
         segment_id = action_state.selected_values.get('ground_truth')
         if segment_id is None: return
+        segment_id = segment_id.value
         with self.viewer.txn() as s:
             segments = s.layers['ground_truth'].segments
             if segment_id in segments:

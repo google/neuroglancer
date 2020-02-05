@@ -16,6 +16,7 @@ from __future__ import absolute_import
 
 import base64
 import collections
+import io
 import numbers
 import traceback
 
@@ -29,18 +30,29 @@ from .json_wrappers import (JsonObjectWrapper, array_wrapper, optional, text_typ
 _uint64_keys = frozenset(['t', 'v'])
 _map_entry_keys = frozenset(['key', 'value'])
 
-MapEntry = collections.namedtuple('MapEntry', ['key', 'value'])
+class SegmentIdMapEntry(collections.namedtuple('SegmentIdMapEntry', ['key', 'value', 'label'])):
+    def __new__(cls, key, value=None, label=None):
+        return super(SegmentIdMapEntry, cls).__new__(cls, key, value, label)
 
 def layer_selected_value(x):
     if isinstance(x, numbers.Number):
         return x
+    if isinstance(x, six.string_types):
+        return int(x)
     if isinstance(x, dict):
-        if six.viewkeys(x) == _uint64_keys and x.get('t') == 'u64':
-            return int(x['v'])
-        if six.viewkeys(x) == _map_entry_keys:
-            return MapEntry(int(x['key']), int(x['value']))
+        value = x.get('value')
+        if value is not None:
+            value = int(value)
+        return SegmentIdMapEntry(int(x['key']), value, x.get('label'))
+    return None
 
-LayerSelectedValues = typed_string_map(layer_selected_value)
+class LayerSelectionState(JsonObjectWrapper):
+    __slots__ = ()
+    supports_validation = True
+    local_position = wrapped_property('localPosition', optional(array_wrapper(np.float32)))
+    value = wrapped_property('value', optional(layer_selected_value))
+
+LayerSelectedValues = typed_string_map(LayerSelectionState)
 
 
 class ScreenshotReply(JsonObjectWrapper):
@@ -49,14 +61,18 @@ class ScreenshotReply(JsonObjectWrapper):
     image = wrapped_property('image', base64.b64decode)
     image_type = imageType = wrapped_property('imageType', text_type)
 
+    @property
+    def image_pixels(self):
+        """Returns the screenshot image as a numpy array of pixel values."""
+        import PIL
+        return np.asarray(PIL.Image.open(io.BytesIO(self.image)))
+
 class ActionState(JsonObjectWrapper):
     __slots__ = ()
     viewer_state = viewerState = wrapped_property('viewerState', viewer_state.ViewerState)
     selected_values = selectedValues = wrapped_property('selectedValues', LayerSelectedValues)
-    mouse_spatial_coordinates = mouseSpatialCoordinates = wrapped_property(
-        'mouseSpatialCoordinates', optional(array_wrapper(np.float32, 3)))
-    mouse_voxel_coordinates = mouseVoxelCoordinates = wrapped_property(
-        'mouseVoxelCoordinates', optional(array_wrapper(np.float32, 3)))
+    mouse_position = mouse_voxel_coordinates = mouseVoxelCoordinates = wrapped_property(
+        'mousePosition', optional(array_wrapper(np.float32)))
     screenshot = wrapped_property('screenshot', optional(ScreenshotReply))
 
 
@@ -70,7 +86,10 @@ class Actions(object):
         self._update_config()
 
     def clear(self):
+        screenshot_handler = self._action_handlers.get('screenshot')
         self._action_handlers.clear()
+        if screenshot_handler is not None:
+            self._action_handlers['screenshot'] = screenshot_handler
         self._update_config()
 
     def remove(self, name, handler):

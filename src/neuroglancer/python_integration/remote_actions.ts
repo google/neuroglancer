@@ -64,9 +64,9 @@ export class RemoteActionHandler extends RefCounted {
     const actionState: any = {};
 
     if (mouseState.updateUnconditionally()) {
-      actionState.mouseVoxelCoordinates = Array.prototype.slice.call(mouseState.position);
+      actionState.mousePosition = Array.prototype.slice.call(mouseState.position);
     }
-    actionState.selectedValues = layerSelectedValues;
+    actionState.selectedValues = layerSelectedValues.toJSON();
     actionState.viewerState = getCachedJson(this.viewer.state).value;
     this.sendActionRequested.dispatch(action, JSON.parse(JSON.stringify(actionState)));
   }

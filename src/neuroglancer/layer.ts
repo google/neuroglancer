@@ -146,7 +146,8 @@ export class UserLayer extends RefCounted {
     return false;
   }
 
-  selectionStateToJson(state: this['selectionState']): any {
+  selectionStateToJson(state: this['selectionState'], forPython: boolean): any {
+    forPython;
     const json: any = {};
     if (state.localPositionValid) {
       const {localPosition} = state;
@@ -883,7 +884,7 @@ export class LayerSelectedValues extends RefCounted {
       if (userLayer) {
         const state = this.get(userLayer);
         if (state !== undefined) {
-          result[layer.name] = userLayer.selectionStateToJson(state);
+          result[layer.name] = userLayer.selectionStateToJson(state, true);
         }
       }
     }
@@ -1011,7 +1012,7 @@ export class TrackableDataSelectionState extends RefCounted implements
     const layersJson: any = {};
     for (const layerData of value.layers) {
       const {layer} = layerData;
-      let data = layer.selectionStateToJson(layerData.state);
+      let data = layer.selectionStateToJson(layerData.state, false);
       if (Object.keys(data).length === 0) data = undefined;
       layersJson[layerData.layer.managedLayer.name] = data;
     }

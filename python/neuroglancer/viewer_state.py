@@ -20,6 +20,11 @@ import collections
 import copy
 import math
 
+try:
+    import collections.abc as collections_abc
+except ImportError:
+    import collections as collections_abc
+
 import numpy as np
 import six
 
@@ -525,7 +530,7 @@ class Layers(object):
             json_data = collections.OrderedDict()
         self._layers = []
         self._readonly = _readonly
-        if isinstance(json_data, collections.Mapping):
+        if isinstance(json_data, collections_abc.Mapping):
             for k, v in six.iteritems(json_data):
                 self._layers.append(ManagedLayer(k, v, _readonly=_readonly))
         else:

@@ -35,16 +35,16 @@ import {withSharedVisibility} from 'neuroglancer/visibility_priority/frontend';
 import {SharedObject} from 'neuroglancer/worker_rpc';
 
 export class Uint64MapEntry {
-  constructor(public key: Uint64, public value?: Uint64, public name?: string|undefined) {}
+  constructor(public key: Uint64, public value?: Uint64, public label?: string|undefined) {}
   toString() {
-    const {key, value, name} = this;
+    const {key, value, label} = this;
     let baseString: string;
     if (value === undefined) {
       baseString = `${key}`;
     } else {
       baseString = `${key}→${value}`;
     }
-    return `${baseString} ${name}`;
+    return `${baseString} ${label}`;
   }
 }
 

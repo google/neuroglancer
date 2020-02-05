@@ -652,11 +652,15 @@ class InteractiveSplitter(object):
             self._update_state(s)
 
     def _get_mouse_supervoxel(self, s):
-        supervoxel_id = s.selected_values['original']
+        supervoxel_id = s.selected_values.get('original')
+        if supervoxel_id is not None:
+            supervoxel_id = supervoxel_id.value
         if supervoxel_id is None:
-            m = s.selected_values['split-result']
+            m = s.selected_values.get('split-result')
             if m is not None:
-                if isinstance(m, neuroglancer.MapEntry):
+                m = m.value
+            if m is not None:
+                if isinstance(m, neuroglancer.SegmentIdMapEntry):
                     supervoxel_id = m.key
                 else:
                     supervoxel_id = m
