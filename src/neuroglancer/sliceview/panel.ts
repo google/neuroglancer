@@ -338,13 +338,10 @@ export class SliceViewPanel extends RenderedDataPanel {
         data, 0, 4, glWindowX, glWindowY, pickingData.viewportWidth, pickingData.viewportHeight);
     const {viewportWidth, viewportHeight} = pickingData;
     const numOffsets = pickOffsetSequence.length;
-    const setStateFromOffset = (offset: number, pickId: number) => {
-      const relativeX = offset % pickDiameter;
-      const relativeY = (offset - relativeX) / pickDiameter;
+    const setStateFromRelative = (relativeX: number, relativeY: number, pickId: number) => {
+      const x = glWindowX + relativeX - pickRadius;
       const y = pickingData.viewportHeight - (glWindowY + relativeY - pickRadius);
-      vec3.set(
-          tempVec3, (glWindowX + relativeX - pickRadius) - viewportWidth / 2,
-          y - viewportHeight / 2, 0);
+      vec3.set(tempVec3, x - viewportWidth / 2, y - viewportHeight / 2, 0);
       vec3.transformMat4(tempVec3, tempVec3, pickingData.invTransform);
       let {position: mousePosition} = mouseState;
       const {value: voxelCoordinates} = this.navigationState.position;
@@ -367,10 +364,12 @@ export class SliceViewPanel extends RenderedDataPanel {
       const offset = pickOffsetSequence[i];
       const pickId = data[4 * i];
       if (pickId === 0) continue;
-      setStateFromOffset(offset, pickId);
+      const relativeX = offset % pickDiameter;
+      const relativeY = (offset - relativeX) / pickDiameter;
+      setStateFromRelative(relativeX, relativeY, pickId);
       return;
     }
-    setStateFromOffset(0, 0);
+    setStateFromRelative(pickRadius, pickRadius, 0);
   }
 
   /**

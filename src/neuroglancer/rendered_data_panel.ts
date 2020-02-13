@@ -615,10 +615,10 @@ export abstract class RenderedDataPanel extends RenderedPanel {
   abstract translateByViewportPixels(deltaX: number, deltaY: number): void;
 
   handleMouseMove(clientX: number, clientY: number) {
-    let {element} = this;
+    const {element} = this;
     const bounds = element.getBoundingClientRect();
-    const mouseX = clientX - bounds.left;
-    const mouseY = clientY - bounds.top;
+    const mouseX = clientX - (bounds.left + element.clientLeft);
+    const mouseY = clientY - (bounds.top + element.clientTop);
     const {mouseState} = this.viewer;
     mouseState.pageX = clientX + window.scrollX;
     mouseState.pageY = clientY + window.scrollY;
