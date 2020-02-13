@@ -301,8 +301,8 @@ export class PositionWidget extends RefCounted {
       const x = getPositionFromMouseEvent(event);
       if (x === undefined) return;
       const {position} = this;
-      const voxelCoordinates = position.value!;
-      voxelCoordinates[dimensionIndex] = x;
+      const voxelCoordinates = position.value;
+      voxelCoordinates[dimensionIndex] = x + 0.5;
       widget.modified = false;
       position.value = voxelCoordinates;
     };
@@ -769,23 +769,22 @@ export class PositionWidget extends RefCounted {
     if (!position.valid) {
       return;
     }
-    const coordinateSpace = position.coordinateSpace.value!;
+    const coordinateSpace = position.coordinateSpace.value;
     const {bounds} = coordinateSpace;
     const voxelCoordinates = Float32Array.from(position.value);
-    let newValue = voxelCoordinates[axisIndex] + adjustment
+    let newValue = Math.floor(voxelCoordinates[axisIndex] + adjustment);
     if (adjustment > 0) {
       const bound = bounds.upperBounds[axisIndex];
       if (Number.isFinite(bound)) {
         newValue = Math.min(newValue, Math.ceil(bound - 1));
       }
-    }
-    else {
+    } else {
       const bound = bounds.lowerBounds[axisIndex];
       if (Number.isFinite(bound)) {
         newValue = Math.max(newValue, Math.floor(bound));
       }
     }
-    voxelCoordinates[axisIndex] = newValue;
+    voxelCoordinates[axisIndex] = newValue + 0.5;
     this.position.value = voxelCoordinates;
     this.updateView();
   }
@@ -801,7 +800,7 @@ export class PositionWidget extends RefCounted {
       widget.modified = false;
       const value = Number(widget.coordinate.value);
       if (Number.isFinite(value)) {
-        voxelCoordinates[i] = value;
+        voxelCoordinates[i] = value + (Number.isInteger(value) ? 0.5 : 0);
       }
     }
     position.value = voxelCoordinates;

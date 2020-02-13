@@ -467,7 +467,7 @@ export abstract class RenderedDataPanel extends RenderedPanel {
           offset[1] = 0;
           offset[2] = 0;
           offset[axis] = sign;
-          navigationState.pose.translateVoxelsRelative(offset);
+          navigationState.pose.translateVoxelsRelative(offset, true);
         });
       }
     }
@@ -504,7 +504,7 @@ export abstract class RenderedDataPanel extends RenderedPanel {
           offset[0] = 0;
           offset[1] = 0;
           offset[2] = detail.deltaY + detail.deltaX;
-          navigationState.pose.translateVoxelsRelative(offset);
+          navigationState.pose.translateVoxelsRelative(offset, true);
         });
 
     for (const amount of [1, 10]) {
@@ -516,7 +516,7 @@ export abstract class RenderedDataPanel extends RenderedPanel {
         offset[0] = 0;
         offset[1] = 0;
         offset[2] = (delta > 0 ? -1 : 1) * amount;
-        navigationState.pose.translateVoxelsRelative(offset);
+        navigationState.pose.translateVoxelsRelative(offset, true);
       });
     }
 

@@ -188,6 +188,9 @@ export class Position extends RefCounted {
       } else {
         coordinates_ = this.coordinates_ = new Float32Array(rank);
         getBoundingBoxCenter(coordinates_, coordinateSpace.bounds);
+        for (let i = 0; i < rank; ++i) {
+          coordinates_[i] = Math.floor(coordinates_[i]) + 0.5;
+        }
       }
       this.changed.dispatch();
       return;
@@ -235,7 +238,7 @@ export class Position extends RefCounted {
     const {coordinates_} = this;
     const rank = coordinates_.length;
     for (let i = 0; i < rank; ++i) {
-      coordinates_[i] = Math.round(coordinates_[i]);
+      coordinates_[i] = Math.floor(coordinates_[i]) + 0.5;
     }
     this.changed.dispatch();
   }
@@ -1078,7 +1081,7 @@ export class DisplayPose extends RefCounted {
     position.changed.dispatch();
   }
 
-  translateVoxelsRelative(translation: vec3) {
+  translateVoxelsRelative(translation: vec3, round: boolean = false) {
     if (!this.valid) {
       return;
     }
@@ -1090,6 +1093,7 @@ export class DisplayPose extends RefCounted {
     for (let i = 0; i < displayRank; ++i) {
       const dim = displayDimensionIndices[i];
       const adjustment = temp[i];
+      if (adjustment === 0) continue;
       let newValue = voxelCoordinates[dim] + adjustment;
       if (adjustment > 0) {
         const bound = upperBounds[dim];
@@ -1102,6 +1106,7 @@ export class DisplayPose extends RefCounted {
           newValue = Math.max(newValue, Math.floor(bound));
         }
       }
+      if (round) newValue = Math.floor(newValue) + 0.5;
       voxelCoordinates[dim] = newValue;
     }
     this.position.changed.dispatch();
