@@ -19,20 +19,19 @@
  */
 
 import {AnnotationType, Point} from 'neuroglancer/annotation';
-import {AnnotationRenderContext, AnnotationRenderHelper, registerAnnotationTypeRenderHandler} from 'neuroglancer/annotation/type_handler';
+import {AnnotationRenderContext, AnnotationRenderHelper, AnnotationShaderGetter, registerAnnotationTypeRenderHandler} from 'neuroglancer/annotation/type_handler';
 import {defineCircleShader, drawCircles, initializeCircleShader} from 'neuroglancer/webgl/circles';
-import {ShaderBuilder} from 'neuroglancer/webgl/shader';
+import {defineLineShader, drawLines, initializeLineShader} from 'neuroglancer/webgl/lines';
+import {ShaderBuilder, ShaderProgram} from 'neuroglancer/webgl/shader';
 import {defineVectorArrayVertexShaderInput} from 'neuroglancer/webgl/shader_lib';
 
 class RenderHelper extends AnnotationRenderHelper {
-  private shaderGetter = this.getDependentShader('annotation/point', (builder: ShaderBuilder) => {
+  private defineShaderCommon(builder: ShaderBuilder) {
     const {rank} = this;
-    defineCircleShader(builder, /*crossSectionFade=*/ this.targetIsSliceView);
     // Position of point in model coordinates.
     defineVectorArrayVertexShaderInput(
         builder, 'float', WebGL2RenderingContext.FLOAT, /*normalized=*/ false, 'VertexPosition',
         rank);
-    builder.addVarying('highp float', 'vClipCoefficient');
     builder.addVarying('highp vec4', 'vBorderColor');
     builder.addVertexCode(`
 float ng_markerDiameter;
@@ -50,39 +49,120 @@ void setPointMarkerBorderColor(vec4 color) {
   vBorderColor = color;
 }
 `);
-    builder.setVertexMain(`
-float modelPosition[${rank}] = getVertexPosition0();
-vClipCoefficient = getSubspaceClipCoefficient(modelPosition);
-if (vClipCoefficient == 0.0) {
-  gl_Position = vec4(2.0, 0.0, 0.0, 1.0);
-  return;
-}
+    builder.addVertexMain(`
 ng_markerDiameter = 5.0;
 ng_markerBorderWidth = 1.0;
 vBorderColor = vec4(0.0, 0.0, 0.0, 1.0);
+float modelPosition[${rank}] = getVertexPosition0();
+float clipCoefficient = getSubspaceClipCoefficient(modelPosition);
+if (clipCoefficient == 0.0) {
+  gl_Position = vec4(2.0, 0.0, 0.0, 1.0);
+  return;
+}
 ${this.invokeUserMain}
-emitCircle(uModelViewProjection *
-           vec4(projectModelVectorToSubspace(modelPosition), 1.0), ng_markerDiameter, ng_markerBorderWidth);
+vColor.a *= clipCoefficient;
+vBorderColor.a *= clipCoefficient;
 ${this.setPartIndex(builder)};
 `);
-    builder.setFragmentMain(`
+  }
+
+  private shaderGetter3d =
+      this.getDependentShader('annotation/point:3d', (builder: ShaderBuilder) => {
+        defineCircleShader(builder, /*crossSectionFade=*/ this.targetIsSliceView);
+        this.defineShaderCommon(builder);
+        builder.addVertexMain(`
+emitCircle(uModelViewProjection *
+           vec4(projectModelVectorToSubspace(modelPosition), 1.0), ng_markerDiameter, ng_markerBorderWidth);
+`);
+        builder.setFragmentMain(`
 vec4 color = getCircleColor(vColor, vBorderColor);
-color.a *= vClipCoefficient;
 emitAnnotation(color);
 `);
-  });
+      });
 
-  draw(context: AnnotationRenderContext) {
-    this.enable(this.shaderGetter, context, shader => {
+  private makeShaderGetter2d = (extraDim: number) =>
+      this.getDependentShader(`annotation/point:2d:${extraDim}`, (builder: ShaderBuilder) => {
+        defineLineShader(builder, /*rounded=*/ true);
+        this.defineShaderCommon(builder);
+        builder.addVertexMain(`
+vec3 subspacePositionA = projectModelVectorToSubspace(modelPosition);
+vec3 subspacePositionB = subspacePositionA;
+vec4 baseProjection = uModelViewProjection * vec4(subspacePositionA, 1.0);
+vec4 zCoeffs = uModelViewProjection[${extraDim}];
+float minZ = 1e30;
+float maxZ = -1e30;
+for (int i = 0; i < 3; ++i) {
+  // Want: baseProjection[i] + z * zCoeffs[i] = -2.0 * (baseProjection.w - z * zCoeffs.w)
+  //  i.e. baseProjection[i] + 2.0 * baseProjection.w < -z * (2.0 * zCoeffs.w + zCoeffs[i])
+  //  i.e. baseProjection[i] + 2.0 * baseProjection.w < -z * k1
+  float k1 = 2.0 * zCoeffs.w + zCoeffs[i];
+  float q1 = -(baseProjection[i] + 2.0 * baseProjection.w) / k1;
+  if (k1 != 0.0) {
+    minZ = min(minZ, q1);
+    maxZ = max(maxZ, q1);
+  }
+  // Want: baseProjection[i] + z * zCoeffs[i] = 2.0 * (baseProjection.w + z * zCoeffs.w)
+  //  i.e. baseProjection[i] - 2.0 * baseProjection.w > z * (2.0 * zCoeffs.w - zCoeffs[i])
+  //  i.e. baseProjection[i] - 2.0 * baseProjection.w > z * k2
+  float k2 = 2.0 * zCoeffs.w - zCoeffs[i];
+  float q2 = (baseProjection[i] - 2.0 * baseProjection.w) / k2;
+  if (k2 != 0.0) {
+    minZ = min(minZ, q2);
+    maxZ = max(maxZ, q2);
+  }
+}
+if (minZ > maxZ) minZ = maxZ = 0.0;
+subspacePositionA[${extraDim}] = minZ;
+subspacePositionB[${extraDim}] = maxZ;
+emitLine(uModelViewProjection, subspacePositionA, subspacePositionB, ng_markerDiameter, ng_markerBorderWidth);
+`);
+        builder.setFragmentMain(`
+vec4 color = getRoundedLineColor(vColor, vBorderColor);
+emitAnnotation(vec4(color.rgb, color.a * ${this.getCrossSectionFadeFactor()}));
+`);
+      });
+
+  private shaderGetter2d = this.makeShaderGetter2d(2);
+
+  // TODO(jbms): This rendering for the 1d case is not correct except for cross-section/orthographic
+  // projection views where the "z" dimension is orthogonal to the single annotation chunk
+  // dimension.
+  private shaderGetter1d = this.makeShaderGetter2d(1);
+
+  enable(
+      shaderGetter: AnnotationShaderGetter, context: AnnotationRenderContext,
+      callback: (shader: ShaderProgram) => void) {
+    super.enable(shaderGetter, context, shader => {
       const binder = shader.vertexShaderInputBinders['VertexPosition'];
       binder.enable(1);
       this.gl.bindBuffer(WebGL2RenderingContext.ARRAY_BUFFER, context.buffer.buffer);
       binder.bind(this.serializedBytesPerAnnotation, context.bufferOffset);
-      initializeCircleShader(
-          shader, context.renderContext.projectionParameters, {featherWidthInPixels: 1});
-      drawCircles(shader.gl, 1, context.count);
+      callback(shader);
       binder.disable();
     });
+  }
+
+  draw(context: AnnotationRenderContext) {
+    const {numChunkDisplayDims} = context.chunkDisplayTransform;
+    switch (numChunkDisplayDims) {
+      case 3:
+        this.enable(this.shaderGetter3d, context, shader => {
+          initializeCircleShader(
+              shader, context.renderContext.projectionParameters, {featherWidthInPixels: 1});
+          drawCircles(shader.gl, 1, context.count);
+        });
+        break;
+      case 2:
+      case 1:
+        this.enable(
+            numChunkDisplayDims === 2 ? this.shaderGetter2d : this.shaderGetter1d, context,
+            shader => {
+              initializeLineShader(
+                  shader, context.renderContext.projectionParameters, /*featherWidthInPixels=*/ 1);
+              drawLines(shader.gl, 1, context.count);
+            });
+        break;
+    }
   }
 }
 

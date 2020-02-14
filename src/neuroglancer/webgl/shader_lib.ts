@@ -173,6 +173,33 @@ highp uint log2Exact(highp uint i) {
 }
 `;
 
+// Clip line endpoints to the OpenGL viewing volume depth range.
+// https://www.khronos.org/opengl/wiki/Vertex_Post-Processing#Clipping
+//
+// This is similar to the clipping that the OpenGL implementation itself would do for lines, except
+// that we only clip based on `z`.
+export const glsl_clipLineToDepthRange = `
+bool clipLineToDepthRange(inout vec4 a, inout vec4 b) {
+  float tmin = 0.0, tmax = 1.0;
+  float k1 = b.w - a.w + a.z - b.z;
+  float k2 = a.w - b.w + a.z - b.z;
+  float q1 = (a.z - a.w) / k1;
+  float q2 = (a.z + a.w) / k2;
+  if (k1 > 0.0) tmin = max(tmin, q1);
+  else if (k1 < 0.0) tmax = min(tmax, q1);
+  if (k2 > 0.0) tmax = min(tmax, q2);
+  else if (k2 < 0.0) tmin = max(tmin, q2);
+  if (tmin <= tmax) {
+    vec4 tempA = a;
+    vec4 tempB = b;
+    a = mix(tempA, tempB, tmin);
+    b = mix(tempA, tempB, tmax);
+    return true;
+  }
+  return false;
+}
+`;
+
 export function getShaderType(dataType: DataType, numComponents: number = 1) {
   switch (dataType) {
     case DataType.FLOAT32:

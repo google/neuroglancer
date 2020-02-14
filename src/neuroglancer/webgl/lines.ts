@@ -20,10 +20,11 @@
 
 import {drawQuads, glsl_getQuadVertexPosition, VERTICES_PER_QUAD} from 'neuroglancer/webgl/quad';
 import {ShaderBuilder, ShaderProgram} from 'neuroglancer/webgl/shader';
+import {glsl_clipLineToDepthRange} from 'neuroglancer/webgl/shader_lib';
 
 export const VERTICES_PER_LINE = VERTICES_PER_QUAD;
 
-export function defineLineShader(builder: ShaderBuilder) {
+export function defineLineShader(builder: ShaderBuilder, rounded = false) {
   builder.addVertexCode(glsl_getQuadVertexPosition);
   // x: 1 / viewportWidth
   // y: 1 / viewportHeight
@@ -32,32 +33,74 @@ export function defineLineShader(builder: ShaderBuilder) {
   builder.addVarying('highp float', 'vLineCoord');
   // max(1e-6, featherWidth) / (lineWidth + featherWidth)
   builder.addVarying('highp float', 'vLineFeatherFraction');
-
+  if (rounded) {
+    // Fraction of total line length used by each endpoint.
+    builder.addVarying('highp float', 'vEndpointFraction');
+    builder.addVarying('highp float', 'vLineCoordT');
+    // Starting point of border from [0, 1].
+    builder.addVarying('highp float', 'vLineBorderStartFraction');
+  }
+  builder.addVertexCode(glsl_clipLineToDepthRange);
   builder.addVertexCode(`
 vec2 getLineOffset() { return getQuadVertexPosition(vec2(0.0, -1.0), vec2(1.0, 1.0)); }
 float getLineEndpointCoefficient() { return getLineOffset().x; }
 uint getLineEndpointIndex() { return uint(getLineEndpointCoefficient()); }
-void emitLine(vec4 vertexAClip, vec4 vertexBClip, float lineWidthInPixels) {
+void emitLine(vec4 vertexAClip, vec4 vertexBClip, float lineWidthInPixels
+              ${rounded ? ', float borderWidth' : ''}) {
+  clipLineToDepthRange(vertexAClip, vertexBClip);
+  vec3 vertexADevice = vertexAClip.xyz / vertexAClip.w;
+  vec3 vertexBDevice = vertexBClip.xyz / vertexBClip.w;
+
+  vec2 lineDirectionUnnormalized = vertexBDevice.xy - vertexADevice.xy;
+  vec2 lineDirection;
+  float linePixelLength = length(lineDirectionUnnormalized / uLineParams.xy * 0.5);
+
+  if (linePixelLength < 1e-3) {
+    lineDirection = vec2(1.0, 0.0);
+    vertexADevice.z = vertexBDevice.z = 0.0;
+  } else {
+    lineDirection = normalize(lineDirectionUnnormalized);
+  }
+  vec2 lineNormal = normalize(vec2(lineDirection.y, -lineDirection.x) / uLineParams.yx * uLineParams.xy);
+
   vec2 lineOffset = getLineOffset();
-  vec4 vertexPositionClip = mix(vertexAClip, vertexBClip, lineOffset.x);
-  vec4 otherVertexPositionClip = mix(vertexBClip, vertexAClip, lineOffset.x);
-
-  vec3 vertexPositionDevice = vertexPositionClip.xyz / vertexPositionClip.w;
-  vec3 otherVertexPositionDevice = otherVertexPositionClip.xyz / otherVertexPositionClip.w;
-
-  vec2 lineDirection = normalize(otherVertexPositionDevice.xy - vertexPositionDevice.xy);
-  vec2 lineNormal = vec2(lineDirection.y, -lineDirection.x);
-
-  gl_Position = vertexPositionClip;
-  float totalLineWidth = lineWidthInPixels + uLineParams.z;
+  gl_Position = vec4(mix(vertexADevice, vertexBDevice, lineOffset.x), 1.0);
+  float totalLineWidth = lineWidthInPixels + 2.0 * uLineParams.z ${rounded ? ' + 2.0 * borderWidth' : ''};
   vLineFeatherFraction = max(1e-6, uLineParams.z) / totalLineWidth;
-  gl_Position.xy += lineOffset.y * (2.0 * lineOffset.x - 1.0) * lineNormal * totalLineWidth * uLineParams.xy * gl_Position.w;
+  gl_Position.xy += (lineOffset.y * lineNormal
+                     ${rounded ? '+ lineDirection * (2.0 * lineOffset.x - 1.0)' : ''})
+                  * totalLineWidth * uLineParams.xy;
   vLineCoord = lineOffset.y;
+  ${rounded ? 'vEndpointFraction = totalLineWidth / (linePixelLength + totalLineWidth * 2.0);' : ''}
+  ${rounded ? 'vLineCoordT = lineOffset.x; vLineBorderStartFraction = lineWidthInPixels / totalLineWidth;' : ''}
 }
-void emitLine(mat4 projection, vec3 vertexA, vec3 vertexB, float lineWidthInPixels) {
-  emitLine(projection * vec4(vertexA, 1.0), projection * vec4(vertexB, 1.0), lineWidthInPixels);
+void emitLine(mat4 projection, vec3 vertexA, vec3 vertexB, float lineWidthInPixels
+              ${rounded ? ', float borderWidth' : ''}) {
+  emitLine(projection * vec4(vertexA, 1.0), projection * vec4(vertexB, 1.0),
+           lineWidthInPixels
+           ${rounded ? ', borderWidth' : ''});
 }
 `);
+  if (rounded) {
+    builder.addFragmentCode(`
+vec4 getRoundedLineColor(vec4 interiorColor, vec4 borderColor) {
+  float radius;
+  if (vLineCoordT < vEndpointFraction || vLineCoordT > 1.0 - vEndpointFraction) {
+    radius = length(vec2(1.0 - min(vLineCoordT, 1.0 - vLineCoordT) / vEndpointFraction,
+                         vLineCoord));
+    if (radius > 1.0) {
+      discard;
+    }
+  } else {
+    radius = abs(vLineCoord);
+  }
+  float borderColorFraction = clamp((radius - vLineBorderStartFraction) / vLineFeatherFraction, 0.0, 1.0);
+  float feather = clamp((1.0 - radius) / vLineFeatherFraction, 0.0, 1.0);
+  vec4 color = mix(interiorColor, borderColor, borderColorFraction);
+  return vec4(color.rgb, color.a * feather);
+}
+`);
+  }
 
   builder.addFragmentCode(`
 float getLineAlpha() {

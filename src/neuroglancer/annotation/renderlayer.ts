@@ -448,6 +448,7 @@ function AnnotationRenderLayer<TBase extends AnyConstructor<VisibilityTrackedRen
         subspaceMatrix: state.renderSubspaceTransform,
         renderSubspaceModelMatrix: chunkDisplayTransform.displaySubspaceModelMatrix,
         renderSubspaceInvModelMatrix: chunkDisplayTransform.displaySubspaceInvModelMatrix,
+        chunkDisplayTransform,
       };
       for (const annotationType of annotationTypes) {
         const idMap = typeToIdMaps[annotationType];

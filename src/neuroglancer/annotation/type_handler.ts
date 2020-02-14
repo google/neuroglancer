@@ -17,6 +17,7 @@
 import {Annotation, AnnotationPropertySpec, AnnotationType, annotationTypeHandlers, getPropertyOffsets} from 'neuroglancer/annotation';
 import {AnnotationLayer} from 'neuroglancer/annotation/renderlayer';
 import {PerspectiveViewRenderContext} from 'neuroglancer/perspective_view/render_layer';
+import {ChunkDisplayTransformParameters} from 'neuroglancer/render_coordinate_transform';
 import {SliceViewPanelRenderContext} from 'neuroglancer/sliceview/renderlayer';
 import {WatchableValueInterface} from 'neuroglancer/trackable_value';
 import {RefCounted} from 'neuroglancer/util/disposable';
@@ -43,6 +44,7 @@ export interface AnnotationRenderContext {
   renderSubspaceModelMatrix: mat4;
   renderSubspaceInvModelMatrix: mat4;
   modelClipBounds: Float32Array;
+  chunkDisplayTransform: ChunkDisplayTransformParameters;
 }
 
 interface AnnotationPropertyTypeRenderHandler {
@@ -277,6 +279,7 @@ void setPointMarkerColor(vec4 color);
 void setPointMarkerBorderColor(vec4 color);
 void setPointMarkerSize(float size);
 void setPointMarkerBorderWidth(float size);
+void setPointMarkerBorderColor(vec3 color) { setPointMarkerBorderColor(vec4(color, 1.0)); }
 
 void setEllipsoidFillColor(vec4 color);
 
