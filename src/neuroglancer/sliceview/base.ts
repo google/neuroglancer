@@ -766,8 +766,11 @@ forEachPlaneIntersectingVolumetricChunk<RLayer extends MultiscaleVolumetricDataR
   mat4.invert(invModelViewProjection, modelViewProjection);
   const lower = tempVisibleVolumetricChunkLower;
   const upper = tempVisibleVolumetricChunkUpper;
+  const epsilon = 1e-3;
   for (let i = 0; i < 3; ++i) {
-    const c = invModelViewProjection[12 + i];
+    // Add small offset of `epsilon` voxels to bias towards the higher coordinate if very close to a
+    // voxel boundary.
+    const c = invModelViewProjection[12 + i] + epsilon / chunkSize[i];
     const xCoeff = Math.abs(invModelViewProjection[i]);
     const yCoeff = Math.abs(invModelViewProjection[4 + i]);
     lower[i] = Math.floor(c - xCoeff - yCoeff);
