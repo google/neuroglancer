@@ -24,7 +24,7 @@ let authPromise: Promise<string>|null = null;
 // generate a token with the neuroglancer-auth service using google oauth2
 async function authorize(auth_url: string) {
   const oauth_uri = await fetch(
-                        `https://${auth_url}/authorize?redirect=${
+                        `${auth_url}?redirect=${
                             encodeURI(window.location.origin + '/auth_redirect.html')}`,
                         {credentials: 'include'})
                         .then((res) => {
