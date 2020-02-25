@@ -32,6 +32,7 @@ import {GL} from 'neuroglancer/webgl/context';
 import {makeWatchableShaderError, ParameterizedContextDependentShaderGetter, parameterizedContextDependentShaderGetter, ParameterizedShaderGetterResult, WatchableShaderError} from 'neuroglancer/webgl/dynamic_shader';
 import {defineLineShader, drawLines, initializeLineShader, VERTICES_PER_LINE} from 'neuroglancer/webgl/lines';
 import {ShaderBuilder, ShaderProgram} from 'neuroglancer/webgl/shader';
+import {defineVertexId, VertexIdHelper} from 'neuroglancer/webgl/vertex_id';
 
 const DEBUG_VERTICES = false;
 
@@ -51,6 +52,7 @@ const CHUNK_POSITION_EPSILON = 1e-3;
 const tempMat4 = mat4.create();
 
 function defineVolumeShader(builder: ShaderBuilder, wireFrame: boolean) {
+  defineVertexId(builder);
   defineBoundingBoxCrossSectionShader(builder);
 
   // Specifies translation of the current chunk.
@@ -215,12 +217,14 @@ export abstract class SliceViewVolumeRenderLayer<ShaderParameters = any> extends
       ParameterizedContextDependentShaderGetter<ChunkFormat|null, ShaderParameters, number>;
   private tempChunkPosition: Float32Array;
   shaderParameters: WatchableValueInterface<ShaderParameters>;
+  private vertexIdHelper: VertexIdHelper;
   constructor(
       multiscaleSource: MultiscaleVolumeChunkSource,
       options: RenderLayerOptions<ShaderParameters>) {
     const {shaderError = makeWatchableShaderError(), shaderParameters} = options;
     super(multiscaleSource.chunkManager, multiscaleSource, options);
     const {gl} = this;
+    this.vertexIdHelper = this.registerDisposer(VertexIdHelper.get(gl));
     this.shaderParameters = shaderParameters;
     const {channelCoordinateSpace} = options;
     this.channelCoordinateSpace = channelCoordinateSpace === undefined ?
@@ -323,6 +327,8 @@ void emit(vec4 color) {
 
     const {gl} = this;
 
+    this.vertexIdHelper.enable();
+
     const chunkPosition = vec3.create();
     const {renderScaleHistogram} = this;
 
@@ -424,5 +430,6 @@ void emit(vec4 color) {
       }
     }
     endShader();
+    this.vertexIdHelper.disable();
   }
 }

@@ -29,6 +29,7 @@ import {defineCircleShader, drawCircles, initializeCircleShader, VERTICES_PER_CI
 import {defineLineShader, drawLines, initializeLineShader, VERTICES_PER_LINE} from 'neuroglancer/webgl/lines';
 import {ShaderBuilder, ShaderProgram} from 'neuroglancer/webgl/shader';
 import {defineVectorArrayVertexShaderInput} from 'neuroglancer/webgl/shader_lib';
+import {defineVertexId, VertexIdHelper} from 'neuroglancer/webgl/vertex_id';
 
 const FULL_OBJECT_PICK_OFFSET = 0;
 const CORNERS_PICK_OFFSET = FULL_OBJECT_PICK_OFFSET + 1;
@@ -124,11 +125,14 @@ const edgeBoxCornerOffsetData = Float32Array.from([
 
 abstract class RenderHelper extends AnnotationRenderHelper {
   defineShader(builder: ShaderBuilder) {
+    defineVertexId(builder);
     // Position of lower/upper in model coordinates.
     const {rank} = this;
     defineVectorArrayVertexShaderInput(
         builder, 'float', WebGL2RenderingContext.FLOAT, /*normalized=*/ false, 'Bounds', rank, 2);
   }
+
+  private vertexIdHelper = this.registerDisposer(VertexIdHelper.get(this.gl));
 
   enable(
       shaderGetter: AnnotationShaderGetter, context: AnnotationRenderContext,
@@ -138,7 +142,10 @@ abstract class RenderHelper extends AnnotationRenderHelper {
       binder.enable(1);
       this.gl.bindBuffer(WebGL2RenderingContext.ARRAY_BUFFER, context.buffer.buffer);
       binder.bind(this.serializedBytesPerAnnotation, context.bufferOffset);
+      const {vertexIdHelper} = this;
+      vertexIdHelper.enable();
       callback(shader);
+      vertexIdHelper.disable();
       binder.disable();
     });
   }

@@ -28,6 +28,7 @@ import {drawQuads, glsl_getQuadVertexPosition} from 'neuroglancer/webgl/quad';
 import {ShaderBuilder, ShaderProgram} from 'neuroglancer/webgl/shader';
 import {defineVectorArrayVertexShaderInput} from 'neuroglancer/webgl/shader_lib';
 import {SphereRenderHelper} from 'neuroglancer/webgl/spheres';
+import {defineVertexId, VertexIdHelper} from 'neuroglancer/webgl/vertex_id';
 
 const tempMat4 = mat4.create();
 
@@ -169,6 +170,7 @@ emitAnnotation(vec4(vColor.rgb * vLightingFactor, vColor.a * vClipCoefficient));
 class SliceViewRenderHelper extends RenderHelper {
   private shaderGetter =
       this.getDependentShader('annotation/ellipsoid/crossSection', (builder: ShaderBuilder) => {
+        defineVertexId(builder);
         this.defineShader(builder);
         builder.addUniform('highp mat4', 'uViewportToObject');
         builder.addUniform('highp mat4', 'uObjectToViewport');
@@ -219,6 +221,8 @@ emitAnnotation(vec4(vColor.rgb, vColor.a * vClipCoefficient));
 `);
       });
 
+  private vertexIdHelper = this.registerDisposer(VertexIdHelper.get(this.gl));
+
   draw(context: AnnotationRenderContext&{renderContext: SliceViewPanelRenderContext}) {
     this.enable(this.shaderGetter, context, shader => {
       const {gl} = shader;
@@ -234,7 +238,10 @@ emitAnnotation(vec4(vColor.rgb, vColor.a * vClipCoefficient));
       mat4.invert(objectToViewport, viewportToObject);
       gl.uniformMatrix4fv(
           shader.uniform('uObjectToViewport'), /*transpose=*/ false, objectToViewport);
+      const {vertexIdHelper} = this;
+      vertexIdHelper.enable();
       drawQuads(gl, 1, context.count);
+      vertexIdHelper.disable();
 
       if (DEBUG) {
         const center = vec3.fromValues(3406.98779296875, 3234.910400390625, 4045);

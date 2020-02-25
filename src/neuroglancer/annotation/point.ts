@@ -24,6 +24,7 @@ import {defineCircleShader, drawCircles, initializeCircleShader} from 'neuroglan
 import {defineLineShader, drawLines, initializeLineShader} from 'neuroglancer/webgl/lines';
 import {ShaderBuilder, ShaderProgram} from 'neuroglancer/webgl/shader';
 import {defineVectorArrayVertexShaderInput} from 'neuroglancer/webgl/shader_lib';
+import {defineVertexId, VertexIdHelper} from 'neuroglancer/webgl/vertex_id';
 
 class RenderHelper extends AnnotationRenderHelper {
   private defineShaderCommon(builder: ShaderBuilder) {
@@ -68,6 +69,7 @@ ${this.setPartIndex(builder)};
 
   private shaderGetter3d =
       this.getDependentShader('annotation/point:3d', (builder: ShaderBuilder) => {
+        defineVertexId(builder);
         defineCircleShader(builder, /*crossSectionFade=*/ this.targetIsSliceView);
         this.defineShaderCommon(builder);
         builder.addVertexMain(`
@@ -82,6 +84,7 @@ emitAnnotation(color);
 
   private makeShaderGetter2d = (extraDim: number) =>
       this.getDependentShader(`annotation/point:2d:${extraDim}`, (builder: ShaderBuilder) => {
+        defineVertexId(builder);
         defineLineShader(builder, /*rounded=*/ true);
         this.defineShaderCommon(builder);
         builder.addVertexMain(`
@@ -129,6 +132,8 @@ emitAnnotation(vec4(color.rgb, color.a * ${this.getCrossSectionFadeFactor()}));
   // dimension.
   private shaderGetter1d = this.makeShaderGetter2d(1);
 
+  private vertexIdHelper = this.registerDisposer(VertexIdHelper.get(this.gl));
+
   enable(
       shaderGetter: AnnotationShaderGetter, context: AnnotationRenderContext,
       callback: (shader: ShaderProgram) => void) {
@@ -137,7 +142,10 @@ emitAnnotation(vec4(color.rgb, color.a * ${this.getCrossSectionFadeFactor()}));
       binder.enable(1);
       this.gl.bindBuffer(WebGL2RenderingContext.ARRAY_BUFFER, context.buffer.buffer);
       binder.bind(this.serializedBytesPerAnnotation, context.bufferOffset);
+      const {vertexIdHelper} = this;
+      vertexIdHelper.enable();
       callback(shader);
+      vertexIdHelper.disable();
       binder.disable();
     });
   }

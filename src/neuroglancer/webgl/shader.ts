@@ -321,8 +321,9 @@ export class ShaderBuilder {
     return name + (this.nextSymbolID++);
   }
 
-  addAttribute(typeName: string, name: string) {
+  addAttribute(typeName: string, name: string, location?: number) {
     this.attributes.push(name);
+    if (location !== undefined) this.attributesCode += `layout(location = ${location})`;
     this.attributesCode += `in ${typeName} ${name};\n`;
     return name;
   }
