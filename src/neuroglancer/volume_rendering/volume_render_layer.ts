@@ -36,6 +36,7 @@ import {glsl_COLORMAPS} from 'neuroglancer/webgl/colormaps';
 import {ParameterizedContextDependentShaderGetter, parameterizedContextDependentShaderGetter, ParameterizedShaderGetterResult, shaderCodeWithLineDirective, WatchableShaderError} from 'neuroglancer/webgl/dynamic_shader';
 import {ShaderModule, ShaderProgram} from 'neuroglancer/webgl/shader';
 import {addControlsToBuilder, setControlsInShader, ShaderControlsParseResult, ShaderControlState} from 'neuroglancer/webgl/shader_ui_controls';
+import {defineVertexId, VertexIdHelper} from 'neuroglancer/webgl/vertex_id';
 import {SharedObject} from 'neuroglancer/worker_rpc';
 
 interface TransformedVolumeSource extends
@@ -68,7 +69,7 @@ export class VolumeRenderingRenderLayer extends PerspectiveViewRenderLayer {
   renderScaleTarget: WatchableValueInterface<number>;
   renderScaleHistogram: RenderScaleHistogram;
   backend: SharedObject;
-
+  private vertexIdHelper: VertexIdHelper;
 
   private shaderGetter: ParameterizedContextDependentShaderGetter<
       {emitter: ShaderModule, chunkFormat: ChunkFormat}, ShaderControlsParseResult, number>;
@@ -104,6 +105,7 @@ export class VolumeRenderingRenderLayer extends PerspectiveViewRenderLayer {
       shaderError: options.shaderError,
       extraParameters: numChannelDimensions,
       defineShader: (builder, {emitter, chunkFormat}, shaderParseResult, numChannelDimensions) => {
+        defineVertexId(builder);
         builder.addFragmentCode(`
 #define VOLUME_RENDERING true
 `);
@@ -212,6 +214,7 @@ void main() {
             `\n#undef main\n`);
       },
     });
+    this.vertexIdHelper = this.registerDisposer(VertexIdHelper.get(this.gl));
 
     this.registerDisposer(this.renderScaleTarget.changed.add(this.redrawNeeded.dispatch));
     this.registerDisposer(this.shaderControlState.changed.add(this.redrawNeeded.dispatch));
@@ -286,6 +289,7 @@ void main() {
     const chunkDataDisplaySize = vec3.create();
 
     const {gl} = this;
+    this.vertexIdHelper.enable();
 
     const {renderScaleHistogram} = this;
     renderScaleHistogram.begin(this.chunkManager.chunkQueueManager.frameNumberCounter.frameNumber);
@@ -419,6 +423,7 @@ void main() {
         });
     gl.disable(WebGL2RenderingContext.CULL_FACE);
     endShader();
+    this.vertexIdHelper.disable();
   }
 
   isReady(
