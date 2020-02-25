@@ -17,6 +17,10 @@
 import {DataType} from 'neuroglancer/util/data_type';
 import {AttributeIndex, ShaderBuilder} from 'neuroglancer/webgl/shader';
 
+export const glsl_mixLinear = `
+float mixLinear(float x, float y, float a) { return mix(x, y, a); }
+`;
+
 // Hue, saturation, and value are in [0, 1] range.
 export var glsl_hsvToRgb = `
 vec3 hueToRgb(float hue) {
@@ -39,7 +43,7 @@ struct uint64_t {
 struct uint64x2_t {
   highp uvec4 value;
 };
-uint64_t mix(uint64_t x, uint64_t y, float a) {
+uint64_t mixLinear(uint64_t x, uint64_t y, float a) {
   return x;
 }
 uint64_t toUint64(uint64_t x) { return x; }
@@ -81,7 +85,7 @@ struct uint8x3_t {
 struct uint8x4_t {
   highp uvec4 value;
 };
-uint8_t mix(uint8_t x, uint8_t y, float a) {
+uint8_t mixLinear(uint8_t x, uint8_t y, float a) {
   return uint8_t(uint(round(mix(float(x.value), float(y.value), a))));
 }
 highp uint toRaw(uint8_t x) { return x.value; }
@@ -120,7 +124,7 @@ struct uint16_t {
 struct uint16x2_t {
   highp uvec2 value;
 };
-uint16_t mix(uint16_t x, uint16_t y, float a) {
+uint16_t mixLinear(uint16_t x, uint16_t y, float a) {
   return uint16_t(uint(round(mix(float(x.value), float(y.value), a))));
 }
 highp uint toRaw(uint16_t x) { return x.value; }
@@ -141,7 +145,7 @@ export const glsl_uint32 = [
 struct uint32_t {
   highp uint value;
 };
-uint32_t mix(uint32_t x, uint32_t y, float a) {
+uint32_t mixLinear(uint32_t x, uint32_t y, float a) {
   return uint32_t(uint(round(mix(float(x.value), float(y.value), a))));
 }
 highp float toNormalized(uint32_t x) { return float(x.value) / 4294967295.0; }

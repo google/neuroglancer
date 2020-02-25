@@ -22,7 +22,7 @@ import {VolumeChunkSource as VolumeChunkSourceInterface, VolumeChunkSpecificatio
 import {Disposable} from 'neuroglancer/util/disposable';
 import {GL} from 'neuroglancer/webgl/context';
 import {ShaderBuilder, ShaderProgram} from 'neuroglancer/webgl/shader';
-import {getShaderType} from 'neuroglancer/webgl/shader_lib';
+import {getShaderType, glsl_mixLinear} from 'neuroglancer/webgl/shader_lib';
 
 export type VolumeChunkKey = string;
 
@@ -84,9 +84,11 @@ export function defineChunkDataShaderAccess(
     }
   }
 
+  builder.addFragmentCode(glsl_mixLinear);
   let dataAccessCode = `
 ${getShaderType(dataType)} getDataValue(${dataAccessChannelParams}) {
-  highp ivec3 p = ivec3(max(vec3(0.0, 0.0, 0.0), min(floor(${getPositionWithinChunkExpr}), uChunkDataSize - 1.0)));
+  highp ivec3 p = ivec3(max(vec3(0.0, 0.0, 0.0), min(floor(${
+      getPositionWithinChunkExpr}), uChunkDataSize - 1.0)));
   return getDataValueAt(p${dataAccessChannelArgs});
 }
 ${getShaderType(dataType)} getInterpolatedDataValue(${dataAccessChannelParams}) {
@@ -104,11 +106,11 @@ ${getShaderType(dataType)} getInterpolatedDataValue(${dataAccessChannelParams}) 
         zvalues[iz] = getDataValueAt(ivec3(points[ix].x, points[iy].y, points[iz].z)
                                      ${dataAccessChannelArgs});
       }
-      yvalues[iy] = mix(zvalues[0], zvalues[1], mixCoeff.z);
+      yvalues[iy] = mixLinear(zvalues[0], zvalues[1], mixCoeff.z);
     }
-    xvalues[ix] = mix(yvalues[0], yvalues[1], mixCoeff.y);
+    xvalues[ix] = mixLinear(yvalues[0], yvalues[1], mixCoeff.y);
   }
-  return mix(xvalues[0], xvalues[1], mixCoeff.x);
+  return mixLinear(xvalues[0], xvalues[1], mixCoeff.x);
 }
 `;
   builder.addFragmentCode(dataAccessCode);
