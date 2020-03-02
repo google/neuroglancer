@@ -47,7 +47,10 @@ float getLineEndpointCoefficient() { return getLineOffset().x; }
 uint getLineEndpointIndex() { return uint(getLineEndpointCoefficient()); }
 void emitLine(vec4 vertexAClip, vec4 vertexBClip, float lineWidthInPixels
               ${rounded ? ', float borderWidth' : ''}) {
-  clipLineToDepthRange(vertexAClip, vertexBClip);
+  if (!clipLineToDepthRange(vertexAClip, vertexBClip)) {
+    gl_Position = vec4(2.0, 2.0, 2.0, 1.0);
+    return;
+  }
   vec3 vertexADevice = vertexAClip.xyz / vertexAClip.w;
   vec3 vertexBDevice = vertexBClip.xyz / vertexBClip.w;
 
