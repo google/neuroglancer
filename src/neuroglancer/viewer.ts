@@ -17,7 +17,7 @@
 import debounce from 'lodash/debounce';
 import {MultiStepAnnotationTool} from 'neuroglancer/annotation/annotation';
 import {AnnotationUserLayer} from 'neuroglancer/annotation/user_layer';
-import {initAuthTokenSharedValue} from 'neuroglancer/authentication/frontend';
+import {initAuthTokenSharedValue, authFetch} from 'neuroglancer/authentication/frontend';
 import {CapacitySpecification, ChunkManager, ChunkQueueManager, FrameNumberCounter} from 'neuroglancer/chunk_manager/frontend';
 import {defaultCredentialsManager} from 'neuroglancer/credentials_provider/default_manager';
 import {InputEventBindings as DataPanelInputEventBindings} from 'neuroglancer/data_panel_layout';
@@ -50,7 +50,6 @@ import {Borrowed, Owned, RefCounted} from 'neuroglancer/util/disposable';
 import {removeFromParent} from 'neuroglancer/util/dom';
 import {registerActionListener} from 'neuroglancer/util/event_action_map';
 import {vec3} from 'neuroglancer/util/geom';
-import {cancellableFetchOk, responseJson} from 'neuroglancer/util/http_request';
 import {EventActionMap, KeyboardEventBinder} from 'neuroglancer/util/keyboard_bindings';
 import {NullarySignal} from 'neuroglancer/util/signal';
 import {CompoundTrackable} from 'neuroglancer/util/trackable';
@@ -748,14 +747,16 @@ export class Viewer extends RefCounted implements ViewerState {
       let json_url = urlParams.get('json_url')!;
       history.replaceState(null, '', removeParameterFromUrl(window.location.href, 'json_url'));
       StatusMessage.forPromise(
-          cancellableFetchOk(json_url, {}, responseJson).then(response => {
-            this.state.restoreState(response);
-          }),
-          {
-            initialMessage: `Retrieving state from json_url: ${json_url}.`,
-            delay: true,
-            errorPrefix: `Error retrieving state: `,
-          });
+          authFetch(json_url)
+            .then(res => res.json())
+            .then(response => {
+              this.state.restoreState(response);
+            }),
+            {
+              initialMessage: `Retrieving state from json_url: ${json_url}.`,
+              delay: true,
+              errorPrefix: `Error retrieving state: `,
+            });
     }
   }
 
@@ -783,9 +784,9 @@ export class Viewer extends RefCounted implements ViewerState {
     // upload state to jsonStateServer (only if it's defined)
     if (this.jsonStateServer.value) {
       StatusMessage.showTemporaryMessage(`Posting state to ${this.jsonStateServer.value}.`);
-      cancellableFetchOk(
-          this.jsonStateServer.value, {method: 'POST', body: JSON.stringify(this.state.toJSON())},
-          responseJson)
+      authFetch(
+          this.jsonStateServer.value, {method: 'POST', body: JSON.stringify(this.state.toJSON())})
+          .then(res => res.json())
           .then(response => {
             history.replaceState(
                 null, '',
