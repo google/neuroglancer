@@ -42,6 +42,7 @@ import {defineLineShader, drawLines, initializeLineShader} from 'neuroglancer/we
 import {ShaderBuilder, ShaderProgram, ShaderSamplerType} from 'neuroglancer/webgl/shader';
 import {addControlsToBuilder, parseShaderUiControls, setControlsInShader, ShaderControlsParseResult, ShaderControlState} from 'neuroglancer/webgl/shader_ui_controls';
 import {computeTextureFormat, getSamplerPrefixForDataType, OneDimensionalTextureAccessHelper, setOneDimensionalTextureData, TextureFormat} from 'neuroglancer/webgl/texture_access';
+import {defineVertexId, VertexIdHelper} from 'neuroglancer/webgl/vertex_id';
 
 const tempMat2 = mat4.create();
 
@@ -62,11 +63,13 @@ const vertexPositionTextureFormat = computeTextureFormat(new TextureFormat(), Da
 
 class RenderHelper extends RefCounted {
   private textureAccessHelper = new OneDimensionalTextureAccessHelper('vertexData');
+  private vertexIdHelper = this.registerDisposer(VertexIdHelper.get(this.gl));
   get vertexAttributes(): VertexAttributeRenderInfo[] {
     return this.base.vertexAttributes;
   }
 
   defineCommonShader(builder: ShaderBuilder) {
+    defineVertexId(builder);
     builder.addUniform('highp vec4', 'uColor');
     builder.addUniform('highp mat4', 'uProjection');
     builder.addUniform('highp uint', 'uPickID');
@@ -80,11 +83,11 @@ class RenderHelper extends RefCounted {
     shaderError: this.base.displayState.shaderError,
     defineShader:
         (builder: ShaderBuilder, shaderParseResult: ShaderControlsParseResult) => {
+          this.defineCommonShader(builder);
           this.defineAttributeAccess(builder);
           defineLineShader(builder);
           builder.addAttribute('highp uvec2', 'aVertexIndex');
           builder.addUniform('highp float', 'uLineWidth');
-          this.defineCommonShader(builder);
           let vertexMain = `
 highp vec3 vertexA = readAttribute0(aVertexIndex.x);
 highp vec3 vertexB = readAttribute0(aVertexIndex.y);
@@ -128,9 +131,9 @@ void emitDefault() {
     shaderError: this.base.displayState.shaderError,
     defineShader:
         (builder: ShaderBuilder, shaderParseResult: ShaderControlsParseResult) => {
+          this.defineCommonShader(builder);
           this.defineAttributeAccess(builder);
           defineCircleShader(builder, /*crossSectionFade=*/ this.targetIsSliceView);
-          this.defineCommonShader(builder);
           builder.addUniform('highp float', 'uNodeDiameter');
           let vertexMain = `
 highp uint vertexIndex = uint(gl_InstanceID);
@@ -206,6 +209,7 @@ void emitDefault() {
     const {viewProjectionMat} = renderContext.projectionParameters;
     let mat = mat4.multiply(tempMat2, viewProjectionMat, modelMatrix);
     gl.uniformMatrix4fv(shader.uniform('uProjection'), false, mat);
+    this.vertexIdHelper.enable();
   }
 
   setColor(gl: GL, shader: ShaderProgram, color: vec3) {
@@ -260,6 +264,7 @@ void emitDefault() {
       gl.activeTexture(curTextureUnit);
       gl.bindTexture(gl.TEXTURE_2D, null);
     }
+    this.vertexIdHelper.disable();
   }
 }
 
