@@ -31,7 +31,8 @@ import {RootLayoutContainer} from 'neuroglancer/layer_groups_layout';
 import {TopLevelLayerListSpecification} from 'neuroglancer/layer_specification';
 import {NavigationState, Pose} from 'neuroglancer/navigation_state';
 import {overlaysOpen} from 'neuroglancer/overlay';
-import {UserPreferencesDialog} from 'neuroglancer/preferences/user_preferences';
+import {getSaveToAddressBar, UserPreferencesDialog} from 'neuroglancer/preferences/user_preferences';
+import {SaveState, storageAvailable} from 'neuroglancer/save_state/save_state';
 import {StatusMessage} from 'neuroglancer/status';
 import {ElementVisibilityFromTrackableBoolean, TrackableBoolean, TrackableBooleanCheckbox} from 'neuroglancer/trackable_boolean';
 import {makeDerivedWatchableValue, TrackableValue, WatchableValueInterface} from 'neuroglancer/trackable_value';
@@ -42,7 +43,7 @@ import {MouseSelectionStateTooltipManager} from 'neuroglancer/ui/mouse_selection
 import {setupPositionDropHandlers} from 'neuroglancer/ui/position_drag_and_drop';
 import {StateEditorDialog} from 'neuroglancer/ui/state_editor';
 import {StatisticsDisplayState, StatisticsPanel} from 'neuroglancer/ui/statistics';
-import {removeParameterFromUrl} from 'neuroglancer/ui/url_hash_binding';
+import {removeParameterFromUrl, UrlHashBinding} from 'neuroglancer/ui/url_hash_binding';
 import {UserReportDialog} from 'neuroglancer/user_report/user_report';
 import {AutomaticallyFocusedElement} from 'neuroglancer/util/automatic_focus';
 import {TrackableRGB} from 'neuroglancer/util/color';
@@ -104,7 +105,7 @@ export class InputEventBindings extends DataPanelInputEventBindings {
 const viewerUiControlOptionKeys: (keyof ViewerUIControlConfiguration)[] = [
   'showHelpButton', 'showEditStateButton', 'showLayerPanel', 'showLocation',
   'showAnnotationToolStatus', 'showJsonPostButton', 'showUserPreferencesButton',
-  'showWhatsNewButton', 'showBugButton'
+  'showWhatsNewButton', 'showBugButton', 'showSaveButton', 'showHistoryButton'
 ];
 
 const viewerOptionKeys: (keyof ViewerUIOptions)[] =
@@ -120,6 +121,8 @@ export class ViewerUIControlConfiguration {
   showLocation = new TrackableBoolean(true);
   showAnnotationToolStatus = new TrackableBoolean(true);
   showWhatsNewButton = new TrackableBoolean(true);
+  showSaveButton = new TrackableBoolean(true);
+  showHistoryButton = new TrackableBoolean(true);
 }
 
 export class ViewerUIConfiguration extends ViewerUIControlConfiguration {
@@ -153,6 +156,8 @@ interface ViewerUIOptions {
   showUserPreferencesButton: boolean;
   showWhatsNewButton: boolean;
   showBugButton: boolean;
+  showSaveButton: boolean;
+  showHistoryButton: boolean;
 }
 
 export interface ViewerOptions extends ViewerUIOptions, VisibilityPrioritySpecification {
@@ -201,9 +206,16 @@ function makeViewerContextMenu(viewer: Viewer) {
   return menu;
 }
 
+export enum UrlType {
+  json = 1,
+  raw,
+}
+
 export class Viewer extends RefCounted implements ViewerState {
   navigationState = this.registerDisposer(new NavigationState());
   perspectiveNavigationState = new NavigationState(new Pose(this.navigationState.position), 1);
+  saver?: SaveState;
+  hashBinding?: UrlHashBinding;
   mouseState = new MouseSelectionState();
   layerManager = this.registerDisposer(new LayerManager(this.messageWithUndo.bind(this)));
   selectedLayer = this.registerDisposer(new SelectedLayerState(this.layerManager.addRef()));
@@ -472,21 +484,50 @@ export class Viewer extends RefCounted implements ViewerState {
         this.uiControlVisibility.showAnnotationToolStatus, annotationToolStatus.element));
 
     {
+      const button = document.createElement('button');
+      button.id = 'neuroglancer-saver-button';
+      button.classList.add('ng-saver', 'neuroglancer-icon-button');
+      button.innerText = 'Share';
+      button.title = 'Save Changes';
+      if (!storageAvailable()) {
+        button.classList.add('fallback');
+        button.title =
+            `Cannot access Local Storage. Unsaved changes will be lost! Use OldStyleSaving to allow for auto saving.`;
+      }
+      if (storageAvailable() && getSaveToAddressBar().value) {
+        button.classList.add('inactive');
+        button.title =
+            `Save State has been disabled because Old Style saving has been turned on in User Preferences.`;
+      }
+      if (this.saver && !this.saver.supported && this.saver.key) {
+        const entry = this.saver.saves[this.saver.key];
+        button.classList.toggle('dirty', entry.dirty.value);
+      }
+      this.registerEventListener(button, 'click', () => {
+        this.postJsonState();
+      });
+      this.registerDisposer(new ElementVisibilityFromTrackableBoolean(
+          this.uiControlVisibility.showSaveButton, button));
+      topRow.appendChild(button);
+    }
+
+    {
+      const button = makeTextIconButton('$', 'View Save History');
+      this.registerEventListener(button, 'click', () => {
+        this.showHistory();
+      });
+      this.registerDisposer(new ElementVisibilityFromTrackableBoolean(
+          this.uiControlVisibility.showHistoryButton, button));
+      topRow.appendChild(button);
+    }
+
+    {
       const button = makeTextIconButton('{}', 'Edit JSON state');
       this.registerEventListener(button, 'click', () => {
         this.editJsonState();
       });
       this.registerDisposer(new ElementVisibilityFromTrackableBoolean(
           this.uiControlVisibility.showEditStateButton, button));
-      topRow.appendChild(button);
-    }
-    {
-      const button = makeTextIconButton('⇧', 'Post JSON to state server');
-      this.registerEventListener(button, 'click', () => {
-        this.postJsonState();
-      });
-      this.registerDisposer(new ElementVisibilityFromTrackableBoolean(
-          this.uiControlVisibility.showJsonPostButton, button));
       topRow.appendChild(button);
     }
 
@@ -722,6 +763,13 @@ export class Viewer extends RefCounted implements ViewerState {
     this.bindAction('toggle-default-annotations', () => this.showDefaultAnnotations.toggle());
     this.bindAction('toggle-show-slices', () => this.showPerspectiveSliceViews.toggle());
     this.bindAction('toggle-show-statistics', () => this.showStatistics());
+    this.bindAction('save-state', () => this.postJsonState());
+    this.bindAction('save-state-getjson', () => {
+      this.postJsonState(UrlType.json);
+    });
+    this.bindAction('save-state-getraw', () => {
+      this.postJsonState(UrlType.raw);
+    });
   }
 
   showHelpDialog() {
@@ -741,27 +789,16 @@ export class Viewer extends RefCounted implements ViewerState {
     new WhatsNewDialog(this);
   }
 
-  loadFromJsonUrl() {
-    var urlParams = new URLSearchParams(window.location.search);
-    if (urlParams.has('json_url')) {
-      let json_url = urlParams.get('json_url')!;
-      history.replaceState(null, '', removeParameterFromUrl(window.location.href, 'json_url'));
-      StatusMessage.forPromise(
-          authFetch(json_url)
-            .then(res => res.json())
-            .then(response => {
-              this.state.restoreState(response);
-            }),
-            {
-              initialMessage: `Retrieving state from json_url: ${json_url}.`,
-              delay: true,
-              errorPrefix: `Error retrieving state: `,
-            });
-    }
-  }
-
   showReportDialog(image: string) {
     new UserReportDialog(this, image);
+  }
+
+  showSaveDialog(getUrlType?: UrlType, jsonString?: string) {
+    this.saver!.showSaveDialog(this, jsonString, getUrlType);
+  }
+
+  showHistory() {
+    this.saver!.showHistory(this);
   }
 
   promptJsonStateServer(message: string): void {
@@ -774,31 +811,70 @@ export class Viewer extends RefCounted implements ViewerState {
     }
   }
 
-  postJsonState() {
-    // if jsonStateServer is not present prompt for value and store it in state
-    if (!this.jsonStateServer.value) {
-      this.promptJsonStateServer(
-          'No state server found. Please enter a server URL, or hit OK to use the default server.');
-    }
+  loadFromJsonUrl() {
+    var urlParams = new URLSearchParams(window.location.search);
+    if (urlParams.has('json_url')) {
+      let json_url = urlParams.get('json_url')!;
+      history.replaceState(null, '', removeParameterFromUrl(window.location.href, 'json_url'));
 
+      this.resetStateWhenEmpty = false;
+      StatusMessage
+          .forPromise(
+            authFetch(json_url)
+              .then(res => res.json())
+              .then(response => {
+                this.state.restoreState(response);
+              }),
+              {
+                initialMessage: `Retrieving state from json_url: ${json_url}.`,
+                delay: true,
+                errorPrefix: `Error retrieving state: `,
+              })
+          .finally(() => {
+            this.resetStateWhenEmpty = true;
+          });
+    }
+  }
+
+  postJsonState(getUrlType?: UrlType) {
     // upload state to jsonStateServer (only if it's defined)
-    if (this.jsonStateServer.value) {
+    if (this.saver && this.saver.key && !this.saver.saves[this.saver.key].dirty.value) {
+      this.showSaveDialog(getUrlType, this.saver.savedUrl);
+      return;
+    }
+    if (this.jsonStateServer.value || !getUrlType) {
       StatusMessage.showTemporaryMessage(`Posting state to ${this.jsonStateServer.value}.`);
       authFetch(
           this.jsonStateServer.value, {method: 'POST', body: JSON.stringify(this.state.toJSON())})
           .then(res => res.json())
           .then(response => {
-            history.replaceState(
-                null, '',
-                window.location.origin + window.location.pathname + '?json_url=' + response);
+            const savedUrl =
+                `${window.location.origin}${window.location.pathname}?json_url=${response}`;
+            if (this.saver && this.saver.supported) {
+              this.saver.commit(response);
+              this.showSaveDialog(getUrlType, response);
+            } else {
+              history.replaceState(null, '', savedUrl);
+              this.showSaveDialog(getUrlType);
+            }
           })
           // catch errors with upload and prompt the user if there was an error
           .catch(() => {
-            this.promptJsonStateServer('state server not responding, enter a new one?');
+            this.promptJsonStateServer('State server could not be reached, try again or enter a new one.');
             if (this.jsonStateServer.value) {
               this.postJsonState();
             }
+          })
+          .finally(() => {
+            const noStateServerAccess = !this.jsonStateServer.value;
+            if (noStateServerAccess) {
+              this.showSaveDialog();
+            }
           });
+    } else {
+      StatusMessage.showTemporaryMessage(
+          `Cannot access state server. Press the share button/CTRL + SHIFT + S to enter a server URL.`);
+      this.showSaveDialog(UrlType.raw);
     }
   }
 
@@ -827,7 +903,6 @@ export class Viewer extends RefCounted implements ViewerState {
     const undo = this.getStateRevertingFunction();
     StatusMessage.messageWithAction(message, actionMessage, undo, closeAfter);
   }
-
 
   private getStateRevertingFunction() {
     const currentState = getCachedJson(this.state).value;
@@ -865,5 +940,33 @@ export class Viewer extends RefCounted implements ViewerState {
       }
     };
     return maybeAddOrRemoveAnnotationShortcuts;
+  }
+
+  initializeSaver() {
+    const hashBinding = this.legacyViewerSetupHashBinding();
+    this.saver = this.registerDisposer(new SaveState(this.state));
+    if (!this.saver.supported) {
+      // Fallback to register state change handler has legacy urlHashBinding if saver is not
+      // supported
+      hashBinding.legacy.fallback();
+    }
+  }
+
+  legacyViewerSetupHashBinding() {
+    // Backwards compatibility for state links
+    const hashBinding = this.registerDisposer(new UrlHashBinding(this.state));
+    this.hashBinding = hashBinding;
+    this.registerDisposer(hashBinding.parseError.changed.add(() => {
+      const {value} = hashBinding.parseError;
+      if (value !== undefined) {
+        const status = new StatusMessage();
+        status.setErrorMessage(`Error parsing state: ${value.message}`);
+        console.log('Error parsing state', value);
+      }
+      hashBinding.parseError;
+    }));
+    hashBinding.updateFromUrlHash();
+
+    return hashBinding;
   }
 }

@@ -14,32 +14,19 @@
  * limitations under the License.
  */
 
-import {StatusMessage} from 'neuroglancer/status';
 import {bindDefaultCopyHandler, bindDefaultPasteHandler} from 'neuroglancer/ui/default_clipboard_handling';
 import {setDefaultInputEventBindings} from 'neuroglancer/ui/default_input_event_bindings';
 import {makeDefaultViewer} from 'neuroglancer/ui/default_viewer';
-import {UrlHashBinding} from 'neuroglancer/ui/url_hash_binding';
 
 /**
  * Sets up the default neuroglancer viewer.
  */
 export function setupDefaultViewer() {
-  let viewer = (<any>window)['viewer'] = makeDefaultViewer();
+  const viewer = (<any>window)['viewer'] = makeDefaultViewer();
   setDefaultInputEventBindings(viewer.inputEventBindings);
 
-  const hashBinding = viewer.registerDisposer(new UrlHashBinding(viewer.state));
-  viewer.registerDisposer(hashBinding.parseError.changed.add(() => {
-    const {value} = hashBinding.parseError;
-    if (value !== undefined) {
-      const status = new StatusMessage();
-      status.setErrorMessage(`Error parsing state: ${value.message}`);
-      console.log('Error parsing state', value);
-    }
-    hashBinding.parseError;
-  }));
-  hashBinding.updateFromUrlHash();
-  
   viewer.loadFromJsonUrl();
+  viewer.initializeSaver();
 
   bindDefaultCopyHandler(viewer);
   bindDefaultPasteHandler(viewer);

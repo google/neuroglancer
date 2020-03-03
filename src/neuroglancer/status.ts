@@ -22,10 +22,13 @@ export var DEFAULT_STATUS_DELAY = 200;
 
 export type Delay = boolean|number;
 
+export type styleOptions = {
+  color?: string
+};
 export class StatusMessage {
   element: HTMLElement;
   private timer: number|null;
-  constructor(delay: Delay = false) {
+  constructor(delay: Delay = false, config?: styleOptions) {
     if (statusContainer === null) {
       statusContainer = document.createElement('ul');
       statusContainer.id = 'statusContainer';
@@ -41,6 +44,11 @@ export class StatusMessage {
       this.timer = setTimeout(this.setVisible.bind(this, true), delay);
     } else {
       this.timer = null;
+    }
+    if (config) {
+      if (config.color) {
+        element.style.color = config.color;
+      }
     }
     statusContainer.appendChild(element);
   }
@@ -102,9 +110,16 @@ export class StatusMessage {
     this.element.appendChild(button);
   }
 
+  static showMessage(message: string, config?: styleOptions): StatusMessage {
+    const msg = new StatusMessage(undefined, config);
+    msg.element.textContent = message;
+    msg.setVisible(true);
+    return msg;
+  }
+
   static messageWithAction(
-      message: string, actionMessage: string, action: () => void, closeAfter?: number) {
-    const msg = this.showMessage(message);
+      message: string, actionMessage: string, action: () => void, closeAfter?: number, config?: styleOptions) {
+    const msg = this.showMessage(message, config);
     const actionButton = document.createElement('button');
     actionButton.textContent = actionMessage;
     actionButton.addEventListener('click', () => {
@@ -118,15 +133,8 @@ export class StatusMessage {
     return msg;
   }
 
-  static showMessage(message: string): StatusMessage {
-    const msg = new StatusMessage();
-    msg.element.textContent = message;
-    msg.setVisible(true);
-    return msg;
-  }
-
-  static showTemporaryMessage(message: string, closeAfter: number = 2000): StatusMessage {
-    const msg = this.showMessage(message);
+  static showTemporaryMessage(message: string, closeAfter: number = 2000, config?: styleOptions): StatusMessage {
+    const msg = this.showMessage(message, config);
     setTimeout(() => msg.dispose(), closeAfter);
     return msg;
   }

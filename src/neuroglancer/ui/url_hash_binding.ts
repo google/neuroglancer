@@ -14,8 +14,8 @@
  * limitations under the License.
  */
 
-import debounce from 'lodash/debounce';
-import {getUrlAutoSave} from 'neuroglancer/preferences/user_preferences';
+import {debounce} from 'lodash';
+import {StatusMessage} from 'neuroglancer/status';
 import {WatchableValue} from 'neuroglancer/trackable_value';
 import {RefCounted} from 'neuroglancer/util/disposable';
 import {urlSafeParse, verifyObject} from 'neuroglancer/util/json';
@@ -24,15 +24,6 @@ import {getCachedJson, Trackable} from 'neuroglancer/util/trackable';
 /**
  * @file Implements a binding between a Trackable value and the URL hash state.
  */
-
-/**
- * Encodes a fragment string robustly.
- */
-function encodeFragment(fragment: string) {
-  return encodeURI(fragment).replace(/[!'()*;,]/g, function(c) {
-    return '%' + c.charCodeAt(0).toString(16).toUpperCase();
-  });
-}
 
 export function removeParameterFromUrl(url: string, parameter: string) {
   return url.replace(new RegExp('[?&]' + parameter + '=[^&#]*(#.*)?$'), '$1')
@@ -47,52 +38,16 @@ export class UrlHashBinding extends RefCounted {
    * Most recently parsed or set state string.
    */
   private prevStateString: string|undefined;
-
-  /**
-   * Generation number of previous state set.
-   */
-  private prevStateGeneration: number|undefined;
-
   /**
    * Most recent error parsing URL hash.
    */
   parseError = new WatchableValue<Error|undefined>(undefined);
-
-  constructor(public root: Trackable, updateDelayMilliseconds = 200) {
+  legacy: UrlHashBindingLegacy;
+  constructor(public root: Trackable) {
     super();
     this.registerEventListener(window, 'hashchange', () => this.updateFromUrlHash());
-    const throttledSetUrlHash = debounce(() => this.setUrlHash(), updateDelayMilliseconds);
-    this.registerDisposer(root.changed.add(throttledSetUrlHash));
-    this.registerDisposer(() => throttledSetUrlHash.cancel());
+    this.legacy = new UrlHashBindingLegacy(root, this, this.prevStateString);
   }
-
-  /**
-   * Sets the URL hash to match the current state.
-   */
-  setUrlHash() {
-    const cacheState = getCachedJson(this.root);
-    const {generation} = cacheState;
-    // TODO: Change to recurring, onblur and time, or onunload save and push to state server
-    if (getUrlAutoSave().value) {
-      history.replaceState(null, '', removeParameterFromUrl(window.location.href, 'json_url'));
-    }
-
-    if (generation !== this.prevStateGeneration) {
-      this.prevStateGeneration = cacheState.generation;
-      let stateString = encodeFragment(JSON.stringify(cacheState.value));
-      if (stateString !== this.prevStateString) {
-        this.prevStateString = stateString;
-        if (getUrlAutoSave().value) {
-          if (decodeURIComponent(stateString) === '{}') {
-            history.replaceState(null, '', '#');
-          } else {
-            history.replaceState(null, '', '#!' + stateString);
-          }
-        }
-      }
-    }
-  }
-
   /**
    * Sets the current state to match the URL hash.  If it is desired to initialize the state based
    * on the URL hash, then this should be called immediately after construction.
@@ -101,8 +56,11 @@ export class UrlHashBinding extends RefCounted {
     try {
       let s = location.href.replace(/^[^#]+/, '');
       if (s === '' || s === '#' || s === '#!') {
-        s = '#!{}';
+        // s = '#!{}';
+        return;
       }
+      StatusMessage.showTemporaryMessage(
+          `State URLs are Deprecated! Please use JSON URLs whenever avaliable.`, 10000);
       if (s.startsWith('#!+')) {
         s = s.slice(3);
         // Firefox always %-encodes the URL even if it is not typed that way.
@@ -128,6 +86,62 @@ export class UrlHashBinding extends RefCounted {
       this.parseError.value = undefined;
     } catch (parseError) {
       this.parseError.value = parseError;
+    }
+  }
+  returnURLHash() {
+    const cacheState = getCachedJson(this.root);
+    return this.legacy.encodeFragment(JSON.stringify(cacheState.value));
+  }
+}
+
+class UrlHashBindingLegacy {
+  // No localStorage fallback (Neuroglancer is currently inoperable w/o localStorage)
+  constructor(
+      public root: Trackable, public parent: UrlHashBinding,
+      private prevStateString: string|undefined) {}
+  /**
+   * Generation number of previous state set.
+   */
+  private prevStateGeneration: number|undefined;
+  /**
+   * Encodes a fragment string robustly.
+   */
+  encodeFragment(fragment: string) {
+    return encodeURI(fragment).replace(/[!'()*;,]/g, function(c) {
+      return '%' + c.charCodeAt(0).toString(16).toUpperCase();
+    });
+  }
+  /**
+   * Sets url hash event handler, in case saver is deactivated.
+   */
+  fallback(updateDelayMilliseconds = 400) {
+    const throttledSetUrlHash = debounce(() => this.setUrlHash(), updateDelayMilliseconds);
+    this.parent.registerDisposer(this.root.changed.add(throttledSetUrlHash));
+    this.parent.registerDisposer(() => throttledSetUrlHash.cancel());
+  }
+  /**
+   * Sets the URL hash to match the current state.
+   */
+  setUrlHash() {
+    const cacheState = getCachedJson(this.root);
+    const {generation} = cacheState;
+    // Suggestion: Change to recurring, onblur and time, or onunload save and push to state server
+    // Counterpoint: No point optimizing deprecated code
+    let cleanURL =
+        removeParameterFromUrl(removeParameterFromUrl(window.location.href, 'json_url'), 'local_id');
+    history.replaceState(null, '', cleanURL);
+
+    if (generation !== this.prevStateGeneration) {
+      this.prevStateGeneration = cacheState.generation;
+      let stateString = this.encodeFragment(JSON.stringify(cacheState.value));
+      if (stateString !== this.prevStateString) {
+        this.prevStateString = stateString;
+        if (decodeURIComponent(stateString) === '{}') {
+          history.replaceState(null, '', '#');
+        } else {
+          history.replaceState(null, '', '#!' + stateString);
+        }
+      }
     }
   }
 }

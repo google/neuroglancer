@@ -34,7 +34,6 @@ import {TrackableValue} from 'neuroglancer/trackable_value';
 import {bindDefaultCopyHandler, bindDefaultPasteHandler} from 'neuroglancer/ui/default_clipboard_handling';
 import {setDefaultInputEventBindings} from 'neuroglancer/ui/default_input_event_bindings';
 import {makeDefaultViewer} from 'neuroglancer/ui/default_viewer';
-import {UrlHashBinding} from 'neuroglancer/ui/url_hash_binding';
 import {parseFixedLengthArray, verifyInt} from 'neuroglancer/util/json';
 import {CompoundTrackable} from 'neuroglancer/util/trackable';
 import {InputEventBindings} from 'neuroglancer/viewer';
@@ -151,8 +150,8 @@ window.addEventListener('DOMContentLoaded', () => {
       element.style.height = `${value[1]}px`;
       const screenWidth = document.documentElement!.clientWidth;
       const screenHeight = document.documentElement!.clientHeight;
-      const scaleX = screenWidth/value[0];
-      const scaleY = screenHeight/value[1];
+      const scaleX = screenWidth / value[0];
+      const scaleY = screenHeight / value[1];
       const scale = Math.min(scaleX, scaleY);
       element.style.transform = `scale(${scale})`;
       element.style.transformOrigin = 'top left';
@@ -160,10 +159,9 @@ window.addEventListener('DOMContentLoaded', () => {
   };
   updateSize();
   window.addEventListener('resize', updateSize);
-  size.changed.add(debounce(() => updateSize(), 0));
+  size.changed.add(debounce(() => updateSize(), 0))
 
-  const hashBinding = viewer.registerDisposer(new UrlHashBinding(viewer.state));
-  hashBinding.updateFromUrlHash();
+  viewer.initializeSaver();
 
   let serverConnection: ServerConnection;
   if (viewer.stateServer.value === '') {
@@ -172,10 +170,9 @@ window.addEventListener('DOMContentLoaded', () => {
     } else {
       serverConnection = new ServerConnection(viewer.state, privateState, configState);
     }
-  }
-  else {
-    serverConnection = new ServerConnection(viewer.state, privateState, configState,
-        viewer.stateServer.value);
+  } else {
+    serverConnection =
+        new ServerConnection(viewer.state, privateState, configState, viewer.stateServer.value);
     serverConnection.sendActionNotification('initState', viewer.state);
   }
   remoteActionHandler.sendActionRequested.add(

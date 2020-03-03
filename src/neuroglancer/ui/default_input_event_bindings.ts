@@ -29,6 +29,9 @@ export function getDefaultGlobalBindings() {
     map.set('shift+keyb', 'toggle-default-annotations');
     map.set('keya', 'toggle-axis-lines');
     map.set('keyo', 'toggle-orthographic-projection');
+    map.set('control+shift+keys', 'save-state');
+    map.set('control+shift+keyj', 'save-state-getjson');
+    map.set('control+shift+keyr', 'save-state-getraw');
 
     for (let i = 1; i <= 9; ++i) {
       map.set('digit' + i, 'toggle-layer-' + i);
