@@ -23,15 +23,7 @@ let authPromise: Promise<string>|null = null;
 
 // generate a token with the neuroglancer-auth service using google oauth2
 async function authorize(auth_url: string) {
-  const oauth_uri = await fetch(
-                        `${auth_url}?redirect=${
-                            encodeURI(window.location.origin + '/auth_redirect.html')}`,
-                        {credentials: 'include'})
-                        .then((res) => {
-                          return res.text();
-                        });
-
-  const auth_popup = window.open(oauth_uri);
+  const auth_popup = window.open(`${auth_url}?redirect=${encodeURI(window.location.origin + '/auth_redirect.html')}`);
 
   if (!auth_popup) {
     alert('Allow popups on this page to authenticate');
