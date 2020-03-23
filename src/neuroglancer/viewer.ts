@@ -504,7 +504,7 @@ export class Viewer extends RefCounted implements ViewerState {
         button.classList.toggle('dirty', entry.dirty.value);
       }
       this.registerEventListener(button, 'click', () => {
-        this.postJsonState();
+        this.postJsonState(true);
       });
       this.registerDisposer(new ElementVisibilityFromTrackableBoolean(
           this.uiControlVisibility.showSaveButton, button));
@@ -763,12 +763,12 @@ export class Viewer extends RefCounted implements ViewerState {
     this.bindAction('toggle-default-annotations', () => this.showDefaultAnnotations.toggle());
     this.bindAction('toggle-show-slices', () => this.showPerspectiveSliceViews.toggle());
     this.bindAction('toggle-show-statistics', () => this.showStatistics());
-    this.bindAction('save-state', () => this.postJsonState());
+    this.bindAction('save-state', () => this.postJsonState(true));
     this.bindAction('save-state-getjson', () => {
-      this.postJsonState(UrlType.json);
+      this.postJsonState(true, UrlType.json);
     });
     this.bindAction('save-state-getraw', () => {
-      this.postJsonState(UrlType.raw);
+      this.postJsonState(true, UrlType.raw);
     });
   }
 
@@ -836,45 +836,57 @@ export class Viewer extends RefCounted implements ViewerState {
     }
   }
 
-  postJsonState(getUrlType?: UrlType) {
+  postJsonState(savestate?: boolean, getUrlType?: UrlType, retry?: boolean) {
     // upload state to jsonStateServer (only if it's defined)
-    if (this.saver && this.saver.key && !this.saver.saves[this.saver.key].dirty.value) {
+    if (savestate && this.saver && this.saver.savedUrl && this.saver.key && !this.saver.saves[this.saver.key].dirty.value) {
       this.showSaveDialog(getUrlType, this.saver.savedUrl);
       return;
     }
     if (this.jsonStateServer.value || !getUrlType) {
-      StatusMessage.showTemporaryMessage(`Posting state to ${this.jsonStateServer.value}.`);
+      if (this.jsonStateServer.value.length) {
+        StatusMessage.showTemporaryMessage(`Posting state to ${this.jsonStateServer.value}.`);
+      }
+      else {
+        StatusMessage.showTemporaryMessage(`No state server found.`, 2000, {color: 'yellow'});
+      }
+      let postSuccess = false;
       authFetch(
           this.jsonStateServer.value, {method: 'POST', body: JSON.stringify(this.state.toJSON())})
           .then(res => res.json())
           .then(response => {
             const savedUrl =
-                `${window.location.origin}${window.location.pathname}?json_url=${response}`;
-            if (this.saver && this.saver.supported) {
-              this.saver.commit(response);
-              this.showSaveDialog(getUrlType, response);
+              `${window.location.origin}${window.location.pathname}?json_url=${response}`;
+            const saverSupported = this.saver && this.saver.supported;
+            if (saverSupported) {
+              this.saver!.commit(response);
             } else {
               history.replaceState(null, '', savedUrl);
-              this.showSaveDialog(getUrlType);
             }
+            if (savestate) {
+              this.showSaveDialog(getUrlType, saverSupported ? response : undefined);
+            }
+            postSuccess = true;
           })
           // catch errors with upload and prompt the user if there was an error
           .catch(() => {
-            this.promptJsonStateServer('State server could not be reached, try again or enter a new one.');
-            if (this.jsonStateServer.value) {
-              this.postJsonState();
+            if (retry) {
+              this.promptJsonStateServer('State server could not be reached, try again or enter a new one.');
+              if (this.jsonStateServer.value) {
+                this.postJsonState(savestate);
+              }
             }
           })
           .finally(() => {
-            const noStateServerAccess = !this.jsonStateServer.value;
-            if (noStateServerAccess) {
+            if (!postSuccess && savestate) {
               this.showSaveDialog();
             }
           });
     } else {
       StatusMessage.showTemporaryMessage(
           `Cannot access state server. Press the share button/CTRL + SHIFT + S to enter a server URL.`);
-      this.showSaveDialog(UrlType.raw);
+      if (savestate) {
+        this.showSaveDialog(UrlType.raw);
+      }
     }
   }
 

@@ -227,6 +227,16 @@ class SaveDialog extends Overlay {
     let {content} = this;
     content.style.overflow = 'visible';
 
+    const pushButton = document.createElement('button');
+    pushButton.innerText = 'Push State to Server';
+    pushButton.title = 'Push to state server to get JSON URL.';
+    pushButton.addEventListener('click', () => {
+      viewer.promptJsonStateServer('Please enter the state server to access.');
+      viewer.postJsonState(true, undefined, true);
+      this.dispose();
+    });
+    content.append(pushButton);
+
     let modal = document.createElement('div');
     content.appendChild(modal);
 
