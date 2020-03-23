@@ -1,4 +1,4 @@
-button.ng-saver.inactive button.ng-saver.fallback{
+button.ng-saver.inactive, button.ng-saver.fallback{
   background-color: orangered;
   border: 1px solid black;
   color: black;
