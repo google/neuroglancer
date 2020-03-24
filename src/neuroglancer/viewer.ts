@@ -17,7 +17,7 @@
 import debounce from 'lodash/debounce';
 import {MultiStepAnnotationTool} from 'neuroglancer/annotation/annotation';
 import {AnnotationUserLayer} from 'neuroglancer/annotation/user_layer';
-import {initAuthTokenSharedValue, authFetch} from 'neuroglancer/authentication/frontend';
+import {authFetch, initAuthTokenSharedValue} from 'neuroglancer/authentication/frontend';
 import {CapacitySpecification, ChunkManager, ChunkQueueManager, FrameNumberCounter} from 'neuroglancer/chunk_manager/frontend';
 import {defaultCredentialsManager} from 'neuroglancer/credentials_provider/default_manager';
 import {InputEventBindings as DataPanelInputEventBindings} from 'neuroglancer/data_panel_layout';
@@ -820,9 +820,7 @@ export class Viewer extends RefCounted implements ViewerState {
       this.resetStateWhenEmpty = false;
       StatusMessage
           .forPromise(
-            authFetch(json_url)
-              .then(res => res.json())
-              .then(response => {
+              authFetch(json_url).then(res => res.json()).then(response => {
                 this.state.restoreState(response);
               }),
               {
@@ -838,15 +836,15 @@ export class Viewer extends RefCounted implements ViewerState {
 
   postJsonState(savestate?: boolean, getUrlType?: UrlType, retry?: boolean) {
     // upload state to jsonStateServer (only if it's defined)
-    if (savestate && this.saver && this.saver.savedUrl && this.saver.key && !this.saver.saves[this.saver.key].dirty.value) {
+    if (savestate && this.saver && this.saver.savedUrl && this.saver.key &&
+        !this.saver.saves[this.saver.key].dirty.value) {
       this.showSaveDialog(getUrlType, this.saver.savedUrl);
       return;
     }
-    if (this.jsonStateServer.value || !getUrlType) {
+    if (this.jsonStateServer.value || getUrlType) {
       if (this.jsonStateServer.value.length) {
         StatusMessage.showTemporaryMessage(`Posting state to ${this.jsonStateServer.value}.`);
-      }
-      else {
+      } else {
         StatusMessage.showTemporaryMessage(`No state server found.`, 2000, {color: 'yellow'});
       }
       let postSuccess = false;
@@ -855,7 +853,7 @@ export class Viewer extends RefCounted implements ViewerState {
           .then(res => res.json())
           .then(response => {
             const savedUrl =
-              `${window.location.origin}${window.location.pathname}?json_url=${response}`;
+                `${window.location.origin}${window.location.pathname}?json_url=${response}`;
             const saverSupported = this.saver && this.saver.supported;
             if (saverSupported) {
               this.saver!.commit(response);
@@ -869,16 +867,17 @@ export class Viewer extends RefCounted implements ViewerState {
           })
           // catch errors with upload and prompt the user if there was an error
           .catch(() => {
-            if (retry) {
-              this.promptJsonStateServer('State server could not be reached, try again or enter a new one.');
+            if (retry || getUrlType === UrlType.json) {
+              this.promptJsonStateServer(
+                  'State server could not be reached, try again or enter a new one.');
               if (this.jsonStateServer.value) {
-                this.postJsonState(savestate);
+                this.postJsonState(savestate, getUrlType);
               }
             }
           })
           .finally(() => {
             if (!postSuccess && savestate) {
-              this.showSaveDialog();
+              this.showSaveDialog(getUrlType);
             }
           });
     } else {

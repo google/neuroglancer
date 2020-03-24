@@ -208,17 +208,22 @@ class SaveDialog extends Overlay {
 
     if (getUrlType) {
       const copyString = getUrlType === UrlType.json ? jsonUrl : rawUrl;
-      const text = document.createElement('input');
-      document.body.append(text);
-      text.type = 'text';
-      text.value = copyString;
-      text.select();
-      document.execCommand('copy');
-      document.body.removeChild(text);
-      StatusMessage.showTemporaryMessage(
-          `Saved and Copied ${
-              getUrlType === UrlType.json ? `JSON Link` : `Full State (RAW) link`} to Clipboard.`,
-          5000);
+      if (copyString !== 'NOT AVAILABLE') {
+        const text = document.createElement('input');
+        document.body.append(text);
+        text.type = 'text';
+        text.value = copyString;
+        text.select();
+        document.execCommand('copy');
+        document.body.removeChild(text);
+        StatusMessage.showTemporaryMessage(
+            `Saved and Copied ${
+                getUrlType === UrlType.json ? `JSON Link` : `Full State (RAW) link`} to Clipboard.`,
+            5000);
+      } else {
+        StatusMessage.showTemporaryMessage(
+            'Could not generate JSON link.', 2000, {color: 'yellow'});
+      }
       this.dispose();
       return;
     }

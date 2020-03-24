@@ -60,7 +60,7 @@ export class UrlHashBinding extends RefCounted {
         return;
       }
       StatusMessage.showTemporaryMessage(
-          `State URLs are Deprecated! Please use JSON URLs whenever avaliable.`, 10000);
+          `State URLs are Deprecated! Please use JSON URLs whenever available.`, 10000);
       if (s.startsWith('#!+')) {
         s = s.slice(3);
         // Firefox always %-encodes the URL even if it is not typed that way.
@@ -127,8 +127,8 @@ class UrlHashBindingLegacy {
     const {generation} = cacheState;
     // Suggestion: Change to recurring, onblur and time, or onunload save and push to state server
     // Counterpoint: No point optimizing deprecated code
-    let cleanURL =
-        removeParameterFromUrl(removeParameterFromUrl(window.location.href, 'json_url'), 'local_id');
+    let cleanURL = removeParameterFromUrl(
+        removeParameterFromUrl(window.location.href, 'json_url'), 'local_id');
     history.replaceState(null, '', cleanURL);
 
     if (generation !== this.prevStateGeneration) {
