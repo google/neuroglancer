@@ -235,7 +235,11 @@ class SaveDialog extends Overlay {
       viewer.postJsonState(true, undefined, true);
       this.dispose();
     });
-    content.append(pushButton);
+    const pushButtonContainer = document.createElement('div');
+    pushButtonContainer.style.textAlign = 'right';
+    pushButtonContainer.style.marginBottom = '5px';
+    pushButtonContainer.append(pushButton);
+    content.append(pushButtonContainer);
 
     let modal = document.createElement('div');
     content.appendChild(modal);
@@ -246,7 +250,7 @@ class SaveDialog extends Overlay {
     form.append(document.createElement('br'));
     form.append(this.makePopup('RAW_URL'));
     this.insertField(form, 'RAW_URL', rawUrl, 'neuroglancer-save-state-raw');
-    form.append('DEPRECATED');
+    // form.append('DEPRECATED');
     StatusMessage.showTemporaryMessage(`Saved.`, 5000);
     modal.appendChild(form);
 
