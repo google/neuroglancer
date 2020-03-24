@@ -884,7 +884,7 @@ export class Viewer extends RefCounted implements ViewerState {
       StatusMessage.showTemporaryMessage(
           `Cannot access state server. Press the share button/CTRL + SHIFT + S to enter a server URL.`);
       if (savestate) {
-        this.showSaveDialog(UrlType.raw);
+        this.showSaveDialog(getUrlType);
       }
     }
   }
