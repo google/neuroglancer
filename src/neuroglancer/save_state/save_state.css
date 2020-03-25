@@ -1,3 +1,9 @@
+button.ng-saver.busy, button.ng-saver.busy:hover {
+  background-color: grey !important;
+  border: 1px solid black;
+  color: black;
+}
+
 button.ng-saver.inactive, button.ng-saver.fallback{
   background-color: orangered;
   border: 1px solid black;

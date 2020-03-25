@@ -242,8 +242,25 @@ class SaveDialog extends Overlay {
     pushButton.title = 'Push to state server to get JSON URL.';
     pushButton.addEventListener('click', () => {
       viewer.promptJsonStateServer('Please enter the state server to access.');
-      viewer.postJsonState(true, undefined, true);
-      this.dispose();
+      pushButton.disabled = true;
+      const saver = document.getElementsByClassName('ng-saver');
+      let saveBtn: HTMLButtonElement;
+      if (saver && saver.length) {
+        saveBtn = <HTMLButtonElement>saver[0];
+        saveBtn.classList.add('busy');
+        saveBtn.disabled = true;
+      }
+      const restoreSaving = () => {
+        try {
+          this.dispose();
+        } catch {
+        }
+        if (saveBtn) {
+          saveBtn.classList.remove('busy');
+          saveBtn.disabled = false;
+        }
+      };
+      viewer.postJsonState(true, undefined, true, restoreSaving);
     });
     const pushButtonContainer = document.createElement('div');
     pushButtonContainer.style.textAlign = 'right';

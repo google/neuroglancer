@@ -834,7 +834,8 @@ export class Viewer extends RefCounted implements ViewerState {
     }
   }
 
-  postJsonState(savestate?: boolean, getUrlType?: UrlType, retry?: boolean) {
+  postJsonState(
+      savestate?: boolean, getUrlType?: UrlType, retry?: boolean, callback: Function = () => {}) {
     // upload state to jsonStateServer (only if it's defined)
     if (savestate && this.saver && this.saver.savedUrl && this.saver.key &&
         !this.saver.saves[this.saver.key].dirty.value) {
@@ -861,6 +862,7 @@ export class Viewer extends RefCounted implements ViewerState {
               history.replaceState(null, '', savedUrl);
             }
             if (savestate) {
+              callback();
               this.showSaveDialog(getUrlType, saverSupported ? response : undefined);
             }
             postSuccess = true;
@@ -877,6 +879,7 @@ export class Viewer extends RefCounted implements ViewerState {
           })
           .finally(() => {
             if (!postSuccess && savestate) {
+              callback();
               this.showSaveDialog(getUrlType);
             }
           });
