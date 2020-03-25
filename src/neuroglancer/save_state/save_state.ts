@@ -104,10 +104,13 @@ export class SaveState extends RefCounted {
     localStorage.setItem(historyKey, JSON.stringify(newHistory));
   }
 
-  unsaved() {
+  unsaved(override?: boolean) {
     const button = document.getElementById('neuroglancer-saver-button');
-    if (this.saves && this.key && button) {
-      button.classList.toggle('dirty', this.saves[this.key].dirty.value);
+    if (override || this.saves && this.key && button) {
+      const isDirty = override ? override : this.saves[this.key!].dirty.value;
+      if (button) {
+        button.classList.toggle('dirty', isDirty);
+      }
     }
   }
 
@@ -141,6 +144,8 @@ export class SaveState extends RefCounted {
             `This URL is invalid. Do not copy the URL in the address bar. Use the save button.`,
             10000, {color: 'red'});
       }
+    } else {
+      this.unsaved(true);
     }
   }
 
