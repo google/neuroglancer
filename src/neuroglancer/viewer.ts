@@ -867,7 +867,7 @@ export class Viewer extends RefCounted implements ViewerState {
           })
           // catch errors with upload and prompt the user if there was an error
           .catch(() => {
-            if (retry || getUrlType === UrlType.json) {
+            if (retry) {
               this.promptJsonStateServer(
                   'State server could not be reached, try again or enter a new one.');
               if (this.jsonStateServer.value) {
