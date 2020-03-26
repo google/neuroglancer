@@ -221,6 +221,28 @@ export function setOneDimensionalTextureData(gl: GL, format: TextureFormat, data
       /*border=*/ 0, textureFormat, format.texelType, padded);
 }
 
+export function setTwoDimensionalTextureData(
+    gl: GL, format: TextureFormat, data: TypedArray, width: number, height: number) {
+  const {
+    arrayConstructor,
+    textureInternalFormat,
+    textureFormat,
+    texelsPerElement,
+  } = format;
+  if (data.constructor !== arrayConstructor) {
+    data = new arrayConstructor(
+        data.buffer, data.byteOffset, data.byteLength / arrayConstructor.BYTES_PER_ELEMENT);
+  }
+  gl.pixelStorei(WebGL2RenderingContext.UNPACK_ALIGNMENT, 1);
+  setRawTextureParameters(gl);
+  gl.texImage2D(
+      WebGL2RenderingContext.TEXTURE_2D,
+      /*level=*/ 0, textureInternalFormat,
+      /*width=*/ width * texelsPerElement,
+      /*height=*/ height,
+      /*border=*/ 0, textureFormat, format.texelType, data);
+}
+
 export function setThreeDimensionalTextureData(
     gl: GL, format: TextureFormat, data: TypedArray, width: number, height: number, depth: number) {
   const {
@@ -344,12 +366,13 @@ void ${this.readTextureValue}(highp ${samplerPrefix}sampler2D sampler, highp uin
   }
 }
 
-export class ThreeDimensionalTextureAccessHelper {
+export class TextureAccessHelper {
   readTextureValue = `readTextureValue_${this.key}`;
-  constructor(public key: string) {}
+  constructor(public key: string, public textureDims: number) {}
   getReadTextureValueCode(texelsPerElement: number, samplerPrefix: ShaderSamplerPrefix) {
+    const {textureDims} = this;
     let code = `
-void ${this.readTextureValue}(highp ${samplerPrefix}sampler3D sampler, highp ivec3 p`;
+void ${this.readTextureValue}(highp ${samplerPrefix}sampler${this.textureDims}D sampler, highp ivec${textureDims} p`;
     for (let i = 0; i < texelsPerElement; ++i) {
       code += `, out ${samplerPrefix}vec4 output${i}`;
     }
@@ -357,7 +380,8 @@ void ${this.readTextureValue}(highp ${samplerPrefix}sampler3D sampler, highp ive
 `;
     for (let i = 0; i < texelsPerElement; ++i) {
       code += `
-  output${i} = texelFetch(sampler, ivec3(p.x * ${texelsPerElement} + ${i}, p.y, p.z), 0);
+  output${i} = texelFetch(sampler, ivec${textureDims}(p.x * ${texelsPerElement} + ${i}, p.y
+                                         ${textureDims === 3 ? ', p.z' : ''}), 0);
 `;
     }
     code += `
@@ -372,7 +396,7 @@ void ${this.readTextureValue}(highp ${samplerPrefix}sampler3D sampler, highp ive
     return [
       this.getReadTextureValueCode(1, samplerPrefix),
       ...getAccessorFunction(
-          functionName, this.readTextureValue, samplerName, 'highp ivec3', dataType, numComponents)
+          functionName, this.readTextureValue, samplerName, `highp ivec${this.textureDims}`, dataType, numComponents)
     ];
   }
 }
