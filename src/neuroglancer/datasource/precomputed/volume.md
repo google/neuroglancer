@@ -97,7 +97,61 @@ as a key to retrieve the encoded chunk data from sharded representation.
 
 The "compressed Morton code" is a variant of the normal [Morton
 code](https://en.wikipedia.org/wiki/Z-order_curve) where bits that would be equal to 0 for all grid
-cells are skipped.  Specifically, given the coordinates `g` for a grid cell, where `0 <= g <
+cells are skipped.  
+
+Note that for a normal 3D morton code in a uint64, we could only allow 21 bits for each of
+the three dimensions.
+
+In the following, we list each potentially used bit with a hexadecimal letter,
+so a 21-bit X coordinate would look like this:  
+`x = ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---4 3210 fedc ba98 7654 3210`   
+after spacing out by 2 to allow interleaved Y and Z bits, it becomes  
+`x = ---4 --3- -2-- 1--0 --f- -e-- d--c --b- -a-- 9--8 --7- -6-- 5--4 --3- -2-- 1--0`
+
+For standard morton code, we'd shift Y << 1 and Z << 2 then OR the three resulting uint64.
+But most datasets aren't symmetrical in size across dimensions.
+
+Using compressed 3D morton code lets us use bits assymetrically and conserve bits where some
+dimensions are smaller and those bits would always be zero.  Compressed morton code
+drops the bits that would be zero across all entries because that dimension is limited in
+size.  Say the X has max size 42,943 which requires only 16 bits (~64K) and would only use
+up to the "f" bit in the above diagram.  The bits corresponding to the most-significant
+`4`, `3`, `2`, `1`, and `0` bits would always be zero and therefore can be removed.
+
+This allows us to fit more data into the single uint64, as the following example shows
+with Z having a 24 bit range.
+
+Start with a X coordinate that for this example has a max of 16 bits  
+`x = ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- fedc ba98 7654 3210`  
+after spacing, note MSB `f` only has room for the Z bit since Y has dropped out  
+`x = ---- ---- ---- ---- ---f -e-- d--c --b- -a-- 9--8 --7- -6-- 5--4 --3- -2-- 1--0`
+
+Start with a Y coordinate that for this example has a max of 14 bits  
+`y = ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- --dc ba98 7654 3210`  
+after spacing with constant 2 bits since Y has smallest range  
+`y = ---- ---- ---- ---- ---- ---- d--c --b- -a-- 9--8 --7- -6-- 5--4 --3- -2-- 1--0`  
+after shifting by 1 for future interleaving to get morton code  
+`y = ---- ---- ---- ---- ---- ---d --c- -b-- a--9 --8- -7-- 6--5 --4- -3-- 2--1 --0-`
+
+Start with a Z coordinate that for this example has a max of 24 bits  
+`z = ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- 7654 3210 fedc ba98 7654 3210`  
+after spacing out Z with 24 bits max; note compression of MSB due to X and Y dropout  
+`z = ---- ---- ---- 7654 3210 f-e- d--c --b- -a-- 9--8 --7- -6-- 5--4 --3- -2-- 1--0`  
+after shifting by 2 for future interleaving  
+`z = ---- ---- --76 5432 10f- e-d- -c-- b--a --9- -8-- 7--6 --5- -4-- 3--2 --1- -0--`
+
+Now if you OR the final X, Y, and Z you see no collisions.
+```
+x = ---- ---- ---- ---- ---f -e-- d--c --b- -a-- 9--8 --7- -6-- 5--4 --3- -2-- 1--0
+y = ---- ---- ---- ---- ---- ---d --c- -b-- a--9 --8- -7-- 6--5 --4- -3-- 2--1 --0-
+z = ---- ---- --76 5432 10f- e-d- -c-- b--a --9- -8-- 7--6 --5- -4-- 3--2 --1- -0--
+```
+
+While the above may be the simplest way to understand compressed morton codes,
+the algorithm can be implemented more simply by iteratively going bit by bit
+from LSB to MSB and keeping track of the interleaved output bit.
+
+Specifically, given the coordinates `g` for a grid cell, where `0 <= g <
 grid_size`, the compressed Morton code is computed as follows:
 1. Set `j := 0`.
 2. For `i` from `0` to `n-1`, where `n` is the number of bits needed to encode the grid cell
