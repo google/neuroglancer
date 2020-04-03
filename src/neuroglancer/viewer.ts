@@ -844,47 +844,62 @@ export class Viewer extends RefCounted implements ViewerState {
     }
     if (this.jsonStateServer.value || getUrlType) {
       if (this.jsonStateServer.value.length) {
-        StatusMessage.showTemporaryMessage(`Posting state to ${this.jsonStateServer.value}.`);
+        let postSuccess = false;
+        StatusMessage.forPromise(
+            authFetch(
+                this.jsonStateServer.value,
+                {method: 'POST', body: JSON.stringify(this.state.toJSON())})
+                .then(res => res.json())
+                .then(response => {
+                  const savedUrl =
+                      `${window.location.origin}${window.location.pathname}?json_url=${response}`;
+                  const saverSupported = this.saver && this.saver.supported;
+                  if (saverSupported) {
+                    this.saver!.commit(response);
+                  } else {
+                    history.replaceState(null, '', savedUrl);
+                  }
+                  if (savestate) {
+                    callback();
+                    this.showSaveDialog(getUrlType, saverSupported ? response : undefined);
+                  }
+                  StatusMessage.showTemporaryMessage(`Successfully shared state.`, 4000);
+                  postSuccess = true;
+                })
+                // catch errors with upload and prompt the user if there was an error
+                .catch(() => {
+                  if (retry) {
+                    this.promptJsonStateServer(
+                        'State server could not be reached, try again or enter a new one.');
+                    if (this.jsonStateServer.value) {
+                      this.postJsonState(savestate, getUrlType);
+                    } else {
+                      StatusMessage.messageWithAction(
+                          `Could not share state, no state server was found. `, 'Ok', () => {},
+                          undefined, {color: 'yellow'});
+                    }
+                  } else {
+                    StatusMessage.showTemporaryMessage(
+                        `Could not access state server.`, 4000, {color: 'yellow'});
+                  }
+                })
+                .finally(() => {
+                  if (!postSuccess && savestate) {
+                    callback();
+                    this.showSaveDialog(getUrlType);
+                  }
+                }),
+            {
+              initialMessage: `Posting state to ${this.jsonStateServer.value}.`,
+              delay: true,
+              errorPrefix: ''
+            });
       } else {
-        StatusMessage.showTemporaryMessage(`No state server found.`, 2000, {color: 'yellow'});
+        StatusMessage.showTemporaryMessage(`No state server found.`, 4000, {color: 'yellow'});
       }
-      let postSuccess = false;
-      authFetch(
-          this.jsonStateServer.value, {method: 'POST', body: JSON.stringify(this.state.toJSON())})
-          .then(res => res.json())
-          .then(response => {
-            const savedUrl =
-                `${window.location.origin}${window.location.pathname}?json_url=${response}`;
-            const saverSupported = this.saver && this.saver.supported;
-            if (saverSupported) {
-              this.saver!.commit(response);
-            } else {
-              history.replaceState(null, '', savedUrl);
-            }
-            if (savestate) {
-              callback();
-              this.showSaveDialog(getUrlType, saverSupported ? response : undefined);
-            }
-            postSuccess = true;
-          })
-          // catch errors with upload and prompt the user if there was an error
-          .catch(() => {
-            if (retry) {
-              this.promptJsonStateServer(
-                  'State server could not be reached, try again or enter a new one.');
-              if (this.jsonStateServer.value) {
-                this.postJsonState(savestate, getUrlType);
-              }
-            }
-          })
-          .finally(() => {
-            if (!postSuccess && savestate) {
-              callback();
-              this.showSaveDialog(getUrlType);
-            }
-          });
     } else {
       if (savestate) {
+        callback();
         this.showSaveDialog(getUrlType);
       }
     }
@@ -956,7 +971,7 @@ export class Viewer extends RefCounted implements ViewerState {
 
   initializeSaver() {
     const hashBinding = this.legacyViewerSetupHashBinding();
-    this.saver = this.registerDisposer(new SaveState(this.state));
+    this.saver = this.registerDisposer(new SaveState(this.state, this));
     if (!this.saver.supported) {
       // Fallback to register state change handler has legacy urlHashBinding if saver is not
       // supported
@@ -966,7 +981,7 @@ export class Viewer extends RefCounted implements ViewerState {
 
   legacyViewerSetupHashBinding() {
     // Backwards compatibility for state links
-    const hashBinding = this.registerDisposer(new UrlHashBinding(this.state));
+    const hashBinding = this.registerDisposer(new UrlHashBinding(this.state, this));
     this.hashBinding = hashBinding;
     this.registerDisposer(hashBinding.parseError.changed.add(() => {
       const {value} = hashBinding.parseError;

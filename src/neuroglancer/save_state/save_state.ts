@@ -21,7 +21,7 @@ export class SaveState extends RefCounted {
   savedUrl?: string;
   saves: {[key: string]: SaveEntry;} = {};
   supported = true;
-  constructor(public root: Trackable, updateDelayMilliseconds = 400) {
+  constructor(public root: Trackable, public viewer: Viewer, updateDelayMilliseconds = 400) {
     super();
     const userDisabledSaver = getSaveToAddressBar().value;
 
@@ -33,15 +33,15 @@ export class SaveState extends RefCounted {
       this.registerEventListener(window, 'popstate', () => this.loadFromStorage());
     } else {
       this.supported = false;
-      StatusMessage.showTemporaryMessage(
+      StatusMessage.messageWithAction(
           `Warning: Cannot access Local Storage. Unsaved changes will be lost! Use OldStyleSaving to allow for auto saving.`,
-          30000);
+          'Ok', () => {}, 30000, {color: 'red'});
     }
     if (userDisabledSaver) {
       this.supported = false;
       StatusMessage.showTemporaryMessage(
           `Save State has been disabled because Old Style saving has been turned on in User Preferences.`,
-          10000);
+          10000, {color: 'orange'});
     } else {
       const throttledUpdate = debounce(() => this.updateStorage(), updateDelayMilliseconds);
       this.registerDisposer(root.changed.add(throttledUpdate));
@@ -111,7 +111,9 @@ export class SaveState extends RefCounted {
       if (button) {
         button.classList.toggle('dirty', isDirty);
       }
+      return true;
     }
+    return false;
   }
 
   forceDirtyAsTrackable() {
@@ -135,10 +137,15 @@ export class SaveState extends RefCounted {
       const entry = this.saves[this.key];
       if (entry) {
         this.forceDirtyAsTrackable();
-        this.unsaved();
+        const dirtyState = this.unsaved();
         this.root.restoreState(entry.state);
         StatusMessage.showTemporaryMessage(
-            `Loaded from local storage. Do not duplicate this URL.`, 4000, {color: 'yellow'});
+            `Loaded from local storage. Do not duplicate this URL.`, 4000);
+        if (dirtyState) {
+          StatusMessage.messageWithAction(
+              `This state has not been shared, share and copy the JSON or RAW URL to avoid losing progress. `,
+              'Share', () => this.viewer.postJsonState(true), undefined, {color: 'yellow'});
+        }
       } else {
         StatusMessage.showTemporaryMessage(
             `This URL is invalid. Do not copy the URL in the address bar. Use the save button.`,
@@ -190,7 +197,7 @@ export class SaveState extends RefCounted {
         {
           initialMessage: `Retrieving state from json_url: ${json_url}.`,
           delay: true,
-          errorPrefix: `Error retrieving state: `,
+          errorPrefix: `Error retrieving state: ${json_url}`,
         });
   }
 
@@ -242,25 +249,27 @@ class SaveDialog extends Overlay {
     pushButton.title = 'Push to state server to get JSON URL.';
     pushButton.addEventListener('click', () => {
       viewer.promptJsonStateServer('Please enter the state server to access.');
-      pushButton.disabled = true;
-      const saver = document.getElementsByClassName('ng-saver');
-      let saveBtn: HTMLButtonElement;
-      if (saver && saver.length) {
-        saveBtn = <HTMLButtonElement>saver[0];
-        saveBtn.classList.add('busy');
-        saveBtn.disabled = true;
+      if (viewer.jsonStateServer.value) {
+        pushButton.disabled = true;
+        const saver = document.getElementsByClassName('ng-saver');
+        let saveBtn: HTMLButtonElement;
+        if (saver && saver.length) {
+          saveBtn = <HTMLButtonElement>saver[0];
+          saveBtn.classList.add('busy');
+          saveBtn.disabled = true;
+        }
+        const restoreSaving = () => {
+          try {
+            this.dispose();
+          } catch {
+          }
+          if (saveBtn) {
+            saveBtn.classList.remove('busy');
+            saveBtn.disabled = false;
+          }
+        };
+        viewer.postJsonState(true, undefined, true, restoreSaving);
       }
-      const restoreSaving = () => {
-        try {
-          this.dispose();
-        } catch {
-        }
-        if (saveBtn) {
-          saveBtn.classList.remove('busy');
-          saveBtn.disabled = false;
-        }
-      };
-      viewer.postJsonState(true, undefined, true, restoreSaving);
     });
     const pushButtonContainer = document.createElement('div');
     pushButtonContainer.style.textAlign = 'right';
@@ -277,8 +286,8 @@ class SaveDialog extends Overlay {
     form.append(document.createElement('br'));
     form.append(this.makePopup('RAW_URL'));
     this.insertField(form, 'RAW_URL', rawUrl, 'neuroglancer-save-state-raw');
+    // TODO: Re Deprecate
     // form.append('DEPRECATED');
-    StatusMessage.showTemporaryMessage(`Saved.`, 5000);
     modal.appendChild(form);
 
     modal.onblur = () => this.dispose();

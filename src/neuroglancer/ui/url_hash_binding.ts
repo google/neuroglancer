@@ -20,6 +20,7 @@ import {WatchableValue} from 'neuroglancer/trackable_value';
 import {RefCounted} from 'neuroglancer/util/disposable';
 import {urlSafeParse, verifyObject} from 'neuroglancer/util/json';
 import {getCachedJson, Trackable} from 'neuroglancer/util/trackable';
+import {Viewer} from 'neuroglancer/viewer';
 
 /**
  * @file Implements a binding between a Trackable value and the URL hash state.
@@ -43,7 +44,7 @@ export class UrlHashBinding extends RefCounted {
    */
   parseError = new WatchableValue<Error|undefined>(undefined);
   legacy: UrlHashBindingLegacy;
-  constructor(public root: Trackable) {
+  constructor(public root: Trackable, public viewer: Viewer) {
     super();
     this.registerEventListener(window, 'hashchange', () => this.updateFromUrlHash());
     this.legacy = new UrlHashBindingLegacy(root, this, this.prevStateString);
@@ -60,7 +61,10 @@ export class UrlHashBinding extends RefCounted {
         return;
       }
       StatusMessage.showTemporaryMessage(
-          `State URLs are Deprecated! Please use JSON URLs whenever available.`, 10000);
+          `RAW URLs will soon be Deprecated. Please use JSON URLs whenever available.`, 10000);
+      StatusMessage.messageWithAction(
+          `This state has not been shared, share and copy the JSON or RAW url to avoid losing progress. `,
+          'Share', () => this.viewer.postJsonState(true), undefined, {color: 'yellow'});
       if (s.startsWith('#!+')) {
         s = s.slice(3);
         // Firefox always %-encodes the URL even if it is not typed that way.
