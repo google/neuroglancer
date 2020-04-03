@@ -111,7 +111,7 @@ export class SaveState extends RefCounted {
       if (button) {
         button.classList.toggle('dirty', isDirty);
       }
-      return true;
+      return isDirty;
     }
     return false;
   }
