@@ -2,7 +2,7 @@ import 'neuroglancer/save_state/save_state.css';
 
 import {debounce} from 'lodash';
 import {Overlay} from 'neuroglancer/overlay';
-import {getSaveToAddressBar} from 'neuroglancer/preferences/user_preferences';
+import {getSaveToAddressBar, getUnshareWarning} from 'neuroglancer/preferences/user_preferences';
 import {StatusMessage} from 'neuroglancer/status';
 import {TrackableBoolean} from 'neuroglancer/trackable_boolean';
 import {RefCounted} from 'neuroglancer/util/disposable';
@@ -141,7 +141,7 @@ export class SaveState extends RefCounted {
         this.root.restoreState(entry.state);
         StatusMessage.showTemporaryMessage(
             `Loaded from local storage. Do not duplicate this URL.`, 4000);
-        if (dirtyState) {
+        if (dirtyState && getUnshareWarning()) {
           StatusMessage.messageWithAction(
               `This state has not been shared, share and copy the JSON or RAW URL to avoid losing progress. `,
               'Share', () => this.viewer.postJsonState(true), undefined, {color: 'yellow'});

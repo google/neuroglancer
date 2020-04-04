@@ -15,6 +15,7 @@
  */
 
 import {debounce} from 'lodash';
+import {getUnshareWarning} from 'neuroglancer/preferences/user_preferences';
 import {StatusMessage} from 'neuroglancer/status';
 import {WatchableValue} from 'neuroglancer/trackable_value';
 import {RefCounted} from 'neuroglancer/util/disposable';
@@ -62,9 +63,11 @@ export class UrlHashBinding extends RefCounted {
       }
       StatusMessage.showTemporaryMessage(
           `RAW URLs will soon be Deprecated. Please use JSON URLs whenever available.`, 10000);
-      StatusMessage.messageWithAction(
-          `This state has not been shared, share and copy the JSON or RAW url to avoid losing progress. `,
-          'Share', () => this.viewer.postJsonState(true), undefined, {color: 'yellow'});
+      if (getUnshareWarning()) {
+        StatusMessage.messageWithAction(
+            `This state has not been shared, share and copy the JSON or RAW url to avoid losing progress. `,
+            'Share', () => this.viewer.postJsonState(true), undefined, {color: 'yellow'});
+      }
       if (s.startsWith('#!+')) {
         s = s.slice(3);
         // Firefox always %-encodes the URL even if it is not typed that way.

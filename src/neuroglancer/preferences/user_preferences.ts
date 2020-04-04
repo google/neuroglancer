@@ -11,6 +11,7 @@ class UserPreferences {
   prefetchSliceViewChunks: TrackableBoolean;
   cursorOnMousedrag: TrackableBoolean;
   saveToAddressBar: TrackableBoolean;
+  unshareWarning: TrackableBoolean;
   constructor() {
     // mesh rendering is enabled by default, unless user selects not to
     this.renderMeshByDefault = new TrackableBoolean(true, true, 'renderMeshByDefault');
@@ -18,11 +19,13 @@ class UserPreferences {
     this.prefetchSliceViewChunks = new TrackableBoolean(false, false, 'prefetchSliceViewChunks');
     this.cursorOnMousedrag = new TrackableBoolean(true, true, 'cursorOnMousedrag');
     this.saveToAddressBar = new TrackableBoolean(false, false, 'saveToAddressBar');
+    this.unshareWarning = new TrackableBoolean(true, true, 'unshareWarning');
 
     this.renderMeshByDefault.restoreState({});
     this.prefetchSliceViewChunks.restoreState({});
     this.cursorOnMousedrag.restoreState({});
     this.saveToAddressBar.restoreState({});
+    this.unshareWarning.restoreState({});
 
     this.renderMeshByDefault.changed.add(() => {
       location.reload(false);
@@ -46,6 +49,10 @@ export function getCursorOnMousedrag(): TrackableBoolean {
 
 export function getSaveToAddressBar(): TrackableBoolean {
   return userPreferences.saveToAddressBar;
+}
+
+export function getUnshareWarning(): TrackableBoolean {
+  return userPreferences.unshareWarning;
 }
 
 export class UserPreferencesDialog extends Overlay {
@@ -98,5 +105,8 @@ export class UserPreferencesDialog extends Overlay {
     addCheckbox(
         'Old Style Saving', userPreferences.saveToAddressBar, () => location.reload(),
         `Saves state in address bar. Useful if storage is unsupported. Press save to post to JSON Server. Warning: Toggling the option reloads the page!`);
+    addCheckbox(
+        'Unshared state warning', userPreferences.unshareWarning, undefined,
+        'Disable the warning message when loading an unshared state.');
   }
 }
