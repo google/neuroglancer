@@ -504,8 +504,8 @@ export class Viewer extends RefCounted implements ViewerState {
             `Save State has been disabled because Old Style saving has been turned on in User Preferences.`;
       }
       if (this.saver && !this.saver.supported && this.saver.key) {
-        const entry = this.saver.saves[this.saver.key];
-        button.classList.toggle('dirty', entry.dirty.value);
+        const entry = this.saver.pull();
+        button.classList.toggle('dirty', entry ? entry.dirty : true);
       }
       this.registerEventListener(button, 'click', () => {
         this.postJsonState(true);
@@ -841,10 +841,14 @@ export class Viewer extends RefCounted implements ViewerState {
   postJsonState(
       savestate?: boolean, getUrlType?: UrlType, retry?: boolean, callback: Function = () => {}) {
     // upload state to jsonStateServer (only if it's defined)
-    if (savestate && this.saver && this.saver.savedUrl && this.saver.key &&
-        !this.saver.saves[this.saver.key].dirty.value) {
-      this.showSaveDialog(getUrlType, this.saver.savedUrl);
-      return;
+    if (savestate && this.saver) {
+      const savedUrl = this.saver.savedUrl;
+      const entry = this.saver.pull();
+      if (savedUrl && !entry.dirty) {
+        callback();
+        this.showSaveDialog(getUrlType, this.saver.savedUrl);
+        return;
+      }
     }
     if (this.jsonStateServer.value || getUrlType) {
       if (this.jsonStateServer.value.length) {
@@ -879,7 +883,7 @@ export class Viewer extends RefCounted implements ViewerState {
                       this.postJsonState(savestate, getUrlType);
                     } else {
                       StatusMessage.messageWithAction(
-                          `Could not share state, no state server was found. `, 'Ok', () => {},
+                          `Could not share state, no state server was found. `, [{message: 'Ok'}],
                           undefined, {color: 'yellow'});
                     }
                   } else {
@@ -932,7 +936,7 @@ export class Viewer extends RefCounted implements ViewerState {
 
   messageWithUndo(message: string, actionMessage: string, closeAfter: number = 10000) {
     const undo = this.getStateRevertingFunction();
-    StatusMessage.messageWithAction(message, actionMessage, undo, closeAfter);
+    StatusMessage.messageWithAction(message, [{message: actionMessage, action: undo}], closeAfter);
   }
 
   private getStateRevertingFunction() {

@@ -684,7 +684,8 @@ class SplitPreview extends RefCounted {
                   });
             } else {
               StatusMessage.showTemporaryMessage(
-                  'You must select at least one source and one sink to perform a split preview.', 5000);
+                  'You must select at least one source and one sink to perform a split preview.',
+                  5000);
             }
           }
         }
@@ -701,11 +702,14 @@ class SplitPreview extends RefCounted {
           const userGuidanceWarning = StatusMessage.showMessage(
               'The uncolored supervoxels in the preview form a separate group. It may help to select more of them in the multicut process.');
           const statusMessage = StatusMessage.messageWithAction(
-              'In split preview mode. Exit and return to multicut tool? ', 'Yes', () => {
-                this.disablePreview();
-                illegalSplitWarning.dispose();
-                userGuidanceWarning.dispose();
-              });
+              'In split preview mode. Exit and return to multicut tool? ', [{
+                message: 'Yes',
+                action: () => {
+                  this.disablePreview();
+                  illegalSplitWarning.dispose();
+                  userGuidanceWarning.dispose();
+                }
+              }]);
           this.removeStatusMessages = () => {
             illegalSplitWarning.dispose();
             userGuidanceWarning.dispose();
@@ -713,8 +717,8 @@ class SplitPreview extends RefCounted {
           };
         } else {
           const statusMessage = StatusMessage.messageWithAction(
-              'In split preview mode. Exit and return to multicut tool? ', 'Yes',
-              this.disablePreview);
+              'In split preview mode. Exit and return to multicut tool? ',
+              [{message: 'Yes', action: this.disablePreview}]);
           this.removeStatusMessages = () => {
             statusMessage.dispose();
           };
@@ -1021,7 +1025,7 @@ export class PlaceGraphOperationMarkerTool extends PlaceGraphOperationTool {
               vec3.create(), mouseState.position, graphOperationLayer.globalToObject),
           type: AnnotationType.POINT,
         };
-        const reference = graphOperationLayer.activeSource.add(annotation, /*commit=*/true);
+        const reference = graphOperationLayer.activeSource.add(annotation, /*commit=*/ true);
         this.layer.selectedGraphOperationElement.value = {id: reference.id};
         reference.dispose();
       }

@@ -2,40 +2,36 @@ import 'neuroglancer/save_state/save_state.css';
 
 import {debounce} from 'lodash';
 import {Overlay} from 'neuroglancer/overlay';
-import {getSaveToAddressBar, getUnshareWarning} from 'neuroglancer/preferences/user_preferences';
+import {dismissUnshareWarning, getSaveToAddressBar, getUnshareWarning} from 'neuroglancer/preferences/user_preferences';
 import {StatusMessage} from 'neuroglancer/status';
-import {TrackableBoolean} from 'neuroglancer/trackable_boolean';
 import {RefCounted} from 'neuroglancer/util/disposable';
-import {cancellableFetchOk, responseJson} from 'neuroglancer/util/http_request';
 import {getRandomHexString} from 'neuroglancer/util/random';
 import {Trackable} from 'neuroglancer/util/trackable';
 import {UrlType, Viewer} from 'neuroglancer/viewer';
 
-const stateKey = 'neuroglancerSaveState';
+const oldKey = 'neuroglancerSaveState';
+const stateKey = 'neuroglancerSS';
 const historyKey = 'neuroglancerSaveHistory';
 // TODO: Remove state ID from URL and preserve updated state order, or use timestamp
 // const orderKey = 'neuroglancerSaveOrder';
 
 export class SaveState extends RefCounted {
   key?: string;
+  session_id = getRandomHexString();
   savedUrl?: string;
-  saves: {[key: string]: SaveEntry;} = {};
   supported = true;
   constructor(public root: Trackable, public viewer: Viewer, updateDelayMilliseconds = 400) {
     super();
     const userDisabledSaver = getSaveToAddressBar().value;
 
     if (storageAvailable()) {
-      const saveStorageString = localStorage.getItem(stateKey);
-      this.saves = JSON.parse(saveStorageString || '{}');
-      this.loadFromStorage();
-      this.cull();
-      this.registerEventListener(window, 'popstate', () => this.loadFromStorage());
+      this.loadFromKey();
+      this.registerEventListener(window, 'popstate', () => this.loadFromKey());
     } else {
       this.supported = false;
       StatusMessage.messageWithAction(
           `Warning: Cannot access Local Storage. Unsaved changes will be lost! Use OldStyleSaving to allow for auto saving.`,
-          'Ok', () => {}, 30000, {color: 'red'});
+          [{message: 'Ok'}], 30000, {color: 'red'});
     }
     if (userDisabledSaver) {
       this.supported = false;
@@ -43,108 +39,89 @@ export class SaveState extends RefCounted {
           `Save State has been disabled because Old Style saving has been turned on in User Preferences.`,
           10000, {color: 'orange'});
     } else {
-      const throttledUpdate = debounce(() => this.updateStorage(), updateDelayMilliseconds);
+      const throttledUpdate = debounce(() => this.push(), updateDelayMilliseconds);
       this.registerDisposer(root.changed.add(throttledUpdate));
       this.registerDisposer(() => throttledUpdate.cancel());
     }
   }
-
-  purge() {
-    if (storageAvailable()) {
-      this.overwriteHistory();
-    }
-  }
-
-  push() {
-    if (storageAvailable()) {
-      localStorage.setItem(stateKey, JSON.stringify(this.saves));
-    }
-  }
-
+  // Main Methods
   pull() {
-    if (storageAvailable()) {
-      this.saves = {...this.saves, ...JSON.parse(localStorage.getItem(stateKey) || '{}')};
-    }
-  }
-
-  cull(limit = 100) {
-    if (storageAvailable()) {
-      this.pull();
-      if (this.list().length >= limit) {
-        const recent = this.list().slice(0, limit);
-        const newStorage: any = {};
-        recent.forEach(entry => {
-          newStorage[entry.state_id] = entry;
-        });
-        this.saves = newStorage;
-        this.push();
+    // Get SaveEntry from localStorage
+    if (storageAvailable() && this.key) {
+      const entry = localStorage[`${stateKey}-${this.key}`];
+      if (entry) {
+        return JSON.parse(entry);
       }
-      const history = this.history();
-      this.overwriteHistory(history.slice(history.length - limit));
     }
+    return;
   }
-
-  list() {
-    return (<SaveEntry[]>Object.values(this.saves)).sort((a, b) => b.timestamp - a.timestamp);
-  }
-
-  history(): SaveHistory[] {
-    const saveHistoryString = localStorage.getItem(historyKey);
-    return saveHistoryString ? JSON.parse(saveHistoryString) : [];
-  }
-
-  addToHistory(entry: SaveHistory) {
-    const saveHistoryString = this.history();
-    saveHistoryString.push(entry);
-    const record = JSON.stringify(saveHistoryString);
-    localStorage.setItem(historyKey, record);
-  }
-
-  overwriteHistory(newHistory: SaveHistory[] = []) {
-    localStorage.setItem(historyKey, JSON.stringify(newHistory));
-  }
-
-  unsaved(override?: boolean) {
-    const button = document.getElementById('neuroglancer-saver-button');
-    if (override || this.saves && this.key && button) {
-      const isDirty = override ? override : this.saves[this.key!].dirty.value;
-      if (button) {
-        button.classList.toggle('dirty', isDirty);
+  push(clean = false) {
+    // update SaveEntry in localStorage
+    if (storageAvailable() && this.key) {
+      const source = <SaveEntry>this.pull() || {};
+      if (source.history && source.history.length) {
+        // history should never be empty
+        if (this.reassign(source)) {
+          source.history = [];
+        }
+        source.history = this.uniquePush(source.history, this.session_id);
+        // .push(this.session_id);
+      } else {
+        source.history = [this.session_id];
       }
-      return isDirty;
-    }
-    return false;
-  }
-
-  forceDirtyAsTrackable() {
-    if (!this.key) {
-      return;
-    }
-    const entry = this.saves[this.key];
-    if (entry.dirty === undefined || entry.dirty.value === undefined) {
-      this.saves[this.key].dirty = new TrackableBoolean(entry.dirty ? true : false);
-      this.saves[this.key].dirty.changed.add(this.unsaved.bind(this));
-      this.unsaved();
+      source.state = this.root.toJSON();
+      source.dirty = !clean;
+      this.setSaveStatus(source.dirty);
+      const serializedUpdate = JSON.stringify(source);
+      this.robustLocalStorageSet(`${stateKey}-${this.key}`, serializedUpdate);
+      this.notifyManager();
     }
   }
-
-  loadFromStorage() {
+  commit(source_url: string) {
+    if (this.key) {
+      this.savedUrl = source_url;
+      this.addToHistory(recordHistory(source_url));
+      this.push(true);
+    }
+  }
+  loadFromKey() {
     const params = new URLSearchParams(window.location.search);
     this.key = <any>params.get('local_id');
 
     if (this.key) {
       location.hash = '';
-      const entry = this.saves[this.key];
+      let entry = this.pull();
+      // TODO: REMOVE BACKWARD COMPATIBILITY
+      if (!entry) {
+        const oldDatabaseRaw = localStorage[oldKey];
+        const oldDatabase = JSON.parse(oldDatabaseRaw || '{}');
+        entry = oldDatabase[this.key];
+        delete oldDatabase[this.key];
+        const serializedDatabase = JSON.stringify(oldDatabase);
+        localStorage.setItem(oldKey, serializedDatabase);
+      }
+
       if (entry) {
-        this.forceDirtyAsTrackable();
-        const dirtyState = this.unsaved();
+        this.setSaveStatus(entry.dirty);
         this.root.restoreState(entry.state);
         StatusMessage.showTemporaryMessage(
             `Loaded from local storage. Do not duplicate this URL.`, 4000);
-        if (dirtyState && getUnshareWarning()) {
+        if (entry.dirty && getUnshareWarning().value) {
           StatusMessage.messageWithAction(
               `This state has not been shared, share and copy the JSON or RAW URL to avoid losing progress. `,
-              'Share', () => this.viewer.postJsonState(true), undefined, {color: 'yellow'});
+              [
+                {
+                  message: 'Dismiss',
+                  action: () => {
+                    dismissUnshareWarning();
+                    StatusMessage.showTemporaryMessage(
+                        'To reenable this warning, check "Unshared state warning" in the User Preferences menu.',
+                        5000);
+                  }
+                },
+                {message: 'Share', action: () => this.viewer.postJsonState(true)}
+              ],
+              undefined, {color: 'yellow'});
         }
       } else {
         StatusMessage.showTemporaryMessage(
@@ -152,61 +129,115 @@ export class SaveState extends RefCounted {
             10000, {color: 'red'});
       }
     } else {
-      this.unsaved(true);
+      this.setSaveStatus(true);
+      this.generateKey();
     }
   }
-
-  updateStorage() {
-    let entry: SaveEntry;
-    if (!this.key) {
-      entry = recordEntry();
-      entry.dirty.changed.add(this.unsaved.bind(this));
-      this.key = entry.state_id;
-      this.saves[this.key] = entry;
-      this.unsaved();
-      const params = new URLSearchParams();
-      params.set('local_id', this.key);
-      history.pushState({}, '', `${window.location.origin}/?${params.toString()}`);
-    } else {
-      entry = this.saves[this.key];
-      this.forceDirtyAsTrackable();
-    }
-    const newState = this.root.toJSON();
-    if (JSON.stringify(entry.state) === JSON.stringify(newState)) {
-      return;
-    }
-    entry.state = this.root.toJSON();
-    entry.dirty.value = true;
-    this.push();
-  }
-
-  commit(source_url: string) {
-    if (this.key) {
-      this.savedUrl = source_url;
-      this.saves[this.key].dirty.value = false;
-      this.addToHistory(recordHistory(source_url));
-      this.push();
+  // Utility
+  purge() {
+    if (storageAvailable()) {
+      this.overwriteHistory();
     }
   }
-
-  remoteLoad(json_url: string) {
-    StatusMessage.forPromise(
-        cancellableFetchOk(json_url, {}, responseJson).then(response => {
-          this.root.restoreState(response);
-        }),
-        {
-          initialMessage: `Retrieving state from json_url: ${json_url}.`,
-          delay: true,
-          errorPrefix: `Error retrieving state: ${json_url}`,
-        });
+  nuke() {
+    if (storageAvailable()) {
+      localStorage[stateKey] = '[]';
+      const storage = localStorage;
+      const storageKeys = Object.keys(storage);
+      const stateKeys = storageKeys.filter(key => key.includes(`${stateKey}-`));
+      stateKeys.forEach(target => localStorage.removeItem(target));
+    }
   }
-
+  setSaveStatus(status: boolean) {
+    const button = document.getElementById('neuroglancer-saver-button');
+    if (button) {
+      button.classList.toggle('dirty', status);
+    }
+    return status;
+  }
+  history(): SaveHistory[] {
+    const saveHistoryString = localStorage.getItem(historyKey);
+    return saveHistoryString ? JSON.parse(saveHistoryString) : [];
+  }
+  overwriteHistory(newHistory: SaveHistory[] = []) {
+    localStorage.setItem(historyKey, JSON.stringify(newHistory));
+  }
   showSaveDialog(viewer: Viewer, jsonString?: string, get?: UrlType) {
     new SaveDialog(viewer, jsonString, get);
   }
-
   showHistory(viewer: Viewer) {
     new SaveHistoryDialog(viewer, this);
+  }
+  // Helper
+  generateKey() {
+    this.key = getRandomHexString();
+    const params = new URLSearchParams();
+    params.set('local_id', this.key);
+    history.pushState({}, '', `${window.location.origin}/?${params.toString()}`);
+  }
+  reassign(master: any) {
+    const hist = <string[]>master.history;
+    const lastIndex = hist.length - 1;
+    const amILastEditor = hist[lastIndex] === this.session_id;
+    if (!amILastEditor && hist.includes(this.session_id)) {
+      // someone else is editing the state I am editing
+      this.generateKey();
+      return true;
+    }
+    return false;
+  }
+  robustLocalStorageSet(key: string, data: any) {
+    while (true) {
+      try {
+        localStorage.setItem(key, data);
+        break;
+      } catch (e) {
+        // make space
+        const entryCount = this.getManager().length;
+        if (entryCount) {
+          this.evict();
+        } else {
+          // if no space avaliable break and warn user
+          throw e;
+        }
+      }
+    }
+  }
+  getManager() {
+    // karen
+    const managerRaw = localStorage[stateKey];
+    return <string[]>JSON.parse(managerRaw || '[]');
+  }
+  notifyManager() {
+    if (storageAvailable() && this.key) {
+      const manager = this.uniquePush(this.getManager(), this.key);
+      const serializedManager = JSON.stringify(manager);
+      localStorage.setItem(stateKey, serializedManager);
+    }
+  }
+  evict(count = 1) {
+    if (storageAvailable() && this.key) {
+      const manager = this.getManager();
+
+      const targets = manager.splice(0, count);
+      const serializedManager = JSON.stringify(manager);
+      localStorage.setItem(stateKey, serializedManager);
+      targets.forEach(key => localStorage.removeItem(`${stateKey}-${key}`));
+    }
+  }
+  addToHistory(entry: SaveHistory) {
+    const saveHistoryString = this.history();
+    saveHistoryString.push(entry);
+    const record = JSON.stringify(saveHistoryString);
+    localStorage.setItem(historyKey, record);
+  }
+  uniquePush(source: any[], entry: any) {
+    const target = source.indexOf(entry);
+    if (target > -1) {
+      source.splice(target, 1);
+    }
+    source.push(entry);
+    return source;
   }
 }
 
@@ -339,7 +370,6 @@ class SaveHistoryDialog extends Overlay {
     super();
     let {content, table} = this;
     if (saver.supported) {
-      saver.pull();
       let saves = saver.history();
       let modal = document.createElement('div');
       content.appendChild(modal);
@@ -389,25 +419,15 @@ class SaveHistoryDialog extends Overlay {
 }
 
 interface SaveEntry {
-  timestamp: number;
-  state_id: string;
-  dirty: TrackableBoolean;
+  dirty: boolean;
   state: any;
+  history: string[];
 }
 
 interface SaveHistory {
   source_url: string;
   timestamp: number;
 }
-
-const recordEntry = (state = {}) => {
-  return <SaveEntry>{
-    timestamp: (new Date()).valueOf(),
-    state_id: getRandomHexString(),
-    dirty: new TrackableBoolean(false, false),
-    state
-  };
-};
 
 const recordHistory = (url: string) => {
   return <SaveHistory>{timestamp: (new Date()).valueOf(), source_url: url};

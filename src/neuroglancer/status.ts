@@ -118,22 +118,29 @@ export class StatusMessage {
   }
 
   static messageWithAction(
-      message: string, actionMessage: string, action: () => void, closeAfter?: number, config?: styleOptions) {
+      message: string, actionArray: {message: string, action?: () => void}[], closeAfter?: number,
+      config?: styleOptions) {
     const msg = this.showMessage(message, config);
-    const actionButton = document.createElement('button');
-    actionButton.textContent = actionMessage;
-    actionButton.addEventListener('click', () => {
-      action();
-      msg.dispose();
+    actionArray.forEach(action => {
+      const btn = document.createElement('button');
+      btn.textContent = action.message;
+      btn.addEventListener('click', () => {
+        if (action.action) {
+          action.action();
+        }
+        msg.dispose();
+      });
+      msg.element.appendChild(btn);
     });
-    msg.element.appendChild(actionButton);
+
     if (closeAfter !== undefined) {
       setTimeout(() => msg.dispose(), closeAfter);
     }
     return msg;
   }
 
-  static showTemporaryMessage(message: string, closeAfter: number = 2000, config?: styleOptions): StatusMessage {
+  static showTemporaryMessage(message: string, closeAfter: number = 2000, config?: styleOptions):
+      StatusMessage {
     const msg = this.showMessage(message, config);
     setTimeout(() => msg.dispose(), closeAfter);
     return msg;

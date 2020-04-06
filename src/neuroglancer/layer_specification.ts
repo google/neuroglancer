@@ -21,7 +21,7 @@ import {VoxelSize} from 'neuroglancer/navigation_state';
 import {VolumeType} from 'neuroglancer/sliceview/volume/base';
 import {MultiscaleVolumeChunkSource} from 'neuroglancer/sliceview/volume/frontend';
 import {StatusMessage} from 'neuroglancer/status';
-import {Owned, RefCounted, Borrowed} from 'neuroglancer/util/disposable';
+import {Borrowed, Owned, RefCounted} from 'neuroglancer/util/disposable';
 import {vec3} from 'neuroglancer/util/geom';
 import {parseArray, verifyObject, verifyObjectProperty, verifyOptionalString, verifyString} from 'neuroglancer/util/json';
 import {NullarySignal, Signal} from 'neuroglancer/util/signal';
@@ -133,7 +133,8 @@ export class TopLevelLayerListSpecification extends RefCounted implements LayerL
       // If array, layers have an order
       for (const layerObj of x) {
         verifyObject(layerObj);
-        const name = this.layerManager.getUniqueLayerName(verifyObjectProperty(layerObj, 'name', verifyString));
+        const name = this.layerManager.getUniqueLayerName(
+            verifyObjectProperty(layerObj, 'name', verifyString));
         this.layerManager.addManagedLayer(this.getLayer(name, layerObj));
       }
     } else {
@@ -260,20 +261,36 @@ export class TopLevelLayerListSpecification extends RefCounted implements LayerL
 export class LayerSubsetSpecification extends RefCounted implements LayerListSpecification {
   changed = new NullarySignal();
 
-  get voxelCoordinatesSet() { return this.master.voxelCoordinatesSet; }
-  get spatialCoordinatesSet() { return this.master.spatialCoordinatesSet; }
+  get voxelCoordinatesSet() {
+    return this.master.voxelCoordinatesSet;
+  }
+  get spatialCoordinatesSet() {
+    return this.master.spatialCoordinatesSet;
+  }
 
-  get worker() { return this.master.rpc; }
-  get rpc() { return this.master.rpc; }
+  get worker() {
+    return this.master.rpc;
+  }
+  get rpc() {
+    return this.master.rpc;
+  }
 
-  get dataSourceProvider () { return this.master.dataSourceProvider; }
-  get chunkManager () { return this.master.chunkManager; }
-  get voxelSize () { return this.master.voxelSize; }
-  get layerSelectedValues () { return this.master.layerSelectedValues; }
+  get dataSourceProvider() {
+    return this.master.dataSourceProvider;
+  }
+  get chunkManager() {
+    return this.master.chunkManager;
+  }
+  get voxelSize() {
+    return this.master.voxelSize;
+  }
+  get layerSelectedValues() {
+    return this.master.layerSelectedValues;
+  }
 
   layerManager = new LayerManager(this.messageWithUndo.bind(this));
 
-  constructor (public master: Owned<LayerListSpecification>) {
+  constructor(public master: Owned<LayerListSpecification>) {
     super();
     this.registerDisposer(master);
     const {layerManager} = this;
@@ -291,7 +308,8 @@ export class LayerSubsetSpecification extends RefCounted implements LayerListSpe
     for (const name of new Set(parseArray(x, verifyString))) {
       const layer = masterLayerManager.getLayerByName(name);
       if (layer === undefined) {
-        throw new Error(`Undefined layer referenced in subset specification: ${JSON.stringify(name)}`);
+        throw new Error(
+            `Undefined layer referenced in subset specification: ${JSON.stringify(name)}`);
       }
       layers.push(layer);
     }
@@ -329,7 +347,9 @@ export class LayerSubsetSpecification extends RefCounted implements LayerListSpe
     this.master.setSpatialCoordinates(spatialCoordinates);
   }
 
-  get rootLayers () { return this.master.rootLayers; }
+  get rootLayers() {
+    return this.master.rootLayers;
+  }
 
   private getStateRevertingFunction() {
     const currentState = this.toJSON();
@@ -339,7 +359,7 @@ export class LayerSubsetSpecification extends RefCounted implements LayerListSpe
   }
   messageWithUndo(message: string, actionMessage: string, closeAfter: number = 10000) {
     const undo = this.getStateRevertingFunction();
-    StatusMessage.messageWithAction(message, actionMessage, undo, closeAfter);
+    StatusMessage.messageWithAction(message, [{message: actionMessage, action: undo}], closeAfter);
   }
 }
 

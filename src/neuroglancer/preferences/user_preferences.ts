@@ -55,6 +55,10 @@ export function getUnshareWarning(): TrackableBoolean {
   return userPreferences.unshareWarning;
 }
 
+export function dismissUnshareWarning() {
+  userPreferences.unshareWarning.value = false;
+}
+
 export class UserPreferencesDialog extends Overlay {
   constructor(public viewer: Viewer) {
     super();
