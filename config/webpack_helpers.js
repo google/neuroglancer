@@ -56,10 +56,7 @@ const DEFAULT_DATA_SOURCES = exports.DEFAULT_DATA_SOURCES = [
     ],
   },
   {
-    source: 'neuroglancer/datasource/swc',
-    asyncComputation: [
-      'neuroglancer/async_computation/decode_jpeg',
-    ],
+    source: 'neuroglancer/datasource/swc'
   },  
   {
     source: 'neuroglancer/datasource/render',

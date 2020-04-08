@@ -14,29 +14,9 @@
  * limitations under the License.
  */
 
-export enum VolumeChunkEncoding {
-  JPEG,
-  RAW,
-  COMPRESSED_SEGMENTATION,
-  COMPRESSED_SEGMENTATIONARRAY
-}
-
 export class SWCSourceParameters {
   baseUrl: string;
   nodeKey: string;
-  dataInstanceKey: string;
-}
-
-export class VolumeChunkSourceParameters extends SWCSourceParameters {
-  dataScale: string;
-  encoding: VolumeChunkEncoding;
-  static RPC_ID = 'swc/VolumeChunkSource';
-}
-
-export class SkeletonSourceParameters extends SWCSourceParameters {
-  static RPC_ID = 'swc/SkeletonSource';
-}
-
-export class MeshSourceParameters extends SWCSourceParameters {
-  static RPC_ID = 'swc/MeshSource';
+  // dataInstanceKey: string;
+  static RPC_ID = 'swc/SkeletonSource';  
 }
