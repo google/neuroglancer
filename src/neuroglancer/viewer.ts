@@ -429,6 +429,10 @@ export class Viewer extends RefCounted implements ViewerState {
     const maybeAddOrRemoveAnnotationShortcuts = this.annotationShortcutControllerFactory();
     this.registerDisposer(
         this.selectedLayer.changed.add(() => maybeAddOrRemoveAnnotationShortcuts()));
+    const error = document.getElementById('neuroglancer-error');
+    if (error) {
+      error.style.display = 'none';
+    }
     findWhatsNew(this);
   }
 
