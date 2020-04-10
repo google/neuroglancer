@@ -9,8 +9,8 @@ import {getRandomHexString} from 'neuroglancer/util/random';
 import {Trackable} from 'neuroglancer/util/trackable';
 import {UrlType, Viewer} from 'neuroglancer/viewer';
 
-const oldKey = 'neuroglancerSaveState';
-const stateKey = 'neuroglancerSS';
+const deprecatedKey = 'neuroglancerSaveState';
+const stateKey = 'neuroglancerSaveState_v2';
 const historyKey = 'neuroglancerSaveHistory';
 // TODO: Remove state ID from URL and preserve updated state order, or use timestamp
 // const orderKey = 'neuroglancerSaveOrder';
@@ -42,6 +42,7 @@ export class SaveState extends RefCounted {
       const throttledUpdate = debounce(() => this.push(), updateDelayMilliseconds);
       this.registerDisposer(root.changed.add(throttledUpdate));
       this.registerDisposer(() => throttledUpdate.cancel());
+      window.addEventListener('focus', (() => this.push(true)).bind(this));
     }
   }
   // Main Methods
@@ -65,7 +66,6 @@ export class SaveState extends RefCounted {
           source.history = [];
         }
         source.history = this.uniquePush(source.history, this.session_id);
-        // .push(this.session_id);
       } else {
         source.history = [this.session_id];
       }
@@ -93,12 +93,12 @@ export class SaveState extends RefCounted {
       let entry = this.pull();
       // TODO: REMOVE BACKWARD COMPATIBILITY
       if (!entry) {
-        const oldDatabaseRaw = localStorage[oldKey];
+        const oldDatabaseRaw = localStorage[deprecatedKey];
         const oldDatabase = JSON.parse(oldDatabaseRaw || '{}');
         entry = oldDatabase[this.key];
         delete oldDatabase[this.key];
         const serializedDatabase = JSON.stringify(oldDatabase);
-        localStorage.setItem(oldKey, serializedDatabase);
+        localStorage.setItem(deprecatedKey, serializedDatabase);
       }
 
       if (entry) {
@@ -204,7 +204,6 @@ export class SaveState extends RefCounted {
     }
   }
   getManager() {
-    // karen
     const managerRaw = localStorage[stateKey];
     return <string[]>JSON.parse(managerRaw || '[]');
   }
