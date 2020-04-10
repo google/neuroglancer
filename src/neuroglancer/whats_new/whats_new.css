@@ -2,3 +2,7 @@
     max-height: 90%;
     overflow: auto;
 }
+
+.align-center {
+    text-align: center;
+}
