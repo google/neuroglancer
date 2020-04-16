@@ -337,38 +337,6 @@ export function getServerInfo(chunkManager: ChunkManager, baseUrl: string) {
   });
 }
 
-/**
- * Get extra dataInstance info that isn't available on the server level.
- * this requires an extra api call
- */
-/*
-export function getDataInstanceDetails(
-    chunkManager: ChunkManager, baseUrl: string, nodeKey: string, info: VolumeDataInstanceInfo) {
-  return chunkManager.memoize.getUncounted(
-      {type: 'dvid:getInstanceDetails', baseUrl, nodeKey, name: info.name}, async () => {
-        let result = fetchOk(`${baseUrl}/api/node/${nodeKey}/${info.name}/info`)
-                         .then(response => response.json());
-        const description = `datainstance info for node ${nodeKey} and instance ${info.name} ` +
-            `on DVID server ${baseUrl}`;
-
-        StatusMessage.forPromise(result, {
-          initialMessage: `Retrieving ${description}.`,
-          delay: true,
-          errorPrefix: `Error retrieving ${description}: `,
-        });
-
-        const instanceDetails = await result;
-
-        let extended = verifyObjectProperty(instanceDetails, 'Extended', verifyObject);
-        info.lowerVoxelBound =
-            verifyObjectProperty(extended, 'MinPoint', x => parseIntVec(vec3.create(), x));
-        info.upperVoxelBoundInclusive =
-            verifyObjectProperty(extended, 'MaxPoint', x => parseIntVec(vec3.create(), x));
-        return info;
-      });
-}
-*/
-
 class DvidMultiscaleVolumeChunkSource extends MultiscaleVolumeChunkSource {
   get dataType() {
     return this.info.dataType;
