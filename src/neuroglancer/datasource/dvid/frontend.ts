@@ -57,6 +57,12 @@ export class DataInstanceBaseInfo {
 }
 
 export class DataInstanceInfo {
+  lowerVoxelBound: vec3;
+  upperVoxelBoundInclusive: vec3;
+  voxelSize: vec3;
+  blockSize: vec3;
+  numLevels: number;
+
   constructor(public obj: any, public name: string, public base: DataInstanceBaseInfo) {}
 }
 
@@ -71,10 +77,6 @@ class DVIDMeshSource extends
 
 export class VolumeDataInstanceInfo extends DataInstanceInfo {
   dataType: DataType;
-  lowerVoxelBound: vec3;
-  upperVoxelBoundInclusive: vec3;
-  voxelSize: vec3;
-  numLevels: number;
   meshSrc: string;
   skeletonSrc: string;
 
@@ -122,6 +124,13 @@ export class VolumeDataInstanceInfo extends DataInstanceInfo {
     this.voxelSize = verifyObjectProperty(
         extended, 'VoxelSize',
         x => parseFixedLengthArray(vec3.create(), x, verifyFinitePositiveFloat));
+    this.blockSize = verifyObjectProperty(
+        extended, 'BlockSize',
+        x => parseFixedLengthArray(vec3.create(), x, verifyFinitePositiveFloat));
+    this.lowerVoxelBound =
+        verifyObjectProperty(extended, 'MinPoint', x => parseIntVec(vec3.create(), x));
+    this.upperVoxelBoundInclusive =
+        verifyObjectProperty(extended, 'MaxPoint', x => parseIntVec(vec3.create(), x));
   }
 
   get volumeType() {
@@ -332,6 +341,7 @@ export function getServerInfo(chunkManager: ChunkManager, baseUrl: string) {
  * Get extra dataInstance info that isn't available on the server level.
  * this requires an extra api call
  */
+/*
 export function getDataInstanceDetails(
     chunkManager: ChunkManager, baseUrl: string, nodeKey: string, info: VolumeDataInstanceInfo) {
   return chunkManager.memoize.getUncounted(
@@ -357,7 +367,7 @@ export function getDataInstanceDetails(
         return info;
       });
 }
-
+*/
 
 class DvidMultiscaleVolumeChunkSource extends MultiscaleVolumeChunkSource {
   get dataType() {
@@ -390,14 +400,97 @@ class DvidMultiscaleVolumeChunkSource extends MultiscaleVolumeChunkSource {
 
 const urlPattern = /^((?:http|https):\/\/[^\/]+)\/([^\/]+)\/([^\/]+)$/;
 
-export function getDataSource(options: GetDataSourceOptions): Promise<DataSource> {
-  let match = options.providerUrl.match(urlPattern);
+function parseSourceUrl(url: string): DVIDSourceParameters {
+  let match = url.match(urlPattern);
   if (match === null) {
-    throw new Error(`Invalid DVID URL: ${JSON.stringify(options.providerUrl)}.`);
+    throw new Error(`Invalid DVID URL: ${JSON.stringify(url)}.`);
   }
-  const baseUrl = match[1];
-  const nodeKey = match[2];
-  const dataInstanceKey = match[3];
+
+  let sourceParameters: DVIDSourceParameters = {
+    baseUrl: match[1],
+    nodeKey: match[2],
+    dataInstanceKey: match[3],
+  };
+
+  return sourceParameters;
+}
+
+function getVolumeSource(options: GetDataSourceOptions, sourceParameters: DVIDSourceParameters, dataInstanceInfo: DataInstanceInfo) {
+  const baseUrl = sourceParameters.baseUrl;
+  const nodeKey = sourceParameters.nodeKey;
+  const dataInstanceKey = sourceParameters.dataInstanceKey;
+
+  const info = <VolumeDataInstanceInfo>dataInstanceInfo;
+
+  const box: BoundingBox = {
+    lowerBounds: new Float64Array(info.lowerVoxelBound),
+    upperBounds: Float64Array.from(info.upperVoxelBoundInclusive, x => x + 1)
+  };
+  const modelSpace = makeCoordinateSpace({
+    rank: 3,
+    names: ['x', 'y', 'z'],
+    units: ['m', 'm', 'm'],
+    scales: Float64Array.from(info.voxelSize, x => x / 1e9),
+    boundingBoxes: [makeIdentityTransformedBoundingBox(box)],
+  });
+
+  const volume = new DvidMultiscaleVolumeChunkSource(
+    options.chunkManager, baseUrl, nodeKey, dataInstanceKey, info);
+
+  const dataSource: DataSource = {
+    modelTransform: makeIdentityTransform(modelSpace),
+    subsources: [{
+      id: 'default',
+      subsource: { volume },
+      default: true,
+    }],
+  };
+  if (info.meshSrc) {
+    const subsourceToModelSubspaceTransform = mat4.create();
+    for (let i = 0; i < 3; ++i) {
+      subsourceToModelSubspaceTransform[5 * i] = 1 / info.voxelSize[i];
+    }
+    dataSource.subsources.push({
+      id: 'meshes',
+      default: true,
+      subsource: {
+        mesh: options.chunkManager.getChunkSource(DVIDMeshSource, {
+          parameters: {
+            ...sourceParameters,
+            'dataInstanceKey': info.meshSrc
+          }
+        })
+      },
+      subsourceToModelSubspaceTransform,
+    });
+  }
+  if (info.skeletonSrc) {
+    dataSource.subsources.push({
+      id: 'skeletons',
+      default: true,
+      subsource: {
+        mesh: options.chunkManager.getChunkSource(DVIDSkeletonSource, {
+          parameters: {
+            ...sourceParameters,
+            'dataInstanceKey': info.skeletonSrc
+          }
+        })
+      },
+    });
+  }
+  dataSource.subsources.push({
+    id: 'bounds',
+    subsource: { staticAnnotations: makeDataBoundsBoundingBoxAnnotationSet(box) },
+    default: true,
+  });
+
+  return dataSource;
+}
+
+export function getDataSource(options: GetDataSourceOptions): Promise<DataSource> {
+  const sourceParameters = parseSourceUrl(options.providerUrl);
+  const {baseUrl, nodeKey, dataInstanceKey} = sourceParameters;
+
   return options.chunkManager.memoize.getUncounted(
       {
         type: 'dvid:MultiscaleVolumeChunkSource',
@@ -415,70 +508,8 @@ export function getDataSource(options: GetDataSourceOptions): Promise<DataSource
         if (!(dataInstanceInfo instanceof VolumeDataInstanceInfo)) {
           throw new Error(`Invalid data instance ${dataInstanceKey}.`);
         }
-        const info =
-            await getDataInstanceDetails(options.chunkManager, baseUrl, nodeKey, dataInstanceInfo);
-        const volume = new DvidMultiscaleVolumeChunkSource(
-            options.chunkManager, baseUrl, nodeKey, dataInstanceKey, info);
-        const box: BoundingBox = {
-          lowerBounds: new Float64Array(info.lowerVoxelBound),
-          upperBounds: Float64Array.from(info.upperVoxelBoundInclusive, x => x + 1)
-        };
-        const modelSpace = makeCoordinateSpace({
-          rank: 3,
-          names: ['x', 'y', 'z'],
-          units: ['m', 'm', 'm'],
-          scales: Float64Array.from(info.voxelSize, x => x / 1e9),
-          boundingBoxes: [makeIdentityTransformedBoundingBox(box)],
-        });
-        const dataSource: DataSource = {
-          modelTransform: makeIdentityTransform(modelSpace),
-          subsources: [{
-            id: 'default',
-            subsource: {volume},
-            default: true,
-          }],
-        };
-        if (info.meshSrc) {
-          const subsourceToModelSubspaceTransform = mat4.create();
-          for (let i = 0; i < 3; ++i) {
-            subsourceToModelSubspaceTransform[5 * i] = 1 / info.voxelSize[i];
-          }
-          dataSource.subsources.push({
-            id: 'meshes',
-            default: true,
-            subsource: {
-              mesh: options.chunkManager.getChunkSource(DVIDMeshSource, {
-                parameters: {
-                  'baseUrl': baseUrl,
-                  'nodeKey': nodeKey,
-                  'dataInstanceKey': info.meshSrc,
-                }
-              })
-            },
-            subsourceToModelSubspaceTransform,
-          });
-        }
-        if (info.skeletonSrc) {
-          dataSource.subsources.push({
-            id: 'skeletons',
-            default: true,
-            subsource: {
-              mesh: options.chunkManager.getChunkSource(DVIDSkeletonSource, {
-                parameters: {
-                  'baseUrl': baseUrl,
-                  'nodeKey': nodeKey,
-                  'dataInstanceKey': info.skeletonSrc,
-                }
-              })
-            },
-          });
-        }
-        dataSource.subsources.push({
-          id: 'bounds',
-          subsource: {staticAnnotations: makeDataBoundsBoundingBoxAnnotationSet(box)},
-          default: true,
-        });
-        return dataSource;
+
+        return getVolumeSource(options, sourceParameters, dataInstanceInfo);
       });
 }
 
