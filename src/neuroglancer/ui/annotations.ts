@@ -1132,7 +1132,7 @@ export class AnnotationLayerView extends Tab {
   }
 
   private exportToCSV() {
-    const filename = 'annotations.csv';
+    const filename = `${this.layer.name}.csv`;
     const pointToCoordinateText = (point: vec3, transform: mat4) => {
       const spatialPoint = vec3.transformMat4(vec3.create(), point, transform);
       return formatIntegerPoint(this.voxelSize.voxelFromSpatial(tempVec3, spatialPoint));

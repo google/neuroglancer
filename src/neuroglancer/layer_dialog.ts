@@ -165,6 +165,7 @@ export class LayerDialog extends Overlay {
     if (this.sourceValid && this.isNameValid()) {
       if (this.existingLayer) {
         this.existingLayer.name = this.nameInputElement.value;
+        this.existingLayer.layer!.name = this.nameInputElement.value;
         this.manager.layerManager.layersChanged.dispatch();
       } else {
         this.manager.add(

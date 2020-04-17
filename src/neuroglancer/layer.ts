@@ -101,6 +101,7 @@ export class VisibilityTrackedRenderLayer extends RenderLayer {
 
 const TAB_JSON_KEY = 'tab';
 const TOOL_JSON_KEY = 'tool';
+const NAME_JSON_KEY = 'name';
 
 export class UserLayer extends RefCounted {
   layersChanged = new NullarySignal();
@@ -111,6 +112,7 @@ export class UserLayer extends RefCounted {
   tabs = this.registerDisposer(new TabSpecification());
   tool = this.registerDisposer(
       new TrackableRefCounted<Tool>(value => restoreTool(this, value), value => value.toJSON()));
+  name = '';
   constructor(public manager: Borrowed<LayerListSpecification>, specification: any) {
     super();
     specification;
@@ -121,6 +123,7 @@ export class UserLayer extends RefCounted {
   restoreState(specification: any) {
     this.tool.restoreState(specification[TOOL_JSON_KEY]);
     this.tabs.restoreState(specification[TAB_JSON_KEY]);
+    this.name = specification[NAME_JSON_KEY];
   }
 
   addRenderLayer(layer: RenderLayer) {
