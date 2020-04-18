@@ -219,6 +219,7 @@ async function getAttributes(
       (u, i) => getIndividualAttributesJson(
           chunkManager, u, required && i === attributesJsonUrls.length - 1)));
   if (metadata.indexOf(undefined) !== -1) return undefined;
+  metadata.reverse();
   return Object.assign({}, ...metadata);
 }
 
