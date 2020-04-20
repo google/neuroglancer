@@ -28,9 +28,7 @@ import {registerSharedObject} from 'neuroglancer/worker_rpc';
     const {parameters} = this;
     let bodyid = `${chunk.objectId}`;
     // Change the url pattern for SWC
-    // const url = `${parameters.baseUrl}/api/node/${parameters['nodeKey']}` +
-    //     `/${parameters['dataInstanceKey']}/key/` + bodyid + '_swc';
-    const url = `${parameters.baseUrl}/swc/` + bodyid ;
+    const url = `${parameters.baseUrl}/swc/` + bodyid + `.swc` ;
     return cancellableFetchOk(url, {}, responseArrayBuffer, cancellationToken)
         .then(response => {
           let enc = new TextDecoder('utf-8');
