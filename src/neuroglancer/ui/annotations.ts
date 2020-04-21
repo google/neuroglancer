@@ -1132,126 +1132,130 @@ export class AnnotationLayerView extends Tab {
   }
 
   private exportToCSV() {
-    const filename = `${this.layer.name}.csv`;
-    const pointToCoordinateText = (point: vec3, transform: mat4) => {
-      const spatialPoint = vec3.transformMat4(vec3.create(), point, transform);
-      return formatIntegerPoint(this.voxelSize.voxelFromSpatial(tempVec3, spatialPoint));
-    };
-    const columnHeaders = [
-      'Coordinate 1', 'Coordinate 2', 'Ellipsoid Dimensions', 'Tags', 'Description', 'Segment IDs',
-      'Parent ID', 'Type', 'ID'
-    ];
-    const csvData: string[][] = [];
-    for (const annotation of this.annotationLayer.source) {
-      const annotationRow = [];
-      let coordinate1String = '';
-      let coordinate2String = '';
-      let ellipsoidDimensions = '';
-      let stringType = '';
-      let collectionID = '';
-      switch (annotation.type) {
-        case AnnotationType.AXIS_ALIGNED_BOUNDING_BOX:
-        case AnnotationType.LINE:
-          stringType = annotation.type === AnnotationType.LINE ? 'Line' : 'AABB';
-          coordinate1String =
-              pointToCoordinateText(annotation.pointA, this.annotationLayer.objectToGlobal);
-          coordinate2String =
-              pointToCoordinateText(annotation.pointB, this.annotationLayer.objectToGlobal);
-          break;
-        case AnnotationType.POINT:
-          stringType = 'Point';
-          coordinate1String =
-              pointToCoordinateText(annotation.point, this.annotationLayer.objectToGlobal);
-          break;
-        case AnnotationType.ELLIPSOID:
-          stringType = 'Ellipsoid';
-          coordinate1String =
-              pointToCoordinateText(annotation.center, this.annotationLayer.objectToGlobal);
-          const transformedRadii = transformVectorByMat4(
-              tempVec3, annotation.radii, this.annotationLayer.objectToGlobal);
-          this.voxelSize.voxelFromSpatial(transformedRadii, transformedRadii);
-          ellipsoidDimensions = formatIntegerBounds(transformedRadii);
-          break;
-        case AnnotationType.SPOKE:
-        case AnnotationType.LINE_STRIP:
-        case AnnotationType.COLLECTION:
-          switch (annotation.type) {
-            case AnnotationType.SPOKE:
-              stringType = (<Spoke>annotation).wheeled ? 'Spoke*' : 'Spoke';
-              break;
-            case AnnotationType.LINE_STRIP:
-              stringType = (<LineStrip>annotation).looped ? 'Line Strip*' : 'Line Strip';
-              break;
-            default:
-              stringType = 'Collection';
+    const filename = window.prompt("Enter your desired filename",`${this.layer.name}.csv`);
+    if (filename === '') {
+      StatusMessage.showTemporaryMessage('Filename cannot be empty.', 5000);
+    } else if (filename !== null) {
+      const pointToCoordinateText = (point: vec3, transform: mat4) => {
+        const spatialPoint = vec3.transformMat4(vec3.create(), point, transform);
+        return formatIntegerPoint(this.voxelSize.voxelFromSpatial(tempVec3, spatialPoint));
+      };
+      const columnHeaders = [
+        'Coordinate 1', 'Coordinate 2', 'Ellipsoid Dimensions', 'Tags', 'Description', 'Segment IDs',
+        'Parent ID', 'Type', 'ID'
+      ];
+      const csvData: string[][] = [];
+      for (const annotation of this.annotationLayer.source) {
+        const annotationRow = [];
+        let coordinate1String = '';
+        let coordinate2String = '';
+        let ellipsoidDimensions = '';
+        let stringType = '';
+        let collectionID = '';
+        switch (annotation.type) {
+          case AnnotationType.AXIS_ALIGNED_BOUNDING_BOX:
+          case AnnotationType.LINE:
+            stringType = annotation.type === AnnotationType.LINE ? 'Line' : 'AABB';
+            coordinate1String =
+                pointToCoordinateText(annotation.pointA, this.annotationLayer.objectToGlobal);
+            coordinate2String =
+                pointToCoordinateText(annotation.pointB, this.annotationLayer.objectToGlobal);
+            break;
+          case AnnotationType.POINT:
+            stringType = 'Point';
+            coordinate1String =
+                pointToCoordinateText(annotation.point, this.annotationLayer.objectToGlobal);
+            break;
+          case AnnotationType.ELLIPSOID:
+            stringType = 'Ellipsoid';
+            coordinate1String =
+                pointToCoordinateText(annotation.center, this.annotationLayer.objectToGlobal);
+            const transformedRadii = transformVectorByMat4(
+                tempVec3, annotation.radii, this.annotationLayer.objectToGlobal);
+            this.voxelSize.voxelFromSpatial(transformedRadii, transformedRadii);
+            ellipsoidDimensions = formatIntegerBounds(transformedRadii);
+            break;
+          case AnnotationType.SPOKE:
+          case AnnotationType.LINE_STRIP:
+          case AnnotationType.COLLECTION:
+            switch (annotation.type) {
+              case AnnotationType.SPOKE:
+                stringType = (<Spoke>annotation).wheeled ? 'Spoke*' : 'Spoke';
+                break;
+              case AnnotationType.LINE_STRIP:
+                stringType = (<LineStrip>annotation).looped ? 'Line Strip*' : 'Line Strip';
+                break;
+              default:
+                stringType = 'Collection';
+            }
+            coordinate1String =
+                pointToCoordinateText(annotation.source, this.annotationLayer.objectToGlobal);
+            collectionID = annotation.id;
+            break;
+        }
+        annotationRow.push(coordinate1String);
+        annotationRow.push(coordinate2String);
+        annotationRow.push(ellipsoidDimensions);
+        // Tags
+        if (this.annotationLayer.source instanceof AnnotationSource && annotation.tagIds) {
+          // Papa.unparse expects an array of arrays even though here we only want to create a csv
+          // for one row of tags
+          const annotationTags: string[][] = [[]];
+          annotation.tagIds.forEach(tagId => {
+            const tag = (<AnnotationSource>this.annotationLayer.source).getTag(tagId);
+            if (tag) {
+              annotationTags[0].push(tag.label);
+            }
+          });
+          if (annotationTags[0].length > 0) {
+            annotationRow.push(Papa.unparse(annotationTags));
+          } else {
+            annotationRow.push('');
           }
-          coordinate1String =
-              pointToCoordinateText(annotation.source, this.annotationLayer.objectToGlobal);
-          collectionID = annotation.id;
-          break;
-      }
-      annotationRow.push(coordinate1String);
-      annotationRow.push(coordinate2String);
-      annotationRow.push(ellipsoidDimensions);
-      // Tags
-      if (this.annotationLayer.source instanceof AnnotationSource && annotation.tagIds) {
-        // Papa.unparse expects an array of arrays even though here we only want to create a csv
-        // for one row of tags
-        const annotationTags: string[][] = [[]];
-        annotation.tagIds.forEach(tagId => {
-          const tag = (<AnnotationSource>this.annotationLayer.source).getTag(tagId);
-          if (tag) {
-            annotationTags[0].push(tag.label);
-          }
-        });
-        if (annotationTags[0].length > 0) {
-          annotationRow.push(Papa.unparse(annotationTags));
         } else {
           annotationRow.push('');
         }
-      } else {
-        annotationRow.push('');
-      }
-      // Description
-      if (annotation.description) {
-        annotationRow.push(annotation.description);
-      } else {
-        annotationRow.push('');
-      }
-      // Segment IDs
-      if (annotation.segments) {
-        // Papa.unparse expects an array of arrays even though here we only want to create a csv
-        // for one row of segments
-        const annotationSegments: string[][] = [[]];
-        annotation.segments.forEach(segmentID => {
-          annotationSegments[0].push(segmentID.toString());
-        });
-        if (annotationSegments[0].length > 0) {
-          annotationRow.push(Papa.unparse(annotationSegments));
+        // Description
+        if (annotation.description) {
+          annotationRow.push(annotation.description);
         } else {
           annotationRow.push('');
         }
-      } else {
-        annotationRow.push('');
+        // Segment IDs
+        if (annotation.segments) {
+          // Papa.unparse expects an array of arrays even though here we only want to create a csv
+          // for one row of segments
+          const annotationSegments: string[][] = [[]];
+          annotation.segments.forEach(segmentID => {
+            annotationSegments[0].push(segmentID.toString());
+          });
+          if (annotationSegments[0].length > 0) {
+            annotationRow.push(Papa.unparse(annotationSegments));
+          } else {
+            annotationRow.push('');
+          }
+        } else {
+          annotationRow.push('');
+        }
+        // Parent ID
+        annotationRow.push(annotation.parentId || '');
+        // Type
+        annotationRow.push(stringType);
+        // ID
+        annotationRow.push(collectionID);
+  
+        csvData.push(annotationRow);
       }
-      // Parent ID
-      annotationRow.push(annotation.parentId || '');
-      // Type
-      annotationRow.push(stringType);
-      // ID
-      annotationRow.push(collectionID);
-
-      csvData.push(annotationRow);
+      const csvString = Papa.unparse({'fields': columnHeaders, 'data': csvData});
+      const blob = new Blob([csvString], {type: 'text/csv;charset=utf-8;'});
+      const link = document.createElement('a');
+      const url = URL.createObjectURL(blob);
+      link.setAttribute('href', url);
+      link.setAttribute('download', filename);
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
     }
-    const csvString = Papa.unparse({'fields': columnHeaders, 'data': csvData});
-    const blob = new Blob([csvString], {type: 'text/csv;charset=utf-8;'});
-    const link = document.createElement('a');
-    const url = URL.createObjectURL(blob);
-    link.setAttribute('href', url);
-    link.setAttribute('download', filename);
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
   }
 
   // TODO: pull request to papa repo

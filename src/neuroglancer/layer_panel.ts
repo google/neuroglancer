@@ -352,7 +352,7 @@ export class LayerPanel extends RefCounted {
     const addLayer = (event: MouseEvent) => {
       if (event.ctrlKey || event.metaKey || event.type === 'contextmenu') {
         const layer = new ManagedUserLayerWithSpecification('annotation', {}, this.manager);
-        this.manager.initializeLayerFromSpec(layer, {type: 'annotation'});
+        this.manager.initializeLayerFromSpec(layer, {type: 'annotation', name: layer.name});
         this.manager.add(layer);
       } else {
         this.addLayerMenu();
