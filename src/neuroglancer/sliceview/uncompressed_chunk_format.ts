@@ -220,9 +220,12 @@ export class UncompressedVolumeChunk extends SingleTextureVolumeChunk<Uint8Array
     let data = this.data;
     switch (dataType) {
       case DataType.UINT8:
+      case DataType.INT8:
       case DataType.FLOAT32:
       case DataType.UINT16:
+      case DataType.INT16:
       case DataType.UINT32:
+      case DataType.INT32:
         return data[index];
       case DataType.UINT64: {
         let index2 = index * 2;

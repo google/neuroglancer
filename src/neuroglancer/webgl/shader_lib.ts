@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-import {DataType} from 'neuroglancer/util/data_type';
+import {DATA_TYPE_BYTES, DATA_TYPE_SIGNED, DataType} from 'neuroglancer/util/data_type';
 import {AttributeIndex, ShaderBuilder} from 'neuroglancer/webgl/shader';
 
 export const glsl_mixLinear = `
@@ -105,6 +105,30 @@ uint64_t toUint64(uint8_t x) {
 `
 ];
 
+
+export const glsl_int8 = `
+struct int8_t {
+  highp uint value;
+};
+struct int8x2_t {
+  highp ivec2 value;
+};
+struct int8x3_t {
+  highp ivec3 value;
+};
+struct int8x4_t {
+  highp ivec4 value;
+};
+int8_t mixLinear(int8_t x, int8_t y, float a) {
+  return int8_t(int(round(mix(float(x.value), float(y.value), a))));
+}
+highp int toRaw(int8_t x) { return x.value; }
+highp ivec2 toRaw(int8x2_t x) { return x.value; }
+highp ivec3 toRaw(int8x3_t x) { return x.value; }
+highp ivec4 toRaw(int8x4_t x) { return x.value; }
+`;
+
+
 export const glsl_float = `
 float toRaw(float x) { return x; }
 float toNormalized(float x) { return x; }
@@ -140,6 +164,20 @@ uint64_t toUint64(uint16_t x) {
 `
 ];
 
+export const glsl_int16 = `
+struct int16_t {
+  highp int value;
+};
+struct int16x2_t {
+  highp ivec2 value;
+};
+int16_t mixLinear(int16_t x, int16_t y, float a) {
+  return int16_t(int(round(mix(float(x.value), float(y.value), a))));
+}
+highp int toRaw(int16_t x) { return x.value; }
+highp ivec2 toRaw(int16x2_t x) { return x.value; }
+`;
+
 export const glsl_uint32 = [
   glsl_uint64, `
 struct uint32_t {
@@ -158,6 +196,16 @@ uint64_t toUint64(uint32_t x) {
 }
 `
 ];
+
+export const glsl_int32 = `
+struct int32_t {
+  highp int value;
+};
+int32_t mixLinear(int32_t x, int32_t y, float a) {
+  return int32_t(int(round(mix(float(x.value), float(y.value), a))));
+}
+highp int toRaw(int32_t x) { return x.value; }
+`;
 
 export var glsl_getFortranOrderIndex = `
 highp int getFortranOrderIndex(ivec3 subscripts, ivec3 size) {
@@ -215,31 +263,22 @@ export function getShaderType(dataType: DataType, numComponents: number = 1) {
       }
       break;
     case DataType.UINT8:
-      if (numComponents === 1) {
-        return 'uint8_t';
-      }
-      if (numComponents > 1 && numComponents <= 4) {
-        return `uint8x${numComponents}_t`;
-      }
-      break;
+    case DataType.INT8:
     case DataType.UINT16:
-      if (numComponents === 1) {
-        return 'uint16_t';
-      }
-      if (numComponents === 2) {
-        return `uint16x2_t`;
-      }
-      break;
+    case DataType.INT16:
     case DataType.UINT32:
+    case DataType.INT32:
+    case DataType.UINT64: {
+      const prefix = DATA_TYPE_SIGNED[dataType] ? '' : 'u';
+      const bits = DATA_TYPE_BYTES[dataType] * 8;
       if (numComponents === 1) {
-        return 'uint32_t';
+        return `${prefix}int${bits}_t`;
+      }
+      if (numComponents > 1 && numComponents * bits <= 32) {
+        return `${prefix}int${bits}x${numComponents}_t`;
       }
       break;
-    case DataType.UINT64:
-      if (numComponents === 1) {
-        return 'uint64_t';
-      }
-      break;
+    }
   }
   throw new Error(`No shader type for ${DataType[dataType]}[${numComponents}].`);
 }

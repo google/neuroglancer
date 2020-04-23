@@ -42,35 +42,17 @@ supportedDataTypes.set('|u1', {
   dataType: DataType.UINT8,
 });
 supportedDataTypes.set('|i1', {
-  arrayConstructor: Uint8Array,
+  arrayConstructor: Int8Array,
   fixEndianness: () => {},
   javascriptElementsPerArrayElement: 1,
   elementBytes: 1,
-  dataType: DataType.UINT8,
+  dataType: DataType.INT8,
 });
-for (let [endiannessChar, endianness] of<[string, Endianness][]>[
+for (let [endiannessChar, endianness] of <[string, Endianness][]>[
        ['<', Endianness.LITTLE], ['>', Endianness.BIG]
      ]) {
   // For now, treat both signed and unsigned integer types as unsigned.
   for (let typeChar of ['u', 'i']) {
-    supportedDataTypes.set(`${endiannessChar}${typeChar}2`, {
-      arrayConstructor: Uint16Array,
-      elementBytes: 2,
-      fixEndianness: array => {
-        convertEndian16(array, endianness);
-      },
-      javascriptElementsPerArrayElement: 1,
-      dataType: DataType.UINT16,
-    });
-    supportedDataTypes.set(`${endiannessChar}${typeChar}4`, {
-      arrayConstructor: Uint32Array,
-      elementBytes: 4,
-      fixEndianness: array => {
-        convertEndian32(array, endianness);
-      },
-      javascriptElementsPerArrayElement: 1,
-      dataType: DataType.UINT32,
-    });
     supportedDataTypes.set(`${endiannessChar}${typeChar}8`, {
       arrayConstructor: Uint32Array,
       elementBytes: 8,
@@ -82,6 +64,46 @@ for (let [endiannessChar, endianness] of<[string, Endianness][]>[
       dataType: DataType.UINT64,
     });
   }
+  supportedDataTypes.set(`${endiannessChar}u2`, {
+    arrayConstructor: Uint16Array,
+    elementBytes: 2,
+    fixEndianness: array => {
+      convertEndian16(array, endianness);
+    },
+    javascriptElementsPerArrayElement: 1,
+    dataType: DataType.UINT16,
+  });
+
+  supportedDataTypes.set(`${endiannessChar}i2`, {
+    arrayConstructor: Int16Array,
+    elementBytes: 2,
+    fixEndianness: array => {
+      convertEndian16(array, endianness);
+    },
+    javascriptElementsPerArrayElement: 1,
+    dataType: DataType.INT16,
+  });
+
+  supportedDataTypes.set(`${endiannessChar}u4`, {
+    arrayConstructor: Uint32Array,
+    elementBytes: 4,
+    fixEndianness: array => {
+      convertEndian32(array, endianness);
+    },
+    javascriptElementsPerArrayElement: 1,
+    dataType: DataType.UINT32,
+  });
+
+  supportedDataTypes.set(`${endiannessChar}i4`, {
+    arrayConstructor: Int32Array,
+    elementBytes: 4,
+    fixEndianness: array => {
+      convertEndian32(array, endianness);
+    },
+    javascriptElementsPerArrayElement: 1,
+    dataType: DataType.INT32,
+  });
+
   supportedDataTypes.set(`${endiannessChar}f4`, {
     arrayConstructor: Float32Array,
     elementBytes: 4,

@@ -100,11 +100,11 @@ enum NiftiDataType {
 }
 
 const DATA_TYPE_CONVERSIONS = new Map([
-  [NiftiDataType.INT8, {dataType: DataType.UINT8}],
+  [NiftiDataType.INT8, {dataType: DataType.INT8}],
   [NiftiDataType.UINT8, {dataType: DataType.UINT8}],
-  [NiftiDataType.INT16, {dataType: DataType.UINT16}],
+  [NiftiDataType.INT16, {dataType: DataType.INT16}],
   [NiftiDataType.UINT16, {dataType: DataType.UINT16}],
-  [NiftiDataType.INT32, {dataType: DataType.UINT32}],
+  [NiftiDataType.INT32, {dataType: DataType.INT32}],
   [NiftiDataType.UINT32, {dataType: DataType.UINT32}],
   [NiftiDataType.INT64, {dataType: DataType.UINT64}],
   [NiftiDataType.UINT64, {dataType: DataType.UINT64}],

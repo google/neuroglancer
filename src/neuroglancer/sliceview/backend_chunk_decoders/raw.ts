@@ -41,9 +41,20 @@ export async function decodeRawChunk(
     case DataType.UINT8:
       data = new Uint8Array(response, byteOffset, byteLength);
       break;
+    case DataType.INT8:
+      data = new Int8Array(response, byteOffset, byteLength);
+      break;
     case DataType.UINT16:
       data = new Uint16Array(response, byteOffset, byteLength / 2);
       convertEndian16(data, endianness);
+      break;
+    case DataType.INT16:
+      data = new Int16Array(response, byteOffset, byteLength / 2);
+      convertEndian16(data, endianness);
+      break;
+    case DataType.INT32:
+      data = new Int32Array(response, byteOffset, byteLength / 4);
+      convertEndian32(data, endianness);
       break;
     case DataType.UINT32:
     case DataType.UINT64:
