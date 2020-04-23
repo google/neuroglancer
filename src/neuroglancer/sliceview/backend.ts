@@ -16,12 +16,15 @@
 
 import 'neuroglancer/render_layer_backend';
 
-import {Chunk, ChunkConstructor, ChunkSource, withChunkManager} from 'neuroglancer/chunk_manager/backend';
+import {Chunk, ChunkConstructor, ChunkRenderLayerBackend, ChunkSource, withChunkManager} from 'neuroglancer/chunk_manager/backend';
+import {ChunkPriorityTier, ChunkState} from 'neuroglancer/chunk_manager/base';
 import {SharedWatchableValue} from 'neuroglancer/shared_watchable_value';
 import {filterVisibleSources, forEachPlaneIntersectingVolumetricChunk, MultiscaleVolumetricDataRenderLayer, SLICEVIEW_ADD_VISIBLE_LAYER_RPC_ID, SLICEVIEW_REMOVE_VISIBLE_LAYER_RPC_ID, SLICEVIEW_RENDERLAYER_RPC_ID, SLICEVIEW_RPC_ID, SliceViewBase, SliceViewChunkSource as SliceViewChunkSourceInterface, SliceViewChunkSpecification, SliceViewRenderLayer as SliceViewRenderLayerInterface, TransformedSource} from 'neuroglancer/sliceview/base';
 import {ChunkLayout} from 'neuroglancer/sliceview/chunk_layout';
 import {WatchableValueInterface} from 'neuroglancer/trackable_value';
+import {erf} from 'neuroglancer/util/erf';
 import {vec3, vec3Key} from 'neuroglancer/util/geom';
+import {VelocityEstimator} from 'neuroglancer/util/velocity_estimation';
 import {getBasePriority, getPriorityTier, withSharedVisibility} from 'neuroglancer/visibility_priority/backend';
 import {registerRPC, registerSharedObject, RPC, SharedObjectCounterpart} from 'neuroglancer/worker_rpc';
 
@@ -53,10 +56,14 @@ function disposeTransformedSources(
 const SliceViewIntermediateBase = withSharedVisibility(withChunkManager(SliceViewCounterpartBase));
 @registerSharedObject(SLICEVIEW_RPC_ID)
 export class SliceViewBackend extends SliceViewIntermediateBase {
+  velocityEstimator = new VelocityEstimator();
   constructor(rpc: RPC, options: any) {
     super(rpc, options);
     this.registerDisposer(this.chunkManager.recomputeChunkPriorities.add(() => {
       this.updateVisibleChunks();
+    }));
+    this.registerDisposer(this.projectionParameters.changed.add(() => {
+      this.velocityEstimator.addSample(this.projectionParameters.value.globalPosition);
     }));
   }
 
@@ -86,10 +93,14 @@ export class SliceViewBackend extends SliceViewIntermediateBase {
 
     const chunkSize = tempChunkSize;
 
-    for (const visibleLayerSources of this.visibleLayers.values()) {
+    this.velocityEstimator.addSample(this.projectionParameters.value.globalPosition);
+
+    for (const [layer, visibleLayerSources] of this.visibleLayers) {
+      chunkManager.registerLayer(layer);
       const {visibleSources} = visibleLayerSources;
       for (let i = 0, numVisibleSources = visibleSources.length; i < numVisibleSources; ++i) {
         const tsource = visibleSources[i];
+        const prefetchOffsets = getPrefetchChunkOffsets(this.velocityEstimator, tsource);
         const {chunkLayout} = tsource;
         chunkLayout.globalToLocalSpatial(localCenter, centerDataPosition);
         const {size, finiteRank} = chunkLayout;
@@ -105,8 +116,36 @@ export class SliceViewBackend extends SliceViewIntermediateBase {
             positionInChunks => {
               vec3.multiply(tempChunkPosition, positionInChunks, chunkSize);
               let priority = -vec3.distance(localCenter, tempChunkPosition);
-              let chunk = tsource.source.getChunk(tsource.curPositionInChunks);
+              const {curPositionInChunks} = tsource;
+              let chunk = tsource.source.getChunk(curPositionInChunks);
               chunkManager.requestChunk(chunk, priorityTier, sourceBasePriority + priority);
+              ++layer.numVisibleChunksNeeded;
+              if (chunk.state === ChunkState.GPU_MEMORY) {
+                ++layer.numVisibleChunksAvailable;
+              }
+              for (let j = 0, length = prefetchOffsets.length; j < length; j += 5) {
+                const chunkDim = prefetchOffsets[j];
+                const minChunk = prefetchOffsets[j + 2];
+                const maxChunk = prefetchOffsets[j + 3];
+                const newPriority = prefetchOffsets[j + 4];
+                const oldIndex = curPositionInChunks[chunkDim];
+                const newIndex = oldIndex + prefetchOffsets[j + 1];
+                if (newIndex < minChunk || newIndex > maxChunk) {
+                  continue;
+                }
+                curPositionInChunks[chunkDim] = newIndex;
+                chunk = tsource.source.getChunk(curPositionInChunks);
+                curPositionInChunks[chunkDim] = oldIndex;
+                if (!Number.isFinite(newPriority)) {
+                  debugger;
+                }
+                chunkManager.requestChunk(
+                    chunk, ChunkPriorityTier.PREFETCH, sourceBasePriority + newPriority);
+                ++layer.numPrefetchChunksNeeded;
+                if (chunk.state === ChunkState.GPU_MEMORY) {
+                  ++layer.numPrefetchChunksAvailable;
+                }
+              }
             });
       }
     }
@@ -173,6 +212,8 @@ export function deserializeTransformedSources<
           layerRank: serializedSource.layerRank,
           nonDisplayLowerClipBound: serializedSource.nonDisplayLowerClipBound,
           nonDisplayUpperClipBound: serializedSource.nonDisplayUpperClipBound,
+          lowerClipBound: serializedSource.lowerClipBound,
+          upperClipBound: serializedSource.upperClipBound,
           lowerClipDisplayBound: serializedSource.lowerClipDisplayBound,
           upperClipDisplayBound: serializedSource.upperClipDisplayBound,
           lowerChunkDisplayBound: serializedSource.lowerChunkDisplayBound,
@@ -180,6 +221,7 @@ export function deserializeTransformedSources<
           effectiveVoxelSize: serializedSource.effectiveVoxelSize,
           chunkDisplayDimensionIndices: serializedSource.chunkDisplayDimensionIndices,
           fixedLayerToChunkTransform: serializedSource.fixedLayerToChunkTransform,
+          combinedGlobalLocalToChunkTransform: serializedSource.combinedGlobalLocalToChunkTransform,
           curPositionInChunks: new Float32Array(rank),
           fixedPositionWithinChunk: new Uint32Array(rank),
         };
@@ -265,19 +307,94 @@ export class SliceViewChunkSourceBackend<
 
 @registerSharedObject(SLICEVIEW_RENDERLAYER_RPC_ID)
 export class SliceViewRenderLayerBackend extends SharedObjectCounterpart implements
-    SliceViewRenderLayerInterface {
+    SliceViewRenderLayerInterface, ChunkRenderLayerBackend {
   rpcId: number;
   renderScaleTarget: SharedWatchableValue<number>;
   localPosition: WatchableValueInterface<Float32Array>;
+
+  numVisibleChunksNeeded: number;
+  numVisibleChunksAvailable: number;
+  numPrefetchChunksNeeded: number;
+  numPrefetchChunksAvailable: number;
+  chunkManagerGeneration: number;
 
   constructor(rpc: RPC, options: any) {
     super(rpc, options);
     this.renderScaleTarget = rpc.get(options.renderScaleTarget);
     this.localPosition = rpc.get(options.localPosition);
+    this.numVisibleChunksNeeded = 0;
+    this.numVisibleChunksAvailable = 0;
+    this.numPrefetchChunksAvailable = 0;
+    this.numPrefetchChunksNeeded = 0;
+    this.chunkManagerGeneration = -1;
   }
 
   filterVisibleSources(sliceView: SliceViewBase, sources: readonly TransformedSource[]):
       Iterable<TransformedSource> {
     return filterVisibleSources(sliceView, this, sources);
   }
+}
+
+const PREFETCH_MS = 2000;
+const MAX_PREFETCH_VELOCITY = 0.1;  // voxels per millisecond
+const MAX_SINGLE_DIRECTION_PREFETCH_CHUNKS =
+    32;  // Maximum number of chunks to prefetch in a single direction.
+
+// If the probability under the model of needing a chunk within `PREFETCH_MS` is less than this
+// probability, skip prefetching it.
+const PREFETCH_PROBABILITY_CUTOFF = 0.05;
+
+function getPrefetchChunkOffsets(
+    velocityEstimator: VelocityEstimator, tsource: TransformedSource): number[] {
+  const offsets: number[] = [];
+  const globalRank = velocityEstimator.rank;
+  const {combinedGlobalLocalToChunkTransform, layerRank} = tsource;
+
+  const {rank: chunkRank, chunkDataSize} = tsource.source.spec;
+  const {mean: meanVec, variance: varianceVec} = velocityEstimator;
+  for (let chunkDim = 0; chunkDim < chunkRank; ++chunkDim) {
+    const isDisplayDimension = tsource.chunkDisplayDimensionIndices.includes(chunkDim);
+    let mean = 0;
+    let variance = 0;
+    for (let globalDim = 0; globalDim < globalRank; ++globalDim) {
+      const meanValue = meanVec[globalDim];
+      const varianceValue = varianceVec[globalDim];
+      const coeff = combinedGlobalLocalToChunkTransform[globalDim * layerRank + chunkDim];
+      mean += coeff * meanValue;
+      variance += coeff * coeff * varianceValue;
+    }
+    if (mean > MAX_PREFETCH_VELOCITY) {
+      continue;
+    }
+    const chunkSize = chunkDataSize[chunkDim];
+    const initialFraction =
+        isDisplayDimension ? 0 : tsource.fixedPositionWithinChunk[chunkDim] / chunkSize;
+    const adjustedMean = mean / chunkSize * PREFETCH_MS;
+    let adjustedStddevTimesSqrt2 = Math.sqrt(2 * variance) / chunkSize * PREFETCH_MS;
+    if (Math.abs(adjustedMean) < 1e-3 && adjustedStddevTimesSqrt2 < 1e-3) {
+      continue;
+    }
+    adjustedStddevTimesSqrt2 = Math.max(1e-6, adjustedStddevTimesSqrt2);
+    const cdf = (x: number) => 0.5 * (1 + erf((x - adjustedMean) / adjustedStddevTimesSqrt2));
+
+    const curChunk = tsource.curPositionInChunks[chunkDim];
+    const minChunk = Math.floor(tsource.lowerClipBound[chunkDim] / chunkSize);
+    const maxChunk = Math.ceil(tsource.upperClipBound[chunkDim] / chunkSize) - 1;
+    for (let i = 1; i <= MAX_SINGLE_DIRECTION_PREFETCH_CHUNKS; ++i) {
+      if (!isDisplayDimension && curChunk + i > maxChunk) break;
+      const probability = 1 - cdf(i - initialFraction);
+      // Probability that chunk `curChunk + i` will be needed within `PREFETCH_MS`.
+      if (probability < PREFETCH_PROBABILITY_CUTOFF) break;
+      offsets.push(chunkDim, i, minChunk, maxChunk, probability);
+    }
+
+    for (let i = 1; i <= MAX_SINGLE_DIRECTION_PREFETCH_CHUNKS; ++i) {
+      if (!isDisplayDimension && curChunk - i < minChunk) break;
+      const probability = cdf(-i + 1 - initialFraction);
+      // Probability that chunk `curChunk - i` will be needed within `PREFETCH_MS`.
+      if (probability < PREFETCH_PROBABILITY_CUTOFF) break;
+      offsets.push(chunkDim, -i, minChunk, maxChunk, probability);
+    }
+  }
+  return offsets;
 }

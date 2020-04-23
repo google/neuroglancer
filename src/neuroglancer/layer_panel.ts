@@ -156,22 +156,35 @@ function registerDropHandlers(
 
 
 class LayerWidget extends RefCounted {
-  element: HTMLElement;
-  layerNumberElement: HTMLSpanElement;
-  labelElement: HTMLSpanElement;
-  valueElement: HTMLSpanElement;
+  element = document.createElement('div');
+  layerNumberElement = document.createElement('div');
+  labelElement = document.createElement('div');
+  visibleProgress = document.createElement('div');
+  prefetchProgress = document.createElement('div');
+  labelElementText = document.createTextNode('');
+  valueElement = document.createElement('div');
   maxLength: number = 0;
   prevValueText: string = '';
 
   constructor(public layer: ManagedUserLayer, public panel: LayerPanel) {
     super();
-    let element = this.element = document.createElement('div');
+    const {
+      element,
+      labelElement,
+      layerNumberElement,
+      valueElement,
+      visibleProgress,
+      prefetchProgress,
+      labelElementText
+    } = this;
     element.className = 'neuroglancer-layer-item neuroglancer-noselect';
-    let labelElement = this.labelElement = document.createElement('span');
+    element.appendChild(visibleProgress);
+    element.appendChild(prefetchProgress);
     labelElement.className = 'neuroglancer-layer-item-label';
-    let layerNumberElement = this.layerNumberElement = document.createElement('span');
+    labelElement.appendChild(labelElementText);
+    visibleProgress.className = 'neuroglancer-layer-item-visible-progress';
+    prefetchProgress.className = 'neuroglancer-layer-item-prefetch-progress';
     layerNumberElement.className = 'neuroglancer-layer-item-number';
-    let valueElement = this.valueElement = document.createElement('span');
     valueElement.className = 'neuroglancer-layer-item-value';
     const closeElement = makeCloseButton();
     closeElement.title = 'Remove layer from this layer group';
@@ -227,7 +240,7 @@ class LayerWidget extends RefCounted {
 
   update() {
     const {layer, element} = this;
-    this.labelElement.textContent = layer.name;
+    this.labelElementText.textContent = layer.name;
     element.dataset.visible = layer.visible.toString();
     element.dataset.selected = (layer === this.panel.selectedLayer.layer).toString();
     element.dataset.pick = layer.pickEnabled.toString();
@@ -326,6 +339,7 @@ export class LayerPanel extends RefCounted {
     updatePositionWidgetVisibility();
 
     this.update();
+    this.updateChunkStatistics();
 
     this.registerEventListener(element, 'dragleave', (event: DragEvent) => {
       if (event.relatedTarget && element.contains(<Node>event.relatedTarget)) {
@@ -343,6 +357,9 @@ export class LayerPanel extends RefCounted {
     // Ensure layer widgets are updated before WebGL drawing starts; we don't want the layout to
     // change after WebGL drawing or we will get flicker.
     this.registerDisposer(display.updateStarted.add(() => this.updateLayers()));
+
+    this.registerDisposer(manager.chunkManager.layerChunkStatisticsUpdated.add(
+        this.registerCancellable(animationFrameDebounce(() => this.updateChunkStatistics()))));
   }
 
   disposed() {
@@ -385,7 +402,7 @@ export class LayerPanel extends RefCounted {
         if (state !== undefined) {
           const {value} = state;
           if (value !== undefined) {
-            text = value.toString();
+            text = '' + value;
           }
         }
       }
@@ -396,6 +413,26 @@ export class LayerPanel extends RefCounted {
         widget.valueElement.style.width = `${length}ch`;
       }
       widget.valueElement.textContent = text;
+    }
+  }
+
+  private updateChunkStatistics() {
+    for (const [layer, widget] of this.layerWidgets) {
+      let numVisibleChunksNeeded = 0;
+      let numVisibleChunksAvailable = 0;
+      let numPrefetchChunksNeeded = 0;
+      let numPrefetchChunksAvailable = 0;
+      const userLayer = layer.layer;
+      if (userLayer !== null) {
+        for (const {layerChunkProgressInfo} of userLayer.renderLayers) {
+          numVisibleChunksNeeded += layerChunkProgressInfo.numVisibleChunksNeeded;
+          numVisibleChunksAvailable += layerChunkProgressInfo.numVisibleChunksAvailable;
+          numPrefetchChunksNeeded += layerChunkProgressInfo.numPrefetchChunksNeeded;
+          numPrefetchChunksAvailable += layerChunkProgressInfo.numPrefetchChunksAvailable;
+        }
+      }
+      widget.visibleProgress.style.width = `${numVisibleChunksAvailable/Math.max(1, numVisibleChunksNeeded)*100}%`;
+      widget.prefetchProgress.style.width = `${numPrefetchChunksAvailable/Math.max(1, numPrefetchChunksNeeded)*100}%`;
     }
   }
 

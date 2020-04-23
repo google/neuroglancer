@@ -87,7 +87,17 @@ export const CHUNK_SOURCE_INVALIDATE_RPC_ID = 'ChunkSource.invalidate';
 
 export const REQUEST_CHUNK_STATISTICS_RPC_ID = 'ChunkQueueManager.requestChunkStatistics';
 
+// Used for sending per-layer visible/prefetch chunk statistics from backend to frontend.
+export const CHUNK_LAYER_STATISTICS_RPC_ID = 'ChunkManager.chunkLayerStatistics';
+
 export interface ChunkSourceParametersConstructor<T> {
   new(): T;
   RPC_ID: string;
+}
+
+export class LayerChunkProgressInfo {
+  numVisibleChunksNeeded: number = 0;
+  numVisibleChunksAvailable: number = 0;
+  numPrefetchChunksNeeded: number = 0;
+  numPrefetchChunksAvailable: number = 0;
 }

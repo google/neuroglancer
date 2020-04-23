@@ -63,6 +63,7 @@
 
 .neuroglancer-layer-item-label {
   display: inline-block;
+  position: relative;
   background-color: #222;
   padding-right: 3px;
 }
@@ -71,7 +72,8 @@
   display: inline-block;
   background-color: /*#daa520*/ #9a7518;
   font-weight: bold;
-  padding: 1px;
+  padding-left: 1px;
+  padding-right: 1px;
 }
 
 .neuroglancer-layer-panel[data-show-hover-values="true"] .neuroglancer-layer-item-value {
@@ -101,4 +103,19 @@
 .neuroglancer-layer-panel-drop-zone {
   display: inline-block;
   flex: 1;
+}
+
+.neuroglancer-layer-item-visible-progress, .neuroglancer-layer-item-prefetch-progress {
+  position: absolute;
+  left: 0px;
+  height: 2px;
+  background-color: #666;
+}
+
+.neuroglancer-layer-item-visible-progress {
+  top: 0px;
+}
+
+.neuroglancer-layer-item-prefetch-progress {
+  bottom: 0px;
 }

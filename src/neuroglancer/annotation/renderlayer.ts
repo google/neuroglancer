@@ -24,8 +24,8 @@ import {AnnotationLayerState} from 'neuroglancer/annotation/annotation_layer_sta
 import {ANNOTATION_PERSPECTIVE_RENDER_LAYER_UPDATE_SOURCES_RPC_ID, ANNOTATION_RENDER_LAYER_RPC_ID, ANNOTATION_RENDER_LAYER_UPDATE_SEGMENTATION_RPC_ID, ANNOTATION_SPATIALLY_INDEXED_RENDER_LAYER_RPC_ID, forEachVisibleAnnotationChunk} from 'neuroglancer/annotation/base';
 import {AnnotationGeometryChunkSource, AnnotationGeometryData, computeNumPickIds, MultiscaleAnnotationSource} from 'neuroglancer/annotation/frontend_source';
 import {AnnotationRenderContext, AnnotationRenderHelper, getAnnotationTypeRenderHandler} from 'neuroglancer/annotation/type_handler';
-import {ChunkState} from 'neuroglancer/chunk_manager/base';
-import {ChunkManager} from 'neuroglancer/chunk_manager/frontend';
+import {LayerChunkProgressInfo, ChunkState} from 'neuroglancer/chunk_manager/base';
+import {ChunkManager, ChunkRenderLayerFrontend} from 'neuroglancer/chunk_manager/frontend';
 import {LayerView, MouseSelectionState, VisibleLayerInfo} from 'neuroglancer/layer';
 import {DisplayDimensionRenderInfo} from 'neuroglancer/navigation_state';
 import {PerspectivePanel} from 'neuroglancer/perspective_view/panel';
@@ -92,13 +92,14 @@ function serializeAnnotationSet(
 
 @registerSharedObjectOwner(ANNOTATION_RENDER_LAYER_RPC_ID)
 class AnnotationLayerSharedObject extends withSharedVisibility
-(SharedObject) {
+(ChunkRenderLayerFrontend) {
   constructor(
       public chunkManager: Borrowed<ChunkManager>,
       public source: Borrowed<MultiscaleAnnotationSource>,
       public segmentationStates:
-          WatchableValueInterface<(SegmentationDisplayState | undefined | null)[]|undefined>) {
-    super();
+          WatchableValueInterface<(SegmentationDisplayState | undefined | null)[]|undefined>,
+      chunkRenderLayer: LayerChunkProgressInfo) {
+    super(chunkRenderLayer);
 
     this.initializeCounterpart(this.chunkManager.rpc!, {
       chunkManager: this.chunkManager.rpcId,
@@ -127,6 +128,8 @@ class AnnotationLayerSharedObject extends withSharedVisibility
 }
 
 export class AnnotationLayer extends RefCounted {
+  layerChunkProgressInfo = new LayerChunkProgressInfo();
+
   /**
    * Stores a serialized representation of the information needed to render the annotations.
    */
@@ -202,8 +205,8 @@ export class AnnotationLayer extends RefCounted {
       }
     }, this.segmentationStates));
     if (!(this.source instanceof AnnotationSource)) {
-      this.sharedObject = this.registerDisposer(
-          new AnnotationLayerSharedObject(chunkManager, this.source, this.segmentationStates));
+      this.sharedObject = this.registerDisposer(new AnnotationLayerSharedObject(
+          chunkManager, this.source, this.segmentationStates, this.layerChunkProgressInfo));
     }
     const {displayState} = this.state;
     this.registerDisposer(displayState.color.changed.add(this.redrawNeeded.dispatch));
@@ -572,6 +575,7 @@ type AnnotationRenderLayer = InstanceType<ReturnType<typeof AnnotationRenderLaye
 const NonSpatiallyIndexedAnnotationRenderLayer =
     <TBase extends {new (...args: any[]): AnnotationRenderLayer}>(Base: TBase) =>
         class C extends Base {
+  layerChunkProgressInfo = this.base.layerChunkProgressInfo;
   draw(
       renderContext: PerspectiveViewRenderContext|SliceViewPanelRenderContext,
       attachment: VisibleLayerInfo<LayerView, AttachmentState>) {
@@ -636,7 +640,8 @@ const SpatiallyIndexedAnnotationLayer = <TBase extends AnyConstructor<Annotation
       super(options.annotationLayer, options.renderScaleHistogram);
       this.renderScaleTarget = options.renderScaleTarget;
       this.registerDisposer(this.renderScaleTarget.changed.add(this.redrawNeeded.dispatch));
-      const sharedObject = this.registerDisposer(new SharedObject());
+      const sharedObject =
+          this.registerDisposer(new ChunkRenderLayerFrontend(this.layerChunkProgressInfo));
       const rpc = this.base.chunkManager.rpc!;
       sharedObject.RPC_TYPE_ID = ANNOTATION_SPATIALLY_INDEXED_RENDER_LAYER_RPC_ID;
       sharedObject.initializeCounterpart(rpc, {

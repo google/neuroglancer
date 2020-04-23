@@ -15,6 +15,7 @@
  */
 
 import {ChunkState} from 'neuroglancer/chunk_manager/base';
+import {ChunkRenderLayerFrontend} from 'neuroglancer/chunk_manager/frontend';
 import {CoordinateSpace} from 'neuroglancer/coordinate_transform';
 import {VisibleLayerInfo} from 'neuroglancer/layer';
 import {PerspectivePanel} from 'neuroglancer/perspective_view/panel';
@@ -37,7 +38,6 @@ import {ParameterizedContextDependentShaderGetter, parameterizedContextDependent
 import {ShaderModule, ShaderProgram} from 'neuroglancer/webgl/shader';
 import {addControlsToBuilder, setControlsInShader, ShaderControlsParseResult, ShaderControlState} from 'neuroglancer/webgl/shader_ui_controls';
 import {defineVertexId, VertexIdHelper} from 'neuroglancer/webgl/vertex_id';
-import {SharedObject} from 'neuroglancer/worker_rpc';
 
 interface TransformedVolumeSource extends
     FrontendTransformedSource<SliceViewRenderLayer, VolumeChunkSource> {}
@@ -68,7 +68,7 @@ export class VolumeRenderingRenderLayer extends PerspectiveViewRenderLayer {
   shaderControlState: ShaderControlState;
   renderScaleTarget: WatchableValueInterface<number>;
   renderScaleHistogram: RenderScaleHistogram;
-  backend: SharedObject;
+  backend: ChunkRenderLayerFrontend;
   private vertexIdHelper: VertexIdHelper;
 
   private shaderGetter: ParameterizedContextDependentShaderGetter<
@@ -223,7 +223,8 @@ void main() {
     this.registerDisposer(
         this.shaderControlState.fragmentMain.changed.add(this.redrawNeeded.dispatch));
     const {chunkManager} = this.multiscaleSource;
-    const sharedObject = this.registerDisposer(new SharedObject());
+    const sharedObject =
+        this.registerDisposer(new ChunkRenderLayerFrontend(this.layerChunkProgressInfo));
     const rpc = chunkManager.rpc!;
     sharedObject.RPC_TYPE_ID = VOLUME_RENDERING_RENDER_LAYER_RPC_ID;
     sharedObject.initializeCounterpart(rpc, {

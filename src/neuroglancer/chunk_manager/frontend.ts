@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-import {CHUNK_MANAGER_RPC_ID, CHUNK_QUEUE_MANAGER_RPC_ID, CHUNK_SOURCE_INVALIDATE_RPC_ID, ChunkSourceParametersConstructor, ChunkState} from 'neuroglancer/chunk_manager/base';
+import {CHUNK_LAYER_STATISTICS_RPC_ID, CHUNK_MANAGER_RPC_ID, CHUNK_QUEUE_MANAGER_RPC_ID, CHUNK_SOURCE_INVALIDATE_RPC_ID, LayerChunkProgressInfo, ChunkSourceParametersConstructor, ChunkState} from 'neuroglancer/chunk_manager/base';
 import {SharedWatchableValue} from 'neuroglancer/shared_watchable_value';
 import {TrackableValue} from 'neuroglancer/trackable_value';
 import {CANCELED, CancellationToken} from 'neuroglancer/util/cancellation';
@@ -262,6 +262,28 @@ registerPromiseRPC('Chunk.retrieve', function(x, cancellationToken): RPCPromise<
   });
 });
 
+registerRPC(CHUNK_LAYER_STATISTICS_RPC_ID, function(x) {
+  const chunkManager = this.get(x.id) as ChunkManager;
+  for (const stats of chunkManager.prevStatisticsLayers) {
+    stats.numVisibleChunksNeeded = 0;
+    stats.numVisibleChunksAvailable = 0;
+    stats.numPrefetchChunksNeeded = 0;
+    stats.numPrefetchChunksAvailable = 0;
+  }
+  chunkManager.prevStatisticsLayers.length = 0;
+  for (const layerUpdate of x.layers) {
+    const layer = this.get(layerUpdate.id) as ChunkRenderLayerFrontend;
+    if (layer === undefined) continue;
+    const stats = layer.layerChunkProgressInfo;
+    stats.numVisibleChunksAvailable = layerUpdate.numVisibleChunksAvailable;
+    stats.numVisibleChunksNeeded = layerUpdate.numVisibleChunksNeeded;
+    stats.numPrefetchChunksAvailable = layerUpdate.numPrefetchChunksAvailable;
+    stats.numPrefetchChunksNeeded = layerUpdate.numPrefetchChunksNeeded;
+    chunkManager.prevStatisticsLayers.push(stats);
+  }
+  chunkManager.layerChunkStatisticsUpdated.dispatch();
+});
+
 export type GettableChunkSource = (SharedObject&{OPTIONS: {}, key: any});
 
 export interface ChunkSourceConstructor<T extends GettableChunkSource = GettableChunkSource> {
@@ -272,6 +294,9 @@ export interface ChunkSourceConstructor<T extends GettableChunkSource = Gettable
 @registerSharedObjectOwner(CHUNK_MANAGER_RPC_ID)
 export class ChunkManager extends SharedObject {
   memoize = new StringMemoize();
+
+  prevStatisticsLayers: LayerChunkProgressInfo[] = [];
+  layerChunkStatisticsUpdated = new NullarySignal();
 
   get gl() {
     return this.chunkQueueManager.gl;
@@ -375,4 +400,10 @@ export function WithParameters<Parameters, TBase extends ChunkSourceConstructor>
     }
   }
   return C;
+}
+
+export class ChunkRenderLayerFrontend extends SharedObject {
+  constructor(public layerChunkProgressInfo: LayerChunkProgressInfo) {
+    super();
+  }
 }

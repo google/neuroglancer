@@ -14,7 +14,8 @@
  * limitations under the License.
  */
 
-import {ChunkManager} from 'neuroglancer/chunk_manager/frontend';
+import {LayerChunkProgressInfo} from 'neuroglancer/chunk_manager/base';
+import {ChunkManager, ChunkRenderLayerFrontend} from 'neuroglancer/chunk_manager/frontend';
 import {LayerSelectedValues} from 'neuroglancer/layer';
 import {WatchableRenderLayerTransform} from 'neuroglancer/render_coordinate_transform';
 import {RenderScaleHistogram} from 'neuroglancer/render_scale_statistics';
@@ -32,7 +33,6 @@ import {vec4} from 'neuroglancer/util/geom';
 import {NullarySignal} from 'neuroglancer/util/signal';
 import {Uint64} from 'neuroglancer/util/uint64';
 import {withSharedVisibility} from 'neuroglancer/visibility_priority/frontend';
-import {SharedObject} from 'neuroglancer/worker_rpc';
 
 export class Uint64MapEntry {
   constructor(public key: Uint64, public value?: Uint64, public label?: string|undefined) {}
@@ -228,10 +228,12 @@ export function getObjectColor(
   return color;
 }
 
-const Base = withSharedVisibility(SharedObject);
+const Base = withSharedVisibility(ChunkRenderLayerFrontend);
 export class SegmentationLayerSharedObject extends Base {
-  constructor(public chunkManager: ChunkManager, public displayState: SegmentationDisplayState3D) {
-    super();
+  constructor(
+      public chunkManager: ChunkManager, public displayState: SegmentationDisplayState3D,
+      chunkRenderLayer: LayerChunkProgressInfo) {
+    super(chunkRenderLayer);
   }
 
   initializeCounterpartWithChunkManager(options: any) {

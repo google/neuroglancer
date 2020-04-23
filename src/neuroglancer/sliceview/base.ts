@@ -85,6 +85,12 @@ export interface TransformedSource<
   nonDisplayLowerClipBound: Float32Array;
   nonDisplayUpperClipBound: Float32Array;
 
+  /**
+   * Arrays of length `rank` specifying the clip bounds (in voxels) for all dimensions.
+   */
+  lowerClipBound: Float32Array;
+  upperClipBound: Float32Array;
+
   // Lower clip bound (in voxels) in the "display" subspace of the chunk coordinate space.
   lowerClipDisplayBound: vec3;
   // Upper clip bound (in voxels) in the "display" subspace of the chunk coordinate space.
@@ -107,7 +113,21 @@ export interface TransformedSource<
   layerRank: number;
 
   /**
+   * Transform from dimensions of layer space to dimensions of chunk space.
+   *
+   * Matrix has dimensions `(globalRank + localRank + 1) * layerRank`.
+   *
+   * Input space is `[global dimensions, local dimensions]`.  Output space is the "chunk clip"
+   * coordinate space, in units of voxels.
+   *
+   */
+  combinedGlobalLocalToChunkTransform: Float32Array;
+
+  /**
    * Transform from non-display dimensions of layer space to non-display dimensions of chunk space.
+   *
+   * Same as `combinedGlobalLocalToChunkTransform`, except that rows corresponding to "display"
+   * chunk dimensions are all 0.
    *
    * Matrix has dimensions `(globalRank + localRank + 1) * layerRank`.
    *

@@ -67,12 +67,15 @@ function serializeTransformedSource(
     layerRank: tsource.layerRank,
     nonDisplayLowerClipBound: tsource.nonDisplayLowerClipBound,
     nonDisplayUpperClipBound: tsource.nonDisplayUpperClipBound,
+    lowerClipBound: tsource.lowerClipBound,
+    upperClipBound: tsource.upperClipBound,
     lowerClipDisplayBound: tsource.lowerClipDisplayBound,
     upperClipDisplayBound: tsource.upperClipDisplayBound,
     chunkDisplayDimensionIndices: tsource.chunkDisplayDimensionIndices,
     lowerChunkDisplayBound: tsource.lowerChunkDisplayBound,
     upperChunkDisplayBound: tsource.upperChunkDisplayBound,
     fixedLayerToChunkTransform: tsource.fixedLayerToChunkTransform,
+    combinedGlobalLocalToChunkTransform: tsource.combinedGlobalLocalToChunkTransform,
     chunkLayout: tsource.chunkLayout.toObject(),
   };
 }
@@ -690,6 +693,8 @@ export function getVolumetricTransformedSources(
           effectiveVoxelSize.fill(1, displayRank);
           return {
             layerRank,
+            lowerClipBound,
+            upperClipBound,
             nonDisplayLowerClipBound,
             nonDisplayUpperClipBound,
             renderLayer: layer,
@@ -703,6 +708,7 @@ export function getVolumetricTransformedSources(
             chunkDisplayDimensionIndices,
             fixedLayerToChunkTransform,
             curPositionInChunks: new Float32Array(chunkRank),
+            combinedGlobalLocalToChunkTransform: chunkTransform.combinedGlobalLocalToChunkTransform,
             fixedPositionWithinChunk: new Uint32Array(chunkRank),
             chunkTransform,
             chunkDisplayTransform,

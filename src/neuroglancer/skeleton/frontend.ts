@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-import {ChunkState} from 'neuroglancer/chunk_manager/base';
+import {LayerChunkProgressInfo, ChunkState} from 'neuroglancer/chunk_manager/base';
 import {Chunk, ChunkManager, ChunkSource} from 'neuroglancer/chunk_manager/frontend';
 import {LayerView, VisibleLayerInfo} from 'neuroglancer/layer';
 import {PerspectivePanel} from 'neuroglancer/perspective_view/panel';
@@ -341,6 +341,7 @@ export interface SkeletonLayerDisplayState extends SegmentationDisplayState3D {
 }
 
 export class SkeletonLayer extends RefCounted {
+  layerChunkProgressInfo = new LayerChunkProgressInfo();
   redrawNeeded = new NullarySignal();
   private sharedObject: SegmentationLayerSharedObject;
   vertexAttributes: VertexAttributeRenderInfo[];
@@ -363,8 +364,8 @@ export class SkeletonLayer extends RefCounted {
       this.displayState.shaderError.value = undefined;
       this.redrawNeeded.dispatch();
     }));
-    let sharedObject = this.sharedObject =
-        this.registerDisposer(new SegmentationLayerSharedObject(chunkManager, displayState));
+    let sharedObject = this.sharedObject = this.registerDisposer(
+        new SegmentationLayerSharedObject(chunkManager, displayState, this.layerChunkProgressInfo));
     sharedObject.RPC_TYPE_ID = SKELETON_LAYER_RPC_ID;
     sharedObject.initializeCounterpartWithChunkManager({
       'source': source.addCounterpartRef(),
@@ -486,9 +487,9 @@ export class SkeletonLayer extends RefCounted {
 export class PerspectiveViewSkeletonLayer extends PerspectiveViewRenderLayer {
   private renderHelper = this.registerDisposer(new RenderHelper(this.base, false));
   private renderOptions = this.base.displayState.skeletonRenderingOptions.params3d;
-
   constructor(public base: SkeletonLayer) {
     super();
+    this.layerChunkProgressInfo = base.layerChunkProgressInfo;
     this.registerDisposer(base);
     this.registerDisposer(base.redrawNeeded.add(this.redrawNeeded.dispatch));
     const {renderOptions} = this;
@@ -524,6 +525,7 @@ export class SliceViewPanelSkeletonLayer extends SliceViewPanelRenderLayer {
   private renderOptions = this.base.displayState.skeletonRenderingOptions.params2d;
   constructor(public base: SkeletonLayer) {
     super();
+    this.layerChunkProgressInfo = base.layerChunkProgressInfo;
     this.registerDisposer(base);
     const {renderOptions} = this;
     this.registerDisposer(renderOptions.mode.changed.add(this.redrawNeeded.dispatch));

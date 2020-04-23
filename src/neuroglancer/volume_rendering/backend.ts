@@ -15,6 +15,7 @@
  */
 
 import {withChunkManager} from 'neuroglancer/chunk_manager/backend';
+import {ChunkState} from 'neuroglancer/chunk_manager/base';
 import {DisplayDimensionRenderInfo} from 'neuroglancer/navigation_state';
 import {RenderedViewBackend, RenderLayerBackend, RenderLayerBackendAttachment} from 'neuroglancer/render_layer_backend';
 import {SharedWatchableValue} from 'neuroglancer/shared_watchable_value';
@@ -97,6 +98,7 @@ class VolumeRenderingRenderLayerBackend extends withChunkManager
       }
       let sourceBasePriority: number;
       const {chunkManager} = this;
+      chunkManager.registerLayer(this);
       forEachVisibleVolumeRenderingChunk(
           projectionParameters, this.localPosition.value, this.renderScaleTarget.value,
           transformedSources[0],
@@ -118,10 +120,11 @@ class VolumeRenderingRenderLayerBackend extends withChunkManager
             vec3.multiply(tempChunkPosition, positionInChunks, chunkSize);
             const priority = -vec3.distance(localCenter, tempChunkPosition);
             const chunk = tsource.source.getChunk(tsource.curPositionInChunks);
-            if (!Number.isFinite(priority + sourceBasePriority)) {
-              debugger;
-            }
+            ++this.numVisibleChunksNeeded;
             chunkManager.requestChunk(chunk, priorityTier, sourceBasePriority + priority);
+            if (chunk.state === ChunkState.GPU_MEMORY) {
+              ++this.numVisibleChunksAvailable;
+            }
           });
     }
   }

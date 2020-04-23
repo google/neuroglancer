@@ -16,8 +16,8 @@
 
 import {Annotation, AnnotationId, fixAnnotationAfterStructuredCloning, SerializedAnnotations} from 'neuroglancer/annotation';
 import {ANNOTATION_COMMIT_UPDATE_RESULT_RPC_ID, ANNOTATION_COMMIT_UPDATE_RPC_ID, ANNOTATION_METADATA_CHUNK_SOURCE_RPC_ID, ANNOTATION_PERSPECTIVE_RENDER_LAYER_UPDATE_SOURCES_RPC_ID, ANNOTATION_REFERENCE_ADD_RPC_ID, ANNOTATION_REFERENCE_DELETE_RPC_ID, ANNOTATION_RENDER_LAYER_RPC_ID, ANNOTATION_RENDER_LAYER_UPDATE_SEGMENTATION_RPC_ID, ANNOTATION_SPATIALLY_INDEXED_RENDER_LAYER_RPC_ID, ANNOTATION_SUBSET_GEOMETRY_CHUNK_SOURCE_RPC_ID, AnnotationGeometryChunkSpecification, forEachVisibleAnnotationChunk} from 'neuroglancer/annotation/base';
-import {Chunk, ChunkManager, ChunkSource, withChunkManager} from 'neuroglancer/chunk_manager/backend';
-import {ChunkPriorityTier} from 'neuroglancer/chunk_manager/base';
+import {Chunk, ChunkManager, ChunkRenderLayerBackend, ChunkSource, withChunkManager} from 'neuroglancer/chunk_manager/backend';
+import {ChunkPriorityTier, ChunkState} from 'neuroglancer/chunk_manager/base';
 import {DisplayDimensionRenderInfo} from 'neuroglancer/navigation_state';
 import {RenderedViewBackend, RenderLayerBackend, RenderLayerBackendAttachment} from 'neuroglancer/render_layer_backend';
 import {forEachVisibleSegment, getObjectKey} from 'neuroglancer/segmentation_display_state/base';
@@ -299,6 +299,7 @@ class AnnotationSpatiallyIndexedRenderLayerBackend extends withChunkManager
   }
 
   private recomputeChunkPriorities() {
+    this.chunkManager.registerLayer(this);
     for (const attachment of this.attachments.values()) {
       const {view} = attachment;
       const visibility = view.visibility.value;
@@ -323,7 +324,11 @@ class AnnotationSpatiallyIndexedRenderLayerBackend extends withChunkManager
           transformedSources[0], () => {}, (tsource, scaleIndex) => {
             const chunk = (tsource.source as AnnotationGeometryChunkSourceBackend)
                               .getChunk(tsource.curPositionInChunks);
+            ++this.numVisibleChunksNeeded;
             // FIXME: calculate priority
+            if (chunk.state === ChunkState.GPU_MEMORY) {
+              ++this.numVisibleChunksAvailable;
+            }
             let priority = 0;
             chunkManager.requestChunk(
                 chunk, priorityTier,
@@ -355,7 +360,7 @@ type AnnotationLayerSegmentationState = {
 
 @registerSharedObject(ANNOTATION_RENDER_LAYER_RPC_ID)
 class AnnotationLayerSharedObjectCounterpart extends withSharedVisibility
-(withChunkManager(SharedObjectCounterpart)) {
+(withChunkManager(ChunkRenderLayerBackend)) {
   source: AnnotationSource;
 
   segmentationStates: WatchableValue<AnnotationLayerSegmentationState[]|undefined>;
@@ -388,6 +393,8 @@ class AnnotationLayerSharedObjectCounterpart extends withSharedVisibility
     }
     const {segmentationStates: {value: states}, source: {segmentFilteredSources}} = this;
     if (states === undefined) return;
+    const {chunkManager} = this;
+    chunkManager.registerLayer(this);
     const numRelationships = states.length;
     for (let i = 0; i < numRelationships; ++i) {
       const state = states[i];
@@ -396,10 +403,13 @@ class AnnotationLayerSharedObjectCounterpart extends withSharedVisibility
       }
       const priorityTier = getPriorityTier(visibility);
       const basePriority = getBasePriority(visibility);
-      const {chunkManager} = this;
       const source = segmentFilteredSources[i];
       forEachVisibleSegment(state, objectId => {
         const chunk = source.getChunk(objectId);
+        ++this.numVisibleChunksNeeded;
+        if (chunk.state === ChunkState.GPU_MEMORY) {
+          ++this.numVisibleChunksAvailable;
+        }
         chunkManager.requestChunk(
             chunk, priorityTier, basePriority + ANNOTATION_SEGMENT_FILTERED_CHUNK_PRIORITY);
       });

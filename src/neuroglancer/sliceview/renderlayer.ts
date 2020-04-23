@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-import {ChunkManager} from 'neuroglancer/chunk_manager/frontend';
+import { ChunkManager, ChunkRenderLayerFrontend} from 'neuroglancer/chunk_manager/frontend';
 import {CoordinateSpace} from 'neuroglancer/coordinate_transform';
 import {VisibleLayerInfo} from 'neuroglancer/layer';
 import {ChunkTransformParameters, RenderLayerTransformOrError} from 'neuroglancer/render_coordinate_transform';
@@ -139,7 +139,8 @@ export abstract class SliceViewRenderLayer<
   RPC_TYPE_ID: string;
 
   initializeCounterpart() {
-    const sharedObject = this.registerDisposer(new SharedObject());
+    const sharedObject =
+        this.registerDisposer(new ChunkRenderLayerFrontend(this.layerChunkProgressInfo));
     const rpc = this.chunkManager.rpc!;
     sharedObject.RPC_TYPE_ID = this.RPC_TYPE_ID;
     sharedObject.initializeCounterpart(rpc, {

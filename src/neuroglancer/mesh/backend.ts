@@ -369,20 +369,27 @@ export class MeshLayer extends withSegmentationLayerBackendState
     if (visibility === Number.NEGATIVE_INFINITY) {
       return;
     }
+    this.chunkManager.registerLayer(this);
     const priorityTier = getPriorityTier(visibility);
     const basePriority = getBasePriority(visibility);
     const {source, chunkManager} = this;
     forEachVisibleSegment(this, objectId => {
       let manifestChunk = source.getChunk(objectId);
+      ++this.numVisibleChunksNeeded;
       chunkManager.requestChunk(
           manifestChunk, priorityTier, basePriority + MESH_OBJECT_MANIFEST_CHUNK_PRIORITY);
       const state = manifestChunk.state;
       if (state === ChunkState.SYSTEM_MEMORY_WORKER || state === ChunkState.SYSTEM_MEMORY ||
           state === ChunkState.GPU_MEMORY) {
+        ++this.numVisibleChunksAvailable;
         for (let fragmentId of manifestChunk.fragmentIds!) {
           let fragmentChunk = source.getFragmentChunk(manifestChunk, fragmentId);
+          ++this.numVisibleChunksNeeded;
           chunkManager.requestChunk(
               fragmentChunk, priorityTier, basePriority + MESH_OBJECT_FRAGMENT_CHUNK_PRIORITY);
+          if (fragmentChunk.state === ChunkState.GPU_MEMORY) {
+            ++this.numVisibleChunksAvailable;
+          }
         }
       }
     });
@@ -522,7 +529,7 @@ const tempModelMatrix = mat4.create();
 export class MultiscaleMeshLayer extends withSegmentationLayerBackendState
 (withSharedVisibility(withChunkManager(PerspectiveViewRenderLayerBackend))) {
   source: MultiscaleMeshSource;
-  
+
   constructor(rpc: RPC, options: any) {
     super(rpc, options);
     this.source = this.registerDisposer(rpc.getRef<MultiscaleMeshSource>(options['source']));
@@ -549,18 +556,21 @@ export class MultiscaleMeshLayer extends withSegmentationLayerBackendState
     const {transform: {value: transform}} = this;
     if (transform.error !== undefined) return;
     const manifestChunks = new Array<MultiscaleManifestChunk>();
+    this.chunkManager.registerLayer(this);
     {
       const priorityTier = getPriorityTier(maxVisibility);
       const basePriority = getBasePriority(maxVisibility);
       const {source, chunkManager} = this;
       forEachVisibleSegment(this, objectId => {
         const manifestChunk = source.getChunk(objectId);
+        ++this.numVisibleChunksNeeded;
         chunkManager.requestChunk(
             manifestChunk, priorityTier, basePriority + MESH_OBJECT_MANIFEST_CHUNK_PRIORITY);
         const state = manifestChunk.state;
         if (state === ChunkState.SYSTEM_MEMORY_WORKER || state === ChunkState.SYSTEM_MEMORY ||
             state === ChunkState.GPU_MEMORY) {
           manifestChunks.push(manifestChunk);
+          ++this.numVisibleChunksAvailable;
         }
       });
     }
@@ -582,19 +592,25 @@ export class MultiscaleMeshLayer extends withSegmentationLayerBackendState
         continue;
       }
       mat4.multiply(
-          modelViewProjectionMatrix, projectionParameters.viewProjectionMat, modelViewProjectionMatrix);
+          modelViewProjectionMatrix, projectionParameters.viewProjectionMat,
+          modelViewProjectionMatrix);
       const clippingPlanes = getFrustrumPlanes(new Float32Array(24), modelViewProjectionMatrix);
       const detailCutoff = this.renderScaleTarget.value;
       for (const manifestChunk of manifestChunks) {
         const maxLod = manifestChunk.manifest!.lodScales.length - 1;
         getDesiredMultiscaleMeshChunks(
             manifestChunk.manifest!, modelViewProjectionMatrix, clippingPlanes, detailCutoff,
-            projectionParameters.width, projectionParameters.height, (lod, chunkIndex, _renderScale, empty) => {
+            projectionParameters.width, projectionParameters.height,
+            (lod, chunkIndex, _renderScale, empty) => {
               if (empty) return;
               let fragmentChunk = source.getFragmentChunk(manifestChunk, lod, chunkIndex);
+              ++this.numVisibleChunksNeeded;
               chunkManager.requestChunk(
                   fragmentChunk, priorityTier,
                   basePriority + MESH_OBJECT_FRAGMENT_CHUNK_PRIORITY - maxLod + lod);
+              if (fragmentChunk.state === ChunkState.GPU_MEMORY) {
+                ++this.numVisibleChunksAvailable;
+              }
             });
       }
     }

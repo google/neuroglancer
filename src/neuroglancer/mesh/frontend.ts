@@ -312,8 +312,8 @@ export class MeshLayer extends
     registerRedrawWhenSegmentationDisplayState3DChanged(displayState, this);
     this.registerDisposer(displayState.silhouetteRendering.changed.add(this.redrawNeeded.dispatch));
 
-    let sharedObject = this.backend =
-        this.registerDisposer(new SegmentationLayerSharedObject(chunkManager, displayState));
+    let sharedObject = this.backend = this.registerDisposer(
+        new SegmentationLayerSharedObject(chunkManager, displayState, this.layerChunkProgressInfo));
     sharedObject.RPC_TYPE_ID = MESH_LAYER_RPC_ID;
     sharedObject.initializeCounterpartWithChunkManager({
       'source': source.addCounterpartRef(),
@@ -513,8 +513,8 @@ export class MultiscaleMeshLayer extends
     registerRedrawWhenSegmentationDisplayState3DChanged(displayState, this);
     this.registerDisposer(displayState.silhouetteRendering.changed.add(this.redrawNeeded.dispatch));
 
-    let sharedObject = this.backend =
-        this.registerDisposer(new SegmentationLayerSharedObject(chunkManager, displayState));
+    let sharedObject = this.backend = this.registerDisposer(
+        new SegmentationLayerSharedObject(chunkManager, displayState, this.layerChunkProgressInfo));
     sharedObject.RPC_TYPE_ID = MULTISCALE_MESH_LAYER_RPC_ID;
     sharedObject.initializeCounterpartWithChunkManager({
       'source': source.addCounterpartRef(),

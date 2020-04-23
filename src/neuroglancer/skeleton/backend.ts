@@ -14,7 +14,8 @@
  * limitations under the License.
  */
 
-import { Chunk, ChunkSource, withChunkManager} from 'neuroglancer/chunk_manager/backend';
+import {Chunk, ChunkRenderLayerBackend, ChunkSource, withChunkManager} from 'neuroglancer/chunk_manager/backend';
+import {ChunkState} from 'neuroglancer/chunk_manager/base';
 import {decodeVertexPositionsAndIndices} from 'neuroglancer/mesh/backend';
 import {withSegmentationLayerBackendState} from 'neuroglancer/segmentation_display_state/backend';
 import {forEachVisibleSegment, getObjectKey} from 'neuroglancer/segmentation_display_state/base';
@@ -24,7 +25,7 @@ import {Endianness} from 'neuroglancer/util/endian';
 import {Uint64} from 'neuroglancer/util/uint64';
 import {getBasePriority, getPriorityTier} from 'neuroglancer/visibility_priority/backend';
 import {withSharedVisibility} from 'neuroglancer/visibility_priority/backend';
-import {registerSharedObject, RPC, SharedObjectCounterpart} from 'neuroglancer/worker_rpc';
+import {registerSharedObject, RPC} from 'neuroglancer/worker_rpc';
 
 const SKELETON_CHUNK_PRIORITY = 60;
 
@@ -114,7 +115,7 @@ export class SkeletonSource extends ChunkSource {
 
 @registerSharedObject(SKELETON_LAYER_RPC_ID)
 export class SkeletonLayer extends withSegmentationLayerBackendState
-(withSharedVisibility(withChunkManager(SharedObjectCounterpart))) {
+(withSharedVisibility(withChunkManager(ChunkRenderLayerBackend))) {
   source: SkeletonSource;
 
   constructor(rpc: RPC, options: any) {
@@ -130,11 +131,16 @@ export class SkeletonLayer extends withSegmentationLayerBackendState
     if (visibility === Number.NEGATIVE_INFINITY) {
       return;
     }
+    this.chunkManager.registerLayer(this);
     const priorityTier = getPriorityTier(visibility);
     const basePriority = getBasePriority(visibility);
     const {source, chunkManager} = this;
     forEachVisibleSegment(this, objectId => {
       const chunk = source.getChunk(objectId);
+      ++this.numVisibleChunksNeeded;
+      if (chunk.state === ChunkState.GPU_MEMORY) {
+        ++this.numVisibleChunksAvailable;
+      }
       chunkManager.requestChunk(chunk, priorityTier, basePriority + SKELETON_CHUNK_PRIORITY);
     });
   }

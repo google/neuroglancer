@@ -15,6 +15,7 @@
  */
 
 import debounce from 'lodash/debounce';
+import {LayerChunkProgressInfo} from 'neuroglancer/chunk_manager/base';
 import {LayerView, MouseSelectionState, VisibleLayerInfo} from 'neuroglancer/layer';
 import {DisplayDimensionRenderInfo, NavigationState} from 'neuroglancer/navigation_state';
 import {PickIDManager} from 'neuroglancer/object_picking';
@@ -46,6 +47,7 @@ export class RenderLayer extends RefCounted {
   messages = new MessageList();
   layerChanged = new NullarySignal();
   redrawNeeded = new NullarySignal();
+  layerChunkProgressInfo = new LayerChunkProgressInfo();
 
   handleAction(_action: string) {
     // Do nothing by default.
@@ -70,7 +72,6 @@ export class RenderLayer extends RefCounted {
   updateMouseState(
       _mouseState: MouseSelectionState, _pickedValue: Uint64, _pickedOffset: number, _data: any) {}
 }
-
 
 /**
  * Extends RenderLayer with functionality for tracking the number of panels in which the layer is

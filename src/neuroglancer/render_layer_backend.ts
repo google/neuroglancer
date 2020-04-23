@@ -14,6 +14,7 @@
  * limitations under the License.
  */
 
+import {ChunkRenderLayerBackend} from 'neuroglancer/chunk_manager/backend';
 import {ProjectionParameters} from 'neuroglancer/projection_parameters';
 import {PROJECTION_PARAMETERS_CHANGED_RPC_METHOD_ID, PROJECTION_PARAMETERS_RPC_ID, RENDERED_VIEW_ADD_LAYER_RPC_ID, RENDERED_VIEW_REMOVE_LAYER_RPC_ID} from 'neuroglancer/render_layer_common';
 import {WatchableValueChangeInterface, WatchableValueInterface} from 'neuroglancer/trackable_value';
@@ -37,7 +38,7 @@ export class RenderLayerBackendAttachment<
 
 export class RenderLayerBackend<ViewBackend extends RenderedViewBackend = RenderedViewBackend,
                                                     AttachmentState = unknown> extends
-    SharedObjectCounterpart {
+    ChunkRenderLayerBackend {
   attachments = new Map<ViewBackend, RenderLayerBackendAttachment>();
   attach(attachment: RenderLayerBackendAttachment<ViewBackend, AttachmentState>) {
     attachment;
