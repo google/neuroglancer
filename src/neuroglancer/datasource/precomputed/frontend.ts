@@ -299,25 +299,34 @@ function parseTransform(data: any): mat4 {
   });
 }
 
-function parseMeshMetadata(data: any): MultiscaleMeshMetadata|undefined {
+interface ParsedMeshMetadata {
+  metadata: MultiscaleMeshMetadata|undefined;
+  segmentPropertyMap?: string|undefined;
+}
+
+function parseMeshMetadata(data: any): ParsedMeshMetadata {
   verifyObject(data);
   const t = verifyObjectProperty(data, '@type', verifyString);
+  let metadata: MultiscaleMeshMetadata|undefined;
   if (t === 'neuroglancer_legacy_mesh') {
-    return undefined;
+    metadata = undefined;
   } else if (t !== 'neuroglancer_multilod_draco') {
     throw new Error(`Unsupported mesh type: ${JSON.stringify(t)}`);
+  } else {
+    const lodScaleMultiplier =
+        verifyObjectProperty(data, 'lod_scale_multiplier', verifyFinitePositiveFloat);
+    const vertexQuantizationBits =
+        verifyObjectProperty(data, 'vertex_quantization_bits', verifyPositiveInt);
+    const transform = parseTransform(data);
+    const sharding = verifyObjectProperty(data, 'sharding', parseShardingParameters);
+    metadata = {lodScaleMultiplier, transform, sharding, vertexQuantizationBits};
   }
-  const lodScaleMultiplier =
-      verifyObjectProperty(data, 'lod_scale_multiplier', verifyFinitePositiveFloat);
-  const vertexQuantizationBits =
-      verifyObjectProperty(data, 'vertex_quantization_bits', verifyPositiveInt);
-  const transform = parseTransform(data);
-  const sharding = verifyObjectProperty(data, 'sharding', parseShardingParameters);
-  return {lodScaleMultiplier, transform, sharding, vertexQuantizationBits};
+  const segmentPropertyMap = verifyObjectProperty(data, 'segment_properties', verifyOptionalString);
+  return {metadata, segmentPropertyMap};
 }
 
 async function getMeshMetadata(
-    chunkManager: ChunkManager, url: string): Promise<MultiscaleMeshMetadata|undefined> {
+    chunkManager: ChunkManager, url: string): Promise<ParsedMeshMetadata> {
   let metadata: any;
   try {
     metadata = await getJsonMetadata(chunkManager, url);
@@ -325,7 +334,7 @@ async function getMeshMetadata(
     if (e instanceof HttpError && (e.status === 404 || e.status === 403)) {
       // If we fail to fetch the info file, assume it is the legacy
       // single-resolution mesh format.
-      return undefined;
+      return {metadata: undefined};
     }
     throw e;
   }
@@ -355,7 +364,12 @@ function parseShardingParameters(shardingData: any): ShardingParameters|undefine
   return {hash, preshiftBits, shardBits, minishardBits, minishardIndexEncoding, dataEncoding};
 }
 
-function parseSkeletonMetadata(data: any): SkeletonMetadata {
+interface ParsedSkeletonMetadata {
+  metadata: SkeletonMetadata;
+  segmentPropertyMap: string|undefined;
+}
+
+function parseSkeletonMetadata(data: any): ParsedSkeletonMetadata {
   verifyObject(data);
   const t = verifyObjectProperty(data, '@type', verifyString);
   if (t !== 'neuroglancer_skeletons') {
@@ -380,11 +394,15 @@ function parseSkeletonMetadata(data: any): SkeletonMetadata {
     });
   });
   const sharding = verifyObjectProperty(data, 'sharding', parseShardingParameters);
-  return {transform, vertexAttributes, sharding};
+  const segmentPropertyMap = verifyObjectProperty(data, 'segment_properties', verifyOptionalString);
+  return {
+    metadata: {transform, vertexAttributes, sharding} as SkeletonMetadata,
+    segmentPropertyMap
+  };
 }
 
 async function getSkeletonMetadata(
-    chunkManager: ChunkManager, url: string): Promise<SkeletonMetadata> {
+    chunkManager: ChunkManager, url: string): Promise<ParsedSkeletonMetadata> {
   const metadata = await getJsonMetadata(chunkManager, url);
   return parseSkeletonMetadata(metadata);
 }
@@ -395,9 +413,13 @@ function getDefaultCoordinateSpace() {
 }
 
 async function getMeshSource(chunkManager: ChunkManager, url: string) {
-  const metadata = await getMeshMetadata(chunkManager, url);
+  const {metadata, segmentPropertyMap} = await getMeshMetadata(chunkManager, url);
   if (metadata === undefined) {
-    return {source: getLegacyMeshSource(chunkManager, {url, lod: 0}), transform: mat4.create()};
+    return {
+      source: getLegacyMeshSource(chunkManager, {url, lod: 0}),
+      transform: mat4.create(),
+      segmentPropertyMap
+    };
   }
   let vertexPositionFormat: VertexPositionFormat;
   const {vertexQuantizationBits} = metadata;
@@ -416,12 +438,13 @@ async function getMeshSource(chunkManager: ChunkManager, url: string) {
         vertexPositionFormat,
       }
     }),
-    transform: metadata.transform
+    transform: metadata.transform,
+    segmentPropertyMap,
   };
 }
 
 async function getSkeletonSource(chunkManager: ChunkManager, url: string) {
-  const metadata = await getSkeletonMetadata(chunkManager, url);
+  const {metadata, segmentPropertyMap} = await getSkeletonMetadata(chunkManager, url);
   return {
     source: chunkManager.getChunkSource(PrecomputedSkeletonSource, {
       parameters: {
@@ -429,7 +452,8 @@ async function getSkeletonSource(chunkManager: ChunkManager, url: string) {
         metadata,
       },
     }),
-    transform: metadata.transform
+    transform: metadata.transform,
+    segmentPropertyMap,
   };
 }
 
@@ -514,17 +538,31 @@ async function getVolumeDataSource(
 
 async function getSkeletonsDataSource(
     options: GetDataSourceOptions, url: string): Promise<DataSource> {
-  const {source: skeletons, transform} = await getSkeletonSource(options.chunkManager, url);
+  const {source: skeletons, transform, segmentPropertyMap} =
+      await getSkeletonSource(options.chunkManager, url);
+  const subsources: DataSubsourceEntry[] = [
+    {
+      id: 'default',
+      default: true,
+      subsource: {mesh: skeletons},
+      subsourceToModelSubspaceTransform: transform,
+    },
+  ];
+  if (segmentPropertyMap !== undefined) {
+    const mapUrl = resolvePath(url, segmentPropertyMap);
+    const normalizedMapUrl = parseSpecialUrl(mapUrl);
+    const metadata = await getJsonMetadata(options.chunkManager, normalizedMapUrl);
+    const segmentPropertyMapData =
+        getSegmentPropertyMap(options.chunkManager, metadata, normalizedMapUrl);
+    subsources.push({
+      id: 'properties',
+      default: true,
+      subsource: {segmentPropertyMap: segmentPropertyMapData},
+    });
+  }
   return {
     modelTransform: makeIdentityTransform(getDefaultCoordinateSpace()),
-    subsources: [
-      {
-        id: 'default',
-        default: true,
-        subsource: {mesh: skeletons},
-        subsourceToModelSubspaceTransform: transform,
-      },
-    ],
+    subsources,
   };
 }
 
@@ -675,17 +713,32 @@ async function getAnnotationDataSource(
 }
 
 async function getMeshDataSource(options: GetDataSourceOptions, url: string): Promise<DataSource> {
-  const {source: mesh, transform} = await getMeshSource(options.chunkManager, url);
+  const {source: mesh, transform, segmentPropertyMap} =
+      await getMeshSource(options.chunkManager, url);
+  const subsources: DataSubsourceEntry[] = [
+    {
+      id: 'default',
+      default: true,
+      subsource: {mesh},
+      subsourceToModelSubspaceTransform: transform,
+    },
+  ];
+  if (segmentPropertyMap !== undefined) {
+    const mapUrl = resolvePath(url, segmentPropertyMap);
+    const normalizedMapUrl = parseSpecialUrl(mapUrl);
+    const metadata = await getJsonMetadata(options.chunkManager, normalizedMapUrl);
+    const segmentPropertyMapData =
+        getSegmentPropertyMap(options.chunkManager, metadata, normalizedMapUrl);
+    subsources.push({
+      id: 'properties',
+      default: true,
+      subsource: {segmentPropertyMap: segmentPropertyMapData},
+    });
+  }
+
   return {
     modelTransform: makeIdentityTransform(getDefaultCoordinateSpace()),
-    subsources: [
-      {
-        id: 'default',
-        default: true,
-        subsource: {mesh},
-        subsourceToModelSubspaceTransform: transform,
-      },
-    ],
+    subsources,
   };
 }
 
@@ -759,7 +812,7 @@ function getSegmentPropertyMap(
   }
 }
 
-async function getSegmentNameMapDataSource(
+async function getSegmentPropertyMapDataSource(
     options: GetDataSourceOptions, normalizedUrl: string, metadata: unknown): Promise<DataSource> {
   options;
   return {
@@ -843,8 +896,8 @@ export class PrecomputedDataSource extends DataSourceProvider {
               return await getMeshDataSource(options, normalizedUrl);
             case 'neuroglancer_annotations_v1':
               return await getAnnotationDataSource(options, normalizedUrl, metadata);
-            case 'neuroglancer_segment_name_map':
-              return await getSegmentNameMapDataSource(options, normalizedUrl, metadata);
+            case 'neuroglancer_segment_properties':
+              return await getSegmentPropertyMapDataSource(options, normalizedUrl, metadata);
             case 'neuroglancer_multiscale_volume':
             case undefined:
               return await getVolumeDataSource(options, url, normalizedUrl, metadata);
