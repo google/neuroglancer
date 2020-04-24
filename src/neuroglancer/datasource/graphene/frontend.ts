@@ -218,14 +218,22 @@ export class MultiscaleVolumeChunkSource implements GenericMultiscaleVolumeChunk
     if (t !== undefined && t !== 'neuroglancer_multiscale_volume') {
       throw new Error(`Invalid type: ${JSON.stringify(t)}`);
     }
-    this.app = verifyObjectProperty(obj, 'app', x => new AppInfo(infoUrl, x));
-    this.dataUrl = verifyObjectProperty(obj, 'data_dir', x => parseSpecialUrl(x));
+
+    this.volumeType = verifyObjectProperty(obj, 'type', x => verifyEnumString(x, VolumeType));
     this.dataType = verifyObjectProperty(obj, 'data_type', x => verifyEnumString(x, DataType));
+
+    if (this.volumeType === VolumeType.IMAGE) {
+      this.dataUrl = infoUrl;
+    } else {
+      this.app = verifyObjectProperty(obj, 'app', x => new AppInfo(infoUrl, x));
+      this.dataUrl = verifyObjectProperty(obj, 'data_dir', x => parseSpecialUrl(x));
+      this.volumeType = VolumeType.SEGMENTATION_WITH_GRAPH;
+      this.graph = verifyObjectProperty(obj, 'graph', x => new GraphInfo(x));
+    }
+
     this.numChannels = verifyObjectProperty(obj, 'num_channels', verifyPositiveInt);
-    this.volumeType = VolumeType.SEGMENTATION_WITH_GRAPH;
     this.mesh = verifyObjectProperty(obj, 'mesh', verifyOptionalString);
     this.skeletons = verifyObjectProperty(obj, 'skeletons', verifyOptionalString);
-    this.graph = verifyObjectProperty(obj, 'graph', x => new GraphInfo(x));
     this.scales = verifyObjectProperty(obj, 'scales', x => parseArray(x, y => new ScaleInfo(y)));
   }
 
@@ -288,8 +296,7 @@ function parseMeshMetadata(data: any): MultiscaleMeshMetadata|undefined {
   const t = verifyObjectProperty(data, '@type', verifyString);
   if (t === 'neuroglancer_legacy_mesh') {
     return undefined;
-  }
-  else if (t !== 'neuroglancer_multilod_draco') {
+  } else if (t !== 'neuroglancer_multilod_draco') {
     throw new Error(`Unsupported mesh type: ${JSON.stringify(t)}`);
   }
   const lodScaleMultiplier =

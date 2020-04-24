@@ -16,7 +16,7 @@
 
 import {decodeGzip} from 'neuroglancer/async_computation/decode_gzip_request';
 import {requestAsyncComputation} from 'neuroglancer/async_computation/request';
-import {authFetch} from 'neuroglancer/authentication/backend.ts';
+import {authFetch as cancellableFetchOk} from 'neuroglancer/authentication/backend';
 import {Chunk, ChunkManager, WithParameters} from 'neuroglancer/chunk_manager/backend';
 import {GenericSharedDataSource} from 'neuroglancer/chunk_manager/generic_file_source';
 import {ChunkedGraphSourceParameters, DataEncoding, MeshSourceParameters, ShardingHashFunction, ShardingParameters, SkeletonSourceParameters, VolumeChunkEncoding, VolumeChunkSourceParameters} from 'neuroglancer/datasource/graphene/base';
@@ -34,7 +34,7 @@ import {CancellationToken} from 'neuroglancer/util/cancellation';
 import {Borrowed} from 'neuroglancer/util/disposable';
 import {convertEndian32, Endianness} from 'neuroglancer/util/endian';
 import {murmurHash3_x86_128Hash64Bits} from 'neuroglancer/util/hash';
-import {cancellableFetchOk, responseArrayBuffer, responseJson} from 'neuroglancer/util/http_request';
+import {responseArrayBuffer, responseJson} from 'neuroglancer/util/http_request';
 import {stableStringify} from 'neuroglancer/util/json';
 import {Uint64} from 'neuroglancer/util/uint64';
 import {registerSharedObject} from 'neuroglancer/worker_rpc';
@@ -82,8 +82,8 @@ function getMinishardIndexDataSource(
               const temp = new Uint64();
               Uint64.rshift(temp, shardAndMinishard, sharding.minishardBits);
               Uint64.and(shard, shard, temp);
-              const shardUrl =
-                  `${url}/${shard.toString(16).padStart(Math.ceil(sharding.shardBits / 4), '0')}.shard`;
+              const shardUrl = `${url}/${
+                  shard.toString(16).padStart(Math.ceil(sharding.shardBits / 4), '0')}.shard`;
               // Retrive minishard index start/end offsets.
 
               const shardIndexSize = new Uint64(16);
@@ -258,10 +258,13 @@ export function decodeChunkedGraphChunk(
 
     let promises = Array<Promise<any>>();
     let promise: Promise<any>;
+
+    const responseIdentity = async (x: any) => x;
+
     for (const [key, val] of chunk.mappings!.entries()) {
       if (val === null) {
-        promise = authFetch(
-            `${parameters.url}/${key}/leaves?int64_as_str=1&bounds=${bounds}`, {},
+        promise = cancellableFetchOk(
+            `${parameters.url}/${key}/leaves?int64_as_str=1&bounds=${bounds}`, {}, responseIdentity,
             cancellationToken);
         promises.push(this.withErrorMessage(
                               promise, `Fetching leaves of segment ${key} in region ${bounds}: `)
@@ -311,10 +314,9 @@ export function decodeDracoFragmentChunk(
 (WithParameters(MeshSource, MeshSourceParameters)) {
   download(chunk: ManifestChunk, cancellationToken: CancellationToken) {
     const {parameters} = this;
-    return authFetch(
+    return cancellableFetchOk(
                `${parameters.manifestUrl}/manifest/${chunk.objectId}:${parameters.lod}?verify=True`,
-               {}, cancellationToken)
-        .then(responseJson)
+               {}, responseJson, cancellationToken)
         .then(response => decodeManifestChunk(chunk, response));
   }
 

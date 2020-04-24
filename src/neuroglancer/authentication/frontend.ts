@@ -17,20 +17,28 @@
 import {AUTHENTICATION_GET_SHARED_TOKEN_RPC_ID, AUTHENTICATION_REAUTHENTICATE_RPC_ID, authFetchWithSharedValue, SharedAuthToken} from 'neuroglancer/authentication/base.ts';
 import {SharedWatchableValue} from 'neuroglancer/shared_watchable_value.ts';
 import {CancellationToken, uncancelableToken} from 'neuroglancer/util/cancellation';
+import {ResponseTransform} from 'neuroglancer/util/http_request';
 import {registerPromiseRPC, registerRPC, RPC} from 'neuroglancer/worker_rpc';
-
-let authPromise: Promise<string>|null = null;
 
 // generate a token with the neuroglancer-auth service using google oauth2
 async function authorize(auth_url: string) {
-  const auth_popup = window.open(`${auth_url}?redirect=${encodeURI(window.location.origin + '/auth_redirect.html')}`);
+  const auth_popup = window.open(
+      `${auth_url}?redirect=${encodeURI(window.location.origin + '/auth_redirect.html')}`);
 
   if (!auth_popup) {
     alert('Allow popups on this page to authenticate');
     throw new Error('Allow popups on this page to authenticate');
   }
 
-  return new Promise<string>((f, _r) => {
+  return new Promise<string>((f, r) => {
+    const checkClosed = setInterval(() => {
+      if (auth_popup.closed) {
+        // in successful case, this will still fire but fulfill will have already been called
+        clearInterval(checkClosed);
+        r(new Error('Auth popup closed'));
+      }
+    }, 1000);
+
     const tokenListener = (ev: MessageEvent) => {
       if (ev.source === auth_popup) {
         auth_popup.close();
@@ -43,35 +51,38 @@ async function authorize(auth_url: string) {
   });
 }
 
+let currentReauthentication: Promise<string>|null = null;
+
 // returns the token required to authenticate with "neuroglancer-auth" requiring services
 // client currently only supports a single token in use at a time
 async function reauthenticate(
     auth_url: string, used_token?: string|SharedAuthToken): Promise<string> {
+  if (currentReauthentication) {
+    return currentReauthentication;
+  }
+
   // this should never happen but this allows the interface to be the same between front and backend
   if (used_token && (typeof used_token !== 'string')) {
     used_token = used_token.value || undefined;
   }
   used_token = <string>used_token;
 
-  const existingToken = localStorage.getItem('auth_token');
-  const existingAuthURL = localStorage.getItem('auth_url');
+  const storedToken = localStorage.getItem('auth_token');
+  const storedAuthURL = localStorage.getItem('auth_url');
 
-  // if we don't have a promise or we are authenticating with a new auth url
-  // or if we failed to authenticate with our existing token
-  if (!authPromise || existingAuthURL !== auth_url || used_token === existingToken) {
-    if (existingToken && existingAuthURL === auth_url && existingToken !== used_token) {
-      authTokenShared!.value = existingToken;
-      return existingToken;
-    } else {
-      const token = await authorize(auth_url);
-      localStorage.setItem('auth_token', token);
-      localStorage.setItem('auth_url', auth_url);
-      authTokenShared!.value = token;
-      return token;
-    }
+  // if the stored token is not what was tried, and auth url matches, try the stored token
+  if (storedToken && storedAuthURL && storedAuthURL === auth_url && storedToken !== used_token) {
+    authTokenShared!.value = storedToken;
+    return storedToken;
+  } else {
+    currentReauthentication = authorize(auth_url);
+    const token = await currentReauthentication;
+    currentReauthentication = null;
+    localStorage.setItem('auth_token', token);
+    localStorage.setItem('auth_url', auth_url);
+    authTokenShared!.value = token;
+    return token;
   }
-
-  return authPromise;
 }
 
 export let authTokenShared: SharedAuthToken|undefined;
@@ -95,9 +106,19 @@ registerRPC(AUTHENTICATION_REAUTHENTICATE_RPC_ID, function({auth_url, used_token
   });
 });
 
-export async function authFetch(
-    input: RequestInfo, init = {}, cancelToken: CancellationToken = uncancelableToken,
-    retry = 1): Promise<Response> {
-  return authFetchWithSharedValue(
-      reauthenticate, authTokenShared!, input, init, cancelToken, retry);
+export async function authFetch(input: RequestInfo, init?: RequestInit): Promise<Response>;
+export async function authFetch<T>(
+    input: RequestInfo, init: RequestInit, transformResponse: ResponseTransform<T>,
+    cancellationToken: CancellationToken): Promise<T>;
+export async function authFetch<T>(
+    input: RequestInfo, init: RequestInit = {}, transformResponse?: ResponseTransform<T>,
+    cancellationToken: CancellationToken = uncancelableToken): Promise<T|Response> {
+  const response = await authFetchWithSharedValue(
+      reauthenticate, authTokenShared!, input, init, cancellationToken);
+
+  if (transformResponse) {
+    return transformResponse(response);
+  } else {
+    return response;
+  }
 }

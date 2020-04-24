@@ -16,6 +16,7 @@
 
 import {SharedWatchableValue} from 'neuroglancer/shared_watchable_value';
 import {CancellationToken, uncancelableToken} from 'neuroglancer/util/cancellation';
+import {HttpError} from 'neuroglancer/util/http_request';
 
 export const AUTHENTICATION_GET_SHARED_TOKEN_RPC_ID = 'Authentication.get_shared_token';
 export const AUTHENTICATION_REAUTHENTICATE_RPC_ID = 'Authentication.reauthenticate';
@@ -36,62 +37,97 @@ export type SharedAuthToken = SharedWatchableValue<string|null>;
 
 type ReauthFunction = (auth_url: string, used_token?: string|SharedAuthToken) => Promise<string>;
 
-export async function authFetchWithSharedValue(
-    reauthenticate: ReauthFunction, authTokenShared: SharedAuthToken, input: RequestInfo, init = {},
-    cancelToken: CancellationToken = uncancelableToken, retry = 1): Promise<Response> {
-  if (!input) {
-    return fetch(input);  // to keep the errors consistent
+export class AuthenticationError extends Error {
+  realm: string;
+
+  constructor(realm: string) {
+    super();
+    this.realm = realm;
   }
+}
 
-  let options = JSON.parse(JSON.stringify(init));
-
-  // handle aborting
-  const abortController = new AbortController();
-  options.signal = abortController.signal;
-  const abort = () => {
-    abortController.abort();
-  };
-  cancelToken.add(abort);
-
-  const authToken = authTokenShared!.value;
-
-  if (authToken) {
-    options.headers = options.headers || new Headers();
-
-    // Headers object seems to be the correct format but a regular object is supported as well
-    if (options.headers instanceof Headers) {
-      options.headers.append('Authorization', `Bearer ${authToken}`);
-    } else {
-      options.headers['Authorization'] = `Bearer ${authToken}`;
-    }
-  }
-
-  return fetch(input, options).then((res) => {
-    cancelToken.remove(abort);
+async function authFetchOk(input: RequestInfo, init?: RequestInit): Promise<Response> {
+  try {
+    const res = await fetch(input, init);
 
     if (res.status === 400 || res.status === 401) {
       const wwwAuth = res.headers.get('WWW-Authenticate');
-
       if (wwwAuth) {
         if (wwwAuth.startsWith('Bearer ')) {
           const wwwAuthMap = parseWWWAuthHeader(wwwAuth);
 
           if (!wwwAuthMap.get('error') || wwwAuthMap.get('error') === 'invalid_token') {
             // missing or expired
-            if (retry > 0) {
-              return reauthenticate(<string>wwwAuthMap.get('realm'), authTokenShared).then(() => {
-                return authFetchWithSharedValue(
-                    reauthenticate, authTokenShared, input, init, cancelToken, retry - 1);
-              });
-            }
+            throw new AuthenticationError(<string>wwwAuthMap.get('realm'));
           }
-
           throw new Error(`status ${res.status} auth error - ${
               wwwAuthMap.get('error')} + " Reason: ${wwwAuthMap.get('error_description')}`);
         }
       }
     }
 
+    if (!res.ok) {
+      throw HttpError.fromResponse(res);
+    }
+
     return res;
-  });
+  } catch (error) {
+    // A fetch() promise will reject with a TypeError when a network error is encountered or CORS is
+    // misconfigured on the server-side
+    if (error instanceof TypeError) {
+      throw new HttpError('', 0, '');
+    }
+    throw error;
+  }
+}
+
+export async function authFetchWithSharedValue(
+    reauthenticate: ReauthFunction, authTokenShared: SharedAuthToken, input: RequestInfo,
+    init: RequestInit,
+    cancellationToken: CancellationToken = uncancelableToken): Promise<Response> {
+  const aborts: (() => void)[] = [];
+  function addCancellationToken(options: any) {
+    options = JSON.parse(JSON.stringify(init));
+
+    // handle aborting
+    const abortController = new AbortController();
+    options.signal = abortController.signal;
+    const abort = () => {
+      abortController.abort();
+    };
+    cancellationToken.add(abort);
+    aborts.push(abort);
+    return options;
+  }
+
+  function setAuthQuery(input: RequestInfo) {
+    if (input instanceof Request) {
+      // do nothing TODO: is this right?
+    } else {
+      const authToken = authTokenShared!.value;
+
+      if (authToken) {
+        const url = new URL(input);
+        url.searchParams.set('middle_auth_token', authToken);
+        return url.href;
+      }
+    }
+
+    return input;
+  }
+
+  try {
+    return await authFetchOk(setAuthQuery(input), addCancellationToken(init));
+  } catch (error) {
+    if (error instanceof AuthenticationError) {
+      await reauthenticate(error.realm, authTokenShared);  // try once after authenticating
+      return await authFetchOk(setAuthQuery(input), addCancellationToken(init));
+    } else {
+      throw error;
+    }
+  } finally {
+    for (let abort of aborts) {
+      cancellationToken.remove(abort);
+    }
+  }
 }

@@ -17,6 +17,7 @@
 import {AUTHENTICATION_GET_SHARED_TOKEN_RPC_ID, AUTHENTICATION_REAUTHENTICATE_RPC_ID, authFetchWithSharedValue} from 'neuroglancer/authentication/base.ts';
 import {SharedWatchableValue} from 'neuroglancer/shared_watchable_value.ts';
 import {CancellationToken, uncancelableToken} from 'neuroglancer/util/cancellation';
+import {ResponseTransform} from 'neuroglancer/util/http_request';
 import {rpc} from 'neuroglancer/worker_rpc_context.ts';
 
 const authTokenSharedValuePromise: Promise<SharedWatchableValue<string|null>> = new Promise((f) => {
@@ -50,8 +51,8 @@ async function reauthenticate(
     waitingForToken = null;
   });
 
-  // returns a promise though I don't use this value since it also gets sent through the
-  // authTokenSharedValue maybe it should be changed to a regular invoke
+  // TODO: change back to promise, we need to handle the promise rejecting even though we get the
+  // value from the shared value
   rpc.invoke(
       AUTHENTICATION_REAUTHENTICATE_RPC_ID,
       {auth_url: auth_url, used_token: authTokenSharedValue.value});
@@ -59,10 +60,20 @@ async function reauthenticate(
   return waitingForToken;
 }
 
-export async function authFetch(
-    input: RequestInfo, init = {}, cancelToken: CancellationToken = uncancelableToken,
-    retry = 1): Promise<Response> {
-  return authTokenSharedValuePromise.then((val) => {
-    return authFetchWithSharedValue(reauthenticate, val, input, init, cancelToken, retry);
-  });
+export async function authFetch(input: RequestInfo, init?: RequestInit): Promise<Response>;
+export async function authFetch<T>(
+    input: RequestInfo, init: RequestInit, transformResponse: ResponseTransform<T>,
+    cancellationToken: CancellationToken): Promise<T>;
+export async function authFetch<T>(
+    input: RequestInfo, init: RequestInit = {}, transformResponse?: ResponseTransform<T>,
+    cancellationToken: CancellationToken = uncancelableToken): Promise<T|Response> {
+  const authTokenShared = await authTokenSharedValuePromise;
+  const response = await authFetchWithSharedValue(
+      reauthenticate, authTokenShared!, input, init, cancellationToken);
+
+  if (transformResponse) {
+    return transformResponse(response);
+  } else {
+    return response;
+  }
 }
