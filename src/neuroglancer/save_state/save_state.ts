@@ -24,7 +24,7 @@ export class SaveState extends RefCounted {
     super();
     const userDisabledSaver = getSaveToAddressBar().value;
 
-    if (storageAvailable()) {
+    if (storageAccessible()) {
       this.loadFromKey();
       this.registerEventListener(window, 'popstate', () => this.loadFromKey());
     } else {
@@ -42,13 +42,13 @@ export class SaveState extends RefCounted {
       const throttledUpdate = debounce(() => this.push(), updateDelayMilliseconds);
       this.registerDisposer(root.changed.add(throttledUpdate));
       this.registerDisposer(() => throttledUpdate.cancel());
-      window.addEventListener('focus', (() => this.push(true)).bind(this));
+      window.addEventListener('focus', (() => this.push()).bind(this));
     }
   }
   // Main Methods
   pull() {
     // Get SaveEntry from localStorage
-    if (storageAvailable() && this.key) {
+    if (storageAccessible() && this.key) {
       const entry = localStorage[`${stateKey}-${this.key}`];
       if (entry) {
         return JSON.parse(entry);
@@ -56,9 +56,9 @@ export class SaveState extends RefCounted {
     }
     return;
   }
-  push(clean = false) {
+  push(clean?: boolean) {
     // update SaveEntry in localStorage
-    if (storageAvailable() && this.key) {
+    if (storageAccessible() && this.key) {
       const source = <SaveEntry>this.pull() || {};
       if (source.history && source.history.length) {
         // history should never be empty
@@ -69,11 +69,17 @@ export class SaveState extends RefCounted {
       } else {
         source.history = [this.session_id];
       }
-      source.state = this.root.toJSON();
-      source.dirty = !clean;
+      const oldState = this.root.toJSON();
+      const stateChange = JSON.stringify(oldState) !== JSON.stringify(source.state);
+
+      if (stateChange || clean) {
+        source.state = oldState;
+        // if clean is true, then this state is committed, and not dirty.
+        source.dirty = clean ? !clean : true;
+        const serializedUpdate = JSON.stringify(source);
+        this.robustSet(`${stateKey}-${this.key}`, serializedUpdate);
+      }
       this.setSaveStatus(source.dirty);
-      const serializedUpdate = JSON.stringify(source);
-      this.robustLocalStorageSet(`${stateKey}-${this.key}`, serializedUpdate);
       this.notifyManager();
     }
   }
@@ -98,7 +104,7 @@ export class SaveState extends RefCounted {
         entry = oldDatabase[this.key];
         delete oldDatabase[this.key];
         const serializedDatabase = JSON.stringify(oldDatabase);
-        localStorage.setItem(deprecatedKey, serializedDatabase);
+        this.robustSet(deprecatedKey, serializedDatabase);
       }
 
       if (entry) {
@@ -135,20 +141,25 @@ export class SaveState extends RefCounted {
   }
   // Utility
   purge() {
-    if (storageAvailable()) {
+    if (storageAccessible()) {
       this.overwriteHistory();
     }
   }
-  nuke() {
-    if (storageAvailable()) {
+  nuke(complete = false) {
+    if (storageAccessible()) {
       localStorage[stateKey] = '[]';
       const storage = localStorage;
       const storageKeys = Object.keys(storage);
-      const stateKeys = storageKeys.filter(key => key.includes(`${stateKey}-`));
+      const stateKeys =
+          complete ? storageKeys : storageKeys.filter(key => key.includes(`${stateKey}-`));
       stateKeys.forEach(target => localStorage.removeItem(target));
     }
   }
-  setSaveStatus(status: boolean) {
+  userRemoveEntries(complete = false) {
+    this.nuke(complete);
+    this.push();
+  }
+  setSaveStatus(status = false) {
     const button = document.getElementById('neuroglancer-saver-button');
     if (button) {
       button.classList.toggle('dirty', status);
@@ -160,7 +171,7 @@ export class SaveState extends RefCounted {
     return saveHistoryString ? JSON.parse(saveHistoryString) : [];
   }
   overwriteHistory(newHistory: SaveHistory[] = []) {
-    localStorage.setItem(historyKey, JSON.stringify(newHistory));
+    this.robustSet(historyKey, JSON.stringify(newHistory));
   }
   showSaveDialog(viewer: Viewer, jsonString?: string, get?: UrlType) {
     new SaveDialog(viewer, jsonString, get);
@@ -186,7 +197,7 @@ export class SaveState extends RefCounted {
     }
     return false;
   }
-  robustLocalStorageSet(key: string, data: any) {
+  robustSet(key: string, data: any) {
     while (true) {
       try {
         localStorage.setItem(key, data);
@@ -208,14 +219,14 @@ export class SaveState extends RefCounted {
     return <string[]>JSON.parse(managerRaw || '[]');
   }
   notifyManager() {
-    if (storageAvailable() && this.key) {
+    if (storageAccessible() && this.key) {
       const manager = this.uniquePush(this.getManager(), this.key);
       const serializedManager = JSON.stringify(manager);
-      localStorage.setItem(stateKey, serializedManager);
+      this.robustSet(stateKey, serializedManager);
     }
   }
   evict(count = 1) {
-    if (storageAvailable() && this.key) {
+    if (storageAccessible() && this.key) {
       const manager = this.getManager();
 
       const targets = manager.splice(0, count);
@@ -225,10 +236,12 @@ export class SaveState extends RefCounted {
     }
   }
   addToHistory(entry: SaveHistory) {
-    const saveHistoryString = this.history();
-    saveHistoryString.push(entry);
-    const record = JSON.stringify(saveHistoryString);
-    localStorage.setItem(historyKey, record);
+    const saveHistory = this.history();
+    saveHistory.push(entry);
+    if (saveHistory.length > 100) {
+      saveHistory.splice(0, 1);
+    }
+    this.overwriteHistory(saveHistory);
   }
   uniquePush(source: any[], entry: any) {
     const target = source.indexOf(entry);
@@ -281,30 +294,31 @@ class SaveDialog extends Overlay {
       viewer.promptJsonStateServer('Please enter the state server to access.');
       if (viewer.jsonStateServer.value) {
         pushButton.disabled = true;
-        const saver = document.getElementsByClassName('ng-saver');
-        let saveBtn: HTMLButtonElement;
-        if (saver && saver.length) {
-          saveBtn = <HTMLButtonElement>saver[0];
-          saveBtn.classList.add('busy');
-          saveBtn.disabled = true;
-        }
+        saverToggle(false);
         const restoreSaving = () => {
           try {
             this.dispose();
           } catch {
           }
-          if (saveBtn) {
-            saveBtn.classList.remove('busy');
-            saveBtn.disabled = false;
-          }
+          saverToggle(true);
         };
         viewer.postJsonState(true, undefined, true, restoreSaving);
+      }
+    });
+    const clearButton = document.createElement('button');
+    clearButton.innerText = '⚠️ Clear States';
+    clearButton.title = 'Remove all Local States.';
+    clearButton.addEventListener('click', () => {
+      if (confirm('All unshared or unopened states will be lost. Continue?')) {
+        if (viewer.saver) {
+          viewer.saver.userRemoveEntries();
+        }
       }
     });
     const pushButtonContainer = document.createElement('div');
     pushButtonContainer.style.textAlign = 'right';
     pushButtonContainer.style.marginBottom = '5px';
-    pushButtonContainer.append(pushButton);
+    pushButtonContainer.append(pushButton, ' ', clearButton);
     content.append(pushButtonContainer);
 
     let modal = document.createElement('div');
@@ -432,7 +446,17 @@ const recordHistory = (url: string) => {
   return <SaveHistory>{timestamp: (new Date()).valueOf(), source_url: url};
 };
 
-export const storageAvailable = () => {
+export const saverToggle = (active: boolean) => {
+  const saver = document.getElementsByClassName('ng-saver');
+  let saveBtn: HTMLButtonElement;
+  if (saver && saver.length) {
+    saveBtn = <HTMLButtonElement>saver[0];
+    saveBtn.classList.toggle('busy', !active);
+    saveBtn.disabled = !active;
+  }
+};
+
+export const storageAccessible = () => {
   // Stolen from
   // https://developer.mozilla.org/en-US/docs/Web/API/Web_Storage_API/Using_the_Web_Storage_API
   const type = 'localStorage';
@@ -444,6 +468,20 @@ export const storageAvailable = () => {
     storage.removeItem(x);
     return true;
   } catch (e) {
-    return false;
+    const outOfSpace = e instanceof DOMException &&
+        (
+                           // everything except Firefox
+                           e.code === 22 ||
+                           // Firefox
+                           e.code === 1014 ||
+                           // test name field too, because code might not be present
+                           // everything except Firefox
+                           e.name === 'QuotaExceededError' ||
+                           // Firefox
+                           e.name === 'NS_ERROR_DOM_QUOTA_REACHED') &&
+        // acknowledge QuotaExceededError only if there's something already stored
+        (storage && storage.length !== 0);
+    // outOfSpace is still accessible
+    return outOfSpace;
   }
 };

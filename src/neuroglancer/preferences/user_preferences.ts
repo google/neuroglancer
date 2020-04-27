@@ -112,5 +112,19 @@ export class UserPreferencesDialog extends Overlay {
     addCheckbox(
         'Unshared state warning', userPreferences.unshareWarning, undefined,
         'Disable the warning message when loading an unshared state.');
+
+    const evictButton = document.createElement('button');
+    evictButton.innerText = '⚠️ Clear Storage';
+    evictButton.title = 'Remove all local storage entries.';
+    evictButton.addEventListener('click', () => {
+      if (confirm(
+              'All unshared or unopened states will be lost and you will need to reauthenticate. The page will be reloaded. Continue?')) {
+        if (viewer.saver) {
+          viewer.saver.userRemoveEntries(true);
+          location.reload();
+        }
+      }
+    });
+    scroll.appendChild(evictButton);
   }
 }

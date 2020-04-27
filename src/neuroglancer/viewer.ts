@@ -32,7 +32,7 @@ import {TopLevelLayerListSpecification} from 'neuroglancer/layer_specification';
 import {NavigationState, Pose} from 'neuroglancer/navigation_state';
 import {overlaysOpen} from 'neuroglancer/overlay';
 import {getSaveToAddressBar, UserPreferencesDialog} from 'neuroglancer/preferences/user_preferences';
-import {SaveState, storageAvailable} from 'neuroglancer/save_state/save_state';
+import {saverToggle, SaveState, storageAccessible} from 'neuroglancer/save_state/save_state';
 import {StatusMessage} from 'neuroglancer/status';
 import {ElementVisibilityFromTrackableBoolean, TrackableBoolean, TrackableBooleanCheckbox} from 'neuroglancer/trackable_boolean';
 import {makeDerivedWatchableValue, TrackableValue, WatchableValueInterface} from 'neuroglancer/trackable_value';
@@ -495,12 +495,12 @@ export class Viewer extends RefCounted implements ViewerState {
       button.classList.add('ng-saver', 'neuroglancer-icon-button');
       button.innerText = 'Share';
       button.title = 'Save Changes';
-      if (!storageAvailable()) {
+      if (!storageAccessible()) {
         button.classList.add('fallback');
         button.title =
             `Cannot access Local Storage. Unsaved changes will be lost! Use OldStyleSaving to allow for auto saving.`;
       }
-      if (storageAvailable() && getSaveToAddressBar().value) {
+      if (storageAccessible() && getSaveToAddressBar().value) {
         button.classList.add('inactive');
         button.title =
             `Save State has been disabled because Old Style saving has been turned on in User Preferences.`;
@@ -828,6 +828,9 @@ export class Viewer extends RefCounted implements ViewerState {
           .forPromise(
               authFetch(json_url).then(res => res.json()).then(response => {
                 this.state.restoreState(response);
+                if (this.saver) {
+                  this.saver.push(true);
+                }
               }),
               {
                 initialMessage: `Retrieving state from json_url: ${json_url}.`,
@@ -854,6 +857,7 @@ export class Viewer extends RefCounted implements ViewerState {
     }
     if (this.jsonStateServer.value || getUrlType) {
       if (this.jsonStateServer.value.length) {
+        saverToggle(false);
         let postSuccess = false;
         StatusMessage.forPromise(
             authFetch(
@@ -894,6 +898,7 @@ export class Viewer extends RefCounted implements ViewerState {
                   }
                 })
                 .finally(() => {
+                  saverToggle(true);
                   if (!postSuccess && savestate) {
                     callback();
                     this.showSaveDialog(getUrlType);
