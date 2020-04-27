@@ -1132,7 +1132,7 @@ export class AnnotationLayerView extends Tab {
   }
 
   private exportToCSV() {
-    const filename = window.prompt("Enter your desired filename",`${this.layer.name}.csv`);
+    const filename = window.prompt('Enter your desired filename', `${this.layer.name}.csv`);
     if (filename === '') {
       StatusMessage.showTemporaryMessage('Filename cannot be empty.', 5000);
     } else if (filename !== null) {
@@ -1141,8 +1141,8 @@ export class AnnotationLayerView extends Tab {
         return formatIntegerPoint(this.voxelSize.voxelFromSpatial(tempVec3, spatialPoint));
       };
       const columnHeaders = [
-        'Coordinate 1', 'Coordinate 2', 'Ellipsoid Dimensions', 'Tags', 'Description', 'Segment IDs',
-        'Parent ID', 'Type', 'ID'
+        'Coordinate 1', 'Coordinate 2', 'Ellipsoid Dimensions', 'Tags', 'Description',
+        'Segment IDs', 'Parent ID', 'Type', 'ID'
       ];
       const csvData: string[][] = [];
       for (const annotation of this.annotationLayer.source) {
@@ -1243,7 +1243,7 @@ export class AnnotationLayerView extends Tab {
         annotationRow.push(stringType);
         // ID
         annotationRow.push(collectionID);
-  
+
         csvData.push(annotationRow);
       }
       const csvString = Papa.unparse({'fields': columnHeaders, 'data': csvData});
