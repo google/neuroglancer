@@ -106,15 +106,18 @@ registerRPC(AUTHENTICATION_REAUTHENTICATE_RPC_ID, function({auth_url, used_token
   });
 });
 
+export const responseIdentity = async (x: any) => x;
+
 export async function authFetch(input: RequestInfo, init?: RequestInit): Promise<Response>;
 export async function authFetch<T>(
-    input: RequestInfo, init: RequestInit, transformResponse: ResponseTransform<T>,
-    cancellationToken: CancellationToken): Promise<T>;
+    input: RequestInfo, init: RequestInit, transformResponse?: ResponseTransform<T>,
+    cancellationToken?: CancellationToken, handleError?: boolean): Promise<T>;
 export async function authFetch<T>(
     input: RequestInfo, init: RequestInit = {}, transformResponse?: ResponseTransform<T>,
-    cancellationToken: CancellationToken = uncancelableToken): Promise<T|Response> {
+    cancellationToken: CancellationToken = uncancelableToken,
+    handleError = true): Promise<T|Response> {
   const response = await authFetchWithSharedValue(
-      reauthenticate, authTokenShared!, input, init, cancellationToken);
+      reauthenticate, authTokenShared!, input, init, cancellationToken, handleError);
 
   if (transformResponse) {
     return transformResponse(response);

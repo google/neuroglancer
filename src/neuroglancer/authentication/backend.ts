@@ -60,16 +60,19 @@ async function reauthenticate(
   return waitingForToken;
 }
 
+export const responseIdentity = async (x: any) => x;
+
 export async function authFetch(input: RequestInfo, init?: RequestInit): Promise<Response>;
 export async function authFetch<T>(
-    input: RequestInfo, init: RequestInit, transformResponse: ResponseTransform<T>,
-    cancellationToken: CancellationToken): Promise<T>;
+    input: RequestInfo, init: RequestInit, transformResponse: ResponseTransform<T>|undefined,
+    cancellationToken?: CancellationToken, handleError?: boolean): Promise<T>;
 export async function authFetch<T>(
-    input: RequestInfo, init: RequestInit = {}, transformResponse?: ResponseTransform<T>,
-    cancellationToken: CancellationToken = uncancelableToken): Promise<T|Response> {
+    input: RequestInfo, init: RequestInit = {}, transformResponse?: ResponseTransform<T>|undefined,
+    cancellationToken: CancellationToken = uncancelableToken,
+    handleError = true): Promise<T|Response> {
   const authTokenShared = await authTokenSharedValuePromise;
   const response = await authFetchWithSharedValue(
-      reauthenticate, authTokenShared!, input, init, cancellationToken);
+      reauthenticate, authTokenShared!, input, init, cancellationToken, handleError);
 
   if (transformResponse) {
     return transformResponse(response);

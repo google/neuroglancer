@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-import {authFetch} from 'neuroglancer/authentication/frontend.ts';
+import {authFetch, responseIdentity} from 'neuroglancer/authentication/frontend.ts';
 import {ChunkManager} from 'neuroglancer/chunk_manager/frontend';
 import {VisibleSegmentsState} from 'neuroglancer/segmentation_display_state/base';
 import {CHUNKED_GRAPH_LAYER_RPC_ID, CHUNKED_GRAPH_SOURCE_UPDATE_ROOT_SEGMENTS_RPC_ID, ChunkedGraphChunkSource as ChunkedGraphChunkSourceInterface, ChunkedGraphChunkSpecification, RENDER_RATIO_LIMIT} from 'neuroglancer/sliceview/chunked_graph/base';
@@ -113,8 +113,10 @@ export class ChunkedGraphLayer extends GenericSliceViewRenderLayer {
       return Promise.resolve(selection.segmentId);
     }
 
-    const promise = authFetch(`${url}/node/${String(selection.segmentId)}/root?int64_as_str=1${
-        timestamp ? `&timestamp=${timestamp}` : ``}`);
+    const promise = authFetch(
+        `${url}/node/${String(selection.segmentId)}/root?int64_as_str=1${
+            timestamp ? `&timestamp=${timestamp}` : ``}`,
+        {}, responseIdentity, undefined, false);
 
     const response = await this.withErrorMessage(promise, {
       initialMessage: `Retrieving root for segment ${selection.segmentId}`,
@@ -130,13 +132,15 @@ export class ChunkedGraphLayer extends GenericSliceViewRenderLayer {
       return Promise.reject(GRAPH_SERVER_NOT_SPECIFIED);
     }
 
-    const promise = authFetch(`${url}/merge?int64_as_str=1`, {
-      method: 'POST',
-      body: JSON.stringify([
-        [String(first.segmentId), ...first.position.values()],
-        [String(second.segmentId), ...second.position.values()]
-      ])
-    });
+    const promise = authFetch(
+        `${url}/merge?int64_as_str=1`, {
+          method: 'POST',
+          body: JSON.stringify([
+            [String(first.segmentId), ...first.position.values()],
+            [String(second.segmentId), ...second.position.values()]
+          ])
+        },
+        responseIdentity, undefined, false);
 
     const response = await this.withErrorMessage(promise, {
       initialMessage: `Merging ${first.segmentId} and ${second.segmentId}`,
@@ -152,13 +156,15 @@ export class ChunkedGraphLayer extends GenericSliceViewRenderLayer {
       return Promise.reject(GRAPH_SERVER_NOT_SPECIFIED);
     }
 
-    const promise = authFetch(`${url}/split?int64_as_str=1`, {
-      method: 'POST',
-      body: JSON.stringify({
-        'sources': first.map(x => [String(x.segmentId), ...x.position.values()]),
-        'sinks': second.map(x => [String(x.segmentId), ...x.position.values()])
-      })
-    });
+    const promise = authFetch(
+        `${url}/split?int64_as_str=1`, {
+          method: 'POST',
+          body: JSON.stringify({
+            'sources': first.map(x => [String(x.segmentId), ...x.position.values()]),
+            'sinks': second.map(x => [String(x.segmentId), ...x.position.values()])
+          })
+        },
+        responseIdentity, undefined, false);
 
     const response = await this.withErrorMessage(promise, {
       initialMessage: `Splitting ${first.length} sources from ${second.length} sinks`,
@@ -179,13 +185,15 @@ export class ChunkedGraphLayer extends GenericSliceViewRenderLayer {
       return Promise.reject(GRAPH_SERVER_NOT_SPECIFIED);
     }
 
-    const promise = authFetch(`${url}/graph/split_preview?int64_as_str=1`, {
-      method: 'POST',
-      body: JSON.stringify({
-        'sources': first.map(x => [String(x.segmentId), ...x.position.values()]),
-        'sinks': second.map(x => [String(x.segmentId), ...x.position.values()])
-      })
-    });
+    const promise = authFetch(
+        `${url}/graph/split_preview?int64_as_str=1`, {
+          method: 'POST',
+          body: JSON.stringify({
+            'sources': first.map(x => [String(x.segmentId), ...x.position.values()]),
+            'sinks': second.map(x => [String(x.segmentId), ...x.position.values()])
+          })
+        },
+        responseIdentity, undefined, false);
 
     const response = await this.withErrorMessage(promise, {
       initialMessage:

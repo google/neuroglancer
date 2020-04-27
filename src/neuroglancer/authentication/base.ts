@@ -46,7 +46,8 @@ export class AuthenticationError extends Error {
   }
 }
 
-async function authFetchOk(input: RequestInfo, init?: RequestInit): Promise<Response> {
+async function authFetchOk(
+    input: RequestInfo, init?: RequestInit, handleError = true): Promise<Response> {
   try {
     const res = await fetch(input, init);
 
@@ -66,7 +67,7 @@ async function authFetchOk(input: RequestInfo, init?: RequestInit): Promise<Resp
       }
     }
 
-    if (!res.ok) {
+    if (!res.ok && handleError) {
       throw HttpError.fromResponse(res);
     }
 
@@ -83,8 +84,8 @@ async function authFetchOk(input: RequestInfo, init?: RequestInit): Promise<Resp
 
 export async function authFetchWithSharedValue(
     reauthenticate: ReauthFunction, authTokenShared: SharedAuthToken, input: RequestInfo,
-    init: RequestInit,
-    cancellationToken: CancellationToken = uncancelableToken): Promise<Response> {
+    init: RequestInit, cancellationToken: CancellationToken = uncancelableToken,
+    handleError = true): Promise<Response> {
   const aborts: (() => void)[] = [];
   function addCancellationToken(options: any) {
     options = JSON.parse(JSON.stringify(init));
@@ -117,11 +118,11 @@ export async function authFetchWithSharedValue(
   }
 
   try {
-    return await authFetchOk(setAuthQuery(input), addCancellationToken(init));
+    return await authFetchOk(setAuthQuery(input), addCancellationToken(init), handleError);
   } catch (error) {
     if (error instanceof AuthenticationError) {
       await reauthenticate(error.realm, authTokenShared);  // try once after authenticating
-      return await authFetchOk(setAuthQuery(input), addCancellationToken(init));
+      return await authFetchOk(setAuthQuery(input), addCancellationToken(init), handleError);
     } else {
       throw error;
     }
