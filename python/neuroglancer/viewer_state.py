@@ -222,6 +222,7 @@ class CoordinateSpaceTransform(JsonObjectWrapper):
     output_dimensions = outputDimensions = wrapped_property('outputDimensions', CoordinateSpace)
     input_dimensions = inputDimensions = wrapped_property('inputDimensions', optional(CoordinateSpace))
     source_rank = sourceRank = wrapped_property('sourceRank', optional(int))
+    matrix = wrapped_property('matrix', optional(array_wrapper(np.float64)))
 
 def data_source_url(x):
     if isinstance(x, (local_volume.LocalVolume, skeleton.SkeletonSource)):
@@ -229,6 +230,18 @@ def data_source_url(x):
     if not isinstance(x, six.string_types):
         raise TypeError
     return text_type(x)
+
+@export
+class LayerDataSubsource(JsonObjectWrapper):
+    __slots__ = ()
+    supports_validation = True
+
+    def __init__(self, json_data=None, *args, **kwargs):
+        if isinstance(json_data, bool):
+            json_data = {'enabled': json_data}
+        super(LayerDataSubsource, self).__init__(json_data, *args, **kwargs)
+
+    enabled = wrapped_property('enabled', optional(bool))
 
 @export
 class LayerDataSource(JsonObjectWrapper):
@@ -242,6 +255,7 @@ class LayerDataSource(JsonObjectWrapper):
 
     url = wrapped_property('url', data_source_url)
     transform = wrapped_property('transform', optional(CoordinateSpaceTransform))
+    subsources = wrapped_property('subsources', typed_string_map(LayerDataSubsource))
     enable_default_subsources = enableDefaultSubsources = wrapped_property('enableDefaultSubsources', optional(bool, True))
 
 @export
@@ -249,10 +263,11 @@ class LayerDataSources(typed_list(LayerDataSource, validator=LayerDataSource)):
     __slots__ = ()
 
     def __init__(self, json_data=None, **kwargs):
-        if (isinstance(json_data, LayerDataSource) or
-            isinstance(json_data, six.string_types) or
-            isinstance(json_data, (local_volume.LocalVolume, skeleton.SkeletonSource))):
+        if isinstance(json_data, (LayerDataSource, six.string_types, local_volume.LocalVolume,
+                                  skeleton.SkeletonSource, dict)):
             json_data = [json_data]
+        elif isinstance(json_data, LayerDataSources):
+            json_data = json_data.to_json()
         super(LayerDataSources, self).__init__(json_data, **kwargs)
 
 class _AnnotationLayerOptions(object):
@@ -309,6 +324,8 @@ class SegmentationLayer(Layer, _AnnotationLayerOptions):
     cross_section_render_scale = crossSectionRenderScale = wrapped_property(
         'crossSectionRenderScale', optional(float, 1))
     mesh_render_scale = meshRenderScale = wrapped_property('meshRenderScale', optional(float, 10))
+    mesh_silhouette_rendering = meshSilhouetteRendering = wrapped_property('meshSilhouetteRendering', optional(float, 0))
+    segment_query = segmentQuery = wrapped_property('segmentQuery', optional(text_type))
 
     @staticmethod
     def interpolate(a, b, t):

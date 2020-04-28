@@ -74,6 +74,9 @@ class JsonObjectWrapper(object):
     def __deepcopy__(self, memo):
         return type(self)(copy.deepcopy(self.to_json(), memo))
 
+    def __eq__(self, other):
+        return type(self) == type(other) and self.to_json() == other.to_json()
+
     def __repr__(self):
         return u'%s(%s)' % (type(self).__name__, encode_json_for_repr(self.to_json()))
 
