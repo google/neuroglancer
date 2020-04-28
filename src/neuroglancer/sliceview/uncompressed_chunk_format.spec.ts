@@ -36,7 +36,7 @@ describe('sliceview/uncompressed_chunk_format', () => {
       fillSequential(data);
       const dataType = DataType.FLOAT32;
       chunkFormatTest(dataType, volumeSize, gl => {
-        let chunkFormat = ChunkFormat.get(gl, dataType);
+        let chunkFormat = ChunkFormat.get(gl, dataType, 3);
         let textureLayout = chunkFormat.getTextureLayout(gl, volumeSize);
         return [chunkFormat, textureLayout];
       }, data, data);
@@ -57,7 +57,7 @@ describe('sliceview/uncompressed_chunk_format', () => {
         let data = new arrayConstructor(numElements * texelsPerElement);
         getRandomValues(data);
         chunkFormatTest(dataType, volumeSize, gl => {
-          let chunkFormat = ChunkFormat.get(gl, dataType);
+          let chunkFormat = ChunkFormat.get(gl, dataType, 3);
           let textureLayout = chunkFormat.getTextureLayout(gl, volumeSize);
           return [chunkFormat, textureLayout];
         }, data, data);

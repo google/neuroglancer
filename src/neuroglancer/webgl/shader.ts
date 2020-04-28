@@ -292,7 +292,7 @@ export class ShaderBuilder {
 
   allocateTextureUnit(symbol: Symbol, count: number = 1) {
     if (this.textureUnits.has(symbol)) {
-      throw new Error('Duplicate texture unit symbol: ' + symbol);
+      throw new Error('Duplicate texture unit symbol: ' + symbol.toString());
     }
     let old = this.nextTextureUnit;
     this.nextTextureUnit += count;

@@ -15,7 +15,6 @@
  */
 
 import {SingleTextureChunkFormat} from 'neuroglancer/sliceview/single_texture_chunk_format';
-import {glsl_getPositionWithinChunk} from 'neuroglancer/sliceview/volume/renderlayer';
 import {getFortranOrderStrides} from 'neuroglancer/util/array';
 import {TypedArray} from 'neuroglancer/util/array';
 import {DataType} from 'neuroglancer/util/data_type';
@@ -24,6 +23,7 @@ import {vec3, vec3Key} from 'neuroglancer/util/geom';
 import {GL} from 'neuroglancer/webgl/context';
 import {textureTargetForSamplerType} from 'neuroglancer/webgl/shader';
 import {fragmentShaderTest, FragmentShaderTestOutputs} from 'neuroglancer/webgl/shader_testing';
+import {defineChunkDataShaderAccess} from './volume/frontend';
 
 export function chunkFormatTest<TextureLayout extends Disposable>(
     dataType: DataType, volumeSize: Uint32Array,
@@ -50,8 +50,7 @@ export function chunkFormatTest<TextureLayout extends Disposable>(
          let [chunkFormat, textureLayout] = getChunkFormatAndTextureLayout(gl);
          builder.addUniform('highp vec3', 'vChunkPosition');
          builder.addUniform('vec3', 'uChunkDataSize');
-         builder.addFragmentCode(glsl_getPositionWithinChunk);
-         chunkFormat.defineShader(builder, /*numChannelDimensions=*/ 1);
+         defineChunkDataShaderAccess(builder, chunkFormat, 1, 'vChunkPosition');
          {
            let fragmentMain = '';
            for (let channel = 0; channel < numChannels; ++channel) {
