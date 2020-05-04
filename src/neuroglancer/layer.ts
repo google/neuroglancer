@@ -281,7 +281,7 @@ export class LayerManager extends RefCounted {
   private renderLayerToManagedLayerMapGeneration = -1;
   private renderLayerToManagedLayerMap_ = new Map<RenderLayer, ManagedUserLayer>();
 
-  constructor(public messageWithUndo: (message: string, action: string) => void) {
+  constructor(public messageWithUndo: (message: string, action: string, closeAfter?: number) => void) {
     super();
     this.layersChanged.add(this.scheduleRemoveLayersWithSingleRef);
   }
@@ -402,7 +402,7 @@ export class LayerManager extends RefCounted {
 
   remove(index: number) {
     const layer = this.managedLayers[index];
-    this.messageWithUndo(`${layer.name} layer deleted. `, 'Undo?');
+    this.messageWithUndo(`${layer.name} layer deleted. `, 'Undo?', 15000);
     this.unbindManagedLayer(layer);
     this.managedLayers.splice(index, 1);
     this.layerSet.delete(layer);
