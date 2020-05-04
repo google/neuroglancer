@@ -32,62 +32,89 @@ button.ng-saver {
 }
 /* Popup container */
 .ng-popup {
-    position: relative;
-    display: inline-block;
-    cursor: pointer;
-  }
-  
-  /* The actual popup (appears on top) */
-  .ng-popup .ng-popuptext {
-    visibility: hidden;
-    width: 160px;
-    background-color: #555;
-    color: #fff;
-    text-align: center;
-    border-radius: 6px;
-    padding: 8px 0;
-    position: absolute;
-    z-index: 1;
-    bottom: 125%;
-    left: 50%;
-    margin-left: -80px;
-  }
-  
-  /* Popup arrow */
-  .ng-popup .ng-popuptext::after {
-    content: "";
-    position: absolute;
-    top: 100%;
-    left: 50%;
-    margin-left: -5px;
-    border-width: 5px;
-    border-style: solid;
-    border-color: #555 transparent transparent transparent;
-  }
-  
-  /* Toggle this class when clicking on the popup container (hide and show the popup) */
-  .ng-popup .ng-show {
-    visibility: visible;
-    -webkit-animation: fadeIn 1s;
-    animation: fadeIn 1s
-  }
-  
-  /* Add animation (fade in the popup) */
-  @-webkit-keyframes fadeIn {
-    from {opacity: 0;}
-    to {opacity: 1;}
-  }
-  
-  @keyframes fadeIn {
-    from {opacity: 0;}
-    to {opacity:1 ;}
-  }
+  position: relative;
+  display: inline-block;
+  cursor: pointer;
+}
 
-  .ng-zebra-table td, .ng-zebra-table th {
-    border: 1px solid #ddd;
-    padding: 8px;
-  }
-  
-  .ng-zebra-table tr:nth-child(even){background-color: #f2f2f2;}
-  
-  .ng-zebra-table tr:hover {background-color: #ddd;}
+/* The actual popup (appears on top) */
+.ng-popup .ng-popuptext {
+  visibility: hidden;
+  width: 160px;
+  background-color: #555;
+  color: #fff;
+  text-align: center;
+  border-radius: 6px;
+  padding: 8px 0;
+  position: absolute;
+  z-index: 1;
+  bottom: 125%;
+  left: 50%;
+  margin-left: -80px;
+}
+
+/* Popup arrow */
+.ng-popup .ng-popuptext::after {
+  content: "";
+  position: absolute;
+  top: 100%;
+  left: 50%;
+  margin-left: -5px;
+  border-width: 5px;
+  border-style: solid;
+  border-color: #555 transparent transparent transparent;
+}
+
+/* Toggle this class when clicking on the popup container (hide and show the popup) */
+.ng-popup .ng-show {
+  visibility: visible;
+  -webkit-animation: fadeIn 1s;
+  animation: fadeIn 1s
+}
+
+/* Add animation (fade in the popup) */
+@-webkit-keyframes fadeIn {
+  from {opacity: 0;}
+  to {opacity: 1;}
+}
+
+@keyframes fadeIn {
+  from {opacity: 0;}
+  to {opacity:1 ;}
+}
+
+.ng-zebra-table td, .ng-zebra-table th {
+  border: 1px solid #ddd;
+  padding: 8px;
+}
+
+.ng-zebra-table tr:nth-child(even){background-color: #f2f2f2;}
+
+.ng-zebra-table tr:hover {background-color: #ddd;}
+
+.ng-hidden {display: none;}
+
+.ng-dark, .ng-dark button, .ng-dark input{
+  font-family : Roboto;
+  color: #EEEEEE;
+  background-color: #222222;
+}
+
+.ng-dark div {
+  margin-top: 5px;
+  margin-bottom: 5px;
+}
+
+.ng-dark button.copy_button {
+  background : -moz-linear-gradient(17.04% -35.28% -45deg,rgba(15, 177, 139, 1) 0%,rgba(11, 167, 151, 1) 23.12%,rgba(4, 151, 168, 1) 67.21%,rgba(2, 146, 174, 1) 100%);
+  background : -webkit-linear-gradient(-45deg, rgba(15, 177, 139, 1) 0%, rgba(11, 167, 151, 1) 23.12%, rgba(4, 151, 168, 1) 67.21%, rgba(2, 146, 174, 1) 100%);
+  background : -webkit-gradient(linear,17.04% -35.28% ,82.96% 135.28% ,color-stop(0,rgba(15, 177, 139, 1) ),color-stop(0.2312,rgba(11, 167, 151, 1) ),color-stop(0.6721,rgba(4, 151, 168, 1) ),color-stop(1,rgba(2, 146, 174, 1) ));
+  background : -o-linear-gradient(-45deg, rgba(15, 177, 139, 1) 0%, rgba(11, 167, 151, 1) 23.12%, rgba(4, 151, 168, 1) 67.21%, rgba(2, 146, 174, 1) 100%);
+  background : -ms-linear-gradient(-45deg, rgba(15, 177, 139, 1) 0%, rgba(11, 167, 151, 1) 23.12%, rgba(4, 151, 168, 1) 67.21%, rgba(2, 146, 174, 1) 100%);
+  -ms-filter: "progid:DXImageTransform.Microsoft.gradient(startColorstr='#0FB18B', endColorstr='#0292AE' ,GradientType=0)";
+  background : linear-gradient(135deg, rgba(15, 177, 139, 1) 0%, rgba(11, 167, 151, 1) 23.12%, rgba(4, 151, 168, 1) 67.21%, rgba(2, 146, 174, 1) 100%);
+  border-radius : 12px;
+  -moz-border-radius : 12px;
+  -webkit-border-radius : 12px;
+  filter: progid:DXImageTransform.Microsoft.gradient(startColorstr='#0FB18B',endColorstr='#0292AE' , GradientType=1);
+}
