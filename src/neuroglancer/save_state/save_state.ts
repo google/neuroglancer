@@ -301,10 +301,16 @@ class SaveDialog extends Overlay {
 
     const viewSimple = document.createElement('div');
     {
-      // viewSimple.append(this.makePopup('JSON_URL'));
+      viewSimple.append(this.makePopup('JSON_URL'));
       this.insertField(
           viewSimple, 'JSON_URL', jsonUrl, 'neuroglancer-save-state-json',
           jsonUrl === 'NOT AVAILABLE', 'Copy', 'CTRL + SHIFT + J', undefined, 'copy_button');
+      viewSimple.append(br());
+      viewSimple.append(this.makePopup('RAW_URL'));
+      this.insertLabel(viewSimple, 'Long Link', 'neuroglancer-save-state-raw');
+      this.insertField(
+          viewSimple, 'RAW_URL', rawUrl, 'neuroglancer-save-state-raw', false, 'Copy',
+          'CTRL + SHIFT + R', undefined, 'copy_button');
     }
 
     const advanceTab = document.createElement('button');
@@ -316,12 +322,14 @@ class SaveDialog extends Overlay {
     });
     {
       viewAdvanc.classList.add('ng-hidden');
-      // viewAdvanc.append(this.makePopup('RAW_URL'));
+      /*
+      viewAdvanc.append(this.makePopup('RAW_URL'));
       // viewAdvanc.append(br());
-      this.insertLabel(viewAdvanc, 'Raw Link', 'neuroglancer-save-state-raw');
+      this.insertLabel(viewAdvanc, 'Long Link', 'neuroglancer-save-state-raw');
       this.insertField(
           viewAdvanc, 'RAW_URL', rawUrl, 'neuroglancer-save-state-raw', false, 'Copy',
-          'CTRL + SHIFT + R', undefined, 'copy_button');
+        'CTRL + SHIFT + R', undefined, 'copy_button');
+      */
       viewAdvanc.append(br());
       this.insertLabel(viewAdvanc, 'Link Shortener', 'neuroglancer-save-state-linkshare');
       this.insertField(
