@@ -50,7 +50,7 @@ button.ng-saver {
   z-index: 1;
   bottom: 125%;
   left: 50%;
-  margin-left: -80px;
+  margin-left: 80px;
 }
 
 /* Popup arrow */
@@ -120,6 +120,10 @@ input.rounded-input {
   max-height: 22px;
 }
 
+input.rounded-input.disabled {
+  color: #888888
+}
+
 .ng-dark button.copy_button {
   background : -moz-linear-gradient(17.04% -35.28% -45deg,rgba(15, 177, 139, 1) 0%,rgba(11, 167, 151, 1) 23.12%,rgba(4, 151, 168, 1) 67.21%,rgba(2, 146, 174, 1) 100%);
   background : -webkit-linear-gradient(-45deg, rgba(15, 177, 139, 1) 0%, rgba(11, 167, 151, 1) 23.12%, rgba(4, 151, 168, 1) 67.21%, rgba(2, 146, 174, 1) 100%);
@@ -128,20 +132,32 @@ input.rounded-input {
   background : -ms-linear-gradient(-45deg, rgba(15, 177, 139, 1) 0%, rgba(11, 167, 151, 1) 23.12%, rgba(4, 151, 168, 1) 67.21%, rgba(2, 146, 174, 1) 100%);
   -ms-filter: "progid:DXImageTransform.Microsoft.gradient(startColorstr='#0FB18B', endColorstr='#0292AE' ,GradientType=0)";
   background : linear-gradient(135deg, rgba(15, 177, 139, 1) 0%, rgba(11, 167, 151, 1) 23.12%, rgba(4, 151, 168, 1) 67.21%, rgba(2, 146, 174, 1) 100%);
+  filter: progid:DXImageTransform.Microsoft.gradient(startColorstr='#0FB18B',endColorstr='#0292AE' , GradientType=1);
+  border: none;
+}
+
+.ng-dark button.copy_button.disabled {
+  background: #888888;
+  color: #222222;
+}
+
+.ng-dark button.copy_button, .ng-dark button.shorten_button {
   border-radius : 12px;
   -moz-border-radius : 12px;
   -webkit-border-radius : 12px;
-  filter: progid:DXImageTransform.Microsoft.gradient(startColorstr='#0FB18B',endColorstr='#0292AE' , GradientType=1);
   margin-left: 49px;
   max-height: 35px;
-  border: none;
   border-radius: 8px;
   font-size: 16px;
   padding: 7px 17px;
   align-content: center;
 }
 
-.special-button {
+.ng-dark button.shorten_button {
+  border-color: #eeeeee;
+}
+
+button.special-button {
   border: none;
   font-style: italic;
   padding: 1px 1px;

@@ -253,13 +253,32 @@ export class SaveState extends RefCounted {
   }
 }
 
+/*form: HTMLElement, popupID?: string, content?:
+string, textId?: string, disabled = false, fieldTitle = '', btnName?: string, btnTitle?: string,
+btnAct?: EventListener, btnClass?: string, readonly = true, newLine = true */
+type FieldConfig = {
+  form: HTMLElement,
+  popupID?: string,
+  content?: string,
+  textId?: string,
+  disabled?: boolean,
+  fieldTitle?: string,
+  btnName?: string,
+  btnTitle?: string,
+  btnAct?: EventListener,
+  btnClass?: string,
+  readonly?: boolean,
+  newLine?: boolean
+};
+
 class SaveDialog extends Overlay {
   constructor(public viewer: Viewer, jsonString?: string, getUrlType?: UrlType) {
     super();
     const br = () => document.createElement('br');
+    const jsonURLDefault = `LINK SHORTNER INACCESSIBLE`;
 
     const urlStart = `${window.location.origin}${window.location.pathname}`;
-    const jsonUrl = jsonString ? `${urlStart}?json_url=${jsonString}` : `NOT AVAILABLE`;
+    const jsonUrl = jsonString ? `${urlStart}?json_url=${jsonString}` : jsonURLDefault;
     const rawUrl = `${urlStart}#!${viewer.hashBinding!.returnURLHash()}`;
 
     const existingShareDialog = document.getElementById('neuroglancer-save-state-json');
@@ -269,7 +288,7 @@ class SaveDialog extends Overlay {
 
     if (getUrlType) {
       const copyString = getUrlType === UrlType.json ? jsonUrl : rawUrl;
-      if (copyString !== 'NOT AVAILABLE') {
+      if (copyString !== jsonURLDefault) {
         const text = document.createElement('input');
         document.body.append(text);
         text.type = 'text';
@@ -289,7 +308,7 @@ class SaveDialog extends Overlay {
       return;
     }
 
-    let form = document.createElement('form');
+    let formMain = document.createElement('form');
     let {content} = this;
     content.style.overflow = 'visible';
     content.classList.add('ng-dark');
@@ -304,15 +323,18 @@ class SaveDialog extends Overlay {
     const viewSimple = document.createElement('div');
     {
       viewSimple.append(this.makePopup('JSON_URL'));
-      this.insertField(
-          viewSimple, 'JSON_URL', jsonUrl, 'neuroglancer-save-state-json',
-          jsonUrl === 'NOT AVAILABLE', 'Copy', 'CTRL + SHIFT + J', undefined, 'copy_button');
-      viewSimple.append(br());
-      viewSimple.append(this.makePopup('RAW_URL'));
-      this.insertLabel(viewSimple, 'Long Link', 'neuroglancer-save-state-raw');
-      this.insertField(
-          viewSimple, 'RAW_URL', rawUrl, 'neuroglancer-save-state-raw', false, 'Copy',
-          'CTRL + SHIFT + R', undefined, 'copy_button');
+      this.insertField({
+        form: viewSimple,
+        popupID: `ng-save-popup-${'JSON_URL'}`,
+        content: jsonUrl,
+        textId: 'neuroglancer-save-state-json',
+        disabled: jsonUrl === jsonURLDefault,
+        fieldTitle:
+            'This link points to a location where the state is saved with a server defined in "Advanced Options"',
+        btnName: 'Copy',
+        btnTitle: 'CTRL + SHIFT + J',
+        btnClass: 'copy_button'
+      });
     }
 
     const advanceTab = document.createElement('button');
@@ -324,47 +346,39 @@ class SaveDialog extends Overlay {
       viewAdvanc.classList.toggle('ng-hidden');
     });
     {
-      viewAdvanc.classList.add('ng-hidden');
-      /*
+      viewAdvanc.classList.toggle('ng-hidden', jsonUrl !== jsonURLDefault);
       viewAdvanc.append(this.makePopup('RAW_URL'));
-      // viewAdvanc.append(br());
       this.insertLabel(viewAdvanc, 'Long Link', 'neuroglancer-save-state-raw');
-      this.insertField(
-          viewAdvanc, 'RAW_URL', rawUrl, 'neuroglancer-save-state-raw', false, 'Copy',
-        'CTRL + SHIFT + R', undefined, 'copy_button');
-      */
+
+      this.insertField({
+        form: viewAdvanc,
+        popupID: `ng-save-popup-${'RAW_URL'}`,
+        content: rawUrl,
+        textId: 'neuroglancer-save-state-raw',
+        fieldTitle:
+            'This link contains the whole state, does not involve a server but might be too long to copy and share.',
+        btnName: 'Copy',
+        btnTitle: 'CTRL + SHIFT + R',
+        btnClass: 'copy_button'
+      });
       viewAdvanc.append(br());
       this.insertLabel(viewAdvanc, 'Link Shortener', 'neuroglancer-save-state-linkshare');
-      this.insertField(
-          viewAdvanc, '', viewer.jsonStateServer.value, 'neuroglancer-save-state-linkshare', false,
-          'Shorten', 'Push to state server to get JSON URL.', () => {
-            const field =
-                <HTMLInputElement>document.getElementById('neuroglancer-save-state-linkshare');
-            const fieldBtn = <HTMLButtonElement>document.getElementById(
-                'neuroglancer-save-state-linkshare-button');
-            viewer.jsonStateServer.value = field ? field.value : '';
-            if (viewer.jsonStateServer.value && fieldBtn) {
-              fieldBtn.disabled = true;
-              saverToggle(false);
-              const restoreSaving = () => {
-                try {
-                  this.dispose();
-                } catch {
-                }
-                saverToggle(true);
-              };
-              viewer.postJsonState(true, undefined, true, restoreSaving);
-            }
-          }, '', false);
-      /*const pushButton = document.createElement('button');
-      {
-        pushButton.innerText = 'Push State to Server';
-        pushButton.title = 'Push to state server to get JSON URL.';
-        pushButton.type = 'button';
-        pushButton.addEventListener('click', () => {
-          viewer.promptJsonStateServer('Please enter the state server to access.');
-          if (viewer.jsonStateServer.value) {
-            pushButton.disabled = true;
+      this.insertField({
+        form: viewAdvanc,
+        popupID: '',
+        content: viewer.jsonStateServer.value,
+        textId: 'neuroglancer-save-state-linkshare',
+        fieldTitle: '',
+        btnName: 'Shorten',
+        btnTitle: 'Push to state server to get JSON URL.',
+        btnAct: () => {
+          const field =
+              <HTMLInputElement>document.getElementById('neuroglancer-save-state-linkshare');
+          const fieldBtn = <HTMLButtonElement>document.getElementById(
+              'neuroglancer-save-state-linkshare-button');
+          viewer.jsonStateServer.value = field ? field.value : '';
+          if (viewer.jsonStateServer.value && fieldBtn) {
+            fieldBtn.disabled = true;
             saverToggle(false);
             const restoreSaving = () => {
               try {
@@ -375,8 +389,9 @@ class SaveDialog extends Overlay {
             };
             viewer.postJsonState(true, undefined, true, restoreSaving);
           }
-        });
-      }*/
+        },
+        btnClass: 'shorten_button'
+      });
 
       const clearButton = document.createElement('button');
       {
@@ -393,58 +408,61 @@ class SaveDialog extends Overlay {
       }
     }
 
-    form.append(title, descr, viewSimple, br(), advanceTab, viewAdvanc);
-    /*const pushButtonContainer = document.createElement('div');
-    pushButtonContainer.style.textAlign = 'right';
-    pushButtonContainer.style.marginBottom = '5px';
-    pushButtonContainer.append(pushButton, ' ', clearButton);
-    content.append(pushButtonContainer);*/
+    formMain.append(title, descr, viewSimple, br(), advanceTab, viewAdvanc);
 
     let modal = document.createElement('div');
     content.appendChild(modal);
 
-    modal.appendChild(form);
+    modal.appendChild(formMain);
 
     modal.onblur = () => this.dispose();
     modal.focus();
   }
 
-  insertField(
-      form: HTMLElement, popupID?: string, content?: string, textId?: string, disabled = false,
-      btnName?: string, btnTitle?: string, btnAct?: EventListener, btnClass?: string,
-      readonly = true, newLine = true) {
+  insertField(config: FieldConfig) {
+    const {form} = config;
+    let {content, textId, fieldTitle, disabled} = config;
+    let {btnName, btnTitle, btnAct, btnClass} = config;
+    let {readonly, newLine, popupID} = config;
+
     let text = document.createElement('input');
+    text.readOnly = readonly === undefined ? true : readonly;
+    text.type = 'text';
+    text.value = content || '';
+    text.size = 100;
+    text.disabled = !!disabled;
+    text.title = fieldTitle || '';
+    text.classList.add('rounded-input');
+    text.classList.toggle('disabled', !!disabled);
+
     const btn = document.createElement('button');
     btn.type = 'button';
     btn.className = btnClass || '';
-    if (btnAct) {
+    btn.classList.toggle('disabled', !!disabled);
+    btn.disabled = !!disabled;
+    if (btnAct && !disabled) {
       btn.addEventListener('click', btnAct);
     }
     btn.innerText = btnName || '';
     btn.title = btnTitle || '';
-    text.readOnly = readonly;
-    text.type = 'text';
-    text.value = content || '';
-    text.size = 100;
-    text.disabled = disabled;
+
     if (textId) {
       text.id = textId;
       btn.id = `${text.id}-button`;
     }
-    text.classList.add('rounded-input');
 
     if (popupID) {
       const copyFtn = () => {
         text.select();
         document.execCommand('copy');
-        let popup = document.getElementById(popupID);
+        let popup = document.getElementById(popupID!);
         if (popup) {
           popup.classList.add('ng-show');
         }
       };
       text.addEventListener('click', copyFtn);
       text.addEventListener('blur', () => {
-        let popup = document.getElementById(popupID);
+        let popup = document.getElementById(popupID!);
         if (popup) {
           popup.classList.remove('ng-show');
         }
@@ -453,7 +471,8 @@ class SaveDialog extends Overlay {
         btn.addEventListener('click', copyFtn);
       }
     }
-    form.append(text, ' ', btn, newLine ? document.createElement('br') : '');
+    form.append(
+        text, ' ', btn, (newLine || newLine === undefined) ? document.createElement('br') : '');
   }
 
   insertLabel(form: HTMLElement, label: string, targetId: string, newLine = true) {
