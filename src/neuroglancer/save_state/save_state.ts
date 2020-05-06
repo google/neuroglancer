@@ -369,6 +369,7 @@ class SaveDialog extends Overlay {
         content: viewer.jsonStateServer.value,
         textId: 'neuroglancer-save-state-linkshare',
         fieldTitle: '',
+        readonly: false,
         btnName: 'Shorten',
         btnTitle: 'Push to state server to get JSON URL.',
         btnAct: () => {
