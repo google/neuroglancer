@@ -66,11 +66,11 @@ the following format:
     corresponds to the axis-aligned bounding box within the "stored model" coordinate space with an
     origin of: `grid_origin + [x, y, z] * chunk_shape * (2**lod)` and a shape of `chunk_shape *
     (2**lod)`.
-  - `fragment_offfsets`: ``num_fragments_per_lod[lod]` uint32le, specifies the size in bytes of the
+  - `fragment_offsets`: `num_fragments_per_lod[lod]` uint32le, specifies the size in bytes of the
     encoded mesh fragment in the [mesh fragment data
     file](#multi-resolution-mesh-fragment-data-file-format) corresponding to each octree node in the
     `fragment_positions` array.  The starting offset of the encoded mesh data corresponding to a
-    given octree node is equal to the sum of all prior `fragment_positions` values.
+    given octree node is equal to the sum of all prior `fragment_offsets` values.
     
 #### Unsharded storage of multi-resolution mesh manifest
     
