@@ -111,7 +111,7 @@ button.ng-saver {
 }
 
 input.rounded-input {
-  padding: 5px;
+  padding: 8px;
   padding-right: 19px;
   border-radius: 8px;
   border-width: 1px;
@@ -146,10 +146,10 @@ input.rounded-input.disabled {
   -moz-border-radius : 12px;
   -webkit-border-radius : 12px;
   margin-left: 49px;
-  max-height: 35px;
+  max-height: 34px;
   border-radius: 8px;
   font-size: 16px;
-  padding: 7px 17px;
+  padding: 8px 17px;
   align-content: center;
 }
 
