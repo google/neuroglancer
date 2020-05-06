@@ -298,6 +298,8 @@ class SaveDialog extends Overlay {
     title.innerText = 'Share Link';
     const descr = document.createElement('div');
     descr.innerText = 'This link lets you share the exact view you currently see in neuroglancer.';
+    descr.style.paddingBottom = '10px';
+    descr.style.maxWidth = '360px';
 
     const viewSimple = document.createElement('div');
     {
@@ -316,6 +318,7 @@ class SaveDialog extends Overlay {
     const advanceTab = document.createElement('button');
     advanceTab.innerHTML = 'Advanced Options';
     advanceTab.type = 'button';
+    advanceTab.classList.add('special-button');
     const viewAdvanc = document.createElement('div');
     advanceTab.addEventListener('click', () => {
       viewAdvanc.classList.toggle('ng-hidden');
@@ -428,6 +431,7 @@ class SaveDialog extends Overlay {
       text.id = textId;
       btn.id = `${text.id}-button`;
     }
+    text.classList.add('rounded-input');
 
     if (popupID) {
       const copyFtn = () => {

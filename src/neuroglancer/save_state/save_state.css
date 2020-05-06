@@ -100,9 +100,24 @@ button.ng-saver {
   background-color: #222222;
 }
 
+.ng-dark {
+  border-radius: 8px;
+  padding: 46px;
+}
+
 .ng-dark div {
   margin-top: 5px;
   margin-bottom: 5px;
+}
+
+input.rounded-input {
+  padding: 5px;
+  padding-right: 19px;
+  border-radius: 8px;
+  border-width: 1px;
+  border-color: #eeeeee;
+  max-width: 200px;
+  max-height: 22px;
 }
 
 .ng-dark button.copy_button {
@@ -117,4 +132,19 @@ button.ng-saver {
   -moz-border-radius : 12px;
   -webkit-border-radius : 12px;
   filter: progid:DXImageTransform.Microsoft.gradient(startColorstr='#0FB18B',endColorstr='#0292AE' , GradientType=1);
+  margin-left: 49px;
+  max-height: 35px;
+  border: none;
+  border-radius: 8px;
+  font-size: 16px;
+  padding: 7px 17px;
+  align-content: center;
+}
+
+.special-button {
+  border: none;
+  font-style: italic;
+  padding: 1px 1px;
+  font-size: 14px;
+  font-weight: bolder;
 }
