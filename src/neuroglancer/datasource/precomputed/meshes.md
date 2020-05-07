@@ -90,7 +90,7 @@ nodes specified in the manifest file, in the same order the nodes are specified 
 starting with `lod` 0.  Each mesh fragment is a [Draco](https://google.github.io/draco/)-encoded
 triangular mesh with a 3-component integer vertex position attribute.  Each position component `j`
 must be in the range `[0, 2**vertex_quantization_bits)`, where a value of `x` corresponds to
-`grid_origin[i] + (fragmentPosition[i] + x / (2**vertex_quantization_bits-1) * (2**lod)`.  The
+`grid_origin[i] + chunk_shape[i] * (fragmentPosition[i] + x / (2**vertex_quantization_bits-1)) * (2**lod)`.  The
 built-in Draco attribute quantization is not supported.
 
 Each mesh fragment for `lod > 0` must be partitioned by a `2x2x2` grid such that no triangle crosses
