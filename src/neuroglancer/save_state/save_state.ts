@@ -394,6 +394,7 @@ class SaveDialog extends Overlay {
         btnClass: 'shorten_button'
       });
 
+      /* TODO: This button may be renabled in the future
       const clearButton = document.createElement('button');
       {
         clearButton.innerText = '⚠️ Clear States';
@@ -407,6 +408,9 @@ class SaveDialog extends Overlay {
           }
         });
       }
+      viewAdvanc.append(br());
+      viewAdvanc.append(clearButton);
+      */
     }
 
     formMain.append(title, descr, viewSimple, br(), advanceTab, viewAdvanc);
