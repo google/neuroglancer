@@ -46,7 +46,7 @@ export class SaveState extends RefCounted {
     }
   }
   // Main Methods
-  pull() {
+  public pull() {
     // Get SaveEntry from localStorage
     if (storageAccessible() && this.key) {
       const entry = localStorage[`${stateKey}-${this.key}`];
@@ -56,7 +56,7 @@ export class SaveState extends RefCounted {
     }
     return;
   }
-  push(clean?: boolean) {
+  public push(clean?: boolean) {
     // update SaveEntry in localStorage
     if (storageAccessible() && this.key) {
       const source = <SaveEntry>this.pull() || {};
@@ -83,7 +83,7 @@ export class SaveState extends RefCounted {
       this.notifyManager();
     }
   }
-  commit(source_url: string) {
+  public commit(source_url: string) {
     if (this.key) {
       this.savedUrl = source_url;
       this.addToHistory(recordHistory(source_url));
@@ -173,10 +173,10 @@ export class SaveState extends RefCounted {
   overwriteHistory(newHistory: SaveHistory[] = []) {
     this.robustSet(historyKey, JSON.stringify(newHistory));
   }
-  showSaveDialog(viewer: Viewer, jsonString?: string, get?: UrlType) {
+  public showSaveDialog(viewer: Viewer, jsonString?: string, get?: UrlType) {
     new SaveDialog(viewer, jsonString, get);
   }
-  showHistory(viewer: Viewer) {
+  public showHistory(viewer: Viewer) {
     new SaveHistoryDialog(viewer, this);
   }
   // Helper
