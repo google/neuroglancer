@@ -54,7 +54,7 @@ the following format:
 - `lod_scales`: `num_lods` float32le, specifies the scale in "stored model" spatial units
   corresponding to each level of detail.  Each scale value is multiplied by the
   `lod_scale_multiplier` value from the `info` JSON file.
-- `vertex_offsets`: `num_lods*3` float32le, as a C order `[vertex_offsets, 3]` array specifying an
+- `vertex_offsets`: `num_lods*3` float32le, as a C order `[num_lods, 3]` array specifying an
   offset (in the "stored model" coordinate space) to add to vertex positions for each level of
   detail.
 - `num_fragments_per_lod`: `num_lods` uint32le, specifies the number of fragments (octree nodes) for
@@ -89,9 +89,17 @@ The mesh fragment data files consist of the concatenation of the encoded mesh da
 nodes specified in the manifest file, in the same order the nodes are specified in the index file,
 starting with `lod` 0.  Each mesh fragment is a [Draco](https://google.github.io/draco/)-encoded
 triangular mesh with a 3-component integer vertex position attribute.  Each position component `j`
-must be in the range `[0, 2**vertex_quantization_bits)`, where a value of `x` corresponds to
-`grid_origin[i] + chunk_shape[i] * (fragmentPosition[i] + x / (2**vertex_quantization_bits-1)) * (2**lod)`.  The
-built-in Draco attribute quantization is not supported.
+must be a value `x` in the range `[0, 2**vertex_quantization_bits)`, which corresponds to a "stored
+model" coordinate of:
+
+```
+grid_origin[j] +
+vertex_offsets[lod,j] +
+chunk_shape[j] * (2**lod) * (fragmentPosition[j] +
+                             x / ((2**vertex_quantization_bits)-1))
+```
+
+The built-in Draco attribute quantization is not supported.
 
 Each mesh fragment for `lod > 0` must be partitioned by a `2x2x2` grid such that no triangle crosses
 a grid boundary (but may be incident to a grid boundary).
