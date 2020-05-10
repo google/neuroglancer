@@ -44,6 +44,7 @@ export class Uint64MapEntry {
     } else {
       baseString = `${key}→${value}`;
     }
+    if (label === undefined) return baseString;
     return `${baseString} ${label}`;
   }
 }
