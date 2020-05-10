@@ -16,7 +16,7 @@
 
 import 'neuroglancer/render_layer_backend';
 
-import {Chunk, ChunkConstructor, ChunkRenderLayerBackend, ChunkSource, withChunkManager} from 'neuroglancer/chunk_manager/backend';
+import {Chunk, ChunkConstructor, ChunkRenderLayerBackend, ChunkSource, getNextMarkGeneration, withChunkManager} from 'neuroglancer/chunk_manager/backend';
 import {ChunkPriorityTier, ChunkState} from 'neuroglancer/chunk_manager/base';
 import {SharedWatchableValue} from 'neuroglancer/shared_watchable_value';
 import {filterVisibleSources, forEachPlaneIntersectingVolumetricChunk, MultiscaleVolumetricDataRenderLayer, SLICEVIEW_ADD_VISIBLE_LAYER_RPC_ID, SLICEVIEW_REMOVE_VISIBLE_LAYER_RPC_ID, SLICEVIEW_RENDERLAYER_RPC_ID, SLICEVIEW_RPC_ID, SliceViewBase, SliceViewChunkSource as SliceViewChunkSourceInterface, SliceViewChunkSpecification, SliceViewRenderLayer as SliceViewRenderLayerInterface, TransformedSource} from 'neuroglancer/sliceview/base';
@@ -93,14 +93,16 @@ export class SliceViewBackend extends SliceViewIntermediateBase {
 
     const chunkSize = tempChunkSize;
 
+    const curVisibleChunks: SliceViewChunk[] = [];
     this.velocityEstimator.addSample(this.projectionParameters.value.globalPosition);
-
     for (const [layer, visibleLayerSources] of this.visibleLayers) {
       chunkManager.registerLayer(layer);
       const {visibleSources} = visibleLayerSources;
       for (let i = 0, numVisibleSources = visibleSources.length; i < numVisibleSources; ++i) {
         const tsource = visibleSources[i];
-        const prefetchOffsets = getPrefetchChunkOffsets(this.velocityEstimator, tsource);
+        const prefetchOffsets = chunkManager.queueManager.enablePrefetch.value ?
+            getPrefetchChunkOffsets(this.velocityEstimator, tsource) :
+            [];
         const {chunkLayout} = tsource;
         chunkLayout.globalToLocalSpatial(localCenter, centerDataPosition);
         const {size, finiteRank} = chunkLayout;
@@ -111,6 +113,8 @@ export class SliceViewBackend extends SliceViewIntermediateBase {
         }
         const priorityIndex = i;
         const sourceBasePriority = basePriority + SCALE_PRIORITY_MULTIPLIER * priorityIndex;
+        curVisibleChunks.length = 0;
+        const curMarkGeneration = getNextMarkGeneration();
         forEachPlaneIntersectingVolumetricChunk(
             projectionParameters, tsource.renderLayer.localPosition.value, tsource,
             positionInChunks => {
@@ -123,30 +127,45 @@ export class SliceViewBackend extends SliceViewIntermediateBase {
               if (chunk.state === ChunkState.GPU_MEMORY) {
                 ++layer.numVisibleChunksAvailable;
               }
-              for (let j = 0, length = prefetchOffsets.length; j < length; j += 5) {
-                const chunkDim = prefetchOffsets[j];
-                const minChunk = prefetchOffsets[j + 2];
-                const maxChunk = prefetchOffsets[j + 3];
-                const newPriority = prefetchOffsets[j + 4];
-                const oldIndex = curPositionInChunks[chunkDim];
-                const newIndex = oldIndex + prefetchOffsets[j + 1];
-                if (newIndex < minChunk || newIndex > maxChunk) {
-                  continue;
-                }
-                curPositionInChunks[chunkDim] = newIndex;
-                chunk = tsource.source.getChunk(curPositionInChunks);
-                curPositionInChunks[chunkDim] = oldIndex;
-                if (!Number.isFinite(newPriority)) {
-                  debugger;
-                }
-                chunkManager.requestChunk(
-                    chunk, ChunkPriorityTier.PREFETCH, sourceBasePriority + newPriority);
-                ++layer.numPrefetchChunksNeeded;
-                if (chunk.state === ChunkState.GPU_MEMORY) {
-                  ++layer.numPrefetchChunksAvailable;
-                }
-              }
+              curVisibleChunks.push(chunk);
+              // Mark visible chunks to avoid duplicate work when prefetching.  Once we hit a
+              // visible chunk, we don't continue prefetching in the same direction.
+              chunk.markGeneration = curMarkGeneration;
             });
+        const {curPositionInChunks} = tsource;
+        for (const visibleChunk of curVisibleChunks) {
+          curPositionInChunks.set(visibleChunk.chunkGridPosition);
+          for (let j = 0, length = prefetchOffsets.length; j < length;) {
+            const chunkDim = prefetchOffsets[j];
+            const minChunk = prefetchOffsets[j + 2];
+            const maxChunk = prefetchOffsets[j + 3];
+            const newPriority = prefetchOffsets[j + 4];
+            const jumpOffset = prefetchOffsets[j + 5];
+            const oldIndex = curPositionInChunks[chunkDim];
+            const newIndex = oldIndex + prefetchOffsets[j + 1];
+            if (newIndex < minChunk || newIndex > maxChunk) {
+              j = jumpOffset;
+              continue;
+            }
+            curPositionInChunks[chunkDim] = newIndex;
+            const chunk = tsource.source.getChunk(curPositionInChunks);
+            curPositionInChunks[chunkDim] = oldIndex;
+            if (chunk.markGeneration === curMarkGeneration) {
+              j = jumpOffset;
+              continue;
+            }
+            if (!Number.isFinite(newPriority)) {
+              debugger;
+            }
+            chunkManager.requestChunk(
+                chunk, ChunkPriorityTier.PREFETCH, sourceBasePriority + newPriority);
+            ++layer.numPrefetchChunksNeeded;
+            if (chunk.state === ChunkState.GPU_MEMORY) {
+              ++layer.numPrefetchChunksAvailable;
+            }
+            j += PREFETCH_ENTRY_SIZE;
+          }
+        }
       }
     }
   }
@@ -344,6 +363,8 @@ const MAX_SINGLE_DIRECTION_PREFETCH_CHUNKS =
 // probability, skip prefetching it.
 const PREFETCH_PROBABILITY_CUTOFF = 0.05;
 
+const PREFETCH_ENTRY_SIZE = 6;
+
 function getPrefetchChunkOffsets(
     velocityEstimator: VelocityEstimator, tsource: TransformedSource): number[] {
   const offsets: number[] = [];
@@ -380,20 +401,30 @@ function getPrefetchChunkOffsets(
     const curChunk = tsource.curPositionInChunks[chunkDim];
     const minChunk = Math.floor(tsource.lowerClipBound[chunkDim] / chunkSize);
     const maxChunk = Math.ceil(tsource.upperClipBound[chunkDim] / chunkSize) - 1;
+    let groupStart = offsets.length;
     for (let i = 1; i <= MAX_SINGLE_DIRECTION_PREFETCH_CHUNKS; ++i) {
       if (!isDisplayDimension && curChunk + i > maxChunk) break;
       const probability = 1 - cdf(i - initialFraction);
       // Probability that chunk `curChunk + i` will be needed within `PREFETCH_MS`.
       if (probability < PREFETCH_PROBABILITY_CUTOFF) break;
-      offsets.push(chunkDim, i, minChunk, maxChunk, probability);
+      offsets.push(chunkDim, i, minChunk, maxChunk, probability, 0);
     }
+    let newGroupStart = offsets.length;
+    for (let i = groupStart, end = offsets.length; i < end; i += PREFETCH_ENTRY_SIZE) {
+      offsets[i + PREFETCH_ENTRY_SIZE - 1] = newGroupStart;
+    }
+    groupStart = newGroupStart;
 
     for (let i = 1; i <= MAX_SINGLE_DIRECTION_PREFETCH_CHUNKS; ++i) {
       if (!isDisplayDimension && curChunk - i < minChunk) break;
       const probability = cdf(-i + 1 - initialFraction);
       // Probability that chunk `curChunk - i` will be needed within `PREFETCH_MS`.
       if (probability < PREFETCH_PROBABILITY_CUTOFF) break;
-      offsets.push(chunkDim, -i, minChunk, maxChunk, probability);
+      offsets.push(chunkDim, -i, minChunk, maxChunk, probability, 0);
+    }
+    newGroupStart = offsets.length;
+    for (let i = groupStart, end = offsets.length; i < end; i += PREFETCH_ENTRY_SIZE) {
+      offsets[i + PREFETCH_ENTRY_SIZE - 1] = newGroupStart;
     }
   }
   return offsets;

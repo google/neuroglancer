@@ -189,6 +189,7 @@ function makeViewerContextMenu(viewer: Viewer) {
   addCheckbox('Show default annotations', viewer.showDefaultAnnotations);
   addCheckbox('Show chunk statistics', viewer.statisticsDisplayState.visible);
   addCheckbox('Wire frame rendering', viewer.wireFrame);
+  addCheckbox('Enable prefetching', viewer.chunkQueueManager.enablePrefetch);
   return menu;
 }
 
@@ -213,6 +214,7 @@ class TrackableViewerState extends CompoundTrackable {
 
     this.add('showSlices', viewer.showPerspectiveSliceViews);
     this.add('gpuMemoryLimit', viewer.dataContext.chunkQueueManager.capacities.gpuMemory.sizeLimit);
+    this.add('prefetch', viewer.dataContext.chunkQueueManager.enablePrefetch);
     this.add(
         'systemMemoryLimit',
         viewer.dataContext.chunkQueueManager.capacities.systemMemory.sizeLimit);

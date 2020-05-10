@@ -37,6 +37,11 @@ export interface ChunkStateListener {
   stateChanged(chunk: Chunk, oldState: ChunkState): void;
 }
 
+let nextMarkGeneration = 0;
+export function getNextMarkGeneration() {
+  return ++nextMarkGeneration;
+}
+
 export class Chunk implements Disposable {
   // Node properties used for eviction/promotion heaps and LRU linked lists.
   child0: Chunk|null = null;
@@ -53,6 +58,9 @@ export class Chunk implements Disposable {
   private state_ = ChunkState.NEW;
 
   error: any = null;
+
+  // Used by layers for marking chunks for various purposes.
+  markGeneration = -1;
 
   /**
    * Specifies existing priority within priority tier.  Only meaningful if priorityTier in
@@ -556,6 +564,8 @@ export class ChunkQueueManager extends SharedObjectCounterpart {
   downloadCapacity: AvailableCapacity[];
   computeCapacity: AvailableCapacity;
 
+  enablePrefetch: SharedWatchableValue<boolean>;
+
   /**
    * Set of chunk sources associated with this queue manager.
    */
@@ -621,6 +631,7 @@ export class ChunkQueueManager extends SharedObjectCounterpart {
     };
     this.gpuMemoryCapacity = getCapacity(options['gpuMemoryCapacity']);
     this.systemMemoryCapacity = getCapacity(options['systemMemoryCapacity']);
+    this.enablePrefetch = rpc.get(options['enablePrefetch']);
     this.downloadCapacity = [
       getCapacity(options['downloadCapacity']),
       getCapacity(options['downloadCapacity']),
@@ -1027,6 +1038,11 @@ export class ChunkManager extends SharedObjectCounterpart {
    * @param toFrontend true if the chunk should be moved to the frontend when ready.
    */
   requestChunk(chunk: Chunk, tier: ChunkPriorityTier, priority: number, toFrontend = true) {
+    if (!Number.isFinite(priority)) {
+      // Non-finite priority indicates a bug.
+      debugger;
+      return;
+    }
     if (tier === ChunkPriorityTier.RECENT) {
       throw new Error('Not going to request a chunk with the RECENT tier');
     }

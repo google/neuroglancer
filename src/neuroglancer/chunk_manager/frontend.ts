@@ -14,8 +14,9 @@
  * limitations under the License.
  */
 
-import {CHUNK_LAYER_STATISTICS_RPC_ID, CHUNK_MANAGER_RPC_ID, CHUNK_QUEUE_MANAGER_RPC_ID, CHUNK_SOURCE_INVALIDATE_RPC_ID, LayerChunkProgressInfo, ChunkSourceParametersConstructor, ChunkState} from 'neuroglancer/chunk_manager/base';
+import {CHUNK_LAYER_STATISTICS_RPC_ID, CHUNK_MANAGER_RPC_ID, CHUNK_QUEUE_MANAGER_RPC_ID, CHUNK_SOURCE_INVALIDATE_RPC_ID, ChunkSourceParametersConstructor, ChunkState, LayerChunkProgressInfo} from 'neuroglancer/chunk_manager/base';
 import {SharedWatchableValue} from 'neuroglancer/shared_watchable_value';
+import {TrackableBoolean} from 'neuroglancer/trackable_boolean';
 import {TrackableValue} from 'neuroglancer/trackable_value';
 import {CANCELED, CancellationToken} from 'neuroglancer/util/cancellation';
 import {Borrowed} from 'neuroglancer/util/disposable';
@@ -83,6 +84,8 @@ export class ChunkQueueManager extends SharedObject {
 
   chunkUpdateDelay: number = 30;
 
+  enablePrefetch = new TrackableBoolean(true, true);
+
   constructor(
       rpc: RPC, public gl: GL, public frameNumberCounter: FrameNumberCounter, public capacities: {
         gpuMemory: CapacitySpecification,
@@ -107,7 +110,10 @@ export class ChunkQueueManager extends SharedObject {
       'gpuMemoryCapacity': makeCapacityCounterparts(capacities.gpuMemory),
       'systemMemoryCapacity': makeCapacityCounterparts(capacities.systemMemory),
       'downloadCapacity': makeCapacityCounterparts(capacities.download),
-      'computeCapacity': makeCapacityCounterparts(capacities.compute)
+      'computeCapacity': makeCapacityCounterparts(capacities.compute),
+      'enablePrefetch':
+          this.registerDisposer(SharedWatchableValue.makeFromExisting(rpc, this.enablePrefetch))
+              .rpcId,
     });
   }
 
