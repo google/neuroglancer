@@ -130,7 +130,10 @@ export function computeNearIsotropicDownsamplingLevels(
 
 function parseCoordinateSpaceAndVoxelOffset(response: any) {
   verifyObject(response);
-  const baseModelSpace = verifyObjectProperty(response, 'coordinateSpace', coordinateSpaceFromJson);
+  const baseModelSpace: CoordinateSpace = {
+    ...verifyObjectProperty(response, 'coordinateSpace', coordinateSpaceFromJson),
+    valid: true
+  };
   const {rank} = baseModelSpace;
   const subsourceToModelTransform =
       matrix.identity(new Float32Array((rank + 1) * (rank + 1)), rank + 1, rank + 1);
@@ -328,9 +331,6 @@ export class PythonMultiscaleVolumeChunkSource extends MultiscaleVolumeChunkSour
 
 export class PythonSkeletonSource extends
 (WithPythonDataSource(WithParameters(SkeletonSource, SkeletonSourceParameters))) {
-  get skeletonVertexCoordinatesInVoxels() {
-    return false;
-  }
   get vertexAttributes() {
     return this.parameters.vertexAttributes;
   }
