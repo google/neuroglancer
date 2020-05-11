@@ -19,6 +19,7 @@ from __future__ import absolute_import
 import collections
 import copy
 import math
+import numbers
 
 try:
     import collections.abc as collections_abc
@@ -276,6 +277,9 @@ class _AnnotationLayerOptions(object):
     annotation_fill_opacity = annotationFillOpacity = wrapped_property('annotationFillOpacity', optional(float, 0))
 
 
+ShaderControls = typed_string_map((six.text_type, numbers.Number))
+
+
 @export
 class ImageLayer(Layer, _AnnotationLayerOptions):
     __slots__ = ()
@@ -285,6 +289,7 @@ class ImageLayer(Layer, _AnnotationLayerOptions):
 
     source = wrapped_property('source', LayerDataSources)
     shader = wrapped_property('shader', text_type)
+    shader_controls = shaderControls = wrapped_property('shaderControls', ShaderControls)
     opacity = wrapped_property('opacity', optional(float, 0.5))
     blend = wrapped_property('blend', optional(str))
     cross_section_render_scale = crossSectionRenderScale = wrapped_property(
@@ -306,6 +311,16 @@ def uint64_equivalence_map(obj, _readonly=False):
 
 
 @export
+class SkeletonRenderingOptions(JsonObjectWrapper):
+    shader = wrapped_property('shader', optional(text_type))
+    shader_controls = shaderControls = wrapped_property('shaderControls', ShaderControls)
+    mode2d = wrapped_property('mode2d', optional(text_type))
+    line_width2d = lineWidth2d = wrapped_property('lineWidth2d', optional(float, 2))
+    mode3d = wrapped_property('mode3d', optional(text_type))
+    line_width3d = lineWidth3d = wrapped_property('lineWidth3d', optional(float, 1))
+
+
+@export
 class SegmentationLayer(Layer, _AnnotationLayerOptions):
     __slots__ = ()
 
@@ -319,7 +334,18 @@ class SegmentationLayer(Layer, _AnnotationLayerOptions):
     selected_alpha = selectedAlpha = wrapped_property('selectedAlpha', optional(float, 0.5))
     not_selected_alpha = notSelectedAlpha = wrapped_property('notSelectedAlpha', optional(float, 0))
     object_alpha = objectAlpha = wrapped_property('objectAlpha', optional(float, 1.0))
-    skeleton_shader = skeletonShader = wrapped_property('skeletonShader', text_type)
+    skeleton_rendering = skeletonRendering = wrapped_property('skeletonRendering', SkeletonRenderingOptions)
+
+    @property
+    def skeleton_shader(self):
+        return self.skeleton_rendering.shader
+
+    @skeleton_shader.setter
+    def skeleton_shader(self, shader):
+        self.skeleton_rendering.shader = shader
+
+    skeletonShader = skeleton_shader
+
     color_seed = colorSeed = wrapped_property('colorSeed', optional(int, 0))
     cross_section_render_scale = crossSectionRenderScale = wrapped_property(
         'crossSectionRenderScale', optional(float, 1))
