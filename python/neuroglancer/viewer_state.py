@@ -200,6 +200,8 @@ class Layer(JsonObjectWrapper):
     type = wrapped_property('type', optional(text_type))
     layer_dimensions = layerDimensions = wrapped_property('localDimensions', CoordinateSpace)
     layer_position = layerPosition = wrapped_property('localPosition', optional(array_wrapper(np.float32)))
+    tab = wrapped_property('tab', optional(text_type))
+    pick = wrapped_property('pick', optional(bool))
 
     @staticmethod
     def interpolate(a, b, t):
