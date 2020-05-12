@@ -55,7 +55,17 @@ with viewer.txn() as s:
             skeleton_shader='void main() { emitRGB(colormapJet(affinity)); }',
             selected_alpha=0,
             not_selected_alpha=0,
+            segments=[395750],
         ))
+    # Can adjust the skeleton rendering options
+    s.layers[0].skeleton_rendering.mode2d = 'lines'
+    s.layers[0].skeleton_rendering.line_width2d = 3
+    s.layers[0].skeleton_rendering.mode3d = 'lines_and_points'
+    s.layers[0].skeleton_rendering.line_width3d = 10
+
+    # Can adjust visibility of layer side panel
+    s.selected_layer.layer = 'a'
+    s.selected_layer.visible = True
 
 if __name__ == '__main__':
     ap = argparse.ArgumentParser()
