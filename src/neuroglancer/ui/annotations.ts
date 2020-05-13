@@ -43,7 +43,7 @@ import {Borrowed, disposableOnce, Owned, RefCounted} from 'neuroglancer/util/dis
 import {removeChildren, removeFromParent, updateChildren} from 'neuroglancer/util/dom';
 import {ValueOrError} from 'neuroglancer/util/error';
 import {vec3} from 'neuroglancer/util/geom';
-import {verifyInt, verifyObject, verifyObjectProperty, verifyOptionalObjectProperty, verifyOptionalString, verifyString} from 'neuroglancer/util/json';
+import {verifyInt, verifyObject, verifyObjectProperty, verifyOptionalObjectProperty, verifyString} from 'neuroglancer/util/json';
 import {EventActionMap, KeyboardEventBinder, registerActionListener} from 'neuroglancer/util/keyboard_bindings';
 import * as matrix from 'neuroglancer/util/matrix';
 import {MouseEventBinder} from 'neuroglancer/util/mouse_bindings';
@@ -925,11 +925,9 @@ function getSelectedAssociatedSegments(annotationLayer: AnnotationLayerState) {
 }
 
 abstract class PlaceAnnotationTool extends Tool {
-  group: string;
-  annotationDescription: string|undefined;
   constructor(public layer: UserLayerWithAnnotations, options: any) {
     super();
-    this.annotationDescription = verifyObjectProperty(options, 'description', verifyOptionalString);
+    options;
   }
 
   get annotationLayer(): AnnotationLayerState|undefined {
@@ -946,10 +944,6 @@ const ANNOTATE_BOUNDING_BOX_TOOL_ID = 'annotateBoundingBox';
 const ANNOTATE_ELLIPSOID_TOOL_ID = 'annotateSphere';
 
 export class PlacePointTool extends PlaceAnnotationTool {
-  constructor(layer: UserLayerWithAnnotations, options: any) {
-    super(layer, options);
-  }
-
   trigger(mouseState: MouseSelectionState) {
     const {annotationLayer} = this;
     if (annotationLayer === undefined) {

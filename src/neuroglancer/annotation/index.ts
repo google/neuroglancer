@@ -610,6 +610,7 @@ export class AnnotationSource extends RefCounted implements AnnotationSourceSign
     this.ensureUpdated();
     const id = reference.id;
     this.pending.delete(id);
+    this.changed.dispatch();
   }
 
   update(reference: AnnotationReference, annotation: Annotation) {

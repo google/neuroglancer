@@ -194,20 +194,93 @@ class CoordinateSpace(object):
             d[name] = [scale, unit]
         return d
 
+
+@export
+class Tool(JsonObjectWrapper):
+    __slots__ = ()
+
+    type = wrapped_property('type', text_type)
+
+    def __init__(self, json_data, **kwargs):
+        super(Tool, self).__init__(json_data=json_data, **kwargs)
+
+
+@export
+class PlacePointTool(Tool):
+    __slots__ = ()
+
+    def __init__(self, *args, **kwargs):
+        super(PlacePointTool, self).__init__(*args, type='annotatePoint', **kwargs)
+
+
+@export
+class PlaceLineTool(Tool):
+    __slots__ = ()
+
+    def __init__(self, *args, **kwargs):
+        super(PlaceLineTool, self).__init__(*args, type='annotateLine', **kwargs)
+
+
+@export
+class PlaceBoundingBoxTool(Tool):
+    __slots__ = ()
+
+    def __init__(self, *args, **kwargs):
+        super(PlaceBoundingBoxTool, self).__init__(*args, type='annotateBoundingBox', **kwargs)
+
+
+@export
+class PlaceEllipsoidTool(Tool):
+    __slots__ = ()
+
+    def __init__(self, *args, **kwargs):
+        super(PlaceEllipsoidTool, self).__init__(*args, type='annotateSphere', **kwargs)
+
+
+tool_types = {
+    'annotatePoint': PlacePointTool,
+    'annotateLine': PlaceLineTool,
+    'annotateBoundingBox': PlaceBoundingBoxTool,
+    'annotateSphere': PlaceEllipsoidTool,
+}
+
+
+@export
+def tool(json_data, _readonly=False):
+    if isinstance(json_data, Tool):
+        return json_data
+    if isinstance(json_data, six.string_types):
+        json_data = {'type': json_data}
+    if not isinstance(json_data, dict):
+        raise TypeError
+
+    type_name = json_data.get('type')
+    tool_type = tool_types.get(type_name)
+    if tool_type is None: raise ValueError
+    return tool_type(json_data, _readonly=_readonly)
+
+
+tool.supports_readonly = True
+
+
 @export
 class Layer(JsonObjectWrapper):
     __slots__ = ()
     type = wrapped_property('type', optional(text_type))
     layer_dimensions = layerDimensions = wrapped_property('localDimensions', CoordinateSpace)
-    layer_position = layerPosition = wrapped_property('localPosition', optional(array_wrapper(np.float32)))
+    layer_position = layerPosition = wrapped_property('localPosition',
+                                                      optional(array_wrapper(np.float32)))
     tab = wrapped_property('tab', optional(text_type))
     pick = wrapped_property('pick', optional(bool))
+    tool = wrapped_property('tool', optional(tool))
 
     @staticmethod
     def interpolate(a, b, t):
         c = copy.deepcopy(a)
-        c.layer_position = interpolate_linear_optional_vectors(a.layer_position, b.layer_position, t)
+        c.layer_position = interpolate_linear_optional_vectors(a.layer_position, b.layer_position,
+                                                               t)
         return c
+
 
 @export
 class PointAnnotationLayer(Layer):
@@ -276,7 +349,6 @@ class LayerDataSources(typed_list(LayerDataSource, validator=LayerDataSource)):
 class _AnnotationLayerOptions(object):
     __slots__ = ()
     annotation_color = annotationColor = wrapped_property('annotationColor', optional(text_type))
-    annotation_fill_opacity = annotationFillOpacity = wrapped_property('annotationFillOpacity', optional(float, 0))
 
 
 ShaderControls = typed_string_map((six.text_type, numbers.Number))
@@ -314,6 +386,8 @@ def uint64_equivalence_map(obj, _readonly=False):
 
 @export
 class SkeletonRenderingOptions(JsonObjectWrapper):
+    __slots__ = ()
+
     shader = wrapped_property('shader', optional(text_type))
     shader_controls = shaderControls = wrapped_property('shaderControls', ShaderControls)
     mode2d = wrapped_property('mode2d', optional(text_type))
@@ -463,6 +537,8 @@ class AnnotationLayer(Layer, _AnnotationLayerOptions):
     annotations = wrapped_property('annotations', typed_list(annotation))
     linked_segmentation_layer = linkedSegmentationLayer = wrapped_property('linkedSegmentationLayer', optional(text_type))
     filter_by_segmentation = filterBySegmentation = wrapped_property('filterBySegmentation', optional(bool, False))
+    shader = wrapped_property('shader', text_type)
+    shader_controls = shaderControls = wrapped_property('shaderControls', ShaderControls)
 
     @staticmethod
     def interpolate(a, b, t):
@@ -593,6 +669,9 @@ class Layers(object):
             if u.name == k:
                 return i
         return -1
+
+    def __contains__(self, k):
+        return self.index(k) != -1
 
     def __getitem__(self, k):
         """Indexes into the list of layers by index, slice, or layer name."""
