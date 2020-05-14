@@ -20,10 +20,18 @@ import {CancellationToken, uncancelableToken} from 'neuroglancer/util/cancellati
 import {ResponseTransform} from 'neuroglancer/util/http_request';
 import {registerPromiseRPC, registerRPC, RPC} from 'neuroglancer/worker_rpc';
 
+function openPopupCenter(url: string, width: number, height: number) {
+  const top = window.outerHeight - window.innerHeight + window.innerHeight / 2 - height / 2;
+  const left = window.innerWidth / 2 - width / 2;
+  return window.open(
+    url, undefined, `toolbar=no, menubar=no, width=${width}, height=${height}, top=${top}, left=${left}`
+  );
+}
+
 // generate a token with the neuroglancer-auth service using google oauth2
 async function authorize(auth_url: string) {
-  const auth_popup = window.open(
-      `${auth_url}?redirect=${encodeURI(window.location.origin + '/auth_redirect.html')}`);
+  const auth_popup = openPopupCenter(
+      `${auth_url}?redirect=${encodeURI(window.location.origin + '/auth_redirect.html')}`, 400, 650);
 
   if (!auth_popup) {
     alert('Allow popups on this page to authenticate');
