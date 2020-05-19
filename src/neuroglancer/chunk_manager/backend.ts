@@ -81,8 +81,8 @@ export class Chunk implements Disposable {
    */
   newPriorityTier = ChunkPriorityTier.RECENT;
 
-  private systemMemoryBytes_: number;
-  private gpuMemoryBytes_: number;
+  private systemMemoryBytes_: number = 0;
+  private gpuMemoryBytes_: number = 0;
   backendOnly = false;
   isComputational = false;
   newlyRequestedToFrontend = false;
@@ -551,6 +551,11 @@ class AvailableCapacity extends RefCounted {
   get availableItems() {
     return this.itemLimit.value - this.currentItems;
   }
+
+  toString() {
+    return `bytes=${this.currentSize}/${this.sizeLimit.value},` +
+        `items=${this.currentItems}/${this.itemLimit.value}`;
+  }
 }
 
 @registerSharedObject(CHUNK_QUEUE_MANAGER_RPC_ID)
@@ -759,7 +764,7 @@ export class ChunkQueueManager extends SharedObjectCounterpart {
       return;
     }
     if (DEBUG_CHUNK_UPDATES) {
-      console.log(`${chunk}: changed state ${chunk.state} -> ${newState}`);
+      console.log(`${chunk}: changed state ${ChunkState[chunk.state]} -> ${ChunkState[newState]}`);
     }
     this.adjustCapacitiesForChunk(chunk, false);
     this.removeChunkFromQueues_(chunk);
@@ -1027,7 +1032,7 @@ export class ChunkManager extends SharedObjectCounterpart {
     this.layers.length = 0;
     this.recomputeChunkPriorities.dispatch();
     this.recomputeChunkPrioritiesLate.dispatch();
-    this.updateQueueState([ChunkPriorityTier.VISIBLE]);
+    this.updateQueueState([ChunkPriorityTier.VISIBLE, ChunkPriorityTier.PREFETCH]);
     this.sendLayerChunkStatistics();
   }
 
@@ -1067,6 +1072,9 @@ export class ChunkManager extends SharedObjectCounterpart {
     let queueManager = this.queueManager;
     for (let tier of tiers) {
       let chunks = existingTierChunks[tier];
+      if (DEBUG_CHUNK_UPDATES) {
+        console.log(`existingTierChunks[${ChunkPriorityTier[tier]}].length=${chunks.length}`);
+      }
       for (let chunk of chunks) {
         if (chunk.newPriorityTier === ChunkPriorityTier.RECENT) {
           // Downgrade the priority of this chunk.

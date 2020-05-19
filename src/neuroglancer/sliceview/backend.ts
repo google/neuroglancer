@@ -132,38 +132,40 @@ export class SliceViewBackend extends SliceViewIntermediateBase {
               // visible chunk, we don't continue prefetching in the same direction.
               chunk.markGeneration = curMarkGeneration;
             });
-        const {curPositionInChunks} = tsource;
-        for (const visibleChunk of curVisibleChunks) {
-          curPositionInChunks.set(visibleChunk.chunkGridPosition);
-          for (let j = 0, length = prefetchOffsets.length; j < length;) {
-            const chunkDim = prefetchOffsets[j];
-            const minChunk = prefetchOffsets[j + 2];
-            const maxChunk = prefetchOffsets[j + 3];
-            const newPriority = prefetchOffsets[j + 4];
-            const jumpOffset = prefetchOffsets[j + 5];
-            const oldIndex = curPositionInChunks[chunkDim];
-            const newIndex = oldIndex + prefetchOffsets[j + 1];
-            if (newIndex < minChunk || newIndex > maxChunk) {
-              j = jumpOffset;
-              continue;
+        if (prefetchOffsets.length !== 0) {
+          const {curPositionInChunks} = tsource;
+          for (const visibleChunk of curVisibleChunks) {
+            curPositionInChunks.set(visibleChunk.chunkGridPosition);
+            for (let j = 0, length = prefetchOffsets.length; j < length;) {
+              const chunkDim = prefetchOffsets[j];
+              const minChunk = prefetchOffsets[j + 2];
+              const maxChunk = prefetchOffsets[j + 3];
+              const newPriority = prefetchOffsets[j + 4];
+              const jumpOffset = prefetchOffsets[j + 5];
+              const oldIndex = curPositionInChunks[chunkDim];
+              const newIndex = oldIndex + prefetchOffsets[j + 1];
+              if (newIndex < minChunk || newIndex > maxChunk) {
+                j = jumpOffset;
+                continue;
+              }
+              curPositionInChunks[chunkDim] = newIndex;
+              const chunk = tsource.source.getChunk(curPositionInChunks);
+              curPositionInChunks[chunkDim] = oldIndex;
+              if (chunk.markGeneration === curMarkGeneration) {
+                j = jumpOffset;
+                continue;
+              }
+              if (!Number.isFinite(newPriority)) {
+                debugger;
+              }
+              chunkManager.requestChunk(
+                  chunk, ChunkPriorityTier.PREFETCH, sourceBasePriority + newPriority);
+              ++layer.numPrefetchChunksNeeded;
+              if (chunk.state === ChunkState.GPU_MEMORY) {
+                ++layer.numPrefetchChunksAvailable;
+              }
+              j += PREFETCH_ENTRY_SIZE;
             }
-            curPositionInChunks[chunkDim] = newIndex;
-            const chunk = tsource.source.getChunk(curPositionInChunks);
-            curPositionInChunks[chunkDim] = oldIndex;
-            if (chunk.markGeneration === curMarkGeneration) {
-              j = jumpOffset;
-              continue;
-            }
-            if (!Number.isFinite(newPriority)) {
-              debugger;
-            }
-            chunkManager.requestChunk(
-                chunk, ChunkPriorityTier.PREFETCH, sourceBasePriority + newPriority);
-            ++layer.numPrefetchChunksNeeded;
-            if (chunk.state === ChunkState.GPU_MEMORY) {
-              ++layer.numPrefetchChunksAvailable;
-            }
-            j += PREFETCH_ENTRY_SIZE;
           }
         }
       }
