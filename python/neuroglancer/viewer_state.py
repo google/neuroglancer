@@ -535,8 +535,9 @@ class AnnotationLayer(Layer, _AnnotationLayerOptions):
 
     source = wrapped_property('source', LayerDataSources)
     annotations = wrapped_property('annotations', typed_list(annotation))
-    linked_segmentation_layer = linkedSegmentationLayer = wrapped_property('linkedSegmentationLayer', optional(text_type))
-    filter_by_segmentation = filterBySegmentation = wrapped_property('filterBySegmentation', optional(bool, False))
+    linked_segmentation_layer = linkedSegmentationLayer = wrapped_property('linkedSegmentationLayer', typed_string_map(text_type))
+    filter_by_segmentation = filterBySegmentation = wrapped_property('filterBySegmentation', typed_list(text_type))
+    ignore_null_segment_filter = ignoreNullSegmentFilter = wrapped_property('ignoreNullSegmentFilter', optional(bool, True))
     shader = wrapped_property('shader', text_type)
     shader_controls = shaderControls = wrapped_property('shaderControls', ShaderControls)
 
