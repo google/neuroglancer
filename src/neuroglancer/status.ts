@@ -145,4 +145,10 @@ export class StatusMessage {
     setTimeout(() => msg.dispose(), closeAfter);
     return msg;
   }
+
+  static showError(message: string, closeAfter: number = 10000, config: styleOptions = {
+    color: 'red'
+  }): StatusMessage {
+    return this.showTemporaryMessage(message, closeAfter, config);
+  }
 }

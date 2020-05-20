@@ -109,7 +109,11 @@ export class SaveState extends RefCounted {
 
       if (entry) {
         this.setSaveStatus(entry.dirty);
-        this.root.restoreState(entry.state);
+        try {
+          this.root.restoreState(entry.state);
+        } catch (e) {
+          StatusMessage.showError(e);
+        }
         StatusMessage.showTemporaryMessage(
             `Loaded from local storage. Do not duplicate this URL.`, 4000);
         if (entry.dirty && getUnshareWarning().value) {
@@ -130,9 +134,8 @@ export class SaveState extends RefCounted {
               undefined, {color: 'yellow'});
         }
       } else {
-        StatusMessage.showTemporaryMessage(
-            `This URL is invalid. Do not copy the URL in the address bar. Use the save button.`,
-            10000, {color: 'red'});
+        StatusMessage.showError(
+            `This URL is invalid. Do not copy the URL in the address bar. Use the save button.`);
       }
     } else {
       this.setSaveStatus(true);
