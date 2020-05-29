@@ -29,8 +29,12 @@ import tornado.netutil
 import tornado.web
 
 import sockjs.tornado
-from sockjs.tornado.util import asynchronous
 
+try:
+    # Newer versions of tornado do not have the asynchronous decorator
+    from sockjs.tornado.util import asynchronous
+except (ImportError, ModuleNotFoundError):
+    from tornado.web import asynchronous
 
 from . import local_volume, static
 from . import skeleton
