@@ -126,7 +126,7 @@ setup(
         "numpy>=1.11.0",
         'requests',
         'tornado',
-        'sockjs-tornado',
+        'sockjs-tornado>=1.0.7',
         'six',
         'google-apitools',
     ],
