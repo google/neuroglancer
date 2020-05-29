@@ -29,6 +29,7 @@ import tornado.netutil
 import tornado.web
 
 import sockjs.tornado
+from sockjs.tornado.util import asynchronous
 
 
 from . import local_volume, static
@@ -146,7 +147,7 @@ class SkeletonInfoHandler(BaseRequestHandler):
         self.finish(json.dumps(vol.info(), default=json_encoder_default).encode())
 
 class SubvolumeHandler(BaseRequestHandler):
-    @tornado.web.asynchronous
+    @asynchronous
     def get(self, data_format, token, scale_key, start, end):
         start_pos = np.array(start.split(','), dtype=np.int64)
         end_pos = np.array(end.split(','), dtype=np.int64)
@@ -172,7 +173,7 @@ class SubvolumeHandler(BaseRequestHandler):
 
 
 class MeshHandler(BaseRequestHandler):
-    @tornado.web.asynchronous
+    @asynchronous
     def get(self, key, object_id):
         object_id = int(object_id)
         vol = self.server.get_volume(key)
@@ -204,7 +205,7 @@ class MeshHandler(BaseRequestHandler):
 
 
 class SkeletonHandler(BaseRequestHandler):
-    @tornado.web.asynchronous
+    @asynchronous
     def get(self, key, object_id):
         object_id = int(object_id)
         vol = self.server.get_volume(key)
