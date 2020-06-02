@@ -81,5 +81,9 @@ def hex_string_from_segment_id(color_seed,segment_id):
     v = 1.0
     rgb=hsv_to_rgb(h,s,v)
     packed_color = pack_color(rgb_vec=rgb)
-    hex_string = '#' + format(packed_color, 'x')
+    hex_string = format(packed_color, 'x')
+    """ Zero pad the hex string if less than 6 characeters """
+    if len(hex_string) < 6:
+        hex_string = '0'*(6-len(hex_string)) + hex_string
+    hex_string = '#' + hex_string
     return hex_string
