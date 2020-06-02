@@ -24,3 +24,5 @@ from .url_state import to_url, parse_url
 from .screenshot import ScreenshotSaver
 from . import skeleton
 from . import server
+from . import segment_colors
+
