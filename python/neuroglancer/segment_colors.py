@@ -27,10 +27,10 @@ def hash_function(state,value):
     k2 = 0x1b873593
     state = state & 0xffffffff
     value = (value * k1) & 0xffffffff
-    value = ((value << 15) | zero_fill_right_shift(value,17)) & 0xffffffff
+    value = ((value << 15) | value >> 17) & 0xffffffff
     value = (value * k2) & 0xffffffff
     state = (state ^ value) & 0xffffffff
-    state = (( state << 13) | (zero_fill_right_shift(state,19))) & 0xffffffff
+    state = (( state << 13) | state >> 19) & 0xffffffff
     state = (( state * 5) + 0xe6546b64) & 0xffffffff
     return state
 
