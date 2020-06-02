@@ -17,4 +17,4 @@
 import {DVIDDataSource} from 'neuroglancer/datasource/dvid/frontend';
 import {registerProvider} from 'neuroglancer/datasource/default_provider';
 
-registerProvider('dvid', options => new DVIDDataSource(options.credentialsManager));
+registerProvider('dvid', () => new DVIDDataSource());

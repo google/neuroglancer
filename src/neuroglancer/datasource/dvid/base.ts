@@ -25,8 +25,6 @@ export class DVIDSourceParameters {
   baseUrl: string;
   nodeKey: string;
   dataInstanceKey: string;
-  authServer?: string;
-  user?: string;
 }
 
 export class VolumeChunkSourceParameters extends DVIDSourceParameters {

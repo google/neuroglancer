@@ -24,29 +24,17 @@ import {decodeJpegChunk} from 'neuroglancer/sliceview/backend_chunk_decoders/jpe
 import {VolumeChunk, VolumeChunkSource} from 'neuroglancer/sliceview/volume/backend';
 import {CancellationToken} from 'neuroglancer/util/cancellation';
 import {Endianness} from 'neuroglancer/util/endian';
-import {registerSharedObject, SharedObject} from 'neuroglancer/worker_rpc';
-import {ChunkSourceParametersConstructor} from 'neuroglancer/chunk_manager/base';
-import {WithSharedCredentialsProviderCounterpart} from 'neuroglancer/credentials_provider/shared_counterpart';
-import {DVIDInstance, DVIDToken, makeRequestWithCredentials, appendQueryStringForDvid} from 'neuroglancer/datasource/dvid/api';
-
-function DVIDSource<Parameters, TBase extends {new (...args: any[]): SharedObject}>(
-  Base: TBase, parametersConstructor: ChunkSourceParametersConstructor<Parameters>) {
-  return WithParameters(
-    WithSharedCredentialsProviderCounterpart<DVIDToken>()(Base), parametersConstructor);
-}
+import {cancellableFetchOk, responseArrayBuffer} from 'neuroglancer/util/http_request';
+import {registerSharedObject} from 'neuroglancer/worker_rpc';
 
 @registerSharedObject() export class DVIDSkeletonSource extends
-(DVIDSource(SkeletonSource, SkeletonSourceParameters)) {
+(WithParameters(SkeletonSource, SkeletonSourceParameters)) {
   download(chunk: SkeletonChunk, cancellationToken: CancellationToken) {
     const {parameters} = this;
     let bodyid = `${chunk.objectId}`;
     const url = `${parameters.baseUrl}/api/node/${parameters['nodeKey']}` +
         `/${parameters['dataInstanceKey']}/key/` + bodyid + '_swc';
-    return makeRequestWithCredentials(this.credentialsProvider, {
-          method: 'GET',
-          url: appendQueryStringForDvid(url, parameters.user),
-          responseType: 'arraybuffer'
-        }, cancellationToken)
+    return cancellableFetchOk(url, {}, responseArrayBuffer, cancellationToken)
         .then(response => {
           let enc = new TextDecoder('utf-8');
           decodeSwcSkeletonChunk(chunk, enc.decode(response));
@@ -64,7 +52,7 @@ export function decodeFragmentChunk(chunk: FragmentChunk, response: ArrayBuffer)
 }
 
 @registerSharedObject() export class DVIDMeshSource extends
-(DVIDSource(MeshSource, MeshSourceParameters)) {
+(WithParameters(MeshSource, MeshSourceParameters)) {
   download(chunk: ManifestChunk) {
     // DVID does not currently store meshes chunked, the main
     // use-case is for low-resolution 3D views.
@@ -75,20 +63,15 @@ export function decodeFragmentChunk(chunk: FragmentChunk, response: ArrayBuffer)
 
   downloadFragment(chunk: FragmentChunk, cancellationToken: CancellationToken) {
     const {parameters} = this;
-    const dvidInstance = new DVIDInstance(parameters.baseUrl, parameters.nodeKey);
-    const meshUrl = dvidInstance.getKeyValueUrl(parameters.dataInstanceKey, `${chunk.fragmentId}.ngmesh`);
-
-    return makeRequestWithCredentials(this.credentialsProvider, {
-          method: 'GET',
-          url: appendQueryStringForDvid(meshUrl, parameters.user),
-          responseType: 'arraybuffer'
-        }, cancellationToken)
+    const url = `${parameters.baseUrl}/api/node/${parameters['nodeKey']}/${
+        parameters['dataInstanceKey']}/key/${chunk.fragmentId}.ngmesh`;
+    return cancellableFetchOk(url, {}, responseArrayBuffer, cancellationToken)
         .then(response => decodeFragmentChunk(chunk, response));
   }
 }
 
 @registerSharedObject() export class DVIDVolumeChunkSource extends
-(DVIDSource(VolumeChunkSource, VolumeChunkSourceParameters)) {
+(WithParameters(VolumeChunkSource, VolumeChunkSourceParameters)) {
   async download(chunk: VolumeChunk, cancellationToken: CancellationToken) {
     let params = this.parameters;
     let path: string;
@@ -102,13 +85,8 @@ export function decodeFragmentChunk(chunk: FragmentChunk, response: ArrayBuffer)
       path = this.getPath(chunkPosition, chunkDataSize);
     }
     const decoder = this.getDecoder(params);
-    const response = await makeRequestWithCredentials(
-        this.credentialsProvider,
-        {
-          method: 'GET',
-          url: appendQueryStringForDvid(`${params.baseUrl}${path}`, params.user),
-          responseType: 'arraybuffer'
-        }, cancellationToken);
+    const response = await cancellableFetchOk(
+        `${params.baseUrl}${path}`, {}, responseArrayBuffer, cancellationToken);
     await decoder(
         chunk, cancellationToken,
         (params.encoding === VolumeChunkEncoding.JPEG) ? response.slice(16) : response);
