@@ -33,8 +33,11 @@ import {StatusMessage} from 'neuroglancer/status';
 import {transposeNestedArrays} from 'neuroglancer/util/array';
 import {applyCompletionOffset, getPrefixMatchesWithDescriptions} from 'neuroglancer/util/completion';
 import {mat4, vec3} from 'neuroglancer/util/geom';
-import {fetchOk} from 'neuroglancer/util/http_request';
-import {parseArray, parseFixedLengthArray, parseIntVec, verifyFinitePositiveFloat, verifyMapKey, verifyObject, verifyObjectAsMap, verifyObjectProperty, verifyPositiveInt, verifyString} from 'neuroglancer/util/json';
+import {parseArray, parseFixedLengthArray, parseIntVec, verifyFinitePositiveFloat, verifyMapKey, verifyObject, verifyObjectAsMap, verifyObjectProperty, verifyPositiveInt, verifyString, parseQueryStringParameters} from 'neuroglancer/util/json';
+import {CredentialsManager, CredentialsProvider} from 'neuroglancer/credentials_provider';
+import {WithCredentialsProvider} from 'neuroglancer/credentials_provider/chunk_source_frontend';
+import { dvidCredentailsKey, registerDVIDCredentialsProvider, isDVIDCredentialsProviderRegistered } from 'neuroglancer/datasource/dvid/register_credentials_provider';
+import { DVIDToken, makeRequestWithCredentials } from 'neuroglancer/datasource/dvid/api';
 
 let serverDataTypes = new Map<string, DataType>();
 serverDataTypes.set('uint8', DataType.UINT8);
@@ -67,13 +70,13 @@ export class DataInstanceInfo {
 }
 
 class DVIDVolumeChunkSource extends
-(WithParameters(VolumeChunkSource, VolumeChunkSourceParameters)) {}
+(WithParameters(WithCredentialsProvider<DVIDToken>()(VolumeChunkSource), VolumeChunkSourceParameters)) {}
 
 class DVIDSkeletonSource extends
-(WithParameters(SkeletonSource, SkeletonSourceParameters)) {}
+(WithParameters(WithCredentialsProvider<DVIDToken>()(SkeletonSource), SkeletonSourceParameters)) {}
 
 class DVIDMeshSource extends
-(WithParameters(MeshSource, MeshSourceParameters)) {}
+(WithParameters(WithCredentialsProvider<DVIDToken>()(MeshSource), MeshSourceParameters)) {}
 
 export class VolumeDataInstanceInfo extends DataInstanceInfo {
   dataType: DataType;
@@ -143,7 +146,7 @@ export class VolumeDataInstanceInfo extends DataInstanceInfo {
 
   getSources(
       chunkManager: ChunkManager, parameters: DVIDSourceParameters,
-      volumeSourceOptions: VolumeSourceOptions) {
+      volumeSourceOptions: VolumeSourceOptions, credentialsProvider: CredentialsProvider<DVIDToken>) {
     let {encoding} = this;
     let sources: SliceViewSingleResolutionSource<VolumeChunkSource>[][] = [];
 
@@ -202,7 +205,7 @@ export class VolumeDataInstanceInfo extends DataInstanceInfo {
                      undefined)
           }).map(spec => ({
                    chunkSource: chunkManager.getChunkSource(
-                       DVIDVolumeChunkSource, {spec, parameters: volParameters}),
+                       DVIDVolumeChunkSource, {spec, parameters: volParameters, credentialsProvider}),
                    chunkToMultiscaleTransform,
                  }));
       sources.push(alternatives);
@@ -322,11 +325,12 @@ export class ServerInfo {
   }
 }
 
-export function getServerInfo(chunkManager: ChunkManager, baseUrl: string) {
+export function getServerInfo(chunkManager: ChunkManager, baseUrl: string, credentialsProvider: CredentialsProvider<DVIDToken>) {
   return chunkManager.memoize.getUncounted({type: 'dvid:getServerInfo', baseUrl}, () => {
-    const result = fetchOk(`${baseUrl}/api/repos/info`)
-                       .then(response => response.json())
-                       .then(response => new ServerInfo(response));
+    const result = makeRequestWithCredentials(
+      credentialsProvider,
+      {url: `${baseUrl}/api/repos/info`, method: 'GET', responseType: 'json'})
+      .then(response => new ServerInfo(response));
     const description = `repository info for DVID server ${baseUrl}`;
     StatusMessage.forPromise(result, {
       initialMessage: `Retrieving ${description}.`,
@@ -351,7 +355,7 @@ class DvidMultiscaleVolumeChunkSource extends MultiscaleVolumeChunkSource {
 
   constructor(
       chunkManager: ChunkManager, public baseUrl: string, public nodeKey: string,
-      public dataInstanceKey: string, public info: VolumeDataInstanceInfo) {
+      public dataInstanceKey: string, public info: VolumeDataInstanceInfo, public credentialsProvider: CredentialsProvider<DVIDToken>) {
     super(chunkManager);
   }
 
@@ -362,11 +366,21 @@ class DvidMultiscaleVolumeChunkSource extends MultiscaleVolumeChunkSource {
           'nodeKey': this.nodeKey,
           'dataInstanceKey': this.dataInstanceKey,
         },
-        volumeSourceOptions);
+        volumeSourceOptions,
+        this.credentialsProvider);
   }
 }
 
-const urlPattern = /^((?:http|https):\/\/[^\/]+)\/([^\/]+)\/([^\/]+)$/;
+const urlPattern = /^((?:http|https):\/\/[^\/]+)\/([^\/]+)\/([^\/]+)(\?.*)?$/;
+
+function getDefaultAuthServer(baseUrl: string) {
+  if (baseUrl.startsWith('https')) {
+    // Use default token API for DVID https to make completeUrl work properly
+    return baseUrl + '/api/server/token';
+  } else {
+    return undefined;
+  }
+}
 
 function parseSourceUrl(url: string): DVIDSourceParameters {
   let match = url.match(urlPattern);
@@ -380,10 +394,25 @@ function parseSourceUrl(url: string): DVIDSourceParameters {
     dataInstanceKey: match[3],
   };
 
+  const queryString = match[4];
+  if (queryString && queryString.length > 1) {
+    const parameters = parseQueryStringParameters(queryString.substring(1));
+    if (parameters.user) {
+      sourceParameters.user = parameters.user;
+    }
+    if (parameters.auth) {
+      sourceParameters.authServer = parameters.auth;
+    }
+  }
+
+  if (!sourceParameters.authServer) {
+    sourceParameters.authServer = getDefaultAuthServer(sourceParameters.baseUrl);
+  }
+
   return sourceParameters;
 }
 
-function getVolumeSource(options: GetDataSourceOptions, sourceParameters: DVIDSourceParameters, dataInstanceInfo: DataInstanceInfo) {
+function getVolumeSource(options: GetDataSourceOptions, sourceParameters: DVIDSourceParameters, dataInstanceInfo: DataInstanceInfo, credentialsProvider: CredentialsProvider<DVIDToken>) {
   const baseUrl = sourceParameters.baseUrl;
   const nodeKey = sourceParameters.nodeKey;
   const dataInstanceKey = sourceParameters.dataInstanceKey;
@@ -403,7 +432,7 @@ function getVolumeSource(options: GetDataSourceOptions, sourceParameters: DVIDSo
   });
 
   const volume = new DvidMultiscaleVolumeChunkSource(
-    options.chunkManager, baseUrl, nodeKey, dataInstanceKey, info);
+    options.chunkManager, baseUrl, nodeKey, dataInstanceKey, info, credentialsProvider);
 
   const dataSource: DataSource = {
     modelTransform: makeIdentityTransform(modelSpace),
@@ -426,7 +455,8 @@ function getVolumeSource(options: GetDataSourceOptions, sourceParameters: DVIDSo
           parameters: {
             ...sourceParameters,
             'dataInstanceKey': info.meshSrc
-          }
+          },
+          'credentialsProvider': credentialsProvider
         })
       },
       subsourceToModelSubspaceTransform,
@@ -441,7 +471,8 @@ function getVolumeSource(options: GetDataSourceOptions, sourceParameters: DVIDSo
           parameters: {
             ...sourceParameters,
             'dataInstanceKey': info.skeletonSrc
-          }
+          },
+          'credentialsProvider': credentialsProvider
         })
       },
     });
@@ -455,7 +486,9 @@ function getVolumeSource(options: GetDataSourceOptions, sourceParameters: DVIDSo
   return dataSource;
 }
 
-export function getDataSource(options: GetDataSourceOptions): Promise<DataSource> {
+type AuthType = string|undefined|null;
+
+export function getDataSource(options: GetDataSourceOptions, getCredentialsProvider: (auth:AuthType) => CredentialsProvider<DVIDToken>): Promise<DataSource> {
   const sourceParameters = parseSourceUrl(options.providerUrl);
   const {baseUrl, nodeKey, dataInstanceKey} = sourceParameters;
 
@@ -467,7 +500,8 @@ export function getDataSource(options: GetDataSourceOptions): Promise<DataSource
         dataInstanceKey,
       },
       async () => {
-        const serverInfo = await getServerInfo(options.chunkManager, baseUrl);
+        const credentailsProvider = getCredentialsProvider(sourceParameters.authServer);
+        const serverInfo = await getServerInfo(options.chunkManager, baseUrl, credentailsProvider);
         let repositoryInfo = serverInfo.getNode(nodeKey);
         if (repositoryInfo === undefined) {
           throw new Error(`Invalid node: ${JSON.stringify(nodeKey)}.`);
@@ -477,7 +511,7 @@ export function getDataSource(options: GetDataSourceOptions): Promise<DataSource
           throw new Error(`Invalid data instance ${dataInstanceKey}.`);
         }
 
-        return getVolumeSource(options, sourceParameters, dataInstanceInfo);
+        return getVolumeSource(options, sourceParameters, dataInstanceInfo, credentailsProvider);
       });
 }
 
@@ -512,29 +546,60 @@ export function completeNodeAndInstance(serverInfo: ServerInfo, prefix: string):
   return applyCompletionOffset(nodeKey.length + 1, completeInstanceName(repositoryInfo, match[2]));
 }
 
-export async function completeUrl(options: CompleteUrlOptions): Promise<CompletionResult> {
-  const curUrlPattern = /^((?:http|https):\/\/[^\/]+)\/(.*)$/;
-  let match = options.providerUrl.match(curUrlPattern);
+export async function completeUrl(options: CompleteUrlOptions, getCredentialsProvider: (auth:AuthType) => CredentialsProvider<DVIDToken>): Promise<CompletionResult> {
+  const curUrlPattern = /^((?:http|https):\/\/[^\/]+)\/([^\?]*).*$/;
+  let url = options.providerUrl;
+  let auth:string|undefined = undefined;
+
+  const firstMatch = options.providerUrl.match(/^([^\?]*)\?[^\?]*auth=([^&]*)/);
+
+  if (firstMatch) {
+    url = firstMatch[1];
+    auth = firstMatch[2];
+  }
+
+  let match = url.match(curUrlPattern);
   if (match === null) {
     // We don't yet have a full hostname.
     throw null;
   }
   let baseUrl = match[1];
   let path = match[2];
-  const serverInfo = await getServerInfo(options.chunkManager, baseUrl);
+  if (!auth && baseUrl.startsWith('https')) {
+    auth = getDefaultAuthServer(baseUrl);
+  }
+
+  const serverInfo = await getServerInfo(options.chunkManager, baseUrl, getCredentialsProvider(auth));
   return applyCompletionOffset(baseUrl.length + 1, completeNodeAndInstance(serverInfo, path));
 }
 
 export class DVIDDataSource extends DataSourceProvider {
+  constructor(public credentialsManager: CredentialsManager) {
+    super();
+  }
+
   get description() {
     return 'DVID';
   }
 
+  getCredentialsProvider(authServer: AuthType) {
+    if (authServer) {
+      const key = dvidCredentailsKey(authServer);
+      if (!isDVIDCredentialsProviderRegistered(key)) {
+        registerDVIDCredentialsProvider(key);
+      }
+
+      return this.credentialsManager.getCredentialsProvider<DVIDToken>(key, authServer);
+    } else {
+      return this.credentialsManager.getCredentialsProvider<DVIDToken>(dvidCredentailsKey(''));
+    }
+  }
+
   get(options: GetDataSourceOptions): Promise<DataSource> {
-    return getDataSource(options);
+    return getDataSource(options, this.getCredentialsProvider.bind(this));
   }
 
   completeUrl(options: CompleteUrlOptions) {
-    return completeUrl(options);
+    return completeUrl(options, this.getCredentialsProvider.bind(this));
   }
 }
