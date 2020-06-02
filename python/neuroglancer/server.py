@@ -33,7 +33,7 @@ import sockjs.tornado
 try:
     # Newer versions of tornado do not have the asynchronous decorator
     from sockjs.tornado.util import asynchronous
-except (ImportError, ModuleNotFoundError):
+except ImportError:
     from tornado.web import asynchronous
 
 from . import local_volume, static
