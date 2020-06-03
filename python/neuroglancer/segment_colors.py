@@ -14,10 +14,6 @@
 
 import math
 
-def zero_fill_right_shift(val, n):
-    """ Python implementation of javascript's >>> operator """
-    return (val >> n) if val >= 0 else ((val + 0x100000000) >> n)
-
 def hash_function(state,value):
     """ Python implementation of hashCombine() function
     in src/neuroglancer/gpu_hash/hash_function.ts,
