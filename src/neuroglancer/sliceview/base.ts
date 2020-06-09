@@ -21,7 +21,7 @@ import {ChunkLayout} from 'neuroglancer/sliceview/chunk_layout';
 import {WatchableValueChangeInterface, WatchableValueInterface} from 'neuroglancer/trackable_value';
 import {DATA_TYPE_BYTES, DataType} from 'neuroglancer/util/data_type';
 import {Disposable} from 'neuroglancer/util/disposable';
-import {getFrustrumPlanes, isAABBIntersectingPlane, isAABBVisible, mat4, vec3} from 'neuroglancer/util/geom';
+import {getFrustrumPlanes, getViewFrustrumDepthRange, isAABBIntersectingPlane, isAABBVisible, mat4, vec3} from 'neuroglancer/util/geom';
 import * as matrix from 'neuroglancer/util/matrix';
 import * as vector from 'neuroglancer/util/vector';
 import {SharedObject} from 'neuroglancer/worker_rpc';
@@ -29,6 +29,7 @@ import {SharedObject} from 'neuroglancer/worker_rpc';
 export {DATA_TYPE_BYTES, DataType};
 
 const DEBUG_VISIBLE_SOURCES = false;
+const DEBUG_CHUNK_VISIBILITY = false;
 
 const tempMat4 = mat4.create();
 
@@ -822,7 +823,11 @@ forEachPlaneIntersectingVolumetricChunk<RLayer extends MultiscaleVolumetricDataR
     clippingPlanes[16 + i] = zCoeff;
     clippingPlanes[20 + i] = -zCoeff;
   }
-
+  if (DEBUG_CHUNK_VISIBILITY) {
+    console.log('clippingPlanes', clippingPlanes);
+    console.log('modelViewProjection', modelViewProjection.join(','));
+    console.log(`lower=${lower.join(',')}, upper=${upper.join(',')}`);
+  }
   forEachVolumetricChunkWithinFrustrum(
       clippingPlanes, transformedSource, callback, isAABBIntersectingPlane);
 }
@@ -841,6 +846,7 @@ export function getNormalizedChunkLayout(
   const invTransform = mat4.copy(tempChunkLayout.invTransform, chunkLayout.invTransform);
   tempChunkLayout.detTransform = chunkLayout.detTransform;
   const {invViewMatrix, width, height} = projectionParameters;
+  const depth = getViewFrustrumDepthRange(projectionParameters.projectionMat);
   for (let chunkRenderDim = finiteRank; chunkRenderDim < 3; ++chunkRenderDim) {
     // we want to ensure chunk [0] fully covers the viewport
     const offset = invViewMatrix[12 + chunkRenderDim];
@@ -851,6 +857,9 @@ export function getNormalizedChunkLayout(
     const yc = Math.abs(invViewMatrix[chunkRenderDim + 4] * height);
     lower -= yc;
     upper += yc;
+    const zc = Math.abs(invViewMatrix[chunkRenderDim + 8] * depth);
+    lower -= zc;
+    upper += zc;
     const scaleFactor = Math.max(1, upper - lower);
     transform[12 + chunkRenderDim] = lower;
     transform[5 * chunkRenderDim] = scaleFactor;
