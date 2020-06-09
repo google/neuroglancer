@@ -766,15 +766,16 @@ export function forEachVisibleVolumetricChunk<RLayer extends MultiscaleVolumetri
 export function
 forEachPlaneIntersectingVolumetricChunk<RLayer extends MultiscaleVolumetricDataRenderLayer>(
     projectionParameters: ProjectionParameters, localPosition: Float32Array,
-    transformedSource: TransformedSource<RLayer>, callback: (positionInChunks: vec3) => void) {
+    transformedSource: TransformedSource<RLayer>, chunkLayout: ChunkLayout,
+    callback: (positionInChunks: vec3) => void) {
   if (!updateFixedCurPositionInChunks(
           transformedSource, projectionParameters.globalPosition, localPosition)) {
     return;
   }
-  const {size: chunkSize} = transformedSource.chunkLayout;
+  const {size: chunkSize} = chunkLayout;
   const modelViewProjection = mat4.multiply(
       tempVisibleVolumetricModelViewProjection, projectionParameters.viewProjectionMat,
-      transformedSource.chunkLayout.transform);
+      chunkLayout.transform);
   for (let i = 0; i < 3; ++i) {
     const s = chunkSize[i];
     for (let j = 0; j < 4; ++j) {

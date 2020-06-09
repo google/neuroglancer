@@ -19,7 +19,7 @@ import 'neuroglancer/render_layer_backend';
 import {Chunk, ChunkConstructor, ChunkRenderLayerBackend, ChunkSource, getNextMarkGeneration, withChunkManager} from 'neuroglancer/chunk_manager/backend';
 import {ChunkPriorityTier, ChunkState} from 'neuroglancer/chunk_manager/base';
 import {SharedWatchableValue} from 'neuroglancer/shared_watchable_value';
-import {filterVisibleSources, forEachPlaneIntersectingVolumetricChunk, MultiscaleVolumetricDataRenderLayer, SLICEVIEW_ADD_VISIBLE_LAYER_RPC_ID, SLICEVIEW_REMOVE_VISIBLE_LAYER_RPC_ID, SLICEVIEW_RENDERLAYER_RPC_ID, SLICEVIEW_RPC_ID, SliceViewBase, SliceViewChunkSource as SliceViewChunkSourceInterface, SliceViewChunkSpecification, SliceViewRenderLayer as SliceViewRenderLayerInterface, TransformedSource} from 'neuroglancer/sliceview/base';
+import { filterVisibleSources, forEachPlaneIntersectingVolumetricChunk, MultiscaleVolumetricDataRenderLayer, SLICEVIEW_ADD_VISIBLE_LAYER_RPC_ID, SLICEVIEW_REMOVE_VISIBLE_LAYER_RPC_ID, SLICEVIEW_RENDERLAYER_RPC_ID, SLICEVIEW_RPC_ID, SliceViewBase, SliceViewChunkSource as SliceViewChunkSourceInterface, SliceViewChunkSpecification, SliceViewRenderLayer as SliceViewRenderLayerInterface, TransformedSource, getNormalizedChunkLayout} from 'neuroglancer/sliceview/base';
 import {ChunkLayout} from 'neuroglancer/sliceview/chunk_layout';
 import {WatchableValueInterface} from 'neuroglancer/trackable_value';
 import {erf} from 'neuroglancer/util/erf';
@@ -117,6 +117,7 @@ export class SliceViewBackend extends SliceViewIntermediateBase {
         const curMarkGeneration = getNextMarkGeneration();
         forEachPlaneIntersectingVolumetricChunk(
             projectionParameters, tsource.renderLayer.localPosition.value, tsource,
+            getNormalizedChunkLayout(projectionParameters, tsource.chunkLayout),
             positionInChunks => {
               vec3.multiply(tempChunkPosition, positionInChunks, chunkSize);
               let priority = -vec3.distance(localCenter, tempChunkPosition);

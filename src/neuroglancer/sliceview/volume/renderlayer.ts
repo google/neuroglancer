@@ -385,7 +385,7 @@ void emit(vec4 color) {
       }
       newSource = true;
       let presentCount = 0, notPresentCount = 0;
-      sliceView.forEachVisibleChunk(transformedSource, key => {
+      sliceView.forEachVisibleChunk(transformedSource, chunkLayout, key => {
         let chunk = chunks.get(key);
         if (chunk && chunk.state === ChunkState.GPU_MEMORY) {
           let newChunkDataSize = chunk.chunkDataSize;

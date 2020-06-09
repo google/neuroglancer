@@ -22,7 +22,7 @@ import {DisplayDimensionRenderInfo, NavigationState} from 'neuroglancer/navigati
 import {updateProjectionParametersFromInverseViewAndProjection} from 'neuroglancer/projection_parameters';
 import {ChunkDisplayTransformParameters, ChunkTransformParameters, getChunkDisplayTransformParameters, getChunkTransformParameters, getLayerDisplayDimensionMapping, RenderLayerTransformOrError} from 'neuroglancer/render_coordinate_transform';
 import {DerivedProjectionParameters, SharedProjectionParameters} from 'neuroglancer/renderlayer';
-import {forEachPlaneIntersectingVolumetricChunk, SLICEVIEW_ADD_VISIBLE_LAYER_RPC_ID, SLICEVIEW_REMOVE_VISIBLE_LAYER_RPC_ID, SLICEVIEW_RPC_ID, SliceViewBase, SliceViewChunkSource as SliceViewChunkSourceInterface, SliceViewChunkSpecification, SliceViewProjectionParameters, SliceViewSourceOptions, TransformedSource, VisibleLayerSources} from 'neuroglancer/sliceview/base';
+import {forEachPlaneIntersectingVolumetricChunk, getNormalizedChunkLayout, SLICEVIEW_ADD_VISIBLE_LAYER_RPC_ID, SLICEVIEW_REMOVE_VISIBLE_LAYER_RPC_ID, SLICEVIEW_RPC_ID, SliceViewBase, SliceViewChunkSource as SliceViewChunkSourceInterface, SliceViewChunkSpecification, SliceViewProjectionParameters, SliceViewSourceOptions, TransformedSource, VisibleLayerSources} from 'neuroglancer/sliceview/base';
 import {ChunkLayout} from 'neuroglancer/sliceview/chunk_layout';
 import {SliceViewRenderLayer} from 'neuroglancer/sliceview/renderlayer';
 import {WatchableValueInterface} from 'neuroglancer/trackable_value';
@@ -194,9 +194,12 @@ export class SliceView extends Base {
     this.updateVisibleLayers();
   }
 
-  forEachVisibleChunk(tsource: FrontendTransformedSource, callback: (key: string) => void) {
+  forEachVisibleChunk(
+      tsource: FrontendTransformedSource, chunkLayout: ChunkLayout,
+      callback: (key: string) => void) {
     forEachPlaneIntersectingVolumetricChunk(
-        this.projectionParameters.value, tsource.renderLayer.localPosition.value, tsource, () => {
+        this.projectionParameters.value, tsource.renderLayer.localPosition.value, tsource,
+        chunkLayout, () => {
           callback(tsource.curPositionInChunks.join());
         });
   }
@@ -211,9 +214,11 @@ export class SliceView extends Base {
     let totalChunks = 0;
     for (const {visibleSources} of this.visibleLayers.values()) {
       for (const tsource of visibleSources) {
+        const chunkLayout =
+            getNormalizedChunkLayout(this.projectionParameters.value, tsource.chunkLayout);
         const {source} = tsource;
         const {chunks} = source;
-        this.forEachVisibleChunk(tsource, key => {
+        this.forEachVisibleChunk(tsource, chunkLayout, key => {
           const chunk = chunks.get(key);
           ++totalChunks;
           if (chunk && chunk.state === ChunkState.GPU_MEMORY) {
