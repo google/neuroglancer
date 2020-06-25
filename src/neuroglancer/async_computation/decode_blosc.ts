@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2019 Google Inc.
+ * Copyright 2020 Google Inc.
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
@@ -14,15 +14,12 @@
  * limitations under the License.
  */
 
-export enum VolumeChunkEncoding {
-  RAW,
-  GZIP,
-  BLOSC,
-}
+import {decodeBlosc} from 'neuroglancer/async_computation/decode_blosc_request';
+import {registerAsyncComputation} from 'neuroglancer/async_computation/handler';
 
-export class VolumeChunkSourceParameters {
-  url: string;
-  encoding: VolumeChunkEncoding;
-
-  static RPC_ID = 'n5/VolumeChunkSource';
-}
+registerAsyncComputation(decodeBlosc, async function(data: Uint8Array) {
+  const {Blosc} = await import(/*webpackChunkName: "blosc" */ 'neuroglancer/util/blosc');
+  const codec = new Blosc();
+  const result = await codec.decode(data);
+  return {value: result, transfer: [result.buffer]};
+});

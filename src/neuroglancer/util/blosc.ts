@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2019 Google Inc.
+ * Copyright 2020 Google Inc.
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
@@ -14,15 +14,7 @@
  * limitations under the License.
  */
 
-export enum VolumeChunkEncoding {
-  RAW,
-  GZIP,
-  BLOSC,
-}
+// Re-export just the blosc codec to allow for a smaller bundle when dynamically importing this
+// module.
 
-export class VolumeChunkSourceParameters {
-  url: string;
-  encoding: VolumeChunkEncoding;
-
-  static RPC_ID = 'n5/VolumeChunkSource';
-}
+export {Blosc} from 'numcodecs';

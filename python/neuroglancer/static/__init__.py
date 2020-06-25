@@ -22,6 +22,7 @@ static_content_filenames = set([
     'async_computation.bundle.js',
     'index.html',
     'draco.bundle.js',
+    'blosc.bundle.js',
 ])
 
 mime_type_map = {

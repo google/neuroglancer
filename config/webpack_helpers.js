@@ -78,6 +78,7 @@ const DEFAULT_DATA_SOURCES = exports.DEFAULT_DATA_SOURCES = [
     source: 'neuroglancer/datasource/n5',
     asyncComputation: [
       'neuroglancer/async_computation/decode_gzip',
+      'neuroglancer/async_computation/decode_blosc',
     ],
   },
   // 'neuroglancer/datasource/computed',

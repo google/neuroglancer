@@ -26,6 +26,7 @@ static_files = [
     'async_computation.bundle.js',
     'draco.bundle.js',
     'index.html',
+    'blosc.bundle.js',
 ]
 
 

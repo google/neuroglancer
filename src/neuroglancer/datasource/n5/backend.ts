@@ -14,6 +14,7 @@
  * limitations under the License.
  */
 
+import {decodeBlosc} from 'neuroglancer/async_computation/decode_blosc_request';
 import {decodeGzip} from 'neuroglancer/async_computation/decode_gzip_request';
 import {requestAsyncComputation} from 'neuroglancer/async_computation/request';
 import {WithParameters} from 'neuroglancer/chunk_manager/backend';
@@ -45,8 +46,15 @@ async function decodeChunk(
   }
   chunk.chunkDataSize = shape;
   let buffer = new Uint8Array(response, offset);
-  if (encoding === VolumeChunkEncoding.GZIP) {
-    buffer = await requestAsyncComputation(decodeGzip, cancellationToken, [buffer.buffer], buffer);
+  switch (encoding) {
+    case VolumeChunkEncoding.GZIP:
+      buffer =
+          await requestAsyncComputation(decodeGzip, cancellationToken, [buffer.buffer], buffer);
+      break;
+    case VolumeChunkEncoding.BLOSC:
+      buffer =
+          await requestAsyncComputation(decodeBlosc, cancellationToken, [buffer.buffer], buffer);
+      break;
   }
   await decodeRawChunk(
       chunk, cancellationToken, buffer.buffer, Endianness.BIG, buffer.byteOffset,
