@@ -81,6 +81,13 @@ const DEFAULT_DATA_SOURCES = exports.DEFAULT_DATA_SOURCES = [
       'neuroglancer/async_computation/decode_blosc',
     ],
   },
+  {
+    source: 'neuroglancer/datasource/zarr',
+    asyncComputation: [
+      'neuroglancer/async_computation/decode_gzip',
+      'neuroglancer/async_computation/decode_blosc',
+    ],
+  },
   // 'neuroglancer/datasource/computed',
   // 'neuroglancer/datasource/computed/example',
   // 'neuroglancer/datasource/computed/tensorflow',

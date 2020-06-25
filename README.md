@@ -35,6 +35,7 @@ Neuroglancer itself is purely a client-side program, but it depends on data bein
 - Single NIfTI files <https://www.nitrc.org/projects/nifti>
 - [Python in-memory volumes](python/README.md) (with automatic mesh generation)
 - N5 <https://github.com/saalfeldlab/n5>
+- [Zarr](src/neuroglancer/datasource/zarr)
 
 # Supported browsers
 
