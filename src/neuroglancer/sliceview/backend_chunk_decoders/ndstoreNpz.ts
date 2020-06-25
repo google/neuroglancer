@@ -42,7 +42,7 @@ export async function decodeNdstoreNpzChunk(
     throw new Error(
         `Shape ${JSON.stringify(shape)} does not match chunkDataSize ${chunkDataSize.join()}`);
   }
-  let parsedDataType = parseResult.dataType.dataType;
+  let parsedDataType = parseResult.dataType;
   let {spec} = source;
   if (parsedDataType !== spec.dataType) {
     throw new Error(
