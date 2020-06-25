@@ -133,10 +133,12 @@ export function fetchSpecial(url: string, init?: RequestInit): Promise<Response>
   const u = parseUrl(url);
   switch (u.protocol) {
     case 'gs':
-      return fetch(`https://www.googleapis.com/storage/v1/b/${u.host}/o/${
-          encodeURIComponent(u.path.substring(1))}?alt=media`);
+      return fetch(
+          `https://www.googleapis.com/storage/v1/b/${u.host}/o/${
+              encodeURIComponent(u.path.substring(1))}?alt=media`,
+          init);
     case 'gs+xml':
-      return fetch(`https://storage.googleapis.com/${u.host}${u.path}`);
+      return fetch(`https://storage.googleapis.com/${u.host}${u.path}`, init);
     default:
       return fetch(url, init);
   }
