@@ -16,6 +16,7 @@
 
 import {CancellationToken} from 'neuroglancer/util/cancellation';
 import {BasicCompletionResult, Completion} from 'neuroglancer/util/completion';
+import {getGcsPathCompletions} from 'neuroglancer/util/gcs_bucket_listing';
 import {parseUrl} from 'neuroglancer/util/http_request';
 import {cancellableFetchOk} from 'neuroglancer/util/http_request';
 import {getS3PathCompletions} from 'neuroglancer/util/s3_bucket_listing';
@@ -73,11 +74,14 @@ export async function completeHttpPath(url: string, cancellationToken: Cancellat
     throw null;
   }
   const {protocol, host, path} = result;
-  if (protocol === 'gs' && path.length > 0) {
+  if (protocol === 'gs+xml' && path.length > 0) {
     return await getS3PathCompletions(
         `${protocol}://${host}`, `https://storage.googleapis.com/${host}`, path, cancellationToken);
+  } else if (protocol === 'gs' && path.length > 0) {
+    return await getGcsPathCompletions(`${protocol}://${host}`, host, path, cancellationToken);
   }
-  const s3Match = url.match(/^((?:http|https):\/\/(?:storage\.googleapis\.com\/[^\/]+|[^\/]+\.storage\.googleapis\.com))(\/.*)$/);
+  const s3Match = url.match(
+      /^((?:http|https):\/\/(?:storage\.googleapis\.com\/[^\/]+|[^\/]+\.storage\.googleapis\.com))(\/.*)$/);
   if (s3Match !== null) {
     return await getS3PathCompletions(s3Match[1], s3Match[1], s3Match[2], cancellationToken);
   }

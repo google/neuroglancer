@@ -34,7 +34,7 @@ import {MultiscaleVolumeChunkSource as GenericMultiscaleVolumeChunkSource, Volum
 import {transposeNestedArrays} from 'neuroglancer/util/array';
 import {Borrowed} from 'neuroglancer/util/disposable';
 import {completeHttpPath} from 'neuroglancer/util/http_path_completion';
-import {fetchOk, HttpError, parseSpecialUrl, parseUrl} from 'neuroglancer/util/http_request';
+import {fetchSpecialOk, HttpError, parseUrl} from 'neuroglancer/util/http_request';
 import {expectArray, parseArray, parseFixedLengthArray, verifyEnumString, verifyFinitePositiveFloat, verifyObject, verifyObjectProperty, verifyOptionalObjectProperty, verifyPositiveInt, verifyString} from 'neuroglancer/util/json';
 import {createHomogeneousScaleMatrix} from 'neuroglancer/util/matrix';
 import {scaleByExp10, unitFromJson} from 'neuroglancer/util/si_units';
@@ -118,10 +118,7 @@ export class MultiscaleVolumeChunkSource extends GenericMultiscaleVolumeChunkSou
               .map((spec): SliceViewSingleResolutionSource<VolumeChunkSource> => ({
                      chunkSource: this.chunkManager.getChunkSource(N5VolumeChunkSource, {
                        spec,
-                       parameters: {
-                         url: parseSpecialUrl(scaleDownsamplingInfo.url),
-                         encoding: scale.encoding
-                       }
+                       parameters: {url: scaleDownsamplingInfo.url, encoding: scale.encoding}
                      }),
                      chunkToMultiscaleTransform: transform,
                    }));
@@ -191,10 +188,9 @@ function getAttributesJsonUrls(url: string): string[] {
 
 function getIndividualAttributesJson(
     chunkManager: ChunkManager, url: string, required: boolean): Promise<any> {
-  url = parseSpecialUrl(url);
   return chunkManager.memoize.getUncounted(
       {type: 'n5:attributes.json', url},
-      () => fetchOk(url)
+      () => fetchSpecialOk(url)
                 .then(response => response.json())
                 .then(j => {
                   try {
@@ -214,7 +210,7 @@ function getIndividualAttributesJson(
 
 async function getAttributes(
     chunkManager: ChunkManager, url: string, required: boolean): Promise<unknown> {
-  const attributesJsonUrls = getAttributesJsonUrls(url).map(parseSpecialUrl);
+  const attributesJsonUrls = getAttributesJsonUrls(url);
   const metadata = await Promise.all(attributesJsonUrls.map(
       (u, i) => getIndividualAttributesJson(
           chunkManager, u, required && i === attributesJsonUrls.length - 1)));

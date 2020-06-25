@@ -18,7 +18,7 @@ import debounce from 'lodash/debounce';
 import {StatusMessage} from 'neuroglancer/status';
 import {WatchableValue} from 'neuroglancer/trackable_value';
 import {RefCounted} from 'neuroglancer/util/disposable';
-import {fetchOk, parseSpecialUrl} from 'neuroglancer/util/http_request';
+import {fetchSpecialOk} from 'neuroglancer/util/http_request';
 import {urlSafeParse, verifyObject} from 'neuroglancer/util/json';
 import {getCachedJson, Trackable} from 'neuroglancer/util/trackable';
 
@@ -96,17 +96,13 @@ export class UrlHashBinding extends RefCounted {
       // Handle remote JSON state
       if (s.match(/^#!(http|https|gs):\/\//)) {
         const url = s.substring(2);
-        const normalizedUrl = parseSpecialUrl(url);
         StatusMessage.forPromise(
-            fetchOk(normalizedUrl).then(response => response.json()).then(json => {
+            fetchSpecialOk(url).then(response => response.json()).then(json => {
               verifyObject(json);
               this.root.reset();
               this.root.restoreState(json);
             }),
-            {
-              initialMessage: `Loading state from ${url}`,
-              errorPrefix: `Error loading state:`
-            });
+            {initialMessage: `Loading state from ${url}`, errorPrefix: `Error loading state:`});
       } else if (s.startsWith('#!+')) {
         s = s.slice(3);
         // Firefox always %-encodes the URL even if it is not typed that way.

@@ -31,13 +31,13 @@ import {decodeCompressedSegmentationChunk} from 'neuroglancer/sliceview/backend_
 import {decodeJpegChunk} from 'neuroglancer/sliceview/backend_chunk_decoders/jpeg';
 import {decodeRawChunk} from 'neuroglancer/sliceview/backend_chunk_decoders/raw';
 import {VolumeChunk, VolumeChunkSource} from 'neuroglancer/sliceview/volume/backend';
-import {fetchHttpByteRange} from 'neuroglancer/util/byte_range_http_requests';
+import {fetchSpecialHttpByteRange} from 'neuroglancer/util/byte_range_http_requests';
 import {CancellationToken} from 'neuroglancer/util/cancellation';
 import {Borrowed} from 'neuroglancer/util/disposable';
 import {convertEndian32, Endianness} from 'neuroglancer/util/endian';
 import {vec3} from 'neuroglancer/util/geom';
 import {murmurHash3_x86_128Hash64Bits} from 'neuroglancer/util/hash';
-import {cancellableFetchOk, isNotFoundError, responseArrayBuffer, responseJson} from 'neuroglancer/util/http_request';
+import {cancellableFetchSpecialOk, isNotFoundError, responseArrayBuffer, responseJson} from 'neuroglancer/util/http_request';
 import {stableStringify} from 'neuroglancer/util/json';
 import {Uint64} from 'neuroglancer/util/uint64';
 import {encodeZIndexCompressed} from 'neuroglancer/util/zorder';
@@ -96,7 +96,7 @@ function getMinishardIndexDataSource(
               const shardIndexEnd = Uint64.addUint32(new Uint64(), shardIndexStart, 16);
               let shardIndexResponse: ArrayBuffer;
               try {
-                shardIndexResponse = await fetchHttpByteRange(
+                shardIndexResponse = await fetchSpecialHttpByteRange(
                     shardUrl, shardIndexStart, shardIndexEnd, cancellationToken);
               } catch (e) {
                 if (isNotFoundError(e)) return {data: undefined, size: 0};
@@ -120,7 +120,7 @@ function getMinishardIndexDataSource(
               Uint64.add(minishardStartOffset, minishardStartOffset, shardIndexSize);
               Uint64.add(minishardEndOffset, minishardEndOffset, shardIndexSize);
 
-              let minishardIndexResponse = await fetchHttpByteRange(
+              let minishardIndexResponse = await fetchSpecialHttpByteRange(
                   shardUrl, minishardStartOffset, minishardEndOffset, cancellationToken);
               if (sharding.minishardIndexEncoding === DataEncoding.GZIP) {
                 minishardIndexResponse =
@@ -217,8 +217,8 @@ async function getShardedData(
   const minishardEntry = findMinishardEntry(minishardIndex, key);
   if (minishardEntry === undefined) return undefined;
   const {startOffset, endOffset} = minishardEntry;
-  let data =
-      await fetchHttpByteRange(minishardIndex.shardUrl, startOffset, endOffset, cancellationToken);
+  let data = await fetchSpecialHttpByteRange(
+      minishardIndex.shardUrl, startOffset, endOffset, cancellationToken);
   if (minishardIndexSource.sharding.dataEncoding === DataEncoding.GZIP) {
     data =
         (await requestAsyncComputation(decodeGzip, cancellationToken, [data], new Uint8Array(data)))
@@ -267,7 +267,7 @@ chunkDecoders.set(VolumeChunkEncoding.COMPRESSED_SEGMENTATION, decodeCompressedS
             `${chunkPosition[1]}-${chunkPosition[1] + chunkDataSize[1]}_` +
             `${chunkPosition[2]}-${chunkPosition[2] + chunkDataSize[2]}`;
       }
-      response = await cancellableFetchOk(url, {}, responseArrayBuffer, cancellationToken);
+      response = await cancellableFetchSpecialOk(url, {}, responseArrayBuffer, cancellationToken);
     } else {
       this.computeChunkBounds(chunk);
       const {gridShape} = this;
@@ -302,7 +302,7 @@ export function decodeFragmentChunk(chunk: FragmentChunk, response: ArrayBuffer)
 (WithParameters(MeshSource, MeshSourceParameters)) {
   async download(chunk: ManifestChunk, cancellationToken: CancellationToken) {
     const {parameters} = this;
-    const response = await cancellableFetchOk(
+    const response = await cancellableFetchSpecialOk(
         `${parameters.url}/${chunk.objectId}:${parameters.lod}`, {}, responseJson,
         cancellationToken);
     decodeManifestChunk(chunk, response);
@@ -310,7 +310,7 @@ export function decodeFragmentChunk(chunk: FragmentChunk, response: ArrayBuffer)
 
   async downloadFragment(chunk: FragmentChunk, cancellationToken: CancellationToken) {
     const {parameters} = this;
-    const response = await cancellableFetchOk(
+    const response = await cancellableFetchSpecialOk(
         `${parameters.url}/${chunk.fragmentId}`, {}, responseArrayBuffer, cancellationToken);
     decodeFragmentChunk(chunk, response);
   }
@@ -498,13 +498,13 @@ export class PrecomputedMultiscaleMeshSource extends
     const {parameters, minishardIndexSource} = this;
     let data: ArrayBuffer;
     if (minishardIndexSource === undefined) {
-      data = await cancellableFetchOk(
+      data = await cancellableFetchSpecialOk(
           `${parameters.url}/${chunk.objectId}.index`, {}, responseArrayBuffer, cancellationToken);
     } else {
       ({data, shardInfo: chunk.shardInfo} = getOrNotFoundError(
            await getShardedData(minishardIndexSource, chunk, chunk.objectId, cancellationToken)));
     }
-    await decodeMultiscaleManifestChunk(chunk, data);
+    decodeMultiscaleManifestChunk(chunk, data);
   }
 
   async downloadFragment(
@@ -543,7 +543,7 @@ export class PrecomputedMultiscaleMeshSource extends
       adjustedStartOffset = startOffset;
       adjustedEndOffset = endOffset;
     }
-    const response = await fetchHttpByteRange(
+    const response = await fetchSpecialHttpByteRange(
         requestUrl, adjustedStartOffset, adjustedEndOffset, cancellationToken);
     await decodeMultiscaleFragmentChunk(chunk, response);
   }
@@ -554,7 +554,8 @@ async function fetchByUint64(
     cancellationToken: CancellationToken) {
   if (minishardIndexSource === undefined) {
     try {
-      return await cancellableFetchOk(`${url}/${id}`, {}, responseArrayBuffer, cancellationToken);
+      return await cancellableFetchSpecialOk(
+          `${url}/${id}`, {}, responseArrayBuffer, cancellationToken);
     } catch (e) {
       if (isNotFoundError(e)) return undefined;
       throw e;
@@ -668,7 +669,7 @@ export class PrecomputedAnnotationSpatialIndexSourceBackend extends (WithParamet
     if (minishardIndexSource === undefined) {
       const url = `${parameters.url}/${chunkGridPosition.join('_')}`;
       try {
-        response = await cancellableFetchOk(url, {}, responseArrayBuffer, cancellationToken);
+        response = await cancellableFetchSpecialOk(url, {}, responseArrayBuffer, cancellationToken);
       } catch (e) {
         if (!isNotFoundError(e)) throw e;
       }
