@@ -43,7 +43,7 @@ export async function decodeBossNpzChunk(
     throw new Error(
         `Shape ${JSON.stringify(shape)} does not match chunkDataSize ${vec3Key(chunkDataSize)}`);
   }
-  let parsedDataType = parseResult.dataType.dataType;
+  let parsedDataType = parseResult.dataType;
   let {spec} = source;
   if (parsedDataType !== spec.dataType) {
     throw new Error(`Data type ${DataType[parsedDataType]} does not match expected data type ${

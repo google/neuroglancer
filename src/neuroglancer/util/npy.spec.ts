@@ -26,7 +26,7 @@ interface ExampleSpec {
 function checkNpy(spec: ExampleSpec, encoded: Uint8Array) {
   let decoded = parseNpy(encoded);
   expect(decoded.shape).toEqual(spec.shape);
-  expect(DataType[decoded.dataType.dataType].toLowerCase()).toBe(spec.dataType);
+  expect(DataType[decoded.dataType].toLowerCase()).toBe(spec.dataType);
   expect(Array.from(<any>decoded.data)).toEqual(spec.data);
 }
 

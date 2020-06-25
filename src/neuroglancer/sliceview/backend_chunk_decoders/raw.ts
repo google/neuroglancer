@@ -17,8 +17,8 @@
 import {postProcessRawData} from 'neuroglancer/sliceview/backend_chunk_decoders/postprocess';
 import {VolumeChunk} from 'neuroglancer/sliceview/volume/backend';
 import {CancellationToken} from 'neuroglancer/util/cancellation';
-import {DATA_TYPE_BYTES, DataType} from 'neuroglancer/util/data_type';
-import {convertEndian16, convertEndian32, Endianness, ENDIANNESS} from 'neuroglancer/util/endian';
+import {DATA_TYPE_BYTES, makeDataTypeArrayView} from 'neuroglancer/util/data_type';
+import {convertEndian, Endianness, ENDIANNESS} from 'neuroglancer/util/endian';
 import * as vector from 'neuroglancer/util/vector';
 
 export async function decodeRawChunk(
@@ -36,37 +36,7 @@ export async function decodeRawChunk(
         `Raw-format chunk is ${byteLength} bytes, ` +
         `but ${numElements} * ${bytesPerElement} = ${expectedBytes} bytes are expected.`);
   }
-  let data: ArrayBufferView;
-  switch (dataType) {
-    case DataType.UINT8:
-      data = new Uint8Array(response, byteOffset, byteLength);
-      break;
-    case DataType.INT8:
-      data = new Int8Array(response, byteOffset, byteLength);
-      break;
-    case DataType.UINT16:
-      data = new Uint16Array(response, byteOffset, byteLength / 2);
-      convertEndian16(data, endianness);
-      break;
-    case DataType.INT16:
-      data = new Int16Array(response, byteOffset, byteLength / 2);
-      convertEndian16(data, endianness);
-      break;
-    case DataType.INT32:
-      data = new Int32Array(response, byteOffset, byteLength / 4);
-      convertEndian32(data, endianness);
-      break;
-    case DataType.UINT32:
-    case DataType.UINT64:
-      data = new Uint32Array(response, byteOffset, byteLength / 4);
-      convertEndian32(data, endianness);
-      break;
-    case DataType.FLOAT32:
-      data = new Float32Array(response, byteOffset, byteLength / 4);
-      convertEndian32(data, endianness);
-      break;
-    default:
-      throw new Error(`Unexpected data type: ${dataType}.`);
-  }
+  const data = makeDataTypeArrayView(dataType, response, byteOffset, byteLength);
+  convertEndian(data, endianness, bytesPerElement);
   await postProcessRawData(chunk, cancellationToken, data);
 }

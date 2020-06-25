@@ -14,6 +14,8 @@
  * limitations under the License.
  */
 
+import {TypedArrayConstructor} from 'neuroglancer/util/array';
+
 /**
  * If this is updated, DATA_TYPE_BYTES must also be updated.
  */
@@ -28,25 +30,56 @@ export enum DataType {
   FLOAT32,
 }
 
-interface DataTypeBytes {
-  [index: number]: number;
+export const DATA_TYPE_SIGNED: Record<DataType, boolean|undefined> = {
+  [DataType.UINT8]: false,
+  [DataType.INT8]: true,
+  [DataType.UINT16]: false,
+  [DataType.INT16]: true,
+  [DataType.UINT32]: false,
+  [DataType.INT32]: true,
+  [DataType.UINT64]: false,
+  [DataType.FLOAT32]: undefined,
+};
+
+export const DATA_TYPE_BYTES: Record<DataType, number> = {
+  [DataType.UINT8]: 1,
+  [DataType.INT8]: 1,
+  [DataType.UINT16]: 2,
+  [DataType.INT16]: 2,
+  [DataType.UINT32]: 4,
+  [DataType.INT32]: 4,
+  [DataType.UINT64]: 8,
+  [DataType.FLOAT32]: 4,
+};
+
+export const DATA_TYPE_ARRAY_CONSTRUCTOR: Record<DataType, TypedArrayConstructor> = {
+  [DataType.UINT8]: Uint8Array,
+  [DataType.INT8]: Int8Array,
+  [DataType.UINT16]: Uint16Array,
+  [DataType.INT16]: Int16Array,
+  [DataType.UINT32]: Uint32Array,
+  [DataType.INT32]: Int32Array,
+  [DataType.UINT64]: Uint32Array,
+  [DataType.FLOAT32]: Float32Array,
+};
+
+export const DATA_TYPE_JAVASCRIPT_ELEMENTS_PER_ARRAY_ELEMENT: Record<DataType, number> = {
+  [DataType.UINT8]: 1,
+  [DataType.INT8]: 1,
+  [DataType.UINT16]: 1,
+  [DataType.INT16]: 1,
+  [DataType.UINT32]: 1,
+  [DataType.INT32]: 1,
+  [DataType.UINT64]: 2,
+  [DataType.FLOAT32]: 1,
+};
+
+export function makeDataTypeArrayView(
+    dataType: DataType, buffer: ArrayBuffer, byteOffset: number = 0,
+    byteLength: number = buffer.byteLength): ArrayBufferView {
+  const bytesPerElement = DATA_TYPE_BYTES[dataType];
+  const javascriptElementsPerArrayElement =
+      DATA_TYPE_JAVASCRIPT_ELEMENTS_PER_ARRAY_ELEMENT[dataType];
+  return new DATA_TYPE_ARRAY_CONSTRUCTOR[dataType](
+      buffer, byteOffset, byteLength / bytesPerElement / javascriptElementsPerArrayElement);
 }
-
-export const DATA_TYPE_SIGNED: boolean[] = [];
-DATA_TYPE_SIGNED[DataType.UINT8] = false;
-DATA_TYPE_SIGNED[DataType.INT8] = true;
-DATA_TYPE_SIGNED[DataType.UINT16] = false;
-DATA_TYPE_SIGNED[DataType.INT16] = true;
-DATA_TYPE_SIGNED[DataType.UINT32] = false;
-DATA_TYPE_SIGNED[DataType.INT32] = true;
-DATA_TYPE_SIGNED[DataType.UINT64] = false;
-
-export const DATA_TYPE_BYTES: DataTypeBytes = [];
-DATA_TYPE_BYTES[DataType.UINT8] = 1;
-DATA_TYPE_BYTES[DataType.INT8] = 1;
-DATA_TYPE_BYTES[DataType.UINT16] = 2;
-DATA_TYPE_BYTES[DataType.INT16] = 2;
-DATA_TYPE_BYTES[DataType.UINT32] = 4;
-DATA_TYPE_BYTES[DataType.INT32] = 4;
-DATA_TYPE_BYTES[DataType.UINT64] = 8;
-DATA_TYPE_BYTES[DataType.FLOAT32] = 4;
