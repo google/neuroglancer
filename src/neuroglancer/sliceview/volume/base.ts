@@ -207,7 +207,6 @@ export function makeDefaultVolumeChunkSpecifications(
     }
   }
   const {chunkDataSizes = getChunkDataSizes({
-           rank,
            ...options,
            minBlockSize,
            chunkToViewTransform,

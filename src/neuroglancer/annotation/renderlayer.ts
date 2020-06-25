@@ -24,7 +24,7 @@ import {AnnotationLayerState} from 'neuroglancer/annotation/annotation_layer_sta
 import {ANNOTATION_PERSPECTIVE_RENDER_LAYER_UPDATE_SOURCES_RPC_ID, ANNOTATION_RENDER_LAYER_RPC_ID, ANNOTATION_RENDER_LAYER_UPDATE_SEGMENTATION_RPC_ID, ANNOTATION_SPATIALLY_INDEXED_RENDER_LAYER_RPC_ID, forEachVisibleAnnotationChunk} from 'neuroglancer/annotation/base';
 import {AnnotationGeometryChunkSource, AnnotationGeometryData, computeNumPickIds, MultiscaleAnnotationSource} from 'neuroglancer/annotation/frontend_source';
 import {AnnotationRenderContext, AnnotationRenderHelper, getAnnotationTypeRenderHandler} from 'neuroglancer/annotation/type_handler';
-import {LayerChunkProgressInfo, ChunkState} from 'neuroglancer/chunk_manager/base';
+import {ChunkState, LayerChunkProgressInfo} from 'neuroglancer/chunk_manager/base';
 import {ChunkManager, ChunkRenderLayerFrontend} from 'neuroglancer/chunk_manager/frontend';
 import {LayerView, MouseSelectionState, VisibleLayerInfo} from 'neuroglancer/layer';
 import {DisplayDimensionRenderInfo} from 'neuroglancer/navigation_state';
@@ -51,8 +51,8 @@ import {NullarySignal} from 'neuroglancer/util/signal';
 import {Uint64} from 'neuroglancer/util/uint64';
 import {withSharedVisibility} from 'neuroglancer/visibility_priority/frontend';
 import {Buffer} from 'neuroglancer/webgl/buffer';
-import {parameterizedEmitterDependentShaderGetter} from 'neuroglancer/webgl/dynamic_shader';
-import {ShaderBuilder, ShaderProgram} from 'neuroglancer/webgl/shader';
+import {ParameterizedContextDependentShaderGetter, parameterizedEmitterDependentShaderGetter} from 'neuroglancer/webgl/dynamic_shader';
+import {ShaderBuilder, ShaderModule, ShaderProgram} from 'neuroglancer/webgl/shader';
 import {registerSharedObjectOwner, SharedObject} from 'neuroglancer/worker_rpc';
 
 const tempMat = mat4.create();
@@ -688,18 +688,19 @@ const SpatiallyIndexedAnnotationLayer = <TBase extends AnyConstructor<Annotation
           this.base.state.transform, attachment.view.displayDimensionRenderInfo));
     }
 
-    wireFrameRenderHelper = (this instanceof SliceViewPanelRenderLayer) ?
-        crossSectionBoxWireFrameShader :
-        projectionViewBoxWireFrameShader;
+    wireFrameRenderHelper: typeof crossSectionBoxWireFrameShader =
+        (this instanceof SliceViewPanelRenderLayer) ? crossSectionBoxWireFrameShader :
+                                                      projectionViewBoxWireFrameShader;
 
-    wireFrameShaderGetter = parameterizedEmitterDependentShaderGetter(this, this.gl, {
-      memoizeKey: `annotation/wireFrameShader:${this instanceof SliceViewPanelRenderLayer}`,
-      parameters: constantWatchableValue(undefined),
-      defineShader:
-          (builder: ShaderBuilder) => {
-            this.wireFrameRenderHelper.defineShader(builder);
-          },
-    });
+    wireFrameShaderGetter: ParameterizedContextDependentShaderGetter<ShaderModule, undefined> =
+        parameterizedEmitterDependentShaderGetter(this, this.gl, {
+          memoizeKey: `annotation/wireFrameShader:${this instanceof SliceViewPanelRenderLayer}`,
+          parameters: constantWatchableValue(undefined),
+          defineShader:
+              (builder: ShaderBuilder) => {
+                this.wireFrameRenderHelper.defineShader(builder);
+              },
+        });
 
     draw(
         renderContext: PerspectiveViewRenderContext|SliceViewPanelRenderContext,
