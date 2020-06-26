@@ -37,6 +37,7 @@ const hsv = new Float32Array(3);
 
 export class FindPathWidget extends RefCounted {
   private findPathButton = document.createElement('button');
+  private precisionModeCheckbox = document.createElement('input');
 
   constructor(
       private findPathGroup: Borrowed<MinimizableGroupWidget>,
@@ -69,7 +70,7 @@ export class FindPathWidget extends RefCounted {
       this.layer.tool.value = new PathFindingMarkerTool(this.layer);
     });
     let pathFound = false;
-    const {findPathButton} = this;
+    const {findPathButton, precisionModeCheckbox} = this;
     findPathButton.textContent = '✔️';
     findPathButton.title = 'Find path';
     findPathButton.addEventListener('click', () => {
@@ -87,7 +88,8 @@ export class FindPathWidget extends RefCounted {
           this.layer.chunkedGraphLayer!
               .findPath(
                   getSegmentSelectionFromPoint(this.pathBetweenSupervoxels.source!),
-                  getSegmentSelectionFromPoint(this.pathBetweenSupervoxels.target!))
+                  getSegmentSelectionFromPoint(this.pathBetweenSupervoxels.target!),
+                  precisionModeCheckbox.checked)
               .then((centroids) => {
                 pathFound = true;
                 findPathButton.title = 'Path found!';
@@ -123,6 +125,14 @@ export class FindPathWidget extends RefCounted {
     toolbox.appendChild(findPathButton);
     toolbox.appendChild(clearButton);
     this.findPathGroup.appendFixedChild(toolbox);
+
+    precisionModeCheckbox.type = 'checkbox';
+    precisionModeCheckbox.id = 'precision-mode-checkbox';
+    const checkboxLabel = document.createElement('label');
+    checkboxLabel.textContent = 'Precision mode: ';
+    checkboxLabel.title = 'Precision mode returns a more accurate path, but takes longer.';
+    checkboxLabel.appendChild(precisionModeCheckbox);
+    this.findPathGroup.appendFlexibleChild(checkboxLabel);
   }
 
   // Rotate color by 60 degrees on color wheel (to match up with annotation line
@@ -228,7 +238,8 @@ export class FindPathWidget extends RefCounted {
         findPathLabel.textContent = 'Rough path between source and target found.';
         findPathButton.style.color = '#32CD32';
       } else {
-        findPathLabel.textContent = 'Select a source and target to find a (very rough) path between the two.';
+        findPathLabel.textContent =
+            'Select a source and target to find a (very rough) path between the two.';
         findPathButton.style.color = '#000000';
       }
       if (pathBetweenSupervoxels.target) {

@@ -216,19 +216,21 @@ export class ChunkedGraphLayer extends GenericSliceViewRenderLayer {
     return {supervoxelConnectedComponents, isSplitIllegal: jsonResp[jsonIllegalSplitKey]};
   }
 
-  async findPath(first: SegmentSelection, second: SegmentSelection): Promise<number[][]> {
+  async findPath(first: SegmentSelection, second: SegmentSelection, precisionMode: boolean):
+      Promise<number[][]> {
     const {url} = this;
     if (url === '') {
       return Promise.reject(GRAPH_SERVER_NOT_SPECIFIED);
     }
 
-    const promise = authFetch(`${url}/graph/find_path?int64_as_str=1`, {
-      method: 'POST',
-      body: JSON.stringify([
-        [String(first.segmentId), ...first.position.values()],
-        [String(second.segmentId), ...second.position.values()]
-      ])
-    });
+    const promise =
+        authFetch(`${url}/graph/find_path?int64_as_str=1&precision_mode=${Number(precisionMode)}`, {
+          method: 'POST',
+          body: JSON.stringify([
+            [String(first.segmentId), ...first.position.values()],
+            [String(second.segmentId), ...second.position.values()]
+          ])
+        });
 
     const response = await this.withErrorMessage(promise, {
       initialMessage: `Finding path between ${first.segmentId} and ${second.segmentId}`,
