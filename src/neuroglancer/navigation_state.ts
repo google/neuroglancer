@@ -1159,7 +1159,7 @@ export class DisplayPose extends RefCounted {
     for (let i = 0; i < displayRank; ++i) {
       const dim = displayDimensionIndices[i];
       voxelCoordinates[dim] =
-          fixedPoint[dim] - fixedPointLocal[i] / (scales[dim] * relativeDisplayScales[i]);
+          fixedPoint[dim] - fixedPointLocal[i] / (scales[dim] * relativeDisplayScales[dim]);
     }
     this.position.changed.dispatch();
     this.orientation.changed.dispatch();
