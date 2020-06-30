@@ -411,6 +411,8 @@ class SegmentationLayer(Layer, _AnnotationLayerOptions):
     selected_alpha = selectedAlpha = wrapped_property('selectedAlpha', optional(float, 0.5))
     not_selected_alpha = notSelectedAlpha = wrapped_property('notSelectedAlpha', optional(float, 0))
     object_alpha = objectAlpha = wrapped_property('objectAlpha', optional(float, 1.0))
+    saturation = wrapped_property('saturation', optional(float, 1.0))
+    ignore_null_visible_set = ignoreNullVisibleSet = wrapped_property('ignoreNullVisibleSet', optional(bool, True))
     skeleton_rendering = skeletonRendering = wrapped_property('skeletonRendering', SkeletonRenderingOptions)
 
     @property
@@ -432,16 +434,15 @@ class SegmentationLayer(Layer, _AnnotationLayerOptions):
 
     @property
     def segment_html_color_dict(self):
-        """ Returns a dictionary whose keys 
-        are segments and values are the 6-digit hex strings
-        representing the colors of those segments
-        given the current color seed """
+        """Returns a dictionary whose keys are segments and values are the 6-digit hex
+        strings representing the colors of those segments given the current
+        color seed
+        """
         d = {}
         for segment in self.segments:
-            hex_string = segment_colors.hex_string_from_segment_id(
-                color_seed=self.color_seed,segment_id=segment)
+            hex_string = segment_colors.hex_string_from_segment_id(color_seed=self.color_seed,
+                                                                   segment_id=segment)
             d[segment] = hex_string
-            
         return d
 
     @staticmethod
