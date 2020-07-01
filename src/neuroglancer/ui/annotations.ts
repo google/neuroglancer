@@ -1132,10 +1132,13 @@ export class AnnotationLayerView extends Tab {
   }
 
   private exportToCSV() {
-    const filename = window.prompt('Enter your desired filename', `${this.layer.name}.csv`);
+    let filename = window.prompt('Enter your desired filename', `${this.layer.name}.csv`);
     if (filename === '') {
       StatusMessage.showTemporaryMessage('Filename cannot be empty.', 5000);
     } else if (filename !== null) {
+      if (filename.indexOf('.') === -1) {
+        filename = filename + '.csv';
+      }
       const pointToCoordinateText = (point: vec3, transform: mat4) => {
         const spatialPoint = vec3.transformMat4(vec3.create(), point, transform);
         return formatIntegerPoint(this.voxelSize.voxelFromSpatial(tempVec3, spatialPoint));
