@@ -81,5 +81,5 @@ export function makeDataTypeArrayView(
   const javascriptElementsPerArrayElement =
       DATA_TYPE_JAVASCRIPT_ELEMENTS_PER_ARRAY_ELEMENT[dataType];
   return new DATA_TYPE_ARRAY_CONSTRUCTOR[dataType](
-      buffer, byteOffset, byteLength / bytesPerElement / javascriptElementsPerArrayElement);
+      buffer, byteOffset, byteLength / bytesPerElement * javascriptElementsPerArrayElement);
 }
