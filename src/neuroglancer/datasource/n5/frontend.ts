@@ -200,7 +200,7 @@ function getIndividualAttributesJson(
                   }
                 })
                 .catch(e => {
-                  if (e instanceof HttpError && e.status === 404) {
+                  if (e instanceof HttpError && (e.status === 404 || e.status === 403)) {
                     if (required) return undefined;
                     return {};
                   }
