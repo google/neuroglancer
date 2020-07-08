@@ -36,7 +36,7 @@ import {transposeNestedArrays} from 'neuroglancer/util/array';
 import {Borrowed} from 'neuroglancer/util/disposable';
 import {mat4, vec3} from 'neuroglancer/util/geom';
 import {completeHttpPath} from 'neuroglancer/util/http_path_completion';
-import {fetchSpecialOk, HttpError} from 'neuroglancer/util/http_request';
+import {fetchSpecialOk, isNotFoundError} from 'neuroglancer/util/http_request';
 import {parseArray, parseFixedLengthArray, parseQueryStringParameters, unparseQueryStringParameters, verifyEnumString, verifyFiniteFloat, verifyFinitePositiveFloat, verifyInt, verifyObject, verifyObjectProperty, verifyOptionalObjectProperty, verifyOptionalString, verifyPositiveInt, verifyString, verifyStringArray} from 'neuroglancer/util/json';
 import * as matrix from 'neuroglancer/util/matrix';
 
@@ -331,7 +331,7 @@ async function getMeshMetadata(
   try {
     metadata = await getJsonMetadata(chunkManager, url);
   } catch (e) {
-    if (e instanceof HttpError && (e.status === 404 || e.status === 403)) {
+    if (isNotFoundError(e)) {
       // If we fail to fetch the info file, assume it is the legacy
       // single-resolution mesh format.
       return {metadata: undefined};
@@ -862,7 +862,7 @@ export class PrecomputedDataSource extends DataSourceProvider {
           try {
             metadata = await getJsonMetadata(options.chunkManager, url);
           } catch (e) {
-            if (e instanceof HttpError && e.status === 404) {
+            if (isNotFoundError(e)) {
               if (parameters['type'] === 'mesh') {
                 return await getMeshDataSource(options, url);
               }

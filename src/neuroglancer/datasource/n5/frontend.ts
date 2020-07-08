@@ -34,7 +34,7 @@ import {MultiscaleVolumeChunkSource as GenericMultiscaleVolumeChunkSource, Volum
 import {transposeNestedArrays} from 'neuroglancer/util/array';
 import {Borrowed} from 'neuroglancer/util/disposable';
 import {completeHttpPath} from 'neuroglancer/util/http_path_completion';
-import {fetchSpecialOk, HttpError, parseUrl} from 'neuroglancer/util/http_request';
+import {fetchSpecialOk, isNotFoundError, parseUrl} from 'neuroglancer/util/http_request';
 import {expectArray, parseArray, parseFixedLengthArray, verifyEnumString, verifyFinitePositiveFloat, verifyObject, verifyObjectProperty, verifyOptionalObjectProperty, verifyPositiveInt, verifyString} from 'neuroglancer/util/json';
 import {createHomogeneousScaleMatrix} from 'neuroglancer/util/matrix';
 import {scaleByExp10, unitFromJson} from 'neuroglancer/util/si_units';
@@ -200,7 +200,7 @@ function getIndividualAttributesJson(
                   }
                 })
                 .catch(e => {
-                  if (e instanceof HttpError && (e.status === 404 || e.status === 403)) {
+                  if (isNotFoundError(e)) {
                     if (required) return undefined;
                     return {};
                   }
