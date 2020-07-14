@@ -57,7 +57,6 @@ export interface SliceViewSegmentationDisplayState extends SegmentationDisplaySt
 interface ShaderParameters {
   hasEquivalences: boolean;
   hasSegmentStatedColors: boolean;
-  hasHighlightedSegments: boolean;
   hideSegmentZero: boolean;
 }
 
@@ -70,10 +69,6 @@ export class SegmentationRenderLayer extends SliceViewVolumeRenderLayer<ShaderPa
 
   private hashTableManager = new HashSetShaderManager('visibleSegments');
   private gpuHashTable = GPUHashTable.get(this.gl, this.displayState.visibleSegments.hashTable);
-  private hashTableManagerHighlighted = new HashSetShaderManager('highlightedSegments');
-  private gpuHashTableHighlighted =
-      GPUHashTable.get(this.gl, this.displayState.highlightedSegments.hashTable);
-
   private equivalencesShaderManager = new HashMapShaderManager('equivalences');
   private equivalencesHashMap =
       new EquivalencesHashMap(this.displayState.segmentEquivalences.disjointSets);
@@ -87,8 +82,6 @@ export class SegmentationRenderLayer extends SliceViewVolumeRenderLayer<ShaderPa
           refCounted => ({
             hasEquivalences: refCounted.registerDisposer(makeCachedDerivedWatchableValue(
                 x => x.size !== 0, [displayState.segmentEquivalences])),
-            hasHighlightedSegments: refCounted.registerDisposer(makeCachedDerivedWatchableValue(
-                x => x.size !== 0, [displayState.highlightedSegments])),
             hasSegmentStatedColors: refCounted.registerDisposer(makeCachedDerivedWatchableValue(
                 x => x.size !== 0, [displayState.segmentStatedColors])),
             hideSegmentZero: displayState.hideSegmentZero,
@@ -185,17 +178,6 @@ uint64_t getMappedObjectId() {
 `;
     }
 
-    if (parameters.hasHighlightedSegments) {
-      this.hashTableManagerHighlighted.defineShader(builder);
-      // Override color for all highlighted segments.
-      fragmentMain += `
-  if (${this.hashTableManagerHighlighted.hasFunctionName}(value)) {
-    rgb = vec3(0.2,0.2,2.0);
-    saturation = 1.0;
-  };
-`;
-    }
-
     fragmentMain += `
   emit(vec4(mix(vec3(1.0,1.0,1.0), rgb, saturation), alpha));
 `;
@@ -221,9 +203,6 @@ uint64_t getMappedObjectId() {
         shader.uniform('uShowAllSegments'),
         visibleSegments.hashTable.size || !ignoreNullSegmentSet ? 0 : 1);
     this.hashTableManager.enable(gl, shader, this.gpuHashTable);
-    if (parameters.hasHighlightedSegments) {
-      this.hashTableManagerHighlighted.enable(gl, shader, this.gpuHashTableHighlighted);
-    }
     if (parameters.hasEquivalences) {
       this.equivalencesHashMap.update();
       this.equivalencesShaderManager.enable(gl, shader, this.gpuEquivalencesHashTable);
@@ -237,9 +216,6 @@ uint64_t getMappedObjectId() {
   endSlice(sliceView: SliceView, shader: ShaderProgram, parameters: ShaderParameters) {
     const {gl} = this;
     this.hashTableManager.disable(gl, shader);
-    if (parameters.hasHighlightedSegments) {
-      this.hashTableManagerHighlighted.disable(gl, shader);
-    }
     if (parameters.hasEquivalences) {
       this.equivalencesShaderManager.disable(gl, shader);
     }

@@ -73,7 +73,6 @@ const IGNORE_NULL_VISIBLE_SET_JSON_KEY = 'ignoreNullVisibleSet';
 const MESH_JSON_KEY = 'mesh';
 const SKELETONS_JSON_KEY = 'skeletons';
 const SEGMENTS_JSON_KEY = 'segments';
-const HIGHLIGHTS_JSON_KEY = 'highlights';
 const EQUIVALENCES_JSON_KEY = 'equivalences';
 const COLOR_SEED_JSON_KEY = 'colorSeed';
 const SEGMENT_STATED_COLORS_JSON_KEY = 'segmentColors';
@@ -137,7 +136,6 @@ export class SegmentationUserLayer extends Base {
     hideSegmentZero: new TrackableBoolean(true, true),
     ignoreNullVisibleSet: new TrackableBoolean(true, true),
     visibleSegments: Uint64Set.makeWithCounterpart(this.manager.worker),
-    highlightedSegments: Uint64Set.makeWithCounterpart(this.manager.worker),
     segmentEquivalences: SharedDisjointUint64Sets.makeWithCounterpart(this.manager.worker),
     skeletonRenderingOptions: new SkeletonRenderingOptions(),
     shaderError: makeWatchableShaderError(),
@@ -323,9 +321,6 @@ export class SegmentationUserLayer extends Base {
     };
 
     restoreSegmentsList(SEGMENTS_JSON_KEY, this.displayState.visibleSegments);
-    restoreSegmentsList(HIGHLIGHTS_JSON_KEY, this.displayState.highlightedSegments);
-
-    this.displayState.highlightedSegments.changed.add(this.specificationChanged.dispatch);
 
     verifyObjectProperty(specification, SEGMENT_STATED_COLORS_JSON_KEY, y => {
       if (y !== undefined) {
@@ -363,10 +358,6 @@ export class SegmentationUserLayer extends Base {
     let {visibleSegments} = this.displayState;
     if (visibleSegments.size > 0) {
       x[SEGMENTS_JSON_KEY] = visibleSegments.toJSON();
-    }
-    let {highlightedSegments} = this.displayState;
-    if (highlightedSegments.size > 0) {
-      x[HIGHLIGHTS_JSON_KEY] = highlightedSegments.toJSON();
     }
     let {segmentEquivalences} = this.displayState;
     if (segmentEquivalences.size > 0) {
@@ -430,20 +421,6 @@ export class SegmentationUserLayer extends Base {
           const segment = segmentSelectionState.selectedSegment;
           const {visibleSegments} = this.displayState;
           visibleSegments.set(segment, !visibleSegments.has(segment));
-        }
-        break;
-      }
-      case 'highlight': {
-        if (!this.pick.value) break;
-        let {segmentSelectionState} = this.displayState;
-        if (segmentSelectionState.hasSelectedSegment) {
-          let segment = segmentSelectionState.selectedSegment;
-          let {highlightedSegments} = this.displayState;
-          if (highlightedSegments.has(segment)) {
-            highlightedSegments.delete(segment);
-          } else {
-            highlightedSegments.add(segment);
-          }
         }
         break;
       }

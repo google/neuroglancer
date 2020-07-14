@@ -27,7 +27,6 @@ import {SharedWatchableValue} from 'neuroglancer/shared_watchable_value';
 import {TrackableAlphaValue} from 'neuroglancer/trackable_alpha';
 import {TrackableValue, WatchableValueInterface} from 'neuroglancer/trackable_value';
 import {Uint64Map} from 'neuroglancer/uint64_map';
-import {Uint64Set} from 'neuroglancer/uint64_set';
 import {RefCounted} from 'neuroglancer/util/disposable';
 import {vec4} from 'neuroglancer/util/geom';
 import {NullarySignal} from 'neuroglancer/util/signal';
@@ -109,7 +108,6 @@ export interface SegmentationDisplayState extends VisibleSegmentsState {
   segmentColorHash: SegmentColorHash;
   segmentStatedColors: Uint64Map;
   saturation: TrackableAlphaValue;
-  highlightedSegments: Uint64Set;
   /**
    * Maximum length of base-10 representation of id seen.
    */
@@ -147,7 +145,6 @@ export function registerRedrawWhenSegmentationDisplayStateChanged(
   renderLayer.registerDisposer(displayState.segmentColorHash.changed.add(dispatchRedrawNeeded));
   renderLayer.registerDisposer(displayState.visibleSegments.changed.add(dispatchRedrawNeeded));
   renderLayer.registerDisposer(displayState.saturation.changed.add(dispatchRedrawNeeded));
-  renderLayer.registerDisposer(displayState.highlightedSegments.changed.add(dispatchRedrawNeeded));
   renderLayer.registerDisposer(displayState.segmentEquivalences.changed.add(dispatchRedrawNeeded));
   renderLayer.registerDisposer(
       displayState.segmentSelectionState.changed.add(dispatchRedrawNeeded));
@@ -212,15 +209,6 @@ export function getObjectColor(
   }
   for (let i = 0; i < 3; ++i) {
     color[i] = color[i] * saturation + (1 - saturation);
-  }
-
-  // Color highlighted segments
-  if (displayState.highlightedSegments.has(objectId)) {
-    // Make it vivid blue for selection
-    color[0] = 0.2;
-    color[1] = 0.2;
-    color[2] = 2.0;
-    color[3] = 1.0;
   }
 
   color[0] *= alpha;
