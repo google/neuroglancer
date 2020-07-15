@@ -120,10 +120,12 @@ setup(
     },
     setup_requires=[
         "numpy>=1.11.0",
+        "numpy<1.19;python_version<'3.6'"
     ],
     install_requires=[
         "Pillow>=3.2.0",
         "numpy>=1.11.0",
+        "numpy<1.19;python_version<'3.6'",
         'requests',
         'tornado<6',
         'sockjs-tornado',

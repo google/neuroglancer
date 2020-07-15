@@ -4,7 +4,7 @@ os:
   - linux
 python:
   - "3.5"
-  - "3.7"
+  - "3.8"
 matrix:
   include:
     - name: "C++"
