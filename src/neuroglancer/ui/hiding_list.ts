@@ -53,6 +53,12 @@ export class HidingList {
             return;
           }
 
+          const minimizingEl = this.scrollArea.parentElement!.parentElement!.parentElement!;
+          if (minimizingEl.classList.contains('minimized')) {
+            // Annotations section is minimized, don't resize
+            return;
+          }
+
           for (const entry of entries) {
             // On annotation resize, update all subsequent annotation Ys
 
