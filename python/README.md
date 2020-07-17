@@ -118,6 +118,7 @@ password=xxxx
 To publish a new version, run the following command:
 
 ```shell
+rm -rf neuroglancer.egg-info
 python setup.py bundle_client sdist
 twine upload dist/*
 ```
