@@ -229,6 +229,83 @@ def typed_string_map(wrapped_type, validator=None):
 
     return Map
 
+
+def typed_map(key_type, value_type, key_validator=None, value_validator=None):
+    key_validator = _normalize_validator(key_type, key_validator)
+    value_validator = _normalize_validator(value_type, value_validator)
+
+    class Map(JsonObjectWrapper, MapBase):
+        supports_validation = True
+
+        def __init__(self, json_data=None, _readonly=False):
+            if isinstance(json_data, MapBase):
+                json_data = json_data.to_json()
+            elif json_data is not None:
+                new_map = collections.OrderedDict()
+                for k, v in six.viewitems(json_data):
+                    key_validator(k)
+                    value_validator(v)
+                    new_map[str(k)] = to_json(v)
+                json_data = new_map
+            super(Map, self).__init__(json_data, _readonly=_readonly)
+
+        def clear(self):
+            with self._lock:
+                self._cached_wrappers.clear()
+                self._json_data.clear()
+
+        def keys(self):
+            return [key_validator(k) for k in six.viewkeys(self._json_data)]
+
+        def iteritems(self):
+            for key in self:
+                yield (key, self[key])
+
+        def itervalues(self):
+            for key in self:
+                yield self[key]
+
+        def get(self, key, default_value=None):
+            key = str(key)
+            with self._lock:
+                if key in self._json_data:
+                    return self._get_wrapped(key, value_type)
+                return default_value
+
+        def __len__(self):
+            return len(self._json_data)
+
+        def __contains__(self, key):
+            return str(key) in self._json_data
+
+        def __getitem__(self, key):
+            key = str(key)
+            with self._lock:
+                if key not in self._json_data:
+                    raise KeyError
+                return self._get_wrapped(key, value_type)
+
+        def __setitem__(self, key, value):
+            key = str(key)
+            with self._lock:
+                self._set_wrapped(key, value, validator)
+                self._json_data[key] = None # placeholder
+
+        def __delitem__(self, key):
+            if self._readonly:
+                raise AttributeError
+            key = str(key)
+            with self._lock:
+                del self._json_data[key]
+                self._cached_wrappers.pop(key, None)
+
+        def __iter__(self):
+            for key in self._json_data:
+                yield key_validator(key)
+
+    return Map
+
+
 def typed_set(wrapped_type):
     def wrapper(x, _readonly=False):
         set_type = frozenset if _readonly else set

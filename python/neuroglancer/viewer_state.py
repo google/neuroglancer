@@ -35,7 +35,7 @@ from . import segment_colors
 from .equivalence_map import EquivalenceMap
 from .json_utils import encode_json_for_repr
 from .json_wrappers import (JsonObjectWrapper, array_wrapper, optional, text_type, typed_list,
-                            typed_set, typed_string_map, wrapped_property)
+                            typed_map, typed_set, typed_string_map, wrapped_property)
 
 __all__ = []
 
@@ -431,6 +431,8 @@ class SegmentationLayer(Layer, _AnnotationLayerOptions):
     mesh_render_scale = meshRenderScale = wrapped_property('meshRenderScale', optional(float, 10))
     mesh_silhouette_rendering = meshSilhouetteRendering = wrapped_property('meshSilhouetteRendering', optional(float, 0))
     segment_query = segmentQuery = wrapped_property('segmentQuery', optional(text_type))
+    segment_colors = segmentColors = wrapped_property(
+        'segmentColors', typed_map(key_type=np.uint64, value_type=text_type))
 
     @property
     def segment_html_color_dict(self):
