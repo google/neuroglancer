@@ -598,6 +598,7 @@ export class AnnotationLayerView extends Tab {
     const {source} = this.annotationLayer;
     annotationTagFilter.id = 'annotation-tag-filter';
     annotationTagFilter.add(new Option('View all', '0', true, true));
+    annotationTagFilter.add(new Option('View untagged', '-1', false, false));
     const createOptionText = (tag: AnnotationTag) => {
       return '#' + tag.label + ' (id: ' + tag.id.toString() + ')';
     };
@@ -1121,7 +1122,15 @@ export class AnnotationLayerView extends Tab {
 
   private filterAnnotationsByTag(tagId: number) {
     for (const [annotationId, annotationElement] of this.annotationListElements) {
-      if (tagId === 0 ||
+      if (tagId === -1) {
+        const tags = this.annotationLayer.source.getReference(annotationId).value!.tagIds!
+        if (tags.size > 0) {
+          annotationElement.classList.add('neuroglancer-annotation-hiding-list-tagged-hidden');
+        } else {
+          annotationElement.classList.remove('neuroglancer-annotation-hiding-list-tagged-hidden');
+        }
+      }
+      else if (tagId === 0 ||
           this.annotationLayer.source.isAnnotationTaggedWithTag(annotationId, tagId)) {
         annotationElement.classList.remove('neuroglancer-annotation-hiding-list-tagged-hidden');
       } else {
