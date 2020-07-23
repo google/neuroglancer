@@ -188,14 +188,6 @@ uint64_t getMappedObjectId() {
   float alpha = uSelectedAlpha;
   float saturation = uSaturation;
 `;
-    if (this.displayState.hideSegmentZero.value) {
-      fragmentMain += `
-  if (value.value[0] == 0u && value.value[1] == 0u) {
-    emit(vec4(vec4(0, 0, 0, 0)));
-    return;
-  }
-`;
-    }
     fragmentMain += `
   if (uFocusMulticutSegments == 1u) {
     bool has = uShowAllSegments != 0u ? true : ${
@@ -208,6 +200,14 @@ uint64_t getMappedObjectId() {
     return;
   } else {
 `;
+    if (this.displayState.hideSegmentZero.value) {
+      fragmentMain += `
+  if (value.value[0] == 0u && value.value[1] == 0u) {
+    emit(vec4(vec4(0, 0, 0, 0)));
+    return;
+  }
+`;
+    }
     fragmentMain += `
     bool has = uShowAllSegments != 0u ? true : ${this.hashTableManager.hasFunctionName}(value);
     if (uSelectedSegment == value.value) {
