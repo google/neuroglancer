@@ -45,7 +45,7 @@ Neuroglancer itself is purely a client-side program, but it depends on data bein
 # Keyboard and mouse bindings
 
 For the complete set of bindings, see
-[src/neuroglancer/ui/default_input_event_bindings.ts](src/neuroglancer/default_input_event_bindings.ts),
+[src/neuroglancer/ui/default_input_event_bindings.ts](src/neuroglancer/ui/default_input_event_bindings.ts),
 or within Neuroglancer, press `h` or click on the button labeled `?` in the upper right corner.
 
 - Click on a layer name to toggle its visibility.
