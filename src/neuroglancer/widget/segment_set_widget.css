@@ -32,6 +32,7 @@
 .segment-set-widget .item-container {
   display: flex;
   flex-wrap: wrap;
+  max-height: 40vh;
 }
 
 .copy-all-segment-IDs-button {
