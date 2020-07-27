@@ -160,12 +160,14 @@ def optional(wrapper, default_value=None):
     return modified_wrapper
 
 class MapBase(object):
+    __slots__ = ()
     pass
 
 def typed_string_map(wrapped_type, validator=None):
     validator = _normalize_validator(wrapped_type, validator)
     class Map(JsonObjectWrapper, MapBase):
         supports_validation = True
+        __slots__ = ()
 
         def __init__(self, json_data=None, _readonly=False):
             if isinstance(json_data, MapBase):
@@ -236,6 +238,7 @@ def typed_map(key_type, value_type, key_validator=None, value_validator=None):
 
     class Map(JsonObjectWrapper, MapBase):
         supports_validation = True
+        __slots__ = ()
 
         def __init__(self, json_data=None, _readonly=False):
             if isinstance(json_data, MapBase):
@@ -323,6 +326,8 @@ def typed_list(wrapped_type, validator=None):
     class TypedList(object):
         supports_readonly = True
         supports_validation = True
+        __slots__ = ('_readonly', '_data')
+
         def __init__(self, json_data=None, _readonly=False):
             if json_data is None:
                 json_data = []
