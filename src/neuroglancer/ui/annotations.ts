@@ -1124,7 +1124,7 @@ export class AnnotationLayerView extends Tab {
     for (const [annotationId, annotationElement] of this.annotationListElements) {
       if (tagId === -1) {
         const tags = this.annotationLayer.source.getReference(annotationId).value!.tagIds!
-        if (tags.size > 0) {
+        if (tags && tags.size > 0) {
           annotationElement.classList.add('neuroglancer-annotation-hiding-list-tagged-hidden');
         } else {
           annotationElement.classList.remove('neuroglancer-annotation-hiding-list-tagged-hidden');
