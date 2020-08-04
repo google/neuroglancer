@@ -20,6 +20,7 @@
 
 import {Annotation, AnnotationReference, AnnotationType, Point} from 'neuroglancer/annotation';
 import {getSelectedAssocatedSegment, PlaceAnnotationTool} from 'neuroglancer/annotation/annotation';
+import {AnnotationLayerState} from 'neuroglancer/annotation/annotation_layer_state';
 import {AnnotationRenderContext, AnnotationRenderHelper, registerAnnotationTypeRenderHandler} from 'neuroglancer/annotation/type_handler';
 import {MouseSelectionState} from 'neuroglancer/layer';
 import {UserLayerWithAnnotations} from 'neuroglancer/ui/annotations';
@@ -37,7 +38,7 @@ class RenderHelper extends AnnotationRenderHelper {
 
   defineShader(builder: ShaderBuilder) {
     super.defineShader(builder);
-    this.circleShader.defineShader(builder, /*crossSectionFade=*/this.targetIsSliceView);
+    this.circleShader.defineShader(builder, /*crossSectionFade=*/ this.targetIsSliceView);
     // Position of point in camera coordinates.
     builder.addAttribute('highp vec3', 'aVertexPosition');
     builder.setVertexMain(`
@@ -56,9 +57,9 @@ emitAnnotation(getCircleColor(vColor, borderColor));
       const {gl} = this;
       const aVertexPosition = shader.attribute('aVertexPosition');
       context.buffer.bindToVertexAttrib(
-          aVertexPosition, /*components=*/3, /*attributeType=*/WebGL2RenderingContext.FLOAT,
-          /*normalized=*/false,
-          /*stride=*/0, /*offset=*/context.bufferOffset);
+          aVertexPosition, /*components=*/ 3, /*attributeType=*/ WebGL2RenderingContext.FLOAT,
+          /*normalized=*/ false,
+          /*stride=*/ 0, /*offset=*/ context.bufferOffset);
       gl.vertexAttribDivisor(aVertexPosition, 1);
       this.circleShader.draw(
           shader, context.renderContext,
@@ -121,7 +122,7 @@ export class PlacePointTool extends PlaceAnnotationTool {
             vec3.transformMat4(vec3.create(), mouseState.position, annotationLayer.globalToObject),
         type: AnnotationType.POINT,
       };
-      const reference = annotationLayer.source.add(annotation, /*commit=*/true, parentReference);
+      const reference = annotationLayer.source.add(annotation, /*commit=*/ true, parentReference);
       this.layer.selectedAnnotation.value = {id: reference.id};
       this.assignToParent(reference, parentReference);
       reference.dispose();
@@ -141,3 +142,16 @@ PlacePointTool.prototype.annotationType = AnnotationType.POINT;
 registerTool(
     ANNOTATE_POINT_TOOL_ID,
     (layer, options) => new PlacePointTool(<UserLayerWithAnnotations>layer, options));
+
+export function createPointAnnotation(
+    position: vec3, annotationLayer: AnnotationLayerState, source: Annotation = <Annotation>{}) {
+  const annotation: Annotation = {
+    id: '',
+    description: source.description || '',
+    segments: getSelectedAssocatedSegment(annotationLayer),
+    point: position,
+    type: AnnotationType.POINT,
+    tagIds: source.tagIds,
+  };
+  return annotation;
+}

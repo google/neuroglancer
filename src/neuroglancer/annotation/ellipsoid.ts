@@ -51,13 +51,13 @@ abstract class RenderHelper extends AnnotationRenderHelper {
       const aRadii = shader.attribute('aRadii');
       const {gl} = shader;
       context.buffer.bindToVertexAttrib(
-          aCenter, /*components=*/3, /*attributeType=*/WebGL2RenderingContext.FLOAT,
-          /*normalized=*/false,
-          /*stride=*/4 * 6, /*offset=*/context.bufferOffset);
+          aCenter, /*components=*/ 3, /*attributeType=*/ WebGL2RenderingContext.FLOAT,
+          /*normalized=*/ false,
+          /*stride=*/ 4 * 6, /*offset=*/ context.bufferOffset);
       context.buffer.bindToVertexAttrib(
-          aRadii, /*components=*/3, /*attributeType=*/WebGL2RenderingContext.FLOAT,
-          /*normalized=*/false,
-          /*stride=*/4 * 6, /*offset=*/context.bufferOffset + 4 * 3);
+          aRadii, /*components=*/ 3, /*attributeType=*/ WebGL2RenderingContext.FLOAT,
+          /*normalized=*/ false,
+          /*stride=*/ 4 * 6, /*offset=*/ context.bufferOffset + 4 * 3);
       gl.vertexAttribDivisor(aCenter, 1);
       gl.vertexAttribDivisor(aRadii, 1);
       callback();
@@ -101,7 +101,7 @@ emitAnnotation(vec4(vColor.rgb * vLightingFactor, vColor.a));
       lightVec[3] = ambientLighting;
       gl.uniform4fv(shader.uniform('uLightDirection'), lightVec);
       gl.uniformMatrix4fv(
-          shader.uniform('uNormalTransform'), /*transpose=*/false,
+          shader.uniform('uNormalTransform'), /*transpose=*/ false,
           mat4.transpose(mat4.create(), context.annotationLayer.state.globalToObject));
       this.sphereRenderHelper.draw(shader, context.count);
     });
@@ -138,7 +138,7 @@ emitAnnotation(vec4(vColor.rgb * vLightingFactor, vColor.a));
 class SliceViewRenderHelper extends RenderHelper {
   private quadRenderHelper = this.registerDisposer(new QuadRenderHelper(this.gl, 1));
   private squareCornersBuffer =
-      getSquareCornersBuffer(this.gl, -1, -1, 1, 1, /*minorTiles=*/1, /*majorTiles=*/1);
+      getSquareCornersBuffer(this.gl, -1, -1, 1, 1, /*minorTiles=*/ 1, /*majorTiles=*/ 1);
 
   private shaderGetter = emitterDependentShaderGetter(this, this.gl, (builder: ShaderBuilder) => {
     this.defineShader(builder);
@@ -185,19 +185,19 @@ emitAnnotation(vec4(vColor.rgb, 0.5));
     this.enable(shader, context, () => {
       const {gl} = shader;
       const aCornerOffset = shader.attribute('aCornerOffset');
-      this.squareCornersBuffer.bindToVertexAttrib(aCornerOffset, /*components=*/2);
+      this.squareCornersBuffer.bindToVertexAttrib(aCornerOffset, /*components=*/ 2);
       const viewportToObject = mat4.multiply(
           tempMat4, context.annotationLayer.state.globalToObject,
           context.renderContext.sliceView.viewportToData);
       gl.uniformMatrix4fv(
-          shader.uniform('uViewportToObject'), /*transpose=*/false, viewportToObject);
+          shader.uniform('uViewportToObject'), /*transpose=*/ false, viewportToObject);
       gl.uniformMatrix4fv(
-          shader.uniform('uViewportToDevice'), /*transpose=*/false,
+          shader.uniform('uViewportToDevice'), /*transpose=*/ false,
           context.renderContext.sliceView.viewportToDevice);
       const objectToViewport = tempMat4;
       mat4.invert(objectToViewport, viewportToObject);
       gl.uniformMatrix4fv(
-          shader.uniform('uObjectToViewport'), /*transpose=*/false, objectToViewport);
+          shader.uniform('uObjectToViewport'), /*transpose=*/ false, objectToViewport);
       this.quadRenderHelper.draw(gl, context.count);
       shader.gl.disableVertexAttribArray(aCornerOffset);
 

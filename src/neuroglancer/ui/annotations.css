@@ -111,20 +111,23 @@
   overflow-y: scroll;
 }
 
-.neuroglancer-annotation-details-position {
-}
-
 .neuroglancer-annotation-toolbox {
   display: flex;
   align-items: stretch;
 }
 
-.neuroglancer-annotation-segment-list {
-}
-
 
 .neuroglancer-annotation-segment-item {
   color: black;
+}
+
+.neuroglancer-seperator-element {
+  padding: 1px;
+  border: 1px;
+}
+
+.neuroglancer-hidden-button {
+  display: none;
 }
 
 .neuroglancer-minimizable-group-flexible.neuroglancer-annotation-hiding-list-parent {
@@ -197,4 +200,20 @@
 
 .neuroglancer-annotation-inprogress {
   color: #3c3;
+}
+
+.neuroglancer-annotation-editing {
+  background-color: #3c3 !important;
+}
+
+@keyframes pulseSelect {
+  from { background-color: blue; -webkit-box-shadow: 0 0 9px black; }
+  50% { background-color: rgb(0, 157, 255); -webkit-box-shadow: 0 0 18px rgb(0, 157, 255); }
+  to { background-color: blue; -webkit-box-shadow: 0 0 9px black; }
+}
+
+.neuroglancer-annotation-first.neuroglancer-annotation-multiple {
+  animation-name: pulseSelect;
+  animation-duration: 2s;
+  animation-iteration-count: infinite;
 }

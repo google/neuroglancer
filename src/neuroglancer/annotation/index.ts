@@ -133,6 +133,11 @@ type AnnotationNode = Annotation&{
   next: AnnotationNode;
 };
 
+export type AnnotationCT = Annotation&{
+  // Circularly tracked
+  loopedOver?: boolean;
+};
+
 export interface AnnotationTypeHandler<T extends Annotation> {
   icon: string;
   description: string;
@@ -268,14 +273,13 @@ const collectionTypeSet = {
   toJSON: (annotation: Collection) => {
     return {
       source: Array.from(annotation.source),
-      entries: Array.from(annotation.entries),
       childrenVisible: annotation.childrenVisible.value,
       looped: (<LineStrip>annotation).looped
     };
   },
   restoreState: (annotation: Collection, obj: any) => {
     annotation.source = verifyObjectProperty(obj, 'source', verify3dVec);
-    annotation.entries = obj.entries.filter((v: any) => typeof v === 'string');
+    annotation.entries = [];
     annotation.childrenVisible = new TrackableBoolean(obj.childrenVisible, true);
     (<LineStrip>annotation).looped = verifyObjectProperty(obj, 'looped', verifyOptionalBoolean);
   },
@@ -475,7 +479,7 @@ export class AnnotationSource extends RefCounted implements AnnotationSourceSign
         annotationNode.entries.forEach((ref: any, index: number) => {
           ref;
           const child = <Annotation>annotationNode.entry(index);
-          if (annotationNode.segments && child.segments) {
+          if (annotationNode.segments && child && child.segments) {
             annotationNode.segments = [...annotationNode.segments!, ...child.segments];
           }
         });
@@ -509,20 +513,43 @@ export class AnnotationSource extends RefCounted implements AnnotationSourceSign
     return existingAnnotation;
   }
 
-  getNextAnnotation(id: AnnotationId): Annotation|undefined {
-    const existingAnnotation = this.annotationMap.get(id);
-    if (existingAnnotation) {
-      return existingAnnotation.next;
+  bypass(source: AnnotationNode|undefined, view: HTMLElement, forward: boolean) {
+    if (!source) {
+      return;
     }
-    return;
+    const next = forward;
+    const prev = !forward;
+    const parent =
+        source.parentId ? <Collection><any>this.annotationMap.get(source.parentId) : undefined;
+    let loopedOver;
+    if (parent) {
+      const lastId = parent.entries.length - 1;
+      const isLastChild = parent.entries[lastId] === source.id;
+      const isFirstChild = parent.entries[0] === source.id;
+      loopedOver = (next && isLastChild) || (prev && isFirstChild);
+    } else {
+      const area = view.firstElementChild ? view.firstElementChild : document.createElement('div');
+      const head = area.firstElementChild ? (<HTMLElement>area.firstElementChild).dataset.id : null;
+      const tail = head ? this.annotationMap.get(head)!.prev.id : null;
+      loopedOver = (next && source.id === tail) || (prev && source.id === head);
+    }
+    return <AnnotationCT>{...next ? source.next : source.prev, loopedOver};
   }
 
-  getPrevAnnotation(id: AnnotationId): Annotation|undefined {
+  getNextAnnotation(id: AnnotationId, viewContainer?: HTMLElement): Annotation|undefined {
     const existingAnnotation = this.annotationMap.get(id);
-    if (existingAnnotation) {
-      return existingAnnotation.prev;
+    if (viewContainer) {
+      return this.bypass(existingAnnotation, viewContainer, true);
     }
-    return;
+    return existingAnnotation ? existingAnnotation.next : existingAnnotation;
+  }
+
+  getPrevAnnotation(id: AnnotationId, viewContainer?: HTMLElement): Annotation|undefined {
+    const existingAnnotation = this.annotationMap.get(id);
+    if (viewContainer) {
+      return this.bypass(existingAnnotation, viewContainer, false);
+    }
+    return existingAnnotation ? existingAnnotation.prev : existingAnnotation;
   }
 
   private addHelper(annotation: Annotation, commit: boolean, parentReference?: AnnotationReference):
@@ -614,11 +641,37 @@ export class AnnotationSource extends RefCounted implements AnnotationSourceSign
     return [];
   }
 
+  unlinkChild(targetNode: AnnotationNode) {
+    const firstChildNode = targetNode.next;
+    const lastChildNode = targetNode.prev;
+    firstChildNode.prev = targetNode.prev;
+    lastChildNode.next = targetNode.next;
+  }
+
+  linkChild(targetNode: AnnotationNode, handleID: string) {
+    const handle = document.querySelector(`[data-id="${handleID}"]`);
+    if (handle) {
+      const firstChild = <HTMLElement>handle.parentElement!.firstElementChild;
+      if (firstChild) {
+        const firstId = firstChild.dataset.id!;
+        const firstNode = this.annotationMap.get(firstId)!;
+        const lastNode = firstNode.prev;
+        lastNode.next = targetNode;
+        firstNode.prev = targetNode;
+        targetNode.next = firstNode;
+        targetNode.prev = lastNode;
+      }
+    }
+  }
+
   childReassignment(targets: string[], surrogate?: AnnotationReference): AnnotationReference[] {
     const emptynesters = <AnnotationReference[]>[];
     let adopter = surrogate ? <Collection>surrogate.value : null;
-
+    if (adopter) {
+      targets = targets.filter(e => e !== adopter!.id);
+    }
     targets.forEach((id: string) => {
+      const targetNode = this.annotationMap.get(id);
       const target = this.getReference(id).value!;
       let oldParent;
       if (target.parentId) {
@@ -632,14 +685,21 @@ export class AnnotationSource extends RefCounted implements AnnotationSourceSign
         // reassign/orphan child
         if (!adopter) {
           // no adopter- clear parent
+          if (targetNode) {
+            this.unlinkChild(targetNode);
+            this.linkChild(targetNode, id);
+          }
           target.parentId = undefined;
         } else if (this.isAncestor(target, adopter)) {
           // ancestor cannot be adopted by its descendant- skip this one
           return;
         } else {
           // adopt normally
+          if (targetNode) {
+            this.unlinkChild(targetNode);
+            this.linkChild(targetNode, adopter.id);
+          }
           target.parentId = adopter.id;
-          adopter.entries.push(target.id);
         }
 
         if (adopter) {
@@ -798,8 +858,12 @@ export class AnnotationSource extends RefCounted implements AnnotationSourceSign
     }
     if (annotationObj !== undefined) {
       parseArray(annotationObj, x => {
-        const annotation = restoreAnnotation(x, allowMissingId);
-        this.insertAnnotationNode(annotation);
+        try {
+          const annotation = restoreAnnotation(x, allowMissingId);
+          this.insertAnnotationNode(annotation);
+        } catch (e) {
+          console.error(e);
+        }
       });
     }
     for (const reference of this.references.values()) {

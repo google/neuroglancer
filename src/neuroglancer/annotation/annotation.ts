@@ -1,4 +1,4 @@
-import {Annotation, AnnotationReference, AnnotationSource, AnnotationType, AxisAlignedBoundingBox, Collection, Line, LocalAnnotationSource} from 'neuroglancer/annotation';
+import {Annotation, AnnotationReference, AnnotationSource, annotationToJson, AnnotationType, AxisAlignedBoundingBox, Collection, Ellipsoid, getAnnotationTypeHandler, Line, LineStrip, LocalAnnotationSource, Point, restoreAnnotation} from 'neuroglancer/annotation';
 import {PlaceBoundingBoxTool} from 'neuroglancer/annotation/bounding_box';
 import {PlaceSphereTool} from 'neuroglancer/annotation/ellipsoid';
 import {AnnotationLayerState} from 'neuroglancer/annotation/frontend';
@@ -60,7 +60,6 @@ export abstract class PlaceAnnotationTool extends Tool {
     if (!annotation || !parent) {
       throw `Invalid reference for assignment: ${!annotation ? 'Child' : 'Parent'} has no value`;
     }
-    parent.entries.push(annotation.id);
   }
 
   complete() {
@@ -118,7 +117,7 @@ export abstract class TwoStepAnnotationTool extends PlaceAnnotationTool {
       if (spoof && spoof.segments) {
         annotation.segments = spoof.segments;
       }
-      const reference = annotationLayer.source.add(annotation, /*commit=*/false, parentReference);
+      const reference = annotationLayer.source.add(annotation, /*commit=*/ false, parentReference);
       this.layer.selectedAnnotation.value = {id: reference.id};
       const disposer = () => {
         mouseDisposer();
@@ -134,11 +133,19 @@ export abstract class TwoStepAnnotationTool extends PlaceAnnotationTool {
     } else {
       updatePointB();
       if (this.inProgressAnnotation) {
-        this.inProgressAnnotation.annotationLayer.source.commit(
-            this.inProgressAnnotation.reference);
-        this.inProgressAnnotation.disposer();
-        this.inProgressAnnotation = undefined;
-        this.layer.selectedAnnotation.changed.dispatch();
+        const annotation = this.inProgressAnnotation.reference.value!;
+        const handler = getAnnotationTypeHandler(this.inProgressAnnotation.reference.value!.type);
+        try {
+          const tester = handler.toJSON(annotation);
+          handler.restoreState(annotation, tester);
+          this.inProgressAnnotation.annotationLayer.source.commit(
+              this.inProgressAnnotation.reference);
+          this.inProgressAnnotation.disposer();
+          this.inProgressAnnotation = undefined;
+          this.layer.selectedAnnotation.changed.dispatch();
+        } catch (e) {
+          this.disposed();
+        }
       }
     }
   }
@@ -248,36 +255,10 @@ export abstract class MultiStepAnnotationTool extends PlaceAnnotationTool {
 
   protected getInitialAnnotation(
       mouseState: MouseSelectionState, annotationLayer: AnnotationLayerState): Annotation {
-    const coll = <Collection>{
-      id: '',
-      type: this.annotationType,
-      description: '',
-      entries: [],
-      segments: [],
-      connected: false,
-      source:
-          vec3.transformMat4(vec3.create(), mouseState.position, annotationLayer.globalToObject),
-      entry: () => {},
-      segmentSet: () => {},
-      childrenVisible: new TrackableBoolean(true, true)
-    };
-    coll.entry = (index: number) =>
-        (<LocalAnnotationSource>annotationLayer.source).get(coll.entries[index]);
-    coll.segmentSet = () => {
-      coll.segments = [];
-      coll.entries.forEach((ref, index) => {
-        ref;
-        const child = <Annotation>coll.entry(index);
-        if (coll.segments && child && child.segments) {
-          coll.segments = [...coll.segments!, ...child.segments];
-        }
-      });
-      if (coll.segments) {
-        coll.segments =
-            [...new Set(coll.segments.map((e) => e.toString()))].map((s) => Uint64.parseString(s));
-      }
-    };
-    return coll;
+    const sourcePoint =
+        vec3.transformMat4(vec3.create(), mouseState.position, annotationLayer.globalToObject);
+    const annotationSource = <LocalAnnotationSource>annotationLayer.source;
+    return produceCollection(sourcePoint, annotationSource);
   }
 
   protected safeDelete(target?: AnnotationReference) {
@@ -303,9 +284,10 @@ export abstract class MultiStepAnnotationTool extends PlaceAnnotationTool {
     if (mouseState.active) {
       if (this.inProgressAnnotation === undefined || !this.inProgressAnnotation.reference.value) {
         const annotation = this.getInitialAnnotation(mouseState, annotationLayer);
-        const reference = annotationLayer.source.add(annotation, /*commit=*/false, parentReference);
+        const reference =
+            annotationLayer.source.add(annotation, /*commit=*/ false, parentReference);
         this.layer.selectedAnnotation.value = {id: reference.id};
-        this.childTool.trigger(mouseState, /*child=*/reference);
+        this.childTool.trigger(mouseState, /*child=*/ reference);
         this.updateLast();
         const disposer = () => {
           mouseDisposer();
@@ -348,7 +330,6 @@ export abstract class MultiStepAnnotationTool extends PlaceAnnotationTool {
     }
     const nonPointTool = <MultiStepAnnotationTool|TwoStepAnnotationTool>this.childTool;
     const childInProgress = nonPointTool ? nonPointTool.inProgressAnnotation : undefined;
-    const childCount = value.entries.length;
     let isChildInProgressCollection = false;
     let success = false;
     let collection: Collection;
@@ -381,6 +362,7 @@ export abstract class MultiStepAnnotationTool extends PlaceAnnotationTool {
       }
     }
 
+    let childCount = value.entries.length;
     // success is true if, child annotation is a completed collection
     if (((!childInProgress || success) && childCount === 1) || childCount > 1) {
       if (this.childTool) {
@@ -388,6 +370,17 @@ export abstract class MultiStepAnnotationTool extends PlaceAnnotationTool {
         if (!endChild) {
           this.reInitChildTool();
         }
+      }
+
+      childCount = value.entries.length;
+      if (childCount < 1) {
+        StatusMessage.showTemporaryMessage(`No annotation has been made.`, 3000);
+        const myType = this.inProgressAnnotation.reference.value!.type;
+        const acceptableTypes = [AnnotationType.SPOKE, AnnotationType.LINE_STRIP];
+        if (acceptableTypes.includes(myType)) {
+          this.dispose();
+        }
+        return false;
       }
 
       const {reference, annotationLayer} = this.inProgressAnnotation;
@@ -422,4 +415,79 @@ export abstract class MultiStepAnnotationTool extends PlaceAnnotationTool {
   abstract get description(): string;
 
   abstract toJSON(): string;
+}
+
+export function produceCollection(
+    sourcePoint: vec3, annotationSource: LocalAnnotationSource, id: string = '') {
+  const collection = <Collection>{
+    id,
+    type: AnnotationType.COLLECTION,
+    description: '',
+    entries: [],  // identical to target
+    segments: [],
+    connected: false,
+    source: sourcePoint,
+    entry: () => {},
+    segmentSet: () => {},
+    childrenVisible: new TrackableBoolean(true, true)
+  };
+  collection.entry = (index: number) => annotationSource.get(collection.entries[index]);
+  collection.segmentSet = () => {
+    collection.segments = [];
+    collection.entries.forEach((ref, index) => {
+      ref;
+      const child = <Annotation>collection.entry(index);
+      if (collection.segments && child.segments) {
+        collection.segments = [...collection.segments!, ...child.segments];
+      }
+    });
+    if (collection.segments) {
+      collection.segments = [...new Set(collection.segments.map((e) => e.toString()))].map(
+          (s) => Uint64.parseString(s));
+    }
+  };
+  return collection;
+}
+
+export function getSourcePoint(annotation: Annotation) {
+  switch (annotation.type) {
+    case AnnotationType.AXIS_ALIGNED_BOUNDING_BOX:
+    case AnnotationType.LINE:
+      return (<Line|AxisAlignedBoundingBox>annotation).pointA;
+    case AnnotationType.POINT:
+      return (<Point>annotation).point;
+    case AnnotationType.ELLIPSOID:
+      return (<Ellipsoid>annotation).center;
+    case AnnotationType.LINE_STRIP:
+    case AnnotationType.SPOKE:
+    case AnnotationType.COLLECTION:
+      return (<LineStrip>annotation).source;
+  }
+}
+
+export function annotationErrorCorrection(
+    annotationObj: Annotation[], source: LocalAnnotationSource) {
+  const verifyMap: {[key: string]: any} = {};
+  const newAnnotations: Annotation[] = annotationObj;
+
+  for (const annotation of annotationObj) {
+    verifyMap[annotation.id] = annotation;
+    if (annotation.parentId) {
+      const {parentId} = annotation;
+      if (!verifyMap[parentId]) {
+        verifyMap[parentId] = {child: annotation, invalid: true};
+      }
+    }
+  }
+
+  for (const ids in verifyMap) {
+    if (verifyMap[ids].invalid) {
+      const child = verifyMap[ids].child;
+      const virChild = restoreAnnotation(child);
+      const parent = produceCollection(getSourcePoint(virChild), source, ids);
+      const strParent = annotationToJson(parent);
+      newAnnotations.push(strParent);
+    }
+  }
+  return newAnnotations;
 }
