@@ -36,7 +36,7 @@ import {startRelativeMouseDrag} from 'neuroglancer/util/mouse_drag';
 import {TouchRotateInfo, TouchTranslateInfo} from 'neuroglancer/util/touch_bindings';
 import {WatchableMap} from 'neuroglancer/util/watchable_map';
 import {withSharedVisibility} from 'neuroglancer/visibility_priority/frontend';
-import {DepthBuffer, FramebufferConfiguration, makeTextureBuffers, OffscreenCopyHelper, TextureBuffer} from 'neuroglancer/webgl/offscreen';
+import {DepthStencilBuffer, FramebufferConfiguration, makeTextureBuffers, OffscreenCopyHelper, TextureBuffer} from 'neuroglancer/webgl/offscreen';
 import {ShaderBuilder} from 'neuroglancer/webgl/shader';
 import {MultipleScaleBarTextures, ScaleBarOptions} from 'neuroglancer/widget/scale_bar';
 import {RPC, SharedObject} from 'neuroglancer/worker_rpc';
@@ -182,7 +182,7 @@ export class PerspectivePanel extends RenderedDataPanel {
           this.gl, WebGL2RenderingContext.R32F, WebGL2RenderingContext.RED,
           WebGL2RenderingContext.FLOAT),
     ],
-    depthBuffer: new DepthBuffer(this.gl)
+    depthBuffer: new DepthStencilBuffer(this.gl)
   }));
 
   protected transparentConfiguration_: FramebufferConfiguration<TextureBuffer>|undefined;
@@ -433,6 +433,22 @@ export class PerspectivePanel extends RenderedDataPanel {
     let gl = this.gl;
     this.offscreenFramebuffer.bind(width, height);
 
+    // Stencil buffer bit 0 indicates positions of framebuffer written by either:
+    // - a non-transparent layer;
+    // - a transparent layer with transparent pick enabled.
+    //
+    // In the final pick rendering pass for transparent layers with transparent pick enabled, we
+    // only write to positions with the stencil bit unset.
+
+    gl.enable(WebGL2RenderingContext.STENCIL_TEST);
+    gl.clearStencil(0);
+    gl.clear(WebGL2RenderingContext.STENCIL_BUFFER_BIT);
+    gl.stencilOpSeparate(
+        /*face=*/ WebGL2RenderingContext.FRONT_AND_BACK, /*sfail=*/ WebGL2RenderingContext.KEEP,
+        /*dpfail=*/ WebGL2RenderingContext.KEEP, /*dppass=*/ WebGL2RenderingContext.REPLACE);
+    gl.stencilFuncSeparate(
+        /*face=*/ WebGL2RenderingContext.FRONT_AND_BACK, /*func=*/ WebGL2RenderingContext.ALWAYS,
+        /*ref=*/ 1, /*mask=*/ 1);
     gl.disable(gl.SCISSOR_TEST);
     const backgroundColor = this.viewer.perspectiveViewBackgroundColor.value;
     this.gl.clearColor(backgroundColor[0], backgroundColor[1], backgroundColor[2], 0.0);
@@ -511,6 +527,9 @@ export class PerspectivePanel extends RenderedDataPanel {
       // Compute accumulate and revealage textures.
       const {transparentConfiguration} = this;
       transparentConfiguration.bind(width, height);
+      gl.stencilOpSeparate(
+          /*face=*/ WebGL2RenderingContext.FRONT_AND_BACK, /*sfail=*/ WebGL2RenderingContext.KEEP,
+          /*dpfail=*/ WebGL2RenderingContext.KEEP, /*dppass=*/ WebGL2RenderingContext.KEEP);
       this.gl.clearColor(0.0, 0.0, 0.0, 1.0);
       gl.clear(WebGL2RenderingContext.COLOR_BUFFER_BIT);
       renderContext.emitter = perspectivePanelEmitOIT;
@@ -531,7 +550,9 @@ export class PerspectivePanel extends RenderedDataPanel {
       this.transparencyCopyHelper.draw(
           transparentConfiguration.colorBuffers[0].texture,
           transparentConfiguration.colorBuffers[1].texture);
-
+      gl.stencilOpSeparate(
+          /*face=*/ WebGL2RenderingContext.FRONT_AND_BACK, /*sfail=*/ WebGL2RenderingContext.KEEP,
+          /*dpfail=*/ WebGL2RenderingContext.KEEP, /*dppass=*/ WebGL2RenderingContext.REPLACE);
       gl.depthMask(true);
       gl.disable(WebGL2RenderingContext.BLEND);
       gl.enable(WebGL2RenderingContext.DEPTH_TEST);
@@ -556,6 +577,21 @@ export class PerspectivePanel extends RenderedDataPanel {
       }
       renderLayer.draw(renderContext, attachment);
     }
+
+    gl.stencilFuncSeparate(
+        /*face=*/ WebGL2RenderingContext.FRONT_AND_BACK, /*func=*/ WebGL2RenderingContext.GREATER,
+        /*ref=*/ 1, /*mask=*/ 1);
+    gl.stencilOpSeparate(
+        /*face=*/ WebGL2RenderingContext.FRONT_AND_BACK, /*sfail=*/ WebGL2RenderingContext.KEEP,
+        /*dpfail=*/ WebGL2RenderingContext.KEEP, /*dppass=*/ WebGL2RenderingContext.KEEP);
+    for (const [renderLayer, attachment] of visibleLayers) {
+      if (!renderLayer.isTransparent || renderLayer.transparentPickEnabled) {
+        continue;
+      }
+      renderLayer.draw(renderContext, attachment);
+    }
+    gl.disable(WebGL2RenderingContext.STENCIL_TEST);
+
     gl.disable(WebGL2RenderingContext.POLYGON_OFFSET_FILL);
 
     if (this.viewer.showScaleBar.value && this.viewer.orthographicProjection.value) {

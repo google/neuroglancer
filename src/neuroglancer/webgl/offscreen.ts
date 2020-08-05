@@ -186,6 +186,10 @@ export class FramebufferConfiguration<ColorBuffer extends TextureBuffer|Renderbu
     if (depthBuffer !== undefined) {
       depthBuffer.resize(width, height);
       depthBuffer.attachToFramebuffer();
+    } else {
+      gl.framebufferRenderbuffer(
+          WebGL2RenderingContext.FRAMEBUFFER, WebGL2RenderingContext.DEPTH_STENCIL_ATTACHMENT,
+          WebGL2RenderingContext.RENDERBUFFER, null);
     }
     this.colorBuffers.forEach((buffer, i) => {
       buffer.resize(width, height);
