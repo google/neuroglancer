@@ -103,6 +103,9 @@ const VOXEL_SIZE_JSON_KEY = 'voxelSize';
 const SOURCE_JSON_KEY = 'source';
 const LINKED_SEGMENTATION_LAYER_JSON_KEY = 'linkedSegmentationLayer';
 const FILTER_BY_SEGMENTATION_JSON_KEY = 'filterBySegmentation';
+const BRACKET_SHORTCUTS_SHOW_SEGMENTATION_KEY = 'bracketShortcutsShowSegmentation';
+const ANNOTATION_SELECTION_SHOWS_SEGMENTATION_KEY = 'annotationSelectionShowsSegmentation';
+
 const Base = UserLayerWithAnnotationsMixin(UserLayerWithCoordinateTransformMixin(UserLayer));
 export class AnnotationUserLayer extends Base {
   localAnnotations = this.registerDisposer(new LocalAnnotationSource());
@@ -170,7 +173,11 @@ export class AnnotationUserLayer extends Base {
           this.annotationLayerState.value = new AnnotationLayerState({
             transform: derivedTransform,
             source: this.localAnnotations.addRef(),
-            ...this.getAnnotationRenderOptions()
+            ...this.getAnnotationRenderOptions(),
+            annotationJumpingDispaysSegmentationInitialValue:
+                specification[BRACKET_SHORTCUTS_SHOW_SEGMENTATION_KEY],
+            annotationSelectionDisplaysSegmentationInitialValue:
+                specification[ANNOTATION_SELECTION_SHOWS_SEGMENTATION_KEY]
           });
           voxelSizeValid = true;
         }
@@ -205,8 +212,15 @@ export class AnnotationUserLayer extends Base {
             if (this.wasDisposed) {
               return;
             }
-            this.annotationLayerState.value = new AnnotationLayerState(
-                {transform: this.transform, source, ...this.getAnnotationRenderOptions()});
+            this.annotationLayerState.value = new AnnotationLayerState({
+              transform: this.transform,
+              source,
+              ...this.getAnnotationRenderOptions(),
+              annotationJumpingDispaysSegmentationInitialValue:
+                  specification[BRACKET_SHORTCUTS_SHOW_SEGMENTATION_KEY],
+              annotationSelectionDisplaysSegmentationInitialValue:
+                  specification[ANNOTATION_SELECTION_SHOWS_SEGMENTATION_KEY]
+            });
             this.isReady = true;
           });
     }
@@ -245,6 +259,10 @@ export class AnnotationUserLayer extends Base {
     }
     x[LINKED_SEGMENTATION_LAYER_JSON_KEY] = this.linkedSegmentationLayer.toJSON();
     x[FILTER_BY_SEGMENTATION_JSON_KEY] = this.filterBySegmentation.toJSON();
+    x[BRACKET_SHORTCUTS_SHOW_SEGMENTATION_KEY] =
+        this.annotationLayerState.value!.annotationJumpingDisplaysSegmentation.value;
+    x[ANNOTATION_SELECTION_SHOWS_SEGMENTATION_KEY] =
+        this.annotationLayerState.value!.annotationSelectionDisplaysSegmentation.value;
     return x;
   }
 

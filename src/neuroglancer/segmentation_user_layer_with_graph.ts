@@ -315,12 +315,25 @@ function helper<TBase extends BaseConstructor>(Base: TBase) {
       }
     }
 
+    getRootOfSelectedSupervoxel() {
+      let {segmentSelectionState, timestamp} = this.displayState;
+      let tsValue = (timestamp.value !== '') ? timestamp.value : void (0);
+      const currentSegmentSelection: SegmentSelection = {
+        segmentId: segmentSelectionState.selectedSegment.clone(),
+        rootId: segmentSelectionState.selectedSegment.clone(),
+        position: vec3.transformMat4(
+            vec3.create(), this.manager.layerSelectedValues.mouseState.position,
+            this.transform.inverse)
+      };
+
+      return this.chunkedGraphLayer!.getRoot(currentSegmentSelection, tsValue);
+    }
+
     selectSegment() {
       let {segmentSelectionState} = this.displayState;
       if (segmentSelectionState.hasSelectedSegment) {
         let segment = segmentSelectionState.selectedSegment;
-        let {rootSegments, timestamp} = this.displayState;
-        let tsValue = (timestamp.value !== '') ? timestamp.value : void (0);
+        let {rootSegments} = this.displayState;
         if (rootSegments.has(segment)) {
           rootSegments.delete(segment);
         } else if (this.chunkedGraphLayer) {
@@ -329,15 +342,7 @@ function helper<TBase extends BaseConstructor>(Base: TBase) {
                 'The selected segment will not be displayed in 2D at this current zoom level. ',
                 3000);
           }
-          const currentSegmentSelection: SegmentSelection = {
-            segmentId: segmentSelectionState.selectedSegment.clone(),
-            rootId: segmentSelectionState.selectedSegment.clone(),
-            position: vec3.transformMat4(
-                vec3.create(), this.manager.layerSelectedValues.mouseState.position,
-                this.transform.inverse)
-          };
-
-          this.chunkedGraphLayer.getRoot(currentSegmentSelection, tsValue)
+          this.getRootOfSelectedSupervoxel()
               .then(rootSegment => {
                 rootSegments.add(rootSegment);
               })
@@ -455,6 +460,8 @@ function helper<TBase extends BaseConstructor>(Base: TBase) {
       }
     }
 
+    private lastDeselectionMessage: StatusMessage|undefined;
+    private lastDeselectionMessageExists = false;
     rootSegmentChange(rootSegments: Uint64[]|null, added: boolean) {
       if (rootSegments === null) {
         if (added) {
@@ -477,7 +484,19 @@ function helper<TBase extends BaseConstructor>(Base: TBase) {
           this.displayState.visibleSegments2D!.delete(rootSegment);
           this.displayState.visibleSegments3D.delete(segments);
           this.displayState.segmentEquivalences.deleteSet(rootSegment);
-          StatusMessage.showTemporaryMessage(`Deselected ${segmentCount} segments.`);
+          if (this.lastDeselectionMessage && this.lastDeselectionMessageExists) {
+            this.lastDeselectionMessage.dispose();
+            this.lastDeselectionMessageExists = false;
+          }
+          this.lastDeselectionMessage =
+              StatusMessage.showMessage(`Deselected ${segmentCount} segments.`);
+          this.lastDeselectionMessageExists = true;
+          setTimeout(() => {
+            if (this.lastDeselectionMessageExists) {
+              this.lastDeselectionMessage!.dispose();
+              this.lastDeselectionMessageExists = false;
+            }
+          }, 2000);
         }
       }
       this.specificationChanged.dispatch();
@@ -535,6 +554,7 @@ export interface SegmentationUserLayerWithGraph extends SegmentationUserLayer {
     performingMulticut: TrackableBoolean
   }) => SupervoxelRenderLayer;
   pathFinderState: PathFinderState;
+  getRootOfSelectedSupervoxel: () => Promise<Uint64>;
 }
 
 /**
@@ -544,6 +564,11 @@ export function
 SegmentationUserLayerWithGraphMixin<TBase extends {new (...args: any[]): SegmentationUserLayer}>(
     Base: TBase) {
   return helper(Base);
+}
+
+export function isSegmentationUserLayerWithGraph(layer: SegmentationUserLayer):
+    layer is SegmentationUserLayerWithGraph {
+  return 'chunkedGraphLayer' in layer;
 }
 
 registerLayerType(

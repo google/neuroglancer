@@ -33,6 +33,8 @@ import {NavigationState, Pose} from 'neuroglancer/navigation_state';
 import {overlaysOpen} from 'neuroglancer/overlay';
 import {getSaveToAddressBar, UserPreferencesDialog} from 'neuroglancer/preferences/user_preferences';
 import {saverToggle, SaveState, storageAccessible} from 'neuroglancer/save_state/save_state';
+import {SegmentationUserLayer} from 'neuroglancer/segmentation_user_layer';
+import {isSegmentationUserLayerWithGraph} from 'neuroglancer/segmentation_user_layer_with_graph';
 import {StatusMessage} from 'neuroglancer/status';
 import {ElementVisibilityFromTrackableBoolean, TrackableBoolean, TrackableBooleanCheckbox} from 'neuroglancer/trackable_boolean';
 import {makeDerivedWatchableValue, TrackableValue, WatchableValueInterface} from 'neuroglancer/trackable_value';
@@ -746,6 +748,18 @@ export class Viewer extends RefCounted implements ViewerState {
         return;
       }
       userLayer.tool.value.trigger(this.mouseState);
+      if (userLayer instanceof AnnotationUserLayer &&
+          userLayer.linkedSegmentationLayer.layerName !== undefined) {
+        const segLayer = userLayer.linkedSegmentationLayer.layer!.layer;
+        if (segLayer instanceof SegmentationUserLayer) {
+          if (isSegmentationUserLayerWithGraph(segLayer)) {
+            segLayer.getRootOfSelectedSupervoxel().then(rootSegment => {
+              userLayer.localAnnotations.get(userLayer.selectedAnnotation.value!.id)!.segments!
+                  .push(rootSegment);
+            });
+          }
+        }
+      }
     });
 
     this.bindAction('complete-annotation', () => {

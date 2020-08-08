@@ -249,6 +249,15 @@ export class AnnotationLayerView extends Tab {
     this.groupVisualization.appendFixedChild(label);
   }
 
+  private selectionShowsSegmentationCheckbox() {
+    const selectionShowsSegmentationCheckbox = this.registerDisposer(
+        new TrackableBooleanCheckbox(this.annotationLayer.annotationSelectionDisplaysSegmentation));
+    const label = document.createElement('label');
+    label.textContent = 'Annotation selection shows segmentation: ';
+    label.appendChild(selectionShowsSegmentationCheckbox.element);
+    this.groupVisualization.appendFixedChild(label);
+  }
+
   private filterAnnotationByTagControl() {
     const annotationTagFilter = document.createElement('select');
     const {source} = this.annotationLayer;
@@ -360,6 +369,7 @@ export class AnnotationLayerView extends Tab {
     // Visualization Group
     this.addOpacitySlider();
     this.bracketShortcutCheckbox();
+    this.selectionShowsSegmentationCheckbox();
     this.filterAnnotationByTagControl();
     // Annotations Group
     this.addColorPicker();
@@ -751,7 +761,9 @@ export class AnnotationLayerView extends Tab {
 
     const position = document.createElement('div');
     position.className = 'neuroglancer-annotation-position';
-    getPositionSummary(position, annotation, transform, this.voxelSize, this.setSpatialCoordinates);
+    getPositionSummary(
+        position, annotation, transform, this.voxelSize, this.setSpatialCoordinates,
+        this.annotationLayer);
     element.appendChild(position);
     if (annotation.parentId) {
       element.dataset.parent = annotation.parentId;

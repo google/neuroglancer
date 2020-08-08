@@ -307,10 +307,12 @@ export class SelectedAnnotationState extends RefCounted implements
 }
 
 const tempVec3 = vec3.create();
+let lastSelectedAnnotation: Annotation|undefined;
 
 function makePointLink(
     point: vec3, transform: mat4, voxelSize: VoxelSize,
-    setSpatialCoordinates?: (point: vec3) => void) {
+    setSpatialCoordinates?: (point: vec3) => void, annotation?: Annotation,
+    annotationLayerState?: AnnotationLayerState) {
   const spatialPoint = vec3.transformMat4(vec3.create(), point, transform);
   const positionText = formatIntegerPoint(voxelSize.voxelFromSpatial(tempVec3, spatialPoint));
   if (setSpatialCoordinates !== undefined) {
@@ -320,6 +322,22 @@ function makePointLink(
     element.title = `Center view on voxel coordinates ${positionText}.`;
     element.addEventListener('click', () => {
       setSpatialCoordinates(spatialPoint);
+      if (annotationLayerState &&
+          annotationLayerState.annotationSelectionDisplaysSegmentation.value) {
+        if (lastSelectedAnnotation && lastSelectedAnnotation.segments) {
+          lastSelectedAnnotation.segments.forEach(segment => {
+            if (annotationLayerState.segmentationState.value!.rootSegments.has(segment)) {
+              annotationLayerState.segmentationState.value!.rootSegments.delete(segment);
+            }
+          });
+        }
+        if (annotation && annotation.segments) {
+          annotation.segments.forEach(segment => {
+            annotationLayerState.segmentationState.value!.rootSegments.add(segment);
+          });
+        }
+        lastSelectedAnnotation = annotation;
+      }
     });
     return element;
   } else {
@@ -329,9 +347,9 @@ function makePointLink(
 
 export function getPositionSummary(
     element: HTMLElement, annotation: Annotation, transform: mat4, voxelSize: VoxelSize,
-    setSpatialCoordinates?: (point: vec3) => void) {
-  const makePointLinkWithTransform = (point: vec3) =>
-      makePointLink(point, transform, voxelSize, setSpatialCoordinates);
+    setSpatialCoordinates?: (point: vec3) => void, annotationLayerState?: AnnotationLayerState) {
+  const makePointLinkWithTransform = (point: vec3) => makePointLink(
+      point, transform, voxelSize, setSpatialCoordinates, annotation, annotationLayerState);
 
   switch (annotation.type) {
     case AnnotationType.AXIS_ALIGNED_BOUNDING_BOX:
