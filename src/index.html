@@ -33,6 +33,13 @@
         }
       }
     }
+    // WebGL2 support test
+    {
+      const gl = document.createElement('canvas').getContext('webgl2');
+      if (!gl) {
+        alert('Your browser does not support WebGL2, or it is not enabled. Please use a browser that does, such as Chrome or Firefox.');
+      }
+    }
   </script>
   <link href='https://fonts.googleapis.com/css?family=Roboto' rel='stylesheet'>
 </head>
