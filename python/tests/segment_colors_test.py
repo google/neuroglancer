@@ -94,3 +94,8 @@ def test_segment_colors(webdriver):
     screenshot = webdriver.viewer.screenshot(size=[10, 10]).screenshot
     np.testing.assert_array_equal(screenshot.image_pixels,
                                   np.tile(np.array([255, 0, 0, 255], dtype=np.uint8), (10, 10, 1)))
+    with webdriver.viewer.txn() as s:
+        s.layers[0].segment_colors[42] = '#0f0'
+    screenshot = webdriver.viewer.screenshot(size=[10, 10]).screenshot
+    np.testing.assert_array_equal(screenshot.image_pixels,
+                                  np.tile(np.array([0, 255, 0, 255], dtype=np.uint8), (10, 10, 1)))

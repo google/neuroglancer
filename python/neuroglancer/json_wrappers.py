@@ -291,7 +291,7 @@ def typed_map(key_type, value_type, key_validator=None, value_validator=None):
         def __setitem__(self, key, value):
             key = str(key)
             with self._lock:
-                self._set_wrapped(key, value, validator)
+                self._set_wrapped(key, value, value_validator)
                 self._json_data[key] = None # placeholder
 
         def __delitem__(self, key):
