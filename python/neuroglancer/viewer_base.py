@@ -62,8 +62,16 @@ class LocalVolumeManager(trackable_state.ChangeNotifier):
 
 
 class ViewerCommonBase(object):
-    def __init__(self):
-        self.token = make_random_token()
+    def __init__(self, token=None, allow_credentials=None):
+        if token is None:
+            token = make_random_token()
+            if allow_credentials is None:
+                allow_credentials = True
+        else:
+            if allow_credentials is None:
+                allow_credentials = False
+        self.allow_credentials = allow_credentials
+        self.token = token
         self.config_state = trackable_state.TrackableState(viewer_config_state.ConfigState)
 
         def set_actions(actions):
@@ -167,8 +175,8 @@ class ViewerCommonBase(object):
 
 
 class ViewerBase(ViewerCommonBase):
-    def __init__(self):
-        super(ViewerBase, self).__init__()
+    def __init__(self, **kwargs):
+        super(ViewerBase, self).__init__(**kwargs)
         self.shared_state = trackable_state.TrackableState(viewer_state.ViewerState,
                                                            self._transform_viewer_state)
         self.shared_state.add_changed_callback(
@@ -189,8 +197,8 @@ class ViewerBase(ViewerCommonBase):
 
 
 class UnsynchronizedViewerBase(ViewerCommonBase):
-    def __init__(self):
-        super(UnsynchronizedViewerBase, self).__init__()
+    def __init__(self, **kwargs):
+        super(UnsynchronizedViewerBase, self).__init__(**kwargs)
         self.state = viewer_state.ViewerState()
 
     @property

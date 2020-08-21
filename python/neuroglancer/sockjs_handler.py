@@ -135,11 +135,13 @@ class SockJSHandler(sockjs.tornado.SockJSConnection):
                 dict(key='s', state=viewer.shared_state, send_updates=True, receive_updates=True))
 
         self._state_handlers = dict()
-        from .default_credentials_manager import default_credentials_manager
-        self._credentials_handler = ClientCredentialsHandler(io_loop=self.io_loop,
-                                                             private_state=private_state,
-                                                             config_state=viewer.config_state,
-                                                             credentials_manager=default_credentials_manager)
+        if viewer.allow_credentials:
+            from .default_credentials_manager import default_credentials_manager
+            self._credentials_handler = ClientCredentialsHandler(
+                io_loop=self.io_loop,
+                private_state=private_state,
+                config_state=viewer.config_state,
+                credentials_manager=default_credentials_manager)
 
         def make_state_handler(key, state, send_updates, receive_updates):
             def send_update(raw_state, generation):
@@ -188,5 +190,6 @@ class SockJSHandler(sockjs.tornado.SockJSConnection):
         if viewer is not None:
             for state_handler in six.itervalues(self._state_handlers):
                 state_handler.close()
-            self._credentials_handler.close()
+            if self._credentials_handler is not None:
+                self._credentials_handler.close()
         del self._state_handlers
