@@ -38,6 +38,7 @@ import {vec3} from 'neuroglancer/util/geom';
 import {parseArray, verifyObjectProperty} from 'neuroglancer/util/json';
 import {Uint64} from 'neuroglancer/util/uint64';
 import {NullarySignal} from './util/signal';
+import {GRAPHENE_MANIFEST_REFRESH_PROMISE} from 'neuroglancer/datasource/graphene/base';
 
 // Already defined in segmentation_user_layer.ts
 const EQUIVALENCES_JSON_KEY = 'equivalences';
@@ -309,6 +310,10 @@ function helper<TBase extends BaseConstructor>(Base: TBase) {
               5000);
           break;
         }
+        case 'refresh-mesh': {
+          this.reloadManifest();
+          break;
+        }
         default:
           super.handleAction(action);
           break;
@@ -456,6 +461,25 @@ function helper<TBase extends BaseConstructor>(Base: TBase) {
         } else {
           StatusMessage.showTemporaryMessage(
               `Split unsuccessful - graph layer not initialized.`, 3000);
+        }
+      }
+    }
+
+    reloadManifest() {
+      let {segmentSelectionState} = this.displayState;
+      if (segmentSelectionState.hasSelectedSegment) {
+        let segment = segmentSelectionState.selectedSegment;
+        let {rootSegments} = this.displayState;
+        if (rootSegments.has(segment)) {
+          let meshSource = this.meshLayer!.source;
+          const promise = meshSource.rpc!.promiseInvoke<any>(
+            GRAPHENE_MANIFEST_REFRESH_PROMISE,
+            {'rpcId': meshSource.rpcId!, 'segment': segment.toString()});
+          let msgTail = 'if full mesh does not appear try again after this message disappears.'
+          this.chunkedGraphLayer!.withErrorMessage(promise, {
+            initialMessage: `Reloading mesh for segment ${segment}, ${msgTail}`,
+            errorPrefix: `Could not fetch mesh manifest: `
+          });
         }
       }
     }

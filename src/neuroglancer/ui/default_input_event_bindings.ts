@@ -93,6 +93,7 @@ export function getDefaultRenderedDataPanelBindings() {
           'at:control+mousedown2': 'select-annotation',
           'at:alt+mousedown0': 'move-annotation',
           'at:control+alt+mousedown2': 'delete-annotation',
+          'at:control+shift+mousedown0': 'refresh-mesh',
           'at:touchpinch': 'zoom-via-touchpinch',
           'at:touchrotate': 'rotate-in-plane-via-touchrotate',
           'at:touchtranslate2': 'translate-in-plane-via-touchtranslate',

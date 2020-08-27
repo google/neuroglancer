@@ -37,7 +37,8 @@ import {murmurHash3_x86_128Hash64Bits} from 'neuroglancer/util/hash';
 import {responseArrayBuffer, responseJson} from 'neuroglancer/util/http_request';
 import {stableStringify} from 'neuroglancer/util/json';
 import {Uint64} from 'neuroglancer/util/uint64';
-import {registerSharedObject} from 'neuroglancer/worker_rpc';
+import {registerPromiseRPC, registerSharedObject, RPCPromise} from 'neuroglancer/worker_rpc';
+import {GRAPHENE_MANIFEST_REFRESH_PROMISE} from 'neuroglancer/datasource/graphene/base';
 
 const DracoLoader = require('dracoloader');
 
@@ -361,3 +362,13 @@ export class GrapheneSkeletonSource extends
     decodeSkeletonChunk(chunk, response, parameters.metadata.vertexAttributes);
   }
 }
+
+registerPromiseRPC(GRAPHENE_MANIFEST_REFRESH_PROMISE, function(x, cancellationToken): RPCPromise<any> {
+  let obj = <GrapheneMeshSource>this.get(x['rpcId']);
+  let manifestChunk = obj.getChunk(Uint64.parseString(x['segment']));
+  return obj.download(manifestChunk, cancellationToken)
+    .then(() => {
+      manifestChunk.downloadSucceeded();
+      return {value: JSON.stringify(new Response())};
+    }) as RPCPromise<any>;
+});

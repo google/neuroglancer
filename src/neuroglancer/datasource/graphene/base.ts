@@ -18,6 +18,7 @@ import {VertexAttributeInfo} from 'neuroglancer/skeleton/base';
 import {mat4} from 'neuroglancer/util/geom';
 
 export const PYCG_APP_VERSION = 1;
+export const GRAPHENE_MANIFEST_REFRESH_PROMISE = 'GrapheneMeshSource.RefreshManifestPromise';
 
 export enum VolumeChunkEncoding {
   RAW,
