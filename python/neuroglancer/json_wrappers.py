@@ -100,17 +100,21 @@ class JsonObjectWrapper(object):
         with self._lock:
             self._cached_wrappers[key] = (value, self._json_data.get(key))
 
-_types_supporting_validation = frozenset([np.uint64])
+_types_supporting_validation = frozenset([np.uint64, float, int])
 
 def _normalize_validator(wrapped_type, validator):
     if validator is None:
-        if (inspect.isroutine(wrapped_type) or hasattr(wrapped_type, 'supports_validation')
+        supports_validation = getattr(wrapped_type, 'supports_validation', None)
+        if (inspect.isroutine(wrapped_type) or supports_validation is not None
                 or wrapped_type in _types_supporting_validation):
-            validator = wrapped_type
+            if inspect.isroutine(supports_validation):
+                validator = supports_validation
+            else:
+                validator = wrapped_type
         else:
             def validator_func(x):
                 if not isinstance(x, wrapped_type):
-                    raise TypeError
+                    raise TypeError(wrapped_type, x)
                 return x
             validator = validator_func
     return validator
@@ -149,7 +153,7 @@ def text_type(value):
     return six.text_type(value)
 
 
-def optional(wrapper, default_value=None):
+def optional(wrapper, default_value=None, validator=None):
     def modified_wrapper(value, **kwargs):
         if value is None:
             return default_value
@@ -157,6 +161,15 @@ def optional(wrapper, default_value=None):
 
     if hasattr(wrapper, 'supports_readonly'):
         modified_wrapper.supports_readonly = True
+
+    validator = _normalize_validator(wrapper, validator)
+
+    def modified_validator(value, **kwargs):
+        if value is None:
+            return default_value
+        return validator(value, **kwargs)
+
+    modified_wrapper.supports_validation = modified_validator
     return modified_wrapper
 
 class MapBase(object):
@@ -211,7 +224,7 @@ def typed_string_map(wrapped_type, validator=None):
         def __getitem__(self, key):
             with self._lock:
                 if key not in self._json_data:
-                    raise KeyError
+                    raise KeyError(key)
                 return self._get_wrapped(key, wrapped_type)
 
         def __setitem__(self, key, value):
@@ -285,7 +298,7 @@ def typed_map(key_type, value_type, key_validator=None, value_validator=None):
             key = str(key)
             with self._lock:
                 if key not in self._json_data:
-                    raise KeyError
+                    raise KeyError(key)
                 return self._get_wrapped(key, value_type)
 
         def __setitem__(self, key, value):
