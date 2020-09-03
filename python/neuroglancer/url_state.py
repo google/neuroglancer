@@ -25,7 +25,7 @@ from .json_utils import json_encoder_default
 from .json_wrappers import to_json
 
 SINGLE_QUOTE_STRING_PATTERN = u'(\'(?:[^\'\\\\]|(?:\\\\.))*\')'
-DOUBLE_QUOTE_STRING_PATTERN = u'("(?:[^\'\\\\]|(?:\\\\.))*")'
+DOUBLE_QUOTE_STRING_PATTERN = u'("(?:[^"\\\\]|(?:\\\\.))*")'
 SINGLE_OR_DOUBLE_QUOTE_STRING_PATTERN = SINGLE_QUOTE_STRING_PATTERN + u'|' + DOUBLE_QUOTE_STRING_PATTERN
 DOUBLE_OR_SINGLE_QUOTE_STRING_PATTERN = DOUBLE_QUOTE_STRING_PATTERN + u'|' + SINGLE_QUOTE_STRING_PATTERN
 
