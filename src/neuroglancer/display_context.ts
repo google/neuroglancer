@@ -241,6 +241,16 @@ export class DisplayContext extends RefCounted implements FrameNumberCounter {
     canvas.style.zIndex = '0';
     resizeObserver.observe(canvas);
     container.appendChild(canvas);
+    this.registerEventListener(canvas, 'webglcontextlost', (event: WebGLContextEvent) => {
+      console.log(`Lost WebGL context: ${event.statusMessage}`);
+      // Wait for context to be regained.
+      event.preventDefault();
+    });
+    this.registerEventListener(canvas, 'webglcontextrestored', () => {
+      console.log('WebGL context restored');
+      // Simply reload Neuroglancer.
+      window.location.reload();
+    });
     this.gl = initializeWebGL(canvas);
   }
 

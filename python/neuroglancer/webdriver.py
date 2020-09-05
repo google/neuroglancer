@@ -52,6 +52,9 @@ class Webdriver(object):
     def get_log(self):
         return self.driver.get_log('browser')
 
+    def get_log_messages(self):
+        return '\n'.join(x['message'] for x in self.get_log())
+
     def sync(self):
         """Wait until client is ready."""
         while True:
