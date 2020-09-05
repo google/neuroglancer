@@ -17,6 +17,7 @@ import numpy as np
 import six
 
 import neuroglancer
+import neuroglancer.cli
 
 debug_graph = False
 verbose_merging = False
@@ -743,10 +744,7 @@ def run_interactive(args, graph):
     # interactive `python -i` shell.
     global splitter
 
-    if args.bind_address:
-        neuroglancer.set_server_bind_address(args.bind_address)
-    if args.static_content_url:
-        neuroglancer.set_static_content_source(url=args.static_content_url)
+    neuroglancer.cli.handle_server_arguments(args)
 
     splitter = InteractiveSplitter(
         graph,
@@ -793,14 +791,7 @@ if __name__ == '__main__':
         '--agglo-id', type=int, required=True, help='Agglomerated component id to split')
     interactive_ap.add_argument('--split-seeds', help='Path to JSON file specifying split seeds')
     interactive_ap.add_argument('--state', help='Path to JSON state file.')
-    interactive_ap.add_argument(
-        '-a',
-        '--bind-address',
-        help='Bind address for Python web server.  Use 127.0.0.1 (the default) to restrict access '
-        'to browers running on the local machine, use 0.0.0.0 to permit access from remote browsers.'
-    )
-    interactive_ap.add_argument(
-        '--static-content-url', help='Obtain the Neuroglancer client code from the specified URL.')
+    neuroglancer.cli.add_server_arguments(interactive_ap)
 
     interactive_ap.set_defaults(func=run_interactive)
 

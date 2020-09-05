@@ -28,6 +28,7 @@ import numpy as np
 import six
 
 import neuroglancer
+import neuroglancer.cli
 import neuroglancer.url_state
 from neuroglancer.json_utils import json_encoder_default
 
@@ -269,20 +270,10 @@ if __name__ == '__main__':
     ap.add_argument('--url', type=str)
     ap.add_argument(
         '-n', '--no-webbrowser', action='store_true', help='Don\'t open the webbrowser.')
-    ap.add_argument(
-        '-a',
-        '--bind-address',
-        help='Bind address for Python web server.  Use 127.0.0.1 (the default) to restrict access '
-        'to browers running on the local machine, use 0.0.0.0 to permit access from remote browsers.'
-    )
-    ap.add_argument(
-        '--static-content-url', help='Obtain the Neuroglancer client code from the specified URL.')
+    neuroglancer.cli.add_server_arguments(ap)
 
     args = ap.parse_args()
-    if args.bind_address:
-        neuroglancer.set_server_bind_address(args.bind_address)
-    if args.static_content_url:
-        neuroglancer.set_static_content_source(url=args.static_content_url)
+    neuroglancer.cli.handle_server_arguments(args)
 
     anno = Annotator()
 

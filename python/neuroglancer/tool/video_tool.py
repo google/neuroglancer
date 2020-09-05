@@ -550,14 +550,7 @@ def run_render(args):
 
 if __name__ == '__main__':
     ap = argparse.ArgumentParser()
-    ap.add_argument(
-        '-a',
-        '--bind-address',
-        help='Bind address for Python web server.  Use 127.0.0.1 (the default) to restrict access '
-        'to browers running on the local machine, use 0.0.0.0 to permit access from remote browsers.'
-    )
-    ap.add_argument(
-        '--static-content-url', help='Obtain the Neuroglancer client code from the specified URL.')
+    neuroglancer.cli.add_server_arguments(ap)
     sub_aps = ap.add_subparsers(help='command to run')
     ap_edit = sub_aps.add_parser('edit', help='Create or edit a script.')
     ap_edit.set_defaults(func=run_edit)
@@ -604,8 +597,5 @@ if __name__ == '__main__':
         help='Background color for cross sections.')
 
     args = ap.parse_args()
-    if args.bind_address:
-        neuroglancer.set_server_bind_address(args.bind_address)
-    if args.static_content_url:
-        neuroglancer.set_static_content_source(url=args.static_content_url)
+    neuroglancer.cli.handle_server_arguments(args)
     args.func(args)

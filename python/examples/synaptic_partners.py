@@ -20,7 +20,7 @@ import time
 import six
 
 import neuroglancer
-
+import neuroglancer.cli
 
 def get_synapses_by_id(synapse_data):
     synapses_by_id = {}
@@ -164,18 +164,9 @@ if __name__ == '__main__':
         choices=['min', 'sum'],
         default='min',
         help='Method by which to combine synaptic partner counts from multiple segments.')
-    ap.add_argument(
-        '-a',
-        '--bind-address',
-        help='Bind address for Python web server.  Use 127.0.0.1 (the default) to restrict access '
-        'to browers running on the local machine, use 0.0.0.0 to permit access from remote browsers.')
-    ap.add_argument(
-        '--static-content-url', help='Obtain the Neuroglancer client code from the specified URL.')
+    neuroglancer.cli.add_server_arguments(ap)
     args = ap.parse_args()
-    if args.bind_address:
-        neuroglancer.set_server_bind_address(args.bind_address)
-    if args.static_content_url:
-        neuroglancer.set_static_content_source(url=args.static_content_url)
+    neuroglancer.cli.handle_server_arguments(args)
 
     demo = Demo(
         synapse_path=args.synapses,

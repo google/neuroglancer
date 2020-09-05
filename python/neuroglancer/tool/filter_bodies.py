@@ -8,6 +8,7 @@ import argparse
 import csv
 
 import neuroglancer
+import neuroglancer.cli
 import numpy as np
 
 
@@ -143,30 +144,18 @@ class Tool(object):
 
 if __name__ == '__main__':
     ap = argparse.ArgumentParser()
+    neuroglancer.cli.add_server_arguments(ap)
     ap.add_argument('--image-url', required=True, help='Neuroglancer data source URL for image')
-    ap.add_argument(
-        '--segmentation-url', required=True, help='Neuroglancer data source URL for segmentation')
-
+    ap.add_argument('--segmentation-url',
+                    required=True,
+                    help='Neuroglancer data source URL for segmentation')
     ap.add_argument('--state', required=True, help='Path to proofreading state file')
-
     ap.add_argument('--bodies', required=True, help='Path to list of bodies to proofread')
-    ap.add_argument(
-        '-a',
-        '--bind-address',
-        help='Bind address for Python web server.  Use 127.0.0.1 (the default) to restrict access '
-        'to browers running on the local machine, use 0.0.0.0 to permit access from remote browsers.'
-    )
-    ap.add_argument(
-        '--static-content-url', help='Obtain the Neuroglancer client code from the specified URL.')
-
     ap.add_argument('--labels', nargs='+', help='Labels to use')
     ap.add_argument('--prefetch', type=int, default=10, help='Number of bodies to prefetch')
 
     args = ap.parse_args()
-    if args.bind_address:
-        neuroglancer.set_server_bind_address(args.bind_address)
-    if args.static_content_url:
-        neuroglancer.set_static_content_source(url=args.static_content_url)
+    neuroglancer.cli.handle_server_arguments(args)
 
     bodies = []
 
@@ -177,13 +166,12 @@ if __name__ == '__main__':
                 Body(
                     segment_id=int(row['id']),
                     num_voxels=int(row['num_voxels']),
-                    bbox_start=np.array(
-                        [
-                            int(row['bbox.start.x']),
-                            int(row['bbox.start.y']),
-                            int(row['bbox.start.z'])
-                        ],
-                        dtype=np.int64),
+                    bbox_start=np.array([
+                        int(row['bbox.start.x']),
+                        int(row['bbox.start.y']),
+                        int(row['bbox.start.z'])
+                    ],
+                                        dtype=np.int64),
                     bbox_size=np.array(
                         [int(row['bbox.size.x']),
                          int(row['bbox.size.y']),
