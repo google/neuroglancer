@@ -53,6 +53,8 @@ MESH_PATH_REGEX = r'^/neuroglancer/mesh/(?P<key>[^/]+)/(?P<object_id>[0-9]+)$'
 
 STATIC_PATH_REGEX = r'^/v/(?P<viewer_token>[^/]+)/(?P<path>(?:[a-zA-Z0-9_\-][a-zA-Z0-9_\-.]*)?)$'
 
+ACTION_PATH_REGEX = r'^/action/(?P<viewer_token>[^/]+)$'
+
 global_static_content_source = None
 
 global_server_args = dict(bind_address='127.0.0.1', bind_port=0)
@@ -83,12 +85,17 @@ class Server(object):
                 (DATA_PATH_REGEX, SubvolumeHandler, dict(server=self)),
                 (SKELETON_PATH_REGEX, SkeletonHandler, dict(server=self)),
                 (MESH_PATH_REGEX, MeshHandler, dict(server=self)),
+                (ACTION_PATH_REGEX, ActionHandler, dict(server=self)),
             ] + sockjs_router.urls,
             log_function=log_function,
             # Set a large maximum message size to accommodate large screenshot
             # messages.
             websocket_max_message_size=100 * 1024 * 1024)
-        http_server = tornado.httpserver.HTTPServer(app)
+        http_server = tornado.httpserver.HTTPServer(
+            app,
+            # Allow very large requests to accommodate large screenshots.
+            max_buffer_size=1024**3,
+        )
         sockets = tornado.netutil.bind_sockets(port=bind_port, address=bind_address)
         http_server.add_sockets(sockets)
         actual_port = sockets[0].getsockname()[1]
@@ -133,6 +140,15 @@ class StaticPathHandler(BaseRequestHandler):
         self.set_header('Content-type', content_type)
         self.finish(data)
 
+class ActionHandler(BaseRequestHandler):
+    def post(self, viewer_token):
+        viewer = self.server.viewers.get(viewer_token)
+        if viewer is None:
+            self.send_error(404)
+            return
+        action = json.loads(self.request.body)
+        self.server.ioloop.add_callback(viewer.actions.invoke, action['action'], action['state'])
+        self.finish('')
 
 class VolumeInfoHandler(BaseRequestHandler):
     def get(self, token):
