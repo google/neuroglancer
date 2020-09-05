@@ -357,6 +357,7 @@ export class UserLayer extends RefCounted {
     this.renderLayers.push(layer);
     const {layersChanged} = this;
     layer.layerChanged.add(layersChanged.dispatch);
+    layer.userLayer = this;
     layersChanged.dispatch();
     return () => this.removeRenderLayer(layer);
   }
@@ -369,6 +370,7 @@ export class UserLayer extends RefCounted {
     }
     renderLayers.splice(index, 1);
     layer.layerChanged.remove(layersChanged.dispatch);
+    layer.userLayer = undefined;
     layer.dispose();
     layersChanged.dispatch();
   }

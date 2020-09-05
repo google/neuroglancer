@@ -154,7 +154,8 @@ export abstract class AnnotationRenderHelper extends RefCounted {
         targetIsSliceView: this.targetIsSliceView,
         type: this.annotationType,
         subType: memoizeKey,
-        properties: this.properties
+        properties: this.properties,
+        rank: this.rank,
       },
       fallbackParameters: this.fallbackShaderParameters,
       parameters: this.shaderControlState.parseResult,

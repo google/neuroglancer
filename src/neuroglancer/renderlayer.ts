@@ -17,7 +17,7 @@
 import debounce from 'lodash/debounce';
 import {LayerChunkProgressInfo} from 'neuroglancer/chunk_manager/base';
 import {RenderViewport, renderViewportsEqual} from 'neuroglancer/display_context';
-import {LayerView, MouseSelectionState, VisibleLayerInfo} from 'neuroglancer/layer';
+import {LayerView, MouseSelectionState, UserLayer, VisibleLayerInfo} from 'neuroglancer/layer';
 import {DisplayDimensionRenderInfo, NavigationState} from 'neuroglancer/navigation_state';
 import {PickIDManager} from 'neuroglancer/object_picking';
 import {ProjectionParameters, projectionParametersEqual} from 'neuroglancer/projection_parameters';
@@ -44,6 +44,7 @@ export function allRenderLayerRoles() {
 }
 
 export class RenderLayer extends RefCounted {
+  userLayer: UserLayer|undefined;
   role: RenderLayerRole = RenderLayerRole.DATA;
   messages = new MessageList();
   layerChanged = new NullarySignal();

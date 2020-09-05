@@ -84,14 +84,6 @@ class PythonMeshSource extends
 export function computeNearIsotropicDownsamplingLevels(
     shape: Float32Array, downsampleDims: readonly number[], effectiveVoxelSize: Float32Array,
     maxDownsampling: number, maxDownsamplingScales: number, maxDownsampledSize: number) {
-  console.log({
-    shape,
-    downsampleDims,
-    effectiveVoxelSize,
-    maxDownsampling,
-    maxDownsamplingScales,
-    maxDownsampledSize
-  });
   const rank = shape.length;
   const curDownsampleFactors = new Float32Array(rank);
   curDownsampleFactors.fill(1);
