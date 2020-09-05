@@ -29,6 +29,7 @@
  * understand.
  */
 
+import {RenderViewport} from 'neuroglancer/display_context';
 import {DisplayDimensionRenderInfo, RelativeDisplayScales} from 'neuroglancer/navigation_state';
 import {TrackableValue} from 'neuroglancer/trackable_value';
 import {RefCounted} from 'neuroglancer/util/disposable';
@@ -252,7 +253,7 @@ export class MultipleScaleBarTextures extends RefCounted {
   }
 
   draw(
-      viewportWidth: number, displayDimensionRenderInfo: DisplayDimensionRenderInfo,
+      viewport: RenderViewport, displayDimensionRenderInfo: DisplayDimensionRenderInfo,
       relativeDisplayScales: RelativeDisplayScales, effectiveZoom: number,
       options: ScaleBarOptions) {
     const {scaleBars} = this;
@@ -268,7 +269,8 @@ export class MultipleScaleBarTextures extends RefCounted {
     const {factors} = relativeDisplayScales;
 
     const targetLengthInPixels = Math.min(
-        options.maxWidthFraction * viewportWidth, options.maxWidthInPixels * options.scaleFactor);
+        options.maxWidthFraction * viewport.logicalWidth,
+        options.maxWidthInPixels * options.scaleFactor);
 
     let numScaleBars = 0;
 
@@ -312,8 +314,12 @@ export class MultipleScaleBarTextures extends RefCounted {
       }
       scaleBar.update(options);
       gl.viewport(
-          options.leftPixelOffset * options.scaleFactor, bottomPixelOffset, scaleBar.width,
-          scaleBar.height);
+          options.leftPixelOffset * options.scaleFactor -
+              viewport.visibleLeftFraction * viewport.logicalWidth,
+          bottomPixelOffset -
+              (1 - (viewport.visibleTopFraction + viewport.visibleHeightFraction)) *
+                  viewport.logicalHeight,
+          scaleBar.width, scaleBar.height);
       scaleBarCopyHelper.draw(scaleBar.texture);
       bottomPixelOffset +=
           scaleBar.height + options.marginPixelsBetweenScaleBars * options.scaleFactor;

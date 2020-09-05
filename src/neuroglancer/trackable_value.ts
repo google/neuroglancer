@@ -47,7 +47,7 @@ export class TrackableValue<T> extends WatchableValue<T> implements Trackable {
   constructor(value: T, public validator: (value: any) => T, public defaultValue = value) {
     super(value);
   }
-  toJSON() {
+  toJSON(): any {
     let {value_} = this;
     if (value_ === this.defaultValue) {
       return undefined;

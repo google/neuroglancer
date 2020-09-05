@@ -354,3 +354,12 @@ export function getViewFrustrumDepthRange(projectionMat: mat4) {
   const depth = Math.abs(far - near);
   return depth;
 }
+
+// Ensures the z output is 0.  Useful for disabling depth clipping.
+export function disableZProjection(mat: mat4) {
+  mat[2] = 0;
+  mat[6] = 0;
+  mat[10] = 0;
+  mat[14] = 0;
+  return mat;
+}

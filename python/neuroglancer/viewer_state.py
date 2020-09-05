@@ -1065,6 +1065,9 @@ class ViewerState(JsonObjectWrapper):
         'projectionBackgroundColor', optional(text_type))
     selected_layer = selectedLayer = wrapped_property('selectedLayer', SelectedLayerState)
     statistics = wrapped_property('statistics', StatisticsDisplayState)
+    partial_viewport = partialViewport = wrapped_property(
+        'partialViewport',
+        optional(array_wrapper(np.float64, 4), np.array([0, 0, 1, 1], dtype=np.float64)))
 
     @staticmethod
     def interpolate(a, b, t):

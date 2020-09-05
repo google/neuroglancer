@@ -24,7 +24,7 @@ import {defaultCredentialsManager} from 'neuroglancer/credentials_provider/defau
 import {InputEventBindings as DataPanelInputEventBindings} from 'neuroglancer/data_panel_layout';
 import {DataSourceProviderRegistry} from 'neuroglancer/datasource';
 import {getDefaultDataSourceProvider} from 'neuroglancer/datasource/default_provider';
-import {DisplayContext} from 'neuroglancer/display_context';
+import {DisplayContext, TrackableWindowedViewport} from 'neuroglancer/display_context';
 import {InputEventBindingHelpDialog} from 'neuroglancer/help/input_event_bindings';
 import {addNewLayer, LayerManager, LayerSelectedValues, MouseSelectionState, SelectedLayerState, TopLevelLayerListSpecification, TrackableDataSelectionState} from 'neuroglancer/layer';
 import {RootLayoutContainer} from 'neuroglancer/layer_groups_layout';
@@ -33,7 +33,7 @@ import {overlaysOpen} from 'neuroglancer/overlay';
 import {allRenderLayerRoles, RenderLayerRole} from 'neuroglancer/renderlayer';
 import {StatusMessage} from 'neuroglancer/status';
 import {ElementVisibilityFromTrackableBoolean, TrackableBoolean, TrackableBooleanCheckbox} from 'neuroglancer/trackable_boolean';
-import {makeDerivedWatchableValue, TrackableValue, WatchableValueInterface} from 'neuroglancer/trackable_value';
+import {makeDerivedWatchableValue, observeWatchable, TrackableValue, WatchableValueInterface} from 'neuroglancer/trackable_value';
 import {ContextMenu} from 'neuroglancer/ui/context_menu';
 import {DragResizablePanel} from 'neuroglancer/ui/drag_resize';
 import {LayerInfoPanelContainer} from 'neuroglancer/ui/layer_side_panel';
@@ -226,6 +226,7 @@ class TrackableViewerState extends CompoundTrackable {
     this.add('layout', viewer.layout);
     this.add('statistics', viewer.statisticsDisplayState);
     this.add('selection', viewer.selectionDetailsState);
+    this.add('partialViewport', viewer.partialViewport);
   }
 
   restoreState(obj: any) {
@@ -306,6 +307,7 @@ export class Viewer extends RefCounted implements ViewerState {
   crossSectionBackgroundColor = new TrackableRGB(vec3.fromValues(0.5, 0.5, 0.5));
   perspectiveViewBackgroundColor = new TrackableRGB(vec3.fromValues(0, 0, 0));
   scaleBarOptions = new TrackableScaleBarOptions();
+  partialViewport = new TrackableWindowedViewport();
   contextMenu: ContextMenu;
   statisticsDisplayState = new StatisticsDisplayState();
   layerSelectedValues =
@@ -378,6 +380,10 @@ export class Viewer extends RefCounted implements ViewerState {
     this.element = element;
     this.dataSourceProvider = dataSourceProvider;
     this.uiConfiguration = uiConfiguration;
+
+    this.registerDisposer(observeWatchable(value => {
+      this.display.applyWindowedViewportToElement(element, value);
+    }, this.partialViewport));
 
     this.registerDisposer(() => removeFromParent(this.element));
 

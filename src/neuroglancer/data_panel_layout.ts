@@ -200,8 +200,17 @@ function makeSliceViewFromSpecification(
       viewer.chunkManager, viewer.layerManager, specification.navigationState.addRef(),
       viewer.wireFrame);
   const updateViewportSize = () => {
-    sliceView.projectionParameters.setViewportShape(
-        specification.width.value, specification.height.value);
+    const {width: {value: width}, height: {value: height}} = specification;
+    sliceView.projectionParameters.setViewport({
+      width,
+      height,
+      logicalWidth: width,
+      logicalHeight: height,
+      visibleLeftFraction: 0,
+      visibleTopFraction: 0,
+      visibleWidthFraction: 1,
+      visibleHeightFraction: 1
+    });
   };
   sliceView.registerDisposer(specification.width.changed.add(updateViewportSize));
   sliceView.registerDisposer(specification.height.changed.add(updateViewportSize));

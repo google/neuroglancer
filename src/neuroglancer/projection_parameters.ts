@@ -14,28 +14,19 @@
  * limitations under the License.
  */
 
+import {RenderViewport, renderViewportsEqual} from 'neuroglancer/display_context';
 import {DisplayDimensionRenderInfo} from 'neuroglancer/navigation_state';
 import {arraysEqual} from 'neuroglancer/util/array';
 import {mat4} from 'neuroglancer/util/geom';
 import {kEmptyFloat32Vec} from 'neuroglancer/util/vector';
 
-export class ProjectionParameters {
+export class ProjectionParameters extends RenderViewport {
   displayDimensionRenderInfo: DisplayDimensionRenderInfo;
 
   /**
    * Global position.
    */
   globalPosition: Float32Array = kEmptyFloat32Vec;
-
-  /**
-   * Width of the viewport in pixels, or 0 if there is no viewport yet.
-   */
-  width: number = 0;
-
-  /**
-   * Height of the viewport in pixels, or 0 if there is no viewport yet.
-   */
-  height: number = 0;
 
   /**
    * Transform from camera coordinates to OpenGL clip coordinates.
@@ -66,8 +57,8 @@ export class ProjectionParameters {
 
 export function projectionParametersEqual(a: ProjectionParameters, b: ProjectionParameters) {
   return (
-      a.displayDimensionRenderInfo === b.displayDimensionRenderInfo && a.width === b.width &&
-      a.height === b.height && arraysEqual(a.globalPosition, b.globalPosition) &&
+      a.displayDimensionRenderInfo === b.displayDimensionRenderInfo && renderViewportsEqual(a, b) &&
+      arraysEqual(a.globalPosition, b.globalPosition) &&
       arraysEqual(a.projectionMat, b.projectionMat) && arraysEqual(a.viewMatrix, b.viewMatrix));
 }
 

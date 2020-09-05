@@ -17,6 +17,7 @@
 import debounce from 'lodash/debounce';
 import {ChunkState} from 'neuroglancer/chunk_manager/base';
 import {Chunk, ChunkManager, ChunkSource} from 'neuroglancer/chunk_manager/frontend';
+import {applyRenderViewportToProjectionMatrix} from 'neuroglancer/display_context';
 import {LayerManager} from 'neuroglancer/layer';
 import {DisplayDimensionRenderInfo, NavigationState} from 'neuroglancer/navigation_state';
 import {updateProjectionParametersFromInverseViewAndProjection} from 'neuroglancer/projection_parameters';
@@ -137,16 +138,17 @@ export class SliceView extends Base {
           centerDataPosition[i] = invViewMatrix[12 + i];
         }
         const {
-          width,
-          height,
+          logicalWidth,
+          logicalHeight,
           projectionMat,
           viewportNormalInGlobalCoordinates,
           viewportNormalInCanonicalCoordinates
         } = out;
         const {relativeDepthRange} = navigationState;
         mat4.ortho(
-            projectionMat, -width / 2, width / 2, height / 2, -height / 2, -relativeDepthRange,
-            relativeDepthRange);
+            projectionMat, -logicalWidth / 2, logicalWidth / 2, logicalHeight / 2,
+            -logicalHeight / 2, -relativeDepthRange, relativeDepthRange);
+        applyRenderViewportToProjectionMatrix(out, projectionMat);
         updateProjectionParametersFromInverseViewAndProjection(out);
         const {viewMatrix} = out;
         for (let i = 0; i < 3; ++i) {
