@@ -206,7 +206,7 @@ export class ImageUserLayer extends Base {
     for (let channelIndex = 0; channelIndex < numChannels; ++channelIndex) {
       const x = rank === 0 ? value : value[channelIndex];
       // TODO(jbms): do data type-specific formatting
-      const valueString = x.toString();
+      const valueString = x == null ? '' : x.toString();
       const copyButton = makeCopyButton({
         title: `Copy value`,
         onClick: () => {
