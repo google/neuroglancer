@@ -176,6 +176,10 @@ export abstract class RenderedPanel extends RefCounted {
     return this.visibility.visible;
   }
 
+  getDepthArray(): Float32Array|undefined {
+    return undefined;
+  }
+
   get shouldDraw() {
     if (!this.visible) return false;
     const {element} = this;
@@ -334,5 +338,23 @@ export class DisplayContext extends RefCounted implements FrameNumberCounter {
     gl.clear(gl.COLOR_BUFFER_BIT);
     this.gl.colorMask(true, true, true, true);
     this.updateFinished.dispatch();
+  }
+
+  getDepthArray(): Float32Array {
+    const {width, height} = this.canvas;
+    const depthArray = new Float32Array(width * height);
+    for (const panel of this.panels) {
+      if (!panel.shouldDraw) continue;
+      const panelDepthArray = panel.getDepthArray();
+      if (panelDepthArray === undefined) continue;
+      const {canvasRelativeTop, canvasRelativeLeft, renderViewport: {width, height}} = panel;
+      for (let y = 0; y < height; ++y) {
+        const panelDepthArrayOffset = (height - 1 - y) * width;
+        depthArray.set(
+            panelDepthArray.subarray(panelDepthArrayOffset, panelDepthArrayOffset + width),
+            (canvasRelativeTop + y) * width + canvasRelativeLeft);
+      }
+    }
+    return depthArray;
   }
 }

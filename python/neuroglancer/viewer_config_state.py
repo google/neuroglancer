@@ -59,13 +59,23 @@ class ScreenshotReply(JsonObjectWrapper):
     __slots__ = ()
     id = wrapped_property('id', text_type)
     image = wrapped_property('image', base64.b64decode)
+    width = wrapped_property('width', int)
+    height = wrapped_property('height', int)
     image_type = imageType = wrapped_property('imageType', text_type)
+    depth_data = depthData = wrapped_property('depthData', optional(base64.b64decode))
 
     @property
     def image_pixels(self):
         """Returns the screenshot image as a numpy array of pixel values."""
         import PIL
         return np.asarray(PIL.Image.open(io.BytesIO(self.image)))
+
+    @property
+    def depth_array(self):
+        """Returns the depth data as a numpy float32 array."""
+        depth_data = self.depth_data
+        if depth_data is None: return None
+        return np.frombuffer(depth_data, dtype='<f4').reshape((self.height, self.width))
 
 class ActionState(JsonObjectWrapper):
     __slots__ = ()

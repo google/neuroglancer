@@ -92,21 +92,27 @@ class ViewerCommonBase(object):
         self._screenshot_callbacks = {}
         self.actions.add('screenshot', self._handle_screenshot_reply)
 
-    def async_screenshot(self, callback):
+    def async_screenshot(self, callback, include_depth=False):
+        """Captures a screenshot asynchronously."""
         screenshot_id = str(self._next_screenshot_id)
+        if include_depth:
+            screenshot_id = screenshot_id + '_includeDepth'
         self._next_screenshot_id += 1
         def set_screenshot_id(s):
             s.screenshot = screenshot_id
         self.config_state.retry_txn(set_screenshot_id)
         self._screenshot_callbacks[screenshot_id] = callback
 
-    def screenshot(self, size=None):
-        """Capture a screenshot synchronously.
+    def screenshot(self, size=None, include_depth=False):
+        """Captures a screenshot synchronously.
 
         :param size: Optional.  List of [width, height] specifying the dimension
                      in pixels of the canvas to use.  If specified, UI controls
                      are hidden and the canvas is resized to the specified
                      dimensions while the screenshot is captured.
+
+        :param include_depth: Optional.  Specifies whether to also return depth
+                              information.
 
         :returns: The screenshot.
         """
@@ -121,7 +127,7 @@ class ViewerCommonBase(object):
         def handler(s):
             result[0] = s
             event.set()
-        self.async_screenshot(handler)
+        self.async_screenshot(handler, include_depth=include_depth)
         event.wait()
         if size is not None:
             self.config_state.set_state(prior_state)

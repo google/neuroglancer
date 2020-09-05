@@ -16,7 +16,9 @@
 
 import debounce from 'lodash/debounce';
 import {TrackableValue} from 'neuroglancer/trackable_value';
+import {toBase64} from 'neuroglancer/util/base64';
 import {RefCounted} from 'neuroglancer/util/disposable';
+import {convertEndian32, Endianness,} from 'neuroglancer/util/endian';
 import {verifyOptionalString} from 'neuroglancer/util/json';
 import {Signal} from 'neuroglancer/util/signal';
 import {getCachedJson} from 'neuroglancer/util/trackable';
@@ -41,7 +43,7 @@ export class ScreenshotHandler extends RefCounted {
     this.registerDisposer(viewer.display.updateFinished.add(this.debouncedMaybeSendScreenshot));
   }
 
-  private maybeSendScreenshot() {
+  private async maybeSendScreenshot() {
     const requestState = this.requestState.value;
     const {previousRequest} = this;
     const {layerSelectedValues} = this.viewer;
@@ -69,20 +71,27 @@ export class ScreenshotHandler extends RefCounted {
     this.previousRequest = requestState;
     viewer.display.draw();
     const screenshotData = viewer.display.canvas.toDataURL();
+    const {width, height} = viewer.display.canvas;
     const prefix = 'data:image/png;base64,';
     let imageType: string;
     let image: string;
+    let depthData: string|undefined = undefined;
     if (!screenshotData.startsWith(prefix)) {
       imageType = '';
       image = '';
     } else {
       imageType = 'image/png';
       image = screenshotData.substring(prefix.length);
+      if (requestState.endsWith('_includeDepth')) {
+        const depthArray = viewer.display.getDepthArray();
+        convertEndian32(depthArray, Endianness.LITTLE);
+        depthData = await toBase64(depthArray);
+      }
     }
     const actionState = {
       viewerState: JSON.parse(JSON.stringify(getCachedJson(this.viewer.state).value)),
       selectedValues: JSON.parse(JSON.stringify(layerSelectedValues)),
-      screenshot: {id: requestState, image, imageType},
+      screenshot: {id: requestState, image, imageType, depthData, width, height},
     };
 
     this.sendScreenshotRequested.dispatch(actionState);

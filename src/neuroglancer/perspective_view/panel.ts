@@ -346,6 +346,28 @@ export class PerspectivePanel extends RenderedDataPanel {
     super.disposed();
   }
 
+  getDepthArray(): Float32Array|undefined {
+    if (!this.navigationState.valid) {
+      return undefined;
+    }
+    const {offscreenFramebuffer, renderViewport: {width, height}} = this;
+    const numPixels = width * height;
+    const depthArrayRGBA = new Float32Array(numPixels * 4);
+    try {
+      offscreenFramebuffer.bindSingle(OffscreenTextures.Z);
+      this.gl.readPixels(
+          0, 0, width, height, WebGL2RenderingContext.RGBA, WebGL2RenderingContext.FLOAT,
+          depthArrayRGBA);
+    } finally {
+      offscreenFramebuffer.framebuffer.unbind();
+    }
+    const depthArray = new Float32Array(numPixels);
+    for (let i = 0; i < numPixels; ++i) {
+      depthArray[i] = depthArrayRGBA[i * 4];
+    }
+    return depthArray;
+  }
+
   issuePickRequest(glWindowX: number, glWindowY: number) {
     const {offscreenFramebuffer} = this;
     offscreenFramebuffer.readPixelFloat32IntoBuffer(
