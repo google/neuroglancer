@@ -15,7 +15,9 @@
  */
 
 import debounce from 'lodash/debounce';
+import throttle from 'lodash/throttle';
 import {TrackableValue} from 'neuroglancer/trackable_value';
+import {columnSpecifications, getChunkSourceIdentifier, getFormattedNames} from 'neuroglancer/ui/statistics';
 import {toBase64} from 'neuroglancer/util/base64';
 import {RefCounted} from 'neuroglancer/util/disposable';
 import {convertEndian32, Endianness,} from 'neuroglancer/util/endian';
@@ -23,9 +25,11 @@ import {verifyOptionalString} from 'neuroglancer/util/json';
 import {Signal} from 'neuroglancer/util/signal';
 import {getCachedJson} from 'neuroglancer/util/trackable';
 import {Viewer} from 'neuroglancer/viewer';
+import { numChunkStatistics } from '../chunk_manager/base';
 
 export class ScreenshotHandler extends RefCounted {
   sendScreenshotRequested = new Signal<(state: any) => void>();
+  sendStatisticsRequested = new Signal<(state: any) => void>();
   requestState = new TrackableValue<string|undefined>(undefined, verifyOptionalString);
   /**
    * To reduce the risk of taking a screenshot while deferred code is still registering layers,
@@ -35,12 +39,63 @@ export class ScreenshotHandler extends RefCounted {
   private wasAlreadyVisible = false;
   private previousRequest: string|undefined = undefined;
   private debouncedMaybeSendScreenshot =
-      this.registerCancellable(debounce(() => this.maybeSendScreenshot(), 0));
+    this.registerCancellable(debounce(() => this.maybeSendScreenshot(), 0));
+  private statisticsRequested = false;
+  private throttledSendStatistics = this.registerCancellable(throttle(async (requestId: string) => {
+    if (this.requestState.value !== requestId || this.previousRequest === requestId) return;
+    this.throttledSendStatistics(requestId);
+    if (this.statisticsRequested) return;
+    this.statisticsRequested = true;
+    const map = await this.viewer.chunkQueueManager.getStatistics();
+    this.statisticsRequested = false;
+    if (this.wasDisposed) return;
+    if (this.requestState.value !== requestId || this.previousRequest === requestId) return;
+    const formattedNames = getFormattedNames(Array.from(map, x => getChunkSourceIdentifier(x[0])));
+    let i = 0;
+    const rows: any[] = [];
+    let sumStatistics = new Float64Array(numChunkStatistics);
+    for (const [source, statistics] of map) {
+      for (let i = 0; i < numChunkStatistics; ++i) {
+        sumStatistics[i] += statistics[i];
+      }
+      const row: any = {};
+      row.id = getChunkSourceIdentifier(source);
+      row.distinctId = formattedNames[i];
+      for (const column of columnSpecifications) {
+        row[column.key] = column.getter(statistics);
+      }
+      ++i;
+      rows.push(row);
+    }
+    const total: any = {};
+    for (const column of columnSpecifications) {
+      total[column.key] = column.getter(sumStatistics);
+    }
+    const actionState = {
+      viewerState: JSON.parse(JSON.stringify(getCachedJson(this.viewer.state).value)),
+      selectedValues: JSON.parse(JSON.stringify(this.viewer.layerSelectedValues)),
+      screenshotStatistics: {id: requestId, chunkSources: rows, total},
+    };
+    this.sendStatisticsRequested.dispatch(actionState);
+  }, 1000, {leading: false, trailing: true}));
 
   constructor(public viewer: Viewer) {
     super();
     this.requestState.changed.add(this.debouncedMaybeSendScreenshot);
     this.registerDisposer(viewer.display.updateFinished.add(this.debouncedMaybeSendScreenshot));
+  }
+
+  private isReady() {
+    const {viewer} = this;
+    if (!viewer.display.isReady()) {
+      return false;
+    }
+    for (const layer of viewer.layerManager.managedLayers) {
+      if (!layer.isReady()) {
+        return false;
+      }
+    }
+    return true;
   }
 
   private async maybeSendScreenshot() {
@@ -49,26 +104,24 @@ export class ScreenshotHandler extends RefCounted {
     const {layerSelectedValues} = this.viewer;
     if (requestState === undefined || requestState === previousRequest) {
       this.wasAlreadyVisible = false;
+      this.throttledSendStatistics.cancel();
       return;
     }
     const {viewer} = this;
-    if (!viewer.display.isReady()) {
+    if (!this.isReady()) {
       this.wasAlreadyVisible = false;
+      this.throttledSendStatistics(requestState);
       return;
     }
-    for (const layer of viewer.layerManager.managedLayers) {
-      if (!layer.isReady()) {
-        this.wasAlreadyVisible = false;
-        return;
-      }
-    }
     if (!this.wasAlreadyVisible) {
+      this.throttledSendStatistics(requestState);
       this.wasAlreadyVisible = true;
       this.debouncedMaybeSendScreenshot();
       return;
     }
     this.wasAlreadyVisible = false;
     this.previousRequest = requestState;
+    this.throttledSendStatistics.cancel();
     viewer.display.draw();
     const screenshotData = viewer.display.canvas.toDataURL();
     const {width, height} = viewer.display.canvas;

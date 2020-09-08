@@ -173,6 +173,8 @@ window.addEventListener('DOMContentLoaded', () => {
       (action, state) => serverConnection.sendActionNotification(action, state));
   screenshotHandler.sendScreenshotRequested.add(
       state => serverConnection.sendActionNotification('screenshot', state));
+  screenshotHandler.sendStatisticsRequested.add(
+      state => serverConnection.sendActionNotification('screenshotStatistics', state));
 
   bindDefaultCopyHandler(viewer);
   bindDefaultPasteHandler(viewer);

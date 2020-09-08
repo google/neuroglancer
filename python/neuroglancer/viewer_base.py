@@ -91,8 +91,10 @@ class ViewerCommonBase(object):
         self._next_screenshot_id = 0
         self._screenshot_callbacks = {}
         self.actions.add('screenshot', self._handle_screenshot_reply)
+        self.actions.add('screenshotStatistics', self._handle_screenshot_statistics)
 
-    def async_screenshot(self, callback, include_depth=False):
+    def async_screenshot(self, callback, include_depth=False,
+                         statistics_callback=None):
         """Captures a screenshot asynchronously."""
         screenshot_id = str(self._next_screenshot_id)
         if include_depth:
@@ -101,9 +103,10 @@ class ViewerCommonBase(object):
         def set_screenshot_id(s):
             s.screenshot = screenshot_id
         self.config_state.retry_txn(set_screenshot_id)
-        self._screenshot_callbacks[screenshot_id] = callback
+        self._screenshot_callbacks[screenshot_id] = (callback, statistics_callback)
 
-    def screenshot(self, size=None, include_depth=False):
+    def screenshot(self, size=None, include_depth=False,
+                   statistics_callback=None):
         """Captures a screenshot synchronously.
 
         :param size: Optional.  List of [width, height] specifying the dimension
@@ -127,7 +130,8 @@ class ViewerCommonBase(object):
         def handler(s):
             result[0] = s
             event.set()
-        self.async_screenshot(handler, include_depth=include_depth)
+        self.async_screenshot(handler, include_depth=include_depth,
+                              statistics_callback=statistics_callback)
         event.wait()
         if size is not None:
             self.config_state.set_state(prior_state)
@@ -141,7 +145,13 @@ class ViewerCommonBase(object):
         screenshot_id = s.screenshot.id
         callback = self._screenshot_callbacks.pop(screenshot_id, None)
         if callback is not None:
-            callback(s)
+            callback[0](s)
+
+    def _handle_screenshot_statistics(self, s):
+        screenshot_id = s.screenshot_statistics.id
+        callback = self._screenshot_callbacks.get(screenshot_id)
+        if callback is None or callback[1] is None: return
+        callback[1](s.screenshot_statistics)
 
     def _handle_volumes_changed(self):
         volumes = self.volume_manager.volumes

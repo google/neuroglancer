@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-import {CHUNK_LAYER_STATISTICS_RPC_ID, CHUNK_MANAGER_RPC_ID, CHUNK_QUEUE_MANAGER_RPC_ID, CHUNK_SOURCE_INVALIDATE_RPC_ID, ChunkSourceParametersConstructor, ChunkState, LayerChunkProgressInfo} from 'neuroglancer/chunk_manager/base';
+import {CHUNK_LAYER_STATISTICS_RPC_ID, CHUNK_MANAGER_RPC_ID, CHUNK_QUEUE_MANAGER_RPC_ID, CHUNK_SOURCE_INVALIDATE_RPC_ID, ChunkSourceParametersConstructor, ChunkState, LayerChunkProgressInfo, REQUEST_CHUNK_STATISTICS_RPC_ID} from 'neuroglancer/chunk_manager/base';
 import {SharedWatchableValue} from 'neuroglancer/shared_watchable_value';
 import {TrackableBoolean} from 'neuroglancer/trackable_boolean';
 import {TrackableValue} from 'neuroglancer/trackable_value';
@@ -229,6 +229,19 @@ export class ChunkQueueManager extends SharedObject {
     }
     return visibleChunksChanged;
   }
+
+  async getStatistics(): Promise<Map<ChunkSource, Float64Array>> {
+    const rpc = this.rpc!;
+    const rawData = await rpc.promiseInvoke<Map<number, Float64Array>>(
+        REQUEST_CHUNK_STATISTICS_RPC_ID, {queue: this.rpcId});
+    const data = new Map<ChunkSource, Float64Array>();
+    for (const [id, statistics] of rawData) {
+      const source = rpc.get(id) as ChunkSource | undefined;
+      if (source === undefined) continue;
+      data.set(source, statistics);
+    }
+    return data;
+  }
 }
 
 function updateChunk(rpc: RPC, x: any) {
@@ -413,3 +426,5 @@ export class ChunkRenderLayerFrontend extends SharedObject {
     super();
   }
 }
+
+export type ChunkStatistics = Map<ChunkSource, Float64Array>;
