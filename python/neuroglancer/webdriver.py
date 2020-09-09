@@ -17,10 +17,12 @@
 from __future__ import absolute_import
 
 import time
+import threading
 
 class Webdriver(object):
 
-    def __init__(self, viewer=None, headless=True, window_size=(1920, 1080)):
+    def __init__(self, viewer=None, headless=True, window_size=(1920, 1080),
+                 print_logs=True):
         import selenium.webdriver
         import selenium.webdriver.chrome.options
         import selenium.webdriver.common.desired_capabilities
@@ -42,15 +44,47 @@ class Webdriver(object):
         caps['goog:loggingPrefs'] = {'browser': 'ALL'}
         self.driver = selenium.webdriver.Chrome(options=chrome_options, desired_capabilities=caps)
         self.driver.get(viewer.get_viewer_url())
+        self._pending_logs = []
+        self._pending_logs_to_print = []
+        self._logs_lock = threading.Lock()
+        self._closed = False
+        def print_log_handler():
+            while True:
+                logs_to_print = self._get_logs_to_print()
+                if logs_to_print:
+                    print('\n'.join(x['message'] for x in logs_to_print))
+                if self._closed:
+                    break
+                time.sleep(1)
+        t = threading.Thread(target = print_log_handler)
+        t.daemon = True
+        t.start()
 
     def __enter__(self):
         return self
 
     def __exit__(self, exc_type, exc_value, traceback):
-        self.driver.close()
+        self.driver.quit()
+        self._closed = True
+
+    def _get_new_logs(self):
+        new_logs = self.driver.get_log('browser')
+        self._pending_logs.extend(new_logs)
+        self._pending_logs_to_print.extend(new_logs)
+
+    def _get_logs_to_print(self):
+        with self._logs_lock:
+            self._get_new_logs()
+            new_logs = self._pending_logs_to_print
+            self._pending_logs_to_print = []
+            return new_logs
 
     def get_log(self):
-        return self.driver.get_log('browser')
+        with self._logs_lock:
+            self._get_new_logs()
+            new_logs = self._pending_logs
+            self._pending_logs = []
+            return new_logs
 
     def get_log_messages(self):
         return '\n'.join(x['message'] for x in self.get_log())
