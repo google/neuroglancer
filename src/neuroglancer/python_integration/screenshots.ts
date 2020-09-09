@@ -87,6 +87,7 @@ export class ScreenshotHandler extends RefCounted {
 
   private isReady() {
     const {viewer} = this;
+    viewer.chunkQueueManager.flushPendingChunkUpdates();
     if (!viewer.display.isReady()) {
       return false;
     }

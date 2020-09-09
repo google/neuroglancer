@@ -127,24 +127,26 @@ export class ChunkQueueManager extends SharedObject {
     }
     setTimeout(this.processPendingChunkUpdates.bind(this), delay);
   }
-  processPendingChunkUpdates() {
+  processPendingChunkUpdates(flush = false) {
     let deadline = this.chunkUpdateDeadline;
-    if (deadline === null) {
+    if (!flush && deadline === null) {
       deadline = Date.now() + 30;
     }
     let visibleChunksChanged = false;
+    let numUpdates = 0;
     while (true) {
-      if (Date.now() > deadline) {
+      if (!flush && Date.now() > deadline!) {
         // No time to perform chunk update now, we will wait some more.
         this.chunkUpdateDeadline = null;
         setTimeout(() => this.processPendingChunkUpdates(), this.chunkUpdateDelay);
         break;
       }
       let update = this.pendingChunkUpdates;
+      if (update == null) break;
       if (this.applyChunkUpdate(update)) {
         visibleChunksChanged = true;
       }
-      // FIXME: do chunk update
+      ++numUpdates;
       let nextUpdate = this.pendingChunkUpdates = update.nextUpdate;
       if (nextUpdate == null) {
         this.pendingChunkUpdatesTail = null;
@@ -154,6 +156,7 @@ export class ChunkQueueManager extends SharedObject {
     if (visibleChunksChanged) {
       this.visibleChunksChanged.dispatch();
     }
+    return numUpdates;
   }
 
   private handleFetch_(source: ChunkSource, update: any) {
@@ -228,6 +231,10 @@ export class ChunkQueueManager extends SharedObject {
       }
     }
     return visibleChunksChanged;
+  }
+
+  flushPendingChunkUpdates(): number {
+    return this.processPendingChunkUpdates(true);
   }
 
   async getStatistics(): Promise<Map<ChunkSource, Float64Array>> {
