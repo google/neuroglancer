@@ -22,5 +22,9 @@
 }
 
 .range-slider input[type='range'] {
+  background: transparent;
 }
 
+.range-slider input[type=range]::-moz-range-track {
+  background-color: white;
+}
