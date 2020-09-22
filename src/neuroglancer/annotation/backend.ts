@@ -253,9 +253,11 @@ registerRPC(ANNOTATION_COMMIT_UPDATE_RPC_ID, function(x: any) {
       },
       (error: Error) => {
         if (!obj.wasDisposed) {
-          this.invoke(
-              ANNOTATION_COMMIT_UPDATE_RESULT_RPC_ID,
-              {id: obj.rpcId, annotationId, error: error.message});
+          this.invoke(ANNOTATION_COMMIT_UPDATE_RESULT_RPC_ID, {
+            id: obj.rpcId,
+            annotationId: annotationId || (newAnnotation && newAnnotation.id),
+            error: error.message
+          });
         }
       });
 });
