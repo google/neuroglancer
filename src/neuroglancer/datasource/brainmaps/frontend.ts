@@ -732,6 +732,7 @@ export class BrainmapsDataSource extends DataSourceProvider {
             dataSource.subsources.push({
               id: 'spatials',
               default: true,
+              modelSubspaceDimensionIndices: [0, 1, 2],
               subsource: {
                 annotation: options.chunkManager.getChunkSource(BrainmapsAnnotationSource, {
                   parameters: {
