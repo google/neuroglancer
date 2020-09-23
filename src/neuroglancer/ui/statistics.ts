@@ -246,7 +246,7 @@ export class StatisticsPanel extends RefCounted {
   }
 
   disposed() {
-    clearTimeout(this.requestDataTimerId);
+    window.clearTimeout(this.requestDataTimerId);
     removeFromParent(this.element);
     super.disposed();
   }
@@ -260,7 +260,7 @@ export class StatisticsPanel extends RefCounted {
       this.dataRequested = false;
       this.data = data;
       this.debouncedUpdateView();
-      this.requestDataTimerId = setTimeout(() => {
+      this.requestDataTimerId = window.setTimeout(() => {
         this.requestDataTimerId = -1;
         this.requestData();
       }, requestDataInterval);

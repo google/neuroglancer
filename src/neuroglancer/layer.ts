@@ -1425,15 +1425,14 @@ export abstract class LayerListSpecification extends RefCounted {
     return this.rpc;
   }
 
-  rpc: RPC;
+  abstract rpc: RPC;
 
-  dataSourceProviderRegistry: Borrowed<DataSourceProviderRegistry>;
-  layerManager: Borrowed<LayerManager>;
-  chunkManager: Borrowed<ChunkManager>;
-  layerSelectedValues: Borrowed<LayerSelectedValues>;
-  coordinateSpace: WatchableValueInterface<CoordinateSpace|undefined>;
+  abstract dataSourceProviderRegistry: Borrowed<DataSourceProviderRegistry>;
+  abstract layerManager: Borrowed<LayerManager>;
+  abstract chunkManager: Borrowed<ChunkManager>;
+  abstract layerSelectedValues: Borrowed<LayerSelectedValues>;
 
-  readonly root: TopLevelLayerListSpecification;
+  abstract readonly root: TopLevelLayerListSpecification;
 
   abstract initializeLayerFromSpec(managedLayer: ManagedUserLayer, spec: any): void;
 
@@ -1441,7 +1440,7 @@ export abstract class LayerListSpecification extends RefCounted {
 
   abstract add(layer: Owned<ManagedUserLayer>, index?: number|undefined): void;
 
-  rootLayers: Borrowed<LayerManager>;
+  abstract rootLayers: Borrowed<LayerManager>;
 }
 
 export class TopLevelLayerListSpecification extends LayerListSpecification {

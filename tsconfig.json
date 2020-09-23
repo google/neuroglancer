@@ -18,6 +18,7 @@
       "*": ["*"],
       "neuroglancer/*": ["src/neuroglancer/*"]
     },
+    "lib": ["dom", "es2020", "dom.iterable"],
     "typeRoots": [],
     "module": "ESNext"
   },

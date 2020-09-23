@@ -43,7 +43,7 @@ export class StatusMessage {
     }
     if (delay !== false) {
       this.setVisible(false);
-      this.timer = setTimeout(this.setVisible.bind(this, true), delay);
+      this.timer = window.setTimeout(this.setVisible.bind(this, true), delay);
     } else {
       this.timer = null;
     }
@@ -115,7 +115,7 @@ export class StatusMessage {
 
   static showTemporaryMessage(message: string, closeAfter: number = 2000): StatusMessage {
     const msg = this.showMessage(message);
-    setTimeout(() => msg.dispose(), closeAfter);
+    window.setTimeout(() => msg.dispose(), closeAfter);
     return msg;
   }
 }

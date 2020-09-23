@@ -618,7 +618,8 @@ export class ChunkQueueManager extends SharedObjectCounterpart {
    */
   private gpuMemoryEvictionQueue = makeChunkPriorityQueue1(Chunk.priorityLess);
 
-  private updatePending: number|null = null;
+  // Should be `number|null`, but marked `any` to work around @types/node being pulled in.
+  private updatePending: any = null;
 
   gpuMemoryChanged = new NullarySignal();
 
@@ -964,7 +965,8 @@ export class ChunkManager extends SharedObjectCounterpart {
    */
   private newTierChunks: Chunk[] = [];
 
-  private updatePending: number|null = null;
+  // Should be `number|null`, but marked `any` to workaround `@types/node` being pulled in.
+  private updatePending: any = null;
 
   recomputeChunkPriorities = new NullarySignal();
 

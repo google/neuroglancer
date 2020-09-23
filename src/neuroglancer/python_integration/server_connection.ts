@@ -123,10 +123,10 @@ export class ServerConnection extends RefCounted {
             `Disconnected from Python server.  ` +
             `Retrying in ${Math.ceil(remaining / 1000)} seconds.`);
       };
-      this.waitingToReconnect = setInterval(() => {
+      this.waitingToReconnect = window.setInterval(() => {
         const remaining = reconnectTime - Date.now();
         if (remaining < 0) {
-          clearInterval(this.waitingToReconnect);
+          window.clearInterval(this.waitingToReconnect);
           this.waitingToReconnect = -1;
           this.connect();
         } else {

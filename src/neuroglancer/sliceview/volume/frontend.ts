@@ -226,8 +226,9 @@ export class VolumeChunkSource extends SliceViewChunkSource<VolumeChunkSpecifica
 export abstract class VolumeChunk extends SliceViewChunk {
   source: VolumeChunkSource;
   chunkDataSize: Uint32Array;
+  CHUNK_FORMAT_TYPE: ChunkFormat;
 
-  get chunkFormat() {
+  get chunkFormat(): this['CHUNK_FORMAT_TYPE'] {
     return this.source.chunkFormat;
   }
 
@@ -240,6 +241,6 @@ export abstract class VolumeChunk extends SliceViewChunk {
 
 export abstract class MultiscaleVolumeChunkSource extends
     MultiscaleSliceViewChunkSource<VolumeChunkSource, VolumeSourceOptions> {
-  dataType: DataType;
-  volumeType: VolumeType;
+  abstract dataType: DataType;
+  abstract volumeType: VolumeType;
 }

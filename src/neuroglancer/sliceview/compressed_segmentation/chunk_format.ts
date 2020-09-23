@@ -214,7 +214,7 @@ ${glslType} getDataValueAt(highp ivec3 p`;
 
 export class CompressedSegmentationVolumeChunk extends
     SingleTextureVolumeChunk<Uint32Array, TextureLayout> {
-  chunkFormat: ChunkFormat;
+  CHUNK_FORMAT_TYPE: ChunkFormat;
 
   setTextureData(gl: GL) {
     let {data} = this;

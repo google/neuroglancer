@@ -405,10 +405,12 @@ function getViewerConfig(options) {
             ...extraFrontendPlugins,
             ...commonPlugins,
             ...extraCommonPlugins,
-            new CopyWebpackPlugin([{
-              from: resolveReal(srcDir, 'neuroglancer/datasource/boss/bossauth.html'),
-              to: 'bossauth.html'
-            }]),
+            new CopyWebpackPlugin({
+              patterns: [{
+                from: resolveReal(srcDir, 'neuroglancer/datasource/boss/bossauth.html'),
+                to: 'bossauth.html'
+              }],
+            }),
           ],
         },
         baseConfig),

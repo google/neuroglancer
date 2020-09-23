@@ -188,7 +188,7 @@ interface Source extends VolumeChunkSource {
 }
 
 export class UncompressedVolumeChunk extends SingleTextureVolumeChunk<Uint8Array, TextureLayout> {
-  chunkFormat: ChunkFormat;
+  CHUNK_FORMAT_TYPE: ChunkFormat;
   source: Source;
 
   setTextureData(gl: GL) {

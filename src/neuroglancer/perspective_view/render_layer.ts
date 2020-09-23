@@ -64,10 +64,13 @@ export class PerspectiveViewRenderLayer<AttachmentState = unknown> extends
     return true;
   }
 
-  isTransparent: boolean|undefined;
-  isAnnotation: boolean|undefined;
-  backend: SharedObject|undefined;
   get transparentPickEnabled() {
     return true;
   }
+}
+
+export interface PerspectiveViewRenderLayer<AttachmentState = unknown> {
+  isTransparent: boolean|undefined;
+  isAnnotation: boolean|undefined;
+  backend: SharedObject|undefined;
 }

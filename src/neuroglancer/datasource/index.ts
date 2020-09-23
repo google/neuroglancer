@@ -197,7 +197,7 @@ export function makeEmptyDataSourceSpecification(): DataSourceSpecification {
 }
 
 export abstract class DataSourceProvider extends RefCounted {
-  description?: string;
+  abstract description?: string;
 
   abstract get(options: GetDataSourceOptions): Promise<DataSource>;
 
@@ -218,7 +218,9 @@ export abstract class DataSourceProvider extends RefCounted {
 export const localAnnotationsUrl = 'local://annotations';
 
 class LocalDataSourceProvider extends DataSourceProvider {
-  description = 'Local in-memory';
+  get description() {
+    return 'Local in-memory';
+  }
 
   async get(options: GetDataSourceOptions): Promise<DataSource> {
     if (options.url === localAnnotationsUrl) {

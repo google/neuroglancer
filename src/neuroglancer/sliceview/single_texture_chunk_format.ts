@@ -85,7 +85,7 @@ export abstract class SingleTextureVolumeChunk<Data, TextureLayout extends Dispo
   texture: WebGLTexture|null = null;
   data: Data;
   textureLayout: TextureLayout|null;
-  chunkFormat: SingleTextureChunkFormat<TextureLayout>;
+  CHUNK_FORMAT_TYPE: SingleTextureChunkFormat<TextureLayout>;
 
   constructor(source: VolumeChunkSource, x: any) {
     super(source, x);

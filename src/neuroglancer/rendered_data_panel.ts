@@ -143,7 +143,7 @@ export abstract class RenderedDataPanel extends RenderedPanel {
 
   inputEventMap: EventActionMap;
 
-  navigationState: NavigationState;
+  abstract navigationState: NavigationState;
 
   pickingData = [new FramePickingData(), new FramePickingData()];
   pickRequests = [new PickRequest(), new PickRequest()];
@@ -226,7 +226,7 @@ export abstract class RenderedDataPanel extends RenderedPanel {
   }
 
   private scheduleCheckForPickRequestCompletion() {
-    this.pickTimerId = setTimeout(() => {
+    this.pickTimerId = window.setTimeout(() => {
       this.pickTimerId = -1;
       this.checkForPickRequestCompletion();
     }, 0);
@@ -267,7 +267,7 @@ export abstract class RenderedDataPanel extends RenderedPanel {
     if (remaining && pickTimerId === -1) {
       this.scheduleCheckForPickRequestCompletion();
     } else if (!remaining && pickTimerId !== -1) {
-      clearTimeout(pickTimerId);
+      window.clearTimeout(pickTimerId);
       this.pickTimerId = -1;
     }
     if (!checkingBeforeDraw && available !== undefined && this.pickRequestPending &&
@@ -324,7 +324,7 @@ export abstract class RenderedDataPanel extends RenderedPanel {
     if (time < nextPickRequestTime) {
       if (pendingPickRequestTimerId == -1) {
         this.pendingPickRequestTimerId =
-            setTimeout(this.pendingPickRequestTimerExpired, nextPickRequestTime - time);
+            window.setTimeout(this.pendingPickRequestTimerExpired, nextPickRequestTime - time);
       }
       return false;
     }
@@ -633,7 +633,7 @@ export abstract class RenderedDataPanel extends RenderedPanel {
     this.cancelPickRequests();
     const {pendingPickRequestTimerId} = this;
     if (pendingPickRequestTimerId !== -1) {
-      clearTimeout(pendingPickRequestTimerId);
+      window.clearTimeout(pendingPickRequestTimerId);
     }
     for (const request of this.pickRequests) {
       gl.deleteBuffer(request.buffer);

@@ -352,7 +352,6 @@ export class ChunkManager extends SharedObject {
 export class ChunkSource extends SharedObject {
   OPTIONS: {};
   chunks = new Map<string, Chunk>();
-  key: any;
 
   /**
    * If set to true, chunk updates will be applied to this source immediately, rather than queueing
@@ -403,6 +402,10 @@ export class ChunkSource extends SharedObject {
   static encodeOptions(_options: {}): {[key: string]: any} {
     return {};
   }
+}
+
+export interface ChunkSource {
+  key: any;
 }
 
 export function WithParameters<Parameters, TBase extends ChunkSourceConstructor>(
