@@ -36,7 +36,7 @@ describe('single_mesh/frontend', () => {
     vertexData.vertexAttributes = [];
 
     fragmentShaderTest(
-        {
+        {vertexIndex: 'uint'}, {
           posX: 'float',
           posY: 'float',
           posZ: 'float',
@@ -49,7 +49,6 @@ describe('single_mesh/frontend', () => {
           const attributeFormats = getAttributeTextureFormats(attributeInfo);
 
           let {gl, builder} = tester;
-          builder.addUniform('highp uint', 'vertexIndex');
           builder.addVarying('highp vec3', 'vVertexPosition');
           builder.addVarying('highp vec3', 'vVertexNormal');
           shaderManager.defineAttributeAccess(builder, 'vertexIndex');
@@ -72,8 +71,7 @@ describe('single_mesh/frontend', () => {
 
           for (let index of [0, 1, 2, 32104, 100201, 143212]) {
             shaderManager.bindVertexData(gl, shader, vertexData);
-            gl.uniform1ui(shader.uniform('vertexIndex'), index);
-            tester.execute();
+            tester.execute({vertexIndex: index});
             const {values} = tester;
             const pos = [values.posX, values.posY, values.posZ];
             const norm = [values.normX, values.normY, values.normZ];

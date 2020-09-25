@@ -139,9 +139,6 @@ export function makeTextureBuffers(
   return result;
 }
 
-const tempPixel = new Uint8Array(4);
-const tempPixelUint32 = new Uint32Array(1);
-const tempPixelFloat32 = new Float32Array(4);
 export class FramebufferConfiguration<ColorBuffer extends TextureBuffer|Renderbuffer> extends
     RefCounted {
   width = Number.NaN;
@@ -219,48 +216,6 @@ export class FramebufferConfiguration<ColorBuffer extends TextureBuffer|Renderbu
 
   unbind() {
     this.framebuffer.unbind();
-  }
-
-  /**
-   * Only supports UNSIGNED_BYTE RGBA textures.
-   */
-  readPixel(textureIndex: number, glWindowX: number, glWindowY: number): Uint8Array {
-    let {gl} = this;
-    try {
-      this.bindSingle(textureIndex);
-      gl.readPixels(glWindowX, glWindowY, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, tempPixel);
-    } finally {
-      this.framebuffer.unbind();
-    }
-    return tempPixel;
-  }
-
-  readPixelUint32(textureIndex: number, glWindowX: number, glWindowY: number): number {
-    let {gl} = this;
-    try {
-      this.bindSingle(textureIndex);
-      gl.readPixels(
-          glWindowX, glWindowY, 1, 1, WebGL2RenderingContext.RED_INTEGER,
-        WebGL2RenderingContext.UNSIGNED_INT, tempPixelUint32);
-    } finally {
-      this.framebuffer.unbind();
-    }
-    return tempPixelUint32[0];
-  }
-
-  readPixelFloat32(textureIndex: number, glWindowX: number, glWindowY: number): number {
-    let {gl} = this;
-    try {
-      this.bindSingle(textureIndex);
-      // Reading just the red channel using a format of RED fails with certain WebGL
-      // implementations.  Using RGBA seems to have better compatibility.
-      gl.readPixels(
-          glWindowX, glWindowY, 1, 1, WebGL2RenderingContext.RGBA, WebGL2RenderingContext.FLOAT,
-          tempPixelFloat32);
-    } finally {
-      this.framebuffer.unbind();
-    }
-    return tempPixelFloat32[0];
   }
 
   readPixelFloat32IntoBuffer(

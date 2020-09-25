@@ -15,15 +15,16 @@
  */
 
 import {SingleTextureChunkFormat} from 'neuroglancer/sliceview/single_texture_chunk_format';
+import {defineChunkDataShaderAccess} from 'neuroglancer/sliceview/volume/frontend';
 import {getFortranOrderStrides} from 'neuroglancer/util/array';
 import {TypedArray} from 'neuroglancer/util/array';
 import {DataType} from 'neuroglancer/util/data_type';
 import {Disposable} from 'neuroglancer/util/disposable';
 import {vec3, vec3Key} from 'neuroglancer/util/geom';
+import {Uint64} from 'neuroglancer/util/uint64';
 import {GL} from 'neuroglancer/webgl/context';
 import {textureTargetForSamplerType} from 'neuroglancer/webgl/shader';
 import {fragmentShaderTest, FragmentShaderTestOutputs} from 'neuroglancer/webgl/shader_testing';
-import {defineChunkDataShaderAccess} from './volume/frontend';
 
 export function chunkFormatTest<TextureLayout extends Disposable>(
     dataType: DataType, volumeSize: Uint32Array,
@@ -32,20 +33,14 @@ export function chunkFormatTest<TextureLayout extends Disposable>(
     rawData: TypedArray, encodedData: TypedArray) {
   const numChannels = volumeSize[3];
   let strides = getFortranOrderStrides(volumeSize);
-  const outputType = dataType === DataType.FLOAT32 ? 'float' : 'uint';
   const outputs: FragmentShaderTestOutputs = {};
   for (let channelIndex = 0; channelIndex < numChannels; ++channelIndex) {
-    if (dataType === DataType.UINT64) {
-      outputs[`output${channelIndex}Low`] = outputType;
-      outputs[`output${channelIndex}High`] = outputType;
-    } else {
-      outputs[`output${channelIndex}`] = outputType;
-    }
+    outputs[`output${channelIndex}`] = dataType;
   }
   it(`volumeSize = ${volumeSize.join()}, numChannels = ${volumeSize[3]}, ` +
          `dataType = ${DataType[dataType]}`,
      () => {
-       fragmentShaderTest(outputs, tester => {
+       fragmentShaderTest({}, outputs, tester => {
          let {gl, builder} = tester;
          let [chunkFormat, textureLayout] = getChunkFormatAndTextureLayout(gl);
          builder.addUniform('highp vec3', 'vChunkPosition');
@@ -54,27 +49,9 @@ export function chunkFormatTest<TextureLayout extends Disposable>(
          {
            let fragmentMain = '';
            for (let channel = 0; channel < numChannels; ++channel) {
-             switch (dataType) {
-               case DataType.UINT64:
-                 fragmentMain += `
-{
-  uint64_t value = getDataValue(${channel});
-  output${channel}Low = value.value[0];
-  output${channel}High = value.value[1];
-}
-`;
-                 break;
-               case DataType.FLOAT32:
-                 fragmentMain += `
+             fragmentMain += `
 output${channel} = getDataValue(${channel});
 `;
-                 break;
-               default:
-                 fragmentMain += `
-output${channel} = getDataValue(${channel}).value;
-`;
-                 break;
-             }
            }
            builder.setFragmentMain(fragmentMain);
          }
@@ -122,10 +99,9 @@ output${channel} = getDataValue(${channel}).value;
                  `channel = ${channel}, offset = ${curOffset}`;
              switch (dataType) {
                case DataType.UINT64: {
-                 let low = values[`output${channel}Low`];
-                 let high = values[`output${channel}High`];
-                 expect(low).toBe(rawData[curOffset * 2], `${msg} (low)`);
-                 expect(high).toEqual(rawData[curOffset * 2 + 1], `${msg} (high)`);
+                 let result = values[`output${channel}`] as Uint64;
+                 expect(result.low).toBe(rawData[curOffset * 2], `${msg} (low)`);
+                 expect(result.high).toEqual(rawData[curOffset * 2 + 1], `${msg} (high)`);
                  break;
                }
                default: {

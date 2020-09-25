@@ -19,9 +19,9 @@ import {fragmentShaderTest} from 'neuroglancer/webgl/shader_testing';
 import {computeTextureFormat, OneDimensionalTextureAccessHelper, setOneDimensionalTextureData, TextureFormat} from 'neuroglancer/webgl/texture_access';
 
 function testTextureAccess(dataLength: number) {
-  fragmentShaderTest({outputValue: 'uint'}, tester => {
+  const dataType = DataType.UINT32;
+  fragmentShaderTest({uOffset: 'uint'}, {outputValue: dataType}, tester => {
     let {gl, builder} = tester;
-    const dataType = DataType.UINT32;
     const numComponents = 1;
     const format = new TextureFormat();
     computeTextureFormat(format, dataType, numComponents);
@@ -34,12 +34,11 @@ function testTextureAccess(dataLength: number) {
     const accessHelper = new OneDimensionalTextureAccessHelper('textureAccess');
     const textureUnitSymbol = Symbol('textureUnit');
     accessHelper.defineShader(builder);
-    builder.addUniform('highp uint', 'uOffset');
     builder.addTextureSampler('usampler2D', 'uSampler', textureUnitSymbol);
     builder.addFragmentCode(
         accessHelper.getAccessor('readValue', 'uSampler', dataType, numComponents));
     builder.setFragmentMain(`
-outputValue = readValue(uOffset).value;
+outputValue = readValue(uOffset);
 `);
 
     tester.build();
@@ -57,11 +56,9 @@ outputValue = readValue(uOffset).value;
 
     function testOffset(x: number) {
       let value = data[x];
-      gl.uniform1ui(shader.uniform('uOffset'), x);
-
       gl.activeTexture(gl.TEXTURE0 + textureUnit);
       gl.bindTexture(gl.TEXTURE_2D, texture);
-      tester.execute();
+      tester.execute({uOffset: x});
       gl.bindTexture(gl.TEXTURE_2D, null);
       expect(tester.values.outputValue).toBe(value,
             `offset = ${x}, value = ${value}`);
