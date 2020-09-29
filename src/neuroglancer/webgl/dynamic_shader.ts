@@ -38,7 +38,7 @@ export function makeTrackableFragmentMain(value: string) {
   return new TrackableValue<string>(value, verifyString);
 }
 
-export interface ParameterizedShaderGetterResult<Parameters, ExtraParameters = any> {
+export interface ParameterizedShaderGetterResult<Parameters = any, ExtraParameters = any> {
   shader: ShaderProgram|null;
   fallback: boolean;
   parameters: Parameters;
@@ -50,21 +50,25 @@ export interface ParameterizedContextDependentShaderGetter<
   (context: Context): ParameterizedShaderGetterResult<Parameters, ExtraParameters>;
 }
 
+export interface ParameterizedShaderOptions<Parameters = any, ExtraParameters = any> {
+  memoizeKey: any;
+  parameters: WatchableValueInterface<Parameters>;
+  fallbackParameters?: WatchableValueInterface<Parameters>|undefined;
+  shaderError?: WatchableShaderError|undefined;
+  encodeParameters?: (p: Parameters) => any;
+  extraParameters?: WatchableValueInterface<ExtraParameters>;
+  encodeExtraParameters?: (p: ExtraParameters) => any;
+}
+
 export function parameterizedContextDependentShaderGetter<
     Context, ContextKey, Parameters, ExtraParameters = undefined>(
-    refCounted: RefCounted, gl: GL, options: {
-      memoizeKey: any,
+    refCounted: RefCounted, gl: GL,
+    options: ParameterizedShaderOptions<Parameters, ExtraParameters>&{
       getContextKey: (context: Context) => ContextKey,
       defineShader:
           (builder: ShaderBuilder, context: Context, parameters: Parameters,
            extraParameters: ExtraParameters) => void,
-      parameters: WatchableValueInterface<Parameters>,
-      fallbackParameters?: WatchableValueInterface<Parameters>| undefined,
-      shaderError?: WatchableShaderError | undefined,
-      encodeParameters?: (p: Parameters) => any,
       encodeContext?: (context: Context) => any,
-      extraParameters?: WatchableValueInterface<ExtraParameters>,
-      encodeExtraParameters?: (p: ExtraParameters) => any,
     }): ParameterizedContextDependentShaderGetter<Context, Parameters, ExtraParameters> {
   const shaders = new Map<ContextKey, ParameterizedShaderGetterResult<Parameters, ExtraParameters>&{
     parametersGeneration: number,
@@ -165,28 +169,24 @@ export function parameterizedContextDependentShaderGetter<
   return getter;
 }
 
+export interface ParameterizedEmitterDependentShaderOptions<
+    Parameters = any, ExtraParameters = any> extends
+    ParameterizedShaderOptions<Parameters, ExtraParameters> {
+  defineShader:
+      (builder: ShaderBuilder, parameters: Parameters, extraParameters: ExtraParameters) => void;
+}
+
+export type ParameterizedEmitterDependentShaderGetter<Parameters = any, ExtraParameters = any> =
+    ParameterizedContextDependentShaderGetter<ShaderModule, Parameters, ExtraParameters>;
+
 export function parameterizedEmitterDependentShaderGetter<Parameters, ExtraParameters = undefined>(
-    refCounted: RefCounted, gl: GL, options: {
-      memoizeKey: any,
-      parameters: WatchableValueInterface<Parameters>,
-      defineShader: (
-          builder: ShaderBuilder, parameters: Parameters, extraParameters: ExtraParameters) => void,
-      fallbackParameters?: WatchableValueInterface<Parameters>,
-      shaderError?: WatchableShaderError,
-      encodeParameters?: (parameters: Parameters) => any,
-      extraParameters?: WatchableValueInterface<ExtraParameters>,
-      encodeExtraParameters?: (p: ExtraParameters) => any,
-    }): ParameterizedContextDependentShaderGetter<ShaderModule, Parameters, ExtraParameters> {
+    refCounted: RefCounted, gl: GL,
+    options: ParameterizedEmitterDependentShaderOptions<Parameters, ExtraParameters>):
+    ParameterizedEmitterDependentShaderGetter<Parameters, ExtraParameters> {
   return parameterizedContextDependentShaderGetter(refCounted, gl, {
-    memoizeKey: options.memoizeKey,
-    fallbackParameters: options.fallbackParameters,
-    encodeParameters: options.encodeParameters,
-    parameters: options.parameters,
+    ...options,
     getContextKey: (emitter: ShaderModule) => emitter,
     encodeContext: (emitter: ShaderModule) => getObjectId(emitter),
-    shaderError: options.shaderError,
-    extraParameters: options.extraParameters,
-    encodeExtraParameters: options.encodeExtraParameters,
     defineShader: (builder, emitter: ShaderModule, parameters, extraParameters) => {
       builder.require(emitter);
       return options.defineShader(builder, parameters, extraParameters);
