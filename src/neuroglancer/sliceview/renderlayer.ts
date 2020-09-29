@@ -161,8 +161,10 @@ export abstract class SliceViewRenderLayer<
   setGLBlendMode(gl: WebGL2RenderingContext, renderLayerNum: number): void {
     // Default blend mode for non-blend-mode-aware layers
     if (renderLayerNum > 0) {
-      gl.enable(gl.BLEND);
-      gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
+      gl.enable(WebGL2RenderingContext.BLEND);
+      gl.blendFunc(WebGL2RenderingContext.SRC_ALPHA, WebGL2RenderingContext.ONE_MINUS_SRC_ALPHA);
+    } else {
+      gl.disable(WebGL2RenderingContext.BLEND);
     }
   }
 

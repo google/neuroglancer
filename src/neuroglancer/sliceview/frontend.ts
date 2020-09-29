@@ -376,7 +376,7 @@ export class SliceView extends Base {
       renderLayer.draw(renderContext);
       ++renderLayerNum;
     }
-    gl.disable(gl.BLEND);
+    gl.disable(WebGL2RenderingContext.BLEND);
     gl.disable(gl.STENCIL_TEST);
     offscreenFramebuffer.unbind();
   }
@@ -510,6 +510,7 @@ gl_Position = uProjectionMatrix * aVertexPosition;
     shader.bind();
     gl.activeTexture(gl.TEXTURE0);
     gl.bindTexture(gl.TEXTURE_2D, texture);
+    gl.disable(WebGL2RenderingContext.BLEND);
     gl.uniformMatrix4fv(shader.uniform('uProjectionMatrix'), false, projectionMatrix);
     gl.uniform4fv(shader.uniform('uColorFactor'), colorFactor);
     gl.uniform4fv(shader.uniform('uBackgroundColor'), backgroundColor);

@@ -101,6 +101,8 @@ void emitTransparent() {
     if (blendModeValue === BLEND_MODES.ADDITIVE || renderLayerNum > 0) {
       gl.enable(gl.BLEND);
       BLEND_FUNCTIONS.get(blendModeValue)!(gl);
+    } else {
+      gl.disable(WebGL2RenderingContext.BLEND);
     }
   }
 }
