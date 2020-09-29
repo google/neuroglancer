@@ -85,12 +85,17 @@ export abstract class RenderedPanel extends RefCounted {
   boundsGeneration = -1;
 
   // Offset of visible portion of panel in canvas pixels from left side of canvas.
-  canvasRelativeLeft: number = 0;
+  canvasRelativeClippedLeft: number = 0;
 
   // Offset of visible portion of panel in canvas pixels from top of canvas.
-  canvasRelativeTop: number = 0;
+  canvasRelativeClippedTop: number = 0;
+
+  canvasRelativeLogicalLeft: number = 0;
+  canvasRelativeLogicalTop: number = 0;
 
   renderViewport = new RenderViewport();
+
+  private boundsObserversRegistered = false;
 
   constructor(
       public context: Borrowed<DisplayContext>, public element: HTMLElement,
@@ -115,56 +120,90 @@ export abstract class RenderedPanel extends RefCounted {
     if (boundsGeneration === this.boundsGeneration) return;
     this.boundsGeneration = boundsGeneration;
     const {element} = this;
+    if (!this.boundsObserversRegistered && context.monitorPanel(element)) {
+      this.boundsObserversRegistered = true;
+    }
     const clientRect = element.getBoundingClientRect();
+    const root = context.container;
     const canvasRect = context.canvasRect!;
     const {canvas} = context;
     const {width: canvasPixelWidth, height: canvasPixelHeight} = canvas;
     const screenToCanvasPixelScaleX = canvasPixelWidth / canvasRect.width;
     const screenToCanvasPixelScaleY = canvasPixelHeight / canvasRect.height;
-    let leftInScreenPixels = element.clientLeft + clientRect.left - canvasRect.left;
-    let leftInCanvasPixels = Math.round(leftInScreenPixels * screenToCanvasPixelScaleX);
-    let logicalWidthInCanvasPixels = element.clientWidth;
-    let topInScreenPixels = clientRect.top - canvasRect.top + element.clientTop;
-    let topInCanvasPixels = Math.round(topInScreenPixels * screenToCanvasPixelScaleY);
-    let logicalHeightInCanvasPixels = element.clientHeight;
-    const canvasRelativeTop = this.canvasRelativeTop = Math.max(0, topInCanvasPixels);
-    const canvasRelativeLeft = this.canvasRelativeLeft = Math.max(0, leftInCanvasPixels);
+    // Logical bounding rectangle in canvas/WebGL pixels (which may be a different size than screen
+    // pixels when using a fixed canvas size via the Python integration).
+    const canvasLeft = canvasRect.left, canvasTop = canvasRect.top;
+    let logicalLeft = this.canvasRelativeLogicalLeft = Math.round(
+            (clientRect.left - canvasLeft) * screenToCanvasPixelScaleX + element.clientLeft),
+        logicalTop = this.canvasRelativeLogicalTop = Math.round(
+            (clientRect.top - canvasTop) * screenToCanvasPixelScaleY + element.clientTop),
+        logicalWidth = element.clientWidth, logicalHeight = element.clientHeight,
+        logicalRight = logicalLeft + logicalWidth, logicalBottom = logicalTop + logicalHeight;
+    // Clipped bounding rectangle in canvas/WebGL pixels.  The clipped bounding rectangle is the
+    // portion actually visible and overlapping the canvas.
+    let clippedTop = logicalTop, clippedLeft = logicalLeft, clippedRight = logicalRight,
+        clippedBottom = logicalBottom;
+    for (let parent = element.parentElement; parent !== null && parent !== root;
+         parent = parent.parentElement) {
+      const rect = parent.getBoundingClientRect();
+      if (rect.x === 0 && rect.y === 0 && rect.width === 0 && rect.height === 0) {
+        // Assume this is a `display: contents;` element.
+        continue;
+      }
+      clippedLeft = Math.max(clippedLeft, (rect.left - canvasLeft) * screenToCanvasPixelScaleX);
+      clippedTop = Math.max(clippedTop, (rect.top - canvasTop) * screenToCanvasPixelScaleY);
+      clippedRight = Math.min(clippedRight, (rect.right - canvasLeft) * screenToCanvasPixelScaleX);
+      clippedBottom =
+          Math.min(clippedBottom, (rect.bottom - canvasTop) * screenToCanvasPixelScaleY);
+    }
+    clippedTop = this.canvasRelativeClippedTop = Math.round(Math.max(clippedTop, 0));
+    clippedLeft = this.canvasRelativeClippedLeft = Math.round(Math.max(clippedLeft, 0));
+    clippedRight = Math.round(Math.min(clippedRight, canvasPixelWidth));
+    clippedBottom = Math.round(Math.min(clippedBottom, canvasPixelHeight));
     const viewport = this.renderViewport;
-    viewport.logicalWidth = logicalWidthInCanvasPixels;
-    viewport.logicalHeight = logicalHeightInCanvasPixels;
-    const canvasRelativeWidth = viewport.width = Math.max(
-        0,
-        Math.min(leftInCanvasPixels + logicalWidthInCanvasPixels, canvasPixelWidth) -
-            canvasRelativeLeft);
-    const canvasRelativeHeight = viewport.height = Math.max(
-        0,
-        Math.min(topInCanvasPixels + logicalHeightInCanvasPixels, canvasPixelHeight) -
-            canvasRelativeTop);
-    viewport.visibleLeftFraction =
-        (canvasRelativeLeft - leftInCanvasPixels) / logicalWidthInCanvasPixels;
-    viewport.visibleTopFraction =
-        (canvasRelativeTop - topInCanvasPixels) / logicalHeightInCanvasPixels;
-    viewport.visibleWidthFraction = canvasRelativeWidth / logicalWidthInCanvasPixels;
-    viewport.visibleHeightFraction = canvasRelativeHeight / logicalHeightInCanvasPixels;
+    const clippedWidth = viewport.width = Math.max(0, clippedRight - clippedLeft);
+    const clippedHeight = viewport.height = Math.max(0, clippedBottom - clippedTop);
+    viewport.logicalWidth = logicalWidth;
+    viewport.logicalHeight = logicalHeight;
+    viewport.visibleLeftFraction = (clippedLeft - logicalLeft) / logicalWidth;
+    viewport.visibleTopFraction = (clippedTop - logicalTop) / logicalHeight;
+    viewport.visibleWidthFraction = clippedWidth / logicalWidth;
+    viewport.visibleHeightFraction = clippedHeight / logicalHeight;
   }
 
-  setGLViewport() {
-    const {
-      gl,
-      canvasRelativeTop,
-      canvasRelativeLeft,
-      renderViewport: {width, height}
-    } = this;
-    const bottom = canvasRelativeTop + height;
+  // Sets the viewport to the clipped viewport.  Any drawing must take
+  // `visible{Left,Top,Width,Height}Fraction` into account.  setGLClippedViewport() {
+  setGLClippedViewport() {
+    const {gl, canvasRelativeClippedTop, canvasRelativeClippedLeft, renderViewport: {width, height}} = this;
+    const bottom = canvasRelativeClippedTop + height;
     gl.enable(WebGL2RenderingContext.SCISSOR_TEST);
     let glBottom = this.context.canvas.height - bottom;
-    gl.viewport(canvasRelativeLeft, glBottom, width, height);
-    gl.scissor(canvasRelativeLeft, glBottom, width, height);
+    gl.viewport(canvasRelativeClippedLeft, glBottom, width, height);
+    gl.scissor(canvasRelativeClippedLeft, glBottom, width, height);
+  }
+
+  // Sets the viewport to the logical viewport, using the scissor test to constrain drawing to the
+  // clipped viewport.  Drawing does not need to take `visible{Left,Top,Width,Height}Fraction` into
+  // account.
+  setGLLogicalViewport() {
+    const {gl, renderViewport: {width, height, logicalWidth, logicalHeight}} = this;
+    const canvasHeight = this.context.canvas.height;
+    gl.enable(WebGL2RenderingContext.SCISSOR_TEST);
+    gl.viewport(
+        this.canvasRelativeLogicalLeft,
+        canvasHeight - (this.canvasRelativeLogicalTop + logicalHeight), logicalWidth,
+        logicalHeight);
+    gl.scissor(
+        this.canvasRelativeClippedLeft, canvasHeight - (this.canvasRelativeClippedTop + height),
+        width, height);
   }
 
   abstract draw(): void;
 
   disposed() {
+    if (this.boundsObserversRegistered) {
+      this.context.unmonitorPanel(this.element);
+    }
     this.context.removePanel(this);
     super.disposed();
   }
@@ -221,10 +260,48 @@ export class DisplayContext extends RefCounted implements FrameNumberCounter {
    */
   frameNumber = 0;
 
-  private resizeObserver = new ResizeObserver(() => {
+  private panelAncestors = new Map<HTMLElement, {parent: HTMLElement, count: number}>();
+
+  private resizeCallback = () => {
     ++this.resizeGeneration;
     this.scheduleRedraw();
-  });
+  };
+
+  monitorPanel(element: HTMLElement): boolean {
+    const {panelAncestors, container: root} = this;
+    if (!root.contains(element)) return false;
+    while (element !== root) {
+      let entry = panelAncestors.get(element);
+      if (entry !== undefined) {
+        ++entry.count;
+        break;
+      }
+      const parent = element.parentElement!;
+      entry = {parent, count: 1};
+      panelAncestors.set(element, entry);
+      element.addEventListener('scroll', this.resizeCallback, {capture: true});
+      this.resizeObserver.observe(element);
+      element = parent;
+    }
+    return true;
+  }
+
+  unmonitorPanel(element: HTMLElement) {
+    const {panelAncestors, container: root} = this;
+    while (element !== root) {
+      const entry = panelAncestors.get(element)!;
+      if (entry.count !== 1) {
+        --entry.count;
+        break;
+      }
+      element.removeEventListener('scroll', this.resizeCallback, {capture: true});
+      this.resizeObserver.unobserve(element);
+      panelAncestors.delete(element);
+      element = entry.parent;
+    }
+  }
+
+  private resizeObserver = new ResizeObserver(this.resizeCallback);
 
   constructor(public container: HTMLElement) {
     super();
@@ -300,13 +377,11 @@ export class DisplayContext extends RefCounted implements FrameNumberCounter {
 
   addPanel(panel: Borrowed<RenderedPanel>) {
     this.panels.add(panel);
-    this.resizeObserver.observe(panel.element);
     ++this.resizeGeneration;
     this.scheduleRedraw();
   }
 
   removePanel(panel: Borrowed<RenderedPanel>) {
-    this.resizeObserver.unobserve(panel.element);
     this.panels.delete(panel);
     ++this.resizeGeneration;
     this.scheduleRedraw();
@@ -334,7 +409,8 @@ export class DisplayContext extends RefCounted implements FrameNumberCounter {
     for (let panel of this.panels) {
       if (!panel.shouldDraw) continue;
       panel.ensureBoundsUpdated();
-      panel.setGLViewport();
+      const {renderViewport} = panel;
+      if (renderViewport.width === 0 || renderViewport.height === 0) continue;
       panel.draw();
     }
 
@@ -354,12 +430,12 @@ export class DisplayContext extends RefCounted implements FrameNumberCounter {
       if (!panel.shouldDraw) continue;
       const panelDepthArray = panel.getDepthArray();
       if (panelDepthArray === undefined) continue;
-      const {canvasRelativeTop, canvasRelativeLeft, renderViewport: {width, height}} = panel;
+      const {canvasRelativeClippedTop, canvasRelativeClippedLeft, renderViewport: {width, height}} = panel;
       for (let y = 0; y < height; ++y) {
         const panelDepthArrayOffset = (height - 1 - y) * width;
         depthArray.set(
             panelDepthArray.subarray(panelDepthArrayOffset, panelDepthArrayOffset + width),
-            (canvasRelativeTop + y) * width + canvasRelativeLeft);
+            (canvasRelativeClippedTop + y) * width + canvasRelativeClippedLeft);
       }
     }
     return depthArray;

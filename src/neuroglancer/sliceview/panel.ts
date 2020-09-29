@@ -297,7 +297,7 @@ export class SliceViewPanel extends RenderedDataPanel {
     this.offscreenFramebuffer.unbind();
 
     // Draw the texture over the whole viewport.
-    this.setGLViewport();
+    this.setGLClippedViewport();
     this.offscreenCopyHelper.draw(
         this.offscreenFramebuffer.colorBuffers[OffscreenTextures.COLOR].texture);
     return true;
