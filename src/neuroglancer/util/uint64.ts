@@ -294,6 +294,10 @@ export class Uint64 {
     return out;
   }
 
+  static absDifference(out: Uint64, a: Uint64, b: Uint64): Uint64 {
+    return Uint64.less(a, b) ? Uint64.subtract(out, b, a) : Uint64.subtract(out, a, b);
+  }
+
   static multiplyUint32(out: Uint64, a: Uint64, b: number): Uint64 {
     const {low, high} = a;
     out.low = Math.imul(low, b) >>> 0;
