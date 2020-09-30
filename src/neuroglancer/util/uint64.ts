@@ -313,4 +313,20 @@ export class Uint64 {
     }
     return out;
   }
+
+  toNumber() {
+    return this.low + this.high * 0x100000000;
+  }
+
+  setFromNumber(value: number) {
+    value = Math.round(value);
+    if (value < 0) {
+      this.low = this.high = 0;
+    } else if (value >= 0x10000000000000000) {
+      this.low = this.high = 0xffffffff;
+    } else {
+      this.low = (value % 0x100000000);
+      this.high = Math.floor(value / 0x100000000);
+    }
+  }
 }
