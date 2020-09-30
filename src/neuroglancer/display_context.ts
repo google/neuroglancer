@@ -226,6 +226,14 @@ export abstract class RenderedPanel extends RefCounted {
     }
     return true;
   }
+
+  // Returns a number that determine the order in which panels are drawn. This is used by CdfPanel
+  // to ensure it is drawn after other panels that update the histogram.
+  //
+  // A higher number -> later draw.
+  get drawOrder() {
+    return 0;
+  }
 }
 
 // Specifies a rectangular sub-region of the full viewer area to actually be rendered on the canvas.
@@ -254,6 +262,9 @@ export class DisplayContext extends RefCounted implements FrameNumberCounter {
   canvasRect: ClientRect|undefined;
   resizeGeneration = 0;
   boundsGeneration = -1;
+
+  // Panels ordered by `drawOrder`.  If length is 0, needs to be recomputed.
+  private orderedPanels: RenderedPanel[] = [];
 
   /**
    * Unique number of the next frame.  Incremented once each time a frame is drawn.
@@ -372,17 +383,20 @@ export class DisplayContext extends RefCounted implements FrameNumberCounter {
   }
 
   disposed() {
+    this.orderedPanels.length = 0;
     this.resizeObserver.disconnect();
   }
 
   addPanel(panel: Borrowed<RenderedPanel>) {
     this.panels.add(panel);
+    this.orderedPanels.length = 0;
     ++this.resizeGeneration;
     this.scheduleRedraw();
   }
 
   removePanel(panel: Borrowed<RenderedPanel>) {
     this.panels.delete(panel);
+    this.orderedPanels.length = 0;
     ++this.resizeGeneration;
     this.scheduleRedraw();
   }
@@ -406,7 +420,12 @@ export class DisplayContext extends RefCounted implements FrameNumberCounter {
     this.ensureBoundsUpdated();
     this.gl.clearColor(0.0, 0.0, 0.0, 0.0);
     gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
-    for (let panel of this.panels) {
+    const {orderedPanels, panels} = this;
+    if (orderedPanels.length !== panels.size) {
+      orderedPanels.push(...panels);
+      orderedPanels.sort((a, b) => a.drawOrder - b.drawOrder);
+    }
+    for (const panel of orderedPanels) {
       if (!panel.shouldDraw) continue;
       panel.ensureBoundsUpdated();
       const {renderViewport} = panel;
