@@ -68,7 +68,7 @@ export class Renderbuffer extends SizeManaged {
   }
 }
 
-export class DepthBuffer extends Renderbuffer {
+export class DepthRenderbuffer extends Renderbuffer {
   constructor(public gl: GL, public includeStencilBuffer = false) {
     super(gl, includeStencilBuffer ? gl.DEPTH_STENCIL : gl.DEPTH_COMPONENT16);
   }
@@ -79,13 +79,13 @@ export class DepthBuffer extends Renderbuffer {
   }
 }
 
-export class DepthStencilBuffer extends DepthBuffer {
+export class DepthStencilRenderbuffer extends DepthRenderbuffer {
   constructor(gl: GL) {
     super(gl, /*includeStencilBuffer=*/true);
   }
 }
 
-export const StencilBuffer = DepthStencilBuffer;
+export const StencilRenderbuffer = DepthStencilRenderbuffer;
 
 export class Framebuffer extends RefCounted {
   framebuffer = this.gl.createFramebuffer();
@@ -128,6 +128,22 @@ export class TextureBuffer extends SizeManaged {
   }
 }
 
+export class DepthTextureBuffer extends TextureBuffer {
+  constructor(
+      gl: GL, internalFormat: number = WebGL2RenderingContext.DEPTH_COMPONENT16,
+      format: number = WebGL2RenderingContext.DEPTH_COMPONENT,
+      dataType: number = WebGL2RenderingContext.UNSIGNED_SHORT) {
+    super(gl, internalFormat, format, dataType);
+  }
+
+  attachToFramebuffer() {
+    super.attachToFramebuffer(
+        this.format === WebGL2RenderingContext.DEPTH_COMPONENT ?
+            WebGL2RenderingContext.DEPTH_ATTACHMENT :
+            WebGL2RenderingContext.DEPTH_STENCIL_ATTACHMENT);
+  }
+}
+
 export function makeTextureBuffers(
     gl: GL, count: number, internalFormat: number = WebGL2RenderingContext.RGBA8,
     format: number = WebGL2RenderingContext.RGBA,
@@ -139,8 +155,10 @@ export function makeTextureBuffers(
   return result;
 }
 
-export class FramebufferConfiguration<ColorBuffer extends TextureBuffer|Renderbuffer> extends
-    RefCounted {
+export class FramebufferConfiguration<
+    ColorBuffer extends TextureBuffer|Renderbuffer = TextureBuffer | Renderbuffer,
+                        DepthBuffer extends DepthTextureBuffer |
+        DepthRenderbuffer = DepthTextureBuffer | DepthRenderbuffer> extends RefCounted {
   width = Number.NaN;
   height = Number.NaN;
 
@@ -152,8 +170,7 @@ export class FramebufferConfiguration<ColorBuffer extends TextureBuffer|Renderbu
   private singleAttachmentList = [this.gl.COLOR_ATTACHMENT0];
 
   constructor(public gl: GL, configuration: {
-    framebuffer?: Framebuffer,
-    colorBuffers: ColorBuffer[],
+    framebuffer?: Framebuffer, colorBuffers: ColorBuffer[],
     depthBuffer?: DepthBuffer
   }) {
     super();

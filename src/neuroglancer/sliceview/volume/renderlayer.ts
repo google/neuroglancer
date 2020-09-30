@@ -87,9 +87,14 @@ emit(vec4(1.0, 1.0, 1.0, getLineAlpha()));
   // Position within chunk of vertex, in floating point range [0, chunkDataSize].
   builder.addVarying('highp vec3', 'vChunkPosition');
 
+  // Set gl_Position.z = 0 since we use the depth buffer as a stencil buffer to avoid overwriting
+  // higher-resolution data with lower-resolution data.  The depth buffer is used rather than the
+  // stencil buffer because for computing data distributions we need to read from it, and WebGL2
+  // does not support reading from the stencil component of a depth-stencil texture.
   builder.setVertexMain(`
 vec3 position = getBoundingBoxPlaneIntersectionVertexPosition(uChunkDataSize, uTranslation, uLowerClipBound, uUpperClipBound, gl_VertexID);
 gl_Position = uProjectionMatrix * vec4(position, 1.0);
+gl_Position.z = 0.0;
 vChunkPosition = (position - uTranslation) +
     ${CHUNK_POSITION_EPSILON} * abs(uPlaneNormal);
 `);

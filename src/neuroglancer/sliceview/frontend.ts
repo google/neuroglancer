@@ -34,7 +34,7 @@ import {getObjectId} from 'neuroglancer/util/object_id';
 import {NullarySignal} from 'neuroglancer/util/signal';
 import {withSharedVisibility} from 'neuroglancer/visibility_priority/frontend';
 import {GL} from 'neuroglancer/webgl/context';
-import {FramebufferConfiguration, makeTextureBuffers, StencilBuffer} from 'neuroglancer/webgl/offscreen';
+import {DepthTextureBuffer, FramebufferConfiguration, makeTextureBuffers, TextureBuffer} from 'neuroglancer/webgl/offscreen';
 import {ShaderBuilder, ShaderModule, ShaderProgram} from 'neuroglancer/webgl/shader';
 import {getSquareCornersBuffer} from 'neuroglancer/webgl/square_corners_buffer';
 import {registerSharedObjectOwner, RPC} from 'neuroglancer/worker_rpc';
@@ -111,9 +111,10 @@ export class SliceView extends Base {
 
   visibleLayers: Map<SliceViewRenderLayer, FrontendVisibleLayerSources>;
 
-  offscreenFramebuffer = this.registerDisposer(new FramebufferConfiguration(
-      this.gl,
-      {colorBuffers: makeTextureBuffers(this.gl, 1), depthBuffer: new StencilBuffer(this.gl)}));
+  offscreenFramebuffer = this.registerDisposer(new FramebufferConfiguration(this.gl, {
+    colorBuffers: makeTextureBuffers(this.gl, 1),
+    depthBuffer: new DepthTextureBuffer(this.gl)
+  }));
 
   projectionParameters: Owned<DerivedProjectionParameters<SliceViewProjectionParameters>>;
 
@@ -346,38 +347,28 @@ export class SliceView extends Base {
 
     let {gl, offscreenFramebuffer} = this;
 
-    offscreenFramebuffer.bind(width!, height!);
+    offscreenFramebuffer.bind(width, height);
     gl.disable(gl.SCISSOR_TEST);
 
     // we have viewportToData
     // we need: matrix that maps input x to the output x axis, scaled by
 
-    gl.clearStencil(0);
     gl.clearColor(0, 0, 0, 0);
     gl.colorMask(true, true, true, true);
-    gl.clear(gl.COLOR_BUFFER_BIT);
-    gl.enable(gl.STENCIL_TEST);
-    gl.disable(gl.DEPTH_TEST);
-    gl.stencilOpSeparate(
-        /*face=*/ gl.FRONT_AND_BACK, /*sfail=*/ gl.KEEP, /*dpfail=*/ gl.KEEP,
-        /*dppass=*/ gl.REPLACE);
-
+    gl.clear(WebGL2RenderingContext.COLOR_BUFFER_BIT);
     let renderLayerNum = 0;
     const renderContext = {sliceView: this, projectionParameters, wireFrame: this.wireFrame.value};
     for (let renderLayer of this.visibleLayerList) {
-      gl.clear(gl.STENCIL_BUFFER_BIT);
-      gl.stencilFuncSeparate(
-          /*face=*/ gl.FRONT_AND_BACK,
-          /*func=*/ gl.GREATER,
-          /*ref=*/ 1,
-          /*mask=*/ 1);
-
+      gl.enable(WebGL2RenderingContext.DEPTH_TEST);
+      gl.depthFunc(WebGL2RenderingContext.LESS);
+      gl.clearDepth(1);
+      gl.clear(WebGL2RenderingContext.DEPTH_BUFFER_BIT);
       renderLayer.setGLBlendMode(gl, renderLayerNum);
       renderLayer.draw(renderContext);
       ++renderLayerNum;
     }
     gl.disable(WebGL2RenderingContext.BLEND);
-    gl.disable(gl.STENCIL_TEST);
+    gl.disable(WebGL2RenderingContext.DEPTH_TEST);
     offscreenFramebuffer.unbind();
   }
 

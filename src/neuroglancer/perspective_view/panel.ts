@@ -36,7 +36,7 @@ import {startRelativeMouseDrag} from 'neuroglancer/util/mouse_drag';
 import {TouchRotateInfo, TouchTranslateInfo} from 'neuroglancer/util/touch_bindings';
 import {WatchableMap} from 'neuroglancer/util/watchable_map';
 import {withSharedVisibility} from 'neuroglancer/visibility_priority/frontend';
-import {DepthStencilBuffer, FramebufferConfiguration, makeTextureBuffers, OffscreenCopyHelper, TextureBuffer} from 'neuroglancer/webgl/offscreen';
+import {DepthStencilRenderbuffer, FramebufferConfiguration, makeTextureBuffers, OffscreenCopyHelper, TextureBuffer} from 'neuroglancer/webgl/offscreen';
 import {ShaderBuilder} from 'neuroglancer/webgl/shader';
 import {MultipleScaleBarTextures, ScaleBarOptions} from 'neuroglancer/widget/scale_bar';
 import {RPC, SharedObject} from 'neuroglancer/worker_rpc';
@@ -182,7 +182,7 @@ export class PerspectivePanel extends RenderedDataPanel {
           this.gl, WebGL2RenderingContext.R32F, WebGL2RenderingContext.RED,
           WebGL2RenderingContext.FLOAT),
     ],
-    depthBuffer: new DepthStencilBuffer(this.gl)
+    depthBuffer: new DepthStencilRenderbuffer(this.gl)
   }));
 
   protected transparentConfiguration_: FramebufferConfiguration<TextureBuffer>|undefined;
