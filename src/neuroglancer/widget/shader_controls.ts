@@ -14,6 +14,8 @@
  * limitations under the License.
  */
 
+import './shader_controls.css';
+
 import debounce from 'lodash/debounce';
 import {TrackableRGB} from 'neuroglancer/util/color';
 import {RefCounted} from 'neuroglancer/util/disposable';
@@ -22,13 +24,14 @@ import {ShaderControlState} from 'neuroglancer/webgl/shader_ui_controls';
 import {ColorWidget} from 'neuroglancer/widget/color';
 import {RangeWidget} from 'neuroglancer/widget/range';
 
-
 export class ShaderControls extends RefCounted {
   element = document.createElement('div');
   private controlDisposer: RefCounted|undefined = undefined;
 
   constructor(public state: ShaderControlState) {
     super();
+    const {element} = this;
+    element.classList.add('neuroglancer-shader-controls');
     const {controls} = state;
     this.registerDisposer(
         controls.changed.add(this.registerCancellable(debounce(() => this.updateControls(), 0))));
@@ -36,28 +39,28 @@ export class ShaderControls extends RefCounted {
   }
 
   updateControls() {
+    const {element} = this;
     if (this.controlDisposer !== undefined) {
       this.controlDisposer.dispose();
-      removeChildren(this.element);
+      removeChildren(element);
     }
     const controlDisposer = this.controlDisposer = new RefCounted();
     for (const [name, controlState] of this.state.state) {
       const {control} = controlState;
+      const label = document.createElement('label');
+      label.textContent = name;
+      element.appendChild(label);
       switch (control.type) {
         case 'slider': {
           const widget = controlDisposer.registerDisposer(new RangeWidget(
               controlState.trackable, {min: control.min, max: control.max, step: control.step}));
-          widget.promptElement.textContent = name;
-          this.element.appendChild(widget.element);
+          element.appendChild(widget.element);
           break;
         }
         case 'color': {
-          const label = document.createElement('label');
-          label.textContent = name;
           const widget = controlDisposer.registerDisposer(
               new ColorWidget(controlState.trackable as TrackableRGB));
-          this.element.appendChild(label);
-          label.appendChild(widget.element);
+          element.appendChild(widget.element);
           break;
         }
       }
