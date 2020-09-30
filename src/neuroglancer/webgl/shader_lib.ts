@@ -273,6 +273,13 @@ bool clipLineToDepthRange(inout vec4 a, inout vec4 b) {
 }
 `;
 
+// https://stackoverflow.com/questions/4200224/random-noise-functions-for-glsl
+export const glsl_simpleFloatHash = `
+float simpleFloatHash(vec2 co) {
+    return fract(sin(dot(co.xy ,vec2(12.9898,78.233))) * 43758.5453);
+}
+`;
+
 export function getShaderType(dataType: DataType, numComponents: number = 1) {
   switch (dataType) {
     case DataType.FLOAT32:
