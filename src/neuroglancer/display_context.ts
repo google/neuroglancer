@@ -18,7 +18,7 @@ import {FrameNumberCounter} from 'neuroglancer/chunk_manager/frontend';
 import {TrackableValue} from 'neuroglancer/trackable_value';
 import {animationFrameDebounce} from 'neuroglancer/util/animation_frame_debounce';
 import {Borrowed, RefCounted} from 'neuroglancer/util/disposable';
-import {vec3, mat4} from 'neuroglancer/util/geom';
+import {mat4} from 'neuroglancer/util/geom';
 import {parseFixedLengthArray, verifyFloat01} from 'neuroglancer/util/json';
 import {NullarySignal} from 'neuroglancer/util/signal';
 import {WatchableVisibilityPriority} from 'neuroglancer/visibility_priority/frontend';
@@ -163,9 +163,6 @@ export abstract class RenderedPanel extends RefCounted {
   }
 
   abstract draw(): void;
-
-  abstract translateDataPointByViewportPixels(
-      out: vec3, orig: vec3, deltaX: number, deltaY: number): vec3;
 
   disposed() {
     this.context.removePanel(this);

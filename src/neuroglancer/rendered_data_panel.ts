@@ -590,6 +590,9 @@ export abstract class RenderedDataPanel extends RenderedPanel {
     });
   }
 
+  abstract translateDataPointByViewportPixels(
+      out: vec3, orig: vec3, deltaX: number, deltaY: number): vec3;
+
   onMouseout() {
     this.updateMousePosition(-1, -1);
     this.viewer.mouseState.setForcer(undefined);
