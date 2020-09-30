@@ -71,6 +71,15 @@ bool equals(uint64_t a, uint64_t b) {
 `
 ];
 
+export const glsl_compareLessThanUint64 = [
+  glsl_uint64, `
+bool compareLessThan(uint64_t a, uint64_t b) {
+  return (a.value[1] < b.value[1])||
+         (a.value[1] == b.value[1] && a.value[0] < b.value[0]);
+}
+`
+];
+
 export const glsl_uint8 = [
   glsl_uint64, `
 struct uint8_t {
