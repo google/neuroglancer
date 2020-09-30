@@ -104,6 +104,7 @@ export function getShader(gl: WebGL2RenderingContext, source: string, shaderType
         s += `${i + 1}: ${line}\n`;
       });
       s += `\n</pre>`;
+      console.log(s);
       let w = window.open('about:blank', '_blank');
       if (w !== null) {
         try {
