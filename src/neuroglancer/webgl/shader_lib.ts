@@ -80,6 +80,18 @@ bool compareLessThan(uint64_t a, uint64_t b) {
 `
 ];
 
+export const glsl_subtractUint64 = [
+  glsl_uint64, `
+uint64_t subtract(uint64_t a, uint64_t b) {
+  if (a.value[0] < b.value[0]) {
+    --a.value[1];
+  }
+  a.value -= b.value;
+  return a;
+}
+`
+];
+
 export const glsl_uint8 = [
   glsl_uint64, `
 struct uint8_t {
