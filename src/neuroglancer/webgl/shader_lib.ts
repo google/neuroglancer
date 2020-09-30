@@ -15,7 +15,7 @@
  */
 
 import {DATA_TYPE_BYTES, DATA_TYPE_SIGNED, DataType} from 'neuroglancer/util/data_type';
-import {AttributeIndex, ShaderBuilder} from 'neuroglancer/webgl/shader';
+import {AttributeIndex, ShaderBuilder, ShaderCodePart} from 'neuroglancer/webgl/shader';
 
 export const glsl_mixLinear = `
 float mixLinear(float x, float y, float a) { return mix(x, y, a); }
@@ -310,6 +310,17 @@ export function getShaderType(dataType: DataType, numComponents: number = 1) {
   }
   throw new Error(`No shader type for ${DataType[dataType]}[${numComponents}].`);
 }
+
+export const dataTypeShaderDefinition: Record<DataType, ShaderCodePart> = {
+  [DataType.UINT8]: glsl_uint8,
+  [DataType.INT8]: glsl_int8,
+  [DataType.UINT16]: glsl_uint16,
+  [DataType.INT16]: glsl_int16,
+  [DataType.UINT32]: glsl_uint32,
+  [DataType.INT32]: glsl_int32,
+  [DataType.UINT64]: glsl_uint64,
+  [DataType.FLOAT32]: glsl_float,
+};
 
 export function getShaderVectorType(typeName: 'float'|'int'|'uint', n: number) {
   if (n === 1) return typeName;
