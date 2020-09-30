@@ -770,11 +770,13 @@ class DisplayOptionsTab extends Tab {
 
           const codeWidget = refCounted.registerDisposer(makeSkeletonShaderCodeWidget(this.layer));
           parent.appendChild(codeWidget.element);
-          parent.appendChild(
-              refCounted
-                  .registerDisposer(new ShaderControls(
-                      layer.displayState.skeletonRenderingOptions.shaderControlState))
-                  .element);
+          parent.appendChild(refCounted
+                                 .registerDisposer(new ShaderControls(
+                                     layer.displayState.skeletonRenderingOptions.shaderControlState,
+                                     this.layer.manager.root.display, {
+                                       visibility: this.visibility,
+                                     }))
+                                 .element);
           codeWidget.textEditor.refresh();
         }, this.visibility));
     element.appendChild(skeletonControls.element);

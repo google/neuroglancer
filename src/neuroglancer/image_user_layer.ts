@@ -323,7 +323,11 @@ class RenderingOptionsTab extends Tab {
             .element);
     element.appendChild(this.codeWidget.element);
     element.appendChild(
-        this.registerDisposer(new ShaderControls(layer.shaderControlState)).element);
+        this.registerDisposer(
+                new ShaderControls(layer.shaderControlState, this.layer.manager.root.display, {
+                  visibility: this.visibility,
+                }))
+            .element);
   }
 }
 

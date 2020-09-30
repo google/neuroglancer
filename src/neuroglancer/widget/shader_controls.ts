@@ -17,19 +17,27 @@
 import './shader_controls.css';
 
 import debounce from 'lodash/debounce';
+import {DisplayContext} from 'neuroglancer/display_context';
 import {TrackableRGB} from 'neuroglancer/util/color';
 import {RefCounted} from 'neuroglancer/util/disposable';
 import {removeChildren} from 'neuroglancer/util/dom';
+import {WatchableVisibilityPriority} from 'neuroglancer/visibility_priority/frontend';
 import {ShaderControlState} from 'neuroglancer/webgl/shader_ui_controls';
 import {ColorWidget} from 'neuroglancer/widget/color';
 import {RangeWidget} from 'neuroglancer/widget/range';
+import {Tab} from 'neuroglancer/widget/tab_view';
 
-export class ShaderControls extends RefCounted {
-  element = document.createElement('div');
+export interface ShaderControlsOptions {
+  visibility?: WatchableVisibilityPriority;
+}
+
+export class ShaderControls extends Tab {
   private controlDisposer: RefCounted|undefined = undefined;
 
-  constructor(public state: ShaderControlState) {
-    super();
+  constructor(
+      public state: ShaderControlState, public display: DisplayContext,
+      public options: ShaderControlsOptions = {}) {
+    super(options.visibility);
     const {element} = this;
     element.classList.add('neuroglancer-shader-controls');
     const {controls} = state;
@@ -68,10 +76,7 @@ export class ShaderControls extends RefCounted {
   }
 
   disposed() {
-    const {controlDisposer} = this;
-    if (controlDisposer !== undefined) {
-      controlDisposer.dispose();
-    }
+    this.controlDisposer?.dispose();
     super.disposed();
   }
 }
