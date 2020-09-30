@@ -21,12 +21,13 @@ import {ChunkManager} from 'neuroglancer/chunk_manager/frontend';
 import {CoordinateSpace, CoordinateSpaceCombiner, CoordinateTransformSpecification, coordinateTransformSpecificationFromLegacyJson, emptyInvalidCoordinateSpace, isGlobalDimension, isLocalDimension, isLocalOrChannelDimension, TrackableCoordinateSpace} from 'neuroglancer/coordinate_transform';
 import {DataSourceSpecification, makeEmptyDataSourceSpecification} from 'neuroglancer/datasource';
 import {DataSourceProviderRegistry, DataSubsource} from 'neuroglancer/datasource';
-import {RenderedPanel} from 'neuroglancer/display_context';
+import {DisplayContext, RenderedPanel} from 'neuroglancer/display_context';
 import {LayerDataSource, layerDataSourceSpecificationFromJson, LoadedDataSubsource} from 'neuroglancer/layer_data_source';
 import {DisplayDimensions, Position, WatchableDisplayDimensionRenderInfo} from 'neuroglancer/navigation_state';
 import {RENDERED_VIEW_ADD_LAYER_RPC_ID, RENDERED_VIEW_REMOVE_LAYER_RPC_ID} from 'neuroglancer/render_layer_common';
 import {RenderLayer, RenderLayerRole, VisibilityTrackedRenderLayer} from 'neuroglancer/renderlayer';
 import {VolumeType} from 'neuroglancer/sliceview/volume/base';
+import {TrackableBoolean} from 'neuroglancer/trackable_boolean';
 import {registerNested, TrackableRefCounted, TrackableValue, TrackableValueInterface, WatchableSet, WatchableValue, WatchableValueInterface} from 'neuroglancer/trackable_value';
 import {LayerDataSourcesTab} from 'neuroglancer/ui/layer_data_sources_tab';
 import {restoreTool, Tool} from 'neuroglancer/ui/tool';
@@ -41,7 +42,6 @@ import {kEmptyFloat32Vec} from 'neuroglancer/util/vector';
 import {WatchableVisibilityPriority} from 'neuroglancer/visibility_priority/frontend';
 import {TabSpecification} from 'neuroglancer/widget/tab_view';
 import {RPC} from 'neuroglancer/worker_rpc';
-import { TrackableBoolean } from './trackable_boolean';
 
 const TAB_JSON_KEY = 'tab';
 const TOOL_JSON_KEY = 'tool';
@@ -1457,7 +1457,7 @@ export class TopLevelLayerListSpecification extends LayerListSpecification {
   layerSelectedValues = this.selectionState.layerSelectedValues;
 
   constructor(
-      public dataSourceProviderRegistry: DataSourceProviderRegistry,
+      public display: DisplayContext, public dataSourceProviderRegistry: DataSourceProviderRegistry,
       public layerManager: LayerManager, public chunkManager: ChunkManager,
       public selectionState: Borrowed<TrackableDataSelectionState>,
       public selectedLayer: Borrowed<SelectedLayerState>,

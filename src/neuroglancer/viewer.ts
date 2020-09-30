@@ -408,8 +408,8 @@ export class Viewer extends RefCounted implements ViewerState {
     this.resetStateWhenEmpty = resetStateWhenEmpty;
 
     this.layerSpecification = new TopLevelLayerListSpecification(
-        this.dataSourceProvider, this.layerManager, this.chunkManager, this.selectionDetailsState,
-        this.selectedLayer, this.navigationState.coordinateSpace,
+        this.display, this.dataSourceProvider, this.layerManager, this.chunkManager,
+        this.selectionDetailsState, this.selectedLayer, this.navigationState.coordinateSpace,
         this.navigationState.pose.position);
 
     this.registerDisposer(display.updateStarted.add(() => {
