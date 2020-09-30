@@ -100,7 +100,7 @@ export function parameterizedContextDependentShaderGetter<
     });
   }
   function getter(context: Context) {
-    const contextKey = encodeContext(context);
+    const contextKey = getContextKey(context);
     let entry = shaders.get(contextKey);
     if (entry === undefined) {
       entry = {
