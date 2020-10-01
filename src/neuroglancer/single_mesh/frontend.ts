@@ -34,7 +34,7 @@ import {makeTrackableFragmentMain, makeWatchableShaderError, parameterizedEmitte
 import {CountingBuffer, countingBufferShaderModule, disableCountingBuffer, getCountingBuffer, IndexBufferAttributeHelper, makeIndexBuffer} from 'neuroglancer/webgl/index_emulation';
 import {ShaderBuilder, ShaderModule, ShaderProgram, ShaderSamplerType} from 'neuroglancer/webgl/shader';
 import {getShaderType} from 'neuroglancer/webgl/shader_lib';
-import {addControlsToBuilder, parseShaderUiControls, setControlsInShader, ShaderControlsParseResult, ShaderControlState} from 'neuroglancer/webgl/shader_ui_controls';
+import {addControlsToBuilder, getFallbackBuilderState, parseShaderUiControls, setControlsInShader, ShaderControlsBuilderState, ShaderControlState} from 'neuroglancer/webgl/shader_ui_controls';
 import {computeTextureFormat, getSamplerPrefixForDataType, OneDimensionalTextureAccessHelper, setOneDimensionalTextureData, TextureFormat} from 'neuroglancer/webgl/texture_access';
 import {SharedObject} from 'neuroglancer/worker_rpc';
 
@@ -336,18 +336,19 @@ export class SingleMeshLayer extends
   private shaderGetter = parameterizedEmitterDependentShaderGetter(this, this.gl, {
     memoizeKey: {t: `single_mesh/RenderLayer`, attributes: this.source.info.vertexAttributes},
     fallbackParameters:
-        new WatchableValue<ShaderControlsParseResult>(parseShaderUiControls(DEFAULT_FRAGMENT_MAIN)),
-    parameters: this.displayState.shaderControlState.parseResult,
-    encodeParameters: p => p.source,
+        new WatchableValue(getFallbackBuilderState(parseShaderUiControls(DEFAULT_FRAGMENT_MAIN))),
+    parameters: this.displayState.shaderControlState.builderState,
+    encodeParameters: p => p.key,
     shaderError: this.displayState.shaderError,
     defineShader:
-        (builder: ShaderBuilder, shaderParseResult: ShaderControlsParseResult) => {
-          if (shaderParseResult.errors.length !== 0) {
+        (builder: ShaderBuilder, shaderBuilderState: ShaderControlsBuilderState) => {
+          if (shaderBuilderState.parseResult.errors.length !== 0) {
             throw new Error('Invalid UI control specification');
           }
-          addControlsToBuilder(shaderParseResult.controls, builder);
+          addControlsToBuilder(shaderBuilderState, builder);
           this.shaderManager.defineShader(builder);
-          builder.setFragmentMainFunction(shaderCodeWithLineDirective(shaderParseResult.code));
+          builder.setFragmentMainFunction(
+              shaderCodeWithLineDirective(shaderBuilderState.parseResult.code));
         },
   });
 
@@ -416,7 +417,8 @@ export class SingleMeshLayer extends
     const shaderManager = this.shaderManager!;
     shader.bind();
     shaderManager.beginLayer(gl, shader, renderContext);
-    setControlsInShader(gl, shader, this.displayState.shaderControlState, parameters.controls);
+    setControlsInShader(
+        gl, shader, this.displayState.shaderControlState, parameters.parseResult.controls);
 
     let {pickIDs} = renderContext;
 

@@ -36,13 +36,16 @@ void main() {
 The directive syntax is:
 
 ``` glsl
+#uicontrol <type> <name>
+#uicontrol <type> <name>(<parameter>=<value>, ...)
 #uicontrol <type> <name> <control>
 #uicontrol <type> <name> <control>(<parameter>=<value>, ...)
 ```
 
 which has the effect of defining a variable `<name>` of GLSL type `<type>` whose value is set by a
 UI control of type `<control>`.  The valid parameters and `<type>` values depend on the `<control>`
-type.  If no parameters are specified, the parentheses may be omitted.
+type.  If no parameters are specified, the parentheses may be omitted.  Depending on the specified
+`<type>`, `<control>` may be omitted, as described below.
 
 ### `slider` controls
 
@@ -71,6 +74,53 @@ The `<type>` must be `vec3`, which is set to the RGB `[0, 1]` representation of 
 `default` parameter indicates the initial value as a CSS color string (must be quoted), and defaults
 to `"white"` if not specified.
 
+### `invlerp` controls
+
+The `invlerp` control type allows the user to specify an interval of the layer's data type that is
+linearly mapped to a `float` in the interval `[0, 1]`.  The name `invlerp` refers to *inverse linear
+interpolation*.  To aid the selection of the interval, an empirical cumulative distribution function
+(ECDF) of the currently displayed data is plotted as part of the control.  Additionally, if there
+are no channel dimensions, a color legend is also displayed.
+
+Directive syntax:
+
+```glsl
+#uicontrol invlerp <name>(range=[3, 75], window=[0, 100], channel=[1,2], clamp=false)
+```
+
+The following parameters are supported:
+
+- `range`: Optional.  The default interval to be normalized to `[0, 1]`.  Must be specified as an
+  array.  May be overridden using the UI control.  If not specified, defaults to the full range of
+  the data type for integer data types, and `[0, 1]` for float32.  It is valid to specify an
+  inverted interval like `[50, 20]`.  In this case, 50 maps to 0 and 20 maps to 1.
+
+- `window`: Optional.  The default interval over which the ECDF will be shown.  May be overridden
+  using the UI control.  If not specified, defaults to the interval specified for `range`.
+
+- `channel`: Optional.  The channel for which to compute the ECDF.  If the rank of the channel
+  coordinate space is 1, may be specified as a single number, e.g. `channel=2`.  Otherwise, must be
+  specified as an array, e.g. `channel=[2, 3]`.  May be overriden using the UI control.  If not
+  specified, defaults to all-zero channel coordinates.
+
+- `clamp`: Optional.  Indicates whether to clamp the result to `[0, 1]`.  Defaults to `true`.  If
+  `false`, the result will be outside `[0, 1]` if the input value is outside the configured range.
+  Unlike the other parameters, this cannot be adjusted in the UI.
+
+This directive makes the following shader functions available:
+
+```glsl
+float <name>(T value);
+float <name>() {
+  return <name>(getDataValue(channel...));
+}
+```
+
+where `T` is the data type returned by `getDataValue`.  The one-parameter overload simply computes
+the inverse linear interpolation of the specified value within the range specified by the control.
+The zero-parameter overload returns the inverse linear interpolation of the data value for
+configured channel.
+
 ## API
 
 ### Retrieving voxel channel value
@@ -82,10 +132,10 @@ T getDataValue(int channelIndex...);
 T getInterpolated(int channelIndex...);
 ```
 
-The type `T` is `uint8_t`, `uint16_t`, `uint32_t`, `uint64_t`, or `float` depending on the data
-source.  The `channelIndex...` parameters specifying the coordinates within the channel dimensions,
-if any.  For backward compatibility, if there are no channel dimensions, a single unused
-`channelIndex` argument may still be specified.
+The type `T` is `{u,}int{8,16,32}_t`, `uint64_t`, or `float` depending on the data source.  The
+`channelIndex...` parameters specifying the coordinates within the channel dimensions, if any.  For
+backward compatibility, if there are no channel dimensions, a single unused `channelIndex` argument
+may still be specified.
 
 The `getDataValue` function returns the nearest value without interpolation, while the
 `getInterpolated` function uses trilinear interpolation.

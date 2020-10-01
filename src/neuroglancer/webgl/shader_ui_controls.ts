@@ -14,14 +14,19 @@
  * limitations under the License.
  */
 
-import {TrackableValue, TrackableValueInterface, WatchableValueInterface} from 'neuroglancer/trackable_value';
+import {CoordinateSpaceCombiner} from 'neuroglancer/coordinate_transform';
+import {constantWatchableValue, makeCachedDerivedWatchableValue, makeCachedLazyDerivedWatchableValue, TrackableValue, TrackableValueInterface, WatchableValueInterface} from 'neuroglancer/trackable_value';
+import {arraysEqual, arraysEqualWithPredicate} from 'neuroglancer/util/array';
 import {parseRGBColorSpecification, TrackableRGB} from 'neuroglancer/util/color';
+import {DataType} from 'neuroglancer/util/data_type';
 import {RefCounted} from 'neuroglancer/util/disposable';
 import {vec3} from 'neuroglancer/util/geom';
-import {verifyFiniteFloat, verifyInt, verifyObject} from 'neuroglancer/util/json';
+import {parseFixedLengthArray, verifyFiniteFloat, verifyInt, verifyObject, verifyOptionalObjectProperty} from 'neuroglancer/util/json';
 import {NullarySignal} from 'neuroglancer/util/signal';
 import {Trackable} from 'neuroglancer/util/trackable';
 import {GL} from 'neuroglancer/webgl/context';
+import {HistogramChannelSpecification, HistogramSpecifications} from 'neuroglancer/webgl/empirical_cdf';
+import {DataTypeInterval, dataTypeIntervalToJson, defaultDataTypeRange, defineInvlerpShaderFunction, enableLerpShaderFunction, normalizeDataTypeInterval, parseDataTypeInterval, validateDataTypeInterval} from 'neuroglancer/webgl/lerp';
 import {ShaderBuilder, ShaderProgram} from 'neuroglancer/webgl/shader';
 
 export interface ShaderSliderControl {
@@ -40,7 +45,14 @@ export interface ShaderColorControl {
   default: vec3;
 }
 
-export type ShaderUiControl = ShaderSliderControl|ShaderColorControl;
+export interface ShaderInvlerpControl {
+  type: 'invlerp';
+  dataType: DataType;
+  clamp: boolean;
+  default: InvlerpParameters;
+}
+
+export type ShaderUiControl = ShaderSliderControl|ShaderColorControl|ShaderInvlerpControl;
 
 export interface ShaderControlParseError {
   line: number;
@@ -52,6 +64,12 @@ export interface ShaderControlsParseResult {
   code: string;
   controls: Map<string, ShaderUiControl>;
   errors: ShaderControlParseError[];
+}
+
+export interface ShaderControlsBuilderState {
+  key: string;
+  parseResult: ShaderControlsParseResult;
+  builderValues: ShaderBuilderValues;
 }
 
 // Strips comments from GLSL code.  Also handles string literals since they are used in ui control
@@ -67,7 +85,42 @@ export function stripComments(code: string) {
   });
 }
 
-type DirectiveParameters = Map<string, string|number>;
+type DirectiveParameters = Map<string, any>;
+
+// Returns the length of the prefix that may be a valid directive parameter.
+function matchDirectiveParameterValue(input: string): number {
+  const valueTokenPattern =
+      /^(?:-?(?:0|[1-9]\d*)(?:\.\d+)?(?:[eE][+-]?\d+)?|"(?:\\.|[^\\"])*"|true|false|:|\s+|,|\[|\]|\{|\})/;
+  let depth = 0;
+  let initialInput = input;
+  outerLoop: while (input.length) {
+    const m = input.match(valueTokenPattern);
+    if (m === null) break;
+    const token = m[0];
+    switch (token.charAt(0)) {
+      case '[':
+      case '{':
+        ++depth;
+        break;
+      case ']':
+      case '}':
+        if (--depth < 0) return -1;
+        break;
+      case ',':
+        if (depth === 0) break outerLoop;
+        break;
+      default:
+        if (depth === 0) {
+          input = input.substring(token.length);
+          break outerLoop;
+        }
+        break;
+    }
+    input = input.substring(token.length);
+  }
+  if (depth !== 0) return -1;
+  return initialInput.length - input.length;
+}
 
 export function parseDirectiveParameters(input: string|undefined):
     {parameters: DirectiveParameters, errors: string[]} {
@@ -76,22 +129,27 @@ export function parseDirectiveParameters(input: string|undefined):
   if (input === undefined) {
     return {errors, parameters};
   }
-  const pattern =
-      /^[ \t]*([_a-z][_a-zA-Z0-9]*)[ \t]*=[ \t]*(-?(?:0|[1-9]\d*)(?:\.\d+)?(?:[eE][+-]?\d+)?|"(?:\\.|[^\\"])*")[ \t]*/;
+  const startPattern = /^([_a-z][_a-zA-Z0-9]*)[ \t]*=/;
   while (true) {
     input = input.trim();
     if (input.length == 0) break;
-    const m = input.match(pattern);
+    const m = input.match(startPattern);
     if (m === null) {
       errors.push('Invalid #uicontrol parameter syntax, expected: <param>=<value>, ...');
       break;
     }
     const name = m[1];
+    input = input.substring(m[0].length);
+    let valueLength = matchDirectiveParameterValue(input);
+    if (valueLength <= 0) {
+      errors.push('Invalid #uicontrol parameter syntax, expected: <param>=<value>, ...');
+      break;
+    }
     let value;
     try {
-      value = JSON.parse(m[2]);
+      value = JSON.parse(input.substring(0, valueLength));
     } catch {
-      errors.push(`Invalid #uicontrol parameter value: ${value}`);
+      errors.push(`Invalid #uicontrol parameter value for ${name}: ${value}`);
       break;
     }
     if (parameters.has(name)) {
@@ -99,7 +157,8 @@ export function parseDirectiveParameters(input: string|undefined):
     } else {
       parameters.set(name, value);
     }
-    input = input.substring(m[0].length);
+    input = input.substring(valueLength);
+    input = input.trim();
     if (input.length > 0 && !input.startsWith(',')) {
       errors.push('Invalid #uicontrol parameter syntax, expected: <param>=<value>, ...');
     }
@@ -184,7 +243,8 @@ function parseSliderDirective(
     return {errors};
   } else {
     return {
-      control: {type: 'slider', valueType, min, max, step, default: defaultValue} as ShaderSliderControl,
+      control: {type: 'slider', valueType, min, max, step, default: defaultValue} as
+          ShaderSliderControl,
       errors: undefined,
     };
   }
@@ -222,17 +282,107 @@ function parseColorDirective(
   };
 }
 
-const controlParsers =
-    new Map<string, (valueType: string, parameters: DirectiveParameters) => DirectiveParseResult>(
-        [['slider', parseSliderDirective], ['color', parseColorDirective]]);
+function parseInvlerpChannel(value: unknown, rank: number) {
+  if (typeof value === 'number') {
+    value = [value];
+  }
+  const channel = new Array(rank);
+  parseFixedLengthArray(channel, value, x => {
+    if (!Number.isInteger(x) || x < 0) {
+      throw new Error(`Expected non-negative integer, but received: ${JSON.stringify(x)}`);
+    }
+    return x;
+  });
+  return channel;
+}
 
+function parseInvlerpDirective(
+    valueType: string, parameters: DirectiveParameters,
+    dataContext: ShaderDataContext): DirectiveParseResult {
+  let errors = [];
+  const {imageData} = dataContext;
+  if (imageData === undefined) {
+    errors.push('invlerp control not supported');
+    return {errors};
+  }
+  if (valueType !== 'invlerp') {
+    errors.push('type must be invlerp');
+  }
+  let channel = new Array(imageData.channelRank).fill(0);
+  const {dataType} = imageData;
+  let clamp = true;
+  let range = defaultDataTypeRange[dataType];
+  let window: DataTypeInterval|undefined;
+  for (let [key, value] of parameters) {
+    try {
+      switch (key) {
+        case 'range': {
+          range = parseDataTypeInterval(value, dataType);
+          break;
+        }
+        case 'window': {
+          window = validateDataTypeInterval(parseDataTypeInterval(value, dataType));
+          break;
+        }
+        case 'clamp': {
+          if (typeof value !== 'boolean') {
+            errors.push(`Invalid clamp value: ${JSON.stringify(value)}`);
+          } else {
+            clamp = value;
+          }
+          break;
+        }
+        case 'channel': {
+          channel = parseInvlerpChannel(value, channel.length);
+          break;
+        }
+        default:
+          errors.push(`Invalid parameter: ${key}`);
+          break;
+      }
+    } catch (e) {
+      errors.push(`Invalid ${key} value: ${e.message}`);
+    }
+  }
+  if (errors.length > 0) {
+    return {errors};
+  }
+  return {
+    control: {
+      type: 'invlerp',
+      dataType,
+      clamp,
+      default: {range, window: window ?? normalizeDataTypeInterval(range), channel},
+    } as ShaderInvlerpControl,
+    errors: undefined,
+  };
+}
 
-export function parseShaderUiControls(code: string): ShaderControlsParseResult {
+export interface ImageDataSpecification {
+  dataType: DataType;
+  channelRank: number;
+}
+
+export interface ShaderDataContext {
+  imageData?: ImageDataSpecification;
+}
+
+const controlParsers = new Map<
+    string,
+    (valueType: string, parameters: DirectiveParameters, context: ShaderDataContext) =>
+        DirectiveParseResult>([
+  ['slider', parseSliderDirective],
+  ['color', parseColorDirective],
+  ['invlerp', parseInvlerpDirective],
+]);
+
+export function parseShaderUiControls(
+    code: string, dataContext: ShaderDataContext = {}): ShaderControlsParseResult {
   code = stripComments(code);
   // Matches any #uicontrols directive.  Syntax errors in the directive are handled later.
   const directivePattern = /^[ \t]*#[ \t]*uicontrol[ \t]+(.*)$/mg;
   const innerPattern =
-      /^([_a-zA-Z][_a-zA-Z0-9]*)[ \t]+([a-z][a-zA-Z0-9]*)[ \t]+([a-z]+)[ \t]*(?:\([ \t]*(.*)\)[ \t]*)?/;
+      /^([_a-zA-Z][_a-zA-Z0-9]*)[ \t]+([a-z][a-zA-Z0-9_]*)(?:[ \t]+([a-z]+))?[ \t]*(?:\([ \t]*(.*)\)[ \t]*)?/;
   let errors: {line: number, message: string}[] = [];
   const controls = new Map<string, ShaderUiControl>();
   const newCode = code.replace(directivePattern, (_match, innerPart: string, offset: number) => {
@@ -250,7 +400,7 @@ export function parseShaderUiControls(code: string): ShaderControlsParseResult {
     }
     const typeName = m[1];
     const variableName = m[2];
-    const controlName = m[3];
+    const controlName = m[3] ?? typeName;
     const parameterText = m[4];
     const {parameters, errors: innerErrors} = parseDirectiveParameters(parameterText);
     for (const error of innerErrors) {
@@ -268,7 +418,7 @@ export function parseShaderUiControls(code: string): ShaderControlsParseResult {
       errors.push({line: getLineNumber(), message: `Invalid control type ${controlName}`});
       return '';
     }
-    const result = parser(typeName, parameters);
+    const result = parser(typeName, parameters, dataContext);
     if (result.errors !== undefined) {
       for (const error of result.errors) {
         errors.push({line: getLineNumber(), message: error});
@@ -287,11 +437,32 @@ function uniformName(controlName: string) {
   return `u_shaderControl_${controlName}`;
 }
 
-export function addControlsToBuilder(controls: Controls, builder: ShaderBuilder) {
-  for (const [name, control] of controls) {
-    builder.addUniform(`highp ${control.valueType}`, uniformName(name));
-    builder.addVertexCode(`#define ${name} ${uniformName(name)}\n`);
-    builder.addFragmentCode(`#define ${name} ${uniformName(name)}\n`);
+export function addControlsToBuilder(
+  builderState: ShaderControlsBuilderState, builder: ShaderBuilder) {
+  const {builderValues} = builderState;
+  for (const [name, control] of builderState.parseResult.controls) {
+    const uName = uniformName(name);
+    const builderValue = builderValues[name];
+    switch (control.type) {
+      case 'invlerp': {
+        const code = [
+          defineInvlerpShaderFunction(builder, uName, control.dataType, control.clamp), `
+float ${uName}() {
+  return ${uName}(getDataValue(${builderValue.channel.join(',')}));
+}
+`
+        ];
+        builder.addFragmentCode(code);
+        builder.addFragmentCode(`#define ${name} ${uName}\n`);
+        break;
+      }
+      default: {
+        builder.addUniform(`highp ${control.valueType}`, uName);
+        builder.addVertexCode(`#define ${name} ${uName}\n`);
+        builder.addFragmentCode(`#define ${name} ${uName}\n`);
+        break;
+      }
+    }
   }
 }
 
@@ -323,43 +494,129 @@ export class WatchableShaderUiControls implements WatchableValueInterface<Contro
   }
 }
 
-function getControlTrackable(control: ShaderUiControl): TrackableValueInterface<any> {
-  switch (control.type) {
-    case 'slider':
-      return new TrackableValue<number>(control.default, x => {
-        let v: number;
-        if (control.valueType === 'float') {
-          v = verifyFiniteFloat(x);
-        } else {
-          v = verifyInt(x);
-        }
-        if (v < control.min || v > control.max) {
-          throw new Error(
-              `${JSON.stringify(x)} is outside valid range [${control.min}, ${control.max}]`);
-        }
-        return v;
-      });
-    case 'color':
-      return new TrackableRGB(control.default);
+export interface InvlerpParameters {
+  range: DataTypeInterval;
+  window: DataTypeInterval;
+  channel: number[];
+}
+
+function parseInvlerpParameters(
+    obj: unknown, dataType: DataType, defaultValue: InvlerpParameters): InvlerpParameters {
+  if (obj === undefined) return defaultValue;
+  verifyObject(obj);
+  return {
+    range: verifyOptionalObjectProperty(
+        obj, 'range', x => parseDataTypeInterval(x, dataType), defaultValue.range),
+    window: verifyOptionalObjectProperty(
+        obj, 'window', x => validateDataTypeInterval(parseDataTypeInterval(x, dataType)),
+        defaultValue.window),
+    channel: verifyOptionalObjectProperty(
+        obj, 'channel', x => parseInvlerpChannel(x, defaultValue.channel.length),
+        defaultValue.channel),
+  };
+}
+
+class TrackableInvlerpParameters extends TrackableValue<InvlerpParameters> {
+  constructor(public dataType: DataType, public defaultValue: InvlerpParameters) {
+    super(defaultValue, obj => parseInvlerpParameters(obj, dataType, defaultValue));
+  }
+
+  toJSON() {
+    const {value: {range, window, channel}, dataType, defaultValue} = this;
+    const rangeJson = dataTypeIntervalToJson(range, dataType, defaultValue.range);
+    const windowJson = dataTypeIntervalToJson(window, dataType, defaultValue.window);
+    const channelJson = arraysEqual(defaultValue.channel, channel) ? undefined : channel;
+    if (rangeJson === undefined && windowJson === undefined && channelJson === undefined) {
+      return undefined;
+    }
+    return {range: rangeJson, window: windowJson, channel: channelJson};
   }
 }
 
-export class ShaderControlState extends RefCounted implements Trackable {
+function getControlTrackable(control: ShaderUiControl):
+    {trackable: TrackableValueInterface<any>, getBuilderValue: (value: any) => any} {
+  switch (control.type) {
+    case 'slider':
+      return {
+        trackable: new TrackableValue<number>(
+            control.default,
+            x => {
+              let v: number;
+              if (control.valueType === 'float') {
+                v = verifyFiniteFloat(x);
+              } else {
+                v = verifyInt(x);
+              }
+              if (v < control.min || v > control.max) {
+                throw new Error(
+                    `${JSON.stringify(x)} is outside valid range [${control.min}, ${control.max}]`);
+              }
+              return v;
+            }),
+        getBuilderValue: () => null,
+      };
+    case 'color':
+      return {trackable: new TrackableRGB(control.default), getBuilderValue: () => null};
+    case 'invlerp':
+      return {
+        trackable: new TrackableInvlerpParameters(control.dataType, control.default),
+        getBuilderValue: (value: InvlerpParameters) =>
+            ({channel: value.channel, dataType: control.dataType}),
+      };
+  }
+}
+
+export type ShaderControlMap = Map<string, {
+  control: ShaderUiControl,
+  trackable: TrackableValueInterface<any>,
+  getBuilderValue: (value: any) => any,
+}>;
+
+export type ShaderBuilderValues = {
+  [key: string]: any
+};
+
+function encodeBuilderStateKey(
+    builderValues: ShaderBuilderValues, parseResult: ShaderControlsParseResult) {
+  return JSON.stringify(builderValues) + '\0' + parseResult.source;
+}
+
+export function getFallbackBuilderState(parseResult: ShaderControlsParseResult):
+    ShaderControlsBuilderState {
+  const builderValues: ShaderBuilderValues = {};
+  for (const [key, control] of parseResult.controls) {
+    const {trackable, getBuilderValue} = getControlTrackable(control);
+    builderValues[key] = getBuilderValue(trackable.value);
+  }
+  return {builderValues, parseResult, key: encodeBuilderStateKey(builderValues, parseResult)};
+}
+
+export class ShaderControlState extends RefCounted implements
+    Trackable, WatchableValueInterface<ShaderControlMap> {
   changed = new NullarySignal();
   controls = new WatchableShaderUiControls();
   parseErrors: WatchableValueInterface<ShaderControlParseError[]>;
   processedFragmentMain: WatchableValueInterface<string>;
   parseResult: WatchableValueInterface<ShaderControlsParseResult>;
+  builderState: WatchableValueInterface<ShaderControlsBuilderState>;
+  histogramSpecifications: HistogramSpecifications;
+
   private fragmentMainGeneration = -1;
+  private dataContextGeneration = -1;
   private parseErrors_: ShaderControlParseError[] = [];
   private processedFragmentMain_ = '';
   private parseResult_: ShaderControlsParseResult;
   private controlsGeneration = -1;
 
-  constructor(public fragmentMain: WatchableValueInterface<string>) {
+  constructor(
+      public fragmentMain: WatchableValueInterface<string>,
+      public dataContext:
+          WatchableValueInterface<ShaderDataContext|null> = constantWatchableValue({}),
+      public channelCoordinateSpaceCombiner?: CoordinateSpaceCombiner|undefined) {
     super();
     this.registerDisposer(fragmentMain.changed.add(() => this.handleFragmentMainChanged()));
     this.registerDisposer(this.controls.changed.add(() => this.handleControlsChanged()));
+    this.registerDisposer(this.dataContext.changed.add(() => this.handleFragmentMainChanged()));
     this.handleFragmentMainChanged();
     const self = this;
     this.parseErrors = {
@@ -382,13 +639,66 @@ export class ShaderControlState extends RefCounted implements Trackable {
         return self.parseResult_;
       }
     };
+    this.builderState = makeCachedDerivedWatchableValue(
+        (parseResult: ShaderControlsParseResult, state: ShaderControlMap) => {
+          const builderValues: ShaderBuilderValues = {};
+          for (const [key, {trackable, getBuilderValue}] of state) {
+            const builderValue = getBuilderValue(trackable.value);
+            builderValues[key] = builderValue;
+          }
+          return {
+            key: encodeBuilderStateKey(builderValues, parseResult),
+            parseResult,
+            builderValues
+          };
+        },
+        [this.parseResult, this], (a, b) => a.key === b.key);
+    const histogramChannels = makeCachedDerivedWatchableValue(
+        state => {
+          const channels: HistogramChannelSpecification[] = [];
+          for (const {control, trackable} of state.values()) {
+            if (control.type !== 'invlerp') continue;
+            channels.push({channel: trackable.value.channel});
+          }
+          return channels;
+        },
+        [this],
+        (a, b) => arraysEqualWithPredicate(a, b, (ca, cb) => arraysEqual(ca.channel, cb.channel)));
+    const histogramBounds = makeCachedLazyDerivedWatchableValue(state => {
+      const bounds: DataTypeInterval[] = [];
+      for (const {control, trackable} of state.values()) {
+        if (control.type !== 'invlerp') continue;
+        bounds.push(trackable.value.window);
+      }
+      return bounds;
+    }, this);
+    this.histogramSpecifications =
+        this.registerDisposer(new HistogramSpecifications(histogramChannels, histogramBounds));
   }
 
   private handleFragmentMainChanged() {
     const generation = this.fragmentMain.changed.count;
-    if (generation === this.fragmentMainGeneration) return;
+    const dataContextGeneration = this.dataContext.changed.count;
+    if (generation === this.fragmentMainGeneration &&
+        dataContextGeneration === this.dataContextGeneration) {
+      return;
+    }
     this.fragmentMainGeneration = generation;
-    const result = this.parseResult_ = parseShaderUiControls(this.fragmentMain.value);
+    this.dataContextGeneration = dataContextGeneration;
+    const dataContext = this.dataContext.value;
+    if (dataContext === null) {
+      this.parseResult_ = {
+        source: '',
+        code: '',
+        controls: new Map(),
+        errors: [{line: 0, message: 'Loading'}],
+      };
+      this.parseErrors_ = [];
+      this.processedFragmentMain_ = '';
+      this.controls.value = undefined;
+      return;
+    }
+    const result = this.parseResult_ = parseShaderUiControls(this.fragmentMain.value, dataContext);
     this.parseErrors_ = result.errors;
     this.processedFragmentMain_ = result.code;
     if (result.errors.length === 0) {
@@ -426,7 +736,8 @@ export class ShaderControlState extends RefCounted implements Trackable {
         controlState = undefined;
       }
       if (controlState === undefined) {
-        controlState = {control, trackable: getControlTrackable(control)};
+        const {trackable, getBuilderValue} = getControlTrackable(control);
+        controlState = {control, trackable, getBuilderValue};
         controlState.trackable.changed.add(this.changed.dispatch);
         state_.set(name, controlState);
         changed = true;
@@ -449,14 +760,17 @@ export class ShaderControlState extends RefCounted implements Trackable {
     }
   }
 
-  private state_ =
-      new Map<string, {control: ShaderUiControl, trackable: TrackableValueInterface<any>}>();
+  private state_: ShaderControlMap = new Map();
 
   get state() {
     if (this.controls.changed.count !== this.controlsGeneration) {
       this.handleControlsChanged();
     }
     return this.state_;
+  }
+
+  get value() {
+    return this.state;
   }
 
   private unparsedJson: any = undefined;
@@ -502,7 +816,8 @@ export class ShaderControlState extends RefCounted implements Trackable {
     const obj: any = {};
     let empty = true;
     for (const [key, value] of state) {
-      const valueJson = value.trackable.toJSON();;
+      const valueJson = value.trackable.toJSON();
+      ;
       if (valueJson !== undefined) {
         obj[key] = valueJson;
         empty = false;
@@ -513,8 +828,10 @@ export class ShaderControlState extends RefCounted implements Trackable {
   }
 }
 
-function setControlInShader(gl: GL, shader: ShaderProgram, name: string, control: ShaderUiControl, value: any) {
-  const uniform = shader.uniform(uniformName(name));
+function setControlInShader(
+    gl: GL, shader: ShaderProgram, name: string, control: ShaderUiControl, value: any) {
+  const uName = uniformName(name);
+  const uniform = shader.uniform(uName);
   switch (control.type) {
     case 'slider':
       switch (control.valueType) {
@@ -528,6 +845,9 @@ function setControlInShader(gl: GL, shader: ShaderProgram, name: string, control
       break;
     case 'color':
       gl.uniform3fv(uniform, value);
+      break;
+    case 'invlerp':
+      enableLerpShaderFunction(shader, uName, control.dataType, value.range);
       break;
   }
 }

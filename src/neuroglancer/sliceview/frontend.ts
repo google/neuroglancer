@@ -34,6 +34,7 @@ import {getObjectId} from 'neuroglancer/util/object_id';
 import {NullarySignal} from 'neuroglancer/util/signal';
 import {withSharedVisibility} from 'neuroglancer/visibility_priority/frontend';
 import {GL} from 'neuroglancer/webgl/context';
+import {HistogramSpecifications, TextureHistogramGenerator} from 'neuroglancer/webgl/empirical_cdf';
 import {DepthTextureBuffer, FramebufferConfiguration, makeTextureBuffers, TextureBuffer} from 'neuroglancer/webgl/offscreen';
 import {ShaderBuilder, ShaderModule, ShaderProgram} from 'neuroglancer/webgl/shader';
 import {getSquareCornersBuffer} from 'neuroglancer/webgl/square_corners_buffer';
@@ -97,11 +98,12 @@ function disposeTransformedSources(
   }
 }
 
-
 @registerSharedObjectOwner(SLICEVIEW_RPC_ID)
 export class SliceView extends Base {
   gl = this.chunkManager.gl;
   viewChanged = new NullarySignal();
+  rpc: RPC;
+  rpcId: number;
 
   renderingStale = true;
 
@@ -115,6 +117,21 @@ export class SliceView extends Base {
     colorBuffers: makeTextureBuffers(this.gl, 1),
     depthBuffer: new DepthTextureBuffer(this.gl)
   }));
+  histogramInputTextures: TextureBuffer[] = [];
+  offscreenFramebuffersWithHistograms = [this.offscreenFramebuffer];
+
+  get displayDimensionRenderInfo() {
+    return this.navigationState.displayDimensionRenderInfo;
+  }
+
+  private histogramGenerator = TextureHistogramGenerator.get(this.gl);
+
+  computeHistograms(count: number, histogramSpecifications: HistogramSpecifications) {
+    this.histogramGenerator.compute(
+        count, this.offscreenFramebuffer.depthBuffer!.texture, this.histogramInputTextures,
+        histogramSpecifications,
+        this.chunkManager.chunkQueueManager.frameNumberCounter.frameNumber);
+  }
 
   projectionParameters: Owned<DerivedProjectionParameters<SliceViewProjectionParameters>>;
 
@@ -252,6 +269,7 @@ export class SliceView extends Base {
     if (renderScaleHistogram !== undefined) {
       disposers.push(renderScaleHistogram.visibility.add(this.visibility));
     }
+    disposers.push(renderLayer.dataHistogramSpecifications.producerVisibility.add(this.visibility));
   }
 
   private updateVisibleLayersNow() {
@@ -335,6 +353,27 @@ export class SliceView extends Base {
     return this.navigationState.valid;
   }
 
+  private getOffscreenFramebufferWithHistograms(count: number) {
+    const {offscreenFramebuffersWithHistograms} = this;
+    let framebuffer = offscreenFramebuffersWithHistograms[count];
+    if (framebuffer === undefined) {
+      const {gl, histogramInputTextures, offscreenFramebuffer} = this;
+      if (histogramInputTextures.length < count) {
+        histogramInputTextures.push(...makeTextureBuffers(
+            gl, count - histogramInputTextures.length, WebGL2RenderingContext.R8,
+          WebGL2RenderingContext.RED));
+      }
+      let colorBuffers = [offscreenFramebuffer.colorBuffers[0].addRef()];
+      for (let i = 0; i < count; ++i) {
+        colorBuffers.push(histogramInputTextures[i].addRef());
+      }
+      framebuffer = this.registerDisposer(new FramebufferConfiguration(
+          gl, {colorBuffers, depthBuffer: offscreenFramebuffer.depthBuffer!.addRef()}));
+      offscreenFramebuffersWithHistograms[count] = framebuffer;
+    }
+    return framebuffer;
+  }
+
   updateRendering() {
     const projectionParameters = this.projectionParameters.value;
     const {width, height} = projectionParameters;
@@ -357,8 +396,12 @@ export class SliceView extends Base {
     gl.colorMask(true, true, true, true);
     gl.clear(WebGL2RenderingContext.COLOR_BUFFER_BIT);
     let renderLayerNum = 0;
-    const renderContext = {sliceView: this, projectionParameters, wireFrame: this.wireFrame.value};
+    const wireFrame = this.wireFrame.value;
+    const renderContext = {sliceView: this, projectionParameters, wireFrame};
     for (let renderLayer of this.visibleLayerList) {
+      const histogramCount = wireFrame ? 0 : renderLayer.getDataHistogramCount();
+      let framebuffer = this.getOffscreenFramebufferWithHistograms(histogramCount);
+      framebuffer.bind(width, height);
       gl.enable(WebGL2RenderingContext.DEPTH_TEST);
       gl.depthFunc(WebGL2RenderingContext.LESS);
       gl.clearDepth(1);

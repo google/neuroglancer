@@ -46,12 +46,12 @@ function getRandomInterval(dataType: DataType): DataTypeInterval {
       let b = Uint64.random();
       let c = Uint64.compare(a, b);
       if (c === 0) continue;
-      return (c < 0) ? [a, b] : [b, a];
+      return [a, b];
     } else {
       let a = getRandomValue(dataType) as number;
       let b = getRandomValue(dataType) as number;
       if (a === b) continue;
-      return (a < b) ? [a, b] : [b, a];
+      return [a, b];
     }
   }
 }
@@ -77,7 +77,7 @@ function getAbsDifference(a: number|Uint64, b: number|Uint64): number {
 function getLerpErrorBound(interval: DataTypeInterval, dataType: DataType) {
   if (dataType === DataType.FLOAT32) {
     // For float, the error bound is independent of the interval.
-    return 1e-6;
+    return 1e-4;
   }
   const size = getAbsDifference(interval[0], interval[1]);
   return Math.max(1e-6, 1 / size);
@@ -138,6 +138,9 @@ describe('computeLerp', () => {
   });
   it('works for uint64', () => {
     expect(computeLerp([u64('0'), u64('255')], DataType.UINT64, 0).toString()).toEqual('0');
+    expect(computeLerp([u64('255'), u64('0')], DataType.UINT64, 0).toString()).toEqual('255');
+    expect(computeInvlerp([u64('255'), u64('0')], u64('0'))).toEqual(1);
+    expect(computeInvlerp([u64('255'), u64('0')], u64('128'))).toBeCloseTo(0.498, 2);
     expect(computeLerp([u64('0'), u64('255')], DataType.UINT64, 0.999).toString()).toEqual('255');
     expect(computeLerp([u64('0'), u64('255')], DataType.UINT64, 0.99).toString()).toEqual('252');
     expect(computeLerp([u64('0'), u64('255')], DataType.UINT64, 0.99).toString()).toEqual('252');

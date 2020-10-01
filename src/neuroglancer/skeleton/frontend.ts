@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-import {LayerChunkProgressInfo, ChunkState} from 'neuroglancer/chunk_manager/base';
+import {ChunkState, LayerChunkProgressInfo} from 'neuroglancer/chunk_manager/base';
 import {Chunk, ChunkManager, ChunkSource} from 'neuroglancer/chunk_manager/frontend';
 import {LayerView, VisibleLayerInfo} from 'neuroglancer/layer';
 import {PerspectivePanel} from 'neuroglancer/perspective_view/panel';
@@ -40,7 +40,7 @@ import {GL} from 'neuroglancer/webgl/context';
 import {makeTrackableFragmentMain, parameterizedEmitterDependentShaderGetter, shaderCodeWithLineDirective, WatchableShaderError} from 'neuroglancer/webgl/dynamic_shader';
 import {defineLineShader, drawLines, initializeLineShader} from 'neuroglancer/webgl/lines';
 import {ShaderBuilder, ShaderProgram, ShaderSamplerType} from 'neuroglancer/webgl/shader';
-import {addControlsToBuilder, parseShaderUiControls, setControlsInShader, ShaderControlsParseResult, ShaderControlState} from 'neuroglancer/webgl/shader_ui_controls';
+import {addControlsToBuilder, getFallbackBuilderState, parseShaderUiControls, setControlsInShader, ShaderControlsBuilderState, ShaderControlState} from 'neuroglancer/webgl/shader_ui_controls';
 import {computeTextureFormat, getSamplerPrefixForDataType, OneDimensionalTextureAccessHelper, setOneDimensionalTextureData, TextureFormat} from 'neuroglancer/webgl/texture_access';
 import {defineVertexId, VertexIdHelper} from 'neuroglancer/webgl/vertex_id';
 
@@ -79,10 +79,13 @@ class RenderHelper extends RefCounted {
     memoizeKey:
         {type: 'skeleton/SkeletonShaderManager/edge', vertexAttributes: this.vertexAttributes},
     fallbackParameters: this.base.fallbackShaderParameters,
-    parameters: this.base.displayState.skeletonRenderingOptions.shaderControlState.parseResult,
+    parameters: this.base.displayState.skeletonRenderingOptions.shaderControlState.builderState,
     shaderError: this.base.displayState.shaderError,
     defineShader:
-        (builder: ShaderBuilder, shaderParseResult: ShaderControlsParseResult) => {
+        (builder: ShaderBuilder, shaderBuilderState: ShaderControlsBuilderState) => {
+          if (shaderBuilderState.parseResult.errors.length !== 0) {
+            throw new Error('Invalid UI control specification');
+          }
           this.defineCommonShader(builder);
           this.defineAttributeAccess(builder);
           defineLineShader(builder);
@@ -118,8 +121,9 @@ void emitDefault() {
             builder.addFragmentCode(`#define ${info.name} vCustom${i}\n`);
           }
           builder.setVertexMain(vertexMain);
-          addControlsToBuilder(shaderParseResult.controls, builder);
-          builder.setFragmentMainFunction(shaderCodeWithLineDirective(shaderParseResult.code));
+          addControlsToBuilder(shaderBuilderState, builder);
+          builder.setFragmentMainFunction(
+              shaderCodeWithLineDirective(shaderBuilderState.parseResult.code));
         },
   });
 
@@ -127,10 +131,13 @@ void emitDefault() {
     memoizeKey:
         {type: 'skeleton/SkeletonShaderManager/node', vertexAttributes: this.vertexAttributes},
     fallbackParameters: this.base.fallbackShaderParameters,
-    parameters: this.base.displayState.skeletonRenderingOptions.shaderControlState.parseResult,
+    parameters: this.base.displayState.skeletonRenderingOptions.shaderControlState.builderState,
     shaderError: this.base.displayState.shaderError,
     defineShader:
-        (builder: ShaderBuilder, shaderParseResult: ShaderControlsParseResult) => {
+        (builder: ShaderBuilder, shaderBuilderState: ShaderControlsBuilderState) => {
+          if (shaderBuilderState.parseResult.errors.length !== 0) {
+            throw new Error('Invalid UI control specification');
+          }
           this.defineCommonShader(builder);
           this.defineAttributeAccess(builder);
           defineCircleShader(builder, /*crossSectionFade=*/ this.targetIsSliceView);
@@ -166,8 +173,9 @@ void emitDefault() {
             builder.addFragmentCode(`#define ${info.name} vCustom${i}\n`);
           }
           builder.setVertexMain(vertexMain);
-          addControlsToBuilder(shaderParseResult.controls, builder);
-          builder.setFragmentMainFunction(shaderCodeWithLineDirective(shaderParseResult.code));
+          addControlsToBuilder(shaderBuilderState, builder);
+          builder.setFragmentMainFunction(
+              shaderCodeWithLineDirective(shaderBuilderState.parseResult.code));
         },
   });
 
@@ -346,7 +354,7 @@ export class SkeletonLayer extends RefCounted {
   private sharedObject: SegmentationLayerSharedObject;
   vertexAttributes: VertexAttributeRenderInfo[];
   fallbackShaderParameters =
-      new WatchableValue<ShaderControlsParseResult>(parseShaderUiControls(DEFAULT_FRAGMENT_MAIN));
+      new WatchableValue(getFallbackBuilderState(parseShaderUiControls(DEFAULT_FRAGMENT_MAIN)));
 
   get visibility() {
     return this.sharedObject.visibility;
@@ -423,13 +431,15 @@ export class SkeletonLayer extends RefCounted {
 
     edgeShader.bind();
     renderHelper.beginLayer(gl, edgeShader, renderContext, modelMatrix);
-    setControlsInShader(gl, edgeShader, shaderControlState, edgeShaderParameters.controls);
+    setControlsInShader(
+        gl, edgeShader, shaderControlState, edgeShaderParameters.parseResult.controls);
     gl.uniform1f(edgeShader.uniform('uLineWidth'), lineWidth!);
 
     nodeShader.bind();
     renderHelper.beginLayer(gl, nodeShader, renderContext, modelMatrix);
     gl.uniform1f(nodeShader.uniform('uNodeDiameter'), pointDiameter);
-    setControlsInShader(gl, nodeShader, shaderControlState, nodeShaderParameters.controls);
+    setControlsInShader(
+        gl, nodeShader, shaderControlState, nodeShaderParameters.parseResult.controls);
 
     const skeletons = source.chunks;
     const {pickIDs} = renderContext;

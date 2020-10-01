@@ -36,7 +36,7 @@ import {drawBoxes, glsl_getBoxFaceVertexPosition} from 'neuroglancer/webgl/bound
 import {glsl_COLORMAPS} from 'neuroglancer/webgl/colormaps';
 import {ParameterizedContextDependentShaderGetter, parameterizedContextDependentShaderGetter, ParameterizedShaderGetterResult, shaderCodeWithLineDirective, WatchableShaderError} from 'neuroglancer/webgl/dynamic_shader';
 import {ShaderModule, ShaderProgram} from 'neuroglancer/webgl/shader';
-import {addControlsToBuilder, setControlsInShader, ShaderControlsParseResult, ShaderControlState} from 'neuroglancer/webgl/shader_ui_controls';
+import {addControlsToBuilder, setControlsInShader, ShaderControlsBuilderState, ShaderControlState} from 'neuroglancer/webgl/shader_ui_controls';
 import {defineVertexId, VertexIdHelper} from 'neuroglancer/webgl/vertex_id';
 
 interface TransformedVolumeSource extends
@@ -72,7 +72,7 @@ export class VolumeRenderingRenderLayer extends PerspectiveViewRenderLayer {
   private vertexIdHelper: VertexIdHelper;
 
   private shaderGetter: ParameterizedContextDependentShaderGetter<
-      {emitter: ShaderModule, chunkFormat: ChunkFormat}, ShaderControlsParseResult, number>;
+      {emitter: ShaderModule, chunkFormat: ChunkFormat}, ShaderControlsBuilderState, number>;
 
   get gl() {
     return this.multiscaleSource.chunkManager.gl;
@@ -100,11 +100,14 @@ export class VolumeRenderingRenderLayer extends PerspectiveViewRenderLayer {
         makeCachedDerivedWatchableValue(space => space.rank, [this.channelCoordinateSpace]));
     this.shaderGetter = parameterizedContextDependentShaderGetter(this, this.gl, {
       memoizeKey: 'VolumeRenderingRenderLayer',
-      parameters: options.shaderControlState.parseResult,
+      parameters: options.shaderControlState.builderState,
       getContextKey: ({emitter, chunkFormat}) => `${getObjectId(emitter)}:${chunkFormat.shaderKey}`,
       shaderError: options.shaderError,
       extraParameters: numChannelDimensions,
-      defineShader: (builder, {emitter, chunkFormat}, shaderParseResult, numChannelDimensions) => {
+      defineShader: (builder, {emitter, chunkFormat}, shaderBuilderState, numChannelDimensions) => {
+        if (shaderBuilderState.parseResult.errors.length !== 0) {
+          throw new Error('Invalid UI control specification');
+        }
         defineVertexId(builder);
         builder.addFragmentCode(`
 #define VOLUME_RENDERING true
@@ -208,10 +211,10 @@ void main() {
 }
 `);
         builder.addFragmentCode(glsl_COLORMAPS);
-        addControlsToBuilder(shaderParseResult.controls, builder);
+        addControlsToBuilder(shaderBuilderState, builder);
         builder.addFragmentCode(
-            `\n#define main userMain\n` + shaderCodeWithLineDirective(shaderParseResult.code) +
-            `\n#undef main\n`);
+            `\n#define main userMain\n` +
+            shaderCodeWithLineDirective(shaderBuilderState.parseResult.code) + `\n#undef main\n`);
       },
     });
     this.vertexIdHelper = this.registerDisposer(VertexIdHelper.get(this.gl));
@@ -285,7 +288,7 @@ void main() {
     let curPixelSpacing: number = 0;
     let shader: ShaderProgram|null = null;
     let prevChunkFormat: ChunkFormat|undefined|null;
-    let shaderResult: ParameterizedShaderGetterResult<ShaderControlsParseResult, number>;
+    let shaderResult: ParameterizedShaderGetterResult<ShaderControlsBuilderState, number>;
     // Size of chunk (in voxels) in the "display" subspace of the chunk coordinate space.
     const chunkDataDisplaySize = vec3.create();
 
@@ -343,7 +346,8 @@ void main() {
               shader.bind();
               if (chunkFormat !== null) {
                 setControlsInShader(
-                    gl, shader, this.shaderControlState, shaderResult.parameters.controls);
+                    gl, shader, this.shaderControlState,
+                    shaderResult.parameters.parseResult.controls);
                 chunkFormat.beginDrawing(gl, shader);
                 chunkFormat.beginSource(gl, shader);
               }

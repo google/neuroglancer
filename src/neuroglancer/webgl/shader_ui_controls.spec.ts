@@ -14,6 +14,7 @@
  * limitations under the License.
  */
 
+import {DataType} from 'neuroglancer/util/data_type';
 import {vec3} from 'neuroglancer/util/geom';
 import {parseShaderUiControls, stripComments} from 'neuroglancer/webgl/shader_ui_controls';
 
@@ -118,6 +119,138 @@ void main() {
         'color',
         {type: 'color', valueType: 'vec3', default: vec3.fromValues(1, 0, 0), defaultString: 'red'}
       ]])
+    });
+  });
+
+  it('handles invlerp control without channel', () => {
+    const code = `
+#uicontrol invlerp normalized
+void main() {
+}
+`;
+    const newCode = `
+
+void main() {
+}
+`;
+    expect(parseShaderUiControls(code, {imageData: {dataType: DataType.UINT8, channelRank: 0}})).toEqual({
+      source: code,
+      code: newCode,
+      errors: [],
+      controls: new Map([[
+        'normalized',
+        {type: 'invlerp', dataType: DataType.UINT8, channel: Uint32Array.of()}
+      ]]),
+    });
+  });
+
+  it('handles invlerp control without channel (rank 1)', () => {
+    const code = `
+#uicontrol invlerp normalized
+void main() {
+}
+`;
+    const newCode = `
+
+void main() {
+}
+`;
+    expect(parseShaderUiControls(code, {imageData: {dataType: DataType.UINT8, channelRank: 1}})).toEqual({
+      source: code,
+      code: newCode,
+      errors: [],
+      controls: new Map([[
+        'normalized',
+        {type: 'invlerp', dataType: DataType.UINT8, channel: Uint32Array.of(0)}
+      ]]),
+    });
+  });
+
+  it('handles invlerp control with channel (rank 0)', () => {
+    const code = `
+#uicontrol invlerp normalized(channel=[])
+void main() {
+}
+`;
+    const newCode = `
+
+void main() {
+}
+`;
+    expect(parseShaderUiControls(code, {imageData: {dataType: DataType.UINT8, channelRank: 0}})).toEqual({
+      source: code,
+      code: newCode,
+      errors: [],
+      controls: new Map([[
+        'normalized',
+        {type: 'invlerp', dataType: DataType.UINT8, channel: Uint32Array.of()}
+      ]]),
+    });
+  });
+
+  it('handles invlerp control with non-array channel (rank 1)', () => {
+    const code = `
+#uicontrol invlerp normalized(channel=1)
+void main() {
+}
+`;
+    const newCode = `
+
+void main() {
+}
+`;
+    expect(parseShaderUiControls(code, {imageData: {dataType: DataType.UINT8, channelRank: 1}})).toEqual({
+      source: code,
+      code: newCode,
+      errors: [],
+      controls: new Map([[
+        'normalized',
+        {type: 'invlerp', dataType: DataType.UINT8, channel: Uint32Array.of(1)}
+      ]]),
+    });
+  });
+
+  it('handles invlerp control with array channel (rank 1)', () => {
+    const code = `
+#uicontrol invlerp normalized(channel=[1])
+void main() {
+}
+`;
+    const newCode = `
+
+void main() {
+}
+`;
+    expect(parseShaderUiControls(code, {imageData: {dataType: DataType.UINT8, channelRank: 1}})).toEqual({
+      source: code,
+      code: newCode,
+      errors: [],
+      controls: new Map([[
+        'normalized',
+        {type: 'invlerp', dataType: DataType.UINT8, channel: Uint32Array.of(1)}
+      ]]),
+    });
+  });
+
+  it('handles invlerp control with array channel (rank 2)', () => {
+    const code = `
+#uicontrol invlerp normalized(channel=[1,2])
+void main() {
+}
+`;
+    const newCode = `
+
+void main() {
+}
+`;
+    expect(parseShaderUiControls(code, {imageData: {dataType: DataType.UINT8, channelRank: 2}})).toEqual({
+      source: code,
+      code: newCode,
+      errors: [],
+      controls: new Map([[
+        'normalized',
+        {type: 'invlerp', dataType: DataType.UINT8, channel: Uint32Array.of(1, 2)}
+      ]]),
     });
   });
 });

@@ -19,6 +19,7 @@
  */
 
 import {DataType} from 'neuroglancer/util/data_type';
+import {parseFixedLengthArray} from 'neuroglancer/util/json';
 import {Uint64} from 'neuroglancer/util/uint64';
 import {ShaderBuilder, ShaderCodePart, ShaderProgram} from 'neuroglancer/webgl/shader';
 import {dataTypeShaderDefinition, getShaderType, glsl_addSaturateInt32, glsl_addSaturateUint32, glsl_addSaturateUint64, glsl_equalUint64, glsl_shiftLeftSaturateUint32, glsl_shiftLeftUint64, glsl_shiftRightUint64, glsl_subtractSaturateInt32, glsl_subtractSaturateUint32, glsl_subtractSaturateUint64, glsl_uint64} from 'neuroglancer/webgl/shader_lib';
@@ -255,7 +256,7 @@ export function defineInvlerpShaderFunction(
     `
 float ${name}(${getShaderType(dataType)} inputValue) {
   float v = computeInvlerp(inputValue, uLerpParams_${name});
-  ${clamp ? '' : 'v = clamp(v, 0.0, 1.0);'}
+  ${!clamp ? '' : 'v = clamp(v, 0.0, 1.0);'}
   return v;
 }
 `,
@@ -309,7 +310,7 @@ export function enableLerpShaderFunction(
     case DataType.UINT32: {
       const lower = interval[0] as number;
       const diff = (interval[1] as number) - lower;
-      const shift = Math.max(0, Math.ceil(Math.log2(diff)) - 24);
+      const shift = Math.max(0, Math.ceil(Math.log2(Math.abs(diff))) - 24);
       const scalar = Math.pow(2, shift) / diff;
       const bLocation = shader.uniform(`uLerpBounds_${name}`);
       if (dataType === DataType.UINT32) {
@@ -322,12 +323,16 @@ export function enableLerpShaderFunction(
     }
     case DataType.UINT64: {
       const lower = interval[0] as Uint64;
-      Uint64.subtract(tempUint64, interval[1] as Uint64, lower);
+      const upper = interval[1] as Uint64;
+      Uint64.absDifference(tempUint64, upper, lower);
       const numBits = (tempUint64.high > 0) ? 32 + Math.ceil(Math.log2(tempUint64.high)) :
                                               Math.ceil(Math.log2(tempUint64.low));
       const shift = Math.max(0, numBits - 24);
       Uint64.rshift(tempUint64, tempUint64, shift);
-      const scalar = 1 / tempUint64.low;
+      let scalar = 1 / tempUint64.low;
+      if (Uint64.compare(lower, upper) > 0) {
+        scalar *= -1;
+      }
       const bLocation = shader.uniform(`uLerpBounds_${name}`);
       gl.uniform3ui(bLocation, lower.low, lower.high, shift);
       gl.uniform1f(shader.uniform(`uLerpScalar_${name}`), scalar);
@@ -349,7 +354,8 @@ export function computeInvlerp(range: DataTypeInterval, value: number|Uint64): n
     } else {
       numerator = Uint64.subtract(tempUint64, value, minValue).toNumber();
     }
-    const denominator = Uint64.subtract(tempUint64, maxValue, minValue).toNumber();
+    let denominator = Uint64.absDifference(tempUint64, maxValue, minValue).toNumber();
+    if (Uint64.compare(minValue, maxValue) > 0) denominator *= -1;
     return numerator / denominator;
   }
 }
@@ -368,8 +374,12 @@ export function computeLerp(range: DataTypeInterval, dataType: DataType, value: 
     }
     return result;
   } else {
-    const minValue = range[0] as Uint64;
-    const maxValue = range[1] as Uint64;
+    let minValue = range[0] as Uint64;
+    let maxValue = range[1] as Uint64;
+    if (Uint64.compare(minValue, maxValue) > 0) {
+      [minValue, maxValue] = [maxValue, minValue];
+      value = 1 - value;
+    }
     const scalar = Uint64.subtract(tempUint64, maxValue, minValue).toNumber();
     const result = new Uint64();
     if (value <= 0) {
@@ -405,9 +415,16 @@ export function getClampedInterval(
   return [clampToInterval(bounds, range[0]), clampToInterval(bounds, range[1])] as DataTypeInterval;
 }
 
-export function validateDataTypeInterval(interval: DataTypeInterval) {
-  if (dataTypeCompare(interval[0], interval[1]) <= 0) return;
+// Validates that the lower bound is <= the upper bound.
+export function validateDataTypeInterval(interval: DataTypeInterval): DataTypeInterval {
+  if (dataTypeCompare(interval[0], interval[1]) <= 0) return interval;
   throw new Error(`Invalid interval: [${interval[0]}, ${interval[1]}]`);
+}
+
+// Ensures the lower bound is <= the upper bound.
+export function normalizeDataTypeInterval(interval: DataTypeInterval): DataTypeInterval {
+  if (dataTypeCompare(interval[0], interval[1]) <= 0) return interval;
+  return [interval[1], interval[0]] as DataTypeInterval;
 }
 
 export function dataTypeCompare(a: number|Uint64, b: number|Uint64) {
@@ -457,5 +474,30 @@ export function parseDataTypeValue(dataType: DataType, x: unknown): number|Uint6
       }
       return value;
     }
+  }
+}
+
+export function parseDataTypeInterval(obj: unknown, dataType: DataType): DataTypeInterval {
+  return parseFixedLengthArray(new Array(2), obj, x => parseDataTypeValue(dataType, x)) as
+      DataTypeInterval;
+}
+
+export function dataTypeIntervalEqual(
+    dataType: DataType, a: DataTypeInterval, b: DataTypeInterval) {
+  if (dataType === DataType.UINT64) {
+    return Uint64.equal(a[0] as Uint64, b[0] as Uint64) &&
+        Uint64.equal(a[1] as Uint64, b[1] as Uint64);
+  } else {
+    return a[0] === b[0] && a[1] === b[1];
+  }
+}
+
+export function dataTypeIntervalToJson(
+    range: DataTypeInterval, dataType: DataType, defaultRange = defaultDataTypeRange[dataType]) {
+  if (dataTypeIntervalEqual(dataType, range, defaultRange)) return undefined;
+  if (dataType === DataType.UINT64) {
+    return [range[0].toString(), range[1].toString()];
+  } else {
+    return range;
   }
 }

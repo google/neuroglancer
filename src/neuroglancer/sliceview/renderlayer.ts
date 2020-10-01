@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-import { ChunkManager, ChunkRenderLayerFrontend} from 'neuroglancer/chunk_manager/frontend';
+import {ChunkManager, ChunkRenderLayerFrontend} from 'neuroglancer/chunk_manager/frontend';
 import {CoordinateSpace} from 'neuroglancer/coordinate_transform';
 import {VisibleLayerInfo} from 'neuroglancer/layer';
 import {ChunkTransformParameters, RenderLayerTransformOrError} from 'neuroglancer/render_coordinate_transform';
@@ -24,8 +24,9 @@ import {SharedWatchableValue} from 'neuroglancer/shared_watchable_value';
 import {filterVisibleSources, SLICEVIEW_RENDERLAYER_RPC_ID, SliceViewBase, SliceViewProjectionParameters, SliceViewSourceOptions, TransformedSource} from 'neuroglancer/sliceview/base';
 import {MultiscaleSliceViewChunkSource, SliceView, SliceViewChunkSource, SliceViewSingleResolutionSource} from 'neuroglancer/sliceview/frontend';
 import {SliceViewPanel} from 'neuroglancer/sliceview/panel';
-import {WatchableValueInterface} from 'neuroglancer/trackable_value';
+import {constantWatchableValue, WatchableValueInterface} from 'neuroglancer/trackable_value';
 import {Borrowed} from 'neuroglancer/util/disposable';
+import {HistogramSpecifications} from 'neuroglancer/webgl/empirical_cdf';
 import {ShaderModule} from 'neuroglancer/webgl/shader';
 import {RpcId} from 'neuroglancer/worker_rpc';
 import {SharedObject} from 'neuroglancer/worker_rpc';
@@ -43,6 +44,7 @@ export interface SliceViewRenderLayerOptions {
    * Specifies the position within the "local" coordinate space.
    */
   localPosition: WatchableValueInterface<Float32Array>;
+  dataHistogramSpecifications?: HistogramSpecifications;
 }
 
 export interface VisibleSourceInfo<Source extends SliceViewChunkSource> {
@@ -68,6 +70,17 @@ export abstract class SliceViewRenderLayer<
 
   renderScaleTarget: WatchableValueInterface<number>;
   renderScaleHistogram?: RenderScaleHistogram;
+
+  // This is only used by `ImageRenderLayer` currently, but is defined here because
+  // `sliceview/frontend.ts` is responsible for providing the texture buffers used for accumulating
+  // histograms.
+  dataHistogramSpecifications: HistogramSpecifications;
+
+  getDataHistogramCount() {
+    const {dataHistogramSpecifications} = this;
+    if (!dataHistogramSpecifications.visibility.visible) return 0;
+    return dataHistogramSpecifications.bounds.value.length;
+  }
 
   /**
    * Currently visible sources for this render layer.
@@ -134,6 +147,11 @@ export abstract class SliceViewRenderLayer<
     this.renderScaleHistogram = options.renderScaleHistogram;
     this.transform = options.transform;
     this.localPosition = options.localPosition;
+    this.dataHistogramSpecifications = this.registerDisposer(
+        options.dataHistogramSpecifications ??
+        new HistogramSpecifications(constantWatchableValue([]), constantWatchableValue([])));
+    this.registerDisposer(
+        this.dataHistogramSpecifications.visibility.changed.add(this.redrawNeeded.dispatch));
   }
 
   RPC_TYPE_ID: string;

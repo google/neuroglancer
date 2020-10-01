@@ -22,12 +22,22 @@ import {TrackableRGB} from 'neuroglancer/util/color';
 import {RefCounted} from 'neuroglancer/util/disposable';
 import {removeChildren} from 'neuroglancer/util/dom';
 import {WatchableVisibilityPriority} from 'neuroglancer/visibility_priority/frontend';
+import {ParameterizedEmitterDependentShaderOptions, ParameterizedShaderGetterResult} from 'neuroglancer/webgl/dynamic_shader';
 import {ShaderControlState} from 'neuroglancer/webgl/shader_ui_controls';
 import {ColorWidget} from 'neuroglancer/widget/color';
+import {InvlerpWidget} from 'neuroglancer/widget/invlerp';
 import {RangeWidget} from 'neuroglancer/widget/range';
 import {Tab} from 'neuroglancer/widget/tab_view';
+import { Position } from '../navigation_state';
+import { PositionWidget } from './position_widget';
+import { arraysEqual } from '../util/array';
+
+export interface LegendShaderOptions extends ParameterizedEmitterDependentShaderOptions {
+  initializeShader: (shaderResult: ParameterizedShaderGetterResult) => void;
+}
 
 export interface ShaderControlsOptions {
+  legendShaderOptions?: LegendShaderOptions;
   visibility?: WatchableVisibilityPriority;
 }
 
@@ -53,11 +63,14 @@ export class ShaderControls extends Tab {
       removeChildren(element);
     }
     const controlDisposer = this.controlDisposer = new RefCounted();
+    let histogramIndex = 0;
     for (const [name, controlState] of this.state.state) {
       const {control} = controlState;
+      const labelDiv = document.createElement('div');
       const label = document.createElement('label');
       label.textContent = name;
-      element.appendChild(label);
+      labelDiv.appendChild(label);
+      element.appendChild(labelDiv);
       switch (control.type) {
         case 'slider': {
           const widget = controlDisposer.registerDisposer(new RangeWidget(
@@ -69,6 +82,42 @@ export class ShaderControls extends Tab {
           const widget = controlDisposer.registerDisposer(
               new ColorWidget(controlState.trackable as TrackableRGB));
           element.appendChild(widget.element);
+          break;
+        }
+        case 'invlerp': {
+          const {channelCoordinateSpaceCombiner} = this.state;
+          if (channelCoordinateSpaceCombiner !== undefined &&
+              control.default.channel.length !== 0) {
+            const position = controlDisposer.registerDisposer(
+                new Position(channelCoordinateSpaceCombiner.combined));
+            const positionWidget = controlDisposer.registerDisposer(
+              new PositionWidget(position, channelCoordinateSpaceCombiner, {copyButton: false}));
+            const {trackable} = controlState;
+            controlDisposer.registerDisposer(position.changed.add(() => {
+              const value = position.value;
+              const newChannel = Array.from(value, x => Math.floor(x));
+              const oldParams = trackable.value;
+              if (!arraysEqual(oldParams.channel, newChannel)) {
+                trackable.value = {...trackable.value, channel: newChannel};
+              }
+            }));
+            const updatePosition = () => {
+              const value = position.value;
+              const params = trackable.value;
+              if (!arraysEqual(value, params.channel)) {
+                value.set(params.channel);
+                position.changed.dispatch();
+              }
+            };
+            updatePosition();
+            controlDisposer.registerDisposer(trackable.changed.add(updatePosition));
+            labelDiv.appendChild(positionWidget.element);
+          }
+          const widget = controlDisposer.registerDisposer(new InvlerpWidget(
+              this.visibility, this.display, control, controlState.trackable,
+              this.state.histogramSpecifications, histogramIndex, this.options));
+          element.appendChild(widget.element);
+          ++histogramIndex;
           break;
         }
       }

@@ -28,7 +28,7 @@ import {makeValueOrError, ValueOrError, valueOrThrow} from 'neuroglancer/util/er
 import {vec3} from 'neuroglancer/util/geom';
 import {WatchableMap} from 'neuroglancer/util/watchable_map';
 import {makeTrackableFragmentMain, makeWatchableShaderError} from 'neuroglancer/webgl/dynamic_shader';
-import {parseShaderUiControls, ShaderControlState} from 'neuroglancer/webgl/shader_ui_controls';
+import {getFallbackBuilderState, parseShaderUiControls, ShaderControlState} from 'neuroglancer/webgl/shader_ui_controls';
 
 export class AnnotationHoverState extends WatchableValue<
     {id: string, partIndex: number, annotationLayerState: AnnotationLayerState}|undefined> {}
@@ -85,7 +85,8 @@ void main() {
 export class AnnotationDisplayState extends RefCounted {
   shader = makeTrackableFragmentMain(DEFAULT_FRAGMENT_MAIN);
   shaderControls = new ShaderControlState(this.shader);
-  fallbackShaderControls = new WatchableValue(parseShaderUiControls(DEFAULT_FRAGMENT_MAIN));
+  fallbackShaderControls =
+      new WatchableValue(getFallbackBuilderState(parseShaderUiControls(DEFAULT_FRAGMENT_MAIN)));
   shaderError = makeWatchableShaderError();
   color = new TrackableRGB(vec3.fromValues(1, 1, 0));
   relationshipStates = this.registerDisposer(new WatchableAnnotationRelationshipStates());
