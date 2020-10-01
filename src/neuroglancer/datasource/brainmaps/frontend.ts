@@ -623,8 +623,7 @@ export class BrainmapsDataSource extends DataSourceProvider {
         parameters, 'encoding', x => verifyEnumString(x, VolumeChunkEncoding));
     const chunkLayoutPreference = verifyOptionalObjectProperty(
         parameters, 'chunkLayout', x => verifyEnumString(x, ChunkLayoutPreference));
-    const brainmapsOptions:
-        GetBrainmapsVolumeOptions = {...options, encoding, chunkLayoutPreference};
+    const brainmapsOptions: GetBrainmapsVolumeOptions = {encoding, chunkLayoutPreference};
     return options.chunkManager.memoize.getUncounted(
         {type: 'brainmaps:get', instance: this.instance, volumeId, changeSpec, brainmapsOptions},
         async () => {
