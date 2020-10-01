@@ -903,7 +903,7 @@ def data_panel_layout_wrapper(default_value='xy'):
     return wrapper
 
 
-data_panel_layout_types = frozenset(['xy', 'yz', 'yz', 'xy-3d', 'yz-3d', 'yz-3d', '4panel', '3d'])
+data_panel_layout_types = frozenset(['xy', 'yz', 'xz', 'xy-3d', 'yz-3d', 'xz-3d', '4panel', '3d'])
 
 
 def layout_specification(x, _readonly=False):
