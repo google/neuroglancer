@@ -28,7 +28,7 @@ import {ChunkLayout} from 'neuroglancer/sliceview/chunk_layout';
 import {SliceViewRenderLayer} from 'neuroglancer/sliceview/renderlayer';
 import {WatchableValueInterface} from 'neuroglancer/trackable_value';
 import {Borrowed, Disposer, invokeDisposers, Owned, RefCounted} from 'neuroglancer/util/disposable';
-import {kOneVec, mat4, vec3, vec4} from 'neuroglancer/util/geom';
+import {kOneVec, kZeroVec4, mat4, vec3, vec4} from 'neuroglancer/util/geom';
 import {MessageList, MessageSeverity} from 'neuroglancer/util/message_list';
 import {getObjectId} from 'neuroglancer/util/object_id';
 import {NullarySignal} from 'neuroglancer/util/signal';
@@ -402,6 +402,9 @@ export class SliceView extends Base {
       const histogramCount = wireFrame ? 0 : renderLayer.getDataHistogramCount();
       let framebuffer = this.getOffscreenFramebufferWithHistograms(histogramCount);
       framebuffer.bind(width, height);
+      for (let i = 0; i < histogramCount; ++i) {
+        gl.clearBufferfv(WebGL2RenderingContext.COLOR, 1 + i, kZeroVec4);
+      }
       gl.enable(WebGL2RenderingContext.DEPTH_TEST);
       gl.depthFunc(WebGL2RenderingContext.LESS);
       gl.clearDepth(1);

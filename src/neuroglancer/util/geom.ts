@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-import {mat3, mat4, quat, vec3} from 'gl-matrix';
+import {mat3, mat4, quat, vec3, vec4} from 'gl-matrix';
 import {findMatchingIndices, TypedArray} from 'neuroglancer/util/array';
 
 export {mat2, mat3, mat4, quat, vec2, vec3, vec4} from 'gl-matrix';
@@ -29,6 +29,7 @@ export const kAxes = [
   vec3.fromValues(0, 0, 1),
 ];
 export const kZeroVec = vec3.fromValues(0, 0, 0);
+export const kZeroVec4 = vec4.fromValues(0, 0, 0, 0);
 export const kOneVec = vec3.fromValues(1, 1, 1);
 export const kInfinityVec = vec3.fromValues(Infinity, Infinity, Infinity);
 export const kIdentityQuat = quat.create();
