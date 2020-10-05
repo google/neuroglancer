@@ -142,7 +142,7 @@ ${shaderDataType} computeLerp(float inputValue, vec2 p) {
   if (dataType === DataType.FLOAT32) {
     code += `return inputValue;\n`;
   } else {
-    code += `return ${DataType[dataType].toLowerCase()}FromFloat(inputValue);\n`;
+    code += `return ${DataType[dataType].toLowerCase()}FromFloat(round(inputValue));\n`;
   }
   code += `
 }
@@ -162,7 +162,7 @@ function getInt32LerpImpl(dataType: DataType) {
     `
 ${shaderDataType} computeLerp(float inputValue, ${pType} p) {
   inputValue = inputValue / p.multiplier;
-  uint x = uint(clamp(abs(inputValue), 0.0, 4294967295.0));
+  uint x = uint(clamp(round(abs(inputValue)), 0.0, 4294967295.0));
   uint xShifted = shiftLeftSaturate(x, p.shift);
   if (inputValue >= 0.0) {
     return ${shaderDataType}(addSaturate(p.offset, xShifted));
@@ -194,7 +194,7 @@ export const glsl_dataTypeComputeLerp: Record<DataType, ShaderCodePart> = {
     `
 uint64_t computeLerp(float inputValue, Uint64LerpParameters p) {
   inputValue = inputValue / p.multiplier;
-  uint64_t x = uint64_t(uvec2(uint(clamp(abs(inputValue), 0.0, 4294967295.0)), 0u));
+  uint64_t x = uint64_t(uvec2(uint(clamp(round(abs(inputValue)), 0.0, 4294967295.0)), 0u));
   uint64_t shifted = shiftLeft(x, p.shift);
   if (!equals(shiftRight(shifted, p.shift), x)) {
     return uint64_t(uvec2(0xffffffffu, 0xffffffffu));
@@ -292,6 +292,41 @@ export const defaultDataTypeRange: Record<DataType, DataTypeInterval> = {
 
 const tempUint64 = new Uint64();
 const temp2Uint64 = new Uint64();
+
+// Returns the offset such that within the floating point range `[-offset, 1+offset]`, there is an
+// equal-sized interval corresponding to each number in `interval`.
+//
+// For dataType=FLOAT32, always returns 0.  For integer data types, returns:
+//
+//   0.5 / (1 + abs(interval[1] - interval[0]))
+export function getIntervalBoundsEffectiveOffset(dataType: DataType, interval: DataTypeInterval) {
+  switch (dataType) {
+    case DataType.FLOAT32:
+      return 0;
+    case DataType.UINT64:
+      return 0.5 /
+          (Uint64.absDifference(tempUint64, interval[0] as Uint64, interval[1] as Uint64)
+               .toNumber());
+    default:
+      return 0.5 / (Math.abs((interval[0] as number) - (interval[1] as number)));
+  }
+}
+
+export function getIntervalBoundsEffectiveFraction(dataType: DataType, interval: DataTypeInterval) {
+  switch (dataType) {
+    case DataType.FLOAT32:
+      return 1;
+    case DataType.UINT64: {
+      const diff =
+          Uint64.absDifference(tempUint64, interval[0] as Uint64, interval[1] as Uint64).toNumber();
+      return diff / (diff + 1);
+    }
+    default: {
+      const diff = Math.abs((interval[0] as number) - (interval[1] as number));
+      return diff / (diff + 1);
+    }
+  }
+}
 
 export function enableLerpShaderFunction(
     shader: ShaderProgram, name: string, dataType: DataType, interval: DataTypeInterval) {

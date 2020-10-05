@@ -35,6 +35,8 @@ import {ShaderBuilder} from 'neuroglancer/webgl/shader';
 import {glsl_simpleFloatHash} from 'neuroglancer/webgl/shader_lib';
 import {setRawTextureParameters} from 'neuroglancer/webgl/texture';
 
+const DEBUG_HISTOGRAMS = false;
+
 export interface HistogramChannelSpecification {
   // Channel coordinates.
   channel: Uint32Array;
@@ -100,7 +102,7 @@ float stencilValue = texture(uDepthSampler, p).x;
 if (stencilValue == 1.0) {
   gl_Position = vec4(2.0, 2.0, 2.0, 1.0);
 } else {
-  gl_Position = vec4(2.0 * dataValue * 255.0 / 256.0 - 1.0, 0.0, 0.0, 1.0);
+  gl_Position = vec4(2.0 * (dataValue * 255.0 + 0.5) / 256.0 - 1.0, 0.0, 0.0, 1.0);
 }
 gl_PointSize = 1.0;
 `);
@@ -155,6 +157,17 @@ outputValue = vec4(1.0, 1.0, 1.0, 1.0);
       gl.drawArraysInstanced(
           WebGL2RenderingContext.POINTS, 0, histogramSamplesPerInstance,
           histogramSamples / histogramSamplesPerInstance);
+
+      if (DEBUG_HISTOGRAMS) {
+        const tempBuffer = new Float32Array(256 * 4);
+        gl.readPixels(
+            0, 0, 256, 1, WebGL2RenderingContext.RGBA, WebGL2RenderingContext.FLOAT, tempBuffer);
+        const tempBuffer2 = new Float32Array(256);
+        for (let j = 0; j < 256; ++j) {
+          tempBuffer2[j] = tempBuffer[j * 4];
+        }
+        console.log('histogram', tempBuffer2.join(' '));
+      }
     }
     gl.disable(WebGL2RenderingContext.BLEND);
   }

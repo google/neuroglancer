@@ -288,7 +288,7 @@ void emit(vec4 color) {
             const getDataValueExpr = `getDataValue(${channel.join(',')})`;
             const invlerpName = `invlerpForHistogram${i}`;
             builder.addFragmentCode(
-                defineInvlerpShaderFunction(builder, invlerpName, dataType, /*clamp=*/ true));
+                defineInvlerpShaderFunction(builder, invlerpName, dataType, /*clamp=*/ false));
             builder.addFragmentCode(`
 float getHistogramValue${i}() {
   return invlerpForHistogram${i}(${getDataValueExpr});
@@ -296,6 +296,9 @@ float getHistogramValue${i}() {
 `);
             histogramCollectionCode += `{
 float x = getHistogramValue${i}();
+if (x < 0.0) x = 0.0;
+else if (x > 1.0) x = 1.0;
+else x = (1.0 + x * 253.0) / 255.0;
 ${outputName} = vec4(x, x, x, 1.0);
 }`;
           }

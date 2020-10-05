@@ -389,9 +389,6 @@ export class SliceView extends Base {
     offscreenFramebuffer.bind(width, height);
     gl.disable(gl.SCISSOR_TEST);
 
-    // we have viewportToData
-    // we need: matrix that maps input x to the output x axis, scaled by
-
     gl.clearColor(0, 0, 0, 0);
     gl.colorMask(true, true, true, true);
     gl.clear(WebGL2RenderingContext.COLOR_BUFFER_BIT);

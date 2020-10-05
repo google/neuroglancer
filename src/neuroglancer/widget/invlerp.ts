@@ -32,7 +32,7 @@ import {WatchableVisibilityPriority} from 'neuroglancer/visibility_priority/fron
 import {getMemoizedBuffer} from 'neuroglancer/webgl/buffer';
 import {ParameterizedEmitterDependentShaderGetter, parameterizedEmitterDependentShaderGetter} from 'neuroglancer/webgl/dynamic_shader';
 import {HistogramSpecifications} from 'neuroglancer/webgl/empirical_cdf';
-import {computeInvlerp, computeLerp, dataTypeCompare, DataTypeInterval, defineLerpShaderFunction, enableLerpShaderFunction, getClampedInterval, getClosestEndpoint, parseDataTypeValue} from 'neuroglancer/webgl/lerp';
+import {computeInvlerp, computeLerp, dataTypeCompare, DataTypeInterval, defineLerpShaderFunction, enableLerpShaderFunction, getClampedInterval, getClosestEndpoint, getIntervalBoundsEffectiveFraction, getIntervalBoundsEffectiveOffset, parseDataTypeValue} from 'neuroglancer/webgl/lerp';
 import {defineLineShader, drawLines, initializeLineShader, VERTICES_PER_LINE} from 'neuroglancer/webgl/lines';
 import {ShaderBuilder} from 'neuroglancer/webgl/shader';
 import {getShaderType} from 'neuroglancer/webgl/shader_lib';
@@ -76,6 +76,11 @@ function getUpdatedParameters(
   }
   return newBounds;
 }
+
+// 256 bins in total.  The first and last bin are for values below the lower bound/above the upper
+// bound.
+const NUM_HISTOGRAM_BINS_IN_RANGE = 254;
+const NUM_CDF_LINES = NUM_HISTOGRAM_BINS_IN_RANGE + 1;
 
 class CdfPanel extends RenderedPanel {
   get drawOrder() {
@@ -166,8 +171,8 @@ class CdfPanel extends RenderedPanel {
 
   private dataValuesBuffer =
       this.registerDisposer(getMemoizedBuffer(this.gl, WebGL2RenderingContext.ARRAY_BUFFER, () => {
-            const array = new Uint8Array(255 * VERTICES_PER_LINE);
-            for (let i = 0; i < 255; ++i) {
+            const array = new Uint8Array(NUM_CDF_LINES * VERTICES_PER_LINE);
+            for (let i = 0; i < NUM_CDF_LINES; ++i) {
               for (let j = 0; j < VERTICES_PER_LINE; ++j) {
                 array[i * VERTICES_PER_LINE + j] = i;
               }
@@ -181,29 +186,42 @@ class CdfPanel extends RenderedPanel {
     builder.addTextureSampler('sampler2D', 'uHistogramSampler', histogramSamplerTextureUnit);
     builder.addOutputBuffer('vec4', 'out_color', 0);
     builder.addAttribute('uint', 'aDataValue');
+    builder.addUniform('float', 'uBoundsFraction');
     builder.addVertexCode(`
 float getCount(int i) {
   return texelFetch(uHistogramSampler, ivec2(i, 0), 0).x;
 }
 vec4 getVertex(float cdf, int i) {
-  return vec4(float(i) / 256.0 * 2.0 - 1.0, cdf * (2.0 - uLineParams.y) - 1.0 + uLineParams.y * 0.5, 0.0, 1.0);
+  float x;
+  if (i == 0) {
+    x = -1.0;
+  } else if (i == 255) {
+    x = 1.0;
+  } else {
+    x = float(i) / 254.0 * uBoundsFraction * 2.0 - 1.0;
+  }
+  return vec4(x, cdf * (2.0 - uLineParams.y) - 1.0 + uLineParams.y * 0.5, 0.0, 1.0);
 }
 `);
     builder.setVertexMain(`
-int dataValue = int(aDataValue);
+int lineNumber = int(aDataValue);
+int dataValue = lineNumber;
 float cumSum = 0.0;
-for (int i = 0; i < dataValue; ++i) {
+for (int i = 0; i <= dataValue; ++i) {
   cumSum += getCount(i);
 }
-float cumSumEnd = cumSum + getCount(dataValue);
-float total = cumSumEnd;
-for (int i = dataValue + 1; i < 256; ++i) {
+float total = cumSum + getCount(dataValue + 1);
+float cumSumEnd = dataValue == ${NUM_CDF_LINES-1} ? cumSum : total;
+if (dataValue == ${NUM_CDF_LINES-1}) {
+  cumSum + getCount(dataValue + 1);
+}
+for (int i = dataValue + 2; i < 256; ++i) {
   total += getCount(i);
 }
 total = max(total, 1.0);
 float cdf1 = cumSum / total;
 float cdf2 = cumSumEnd / total;
-emitLine(getVertex(cdf1, dataValue), getVertex(cdf2, dataValue + 1), 1.0);
+emitLine(getVertex(cdf1, lineNumber), getVertex(cdf2, lineNumber + 1), 1.0);
 `);
     builder.setFragmentMain(`
 out_color = vec4(0.0, 1.0, 1.0, getLineAlpha());
@@ -229,7 +247,7 @@ out_color = uColor;
   })());
 
   draw() {
-    const {lineShader, gl, regionShader, parent: {trackable: {value: bounds}}} = this;
+    const {lineShader, gl, regionShader, parent: {dataType, trackable: {value: bounds}}} = this;
     this.setGLLogicalViewport();
     gl.enable(WebGL2RenderingContext.BLEND);
     gl.blendFunc(WebGL2RenderingContext.SRC_ALPHA, WebGL2RenderingContext.ONE_MINUS_SRC_ALPHA);
@@ -238,9 +256,12 @@ out_color = uColor;
     {
       regionShader.bind();
       gl.uniform4f(regionShader.uniform('uColor'), 0.2, 0.2, 0.2, 1.0);
+      const fraction0 = computeInvlerp(bounds.window, bounds.range[0]),
+            fraction1 = computeInvlerp(bounds.window, bounds.range[1]);
+      const effectiveFraction = getIntervalBoundsEffectiveFraction(dataType, bounds.window);
       gl.uniform2f(
-          regionShader.uniform('uBounds'), computeInvlerp(bounds.window, bounds.range[0]),
-          computeInvlerp(bounds.window, bounds.range[1]));
+          regionShader.uniform('uBounds'), Math.min(fraction0, fraction1) * effectiveFraction,
+          Math.max(fraction0, fraction1) * effectiveFraction + (1 - effectiveFraction));
       const aVertexPosition = regionShader.attribute('aVertexPosition');
       this.regionCornersBuffer.bindToVertexAttrib(
           aVertexPosition, /*componentsPerVertexAttribute=*/ 2,
@@ -255,6 +276,9 @@ out_color = uColor;
           lineShader, {width: renderViewport.logicalWidth, height: renderViewport.logicalHeight},
           /*featherWidthInPixels=*/ 1.0);
       const histogramTextureUnit = lineShader.textureUnit(histogramSamplerTextureUnit);
+      gl.uniform1f(
+          lineShader.uniform('uBoundsFraction'),
+          getIntervalBoundsEffectiveFraction(dataType, bounds.window));
       gl.activeTexture(WebGL2RenderingContext.TEXTURE0 + histogramTextureUnit);
       gl.bindTexture(WebGL2RenderingContext.TEXTURE_2D, this.parent.texture);
       setRawTextureParameters(gl);
@@ -262,7 +286,7 @@ out_color = uColor;
       this.dataValuesBuffer.bindToVertexAttribI(
           aDataValue, /*componentsPerVertexAttribute=*/ 1,
           /*attributeType=*/ WebGL2RenderingContext.UNSIGNED_BYTE);
-      drawLines(gl, /*linesPerInstance=*/ 255, /*numInstances=*/ 1);
+      drawLines(gl, /*linesPerInstance=*/ NUM_CDF_LINES, /*numInstances=*/ 1);
       gl.disableVertexAttribArray(aDataValue);
       gl.bindTexture(WebGL2RenderingContext.TEXTURE_2D, null);
     }
@@ -289,10 +313,11 @@ class ColorLegendPanel extends RenderedPanel {
       defineShader: (builder, parameters, extraParameters) => {
         builder.addOutputBuffer('vec4', 'v4f_fragData0', 0);
         builder.addAttribute('vec2', 'aVertexPosition');
+        builder.addUniform('float', 'uLegendOffset');
         builder.addVarying('float', 'vLinearPosition');
         builder.setVertexMain(`
 gl_Position = vec4(aVertexPosition, 0.0, 1.0);
-vLinearPosition = (aVertexPosition.x + 1.0) * 0.5;
+vLinearPosition = -uLegendOffset + ((aVertexPosition.x + 1.0) * 0.5) * (1.0 + 2.0 * uLegendOffset);
 `);
         const dataType = this.parent.dataType;
         const shaderDataType = getShaderType(dataType);
@@ -332,8 +357,10 @@ ${shaderDataType} getInterpolatedDataValue(int dummyChannel) {
     this.shaderOptions.initializeShader(shaderResult);
     const {gl} = this;
     gl.enable(WebGL2RenderingContext.BLEND);
-    enableLerpShaderFunction(
-        shader, 'ng_colorLegendLerp', this.parent.dataType, this.parent.trackable.value.window);
+    const {trackable: {value: {window}}, dataType} = this.parent;
+    enableLerpShaderFunction(shader, 'ng_colorLegendLerp', this.parent.dataType, window);
+    const legendOffset = getIntervalBoundsEffectiveOffset(dataType, window);
+    gl.uniform1f(shader.uniform('uLegendOffset'), Number.isFinite(legendOffset) ? legendOffset : 0);
     gl.blendFunc(WebGL2RenderingContext.SRC_ALPHA, WebGL2RenderingContext.ONE_MINUS_SRC_ALPHA);
     gl.disable(WebGL2RenderingContext.DEPTH_TEST);
     gl.disable(WebGL2RenderingContext.STENCIL_TEST);
@@ -481,7 +508,7 @@ export class InvlerpWidget extends Tab {
 
   updateView() {
     const {boundElements} = this;
-    const {trackable: {value: bounds}} = this;
+    const {trackable: {value: bounds}, dataType} = this;
     for (let i = 0; i < 2; ++i) {
       updateInputBoundValue(boundElements.range.inputs[i], bounds.range[i]);
       updateInputBoundValue(boundElements.window.inputs[i], bounds.window[i]);
@@ -490,8 +517,12 @@ export class InvlerpWidget extends Tab {
     boundElements.range.container.style.flexDirection = !reversed ? 'row' : 'row-reverse';
     const clampedRange = getClampedInterval(bounds.window, bounds.range);
     const spacers = boundElements.range.spacers!;
-    const leftOffset = computeInvlerp(bounds.window, clampedRange[reversed ? 1 : 0]);
-    const rightOffset = computeInvlerp(bounds.window, clampedRange[reversed ? 0 : 1]);
+    const effectiveFraction = getIntervalBoundsEffectiveFraction(dataType, bounds.window);
+    const leftOffset =
+        computeInvlerp(bounds.window, clampedRange[reversed ? 1 : 0]) * effectiveFraction;
+    const rightOffset =
+        computeInvlerp(bounds.window, clampedRange[reversed ? 0 : 1]) * effectiveFraction +
+        (1 - effectiveFraction);
     spacers[reversed ? 2 : 0].style.width = `${leftOffset * 100}%`;
     spacers[reversed ? 0 : 2].style.width = `${(1 - rightOffset) * 100}%`;
     const {invertArrows} = this;
