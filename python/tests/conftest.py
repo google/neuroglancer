@@ -20,6 +20,14 @@ def pytest_addoption(parser):
                      action='store_true',
                      default=False,
                      help='Run Chrome browser headless')
+    parser.addoption('--debug-webdriver',
+                     action='store_true',
+                     default=False,
+                     help='Show webdriver debug logs')
+    parser.addoption('--webdriver-docker',
+                     action='store_true',
+                     default=False,
+                     help='Use webdriver configuration that supports running inside docker')
     parser.addoption('--static-content-url',
                      default=None,
                      help='URL to Neuroglancer Python client')
@@ -30,7 +38,11 @@ def _webdriver_internal(request):
     static_content_url = request.config.getoption('--static-content-url')
     if static_content_url is not None:
         neuroglancer.set_static_content_source(url=static_content_url)
-    webdriver = neuroglancer.webdriver.Webdriver(headless=request.config.getoption('--headless'))
+    webdriver = neuroglancer.webdriver.Webdriver(
+        headless=request.config.getoption('--headless'),
+        docker=request.config.getoption('--webdriver-docker'),
+        debug=request.config.getoption('--debug-webdriver'),
+    )
     atexit.register(webdriver.driver.close)
     return webdriver
 
