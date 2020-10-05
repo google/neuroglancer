@@ -1038,8 +1038,8 @@ class StatisticsDisplayState(JsonObjectWrapper):
 class ViewerState(JsonObjectWrapper):
     __slots__ = ()
     dimensions = wrapped_property('dimensions', CoordinateSpace)
-    dimensionRenderScales = dimension_render_scales = wrapped_property('dimensionRenderScales', optional(typed_string_map(float)))
-    render_dimensions = renderDimensions = wrapped_property('renderDimensions', optional(typed_list(text_type)))
+    relative_display_scales = relativeDisplayScales = wrapped_property('relativeDisplayScales', optional(typed_string_map(float)))
+    display_dimensions = displayDimensions = wrapped_property('displayDimensions', optional(typed_list(text_type)))
     position = voxel_coordinates = wrapped_property('position', optional(array_wrapper(np.float32)))
     cross_section_orientation = crossSectionOrientation = wrapped_property(
         'crossSectionOrientation', optional(array_wrapper(np.float32, 4)))
