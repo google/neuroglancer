@@ -17,7 +17,7 @@
 import './image_user_layer.css';
 
 import {CoordinateSpace, CoordinateSpaceCombiner, isChannelDimension, isLocalDimension, TrackableCoordinateSpace} from 'neuroglancer/coordinate_transform';
-import {ManagedUserLayer, registerLayerType, registerVolumeLayerType, UserLayer, UserLayerSelectionState} from 'neuroglancer/layer';
+import {ManagedUserLayer, registerLayerType, registerLayerTypeDetector, registerVolumeLayerType, UserLayer, UserLayerSelectionState} from 'neuroglancer/layer';
 import {LoadedDataSubsource} from 'neuroglancer/layer_data_source';
 import {Overlay} from 'neuroglancer/overlay';
 import {getChannelSpace} from 'neuroglancer/render_coordinate_transform';
@@ -375,3 +375,10 @@ class ShaderCodeOverlay extends Overlay {
 
 registerLayerType('image', ImageUserLayer);
 registerVolumeLayerType(VolumeType.IMAGE, ImageUserLayer);
+// Use ImageUserLayer as a fallback layer type if there is a `volume` subsource.
+registerLayerTypeDetector(subsource => {
+  const {volume} = subsource;
+  if (volume === undefined) return undefined;
+  if (volume.volumeType !== VolumeType.UNKNOWN) return undefined;
+  return {layerConstructor: ImageUserLayer, priority: -100};
+});

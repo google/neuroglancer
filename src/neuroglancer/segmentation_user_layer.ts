@@ -1317,6 +1317,8 @@ class ShaderCodeOverlay extends Overlay {
 registerLayerType('segmentation', SegmentationUserLayer);
 registerVolumeLayerType(VolumeType.SEGMENTATION, SegmentationUserLayer);
 registerLayerTypeDetector(subsource => {
-  if (subsource.mesh !== undefined) return SegmentationUserLayer;
+  if (subsource.mesh !== undefined) {
+    return {layerConstructor: SegmentationUserLayer, priority: 1};
+  }
   return undefined;
 });

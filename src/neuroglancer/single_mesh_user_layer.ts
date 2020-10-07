@@ -198,6 +198,8 @@ class ShaderCodeOverlay extends Overlay {
 
 registerLayerType('mesh', SingleMeshUserLayer);
 registerLayerTypeDetector(subsource => {
-  if (subsource.singleMesh !== undefined) return SingleMeshUserLayer;
+  if (subsource.singleMesh !== undefined) {
+    return {layerConstructor: SingleMeshUserLayer, priority: 2};
+  }
   return undefined;
 });

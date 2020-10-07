@@ -1624,8 +1624,22 @@ export type UserLayerConstructor = typeof UserLayer;
 
 export const layerTypes = new Map<string, UserLayerConstructor>();
 const volumeLayerTypes = new Map<VolumeType, UserLayerConstructor>();
-export type LayerTypeDetector = (subsource: DataSubsource) => (UserLayerConstructor|undefined);
-const layerTypeDetectors: LayerTypeDetector[] = [];
+export interface LayerTypeGuess {
+  // Layer constructor
+  layerConstructor: UserLayerConstructor;
+  // Priority of the guess.  Higher values take precedence.
+  priority: number;
+}
+export type LayerTypeDetector = (subsource: DataSubsource) => (LayerTypeGuess|undefined);
+const layerTypeDetectors: LayerTypeDetector[] = [
+  subsource => {
+    const {volume} = subsource;
+    if (volume === undefined) return undefined;
+    const layerConstructor = volumeLayerTypes.get(volume.volumeType);
+    if (layerConstructor === undefined) return undefined;
+    return {layerConstructor, priority: 0};
+  },
+];
 
 export function registerLayerType(name: string, layerConstructor: UserLayerConstructor) {
   layerTypes.set(name, layerConstructor);
@@ -1670,25 +1684,30 @@ export function deleteLayer(managedLayer: Borrowed<ManagedUserLayer>) {
   }
 }
 
-export function detectLayerTypeFromDataSubsource(subsource: DataSubsource): UserLayerConstructor|
+function getMaxPriorityGuess(a: LayerTypeGuess|undefined, b: LayerTypeGuess|undefined) {
+  if (a === undefined) return b;
+  if (b === undefined) return a;
+  return (a.priority < b.priority) ? b : a;
+}
+
+export function detectLayerTypeFromDataSubsource(subsource: DataSubsource): LayerTypeGuess|
     undefined {
+  let bestGuess: LayerTypeGuess|undefined;
   for (const detector of layerTypeDetectors) {
-    const layerConstructor = detector(subsource);
-    if (layerConstructor !== undefined) {
-      return layerConstructor;
-    }
+    bestGuess = getMaxPriorityGuess(bestGuess, detector(subsource));
   }
   const {volume} = subsource;
   if (volume !== undefined) {
     const layerConstructor = volumeLayerTypes.get(volume.volumeType);
     if (layerConstructor !== undefined) {
-      return layerConstructor;
+      bestGuess = getMaxPriorityGuess(bestGuess, {layerConstructor, priority: 0});
     }
   }
-  return undefined;
+  return bestGuess;
 }
 
 export function detectLayerType(userLayer: UserLayer): UserLayerConstructor|undefined {
+  let guess: LayerTypeGuess|undefined;
   for (const dataSource of userLayer.dataSources) {
     const {loadState} = dataSource;
     if (loadState === undefined || loadState.error !== undefined) continue;
@@ -1696,24 +1715,21 @@ export function detectLayerType(userLayer: UserLayer): UserLayerConstructor|unde
       const {subsourceEntry} = loadedSubsource;
       const {subsource} = subsourceEntry;
       if (!loadedSubsource.enabled) continue;
-      const layerConstructor = detectLayerTypeFromDataSubsource(subsource);
-      if (layerConstructor !== undefined) return layerConstructor;
+      guess = getMaxPriorityGuess(guess, detectLayerTypeFromDataSubsource(subsource));
     }
   }
-  return undefined;
+  return guess?.layerConstructor;
 }
 
-function detectLayerTypeFromSubsources(subsources: Iterable<LoadedDataSubsource>):
-    UserLayerConstructor|undefined {
+function detectLayerTypeFromSubsources(subsources: Iterable<LoadedDataSubsource>): LayerTypeGuess|
+    undefined {
+  let guess: LayerTypeGuess|undefined;
   for (const loadedSubsource of subsources) {
     const {subsourceEntry} = loadedSubsource;
     const {subsource} = subsourceEntry;
-    const layerConstructor = detectLayerTypeFromDataSubsource(subsource);
-    if (layerConstructor !== undefined) {
-      return layerConstructor;
-    }
+    guess = getMaxPriorityGuess(guess, detectLayerTypeFromDataSubsource(subsource));
   }
-  return undefined;
+  return guess;
 }
 
 /**
@@ -1724,7 +1740,7 @@ export class NewUserLayer extends UserLayer {
   detectedLayerConstructor: UserLayerConstructor|undefined;
 
   activateDataSubsources(subsources: Iterable<LoadedDataSubsource>) {
-    this.detectedLayerConstructor = detectLayerTypeFromSubsources(subsources);
+    this.detectedLayerConstructor = detectLayerTypeFromSubsources(subsources)?.layerConstructor;
   }
 }
 
@@ -1735,7 +1751,7 @@ export class AutoUserLayer extends UserLayer {
   static type = 'auto';
 
   activateDataSubsources(subsources: Iterable<LoadedDataSubsource>) {
-    const layerConstructor = detectLayerTypeFromSubsources(subsources);
+    const layerConstructor = detectLayerTypeFromSubsources(subsources)?.layerConstructor;
     if (layerConstructor !== undefined) {
       changeLayerType(this.managedLayer, layerConstructor);
     }
