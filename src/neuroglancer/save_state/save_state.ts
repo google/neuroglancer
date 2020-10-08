@@ -90,7 +90,7 @@ export class SaveState extends RefCounted {
       this.push(true);
     }
   }
-  loadFromKey() {
+  private loadFromKey() {
     const params = new URLSearchParams(window.location.search);
     this.key = <any>params.get('local_id');
 
@@ -143,12 +143,12 @@ export class SaveState extends RefCounted {
     }
   }
   // Utility
-  purge() {
+  public purge() {
     if (storageAccessible()) {
       this.overwriteHistory();
     }
   }
-  nuke(complete = false) {
+  private nuke(complete = false) {
     if (storageAccessible()) {
       localStorage[stateKey] = '[]';
       const storage = localStorage;
@@ -158,22 +158,22 @@ export class SaveState extends RefCounted {
       stateKeys.forEach(target => localStorage.removeItem(target));
     }
   }
-  userRemoveEntries(complete = false) {
+  public userRemoveEntries(complete = false) {
     this.nuke(complete);
     this.push();
   }
-  setSaveStatus(status = false) {
+  private setSaveStatus(status = false) {
     const button = document.getElementById('neuroglancer-saver-button');
     if (button) {
       button.classList.toggle('dirty', status);
     }
     return status;
   }
-  history(): SaveHistory[] {
+  public history(): SaveHistory[] {
     const saveHistoryString = localStorage.getItem(historyKey);
     return saveHistoryString ? JSON.parse(saveHistoryString) : [];
   }
-  overwriteHistory(newHistory: SaveHistory[] = []) {
+  private overwriteHistory(newHistory: SaveHistory[] = []) {
     this.robustSet(historyKey, JSON.stringify(newHistory));
   }
   public showSaveDialog(viewer: Viewer, jsonString?: string, get?: UrlType) {
@@ -183,7 +183,7 @@ export class SaveState extends RefCounted {
     new SaveHistoryDialog(viewer, this);
   }
   // Helper
-  generateKey() {
+  private generateKey() {
     const whiteList = ['hide_news'];
     const oldParams = new URLSearchParams(window.location.search);
     const params = new URLSearchParams();
@@ -198,7 +198,7 @@ export class SaveState extends RefCounted {
     params.set('local_id', this.key);
     history.pushState({}, '', `${window.location.origin}/?${params.toString()}`);
   }
-  reassign(master: any) {
+  private reassign(master: any) {
     const hist = <string[]>master.history;
     const lastIndex = hist.length - 1;
     const amILastEditor = hist[lastIndex] === this.session_id;
@@ -209,7 +209,7 @@ export class SaveState extends RefCounted {
     }
     return false;
   }
-  robustSet(key: string, data: any) {
+  private robustSet(key: string, data: any) {
     while (true) {
       try {
         localStorage.setItem(key, data);
@@ -226,18 +226,18 @@ export class SaveState extends RefCounted {
       }
     }
   }
-  getManager() {
+  private getManager() {
     const managerRaw = localStorage[stateKey];
     return <string[]>JSON.parse(managerRaw || '[]');
   }
-  notifyManager() {
+  private notifyManager() {
     if (storageAccessible() && this.key) {
       const manager = this.uniquePush(this.getManager(), this.key);
       const serializedManager = JSON.stringify(manager);
       this.robustSet(stateKey, serializedManager);
     }
   }
-  evict(count = 1) {
+  private evict(count = 1) {
     if (storageAccessible() && this.key) {
       const manager = this.getManager();
 
@@ -247,7 +247,7 @@ export class SaveState extends RefCounted {
       targets.forEach(key => localStorage.removeItem(`${stateKey}-${key}`));
     }
   }
-  addToHistory(entry: SaveHistory) {
+  private addToHistory(entry: SaveHistory) {
     const saveHistory = this.history();
     saveHistory.push(entry);
     if (saveHistory.length > 100) {
@@ -255,7 +255,7 @@ export class SaveState extends RefCounted {
     }
     this.overwriteHistory(saveHistory);
   }
-  uniquePush(source: any[], entry: any) {
+  private uniquePush(source: any[], entry: any) {
     const target = source.indexOf(entry);
     if (target > -1) {
       source.splice(target, 1);
@@ -436,7 +436,7 @@ class SaveDialog extends Overlay {
     modal.focus();
   }
 
-  insertField(config: FieldConfig) {
+  private insertField(config: FieldConfig) {
     const {form} = config;
     let {content, textId, fieldTitle, disabled} = config;
     let {btnName, btnTitle, btnAct, btnClass} = config;
@@ -492,14 +492,14 @@ class SaveDialog extends Overlay {
         text, ' ', btn, (newLine || newLine === undefined) ? document.createElement('br') : '');
   }
 
-  insertLabel(form: HTMLElement, label: string, targetId: string, newLine = true) {
+  private insertLabel(form: HTMLElement, label: string, targetId: string, newLine = true) {
     let labelElement = document.createElement('label');
     labelElement.innerText = label;
     labelElement.htmlFor = targetId;
     form.append(labelElement, newLine ? document.createElement('br') : '');
   }
 
-  makePopup(label?: string) {
+  private makePopup(label?: string) {
     let popupContainer = document.createElement('div');
     popupContainer.classList.add('ng-popup');
     let popupContent = document.createElement('span');
@@ -545,7 +545,7 @@ class SaveHistoryDialog extends Overlay {
     }
   }
 
-  tableEntry(entry: SaveHistory) {
+  private tableEntry(entry: SaveHistory) {
     if (!entry || !entry.source_url) {
       return;
     }
