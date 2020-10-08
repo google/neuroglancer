@@ -19,6 +19,7 @@ import json
 import multiprocessing
 import re
 import socket
+import sys
 import threading
 import weakref
 
@@ -294,11 +295,20 @@ def get_server_url():
 
 _global_server_lock = threading.Lock()
 
+
 def start():
     global global_server
     with _global_server_lock:
         if global_server is not None: return
+
+        # Workaround https://bugs.python.org/issue37373
+        # https://www.tornadoweb.org/en/stable/index.html#installation
+        if sys.platform == 'win32' and sys.version_info >= (3, 8):
+            import asyncio
+            asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
+
         done = threading.Event()
+
         def start_server():
             global global_server
             ioloop = tornado.ioloop.IOLoop()
@@ -306,10 +316,12 @@ def start():
             global_server = Server(ioloop=ioloop, **global_server_args)
             done.set()
             ioloop.start()
+
         thread = threading.Thread(target=start_server)
         thread.daemon = True
         thread.start()
         done.wait()
+
 
 def register_viewer(viewer):
     start()
