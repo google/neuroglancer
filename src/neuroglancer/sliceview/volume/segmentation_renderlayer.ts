@@ -108,7 +108,7 @@ export class SegmentationRenderLayer extends SliceViewVolumeRenderLayer<ShaderPa
 
   getSources(options: SliceViewSourceOptions):
       SliceViewSingleResolutionSource<VolumeChunkSource>[][] {
-    return this.multiscaleSource.getSources(options as any);
+    return this.multiscaleSource.getSources({...options, discreteValues: true});
   }
 
   defineShader(builder: ShaderBuilder, parameters: ShaderParameters) {

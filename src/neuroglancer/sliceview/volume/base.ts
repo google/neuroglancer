@@ -143,7 +143,8 @@ export function makeVolumeChunkSpecificationWithDefaultCompression(
     upperVoxelBound,
   } = options;
   if (compressedSegmentationBlockSize === undefined && rank === 3 &&
-      options.volumeType === VolumeType.SEGMENTATION &&
+      (options.volumeType === VolumeType.SEGMENTATION ||
+       options.volumeSourceOptions.discreteValues === true) &&
       (dataType === DataType.UINT32 || dataType === DataType.UINT64)) {
     let {
       volumeSourceOptions: {displayRank, multiscaleToViewTransform},
