@@ -41,7 +41,7 @@ chunkDecoders.set(VolumeChunkEncoding.RAW, decodeRawChunk);
 
   async download(chunk: VolumeChunk, cancellationToken: CancellationToken) {
     let {parameters} = this;
-    let path = `/neuroglancer/${this.encoding}/${parameters.key}/${parameters.scaleKey}`;
+    let path = `../../neuroglancer/${this.encoding}/${parameters.key}/${parameters.scaleKey}`;
     {
       // chunkPosition must not be captured, since it will be invalidated by the next call to
       // computeChunkBounds.
@@ -79,7 +79,7 @@ export function decodeFragmentChunk(chunk: FragmentChunk, response: ArrayBuffer)
 
   downloadFragment(chunk: FragmentChunk, cancellationToken: CancellationToken) {
     let {parameters} = this;
-    let requestPath = `/neuroglancer/mesh/${parameters.key}/${chunk.manifestChunk!.objectId}`;
+    let requestPath = `../../neuroglancer/mesh/${parameters.key}/${chunk.manifestChunk!.objectId}`;
     return cancellableFetchOk(requestPath, {}, responseArrayBuffer, cancellationToken)
         .then(response => decodeFragmentChunk(chunk, response));
   }
@@ -89,7 +89,7 @@ export function decodeFragmentChunk(chunk: FragmentChunk, response: ArrayBuffer)
 (WithParameters(SkeletonSource, SkeletonSourceParameters)) {
   download(chunk: SkeletonChunk, cancellationToken: CancellationToken) {
     const {parameters} = this;
-    let requestPath = `/neuroglancer/skeleton/${parameters.key}/${chunk.objectId}`;
+    let requestPath = `../../neuroglancer/skeleton/${parameters.key}/${chunk.objectId}`;
     return cancellableFetchOk(requestPath, {}, responseArrayBuffer, cancellationToken)
         .then(response => decodeSkeletonChunk(chunk, response, parameters.vertexAttributes));
   }
