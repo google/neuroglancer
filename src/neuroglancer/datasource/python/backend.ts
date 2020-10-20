@@ -79,7 +79,7 @@ export function decodeFragmentChunk(chunk: FragmentChunk, response: ArrayBuffer)
 
   downloadFragment(chunk: FragmentChunk, cancellationToken: CancellationToken) {
     let {parameters} = this;
-    let requestPath = `/neuroglancer/mesh/${parameters.key}/${chunk.manifestChunk!.objectId}`;
+    let requestPath = `../../neuroglancer/mesh/${parameters.key}/${chunk.manifestChunk!.objectId}`;
     return cancellableFetchOk(requestPath, {}, responseArrayBuffer, cancellationToken)
         .then(response => decodeFragmentChunk(chunk, response));
   }
@@ -89,7 +89,7 @@ export function decodeFragmentChunk(chunk: FragmentChunk, response: ArrayBuffer)
 (WithParameters(SkeletonSource, SkeletonSourceParameters)) {
   download(chunk: SkeletonChunk, cancellationToken: CancellationToken) {
     const {parameters} = this;
-    let requestPath = `/neuroglancer/skeleton/${parameters.key}/${chunk.objectId}`;
+    let requestPath = `../../neuroglancer/skeleton/${parameters.key}/${chunk.objectId}`;
     return cancellableFetchOk(requestPath, {}, responseArrayBuffer, cancellationToken)
         .then(response => decodeSkeletonChunk(chunk, response, parameters.vertexAttributes));
   }
