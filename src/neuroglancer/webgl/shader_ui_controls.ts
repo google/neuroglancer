@@ -607,6 +607,7 @@ export class ShaderControlState extends RefCounted implements
   private processedFragmentMain_ = '';
   private parseResult_: ShaderControlsParseResult;
   private controlsGeneration = -1;
+  private parseResultChanged = new NullarySignal();
 
   constructor(
       public fragmentMain: WatchableValueInterface<string>,
@@ -620,21 +621,21 @@ export class ShaderControlState extends RefCounted implements
     this.handleFragmentMainChanged();
     const self = this;
     this.parseErrors = {
-      changed: fragmentMain.changed,
+      changed: this.parseResultChanged,
       get value() {
         self.handleFragmentMainChanged();
         return self.parseErrors_;
       }
     };
     this.processedFragmentMain = {
-      changed: fragmentMain.changed,
+      changed: this.parseResultChanged,
       get value() {
         self.handleFragmentMainChanged();
         return self.processedFragmentMain_;
       }
     };
     this.parseResult = {
-      changed: fragmentMain.changed,
+      changed: this.parseResultChanged,
       get value() {
         return self.parseResult_;
       }
@@ -696,14 +697,16 @@ export class ShaderControlState extends RefCounted implements
       this.parseErrors_ = [];
       this.processedFragmentMain_ = '';
       this.controls.value = undefined;
-      return;
+    } else {
+      const result = this.parseResult_ =
+          parseShaderUiControls(this.fragmentMain.value, dataContext);
+      this.parseErrors_ = result.errors;
+      this.processedFragmentMain_ = result.code;
+      if (result.errors.length === 0) {
+        this.controls.value = result.controls;
+      }
     }
-    const result = this.parseResult_ = parseShaderUiControls(this.fragmentMain.value, dataContext);
-    this.parseErrors_ = result.errors;
-    this.processedFragmentMain_ = result.code;
-    if (result.errors.length === 0) {
-      this.controls.value = result.controls;
-    }
+    this.parseResultChanged.dispatch();
   }
 
   private handleControlsChanged() {
