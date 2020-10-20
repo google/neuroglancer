@@ -89,6 +89,7 @@ export function getDefaultRenderedDataPanelBindings() {
           'at:dblclick0': 'select',
           'at:control+mousedown0': 'annotate',
           'at:control+dblclick0': 'complete-annotation',
+          'at:backquote': 'complete-annotation-viakey',
           'at:mousedown2': 'move-to-mouse-position',
           'at:control+mousedown2': 'select-annotation',
           'at:alt+mousedown0': 'move-annotation',

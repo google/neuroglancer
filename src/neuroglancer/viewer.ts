@@ -762,7 +762,7 @@ export class Viewer extends RefCounted implements ViewerState {
       }
     });
 
-    this.bindAction('complete-annotation', () => {
+    const actionCompleteAnnotation = (shortcut?: boolean) => {
       const selectedLayer = this.selectedLayer.layer;
       if (selectedLayer === undefined) {
         StatusMessage.showTemporaryMessage(
@@ -775,8 +775,11 @@ export class Viewer extends RefCounted implements ViewerState {
             JSON.stringify(selectedLayer.name)}) does not have an active annotation tool.`);
         return;
       }
-      (<MultiStepAnnotationTool>userLayer.tool.value).complete(true);
-    });
+      (<MultiStepAnnotationTool>userLayer.tool.value).complete(shortcut);
+    };
+
+    this.bindAction('complete-annotation-viakey', () => actionCompleteAnnotation());
+    this.bindAction('complete-annotation', () => actionCompleteAnnotation(true));
 
     this.bindAction('toggle-axis-lines', () => this.showAxisLines.toggle());
     this.bindAction('toggle-scale-bar', () => this.showScaleBar.toggle());
