@@ -32,6 +32,7 @@ const Base = withSharedVisibility(withChunkManager(SharedObjectCounterpart));
 
 export class SegmentationLayerSharedObjectCounterpart extends Base implements VisibleSegmentsState {
   rootSegments: Uint64Set;
+  rootSegmentsAfterEdit?: Uint64Set;
   visibleSegments3D: Uint64Set;
   segmentEquivalences: SharedDisjointUint64Sets;
   objectToDataTransform: SharedWatchableValue<mat4>;
@@ -42,6 +43,7 @@ export class SegmentationLayerSharedObjectCounterpart extends Base implements Vi
     // No need to increase the reference count of rootSegments, visibleSegments3D or
     // segmentEquivalences since our owner will hold a reference to their owners.
     this.rootSegments = <Uint64Set>rpc.get(options['rootSegments']);
+    this.rootSegmentsAfterEdit = <Uint64Set>rpc.get(options['rootSegmentsAfterEdit']);
     this.visibleSegments3D = <Uint64Set>rpc.get(options['visibleSegments3D']);
     this.segmentEquivalences = <SharedDisjointUint64Sets>rpc.get(options['segmentEquivalences']);
     this.objectToDataTransform = rpc.get(options['objectToDataTransform']);

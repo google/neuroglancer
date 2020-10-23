@@ -16,7 +16,7 @@
 
 import {ChunkState} from 'neuroglancer/chunk_manager/base';
 import {Chunk, ChunkManager, ChunkSource} from 'neuroglancer/chunk_manager/frontend';
-import {EncodedMeshData, FRAGMENT_SOURCE_RPC_ID, MESH_LAYER_RPC_ID, MULTISCALE_FRAGMENT_SOURCE_RPC_ID, MULTISCALE_MESH_LAYER_RPC_ID, MultiscaleFragmentFormat, VertexPositionFormat} from 'neuroglancer/mesh/base';
+import {EncodedMeshData, FRAGMENT_SOURCE_RPC_ID, MESH_LAYER_RPC_ID, MULTISCALE_FRAGMENT_SOURCE_RPC_ID, MULTISCALE_MESH_LAYER_RPC_ID, MultiscaleFragmentFormat, VertexPositionFormat, FragmentId} from 'neuroglancer/mesh/base';
 import {getMultiscaleChunksToDraw, getMultiscaleFragmentKey, MultiscaleMeshManifest} from 'neuroglancer/mesh/multiscale';
 import {PerspectiveViewReadyRenderContext, PerspectiveViewRenderContext, PerspectiveViewRenderLayer} from 'neuroglancer/perspective_view/render_layer';
 import {forEachVisibleSegment3D, getObjectKey} from 'neuroglancer/segmentation_display_state/base';
@@ -28,6 +28,7 @@ import {Buffer} from 'neuroglancer/webgl/buffer';
 import {GL} from 'neuroglancer/webgl/context';
 import {ShaderBuilder, ShaderModule, ShaderProgram} from 'neuroglancer/webgl/shader';
 import {registerSharedObjectOwner, RPC} from 'neuroglancer/worker_rpc';
+import {GRAPHENE_MANIFEST_SHARDED} from 'neuroglancer/datasource/graphene/base';
 
 const tempMat4 = mat4.create();
 const tempModelMatrix = mat4.create();
@@ -325,7 +326,9 @@ export class MeshLayer extends PerspectiveViewRenderLayer {
       totalChunks += manifestChunk.fragmentIds.length;
 
       for (const fragmentId of manifestChunk.fragmentIds) {
-        const fragment = fragmentChunks.get(`${key}/${fragmentId}`);
+        if (fragmentId.charAt(0) === '~') manifestChunk.manifestType = GRAPHENE_MANIFEST_SHARDED;
+        const key = manifestChunk.extractFragmentKey(fragmentId).key;
+        const fragment = fragmentChunks.get(key);
         if (fragment !== undefined && fragment.state === ChunkState.GPU_MEMORY) {
           meshShaderManager.drawFragment(gl, shader, fragment);
           ++presentChunks;
@@ -355,7 +358,9 @@ export class MeshLayer extends PerspectiveViewRenderLayer {
         return;
       }
       for (const fragmentId of manifestChunk.fragmentIds) {
-        const fragmentChunk = fragmentChunks.get(`${key}/${fragmentId}`);
+        if (fragmentId.charAt(0) === '~') manifestChunk.manifestType = GRAPHENE_MANIFEST_SHARDED;
+        const key = manifestChunk.extractFragmentKey(fragmentId).key;
+        const fragmentChunk = fragmentChunks.get(key);
         if (fragmentChunk === undefined || fragmentChunk.state !== ChunkState.GPU_MEMORY) {
           ready = false;
           return;
@@ -368,11 +373,30 @@ export class MeshLayer extends PerspectiveViewRenderLayer {
 
 export class ManifestChunk extends Chunk {
   fragmentIds: string[];
+  manifestType: string|undefined;
 
   constructor(source: MeshSource, x: any) {
     super(source);
     this.fragmentIds = x.fragmentIds;
   }
+
+  extractFragmentKey(fragmentId: FragmentId) {
+    if (this.manifestType === GRAPHENE_MANIFEST_SHARDED) {
+      return this.extractGrapheneFragmentKey(fragmentId);
+    }
+    return {key:fragmentId, id: fragmentId}
+  }
+
+  extractGrapheneFragmentKey(fragmentId: FragmentId) {
+    // extract segment ID from fragment ID
+    // use it as key, the rest is information for reading the fragment
+    // ignores tilde at 0 index
+    let parts = fragmentId.substr(1).split(/:(.+)/);
+    let key = parts[0];
+    fragmentId = parts[1];
+    return {key:key, id: fragmentId}
+  }
+
 }
 
 export class FragmentChunk extends Chunk {

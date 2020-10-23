@@ -96,6 +96,7 @@ export class SegmentationUserLayer extends Base {
     objectAlpha: trackableAlphaValue(1.0),
     hideSegmentZero: new TrackableBoolean(true, true),
     rootSegments: Uint64Set.makeWithCounterpart(this.manager.worker),
+    rootSegmentsAfterEdit: Uint64Set.makeWithCounterpart(this.manager.worker),
     hiddenRootSegments: new Uint64Set(),
     visibleSegments2D: new Uint64Set(),
     visibleSegments3D: Uint64Set.makeWithCounterpart(this.manager.worker),
@@ -128,7 +129,7 @@ export class SegmentationUserLayer extends Base {
 
   // Whether to load meshes for this layer.
   loadMeshes = new TrackableBoolean(true, true);
-  
+
   // Whether to load skeletons for this layer.
   loadSkeletons = new TrackableBoolean(true, true);
 

@@ -20,6 +20,7 @@ import {Uint64} from 'neuroglancer/util/uint64';
 
 export interface VisibleSegmentsState {
   rootSegments: Uint64Set;
+  rootSegmentsAfterEdit?: Uint64Set; // new roots generated as result of edit operation
   hiddenRootSegments?: Uint64Set; // not needed for backend, for segment_set_widget.ts
   visibleSegments2D?: Uint64Set; // not needed for backend
   visibleSegments3D: Uint64Set;

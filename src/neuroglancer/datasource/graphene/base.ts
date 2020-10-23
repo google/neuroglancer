@@ -18,6 +18,7 @@ import {VertexAttributeInfo} from 'neuroglancer/skeleton/base';
 import {mat4} from 'neuroglancer/util/geom';
 
 export const PYCG_APP_VERSION = 1;
+export const GRAPHENE_MANIFEST_SHARDED = 'GrapheneSharded';
 export const GRAPHENE_MANIFEST_REFRESH_PROMISE = 'GrapheneMeshSource.RefreshManifestPromise';
 
 export enum VolumeChunkEncoding {
@@ -44,6 +45,8 @@ export class MeshSourceParameters {
   manifestUrl: string;
   fragmentUrl: string;
   lod: number;
+  sharding: Array<ShardingParameters>|undefined;
+  verifyMesh: boolean;
 
   static RPC_ID = 'graphene/MeshSource';
 }
@@ -72,11 +75,10 @@ export class MultiscaleMeshMetadata {
   transform: mat4;
   lodScaleMultiplier: number;
   vertexQuantizationBits: number;
-  sharding: ShardingParameters|undefined;
+  sharding: Array<ShardingParameters>|undefined;
 }
 
 export class MultiscaleMeshSourceParameters {
-  url: string;
   metadata: MultiscaleMeshMetadata;
 
   static RPC_ID = 'graphene/MultiscaleMeshSource';

@@ -348,12 +348,13 @@ export class GraphOperationLayerView extends Tab {
           if (splitRoots.length === 0) {
             StatusMessage.showTemporaryMessage(`No split found.`, 3000);
           } else {
+            let segmentationState = this.annotationLayer.segmentationState.value!
             for (let segment of [...sinks, ...sources]) {
-              this.annotationLayer.segmentationState.value!.rootSegments.delete(segment.rootId);
+              segmentationState.rootSegments.delete(segment.rootId);
             }
-            for (let splitRoot of splitRoots) {
-              this.annotationLayer.segmentationState.value!.rootSegments.add(splitRoot);
-            }
+            segmentationState.rootSegmentsAfterEdit!.clear();
+            segmentationState.rootSegments.add(splitRoots);
+            segmentationState.rootSegmentsAfterEdit!.add(splitRoots);
           }
         });
       });

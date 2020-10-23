@@ -25,6 +25,7 @@ export const MULTISCALE_FRAGMENT_SOURCE_RPC_ID = 'mesh/MultiscaleFragmentSource'
 export type EncodedVertexPositions = Float32Array|Uint32Array|Uint16Array;
 export type MeshVertexIndices = Uint16Array|Uint32Array;
 export type OctahedronVertexNormals = Uint8Array;
+export type FragmentId = string;
 
 export interface EncodedMeshData {
   vertexPositions: EncodedVertexPositions;

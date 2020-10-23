@@ -221,6 +221,9 @@ export class SegmentationLayerSharedObject extends Base {
     let {displayState} = this;
     options['chunkManager'] = this.chunkManager.rpcId;
     options['rootSegments'] = displayState.rootSegments.rpcId;
+    if (displayState.rootSegmentsAfterEdit !== undefined){
+      options['rootSegmentsAfterEdit'] = displayState.rootSegmentsAfterEdit!.rpcId;
+    }
     options['visibleSegments3D'] = displayState.visibleSegments3D.rpcId;
     options['segmentEquivalences'] = displayState.segmentEquivalences.rpcId;
     options['objectToDataTransform'] =

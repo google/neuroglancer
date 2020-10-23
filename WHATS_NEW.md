@@ -8,3 +8,6 @@ NOTE: You may need to do this more than once because Neuroglancer cannot know if
 `Backquote` key (under `ESC`) can be used to complete an annotation.<sup>*</sup>
 
 <sub>****This serves as an alternative control for when double clicking doesn't work.***</sub>
+
+## Sharded meshes
+You can now view datasets with sharded meshes ( Minnie65 / `minnie3_v1` ).
