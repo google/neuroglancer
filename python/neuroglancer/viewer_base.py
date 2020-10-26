@@ -125,14 +125,20 @@ class ViewerCommonBase(object):
                 s.show_ui_controls = False
                 s.show_panel_borders = False
                 s.viewer_size = size
-        event = threading.Event()
-        result = [None]
-        def handler(s):
-            result[0] = s
-            event.set()
-        self.async_screenshot(handler, include_depth=include_depth,
-                              statistics_callback=statistics_callback)
-        event.wait()
+        for _ in range(5):
+            # Allow multiple retries in case size is not respected on first attempt
+            event = threading.Event()
+            result = [None]
+            def handler(s):
+                result[0] = s
+                event.set()
+            self.async_screenshot(handler, include_depth=include_depth,
+                                  statistics_callback=statistics_callback)
+            event.wait()
+            if size is not None and (result[0].screenshot.width != size[0] or
+                                     result[0].screenshot.height != size[1]):
+                continue
+            break
         if size is not None:
             self.config_state.set_state(prior_state)
         return result[0]
