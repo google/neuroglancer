@@ -631,7 +631,7 @@ class ManagedLayer(JsonObjectWrapper):
         object.__setattr__(self, 'layer', layer)
         super(ManagedLayer, self).__init__(json_data, _readonly=_readonly, **kwargs)
 
-    visible = wrapped_property('visible', optional(bool))
+    visible = wrapped_property('visible', optional(bool, True))
 
     def __getattr__(self, key):
         return getattr(self.layer, key)
@@ -652,8 +652,10 @@ class ManagedLayer(JsonObjectWrapper):
         r = self.layer.to_json()
         r['name'] = self.name
         visible = self.visible
-        if visible is not None:
-            r['visible'] = visible
+        if visible:
+            r.pop('visible', None)
+        else:
+            r['visible'] = False
         return r
 
     def __deepcopy__(self, memo):
