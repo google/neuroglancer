@@ -185,9 +185,9 @@ export function getBaseObjectColor(
   if (segmentStatedColors.size !== 0 && segmentStatedColors.has(objectId)) {
     // If displayState maps the ID to a color, use it
     displayState.segmentStatedColors.get(objectId, tempStatedColor);
-    color[0] = ((tempStatedColor.low & 0xff0000) >>> 16) / 255.0;
+    color[0] = ((tempStatedColor.low & 0x0000ff)) / 255.0;
     color[1] = ((tempStatedColor.low & 0x00ff00) >>> 8) / 255.0;
-    color[2] = ((tempStatedColor.low & 0x0000ff)) / 255.0;
+    color[2] = ((tempStatedColor.low & 0xff0000) >>> 16) / 255.0;
   } else {
     displayState.segmentColorHash.compute(color, objectId);
   }

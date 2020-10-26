@@ -35,7 +35,8 @@ from . import segment_colors
 from .equivalence_map import EquivalenceMap
 from .json_utils import encode_json_for_repr
 from .json_wrappers import (JsonObjectWrapper, array_wrapper, optional, text_type, typed_list,
-                            typed_map, typed_set, typed_string_map, wrapped_property)
+                            typed_map, typed_set, typed_string_map, wrapped_property,
+                            number_or_string)
 
 __all__ = []
 
@@ -478,6 +479,7 @@ class AnnotationBase(JsonObjectWrapper):
     type = wrapped_property('type', text_type)
     description = wrapped_property('description', optional(text_type))
     segments = wrapped_property('segments', optional(typed_list(typed_list(np.uint64))))
+    props = wrapped_property('props', optional(typed_list(number_or_string)))
 
 
 @export
@@ -487,7 +489,7 @@ class PointAnnotation(AnnotationBase):
     def __init__(self, *args, **kwargs):
         super(PointAnnotation, self).__init__(*args, type='point', **kwargs)
 
-    point = wrapped_property('point', array_wrapper(np.float32, 3))
+    point = wrapped_property('point', array_wrapper(np.float32))
 
 
 @export
@@ -497,8 +499,8 @@ class LineAnnotation(AnnotationBase):
     def __init__(self, *args, **kwargs):
         super(LineAnnotation, self).__init__(*args, type='line', **kwargs)
 
-    point_a = pointA = wrapped_property('pointA', array_wrapper(np.float32, 3))
-    point_b = pointB = wrapped_property('pointB', array_wrapper(np.float32, 3))
+    point_a = pointA = wrapped_property('pointA', array_wrapper(np.float32))
+    point_b = pointB = wrapped_property('pointB', array_wrapper(np.float32))
 
 
 @export
@@ -509,8 +511,8 @@ class AxisAlignedBoundingBoxAnnotation(AnnotationBase):
         super(AxisAlignedBoundingBoxAnnotation, self).__init__(
             *args, type='axis_aligned_bounding_box', **kwargs)
 
-    point_a = pointA = wrapped_property('pointA', array_wrapper(np.float32, 3))
-    point_b = pointB = wrapped_property('pointB', array_wrapper(np.float32, 3))
+    point_a = pointA = wrapped_property('pointA', array_wrapper(np.float32))
+    point_b = pointB = wrapped_property('pointB', array_wrapper(np.float32))
 
 
 @export
@@ -520,8 +522,8 @@ class EllipsoidAnnotation(AnnotationBase):
     def __init__(self, *args, **kwargs):
         super(EllipsoidAnnotation, self).__init__(*args, type='ellipsoid', **kwargs)
 
-    center = wrapped_property('center', array_wrapper(np.float32, 3))
-    radii = wrapped_property('radii', array_wrapper(np.float32, 3))
+    center = wrapped_property('center', array_wrapper(np.float32))
+    radii = wrapped_property('radii', array_wrapper(np.float32))
 
 
 annotation_types = {
@@ -543,6 +545,13 @@ def annotation(obj, _readonly=False):
 
 annotation.supports_readonly = True
 
+@export
+class AnnotationPropertySpec(JsonObjectWrapper):
+    __slots__ = ()
+    id = wrapped_property('id', text_type)
+    type = wrapped_property('type', text_type)
+    description = wrapped_property('description', optional(text_type))
+    default = wrapped_property('default', optional(number_or_string))
 
 @export
 class AnnotationLayer(Layer, _AnnotationLayerOptions):
@@ -553,6 +562,8 @@ class AnnotationLayer(Layer, _AnnotationLayerOptions):
 
     source = wrapped_property('source', LayerDataSources)
     annotations = wrapped_property('annotations', typed_list(annotation))
+    annotation_properties = annotationProperties = wrapped_property('annotationProperties', typed_list(AnnotationPropertySpec))
+    annotation_relationships = annotationRelationships = wrapped_property('annotationRelationships', typed_list(text_type))
     linked_segmentation_layer = linkedSegmentationLayer = wrapped_property('linkedSegmentationLayer', typed_string_map(text_type))
     filter_by_segmentation = filterBySegmentation = wrapped_property('filterBySegmentation', typed_list(text_type))
     ignore_null_segment_filter = ignoreNullSegmentFilter = wrapped_property('ignoreNullSegmentFilter', optional(bool, True))

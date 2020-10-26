@@ -16,7 +16,7 @@
 
 import './user_layer.css';
 
-import {AnnotationPropertySpec, AnnotationType, LocalAnnotationSource} from 'neuroglancer/annotation';
+import {AnnotationPropertySpec, annotationPropertySpecsToJson, AnnotationType, LocalAnnotationSource, parseAnnotationPropertySpecs} from 'neuroglancer/annotation';
 import {AnnotationDisplayState, AnnotationLayerState} from 'neuroglancer/annotation/annotation_layer_state';
 import {MultiscaleAnnotationSource} from 'neuroglancer/annotation/frontend_source';
 import {CoordinateTransformSpecification, makeCoordinateSpace} from 'neuroglancer/coordinate_transform';
@@ -47,6 +47,8 @@ import {Tab} from 'neuroglancer/widget/tab_view';
 
 const POINTS_JSON_KEY = 'points';
 const ANNOTATIONS_JSON_KEY = 'annotations';
+const ANNOTATION_PROPERTIES_JSON_KEY = 'annotationProperties';
+const ANNOTATION_RELATIONSHIPS_JSON_KEY = 'annotationRelationships';
 const CROSS_SECTION_RENDER_SCALE_JSON_KEY = 'crossSectionAnnotationSpacing';
 const PROJECTION_RENDER_SCALE_JSON_KEY = 'projectionAnnotationSpacing';
 const SHADER_JSON_KEY = 'shader';
@@ -313,6 +315,8 @@ class LinkedSegmentationLayersWidget extends RefCounted {
 const Base = UserLayerWithAnnotationsMixin(UserLayer);
 export class AnnotationUserLayer extends Base {
   localAnnotations: LocalAnnotationSource|undefined;
+  private localAnnotationProperties: AnnotationPropertySpec[]|undefined;
+  private localAnnotationRelationships: string[];
   annotationProperties = new WatchableValue<AnnotationPropertySpec[]|undefined>(undefined);
   private localAnnotationsJson: any = undefined;
   private pointAnnotationsJson: any = undefined;
@@ -335,6 +339,10 @@ export class AnnotationUserLayer extends Base {
         this.specificationChanged.dispatch);
     this.annotationCrossSectionRenderScaleTarget.changed.add(this.specificationChanged.dispatch);
     this.localAnnotationsJson = specification[ANNOTATIONS_JSON_KEY];
+    this.localAnnotationProperties = verifyOptionalObjectProperty(
+        specification, ANNOTATION_PROPERTIES_JSON_KEY, parseAnnotationPropertySpecs);
+    this.localAnnotationRelationships = verifyOptionalObjectProperty(
+        specification, ANNOTATION_RELATIONSHIPS_JSON_KEY, verifyStringArray, ['segments']);
     this.pointAnnotationsJson = specification[POINTS_JSON_KEY];
     this.annotationCrossSectionRenderScaleTarget.restoreState(
         specification[CROSS_SECTION_RENDER_SCALE_JSON_KEY]);
@@ -396,15 +404,26 @@ export class AnnotationUserLayer extends Base {
     for (const loadedSubsource of subsources) {
       const {subsourceEntry} = loadedSubsource;
       const {local} = subsourceEntry.subsource;
+      const setProperties = (newProperties: AnnotationPropertySpec[]) => {
+        if (properties !== undefined &&
+            stableStringify(newProperties) !== stableStringify(properties)) {
+          loadedSubsource.deactivate('Annotation properties are not compatible');
+          return false;
+        }
+        properties = newProperties;
+        return true;
+      };
       if (local === LocalDataSource.annotations) {
         if (hasLocalAnnotations) {
           loadedSubsource.deactivate('Only one local annotations source per layer is supported');
           continue;
         }
         hasLocalAnnotations = true;
+        if (!setProperties(this.localAnnotationProperties ?? [])) continue;
         loadedSubsource.activate(refCounted => {
-          const localAnnotations = this.localAnnotations =
-              new LocalAnnotationSource(loadedSubsource.loadedDataSource.transform);
+          const localAnnotations = this.localAnnotations = new LocalAnnotationSource(
+              loadedSubsource.loadedDataSource.transform, this.localAnnotationProperties ?? [],
+            this.localAnnotationRelationships);
           try {
             localAnnotations.restoreState(this.localAnnotationsJson);
           } catch {
@@ -421,7 +440,6 @@ export class AnnotationUserLayer extends Base {
           }
           this.pointAnnotationsJson = undefined;
           this.localAnnotationsJson = undefined;
-
           const state = new AnnotationLayerState({
             localPosition: this.localPosition,
             transform: refCounted.registerDisposer(getWatchableRenderLayerTransform(
@@ -440,12 +458,7 @@ export class AnnotationUserLayer extends Base {
       }
       const {annotation} = subsourceEntry.subsource;
       if (annotation !== undefined) {
-        if (properties !== undefined &&
-            stableStringify(annotation.properties) !== stableStringify(properties)) {
-          loadedSubsource.deactivate('Annotation properties are not compatible');
-          continue;
-        }
-        properties = annotation.properties;
+        if (!setProperties(annotation.properties)) continue;
         loadedSubsource.activate(() => {
           const state = new AnnotationLayerState({
             localPosition: this.localPosition,
@@ -516,6 +529,13 @@ export class AnnotationUserLayer extends Base {
     } else if (this.localAnnotationsJson !== undefined) {
       x[ANNOTATIONS_JSON_KEY] = this.localAnnotationsJson;
     }
+    x[ANNOTATION_PROPERTIES_JSON_KEY] =
+        annotationPropertySpecsToJson(this.localAnnotationProperties);
+    const {localAnnotationRelationships} = this;
+    x[ANNOTATION_RELATIONSHIPS_JSON_KEY] = (localAnnotationRelationships.length === 1 &&
+                                            localAnnotationRelationships[0] === 'segments') ?
+        undefined :
+        localAnnotationRelationships;
     x[IGNORE_NULL_SEGMENT_FILTER_JSON_KEY] =
         this.annotationDisplayState.ignoreNullSegmentFilter.toJSON();
     x[SHADER_JSON_KEY] = this.annotationDisplayState.shader.toJSON();

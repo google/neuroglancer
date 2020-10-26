@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-import {AnnotationPropertySpec, annotationPropertyTypeHandlers, AnnotationType, makeDataBoundsBoundingBoxAnnotationSet} from 'neuroglancer/annotation';
+import {AnnotationPropertySpec, AnnotationType, ensureUniqueAnnotationPropertyIds, makeDataBoundsBoundingBoxAnnotationSet, parseAnnotationPropertyId, parseAnnotationPropertyType} from 'neuroglancer/annotation';
 import {AnnotationGeometryChunkSpecification} from 'neuroglancer/annotation/base';
 import {MultiscaleAnnotationSource} from 'neuroglancer/annotation/frontend_source';
 import {AnnotationGeometryChunkSource} from 'neuroglancer/annotation/frontend_source';
@@ -566,36 +566,18 @@ function parseKeyAndShardingSpec(url: string, obj: any) {
   };
 }
 
-function parseAnnotationProperty(obj: unknown): AnnotationPropertySpec {
+function parseAnnotationPropertySpec(obj: unknown): AnnotationPropertySpec {
   verifyObject(obj);
-  const identifier = verifyObjectProperty(obj, 'id', idJson => {
-    const s = verifyString(idJson);
-    if (s.match(/^[a-z][a-zA-Z0-9_]*$/) === null) {
-      throw new Error(`Invalid property identifier: ${JSON.stringify(idJson)}`);
-    }
-    return s;
-  });
-  const type = verifyObjectProperty(obj, 'type', tJson => {
-                 verifyString(tJson);
-                 if (!Object.prototype.hasOwnProperty.call(annotationPropertyTypeHandlers, tJson)) {
-                   throw new Error(`Unsupported property type: $JSON.stringify(tJson)}`);
-                 }
-                 return tJson;
-               }) as AnnotationPropertySpec['type'];
+  const identifier = verifyObjectProperty(obj, 'id', parseAnnotationPropertyId);
+  const type = verifyObjectProperty(obj, 'type', parseAnnotationPropertyType);
   const description = verifyOptionalObjectProperty(obj, 'description', verifyString);
   let defaultValue = 0;
   return {type, identifier, description, default: defaultValue} as AnnotationPropertySpec;
 }
 
-function parseAnnotationProperties(obj: unknown) {
-  const properties = parseArray(obj, parseAnnotationProperty);
-  const ids = new Set<string>();
-  for (const p of properties) {
-    if (ids.has(p.identifier)) {
-      throw new Error(`Duplicate property identifier: ${p.identifier}`);
-    }
-    ids.add(p.identifier);
-  }
+function parseAnnotationPropertySpecs(obj: unknown) {
+  const properties = parseArray(obj, parseAnnotationPropertySpec);
+  ensureUniqueAnnotationPropertyIds(properties);
   return properties;
 }
 
@@ -640,7 +622,7 @@ class AnnotationMetadata {
                 const name = verifyObjectProperty(relObj, 'id', verifyString);
                 return {...common, name};
               })),
-      properties: verifyObjectProperty(metadata, 'properties', parseAnnotationProperties),
+      properties: verifyObjectProperty(metadata, 'properties', parseAnnotationPropertySpecs),
       byId: verifyObjectProperty(metadata, 'by_id', obj => parseKeyAndShardingSpec(url, obj)),
     };
     this.spatialIndices = verifyObjectProperty(

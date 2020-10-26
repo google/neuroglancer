@@ -398,3 +398,9 @@ def typed_list(wrapped_type, validator=None):
         def __repr__(self):
             return encode_json_for_repr(self.to_json())
     return TypedList
+
+
+def number_or_string(value):
+    if (not isinstance(value, numbers.Real) and not isinstance(value, six.text_type)):
+        raise TypeError
+    return value

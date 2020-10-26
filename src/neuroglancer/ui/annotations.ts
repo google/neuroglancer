@@ -39,6 +39,7 @@ import {getDefaultSelectBindings} from 'neuroglancer/ui/default_input_event_bind
 import {registerTool, Tool} from 'neuroglancer/ui/tool';
 import {arraysEqual, gatherUpdate} from 'neuroglancer/util/array';
 import {setClipboard} from 'neuroglancer/util/clipboard';
+import {serializeColor, unpackRGB, unpackRGBA, useWhiteBackground} from 'neuroglancer/util/color';
 import {Borrowed, disposableOnce, Owned, RefCounted} from 'neuroglancer/util/disposable';
 import {removeChildren, removeFromParent, updateChildren} from 'neuroglancer/util/dom';
 import {ValueOrError} from 'neuroglancer/util/error';
@@ -1704,8 +1705,31 @@ export function UserLayerWithAnnotationsMixin<TBase extends {new (...args: any[]
                       const value = annotation.properties[i];
                       const valueElement = document.createElement('span');
                       valueElement.classList.add('neuroglancer-annotation-property-value');
-                      valueElement.textContent =
-                          property.type === 'float32' ? value.toPrecision(6) : value.toString();
+                      switch (property.type) {
+                        case 'float32':
+                          valueElement.textContent = value.toPrecision(6);
+                          break;
+                        case 'rgb': {
+                          const colorVec = unpackRGB(value);
+                          const hex = serializeColor(colorVec);
+                          valueElement.textContent = hex;
+                          valueElement.style.backgroundColor = hex;
+                          valueElement.style.color = useWhiteBackground(colorVec) ? 'white' : 'black';
+                          break;
+                        }
+                        case 'rgba': {
+                          const colorVec = unpackRGB(value >>> 8);
+                          valueElement.textContent = serializeColor(unpackRGBA(value));
+                          valueElement.style.backgroundColor =
+                              serializeColor(unpackRGB(value >>> 8));
+                          valueElement.style.color =
+                              useWhiteBackground(colorVec) ? 'white' : 'black';
+                          break;
+                        }
+                        default:
+                          valueElement.textContent = value.toString();
+                          break;
+                      }
                       label.appendChild(valueElement);
                       parent.appendChild(label);
                     }

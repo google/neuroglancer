@@ -20,9 +20,10 @@
 
 import {BoundingBox, CoordinateSpaceTransform, WatchableCoordinateSpaceTransform} from 'neuroglancer/coordinate_transform';
 import {arraysEqual} from 'neuroglancer/util/array';
+import {packColor, parseRGBAColorSpecification, parseRGBColorSpecification, serializeColor, unpackRGB, unpackRGBA} from 'neuroglancer/util/color';
 import {Borrowed, RefCounted} from 'neuroglancer/util/disposable';
 import {Endianness, ENDIANNESS} from 'neuroglancer/util/endian';
-import {expectArray, parseArray, parseFixedLengthArray, verifyEnumString, verifyFiniteFloat, verifyFiniteNonNegativeFloat, verifyObject, verifyObjectProperty, verifyOptionalString, verifyString} from 'neuroglancer/util/json';
+import {expectArray, parseArray, parseFixedLengthArray, verifyEnumString, verifyFiniteFloat, verifyFiniteNonNegativeFloat, verifyFloat, verifyInt, verifyObject, verifyObjectProperty, verifyOptionalObjectProperty, verifyOptionalString, verifyString} from 'neuroglancer/util/json';
 import {getRandomHexString} from 'neuroglancer/util/random';
 import {NullarySignal, Signal} from 'neuroglancer/util/signal';
 import {Uint64} from 'neuroglancer/util/uint64';
@@ -82,6 +83,8 @@ export interface AnnotationPropertyTypeHandler {
   alignment(rank: number): number;
   serializeCode(property: string, offset: string, rank: number): string;
   deserializeCode(property: string, offset: string, rank: number): string;
+  deserializeJson(obj: unknown): number;
+  serializeJson(value: number): any;
 }
 
 export const annotationPropertyTypeHandlers:
@@ -101,6 +104,12 @@ export const annotationPropertyTypeHandlers:
           return `${property} = dv.getUint16(${offset}, true) | (dv.getUint8(${
               offset} + 2) << 16);`;
         },
+        deserializeJson(obj: unknown) {
+          return packColor(parseRGBColorSpecification(obj));
+        },
+        serializeJson(value: number) {
+          return serializeColor(unpackRGB(value));
+        },
       },
       'rgba': {
         serializedBytes() {
@@ -115,6 +124,12 @@ export const annotationPropertyTypeHandlers:
         deserializeCode(property: string, offset: string) {
           return `${property} = dv.getUint32(${offset}, true);`;
         },
+        deserializeJson(obj: unknown) {
+          return packColor(parseRGBAColorSpecification(obj));
+        },
+        serializeJson(value: number) {
+          return serializeColor(unpackRGBA(value));
+        },
       },
       'float32': {
         serializedBytes() {
@@ -128,7 +143,13 @@ export const annotationPropertyTypeHandlers:
         },
         deserializeCode(property: string, offset: string) {
           return `${property} = dv.getFloat32(${offset}, isLittleEndian);`;
-        }
+        },
+        deserializeJson(obj: unknown) {
+          return verifyFloat(obj);
+        },
+        serializeJson(value: number) {
+          return value;
+        },
       },
       'uint32': {
         serializedBytes() {
@@ -142,7 +163,13 @@ export const annotationPropertyTypeHandlers:
         },
         deserializeCode(property: string, offset: string) {
           return `${property} = dv.getUint32(${offset}, isLittleEndian);`;
-        }
+        },
+        deserializeJson(obj: unknown) {
+          return verifyInt(obj);
+        },
+        serializeJson(value: number) {
+          return value;
+        },
       },
       'int32': {
         serializedBytes() {
@@ -156,7 +183,13 @@ export const annotationPropertyTypeHandlers:
         },
         deserializeCode(property: string, offset: string) {
           return `${property} = dv.getInt32(${offset}, isLittleEndian);`;
-        }
+        },
+        deserializeJson(obj: unknown) {
+          return verifyInt(obj);
+        },
+        serializeJson(value: number) {
+          return value;
+        },
       },
       'uint16': {
         serializedBytes() {
@@ -170,7 +203,13 @@ export const annotationPropertyTypeHandlers:
         },
         deserializeCode(property: string, offset: string) {
           return `${property} = dv.getUint16(${offset}, isLittleEndian);`;
-        }
+        },
+        deserializeJson(obj: unknown) {
+          return verifyInt(obj);
+        },
+        serializeJson(value: number) {
+          return value;
+        },
       },
       'int16': {
         serializedBytes() {
@@ -184,7 +223,13 @@ export const annotationPropertyTypeHandlers:
         },
         deserializeCode(property: string, offset: string) {
           return `${property} = dv.getInt16(${offset}, isLittleEndian);`;
-        }
+        },
+        deserializeJson(obj: unknown) {
+          return verifyInt(obj);
+        },
+        serializeJson(value: number) {
+          return value;
+        },
       },
       'uint8': {
         serializedBytes() {
@@ -198,7 +243,13 @@ export const annotationPropertyTypeHandlers:
         },
         deserializeCode(property: string, offset: string) {
           return `${property} = dv.getUint8(${offset});`;
-        }
+        },
+        deserializeJson(obj: unknown) {
+          return verifyInt(obj);
+        },
+        serializeJson(value: number) {
+          return value;
+        },
       },
       'int8': {
         serializedBytes() {
@@ -212,7 +263,13 @@ export const annotationPropertyTypeHandlers:
         },
         deserializeCode(property: string, offset: string) {
           return `${property} = dv.getInt8(${offset});`;
-        }
+        },
+        deserializeJson(obj: unknown) {
+          return verifyInt(obj);
+        },
+        serializeJson(value: number) {
+          return value;
+        },
       },
     };
 
@@ -272,6 +329,66 @@ export class AnnotationPropertySerializer {
     this.deserialize =
         new Function('dv', 'offset', 'isLittleEndian', 'properties', deserializeCode) as any;
   }
+}
+
+export function parseAnnotationPropertyId(obj: unknown) {
+  const s = verifyString(obj);
+  if (s.match(/^[a-z][a-zA-Z0-9_]*$/) === null) {
+    throw new Error(`Invalid property identifier: ${JSON.stringify(obj)}`);
+  }
+  return s;
+}
+
+export function parseAnnotationPropertyType(obj: unknown) {
+  verifyString(obj);
+  if (!Object.prototype.hasOwnProperty.call(annotationPropertyTypeHandlers, obj)) {
+    throw new Error(`Unsupported property type: $JSON.stringify(obj)}`);
+  }
+  return obj as AnnotationPropertySpec['type'];
+}
+
+export function ensureUniqueAnnotationPropertyIds(properties: AnnotationPropertySpec[]) {
+  const ids = new Set<string>();
+  for (const p of properties) {
+    if (ids.has(p.identifier)) {
+      throw new Error(`Duplicate property identifier: ${p.identifier}`);
+    }
+    ids.add(p.identifier);
+  }
+}
+
+function parseAnnotationPropertySpec(obj: unknown): AnnotationPropertySpec {
+  verifyObject(obj);
+  const identifier = verifyObjectProperty(obj, 'id', parseAnnotationPropertyId);
+  const type = verifyObjectProperty(obj, 'type', parseAnnotationPropertyType);
+  const description = verifyOptionalObjectProperty(obj, 'description', verifyString);
+  let defaultValue = verifyOptionalObjectProperty(
+      obj, 'default', x => annotationPropertyTypeHandlers[type].deserializeJson(x), 0);
+  return {type, identifier, description, default: defaultValue} as AnnotationPropertySpec;
+}
+
+function annotationPropertySpecToJson(spec: AnnotationPropertySpec) {
+  const defaultValue = spec.default;
+  return {
+    id: spec.identifier,
+    description: spec.description,
+    type: spec.type,
+    default: defaultValue === 0 ?
+        undefined :
+        annotationPropertyTypeHandlers[spec.type].serializeJson(defaultValue)
+  };
+}
+
+export function annotationPropertySpecsToJson(specs: AnnotationPropertySpec[]|undefined) {
+  if (specs === undefined || specs.length === 0) return undefined;
+  return specs.map(annotationPropertySpecToJson);
+}
+
+export function parseAnnotationPropertySpecs(obj: unknown) {
+  if (obj === undefined) return [];
+  const properties = parseArray(obj, parseAnnotationPropertySpec);
+  ensureUniqueAnnotationPropertyIds(properties);
+  return properties;
 }
 
 export interface AnnotationBase {
@@ -516,7 +633,9 @@ export function annotationToJson(annotation: Annotation, schema: AnnotationSchem
     result.segments = relatedSegments.map(segments => segments.map(x => x.toString()));
   }
   if (schema.properties.length !== 0) {
-    result.props = annotation.properties.slice();
+    const propertySpecs = schema.properties;
+    result.props = annotation.properties.map(
+        (prop, i) => annotationPropertyTypeHandlers[propertySpecs[i].type].serializeJson(prop));
   }
   return result;
 }
@@ -543,8 +662,11 @@ function restoreAnnotation(obj: any, schema: AnnotationSchema, allowMissingId = 
         segments => parseArray(segments, y => Uint64.parseString(y)));
   });
   const properties = verifyObjectProperty(obj, 'props', propsObj => {
-    if (propsObj === undefined) return schema.properties.map(x => x.default);
-    return parseArray(expectArray(propsObj, schema.properties.length), x => Number(x));
+    const propSpecs = schema.properties;
+    if (propsObj === undefined) return propSpecs.map(x => x.default);
+    return parseArray(
+        expectArray(propsObj, schema.properties.length),
+        (x, i) => annotationPropertyTypeHandlers[propSpecs[i].type].deserializeJson(x));
   });
   const result: Annotation = {
     id,
@@ -718,8 +840,10 @@ export class LocalAnnotationSource extends AnnotationSource {
     return this.rank_;
   }
 
-  constructor(public watchableTransform: WatchableCoordinateSpaceTransform) {
-    super(watchableTransform.value.sourceRank, ['segments']);
+  constructor(
+      public watchableTransform: WatchableCoordinateSpaceTransform,
+      properties: AnnotationPropertySpec[], relationships: string[]) {
+    super(watchableTransform.value.sourceRank, relationships, properties);
     this.curCoordinateTransform = watchableTransform.value;
     this.registerDisposer(watchableTransform.changed.add(() => this.ensureUpdated()));
   }

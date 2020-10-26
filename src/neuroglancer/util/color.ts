@@ -76,9 +76,21 @@ export function packColor(x: vec3|vec4): number {
   let result = 0;
   for (let i = 0; i < size; i++) {
     // The ">>> 0" ensures an unsigned value.
-    result = ((result << 8) >>> 0) + Math.min(255, Math.max(0, (Math.round(x[i] * 255))));
+    result =
+        ((result << 8) >>> 0) + Math.min(255, Math.max(0, (Math.round(x[size - 1 - i] * 255))));
   }
   return result;
+}
+
+export function unpackRGB(value: number) {
+  return vec3.fromValues(
+      ((value >>> 0) & 0xff) / 255, ((value >>> 8) & 0xff) / 255, ((value >>> 16) & 0xff) / 255);
+}
+
+export function unpackRGBA(value: number) {
+  return vec4.fromValues(
+      ((value >>> 0) & 0xff) / 255, ((value >>> 8) & 0xff) / 255, ((value >>> 16) & 0xff) / 255,
+      ((value >>> 24) & 0xff) / 255);
 }
 
 export function serializeColor(x: vec3|vec4) {
@@ -99,6 +111,32 @@ export function serializeColor(x: vec3|vec4) {
     result += `, ${float32ToString(x[3])})`;
     return result;
   }
+}
+
+// Converts an sRGB color component to the gamma-expanded ("linear") value.
+export function srgbGammaExpand(value: number) {
+  return value <= 0.03928 ? value / 12.92 : ((value + 0.055) / 1.055) ** 2.4;
+}
+
+// Computes the relative luminance according to Web Content Accessibility Guidelines (WCAG) 2.0
+//
+// https://www.w3.org/TR/WCAG20/#relativeluminancedef
+//
+// @param color sRGB color
+export function getRelativeLuminance(color: vec3|vec4) {
+  const [r, g, b] = color;
+  return 0.2126 * srgbGammaExpand(r) + 0.7152 * srgbGammaExpand(g) + 0.0722 * srgbGammaExpand(b);
+}
+
+// Determines whether a white background would provide higher contrast than a black background for
+// the given foreground color.
+//
+// This is determined according to the Web Content Accessibility Guidelines (WCAG) 2.0:
+// https://www.w3.org/TR/WCAG20/#contrast-ratiodef
+//
+// https://stackoverflow.com/a/3943023
+export function useWhiteBackground(foregroundColor: vec3|vec4) {
+  return getRelativeLuminance(foregroundColor) <= 0.179;
 }
 
 export class TrackableRGB extends WatchableValue<vec3> {

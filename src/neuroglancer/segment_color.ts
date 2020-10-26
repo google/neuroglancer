@@ -133,9 +133,9 @@ bool ${this.getFunctionName}(uint64_t x, out vec3 value) {
   uint64_t uint64Value;
   if (${this.hashMapShaderManager.getFunctionName}(x, uint64Value)) {
     uint uintValue = uint64Value.value[0];
-    value.x = float((uintValue & 0xff0000u) >> 16) / 255.0;
-    value.y = float((uintValue & 0x00ff00u) >>  8) / 255.0;
-    value.z = float((uintValue & 0x0000ffu))       / 255.0;
+    value.r = float((uintValue & 0x0000ffu))       / 255.0;
+    value.g = float((uintValue & 0x00ff00u) >>  8) / 255.0;
+    value.b = float((uintValue & 0xff0000u) >> 16) / 255.0;
     return true;
   }
   return false;
