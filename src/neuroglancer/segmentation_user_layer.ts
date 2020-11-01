@@ -43,7 +43,7 @@ import {Uint64Set} from 'neuroglancer/uint64_set';
 import {animationFrameDebounce} from 'neuroglancer/util/animation_frame_debounce';
 import {arraysEqual, ArraySpliceOp, binarySearchLowerBound, getMergeSplices} from 'neuroglancer/util/array';
 import {setClipboard} from 'neuroglancer/util/clipboard';
-import {packColor, parseRGBColorSpecification} from 'neuroglancer/util/color';
+import {packColor, parseRGBColorSpecification, serializeColor, unpackRGB} from 'neuroglancer/util/color';
 import {Borrowed, RefCounted} from 'neuroglancer/util/disposable';
 import {parseArray, verifyFiniteNonNegativeFloat, verifyObjectAsMap, verifyObjectProperty, verifyOptionalObjectProperty, verifyString} from 'neuroglancer/util/json';
 import {ActionEvent, EventActionMap, KeyboardEventBinder, registerActionListener} from 'neuroglancer/util/keyboard_bindings';
@@ -353,13 +353,12 @@ export class SegmentationUserLayer extends Base {
     x[IGNORE_NULL_VISIBLE_SET_JSON_KEY] = this.displayState.ignoreNullVisibleSet.toJSON();
     x[COLOR_SEED_JSON_KEY] = this.displayState.segmentColorHash.toJSON();
     x[MESH_SILHOUETTE_RENDERING_JSON_KEY] = this.displayState.silhouetteRendering.toJSON();
-    let {segmentStatedColors} = this.displayState;
+    const {segmentStatedColors} = this.displayState;
     if (segmentStatedColors.size > 0) {
-      let json = segmentStatedColors.toJSON();
-      // Convert colors from decimal integers to CSS "#RRGGBB" format.
-      Object.keys(json).map(
-          k => json[k] = '#' + parseInt(json[k], 10).toString(16).padStart(6, '0'));
-      x[SEGMENT_STATED_COLORS_JSON_KEY] = json;
+      const j: any = x[SEGMENT_STATED_COLORS_JSON_KEY] = {};
+      for (const [key, value] of segmentStatedColors) {
+        j[key.toString()] = serializeColor(unpackRGB(value.low));
+      }
     }
     let {visibleSegments} = this.displayState;
     if (visibleSegments.size > 0) {
