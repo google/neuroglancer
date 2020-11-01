@@ -109,7 +109,7 @@ if platform.system() == 'Darwin':
 
 setup(
     name='neuroglancer',
-    version='2.14',
+    version='2.15',
     description='Python data backend for neuroglancer, a WebGL-based viewer for volumetric data',
     author='Jeremy Maitin-Shepard, Jan Funke',
     author_email='jbms@google.com, jfunke@iri.upc.edu',
