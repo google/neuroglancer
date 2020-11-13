@@ -1,7 +1,11 @@
-zarr datasource
-=================
+zarr data source
+================
 
-This directory defines Neuroglancer support for the [zarr](https://zarr.readthedocs.io/) format.
+The `"zarr"` data source allows Neuroglancer to directly read [zarr](https://zarr.readthedocs.io/)
+format arrays, using the following data source URL syntax:
+
+`zarr://FILE_URL`, where `FILE_URL` is a URL to the directory containing the `.zarray` metadata file
+using any [supported file protocol](../file_protocols.md).
 
 Supported compressors:
 

@@ -19,9 +19,8 @@
  */
 
 import {ChunkManager, ChunkSourceConstructor, GettableChunkSource} from 'neuroglancer/chunk_manager/frontend';
-import {CredentialsProvider} from 'neuroglancer/credentials_provider';
+import {MaybeOptionalCredentialsProvider} from 'neuroglancer/credentials_provider';
 import {SharedCredentialsProvider} from 'neuroglancer/credentials_provider/shared';
-import {Borrowed, Owned} from 'neuroglancer/util/disposable';
 import {getObjectId} from 'neuroglancer/util/object_id';
 import {RPC} from 'neuroglancer/worker_rpc';
 
@@ -30,7 +29,9 @@ import {RPC} from 'neuroglancer/worker_rpc';
  * SharedCredentialsProviderCounterpart that forwards to `credentialsProvider`.
  */
 export function getCredentialsProviderCounterpart<Credentials>(
-    chunkManager: ChunkManager, credentialsProvider: Borrowed<CredentialsProvider<Credentials>>) {
+    chunkManager: ChunkManager,
+    credentialsProvider: MaybeOptionalCredentialsProvider<Credentials>) {
+  if (credentialsProvider === undefined) return undefined;
   const sharedCredentialsProvider = chunkManager.memoize.get(
       {type: 'getSharedCredentialsProvider', credentialsProvider: getObjectId(credentialsProvider)},
       () => new SharedCredentialsProvider(credentialsProvider.addRef(), chunkManager.rpc!));
@@ -47,23 +48,27 @@ export function WithCredentialsProvider<Credentials>() {
       TBase extends ChunkSourceConstructor<GettableChunkSource&{chunkManager: ChunkManager}>>(
       Base: TBase) {
     type WithCredentialsOptions = InstanceType<TBase>['OPTIONS']&
-        {credentialsProvider: Borrowed<CredentialsProvider<Credentials>>};
+        {credentialsProvider: MaybeOptionalCredentialsProvider<Credentials>};
     class C extends Base {
-      credentialsProvider: Owned<CredentialsProvider<Credentials>>;
+      credentialsProvider: MaybeOptionalCredentialsProvider<Credentials>;
       OPTIONS: WithCredentialsOptions;
       constructor(...args: any[]) {
         super(...args);
         const options: WithCredentialsOptions = args[1];
-        this.credentialsProvider = options.credentialsProvider.addRef();
+        this.credentialsProvider =
+            options.credentialsProvider?.addRef() as MaybeOptionalCredentialsProvider<Credentials>;
       }
       initializeCounterpart(rpc: RPC, options: any) {
+        const {credentialsProvider} = this;
         options['credentialsProvider'] =
-            getCredentialsProviderCounterpart(this.chunkManager, this.credentialsProvider);
+            getCredentialsProviderCounterpart(this.chunkManager, credentialsProvider);
         super.initializeCounterpart(rpc, options);
       }
       static encodeOptions(options: WithCredentialsOptions) {
         const encoding = super.encodeOptions(options);
-        encoding.credentialsProvider = getObjectId(options.credentialsProvider);
+        const {credentialsProvider} = options;
+        encoding.credentialsProvider =
+            credentialsProvider === undefined ? undefined : getObjectId(credentialsProvider);
         return encoding;
       }
     };

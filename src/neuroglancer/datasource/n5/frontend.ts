@@ -26,6 +26,7 @@
 import {makeDataBoundsBoundingBoxAnnotationSet} from 'neuroglancer/annotation';
 import {ChunkManager, WithParameters} from 'neuroglancer/chunk_manager/frontend';
 import {CoordinateSpace, makeCoordinateSpace, makeIdentityTransform} from 'neuroglancer/coordinate_transform';
+import {WithCredentialsProvider} from 'neuroglancer/credentials_provider/chunk_source_frontend';
 import {CompleteUrlOptions, DataSource, DataSourceProvider, GetDataSourceOptions} from 'neuroglancer/datasource';
 import {VolumeChunkEncoding, VolumeChunkSourceParameters} from 'neuroglancer/datasource/n5/base';
 import {SliceViewSingleResolutionSource} from 'neuroglancer/sliceview/frontend';
@@ -34,13 +35,15 @@ import {MultiscaleVolumeChunkSource as GenericMultiscaleVolumeChunkSource, Volum
 import {transposeNestedArrays} from 'neuroglancer/util/array';
 import {Borrowed} from 'neuroglancer/util/disposable';
 import {completeHttpPath} from 'neuroglancer/util/http_path_completion';
-import {fetchSpecialOk, isNotFoundError, parseUrl} from 'neuroglancer/util/http_request';
+import {isNotFoundError, parseUrl, responseJson} from 'neuroglancer/util/http_request';
 import {expectArray, parseArray, parseFixedLengthArray, verifyEnumString, verifyFinitePositiveFloat, verifyObject, verifyObjectProperty, verifyOptionalObjectProperty, verifyPositiveInt, verifyString} from 'neuroglancer/util/json';
 import {createHomogeneousScaleMatrix} from 'neuroglancer/util/matrix';
+import {getObjectId} from 'neuroglancer/util/object_id';
 import {scaleByExp10, unitFromJson} from 'neuroglancer/util/si_units';
+import {cancellableFetchSpecialOk, parseSpecialUrl, SpecialProtocolCredentials, SpecialProtocolCredentialsProvider} from 'neuroglancer/util/special_protocol_request';
 
 class N5VolumeChunkSource extends
-(WithParameters(VolumeChunkSource, VolumeChunkSourceParameters)) {}
+(WithParameters(WithCredentialsProvider<SpecialProtocolCredentials>()(VolumeChunkSource), VolumeChunkSourceParameters)) {}
 
 export class MultiscaleVolumeChunkSource extends GenericMultiscaleVolumeChunkSource {
   dataType: DataType;
@@ -54,8 +57,9 @@ export class MultiscaleVolumeChunkSource extends GenericMultiscaleVolumeChunkSou
   }
 
   constructor(
-      chunkManager: Borrowed<ChunkManager>, public multiscaleMetadata: MultiscaleMetadata,
-      public scales: (ScaleMetadata|undefined)[]) {
+      chunkManager: Borrowed<ChunkManager>,
+      public credentialsProvider: SpecialProtocolCredentialsProvider,
+      public multiscaleMetadata: MultiscaleMetadata, public scales: (ScaleMetadata|undefined)[]) {
     super(chunkManager);
     let dataType: DataType|undefined;
     let baseScaleIndex: number|undefined;
@@ -117,6 +121,7 @@ export class MultiscaleVolumeChunkSource extends GenericMultiscaleVolumeChunkSou
                  })
               .map((spec): SliceViewSingleResolutionSource<VolumeChunkSource> => ({
                      chunkSource: this.chunkManager.getChunkSource(N5VolumeChunkSource, {
+                       credentialsProvider: this.credentialsProvider,
                        spec,
                        parameters: {url: scaleDownsamplingInfo.url, encoding: scale.encoding}
                      }),
@@ -162,10 +167,11 @@ class ScaleMetadata {
   }
 }
 
-function getAllScales(chunkManager: ChunkManager, multiscaleMetadata: MultiscaleMetadata):
-    Promise<(ScaleMetadata | undefined)[]> {
+function getAllScales(
+    chunkManager: ChunkManager, credentialsProvider: SpecialProtocolCredentialsProvider,
+    multiscaleMetadata: MultiscaleMetadata): Promise<(ScaleMetadata | undefined)[]> {
   return Promise.all(multiscaleMetadata.scales.map(async scale => {
-    const attributes = await getAttributes(chunkManager, scale.url, true);
+    const attributes = await getAttributes(chunkManager, credentialsProvider, scale.url, true);
     if (attributes === undefined) return undefined;
     return new ScaleMetadata(attributes);
   }));
@@ -187,11 +193,11 @@ function getAttributesJsonUrls(url: string): string[] {
 }
 
 function getIndividualAttributesJson(
-    chunkManager: ChunkManager, url: string, required: boolean): Promise<any> {
+    chunkManager: ChunkManager, credentialsProvider: SpecialProtocolCredentialsProvider,
+    url: string, required: boolean): Promise<any> {
   return chunkManager.memoize.getUncounted(
-      {type: 'n5:attributes.json', url},
-      () => fetchSpecialOk(url)
-                .then(response => response.json())
+      {type: 'n5:attributes.json', url, credentialsProvider: getObjectId(credentialsProvider)},
+      () => cancellableFetchSpecialOk(credentialsProvider, url, {}, responseJson)
                 .then(j => {
                   try {
                     return verifyObject(j);
@@ -209,11 +215,12 @@ function getIndividualAttributesJson(
 }
 
 async function getAttributes(
-    chunkManager: ChunkManager, url: string, required: boolean): Promise<unknown> {
+    chunkManager: ChunkManager, credentialsProvider: SpecialProtocolCredentialsProvider,
+    url: string, required: boolean): Promise<unknown> {
   const attributesJsonUrls = getAttributesJsonUrls(url);
   const metadata = await Promise.all(attributesJsonUrls.map(
       (u, i) => getIndividualAttributesJson(
-          chunkManager, u, required && i === attributesJsonUrls.length - 1)));
+          chunkManager, credentialsProvider, u, required && i === attributesJsonUrls.length - 1)));
   if (metadata.indexOf(undefined) !== -1) return undefined;
   metadata.reverse();
   return Object.assign({}, ...metadata);
@@ -366,17 +373,21 @@ export class N5DataSource extends DataSourceProvider {
     return 'N5 data source';
   }
   get(options: GetDataSourceOptions): Promise<DataSource> {
-    let url = options.providerUrl;
-    if (url.endsWith('/')) {
-      url = url.substring(0, url.length - 1);
+    let {providerUrl} = options;
+    if (providerUrl.endsWith('/')) {
+      providerUrl = providerUrl.substring(0, providerUrl.length - 1);
     }
     return options.chunkManager.memoize.getUncounted(
-        {'type': 'n5:MultiscaleVolumeChunkSource', url}, async () => {
-          const attributes = await getAttributes(options.chunkManager, url, false);
+        {'type': 'n5:MultiscaleVolumeChunkSource', providerUrl}, async () => {
+          const {url, credentialsProvider} =
+              parseSpecialUrl(providerUrl, options.credentialsManager);
+          const attributes =
+              await getAttributes(options.chunkManager, credentialsProvider, url, false);
           const multiscaleMetadata = getMultiscaleMetadata(url, attributes);
-          const scales = await getAllScales(options.chunkManager, multiscaleMetadata);
-          const volume =
-              new MultiscaleVolumeChunkSource(options.chunkManager, multiscaleMetadata, scales);
+          const scales =
+              await getAllScales(options.chunkManager, credentialsProvider, multiscaleMetadata);
+          const volume = new MultiscaleVolumeChunkSource(
+              options.chunkManager, credentialsProvider, multiscaleMetadata, scales);
           return {
             modelTransform: makeIdentityTransform(volume.modelSpace),
             subsources: [
@@ -401,6 +412,7 @@ export class N5DataSource extends DataSourceProvider {
   }
 
   completeUrl(options: CompleteUrlOptions) {
-    return completeHttpPath(options.providerUrl, options.cancellationToken);
+    return completeHttpPath(
+        options.credentialsManager, options.providerUrl, options.cancellationToken);
   }
-}
+  }

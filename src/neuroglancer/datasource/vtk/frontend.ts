@@ -25,8 +25,8 @@ export class VtkDataSource extends DataSourceProvider {
   }
 
   async get(options: GetDataSourceOptions): Promise<DataSource> {
-    const meshSource = await getSingleMeshSource(
-        options.chunkManager, {meshSourceUrl: options.url, attributeSourceUrls: []});
+    const meshSource =
+        await getSingleMeshSource(options.chunkManager, options.credentialsManager, options.url);
     const modelSpace = makeCoordinateSpace({
       rank: 3,
       names: ['x', 'y', 'z'],
@@ -44,6 +44,7 @@ export class VtkDataSource extends DataSourceProvider {
     return dataSource;
   }
   completeUrl(options: CompleteUrlOptions) {
-    return completeHttpPath(options.providerUrl, options.cancellationToken);
+    return completeHttpPath(
+        options.credentialsManager, options.providerUrl, options.cancellationToken);
   }
 }

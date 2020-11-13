@@ -14,15 +14,18 @@
  * limitations under the License.
  */
 
+import {fetchWithOAuth2Credentials} from 'neuroglancer/credentials_provider/oauth2';
 import {CancellationToken} from 'neuroglancer/util/cancellation';
 import {BasicCompletionResult} from 'neuroglancer/util/completion';
-import {cancellableFetchOk, responseJson} from 'neuroglancer/util/http_request';
+import {responseJson} from 'neuroglancer/util/http_request';
 import {parseArray, verifyObject, verifyObjectProperty, verifyOptionalObjectProperty, verifyString, verifyStringArray} from 'neuroglancer/util/json';
+import {SpecialProtocolCredentialsProvider} from 'neuroglancer/util/special_protocol_request';
 
 export async function getGcsBucketListing(
-    bucket: string, prefix: string, delimiter: string,
-    cancellationToken: CancellationToken): Promise<string[]> {
-  const response = await cancellableFetchOk(
+    credentialsProvider: SpecialProtocolCredentialsProvider, bucket: string, prefix: string,
+    delimiter: string, cancellationToken: CancellationToken): Promise<string[]> {
+  const response = await fetchWithOAuth2Credentials(
+      credentialsProvider,
       `https://www.googleapis.com/storage/v1/b/${bucket}/o?delimiter=${
           encodeURIComponent(delimiter)}&prefix=${encodeURIComponent(prefix)}`,
       {}, responseJson, cancellationToken);
@@ -43,11 +46,13 @@ export async function getGcsBucketListing(
 
 
 export async function getGcsPathCompletions(
-    enteredBucketUrl: string, bucket: string, path: string,
+    credentialsProvider: SpecialProtocolCredentialsProvider, enteredBucketUrl: string,
+    bucket: string, path: string,
     cancellationToken: CancellationToken): Promise<BasicCompletionResult> {
   let prefix = path;
   if (!prefix.startsWith('/')) throw null;
-  const paths = await getGcsBucketListing(bucket, path.substring(1), '/', cancellationToken);
+  const paths = await getGcsBucketListing(
+      credentialsProvider, bucket, path.substring(1), '/', cancellationToken);
   let offset = path.lastIndexOf('/');
   return {
     offset: offset + enteredBucketUrl.length + 1,

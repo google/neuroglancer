@@ -15,7 +15,8 @@
  */
 
 import {CancellationToken} from 'neuroglancer/util/cancellation';
-import {cancellableFetchSpecialOk, getByteRangeHeader, responseArrayBuffer} from 'neuroglancer/util/http_request';
+import {getByteRangeHeader, responseArrayBuffer} from 'neuroglancer/util/http_request';
+import {cancellableFetchSpecialOk, SpecialProtocolCredentialsProvider} from 'neuroglancer/util/special_protocol_request';
 import {Uint64} from 'neuroglancer/util/uint64';
 
 /**
@@ -27,10 +28,11 @@ import {Uint64} from 'neuroglancer/util/uint64';
 const cacheMode = navigator.userAgent.indexOf('Chrome') !== -1 ? 'no-store' : 'default';
 
 export function fetchSpecialHttpByteRange(
-    url: string, startOffset: Uint64|number, endOffset: Uint64|number,
+    credentialsProvider: SpecialProtocolCredentialsProvider, url: string,
+    startOffset: Uint64|number, endOffset: Uint64|number,
     cancellationToken: CancellationToken): Promise<ArrayBuffer> {
   return cancellableFetchSpecialOk(
-      url, {
+      credentialsProvider, url, {
         headers: getByteRangeHeader(startOffset, endOffset),
         cache: cacheMode,
       },

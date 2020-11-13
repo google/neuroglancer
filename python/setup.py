@@ -130,6 +130,7 @@ setup(
         'sockjs-tornado',
         'six',
         'google-apitools',
+        'google-auth',
     ],
     test_requires=[
         'pytest',

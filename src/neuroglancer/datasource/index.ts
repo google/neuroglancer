@@ -18,6 +18,7 @@ import {AnnotationSource} from 'neuroglancer/annotation';
 import {MultiscaleAnnotationSource} from 'neuroglancer/annotation/frontend_source';
 import {ChunkManager} from 'neuroglancer/chunk_manager/frontend';
 import {CoordinateSpace, CoordinateSpaceTransform, CoordinateTransformSpecification, emptyValidCoordinateSpace, makeCoordinateSpace, makeIdentityTransform} from 'neuroglancer/coordinate_transform';
+import {CredentialsManager} from 'neuroglancer/credentials_provider';
 import {MeshSource, MultiscaleMeshSource} from 'neuroglancer/mesh/frontend';
 import {SegmentPropertyMap} from 'neuroglancer/segmentation_display_state/property_map';
 import {SingleMeshSource} from 'neuroglancer/single_mesh/frontend';
@@ -82,6 +83,7 @@ export interface GetDataSourceOptions extends GetDataSourceOptionsBase {
   providerUrl: string;
   cancellationToken: CancellationToken;
   providerProtocol: string;
+  credentialsManager: CredentialsManager;
 }
 
 export interface ConvertLegacyUrlOptionsBase {
@@ -129,6 +131,7 @@ export interface CompleteUrlOptions extends CompleteUrlOptionsBase {
   registry: DataSourceProviderRegistry;
   providerUrl: string;
   cancellationToken: CancellationToken;
+  credentialsManager: CredentialsManager;
 }
 
 export interface DataSubsourceEntry {
@@ -277,6 +280,9 @@ class LocalDataSourceProvider extends DataSourceProvider {
 const protocolPattern = /^(?:([a-zA-Z][a-zA-Z0-9-+_]*):\/\/)?(.*)$/;
 
 export class DataSourceProviderRegistry extends RefCounted {
+  constructor(public credentialsManager: CredentialsManager) {
+    super();
+  }
   dataSources =
       new Map<string, Owned<DataSourceProvider>>([['local', new LocalDataSourceProvider()]]);
 
@@ -305,8 +311,15 @@ export class DataSourceProviderRegistry extends RefCounted {
       const [provider, providerUrl, providerProtocol] = this.getProvider(options.url);
       redirectLog.add(options.url);
       try {
-        return provider.get(
-            {...options, url, providerProtocol, providerUrl, registry: this, cancellationToken});
+        return provider.get({
+          ...options,
+          url,
+          providerProtocol,
+          providerUrl,
+          registry: this,
+          cancellationToken,
+          credentialsManager: this.credentialsManager,
+        });
       } catch (e) {
         if (e instanceof RedirectError) {
           const redirect = e.redirectTarget;
@@ -363,7 +376,8 @@ export class DataSourceProviderRegistry extends RefCounted {
           url,
           providerUrl: protocolMatch[2],
           chunkManager: options.chunkManager,
-          cancellationToken
+          cancellationToken,
+          credentialsManager: this.credentialsManager,
         });
         return applyCompletionOffset(protocol.length + 3, completions);
       }

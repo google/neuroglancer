@@ -125,6 +125,11 @@ supported.  This format is specified by either the absence of an `info` file in 
 subdirectory or an `info` file contanining a JSON object with the following members:
 - `"@type"`: Must be `"neuroglancer_legacy_mesh"`.
 
+To specify a legacy single-resolution mesh dataset that lacks an `info` file as a Neuroglancer data
+source, use the data source URL syntax `precomputed://FILE_URL#type=mesh`, where `FILE_URL` is the
+URL to the directory containing the mesh data using any [supported file
+protocol](../file_protocols.md).
+
 The surface mesh representation for a given segmented object may be split into one or more separate
 fragments (e.g. corresponding to subvolumes).
 

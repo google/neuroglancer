@@ -19,14 +19,16 @@
  * and GCS).
  */
 
+import {fetchWithOAuth2Credentials} from 'neuroglancer/credentials_provider/oauth2';
 import {CancellationToken} from 'neuroglancer/util/cancellation';
 import {BasicCompletionResult} from 'neuroglancer/util/completion';
-import {cancellableFetchOk} from 'neuroglancer/util/http_request';
+import {SpecialProtocolCredentialsProvider} from 'neuroglancer/util/special_protocol_request';
 
 export async function getS3BucketListing(
-    bucketUrl: string, prefix: string, delimiter: string,
-    cancellationToken: CancellationToken): Promise<string[]> {
-  const response = await cancellableFetchOk(
+    credentialsProvider: SpecialProtocolCredentialsProvider, bucketUrl: string, prefix: string,
+    delimiter: string, cancellationToken: CancellationToken): Promise<string[]> {
+  const response = await fetchWithOAuth2Credentials(
+      credentialsProvider,
       `${bucketUrl}?prefix=${encodeURIComponent(prefix)}` +
           `&delimiter=${encodeURIComponent(delimiter)}`,
       /*init=*/ {}, x => x.text(), cancellationToken);
@@ -39,8 +41,8 @@ export async function getS3BucketListing(
     results.push(commonPrefixNodes.snapshotItem(i)!.textContent || '');
   }
   const contents = doc.evaluate(
-      '//*[name()="Contents"]/*[name()="Key"]', doc, null,
-      XPathResult.UNORDERED_NODE_SNAPSHOT_TYPE, null);
+      '//*[name()="Contents"]/*[name()="Key"]', doc, null, XPathResult.UNORDERED_NODE_SNAPSHOT_TYPE,
+      null);
   for (let i = 0, n = contents.snapshotLength; i < n; ++i) {
     results.push(contents.snapshotItem(i)!.textContent || '');
   }
@@ -48,11 +50,13 @@ export async function getS3BucketListing(
 }
 
 export async function getS3PathCompletions(
-    enteredBucketUrl: string, bucketUrl: string, path: string,
+    credentialsProvider: SpecialProtocolCredentialsProvider, enteredBucketUrl: string,
+    bucketUrl: string, path: string,
     cancellationToken: CancellationToken): Promise<BasicCompletionResult> {
   let prefix = path;
   if (!prefix.startsWith('/')) throw null;
-  const paths = await getS3BucketListing(bucketUrl, path.substring(1), '/', cancellationToken);
+  const paths = await getS3BucketListing(
+      credentialsProvider, bucketUrl, path.substring(1), '/', cancellationToken);
   let offset = path.lastIndexOf('/');
   return {
     offset: offset + enteredBucketUrl.length + 1,

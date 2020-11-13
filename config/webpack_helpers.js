@@ -103,6 +103,13 @@ const DEFAULT_DATA_SOURCES = exports.DEFAULT_DATA_SOURCES = [
       'neuroglancer/async_computation/obj_mesh',
     ],
   },
+  {
+    source: 'neuroglancer/datasource/ngauth',
+    frontend: null,
+    backend: null,
+    register: null,
+    registerCredentials: 'neuroglancer/datasource/ngauth/register_credentials_provider',
+  },
 ];
 
 const DEFAULT_SUPPORTED_LAYERS = exports.DEFAULT_SUPPORTED_LAYERS = [
@@ -459,6 +466,7 @@ function makePythonClientOptions(options) {
   ];
   options.frontendModules = options.frontendModules || [resolveReal(srcDir, 'main_python.ts')];
   options.registerCredentials = false;
+  options.defines = Object.assign(options.defines || {}, {NEUROGLANCER_PYTHON_INTEGRATION: 'true'});
   return options;
 }
 

@@ -22,7 +22,7 @@ import {BoundingBox, CoordinateSpace, makeCoordinateSpace, makeIdentityTransform
 import {CredentialsProvider} from 'neuroglancer/credentials_provider';
 import {WithCredentialsProvider} from 'neuroglancer/credentials_provider/chunk_source_frontend';
 import {CompleteUrlOptions, DataSource, DataSourceProvider, GetDataSourceOptions} from 'neuroglancer/datasource';
-import {BrainmapsCredentialsProvider, BrainmapsInstance, Credentials, makeRequest} from 'neuroglancer/datasource/brainmaps/api';
+import {BrainmapsCredentialsProvider, BrainmapsInstance, OAuth2Credentials, makeRequest} from 'neuroglancer/datasource/brainmaps/api';
 import {AnnotationSourceParameters, AnnotationSpatialIndexSourceParameters, ChangeSpec, MeshSourceParameters, MultiscaleMeshInfo, MultiscaleMeshSourceParameters, SingleMeshInfo, SkeletonSourceParameters, VolumeChunkEncoding, VolumeSourceParameters} from 'neuroglancer/datasource/brainmaps/base';
 import {VertexPositionFormat} from 'neuroglancer/mesh/base';
 import {MeshSource, MultiscaleMeshSource} from 'neuroglancer/mesh/frontend';
@@ -42,19 +42,19 @@ import {defaultStringCompare} from 'neuroglancer/util/string';
 
 class BrainmapsVolumeChunkSource extends
 (WithParameters(
-  WithCredentialsProvider<Credentials>()(VolumeChunkSource), VolumeSourceParameters)) {}
+  WithCredentialsProvider<OAuth2Credentials>()(VolumeChunkSource), VolumeSourceParameters)) {}
 
 class BrainmapsMultiscaleMeshSource extends
-(WithParameters(WithCredentialsProvider<Credentials>()(MultiscaleMeshSource), MultiscaleMeshSourceParameters)) {}
+(WithParameters(WithCredentialsProvider<OAuth2Credentials>()(MultiscaleMeshSource), MultiscaleMeshSourceParameters)) {}
 
 class BrainmapsMeshSource extends
-(WithParameters(WithCredentialsProvider<Credentials>()(MeshSource), MeshSourceParameters)) {}
+(WithParameters(WithCredentialsProvider<OAuth2Credentials>()(MeshSource), MeshSourceParameters)) {}
 
 export class BrainmapsSkeletonSource extends
-(WithParameters(WithCredentialsProvider<Credentials>()(SkeletonSource), SkeletonSourceParameters)) {}
+(WithParameters(WithCredentialsProvider<OAuth2Credentials>()(SkeletonSource), SkeletonSourceParameters)) {}
 
 class BrainmapsAnnotationSpatialIndexSource extends
-(WithParameters(WithCredentialsProvider<Credentials>()(AnnotationGeometryChunkSource), AnnotationSpatialIndexSourceParameters)) {}
+(WithParameters(WithCredentialsProvider<OAuth2Credentials>()(AnnotationGeometryChunkSource), AnnotationSpatialIndexSourceParameters)) {}
 
 const SERVER_DATA_TYPES = new Map<string, DataType>();
 SERVER_DATA_TYPES.set('UINT8', DataType.UINT8);
@@ -516,15 +516,15 @@ export function parseChangeStackList(x: any) {
 }
 
 const MultiscaleAnnotationSourceBase = (WithParameters(
-    WithCredentialsProvider<Credentials>()(MultiscaleAnnotationSource),
+    WithCredentialsProvider<OAuth2Credentials>()(MultiscaleAnnotationSource),
     AnnotationSourceParameters));
 
 export class BrainmapsAnnotationSource extends MultiscaleAnnotationSourceBase {
   key: any;
   parameters: AnnotationSourceParameters;
-  credentialsProvider: Owned<CredentialsProvider<Credentials>>;
+  credentialsProvider: Owned<CredentialsProvider<OAuth2Credentials>>;
   constructor(chunkManager: ChunkManager, options: {
-    credentialsProvider: CredentialsProvider<Credentials>,
+    credentialsProvider: CredentialsProvider<OAuth2Credentials>,
     parameters: AnnotationSourceParameters,
   }) {
     super(chunkManager, {

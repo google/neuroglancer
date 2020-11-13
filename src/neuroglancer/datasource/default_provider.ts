@@ -34,7 +34,7 @@ export function registerProvider(name: string, factory: ProviderFactory) {
 }
 
 export function getDefaultDataSourceProvider(options: ProviderOptions) {
-  const provider = new DataSourceProviderRegistry();
+  const provider = new DataSourceProviderRegistry(options.credentialsManager);
   for (const [name, factory] of providerFactories) {
     provider.register(name, factory(options));
   }

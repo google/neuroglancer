@@ -31,8 +31,9 @@ function parse(buffer: ArrayBuffer, cancellationToken: CancellationToken) {
 
 registerSingleMeshFactory('vtk', {
   description: 'VTK',
-  getMesh: (chunkManager, url, getPriority, cancellationToken) =>
-      GenericSharedDataSource.getUrl(chunkManager, parse, url, getPriority, cancellationToken)
+  getMesh: (chunkManager, credentialsProvider, url, getPriority, cancellationToken) =>
+      GenericSharedDataSource
+          .getUrl(chunkManager, credentialsProvider, parse, url, getPriority, cancellationToken)
           .then(mesh => {
             let result: SingleMesh = {
               info: {

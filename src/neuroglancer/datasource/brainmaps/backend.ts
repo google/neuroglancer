@@ -20,7 +20,7 @@ import {WithParameters} from 'neuroglancer/chunk_manager/backend';
 import {ChunkSourceParametersConstructor} from 'neuroglancer/chunk_manager/base';
 import {CredentialsProvider} from 'neuroglancer/credentials_provider';
 import {WithSharedCredentialsProviderCounterpart} from 'neuroglancer/credentials_provider/shared_counterpart';
-import {BatchMeshFragment, BatchMeshFragmentPayload, BrainmapsInstance, ChangeStackAwarePayload, Credentials, makeRequest, SkeletonPayload, SubvolumePayload} from 'neuroglancer/datasource/brainmaps/api';
+import {BatchMeshFragment, BatchMeshFragmentPayload, BrainmapsInstance, ChangeStackAwarePayload, OAuth2Credentials, makeRequest, SkeletonPayload, SubvolumePayload} from 'neuroglancer/datasource/brainmaps/api';
 import {AnnotationSourceParameters, AnnotationSpatialIndexSourceParameters, ChangeSpec, MeshSourceParameters, MultiscaleMeshSourceParameters, SkeletonSourceParameters, VolumeChunkEncoding, VolumeSourceParameters} from 'neuroglancer/datasource/brainmaps/base';
 import {assignMeshFragmentData, assignMultiscaleMeshFragmentData, FragmentChunk, generateHigherOctreeLevel, ManifestChunk, MeshSource, MultiscaleFragmentChunk, MultiscaleManifestChunk, MultiscaleMeshSource} from 'neuroglancer/mesh/backend';
 import {VertexPositionFormat} from 'neuroglancer/mesh/base';
@@ -70,7 +70,7 @@ function applyChangeStack(changeStack: ChangeSpec|undefined, payload: ChangeStac
 function BrainmapsSource<Parameters, TBase extends {new (...args: any[]): SharedObject}>(
     Base: TBase, parametersConstructor: ChunkSourceParametersConstructor<Parameters>) {
   return WithParameters(
-      WithSharedCredentialsProviderCounterpart<Credentials>()(Base), parametersConstructor);
+      WithSharedCredentialsProviderCounterpart<OAuth2Credentials>()(Base), parametersConstructor);
 }
 
 const tempUint64 = new Uint64();
@@ -337,7 +337,7 @@ function combineBatchMeshFragments(fragments: BatchMeshResponseFragment[]) {
 }
 
 async function makeBatchMeshRequest<T>(
-    credentialsProvider: CredentialsProvider<Credentials>,
+    credentialsProvider: CredentialsProvider<OAuth2Credentials>,
     parameters: {instance: BrainmapsInstance, volumeId: string, meshName: string},
     ids: Map<string, T>, cancellationToken: CancellationToken): Promise<ArrayBuffer> {
   const path = `/v1/objects/meshes:batch`;

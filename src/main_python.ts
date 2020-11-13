@@ -121,7 +121,8 @@ window.addEventListener('DOMContentLoaded', () => {
   let sharedState: Trackable|undefined = viewer.state;
 
   if (window.location.hash) {
-    const hashBinding = viewer.registerDisposer(new UrlHashBinding(viewer.state));
+    const hashBinding =
+        viewer.registerDisposer(new UrlHashBinding(viewer.state, credentialsManager));
     hashBinding.updateFromUrlHash();
     sharedState = undefined;
   }

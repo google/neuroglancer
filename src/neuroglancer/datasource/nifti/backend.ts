@@ -19,6 +19,7 @@ import {requestAsyncComputation} from 'neuroglancer/async_computation/request';
 import {ChunkManager, WithParameters} from 'neuroglancer/chunk_manager/backend';
 import {ChunkPriorityTier} from 'neuroglancer/chunk_manager/base';
 import {GenericSharedDataSource, PriorityGetter} from 'neuroglancer/chunk_manager/generic_file_source';
+import {SharedCredentialsProviderCounterpart, WithSharedCredentialsProviderCounterpart} from 'neuroglancer/credentials_provider/shared_counterpart';
 import {GET_NIFTI_VOLUME_INFO_RPC_ID, NiftiVolumeInfo, VolumeSourceParameters} from 'neuroglancer/datasource/nifti/base';
 import {decodeRawChunk} from 'neuroglancer/sliceview/backend_chunk_decoders/raw';
 import {VolumeChunk, VolumeChunkSource} from 'neuroglancer/sliceview/volume/backend';
@@ -28,6 +29,7 @@ import {Borrowed} from 'neuroglancer/util/disposable';
 import {Endianness} from 'neuroglancer/util/endian';
 import {kOneVec, mat4, quat, translationRotationScaleZReflectionToMat4, vec3} from 'neuroglancer/util/geom';
 import * as matrix from 'neuroglancer/util/matrix';
+import {SpecialProtocolCredentials, SpecialProtocolCredentialsProvider} from 'neuroglancer/util/special_protocol_request';
 import {registerPromiseRPC, registerSharedObject, RPCPromise} from 'neuroglancer/worker_rpc';
 import {isCompressed, NIFTI1, NIFTI2, readHeader, readImage} from 'nifti-reader-js';
 
@@ -53,22 +55,22 @@ async function decodeNiftiFile(buffer: ArrayBuffer, cancellationToken: Cancellat
 }
 
 function getNiftiFileData(
-    chunkManager: Borrowed<ChunkManager>, url: string, getPriority: PriorityGetter,
-    cancellationToken: CancellationToken) {
+    chunkManager: Borrowed<ChunkManager>, credentialsProvider: SpecialProtocolCredentialsProvider,
+    url: string, getPriority: PriorityGetter, cancellationToken: CancellationToken) {
   return GenericSharedDataSource.getUrl(
-      chunkManager, decodeNiftiFile, url, getPriority, cancellationToken);
+      chunkManager, credentialsProvider, decodeNiftiFile, url, getPriority, cancellationToken);
 }
 
 const NIFTI_HEADER_INFO_PRIORITY = 1000;
 
-function getNiftiHeaderInfo(
-    chunkManager: Borrowed<ChunkManager>, url: string, cancellationToken: CancellationToken) {
-  return getNiftiFileData(
-             chunkManager, url,
-             () =>
-                 ({priorityTier: ChunkPriorityTier.VISIBLE, priority: NIFTI_HEADER_INFO_PRIORITY}),
-             cancellationToken)
-      .then(data => data.header);
+async function getNiftiHeaderInfo(
+    chunkManager: Borrowed<ChunkManager>, credentialsProvider: SpecialProtocolCredentialsProvider,
+    url: string, cancellationToken: CancellationToken) {
+  const data = await getNiftiFileData(
+      chunkManager, credentialsProvider, url,
+      () => ({priorityTier: ChunkPriorityTier.VISIBLE, priority: NIFTI_HEADER_INFO_PRIORITY}),
+      cancellationToken);
+  return data.header;
 }
 
 function convertAffine(affine: number[][]) {
@@ -112,11 +114,15 @@ const DATA_TYPE_CONVERSIONS = new Map([
 ]);
 
 registerPromiseRPC(
-    GET_NIFTI_VOLUME_INFO_RPC_ID, function(x, cancellationToken): RPCPromise<NiftiVolumeInfo> {
+    GET_NIFTI_VOLUME_INFO_RPC_ID,
+    async function(x, cancellationToken): RPCPromise<NiftiVolumeInfo> {
       const chunkManager = this.getRef<ChunkManager>(x['chunkManager']);
-      const headerPromise = getNiftiHeaderInfo(chunkManager, x['url'], cancellationToken);
-      chunkManager.dispose();
-      return headerPromise.then(header => {
+      const credentialsProvider = this.getOptionalRef<
+          SharedCredentialsProviderCounterpart<Exclude<SpecialProtocolCredentials, undefined>>>(
+          x['credentialsProvider']);
+      try {
+        const header = await getNiftiHeaderInfo(
+            chunkManager, credentialsProvider, x['url'], cancellationToken);
         let dataTypeInfo = DATA_TYPE_CONVERSIONS.get(header.datatypeCode);
         if (dataTypeInfo === undefined) {
           throw new Error(
@@ -212,15 +218,18 @@ registerPromiseRPC(
           volumeSize: Uint32Array.from(header.dims.slice(1, 1 + rank)),
         };
         return {value: info};
-      });
+      } finally {
+        chunkManager.dispose();
+        credentialsProvider?.dispose();
+      }
     });
 
 @registerSharedObject() export class NiftiVolumeChunkSource extends
-(WithParameters(VolumeChunkSource, VolumeSourceParameters)) {
+(WithParameters(WithSharedCredentialsProviderCounterpart<SpecialProtocolCredentials>()(VolumeChunkSource), VolumeSourceParameters)) {
   async download(chunk: VolumeChunk, cancellationToken: CancellationToken) {
     chunk.chunkDataSize = this.spec.chunkDataSize;
     const data = await getNiftiFileData(
-        this.chunkManager, this.parameters.url,
+        this.chunkManager, this.credentialsProvider, this.parameters.url,
         () => ({priorityTier: chunk.priorityTier, priority: chunk.priority}), cancellationToken);
     const imageBuffer = readImage(data.header, data.uncompressedData);
     await decodeRawChunk(

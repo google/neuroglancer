@@ -22,6 +22,8 @@
 import {makeDataBoundsBoundingBoxAnnotationSet} from 'neuroglancer/annotation';
 import {ChunkManager, WithParameters} from 'neuroglancer/chunk_manager/frontend';
 import {makeCoordinateSpace, makeIdentityTransformedBoundingBox} from 'neuroglancer/coordinate_transform';
+import {CredentialsManager} from 'neuroglancer/credentials_provider';
+import {getCredentialsProviderCounterpart, WithCredentialsProvider} from 'neuroglancer/credentials_provider/chunk_source_frontend';
 import {CompleteUrlOptions, DataSource, DataSourceProvider, GetDataSourceOptions} from 'neuroglancer/datasource';
 import {GET_NIFTI_VOLUME_INFO_RPC_ID, NiftiVolumeInfo, VolumeSourceParameters} from 'neuroglancer/datasource/nifti/base';
 import {makeVolumeChunkSpecificationWithDefaultCompression, VolumeSourceOptions, VolumeType} from 'neuroglancer/sliceview/volume/base';
@@ -29,12 +31,15 @@ import {MultiscaleVolumeChunkSource, VolumeChunkSource} from 'neuroglancer/slice
 import {CancellationToken, uncancelableToken} from 'neuroglancer/util/cancellation';
 import {completeHttpPath} from 'neuroglancer/util/http_path_completion';
 import * as matrix from 'neuroglancer/util/matrix';
+import {parseSpecialUrl, SpecialProtocolCredentials, SpecialProtocolCredentialsProvider} from 'neuroglancer/util/special_protocol_request';
 
 class NiftiVolumeChunkSource extends
-(WithParameters(VolumeChunkSource, VolumeSourceParameters)) {}
+(WithParameters(WithCredentialsProvider<SpecialProtocolCredentials>()(VolumeChunkSource), VolumeSourceParameters)) {}
 
 export class NiftiMultiscaleVolumeChunkSource extends MultiscaleVolumeChunkSource {
-  constructor(chunkManager: ChunkManager, public url: string, public info: NiftiVolumeInfo) {
+  constructor(
+      chunkManager: ChunkManager, public credentialsProvider: SpecialProtocolCredentialsProvider,
+      public url: string, public info: NiftiVolumeInfo) {
     super(chunkManager);
   }
   get dataType() {
@@ -60,23 +65,35 @@ export class NiftiMultiscaleVolumeChunkSource extends MultiscaleVolumeChunkSourc
     });
     return [[{
       chunkSource: this.chunkManager.getChunkSource(
-          NiftiVolumeChunkSource, {spec, parameters: {url: this.url}}),
+          NiftiVolumeChunkSource,
+          {credentialsProvider: this.credentialsProvider, spec, parameters: {url: this.url}}),
       chunkToMultiscaleTransform,
     }]];
   }
 }
 
 function getNiftiVolumeInfo(
-    chunkManager: ChunkManager, url: string, cancellationToken: CancellationToken) {
+    chunkManager: ChunkManager, credentialsProvider: SpecialProtocolCredentialsProvider,
+    url: string, cancellationToken: CancellationToken) {
   return chunkManager.rpc!.promiseInvoke<NiftiVolumeInfo>(
-      GET_NIFTI_VOLUME_INFO_RPC_ID, {'chunkManager': chunkManager.addCounterpartRef(), 'url': url},
+      GET_NIFTI_VOLUME_INFO_RPC_ID, {
+        'chunkManager': chunkManager.addCounterpartRef(),
+        credentialsProvider: getCredentialsProviderCounterpart<SpecialProtocolCredentials>(
+            chunkManager, credentialsProvider),
+        'url': url
+      },
       cancellationToken);
 }
 
-function getDataSource(chunkManager: ChunkManager, url: string) {
+function getDataSource(
+    chunkManager: ChunkManager, credentialsManager: CredentialsManager,
+    url: string) {
   return chunkManager.memoize.getUncounted({type: 'nifti/getVolume', url}, async () => {
-    const info = await getNiftiVolumeInfo(chunkManager, url, uncancelableToken);
-    const volume = new NiftiMultiscaleVolumeChunkSource(chunkManager, url, info);
+    const {url: parsedUrl, credentialsProvider} = parseSpecialUrl(url, credentialsManager);
+    const info =
+        await getNiftiVolumeInfo(chunkManager, credentialsProvider, parsedUrl, uncancelableToken);
+    const volume =
+        new NiftiMultiscaleVolumeChunkSource(chunkManager, credentialsProvider, parsedUrl, info);
     const box = {
       lowerBounds: new Float64Array(info.rank),
       upperBounds: Float64Array.from(info.volumeSize),
@@ -124,10 +141,11 @@ export class NiftiDataSource extends DataSourceProvider {
     return 'Single NIfTI file';
   }
   get(options: GetDataSourceOptions): Promise<DataSource> {
-    return getDataSource(options.chunkManager, options.providerUrl);
+    return getDataSource(options.chunkManager, options.credentialsManager, options.providerUrl);
   }
 
   completeUrl(options: CompleteUrlOptions) {
-    return completeHttpPath(options.providerUrl, options.cancellationToken);
+    return completeHttpPath(
+        options.credentialsManager, options.providerUrl, options.cancellationToken);
   }
 }

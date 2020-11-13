@@ -17,6 +17,7 @@
 import {makeDataBoundsBoundingBoxAnnotationSet} from 'neuroglancer/annotation';
 import {ChunkManager, WithParameters} from 'neuroglancer/chunk_manager/frontend';
 import {CoordinateSpace, makeCoordinateSpace, makeIdentityTransform, makeIdentityTransformedBoundingBox} from 'neuroglancer/coordinate_transform';
+import {WithCredentialsProvider} from 'neuroglancer/credentials_provider/chunk_source_frontend';
 import {CompleteUrlOptions, DataSource, DataSourceProvider, GetDataSourceOptions} from 'neuroglancer/datasource';
 import {VolumeChunkSourceParameters, ZarrCompressor, ZarrEncoding, ZarrSeparator} from 'neuroglancer/datasource/zarr/base';
 import {SliceViewSingleResolutionSource} from 'neuroglancer/sliceview/frontend';
@@ -25,13 +26,15 @@ import {MultiscaleVolumeChunkSource as GenericMultiscaleVolumeChunkSource, Volum
 import {transposeNestedArrays} from 'neuroglancer/util/array';
 import {Borrowed} from 'neuroglancer/util/disposable';
 import {completeHttpPath} from 'neuroglancer/util/http_path_completion';
-import {fetchSpecialOk, isNotFoundError} from 'neuroglancer/util/http_request';
+import {isNotFoundError, responseJson} from 'neuroglancer/util/http_request';
 import {parseArray, parseFixedLengthArray, verifyObject, verifyObjectProperty, verifyOptionalObjectProperty, verifyString} from 'neuroglancer/util/json';
 import {createIdentity} from 'neuroglancer/util/matrix';
 import {parseNumpyDtype} from 'neuroglancer/util/numpy_dtype';
+import {getObjectId} from 'neuroglancer/util/object_id';
+import {cancellableFetchSpecialOk, parseSpecialUrl, SpecialProtocolCredentials, SpecialProtocolCredentialsProvider} from 'neuroglancer/util/special_protocol_request';
 
 class ZarrVolumeChunkSource extends
-(WithParameters(VolumeChunkSource, VolumeChunkSourceParameters)) {}
+(WithParameters(WithCredentialsProvider<SpecialProtocolCredentials>()(VolumeChunkSource), VolumeChunkSourceParameters)) {}
 
 interface ZarrMetadata {
   encoding: ZarrEncoding;
@@ -112,8 +115,9 @@ export class MultiscaleVolumeChunkSource extends GenericMultiscaleVolumeChunkSou
   }
 
   constructor(
-      chunkManager: Borrowed<ChunkManager>, public url: string, public separator: ZarrSeparator,
-      public metadata: ZarrMetadata, public attrs: unknown) {
+      chunkManager: Borrowed<ChunkManager>,
+      public credentialsProvider: SpecialProtocolCredentialsProvider, public url: string,
+      public separator: ZarrSeparator, public metadata: ZarrMetadata, public attrs: unknown) {
     super(chunkManager);
     this.dataType = metadata.dataType;
     this.volumeType = VolumeType.IMAGE;
@@ -166,6 +170,7 @@ export class MultiscaleVolumeChunkSource extends GenericMultiscaleVolumeChunkSou
            volumeSourceOptions,
          }).map((spec): SliceViewSingleResolutionSource<VolumeChunkSource> => ({
                   chunkSource: this.chunkManager.getChunkSource(ZarrVolumeChunkSource, {
+                    credentialsProvider: this.credentialsProvider,
                     spec,
                     parameters: {
                       url: this.url,
@@ -178,25 +183,35 @@ export class MultiscaleVolumeChunkSource extends GenericMultiscaleVolumeChunkSou
   }
 }
 
-function getAttributes(chunkManager: ChunkManager, url: string): Promise<any> {
-  return chunkManager.memoize.getUncounted({type: 'zarr:.zattrs json', url}, async () => {
-    try {
-      const json = await (await fetchSpecialOk(url + '/.zattrs')).json();
-      verifyObject(json);
-      return json;
-    } catch (e) {
-      if (isNotFoundError(e)) return {};
-      throw e;
-    }
-  });
+function getAttributes(
+    chunkManager: ChunkManager, credentialsProvider: SpecialProtocolCredentialsProvider,
+    url: string): Promise<any> {
+  return chunkManager.memoize.getUncounted(
+      {type: 'zarr:.zattrs json', url, credentialsProvider: getObjectId(credentialsProvider)},
+      async () => {
+        try {
+          const json = await cancellableFetchSpecialOk(
+              credentialsProvider, url + '/.zattrs', {}, responseJson);
+          verifyObject(json);
+          return json;
+        } catch (e) {
+          if (isNotFoundError(e)) return {};
+          throw e;
+        }
+      });
 }
 
 
-function getMetadata(chunkManager: ChunkManager, url: string): Promise<any> {
-  return chunkManager.memoize.getUncounted({type: 'zarr:.zarray json', url}, async () => {
-    const json = await (await fetchSpecialOk(url + '/.zarray')).json();
-    return parseZarrMetadata(json);
-  });
+function getMetadata(
+    chunkManager: ChunkManager, credentialsProvider: SpecialProtocolCredentialsProvider,
+    url: string): Promise<any> {
+  return chunkManager.memoize.getUncounted(
+      {type: 'zarr:.zarray json', url, credentialsProvider: getObjectId(credentialsProvider)},
+      async () => {
+        const json = await cancellableFetchSpecialOk(
+            credentialsProvider, url + '/.zarray', {}, responseJson);
+        return parseZarrMetadata(json);
+      });
 }
 
 export class ZarrDataSource extends DataSourceProvider {
@@ -204,16 +219,20 @@ export class ZarrDataSource extends DataSourceProvider {
     return 'Zarr data source';
   }
   get(options: GetDataSourceOptions): Promise<DataSource> {
-    let url = options.providerUrl;
-    if (url.endsWith('/')) {
-      url = url.substring(0, url.length - 1);
+    let {providerUrl} = options;
+    if (providerUrl.endsWith('/')) {
+      providerUrl = providerUrl.substring(0, providerUrl.length - 1);
     }
     return options.chunkManager.memoize.getUncounted(
-        {'type': 'zarr:MultiscaleVolumeChunkSource', url}, async () => {
-          const [metadata, attrs] = await Promise.all(
-              [getMetadata(options.chunkManager, url), getAttributes(options.chunkManager, url)]);
-          const volume =
-              new MultiscaleVolumeChunkSource(options.chunkManager, url, '.', metadata, attrs);
+        {'type': 'zarr:MultiscaleVolumeChunkSource', providerUrl}, async () => {
+          const {url, credentialsProvider} =
+              parseSpecialUrl(providerUrl, options.credentialsManager);
+          const [metadata, attrs] = await Promise.all([
+            getMetadata(options.chunkManager, credentialsProvider, url),
+            getAttributes(options.chunkManager, credentialsProvider, url)
+          ]);
+          const volume = new MultiscaleVolumeChunkSource(
+              options.chunkManager, credentialsProvider, url, '.', metadata, attrs);
           return {
             modelTransform: makeIdentityTransform(volume.modelSpace),
             subsources: [
@@ -238,6 +257,7 @@ export class ZarrDataSource extends DataSourceProvider {
   }
 
   completeUrl(options: CompleteUrlOptions) {
-    return completeHttpPath(options.providerUrl, options.cancellationToken);
+    return completeHttpPath(
+        options.credentialsManager, options.providerUrl, options.cancellationToken);
   }
 }

@@ -23,9 +23,10 @@ import {Chunk, ChunkManager, ChunkSourceBase} from 'neuroglancer/chunk_manager/b
 import {ChunkPriorityTier, ChunkState} from 'neuroglancer/chunk_manager/base';
 import {CANCELED, CancellationToken, makeCancelablePromise} from 'neuroglancer/util/cancellation';
 import {Borrowed, Owned} from 'neuroglancer/util/disposable';
-import {cancellableFetchSpecialOk, responseArrayBuffer} from 'neuroglancer/util/http_request';
+import {responseArrayBuffer} from 'neuroglancer/util/http_request';
 import {stableStringify} from 'neuroglancer/util/json';
 import {getObjectId} from 'neuroglancer/util/object_id';
+import {cancellableFetchSpecialOk, SpecialProtocolCredentialsProvider} from 'neuroglancer/util/special_protocol_request';
 
 export type PriorityGetter = () => {
   priorityTier: ChunkPriorityTier, priority: number
@@ -178,14 +179,15 @@ export class GenericSharedDataSource<Key, Data> extends ChunkSourceBase {
   }
 
   static getUrl<Data>(
-      chunkManager: Borrowed<ChunkManager>,
+      chunkManager: Borrowed<ChunkManager>, credentialsProvider: SpecialProtocolCredentialsProvider,
       decodeFunction: (buffer: ArrayBuffer, cancellationToken: CancellationToken) =>
           Promise<{size: number, data: Data}>,
       url: string, getPriority: PriorityGetter, cancellationToken: CancellationToken) {
     return GenericSharedDataSource.getData<string, Data>(
         chunkManager, `${getObjectId(decodeFunction)}`, {
           download: (url: string, cancellationToken: CancellationToken) =>
-              cancellableFetchSpecialOk(url, {}, responseArrayBuffer, cancellationToken)
+              cancellableFetchSpecialOk(
+                  credentialsProvider, url, {}, responseArrayBuffer, cancellationToken)
                   .then(response => decodeFunction(response, cancellationToken))
         },
         url, getPriority, cancellationToken);

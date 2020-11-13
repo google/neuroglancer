@@ -129,49 +129,6 @@ export function parseUrl(url: string): {protocol: string, host: string, path: st
   return {protocol: match[1], host: match[2], path: match[3]};
 }
 
-export function fetchSpecial(url: string, init?: RequestInit): Promise<Response> {
-  const u = parseUrl(url);
-  switch (u.protocol) {
-    case 'gs':
-      return fetch(
-          `https://www.googleapis.com/storage/v1/b/${u.host}/o/${
-              encodeURIComponent(u.path.substring(1))}?alt=media`,
-          init);
-    case 'gs+xml':
-      return fetch(`https://storage.googleapis.com/${u.host}${u.path}`, init);
-    default:
-      return fetch(url, init);
-  }
-}
-
-export async function fetchSpecialOk(url: string, init?: RequestInit): Promise<Response> {
-  let response: Response;
-  try {
-    response = await fetchSpecial(url, init);
-  } catch (error) {
-    throw HttpError.fromRequestError(url, error);
-  }
-  if (!response.ok) throw HttpError.fromResponse(response);
-  return response;
-}
-
-export async function cancellableFetchSpecialOk<T>(
-    url: string, init: RequestInit, transformResponse: ResponseTransform<T>,
-    cancellationToken: CancellationToken = uncancelableToken): Promise<T> {
-  if (cancellationToken === uncancelableToken) {
-    const response = await fetchSpecialOk(url, init);
-    return await transformResponse(response);
-  }
-  const abortController = new AbortController();
-  const unregisterCancellation = cancellationToken.add(() => abortController.abort());
-  try {
-    const response = await fetchSpecialOk(url, {...init, signal: abortController.signal});
-    return await transformResponse(response);
-  } finally {
-    unregisterCancellation();
-  }
-}
-
 export function isNotFoundError(e: any) {
   if (!(e instanceof HttpError)) return false;
   return (e.status === 403 || e.status === 404);

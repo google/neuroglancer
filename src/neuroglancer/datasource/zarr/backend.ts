@@ -18,11 +18,13 @@ import {decodeBlosc} from 'neuroglancer/async_computation/decode_blosc_request';
 import {decodeGzip} from 'neuroglancer/async_computation/decode_gzip_request';
 import {requestAsyncComputation} from 'neuroglancer/async_computation/request';
 import {WithParameters} from 'neuroglancer/chunk_manager/backend';
+import {WithSharedCredentialsProviderCounterpart} from 'neuroglancer/credentials_provider/shared_counterpart';
 import {VolumeChunkSourceParameters, ZarrCompressor, ZarrEncoding} from 'neuroglancer/datasource/zarr/base';
 import {decodeRawChunk} from 'neuroglancer/sliceview/backend_chunk_decoders/raw';
 import {VolumeChunk, VolumeChunkSource} from 'neuroglancer/sliceview/volume/backend';
 import {CancellationToken} from 'neuroglancer/util/cancellation';
-import {cancellableFetchSpecialOk, responseArrayBuffer} from 'neuroglancer/util/http_request';
+import {responseArrayBuffer} from 'neuroglancer/util/http_request';
+import {cancellableFetchSpecialOk, SpecialProtocolCredentials} from 'neuroglancer/util/special_protocol_request';
 import {registerSharedObject} from 'neuroglancer/worker_rpc';
 
 async function decodeChunk(
@@ -45,7 +47,7 @@ async function decodeChunk(
 
 
 @registerSharedObject() export class PrecomputedVolumeChunkSource extends
-(WithParameters(VolumeChunkSource, VolumeChunkSourceParameters)) {
+(WithParameters(WithSharedCredentialsProviderCounterpart<SpecialProtocolCredentials>()(VolumeChunkSource), VolumeChunkSourceParameters)) {
   async download(chunk: VolumeChunk, cancellationToken: CancellationToken) {
     chunk.chunkDataSize = this.spec.chunkDataSize;
     const {parameters} = this;
@@ -55,8 +57,8 @@ async function decodeChunk(
     for (let i = rank; i > 0; --i) {
       url += `${i == rank ? '/' : separator}${chunkGridPosition[i - 1]}`;
     }
-    const response =
-        await cancellableFetchSpecialOk(url, {}, responseArrayBuffer, cancellationToken);
+    const response = await cancellableFetchSpecialOk(
+        this.credentialsProvider, url, {}, responseArrayBuffer, cancellationToken);
     await decodeChunk(chunk, cancellationToken, response, parameters.encoding);
   }
 }

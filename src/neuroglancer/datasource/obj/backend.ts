@@ -14,8 +14,8 @@
  * limitations under the License.
  */
 
-import {requestAsyncComputation} from 'neuroglancer/async_computation/request';
 import {parseOBJFromArrayBuffer} from 'neuroglancer/async_computation/obj_mesh_request';
+import {requestAsyncComputation} from 'neuroglancer/async_computation/request';
 import {GenericSharedDataSource} from 'neuroglancer/chunk_manager/generic_file_source';
 import {registerSingleMeshFactory} from 'neuroglancer/single_mesh/backend';
 import {CancellationToken} from 'neuroglancer/util/cancellation';
@@ -30,6 +30,7 @@ function parse(buffer: ArrayBuffer, cancellationToken: CancellationToken) {
 
 registerSingleMeshFactory('obj', {
   description: 'OBJ',
-  getMesh: (chunkManager, url, getPriority, cancellationToken) =>
-      GenericSharedDataSource.getUrl(chunkManager, parse, url, getPriority, cancellationToken)
+  getMesh: (chunkManager, credentialsProvider, url, getPriority, cancellationToken) =>
+      GenericSharedDataSource.getUrl(
+          chunkManager, credentialsProvider, parse, url, getPriority, cancellationToken)
 });

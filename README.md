@@ -28,14 +28,14 @@ The four-pane view consists of 3 orthogonal cross-sectional views as well as a 3
 
 Neuroglancer itself is purely a client-side program, but it depends on data being accessible via HTTP in a suitable format.  It is designed to easily support many different data sources, and there is existing support for the following data APIs/formats:
 
+- [Neuroglancer precomputed format](src/neuroglancer/datasource/precomputed)
+- [N5](src/neuroglancer/datasource/n5)
+- [Zarr](src/neuroglancer/datasource/zarr)
+- [Python in-memory volumes](python/README.md) (with automatic mesh generation)
 - BOSS <https://bossdb.org/>
 - DVID <https://github.com/janelia-flyem/dvid>
 - Render <https://github.com/saalfeldlab/render>
-- [Precomputed chunk/mesh fragments exposed over HTTP](src/neuroglancer/datasource/precomputed)
 - Single NIfTI files <https://www.nitrc.org/projects/nifti>
-- [Python in-memory volumes](python/README.md) (with automatic mesh generation)
-- N5 <https://github.com/saalfeldlab/n5>
-- [Zarr](src/neuroglancer/datasource/zarr)
 
 # Supported browsers
 

@@ -1,4 +1,4 @@
-The "precomputed" data source format is based on static collections of files served directly over
+The `"precomputed"` data source format is based on static collections of files served directly over
 HTTP; it therefore can be used without any special serving infrastructure.  In particular, it can be
 used with data hosted by a cloud storage provider like Google Cloud Storage or Amazon S3.  Note that
 it is necessary, however, to either host the Neuroglancer client from the same server or enable CORS
@@ -10,6 +10,18 @@ Several types of data are supported:
 - [Object skeleton representations (keyed by uint64 object ids)](./skeletons.md)
 - [Collection of point/line/bounding box/ellipsoid annotations](./annotations.md)
 - [Segment property maps](./segment_properties.md)
+
+Precomputed data sources are specified using the following data source URL syntax:
+
+`precomputed://FILE_URL`, where `FILE_URL` is a URL to the directory containing a precomputed format
+`info` metadata file using any [supported file protocol](../file_protocols.md).
+
+For a [legacy single-resolution mesh dataset](./meshes.md#legacy-single-resolution-mesh-format)
+without an `info` metadata file, you must specify the type explicitly:
+
+`precomputed://FILE_URL#type=mesh`
+
+where `FILE_URL` is a URL to the directory containing the mesh data.
 
 # HTTP Content-Encoding
 
