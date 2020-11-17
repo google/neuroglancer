@@ -30,15 +30,16 @@ import {RenderLayer, RenderLayerRole, VisibilityTrackedRenderLayer} from 'neurog
 import {VolumeType} from 'neuroglancer/sliceview/volume/base';
 import {StatusMessage} from 'neuroglancer/status';
 import {TrackableBoolean} from 'neuroglancer/trackable_boolean';
-import {registerNested, TrackableRefCounted, TrackableValueInterface, WatchableSet, WatchableValue, WatchableValueInterface} from 'neuroglancer/trackable_value';
+import {registerNested, TrackableValueInterface, WatchableSet, WatchableValue, WatchableValueInterface} from 'neuroglancer/trackable_value';
 import {LayerDataSourcesTab} from 'neuroglancer/ui/layer_data_sources_tab';
 import {SELECTED_LAYER_SIDE_PANEL_DEFAULT_LOCATION, UserLayerSidePanelsState} from 'neuroglancer/ui/layer_side_panel_state';
 import {DEFAULT_SIDE_PANEL_LOCATION, TrackableSidePanelLocation} from 'neuroglancer/ui/side_panel_location';
-import {restoreTool, Tool} from 'neuroglancer/ui/tool';
+import {LayerToolBinder, SelectedLegacyTool, ToolBinder} from 'neuroglancer/ui/tool';
 import {gatherUpdate} from 'neuroglancer/util/array';
 import {Borrowed, invokeDisposers, Owned, RefCounted} from 'neuroglancer/util/disposable';
 import {emptyToUndefined, parseArray, parseFixedLengthArray, verifyBoolean, verifyFiniteFloat, verifyInt, verifyObject, verifyObjectProperty, verifyOptionalObjectProperty, verifyOptionalString, verifyString} from 'neuroglancer/util/json';
 import {MessageList} from 'neuroglancer/util/message_list';
+import {AnyConstructor} from 'neuroglancer/util/mixin';
 import {NullarySignal} from 'neuroglancer/util/signal';
 import {addSignalBinding, removeSignalBinding, SignalBindingUpdater} from 'neuroglancer/util/signal_binding_updater';
 import {Trackable} from 'neuroglancer/util/trackable';
@@ -50,6 +51,7 @@ import {TabSpecification} from 'neuroglancer/widget/tab_view';
 import {RPC} from 'neuroglancer/worker_rpc';
 
 const TOOL_JSON_KEY = 'tool';
+const TOOL_BINDINGS_JSON_KEY = 'toolBindings';
 const LOCAL_POSITION_JSON_KEY = 'localPosition';
 const LOCAL_COORDINATE_SPACE_JSON_KEY = 'localDimensions';
 const SOURCE_JSON_KEY = 'source';
@@ -223,8 +225,8 @@ export class UserLayer extends RefCounted {
 
   tabs = this.registerDisposer(new TabSpecification());
   panels = new UserLayerSidePanelsState(this);
-  tool: TrackableRefCounted<Tool> = this.registerDisposer(
-      new TrackableRefCounted<Tool>(value => restoreTool(this, value), value => value.toJSON()));
+  tool = this.registerDisposer(new SelectedLegacyTool(this));
+  toolBinder = new LayerToolBinder(this);
 
   dataSourcesChanged = new NullarySignal();
   dataSources: LayerDataSource[] = [];
@@ -239,6 +241,7 @@ export class UserLayer extends RefCounted {
     this.tabs.changed.add(this.specificationChanged.dispatch);
     this.panels.specificationChanged.add(this.specificationChanged.dispatch);
     this.tool.changed.add(this.specificationChanged.dispatch);
+    this.toolBinder.changed.add(this.specificationChanged.dispatch);
     this.localPosition.changed.add(this.specificationChanged.dispatch);
     this.pick.changed.add(this.specificationChanged.dispatch);
     this.pick.changed.add(this.layersChanged.dispatch);
@@ -357,6 +360,7 @@ export class UserLayer extends RefCounted {
 
   restoreState(specification: any) {
     this.tool.restoreState(specification[TOOL_JSON_KEY]);
+    this.toolBinder.restoreState(specification[TOOL_BINDINGS_JSON_KEY]);
     this.panels.restoreState(specification);
     this.localCoordinateSpace.restoreState(specification[LOCAL_COORDINATE_SPACE_JSON_KEY]);
     this.localPosition.restoreState(specification[LOCAL_POSITION_JSON_KEY]);
@@ -428,6 +432,7 @@ export class UserLayer extends RefCounted {
       type: this.type,
       [SOURCE_JSON_KEY]: dataSourcesToJson(this.dataSources),
       [TOOL_JSON_KEY]: this.tool.toJSON(),
+      [TOOL_BINDINGS_JSON_KEY]: this.toolBinder.toJSON(),
       [LOCAL_COORDINATE_SPACE_JSON_KEY]: this.localCoordinateSpace.toJSON(),
       [LOCAL_POSITION_JSON_KEY]: this.localPosition.toJSON(),
       [PICK_JSON_KEY]: this.pick.toJSON(),
@@ -1761,7 +1766,7 @@ export class TopLevelLayerListSpecification extends LayerListSpecification {
       public selectionState: Borrowed<TrackableDataSelectionState>,
       public selectedLayer: Borrowed<SelectedLayerState>,
       public coordinateSpace: WatchableValueInterface<CoordinateSpace>,
-      public globalPosition: Borrowed<Position>) {
+      public globalPosition: Borrowed<Position>, public toolBinder: Borrowed<ToolBinder>) {
     super();
     this.registerDisposer(layerManager.layersChanged.add(this.changed.dispatch));
     this.registerDisposer(layerManager.specificationChanged.add(this.changed.dispatch));
@@ -1924,7 +1929,8 @@ export class LayerSubsetSpecification extends LayerListSpecification {
   }
 }
 
-export type UserLayerConstructor = typeof UserLayer;
+export type UserLayerConstructor<LayerType extends UserLayer = UserLayer> =
+    typeof UserLayer&AnyConstructor<LayerType>;
 
 export const layerTypes = new Map<string, UserLayerConstructor>();
 const volumeLayerTypes = new Map<VolumeType, UserLayerConstructor>();

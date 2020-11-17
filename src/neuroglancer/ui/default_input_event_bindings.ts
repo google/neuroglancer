@@ -26,7 +26,7 @@ export function getDefaultGlobalBindings() {
     map.set('keyx', 'clear-segments');
     map.set('keys', 'toggle-show-slices');
     map.set('keyb', 'toggle-scale-bar');
-    map.set('shift+keyb', 'toggle-default-annotations');
+    map.set('keyv', 'toggle-default-annotations');
     map.set('keya', 'toggle-axis-lines');
     map.set('keyo', 'toggle-orthographic-projection');
 
@@ -34,6 +34,12 @@ export function getDefaultGlobalBindings() {
       map.set('digit' + i, 'toggle-layer-' + i);
       map.set('control+digit' + i, 'select-layer-' + i);
       map.set('alt+digit' + i, 'toggle-pick-layer-' + i);
+    }
+
+    for (let i = 0; i < 26; ++i) {
+      const lowercase = String.fromCharCode(97 + i);
+      const uppercase = String.fromCharCode(65 + i);
+      map.set(`shift+key${lowercase}`, `tool-${uppercase}`);
     }
 
     map.set('keyn', 'add-layer');

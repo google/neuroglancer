@@ -34,7 +34,7 @@ import {bindSegmentListWidth, registerCallbackWhenSegmentationDisplayStateChange
 import {ElementVisibilityFromTrackableBoolean} from 'neuroglancer/trackable_boolean';
 import {AggregateWatchableValue, makeCachedLazyDerivedWatchableValue, registerNested, WatchableValueInterface} from 'neuroglancer/trackable_value';
 import {getDefaultAnnotationListBindings} from 'neuroglancer/ui/default_input_event_bindings';
-import {registerTool, Tool} from 'neuroglancer/ui/tool';
+import {registerLegacyTool, LegacyTool} from 'neuroglancer/ui/tool';
 import {animationFrameDebounce} from 'neuroglancer/util/animation_frame_debounce';
 import {arraysEqual, ArraySpliceOp} from 'neuroglancer/util/array';
 import {setClipboard} from 'neuroglancer/util/clipboard';
@@ -791,9 +791,10 @@ function getSelectedAssociatedSegments(annotationLayer: AnnotationLayerState) {
   return segments;
 }
 
-abstract class PlaceAnnotationTool extends Tool {
-  constructor(public layer: UserLayerWithAnnotations, options: any) {
-    super();
+abstract class PlaceAnnotationTool extends LegacyTool {
+  layer: UserLayerWithAnnotations;
+  constructor(layer: UserLayerWithAnnotations, options: any) {
+    super(layer);
     options;
   }
 
@@ -1058,16 +1059,16 @@ class PlaceEllipsoidTool extends TwoStepAnnotationTool {
   }
 }
 
-registerTool(
+registerLegacyTool(
     ANNOTATE_POINT_TOOL_ID,
     (layer, options) => new PlacePointTool(<UserLayerWithAnnotations>layer, options));
-registerTool(
+registerLegacyTool(
     ANNOTATE_BOUNDING_BOX_TOOL_ID,
     (layer, options) => new PlaceBoundingBoxTool(<UserLayerWithAnnotations>layer, options));
-registerTool(
+registerLegacyTool(
     ANNOTATE_LINE_TOOL_ID,
     (layer, options) => new PlaceLineTool(<UserLayerWithAnnotations>layer, options));
-registerTool(
+registerLegacyTool(
     ANNOTATE_ELLIPSOID_TOOL_ID,
     (layer, options) => new PlaceEllipsoidTool(<UserLayerWithAnnotations>layer, options));
 
