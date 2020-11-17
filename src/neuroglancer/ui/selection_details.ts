@@ -89,6 +89,7 @@ export class SelectionDetailsTab extends RefCounted {
     element.appendChild(body);
     body.appendChild(
         this.registerDisposer(new DependentViewWidget(state, (stateValue, parent, context) => {
+              if (!state.visible.value) return;
               backButton.style.visibility = state.canGoBack() ? 'visible' : 'hidden';
               forwardButton.style.visibility = state.canGoForward() ? 'visible' : 'hidden';
               if (stateValue === undefined) return;
