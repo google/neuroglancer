@@ -21,6 +21,7 @@ import {CoordinateSpace, CoordinateSpaceTransform, CoordinateTransformSpecificat
 import {CredentialsManager} from 'neuroglancer/credentials_provider';
 import {MeshSource, MultiscaleMeshSource} from 'neuroglancer/mesh/frontend';
 import {SegmentPropertyMap} from 'neuroglancer/segmentation_display_state/property_map';
+import {SegmentationGraphSource} from 'neuroglancer/segmentation_graph/source';
 import {SingleMeshSource} from 'neuroglancer/single_mesh/frontend';
 import {SkeletonSource} from 'neuroglancer/skeleton/frontend';
 import {MultiscaleVolumeChunkSource} from 'neuroglancer/sliceview/volume/frontend';
@@ -109,6 +110,7 @@ export interface NormalizeUrlOptions extends NormalizeUrlOptionsBase {
 
 export enum LocalDataSource {
   annotations,
+  equivalences,
 }
 
 export interface DataSubsource {
@@ -119,6 +121,7 @@ export interface DataSubsource {
   local?: LocalDataSource;
   singleMesh?: SingleMeshSource;
   segmentPropertyMap?: SegmentPropertyMap;
+  segmentationGraph?: SegmentationGraphSource;
 }
 
 export interface CompleteUrlOptionsBase {
@@ -219,6 +222,7 @@ export abstract class DataSourceProvider extends RefCounted {
 }
 
 export const localAnnotationsUrl = 'local://annotations';
+export const localEquivalencesUrl = 'local://equivalences';
 
 class LocalDataSourceProvider extends DataSourceProvider {
   get description() {
@@ -226,42 +230,59 @@ class LocalDataSourceProvider extends DataSourceProvider {
   }
 
   async get(options: GetDataSourceOptions): Promise<DataSource> {
-    if (options.url === localAnnotationsUrl) {
-      const {transform} = options;
-      let modelTransform: CoordinateSpaceTransform;
-      if (transform === undefined) {
-        const baseSpace = options.globalCoordinateSpace.value;
-        const {rank, names, scales, units} = baseSpace;
-        const inputSpace = makeCoordinateSpace({
-          rank,
-          scales,
-          units,
-          names: names.map((_, i) => `${i}`),
-        });
-        const outputSpace = makeCoordinateSpace({rank, scales, units, names});
-        modelTransform = {
-          rank,
-          sourceRank: rank,
-          inputSpace,
-          outputSpace,
-          transform: createIdentity(Float64Array, rank + 1),
-        };
-      } else {
-        modelTransform = makeIdentityTransform(emptyValidCoordinateSpace);
-      }
-      return {
-        modelTransform,
-        canChangeModelSpaceRank: true,
-        subsources: [
-          {
-            id: 'default',
-            default: true,
-            subsource: {
-              local: LocalDataSource.annotations,
+    switch (options.url) {
+      case localAnnotationsUrl: {
+        const {transform} = options;
+        let modelTransform: CoordinateSpaceTransform;
+        if (transform === undefined) {
+          const baseSpace = options.globalCoordinateSpace.value;
+          const {rank, names, scales, units} = baseSpace;
+          const inputSpace = makeCoordinateSpace({
+            rank,
+            scales,
+            units,
+            names: names.map((_, i) => `${i}`),
+          });
+          const outputSpace = makeCoordinateSpace({rank, scales, units, names});
+          modelTransform = {
+            rank,
+            sourceRank: rank,
+            inputSpace,
+            outputSpace,
+            transform: createIdentity(Float64Array, rank + 1),
+          };
+        } else {
+          modelTransform = makeIdentityTransform(emptyValidCoordinateSpace);
+        }
+        return {
+          modelTransform,
+          canChangeModelSpaceRank: true,
+          subsources: [
+            {
+              id: 'default',
+              default: true,
+              subsource: {
+                local: LocalDataSource.annotations,
+              },
             },
-          },
-        ],
-      };
+          ],
+        };
+      }
+      case localEquivalencesUrl: {
+        return {
+          modelTransform: makeIdentityTransform(emptyValidCoordinateSpace),
+          canChangeModelSpaceRank: false,
+          subsources: [
+            {
+              id: 'default',
+              default: true,
+              subsource: {
+                local: LocalDataSource.equivalences,
+              },
+            },
+          ],
+        };
+      }
     }
     throw new Error('Invalid local data source URL');
   }
@@ -271,7 +292,16 @@ class LocalDataSourceProvider extends DataSourceProvider {
       offset: 0,
       completions: getPrefixMatchesWithDescriptions(
           options.providerUrl,
-          [{value: 'annotations', description: 'Annotations stored in the JSON state'}],
+          [
+            {
+              value: 'annotations',
+              description: 'Annotations stored in the JSON state',
+            },
+            {
+              value: 'equivalences',
+              description: 'Segmentation equivalence graph stored in the JSON state'
+            },
+          ],
           x => x.value, x => x.description)
     };
   }

@@ -330,8 +330,10 @@ export class UserLayer extends RefCounted {
 
   getLegacyDataSourceSpecifications(
       sourceSpec: string|undefined, layerSpec: any,
-      legacyTransform: CoordinateTransformSpecification|undefined): DataSourceSpecification[] {
+      legacyTransform: CoordinateTransformSpecification|undefined,
+      explicitSpecs: DataSourceSpecification[]): DataSourceSpecification[] {
     layerSpec;
+    explicitSpecs;
     if (sourceSpec === undefined) return [];
     return [layerDataSourceSpecificationFromJson(sourceSpec, legacyTransform)];
   }
@@ -350,7 +352,7 @@ export class UserLayer extends RefCounted {
     });
     const legacyTransform = verifyObjectProperty(
         layerSpec, TRANSFORM_JSON_KEY, coordinateTransformSpecificationFromLegacyJson);
-    specs.push(...this.getLegacyDataSourceSpecifications(legacySpec, layerSpec, legacyTransform));
+    specs.push(...this.getLegacyDataSourceSpecifications(legacySpec, layerSpec, legacyTransform, specs));
     specs = specs.filter(spec => spec.url);
     if (specs.length === 0) {
       specs.push(makeEmptyDataSourceSpecification());

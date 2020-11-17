@@ -149,6 +149,12 @@ export class DisjointUint64Sets {
     return true;
   }
 
+  linkAll(ids: Uint64[]) {
+    for (let i = 1, length = ids.length; i < length; ++i) {
+      this.link(ids[0], ids[i]);
+    }
+  }
+
   /**
    * Unlinks all members of the specified set.
    */
@@ -191,6 +197,14 @@ export class DisjointUint64Sets {
       temp[0] = element;
       temp[1] = findRepresentative(element)[minSymbol];
       yield temp;
+    }
+  }
+
+  * roots() {
+    for (let element of this.map.values()) {
+      if (isRootElement(element)) {
+        yield element;
+      }
     }
   }
 

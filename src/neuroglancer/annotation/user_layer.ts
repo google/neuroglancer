@@ -364,10 +364,11 @@ export class AnnotationUserLayer extends Base {
   }
 
   getLegacyDataSourceSpecifications(
-      sourceSpec: any, layerSpec: any,
-      legacyTransform: CoordinateTransformSpecification|undefined): DataSourceSpecification[] {
+      sourceSpec: any, layerSpec: any, legacyTransform: CoordinateTransformSpecification|undefined,
+      explicitSpecs: DataSourceSpecification[]): DataSourceSpecification[] {
     if (Object.prototype.hasOwnProperty.call(layerSpec, 'source')) {
-      return super.getLegacyDataSourceSpecifications(sourceSpec, layerSpec, legacyTransform);
+      return super.getLegacyDataSourceSpecifications(
+          sourceSpec, layerSpec, legacyTransform, explicitSpecs);
     }
     const scales = verifyOptionalObjectProperty(
         layerSpec, 'voxelSize',

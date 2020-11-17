@@ -39,6 +39,8 @@ import {Tab} from 'neuroglancer/widget/tab_view';
 import {VirtualList, VirtualListSource} from 'neuroglancer/widget/virtual_list';
 import {clampToInterval, computeInvlerp, dataTypeCompare, DataTypeInterval, dataTypeIntervalEqual, getClampedInterval, getIntervalBoundsEffectiveFraction, parseDataTypeValue} from 'neuroglancer/util/lerp';
 import {CdfController, getUpdatedRangeAndWindowParameters, RangeAndWindowIntervals} from 'neuroglancer/widget/invlerp';
+import {makeToolButton} from 'neuroglancer/ui/tool';
+import {ANNOTATE_MERGE_SEGMENTS_TOOL_ID, ANNOTATE_SPLIT_SEGMENTS_TOOL_ID} from 'neuroglancer/ui/segment_split_merge_tools';
 
 const tempUint64 = new Uint64();
 
@@ -776,6 +778,26 @@ export class SegmentDisplayTab extends Tab {
     super();
     const {element} = this;
     element.classList.add('neuroglancer-segment-display-tab');
+    element.appendChild(
+        this.registerDisposer(new DependentViewWidget(
+                                  layer.displayState.segmentationGroupState.value.graph,
+                                  (graph, parent, context) => {
+                                    if (graph === undefined) return;
+                                    const toolbox = document.createElement('div');
+                                    toolbox.className = 'neuroglancer-segmentation-toolbox';
+                                    toolbox.appendChild(makeToolButton(context, layer, {
+                                      toolJson: ANNOTATE_MERGE_SEGMENTS_TOOL_ID,
+                                      label: 'Merge',
+                                      title: 'Merge segments'
+                                    }));
+                                    toolbox.appendChild(makeToolButton(context, layer, {
+                                      toolJson: ANNOTATE_SPLIT_SEGMENTS_TOOL_ID,
+                                      label: 'Split',
+                                      title: 'Split segments'
+                                    }));
+                                    parent.appendChild(toolbox);
+                                  }))
+            .element);
     const queryElement = document.createElement('input');
     queryElement.classList.add('neuroglancer-segment-list-query');
     queryElement.addEventListener('focus', () => {

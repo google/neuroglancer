@@ -14,14 +14,6 @@
  * limitations under the License.
  */
 
-#statusContainer li.neuroglancer-layer-control-tool-status {
-  max-height: 50vh;
-}
-
-.neuroglancer-layer-control-tool-status-bindings {
-  background-color: #333;
-}
-
 .neuroglancer-layer-options-control-container .neuroglancer-layer-control-label-container {
   margin-right: auto;
 }

@@ -68,6 +68,14 @@ export class SharedDisjointUint64Sets extends SharedObjectCounterpart implements
             {'id': this.rpcId, 'al': a.low, 'ah': a.high, 'bl': b.low, 'bh': b.high});
       }
       this.changed.dispatch();
+      return true;
+    }
+    return false;
+  }
+
+  linkAll(ids: Uint64[]) {
+    for (let i = 1, length = ids.length; i < length; ++i) {
+      this.link(ids[0], ids[i]);
     }
   }
 
@@ -124,9 +132,14 @@ export class SharedDisjointUint64Sets extends SharedObjectCounterpart implements
     }
   }
 
-  assignFrom(other: SharedDisjointUint64Sets) {
+  assignFrom(other: SharedDisjointUint64Sets|DisjointUint64Sets) {
     this.clear();
-    this.restoreState(other.toJSON());
+    if (other instanceof SharedDisjointUint64Sets) {
+      other = other.disjointSets;
+    }
+    for (const [a, b] of other) {
+      this.link(a, b);
+    }
   }
 }
 

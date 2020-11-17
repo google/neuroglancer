@@ -18,11 +18,9 @@ import './layer_control.css';
 
 import {DisplayContext} from 'neuroglancer/display_context';
 import {UserLayer, UserLayerConstructor} from 'neuroglancer/layer';
-import {StatusMessage} from 'neuroglancer/status';
 import {WatchableValueInterface} from 'neuroglancer/trackable_value';
-import {registerLayerTool, Tool, ToolActivation, ToolBindingWidget} from 'neuroglancer/ui/tool';
+import {makeToolActivationStatusMessageWithHeader, registerLayerTool, Tool, ToolActivation, ToolBindingWidget} from 'neuroglancer/ui/tool';
 import {RefCounted} from 'neuroglancer/util/disposable';
-import {EventActionMap} from 'neuroglancer/util/event_action_map';
 import {WatchableVisibilityPriority} from 'neuroglancer/visibility_priority/frontend';
 import {DependentViewWidget} from 'neuroglancer/widget/dependent_view_widget';
 
@@ -86,20 +84,12 @@ export class LayerControlTool<LayerType extends UserLayer = UserLayer> extends T
     const {layer} = this;
     const {isValid} = options;
     if (isValid !== undefined && !isValid(layer).value) return;
-    const message = activation.registerDisposer(new StatusMessage(false));
-    message.element.classList.add('neuroglancer-layer-control-tool-status');
-    const {controlContainer, control} = makeControl(
+    const {header, body} = makeToolActivationStatusMessageWithHeader(activation);
+    const {controlContainer, control, labelContainer} = makeControl(
         activation, layer, options,
         new WatchableVisibilityPriority(WatchableVisibilityPriority.VISIBLE));
-    message.element.appendChild(controlContainer);
-    const {inputEventMapBinder} = activation;
-    activation.inputEventMapBinder = (inputEventMap: EventActionMap, context: RefCounted) => {
-      const bindingHelp = document.createElement('div');
-      bindingHelp.textContent = inputEventMap.describe();
-      bindingHelp.classList.add('neuroglancer-layer-control-tool-status-bindings');
-      message.element.appendChild(bindingHelp);
-      inputEventMapBinder(inputEventMap, context);
-    };
+    header.appendChild(labelContainer);
+    body.appendChild(controlContainer);
     options.activateTool(activation, control);
   }
   get description() {

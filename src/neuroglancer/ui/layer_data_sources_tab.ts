@@ -170,6 +170,9 @@ export class DataSourceSubsourceView extends RefCounted {
         case LocalDataSource.annotations:
           sourceTypeStr = 'Local annotations';
           break;
+        case LocalDataSource.equivalences:
+          sourceTypeStr = 'local segmentation graph';
+          break;
       }
     } else if (subsource.staticAnnotations !== undefined) {
       sourceTypeStr = 'default annotations';
@@ -177,6 +180,8 @@ export class DataSourceSubsourceView extends RefCounted {
       sourceTypeStr = 'annotations';
     } else if (subsource.singleMesh !== undefined) {
       sourceTypeStr = 'single mesh';
+    } else if (subsource.segmentationGraph !== undefined) {
+      sourceTypeStr = 'segmentation graph';
     }
     sourceType.textContent = sourceTypeStr;
   }

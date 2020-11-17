@@ -156,7 +156,8 @@ export function registerLayerTool<LayerType extends UserLayer>(
   tools.set(type, getter);
 }
 
-export class SelectedLegacyTool extends RefCounted implements TrackableValueInterface<LegacyTool|undefined> {
+export class SelectedLegacyTool extends RefCounted implements
+    TrackableValueInterface<LegacyTool|undefined> {
   changed = new Signal();
   private value_: Owned<LegacyTool>|undefined;
 
@@ -429,4 +430,52 @@ export function addToolKeyBindHandlers(
     event.preventDefault();
     event.stopPropagation();
   });
+}
+
+export function makeToolButton(
+    context: RefCounted, layer: UserLayer,
+    options: {toolJson: any, label: string, title?: string}) {
+  const element = document.createElement('div');
+  element.classList.add('neuroglancer-tool-button');
+  element.appendChild(
+      context.registerDisposer(new ToolBindingWidget(layer, options.toolJson)).element);
+  const labelElement = document.createElement('div');
+  labelElement.classList.add('neuroglancer-tool-button-label');
+  labelElement.textContent = options.label;
+  if (options.title) {
+    labelElement.title = options.title;
+  }
+  element.appendChild(labelElement);
+  return element;
+}
+
+export function makeToolActivationStatusMessage(activation: ToolActivation) {
+  const message = activation.registerDisposer(new StatusMessage(false));
+  message.element.classList.add('neuroglancer-tool-status');
+  const content = document.createElement('div');
+  content.classList.add('neuroglancer-tool-status-content');
+  message.element.appendChild(content);
+  const {inputEventMapBinder} = activation;
+  activation.inputEventMapBinder = (inputEventMap: EventActionMap, context: RefCounted) => {
+    const bindingHelp = document.createElement('div');
+    bindingHelp.textContent = inputEventMap.describe();
+    bindingHelp.classList.add('neuroglancer-tool-status-bindings');
+    message.element.appendChild(bindingHelp);
+    inputEventMapBinder(inputEventMap, context);
+  };
+  return {message, content};
+}
+
+export function makeToolActivationStatusMessageWithHeader(activation: ToolActivation) {
+  const {message, content} = makeToolActivationStatusMessage(activation);
+  const header = document.createElement('div');
+  header.classList.add('neuroglancer-tool-status-header');
+  const headerContainer = document.createElement('div');
+  headerContainer.classList.add('neuroglancer-tool-status-header-container');
+  headerContainer.appendChild(header);
+  content.appendChild(headerContainer);
+  const body = document.createElement('div');
+  body.classList.add('neuroglancer-tool-status-body');
+  content.appendChild(body);
+  return {message, body, header};
 }

@@ -264,6 +264,18 @@ class ShaderControlTool(Tool):
     control = wrapped_property('control', text_type)
 
 
+@export_tool
+class MergeSegmentsTool(Tool):
+    __slots__ = ()
+    TOOL_TYPE = 'mergeSegments'
+
+
+@export_tool
+class SplitSegmentsTool(Tool):
+    __slots__ = ()
+    TOOL_TYPE = 'splitSegments'
+
+
 @export
 def tool(json_data, _readonly=False):
     if isinstance(json_data, Tool):
