@@ -192,6 +192,12 @@ class HideSegmentZeroTool(Tool):
 
 
 @export_tool
+class BaseSegmentColoringTool(Tool):
+    __slots__ = ()
+    TOOL_TYPE = 'baseSegmentColoring'
+
+
+@export_tool
 class IgnoreNullVisibleSetTool(Tool):
     __slots__ = ()
     TOOL_TYPE = 'ignoreNullVisibleSet'

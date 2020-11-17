@@ -34,7 +34,7 @@ import {setClipboard} from 'neuroglancer/util/clipboard';
 import {useWhiteBackground} from 'neuroglancer/util/color';
 import {RefCounted} from 'neuroglancer/util/disposable';
 import {measureElementClone} from 'neuroglancer/util/dom';
-import {vec3, vec4} from 'neuroglancer/util/geom';
+import {kOneVec, vec3, vec4} from 'neuroglancer/util/geom';
 import {NullarySignal} from 'neuroglancer/util/signal';
 import {Uint64} from 'neuroglancer/util/uint64';
 import {withSharedVisibility} from 'neuroglancer/visibility_priority/frontend';
@@ -149,6 +149,7 @@ export interface SegmentationColorGroupState {
 export interface SegmentationDisplayState {
   segmentSelectionState: SegmentSelectionState;
   saturation: TrackableAlphaValue;
+  baseSegmentColoring: WatchableValueInterface<boolean>;
   segmentationGroupState: WatchableValueInterface<SegmentationGroupState>;
   segmentationColorGroupState: WatchableValueInterface<SegmentationColorGroupState>;
 
@@ -474,15 +475,29 @@ export class SegmentWidgetFactory<Template extends SegmentWidgetTemplate> {
     container.dataset.selected = (segmentSelectionState.hasSelectedSegment &&
                                   Uint64.equal(segmentSelectionState.selectedSegment, mapped))
                                      .toString();
-    const idElement = (stickyChildren[template.idIndex] as HTMLElement);
-    const baseObjectColor = getBaseObjectColor(this.displayState, mapped);
-    idElement.style.backgroundColor = getCssColor(baseObjectColor);
-    idElement.style.color = useWhiteBackground(baseObjectColor as vec3) ? 'white' : 'black';
+    setSegmentIdElementStyle(
+        (stickyChildren[template.idIndex] as HTMLElement),
+        getBaseObjectColor(this.displayState, mapped) as vec3);
     const {unmappedIdIndex} = template;
     if (unmappedIdIndex !== -1) {
-      (children[unmappedIdIndex] as HTMLElement).style.backgroundColor = 'white';
+      let unmappedIdString: string|undefined;
+      let color: vec3;
+      if (displayState!.baseSegmentColoring.value &&
+          (unmappedIdString = container.dataset.unmappedId) !== undefined) {
+        const unmappedId = tempStatedColor;
+        unmappedId.parseString(unmappedIdString);
+        color = getBaseObjectColor(this.displayState, unmappedId) as vec3;
+      } else {
+        color = kOneVec;
+      }
+      setSegmentIdElementStyle(children[unmappedIdIndex] as HTMLElement, color);
     }
   }
+}
+
+function setSegmentIdElementStyle(element: HTMLElement, color: vec3) {
+  element.style.backgroundColor = getCssColor(color);
+  element.style.color = useWhiteBackground(color) ? 'white' : 'black';
 }
 
 export class SegmentWidgetWithExtraColumnsFactory extends
@@ -616,6 +631,7 @@ export function registerCallbackWhenSegmentationDisplayStateChanged(
   }, displayState.segmentationColorGroupState));
   context.registerDisposer(displayState.saturation.changed.add(callback));
   context.registerDisposer(displayState.segmentSelectionState.changed.add(callback));
+  context.registerDisposer(displayState.baseSegmentColoring.changed.add(callback));
 }
 
 export function registerRedrawWhenSegmentationDisplayStateChanged(
@@ -742,9 +758,12 @@ export function forEachVisibleSegmentToDraw(
         objectId: Uint64, color: vec4|undefined, pickIndex: number|undefined,
         rootObjectId: Uint64) => void) {
   const alpha = Math.min(1, displayState.objectAlpha.value);
+  const baseSegmentColoring = displayState.baseSegmentColoring.value;
   forEachVisibleSegment(displayState.segmentationGroupState.value, (objectId, rootObjectId) => {
     let pickIndex = pickIDs?.registerUint64(renderLayer, objectId);
-    let color = emitColor ? getObjectColor(displayState, rootObjectId, alpha) : undefined;
+    let color = emitColor ?
+        getObjectColor(displayState, baseSegmentColoring ? objectId : rootObjectId, alpha) :
+        undefined;
     callback(objectId, color, pickIndex, rootObjectId);
   });
 }

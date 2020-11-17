@@ -54,6 +54,7 @@ export interface SliceViewSegmentationDisplayState extends SegmentationDisplaySt
 
 interface ShaderParameters {
   hasEquivalences: boolean;
+  baseSegmentColoring: boolean;
   hasSegmentStatedColors: boolean;
   hideSegmentZero: boolean;
   hasSegmentDefaultColor: boolean;
@@ -88,6 +89,7 @@ export class SegmentationRenderLayer extends SliceViewVolumeRenderLayer<ShaderPa
             hasSegmentDefaultColor: refCounted.registerDisposer(makeCachedDerivedWatchableValue(
                 x => x !== undefined, [displayState.segmentDefaultColor])),
             hideSegmentZero: displayState.hideSegmentZero,
+            baseSegmentColoring: displayState.baseSegmentColoring,
           })),
       transform: displayState.transform,
       renderScaleHistogram: displayState.renderScaleHistogram,
@@ -113,16 +115,18 @@ export class SegmentationRenderLayer extends SliceViewVolumeRenderLayer<ShaderPa
 
   defineShader(builder: ShaderBuilder, parameters: ShaderParameters) {
     this.hashTableManager.defineShader(builder);
-    builder.addFragmentCode(`
+    let getUint64Code = `
 uint64_t getUint64DataValue() {
-  return toUint64(getDataValue());
+  uint64_t x = toUint64(getDataValue());
+`;
+    getUint64Code += `return x;
 }
-`);
+`;
+    builder.addFragmentCode(getUint64Code);
     if (parameters.hasEquivalences) {
       this.equivalencesShaderManager.defineShader(builder);
       builder.addFragmentCode(`
-uint64_t getMappedObjectId() {
-  uint64_t value = getUint64DataValue();
+uint64_t getMappedObjectId(uint64_t value) {
   uint64_t mappedValue;
   if (${this.equivalencesShaderManager.getFunctionName}(value, mappedValue)) {
     return mappedValue;
@@ -132,8 +136,8 @@ uint64_t getMappedObjectId() {
 `);
     } else {
       builder.addFragmentCode(`
-uint64_t getMappedObjectId() {
-  return getUint64DataValue();
+uint64_t getMappedObjectId(uint64_t value) {
+  return value;
 }
 `);
     }
@@ -143,7 +147,9 @@ uint64_t getMappedObjectId() {
     builder.addUniform('highp float', 'uNotSelectedAlpha');
     builder.addUniform('highp float', 'uSaturation');
     let fragmentMain = `
-  uint64_t value = getMappedObjectId();
+  uint64_t baseValue = getUint64DataValue();
+  uint64_t value = getMappedObjectId(baseValue);
+  uint64_t valueForColor = ${parameters.baseSegmentColoring?'baseValue':'value'};
 
   float alpha = uSelectedAlpha;
   float saturation = uSaturation;
@@ -197,7 +203,7 @@ uint64_t getMappedObjectId() {
     builder.addFragmentCode(getMappedIdColor);
 
     fragmentMain += `
-  vec3 rgb = getMappedIdColor(value);
+  vec3 rgb = getMappedIdColor(valueForColor);
   emit(vec4(mix(vec3(1.0,1.0,1.0), rgb, saturation), alpha));
 `;
     builder.setFragmentMain(fragmentMain);
@@ -205,6 +211,7 @@ uint64_t getMappedObjectId() {
 
   initializeShader(_sliceView: SliceView, shader: ShaderProgram, parameters: ShaderParameters) {
     const {gl} = this;
+    const {displayState} = this;
     const {segmentSelectionState} = this.displayState;
     const {visibleSegments} = this.segmentationGroupState;
     const {segmentDefaultColor: {value: segmentDefaultColor}, segmentColorHash: {value: segmentColorHash}} = this.displayState;
@@ -215,9 +222,9 @@ uint64_t getMappedObjectId() {
       selectedSegmentLow = seg.low;
       selectedSegmentHigh = seg.high;
     }
-    gl.uniform1f(shader.uniform('uSelectedAlpha'), this.displayState.selectedAlpha.value);
-    gl.uniform1f(shader.uniform('uSaturation'), this.displayState.saturation.value);
-    gl.uniform1f(shader.uniform('uNotSelectedAlpha'), this.displayState.notSelectedAlpha.value);
+    gl.uniform1f(shader.uniform('uSelectedAlpha'), displayState.selectedAlpha.value);
+    gl.uniform1f(shader.uniform('uSaturation'), displayState.saturation.value);
+    gl.uniform1f(shader.uniform('uNotSelectedAlpha'), displayState.notSelectedAlpha.value);
     gl.uniform2ui(shader.uniform('uSelectedSegment'), selectedSegmentLow, selectedSegmentHigh);
     gl.uniform1ui(
         shader.uniform('uShowAllSegments'),
