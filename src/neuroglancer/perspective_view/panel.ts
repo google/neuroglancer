@@ -31,7 +31,7 @@ import {TrackableValue, WatchableValueInterface} from 'neuroglancer/trackable_va
 import {TrackableRGB} from 'neuroglancer/util/color';
 import {Owned} from 'neuroglancer/util/disposable';
 import {ActionEvent, registerActionListener} from 'neuroglancer/util/event_action_map';
-import {kAxes, mat4, vec3, vec4} from 'neuroglancer/util/geom';
+import {kAxes, kZeroVec4, mat4, vec3, vec4} from 'neuroglancer/util/geom';
 import {startRelativeMouseDrag} from 'neuroglancer/util/mouse_drag';
 import {TouchRotateInfo, TouchTranslateInfo} from 'neuroglancer/util/touch_bindings';
 import {WatchableMap} from 'neuroglancer/util/watchable_map';
@@ -475,7 +475,12 @@ export class PerspectivePanel extends RenderedDataPanel {
     gl.disable(gl.SCISSOR_TEST);
     const backgroundColor = this.viewer.perspectiveViewBackgroundColor.value;
     this.gl.clearColor(backgroundColor[0], backgroundColor[1], backgroundColor[2], 0.0);
-    gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+    gl.clear(gl.DEPTH_BUFFER_BIT);
+    gl.clearBufferfv(
+        WebGL2RenderingContext.COLOR, OffscreenTextures.COLOR,
+        [backgroundColor[0], backgroundColor[1], backgroundColor[2], 0.0]);
+    gl.clearBufferfv(WebGL2RenderingContext.COLOR, OffscreenTextures.Z, kZeroVec4);
+    gl.clearBufferfv(WebGL2RenderingContext.COLOR, OffscreenTextures.PICK, kZeroVec4);
 
     gl.enable(gl.DEPTH_TEST);
     const projectionParameters = this.projectionParameters.value;
