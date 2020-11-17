@@ -175,7 +175,7 @@ Neuroglancer access to data you do not intend.
    (https://golang.org/s/re2syntax) that matches allowed origins.  For example:
 
    ```
-   '^((http://localhost(|:[0-9]+))|(https://neuroglancer-demo\.appspot\.com))$'
+   ^((http://localhost(|:[0-9]+))|(https://neuroglancer-demo\.appspot\.com))$
    ```
 
    allows any localhost origin as well as `https://neuroglancer-demo.appspot.com`.
