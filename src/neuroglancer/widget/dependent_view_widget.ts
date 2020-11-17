@@ -20,23 +20,29 @@ import {RefCounted} from 'neuroglancer/util/disposable';
 import {removeChildren} from 'neuroglancer/util/dom';
 import {WatchableVisibilityPriority} from 'neuroglancer/visibility_priority/frontend';
 
+export class DependentViewContext extends RefCounted {
+  constructor(public redraw: () => void) {
+    super();
+  }
+}
+
 export class DependentViewWidget<T> extends RefCounted {
   element = document.createElement('div');
 
   private generation = -1;
   private currentViewDisposer: RefCounted|undefined = undefined;
+  private debouncedUpdateView =
+      this.registerCancellable(animationFrameDebounce(() => this.updateView()));
 
   constructor(
       public model: WatchableValueInterface<T>,
-      public render: (value: T, parent: HTMLElement, refCounted: RefCounted) => void,
+      public render: (value: T, parent: HTMLElement, context: DependentViewContext) => void,
       public visibility = new WatchableVisibilityPriority(WatchableVisibilityPriority.VISIBLE)) {
     super();
     this.element.style.display = 'contents';
-    const debouncedUpdateView =
-        this.registerCancellable(animationFrameDebounce(() => this.updateView()));
-    this.registerDisposer(model.changed.add(debouncedUpdateView));
+    this.registerDisposer(model.changed.add(this.debouncedUpdateView));
     this.registerDisposer(visibility.changed.add(() => {
-      if (this.visible) debouncedUpdateView();
+      if (this.visible) this.debouncedUpdateView();
     }));
     this.updateView();
   }
@@ -51,7 +57,8 @@ export class DependentViewWidget<T> extends RefCounted {
     const generation = model.changed.count;
     if (generation === this.generation) return;
     this.disposeCurrentView();
-    const currentViewDisposer = this.currentViewDisposer = new RefCounted();
+    const currentViewDisposer = this.currentViewDisposer =
+        new DependentViewContext(this.debouncedUpdateView);
     this.render(model.value, this.element, currentViewDisposer);
   }
 

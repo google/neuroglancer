@@ -31,7 +31,7 @@ import {TrackableBoolean, TrackableBooleanCheckbox} from 'neuroglancer/trackable
 import {makeCachedDerivedWatchableValue, makeCachedLazyDerivedWatchableValue, registerNested, WatchableValue, WatchableValueInterface} from 'neuroglancer/trackable_value';
 import {UserLayerWithAnnotationsMixin} from 'neuroglancer/ui/annotations';
 import {setClipboard} from 'neuroglancer/util/clipboard';
-import {Borrowed, RefCounted} from 'neuroglancer/util/disposable';
+import {Borrowed} from 'neuroglancer/util/disposable';
 import {makeValueOrError} from 'neuroglancer/util/error';
 import {verifyOptionalObjectProperty} from 'neuroglancer/util/json';
 import {VolumeRenderingRenderLayer} from 'neuroglancer/volume_rendering/volume_render_layer';
@@ -39,7 +39,7 @@ import {makeWatchableShaderError, ParameterizedShaderGetterResult} from 'neurogl
 import {setControlsInShader, ShaderControlsBuilderState, ShaderControlState} from 'neuroglancer/webgl/shader_ui_controls';
 import {ChannelDimensionsWidget} from 'neuroglancer/widget/channel_dimensions_widget';
 import {makeCopyButton} from 'neuroglancer/widget/copy_button';
-import {DependentViewWidget} from 'neuroglancer/widget/dependent_view_widget';
+import {DependentViewContext, DependentViewWidget} from 'neuroglancer/widget/dependent_view_widget';
 import {EnumSelectWidget} from 'neuroglancer/widget/enum_widget';
 import {makeHelpButton} from 'neuroglancer/widget/help_button';
 import {makeMaximizeButton} from 'neuroglancer/widget/maximize_button';
@@ -245,8 +245,8 @@ export class ImageUserLayer extends Base {
     return true;
   }
 
-  displaySelectionState(state: this['selectionState'], parent: HTMLElement, context: RefCounted):
-      boolean {
+  displaySelectionState(
+      state: this['selectionState'], parent: HTMLElement, context: DependentViewContext): boolean {
     let displayed = this.displayImageSelectionState(state, parent);
     if (super.displaySelectionState(state, parent, context)) displayed = true;
     return displayed;

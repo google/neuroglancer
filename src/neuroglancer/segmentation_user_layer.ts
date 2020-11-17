@@ -25,8 +25,9 @@ import {layerDataSourceSpecificationFromJson, LoadedDataSubsource} from 'neurogl
 import {MeshLayer, MeshSource, MultiscaleMeshLayer, MultiscaleMeshSource} from 'neuroglancer/mesh/frontend';
 import {Overlay} from 'neuroglancer/overlay';
 import {RenderScaleHistogram, trackableRenderScaleTarget} from 'neuroglancer/render_scale_statistics';
-import {getCssColor, SegmentColorHash} from 'neuroglancer/segment_color';
-import {getBaseObjectColor, SegmentationDisplayState, SegmentSelectionState, Uint64MapEntry} from 'neuroglancer/segmentation_display_state/frontend';
+import {SegmentColorHash} from 'neuroglancer/segment_color';
+import {VisibleSegmentsState} from 'neuroglancer/segmentation_display_state/base';
+import {augmentSegmentId, bindSegmentListWidth, makeSegmentWidget, maybeAugmentSegmentId, registerCallbackWhenSegmentationDisplayStateChanged, SegmentationDisplayState, SegmentSelectionState, SegmentWidgetFactory, Uint64MapEntry} from 'neuroglancer/segmentation_display_state/frontend';
 import {compareSegmentLabels, normalizeSegmentLabel, SegmentLabelMap, SegmentPropertyMap} from 'neuroglancer/segmentation_display_state/property_map';
 import {SharedDisjointUint64Sets} from 'neuroglancer/shared_disjoint_sets';
 import {PerspectiveViewSkeletonLayer, SkeletonLayer, SkeletonRenderingOptions, SliceViewPanelSkeletonLayer, ViewSpecificSkeletonRenderingOptions} from 'neuroglancer/skeleton/frontend';
@@ -46,15 +47,14 @@ import {setClipboard} from 'neuroglancer/util/clipboard';
 import {packColor, parseRGBColorSpecification, serializeColor, unpackRGB} from 'neuroglancer/util/color';
 import {Borrowed, RefCounted} from 'neuroglancer/util/disposable';
 import {parseArray, verifyFiniteNonNegativeFloat, verifyObjectAsMap, verifyObjectProperty, verifyOptionalObjectProperty, verifyString} from 'neuroglancer/util/json';
-import {ActionEvent, EventActionMap, KeyboardEventBinder, registerActionListener} from 'neuroglancer/util/keyboard_bindings';
+import {EventActionMap, KeyboardEventBinder, registerActionListener} from 'neuroglancer/util/keyboard_bindings';
 import {MouseEventBinder} from 'neuroglancer/util/mouse_bindings';
-import {observeSignal, Signal} from 'neuroglancer/util/signal';
+import {Signal} from 'neuroglancer/util/signal';
 import {Uint64} from 'neuroglancer/util/uint64';
 import {makeWatchableShaderError} from 'neuroglancer/webgl/dynamic_shader';
 import {makeCopyButton} from 'neuroglancer/widget/copy_button';
-import {DependentViewWidget} from 'neuroglancer/widget/dependent_view_widget';
+import {DependentViewContext, DependentViewWidget} from 'neuroglancer/widget/dependent_view_widget';
 import {EnumSelectWidget} from 'neuroglancer/widget/enum_widget';
-import {makeFilterButton} from 'neuroglancer/widget/filter_button';
 import {makeHelpButton} from 'neuroglancer/widget/help_button';
 import {makeMaximizeButton} from 'neuroglancer/widget/maximize_button';
 import {RangeWidget} from 'neuroglancer/widget/range';
@@ -87,15 +87,43 @@ const maxSilhouettePower = 10;
 
 const tempUint64 = new Uint64();
 
+class SegmentationUserLayerDisplayState implements VisibleSegmentsState {
+  constructor(public layer: SegmentationUserLayer) {}
+
+  segmentColorHash = SegmentColorHash.getDefault();
+  segmentStatedColors =
+      this.layer.registerDisposer(Uint64Map.makeWithCounterpart(this.layer.manager.worker));
+  segmentSelectionState = new SegmentSelectionState();
+  selectedAlpha = trackableAlphaValue(0.5);
+  saturation = trackableAlphaValue(1.0);
+  notSelectedAlpha = trackableAlphaValue(0);
+  silhouetteRendering = new TrackableValue<number>(0, verifyFiniteNonNegativeFloat, 0);
+  objectAlpha = trackableAlphaValue(1.0);
+  hideSegmentZero = new TrackableBoolean(true, true);
+  ignoreNullVisibleSet = new TrackableBoolean(true, true);
+  visibleSegments =
+      this.layer.registerDisposer(Uint64Set.makeWithCounterpart(this.layer.manager.worker));
+  skeletonRenderingOptions = new SkeletonRenderingOptions();
+  shaderError = makeWatchableShaderError();
+  renderScaleHistogram = new RenderScaleHistogram();
+  renderScaleTarget = trackableRenderScaleTarget(1);
+  segmentLabelMap = new WatchableValue<SegmentLabelMap|undefined>(undefined);
+  segmentPropertyMaps = new WatchableValue<SegmentPropertyMap[]>([]);
+  segmentEquivalences = this.layer.registerDisposer(
+      SharedDisjointUint64Sets.makeWithCounterpart(this.layer.manager.worker));
+  maxIdLength = new WatchableValue(1);
+  selectSegment = this.layer.selectSegment;
+  filterBySegmentLabel = this.layer.filterBySegmentLabel;
+  transparentPickEnabled = this.layer.pick;
+}
+
 const Base = UserLayerWithAnnotationsMixin(UserLayer);
 export class SegmentationUserLayer extends Base {
   sliceViewRenderScaleHistogram = new RenderScaleHistogram();
   sliceViewRenderScaleTarget = trackableRenderScaleTarget(1);
 
   bindSegmentListWidth(element: HTMLElement) {
-    return observeWatchable(
-        width => element.style.setProperty('--neuroglancer-segment-list-width', `${width}ch`),
-        this.displayState.maxIdLength);
+    return bindSegmentListWidth(this.displayState, element);
   }
 
   segmentQuery = new TrackableValue<string>('', verifyString);
@@ -124,30 +152,7 @@ export class SegmentationUserLayer extends Base {
     this.manager.root.selectedLayer.layer = this.managedLayer;
   };
 
-  displayState = {
-    segmentColorHash: SegmentColorHash.getDefault(),
-    segmentStatedColors: Uint64Map.makeWithCounterpart(this.manager.worker),
-    segmentSelectionState: new SegmentSelectionState(),
-    selectedAlpha: trackableAlphaValue(0.5),
-    saturation: trackableAlphaValue(1.0),
-    notSelectedAlpha: trackableAlphaValue(0),
-    silhouetteRendering: new TrackableValue<number>(0, verifyFiniteNonNegativeFloat, 0),
-    objectAlpha: trackableAlphaValue(1.0),
-    hideSegmentZero: new TrackableBoolean(true, true),
-    ignoreNullVisibleSet: new TrackableBoolean(true, true),
-    visibleSegments: Uint64Set.makeWithCounterpart(this.manager.worker),
-    segmentEquivalences: SharedDisjointUint64Sets.makeWithCounterpart(this.manager.worker),
-    skeletonRenderingOptions: new SkeletonRenderingOptions(),
-    shaderError: makeWatchableShaderError(),
-    renderScaleHistogram: new RenderScaleHistogram(),
-    renderScaleTarget: trackableRenderScaleTarget(1),
-    segmentLabelMap: new WatchableValue<SegmentLabelMap|undefined>(undefined),
-    segmentPropertyMaps: new WatchableValue<SegmentPropertyMap[]>([]),
-    maxIdLength: new WatchableValue(1),
-    selectSegment: this.selectSegment,
-    filterBySegmentLabel: this.filterBySegmentLabel,
-    transparentPickEnabled: this.pick,
-  };
+  displayState = new SegmentationUserLayerDisplayState(this);
 
   constructor(managedLayer: Borrowed<ManagedUserLayer>, specification: any) {
     super(managedLayer, specification);
@@ -374,33 +379,8 @@ export class SegmentationUserLayer extends Base {
     if (value == null) {
       return value;
     }
-    const {segmentEquivalences, segmentLabelMap: {value: segmentLabelMap}} = this.displayState;
-    let id: Uint64;
-    let mappedValue: Uint64;
-    let mapped: Uint64|undefined;
-    let label: string|undefined;
-    if (typeof value === 'number') {
-      id = new Uint64(value, 0);
-    } else {
-      id = value;
-    }
-    if (segmentEquivalences.size !== 0) {
-      mappedValue = segmentEquivalences.get(value);
-      if (Uint64.equal(mappedValue, value)) {
-        mapped = undefined;
-      } else {
-        mapped = mappedValue;
-      }
-    } else {
-      mappedValue = id;
-    }
-    if (segmentLabelMap !== undefined) {
-      label = segmentLabelMap.get(mappedValue.toString());
-    }
-    if (label === undefined && mapped === undefined) {
-      return id;
-    }
-    return new Uint64MapEntry(id, mapped, label);
+    // Must copy, because `value` may be a temporary Uint64 returned by PickIDManager.
+    return maybeAugmentSegmentId(this.displayState, value, /*mustCopy=*/ true);
   }
 
   handleAction(action: string) {
@@ -456,8 +436,9 @@ export class SegmentationUserLayer extends Base {
     return json;
   }
 
+
   private displaySegmentationSelection(
-      state: this['selectionState'], parent: HTMLElement, context: RefCounted): boolean {
+      state: this['selectionState'], parent: HTMLElement, context: DependentViewContext): boolean {
     const {value} = state;
     let id: Uint64;
     if (typeof value === 'number' || typeof value === 'string') {
@@ -471,103 +452,18 @@ export class SegmentationUserLayer extends Base {
     } else {
       return false;
     }
+    const {displayState} = this;
+    const normalizedId = augmentSegmentId(displayState, id);
     const {
       segmentEquivalences,
-      segmentLabelMap: {value: segmentLabelMap},
       segmentPropertyMaps: {value: segmentPropertyMaps},
-      visibleSegments,
-      segmentSelectionState
     } = this.displayState;
     const mapped = segmentEquivalences.get(id);
-    const row = document.createElement('div');
-    row.classList.add('neuroglancer-selection-details-segment');
-    row.classList.add('neuroglancer-segment-list-entry');
-    let label: string|undefined;
-    if (segmentLabelMap !== undefined) {
-      label = segmentLabelMap.get(mapped.toString());
-    }
-
-    const watchableHas = context.registerDisposer(makeCachedLazyDerivedWatchableValue(
-        visibleSegments => visibleSegments.has(mapped), visibleSegments));
-    const checkbox = context
-                         .registerDisposer(new TrackableBooleanCheckbox({
-                           changed: watchableHas.changed,
-                           get value() {
-                             return watchableHas.value;
-                           },
-                           set value(value: boolean) {
-                             visibleSegments.set(mapped, value);
-                           },
-                         }))
-                         .element;
-    context.registerDisposer(observeSignal(() => {
-      row.dataset.selected = (segmentSelectionState.hasSelectedSegment &&
-                              Uint64.equal(segmentSelectionState.selectedSegment, mapped)) ?
-          'true' :
-          'false';
-    }, segmentSelectionState.changed));
-    row.addEventListener('mouseenter', () => {
-      this.displayState.segmentSelectionState.set(mapped);
-    });
-    row.addEventListener('mouseleave', () => {
-      this.displayState.segmentSelectionState.set(null);
-    });
-    checkbox.title = 'Toggle segment visibility';
-    const copyButton = makeCopyButton({
-      title: `Copy segment ID`,
-      onClick: () => {
-        setClipboard(mappedIdString);
-      },
-    });
-    copyButton.classList.add('neuroglancer-segment-list-entry-copy');
-    row.appendChild(copyButton);
-    row.appendChild(checkbox);
     const mappedIdString = mapped.toString();
-    context.registerDisposer(this.bindSegmentListWidth(row));
-    const idElement = document.createElement('span');
-    idElement.classList.add('neuroglancer-selection-details-segment-id');
-    const idString = id.toString();
-    idElement.textContent = idString;
-    updateIdStringWidth(this.displayState.maxIdLength, idString);
-    updateIdStringWidth(this.displayState.maxIdLength, mappedIdString);
-    row.appendChild(idElement);
-    if (!Uint64.equal(mapped, id)) {
-      const mappedIdElement = document.createElement('span');
-      mappedIdElement.classList.add('neuroglancer-selection-details-segment-mapped-id');
-      mappedIdElement.textContent = mapped.toString();
-      context.registerDisposer(observeSignal(
-          () => {
-            mappedIdElement.style.backgroundColor =
-                getCssColor(getBaseObjectColor(this.displayState, mapped));
-          },
-          this.displayState.segmentStatedColors.changed,
-          this.displayState.segmentColorHash.changed));
-      idElement.style.backgroundColor = 'white';
-      row.appendChild(mappedIdElement);
-    } else {
-      context.registerDisposer(observeSignal(
-          () => {
-            idElement.style.backgroundColor =
-                getCssColor(getBaseObjectColor(this.displayState, mapped));
-          },
-          this.displayState.segmentStatedColors.changed,
-          this.displayState.segmentColorHash.changed));
-    }
-    const filterElement = makeFilterButton({
-      title: 'Filter by label',
-      onClick: () => {
-        this.filterBySegmentLabel(mapped);
-      }
-    });
-    filterElement.classList.add('neuroglancer-segment-list-entry-filter');
-    row.appendChild(filterElement);
-    if (!label) {
-      filterElement.style.visibility = 'hidden';
-    }
-    const nameElement = document.createElement('span');
-    nameElement.classList.add('neuroglancer-segment-list-entry-name');
-    nameElement.textContent = label || '';
-    row.appendChild(nameElement);
+    const row = makeSegmentWidget(this.displayState, normalizedId);
+    registerCallbackWhenSegmentationDisplayStateChanged(displayState, context, context.redraw);
+    context.registerDisposer(bindSegmentListWidth(displayState, row));
+    row.classList.add('neuroglancer-selection-details-segment');
     parent.appendChild(row);
 
     // First extract all description properties
@@ -591,8 +487,8 @@ export class SegmentationUserLayer extends Base {
     return true;
   }
 
-  displaySelectionState(state: this['selectionState'], parent: HTMLElement, context: RefCounted):
-      boolean {
+  displaySelectionState(
+      state: this['selectionState'], parent: HTMLElement, context: DependentViewContext): boolean {
     let displayed = this.displaySegmentationSelection(state, parent, context);
     if (super.displaySelectionState(state, parent, context)) displayed = true;
     return displayed;
@@ -600,15 +496,6 @@ export class SegmentationUserLayer extends Base {
   static type = 'segmentation';
   static supportsPickOption = true;
 }
-
-
-function updateIdStringWidth(idStringWidth: WatchableValueInterface<number>, idString: string) {
-  const {length} = idString;
-  if (idStringWidth.value < length) {
-    idStringWidth.value = length;
-  }
-}
-
 
 function makeSkeletonShaderCodeWidget(layer: SegmentationUserLayer) {
   return new ShaderCodeWidget({
@@ -938,135 +825,36 @@ class SegmentListSource extends RefCounted implements VirtualListSource {
   }
 
   private updateRendering(element: HTMLElement) {
-    const idString = element.dataset.id;
-    if (idString === undefined) return;
-    tempUint64.tryParseString(idString);
-    const {children} = element;
-    const checkbox = children[1] as HTMLInputElement;
-    const idElement = children[2] as HTMLElement;
-    const {visibleSegments} = this.segmentationDisplayState;
-    checkbox.checked = visibleSegments.has(tempUint64);
-    idElement.style.backgroundColor =
-        getCssColor(getBaseObjectColor(this.segmentationDisplayState, tempUint64));
-    idElement.textContent = idString;
+    this.segmentWidgetFactory.update(element);
   }
 
-  render = (() => {
-    const containerTemplate = document.createElement('div');
-    containerTemplate.classList.add('neuroglancer-segment-list-entry');
-    const checkbox = document.createElement('input');
-    checkbox.type = 'checkbox';
-    checkbox.title = 'Toggle segment visibility';
-    const copyButton = makeCopyButton({
-      title: `Copy segment ID`,
-    });
-    copyButton.classList.add('neuroglancer-segment-list-entry-copy');
-    containerTemplate.appendChild(copyButton);
-    containerTemplate.appendChild(checkbox);
-    const idElement = document.createElement('span');
-    idElement.classList.add('neuroglancer-segment-list-entry-id');
-    containerTemplate.appendChild(idElement);
-    const filterElement = makeFilterButton({
-      title: 'Filter by label',
-    });
-    filterElement.classList.add('neuroglancer-segment-list-entry-filter');
-    containerTemplate.appendChild(filterElement);
-    const nameElement = document.createElement('span');
-    nameElement.classList.add('neuroglancer-segment-list-entry-name');
-    containerTemplate.appendChild(nameElement);
-    const {segmentationDisplayState} = this;
-    function onMouseEnter(this: HTMLElement) {
-      const idString = this.dataset.id!;
-      if (!tempUint64.tryParseString(idString)) return;
-      segmentationDisplayState.segmentSelectionState.set(tempUint64);
-      segmentationDisplayState.selectSegment(tempUint64, false);
-    }
-    function selectHandler(this: HTMLElement, event: ActionEvent<Event>) {
-      event.stopPropagation();
-      const idString = this.dataset.id!;
-      if (!tempUint64.tryParseString(idString)) return;
-      segmentationDisplayState.selectSegment(tempUint64, 'toggle');
-    }
-    function filterHandler(this: HTMLElement) {
-      const idString = this.parentElement!.dataset.id!;
-      if (!tempUint64.tryParseString(idString)) return;
-      segmentationDisplayState.filterBySegmentLabel(tempUint64);
-    }
-    function onMouseLeave(this: HTMLElement) {
-      const idString = this.dataset.id!;
-      if (!tempUint64.tryParseString(idString)) return;
-      segmentationDisplayState.segmentSelectionState.set(null);
-    }
+  private segmentWidgetFactory =
+      new SegmentWidgetFactory(this.segmentationDisplayState, /*includeMapped=*/ false);
 
-    function checkboxHandler(this: HTMLInputElement, event: Event) {
-      event.stopPropagation();
-      const idString = this.parentElement!.dataset.id!;
-      tempUint64.parseString(idString);
-      const {visibleSegments} = segmentationDisplayState;
-      if (this.checked) {
-        visibleSegments.add(tempUint64);
-      } else {
-        visibleSegments.delete(tempUint64);
+  render = (index: number) => {
+    const {sortedVisibleSegments} = this;
+    let id: Uint64;
+    let visibleList = false;
+    if (sortedVisibleSegments !== undefined && index < sortedVisibleSegments.length) {
+      id = sortedVisibleSegments[index];
+      visibleList = true;
+    } else {
+      if (sortedVisibleSegments !== undefined) {
+        index = index - sortedVisibleSegments.length;
       }
+      id = tempUint64;
+      id.parseString(this.matches![index][0]);
     }
-    function copyHandler(this: HTMLElement, event: MouseEvent) {
-      setClipboard(this.parentElement!.dataset.id!);
-      event.stopPropagation();
+    const container = this.segmentWidgetFactory.get(id);
+    if (visibleList) {
+      container.dataset.visibleList = 'true';
     }
-    const {segmentSelectionState} = segmentationDisplayState;
-    return (index: number) => {
-      const {sortedVisibleSegments, segmentLabelMap} = this;
-      let idString: string;
-      let name: string|undefined;
-      const container = containerTemplate.cloneNode(/*deep=*/ true) as HTMLDivElement;
-      if (sortedVisibleSegments !== undefined && index < sortedVisibleSegments.length) {
-        idString = sortedVisibleSegments[index].toString();
-        if (segmentLabelMap !== undefined) {
-          name = segmentLabelMap.get(idString);
-        }
-        container.dataset.visibleList = 'true';
-      } else {
-        if (sortedVisibleSegments !== undefined) {
-          index = index - sortedVisibleSegments.length;
-        }
-        [idString, name] = this.matches![index];
-      }
-      container.dataset.selected = (segmentSelectionState.hasSelectedSegment &&
-                                    segmentSelectionState.selectedSegment.toString() === idString) ?
-          'true' :
-          'false';
-      const {children} = container;
-      const checkbox = children[1];
-      checkbox.addEventListener('change', checkboxHandler);
-      const filterElement = children[3];
-      filterElement.addEventListener('click', filterHandler);
-      container.addEventListener('mouseenter', onMouseEnter);
-      container.addEventListener('mouseleave', onMouseLeave);
-      const copyButton = children[0];
-      copyButton.addEventListener('click', copyHandler);
-      container.addEventListener('action:select-position', selectHandler);
-      const idElement = children[2];
-      const nameElement = children[4];
-      container.dataset.id = idString;
-      idElement.textContent = idString;
-      nameElement.textContent = name || '';
-      if (!name) {
-        (filterElement as HTMLElement).style.visibility = 'hidden';
-      }
-      this.updateRendering(container);
-      updateIdStringWidth(segmentationDisplayState.maxIdLength, idString);
-      return container;
-    };
-  })();
+    return container;
+  };
 
   updateRenderedItems(list: VirtualList) {
-    const {segmentSelectionState} = this.segmentationDisplayState;
-    const idString = segmentSelectionState.hasSelectedSegment ?
-        segmentSelectionState.selectedSegment.toString() :
-        '';
     list.forEachRenderedItem(element => {
       this.updateRendering(element);
-      element.dataset.selected = (element.dataset.id === idString) ? 'true' : 'false';
     });
   }
 }

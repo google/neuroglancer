@@ -23,7 +23,7 @@ import {PerspectivePanel} from 'neuroglancer/perspective_view/panel';
 import {PerspectiveViewReadyRenderContext, PerspectiveViewRenderContext, PerspectiveViewRenderLayer} from 'neuroglancer/perspective_view/render_layer';
 import {ThreeDimensionalRenderLayerAttachmentState, update3dRenderLayerAttachment} from 'neuroglancer/renderlayer';
 import {forEachVisibleSegment, getObjectKey} from 'neuroglancer/segmentation_display_state/base';
-import {getObjectColor, registerRedrawWhenSegmentationDisplayState3DChanged, SegmentationDisplayState3D, SegmentationLayerSharedObject} from 'neuroglancer/segmentation_display_state/frontend';
+import {forEachVisibleSegmentToDraw, registerRedrawWhenSegmentationDisplayState3DChanged, SegmentationDisplayState3D, SegmentationLayerSharedObject} from 'neuroglancer/segmentation_display_state/frontend';
 import {makeCachedDerivedWatchableValue, WatchableValueInterface} from 'neuroglancer/trackable_value';
 import {Borrowed, RefCounted} from 'neuroglancer/util/disposable';
 import {getFrustrumPlanes, mat3, mat3FromMat4, mat4, scaleMat3Output, vec3, vec4} from 'neuroglancer/util/geom';
@@ -343,8 +343,7 @@ export class MeshLayer extends
       return;
     }
     const {gl, displayState, meshShaderManager} = this;
-    const alpha = Math.min(1.0, displayState.objectAlpha.value);
-    if (alpha <= 0.0) {
+    if (displayState.objectAlpha.value <= 0.0) {
       // Skip drawing.
       return;
     }
@@ -360,35 +359,37 @@ export class MeshLayer extends
     meshShaderManager.beginLayer(gl, shader, renderContext, this.displayState);
     meshShaderManager.beginModel(gl, shader, renderContext, modelMatrix);
 
-    let {pickIDs} = renderContext;
     const manifestChunks = this.source.chunks;
 
     let totalChunks = 0, presentChunks = 0;
     const {renderScaleHistogram} = this.displayState;
     const fragmentChunks = this.source.fragmentSource.chunks;
 
-    forEachVisibleSegment(displayState, (objectId, rootObjectId) => {
-      const key = getObjectKey(objectId);
-      const manifestChunk = manifestChunks.get(key);
-      ++totalChunks;
-      if (manifestChunk === undefined) return;
-      ++presentChunks;
-      if (renderContext.emitColor) {
-        meshShaderManager.setColor(gl, shader, getObjectColor(displayState, rootObjectId, alpha));
-      }
-      if (renderContext.emitPickID) {
-        meshShaderManager.setPickID(gl, shader, pickIDs.registerUint64(this, objectId));
-      }
-      totalChunks += manifestChunk.fragmentIds.length;
-
-      for (const fragmentId of manifestChunk.fragmentIds) {
-        const fragment = fragmentChunks.get(`${key}/${fragmentId}`);
-        if (fragment !== undefined && fragment.state === ChunkState.GPU_MEMORY) {
-          meshShaderManager.drawFragment(gl, shader, fragment);
+    forEachVisibleSegmentToDraw(
+        displayState, this, renderContext.emitColor,
+        renderContext.emitPickID ? renderContext.pickIDs : undefined,
+        (objectId, color, pickIndex) => {
+          const key = getObjectKey(objectId);
+          const manifestChunk = manifestChunks.get(key);
+          ++totalChunks;
+          if (manifestChunk === undefined) return;
           ++presentChunks;
-        }
-      }
-    });
+          if (renderContext.emitColor) {
+            meshShaderManager.setColor(gl, shader, color!);
+          }
+          if (renderContext.emitPickID) {
+            meshShaderManager.setPickID(gl, shader, pickIndex!);
+          }
+          totalChunks += manifestChunk.fragmentIds.length;
+
+          for (const fragmentId of manifestChunk.fragmentIds) {
+            const fragment = fragmentChunks.get(`${key}/${fragmentId}`);
+            if (fragment !== undefined && fragment.state === ChunkState.GPU_MEMORY) {
+              meshShaderManager.drawFragment(gl, shader, fragment);
+              ++presentChunks;
+            }
+          }
+        });
 
     if (renderContext.emitColor) {
       renderScaleHistogram.begin(
@@ -544,8 +545,7 @@ export class MultiscaleMeshLayer extends
       return;
     }
     const {gl, displayState, meshShaderManager} = this;
-    const alpha = Math.min(1.0, displayState.objectAlpha.value);
-    if (alpha <= 0.0) {
+    if (displayState.objectAlpha.value <= 0.0) {
       // Skip drawing.
       return;
     }
@@ -563,8 +563,6 @@ export class MultiscaleMeshLayer extends
       renderScaleHistogram.begin(
           this.chunkManager.chunkQueueManager.frameNumberCounter.frameNumber);
     }
-
-    let {pickIDs} = renderContext;
 
     mat3FromMat4(tempMat3, modelMatrix);
     scaleMat3Output(
@@ -590,7 +588,7 @@ export class MultiscaleMeshLayer extends
     let totalManifestChunks = 0;
     let presentManifestChunks = 0;
 
-    forEachVisibleSegment(displayState, (objectId, rootObjectId) => {
+    forEachVisibleSegmentToDraw(displayState, this, renderContext.emitColor, renderContext.emitPickID ? renderContext.pickIDs : undefined, (objectId, color, pickIndex) => {
       const key = getObjectKey(objectId);
       const manifestChunk = chunks.get(key);
       ++totalManifestChunks;
@@ -599,10 +597,10 @@ export class MultiscaleMeshLayer extends
       const {manifest} = manifestChunk;
       const {octree, chunkShape, chunkGridSpatialOrigin, vertexOffsets} = manifest;
       if (renderContext.emitColor) {
-        meshShaderManager.setColor(gl, shader, getObjectColor(displayState, rootObjectId, alpha));
+        meshShaderManager.setColor(gl, shader, color!);
       }
       if (renderContext.emitPickID) {
-        meshShaderManager.setPickID(gl, shader, pickIDs.registerUint64(this, objectId));
+        meshShaderManager.setPickID(gl, shader, pickIndex!);
       }
       if (DEBUG_MULTISCALE_FRAGMENTS) {
         console.log('drawing object, numChunks=', manifest.octree.length / 5, manifest.octree);
@@ -657,8 +655,7 @@ export class MultiscaleMeshLayer extends
       renderContext: PerspectiveViewReadyRenderContext,
       attachment: VisibleLayerInfo<PerspectivePanel, ThreeDimensionalRenderLayerAttachmentState>) {
     let {displayState} = this;
-    let alpha = Math.min(1.0, displayState.objectAlpha.value);
-    if (alpha <= 0.0) {
+    if (displayState.objectAlpha.value <= 0.0) {
       // Skip drawing.
       return true;
     }

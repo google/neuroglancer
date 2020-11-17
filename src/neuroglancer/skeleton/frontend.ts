@@ -21,7 +21,7 @@ import {PerspectivePanel} from 'neuroglancer/perspective_view/panel';
 import {PerspectiveViewRenderContext, PerspectiveViewRenderLayer} from 'neuroglancer/perspective_view/render_layer';
 import {RenderLayer, ThreeDimensionalRenderLayerAttachmentState, update3dRenderLayerAttachment} from 'neuroglancer/renderlayer';
 import {forEachVisibleSegment, getObjectKey} from 'neuroglancer/segmentation_display_state/base';
-import {getObjectColor, registerRedrawWhenSegmentationDisplayState3DChanged, SegmentationDisplayState3D, SegmentationLayerSharedObject} from 'neuroglancer/segmentation_display_state/frontend';
+import {forEachVisibleSegmentToDraw, registerRedrawWhenSegmentationDisplayState3DChanged, SegmentationDisplayState3D, SegmentationLayerSharedObject} from 'neuroglancer/segmentation_display_state/frontend';
 import {SKELETON_LAYER_RPC_ID, VertexAttributeInfo} from 'neuroglancer/skeleton/base';
 import {SliceViewPanel} from 'neuroglancer/sliceview/panel';
 import {SliceViewPanelRenderContext, SliceViewPanelRenderLayer} from 'neuroglancer/sliceview/renderlayer';
@@ -402,8 +402,7 @@ export class SkeletonLayer extends RefCounted {
       attachment: VisibleLayerInfo<LayerView, ThreeDimensionalRenderLayerAttachmentState>) {
     let lineWidth = renderOptions.lineWidth.value;
     const {gl, source, displayState} = this;
-    const alpha = Math.min(1.0, displayState.objectAlpha.value);
-    if (alpha <= 0.0) {
+    if (displayState.objectAlpha.value <= 0.0) {
       // Skip drawing.
       return;
     }
@@ -442,38 +441,37 @@ export class SkeletonLayer extends RefCounted {
         gl, nodeShader, shaderControlState, nodeShaderParameters.parseResult.controls);
 
     const skeletons = source.chunks;
-    const {pickIDs} = renderContext;
 
-    forEachVisibleSegment(displayState, (objectId, rootObjectId) => {
-      const key = getObjectKey(objectId);
-      const skeleton = skeletons.get(key);
-      if (skeleton === undefined || skeleton.state !== ChunkState.GPU_MEMORY) {
-        return;
-      }
-      if (renderContext.emitColor) {
-        edgeShader.bind();
-        renderHelper.setColor(
-            gl, edgeShader, <vec3><Float32Array>getObjectColor(displayState, rootObjectId, alpha));
-        nodeShader.bind();
-        renderHelper.setColor(
-            gl, nodeShader, <vec3><Float32Array>getObjectColor(displayState, rootObjectId, alpha));
-      }
-      if (renderContext.emitPickID) {
-        edgeShader.bind();
-        renderHelper.setPickID(gl, edgeShader, pickIDs.registerUint64(layer, objectId));
-        nodeShader.bind();
-        renderHelper.setPickID(gl, nodeShader, pickIDs.registerUint64(layer, objectId));
-      }
-      renderHelper.drawSkeleton(
-          gl, edgeShader, nodeShader, skeleton, renderContext.projectionParameters);
-    });
+    forEachVisibleSegmentToDraw(
+        displayState, layer, renderContext.emitColor,
+        renderContext.emitPickID ? renderContext.pickIDs : undefined,
+        (objectId, color, pickIndex) => {
+          const key = getObjectKey(objectId);
+          const skeleton = skeletons.get(key);
+          if (skeleton === undefined || skeleton.state !== ChunkState.GPU_MEMORY) {
+            return;
+          }
+          if (color !== undefined) {
+            edgeShader.bind();
+            renderHelper.setColor(gl, edgeShader, <vec3><Float32Array>color);
+            nodeShader.bind();
+            renderHelper.setColor(gl, nodeShader, <vec3><Float32Array>color);
+          }
+          if (pickIndex !== undefined) {
+            edgeShader.bind();
+            renderHelper.setPickID(gl, edgeShader, pickIndex);
+            nodeShader.bind();
+            renderHelper.setPickID(gl, nodeShader, pickIndex);
+          }
+          renderHelper.drawSkeleton(
+              gl, edgeShader, nodeShader, skeleton, renderContext.projectionParameters);
+        });
     renderHelper.endLayer(gl, edgeShader);
   }
 
   isReady() {
     const {source, displayState} = this;
-    const alpha = Math.min(1.0, displayState.objectAlpha.value);
-    if (alpha <= 0.0) {
+    if (displayState.objectAlpha.value <= 0.0) {
       // Skip drawing.
       return true;
     }

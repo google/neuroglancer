@@ -19,15 +19,20 @@ import './selection_details.css';
 import svg_arrowLeft from 'ikonate/icons/arrow-left.svg';
 import svg_arrowRight from 'ikonate/icons/arrow-right.svg';
 import {SelectedLayerState, TopLevelLayerListSpecification, TrackableDataSelectionState} from 'neuroglancer/layer';
+import {getDefaultSelectBindings} from 'neuroglancer/ui/default_input_event_bindings';
 import {setClipboard} from 'neuroglancer/util/clipboard';
 import {Borrowed, RefCounted} from 'neuroglancer/util/disposable';
+import {MouseEventBinder} from 'neuroglancer/util/mouse_bindings';
 import {CheckboxIcon} from 'neuroglancer/widget/checkbox_icon';
 import {makeCloseButton} from 'neuroglancer/widget/close_button';
 import {makeCopyButton} from 'neuroglancer/widget/copy_button';
 import {DependentViewWidget} from 'neuroglancer/widget/dependent_view_widget';
+import {makeIcon} from 'neuroglancer/widget/icon';
 import {makeMoveToButton} from 'neuroglancer/widget/move_to_button';
 
-import {makeIcon} from '../widget/icon';
+export function isWithinSelectionPanel(element: HTMLElement) {
+  return element.closest('.neuroglancer-selection-details');
+}
 
 export class SelectionDetailsTab extends RefCounted {
   element = document.createElement('div');
@@ -40,6 +45,8 @@ export class SelectionDetailsTab extends RefCounted {
     super();
     const {element, body} = this;
     element.classList.add('neuroglancer-selection-details');
+    this.registerDisposer(new MouseEventBinder(this.element, getDefaultSelectBindings()));
+
     const titleBar = document.createElement('div');
 
     const title = document.createElement('div');

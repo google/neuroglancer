@@ -34,7 +34,7 @@ import {ChunkDisplayTransformParameters, ChunkTransformParameters, getChunkDispl
 import {RenderScaleHistogram} from 'neuroglancer/render_scale_statistics';
 import {ThreeDimensionalRenderContext, VisibilityTrackedRenderLayer} from 'neuroglancer/renderlayer';
 import {forEachVisibleSegment, getObjectKey} from 'neuroglancer/segmentation_display_state/base';
-import {SegmentationDisplayState} from 'neuroglancer/segmentation_display_state/frontend';
+import {SegmentationDisplayState, sendVisibleSegmentsState} from 'neuroglancer/segmentation_display_state/frontend';
 import {SharedWatchableValue} from 'neuroglancer/shared_watchable_value';
 import {SliceViewProjectionParameters} from 'neuroglancer/sliceview/base';
 import {FrontendTransformedSource, getVolumetricTransformedSources, serializeAllTransformedSources} from 'neuroglancer/sliceview/frontend';
@@ -119,10 +119,7 @@ class AnnotationLayerSharedObject extends withSharedVisibility
     if (segmentationStates === undefined) return undefined;
     return segmentationStates.map(segmentationState => {
       if (segmentationState == null) return segmentationState;
-      return {
-        segmentEquivalences: segmentationState.segmentEquivalences.rpcId,
-        visibleSegments: segmentationState.visibleSegments.rpcId
-      };
+      return sendVisibleSegmentsState(segmentationState);
     });
   }
 }

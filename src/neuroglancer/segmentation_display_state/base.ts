@@ -16,11 +16,23 @@
 
 import {SharedDisjointUint64Sets} from 'neuroglancer/shared_disjoint_sets';
 import {Uint64Set} from 'neuroglancer/uint64_set';
+import {RefCounted} from 'neuroglancer/util/disposable';
 import {Uint64} from 'neuroglancer/util/uint64';
 
 export interface VisibleSegmentsState {
   visibleSegments: Uint64Set;
   segmentEquivalences: SharedDisjointUint64Sets;
+}
+
+export const VISIBLE_SEGMENTS_STATE_PROPERTIES: (keyof VisibleSegmentsState)[] = [
+  'visibleSegments',
+  'segmentEquivalences',
+];
+
+export function onVisibleSegmentsStateChanged(
+    context: RefCounted, state: VisibleSegmentsState, callback: () => void) {
+  context.registerDisposer(state.visibleSegments.changed.add(callback));
+  context.registerDisposer(state.segmentEquivalences.changed.add(callback));
 }
 
 /**
@@ -31,9 +43,18 @@ export function getObjectKey(objectId: Uint64): string {
   return `${objectId.low},${objectId.high}`;
 }
 
+export function getVisibleSegments(state: VisibleSegmentsState) {
+  return state.visibleSegments;
+}
+
+export function getSegmentEquivalences(state: VisibleSegmentsState) {
+  return state.segmentEquivalences;
+}
+
 export function forEachVisibleSegment(
     state: VisibleSegmentsState, callback: (objectId: Uint64, rootObjectId: Uint64) => void) {
-  let {visibleSegments, segmentEquivalences} = state;
+  const visibleSegments = getVisibleSegments(state);
+  const segmentEquivalences = getSegmentEquivalences(state);
   for (let rootObjectId of visibleSegments) {
     // TODO(jbms): Remove this check if logic is added to ensure that it always holds.
     if (!segmentEquivalences.disjointSets.isMinElement(rootObjectId)) {

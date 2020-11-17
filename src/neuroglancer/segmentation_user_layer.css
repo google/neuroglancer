@@ -14,6 +14,10 @@
  * limitations under the License.
  */
 
+:root {
+  --neuroglancer-segment-list-width: auto;
+}
+
 .segmentation-dropdown {
   display: flex;
   flex-direction: column;
@@ -48,8 +52,16 @@
 }
 
 .neuroglancer-segment-list-entry, .neuroglancer-selection-details-segment {
-  display: flex;
-  flex-direction: row;
+  display: grid;
+  grid-auto-flow: dense;
+  grid-template-columns:
+    [fringe] 0px
+             [copy] min-content
+             [visible] min-content
+             [delete] min-content
+             [id] var(--neuroglancer-segment-list-width)
+             [filter] min-content
+             [label] min-content;
   align-items: center;
 }
 
@@ -59,8 +71,8 @@
 }
 
 .neuroglancer-segment-list-entry-id,
-.neuroglancer-selection-details-segment-id,
-.neuroglancer-selection-details-segment-mapped-id {
+.neuroglancer-selection-details-segment-id {
+  grid-column: id;
   display: inline-block;
   font-family: monospace;
   font-size: medium;
@@ -72,7 +84,20 @@
   width: var(--neuroglancer-segment-list-width);
 }
 
+.neuroglancer-segment-list-entry:not(.neuroglancer-segment-list-entry-double-line) .neuroglancer-segment-list-entry-unmapped-id:empty + .neuroglancer-segment-list-entry-copy {
+  display: none;
+}
+
+.neuroglancer-segment-list-entry.neuroglancer-segment-list-entry-double-line .neuroglancer-segment-list-entry-unmapped-id:empty + .neuroglancer-segment-list-entry-copy {
+  visibility: hidden;
+}
+
+.neuroglancer-segment-list-entry-name:empty + .neuroglancer-segment-list-entry-filter {
+  display: none;
+}
+
 .neuroglancer-segment-list-entry-name {
+  grid-column: label;
   display: inline-block;
   font-family: monospace;
   font-size: medium;
@@ -102,11 +127,16 @@
 }
 
 .neuroglancer-segment-list-entry-copy {
+  grid-column: copy;
   visibility: hidden;
 }
 
 .neuroglancer-segment-list-entry:hover .neuroglancer-segment-list-entry-copy {
   visibility: visible;
+}
+
+.neuroglancer-segment-list-entry-visible-checkbox {
+  grid-column: visible;
 }
 
 .neuroglancer-segment-list-entry[data-visible-list]::before {
@@ -128,6 +158,7 @@
 
 .neuroglancer-segment-list-entry-filter {
   visibility: hidden;
+  grid-column: filter;
 }
 
 .neuroglancer-segment-list-entry:hover .neuroglancer-segment-list-entry-filter {

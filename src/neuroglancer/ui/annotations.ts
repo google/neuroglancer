@@ -31,12 +31,12 @@ import {LoadedDataSubsource} from 'neuroglancer/layer_data_source';
 import {ChunkTransformParameters, getChunkPositionFromCombinedGlobalLocalPositions} from 'neuroglancer/render_coordinate_transform';
 import {RenderScaleHistogram, trackableRenderScaleTarget} from 'neuroglancer/render_scale_statistics';
 import {RenderLayerRole} from 'neuroglancer/renderlayer';
-import {getCssColor} from 'neuroglancer/segment_color';
-import {getBaseObjectColor, SegmentationDisplayState, updateIdStringWidth} from 'neuroglancer/segmentation_display_state/frontend';
+import {bindSegmentListWidth, registerCallbackWhenSegmentationDisplayStateChanged, SegmentationDisplayState, SegmentWidgetFactory} from 'neuroglancer/segmentation_display_state/frontend';
 import {ElementVisibilityFromTrackableBoolean} from 'neuroglancer/trackable_boolean';
-import {AggregateWatchableValue, makeCachedLazyDerivedWatchableValue, observeWatchable, registerNested, TrackableValueInterface, WatchableValueInterface} from 'neuroglancer/trackable_value';
+import {AggregateWatchableValue, makeCachedLazyDerivedWatchableValue, registerNested, TrackableValueInterface, WatchableValueInterface} from 'neuroglancer/trackable_value';
 import {getDefaultSelectBindings} from 'neuroglancer/ui/default_input_event_bindings';
 import {registerTool, Tool} from 'neuroglancer/ui/tool';
+import {animationFrameDebounce} from 'neuroglancer/util/animation_frame_debounce';
 import {arraysEqual, gatherUpdate} from 'neuroglancer/util/array';
 import {setClipboard} from 'neuroglancer/util/clipboard';
 import {serializeColor, unpackRGB, unpackRGBA, useWhiteBackground} from 'neuroglancer/util/color';
@@ -49,7 +49,7 @@ import {EventActionMap, KeyboardEventBinder, registerActionListener} from 'neuro
 import * as matrix from 'neuroglancer/util/matrix';
 import {MouseEventBinder} from 'neuroglancer/util/mouse_bindings';
 import {formatScaleWithUnitAsString} from 'neuroglancer/util/si_units';
-import {NullarySignal, observeSignal} from 'neuroglancer/util/signal';
+import {NullarySignal} from 'neuroglancer/util/signal';
 import {formatIntegerBounds, formatIntegerPoint} from 'neuroglancer/util/spatial_units';
 import {Uint64} from 'neuroglancer/util/uint64';
 import * as vector from 'neuroglancer/util/vector';
@@ -57,8 +57,7 @@ import {makeAddButton} from 'neuroglancer/widget/add_button';
 import {ColorWidget} from 'neuroglancer/widget/color';
 import {makeCopyButton} from 'neuroglancer/widget/copy_button';
 import {makeDeleteButton} from 'neuroglancer/widget/delete_button';
-import {DependentViewWidget} from 'neuroglancer/widget/dependent_view_widget';
-import {makeFilterButton} from 'neuroglancer/widget/filter_button';
+import {DependentViewContext, DependentViewWidget} from 'neuroglancer/widget/dependent_view_widget';
 import {makeIcon} from 'neuroglancer/widget/icon';
 import {makeMoveToButton} from 'neuroglancer/widget/move_to_button';
 import {Tab} from 'neuroglancer/widget/tab_view';
@@ -1203,6 +1202,9 @@ function makeRelatedSegmentList(
       segmentationDisplayState, (segmentationDisplayState, parent, context) => {
         const listElement = document.createElement('div');
         listElement.classList.add('neuroglancer-related-segment-list');
+        if (segmentationDisplayState != null) {
+          context.registerDisposer(bindSegmentListWidth(segmentationDisplayState, listElement));
+        }
         const headerRow = document.createElement('div');
         headerRow.classList.add('neuroglancer-related-segment-list-header');
         const copyButton = makeCopyButton({
@@ -1252,6 +1254,7 @@ function makeRelatedSegmentList(
               newRow.appendChild(copyButton);
               if (segmentationDisplayState != null) {
                 const checkbox = document.createElement('input');
+                checkbox.classList.add('neuroglancer-segment-list-entry-visible-checkbox');
                 checkbox.type = 'checkbox';
                 newRow.appendChild(checkbox);
               }
@@ -1261,6 +1264,7 @@ function makeRelatedSegmentList(
                   addContextDisposer();
                 },
               });
+            deleteButton.classList.add('neuroglancer-segment-list-entry-delete');
               newRow.appendChild(deleteButton);
               const idElement = document.createElement('input');
               idElement.autocomplete = 'off';
@@ -1312,43 +1316,12 @@ function makeRelatedSegmentList(
 
         listElement.appendChild(headerRow);
 
-        const rows: {
-          id: Uint64,
-          row: HTMLElement,
-          checkbox: HTMLInputElement|undefined,
-          nameElement: HTMLElement,
-          filterElement: HTMLElement,
-          idElement: HTMLElement
-        }[] = [];
+        const rows: HTMLElement[] = [];
+        const segmentWidgetFactory = new SegmentWidgetFactory(
+            segmentationDisplayState ?? undefined, /*includeMapped=*/ false);
         for (const id of segments) {
-          const row = document.createElement('div');
-          row.classList.add('neuroglancer-segment-list-entry');
-          row.addEventListener('click', () => {
-            if (segmentationDisplayState != null) {
-              segmentationDisplayState.selectSegment(id, true);
-            }
-          });
-          const copyButton = makeCopyButton({
-            title: 'Copy segment ID',
-            onClick: event => {
-              setClipboard(id.toString());
-              event.stopPropagation();
-            },
-          });
-          copyButton.classList.add('neuroglancer-segment-list-entry-copy');
-          row.appendChild(copyButton);
-          let checkbox: HTMLInputElement|undefined;
-          if (segmentationDisplayState != null) {
-            checkbox = document.createElement('input');
-            checkbox.type = 'checkbox';
-            checkbox.title = 'Toggle segment visibility';
-            checkbox.addEventListener('click', event => {
-              const {visibleSegments} = segmentationDisplayState;
-              visibleSegments.set(id, !visibleSegments.has(id));
-              event.stopPropagation();
-            });
-            row.appendChild(checkbox);
-          }
+          const row = segmentWidgetFactory.get(id);
+          rows.push(row);
           if (mutate !== undefined) {
             const deleteButton = makeDeleteButton({
               title: 'Remove ID',
@@ -1357,80 +1330,30 @@ function makeRelatedSegmentList(
                 event.stopPropagation();
               },
             });
+            deleteButton.classList.add('neuroglancer-segment-list-entry-delete');
             row.appendChild(deleteButton);
           }
-          const idElement = document.createElement('span');
-          idElement.classList.add('neuroglancer-segment-list-entry-id');
-          const idString = id.toString();
-          if (segmentationDisplayState != null) {
-            updateIdStringWidth(segmentationDisplayState.maxIdLength, idString);
-          }
-          idElement.textContent = idString;
-          row.appendChild(idElement);
-          const filterElement = makeFilterButton({
-            title: 'Filter by label',
-            onClick: event => {
-              if (segmentationDisplayState != null) {
-                segmentationDisplayState.filterBySegmentLabel(id);
-              }
-              event.stopPropagation();
-            },
-          });
-          filterElement.classList.add('neuroglancer-segment-list-entry-filter');
-          filterElement.style.visibility = 'hidden';
-          row.appendChild(filterElement);
-          const nameElement = document.createElement('span');
-          nameElement.classList.add('neuroglancer-segment-list-entry-name');
-          row.appendChild(nameElement);
           listElement.appendChild(row);
-          if (segmentationDisplayState != null) {
-            row.addEventListener('mouseenter', () => {
-              segmentationDisplayState.segmentSelectionState.set(id);
-            });
-            row.addEventListener('mouseleave', () => {
-              segmentationDisplayState.segmentSelectionState.set(null);
-            });
-          }
-          rows.push({id, row, checkbox, nameElement, idElement, filterElement});
         }
-
         if (segmentationDisplayState != null) {
-          context.registerDisposer(observeWatchable(
-              width =>
-                  listElement.style.setProperty('--neuroglancer-segment-list-width', `${width}ch`),
-              segmentationDisplayState.maxIdLength));
-          context.registerDisposer(observeSignal(
-              () => {
-                const {segmentSelectionState, visibleSegments} = segmentationDisplayState;
+          const updateSegments = context.registerCancellable(animationFrameDebounce(() => {
+                const {visibleSegments} = segmentationDisplayState;
                 let numVisible = 0;
-                for (const {id, row, checkbox} of rows) {
-                  row.dataset.selected = (segmentSelectionState.hasSelectedSegment &&
-                                          Uint64.equal(segmentSelectionState.selectedSegment, id))
-                                             .toString();
-                  const visible = checkbox!.checked = visibleSegments.has(id);
-                  if (visible) ++numVisible;
+                for (const id of segments) {
+                  if (visibleSegments.has(id)) {
+                    ++numVisible;
+                  }
+                }
+                for (const row of rows) {
+                  segmentWidgetFactory.update(row);
                 }
                 headerCheckbox!.checked = numVisible === segments.length && numVisible > 0;
                 headerCheckbox!.indeterminate = (numVisible > 0) && (numVisible < segments.length);
-              },
-              segmentationDisplayState.visibleSegments.changed,
-              segmentationDisplayState.segmentSelectionState.changed));
-          context.registerDisposer(observeSignal(
-              () => {
-                const segmentLabelMap = segmentationDisplayState.segmentLabelMap.value;
-                for (const {id, nameElement, idElement, filterElement} of rows) {
-                  let name = '';
-                  if (segmentLabelMap !== undefined) {
-                    name = segmentLabelMap.get(id.toString()) || '';
-                  }
-                  filterElement.style.visibility = name ? '' : 'hidden';
-                  nameElement.textContent = name;
-                  idElement.style.backgroundColor =
-                      getCssColor(getBaseObjectColor(segmentationDisplayState, id));
-                }
-              },
-              segmentationDisplayState.segmentColorHash.changed,
-              segmentationDisplayState.segmentLabelMap.changed));
+          }));
+          updateSegments();
+          updateSegments.flush();
+          registerCallbackWhenSegmentationDisplayStateChanged(
+              segmentationDisplayState, context, updateSegments);
         }
         parent.appendChild(listElement);
       });
@@ -1761,8 +1684,9 @@ export function UserLayerWithAnnotationsMixin<TBase extends {new (...args: any[]
     }
 
 
-    displaySelectionState(state: this['selectionState'], parent: HTMLElement, context: RefCounted):
-        boolean {
+    displaySelectionState(
+        state: this['selectionState'], parent: HTMLElement,
+        context: DependentViewContext): boolean {
       let displayed = this.displayAnnotationState(state, parent, context);
       if (super.displaySelectionState(state, parent, context)) displayed = true;
       return displayed;

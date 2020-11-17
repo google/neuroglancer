@@ -19,37 +19,48 @@ import 'neuroglancer/shared_disjoint_sets';
 import 'neuroglancer/uint64_set';
 import 'neuroglancer/uint64_map';
 
-import { ChunkRequester, ChunkSource} from 'neuroglancer/chunk_manager/backend';
+import {ChunkRequester, ChunkSource} from 'neuroglancer/chunk_manager/backend';
 import {RenderLayerTransformOrError} from 'neuroglancer/render_coordinate_transform';
-import { VisibleSegmentsState, IndexedSegmentProperty} from 'neuroglancer/segmentation_display_state/base';
+import {IndexedSegmentProperty, onVisibleSegmentsStateChanged, VISIBLE_SEGMENTS_STATE_PROPERTIES, VisibleSegmentsState} from 'neuroglancer/segmentation_display_state/base';
 import {SharedDisjointUint64Sets} from 'neuroglancer/shared_disjoint_sets';
 import {SharedWatchableValue} from 'neuroglancer/shared_watchable_value';
 import {Uint64Set} from 'neuroglancer/uint64_set';
 import {AnyConstructor} from 'neuroglancer/util/mixin';
 import {RPC} from 'neuroglancer/worker_rpc';
 
+export function receiveVisibleSegmentsState(
+    rpc: RPC, options: any,
+    target: VisibleSegmentsState = {} as VisibleSegmentsState): VisibleSegmentsState {
+  // No need to increase the reference count of these properties since our owner will hold a
+  // reference to their owners.
+  for (const property of VISIBLE_SEGMENTS_STATE_PROPERTIES) {
+    target[property] = rpc.get(options[property]);
+  }
+  return target;
+}
+
 export const withSegmentationLayerBackendState =
     <TBase extends AnyConstructor<ChunkRequester>>(Base: TBase) =>
         class SegmentationLayerState extends Base implements VisibleSegmentsState {
   visibleSegments: Uint64Set;
   segmentEquivalences: SharedDisjointUint64Sets;
+  temporaryVisibleSegments: Uint64Set;
+  temporarySegmentEquivalences: SharedDisjointUint64Sets;
+  useTemporaryVisibleSegments: SharedWatchableValue<boolean>;
+  useTemporarySegmentEquivalences: SharedWatchableValue<boolean>;
   transform: SharedWatchableValue<RenderLayerTransformOrError>;
   renderScaleTarget: SharedWatchableValue<number>;
   constructor(...args: any[]) {
     const [rpc, options] = args as [RPC, any];
     super(rpc, options);
-    // No need to increase the reference count of visibleSegments or
-    // segmentEquivalences since our owner will hold a reference to their owners.
-    this.visibleSegments = <Uint64Set>rpc.get(options['visibleSegments']);
-    this.segmentEquivalences = <SharedDisjointUint64Sets>rpc.get(options['segmentEquivalences']);
+    receiveVisibleSegmentsState(rpc, options, this);
     this.transform = rpc.get(options['transform']);
     this.renderScaleTarget = rpc.get(options['renderScaleTarget']);
 
     const scheduleUpdateChunkPriorities = () => {
       this.chunkManager.scheduleUpdateChunkPriorities();
     };
-    this.registerDisposer(this.visibleSegments.changed.add(scheduleUpdateChunkPriorities));
-    this.registerDisposer(this.segmentEquivalences.changed.add(scheduleUpdateChunkPriorities));
+    onVisibleSegmentsStateChanged(this, this, scheduleUpdateChunkPriorities);
     this.registerDisposer(this.transform.changed.add(scheduleUpdateChunkPriorities));
     this.registerDisposer(this.renderScaleTarget.changed.add(scheduleUpdateChunkPriorities));
   }

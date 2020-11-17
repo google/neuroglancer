@@ -40,6 +40,7 @@ import {Trackable} from 'neuroglancer/util/trackable';
 import {Uint64} from 'neuroglancer/util/uint64';
 import {kEmptyFloat32Vec} from 'neuroglancer/util/vector';
 import {WatchableVisibilityPriority} from 'neuroglancer/visibility_priority/frontend';
+import {DependentViewContext} from 'neuroglancer/widget/dependent_view_widget';
 import {TabSpecification} from 'neuroglancer/widget/tab_view';
 import {RPC} from 'neuroglancer/worker_rpc';
 
@@ -139,7 +140,8 @@ export class UserLayer extends RefCounted {
   }
 
   // Derived classes should override.
-  displaySelectionState(state: this['selectionState'], parent: HTMLElement, context: RefCounted) {
+  displaySelectionState(
+      state: this['selectionState'], parent: HTMLElement, context: DependentViewContext) {
     state;
     parent;
     context;
