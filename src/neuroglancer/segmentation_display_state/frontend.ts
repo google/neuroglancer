@@ -22,7 +22,7 @@ import {WatchableRenderLayerTransform} from 'neuroglancer/render_coordinate_tran
 import {RenderScaleHistogram} from 'neuroglancer/render_scale_statistics';
 import {RenderLayer} from 'neuroglancer/renderlayer';
 import {getCssColor, SegmentColorHash} from 'neuroglancer/segment_color';
-import {forEachVisibleSegment, onVisibleSegmentsStateChanged, VISIBLE_SEGMENTS_STATE_PROPERTIES, VisibleSegmentsState} from 'neuroglancer/segmentation_display_state/base';
+import {forEachVisibleSegment, onTemporaryVisibleSegmentsStateChanged, onVisibleSegmentsStateChanged, VISIBLE_SEGMENTS_STATE_PROPERTIES, VisibleSegmentsState} from 'neuroglancer/segmentation_display_state/base';
 import {InlineSegmentNumericalProperty, InlineSegmentProperty, PreprocessedSegmentPropertyMap} from 'neuroglancer/segmentation_display_state/property_map';
 import {SegmentationUserLayer} from 'neuroglancer/segmentation_user_layer';
 import {SharedWatchableValue} from 'neuroglancer/shared_watchable_value';
@@ -162,6 +162,13 @@ export interface SegmentationDisplayState {
   segmentColorHash: WatchableValueInterface<number>;
   segmentStatedColors: WatchableValueInterface<Uint64Map>;
   segmentDefaultColor: WatchableValueInterface<vec3|undefined>;
+}
+
+export function resetTemporaryVisibleSegmentsState(state: VisibleSegmentsState) {
+  state.useTemporarySegmentEquivalences.value = false;
+  state.useTemporaryVisibleSegments.value = false;
+  state.temporaryVisibleSegments.clear();
+  state.temporarySegmentEquivalences.clear();
 }
 
 /// Converts a segment id to a Uint64MapEntry or Uint64 (if Uint64MapEntry would add no additional
@@ -638,6 +645,9 @@ export function registerRedrawWhenSegmentationDisplayStateChanged(
     displayState: SegmentationDisplayState, renderLayer: {redrawNeeded: NullarySignal}&RefCounted) {
   const callback = renderLayer.redrawNeeded.dispatch;
   registerCallbackWhenSegmentationDisplayStateChanged(displayState, renderLayer, callback);
+  renderLayer.registerDisposer(registerNestedSync((c, groupState) => {
+    onTemporaryVisibleSegmentsStateChanged(c, groupState, callback);
+  }, displayState.segmentationGroupState));
 }
 
 export function registerRedrawWhenSegmentationDisplayStateWithAlphaChanged(

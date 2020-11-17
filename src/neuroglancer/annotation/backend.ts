@@ -21,7 +21,7 @@ import {ChunkPriorityTier, ChunkState} from 'neuroglancer/chunk_manager/base';
 import {DisplayDimensionRenderInfo} from 'neuroglancer/navigation_state';
 import {RenderedViewBackend, RenderLayerBackend, RenderLayerBackendAttachment} from 'neuroglancer/render_layer_backend';
 import {receiveVisibleSegmentsState} from 'neuroglancer/segmentation_display_state/backend';
-import {forEachVisibleSegment, getObjectKey, onVisibleSegmentsStateChanged, VisibleSegmentsState} from 'neuroglancer/segmentation_display_state/base';
+import {forEachVisibleSegment, getObjectKey, onTemporaryVisibleSegmentsStateChanged, onVisibleSegmentsStateChanged, VisibleSegmentsState} from 'neuroglancer/segmentation_display_state/base';
 import {SharedWatchableValue} from 'neuroglancer/shared_watchable_value';
 import {deserializeTransformedSources, SCALE_PRIORITY_MULTIPLIER, SliceViewChunk, SliceViewChunkSourceBackend} from 'neuroglancer/sliceview/backend';
 import {TransformedSource} from 'neuroglancer/sliceview/base';
@@ -375,6 +375,7 @@ class AnnotationLayerSharedObjectCounterpart extends withSharedVisibility
       for (const state of states) {
         if (state == null) continue;
         onVisibleSegmentsStateChanged(context, state, scheduleUpdateChunkPriorities);
+        onTemporaryVisibleSegmentsStateChanged(context, state, scheduleUpdateChunkPriorities);
       }
       scheduleUpdateChunkPriorities();
     }, this.segmentationStates));
