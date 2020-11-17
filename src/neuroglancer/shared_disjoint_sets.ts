@@ -24,6 +24,7 @@ import {registerRPC, registerSharedObject, RPC, SharedObjectCounterpart} from 'n
 const RPC_TYPE_ID = 'DisjointUint64Sets';
 const ADD_METHOD_ID = 'DisjointUint64Sets.add';
 const CLEAR_METHOD_ID = 'DisjointUint64Sets.clear';
+const HIGH_BIT_REPRESENTATIVE_CHANGED_ID = 'DisjointUint64Sets.highBitRepresentativeChanged';
 
 @registerSharedObject(RPC_TYPE_ID)
 export class SharedDisjointUint64Sets extends SharedObjectCounterpart implements
@@ -38,9 +39,16 @@ export class SharedDisjointUint64Sets extends SharedObjectCounterpart implements
     return this;
   }
 
-  static makeWithCounterpart(rpc: RPC) {
+  static makeWithCounterpart(rpc: RPC, highBitRepresentative: WatchableValueInterface<boolean>) {
     let obj = new this();
+    obj.disjointSets.highBitRepresentative = highBitRepresentative;
+    obj.registerDisposer(highBitRepresentative.changed.add(() => {
+      updateHighBitRepresentative(obj);
+    }));
     obj.initializeCounterpart(rpc);
+    if (highBitRepresentative.value) {
+      updateHighBitRepresentative(obj);
+    }
     return obj;
   }
 
@@ -130,4 +138,15 @@ registerRPC(CLEAR_METHOD_ID, function(x) {
   if (obj.disjointSets.clear()) {
     obj.changed.dispatch();
   }
+});
+
+function updateHighBitRepresentative(obj: SharedDisjointUint64Sets) {
+  obj.rpc!.invoke(
+      HIGH_BIT_REPRESENTATIVE_CHANGED_ID,
+      {'id': obj.rpcId, 'value': obj.disjointSets.highBitRepresentative.value});
+}
+
+registerRPC(HIGH_BIT_REPRESENTATIVE_CHANGED_ID, function(x) {
+  let obj = this.get(x['id']) as SharedDisjointUint64Sets;
+  obj.disjointSets.highBitRepresentative.value = x['value'];
 });

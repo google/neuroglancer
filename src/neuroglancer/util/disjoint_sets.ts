@@ -14,6 +14,7 @@
  * limitations under the License.
  */
 
+import {WatchableValue, WatchableValueInterface} from 'neuroglancer/trackable_value';
 import {Uint64} from 'neuroglancer/util/uint64';
 
 const rankSymbol = Symbol('disjoint_sets:rank');
@@ -98,6 +99,7 @@ function isRootElement(v: any) {
  */
 export class DisjointUint64Sets {
   private map = new Map<string, Uint64>();
+  highBitRepresentative: WatchableValueInterface<boolean> = new WatchableValue<boolean>(false);
   generation = 0;
 
   get(x: Uint64): Uint64 {
@@ -139,7 +141,7 @@ export class DisjointUint64Sets {
     spliceCircularLists(a, b);
     let aMin = (<any>a)[minSymbol];
     let bMin = (<any>b)[minSymbol];
-    newNode[minSymbol] = Uint64.less(aMin, bMin) ? aMin : bMin;
+    newNode[minSymbol] = Uint64.less(aMin, bMin) !== this.highBitRepresentative.value ? aMin : bMin;
     return true;
   }
 

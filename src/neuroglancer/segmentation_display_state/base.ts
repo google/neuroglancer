@@ -63,6 +63,10 @@ export function getObjectKey(objectId: Uint64): string {
   return `${objectId.low},${objectId.high}`;
 }
 
+function isHighBitSegment(segmentId: Uint64): boolean {
+  return (segmentId.high >>> 31) ? true : false;
+}
+
 export function getVisibleSegments(state: VisibleSegmentsState) {
   return state.useTemporaryVisibleSegments.value ? state.temporaryVisibleSegments :
                                                    state.visibleSegments;
@@ -77,12 +81,16 @@ export function forEachVisibleSegment(
     state: VisibleSegmentsState, callback: (objectId: Uint64, rootObjectId: Uint64) => void) {
   const visibleSegments = getVisibleSegments(state);
   const segmentEquivalences = getSegmentEquivalences(state);
+  const highBitRepresentative = segmentEquivalences.disjointSets.highBitRepresentative.value;
   for (let rootObjectId of visibleSegments) {
     // TODO(jbms): Remove this check if logic is added to ensure that it always holds.
     if (!segmentEquivalences.disjointSets.isMinElement(rootObjectId)) {
       continue;
     }
     for (let objectId of segmentEquivalences.setElements(rootObjectId)) {
+      if (highBitRepresentative && isHighBitSegment(objectId)) {
+        continue;
+      }
       callback(objectId, rootObjectId);
     }
   }
