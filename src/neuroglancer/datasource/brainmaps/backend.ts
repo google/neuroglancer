@@ -485,6 +485,16 @@ async function makeBatchMeshRequest<T>(
             });
           if (!parallelRequests) break;
         }
+        // Notify the chunk queue of the number of download slots being used.  This partially limits
+        // parallelism by maximum number of concurrent downloads, and avoids fetch errors due to an
+        // excessive number of concurrent requests.
+        //
+        // Note that the limit on the number of concurrent downloads is not enforced perfectly.  If
+        // the new value of `downloadSlots` results in the total number of concurrent downloads
+        // exceeding the maximum allowed, the concurrent requests are still issued.  However, no
+        // additional lower-priority chunks will be promoted to `ChunkState.DOWNLOADING` until a
+        // download slot is available.
+        chunk.downloadSlots = Math.max(1, requestsInProgress);
         if (requestsInProgress === 0) {
           resolve();
           return;

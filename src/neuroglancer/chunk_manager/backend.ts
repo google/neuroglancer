@@ -83,6 +83,7 @@ export class Chunk implements Disposable {
 
   private systemMemoryBytes_: number = 0;
   private gpuMemoryBytes_: number = 0;
+  private downloadSlots_: number = 1;
   backendOnly = false;
   isComputational = false;
   newlyRequestedToFrontend = false;
@@ -191,6 +192,20 @@ export class Chunk implements Disposable {
 
   get gpuMemoryBytes() {
     return this.gpuMemoryBytes_;
+  }
+
+  get downloadSlots() {
+    return this.downloadSlots_;
+  }
+
+  set downloadSlots(count: number) {
+    if (count === this.downloadSlots_) return;
+    updateChunkStatistics(this, -1);
+    this.chunkManager.queueManager.adjustCapacitiesForChunk(this, false);
+    this.downloadSlots_ = count;
+    this.chunkManager.queueManager.adjustCapacitiesForChunk(this, true);
+    updateChunkStatistics(this, 1);
+    this.chunkManager.queueManager.scheduleUpdate();
   }
 
   registerListener(listener: ChunkStateListener) {
@@ -700,7 +715,7 @@ export class ChunkQueueManager extends SharedObjectCounterpart {
       case ChunkState.DOWNLOADING:
         (chunk.isComputational ? this.computeCapacity :
                                  this.downloadCapacity[chunk.source!.sourceQueueLevel])
-            .adjust(factor, factor * chunk.systemMemoryBytes);
+            .adjust(factor * chunk.downloadSlots, factor * chunk.systemMemoryBytes);
         this.systemMemoryCapacity.adjust(factor, factor * chunk.systemMemoryBytes);
         break;
 
