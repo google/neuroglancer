@@ -45,4 +45,5 @@ export class MouseEventBinder<EventMap extends EventActionMapInterface> extends 
   }
 }
 
-export {EventActionMapInterface, EventActionMap, registerActionListener, ActionEvent};
+export {EventActionMap, registerActionListener};
+export type {EventActionMapInterface, ActionEvent}

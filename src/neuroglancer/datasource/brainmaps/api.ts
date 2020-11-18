@@ -19,7 +19,7 @@ import {fetchWithOAuth2Credentials, OAuth2Credentials} from 'neuroglancer/creden
 import {CancellationToken, uncancelableToken} from 'neuroglancer/util/cancellation';
 import {responseArrayBuffer, responseJson} from 'neuroglancer/util/http_request';
 
-export {OAuth2Credentials};
+export type {OAuth2Credentials};
 
 export type BrainmapsCredentialsProvider = CredentialsProvider<OAuth2Credentials>;
 

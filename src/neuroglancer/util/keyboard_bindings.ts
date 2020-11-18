@@ -102,4 +102,5 @@ export function getEventKeyName(event: KeyboardEvent): string {
   return event.code.toLowerCase();
 }
 
-export {EventActionMapInterface, EventActionMap, registerActionListener, ActionEvent};
+export {EventActionMap, registerActionListener};
+export type {EventActionMapInterface, ActionEvent}

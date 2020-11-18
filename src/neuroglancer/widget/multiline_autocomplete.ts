@@ -28,7 +28,7 @@ import {Signal} from 'neuroglancer/util/signal';
 import {VirtualList} from 'neuroglancer/widget/virtual_list';
 import ResizeObserver from 'resize-observer-polyfill';
 
-export {Completion, CompletionWithDescription} from 'neuroglancer/util/completion';
+export type {Completion, CompletionWithDescription} from 'neuroglancer/util/completion';
 
 const ACTIVE_COMPLETION_CLASS_NAME = 'neuroglancer-multiline-autocomplete-completion-active';
 
