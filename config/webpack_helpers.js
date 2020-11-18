@@ -18,12 +18,12 @@
 
 const path = require('path');
 const HtmlWebpackPlugin = require('html-webpack-plugin');
-const ExtractTextPlugin = require('extract-text-webpack-plugin');
 const MiniCssExtractPlugin = require('mini-css-extract-plugin');
 const webpack = require('webpack');
 const fs = require('fs');
 const resolveReal = require('./resolve_real');
 const CopyWebpackPlugin = require('copy-webpack-plugin');
+const ForkTsCheckerWebpackPlugin = require('fork-ts-checker-webpack-plugin');
 
 // Note: We use require.resolve below to ensure the plugins are resolved
 // relative to this configuration file, rather than relative to the source
@@ -146,14 +146,16 @@ function getTypescriptLoaderEntry(options) {
     }
   }
   let tsOptions = {
-    compiler: resolveReal(__dirname, 'typescript_compiler_shim.js'),
     configFile: tsconfigPath,
     compilerOptions: {paths: newCompilerPaths},
+    onlyCompileBundledFiles: true,
+    transpileOnly: true,
+    experimentalFileCaching: true,
     instance: 'main',
   };
   return {
     loaderEntry: {test: /\.ts$/, use: [{loader: 'ts-loader', options: tsOptions}]},
-    extraResolveAliases
+    extraResolveAliases,
   };
 }
 
@@ -219,7 +221,7 @@ function getBaseConfig(options) {
                 []),
       ],
     },
-    devtool: 'source-map',
+    devtool: options.minify ? 'source-map' : 'eval-cheap-module-source-map',
     module: {
       defaultRules: [
         {
@@ -389,6 +391,13 @@ function getViewerConfig(options) {
   }
   let htmlPlugin =
       options.htmlPlugin || new HtmlWebpackPlugin({template: resolveReal(srcDir, 'index.html')});
+  const getCacheConfig = (bundleId) => {
+    return {
+      type: 'filesystem',
+      buildDependencies: [__filename],
+      name: `${options.python ? 'python' : 'normal'}-${options.minify ? 'minify' : 'dev'}-${bundleId}`,
+    };
+  };
   return [
     Object.assign(
         {
@@ -412,7 +421,17 @@ function getViewerConfig(options) {
                 to: 'bossauth.html'
               }],
             }),
+            new ForkTsCheckerWebpackPlugin({
+              typescript: {
+                configOverwrite: {
+                  compilerOptions: {
+                    incremental: true,
+                  },
+                },
+              },
+            }),
           ],
+          cache: getCacheConfig('main'),
         },
         baseConfig),
     Object.assign(
@@ -426,6 +445,7 @@ function getViewerConfig(options) {
             ...commonPlugins,
             ...extraCommonPlugins,
           ],
+          cache: getCacheConfig('chunk_worker'),
         },
         baseConfig),
     Object.assign(
@@ -439,6 +459,7 @@ function getViewerConfig(options) {
             ...commonPlugins,
             ...extraCommonPlugins,
           ],
+          cache: getCacheConfig('async_computation'),
         },
         baseConfig),
   ];
