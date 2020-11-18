@@ -22,8 +22,7 @@
 }
 
 .neuroglancer-annotation-list { 
-  display: grid;
-  grid-auto-rows: min-content;
+  position: relative;
   margin: 0px;
   padding: 0px;
   margin-top: 2px;
@@ -35,15 +34,13 @@
 }
 
 .neuroglancer-annotation-list-entry {
-  display: contents;
+  display: grid;
+  grid-auto-rows: min-content;
   cursor: pointer;
+  justify-content: start;
 }
 
 .neuroglancer-annotation-position {
-  display: contents;
-}
-
-.neuroglancer-annotation-sublist {
   display: contents;
 }
 
@@ -55,14 +52,10 @@
 }
 
 .neuroglancer-annotation-list-header {
-  display: contents;
-}
-
-.neuroglancer-annotation-list-header > * {
-  position: sticky;
-  top: 0px;
-  background-color: black;
+  grid-auto-rows: min-content;
+  display: grid;
   padding-bottom: 2px;
+  justify-content: start;
 }
 
 .neuroglancer-annotation-coordinate {
@@ -85,18 +78,23 @@
 .neuroglancer-annotation-list-entry-delete {
   grid-column: delete;
   margin-left: 1ch;
-  align-self: start;  
+  align-self: start;
+  visibility: hidden;
 }
 
-.neuroglancer-annotation-hover .neuroglancer-annotation-list-entry-highlight {
+.neuroglancer-annotation-list-entry:hover > .neuroglancer-annotation-list-entry-delete {
+  visibility: visible;
+}
+
+.neuroglancer-annotation-hover {
   background-color: #333;
 }
 
-.neuroglancer-annotation-selected .neuroglancer-annotation-list-entry-highlight {
+.neuroglancer-annotation-selected {
   background-color: #939;
 }
 
-.neuroglancer-annotation-hover.neuroglancer-annotation-selected .neuroglancer-annotation-list-entry-highlight {
+.neuroglancer-annotation-hover.neuroglancer-annotation-selected {
   background-color: #969;
 }
 
@@ -177,7 +175,6 @@ div.neuroglancer-annotation-details-description {
 .neuroglancer-annotations-view-dimension {
   font-family: monospace;
   text-align: right;
-  padding-left: 2ch;
 }
 
 .neuroglancer-annotations-view-dimension-name {

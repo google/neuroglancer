@@ -20,7 +20,7 @@
 
 import './annotations.css';
 
-import {Annotation, AnnotationReference, AnnotationSource, annotationToJson, AnnotationType, annotationTypeHandlers, AxisAlignedBoundingBox, Ellipsoid, Line} from 'neuroglancer/annotation';
+import {Annotation, AnnotationId, AnnotationReference, AnnotationSource, annotationToJson, AnnotationType, annotationTypeHandlers, AxisAlignedBoundingBox, Ellipsoid, Line} from 'neuroglancer/annotation';
 import {AnnotationDisplayState, AnnotationLayerState} from 'neuroglancer/annotation/annotation_layer_state';
 import {MultiscaleAnnotationSource} from 'neuroglancer/annotation/frontend_source';
 import {AnnotationLayer, PerspectiveViewAnnotationLayer, SliceViewAnnotationLayer} from 'neuroglancer/annotation/renderlayer';
@@ -37,11 +37,11 @@ import {AggregateWatchableValue, makeCachedLazyDerivedWatchableValue, registerNe
 import {getDefaultSelectBindings} from 'neuroglancer/ui/default_input_event_bindings';
 import {registerTool, Tool} from 'neuroglancer/ui/tool';
 import {animationFrameDebounce} from 'neuroglancer/util/animation_frame_debounce';
-import {arraysEqual, gatherUpdate} from 'neuroglancer/util/array';
+import {arraysEqual, ArraySpliceOp, gatherUpdate} from 'neuroglancer/util/array';
 import {setClipboard} from 'neuroglancer/util/clipboard';
 import {serializeColor, unpackRGB, unpackRGBA, useWhiteBackground} from 'neuroglancer/util/color';
 import {Borrowed, disposableOnce, Owned, RefCounted} from 'neuroglancer/util/disposable';
-import {removeChildren, removeFromParent, updateChildren} from 'neuroglancer/util/dom';
+import {removeChildren} from 'neuroglancer/util/dom';
 import {ValueOrError} from 'neuroglancer/util/error';
 import {vec3} from 'neuroglancer/util/geom';
 import {verifyInt, verifyObject, verifyObjectProperty, verifyOptionalObjectProperty, verifyString} from 'neuroglancer/util/json';
@@ -49,7 +49,7 @@ import {EventActionMap, KeyboardEventBinder, registerActionListener} from 'neuro
 import * as matrix from 'neuroglancer/util/matrix';
 import {MouseEventBinder} from 'neuroglancer/util/mouse_bindings';
 import {formatScaleWithUnitAsString} from 'neuroglancer/util/si_units';
-import {NullarySignal} from 'neuroglancer/util/signal';
+import {NullarySignal, Signal} from 'neuroglancer/util/signal';
 import {formatIntegerBounds, formatIntegerPoint} from 'neuroglancer/util/spatial_units';
 import {Uint64} from 'neuroglancer/util/uint64';
 import * as vector from 'neuroglancer/util/vector';
@@ -61,6 +61,7 @@ import {DependentViewContext, DependentViewWidget} from 'neuroglancer/widget/dep
 import {makeIcon} from 'neuroglancer/widget/icon';
 import {makeMoveToButton} from 'neuroglancer/widget/move_to_button';
 import {Tab} from 'neuroglancer/widget/tab_view';
+import {VirtualList, VirtualListSource} from 'neuroglancer/widget/virtual_list';
 
 interface AnnotationIdAndPart {
   id: string, sourceIndex: number;
@@ -385,17 +386,25 @@ function visitTransformedAnnotationGeometry(
 
 interface AnnotationLayerViewAttachedState {
   refCounted: RefCounted;
-  listElements: Map<string, HTMLElement>;
-  sublistContainer: HTMLElement;
+  annotations: Annotation[];
+  idToIndex: Map<AnnotationId, number>;
+  listOffset: number;
 }
 
 export class AnnotationLayerView extends Tab {
-  private previousSelectedId: string|undefined = undefined;
-  private previousSelectedAnnotationLayerState: AnnotationLayerState|undefined = undefined;
+  private previousSelectedState:
+      {annotationId: string, annotationLayerState: AnnotationLayerState, pin: boolean}|undefined =
+          undefined;
   private previousHoverId: string|undefined = undefined;
   private previousHoverAnnotationLayerState: AnnotationLayerState|undefined = undefined;
 
-  private listContainer = document.createElement('div');
+  private virtualListSource: VirtualListSource = {
+    length: 0,
+    render: (index: number) => this.render(index),
+    changed: new Signal<(splices: ArraySpliceOp[]) => void>(),
+  };
+  private virtualList = new VirtualList({source: this.virtualListSource});
+  private listElements: {state: AnnotationLayerState, annotation: Annotation}[] = [];
   private updated = false;
   private mutableControls = document.createElement('div');
   private headerRow = document.createElement('div');
@@ -415,7 +424,6 @@ export class AnnotationLayerView extends Tab {
     for (const [state, info] of attachedAnnotationStates) {
       if (!states.includes(state)) {
         attachedAnnotationStates.delete(state);
-        info.listElements.clear();
         info.refCounted.dispose();
       }
     }
@@ -436,10 +444,8 @@ export class AnnotationLayerView extends Tab {
             (annotationId) => this.deleteAnnotationElement(annotationId, state)));
       }
       refCounted.registerDisposer(state.transform.changed.add(this.forceUpdateView));
-      const sublistContainer = document.createElement('div');
-      sublistContainer.classList.add('neuroglancer-annotation-sublist');
       newAttachedAnnotationStates.set(
-          state, {refCounted, listElements: new Map(), sublistContainer});
+          state, {refCounted, annotations: [], idToIndex: new Map(), listOffset: 0});
     }
     this.attachedAnnotationStates = newAttachedAnnotationStates;
     attachedAnnotationStates.clear();
@@ -456,6 +462,8 @@ export class AnnotationLayerView extends Tab {
   private localDimensionIndices: number[] = [];
   private curCoordinateSpaceGeneration = -1;
   private prevCoordinateSpaceGeneration = -1;
+  private columnWidths: number[] = [];
+  private gridTemplate: string = '';
 
   private updateCoordinateSpace() {
     const localCoordinateSpace = this.layer.localCoordinateSpace.value;
@@ -495,7 +503,6 @@ export class AnnotationLayerView extends Tab {
       public state: Owned<SelectedAnnotationState>, public displayState: AnnotationDisplayState) {
     super();
     this.element.classList.add('neuroglancer-annotation-layer-view');
-    this.listContainer.classList.add('neuroglancer-annotation-list');
     this.registerDisposer(state);
     this.registerDisposer(this.visibility.changed.add(() => this.updateView()));
     this.registerDisposer(
@@ -553,14 +560,19 @@ export class AnnotationLayerView extends Tab {
     toolbox.appendChild(mutableControls);
     this.element.appendChild(toolbox);
 
-    this.element.appendChild(this.listContainer);
-    this.listContainer.addEventListener('mouseleave', () => {
+    this.element.appendChild(this.headerRow);
+    const {virtualList} = this;
+    virtualList.element.classList.add('neuroglancer-annotation-list');
+    this.element.appendChild(virtualList.element);
+    this.virtualList.element.addEventListener('mouseleave', () => {
       this.displayState.hoverState.value = undefined;
     });
 
-    this.registerDisposer(new MouseEventBinder(this.listContainer, getDefaultSelectBindings()));
+    this.registerDisposer(
+        new MouseEventBinder(this.virtualList.element, getDefaultSelectBindings()));
     this.registerDisposer(this.displayState.hoverState.changed.add(() => this.updateHoverView()));
-    this.registerDisposer(this.state.changed.add(() => this.updateSelectionView()));
+    this.registerDisposer(
+        this.selectedAnnotationState.changed.add(() => this.updateSelectionView()));
     this.registerDisposer(this.layer.localCoordinateSpace.changed.add(() => {
       this.updateCoordinateSpace();
       this.updateView();
@@ -571,19 +583,31 @@ export class AnnotationLayerView extends Tab {
     }));
     this.updateCoordinateSpace();
     this.updateAttachedAnnotationLayerStates();
+    this.updateSelectionView();
+  }
+
+  private getRenderedAnnotationListElement(
+      state: AnnotationLayerState, id: AnnotationId, scrollIntoView: boolean = false): HTMLElement
+      |undefined {
+    const attached = this.attachedAnnotationStates.get(state);
+    if (attached == undefined) return undefined;
+    const index = attached.idToIndex.get(id);
+    if (index === undefined) return undefined;
+    const listIndex = attached.listOffset + index;
+    if (scrollIntoView) {
+      this.virtualList.scrollItemIntoView(index)
+    }
+    return this.virtualList.getItemElement(listIndex);
   }
 
   private clearSelectionClass() {
-    const {previousSelectedAnnotationLayerState, previousSelectedId} = this;
-    if (previousSelectedAnnotationLayerState !== undefined) {
-      this.previousSelectedAnnotationLayerState = undefined;
-      this.previousSelectedId = undefined;
-      const attached = this.attachedAnnotationStates.get(previousSelectedAnnotationLayerState);
-      if (attached === undefined) return;
-      const element = attached.listElements.get(previousSelectedId!);
-      if (element !== undefined) {
-        element.classList.remove('neuroglancer-annotation-selected');
-      }
+    const {previousSelectedState: state} = this;
+    if (state === undefined) return;
+    this.previousSelectedState = undefined;
+    const element =
+        this.getRenderedAnnotationListElement(state.annotationLayerState, state.annotationId);
+    if (element !== undefined) {
+      element.classList.remove('neuroglancer-annotation-selected');
     }
   }
 
@@ -592,38 +616,48 @@ export class AnnotationLayerView extends Tab {
     if (previousHoverAnnotationLayerState !== undefined) {
       this.previousHoverAnnotationLayerState = undefined;
       this.previousHoverId = undefined;
-      const attached = this.attachedAnnotationStates.get(previousHoverAnnotationLayerState);
-      if (attached === undefined) return;
-      const element = attached.listElements.get(previousHoverId!);
+      const element = this.getRenderedAnnotationListElement(
+          previousHoverAnnotationLayerState, previousHoverId!!);
       if (element !== undefined) {
         element.classList.remove('neuroglancer-annotation-hover');
       }
     }
   }
 
+  private selectedAnnotationState = makeCachedLazyDerivedWatchableValue((selectionState, pin) => {
+    if (selectionState === undefined) return undefined;
+    const {layer} = this;
+    const layerSelectionState = selectionState.layers.find(s => s.layer === layer)?.state;
+    if (layerSelectionState === undefined) return undefined;
+    const {annotationId} = layerSelectionState;
+    if (annotationId === undefined) return undefined;
+    const annotationLayerState = this.annotationStates.states.find(
+        x => x.sourceIndex === layerSelectionState.annotationSourceIndex &&
+            (layerSelectionState.annotationSubsource === undefined ||
+             x.subsourceId === layerSelectionState.annotationSubsource));
+    if (annotationLayerState === undefined) return undefined;
+    return {annotationId, annotationLayerState, pin};
+  }, this.layer.manager.root.selectionState, this.layer.manager.root.selectionState.pin);
+
   private updateSelectionView() {
-    const selectedValue = this.state.value;
-    let newSelectedId: string|undefined;
-    let newSelectedAnnotationLayerState: AnnotationLayerState|undefined;
-    if (selectedValue !== undefined) {
-      newSelectedId = selectedValue.id;
-      newSelectedAnnotationLayerState = this.state.selectedAnnotationLayer;
-    }
-    const {previousSelectedId, previousSelectedAnnotationLayerState} = this;
-    if (newSelectedId === previousSelectedId &&
-        previousSelectedAnnotationLayerState === newSelectedAnnotationLayerState) {
+    const selectionState = this.selectedAnnotationState.value;
+    const {previousSelectedState} = this;
+    if (previousSelectedState === selectionState ||
+        (previousSelectedState !== undefined && selectionState !== undefined &&
+         previousSelectedState.annotationId === selectionState.annotationId &&
+         previousSelectedState.annotationLayerState === selectionState.annotationLayerState &&
+         previousSelectedState.pin === selectionState.pin)) {
       return;
     }
     this.clearSelectionClass();
-    this.previousSelectedId = newSelectedId;
-    this.previousSelectedAnnotationLayerState = newSelectedAnnotationLayerState;
-    if (newSelectedId === undefined) return;
-    const attached = this.attachedAnnotationStates.get(newSelectedAnnotationLayerState!);
-    if (attached === undefined) return;
-    const element = attached.listElements.get(newSelectedId);
-    if (element === undefined) return;
-    element.classList.add('neuroglancer-annotation-selected');
-    element.scrollIntoView();
+    this.previousSelectedState = selectionState;
+    if (selectionState === undefined) return;
+    const element = this.getRenderedAnnotationListElement(
+        selectionState.annotationLayerState, selectionState.annotationId,
+        /*scrollIntoView=*/ selectionState.pin);
+    if (element !== undefined) {
+      element.classList.add('neuroglancer-annotation-selected');
+    }
   }
 
   private updateHoverView() {
@@ -643,11 +677,26 @@ export class AnnotationLayerView extends Tab {
     this.previousHoverId = newHoverId;
     this.previousHoverAnnotationLayerState = newAnnotationLayerState;
     if (newHoverId === undefined) return;
-    const attached = this.attachedAnnotationStates.get(newAnnotationLayerState!);
-    if (attached === undefined) return;
-    const element = attached.listElements.get(newHoverId);
+    const element = this.getRenderedAnnotationListElement(newAnnotationLayerState!, newHoverId);
     if (element === undefined) return;
     element.classList.add('neuroglancer-annotation-hover');
+  }
+
+  private render(index: number) {
+    const {annotation, state} = this.listElements[index];
+    return this.makeAnnotationListElement(annotation, state);
+  }
+
+  private setColumnWidth(column: number, width: number) {
+    // Padding
+    width += 2;
+    const {columnWidths} = this;
+    if (columnWidths[column] > width) {
+      // False if `columnWidths[column] === undefined`.
+      return;
+    }
+    columnWidths[column] = width;
+    this.element.style.setProperty(`--neuroglancer-column-${column}-width`, `${width}ch`);
   }
 
   private updateView() {
@@ -656,6 +705,8 @@ export class AnnotationLayerView extends Tab {
     }
     if (this.curCoordinateSpaceGeneration !== this.prevCoordinateSpaceGeneration) {
       this.updated = false;
+      const {columnWidths} = this;
+      columnWidths.length = 0;
       const {headerRow} = this;
       const symbolPlaceholder = document.createElement('div');
       symbolPlaceholder.style.gridColumn = `symbol`;
@@ -666,6 +717,7 @@ export class AnnotationLayerView extends Tab {
       removeChildren(headerRow);
       headerRow.appendChild(symbolPlaceholder);
       let i = 0;
+      let gridTemplate = '[symbol] 2ch';
       const addDimension = (coordinateSpace: CoordinateSpace, dimIndex: number) => {
         const dimWidget = document.createElement('div');
         dimWidget.classList.add('neuroglancer-annotations-view-dimension');
@@ -679,6 +731,8 @@ export class AnnotationLayerView extends Tab {
         dimWidget.appendChild(name);
         dimWidget.appendChild(scale);
         dimWidget.style.gridColumn = `dim ${i + 1}`;
+        this.setColumnWidth(i, scale.textContent.length + name.textContent.length + 3);
+        gridTemplate += ` [dim] var(--neuroglancer-column-${i}-width)`;
         ++i;
         headerRow.appendChild(dimWidget);
       };
@@ -691,8 +745,9 @@ export class AnnotationLayerView extends Tab {
         addDimension(localCoordinateSpace, localDim);
       }
       headerRow.appendChild(deletePlaceholder);
-      this.listContainer.style.gridTemplateColumns =
-          `[symbol] min-content repeat(${i}, [dim] min-content) [delete] min-content`;
+      gridTemplate += ` [delete] 2ch`;
+      this.gridTemplate = gridTemplate;
+      headerRow.style.gridTemplateColumns = gridTemplate;
       this.prevCoordinateSpaceGeneration = this.curCoordinateSpaceGeneration;
     }
     if (this.updated) {
@@ -700,23 +755,38 @@ export class AnnotationLayerView extends Tab {
     }
 
     let isMutable = false;
-    const self = this;
-    function* sublistContainers() {
-      yield self.headerRow;
-      for (const [state, {sublistContainer, listElements}] of self.attachedAnnotationStates) {
-        if (!state.source.readonly) isMutable = true;
-        removeChildren(sublistContainer);
-        listElements.clear();
-        if (state.chunkTransform.value.error !== undefined) continue;
-        for (const annotation of state.source) {
-          sublistContainer.appendChild(self.makeAnnotationListElement(annotation, state));
-        }
-        yield sublistContainer;
+    const {listElements} = this;
+    listElements.length = 0;
+    for (const [state, info] of this.attachedAnnotationStates) {
+      if (!state.source.readonly) isMutable = true;
+      if (state.chunkTransform.value.error !== undefined) continue;
+      const {source} = state;
+      const annotations = Array.from(source);
+      info.annotations = annotations;
+      const {idToIndex} = info;
+      idToIndex.clear();
+      for (let i = 0, length = annotations.length; i < length; ++i) {
+        idToIndex.set(annotations[i].id, i);
+      }
+      for (const annotation of annotations) {
+        listElements.push({state, annotation});
       }
     }
-    updateChildren(this.listContainer, sublistContainers());
+    const oldLength = this.virtualListSource.length;
+    this.updateListLength();
+    this.virtualListSource.changed!.dispatch(
+        [{retainCount: 0, deleteCount: oldLength, insertCount: listElements.length}]);
     this.mutableControls.style.display = isMutable ? 'contents' : 'none';
     this.resetOnUpdate();
+  }
+
+  private updateListLength() {
+    let length = 0;
+    for (const info of this.attachedAnnotationStates.values()) {
+      info.listOffset = length;
+      length += info.annotations.length;
+    }
+    this.virtualListSource.length = length;
   }
 
   private addAnnotationElement(annotation: Annotation, state: AnnotationLayerState) {
@@ -730,7 +800,14 @@ export class AnnotationLayerView extends Tab {
     }
     const info = this.attachedAnnotationStates.get(state);
     if (info !== undefined) {
-      info.sublistContainer.appendChild(this.makeAnnotationListElement(annotation, state));
+      const index = info.annotations.length;
+      info.annotations.push(annotation);
+      info.idToIndex.set(annotation.id, index);
+      const spliceStart = info.listOffset + index;
+      this.listElements.splice(spliceStart, 0, {state, annotation});
+      this.updateListLength();
+      this.virtualListSource.changed!.dispatch(
+          [{retainCount: spliceStart, deleteCount: 0, insertCount: 1}]);
     }
     this.resetOnUpdate();
   }
@@ -746,12 +823,13 @@ export class AnnotationLayerView extends Tab {
     }
     const info = this.attachedAnnotationStates.get(state);
     if (info !== undefined) {
-      const {listElements} = info;
-      const element = listElements.get(annotation.id);
-      if (element !== undefined) {
-        const newElement = this.makeAnnotationListElement(annotation, state);
-        info.sublistContainer.replaceChild(newElement, element);
-        listElements.set(annotation.id, newElement);
+      const index = info.idToIndex.get(annotation.id);
+      if (index !== undefined) {
+        const updateStart = info.listOffset + index;
+        info.annotations[index] = annotation;
+        this.listElements[updateStart].annotation = annotation;
+        this.virtualListSource.changed!.dispatch(
+            [{retainCount: updateStart, deleteCount: 1, insertCount: 1}]);
       }
     }
     this.resetOnUpdate();
@@ -766,12 +844,22 @@ export class AnnotationLayerView extends Tab {
       this.updateView();
       return;
     }
-    const attached = this.attachedAnnotationStates.get(state);
-    if (attached !== undefined) {
-      let element = attached.listElements.get(annotationId);
-      if (element !== undefined) {
-        removeFromParent(element);
-        attached.listElements.delete(annotationId);
+    const info = this.attachedAnnotationStates.get(state);
+    if (info !== undefined) {
+      const {idToIndex} = info;
+      const index = idToIndex.get(annotationId);
+      if (index !== undefined) {
+        const spliceStart = info.listOffset + index;
+        const {annotations} = info;
+        annotations.splice(index, 1);
+        idToIndex.delete(annotationId);
+        for (let i = index, length = annotations.length; i < length; ++i) {
+          idToIndex.set(annotations[i].id, i);
+        }
+        this.listElements.splice(spliceStart, 1);
+        this.updateListLength();
+        this.virtualListSource.changed!.dispatch(
+            [{retainCount: spliceStart, deleteCount: 1, insertCount: 0}]);
       }
     }
     this.resetOnUpdate();
@@ -789,12 +877,13 @@ export class AnnotationLayerView extends Tab {
     const chunkTransform = state.chunkTransform.value as ChunkTransformParameters;
     const element = document.createElement('div');
     element.classList.add('neuroglancer-annotation-list-entry');
+    element.style.gridTemplateColumns = this.gridTemplate;
+
     element.title = 'Click to select, right click to recenter view.';
 
     const icon = document.createElement('div');
     icon.className = 'neuroglancer-annotation-icon';
     icon.textContent = annotationTypeHandlers[annotation.type].icon;
-    icon.classList.add('neuroglancer-annotation-list-entry-highlight');
     element.appendChild(icon);
 
     let deleteButton: HTMLElement|undefined;
@@ -832,10 +921,11 @@ export class AnnotationLayerView extends Tab {
               if (layerDim !== -1) {
                 const coord = Math.floor(layerPosition[layerDim]);
                 const coordElement = document.createElement('div');
-                coordElement.textContent = coord.toString();
+                const text = coord.toString()
+                coordElement.textContent = text;
                 coordElement.classList.add('neuroglancer-annotation-coordinate');
-                coordElement.classList.add('neuroglancer-annotation-list-entry-highlight');
                 coordElement.style.gridColumn = `dim ${i + 1}`;
+                this.setColumnWidth(i, text.length);
                 position.appendChild(coordElement);
               }
               ++i;
@@ -851,7 +941,6 @@ export class AnnotationLayerView extends Tab {
       ++numRows;
       const description = document.createElement('div');
       description.classList.add('neuroglancer-annotation-description');
-      description.classList.add('neuroglancer-annotation-list-entry-highlight');
       description.textContent = annotation.description;
       element.appendChild(description);
     }
@@ -859,10 +948,6 @@ export class AnnotationLayerView extends Tab {
     if (deleteButton !== undefined) {
       deleteButton.style.gridRow = `span ${numRows}`;
     }
-
-
-    const info = this.attachedAnnotationStates.get(state)!;
-    info.listElements.set(annotation.id, element);
     element.addEventListener('mouseenter', () => {
       this.displayState.hoverState.value = {
         id: annotation.id,
@@ -888,7 +973,11 @@ export class AnnotationLayerView extends Tab {
         setLayerPosition(this.layer, chunkTransform, layerPosition);
       }
     });
-
+    const selectionState = this.selectedAnnotationState.value;
+    if (selectionState !== undefined && selectionState.annotationLayerState === state &&
+        selectionState.annotationId === annotation.id) {
+      element.classList.add('neuroglancer-annotation-selected');
+    }
     return element;
   }
 }
@@ -1264,7 +1353,7 @@ function makeRelatedSegmentList(
                   addContextDisposer();
                 },
               });
-            deleteButton.classList.add('neuroglancer-segment-list-entry-delete');
+              deleteButton.classList.add('neuroglancer-segment-list-entry-delete');
               newRow.appendChild(deleteButton);
               const idElement = document.createElement('input');
               idElement.autocomplete = 'off';
@@ -1337,18 +1426,18 @@ function makeRelatedSegmentList(
         }
         if (segmentationDisplayState != null) {
           const updateSegments = context.registerCancellable(animationFrameDebounce(() => {
-                const {visibleSegments} = segmentationDisplayState;
-                let numVisible = 0;
-                for (const id of segments) {
-                  if (visibleSegments.has(id)) {
-                    ++numVisible;
-                  }
-                }
-                for (const row of rows) {
-                  segmentWidgetFactory.update(row);
-                }
-                headerCheckbox!.checked = numVisible === segments.length && numVisible > 0;
-                headerCheckbox!.indeterminate = (numVisible > 0) && (numVisible < segments.length);
+            const {visibleSegments} = segmentationDisplayState;
+            let numVisible = 0;
+            for (const id of segments) {
+              if (visibleSegments.has(id)) {
+                ++numVisible;
+              }
+            }
+            for (const row of rows) {
+              segmentWidgetFactory.update(row);
+            }
+            headerCheckbox!.checked = numVisible === segments.length && numVisible > 0;
+            headerCheckbox!.indeterminate = (numVisible > 0) && (numVisible < segments.length);
           }));
           updateSegments();
           updateSegments.flush();
@@ -1637,7 +1726,8 @@ export function UserLayerWithAnnotationsMixin<TBase extends {new (...args: any[]
                           const hex = serializeColor(colorVec);
                           valueElement.textContent = hex;
                           valueElement.style.backgroundColor = hex;
-                          valueElement.style.color = useWhiteBackground(colorVec) ? 'white' : 'black';
+                          valueElement.style.color =
+                              useWhiteBackground(colorVec) ? 'white' : 'black';
                           break;
                         }
                         case 'rgba': {
