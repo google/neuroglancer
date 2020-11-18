@@ -133,13 +133,23 @@ void main() {
 void main() {
 }
 `;
-    expect(parseShaderUiControls(code, {imageData: {dataType: DataType.UINT8, channelRank: 0}})).toEqual({
+    expect(parseShaderUiControls(code, {
+      imageData: {dataType: DataType.UINT8, channelRank: 0}
+    })).toEqual({
       source: code,
       code: newCode,
       errors: [],
       controls: new Map([[
-        'normalized',
-        {type: 'invlerp', dataType: DataType.UINT8, channel: Uint32Array.of()}
+        'normalized', {
+          type: 'invlerp',
+          dataType: DataType.UINT8,
+          clamp: true,
+          default: {
+            range: [0, 255],
+            window: [0, 255],
+            channel: [],
+          },
+        }
       ]]),
     });
   });
@@ -155,13 +165,23 @@ void main() {
 void main() {
 }
 `;
-    expect(parseShaderUiControls(code, {imageData: {dataType: DataType.UINT8, channelRank: 1}})).toEqual({
+    expect(parseShaderUiControls(code, {
+      imageData: {dataType: DataType.UINT8, channelRank: 1}
+    })).toEqual({
       source: code,
       code: newCode,
       errors: [],
       controls: new Map([[
-        'normalized',
-        {type: 'invlerp', dataType: DataType.UINT8, channel: Uint32Array.of(0)}
+        'normalized', {
+          type: 'invlerp',
+          dataType: DataType.UINT8,
+          clamp: true,
+          default: {
+            range: [0, 255],
+            window: [0, 255],
+            channel: [0],
+          },
+        }
       ]]),
     });
   });
@@ -177,13 +197,23 @@ void main() {
 void main() {
 }
 `;
-    expect(parseShaderUiControls(code, {imageData: {dataType: DataType.UINT8, channelRank: 0}})).toEqual({
+    expect(parseShaderUiControls(code, {
+      imageData: {dataType: DataType.UINT8, channelRank: 0}
+    })).toEqual({
       source: code,
       code: newCode,
       errors: [],
       controls: new Map([[
-        'normalized',
-        {type: 'invlerp', dataType: DataType.UINT8, channel: Uint32Array.of()}
+        'normalized', {
+          type: 'invlerp',
+          dataType: DataType.UINT8,
+          clamp: true,
+          default: {
+            range: [0, 255],
+            window: [0, 255],
+            channel: [],
+          },
+        }
       ]]),
     });
   });
@@ -199,13 +229,23 @@ void main() {
 void main() {
 }
 `;
-    expect(parseShaderUiControls(code, {imageData: {dataType: DataType.UINT8, channelRank: 1}})).toEqual({
+    expect(parseShaderUiControls(code, {
+      imageData: {dataType: DataType.UINT8, channelRank: 1}
+    })).toEqual({
       source: code,
       code: newCode,
       errors: [],
       controls: new Map([[
-        'normalized',
-        {type: 'invlerp', dataType: DataType.UINT8, channel: Uint32Array.of(1)}
+        'normalized', {
+          type: 'invlerp',
+          dataType: DataType.UINT8,
+          clamp: true,
+          default: {
+            range: [0, 255],
+            window: [0, 255],
+            channel: [1],
+          },
+        }
       ]]),
     });
   });
@@ -221,13 +261,23 @@ void main() {
 void main() {
 }
 `;
-    expect(parseShaderUiControls(code, {imageData: {dataType: DataType.UINT8, channelRank: 1}})).toEqual({
+    expect(parseShaderUiControls(code, {
+      imageData: {dataType: DataType.UINT8, channelRank: 1}
+    })).toEqual({
       source: code,
       code: newCode,
       errors: [],
       controls: new Map([[
-        'normalized',
-        {type: 'invlerp', dataType: DataType.UINT8, channel: Uint32Array.of(1)}
+        'normalized', {
+          type: 'invlerp',
+          dataType: DataType.UINT8,
+          clamp: true,
+          default: {
+            range: [0, 255],
+            window: [0, 255],
+            channel: [1],
+          },
+        }
       ]]),
     });
   });
@@ -243,13 +293,23 @@ void main() {
 void main() {
 }
 `;
-    expect(parseShaderUiControls(code, {imageData: {dataType: DataType.UINT8, channelRank: 2}})).toEqual({
+    expect(parseShaderUiControls(code, {
+      imageData: {dataType: DataType.UINT8, channelRank: 2}
+    })).toEqual({
       source: code,
       code: newCode,
       errors: [],
       controls: new Map([[
-        'normalized',
-        {type: 'invlerp', dataType: DataType.UINT8, channel: Uint32Array.of(1, 2)}
+        'normalized', {
+          type: 'invlerp',
+          dataType: DataType.UINT8,
+          clamp: true,
+          default: {
+            range: [0, 255],
+            window: [0, 255],
+            channel: [1, 2],
+          },
+        }
       ]]),
     });
   });
