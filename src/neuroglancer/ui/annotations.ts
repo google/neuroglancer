@@ -33,18 +33,17 @@ import {RenderScaleHistogram, trackableRenderScaleTarget} from 'neuroglancer/ren
 import {RenderLayerRole} from 'neuroglancer/renderlayer';
 import {bindSegmentListWidth, registerCallbackWhenSegmentationDisplayStateChanged, SegmentationDisplayState, SegmentWidgetFactory} from 'neuroglancer/segmentation_display_state/frontend';
 import {ElementVisibilityFromTrackableBoolean} from 'neuroglancer/trackable_boolean';
-import {AggregateWatchableValue, makeCachedLazyDerivedWatchableValue, registerNested, TrackableValueInterface, WatchableValueInterface} from 'neuroglancer/trackable_value';
+import {AggregateWatchableValue, makeCachedLazyDerivedWatchableValue, registerNested, WatchableValueInterface} from 'neuroglancer/trackable_value';
 import {getDefaultSelectBindings} from 'neuroglancer/ui/default_input_event_bindings';
 import {registerTool, Tool} from 'neuroglancer/ui/tool';
 import {animationFrameDebounce} from 'neuroglancer/util/animation_frame_debounce';
 import {arraysEqual, ArraySpliceOp, gatherUpdate} from 'neuroglancer/util/array';
 import {setClipboard} from 'neuroglancer/util/clipboard';
 import {serializeColor, unpackRGB, unpackRGBA, useWhiteBackground} from 'neuroglancer/util/color';
-import {Borrowed, disposableOnce, Owned, RefCounted} from 'neuroglancer/util/disposable';
+import {Borrowed, disposableOnce, RefCounted} from 'neuroglancer/util/disposable';
 import {removeChildren} from 'neuroglancer/util/dom';
 import {ValueOrError} from 'neuroglancer/util/error';
 import {vec3} from 'neuroglancer/util/geom';
-import {verifyInt, verifyObject, verifyObjectProperty, verifyOptionalObjectProperty, verifyString} from 'neuroglancer/util/json';
 import {EventActionMap, KeyboardEventBinder, registerActionListener} from 'neuroglancer/util/keyboard_bindings';
 import * as matrix from 'neuroglancer/util/matrix';
 import {MouseEventBinder} from 'neuroglancer/util/mouse_bindings';
@@ -62,12 +61,6 @@ import {makeIcon} from 'neuroglancer/widget/icon';
 import {makeMoveToButton} from 'neuroglancer/widget/move_to_button';
 import {Tab} from 'neuroglancer/widget/tab_view';
 import {VirtualList, VirtualListSource} from 'neuroglancer/widget/virtual_list';
-
-interface AnnotationIdAndPart {
-  id: string, sourceIndex: number;
-  subsource?: string;
-  partIndex?: number
-}
 
 export class MergedAnnotationStates extends RefCounted implements
     WatchableValueInterface<readonly AnnotationLayerState[]> {
@@ -122,163 +115,6 @@ export class MergedAnnotationStates extends RefCounted implements
       this.states.splice(index, 1);
       this.updateRelationships();
       this.changed.dispatch();
-    };
-  }
-}
-
-export class SelectedAnnotationState extends RefCounted implements
-    TrackableValueInterface<AnnotationIdAndPart|undefined> {
-  private value_: AnnotationIdAndPart|undefined = undefined;
-  changed = new NullarySignal();
-
-  private annotationLayer_: AnnotationLayerState|undefined = undefined;
-  private reference_: Owned<AnnotationReference>|undefined = undefined;
-
-  get reference() {
-    return this.reference_;
-  }
-
-  constructor(public annotationStates: Borrowed<MergedAnnotationStates>) {
-    super();
-    this.registerDisposer(annotationStates.isLoadingChanged.add(this.validate));
-  }
-
-  get selectedAnnotationLayer(): AnnotationLayerState|undefined {
-    return this.annotationLayer_;
-  }
-
-  get value() {
-    this.validate();
-    return this.value_;
-  }
-
-  get validValue() {
-    this.validate();
-    return this.annotationLayer_ && this.value_;
-  }
-
-  set value(value: AnnotationIdAndPart|undefined) {
-    if (this.value_ === value) return;
-    this.value_ = value;
-    if (value === undefined) {
-      this.unbindReference();
-      this.changed.dispatch();
-      return;
-    }
-    const reference = this.reference_;
-    if (reference !== undefined) {
-      const annotationLayer = this.annotationLayer_!;
-      if (value === undefined || reference.id !== value.id ||
-          annotationLayer.sourceIndex !== value.sourceIndex ||
-          (annotationLayer.subsourceId !== undefined &&
-           annotationLayer.subsourceId !== value.subsource)) {
-        this.unbindReference();
-      }
-    }
-    this.validate();
-    this.changed.dispatch();
-  }
-
-  disposed() {
-    this.unbindReference();
-    super.disposed();
-  }
-
-  private unbindReference() {
-    const reference = this.reference_;
-    if (reference !== undefined) {
-      reference.changed.remove(this.referenceChanged);
-      const annotationLayer = this.annotationLayer_!;
-      annotationLayer.source.changed.remove(this.validate);
-      annotationLayer.dataSource.layer.dataSourcesChanged.remove(this.validate);
-      this.reference_ = undefined;
-      this.annotationLayer_ = undefined;
-    }
-  }
-
-  private referenceChanged = (() => {
-    this.validate();
-    this.changed.dispatch();
-  });
-
-  private validate = (() => {
-    const value = this.value_;
-    if (value === undefined) return;
-    const {annotationLayer_} = this;
-    const {annotationStates} = this;
-    if (annotationLayer_ !== undefined) {
-      if (!annotationStates.states.includes(annotationLayer_)) {
-        // Annotation layer containing selected annotation was removed.
-        this.unbindReference();
-        if (!annotationStates.isLoading) {
-          this.value_ = undefined;
-          this.changed.dispatch();
-        }
-        return;
-      }
-      // Existing reference is still valid.
-      const reference = this.reference_!;
-      let hasChange = false;
-      if (reference.id !== value.id) {
-        // Id changed.
-        value.id = reference.id;
-        hasChange = true;
-      }
-      const {dataSource} = annotationLayer_;
-      if (dataSource.layer.dataSources[value.sourceIndex] !== dataSource) {
-        value.sourceIndex = annotationLayer_.sourceIndex;
-        hasChange = true;
-      }
-      if (hasChange) this.changed.dispatch();
-      return;
-    }
-    const newAnnotationLayer = annotationStates.states.find(
-        x => x.sourceIndex === value.sourceIndex &&
-            (value.subsource === undefined || x.subsourceId === value.subsource));
-    if (newAnnotationLayer === undefined) {
-      if (!annotationStates.isLoading) {
-        this.value_ = undefined;
-        this.changed.dispatch();
-      }
-      return;
-    }
-    this.annotationLayer_ = newAnnotationLayer;
-    const reference = this.reference_ = newAnnotationLayer!.source.getReference(value.id);
-    reference.changed.add(this.referenceChanged);
-    newAnnotationLayer.source.changed.add(this.validate);
-    newAnnotationLayer.dataSource.layer.dataSourcesChanged.add(this.validate);
-    this.changed.dispatch();
-  });
-
-  toJSON() {
-    const value = this.value_;
-    if (value === undefined) {
-      return undefined;
-    }
-    let partIndex: number|undefined = value.partIndex;
-    if (partIndex === 0) partIndex = undefined;
-    let sourceIndex: number|undefined = value.sourceIndex;
-    if (sourceIndex === 0) sourceIndex = undefined;
-    return {id: value.id, partIndex, source: sourceIndex, subsource: value.subsource};
-  }
-  reset() {
-    this.value = undefined;
-  }
-  restoreState(x: any) {
-    if (x === undefined) {
-      this.value = undefined;
-      return;
-    }
-    if (typeof x === 'string') {
-      this.value = {'id': x, 'partIndex': 0, sourceIndex: 0};
-      return;
-    }
-    verifyObject(x);
-    this.value = {
-      id: verifyObjectProperty(x, 'id', verifyString),
-      partIndex: verifyOptionalObjectProperty(x, 'partIndex', verifyInt),
-      sourceIndex: verifyOptionalObjectProperty(x, 'source', verifyInt, 0),
-      subsource: verifyOptionalObjectProperty(x, 'subsource', verifyString),
     };
   }
 }
@@ -410,7 +246,7 @@ export class AnnotationLayerView extends Tab {
   private headerRow = document.createElement('div');
 
   get annotationStates() {
-    return this.state.annotationStates;
+    return this.layer.annotationStates;
   }
 
   private attachedAnnotationStates =
@@ -500,13 +336,12 @@ export class AnnotationLayerView extends Tab {
 
   constructor(
       public layer: Borrowed<UserLayerWithAnnotations>,
-      public state: Owned<SelectedAnnotationState>, public displayState: AnnotationDisplayState) {
+      public displayState: AnnotationDisplayState) {
     super();
     this.element.classList.add('neuroglancer-annotation-layer-view');
-    this.registerDisposer(state);
     this.registerDisposer(this.visibility.changed.add(() => this.updateView()));
     this.registerDisposer(
-        state.annotationStates.changed.add(() => this.updateAttachedAnnotationLayerStates()));
+        layer.annotationStates.changed.add(() => this.updateAttachedAnnotationLayerStates()));
     this.headerRow.classList.add('neuroglancer-annotation-list-header');
 
     const toolbox = document.createElement('div');
@@ -983,13 +818,10 @@ export class AnnotationLayerView extends Tab {
 }
 
 export class AnnotationTab extends Tab {
-  private layerView = this.registerDisposer(
-      new AnnotationLayerView(this.layer, this.state.addRef(), this.layer.annotationDisplayState));
-  constructor(
-      public layer: Borrowed<UserLayerWithAnnotations>,
-      public state: Owned<SelectedAnnotationState>) {
+  private layerView =
+      this.registerDisposer(new AnnotationLayerView(this.layer, this.layer.annotationDisplayState));
+  constructor(public layer: Borrowed<UserLayerWithAnnotations>) {
     super();
-    this.registerDisposer(state);
     const {element} = this;
     element.classList.add('neuroglancer-annotations-tab');
     element.appendChild(this.layerView.element);
@@ -1448,14 +1280,12 @@ function makeRelatedSegmentList(
       });
 }
 
-const SELECTED_ANNOTATION_JSON_KEY = 'selectedAnnotation';
 const ANNOTATION_COLOR_JSON_KEY = 'annotationColor';
 export function UserLayerWithAnnotationsMixin<TBase extends {new (...args: any[]): UserLayer}>(
     Base: TBase) {
   abstract class C extends Base implements UserLayerWithAnnotations {
     annotationStates = this.registerDisposer(new MergedAnnotationStates());
     annotationDisplayState = new AnnotationDisplayState();
-    selectedAnnotation = this.registerDisposer(new SelectedAnnotationState(this.annotationStates));
     annotationCrossSectionRenderScaleHistogram = new RenderScaleHistogram();
     annotationCrossSectionRenderScaleTarget = trackableRenderScaleTarget(8);
     annotationProjectionRenderScaleHistogram = new RenderScaleHistogram();
@@ -1463,14 +1293,13 @@ export function UserLayerWithAnnotationsMixin<TBase extends {new (...args: any[]
 
     constructor(...args: any[]) {
       super(...args);
-      this.selectedAnnotation.changed.add(this.specificationChanged.dispatch);
       this.annotationDisplayState.color.changed.add(this.specificationChanged.dispatch);
       this.annotationDisplayState.shader.changed.add(this.specificationChanged.dispatch);
       this.annotationDisplayState.shaderControls.changed.add(this.specificationChanged.dispatch);
       this.tabs.add('annotations', {
         label: 'Annotations',
         order: 10,
-        getter: () => new AnnotationTab(this, this.selectedAnnotation.addRef())
+        getter: () => new AnnotationTab(this)
       });
 
       let annotationStateReadyBinding: (() => void)|undefined;
@@ -1516,7 +1345,6 @@ export function UserLayerWithAnnotationsMixin<TBase extends {new (...args: any[]
 
     restoreState(specification: any) {
       super.restoreState(specification);
-      this.selectedAnnotation.restoreState(specification[SELECTED_ANNOTATION_JSON_KEY]);
       this.annotationDisplayState.color.restoreState(specification[ANNOTATION_COLOR_JSON_KEY]);
     }
 
@@ -1863,7 +1691,6 @@ export function UserLayerWithAnnotationsMixin<TBase extends {new (...args: any[]
 
     toJSON() {
       const x = super.toJSON();
-      x[SELECTED_ANNOTATION_JSON_KEY] = this.selectedAnnotation.toJSON();
       x[ANNOTATION_COLOR_JSON_KEY] = this.annotationDisplayState.color.toJSON();
       return x;
     }
