@@ -55,6 +55,19 @@ export function getDefaultSelectBindings() {
   return defaultSelectBindings;
 }
 
+let defaultAnnotationListBindings: EventActionMap|undefined;
+export function getDefaultAnnotationListBindings() {
+  if (defaultAnnotationListBindings === undefined) {
+    defaultAnnotationListBindings = EventActionMap.fromObject(
+        {
+          'click0': 'pin-annotation',
+          'mousedown2': 'move-to-annotation',
+        },
+        {parents: [[getDefaultSelectBindings(), 0]]});
+  }
+  return defaultAnnotationListBindings;
+}
+
 let defaultRenderedDataPanelBindings: EventActionMap|undefined;
 export function getDefaultRenderedDataPanelBindings() {
   if (defaultRenderedDataPanelBindings === undefined) {

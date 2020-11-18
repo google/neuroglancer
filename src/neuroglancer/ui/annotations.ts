@@ -34,7 +34,7 @@ import {RenderLayerRole} from 'neuroglancer/renderlayer';
 import {bindSegmentListWidth, registerCallbackWhenSegmentationDisplayStateChanged, SegmentationDisplayState, SegmentWidgetFactory} from 'neuroglancer/segmentation_display_state/frontend';
 import {ElementVisibilityFromTrackableBoolean} from 'neuroglancer/trackable_boolean';
 import {AggregateWatchableValue, makeCachedLazyDerivedWatchableValue, registerNested, WatchableValueInterface} from 'neuroglancer/trackable_value';
-import {getDefaultSelectBindings} from 'neuroglancer/ui/default_input_event_bindings';
+import {getDefaultAnnotationListBindings} from 'neuroglancer/ui/default_input_event_bindings';
 import {registerTool, Tool} from 'neuroglancer/ui/tool';
 import {animationFrameDebounce} from 'neuroglancer/util/animation_frame_debounce';
 import {arraysEqual, ArraySpliceOp, gatherUpdate} from 'neuroglancer/util/array';
@@ -403,8 +403,9 @@ export class AnnotationLayerView extends Tab {
       this.displayState.hoverState.value = undefined;
     });
 
-    this.registerDisposer(
-        new MouseEventBinder(this.virtualList.element, getDefaultSelectBindings()));
+    const bindings = getDefaultAnnotationListBindings();
+    this.registerDisposer(new MouseEventBinder(this.virtualList.element, bindings));
+    this.virtualList.element.title = bindings.describe();
     this.registerDisposer(this.displayState.hoverState.changed.add(() => this.updateHoverView()));
     this.registerDisposer(
         this.selectedAnnotationState.changed.add(() => this.updateSelectionView()));
@@ -713,9 +714,6 @@ export class AnnotationLayerView extends Tab {
     const element = document.createElement('div');
     element.classList.add('neuroglancer-annotation-list-entry');
     element.style.gridTemplateColumns = this.gridTemplate;
-
-    element.title = 'Click to select, right click to recenter view.';
-
     const icon = document.createElement('div');
     icon.className = 'neuroglancer-annotation-icon';
     icon.textContent = annotationTypeHandlers[annotation.type].icon;
@@ -728,7 +726,9 @@ export class AnnotationLayerView extends Tab {
       if (deleteButton !== undefined) return;
       deleteButton = makeDeleteButton({
         title: 'Delete annotation',
-        onClick: () => {
+        onClick: event => {
+          event.stopPropagation();
+          event.preventDefault();
           const ref = state.source.getReference(annotation.id);
           try {
             state.source.delete(ref);
@@ -796,18 +796,24 @@ export class AnnotationLayerView extends Tab {
       this.layer.selectAnnotation(state, annotation.id, 'toggle');
     });
 
-    element.addEventListener('mouseup', (event: MouseEvent) => {
-      if (event.button === 2) {
-        const {layerRank} = chunkTransform;
-        const chunkPosition = new Float32Array(layerRank);
-        const layerPosition = new Float32Array(layerRank);
-        getCenterPosition(chunkPosition, annotation);
-        matrix.transformPoint(
-            layerPosition, chunkTransform.chunkToLayerTransform, layerRank + 1, chunkPosition,
-            layerRank);
-        setLayerPosition(this.layer, chunkTransform, layerPosition);
-      }
+    element.addEventListener('action:pin-annotation', event => {
+      event.stopPropagation();
+      this.layer.selectAnnotation(state, annotation.id, true);
     });
+
+    element.addEventListener('action:move-to-annotation', event => {
+      event.stopPropagation();
+      event.preventDefault();
+      const {layerRank} = chunkTransform;
+      const chunkPosition = new Float32Array(layerRank);
+      const layerPosition = new Float32Array(layerRank);
+      getCenterPosition(chunkPosition, annotation);
+      matrix.transformPoint(
+          layerPosition, chunkTransform.chunkToLayerTransform, layerRank + 1, chunkPosition,
+          layerRank);
+      setLayerPosition(this.layer, chunkTransform, layerPosition);
+    });
+
     const selectionState = this.selectedAnnotationState.value;
     if (selectionState !== undefined && selectionState.annotationLayerState === state &&
         selectionState.annotationId === annotation.id) {
@@ -1296,11 +1302,8 @@ export function UserLayerWithAnnotationsMixin<TBase extends {new (...args: any[]
       this.annotationDisplayState.color.changed.add(this.specificationChanged.dispatch);
       this.annotationDisplayState.shader.changed.add(this.specificationChanged.dispatch);
       this.annotationDisplayState.shaderControls.changed.add(this.specificationChanged.dispatch);
-      this.tabs.add('annotations', {
-        label: 'Annotations',
-        order: 10,
-        getter: () => new AnnotationTab(this)
-      });
+      this.tabs.add(
+          'annotations', {label: 'Annotations', order: 10, getter: () => new AnnotationTab(this)});
 
       let annotationStateReadyBinding: (() => void)|undefined;
 
