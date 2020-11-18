@@ -22,7 +22,6 @@ const ExtractTextPlugin = require('extract-text-webpack-plugin');
 const MiniCssExtractPlugin = require('mini-css-extract-plugin');
 const webpack = require('webpack');
 const fs = require('fs');
-const AliasPlugin = require('./webpack_alias_plugin');
 const resolveReal = require('./resolve_real');
 const CopyWebpackPlugin = require('copy-webpack-plugin');
 
@@ -153,7 +152,7 @@ function getTypescriptLoaderEntry(options) {
     instance: 'main',
   };
   return {
-    loaderEntry: {test: /\.ts$/, loader: [{loader: 'ts-loader', options: tsOptions}]},
+    loaderEntry: {test: /\.ts$/, use: [{loader: 'ts-loader', options: tsOptions}]},
     extraResolveAliases
   };
 }
@@ -184,18 +183,15 @@ function getBaseConfig(options) {
     {test: /\.css$/, loader: 'style-loader!css-loader'} :
     {
       test: /\.css$/,
-      loader: [
+      use: [
         {
           loader: MiniCssExtractPlugin.loader,
-          options: {
-            hmr: process.env.NODE_ENV === 'development',
-          }
         },
         {
           loader: 'css-loader',
         },
       ],
-    }
+    };
 
   let aliasMappings = Object.assign(
       {
@@ -208,14 +204,7 @@ function getBaseConfig(options) {
   let baseConfig = {
     resolve: {
       extensions: ['.ts', '.js'],
-      /**
-       * Don't use the built-in alias mechanism because of a bug in the normalize function defined
-       * in the memory-fs package it depends on.
-       */
-      // alias: aliasMappings,
-      plugins: [
-        new AliasPlugin(aliasMappings, 'described-resolve', 'resolve'),
-      ],
+      alias: aliasMappings,
     },
     resolveLoader: {
       alias: Object.assign(
@@ -248,18 +237,17 @@ function getBaseConfig(options) {
         {
           test: /\.svg$/,
           loader: require.resolve('svg-inline-loader'),
-            options: {removeSVGTagAttrs: false, removeTags: true}
+          options: {removeSVGTagAttrs: false, removeTags: true}
         },
         {
           test: /\.glsl$/,
-          loader: [
+          use: [
             {loader: require.resolve('raw-loader')},
             {loader: require.resolve('glsl-strip-comments-loader')},
           ],
         },
       ],
     },
-    node: {'Buffer': false},
     optimization: {
       splitChunks: false,
     },
@@ -484,7 +472,8 @@ function getViewerConfigFromEnv(options, env) {
     const srcDir = resolveReal(__dirname, '../src');
     options.frontendModules = [resolveReal(srcDir, 'main_module.ts')];
   }
-  return getViewerConfig(options);
+  const config = getViewerConfig(options);
+  return config;
 }
 
 exports.getTypescriptLoaderEntry = getTypescriptLoaderEntry;

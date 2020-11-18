@@ -16,9 +16,9 @@
 
 import {decodeGzip} from 'neuroglancer/async_computation/decode_gzip_request';
 import {registerAsyncComputation} from 'neuroglancer/async_computation/handler';
-import {inflate} from 'pako';
+import pako from 'pako';
 
 registerAsyncComputation(decodeGzip, async function(data: Uint8Array) {
-  const result = inflate(data);
+  const result = pako.inflate(data);
   return {value: result, transfer: [result.buffer]};
 });
