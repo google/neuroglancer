@@ -245,9 +245,9 @@ void main() {
         case DataType.UINT32:
         case 'uint':
         case 'bool': {
-          const buf = new Uint32Array(1);
+          const buf = new Uint32Array(4);
           gl.readPixels(
-              0, 0, 1, 1, WebGL2RenderingContext.RED_INTEGER, WebGL2RenderingContext.UNSIGNED_INT,
+              0, 0, 1, 1, WebGL2RenderingContext.RGBA_INTEGER, WebGL2RenderingContext.UNSIGNED_INT,
             buf);
           return t === 'bool' ? !!buf[0] : buf[0];
         }
@@ -255,15 +255,15 @@ void main() {
         case DataType.INT16:
         case DataType.INT32:
         case 'int': {
-          const buf = new Int32Array(1);
+          const buf = new Int32Array(4);
           gl.readPixels(
-              0, 0, 1, 1, WebGL2RenderingContext.RED_INTEGER, WebGL2RenderingContext.INT, buf);
+              0, 0, 1, 1, WebGL2RenderingContext.RGBA_INTEGER, WebGL2RenderingContext.INT, buf);
           return buf[0];
         }
         case DataType.UINT64: {
-          const buf = new Uint32Array(2);
+          const buf = new Uint32Array(4);
           gl.readPixels(
-              0, 0, 1, 1, WebGL2RenderingContext.RG_INTEGER, WebGL2RenderingContext.UNSIGNED_INT, buf);
+              0, 0, 1, 1, WebGL2RenderingContext.RGBA_INTEGER, WebGL2RenderingContext.UNSIGNED_INT, buf);
           return new Uint64(buf[0], buf[1]);
         }
         default: {
