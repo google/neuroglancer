@@ -389,8 +389,7 @@ class RenderMultiscaleVolumeChunkSource extends MultiscaleVolumeChunkSource {
 export function computeStackHierarchy(stackInfo: StackInfo, tileSize: number) {
   let maxBound = 0;
   for (let i = 0; i < 2; i++) {
-    maxBound < stackInfo.upperVoxelBound[i] ? maxBound = stackInfo.upperVoxelBound[i] :
-                                              maxBound = maxBound;
+    maxBound = Math.max(maxBound, stackInfo.upperVoxelBound[i]);
   }
 
   if (tileSize >= maxBound) {
