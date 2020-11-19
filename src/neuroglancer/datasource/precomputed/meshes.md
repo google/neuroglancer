@@ -40,6 +40,12 @@ members:
 - `"sharding"`: If specified, indicates that the mesh is stored using the [sharded
     format](./sharded.md).  Must be a [sharding specification](./sharded.md#sharding-specification).  If not
     specified, the unsharded storage representation is used.
+- `"segment_properties"`: Optional.  If specified, it must be a string value specifying the name of
+  the subdirectory containing a [segment properties](./segment_properties.md) representation.  Note
+  that Neuroglancer only uses these segment properties if this mesh source is specified as a data
+  source directly.  If it is specified indirectly via the `"mesh"` property in a [multi-scale
+  volume](./volume.md), then you must instead specify the properties using use the
+  `"segment_properties"` member in the volume's `info` file.
 
 ### Multi-resolution mesh manifest file format
 

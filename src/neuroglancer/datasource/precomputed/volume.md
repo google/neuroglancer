@@ -9,7 +9,7 @@ Each (optionally multi-scale) volume is represented as a directory tree (served 
 - One subdirectory with a name equal to the `"skeletons"` key value in the `json` file (only if a
   `"skeletons"` key is specified, and only for segmentation volumes).  This subdirectory contains
   [skeleton representations](./skeletons.md) of objects in the volume.
-  
+
 Within neuroglancer, a precomputed data source is specified using a URL of the form:
 `precomputed://https://host/path/to/root/directory`.  If the data is being served from Google Cloud
 Storage (GCS), `precomputed://gs://bucket/path/to/root/directory` may be used as an alias for

@@ -28,6 +28,12 @@ members:
 - `"sharding"`: If specified, indicates that the mesh is stored using the [sharded
     format](./sharded.md).  Must be a [sharding specification](./sharded.md#sharding-specification).  If not
     specified, the unsharded storage representation is used.
+- `"segment_properties"`: Optional.  If specified, it must be a string value specifying the name of
+  the subdirectory containing a [segment properties](./segment_properties.md) representation.  Note
+  that Neuroglancer only uses these segment properties if this skeleton source is specified as a
+  data source directly.  If it is specified indirectly via the `"skeletons"` property in a
+  [multi-scale volume](./volume.md), then you must instead specify the properties using use the
+  `"segment_properties"` member in the volume's `info` file.
 
 The special vertex attribute id of `"radius"` may be used to indicate the radius in "stored model"
 units; it should have a `"data_type"` of `"float32"` and `"num_components"` of 1.
