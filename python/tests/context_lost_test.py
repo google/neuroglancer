@@ -15,6 +15,7 @@
 
 import numpy as np
 import neuroglancer
+import time
 
 def test_context_lost(webdriver):
     a = np.array([[[255]]], dtype=np.uint8)
@@ -39,11 +40,13 @@ def test_context_lost(webdriver):
 window.webglLoseContext = viewer.gl.getExtension('WEBGL_lose_context');
 window.webglLoseContext.loseContext();
 ''')
+    time.sleep(3) # Wait a few seconds for log messages to be written
     browser_log = webdriver.get_log_messages()
     assert 'Lost WebGL context' in browser_log
     webdriver.driver.execute_script('''
 window.webglLoseContext.restoreContext();
 ''')
+    time.sleep(3) # Wait a few seconds for log messages to be written
     browser_log = webdriver.get_log_messages()
     assert 'WebGL context restored' in browser_log
     screenshot = webdriver.viewer.screenshot(size=[10, 10]).screenshot

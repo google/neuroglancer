@@ -31,6 +31,10 @@ def pytest_addoption(parser):
     parser.addoption('--static-content-url',
                      default=None,
                      help='URL to Neuroglancer Python client')
+    parser.addoption('--browser',
+                     choices=['chrome', 'firefox'],
+                     default='chrome',
+                     help='Specifies the browser to use.')
 
 
 @pytest.fixture(scope='session')
@@ -42,6 +46,7 @@ def _webdriver_internal(request):
         headless=request.config.getoption('--headless'),
         docker=request.config.getoption('--webdriver-docker'),
         debug=request.config.getoption('--debug-webdriver'),
+        browser=request.config.getoption('--browser'),
     )
     atexit.register(webdriver.driver.close)
     return webdriver

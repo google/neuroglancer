@@ -97,6 +97,7 @@ void main() {
         with webdriver.viewer.txn() as s:
             s.layers['seg1'].segments = seg1
             s.layers['seg2'].segments = seg2
+        webdriver.sync()
         screenshot = webdriver.viewer.screenshot(size=[10, 10]).screenshot
         np.testing.assert_array_equal(screenshot.image_pixels,
                                       np.tile(np.array(color, dtype=np.uint8), (10, 10, 1)))

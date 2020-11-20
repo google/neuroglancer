@@ -40,15 +40,16 @@ def get_selected_value(webdriver):
     event = threading.Event()
     result = [None]
     def my_action(s):
-        event.set()
         result[0] = s
+        event.set()
     webdriver.viewer.actions.add('my-action', my_action)
     with webdriver.viewer.config_state.txn() as s:
         s.show_ui_controls = False
         s.show_panel_borders = False
-        s.input_event_bindings.viewer['keyt'] = 'my-action'
+        s.input_event_bindings.slice_view['click0'] = 'my-action'
     webdriver.sync()
-    webdriver.action_chain().move_to_element_with_offset(webdriver.root_element, 100, 100).click().send_keys('t').perform()
+    webdriver.action_chain().move_to_element_with_offset(webdriver.root_element, 300,
+                                                         300).click().perform()
     event.wait()
     action_state = result[0]
     assert action_state is not None

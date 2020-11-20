@@ -394,7 +394,9 @@ export abstract class RenderedDataPanel extends RenderedPanel {
 
     this.registerDisposer(new AutomaticallyFocusedElement(element));
     this.registerDisposer(new KeyboardEventBinder(element, this.inputEventMap));
-    this.registerDisposer(new MouseEventBinder(element, this.inputEventMap));
+    this.registerDisposer(new MouseEventBinder(element, this.inputEventMap, event => {
+      this.onMousemove(event);
+    }));
     this.registerDisposer(new TouchEventBinder(element, this.inputEventMap));
 
     this.registerEventListener(element, 'mousemove', this.onMousemove.bind(this));
