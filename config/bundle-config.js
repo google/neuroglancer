@@ -152,9 +152,13 @@ function getBundleSources(options) {
     // it in.
     'BRAINMAPS_CLIENT_ID':
         JSON.stringify('639403125587-4k5hgdfumtrvur8v48e3pr7oo91d765k.apps.googleusercontent.com'),
+
+    'process.env.NODE_ENV': JSON.stringify('production'),
+
+    'global': 'window',
   };
   let extraDefines = options.defines || {};
-  let srcDir = resolveReal(__dirname, '../src');
+  let srcDir = resolveReal(__dirname, '..', 'src');
   let extraChunkWorkerModules = options.chunkWorkerModules || [];
   let extraAsyncComputationModules = options.asyncComputationModules || [];
   let chunkWorkerModules = [
@@ -191,7 +195,7 @@ function getBundleSources(options) {
 exports.getBundleSources = getBundleSources;
 
 function makePythonClientOptions(options) {
-  const srcDir = resolveReal(__dirname, '../src');
+  const srcDir = resolveReal(__dirname, '..', 'src');
   options = Object.assign({}, options);
   options.extraDataSources = [
     ...(options.extraDataSources || []),
@@ -210,7 +214,7 @@ exports.getViewerOptions = function (baseConfig, options = {}) {
     baseConfig = makePythonClientOptions(baseConfig);
   }
   if (options.module) {
-    const srcDir = resolveReal(__dirname, '../src');
+    const srcDir = resolveReal(__dirname, '..', 'src');
     baseConfig.frontendModules = [resolveReal(srcDir, 'main_module.ts')];
   }
   return baseConfig;

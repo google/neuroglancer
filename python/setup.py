@@ -19,17 +19,6 @@ class build_ext_subclass(build_ext):
         self.include_dirs.append(numpy.get_include())
 
 
-static_files = [
-    'main.bundle.js',
-    'main.css',
-    'chunk_worker.bundle.js',
-    'async_computation.bundle.js',
-    'draco.bundle.js',
-    'index.html',
-    'blosc.bundle.js',
-]
-
-
 class bundle_client(build):
 
     user_options = [
@@ -52,39 +41,21 @@ class bundle_client(build):
         this_dir = os.path.abspath(os.path.dirname(__file__))
         project_dir = os.path.join(this_dir, '..')
 
-        build_dir = os.path.join(project_dir, 'dist/python-' + self.client_bundle_type)
-        static_dir = os.path.join(this_dir, 'neuroglancer/static')
-
         print("Project dir " + project_dir)
-        print("Build dir " + build_dir)
-        print("Static dir " + static_dir)
 
-        prev_dir = os.path.abspath('.')
-        os.chdir(project_dir)
-
-        target = {"min": "build-python-min", "dev": "build-python"}
+        target = {"min": "build-python-min", "dev": "build-python-dev"}
 
         try:
             t = target[self.client_bundle_type]
-            subprocess.call('npm i', shell=True)
-            res = subprocess.call('npm run %s' % t, shell=True)
+            subprocess.call('npm i', shell=True, cwd=project_dir)
+            res = subprocess.call('npm run %s' % t, shell=True, cwd=project_dir)
         except:
             raise RuntimeError(
-                'Could not run \'npm run %s\'. Make sure node.js >= v5.9.0 is installed and in your path.'
+                'Could not run \'npm run %s\'. Make sure node.js >= v12 is installed and in your path.'
                 % t)
 
         if res != 0:
             raise RuntimeError('failed to bundle neuroglancer node.js project')
-
-        try:
-            os.mkdir(static_dir)
-        except OSError:
-            pass
-
-        for f in static_files:
-            shutil.copy(os.path.join(build_dir, f), os.path.join(static_dir, f))
-
-        os.chdir(prev_dir)
 
 setup_dir = os.path.dirname(__file__)
 src_dir = os.path.join(setup_dir, 'ext/src')
@@ -117,7 +88,7 @@ setup(
     license='Apache License 2.0',
     packages=find_packages(),
     package_data={
-        'neuroglancer.static': static_files,
+        'neuroglancer.static': ['*.html', '*.css', '*.js', '*.js.map'],
     },
     setup_requires=[
         "numpy>=1.11.0",

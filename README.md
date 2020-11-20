@@ -136,13 +136,13 @@ node.js is required to build the viewer.
    
    `npm test`
    
-   To run only tests in files matching a given regular expression pattern:
+   To run only tests in files matching a given glob pattern:
    
    `npm test -- --pattern='<pattern>'`
    
    For example,
    
-   `npm test -- --pattern='util/uint64'`
+   `npm test -- --pattern='src/neuroglancer/util/uint64*'`
 
 6. See [package.json](package.json) for other commands available.
 

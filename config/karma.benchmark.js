@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2016 Google Inc.
+ * Copyright 2016-2020 Google LLC
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
@@ -16,40 +16,14 @@
 
 'use strict';
 
-let webpack_helpers = require('./webpack_helpers');
-const webpack = require('webpack');
-const minimist = require('minimist');
+const path = require('path');
+const {getEntryPointConfig, getEsbuildConfig} = require('./karma-entry-points');
 
 module.exports = function(config) {
-  let webpackConfig = webpack_helpers.getBaseConfig({useBabel: false, noOutput: true});
-  webpackConfig.mode = 'development';
-
-  const argv = minimist(process.argv);
-  let pattern = argv['pattern'] || '';
-  let patternSuffix = '\\.benchmark\\.ts$';
-  let newRegExp = new RegExp(pattern + patternSuffix);
-
-  webpackConfig.plugins = [
-    new webpack.ContextReplacementPlugin(
-        /.*/,
-        result => {
-          if (result.regExp.source === patternSuffix) {
-            result.regExp = newRegExp;
-          }
-        }),
-  ];
-
   config.set({
-    files: [
-      '../src/benchmark.js',
-    ],
+    ...getEntryPointConfig(path.resolve(__dirname, '..', 'src', '**', '*.benchmark.ts')),
+    esbuild: getEsbuildConfig(),
     frameworks: ['benchmark'],
-    preprocessors: {
-      '../src/benchmark.js': ['webpack'],
-    },
-
-    webpack: webpackConfig,
-    webpackServer: {noInfo: true},
     browsers: [
       'ChromeHeadless',
       // 'Chrome',
@@ -60,5 +34,12 @@ module.exports = function(config) {
     reporters: ['benchmark'],
     // logLevel: config.LOG_DEBUG,
     singleRun: true,
+    plugins: [
+      'karma-benchmark',
+      'karma-benchmark-reporter',
+      'karma-chrome-launcher',
+      'karma-firefox-launcher',
+      require('./karma-esbuild'),
+    ],
   });
 };
