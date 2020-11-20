@@ -877,7 +877,7 @@ export class PlacePointTool extends PlaceAnnotationTool {
       // Not yet ready.
       return;
     }
-    if (mouseState.active) {
+    if (mouseState.updateUnconditionally()) {
       const point = getMousePositionInAnnotationCoordinates(mouseState, annotationLayer);
       if (point === undefined) return;
       const annotation: Annotation = {
@@ -934,7 +934,7 @@ abstract class TwoStepAnnotationTool extends PlaceAnnotationTool {
       // Not yet ready.
       return;
     }
-    if (mouseState.active) {
+    if (mouseState.updateUnconditionally()) {
       const updatePointB = () => {
         const state = this.inProgressAnnotation!;
         const reference = state.reference;
