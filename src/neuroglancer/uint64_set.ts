@@ -36,12 +36,6 @@ export class Uint64Set extends SharedObjectCounterpart implements
     return obj;
   }
 
-  disposed() {
-    super.disposed();
-    this.hashTable = <any>undefined;
-    this.changed = <any>undefined;
-  }
-
   set(x: Uint64, value: boolean) {
     if (!value) {
       this.delete(x);

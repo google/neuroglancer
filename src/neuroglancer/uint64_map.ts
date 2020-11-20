@@ -40,12 +40,6 @@ export class Uint64Map extends SharedObjectCounterpart implements
     return obj;
   }
 
-  disposed() {
-    super.disposed();
-    this.hashTable = <any>undefined;
-    this.changed = <any>undefined;
-  }
-
   set_(key: Uint64, value: Uint64) {
     return this.hashTable.set(key, value);
   }
