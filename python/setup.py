@@ -78,6 +78,13 @@ extra_compile_args = ['-std=c++11', '-fvisibility=hidden', '-O3'] + openmp_flags
 if platform.system() == 'Darwin':
     extra_compile_args.insert(0, '-stdlib=libc++')
 
+tests_require=[
+    'pytest',
+    'selenium',
+    'chromedriver-binary',
+    "geckodriver_autoinstaller ; python_version>='3.6'",
+]
+
 setup(
     name='neuroglancer',
     version='2.17',
@@ -103,12 +110,9 @@ setup(
         'google-apitools',
         'google-auth',
     ],
-    test_requires=[
-        'pytest',
-        'selenium',
-        'chromedriver-binary',
-    ],
+    tests_require=tests_require,
     extras_require={
+        'test': tests_require,
         ":python_version<'3.2'": ['futures'],
     },
     ext_modules=[

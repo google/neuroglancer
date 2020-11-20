@@ -16,6 +16,7 @@
 
 from __future__ import absolute_import
 
+import tempfile
 import time
 import threading
 
@@ -24,6 +25,7 @@ class Webdriver(object):
     def __init__(self,
                  viewer=None,
                  headless=True,
+                 browser='chrome',
                  window_size=(1920, 1080),
                  debug=False,
                  docker=False,
@@ -33,10 +35,14 @@ class Webdriver(object):
             viewer = Viewer()
         self.viewer = viewer
         self.headless = headless
+        self.browser = browser
         self.window_size = window_size
         self.headless = headless
         self.docker = docker
         self.debug = debug
+        self._logfile = None
+        if browser == 'firefox':
+            self._logfile = tempfile.NamedTemporaryFile(suffix='neuroglancer-geckodriver.log')
         self._init_driver()
         self._pending_logs = []
         self._pending_logs_to_print = []
@@ -54,7 +60,7 @@ class Webdriver(object):
         t.daemon = True
         t.start()
 
-    def _init_driver(self):
+    def _init_chrome(self):
         import selenium.webdriver
         import selenium.webdriver.chrome.options
         import selenium.webdriver.common.service
@@ -102,17 +108,59 @@ class Webdriver(object):
         finally:
             if self.debug:
                 selenium.webdriver.chrome.service.Service.__init__ = orig_init
+
+    def _init_firefox(self):
+        import selenium.webdriver
+        try:
+            # Use geckodriver_autoinstaller package if available
+            import geckodriver_autoinstaller
+            geckodriver_autoinstaller.install()
+        except (ImportError, SyntaxError):
+            # Fallback to system chromedriver
+            pass
+        profile = selenium.webdriver.FirefoxProfile()
+        profile.set_preference('devtools.console.stdout.content', True)
+        self.driver = selenium.webdriver.Firefox(firefox_profile=profile,
+                                                 service_log_path=self._logfile.name)
+
+    def _init_driver(self):
+        if self.browser == 'chrome':
+            self._init_chrome()
+        elif self.browser == 'firefox':
+            self._init_firefox()
+        else:
+            raise ValueError('unsupported browser: %s, must be "chrome" or "firefox"' %
+                             (self.browser, ))
         self.driver.get(self.viewer.get_viewer_url())
 
     def __enter__(self):
         return self
 
     def __exit__(self, exc_type, exc_value, traceback):
+        if self._logfile is not None:
+            self._logfile.file.close()
+            self._logfile = None
         self.driver.quit()
         self._closed = True
 
     def _get_new_logs(self):
-        new_logs = self.driver.get_log('browser')
+        if self.browser == 'chrome':
+            new_logs = self.driver.get_log('browser')
+        else:
+            cur_offset = self._logfile.file.tell()
+            new_data = self._logfile.file.read()
+            # rfind may return -1, still works
+            end_within_data = new_data.rfind(b'\n') + 1
+            new_data = new_data[:end_within_data]
+            self._logfile.file.seek(cur_offset + end_within_data)
+            new_logs = []
+            for msg in new_data.decode().split('\n'):
+                msg = msg.strip()
+                if not msg: continue
+                if (not msg.startswith('console.log: ')
+                        and not msg.startswith('JavaScript ')):
+                    continue
+                new_logs.append({'message': msg})
         self._pending_logs.extend(new_logs)
         self._pending_logs_to_print.extend(new_logs)
 
