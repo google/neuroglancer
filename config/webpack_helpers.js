@@ -25,98 +25,16 @@ const resolveReal = require('./resolve_real');
 const CopyWebpackPlugin = require('copy-webpack-plugin');
 const ForkTsCheckerWebpackPlugin = require('fork-ts-checker-webpack-plugin');
 
+const bundleConfig = require('./bundle-config.js');;
+
+Object.assign(exports, bundleConfig);
+
 // Note: We use require.resolve below to ensure the plugins are resolved
 // relative to this configuration file, rather than relative to the source
 // files, in case this configuration is being used from a dependent project that
 // doesn't have all of these plugins as direct dependencies.
 //
 // require.resolve resolves all symlinks.
-
-const DEFAULT_DATA_SOURCES = exports.DEFAULT_DATA_SOURCES = [
-  {
-    source: 'neuroglancer/datasource/brainmaps',
-    registerCredentials: 'neuroglancer/datasource/brainmaps/register_credentials_provider',
-    asyncComputation: [
-      'neuroglancer/async_computation/decode_jpeg',
-    ],
-  },
-  {
-    source: 'neuroglancer/datasource/boss',
-    registerCredentials: 'neuroglancer/datasource/boss/register_credentials_provider',
-    asyncComputation: [
-      'neuroglancer/async_computation/decode_jpeg',
-      'neuroglancer/async_computation/decode_gzip',
-    ],
-  },
-  {
-    source: 'neuroglancer/datasource/dvid',
-    asyncComputation: [
-      'neuroglancer/async_computation/decode_jpeg',
-    ],
-  },
-  {
-    source: 'neuroglancer/datasource/render',
-    asyncComputation: [
-      'neuroglancer/async_computation/decode_jpeg',
-    ],
-  },
-  {
-    source: 'neuroglancer/datasource/precomputed',
-    asyncComputation: [
-      'neuroglancer/async_computation/decode_jpeg',
-      'neuroglancer/async_computation/decode_gzip',
-    ],
-  },
-  {
-    source: 'neuroglancer/datasource/nifti',
-    asyncComputation: [
-      'neuroglancer/async_computation/decode_gzip',
-    ],
-  },
-  {
-    source: 'neuroglancer/datasource/n5',
-    asyncComputation: [
-      'neuroglancer/async_computation/decode_gzip',
-      'neuroglancer/async_computation/decode_blosc',
-    ],
-  },
-  {
-    source: 'neuroglancer/datasource/zarr',
-    asyncComputation: [
-      'neuroglancer/async_computation/decode_gzip',
-      'neuroglancer/async_computation/decode_blosc',
-    ],
-  },
-  // 'neuroglancer/datasource/computed',
-  // 'neuroglancer/datasource/computed/example',
-  // 'neuroglancer/datasource/computed/tensorflow',
-  {
-    source: 'neuroglancer/datasource/vtk',
-    asyncComputation: [
-      'neuroglancer/async_computation/vtk_mesh',
-    ],
-  },
-  {
-    source: 'neuroglancer/datasource/obj',
-    asyncComputation: [
-      'neuroglancer/async_computation/obj_mesh',
-    ],
-  },
-  {
-    source: 'neuroglancer/datasource/ngauth',
-    frontend: null,
-    backend: null,
-    register: null,
-    registerCredentials: 'neuroglancer/datasource/ngauth/register_credentials_provider',
-  },
-];
-
-const DEFAULT_SUPPORTED_LAYERS = exports.DEFAULT_SUPPORTED_LAYERS = [
-  'neuroglancer/image_user_layer',
-  'neuroglancer/segmentation_user_layer',
-  'neuroglancer/single_mesh_user_layer',
-  'neuroglancer/annotation/user_layer',
-];
 
 /**
  * Returns a loader specification for TypeScript files.
@@ -316,158 +234,67 @@ function getViewerConfig(options) {
   if (options.modifyBaseConfig) {
     options.modifyBaseConfig(baseConfig);
   }
-  let dataSources =
-      [...(options.dataSources || DEFAULT_DATA_SOURCES), ...(options.extraDataSources || [])];
-  let supportedLayers = options.supportedLayers || DEFAULT_SUPPORTED_LAYERS;
-  let frontendDataSourceModules = [];
-  let backendDataSourceModules = [];
-  let asyncComputationDataSourceModules = new Set();
-  const registerCredentials =
-      options.registerCredentials !== undefined ? options.registerCredentials : !options.python;
-  for (let datasource of dataSources) {
-    if (typeof datasource === 'string') {
-      datasource = {source: datasource};
-    }
-    if (datasource.frontend !== null) {
-      frontendDataSourceModules.push(datasource.frontend || `${datasource.source}/frontend`);
-    }
-    if (registerCredentials && datasource.registerCredentials) {
-      frontendDataSourceModules.push(datasource.registerCredentials);
-    }
-    if (datasource.register === undefined) {
-      frontendDataSourceModules.push(`${datasource.source}/register_default`);
-    } else if (datasource.register !== null) {
-      frontendDataSourceModules.push(datasource.register);
-    }
-    if (datasource.backend !== null) {
-      backendDataSourceModules.push(datasource.backend || `${datasource.source}/backend`);
-    }
-    if (datasource.asyncComputation !== undefined) {
-      for (const m of datasource.asyncComputation) {
-        asyncComputationDataSourceModules.add(m);
-      }
-    }
-  }
-  let defaultDefines = {
-    // This is the default client ID used for the hosted neuroglancer.
-    // In addition to the hosted neuroglancer origin, it is valid for
-    // the origins:
-    //
-    //   localhost:8000
-    //   127.0.0.1:8000
-    //   localhost:8080
-    //   127.0.0.1:8080
-    //
-    // To deploy to a different origin, you will need to generate your
-    // own client ID from on the Google Developer Console and substitute
-    // it in.
-    'BRAINMAPS_CLIENT_ID':
-        JSON.stringify('639403125587-4k5hgdfumtrvur8v48e3pr7oo91d765k.apps.googleusercontent.com'),
-  };
-  let extraDefines = options.defines || {};
+  const bundleSources = bundleConfig.getBundleSources(options);
   let srcDir = resolveReal(__dirname, '../src');
   let commonPlugins = [];
-  let extraChunkWorkerModules = options.chunkWorkerModules || [];
-  let extraAsyncComputationModules = options.asyncComputationModules || [];
   let extraCommonPlugins = options.commonPlugins || [];
   let extraFrontendPlugins = options.frontendPlugins || [];
-  let extraChunkWorkerPlugins = options.chunkWorkerPlugins || [];
-  let extraAsyncComputationPlugins = options.asyncComputationPlugins || [];
-  let chunkWorkerModules = [
-    'neuroglancer/worker_rpc_context',
-    'neuroglancer/chunk_manager/backend',
-    'neuroglancer/sliceview/backend',
-    'neuroglancer/perspective_view/backend',
-    'neuroglancer/volume_rendering/backend',
-    'neuroglancer/annotation/backend',
-    ...backendDataSourceModules,
-    ...extraChunkWorkerModules,
-  ];
-  let asyncComputationModules = [
-    'neuroglancer/async_computation/handler',
-    'neuroglancer/async_computation/encode_compressed_segmentation',
-    ...asyncComputationDataSourceModules,
-    ...extraAsyncComputationModules,
-  ];
-  let frontendModules = options.frontendModules || [resolveReal(srcDir, 'main.ts')];
-  let frontendLayerModules = [];
-  for (let name of supportedLayers) {
-    frontendLayerModules.push(name);
-  }
   let htmlPlugin =
       options.htmlPlugin || new HtmlWebpackPlugin({template: resolveReal(srcDir, 'index.html')});
   const getCacheConfig = (bundleId) => {
     return {
       type: 'filesystem',
       buildDependencies: [__filename],
-      name: `${options.python ? 'python' : 'normal'}-${options.minify ? 'minify' : 'dev'}-${bundleId}`,
+      name: `${options.python ? 'python' : 'normal'}-${options.minify ? 'minify' : 'dev'}-${
+          bundleId}`,
     };
   };
-  return [
-    Object.assign(
-        {
-          mode: minify ? 'production' : 'development',
-          entry:
-              {'main': [...frontendDataSourceModules, ...frontendLayerModules, ...frontendModules]},
-          target: 'web',
-          plugins: [
-            htmlPlugin,
-            new MiniCssExtractPlugin({
-              filename: '[name].css',
-              chunkFilename: '[id].css'
-            }),
-            new webpack.DefinePlugin(Object.assign({}, defaultDefines, extraDefines)),
-            ...extraFrontendPlugins,
-            ...commonPlugins,
-            ...extraCommonPlugins,
-            new CopyWebpackPlugin({
-              patterns: [{
-                from: resolveReal(srcDir, 'neuroglancer/datasource/boss/bossauth.html'),
-                to: 'bossauth.html'
-              }],
-            }),
-            new ForkTsCheckerWebpackPlugin({
-              typescript: {
-                configOverwrite: {
-                  compilerOptions: {
-                    incremental: true,
-                  },
-                },
+  const configs = [
+    {
+      ...baseConfig,
+      mode: minify ? 'production' : 'development',
+      entry: {'main': bundleSources.main},
+      target: 'web',
+      plugins: [
+        htmlPlugin,
+        new MiniCssExtractPlugin({filename: '[name].css', chunkFilename: '[id].css'}),
+        new webpack.DefinePlugin(bundleSources.defines),
+        ...extraFrontendPlugins,
+        ...commonPlugins,
+        ...extraCommonPlugins,
+        new CopyWebpackPlugin({
+          patterns: [{
+            from: resolveReal(srcDir, 'neuroglancer/datasource/boss/bossauth.html'),
+            to: 'bossauth.html'
+          }],
+        }),
+        new ForkTsCheckerWebpackPlugin({
+          typescript: {
+            configOverwrite: {
+              compilerOptions: {
+                incremental: true,
               },
-            }),
-          ],
-          cache: getCacheConfig('main'),
-        },
-        baseConfig),
-    Object.assign(
-        {
-          mode: minify ? 'production' : 'development',
-          entry: {'chunk_worker': [...chunkWorkerModules]},
-          target: 'webworker',
-          plugins: [
-            new webpack.DefinePlugin(Object.assign({}, defaultDefines, extraDefines)),
-            ...extraChunkWorkerPlugins,
-            ...commonPlugins,
-            ...extraCommonPlugins,
-          ],
-          cache: getCacheConfig('chunk_worker'),
-        },
-        baseConfig),
-    Object.assign(
-        {
-          mode: minify ? 'production' : 'development',
-          entry: {'async_computation': [...asyncComputationModules]},
-          target: 'webworker',
-          plugins: [
-            new webpack.DefinePlugin(Object.assign({}, defaultDefines, extraDefines)),
-            ...extraAsyncComputationPlugins,
-            ...commonPlugins,
-            ...extraCommonPlugins,
-          ],
-          cache: getCacheConfig('async_computation'),
-        },
-        baseConfig),
+            },
+          },
+        }),
+      ],
+      cache: getCacheConfig('main'),
+    },
+    {
+      ...baseConfig,
+      mode: minify ? 'production' : 'development',
+      entry: bundleSources.workers,
+      target: 'webworker',
+      plugins: [
+        new webpack.DefinePlugin(bundleSources.defines),
+        ...commonPlugins,
+        ...extraCommonPlugins,
+      ],
+      cache: getCacheConfig('workers'),
+    },
+
   ];
+  return configs;
 }
 
 
@@ -491,13 +318,8 @@ function getViewerConfigFromEnv(options, env) {
   if (envParts.has('min')) {
     options.minify = true;
   }
-  if (envParts.has('python')) {
-    options = makePythonClientOptions(options);
-  }
-  if (envParts.has('module')) {
-    const srcDir = resolveReal(__dirname, '../src');
-    options.frontendModules = [resolveReal(srcDir, 'main_module.ts')];
-  }
+  options = bundleConfig.makeViewerConfig(
+      options, {python: envParts.has('python'), module: envParts.has('module')});
   const config = getViewerConfig(options);
   return config;
 }
@@ -505,5 +327,4 @@ function getViewerConfigFromEnv(options, env) {
 exports.getTypescriptLoaderEntry = getTypescriptLoaderEntry;
 exports.getBaseConfig = getBaseConfig;
 exports.getViewerConfig = getViewerConfig;
-exports.makePythonClientOptions = makePythonClientOptions;
 exports.getViewerConfigFromEnv = getViewerConfigFromEnv;
