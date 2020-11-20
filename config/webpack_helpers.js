@@ -242,11 +242,16 @@ function getBaseConfig(options) {
           options: {removeSVGTagAttrs: false, removeTags: true}
         },
         {
-          test: /\.glsl$/,
-          use: [
-            {loader: require.resolve('raw-loader')},
-            {loader: require.resolve('glsl-strip-comments-loader')},
-          ],
+          test: /\.wasm$/,
+          loader: 'url-loader',
+        },
+        {
+          test: /\.npy$/,
+          loader: resolveReal(__dirname, 'raw-data-loader.js'),
+        },
+        {
+          test: /\.dat$/,
+          loader: resolveReal(__dirname, 'raw-data-loader.js'),
         },
       ],
     },

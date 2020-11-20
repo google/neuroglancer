@@ -34,51 +34,50 @@ describe('parseNpy', () => {
   it('uint8', () => {
     checkNpy(
         require<ExampleSpec>('neuroglancer-testdata/npy_test.uint8.json'),
-        require<Uint8Array>('raw-data!neuroglancer-testdata/npy_test.uint8.npy'));
+        require<Uint8Array>('neuroglancer-testdata/npy_test.uint8.npy'));
   });
 
   it('uint16-le', () => {
     checkNpy(
         require<ExampleSpec>('neuroglancer-testdata/npy_test.uint16.json'),
-        require<Uint8Array>('raw-data!neuroglancer-testdata/npy_test.uint16-le.npy'));
+        require<Uint8Array>('neuroglancer-testdata/npy_test.uint16-le.npy'));
   });
   it('uint16-be', () => {
     checkNpy(
         require<ExampleSpec>('neuroglancer-testdata/npy_test.uint16.json'),
-        require<Uint8Array>('raw-data!neuroglancer-testdata/npy_test.uint16-be.npy'));
+        require<Uint8Array>('neuroglancer-testdata/npy_test.uint16-be.npy'));
   });
 
   it('uint32-le', () => {
     checkNpy(
         require<ExampleSpec>('neuroglancer-testdata/npy_test.uint32.json'),
-        require<Uint8Array>('raw-data!neuroglancer-testdata/npy_test.uint32-le.npy'));
+        require<Uint8Array>('neuroglancer-testdata/npy_test.uint32-le.npy'));
   });
   it('uint32-be', () => {
     checkNpy(
         require<ExampleSpec>('neuroglancer-testdata/npy_test.uint32.json'),
-        require<Uint8Array>('raw-data!neuroglancer-testdata/npy_test.uint32-be.npy'));
+        require<Uint8Array>('neuroglancer-testdata/npy_test.uint32-be.npy'));
   });
 
   it('uint64-le', () => {
     checkNpy(
         require<ExampleSpec>('neuroglancer-testdata/npy_test.uint64.json'),
-        require<Uint8Array>('raw-data!neuroglancer-testdata/npy_test.uint64-le.npy'));
+        require<Uint8Array>('neuroglancer-testdata/npy_test.uint64-le.npy'));
   });
   it('uint64-be', () => {
     checkNpy(
         require<ExampleSpec>('neuroglancer-testdata/npy_test.uint64.json'),
-        require<Uint8Array>('raw-data!neuroglancer-testdata/npy_test.uint64-be.npy'));
-
+        require<Uint8Array>('neuroglancer-testdata/npy_test.uint64-be.npy'));
   });
 
   it('float32-le', () => {
     checkNpy(
         require<ExampleSpec>('neuroglancer-testdata/npy_test.float32.json'),
-        require<Uint8Array>('raw-data!neuroglancer-testdata/npy_test.float32-le.npy'));
+        require<Uint8Array>('neuroglancer-testdata/npy_test.float32-le.npy'));
   });
   it('float32-be', () => {
     checkNpy(
         require<ExampleSpec>('neuroglancer-testdata/npy_test.float32.json'),
-        require<Uint8Array>('raw-data!neuroglancer-testdata/npy_test.float32-be.npy'));
+        require<Uint8Array>('neuroglancer-testdata/npy_test.float32-be.npy'));
   });
 });
