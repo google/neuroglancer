@@ -3,6 +3,7 @@
 /// <reference path="url-loader.d.ts" />
 /// <reference path="jpgjs.d.ts" />
 /// <reference path="karma-benchmark.d.ts" />
+/// <reference path="glsl-editor.d.ts" />
 /// <reference path="nifti-reader-js.d.ts" />
 /// <reference path="../node_modules/@types/jasmine/index.d.ts" />
 /// <reference path="../node_modules/@types/webpack-env/index.d.ts" />

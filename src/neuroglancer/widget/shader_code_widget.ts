@@ -20,6 +20,7 @@ import 'codemirror/lib/codemirror.css';
 import 'codemirror/addon/lint/lint.css';
 
 import CodeMirror from 'codemirror';
+import glslCodeMirror from 'glsl-editor/glsl';
 import debounce from 'lodash/debounce';
 import {WatchableValue} from 'neuroglancer/trackable_value';
 import {RefCounted} from 'neuroglancer/util/disposable';
@@ -28,7 +29,8 @@ import {WatchableShaderError} from 'neuroglancer/webgl/dynamic_shader';
 import {ShaderCompilationError, ShaderLinkError} from 'neuroglancer/webgl/shader';
 import {ShaderControlParseError, ShaderControlState} from 'neuroglancer/webgl/shader_ui_controls';
 
-require<(codeMirror: typeof CodeMirror) => void>('glsl-editor/glsl')(CodeMirror);
+// Install glsl support in CodeMirror.
+glslCodeMirror(CodeMirror);
 
 /**
  * Time in milliseconds during which the input field must not be modified before the shader is
