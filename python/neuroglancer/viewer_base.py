@@ -134,9 +134,7 @@ class ViewerCommonBase(object):
                 event.set()
             self.async_screenshot(handler, include_depth=include_depth,
                                   statistics_callback=statistics_callback)
-            print('Waiting for screenshot')
             event.wait()
-            print('Got screenshot')
             if size is not None and (result[0].screenshot.width != size[0] or
                                      result[0].screenshot.height != size[1]):
                 continue
