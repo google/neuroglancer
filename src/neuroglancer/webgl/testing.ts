@@ -16,7 +16,14 @@
 
 import {GL, initializeWebGL} from 'neuroglancer/webgl/context';
 
+declare const NEUROGLANCER_SKIP_WEBGL_TESTS: boolean|undefined;
+
 export function webglTest(f: (gl: GL, canvas: HTMLCanvasElement) => void) {
+  if (typeof NEUROGLANCER_SKIP_WEBGL_TESTS !== 'undefined' &&
+      NEUROGLANCER_SKIP_WEBGL_TESTS === true) {
+    pending('NEUROGLANCER_SKIP_WEBGL_TESTS=true');
+    return;
+  }
   let canvas = document.createElement('canvas');
   document.body.appendChild(canvas);
   let gl: GL|undefined;

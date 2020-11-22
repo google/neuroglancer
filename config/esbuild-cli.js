@@ -22,6 +22,28 @@ const {Builder} = require('./esbuild');
 const path = require('path');
 const fs = require('fs');
 
+function parseDefines(definesArg) {
+  const defines = {};
+  let defineList = definesArg || [];
+  if (typeof defineList === 'string') {
+    defineList = [defineList];
+  }
+  for (const entry of defineList) {
+    const splitPoint = entry.indexOf('=');
+    let key, value;
+    if (splitPoint === -1) {
+      key = entry;
+      value = 'true';
+    } else {
+      key = entry.substring(0, splitPoint);
+      value = entry.substring(splitPoint+1);
+    }
+    defines[key] = value;
+  }
+  return defines;
+}
+exports.parseDefines = parseDefines;
+
 async function main(argv) {
   let minify = true;
   let python = false;
@@ -53,30 +75,13 @@ async function main(argv) {
       throw new Error(`Unsupported config: ${id}`);
   }
   const skipTypeCheck = !argv.typecheck;
-  const defines = {};
-  let defineList = argv.define || [];
-  if (typeof defineList === 'string') {
-    defineList = [defineList];
-  }
-  for (const entry of defineList) {
-    const splitPoint = entry.indexOf('=');
-    let key, value;
-    if (splitPoint === -1) {
-      key = entry;
-      value = 'true';
-    } else {
-      key = entry.substring(0, splitPoint);
-      value = entry.substring(splitPoint+1);
-    }
-    defines[key] = value;
-  }
   const builder = new Builder({
     outDir,
     id,
     minify,
     python,
     module: moduleBuild,
-    define: defines,
+    define: parseDefines(argv.define),
   });
   if (moduleBuild) {
     try {

@@ -19,10 +19,11 @@
 const path = require('path');
 const minimist = require('minimist');
 const glob = require('glob');
+const {parseDefines} = require('./esbuild-cli');
 const {createEntryPointFile, getCommonPlugins} = require('./esbuild');
 
 const getEntryPoint = exports.getEntryPoint = (testPattern) => {
-  const argv = minimist(process.argv);
+  const argv = minimist(process.argv, {string: ['pattern']});
   let userPattern = argv['pattern'];
   let testPaths = glob.sync(testPattern);
   const userCwd = process.env.INIT_CWD || process.cwd();
@@ -48,6 +49,7 @@ exports.getEntryPointConfig = (testPattern, preprocessors = []) => {
 };
 
 exports.getEsbuildConfig = () => {
+  const argv = minimist(process.argv, {string: ['define']});
   return {
     target: 'es2019',
     plugins: getCommonPlugins(),
@@ -56,5 +58,6 @@ exports.getEsbuildConfig = () => {
       '.dat': 'binary',
       '.npy': 'binary',
     },
+    define: parseDefines(argv.define),
   };
 };
