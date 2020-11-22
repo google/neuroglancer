@@ -15,6 +15,7 @@ import atexit
 import pytest
 import neuroglancer.webdriver
 
+
 def pytest_addoption(parser):
     parser.addoption('--headless',
                      action='store_true',
@@ -28,17 +29,21 @@ def pytest_addoption(parser):
                      action='store_true',
                      default=False,
                      help='Use webdriver configuration that supports running inside docker')
-    parser.addoption('--static-content-url',
-                     default=None,
-                     help='URL to Neuroglancer Python client')
+    parser.addoption('--static-content-url', default=None, help='URL to Neuroglancer Python client')
     parser.addoption('--browser',
                      choices=['chrome', 'firefox'],
                      default='chrome',
                      help='Specifies the browser to use.')
+    parser.addoption('--skip-browser-tests',
+                     action='store_true',
+                     default=False,
+                     help='Skip tests that rely on a web browser.')
 
 
 @pytest.fixture(scope='session')
 def _webdriver_internal(request):
+    if request.config.getoption('--skip-browser-tests'):
+        pytest.skip('--skip-browser-tests')
     static_content_url = request.config.getoption('--static-content-url')
     if static_content_url is not None:
         neuroglancer.set_static_content_source(url=static_content_url)
@@ -50,6 +55,7 @@ def _webdriver_internal(request):
     )
     atexit.register(webdriver.driver.close)
     return webdriver
+
 
 @pytest.fixture
 def webdriver(_webdriver_internal):
