@@ -23,8 +23,6 @@ jobs:
       with:
         path: "**/node_modules"
         key: ${{ runner.os }}-${{ matrix.node-version }}-node_modules-${{ hashFiles('**/package-lock.json') }}
-        restore-keys: |
-          ${{ runner.os }}-${{ matrix.node-version }}-node_modules-
     - run: npm install
     - name: Typecheck with TypeScript
       run: npm run typecheck
@@ -77,8 +75,6 @@ jobs:
       with:
         path: "**/node_modules"
         key: ${{ runner.os }}-${{ matrix.node-version }}-node_modules-${{ hashFiles('**/package-lock.json') }}
-        restore-keys: |
-          ${{ runner.os }}-${{ matrix.node-version }}-node_modules-
     - name: Get pip cache dir
       id: pip-cache
       run: |
@@ -87,8 +83,6 @@ jobs:
       with:
         path: ${{ steps.pip-cache.outputs.dir }}
         key: ${{ runner.os }}-${{ matrix.python-version }}-pip-${{ hashFiles('python/setup.py') }}
-        restore-keys: |
-          ${{ runner.os }}-${{ matrix.python-version }}-pip-
     - run: npm install
     - run: npm run build-python -- --no-typecheck
     - name: Build and install Python package
@@ -104,7 +98,9 @@ jobs:
     #   uses: mxschmitt/action-tmate@v3
     - name: Test with pytest (including web browser tests)
       working-directory: python/tests
-      run: xvfb-run --auto-servernum --server-args='-screen 0 1024x768x24' pytest --browser=firefox -vv -s --reruns 5 --timeout=30
+      # browser-based tests are flaky and can hang, so set a 30 second timeout and retry up to 5 times.
+      # Use `timeout_func_only=true` to work around https://github.com/pytest-dev/pytest-rerunfailures/issues/99
+      run: xvfb-run --auto-servernum --server-args='-screen 0 1024x768x24' pytest --browser=firefox -vv -s --reruns 5 --timeout=30 -o timeout_func_only=true
       env:
         PYTHONUNBUFFERED: 1
       if: ${{ startsWith(runner.os, 'Linux') }}
@@ -131,7 +127,5 @@ jobs:
       with:
         path: ~/go/pkg/mod
         key: ${{ runner.os }}-${{ matrix.go-version }}-go-${{ hashFiles('**/go.sum') }}
-        restore-keys: |
-          ${{ runner.os }}-${{ matrix.go-version }}-go-        
     - run: go build .
       working-directory: ngauth_server
