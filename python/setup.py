@@ -1,31 +1,36 @@
 #!/usr/bin/env python
 from __future__ import print_function
 
-import os
-import shutil
-import subprocess
-import platform
 from distutils.command.build import build
+import os
+import platform
+import subprocess
+import time
 from setuptools.command.build_ext import build_ext
 
 from setuptools import Extension, find_packages, setup
 
+package_name = 'neuroglancer'
+
+
 class build_ext_subclass(build_ext):
     def finalize_options(self):
         build_ext.finalize_options(self)
-        # Prevent numpy from thinking it is still in its setup process:
-        __builtins__.__NUMPY_SETUP__ = False
+        # Prevent numpy from thinking it is still in its setup process
+        if isinstance(__builtins__, dict):
+            __builtins__['__NUMPY_SETUP__'] = False
+        else:
+            setattr(__builtins__, '__NUMPY_SETUP__', False)
         import numpy
         self.include_dirs.append(numpy.get_include())
 
 
 class bundle_client(build):
 
-    user_options = [
-        ('client-bundle-type=', None,
-         'The nodejs bundle type. "min" (default) creates condensed static files for production, "dev" creates human-readable files.'
-         )
-    ]
+    user_options = [(
+        'client-bundle-type=', None,
+        'The nodejs bundle type. "min" (default) creates condensed static files for production, "dev" creates human-readable files.'
+    )]
 
     def initialize_options(self):
 
@@ -57,6 +62,7 @@ class bundle_client(build):
         if res != 0:
             raise RuntimeError('failed to bundle neuroglancer node.js project')
 
+
 setup_dir = os.path.dirname(__file__)
 src_dir = os.path.join(setup_dir, 'ext/src')
 openmesh_dir = os.path.join(setup_dir, 'ext/third_party/openmesh/OpenMesh/src')
@@ -78,16 +84,37 @@ extra_compile_args = ['-std=c++11', '-fvisibility=hidden', '-O3'] + openmp_flags
 if platform.system() == 'Darwin':
     extra_compile_args.insert(0, '-stdlib=libc++')
 
-tests_require=[
+tests_require = [
     'pytest',
     'selenium',
     'chromedriver-binary',
     "geckodriver_autoinstaller ; python_version>='3.6'",
 ]
 
+
+# Copied from setuptools_scm, can be removed once a released version of
+# setuptools_scm supports `version_scheme=no-guess-dev`.
+#
+# Note: It would be nice to include the commit hash in the version, but that
+# can't be done in a PEP 440-compatible way.
+def _no_guess_dev_version(version):
+    if version.exact:
+        return version.format_with("{tag}")
+    else:
+        return version.format_with("{tag}.post1.dev{distance}")
+
+
 setup(
-    name='neuroglancer',
-    version='2.17',
+    name=package_name,
+
+    # Use setuptools_scm to determine version from git tags
+    use_scm_version={
+        "root": "..",
+        "relative_to": __file__,
+        "version_scheme": _no_guess_dev_version,
+        "local_scheme": "no-local-version",
+        "parentdir_prefix_version": package_name + "-",
+    },
     description='Python data backend for neuroglancer, a WebGL-based viewer for volumetric data',
     author='Jeremy Maitin-Shepard, Jan Funke',
     author_email='jbms@google.com, jfunke@iri.upc.edu',
@@ -98,6 +125,7 @@ setup(
         'neuroglancer.static': ['*.html', '*.css', '*.js', '*.js.map'],
     },
     setup_requires=[
+        "setuptools_scm>=4.1.2",
         "numpy>=1.11.0",
     ],
     install_requires=[

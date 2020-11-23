@@ -1,1 +1,9 @@
-graft ext
+prune examples
+prune tests
+prune testdata
+exclude tox.ini
+exclude .pylintrc
+exclude .gitignore
+exclude .dockerignore
+exclude Dockerfile
+exclude CMakeLists.txt
