@@ -16,25 +16,26 @@
 import numpy as np
 import neuroglancer
 import pytest
-from selenium.webdriver.common.keys import Keys
 
 
 @pytest.mark.parametrize('display_dimensions,layout,key,expected_position', [
-    (['x', 'y', 'z'], 'xy', Keys.LEFT, [5, 5, 4]),
-    (['x', 'y', 'z'], 'xy', Keys.RIGHT, [5, 5, 6]),
-    (['x', 'y', 'z'], 'xy', Keys.UP, [5, 4, 5]),
-    (['x', 'y', 'z'], 'xy', Keys.DOWN, [5, 6, 5]),
+    (['x', 'y', 'z'], 'xy', 'LEFT', [5, 5, 4]),
+    (['x', 'y', 'z'], 'xy', 'RIGHT', [5, 5, 6]),
+    (['x', 'y', 'z'], 'xy', 'UP', [5, 4, 5]),
+    (['x', 'y', 'z'], 'xy', 'DOWN', [5, 6, 5]),
     (['x', 'y', 'z'], 'xy', ',', [4, 5, 5]),
     (['x', 'y', 'z'], 'xy', '.', [6, 5, 5]),
-
-    (['z', 'y', 'x'], 'xy', Keys.LEFT, [4, 5, 5]),
-    (['z', 'y', 'x'], 'xy', Keys.RIGHT, [6, 5, 5]),
-    (['z', 'y', 'x'], 'xy', Keys.UP, [5, 4, 5]),
-    (['z', 'y', 'x'], 'xy', Keys.DOWN, [5, 6, 5]),
+    (['z', 'y', 'x'], 'xy', 'LEFT', [4, 5, 5]),
+    (['z', 'y', 'x'], 'xy', 'RIGHT', [6, 5, 5]),
+    (['z', 'y', 'x'], 'xy', 'UP', [5, 4, 5]),
+    (['z', 'y', 'x'], 'xy', 'DOWN', [5, 6, 5]),
     (['z', 'y', 'x'], 'xy', ',', [5, 5, 4]),
     (['z', 'y', 'x'], 'xy', '.', [5, 5, 6]),
 ])
 def test_display_dimensions(webdriver, display_dimensions, layout, key, expected_position):
+    from selenium.webdriver.common.keys import Keys
+    if len(key) > 0 and hasattr(Keys, key):
+        key = getattr(Keys, key)
     a = np.zeros((10, 10, 10), dtype=np.uint8)
     with webdriver.viewer.txn() as s:
         s.dimensions = neuroglancer.CoordinateSpace(names=["z", "y", "x"],

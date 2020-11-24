@@ -16,7 +16,103 @@ It starts a local web server for communicating state changes using sockjs,
 serving a copy of the Neuroglancer client code, and for serving data to the
 Neuroglancer client if Python data sources are used.
 
-## Example
+## Installation
+
+It is recommended that you activate a suitable Python virtual environment before installing.
+
+Python 3.5 or later is required.
+
+You can install the latest published package from [PyPI](https://pypi.org/project/neuroglancer)
+with:
+
+```shell
+pip install neuroglancer
+```
+
+In most cases, this will use a prebuilt binary wheel, which requires neither node.js (to build the
+Neuroglancer client) nor a C++ compiler.  If no binary wheel is available for your platform, a
+source distribution (sdist) will be used instead, which requires a C++ compiler to build but does
+not require node.js (the source distribution includes a prebuilt copy of the Neuroglancer client).
+
+### Direct installation from remote git repository
+
+To install the latest version from the Neuroglancer git repository, you can use:
+
+```shell
+pip install git+https://github.com/google/neuroglancer
+```
+
+Note that installing from a git repository requires Node.js and a C++ compiler.
+
+To install a specific commit `XXXXXXXXX`:
+
+```shell
+pip install git+https://github.com/google/neuroglancer@XXXXXXXXX
+```
+
+In another Python package, you can declare a dependency on a git version using the syntax:
+
+```python
+setup(
+    name='<package>',
+    ...,
+    install_requires=[
+        ...,
+        'neuroglancer @ git+https://github.com/google/neuroglancer@XXXXXXXXX',
+    ],
+)
+```
+
+### Installation from local checkout of git repository
+
+You can also install from a local checkout of the git repository.  Two forms of installation are
+supported: normal installation, and an editable installation for development purposes.
+
+As with installation from a remote git repository, installation from a local checkout requires
+Node.js to build the Neuroglancer client and a C++ compiler to build the C++ mesh generation
+extension module.
+
+#### Normal installation
+
+For normal installation, run the following from the root of the repository:
+
+```shell
+python setup.py install
+```
+
+That will automatically build the Neuroglancer client using Node.js if it has not already been built
+(i.e. if `neuroglancer/static/index.html` does not exist).  To rebuild the Neuroglancer client
+explicitly, you can use:
+
+```shell
+python setup.py bundle_client
+```
+
+or
+
+```shell
+npm run build-python
+```
+
+Note: Installing from a local checkout using `pip install .` also works, but it may be slower
+because it makes a full copy of the local directory (https://github.com/pypa/pip/pull/7882),
+including the possibly-large `.git` and `node_modules` directories.
+
+#### Editable installation (for development purposes)
+
+During development, an *editable* installation allows the package to be imported directly from the
+local checkout directory:
+
+```shell
+pip install -e .
+```
+
+Any changes you make to the .py source files take effect the next time the package is imported,
+without the need to reinstall.  If you make changes to the Neuroglancer client, you still need to
+rebuild it with `npm run build-python`.  You can also keep the Neuroglancer client continuously
+up-to-date by running `npm run dev-server-python`.
+
+## Examples
 
 See the example programs in the [examples/](examples/) directory.  Run them
 using the Python interpreter in interactive mode, e.g.
@@ -42,9 +138,7 @@ because then the server will exit immediately.
 
 For in-memory segmentation volumes, mesh representations of the surface of each
 object can be generated on-demand as they are requested by the client (e.g. due
-to the user selecting a segment).  This requires that the C++ extension module
-be built.  If you install this Python package normally, that will happen
-automatically.  For development, see the instructions below.
+to the user selecting a segment)
 
 ## Security
 
@@ -52,73 +146,27 @@ By default the server binds only to the `127.0.0.1` address, and for protection
 against cross-site scripting attacks only accepts requests that include a valid
 randomly-generated 160-bit secret key.
 
-## Development
+## Test suite
 
-## Building the C++ extension module
-
-Mesh generation for segmentation volumes depends on a C++ extension module.  To
-build it, activate a suitable Python virtual environment and run:
-
-```shell
-pip install -e .
-```
-
-### Serving the Neuroglancer client code
-
-By default, a bundled copy of the Neuroglancer client code (HTML, CSS,
-JavaScript) is served from the [neuroglancer/static](neuroglancer/static)
-directory.  You can build this bundled copy by running
-
-``` shell
-python setup.py bundle_client
-```
-
-This requires a suitable version of [Node.js](https://nodejs.org/), as dsecribed
-in the [top level README](../README.md).  The
-[PyPI package](https://pypi.python.org/pypi/neuroglancer/) includes a prebuilt
-copy of these files.
-
-The Neuroglancer client code can also be served from several other locations,
-for convenience during development.
-
-For example, while developing the Neuroglancer client, you can run the shell command
+The test suite can be run using the `tox` command.  Some of the tests require a WebGL2-enabled web
+browser in order to test interaction with the Neuroglancer client.  Both Chrome and Firefox are
+supported, but currently due to bugs in Swiftshader, Chrome Headless does not work.  Firefox
+Headless also currently does not support WebGL at all.  On Linux, you can successfully run the tests
+headlessly on Firefox using `xvfb-run`.  On other platforms, tests can't be run headlessly.
 
 ```shell
-npm run dev-server-python
-```
-to start the `webpack-dev-server` on <http://localhost:8080> and then call
+# For headless using Firefox on xvfb (Linux only)
+sudo apt-get instrall xvfb # On Debian-based systems
+tox -e firefox-xvfb  # Run tests using non-headless Firefox
 
-```python
-neuroglancer.set_static_content_source(url='http://localhost:8080')
-```
-from Python.  With this setup, refreshing the browser will automatically reflect any changes to
-the client source code.
+# For non-headless using Chrome
+tox -e chrome
 
-### Publishing to PyPI
+# For non-headless using Firefox
+tox -e firefox
 
-This package is maintained at [PyPI](https://pypi.python.org/pypi/neuroglancer/).
-
-To upload a new version, create a `~/.pypirc` file with the following content:
-```
-[distutils]
-index-servers =
-  pypi
-  testpypi
-
-[pypi]
-username=neuroglancer
-password=xxxx
-
-[pypitest]
-repository=https://test.pypi.org/legacy/
-username=neuroglancer
-password=xxxx
+# To run only tests that do not require a browser
+tox -e skip-browser-tests
 ```
 
-To publish a new version, run the following command:
-
-```shell
-rm -rf neuroglancer.egg-info
-python setup.py bundle_client sdist
-twine upload dist/*
-```
+Refer to [tox.ini](../tox.ini) for details of the test procedure.

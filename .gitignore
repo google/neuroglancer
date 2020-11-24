@@ -1,6 +1,5 @@
 /node_modules/
 /dist/
-/lib
 /trans
 /build/
 /coverage/
@@ -10,3 +9,6 @@ __pycache__
 *.sw[pmn]
 .vscode
 tsconfig.tsbuildinfo
+/.eggs
+/neuroglancer.egg-info
+/.tox

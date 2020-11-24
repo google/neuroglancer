@@ -17,7 +17,6 @@ import numpy as np
 import neuroglancer
 import threading
 import pytest
-from selenium.webdriver.common.keys import Keys
 
 
 def setup_viewer(viewer, dtype, value, layer_type):

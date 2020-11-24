@@ -17,7 +17,6 @@ import numpy as np
 import neuroglancer
 import threading
 import pytest
-from selenium.webdriver.common.keys import Keys
 
 
 def test_mesh_silhouette(webdriver):
@@ -34,6 +33,7 @@ def test_mesh_silhouette(webdriver):
 
     state = webdriver.sync()
     assert state.layers['a'].mesh_silhouette_rendering == 2
+
 
 def test_layer_subsources(webdriver):
     with webdriver.viewer.txn() as s:

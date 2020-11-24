@@ -16,7 +16,6 @@
 import neuroglancer
 import numpy as np
 import pytest
-from selenium.webdriver.common.keys import Keys
 
 
 def setup_viewer(viewer):
@@ -48,6 +47,7 @@ def setup_viewer(viewer):
     ('annotateSphere', neuroglancer.PlaceEllipsoidTool, neuroglancer.EllipsoidAnnotation, 2),
 ])
 def test_annotate(webdriver, tool, tool_class, annotation_class, num_clicks):
+    from selenium.webdriver.common.keys import Keys
     setup_viewer(viewer=webdriver.viewer)
     with webdriver.viewer.txn() as s:
         s.layers['a'].tool = tool

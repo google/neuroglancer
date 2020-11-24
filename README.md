@@ -1,9 +1,13 @@
+Neuroglancer: Web-based volumetric data visualization
+-----------------------------------------------------
+
+[![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
+[![PyPI](https://img.shields.io/pypi/v/neuroglancer)](https://pypi.org/project/neuroglancer)
+![Build](https://github.com/google/neuroglancer/workflows/Build/badge.svg)
+
 Neuroglancer is a WebGL-based viewer for volumetric data.  It is capable of displaying arbitrary (non axis-aligned) cross-sectional views of volumetric data, as well as 3-D meshes and line-segment based models (skeletons).
 
 This is not an official Google product.
-
-[![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
-![Build](https://github.com/google/neuroglancer/workflows/Build/badge.svg)
 
 # Examples
 
