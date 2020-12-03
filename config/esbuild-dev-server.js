@@ -61,13 +61,17 @@ async function main(builder, options) {
         }
         do {
           needBuild = false;
-          let result = await tryBuild(builder);
-          if (serve) {
-            if (result) {
-              liveServer.reload();
-            } else {
-              console.log('Not reloading due to errors');
+          try {
+            let result = await tryBuild(builder);
+            if (serve) {
+              if (result) {
+                liveServer.reload();
+              } else {
+                console.log('Not reloading due to errors');
+              }
             }
+          } catch (e) {
+            console.log(`Error building: ${e.message}`);
           }
         } while (needBuild);
         building = false;

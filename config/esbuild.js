@@ -88,12 +88,20 @@ class Builder {
   // Deletes .js/.css/.html files from `this.outDir`.  Can safely be used on
   // `python/neuroglancer/static` directory.
   async clearOutput() {
-    const pattern = /\.(js|js\.map|html|css)$/;
-    const paths = await fs.promises.readdir(this.outDir);
-    for (const filename of paths) {
-      const p = path.resolve(this.outDir, filename);
-      if (!pattern.test(p)) continue;
-      await fs.promises.unlink(p);
+    try {
+      const pattern = /\.(js|js\.map|html|css)$/;
+      const paths = await fs.promises.readdir(this.outDir);
+      for (const filename of paths) {
+        const p = path.resolve(this.outDir, filename);
+        if (!pattern.test(p)) continue;
+        try {
+          await fs.promises.unlink(p);
+        } catch {
+          // Ignore errors removing output files
+        }
+      }
+    } catch  {
+      // ignore errors listing output directory (e.g. if it does not already exist)
     }
   }
 

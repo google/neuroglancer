@@ -36,7 +36,7 @@ function parseDefines(definesArg) {
       value = 'true';
     } else {
       key = entry.substring(0, splitPoint);
-      value = entry.substring(splitPoint+1);
+      value = entry.substring(splitPoint + 1);
     }
     defines[key] = value;
   }
@@ -106,25 +106,60 @@ async function main(argv) {
   }
 }
 if (require.main === module) {
-  const argv = require('minimist')(process.argv.slice(2), {
-    string: ['config', 'host', 'define'],
-    boolean: ['watch', 'serve', 'typecheck'],
-    default: {
-      config: 'min',
-      port: 8080,
-      host: '127.0.0.1',
-      watch: false,
-      serve: false,
-      typecheck: true,
-    },
-    unknown: arg => {
-      console.log(`Unknown option: ${arg}`);
-      process.exit(2);
-    },
-  });
-  if (argv._.length > 0) {
-    console.log(`Unknown options: ${JSON.stringify(argv._)}`);
-    process.exit(2);
+  const {argv} =
+      require('yargs')
+          .options({
+            config: {
+              description: 'Build configuration identifier',
+              type: 'string',
+              nargs: 1,
+              choices: ['min', 'dev', 'python-min', 'python-dev', 'module'],
+              default: 'min',
+            },
+            typecheck: {
+              type: 'boolean',
+              default: true,
+              description: 'Typecheck the TypeScript code.',
+            },
+            define: {
+              type: 'array',
+              default: [],
+              description:
+                  'JavaScript global identifiers to define when building.  Usage: `--define VARIABLE=EXPR`.',
+            },
+            watch: {
+              type: 'boolean',
+              default: false,
+              description: 'Watch sources for changes and rebuild automatically.',
+            },
+            serve: {
+              group: 'Development server options:',
+              type: 'boolean',
+              default: false,
+              description: 'Run a development server.',
+            },
+            host: {
+              group: 'Development server options:',
+              type: 'string',
+              nargs: 1,
+              description:
+                  'Specifies bind address for development server, e.g. 0.0.0.0 or 127.0.0.1',
+              default: '127.0.0.1',
+            },
+            port: {
+              group: 'Development server options:',
+              type: 'number',
+              nargs: 1,
+              default: 8080,
+              description: 'Port number for the development server',
+            },
+          })
+          .strict()
+          .demandCommand(0, 0)
+          .version(false)
+          .help();
+  if (argv.serve) {
+    argv.watch = true;
   }
   main(argv);
 }

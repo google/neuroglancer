@@ -54,10 +54,10 @@
     "karma-jasmine": "^4.0.1",
     "karma-mocha-reporter": "^2.2.5",
     "karma-sourcemap-loader": "^0.3.8",
-    "minimist": "^1.2.5",
     "morgan": "^1.10.0",
     "nunjucks": "^3.2.2",
-    "send": "^0.17.1"
+    "send": "^0.17.1",
+    "yargs": "^16.1.1"
   },
   "dependencies": {
     "@types/codemirror": "0.0.98",
@@ -71,7 +71,6 @@
     "esbuild": "^0.8.11",
     "gl-matrix": "^3.1.0",
     "glsl-editor": "^1.0.0",
-    "glsl-strip-comments-loader": "^1.1.0",
     "ikonate": "^1.1.1",
     "lodash": "^4.17.20",
     "nifti-reader-js": "^0.5.4",

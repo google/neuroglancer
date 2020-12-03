@@ -17,19 +17,25 @@
 'use strict';
 
 const path = require('path');
-const minimist = require('minimist');
+const yargs = require('yargs');
 const glob = require('glob');
 const {parseDefines} = require('./esbuild-cli');
 const {createEntryPointFile, getCommonPlugins} = require('./esbuild');
 
 const getEntryPoint = exports.getEntryPoint = (testPattern) => {
-  const argv = minimist(process.argv, {string: ['pattern']});
-  let userPattern = argv['pattern'];
+  const {argv: {pattern: userPattern}} = yargs.options({
+    pattern: {
+      type: 'string',
+      nargs: 1,
+    },
+  });
   let testPaths = glob.sync(testPattern);
   const userCwd = process.env.INIT_CWD || process.cwd();
   if (userPattern !== undefined) {
+    console.log('Restricting test files by glob pattern: ' + JSON.stringify(userPattern));
     const userPaths = new Set(glob.sync(path.resolve(userCwd, userPattern)));
     testPaths = testPaths.filter(x => userPaths.has(x));
+    console.log('Loading tests from: \n' + testPaths.join('\n'));
   }
   return createEntryPointFile('test', undefined, testPaths);
 };
@@ -49,7 +55,12 @@ exports.getEntryPointConfig = (testPattern, preprocessors = []) => {
 };
 
 exports.getEsbuildConfig = () => {
-  const argv = minimist(process.argv, {string: ['define']});
+  const {argv} = yargs.options({
+    define: {
+      type: 'array',
+      default: [],
+    },
+  });
   return {
     target: 'es2019',
     plugins: getCommonPlugins(),
