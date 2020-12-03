@@ -30,7 +30,10 @@ class AutomaticFocusList {
 
 const automaticFocusList = new AutomaticFocusList();
 
+const isTopLevel = window.top === window;
+
 const maybeUpdateFocus = debounce(() => {
+  if (!isTopLevel) return;
   const {activeElement} = document;
   if (activeElement === null || activeElement === document.body) {
     const node = LinkedListOperations.front<AutomaticallyFocusedElement>(<any>automaticFocusList);
