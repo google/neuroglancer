@@ -23,6 +23,7 @@ import six
 
 from . import downsample, downsample_scales
 from .chunks import encode_jpeg, encode_npz, encode_raw
+from .coordinate_space import CoordinateSpace
 from . import trackable_state
 from .random_token import make_random_token
 
@@ -39,7 +40,7 @@ class InvalidObjectIdForMesh(Exception):
 class LocalVolume(trackable_state.ChangeNotifier):
     def __init__(self,
                  data,
-                 dimensions,
+                 dimensions=None,
                  volume_type=None,
                  voxel_offset=None,
                  encoding='npz',
@@ -85,6 +86,12 @@ class LocalVolume(trackable_state.ChangeNotifier):
         self.data = data
         self.shape = data.shape
         rank = self.rank = len(self.shape)
+        if dimensions is None:
+            dimensions = CoordinateSpace(
+                names=['d%d' % d for d in range(rank)],
+                units=[''] * rank,
+                scales=[1] * rank,
+            )
         if rank != dimensions.rank:
             raise ValueError('rank of data (%d) must match rank of coordinate space (%d)' %
                              (rank, dimensions.rank))
@@ -162,7 +169,7 @@ class LocalVolume(trackable_state.ChangeNotifier):
 
         indexing_expr = tuple(np.s_[start[i] * downsample_factor[i]:end[i] * downsample_factor[i]]
                               for i in range(rank))
-        subvol = self.data[indexing_expr]
+        subvol = np.array(self.data[indexing_expr], copy=False)
         if subvol.dtype == 'float64':
             subvol = np.cast[np.float32](subvol)
 
