@@ -196,7 +196,7 @@ jobs:
       with:
         user: __token__
         password: ${{ secrets.pypi_token }}
-      if: ${{ startWith(github.ref, 'refs/tags/v') }}
+      if: ${{ startsWith(github.ref, 'refs/tags/v') }}
   ngauth:
     strategy:
       matrix:
