@@ -82,6 +82,7 @@ async function main(argv) {
     python,
     module: moduleBuild,
     define: parseDefines(argv.define),
+    inject: argv.inject,
   });
   if (moduleBuild) {
     try {
@@ -126,6 +127,11 @@ if (require.main === module) {
               default: [],
               description:
                   'JavaScript global identifiers to define when building.  Usage: `--define VARIABLE=EXPR`.',
+            },
+            inject: {
+              type: 'array',
+              default: [],
+              description: 'Additional modules to inject into global scope.',
             },
             watch: {
               type: 'boolean',

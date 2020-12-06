@@ -68,6 +68,7 @@ class Builder {
       python = false,
       module: moduleBuild = false,
       define = {},
+      inject = [],
       minify = true,
     } = options;
     this.outDir = outDir;
@@ -83,6 +84,7 @@ class Builder {
     this.srcDir = path.resolve(__dirname, '..', 'src');
     this.plugins = getCommonPlugins();
     this.define = define;
+    this.inject = inject;
   }
 
   // Deletes .js/.css/.html files from `this.outDir`.  Can safely be used on
@@ -125,6 +127,7 @@ class Builder {
     return {
       outdir: this.outDir,
       define: {...this.bundleSources.defines, ...this.define},
+      inject: this.inject,
       minify: this.minify,
       target: 'es2019',
       plugins: this.plugins,
