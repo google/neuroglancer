@@ -47,7 +47,7 @@ def save_meshes(state, output_dir, output_format):
                 output_path = os.path.join(output_dir, '%d.%s' % (segment, output_format))
                 print('Saving layer %r object %s -> %s' % (layer.name, segment, output_path))
                 os.makedirs(output_dir, exist_ok=True)
-                vol.mesh.save(segment, os.path.join(output_dir, '%d.%s' % (segment, output_format)))
+                vol.mesh.save(segment, output_path, file_format=output_format)
             return
     print('No segmentation layer found')
     sys.exit(1)
