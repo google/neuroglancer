@@ -92,7 +92,7 @@ class SegmentationUserLayerDisplayState implements VisibleSegmentsState {
 
   segmentColorHash = SegmentColorHash.getDefault();
   segmentStatedColors =
-      this.layer.registerDisposer(Uint64Map.makeWithCounterpart(this.layer.manager.worker));
+      this.layer.registerDisposer(Uint64Map.makeWithCounterpart(this.layer.manager.rpc));
   segmentSelectionState = new SegmentSelectionState();
   selectedAlpha = trackableAlphaValue(0.5);
   saturation = trackableAlphaValue(1.0);
@@ -102,7 +102,7 @@ class SegmentationUserLayerDisplayState implements VisibleSegmentsState {
   hideSegmentZero = new TrackableBoolean(true, true);
   ignoreNullVisibleSet = new TrackableBoolean(true, true);
   visibleSegments =
-      this.layer.registerDisposer(Uint64Set.makeWithCounterpart(this.layer.manager.worker));
+      this.layer.registerDisposer(Uint64Set.makeWithCounterpart(this.layer.manager.rpc));
   skeletonRenderingOptions = new SkeletonRenderingOptions();
   shaderError = makeWatchableShaderError();
   renderScaleHistogram = new RenderScaleHistogram();
@@ -110,7 +110,7 @@ class SegmentationUserLayerDisplayState implements VisibleSegmentsState {
   segmentLabelMap = new WatchableValue<SegmentLabelMap|undefined>(undefined);
   segmentPropertyMaps = new WatchableValue<SegmentPropertyMap[]>([]);
   segmentEquivalences = this.layer.registerDisposer(
-      SharedDisjointUint64Sets.makeWithCounterpart(this.layer.manager.worker));
+      SharedDisjointUint64Sets.makeWithCounterpart(this.layer.manager.rpc));
   maxIdLength = new WatchableValue(1);
   selectSegment = this.layer.selectSegment;
   filterBySegmentLabel = this.layer.filterBySegmentLabel;

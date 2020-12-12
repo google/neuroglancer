@@ -1420,13 +1420,6 @@ export class LayerReference extends RefCounted implements Trackable {
 export abstract class LayerListSpecification extends RefCounted {
   changed = new NullarySignal();
 
-  /**
-   * @deprecated
-   */
-  get worker() {
-    return this.rpc;
-  }
-
   abstract rpc: RPC;
 
   abstract dataSourceProviderRegistry: Borrowed<DataSourceProviderRegistry>;
