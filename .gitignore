@@ -10,5 +10,7 @@ __pycache__
 .vscode
 tsconfig.tsbuildinfo
 /.eggs
-/neuroglancer.egg-info
 /.tox
+/.log
+*.so
+*.egg-info
