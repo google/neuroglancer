@@ -248,7 +248,10 @@ export class TrackableWindowedViewport extends TrackableValue<Float64Array> {
         obj => parseFixedLengthArray(new Float64Array(4), obj, verifyFloat01));
   }
   toJSON() {
-    return Array.from(this.value);
+    const {value} = this;
+    const [left, top, width, height] = value;
+    if (left === 0 && top == 0 && width === 1 && height === 1) return undefined;
+    return Array.from(value);
   }
 }
 
