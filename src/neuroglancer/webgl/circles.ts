@@ -36,6 +36,7 @@ export function defineCircleShader(builder: ShaderBuilder, crossSectionFade: boo
 void emitCircle(vec4 position, float diameter, float borderWidth) {
   gl_Position = position;
   float totalDiameter = diameter + 2.0 * (borderWidth + uCircleParams.z);
+  if (diameter == 0.0) totalDiameter = 0.0;
   vec2 circleCornerOffset = getQuadVertexPosition(vec2(-1.0, -1.0), vec2(1.0, 1.0));
   gl_Position.xy += circleCornerOffset * uCircleParams.xy * gl_Position.w * totalDiameter;
   vCircleCoord.xy = circleCornerOffset;

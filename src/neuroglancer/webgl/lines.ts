@@ -69,6 +69,7 @@ void emitLine(vec4 vertexAClip, vec4 vertexBClip, float lineWidthInPixels
   vec2 lineOffset = getLineOffset();
   gl_Position = vec4(mix(vertexADevice, vertexBDevice, lineOffset.x), 1.0);
   float totalLineWidth = lineWidthInPixels + 2.0 * uLineParams.z ${rounded ? ' + 2.0 * borderWidth' : ''};
+  if (lineWidthInPixels == 0.0) totalLineWidth = 0.0;
   vLineFeatherFraction = max(1e-6, uLineParams.z) / totalLineWidth;
   gl_Position.xy += (lineOffset.y * lineNormal
                      ${rounded ? '+ lineDirection * (2.0 * lineOffset.x - 1.0)' : ''})
