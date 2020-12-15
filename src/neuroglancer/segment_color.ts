@@ -78,6 +78,17 @@ export class SegmentColorHash implements Trackable {
     return new SegmentColorHash(0);
   }
 
+  get value() {
+    return this.hashSeed;
+  }
+
+  set value(value: number) {
+    if (value !== this.hashSeed) {
+      this.hashSeed = value;
+      this.changed.dispatch();
+    }
+  }
+
   compute(out: Float32Array, x: Uint64) {
     let h = hashCombine(this.hashSeed, x.low);
     h = hashCombine(h, x.high);

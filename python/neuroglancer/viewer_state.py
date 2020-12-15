@@ -349,6 +349,8 @@ class SegmentationLayer(Layer, _AnnotationLayerOptions):
             d[segment] = hex_string
         return d
 
+    linked_segmentation_layer = linkedSegmentationLayer = wrapped_property('linkedSegmentationLayer', optional(text_type))
+
     @staticmethod
     def interpolate(a, b, t):
         c = Layer.interpolate(a, b, t)

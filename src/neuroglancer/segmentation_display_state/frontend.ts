@@ -123,21 +123,25 @@ export class SegmentSelectionState extends RefCounted {
       if (state !== undefined) {
         value = state.value;
       }
-      this.set(value, userLayer.displayState.hideSegmentZero.value);
+      this.set(value, userLayer.displayState.segmentationGroupState.value.hideSegmentZero.value);
     }));
   }
 }
 
-export interface SegmentationDisplayState extends VisibleSegmentsState {
-  segmentSelectionState: SegmentSelectionState;
+export interface SegmentationGroupState extends VisibleSegmentsState {
   segmentColorHash: SegmentColorHash;
   segmentStatedColors: Uint64Map;
-  saturation: TrackableAlphaValue;
   /**
    * Maximum length of base-10 representation of id seen.
    */
   maxIdLength: WatchableValueInterface<number>;
   segmentLabelMap: WatchableValueInterface<SegmentLabelMap|undefined>;
+}
+
+export interface SegmentationDisplayState {
+  segmentSelectionState: SegmentSelectionState;
+  saturation: TrackableAlphaValue;
+  segmentationGroupState: WatchableValueInterface<SegmentationGroupState>;
 
   selectSegment: (id: Uint64, pin: boolean|'toggle') => void;
   filterBySegmentLabel: (id: Uint64) => void;
@@ -160,7 +164,8 @@ export function maybeAugmentSegmentId(
     id = mustCopy ? value.clone() : value;
   }
   if (displayState == null) return id;
-  const {segmentEquivalences, segmentLabelMap: {value: segmentLabelMap}} = displayState;
+  const {segmentEquivalences, segmentLabelMap: {value: segmentLabelMap}} =
+      displayState.segmentationGroupState.value;
   if (segmentEquivalences.size !== 0) {
     mappedValue = segmentEquivalences.get(id);
     if (Uint64.equal(mappedValue, id)) {
@@ -203,7 +208,7 @@ export function updateIdStringWidth(
 export function bindSegmentListWidth(displayState: SegmentationDisplayState, element: HTMLElement) {
   return observeWatchable(
       width => element.style.setProperty('--neuroglancer-segment-list-width', `${width}ch`),
-      displayState.maxIdLength);
+      displayState.segmentationGroupState.value.maxIdLength);
 }
 
 const segmentWidgetTemplate = (() => {
@@ -305,7 +310,7 @@ function makeRegisterSegmentWidgetEventHandlers(displayState: SegmentationDispla
     const idString = entryElement.dataset.id!;
     const id = tempStatedColor;
     id.tryParseString(idString);
-    const {visibleSegments} = displayState;
+    const {visibleSegments} = displayState.segmentationGroupState.value;
     visibleSegments.set(id, !visibleSegments.has(id));
     event.stopPropagation();
   };
@@ -375,13 +380,13 @@ export class SegmentWidgetFactory {
       container.dataset.unmappedId = unmappedIdString;
       children[unmappedIdIndex].textContent = unmappedIdString;
       if (displayState !== undefined) {
-        updateIdStringWidth(displayState.maxIdLength, unmappedIdString);
+        updateIdStringWidth(displayState.segmentationGroupState.value.maxIdLength, unmappedIdString);
       }
     }
     children[template.labelIndex].textContent = normalizedId.label ?? '';
     if (displayState !== undefined) {
       this.updateWithId(container, mapped);
-      updateIdStringWidth(displayState.maxIdLength, mappedIdString);
+      updateIdStringWidth(displayState.segmentationGroupState.value.maxIdLength, mappedIdString);
     }
     return container;
   }
@@ -398,7 +403,8 @@ export class SegmentWidgetFactory {
     const {children} = container;
     const {template} = this;
     const {displayState} = this;
-    const {visibleSegments, segmentSelectionState} = displayState!;
+    const {segmentSelectionState} = displayState!;
+    const {visibleSegments} = displayState!.segmentationGroupState.value;
     (children[template.visibleIndex] as HTMLInputElement).checked = visibleSegments.has(mapped);
     container.dataset.selected = (segmentSelectionState.hasSelectedSegment &&
                                   Uint64.equal(segmentSelectionState.selectedSegment, mapped))
@@ -433,13 +439,14 @@ export interface SegmentationDisplayState3D extends SegmentationDisplayStateWith
 }
 
 export function registerCallbackWhenSegmentationDisplayStateChanged(
-    displayState: SegmentationDisplayState, context: RefCounted, callback: () => void) {
-  context.registerDisposer(displayState.segmentColorHash.changed.add(callback));
-  context.registerDisposer(displayState.visibleSegments.changed.add(callback));
+  displayState: SegmentationDisplayState, context: RefCounted, callback: () => void) {
+  const groupState = displayState.segmentationGroupState.value;
+  context.registerDisposer(groupState.segmentColorHash.changed.add(callback));
+  context.registerDisposer(groupState.visibleSegments.changed.add(callback));
   context.registerDisposer(displayState.saturation.changed.add(callback));
-  context.registerDisposer(displayState.segmentEquivalences.changed.add(callback));
+  context.registerDisposer(groupState.segmentEquivalences.changed.add(callback));
   context.registerDisposer(displayState.segmentSelectionState.changed.add(callback));
-  onVisibleSegmentsStateChanged(context, displayState, callback);
+  onVisibleSegmentsStateChanged(context, groupState, callback);
 }
 
 export function registerRedrawWhenSegmentationDisplayStateChanged(
@@ -481,15 +488,16 @@ export function getBaseObjectColor(
     color.fill(1);
     return color;
   };
-  const {segmentStatedColors} = displayState;
+  const groupState = displayState.segmentationGroupState.value;
+  const {segmentStatedColors} = groupState;
   if (segmentStatedColors.size !== 0 &&
-      displayState.segmentStatedColors.get(objectId, tempStatedColor)) {
+      groupState.segmentStatedColors.get(objectId, tempStatedColor)) {
     // If displayState maps the ID to a color, use it
     color[0] = ((tempStatedColor.low & 0x0000ff)) / 255.0;
     color[1] = ((tempStatedColor.low & 0x00ff00) >>> 8) / 255.0;
     color[2] = ((tempStatedColor.low & 0xff0000) >>> 16) / 255.0;
   } else {
-    displayState.segmentColorHash.compute(color, objectId);
+    groupState.segmentColorHash.compute(color, objectId);
   }
   return color;
 }
@@ -538,7 +546,7 @@ export class SegmentationLayerSharedObject extends Base {
   initializeCounterpartWithChunkManager(options: any) {
     let {displayState} = this;
     options['chunkManager'] = this.chunkManager.rpcId;
-    sendVisibleSegmentsState(displayState, options);
+    sendVisibleSegmentsState(displayState.segmentationGroupState.value, options);
     options['transform'] =
         this.registerDisposer(SharedWatchableValue.makeFromExisting(
                                   this.chunkManager.rpc!, this.displayState.transform))
@@ -558,7 +566,7 @@ export function forEachVisibleSegmentToDraw(
         objectId: Uint64, color: vec4|undefined, pickIndex: number|undefined,
         rootObjectId: Uint64) => void) {
   const alpha = Math.min(1, displayState.objectAlpha.value);
-  forEachVisibleSegment(displayState, (objectId, rootObjectId) => {
+  forEachVisibleSegment(displayState.segmentationGroupState.value, (objectId, rootObjectId) => {
     let pickIndex = pickIDs?.registerUint64(renderLayer, objectId);
     let color = emitColor ? getObjectColor(displayState, rootObjectId, alpha) : undefined;
     callback(objectId, color, pickIndex, rootObjectId);

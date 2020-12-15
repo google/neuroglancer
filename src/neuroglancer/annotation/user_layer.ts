@@ -331,13 +331,21 @@ export class AnnotationUserLayer extends Base {
     super.disposed();
   }
 
-  constructor(managedLayer: Borrowed<ManagedUserLayer>, specification: any) {
-    super(managedLayer, specification);
-    this.linkedSegmentationLayers.restoreState(specification);
+  constructor(managedLayer: Borrowed<ManagedUserLayer>) {
+    super(managedLayer);
     this.linkedSegmentationLayers.changed.add(this.specificationChanged.dispatch);
     this.annotationDisplayState.ignoreNullSegmentFilter.changed.add(
         this.specificationChanged.dispatch);
     this.annotationCrossSectionRenderScaleTarget.changed.add(this.specificationChanged.dispatch);
+    this.tabs.add(
+        'rendering',
+        {label: 'Rendering', order: -100, getter: () => new RenderingOptionsTab(this)});
+    this.tabs.default = 'annotations';
+  }
+
+  restoreState(specification: any) {
+    super.restoreState(specification);
+    this.linkedSegmentationLayers.restoreState(specification);
     this.localAnnotationsJson = specification[ANNOTATIONS_JSON_KEY];
     this.localAnnotationProperties = verifyOptionalObjectProperty(
         specification, ANNOTATION_PROPERTIES_JSON_KEY, parseAnnotationPropertySpecs);
@@ -350,14 +358,6 @@ export class AnnotationUserLayer extends Base {
         specification[PROJECTION_RENDER_SCALE_JSON_KEY]);
     this.annotationDisplayState.ignoreNullSegmentFilter.restoreState(
         specification[IGNORE_NULL_SEGMENT_FILTER_JSON_KEY]);
-    this.tabs.add(
-        'rendering',
-        {label: 'Rendering', order: -100, getter: () => new RenderingOptionsTab(this)});
-    this.tabs.default = 'annotations';
-  }
-
-  restoreState(specification: any) {
-    super.restoreState(specification);
     this.annotationDisplayState.shader.restoreState(specification[SHADER_JSON_KEY]);
     this.annotationDisplayState.shaderControls.restoreState(
         specification[SHADER_CONTROLS_JSON_KEY]);

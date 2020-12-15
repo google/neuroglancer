@@ -27,6 +27,7 @@ import {DisplayDimensions, Position, WatchableDisplayDimensionRenderInfo} from '
 import {RENDERED_VIEW_ADD_LAYER_RPC_ID, RENDERED_VIEW_REMOVE_LAYER_RPC_ID} from 'neuroglancer/render_layer_common';
 import {RenderLayer, RenderLayerRole, VisibilityTrackedRenderLayer} from 'neuroglancer/renderlayer';
 import {VolumeType} from 'neuroglancer/sliceview/volume/base';
+import {StatusMessage} from 'neuroglancer/status';
 import {TrackableBoolean} from 'neuroglancer/trackable_boolean';
 import {registerNested, TrackableRefCounted, TrackableValue, TrackableValueInterface, WatchableSet, WatchableValue, WatchableValueInterface} from 'neuroglancer/trackable_value';
 import {LayerDataSourcesTab} from 'neuroglancer/ui/layer_data_sources_tab';
@@ -66,6 +67,13 @@ export interface UserLayerSelectionState {
   annotationPartIndex: number|undefined;
 
   value: any;
+}
+
+export class LayerActionContext {
+  callbacks: (() => void)[] = [];
+  defer(callback: () => void) {
+    this.callbacks.push(callback);
+  }
 }
 
 export class UserLayer extends RefCounted {
@@ -220,10 +228,9 @@ export class UserLayer extends RefCounted {
     return this.managedLayer.manager;
   }
 
-  constructor(public managedLayer: Borrowed<ManagedUserLayer>, specification: any) {
+  constructor(public managedLayer: Borrowed<ManagedUserLayer>) {
     super();
     this.localCoordinateSpaceCombiner.includeDimensionPredicate = isLocalOrChannelDimension;
-    specification;
     this.tabs.changed.add(this.specificationChanged.dispatch);
     this.tool.changed.add(this.specificationChanged.dispatch);
     this.localPosition.changed.add(this.specificationChanged.dispatch);
@@ -424,7 +431,7 @@ export class UserLayer extends RefCounted {
   }
 
   // Derived classes should override.
-  handleAction(_action: string): void {}
+  handleAction(_action: string, _context: LayerActionContext): void {}
 
   selectedValueToJson(value: any) {
     return value;
@@ -522,17 +529,15 @@ export class ManagedUserLayer extends RefCounted {
   /**
    * If layer is not null, tranfers ownership of a reference.
    */
-  constructor(
-      name: string, public initialSpecification: any,
-      public manager: Borrowed<LayerListSpecification>) {
+  constructor(name: string, public manager: Borrowed<LayerListSpecification>) {
     super();
     this.name_ = name;
   }
 
   toJSON() {
     let userLayer = this.layer;
-    if (!userLayer) {
-      return this.initialSpecification;
+    if (userLayer === null) {
+      return undefined;
     }
     let layerSpec = userLayer.toJSON();
     layerSpec.name = this.name;
@@ -757,15 +762,19 @@ export class LayerManager extends RefCounted {
   }
 
   invokeAction(action: string) {
+    const context = new LayerActionContext();
     for (let managedLayer of this.managedLayers) {
       if (managedLayer.layer === null || !managedLayer.visible) {
         continue;
       }
       let userLayer = managedLayer.layer;
-      userLayer.handleAction(action);
+      userLayer.handleAction(action, context);
       for (let renderLayer of userLayer.renderLayers) {
         renderLayer.handleAction(action);
       }
+    }
+    for (const callback of context.callbacks) {
+      callback();
     }
   }
 }
@@ -1417,6 +1426,161 @@ export class LayerReference extends RefCounted implements Trackable {
   }
 }
 
+// Group of layers that share a set of properties, e.g. visible segment set.
+export class LinkedLayerGroup extends RefCounted implements Trackable {
+  // Only valid if `root_ == this.layer`.
+  private linkedLayers_ = new Set<UserLayer>();
+  private root_: UserLayer;
+  changed = new NullarySignal();
+  linkedLayersChanged = new NullarySignal();
+  readonly root: WatchableValueInterface<UserLayer>;
+
+  get linkedLayers (): ReadonlySet<UserLayer> {
+    return this.linkedLayers_;
+  }
+
+  get rootGroup(): LinkedLayerGroup {
+    return this.getGroup(this.root.value);
+  }
+
+  constructor(
+      public layerManager: LayerManager, public layer: UserLayer,
+      public predicate: (layer: UserLayer) => boolean,
+      public getGroup: (layer: UserLayer) => LinkedLayerGroup) {
+    super();
+    this.root_ = layer;
+    const self = this;
+    this.root = {
+      get value() {
+        return self.root_;
+      },
+      changed: self.changed,
+    };
+  }
+
+  reset() {
+    this.isolate();
+  }
+
+  restoreState(obj: unknown) {
+    if (obj === undefined) return;
+    const name = verifyString(obj);
+    this.linkByName(name);
+  }
+
+  toJSON() {
+    const {root: {value: root}} = this;
+    if (root === this.layer) return undefined;
+    return root.managedLayer.name;
+  }
+
+  isolate(notifyChanged = true) {
+    const {getGroup, layer, root_: root} = this;
+    if (root === layer) {
+      const {linkedLayers_} = this;
+      if (linkedLayers_.size !== 0) {
+        for (const otherLayer of linkedLayers_) {
+          const otherGroup = getGroup(otherLayer);
+          otherGroup.root_ = otherLayer;
+          otherGroup.changed.dispatch();
+        }
+        linkedLayers_.clear();
+        this.linkedLayersChanged.dispatch();
+      }
+      return;
+    }
+    const rootGroup = getGroup(root);
+    rootGroup.linkedLayers_.delete(layer);
+    rootGroup.linkedLayersChanged.dispatch();
+    this.root_ = layer;
+    if (notifyChanged) {
+      this.changed.dispatch();
+    }
+  }
+
+  linkByName(otherLayerName: string) {
+    const {layer} = this;
+    const {managedLayer} = layer;
+    const {layerManager} = this;
+    const otherLayer = layerManager.getLayerByName(otherLayerName);
+    if (otherLayer === undefined) return;
+    if (otherLayer === managedLayer) return;
+    const otherUserLayer = otherLayer.layer;
+    if (otherUserLayer === null) return;
+    if (!this.predicate(otherUserLayer)) return;
+    this.linkToLayer(otherUserLayer);
+  }
+
+  linkToLayer(otherUserLayer: UserLayer) {
+    if (otherUserLayer === this.layer) return;
+    if (this.root_ === otherUserLayer) return;
+    if (this.root_ !== this.layer) {
+      this.isolate(/*notifyChanged=*/false);
+    }
+    const {getGroup} = this;
+    const newRoot = getGroup(otherUserLayer).root_;
+    if (newRoot === this.layer) return;
+    const rootGroup = getGroup(newRoot);
+    rootGroup.linkedLayers_.add(this.layer);
+    rootGroup.linkedLayersChanged.dispatch();
+    this.root_ = newRoot;
+    this.changed.dispatch();
+  }
+
+  disposed() {
+    this.isolate(/*notifyChanged=*/false);
+  }
+}
+
+function initializeLayerFromSpecNoRestoreState(managedLayer: ManagedUserLayer, spec: any) {
+  const layerType = verifyOptionalObjectProperty(spec, 'type', verifyString, 'auto');
+  managedLayer.visible = verifyOptionalObjectProperty(spec, 'visible', verifyBoolean, true);
+  const layerConstructor = layerTypes.get(layerType) || NewUserLayer;
+  managedLayer.layer = new layerConstructor(managedLayer);
+  return spec;
+}
+
+function completeUserLayerInitialization(managedLayer: Borrowed<ManagedUserLayer>, spec: any) {
+  try {
+    const userLayer = managedLayer.layer;
+    if (userLayer === null) return;
+    userLayer.restoreState(spec);
+    userLayer.initializationDone();
+  } catch (e) {
+    deleteLayer(managedLayer);
+    throw e;
+  }
+}
+
+export function initializeLayerFromSpec(managedLayer: Borrowed<ManagedUserLayer>, spec: any) {
+  try {
+    verifyObject(spec);
+    initializeLayerFromSpecNoRestoreState(managedLayer, spec);
+    completeUserLayerInitialization(managedLayer, spec);
+  } catch (e) {
+    deleteLayer(managedLayer);
+    throw e;
+  }
+}
+
+export function initializeLayerFromSpecShowErrorStatus(
+    managedLayer: Borrowed<ManagedUserLayer>, spec: any) {
+  try {
+    initializeLayerFromSpec(managedLayer, spec);
+  } catch (e) {
+    const msg = new StatusMessage();
+    msg.setErrorMessage((e instanceof Error) ? e.message : ('' + e));
+  }
+}
+
+export function makeLayer(
+    manager: LayerListSpecification, name: string, spec: any): ManagedUserLayer {
+  const managedLayer = new ManagedUserLayer(name, manager);
+  initializeLayerFromSpec(managedLayer, spec);
+  return managedLayer;
+}
+
+
 export abstract class LayerListSpecification extends RefCounted {
   changed = new NullarySignal();
 
@@ -1428,10 +1592,6 @@ export abstract class LayerListSpecification extends RefCounted {
   abstract layerSelectedValues: Borrowed<LayerSelectedValues>;
 
   abstract readonly root: TopLevelLayerListSpecification;
-
-  abstract initializeLayerFromSpec(managedLayer: ManagedUserLayer, spec: any): void;
-
-  abstract getLayer(name: string, spec: any): ManagedUserLayer;
 
   abstract add(layer: Owned<ManagedUserLayer>, index?: number|undefined): void;
 
@@ -1469,42 +1629,48 @@ export class TopLevelLayerListSpecification extends LayerListSpecification {
 
   restoreState(x: any) {
     this.layerManager.clear();
-    if (Array.isArray(x)) {
-      // If array, layers have an order
-      for (const layerObj of x) {
-        verifyObject(layerObj);
-        const name = this.layerManager.getUniqueLayerName(
-            verifyObjectProperty(layerObj, 'name', verifyString));
-        this.layerManager.addManagedLayer(this.getLayer(name, layerObj));
-      }
-    } else {
-      // Keep for backwards compatibility
+    let layerSpecs: any[];
+    if (!Array.isArray(x)) {
       verifyObject(x);
-      for (let key of Object.keys(x)) {
-        this.layerManager.addManagedLayer(this.getLayer(key, x[key]));
+      layerSpecs = Object.entries(x).map(([name, layerSpec]) => {
+        if (typeof layerSpec === 'string') {
+          return {name, source: layerSpec};
+        } else {
+          verifyObject(layerSpec);
+          return {...(layerSpec as any), name};
+        }
+      });
+    } else {
+      layerSpecs = x;
+    }
+    const layersToRestore: {managedLayer: ManagedUserLayer, spec: any}[] = [];
+    for (const layerSpec of layerSpecs) {
+      verifyObject(layerSpec);
+      const name = this.layerManager.getUniqueLayerName(
+          verifyObjectProperty(layerSpec, 'name', verifyString));
+      const managedLayer = new ManagedUserLayer(name, this);
+      try {
+        initializeLayerFromSpecNoRestoreState(managedLayer, layerSpec);
+        this.layerManager.addManagedLayer(managedLayer);
+        layersToRestore.push({managedLayer, spec: layerSpec});
+      } catch (e) {
+        managedLayer.dispose();
+        const msg = new StatusMessage();
+        msg.setErrorMessage(
+            `Error creating layer ${JSON.stringify(name)}: ` + (e instanceof Error) ? e.message :
+                                                                                      ('' + e));
       }
     }
-  }
-
-  initializeLayerFromSpec(managedLayer: ManagedUserLayer, spec: any) {
-    managedLayer.initialSpecification = spec;
-    if (typeof spec === 'string') {
-      spec = {'source': spec};
+    for (const {managedLayer, spec} of layersToRestore) {
+      try {
+        completeUserLayerInitialization(managedLayer, spec);
+      } catch (e) {
+        const msg = new StatusMessage();
+        msg.setErrorMessage(
+            `Error creating layer ${JSON.stringify(name)}: ` + (e instanceof Error) ? e.message :
+                                                                                      ('' + e));
+      }
     }
-    verifyObject(spec);
-    const layerType = verifyOptionalObjectProperty(spec, 'type', verifyString, 'auto');
-    managedLayer.visible = verifyOptionalObjectProperty(spec, 'visible', verifyBoolean, true);
-    const layerConstructor = layerTypes.get(layerType) || NewUserLayer;
-    const userLayer = new layerConstructor(managedLayer, spec);
-    userLayer.restoreState(spec);
-    userLayer.initializationDone();
-    managedLayer.layer = userLayer;
-  }
-
-  getLayer(name: string, spec: any): ManagedUserLayer {
-    let managedLayer = new ManagedUserLayer(name, spec, this);
-    this.initializeLayerFromSpec(managedLayer, spec);
-    return managedLayer;
   }
 
   add(layer: ManagedUserLayer, index?: number|undefined) {
@@ -1594,14 +1760,6 @@ export class LayerSubsetSpecification extends LayerListSpecification {
     return this.layerManager.managedLayers.map(x => x.name);
   }
 
-  initializeLayerFromSpec(managedLayer: ManagedUserLayer, spec: any) {
-    this.master.initializeLayerFromSpec(managedLayer, spec);
-  }
-
-  getLayer(name: string, spec: any): ManagedUserLayer {
-    return this.master.getLayer(name, spec);
-  }
-
   add(layer: ManagedUserLayer, index?: number|undefined) {
     if (this.master.layerManager.managedLayers.indexOf(layer) === -1) {
       layer.name = this.master.layerManager.getUniqueLayerName(layer.name);
@@ -1655,7 +1813,7 @@ export function changeLayerType(
   if (userLayer === null) return;
   const spec = userLayer.toJSON();
   spec['tab'] = userLayer.tabs.value;
-  const newUserLayer = new layerConstructor(managedLayer, spec);
+  const newUserLayer = new layerConstructor(managedLayer);
   newUserLayer.restoreState(spec);
   newUserLayer.initializationDone();
   managedLayer.layer = newUserLayer;
@@ -1755,8 +1913,7 @@ export class AutoUserLayer extends UserLayer {
 
 export function addNewLayer(
     manager: Borrowed<LayerListSpecification>, selectedLayer: Borrowed<SelectedLayerState>) {
-  const layer = new ManagedUserLayer('new layer', {}, manager);
-  manager.initializeLayerFromSpec(layer, {type: 'new'});
+  const layer = makeLayer(manager, 'new layer', {type: 'new'});
   manager.add(layer);
   selectedLayer.layer = layer;
   selectedLayer.visible = true;

@@ -113,8 +113,8 @@ export class ImageUserLayer extends Base {
 
   selectionState: ImageLayerSelectionState;
 
-  constructor(managedLayer: Borrowed<ManagedUserLayer>, specification: any) {
-    super(managedLayer, specification);
+  constructor(managedLayer: Borrowed<ManagedUserLayer>) {
+    super(managedLayer);
     this.localCoordinateSpaceCombiner.includeDimensionPredicate = isLocalDimension;
     this.blendMode.changed.add(this.specificationChanged.dispatch);
     this.opacity.changed.add(this.specificationChanged.dispatch);

@@ -20,6 +20,7 @@ import {UserLayer} from 'neuroglancer/layer';
 import {getWatchableRenderLayerTransform} from 'neuroglancer/render_coordinate_transform';
 import {RenderLayer} from 'neuroglancer/renderlayer';
 import {WatchableValueInterface} from 'neuroglancer/trackable_value';
+import {arraysEqual} from 'neuroglancer/util/array';
 import {CancellationTokenSource} from 'neuroglancer/util/cancellation';
 import {Borrowed, disposableOnce, Owned, RefCounted} from 'neuroglancer/util/disposable';
 import {verifyBoolean, verifyObject, verifyObjectAsMap, verifyObjectProperty, verifyOptionalObjectProperty, verifyString} from 'neuroglancer/util/json';
@@ -91,6 +92,7 @@ export class LoadedDataSubsource {
   modelSubspaceDimensionIndices: number[];
   enabled: boolean;
   activated: RefCounted|undefined = undefined;
+  guardValues: any[] = [];
   messages = new MessageList();
   isActiveChanged = new NullarySignal();
   constructor(
@@ -120,9 +122,13 @@ export class LoadedDataSubsource {
     this.isActiveChanged.add(loadedDataSource.activatedSubsourcesChanged.dispatch);
   }
 
-  activate(callback: (refCounted: RefCounted) => void) {
+  activate(callback: (refCounted: RefCounted) => void, ...guardValues: any[]) {
     this.messages.clearMessages();
-    if (this.activated !== undefined) return;
+    if (this.activated !== undefined) {
+      if (arraysEqual(guardValues, this.guardValues)) return;
+      this.activated.dispose();
+    }
+    this.guardValues = guardValues;
     const activated = this.activated = new RefCounted();
     callback(activated);
     this.isActiveChanged.dispatch();

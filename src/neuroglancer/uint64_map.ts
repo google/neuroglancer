@@ -84,6 +84,13 @@ export class Uint64Map extends SharedObjectCounterpart implements
     return this.hashTable.size;
   }
 
+  assignFrom(other: Uint64Map) {
+    this.clear();
+    for (const [key, value] of other) {
+      this.set(key, value);
+    }
+  }
+
   clear() {
     if (this.hashTable.clear()) {
       let {rpc} = this;

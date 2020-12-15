@@ -346,6 +346,44 @@ export function registerNested<U, T extends any[]>(
   };
 }
 
+export function registerNestedSync<U, T extends any[]>(
+    f: (context: RefCounted, ...values: T) => U,
+    ...watchables: {[K in keyof T]: WatchableValueInterface<T[K]>}):
+    {readonly value: U, dispose(): void} {
+  let values = watchables.map(w => w.value) as T;
+  const count = watchables.length;
+  let context = new RefCounted();
+  let result = f(context, ...values);
+
+  const handleChange = () => {
+    let changed = false;
+    for (let i = 0; i < count; ++i) {
+      const watchable = watchables[i];
+      const value = watchable.value;
+      if (values[i] !== value) {
+        values[i] = value;
+        changed = true;
+      }
+    }
+    if (!changed) return;
+    context.dispose();
+    context = new RefCounted();
+    result = f(context, ...values);
+  };
+
+  const signalDisposers = watchables.map(w => w.changed.add(handleChange));
+
+  return {
+    dispose() {
+      invokeDisposers(signalDisposers);
+      context.dispose();
+    },
+    get value() {
+      return result;
+    },
+  };
+}
+
 export function constantWatchableValue<T>(value: T): WatchableValueInterface<T> {
   return {changed: neverSignal, value};
 }
@@ -354,4 +392,49 @@ export function observeWatchable<T>(
     callback: (value: T) => void, watchable: WatchableValueInterface<T>) {
   callback(watchable.value);
   return watchable.changed.add(() => callback(watchable.value));
+}
+
+export class IndirectWatchableValue<U, T> implements Disposable, WatchableValueInterface<T> {
+  protected inner: WatchableValueInterface<T>;
+  changed = new NullarySignal();
+  disposer: (() => void) | undefined;
+  private update = () => {
+    const {disposer, outer} = this;
+    if (disposer !== undefined) {
+      disposer();
+    }
+    const inner = this.inner = this.getInner(outer.value);
+    this.disposer = inner.changed.add(this.changed.dispatch);
+    this.changed.dispatch();
+  };
+  constructor(private outer: WatchableValueInterface<U>, private getInner: (outer: U) => WatchableValueInterface<T>) {
+    outer.changed.add(this.update);
+    this.update();
+  }
+
+  dispose() {
+    this.outer.changed.remove(this.update);
+    this.disposer!();
+  }
+
+  get value() {
+    return this.inner.value;
+  }
+  set value(value: T) {
+    this.inner.value = value;
+  }
+}
+
+export class IndirectTrackableValue<U, T> extends IndirectWatchableValue<U, T> implements
+    Trackable {
+  declare inner: TrackableValueInterface<T>;
+  reset() {
+    this.inner.reset();
+  }
+  restoreState(obj: unknown) {
+    this.inner.restoreState(obj);
+  }
+  toJSON() {
+    return this.inner.toJSON();
+  }
 }

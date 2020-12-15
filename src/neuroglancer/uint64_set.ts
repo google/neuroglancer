@@ -103,6 +103,13 @@ export class Uint64Set extends SharedObjectCounterpart implements
     result.sort();
     return result;
   }
+
+  assignFrom(other: Uint64Set) {
+    this.clear();
+    for (const key of other) {
+      this.add(key);
+    }
+  }
 }
 
 registerRPC('Uint64Set.add', function(x) {

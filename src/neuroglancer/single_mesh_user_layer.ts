@@ -36,8 +36,8 @@ const SHADER_CONTROLS_JSON_KEY = 'shaderControls';
 export class SingleMeshUserLayer extends UserLayer {
   displayState = new SingleMeshDisplayState();
   vertexAttributes = new WatchableValue<VertexAttributeInfo[]|undefined>(undefined);
-  constructor(public managedLayer: Borrowed<ManagedUserLayer>, specification: any) {
-    super(managedLayer, specification);
+  constructor(public managedLayer: Borrowed<ManagedUserLayer>) {
+    super(managedLayer);
     this.registerDisposer(
         this.displayState.shaderControlState.changed.add(this.specificationChanged.dispatch));
     this.registerDisposer(

@@ -405,7 +405,7 @@ export class MeshLayer extends
     const {displayState, source} = this;
     let ready = true;
     const fragmentChunks = source.fragmentSource.chunks;
-    forEachVisibleSegment(displayState, objectId => {
+    forEachVisibleSegment(displayState.segmentationGroupState.value, objectId => {
       const key = getObjectKey(objectId);
       const manifestChunk = source.chunks.get(key);
       if (manifestChunk === undefined) {
@@ -676,7 +676,7 @@ export class MultiscaleMeshLayer extends
 
     let hasAllChunks = true;
 
-    forEachVisibleSegment(displayState, (objectId) => {
+    forEachVisibleSegment(displayState.segmentationGroupState.value, (objectId) => {
       if (!hasAllChunks) return;
       const key = getObjectKey(objectId);
       const manifestChunk = chunks.get(key);

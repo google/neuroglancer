@@ -480,7 +480,7 @@ export class SkeletonLayer extends RefCounted {
 
     let ready = true;
 
-    forEachVisibleSegment(displayState, objectId => {
+    forEachVisibleSegment(displayState.segmentationGroupState.value, objectId => {
       const key = getObjectKey(objectId);
       const skeleton = skeletons.get(key);
       if (skeleton === undefined || skeleton.state !== ChunkState.GPU_MEMORY) {

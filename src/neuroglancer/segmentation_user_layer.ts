@@ -17,17 +17,17 @@
 import 'neuroglancer/noselect.css';
 import 'neuroglancer/segmentation_user_layer.css';
 
+import svg_rotate from 'ikonate/icons/rotate.svg';
 import debounce from 'lodash/debounce';
 import {CoordinateTransformSpecification} from 'neuroglancer/coordinate_transform';
 import {DataSourceSpecification} from 'neuroglancer/datasource';
-import {ManagedUserLayer, registerLayerType, registerLayerTypeDetector, registerVolumeLayerType, UserLayer} from 'neuroglancer/layer';
+import {LayerActionContext, LinkedLayerGroup, ManagedUserLayer, registerLayerType, registerLayerTypeDetector, registerVolumeLayerType, UserLayer} from 'neuroglancer/layer';
 import {layerDataSourceSpecificationFromJson, LoadedDataSubsource} from 'neuroglancer/layer_data_source';
 import {MeshLayer, MeshSource, MultiscaleMeshLayer, MultiscaleMeshSource} from 'neuroglancer/mesh/frontend';
 import {Overlay} from 'neuroglancer/overlay';
 import {RenderScaleHistogram, trackableRenderScaleTarget} from 'neuroglancer/render_scale_statistics';
 import {SegmentColorHash} from 'neuroglancer/segment_color';
-import {VisibleSegmentsState} from 'neuroglancer/segmentation_display_state/base';
-import {augmentSegmentId, bindSegmentListWidth, makeSegmentWidget, maybeAugmentSegmentId, registerCallbackWhenSegmentationDisplayStateChanged, SegmentationDisplayState, SegmentSelectionState, SegmentWidgetFactory, Uint64MapEntry} from 'neuroglancer/segmentation_display_state/frontend';
+import {augmentSegmentId, bindSegmentListWidth, makeSegmentWidget, maybeAugmentSegmentId, registerCallbackWhenSegmentationDisplayStateChanged, SegmentationDisplayState, SegmentationGroupState, SegmentSelectionState, SegmentWidgetFactory, Uint64MapEntry} from 'neuroglancer/segmentation_display_state/frontend';
 import {compareSegmentLabels, normalizeSegmentLabel, SegmentLabelMap, SegmentPropertyMap} from 'neuroglancer/segmentation_display_state/property_map';
 import {SharedDisjointUint64Sets} from 'neuroglancer/shared_disjoint_sets';
 import {PerspectiveViewSkeletonLayer, SkeletonLayer, SkeletonRenderingOptions, SliceViewPanelSkeletonLayer, ViewSpecificSkeletonRenderingOptions} from 'neuroglancer/skeleton/frontend';
@@ -36,7 +36,7 @@ import {MultiscaleVolumeChunkSource} from 'neuroglancer/sliceview/volume/fronten
 import {SegmentationRenderLayer} from 'neuroglancer/sliceview/volume/segmentation_renderlayer';
 import {trackableAlphaValue} from 'neuroglancer/trackable_alpha';
 import {TrackableBoolean, TrackableBooleanCheckbox} from 'neuroglancer/trackable_boolean';
-import {makeCachedLazyDerivedWatchableValue, observeWatchable, TrackableValue, WatchableValue, WatchableValueInterface} from 'neuroglancer/trackable_value';
+import {IndirectTrackableValue, IndirectWatchableValue, makeCachedLazyDerivedWatchableValue, observeWatchable, registerNestedSync, TrackableValue, TrackableValueInterface, WatchableValue, WatchableValueInterface} from 'neuroglancer/trackable_value';
 import {UserLayerWithAnnotationsMixin} from 'neuroglancer/ui/annotations';
 import {getDefaultSelectBindings} from 'neuroglancer/ui/default_input_event_bindings';
 import {Uint64Map} from 'neuroglancer/uint64_map';
@@ -45,7 +45,7 @@ import {animationFrameDebounce} from 'neuroglancer/util/animation_frame_debounce
 import {arraysEqual, ArraySpliceOp, binarySearchLowerBound, getMergeSplices} from 'neuroglancer/util/array';
 import {setClipboard} from 'neuroglancer/util/clipboard';
 import {packColor, parseRGBColorSpecification, serializeColor, unpackRGB} from 'neuroglancer/util/color';
-import {Borrowed, RefCounted} from 'neuroglancer/util/disposable';
+import {Borrowed, Owned, RefCounted} from 'neuroglancer/util/disposable';
 import {parseArray, verifyFiniteNonNegativeFloat, verifyObjectAsMap, verifyObjectProperty, verifyOptionalObjectProperty, verifyString} from 'neuroglancer/util/json';
 import {EventActionMap, KeyboardEventBinder, registerActionListener} from 'neuroglancer/util/keyboard_bindings';
 import {MouseEventBinder} from 'neuroglancer/util/mouse_bindings';
@@ -56,12 +56,15 @@ import {makeCopyButton} from 'neuroglancer/widget/copy_button';
 import {DependentViewContext, DependentViewWidget} from 'neuroglancer/widget/dependent_view_widget';
 import {EnumSelectWidget} from 'neuroglancer/widget/enum_widget';
 import {makeHelpButton} from 'neuroglancer/widget/help_button';
+import {makeIcon} from 'neuroglancer/widget/icon';
+import {LinkedLayerGroupWidget} from 'neuroglancer/widget/linked_layer';
 import {makeMaximizeButton} from 'neuroglancer/widget/maximize_button';
 import {RangeWidget} from 'neuroglancer/widget/range';
 import {RenderScaleWidget} from 'neuroglancer/widget/render_scale_widget';
 import {ShaderCodeWidget} from 'neuroglancer/widget/shader_code_widget';
 import {ShaderControls} from 'neuroglancer/widget/shader_controls';
 import {Tab} from 'neuroglancer/widget/tab_view';
+import {TextInputWidget} from 'neuroglancer/widget/text_input';
 import {VirtualList, VirtualListSource} from 'neuroglancer/widget/virtual_list';
 
 const SELECTED_ALPHA_JSON_KEY = 'selectedAlpha';
@@ -82,39 +85,187 @@ const SKELETON_RENDERING_JSON_KEY = 'skeletonRendering';
 const SKELETON_SHADER_JSON_KEY = 'skeletonShader';
 const SEGMENT_QUERY_JSON_KEY = 'segmentQuery';
 const MESH_SILHOUETTE_RENDERING_JSON_KEY = 'meshSilhouetteRendering';
+const LINKED_SEGMENTATION_GROUP_JSON_KEY = 'linkedSegmentationGroup';
 
 const maxSilhouettePower = 10;
 
 const tempUint64 = new Uint64();
 
-class SegmentationUserLayerDisplayState implements VisibleSegmentsState {
-  constructor(public layer: SegmentationUserLayer) {}
+export class SegmentationUserLayerGroupState extends RefCounted implements SegmentationGroupState {
+  specificationChanged = new Signal();
+  constructor(public layer: SegmentationUserLayer) {
+    super();
+    const {specificationChanged} = this;
+    this.segmentColorHash.changed.add(specificationChanged.dispatch);
+    this.segmentStatedColors.changed.add(specificationChanged.dispatch);
+    this.visibleSegments.changed.add(specificationChanged.dispatch);
+    this.segmentLabelMap.changed.add(specificationChanged.dispatch);
+    this.segmentEquivalences.changed.add(specificationChanged.dispatch);
+    this.hideSegmentZero.changed.add(specificationChanged.dispatch);
+    this.segmentQuery.changed.add(specificationChanged.dispatch);
+  }
+
+  restoreState(specification: unknown) {
+    verifyOptionalObjectProperty(
+        specification, HIDE_SEGMENT_ZERO_JSON_KEY,
+        value => this.hideSegmentZero.restoreState(value));
+    verifyOptionalObjectProperty(
+        specification, COLOR_SEED_JSON_KEY, value => this.segmentColorHash.restoreState(value));
+    verifyOptionalObjectProperty(specification, EQUIVALENCES_JSON_KEY, value => {
+      this.segmentEquivalences.restoreState(value);
+    });
+
+    verifyOptionalObjectProperty(specification, SEGMENTS_JSON_KEY, segmentsValue => {
+      const {segmentEquivalences, visibleSegments} = this;
+      parseArray(segmentsValue, value => {
+        let id = Uint64.parseString(String(value), 10);
+        visibleSegments.add(segmentEquivalences.get(id));
+      });
+    });
+    verifyOptionalObjectProperty(specification, SEGMENT_STATED_COLORS_JSON_KEY, y => {
+      const {segmentEquivalences} = this;
+      let result = verifyObjectAsMap(y, x => parseRGBColorSpecification(String(x)));
+      for (let [idStr, colorVec] of result) {
+        const id = Uint64.parseString(String(idStr));
+        const color = new Uint64(packColor(colorVec));
+        this.segmentStatedColors.set(segmentEquivalences.get(id), color);
+      }
+    });
+    verifyOptionalObjectProperty(
+        specification, SEGMENT_QUERY_JSON_KEY, value => this.segmentQuery.restoreState(value));
+  }
+
+  toJSON() {
+    const x: any = {};
+    x[HIDE_SEGMENT_ZERO_JSON_KEY] = this.hideSegmentZero.toJSON();
+    x[COLOR_SEED_JSON_KEY] = this.segmentColorHash.toJSON();
+    const {segmentStatedColors} = this;
+    if (segmentStatedColors.size > 0) {
+      const j: any = x[SEGMENT_STATED_COLORS_JSON_KEY] = {};
+      for (const [key, value] of segmentStatedColors) {
+        j[key.toString()] = serializeColor(unpackRGB(value.low));
+      }
+    }
+    let {visibleSegments} = this;
+    if (visibleSegments.size > 0) {
+      x[SEGMENTS_JSON_KEY] = visibleSegments.toJSON();
+    }
+    let {segmentEquivalences} = this;
+    if (segmentEquivalences.size > 0) {
+      x[EQUIVALENCES_JSON_KEY] = segmentEquivalences.toJSON();
+    }
+    x[SEGMENT_QUERY_JSON_KEY] = this.segmentQuery.toJSON();
+    return x;
+  }
+
+  assignFrom(other: SegmentationUserLayerGroupState) {
+    this.segmentColorHash.value = other.segmentColorHash.value;
+    this.maxIdLength.value = other.maxIdLength.value;
+    this.hideSegmentZero.value = other.hideSegmentZero.value;
+    this.segmentStatedColors.assignFrom(other.segmentStatedColors);
+    this.visibleSegments.assignFrom(other.visibleSegments);
+    this.segmentEquivalences.assignFrom(other.segmentEquivalences);
+  }
 
   segmentColorHash = SegmentColorHash.getDefault();
-  segmentStatedColors =
-      this.layer.registerDisposer(Uint64Map.makeWithCounterpart(this.layer.manager.rpc));
+  segmentStatedColors = this.registerDisposer(new Uint64Map());
+  visibleSegments = this.registerDisposer(Uint64Set.makeWithCounterpart(this.layer.manager.rpc));
+  segmentLabelMap = new WatchableValue<SegmentLabelMap|undefined>(undefined);
+  segmentPropertyMaps = new WatchableValue<SegmentPropertyMap[]>([]);
+  segmentEquivalences =
+      this.registerDisposer(SharedDisjointUint64Sets.makeWithCounterpart(this.layer.manager.rpc));
+  maxIdLength = new WatchableValue(1);
+  hideSegmentZero = new TrackableBoolean(true, true);
+  segmentQuery = new TrackableValue<string>('', verifyString);
+}
+
+class LinkedSegmentationGroupState extends RefCounted implements
+    WatchableValueInterface<SegmentationUserLayerGroupState> {
+  private curRoot: SegmentationUserLayer|undefined;
+  private curGroupState: Owned<SegmentationUserLayerGroupState>|undefined;
+  get changed() {
+    return this.linkedGroup.root.changed;
+  }
+  get value() {
+    const root = this.linkedGroup.root.value as SegmentationUserLayer;
+    if (root !== this.curRoot) {
+      this.curRoot = root;
+      const groupState = root.displayState.originalSegmentationGroupState;
+      if (root === this.linkedGroup.layer) {
+        const {curGroupState} = this;
+        if (curGroupState !== undefined) {
+          groupState.assignFrom(curGroupState);
+          curGroupState.dispose();
+        }
+      }
+      this.curGroupState = groupState.addRef();
+    }
+    return this.curGroupState!;
+  }
+  disposed() {
+    this.curGroupState?.dispose();
+  }
+  constructor(public linkedGroup: LinkedLayerGroup) {
+    super();
+    this.value;
+  }
+}
+
+class SegmentationUserLayerDisplayState implements SegmentationDisplayState {
+  constructor(public layer: SegmentationUserLayer) {
+    // Even though `SegmentationUserLayer` assigns this to its `displayState` property, redundantly
+    // assign it here first in order to allow it to be accessed by `segmentationGroupState`.
+    layer.displayState = this;
+    this.segmentationGroupState =
+        this.layer.registerDisposer(new LinkedSegmentationGroupState(this.linkedSegmentationGroup));
+
+    this.hideSegmentZero = this.layer.registerDisposer(
+        new IndirectWatchableValue(this.segmentationGroupState, group => group.hideSegmentZero));
+    this.segmentColorHash = this.layer.registerDisposer(
+        new IndirectTrackableValue(this.segmentationGroupState, group => group.segmentColorHash));
+    this.segmentQuery = this.layer.registerDisposer(
+        new IndirectWatchableValue(this.segmentationGroupState, group => group.segmentQuery));
+    this.segmentLabelMap = this.layer.registerDisposer(
+        new IndirectWatchableValue(this.segmentationGroupState, group => group.segmentLabelMap));
+  }
+
   segmentSelectionState = new SegmentSelectionState();
   selectedAlpha = trackableAlphaValue(0.5);
   saturation = trackableAlphaValue(1.0);
   notSelectedAlpha = trackableAlphaValue(0);
   silhouetteRendering = new TrackableValue<number>(0, verifyFiniteNonNegativeFloat, 0);
   objectAlpha = trackableAlphaValue(1.0);
-  hideSegmentZero = new TrackableBoolean(true, true);
   ignoreNullVisibleSet = new TrackableBoolean(true, true);
-  visibleSegments =
-      this.layer.registerDisposer(Uint64Set.makeWithCounterpart(this.layer.manager.rpc));
   skeletonRenderingOptions = new SkeletonRenderingOptions();
   shaderError = makeWatchableShaderError();
   renderScaleHistogram = new RenderScaleHistogram();
   renderScaleTarget = trackableRenderScaleTarget(1);
-  segmentLabelMap = new WatchableValue<SegmentLabelMap|undefined>(undefined);
-  segmentPropertyMaps = new WatchableValue<SegmentPropertyMap[]>([]);
-  segmentEquivalences = this.layer.registerDisposer(
-      SharedDisjointUint64Sets.makeWithCounterpart(this.layer.manager.rpc));
-  maxIdLength = new WatchableValue(1);
   selectSegment = this.layer.selectSegment;
-  filterBySegmentLabel = this.layer.filterBySegmentLabel;
   transparentPickEnabled = this.layer.pick;
+
+  filterBySegmentLabel = this.layer.filterBySegmentLabel;
+
+  linkedSegmentationGroup: LinkedLayerGroup = this.layer.registerDisposer(new LinkedLayerGroup(
+      this.layer.manager.rootLayers, this.layer,
+      userLayer => (userLayer instanceof SegmentationUserLayer),
+      (userLayer: SegmentationUserLayer) => userLayer.displayState.linkedSegmentationGroup));
+
+  originalSegmentationGroupState =
+      this.layer.registerDisposer(new SegmentationUserLayerGroupState(this.layer));
+
+  segmentationGroupState: WatchableValueInterface<SegmentationUserLayerGroupState>;
+
+  // Indirect properties
+  hideSegmentZero: WatchableValueInterface<boolean>;
+  segmentColorHash: TrackableValueInterface<number>;
+  segmentQuery: WatchableValueInterface<string>;
+  segmentLabelMap: WatchableValueInterface<SegmentLabelMap|undefined>;
+}
+
+interface SegmentationActionContext extends LayerActionContext {
+  // Restrict the `select` action not to both toggle on and off segments.  If segment would be
+  // toggled on in at least one layer, only toggle segments on.
+  segmentationToggleSegmentState?: boolean|undefined;
 }
 
 const Base = UserLayerWithAnnotationsMixin(UserLayer);
@@ -126,7 +277,6 @@ export class SegmentationUserLayer extends Base {
     return bindSegmentListWidth(this.displayState, element);
   }
 
-  segmentQuery = new TrackableValue<string>('', verifyString);
   segmentQueryFocusTime = new WatchableValue<number>(Number.NEGATIVE_INFINITY);
 
   selectSegment = (id: Uint64, pin: boolean|'toggle') => {
@@ -138,7 +288,7 @@ export class SegmentationUserLayer extends Base {
 
   filterBySegmentLabel = (id: Uint64) => {
     const idString = id.toString();
-    const segmentLabelMap = this.displayState.segmentLabelMap.value;
+    const segmentLabelMap = this.displayState.segmentationGroupState.value.segmentLabelMap.value;
     if (segmentLabelMap === undefined) return;
     const label = segmentLabelMap.idToLabel[idString];
     if (!label) return;
@@ -146,7 +296,7 @@ export class SegmentationUserLayer extends Base {
   };
 
   filterSegments = (query: string) => {
-    this.segmentQuery.value = query;
+    this.displayState.segmentationGroupState.value.segmentQuery.value = query;
     this.segmentQueryFocusTime.value = Date.now();
     this.tabs.value = 'segments';
     this.manager.root.selectedLayer.layer = this.managedLayer;
@@ -154,24 +304,24 @@ export class SegmentationUserLayer extends Base {
 
   displayState = new SegmentationUserLayerDisplayState(this);
 
-  constructor(managedLayer: Borrowed<ManagedUserLayer>, specification: any) {
-    super(managedLayer, specification);
-    this.displayState.visibleSegments.changed.add(this.specificationChanged.dispatch);
-    this.displayState.segmentEquivalences.changed.add(this.specificationChanged.dispatch);
+  constructor(managedLayer: Borrowed<ManagedUserLayer>) {
+    super(managedLayer);
+    this.registerDisposer(registerNestedSync((context, group) => {
+      context.registerDisposer(group.specificationChanged.add(this.specificationChanged.dispatch));
+      this.specificationChanged.dispatch();
+    }, this.displayState.segmentationGroupState));
     this.displayState.segmentSelectionState.bindTo(this.manager.layerSelectedValues, this);
     this.displayState.selectedAlpha.changed.add(this.specificationChanged.dispatch);
     this.displayState.saturation.changed.add(this.specificationChanged.dispatch);
     this.displayState.notSelectedAlpha.changed.add(this.specificationChanged.dispatch);
     this.displayState.objectAlpha.changed.add(this.specificationChanged.dispatch);
-    this.displayState.hideSegmentZero.changed.add(this.specificationChanged.dispatch);
     this.displayState.ignoreNullVisibleSet.changed.add(this.specificationChanged.dispatch);
     this.displayState.skeletonRenderingOptions.changed.add(this.specificationChanged.dispatch);
-    this.displayState.segmentColorHash.changed.add(this.specificationChanged.dispatch);
-    this.displayState.segmentStatedColors.changed.add(this.specificationChanged.dispatch);
     this.displayState.renderScaleTarget.changed.add(this.specificationChanged.dispatch);
     this.displayState.silhouetteRendering.changed.add(this.specificationChanged.dispatch);
     this.sliceViewRenderScaleTarget.changed.add(this.specificationChanged.dispatch);
-    this.segmentQuery.changed.add(this.specificationChanged.dispatch);
+    this.displayState.linkedSegmentationGroup.changed.add(
+        () => this.updateDataSubsourceActivations());
     this.tabs.add(
         'rendering', {label: 'Render', order: -100, getter: () => new DisplayOptionsTab(this)});
     this.tabs.add(
@@ -202,6 +352,7 @@ export class SegmentationUserLayer extends Base {
   activateDataSubsources(subsources: Iterable<LoadedDataSubsource>) {
     let updatedSegmentLabelMap: SegmentLabelMap|undefined;
     const updatedSegmentPropertyMaps: SegmentPropertyMap[] = [];
+    const isGroupRoot = this.displayState.linkedSegmentationGroup.root.value === this;
     for (const loadedSubsource of subsources) {
       if (this.addStaticAnnotations(loadedSubsource)) continue;
       const {volume, mesh, segmentPropertyMap} = loadedSubsource.subsourceEntry.subsource;
@@ -218,7 +369,8 @@ export class SegmentationUserLayer extends Base {
               renderScaleTarget: this.sliceViewRenderScaleTarget,
               renderScaleHistogram: this.sliceViewRenderScaleHistogram,
               localPosition: this.localPosition,
-            })));
+            })),
+            this.displayState.segmentationGroupState.value);
       } else if (mesh !== undefined) {
         loadedSubsource.activate(() => {
           const displayState = {
@@ -237,25 +389,32 @@ export class SegmentationUserLayer extends Base {
             loadedSubsource.addRenderLayer(
                 new SliceViewPanelSkeletonLayer(/* transfer ownership */ base));
           }
-        });
+        }, this.displayState.segmentationGroupState.value);
       } else if (segmentPropertyMap !== undefined) {
-        const {labelMap} = segmentPropertyMap;
-        if (labelMap !== undefined) {
-          if (updatedSegmentLabelMap !== undefined) {
-            loadedSubsource.deactivate('Only one segment label map is supported');
-            continue;
+        if (!isGroupRoot) {
+          loadedSubsource.deactivate(`Not supported on non-root linked segmentation layers`);
+        } else {
+          const {labelMap} = segmentPropertyMap;
+          if (labelMap !== undefined) {
+            if (updatedSegmentLabelMap !== undefined) {
+              loadedSubsource.deactivate('Only one segment label map is supported');
+              continue;
+            }
+            loadedSubsource.activate(() => {});
+            updatedSegmentLabelMap = labelMap;
           }
-          loadedSubsource.activate(() => {});
-          updatedSegmentLabelMap = labelMap;
+          updatedSegmentPropertyMaps.push(segmentPropertyMap);
         }
-        updatedSegmentPropertyMaps.push(segmentPropertyMap);
       } else {
         loadedSubsource.deactivate('Not compatible with segmentation layer');
       }
     }
-    this.displayState.segmentLabelMap.value = updatedSegmentLabelMap;
-    if (!arraysEqual(updatedSegmentPropertyMaps, this.displayState.segmentPropertyMaps.value)) {
-      this.displayState.segmentPropertyMaps.value = updatedSegmentPropertyMaps;
+    this.displayState.originalSegmentationGroupState.segmentLabelMap.value = updatedSegmentLabelMap;
+    if (!arraysEqual(
+            updatedSegmentPropertyMaps,
+            this.displayState.originalSegmentationGroupState.segmentPropertyMaps.value)) {
+      this.displayState.originalSegmentationGroupState.segmentPropertyMaps.value =
+          updatedSegmentPropertyMaps;
     }
   }
 
@@ -294,7 +453,6 @@ export class SegmentationUserLayer extends Base {
     this.displayState.saturation.restoreState(specification[SATURATION_JSON_KEY]);
     this.displayState.notSelectedAlpha.restoreState(specification[NOT_SELECTED_ALPHA_JSON_KEY]);
     this.displayState.objectAlpha.restoreState(specification[OBJECT_ALPHA_JSON_KEY]);
-    this.displayState.hideSegmentZero.restoreState(specification[HIDE_SEGMENT_ZERO_JSON_KEY]);
     this.displayState.silhouetteRendering.restoreState(
         specification[MESH_SILHOUETTE_RENDERING_JSON_KEY]);
     this.displayState.ignoreNullVisibleSet.restoreState(
@@ -306,41 +464,13 @@ export class SegmentationUserLayer extends Base {
     if (skeletonShader !== undefined) {
       skeletonRenderingOptions.shader.restoreState(skeletonShader);
     }
-    this.displayState.segmentColorHash.restoreState(specification[COLOR_SEED_JSON_KEY]);
     this.displayState.renderScaleTarget.restoreState(specification[MESH_RENDER_SCALE_JSON_KEY]);
-
-    verifyObjectProperty(specification, EQUIVALENCES_JSON_KEY, y => {
-      this.displayState.segmentEquivalences.restoreState(y);
-    });
-
-    const restoreSegmentsList = (key: string, segments: Uint64Set) => {
-      verifyObjectProperty(specification, key, y => {
-        if (y !== undefined) {
-          let {segmentEquivalences} = this.displayState;
-          parseArray(y, value => {
-            let id = Uint64.parseString(String(value), 10);
-            segments.add(segmentEquivalences.get(id));
-          });
-        }
-      });
-    };
-
-    restoreSegmentsList(SEGMENTS_JSON_KEY, this.displayState.visibleSegments);
-
-    verifyObjectProperty(specification, SEGMENT_STATED_COLORS_JSON_KEY, y => {
-      if (y !== undefined) {
-        let {segmentEquivalences} = this.displayState;
-        let result = verifyObjectAsMap(y, x => parseRGBColorSpecification(String(x)));
-        for (let [idStr, colorVec] of result) {
-          const id = Uint64.parseString(String(idStr));
-          const color = new Uint64(packColor(colorVec));
-          this.displayState.segmentStatedColors.set(segmentEquivalences.get(id), color);
-        }
-      }
-    });
     this.sliceViewRenderScaleTarget.restoreState(
         specification[CROSS_SECTION_RENDER_SCALE_JSON_KEY]);
-    this.segmentQuery.restoreState(specification[SEGMENT_QUERY_JSON_KEY]);
+    verifyObjectProperty(
+        specification, LINKED_SEGMENTATION_GROUP_JSON_KEY,
+        value => this.displayState.linkedSegmentationGroup.restoreState(value));
+    this.displayState.segmentationGroupState.value.restoreState(specification);
   }
 
   toJSON() {
@@ -349,29 +479,17 @@ export class SegmentationUserLayer extends Base {
     x[NOT_SELECTED_ALPHA_JSON_KEY] = this.displayState.notSelectedAlpha.toJSON();
     x[SATURATION_JSON_KEY] = this.displayState.saturation.toJSON();
     x[OBJECT_ALPHA_JSON_KEY] = this.displayState.objectAlpha.toJSON();
-    x[HIDE_SEGMENT_ZERO_JSON_KEY] = this.displayState.hideSegmentZero.toJSON();
     x[IGNORE_NULL_VISIBLE_SET_JSON_KEY] = this.displayState.ignoreNullVisibleSet.toJSON();
-    x[COLOR_SEED_JSON_KEY] = this.displayState.segmentColorHash.toJSON();
     x[MESH_SILHOUETTE_RENDERING_JSON_KEY] = this.displayState.silhouetteRendering.toJSON();
-    const {segmentStatedColors} = this.displayState;
-    if (segmentStatedColors.size > 0) {
-      const j: any = x[SEGMENT_STATED_COLORS_JSON_KEY] = {};
-      for (const [key, value] of segmentStatedColors) {
-        j[key.toString()] = serializeColor(unpackRGB(value.low));
-      }
-    }
-    let {visibleSegments} = this.displayState;
-    if (visibleSegments.size > 0) {
-      x[SEGMENTS_JSON_KEY] = visibleSegments.toJSON();
-    }
-    let {segmentEquivalences} = this.displayState;
-    if (segmentEquivalences.size > 0) {
-      x[EQUIVALENCES_JSON_KEY] = segmentEquivalences.toJSON();
-    }
     x[SKELETON_RENDERING_JSON_KEY] = this.displayState.skeletonRenderingOptions.toJSON();
     x[MESH_RENDER_SCALE_JSON_KEY] = this.displayState.renderScaleTarget.toJSON();
     x[CROSS_SECTION_RENDER_SCALE_JSON_KEY] = this.sliceViewRenderScaleTarget.toJSON();
-    x[SEGMENT_QUERY_JSON_KEY] = this.segmentQuery.toJSON();
+
+    const {linkedSegmentationGroup} = this.displayState;
+    x[LINKED_SEGMENTATION_GROUP_JSON_KEY] = linkedSegmentationGroup.toJSON();
+    if (linkedSegmentationGroup.root.value === this) {
+      Object.assign(x, this.displayState.segmentationGroupState.value.toJSON());
+    }
     return x;
   }
 
@@ -383,15 +501,15 @@ export class SegmentationUserLayer extends Base {
     return maybeAugmentSegmentId(this.displayState, value, /*mustCopy=*/ true);
   }
 
-  handleAction(action: string) {
+  handleAction(action: string, context: SegmentationActionContext) {
     switch (action) {
       case 'recolor': {
-        this.displayState.segmentColorHash.randomize();
+        this.displayState.segmentationGroupState.value.segmentColorHash.randomize();
         break;
       }
       case 'clear-segments': {
         if (!this.pick.value) break;
-        this.displayState.visibleSegments.clear();
+        this.displayState.segmentationGroupState.value.visibleSegments.clear();
         break;
       }
       case 'select': {
@@ -399,8 +517,16 @@ export class SegmentationUserLayer extends Base {
         const {segmentSelectionState} = this.displayState;
         if (segmentSelectionState.hasSelectedSegment) {
           const segment = segmentSelectionState.selectedSegment;
-          const {visibleSegments} = this.displayState;
-          visibleSegments.set(segment, !visibleSegments.has(segment));
+          const {visibleSegments} = this.displayState.segmentationGroupState.value;
+          const newVisible = !visibleSegments.has(segment);
+          if (newVisible || context.segmentationToggleSegmentState === undefined) {
+            context.segmentationToggleSegmentState = newVisible;
+          }
+          context.defer(() => {
+            if (context.segmentationToggleSegmentState === newVisible) {
+              visibleSegments.set(segment, newVisible);
+            }
+          });
         }
         break;
       }
@@ -457,7 +583,7 @@ export class SegmentationUserLayer extends Base {
     const {
       segmentEquivalences,
       segmentPropertyMaps: {value: segmentPropertyMaps},
-    } = this.displayState;
+    } = this.displayState.segmentationGroupState.value;
     const mapped = segmentEquivalences.get(id);
     const mappedIdString = mapped.toString();
     const row = makeSegmentWidget(this.displayState, normalizedId);
@@ -510,6 +636,34 @@ class DisplayOptionsTab extends Tab {
     super();
     const {element} = this;
     element.classList.add('segmentation-dropdown');
+
+    // Linked segmentation control
+    {
+      const widget = this.registerDisposer(
+        new LinkedLayerGroupWidget(layer.displayState.linkedSegmentationGroup));
+      widget.label.textContent = 'Linked to: ';
+      element.appendChild(widget.element);
+    }
+
+    {
+      const label = document.createElement('label');
+      label.textContent = 'Color seed';
+      label.style.display = 'flex';
+      label.style.flexDirection = 'row';
+      label.style.justifyContent = 'space-between';
+      const widget = this.registerDisposer(
+          new TextInputWidget(layer.displayState.segmentColorHash));
+      label.appendChild(widget.element);
+      const randomize = makeIcon({
+        svg: svg_rotate,
+        title: 'Randomize',
+        onClick: () => {
+          layer.displayState.segmentationGroupState.value.segmentColorHash.randomize();
+        },
+      });
+      label.appendChild(randomize);
+      element.appendChild(label);
+    }
 
     {
       const saturationWidget =
@@ -564,8 +718,8 @@ class DisplayOptionsTab extends Tab {
     element.appendChild(controls3d.element);
 
     {
-      const checkbox =
-          this.registerDisposer(new TrackableBooleanCheckbox(layer.displayState.hideSegmentZero));
+      const checkbox = this.registerDisposer(
+          new TrackableBooleanCheckbox(this.layer.displayState.hideSegmentZero));
       checkbox.element.className =
           'neuroglancer-segmentation-dropdown-hide-segment-zero neuroglancer-noselect';
       const label = document.createElement('label');
@@ -673,7 +827,7 @@ class SegmentListSource extends RefCounted implements VirtualListSource {
     let newMatches: readonly(readonly[string, string])[]|undefined;
     let changed = false;
     let matchStatusTextPrefix = '';
-    const {visibleSegments} = this.segmentationDisplayState;
+    const {visibleSegments} = this.segmentationDisplayState.segmentationGroupState.value;
     const visibleSegmentsGeneration = visibleSegments.changed.count;
     const prevVisibleSegmentsGeneration = this.visibleSegmentsGeneration;
     let matchPredicate: ((idString: string) => boolean)|undefined;
@@ -820,7 +974,8 @@ class SegmentListSource extends RefCounted implements VirtualListSource {
     this.update();
 
     this.registerDisposer(
-        segmentationDisplayState.visibleSegments.changed.add(this.debouncedUpdate));
+        segmentationDisplayState.segmentationGroupState.value.visibleSegments.changed.add(
+            this.debouncedUpdate));
     this.registerDisposer(query.changed.add(this.debouncedUpdate));
   }
 
@@ -880,8 +1035,9 @@ class SegmentDisplayTab extends Tab {
     });
     const keyboardHandler = this.registerDisposer(new KeyboardEventBinder(queryElement, keyMap));
     keyboardHandler.allShortcutsAreGlobal = true;
+    const {segmentQuery} = this.layer.displayState;
     const debouncedUpdateQueryModel = this.registerCancellable(debounce(() => {
-      this.layer.segmentQuery.value = queryElement.value;
+      segmentQuery.value = queryElement.value;
     }, 200));
     queryElement.autocomplete = 'off';
     queryElement.title = keyMap.describe();
@@ -889,7 +1045,7 @@ class SegmentDisplayTab extends Tab {
     queryElement.placeholder = 'Enter ID, name prefix or /regexp';
     this.registerDisposer(observeWatchable(q => {
       queryElement.value = q;
-    }, this.layer.segmentQuery));
+    }, segmentQuery));
     this.registerDisposer(observeWatchable(t => {
       if (Date.now() - t < 100) {
         setTimeout(() => {
@@ -902,23 +1058,24 @@ class SegmentDisplayTab extends Tab {
     element.appendChild(
         this
             .registerDisposer(new DependentViewWidget(
+                // segmentLabelMap is guaranteed to change if segmentationGroupState changes.
                 layer.displayState.segmentLabelMap,
                 (segmentLabelMap, parent, context) => {
-                  const listSource = context.registerDisposer(new SegmentListSource(
-                      this.layer.segmentQuery, segmentLabelMap, layer.displayState));
+                  const listSource = context.registerDisposer(
+                      new SegmentListSource(segmentQuery, segmentLabelMap, layer.displayState));
+                  const group = layer.displayState.segmentationGroupState.value;
                   const selectionStatusContainer = document.createElement('span');
                   const selectionClearButton = document.createElement('input');
                   selectionClearButton.type = 'checkbox';
                   selectionClearButton.checked = true;
                   selectionClearButton.title = 'Deselect all segment IDs';
                   selectionClearButton.addEventListener('change', () => {
-                    layer.displayState.visibleSegments.clear();
+                    group.visibleSegments.clear();
                   });
                   const selectionCopyButton = makeCopyButton({
                     title: 'Copy visible segment IDs',
                     onClick: () => {
-                      const visibleSegments =
-                          Array.from(layer.displayState.visibleSegments, x => x.clone());
+                      const visibleSegments = Array.from(group.visibleSegments, x => x.clone());
                       visibleSegments.sort(Uint64.compare);
                       setClipboard(visibleSegments.join(', '));
                     },
@@ -946,7 +1103,7 @@ class SegmentDisplayTab extends Tab {
                     listSource.debouncedUpdate.flush();
                     const {matches} = listSource;
                     if (matches === undefined) return;
-                    const {visibleSegments} = layer.displayState;
+                    const {visibleSegments} = group;
                     const {selectedMatches} = listSource;
                     const shouldSelect = (selectedMatches !== matches.length);
                     if (shouldSelect &&
@@ -979,7 +1136,7 @@ class SegmentDisplayTab extends Tab {
                   parent.appendChild(selectionStatusContainer);
                   let prevNumSelected = -1;
                   const updateStatus = () => {
-                    const numSelected = layer.displayState.visibleSegments.size;
+                    const numSelected = group.visibleSegments.size;
                     if (prevNumSelected !== numSelected) {
                       prevNumSelected = numSelected;
                       selectionStatusMessage.textContent = `${numSelected} visible in total`;
@@ -1008,8 +1165,7 @@ class SegmentDisplayTab extends Tab {
                   };
                   updateStatus();
                   listSource.statusText.changed.add(updateStatus);
-                  context.registerDisposer(
-                      layer.displayState.visibleSegments.changed.add(updateStatus));
+                  context.registerDisposer(group.visibleSegments.changed.add(updateStatus));
                   let hasConfirmed = false;
                   context.registerEventListener(queryElement, 'input', () => {
                     debouncedUpdateQueryModel();
@@ -1021,20 +1177,20 @@ class SegmentDisplayTab extends Tab {
                   registerActionListener(queryElement, 'cancel', () => {
                     queryElement.blur();
                     queryElement.value = '';
-                    this.layer.segmentQuery.value = '';
+                    segmentQuery.value = '';
                     hasConfirmed = false;
                     updateStatus();
                   });
                   registerActionListener(queryElement, 'toggle-listed', toggleMatches);
                   registerActionListener(queryElement, 'hide-all', () => {
-                    layer.displayState.visibleSegments.clear();
+                    group.visibleSegments.clear();
                   });
                   registerActionListener(queryElement, 'hide-listed', () => {
                     debouncedUpdateQueryModel();
                     debouncedUpdateQueryModel.flush();
                     listSource.debouncedUpdate.flush();
-                    const {visibleSegments} = layer.displayState;
-                    if (layer.segmentQuery.value === '') {
+                    const {visibleSegments} = group;
+                    if (segmentQuery.value === '') {
                       visibleSegments.clear();
                     } else {
                       const {matches} = listSource;
@@ -1052,12 +1208,9 @@ class SegmentDisplayTab extends Tab {
                   const {displayState} = this.layer;
                   context.registerDisposer(
                       displayState.segmentSelectionState.changed.add(updateListItems));
-                  context.registerDisposer(
-                      displayState.visibleSegments.changed.add(updateListItems));
-                  context.registerDisposer(
-                      displayState.segmentColorHash.changed.add(updateListItems));
-                  context.registerDisposer(
-                      displayState.segmentStatedColors.changed.add(updateListItems));
+                  context.registerDisposer(group.visibleSegments.changed.add(updateListItems));
+                  context.registerDisposer(group.segmentColorHash.changed.add(updateListItems));
+                  context.registerDisposer(group.segmentStatedColors.changed.add(updateListItems));
                   list.element.classList.add('neuroglancer-segment-list');
                   context.registerDisposer(layer.bindSegmentListWidth(list.element));
                   context.registerDisposer(

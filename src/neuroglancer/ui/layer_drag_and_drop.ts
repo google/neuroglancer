@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-import {LayerListSpecification, ManagedUserLayer} from 'neuroglancer/layer';
+import {initializeLayerFromSpecShowErrorStatus, LayerListSpecification, ManagedUserLayer} from 'neuroglancer/layer';
 import {Borrowed, Owned} from 'neuroglancer/util/disposable';
 import {decodeParametersFromDragTypeList, DragInfo, encodeParametersAsDragType, setDropEffect} from 'neuroglancer/util/drag_and_drop';
 import {parseArray, verifyBoolean, verifyObjectProperty, verifyString} from 'neuroglancer/util/json';
@@ -117,7 +117,7 @@ export class DropLayers {
         }
         this.layoutSpec = layout;
         for (const [layer, index] of this.layers) {
-          this.manager.initializeLayerFromSpec(layer, spec[index]);
+          initializeLayerFromSpecShowErrorStatus(layer, spec[index]);
         }
         return true;
       } catch {
@@ -217,9 +217,9 @@ export function getDropLayers(
       const layers = parseArray(info.parameters, (layerInfo, index) => {
         const name = verifyObjectProperty(layerInfo, 'name', verifyString);
         const visible = verifyObjectProperty(layerInfo, 'visible', verifyBoolean);
-        const newLayer = new ManagedUserLayer(name, null, manager);
+        const newLayer = new ManagedUserLayer(name, manager);
         newLayer.visible = visible;
-        return <[ManagedUserLayer, number]>[newLayer, index];
+        return [newLayer, index] as [ManagedUserLayer, number];
       });
       const result = new DropLayers();
       result.numSourceLayers = layers.length;
