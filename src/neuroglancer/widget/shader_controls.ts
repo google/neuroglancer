@@ -18,6 +18,9 @@ import './shader_controls.css';
 
 import debounce from 'lodash/debounce';
 import {DisplayContext} from 'neuroglancer/display_context';
+import {Position} from 'neuroglancer/navigation_state';
+import {TrackableBoolean, TrackableBooleanCheckbox} from 'neuroglancer/trackable_boolean';
+import {arraysEqual} from 'neuroglancer/util/array';
 import {TrackableRGB} from 'neuroglancer/util/color';
 import {RefCounted} from 'neuroglancer/util/disposable';
 import {removeChildren} from 'neuroglancer/util/dom';
@@ -26,11 +29,9 @@ import {ParameterizedEmitterDependentShaderOptions, ParameterizedShaderGetterRes
 import {ShaderControlState} from 'neuroglancer/webgl/shader_ui_controls';
 import {ColorWidget} from 'neuroglancer/widget/color';
 import {InvlerpWidget} from 'neuroglancer/widget/invlerp';
+import {PositionWidget} from 'neuroglancer/widget/position_widget';
 import {RangeWidget} from 'neuroglancer/widget/range';
 import {Tab} from 'neuroglancer/widget/tab_view';
-import { Position } from '../navigation_state';
-import { PositionWidget } from './position_widget';
-import { arraysEqual } from '../util/array';
 
 export interface LegendShaderOptions extends ParameterizedEmitterDependentShaderOptions {
   initializeShader: (shaderResult: ParameterizedShaderGetterResult) => void;
@@ -81,6 +82,12 @@ export class ShaderControls extends Tab {
         case 'color': {
           const widget = controlDisposer.registerDisposer(
               new ColorWidget(controlState.trackable as TrackableRGB));
+          element.appendChild(widget.element);
+          break;
+        }
+        case 'checkbox': {
+          const widget = controlDisposer.registerDisposer(
+              new TrackableBooleanCheckbox(controlState.trackable as TrackableBoolean));
           element.appendChild(widget.element);
           break;
         }

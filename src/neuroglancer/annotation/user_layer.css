@@ -14,8 +14,10 @@
  * limitations under the License.
  */
 
-.neuroglancer-annotation-point-list-dropdown {
+.neuroglancer-annotation-rendering-tab {
   display: flex;
+  flex-direction: column;
+  overflow-y: auto;
 }
 
 .neuroglancer-annotation-shader-property {

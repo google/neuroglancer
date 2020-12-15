@@ -15,6 +15,7 @@
  */
 
 import {CoordinateSpaceCombiner} from 'neuroglancer/coordinate_transform';
+import {TrackableBoolean} from 'neuroglancer/trackable_boolean';
 import {constantWatchableValue, makeCachedDerivedWatchableValue, makeCachedLazyDerivedWatchableValue, TrackableValue, TrackableValueInterface, WatchableValueInterface} from 'neuroglancer/trackable_value';
 import {arraysEqual, arraysEqualWithPredicate} from 'neuroglancer/util/array';
 import {parseRGBColorSpecification, TrackableRGB} from 'neuroglancer/util/color';
@@ -52,7 +53,13 @@ export interface ShaderInvlerpControl {
   default: InvlerpParameters;
 }
 
-export type ShaderUiControl = ShaderSliderControl|ShaderColorControl|ShaderInvlerpControl;
+export interface ShaderCheckboxControl {
+  type: 'checkbox';
+  valueType: 'bool';
+  default: boolean;
+}
+
+export type ShaderUiControl = ShaderSliderControl|ShaderColorControl|ShaderInvlerpControl|ShaderCheckboxControl;
 
 export interface ShaderControlParseError {
   line: number;
@@ -250,6 +257,34 @@ function parseSliderDirective(
   }
 }
 
+function parseCheckboxDirective(
+    valueType: string, parameters: DirectiveParameters): DirectiveParseResult {
+  let defaultValue: boolean = false;
+  let errors = [];
+  if (valueType !== 'bool') {
+    errors.push('type must be bool');
+  }
+  for (const [key, value] of parameters) {
+    if (key === 'default') {
+      if (typeof value !== 'boolean') {
+        errors.push(`Expected ${key} argument to be a boolean`);
+        continue;
+      }
+      defaultValue = value;
+    } else {
+      errors.push(`Invalid parameter: ${key}`);
+    }
+  }
+  if (errors.length > 0) {
+    return {errors};
+  } else {
+    return {
+      control: {type: 'checkbox', valueType, default: defaultValue} as ShaderCheckboxControl,
+      errors: undefined,
+    };
+  }
+}
+
 function parseColorDirective(
     valueType: string, parameters: DirectiveParameters): DirectiveParseResult {
   let defaultColor = 'white';
@@ -374,6 +409,7 @@ const controlParsers = new Map<
   ['slider', parseSliderDirective],
   ['color', parseColorDirective],
   ['invlerp', parseInvlerpDirective],
+  ['checkbox', parseCheckboxDirective],
 ]);
 
 export function parseShaderUiControls(
@@ -454,6 +490,12 @@ float ${uName}() {
         ];
         builder.addFragmentCode(code);
         builder.addFragmentCode(`#define ${name} ${uName}\n`);
+        break;
+      }
+      case 'checkbox': {
+        const code = `#define ${name} ${builderValue.value}\n`;
+        builder.addFragmentCode(code);
+        builder.addVertexCode(code);
         break;
       }
       default: {
@@ -562,6 +604,11 @@ function getControlTrackable(control: ShaderUiControl):
         trackable: new TrackableInvlerpParameters(control.dataType, control.default),
         getBuilderValue: (value: InvlerpParameters) =>
             ({channel: value.channel, dataType: control.dataType}),
+      };
+    case 'checkbox':
+      return {
+        trackable: new TrackableBoolean(control.default),
+        getBuilderValue: value => ({value}),
       };
   }
 }
@@ -851,6 +898,9 @@ function setControlInShader(
       break;
     case 'invlerp':
       enableLerpShaderFunction(shader, uName, control.dataType, value.range);
+      break;
+    case 'checkbox':
+      // Value is hard-coded in shader.
       break;
   }
 }

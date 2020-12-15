@@ -98,6 +98,32 @@ void main() {
     });
   });
 
+  it('handles checkbox control', () => {
+    const code = `
+#uicontrol bool myCheckbox checkbox
+#uicontrol bool myCheckbox2 checkbox(default=true)
+void main() {
+  emitRGB(vec3(1.0, 1.0, 1.0));
+}
+`;
+    const newCode = `
+
+
+void main() {
+  emitRGB(vec3(1.0, 1.0, 1.0));
+}
+`;
+    expect(parseShaderUiControls(code)).toEqual({
+      source: code,
+      code: newCode,
+      errors: [],
+      controls: new Map([
+        ['myCheckbox', {type: 'checkbox', valueType: 'bool', default: false}],
+        ['myCheckbox2', {type: 'checkbox', valueType: 'bool', default: true}],
+      ]),
+    });
+  });
+
   it('handles color control', () => {
     const code = `
 #uicontrol vec3 color color(default="red")

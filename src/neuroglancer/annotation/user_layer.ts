@@ -569,6 +569,7 @@ class RenderingOptionsTab extends Tab {
   constructor(public layer: AnnotationUserLayer) {
     super();
     const {element} = this;
+    element.classList.add('neuroglancer-annotation-rendering-tab');
     element.appendChild(
         this
             .registerDisposer(new DependentViewWidget(
