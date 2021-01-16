@@ -284,7 +284,6 @@ def stop():
         ioloop = global_server.ioloop
         def stop_ioloop():
             ioloop.stop()
-            ioloop.close()
         global_server.ioloop.add_callback(stop_ioloop)
         global_server = None
 
@@ -316,6 +315,7 @@ def start():
             global_server = Server(ioloop=ioloop, **global_server_args)
             done.set()
             ioloop.start()
+            ioloop.close()
 
         thread = threading.Thread(target=start_server)
         thread.daemon = True
