@@ -52,20 +52,21 @@ class GoogleApplicationDefaultCredentialsProvider(credentials_provider.Credentia
     def __init__(self):
         super(GoogleApplicationDefaultCredentialsProvider, self).__init__()
 
-        import google.auth
-
-        self._lock = threading.Lock()
-        credentials, project = google.auth.default()
-        del project
-        self._credentials = credentials
-
         # Make sure logging is initialized.  Does nothing if logging has already
         # been initialized.
         logging.basicConfig()
 
+        self._lock = threading.Lock()
+        self._credentials = None
+
     def get_new(self):
         def func():
             with self._lock:
+                if self._credentials is None:
+                    import google.auth
+                    credentials, project = google.auth.default()
+                    del project
+                    self._credentials = credentials
                 if not self._credentials.valid:
                     import google.auth.transport.requests
                     import requests
@@ -79,9 +80,11 @@ class GoogleApplicationDefaultCredentialsProvider(credentials_provider.Credentia
 _global_google_application_default_credentials_provider = None
 _global_google_application_default_credentials_provider_lock = threading.Lock()
 
+
 def get_google_application_default_credentials_provider():
     global _global_google_application_default_credentials_provider
     with _global_google_application_default_credentials_provider_lock:
         if _global_google_application_default_credentials_provider is None:
-            _global_google_application_default_credentials_provider = GoogleApplicationDefaultCredentialsProvider()
+            _global_google_application_default_credentials_provider = GoogleApplicationDefaultCredentialsProvider(
+            )
         return _global_google_application_default_credentials_provider

@@ -29,8 +29,10 @@ function getNgauthCredentialsProvider(
   const bucketPattern = /^\/([^\/]+)/;
   const m = path.match(bucketPattern);
   if (m === null) return undefined;
-  return credentialsManager.getCredentialsProvider(
-      'ngauth_gcs', {authServer: serverUrl, bucket: m[1]});
+  return typeof NEUROGLANCER_PYTHON_INTEGRATION !== 'undefined' ?
+      credentialsManager.getCredentialsProvider('gcs', {bucket: m[1]}) :
+      credentialsManager.getCredentialsProvider(
+          'ngauth_gcs', {authServer: serverUrl, bucket: m[1]});
 }
 
 export function parseSpecialUrl(url: string, credentialsManager: CredentialsManager):
@@ -41,7 +43,7 @@ export function parseSpecialUrl(url: string, credentialsManager: CredentialsMana
     case 'gs+xml':
       return {
         credentialsProvider: typeof NEUROGLANCER_PYTHON_INTEGRATION !== 'undefined' ?
-            credentialsManager.getCredentialsProvider('gcs') :
+            credentialsManager.getCredentialsProvider('gcs', {bucket: u.host}) :
             undefined,
         url,
       };

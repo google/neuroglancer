@@ -20,7 +20,7 @@ import concurrent.futures
 import threading
 
 
-def future_then_immediate(future, func):
+def future_then_immediate(future, func, new_future = None):
     """Returns a future that maps the result of `future` by `func`.
 
     If `future` succeeds, sets the result of the returned future to `func(future.result())`.  If
@@ -29,16 +29,17 @@ def future_then_immediate(future, func):
     If `future` has not yet finished, `func` is invoked by the same thread that finishes it.
     Otherwise, it is invoked immediately in the same thread that calls `future_then_immediate`.
     """
-    result = concurrent.futures.Future()
+    if new_future is None:
+        new_future = concurrent.futures.Future()
 
     def on_done(f):
         try:
-            result.set_result(func(f.result()))
+            new_future.set_result(func(f.result()))
         except Exception as e:
-            result.set_exception(e)
+            new_future.set_exception(e)
 
     future.add_done_callback(on_done)
-    return result
+    return new_future
 
 
 def run_on_new_thread(func, daemon=True):
