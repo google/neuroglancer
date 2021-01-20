@@ -14,15 +14,8 @@
 
 import os
 import posixpath
+import re
 
-static_content_filenames = set([
-    'main.bundle.js',
-    'chunk_worker.bundle.js',
-    'tfjs-library.bundle.js',
-    'async_computation.bundle.js',
-    'index.html',
-    'draco.bundle.js',
-])
 
 mime_type_map = {
     '.css': 'text/css',
@@ -49,12 +42,12 @@ class StaticContentSource(object):
 class PkgResourcesContentSource(StaticContentSource):
     def get_content(self, name):
         import pkg_resources
-        if name not in static_content_filenames:
+        if not re.match(r'^[a-z][a-z_\-\.]*\.(?:js|js\.map|css|html)$', name):
             raise ValueError('Invalid static resource name: %r' % name)
         if pkg_resources.resource_exists(__name__, name):
             return pkg_resources.resource_string(__name__, name)
         raise ValueError(
-            'Static resources not built.  Run: "python setup.py bundle_client" or use an alternative static content source.'
+            'Static resources not built.  Run: "npm run build-python" or use an alternative static content source.'
         )
 
 
@@ -72,9 +65,7 @@ class HttpSource(StaticContentSource):
 
 
 class FileSource(StaticContentSource):
-    def __init__(self, path=None, file_open=None):
-        if path is None:
-            path = os.path.join(os.path.dirname(__file__), '../../../dist/dev-python')
+    def __init__(self, path, file_open=None):
         self.file_path = path
         self.file_open = file_open or open
 
@@ -85,9 +76,6 @@ class FileSource(StaticContentSource):
                 return f.read()
         except Exception as e:
             raise ValueError('Failed to read local path %r: %s' % (full_path, e))
-
-
-dist_dev_static_content_source = FileSource()
 
 
 def get_default_static_content_source():

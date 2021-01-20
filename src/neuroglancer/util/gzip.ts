@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-import {inflate} from 'pako';
+import pako from 'pako';
 
 /**
  * Detects gzip format based on the 2 magic bytes at the start.
@@ -35,7 +35,7 @@ export function maybeDecompressGzip(data: ArrayBuffer|ArrayBufferView) {
     byteView = new Uint8Array(data.buffer, data.byteOffset, data.byteLength);
   }
   if (isGzipFormat(byteView)) {
-    return inflate(byteView);
+    return pako.inflate(byteView);
   }
   return byteView;
 }

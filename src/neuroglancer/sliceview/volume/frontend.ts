@@ -14,40 +14,33 @@
  * limitations under the License.
  */
 
-import {AnnotationSource} from 'neuroglancer/annotation';
 import {ChunkManager} from 'neuroglancer/chunk_manager/frontend';
-import {MeshSource, MultiscaleMeshSource} from 'neuroglancer/mesh/frontend';
-import {SkeletonSource} from 'neuroglancer/skeleton/frontend';
-import {DataType} from 'neuroglancer/sliceview/base';
+import {ChunkChannelAccessParameters} from 'neuroglancer/render_coordinate_transform';
+import {DataType, SliceViewChunkSpecification} from 'neuroglancer/sliceview/base';
 import {MultiscaleSliceViewChunkSource, SliceViewChunk, SliceViewChunkSource} from 'neuroglancer/sliceview/frontend';
 import {VolumeChunkSource as VolumeChunkSourceInterface, VolumeChunkSpecification, VolumeSourceOptions, VolumeType} from 'neuroglancer/sliceview/volume/base';
 import {Disposable} from 'neuroglancer/util/disposable';
-import {vec3, vec3Key} from 'neuroglancer/util/geom';
-import {Uint64} from 'neuroglancer/util/uint64';
 import {GL} from 'neuroglancer/webgl/context';
 import {ShaderBuilder, ShaderProgram} from 'neuroglancer/webgl/shader';
+import {getShaderType, glsl_mixLinear} from 'neuroglancer/webgl/shader_lib';
 
 export type VolumeChunkKey = string;
 
-const tempChunkGridPosition = vec3.create();
-const tempLocalPosition = vec3.create();
-
-
 export interface ChunkFormat {
   shaderKey: string;
+
+  dataType: DataType;
 
   /**
    * Called on the ChunkFormat of the first source of a RenderLayer.
    *
    * This should define a fragment shader function:
    *
-   *   value_type getDataValue(int channelIndex);
+   *   value_type getDataValueAt(ivec3 position, int channelIndex...);
    *
-   * where value_type is the shader data type corresponding to the chunk data type.  This function
-   * should retrieve the value for channel `channelIndex` at position `getPositionWithinChunk()`
-   * within the chunk.
+   * where value_type is `getShaderType(this.dataType)`.
    */
-  defineShader: (builder: ShaderBuilder) => void;
+  defineShader: (builder: ShaderBuilder, numChannelDimensions: number) => void;
 
   /**
    * Called once per RenderLayer when starting to draw chunks, on the ChunkFormat of the first
@@ -63,12 +56,70 @@ export interface ChunkFormat {
   /**
    * Called just before drawing each chunk, on the ChunkFormat .
    */
-  bindChunk: (gl: GL, shader: ShaderProgram, chunk: SliceViewChunk) => void;
+  bindChunk:
+      (gl: GL, shader: ShaderProgram, chunk: SliceViewChunk, fixedChunkPosition: Uint32Array,
+       displayChunkDimensions: readonly number[], channelDimensions: readonly number[],
+       newSource: boolean) => void;
 
   /**
    * Called just before drawing chunks for the source.
    */
   beginSource: (gl: GL, shader: ShaderProgram) => void;
+}
+
+export function defineChunkDataShaderAccess(
+    builder: ShaderBuilder, chunkFormat: ChunkFormat, numChannelDimensions: number,
+    getPositionWithinChunkExpr: string) {
+  const {dataType} = chunkFormat;
+  chunkFormat.defineShader(builder, numChannelDimensions);
+  let dataAccessChannelParams = ``;
+  let dataAccessChannelArgs = ``;
+  if (numChannelDimensions === 0) {
+    dataAccessChannelParams += `highp int ignoredChannelIndex`;
+  } else {
+    for (let channelDim = 0; channelDim < numChannelDimensions; ++channelDim) {
+      if (channelDim !== 0) dataAccessChannelParams += `, `;
+      dataAccessChannelParams += `highp int channelIndex${channelDim}`;
+      dataAccessChannelArgs += `, channelIndex${channelDim}`;
+    }
+  }
+
+  builder.addFragmentCode(glsl_mixLinear);
+  let dataAccessCode = `
+${getShaderType(dataType)} getDataValue(${dataAccessChannelParams}) {
+  highp ivec3 p = ivec3(max(vec3(0.0, 0.0, 0.0), min(floor(${
+      getPositionWithinChunkExpr}), uChunkDataSize - 1.0)));
+  return getDataValueAt(p${dataAccessChannelArgs});
+}
+${getShaderType(dataType)} getInterpolatedDataValue(${dataAccessChannelParams}) {
+  highp vec3 positionWithinChunk = ${getPositionWithinChunkExpr};
+  highp ivec3[2] points;
+  points[0] = ivec3(max(vec3(0.0, 0.0, 0.0), min(floor(positionWithinChunk - 0.5), uChunkDataSize - 1.0)));
+  points[1] = ivec3(max(vec3(0.0, 0.0, 0.0), min(ceil(positionWithinChunk - 0.5), uChunkDataSize - 1.0)));
+  highp vec3 mixCoeff = fract(positionWithinChunk - 0.5);
+  ${getShaderType(dataType)} xvalues[2];
+  for (int ix = 0; ix < 2; ++ix) {
+    ${getShaderType(dataType)} yvalues[2];
+    for (int iy = 0; iy < 2; ++iy) {
+      ${getShaderType(dataType)} zvalues[2];
+      for (int iz = 0; iz < 2; ++iz) {
+        zvalues[iz] = getDataValueAt(ivec3(points[ix].x, points[iy].y, points[iz].z)
+                                     ${dataAccessChannelArgs});
+      }
+      yvalues[iy] = mixLinear(zvalues[0], zvalues[1], mixCoeff.z);
+    }
+    xvalues[ix] = mixLinear(yvalues[0], yvalues[1], mixCoeff.y);
+  }
+  return mixLinear(xvalues[0], xvalues[1], mixCoeff.x);
+}
+`;
+  builder.addFragmentCode(dataAccessCode);
+  if (numChannelDimensions <= 1) {
+    builder.addFragmentCode(`
+${getShaderType(dataType)} getDataValue() { return getDataValue(0); }
+${getShaderType(dataType)} getInterpolatedDataValue() { return getInterpolatedDataValue(0); }
+`);
+  }
 }
 
 export interface ChunkFormatHandler extends Disposable {
@@ -95,63 +146,76 @@ export function getChunkFormatHandler(gl: GL, spec: VolumeChunkSpecification) {
   throw new Error('No chunk format handler found.');
 }
 
-
-export class VolumeChunkSource extends SliceViewChunkSource implements VolumeChunkSourceInterface {
+export class VolumeChunkSource extends SliceViewChunkSource<VolumeChunkSpecification, VolumeChunk>
+    implements VolumeChunkSourceInterface {
   chunkFormatHandler: ChunkFormatHandler;
-
-  chunks: Map<string, VolumeChunk>;
-
-  spec: VolumeChunkSpecification;
+  private tempChunkGridPosition: Float32Array;
+  private tempPositionWithinChunk: Uint32Array;
 
   constructor(chunkManager: ChunkManager, options: {spec: VolumeChunkSpecification}) {
     super(chunkManager, options);
     this.chunkFormatHandler =
         this.registerDisposer(getChunkFormatHandler(chunkManager.chunkQueueManager.gl, this.spec));
+    const rank = this.spec.upperVoxelBound.length;
+    this.tempChunkGridPosition = new Float32Array(rank);
+    this.tempPositionWithinChunk = new Uint32Array(rank);
+  }
+
+  static encodeSpec(spec: SliceViewChunkSpecification) {
+    const s = spec as VolumeChunkSpecification;
+    return {
+      ...super.encodeSpec(spec),
+      dataType: s.dataType,
+      compressedSegmentationBlockSize:
+          s.compressedSegmentationBlockSize && Array.from(s.compressedSegmentationBlockSize),
+      baseVoxelOffset: Array.from(s.baseVoxelOffset),
+    };
   }
 
   get chunkFormat() {
     return this.chunkFormatHandler.chunkFormat;
   }
 
-  getValueAt(position: vec3, chunkLayout = this.spec.chunkLayout) {
-    const chunkGridPosition = tempChunkGridPosition;
-    const localPosition = tempLocalPosition;
-    let spec = this.spec;
-    let chunkSize = chunkLayout.size;
-    chunkLayout.globalToLocalSpatial(localPosition, position);
-    for (let i = 0; i < 3; ++i) {
-      const chunkSizeValue = chunkSize[i];
-      const localPositionValue = localPosition[i];
-      chunkGridPosition[i] = Math.floor(localPositionValue / chunkSizeValue);
+  getValueAt(chunkPosition: Float32Array, channelAccess: ChunkChannelAccessParameters) {
+    const rank = this.spec.rank;
+    const chunkGridPosition = this.tempChunkGridPosition;
+    const positionWithinChunk = this.tempPositionWithinChunk;
+    const {spec} = this;
+    {
+      const {chunkDataSize} = spec;
+      for (let chunkDim = 0; chunkDim < rank; ++chunkDim) {
+        const voxel = chunkPosition[chunkDim];
+        const chunkSize = chunkDataSize[chunkDim];
+        const chunk = Math.floor(voxel / chunkSize);
+        chunkGridPosition[chunkDim] = chunk;
+        positionWithinChunk[chunkDim] = Math.floor(voxel - chunkSize * chunk);
+      }
     }
-    let key = vec3Key(chunkGridPosition);
-    let chunk = <VolumeChunk>this.chunks.get(key);
-    if (!chunk) {
+    const chunk = this.chunks.get(chunkGridPosition.join()) as VolumeChunk;
+    if (chunk === undefined) {
       return null;
     }
-    // Reuse temporary variable.
-    const dataPosition = chunkGridPosition;
-    const voxelSize = spec.voxelSize;
+    const chunkDataSize = chunk.chunkDataSize;
     for (let i = 0; i < 3; ++i) {
-      dataPosition[i] =
-          Math.floor((localPosition[i] - chunkGridPosition[i] * chunkSize[i]) / voxelSize[i]);
-    }
-    let chunkDataSize = chunk.chunkDataSize;
-    for (let i = 0; i < 3; ++i) {
-      if (dataPosition[i] >= chunkDataSize[i]) {
+      if (positionWithinChunk[i] >= chunkDataSize[i]) {
         return undefined;
       }
     }
-    let {numChannels} = spec;
-    if (numChannels === 1) {
-      return chunk.getChannelValueAt(dataPosition, 0);
-    } else {
-      let result = new Array<number|Uint64>(numChannels);
-      for (let i = 0; i < numChannels; ++i) {
-        result[i] = chunk.getChannelValueAt(dataPosition, i);
-      }
-      return result;
+    if (channelAccess.channelSpaceShape.length === 0) {
+      // Return a single value.
+      return chunk.getValueAt(positionWithinChunk);
     }
+    const {numChannels, chunkChannelCoordinates, chunkChannelDimensionIndices} = channelAccess;
+    const chunkChannelRank = chunkChannelDimensionIndices.length;
+    let offset = 0;
+    const values = new Array<any>(numChannels);
+    for (let channelIndex = 0; channelIndex < numChannels; ++channelIndex) {
+      for (let i = 0; i < chunkChannelRank; ++i) {
+        positionWithinChunk[chunkChannelDimensionIndices[i]] = chunkChannelCoordinates[offset++];
+      }
+      values[channelIndex] = chunk.getValueAt(positionWithinChunk);
+    }
+    return values;
   }
 
   getChunk(x: any): VolumeChunk {
@@ -161,9 +225,10 @@ export class VolumeChunkSource extends SliceViewChunkSource implements VolumeChu
 
 export abstract class VolumeChunk extends SliceViewChunk {
   source: VolumeChunkSource;
-  chunkDataSize: vec3;
+  chunkDataSize: Uint32Array;
+  CHUNK_FORMAT_TYPE: ChunkFormat;
 
-  get chunkFormat() {
+  get chunkFormat(): this['CHUNK_FORMAT_TYPE'] {
     return this.source.chunkFormat;
   }
 
@@ -171,29 +236,11 @@ export abstract class VolumeChunk extends SliceViewChunk {
     super(source, x);
     this.chunkDataSize = x['chunkDataSize'] || source.spec.chunkDataSize;
   }
-  abstract getChannelValueAt(dataPosition: vec3, channel: number): any;
+  abstract getValueAt(dataPosition: Uint32Array): any;
 }
 
-export type OptionalMeshSource = MeshSource|SkeletonSource|MultiscaleMeshSource|null;
-
-
-export interface MultiscaleVolumeChunkSource extends MultiscaleSliceViewChunkSource {
-  /**
-   * @return Chunk sources for each scale, ordered by increasing minVoxelSize.  For each scale,
-   * there may be alternative sources with different chunk layouts.
-   */
-  getSources: (options: VolumeSourceOptions) => VolumeChunkSource[][];
-
-  numChannels: number;
-  dataType: DataType;
-  volumeType: VolumeType;
-
-  /**
-   * Returns the associated mesh source or skeleton source, if there is one.
-   *
-   * This only makes sense if volumeType === VolumeType.SEGMENTATION.
-   */
-  getMeshSource: () => Promise<OptionalMeshSource>| OptionalMeshSource;
-
-  getStaticAnnotations?: () => AnnotationSource;
+export abstract class MultiscaleVolumeChunkSource extends
+    MultiscaleSliceViewChunkSource<VolumeChunkSource, VolumeSourceOptions> {
+  abstract dataType: DataType;
+  abstract volumeType: VolumeType;
 }

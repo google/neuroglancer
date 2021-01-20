@@ -14,13 +14,13 @@
 
 from __future__ import absolute_import
 from .server import set_static_content_source, set_server_bind_address, is_server_running, stop
-from .static import dist_dev_static_content_source
 from .viewer import Viewer, UnsynchronizedViewer
 from .local_volume import LocalVolume
 from .viewer_state import *
-from .viewer_config_state import MapEntry, PrefetchState, ScaleBarOptions
+from .viewer_config_state import LayerSelectedValues, LayerSelectionState, SegmentIdMapEntry, PrefetchState, ScaleBarOptions
 from .equivalence_map import EquivalenceMap
-from .url_state import to_url, parse_url
+from .url_state import to_url, parse_url, to_json_dump
 from .screenshot import ScreenshotSaver
 from . import skeleton
 from . import server
+from . import segment_colors

@@ -19,114 +19,164 @@
  */
 
 import {AnnotationType, Line} from 'neuroglancer/annotation';
-import {AnnotationRenderContext, AnnotationRenderHelper, registerAnnotationTypeRenderHandler} from 'neuroglancer/annotation/type_handler';
-import {tile2dArray} from 'neuroglancer/util/array';
-import {mat4, projectPointToLineSegment, vec3} from 'neuroglancer/util/geom';
-import {getMemoizedBuffer} from 'neuroglancer/webgl/buffer';
-import {CircleShader, VERTICES_PER_CIRCLE} from 'neuroglancer/webgl/circles';
-import {LineShader} from 'neuroglancer/webgl/lines';
-import {emitterDependentShaderGetter, ShaderBuilder, ShaderProgram} from 'neuroglancer/webgl/shader';
+import {AnnotationRenderContext, AnnotationRenderHelper, AnnotationShaderGetter, registerAnnotationTypeRenderHandler} from 'neuroglancer/annotation/type_handler';
+import {projectPointToLineSegment} from 'neuroglancer/util/geom';
+import {defineCircleShader, drawCircles, initializeCircleShader, VERTICES_PER_CIRCLE} from 'neuroglancer/webgl/circles';
+import {defineLineShader, drawLines, initializeLineShader} from 'neuroglancer/webgl/lines';
+import {ShaderBuilder, ShaderProgram} from 'neuroglancer/webgl/shader';
+import {defineVectorArrayVertexShaderInput} from 'neuroglancer/webgl/shader_lib';
+import {defineVertexId, VertexIdHelper} from 'neuroglancer/webgl/vertex_id';
 
 const FULL_OBJECT_PICK_OFFSET = 0;
 const ENDPOINTS_PICK_OFFSET = FULL_OBJECT_PICK_OFFSET + 1;
 const PICK_IDS_PER_INSTANCE = ENDPOINTS_PICK_OFFSET + 2;
 
-function getEndpointIndexArray() {
-  return tile2dArray(
-      new Uint8Array([0, 1]), /*majorDimension=*/ 1, /*minorTiles=*/ 1,
-      /*majorTiles=*/ VERTICES_PER_CIRCLE);
+function defineNoOpEndpointMarkerSetters(builder: ShaderBuilder) {
+  builder.addVertexCode(`
+void setEndpointMarkerSize(float startSize, float endSize) {}
+void setEndpointMarkerBorderWidth(float startSize, float endSize) {}
+void setEndpointMarkerColor(vec4 startColor, vec4 endColor) {}
+void setEndpointMarkerBorderColor(vec4 startColor, vec4 endColor) {}
+`);
+}
+
+function defineNoOpLineSetters(builder: ShaderBuilder) {
+  builder.addVertexCode(`
+void setLineWidth(float width) {}
+void setLineColor(vec4 startColor, vec4 endColor) {}
+`);
 }
 
 class RenderHelper extends AnnotationRenderHelper {
-  private lineShader = this.registerDisposer(new LineShader(this.gl, 1));
-  private circleShader = this.registerDisposer(new CircleShader(this.gl, 2));
-
   defineShader(builder: ShaderBuilder) {
-    super.defineShader(builder);
-    // Position of endpoints in camera coordinates.
-    builder.addAttribute('highp vec3', 'aEndpointA');
-    builder.addAttribute('highp vec3', 'aEndpointB');
+    defineVertexId(builder);
+    // Position of endpoints in model coordinates.
+    const {rank} = this;
+    defineVectorArrayVertexShaderInput(
+        builder, 'float', WebGL2RenderingContext.FLOAT, /*normalized=*/ false, 'VertexPosition',
+        rank, 2);
   }
 
+  private vertexIdHelper = this.registerDisposer(VertexIdHelper.get(this.gl));
+
   private edgeShaderGetter =
-      emitterDependentShaderGetter(this, this.gl, (builder: ShaderBuilder) => {
+      this.getDependentShader('annotation/line/edge', (builder: ShaderBuilder) => {
+        const {rank} = this;
         this.defineShader(builder);
-        this.lineShader.defineShader(builder);
+        defineLineShader(builder);
+        builder.addVarying(`highp float[${rank}]`, 'vModelPosition');
+        builder.addVertexCode(`
+float ng_LineWidth;
+`);
+        defineNoOpEndpointMarkerSetters(builder);
+        builder.addVertexCode(`
+void setLineWidth(float width) {
+  ng_LineWidth = width;
+}
+void setLineColor(vec4 startColor, vec4 endColor) {
+  vColor = mix(startColor, endColor, getLineEndpointCoefficient());
+}
+`);
         builder.setVertexMain(`
-emitLine(uProjection, aEndpointA, aEndpointB);
+float modelPositionA[${rank}] = getVertexPosition0();
+float modelPositionB[${rank}] = getVertexPosition1();
+for (int i = 0; i < ${rank}; ++i) {
+  vModelPosition[i] = mix(modelPositionA[i], modelPositionB[i], getLineEndpointCoefficient());
+}
+ng_LineWidth = 1.0;
+vColor = vec4(0.0, 0.0, 0.0, 0.0);
+${this.invokeUserMain}
+emitLine(uModelViewProjection * vec4(projectModelVectorToSubspace(modelPositionA), 1.0),
+         uModelViewProjection * vec4(projectModelVectorToSubspace(modelPositionB), 1.0),
+         ng_LineWidth);
 ${this.setPartIndex(builder)};
 `);
         builder.setFragmentMain(`
-emitAnnotation(vec4(vColor.rgb, vColor.a * getLineAlpha() * ${this.getCrossSectionFadeFactor()}));
+float clipCoefficient = getSubspaceClipCoefficient(vModelPosition);
+emitAnnotation(vec4(vColor.rgb, vColor.a * getLineAlpha() *
+                                ${this.getCrossSectionFadeFactor()} *
+                                clipCoefficient));
 `);
       });
-
-  private endpointIndexBuffer =
-      this
-          .registerDisposer(getMemoizedBuffer(
-              this.gl, WebGL2RenderingContext.ARRAY_BUFFER, getEndpointIndexArray))
-          .value;
 
   private endpointShaderGetter =
-      emitterDependentShaderGetter(this, this.gl, (builder: ShaderBuilder) => {
+      this.getDependentShader('annotation/line/endpoint', (builder: ShaderBuilder) => {
+        const {rank} = this;
         this.defineShader(builder);
-        this.circleShader.defineShader(builder, this.targetIsSliceView);
-        builder.addAttribute('highp uint', 'aEndpointIndex');
+        defineCircleShader(builder, this.targetIsSliceView);
+        builder.addVarying('highp float', 'vClipCoefficient');
+        builder.addVarying('highp vec4', 'vBorderColor');
+        defineNoOpLineSetters(builder);
+        builder.addVertexCode(`
+float ng_markerDiameter;
+float ng_markerBorderWidth;
+int getEndpointIndex() {
+  return gl_VertexID / ${VERTICES_PER_CIRCLE};
+}
+void setEndpointMarkerSize(float startSize, float endSize) {
+  ng_markerDiameter = mix(startSize, endSize, float(getEndpointIndex()));
+}
+void setEndpointMarkerBorderWidth(float startSize, float endSize) {
+  ng_markerBorderWidth = mix(startSize, endSize, float(getEndpointIndex()));
+}
+void setEndpointMarkerColor(vec4 startColor, vec4 endColor) {
+  vColor = mix(startColor, endColor, float(getEndpointIndex()));
+}
+void setEndpointMarkerBorderColor(vec4 startColor, vec4 endColor) {
+  vBorderColor = mix(startColor, endColor, float(getEndpointIndex()));
+}
+`);
         builder.setVertexMain(`
-vec3 vertexPosition = mix(aEndpointA, aEndpointB, float(aEndpointIndex));
-emitCircle(uProjection * vec4(vertexPosition, 1.0));
-${this.setPartIndex(builder, 'aEndpointIndex + 1u')};
+float modelPosition[${rank}] = getVertexPosition0();
+float modelPositionB[${rank}] = getVertexPosition1();
+for (int i = 0; i < ${rank}; ++i) {
+  modelPosition[i] = mix(modelPosition[i], modelPositionB[i], float(getEndpointIndex()));
+}
+vClipCoefficient = getSubspaceClipCoefficient(modelPosition);
+vColor = vec4(0.0, 0.0, 0.0, 0.0);
+vBorderColor = vec4(0.0, 0.0, 0.0, 1.0);
+ng_markerDiameter = 5.0;
+ng_markerBorderWidth = 1.0;
+${this.invokeUserMain}
+emitCircle(uModelViewProjection * vec4(projectModelVectorToSubspace(modelPosition), 1.0), ng_markerDiameter, ng_markerBorderWidth);
+${this.setPartIndex(builder, 'uint(getEndpointIndex()) + 1u')};
 `);
         builder.setFragmentMain(`
-vec4 borderColor = vec4(0.0, 0.0, 0.0, 1.0);
-emitAnnotation(getCircleColor(vColor, borderColor));
+vec4 color = getCircleColor(vColor, vBorderColor);
+color.a *= vClipCoefficient;
+emitAnnotation(color);
 `);
       });
 
-  enable(shader: ShaderProgram, context: AnnotationRenderContext, callback: () => void) {
-    super.enable(shader, context, () => {
-      const {gl} = shader;
-      const aLower = shader.attribute('aEndpointA');
-      const aUpper = shader.attribute('aEndpointB');
-
-      context.buffer.bindToVertexAttrib(
-          aLower, /*components=*/ 3, /*attributeType=*/ WebGL2RenderingContext.FLOAT,
-          /*normalized=*/ false,
-          /*stride=*/ 4 * 6, /*offset=*/ context.bufferOffset);
-      context.buffer.bindToVertexAttrib(
-          aUpper, /*components=*/ 3, /*attributeType=*/ WebGL2RenderingContext.FLOAT,
-          /*normalized=*/ false,
-          /*stride=*/ 4 * 6, /*offset=*/ context.bufferOffset + 4 * 3);
-
-      gl.vertexAttribDivisor(aLower, 1);
-      gl.vertexAttribDivisor(aUpper, 1);
-      callback();
-      gl.vertexAttribDivisor(aLower, 0);
-      gl.vertexAttribDivisor(aUpper, 0);
-      gl.disableVertexAttribArray(aLower);
-      gl.disableVertexAttribArray(aUpper);
+  enable(
+      shaderGetter: AnnotationShaderGetter, context: AnnotationRenderContext,
+      callback: (shader: ShaderProgram) => void) {
+    super.enable(shaderGetter, context, shader => {
+      const binder = shader.vertexShaderInputBinders['VertexPosition'];
+      binder.enable(1);
+      this.gl.bindBuffer(WebGL2RenderingContext.ARRAY_BUFFER, context.buffer.buffer);
+      binder.bind(this.serializedBytesPerAnnotation, context.bufferOffset);
+      const {vertexIdHelper} = this;
+      vertexIdHelper.enable();
+      callback(shader);
+      vertexIdHelper.disable();
+      binder.disable();
     });
   }
 
   drawEdges(context: AnnotationRenderContext) {
-    const shader = this.edgeShaderGetter(context.renderContext.emitter);
-    this.enable(shader, context, () => {
-      this.lineShader.draw(shader, context.renderContext, /*lineWidth=*/ 1, 1.0, context.count);
+    this.enable(this.edgeShaderGetter, context, shader => {
+      initializeLineShader(
+          shader, context.renderContext.projectionParameters, /*featherWidthInPixels=*/ 1.0);
+      drawLines(shader.gl, 1, context.count);
     });
   }
 
   drawEndpoints(context: AnnotationRenderContext) {
-    const shader = this.endpointShaderGetter(context.renderContext.emitter);
-    this.enable(shader, context, () => {
-      const aEndpointIndex = shader.attribute('aEndpointIndex');
-      this.endpointIndexBuffer.bindToVertexAttribI(
-          aEndpointIndex, /*components=*/ 1,
-          /*attributeType=*/ WebGL2RenderingContext.UNSIGNED_BYTE);
-      this.circleShader.draw(
-          shader, context.renderContext,
-          {interiorRadiusInPixels: 6, borderWidthInPixels: 2, featherWidthInPixels: 1},
-          context.count);
-      shader.gl.disableVertexAttribArray(aEndpointIndex);
+    this.enable(this.endpointShaderGetter, context, shader => {
+      initializeCircleShader(
+          shader, context.renderContext.projectionParameters, {featherWidthInPixels: 0.5});
+      drawCircles(shader.gl, 2, context.count);
     });
   }
 
@@ -136,75 +186,63 @@ emitAnnotation(getCircleColor(vColor, borderColor));
   }
 }
 
-function snapPositionToLine(position: vec3, objectToData: mat4, endpoints: Float32Array) {
-  const cornerA = vec3.transformMat4(vec3.create(), <vec3>endpoints.subarray(0, 3), objectToData);
-  const cornerB = vec3.transformMat4(vec3.create(), <vec3>endpoints.subarray(3, 6), objectToData);
-  projectPointToLineSegment(position, cornerA, cornerB, position);
+function snapPositionToLine(position: Float32Array, endpoints: Float32Array) {
+  const rank = position.length;
+  projectPointToLineSegment(
+      position, endpoints.subarray(0, rank), endpoints.subarray(rank), position);
 }
 
 function snapPositionToEndpoint(
-    position: vec3, objectToData: mat4, endpoints: Float32Array, endpointIndex: number) {
-  const startOffset = 3 * endpointIndex;
-  const point = <vec3>endpoints.subarray(startOffset, startOffset + 3);
-  vec3.transformMat4(position, point, objectToData);
+    position: Float32Array, endpoints: Float32Array, endpointIndex: number) {
+  const rank = position.length;
+  const startOffset = rank * endpointIndex;
+  for (let i = 0; i < rank; ++i) {
+    position[i] = endpoints[startOffset + i];
+  }
 }
 
-registerAnnotationTypeRenderHandler(AnnotationType.LINE, {
-  bytes: 6 * 4,
-  serializer: (buffer: ArrayBuffer, offset: number, numAnnotations: number) => {
-    const coordinates = new Float32Array(buffer, offset, numAnnotations * 6);
-    return (annotation: Line, index: number) => {
-      const {pointA, pointB} = annotation;
-      const coordinateOffset = index * 6;
-      coordinates[coordinateOffset] = pointA[0];
-      coordinates[coordinateOffset + 1] = pointA[1];
-      coordinates[coordinateOffset + 2] = pointA[2];
-      coordinates[coordinateOffset + 3] = pointB[0];
-      coordinates[coordinateOffset + 4] = pointB[1];
-      coordinates[coordinateOffset + 5] = pointB[2];
-    };
-  },
+registerAnnotationTypeRenderHandler<Line>(AnnotationType.LINE, {
   sliceViewRenderHelper: RenderHelper,
   perspectiveViewRenderHelper: RenderHelper,
+  defineShaderNoOpSetters(builder) {
+    defineNoOpEndpointMarkerSetters(builder);
+    defineNoOpLineSetters(builder);
+  },
   pickIdsPerInstance: PICK_IDS_PER_INSTANCE,
-  snapPosition: (position, objectToData, data, offset, partIndex) => {
-    const endpoints = new Float32Array(data, offset, 6);
+  snapPosition(position, data, offset, partIndex) {
+    const rank = position.length;
+    const endpoints = new Float32Array(data, offset, rank * 2);
     if (partIndex === FULL_OBJECT_PICK_OFFSET) {
-      snapPositionToLine(position, objectToData, endpoints);
+      snapPositionToLine(position, endpoints);
     } else {
-      snapPositionToEndpoint(position, objectToData, endpoints, partIndex - ENDPOINTS_PICK_OFFSET);
+      snapPositionToEndpoint(position, endpoints, partIndex - ENDPOINTS_PICK_OFFSET);
     }
   },
-  getRepresentativePoint: (objectToData, ann, partIndex) => {
-    let repPoint = vec3.create();
+  getRepresentativePoint(out, ann, partIndex) {
     // if the full object is selected just pick the first point as representative
-    if (partIndex === FULL_OBJECT_PICK_OFFSET) {
-      vec3.transformMat4(repPoint, ann.pointA, objectToData);
-    } else {
-      if ((partIndex - ENDPOINTS_PICK_OFFSET) === 0) {
-        vec3.transformMat4(repPoint, ann.pointA, objectToData);
-      } else {
-        vec3.transformMat4(repPoint, ann.pointB, objectToData);
-      }
-    }
-    return repPoint;
+    out.set(
+        (partIndex === FULL_OBJECT_PICK_OFFSET || partIndex === ENDPOINTS_PICK_OFFSET) ?
+            ann.pointA :
+            ann.pointB);
   },
-  updateViaRepresentativePoint: (oldAnnotation, position, dataToObject, partIndex) => {
-    let newPt = vec3.transformMat4(vec3.create(), position, dataToObject);
+  updateViaRepresentativePoint(oldAnnotation, position, partIndex) {
     let baseLine = {...oldAnnotation};
+    const rank = position.length;
     switch (partIndex) {
-      case FULL_OBJECT_PICK_OFFSET:
-        let delta = vec3.sub(vec3.create(), oldAnnotation.pointB, oldAnnotation.pointA);
-        baseLine.pointA = newPt;
-        baseLine.pointB = vec3.add(vec3.create(), newPt, delta);
-        break;
+      case FULL_OBJECT_PICK_OFFSET: {
+        const {pointA, pointB} = oldAnnotation;
+        const newPointA = new Float32Array(rank);
+        const newPointB = new Float32Array(rank);
+        for (let i = 0; i < rank; ++i) {
+          const pos = newPointA[i] = position[i];
+          newPointB[i] = pointB[i] + (pos - pointA[i]);
+        }
+        return {...oldAnnotation, pointA: newPointA, pointB: newPointB};
+      }
       case FULL_OBJECT_PICK_OFFSET + 1:
-        baseLine.pointA = newPt;
-        baseLine.pointB = oldAnnotation.pointB;
-        break;
+        return {...oldAnnotation, pointA: new Float32Array(position)};
       case FULL_OBJECT_PICK_OFFSET + 2:
-        baseLine.pointA = oldAnnotation.pointA;
-        baseLine.pointB = newPt;
+        return {...oldAnnotation, pointB: new Float32Array(position)};
     }
     return baseLine;
   }

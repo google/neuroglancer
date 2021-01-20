@@ -14,16 +14,17 @@
  * limitations under the License.
  */
 
-import {Chunk, ChunkSource} from 'neuroglancer/chunk_manager/backend';
+import {Chunk, ChunkSource, withChunkManager} from 'neuroglancer/chunk_manager/backend';
 import {ChunkPriorityTier, ChunkState} from 'neuroglancer/chunk_manager/base';
 import {EncodedMeshData, EncodedVertexPositions, FRAGMENT_SOURCE_RPC_ID, MESH_LAYER_RPC_ID, MeshVertexIndices, MULTISCALE_FRAGMENT_SOURCE_RPC_ID, MULTISCALE_MESH_LAYER_RPC_ID, MultiscaleFragmentFormat, VertexPositionFormat} from 'neuroglancer/mesh/base';
 import {getDesiredMultiscaleMeshChunks, MultiscaleMeshManifest} from 'neuroglancer/mesh/multiscale';
 import {computeTriangleStrips} from 'neuroglancer/mesh/triangle_strips';
-import {PerspectiveViewRenderLayer, PerspectiveViewState} from 'neuroglancer/perspective_view/backend';
-import {SegmentationLayerSharedObjectCounterpart} from 'neuroglancer/segmentation_display_state/backend';
+import {PerspectiveViewBackend, PerspectiveViewRenderLayerBackend} from 'neuroglancer/perspective_view/backend';
+import {get3dModelToDisplaySpaceMatrix} from 'neuroglancer/render_coordinate_transform';
+import {RenderLayerBackendAttachment} from 'neuroglancer/render_layer_backend';
+import {withSegmentationLayerBackendState} from 'neuroglancer/segmentation_display_state/backend';
 import {getObjectKey} from 'neuroglancer/segmentation_display_state/base';
 import {forEachVisibleSegment} from 'neuroglancer/segmentation_display_state/base';
-import {WatchableSet} from 'neuroglancer/trackable_value';
 import {CancellationToken} from 'neuroglancer/util/cancellation';
 import {convertEndian32, Endianness} from 'neuroglancer/util/endian';
 import {getFrustrumPlanes, mat4, vec3} from 'neuroglancer/util/geom';
@@ -31,6 +32,7 @@ import {verifyObject, verifyObjectProperty, verifyStringArray} from 'neuroglance
 import {Uint64} from 'neuroglancer/util/uint64';
 import {zorder3LessThan} from 'neuroglancer/util/zorder';
 import {getBasePriority, getPriorityTier} from 'neuroglancer/visibility_priority/backend';
+import {withSharedVisibility} from 'neuroglancer/visibility_priority/backend';
 import {registerSharedObject, RPC} from 'neuroglancer/worker_rpc';
 
 const MESH_OBJECT_MANIFEST_CHUNK_PRIORITY = 100;
@@ -341,45 +343,25 @@ export class FragmentSource extends ChunkSource {
 }
 
 @registerSharedObject(MESH_LAYER_RPC_ID)
-export class MeshLayer extends SegmentationLayerSharedObjectCounterpart implements
-    PerspectiveViewRenderLayer {
+export class MeshLayer extends withSegmentationLayerBackendState
+(withSharedVisibility(withChunkManager(PerspectiveViewRenderLayerBackend))) {
   source: MeshSource;
-  viewStates = new WatchableSet<PerspectiveViewState>();
-  private viewStatesDisposers = new Map<PerspectiveViewState, () => void>();
-
   constructor(rpc: RPC, options: any) {
     super(rpc, options);
     this.source = this.registerDisposer(rpc.getRef<MeshSource>(options['source']));
     this.registerDisposer(this.chunkManager.recomputeChunkPriorities.add(() => {
       this.updateChunkPriorities();
     }));
+  }
+
+  attach(attachment: RenderLayerBackendAttachment<PerspectiveViewBackend>) {
     const scheduleUpdateChunkPriorities = () => {
       this.chunkManager.scheduleUpdateChunkPriorities();
     };
-    this.registerDisposer(this.viewStates.changed.add(() => {
-      const {viewStatesDisposers} = this;
-      const {viewStates} = this;
-      for (const [viewState, disposer] of viewStatesDisposers) {
-        if (!viewStates.has(viewState)) {
-          disposer();
-        }
-      }
-      for (const viewState of viewStates) {
-        if (!viewStatesDisposers.has(viewState)) {
-          viewState.viewport.changed.add(scheduleUpdateChunkPriorities);
-          viewState.visibility.changed.add(scheduleUpdateChunkPriorities);
-          viewStatesDisposers.set(viewState, () => {
-            viewState.viewport.changed.remove(scheduleUpdateChunkPriorities);
-            viewState.visibility.changed.remove(scheduleUpdateChunkPriorities);
-          });
-        }
-      }
-    }));
-    this.registerDisposer(() => {
-      for (const disposer of this.viewStatesDisposers.values()) {
-        disposer();
-      }
-    });
+    const {view} = attachment;
+    attachment.registerDisposer(view.visibility.changed.add(scheduleUpdateChunkPriorities));
+    attachment.registerDisposer(scheduleUpdateChunkPriorities);
+    scheduleUpdateChunkPriorities();
   }
 
   private updateChunkPriorities() {
@@ -387,20 +369,27 @@ export class MeshLayer extends SegmentationLayerSharedObjectCounterpart implemen
     if (visibility === Number.NEGATIVE_INFINITY) {
       return;
     }
+    this.chunkManager.registerLayer(this);
     const priorityTier = getPriorityTier(visibility);
     const basePriority = getBasePriority(visibility);
     const {source, chunkManager} = this;
     forEachVisibleSegment(this, objectId => {
       let manifestChunk = source.getChunk(objectId);
+      ++this.numVisibleChunksNeeded;
       chunkManager.requestChunk(
           manifestChunk, priorityTier, basePriority + MESH_OBJECT_MANIFEST_CHUNK_PRIORITY);
       const state = manifestChunk.state;
       if (state === ChunkState.SYSTEM_MEMORY_WORKER || state === ChunkState.SYSTEM_MEMORY ||
           state === ChunkState.GPU_MEMORY) {
+        ++this.numVisibleChunksAvailable;
         for (let fragmentId of manifestChunk.fragmentIds!) {
           let fragmentChunk = source.getFragmentChunk(manifestChunk, fragmentId);
+          ++this.numVisibleChunksNeeded;
           chunkManager.requestChunk(
               fragmentChunk, priorityTier, basePriority + MESH_OBJECT_FRAGMENT_CHUNK_PRIORITY);
+          if (fragmentChunk.state === ChunkState.GPU_MEMORY) {
+            ++this.numVisibleChunksAvailable;
+          }
         }
       }
     });
@@ -534,12 +523,12 @@ export class MultiscaleFragmentSource extends ChunkSource {
   }
 }
 
+const tempModelMatrix = mat4.create();
+
 @registerSharedObject(MULTISCALE_MESH_LAYER_RPC_ID)
-export class MultiscaleMeshLayer extends SegmentationLayerSharedObjectCounterpart implements
-    PerspectiveViewRenderLayer {
+export class MultiscaleMeshLayer extends withSegmentationLayerBackendState
+(withSharedVisibility(withChunkManager(PerspectiveViewRenderLayerBackend))) {
   source: MultiscaleMeshSource;
-  viewStates = new WatchableSet<PerspectiveViewState>();
-  private viewStatesDisposers = new Map<PerspectiveViewState, () => void>();
 
   constructor(rpc: RPC, options: any) {
     super(rpc, options);
@@ -547,33 +536,16 @@ export class MultiscaleMeshLayer extends SegmentationLayerSharedObjectCounterpar
     this.registerDisposer(this.chunkManager.recomputeChunkPriorities.add(() => {
       this.updateChunkPriorities();
     }));
-    const scheduleUpdateChunkPriorities = () => {
-      this.chunkManager.scheduleUpdateChunkPriorities();
-    };
-    this.registerDisposer(this.viewStates.changed.add(() => {
-      const {viewStatesDisposers} = this;
-      const {viewStates} = this;
-      for (const [viewState, disposer] of viewStatesDisposers) {
-        if (!viewStates.has(viewState)) {
-          disposer();
-        }
-      }
-      for (const viewState of viewStates) {
-        if (!viewStatesDisposers.has(viewState)) {
-          viewState.viewport.changed.add(scheduleUpdateChunkPriorities);
-          viewState.visibility.changed.add(scheduleUpdateChunkPriorities);
-          viewStatesDisposers.set(viewState, () => {
-            viewState.viewport.changed.remove(scheduleUpdateChunkPriorities);
-            viewState.visibility.changed.remove(scheduleUpdateChunkPriorities);
-          });
-        }
-      }
-    }));
-    this.registerDisposer(() => {
-      for (const disposer of this.viewStatesDisposers.values()) {
-        disposer();
-      }
-    });
+  }
+
+  attach(attachment: RenderLayerBackendAttachment<PerspectiveViewBackend>) {
+    const scheduleUpdateChunkPriorities = () => this.chunkManager.scheduleUpdateChunkPriorities();
+    const {view} = attachment;
+    attachment.registerDisposer(
+        view.projectionParameters.changed.add(scheduleUpdateChunkPriorities));
+    attachment.registerDisposer(view.visibility.changed.add(scheduleUpdateChunkPriorities));
+    attachment.registerDisposer(scheduleUpdateChunkPriorities);
+    scheduleUpdateChunkPriorities();
   }
 
   private updateChunkPriorities() {
@@ -581,49 +553,64 @@ export class MultiscaleMeshLayer extends SegmentationLayerSharedObjectCounterpar
     if (maxVisibility === Number.NEGATIVE_INFINITY) {
       return;
     }
+    const {transform: {value: transform}} = this;
+    if (transform.error !== undefined) return;
     const manifestChunks = new Array<MultiscaleManifestChunk>();
+    this.chunkManager.registerLayer(this);
     {
       const priorityTier = getPriorityTier(maxVisibility);
       const basePriority = getBasePriority(maxVisibility);
       const {source, chunkManager} = this;
       forEachVisibleSegment(this, objectId => {
         const manifestChunk = source.getChunk(objectId);
+        ++this.numVisibleChunksNeeded;
         chunkManager.requestChunk(
             manifestChunk, priorityTier, basePriority + MESH_OBJECT_MANIFEST_CHUNK_PRIORITY);
         const state = manifestChunk.state;
         if (state === ChunkState.SYSTEM_MEMORY_WORKER || state === ChunkState.SYSTEM_MEMORY ||
             state === ChunkState.GPU_MEMORY) {
           manifestChunks.push(manifestChunk);
+          ++this.numVisibleChunksAvailable;
         }
       });
     }
     if (manifestChunks.length === 0) return;
     const {source, chunkManager} = this;
-    for (const viewState of this.viewStates) {
-      const visibility = viewState.visibility.value;
+    for (const {view} of this.attachments.values()) {
+      const visibility = view.visibility.value;
       if (visibility === Number.NEGATIVE_INFINITY) {
         continue;
       }
       const priorityTier = getPriorityTier(visibility);
       const basePriority = getBasePriority(visibility);
-      const viewport = viewState.viewport.value;
-      const modelViewProjection = mat4.create();
+      const projectionParameters = view.projectionParameters.value;
+      const modelViewProjectionMatrix = tempModelMatrix;
+      try {
+        get3dModelToDisplaySpaceMatrix(
+            modelViewProjectionMatrix, projectionParameters.displayDimensionRenderInfo, transform);
+      } catch {
+        continue;
+      }
       mat4.multiply(
-          modelViewProjection, viewport.viewProjectionMat,
-          mat4.multiply(
-              modelViewProjection, this.objectToDataTransform.value, source.format.transform));
-      const clippingPlanes = getFrustrumPlanes(new Float32Array(24), modelViewProjection);
+          modelViewProjectionMatrix, projectionParameters.viewProjectionMat,
+          modelViewProjectionMatrix);
+      const clippingPlanes = getFrustrumPlanes(new Float32Array(24), modelViewProjectionMatrix);
       const detailCutoff = this.renderScaleTarget.value;
       for (const manifestChunk of manifestChunks) {
         const maxLod = manifestChunk.manifest!.lodScales.length - 1;
         getDesiredMultiscaleMeshChunks(
-            manifestChunk.manifest!, modelViewProjection, clippingPlanes, detailCutoff,
-            viewport.width, viewport.height, (lod, chunkIndex, _renderScale, empty) => {
+            manifestChunk.manifest!, modelViewProjectionMatrix, clippingPlanes, detailCutoff,
+            projectionParameters.width, projectionParameters.height,
+            (lod, chunkIndex, _renderScale, empty) => {
               if (empty) return;
               let fragmentChunk = source.getFragmentChunk(manifestChunk, lod, chunkIndex);
+              ++this.numVisibleChunksNeeded;
               chunkManager.requestChunk(
                   fragmentChunk, priorityTier,
                   basePriority + MESH_OBJECT_FRAGMENT_CHUNK_PRIORITY - maxLod + lod);
+              if (fragmentChunk.state === ChunkState.GPU_MEMORY) {
+                ++this.numVisibleChunksAvailable;
+              }
             });
       }
     }

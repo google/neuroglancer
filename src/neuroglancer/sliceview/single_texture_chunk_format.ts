@@ -17,6 +17,7 @@
 import {VolumeChunk, VolumeChunkSource} from 'neuroglancer/sliceview/volume/frontend';
 import {ChunkFormat} from 'neuroglancer/sliceview/volume/frontend';
 import {TypedArray} from 'neuroglancer/util/array';
+import {DataType} from 'neuroglancer/util/data_type';
 import {Disposable, RefCounted} from 'neuroglancer/util/disposable';
 import {GL} from 'neuroglancer/webgl/context';
 import {ShaderBuilder, ShaderProgram, ShaderSamplerType, textureTargetForSamplerType} from 'neuroglancer/webgl/shader';
@@ -26,11 +27,12 @@ const textureLayoutSymbol = Symbol('SingleTextureVolumeChunk.textureLayout');
 
 export abstract class SingleTextureChunkFormat<TextureLayout extends Disposable> extends RefCounted
     implements ChunkFormat {
-  constructor(public shaderKey: string) {
+  constructor(public shaderKey: string, public dataType: DataType) {
     super();
   }
 
-  defineShader(builder: ShaderBuilder) {
+  defineShader(builder: ShaderBuilder, numChannelDimensions: number) {
+    numChannelDimensions;
     builder.addTextureSampler(this.shaderSamplerType, 'uVolumeChunkSampler', textureUnitSymbol);
   }
 
@@ -50,15 +52,22 @@ export abstract class SingleTextureChunkFormat<TextureLayout extends Disposable>
   /**
    * Called each time textureLayout changes while drawing chunks.
    */
-  abstract setupTextureLayout(gl: GL, shader: ShaderProgram, textureLayout: TextureLayout): void;
+  abstract setupTextureLayout(
+      gl: GL, shader: ShaderProgram, textureLayout: TextureLayout, fixedChunkPosition: Uint32Array,
+      chunkDisplaySubspaceDimensions: readonly number[],
+      channelDimensions: readonly number[]): void;
 
   bindChunk<Data>(
-      gl: GL, shader: ShaderProgram, chunk: SingleTextureVolumeChunk<Data, TextureLayout>) {
+      gl: GL, shader: ShaderProgram, chunk: SingleTextureVolumeChunk<Data, TextureLayout>,
+      fixedChunkPosition: Uint32Array, chunkDisplaySubspaceDimensions: readonly number[],
+      channelDimensions: readonly number[], newSource: boolean) {
     let textureLayout = chunk.textureLayout!;
     let existingTextureLayout = (<any>shader)[textureLayoutSymbol];
-    if (existingTextureLayout !== textureLayout) {
+    if (existingTextureLayout !== textureLayout || newSource) {
       (<any>shader)[textureLayoutSymbol] = textureLayout;
-      this.setupTextureLayout(gl, shader, textureLayout);
+      this.setupTextureLayout(
+          gl, shader, textureLayout, fixedChunkPosition, chunkDisplaySubspaceDimensions,
+          channelDimensions);
     }
     gl.bindTexture(textureTargetForSamplerType[this.shaderSamplerType], chunk.texture);
   }
@@ -76,7 +85,7 @@ export abstract class SingleTextureVolumeChunk<Data, TextureLayout extends Dispo
   texture: WebGLTexture|null = null;
   data: Data;
   textureLayout: TextureLayout|null;
-  chunkFormat: SingleTextureChunkFormat<TextureLayout>;
+  CHUNK_FORMAT_TYPE: SingleTextureChunkFormat<TextureLayout>;
 
   constructor(source: VolumeChunkSource, x: any) {
     super(source, x);

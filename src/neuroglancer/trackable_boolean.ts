@@ -56,7 +56,7 @@ export class TrackableBoolean implements Trackable {
 
 export class TrackableBooleanCheckbox extends RefCounted {
   element = document.createElement('input');
-  constructor(public model: TrackableBoolean) {
+  constructor(public model: WatchableValueInterface<boolean>) {
     super();
     let {element} = this;
     element.type = 'checkbox';

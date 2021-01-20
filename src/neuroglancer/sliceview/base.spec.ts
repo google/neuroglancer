@@ -14,27 +14,98 @@
  * limitations under the License.
  */
 
-import {getNearIsotropicBlockSize} from 'neuroglancer/sliceview/base';
-import {vec3} from 'neuroglancer/util/geom';
+import {estimateSliceAreaPerChunk, getNearIsotropicBlockSize} from 'neuroglancer/sliceview/base';
+import {ChunkLayout} from 'neuroglancer/sliceview/chunk_layout';
+import {mat4, vec3} from 'neuroglancer/util/geom';
 
 describe('sliceview/base', () => {
   it('getNearIsotropicBlockSize', () => {
-    expect(
-        getNearIsotropicBlockSize({voxelSize: vec3.fromValues(1, 1, 1), maxVoxelsPerChunkLog2: 18}))
-        .toEqual(vec3.fromValues(64, 64, 64));
-
-    expect(
-        getNearIsotropicBlockSize({voxelSize: vec3.fromValues(2, 1, 1), maxVoxelsPerChunkLog2: 17}))
-        .toEqual(vec3.fromValues(32, 64, 64));
-
-    expect(
-        getNearIsotropicBlockSize({voxelSize: vec3.fromValues(3, 3, 30), maxVoxelsPerChunkLog2: 9}))
-        .toEqual(vec3.fromValues(16, 16, 2));
+    expect(getNearIsotropicBlockSize({
+      rank: 3,
+      displayRank: 3,
+      chunkToViewTransform: Float32Array.of(
+          1, 0, 0,  //
+          0, 1, 0,  //
+          0, 0, 1),
+      maxVoxelsPerChunkLog2: 18,
+    })).toEqual(Uint32Array.of(64, 64, 64));
 
     expect(getNearIsotropicBlockSize({
-      voxelSize: vec3.fromValues(3, 3, 30),
+      rank: 3,
+      displayRank: 3,
+      chunkToViewTransform: Float32Array.of(
+          2, 0, 0,  //
+          0, 1, 0,  //
+          0, 0, 1),
+      maxVoxelsPerChunkLog2: 17,
+    })).toEqual(Uint32Array.of(32, 64, 64));
+
+    expect(getNearIsotropicBlockSize({
+      rank: 3,
+      displayRank: 3,
+      chunkToViewTransform: Float32Array.of(
+          3, 0, 0,  //
+          0, 3, 0,  //
+          0, 0, 30),
+      maxVoxelsPerChunkLog2: 9,
+    })).toEqual(Uint32Array.of(16, 16, 2));
+
+    expect(getNearIsotropicBlockSize({
+      rank: 4,
+      displayRank: 3,
+      chunkToViewTransform: Float32Array.of(
+          3, 0, 0, 0,  //
+          0, 3, 0, 0,  //
+          0, 0, 30, 0),
+      maxVoxelsPerChunkLog2: 9,
+      minBlockSize: Uint32Array.of(1, 1, 1, 8),
+    })).toEqual(Uint32Array.of(8, 8, 1, 8));
+
+
+    expect(getNearIsotropicBlockSize({
+      rank: 3,
+      displayRank: 3,
+      chunkToViewTransform: Float32Array.of(
+          3, 0, 0,  //
+          0, 3, 0,  //
+          0, 0, 30),
       upperVoxelBound: vec3.fromValues(1, 128, 128),
       maxVoxelsPerChunkLog2: 8
-    })).toEqual(vec3.fromValues(1, 64, 4));
+    })).toEqual(Uint32Array.of(1, 64, 4));
+  });
+});
+
+describe('estimateSliceAreaPerChunk', () => {
+  it('works for identity chunk transform', () => {
+    const chunkLayout = new ChunkLayout(vec3.fromValues(3, 4, 5), mat4.create(), 3);
+    {
+      const viewMatrix = Float32Array.from([
+        1, 0, 0, 0,  //
+        0, 1, 0, 0,  //
+        0, 0, 1, 0,  //
+        0, 0, 0, 1,  //
+      ]) as mat4;
+      expect(estimateSliceAreaPerChunk(chunkLayout, viewMatrix)).toEqual(3 * 4);
+    }
+
+    {
+      const viewMatrix = Float32Array.from([
+        0, 1, 0, 0,  //
+        1, 0, 0, 0,  //
+        0, 0, 1, 0,  //
+        0, 0, 0, 1,  //
+      ]) as mat4;
+      expect(estimateSliceAreaPerChunk(chunkLayout, viewMatrix)).toEqual(3 * 4);
+    }
+
+    {
+      const viewMatrix = Float32Array.from([
+        1, 0, 0, 0,  //
+        0, 0, 1, 0,  //
+        0, 1, 0, 0,  //
+        0, 0, 0, 1,  //
+      ]) as mat4;
+      expect(estimateSliceAreaPerChunk(chunkLayout, viewMatrix)).toEqual(3 * 5);
+    }
   });
 });

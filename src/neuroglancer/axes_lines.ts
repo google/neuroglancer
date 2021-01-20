@@ -14,12 +14,31 @@
  * limitations under the License.
  */
 
+import {ProjectionParameters} from 'neuroglancer/projection_parameters';
 import {RefCounted} from 'neuroglancer/util/disposable';
 import {mat4} from 'neuroglancer/util/geom';
 import {Buffer} from 'neuroglancer/webgl/buffer';
 import {GL} from 'neuroglancer/webgl/context';
 import {ShaderProgram} from 'neuroglancer/webgl/shader';
 import {trivialColorShader} from 'neuroglancer/webgl/trivial_shaders';
+
+const tempMat = mat4.create();
+
+export function computeAxisLineMatrix(
+    projectionParameters: ProjectionParameters, axisLength: number) {
+  const mat = mat4.identity(tempMat);
+  const {
+    globalPosition: position,
+    displayDimensionRenderInfo: {canonicalVoxelFactors, displayDimensionIndices}
+  } = projectionParameters;
+  for (let i = 0; i < 3; ++i) {
+    const globalDim = displayDimensionIndices[i];
+    mat[12 + i] = globalDim === -1 ? 0 : position[globalDim];
+    mat[5 * i] = axisLength / canonicalVoxelFactors[i];
+  }
+  mat4.multiply(mat, projectionParameters.viewProjectionMat, mat);
+  return mat;
+}
 
 export class AxesLineHelper extends RefCounted {
   vertexBuffer: Buffer;

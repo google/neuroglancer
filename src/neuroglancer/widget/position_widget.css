@@ -19,87 +19,131 @@
   align-items: center;
 }
 
-.neuroglancer-position-widget-input-container {
-  position: relative;
-  display: inline-block;
-  outline: 0;
-  border: 0;
-  margin: 0;
-  padding: 0;
-}
-
-.neuroglancer-position-widget input {
-  font-family: monospace;
-  font-size: medium;
-  border: 0;
-  margin: 0;
-  top: 0;
-  left: 0;
-}
-
-input.neuroglancer-position-widget-input {
-  color: white;
-  background-color: transparent;
-  position: relative;
-  vertical-align: top;
-}
-.neuroglancer-position-widget-input:focus {
-  outline: 0px;
-  }
-
-.neuroglancer-position-widget-hint {
-  position: absolute;
-  background-color: transparent;
-  border-color: transparent;
-  box-shadow: none;
-  color: #aaa;
+/* In Firefox, disabled input elements block all pointer events, even on parent elements, and that
+interferes with our click handling.  Setting `pointer-events: none;` avoids that problem. */
+.neuroglancer-position-widget input:disabled {
   pointer-events: none;
 }
 
-.neuroglancer-copy-button {
-  padding: 0px;
-  margin-right: 2px;
+.neuroglancer-position-widget .neuroglancer-copy-button:first-child {
+  display: none;
+}
+
+.neuroglancer-position-dimension-coordinate, .neuroglancer-position-dimension-name, .neuroglancer-position-dimension-scale {
+  background-color: transparent;
+  border-color: transparent;
+  box-shadow: none;
+  border: 0;
+  margin: 0;
+  font-family: monospace;
+  font-size: medium;
+}
+
+.neuroglancer-position-dimension-coordinate {
+  color: white;
+}
+
+.neuroglancer-position-widget input:invalid, .neuroglancer-position-widget input::placeholder, .neuroglancer-position-widget input[data-is-valid="false"] {
+  text-decoration: solid underline red;
+}
+
+.neuroglancer-position-widget *:focus {
+  outline: 0px;
+}
+
+.neuroglancer-position-dimension[data-dropdown-visible="true"]::after {
+  content: "";
+  display: block;
+  left: 0px;
+  right: 0px;
+  bottom: -1px;
+  position: absolute;
+  border-bottom: 1px solid black;
+  z-index: 100;
+  height: 0px;
+}
+
+.neuroglancer-position-dimension-dropdown {
+  position: absolute;
+  min-width: calc(100% + 2px);
+  border: 1px solid #aaa;
+  box-sizing: border-box;
+  padding: 2px;
+  left: -1px;
+  z-index: 100;
+  background-color: black;
+  display: grid;
+  grid-template-areas:
+    "labels . graph";
+  grid-template-rows: 1fr;
+  grid-template-columns: 0fr 3px 0fr;
+}
+
+.neuroglancer-position-dimension-dropdown:focus {
+  outline: 0px;
+}
+
+.neuroglancer-position-dimension-dropdown-lowerbound,
+.neuroglancer-position-dimension-dropdown-upperbound,
+.neuroglancer-position-dimension-dropdown-hoverposition {
+  grid-area: labels;
+  text-align: right;
+}
+
+.neuroglancer-position-dimension-dropdown canvas {
+  margin-top: 0.5em;
+  margin-bottom: 0.5em;
+  grid-area: graph;
+}
+
+.neuroglancer-position-dimension:focus-within,
+.neuroglancer-position-dimension[data-dropdown-visible="true"] {
+  border: 1px solid #aaa;
+  background-color: black;
+}
+
+.neuroglancer-position-dimension {
+  border: 1px solid transparent;
+  position: relative;
   display: inline-block;
-  user-select: none;
-  color: black;
-  background-color: #ccc;
-}
-
-.neuroglancer-copy-button:focus {
-  outline: 0px;
-}
-
-.neuroglancer-voxel-size-widget {
-  vertical-align: center;
-  margin-right: 2px;
-}
-
-.neuroglancer-voxel-size-units {
   font-family: monospace;
   font-size: medium;
-  color: white;
-  margin-left: 3px;
-  outline: 0px;
-}
-.neuroglancer-voxel-size-units::after {
-  content: "³";
-  
+  white-space: nowrap;
 }
 
-.neuroglancer-voxel-size-dimension {
-  font-family: monospace;
-  font-size: medium;
-  color: white;
+.neuroglancer-position-dimension-name {
+  color: #ff6;
+  padding-left: 2px;
 }
 
-.neuroglancer-voxel-size-dimension + .neuroglancer-voxel-size-dimension::before {
-  content: "×";
+.neuroglancer-position-dimension-scale-container[data-is-empty="false"]::before {
+  content: "(";
   color: #aaa;
 }
 
+.neuroglancer-position-dimension-scale-container[data-is-empty="false"]::after {
+  content: ")";
+  color: #aaa;
+}
+
+.neuroglancer-position-dimension-scale-container[data-is-empty="false"] {
+  margin-right: 5px;
+}
+
+.neuroglancer-position-dimension-scale {
+   color: #bbb;
+}
+
+.neuroglancer-position-dimension-scale-container {
+  margin-right: 2px;
+  margin-left: 4px;
+}
+
 .neuroglancer-mouse-position-widget {
+  margin-left: 1ch;
   vertical-align: center;
   font-family: monospace;
   font-size: medium;
   color: orange;
+  white-space: pre;
 }

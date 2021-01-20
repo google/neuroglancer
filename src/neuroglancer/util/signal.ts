@@ -26,7 +26,7 @@
  * void.  Due to limitations in TypeScript, any interface containing a callable signature will be
  * accepted by the compiler, but the resultant signature of `dispatch` will not be correct.
  */
-export class Signal<Callable extends Function> {
+export class Signal<Callable extends Function = () => void> {
   private handlers = new Set<Callable>();
 
   /**
@@ -85,6 +85,20 @@ export class Signal<Callable extends Function> {
   }
 }
 
+export function observeSignal(
+    callback: () => void,
+    ...signals: {add(callback: () => void): void, remove(callback: () => void): void}[]) {
+  callback();
+  for (let i = 0, count = signals.length; i < count; ++i) {
+    signals[i].add(callback);
+  }
+  return () => {
+    for (let i = 0, count = signals.length; i < count; ++i) {
+      signals[i].remove(callback);
+    }
+  };
+}
+
 /**
  * Simple specialization of Signal for the common case of a nullary handler signature.
  */
@@ -102,3 +116,13 @@ export interface ReadonlySignal<Callable extends Function> {
 }
 
 export type NullaryReadonlySignal = ReadonlySignal<() => void>;
+
+export const neverSignal: NullaryReadonlySignal = {
+  count: 0,
+  add(_handler: any) {
+    return () => {};
+  },
+  remove(_handler: any) {
+    return false;
+  },
+};

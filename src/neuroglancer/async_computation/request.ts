@@ -27,7 +27,7 @@ let nextTaskId = 0;
 function returnWorker(worker: Worker) {
   for (const [id, task] of pendingTasks) {
     pendingTasks.delete(id);
-    worker.postMessage(task.msg, task.transfer);
+    worker.postMessage(task.msg, task.transfer as Transferable[]);
     return;
   }
   freeWorkers.push(worker);
@@ -66,9 +66,9 @@ export function requestAsyncComputation<Signature extends(...args: any) => any>(
     tasks.set(id, {resolve, reject, cleanup});
   });
   if (freeWorkers.length !== 0) {
-    freeWorkers.pop()!.postMessage(msg, transfer);
+    freeWorkers.pop()!.postMessage(msg, transfer as Transferable[]);
   } else if (tasks.size < maxWorkers) {
-    getNewWorker().postMessage(msg, transfer);
+    getNewWorker().postMessage(msg, transfer as Transferable[]);
   } else {
     pendingTasks.set(id, {msg, transfer});
   }

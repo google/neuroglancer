@@ -20,12 +20,17 @@ import {Trackable} from 'neuroglancer/util/trackable';
 import SockJS from 'sockjs-client';
 import {StatusMessage} from 'neuroglancer/status';
 
-function getServerConnectionURL() {
-  const match = window.location.pathname.match(/^\/v\/([^\/]+)/);
+function getServerUrls() {
+  const match = window.location.pathname.match(/^(.*)\/v\/([^\/]+)/);
   if (match === null) {
     throw new Error('Failed to determine token from URL.');
   }
-  return `${window.location.origin}/socket/${match[1]}`;
+  const prefix = `${window.location.origin}${match[1]}`;
+  const token = match[2];
+  return {
+    socketUrl: `${prefix}/socket/${token}`,
+    actionUrl: `${prefix}/action/${token}`,
+  };
 }
 
 const defaultReconnectionDelay = 1000;
@@ -37,19 +42,18 @@ export class ServerConnection extends RefCounted {
   reconnectionDelay = defaultReconnectionDelay;
   waitingToReconnect: number = -1;
   isOpen = false;
+  socketUrl: string;
+  actionUrl: string;
 
   updateClients = new Map<string, AtomicStateClient>();
 
   status = this.registerDisposer(new StatusMessage(true));
 
-  private actionQueue: {action: string, state: any}[] = [];
-  private nextActionId = 0;
-  private lastActionAcknowledged = -1;
-
   constructor(
-      public sharedState: Trackable|undefined, public privateState: Trackable, public configState: Trackable,
-      public url: string = getServerConnectionURL()) {
+      public sharedState: Trackable|undefined, public privateState: Trackable,
+      public configState: Trackable) {
     super();
+    Object.assign(this, getServerUrls());
     const statesToUpdate = [
       {key: 'p', state: privateState, receiveUpdates: false, sendUpdates: 0},
       {key: 'c', state: configState, receiveUpdates: true, sendUpdates: null},
@@ -97,7 +101,7 @@ export class ServerConnection extends RefCounted {
   private connect() {
     this.status.setText('Connecting to Python server');
     this.status.setVisible(true);
-    const socket = this.socket = new SockJS(this.url, {transports: ['websocket', 'xhr-streaming']});
+    const socket = this.socket = new SockJS(this.socketUrl, {transports: ['websocket', 'xhr-streaming']});
     socket.onopen = () => {
       this.isOpen = true;
       this.reconnectionDelay = defaultReconnectionDelay;
@@ -105,7 +109,6 @@ export class ServerConnection extends RefCounted {
       for (const client of this.updateClients.values()) {
         client.connected = true;
       }
-      this.flushActionQueue();
     };
     socket.onclose = () => {
       this.isOpen = false;
@@ -120,10 +123,10 @@ export class ServerConnection extends RefCounted {
             `Disconnected from Python server.  ` +
             `Retrying in ${Math.ceil(remaining / 1000)} seconds.`);
       };
-      this.waitingToReconnect = setInterval(() => {
+      this.waitingToReconnect = window.setInterval(() => {
         const remaining = reconnectTime - Date.now();
         if (remaining < 0) {
-          clearInterval(this.waitingToReconnect);
+          window.clearInterval(this.waitingToReconnect);
           this.waitingToReconnect = -1;
           this.connect();
         } else {
@@ -147,32 +150,11 @@ export class ServerConnection extends RefCounted {
           updateClient.setState(x['s'], x['g']);
           break;
         }
-        case 'ackAction': {
-          const lastId = parseInt(x['id'], 10);
-          if (lastId < this.lastActionAcknowledged || lastId >= this.nextActionId) {
-            throw new Error('Invalid action acknowledged message');
-          }
-          this.actionQueue.splice(0, lastId - this.lastActionAcknowledged);
-          this.lastActionAcknowledged = lastId;
-          break;
-        }
       }
     };
   }
 
-  private flushActionQueue() {
-    const {actionQueue} = this;
-    if (actionQueue.length === 0) {
-      return;
-    }
-    this.send('action', {id: this.nextActionId - 1, actions: actionQueue});
-  }
-
   sendActionNotification(action: string, state: any) {
-    this.actionQueue.push({action, state});
-    ++this.nextActionId;
-    if (this.isOpen) {
-      this.flushActionQueue();
-    }
+    fetch(this.actionUrl, {method: 'POST', body: JSON.stringify({action, state})});
   }
 }

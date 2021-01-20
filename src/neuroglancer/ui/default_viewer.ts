@@ -14,23 +14,14 @@
  * limitations under the License.
  */
 
-require('./default_viewer.css');
+import './default_viewer.css';
 
-import 'neuroglancer/sliceview/chunk_format_handlers';
-
-import {StatusMessage} from 'neuroglancer/status';
-import {DisplayContext} from 'neuroglancer/display_context';
-import {Viewer, ViewerOptions} from 'neuroglancer/viewer';
+import {ViewerOptions} from 'neuroglancer/viewer';
 import {disableContextMenu, disableWheel} from 'neuroglancer/ui/disable_default_actions';
+import {makeMinimalViewer} from './minimal_viewer';
 
 export function makeDefaultViewer(options?: Partial<ViewerOptions>) {
   disableContextMenu();
   disableWheel();
-  try {
-    let display = new DisplayContext(document.getElementById('neuroglancer-container')!);
-    return new Viewer(display, options);
-  } catch (error) {
-    StatusMessage.showMessage(`Error: ${error.message}`);
-    throw error;
-  }
+  return makeMinimalViewer(options);
 }

@@ -15,56 +15,46 @@
  */
 
 import {SegmentColorHash, SegmentColorShaderManager} from 'neuroglancer/segment_color';
+import {DataType} from 'neuroglancer/util/data_type';
 import {Uint64} from 'neuroglancer/util/uint64';
 import {fragmentShaderTest} from 'neuroglancer/webgl/shader_testing';
-import {glsl_unpackUint64leFromUint32} from './webgl/shader_lib';
 
 describe('segment_color', () => {
   it('the JavaScript implementation matches the WebGL shader implementation', () => {
-    fragmentShaderTest({outR: 'float', outG: 'float', outB: 'float'}, tester => {
-      const shaderManager = new SegmentColorShaderManager('getColor');
-      let {gl, builder} = tester;
-      shaderManager.defineShader(builder);
-      builder.addUniform('highp uvec2', 'inputValue');
-      const colorHash = SegmentColorHash.getDefault();
-      builder.addFragmentCode(glsl_unpackUint64leFromUint32);
-      builder.setFragmentMain(`
-uint64_t x = unpackUint64leFromUint32(inputValue);
-
-highp vec3 color = getColor(x);
+    fragmentShaderTest(
+        {inputValue: DataType.UINT64}, {outR: 'float', outG: 'float', outB: 'float'}, tester => {
+          const shaderManager = new SegmentColorShaderManager('getColor');
+          const {builder} = tester;
+          shaderManager.defineShader(builder);
+          const colorHash = SegmentColorHash.getDefault();
+          builder.setFragmentMain(`
+highp vec3 color = getColor(inputValue);
 outR = color.r;
 outG = color.g;
 outB = color.b;
 `);
-      tester.build();
-      let {shader} = tester;
-      shader.bind();
-      shaderManager.enable(gl, shader, colorHash);
+          tester.build();
+          const {gl, shader} = tester;
+          shader.bind();
+          shaderManager.enable(gl, shader, colorHash);
 
-      function testValue(x: Uint64) {
-        gl.uniform2ui(shader.uniform('inputValue'), x.low, x.high);
-        tester.execute();
+          function testValue(x: Uint64) {
+            tester.execute({inputValue: x});
+            let expected = new Float32Array(3);
+            colorHash.compute(expected, x);
+            const {values} = tester;
+            expect(values.outR).toBeCloseTo(expected[0]);
+            expect(values.outG).toBeCloseTo(expected[1]);
+            expect(values.outB).toBeCloseTo(expected[2]);
+          }
 
-        let actual = new Float32Array(3);
-        for (let i = 0; i < 3; ++i) {
-          actual[i] = tester.readFloat(i);
-        }
-
-        let expected = new Float32Array(3);
-        colorHash.compute(expected, x);
-        const {values} = tester;
-        expect(values.outR).toBeCloseTo(expected[0]);
-        expect(values.outG).toBeCloseTo(expected[1]);
-        expect(values.outB).toBeCloseTo(expected[2]);
-      }
-
-      testValue(Uint64.parseString('0'));
-      testValue(Uint64.parseString('8'));
-      const COUNT = 100;
-      for (let iter = 0; iter < COUNT; ++iter) {
-        let x = Uint64.random();
-        testValue(x);
-      }
-    });
+          testValue(Uint64.parseString('0'));
+          testValue(Uint64.parseString('8'));
+          const COUNT = 100;
+          for (let iter = 0; iter < COUNT; ++iter) {
+            let x = Uint64.random();
+            testValue(x);
+          }
+        });
   });
 });

@@ -15,19 +15,15 @@
  */
 
 import {DataType} from 'neuroglancer/util/data_type';
-import {GL} from 'neuroglancer/webgl/context';
 import {fragmentShaderTest} from 'neuroglancer/webgl/shader_testing';
-import {compute1dTextureLayout, computeTextureFormat, OneDimensionalTextureAccessHelper, OneDimensionalTextureLayout, setOneDimensionalTextureData, TextureFormat} from 'neuroglancer/webgl/texture_access';
+import {computeTextureFormat, OneDimensionalTextureAccessHelper, setOneDimensionalTextureData, TextureFormat} from 'neuroglancer/webgl/texture_access';
 
-function testTextureAccess(
-    dataLength: number,
-    setLayout: (layout: OneDimensionalTextureLayout, gl: GL, texelsPerElement: number) => void) {
-  fragmentShaderTest({outputValue: 'uint'}, tester => {
+function testTextureAccess(dataLength: number) {
+  const dataType = DataType.UINT32;
+  fragmentShaderTest({uOffset: 'uint'}, {outputValue: dataType}, tester => {
     let {gl, builder} = tester;
-    const dataType = DataType.UINT32;
     const numComponents = 1;
     const format = new TextureFormat();
-    const layout = new OneDimensionalTextureLayout();
     computeTextureFormat(format, dataType, numComponents);
 
     const data = new Uint32Array(dataLength);
@@ -35,24 +31,19 @@ function testTextureAccess(
       data[i] = i;
     }
 
-    setLayout(layout, gl, format.texelsPerElement);
-
     const accessHelper = new OneDimensionalTextureAccessHelper('textureAccess');
     const textureUnitSymbol = Symbol('textureUnit');
     accessHelper.defineShader(builder);
-    builder.addUniform('highp uint', 'uOffset');
     builder.addTextureSampler('usampler2D', 'uSampler', textureUnitSymbol);
     builder.addFragmentCode(
         accessHelper.getAccessor('readValue', 'uSampler', dataType, numComponents));
     builder.setFragmentMain(`
-outputValue = readValue(uOffset).value;
+outputValue = readValue(uOffset);
 `);
 
     tester.build();
     let {shader} = tester;
     shader.bind();
-
-    accessHelper.setupTextureLayout(gl, shader, layout);
 
     const textureUnit = shader.textureUnit(textureUnitSymbol);
     let texture = gl.createTexture();
@@ -60,16 +51,14 @@ outputValue = readValue(uOffset).value;
       gl.deleteTexture(texture);
     });
     gl.bindTexture(gl.TEXTURE_2D, texture);
-    setOneDimensionalTextureData(gl, layout, format, data);
+    setOneDimensionalTextureData(gl, format, data);
     gl.bindTexture(gl.TEXTURE_2D, null);
 
     function testOffset(x: number) {
       let value = data[x];
-      gl.uniform1ui(shader.uniform('uOffset'), x);
-
       gl.activeTexture(gl.TEXTURE0 + textureUnit);
       gl.bindTexture(gl.TEXTURE_2D, texture);
-      tester.execute();
+      tester.execute({uOffset: x});
       gl.bindTexture(gl.TEXTURE_2D, null);
       expect(tester.values.outputValue).toBe(value,
             `offset = ${x}, value = ${value}`);
@@ -89,9 +78,7 @@ outputValue = readValue(uOffset).value;
 }
 
 function test1dTextureAccess(dataLength: number) {
-  testTextureAccess(dataLength, (layout, gl, texelsPerElement) => {
-    compute1dTextureLayout(layout, gl, texelsPerElement, dataLength);
-  });
+  testTextureAccess(dataLength);
 }
 
 describe('one_dimensional_texture_access', () => {

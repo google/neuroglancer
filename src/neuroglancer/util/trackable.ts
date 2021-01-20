@@ -19,10 +19,19 @@
  */
 
 import {RefCounted} from 'neuroglancer/util/disposable';
-import {verifyObject} from 'neuroglancer/util/json';
+import {verifyObject, verifyOptionalObjectProperty} from 'neuroglancer/util/json';
 import {NullaryReadonlySignal, NullarySignal} from 'neuroglancer/util/signal';
 
-export interface Trackable {
+export interface JsonRestorable {
+  restoreState: (x: any) => void;
+}
+
+export function optionallyRestoreFromJsonMember(
+    obj: any, member: string, restorable: JsonRestorable) {
+  verifyOptionalObjectProperty(obj, member, x => restorable.restoreState(x));
+}
+
+export interface Trackable extends JsonRestorable {
   restoreState: (x: any) => void;
   reset: () => void;
   changed: NullaryReadonlySignal;

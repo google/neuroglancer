@@ -43,10 +43,11 @@ export class TrackableEnum<T extends number> implements Trackable {
   }
 
   restoreState(obj: any) {
-    this.value = <T>verifyEnumString(obj, this.enumType);
+    this.value = verifyEnumString(obj, this.enumType);
   }
 
-  toJSON(): string {
-    return this.enumType[<number>this.value_].toLowerCase();
+  toJSON(): string|undefined {
+    if (this.value_ === this.defaultValue) return undefined;
+    return this.enumType[this.value_].toLowerCase();
   }
 }

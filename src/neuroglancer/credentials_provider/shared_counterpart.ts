@@ -19,7 +19,7 @@
  * another thread.
  */
 
-import {CredentialsProvider, CredentialsWithGeneration, makeCachedCredentialsGetter} from 'neuroglancer/credentials_provider';
+import {CredentialsProvider, CredentialsWithGeneration, makeCachedCredentialsGetter, MaybeOptionalCredentialsProvider} from 'neuroglancer/credentials_provider';
 import {CREDENTIALS_PROVIDER_GET_RPC_ID, CREDENTIALS_PROVIDER_RPC_ID} from 'neuroglancer/credentials_provider/shared_common';
 import {CancellationToken} from 'neuroglancer/util/cancellation';
 import {registerSharedObject, SharedObjectCounterpart} from 'neuroglancer/worker_rpc';
@@ -39,13 +39,14 @@ export class SharedCredentialsProviderCounterpart<Credentials> extends SharedObj
 export function WithSharedCredentialsProviderCounterpart<Credentials>() {
   return function<TBase extends{new (...args: any[]): SharedObjectCounterpart}>(Base: TBase) {
     return class extends Base {
-      credentialsProvider: SharedCredentialsProviderCounterpart<Credentials>;
+      credentialsProvider: MaybeOptionalCredentialsProvider<Credentials>;
       constructor(...args: any[]) {
         super(...args);
         const options = args[1];
         this.credentialsProvider =
-            this.rpc!.getRef<SharedCredentialsProviderCounterpart<Credentials>>(
-                options['credentialsProvider']);
+            this.rpc!.getOptionalRef<
+                SharedCredentialsProviderCounterpart<Exclude<Credentials, undefined>>>(
+                options['credentialsProvider']) as any;
       }
     };
   };

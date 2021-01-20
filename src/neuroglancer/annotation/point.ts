@@ -19,78 +19,180 @@
  */
 
 import {AnnotationType, Point} from 'neuroglancer/annotation';
-import {AnnotationRenderContext, AnnotationRenderHelper, registerAnnotationTypeRenderHandler} from 'neuroglancer/annotation/type_handler';
-import {mat4, vec3} from 'neuroglancer/util/geom';
-import {CircleShader} from 'neuroglancer/webgl/circles';
-import {emitterDependentShaderGetter, ShaderBuilder} from 'neuroglancer/webgl/shader';
+import {AnnotationRenderContext, AnnotationRenderHelper, AnnotationShaderGetter, registerAnnotationTypeRenderHandler} from 'neuroglancer/annotation/type_handler';
+import {defineCircleShader, drawCircles, initializeCircleShader} from 'neuroglancer/webgl/circles';
+import {defineLineShader, drawLines, initializeLineShader} from 'neuroglancer/webgl/lines';
+import {ShaderBuilder, ShaderProgram} from 'neuroglancer/webgl/shader';
+import {defineVectorArrayVertexShaderInput} from 'neuroglancer/webgl/shader_lib';
+import {defineVertexId, VertexIdHelper} from 'neuroglancer/webgl/vertex_id';
 
 class RenderHelper extends AnnotationRenderHelper {
-  private circleShader = this.registerDisposer(new CircleShader(this.gl));
-  private shaderGetter =
-      emitterDependentShaderGetter(this, this.gl, (builder: ShaderBuilder) => this.defineShader(builder));
-
-  defineShader(builder: ShaderBuilder) {
-    super.defineShader(builder);
-    this.circleShader.defineShader(builder, /*crossSectionFade=*/this.targetIsSliceView);
-    // Position of point in camera coordinates.
-    builder.addAttribute('highp vec3', 'aVertexPosition');
-    builder.setVertexMain(`
-emitCircle(uProjection * vec4(aVertexPosition, 1.0));
+  private defineShaderCommon(builder: ShaderBuilder) {
+    const {rank} = this;
+    // Position of point in model coordinates.
+    defineVectorArrayVertexShaderInput(
+        builder, 'float', WebGL2RenderingContext.FLOAT, /*normalized=*/ false, 'VertexPosition',
+        rank);
+    builder.addVarying('highp vec4', 'vBorderColor');
+    builder.addVertexCode(`
+float ng_markerDiameter;
+float ng_markerBorderWidth;
+void setPointMarkerSize(float size) {
+  ng_markerDiameter = size;
+}
+void setPointMarkerBorderWidth(float size) {
+  ng_markerBorderWidth = size;
+}
+void setPointMarkerColor(vec4 color) {
+  vColor = color;
+}
+void setPointMarkerBorderColor(vec4 color) {
+  vBorderColor = color;
+}
+`);
+    builder.addVertexMain(`
+ng_markerDiameter = 5.0;
+ng_markerBorderWidth = 1.0;
+vBorderColor = vec4(0.0, 0.0, 0.0, 1.0);
+float modelPosition[${rank}] = getVertexPosition0();
+float clipCoefficient = getSubspaceClipCoefficient(modelPosition);
+if (clipCoefficient == 0.0) {
+  gl_Position = vec4(2.0, 0.0, 0.0, 1.0);
+  return;
+}
+${this.invokeUserMain}
+vColor.a *= clipCoefficient;
+vBorderColor.a *= clipCoefficient;
 ${this.setPartIndex(builder)};
 `);
-    builder.setFragmentMain(`
-vec4 borderColor = vec4(0.0, 0.0, 0.0, 1.0);
-emitAnnotation(getCircleColor(vColor, borderColor));
+  }
+
+  private shaderGetter3d =
+      this.getDependentShader('annotation/point:3d', (builder: ShaderBuilder) => {
+        defineVertexId(builder);
+        defineCircleShader(builder, /*crossSectionFade=*/ this.targetIsSliceView);
+        this.defineShaderCommon(builder);
+        builder.addVertexMain(`
+emitCircle(uModelViewProjection *
+           vec4(projectModelVectorToSubspace(modelPosition), 1.0), ng_markerDiameter, ng_markerBorderWidth);
 `);
+        builder.setFragmentMain(`
+vec4 color = getCircleColor(vColor, vBorderColor);
+emitAnnotation(color);
+`);
+      });
+
+  private makeShaderGetter2d = (extraDim: number) =>
+      this.getDependentShader(`annotation/point:2d:${extraDim}`, (builder: ShaderBuilder) => {
+        defineVertexId(builder);
+        defineLineShader(builder, /*rounded=*/ true);
+        this.defineShaderCommon(builder);
+        builder.addVertexMain(`
+vec3 subspacePositionA = projectModelVectorToSubspace(modelPosition);
+vec3 subspacePositionB = subspacePositionA;
+vec4 baseProjection = uModelViewProjection * vec4(subspacePositionA, 1.0);
+vec4 zCoeffs = uModelViewProjection[${extraDim}];
+float minZ = 1e30;
+float maxZ = -1e30;
+for (int i = 0; i < 3; ++i) {
+  // Want: baseProjection[i] + z * zCoeffs[i] = -2.0 * (baseProjection.w - z * zCoeffs.w)
+  //  i.e. baseProjection[i] + 2.0 * baseProjection.w < -z * (2.0 * zCoeffs.w + zCoeffs[i])
+  //  i.e. baseProjection[i] + 2.0 * baseProjection.w < -z * k1
+  float k1 = 2.0 * zCoeffs.w + zCoeffs[i];
+  float q1 = -(baseProjection[i] + 2.0 * baseProjection.w) / k1;
+  if (k1 != 0.0) {
+    minZ = min(minZ, q1);
+    maxZ = max(maxZ, q1);
+  }
+  // Want: baseProjection[i] + z * zCoeffs[i] = 2.0 * (baseProjection.w + z * zCoeffs.w)
+  //  i.e. baseProjection[i] - 2.0 * baseProjection.w > z * (2.0 * zCoeffs.w - zCoeffs[i])
+  //  i.e. baseProjection[i] - 2.0 * baseProjection.w > z * k2
+  float k2 = 2.0 * zCoeffs.w - zCoeffs[i];
+  float q2 = (baseProjection[i] - 2.0 * baseProjection.w) / k2;
+  if (k2 != 0.0) {
+    minZ = min(minZ, q2);
+    maxZ = max(maxZ, q2);
+  }
+}
+if (minZ > maxZ) minZ = maxZ = 0.0;
+subspacePositionA[${extraDim}] = minZ;
+subspacePositionB[${extraDim}] = maxZ;
+emitLine(uModelViewProjection, subspacePositionA, subspacePositionB, ng_markerDiameter, ng_markerBorderWidth);
+`);
+        builder.setFragmentMain(`
+vec4 color = getRoundedLineColor(vColor, vBorderColor);
+emitAnnotation(vec4(color.rgb, color.a * ${this.getCrossSectionFadeFactor()}));
+`);
+      });
+
+  private shaderGetter2d = this.makeShaderGetter2d(2);
+
+  // TODO(jbms): This rendering for the 1d case is not correct except for cross-section/orthographic
+  // projection views where the "z" dimension is orthogonal to the single annotation chunk
+  // dimension.
+  private shaderGetter1d = this.makeShaderGetter2d(1);
+
+  private vertexIdHelper = this.registerDisposer(VertexIdHelper.get(this.gl));
+
+  enable(
+      shaderGetter: AnnotationShaderGetter, context: AnnotationRenderContext,
+      callback: (shader: ShaderProgram) => void) {
+    super.enable(shaderGetter, context, shader => {
+      const binder = shader.vertexShaderInputBinders['VertexPosition'];
+      binder.enable(1);
+      this.gl.bindBuffer(WebGL2RenderingContext.ARRAY_BUFFER, context.buffer.buffer);
+      binder.bind(this.serializedBytesPerAnnotation, context.bufferOffset);
+      const {vertexIdHelper} = this;
+      vertexIdHelper.enable();
+      callback(shader);
+      vertexIdHelper.disable();
+      binder.disable();
+    });
   }
 
   draw(context: AnnotationRenderContext) {
-    const shader = this.shaderGetter(context.renderContext.emitter);
-    this.enable(shader, context, () => {
-      const {gl} = this;
-      const aVertexPosition = shader.attribute('aVertexPosition');
-      context.buffer.bindToVertexAttrib(
-          aVertexPosition, /*components=*/3, /*attributeType=*/WebGL2RenderingContext.FLOAT,
-          /*normalized=*/false,
-          /*stride=*/0, /*offset=*/context.bufferOffset);
-      gl.vertexAttribDivisor(aVertexPosition, 1);
-      this.circleShader.draw(
-          shader, context.renderContext,
-          {interiorRadiusInPixels: 6, borderWidthInPixels: 2, featherWidthInPixels: 1},
-          context.count);
-      gl.vertexAttribDivisor(aVertexPosition, 0);
-      gl.disableVertexAttribArray(aVertexPosition);
-    });
+    const {numChunkDisplayDims} = context.chunkDisplayTransform;
+    switch (numChunkDisplayDims) {
+      case 3:
+        this.enable(this.shaderGetter3d, context, shader => {
+          initializeCircleShader(
+              shader, context.renderContext.projectionParameters, {featherWidthInPixels: 1});
+          drawCircles(shader.gl, 1, context.count);
+        });
+        break;
+      case 2:
+      case 1:
+        this.enable(
+            numChunkDisplayDims === 2 ? this.shaderGetter2d : this.shaderGetter1d, context,
+            shader => {
+              initializeLineShader(
+                  shader, context.renderContext.projectionParameters, /*featherWidthInPixels=*/ 1);
+              drawLines(shader.gl, 1, context.count);
+            });
+        break;
+    }
   }
 }
 
-registerAnnotationTypeRenderHandler(AnnotationType.POINT, {
-  bytes: 3 * 4,
-  serializer: (buffer: ArrayBuffer, offset: number, numAnnotations: number) => {
-    const coordinates = new Float32Array(buffer, offset, numAnnotations * 3);
-    return (annotation: Point, index: number) => {
-      const {point} = annotation;
-      const coordinateOffset = index * 3;
-      coordinates[coordinateOffset] = point[0];
-      coordinates[coordinateOffset + 1] = point[1];
-      coordinates[coordinateOffset + 2] = point[2];
-    };
-  },
+registerAnnotationTypeRenderHandler<Point>(AnnotationType.POINT, {
   sliceViewRenderHelper: RenderHelper,
   perspectiveViewRenderHelper: RenderHelper,
+  defineShaderNoOpSetters(builder) {
+    builder.addVertexCode(`
+void setPointMarkerSize(float size) {}
+void setPointMarkerBorderWidth(float size) {}
+void setPointMarkerColor(vec4 color) {}
+void setPointMarkerBorderColor(vec4 color) {}
+`);
+  },
   pickIdsPerInstance: 1,
-  snapPosition: (position: vec3, objectToData, data, offset) => {
-    vec3.transformMat4(position, <vec3>new Float32Array(data, offset, 3), objectToData);
+  snapPosition(position, data, offset) {
+    position.set(new Float32Array(data, offset, position.length));
   },
-  getRepresentativePoint: (objectToData, ann) => {
-    let repPoint = vec3.create();
-    vec3.transformMat4(repPoint, ann.point, objectToData);
-    return repPoint;
+  getRepresentativePoint(out, ann) {
+    out.set(ann.point);
   },
-  updateViaRepresentativePoint: (oldAnnotation: Point, position: vec3, dataToObject: mat4) => {
-    let annotation = {...oldAnnotation};
-    annotation.point = vec3.transformMat4(vec3.create(), position, dataToObject);
-    // annotation.id = '';
-    return annotation;
+  updateViaRepresentativePoint(oldAnnotation, position) {
+    return {...oldAnnotation, point: new Float32Array(position)};
   }
 });

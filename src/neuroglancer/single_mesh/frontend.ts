@@ -16,50 +16,40 @@
 
 import {ChunkState} from 'neuroglancer/chunk_manager/base';
 import {Chunk, ChunkManager, ChunkSource, WithParameters} from 'neuroglancer/chunk_manager/frontend';
-import {CoordinateTransform} from 'neuroglancer/coordinate_transform';
+import {CredentialsManager} from 'neuroglancer/credentials_provider';
+import {getCredentialsProviderCounterpart, WithCredentialsProvider} from 'neuroglancer/credentials_provider/chunk_source_frontend';
+import {VisibleLayerInfo} from 'neuroglancer/layer';
+import {PerspectivePanel} from 'neuroglancer/perspective_view/panel';
 import {PerspectiveViewRenderContext, PerspectiveViewRenderLayer} from 'neuroglancer/perspective_view/render_layer';
-import {GET_SINGLE_MESH_INFO_RPC_ID, SINGLE_MESH_CHUNK_KEY, SINGLE_MESH_LAYER_RPC_ID, SingleMeshInfo, SingleMeshSourceParameters, SingleMeshSourceParametersWithInfo, VertexAttributeInfo} from 'neuroglancer/single_mesh/base';
-import {TrackableValue} from 'neuroglancer/trackable_value';
+import {WatchableRenderLayerTransform} from 'neuroglancer/render_coordinate_transform';
+import {ThreeDimensionalRenderLayerAttachmentState, update3dRenderLayerAttachment} from 'neuroglancer/renderlayer';
+import {GET_SINGLE_MESH_INFO_RPC_ID, SINGLE_MESH_CHUNK_KEY, SINGLE_MESH_LAYER_RPC_ID, SingleMeshInfo, SingleMeshSourceParametersWithInfo, VertexAttributeInfo} from 'neuroglancer/single_mesh/base';
+import {WatchableValue} from 'neuroglancer/trackable_value';
 import {DataType} from 'neuroglancer/util/data_type';
 import {mat4, vec3} from 'neuroglancer/util/geom';
-import {parseArray, stableStringify, verifyOptionalString, verifyString} from 'neuroglancer/util/json';
-import {getObjectId} from 'neuroglancer/util/object_id';
+import {parseSpecialUrl, SpecialProtocolCredentials} from 'neuroglancer/util/special_protocol_request';
 import {Uint64} from 'neuroglancer/util/uint64';
 import {withSharedVisibility} from 'neuroglancer/visibility_priority/frontend';
 import {Buffer} from 'neuroglancer/webgl/buffer';
-import glsl_COLORMAPS from 'neuroglancer/webgl/colormaps.glsl';
+import {glsl_COLORMAPS} from 'neuroglancer/webgl/colormaps';
 import {GL} from 'neuroglancer/webgl/context';
-import {makeWatchableShaderError} from 'neuroglancer/webgl/dynamic_shader';
+import {makeTrackableFragmentMain, makeWatchableShaderError, parameterizedEmitterDependentShaderGetter, shaderCodeWithLineDirective} from 'neuroglancer/webgl/dynamic_shader';
 import {CountingBuffer, countingBufferShaderModule, disableCountingBuffer, getCountingBuffer, IndexBufferAttributeHelper, makeIndexBuffer} from 'neuroglancer/webgl/index_emulation';
 import {ShaderBuilder, ShaderModule, ShaderProgram, ShaderSamplerType} from 'neuroglancer/webgl/shader';
 import {getShaderType} from 'neuroglancer/webgl/shader_lib';
-import {compute1dTextureLayout, computeTextureFormat, getSamplerPrefixForDataType, OneDimensionalTextureAccessHelper, setOneDimensionalTextureData, TextureFormat} from 'neuroglancer/webgl/texture_access';
+import {addControlsToBuilder, getFallbackBuilderState, parseShaderUiControls, setControlsInShader, ShaderControlsBuilderState, ShaderControlState} from 'neuroglancer/webgl/shader_ui_controls';
+import {computeTextureFormat, getSamplerPrefixForDataType, OneDimensionalTextureAccessHelper, setOneDimensionalTextureData, TextureFormat} from 'neuroglancer/webgl/texture_access';
 import {SharedObject} from 'neuroglancer/worker_rpc';
-
-export const FRAGMENT_MAIN_START = '//NEUROGLANCER_SINGLE_MESH_LAYER_FRAGMENT_MAIN_START';
 
 const DEFAULT_FRAGMENT_MAIN = `void main() {
   emitGray();
 }
 `;
 
-export type TrackableFragmentMain = TrackableValue<string>;
-
-export function getTrackableFragmentMain(value = DEFAULT_FRAGMENT_MAIN) {
-  return new TrackableValue<string>(value, verifyString);
-}
-
-export type TrackableAttributeNames = TrackableValue<Array<string|undefined>>;
-
-export function getTrackableAttributeNames() {
-  return new TrackableValue<Array<string|undefined>>([], x => parseArray(x, verifyOptionalString));
-}
-
 export class SingleMeshDisplayState {
   shaderError = makeWatchableShaderError();
-  fragmentMain = getTrackableFragmentMain();
-  attributeNames = getTrackableAttributeNames();
-  objectToDataTransform = new CoordinateTransform();
+  fragmentMain = makeTrackableFragmentMain(DEFAULT_FRAGMENT_MAIN);
+  shaderControlState = new ShaderControlState(this.fragmentMain);
 }
 
 export function getShaderAttributeType(info: {dataType: DataType, numComponents: number}) {
@@ -71,26 +61,38 @@ const vertexAttributeSamplerSymbols: Symbol[] = [];
 const vertexPositionTextureFormat = computeTextureFormat(new TextureFormat(), DataType.FLOAT32, 3);
 const vertexNormalTextureFormat = vertexPositionTextureFormat;
 
+function makeValidIdentifier(x: string) {
+  return x.split(/[^a-zA-Z0-9]+/).filter(y => y).join('_');
+}
+
+export function pickAttributeNames(existingNames: string[]) {
+  const seenNames = new Set<string>();
+  let result: string[] = [];
+  for (let existingName of existingNames) {
+    let name = makeValidIdentifier(existingName);
+    let suffix = '';
+    let suffixNumber = 0;
+    while (seenNames.has(name + suffix)) {
+      suffix = '' + (++suffixNumber);
+    }
+    result.push(name + suffix);
+  }
+  return result;
+}
+
 export class SingleMeshShaderManager {
   private tempLightVec = new Float32Array(4);
 
   private textureAccessHelper = new OneDimensionalTextureAccessHelper('vertexData');
   private indexBufferHelper = new IndexBufferAttributeHelper('vertexIndex');
 
-  constructor(
-      public attributeNames: (string|undefined)[], public attributeInfo: VertexAttributeInfo[],
-      public fragmentMain: string) {}
+  constructor(public attributeNames: string[], public attributeInfo: VertexAttributeInfo[]) {}
 
   defineAttributeAccess(builder: ShaderBuilder, vertexIndexVariable: string) {
     let {textureAccessHelper} = this;
     textureAccessHelper.defineShader(builder);
-    let numAttributes = 2;
     const {attributeNames} = this;
-    for (const attributeName of attributeNames) {
-      if (attributeName !== undefined) {
-        ++numAttributes;
-      }
-    }
+    let numAttributes = 2 + attributeNames.length;
     for (let j = vertexAttributeSamplerSymbols.length; j < numAttributes; ++j) {
       vertexAttributeSamplerSymbols[j] =
           Symbol(`SingleMeshShaderManager.vertexAttributeTextureUnit${j}`);
@@ -111,24 +113,20 @@ vec3 vertexPosition = readVertexPosition(${vertexIndexVariable});
 vec3 vertexNormal = readVertexNormal(${vertexIndexVariable});
 `;
     this.attributeInfo.forEach((info, i) => {
-      const attributeName = attributeNames[i];
-      if (attributeName !== undefined) {
-        builder.addTextureSampler(
-            `${getSamplerPrefixForDataType(info.dataType)}sampler2D` as ShaderSamplerType,
-            `uVertexAttributeSampler${numAttributes}`,
-            vertexAttributeSamplerSymbols[numAttributes]);
+      builder.addTextureSampler(
+          `${getSamplerPrefixForDataType(info.dataType)}sampler2D` as ShaderSamplerType,
+          `uVertexAttributeSampler${numAttributes}`, vertexAttributeSamplerSymbols[numAttributes]);
 
-        const attributeType = getShaderAttributeType(info);
-        builder.addVarying(`highp ${attributeType}`, `vCustom${i}`);
-        builder.addFragmentCode(`
+      const attributeType = getShaderAttributeType(info);
+      builder.addVarying(`highp ${attributeType}`, `vCustom${i}`);
+      builder.addFragmentCode(`
 #define ${attributeNames[i]} vCustom${i}
 `);
-        builder.addVertexCode(textureAccessHelper.getAccessor(
-            `readAttribute${i}`, `uVertexAttributeSampler${numAttributes}`, info.dataType,
-            info.numComponents));
-        vertexMain += `vCustom${i} = readAttribute${i}(${vertexIndexVariable});\n`;
-        ++numAttributes;
-      }
+      builder.addVertexCode(textureAccessHelper.getAccessor(
+          `readAttribute${i}`, `uVertexAttributeSampler${numAttributes}`, info.dataType,
+          info.numComponents));
+      vertexMain += `vCustom${i} = readAttribute${i}(${vertexIndexVariable});\n`;
+      ++numAttributes;
     });
     builder.addVertexMain(vertexMain);
   }
@@ -174,12 +172,13 @@ gl_Position = uProjection * (uModelMatrix * vec4(vertexPosition, 1.0));
 vec3 normal = normalize((uModelMatrix * vec4(vertexNormal, 0.0)).xyz);
 vLightingFactor = abs(dot(normal, uLightDirection.xyz)) + uLightDirection.w;
 `);
-    builder.setFragmentMainFunction(FRAGMENT_MAIN_START + '\n' + this.fragmentMain);
   }
 
   beginLayer(gl: GL, shader: ShaderProgram, renderContext: PerspectiveViewRenderContext) {
-    let {dataToDevice, lightDirection, ambientLighting, directionalLighting} = renderContext;
-    gl.uniformMatrix4fv(shader.uniform('uProjection'), false, dataToDevice);
+    const {lightDirection, ambientLighting, directionalLighting, projectionParameters} =
+        renderContext;
+    const {viewProjectionMat} = projectionParameters;
+    gl.uniformMatrix4fv(shader.uniform('uProjection'), false, viewProjectionMat);
     let lightVec = <vec3>this.tempLightVec;
     vec3.scale(lightVec, lightDirection, directionalLighting);
     lightVec[3] = ambientLighting;
@@ -194,24 +193,7 @@ vLightingFactor = abs(dot(normal, uLightDirection.xyz)) + uLightDirection.w;
     gl.uniformMatrix4fv(shader.uniform('uModelMatrix'), false, objectToDataMatrix);
   }
 
-  getShader(gl: GL, emitter: ShaderModule) {
-    const key = {
-      attributeNames: this.attributeNames,
-      attributeInfo: this.attributeInfo,
-      fragmentMain: this.fragmentMain
-    };
-    return gl.memoize.get(
-        `single_mesh/SingleMeshShaderManager:${getObjectId(emitter)}:${stableStringify(key)}`,
-        () => {
-          let builder = new ShaderBuilder(gl);
-          builder.require(emitter);
-          this.defineShader(builder);
-          return builder.build();
-        });
-  }
-
   bindVertexData(gl: GL, shader: ShaderProgram, data: VertexChunkData) {
-    this.textureAccessHelper.setupTextureLayout(gl, shader, data);
     let index = 0;
     const bindTexture = (texture: WebGLTexture|null) => {
       const textureUnit = WebGL2RenderingContext.TEXTURE0 +
@@ -270,18 +252,11 @@ export class VertexChunkData {
   vertexAttributes: Float32Array[];
   vertexAttributeTextures: (WebGLTexture|null)[];
 
-  // Emulation of buffer as texture.
-  textureXBits: number;
-  textureWidth: number;
-  textureHeight: number;
-
   copyToGPU(gl: GL, attributeFormats: TextureFormat[]) {
-    let numVertices = this.vertexPositions.length / 3;
-    compute1dTextureLayout(this, gl, /*texelsPerElement=*/ 1, numVertices);
     const getBufferTexture = (data: Float32Array, format: TextureFormat) => {
       let texture = gl.createTexture();
       gl.bindTexture(WebGL2RenderingContext.TEXTURE_2D, texture);
-      setOneDimensionalTextureData(gl, this, format, data);
+      setOneDimensionalTextureData(gl, format, data);
       return texture;
     };
     this.vertexTexture = getBufferTexture(this.vertexPositions, vertexPositionTextureFormat);
@@ -339,7 +314,7 @@ export function getAttributeTextureFormats(vertexAttributes: VertexAttributeInfo
 }
 
 export class SingleMeshSource extends
-(WithParameters(ChunkSource, SingleMeshSourceParametersWithInfo)) {
+(WithParameters(WithCredentialsProvider<SpecialProtocolCredentials>()(ChunkSource), SingleMeshSourceParametersWithInfo)) {
   attributeTextureFormats = getAttributeTextureFormats(this.info.vertexAttributes);
 
   get info() {
@@ -354,29 +329,41 @@ export class SingleMeshSource extends
 const SharedObjectWithSharedVisibility = withSharedVisibility(SharedObject);
 class SingleMeshLayerSharedObject extends SharedObjectWithSharedVisibility {}
 
-export class SingleMeshLayer extends PerspectiveViewRenderLayer {
-  protected shaderManager: SingleMeshShaderManager|undefined;
+export class SingleMeshLayer extends
+    PerspectiveViewRenderLayer<ThreeDimensionalRenderLayerAttachmentState> {
+  private shaderManager = new SingleMeshShaderManager(
+      pickAttributeNames(this.source.info.vertexAttributes.map(a => a.name)),
+      this.source.info.vertexAttributes);
   private shaders = new Map<ShaderModule, ShaderProgram|null>();
   private sharedObject = this.registerDisposer(new SingleMeshLayerSharedObject());
-  private fallbackFragmentMain = DEFAULT_FRAGMENT_MAIN;
+  private shaderGetter = parameterizedEmitterDependentShaderGetter(this, this.gl, {
+    memoizeKey: {t: `single_mesh/RenderLayer`, attributes: this.source.info.vertexAttributes},
+    fallbackParameters:
+        new WatchableValue(getFallbackBuilderState(parseShaderUiControls(DEFAULT_FRAGMENT_MAIN))),
+    parameters: this.displayState.shaderControlState.builderState,
+    encodeParameters: p => p.key,
+    shaderError: this.displayState.shaderError,
+    defineShader:
+        (builder: ShaderBuilder, shaderBuilderState: ShaderControlsBuilderState) => {
+          if (shaderBuilderState.parseResult.errors.length !== 0) {
+            throw new Error('Invalid UI control specification');
+          }
+          addControlsToBuilder(shaderBuilderState, builder);
+          this.shaderManager.defineShader(builder);
+          builder.setFragmentMainFunction(
+              shaderCodeWithLineDirective(shaderBuilderState.parseResult.code));
+        },
+  });
+
   protected countingBuffer = this.registerDisposer(getCountingBuffer(this.gl));
-
-  constructor(public source: SingleMeshSource, public displayState: SingleMeshDisplayState) {
+  constructor(
+      public source: SingleMeshSource, public displayState: SingleMeshDisplayState,
+      public transform: WatchableRenderLayerTransform) {
     super();
-
-    this.displayState.shaderError.value = undefined;
-    const shaderChanged = () => {
-      this.shaderManager = undefined;
-      this.displayState.shaderError.value = undefined;
-      this.disposeShaders();
-      this.redrawNeeded.dispatch();
-    };
-    this.registerDisposer(displayState.fragmentMain.changed.add(shaderChanged));
-    this.registerDisposer(displayState.attributeNames.changed.add(shaderChanged));
-    this.registerDisposer(displayState.objectToDataTransform.changed.add(() => {
-      this.redrawNeeded.dispatch();
-    }));
-    this.displayState.shaderError.value = undefined;
+    this.registerDisposer(
+        displayState.shaderControlState.parseResult.changed.add(this.redrawNeeded.dispatch));
+    this.registerDisposer(displayState.shaderControlState.changed.add(this.redrawNeeded.dispatch));
+    this.registerDisposer(transform.changed.add(this.redrawNeeded.dispatch));
     const {sharedObject} = this;
     sharedObject.visibility.add(this.visibility);
     sharedObject.RPC_TYPE_ID = SINGLE_MESH_LAYER_RPC_ID;
@@ -384,7 +371,6 @@ export class SingleMeshLayer extends PerspectiveViewRenderLayer {
       'chunkManager': source.chunkManager.rpcId,
       'source': source.addCounterpartRef(),
     });
-    this.setReady(true);
   }
 
   private disposeShaders() {
@@ -402,41 +388,6 @@ export class SingleMeshLayer extends PerspectiveViewRenderLayer {
     super.disposed();
   }
 
-  protected makeShaderManager(fragmentMain = this.displayState.fragmentMain.value) {
-    return new SingleMeshShaderManager(
-        this.displayState.attributeNames.value, this.source.info.vertexAttributes, fragmentMain);
-  }
-
-  protected getShader(emitter: ShaderModule): ShaderProgram|null {
-    let {shaders} = this;
-    let shader = shaders.get(emitter);
-    if (shader === undefined) {
-      shader = null;
-      let {shaderManager} = this;
-      if (shaderManager === undefined) {
-        shaderManager = this.shaderManager = this.makeShaderManager();
-      }
-      const fragmentMain = this.displayState.fragmentMain.value;
-      try {
-        shader = shaderManager.getShader(this.gl, emitter);
-        this.fallbackFragmentMain = fragmentMain;
-        this.displayState.shaderError.value = null;
-      } catch (shaderError) {
-        this.displayState.shaderError.value = shaderError;
-        let {fallbackFragmentMain} = this;
-        if (fallbackFragmentMain !== fragmentMain) {
-          shaderManager = this.shaderManager = this.makeShaderManager(fallbackFragmentMain);
-          try {
-            shader = shaderManager.getShader(this.gl, emitter);
-          } catch (otherShaderError) {
-          }
-        }
-      }
-      shaders.set(emitter, shader);
-    }
-    return shader;
-  }
-
   get isTransparent() {
     return this.displayState.fragmentMain.value.match(/emitRGBA|emitPremultipliedRGBA/) !== null;
   }
@@ -445,38 +396,41 @@ export class SingleMeshLayer extends PerspectiveViewRenderLayer {
     return this.source.gl;
   }
 
-  draw(renderContext: PerspectiveViewRenderContext) {
+  draw(
+      renderContext: PerspectiveViewRenderContext,
+      attachment: VisibleLayerInfo<PerspectivePanel, ThreeDimensionalRenderLayerAttachmentState>) {
     if (!renderContext.emitColor && renderContext.alreadyEmittedPickID) {
       // No need for a separate pick ID pass.
       return;
     }
+    const modelMatrix = update3dRenderLayerAttachment(
+        this.transform.value, renderContext.projectionParameters.displayDimensionRenderInfo,
+        attachment);
+    if (modelMatrix === undefined) return;
     let chunk = <SingleMeshChunk|undefined>this.source.chunks.get(SINGLE_MESH_CHUNK_KEY);
     if (chunk === undefined || chunk.state !== ChunkState.GPU_MEMORY) {
       return;
     }
-    let shader = this.getShader(renderContext.emitter);
+    const shaderResult = this.shaderGetter(renderContext.emitter);
+    const {shader, parameters} = shaderResult;
     if (shader === null) {
       return;
     }
-
-    let {gl} = this;
-    let shaderManager = this.shaderManager!;
+    const {gl} = this;
+    const shaderManager = this.shaderManager!;
     shader.bind();
     shaderManager.beginLayer(gl, shader, renderContext);
-
+    setControlsInShader(
+        gl, shader, this.displayState.shaderControlState, parameters.parseResult.controls);
 
     let {pickIDs} = renderContext;
 
-    shaderManager.beginObject(gl, shader, this.displayState.objectToDataTransform.transform);
+    shaderManager.beginObject(gl, shader, modelMatrix);
     if (renderContext.emitPickID) {
       shaderManager.setPickID(gl, shader, pickIDs.register(this, chunk.numIndices / 3));
     }
     shaderManager.drawFragment(gl, shader, chunk, this.countingBuffer);
     shaderManager.endLayer(gl, shader);
-  }
-
-  drawPicking(renderContext: PerspectiveViewRenderContext) {
-    this.draw(renderContext);
   }
 
   transformPickedValue(_pickedValue: Uint64, pickedOffset: number) {
@@ -495,7 +449,7 @@ export class SingleMeshLayer extends PerspectiveViewRenderLayer {
     let vertexIndex = indices[startIndex];
 
     let values: string[] = [];
-    let attributeNames = this.displayState.attributeNames.value;
+    const {attributeNames} = this.shaderManager;
     chunk.vertexData.vertexAttributes.forEach((attributes, i) => {
       const attributeName = attributeNames[i];
       if (attributeName !== undefined) {
@@ -507,18 +461,25 @@ export class SingleMeshLayer extends PerspectiveViewRenderLayer {
   }
 }
 
-function getSingleMeshInfo(chunkManager: ChunkManager, parameters: SingleMeshSourceParameters) {
-  return chunkManager.memoize.getUncounted(
-      {type: 'single_mesh:getMeshInfo', parameters},
-      () => chunkManager.rpc!.promiseInvoke<SingleMeshInfo>(
-          GET_SINGLE_MESH_INFO_RPC_ID,
-          {'chunkManager': chunkManager.addCounterpartRef(), 'parameters': parameters}));
+function getSingleMeshInfo(
+    chunkManager: ChunkManager, credentialsManager: CredentialsManager, url: string) {
+  return chunkManager.memoize.getUncounted({type: 'single_mesh:getMeshInfo', url}, async () => {
+    const {url: parsedUrl, credentialsProvider} = parseSpecialUrl(url, credentialsManager);
+    const info =
+        await chunkManager.rpc!.promiseInvoke<SingleMeshInfo>(GET_SINGLE_MESH_INFO_RPC_ID, {
+          'chunkManager': chunkManager.addCounterpartRef(),
+          credentialsProvider: getCredentialsProviderCounterpart<SpecialProtocolCredentials>(
+              chunkManager, credentialsProvider),
+          'parameters': {meshSourceUrl: parsedUrl}
+        });
+    return {info, url: parsedUrl, credentialsProvider};
+  });
 }
 
-export function getSingleMeshSource(
-    chunkManager: ChunkManager, parameters: SingleMeshSourceParameters) {
-  return getSingleMeshInfo(chunkManager, parameters)
-      .then(
-          info =>
-              chunkManager.getChunkSource(SingleMeshSource, {parameters: {...parameters, info}}));
+export async function getSingleMeshSource(
+    chunkManager: ChunkManager, credentialsManager: CredentialsManager, url: string) {
+  const {info, url: parsedUrl, credentialsProvider} =
+      await getSingleMeshInfo(chunkManager, credentialsManager, url);
+  return chunkManager.getChunkSource(
+      SingleMeshSource, {credentialsProvider, parameters: {meshSourceUrl: parsedUrl, info}});
 }

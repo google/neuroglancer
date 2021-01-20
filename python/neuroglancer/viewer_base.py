@@ -22,6 +22,7 @@ import threading
 import six
 
 from . import local_volume, trackable_state, viewer_config_state, viewer_state
+from . import skeleton
 from .json_utils import decode_json, encode_json, json_encoder_default
 from .random_token import make_random_token
 
@@ -36,7 +37,11 @@ class LocalVolumeManager(trackable_state.ChangeNotifier):
         if v.token not in self.volumes:
             self.volumes[v.token] = v
             self._dispatch_changed_callbacks()
-        return 'python://%s' % (self.get_volume_key(v))
+        if isinstance(v, local_volume.LocalVolume):
+            source_type = 'volume'
+        else:
+            source_type = 'skeleton'
+        return 'python://%s/%s' % (source_type, self.get_volume_key(v))
 
     def get_volume_key(self, v):
         return self.__token_prefix + v.token
@@ -57,8 +62,16 @@ class LocalVolumeManager(trackable_state.ChangeNotifier):
 
 
 class ViewerCommonBase(object):
-    def __init__(self):
-        self.token = make_random_token()
+    def __init__(self, token=None, allow_credentials=None):
+        if token is None:
+            token = make_random_token()
+            if allow_credentials is None:
+                allow_credentials = True
+        else:
+            if allow_credentials is None:
+                allow_credentials = False
+        self.allow_credentials = allow_credentials
+        self.token = token
         self.config_state = trackable_state.TrackableState(viewer_config_state.ConfigState)
 
         def set_actions(actions):
@@ -78,22 +91,31 @@ class ViewerCommonBase(object):
         self._next_screenshot_id = 0
         self._screenshot_callbacks = {}
         self.actions.add('screenshot', self._handle_screenshot_reply)
+        self.actions.add('screenshotStatistics', self._handle_screenshot_statistics)
 
-    def async_screenshot(self, callback):
+    def async_screenshot(self, callback, include_depth=False,
+                         statistics_callback=None):
+        """Captures a screenshot asynchronously."""
         screenshot_id = str(self._next_screenshot_id)
+        if include_depth:
+            screenshot_id = screenshot_id + '_includeDepth'
         self._next_screenshot_id += 1
         def set_screenshot_id(s):
             s.screenshot = screenshot_id
         self.config_state.retry_txn(set_screenshot_id)
-        self._screenshot_callbacks[screenshot_id] = callback
+        self._screenshot_callbacks[screenshot_id] = (callback, statistics_callback)
 
-    def screenshot(self, size=None):
-        """Capture a screenshot synchronously.
+    def screenshot(self, size=None, include_depth=False,
+                   statistics_callback=None):
+        """Captures a screenshot synchronously.
 
         :param size: Optional.  List of [width, height] specifying the dimension
                      in pixels of the canvas to use.  If specified, UI controls
                      are hidden and the canvas is resized to the specified
                      dimensions while the screenshot is captured.
+
+        :param include_depth: Optional.  Specifies whether to also return depth
+                              information.
 
         :returns: The screenshot.
         """
@@ -103,13 +125,20 @@ class ViewerCommonBase(object):
                 s.show_ui_controls = False
                 s.show_panel_borders = False
                 s.viewer_size = size
-        event = threading.Event()
-        result = [None]
-        def handler(s):
-            result[0] = s
-            event.set()
-        self.async_screenshot(handler)
-        event.wait()
+        for _ in range(5):
+            # Allow multiple retries in case size is not respected on first attempt
+            event = threading.Event()
+            result = [None]
+            def handler(s):
+                result[0] = s
+                event.set()
+            self.async_screenshot(handler, include_depth=include_depth,
+                                  statistics_callback=statistics_callback)
+            event.wait()
+            if size is not None and (result[0].screenshot.width != size[0] or
+                                     result[0].screenshot.height != size[1]):
+                continue
+            break
         if size is not None:
             self.config_state.set_state(prior_state)
         return result[0]
@@ -122,7 +151,13 @@ class ViewerCommonBase(object):
         screenshot_id = s.screenshot.id
         callback = self._screenshot_callbacks.pop(screenshot_id, None)
         if callback is not None:
-            callback(s)
+            callback[0](s)
+
+    def _handle_screenshot_statistics(self, s):
+        screenshot_id = s.screenshot_statistics.id
+        callback = self._screenshot_callbacks.get(screenshot_id)
+        if callback is None or callback[1] is None: return
+        callback[1](s.screenshot_statistics)
 
     def _handle_volumes_changed(self):
         volumes = self.volume_manager.volumes
@@ -150,7 +185,7 @@ class ViewerCommonBase(object):
             new_state = new_state.to_json()
 
             def encoder(x):
-                if isinstance(x, local_volume.LocalVolume):
+                if isinstance(x, (local_volume.LocalVolume, skeleton.SkeletonSource)):
                     return self.volume_manager.register_volume(x)
                 return json_encoder_default(x)
 
@@ -162,8 +197,8 @@ class ViewerCommonBase(object):
 
 
 class ViewerBase(ViewerCommonBase):
-    def __init__(self):
-        super(ViewerBase, self).__init__()
+    def __init__(self, **kwargs):
+        super(ViewerBase, self).__init__(**kwargs)
         self.shared_state = trackable_state.TrackableState(viewer_state.ViewerState,
                                                            self._transform_viewer_state)
         self.shared_state.add_changed_callback(
@@ -184,8 +219,8 @@ class ViewerBase(ViewerCommonBase):
 
 
 class UnsynchronizedViewerBase(ViewerCommonBase):
-    def __init__(self):
-        super(UnsynchronizedViewerBase, self).__init__()
+    def __init__(self, **kwargs):
+        super(UnsynchronizedViewerBase, self).__init__(**kwargs)
         self.state = viewer_state.ViewerState()
 
     @property

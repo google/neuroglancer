@@ -15,19 +15,26 @@
  */
 
 import {ChunkState} from 'neuroglancer/chunk_manager/base';
-import {getTransformedSources} from 'neuroglancer/sliceview/base';
-import {BoundingBoxCrossSectionRenderHelper} from 'neuroglancer/sliceview/bounding_box_shader_helper';
+import {CoordinateSpace, emptyInvalidCoordinateSpace} from 'neuroglancer/coordinate_transform';
+import {ProjectionParameters} from 'neuroglancer/projection_parameters';
+import {getChunkPositionFromCombinedGlobalLocalPositions} from 'neuroglancer/render_coordinate_transform';
+import {getNormalizedChunkLayout} from 'neuroglancer/sliceview/base';
+import {computeVertexPositionDebug, defineBoundingBoxCrossSectionShader, setBoundingBoxCrossSectionShaderViewportPlane} from 'neuroglancer/sliceview/bounding_box_shader_helper';
 import {ChunkLayout} from 'neuroglancer/sliceview/chunk_layout';
-import {SliceView} from 'neuroglancer/sliceview/frontend';
-import {RenderLayer as SliceViewRenderLayer, RenderLayerOptions as SliceViewRenderLayerOptions} from 'neuroglancer/sliceview/renderlayer';
-import {VolumeChunkSpecification, VolumeSourceOptions} from 'neuroglancer/sliceview/volume/base';
-import {MultiscaleVolumeChunkSource, VolumeChunkSource} from 'neuroglancer/sliceview/volume/frontend';
-import {Owned} from 'neuroglancer/util/disposable';
-import {BoundingBox, mat4, vec3, vec3Key} from 'neuroglancer/util/geom';
+import {FrontendTransformedSource, SliceView} from 'neuroglancer/sliceview/frontend';
+import {SliceViewRenderContext, SliceViewRenderLayer, SliceViewRenderLayerOptions} from 'neuroglancer/sliceview/renderlayer';
+import {VolumeSourceOptions} from 'neuroglancer/sliceview/volume/base';
+import {ChunkFormat, defineChunkDataShaderAccess, MultiscaleVolumeChunkSource, VolumeChunkSource} from 'neuroglancer/sliceview/volume/frontend';
+import {constantWatchableValue, makeCachedDerivedWatchableValue, WatchableValueInterface} from 'neuroglancer/trackable_value';
+import {mat4, vec3} from 'neuroglancer/util/geom';
+import {getObjectId} from 'neuroglancer/util/object_id';
 import {GL} from 'neuroglancer/webgl/context';
-import {ShaderGetter, WatchableShaderError} from 'neuroglancer/webgl/dynamic_shader';
+import {makeWatchableShaderError, ParameterizedContextDependentShaderGetter, parameterizedContextDependentShaderGetter, ParameterizedShaderGetterResult, WatchableShaderError} from 'neuroglancer/webgl/dynamic_shader';
+import {HistogramChannelSpecification} from 'neuroglancer/webgl/empirical_cdf';
+import {defineInvlerpShaderFunction, enableLerpShaderFunction} from 'neuroglancer/webgl/lerp';
+import {defineLineShader, drawLines, initializeLineShader, VERTICES_PER_LINE} from 'neuroglancer/webgl/lines';
 import {ShaderBuilder, ShaderProgram} from 'neuroglancer/webgl/shader';
-import {getShaderType} from 'neuroglancer/webgl/shader_lib';
+import {defineVertexId, VertexIdHelper} from 'neuroglancer/webgl/vertex_id';
 
 const DEBUG_VERTICES = false;
 
@@ -44,321 +51,454 @@ const DEBUG_VERTICES = false;
  */
 const CHUNK_POSITION_EPSILON = 1e-3;
 
-export const glsl_getPositionWithinChunk = `
-highp ivec3 getPositionWithinChunk () {
-  return ivec3(min(vChunkPosition, uChunkDataSize - 1.0));
-}
-`;
-
-
 const tempMat4 = mat4.create();
-const tempVec3 = vec3.create();
 
-class VolumeSliceVertexComputationManager extends BoundingBoxCrossSectionRenderHelper {
-  static get(gl: GL) {
-    return gl.memoize.get(
-        'volume.VolumeSliceVertexComputationManager',
-        () => new VolumeSliceVertexComputationManager(gl));
+function defineVolumeShader(builder: ShaderBuilder, wireFrame: boolean) {
+  defineVertexId(builder);
+  defineBoundingBoxCrossSectionShader(builder);
+
+  // Specifies translation of the current chunk.
+  builder.addUniform('highp vec3', 'uTranslation');
+
+  // Matrix by which computed vertices will be transformed.
+  builder.addUniform('highp mat4', 'uProjectionMatrix');
+
+  // Chunk size in voxels.
+  builder.addUniform('highp vec3', 'uChunkDataSize');
+
+  builder.addUniform('highp vec3', 'uLowerClipBound');
+  builder.addUniform('highp vec3', 'uUpperClipBound');
+
+  if (wireFrame) {
+    defineLineShader(builder);
+    builder.setVertexMain(`
+int vertexIndex1 = gl_VertexID / ${VERTICES_PER_LINE};
+int vertexIndex2 = vertexIndex1 == 5 ? 0 : vertexIndex1 + 1;
+vec3 vertexPosition1 = getBoundingBoxPlaneIntersectionVertexPosition(uChunkDataSize, uTranslation, uLowerClipBound, uUpperClipBound, vertexIndex1);
+vec3 vertexPosition2 = getBoundingBoxPlaneIntersectionVertexPosition(uChunkDataSize, uTranslation, uLowerClipBound, uUpperClipBound, vertexIndex2);
+emitLine(uProjectionMatrix * vec4(vertexPosition1, 1.0),
+         uProjectionMatrix * vec4(vertexPosition2, 1.0),
+         2.0);
+`);
+    builder.setFragmentMain(`
+emit(vec4(1.0, 1.0, 1.0, getLineAlpha()));
+`);
+    return;
   }
 
-  defineShader(builder: ShaderBuilder) {
-    super.defineShader(builder);
+  // Position within chunk of vertex, in floating point range [0, chunkDataSize].
+  builder.addVarying('highp vec3', 'vChunkPosition');
 
-    // A number in [0, 6) specifying which vertex to compute.
-    builder.addAttribute('highp float', 'aVertexIndexFloat');
-
-    // Specifies translation of the current chunk.
-    builder.addUniform('highp vec3', 'uTranslation');
-
-    // Matrix by which computed vertices will be transformed.
-    builder.addUniform('highp mat4', 'uProjectionMatrix');
-
-    // Chunk size in voxels.
-    builder.addUniform('highp vec3', 'uChunkDataSize');
-
-    // Size of a voxel in nanometers.
-    builder.addUniform('highp vec3', 'uVoxelSize');
-
-    builder.addUniform('highp vec3', 'uLowerClipBound');
-    builder.addUniform('highp vec3', 'uUpperClipBound');
-
-    // Position within chunk of vertex, in floating point range [0, chunkDataSize].
-    builder.addVarying('highp vec3', 'vChunkPosition');
-
-    builder.setVertexMain(`
-vec3 chunkSize = uChunkDataSize * uVoxelSize;
-vec3 position = getBoundingBoxPlaneIntersectionVertexPosition(chunkSize, uTranslation, uLowerClipBound, uUpperClipBound, int(aVertexIndexFloat));
+  // Set gl_Position.z = 0 since we use the depth buffer as a stencil buffer to avoid overwriting
+  // higher-resolution data with lower-resolution data.  The depth buffer is used rather than the
+  // stencil buffer because for computing data distributions we need to read from it, and WebGL2
+  // does not support reading from the stencil component of a depth-stencil texture.
+  builder.setVertexMain(`
+vec3 position = getBoundingBoxPlaneIntersectionVertexPosition(uChunkDataSize, uTranslation, uLowerClipBound, uUpperClipBound, gl_VertexID);
 gl_Position = uProjectionMatrix * vec4(position, 1.0);
-vChunkPosition = (position - uTranslation) / uVoxelSize +
+gl_Position.z = 0.0;
+vChunkPosition = (position - uTranslation) +
     ${CHUNK_POSITION_EPSILON} * abs(uPlaneNormal);
 `);
+}
 
-    builder.addFragmentCode(glsl_getPositionWithinChunk);
-  }
-
-  computeVerticesDebug(
-      uChunkDataSize: vec3, uVoxelSize: vec3, uLowerClipBound: vec3, uUpperClipBound: vec3,
-      uPlaneDistance: number, uPlaneNormal: vec3, uTranslation: vec3, uProjectionMatrix: mat4) {
-    let chunkSize = vec3.multiply(vec3.create(), uChunkDataSize, uVoxelSize);
-    let gl_Position = vec3.create(), vChunkPosition = vec3.create(),
-        planeNormalAbs = vec3.fromValues(
-            Math.abs(uPlaneNormal[0]), Math.abs(uPlaneNormal[1]), Math.abs(uPlaneNormal[2]));
-    for (let vertexIndex = 0; vertexIndex < 6; ++vertexIndex) {
-      const position = this.computeVertexPositionDebug(
-          chunkSize, uLowerClipBound, uUpperClipBound, uPlaneDistance, uPlaneNormal, uTranslation,
-          vertexIndex);
-      if (position === undefined) {
-        console.log('no intersection found');
-        return;
-      }
-      vec3.transformMat4(gl_Position, position, uProjectionMatrix);
-      vec3.sub(vChunkPosition, position, uTranslation);
-      vec3.divide(vChunkPosition, vChunkPosition, uVoxelSize);
-      vec3.scaleAndAdd(vChunkPosition, vChunkPosition, planeNormalAbs, CHUNK_POSITION_EPSILON);
-      console.log(`vertex ${vertexIndex}, at ${gl_Position}, vChunkPosition = ${vChunkPosition}`);
+function computeVerticesDebug(
+    uChunkDataSize: vec3, uLowerClipBound: vec3, uUpperClipBound: vec3, uPlaneDistance: number,
+    uPlaneNormal: vec3, uTranslation: vec3, uProjectionMatrix: mat4) {
+  let gl_Position = vec3.create(), vChunkPosition = vec3.create(),
+      planeNormalAbs = vec3.fromValues(
+          Math.abs(uPlaneNormal[0]), Math.abs(uPlaneNormal[1]), Math.abs(uPlaneNormal[2]));
+  let prevVertex = vec3.create();
+  for (let vertexIndex = 0; vertexIndex < 6; ++vertexIndex) {
+    const position = computeVertexPositionDebug(
+        uChunkDataSize, uLowerClipBound, uUpperClipBound, uPlaneDistance, uPlaneNormal,
+        uTranslation, vertexIndex);
+    if (position === undefined) {
+      console.log('no intersection found');
+      return;
     }
-  }
-
-  beginSlice(_gl: GL, shader: ShaderProgram) {
-    let aVertexIndexFloat = shader.attribute('aVertexIndexFloat');
-    this.data.outputVertexIndices.bindToVertexAttrib(aVertexIndexFloat, 1);
-  }
-
-  endSlice(gl: GL, shader: ShaderProgram) {
-    let aVertexIndexFloat = shader.attribute('aVertexIndexFloat');
-    gl.disableVertexAttribArray(aVertexIndexFloat);
-  }
-
-  beginSource(
-      gl: GL, shader: ShaderProgram, sliceView: SliceView, dataToDeviceMatrix: mat4,
-      spec: VolumeChunkSpecification, chunkLayout: ChunkLayout) {
-    this.setViewportPlane(
-        shader, sliceView.viewportAxes[2], sliceView.centerDataPosition, chunkLayout.invTransform);
-
-    // Compute projection matrix that transforms chunk layout coordinates to device coordinates.
-    gl.uniformMatrix4fv(
-        shader.uniform('uProjectionMatrix'), false,
-        mat4.multiply(tempMat4, dataToDeviceMatrix, chunkLayout.transform));
-
-    gl.uniform3fv(shader.uniform('uVoxelSize'), spec.voxelSize);
-    gl.uniform3fv(shader.uniform('uLowerClipBound'), spec.lowerClipBound);
-    gl.uniform3fv(shader.uniform('uUpperClipBound'), spec.upperClipBound);
-    if (DEBUG_VERTICES) {
-      (<any>window)['debug_sliceView_uVoxelSize'] = spec.voxelSize;
-      (<any>window)['debug_sliceView_uLowerClipBound'] = spec.lowerClipBound;
-      (<any>window)['debug_sliceView_uUpperClipBound'] = spec.upperClipBound;
-      (<any>window)['debug_sliceView'] = sliceView;
-      (<any>window)['debug_sliceView_dataToDevice'] = dataToDeviceMatrix;
-    }
-  }
-
-  setupChunkDataSize(gl: GL, shader: ShaderProgram, chunkDataSize: vec3) {
-    gl.uniform3fv(shader.uniform('uChunkDataSize'), chunkDataSize);
-
-    if (DEBUG_VERTICES) {
-      (<any>window)['debug_sliceView_chunkDataSize'] = chunkDataSize;
-    }
-  }
-
-  drawChunk(gl: GL, shader: ShaderProgram, chunkPosition: vec3) {
-    gl.uniform3fv(shader.uniform('uTranslation'), chunkPosition);
-    gl.drawArrays(gl.TRIANGLE_FAN, 0, 6);
-
-    if (DEBUG_VERTICES) {
-      let sliceView: SliceView = (<any>window)['debug_sliceView'];
-      let chunkDataSize: vec3 = (<any>window)['debug_sliceView_chunkDataSize'];
-      let voxelSize: vec3 = (<any>window)['debug_sliceView_uVoxelSize'];
-      let lowerClipBound: vec3 = (<any>window)['debug_sliceView_uLowerClipBound'];
-      let upperClipBound: vec3 = (<any>window)['debug_sliceView_uUpperClipBound'];
-      console.log(
-          `Drawing chunk: ${vec3Key(chunkPosition)} of data size ${vec3Key(chunkDataSize)}`);
-      let dataToDeviceMatrix: mat4 = (<any>window)['debug_sliceView_dataToDevice'];
-      this.computeVerticesDebug(
-          chunkDataSize, voxelSize, lowerClipBound, upperClipBound,
-          sliceView.viewportPlaneDistanceToOrigin, sliceView.viewportAxes[2], chunkPosition,
-          dataToDeviceMatrix);
-    }
+    vec3.transformMat4(gl_Position, position, uProjectionMatrix);
+    const skipped = vertexIndex !== 0 && vec3.equals(gl_Position, prevVertex);
+    vec3.copy(prevVertex, gl_Position);
+    vec3.sub(vChunkPosition, position, uTranslation);
+    vec3.scaleAndAdd(vChunkPosition, vChunkPosition, planeNormalAbs, CHUNK_POSITION_EPSILON);
+    console.log(
+        `${skipped ? 'SKIPPED' : 'OUTPUT'} vertex ${vertexIndex}, ` +
+        `at ${gl_Position}, vChunkPosition = ${vChunkPosition}, ` +
+        `uTranslation=${uTranslation.join()}, position=${position.join()}`);
   }
 }
 
-export interface RenderLayerOptions extends SliceViewRenderLayerOptions {
-  sourceOptions?: VolumeSourceOptions;
+function initializeShader(
+    shader: ShaderProgram, projectionParameters: ProjectionParameters, wireFrame: boolean) {
+  if (wireFrame) {
+    initializeLineShader(shader, projectionParameters, /*featherWidthInPixels=*/ 1);
+  }
+}
+
+function beginSource(
+    gl: GL, shader: ShaderProgram, sliceView: SliceView, dataToDeviceMatrix: mat4,
+    tsource: FrontendTransformedSource, chunkLayout: ChunkLayout) {
+  const projectionParameters = sliceView.projectionParameters.value;
+  const {centerDataPosition} = projectionParameters;
+
+  setBoundingBoxCrossSectionShaderViewportPlane(
+      shader, projectionParameters.viewportNormalInGlobalCoordinates, centerDataPosition,
+      chunkLayout.transform, chunkLayout.invTransform);
+
+  // Compute projection matrix that transforms chunk layout coordinates to device coordinates.
+  gl.uniformMatrix4fv(
+      shader.uniform('uProjectionMatrix'), false,
+      mat4.multiply(tempMat4, dataToDeviceMatrix, chunkLayout.transform));
+
+  gl.uniform3fv(shader.uniform('uLowerClipBound'), tsource.lowerClipDisplayBound);
+  gl.uniform3fv(shader.uniform('uUpperClipBound'), tsource.upperClipDisplayBound);
+  if (DEBUG_VERTICES) {
+    (<any>window)['debug_sliceView_uLowerClipBound'] = tsource.lowerClipDisplayBound;
+    (<any>window)['debug_sliceView_uUpperClipBound'] = tsource.upperClipDisplayBound;
+    (<any>window)['debug_sliceView'] = sliceView;
+    (<any>window)['debug_sliceView_dataToDevice'] = mat4.clone(tempMat4);
+    (<any>window)['debug_sliceView_chunkLayout'] = chunkLayout;
+  }
+}
+
+function setupChunkDataSize(gl: GL, shader: ShaderProgram, chunkDataSize: vec3) {
+  gl.uniform3fv(shader.uniform('uChunkDataSize'), chunkDataSize);
+
+  if (DEBUG_VERTICES) {
+    (<any>window)['debug_sliceView_chunkDataSize'] = chunkDataSize;
+  }
+}
+
+function drawChunk(gl: GL, shader: ShaderProgram, chunkPosition: vec3, wireFrame: boolean) {
+  gl.uniform3fv(shader.uniform('uTranslation'), chunkPosition);
+  if (wireFrame) {
+    drawLines(shader.gl, 6, 1);
+  } else {
+    gl.drawArrays(gl.TRIANGLE_FAN, 0, 6);
+  }
+
+  if (DEBUG_VERTICES) {
+    let sliceView: SliceView = (<any>window)['debug_sliceView'];
+    const projectionParameters = sliceView.projectionParameters.value;
+    let chunkDataSize: vec3 = (<any>window)['debug_sliceView_chunkDataSize'];
+    let lowerClipBound: vec3 = (<any>window)['debug_sliceView_uLowerClipBound'];
+    let upperClipBound: vec3 = (<any>window)['debug_sliceView_uUpperClipBound'];
+    let dataToDeviceMatrix: mat4 = (<any>window)['debug_sliceView_dataToDevice'];
+    const chunkLayout: ChunkLayout = (<any>window)['debug_sliceView_chunkLayout'];
+    console.log(
+        `Drawing chunk: ${chunkPosition.join()} of data size ` +
+            `${chunkDataSize.join()}, projection`,
+        dataToDeviceMatrix);
+    const localPlaneNormal = chunkLayout.globalToLocalNormal(
+        vec3.create(), projectionParameters.viewportNormalInGlobalCoordinates);
+    const planeDistanceToOrigin = vec3.dot(
+        vec3.transformMat4(
+            vec3.create(), projectionParameters.centerDataPosition, chunkLayout.invTransform),
+        localPlaneNormal);
+    computeVerticesDebug(
+        chunkDataSize, lowerClipBound, upperClipBound, planeDistanceToOrigin, localPlaneNormal,
+        chunkPosition, dataToDeviceMatrix);
+  }
+}
+
+export interface RenderLayerBaseOptions extends SliceViewRenderLayerOptions {
   shaderError?: WatchableShaderError;
+  channelCoordinateSpace?: WatchableValueInterface<CoordinateSpace>;
+}
+
+export interface RenderLayerOptions<ShaderParameters> extends RenderLayerBaseOptions {
+  fallbackShaderParameters?: WatchableValueInterface<ShaderParameters>;
+  shaderParameters: WatchableValueInterface<ShaderParameters>;
+  encodeShaderParameters?: (parameters: ShaderParameters) => any;
 }
 
 function medianOf3(a: number, b: number, c: number) {
   return a > b ? (c > a ? a : (b > c ? b : c)) : (c > b ? b : (a > c ? a : c));
 }
 
-export class RenderLayer extends SliceViewRenderLayer {
-  sources: VolumeChunkSource[][];
-  vertexComputationManager: VolumeSliceVertexComputationManager;
-  protected shaderGetter: Owned<ShaderGetter>;
-  constructor(multiscaleSource: MultiscaleVolumeChunkSource, options: RenderLayerOptions) {
-    const {sourceOptions = {}, shaderError} = options;
-    super(multiscaleSource.chunkManager, multiscaleSource.getSources(sourceOptions), options);
+interface ShaderContext {
+  numChannelDimensions: number;
+  dataHistogramChannelSpecifications: HistogramChannelSpecification[];
+}
+
+export abstract class SliceViewVolumeRenderLayer<ShaderParameters = any> extends
+    SliceViewRenderLayer<VolumeChunkSource, VolumeSourceOptions> {
+  multiscaleSource: MultiscaleVolumeChunkSource;
+  protected shaderGetter: ParameterizedContextDependentShaderGetter<
+      {chunkFormat: ChunkFormat | null, dataHistogramsEnabled: boolean}, ShaderParameters,
+      ShaderContext>;
+  private tempChunkPosition: Float32Array;
+  shaderParameters: WatchableValueInterface<ShaderParameters>;
+  private vertexIdHelper: VertexIdHelper;
+
+  constructor(
+      multiscaleSource: MultiscaleVolumeChunkSource,
+      options: RenderLayerOptions<ShaderParameters>) {
+    const {shaderError = makeWatchableShaderError(), shaderParameters} = options;
+    super(multiscaleSource.chunkManager, multiscaleSource, options);
     const {gl} = this;
-    this.shaderGetter = this.registerDisposer(new ShaderGetter(
-        gl, builder => this.defineShader(builder),
-        () => `${this.getShaderKey()}/${this.chunkFormat.shaderKey}`, shaderError));
-    this.vertexComputationManager = VolumeSliceVertexComputationManager.get(gl);
-
-    const transformedSources = getTransformedSources(this);
-
-    {
-      const {source, chunkLayout} = transformedSources[0][0];
-      const spec = <VolumeChunkSpecification>source.spec;
-
-      const boundingBox = this.boundingBox = new BoundingBox(
-          vec3.fromValues(Infinity, Infinity, Infinity),
-          vec3.fromValues(-Infinity, -Infinity, -Infinity));
-      const globalCorner = vec3.create();
-      const localCorner = tempVec3;
-
-      for (let cornerIndex = 0; cornerIndex < 8; ++cornerIndex) {
-        for (let i = 0; i < 3; ++i) {
-          localCorner[i] = cornerIndex & (1 << i) ? spec.upperClipBound[i] : spec.lowerClipBound[i];
+    this.vertexIdHelper = this.registerDisposer(VertexIdHelper.get(gl));
+    this.shaderParameters = shaderParameters;
+    const {channelCoordinateSpace} = options;
+    this.channelCoordinateSpace = channelCoordinateSpace === undefined ?
+        constantWatchableValue(emptyInvalidCoordinateSpace) :
+        channelCoordinateSpace;
+    this.registerDisposer(shaderParameters.changed.add(this.redrawNeeded.dispatch));
+    // The shader depends on the `ChunkFormat` (which is a property of the `VolumeChunkSource`), the
+    // `ShaderParameters` (which are determined by the derived RenderLayer class), the number of
+    // channel dimensions, and the data histogram channel specifications.
+    const extraParameters = this.registerDisposer(makeCachedDerivedWatchableValue(
+        (space: CoordinateSpace,
+         dataHistogramChannelSpecifications: HistogramChannelSpecification[]) =>
+            ({numChannelDimensions: space.rank, dataHistogramChannelSpecifications}),
+        [this.channelCoordinateSpace, this.dataHistogramSpecifications.channels]));
+    this.shaderGetter = parameterizedContextDependentShaderGetter(this, gl, {
+      memoizeKey: `volume/RenderLayer:${getObjectId(this.constructor)}`,
+      fallbackParameters: options.fallbackShaderParameters,
+      parameters: shaderParameters,
+      encodeParameters: options.encodeShaderParameters,
+      shaderError,
+      extraParameters,
+      defineShader: (
+          builder: ShaderBuilder,
+          context: {chunkFormat: ChunkFormat|null, dataHistogramsEnabled: boolean},
+          parameters: ShaderParameters, extraParameters: ShaderContext) => {
+        const {chunkFormat, dataHistogramsEnabled} = context;
+        const {dataHistogramChannelSpecifications, numChannelDimensions} = extraParameters;
+        defineVolumeShader(builder, chunkFormat === null);
+        builder.addOutputBuffer('vec4', 'v4f_fragData0', 0);
+        builder.addFragmentCode(`
+void emit(vec4 color) {
+  v4f_fragData0 = color;
+}
+`);
+        if (chunkFormat === null) {
+          return;
         }
-        chunkLayout.localSpatialToGlobal(globalCorner, localCorner);
-        vec3.min(boundingBox.lower, boundingBox.lower, globalCorner);
-        vec3.max(boundingBox.upper, boundingBox.upper, globalCorner);
-      }
-    }
+        defineChunkDataShaderAccess(builder, chunkFormat, numChannelDimensions, `vChunkPosition`);
+        const numHistograms = dataHistogramChannelSpecifications.length;
+        if (dataHistogramsEnabled && numHistograms > 0) {
+          let histogramCollectionCode = '';
+          const {dataType} = chunkFormat;
+          for (let i = 0; i < numHistograms; ++i) {
+            const {channel} = dataHistogramChannelSpecifications[i];
+            const outputName = `out_histogram${i}`;
+            builder.addOutputBuffer('vec4', outputName, 1 + i);
+            const getDataValueExpr = `getDataValue(${channel.join(',')})`;
+            const invlerpName = `invlerpForHistogram${i}`;
+            builder.addFragmentCode(
+                defineInvlerpShaderFunction(builder, invlerpName, dataType, /*clamp=*/ false));
+            builder.addFragmentCode(`
+float getHistogramValue${i}() {
+  return invlerpForHistogram${i}(${getDataValueExpr});
+}
+`);
+            histogramCollectionCode += `{
+float x = getHistogramValue${i}();
+if (x < 0.0) x = 0.0;
+else if (x > 1.0) x = 1.0;
+else x = (1.0 + x * 253.0) / 255.0;
+${outputName} = vec4(x, x, x, 1.0);
+}`;
+          }
+          builder.addFragmentCode(`void userMain();
+void main() {
+  ${histogramCollectionCode}
+  userMain();
+}
+#define main userMain\n`);
+        }
+        this.defineShader(builder, parameters);
+      },
+      getContextKey: context =>
+          `${context.chunkFormat?.shaderKey}/${context.dataHistogramsEnabled}`,
+    });
+    this.tempChunkPosition = new Float32Array(multiscaleSource.rank);
+    this.initializeCounterpart();
   }
 
   get dataType() {
-    return this.sources![0][0].spec.dataType;
+    return this.multiscaleSource.dataType;
   }
 
-  get chunkFormat() {
-    return this.sources![0][0].chunkFormat;
-  }
-
-  getValueAt(position: vec3) {
-    for (let alternatives of getTransformedSources(this)) {
-      for (let transformedSource of alternatives) {
-        const source = transformedSource.source as VolumeChunkSource;
-        let result = source.getValueAt(position, transformedSource.chunkLayout);
-        if (result != null) {
-          return result;
-        }
+  getValueAt(globalPosition: Float32Array) {
+    let {tempChunkPosition} = this;
+    for (const {source, chunkTransform} of this.visibleSourcesList) {
+      if (!getChunkPositionFromCombinedGlobalLocalPositions(
+              tempChunkPosition, globalPosition, this.localPosition.value, chunkTransform.layerRank,
+              chunkTransform.combinedGlobalLocalToChunkTransform)) {
+        continue;
+      }
+      const result = source.getValueAt(tempChunkPosition, chunkTransform);
+      if (result != null) {
+        return result;
       }
     }
     return null;
   }
 
-  protected getShaderKey() {
-    return this.chunkFormat.shaderKey;
-  }
-
-  protected defineShader(builder: ShaderBuilder) {
-    this.vertexComputationManager.defineShader(builder);
-    builder.addOutputBuffer('vec4', 'v4f_fragData0', 0);
-    builder.addFragmentCode(`
-void emit(vec4 color) {
-  v4f_fragData0 = color;
-}
-`);
-    this.chunkFormat.defineShader(builder);
-    builder.addFragmentCode(`
-${getShaderType(this.dataType)} getDataValue() { return getDataValue(0); }
-`);
-  }
-
-  beginSlice(_sliceView: SliceView) {
-    let gl = this.gl;
-
-    let shader = this.shaderGetter.get();
-    if (shader === undefined) {
-      return;
+  beginChunkFormat(
+      sliceView: SliceView, chunkFormat: ChunkFormat|null,
+      projectionParameters: ProjectionParameters):
+      ParameterizedShaderGetterResult<ShaderParameters, ShaderContext> {
+    const {gl} = this;
+    const dataHistogramsEnabled = this.dataHistogramSpecifications.visibility.visible;
+    const shaderResult = this.shaderGetter({chunkFormat, dataHistogramsEnabled});
+    const {shader, parameters, fallback} = shaderResult;
+    if (shader !== null) {
+      shader.bind();
+      initializeShader(shader, projectionParameters, chunkFormat === null);
+      if (chunkFormat !== null) {
+        if (dataHistogramsEnabled) {
+          const {dataHistogramChannelSpecifications} = shaderResult.extraParameters;
+          const numHistograms = dataHistogramChannelSpecifications.length;
+          const bounds = this.dataHistogramSpecifications.bounds.value;
+          for (let i = 0; i < numHistograms; ++i) {
+            enableLerpShaderFunction(shader, `invlerpForHistogram${i}`, chunkFormat.dataType, bounds[i]);
+          }
+        }
+        this.initializeShader(sliceView, shader, parameters, fallback);
+        // FIXME: may need to fix wire frame rendering
+        chunkFormat.beginDrawing(gl, shader);
+      }
     }
-    shader.bind();
-    this.vertexComputationManager.beginSlice(gl, shader);
-    return shader;
+    return shaderResult;
   }
 
-  endSlice(shader: ShaderProgram) {
-    let gl = this.gl;
-    this.vertexComputationManager.endSlice(gl, shader);
+  abstract initializeShader(
+      sliceView: SliceView, shader: ShaderProgram, parameters: ShaderParameters,
+      fallback: boolean): void;
+
+  abstract defineShader(builder: ShaderBuilder, parameters: ShaderParameters): void;
+
+  endSlice(sliceView: SliceView, shader: ShaderProgram, parameters: ShaderParameters) {
+    sliceView;
+    shader;
+    parameters;
   }
 
-  draw(sliceView: SliceView) {
-    let visibleSources = sliceView.visibleLayers.get(this)!;
+  draw(renderContext: SliceViewRenderContext) {
+    const {sliceView} = renderContext;
+    const layerInfo = sliceView.visibleLayers.get(this)!;
+    const {visibleSources} = layerInfo;
     if (visibleSources.length === 0) {
       return;
     }
 
-    let gl = this.gl;
+    const {projectionParameters, wireFrame} = renderContext;
 
-    const shader = this.beginSlice(sliceView);
-    if (shader === undefined) {
-      return;
-    }
+    const {gl} = this;
 
-    let chunkPosition = vec3.create();
-    const {renderScaleHistogram, vertexComputationManager} = this;
+    this.vertexIdHelper.enable();
 
-    // All sources are required to have the same texture format.
-    let chunkFormat = this.chunkFormat;
-    chunkFormat.beginDrawing(gl, shader);
+    const chunkPosition = vec3.create();
+    const {renderScaleHistogram} = this;
 
     if (renderScaleHistogram !== undefined) {
       renderScaleHistogram.begin(
           this.chunkManager.chunkQueueManager.frameNumberCounter.frameNumber);
     }
 
-    for (let transformedSource of visibleSources) {
-      const chunkLayout = transformedSource.chunkLayout;
+    let shaderResult: ParameterizedShaderGetterResult<ShaderParameters, ShaderContext>;
+    let shader: ShaderProgram|null = null;
+    let prevChunkFormat: ChunkFormat|undefined|null;
+    // Size of chunk (in voxels) in the "display" subspace of the chunk coordinate space.
+    const chunkDataDisplaySize = vec3.create();
+
+    const endShader = () => {
+      if (shader === null) return;
+      if (prevChunkFormat !== null) {
+        prevChunkFormat!.endDrawing(gl, shader);
+      }
+      this.endSlice(sliceView, shader, shaderResult.parameters);
+    };
+    let newSource = true;
+    for (const transformedSource of visibleSources) {
+      const chunkLayout =
+          getNormalizedChunkLayout(projectionParameters, transformedSource.chunkLayout);
+      const {chunkTransform: {channelToChunkDimensionIndices}} = transformedSource;
       const source = transformedSource.source as VolumeChunkSource;
+      const {fixedPositionWithinChunk, chunkDisplayDimensionIndices} = transformedSource;
+      for (const chunkDim of chunkDisplayDimensionIndices) {
+        fixedPositionWithinChunk[chunkDim] = 0;
+      }
+      const chunkFormat = wireFrame ? null : source.chunkFormat;
+      if (chunkFormat !== prevChunkFormat) {
+        prevChunkFormat = chunkFormat;
+        endShader();
+        shaderResult = this.beginChunkFormat(sliceView, chunkFormat, projectionParameters);
+        shader = shaderResult.shader;
+      }
+      if (shader === null) continue;
       const chunks = source.chunks;
+
+      chunkDataDisplaySize.fill(1);
 
       let originalChunkSize = chunkLayout.size;
 
-      let chunkDataSize: vec3|undefined;
-      let visibleChunks = sliceView.visibleChunks.get(chunkLayout);
-      if (!visibleChunks) {
-        continue;
+      let chunkDataSize: Uint32Array|undefined;
+      const chunkRank = source.spec.rank;
+
+      beginSource(
+          gl, shader, sliceView, projectionParameters.viewProjectionMat, transformedSource,
+          chunkLayout);
+      if (chunkFormat !== null) {
+        chunkFormat.beginSource(gl, shader);
       }
-
-      vertexComputationManager.beginSource(
-          gl, shader, sliceView, sliceView.dataToDevice, source.spec, chunkLayout);
-      let sourceChunkFormat = source.chunkFormat;
-      sourceChunkFormat.beginSource(gl, shader);
-
-      let setChunkDataSize = (newChunkDataSize: vec3) => {
-        chunkDataSize = newChunkDataSize;
-        vertexComputationManager.setupChunkDataSize(gl, shader, chunkDataSize);
-      };
-
+      newSource = true;
       let presentCount = 0, notPresentCount = 0;
-
-      for (let key of visibleChunks) {
+      sliceView.forEachVisibleChunk(transformedSource, chunkLayout, key => {
         let chunk = chunks.get(key);
         if (chunk && chunk.state === ChunkState.GPU_MEMORY) {
           let newChunkDataSize = chunk.chunkDataSize;
           if (newChunkDataSize !== chunkDataSize) {
-            setChunkDataSize(newChunkDataSize);
+            chunkDataSize = newChunkDataSize;
+            for (let i = 0; i < 3; ++i) {
+              const chunkDim = chunkDisplayDimensionIndices[i];
+              chunkDataDisplaySize[i] =
+                  (chunkDim === -1 || chunkDim >= chunkRank) ? 1 : chunkDataSize[chunkDim];
+            }
+            setupChunkDataSize(gl, shader!, chunkDataDisplaySize);
           }
-
-          vec3.multiply(chunkPosition, originalChunkSize, chunk.chunkGridPosition);
-          sourceChunkFormat.bindChunk(gl, shader, chunk);
-          vertexComputationManager.drawChunk(gl, shader, chunkPosition);
+          const {chunkGridPosition} = chunk;
+          for (let i = 0; i < 3; ++i) {
+            const chunkDim = chunkDisplayDimensionIndices[i];
+            chunkPosition[i] = (chunkDim === -1 || chunkDim >= chunkRank) ?
+                0 :
+                originalChunkSize[i] * chunkGridPosition[chunkDim];
+          }
+          if (chunkFormat !== null) {
+            chunkFormat.bindChunk(
+                gl, shader!, chunk, fixedPositionWithinChunk, chunkDisplayDimensionIndices,
+                channelToChunkDimensionIndices, newSource);
+          }
+          newSource = false;
+          drawChunk(gl, shader!, chunkPosition, wireFrame);
           ++presentCount;
         } else {
           ++notPresentCount;
         }
-      }
+      });
 
       if ((presentCount !== 0 || notPresentCount !== 0) && renderScaleHistogram !== undefined) {
-        const {voxelSize} = transformedSource;
+        const {effectiveVoxelSize} = transformedSource;
         // TODO(jbms): replace median hack with more accurate estimate, e.g. based on ellipsoid
         // cross section.
-        const medianVoxelSize = medianOf3(voxelSize[0], voxelSize[1], voxelSize[2]);
+        const medianVoxelSize =
+            medianOf3(effectiveVoxelSize[0], effectiveVoxelSize[1], effectiveVoxelSize[2]);
         renderScaleHistogram.add(
-            medianVoxelSize, medianVoxelSize / sliceView.pixelSize, presentCount, notPresentCount);
+            medianVoxelSize, medianVoxelSize / projectionParameters.pixelSize, presentCount,
+            notPresentCount);
       }
     }
-    chunkFormat.endDrawing(gl, shader);
-    this.endSlice(shader);
+    endShader();
+    this.vertexIdHelper.disable();
+    if (!renderContext.wireFrame) {
+      const dataHistogramCount = this.getDataHistogramCount();
+      if (dataHistogramCount > 0) {
+        sliceView.computeHistograms(dataHistogramCount, this.dataHistogramSpecifications);
+      }
+    }
   }
 }

@@ -14,16 +14,17 @@
  * limitations under the License.
  */
 
-import {eventHasInputTextTarget} from 'neuroglancer/util/clipboard';
-import {vec3} from 'neuroglancer/util/geom';
+import {isInputTextTarget} from 'neuroglancer/util/dom';
 import {getCachedJson} from 'neuroglancer/util/trackable';
 import {Viewer} from 'neuroglancer/viewer';
 
 export function bindDefaultCopyHandler(viewer: Viewer) {
   viewer.registerEventListener(document, 'copy', (event: ClipboardEvent) => {
-    if (eventHasInputTextTarget(event)) {
+    if (isInputTextTarget(event.target)) {
       return;
     }
+    const selection = document.getSelection();
+    if (selection !== null && selection.type === 'Range') return;
     const stateJson = getCachedJson(viewer.state).value;
     const {clipboardData} = event;
     if (clipboardData !== null) {
@@ -34,32 +35,44 @@ export function bindDefaultCopyHandler(viewer: Viewer) {
 }
 
 /**
- * Checks if s consists of 3 numbers separated by whitespace or commas, with optional parentheses or
+ * Checks if `s` consists of `rank` numbers separated by whitespace or commas, with optional parentheses or
  * brackets before and after.
  *
  * @param s The string to parse.
+ * @param rank Specifies how many numbers are expected.
  * @return The parsed vector, or undefined if parsing failed.
  */
-export function parsePositionString(s: string): vec3|undefined {
-  const match = s.match(
-      /^[\[\]{}()\s,]*(\d+(?:\.\d+)?)[,\s]+(\d+(?:\.\d+)?)[,\s]+(\d+(?:\.\d+)?)[\[\]{}()\s,]*$/);
-  if (match !== null) {
-    return vec3.fromValues(parseFloat(match[1]), parseFloat(match[2]), parseFloat(match[3]));
+export function parsePositionString(s: string, rank: number): Float32Array|undefined {
+  let pattern = String.raw`^[\[\]{}()\s,]*`;
+  for (let i = 0; i < rank; ++i) {
+    if (i !== 0) {
+      pattern += String.raw`[,\s]+`;
+    }
+    pattern += String.raw`(\d+(?:\.\d+)?)`;
   }
-  return undefined;
+  pattern += String.raw`[\[\]{}()\s,]*$`;
+  const match = s.match(pattern);
+  if (match === null) return undefined;
+  const result = new Float32Array(rank);
+  for (let i = 0; i < rank; ++i) {
+    const n = Number(match[i + 1]);
+    if (!Number.isFinite(n)) return undefined;
+    result[i] = n;
+  }
+  return result;
 }
 
 export function bindDefaultPasteHandler(viewer: Viewer) {
   viewer.registerEventListener(document, 'paste', (event: ClipboardEvent) => {
-    if (eventHasInputTextTarget(event)) {
+    if (isInputTextTarget(event.target)) {
       return;
     }
     const {clipboardData} = event;
     if (clipboardData !== null) {
       const data = clipboardData.getData('text/plain');
-      const parsedPosition = parsePositionString(data);
+      const parsedPosition = parsePositionString(data, viewer.coordinateSpace.value.rank);
       if (parsedPosition !== undefined) {
-        viewer.navigationState.position.setVoxelCoordinates(parsedPosition);
+        viewer.navigationState.position.value = parsedPosition;
       }
     }
     event.preventDefault();

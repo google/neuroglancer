@@ -20,7 +20,7 @@ import {EventActionMap, KeyboardEventBinder} from 'neuroglancer/util/keyboard_bi
 
 export const overlayKeyboardHandlerPriority = 100;
 
-require('./overlay.css');
+import './overlay.css';
 
 export let overlaysOpen = 0;
 

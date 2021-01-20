@@ -17,11 +17,14 @@
 import {Chunk, ChunkManager, ChunkSource, withChunkManager, WithParameters} from 'neuroglancer/chunk_manager/backend';
 import {ChunkPriorityTier} from 'neuroglancer/chunk_manager/base';
 import {PriorityGetter} from 'neuroglancer/chunk_manager/generic_file_source';
+import {SharedCredentialsProviderCounterpart, WithSharedCredentialsProviderCounterpart} from 'neuroglancer/credentials_provider/shared_counterpart';
 import {computeVertexNormals} from 'neuroglancer/mesh/backend';
 import {GET_SINGLE_MESH_INFO_RPC_ID, SINGLE_MESH_CHUNK_KEY, SINGLE_MESH_LAYER_RPC_ID, SingleMeshData, SingleMeshInfo, SingleMeshSourceParameters, SingleMeshSourceParametersWithInfo, VertexAttributeInfo} from 'neuroglancer/single_mesh/base';
 import {TypedArray} from 'neuroglancer/util/array';
 import {CancellationToken} from 'neuroglancer/util/cancellation';
 import {stableStringify} from 'neuroglancer/util/json';
+import {SpecialProtocolCredentials} from 'neuroglancer/util/special_protocol_request';
+import {SpecialProtocolCredentialsProvider} from 'neuroglancer/util/special_protocol_request';
 import {getBasePriority, getPriorityTier, withSharedVisibility} from 'neuroglancer/visibility_priority/backend';
 import {registerPromiseRPC, registerSharedObject, RPC, RPCPromise, SharedObjectCounterpart} from 'neuroglancer/worker_rpc';
 
@@ -78,26 +81,14 @@ export interface SingleMeshVertexAttributes {
 interface SingleMeshFactory {
   description?: string;
   getMesh:
-      (chunkManager: ChunkManager, url: string, getPriority: PriorityGetter,
+      (chunkManager: ChunkManager, credentialsProvider: SpecialProtocolCredentialsProvider,
+       url: string, getPriority: PriorityGetter,
        cancellationToken: CancellationToken) => Promise<SingleMesh>;
 }
 
-interface SingleMeshVertexAttributesFactory {
-  description?: string;
-  getMeshVertexAttributes:
-      (chunkManager: ChunkManager, url: string, getPriority: PriorityGetter,
-       cancellationToken: CancellationToken) => Promise<SingleMeshVertexAttributes>;
-}
-
 const singleMeshFactories = new Map<string, SingleMeshFactory>();
-const singleMeshVertexAttributesFactories = new Map<string, SingleMeshVertexAttributesFactory>();
 export function registerSingleMeshFactory(name: string, factory: SingleMeshFactory) {
   singleMeshFactories.set(name, factory);
-}
-
-export function registerSingleMeshVertexAttributesFactory(
-    name: string, factory: SingleMeshVertexAttributesFactory) {
-  singleMeshVertexAttributesFactories.set(name, factory);
 }
 
 const protocolPattern = /^(?:([a-zA-Z-+_]+):\/\/)?(.*)$/;
@@ -116,17 +107,10 @@ function getDataSource<T>(factories: Map<string, T>, url: string): [T, string, s
 }
 
 export function getMesh(
-    chunkManager: ChunkManager, url: string, getPriority: PriorityGetter,
-    cancellationToken: CancellationToken) {
+    chunkManager: ChunkManager, credentialsProvider: SpecialProtocolCredentialsProvider,
+    url: string, getPriority: PriorityGetter, cancellationToken: CancellationToken) {
   let [factory, path] = getDataSource(singleMeshFactories, url);
-  return factory.getMesh(chunkManager, path, getPriority, cancellationToken);
-}
-
-export function getMeshVertexAttributes(
-    chunkManager: ChunkManager, url: string, getPriority: PriorityGetter,
-    cancellationToken: CancellationToken) {
-  let [factory, path] = getDataSource(singleMeshVertexAttributesFactories, url);
-  return factory.getMeshVertexAttributes(chunkManager, path, getPriority, cancellationToken);
+  return factory.getMesh(chunkManager, credentialsProvider, path, getPriority, cancellationToken);
 }
 
 export function getMinMax(array: TypedArray): [number, number] {
@@ -140,60 +124,15 @@ export function getMinMax(array: TypedArray): [number, number] {
 }
 
 export function getCombinedMesh(
-    chunkManager: ChunkManager, parameters: SingleMeshSourceParameters, getPriority: PriorityGetter,
+    chunkManager: ChunkManager, credentialsProvider: SpecialProtocolCredentialsProvider,
+    parameters: SingleMeshSourceParameters, getPriority: PriorityGetter,
     cancellationToken: CancellationToken) {
-  let promises: Promise<SingleMesh|SingleMeshVertexAttributes>[] =
-      [getMesh(chunkManager, parameters.meshSourceUrl, getPriority, cancellationToken)];
-  for (let source of parameters.attributeSourceUrls) {
-    promises.push(getMeshVertexAttributes(chunkManager, source, getPriority, cancellationToken));
-  }
-  return Promise.all(promises).then(results => {
-    let origMesh = <SingleMesh>results[0];
-    let combinedMesh: SingleMesh = {
-      info: {
-        numVertices: origMesh.info.numVertices,
-        numTriangles: origMesh.info.numTriangles,
-        vertexAttributes: [],
-      },
-      vertexPositions: origMesh.vertexPositions,
-      indices: origMesh.indices,
-      vertexNormals: origMesh.vertexNormals,
-      vertexAttributes: [],
-    };
-    function addAttribute(info: VertexAttributeInfo, data: Float32Array, source?: string) {
-      let [min, max] = getMinMax(data);
-      combinedMesh.info.vertexAttributes.push({
-        name: info.name,
-        source,
-        numComponents: info.numComponents,
-        dataType: info.dataType,
-        min,
-        max
-      });
-      combinedMesh.vertexAttributes.push(data);
-    }
-    function addAttributes(info: VertexAttributeInfo[], data: Float32Array[], source?: string) {
-      const numAttributes = info.length;
-      for (let i = 0; i < numAttributes; ++i) {
-        addAttribute(info[i], data[i], source);
-      }
-    }
-    addAttributes(origMesh.info.vertexAttributes, origMesh.vertexAttributes);
-    parameters.attributeSourceUrls.forEach((source, i) => {
-      let result = <SingleMeshVertexAttributes>results[i + 1];
-      if (result.numVertices !== origMesh.info.numVertices) {
-        throw new Error(
-            `Vertex attribute source ${JSON.stringify(source)} specifies attributes for ` +
-            `${result.numVertices} vertices, but mesh has ${origMesh.info.numVertices} vertices.`);
-      }
-      addAttributes(result.attributeInfo, result.attributes, source);
-    });
-    return combinedMesh;
-  });
+  return getMesh(
+      chunkManager, credentialsProvider, parameters.meshSourceUrl, getPriority, cancellationToken);
 }
 
 @registerSharedObject() export class SingleMeshSource extends
-(WithParameters(ChunkSource, SingleMeshSourceParametersWithInfo)) {
+(WithParameters(WithSharedCredentialsProviderCounterpart<SpecialProtocolCredentials>()(ChunkSource), SingleMeshSourceParametersWithInfo)) {
   getChunk() {
     const key = SINGLE_MESH_CHUNK_KEY;
     let chunk = <SingleMeshChunk>this.chunks.get(key);
@@ -207,7 +146,9 @@ export function getCombinedMesh(
 
   download(chunk: SingleMeshChunk, cancellationToken: CancellationToken) {
     const getPriority = () => ({priorityTier: chunk.priorityTier, priority: chunk.priority});
-    return getCombinedMesh(this.chunkManager, this.parameters, getPriority, cancellationToken)
+    return getCombinedMesh(
+               this.chunkManager, this.credentialsProvider, this.parameters, getPriority,
+               cancellationToken)
         .then(data => {
           if (stableStringify(data.info) !== stableStringify(this.parameters.info)) {
             throw new Error(`Mesh info has changed.`);
@@ -249,16 +190,20 @@ export class SingleMeshLayer extends SingleMeshLayerBase {
 const INFO_PRIORITY = 1000;
 
 registerPromiseRPC(
-    GET_SINGLE_MESH_INFO_RPC_ID, function(x, cancellationToken): RPCPromise<SingleMeshInfo> {
-      let chunkManager = this.getRef<ChunkManager>(x['chunkManager']);
+    GET_SINGLE_MESH_INFO_RPC_ID, async function(x, cancellationToken): RPCPromise<SingleMeshInfo> {
+      const chunkManager = this.getRef<ChunkManager>(x['chunkManager']);
+      const credentialsProvider = this.getOptionalRef<
+          SharedCredentialsProviderCounterpart<Exclude<SpecialProtocolCredentials, undefined>>>(
+          x['credentialsProvider']);
       try {
         let parameters = <SingleMeshSourceParameters>x['parameters'];
-        return getCombinedMesh(
-                   chunkManager, parameters,
-                   () => ({priorityTier: ChunkPriorityTier.VISIBLE, priority: INFO_PRIORITY}),
-                   cancellationToken)
-            .then(mesh => ({value: mesh.info}));
+        const mesh = await getCombinedMesh(
+            chunkManager, credentialsProvider, parameters,
+            () => ({priorityTier: ChunkPriorityTier.VISIBLE, priority: INFO_PRIORITY}),
+            cancellationToken);
+        return {value: mesh.info};
       } finally {
         chunkManager.dispose();
+        credentialsProvider?.dispose();
       }
     });

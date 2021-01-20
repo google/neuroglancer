@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2018 Google Inc.
+ * Copyright 2019 Google Inc.
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
@@ -14,8 +14,9 @@
  * limitations under the License.
  */
 
-import {makeTextIconButton} from 'neuroglancer/widget/text_icon_button';
+import svg_close from 'ikonate/icons/close.svg';
+import {makeIcon, MakeIconOptions} from 'neuroglancer/widget/icon';
 
-export function makeCloseButton() {
-  return makeTextIconButton('❌');
+export function makeCloseButton(options: MakeIconOptions = {}) {
+  return makeIcon({svg: svg_close, ...options});
 }

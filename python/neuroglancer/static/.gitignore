@@ -1,6 +1,4 @@
-main.bundle.js
-chunk_worker.bundle.js
-index.html
-tfjs-library.bundle.js
-draco.bundle.js
-async_computation.bundle.js
+*.js
+*.js.map
+*.css
+*.html

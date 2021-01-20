@@ -39,6 +39,19 @@ export class HttpError extends Error {
   static fromResponse(response: Response) {
     return new HttpError(response.url, response.status, response.statusText);
   }
+
+  static fromRequestError(input: RequestInfo, error: unknown) {
+    if (error instanceof TypeError) {
+      let url: string;
+      if (typeof input === 'string') {
+        url = input;
+      } else {
+        url = input.url;
+      }
+      return new HttpError(url, 0, 'Network or CORS error');
+    }
+    return error;
+  }
 }
 
 /**
@@ -52,10 +65,7 @@ export async function fetchOk(input: RequestInfo, init?: RequestInit): Promise<R
   try {
     response = await fetch(input, init);
   } catch (error) {
-    if (error instanceof TypeError) {
-      throw new HttpError('', 0, '');
-    }
-    throw error;
+    throw HttpError.fromRequestError(input, error);
   }
   if (!response.ok) throw HttpError.fromResponse(response);
   return response;
@@ -90,7 +100,7 @@ export async function cancellableFetchOk<T>(
   const abortController = new AbortController();
   const unregisterCancellation = cancellationToken.add(() => abortController.abort());
   try {
-    const response = await fetchOk(input, init);
+    const response = await fetchOk(input, {...init, signal: abortController.signal});
     return await transformResponse(response);
   } finally {
     unregisterCancellation();
@@ -110,25 +120,16 @@ export function getByteRangeHeader(startOffset: Uint64|number, endOffset: Uint64
   return {'Range': `bytes=${startOffset}-${endOffsetStr}`};
 }
 
-/**
- * Parses a URL that may have a special protocol designation into a real URL.
- *
- * If the protocol is 'http' or 'https', the input string is returned as is.
- *
- * The special 'gs://bucket/path' syntax is supported for accessing Google Storage buckets.
- */
-export function parseSpecialUrl(url: string): string {
-  const urlProtocolPattern = /^([^:\/]+):\/\/([^\/]+)(\/.*)?$/;
+export function parseUrl(url: string): {protocol: string, host: string, path: string} {
+  const urlProtocolPattern = /^([^:\/]+):\/\/([^\/]+)((?:\/.*)?)$/;
   let match = url.match(urlProtocolPattern);
   if (match === null) {
     throw new Error(`Invalid URL: ${JSON.stringify(url)}`);
   }
-  const protocol = match[1];
-  if (protocol === 'gs') {
-    const bucket = match[2];
-    let path = match[3];
-    if (path === undefined) path = '';
-    return `https://storage.googleapis.com/${bucket}${path}`;
-  }
-  return url;
+  return {protocol: match[1], host: match[2], path: match[3]};
+}
+
+export function isNotFoundError(e: any) {
+  if (!(e instanceof HttpError)) return false;
+  return (e.status === 403 || e.status === 404);
 }

@@ -41,15 +41,19 @@ chunkDecoders.set(VolumeChunkEncoding.RAW, decodeRawChunk);
 
   async download(chunk: VolumeChunk, cancellationToken: CancellationToken) {
     let {parameters} = this;
-    let path = `/neuroglancer/${this.encoding}/${parameters.key}/${parameters.scaleKey}`;
+    let path = `../../neuroglancer/${this.encoding}/${parameters.key}/${parameters.scaleKey}`;
     {
       // chunkPosition must not be captured, since it will be invalidated by the next call to
       // computeChunkBounds.
       let chunkPosition = this.computeChunkBounds(chunk);
-      let {chunkDataSize} = chunk;
-      for (let i = 0; i < 3; ++i) {
-        path += `/${chunkPosition[i]},${chunkPosition[i] + chunkDataSize![i]}`;
+      const chunkDataSize = chunk.chunkDataSize!;
+      const length = chunkPosition.length;
+      path += `/${chunkPosition.join()}/`;
+      for (let i = 0; i < length; ++i) {
+        if (i !== 0) path += ',';
+        path += (chunkPosition[i] + chunkDataSize[i]).toString();
       }
+      
     }
     const response = await cancellableFetchOk(path, {}, responseArrayBuffer, cancellationToken);
     await this.chunkDecoder(chunk, cancellationToken, response);
@@ -75,7 +79,7 @@ export function decodeFragmentChunk(chunk: FragmentChunk, response: ArrayBuffer)
 
   downloadFragment(chunk: FragmentChunk, cancellationToken: CancellationToken) {
     let {parameters} = this;
-    let requestPath = `/neuroglancer/mesh/${parameters.key}/${chunk.manifestChunk!.objectId}`;
+    let requestPath = `../../neuroglancer/mesh/${parameters.key}/${chunk.manifestChunk!.objectId}`;
     return cancellableFetchOk(requestPath, {}, responseArrayBuffer, cancellationToken)
         .then(response => decodeFragmentChunk(chunk, response));
   }
@@ -85,7 +89,7 @@ export function decodeFragmentChunk(chunk: FragmentChunk, response: ArrayBuffer)
 (WithParameters(SkeletonSource, SkeletonSourceParameters)) {
   download(chunk: SkeletonChunk, cancellationToken: CancellationToken) {
     const {parameters} = this;
-    let requestPath = `/neuroglancer/skeleton/${parameters.key}/${chunk.objectId}`;
+    let requestPath = `../../neuroglancer/skeleton/${parameters.key}/${chunk.objectId}`;
     return cancellableFetchOk(requestPath, {}, responseArrayBuffer, cancellationToken)
         .then(response => decodeSkeletonChunk(chunk, response, parameters.vertexAttributes));
   }

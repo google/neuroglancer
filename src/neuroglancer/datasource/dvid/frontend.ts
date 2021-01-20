@@ -19,18 +19,25 @@
  * Support for DVID (https://github.com/janelia-flyem/dvid) servers.
  */
 
+import {makeDataBoundsBoundingBoxAnnotationSet} from 'neuroglancer/annotation';
 import {ChunkManager, WithParameters} from 'neuroglancer/chunk_manager/frontend';
-import {CompletionResult, DataSource} from 'neuroglancer/datasource';
+import {BoundingBox, makeCoordinateSpace, makeIdentityTransform, makeIdentityTransformedBoundingBox} from 'neuroglancer/coordinate_transform';
+import {CompleteUrlOptions, CompletionResult, DataSource, DataSourceProvider, GetDataSourceOptions} from 'neuroglancer/datasource';
 import {DVIDSourceParameters, MeshSourceParameters, SkeletonSourceParameters, VolumeChunkEncoding, VolumeChunkSourceParameters} from 'neuroglancer/datasource/dvid/base';
 import {MeshSource} from 'neuroglancer/mesh/frontend';
 import {SkeletonSource} from 'neuroglancer/skeleton/frontend';
-import {DataType, VolumeChunkSpecification, VolumeSourceOptions, VolumeType} from 'neuroglancer/sliceview/volume/base';
-import {MultiscaleVolumeChunkSource as GenericMultiscaleVolumeChunkSource, VolumeChunkSource} from 'neuroglancer/sliceview/volume/frontend';
+import {SliceViewSingleResolutionSource} from 'neuroglancer/sliceview/frontend';
+import {DataType, makeDefaultVolumeChunkSpecifications, VolumeSourceOptions, VolumeType} from 'neuroglancer/sliceview/volume/base';
+import {MultiscaleVolumeChunkSource, VolumeChunkSource} from 'neuroglancer/sliceview/volume/frontend';
 import {StatusMessage} from 'neuroglancer/status';
+import {transposeNestedArrays} from 'neuroglancer/util/array';
 import {applyCompletionOffset, getPrefixMatchesWithDescriptions} from 'neuroglancer/util/completion';
 import {mat4, vec3} from 'neuroglancer/util/geom';
-import {fetchOk} from 'neuroglancer/util/http_request';
-import {parseArray, parseFixedLengthArray, parseIntVec, verifyFinitePositiveFloat, verifyMapKey, verifyObject, verifyObjectAsMap, verifyObjectProperty, verifyPositiveInt, verifyString} from 'neuroglancer/util/json';
+import {parseArray, parseFixedLengthArray, parseIntVec, verifyFinitePositiveFloat, verifyMapKey, verifyObject, verifyObjectAsMap, verifyObjectProperty, verifyPositiveInt, verifyString, parseQueryStringParameters} from 'neuroglancer/util/json';
+import {CredentialsManager, CredentialsProvider} from 'neuroglancer/credentials_provider';
+import {WithCredentialsProvider} from 'neuroglancer/credentials_provider/chunk_source_frontend';
+import { dvidCredentailsKey, registerDVIDCredentialsProvider, isDVIDCredentialsProviderRegistered } from 'neuroglancer/datasource/dvid/register_credentials_provider';
+import { DVIDToken, makeRequestWithCredentials } from 'neuroglancer/datasource/dvid/api';
 
 let serverDataTypes = new Map<string, DataType>();
 serverDataTypes.set('uint8', DataType.UINT8);
@@ -53,25 +60,26 @@ export class DataInstanceBaseInfo {
 }
 
 export class DataInstanceInfo {
+  lowerVoxelBound: vec3;
+  upperVoxelBoundInclusive: vec3;
+  voxelSize: vec3;
+  blockSize: vec3;
+  numLevels: number;
+
   constructor(public obj: any, public name: string, public base: DataInstanceBaseInfo) {}
 }
 
 class DVIDVolumeChunkSource extends
-(WithParameters(VolumeChunkSource, VolumeChunkSourceParameters)) {}
+(WithParameters(WithCredentialsProvider<DVIDToken>()(VolumeChunkSource), VolumeChunkSourceParameters)) {}
 
 class DVIDSkeletonSource extends
-(WithParameters(SkeletonSource, SkeletonSourceParameters)) {}
+(WithParameters(WithCredentialsProvider<DVIDToken>()(SkeletonSource), SkeletonSourceParameters)) {}
 
 class DVIDMeshSource extends
-(WithParameters(MeshSource, MeshSourceParameters)) {}
+(WithParameters(WithCredentialsProvider<DVIDToken>()(MeshSource), MeshSourceParameters)) {}
 
 export class VolumeDataInstanceInfo extends DataInstanceInfo {
   dataType: DataType;
-  lowerVoxelBound: vec3;
-  upperVoxelBound: vec3;
-  voxelSize: vec3;
-  numChannels: number;
-  numLevels: number;
   meshSrc: string;
   skeletonSrc: string;
 
@@ -101,17 +109,16 @@ export class VolumeDataInstanceInfo extends DataInstanceInfo {
       }
     }
 
-    // only allow mesh or skeletons as sources but not both
-    this.meshSrc = '';
     if (instSet.has(name + '_meshes')) {
       this.meshSrc = name + '_meshes';
+    } else {
+      this.meshSrc = '';
     }
 
-    this.skeletonSrc = '';
-    if (this.meshSrc !== '') {
-      if (instSet.has(name + '_skeletons')) {
-        this.skeletonSrc = name + '_skeletons';
-      }
+    if (instSet.has(name + '_skeletons')) {
+      this.skeletonSrc = name + '_skeletons';
+    } else {
+      this.skeletonSrc = '';
     }
 
 
@@ -120,7 +127,13 @@ export class VolumeDataInstanceInfo extends DataInstanceInfo {
     this.voxelSize = verifyObjectProperty(
         extended, 'VoxelSize',
         x => parseFixedLengthArray(vec3.create(), x, verifyFinitePositiveFloat));
-    this.numChannels = 1;
+    this.blockSize = verifyObjectProperty(
+        extended, 'BlockSize',
+        x => parseFixedLengthArray(vec3.create(), x, verifyFinitePositiveFloat));
+    this.lowerVoxelBound =
+        verifyObjectProperty(extended, 'MinPoint', x => parseIntVec(vec3.create(), x));
+    this.upperVoxelBoundInclusive =
+        verifyObjectProperty(extended, 'MaxPoint', x => parseIntVec(vec3.create(), x));
   }
 
   get volumeType() {
@@ -133,23 +146,22 @@ export class VolumeDataInstanceInfo extends DataInstanceInfo {
 
   getSources(
       chunkManager: ChunkManager, parameters: DVIDSourceParameters,
-      volumeSourceOptions: VolumeSourceOptions) {
+      volumeSourceOptions: VolumeSourceOptions, credentialsProvider: CredentialsProvider<DVIDToken>) {
     let {encoding} = this;
-    let sources: VolumeChunkSource[][] = [];
+    let sources: SliceViewSingleResolutionSource<VolumeChunkSource>[][] = [];
 
     // must be 64 block size to work with neuroglancer properly
     let blocksize = 64;
     for (let level = 0; level < this.numLevels; ++level) {
-      let voxelSize = vec3.scale(vec3.create(), this.voxelSize, Math.pow(2, level));
+      const downsampleFactor = Math.pow(2, level);
+      const invDownsampleFactor = Math.pow(2, -level);
       let lowerVoxelBound = vec3.create();
       let upperVoxelBound = vec3.create();
       for (let i = 0; i < 3; ++i) {
-        let lowerVoxelNotAligned =
-            Math.floor(this.lowerVoxelBound[i] * (this.voxelSize[i] / voxelSize[i]));
+        let lowerVoxelNotAligned = Math.floor(this.lowerVoxelBound[i] * invDownsampleFactor);
         // adjust min to be a multiple of blocksize
         lowerVoxelBound[i] = lowerVoxelNotAligned - (lowerVoxelNotAligned % blocksize);
-        let upperVoxelNotAligned =
-            Math.ceil((this.upperVoxelBound[i] + 1) * (this.voxelSize[i] / voxelSize[i]));
+        let upperVoxelNotAligned = Math.ceil((this.upperVoxelBoundInclusive[i] + 1) * invDownsampleFactor);
         upperVoxelBound[i] = upperVoxelNotAligned;
         // adjust max to be a multiple of blocksize
         if ((upperVoxelNotAligned % blocksize) !== 0) {
@@ -171,59 +183,34 @@ export class VolumeDataInstanceInfo extends DataInstanceInfo {
         'dataScale': level.toString(),
         'encoding': encoding,
       };
+      const chunkToMultiscaleTransform = mat4.create();
+      for (let i = 0; i < 3; ++i) {
+        chunkToMultiscaleTransform[5 * i] = downsampleFactor;
+        chunkToMultiscaleTransform[12 + i] = lowerVoxelBound[i] * downsampleFactor;
+      }
       let alternatives =
-          VolumeChunkSpecification
-              .getDefaults({
-                voxelSize: voxelSize,
-                dataType: this.dataType,
-                numChannels: this.numChannels,
-                transform: mat4.fromTranslation(
-                    mat4.create(), vec3.multiply(vec3.create(), lowerVoxelBound, voxelSize)),
-                baseVoxelOffset: lowerVoxelBound,
-                upperVoxelBound: vec3.subtract(vec3.create(), upperVoxelBound, lowerVoxelBound),
-                volumeType: this.volumeType,
-                volumeSourceOptions,
-                compressedSegmentationBlockSize:
-                    ((encoding === VolumeChunkEncoding.COMPRESSED_SEGMENTATION ||
-                      encoding === VolumeChunkEncoding.COMPRESSED_SEGMENTATIONARRAY) ?
-                         vec3.fromValues(8, 8, 8) :
-                         undefined)
-              })
-              .map(spec => {
-                return chunkManager.getChunkSource(
-                    DVIDVolumeChunkSource, {spec, parameters: volParameters});
-              });
+          makeDefaultVolumeChunkSpecifications({
+            rank: 3,
+            chunkToMultiscaleTransform,
+            dataType: this.dataType,
+
+            baseVoxelOffset: lowerVoxelBound,
+            upperVoxelBound: vec3.subtract(vec3.create(), upperVoxelBound, lowerVoxelBound),
+            volumeType: this.volumeType,
+            volumeSourceOptions,
+            compressedSegmentationBlockSize:
+                ((encoding === VolumeChunkEncoding.COMPRESSED_SEGMENTATION ||
+                  encoding === VolumeChunkEncoding.COMPRESSED_SEGMENTATIONARRAY) ?
+                     vec3.fromValues(8, 8, 8) :
+                     undefined)
+          }).map(spec => ({
+                   chunkSource: chunkManager.getChunkSource(
+                       DVIDVolumeChunkSource, {spec, parameters: volParameters, credentialsProvider}),
+                   chunkToMultiscaleTransform,
+                 }));
       sources.push(alternatives);
     }
-    return sources;
-  }
-
-  getMeshSource(chunkManager: ChunkManager, parameters: DVIDSourceParameters) {
-    if (this.meshSrc !== '') {
-      return chunkManager.getChunkSource(DVIDMeshSource, {
-        parameters: {
-          'baseUrl': parameters.baseUrl,
-          'nodeKey': parameters.nodeKey,
-          'dataInstanceKey': this.meshSrc,
-        }
-      });
-    } else {
-      return null;
-    }
-  }
-
-  getSkeletonSource(chunkManager: ChunkManager, parameters: DVIDSourceParameters) {
-    if (this.skeletonSrc !== '') {
-      return chunkManager.getChunkSource(DVIDSkeletonSource, {
-        parameters: {
-          'baseUrl': parameters.baseUrl,
-          'nodeKey': parameters.nodeKey,
-          'dataInstanceKey': this.skeletonSrc,
-        }
-      });
-    } else {
-      return null;
-    }
+    return transposeNestedArrays(sources);
   }
 }
 
@@ -338,11 +325,12 @@ export class ServerInfo {
   }
 }
 
-export function getServerInfo(chunkManager: ChunkManager, baseUrl: string) {
+export function getServerInfo(chunkManager: ChunkManager, baseUrl: string, credentialsProvider: CredentialsProvider<DVIDToken>) {
   return chunkManager.memoize.getUncounted({type: 'dvid:getServerInfo', baseUrl}, () => {
-    const result = fetchOk(`${baseUrl}/api/repos/info`)
-                       .then(response => response.json())
-                       .then(response => new ServerInfo(response));
+    const result = makeRequestWithCredentials(
+      credentialsProvider,
+      {url: `${baseUrl}/api/repos/info`, method: 'GET', responseType: 'json'})
+      .then(response => new ServerInfo(response));
     const description = `repository info for DVID server ${baseUrl}`;
     StatusMessage.forPromise(result, {
       initialMessage: `Retrieving ${description}.`,
@@ -353,51 +341,23 @@ export function getServerInfo(chunkManager: ChunkManager, baseUrl: string) {
   });
 }
 
-/**
- * Get extra dataInstance info that isn't available on the server level.
- * this requires an extra api call
- */
-export function getDataInstanceDetails(
-    chunkManager: ChunkManager, baseUrl: string, nodeKey: string, info: VolumeDataInstanceInfo) {
-  return chunkManager.memoize.getUncounted(
-      {type: 'dvid:getInstanceDetails', baseUrl, nodeKey, name: info.name}, () => {
-        let result = fetchOk(`${baseUrl}/api/node/${nodeKey}/${info.name}/info`)
-                         .then(response => response.json());
-        const description = `datainstance info for node ${nodeKey} and instance ${info.name} ` +
-            `on DVID server ${baseUrl}`;
-
-        StatusMessage.forPromise(result, {
-          initialMessage: `Retrieving ${description}.`,
-          delay: true,
-          errorPrefix: `Error retrieving ${description}: `,
-        });
-
-        return result.then(instanceDetails => {
-          let extended = verifyObjectProperty(instanceDetails, 'Extended', verifyObject);
-          info.lowerVoxelBound =
-              verifyObjectProperty(extended, 'MinPoint', x => parseIntVec(vec3.create(), x));
-          info.upperVoxelBound =
-              verifyObjectProperty(extended, 'MaxPoint', x => parseIntVec(vec3.create(), x));
-          return info;
-        });
-      });
-}
-
-
-export class MultiscaleVolumeChunkSource implements GenericMultiscaleVolumeChunkSource {
+class DvidMultiscaleVolumeChunkSource extends MultiscaleVolumeChunkSource {
   get dataType() {
     return this.info.dataType;
-  }
-  get numChannels() {
-    return this.info.numChannels;
   }
   get volumeType() {
     return this.info.volumeType;
   }
 
+  get rank() {
+    return 3;
+  }
+
   constructor(
-      public chunkManager: ChunkManager, public baseUrl: string, public nodeKey: string,
-      public dataInstanceKey: string, public info: VolumeDataInstanceInfo) {}
+      chunkManager: ChunkManager, public baseUrl: string, public nodeKey: string,
+      public dataInstanceKey: string, public info: VolumeDataInstanceInfo, public credentialsProvider: CredentialsProvider<DVIDToken>) {
+    super(chunkManager);
+  }
 
   getSources(volumeSourceOptions: VolumeSourceOptions) {
     return this.info.getSources(
@@ -406,38 +366,142 @@ export class MultiscaleVolumeChunkSource implements GenericMultiscaleVolumeChunk
           'nodeKey': this.nodeKey,
           'dataInstanceKey': this.dataInstanceKey,
         },
-        volumeSourceOptions);
-  }
-
-  getMeshSource() {
-    let meshSource = this.info.getMeshSource(this.chunkManager, {
-      'baseUrl': this.baseUrl,
-      'nodeKey': this.nodeKey,
-      'dataInstanceKey': this.dataInstanceKey,
-    });
-    if (meshSource === null) {
-      return this.info.getSkeletonSource(this.chunkManager, {
-        'baseUrl': this.baseUrl,
-        'nodeKey': this.nodeKey,
-        'dataInstanceKey': this.dataInstanceKey,
-      });
-    }
-    return meshSource;
+        volumeSourceOptions,
+        this.credentialsProvider);
   }
 }
 
-const urlPattern = /^((?:http|https):\/\/[^\/]+)\/([^\/]+)\/([^\/]+)$/;
+const urlPattern = /^((?:http|https):\/\/[^\/]+)\/([^\/]+)\/([^\/]+)(\?.*)?$/;
 
-export function getVolume(chunkManager: ChunkManager, url: string) {
+function getDefaultAuthServer(baseUrl: string) {
+  if (baseUrl.startsWith('https')) {
+    // Use default token API for DVID https to make completeUrl work properly
+    return baseUrl + '/api/server/token';
+  } else {
+    return undefined;
+  }
+}
+
+function parseSourceUrl(url: string): DVIDSourceParameters {
   let match = url.match(urlPattern);
   if (match === null) {
     throw new Error(`Invalid DVID URL: ${JSON.stringify(url)}.`);
   }
-  const baseUrl = match[1];
-  const nodeKey = match[2];
-  const dataInstanceKey = match[3];
-  return getServerInfo(chunkManager, baseUrl)
-      .then(serverInfo => {
+
+  let sourceParameters: DVIDSourceParameters = {
+    baseUrl: match[1],
+    nodeKey: match[2],
+    dataInstanceKey: match[3],
+  };
+
+  const queryString = match[4];
+  if (queryString && queryString.length > 1) {
+    const parameters = parseQueryStringParameters(queryString.substring(1));
+    if (parameters.user) {
+      sourceParameters.user = parameters.user;
+    }
+    if (parameters.auth) {
+      sourceParameters.authServer = parameters.auth;
+    }
+  }
+
+  if (!sourceParameters.authServer) {
+    sourceParameters.authServer = getDefaultAuthServer(sourceParameters.baseUrl);
+  }
+
+  return sourceParameters;
+}
+
+function getVolumeSource(options: GetDataSourceOptions, sourceParameters: DVIDSourceParameters, dataInstanceInfo: DataInstanceInfo, credentialsProvider: CredentialsProvider<DVIDToken>) {
+  const baseUrl = sourceParameters.baseUrl;
+  const nodeKey = sourceParameters.nodeKey;
+  const dataInstanceKey = sourceParameters.dataInstanceKey;
+
+  const info = <VolumeDataInstanceInfo>dataInstanceInfo;
+
+  const box: BoundingBox = {
+    lowerBounds: new Float64Array(info.lowerVoxelBound),
+    upperBounds: Float64Array.from(info.upperVoxelBoundInclusive, x => x + 1)
+  };
+  const modelSpace = makeCoordinateSpace({
+    rank: 3,
+    names: ['x', 'y', 'z'],
+    units: ['m', 'm', 'm'],
+    scales: Float64Array.from(info.voxelSize, x => x / 1e9),
+    boundingBoxes: [makeIdentityTransformedBoundingBox(box)],
+  });
+
+  const volume = new DvidMultiscaleVolumeChunkSource(
+    options.chunkManager, baseUrl, nodeKey, dataInstanceKey, info, credentialsProvider);
+
+  const dataSource: DataSource = {
+    modelTransform: makeIdentityTransform(modelSpace),
+    subsources: [{
+      id: 'default',
+      subsource: { volume },
+      default: true,
+    }],
+  };
+  if (info.meshSrc) {
+    const subsourceToModelSubspaceTransform = mat4.create();
+    for (let i = 0; i < 3; ++i) {
+      subsourceToModelSubspaceTransform[5 * i] = 1 / info.voxelSize[i];
+    }
+    dataSource.subsources.push({
+      id: 'meshes',
+      default: true,
+      subsource: {
+        mesh: options.chunkManager.getChunkSource(DVIDMeshSource, {
+          parameters: {
+            ...sourceParameters,
+            'dataInstanceKey': info.meshSrc
+          },
+          'credentialsProvider': credentialsProvider
+        })
+      },
+      subsourceToModelSubspaceTransform,
+    });
+  }
+  if (info.skeletonSrc) {
+    dataSource.subsources.push({
+      id: 'skeletons',
+      default: true,
+      subsource: {
+        mesh: options.chunkManager.getChunkSource(DVIDSkeletonSource, {
+          parameters: {
+            ...sourceParameters,
+            'dataInstanceKey': info.skeletonSrc
+          },
+          'credentialsProvider': credentialsProvider
+        })
+      },
+    });
+  }
+  dataSource.subsources.push({
+    id: 'bounds',
+    subsource: { staticAnnotations: makeDataBoundsBoundingBoxAnnotationSet(box) },
+    default: true,
+  });
+
+  return dataSource;
+}
+
+type AuthType = string|undefined|null;
+
+export function getDataSource(options: GetDataSourceOptions, getCredentialsProvider: (auth:AuthType) => CredentialsProvider<DVIDToken>): Promise<DataSource> {
+  const sourceParameters = parseSourceUrl(options.providerUrl);
+  const {baseUrl, nodeKey, dataInstanceKey} = sourceParameters;
+
+  return options.chunkManager.memoize.getUncounted(
+      {
+        type: 'dvid:MultiscaleVolumeChunkSource',
+        baseUrl,
+        nodeKey: nodeKey,
+        dataInstanceKey,
+      },
+      async () => {
+        const credentailsProvider = getCredentialsProvider(sourceParameters.authServer);
+        const serverInfo = await getServerInfo(options.chunkManager, baseUrl, credentailsProvider);
         let repositoryInfo = serverInfo.getNode(nodeKey);
         if (repositoryInfo === undefined) {
           throw new Error(`Invalid node: ${JSON.stringify(nodeKey)}.`);
@@ -446,18 +510,8 @@ export function getVolume(chunkManager: ChunkManager, url: string) {
         if (!(dataInstanceInfo instanceof VolumeDataInstanceInfo)) {
           throw new Error(`Invalid data instance ${dataInstanceKey}.`);
         }
-        return getDataInstanceDetails(chunkManager, baseUrl, nodeKey, dataInstanceInfo);
-      })
-      .then((info: VolumeDataInstanceInfo) => {
-        return chunkManager.memoize.getUncounted(
-            {
-              type: 'dvid:MultiscaleVolumeChunkSource',
-              baseUrl,
-              nodeKey: nodeKey,
-              dataInstanceKey,
-            },
-            () => new MultiscaleVolumeChunkSource(
-                chunkManager, baseUrl, nodeKey, dataInstanceKey, info));
+
+        return getVolumeSource(options, sourceParameters, dataInstanceInfo, credentailsProvider);
       });
 }
 
@@ -492,32 +546,60 @@ export function completeNodeAndInstance(serverInfo: ServerInfo, prefix: string):
   return applyCompletionOffset(nodeKey.length + 1, completeInstanceName(repositoryInfo, match[2]));
 }
 
-export function volumeCompleter(
-    url: string, chunkManager: ChunkManager): Promise<CompletionResult> {
-  const curUrlPattern = /^((?:http|https):\/\/[^\/]+)\/(.*)$/;
+export async function completeUrl(options: CompleteUrlOptions, getCredentialsProvider: (auth:AuthType) => CredentialsProvider<DVIDToken>): Promise<CompletionResult> {
+  const curUrlPattern = /^((?:http|https):\/\/[^\/]+)\/([^\?]*).*$/;
+  let url = options.providerUrl;
+  let auth:string|undefined = undefined;
+
+  const firstMatch = options.providerUrl.match(/^([^\?]*)\?[^\?]*auth=([^&]*)/);
+
+  if (firstMatch) {
+    url = firstMatch[1];
+    auth = firstMatch[2];
+  }
+
   let match = url.match(curUrlPattern);
   if (match === null) {
     // We don't yet have a full hostname.
-    return Promise.reject<CompletionResult>(null);
+    throw null;
   }
   let baseUrl = match[1];
   let path = match[2];
-  return getServerInfo(chunkManager, baseUrl)
-      .then(
-          serverInfo =>
-              applyCompletionOffset(baseUrl.length + 1, completeNodeAndInstance(serverInfo, path)));
+  if (!auth && baseUrl.startsWith('https')) {
+    auth = getDefaultAuthServer(baseUrl);
+  }
+
+  const serverInfo = await getServerInfo(options.chunkManager, baseUrl, getCredentialsProvider(auth));
+  return applyCompletionOffset(baseUrl.length + 1, completeNodeAndInstance(serverInfo, path));
 }
 
-export class DVIDDataSource extends DataSource {
+export class DVIDDataSource extends DataSourceProvider {
+  constructor(public credentialsManager: CredentialsManager) {
+    super();
+  }
+
   get description() {
     return 'DVID';
   }
 
-  getVolume(chunkManager: ChunkManager, url: string) {
-    return getVolume(chunkManager, url);
+  getCredentialsProvider(authServer: AuthType) {
+    if (authServer) {
+      const key = dvidCredentailsKey(authServer);
+      if (!isDVIDCredentialsProviderRegistered(key)) {
+        registerDVIDCredentialsProvider(key);
+      }
+
+      return this.credentialsManager.getCredentialsProvider<DVIDToken>(key, authServer);
+    } else {
+      return this.credentialsManager.getCredentialsProvider<DVIDToken>(dvidCredentailsKey(''));
+    }
   }
 
-  volumeCompleter(url: string, chunkManager: ChunkManager) {
-    return volumeCompleter(url, chunkManager);
+  get(options: GetDataSourceOptions): Promise<DataSource> {
+    return getDataSource(options, this.getCredentialsProvider.bind(this));
+  }
+
+  completeUrl(options: CompleteUrlOptions) {
+    return completeUrl(options, this.getCredentialsProvider.bind(this));
   }
 }

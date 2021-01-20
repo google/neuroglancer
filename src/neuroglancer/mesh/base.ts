@@ -14,8 +14,6 @@
  * limitations under the License.
  */
 
-import {mat4} from 'neuroglancer/util/geom';
-
 export const MESH_LAYER_RPC_ID = 'mesh/MeshLayer';
 export const MULTISCALE_MESH_LAYER_RPC_ID = 'mesh/MultiscaleMeshLayer';
 export const FRAGMENT_SOURCE_RPC_ID = 'mesh/FragmentSource';
@@ -42,7 +40,6 @@ export interface MultiscaleFragmentFormat {
    */
   fragmentRelativeVertices: boolean;
 
-  transform: mat4;
   vertexPositionFormat: VertexPositionFormat;
 }
 

@@ -16,22 +16,6 @@
 
 import {registerEventListener} from 'neuroglancer/util/disposable';
 
-/**
- * Returns true if the event appears to be targetted on input text and should not be overridden by a
- * global handler.
- */
-export function eventHasInputTextTarget(event: Event) {
-  const selection = window.getSelection();
-  if (selection !== null && !selection.isCollapsed) {
-    return true;
-  }
-  const {tagName} = (<HTMLElement>event.target);
-  if (tagName === 'TEXTAREA' || tagName === 'INPUT') {
-    return true;
-  }
-  return false;
-}
-
 export function setClipboard(data: string, format = 'text/plain') {
   let success = false;
   const cleanup = registerEventListener(document, 'copy', (event: ClipboardEvent) => {

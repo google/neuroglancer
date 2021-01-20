@@ -20,14 +20,17 @@ import 'codemirror/lib/codemirror.css';
 import 'codemirror/addon/lint/lint.css';
 
 import CodeMirror from 'codemirror';
+import glslCodeMirror from 'glsl-editor/glsl';
 import debounce from 'lodash/debounce';
 import {WatchableValue} from 'neuroglancer/trackable_value';
 import {RefCounted} from 'neuroglancer/util/disposable';
 import {removeFromParent} from 'neuroglancer/util/dom';
 import {WatchableShaderError} from 'neuroglancer/webgl/dynamic_shader';
 import {ShaderCompilationError, ShaderLinkError} from 'neuroglancer/webgl/shader';
+import {ShaderControlParseError, ShaderControlState} from 'neuroglancer/webgl/shader_ui_controls';
 
-require<(codeMirror: typeof CodeMirror) => void>('glsl-editor/glsl')(CodeMirror);
+// Install glsl support in CodeMirror.
+glslCodeMirror(CodeMirror);
 
 /**
  * Time in milliseconds during which the input field must not be modified before the shader is
@@ -37,8 +40,9 @@ const SHADER_UPDATE_DELAY = 500;
 
 interface ShaderCodeState {
   shaderError: WatchableShaderError;
+  shaderControlState?: ShaderControlState;
   fragmentMain: WatchableValue<string>;
-  fragmentMainStartLine: string;
+  sourceStringNumber?: number;
 }
 
 export class ShaderCodeWidget extends RefCounted {
@@ -76,42 +80,71 @@ export class ShaderCodeWidget extends RefCounted {
     this.registerDisposer(this.state.shaderError.changed.add(() => {
       this.updateErrorState();
     }));
+    const {shaderControlState} = this.state;
+    if (shaderControlState !== undefined) {
+      this.registerDisposer(shaderControlState.parseErrors.changed.add(() => {
+        this.updateErrorState();
+      }));
+    }
     this.updateErrorState();
+    const intersectionObserver = new IntersectionObserver(entries => {
+      if (entries.some(x => x.isIntersecting)) {
+        this.textEditor.refresh();
+      }
+    }, {
+      root: document.body,
+    });
+    intersectionObserver.observe(this.element);
+    this.registerDisposer(() => intersectionObserver.disconnect());
   }
 
   updateErrorState() {
+    const {sourceStringNumber = 1} = this.state;
     const error = this.state.shaderError.value;
-    if (error === undefined) {
+    let controlParseErrors: ShaderControlParseError[];
+    const {shaderControlState} = this.state;
+    if (shaderControlState !== undefined) {
+      controlParseErrors = shaderControlState.parseErrors.value;
+    } else {
+      controlParseErrors = [];
+    }
+    if (error === undefined && controlParseErrors.length === 0) {
       this.setValidState(undefined);
-    } else if (error !== null) {
+    } else if (error != null || controlParseErrors.length !== 0) {
       this.textEditor.setOption('lint', {
         getAnnotations: () => {
-          if (error.name === 'ShaderCompilationError') {
-            let fragmentMainStartLineNumber = (<ShaderCompilationError>error)
-                                                  .source.split('\n')
-                                                  .indexOf(this.state.fragmentMainStartLine) +
-                2;
-            return (<ShaderCompilationError>error).errorMessages.map(e => {
-              return {
-                message: e.message,
-                severity: 'error',
-                from:
-                    CodeMirror.Pos(e.line === undefined ? 0 : e.line - fragmentMainStartLineNumber),
-              };
+          const annotations = [];
+          for (const e of controlParseErrors) {
+            annotations.push({
+              message: e.message,
+              severity: 'error',
+              from: CodeMirror.Pos(e.line),
             });
-          } else if (error!.name === 'ShaderLinkError') {
-            return [{
-              message: (<ShaderLinkError>error).log,
-              severity: 'error',
-              from: CodeMirror.Pos(0),
-            }];
-          } else {
-            return [{
-              message: error!.message,
-              severity: 'error',
-              from: CodeMirror.Pos(0),
-            }];
           }
+          if (error != null) {
+            if (error.name === 'ShaderCompilationError') {
+              for (const e of (error as ShaderCompilationError).errorMessages) {
+                annotations.push({
+                  message: e.message,
+                  severity: 'error',
+                  from: CodeMirror.Pos(e.file === sourceStringNumber ? e.line || 0 : 0),
+                });
+              }
+            } else if (error!.name === 'ShaderLinkError') {
+              annotations.push({
+                message: (<ShaderLinkError>error).log,
+                severity: 'error',
+                from: CodeMirror.Pos(0),
+              });
+            } else {
+              annotations.push({
+                message: error!.message,
+                severity: 'error',
+                from: CodeMirror.Pos(0),
+              });
+            }
+          }
+          return annotations;
         },
       });
       this.setValidState(false);

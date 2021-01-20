@@ -18,91 +18,71 @@
  * @file Facilities for drawing circles in WebGL as quads (triangle fan).
  */
 
-import {RefCounted} from 'neuroglancer/util/disposable';
-import {Buffer} from 'neuroglancer/webgl/buffer';
-import {GL} from 'neuroglancer/webgl/context';
-import {QuadRenderHelper} from 'neuroglancer/webgl/quad';
+import {drawQuads, glsl_getQuadVertexPosition, VERTICES_PER_QUAD} from 'neuroglancer/webgl/quad';
 import {ShaderBuilder, ShaderProgram} from 'neuroglancer/webgl/shader';
-import {getSquareCornersBuffer} from 'neuroglancer/webgl/square_corners_buffer';
 
-export const VERTICES_PER_CIRCLE = 4;
+export const VERTICES_PER_CIRCLE = VERTICES_PER_QUAD;
 
-export class CircleShader extends RefCounted {
-  private squareCornersBuffer: Buffer;
-  private quadHelper: QuadRenderHelper;
+export function defineCircleShader(builder: ShaderBuilder, crossSectionFade: boolean) {
+  builder.addVertexCode(glsl_getQuadVertexPosition);
+  // x and y components: The x and y radii of the point in normalized device coordinates.
+  // z component: Starting point of border from [0, 1]..
+  // w component: Fraction of total radius that is feathered.
+  builder.addUniform('highp vec3', 'uCircleParams');
 
-  constructor(gl: GL, public circlesPerInstance: number = 1) {
-    super();
-    this.squareCornersBuffer = getSquareCornersBuffer(
-        gl, -1, -1, 1, 1, /*minorTiles=*/circlesPerInstance, /*majorTiles=*/1);
-    this.quadHelper = this.registerDisposer(new QuadRenderHelper(gl, circlesPerInstance));
-  }
-
-  defineShader(builder: ShaderBuilder, crossSectionFade: boolean) {
-    // XY corners of square ranging from [-1, -1] to [1, 1].
-    builder.addAttribute('highp vec2', 'aCircleCornerOffset');
-
-    // x and y components: The x and y radii of the point in normalized device coordinates.
-    // z component: Starting point of border from [0, 1]..
-    // w component: Fraction of total radius that is feathered.
-    builder.addUniform('highp vec4', 'uCircleParams');
-
-    // 2-D position within circle quad, ranging from [-1, -1] to [1, 1].
-    builder.addVarying('highp vec2', 'vCircleCoord');
-    builder.addVertexCode(`
-void emitCircle(vec4 position) {
+  // 2-D position within circle quad, ranging from [-1, -1] to [1, 1].
+  builder.addVarying('highp vec4', 'vCircleCoord');
+  builder.addVertexCode(`
+void emitCircle(vec4 position, float diameter, float borderWidth) {
   gl_Position = position;
-  gl_Position.xy += aCircleCornerOffset * uCircleParams.xy * gl_Position.w;
-  vCircleCoord = aCircleCornerOffset;
+  float totalDiameter = diameter + 2.0 * (borderWidth + uCircleParams.z);
+  if (diameter == 0.0) totalDiameter = 0.0;
+  vec2 circleCornerOffset = getQuadVertexPosition(vec2(-1.0, -1.0), vec2(1.0, 1.0));
+  gl_Position.xy += circleCornerOffset * uCircleParams.xy * gl_Position.w * totalDiameter;
+  vCircleCoord.xy = circleCornerOffset;
+  vCircleCoord.z = diameter / totalDiameter;
+  vCircleCoord.w = uCircleParams.z / totalDiameter;
 }
 `);
-    if (crossSectionFade) {
-      builder.addFragmentCode(`
+  if (crossSectionFade) {
+    builder.addFragmentCode(`
 float getCircleAlphaMultiplier() {
   return 1.0 - 2.0 * abs(0.5 - gl_FragCoord.z);
 }
 `);
-    } else {
-      builder.addFragmentCode(`
+  } else {
+    builder.addFragmentCode(`
 float getCircleAlphaMultiplier() {
   return 1.0;
 }
 `);
-    }
-    builder.addFragmentCode(`
+  }
+  builder.addFragmentCode(`
 vec4 getCircleColor(vec4 interiorColor, vec4 borderColor) {
-  float radius = length(vCircleCoord);
+  float radius = length(vCircleCoord.xy);
   if (radius > 1.0) {
     discard;
   }
 
-  float borderColorFraction = clamp((radius - uCircleParams.z) / uCircleParams.w, 0.0, 1.0);
-  float feather = clamp((1.0 - radius) / uCircleParams.w, 0.0, 1.0);
+  float borderColorFraction = clamp((radius - vCircleCoord.z) / vCircleCoord.w, 0.0, 1.0);
+  float feather = clamp((1.0 - radius) / vCircleCoord.w, 0.0, 1.0);
   vec4 color = mix(interiorColor, borderColor, borderColorFraction);
 
   return vec4(color.rgb, color.a * feather * getCircleAlphaMultiplier());
 }
 `);
-  }
+}
 
-  draw(
-      shader: ShaderProgram, renderContext: {viewportWidth: number, viewportHeight: number},
-      options: {
-        interiorRadiusInPixels: number,
-        borderWidthInPixels: number,
-        featherWidthInPixels: number
-      },
-      count: number) {
-    const {gl} = shader;
-    const aCircleCornerOffset = shader.attribute('aCircleCornerOffset');
-    this.squareCornersBuffer.bindToVertexAttrib(aCircleCornerOffset, /*components=*/2);
-    const totalRadius =
-        options.interiorRadiusInPixels + options.borderWidthInPixels + options.featherWidthInPixels;
-    gl.uniform4f(
-        shader.uniform('uCircleParams'), totalRadius / renderContext.viewportWidth,
-        totalRadius / renderContext.viewportHeight, options.interiorRadiusInPixels / totalRadius,
-        options.featherWidthInPixels === 0 ? 1e-6 : options.featherWidthInPixels / totalRadius);
-    this.quadHelper.draw(gl, count);
-    shader.gl.disableVertexAttribArray(aCircleCornerOffset);
-  }
+export function initializeCircleShader(
+    shader: ShaderProgram, projectionParameters: {width: number, height: number},
+    options: {featherWidthInPixels: number}) {
+  const {gl} = shader;
+  gl.uniform3f(
+      shader.uniform('uCircleParams'), 1 / projectionParameters.width,
+      1 / projectionParameters.height, Math.max(1e-6, options.featherWidthInPixels));
+}
+
+export function drawCircles(
+    gl: WebGL2RenderingContext, circlesPerInstance: number, numInstances: number) {
+  drawQuads(gl, circlesPerInstance, numInstances);
 }

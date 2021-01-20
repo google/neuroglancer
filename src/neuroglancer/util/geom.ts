@@ -14,7 +14,8 @@
  * limitations under the License.
  */
 
-import {mat3, mat4, quat, vec3} from 'gl-matrix';
+import {mat3, mat4, quat, vec3, vec4} from 'gl-matrix';
+import {findMatchingIndices, TypedArray} from 'neuroglancer/util/array';
 
 export {mat2, mat3, mat4, quat, vec2, vec3, vec4} from 'gl-matrix';
 
@@ -22,16 +23,13 @@ export const identityMat4 = mat4.create();
 
 export const AXES_NAMES = ['x', 'y', 'z'];
 
-export class BoundingBox {
-  constructor(public lower: vec3, public upper: vec3) {}
-}
-
 export const kAxes = [
   vec3.fromValues(1, 0, 0),
   vec3.fromValues(0, 1, 0),
   vec3.fromValues(0, 0, 1),
 ];
 export const kZeroVec = vec3.fromValues(0, 0, 0);
+export const kZeroVec4 = vec4.fromValues(0, 0, 0, 0);
 export const kOneVec = vec3.fromValues(1, 1, 1);
 export const kInfinityVec = vec3.fromValues(Infinity, Infinity, Infinity);
 export const kIdentityQuat = quat.create();
@@ -51,33 +49,6 @@ export function prod4(x: ArrayLike<number>) {
  */
 export function vec3Key(x: ArrayLike<number>) {
   return `${x[0]},${x[1]},${x[2]}`;
-}
-
-const RECTIFY_EPSILON = 1e-4;
-
-export function rectifyVec3IfAxisAligned(v: Float32Array, offset: number) {
-  let a0 = Math.abs(v[offset]), a1 = Math.abs(v[offset + 1]), a2 = Math.abs(v[offset + 2]);
-  let max = Math.max(a0, a1, a2);
-  if (a0 / max < RECTIFY_EPSILON) {
-    v[offset] = 0;
-  }
-  if (a1 / max < RECTIFY_EPSILON) {
-    v[offset + 1] = 0;
-  }
-  if (a2 / max < RECTIFY_EPSILON) {
-    v[offset + 2] = 0;
-  }
-}
-
-/**
- * Makes columns of m that are approximately axis-aligned exactly axis aligned.
- *
- * Note that mat is stored in Fortran order, and therefore the first column is m[0], m[1], m[2].
- */
-export function rectifyTransformMatrixIfAxisAligned(m: mat4) {
-  rectifyVec3IfAxisAligned(m, 0);
-  rectifyVec3IfAxisAligned(m, 4);
-  rectifyVec3IfAxisAligned(m, 8);
 }
 
 /**
@@ -126,17 +97,15 @@ export function transformVectorByMat4(out: vec3, a: vec3, m: mat4) {
   return out;
 }
 
-
 /**
- * Computes the effective scaling factor of each local spatial dimension by `m`, which is assumed to
- * transform local coordinates to global coordinates.
+ * Transforms a vector `a` by the transpose of a homogenous transformation matrix `m`.  The
+ * translation component of `m` is ignored.
  */
-export function effectiveScalingFactorFromMat4(out: vec3, m: mat4) {
-  const m0 = m[0], m1 = m[1], m2 = m[2], m4 = m[4], m5 = m[5], m6 = m[6], m8 = m[8], m9 = m[9],
-        m10 = m[10];
-  out[0] = Math.sqrt(m0 * m0 + m1 * m1 + m2 * m2);
-  out[1] = Math.sqrt(m4 * m4 + m5 * m5 + m6 * m6);
-  out[2] = Math.sqrt(m8 * m8 + m9 * m9 + m10 * m10);
+export function transformVectorByMat4Transpose(out: vec3, a: vec3, m: mat4) {
+  let x = a[0], y = a[1], z = a[2];
+  out[0] = m[0] * x + m[1] * y + m[2] * z;
+  out[1] = m[4] * x + m[5] * y + m[6] * z;
+  out[2] = m[8] * x + m[9] * y + m[10] * z;
   return out;
 }
 
@@ -152,12 +121,17 @@ export function translationRotationScaleZReflectionToMat4(
 /**
  * Returns the value of `t` that minimizes `(p - (a + t * (b - a)))`.
  */
-export function findClosestParameterizedLinePosition(a: vec3, b: vec3, p: vec3) {
+export function findClosestParameterizedLinePosition(
+    a: Float32Array, b: Float32Array, p: Float32Array) {
   // http://mathworld.wolfram.com/Point-LineDistance3-Dimensional.html
   // Compute t: -dot(a-p, b-a) / |b - a|^2
-  const denominator = vec3.squaredDistance(a, b);
+  const rank = p.length;
+  let denominator = 0;
+  for (let i = 0; i < rank; ++i) {
+    denominator += (a[i] - b[i]) ** 2;
+  }
   let numerator = 0;
-  for (let i = 0; i < 3; ++i) {
+  for (let i = 0; i < rank; ++i) {
     const aValue = a[i];
     numerator -= (aValue - p[i]) * (b[i] - aValue);
   }
@@ -167,10 +141,12 @@ export function findClosestParameterizedLinePosition(a: vec3, b: vec3, p: vec3) 
 /**
  * Sets `out` to the position on the line segment `[a, b]` closest to `p`.
  */
-export function projectPointToLineSegment(out: vec3, a: vec3, b: vec3, p: vec3) {
+export function projectPointToLineSegment(
+    out: Float32Array, a: Float32Array, b: Float32Array, p: Float32Array) {
+  const rank = out.length;
   let t = findClosestParameterizedLinePosition(a, b, p);
   t = Math.max(0.0, Math.min(1.0, t));
-  for (let i = 0; i < 3; ++i) {
+  for (let i = 0; i < rank; ++i) {
     const aValue = a[i];
     out[i] = aValue + t * (b[i] - aValue);
   }
@@ -231,6 +207,11 @@ export function getFrustrumPlanes(out: Float32Array, m: mat4): Float32Array {
   const nearC = m32 + m22;  // near: c
   const nearD = m33 + m23;  // near: d
 
+  const farA = m30 - m20;  // far: a
+  const farB = m31 - m21;  // far: b
+  const farC = m32 - m22;  // far: c
+  const farD = m33 - m23;  // far: d
+
   // Normalize near plane
   const nearNorm = Math.sqrt(nearA ** 2 + nearB ** 2 + nearC ** 2);
   out[16] = nearA / nearNorm;
@@ -238,10 +219,12 @@ export function getFrustrumPlanes(out: Float32Array, m: mat4): Float32Array {
   out[18] = nearC / nearNorm;
   out[19] = nearD / nearNorm;
 
-  out[20] = m30 - m20;  // far: a
-  out[21] = m31 - m21;  // far: b
-  out[22] = m32 - m22;  // far: c
-  out[23] = m33 - m23;  // far: d
+  // Also normalize far plane
+  const farNorm = Math.sqrt(farA ** 2 + farB ** 2 + farC ** 2);
+  out[20] = farA / farNorm;
+  out[21] = farB / farNorm;
+  out[22] = farC / farNorm;
+  out[23] = farD / farNorm;
 
   return out;
 }
@@ -265,4 +248,119 @@ export function isAABBVisible(
     }
   }
   return true;
+}
+
+export function isAABBIntersectingPlane(
+    xLower: number, yLower: number, zLower: number, xUpper: number, yUpper: number, zUpper: number,
+    clippingPlanes: Float32Array) {
+  for (let i = 0; i < 4; ++i) {
+    const a = clippingPlanes[i * 4], b = clippingPlanes[i * 4 + 1], c = clippingPlanes[i * 4 + 2],
+          d = clippingPlanes[i * 4 + 3];
+    const sum = Math.max(a * xLower, a * xUpper) + Math.max(b * yLower, b * yUpper) +
+        Math.max(c * zLower, c * zUpper) + d;
+    if (sum < 0) {
+      return false;
+    }
+  }
+  {
+    const i = 5;
+    const a = clippingPlanes[i * 4], b = clippingPlanes[i * 4 + 1], c = clippingPlanes[i * 4 + 2],
+          d = clippingPlanes[i * 4 + 3];
+    const maxSum = Math.max(a * xLower, a * xUpper) + Math.max(b * yLower, b * yUpper) +
+        Math.max(c * zLower, c * zUpper);
+    const minSum = Math.min(a * xLower, a * xUpper) + Math.min(b * yLower, b * yUpper) +
+        Math.min(c * zLower, c * zUpper);
+    const epsilon = Math.abs(d) * 1e-6;
+    if (minSum > -d + epsilon || maxSum < -d - epsilon) return false;
+  }
+  return true;
+}
+
+
+/**
+ * Returns the list (in sorted order) of input dimensions that depend on any of the specified output
+ * dimensions.
+ */
+export function getDependentTransformInputDimensions(
+    transform: Float32Array|Float64Array, rank: number, outputDimensions: readonly number[],
+    transpose: boolean = false): number[] {
+  const numOutputDimensions = outputDimensions.length;
+  const isDependentInputDimension: boolean[] = [];
+  const inputStride = transpose ? 1 : rank + 1;
+  const outputStride = transpose ? rank + 1 : 1;
+  for (let i = 0; i < numOutputDimensions; ++i) {
+    const outputDim = outputDimensions[i];
+    for (let inputDim = 0; inputDim < rank; ++inputDim) {
+      if (transform[inputDim * inputStride + outputDim * outputStride] !== 0) {
+        isDependentInputDimension[inputDim] = true;
+      }
+    }
+  }
+  return findMatchingIndices(isDependentInputDimension, true);
+}
+
+export function scaleMat3Input(out: mat3, input: mat3, scales: TypedArray) {
+  for (let j = 0; j < 3; ++j) {
+    const s = scales[j];
+    for (let i = 0; i < 3; ++i) {
+      out[i + j * 3] = s * input[i + j * 3];
+    }
+  }
+  return out;
+}
+
+export function scaleMat3Output(out: mat3, input: mat3, scales: TypedArray) {
+  for (let i = 0; i < 3; ++i) {
+    const s = scales[i];
+    for (let j = 0; j < 3; ++j) {
+      out[i + j * 3] = s * input[i + j * 3];
+    }
+  }
+  return out;
+}
+
+export function getViewFrustrumVolume(projectionMat: mat4) {
+  if (projectionMat[15] === 1) {
+    // orthographic projection
+    const depth = 2 / Math.abs(projectionMat[10]);
+    const width = 2 / Math.abs(projectionMat[0]);
+    const height = 2 / Math.abs(projectionMat[5]);
+    return width * height * depth;
+  }
+  // perspective projection
+  // a = (far + near) / (near - far);
+  // b = 2 * far * near / (near - far);
+  const a = projectionMat[10];
+  const b = projectionMat[14];
+  const near = 2 * b / (2 * a - 2);
+  const far = ((a - 1) * near) / (a + 1);
+
+  const baseArea = 4 / (projectionMat[0] * projectionMat[5]);
+  return baseArea / 3 * (Math.abs(far) ** 3 - Math.abs(near) ** 3);
+}
+
+export function getViewFrustrumDepthRange(projectionMat: mat4) {
+  if (projectionMat[15] === 1) {
+    // orthographic projection
+    const depth = 2 / Math.abs(projectionMat[10]);
+    return depth;
+  }
+  // perspective projection
+  // a = (far + near) / (near - far);
+  // b = 2 * far * near / (near - far);
+  const a = projectionMat[10];
+  const b = projectionMat[14];
+  const near = 2 * b / (2 * a - 2);
+  const far = ((a - 1) * near) / (a + 1);
+  const depth = Math.abs(far - near);
+  return depth;
+}
+
+// Ensures the z output is 0.  Useful for disabling depth clipping.
+export function disableZProjection(mat: mat4) {
+  mat[2] = 0;
+  mat[6] = 0;
+  mat[10] = 0;
+  mat[14] = 0;
+  return mat;
 }

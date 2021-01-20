@@ -18,7 +18,7 @@
  * @file Permits webpack url-loader modules to be imported as strings.
  */
 
-declare module 'url-loader!*' {
+declare module '*.wasm' {
   const value: string;
   export default value;
 }

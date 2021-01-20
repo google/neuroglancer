@@ -15,13 +15,18 @@
  */
 
 import debounce from 'lodash/debounce';
-import {Borrowed, Disposer, Owned, RefCounted} from 'neuroglancer/util/disposable';
-import {NullaryReadonlySignal, NullarySignal} from 'neuroglancer/util/signal';
+import {Borrowed, Disposable, invokeDisposers, Owned, RefCounted} from 'neuroglancer/util/disposable';
+import {neverSignal, NullaryReadonlySignal, NullarySignal, Signal} from 'neuroglancer/util/signal';
 import {Trackable} from 'neuroglancer/util/trackable';
 
 export interface WatchableValueInterface<T> {
   value: T;
   changed: NullaryReadonlySignal;
+}
+
+export interface WatchableValueChangeInterface<T> {
+  readonly value: T;
+  readonly changed: Signal<(oldValue: T, newValue: T) => void>;
 }
 
 export class WatchableValue<T> implements WatchableValueInterface<T> {
@@ -42,7 +47,7 @@ export class TrackableValue<T> extends WatchableValue<T> implements Trackable {
   constructor(value: T, public validator: (value: any) => T, public defaultValue = value) {
     super(value);
   }
-  toJSON() {
+  toJSON(): any {
     let {value_} = this;
     if (value_ === this.defaultValue) {
       return undefined;
@@ -83,23 +88,91 @@ class DerivedWatchableValue<U> extends RefCounted implements WatchableValueInter
   }
 }
 
-export function makeDerivedWatchableValue<U, T0>(
-    f: (v0: T0) => U, w0: WatchableValueInterface<T0>): DerivedWatchableValue<U>;
-export function makeDerivedWatchableValue<U, T0, T1>(
-    f: (v0: T0, v1: T1) => U, w0: WatchableValueInterface<T0>,
-    w1: WatchableValueInterface<T1>): DerivedWatchableValue<U>;
-export function makeDerivedWatchableValue<U, T0, T1, T2>(
-    f: (v0: T0, v1: T1, v2: T2) => U, w0: WatchableValueInterface<T0>,
-    w1: WatchableValueInterface<T1>, w2: WatchableValueInterface<T2>): DerivedWatchableValue<U>;
-export function makeDerivedWatchableValue<U, T0, T1, T2, T3>(
-    f: (v0: T0, v1: T1, v2: T2, v3: T3) => U, w0: WatchableValueInterface<T0>,
-    w1: WatchableValueInterface<T1>, w2: WatchableValueInterface<T2>,
-    w3: WatchableValueInterface<T3>): DerivedWatchableValue<U>;
-export function makeDerivedWatchableValue<U, T>(
-    f: (...values: T[]) => U, ...ws: WatchableValueInterface<T>[]): DerivedWatchableValue<U>;
-export function makeDerivedWatchableValue<U>(
-    f: (...v: any[]) => U, ...ws: WatchableValueInterface<any>[]) {
+export function makeDerivedWatchableValue<U, T extends any[]>(
+    f: (...v: T) => U, ...ws: {[K in keyof T]: WatchableValueInterface<T[K]>}) {
   return new DerivedWatchableValue(f, ws);
+}
+
+class CachedLazyDerivedWatchableValue<U> extends RefCounted implements WatchableValueInterface<U> {
+  changed = new NullarySignal();
+  private value_: U|undefined;
+  private valueGeneration = -1;
+  get value() {
+    const generation = this.changed.count;
+    if (generation !== this.valueGeneration) {
+      this.value_ = this.f(...this.ws.map(w => w.value));
+      this.valueGeneration = generation;
+    }
+    return this.value_ as U;
+  }
+  private f: (...v: any[]) => U;
+  private ws: WatchableValueInterface<any>[];
+
+  constructor(f: (...v: any[]) => U, ws: WatchableValueInterface<any>[]) {
+    super();
+    this.f = f;
+    this.ws = ws;
+    for (const w of ws) {
+      this.registerDisposer(w.changed.add(this.changed.dispatch));
+    }
+  }
+}
+
+export function makeCachedLazyDerivedWatchableValue<U, T extends any[]>(
+    f: (...v: T) => U, ...ws: {[K in keyof T]: WatchableValueInterface<T[K]>}) {
+  return new CachedLazyDerivedWatchableValue(f, ws);
+}
+
+export class CachedWatchableValue<T> extends RefCounted implements WatchableValueInterface<T> {
+  changed = new NullarySignal();
+  value: T;
+  constructor(
+      base: WatchableValueInterface<T>, isEqual: (a: T, b: T) => boolean = (a, b) => a === b) {
+    super();
+    this.value = base.value;
+    this.registerDisposer(base.changed.add(() => {
+      const newValue = base.value;
+      if (!isEqual(this.value, newValue)) {
+        this.value = newValue;
+        this.changed.dispatch();
+      }
+    }));
+  }
+}
+
+export function makeCachedDerivedWatchableValue<U, T extends any[]>(
+    f: (...v: T) => U, ws: {[K in keyof T]: WatchableValueInterface<T[K]>},
+    isEqual?: (a: U, b: U) => boolean) {
+  const derived = new DerivedWatchableValue(f, ws);
+  const cached = new CachedWatchableValue(derived, isEqual);
+  cached.registerDisposer(derived);
+  return cached;
+}
+
+export class AggregateWatchableValue<T> extends RefCounted implements WatchableValueInterface<T> {
+  changed = new NullarySignal();
+  value: T;
+  constructor(
+      getWatchables: (self: RefCounted) => {[k in keyof T]: WatchableValueInterface<T[k]>}) {
+    super();
+    const watchables = getWatchables(this);
+    const keys = Object.keys(watchables) as (keyof T)[];
+    const updateValue = () => {
+      const obj = (Array.isArray(watchables) ? [] : {}) as T;
+      for (const k of keys) {
+        obj[k] = watchables[k].value;
+      }
+      this.value = obj;
+      this.changed.dispatch();
+    };
+    updateValue();
+    for (const k of keys) {
+      const watchable = watchables[k];
+      // Ensure a unique function is used each time in case the same watchable is assigned to
+      // multiple properties.
+      this.registerDisposer(watchable.changed.add(() => updateValue()));
+    }
+  }
 }
 
 export class ComputedWatchableValue<U> extends RefCounted implements WatchableValueInterface<U> {
@@ -226,31 +299,142 @@ export class WatchableSet<T> {
   }
 }
 
-export function registerNested<T>(
-    baseState: WatchableValueInterface<T>, f: (context: RefCounted, value: T) => void): Disposer {
-  let value: T;
-  let context: RefCounted;
+export interface NestedStateManager<T = undefined> extends Disposable {
+  flush: () => void;
+  value: T;
+}
 
-  function updateValue() {
-    value = baseState.value;
-    context = new RefCounted();
-    f(context, value);
-  }
+export function registerNested<U, T extends any[]>(
+    f: (context: RefCounted, ...values: T) => U,
+    ...watchables: {[K in keyof T]: WatchableValueInterface<T[K]>}): NestedStateManager<U> {
+  let values = watchables.map(w => w.value) as T;
+  const count = watchables.length;
+  let context = new RefCounted();
+  let result = f(context, ...values);
 
   const handleChange = debounce(() => {
-    if (baseState.value !== value) {
-      context.dispose();
-      updateValue();
+    let changed = false;
+    for (let i = 0; i < count; ++i) {
+      const watchable = watchables[i];
+      const value = watchable.value;
+      if (values[i] !== value) {
+        values[i] = value;
+        changed = true;
+      }
     }
+    if (!changed) return;
+    context.dispose();
+    context = new RefCounted();
+    result = f(context, ...values);
   }, 0);
 
-  const signalDisposer = baseState.changed.add(handleChange);
+  const signalDisposers = watchables.map(w => w.changed.add(handleChange));
 
-  updateValue();
-
-  return () => {
-    handleChange.cancel();
-    signalDisposer();
-    context.dispose();
+  return {
+    flush() {
+      handleChange.flush();
+    },
+    dispose() {
+      handleChange.cancel();
+      invokeDisposers(signalDisposers);
+      context.dispose();
+    },
+    get value() {
+      handleChange.flush();
+      return result;
+    },
   };
+}
+
+export function registerNestedSync<U, T extends any[]>(
+    f: (context: RefCounted, ...values: T) => U,
+    ...watchables: {[K in keyof T]: WatchableValueInterface<T[K]>}):
+    {readonly value: U, dispose(): void} {
+  let values = watchables.map(w => w.value) as T;
+  const count = watchables.length;
+  let context = new RefCounted();
+  let result = f(context, ...values);
+
+  const handleChange = () => {
+    let changed = false;
+    for (let i = 0; i < count; ++i) {
+      const watchable = watchables[i];
+      const value = watchable.value;
+      if (values[i] !== value) {
+        values[i] = value;
+        changed = true;
+      }
+    }
+    if (!changed) return;
+    context.dispose();
+    context = new RefCounted();
+    result = f(context, ...values);
+  };
+
+  const signalDisposers = watchables.map(w => w.changed.add(handleChange));
+
+  return {
+    dispose() {
+      invokeDisposers(signalDisposers);
+      context.dispose();
+    },
+    get value() {
+      return result;
+    },
+  };
+}
+
+export function constantWatchableValue<T>(value: T): WatchableValueInterface<T> {
+  return {changed: neverSignal, value};
+}
+
+export function observeWatchable<T>(
+    callback: (value: T) => void, watchable: WatchableValueInterface<T>) {
+  callback(watchable.value);
+  return watchable.changed.add(() => callback(watchable.value));
+}
+
+export class IndirectWatchableValue<U, T> implements Disposable, WatchableValueInterface<T> {
+  protected inner: WatchableValueInterface<T>;
+  changed = new NullarySignal();
+  disposer: (() => void) | undefined;
+  private update = () => {
+    const {disposer, outer} = this;
+    if (disposer !== undefined) {
+      disposer();
+    }
+    const inner = this.inner = this.getInner(outer.value);
+    this.disposer = inner.changed.add(this.changed.dispatch);
+    this.changed.dispatch();
+  };
+  constructor(private outer: WatchableValueInterface<U>, private getInner: (outer: U) => WatchableValueInterface<T>) {
+    outer.changed.add(this.update);
+    this.update();
+  }
+
+  dispose() {
+    this.outer.changed.remove(this.update);
+    this.disposer!();
+  }
+
+  get value() {
+    return this.inner.value;
+  }
+  set value(value: T) {
+    this.inner.value = value;
+  }
+}
+
+export class IndirectTrackableValue<U, T> extends IndirectWatchableValue<U, T> implements
+    Trackable {
+  declare inner: TrackableValueInterface<T>;
+  reset() {
+    this.inner.reset();
+  }
+  restoreState(obj: unknown) {
+    this.inner.restoreState(obj);
+  }
+  toJSON() {
+    return this.inner.toJSON();
+  }
 }

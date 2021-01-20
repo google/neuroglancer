@@ -15,7 +15,7 @@ describe('skeleton/decode_swc_skeleton', () => {
     decodeSwcSkeletonChunk(chunk, swcStr);
 
     expect(chunk.vertexPositions).toEqual(new Float32Array([
-      3575, 3191, 4145, 3579, 3195, 4149, 3583, 3195, 4157, 3591, 3195, 4161, 3595, 3199, 4165
+      4145, 3191, 3575, 4149, 3195, 3579, 4157, 3195, 3583, 4161, 3195, 3591, 4165, 3199, 3595
     ]));  // vertex locations
     expect(chunk.indices).toEqual(new Uint32Array([
       1, 0, 2, 1, 3, 2, 4, 3

@@ -14,7 +14,8 @@
  * limitations under the License.
  */
 
-import {CHUNK_MANAGER_RPC_ID, CHUNK_QUEUE_MANAGER_RPC_ID, CHUNK_SOURCE_INVALIDATE_RPC_ID, ChunkDownloadStatistics, ChunkMemoryStatistics, ChunkPriorityTier, ChunkSourceParametersConstructor, ChunkState, getChunkDownloadStatisticIndex, getChunkStateStatisticIndex, numChunkMemoryStatistics, numChunkStatistics, REQUEST_CHUNK_STATISTICS_RPC_ID} from 'neuroglancer/chunk_manager/base';
+import throttle from 'lodash/throttle';
+import {CHUNK_LAYER_STATISTICS_RPC_ID, CHUNK_MANAGER_RPC_ID, CHUNK_QUEUE_MANAGER_RPC_ID, CHUNK_SOURCE_INVALIDATE_RPC_ID, ChunkDownloadStatistics, ChunkMemoryStatistics, ChunkPriorityTier, LayerChunkProgressInfo, ChunkSourceParametersConstructor, ChunkState, getChunkDownloadStatisticIndex, getChunkStateStatisticIndex, numChunkMemoryStatistics, numChunkStatistics, REQUEST_CHUNK_STATISTICS_RPC_ID} from 'neuroglancer/chunk_manager/base';
 import {SharedWatchableValue} from 'neuroglancer/shared_watchable_value';
 import {TypedArray} from 'neuroglancer/util/array';
 import {CancellationToken, CancellationTokenSource} from 'neuroglancer/util/cancellation';
@@ -36,6 +37,11 @@ export interface ChunkStateListener {
   stateChanged(chunk: Chunk, oldState: ChunkState): void;
 }
 
+let nextMarkGeneration = 0;
+export function getNextMarkGeneration() {
+  return ++nextMarkGeneration;
+}
+
 export class Chunk implements Disposable {
   // Node properties used for eviction/promotion heaps and LRU linked lists.
   child0: Chunk|null = null;
@@ -53,9 +59,12 @@ export class Chunk implements Disposable {
 
   error: any = null;
 
+  // Used by layers for marking chunks for various purposes.
+  markGeneration = -1;
+
   /**
    * Specifies existing priority within priority tier.  Only meaningful if priorityTier in
-   * CHUNK_ORDERED_PRIORITY_TIERS.
+   * CHUNK_ORDERED_PRIORITY_TIERS.  Higher numbers mean higher priority.
    */
   priority = 0;
 
@@ -72,8 +81,9 @@ export class Chunk implements Disposable {
    */
   newPriorityTier = ChunkPriorityTier.RECENT;
 
-  private systemMemoryBytes_: number;
-  private gpuMemoryBytes_: number;
+  private systemMemoryBytes_: number = 0;
+  private gpuMemoryBytes_: number = 0;
+  private downloadSlots_: number = 1;
   backendOnly = false;
   isComputational = false;
   newlyRequestedToFrontend = false;
@@ -182,6 +192,20 @@ export class Chunk implements Disposable {
 
   get gpuMemoryBytes() {
     return this.gpuMemoryBytes_;
+  }
+
+  get downloadSlots() {
+    return this.downloadSlots_;
+  }
+
+  set downloadSlots(count: number) {
+    if (count === this.downloadSlots_) return;
+    updateChunkStatistics(this, -1);
+    this.chunkManager.queueManager.adjustCapacitiesForChunk(this, false);
+    this.downloadSlots_ = count;
+    this.chunkManager.queueManager.adjustCapacitiesForChunk(this, true);
+    updateChunkStatistics(this, 1);
+    this.chunkManager.queueManager.scheduleUpdate();
   }
 
   registerListener(listener: ChunkStateListener) {
@@ -542,6 +566,11 @@ class AvailableCapacity extends RefCounted {
   get availableItems() {
     return this.itemLimit.value - this.currentItems;
   }
+
+  toString() {
+    return `bytes=${this.currentSize}/${this.sizeLimit.value},` +
+        `items=${this.currentItems}/${this.itemLimit.value}`;
+  }
 }
 
 @registerSharedObject(CHUNK_QUEUE_MANAGER_RPC_ID)
@@ -554,6 +583,8 @@ export class ChunkQueueManager extends SharedObjectCounterpart {
    */
   downloadCapacity: AvailableCapacity[];
   computeCapacity: AvailableCapacity;
+
+  enablePrefetch: SharedWatchableValue<boolean>;
 
   /**
    * Set of chunk sources associated with this queue manager.
@@ -602,10 +633,14 @@ export class ChunkQueueManager extends SharedObjectCounterpart {
    */
   private gpuMemoryEvictionQueue = makeChunkPriorityQueue1(Chunk.priorityLess);
 
-  private updatePending: number|null = null;
+  // Should be `number|null`, but marked `any` to work around @types/node being pulled in.
+  private updatePending: any = null;
+
+  gpuMemoryChanged = new NullarySignal();
 
   private numQueued = 0;
   private numFailed = 0;
+  private gpuMemoryGeneration = 0;
 
   constructor(rpc: RPC, options: any) {
     super(rpc, options);
@@ -617,6 +652,7 @@ export class ChunkQueueManager extends SharedObjectCounterpart {
     };
     this.gpuMemoryCapacity = getCapacity(options['gpuMemoryCapacity']);
     this.systemMemoryCapacity = getCapacity(options['systemMemoryCapacity']);
+    this.enablePrefetch = rpc.get(options['enablePrefetch']);
     this.downloadCapacity = [
       getCapacity(options['downloadCapacity']),
       getCapacity(options['downloadCapacity']),
@@ -679,7 +715,7 @@ export class ChunkQueueManager extends SharedObjectCounterpart {
       case ChunkState.DOWNLOADING:
         (chunk.isComputational ? this.computeCapacity :
                                  this.downloadCapacity[chunk.source!.sourceQueueLevel])
-            .adjust(factor, factor * chunk.systemMemoryBytes);
+            .adjust(factor * chunk.downloadSlots, factor * chunk.systemMemoryBytes);
         this.systemMemoryCapacity.adjust(factor, factor * chunk.systemMemoryBytes);
         break;
 
@@ -744,7 +780,7 @@ export class ChunkQueueManager extends SharedObjectCounterpart {
       return;
     }
     if (DEBUG_CHUNK_UPDATES) {
-      console.log(`${chunk}: changed state ${chunk.state} -> ${newState}`);
+      console.log(`${chunk}: changed state ${ChunkState[chunk.state]} -> ${ChunkState[newState]}`);
     }
     this.adjustCapacitiesForChunk(chunk, false);
     this.removeChunkFromQueues_(chunk);
@@ -782,6 +818,7 @@ export class ChunkQueueManager extends SharedObjectCounterpart {
   }
 
   freeChunkGPUMemory(chunk: Chunk) {
+    ++this.gpuMemoryGeneration;
     this.rpc!.invoke(
         'Chunk.update',
         {'id': chunk.key, 'state': ChunkState.SYSTEM_MEMORY, 'source': chunk.source!.rpcId});
@@ -803,6 +840,7 @@ export class ChunkQueueManager extends SharedObjectCounterpart {
   }
 
   copyChunkToGPU(chunk: Chunk) {
+    ++this.gpuMemoryGeneration;
     let rpc = this.rpc!;
     if (chunk.state === ChunkState.SYSTEM_MEMORY) {
       rpc.invoke(
@@ -880,9 +918,13 @@ export class ChunkQueueManager extends SharedObjectCounterpart {
       return;
     }
     this.updatePending = null;
+    const gpuMemoryGeneration = this.gpuMemoryGeneration;
     this.processGPUPromotions_();
     this.processQueuePromotions_();
     this.logStatistics();
+    if (this.gpuMemoryGeneration !== gpuMemoryGeneration) {
+      this.gpuMemoryChanged.dispatch();
+    }
   }
 
   logStatistics() {
@@ -912,6 +954,17 @@ export class ChunkQueueManager extends SharedObjectCounterpart {
   }
 }
 
+export class ChunkRenderLayerBackend extends SharedObjectCounterpart implements LayerChunkProgressInfo {
+  chunkManagerGeneration: number = -1;
+
+  numVisibleChunksNeeded: number = 0;
+  numVisibleChunksAvailable: number = 0;
+  numPrefetchChunksNeeded: number = 0;
+  numPrefetchChunksAvailable: number = 0;
+}
+
+const LAYER_CHUNK_STATISTICS_INTERVAL = 200;
+
 @registerSharedObject(CHUNK_MANAGER_RPC_ID)
 export class ChunkManager extends SharedObjectCounterpart {
   queueManager: ChunkQueueManager;
@@ -927,7 +980,8 @@ export class ChunkManager extends SharedObjectCounterpart {
    */
   private newTierChunks: Chunk[] = [];
 
-  private updatePending: number|null = null;
+  // Should be `number|null`, but marked `any` to workaround `@types/node` being pulled in.
+  private updatePending: any = null;
 
   recomputeChunkPriorities = new NullarySignal();
 
@@ -939,9 +993,30 @@ export class ChunkManager extends SharedObjectCounterpart {
 
   memoize = new StringMemoize();
 
+  layers: ChunkRenderLayerBackend[] = [];
+
+  private sendLayerChunkStatistics = this.registerCancellable(throttle(() => {
+    this.rpc!.invoke(CHUNK_LAYER_STATISTICS_RPC_ID, {
+      id: this.rpcId,
+      layers: this.layers.map(layer => ({
+                                id: layer.rpcId,
+                                numVisibleChunksAvailable: layer.numVisibleChunksAvailable,
+                                numVisibleChunksNeeded: layer.numVisibleChunksNeeded,
+                                numPrefetchChunksAvailable: layer.numPrefetchChunksAvailable,
+                                numPrefetchChunksNeeded: layer.numPrefetchChunksNeeded
+                              }))
+    });
+  }, LAYER_CHUNK_STATISTICS_INTERVAL));
+
   constructor(rpc: RPC, options: any) {
     super(rpc, options);
     this.queueManager = (<ChunkQueueManager>rpc.get(options['chunkQueueManager'])).addRef();
+
+    // Update chunk priorities periodically after GPU memory changes to ensure layer chunk
+    // statistics are updated.
+    this.registerDisposer(this.queueManager.gpuMemoryChanged.add(this.registerCancellable(throttle(
+        () => this.scheduleUpdateChunkPriorities(), LAYER_CHUNK_STATISTICS_INTERVAL,
+        {leading: false, trailing: true}))));
 
     for (let tier = ChunkPriorityTier.FIRST_TIER; tier <= ChunkPriorityTier.LAST_TIER; ++tier) {
       if (tier === ChunkPriorityTier.RECENT) {
@@ -957,11 +1032,25 @@ export class ChunkManager extends SharedObjectCounterpart {
     }
   }
 
+  registerLayer(layer: ChunkRenderLayerBackend) {
+    const generation = this.recomputeChunkPriorities.count;
+    if (layer.chunkManagerGeneration !== generation) {
+      layer.chunkManagerGeneration = generation;
+      this.layers.push(layer);
+      layer.numVisibleChunksAvailable = 0;
+      layer.numVisibleChunksNeeded = 0;
+      layer.numPrefetchChunksAvailable = 0;
+      layer.numPrefetchChunksNeeded = 0;
+    }
+  }
+
   private recomputeChunkPriorities_() {
     this.updatePending = null;
+    this.layers.length = 0;
     this.recomputeChunkPriorities.dispatch();
     this.recomputeChunkPrioritiesLate.dispatch();
-    this.updateQueueState([ChunkPriorityTier.VISIBLE]);
+    this.updateQueueState([ChunkPriorityTier.VISIBLE, ChunkPriorityTier.PREFETCH]);
+    this.sendLayerChunkStatistics();
   }
 
   /**
@@ -971,6 +1060,11 @@ export class ChunkManager extends SharedObjectCounterpart {
    * @param toFrontend true if the chunk should be moved to the frontend when ready.
    */
   requestChunk(chunk: Chunk, tier: ChunkPriorityTier, priority: number, toFrontend = true) {
+    if (!Number.isFinite(priority)) {
+      // Non-finite priority indicates a bug.
+      debugger;
+      return;
+    }
     if (tier === ChunkPriorityTier.RECENT) {
       throw new Error('Not going to request a chunk with the RECENT tier');
     }
@@ -995,6 +1089,9 @@ export class ChunkManager extends SharedObjectCounterpart {
     let queueManager = this.queueManager;
     for (let tier of tiers) {
       let chunks = existingTierChunks[tier];
+      if (DEBUG_CHUNK_UPDATES) {
+        console.log(`existingTierChunks[${ChunkPriorityTier[tier]}].length=${chunks.length}`);
+      }
       for (let chunk of chunks) {
         if (chunk.newPriorityTier === ChunkPriorityTier.RECENT) {
           // Downgrade the priority of this chunk.

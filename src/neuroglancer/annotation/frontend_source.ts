@@ -14,47 +14,50 @@
  * limitations under the License.
  */
 
-import {Annotation, AnnotationId, AnnotationReference, AnnotationType, annotationTypes, deserializeAnnotation, getAnnotationTypeHandler, makeAnnotationId, AnnotationSourceSignals} from 'neuroglancer/annotation';
+import {Annotation, AnnotationId, AnnotationPropertySerializer, AnnotationPropertySpec, AnnotationReference, AnnotationSourceSignals, AnnotationType, annotationTypeHandlers, annotationTypes, fixAnnotationAfterStructuredCloning, makeAnnotationId, SerializedAnnotations} from 'neuroglancer/annotation';
 import {ANNOTATION_COMMIT_UPDATE_RESULT_RPC_ID, ANNOTATION_COMMIT_UPDATE_RPC_ID, ANNOTATION_GEOMETRY_CHUNK_SOURCE_RPC_ID, ANNOTATION_METADATA_CHUNK_SOURCE_RPC_ID, ANNOTATION_REFERENCE_ADD_RPC_ID, ANNOTATION_REFERENCE_DELETE_RPC_ID, ANNOTATION_SUBSET_GEOMETRY_CHUNK_SOURCE_RPC_ID, AnnotationGeometryChunkSpecification} from 'neuroglancer/annotation/base';
 import {getAnnotationTypeRenderHandler} from 'neuroglancer/annotation/type_handler';
 import {Chunk, ChunkManager, ChunkSource} from 'neuroglancer/chunk_manager/frontend';
 import {getObjectKey} from 'neuroglancer/segmentation_display_state/base';
 import {SliceViewSourceOptions} from 'neuroglancer/sliceview/base';
-import {MultiscaleSliceViewChunkSource, SliceViewChunk, SliceViewChunkSource, SliceViewChunkSourceOptions} from 'neuroglancer/sliceview/frontend';
-import {RenderLayer} from 'neuroglancer/sliceview/renderlayer';
+import {MultiscaleSliceViewChunkSource, SliceViewChunk, SliceViewChunkSource, SliceViewChunkSourceOptions, SliceViewSingleResolutionSource} from 'neuroglancer/sliceview/frontend';
 import {StatusMessage} from 'neuroglancer/status';
-import {binarySearch} from 'neuroglancer/util/array';
 import {Borrowed, Owned} from 'neuroglancer/util/disposable';
-import {mat4} from 'neuroglancer/util/geom';
-import {Signal, NullarySignal} from 'neuroglancer/util/signal';
+import {ENDIANNESS, Endianness} from 'neuroglancer/util/endian';
+import * as matrix from 'neuroglancer/util/matrix';
+import {NullarySignal, Signal} from 'neuroglancer/util/signal';
 import {Buffer} from 'neuroglancer/webgl/buffer';
 import {GL} from 'neuroglancer/webgl/context';
 import {registerRPC, registerSharedObjectOwner, RPC, SharedObject} from 'neuroglancer/worker_rpc';
 
-interface AnnotationGeometryChunkSourceOptions extends SliceViewChunkSourceOptions {
+export interface AnnotationGeometryChunkSourceOptions extends SliceViewChunkSourceOptions {
   spec: AnnotationGeometryChunkSpecification;
-  parameters: any;
   parent: Borrowed<MultiscaleAnnotationSource>;
+}
+
+export function computeNumPickIds(serializedAnnotations: SerializedAnnotations) {
+  let numPickIds = 0;
+  const {typeToIds} = serializedAnnotations;
+  for (const annotationType of annotationTypes) {
+    numPickIds += getAnnotationTypeRenderHandler(annotationType).pickIdsPerInstance *
+        typeToIds[annotationType].length;
+  }
+  return numPickIds;
 }
 
 export class AnnotationGeometryData {
   buffer: Buffer|undefined;
   bufferValid = false;
-  data: Uint8Array|undefined;
-  typeToOffset: number[]|undefined;
-  numPickIds: number;
-  typeToIds: string[][]|undefined;
+  serializedAnnotations: SerializedAnnotations;
+  numPickIds: number = 0;
 
-  constructor(x: any) {
-    this.data = x.data;
-    const typeToIds = this.typeToIds = x.typeToIds;
-    let numPickIds = 0;
-    for (const annotationType of annotationTypes) {
-      numPickIds += getAnnotationTypeRenderHandler(annotationType).pickIdsPerInstance *
-          typeToIds[annotationType].length;
-    }
-    this.numPickIds = numPickIds;
-    this.typeToOffset = x.typeToOffset;
+  constructor(x: SerializedAnnotations) {
+    this.serializedAnnotations = {
+      data: x.data,
+      typeToIds: x.typeToIds,
+      typeToOffset: x.typeToOffset,
+      typeToIdMaps: x.typeToIdMaps
+    };
   }
   freeGPUMemory(gl: GL) {
     gl;
@@ -69,58 +72,90 @@ export class AnnotationGeometryData {
 
 export class AnnotationSubsetGeometryChunk extends Chunk {
   source: AnnotationSubsetGeometryChunkSource;
-  data: AnnotationGeometryData;
+  // undefined indicates chunk not found
+  data: AnnotationGeometryData|undefined;
   constructor(source: AnnotationSubsetGeometryChunkSource, x: any) {
     super(source);
-    this.data = new AnnotationGeometryData(x);
+    if (x.data !== undefined) {
+      this.data = new AnnotationGeometryData(x);
+    }
   }
 
   freeGPUMemory(gl: GL) {
     super.freeGPUMemory(gl);
-    this.data.freeGPUMemory(gl);
+    const {data} = this;
+    if (data !== undefined) {
+      data.freeGPUMemory(gl);
+    }
   }
 
   dispose() {
-    this.data = <any>undefined;
+    this.data = undefined;
   }
 }
 
 export class AnnotationGeometryChunk extends SliceViewChunk {
   source: AnnotationGeometryChunkSource;
-  data: AnnotationGeometryData;
+  // undefined indicates chunk not found
+  data: AnnotationGeometryData|undefined;
 
   constructor(source: AnnotationGeometryChunkSource, x: any) {
     super(source, x);
-    this.data = new AnnotationGeometryData(x);
+    if (x.data !== undefined) {
+      this.data = new AnnotationGeometryData(x);
+    }
   }
 
   freeGPUMemory(gl: GL) {
     super.freeGPUMemory(gl);
-    this.data.freeGPUMemory(gl);
+    const {data} = this;
+    if (data !== undefined) {
+      data.freeGPUMemory(gl);
+    }
   }
 
   dispose() {
-    this.data = <any>undefined;
+    this.data = undefined;
   }
 }
 
 @registerSharedObjectOwner(ANNOTATION_GEOMETRY_CHUNK_SOURCE_RPC_ID)
-export class AnnotationGeometryChunkSource extends SliceViewChunkSource {
+export class AnnotationGeometryChunkSource extends
+    SliceViewChunkSource<AnnotationGeometryChunkSpecification, AnnotationGeometryChunk> {
+  OPTIONS: AnnotationGeometryChunkSourceOptions;
   parent: Borrowed<MultiscaleAnnotationSource>;
-  chunks: Map<string, AnnotationGeometryChunk>;
-  spec: AnnotationGeometryChunkSpecification;
-  parameters: any;
   immediateChunkUpdates = true;
+
+  /**
+   * Transforms positions in the MultiscaleAnnotationSource coordinate space to grid cell
+   * coordinates.  Equal to the inverse of `this.spec.chunkToMultiscaleTransform`, with rows divided
+   * by `this.spec.chunkDataSize`.
+   */
+  multiscaleToChunkTransform: Float32Array;
 
   constructor(chunkManager: Borrowed<ChunkManager>, options: AnnotationGeometryChunkSourceOptions) {
     super(chunkManager, options);
-    this.parent = options.parent;
-    this.parameters = options.parameters;
-    this.spec = options.spec;
+    const parent = this.parent = options.parent;
+    parent.spatiallyIndexedSources.add(this);
+    const {rank, chunkDataSize} = this.spec;
+    const multiscaleToChunkTransform = this.multiscaleToChunkTransform =
+        new Float32Array((rank + 1) ** 2);
+    matrix.inverse(
+        multiscaleToChunkTransform, rank + 1, this.spec.chunkToMultiscaleTransform, rank + 1,
+        rank + 1);
+    for (let i = 0; i < rank; ++i) {
+      for (let j = 0; j < rank + 1; ++j) {
+        multiscaleToChunkTransform[(rank + 1) * j + i] /= chunkDataSize[i];
+      }
+    }
+  }
+
+  disposed() {
+    this.parent.spatiallyIndexedSources.delete(this);
+    super.disposed();
   }
 
   initializeCounterpart(rpc: RPC, options: any) {
-    options['parameters'] = this.parameters;
     options['parent'] = this.parent.rpcId;
     super.initializeCounterpart(rpc, options);
   }
@@ -141,13 +176,9 @@ export class AnnotationSubsetGeometryChunkSource extends ChunkSource {
   chunks: Map<string, AnnotationSubsetGeometryChunk>;
 
   constructor(
-      chunkManager: Borrowed<ChunkManager>, public parent: Borrowed<MultiscaleAnnotationSource>) {
+      chunkManager: Borrowed<ChunkManager>, public parent: Borrowed<MultiscaleAnnotationSource>,
+      public relationshipIndex: number) {
     super(chunkManager, {});
-  }
-
-  initializeCounterpart(rpc: RPC, options: any) {
-    options['parent'] = this.parent.rpcId;
-    super.initializeCounterpart(rpc, options);
   }
 
   addChunk(key: string, chunk: AnnotationSubsetGeometryChunk) {
@@ -164,7 +195,7 @@ export class AnnotationMetadataChunk extends Chunk {
   annotation: Annotation|null;
   constructor(source: Borrowed<AnnotationMetadataChunkSource>, x: any) {
     super(source);
-    this.annotation = deserializeAnnotation(x.annotation);
+    this.annotation = fixAnnotationAfterStructuredCloning(x.annotation);
   }
 }
 
@@ -195,62 +226,80 @@ export class AnnotationMetadataChunkSource extends ChunkSource {
       reference.changed.dispatch();
     }
   }
-  initializeCounterpart(rpc: RPC, options: any) {
-    options['parent'] = this.parent.rpcId;
-    super.initializeCounterpart(rpc, options);
-  }
 }
 
-function updateAnnotation(chunk: AnnotationGeometryData, annotation: Annotation) {
+export function updateAnnotation(
+    chunk: AnnotationGeometryData, annotation: Annotation,
+    propertySerializer: AnnotationPropertySerializer) {
   // Find insertion point.
+  const {rank} = propertySerializer;
   const type = annotation.type;
-  let ids = chunk.typeToIds![type];
-  const handler = getAnnotationTypeHandler(type);
-  const numBytes = handler.serializedBytes;
-  const renderHandler = getAnnotationTypeRenderHandler(type);
-  let insertionPoint = binarySearch(ids, annotation.id, (a, b) => a < b ? -1 : a === b ? 0 : 1);
+  const {serializedAnnotations} = chunk;
+  const ids = serializedAnnotations.typeToIds[type];
+  const idMap = serializedAnnotations.typeToIdMaps[type];
+  const handler = annotationTypeHandlers[type];
+  const numGeometryBytes = handler.serializedBytes(rank);
+  const numBytes = numGeometryBytes + propertySerializer.serializedBytes;
+  let index = idMap.get(annotation.id);
   let offset = 0;
-  if (insertionPoint < 0) {
+  if (index === undefined) {
     // Doesn't already exist.
-    insertionPoint = ~insertionPoint;
-    ids.splice(insertionPoint, 0, annotation.id);
-    const newData = new Uint8Array(chunk.data!.length + numBytes);
-    chunk.numPickIds += renderHandler.pickIdsPerInstance;
-    offset = chunk.typeToOffset![type] + numBytes * insertionPoint;
-    newData.set(chunk.data!.subarray(0, offset), 0);
-    newData.set(chunk.data!.subarray(offset), offset + numBytes);
-    chunk.data = newData;
-  } else {
-    offset = chunk.typeToOffset![type] + handler.serializedBytes * insertionPoint;
-  }
-  const serializer = handler.serializer(chunk.data!.buffer, chunk.typeToOffset![type], ids.length);
-  serializer(annotation, insertionPoint);
-  for (const otherType of annotationTypes) {
-    if (otherType > type) {
-      chunk.typeToOffset![otherType] += numBytes;
+    index = idMap.size;
+    ids.push(annotation.id);
+    idMap.set(annotation.id, index);
+    const newData = new Uint8Array(serializedAnnotations.data.length + numBytes);
+    offset = serializedAnnotations.typeToOffset[type] + numBytes * index;
+    newData.set(serializedAnnotations.data.subarray(0, offset), 0);
+    newData.set(serializedAnnotations.data.subarray(offset), offset + numBytes);
+    serializedAnnotations.data = newData;
+    for (const otherType of annotationTypes) {
+      if (otherType > type) {
+        serializedAnnotations.typeToOffset![otherType] += numBytes;
+      }
     }
+  } else {
+    offset = serializedAnnotations.typeToOffset[type] + numBytes * index;
   }
+  const dv = new DataView(
+      serializedAnnotations.data.buffer, serializedAnnotations.data.byteOffset,
+      serializedAnnotations.data.byteLength);
+  let bufferOffset = serializedAnnotations.typeToOffset[type] + index * numBytes;
+  const isLittleEndian = ENDIANNESS === Endianness.LITTLE;
+  handler.serialize(dv, bufferOffset, isLittleEndian, rank, annotation);
+  bufferOffset += numGeometryBytes;
+  propertySerializer.serialize(dv, bufferOffset, isLittleEndian, annotation.properties);
   chunk.bufferValid = false;
 }
 
-function deleteAnnotation(chunk: AnnotationGeometryData, type: AnnotationType, id: AnnotationId) {
-  let ids = chunk.typeToIds![type];
-  const handler = getAnnotationTypeRenderHandler(type);
-  const numBytes = handler.bytes;
-  let insertionPoint = binarySearch(ids, id, (a, b) => a < b ? -1 : a === b ? 0 : 1);
-  if (insertionPoint < 0) {
+export function deleteAnnotation(
+    chunk: AnnotationGeometryData, type: AnnotationType, id: AnnotationId,
+    propertySerializer: AnnotationPropertySerializer): boolean {
+  const {serializedAnnotations} = chunk;
+  const idMap = serializedAnnotations.typeToIdMaps[type];
+  const index = idMap.get(id);
+  if (index === undefined) {
     return false;
   }
-  chunk.numPickIds -= handler.pickIdsPerInstance;
-  ids.splice(insertionPoint, 1);
-  const offset = chunk.typeToOffset![type] + handler.bytes * insertionPoint;
-  const newData = new Uint8Array(chunk.data!.length - numBytes);
-  newData.set(chunk.data!.subarray(0, offset), 0);
-  newData.set(chunk.data!.subarray(offset + numBytes), offset);
-  chunk.data = newData;
+  const ids = serializedAnnotations.typeToIds[type];
+  const handler = annotationTypeHandlers[type];
+  const {rank} = propertySerializer;
+  const numGeometryBytes = handler.serializedBytes(rank);
+  const numBytes = numGeometryBytes + propertySerializer.serializedBytes;
+  ids.splice(index, 1);
+  idMap.delete(id);
+  for (let i = index, count = ids.length; i < count; ++i) {
+    idMap.set(ids[i], i);
+  }
+  const {typeToOffset} = serializedAnnotations;
+  const offset = typeToOffset[type] + numBytes * index;
+  const {data} = serializedAnnotations;
+  const newData = new Uint8Array(data.length - numBytes);
+  newData.set(data.subarray(0, offset), 0);
+  newData.set(data.subarray(offset + numBytes), offset);
+  serializedAnnotations.data = newData;
   for (const otherType of annotationTypes) {
     if (otherType > type) {
-      chunk.typeToOffset![otherType] -= numBytes;
+      typeToOffset[otherType] -= numBytes;
     }
   }
   chunk.bufferValid = false;
@@ -279,41 +328,55 @@ interface LocalUpdateUndoState {
   type: AnnotationType;
 }
 
-function makeTemporaryChunk() {
+export function makeTemporaryChunk() {
   const typeToIds: string[][] = [];
   const typeToOffset: number[] = [];
+  const typeToIdMaps: Map<string, number>[] = [];
   for (const annotationType of annotationTypes) {
     typeToIds[annotationType] = [];
     typeToOffset[annotationType] = 0;
+    typeToIdMaps[annotationType] = new Map();
   }
   return new AnnotationGeometryChunk(
       <AnnotationGeometryChunkSource><any>undefined,
-      {data: new Uint8Array(0), numPickIds: 0, typeToOffset, typeToIds});
+      {data: new Uint8Array(0), numPickIds: 0, typeToOffset, typeToIds, typeToIdMaps});
 }
 
 export class MultiscaleAnnotationSource extends SharedObject implements
-    MultiscaleSliceViewChunkSource, AnnotationSourceSignals {
+    MultiscaleSliceViewChunkSource<AnnotationGeometryChunkSource>, AnnotationSourceSignals {
+  OPTIONS: {};
+  key: any;
   metadataChunkSource =
       this.registerDisposer(new AnnotationMetadataChunkSource(this.chunkManager, this));
-  sources: Owned<AnnotationGeometryChunkSource>[][];
-  segmentFilteredSource: Owned<AnnotationSubsetGeometryChunkSource>;
-  objectToLocal = mat4.create();
+  segmentFilteredSources: Owned<AnnotationSubsetGeometryChunkSource>[];
+  spatiallyIndexedSources = new Set<Borrowed<AnnotationGeometryChunkSource>>();
+  rank: number;
+  readonly relationships: readonly string[];
+  readonly properties: Readonly<AnnotationPropertySpec>[];
+  readonly annotationPropertySerializer: AnnotationPropertySerializer;
   constructor(public chunkManager: Borrowed<ChunkManager>, options: {
-    sourceSpecifications: {parameters: any, spec: AnnotationGeometryChunkSpecification}[][]
+    rank: number,
+    relationships: readonly string[],
+    properties: Readonly<AnnotationPropertySpec>[]
   }) {
     super();
-    this.sources = options.sourceSpecifications.map(
-        alternatives => alternatives.map(
-            ({parameters, spec}) => this.registerDisposer(new AnnotationGeometryChunkSource(
-                chunkManager, {spec, parameters, parent: this}))));
-    this.segmentFilteredSource =
-        this.registerDisposer(new AnnotationSubsetGeometryChunkSource(chunkManager, this));
+    this.rank = options.rank;
+    this.properties = options.properties;
+    this.annotationPropertySerializer =
+        new AnnotationPropertySerializer(this.rank, this.properties);
+    const segmentFilteredSources: Owned<AnnotationSubsetGeometryChunkSource>[] =
+        this.segmentFilteredSources = [];
+    const {relationships} = options;
+    this.relationships = relationships;
+    for (let i = 0, count = relationships.length; i < count; ++i) {
+      segmentFilteredSources.push(
+          this.registerDisposer(new AnnotationSubsetGeometryChunkSource(chunkManager, this, i)));
+    }
   }
 
-  getSources(_options: SliceViewSourceOptions): AnnotationGeometryChunkSource[][] {
-    const {sources} = this;
-    sources.forEach(alternatives => alternatives.forEach(source => source.addRef()));
-    return sources;
+  getSources(_options: SliceViewSourceOptions):
+      SliceViewSingleResolutionSource<AnnotationGeometryChunkSource>[][] {
+    throw new Error('not implemented');
   }
 
   temporary = makeTemporaryChunk();
@@ -324,16 +387,11 @@ export class MultiscaleAnnotationSource extends SharedObject implements
 
   initializeCounterpart(rpc: RPC, options: any) {
     this.metadataChunkSource.initializeCounterpart(rpc, {});
-    for (const alternatives of this.sources) {
-      for (const source of alternatives) {
-        source.initializeCounterpart(rpc, {});
-      }
+    for (const source of this.segmentFilteredSources) {
+      source.initializeCounterpart(rpc, {});
     }
-    this.segmentFilteredSource.initializeCounterpart(rpc, {});
-    options.segmentFilteredSource = this.segmentFilteredSource.addCounterpartRef();
+    options.segmentFilteredSource = this.segmentFilteredSources.map(x => x.addCounterpartRef());
     options.metadataChunkSource = this.metadataChunkSource.addCounterpartRef();
-    options.sources =
-        this.sources.map(alternatives => alternatives.map(source => source.addCounterpartRef()));
     options.chunkManager = this.chunkManager.rpcId;
     super.initializeCounterpart(rpc, options);
   }
@@ -371,19 +429,23 @@ export class MultiscaleAnnotationSource extends SharedObject implements
       };
       localUpdates.set(id, localUpdate);
       this.forEachPossibleChunk(annotation, chunk => {
-        deleteAnnotation(chunk.data, annotation.type, id);
+        const {data} = chunk;
+        if (data === undefined) return;
+        deleteAnnotation(data, annotation.type, id, this.annotationPropertySerializer);
       });
       if (newAnnotation !== null) {
         // Add to temporary chunk.
-        updateAnnotation(this.temporary.data, newAnnotation);
+        updateAnnotation(this.temporary.data!, newAnnotation, this.annotationPropertySerializer);
       }
     } else {
       if (newAnnotation === null) {
         // Annotation has a local update already, so we need to delete it from the temporary chunk.
-        deleteAnnotation(this.temporary.data, annotation.type, annotation.id);
+        deleteAnnotation(
+            this.temporary.data!, annotation.type, annotation.id,
+            this.annotationPropertySerializer);
       } else {
         // Modify existing entry in temporary chunk.
-        updateAnnotation(this.temporary.data, newAnnotation);
+        updateAnnotation(this.temporary.data!, newAnnotation, this.annotationPropertySerializer);
       }
       reference.value = newAnnotation;
     }
@@ -465,30 +527,82 @@ export class MultiscaleAnnotationSource extends SharedObject implements
   private forEachPossibleChunk(
       annotation: Annotation,
       callback: (chunk: AnnotationGeometryChunk|AnnotationSubsetGeometryChunk) => void) {
-    const {sources} = this;
-    if (sources.length !== 1 || sources[0].length !== 1) {
-      throw new Error('Not implemented');
-    }
-    const source = sources[0][0];
-    if (source.chunks.size > 1) {
-      throw new Error('Not implemented');
-    }
     annotation;
-    for (const chunk of source.chunks.values()) {
-      callback(chunk);
-    }
-
-    const {segments} = annotation;
-    if (segments === undefined || segments.length === 0) {
-      return;
-    }
-    const {segmentFilteredSource} = this;
-    for (const segment of segments) {
-      const chunk = segmentFilteredSource.chunks.get(getObjectKey(segment));
-      if (chunk === undefined) {
-        continue;
+    const {relatedSegments} = annotation;
+    if (relatedSegments !== undefined) {
+      const numRelationships = relatedSegments.length;
+      const {segmentFilteredSources} = this;
+      for (let i = 0; i < numRelationships; ++i) {
+        const segments = relatedSegments[i];
+        if (segments === undefined) return;
+        const source = segmentFilteredSources[i];
+        for (const segment of segments) {
+          const chunk = source.chunks.get(getObjectKey(segment));
+          if (chunk === undefined) {
+            continue;
+          }
+          callback(chunk);
+        }
       }
-      callback(chunk);
+    }
+    const {rank} = this;
+    const tempLower = new Float32Array(rank);
+    const tempUpper = new Float32Array(rank);
+    const tempChunk = new Float32Array(rank);
+    for (const source of this.spatiallyIndexedSources) {
+      switch (annotation.type) {
+        case AnnotationType.POINT:
+          matrix.transformPoint(
+              tempLower, source.multiscaleToChunkTransform, rank + 1, annotation.point, rank);
+          tempUpper.set(tempLower);
+          break;
+        case AnnotationType.LINE:
+        case AnnotationType.AXIS_ALIGNED_BOUNDING_BOX:
+          matrix.transformPoint(
+              tempLower, source.multiscaleToChunkTransform, rank + 1, annotation.pointA, rank);
+          matrix.transformPoint(
+              tempUpper, source.multiscaleToChunkTransform, rank + 1, annotation.pointB, rank);
+          break;
+        case AnnotationType.ELLIPSOID:
+          matrix.transformPoint(
+              tempLower, source.multiscaleToChunkTransform, rank + 1, annotation.center, rank);
+          matrix.transformVector(
+              tempUpper, source.multiscaleToChunkTransform, rank + 1, annotation.radii, rank);
+          for (let i = 0; i < rank; ++i) {
+            const c = tempLower[i];
+            const r = tempUpper[i];
+            tempLower[i] = c - r;
+            tempUpper[i] = c + r;
+          }
+          break;
+      }
+      let totalChunks = 1;
+      for (let i = 0; i < rank; ++i) {
+        const a = tempLower[i];
+        const b = tempUpper[i];
+        const lower = Math.min(a, b);
+        const upper = Math.max(a, b);
+        // In the case that the point lies directly on a boundary, ensure it is included in both
+        // chunks, since we don't know how the datasource handles this case.
+        tempLower[i] = Math.ceil(lower - 1);
+        tempUpper[i] = Math.floor(upper + 1);
+        totalChunks *= (tempUpper[i] - tempLower[i]);
+      }
+      const {chunks} = source;
+      for (let chunkIndex = 0; chunkIndex < totalChunks; ++chunkIndex) {
+        let remainder = chunkIndex;
+        for (let i = 0; i < rank; ++i) {
+          const lower = tempLower[i];
+          const upper = tempUpper[i];
+          const size = upper - lower;
+          const x = tempChunk[i] = remainder % size;
+          remainder = (remainder - x) / size;
+        }
+        const chunk = chunks.get(tempChunk.join());
+        if (chunk !== undefined) {
+          callback(chunk);
+        }
+      }
     }
   }
 
@@ -513,8 +627,10 @@ export class MultiscaleAnnotationSource extends SharedObject implements
       this.localUpdates.set(newAnnotation.id, localUpdate);
       if (localUpdate.reference.value !== null) {
         localUpdate.reference.value!.id = newAnnotation.id;
-        deleteAnnotation(this.temporary.data, localUpdate.type, id);
-        updateAnnotation(this.temporary.data, localUpdate.reference.value!);
+        deleteAnnotation(
+            this.temporary.data!, localUpdate.type, id, this.annotationPropertySerializer);
+        updateAnnotation(
+            this.temporary.data!, localUpdate.reference.value!, this.annotationPropertySerializer);
       }
       localUpdate.reference.changed.dispatch();
     }
@@ -571,11 +687,15 @@ export class MultiscaleAnnotationSource extends SharedObject implements
   }
 
   private revertLocalUpdate(localUpdate: LocalUpdateUndoState) {
-    deleteAnnotation(this.temporary.data, localUpdate.type, localUpdate.reference.id);
+    deleteAnnotation(
+        this.temporary.data!, localUpdate.type, localUpdate.reference.id,
+        this.annotationPropertySerializer);
     const {existingAnnotation} = localUpdate;
     if (existingAnnotation !== undefined) {
       this.forEachPossibleChunk(existingAnnotation, chunk => {
-        updateAnnotation(chunk.data, existingAnnotation);
+        const {data} = chunk;
+        if (data === undefined) return;
+        updateAnnotation(data, existingAnnotation, this.annotationPropertySerializer);
       });
     }
     const {reference} = localUpdate;
@@ -605,18 +725,7 @@ registerRPC(ANNOTATION_COMMIT_UPDATE_RESULT_RPC_ID, function(x) {
   if (error !== undefined) {
     source.handleFailedUpdate(annotationId, error);
   } else {
-    const newAnnotation: Annotation|null = deserializeAnnotation(x.newAnnotation);
+    const newAnnotation: Annotation|null = fixAnnotationAfterStructuredCloning(x.newAnnotation);
     source.handleSuccessfulUpdate(annotationId, newAnnotation);
   }
 });
-
-export class DataFetchSliceViewRenderLayer extends RenderLayer {
-  sources: AnnotationGeometryChunkSource[][];
-
-  constructor(multiscaleSource: MultiscaleAnnotationSource) {
-    super(multiscaleSource.chunkManager, multiscaleSource.getSources({}), {});
-  }
-
-  // Does nothing.
-  draw() {}
-}

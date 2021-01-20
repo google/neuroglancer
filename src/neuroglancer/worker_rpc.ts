@@ -124,9 +124,18 @@ export class RPC {
   get(id: RpcId) {
     return this.objects.get(id);
   }
-  getRef<T extends SharedObject>(x: {'id': RpcId, 'gen': number}) {
+  getRef<T extends SharedObject>(x: {'id': RpcId, 'gen': number}): T {
     let rpcId = x['id'];
     let obj = <T>this.get(rpcId);
+    obj.referencedGeneration = x['gen'];
+    obj.addRef();
+    return obj;
+  }
+
+  getOptionalRef<T extends SharedObject>(x: {'id': RpcId, 'gen': number}): T|undefined {
+    if (x === undefined) return undefined;
+    let rpcId = x['id'];
+    let obj = this.get(rpcId) as T;
     obj.referencedGeneration = x['gen'];
     obj.addRef();
     return obj;
