@@ -29,7 +29,7 @@ class SkeletonSource(neuroglancer.skeleton.SkeletonSource):
     def get_skeleton(self, i):
         pos = np.unravel_index(i, shape, order='C')
         vertex_positions = [pos, pos + np.random.randn(3) * 30]
-        edges = [0, 1]
+        edges = [[0, 1]]
         return neuroglancer.skeleton.Skeleton(
             vertex_positions=vertex_positions,
             edges=edges,
