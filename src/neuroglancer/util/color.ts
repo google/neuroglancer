@@ -63,7 +63,7 @@ export function parseRGBAColorSpecification(x: any) {
 
 export function parseRGBColorSpecification(x: any) {
   const result = parseRGBAColorSpecification(x);
-  return <vec3>result.subarray(0, 3);
+  return <vec4>result.subarray(0, 3);
 }
 
 /**

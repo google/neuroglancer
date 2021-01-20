@@ -370,8 +370,8 @@ void main() {
           gl.uniformMatrix4fv(
               shader.uniform('uInvModelViewProjectionMatrix'), false, modelViewProjection);
           const {near, far, adjustedNear, adjustedFar} = getVolumeRenderingNearFarBounds(
-              clippingPlanes, transformedSource.lowerClipDisplayBound,
-              transformedSource.upperClipDisplayBound);
+              clippingPlanes, new Float32Array(transformedSource.lowerClipDisplayBound),
+              new Float32Array(transformedSource.upperClipDisplayBound));
           const step = (adjustedFar - adjustedNear) / (volumeRenderingDepthSamples - 1);
           const brightnessFactor = step / (far - near);
           gl.uniform1f(shader.uniform('uBrightnessFactor'), brightnessFactor);

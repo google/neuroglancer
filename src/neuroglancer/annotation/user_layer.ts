@@ -62,7 +62,7 @@ function addPointAnnotations(annotations: LocalAnnotationSource, obj: any) {
     annotations.add({
       type: AnnotationType.POINT,
       id: '' + i,
-      point: verify3dVec(x),
+      point: new Float32Array(verify3dVec(x)),
       properties: [],
     });
   });
