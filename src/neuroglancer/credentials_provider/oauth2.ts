@@ -38,11 +38,12 @@ export function fetchWithOAuth2Credentials<T>(
   return fetchWithCredentials(
       credentialsProvider, input, init, transformResponse,
       (credentials, init) => {
+        if (!credentials.accessToken) return init;
         const headers = new Headers(init.headers);
         headers.set('Authorization', `${credentials.tokenType} ${credentials.accessToken}`);
         return {...init, headers};
       },
-      error => {
+      (error, credentials) => {
         const {status} = error;
         if (status === 401) {
           // 401: Authorization needed.  OAuth2 token may have expired.
@@ -51,6 +52,9 @@ export function fetchWithOAuth2Credentials<T>(
           // 503: Service unavailable.  Retry.
           // 504: Gateway timeout.  Can occur if the server takes too long to reply.  Retry.
           return 'retry';
+        } else if (status === 403 && !credentials.accessToken) {
+          // Anonymous access denied.  Request credentials.
+          return 'refresh';
         }
         throw error;
       },
