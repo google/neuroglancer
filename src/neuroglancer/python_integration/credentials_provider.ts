@@ -18,7 +18,7 @@
  * @file Implementation of a CredentialsProvider based on an input and output TrackableValue.
  */
 
-import {CredentialsManager, CredentialsProvider, CredentialsWithGeneration, makeCachedCredentialsGetter} from 'neuroglancer/credentials_provider';
+import {AnonymousFirstCredentialsProvider, CredentialsManager, CredentialsProvider, CredentialsWithGeneration, makeCachedCredentialsGetter} from 'neuroglancer/credentials_provider';
 import {TrackableValue} from 'neuroglancer/trackable_value';
 import {stableStringify} from 'neuroglancer/util/json';
 import {Memoize} from 'neuroglancer/util/memoize';
@@ -57,19 +57,10 @@ class TrackableBasedCredentialsProvider<Credentials> extends CredentialsProvider
 }
 
 
-class GcsCredentialsProvider extends CredentialsProvider<any> {
-  private anonymous = true;
-  constructor(private baseProvider: CredentialsProvider<any>) {
-    super();
+class GcsCredentialsProvider extends AnonymousFirstCredentialsProvider<any> {
+  constructor(baseProvider: CredentialsProvider<any>) {
+    super(baseProvider, {accessToken: '', tokenType: ''});
   }
-
-  get = makeCachedCredentialsGetter((invalidCredentials?: CredentialsWithGeneration<any>) => {
-    if (this.anonymous && invalidCredentials === undefined) {
-      return Promise.resolve({generation: -10, credentials: {accessToken: '', tokenType: ''}});
-    }
-    this.anonymous = false;
-    return this.baseProvider.get(invalidCredentials);
-  });
 }
 
 export class TrackableBasedCredentialsManager implements CredentialsManager {

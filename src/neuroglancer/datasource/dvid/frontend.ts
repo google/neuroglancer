@@ -22,7 +22,10 @@
 import {makeDataBoundsBoundingBoxAnnotationSet} from 'neuroglancer/annotation';
 import {ChunkManager, WithParameters} from 'neuroglancer/chunk_manager/frontend';
 import {BoundingBox, makeCoordinateSpace, makeIdentityTransform, makeIdentityTransformedBoundingBox} from 'neuroglancer/coordinate_transform';
+import {CredentialsManager, CredentialsProvider} from 'neuroglancer/credentials_provider';
+import {WithCredentialsProvider} from 'neuroglancer/credentials_provider/chunk_source_frontend';
 import {CompleteUrlOptions, CompletionResult, DataSource, DataSourceProvider, GetDataSourceOptions} from 'neuroglancer/datasource';
+import {credentialsKey, DVIDToken, makeRequestWithCredentials} from 'neuroglancer/datasource/dvid/api';
 import {DVIDSourceParameters, MeshSourceParameters, SkeletonSourceParameters, VolumeChunkEncoding, VolumeChunkSourceParameters} from 'neuroglancer/datasource/dvid/base';
 import {MeshSource} from 'neuroglancer/mesh/frontend';
 import {SkeletonSource} from 'neuroglancer/skeleton/frontend';
@@ -33,11 +36,7 @@ import {StatusMessage} from 'neuroglancer/status';
 import {transposeNestedArrays} from 'neuroglancer/util/array';
 import {applyCompletionOffset, getPrefixMatchesWithDescriptions} from 'neuroglancer/util/completion';
 import {mat4, vec3} from 'neuroglancer/util/geom';
-import {parseArray, parseFixedLengthArray, parseIntVec, verifyFinitePositiveFloat, verifyMapKey, verifyObject, verifyObjectAsMap, verifyObjectProperty, verifyPositiveInt, verifyString, parseQueryStringParameters} from 'neuroglancer/util/json';
-import {CredentialsManager, CredentialsProvider} from 'neuroglancer/credentials_provider';
-import {WithCredentialsProvider} from 'neuroglancer/credentials_provider/chunk_source_frontend';
-import { dvidCredentailsKey, registerDVIDCredentialsProvider, isDVIDCredentialsProviderRegistered } from 'neuroglancer/datasource/dvid/register_credentials_provider';
-import { DVIDToken, makeRequestWithCredentials } from 'neuroglancer/datasource/dvid/api';
+import {parseArray, parseFixedLengthArray, parseIntVec, parseQueryStringParameters, verifyFinitePositiveFloat, verifyMapKey, verifyObject, verifyObjectAsMap, verifyObjectProperty, verifyPositiveInt, verifyString} from 'neuroglancer/util/json';
 
 let serverDataTypes = new Map<string, DataType>();
 serverDataTypes.set('uint8', DataType.UINT8);
@@ -486,9 +485,7 @@ function getVolumeSource(options: GetDataSourceOptions, sourceParameters: DVIDSo
   return dataSource;
 }
 
-type AuthType = string|undefined|null;
-
-export function getDataSource(options: GetDataSourceOptions, getCredentialsProvider: (auth:AuthType) => CredentialsProvider<DVIDToken>): Promise<DataSource> {
+export function getDataSource(options: GetDataSourceOptions): Promise<DataSource> {
   const sourceParameters = parseSourceUrl(options.providerUrl);
   const {baseUrl, nodeKey, dataInstanceKey} = sourceParameters;
 
@@ -500,7 +497,8 @@ export function getDataSource(options: GetDataSourceOptions, getCredentialsProvi
         dataInstanceKey,
       },
       async () => {
-        const credentailsProvider = getCredentialsProvider(sourceParameters.authServer);
+        const credentailsProvider = options.credentialsManager.getCredentialsProvider<DVIDToken>(
+            credentialsKey, sourceParameters.authServer);
         const serverInfo = await getServerInfo(options.chunkManager, baseUrl, credentailsProvider);
         let repositoryInfo = serverInfo.getNode(nodeKey);
         if (repositoryInfo === undefined) {
@@ -546,7 +544,7 @@ export function completeNodeAndInstance(serverInfo: ServerInfo, prefix: string):
   return applyCompletionOffset(nodeKey.length + 1, completeInstanceName(repositoryInfo, match[2]));
 }
 
-export async function completeUrl(options: CompleteUrlOptions, getCredentialsProvider: (auth:AuthType) => CredentialsProvider<DVIDToken>): Promise<CompletionResult> {
+export async function completeUrl(options: CompleteUrlOptions): Promise<CompletionResult> {
   const curUrlPattern = /^((?:http|https):\/\/[^\/]+)\/([^\?]*).*$/;
   let url = options.providerUrl;
   let auth:string|undefined = undefined;
@@ -569,7 +567,10 @@ export async function completeUrl(options: CompleteUrlOptions, getCredentialsPro
     auth = getDefaultAuthServer(baseUrl);
   }
 
-  const serverInfo = await getServerInfo(options.chunkManager, baseUrl, getCredentialsProvider(auth));
+  const serverInfo = await getServerInfo(
+      options.chunkManager, baseUrl,
+      options.credentialsManager.getCredentialsProvider<DVIDToken>(
+          credentialsKey, {dvidServer: baseUrl, authServer: auth}));
   return applyCompletionOffset(baseUrl.length + 1, completeNodeAndInstance(serverInfo, path));
 }
 
@@ -582,24 +583,11 @@ export class DVIDDataSource extends DataSourceProvider {
     return 'DVID';
   }
 
-  getCredentialsProvider(authServer: AuthType) {
-    if (authServer) {
-      const key = dvidCredentailsKey(authServer);
-      if (!isDVIDCredentialsProviderRegistered(key)) {
-        registerDVIDCredentialsProvider(key);
-      }
-
-      return this.credentialsManager.getCredentialsProvider<DVIDToken>(key, authServer);
-    } else {
-      return this.credentialsManager.getCredentialsProvider<DVIDToken>(dvidCredentailsKey(''));
-    }
-  }
-
   get(options: GetDataSourceOptions): Promise<DataSource> {
-    return getDataSource(options, this.getCredentialsProvider.bind(this));
+    return getDataSource(options);
   }
 
   completeUrl(options: CompleteUrlOptions) {
-    return completeUrl(options, this.getCredentialsProvider.bind(this));
+    return completeUrl(options);
   }
 }

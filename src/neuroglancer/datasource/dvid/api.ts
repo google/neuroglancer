@@ -23,7 +23,10 @@ import {responseJson, cancellableFetchOk, responseArrayBuffer, ResponseTransform
 import {CredentialsProvider} from 'neuroglancer/credentials_provider';
 import {fetchWithCredentials} from 'neuroglancer/credentials_provider/http_request';
 
-export type DVIDToken = string;
+export interface DVIDToken {
+  // If token is undefined, it indicates anonymous credentials that may be retried.
+  token?: string;
+}
 
 export const credentialsKey = 'DVID';
 
@@ -127,7 +130,7 @@ function  applyCredentials(input: string) {
   return (credentials: DVIDToken, init: RequestInit) => {
     let newInit: RequestInit = { ...init };
 
-    if (credentials.length > 0) {
+    if (credentials.token) {
       newInit.headers = {...newInit.headers, Authorization: `Bearer ${credentials}`};
     } else if (input.startsWith('https:')) {
       // DVID https without credentials provided expects credentials stored in the browser
