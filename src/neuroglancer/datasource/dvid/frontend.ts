@@ -498,7 +498,8 @@ export function getDataSource(options: GetDataSourceOptions): Promise<DataSource
       },
       async () => {
         const credentailsProvider = options.credentialsManager.getCredentialsProvider<DVIDToken>(
-            credentialsKey, sourceParameters.authServer);
+            credentialsKey,
+            {dvidServer: sourceParameters.baseUrl, authServer: sourceParameters.authServer});
         const serverInfo = await getServerInfo(options.chunkManager, baseUrl, credentailsProvider);
         let repositoryInfo = serverInfo.getNode(nodeKey);
         if (repositoryInfo === undefined) {
