@@ -440,25 +440,25 @@ export class Viewer extends RefCounted implements ViewerState {
       }
     });
 
-    const {state} = this;
-    state.add('layers', this.layerSpecification);
-    state.add('navigation', this.navigationState);
-    state.add('showAxisLines', this.showAxisLines);
-    state.add('showScaleBar', this.showScaleBar);
-    state.add('showDefaultAnnotations', this.showDefaultAnnotations);
+    // const {state} = this;
+    // state.add('layers', this.layerSpecification);
+    // // state.add('navigation', this.navigationState);
+    // state.add('showAxisLines', this.showAxisLines);
+    // state.add('showScaleBar', this.showScaleBar);
+    // state.add('showDefaultAnnotations', this.showDefaultAnnotations);
 
-    state.add('perspectiveOrientation', this.perspectiveNavigationState.pose.orientation);
-    state.add('perspectiveZoom', this.perspectiveNavigationState.zoomFactor);
-    state.add('showSlices', this.showPerspectiveSliceViews);
-    state.add('gpuMemoryLimit', this.dataContext.chunkQueueManager.capacities.gpuMemory.sizeLimit);
-    state.add(
-        'systemMemoryLimit', this.dataContext.chunkQueueManager.capacities.systemMemory.sizeLimit);
-    state.add(
-        'concurrentDownloads', this.dataContext.chunkQueueManager.capacities.download.itemLimit);
-    state.add('jsonStateServer', this.jsonStateServer);
-    state.add('selectedLayer', this.selectedLayer);
-    state.add('crossSectionBackgroundColor', this.crossSectionBackgroundColor);
-    state.add('perspectiveViewBackgroundColor', this.perspectiveViewBackgroundColor);
+    // state.add('perspectiveOrientation', this.perspectiveNavigationState.pose.orientation);
+    // state.add('perspectiveZoom', this.perspectiveNavigationState.zoomFactor);
+    // state.add('showSlices', this.showPerspectiveSliceViews);
+    // state.add('gpuMemoryLimit', this.dataContext.chunkQueueManager.capacities.gpuMemory.sizeLimit);
+    // state.add(
+    //     'systemMemoryLimit', this.dataContext.chunkQueueManager.capacities.systemMemory.sizeLimit);
+    // state.add(
+    //     'concurrentDownloads', this.dataContext.chunkQueueManager.capacities.download.itemLimit);
+    // state.add('jsonStateServer', this.jsonStateServer);
+    // state.add('selectedLayer', this.selectedLayer);
+    // state.add('crossSectionBackgroundColor', this.crossSectionBackgroundColor);
+    // state.add('perspectiveViewBackgroundColor', this.perspectiveViewBackgroundColor);
 
     this.registerDisposer(this.navigationState.changed.add(() => {
       this.handleNavigationStateChanged();
