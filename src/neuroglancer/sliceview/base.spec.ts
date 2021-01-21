@@ -69,7 +69,7 @@ describe('sliceview/base', () => {
           3, 0, 0,  //
           0, 3, 0,  //
           0, 0, 30),
-      upperVoxelBound: vec3.fromValues(1, 128, 128),
+      upperVoxelBound: new Float32Array([1, 128, 128]),
       maxVoxelsPerChunkLog2: 8
     })).toEqual(Uint32Array.of(1, 64, 4));
   });
@@ -77,7 +77,7 @@ describe('sliceview/base', () => {
 
 describe('estimateSliceAreaPerChunk', () => {
   it('works for identity chunk transform', () => {
-    const chunkLayout = new ChunkLayout(vec3.fromValues(3, 4, 5), mat4.create(), 3);
+    const chunkLayout = new ChunkLayout(vec3.fromValues(3, 4, 5), new Float32Array(mat4.create()), 3);
     {
       const viewMatrix = Float32Array.from([
         1, 0, 0, 0,  //

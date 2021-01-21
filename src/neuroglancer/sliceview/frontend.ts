@@ -722,7 +722,7 @@ export function getVolumetricTransformedSources(
           lowerClipDisplayBound.fill(0, numChunkDisplayDims);
           upperClipDisplayBound.fill(1, numChunkDisplayDims);
           const chunkLayout = new ChunkLayout(
-              chunkDisplaySize, chunkDisplayTransform.displaySubspaceModelMatrix,
+              chunkDisplaySize, new Float32Array(chunkDisplayTransform.displaySubspaceModelMatrix),
               numChunkDisplayDims);
           // This is an approximation of the voxel size (exact only for permutation/scaling
           // transforms).  It would be better to model the voxel as an ellipsiod and find the

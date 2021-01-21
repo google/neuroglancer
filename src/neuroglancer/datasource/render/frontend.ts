@@ -353,8 +353,8 @@ class RenderMultiscaleVolumeChunkSource extends MultiscaleVolumeChunkSource {
         rank: 3,
         chunkDataSize,
         dataType: this.dataType,
-        lowerVoxelBound,
-        upperVoxelBound,
+        lowerVoxelBound: new Float32Array(lowerVoxelBound),
+        upperVoxelBound: new Float32Array(upperVoxelBound),
       });
 
       const source = this.chunkManager.getChunkSource(TileChunkSource, {
@@ -377,9 +377,9 @@ class RenderMultiscaleVolumeChunkSource extends MultiscaleVolumeChunkSource {
 
       sources.push([{
         chunkSource: source,
-        chunkToMultiscaleTransform,
-        lowerClipBound,
-        upperClipBound,
+        chunkToMultiscaleTransform: new Float32Array(chunkToMultiscaleTransform),
+        lowerClipBound: new Float32Array(lowerClipBound),
+        upperClipBound: new Float32Array(upperClipBound),
       }]);
     }
     return transposeNestedArrays(sources);

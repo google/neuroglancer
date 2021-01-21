@@ -55,7 +55,7 @@ export function parseRGBAColorSpecification(x: any) {
     const context = document.createElement('canvas').getContext('2d')!;
     context.fillStyle = x;
     const result = parseColorSerialization(context.fillStyle);
-    return vec4.fromValues(result[0] / 255, result[1] / 255, result[2] / 255, result[3]);
+    return new Float32Array(vec4.fromValues(result[0] / 255, result[1] / 255, result[2] / 255, result[3]));
   } catch (parseError) {
     throw new Error(`Failed to parse color specification: ${parseError.message}`);
   }
@@ -63,7 +63,7 @@ export function parseRGBAColorSpecification(x: any) {
 
 export function parseRGBColorSpecification(x: any) {
   const result = parseRGBAColorSpecification(x);
-  return <vec4>result.subarray(0, 3);
+  return result.subarray(0, 3);
 }
 
 /**

@@ -40,11 +40,11 @@ export class ChunkLayout {
 
   finiteRank: number;
 
-  constructor(size: vec3, transform: mat4, finiteRank: number) {
+  constructor(size: vec3, transform: Float32Array, finiteRank: number) {
     this.size = vec3.clone(size);
     this.transform = mat4.clone(transform);
     this.finiteRank = finiteRank;
-    const invTransform = mat4.create();
+    const invTransform = new Float32Array(mat4.create());
     const det = matrix.inverse(invTransform, 4, transform, 4, 4);
     if (det === 0) {
       throw new Error('Transform is singular');

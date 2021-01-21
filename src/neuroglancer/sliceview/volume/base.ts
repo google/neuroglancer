@@ -170,7 +170,7 @@ export function makeVolumeChunkSpecificationWithDefaultCompression(
         maxVoxelsPerChunkLog2: 9,
         maxBlockSize: maxCompressedSegmentationBlockSize === undefined ?
             chunkDataSize :
-            vector.min(new Uint32Array(rank), chunkDataSize, maxCompressedSegmentationBlockSize),
+            vector.min(new Uint32Array(rank), chunkDataSize, new Float32Array(maxCompressedSegmentationBlockSize)),
       })) as vec3
     });
   }

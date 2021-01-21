@@ -155,8 +155,8 @@ export class VolumeDataInstanceInfo extends DataInstanceInfo {
     for (let level = 0; level < this.numLevels; ++level) {
       const downsampleFactor = Math.pow(2, level);
       const invDownsampleFactor = Math.pow(2, -level);
-      let lowerVoxelBound = vec3.create();
-      let upperVoxelBound = vec3.create();
+      let lowerVoxelBound = new Float32Array([0,0,0]);
+      let upperVoxelBound = new Float32Array([0,0,0]);
       for (let i = 0; i < 3; ++i) {
         let lowerVoxelNotAligned = Math.floor(this.lowerVoxelBound[i] * invDownsampleFactor);
         // adjust min to be a multiple of blocksize
@@ -191,11 +191,11 @@ export class VolumeDataInstanceInfo extends DataInstanceInfo {
       let alternatives =
           makeDefaultVolumeChunkSpecifications({
             rank: 3,
-            chunkToMultiscaleTransform,
+            chunkToMultiscaleTransform: new Float32Array(chunkToMultiscaleTransform),
             dataType: this.dataType,
 
             baseVoxelOffset: lowerVoxelBound,
-            upperVoxelBound: vec3.subtract(vec3.create(), upperVoxelBound, lowerVoxelBound),
+            upperVoxelBound: new Float32Array(vec3.subtract(vec3.create(), upperVoxelBound, lowerVoxelBound)),
             volumeType: this.volumeType,
             volumeSourceOptions,
             compressedSegmentationBlockSize:
@@ -443,7 +443,7 @@ function getVolumeSource(options: GetDataSourceOptions, sourceParameters: DVIDSo
     }],
   };
   if (info.meshSrc) {
-    const subsourceToModelSubspaceTransform = mat4.create();
+    const subsourceToModelSubspaceTransform = new Float32Array(mat4.create());
     for (let i = 0; i < 3; ++i) {
       subsourceToModelSubspaceTransform[5 * i] = 1 / info.voxelSize[i];
     }

@@ -303,7 +303,7 @@ function getLegacyMeshSource(
 
 function parseTransform(data: any): mat4 {
   return verifyObjectProperty(data, 'transform', value => {
-    const transform = mat4.create();
+    const transform = new Float32Array(mat4.create());
     if (value !== undefined) {
       parseFixedLengthArray(transform.subarray(0, 12), value, verifyFiniteFloat);
     }
@@ -536,8 +536,9 @@ async function getVolumeDataSource(
     const meshUrl = resolvePath(url, info.mesh);
     const {source: meshSource, transform} =
         await getMeshSource(options.chunkManager, credentialsProvider, meshUrl);
-    const subsourceToModelSubspaceTransform = getSubsourceToModelSubspaceTransform(info);
+    let subsourceToModelSubspaceTransform = getSubsourceToModelSubspaceTransform(info);
     mat4.multiply(subsourceToModelSubspaceTransform, subsourceToModelSubspaceTransform, transform);
+    subsourceToModelSubspaceTransform  = new Float32Array(subsourceToModelSubspaceTransform);
     subsources.push({
       id: 'mesh',
       default: true,
@@ -549,8 +550,9 @@ async function getVolumeDataSource(
     const skeletonsUrl = resolvePath(url, info.skeletons);
     const {source: skeletonSource, transform} =
         await getSkeletonSource(options.chunkManager, credentialsProvider, skeletonsUrl);
-    const subsourceToModelSubspaceTransform = getSubsourceToModelSubspaceTransform(info);
+    let subsourceToModelSubspaceTransform = getSubsourceToModelSubspaceTransform(info);
     mat4.multiply(subsourceToModelSubspaceTransform, subsourceToModelSubspaceTransform, transform);
+    subsourceToModelSubspaceTransform  = new Float32Array(subsourceToModelSubspaceTransform);
     subsources.push({
       id: 'skeletons',
       default: true,
@@ -571,7 +573,7 @@ async function getSkeletonsDataSource(
       id: 'default',
       default: true,
       subsource: {mesh: skeletons},
-      subsourceToModelSubspaceTransform: transform,
+      subsourceToModelSubspaceTransform: new Float32Array(transform),
     },
   ];
   if (segmentPropertyMap !== undefined) {
@@ -731,7 +733,7 @@ async function getMeshDataSource(
       id: 'default',
       default: true,
       subsource: {mesh},
-      subsourceToModelSubspaceTransform: transform,
+      subsourceToModelSubspaceTransform: new Float32Array(transform),
     },
   ];
   if (segmentPropertyMap !== undefined) {
