@@ -206,7 +206,7 @@ export class VolumeDataInstanceInfo extends DataInstanceInfo {
           }).map(spec => ({
                    chunkSource: chunkManager.getChunkSource(
                        DVIDVolumeChunkSource, {spec, parameters: volParameters, credentialsProvider}),
-                   chunkToMultiscaleTransform,
+                   chunkToMultiscaleTransform: new Float32Array(chunkToMultiscaleTransform),
                  }));
       sources.push(alternatives);
     }
