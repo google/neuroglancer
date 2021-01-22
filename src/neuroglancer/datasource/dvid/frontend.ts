@@ -399,15 +399,8 @@ function parseSourceUrl(url: string): DVIDSourceParameters {
     if (parameters.user) {
       sourceParameters.user = parameters.user;
     }
-    if (parameters.auth) {
-      sourceParameters.authServer = parameters.auth;
-    }
   }
-
-  if (!sourceParameters.authServer) {
-    sourceParameters.authServer = getDefaultAuthServer(sourceParameters.baseUrl);
-  }
-
+  sourceParameters.authServer = getDefaultAuthServer(sourceParameters.baseUrl);
   return sourceParameters;
 }
 
@@ -548,14 +541,6 @@ export function completeNodeAndInstance(serverInfo: ServerInfo, prefix: string):
 export async function completeUrl(options: CompleteUrlOptions): Promise<CompletionResult> {
   const curUrlPattern = /^((?:http|https):\/\/[^\/]+)\/([^\?]*).*$/;
   let url = options.providerUrl;
-  let auth:string|undefined = undefined;
-
-  const firstMatch = options.providerUrl.match(/^([^\?]*)\?[^\?]*auth=([^&]*)/);
-
-  if (firstMatch) {
-    url = firstMatch[1];
-    auth = firstMatch[2];
-  }
 
   let match = url.match(curUrlPattern);
   if (match === null) {
@@ -564,14 +549,12 @@ export async function completeUrl(options: CompleteUrlOptions): Promise<Completi
   }
   let baseUrl = match[1];
   let path = match[2];
-  if (!auth && baseUrl.startsWith('https')) {
-    auth = getDefaultAuthServer(baseUrl);
-  }
+  let authServer = getDefaultAuthServer(baseUrl);
 
   const serverInfo = await getServerInfo(
       options.chunkManager, baseUrl,
       options.credentialsManager.getCredentialsProvider<DVIDToken>(
-          credentialsKey, {dvidServer: baseUrl, authServer: auth}));
+          credentialsKey, {dvidServer: baseUrl, authServer}));
   return applyCompletionOffset(baseUrl.length + 1, completeNodeAndInstance(serverInfo, path));
 }
 
