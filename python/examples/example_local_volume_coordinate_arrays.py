@@ -26,22 +26,14 @@ def add_example_layers(state):
         layer=neuroglancer.LocalVolume(
             data=a,
             dimensions=neuroglancer.CoordinateSpace(
-                names=['c^', 'x', 'y', 'z'],
+                names=['c', 'x', 'y', 'z'],
                 units=['', 'nm', 'nm', 'nm'],
                 scales=[1, 10, 10, 10],
                 coordinate_arrays=[
                     neuroglancer.CoordinateArray(labels=['red', 'green', 'blue']), None, None, None
                 ]),
             voxel_offset=(0, 20, 30, 15),
-        ),
-        shader="""
-void main() {
-  emitRGB(vec3(toNormalized(getDataValue(0)),
-               toNormalized(getDataValue(1)),
-               toNormalized(getDataValue(2))));
-}
-""",
-    )
+        ))
     state.layers.append(
         name='b',
         layer=neuroglancer.LocalVolume(

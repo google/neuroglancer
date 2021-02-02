@@ -584,6 +584,18 @@ export function verifyStringArray(a: any) {
   return <string[]>a;
 }
 
+export function verifyIntegerArray(a: unknown) {
+  if (!Array.isArray(a)) {
+    throw new Error(`Expected array, received: ${JSON.stringify(a)}.`);
+  }
+  for (let x of a) {
+    if (!Number.isInteger(x)) {
+      throw new Error(`Expected integer, received: ${JSON.stringify(x)}.`);
+    }
+  }
+  return <number[]>a;
+}
+
 export function verifyBoolean(x: any) {
   if (typeof x !== 'boolean') {
     throw new Error(`Expected boolean, received: ${JSON.stringify(x)}`);

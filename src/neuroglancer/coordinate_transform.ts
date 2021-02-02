@@ -17,7 +17,7 @@
 import {WatchableValue, WatchableValueInterface} from 'neuroglancer/trackable_value';
 import {arraysEqual, arraysEqualWithPredicate, getInsertPermutation, TypedArray} from 'neuroglancer/util/array';
 import {getDependentTransformInputDimensions, mat4, quat, vec3} from 'neuroglancer/util/geom';
-import {expectArray, parseArray, parseFiniteVec, parseFixedLengthArray, verifyFiniteFloat, verifyFinitePositiveFloat, verifyObject, verifyObjectProperty, verifyOptionalObjectProperty, verifyString} from 'neuroglancer/util/json';
+import {expectArray, parseArray, parseFiniteVec, parseFixedLengthArray, verifyFiniteFloat, verifyFinitePositiveFloat, verifyIntegerArray, verifyObject, verifyObjectProperty, verifyOptionalObjectProperty, verifyString, verifyStringArray} from 'neuroglancer/util/json';
 import * as matrix from 'neuroglancer/util/matrix';
 import {scaleByExp10, supportedUnits, unitFromJson} from 'neuroglancer/util/si_units';
 import {NullarySignal} from 'neuroglancer/util/signal';
@@ -30,6 +30,16 @@ let nextDimensionId = 0;
 
 export function newDimensionId(): DimensionId {
   return ++nextDimensionId;
+}
+
+export interface CoordinateArray {
+  // Indicates whether this coordinate array was specified explicitly, in which case it will be
+  // encoded in the JSON representation.
+  explicit: boolean;
+  // Specifies the coordinates.  Must be montonically increasing integers.
+  coordinates: number[];
+  // Specifies the label for each coordinate in `coordinates`.
+  labels: string[];
 }
 
 export interface CoordinateSpace {
@@ -67,10 +77,48 @@ export interface CoordinateSpace {
 
   readonly bounds: BoundingBox;
   readonly boundingBoxes: readonly TransformedBoundingBox[];
+
+  readonly coordinateArrays: (CoordinateArray|undefined)[];
 }
 
 export function boundingBoxesEqual(a: BoundingBox, b: BoundingBox) {
   return arraysEqual(a.lowerBounds, b.lowerBounds) && arraysEqual(a.upperBounds, b.upperBounds);
+}
+
+export function coordinateArraysEqual(a: CoordinateArray|undefined, b: CoordinateArray|undefined) {
+  if (a === undefined) return b === undefined;
+  if (b === undefined) return false;
+  return a.explicit === b.explicit && arraysEqual(a.coordinates, b.coordinates) &&
+      arraysEqual(a.labels, b.labels);
+}
+
+export function normalizeCoordinateArray(coordinates: number[], labels: string[]) {
+  const map = new Map<number, string>();
+  for (let i = 0, length = coordinates.length; i < length; ++i) {
+    map.set(coordinates[i], labels[i]);
+  }
+  coordinates = Array.from(map.keys());
+  coordinates.sort((a, b) => a - b);
+  labels = Array.from(coordinates, x => map.get(x)!);
+  return {coordinates, labels};
+}
+
+export function mergeCoordinateArrays(coordinateArrays: ReadonlyArray<CoordinateArray>):
+    CoordinateArray {
+  if (coordinateArrays.length === 1) return coordinateArrays[0];
+  const map = new Map<number, string>();
+  let explicit = false;
+  for (const x of coordinateArrays) {
+    if (x.explicit) explicit = true;
+    const {coordinates, labels} = x;
+    for (let i = 0, length = coordinates.length; i < length; ++i) {
+      map.set(coordinates[i], labels[i]);
+    }
+  }
+  const coordinates = Array.from(map.keys());
+  coordinates.sort((a, b) => a - b);
+  const labels = Array.from(coordinates, x => map.get(x)!);
+  return {explicit, coordinates, labels};
 }
 
 export function transformedBoundingBoxesEqual(
@@ -83,7 +131,8 @@ export function coordinateSpacesEqual(a: CoordinateSpace, b: CoordinateSpace) {
       a.valid === b.valid && a.rank === b.rank && arraysEqual(a.names, b.names) &&
       arraysEqual(a.ids, b.ids) && arraysEqual(a.timestamps, b.timestamps) &&
       arraysEqual(a.units, b.units) && arraysEqual(a.scales, b.scales) &&
-      arraysEqualWithPredicate(a.boundingBoxes, b.boundingBoxes, transformedBoundingBoxesEqual));
+      arraysEqualWithPredicate(a.boundingBoxes, b.boundingBoxes, transformedBoundingBoxesEqual) &&
+      arraysEqualWithPredicate(a.coordinateArrays, b.coordinateArrays, coordinateArraysEqual));
 }
 
 export function unitsFromJson(units: string[], scaleExponents: Float64Array, obj: any) {
@@ -103,7 +152,8 @@ export function makeCoordinateSpace(space: {
   readonly timestamps?: readonly number[],
   readonly ids?: readonly DimensionId[],
   readonly boundingBoxes?: readonly TransformedBoundingBox[],
-  readonly bounds?: BoundingBox
+  readonly bounds?: BoundingBox,
+  readonly coordinateArrays?: (CoordinateArray|undefined)[],
 }): CoordinateSpace {
   const {names, units, scales} = space;
   const {
@@ -111,10 +161,22 @@ export function makeCoordinateSpace(space: {
     rank = names.length,
     timestamps = names.map(() => Number.NEGATIVE_INFINITY),
     ids = names.map((_, i) => -i),
-    boundingBoxes = []
+    boundingBoxes = [],
   } = space;
+  const {coordinateArrays = new Array<CoordinateArray|undefined>(rank)} = space;
   const {bounds = computeCombinedBounds(boundingBoxes, rank)} = space;
-  return {valid, rank, names, timestamps, ids, units, scales, boundingBoxes, bounds};
+  return {
+    valid,
+    rank,
+    names,
+    timestamps,
+    ids,
+    units,
+    scales,
+    boundingBoxes,
+    bounds,
+    coordinateArrays
+  };
 }
 
 export const emptyInvalidCoordinateSpace = makeCoordinateSpace({
@@ -150,23 +212,50 @@ export function coordinateSpaceFromJson(
   const rank = names.length;
   const units = new Array<string>(rank);
   const scales = new Float64Array(rank);
+  const coordinateArrays = new Array<CoordinateArray|undefined>(rank);
   for (let i = 0; i < rank; ++i) {
     verifyObjectProperty(obj, names[i], mem => {
-      const {unit, scale} = unitAndScaleFromJson(mem);
-      units[i] = unit;
-      scales[i] = scale;
+      if (Array.isArray(mem)) {
+        // Normal unit-scale dimension.
+        const {unit, scale} = unitAndScaleFromJson(mem);
+        units[i] = unit;
+        scales[i] = scale;
+      } else {
+        // Coordinate array dimension.
+        verifyObject(mem);
+        let coordinates = verifyObjectProperty(mem, 'coordinates', verifyIntegerArray);
+        let labels = verifyObjectProperty(mem, 'labels', verifyStringArray);
+        let length = coordinates.length;
+        if (length !== labels.length) {
+          throw new Error(
+              `Length of coordinates array (${length}) ` +
+              `does not match length of labels array (${labels.length})`);
+        }
+        units[i] = '';
+        scales[i] = 1;
+        coordinateArrays[i] = {explicit: true, ...normalizeCoordinateArray(coordinates, labels)};
+      }
     });
   }
-  return makeCoordinateSpace({valid: false, names, units, scales});
+  return makeCoordinateSpace({valid: false, names, units, scales, coordinateArrays});
 }
 
 export function coordinateSpaceToJson(coordinateSpace: CoordinateSpace): any {
   const {rank} = coordinateSpace;
   if (rank === 0) return undefined;
-  const {names, units, scales} = coordinateSpace;
+  const {names, units, scales, coordinateArrays} = coordinateSpace;
   const json: any = {};
   for (let i = 0; i < rank; ++i) {
-    json[names[i]] = [scales[i], units[i]];
+    const name = names[i];
+    const coordinateArray = coordinateArrays[i];
+    if (coordinateArray?.explicit) {
+      json[name] = {
+        coordinates: Array.from(coordinateArray.coordinates),
+        labels: coordinateArray.labels
+      };
+    } else {
+      json[name] = [scales[i], units[i]];
+    }
   }
   return json;
 }
@@ -415,6 +504,7 @@ export function getOutputSpaceWithTransformedBoundingBoxes(
     scales: oldOutputSpace.scales,
     units: oldOutputSpace.units,
     boundingBoxes: getTransformedBoundingBoxes(inputSpace, transform, oldOutputSpace.scales),
+    coordinateArrays: oldOutputSpace.coordinateArrays,
   });
   if (coordinateSpacesEqual(newSpace, oldOutputSpace)) return oldOutputSpace;
   return newSpace;
@@ -559,7 +649,8 @@ export function remapTransformInputSpace(
     units: oldOutputUnits,
     scales: oldOutputScales,
     ids: oldOutputDimensionIds,
-    timestamps: oldOutputTimestamps
+    timestamps: oldOutputTimestamps,
+    coordinateArrays: oldOutputCoordinateArrays,
   } = oldOutputSpace;
   // For now just use a simple mapping.
   const removedOldOutputIndices = removedOldInputIndices;
@@ -568,6 +659,7 @@ export function remapTransformInputSpace(
   const outputScales = new Float64Array(newRank);
   const outputDimensionIds: DimensionId[] = [];
   const outputDimensionTimestamps: number[] = [];
+  const outputCoordinateArrays = new Array<CoordinateArray|undefined>(newRank);
   let newOutputDim = 0;
   const newTransform = new Float64Array((newRank + 1) ** 2);
   newTransform[newTransform.length - 1] = 1;
@@ -578,6 +670,7 @@ export function remapTransformInputSpace(
     outputUnits[newOutputDim] = oldOutputUnits[oldOutputDim];
     outputScales[newOutputDim] = oldOutputScales[oldOutputDim];
     outputDimensionTimestamps[newOutputDim] = oldOutputTimestamps[oldOutputDim];
+    outputCoordinateArrays[newOutputDim] = oldOutputCoordinateArrays[oldOutputDim];
     for (let newInputDim = 0; newInputDim < newRank; ++newInputDim) {
       const oldInputDim = newToOldInputDimensionIndices[newInputDim];
       if (oldInputDim === -1) continue;
@@ -606,6 +699,7 @@ export function remapTransformInputSpace(
     units: outputUnits,
     scales: outputScales,
     boundingBoxes: getTransformedBoundingBoxes(inputSpace, newTransform, outputScales),
+    coordinateArrays: outputCoordinateArrays,
   });
   return {
     rank: newRank,
@@ -701,7 +795,6 @@ export class WatchableCoordinateSpaceTransform implements
   reset() {
     if (this.value_ === this.defaultTransform) return;
     this.value_ = this.defaultTransform;
-    console.log('newValue', this.value_);
     this.inputSpaceChanged.dispatch();
     this.changed.dispatch();
   }
@@ -766,6 +859,7 @@ export class WatchableCoordinateSpaceTransform implements
         names: origInputSpace.names.map((_, i) => `${i}`),
         units: origInputSpace.units,
         scales: origInputSpace.scales,
+        coordinateArrays: origInputSpace.coordinateArrays,
       });
       this.value = {
         rank,
@@ -803,20 +897,24 @@ export class WatchableCoordinateSpaceTransform implements
       newToSpecDimensionIndices[defaultSourceRank + i - specSourceRank] = i;
     }
     const newInputScales = new Float64Array(newRank);
+    const newInputCoordinateArrays = new Array<CoordinateArray|undefined>(newRank);
     const newInputUnits: string[] = [];
     for (let newDim = 0; newDim < defaultSourceRank; ++newDim) {
       const specDim = newToSpecDimensionIndices[newDim];
       if (specDim === -1 || specInputSpace === undefined) {
         newInputScales[newDim] = defaultInputSpace.scales[newDim];
         newInputUnits[newDim] = defaultInputSpace.units[newDim];
+        newInputCoordinateArrays[newDim] = defaultInputSpace.coordinateArrays[newDim];
       } else {
         newInputScales[newDim] = specInputSpace.scales[specDim];
         newInputUnits[newDim] = specInputSpace.units[specDim];
+        newInputCoordinateArrays[newDim] = specInputSpace.coordinateArrays[specDim];
       }
     }
     const specInputOrOutputSpace = specInputSpace || specOutputSpace;
     const newInputNames = defaultInputNames.slice(0, defaultSourceRank);
     const newOutputNames = defaultOutputSpace.names.slice(0, defaultSourceRank);
+    const newOutputCoordinateArrays = defaultOutputSpace.coordinateArrays.slice(0, defaultSourceRank);
     const newOutputScales = new Float64Array(newRank);
     const newOutputUnits: string[] = [];
     for (let newDim = 0; newDim < newRank; ++newDim) {
@@ -824,10 +922,12 @@ export class WatchableCoordinateSpaceTransform implements
       if (specDim === -1) {
         newOutputScales[newDim] = defaultOutputSpace.scales[newDim];
         newOutputUnits[newDim] = defaultOutputSpace.units[newDim];
+        newOutputCoordinateArrays[newDim] = defaultOutputSpace.coordinateArrays[newDim];
       } else {
         newOutputNames[newDim] = specOutputSpace.names[specDim];
         newOutputUnits[newDim] = specOutputSpace.units[specDim];
         newOutputScales[newDim] = specOutputSpace.scales[specDim];
+        newOutputCoordinateArrays[newDim] = specOutputSpace.coordinateArrays[specDim];
       }
     }
     if (!validateDimensionNames(newOutputNames)) {
@@ -890,12 +990,14 @@ export class WatchableCoordinateSpaceTransform implements
         names: newOutputNames,
         scales: newOutputScales,
         units: newOutputUnits,
+        coordinateArrays: newOutputCoordinateArrays,
       }),
       inputSpace: makeCoordinateSpace({
         rank: newRank,
         names: newInputNames,
         scales: newInputScales,
         units: newInputUnits,
+        coordinateArrays: newInputCoordinateArrays,
         boundingBoxes,
       }),
     };
@@ -1054,7 +1156,6 @@ export class CoordinateSpaceCombiner {
     const {dimensionRefCounts} = this;
     dimensionRefCounts.clear();
     let bindingIndex = 0;
-    const mergedBoundingBoxes: TransformedBoundingBox[] = [];
     let newRank = mergedNames.length;
     for (const binding of bindings) {
       const {space: {value: space}} = binding;
@@ -1091,6 +1192,7 @@ export class CoordinateSpaceCombiner {
           names,
           timestamps,
           boundingBoxes: space.boundingBoxes,
+          coordinateArrays: space.coordinateArrays,
         });
         binding.prevValue = newSpace;
         binding.space.value = newSpace;
@@ -1113,14 +1215,40 @@ export class CoordinateSpaceCombiner {
       newRank = mergedNames.length;
     }
 
+    const mergedBoundingBoxes: TransformedBoundingBox[] = [];
+    const allCoordinateArrays = new Array<CoordinateArray[]|undefined>(newRank);
+    // Include any explicit coordinate arrays from `existing`.
+    for (let i = 0, existingRank = existing.rank; i < existingRank; ++i) {
+      const coordinateArray = existing.coordinateArrays[i];
+      if (!coordinateArray?.explicit) continue;
+      const newDim = mergedIds.indexOf(existing.ids[i]);
+      if (newDim === -1) continue;
+      allCoordinateArrays[newDim] = [coordinateArray];
+    }
     for (const binding of bindings) {
       const {space: {value: space}} = binding;
-      const {boundingBoxes} = space;
-      if (boundingBoxes.length === 0) continue;
+      const {rank, boundingBoxes, coordinateArrays} = space;
       const newDims = space.names.map(x => mergedNames.indexOf(x));
       for (const oldBoundingBox of boundingBoxes) {
         mergedBoundingBoxes.push(extendTransformedBoundingBox(oldBoundingBox, newRank, newDims));
       }
+      for (let i = 0; i < rank; ++i) {
+        const coordinateArray = coordinateArrays[i];
+        if (coordinateArray === undefined) continue;
+        const newDim = newDims[i];
+        const mergedList = allCoordinateArrays[newDim];
+        if (mergedList === undefined) {
+          allCoordinateArrays[newDim] = [coordinateArray];
+        } else {
+          mergedList.push(coordinateArray);
+        }
+      }
+    }
+    const mergedCoordinateArrays = new Array<CoordinateArray|undefined>(newRank);
+    for (let i = 0; i < newRank; ++i) {
+      const mergedList = allCoordinateArrays[i];
+      if (mergedList === undefined) continue;
+      mergedCoordinateArrays[i] = mergeCoordinateArrays(mergedList);
     }
     const newCombined = makeCoordinateSpace({
       valid,
@@ -1129,6 +1257,7 @@ export class CoordinateSpaceCombiner {
       units: mergedUnits,
       scales: new Float64Array(mergedScales),
       boundingBoxes: mergedBoundingBoxes,
+      coordinateArrays: mergedCoordinateArrays,
     });
     if (retainExisting) {
       for (let i = 0; i < newRank; ++i) {
@@ -1343,7 +1472,7 @@ export function permuteTransformedBoundingBox(
 }
 
 export function permuteCoordinateSpace(existing: CoordinateSpace, newToOld: readonly number[]) {
-  const {ids, names, scales, units, timestamps} = existing;
+  const {ids, names, scales, units, timestamps, coordinateArrays} = existing;
   return makeCoordinateSpace({
     rank: newToOld.length,
     valid: existing.valid,
@@ -1352,6 +1481,7 @@ export function permuteCoordinateSpace(existing: CoordinateSpace, newToOld: read
     timestamps: newToOld.map(i => timestamps[i]),
     scales: Float64Array.from(newToOld, i => scales[i]),
     units: newToOld.map(i => units[i]),
+    coordinateArrays: newToOld.map(i => coordinateArrays[i]),
     boundingBoxes:
         existing.boundingBoxes.map(b => permuteTransformedBoundingBox(b, newToOld, existing.rank))
             .filter(b => b !== undefined) as TransformedBoundingBox[],

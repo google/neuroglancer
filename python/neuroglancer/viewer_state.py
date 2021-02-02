@@ -32,14 +32,14 @@ import six
 from . import local_volume
 from . import skeleton
 from . import segment_colors
-from .coordinate_space import DimensionScale, CoordinateSpace
+from .coordinate_space import DimensionScale, CoordinateSpace, CoordinateArray
 from .equivalence_map import EquivalenceMap
 from .json_utils import encode_json_for_repr
 from .json_wrappers import (JsonObjectWrapper, array_wrapper, optional, text_type, typed_list,
                             typed_map, typed_set, typed_string_map, wrapped_property,
                             number_or_string)
 
-__all__ = ['CoordinateSpace', 'DimensionScale']
+__all__ = ['CoordinateSpace', 'DimensionScale', 'CoordinateArray']
 
 
 def export(obj):
