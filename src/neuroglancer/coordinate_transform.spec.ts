@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-import {transformedBoundingBoxesEqual, CoordinateSpaceCombiner, coordinateSpacesEqual, emptyInvalidCoordinateSpace, homogeneousTransformSubmatrix, makeCoordinateSpace, makeIdentityTransform, newDimensionId, TransformedBoundingBox, WatchableCoordinateSpaceTransform} from 'neuroglancer/coordinate_transform';
+import {transformedBoundingBoxesEqual, CoordinateSpaceCombiner, coordinateSpacesEqual, emptyInvalidCoordinateSpace, homogeneousTransformSubmatrix, makeCoordinateSpace, makeIdentityTransform, newDimensionId, TransformedBoundingBox, WatchableCoordinateSpaceTransform, coordinateTransformSpecificationFromJson} from 'neuroglancer/coordinate_transform';
 import {WatchableValue} from 'neuroglancer/trackable_value';
 
 describe('newDimensionId', () => {
@@ -238,5 +238,48 @@ describe('homogeneousTransformSubmatrix', () => {
       ]);
       expect(permuted).toEqual(expected);
     }
+  });
+});
+
+describe('WatchableCoordinateSpaceTransform.spec', () => {
+  it('preserves coordinate arrays from input space with outputDimensions', () => {
+    const inputSpace = makeCoordinateSpace({
+      names: ['a', 'b'],
+      scales: Float64Array.of(1, 1),
+      units: ['', ''],
+      coordinateArrays: [{explicit: false, coordinates: [0], labels: ['x']}, undefined],
+    });
+    const watchableTransform =
+      new WatchableCoordinateSpaceTransform(makeIdentityTransform(inputSpace));
+    watchableTransform.spec = coordinateTransformSpecificationFromJson({'outputDimensions': {
+      'a': [1, ''],
+      'b': [1, ''],
+    }});
+    expect(watchableTransform.value.inputSpace.coordinateArrays).toEqual(inputSpace.coordinateArrays);
+    expect(watchableTransform.value.outputSpace.coordinateArrays).toEqual(inputSpace.coordinateArrays);
+  });
+  it('preserves coordinate arrays from input space with inputDimensions', () => {
+    const inputSpace = makeCoordinateSpace({
+      names: ['a', 'b'],
+      scales: Float64Array.of(1, 1),
+      units: ['', ''],
+      coordinateArrays: [{explicit: false, coordinates: [0], labels: ['x']}, undefined],
+    });
+    const watchableTransform =
+        new WatchableCoordinateSpaceTransform(makeIdentityTransform(inputSpace));
+    watchableTransform.spec = coordinateTransformSpecificationFromJson({
+      'inputDimensions': {
+        'a': [1, ''],
+        'b': [1, ''],
+      },
+      'outputDimensions': {
+        'a': [1, ''],
+        'b': [1, ''],
+      }
+    });
+    expect(watchableTransform.value.inputSpace.coordinateArrays)
+        .toEqual(inputSpace.coordinateArrays);
+    expect(watchableTransform.value.outputSpace.coordinateArrays)
+        .toEqual(inputSpace.coordinateArrays);
   });
 });

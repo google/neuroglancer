@@ -121,6 +121,13 @@ export function mergeCoordinateArrays(coordinateArrays: ReadonlyArray<Coordinate
   return {explicit, coordinates, labels};
 }
 
+export function mergeOptionalCoordinateArrays(
+    coordinateArrays: ReadonlyArray<CoordinateArray|undefined>): CoordinateArray|undefined {
+  coordinateArrays = coordinateArrays.filter(x => x !== undefined);
+  if (coordinateArrays.length === 0) return undefined;
+  return mergeCoordinateArrays(coordinateArrays as ReadonlyArray<CoordinateArray>);
+}
+
 export function transformedBoundingBoxesEqual(
     a: TransformedBoundingBox, b: TransformedBoundingBox) {
   return arraysEqual(a.transform, b.transform) && boundingBoxesEqual(a.box, b.box);
@@ -908,13 +915,15 @@ export class WatchableCoordinateSpaceTransform implements
       } else {
         newInputScales[newDim] = specInputSpace.scales[specDim];
         newInputUnits[newDim] = specInputSpace.units[specDim];
-        newInputCoordinateArrays[newDim] = specInputSpace.coordinateArrays[specDim];
+        newInputCoordinateArrays[newDim] = mergeOptionalCoordinateArrays(
+            [defaultInputSpace.coordinateArrays[newDim], specInputSpace.coordinateArrays[specDim]]);
       }
     }
     const specInputOrOutputSpace = specInputSpace || specOutputSpace;
     const newInputNames = defaultInputNames.slice(0, defaultSourceRank);
     const newOutputNames = defaultOutputSpace.names.slice(0, defaultSourceRank);
-    const newOutputCoordinateArrays = defaultOutputSpace.coordinateArrays.slice(0, defaultSourceRank);
+    const newOutputCoordinateArrays =
+        defaultOutputSpace.coordinateArrays.slice(0, defaultSourceRank);
     const newOutputScales = new Float64Array(newRank);
     const newOutputUnits: string[] = [];
     for (let newDim = 0; newDim < newRank; ++newDim) {
@@ -980,6 +989,39 @@ export class WatchableCoordinateSpaceTransform implements
         boundingBox => extendTransformedBoundingBoxUpToRank(boundingBox, defaultRank, newRank));
     for (let i = defaultSourceRank; i < newRank; ++i) {
       boundingBoxes.push(makeSingletonDimTransformedBoundingBox(newRank, i));
+    }
+    // Propagate coordinate arrays from input dimensions to output dimensions.
+    for (let outputDim = 0; outputDim < newRank; ++outputDim) {
+      // Check if this output dimension is identity mapped from a single input dimension.
+      const translation = newTransform[newRank * (newRank + 1) + outputDim];
+      if (translation !== 0) continue;
+      let singleInputDim: number|undefined|null = undefined;
+      for (let inputDim = 0; inputDim < newRank; ++inputDim) {
+        const factor = newTransform[inputDim * (newRank + 1) + outputDim];
+        if (factor === 0) continue;
+        if (factor === 1) {
+          if (singleInputDim === undefined) {
+            // First input dimension that maps to this output dimension.
+            singleInputDim = inputDim;
+          } else {
+            // Multiple input dimensions map to this output dimension.
+            singleInputDim = null;
+            break;
+          }
+        } else {
+          // Non-identity mapping.
+          singleInputDim = null;
+          break;
+        }
+      }
+      if (singleInputDim == null) continue;
+      let coordinateArray = newInputCoordinateArrays[singleInputDim];
+      if (coordinateArray === undefined) continue;
+      if (coordinateArray.explicit) {
+        coordinateArray = {...coordinateArray, explicit: false};
+      }
+      newOutputCoordinateArrays[outputDim] =
+          mergeOptionalCoordinateArrays([coordinateArray, newOutputCoordinateArrays[outputDim]]);
     }
     this.value = {
       rank: newRank,

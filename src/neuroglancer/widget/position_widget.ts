@@ -54,6 +54,23 @@ const widgetFieldGetters: ((widget: DimensionWidget) => HTMLInputElement)[] = [
   w => w.scaleElement,
 ];
 
+// Returns the coordinate array for the specified dimension, if valid.
+//
+// If no coordinate array is specified, returns `undefined`.
+//
+// If a coordinate array is specified but there is a unit or scale specified, returns `null`.
+//
+// Otherwise, returns the coordinate array.
+function getCoordinateArray(
+    coordinateSpace: CoordinateSpace, dimensionIndex: number): CoordinateArray|undefined|null {
+  const coordinateArray = coordinateSpace.coordinateArrays[dimensionIndex];
+  if (coordinateArray === undefined) return coordinateArray;
+  if (coordinateSpace.units[dimensionIndex] != '' || coordinateSpace.scales[dimensionIndex] !== 1) {
+    return null;
+  }
+  return coordinateArray;
+}
+
 class DimensionWidget {
   container = document.createElement('div');
   nameContainer = document.createElement('span');
@@ -98,7 +115,6 @@ class DimensionWidget {
     scaleElement.disabled = true;
     scaleElement.spellcheck = false;
     scaleElement.autocomplete = 'off';
-    scaleContainer.title = 'Drag to reorder, double click to change scale';
     container.appendChild(scaleContainer);
     container.appendChild(coordinate);
     coordinate.type = 'text';
@@ -106,8 +122,8 @@ class DimensionWidget {
     coordinate.spellcheck = false;
     coordinate.autocomplete = 'off';
     coordinate.pattern = String.raw`(-?\d+(?:\.(?:\d+)?)?)`;
-    const coordinateArray = coordinateSpace.coordinateArrays[initialDimensionIndex];
-    if (coordinateArray !== undefined) {
+    const coordinateArray = getCoordinateArray(coordinateSpace, initialDimensionIndex);
+    if (coordinateArray != null) {
       let maxLabelWidth = 0;
       for (const label of coordinateArray.labels) {
         maxLabelWidth = Math.max(maxLabelWidth, label.length);
@@ -399,8 +415,8 @@ export class PositionWidget extends RefCounted {
     dropdown.tabIndex = -1;
     widget.container.appendChild(dropdown);
 
-    const coordinateArray = widget.coordinateSpace.coordinateArrays[initialDimensionIndex];
-    if (coordinateArray === undefined) {
+    const coordinateArray = getCoordinateArray(widget.coordinateSpace, initialDimensionIndex);
+    if (coordinateArray == null) {
       this.openRegularDropdown(widget, dropdown);
     } else {
       this.openCoordinateArrayDropdown(widget, dropdown, coordinateArray);
@@ -689,7 +705,6 @@ export class PositionWidget extends RefCounted {
       ids,
       scales,
       units,
-      coordinateArrays,
     } = coordinateSpace;
     updateChildren(this.dimensionContainer, ids.map((id, i) => {
       let widget = dimensionWidgets.get(id);
@@ -703,8 +718,19 @@ export class PositionWidget extends RefCounted {
       widget.nameElement.value = name;
       delete widget.nameElement.dataset.isValid;
       updateInputFieldWidth(widget.nameElement);
-      const hasCoordinateArray= (coordinateArrays[i] !== undefined);
-      widget.scaleElement.style.display = hasCoordinateArray ? 'none' : '';
+      const coordinateArray = getCoordinateArray(coordinateSpace, i);
+      if (coordinateArray === undefined) {
+        widget.container.dataset.coordinateArray = 'none';
+      } else if (coordinateArray === null) {
+        widget.container.dataset.coordinateArray = 'invalid';
+      } else {
+        widget.container.dataset.coordinateArray = 'valid';
+      }
+      widget.scaleContainer.title = 'Drag to reorder, double click to change scale';
+      if (coordinateArray === null) {
+        widget.scaleContainer.title +=
+            '.  Coordinate array disabled.  To use the coordinate array, remove the unit/scale.'
+      }
       const {scale, prefix, unit} = formatScaleWithUnit(scales[i], units[i]);
       const scaleString = `${scale}${prefix}${unit}`;
       widget.scaleElement.value = scaleString;
@@ -915,7 +941,8 @@ export class PositionWidget extends RefCounted {
       timestamps,
       ids: existing.ids,
       names: existing.names,
-      boundingBoxes: existing.boundingBoxes
+      boundingBoxes: existing.boundingBoxes,
+      coordinateArrays: existing.coordinateArrays,
     });
     coordinateSpace.value = newSpace;
     return true;
@@ -938,7 +965,6 @@ export class PositionWidget extends RefCounted {
       return;
     }
     const coordinateSpace = this.coordinateSpace!;
-    const {coordinateArrays} = coordinateSpace;
     for (let i = 0; i < rank; ++i) {
       const widget = dimensionWidgetList[i];
       const inputElement = widget.coordinate;
@@ -946,9 +972,9 @@ export class PositionWidget extends RefCounted {
       const newValue = newCoord.toString();
       updateCoordinateFieldWidth(inputElement, newValue);
       inputElement.value = newValue;
-      const coordinateArray = coordinateArrays[i];
+      const coordinateArray = getCoordinateArray(coordinateSpace, i);
       let label = '';
-      if (coordinateArray !== undefined) {
+      if (coordinateArray != null) {
         const {coordinates} = coordinateArray;
         const index = binarySearch(coordinates, newCoord, (a, b) => a - b);
         if (index !== coordinates.length) {

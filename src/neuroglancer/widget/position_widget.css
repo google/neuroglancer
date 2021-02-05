@@ -39,6 +39,16 @@ interferes with our click handling.  Setting `pointer-events: none;` avoids that
   font-size: medium;
 }
 
+.neuroglancer-position-dimension[data-coordinate-array="valid"] .neuroglancer-position-dimension-scale {
+  display: none;
+}
+
+.neuroglancer-position-dimension[data-coordinate-array="invalid"] .neuroglancer-position-dimension-scale {
+  text-decoration-line: underline;
+  text-decoration-style: wavy;
+  text-decoration-color: red;
+}
+
 .neuroglancer-position-dimension-coordinate {
   color: white;
 }

@@ -138,7 +138,8 @@ function updateCoordinateSpaceScales(
     timestamps,
     ids: existing.ids,
     names: existing.names,
-    boundingBoxes: existing.boundingBoxes
+    boundingBoxes: existing.boundingBoxes,
+    coordinateArrays: existing.coordinateArrays,
   });
   watchable.value = newSpace;
   return true;
@@ -605,6 +606,7 @@ export class CoordinateSpaceTransformWidget extends RefCounted {
         scales: Float64Array.from([...newInputSpace.scales, scale]),
         units: [...newInputSpace.units, unit],
         boundingBoxes,
+        coordinateArrays: [...newInputSpace.coordinateArrays, undefined],
       });
 
       newOutputSpace = makeCoordinateSpace({
@@ -615,6 +617,7 @@ export class CoordinateSpaceTransformWidget extends RefCounted {
         timestamps: [...outputSpace.timestamps, Date.now()],
         scales: Float64Array.from([...outputSpace.scales, scale]),
         units: [...outputSpace.units, unit],
+        coordinateArrays: [...outputSpace.coordinateArrays, undefined],
       });
       newTransform = extendHomogeneousTransform(
           new Float64Array((rank + 2) ** 2), rank + 1, newTransform, rank);
