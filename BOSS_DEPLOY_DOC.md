@@ -1,5 +1,7 @@
 # Instructions for Deploying to the Boss
 
+### The main git branch is ndmaster 
+
 # If Your First Time Deploying
 
 Install Node.js >= v10.23.X
