@@ -4,7 +4,7 @@
 
 # If Your First Time Deploying
 
-Install Node.js >= v10.23.X
+Install Node.js >= v10.0.0
 
 ```shell
 # Install dependencies
@@ -18,7 +18,9 @@ npm ci
 
 To test locally
 ```shell
-npi i
+# Update dependencies if necessary
+npm i
+
 npm run build
 npm run dev-server
 ```
