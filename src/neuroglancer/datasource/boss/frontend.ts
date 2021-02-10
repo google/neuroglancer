@@ -434,8 +434,7 @@ export function getDownsampleInfoForChannel(
           },
           () => fetchWithBossCredentials(
               credentialsProvider,
-              `${hostname}/latest/downsample/${collection}/${experimentInfo.key}/${channel}?iso=true`, {},
-              // `${hostname}/latest/downsample/${collection}/${experimentInfo.key}/${channel}?iso=false`, {},
+              `${hostname}/latest/downsample/${collection}/${experimentInfo.key}/${channel}`, {},
               responseJson))
       .then(downsampleObj => {
         return parseDownsampleInfoForChannel(downsampleObj, experimentInfo, channel);
