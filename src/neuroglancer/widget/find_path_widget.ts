@@ -71,6 +71,9 @@ export class FindPathWidget extends RefCounted {
     });
     let pathFound = false;
     const {findPathButton, precisionModeCheckbox} = this;
+    precisionModeCheckbox.addEventListener('click', () => {
+      pathFound = false;
+    });
     findPathButton.textContent = '✔️';
     findPathButton.title = 'Find path';
     findPathButton.addEventListener('click', () => {
@@ -108,6 +111,8 @@ export class FindPathWidget extends RefCounted {
                 this.pathBetweenSupervoxels.setPath(path);
               });
         }
+      } else {
+        StatusMessage.showTemporaryMessage('Requested path already found.');
       }
     });
     const clearButton = document.createElement('button');
