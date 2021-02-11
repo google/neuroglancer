@@ -315,6 +315,8 @@ export class BossMultiscaleVolumeChunkSource extends MultiscaleVolumeChunkSource
   }
 
   getSources(volumeSourceOptions: VolumeSourceOptions) {
+    // Hannah change Feb 2021
+    // Replaced scale calculations with those from ../precomputed
     const modelResolution = this.scales[0].downsampleFactors;
     const {rank} = this;
     return transposeNestedArrays(this.scales.map(scaleInfo => {
