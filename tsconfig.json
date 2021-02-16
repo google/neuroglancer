@@ -9,15 +9,20 @@
     "experimentalDecorators": true,
     "strictNullChecks": true,
     "allowSyntheticDefaultImports": true,
+    "esModuleInterop": true,
     "sourceMap": true,
     "moduleResolution": "node",
+    "incremental": true,
     "target": "ES2017",
     "newLine": "LF",
     "baseUrl": ".",
     "paths": {
       "*": ["*"],
-      "neuroglancer/*": ["src/neuroglancer/*"]
+      "neuroglancer/*": ["src/neuroglancer/*"],
+      "jpgjs": ["third_party/jpgjs/jpg.js"],
+      "neuroglancer-testdata/*": ["testdata/*"]
     },
+    "lib": ["dom", "es2020", "dom.iterable"],
     "typeRoots": [],
     "module": "ESNext"
   },

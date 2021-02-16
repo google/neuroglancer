@@ -47,7 +47,6 @@ export interface SingleMeshData {
 
 export class SingleMeshSourceParameters {
   meshSourceUrl: string;
-  attributeSourceUrls: string[];
 }
 
 export class SingleMeshSourceParametersWithInfo extends SingleMeshSourceParameters {

@@ -96,7 +96,7 @@ export class SphereRenderHelper extends RefCounted {
 void emitSphere(mat4 projectionMatrix, mat4 normalTransformMatrix, vec3 centerPosition, vec3 radii, vec4 lightDirection) {
   vec3 vertexPosition = aSphereVertex * radii + centerPosition;
   gl_Position = projectionMatrix * vec4(vertexPosition, 1.0);
-  vec3 normal = normalize((normalTransformMatrix * vec4(aSphereVertex / radii, 0.0)).xyz);
+  vec3 normal = normalize((normalTransformMatrix * vec4(aSphereVertex / max(radii, 1e-6), 0.0)).xyz);
   vLightingFactor = abs(dot(normal, uLightDirection.xyz)) + uLightDirection.w;
 }
 `);

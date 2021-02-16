@@ -14,16 +14,18 @@
  * limitations under the License.
  */
 
+import {decodeBlosc} from 'neuroglancer/async_computation/decode_blosc_request';
 import {decodeGzip} from 'neuroglancer/async_computation/decode_gzip_request';
 import {requestAsyncComputation} from 'neuroglancer/async_computation/request';
 import {WithParameters} from 'neuroglancer/chunk_manager/backend';
+import {WithSharedCredentialsProviderCounterpart} from 'neuroglancer/credentials_provider/shared_counterpart';
 import {VolumeChunkEncoding, VolumeChunkSourceParameters} from 'neuroglancer/datasource/n5/base';
 import {decodeRawChunk} from 'neuroglancer/sliceview/backend_chunk_decoders/raw';
 import {VolumeChunk, VolumeChunkSource} from 'neuroglancer/sliceview/volume/backend';
 import {CancellationToken} from 'neuroglancer/util/cancellation';
 import {Endianness} from 'neuroglancer/util/endian';
-import {vec3} from 'neuroglancer/util/geom';
-import {cancellableFetchOk, responseArrayBuffer} from 'neuroglancer/util/http_request';
+import {responseArrayBuffer} from 'neuroglancer/util/http_request';
+import {cancellableFetchSpecialOk, SpecialProtocolCredentials} from 'neuroglancer/util/special_protocol_request';
 import {registerSharedObject} from 'neuroglancer/worker_rpc';
 
 async function decodeChunk(
@@ -35,7 +37,7 @@ async function decodeChunk(
     throw new Error(`Unsupported mode: ${mode}.`);
   }
   const numDimensions = dv.getUint16(2, /*littleEndian=*/ false);
-  if (numDimensions !== 3) {
+  if (numDimensions !== chunk.source!.spec.rank) {
     throw new Error(`Number of dimensions must be 3.`);
   }
   let offset = 4;
@@ -44,10 +46,17 @@ async function decodeChunk(
     shape[i] = dv.getUint32(offset, /*littleEndian=*/ false);
     offset += 4;
   }
-  chunk.chunkDataSize = vec3.fromValues(shape[0], shape[1], shape[2]);
+  chunk.chunkDataSize = shape;
   let buffer = new Uint8Array(response, offset);
-  if (encoding === VolumeChunkEncoding.GZIP) {
-    buffer = await requestAsyncComputation(decodeGzip, cancellationToken, [buffer.buffer], buffer);
+  switch (encoding) {
+    case VolumeChunkEncoding.GZIP:
+      buffer =
+          await requestAsyncComputation(decodeGzip, cancellationToken, [buffer.buffer], buffer);
+      break;
+    case VolumeChunkEncoding.BLOSC:
+      buffer =
+          await requestAsyncComputation(decodeBlosc, cancellationToken, [buffer.buffer], buffer);
+      break;
   }
   await decodeRawChunk(
       chunk, cancellationToken, buffer.buffer, Endianness.BIG, buffer.byteOffset,
@@ -56,13 +65,17 @@ async function decodeChunk(
 
 
 @registerSharedObject() export class PrecomputedVolumeChunkSource extends
-(WithParameters(VolumeChunkSource, VolumeChunkSourceParameters)) {
+(WithParameters(WithSharedCredentialsProviderCounterpart<SpecialProtocolCredentials>()(VolumeChunkSource), VolumeChunkSourceParameters)) {
   async download(chunk: VolumeChunk, cancellationToken: CancellationToken) {
     const {parameters} = this;
     const {chunkGridPosition} = chunk;
-    const url =
-        `${parameters.url}/${chunkGridPosition[0]}/${chunkGridPosition[1]}/${chunkGridPosition[2]}`;
-    const response = await cancellableFetchOk(url, {}, responseArrayBuffer, cancellationToken);
+    let url = parameters.url;
+    const rank = this.spec.rank;
+    for (let i = 0; i < rank; ++i) {
+      url += `/${chunkGridPosition[i]}`;
+    }
+    const response = await cancellableFetchSpecialOk(
+        this.credentialsProvider, url, {}, responseArrayBuffer, cancellationToken);
     await decodeChunk(chunk, cancellationToken, response, parameters.encoding);
   }
 }

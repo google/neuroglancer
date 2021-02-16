@@ -17,9 +17,11 @@ computed inference results that are displayed in neuroglancer.
 
 """
 
+import argparse
 import time
 
 import neuroglancer
+import neuroglancer.cli
 import cloudvolume
 import zarr
 import numpy as np
@@ -36,10 +38,15 @@ class InteractiveInference(object):
             bounded=True,
             progress=False,
             provenance={})
+        self.dimensions = neuroglancer.CoordinateSpace(
+            names=['x', 'y', 'z'],
+            units='nm',
+            scales=self.gt_vol.resolution,
+        )
         self.inf_results = zarr.zeros(
-            self.gt_vol.bounds.to_list()[3:][::-1], chunks=(64, 64, 64), dtype=np.uint8)
+            self.gt_vol.bounds.to_list()[3:], chunks=(64, 64, 64), dtype=np.uint8)
         self.inf_volume = neuroglancer.LocalVolume(
-            data=self.inf_results, voxel_size=list(self.gt_vol.resolution))
+            data=self.inf_results, dimensions=self.dimensions)
         with viewer.config_state.txn() as s:
             s.input_event_bindings.data_view['shift+mousedown0'] = 'inference'
 
@@ -75,10 +82,7 @@ void main() {
         slice_expr = np.s_[int(spos[0]):int(epos[0]),
                            int(spos[1]):int(epos[1]),
                            int(spos[2]):int(epos[2])]
-        rev_slice_expr = np.s_[int(spos[2]):int(epos[2]),
-                               int(spos[1]):int(epos[1]),
-                               int(spos[0]):int(epos[0])]
-        gt_data = np.transpose(self.gt_vol[slice_expr][..., 0], (2, 1, 0))
+        gt_data = self.gt_vol[slice_expr][..., 0]
         boundary_mask = gt_data == 0
         boundary_mask[:, :, :-1] |= (gt_data[:, :, :-1] != gt_data[:, :, 1:])
         boundary_mask[:, :, 1:] |= (gt_data[:, :, :-1] != gt_data[:, :, 1:])
@@ -87,12 +91,17 @@ void main() {
         boundary_mask[:-1, :, :] |= (gt_data[:-1, :, :] != gt_data[1:, :, :])
         boundary_mask[1:, :, :] |= (gt_data[:-1, :, :] != gt_data[1:, :, :])
         dist_transform = scipy.ndimage.morphology.distance_transform_edt(~boundary_mask)
-        self.inf_results[rev_slice_expr] = 1 + np.cast[np.uint8](
+        self.inf_results[slice_expr] = 1 + np.cast[np.uint8](
             np.minimum(dist_transform, 5) / 5.0 * 254)
         self.inf_volume.invalidate()
 
 
 if __name__ == '__main__':
+    ap = argparse.ArgumentParser()
+    neuroglancer.cli.add_server_arguments(ap)
+    args = ap.parse_args()
+    neuroglancer.cli.handle_server_arguments(args)
+
     inf = InteractiveInference()
     print(inf.viewer)
 

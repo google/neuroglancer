@@ -14,7 +14,6 @@
  * limitations under the License.
  */
 
-import {AnnotationLayerState} from 'neuroglancer/annotation/frontend';
 import {LayerManager, MouseSelectionState} from 'neuroglancer/layer';
 
 export function getSelectedAnnotation(mouseState: MouseSelectionState, layerManager: LayerManager) {
@@ -43,22 +42,4 @@ export function getSelectedAnnotation(mouseState: MouseSelectionState, layerMana
     id: mouseState.pickedAnnotationId,
     partIndex: mouseState.pickedOffset,
   };
-}
-
-export function setAnnotationHoverStateFromMouseState(
-    annotationLayer: AnnotationLayerState, mouseState: MouseSelectionState) {
-  annotationLayer.registerDisposer(mouseState.changed.add(() => {
-    if (mouseState.active && mouseState.pickedAnnotationLayer === annotationLayer) {
-      const existingValue = annotationLayer.hoverState.value;
-      if (existingValue === undefined || existingValue.id !== mouseState.pickedAnnotationId! ||
-          existingValue.partIndex !== mouseState.pickedOffset) {
-        annotationLayer.hoverState.value = {
-          id: mouseState.pickedAnnotationId!,
-          partIndex: mouseState.pickedOffset
-        };
-      }
-    } else {
-      annotationLayer.hoverState.value = undefined;
-    }
-  }));
 }

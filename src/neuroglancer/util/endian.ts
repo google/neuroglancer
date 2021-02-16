@@ -61,6 +61,24 @@ export function swapEndian32(array: ArrayBufferView) {
   }
 }
 
+export function swapEndian64(array: ArrayBufferView) {
+  let view = new Uint8Array(array.buffer, array.byteOffset, array.byteLength);
+  for (let i = 0, length = view.length; i < length; i += 8) {
+    let temp = view[i];
+    view[i] = view[i + 7];
+    view[i + 7] = temp;
+    temp = view[i + 1];
+    view[i + 1] = view[i + 6];
+    view[i + 6] = temp;
+    temp = view[i + 2];
+    view[i + 2] = view[i + 5];
+    view[i + 5] = temp;
+    temp = view[i + 3];
+    view[i + 3] = view[i + 4];
+    view[i + 4] = temp;
+  }
+}
+
 /**
  * Converts the endianness of an array assumed to contain 16-bit values from source to target.
  *
@@ -73,17 +91,6 @@ export function convertEndian16(
   }
 }
 
-/**
- * Converts the endianness of an array assumed to contain 16-bit values from native to little
- * endian.
- *
- * This does nothing if the native ENDIANNESS is little endian.
- */
-export function nativeToLittle16(array: ArrayBufferView) {
-  if (ENDIANNESS !== Endianness.LITTLE) {
-    swapEndian16(array);
-  }
-}
 
 /**
  * Converts the endianness of an array assumed to contain 32-bit values from source to target.
@@ -97,14 +104,32 @@ export function convertEndian32(
   }
 }
 
+
 /**
- * Converts the endianness of an array assumed to contain 32-bit values from native to little
- * endian.
+ * Converts the endianness of an array assumed to contain 64-bit values from source to target.
  *
- * This does nothing if the native ENDIANNESS is little endian.
+ * This does nothing if source === target.
  */
-export function nativeToLittle32(array: ArrayBufferView) {
-  if (ENDIANNESS !== Endianness.LITTLE) {
-    swapEndian32(array);
+export function convertEndian64(
+    array: ArrayBufferView, source: Endianness, target: Endianness = ENDIANNESS) {
+  if (source !== target) {
+    swapEndian64(array);
+  }
+}
+
+export function convertEndian(
+    array: ArrayBufferView, source: Endianness, elementBytes: number,
+    target: Endianness = ENDIANNESS) {
+  if (source === target || elementBytes === 1) return;
+  switch (elementBytes) {
+    case 2:
+      swapEndian16(array);
+      break;
+    case 4:
+      swapEndian32(array);
+      break;
+    case 8:
+      swapEndian64(array);
+      break;
   }
 }

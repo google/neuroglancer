@@ -33,6 +33,7 @@ export function getDefaultGlobalBindings() {
     for (let i = 1; i <= 9; ++i) {
       map.set('digit' + i, 'toggle-layer-' + i);
       map.set('control+digit' + i, 'select-layer-' + i);
+      map.set('alt+digit' + i, 'toggle-pick-layer-' + i);
     }
 
     map.set('keyn', 'add-layer');
@@ -46,6 +47,27 @@ export function getDefaultGlobalBindings() {
   return defaultGlobalBindings;
 }
 
+let defaultSelectBindings: EventActionMap|undefined;
+export function getDefaultSelectBindings() {
+  if (defaultSelectBindings === undefined) {
+    defaultSelectBindings = EventActionMap.fromObject({'control+mousedown2': 'select-position'});
+  }
+  return defaultSelectBindings;
+}
+
+let defaultAnnotationListBindings: EventActionMap|undefined;
+export function getDefaultAnnotationListBindings() {
+  if (defaultAnnotationListBindings === undefined) {
+    defaultAnnotationListBindings = EventActionMap.fromObject(
+        {
+          'click0': 'pin-annotation',
+          'mousedown2': 'move-to-annotation',
+        },
+        {parents: [[getDefaultSelectBindings(), 0]]});
+  }
+  return defaultAnnotationListBindings;
+}
+
 let defaultRenderedDataPanelBindings: EventActionMap|undefined;
 export function getDefaultRenderedDataPanelBindings() {
   if (defaultRenderedDataPanelBindings === undefined) {
@@ -57,23 +79,28 @@ export function getDefaultRenderedDataPanelBindings() {
           'arrowdown': 'y+',
           'comma': 'z-',
           'period': 'z+',
+          'bracketleft': 't-',
+          'bracketright': 't+',
           'keyz': 'snap',
           'control+equal': 'zoom-in',
+          'alt+equal': 'depth-range-decrease',
           'control+shift+equal': 'zoom-in',
+          'alt+shift+equal': 'depth-range-decrease',
           'control+minus': 'zoom-out',
+          'alt+minus': 'depth-range-increase',
           'keyr': 'rotate-relative-z-',
           'keye': 'rotate-relative-z+',
           'shift+arrowdown': 'rotate-relative-x-',
           'shift+arrowup': 'rotate-relative-x+',
           'shift+arrowleft': 'rotate-relative-y-',
           'shift+arrowright': 'rotate-relative-y+',
-          'at:control+wheel': {action: 'zoom-via-wheel', preventDefault: true},
+          'control+wheel': {action: 'zoom-via-wheel', preventDefault: true},
+          'alt+wheel': {action: 'adjust-depth-range-via-wheel', preventDefault: true},
           'at:wheel': {action: 'z+1-via-wheel', preventDefault: true},
           'at:shift+wheel': {action: 'z+10-via-wheel', preventDefault: true},
           'at:dblclick0': 'select',
           'at:control+mousedown0': 'annotate',
           'at:mousedown2': 'move-to-mouse-position',
-          'at:control+mousedown2': 'select-annotation',
           'at:alt+mousedown0': 'move-annotation',
           'at:control+alt+mousedown2': 'delete-annotation',
           'at:touchpinch': 'zoom-via-touchpinch',
@@ -83,7 +110,10 @@ export function getDefaultRenderedDataPanelBindings() {
           'at:touchtap1x2': 'select',
           'at:touchtap2x3': 'snap',
         },
-        {label: 'All Data Panels'});
+        {
+          label: 'All Data Panels',
+          parents: [[getDefaultSelectBindings(), 0]],
+        });
   }
   return defaultRenderedDataPanelBindings;
 }

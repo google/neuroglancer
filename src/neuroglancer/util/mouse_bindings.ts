@@ -25,24 +25,32 @@ export class MouseEventBinder<EventMap extends EventActionMapInterface> extends 
   private dispatch(baseIdentifier: string, event: MouseEvent) {
     dispatchEventWithModifiers(baseIdentifier, event, event, this.eventMap);
   }
-  constructor(public target: EventTarget, public eventMap: EventMap) {
+  constructor(
+      public target: EventTarget, public eventMap: EventMap,
+      commonHandler?: (event: MouseEvent) => void) {
     super();
     this.registerEventListener(target, 'wheel', (event: WheelEvent) => {
+      if (commonHandler !== undefined) commonHandler(event);
       this.dispatch('wheel', event);
     });
     this.registerEventListener(target, 'click', (event: MouseEvent) => {
+      if (commonHandler !== undefined) commonHandler(event);
       this.dispatch(`click${event.button}`, event);
     });
     this.registerEventListener(target, 'dblclick', (event: MouseEvent) => {
+      if (commonHandler !== undefined) commonHandler(event);
       this.dispatch(`dblclick${event.button}`, event);
     });
     this.registerEventListener(target, 'mousedown', (event: MouseEvent) => {
+      if (commonHandler !== undefined) commonHandler(event);
       this.dispatch(`mousedown${event.button}`, event);
     });
     this.registerEventListener(target, 'mouseup', (event: MouseEvent) => {
+      if (commonHandler !== undefined) commonHandler(event);
       this.dispatch(`mouseup${event.button}`, event);
     });
   }
 }
 
-export {EventActionMapInterface, EventActionMap, registerActionListener, ActionEvent};
+export {EventActionMap, registerActionListener};
+export type {EventActionMapInterface, ActionEvent}

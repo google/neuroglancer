@@ -15,9 +15,13 @@
  */
 
 import debounce from 'lodash/debounce';
+import {CredentialsManager} from 'neuroglancer/credentials_provider';
+import {StatusMessage} from 'neuroglancer/status';
 import {WatchableValue} from 'neuroglancer/trackable_value';
 import {RefCounted} from 'neuroglancer/util/disposable';
+import {responseJson} from 'neuroglancer/util/http_request';
 import {urlSafeParse, verifyObject} from 'neuroglancer/util/json';
+import {cancellableFetchSpecialOk, parseSpecialUrl} from 'neuroglancer/util/special_protocol_request';
 import {getCachedJson, Trackable} from 'neuroglancer/util/trackable';
 
 /**
@@ -57,7 +61,9 @@ export class UrlHashBinding extends RefCounted {
    */
   parseError = new WatchableValue<Error|undefined>(undefined);
 
-  constructor(public root: Trackable, updateDelayMilliseconds = 200) {
+  constructor(
+      public root: Trackable, public credentialsManager: CredentialsManager,
+      updateDelayMilliseconds = 200) {
     super();
     this.registerEventListener(window, 'hashchange', () => this.updateFromUrlHash());
     const throttledSetUrlHash = debounce(() => this.setUrlHash(), updateDelayMilliseconds);
@@ -123,7 +129,19 @@ export class UrlHashBinding extends RefCounted {
       } else {
         s = fragment;
       }
-      if (s.startsWith('#!+')) {
+      // Handle remote JSON state
+      if (s.match(/^#!(http|https|gs):\/\//)) {
+        const url = s.substring(2);
+        const {url: parsedUrl, credentialsProvider} = parseSpecialUrl(url, this.credentialsManager);
+        StatusMessage.forPromise(
+            cancellableFetchSpecialOk(credentialsProvider, parsedUrl, {}, responseJson)
+                .then(json => {
+                  verifyObject(json);
+                  this.root.reset();
+                  this.root.restoreState(json);
+                }),
+            {initialMessage: `Loading state from ${url}`, errorPrefix: `Error loading state:`});
+      } else if (s.startsWith('#!+')) {
         s = s.slice(3);
         // Firefox always %-encodes the URL even if it is not typed that way.
         s = decodeURIComponent(s);

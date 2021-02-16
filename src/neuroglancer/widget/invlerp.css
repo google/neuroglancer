@@ -1,0 +1,59 @@
+/**
+ * @license
+ * Copyright 2020 Google Inc.
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+.neuroglancer-invlerp-cdfpanel {
+  height: 50px;
+  cursor: ew-resize;
+}
+
+.neuroglancer-invlerp-cdfpanel, .neuroglancer-invlerp-legend-panel {
+  border: 1px solid #666;
+}
+
+.neuroglancer-invlerp-legend-panel {
+  height: 15px;
+}
+
+.neuroglancer-invlerp-widget-bound {
+  background-color: transparent;
+  border-color: transparent;
+  box-shadow: none;
+  border: 0;
+  margin: 0;
+  font-family: monospace;
+  font-size: medium;
+}
+
+.neuroglancer-invlerp-widget-window-bound {
+  color: cyan;
+}
+
+.neuroglancer-invlerp-widget-range-bound {
+  color: white;
+}
+
+.neuroglancer-invlerp-widget-bounds {
+  display: flex;
+}
+
+.neuroglancer-invlerp-widget-range-spacer {
+  flex: 1;
+  text-align: center;
+}
+
+.neuroglancer-invlerp-widget-window-bounds {
+  justify-content: space-between;
+}

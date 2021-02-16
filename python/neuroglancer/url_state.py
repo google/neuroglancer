@@ -25,7 +25,7 @@ from .json_utils import json_encoder_default
 from .json_wrappers import to_json
 
 SINGLE_QUOTE_STRING_PATTERN = u'(\'(?:[^\'\\\\]|(?:\\\\.))*\')'
-DOUBLE_QUOTE_STRING_PATTERN = u'("(?:[^\'\\\\]|(?:\\\\.))*")'
+DOUBLE_QUOTE_STRING_PATTERN = u'("(?:[^"\\\\]|(?:\\\\.))*")'
 SINGLE_OR_DOUBLE_QUOTE_STRING_PATTERN = SINGLE_QUOTE_STRING_PATTERN + u'|' + DOUBLE_QUOTE_STRING_PATTERN
 DOUBLE_OR_SINGLE_QUOTE_STRING_PATTERN = DOUBLE_QUOTE_STRING_PATTERN + u'|' + SINGLE_QUOTE_STRING_PATTERN
 
@@ -109,8 +109,12 @@ def to_url_fragment(state):
     json_string = json.dumps(to_json(state), separators=(u',', u':'), default=json_encoder_default)
     return urllib.parse.quote(json_string, safe=u'~@#$&()*!+=:;,.?/\'')
 
-
 default_neuroglancer_url = u'https://neuroglancer-demo.appspot.com'
 
 def to_url(state, prefix=default_neuroglancer_url):
     return u'%s#!%s' % (prefix, to_url_fragment(state))
+
+def to_json_dump(state, indent=None, separators=None):
+    return json.dumps(to_json(state), separators=separators,
+                      indent=indent,
+                      default=json_encoder_default)

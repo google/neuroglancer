@@ -70,4 +70,4 @@ export default class {
   static initializeHead<T extends Node<T>>(head: T) {
     head.NEXT_PROPERTY = head.PREV_PROPERTY = head;
   }
-};
+}

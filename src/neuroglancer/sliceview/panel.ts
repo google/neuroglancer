@@ -14,24 +14,27 @@
  * limitations under the License.
  */
 
-import {AxesLineHelper} from 'neuroglancer/axes_lines';
+import {AxesLineHelper, computeAxisLineMatrix} from 'neuroglancer/axes_lines';
 import {DisplayContext} from 'neuroglancer/display_context';
-import {makeRenderedPanelVisibleLayerTracker, VisibilityTrackedRenderLayer} from 'neuroglancer/layer';
+import {makeRenderedPanelVisibleLayerTracker, VisibleRenderLayerTracker} from 'neuroglancer/layer';
 import {PickIDManager} from 'neuroglancer/object_picking';
-import {FramePickingData, RenderedDataPanel, RenderedDataViewerState} from 'neuroglancer/rendered_data_panel';
+import {clearOutOfBoundsPickData, FramePickingData, pickDiameter, pickOffsetSequence, pickRadius, RenderedDataPanel, RenderedDataViewerState} from 'neuroglancer/rendered_data_panel';
 import {SliceView, SliceViewRenderHelper} from 'neuroglancer/sliceview/frontend';
+import {SliceViewPanelReadyRenderContext, SliceViewPanelRenderContext, SliceViewPanelRenderLayer} from 'neuroglancer/sliceview/renderlayer';
 import {TrackableBoolean} from 'neuroglancer/trackable_boolean';
 import {TrackableRGB} from 'neuroglancer/util/color';
+import {Borrowed, Owned} from 'neuroglancer/util/disposable';
 import {ActionEvent, registerActionListener} from 'neuroglancer/util/event_action_map';
-import {identityMat4, mat4, vec3, vec4} from 'neuroglancer/util/geom';
+import {disableZProjection, identityMat4, kAxes, mat4, vec3, vec4} from 'neuroglancer/util/geom';
 import {startRelativeMouseDrag} from 'neuroglancer/util/mouse_drag';
 import {TouchRotateInfo} from 'neuroglancer/util/touch_bindings';
 import {FramebufferConfiguration, OffscreenCopyHelper, TextureBuffer} from 'neuroglancer/webgl/offscreen';
-import {ShaderBuilder, ShaderModule} from 'neuroglancer/webgl/shader';
-import {ScaleBarTexture, TrackableScaleBarOptions} from 'neuroglancer/widget/scale_bar';
+import {ShaderBuilder} from 'neuroglancer/webgl/shader';
+import {MultipleScaleBarTextures, TrackableScaleBarOptions} from 'neuroglancer/widget/scale_bar';
 
 export interface SliceViewerState extends RenderedDataViewerState {
   showScaleBar: TrackableBoolean;
+  wireFrame: TrackableBoolean;
   scaleBarOptions: TrackableScaleBarOptions;
   crossSectionBackgroundColor: TrackableRGB;
 }
@@ -42,6 +45,19 @@ export enum OffscreenTextures {
   NUM_TEXTURES
 }
 
+function sliceViewPanelEmitColorAndPickID(builder: ShaderBuilder) {
+  builder.addOutputBuffer('vec4', 'out_fragColor', 0);
+  builder.addOutputBuffer('highp vec4', 'out_pickId', 1);
+  builder.addFragmentCode(`
+void emit(vec4 color, highp uint pickId) {
+  out_fragColor = color;
+  float pickIdFloat = float(pickId);
+  out_pickId = vec4(pickIdFloat, pickIdFloat, pickIdFloat, 1.0);
+}
+`);
+}
+
+
 function sliceViewPanelEmitColor(builder: ShaderBuilder) {
   builder.addOutputBuffer('vec4', 'out_fragColor', null);
   builder.addFragmentCode(`
@@ -51,54 +67,8 @@ void emit(vec4 color, highp uint pickId) {
 `);
 }
 
-function sliceViewPanelEmitPickID(builder: ShaderBuilder) {
-  builder.addOutputBuffer('highp float', 'out_pickId', null);
-  builder.addFragmentCode(`
-void emit(vec4 color, highp uint pickId) {
-  out_pickId = float(pickId);
-}
-`);
-}
-
-
-export interface SliceViewPanelRenderContext {
-  dataToDevice: mat4;
-  pickIDs: PickIDManager;
-  emitter: ShaderModule;
-
-  /**
-   * Specifies whether the emitted color value will be used.
-   */
-  emitColor: boolean;
-
-  /**
-   * Specifies whether the emitted pick ID will be used.
-   */
-  emitPickID: boolean;
-
-  /**
-   * Width of GL viewport in pixels.
-   */
-  viewportWidth: number;
-
-  /**
-   * Height of GL viewport in pixels.
-   */
-  viewportHeight: number;
-
-  sliceView: SliceView;
-}
-
-export class SliceViewPanelRenderLayer extends VisibilityTrackedRenderLayer {
-  draw(_renderContext: SliceViewPanelRenderContext) {
-    // Must be overridden by subclasses.
-  }
-
-  isReady() {
-    return true;
-  }
-}
-
+const tempVec3 = vec3.create();
+const tempVec3b = vec3.create();
 const tempVec4 = vec4.create();
 
 export class SliceViewPanel extends RenderedDataPanel {
@@ -110,8 +80,23 @@ export class SliceViewPanel extends RenderedDataPanel {
   private colorFactor = vec4.fromValues(1, 1, 1, 1);
   private pickIDs = new PickIDManager();
 
-  private visibleLayerTracker = makeRenderedPanelVisibleLayerTracker(
-      this.viewer.layerManager, SliceViewPanelRenderLayer, this.viewer.visibleLayerRoles, this);
+  flushBackendProjectionParameters() {
+    this.sliceView.flushBackendProjectionParameters();
+  }
+
+  private visibleLayerTracker: VisibleRenderLayerTracker<SliceViewPanel, SliceViewPanelRenderLayer>;
+
+  get displayDimensionRenderInfo() {
+    return this.navigationState.displayDimensionRenderInfo;
+  }
+
+  // FIXME: use separate backend object for the panel
+  get rpc() {
+    return this.sliceView.rpc!;
+  }
+  get rpcId() {
+    return this.sliceView.rpcId!;
+  }
 
   private offscreenFramebuffer = this.registerDisposer(new FramebufferConfiguration(this.gl, {
     colorBuffers: [
@@ -125,29 +110,29 @@ export class SliceViewPanel extends RenderedDataPanel {
   }));
 
   private offscreenCopyHelper = this.registerDisposer(OffscreenCopyHelper.get(this.gl));
-  private scaleBarCopyHelper = this.registerDisposer(OffscreenCopyHelper.get(this.gl));
-
-  private scaleBarTexture = this.registerDisposer(new ScaleBarTexture(this.gl));
+  private scaleBars = this.registerDisposer(new MultipleScaleBarTextures(this.gl));
 
   get navigationState() {
     return this.sliceView.navigationState;
   }
 
   constructor(
-      context: DisplayContext, element: HTMLElement, public sliceView: SliceView,
+      context: Borrowed<DisplayContext>, element: HTMLElement, public sliceView: Owned<SliceView>,
       viewer: SliceViewerState) {
     super(context, element, viewer);
-
+    viewer.wireFrame.changed.add(() => this.scheduleRedraw());
     registerActionListener(element, 'rotate-via-mouse-drag', (e: ActionEvent<MouseEvent>) => {
       const {mouseState} = this.viewer;
       if (mouseState.updateUnconditionally()) {
-        const initialPosition = vec3.clone(mouseState.position);
+        const initialPosition = Float32Array.from(mouseState.position);
         startRelativeMouseDrag(e.detail, (_event, deltaX, deltaY) => {
-          let {viewportAxes} = this.sliceView;
+          const {pose} = this.navigationState;
+          const xAxis = vec3.transformQuat(tempVec3, kAxes[0], pose.orientation.orientation);
+          const yAxis = vec3.transformQuat(tempVec3b, kAxes[1], pose.orientation.orientation);
           this.viewer.navigationState.pose.rotateAbsolute(
-              viewportAxes[1], -deltaX / 4.0 * Math.PI / 180.0, initialPosition);
+              yAxis, -deltaX / 4.0 * Math.PI / 180.0, initialPosition);
           this.viewer.navigationState.pose.rotateAbsolute(
-              viewportAxes[0], -deltaY / 4.0 * Math.PI / 180.0, initialPosition);
+              xAxis, -deltaY / 4.0 * Math.PI / 180.0, initialPosition);
         });
       }
     });
@@ -158,13 +143,18 @@ export class SliceViewPanel extends RenderedDataPanel {
           const {mouseState} = this.viewer;
           this.handleMouseMove(detail.centerX, detail.centerY);
           if (mouseState.updateUnconditionally()) {
-            const {viewportAxes} = this.sliceView;
             this.navigationState.pose.rotateAbsolute(
-                viewportAxes[2], detail.angle - detail.prevAngle, mouseState.position);
+                this.sliceView.projectionParameters.value.viewportNormalInCanonicalCoordinates,
+                detail.angle - detail.prevAngle, mouseState.position);
           }
         });
 
     this.registerDisposer(sliceView);
+    // Create visible layer tracker after registering SliceView, to ensure it is destroyed before
+    // SliceView backend is destroyed.
+    this.visibleLayerTracker = makeRenderedPanelVisibleLayerTracker(
+        this.viewer.layerManager, SliceViewPanelRenderLayer, this.viewer.visibleLayerRoles, this);
+
     this.registerDisposer(
         viewer.crossSectionBackgroundColor.changed.add(() => this.scheduleRedraw()));
     this.registerDisposer(sliceView.visibility.add(this.visibility));
@@ -192,17 +182,18 @@ export class SliceViewPanel extends RenderedDataPanel {
   }
 
   translateByViewportPixels(deltaX: number, deltaY: number): void {
-    const {position} = this.viewer.navigationState;
-    const pos = position.spatialCoordinates;
-    vec3.set(pos, -deltaX, -deltaY, 0);
-    vec3.transformMat4(pos, pos, this.sliceView.viewportToData);
-    position.changed.dispatch();
+    const {pose} = this.viewer.navigationState;
+    pose.updateDisplayPosition(pos => {
+      vec3.set(pos, -deltaX, -deltaY, 0);
+      vec3.transformMat4(pos, pos, this.sliceView.projectionParameters.value.invViewMatrix);
+    });
   }
 
   translateDataPointByViewportPixels(out: vec3, orig: vec3, deltaX: number, deltaY: number): vec3 {
-    vec3.transformMat4(out, orig, this.sliceView.dataToViewport);
+    const projectionParameters = this.sliceView.projectionParameters.value;
+    vec3.transformMat4(out, orig, projectionParameters.viewMatrix);
     vec3.set(out, out[0] + deltaX, out[1] + deltaY, out[2]);
-    vec3.transformMat4(out, out, this.sliceView.viewportToData);
+    vec3.transformMat4(out, out, projectionParameters.invViewMatrix);
     return out;
   }
 
@@ -211,13 +202,21 @@ export class SliceViewPanel extends RenderedDataPanel {
       return false;
     }
 
-    if (!this.sliceView.isReady()) {
+    const {sliceView} = this;
+
+    this.ensureBoundsUpdated();
+
+    if (!sliceView.isReady()) {
       return false;
     }
 
-    let visibleLayers = this.visibleLayerTracker.getVisibleLayers();
-    for (let renderLayer of visibleLayers) {
-      if (!renderLayer.isReady()) {
+    const renderContext: SliceViewPanelReadyRenderContext = {
+      projectionParameters: sliceView.projectionParameters.value,
+      sliceView,
+    };
+
+    for (const [renderLayer, attachment] of this.visibleLayerTracker.visibleLayers) {
+      if (!renderLayer.isReady(renderContext, attachment)) {
         return false;
       }
     }
@@ -225,24 +224,20 @@ export class SliceViewPanel extends RenderedDataPanel {
   }
 
   drawWithPicking(pickingData: FramePickingData): boolean {
-    let {sliceView} = this;
-    sliceView.setViewportSize(this.width, this.height);
-    sliceView.updateRendering();
-    if (!sliceView.hasValidViewport) {
+    const {sliceView} = this;
+    if (!sliceView.valid) {
       return false;
     }
-    mat4.copy(pickingData.invTransform, sliceView.viewportToData);
+    sliceView.updateRendering();
+    const projectionParameters = sliceView.projectionParameters.value;
+    const {width, height, invViewProjectionMat} = projectionParameters;
+    mat4.copy(pickingData.invTransform, invViewProjectionMat);
     const {gl} = this;
 
-    const {width, height, dataToDevice} = sliceView;
     this.offscreenFramebuffer.bind(width, height);
     gl.disable(WebGL2RenderingContext.SCISSOR_TEST);
     this.gl.clearColor(0.0, 0.0, 0.0, 0.0);
     gl.clear(WebGL2RenderingContext.COLOR_BUFFER_BIT);
-
-    // Draw axes lines.
-    // FIXME: avoid use of temporary matrix
-    let mat = mat4.create();
 
     const backgroundColor = tempVec4;
     const crossSectionBackgroundColor = this.viewer.crossSectionBackgroundColor.value;
@@ -256,75 +251,45 @@ export class SliceViewPanel extends RenderedDataPanel {
         sliceView.offscreenFramebuffer.colorBuffers[0].texture, identityMat4, this.colorFactor,
         backgroundColor, 0, 0, 1, 1);
 
-    let visibleLayers = this.visibleLayerTracker.getVisibleLayers();
+    const {visibleLayers} = this.visibleLayerTracker;
     let {pickIDs} = this;
     pickIDs.clear();
-    let renderContext: SliceViewPanelRenderContext = {
-      dataToDevice: sliceView.dataToDevice,
+
+    const renderContext: SliceViewPanelRenderContext = {
+      wireFrame: this.viewer.wireFrame.value,
+      projectionParameters,
       pickIDs: pickIDs,
-      emitter: sliceViewPanelEmitColor,
+      emitter: sliceViewPanelEmitColorAndPickID,
       emitColor: true,
-      emitPickID: false,
-      viewportWidth: width,
-      viewportHeight: height,
+      emitPickID: true,
       sliceView,
     };
+    this.offscreenFramebuffer.bind(width, height);
     gl.enable(WebGL2RenderingContext.BLEND);
     gl.blendFunc(WebGL2RenderingContext.SRC_ALPHA, WebGL2RenderingContext.ONE_MINUS_SRC_ALPHA);
-    for (let renderLayer of visibleLayers) {
-      renderLayer.draw(renderContext);
+    for (const [renderLayer, attachment] of visibleLayers) {
+      renderLayer.draw(renderContext, attachment);
     }
     gl.disable(WebGL2RenderingContext.BLEND);
-    this.offscreenFramebuffer.bindSingle(OffscreenTextures.PICK);
-    renderContext.emitColor = false;
-    renderContext.emitPickID = true;
-    renderContext.emitter = sliceViewPanelEmitPickID;
-
-    for (let renderLayer of visibleLayers) {
-      renderLayer.draw(renderContext);
-    }
-
     if (this.viewer.showAxisLines.value || this.viewer.showScaleBar.value) {
-      if (this.viewer.showAxisLines.value) {
-        // Construct matrix that maps [-1, +1] x/y range to the full viewport data
-        // coordinates.
-        mat4.copy(mat, dataToDevice);
-        for (let i = 0; i < 3; ++i) {
-          mat[12 + i] = 0;
-        }
-
-        for (let i = 0; i < 4; ++i) {
-          mat[2 + 4 * i] = 0;
-        }
-
-
-        let axisLength = Math.min(width, height) / 4 * 1.5;
-        let pixelSize = sliceView.pixelSize;
-        for (let i = 0; i < 12; ++i) {
-          // pixelSize is nm / pixel
-          //
-          mat[i] *= axisLength * pixelSize;
-        }
-      }
       this.offscreenFramebuffer.bindSingle(OffscreenTextures.COLOR);
       if (this.viewer.showAxisLines.value) {
-        this.axesLineHelper.draw(mat);
+        const axisLength =
+            Math.min(projectionParameters.logicalWidth, projectionParameters.logicalHeight) / 4 *
+            1.5;
+        const {
+          zoomFactor: {value: zoom},
+        } = this.viewer.navigationState;
+        this.axesLineHelper.draw(
+            disableZProjection(computeAxisLineMatrix(projectionParameters, axisLength * zoom)));
       }
       if (this.viewer.showScaleBar.value) {
         gl.enable(WebGL2RenderingContext.BLEND);
         gl.blendFunc(WebGL2RenderingContext.SRC_ALPHA, WebGL2RenderingContext.ONE_MINUS_SRC_ALPHA);
-        const options = this.viewer.scaleBarOptions.value;
-        const {scaleBarTexture} = this;
-        const {dimensions} = scaleBarTexture;
-        dimensions.targetLengthInPixels = Math.min(
-            options.maxWidthFraction * width, options.maxWidthInPixels * options.scaleFactor);
-        dimensions.nanometersPerPixel = sliceView.pixelSize;
-        scaleBarTexture.update(options);
-        gl.viewport(
-            options.leftPixelOffset * options.scaleFactor,
-            options.bottomPixelOffset * options.scaleFactor, scaleBarTexture.width,
-            scaleBarTexture.height);
-        this.scaleBarCopyHelper.draw(scaleBarTexture.texture);
+        this.scaleBars.draw(
+            projectionParameters, this.navigationState.displayDimensionRenderInfo.value,
+            this.navigationState.relativeDisplayScales.value, this.navigationState.zoomFactor.value,
+            this.viewer.scaleBarOptions.value);
         gl.disable(WebGL2RenderingContext.BLEND);
       }
     }
@@ -332,33 +297,66 @@ export class SliceViewPanel extends RenderedDataPanel {
     this.offscreenFramebuffer.unbind();
 
     // Draw the texture over the whole viewport.
-    this.setGLViewport();
+    this.setGLClippedViewport();
     this.offscreenCopyHelper.draw(
         this.offscreenFramebuffer.colorBuffers[OffscreenTextures.COLOR].texture);
     return true;
   }
 
-  panelSizeChanged() {
-    this.sliceView.setViewportSizeDebounced(this.width, this.height);
+  ensureBoundsUpdated() {
+    super.ensureBoundsUpdated();
+    this.sliceView.projectionParameters.setViewport(this.renderViewport);
   }
 
   issuePickRequest(glWindowX: number, glWindowY: number) {
     const {offscreenFramebuffer} = this;
     offscreenFramebuffer.readPixelFloat32IntoBuffer(
-        OffscreenTextures.PICK, glWindowX, glWindowY, 0);
+        OffscreenTextures.PICK, glWindowX - pickRadius, glWindowY - pickRadius, 0, pickDiameter,
+        pickDiameter);
   }
 
   completePickRequest(
       glWindowX: number, glWindowY: number, data: Float32Array, pickingData: FramePickingData) {
     const {mouseState} = this.viewer;
     mouseState.pickedRenderLayer = null;
-    const out = mouseState.position;
+    clearOutOfBoundsPickData(
+        data, 0, 4, glWindowX, glWindowY, pickingData.viewportWidth, pickingData.viewportHeight);
     const {viewportWidth, viewportHeight} = pickingData;
-    const y = pickingData.viewportHeight - glWindowY;
-    vec3.set(out, glWindowX - viewportWidth / 2, y - viewportHeight / 2, 0);
-    vec3.transformMat4(out, out, pickingData.invTransform);
-    this.pickIDs.setMouseState(mouseState, data[0]);
-    mouseState.setActive(true);
+    const numOffsets = pickOffsetSequence.length;
+    const setStateFromRelative = (relativeX: number, relativeY: number, pickId: number) => {
+      const x = glWindowX + relativeX - pickRadius;
+      const y = glWindowY + relativeY - pickRadius;
+      tempVec3[0] = 2.0 * x / viewportWidth - 1.0;
+      tempVec3[1] = 2.0 * y / viewportHeight - 1.0;
+      tempVec3[2] = 0;
+      vec3.transformMat4(tempVec3, tempVec3, pickingData.invTransform);
+      let {position: mousePosition} = mouseState;
+      const {value: voxelCoordinates} = this.navigationState.position;
+      const rank = voxelCoordinates.length;
+      if (mousePosition.length !== rank) {
+        mousePosition = mouseState.position = new Float32Array(rank);
+      }
+      mousePosition.set(voxelCoordinates);
+      mouseState.coordinateSpace = this.navigationState.coordinateSpace.value;
+      const displayDimensions = this.navigationState.pose.displayDimensions.value;
+      const {displayRank, displayDimensionIndices} = displayDimensions;
+      for (let i = 0; i < displayRank; ++i) {
+        mousePosition[displayDimensionIndices[i]] = tempVec3[i];
+      }
+      this.pickIDs.setMouseState(mouseState, pickId);
+      mouseState.displayDimensions = displayDimensions;
+      mouseState.setActive(true);
+    };
+    for (let i = 0; i < numOffsets; ++i) {
+      const offset = pickOffsetSequence[i];
+      const pickId = data[4 * i];
+      if (pickId === 0) continue;
+      const relativeX = offset % pickDiameter;
+      const relativeY = (offset - relativeX) / pickDiameter;
+      setStateFromRelative(relativeX, relativeY, pickId);
+      return;
+    }
+    setStateFromRelative(pickRadius, pickRadius, 0);
   }
 
   /**
@@ -366,32 +364,32 @@ export class SliceViewPanel extends RenderedDataPanel {
    * position.
    */
   zoomByMouse(factor: number) {
-    let {navigationState} = this;
+    const {navigationState} = this;
     if (!navigationState.valid) {
       return;
     }
-    let {sliceView} = this;
-    let {width, height} = sliceView;
+    const {sliceView} = this;
+    const {
+      width,
+      height,
+      invViewMatrix,
+      displayDimensionRenderInfo: {displayDimensionIndices, displayRank}
+    } = sliceView.projectionParameters.value;
     let {mouseX, mouseY} = this;
     mouseX -= width / 2;
     mouseY -= height / 2;
-    let oldZoom = this.navigationState.zoomFactor.value;
-    // oldPosition + (mouseX * viewportAxes[0] + mouseY * viewportAxes[1]) * oldZoom
-    //     === newPosition + (mouseX * viewportAxes[0] + mouseY * viewportAxes[1]) * newZoom
+    // Desired invariance:
+    //
+    // invViewMatrixLinear * [mouseX, mouseY, 0]^T + [oldX, oldY, oldZ]^T =
+    // invViewMatrixLinear * factor * [mouseX, mouseY, 0]^T + [newX, newY, newZ]^T
 
-    // Therefore, we compute newPosition by:
-    // newPosition = oldPosition + (viewportAxes[0] * mouseX +
-    //                              viewportAxes[1] * mouseY) * (oldZoom - newZoom).
+    const position = this.navigationState.position.value;
+    for (let i = 0; i < displayRank; ++i) {
+      const dim = displayDimensionIndices[i];
+      const f = invViewMatrix[i] * mouseX + invViewMatrix[4 + i] * mouseY;
+      position[dim] += f * (1 - factor);
+    }
+    this.navigationState.position.changed.dispatch();
     navigationState.zoomBy(factor);
-    let newZoom = navigationState.zoomFactor.value;
-
-    let {spatialCoordinates} = navigationState.position;
-    vec3.scaleAndAdd(
-        spatialCoordinates, spatialCoordinates, sliceView.viewportAxes[0],
-        mouseX * (oldZoom - newZoom));
-    vec3.scaleAndAdd(
-        spatialCoordinates, spatialCoordinates, sliceView.viewportAxes[1],
-        mouseY * (oldZoom - newZoom));
-    navigationState.position.changed.dispatch();
   }
 }

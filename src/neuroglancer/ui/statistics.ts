@@ -17,8 +17,8 @@
 import 'neuroglancer/ui/statistics.css';
 
 import debounce from 'lodash/debounce';
-import {ChunkDownloadStatistics, ChunkMemoryStatistics, ChunkPriorityTier, ChunkState, getChunkDownloadStatisticIndex, getChunkStateStatisticIndex, numChunkMemoryStatistics, numChunkStates, REQUEST_CHUNK_STATISTICS_RPC_ID} from 'neuroglancer/chunk_manager/base';
-import {ChunkQueueManager, ChunkSource} from 'neuroglancer/chunk_manager/frontend';
+import {ChunkDownloadStatistics, ChunkMemoryStatistics, ChunkPriorityTier, ChunkState, getChunkDownloadStatisticIndex, getChunkStateStatisticIndex, numChunkMemoryStatistics, numChunkStates} from 'neuroglancer/chunk_manager/base';
+import {ChunkQueueManager, ChunkSource, ChunkStatistics} from 'neuroglancer/chunk_manager/frontend';
 import {TrackableBoolean} from 'neuroglancer/trackable_boolean';
 import {TrackableValue, WatchableValueInterface} from 'neuroglancer/trackable_value';
 import {Borrowed, RefCounted} from 'neuroglancer/util/disposable';
@@ -130,22 +130,105 @@ function getNameFromProps(properties: Map<string,string>, selected: string[]) {
   return JSON.stringify(result);
 }
 
-function getFormattedNames(objects: any[]) {
+export function getChunkSourceIdentifier(source: ChunkSource) {
+  return Object.assign({type: source.RPC_TYPE_ID}, source.key || {});
+}
+
+export function getFormattedNames(objects: any[]) {
   const properties = objects.map(getProperties);
   const selectedProps = getDistinguishingProperties(properties);
   return properties.map(p => getNameFromProps(p, selectedProps));
 }
-
-type ChunkStatistics = Map<number, Float64Array>;
 
 /**
  * Interval in ms at which to request new statistics from the backend thread.
  */
 const requestDataInterval = 1000;
 
+export interface ChunkStatisticsColumn {
+  label: string;
+  key: string;
+  getter: (statistics: Float64Array) => number;
+}
+
+export const columnSpecifications: ChunkStatisticsColumn[] = [
+  {
+    label: 'Visible chunks/T',
+    key: 'visibleChunksTotal',
+    getter: statistics => {
+      let sum = 0;
+      for (let state: ChunkState = 0; state < numChunkStates; ++state) {
+        sum += statistics[getChunkStateStatisticIndex(state, ChunkPriorityTier.VISIBLE) *
+                          numChunkMemoryStatistics + ChunkMemoryStatistics.numChunks];
+      }
+      return sum;
+    },
+  },
+  {
+    label: 'Visible chunks/D',
+    key: 'visibleChunksDownloading',
+    getter: statistics => {
+      return (statistics
+                  [getChunkStateStatisticIndex(ChunkState.DOWNLOADING, ChunkPriorityTier.VISIBLE) *
+                       numChunkMemoryStatistics +
+                   ChunkMemoryStatistics.numChunks]);
+    },
+  },
+  {
+    label: 'Visible chunks/M',
+    key: 'visibleChunksSystemMemory',
+    getter: statistics => {
+      return (
+          statistics
+              [getChunkStateStatisticIndex(ChunkState.SYSTEM_MEMORY, ChunkPriorityTier.VISIBLE) *
+                   numChunkMemoryStatistics +
+               ChunkMemoryStatistics.numChunks] +
+          statistics
+              [getChunkStateStatisticIndex(
+                   ChunkState.SYSTEM_MEMORY_WORKER, ChunkPriorityTier.VISIBLE) *
+                   numChunkMemoryStatistics +
+               ChunkMemoryStatistics.numChunks]);
+    },
+  },
+  {
+    label: 'Visible chunks/G',
+    key: 'visibleChunksGpuMemory',
+    getter: statistics => {
+      return statistics[getChunkStateStatisticIndex(ChunkState.GPU_MEMORY, ChunkPriorityTier.VISIBLE) *
+                   numChunkMemoryStatistics +
+               ChunkMemoryStatistics.numChunks];
+    },
+  },
+  {
+    label: 'Visible chunks/F',
+    key: 'visibleChunksFailed',
+    getter: statistics => {
+      return statistics[getChunkStateStatisticIndex(ChunkState.FAILED, ChunkPriorityTier.VISIBLE) *
+                   numChunkMemoryStatistics +
+               ChunkMemoryStatistics.numChunks];
+    },
+  },
+  {
+    label: 'Visible memory',
+    key: 'visibleGpuMemory',
+    getter: statistics => {
+      return statistics[getChunkStateStatisticIndex(ChunkState.GPU_MEMORY, ChunkPriorityTier.VISIBLE) *
+                   numChunkMemoryStatistics +
+               ChunkMemoryStatistics.gpuMemoryBytes];
+    },
+  },
+  {
+    label: 'Download latency',
+    key: 'downloadLatency',
+    getter: statistics => {
+      return statistics[getChunkDownloadStatisticIndex(ChunkDownloadStatistics.totalTime)] /
+          statistics[getChunkDownloadStatisticIndex(ChunkDownloadStatistics.totalChunks)];
+    },
+  },
+];
+
 export class StatisticsPanel extends RefCounted {
   element = document.createElement('div');
-  columns = new Map<string, (statistics: Float64Array) => number>();
   data: ChunkStatistics|undefined = undefined;
   private requestDataTimerId = -1;
   private dataRequested = false;
@@ -160,89 +243,28 @@ export class StatisticsPanel extends RefCounted {
     this.registerDisposer(this.displayState.changed.add(this.debouncedUpdateView));
     this.registerDisposer(this.displayState.visible.changed.add(() => this.requestData()));
     this.requestData();
-
-    const {columns} = this;
-    // Total number of visible-priority chunks
-    //    number in downloading state
-    //    number in other system memory state
-    //    number in gpu memory state
-    //    number in failed state
-    columns.set('Visible chunks/T', (statistics) => {
-      let sum = 0;
-      for (let state: ChunkState = 0; state < numChunkStates; ++state) {
-        sum += statistics[getChunkStateStatisticIndex(state, ChunkPriorityTier.VISIBLE) *
-                          numChunkMemoryStatistics + ChunkMemoryStatistics.numChunks];
-      }
-      return sum;
-    });
-
-    columns.set('Visible chunks/D', (statistics) => {
-      return (statistics
-                  [getChunkStateStatisticIndex(ChunkState.DOWNLOADING, ChunkPriorityTier.VISIBLE) *
-                       numChunkMemoryStatistics +
-                   ChunkMemoryStatistics.numChunks]);
-    });
-
-    columns.set('Visible chunks/M', (statistics) => {
-      return (
-          statistics
-              [getChunkStateStatisticIndex(ChunkState.SYSTEM_MEMORY, ChunkPriorityTier.VISIBLE) *
-                   numChunkMemoryStatistics +
-               ChunkMemoryStatistics.numChunks] +
-          statistics
-              [getChunkStateStatisticIndex(
-                   ChunkState.SYSTEM_MEMORY_WORKER, ChunkPriorityTier.VISIBLE) *
-                   numChunkMemoryStatistics +
-               ChunkMemoryStatistics.numChunks]);
-    });
-
-    columns.set('Visible chunks/G', (statistics) => {
-      return statistics[getChunkStateStatisticIndex(ChunkState.GPU_MEMORY, ChunkPriorityTier.VISIBLE) *
-                   numChunkMemoryStatistics +
-               ChunkMemoryStatistics.numChunks];
-    });
-
-    columns.set('Visible chunks/F', (statistics) => {
-      return statistics[getChunkStateStatisticIndex(ChunkState.FAILED, ChunkPriorityTier.VISIBLE) *
-                   numChunkMemoryStatistics +
-               ChunkMemoryStatistics.numChunks];
-    });
-
-    columns.set('Visible memory', (statistics) => {
-      return statistics[getChunkStateStatisticIndex(ChunkState.GPU_MEMORY, ChunkPriorityTier.VISIBLE) *
-                   numChunkMemoryStatistics +
-               ChunkMemoryStatistics.gpuMemoryBytes];
-    });
-
-    columns.set('Download latency', (statistics) => {
-      return statistics[getChunkDownloadStatisticIndex(ChunkDownloadStatistics.totalTime)] /
-          statistics[getChunkDownloadStatisticIndex(ChunkDownloadStatistics.totalChunks)];
-    });
   }
 
   disposed() {
-    clearTimeout(this.requestDataTimerId);
+    window.clearTimeout(this.requestDataTimerId);
     removeFromParent(this.element);
     super.disposed();
   }
 
   private requestData() {
-    if (!this.displayState.visible) return;
+    if (!this.displayState.visible.value) return;
     if (this.dataRequested) return;
     const {chunkQueueManager} = this;
-    const rpc = chunkQueueManager.rpc!;
     this.dataRequested = true;
-    rpc.promiseInvoke<ChunkStatistics>(
-           REQUEST_CHUNK_STATISTICS_RPC_ID, {queue: chunkQueueManager.rpcId})
-        .then(data => {
-          this.dataRequested = false;
-          this.data = data;
-          this.debouncedUpdateView();
-          this.requestDataTimerId = setTimeout(() => {
-            this.requestDataTimerId = -1;
-            this.requestData();
-          }, requestDataInterval);
-        });
+    chunkQueueManager.getStatistics().then(data => {
+      this.dataRequested = false;
+      this.data = data;
+      this.debouncedUpdateView();
+      this.requestDataTimerId = window.setTimeout(() => {
+        this.requestDataTimerId = -1;
+        this.requestData();
+      }, requestDataInterval);
+    });
   }
 
   private debouncedUpdateView = this.registerCancellable(debounce(() => this.updateView(), 0));
@@ -251,27 +273,21 @@ export class StatisticsPanel extends RefCounted {
     if (!this.displayState.visible.value) return;
     const {data} = this;
     if (data === undefined) return;
-    const {columns} = this;
-    const rpc = this.chunkQueueManager.rpc!;
     const table = document.createElement('table');
     const rows: [ChunkSource, ...number[]][] = [];
-    for (const [id, statistics] of data) {
-      const source = rpc.get(id) as ChunkSource | undefined;
-      if (source === undefined) continue;
+    for (const [source, statistics] of data) {
       const row: [ChunkSource, ...number[]] = [source];
-      for (const column of columns.values()) {
-        row.push(column(statistics));
+      for (const {getter} of columnSpecifications) {
+        row.push(getter(statistics));
       }
       rows.push(row);
     }
 
-    const formattedNames =
-        getFormattedNames(rows.map(x => Object.assign({type: x[0].RPC_TYPE_ID}, x[0].key || {})));
+    const formattedNames = getFormattedNames(rows.map(x => getChunkSourceIdentifier(x[0])));
     const sourceFormattedNames = new Map<ChunkSource, string>();
     formattedNames.forEach((name, i) => {
       sourceFormattedNames.set(rows[i][0], name);
     });
-
     {
       const thead = document.createElement('thead');
       let tr = document.createElement('tr');
@@ -283,7 +299,7 @@ export class StatisticsPanel extends RefCounted {
       };
       addHeaderColumn('Name');
       let prevPrefix: string|undefined = undefined;
-      for (const column of columns.keys()) {
+      for (const {label: column} of columnSpecifications) {
         const sepIndex = column.indexOf('/');
         let prefix = column;
         if (sepIndex !== -1) {
@@ -302,7 +318,7 @@ export class StatisticsPanel extends RefCounted {
         const td = document.createElement('td');
         tr.appendChild(td);
       }
-      for (const column of columns.keys()) {
+      for (const {label: column} of columnSpecifications) {
         const sepIndex = column.indexOf('/');
         let suffix = '';
         if (sepIndex !== -1) {

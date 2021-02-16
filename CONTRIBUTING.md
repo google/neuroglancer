@@ -28,11 +28,6 @@ To reformat all source files, run:
 npm run gulp format
 ```
 
-Please also ensure that `tslint` gives no warnings.  You can verify this by running:
-```shell
-npm run gulp tslint
-```
-
 ### The small print
 Contributions made by corporations are covered by a different agreement than
 the one above, the

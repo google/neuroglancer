@@ -14,8 +14,9 @@
  * limitations under the License.
  */
 
-import {CHUNK_MANAGER_RPC_ID, CHUNK_QUEUE_MANAGER_RPC_ID, CHUNK_SOURCE_INVALIDATE_RPC_ID, ChunkSourceParametersConstructor, ChunkState} from 'neuroglancer/chunk_manager/base';
+import {CHUNK_LAYER_STATISTICS_RPC_ID, CHUNK_MANAGER_RPC_ID, CHUNK_QUEUE_MANAGER_RPC_ID, CHUNK_SOURCE_INVALIDATE_RPC_ID, ChunkSourceParametersConstructor, ChunkState, LayerChunkProgressInfo, REQUEST_CHUNK_STATISTICS_RPC_ID} from 'neuroglancer/chunk_manager/base';
 import {SharedWatchableValue} from 'neuroglancer/shared_watchable_value';
+import {TrackableBoolean} from 'neuroglancer/trackable_boolean';
 import {TrackableValue} from 'neuroglancer/trackable_value';
 import {CANCELED, CancellationToken} from 'neuroglancer/util/cancellation';
 import {Borrowed} from 'neuroglancer/util/disposable';
@@ -83,6 +84,8 @@ export class ChunkQueueManager extends SharedObject {
 
   chunkUpdateDelay: number = 30;
 
+  enablePrefetch = new TrackableBoolean(true, true);
+
   constructor(
       rpc: RPC, public gl: GL, public frameNumberCounter: FrameNumberCounter, public capacities: {
         gpuMemory: CapacitySpecification,
@@ -107,7 +110,10 @@ export class ChunkQueueManager extends SharedObject {
       'gpuMemoryCapacity': makeCapacityCounterparts(capacities.gpuMemory),
       'systemMemoryCapacity': makeCapacityCounterparts(capacities.systemMemory),
       'downloadCapacity': makeCapacityCounterparts(capacities.download),
-      'computeCapacity': makeCapacityCounterparts(capacities.compute)
+      'computeCapacity': makeCapacityCounterparts(capacities.compute),
+      'enablePrefetch':
+          this.registerDisposer(SharedWatchableValue.makeFromExisting(rpc, this.enablePrefetch))
+              .rpcId,
     });
   }
 
@@ -121,25 +127,27 @@ export class ChunkQueueManager extends SharedObject {
     }
     setTimeout(this.processPendingChunkUpdates.bind(this), delay);
   }
-  processPendingChunkUpdates() {
+  processPendingChunkUpdates(flush = false) {
     let deadline = this.chunkUpdateDeadline;
-    if (deadline === null) {
+    if (!flush && deadline === null) {
       deadline = Date.now() + 30;
     }
     let visibleChunksChanged = false;
+    let numUpdates = 0;
     while (true) {
-      if (Date.now() > deadline) {
+      if (!flush && Date.now() > deadline!) {
         // No time to perform chunk update now, we will wait some more.
-        setTimeout(this.processPendingChunkUpdates.bind(this), this.chunkUpdateDelay);
+        this.chunkUpdateDeadline = null;
+        setTimeout(() => this.processPendingChunkUpdates(), this.chunkUpdateDelay);
         break;
       }
       let update = this.pendingChunkUpdates;
+      if (update == null) break;
       if (this.applyChunkUpdate(update)) {
         visibleChunksChanged = true;
       }
-      // FIXME: do chunk update
+      ++numUpdates;
       let nextUpdate = this.pendingChunkUpdates = update.nextUpdate;
-      --(<any>window).numPendingChunkUpdates;
       if (nextUpdate == null) {
         this.pendingChunkUpdatesTail = null;
         break;
@@ -148,6 +156,7 @@ export class ChunkQueueManager extends SharedObject {
     if (visibleChunksChanged) {
       this.visibleChunksChanged.dispatch();
     }
+    return numUpdates;
   }
 
   private handleFetch_(source: ChunkSource, update: any) {
@@ -223,9 +232,24 @@ export class ChunkQueueManager extends SharedObject {
     }
     return visibleChunksChanged;
   }
-}
 
-(<any>window).numPendingChunkUpdates = 0;
+  flushPendingChunkUpdates(): number {
+    return this.processPendingChunkUpdates(true);
+  }
+
+  async getStatistics(): Promise<Map<ChunkSource, Float64Array>> {
+    const rpc = this.rpc!;
+    const rawData = await rpc.promiseInvoke<Map<number, Float64Array>>(
+        REQUEST_CHUNK_STATISTICS_RPC_ID, {queue: this.rpcId});
+    const data = new Map<ChunkSource, Float64Array>();
+    for (const [id, statistics] of rawData) {
+      const source = rpc.get(id) as ChunkSource | undefined;
+      if (source === undefined) continue;
+      data.set(source, statistics);
+    }
+    return data;
+  }
+}
 
 function updateChunk(rpc: RPC, x: any) {
   let source: ChunkSource = rpc.get(x['source']);
@@ -243,9 +267,6 @@ function updateChunk(rpc: RPC, x: any) {
   }
 
   let pendingTail = queueManager.pendingChunkUpdatesTail;
-  if (++(<any>window).numPendingChunkUpdates > 3) {
-    // console.log(`numPendingChunkUpdates=${(<any>window).numPendingChunkUpdates}`);
-  }
   if (pendingTail == null) {
     queueManager.pendingChunkUpdates = x;
     queueManager.pendingChunkUpdatesTail = x;
@@ -267,14 +288,41 @@ registerPromiseRPC('Chunk.retrieve', function(x, cancellationToken): RPCPromise<
   });
 });
 
-export interface ChunkSourceConstructor<Options, T extends SharedObject = ChunkSource> {
+registerRPC(CHUNK_LAYER_STATISTICS_RPC_ID, function(x) {
+  const chunkManager = this.get(x.id) as ChunkManager;
+  for (const stats of chunkManager.prevStatisticsLayers) {
+    stats.numVisibleChunksNeeded = 0;
+    stats.numVisibleChunksAvailable = 0;
+    stats.numPrefetchChunksNeeded = 0;
+    stats.numPrefetchChunksAvailable = 0;
+  }
+  chunkManager.prevStatisticsLayers.length = 0;
+  for (const layerUpdate of x.layers) {
+    const layer = this.get(layerUpdate.id) as ChunkRenderLayerFrontend;
+    if (layer === undefined) continue;
+    const stats = layer.layerChunkProgressInfo;
+    stats.numVisibleChunksAvailable = layerUpdate.numVisibleChunksAvailable;
+    stats.numVisibleChunksNeeded = layerUpdate.numVisibleChunksNeeded;
+    stats.numPrefetchChunksAvailable = layerUpdate.numPrefetchChunksAvailable;
+    stats.numPrefetchChunksNeeded = layerUpdate.numPrefetchChunksNeeded;
+    chunkManager.prevStatisticsLayers.push(stats);
+  }
+  chunkManager.layerChunkStatisticsUpdated.dispatch();
+});
+
+export type GettableChunkSource = (SharedObject&{OPTIONS: {}, key: any});
+
+export interface ChunkSourceConstructor<T extends GettableChunkSource = GettableChunkSource> {
   new(...args: any[]): T;
-  encodeOptions(options: Options): {[key: string]: any};
+  encodeOptions(options: T['OPTIONS']): any;
 }
 
 @registerSharedObjectOwner(CHUNK_MANAGER_RPC_ID)
 export class ChunkManager extends SharedObject {
   memoize = new StringMemoize();
+
+  prevStatisticsLayers: LayerChunkProgressInfo[] = [];
+  layerChunkStatisticsUpdated = new NullarySignal();
 
   get gl() {
     return this.chunkQueueManager.gl;
@@ -287,8 +335,8 @@ export class ChunkManager extends SharedObject {
         chunkQueueManager.rpc!, {'chunkQueueManager': chunkQueueManager.rpcId});
   }
 
-  getChunkSource<T extends SharedObject&{key: any}, Options>(
-      constructorFunction: ChunkSourceConstructor<Options, T>, options: any): T {
+  getChunkSource<T extends GettableChunkSource>(
+      constructorFunction: ChunkSourceConstructor<T>, options: T['OPTIONS']): T {
     const keyObject = constructorFunction.encodeOptions(options);
     keyObject['constructorId'] = getObjectId(constructorFunction);
     const key = stableStringify(keyObject);
@@ -297,13 +345,13 @@ export class ChunkManager extends SharedObject {
       newSource.initializeCounterpart(this.rpc!, {});
       newSource.key = keyObject;
       return newSource;
-    }) as T;
+    });
   }
 }
 
 export class ChunkSource extends SharedObject {
+  OPTIONS: {};
   chunks = new Map<string, Chunk>();
-  key: any;
 
   /**
    * If set to true, chunk updates will be applied to this source immediately, rather than queueing
@@ -356,25 +404,37 @@ export class ChunkSource extends SharedObject {
   }
 }
 
-export function WithParameters<Parameters, BaseOptions,
-                               TBase extends ChunkSourceConstructor<BaseOptions, SharedObject>>(
+export interface ChunkSource {
+  key: any;
+}
+
+export function WithParameters<Parameters, TBase extends ChunkSourceConstructor>(
     Base: TBase, parametersConstructor: ChunkSourceParametersConstructor<Parameters>) {
-  type Options = BaseOptions&{parameters: Parameters};
+  type WithParametersOptions = InstanceType<TBase>['OPTIONS']&{parameters: Parameters};
   @registerSharedObjectOwner(parametersConstructor.RPC_ID)
   class C extends Base {
+    OPTIONS: WithParametersOptions;
     parameters: Parameters;
     constructor(...args: any[]) {
       super(...args);
-      const options: Options = args[1];
+      const options: WithParametersOptions = args[1];
       this.parameters = options.parameters;
     }
     initializeCounterpart(rpc: RPC, options: any) {
       options['parameters'] = this.parameters;
       super.initializeCounterpart(rpc, options);
     }
-    static encodeOptions(options: Options) {
+    static encodeOptions(options: WithParametersOptions) {
       return Object.assign({parameters: options.parameters}, super.encodeOptions(options));
     }
   }
   return C;
 }
+
+export class ChunkRenderLayerFrontend extends SharedObject {
+  constructor(public layerChunkProgressInfo: LayerChunkProgressInfo) {
+    super();
+  }
+}
+
+export type ChunkStatistics = Map<ChunkSource, Float64Array>;

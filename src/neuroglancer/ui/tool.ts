@@ -27,7 +27,7 @@ export abstract class Tool extends RefCounted {
   abstract trigger(mouseState: MouseSelectionState): void;
   abstract toJSON(): any;
   deactivate(): void {}
-  description: string;
+  abstract description: string;
 }
 
 export function restoreTool(layer: UserLayer, obj: any) {

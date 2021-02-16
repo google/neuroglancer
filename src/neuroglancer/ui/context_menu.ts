@@ -18,9 +18,13 @@ import {RefCounted, registerEventListener} from 'neuroglancer/util/disposable';
 import {removeFromParent} from 'neuroglancer/util/dom';
 import {NullarySignal} from 'neuroglancer/util/signal';
 
-require('./context_menu.css');
+import './context_menu.css';
 
 export function positionContextMenu(menu: HTMLElement, event: MouseEvent) {
+  // Set the display to block before checking the offset, or the offset will be
+  // reported as 0 and the context menu wont display correctly when too close to
+  // the right side of the browser window.
+  menu.style.display = 'block';
   const {offsetWidth, offsetHeight} = menu;
   const viewportWidth = document.documentElement!.clientWidth;
   const viewportHeight = document.documentElement!.clientHeight;
@@ -30,7 +34,6 @@ export function positionContextMenu(menu: HTMLElement, event: MouseEvent) {
       document.documentElement!.scrollTop + Math.min(viewportHeight - offsetHeight, event.clientY);
   menu.style.left = posX + 'px';
   menu.style.top = posY + 'px';
-  menu.style.visibility = null;
 }
 
 export class ContextMenu extends RefCounted {
@@ -55,10 +58,9 @@ export class ContextMenu extends RefCounted {
     super();
     const {element} = this;
     element.className = 'neuroglancer-context-menu';
-    element.style.visibility = 'hidden';
+    element.style.display = 'none';
     element.tabIndex = -1;
     document.body.appendChild(element);
-
     if (parent !== undefined) {
       this.registerParent(parent);
     }
@@ -103,8 +105,6 @@ export class ContextMenu extends RefCounted {
       mousedownDisposer();
       element.style.display = 'none';
     };
-    element.style.display = null;
-    element.style.visibility = 'hidden';
     this.opened.dispatch();
     positionContextMenu(element, originalEvent);
     this.menuDisposer = menuDisposer;

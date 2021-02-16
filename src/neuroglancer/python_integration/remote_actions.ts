@@ -22,7 +22,6 @@ import debounce from 'lodash/debounce';
 import {TrackableValue} from 'neuroglancer/trackable_value';
 import {RefCounted} from 'neuroglancer/util/disposable';
 import {registerActionListener} from 'neuroglancer/util/event_action_map';
-import {vec3} from 'neuroglancer/util/geom';
 import {verifyStringArray} from 'neuroglancer/util/json';
 import {Signal} from 'neuroglancer/util/signal';
 import {getCachedJson} from 'neuroglancer/util/trackable';
@@ -65,14 +64,9 @@ export class RemoteActionHandler extends RefCounted {
     const actionState: any = {};
 
     if (mouseState.updateUnconditionally()) {
-      actionState.mouseSpatialCoordinates = Array.prototype.slice.call(mouseState.position);
-      const {voxelSize} = this.viewer.navigationState;
-      if (voxelSize.valid) {
-        actionState.mouseVoxelCoordinates = Array.prototype.slice.call(
-            vec3.divide(vec3.create(), mouseState.position, voxelSize.size));
-      }
+      actionState.mousePosition = Array.prototype.slice.call(mouseState.position);
     }
-    actionState.selectedValues = layerSelectedValues;
+    actionState.selectedValues = layerSelectedValues.toJSON();
     actionState.viewerState = getCachedJson(this.viewer.state).value;
     this.sendActionRequested.dispatch(action, JSON.parse(JSON.stringify(actionState)));
   }

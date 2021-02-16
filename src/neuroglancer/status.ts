@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-require('./status.css');
+import './status.css';
 
 let statusContainer: HTMLElement|null = null;
 
@@ -29,7 +29,12 @@ export class StatusMessage {
     if (statusContainer === null) {
       statusContainer = document.createElement('ul');
       statusContainer.id = 'statusContainer';
-      document.body.appendChild(statusContainer);
+      const el: HTMLElement | null = document.getElementById('neuroglancer-container');
+      if (el) {
+        el.appendChild(statusContainer);
+      } else {
+        document.body.appendChild(statusContainer);
+      }
     }
     let element = document.createElement('li');
     this.element = element;
@@ -38,7 +43,7 @@ export class StatusMessage {
     }
     if (delay !== false) {
       this.setVisible(false);
-      this.timer = setTimeout(this.setVisible.bind(this, true), delay);
+      this.timer = window.setTimeout(this.setVisible.bind(this, true), delay);
     } else {
       this.timer = null;
     }
@@ -110,7 +115,7 @@ export class StatusMessage {
 
   static showTemporaryMessage(message: string, closeAfter: number = 2000): StatusMessage {
     const msg = this.showMessage(message);
-    setTimeout(() => msg.dispose(), closeAfter);
+    window.setTimeout(() => msg.dispose(), closeAfter);
     return msg;
   }
 }

@@ -112,8 +112,8 @@ export function getDesiredMultiscaleMeshChunks(
   }
 
   /**
-   * Minimum value of w within clipping frustrum (under the assumption that the minimum value is
-   * occurs occurs on the near clipping plane).
+   * Minimum value of w within clipping frustrum (under the assumption that the minimum value occurs
+   * on the near clipping plane).
    */
   const minWClip = getPointW(-nearD * nearA, -nearD * nearB, -nearD * nearC);
 

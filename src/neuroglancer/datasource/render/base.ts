@@ -36,10 +36,3 @@ export class TileChunkSourceParameters extends RenderSourceParameters {
 
   static RPC_ID = 'render/TileChunkSource';
 }
-
-export class PointMatchChunkSourceParameters extends RenderSourceParameters {
-  matchCollection: string;
-  zoffset: number;
-
-  static RPC_ID = 'render/PointMatchSource';
-}

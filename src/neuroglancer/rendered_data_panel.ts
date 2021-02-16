@@ -18,16 +18,17 @@ import 'neuroglancer/rendered_data_panel.css';
 import 'neuroglancer/noselect.css';
 
 import {Annotation} from 'neuroglancer/annotation';
-import {getSelectedAnnotation} from 'neuroglancer/annotation/selection';
 import {getAnnotationTypeRenderHandler} from 'neuroglancer/annotation/type_handler';
 import {DisplayContext, RenderedPanel} from 'neuroglancer/display_context';
 import {NavigationState} from 'neuroglancer/navigation_state';
 import {PickIDManager} from 'neuroglancer/object_picking';
-import {UserLayerWithAnnotations} from 'neuroglancer/ui/annotations';
+import {displayToLayerCoordinates, layerToDisplayCoordinates} from 'neuroglancer/render_coordinate_transform';
 import {AutomaticallyFocusedElement} from 'neuroglancer/util/automatic_focus';
+import {Borrowed} from 'neuroglancer/util/disposable';
 import {ActionEvent, EventActionMap, registerActionListener} from 'neuroglancer/util/event_action_map';
 import {AXES_NAMES, kAxes, mat4, vec2, vec3} from 'neuroglancer/util/geom';
 import {KeyboardEventBinder} from 'neuroglancer/util/keyboard_bindings';
+import * as matrix from 'neuroglancer/util/matrix';
 import {MouseEventBinder} from 'neuroglancer/util/mouse_bindings';
 import {startRelativeMouseDrag} from 'neuroglancer/util/mouse_drag';
 import {TouchEventBinder, TouchPinchInfo, TouchTranslateInfo} from 'neuroglancer/util/touch_bindings';
@@ -58,7 +59,7 @@ export class PickRequest {
 
 const pickRequestInterval = 30;
 
-export const pickRadius = 12;
+export const pickRadius = 5;
 export const pickDiameter = 1 + pickRadius * 2;
 
 /**
@@ -128,13 +129,6 @@ export abstract class RenderedDataPanel extends RenderedPanel {
   mouseY = -1;
 
   /**
-   * Equal to last-seen value of `this.element.clientWidth` and `this.element.clientHeight`.  If the
-   * size changed since the last frame, may not correspond to the last frame.
-   */
-  width: number;
-  height: number;
-
-  /**
    * If `false`, either the mouse is not within the viewport, or a picking request was already
    * issued for the current mouseX and mouseY after the most recent frame was rendered; when the
    * current pick requests complete, no additional pick requests will be issued.
@@ -149,7 +143,7 @@ export abstract class RenderedDataPanel extends RenderedPanel {
 
   inputEventMap: EventActionMap;
 
-  navigationState: NavigationState;
+  abstract navigationState: NavigationState;
 
   pickingData = [new FramePickingData(), new FramePickingData()];
   pickRequests = [new PickRequest(), new PickRequest()];
@@ -178,17 +172,6 @@ export abstract class RenderedDataPanel extends RenderedPanel {
     this.pickTimerId = -1;
   }
 
-  checkForResize() {
-    const {clientWidth, clientHeight} = this.element;
-    if (clientWidth !== this.width || clientHeight !== this.height) {
-      this.width = clientWidth;
-      this.height = clientHeight;
-      this.panelSizeChanged();
-    }
-  }
-
-  abstract panelSizeChanged(): void;
-
   private issuePickRequestInternal(pickRequest: PickRequest) {
     const {gl} = this;
     let {buffer} = pickRequest;
@@ -201,8 +184,10 @@ export abstract class RenderedDataPanel extends RenderedPanel {
     } else {
       gl.bindBuffer(WebGL2RenderingContext.PIXEL_PACK_BUFFER, buffer);
     }
-    let glWindowX = this.mouseX;
-    let glWindowY = this.height - this.mouseY;
+    const {renderViewport} = this;
+    let glWindowX = this.mouseX - renderViewport.visibleLeftFraction * renderViewport.logicalWidth;
+    let glWindowY = renderViewport.height -
+        (this.mouseY - renderViewport.visibleTopFraction * renderViewport.logicalHeight);
     this.issuePickRequest(glWindowX, glWindowY);
     pickRequest.sync = gl.fenceSync(WebGL2RenderingContext.SYNC_GPU_COMMANDS_COMPLETE, 0);
     pickRequest.frameNumber = this.context.frameNumber;
@@ -241,7 +226,7 @@ export abstract class RenderedDataPanel extends RenderedPanel {
   }
 
   private scheduleCheckForPickRequestCompletion() {
-    this.pickTimerId = setTimeout(() => {
+    this.pickTimerId = window.setTimeout(() => {
       this.pickTimerId = -1;
       this.checkForPickRequestCompletion();
     }, 0);
@@ -282,7 +267,7 @@ export abstract class RenderedDataPanel extends RenderedPanel {
     if (remaining && pickTimerId === -1) {
       this.scheduleCheckForPickRequestCompletion();
     } else if (!remaining && pickTimerId !== -1) {
-      clearTimeout(pickTimerId);
+      window.clearTimeout(pickTimerId);
       this.pickTimerId = -1;
     }
     if (!checkingBeforeDraw && available !== undefined && this.pickRequestPending &&
@@ -301,9 +286,7 @@ export abstract class RenderedDataPanel extends RenderedPanel {
   }
 
   draw() {
-    this.checkForResize();
-    const {width, height} = this;
-    if (width === 0 || height === 0) return;
+    const {width, height} = this.renderViewport;
     this.checkForPickRequestCompletion(true);
     const {pickingData} = this;
     pickingData[0] = pickingData[1];
@@ -319,7 +302,7 @@ export abstract class RenderedDataPanel extends RenderedPanel {
     }
     // For the new frame, allow new pick requests regardless of interval since last request.
     this.nextPickRequestTime = 0;
-    if (this.mouseX > 0) {
+    if (this.mouseX >= 0) {
       this.attemptToIssuePickRequest();
     }
   }
@@ -341,7 +324,7 @@ export abstract class RenderedDataPanel extends RenderedPanel {
     if (time < nextPickRequestTime) {
       if (pendingPickRequestTimerId == -1) {
         this.pendingPickRequestTimerId =
-            setTimeout(this.pendingPickRequestTimerExpired, nextPickRequestTime - time);
+            window.setTimeout(this.pendingPickRequestTimerExpired, nextPickRequestTime - time);
       }
       return false;
     }
@@ -389,7 +372,8 @@ export abstract class RenderedDataPanel extends RenderedPanel {
     const currentFrameNumber = this.context.frameNumber;
     const pickingData = this.pickingData[1];
     if (pickingData.frameNumber !== currentFrameNumber ||
-        this.width !== pickingData.viewportWidth || this.height !== pickingData.viewportHeight) {
+        this.renderViewport.width !== pickingData.viewportWidth ||
+        this.renderViewport.height !== pickingData.viewportHeight) {
       // Viewport size has changed since the last frame, which means a redraw is pending.  Don't
       // issue pick request now.  Once will be issued automatically after the redraw.
       return;
@@ -399,7 +383,8 @@ export abstract class RenderedDataPanel extends RenderedPanel {
   }
 
   constructor(
-      context: DisplayContext, element: HTMLElement, public viewer: RenderedDataViewerState) {
+      context: Borrowed<DisplayContext>, element: HTMLElement,
+      public viewer: RenderedDataViewerState) {
     super(context, element, viewer.visibility);
     this.inputEventMap = viewer.inputEventMap;
 
@@ -409,12 +394,24 @@ export abstract class RenderedDataPanel extends RenderedPanel {
 
     this.registerDisposer(new AutomaticallyFocusedElement(element));
     this.registerDisposer(new KeyboardEventBinder(element, this.inputEventMap));
-    this.registerDisposer(new MouseEventBinder(element, this.inputEventMap));
+    this.registerDisposer(new MouseEventBinder(element, this.inputEventMap, event => {
+      this.onMousemove(event);
+    }));
     this.registerDisposer(new TouchEventBinder(element, this.inputEventMap));
 
     this.registerEventListener(element, 'mousemove', this.onMousemove.bind(this));
     this.registerEventListener(element, 'touchstart', this.onTouchstart.bind(this));
-    this.registerEventListener(element, 'mouseleave', this.onMouseout.bind(this));
+    this.registerEventListener(element, 'mouseleave', () => this.onMouseout());
+    this.registerEventListener(element, 'mouseover', event => {
+      if (event.target !== element) {
+        this.onMouseout();
+      }
+    }, /*capture=*/ true);
+
+
+    registerActionListener(element, 'select-position', () => {
+      this.viewer.selectionDetailsState.select();
+    });
 
     registerActionListener(element, 'snap', () => {
       this.navigationState.pose.snap();
@@ -428,8 +425,12 @@ export abstract class RenderedDataPanel extends RenderedPanel {
       this.navigationState.zoomBy(2.0);
     });
 
-    registerActionListener(element, 'highlight', () => {
-      this.viewer.layerManager.invokeAction('highlight');
+    registerActionListener(element, 'depth-range-decrease', () => {
+      this.navigationState.depthRange.value *= 0.5;
+    });
+
+    registerActionListener(element, 'depth-range-increase', () => {
+      this.navigationState.depthRange.value *= 2;
     });
 
     for (let axis = 0; axis < 3; ++axis) {
@@ -447,16 +448,22 @@ export abstract class RenderedDataPanel extends RenderedPanel {
           offset[1] = 0;
           offset[2] = 0;
           offset[axis] = sign;
-          navigationState.pose.translateVoxelsRelative(offset);
+          navigationState.pose.translateVoxelsRelative(offset, true);
         });
       }
     }
 
     registerActionListener(element, 'zoom-via-wheel', (event: ActionEvent<WheelEvent>) => {
       const e = event.detail;
-      this.onMousemove(e);
+      this.onMousemove(e, false);
       this.zoomByMouse(getWheelZoomAmount(e));
     });
+
+    registerActionListener(
+        element, 'adjust-depth-range-via-wheel', (event: ActionEvent<WheelEvent>) => {
+          const e = event.detail;
+          this.navigationState.depthRange.value *= getWheelZoomAmount(e);
+        });
 
     registerActionListener(element, 'translate-via-mouse-drag', (e: ActionEvent<MouseEvent>) => {
       startRelativeMouseDrag(e.detail, (_event, deltaX, deltaY) => {
@@ -478,7 +485,7 @@ export abstract class RenderedDataPanel extends RenderedPanel {
           offset[0] = 0;
           offset[1] = 0;
           offset[2] = detail.deltaY + detail.deltaX;
-          navigationState.pose.translateVoxelsRelative(offset);
+          navigationState.pose.translateVoxelsRelative(offset, true);
         });
 
     for (const amount of [1, 10]) {
@@ -490,38 +497,18 @@ export abstract class RenderedDataPanel extends RenderedPanel {
         offset[0] = 0;
         offset[1] = 0;
         offset[2] = (delta > 0 ? -1 : 1) * amount;
-        navigationState.pose.translateVoxelsRelative(offset);
+        navigationState.pose.translateVoxelsRelative(offset, true);
       });
     }
 
     registerActionListener(element, 'move-to-mouse-position', () => {
-      let {mouseState} = this.viewer;
+      const {mouseState} = this.viewer;
       if (mouseState.updateUnconditionally()) {
-        let position = this.navigationState.pose.position;
-        vec3.copy(position.spatialCoordinates, mouseState.position);
-        position.changed.dispatch();
+        this.navigationState.position.value = mouseState.position;
       }
     });
 
     registerActionListener(element, 'snap', () => this.navigationState.pose.snap());
-
-    registerActionListener(element, 'select-annotation', () => {
-      const {mouseState, layerManager} = this.viewer;
-      const state = getSelectedAnnotation(mouseState, layerManager);
-      if (state === undefined) {
-        return;
-      }
-      const userLayer = state.layer.layer;
-      if (userLayer !== null) {
-        this.viewer.selectedLayer.layer = state.layer;
-        this.viewer.selectedLayer.visible = true;
-        userLayer.tabs.value = 'annotations';
-        (<UserLayerWithAnnotations>userLayer).selectedAnnotation.value = {
-          id: state.id,
-          partIndex: state.partIndex
-        };
-      }
-    });
 
     registerActionListener(element, 'move-annotation', (e: ActionEvent<MouseEvent>) => {
       const {mouseState} = this.viewer;
@@ -535,21 +522,40 @@ export abstract class RenderedDataPanel extends RenderedPanel {
 
           const handler = getAnnotationTypeRenderHandler(ann.type);
           const pickedOffset = mouseState.pickedOffset;
-          let repPoint = handler.getRepresentativePoint(
-              annotationLayer.objectToGlobal, ann, mouseState.pickedOffset);
+          const {chunkTransform: {value: chunkTransform}} = annotationLayer;
+          if (chunkTransform.error !== undefined) return;
+          const {layerRank} = chunkTransform;
+          const repPoint = new Float32Array(layerRank);
+          handler.getRepresentativePoint(repPoint, ann, mouseState.pickedOffset);
           let totDeltaVec = vec2.set(vec2.create(), 0, 0);
           if (mouseState.updateUnconditionally()) {
             startRelativeMouseDrag(
                 e.detail,
                 (_event, deltaX, deltaY) => {
                   vec2.add(totDeltaVec, totDeltaVec, [deltaX, deltaY]);
-                  let newRepPt = this.translateDataPointByViewportPixels(
-                      vec3.create(), repPoint, totDeltaVec[0], totDeltaVec[1]);
-                  let newAnnotation = handler.updateViaRepresentativePoint(
-                      ann, newRepPt, annotationLayer.globalToObject, pickedOffset);
+                  const layerPoint = new Float32Array(layerRank);
+                  matrix.transformPoint(
+                      layerPoint, chunkTransform.chunkToLayerTransform, layerRank + 1, repPoint,
+                      layerRank);
+                  const renderPt = tempVec3;
+                  const {displayDimensionIndices} =
+                      this.navigationState.pose.displayDimensions.value;
+                  layerToDisplayCoordinates(
+                      renderPt, layerPoint, chunkTransform.modelTransform, displayDimensionIndices);
+                  this.translateDataPointByViewportPixels(
+                      renderPt, renderPt, totDeltaVec[0], totDeltaVec[1]);
+                  displayToLayerCoordinates(
+                      layerPoint, renderPt, chunkTransform.modelTransform, displayDimensionIndices);
+                  const newPoint = new Float32Array(layerRank);
+                  matrix.transformPoint(
+                      newPoint, chunkTransform.layerToChunkTransform, layerRank + 1, layerPoint,
+                      layerRank);
+                  let newAnnotation =
+                      handler.updateViaRepresentativePoint(ann, newPoint, pickedOffset);
                   annotationLayer.source.update(annotationRef, newAnnotation);
                 },
                 (_event) => {
+                  annotationLayer.source.commit(annotationRef);
                   annotationRef.dispose();
                 });
           }
@@ -582,7 +588,10 @@ export abstract class RenderedDataPanel extends RenderedPanel {
     });
   }
 
-  onMouseout(_event: MouseEvent) {
+  abstract translateDataPointByViewportPixels(
+      out: vec3, orig: vec3, deltaX: number, deltaY: number): vec3;
+
+  onMouseout() {
     this.updateMousePosition(-1, -1);
     this.viewer.mouseState.setForcer(undefined);
   }
@@ -590,10 +599,10 @@ export abstract class RenderedDataPanel extends RenderedPanel {
   abstract translateByViewportPixels(deltaX: number, deltaY: number): void;
 
   handleMouseMove(clientX: number, clientY: number) {
-    let {element} = this;
+    const {element} = this;
     const bounds = element.getBoundingClientRect();
-    const mouseX = clientX - bounds.left;
-    const mouseY = clientY - bounds.top;
+    const mouseX = clientX - (bounds.left + element.clientLeft);
+    const mouseY = clientY - (bounds.top + element.clientTop);
     const {mouseState} = this.viewer;
     mouseState.pageX = clientX + window.scrollX;
     mouseState.pageY = clientY + window.scrollY;
@@ -601,9 +610,9 @@ export abstract class RenderedDataPanel extends RenderedPanel {
     this.updateMousePosition(mouseX, mouseY);
   }
 
-  onMousemove(event: MouseEvent) {
-    let {element} = this;
-    if (event.target !== element) {
+  onMousemove(event: MouseEvent, atOnly = true) {
+    const {element} = this;
+    if (atOnly && event.target !== element) {
       return;
     }
     this.handleMouseMove(event.clientX, event.clientY);
@@ -625,7 +634,7 @@ export abstract class RenderedDataPanel extends RenderedPanel {
     this.cancelPickRequests();
     const {pendingPickRequestTimerId} = this;
     if (pendingPickRequestTimerId !== -1) {
-      clearTimeout(pendingPickRequestTimerId);
+      window.clearTimeout(pendingPickRequestTimerId);
     }
     for (const request of this.pickRequests) {
       gl.deleteBuffer(request.buffer);

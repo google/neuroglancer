@@ -20,7 +20,7 @@
  */
 
 import debounce from 'lodash/debounce';
-import {DataSourceProvider} from 'neuroglancer/datasource';
+import {DataSourceProviderRegistry} from 'neuroglancer/datasource';
 import {DisplayContext} from 'neuroglancer/display_context';
 import {Borrowed, Owned, RefCounted} from 'neuroglancer/util/disposable';
 import {parseArray, verifyInt, verifyObject, verifyObjectProperty} from 'neuroglancer/util/json';
@@ -35,7 +35,7 @@ export class PrefetchManager extends RefCounted {
   private specification: {state: any, priority: number}[] = [];
 
   constructor(
-      public display: Borrowed<DisplayContext>, public dataSourceProvider: DataSourceProvider,
+      public display: Borrowed<DisplayContext>, public dataSourceProvider: DataSourceProviderRegistry,
       public dataContext: Owned<DataManagementContext>,
       public uiConfiguration: ViewerUIConfiguration) {
     super();

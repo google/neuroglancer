@@ -14,55 +14,50 @@
  * limitations under the License.
  */
 
-import {identityMat4, mat4, transformVectorByMat4, vec3} from 'neuroglancer/util/geom';
+import {mat4, transformVectorByMat4, transformVectorByMat4Transpose, vec3} from 'neuroglancer/util/geom';
+import * as matrix from 'neuroglancer/util/matrix';
 
 export class ChunkLayout {
   /**
-   * Size of each chunk in local spatial coordinates.
+   * Size of each chunk in "chunk" coordinates.
    */
   size: vec3;
 
   /**
-   * Transform from local spatial coordinates to global coordinates (nm).
+   * Transform from local "chunk" coordinates to global voxel coordinates.
    */
   transform: mat4;
 
   /**
-   * Inverse of transform.  Transform from global spatial coordinates to local spatial coordinates.
+   * Inverse of transform.  Transform from global voxel coordinates to "chunk" coordinates.
    */
   invTransform: mat4;
 
-  constructor(size: vec3, transform: mat4 = identityMat4) {
+  /**
+   * Determinant of `transform`.
+   */
+  detTransform: number;
+
+  finiteRank: number;
+
+  constructor(size: vec3, transform: Float32Array, finiteRank: number) {
     this.size = vec3.clone(size);
     this.transform = mat4.clone(transform);
-    this.invTransform = mat4.invert(mat4.create(), transform)!;
-  }
-  static cache = new Map<string, ChunkLayout>();
-  toObject(msg: any) {
-    msg['size'] = this.size;
-    msg['transform'] = this.transform;
-  }
-
-  static get(size: vec3, transform = identityMat4) {
-    let cache = ChunkLayout.cache;
-    const key = JSON.stringify([Array.from(size), Array.from(transform)]);
-    let obj = cache.get(key);
-    if (obj === undefined) {
-      obj = new ChunkLayout(size, transform);
-      cache.set(key, obj);
+    this.finiteRank = finiteRank;
+    const invTransform = new Float32Array(mat4.create());
+    const det = matrix.inverse(invTransform, 4, transform, 4, 4);
+    if (det === 0) {
+      throw new Error('Transform is singular');
     }
-    return obj;
+    this.invTransform = invTransform;
+    this.detTransform = det;
+  }
+  toObject() {
+    return {size: this.size, transform: this.transform, finiteRank: this.finiteRank};
   }
 
   static fromObject(msg: any) {
-    return ChunkLayout.get(msg['size'], msg['transform']);
-  }
-
-  /**
-   * Transform local spatial coordinates to global spatial coordinates.
-   */
-  localSpatialToGlobal(out: vec3, localSpatial: vec3): vec3 {
-    return vec3.transformMat4(out, localSpatial, this.transform);
+    return new ChunkLayout(msg.size, msg.transform, msg.finiteRank);
   }
 
   /**
@@ -72,21 +67,14 @@ export class ChunkLayout {
     return vec3.transformMat4(out, globalSpatial, this.invTransform);
   }
 
-  globalToLocalGrid(out: vec3, globalSpatial: vec3): vec3 {
-    this.globalToLocalSpatial(out, globalSpatial);
-    vec3.divide(out, out, this.size);
-    return out;
-  }
-
   localSpatialVectorToGlobal(out: vec3, localVector: vec3): vec3 {
     return transformVectorByMat4(out, localVector, this.transform);
   }
 
-  globalToLocalSpatialVector(out: vec3, globalVector: vec3): vec3 {
-    return transformVectorByMat4(out, globalVector, this.invTransform);
-  }
-
-  assignLocalSpatialToGlobalMat4(out: mat4): mat4 {
-    return mat4.copy(out, this.transform);
+  /**
+   * Returns the unnormalized normal vector.
+   */
+  globalToLocalNormal(globalNormal: vec3, localNormal: vec3) {
+    return transformVectorByMat4Transpose(globalNormal, localNormal, this.transform);
   }
 }

@@ -15,7 +15,7 @@
  */
 
 import {RawPartitionedMeshData} from 'neuroglancer/mesh/backend';
-import dracoWasmUrl from 'url-loader!./neuroglancer_draco.wasm';
+import dracoWasmUrl from './neuroglancer_draco.wasm';
 
 declare const WebAssembly: any;
 

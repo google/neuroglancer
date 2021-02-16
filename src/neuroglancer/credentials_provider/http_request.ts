@@ -22,7 +22,7 @@ export async function fetchWithCredentials<Credentials, T>(
     credentialsProvider: CredentialsProvider<Credentials>, input: RequestInfo, init: RequestInit,
     transformResponse: ResponseTransform<T>,
     applyCredentials: (credentials: Credentials, requestInit: RequestInit) => RequestInit,
-    errorHandler: (httpError: HttpError) => 'refresh' | 'retry',
+    errorHandler: (httpError: HttpError, credentials: Credentials) => 'refresh' | 'retry',
     cancellationToken: CancellationToken = uncancelableToken): Promise<T> {
   let credentials: CredentialsWithGeneration<Credentials>|undefined;
   credentialsLoop: while (true) {
@@ -34,7 +34,7 @@ export async function fetchWithCredentials<Credentials, T>(
             cancellationToken);
       } catch (error) {
         if (error instanceof HttpError) {
-          if (errorHandler(error) === 'refresh') continue credentialsLoop;
+          if (errorHandler(error, credentials.credentials) === 'refresh') continue credentialsLoop;
           continue requestLoop;
         }
         throw error;

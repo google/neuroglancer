@@ -15,13 +15,12 @@
  */
 
 import {HashTableBase, NUM_ALTERNATIVES} from 'neuroglancer/gpu_hash/hash_table';
+import {DataType} from 'neuroglancer/util/data_type';
 import {RefCounted} from 'neuroglancer/util/disposable';
 import {GL} from 'neuroglancer/webgl/context';
 import {ShaderBuilder, ShaderProgram} from 'neuroglancer/webgl/shader';
 import {glsl_equalUint64, glsl_uint64} from 'neuroglancer/webgl/shader_lib';
-import {compute1dTextureLayout, computeTextureFormat, OneDimensionalTextureAccessHelper, OneDimensionalTextureLayout, setOneDimensionalTextureData, TextureFormat} from 'neuroglancer/webgl/texture_access';
-
-import {DataType} from '../util/data_type';
+import {computeTextureFormat, OneDimensionalTextureAccessHelper, setOneDimensionalTextureData, TextureFormat} from 'neuroglancer/webgl/texture_access';
 
 // MumurHash, excluding the final mixing steps.
 export const glsl_hashCombine = [
@@ -44,12 +43,8 @@ highp uint hashCombine(highp uint state, uint64_t x) {
 
 const textureFormat = computeTextureFormat(new TextureFormat(), DataType.UINT64, 1);
 
-export class GPUHashTable<HashTable extends HashTableBase> extends RefCounted implements
-    OneDimensionalTextureLayout {
+export class GPUHashTable<HashTable extends HashTableBase> extends RefCounted {
   generation = -1;
-  textureXBits: number;
-  textureWidth: number;
-  textureHeight: number;
   texture: WebGLTexture|null = null;
 
   constructor(public gl: GL, public hashTable: HashTable) {
@@ -65,13 +60,11 @@ export class GPUHashTable<HashTable extends HashTableBase> extends RefCounted im
       return;
     }
     const {gl, texture} = this;
-    compute1dTextureLayout(
-        this, gl, textureFormat.texelsPerElement, hashTable.tableSize * hashTable.entryStride / 2);
     this.generation = generation;
     gl.activeTexture(WebGL2RenderingContext.TEXTURE0 + gl.tempTextureUnit);
     gl.bindTexture(WebGL2RenderingContext.TEXTURE_2D, texture);
     hashTable.tableWithMungedEmptyKey(table => {
-      setOneDimensionalTextureData(this.gl, this, textureFormat, table);
+      setOneDimensionalTextureData(this.gl, textureFormat, table);
     });
     gl.bindTexture(WebGL2RenderingContext.TEXTURE_2D, null);
   }
@@ -143,7 +136,6 @@ bool ${this.hasFunctionName}(uint64_t x) {
     const textureUnit = shader.textureUnit(this.textureUnitSymbol);
     gl.activeTexture(WebGL2RenderingContext.TEXTURE0 + textureUnit);
     gl.bindTexture(WebGL2RenderingContext.TEXTURE_2D, hashTable.texture);
-    this.accessHelper.setupTextureLayout(gl, shader, hashTable);
     gl.uniform1ui(shader.uniform(this.hashKeyMask), hashTable.hashTable.tableSize - 1);
     gl.uniform1uiv(shader.uniform(this.hashSeedsName), hashTable.hashTable.hashSeeds);
   }

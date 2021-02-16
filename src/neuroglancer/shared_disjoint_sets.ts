@@ -14,6 +14,7 @@
  * limitations under the License.
  */
 
+import {WatchableValueInterface} from 'neuroglancer/trackable_value';
 import {DisjointUint64Sets} from 'neuroglancer/util/disjoint_sets';
 import {parseArray} from 'neuroglancer/util/json';
 import {NullarySignal} from 'neuroglancer/util/signal';
@@ -25,9 +26,17 @@ const ADD_METHOD_ID = 'DisjointUint64Sets.add';
 const CLEAR_METHOD_ID = 'DisjointUint64Sets.clear';
 
 @registerSharedObject(RPC_TYPE_ID)
-export class SharedDisjointUint64Sets extends SharedObjectCounterpart {
+export class SharedDisjointUint64Sets extends SharedObjectCounterpart implements
+    WatchableValueInterface<SharedDisjointUint64Sets> {
   disjointSets = new DisjointUint64Sets();
   changed = new NullarySignal();
+
+  /**
+   * For compatibility with `WatchableValueInterface`.
+   */
+  get value() {
+    return this;
+  }
 
   static makeWithCounterpart(rpc: RPC) {
     let obj = new this();
@@ -83,7 +92,6 @@ export class SharedDisjointUint64Sets extends SharedObjectCounterpart {
    * Restores the state from a JSON representation.
    */
   restoreState(obj: any) {
-    this.clear();
     if (obj !== undefined) {
       let ids = [new Uint64(), new Uint64()];
       parseArray(obj, z => {
@@ -95,6 +103,11 @@ export class SharedDisjointUint64Sets extends SharedObjectCounterpart {
         });
       });
     }
+  }
+
+  assignFrom(other: SharedDisjointUint64Sets) {
+    this.clear();
+    this.restoreState(other.toJSON());
   }
 }
 

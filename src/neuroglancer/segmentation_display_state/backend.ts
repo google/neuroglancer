@@ -17,39 +17,59 @@
 // Import to register the shared object types.
 import 'neuroglancer/shared_disjoint_sets';
 import 'neuroglancer/uint64_set';
+import 'neuroglancer/uint64_map';
 
-import {withChunkManager} from 'neuroglancer/chunk_manager/backend';
-import {VisibleSegmentsState} from 'neuroglancer/segmentation_display_state/base';
+import {ChunkRequester, ChunkSource} from 'neuroglancer/chunk_manager/backend';
+import {RenderLayerTransformOrError} from 'neuroglancer/render_coordinate_transform';
+import {IndexedSegmentProperty, onVisibleSegmentsStateChanged, VISIBLE_SEGMENTS_STATE_PROPERTIES, VisibleSegmentsState} from 'neuroglancer/segmentation_display_state/base';
 import {SharedDisjointUint64Sets} from 'neuroglancer/shared_disjoint_sets';
 import {SharedWatchableValue} from 'neuroglancer/shared_watchable_value';
 import {Uint64Set} from 'neuroglancer/uint64_set';
-import {mat4} from 'neuroglancer/util/geom';
-import {withSharedVisibility} from 'neuroglancer/visibility_priority/backend';
-import {RPC, SharedObjectCounterpart} from 'neuroglancer/worker_rpc';
+import {AnyConstructor} from 'neuroglancer/util/mixin';
+import {RPC} from 'neuroglancer/worker_rpc';
 
-const Base = withSharedVisibility(withChunkManager(SharedObjectCounterpart));
+export function receiveVisibleSegmentsState(
+    rpc: RPC, options: any,
+    target: VisibleSegmentsState = {} as VisibleSegmentsState): VisibleSegmentsState {
+  // No need to increase the reference count of these properties since our owner will hold a
+  // reference to their owners.
+  for (const property of VISIBLE_SEGMENTS_STATE_PROPERTIES) {
+    target[property] = rpc.get(options[property]);
+  }
+  return target;
+}
 
-export class SegmentationLayerSharedObjectCounterpart extends Base implements VisibleSegmentsState {
+export const withSegmentationLayerBackendState =
+    <TBase extends AnyConstructor<ChunkRequester>>(Base: TBase) =>
+        class SegmentationLayerState extends Base implements VisibleSegmentsState {
   visibleSegments: Uint64Set;
   segmentEquivalences: SharedDisjointUint64Sets;
-  objectToDataTransform: SharedWatchableValue<mat4>;
+  temporaryVisibleSegments: Uint64Set;
+  temporarySegmentEquivalences: SharedDisjointUint64Sets;
+  useTemporaryVisibleSegments: SharedWatchableValue<boolean>;
+  useTemporarySegmentEquivalences: SharedWatchableValue<boolean>;
+  transform: SharedWatchableValue<RenderLayerTransformOrError>;
   renderScaleTarget: SharedWatchableValue<number>;
-
-  constructor(rpc: RPC, options: any) {
+  constructor(...args: any[]) {
+    const [rpc, options] = args as [RPC, any];
     super(rpc, options);
-    // No need to increase the reference count of visibleSegments or
-    // segmentEquivalences since our owner will hold a reference to their owners.
-    this.visibleSegments = <Uint64Set>rpc.get(options['visibleSegments']);
-    this.segmentEquivalences = <SharedDisjointUint64Sets>rpc.get(options['segmentEquivalences']);
-    this.objectToDataTransform = rpc.get(options['objectToDataTransform']);
+    receiveVisibleSegmentsState(rpc, options, this);
+    this.transform = rpc.get(options['transform']);
     this.renderScaleTarget = rpc.get(options['renderScaleTarget']);
 
     const scheduleUpdateChunkPriorities = () => {
       this.chunkManager.scheduleUpdateChunkPriorities();
     };
-    this.registerDisposer(this.visibleSegments.changed.add(scheduleUpdateChunkPriorities));
-    this.registerDisposer(this.segmentEquivalences.changed.add(scheduleUpdateChunkPriorities));
-    this.registerDisposer(this.objectToDataTransform.changed.add(scheduleUpdateChunkPriorities));
+    onVisibleSegmentsStateChanged(this, this, scheduleUpdateChunkPriorities);
+    this.registerDisposer(this.transform.changed.add(scheduleUpdateChunkPriorities));
     this.registerDisposer(this.renderScaleTarget.changed.add(scheduleUpdateChunkPriorities));
+  }
+};
+
+export class IndexedSegmentPropertySourceBackend extends ChunkSource {
+  properties: readonly Readonly<IndexedSegmentProperty>[];
+  constructor(rpc: RPC, options: any) {
+    super(rpc, options);
+    this.properties = options.properties;
   }
 }

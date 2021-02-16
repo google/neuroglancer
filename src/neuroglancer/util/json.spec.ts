@@ -35,6 +35,8 @@ describe('url safe json', () => {
     expect(urlSafeToJSON(`{'a':'b'_'b':'c'}`)).toEqual(`{"a":"b","b":"c"}`);
     expect(urlSafeToJSON(`['a'_true]`)).toEqual(`["a",true]`);
     expect(urlSafeToJSON(`['a',true]`)).toEqual(`["a",true]`);
+    expect(urlSafeToJSON(`["a","a'"]`)).toEqual(`["a","a'"]`);
+    expect(urlSafeToJSON(`["a","a'","a'"]`)).toEqual(`["a","a'","a'"]`);
   });
 
   it('urlSafeStringToJSONString', () => {

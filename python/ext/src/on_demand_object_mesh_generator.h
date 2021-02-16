@@ -27,7 +27,7 @@ namespace meshing {
 struct SimplifyOptions {
   // Maximum quadrics error.  Set this to a negative value to disable
   // simplification.
-  double max_quadrics_error = 1e6;
+  double max_quadrics_error = 1;
 
   // Collapses that change the normal angle by more this amount are
   // prohibited.  Angle is specified in degrees.

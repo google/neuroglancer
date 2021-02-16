@@ -104,6 +104,7 @@ export function getShader(gl: WebGL2RenderingContext, source: string, shaderType
         s += `${i + 1}: ${line}\n`;
       });
       s += `\n</pre>`;
+      console.log(s);
       let w = window.open('about:blank', '_blank');
       if (w !== null) {
         try {
@@ -121,6 +122,14 @@ export function getShader(gl: WebGL2RenderingContext, source: string, shaderType
 
 export type AttributeIndex = number;
 
+export type AttributeType = number;
+
+export interface VertexShaderInputBinder {
+  enable(divisor: number): void;
+  disable(): void;
+  bind(stride: number, offset: number): void;
+}
+
 export class ShaderProgram extends RefCounted {
   program: WebGLProgram;
   vertexShader: WebGLShader;
@@ -128,6 +137,7 @@ export class ShaderProgram extends RefCounted {
   attributes = new Map<string, AttributeIndex>();
   uniforms = new Map<string, WebGLUniformLocation|null>();
   textureUnits: Map<any, number>;
+  vertexShaderInputBinders: {[name: string]: VertexShaderInputBinder} = {};
 
   constructor(
       public gl: GL, public vertexSource: string, public fragmentSource: string,
@@ -283,7 +293,7 @@ export class ShaderBuilder {
 
   allocateTextureUnit(symbol: Symbol, count: number = 1) {
     if (this.textureUnits.has(symbol)) {
-      throw new Error('Duplicate texture unit symbol: ' + symbol);
+      throw new Error('Duplicate texture unit symbol: ' + symbol.toString());
     }
     let old = this.nextTextureUnit;
     this.nextTextureUnit += count;
@@ -312,8 +322,9 @@ export class ShaderBuilder {
     return name + (this.nextSymbolID++);
   }
 
-  addAttribute(typeName: string, name: string) {
+  addAttribute(typeName: string, name: string, location?: number) {
     this.attributes.push(name);
+    if (location !== undefined) this.attributesCode += `layout(location = ${location})`;
     this.attributesCode += `in ${typeName} ${name};\n`;
     return name;
   }
@@ -430,22 +441,4 @@ export function shaderContainsIdentifiers(code: string, identifiers: Iterable<st
     }
   }
   return found;
-}
-
-export function emitterDependentShaderGetter(
-    refCounted: RefCounted, gl: GL,
-    defineShader: (builder: ShaderBuilder) => void): ((emitter: ShaderModule) => ShaderProgram) {
-  const shaders = new Map<ShaderModule, ShaderProgram>();
-  function getter(emitter: ShaderModule) {
-    let shader = shaders.get(emitter);
-    if (shader === undefined) {
-      const builder = new ShaderBuilder(gl);
-      builder.require(emitter);
-      defineShader(builder);
-      shader = refCounted.registerDisposer(builder.build());
-      shaders.set(emitter, shader);
-    }
-    return shader;
-  }
-  return getter;
 }

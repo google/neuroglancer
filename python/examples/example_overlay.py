@@ -1,10 +1,17 @@
 from __future__ import print_function
 
+import argparse
 import webbrowser
 
 import numpy as np
 
 import neuroglancer
+import neuroglancer.cli
+
+ap = argparse.ArgumentParser()
+neuroglancer.cli.add_server_arguments(ap)
+args = ap.parse_args()
+neuroglancer.cli.handle_server_arguments(args)
 
 viewer = neuroglancer.Viewer()
 
@@ -22,7 +29,13 @@ with viewer.txn() as s:
         source='precomputed://gs://neuroglancer-public-data/flyem_fib-25/ground_truth',
     )
     s.layers['overlay'] = neuroglancer.ImageLayer(
-        source=neuroglancer.LocalVolume(a, voxel_size=[8, 8, 8], voxel_offset=[3000, 3000, 3000]),
+        source=neuroglancer.LocalVolume(
+            a,
+            dimensions=neuroglancer.CoordinateSpace(
+                scales=[1, 8, 8, 8],
+                units=['', 'nm', 'nm', 'nm'],
+                names=['c^', 'x', 'y', 'z']),
+            voxel_offset=[0, 3000, 3000, 3000]),
         shader="""
 void main() {
   emitRGB(vec3(toNormalized(getDataValue(0)),

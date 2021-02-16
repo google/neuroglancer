@@ -16,6 +16,7 @@
 
 import debounce from 'lodash/debounce';
 import {RefCounted} from 'neuroglancer/util/disposable';
+import {isInputTextTarget} from 'neuroglancer/util/dom';
 import LinkedListOperations from 'neuroglancer/util/linked_list.0';
 
 class AutomaticFocusList {
@@ -29,12 +30,15 @@ class AutomaticFocusList {
 
 const automaticFocusList = new AutomaticFocusList();
 
+const isTopLevel = window.top === window;
+
 const maybeUpdateFocus = debounce(() => {
+  if (!isTopLevel) return;
   const {activeElement} = document;
   if (activeElement === null || activeElement === document.body) {
     const node = LinkedListOperations.front<AutomaticallyFocusedElement>(<any>automaticFocusList);
     if (node !== null) {
-      node.element.focus();
+      node.element.focus({preventScroll: true});
     }
   }
 });
@@ -56,13 +60,13 @@ export class AutomaticallyFocusedElement extends RefCounted {
   private scheduleUpdateFocus = this.registerCancellable(debounce(() => {
     const {activeElement} = document;
     const {element} = this;
-    if (element.contains(activeElement)) {
-      // Never steal focus from descendant.
+    if (element.contains(activeElement) || isInputTextTarget(activeElement)) {
+      // Never steal focus from descendant or from text input element.
       return;
     }
     if (activeElement != null &&
         (activeElement === this.lastFocusedElement || activeElement.contains(element))) {
-      this.element.focus();
+      this.element.focus({preventScroll: true});
     }
     this.lastFocusedElement = null;
   }, 0));
@@ -70,6 +74,11 @@ export class AutomaticallyFocusedElement extends RefCounted {
   constructor(public element: HTMLElement) {
     super();
     element.tabIndex = -1;
+    this.registerEventListener(element, 'pointerdown', event => {
+      if (event.target !== element) return;
+      this.lastFocusedElement = null;
+      element.focus({preventScroll: true});
+    });
     this.registerEventListener(element, 'mouseenter', () => {
       this.lastFocusedElement = document.activeElement;
       this.scheduleUpdateFocus();

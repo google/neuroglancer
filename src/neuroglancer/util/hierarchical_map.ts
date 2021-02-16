@@ -177,11 +177,11 @@ export class HierarchicalMap<Key, Value, Parent extends HierarchicalMapInterface
     const {parents, parentPriorities} = this;
     const numParents = parentPriorities.length;
     let parentIndex = 0;
-    while (parentIndex < numParents && parentPriorities[parentIndex] > 0) {
-      yield *parents[parentIndex].entries();
+    for (; parentIndex < numParents && parentPriorities[parentIndex] > 0; ++parentIndex) {
+      yield* parents[parentIndex].entries();
     }
     yield *this.bindings.entries();
-    while (parentIndex < numParents) {
+    for (; parentIndex < numParents; ++parentIndex) {
       yield *parents[parentIndex].entries();
     }
   }

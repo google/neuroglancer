@@ -20,11 +20,10 @@
 
 import {GoogleOAuth2CredentialsProvider} from 'neuroglancer/util/google_oauth2';
 
-declare var BRAINMAPS_CLIENT_ID: string;
 const BRAINMAPS_SCOPE = 'https://www.googleapis.com/auth/brainmaps';
 
 export class BrainmapsCredentialsProvider extends GoogleOAuth2CredentialsProvider {
-  constructor() {
-    super({clientId: BRAINMAPS_CLIENT_ID, scopes: [BRAINMAPS_SCOPE], description: 'Brain Maps'});
+  constructor(clientId: string) {
+    super({clientId: clientId, scopes: [BRAINMAPS_SCOPE], description: 'Brain Maps'});
   }
 }

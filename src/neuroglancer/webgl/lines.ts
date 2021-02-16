@@ -18,79 +18,111 @@
  * @file Facilities for drawing anti-aliased lines in WebGL as quads.
  */
 
-import {RefCounted} from 'neuroglancer/util/disposable';
-import {Buffer} from 'neuroglancer/webgl/buffer';
-import {GL} from 'neuroglancer/webgl/context';
-import {QuadRenderHelper, VERTICES_PER_QUAD} from 'neuroglancer/webgl/quad';
+import {drawQuads, glsl_getQuadVertexPosition, VERTICES_PER_QUAD} from 'neuroglancer/webgl/quad';
 import {ShaderBuilder, ShaderProgram} from 'neuroglancer/webgl/shader';
-import {getSquareCornersBuffer} from 'neuroglancer/webgl/square_corners_buffer';
+import {glsl_clipLineToDepthRange} from 'neuroglancer/webgl/shader_lib';
 
 export const VERTICES_PER_LINE = VERTICES_PER_QUAD;
 
-export class LineShader extends RefCounted {
-  private lineOffsetsBuffer: Buffer;
-  private quadHelper: QuadRenderHelper;
-
-  constructor(gl: GL, public linesPerInstance: number = 1) {
-    super();
-    this.lineOffsetsBuffer =
-        getSquareCornersBuffer(gl, 0, -1, 1, 1, /*minorTiles=*/linesPerInstance, /*majorTiles=*/1);
-    this.quadHelper = this.registerDisposer(new QuadRenderHelper(gl, linesPerInstance));
+export function defineLineShader(builder: ShaderBuilder, rounded = false) {
+  builder.addVertexCode(glsl_getQuadVertexPosition);
+  // x: 1 / viewportWidth
+  // y: 1 / viewportHeight
+  // z: featherWidth: Line feather width in pixels
+  builder.addUniform('highp vec3', 'uLineParams');
+  builder.addVarying('highp float', 'vLineCoord');
+  // max(1e-6, featherWidth) / (lineWidth + featherWidth)
+  builder.addVarying('highp float', 'vLineFeatherFraction');
+  if (rounded) {
+    // Fraction of total line length used by each endpoint.
+    builder.addVarying('highp float', 'vEndpointFraction');
+    builder.addVarying('highp float', 'vLineCoordT');
+    // Starting point of border from [0, 1].
+    builder.addVarying('highp float', 'vLineBorderStartFraction');
   }
+  builder.addVertexCode(glsl_clipLineToDepthRange);
+  builder.addVertexCode(`
+vec2 getLineOffset() { return getQuadVertexPosition(vec2(0.0, -1.0), vec2(1.0, 1.0)); }
+float getLineEndpointCoefficient() { return getLineOffset().x; }
+uint getLineEndpointIndex() { return uint(getLineEndpointCoefficient()); }
+void emitLine(vec4 vertexAClip, vec4 vertexBClip, float lineWidthInPixels
+              ${rounded ? ', float borderWidth' : ''}) {
+  if (!clipLineToDepthRange(vertexAClip, vertexBClip)) {
+    gl_Position = vec4(2.0, 2.0, 2.0, 1.0);
+    return;
+  }
+  vec3 vertexADevice = vertexAClip.xyz / vertexAClip.w;
+  vec3 vertexBDevice = vertexBClip.xyz / vertexBClip.w;
 
-  defineShader(builder: ShaderBuilder) {
-    builder.addAttribute('highp vec2', 'aLineOffset');
+  vec2 lineDirectionUnnormalized = vertexBDevice.xy - vertexADevice.xy;
+  vec2 lineDirection;
+  float linePixelLength = length(lineDirectionUnnormalized / uLineParams.xy * 0.5);
 
-    // x: line width in normalized device x coordinates
-    // y: line height in normalized device y coordinates
-    // z: Fraction of line width that is feathered
-    builder.addUniform('highp vec3', 'uLineParams');
-    builder.addVarying('highp float', 'vLineCoord');
+  if (linePixelLength < 1e-3) {
+    lineDirection = vec2(1.0, 0.0);
+    vertexADevice.z = vertexBDevice.z = 0.0;
+  } else {
+    lineDirection = normalize(lineDirectionUnnormalized);
+  }
+  vec2 lineNormal = normalize(vec2(lineDirection.y, -lineDirection.x) / uLineParams.yx * uLineParams.xy);
 
-    builder.addVertexCode(`
-uint getLineEndpointIndex() { return uint(aLineOffset.x); }
-`);
-
-    builder.addVertexCode(`
-void emitLine(mat4 projection, vec3 vertexA, vec3 vertexB) {
-  vec3 vertexPosition = mix(vertexA, vertexB, aLineOffset.x);
-  vec3 otherVertexPosition = mix(vertexB, vertexA, aLineOffset.x);
-
-  vec4 vertexPositionClip = projection * vec4(vertexPosition, 1.0);
-  vec4 otherVertexPositionClip = projection * vec4(otherVertexPosition, 1.0);
-
-  vec3 vertexPositionDevice = vertexPositionClip.xyz / vertexPositionClip.w;
-  vec3 otherVertexPositionDevice = otherVertexPositionClip.xyz / otherVertexPositionClip.w;
-
-  vec2 lineDirection = normalize(otherVertexPositionDevice.xy - vertexPositionDevice.xy);
-  vec2 lineNormal = vec2(lineDirection.y, -lineDirection.x);
-
-  gl_Position = vertexPositionClip;
-  gl_Position.xy += aLineOffset.y * (2.0 * aLineOffset.x - 1.0) * lineNormal * uLineParams.xy * 0.5 * gl_Position.w;
-  vLineCoord = aLineOffset.y;
+  vec2 lineOffset = getLineOffset();
+  gl_Position = vec4(mix(vertexADevice, vertexBDevice, lineOffset.x), 1.0);
+  float totalLineWidth = lineWidthInPixels + 2.0 * uLineParams.z ${rounded ? ' + 2.0 * borderWidth' : ''};
+  if (lineWidthInPixels == 0.0) totalLineWidth = 0.0;
+  vLineFeatherFraction = max(1e-6, uLineParams.z) / totalLineWidth;
+  gl_Position.xy += (lineOffset.y * lineNormal
+                     ${rounded ? '+ lineDirection * (2.0 * lineOffset.x - 1.0)' : ''})
+                  * totalLineWidth * uLineParams.xy;
+  vLineCoord = lineOffset.y;
+  ${rounded ? 'vEndpointFraction = totalLineWidth / (linePixelLength + totalLineWidth * 2.0);' : ''}
+  ${rounded ? 'vLineCoordT = lineOffset.x; vLineBorderStartFraction = lineWidthInPixels / totalLineWidth;' : ''}
+}
+void emitLine(mat4 projection, vec3 vertexA, vec3 vertexB, float lineWidthInPixels
+              ${rounded ? ', float borderWidth' : ''}) {
+  emitLine(projection * vec4(vertexA, 1.0), projection * vec4(vertexB, 1.0),
+           lineWidthInPixels
+           ${rounded ? ', borderWidth' : ''});
 }
 `);
-
+  if (rounded) {
     builder.addFragmentCode(`
-float getLineAlpha() {
-  return clamp((1.0 - abs(vLineCoord)) / uLineParams.z, 0.0, 1.0);
+vec4 getRoundedLineColor(vec4 interiorColor, vec4 borderColor) {
+  float radius;
+  if (vLineCoordT < vEndpointFraction || vLineCoordT > 1.0 - vEndpointFraction) {
+    radius = length(vec2(1.0 - min(vLineCoordT, 1.0 - vLineCoordT) / vEndpointFraction,
+                         vLineCoord));
+    if (radius > 1.0) {
+      discard;
+    }
+  } else {
+    radius = abs(vLineCoord);
+  }
+  float borderColorFraction = clamp((radius - vLineBorderStartFraction) / vLineFeatherFraction, 0.0, 1.0);
+  float feather = clamp((1.0 - radius) / vLineFeatherFraction, 0.0, 1.0);
+  vec4 color = mix(interiorColor, borderColor, borderColorFraction);
+  return vec4(color.rgb, color.a * feather);
 }
 `);
   }
 
-  draw(
-      shader: ShaderProgram, renderContext: {viewportWidth: number, viewportHeight: number},
-      lineWidthInPixels: number, featherWidthInPixels: number, numInstances: number) {
-    const aLineOffset = shader.attribute('aLineOffset');
-    this.lineOffsetsBuffer.bindToVertexAttrib(aLineOffset, /*components=*/2);
+  builder.addFragmentCode(`
+float getLineAlpha() {
+  return clamp((1.0 - abs(vLineCoord)) / vLineFeatherFraction, 0.0, 1.0);
+}
+`);
+}
 
-    const lineWidthIncludingFeather = lineWidthInPixels + featherWidthInPixels;
-    const {gl} = shader;
-    gl.uniform3f(
-        shader.uniform('uLineParams'), lineWidthIncludingFeather / renderContext.viewportWidth,
-        lineWidthIncludingFeather / renderContext.viewportHeight,
-        featherWidthInPixels === 0 ? 1e-6 : featherWidthInPixels / lineWidthIncludingFeather);
-    this.quadHelper.draw(gl, numInstances);
-    gl.disableVertexAttribArray(aLineOffset);
-  }
+export function drawLines(
+    gl: WebGL2RenderingContext, linesPerInstance: number, numInstances: number) {
+  drawQuads(gl, linesPerInstance, numInstances);
+}
+
+export function initializeLineShader(
+    shader: ShaderProgram, projectionParameters: {width: number, height: number},
+    featherWidthInPixels: number) {
+  const {gl} = shader;
+  gl.uniform3f(
+      shader.uniform('uLineParams'), 1 / projectionParameters.width,
+      1 / projectionParameters.height, featherWidthInPixels);
 }

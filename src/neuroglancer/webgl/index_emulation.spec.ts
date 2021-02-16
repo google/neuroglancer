@@ -19,7 +19,7 @@ import {fragmentShaderTest} from 'neuroglancer/webgl/shader_testing';
 
 describe('webgl/index_emulation', () => {
   it('indexBuffer', () => {
-    fragmentShaderTest({outputValue: 'uint'}, tester => {
+    fragmentShaderTest({}, {outputValue: 'uint'}, tester => {
       let {gl, builder} = tester;
       let helper = new IndexBufferAttributeHelper('aVertexIndex');
       helper.defineShader(builder);

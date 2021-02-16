@@ -16,63 +16,37 @@
 
 import {SliceView} from 'neuroglancer/sliceview/frontend';
 import {MultiscaleVolumeChunkSource} from 'neuroglancer/sliceview/volume/frontend';
-import {RenderLayer, RenderLayerOptions} from 'neuroglancer/sliceview/volume/renderlayer';
-import {TrackableAlphaValue, trackableAlphaValue} from 'neuroglancer/trackable_alpha';
-import {BLEND_FUNCTIONS, BLEND_MODES, TrackableBlendModeValue, trackableBlendModeValue} from 'neuroglancer/trackable_blend';
-import {verifyEnumString} from 'neuroglancer/util/json';
-import glsl_COLORMAPS from 'neuroglancer/webgl/colormaps.glsl';
-import {makeTrackableFragmentMain, TrackableFragmentMain} from 'neuroglancer/webgl/dynamic_shader';
-import {ShaderBuilder} from 'neuroglancer/webgl/shader';
+import {RenderLayerBaseOptions, SliceViewVolumeRenderLayer} from 'neuroglancer/sliceview/volume/renderlayer';
+import {TrackableAlphaValue} from 'neuroglancer/trackable_alpha';
+import {BLEND_FUNCTIONS, BLEND_MODES, TrackableBlendModeValue} from 'neuroglancer/trackable_blend';
+import {WatchableValue} from 'neuroglancer/trackable_value';
+import {glsl_COLORMAPS} from 'neuroglancer/webgl/colormaps';
+import {makeTrackableFragmentMain, shaderCodeWithLineDirective, WatchableShaderError} from 'neuroglancer/webgl/dynamic_shader';
+import {ShaderBuilder, ShaderProgram} from 'neuroglancer/webgl/shader';
+import {addControlsToBuilder, getFallbackBuilderState, parseShaderUiControls, setControlsInShader, ShaderControlsBuilderState, ShaderControlState} from 'neuroglancer/webgl/shader_ui_controls';
 
-export const FRAGMENT_MAIN_START = '//NEUROGLANCER_IMAGE_RENDERLAYER_FRAGMENT_MAIN_START';
-
-const DEFAULT_FRAGMENT_MAIN = `void main() {
-  emitGrayscale(toNormalized(getDataValue()));
+const DEFAULT_FRAGMENT_MAIN = `#uicontrol invlerp normalized
+void main() {
+  emitGrayscale(normalized());
 }
 `;
-
 
 export function getTrackableFragmentMain(value = DEFAULT_FRAGMENT_MAIN) {
   return makeTrackableFragmentMain(value);
 }
 
-export interface ImageRenderLayerOptions extends RenderLayerOptions {
+export interface ImageRenderLayerOptions extends RenderLayerBaseOptions {
+  shaderError: WatchableShaderError;
   opacity: TrackableAlphaValue;
   blendMode: TrackableBlendModeValue;
-  fragmentMain: TrackableFragmentMain;
+  shaderControlState: ShaderControlState;
 }
 
-export class ImageRenderLayer extends RenderLayer {
-  fragmentMain: TrackableFragmentMain;
-  opacity: TrackableAlphaValue;
-  blendMode: TrackableBlendModeValue;
-  constructor(multiscaleSource: MultiscaleVolumeChunkSource, options: ImageRenderLayerOptions) {
-    super(multiscaleSource, options);
-    const {
-      opacity = trackableAlphaValue(0.5),
-      blendMode = trackableBlendModeValue(),
-      fragmentMain = getTrackableFragmentMain(),
-    } = options;
-    this.fragmentMain = fragmentMain;
-    this.opacity = opacity;
-    this.blendMode = blendMode;
-    this.registerDisposer(opacity.changed.add(() => {
-      this.redrawNeeded.dispatch();
-    }));
-    this.registerDisposer(fragmentMain.changed.add(() => {
-      this.shaderGetter.invalidateShader();
-      this.redrawNeeded.dispatch();
-    }));
-  }
+export function defineImageLayerShader(
+    builder: ShaderBuilder, shaderBuilderState: ShaderControlsBuilderState) {
+  builder.addFragmentCode(`
+#define VOLUME_RENDERING false
 
-  protected getShaderKey() {
-    return `volume.ImageRenderLayer:${JSON.stringify(this.fragmentMain.value)}`;
-  }
-
-  protected defineShader(builder: ShaderBuilder) {
-    super.defineShader(builder);
-    builder.addUniform('highp float', 'uOpacity');
-    builder.addFragmentCode(`
 void emitRGBA(vec4 rgba) {
   emit(vec4(rgba.rgb, rgba.a * uOpacity));
 }
@@ -86,25 +60,60 @@ void emitTransparent() {
   emit(vec4(0.0, 0.0, 0.0, 0.0));
 }
 `);
-    builder.addFragmentCode(glsl_COLORMAPS);
-    builder.setFragmentMainFunction(FRAGMENT_MAIN_START + '\n' + this.fragmentMain.value);
+  builder.addFragmentCode(glsl_COLORMAPS);
+  addControlsToBuilder(shaderBuilderState, builder);
+  builder.setFragmentMainFunction(shaderCodeWithLineDirective(shaderBuilderState.parseResult.code));
+}
+
+export class ImageRenderLayer extends SliceViewVolumeRenderLayer<ShaderControlsBuilderState> {
+  opacity: TrackableAlphaValue;
+  blendMode: TrackableBlendModeValue;
+  shaderControlState: ShaderControlState;
+  constructor(multiscaleSource: MultiscaleVolumeChunkSource, options: ImageRenderLayerOptions) {
+    const {opacity, blendMode, shaderControlState} = options;
+    super(multiscaleSource, {
+      ...options,
+      fallbackShaderParameters:
+          new WatchableValue(getFallbackBuilderState(parseShaderUiControls(DEFAULT_FRAGMENT_MAIN, {
+            imageData: {
+              dataType: multiscaleSource.dataType,
+              channelRank: options.channelCoordinateSpace?.value?.rank ?? 0,
+            }
+          }))),
+      encodeShaderParameters: p => p.key,
+      shaderParameters: shaderControlState.builderState,
+      dataHistogramSpecifications: shaderControlState.histogramSpecifications,
+    });
+    this.shaderControlState = shaderControlState;
+    this.opacity = opacity;
+    this.blendMode = blendMode;
+    this.registerDisposer(opacity.changed.add(this.redrawNeeded.dispatch));
+    this.registerDisposer(blendMode.changed.add(this.redrawNeeded.dispatch));
+    this.registerDisposer(shaderControlState.changed.add(this.redrawNeeded.dispatch));
   }
 
-  beginSlice(sliceView: SliceView) {
-    let shader = super.beginSlice(sliceView);
-    if (shader === undefined) {
-      return undefined;
+  defineShader(builder: ShaderBuilder, shaderBuilderState: ShaderControlsBuilderState) {
+    if (shaderBuilderState.parseResult.errors.length !== 0) {
+      throw new Error('Invalid UI control specification');
     }
-    let {gl} = this;
+    builder.addUniform('highp float', 'uOpacity');
+    defineImageLayerShader(builder, shaderBuilderState);
+  }
+
+  initializeShader(
+      _sliceView: SliceView, shader: ShaderProgram, parameters: ShaderControlsBuilderState) {
+    const {gl} = this;
     gl.uniform1f(shader.uniform('uOpacity'), this.opacity.value);
-    return shader;
+    setControlsInShader(gl, shader, this.shaderControlState, parameters.parseResult.controls);
   }
 
   setGLBlendMode(gl: WebGL2RenderingContext, renderLayerNum: number) {
-    let blendModeValue = verifyEnumString(this.blendMode.value, BLEND_MODES);
+    const blendModeValue = this.blendMode.value;
     if (blendModeValue === BLEND_MODES.ADDITIVE || renderLayerNum > 0) {
       gl.enable(gl.BLEND);
       BLEND_FUNCTIONS.get(blendModeValue)!(gl);
+    } else {
+      gl.disable(WebGL2RenderingContext.BLEND);
     }
   }
 }

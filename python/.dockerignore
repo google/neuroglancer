@@ -1,0 +1,11 @@
+/build/
+/dist/
+**/*.egg-info
+**/__pycache__
+**/.eggs
+**/.pytest_cache
+**/.tox
+/examples
+**/*.so
+**/*.pyd
+**/*.pyc

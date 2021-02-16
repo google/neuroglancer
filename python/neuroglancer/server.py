@@ -19,9 +19,11 @@ import json
 import multiprocessing
 import re
 import socket
+import sys
 import threading
 import weakref
 
+import numpy as np
 import tornado.httpserver
 import tornado.ioloop
 import tornado.netutil
@@ -29,20 +31,30 @@ import tornado.web
 
 import sockjs.tornado
 
+try:
+    # Newer versions of tornado do not have the asynchronous decorator
+    from sockjs.tornado.util import asynchronous
+except ImportError:
+    from tornado.web import asynchronous
+
 from . import local_volume, static
+from . import skeleton
 from .json_utils import json_encoder_default
 from .random_token import make_random_token
 from .sockjs_handler import SOCKET_PATH_REGEX, SOCKET_PATH_REGEX_WITHOUT_GROUP, SockJSHandler
 
 INFO_PATH_REGEX = r'^/neuroglancer/info/(?P<token>[^/]+)$'
+SKELETON_INFO_PATH_REGEX = r'^/neuroglancer/skeletoninfo/(?P<token>[^/]+)$'
 
-DATA_PATH_REGEX = r'^/neuroglancer/(?P<data_format>[^/]+)/(?P<token>[^/]+)/(?P<scale_key>[^/]+)/(?P<start_x>[0-9]+),(?P<end_x>[0-9]+)/(?P<start_y>[0-9]+),(?P<end_y>[0-9]+)/(?P<start_z>[0-9]+),(?P<end_z>[0-9]+)$'
+DATA_PATH_REGEX = r'^/neuroglancer/(?P<data_format>[^/]+)/(?P<token>[^/]+)/(?P<scale_key>[^/]+)/(?P<start>[0-9]+(?:,[0-9]+)*)/(?P<end>[0-9]+(?:,[0-9]+)*)$'
 
 SKELETON_PATH_REGEX = r'^/neuroglancer/skeleton/(?P<key>[^/]+)/(?P<object_id>[0-9]+)$'
 
 MESH_PATH_REGEX = r'^/neuroglancer/mesh/(?P<key>[^/]+)/(?P<object_id>[0-9]+)$'
 
 STATIC_PATH_REGEX = r'^/v/(?P<viewer_token>[^/]+)/(?P<path>(?:[a-zA-Z0-9_\-][a-zA-Z0-9_\-.]*)?)$'
+
+ACTION_PATH_REGEX = r'^/action/(?P<viewer_token>[^/]+)$'
 
 global_static_content_source = None
 
@@ -70,15 +82,21 @@ class Server(object):
             [
                 (STATIC_PATH_REGEX, StaticPathHandler, dict(server=self)),
                 (INFO_PATH_REGEX, VolumeInfoHandler, dict(server=self)),
+                (SKELETON_INFO_PATH_REGEX, SkeletonInfoHandler, dict(server=self)),
                 (DATA_PATH_REGEX, SubvolumeHandler, dict(server=self)),
                 (SKELETON_PATH_REGEX, SkeletonHandler, dict(server=self)),
                 (MESH_PATH_REGEX, MeshHandler, dict(server=self)),
+                (ACTION_PATH_REGEX, ActionHandler, dict(server=self)),
             ] + sockjs_router.urls,
             log_function=log_function,
             # Set a large maximum message size to accommodate large screenshot
             # messages.
             websocket_max_message_size=100 * 1024 * 1024)
-        http_server = tornado.httpserver.HTTPServer(app)
+        http_server = tornado.httpserver.HTTPServer(
+            app,
+            # Allow very large requests to accommodate large screenshots.
+            max_buffer_size=1024**3,
+        )
         sockets = tornado.netutil.bind_sockets(port=bind_port, address=bind_address)
         http_server.add_sockets(sockets)
         actual_port = sockets[0].getsockname()[1]
@@ -87,7 +105,7 @@ class Server(object):
         if global_static_content_source is None:
             global_static_content_source = static.get_default_static_content_source()
 
-        if bind_address == '0.0.0.0':
+        if bind_address == '0.0.0.0' or bind_address == '::':
             hostname = socket.getfqdn()
         else:
             hostname = bind_address
@@ -123,23 +141,39 @@ class StaticPathHandler(BaseRequestHandler):
         self.set_header('Content-type', content_type)
         self.finish(data)
 
+class ActionHandler(BaseRequestHandler):
+    def post(self, viewer_token):
+        viewer = self.server.viewers.get(viewer_token)
+        if viewer is None:
+            self.send_error(404)
+            return
+        action = json.loads(self.request.body)
+        self.server.ioloop.add_callback(viewer.actions.invoke, action['action'], action['state'])
+        self.finish('')
 
 class VolumeInfoHandler(BaseRequestHandler):
     def get(self, token):
         vol = self.server.get_volume(token)
-        if vol is None:
+        if vol is None or not isinstance(vol, local_volume.LocalVolume):
             self.send_error(404)
             return
         self.finish(json.dumps(vol.info(), default=json_encoder_default).encode())
 
+class SkeletonInfoHandler(BaseRequestHandler):
+    def get(self, token):
+        vol = self.server.get_volume(token)
+        if vol is None or not isinstance(vol, skeleton.SkeletonSource):
+            self.send_error(404)
+            return
+        self.finish(json.dumps(vol.info(), default=json_encoder_default).encode())
 
 class SubvolumeHandler(BaseRequestHandler):
-    @tornado.web.asynchronous
-    def get(self, data_format, token, scale_key, start_x, end_x, start_y, end_y, start_z, end_z):
-        start = (int(start_x), int(start_y), int(start_z))
-        end = (int(end_x), int(end_y), int(end_z))
+    @asynchronous
+    def get(self, data_format, token, scale_key, start, end):
+        start_pos = np.array(start.split(','), dtype=np.int64)
+        end_pos = np.array(end.split(','), dtype=np.int64)
         vol = self.server.get_volume(token)
-        if vol is None:
+        if vol is None or not isinstance(vol, local_volume.LocalVolume):
             self.send_error(404)
             return
 
@@ -155,16 +189,16 @@ class SubvolumeHandler(BaseRequestHandler):
 
         self.server.executor.submit(
             vol.get_encoded_subvolume,
-            data_format, start, end, scale_key=scale_key).add_done_callback(
+            data_format=data_format, start=start_pos, end=end_pos, scale_key=scale_key).add_done_callback(
                 lambda f: self.server.ioloop.add_callback(lambda: handle_subvolume_result(f)))
 
 
 class MeshHandler(BaseRequestHandler):
-    @tornado.web.asynchronous
+    @asynchronous
     def get(self, key, object_id):
         object_id = int(object_id)
         vol = self.server.get_volume(key)
-        if vol is None:
+        if vol is None or not isinstance(vol, local_volume.LocalVolume):
             self.send_error(404)
             return
 
@@ -192,15 +226,12 @@ class MeshHandler(BaseRequestHandler):
 
 
 class SkeletonHandler(BaseRequestHandler):
-    @tornado.web.asynchronous
+    @asynchronous
     def get(self, key, object_id):
         object_id = int(object_id)
         vol = self.server.get_volume(key)
-        if vol is None:
+        if vol is None or not isinstance(vol, skeleton.SkeletonSource):
             self.send_error(404)
-        if vol.skeletons is None:
-            self.send_error(405, message='Skeletons not supported for volume')
-            return
 
         def handle_result(f):
             try:
@@ -221,7 +252,7 @@ class SkeletonHandler(BaseRequestHandler):
             return skeleton.encode(skeletons)
 
         self.server.executor.submit(
-            get_encoded_skeleton, vol.skeletons, object_id).add_done_callback(
+            get_encoded_skeleton, vol, object_id).add_done_callback(
                 lambda f: self.server.ioloop.add_callback(lambda: handle_result(f)))
 
 
@@ -253,7 +284,6 @@ def stop():
         ioloop = global_server.ioloop
         def stop_ioloop():
             ioloop.stop()
-            ioloop.close()
         global_server.ioloop.add_callback(stop_ioloop)
         global_server = None
 
@@ -262,15 +292,35 @@ def get_server_url():
     return global_server.server_url
 
 
+_global_server_lock = threading.Lock()
+
+
 def start():
     global global_server
-    if global_server is None:
-        ioloop = tornado.ioloop.IOLoop()
-        ioloop.make_current()
-        global_server = Server(ioloop=ioloop, **global_server_args)
-        thread = threading.Thread(target=ioloop.start)
+    with _global_server_lock:
+        if global_server is not None: return
+
+        # Workaround https://bugs.python.org/issue37373
+        # https://www.tornadoweb.org/en/stable/index.html#installation
+        if sys.platform == 'win32' and sys.version_info >= (3, 8):
+            import asyncio
+            asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
+
+        done = threading.Event()
+
+        def start_server():
+            global global_server
+            ioloop = tornado.ioloop.IOLoop()
+            ioloop.make_current()
+            global_server = Server(ioloop=ioloop, **global_server_args)
+            done.set()
+            ioloop.start()
+            ioloop.close()
+
+        thread = threading.Thread(target=start_server)
         thread.daemon = True
         thread.start()
+        done.wait()
 
 
 def register_viewer(viewer):

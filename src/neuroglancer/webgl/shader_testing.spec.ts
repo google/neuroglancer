@@ -18,16 +18,14 @@ import {fragmentShaderTest} from 'neuroglancer/webgl/shader_testing';
 
 describe('FragmentShaderTester', () => {
   it('uint passthrough', () => {
-    fragmentShaderTest({outputValue: 'uint'}, tester => {
-      let {gl, builder} = tester;
-      builder.addUniform('highp uint', 'inputValue');
+    fragmentShaderTest({inputValue: 'uint'}, {outputValue: 'uint'}, tester => {
+      const {builder} = tester;
       builder.setFragmentMain(`outputValue = inputValue;`);
       tester.build();
       let {shader} = tester;
       shader.bind();
       for (const inputValue of [0, 1, 42, 343432, 4294967295]) {
-        gl.uniform1ui(shader.uniform('inputValue'), inputValue);
-        tester.execute();
+        tester.execute({inputValue});
         const values = tester.values;
         expect(values.outputValue).toEqual(inputValue);
       }
@@ -35,9 +33,8 @@ describe('FragmentShaderTester', () => {
   });
 
   it('float passthrough', () => {
-    fragmentShaderTest({outputValue: 'float'}, tester => {
-      let {gl, builder} = tester;
-      builder.addUniform('highp float', 'inputValue');
+    fragmentShaderTest({inputValue: 'float'}, {outputValue: 'float'}, tester => {
+      const {builder} = tester;
       builder.setFragmentMain(`outputValue = inputValue;`);
       tester.build();
       function generateRandomNumber() {
@@ -57,8 +54,7 @@ describe('FragmentShaderTester', () => {
         testValues.push(generateRandomNumber());
       }
       for (const inputValue of testValues) {
-        gl.uniform1f(shader.uniform('inputValue'), inputValue);
-        tester.execute();
+        tester.execute({inputValue});
         const values = tester.values;
         expect(values.outputValue).toEqual(inputValue);
       }
@@ -66,44 +62,42 @@ describe('FragmentShaderTester', () => {
   });
 
   it('float uint passthrough', () => {
-    fragmentShaderTest({floatOutput: 'float', uintOutput: 'uint'}, tester => {
-      let {gl, builder} = tester;
-      builder.addUniform('highp float', 'floatInput');
-      builder.addUniform('highp uint', 'uintInput');
-      builder.setFragmentMain(`
+    fragmentShaderTest(
+        {floatInput: 'float', uintInput: 'uint'}, {floatOutput: 'float', uintOutput: 'uint'},
+        tester => {
+          const {builder} = tester;
+          builder.setFragmentMain(`
   floatOutput = floatInput;
   uintOutput = uintInput;
 `);
-      tester.build();
-      function generateRandomNumber() {
-        let buf = new Uint32Array(1);
-        let temp = new Float32Array(buf.buffer);
-        do {
-          crypto.getRandomValues(buf);
-        } while (!Number.isFinite(temp[0]) ||
-                 (temp[0] !== 0 && Math.abs(Math.log2(Math.abs(temp[0]))) > 125));
-        return temp[0];
-      }
+          tester.build();
+          function generateRandomNumber() {
+            let buf = new Uint32Array(1);
+            let temp = new Float32Array(buf.buffer);
+            do {
+              crypto.getRandomValues(buf);
+            } while (!Number.isFinite(temp[0]) ||
+                     (temp[0] !== 0 && Math.abs(Math.log2(Math.abs(temp[0]))) > 125));
+            return temp[0];
+          }
 
-      let {shader} = tester;
-      shader.bind();
-      let testFloatValues = [5, 0, 1, -1, 2, -2, 3, -3, 5, -5, 1.5, -1.5];
-      let testUintValues = [7, 1, 5, 10, 33, 27, 55, 7, 5, 3, 343432, 4294967295];
-      let count = 100;
-      for (let i = 0; i < count; ++i) {
-        testFloatValues.push(generateRandomNumber());
-        testUintValues.push(i);
-      }
-      for (let i = 0; i < testUintValues.length; ++i) {
-        const floatInput = testFloatValues[i];
-        const uintInput = testUintValues[i];
-        gl.uniform1f(shader.uniform('floatInput'), floatInput);
-        gl.uniform1ui(shader.uniform('uintInput'), uintInput);
-        tester.execute();
-        const values = tester.values;
-        expect(values.floatOutput).toEqual(floatInput);
-        expect(values.uintOutput).toEqual(uintInput);
-      }
-    });
+          let {shader} = tester;
+          shader.bind();
+          let testFloatValues = [5, 0, 1, -1, 2, -2, 3, -3, 5, -5, 1.5, -1.5];
+          let testUintValues = [7, 1, 5, 10, 33, 27, 55, 7, 5, 3, 343432, 4294967295];
+          let count = 100;
+          for (let i = 0; i < count; ++i) {
+            testFloatValues.push(generateRandomNumber());
+            testUintValues.push(i);
+          }
+          for (let i = 0; i < testUintValues.length; ++i) {
+            const floatInput = testFloatValues[i];
+            const uintInput = testUintValues[i];
+            tester.execute({floatInput, uintInput});
+            const values = tester.values;
+            expect(values.floatOutput).toEqual(floatInput);
+            expect(values.uintOutput).toEqual(uintInput);
+          }
+        });
   });
 });

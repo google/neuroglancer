@@ -162,7 +162,7 @@ describe('cancellation', () => {
         reject(1);
         source.cancel();
         expect(log).toEqual([]);
-      });
+      }).catch(() => null);
     });
 
   });

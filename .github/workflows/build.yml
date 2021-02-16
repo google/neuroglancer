@@ -1,0 +1,49 @@
+name: Build
+
+on: [push, pull_request]
+
+jobs:
+  client:
+    strategy:
+      matrix:
+        node-version:
+          - '14.x'
+        os:
+          - 'ubuntu-latest'
+          - 'windows-latest'
+          - 'macos-latest'
+    runs-on: ${{ matrix.os }}
+    steps:
+    - uses: actions/checkout@v2
+    - name: Use Node.js ${{ matrix.node-version }}
+      uses: actions/setup-node@v1
+      with:
+        node-version: ${{ matrix.node-version }}
+    - uses: actions/cache@v2
+      with:
+        path: "**/node_modules"
+        key: ${{ runner.os }}-${{ matrix.node-version }}-node_modules-${{ hashFiles('**/package-lock.json') }}
+    - run: npm install
+    - name: Typecheck with TypeScript
+      run: npm run typecheck
+    - name: Build client bundles
+      run: npm run build --no-typecheck
+    - name: Build JavaScript module
+      run: npm run build-module --no-typecheck
+    - name: Build Python client bundles
+      run: npm run build-python --no-typecheck
+    - run: sudo apt-get install xvfb
+      if: startsWith(runner.os, 'Linux')
+    - name: Run JavaScript tests (including WebGL)
+      # Swiftshader, used by Chrome headless, crashes when running Neuroglancer
+      # tests.
+      #
+      # The only reliable headless configuration is Firefox on Linux under
+      # xvfb-run, which uses Mesa software rendering.
+      if: startsWith(runner.os, 'Linux')
+      run: xvfb-run --auto-servernum --server-args='-screen 0 1024x768x24' npm run test -- --browsers Firefox
+    - name: Run JavaScript tests (excluding WebGL)
+      if: ${{ !startsWith(runner.os, 'Linux') }}
+      run: npm run test -- --browsers ChromeHeadless --define=NEUROGLANCER_SKIP_WEBGL_TESTS
+    - name: Run JavaScript benchmarks
+      run: npm run benchmark

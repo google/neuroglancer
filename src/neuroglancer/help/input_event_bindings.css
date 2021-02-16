@@ -19,27 +19,27 @@
 }
 
 .describe-key-bindings-container {
+  display: grid;
   overflow-y: scroll;
   max-height: 80vh;
   overflow-x: hidden;
+  grid-template-columns: [dt-start] 0fr [dt-end] 1em [dd-start] 1fr [dd-end];
+  grid-auto-rows: auto;
 }
 
-.describe-key-bindings .definition-outer-container {
-  display: block;
-}
-
-.describe-key-bindings .definition-container {
-  display: inline-block;
-  white-space: nowrap;
+.describe-key-bindings-container h2 {
+  grid-column-start: 1;
+  grid-column-end: -1;
 }
 
 .describe-key-bindings .dt {
+  grid-column: dt-start;
   font-family: monospace;
   font-weight: bold;
   display: inline-block;
-  width: 20ch;
 }
 
 .describe-key-bindings .dd {
+  grid-column: dd-start;
   display: inline-block;
 }

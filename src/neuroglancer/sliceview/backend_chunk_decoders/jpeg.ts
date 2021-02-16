@@ -25,6 +25,6 @@ export async function decodeJpegChunk(
   const chunkDataSize = chunk.chunkDataSize!;
   const decoded = await requestAsyncComputation(
       decodeJpeg, cancellationToken, [response], new Uint8Array(response), chunkDataSize[0],
-      chunkDataSize[1] * chunkDataSize[2], chunk.source!.spec.numChannels);
+      chunkDataSize[1] * chunkDataSize[2], chunkDataSize[3] || 1, false);
   await postProcessRawData(chunk, cancellationToken, decoded);
 }

@@ -193,8 +193,13 @@ const std::string& OnDemandObjectMeshGenerator::GetSimplifiedMesh(
   ConvertToOpenMeshTriangleMesh(unsimplified_mesh, &triangle_mesh, impl_->voxel_size,
                         impl_->offset);
   impl_->unsimplified_meshes.erase(object_id);
-  auto const &simplify_options = impl_->simplify_options;
+  auto simplify_options = impl_->simplify_options;
   if (simplify_options.max_quadrics_error >= 0) {
+    double voxel_volume = 1;
+    for (int i = 0; i < 3; ++i) {
+      voxel_volume *= impl_->voxel_size[i];
+    }
+    simplify_options.max_quadrics_error *= voxel_volume * voxel_volume;
     if (!SimplifyMesh(simplify_options, &triangle_mesh)) {
       // Can't happen.
       return empty_string;

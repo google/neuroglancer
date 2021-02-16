@@ -24,7 +24,7 @@
   border-width: 2px;
 }
 
-.neuroglancer-panel:focus {
+.neuroglancer-panel:focus-within {
   border-color: white;
 }
 

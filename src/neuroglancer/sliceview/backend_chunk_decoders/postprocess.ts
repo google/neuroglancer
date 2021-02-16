@@ -31,7 +31,7 @@ export async function postProcessRawData(
   if (spec.compressedSegmentationBlockSize !== undefined) {
     const {dataType} = spec;
     const chunkDataSize = chunk.chunkDataSize!;
-    const shape = [chunkDataSize[0], chunkDataSize[1], chunkDataSize[2], spec.numChannels];
+    const shape = [chunkDataSize[0], chunkDataSize[1], chunkDataSize[2], chunkDataSize[3] || 1];
     switch (dataType) {
       case DataType.UINT32:
         chunk.data = await requestAsyncComputation(

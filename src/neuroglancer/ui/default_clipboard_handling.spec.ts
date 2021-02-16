@@ -15,23 +15,26 @@
  */
 
 import {parsePositionString} from 'neuroglancer/ui/default_clipboard_handling';
-import {vec3} from 'neuroglancer/util/geom';
 
 describe('default_clipboard_handling', () => {
   describe('parsePositionString', () => {
     it('fails on invalid cases', () => {
-      expect(parsePositionString('invalid')).toBe(undefined);
-      expect(parsePositionString('1 2')).toBe(undefined);
-      expect(parsePositionString('1 a 2')).toBe(undefined);
+      expect(parsePositionString('invalid', 3)).toEqual(undefined);
+      expect(parsePositionString('1 2', 3)).toEqual(undefined);
+      expect(parsePositionString('1 2 3 4', 3)).toEqual(undefined);
+      expect(parsePositionString('1 a 2', 3)).toBe(undefined);
     });
 
     it('works on basic cases', () => {
-      expect(parsePositionString('10 2 3')).toEqual(vec3.fromValues(10, 2, 3));
-      expect(parsePositionString('[1 2 3')).toEqual(vec3.fromValues(1, 2, 3));
-      expect(parsePositionString('[1, 2, 3,')).toEqual(vec3.fromValues(1, 2, 3));
-      expect(parsePositionString('[1, 2, 3]')).toEqual(vec3.fromValues(1, 2, 3));
-      expect(parsePositionString('1.2 2.4 3')).toEqual(vec3.fromValues(1.2, 2.4, 3));
-      expect(parsePositionString('{200, 400, 500}')).toEqual(vec3.fromValues(200, 400, 500));
+      expect(parsePositionString('1', 1)).toEqual(Float32Array.of(1));
+      expect(parsePositionString('1 2 3 4', 4)).toEqual(Float32Array.of(1, 2, 3, 4));
+      expect(parsePositionString('1 2', 2)).toEqual(Float32Array.of(1, 2));
+      expect(parsePositionString('10 2 3', 3)).toEqual(Float32Array.of(10, 2, 3));
+      expect(parsePositionString('[1 2 3', 3)).toEqual(Float32Array.of(1, 2, 3));
+      expect(parsePositionString('[1, 2, 3,', 3)).toEqual(Float32Array.of(1, 2, 3));
+      expect(parsePositionString('[1, 2, 3]', 3)).toEqual(Float32Array.of(1, 2, 3));
+      expect(parsePositionString('1.2 2.4 3', 3)).toEqual(Float32Array.of(1.2, 2.4, 3));
+      expect(parsePositionString('{200, 400, 500}', 3)).toEqual(Float32Array.of(200, 400, 500));
     });
   });
 });

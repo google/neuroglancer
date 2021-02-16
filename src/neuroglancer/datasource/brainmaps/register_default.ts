@@ -14,11 +14,22 @@
  * limitations under the License.
  */
 
+import {BrainmapsInstance, credentialsKey} from 'neuroglancer/datasource/brainmaps/api';
 import {BrainmapsDataSource, productionInstance} from 'neuroglancer/datasource/brainmaps/frontend';
-import {credentialsKey} from 'neuroglancer/datasource/brainmaps/api';
 import {registerProvider} from 'neuroglancer/datasource/default_provider';
 
 registerProvider(
     'brainmaps',
     options => new BrainmapsDataSource(
         productionInstance, options.credentialsManager.getCredentialsProvider(credentialsKey)));
+
+declare var NEUROGLANCER_BRAINMAPS_SERVERS: {[key: string]: BrainmapsInstance}|undefined;
+
+if (typeof NEUROGLANCER_BRAINMAPS_SERVERS !== 'undefined') {
+  for (const [key, instance] of Object.entries(NEUROGLANCER_BRAINMAPS_SERVERS)) {
+    registerProvider(
+        `brainmaps-${key}`,
+        options => new BrainmapsDataSource(
+            instance, options.credentialsManager.getCredentialsProvider(credentialsKey)));
+  }
+}

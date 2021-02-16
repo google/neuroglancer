@@ -20,9 +20,9 @@
 
 import {CredentialsManager, CredentialsProvider, CredentialsWithGeneration, makeCachedCredentialsGetter} from 'neuroglancer/credentials_provider';
 import {TrackableValue} from 'neuroglancer/trackable_value';
+import {stableStringify} from 'neuroglancer/util/json';
 import {Memoize} from 'neuroglancer/util/memoize';
 import {PersistentCompoundTrackable} from 'neuroglancer/util/trackable';
-import {stableStringify} from 'neuroglancer/util/json';
 
 class TrackableBasedCredentialsProvider<Credentials> extends CredentialsProvider<Credentials> {
   invalidCredentials = new TrackableValue<number|null|undefined>(undefined, x => x);
@@ -36,7 +36,7 @@ class TrackableBasedCredentialsProvider<Credentials> extends CredentialsProvider
           const invalidGeneration =
               invalidCredentials !== undefined ? invalidCredentials.generation : null;
           const isValidCredentials =
-              (credentials: CredentialsWithGeneration<Credentials>| undefined) => {
+              (credentials: CredentialsWithGeneration<Credentials>|undefined) => {
                 return credentials !== undefined && invalidGeneration !== credentials.generation;
               };
           if (isValidCredentials(validCredentials)) {
@@ -56,10 +56,26 @@ class TrackableBasedCredentialsProvider<Credentials> extends CredentialsProvider
       });
 }
 
+
+class GcsCredentialsProvider extends CredentialsProvider<any> {
+  private anonymous = true;
+  constructor(private baseProvider: CredentialsProvider<any>) {
+    super();
+  }
+
+  get = makeCachedCredentialsGetter((invalidCredentials?: CredentialsWithGeneration<any>) => {
+    if (this.anonymous && invalidCredentials === undefined) {
+      return Promise.resolve({generation: -10, credentials: {accessToken: '', tokenType: ''}});
+    }
+    this.anonymous = false;
+    return this.baseProvider.get(invalidCredentials);
+  });
+}
+
 export class TrackableBasedCredentialsManager implements CredentialsManager {
   inputState = new PersistentCompoundTrackable();
   outputState = new PersistentCompoundTrackable();
-  private memoize = new Memoize<string, TrackableBasedCredentialsProvider<any>>();
+  private memoize = new Memoize<string, CredentialsProvider<any>>();
 
   getCredentialsProvider<Credentials>(key: string, parameters?: any) {
     if (parameters === undefined) {
@@ -70,6 +86,9 @@ export class TrackableBasedCredentialsManager implements CredentialsManager {
       const provider = new TrackableBasedCredentialsProvider<Credentials>();
       provider.registerDisposer(this.inputState.add(combinedKey, provider.validCredentials));
       provider.registerDisposer(this.outputState.add(combinedKey, provider.invalidCredentials));
+      if (key === 'gcs') {
+        return new GcsCredentialsProvider(provider);
+      }
       return provider;
     });
   }

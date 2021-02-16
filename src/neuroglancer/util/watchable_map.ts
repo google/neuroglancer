@@ -20,37 +20,54 @@ import {NullarySignal} from 'neuroglancer/util/signal';
 export class WatchableMap<K, V> extends RefCounted {
   changed = new NullarySignal();
   map: Map<K, V>;
+  private disposerMap = new Map<K, RefCounted>();
   constructor(
-      private register: (v: V, k: K) => void, private unregister: (v: V, k: K) => void,
-      values?: Iterable<[K, V]>) {
+      private register: (context: RefCounted, v: V, k: K) => void, values?: Iterable<[K, V]>) {
     super();
     if (values === undefined) {
       this.map = new Map();
     } else {
-      this.map = new Map(values);
-      this.map.forEach(this.register);
+      const map = this.map = new Map(values);
+      const {disposerMap} = this;
+      for (const [key, value] of map) {
+        const context = new RefCounted();
+        disposerMap.set(key, context);
+        register(context, value, key);
+      }
     }
   }
+
+  get value(): ReadonlyMap<K, V> {
+    return this.map;
+  }
+
   set(key: K, value: V) {
-    const {map} = this;
-    const existing = map.get(key);
-    if (existing !== undefined) {
-      this.unregister(existing, key);
+    const {map, disposerMap} = this;
+    let context = disposerMap.get(key);
+    if (context !== undefined) {
+      context.dispose();
     }
+    context = new RefCounted();
+    disposerMap.set(key, context);
     map.set(key, value);
-    this.register(value, key);
+    this.register(context, value, key);
     this.changed.dispatch();
     return this;
   }
   delete(key: K) {
-    const {map} = this;
-    const existing = map.get(key);
-    if (existing !== undefined) {
-      this.unregister(existing, key);
+    const {map, disposerMap} = this;
+    const context = disposerMap.get(key);
+    if (context !== undefined) {
+      context.dispose();
+      disposerMap.delete(key);
+      map.delete(key);
       this.changed.dispatch();
       return true;
     }
     return false;
+  }
+  get(key: K) {
+    return this.map.get(key);
   }
   has(key: K) {
     return this.map.has(key);
@@ -62,10 +79,13 @@ export class WatchableMap<K, V> extends RefCounted {
     return this.map[Symbol.iterator]();
   }
   clear() {
-    const {map} = this;
+    const {map, disposerMap} = this;
     if (map.size > 0) {
-      map.forEach(this.unregister);
+      for (const disposer of disposerMap.values()) {
+        disposer.dispose();
+      }
       map.clear();
+      disposerMap.clear();
       this.changed.dispatch();
     }
   }
@@ -76,9 +96,12 @@ export class WatchableMap<K, V> extends RefCounted {
     return this.map.keys();
   }
   disposed() {
-    const {map} = this;
-    map.forEach(this.unregister);
-    this.map.clear();
+    const {map, disposerMap} = this;
+    for (const disposer of disposerMap.values()) {
+      disposer.dispose();
+    }
+    map.clear();
+    disposerMap.clear();
     super.disposed();
   }
 }

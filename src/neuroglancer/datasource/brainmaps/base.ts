@@ -108,6 +108,15 @@ export class AnnotationSourceParameters {
   instance: BrainmapsInstance;
   volumeId: string;
   changestack: string;
+  upperVoxelBound: Float32Array;
 
   static RPC_ID = 'brainmaps/Annotation';
+}
+
+export class AnnotationSpatialIndexSourceParameters {
+  instance: BrainmapsInstance;
+  volumeId: string;
+  changestack: string;
+
+  static RPC_ID = 'brainmaps/AnnotationSpatialIndex';
 }

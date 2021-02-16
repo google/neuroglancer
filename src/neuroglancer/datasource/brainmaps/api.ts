@@ -15,19 +15,13 @@
  */
 
 import {CredentialsProvider} from 'neuroglancer/credentials_provider';
-import {fetchWithCredentials} from 'neuroglancer/credentials_provider/http_request';
+import {fetchWithOAuth2Credentials, OAuth2Credentials} from 'neuroglancer/credentials_provider/oauth2';
 import {CancellationToken, uncancelableToken} from 'neuroglancer/util/cancellation';
 import {responseArrayBuffer, responseJson} from 'neuroglancer/util/http_request';
 
-export type BrainmapsCredentialsProvider = CredentialsProvider<Credentials>;
+export type {OAuth2Credentials};
 
-/**
- * OAuth2 token
- */
-export interface Credentials {
-  tokenType: string;
-  accessToken: string;
-}
+export type BrainmapsCredentialsProvider = CredentialsProvider<OAuth2Credentials>;
 
 /**
  * Key used for retrieving the CredentialsProvider from a CredentialsManager.
@@ -115,26 +109,8 @@ export function makeRequest(
     instance: BrainmapsInstance, credentialsProvider: BrainmapsCredentialsProvider,
     httpCall: HttpCall&{responseType: XMLHttpRequestResponseType},
     cancellationToken: CancellationToken = uncancelableToken): any {
-  return fetchWithCredentials(
+  return fetchWithOAuth2Credentials(
       credentialsProvider, `${instance.serverUrl}${httpCall.path}`,
       {method: httpCall.method, body: httpCall.payload},
-      httpCall.responseType === 'json' ? responseJson : responseArrayBuffer,
-      (credentials, init) => {
-        const headers = new Headers(init.headers);
-        headers.set('Authorization', `${credentials.tokenType} ${credentials.accessToken}`);
-        return {...init, headers};
-      },
-      error => {
-        const {status} = error;
-        if (status === 401) {
-          // 401: Authorization needed.  OAuth2 token may have expired.
-          return 'refresh';
-        } else if (status === 504 || status === 503) {
-          // 503: Service unavailable.  Retry.
-          // 504: Gateway timeout.  Can occur if the server takes too long to reply.  Retry.
-          return 'retry';
-        }
-        throw error;
-      },
-      cancellationToken);
+      httpCall.responseType === 'json' ? responseJson : responseArrayBuffer, cancellationToken);
 }

@@ -19,4 +19,6 @@
   position: relative;
   outline: 0;
   touch-action: none;
+  color: #fff;
+  text-align:left;
 }

@@ -18,7 +18,6 @@
 
 const gulp = require('gulp');
 const format = require('gulp-clang-format');
-const tslint = require('gulp-tslint');
 
 {
   const sourcesToFormat = [
@@ -43,18 +42,4 @@ const tslint = require('gulp-tslint');
         .pipe(format.format(opt_clangStyle, opt_clangFormat))
         .pipe(gulp.dest('.'));
   });
-}
-
-{
-  const sourcesToLint = [
-    'src/**/*.ts',
-  ];
-  gulp.task(
-      'tslint',
-      () => gulp.src(sourcesToLint, {base: '.', nodir: true})
-                .pipe(tslint({
-                  tslint: require('tslint'),
-                  formatter: 'verbose',
-                }))
-                .pipe(tslint.report()));
 }

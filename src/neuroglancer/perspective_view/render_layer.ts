@@ -14,31 +14,20 @@
  * limitations under the License.
  */
 
-import {VisibilityTrackedRenderLayer} from 'neuroglancer/layer';
-import {PickIDManager} from 'neuroglancer/object_picking';
-import {mat4, vec3} from 'neuroglancer/util/geom';
+import {VisibleLayerInfo} from 'neuroglancer/layer';
+import {PerspectivePanel} from 'neuroglancer/perspective_view/panel';
+import {ThreeDimensionalReadyRenderContext, ThreeDimensionalRenderContext, VisibilityTrackedRenderLayer} from 'neuroglancer/renderlayer';
+import {vec3} from 'neuroglancer/util/geom';
 import {ShaderModule} from 'neuroglancer/webgl/shader';
 import {SharedObject} from 'neuroglancer/worker_rpc';
 
-export interface PerspectiveViewReadyRenderContext {
-  dataToDevice: mat4;
+export interface PerspectiveViewReadyRenderContext extends ThreeDimensionalReadyRenderContext {}
 
-  /**
-   * Width of GL viewport in pixels.
-   */
-  viewportWidth: number;
-
-  /**
-   * Height of GL viewport in pixels.
-   */
-  viewportHeight: number;
-}
-
-export interface PerspectiveViewRenderContext extends PerspectiveViewReadyRenderContext {
+export interface PerspectiveViewRenderContext extends PerspectiveViewReadyRenderContext,
+                                                      ThreeDimensionalRenderContext {
   lightDirection: vec3;
   ambientLighting: number;
   directionalLighting: number;
-  pickIDs: PickIDManager;
   emitter: ShaderModule;
 
   /**
@@ -57,15 +46,30 @@ export interface PerspectiveViewRenderContext extends PerspectiveViewReadyRender
   alreadyEmittedPickID: boolean;
 }
 
-export class PerspectiveViewRenderLayer extends VisibilityTrackedRenderLayer {
-  draw(_renderContext: PerspectiveViewRenderContext) {
+export class PerspectiveViewRenderLayer<AttachmentState = unknown> extends
+    VisibilityTrackedRenderLayer {
+  draw(
+      renderContext: PerspectiveViewRenderContext,
+      attachment: VisibleLayerInfo<PerspectivePanel, AttachmentState>): void {
+    renderContext;
+    attachment;
     // Must be overridden by subclasses.
   }
 
-  isReady(_renderContext: PerspectiveViewReadyRenderContext) {
+  isReady(
+      renderContext: PerspectiveViewReadyRenderContext,
+      attachment: VisibleLayerInfo<PerspectivePanel, AttachmentState>) {
+    renderContext;
+    attachment;
     return true;
   }
 
+  get transparentPickEnabled() {
+    return true;
+  }
+}
+
+export interface PerspectiveViewRenderLayer<AttachmentState = unknown> {
   isTransparent: boolean|undefined;
   isAnnotation: boolean|undefined;
   backend: SharedObject|undefined;

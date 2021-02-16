@@ -45,33 +45,25 @@
   margin-left: 5px;
 }
 
-.neuroglancer-layer-item[layer-selected=true] {
+.neuroglancer-layer-item[data-selected=true] {
   border-color: #8c8;
 }
 
-.neuroglancer-layer-item[layer-selected=true]:hover {
+.neuroglancer-layer-item[data-selected=true]:hover {
   border-color: #3c3;
 }
-
 
 .neuroglancer-layer-item:hover {
   border-color: #daa520;
 }
 
-.clear-button::after {
-  content: "x";
-}
-
-.neuroglancer-layer-dropdown {
-  flex-direction: column;
-  background-color: black;
-  padding: 5px;
-  border: 1px solid white;
-  box-sizing: border-box;
+.neuroglancer-layer-item[data-pick="true"] .neuroglancer-layer-item-label {
+  background-color: #939;
 }
 
 .neuroglancer-layer-item-label {
   display: inline-block;
+  position: relative;
   background-color: #222;
   padding-right: 3px;
 }
@@ -80,12 +72,14 @@
   display: inline-block;
   background-color: /*#daa520*/ #9a7518;
   font-weight: bold;
-  padding: 1px;
+  padding-left: 1px;
+  padding-right: 1px;
 }
 
-.neuroglancer-layer-item-value {
+.neuroglancer-layer-panel[data-show-hover-values="true"] .neuroglancer-layer-item-value {
   display: inline-block;
-  min-width: 10ch;
+  font-family: monospace;
+  font-size: medium;
   max-width: 50ch;
   margin-left: 1ch;
   white-space: nowrap;
@@ -94,24 +88,34 @@
   text-align: center;
 }
 
-.neuroglancer-layer-item[layer-visible=false] .neuroglancer-layer-item-label {
+.neuroglancer-layer-panel[data-show-hover-values="false"] .neuroglancer-layer-item-value { 
+  display:none;
+}
+
+.neuroglancer-layer-item[data-visible=false] .neuroglancer-layer-item-label {
   text-decoration: line-through;
 }
 
-.neuroglancer-layer-item[layer-visible=false] .neuroglancer-layer-item-value {
-  display: none;
-}
-
-
-.neuroglancer-layer-add-button.neuroglancer-button {
-  font-weight: bold;
-}
-
-.neuroglancer-layer-item[layer-visible=false] {
+.neuroglancer-layer-item[data-visible=false] {
   color: #bbb;
 }
 
 .neuroglancer-layer-panel-drop-zone {
   display: inline-block;
   flex: 1;
+}
+
+.neuroglancer-layer-item-visible-progress, .neuroglancer-layer-item-prefetch-progress {
+  position: absolute;
+  left: 0px;
+  height: 2px;
+  background-color: #666;
+}
+
+.neuroglancer-layer-item-visible-progress {
+  top: 0px;
+}
+
+.neuroglancer-layer-item-prefetch-progress {
+  bottom: 0px;
 }

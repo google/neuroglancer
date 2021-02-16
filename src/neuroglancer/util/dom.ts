@@ -16,7 +16,7 @@
 
 export function removeChildren(element: HTMLElement) {
   while (true) {
-    let child = element.firstElementChild;
+    let child = element.firstChild;
     if (!child) {
       break;
     }
@@ -28,6 +28,41 @@ export function removeFromParent(element: HTMLElement) {
   let {parentElement} = element;
   if (parentElement) {
     parentElement.removeChild(element);
+    return true;
+  }
+  return false;
+}
+
+export function updateInputFieldWidth(
+    element: HTMLInputElement, length = Math.max(1, element.value.length)) {
+  const newWidth = `${length}ch`;
+  if (element.style.width !== newWidth) {
+    // Force additional reflow to work around Chrome bug.
+    element.style.width = '0px';
+    element.offsetWidth;
+    element.style.width = newWidth;
+  }
+}
+
+export function updateChildren(element: HTMLElement, children: Iterable<HTMLElement>) {
+  let nextChild = element.firstElementChild;
+  for (const child of children) {
+    if (child !== nextChild) {
+      element.insertBefore(child, nextChild);
+    }
+    nextChild = child.nextElementSibling;
+  }
+  while (nextChild !== null) {
+    let next = nextChild.nextElementSibling;
+    element.removeChild(nextChild);
+    nextChild = next;
+  }
+}
+
+export function isInputTextTarget(target: EventTarget|null) {
+  if (!(target instanceof HTMLElement)) return false;
+  if ((target instanceof HTMLInputElement) || (target instanceof HTMLTextAreaElement) ||
+      target.isContentEditable) {
     return true;
   }
   return false;

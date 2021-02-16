@@ -14,7 +14,8 @@
  * limitations under the License.
  */
 
-import {MouseSelectionState, RenderLayer} from 'neuroglancer/layer';
+import {MouseSelectionState} from 'neuroglancer/layer';
+import {RenderLayer} from 'neuroglancer/renderlayer';
 import {Uint64} from 'neuroglancer/util/uint64';
 
 const DEBUG_PICKING = false;

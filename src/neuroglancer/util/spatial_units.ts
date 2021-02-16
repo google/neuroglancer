@@ -17,13 +17,19 @@
 import {mat3, mat4, prod3, transformVectorByMat4, vec3} from 'neuroglancer/util/geom';
 import {pickLengthUnit, pickVolumeUnit} from 'neuroglancer/widget/scale_bar';
 
-export function formatIntegerPoint(point: vec3) {
-  return `(${Math.floor(point[0])}, ${Math.floor(point[1])}, ${Math.floor(point[2])})`;
+export function formatIntegerPoint(point: Float32Array) {
+  let result = `(`;
+  for (let i = 0, rank = point.length; i < rank; ++i) {
+    if (i !== 0) result += ', ';
+    result += Math.floor(point[i]).toString();
+  }
+  result += ')';
+  return result;
 }
 
-export function formatIntegerBounds(bounds: vec3) {
+export function formatIntegerBounds(bounds: Float32Array) {
   let result = '';
-  for (let i = 0; i < 3; ++i) {
+  for (let i = 0, rank = bounds.length; i < rank; ++i) {
     if (i !== 0) {
       result += ' × ';
     }

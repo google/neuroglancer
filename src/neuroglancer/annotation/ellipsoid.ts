@@ -19,15 +19,16 @@
  */
 
 import {AnnotationType, Ellipsoid} from 'neuroglancer/annotation';
-import {AnnotationRenderContext, AnnotationRenderHelper, registerAnnotationTypeRenderHandler} from 'neuroglancer/annotation/type_handler';
+import {AnnotationRenderContext, AnnotationRenderHelper, AnnotationShaderGetter, registerAnnotationTypeRenderHandler} from 'neuroglancer/annotation/type_handler';
 import {PerspectiveViewRenderContext} from 'neuroglancer/perspective_view/render_layer';
-import {SliceViewPanelRenderContext} from 'neuroglancer/sliceview/panel';
+import {SliceViewPanelRenderContext} from 'neuroglancer/sliceview/renderlayer';
 import {mat3, mat4, vec3} from 'neuroglancer/util/geom';
 import {computeCenterOrientEllipseDebug, computeCrossSectionEllipseDebug, glsl_computeCenterOrientEllipse, glsl_computeCrossSectionEllipse} from 'neuroglancer/webgl/ellipse';
-import {QuadRenderHelper} from 'neuroglancer/webgl/quad';
-import {emitterDependentShaderGetter, ShaderBuilder, ShaderProgram} from 'neuroglancer/webgl/shader';
+import {drawQuads, glsl_getQuadVertexPosition} from 'neuroglancer/webgl/quad';
+import {ShaderBuilder, ShaderProgram} from 'neuroglancer/webgl/shader';
+import {defineVectorArrayVertexShaderInput} from 'neuroglancer/webgl/shader_lib';
 import {SphereRenderHelper} from 'neuroglancer/webgl/spheres';
-import {getSquareCornersBuffer} from 'neuroglancer/webgl/square_corners_buffer';
+import {defineVertexId, VertexIdHelper} from 'neuroglancer/webgl/vertex_id';
 
 const tempMat4 = mat4.create();
 
@@ -35,31 +36,59 @@ const DEBUG = false;
 
 abstract class RenderHelper extends AnnotationRenderHelper {
   defineShader(builder: ShaderBuilder) {
-    super.defineShader(builder);
-    builder.addAttribute('highp vec3', 'aCenter');
-    builder.addAttribute('highp vec3', 'aRadii');
+    const {rank} = this;
+    defineVectorArrayVertexShaderInput(
+        builder, 'float', WebGL2RenderingContext.FLOAT, /*normalized=*/ false, 'CenterAndRadii',
+        rank, 2);
+    builder.addVertexCode(`
+struct SubspaceParams {
+  highp vec3 subspaceCenter;
+  highp vec3 subspaceRadii;
+  highp float clipCoefficient;
+  bool cull;
+};
+SubspaceParams getSubspaceParams() {
+  SubspaceParams params;
+  highp float modelCenter[${rank}] = getCenterAndRadii0();
+  highp float modelRadii[${rank}] = getCenterAndRadii1();
+  float radiusAdjustment = 1.0;
+  float clipCoefficient = 1.0;
+  for (int i = 0; i < ${rank}; ++i) {
+    float r = modelRadii[i];
+    float c = modelCenter[i];
+    float x = uModelClipBounds[i];
+    float clipRadius = uModelClipBounds[i + ${rank}];
+    if (r != 0.0 && clipRadius != 0.0) {
+      float d = c - x;
+      d = d * d;
+      radiusAdjustment -= d / (r * r);
+    }
+    float e = abs(x - clamp(x, c - r, c + r)) * clipRadius;
+    clipCoefficient *= max(0.0, 1.0 - e);
+  }
+  radiusAdjustment = sqrt(max(0.0, radiusAdjustment));
+  params.subspaceCenter = projectModelVectorToSubspace(modelCenter);
+  params.subspaceRadii = projectModelVectorToSubspace(modelRadii) * radiusAdjustment;
+  params.clipCoefficient = clipCoefficient;
+  params.cull = clipCoefficient == 0.0 || radiusAdjustment == 0.0;
+  return params;
+}
+void setEllipsoidFillColor(vec4 color) {
+  vColor = color;
+}
+`);
   }
 
-  enable(shader: ShaderProgram, context: AnnotationRenderContext, callback: () => void) {
-    super.enable(shader, context, () => {
-      const aCenter = shader.attribute('aCenter');
-      const aRadii = shader.attribute('aRadii');
-      const {gl} = shader;
-      context.buffer.bindToVertexAttrib(
-          aCenter, /*components=*/ 3, /*attributeType=*/ WebGL2RenderingContext.FLOAT,
-          /*normalized=*/ false,
-          /*stride=*/ 4 * 6, /*offset=*/ context.bufferOffset);
-      context.buffer.bindToVertexAttrib(
-          aRadii, /*components=*/ 3, /*attributeType=*/ WebGL2RenderingContext.FLOAT,
-          /*normalized=*/ false,
-          /*stride=*/ 4 * 6, /*offset=*/ context.bufferOffset + 4 * 3);
-      gl.vertexAttribDivisor(aCenter, 1);
-      gl.vertexAttribDivisor(aRadii, 1);
-      callback();
-      gl.vertexAttribDivisor(aCenter, 0);
-      gl.vertexAttribDivisor(aRadii, 0);
-      gl.disableVertexAttribArray(aCenter);
-      gl.disableVertexAttribArray(aRadii);
+  enable(
+      shaderGetter: AnnotationShaderGetter, context: AnnotationRenderContext,
+      callback: (shader: ShaderProgram) => void) {
+    super.enable(shaderGetter, context, shader => {
+      const binder = shader.vertexShaderInputBinders['CenterAndRadii'];
+      binder.enable(1);
+      this.gl.bindBuffer(WebGL2RenderingContext.ARRAY_BUFFER, context.buffer.buffer);
+      binder.bind(this.serializedBytesPerAnnotation, context.bufferOffset);
+      callback(shader);
+      binder.disable();
     });
   }
 }
@@ -70,25 +99,33 @@ abstract class RenderHelper extends AnnotationRenderHelper {
 class PerspectiveRenderHelper extends RenderHelper {
   private sphereRenderHelper = this.registerDisposer(new SphereRenderHelper(this.gl, 10, 10));
 
-  private shaderGetter = emitterDependentShaderGetter(this, this.gl, (builder: ShaderBuilder) => {
-    this.defineShader(builder);
-    this.sphereRenderHelper.defineShader(builder);
-    builder.addUniform('highp vec4', 'uLightDirection');
-    builder.addUniform('highp mat4', 'uNormalTransform');
-    builder.setVertexMain(`
-emitSphere(uProjection, uNormalTransform, aCenter, aRadii, uLightDirection);
+  private shaderGetter =
+      this.getDependentShader('annotation/ellipsoid/projection', (builder: ShaderBuilder) => {
+        this.defineShader(builder);
+        this.sphereRenderHelper.defineShader(builder);
+        builder.addUniform('highp vec4', 'uLightDirection');
+        builder.addUniform('highp mat4', 'uNormalTransform');
+        builder.addVarying('highp float', 'vClipCoefficient');
+        builder.setVertexMain(`
+SubspaceParams params = getSubspaceParams();
+if (params.cull) {
+  gl_Position = vec4(2.0, 0.0, 0.0, 1.0);
+  return;
+}
+vClipCoefficient = params.clipCoefficient;
+${this.invokeUserMain}
+emitSphere(uModelViewProjection, uNormalTransform, params.subspaceCenter, params.subspaceRadii, uLightDirection);
 ${this.setPartIndex(builder)};
 `);
-    builder.setFragmentMain(`
-emitAnnotation(vec4(vColor.rgb * vLightingFactor, vColor.a));
+        builder.setFragmentMain(`
+emitAnnotation(vec4(vColor.rgb * vLightingFactor, vColor.a * vClipCoefficient));
 `);
-  });
+      });
 
   private tempLightVec = new Float32Array(4);
 
   draw(context: AnnotationRenderContext&{renderContext: PerspectiveViewRenderContext}) {
-    const shader = this.shaderGetter(context.renderContext.emitter);
-    this.enable(shader, context, () => {
+    this.enable(this.shaderGetter, context, shader => {
       const {gl} = shader;
       let lightVec = <vec3>this.tempLightVec;
       let {lightDirection, ambientLighting, directionalLighting} = context.renderContext;
@@ -97,7 +134,7 @@ emitAnnotation(vec4(vColor.rgb * vLightingFactor, vColor.a));
       gl.uniform4fv(shader.uniform('uLightDirection'), lightVec);
       gl.uniformMatrix4fv(
           shader.uniform('uNormalTransform'), /*transpose=*/ false,
-          mat4.transpose(mat4.create(), context.annotationLayer.state.globalToObject));
+          mat4.transpose(mat4.create(), context.renderSubspaceInvModelMatrix));
       this.sphereRenderHelper.draw(shader, context.count);
     });
   }
@@ -131,75 +168,84 @@ emitAnnotation(vec4(vColor.rgb * vLightingFactor, vColor.a));
  * 5. The fragment shader discards fragments outside the bounds of the ellipse.
  */
 class SliceViewRenderHelper extends RenderHelper {
-  private quadRenderHelper = this.registerDisposer(new QuadRenderHelper(this.gl, 1));
-  private squareCornersBuffer =
-      getSquareCornersBuffer(this.gl, -1, -1, 1, 1, /*minorTiles=*/ 1, /*majorTiles=*/ 1);
-
-  private shaderGetter = emitterDependentShaderGetter(this, this.gl, (builder: ShaderBuilder) => {
-    this.defineShader(builder);
-    builder.addUniform('highp mat4', 'uViewportToObject');
-    builder.addUniform('highp mat4', 'uObjectToViewport');
-    builder.addUniform('highp mat4', 'uViewportToDevice');
-    builder.addAttribute('highp vec2', 'aCornerOffset');
-    builder.addVarying('highp vec2', 'vCircleCoord');
-    builder.addVertexCode(glsl_computeCrossSectionEllipse);
-    builder.addVertexCode(glsl_computeCenterOrientEllipse);
-    builder.setVertexMain(`
+  private shaderGetter =
+      this.getDependentShader('annotation/ellipsoid/crossSection', (builder: ShaderBuilder) => {
+        defineVertexId(builder);
+        this.defineShader(builder);
+        builder.addUniform('highp mat4', 'uViewportToObject');
+        builder.addUniform('highp mat4', 'uObjectToViewport');
+        builder.addUniform('highp mat4', 'uViewportToDevice');
+        builder.addAttribute('highp vec2', 'aCornerOffset');
+        builder.addVarying('highp vec2', 'vCircleCoord');
+        builder.addVarying('highp float', 'vClipCoefficient');
+        builder.addVertexCode(glsl_computeCrossSectionEllipse);
+        builder.addVertexCode(glsl_computeCenterOrientEllipse);
+        builder.addVertexCode(glsl_getQuadVertexPosition);
+        builder.setVertexMain(`
+SubspaceParams params = getSubspaceParams();
+if (params.cull) {
+  gl_Position = vec4(2.0, 0.0, 0.0, 1.0);
+  return;
+}
+vClipCoefficient = params.clipCoefficient;
 mat3 Aobject = mat3(0.0);
 for (int i = 0; i < 3; ++i) {
-  Aobject[i][i] = 1.0 / (aRadii[i] * aRadii[i]);
+  float r = max(params.subspaceRadii[i], 1e-3);
+  Aobject[i][i] = 1.0 / (r * r);
 }
 mat3 RviewportToObject = mat3(uViewportToObject);
 mat3 Aviewport = transpose(RviewportToObject) * Aobject * RviewportToObject;
-vec3 cViewport = (uObjectToViewport * vec4(aCenter, 1.0)).xyz;
+vec3 cViewport = (uObjectToViewport * vec4(params.subspaceCenter, 1.0)).xyz;
 EllipseQuadraticForm quadraticForm = computeCrossSectionEllipse(Aviewport, cViewport);
 vec2 u1, u2;
 float a, b;
 CenterOrientEllipse centerOrient = computeCenterOrientEllipse(quadraticForm);
+vec2 cornerOffset = getQuadVertexPosition(vec2(-1.0, -1.0), vec2(1.0, 1.0));
 vec2 viewportCorner = centerOrient.k +
-  centerOrient.u1 * aCornerOffset.x * centerOrient.a +
-  centerOrient.u2 * aCornerOffset.y * centerOrient.b;
+  centerOrient.u1 * cornerOffset.x * centerOrient.a +
+  centerOrient.u2 * cornerOffset.y * centerOrient.b;
 if (centerOrient.valid) {
   gl_Position = uViewportToDevice * vec4(viewportCorner, 0.0, 1.0);
 } else {
-  gl_Position = vec4(1.0, 1.0, 0.0, -100.0);
+  gl_Position = vec4(2.0, 0.0, 0.0, 1.0);
 }
-vCircleCoord = aCornerOffset;
+vCircleCoord = cornerOffset;
+${this.invokeUserMain}
 ${this.setPartIndex(builder)};
 `);
-    builder.setFragmentMain(`
+        builder.setFragmentMain(`
 if (dot(vCircleCoord, vCircleCoord) > 1.0) {
   discard;
 }
-emitAnnotation(vec4(vColor.rgb, 0.5));
+emitAnnotation(vec4(vColor.rgb, vColor.a * vClipCoefficient));
 `);
-  });
+      });
+
+  private vertexIdHelper = this.registerDisposer(VertexIdHelper.get(this.gl));
 
   draw(context: AnnotationRenderContext&{renderContext: SliceViewPanelRenderContext}) {
-    const shader = this.shaderGetter(context.renderContext.emitter);
-    this.enable(shader, context, () => {
+    this.enable(this.shaderGetter, context, shader => {
       const {gl} = shader;
-      const aCornerOffset = shader.attribute('aCornerOffset');
-      this.squareCornersBuffer.bindToVertexAttrib(aCornerOffset, /*components=*/ 2);
+      const projectionParameters = context.renderContext.sliceView.projectionParameters.value;
       const viewportToObject = mat4.multiply(
-          tempMat4, context.annotationLayer.state.globalToObject,
-          context.renderContext.sliceView.viewportToData);
+          tempMat4, context.renderSubspaceInvModelMatrix, projectionParameters.invViewMatrix);
       gl.uniformMatrix4fv(
           shader.uniform('uViewportToObject'), /*transpose=*/ false, viewportToObject);
       gl.uniformMatrix4fv(
           shader.uniform('uViewportToDevice'), /*transpose=*/ false,
-          context.renderContext.sliceView.viewportToDevice);
+          projectionParameters.projectionMat);
       const objectToViewport = tempMat4;
       mat4.invert(objectToViewport, viewportToObject);
       gl.uniformMatrix4fv(
           shader.uniform('uObjectToViewport'), /*transpose=*/ false, objectToViewport);
-      this.quadRenderHelper.draw(gl, context.count);
-      shader.gl.disableVertexAttribArray(aCornerOffset);
-
+      const {vertexIdHelper} = this;
+      vertexIdHelper.enable();
+      drawQuads(gl, 1, context.count);
+      vertexIdHelper.disable();
 
       if (DEBUG) {
-        const center = vec3.fromValues(2184, 1700, 3981);
-        const radii = vec3.fromValues(133, 133, 133);
+        const center = vec3.fromValues(3406.98779296875, 3234.910400390625, 4045);
+        const radii = vec3.fromValues(10, 10, 10);
 
         const Aobject = mat3.create();
         Aobject[0] = 1 / (radii[0] * radii[0]);
@@ -224,31 +270,22 @@ emitAnnotation(vec4(vColor.rgb, 0.5));
   }
 }
 
-registerAnnotationTypeRenderHandler(AnnotationType.ELLIPSOID, {
-  bytes: 6 * 4,
-  serializer: (buffer: ArrayBuffer, offset: number, numAnnotations: number) => {
-    const coordinates = new Float32Array(buffer, offset, numAnnotations * 6);
-    return (annotation: Ellipsoid, index: number) => {
-      const {center, radii} = annotation;
-      const coordinateOffset = index * 6;
-      coordinates.set(center, coordinateOffset);
-      coordinates.set(radii, coordinateOffset + 3);
-    };
-  },
+registerAnnotationTypeRenderHandler<Ellipsoid>(AnnotationType.ELLIPSOID, {
   sliceViewRenderHelper: SliceViewRenderHelper,
   perspectiveViewRenderHelper: PerspectiveRenderHelper,
+  defineShaderNoOpSetters(builder) {
+    builder.addVertexCode(`
+void setEllipsoidFillColor(vec4 color) {}
+`);
+  },
   pickIdsPerInstance: 1,
-  snapPosition: (/*position, objectToData, annotation, partIndex*/) => {
+  snapPosition: (/*position, annotation, partIndex*/) => {
     // FIXME: snap to nearest point on ellipsoid surface
   },
-  getRepresentativePoint: (objectToData, ann) => {
-    let repPoint = vec3.create();
-    vec3.transformMat4(repPoint, ann.center, objectToData);
-    return repPoint;
+  getRepresentativePoint(position, ann) {
+    position.set(ann.center);
   },
-  updateViaRepresentativePoint: (oldAnnotation: Ellipsoid, position: vec3, dataToObject: mat4) => {
-    let annotation = {...oldAnnotation};
-    annotation.center = vec3.transformMat4(vec3.create(), position, dataToObject);
-    return annotation;
+  updateViaRepresentativePoint(oldAnnotation: Ellipsoid, position: Float32Array) {
+    return {...oldAnnotation, center: new Float32Array(position)};
   }
 });

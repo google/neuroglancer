@@ -121,7 +121,8 @@ window.addEventListener('DOMContentLoaded', () => {
   let sharedState: Trackable|undefined = viewer.state;
   viewer.loadFromJsonUrl();
   if (window.location.hash) {
-    const hashBinding = viewer.registerDisposer(new UrlHashBinding(viewer.state));
+    const hashBinding =
+        viewer.registerDisposer(new UrlHashBinding(viewer.state, credentialsManager));
     hashBinding.updateFromUrlHash();
     sharedState = undefined;
   }
@@ -135,8 +136,8 @@ window.addEventListener('DOMContentLoaded', () => {
   configState.add('showHelpButton', viewer.uiConfiguration.showHelpButton);
   configState.add('showLocation', viewer.uiConfiguration.showLocation);
   configState.add('showPanelBorders', viewer.uiConfiguration.showPanelBorders);
+  configState.add('showLayerHoverValues', viewer.uiConfiguration.showLayerHoverValues);
   configState.add('scaleBarOptions', viewer.scaleBarOptions);
-
   const size = new TrackableValue<[number, number]|undefined>(
       undefined,
       x => x == null ? undefined : parseFixedLengthArray(<[number, number]>[0, 0], x, verifyInt));
@@ -147,18 +148,18 @@ window.addEventListener('DOMContentLoaded', () => {
     const value = size.value;
     if (value === undefined) {
       element.style.position = 'relative';
-      element.style.width = null;
-      element.style.height = null;
-      element.style.transform = null;
-      element.style.transformOrigin = null;
+      element.style.width = '';
+      element.style.height = '';
+      element.style.transform = '';
+      element.style.transformOrigin = '';
     } else {
       element.style.position = 'absolute';
       element.style.width = `${value[0]}px`;
       element.style.height = `${value[1]}px`;
       const screenWidth = document.documentElement!.clientWidth;
       const screenHeight = document.documentElement!.clientHeight;
-      const scaleX = screenWidth/value[0];
-      const scaleY = screenHeight/value[1];
+      const scaleX = screenWidth / value[0];
+      const scaleY = screenHeight / value[1];
       const scale = Math.min(scaleX, scaleY);
       element.style.transform = `scale(${scale})`;
       element.style.transformOrigin = 'top left';
@@ -173,6 +174,8 @@ window.addEventListener('DOMContentLoaded', () => {
       (action, state) => serverConnection.sendActionNotification(action, state));
   screenshotHandler.sendScreenshotRequested.add(
       state => serverConnection.sendActionNotification('screenshot', state));
+  screenshotHandler.sendStatisticsRequested.add(
+      state => serverConnection.sendActionNotification('screenshotStatistics', state));
 
   bindDefaultCopyHandler(viewer);
   bindDefaultPasteHandler(viewer);

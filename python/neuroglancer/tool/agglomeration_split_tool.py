@@ -17,12 +17,14 @@ import numpy as np
 import six
 
 import neuroglancer
+import neuroglancer.cli
 
 debug_graph = False
 verbose_merging = False
 
 
-def normalize_edge((id_a, id_b)):
+def normalize_edge(e):
+    id_a, id_b = e
     if id_a > id_b:
         id_a, id_b = id_b, id_a
     return id_a, id_b
@@ -44,7 +46,8 @@ class GreedyMulticut(object):
         self.num_valid_edges = 0
         self._initialized = False
 
-    def add_edge(self, (id_a, id_b), edge):
+    def add_edge(self, e, edge):
+        id_a, id_b = e
         id_a, id_b = normalize_edge((id_a, id_b))
         self.regions.setdefault(id_a, set()).add(id_b)
         self.regions.setdefault(id_b, set()).add(id_a)
@@ -94,7 +97,8 @@ class GreedyMulticut(object):
                 num_valid_edges += 1
         assert num_valid_edges == self.num_valid_edges
 
-    def merge(self, (id_a, id_b)):
+    def merge(self, e):
+        id_a, id_b = e
         self._initialize_heap()
         id_a, id_b = normalize_edge((id_a, id_b))
         if (id_a, id_b) not in self.edge_map:
@@ -133,8 +137,7 @@ class GreedyMulticut(object):
         expected_entry = self.edge_map.get(entry[1])
         if entry is not expected_entry or entry[0] is not score:
             return None
-        else:
-            return entry
+        return entry
 
     def get_next_edge(self):
         self._initialize_heap()
@@ -205,8 +208,7 @@ class AgglomerationGraph(object):
         result = c.fetchone()
         if result is None:
             return supervoxel_id
-        else:
-            return result[0]
+        return result[0]
 
     def get_agglo_members(self, agglo_id):
         result = self.agglo_members_cache.get(agglo_id)
@@ -355,7 +357,6 @@ def display_split_result(graph, agglo_id, cur_eqs, supervoxel_map, split_seeds, 
         seed['position'] for component in six.viewvalues(split_seeds) for seed in component
     ]
     state.voxel_coordinates = np.mean(all_seed_points, axis=0)
-    state.perspective_zoom = 140
     return state
 
 
@@ -546,7 +547,6 @@ class InteractiveSplitter(object):
         ]
 
         with viewer.txn() as s:
-            s.perspective_zoom = 140
             s.layers.append(
                 name='image',
                 layer=neuroglancer.ImageLayer(source=self.image_url),
@@ -627,14 +627,17 @@ class InteractiveSplitter(object):
 
 
     def _make_new_component(self, s):
+        del s
         self.state.make_new_component()
         self._update_view()
 
     def _next_component(self, s):
+        del s
         self.state.cycle_selected_component(1)
         self._update_view()
 
     def _prev_component(self, s):
+        del s
         self.state.cycle_selected_component(-1)
         self._update_view()
 
@@ -650,11 +653,15 @@ class InteractiveSplitter(object):
             self._update_state(s)
 
     def _get_mouse_supervoxel(self, s):
-        supervoxel_id = s.selected_values['original']
+        supervoxel_id = s.selected_values.get('original')
+        if supervoxel_id is not None:
+            supervoxel_id = supervoxel_id.value
         if supervoxel_id is None:
-            m = s.selected_values['split-result']
+            m = s.selected_values.get('split-result')
             if m is not None:
-                if isinstance(m, neuroglancer.MapEntry):
+                m = m.value
+            if m is not None:
+                if isinstance(m, neuroglancer.SegmentIdMapEntry):
                     supervoxel_id = m.key
                 else:
                     supervoxel_id = m
@@ -703,7 +710,6 @@ class InteractiveSplitter(object):
             self._show_split_result(
                 s,
                 cur_eqs=split_result['cur_eqs'],
-                supervoxel_map=split_result['supervoxel_map'],
             )
         s.layout = neuroglancer.row_layout([
             neuroglancer.LayerGroupViewer(
@@ -714,7 +720,7 @@ class InteractiveSplitter(object):
                                      'exclusive-seeds']),
         ])
 
-    def _show_split_result(self, s, cur_eqs, supervoxel_map):
+    def _show_split_result(self, s, cur_eqs):
         split_layer = s.layers['split-result']
         split_layer.equivalences = cur_eqs
         split_layer.segments = set(cur_eqs[x] for x in self.cached_split_result.supervoxels)
@@ -738,10 +744,7 @@ def run_interactive(args, graph):
     # interactive `python -i` shell.
     global splitter
 
-    if args.bind_address:
-        neuroglancer.set_server_bind_address(args.bind_address)
-    if args.static_content_url:
-        neuroglancer.set_static_content_source(url=args.static_content_url)
+    neuroglancer.cli.handle_server_arguments(args)
 
     splitter = InteractiveSplitter(
         graph,
@@ -755,7 +758,7 @@ def run_interactive(args, graph):
 def open_graph(path, agglo_id):
     # Check if graph_db is sharded
     graph_db = path
-    m = re.match('(.*)@([0-9]+)((?:\..*)?)$', graph_db)
+    m = re.match(r'(.*)@([0-9]+)((?:\..*)?)$', graph_db)
     if m is not None:
         num_shards = int(m.group(2))
         shard = agglo_id % num_shards
@@ -788,14 +791,7 @@ if __name__ == '__main__':
         '--agglo-id', type=int, required=True, help='Agglomerated component id to split')
     interactive_ap.add_argument('--split-seeds', help='Path to JSON file specifying split seeds')
     interactive_ap.add_argument('--state', help='Path to JSON state file.')
-    interactive_ap.add_argument(
-        '-a',
-        '--bind-address',
-        help='Bind address for Python web server.  Use 127.0.0.1 (the default) to restrict access '
-        'to browers running on the local machine, use 0.0.0.0 to permit access from remote browsers.'
-    )
-    interactive_ap.add_argument(
-        '--static-content-url', help='Obtain the Neuroglancer client code from the specified URL.')
+    neuroglancer.cli.add_server_arguments(interactive_ap)
 
     interactive_ap.set_defaults(func=run_interactive)
 

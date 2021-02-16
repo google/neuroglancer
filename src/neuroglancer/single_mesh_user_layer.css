@@ -16,6 +16,7 @@
 
 .neuroglancer-single-mesh-dropdown .neuroglancer-single-mesh-attribute-widget {
   max-height: 6em;
+  margin-bottom: 8px;
 }
 
 .neuroglancer-single-mesh-dropdown .neuroglancer-shader-code-widget {
@@ -38,7 +39,8 @@
 .neuroglancer-single-mesh-attribute-widget {
   word-wrap: break-word;
   overflow-y: auto;
-  width: 60ch;
+  display: grid;
+  grid-template-columns: [type] auto [name] auto [range] auto;
 }
 
 .neuroglancer-single-mesh-layer-shader-overlay .neuroglancer-single-mesh-attribute-widget {
@@ -47,16 +49,25 @@
 
 .neuroglancer-single-mesh-attribute {
   font-family: monospace;
-  display: flex;
-  flex-direction: row;
+  display: contents;
+}
+
+.neuroglancer-single-mesh-attribute-type {
+  color: #c6c;
+  grid-column: type;
+}
+
+.neuroglancer-single-mesh-attribute-name {
+  margin-left: 1ch;
+  color: white;
+  grid-column: name;
+  user-select: text;
 }
 
 .neuroglancer-single-mesh-attribute-range {
-  white-space: nowrap;
-}
-
-.neuroglancer-single-mesh-attribute input {
-  font-family: monospace;
+  grid-column: range;
   margin-left: 1ch;
-  flex: 1;
+  white-space: nowrap;
+  color: #999;
+  grid-column: range;
 }

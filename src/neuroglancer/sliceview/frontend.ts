@@ -17,189 +17,324 @@
 import debounce from 'lodash/debounce';
 import {ChunkState} from 'neuroglancer/chunk_manager/base';
 import {Chunk, ChunkManager, ChunkSource} from 'neuroglancer/chunk_manager/frontend';
+import {applyRenderViewportToProjectionMatrix} from 'neuroglancer/display_context';
 import {LayerManager} from 'neuroglancer/layer';
-import {NavigationState} from 'neuroglancer/navigation_state';
-import {SLICEVIEW_ADD_VISIBLE_LAYER_RPC_ID, SLICEVIEW_REMOVE_VISIBLE_LAYER_RPC_ID, SLICEVIEW_RPC_ID, SLICEVIEW_UPDATE_VIEW_RPC_ID, SliceViewBase, SliceViewChunkSource as SliceViewChunkSourceInterface, SliceViewChunkSpecification, SliceViewSourceOptions} from 'neuroglancer/sliceview/base';
+import {DisplayDimensionRenderInfo, NavigationState} from 'neuroglancer/navigation_state';
+import {updateProjectionParametersFromInverseViewAndProjection} from 'neuroglancer/projection_parameters';
+import {ChunkDisplayTransformParameters, ChunkTransformParameters, getChunkDisplayTransformParameters, getChunkTransformParameters, getLayerDisplayDimensionMapping, RenderLayerTransformOrError} from 'neuroglancer/render_coordinate_transform';
+import {DerivedProjectionParameters, SharedProjectionParameters} from 'neuroglancer/renderlayer';
+import {forEachPlaneIntersectingVolumetricChunk, getNormalizedChunkLayout, SLICEVIEW_ADD_VISIBLE_LAYER_RPC_ID, SLICEVIEW_REMOVE_VISIBLE_LAYER_RPC_ID, SLICEVIEW_RPC_ID, SliceViewBase, SliceViewChunkSource as SliceViewChunkSourceInterface, SliceViewChunkSpecification, SliceViewProjectionParameters, SliceViewSourceOptions, TransformedSource, VisibleLayerSources} from 'neuroglancer/sliceview/base';
 import {ChunkLayout} from 'neuroglancer/sliceview/chunk_layout';
-import {RenderLayer} from 'neuroglancer/sliceview/renderlayer';
-import {Disposer, invokeDisposers, RefCounted} from 'neuroglancer/util/disposable';
-import {mat4, rectifyTransformMatrixIfAxisAligned, vec3, vec3Key, vec4} from 'neuroglancer/util/geom';
+import {SliceViewRenderLayer} from 'neuroglancer/sliceview/renderlayer';
+import {WatchableValueInterface} from 'neuroglancer/trackable_value';
+import {Borrowed, Disposer, invokeDisposers, Owned, RefCounted} from 'neuroglancer/util/disposable';
+import {kOneVec, kZeroVec4, mat4, vec3, vec4} from 'neuroglancer/util/geom';
+import {MessageList, MessageSeverity} from 'neuroglancer/util/message_list';
 import {getObjectId} from 'neuroglancer/util/object_id';
 import {NullarySignal} from 'neuroglancer/util/signal';
 import {withSharedVisibility} from 'neuroglancer/visibility_priority/frontend';
 import {GL} from 'neuroglancer/webgl/context';
-import {FramebufferConfiguration, makeTextureBuffers, StencilBuffer} from 'neuroglancer/webgl/offscreen';
+import {HistogramSpecifications, TextureHistogramGenerator} from 'neuroglancer/webgl/empirical_cdf';
+import {DepthTextureBuffer, FramebufferConfiguration, makeTextureBuffers, TextureBuffer} from 'neuroglancer/webgl/offscreen';
 import {ShaderBuilder, ShaderModule, ShaderProgram} from 'neuroglancer/webgl/shader';
 import {getSquareCornersBuffer} from 'neuroglancer/webgl/square_corners_buffer';
 import {registerSharedObjectOwner, RPC} from 'neuroglancer/worker_rpc';
 
 export type GenericChunkKey = string;
 
-const tempMat = mat4.create();
-
-class FrontendSliceViewBase extends SliceViewBase<SliceViewChunkSource, RenderLayer> {}
+class FrontendSliceViewBase extends
+    SliceViewBase<SliceViewChunkSource, SliceViewRenderLayer, FrontendTransformedSource> {}
 const Base = withSharedVisibility(FrontendSliceViewBase);
+
+export interface FrontendTransformedSource<
+    RLayer extends SliceViewRenderLayer = SliceViewRenderLayer, Source extends
+        SliceViewChunkSource = SliceViewChunkSource> extends TransformedSource<RLayer, Source> {
+  chunkTransform: ChunkTransformParameters;
+  chunkDisplayTransform: ChunkDisplayTransformParameters;
+}
+
+interface FrontendVisibleLayerSources extends
+    VisibleLayerSources<SliceViewRenderLayer, SliceViewChunkSource, FrontendTransformedSource> {
+  transformGeneration: number;
+  lastSeenGeneration: number;
+  disposers: Disposer[];
+  messages: MessageList;
+}
+
+function serializeTransformedSource(
+    tsource: TransformedSource<SliceViewRenderLayer, SliceViewChunkSource>) {
+  return {
+    source: tsource.source.addCounterpartRef(),
+    effectiveVoxelSize: tsource.effectiveVoxelSize,
+    layerRank: tsource.layerRank,
+    nonDisplayLowerClipBound: tsource.nonDisplayLowerClipBound,
+    nonDisplayUpperClipBound: tsource.nonDisplayUpperClipBound,
+    lowerClipBound: tsource.lowerClipBound,
+    upperClipBound: tsource.upperClipBound,
+    lowerClipDisplayBound: tsource.lowerClipDisplayBound,
+    upperClipDisplayBound: tsource.upperClipDisplayBound,
+    chunkDisplayDimensionIndices: tsource.chunkDisplayDimensionIndices,
+    lowerChunkDisplayBound: tsource.lowerChunkDisplayBound,
+    upperChunkDisplayBound: tsource.upperChunkDisplayBound,
+    fixedLayerToChunkTransform: tsource.fixedLayerToChunkTransform,
+    combinedGlobalLocalToChunkTransform: tsource.combinedGlobalLocalToChunkTransform,
+    chunkLayout: tsource.chunkLayout.toObject(),
+  };
+}
+
+export function serializeAllTransformedSources(
+    allSources: TransformedSource<SliceViewRenderLayer, SliceViewChunkSource>[][]) {
+  return allSources.map(scales => scales.map(serializeTransformedSource));
+}
+
+function disposeTransformedSources(
+    layer: SliceViewRenderLayer,
+    allSources: TransformedSource<SliceViewRenderLayer, SliceViewChunkSource>[][]) {
+  for (const scales of allSources) {
+    for (const {source} of scales) {
+      layer.removeSource(source);
+      source.dispose();
+    }
+  }
+}
 
 @registerSharedObjectOwner(SLICEVIEW_RPC_ID)
 export class SliceView extends Base {
   gl = this.chunkManager.gl;
-
-  dataToViewport = mat4.create();
-
-  // Transforms viewport coordinates to OpenGL normalized device coordinates
-  // [left: -1, right: 1], [top: 1, bottom: -1].
-  viewportToDevice = mat4.create();
-
-  // Equals viewportToDevice * dataToViewport.
-  dataToDevice = mat4.create();
-
-  visibleChunks = new Map<ChunkLayout, GenericChunkKey[]>();
-
   viewChanged = new NullarySignal();
+  rpc: RPC;
+  rpcId: number;
 
   renderingStale = true;
 
   visibleChunksStale = true;
 
-  visibleLayerList = new Array<RenderLayer>();
+  visibleLayerList = new Array<SliceViewRenderLayer>();
 
-  newVisibleLayers = new Set<RenderLayer>();
+  visibleLayers: Map<SliceViewRenderLayer, FrontendVisibleLayerSources>;
 
-  offscreenFramebuffer = this.registerDisposer(new FramebufferConfiguration(
-      this.gl,
-      {colorBuffers: makeTextureBuffers(this.gl, 1), depthBuffer: new StencilBuffer(this.gl)}));
+  offscreenFramebuffer = this.registerDisposer(new FramebufferConfiguration(this.gl, {
+    colorBuffers: makeTextureBuffers(this.gl, 1),
+    depthBuffer: new DepthTextureBuffer(this.gl)
+  }));
+  histogramInputTextures: TextureBuffer[] = [];
+  offscreenFramebuffersWithHistograms = [this.offscreenFramebuffer];
 
-  numVisibleChunks = 0;
+  get displayDimensionRenderInfo() {
+    return this.navigationState.displayDimensionRenderInfo;
+  }
+
+  private histogramGenerator = TextureHistogramGenerator.get(this.gl);
+
+  computeHistograms(count: number, histogramSpecifications: HistogramSpecifications) {
+    this.histogramGenerator.compute(
+        count, this.offscreenFramebuffer.depthBuffer!.texture, this.histogramInputTextures,
+        histogramSpecifications,
+        this.chunkManager.chunkQueueManager.frameNumberCounter.frameNumber);
+  }
+
+  projectionParameters: Owned<DerivedProjectionParameters<SliceViewProjectionParameters>>;
+
+  sharedProjectionParameters: Owned<SharedProjectionParameters<SliceViewProjectionParameters>>;
+
+  flushBackendProjectionParameters() {
+    this.sharedProjectionParameters.flush();
+  }
 
   constructor(
       public chunkManager: ChunkManager, public layerManager: LayerManager,
-      public navigationState: NavigationState) {
-    super();
-    mat4.identity(this.dataToViewport);
-    const rpc = this.chunkManager.rpc!;
-    this.initializeCounterpart(rpc, {
-      'chunkManager': chunkManager.rpcId,
-    });
-    this.registerDisposer(navigationState.changed.add(() => {
-      this.updateViewportFromNavigationState();
-    }));
-    this.updateViewportFromNavigationState();
+      public navigationState: Owned<NavigationState>,
+      public wireFrame: WatchableValueInterface<boolean>) {
+    super(new DerivedProjectionParameters({
+      parametersConstructor: SliceViewProjectionParameters,
+      navigationState,
+      update: (out, navigationState) => {
+        const {invViewMatrix, centerDataPosition} = out;
+        navigationState.toMat4(invViewMatrix);
+        const {canonicalVoxelFactors, voxelPhysicalScales} = out.displayDimensionRenderInfo;
+        for (let i = 0; i < 3; ++i) {
+          centerDataPosition[i] = invViewMatrix[12 + i];
+        }
+        const {
+          logicalWidth,
+          logicalHeight,
+          projectionMat,
+          viewportNormalInGlobalCoordinates,
+          viewportNormalInCanonicalCoordinates
+        } = out;
+        const {relativeDepthRange} = navigationState;
+        mat4.ortho(
+            projectionMat, -logicalWidth / 2, logicalWidth / 2, logicalHeight / 2,
+            -logicalHeight / 2, -relativeDepthRange, relativeDepthRange);
+        applyRenderViewportToProjectionMatrix(out, projectionMat);
+        updateProjectionParametersFromInverseViewAndProjection(out);
+        const {viewMatrix} = out;
+        for (let i = 0; i < 3; ++i) {
+          const x = viewportNormalInGlobalCoordinates[i] = viewMatrix[i * 4 + 2];
+          viewportNormalInCanonicalCoordinates[i] = x / canonicalVoxelFactors[i];
+        }
+        vec3.normalize(viewportNormalInGlobalCoordinates, viewportNormalInGlobalCoordinates);
+        vec3.normalize(viewportNormalInCanonicalCoordinates, viewportNormalInCanonicalCoordinates);
 
-    this.registerDisposer(layerManager.layersChanged.add(() => {
-      if (this.hasValidViewport) {
+        let newPixelSize = 0;
+        for (let i = 0; i < 3; ++i) {
+          const s = voxelPhysicalScales[i];
+          const x = invViewMatrix[i];
+          newPixelSize += (s * x) ** 2;
+        }
+        newPixelSize = Math.sqrt(newPixelSize);
+        out.pixelSize = newPixelSize;
+      },
+    }));
+    this.registerDisposer(navigationState);
+    this.registerDisposer(this.projectionParameters);
+    this.registerDisposer(this.projectionParameters.changed.add((oldValue, newValue) => {
+      if (oldValue.displayDimensionRenderInfo !== newValue.displayDimensionRenderInfo) {
         this.updateVisibleLayers();
       }
     }));
+    const rpc = this.chunkManager.rpc!;
+    const sharedProjectionParameters = this.sharedProjectionParameters =
+        this.registerDisposer(new SharedProjectionParameters(rpc, this.projectionParameters));
+    this.initializeCounterpart(rpc, {
+      chunkManager: chunkManager.rpcId,
+      projectionParameters: sharedProjectionParameters.rpcId,
+    });
+    this.registerDisposer(layerManager.layersChanged.add(() => {
+      this.updateVisibleLayers();
+    }));
+
+    this.wireFrame.changed.add(this.viewChanged.dispatch);
 
     this.viewChanged.add(() => {
       this.renderingStale = true;
     });
     this.registerDisposer(
         chunkManager.chunkQueueManager.visibleChunksChanged.add(this.viewChanged.dispatch));
-
-    this.updateViewportFromNavigationState();
     this.updateVisibleLayers();
   }
 
+  forEachVisibleChunk(
+      tsource: FrontendTransformedSource, chunkLayout: ChunkLayout,
+      callback: (key: string) => void) {
+    forEachPlaneIntersectingVolumetricChunk(
+        this.projectionParameters.value, tsource.renderLayer.localPosition.value, tsource,
+        chunkLayout, () => {
+          callback(tsource.curPositionInChunks.join());
+        });
+  }
+
   isReady() {
-    this.setViewportSizeDebounced.flush();
-    if (!this.hasValidViewport) {
+    if (!this.navigationState.valid) {
       return false;
     }
-    this.maybeUpdateVisibleChunks();
+    this.updateVisibleLayers.flush();
+    this.updateVisibleSources();
     let numValidChunks = 0;
-    for (const visibleSources of this.visibleLayers.values()) {
-      for (const {chunkLayout, source} of visibleSources) {
-        // FIXME: handle change to chunkLayout
-        const visibleChunks = this.visibleChunks.get(chunkLayout);
-        if (!visibleChunks) {
-          return false;
-        }
+    let totalChunks = 0;
+    for (const {visibleSources} of this.visibleLayers.values()) {
+      for (const tsource of visibleSources) {
+        const chunkLayout =
+            getNormalizedChunkLayout(this.projectionParameters.value, tsource.chunkLayout);
+        const {source} = tsource;
         const {chunks} = source;
-        for (const key of visibleChunks) {
+        this.forEachVisibleChunk(tsource, chunkLayout, key => {
           const chunk = chunks.get(key);
+          ++totalChunks;
           if (chunk && chunk.state === ChunkState.GPU_MEMORY) {
             ++numValidChunks;
           }
-        }
+        });
       }
     }
-    return numValidChunks === this.numVisibleChunks;
-  }
-
-  private updateViewportFromNavigationState() {
-    let {navigationState} = this;
-    if (!navigationState.valid) {
-      return;
-    }
-    navigationState.toMat4(tempMat);
-    this.setViewportToDataMatrix(tempMat);
+    return numValidChunks === totalChunks;
   }
 
   private updateVisibleLayers = this.registerCancellable(debounce(() => {
     this.updateVisibleLayersNow();
   }, 0));
 
-  private invalidateVisibleSources = (() => {
-    this.visibleSourcesStale = true;
+  invalidateVisibleSources() {
+    super.invalidateVisibleSources();
     this.viewChanged.dispatch();
-  });
+  }
 
-  private bindVisibleRenderLayer(renderLayer: RenderLayer, disposers: Disposer[]) {
+  private bindVisibleRenderLayer(renderLayer: SliceViewRenderLayer, disposers: Disposer[]) {
+    disposers.push(renderLayer.localPosition.changed.add(() => this.invalidateVisibleChunks()));
     disposers.push(renderLayer.redrawNeeded.add(this.viewChanged.dispatch));
-    disposers.push(renderLayer.transform.changed.add(this.invalidateVisibleSources));
-    disposers.push(renderLayer.renderScaleTarget.changed.add(this.invalidateVisibleSources));
+    disposers.push(renderLayer.transform.changed.add(this.updateVisibleLayers));
+    disposers.push(
+        renderLayer.renderScaleTarget.changed.add(() => this.invalidateVisibleSources()));
     const {renderScaleHistogram} = renderLayer;
     if (renderScaleHistogram !== undefined) {
       disposers.push(renderScaleHistogram.visibility.add(this.visibility));
     }
+    disposers.push(renderLayer.dataHistogramSpecifications.producerVisibility.add(this.visibility));
   }
-
-  private visibleLayerDisposers = new Map<RenderLayer, Disposer[]>();
 
   private updateVisibleLayersNow() {
     if (this.wasDisposed) {
       return false;
     }
-    if (!this.hasValidViewport) {
-      return false;
-    }
-    let visibleLayers = this.visibleLayers;
+    if (!this.navigationState.valid) return false;
+    // Used to determine which layers are no longer visible.
+    const curUpdateGeneration = Date.now();
+    const {visibleLayers, visibleLayerList} = this;
+    const {displayDimensionRenderInfo} = this.projectionParameters.value;
     let rpc = this.rpc!;
     let rpcMessage: any = {'id': this.rpcId};
-    let newVisibleLayers = this.newVisibleLayers;
     let changed = false;
-    let visibleLayerList = this.visibleLayerList;
-    const {visibleLayerDisposers} = this;
     visibleLayerList.length = 0;
     for (let renderLayer of this.layerManager.readyRenderLayers()) {
-      if (renderLayer instanceof RenderLayer) {
-        newVisibleLayers.add(renderLayer);
+      if (renderLayer instanceof SliceViewRenderLayer) {
         visibleLayerList.push(renderLayer);
-        if (!visibleLayers.has(renderLayer)) {
-          visibleLayers.set(renderLayer.addRef(), []);
+        let layerInfo = visibleLayers.get(renderLayer);
+        if (layerInfo === undefined) {
           const disposers: Disposer[] = [];
-          visibleLayerDisposers.set(renderLayer, disposers);
+          const messages = new MessageList();
+          layerInfo = {
+            messages,
+            allSources: this.getTransformedSources(renderLayer, messages),
+            transformGeneration: renderLayer.transform.changed.count,
+            visibleSources: [],
+            disposers,
+            lastSeenGeneration: curUpdateGeneration,
+            displayDimensionRenderInfo,
+          };
+          disposers.push(renderLayer.messages.addChild(layerInfo.messages));
+          visibleLayers.set(renderLayer.addRef(), layerInfo);
           this.bindVisibleRenderLayer(renderLayer, disposers);
-          rpcMessage['layerId'] = renderLayer.rpcId;
-          rpc.invoke(SLICEVIEW_ADD_VISIBLE_LAYER_RPC_ID, rpcMessage);
-          changed = true;
+        } else {
+          layerInfo.lastSeenGeneration = curUpdateGeneration;
+          const curTransformGeneration = renderLayer.transform.changed.count;
+          if (layerInfo.transformGeneration === curTransformGeneration &&
+              layerInfo.displayDimensionRenderInfo === displayDimensionRenderInfo) {
+            continue;
+          }
+          const allSources = layerInfo.allSources;
+          layerInfo.allSources = this.getTransformedSources(renderLayer, layerInfo.messages);
+          disposeTransformedSources(renderLayer, allSources);
+          layerInfo.visibleSources.length = 0;
+          layerInfo.displayDimensionRenderInfo = displayDimensionRenderInfo;
+          layerInfo.transformGeneration = curTransformGeneration;
         }
-      }
-    }
-    for (let renderLayer of visibleLayers.keys()) {
-      if (!newVisibleLayers.has(renderLayer)) {
-        visibleLayers.delete(renderLayer);
-        const disposers = this.visibleLayerDisposers.get(renderLayer)!;
-        this.visibleLayerDisposers.delete(renderLayer);
-        invokeDisposers(disposers);
         rpcMessage['layerId'] = renderLayer.rpcId;
-        rpc.invoke(SLICEVIEW_REMOVE_VISIBLE_LAYER_RPC_ID, rpcMessage);
-        renderLayer.dispose();
+        rpcMessage['sources'] = serializeAllTransformedSources(layerInfo.allSources);
+        this.flushBackendProjectionParameters();
+        rpc.invoke(SLICEVIEW_ADD_VISIBLE_LAYER_RPC_ID, rpcMessage);
         changed = true;
       }
     }
-    newVisibleLayers.clear();
+    for (const [renderLayer, layerInfo] of visibleLayers) {
+      if (layerInfo.lastSeenGeneration === curUpdateGeneration) continue;
+      rpcMessage['layerId'] = renderLayer.rpcId;
+      rpc.invoke(SLICEVIEW_REMOVE_VISIBLE_LAYER_RPC_ID, rpcMessage);
+      visibleLayers.delete(renderLayer);
+      disposeTransformedSources(renderLayer, layerInfo.allSources);
+      invokeDisposers(layerInfo.disposers);
+      renderLayer.dispose();
+      changed = true;
+    }
     if (changed) {
       this.visibleSourcesStale = true;
     }
@@ -209,155 +344,137 @@ export class SliceView extends Base {
     return changed;
   }
 
-  onViewportChanged() {
-    var {width, height, viewportToDevice, dataToViewport, dataToDevice} = this;
-    // FIXME: Make this adjustable.
-    const sliceThickness = 10;
-    mat4.ortho(
-        viewportToDevice, -width / 2, width / 2, height / 2, -height / 2, -sliceThickness,
-        sliceThickness);
-    mat4.multiply(dataToDevice, viewportToDevice, dataToViewport);
-
-    this.visibleChunksStale = true;
+  invalidateVisibleChunks() {
+    super.invalidateVisibleChunks();
     this.viewChanged.dispatch();
   }
-  setViewportSizeDebounced = this.registerCancellable(
-      debounce((width: number, height: number) => this.setViewportSize(width, height), 0));
-  setViewportSize(width: number, height: number) {
-    this.setViewportSizeDebounced.cancel();
-    if (super.setViewportSize(width, height)) {
-      this.rpc!.invoke(
-          SLICEVIEW_UPDATE_VIEW_RPC_ID, {id: this.rpcId, width: width, height: height});
-      // this.chunkManager.scheduleUpdateChunkPriorities();
-      return true;
+
+  get valid() {
+    return this.navigationState.valid;
+  }
+
+  private getOffscreenFramebufferWithHistograms(count: number) {
+    const {offscreenFramebuffersWithHistograms} = this;
+    let framebuffer = offscreenFramebuffersWithHistograms[count];
+    if (framebuffer === undefined) {
+      const {gl, histogramInputTextures, offscreenFramebuffer} = this;
+      if (histogramInputTextures.length < count) {
+        histogramInputTextures.push(...makeTextureBuffers(
+            gl, count - histogramInputTextures.length, WebGL2RenderingContext.R8,
+          WebGL2RenderingContext.RED));
+      }
+      let colorBuffers = [offscreenFramebuffer.colorBuffers[0].addRef()];
+      for (let i = 0; i < count; ++i) {
+        colorBuffers.push(histogramInputTextures[i].addRef());
+      }
+      framebuffer = this.registerDisposer(new FramebufferConfiguration(
+          gl, {colorBuffers, depthBuffer: offscreenFramebuffer.depthBuffer!.addRef()}));
+      offscreenFramebuffersWithHistograms[count] = framebuffer;
     }
-    return false;
-  }
-
-  onViewportToDataMatrixChanged() {
-    let {viewportToData, dataToViewport} = this;
-    mat4.invert(dataToViewport, viewportToData);
-    rectifyTransformMatrixIfAxisAligned(dataToViewport);
-    this.rpc!.invoke(
-        SLICEVIEW_UPDATE_VIEW_RPC_ID, {id: this.rpcId, viewportToData: viewportToData});
-  }
-
-  onHasValidViewport() {
-    this.updateVisibleLayers();
+    return framebuffer;
   }
 
   updateRendering() {
-    this.setViewportSizeDebounced.flush();
-    if (!this.renderingStale || !this.hasValidViewport || this.width === 0 || this.height === 0) {
+    const projectionParameters = this.projectionParameters.value;
+    const {width, height} = projectionParameters;
+    if (!this.renderingStale || !this.valid || width === 0 || height === 0) {
       return;
     }
     this.renderingStale = false;
-    this.maybeUpdateVisibleChunks();
+    this.updateVisibleLayers.flush();
+    this.updateVisibleSources();
 
-    let {gl, offscreenFramebuffer, width, height} = this;
+    let {gl, offscreenFramebuffer} = this;
 
-    offscreenFramebuffer.bind(width!, height!);
+    offscreenFramebuffer.bind(width, height);
     gl.disable(gl.SCISSOR_TEST);
 
-    // we have viewportToData
-    // we need: matrix that maps input x to the output x axis, scaled by
-
-    gl.clearStencil(0);
     gl.clearColor(0, 0, 0, 0);
     gl.colorMask(true, true, true, true);
-    gl.clear(gl.COLOR_BUFFER_BIT);
-    gl.enable(gl.STENCIL_TEST);
-    gl.disable(gl.DEPTH_TEST);
-    gl.stencilOpSeparate(
-        /*face=*/ gl.FRONT_AND_BACK, /*sfail=*/ gl.KEEP, /*dpfail=*/ gl.KEEP,
-        /*dppass=*/ gl.REPLACE);
-
+    gl.clear(WebGL2RenderingContext.COLOR_BUFFER_BIT);
     let renderLayerNum = 0;
+    const wireFrame = this.wireFrame.value;
+    const renderContext = {sliceView: this, projectionParameters, wireFrame};
     for (let renderLayer of this.visibleLayerList) {
-      gl.clear(gl.STENCIL_BUFFER_BIT);
-      gl.stencilFuncSeparate(
-          /*face=*/ gl.FRONT_AND_BACK,
-          /*func=*/ gl.GREATER,
-          /*ref=*/ 1,
-          /*mask=*/ 1);
-
+      const histogramCount = wireFrame ? 0 : renderLayer.getDataHistogramCount();
+      let framebuffer = this.getOffscreenFramebufferWithHistograms(histogramCount);
+      framebuffer.bind(width, height);
+      for (let i = 0; i < histogramCount; ++i) {
+        gl.clearBufferfv(WebGL2RenderingContext.COLOR, 1 + i, kZeroVec4);
+      }
+      gl.enable(WebGL2RenderingContext.DEPTH_TEST);
+      gl.depthFunc(WebGL2RenderingContext.LESS);
+      gl.clearDepth(1);
+      gl.clear(WebGL2RenderingContext.DEPTH_BUFFER_BIT);
       renderLayer.setGLBlendMode(gl, renderLayerNum);
-      renderLayer.draw(this);
+      renderLayer.draw(renderContext);
       ++renderLayerNum;
     }
-    gl.disable(gl.BLEND);
-    gl.disable(gl.STENCIL_TEST);
+    gl.disable(WebGL2RenderingContext.BLEND);
+    gl.disable(WebGL2RenderingContext.DEPTH_TEST);
     offscreenFramebuffer.unbind();
   }
 
-  maybeUpdateVisibleChunks() {
-    this.updateVisibleLayers.flush();
-    if (!this.visibleChunksStale && !this.visibleSourcesStale) {
-      return false;
-    }
-    this.visibleChunksStale = false;
-    this.updateVisibleChunks();
-    return true;
-  }
-  updateVisibleChunks() {
-    let allVisibleChunks = this.visibleChunks;
-
-    function getLayoutObject(chunkLayout: ChunkLayout) {
-      let visibleChunks = allVisibleChunks.get(chunkLayout);
-      if (visibleChunks === undefined) {
-        visibleChunks = [];
-        allVisibleChunks.set(chunkLayout, visibleChunks);
-      } else {
-        visibleChunks.length = 0;
-      }
-      return visibleChunks;
-    }
-    let numVisibleChunks = 0;
-    function addChunk(
-        _chunkLayout: ChunkLayout, visibleChunks: string[], positionInChunks: vec3,
-        fullyVisibleSources: SliceViewChunkSource[]) {
-      let key = vec3Key(positionInChunks);
-      visibleChunks[visibleChunks.length] = key;
-      numVisibleChunks += fullyVisibleSources.length;
-    }
-    this.computeVisibleChunks(getLayoutObject, addChunk);
-    this.numVisibleChunks = numVisibleChunks;
-  }
-
   disposed() {
-    for (const [renderLayer, disposers] of this.visibleLayerDisposers) {
-      invokeDisposers(disposers);
+    for (const [renderLayer, layerInfo] of this.visibleLayers) {
+      disposeTransformedSources(renderLayer, layerInfo.allSources);
+      invokeDisposers(layerInfo.disposers);
       renderLayer.dispose();
     }
-    this.visibleLayerDisposers.clear();
     this.visibleLayers.clear();
     this.visibleLayerList.length = 0;
   }
+
+  getTransformedSources(layer: SliceViewRenderLayer, messages: MessageList):
+      FrontendTransformedSource[][] {
+    const transformedSources = getVolumetricTransformedSources(
+        this.projectionParameters.value.displayDimensionRenderInfo, layer.transform.value,
+        options => layer.getSources(options), messages, layer);
+    for (const scales of transformedSources) {
+      for (const tsource of scales) {
+        layer.addSource(tsource.source, tsource.chunkTransform);
+      }
+    }
+    return transformedSources;
+  }
 }
 
-export interface SliceViewChunkSourceOptions {
-  spec: SliceViewChunkSpecification;
+export interface SliceViewChunkSourceOptions<Spec extends SliceViewChunkSpecification =
+                                                              SliceViewChunkSpecification> {
+  spec: Spec;
 }
 
-export abstract class SliceViewChunkSource extends ChunkSource implements
+export abstract class SliceViewChunkSource<
+    Spec extends SliceViewChunkSpecification = SliceViewChunkSpecification,
+                 ChunkType extends SliceViewChunk = SliceViewChunk> extends ChunkSource implements
     SliceViewChunkSourceInterface {
-  chunks: Map<string, SliceViewChunk>;
+  chunks: Map<string, ChunkType>;
 
-  spec: SliceViewChunkSpecification;
+  OPTIONS: SliceViewChunkSourceOptions<Spec>;
 
-  constructor(chunkManager: ChunkManager, options: SliceViewChunkSourceOptions) {
+  spec: Spec;
+
+  constructor(chunkManager: ChunkManager, options: SliceViewChunkSourceOptions<Spec>) {
     super(chunkManager, options);
     this.spec = options.spec;
   }
 
-  static encodeOptions(options: SliceViewChunkSourceOptions) {
+  static encodeSpec(spec: SliceViewChunkSpecification) {
+    return {
+      chunkDataSize: Array.from(spec.chunkDataSize),
+      lowerVoxelBound: Array.from(spec.lowerVoxelBound),
+      upperVoxelBound: Array.from(spec.upperVoxelBound),
+    };
+  }
+
+  static encodeOptions(options: SliceViewChunkSourceOptions): any {
     const encoding = super.encodeOptions(options);
-    encoding.spec = options.spec.toObject();
+    encoding.spec = this.encodeSpec(options.spec);
     return encoding;
   }
 
   initializeCounterpart(rpc: RPC, options: any) {
-    options['spec'] = this.spec.toObject();
+    options['spec'] = this.spec;
     super.initializeCounterpart(rpc, options);
   }
 }
@@ -427,6 +544,7 @@ gl_Position = uProjectionMatrix * aVertexPosition;
     shader.bind();
     gl.activeTexture(gl.TEXTURE0);
     gl.bindTexture(gl.TEXTURE_2D, texture);
+    gl.disable(WebGL2RenderingContext.BLEND);
     gl.uniformMatrix4fv(shader.uniform('uProjectionMatrix'), false, projectionMatrix);
     gl.uniform4fv(shader.uniform('uColorFactor'), colorFactor);
     gl.uniform4fv(shader.uniform('uBackgroundColor'), backgroundColor);
@@ -448,12 +566,212 @@ gl_Position = uProjectionMatrix * aVertexPosition;
   }
 }
 
-export interface MultiscaleSliceViewChunkSource {
-  /**
-   * @return Chunk sources for each scale, ordered by increasing minVoxelSize.  For each scale,
-   * there may be alternative sources with different chunk layouts.
-   */
-  getSources: (options: SliceViewSourceOptions) => SliceViewChunkSource[][];
+export interface SliceViewSingleResolutionSource<Source extends SliceViewChunkSource =
+                                                                    SliceViewChunkSource> {
+  chunkSource: Source;
 
-  chunkManager: ChunkManager;
+  /**
+   * (rank + 1)*(rank + 1) homogeneous transformation matrix from the "chunk" coordinate space to
+   * the MultiscaleSliceViewChunkSource space.
+   */
+  chunkToMultiscaleTransform: Float32Array;
+
+  /**
+   * Lower clipping bound in voxels within the "chunk" coordinate space.  If not specified, defaults
+   * to `chunkSource.spec.lowerVoxelBound`.  Non-integer values are supported.
+   *
+   * Both lowerClipBound and upperClipBound are applied during rendering but do not affect which
+   * chunks/voxels are actually retrieved.  That is determined by lowerVoxelBound and
+   * upperVoxelBound of `chunkSource.spec`.
+   */
+  lowerClipBound?: Float32Array;
+
+  /**
+   * Upper clipping bound in voxels within the "chunk" coordinate space.  If not specified, defaults
+   * to `chunkSource.spec.upperVoxelBound`.
+   */
+  upperClipBound?: Float32Array;
+}
+
+export abstract class MultiscaleSliceViewChunkSource<
+    Source extends SliceViewChunkSource = SliceViewChunkSource,
+                   SourceOptions extends SliceViewSourceOptions = SliceViewSourceOptions> {
+  abstract get rank(): number;
+
+  /**
+   * @return Chunk sources for each scale, ordered by increasing minVoxelSize.  Outer array indexes
+   * over alternative chunk orientations.  The inner array indexes over scale.
+   *
+   * Every chunk source must have rank equal to `this.rank`.
+   */
+  abstract getSources(options: SourceOptions): SliceViewSingleResolutionSource<Source>[][];
+
+  constructor(public chunkManager: Borrowed<ChunkManager>) {}
+}
+
+export function getVolumetricTransformedSources(
+    displayDimensionRenderInfo: DisplayDimensionRenderInfo, transform: RenderLayerTransformOrError,
+    getSources: (options: SliceViewSourceOptions) =>
+        SliceViewSingleResolutionSource<SliceViewChunkSource>[][],
+    messages: MessageList, layer: any): FrontendTransformedSource[][] {
+  messages.clearMessages();
+  const returnError = (message: string) => {
+    messages.addMessage({
+      severity: MessageSeverity.error,
+      message,
+    });
+    return [];
+  };
+  if (transform.error !== undefined) {
+    return returnError(transform.error);
+  }
+  const layerRank = transform.rank;
+  const chunkRank = transform.unpaddedRank;
+  const {displayDimensionIndices, displayRank, canonicalVoxelFactors} = displayDimensionRenderInfo;
+  const layerDisplayDimensionMapping =
+      getLayerDisplayDimensionMapping(transform, displayDimensionIndices);
+
+  const {layerDisplayDimensionIndices} = layerDisplayDimensionMapping;
+  const multiscaleToViewTransform = new Float32Array(displayRank * chunkRank);
+  const {modelToRenderLayerTransform} = transform;
+  for (let displayDim = 0; displayDim < displayRank; ++displayDim) {
+    const layerDim = layerDisplayDimensionIndices[displayDim];
+    if (layerDim === -1) continue;
+    const factor = canonicalVoxelFactors[displayDim];
+    for (let chunkDim = 0; chunkDim < chunkRank; ++chunkDim) {
+      multiscaleToViewTransform[displayRank * chunkDim + displayDim] =
+          modelToRenderLayerTransform[(layerRank + 1) * chunkDim + layerDim] * factor;
+    }
+  }
+  const allSources = getSources({
+    displayRank: displayRank,
+    multiscaleToViewTransform: multiscaleToViewTransform,
+    modelChannelDimensionIndices: transform.channelToRenderLayerDimensions,
+  });
+  const {voxelPhysicalScales: globalScales} = displayDimensionRenderInfo;
+  try {
+    const getTransformedSource =
+        (singleResolutionSource: SliceViewSingleResolutionSource): FrontendTransformedSource => {
+          const {chunkSource: source} = singleResolutionSource;
+          const {spec} = source;
+          const {lowerClipBound = spec.lowerVoxelBound, upperClipBound = spec.upperVoxelBound} =
+              singleResolutionSource;
+          const chunkTransform = getChunkTransformParameters(
+              transform, singleResolutionSource.chunkToMultiscaleTransform);
+          const {chunkDataSize} = spec;
+          const {channelToChunkDimensionIndices} = chunkTransform;
+          const nonDisplayLowerClipBound = new Float32Array(chunkRank);
+          const nonDisplayUpperClipBound = new Float32Array(chunkRank);
+          nonDisplayLowerClipBound.set(lowerClipBound);
+          nonDisplayUpperClipBound.set(upperClipBound);
+          const channelRank = channelToChunkDimensionIndices.length;
+          const {channelSpaceShape} = transform;
+          for (let channelDim = 0; channelDim < channelRank; ++channelDim) {
+            const chunkDim = channelToChunkDimensionIndices[channelDim];
+            if (chunkDim === -1) continue;
+            const size = channelSpaceShape[channelDim];
+            if (chunkDataSize[chunkDim] !== size) {
+              throw new Error(
+                  `Channel dimension ` +
+                  transform
+                      .layerDimensionNames[transform.channelToRenderLayerDimensions[channelDim]] +
+                  ` has extent ${size} but corresponding chunk dimension has extent ` +
+                  `${chunkDataSize[chunkDim]}`);
+            }
+            nonDisplayLowerClipBound[chunkDim] = Number.NEGATIVE_INFINITY;
+            nonDisplayUpperClipBound[chunkDim] = Number.POSITIVE_INFINITY;
+          }
+          const chunkDisplayTransform =
+              getChunkDisplayTransformParameters(chunkTransform, layerDisplayDimensionMapping);
+          // Compute `chunkDisplaySize`, and `{lower,upper}ChunkDisplayBound`.
+          const lowerChunkDisplayBound = vec3.create();
+          const upperChunkDisplayBound = vec3.create();
+          const lowerClipDisplayBound = vec3.create();
+          const upperClipDisplayBound = vec3.create();
+          // Size of chunk in "display" coordinate space.
+          const chunkDisplaySize = vec3.create();
+          const {numChunkDisplayDims, chunkDisplayDimensionIndices} = chunkDisplayTransform;
+          const {combinedGlobalLocalToChunkTransform, layerRank, combinedGlobalLocalRank} =
+              chunkTransform;
+          const fixedLayerToChunkTransform = new Float32Array(combinedGlobalLocalToChunkTransform);
+          for (let chunkDisplayDimIndex = 0; chunkDisplayDimIndex < numChunkDisplayDims;
+               ++chunkDisplayDimIndex) {
+            const chunkDim = chunkDisplayDimensionIndices[chunkDisplayDimIndex];
+            for (let i = 0; i <= combinedGlobalLocalRank; ++i) {
+              fixedLayerToChunkTransform[chunkDim + i * layerRank] = 0;
+            }
+            if (chunkDim < chunkRank) {
+              chunkDisplaySize[chunkDisplayDimIndex] = spec.chunkDataSize[chunkDim];
+              lowerChunkDisplayBound[chunkDisplayDimIndex] = spec.lowerChunkBound[chunkDim];
+              upperChunkDisplayBound[chunkDisplayDimIndex] = spec.upperChunkBound[chunkDim];
+              lowerClipDisplayBound[chunkDisplayDimIndex] = lowerClipBound[chunkDim];
+              upperClipDisplayBound[chunkDisplayDimIndex] = upperClipBound[chunkDim];
+              nonDisplayLowerClipBound[chunkDim] = Number.NEGATIVE_INFINITY;
+              nonDisplayUpperClipBound[chunkDim] = Number.POSITIVE_INFINITY;
+            } else {
+              chunkDisplaySize[chunkDisplayDimIndex] = 1;
+              lowerChunkDisplayBound[chunkDisplayDimIndex] = 0;
+              upperChunkDisplayBound[chunkDisplayDimIndex] = 1;
+              lowerClipDisplayBound[chunkDisplayDimIndex] = 0;
+              upperClipDisplayBound[chunkDisplayDimIndex] = 1;
+            }
+          }
+          chunkDisplaySize.fill(1, numChunkDisplayDims);
+          lowerChunkDisplayBound.fill(0, numChunkDisplayDims);
+          upperChunkDisplayBound.fill(1, numChunkDisplayDims);
+          lowerClipDisplayBound.fill(0, numChunkDisplayDims);
+          upperClipDisplayBound.fill(1, numChunkDisplayDims);
+          const chunkLayout = new ChunkLayout(
+              chunkDisplaySize, new Float32Array(chunkDisplayTransform.displaySubspaceModelMatrix),
+              numChunkDisplayDims);
+          // This is an approximation of the voxel size (exact only for permutation/scaling
+          // transforms).  It would be better to model the voxel as an ellipsiod and find the
+          // lengths of the axes.
+          const effectiveVoxelSize =
+              chunkLayout.localSpatialVectorToGlobal(vec3.create(), /*baseVoxelSize=*/ kOneVec);
+          for (let i = 0; i < displayRank; ++i) {
+            effectiveVoxelSize[i] *= globalScales[i];
+          }
+          effectiveVoxelSize.fill(1, displayRank);
+          return {
+            layerRank,
+            lowerClipBound,
+            upperClipBound,
+            nonDisplayLowerClipBound,
+            nonDisplayUpperClipBound,
+            renderLayer: layer,
+            source,
+            lowerChunkDisplayBound,
+            upperChunkDisplayBound,
+            lowerClipDisplayBound,
+            upperClipDisplayBound,
+            effectiveVoxelSize,
+            chunkLayout,
+            chunkDisplayDimensionIndices,
+            fixedLayerToChunkTransform,
+            curPositionInChunks: new Float32Array(chunkRank),
+            combinedGlobalLocalToChunkTransform: chunkTransform.combinedGlobalLocalToChunkTransform,
+            fixedPositionWithinChunk: new Uint32Array(chunkRank),
+            chunkTransform,
+            chunkDisplayTransform,
+          };
+        };
+    return allSources.map(scales => scales.map(s => getTransformedSource(s)));
+  } catch (e) {
+    // Ensure references are released in the case of an exception.
+    for (const scales of allSources) {
+      for (const {chunkSource: source} of scales) {
+        source.dispose();
+      }
+    }
+    const {globalDimensionNames} = displayDimensionRenderInfo;
+    const dimensionDesc =
+        Array
+            .from(
+                displayDimensionRenderInfo.displayDimensionIndices.filter(i => i !== -1),
+                i => globalDimensionNames[i])
+            .join(',\u00a0');
+    const message = `Cannot render (${dimensionDesc}) cross section: ${e.message}`;
+    return returnError(message);
+  }
 }
