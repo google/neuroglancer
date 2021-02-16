@@ -27,10 +27,14 @@ export type BossToken = string;
 export const credentialsKey = 'boss';
 
 export function fetchWithBossCredentials<T>(
-    credentialsProvider: CredentialsProvider<BossToken>, input: RequestInfo, init: RequestInit,
-    transformResponse: ResponseTransform<T>,
-    cancellationToken: CancellationToken = uncancelableToken): Promise<T> {
-  return fetchWithCredentials(
+  credentialsProvider: CredentialsProvider<BossToken>, input: RequestInfo, init: RequestInit,
+  transformResponse: ResponseTransform<T>,
+  cancellationToken: CancellationToken = uncancelableToken): Promise<T> {
+  try {
+    return cancellableFetchOk(input, init, transformResponse, cancellationToken)
+  } catch (error) {
+    console.error(error)
+    return fetchWithCredentials(
       credentialsProvider, input, init, transformResponse,
       credentials => {
         const headers = new Headers(init.headers);
@@ -50,4 +54,5 @@ export function fetchWithBossCredentials<T>(
         throw error;
       },
       cancellationToken);
+  }
 }
