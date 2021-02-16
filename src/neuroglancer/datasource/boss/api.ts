@@ -31,10 +31,16 @@ export function fetchWithBossCredentials<T>(
   credentialsProvider: CredentialsProvider<BossToken>, input: RequestInfo, init: RequestInit,
   transformResponse: ResponseTransform<T>,
   cancellationToken: CancellationToken = uncancelableToken): Promise<T> {
-  try {
-    return cancellableFetchOk(input, init, transformResponse, cancellationToken)
-  } catch (error) {
-    console.error(error)
+  return cancellableFetchOk(input, init, transformResponse, cancellationToken).catch((error) => {
+    // if (error.status === 504) {
+    //   // Gateway timeout can occur if the server takes too long to reply.  Retry.
+    //   return 'retry';
+    // }
+    if (error.status < 100) {
+      // Prevent an infinite loop of error = 0 where the request 
+      // has been cancelled
+      throw error;
+    }
     return fetchWithCredentials(
       credentialsProvider, input, init, transformResponse,
       credentials => {
@@ -55,5 +61,5 @@ export function fetchWithBossCredentials<T>(
         throw error;
       },
       cancellationToken);
-  }
+  });
 }
