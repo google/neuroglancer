@@ -17,8 +17,7 @@
 import {CredentialsProvider} from 'neuroglancer/credentials_provider';
 import {fetchWithCredentials} from 'neuroglancer/credentials_provider/http_request';
 import {CancellationToken, uncancelableToken} from 'neuroglancer/util/cancellation';
-import {cancellableFetchOk} from 'neuroglancer/util/http_request';
-import {ResponseTransform} from 'neuroglancer/util/http_request';
+import {ResponseTransform, cancellableFetchOk} from 'neuroglancer/util/http_request';
 
 export type BossToken = string;
 
