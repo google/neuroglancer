@@ -14,14 +14,14 @@ jobs:
 
     steps:
     - uses: actions/checkout@v2
-    - name: Use Node.js 14.x
+    - name: Use Node.js ${{ matrix.node-version }}
       uses: actions/setup-node@v1
       with:
-        node-version: 14.x
+        node-version: ${{ matrix.node-version }}
     - uses: actions/cache@v2
       with:
         path: "**/node_modules"
-        key: ${{ runner.os }}-node_modules-${{ hashFiles('**/package-lock.json') }}
+        key: ${{ runner.os }}-${{ matrix.node-version }}-node_modules-${{ hashFiles('**/package-lock.json') }}
     - run: npm install
     - name: Typecheck with TypeScript
       run: npm run typecheck
