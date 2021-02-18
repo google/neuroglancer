@@ -14,12 +14,12 @@ jobs:
 
     steps:
     - uses: actions/checkout@v1
-    - uses: borales/actions-yarn@v2.0.0
+    - uses: bahmutov/npm-install@v1
       with:
-        cmd: install # will run `yarn install` command
-    - uses: borales/actions-yarn@v2.0.0
+        cmd: install # will run `npm install` command
+    - uses: bahmutov/npm-install@v1
       with:
-        cmd: build # will run `yarn build` command
+        cmd: run build # will run `npm run build` command
     - name: S3 Sync
       uses: jakejarvis/s3-sync-action@v0.5.0
       with:
