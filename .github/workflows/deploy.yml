@@ -14,9 +14,17 @@ jobs:
 
     steps:
     - uses: actions/checkout@v1
-    - uses: bahmutov/npm-install@v1
+    - name: Use Node.js ${{ matrix.node-version }}
+      uses: actions/setup-node@v1
+      with:
+        node-version: ${{ matrix.node-version }}
+    - uses: actions/cache@v2
+      with:
+        path: "**/node_modules"
+        key: ${{ runner.os }}-${{ matrix.node-version }}-node_modules-${{ hashFiles('**/package-lock.json') }}
     - run: npm install
-    - run: npm run build
+    - name: Build client bundles
+      run: npm run build
     - name: S3 Sync
       uses: jakejarvis/s3-sync-action@v0.5.0
       with:
