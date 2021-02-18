@@ -14,11 +14,11 @@
  * limitations under the License.
  */
 
-import { CredentialsProvider } from 'neuroglancer/credentials_provider';
-import { fetchWithCredentials } from 'neuroglancer/credentials_provider/http_request';
-import { CancellationToken, uncancelableToken } from 'neuroglancer/util/cancellation';
-import { cancellableFetchOk } from 'neuroglancer/util/http_request';
-import { ResponseTransform } from 'neuroglancer/util/http_request';
+import {CredentialsProvider} from 'neuroglancer/credentials_provider';
+import {fetchWithCredentials} from 'neuroglancer/credentials_provider/http_request';
+import {CancellationToken, uncancelableToken} from 'neuroglancer/util/cancellation';
+import {cancellableFetchOk} from 'neuroglancer/util/http_request';
+import {ResponseTransform} from 'neuroglancer/util/http_request';
 
 export type BossToken = string;
 
@@ -42,10 +42,10 @@ export function fetchWithBossCredentials<T>(
       credentials => {
         const headers = new Headers(init.headers);
         headers.set('Authorization', `Bearer ${credentials}`);
-        return { ...init, headers };
+        return {...init, headers};
       },
       error => {
-        const { status } = error;
+        const {status} = error;
         if (status === 403 || status === 401) {
           // Authorization needed.  Retry with refreshed token.
           return 'refresh';
