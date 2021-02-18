@@ -14,11 +14,11 @@
  * limitations under the License.
  */
 
-import {CredentialsProvider} from 'neuroglancer/credentials_provider';
-import {fetchWithCredentials} from 'neuroglancer/credentials_provider/http_request';
-import {CancellationToken, uncancelableToken} from 'neuroglancer/util/cancellation';
-import {cancellableFetchOk} from 'neuroglancer/util/http_request';
-import {ResponseTransform} from 'neuroglancer/util/http_request';
+import { CredentialsProvider } from 'neuroglancer/credentials_provider';
+import { fetchWithCredentials } from 'neuroglancer/credentials_provider/http_request';
+import { CancellationToken, uncancelableToken } from 'neuroglancer/util/cancellation';
+import { cancellableFetchOk } from 'neuroglancer/util/http_request';
+import { ResponseTransform } from 'neuroglancer/util/http_request';
 
 export type BossToken = string;
 
@@ -32,12 +32,8 @@ export function fetchWithBossCredentials<T>(
   transformResponse: ResponseTransform<T>,
   cancellationToken: CancellationToken = uncancelableToken): Promise<T> {
   return cancellableFetchOk(input, init, transformResponse, cancellationToken).catch((error) => {
-    // if (error.status === 504) {
-    //   // Gateway timeout can occur if the server takes too long to reply.  Retry.
-    //   return 'retry';
-    // }
-    if (error.status < 100) {
-      // Prevent an infinite loop of error = 0 where the request 
+    if (error.status !== 500 && error.status !== 401 && error.status !== 403 && error.status !== 504) {
+      // Prevent an infinite loop of error = 0 where the request
       // has been cancelled
       throw error;
     }
@@ -46,10 +42,10 @@ export function fetchWithBossCredentials<T>(
       credentials => {
         const headers = new Headers(init.headers);
         headers.set('Authorization', `Bearer ${credentials}`);
-        return {...init, headers};
+        return { ...init, headers };
       },
       error => {
-        const {status} = error;
+        const { status } = error;
         if (status === 403 || status === 401) {
           // Authorization needed.  Retry with refreshed token.
           return 'refresh';
