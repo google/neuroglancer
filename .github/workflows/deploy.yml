@@ -2,10 +2,10 @@ name: Deploy Production Neuroglancer
 
 on:
   # Trigger the workflow on push,
-  # but only for the master branch
+  # but only for the ndmaster branch
   push:
     branches:
-      - hannah/github-actions
+      - ndmaster
 
 jobs:
   build:
