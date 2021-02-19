@@ -1,7 +1,7 @@
 name: Create pull request from Google latest
 
 on:
-  schedule:
+  # schedule:
   # - cron: "0 0 19 * *"
     workflow-dispatch:
 
