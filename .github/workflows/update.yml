@@ -25,17 +25,19 @@ jobs:
       with:
         branch: temp-google-merge
 
-    - name: Merge google/master -> jhuapl-boss/google-master
+    - name: Merge google/master -> jhuapl-boss/temp-google-master
       uses: tgymnich/fork-sync@v1.3
       with:
-        owner: google
-        base: master
+        owner: jhuapl-boss
+        base: google:master
         head: temp-google-merge
         github_token: ${{ secrets.GITHUB_TOKEN }} 
+        auto_approve: false
 
-    - name: Create pull request jhuapl-boss/google-master -> jhuapl-boss/ndmaster
-      uses: peter-evans/create-pull-request@v3
-      with:
-        branch: google-master
-        reviewers: hannahgooden 
+
+    # - name: Create pull request jhuapl-boss/temp-google-master -> jhuapl-boss/ndmaster
+    #   uses: peter-evans/create-pull-request@v3
+    #   with:
+    #     branch: google-master
+    #     reviewers: hannahgooden 
 
