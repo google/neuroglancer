@@ -3,7 +3,11 @@ name: Create pull request from Google latest
 on:
   # schedule:
   # - cron: "0 0 19 * *"
-  workflow_dispatch:
+  # workflow_dispatch:
+  # Trigger the workflow on push,
+  # but only for the ndmaster branch
+  push:
+    branches: hannah/github-actions
 
 
 jobs:
