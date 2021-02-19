@@ -1,0 +1,37 @@
+name: Create pull request from Google latest
+
+on:
+  schedule:
+  # - cron: "0 0 19 * *"
+    workflow-dispatch:
+
+
+jobs:
+  create-pr:
+
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v2
+
+    - name: Create branch temp-google-master
+      uses: peterjgrainger/action-create-branch@v2.0.1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        branch: temp-google-merge
+
+    - name: Merge google/master -> jhuapl-boss/google-master
+      uses: tgymnich/fork-sync@v1.3
+      with:
+        owner: google
+        base: master
+        head: temp-google-merge
+        github_token: ${{ secrets.GITHUB_TOKEN }} 
+
+    - name: Create pull request jhuapl-boss/google-master -> jhuapl-boss/ndmaster
+      uses: peter-evans/create-pull-request@v3
+      with:
+        branch: google-master
+        reviewers: hannahgooden 
+
