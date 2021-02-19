@@ -28,9 +28,9 @@ jobs:
     - name: Merge google/master -> jhuapl-boss/temp-google-master
       uses: tgymnich/fork-sync@v1.3
       with:
-        owner: jhuapl-boss
-        head: google:master
+        owner: google
         base: temp-google-merge
+        head: master
         github_token: ${{ secrets.GITHUB_TOKEN }} 
         auto_approve: false
 
