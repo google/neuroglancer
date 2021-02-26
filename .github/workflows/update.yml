@@ -18,14 +18,14 @@ jobs:
     steps:
     - uses: actions/checkout@v2
 
-    - name: Create branch temp-google-master
+    - name: Create branch temp-google-merge
       uses: peterjgrainger/action-create-branch@v2.0.1
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       with:
         branch: temp-google-merge
 
-    - name: Merge google/master -> jhuapl-boss/temp-google-master
+    - name: Merge google/master -> jhuapl-boss/temp-google-merge
       uses: tgymnich/fork-sync@v1.3
       with:
         owner: google
