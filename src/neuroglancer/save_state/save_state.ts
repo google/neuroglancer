@@ -30,13 +30,13 @@ export class SaveState extends RefCounted {
     } else {
       this.supported = false;
       StatusMessage.messageWithAction(
-          `Warning: Cannot access Local Storage. Unsaved changes will be lost! Use OldStyleSaving to allow for auto saving.`,
+          `Warning: Cannot access Local Storage. Unsaved changes will be lost! Use Legacy Saving to allow for auto saving.`,
           [{message: 'Ok'}], 30000, {color: 'red'});
     }
     if (userDisabledSaver) {
       this.supported = false;
       StatusMessage.showTemporaryMessage(
-          `Save State has been disabled because Old Style saving has been turned on in User Preferences.`,
+          `Save State has been disabled because Legacy saving has been turned on in User Preferences.`,
           10000, {color: 'orange'});
     } else {
       const throttledUpdate = debounce(() => this.push(), updateDelayMilliseconds);

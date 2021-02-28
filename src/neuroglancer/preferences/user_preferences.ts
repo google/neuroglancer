@@ -117,7 +117,7 @@ export class UserPreferencesDialog extends Overlay {
     addCheckbox('Show cursor on mouse drag', userPreferences.cursorOnMousedrag);
     addCheckbox('Preserve Source Annotations', userPreferences.preserveSourceAnnotations);
     addCheckbox(
-        'Old Style Saving', userPreferences.saveToAddressBar, () => location.reload(),
+        'Legacy Saving', userPreferences.saveToAddressBar, () => location.reload(),
         `Saves state in address bar. Useful if storage is unsupported. Press save to post to JSON Server. Warning: Toggling the option reloads the page!`);
     addCheckbox(
         'Unshared state warning', userPreferences.unshareWarning, undefined,

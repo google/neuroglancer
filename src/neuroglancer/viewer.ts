@@ -500,12 +500,12 @@ export class Viewer extends RefCounted implements ViewerState {
       if (!storageAccessible()) {
         button.classList.add('fallback');
         button.title =
-            `Cannot access Local Storage. Unsaved changes will be lost! Use OldStyleSaving to allow for auto saving.`;
+            `Cannot access Local Storage. Unsaved changes will be lost! Use Legacy Saving to allow for auto saving.`;
       }
       if (storageAccessible() && getSaveToAddressBar().value) {
         button.classList.add('inactive');
         button.title =
-            `Save State has been disabled because Old Style saving has been turned on in User Preferences.`;
+            `Save State has been disabled because Legacy Saving has been turned on in User Preferences.`;
       }
       if (this.saver && !this.saver.supported && this.saver.key) {
         const entry = this.saver.pull();
@@ -894,7 +894,7 @@ export class Viewer extends RefCounted implements ViewerState {
                   }
                   if (savestate) {
                     callback();
-                    this.showSaveDialog(getUrlType, saverSupported ? response : undefined);
+                    this.showSaveDialog(getUrlType, response);
                   }
                   StatusMessage.showTemporaryMessage(`Successfully shared state.`, 4000);
                   postSuccess = true;

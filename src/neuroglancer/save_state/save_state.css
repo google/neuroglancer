@@ -5,7 +5,7 @@ button.ng-saver.busy, button.ng-saver.busy:hover {
 }
 
 button.ng-saver.inactive, button.ng-saver.fallback{
-  background-color: orangered;
+  background-color: orangered !important;
   border: 1px solid black;
   color: black;
 }
