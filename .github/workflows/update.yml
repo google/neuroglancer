@@ -18,25 +18,26 @@ jobs:
     steps:
     - uses: actions/checkout@v2
 
-    - name: Create branch temp-google-merge
-      uses: peterjgrainger/action-create-branch@v2.0.1
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      with:
-        branch: temp-google-merge
+    # - name: Create branch temp-google-merge
+    #   uses: peterjgrainger/action-create-branch@v2.0.1
+    #   env:
+    #     GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    #   with:
+    #     branch: temp-google-merge
 
     - name: Merge google/master -> jhuapl-boss/temp-google-merge
       uses: tgymnich/fork-sync@v1.3
       with:
         owner: google
-        base: temp-google-merge
         head: master
+        base: ndmaster
         github_token: ${{ secrets.GITHUB_TOKEN }} 
+        auto_approve: false
 
-    - name: Create pull request jhuapl-boss/temp-google-master -> jhuapl-boss/ndmaster
-      uses: peter-evans/create-pull-request@v3
-      with:
-        branch: temp-google-master
-        reviewers: hannahgooden 
-        token: ${{ secrets.GITHUB_TOKEN }}
+    # - name: Create pull request jhuapl-boss/temp-google-master -> jhuapl-boss/ndmaster
+    #   uses: peter-evans/create-pull-request@v3
+    #   with:
+    #     branch: temp-google-master
+    #     reviewers: hannahgooden 
+    #     token: ${{ secrets.GITHUB_TOKEN }}
 
