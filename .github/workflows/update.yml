@@ -32,12 +32,11 @@ jobs:
         base: temp-google-merge
         head: master
         github_token: ${{ secrets.GITHUB_TOKEN }} 
-        auto_approve: false
 
-
-    # - name: Create pull request jhuapl-boss/temp-google-master -> jhuapl-boss/ndmaster
-    #   uses: peter-evans/create-pull-request@v3
-    #   with:
-    #     branch: google-master
-    #     reviewers: hannahgooden 
+    - name: Create pull request jhuapl-boss/temp-google-master -> jhuapl-boss/ndmaster
+      uses: peter-evans/create-pull-request@v3
+      with:
+        branch: temp-google-master
+        reviewers: hannahgooden 
+        token: ${{ secrets.GITHUB_TOKEN }}
 
