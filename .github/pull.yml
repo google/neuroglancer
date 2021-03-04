@@ -1,6 +1,6 @@
 version: "1"
 env:
-  PULL_INTERVAL: 60
+  PULL_INTERVAL: 1209600 # every two weeks
 rules:
   - base: ndmaster
     upstream: google:master
@@ -8,3 +8,5 @@ rules:
     reviewers: 
       - hannahgooden
       - j6k4m8
+      - sandyhider
+      - movestill
