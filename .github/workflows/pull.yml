@@ -1,0 +1,8 @@
+version: "1"
+env:
+  PULL_INTERVAL: 60
+rules:
+  - base: ndmaster
+    upstream: google:master
+    mergeMethod: merge
+    reviewers: hannahgooden
