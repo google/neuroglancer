@@ -15,6 +15,10 @@
  */
 
 import {defaultCredentialsManager} from 'neuroglancer/credentials_provider/default_manager';
-import {MiddleAuthCredentialsProvider} from 'neuroglancer/datasource/middleauth/credentials_provider';
+import {MiddleAuthCredentialsProvider, MiddleAuthAppCredentialsProvider} from 'neuroglancer/datasource/middleauth/credentials_provider';
+import { CredentialsManager } from 'src/neuroglancer/credentials_provider';
 
 defaultCredentialsManager.register('middleauth', serverUrl => new MiddleAuthCredentialsProvider(serverUrl));
+
+defaultCredentialsManager.register('middleauthapp', (serverUrl: string, credentialsManager: CredentialsManager) => 
+    new MiddleAuthAppCredentialsProvider(serverUrl, credentialsManager));

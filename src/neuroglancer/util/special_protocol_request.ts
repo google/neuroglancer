@@ -25,26 +25,8 @@ export type SpecialProtocolCredentialsProvider =
 
 function getMiddleAuthCredentialsProvider(
     credentialsManager: CredentialsManager, url: string): SpecialProtocolCredentialsProvider {
-  // TODO: will add endpoint to lookup auth server using serverUrl
-  function getAuthURL(serverUrl: string) {
-    const auth_url_map = {
-      'https://globalv1.flywire-daf.com': 'https://globalv1.daf-apis.com/auth',
-      'https://globalv1.daf-apis.com': 'https://globalv1.daf-apis.com/auth',
-      'https://authsl1.middleauth.com': 'https://authsl1.middleauth.com/auth'
-    }
-
-    for (const [partialUrl, authURL] of Object.entries(auth_url_map)) {
-      if (serverUrl.startsWith(partialUrl)) {
-        return authURL;
-      }
-    }
-
-    return undefined;
-  }
-
-  const authURL = getAuthURL(url);
   return credentialsManager.getCredentialsProvider(
-    'middleauth', authURL);
+    'middleauthapp', new URL(url).origin);
 }
 
 function getNgauthCredentialsProvider(
@@ -91,12 +73,12 @@ export function parseSpecialUrl(url: string, credentialsManager: CredentialsMana
         credentialsProvider: getNgauthCredentialsProvider(credentialsManager, `https://${u.host}`, u.path),
         url: 'gs+xml:/' + u.path,
       };
-      case 'middleauth+https':
-        url = url.substr('middleauth+'.length);
-        return {
-          credentialsProvider: getMiddleAuthCredentialsProvider(credentialsManager, url),
-          url: url,
-        };
+    case 'middleauth+https':
+      url = url.substr('middleauth+'.length);
+      return {
+        credentialsProvider: getMiddleAuthCredentialsProvider(credentialsManager, url),
+        url: url,
+      };
     default:
       return {
         credentialsProvider: undefined,

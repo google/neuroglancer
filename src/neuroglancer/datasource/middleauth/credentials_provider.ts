@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-import {CredentialsProvider, makeCredentialsGetter} from 'neuroglancer/credentials_provider';
+import {CredentialsManager, CredentialsProvider, makeCredentialsGetter} from 'neuroglancer/credentials_provider';
 import {StatusMessage} from 'neuroglancer/status';
 import {verifyObject, verifyObjectProperty, verifyString} from 'neuroglancer/util/json';
 
@@ -32,30 +32,6 @@ function openPopupCenter(url: string, width: number, height: number) {
   return window.open(
     url, undefined, `toolbar=no, menubar=no, width=${width}, height=${height}, top=${top}, left=${left}`
   );
-}
-
-async function updateAppUrls(token: MiddleAuthToken) {
-  const appListUrl = `${token.url}/api/v1/app`;
-
-  const url = new URL(appListUrl);
-  url.searchParams.set('middle_auth_token', token.accessToken);
-  const res = await fetch(url.href);
-  if (res.status === 200) {
-    const apps = (await res.json()).map((x: any) => x.url);
-    token.apps = apps;
-  } else {
-    throw new Error(`status ${res.status}`);
-  }
-}
-
-function isVerifiedUrl(authToken: MiddleAuthToken, url: string) {
-  for (const verifiedUrl of authToken.apps) {
-    if (url.startsWith(verifiedUrl)) {
-      return true;
-    }
-  }
-
-  return false;
 }
 
 async function waitForLogin(serverUrl: string): Promise<MiddleAuthToken> {
@@ -97,8 +73,6 @@ async function waitForLogin(serverUrl: string): Promise<MiddleAuthToken> {
             const accessToken = verifyObjectProperty(ev.data, 'token', verifyString);
     
             const token: MiddleAuthToken = {tokenType: 'Bearer', accessToken, url: serverUrl, apps: []};
-            await updateAppUrls(token);
-            saveAuthTokenToLocalStorage(serverUrl, token);
             f(token);
           }
         };
@@ -132,19 +106,24 @@ function saveAuthTokenToLocalStorage(authURL: string, value: MiddleAuthToken) {
   localStorage.setItem(`${LOCAL_STORAGE_AUTH_KEY}_${authURL}`, JSON.stringify(value));
 }
 
-export class UnverifiedApp extends Error {
-  url: string;
+async function updateAppUrls(token: MiddleAuthToken) {
+  const appListUrl = `${token.url}/api/v1/app`;
 
-  constructor(url: string) {
-    super();
-    this.url = url;
+  const url = new URL(appListUrl);
+  url.searchParams.set('middle_auth_token', token.accessToken);
+  const res = await fetch(url.href);
+  if (res.status === 200) {
+    const apps = (await res.json()).map((x: any) => x.url);
+    token.apps = apps;
+  } else {
+    throw new Error(`status ${res.status}`);
   }
 }
 
 export class MiddleAuthCredentialsProvider extends CredentialsProvider<MiddleAuthToken> {
   alreadyTriedLocalStorage: Boolean = false;
 
-  constructor(public serverUrl: string) {
+  constructor(private serverUrl: string) {
     super();
   }
   get = makeCredentialsGetter(async () => {
@@ -157,6 +136,63 @@ export class MiddleAuthCredentialsProvider extends CredentialsProvider<MiddleAut
 
     if (!token) {
       token = await waitForLogin(this.serverUrl);
+      await updateAppUrls(token);
+      saveAuthTokenToLocalStorage(this.serverUrl, token);
+    }
+
+    return token;
+  });
+}
+
+export class UnverifiedApp extends Error {
+  url: string;
+
+  constructor(url: string) {
+    super();
+    this.url = url;
+  }
+}
+
+export class MiddleAuthAppCredentialsProvider extends CredentialsProvider<MiddleAuthToken> {
+  alreadyTriedLocalStorage: Boolean = false;
+
+  constructor(private serverUrl: string, private credentialsManager: CredentialsManager) {
+    super();
+  }
+
+  get = makeCredentialsGetter(async () => {
+    // const authURL = await fetch(`${this.serverUrl}/auth_server`);
+
+    // TODO: will add endpoint to lookup auth server using serverUrl
+    async function getAuthURL(serverUrl: string) {
+      const auth_url_map = {
+        'https://globalv1.flywire-daf.com': 'https://globalv1.daf-apis.com/auth',
+        'https://globalv1.daf-apis.com': 'https://globalv1.daf-apis.com/auth',
+        'https://authsl1.middleauth.com': 'https://authsl1.middleauth.com/auth'
+      }
+
+      for (const [partialUrl, authURL] of Object.entries(auth_url_map)) {
+        if (serverUrl.startsWith(partialUrl)) {
+          return authURL;
+        }
+      }
+
+      return undefined;
+    }
+
+    const authURL = await getAuthURL(this.serverUrl);
+
+    const provider = this.credentialsManager.getCredentialsProvider('middleauth', authURL) as MiddleAuthCredentialsProvider;
+
+    const token = (await provider.get()).credentials;
+
+    function isVerifiedUrl(authToken: MiddleAuthToken, url: string) {
+      for (const verifiedUrl of authToken.apps) {
+        if (url.startsWith(verifiedUrl)) {
+          return true;
+        }
+      }
+      return false;
     }
 
     if (isVerifiedUrl(token, this.serverUrl)) {
