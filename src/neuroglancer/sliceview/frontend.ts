@@ -631,11 +631,11 @@ export function getVolumetricTransformedSources(
   const layerDisplayDimensionMapping =
       getLayerDisplayDimensionMapping(transform, displayDimensionIndices);
 
-  const {layerDisplayDimensionIndices} = layerDisplayDimensionMapping;
+  const {displayToLayerDimensionIndices} = layerDisplayDimensionMapping;
   const multiscaleToViewTransform = new Float32Array(displayRank * chunkRank);
   const {modelToRenderLayerTransform} = transform;
   for (let displayDim = 0; displayDim < displayRank; ++displayDim) {
-    const layerDim = layerDisplayDimensionIndices[displayDim];
+    const layerDim = displayToLayerDimensionIndices[displayDim];
     if (layerDim === -1) continue;
     const factor = canonicalVoxelFactors[displayDim];
     for (let chunkDim = 0; chunkDim < chunkRank; ++chunkDim) {
