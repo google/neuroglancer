@@ -14,16 +14,16 @@
  * limitations under the License.
  */
 
-import {CredentialsManager, CredentialsProvider, makeCredentialsGetter} from 'neuroglancer/credentials_provider';
+import {CredentialsManager, CredentialsProvider, CredentialsWithGeneration, makeCredentialsGetter} from 'neuroglancer/credentials_provider';
 import {StatusMessage} from 'neuroglancer/status';
-import {verifyObject, verifyObjectProperty, verifyString} from 'neuroglancer/util/json';
+import {verifyObject, verifyObjectProperty, verifyString, verifyStringArray} from 'neuroglancer/util/json';
 
 
 export type MiddleAuthToken = {
   tokenType: string;
   accessToken: string;
   url: string,
-  apps: string[],
+  appUrls: string[],
 }
 
 function openPopupCenter(url: string, width: number, height: number) {
@@ -37,7 +37,7 @@ function openPopupCenter(url: string, width: number, height: number) {
 async function waitForLogin(serverUrl: string): Promise<MiddleAuthToken> {
   const status = new StatusMessage(/*delay=*/ false);
 
-  const res: Promise<MiddleAuthToken> = new Promise((f, r) => {
+  const res: Promise<MiddleAuthToken> = new Promise((f) => {
     function writeLoginStatus(message: string, buttonMessage: string) {
       status.element.textContent = message + ' ';
       const button = document.createElement('button');
@@ -47,8 +47,7 @@ async function waitForLogin(serverUrl: string): Promise<MiddleAuthToken> {
       button.addEventListener('click', () => {
         writeLoginStatus(`Waiting for login to middle auth server ${serverUrl}...`, 'Retry');
 
-        const auth_popup = openPopupCenter(
-          `${serverUrl}/api/v1/authorize?redirect=${encodeURI(new URL('auth_redirect.html', window.location.href).href)}`, 400, 650);
+        const auth_popup = openPopupCenter(`${serverUrl}/api/v1/authorize`, 400, 650);
     
         const closeAuthPopup = () => {
           auth_popup?.close();
@@ -58,7 +57,7 @@ async function waitForLogin(serverUrl: string): Promise<MiddleAuthToken> {
         const checkClosed = setInterval(() => {
           if (auth_popup?.closed) {
             clearInterval(checkClosed);
-            r(new Error('Auth popup closed'));
+            writeLoginStatus(`Popup closed for middle auth server ${serverUrl}.`, 'Retry');
           }
         }, 1000);
     
@@ -71,8 +70,9 @@ async function waitForLogin(serverUrl: string): Promise<MiddleAuthToken> {
             
             verifyObject(ev.data);
             const accessToken = verifyObjectProperty(ev.data, 'token', verifyString);
+            const appUrls = verifyObjectProperty(ev.data, 'app_urls', verifyStringArray);
     
-            const token: MiddleAuthToken = {tokenType: 'Bearer', accessToken, url: serverUrl, apps: []};
+            const token: MiddleAuthToken = {tokenType: 'Bearer', accessToken, url: serverUrl, appUrls};
             f(token);
           }
         };
@@ -106,20 +106,6 @@ function saveAuthTokenToLocalStorage(authURL: string, value: MiddleAuthToken) {
   localStorage.setItem(`${LOCAL_STORAGE_AUTH_KEY}_${authURL}`, JSON.stringify(value));
 }
 
-async function updateAppUrls(token: MiddleAuthToken) {
-  const appListUrl = `${token.url}/api/v1/app`;
-
-  const url = new URL(appListUrl);
-  url.searchParams.set('middle_auth_token', token.accessToken);
-  const res = await fetch(url.href);
-  if (res.status === 200) {
-    const apps = (await res.json()).map((x: any) => x.url);
-    token.apps = apps;
-  } else {
-    throw new Error(`status ${res.status}`);
-  }
-}
-
 export class MiddleAuthCredentialsProvider extends CredentialsProvider<MiddleAuthToken> {
   alreadyTriedLocalStorage: Boolean = false;
 
@@ -136,7 +122,6 @@ export class MiddleAuthCredentialsProvider extends CredentialsProvider<MiddleAut
 
     if (!token) {
       token = await waitForLogin(this.serverUrl);
-      await updateAppUrls(token);
       saveAuthTokenToLocalStorage(this.serverUrl, token);
     }
 
@@ -154,40 +139,22 @@ export class UnverifiedApp extends Error {
 }
 
 export class MiddleAuthAppCredentialsProvider extends CredentialsProvider<MiddleAuthToken> {
-  alreadyTriedLocalStorage: Boolean = false;
+  private credentials: CredentialsWithGeneration<MiddleAuthToken>|undefined = undefined;
 
   constructor(private serverUrl: string, private credentialsManager: CredentialsManager) {
     super();
   }
 
   get = makeCredentialsGetter(async () => {
-    // const authURL = await fetch(`${this.serverUrl}/auth_server`);
+    const authURL = await fetch(`${this.serverUrl}/auth_info`).then((res) => res.json());
+    const loginURL = authURL.login_url;
 
-    // TODO: will add endpoint to lookup auth server using serverUrl
-    async function getAuthURL(serverUrl: string) {
-      const auth_url_map = {
-        'https://globalv1.flywire-daf.com': 'https://globalv1.daf-apis.com/auth',
-        'https://globalv1.daf-apis.com': 'https://globalv1.daf-apis.com/auth',
-        'https://authsl1.middleauth.com': 'https://authsl1.middleauth.com/auth'
-      }
+    const provider = this.credentialsManager.getCredentialsProvider('middleauth', loginURL) as MiddleAuthCredentialsProvider;
 
-      for (const [partialUrl, authURL] of Object.entries(auth_url_map)) {
-        if (serverUrl.startsWith(partialUrl)) {
-          return authURL;
-        }
-      }
-
-      return undefined;
-    }
-
-    const authURL = await getAuthURL(this.serverUrl);
-
-    const provider = this.credentialsManager.getCredentialsProvider('middleauth', authURL) as MiddleAuthCredentialsProvider;
-
-    const token = (await provider.get()).credentials;
+    this.credentials = await provider.get(this.credentials);
 
     function isVerifiedUrl(authToken: MiddleAuthToken, url: string) {
-      for (const verifiedUrl of authToken.apps) {
+      for (const verifiedUrl of authToken.appUrls) {
         if (url.startsWith(verifiedUrl)) {
           return true;
         }
@@ -195,9 +162,11 @@ export class MiddleAuthAppCredentialsProvider extends CredentialsProvider<Middle
       return false;
     }
 
-    if (isVerifiedUrl(token, this.serverUrl)) {
-      return token;
+    if (isVerifiedUrl(this.credentials.credentials, this.serverUrl)) {
+      return this.credentials.credentials;
     } else {
+      const status = new StatusMessage(/*delay=*/ false);
+      status.setText(`middle auth unverified app ${this.serverUrl}`);
       throw new UnverifiedApp(this.serverUrl);
     }
   });
