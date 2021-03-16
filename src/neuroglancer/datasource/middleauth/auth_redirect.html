@@ -1,7 +1,0 @@
-<script type="text/javascript">
-    const token = new URLSearchParams(window.location.search).get('middle_auth_token');
-
-    if (token && window.opener) {
-        window.opener.postMessage({token: token}, location.origin);
-    }
-</script>

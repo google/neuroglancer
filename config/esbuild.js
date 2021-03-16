@@ -167,10 +167,6 @@ class Builder {
       await fs.promises.copyFile(
           path.resolve(this.srcDir, 'neuroglancer/datasource/boss/bossauth.html'),
           path.resolve(this.outDir, 'bossauth.html'));
-
-      await fs.promises.copyFile(
-        path.resolve(this.srcDir, 'neuroglancer/datasource/middleauth/auth_redirect.html'),
-        path.resolve(this.outDir, 'auth_redirect.html'));
     }
     await esbuild.build({
       ...this.getBaseEsbuildConfig(),
