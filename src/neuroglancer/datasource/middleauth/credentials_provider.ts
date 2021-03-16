@@ -57,7 +57,7 @@ async function waitForLogin(serverUrl: string): Promise<MiddleAuthToken> {
         const checkClosed = setInterval(() => {
           if (auth_popup?.closed) {
             clearInterval(checkClosed);
-            writeLoginStatus(`Popup closed for middle auth server ${serverUrl}.`, 'Retry');
+            writeLoginStatus(`Login window closed for middle auth server ${serverUrl}.`, 'Retry');
           }
         }, 1000);
     
@@ -138,6 +138,15 @@ export class UnverifiedApp extends Error {
   }
 }
 
+function isVerifiedUrl(authToken: MiddleAuthToken, url: string) {
+  for (const verifiedUrl of authToken.appUrls) {
+    if (url.startsWith(verifiedUrl)) {
+      return true;
+    }
+  }
+  return false;
+}
+
 export class MiddleAuthAppCredentialsProvider extends CredentialsProvider<MiddleAuthToken> {
   private credentials: CredentialsWithGeneration<MiddleAuthToken>|undefined = undefined;
 
@@ -146,21 +155,10 @@ export class MiddleAuthAppCredentialsProvider extends CredentialsProvider<Middle
   }
 
   get = makeCredentialsGetter(async () => {
-    const authURL = await fetch(`${this.serverUrl}/auth_info`).then((res) => res.json());
-    const loginURL = authURL.login_url;
-
-    const provider = this.credentialsManager.getCredentialsProvider('middleauth', loginURL) as MiddleAuthCredentialsProvider;
+    const authInfo = await fetch(`${this.serverUrl}/auth_info`).then((res) => res.json());
+    const provider = this.credentialsManager.getCredentialsProvider('middleauth', authInfo.login_url) as MiddleAuthCredentialsProvider;
 
     this.credentials = await provider.get(this.credentials);
-
-    function isVerifiedUrl(authToken: MiddleAuthToken, url: string) {
-      for (const verifiedUrl of authToken.appUrls) {
-        if (url.startsWith(verifiedUrl)) {
-          return true;
-        }
-      }
-      return false;
-    }
 
     if (isVerifiedUrl(this.credentials.credentials, this.serverUrl)) {
       return this.credentials.credentials;
