@@ -45,7 +45,7 @@ async function waitForLogin(serverUrl: string): Promise<MiddleAuthToken> {
       status.element.appendChild(button);
       
       button.addEventListener('click', () => {
-        writeLoginStatus(`Waiting for login to middle auth server ${serverUrl}...`, 'Retry');
+        writeLoginStatus(`Waiting for login to middleauth server ${serverUrl}...`, 'Retry');
 
         const auth_popup = openPopupCenter(`${serverUrl}/api/v1/authorize`, 400, 650);
     
@@ -57,7 +57,7 @@ async function waitForLogin(serverUrl: string): Promise<MiddleAuthToken> {
         const checkClosed = setInterval(() => {
           if (auth_popup?.closed) {
             clearInterval(checkClosed);
-            writeLoginStatus(`Login window closed for middle auth server ${serverUrl}.`, 'Retry');
+            writeLoginStatus(`Login window closed for middleauth server ${serverUrl}.`, 'Retry');
           }
         }, 1000);
     
@@ -81,7 +81,7 @@ async function waitForLogin(serverUrl: string): Promise<MiddleAuthToken> {
       });
     }
 
-    writeLoginStatus(`middle auth server ${serverUrl} login required.`, 'Login');
+    writeLoginStatus(`middleauth server ${serverUrl} login required.`, 'Login');
   });
 
   try {
@@ -155,7 +155,7 @@ export class MiddleAuthAppCredentialsProvider extends CredentialsProvider<Middle
       return this.credentials.credentials;
     } else {
       const status = new StatusMessage(/*delay=*/ false);
-      status.setText(`middle auth unverified app ${this.serverUrl}`);
+      status.setText(`middleauth: unverified app ${this.serverUrl}`);
       throw new UnverifiedApp(this.serverUrl);
     }
   });
