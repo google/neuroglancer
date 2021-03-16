@@ -138,15 +138,6 @@ export class UnverifiedApp extends Error {
   }
 }
 
-function isVerifiedUrl(authToken: MiddleAuthToken, url: string) {
-  for (const verifiedUrl of authToken.appUrls) {
-    if (url.startsWith(verifiedUrl)) {
-      return true;
-    }
-  }
-  return false;
-}
-
 export class MiddleAuthAppCredentialsProvider extends CredentialsProvider<MiddleAuthToken> {
   private credentials: CredentialsWithGeneration<MiddleAuthToken>|undefined = undefined;
 
@@ -160,7 +151,7 @@ export class MiddleAuthAppCredentialsProvider extends CredentialsProvider<Middle
 
     this.credentials = await provider.get(this.credentials);
 
-    if (isVerifiedUrl(this.credentials.credentials, this.serverUrl)) {
+    if (this.credentials.credentials.appUrls.includes(this.serverUrl)) {
       return this.credentials.credentials;
     } else {
       const status = new StatusMessage(/*delay=*/ false);
