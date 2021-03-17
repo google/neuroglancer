@@ -16,6 +16,7 @@ import subprocess
 import tempfile
 import time
 import setuptools.command.build_ext
+import setuptools.command.develop
 import setuptools.command.install
 import setuptools.command.sdist
 import setuptools.command.test
@@ -105,6 +106,12 @@ class BuildExtCommand(setuptools.command.build_ext.build_ext):
 class InstallCommand(setuptools.command.install.install):
     def run(self):
         _setup_temp_egg_info(self)
+        super().run()
+
+
+class DevelopCommand(setuptools.command.develop.develop):
+    def run(self):
+        _maybe_bundle_client(self)
         super().run()
 
 
@@ -274,5 +281,6 @@ setuptools.setup(
         'bundle_client': BundleClientCommand,
         'build_ext': BuildExtCommand,
         'install': InstallCommand,
+        'develop': DevelopCommand,
     },
 )
