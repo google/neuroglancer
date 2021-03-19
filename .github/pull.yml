@@ -1,6 +1,4 @@
 version: "1"
-env:
-  PULL_INTERVAL: 1209600 # every two weeks
 rules:
   - base: ndmaster
     upstream: google:master
@@ -10,3 +8,4 @@ rules:
       - j6k4m8
       - sandyhider
       - movestill
+      - cabishop
