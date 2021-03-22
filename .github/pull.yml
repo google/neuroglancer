@@ -1,0 +1,15 @@
+version: "1"
+rules:
+  - base: ndmaster
+    upstream: google:master
+    mergeMethod: merge
+    reviewers: 
+      - hannahgooden
+      - j6k4m8
+      - sandyhider
+      - movestill
+    assignees: 
+      - hannahgooden
+      - j6k4m8
+      - sandyhider
+      - movestill      
