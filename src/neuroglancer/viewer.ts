@@ -170,6 +170,7 @@ export interface ViewerOptions extends ViewerUIOptions, VisibilityPrioritySpecif
   showLayerDialog: boolean;
   inputEventBindings: InputEventBindings;
   resetStateWhenEmpty: boolean;
+  minSidePanelSize: number;
 }
 
 const defaultViewerOptions = 'undefined' !== typeof NEUROGLANCER_OVERRIDE_DEFAULT_VIEWER_OPTIONS ?
@@ -215,6 +216,7 @@ export enum UrlType {
 
 export class Viewer extends RefCounted implements ViewerState {
   navigationState = this.registerDisposer(new NavigationState());
+  minSidePanelSize = 290;
   perspectiveNavigationState = new NavigationState(new Pose(this.navigationState.position), 1);
   saver?: SaveState;
   hashBinding?: UrlHashBinding;
@@ -297,6 +299,7 @@ export class Viewer extends RefCounted implements ViewerState {
           getDefaultDataSourceProvider({credentialsManager: defaultCredentialsManager}),
       uiConfiguration = new ViewerUIConfiguration(),
     } = options;
+    this.minSidePanelSize = options.minSidePanelSize || this.minSidePanelSize;
     this.visibility = visibility;
     this.inputEventBindings = inputEventBindings;
     this.element = element;
@@ -613,7 +616,7 @@ export class Viewer extends RefCounted implements ViewerState {
             self.selectedLayer.visible = visible;
           }
         },
-        this.selectedLayer.size, 'horizontal', 290));
+        this.selectedLayer.size, 'horizontal', this.minSidePanelSize));
 
     gridContainer.appendChild(layoutAndSidePanel);
 
