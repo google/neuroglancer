@@ -1,0 +1,5 @@
+.ng-zebra-table tr:nth-child(even).ng-differ-current, .ng-zebra-table tr.ng-differ-current {
+    background-color: #02c2f2;
+        color: #555;
+}
+.ng-zebra-table tr:hover.ng-differ-current {background-color:#02c2f2;}

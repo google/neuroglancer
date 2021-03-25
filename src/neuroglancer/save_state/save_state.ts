@@ -1,6 +1,7 @@
 import 'neuroglancer/save_state/save_state.css';
 
 import {debounce} from 'lodash';
+import {Dialog} from 'neuroglancer/dialog';
 import {Overlay} from 'neuroglancer/overlay';
 import {dismissUnshareWarning, getSaveToAddressBar, getUnshareWarning} from 'neuroglancer/preferences/user_preferences';
 import {StatusMessage} from 'neuroglancer/status';
@@ -8,6 +9,7 @@ import {RefCounted} from 'neuroglancer/util/disposable';
 import {getRandomHexString} from 'neuroglancer/util/random';
 import {Trackable} from 'neuroglancer/util/trackable';
 import {UrlType, Viewer} from 'neuroglancer/viewer';
+
 
 const deprecatedKey = 'neuroglancerSaveState';
 const stateKey = 'neuroglancerSaveState_v2';
@@ -36,7 +38,7 @@ export class SaveState extends RefCounted {
     if (userDisabledSaver) {
       this.supported = false;
       StatusMessage.showTemporaryMessage(
-          `Save State has been disabled because Legacy saving has been turned on in User Preferences.`,
+          `Save State has been disabled because Legacy Saving has been turned on in User Preferences.`,
           10000, {color: 'orange'});
     } else {
       const throttledUpdate = debounce(() => this.push(), updateDelayMilliseconds);
@@ -70,7 +72,8 @@ export class SaveState extends RefCounted {
         source.history = [this.session_id];
       }
       const oldState = this.root.toJSON();
-      const stateChange = JSON.stringify(oldState) !== JSON.stringify(source.state);
+      const stateChange = this.viewer.differ!.record(oldState, source.state);
+
 
       if (stateChange || clean) {
         source.state = oldState;
@@ -226,10 +229,16 @@ export class SaveState extends RefCounted {
       }
     }
   }
+  /**
+   * The manager is responsible for keeping track of unique save states
+   */
   private getManager() {
     const managerRaw = localStorage[stateKey];
     return <string[]>JSON.parse(managerRaw || '[]');
   }
+  /**
+   * Registers a new state via ID into the manager
+   */
   private notifyManager() {
     if (storageAccessible() && this.key) {
       const manager = this.uniquePush(this.getManager(), this.key);
@@ -510,46 +519,28 @@ class SaveDialog extends Overlay {
     return popupContainer;
   }
 }
-
-class SaveHistoryDialog extends Overlay {
-  table = document.createElement('table');
-  constructor(public viewer: Viewer, saver: SaveState) {
-    super();
-    let {content, table} = this;
+class SaveHistoryDialog extends Dialog {
+  constructor(public viewer: Viewer, public saver: SaveState) {
+    super(viewer);
+    let {modal, table} = this;
     if (saver.supported) {
       let saves = saver.history();
-      let modal = document.createElement('div');
-      content.appendChild(modal);
+      saves.reverse().forEach(this.addTableEntry.bind(this));
 
-      table.classList.add('ng-zebra-table');
-      saves.reverse().forEach(this.tableEntry.bind(this));
-
-      const clear = document.createElement('button');
-      clear.innerText = 'Clear';
-      clear.title = 'Remove all saved states.';
-      clear.addEventListener('click', () => {
-        saver.purge();
-        this.dispose();
-      });
-
-      modal.append(clear);
       if (!table.children.length) {
         modal.append(document.createElement('br'), `There are no saved states.`);
       }
-      modal.append(table);
-      modal.onblur = () => this.dispose();
-      modal.focus();
     } else {
       this.dispose();
       StatusMessage.showTemporaryMessage(`Cannot access saved states.`, 10000);
     }
   }
 
-  private tableEntry(entry: SaveHistory) {
+  private addTableEntry(entry: SaveHistory) {
     if (!entry || !entry.source_url) {
       return;
     }
-    const row = document.createElement('tr');
+    const row = this.tableEntry();
     const date = document.createElement('td');
     const link = document.createElement('td');
     const linkAnchor = document.createElement('a');
@@ -561,7 +552,11 @@ class SaveHistoryDialog extends Overlay {
     linkAnchor.style.display = 'block';
     link.append(linkAnchor);
     row.append(date, link);
-    this.table.append(row);
+  }
+
+  public clearHandler() {
+    this.saver.purge();
+    this.dispose();
   }
 }
 

@@ -15,8 +15,6 @@
  */
 
 import {debounce} from 'lodash';
-import {dismissUnshareWarning, getUnshareWarning} from 'neuroglancer/preferences/user_preferences';
-import {StatusMessage} from 'neuroglancer/status';
 import {WatchableValue} from 'neuroglancer/trackable_value';
 import {RefCounted} from 'neuroglancer/util/disposable';
 import {urlSafeParse, verifyObject} from 'neuroglancer/util/json';
@@ -60,25 +58,6 @@ export class UrlHashBinding extends RefCounted {
       if (s === '' || s === '#' || s === '#!') {
         // s = '#!{}';
         return;
-      }
-      StatusMessage.showTemporaryMessage(
-          `RAW URLs will soon be Deprecated. Please use JSON URLs whenever available.`, 10000);
-      if (getUnshareWarning().value) {
-        StatusMessage.messageWithAction(
-            `This state has not been shared, share and copy the JSON or RAW url to avoid losing progress. `,
-            [
-              {
-                message: 'Dismiss',
-                action: () => {
-                  dismissUnshareWarning();
-                  StatusMessage.showTemporaryMessage(
-                      'To reenable this warning, check "Unshared state warning" in the User Preferences menu.',
-                      5000);
-                }
-              },
-              {message: 'Share', action: () => this.viewer.postJsonState(true)}
-            ],
-            undefined, {color: 'yellow'});
       }
       if (s.startsWith('#!+')) {
         s = s.slice(3);
@@ -152,13 +131,16 @@ class UrlHashBindingLegacy {
 
     if (generation !== this.prevStateGeneration) {
       this.prevStateGeneration = cacheState.generation;
-      let stateString = this.encodeFragment(JSON.stringify(cacheState.value));
-      if (stateString !== this.prevStateString) {
-        this.prevStateString = stateString;
-        if (decodeURIComponent(stateString) === '{}') {
+      const stateString = JSON.stringify(cacheState.value);
+      const encodedStateString = this.encodeFragment(stateString);
+      const prevStateString =
+          this.prevStateString ? decodeURIComponent(this.prevStateString) : this.prevStateString;
+      if (this.parent.viewer.differ.record(prevStateString, stateString)) {
+        this.prevStateString = encodedStateString;
+        if (decodeURIComponent(encodedStateString) === '{}') {
           history.replaceState(null, '', '#');
         } else {
-          history.replaceState(null, '', '#!' + stateString);
+          history.replaceState(null, '', '#!' + encodedStateString);
         }
       }
     }

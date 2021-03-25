@@ -23,6 +23,7 @@ import {defaultCredentialsManager} from 'neuroglancer/credentials_provider/defau
 import {InputEventBindings as DataPanelInputEventBindings} from 'neuroglancer/data_panel_layout';
 import {DataSourceProvider} from 'neuroglancer/datasource';
 import {getDefaultDataSourceProvider} from 'neuroglancer/datasource/default_provider';
+import {Differ} from 'neuroglancer/differ/differ';
 import {DisplayContext} from 'neuroglancer/display_context';
 import {InputEventBindingHelpDialog} from 'neuroglancer/help/input_event_bindings';
 import {ActionMode, ActionState, allRenderLayerRoles, LayerManager, LayerSelectedValues, ManagedUserLayer, MouseSelectionState, RenderLayerRole, SelectedLayerState, UserLayer} from 'neuroglancer/layer';
@@ -105,9 +106,9 @@ export class InputEventBindings extends DataPanelInputEventBindings {
 }
 
 const viewerUiControlOptionKeys: (keyof ViewerUIControlConfiguration)[] = [
-  'showHelpButton', 'showEditStateButton', 'showLayerPanel', 'showLocation',
-  'showAnnotationToolStatus', 'showJsonPostButton', 'showUserPreferencesButton',
-  'showWhatsNewButton', 'showBugButton', 'showSaveButton', 'showHistoryButton'
+  'showHelpButton', 'showEditStateButton', 'showRedoButton', 'showUndoButton', 'showLayerPanel',
+  'showLocation', 'showAnnotationToolStatus', 'showJsonPostButton', 'showUserPreferencesButton',
+  'showWhatsNewButton', 'showBugButton', 'showSaveButton', 'showHistoryButton', 'showChangesButton'
 ];
 
 const viewerOptionKeys: (keyof ViewerUIOptions)[] =
@@ -116,6 +117,8 @@ const viewerOptionKeys: (keyof ViewerUIOptions)[] =
 export class ViewerUIControlConfiguration {
   showHelpButton = new TrackableBoolean(true);
   showEditStateButton = new TrackableBoolean(true);
+  showRedoButton = new TrackableBoolean(true);
+  showUndoButton = new TrackableBoolean(true);
   showJsonPostButton = new TrackableBoolean(true);
   showUserPreferencesButton = new TrackableBoolean(true);
   showBugButton = new TrackableBoolean(true);
@@ -125,6 +128,7 @@ export class ViewerUIControlConfiguration {
   showWhatsNewButton = new TrackableBoolean(true);
   showSaveButton = new TrackableBoolean(true);
   showHistoryButton = new TrackableBoolean(true);
+  showChangesButton = new TrackableBoolean(true);
 }
 
 export class ViewerUIConfiguration extends ViewerUIControlConfiguration {
@@ -150,6 +154,8 @@ interface ViewerUIOptions {
   showUIControls: boolean;
   showHelpButton: boolean;
   showEditStateButton: boolean;
+  showRedoButton: boolean;
+  showUndoButton: boolean;
   showLayerPanel: boolean;
   showLocation: boolean;
   showPanelBorders: boolean;
@@ -160,6 +166,7 @@ interface ViewerUIOptions {
   showBugButton: boolean;
   showSaveButton: boolean;
   showHistoryButton: boolean;
+  showChangesButton: boolean;
 }
 
 export interface ViewerOptions extends ViewerUIOptions, VisibilityPrioritySpecification {
@@ -252,6 +259,7 @@ export class Viewer extends RefCounted implements ViewerState {
   stateServer = new TrackableValue<string>('', validateStateServer);
   jsonStateServer = new TrackableValue<string>('', validateStateServer);
   state = new CompoundTrackable();
+  differ = new Differ(this.state);
 
   dataContext: Owned<DataManagementContext>;
   visibility: WatchableVisibilityPriority;
@@ -493,6 +501,49 @@ export class Viewer extends RefCounted implements ViewerState {
     topRow.appendChild(annotationToolStatus.element);
     this.registerDisposer(new ElementVisibilityFromTrackableBoolean(
         this.uiControlVisibility.showAnnotationToolStatus, annotationToolStatus.element));
+
+    // TODO: Differ does not work with legacy saving
+    const isLegacySavingOn = getSaveToAddressBar().value;
+    const unsupported = ' is currently unsupported in Legacy Saving Mode';
+    {
+      const button = makeTextIconButton('⇦', `Undo${isLegacySavingOn ? unsupported : ''}`);
+      button.id = 'neuroglancer-undo-button';
+      button.classList.add('disabled');
+      this.registerEventListener(button, 'click', () => {
+        if (this.differ) {
+          this.differ.rollback();
+        }
+      });
+      this.registerDisposer(new ElementVisibilityFromTrackableBoolean(
+          this.uiControlVisibility.showUndoButton, button));
+      topRow.appendChild(button);
+    }
+
+    {
+      const button = makeTextIconButton('⚬', 'Change History');
+      button.id = 'neuroglancer-change-button';
+      this.registerEventListener(button, 'click', () => {
+        this.showChanges();
+      });
+      this.registerDisposer(new ElementVisibilityFromTrackableBoolean(
+          this.uiControlVisibility.showChangesButton, button));
+      // TODO: Enable button once show changes button is complete
+      // topRow.appendChild(button);
+    }
+
+    {
+      const button = makeTextIconButton('⇨', `Redo${isLegacySavingOn ? unsupported : ''}`);
+      button.id = 'neuroglancer-redo-button';
+      button.classList.add('disabled');
+      this.registerEventListener(button, 'click', () => {
+        if (this.differ) {
+          this.differ.rollforward();
+        }
+      });
+      this.registerDisposer(new ElementVisibilityFromTrackableBoolean(
+          this.uiControlVisibility.showRedoButton, button));
+      topRow.appendChild(button);
+    }
 
     {
       const button = document.createElement('button');
@@ -827,6 +878,10 @@ export class Viewer extends RefCounted implements ViewerState {
     this.saver!.showHistory(this);
   }
 
+  showChanges() {
+    this.differ!.showChanges(this);
+  }
+
   promptJsonStateServer(message: string): void {
     let json_server_input =
         prompt(message, 'https://www.dynamicannotationframework.com/nglstate/post');
@@ -1012,6 +1067,7 @@ export class Viewer extends RefCounted implements ViewerState {
     if (!this.saver.supported) {
       // Fallback to register state change handler has legacy urlHashBinding if saver is not
       // supported
+      this.differ.legacy = this;
       hashBinding.legacy.fallback();
     }
   }
@@ -1029,6 +1085,8 @@ export class Viewer extends RefCounted implements ViewerState {
       }
       hashBinding.parseError;
     }));
+    StatusMessage.showTemporaryMessage(
+        `RAW URLs will soon be Deprecated. Please use JSON URLs whenever available.`, 10000);
     hashBinding.updateFromUrlHash();
 
     return hashBinding;

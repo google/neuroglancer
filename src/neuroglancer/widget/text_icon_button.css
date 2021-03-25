@@ -33,6 +33,10 @@
   background-color: #db4437;
 }
 
+.neuroglancer-icon-button:hover.disabled {
+  background-color: #666666;
+}
+
 .neuroglancer-icon-button div {
   display: inline-block;
   margin: -2px;
