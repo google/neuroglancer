@@ -130,7 +130,7 @@ export class UrlHashBinding extends RefCounted {
         s = fragment;
       }
       // Handle remote JSON state
-      if (s.match(/^#!(http|https|gs):\/\//)) {
+      if (s.match(/^#!([a-z][a-z\d+-.]*):\/\//)) {
         const url = s.substring(2);
         const {url: parsedUrl, credentialsProvider} = parseSpecialUrl(url, this.credentialsManager);
         StatusMessage.forPromise(

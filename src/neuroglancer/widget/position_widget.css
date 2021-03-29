@@ -39,6 +39,16 @@ interferes with our click handling.  Setting `pointer-events: none;` avoids that
   font-size: medium;
 }
 
+.neuroglancer-position-dimension[data-coordinate-array="valid"] .neuroglancer-position-dimension-scale {
+  display: none;
+}
+
+.neuroglancer-position-dimension[data-coordinate-array="invalid"] .neuroglancer-position-dimension-scale {
+  text-decoration-line: underline;
+  text-decoration-style: wavy;
+  text-decoration-color: red;
+}
+
 .neuroglancer-position-dimension-coordinate {
   color: white;
 }
@@ -63,7 +73,7 @@ interferes with our click handling.  Setting `pointer-events: none;` avoids that
   height: 0px;
 }
 
-.neuroglancer-position-dimension-dropdown {
+.neuroglancer-position-dimension-dropdown, .neuroglancer-position-dimension-coordinate-dropdown {
   position: absolute;
   min-width: calc(100% + 2px);
   border: 1px solid #aaa;
@@ -72,6 +82,9 @@ interferes with our click handling.  Setting `pointer-events: none;` avoids that
   left: -1px;
   z-index: 100;
   background-color: black;
+}
+
+.neuroglancer-position-dimension-dropdown {
   display: grid;
   grid-template-areas:
     "labels . graph";
@@ -79,7 +92,28 @@ interferes with our click handling.  Setting `pointer-events: none;` avoids that
   grid-template-columns: 0fr 3px 0fr;
 }
 
-.neuroglancer-position-dimension-dropdown:focus {
+.neuroglancer-position-dimension-coordinate-dropdown {
+  display: flex;
+  flex-direction: column;
+  overflow-y: auto;
+}
+
+.neuroglancer-dimension-dropdown-coordinate-entry {
+  display: flex;
+  flex-direction: row;
+  justify-content: space-between;
+}
+
+.neuroglancer-dimension-dropdown-coordinate-entry:hover {
+  background-color: #333;
+}
+
+.neuroglancer-dimension-dropdown-coordinate-label {
+  width: var(--neuroglancer-coordinate-label-width);
+  color: #0ff;
+}
+
+.neuroglancer-position-dimension-dropdown:focus, .neuroglancer-position-dimension-coordinate-dropdown:focus {
   outline: 0px;
 }
 
@@ -146,4 +180,19 @@ interferes with our click handling.  Setting `pointer-events: none;` avoids that
   font-size: medium;
   color: orange;
   white-space: pre;
+}
+
+.neuroglancer-position-dimension-coordinate-label {
+  display: inline-block;
+  color: #0ff;
+}
+
+.neuroglancer-position-dimension-coordinate-label:not(:empty)::before {
+  content: "[";
+  color: #aaa;
+}
+
+.neuroglancer-position-dimension-coordinate-label:not(:empty)::after {
+  content: "]";
+  color: #aaa;
 }

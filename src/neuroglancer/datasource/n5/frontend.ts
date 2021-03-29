@@ -25,7 +25,7 @@
 
 import {makeDataBoundsBoundingBoxAnnotationSet} from 'neuroglancer/annotation';
 import {ChunkManager, WithParameters} from 'neuroglancer/chunk_manager/frontend';
-import {CoordinateSpace, makeCoordinateSpace, makeIdentityTransform} from 'neuroglancer/coordinate_transform';
+import {CoordinateArray, CoordinateSpace, makeCoordinateSpace, makeIdentityTransform} from 'neuroglancer/coordinate_transform';
 import {WithCredentialsProvider} from 'neuroglancer/credentials_provider/chunk_source_frontend';
 import {CompleteUrlOptions, DataSource, DataSourceProvider, GetDataSourceOptions} from 'neuroglancer/datasource';
 import {VolumeChunkEncoding, VolumeChunkSourceParameters} from 'neuroglancer/datasource/n5/base';
@@ -36,7 +36,7 @@ import {transposeNestedArrays} from 'neuroglancer/util/array';
 import {Borrowed} from 'neuroglancer/util/disposable';
 import {completeHttpPath} from 'neuroglancer/util/http_path_completion';
 import {isNotFoundError, parseUrl, responseJson} from 'neuroglancer/util/http_request';
-import {expectArray, parseArray, parseFixedLengthArray, verifyEnumString, verifyFinitePositiveFloat, verifyObject, verifyObjectProperty, verifyOptionalObjectProperty, verifyPositiveInt, verifyString} from 'neuroglancer/util/json';
+import {expectArray, parseArray, parseFixedLengthArray, verifyEnumString, verifyFinitePositiveFloat, verifyObject, verifyObjectProperty, verifyOptionalObjectProperty, verifyPositiveInt, verifyString, verifyStringArray} from 'neuroglancer/util/json';
 import {createHomogeneousScaleMatrix} from 'neuroglancer/util/matrix';
 import {getObjectId} from 'neuroglancer/util/object_id';
 import {scaleByExp10, unitFromJson} from 'neuroglancer/util/si_units';
@@ -98,6 +98,7 @@ export class MultiscaleVolumeChunkSource extends GenericMultiscaleVolumeChunkSou
           },
         },
       ],
+      coordinateArrays: baseModelSpace.coordinateArrays,
     });
   }
 
@@ -324,9 +325,6 @@ function getMultiscaleMetadata(url: string, attributes: any): MultiscaleMetadata
   if (rank === -1) {
     throw new Error('Unable to determine rank of dataset');
   }
-  if (axes === undefined) {
-    axes = getDefaultAxes(rank);
-  }
   if (units === undefined) {
     units = new Array(rank);
     units.fill(defaultUnit);
@@ -338,12 +336,36 @@ function getMultiscaleMetadata(url: string, attributes: any): MultiscaleMetadata
   for (let i = 0; i < rank; ++i) {
     scales[i] = scaleByExp10(scales[i], units[i].exponent);
   }
+  // Handle coordinateArrays
+  const coordinateArrays = new Array<CoordinateArray|undefined>(rank);
+  if (axes !== undefined) {
+    verifyOptionalObjectProperty(attributes, 'coordinateArrays', coordinateArraysObj => {
+      verifyObject(coordinateArraysObj);
+      for (let i = 0; i < rank; ++i) {
+        const name = axes![i];
+        if (Object.prototype.hasOwnProperty.call(coordinateArraysObj, name)) {
+          const labels = verifyStringArray(coordinateArraysObj[name]);
+          coordinateArrays[i] = {
+            explicit: false,
+            labels,
+            coordinates: Array.from(labels, (_, i) => i)
+          };
+          units![i] = {unit: '', exponent: 0};
+          scales![i] = 1;
+        }
+      }
+    });
+  }
+  if (axes === undefined) {
+    axes = getDefaultAxes(rank);
+  }
   const modelSpace = makeCoordinateSpace({
     rank,
     valid: true,
     names: axes,
     scales,
     units: units.map(x => x.unit),
+    coordinateArrays,
   });
   if (dimensions === undefined) {
     if (allDownsamplingFactors === undefined) {

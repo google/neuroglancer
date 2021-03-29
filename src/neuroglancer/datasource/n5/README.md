@@ -13,6 +13,24 @@ Dimension names may be specified using the `axes` metadata attribute; if present
 attribute must be an array of strings, specifying the name of each dimension in the same order as
 the `dimensions` attribute.
 
+As a Neuroglancer-specific extension, coordinate arrays may be specified using the
+`coordinateArrays` metadata attribute; if present, the `coordinateArrays` attribute must be an
+object, where the keys correspond to dimension names in `axes` and the values are arrays of strings
+specifying the coordinate labels starting at 0.  For example:
+
+```json
+{
+  "dimensions": [10000, 10000, 5],
+  "dataType": "uint8",
+  "blockSize": [512, 512, 1],
+  "compression": {"type": "raw"},
+  "axes": ["x", "y", "c"],
+  "coordinateArrays": {
+    "c": ["A", "B', "C', "D', "E"]
+  }
+}
+```
+
 For mutli-scale datasets, both the [n5-viewer](https://github.com/saalfeldlab/n5-viewer) and
 [bigdataviewer-n5](https://github.com/bigdataviewer/bigdataviewer-core/blob/master/BDV%20N5%20format.md)
 formats are supported.  `FILE_URL` must specify a directory with the following contents:

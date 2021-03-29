@@ -16,13 +16,13 @@
 
 import './position_widget.css';
 
-import {computeCombinedLowerUpperBound, CoordinateSpace, CoordinateSpaceCombiner, DimensionId, emptyInvalidCoordinateSpace, insertDimensionAt, makeCoordinateSpace} from 'neuroglancer/coordinate_transform';
+import {computeCombinedLowerUpperBound, CoordinateArray, CoordinateSpace, CoordinateSpaceCombiner, DimensionId, emptyInvalidCoordinateSpace, insertDimensionAt, makeCoordinateSpace} from 'neuroglancer/coordinate_transform';
 import {MouseSelectionState} from 'neuroglancer/layer';
 import {Position} from 'neuroglancer/navigation_state';
 import {StatusMessage} from 'neuroglancer/status';
 import {WatchableValueInterface} from 'neuroglancer/trackable_value';
 import {animationFrameDebounce} from 'neuroglancer/util/animation_frame_debounce';
-import {arraysEqual, filterArrayInplace} from 'neuroglancer/util/array';
+import {arraysEqual, binarySearch, filterArrayInplace} from 'neuroglancer/util/array';
 import {setClipboard} from 'neuroglancer/util/clipboard';
 import {Borrowed, RefCounted} from 'neuroglancer/util/disposable';
 import {removeFromParent, updateChildren, updateInputFieldWidth} from 'neuroglancer/util/dom';
@@ -54,6 +54,23 @@ const widgetFieldGetters: ((widget: DimensionWidget) => HTMLInputElement)[] = [
   w => w.scaleElement,
 ];
 
+// Returns the coordinate array for the specified dimension, if valid.
+//
+// If no coordinate array is specified, returns `undefined`.
+//
+// If a coordinate array is specified but there is a unit or scale specified, returns `null`.
+//
+// Otherwise, returns the coordinate array.
+function getCoordinateArray(
+    coordinateSpace: CoordinateSpace, dimensionIndex: number): CoordinateArray|undefined|null {
+  const coordinateArray = coordinateSpace.coordinateArrays[dimensionIndex];
+  if (coordinateArray === undefined) return coordinateArray;
+  if (coordinateSpace.units[dimensionIndex] != '' || coordinateSpace.scales[dimensionIndex] !== 1) {
+    return null;
+  }
+  return coordinateArray;
+}
+
 class DimensionWidget {
   container = document.createElement('div');
   nameContainer = document.createElement('span');
@@ -61,13 +78,23 @@ class DimensionWidget {
   scaleContainer = document.createElement('span');
   scaleElement = document.createElement('input');
   coordinate = document.createElement('input');
+  coordinateLabel = document.createElement('span')
+  coordinateLabelWidth = 0;
   dropdownOwner: RefCounted|undefined = undefined;
   modified = false;
   draggingPosition = false;
   hasFocus = false;
 
-  constructor(public coordinateSpace: CoordinateSpace) {
-    const {container, scaleElement, scaleContainer, coordinate, nameElement, nameContainer} = this;
+  constructor(public coordinateSpace: CoordinateSpace, initialDimensionIndex: number) {
+    const {
+      container,
+      scaleElement,
+      scaleContainer,
+      coordinate,
+      nameElement,
+      nameContainer,
+      coordinateLabel
+    } = this;
     container.title = '';
     container.classList.add('neuroglancer-position-dimension');
     container.draggable = true;
@@ -88,7 +115,6 @@ class DimensionWidget {
     scaleElement.disabled = true;
     scaleElement.spellcheck = false;
     scaleElement.autocomplete = 'off';
-    scaleContainer.title = 'Drag to reorder, double click to change scale';
     container.appendChild(scaleContainer);
     container.appendChild(coordinate);
     coordinate.type = 'text';
@@ -96,8 +122,19 @@ class DimensionWidget {
     coordinate.spellcheck = false;
     coordinate.autocomplete = 'off';
     coordinate.pattern = String.raw`(-?\d+(?:\.(?:\d+)?)?)`;
+    const coordinateArray = getCoordinateArray(coordinateSpace, initialDimensionIndex);
+    if (coordinateArray != null) {
+      let maxLabelWidth = 0;
+      for (const label of coordinateArray.labels) {
+        maxLabelWidth = Math.max(maxLabelWidth, label.length);
+      }
+      this.coordinateLabelWidth = maxLabelWidth;
+      coordinateLabel.style.width = `${maxLabelWidth + 2}ch`;
+      container.appendChild(coordinateLabel);
+    }
     coordinate.required = true;
     coordinate.placeholder = ' ';
+    coordinateLabel.classList.add('neuroglancer-position-dimension-coordinate-label');
   }
 }
 
@@ -192,20 +229,7 @@ export class PositionWidget extends RefCounted {
   private dimensionWidgets = new Map<DimensionId, DimensionWidget>();
   private dimensionWidgetList: DimensionWidget[] = [];
 
-  private openDropdown(widget: DimensionWidget) {
-    if (widget.dropdownOwner !== undefined) return;
-    this.closeDropdown();
-    const dropdownOwner = widget.dropdownOwner = new RefCounted();
-    const dropdown = document.createElement('div');
-    dropdown.draggable = true;
-    dropdown.addEventListener('dragstart', event => {
-      event.stopPropagation();
-      event.preventDefault();
-    });
-    dropdown.addEventListener('pointerenter', () => {
-      widget.hasFocus = true;
-    });
-    dropdown.tabIndex = -1;
+  private openRegularDropdown(widget: DimensionWidget, dropdown: HTMLDivElement) {
     dropdown.classList.add('neuroglancer-position-dimension-dropdown');
     const canvas = document.createElement('canvas');
     const ctx = canvas.getContext('2d')!;
@@ -224,7 +248,6 @@ export class PositionWidget extends RefCounted {
     dropdown.appendChild(upperBoundElement);
     dropdown.appendChild(hoverElement);
     dropdown.appendChild(canvas);
-    widget.container.appendChild(dropdown);
 
     const canvasHeight = 100;
 
@@ -283,7 +306,7 @@ export class PositionWidget extends RefCounted {
         upperBoundElement.style.visibility = '';
       }
     };
-
+    const dropdownOwner = widget.dropdownOwner!;
     const scheduleUpdateView =
         dropdownOwner.registerCancellable(animationFrameDebounce(updateView));
     dropdownOwner.registerDisposer(this.position.changed.add(scheduleUpdateView));
@@ -339,6 +362,65 @@ export class PositionWidget extends RefCounted {
       setPositionFromMouse(event);
     });
     updateView();
+  }
+
+  private openCoordinateArrayDropdown(widget: DimensionWidget, dropdown: HTMLDivElement, coordinateArray: CoordinateArray) {
+    dropdown.classList.add('neuroglancer-position-dimension-coordinate-dropdown');
+    const {coordinates, labels} = coordinateArray;
+    const entries: {entryElement: HTMLDivElement, coordinateElement: HTMLDivElement, labelElement: HTMLDivElement}[] = [];
+    const length = coordinates.length;
+    dropdown.style.setProperty(
+        '--neuroglancer-coordinate-label-width', `${widget.coordinateLabelWidth}ch`);
+    for (let i = 0; i < length; ++i) {
+      const entryElement = document.createElement('div');
+      entryElement.classList.add('neuroglancer-dimension-dropdown-coordinate-entry');
+      const coordinateElement = document.createElement('div');
+      coordinateElement.classList.add('neuroglancer-dimension-dropdown-coordinate');
+      const labelElement = document.createElement('div');
+      labelElement.classList.add('neuroglancer-dimension-dropdown-coordinate-label');
+      labelElement.textContent = labels[i];
+      coordinateElement.textContent = coordinates[i].toString();
+      entryElement.appendChild(coordinateElement);
+      entryElement.appendChild(labelElement);
+      entryElement.addEventListener('click', () => {
+        const dimensionIndex = this.dimensionWidgetList.indexOf(widget);
+        if (dimensionIndex === -1) return;
+        const {position} = this;
+        const voxelCoordinates = position.value;
+        voxelCoordinates[dimensionIndex] = coordinates[i] + 0.5;
+        widget.modified = false;
+        position.value = voxelCoordinates;
+      });
+      dropdown.appendChild(entryElement);
+      entries.push({entryElement, coordinateElement, labelElement});
+    }
+    //const dropdownOwner = widget.dropdownOwner!;
+  }
+
+  private openDropdown(widget: DimensionWidget) {
+    if (widget.dropdownOwner !== undefined) return;
+    const initialDimensionIndex = this.dimensionWidgetList.indexOf(widget);
+    if (initialDimensionIndex === -1) return;
+    this.closeDropdown();
+    const dropdownOwner = widget.dropdownOwner = new RefCounted();
+    const dropdown = document.createElement('div');
+    dropdown.draggable = true;
+    dropdown.addEventListener('dragstart', event => {
+      event.stopPropagation();
+      event.preventDefault();
+    });
+    dropdown.addEventListener('pointerenter', () => {
+      widget.hasFocus = true;
+    });
+    dropdown.tabIndex = -1;
+    widget.container.appendChild(dropdown);
+
+    const coordinateArray = getCoordinateArray(widget.coordinateSpace, initialDimensionIndex);
+    if (coordinateArray == null) {
+      this.openRegularDropdown(widget, dropdown);
+    } else {
+      this.openCoordinateArrayDropdown(widget, dropdown, coordinateArray);
+    }
 
     this.widgetWithOpenDropdown = widget;
 
@@ -407,8 +489,8 @@ export class PositionWidget extends RefCounted {
     }
   }
 
-  private newDimension(coordinateSpace: CoordinateSpace) {
-    const widget = new DimensionWidget(coordinateSpace);
+  private newDimension(coordinateSpace: CoordinateSpace, initialDimensionIndex: number) {
+    const widget = new DimensionWidget(coordinateSpace, initialDimensionIndex);
     widget.container.addEventListener('dragstart', (event: DragEvent) => {
       this.dragSource = widget;
       event.stopPropagation();
@@ -627,7 +709,7 @@ export class PositionWidget extends RefCounted {
     updateChildren(this.dimensionContainer, ids.map((id, i) => {
       let widget = dimensionWidgets.get(id);
       if (widget === undefined) {
-        widget = this.newDimension(coordinateSpace);
+        widget = this.newDimension(coordinateSpace, i);
         dimensionWidgets.set(id, widget);
       } else {
         widget.coordinateSpace = coordinateSpace;
@@ -636,6 +718,19 @@ export class PositionWidget extends RefCounted {
       widget.nameElement.value = name;
       delete widget.nameElement.dataset.isValid;
       updateInputFieldWidth(widget.nameElement);
+      const coordinateArray = getCoordinateArray(coordinateSpace, i);
+      if (coordinateArray === undefined) {
+        widget.container.dataset.coordinateArray = 'none';
+      } else if (coordinateArray === null) {
+        widget.container.dataset.coordinateArray = 'invalid';
+      } else {
+        widget.container.dataset.coordinateArray = 'valid';
+      }
+      widget.scaleContainer.title = 'Drag to reorder, double click to change scale';
+      if (coordinateArray === null) {
+        widget.scaleContainer.title +=
+            '.  Coordinate array disabled.  To use the coordinate array, remove the unit/scale.'
+      }
       const {scale, prefix, unit} = formatScaleWithUnit(scales[i], units[i]);
       const scaleString = `${scale}${prefix}${unit}`;
       widget.scaleElement.value = scaleString;
@@ -662,20 +757,23 @@ export class PositionWidget extends RefCounted {
       widget: DimensionWidget, dir: number,
       fieldGetter: (widget: DimensionWidget) => HTMLInputElement) {
     const {dimensionWidgetList} = this;
-    const axisIndex = dimensionWidgetList.indexOf(widget);
+    let axisIndex = dimensionWidgetList.indexOf(widget);
     if (axisIndex === -1) return;
-    const newAxisIndex = axisIndex + dir;
-    if (newAxisIndex < 0 || newAxisIndex >= dimensionWidgetList.length) {
-      return false;
+    while (true) {
+      axisIndex += dir;
+      if (axisIndex < 0 || axisIndex >= dimensionWidgetList.length) {
+        return false;
+      }
+      const newWidget = dimensionWidgetList[axisIndex];
+      const field = fieldGetter(newWidget);
+      if (field.style.display === 'none') continue;
+      field.disabled = false;
+      field.focus();
+      field.selectionStart = 0;
+      field.selectionEnd = field.value.length;
+      field.selectionDirection = dir === 1 ? 'forward' : 'backward';
+      return true;
     }
-    const newWidget = dimensionWidgetList[newAxisIndex];
-    const field = fieldGetter(newWidget);
-    field.disabled = false;
-    field.focus();
-    field.selectionStart = 0;
-    field.selectionEnd = field.value.length;
-    field.selectionDirection = dir === 1 ? 'forward' : 'backward';
-    return true;
   }
 
   private selectAdjacentCoordinate(widget: DimensionWidget, dir: number) {
@@ -843,7 +941,8 @@ export class PositionWidget extends RefCounted {
       timestamps,
       ids: existing.ids,
       names: existing.names,
-      boundingBoxes: existing.boundingBoxes
+      boundingBoxes: existing.boundingBoxes,
+      coordinateArrays: existing.coordinateArrays,
     });
     coordinateSpace.value = newSpace;
     return true;
@@ -865,11 +964,25 @@ export class PositionWidget extends RefCounted {
     if (voxelCoordinates === undefined) {
       return;
     }
+    const coordinateSpace = this.coordinateSpace!;
     for (let i = 0; i < rank; ++i) {
-      const inputElement = dimensionWidgetList[i].coordinate;
-      const newValue = Math.floor(voxelCoordinates[i]).toString();
+      const widget = dimensionWidgetList[i];
+      const inputElement = widget.coordinate;
+      const newCoord = Math.floor(voxelCoordinates[i]);
+      const newValue = newCoord.toString();
       updateCoordinateFieldWidth(inputElement, newValue);
       inputElement.value = newValue;
+      const coordinateArray = getCoordinateArray(coordinateSpace, i);
+      let label = '';
+      if (coordinateArray != null) {
+        const {coordinates} = coordinateArray;
+        const index = binarySearch(coordinates, newCoord, (a, b) => a - b);
+        if (index !== coordinates.length) {
+          label = coordinateArray.labels[index];
+        }
+      }
+      const labelElement = widget.coordinateLabel;
+      labelElement.textContent = label;
     }
   }
 

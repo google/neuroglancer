@@ -127,6 +127,12 @@ function parseCoordinateSpaceAndVoxelOffset(response: any) {
     valid: true
   };
   const {rank} = baseModelSpace;
+  // Mark all coordinate arrays as implicit, since they are obtained from the data source and need
+  // not be preserved in the Neuroglancer JSON state.
+  baseModelSpace.coordinateArrays.forEach(coordinateArray => {
+    if (coordinateArray === undefined) return;
+    coordinateArray.explicit = false;
+  });
   const subsourceToModelTransform =
       matrix.identity(new Float32Array((rank + 1) * (rank + 1)), rank + 1, rank + 1);
 
@@ -203,6 +209,7 @@ export class PythonMultiscaleVolumeChunkSource extends MultiscaleVolumeChunkSour
       scales: baseModelSpace.scales,
       units: baseModelSpace.units,
       boundingBoxes: [makeIdentityTransformedBoundingBox(box)],
+      coordinateArrays: baseModelSpace.coordinateArrays,
     });
     this.modelSpace = modelSpace;
     this.generation = verifyObjectProperty(response, 'generation', x => x);

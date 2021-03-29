@@ -1,17 +1,14 @@
 import {bindDefaultCopyHandler, bindDefaultPasteHandler} from 'neuroglancer/ui/default_clipboard_handling';
 import {setDefaultInputEventBindings} from 'neuroglancer/ui/default_input_event_bindings';
 import {makeMinimalViewer} from 'neuroglancer/ui/minimal_viewer';
-import {registerLayerType, registerVolumeLayerType} from 'neuroglancer/layer';
-import {VolumeType} from 'neuroglancer/sliceview/volume/base';
-
-import {ImageUserLayer} from 'neuroglancer/image_user_layer';
-import {SegmentationUserLayer} from 'neuroglancer/segmentation_user_layer';
 // import {UrlHashBinding} from 'neuroglancer/ui/url_hash_binding';
 
-import {DVIDDataSource} from 'neuroglancer/datasource/dvid/frontend';
-import {PrecomputedDataSource} from 'neuroglancer/datasource/precomputed/frontend';
-import {BrainmapsDataSource, productionInstance} from 'neuroglancer/datasource/brainmaps/frontend';
-import {registerProvider} from 'neuroglancer/datasource/default_provider';
+import 'neuroglancer/datasource/dvid/register_credentials_provider';
+import 'neuroglancer/datasource/dvid/register_default';
+import 'neuroglancer/datasource/brainmaps/register_default';
+import 'neuroglancer/datasource/precomputed/register_default';
+import 'neuroglancer/segmentation_user_layer';
+import 'neuroglancer/image_user_layer';
 
 import {defaultCredentialsManager} from 'neuroglancer/credentials_provider/default_manager';
 import {credentialsKey} from 'neuroglancer/datasource/brainmaps/api';
@@ -36,26 +33,10 @@ export function setupDefaultViewer(options: {
   target: HTMLElement | undefined,
   bundleRoot: string | undefined
 }) {
-  // image_register();
-  registerLayerType('image', ImageUserLayer);
-  registerVolumeLayerType(VolumeType.IMAGE, ImageUserLayer);
-
-  // segmentation_register();
-  registerLayerType('segmentation', SegmentationUserLayer);
-  registerVolumeLayerType(VolumeType.SEGMENTATION, SegmentationUserLayer);
-
-  registerProvider('dvid', options => new DVIDDataSource(options.credentialsManager));
-  registerProvider('precomputed', () => new PrecomputedDataSource());
-
   // register_brainmaps
   if (options.brainMapsClientId) {
     const clientId: string = options.brainMapsClientId;
     defaultCredentialsManager.register(credentialsKey, () => new BrainmapsCredentialsProvider(clientId));
-    registerProvider('brainmaps',
-      options => new BrainmapsDataSource(
-        productionInstance, options.credentialsManager.getCredentialsProvider(credentialsKey)
-      )
-    );
   }
 
   let viewer = makeMinimalViewer({ bundleRoot: options.bundleRoot }, options.target);

@@ -21,20 +21,19 @@
 export const VERTICES_PER_QUAD = 6;
 export const TRIANGLES_PER_QUAD = 2;
 
+// Use a lookup table rather than a switch to avoid miscompilation on Apple M1.
 export const glsl_getQuadVertexPosition = `
 vec2 getQuadVertexPosition(vec2 lower, vec2 upper) {
-  switch (gl_VertexID % 6) {
-    case 0:
-    case 5:
-      return lower;
-    case 1:
-      return vec2(lower.x, upper.y);
-    case 2:
-    case 3:
-      return vec2(upper.x, upper.y);
-    case 4:
-      return vec2(upper.x, lower.y);
-  }
+  const vec2 coeffs[] = vec2[](
+    vec2(0.0, 0.0),
+    vec2(0.0, 1.0),
+    vec2(1.0, 1.0),
+    vec2(1.0, 1.0),
+    vec2(1.0, 0.0),
+    vec2(0.0, 0.0)
+  );
+  int v = gl_VertexID % 6;
+  return mix(lower, upper, coeffs[v]);
 }
 `;
 

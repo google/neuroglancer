@@ -18,32 +18,25 @@
  * limitations under the License.
  */
 
-import {CredentialsProvider, makeCredentialsGetter} from 'neuroglancer/credentials_provider';
+import {AnonymousFirstCredentialsProvider, CredentialsProvider, makeCredentialsGetter} from 'neuroglancer/credentials_provider';
 import {StatusMessage} from 'neuroglancer/status';
 import {CANCELED, CancellationTokenSource, uncancelableToken} from 'neuroglancer/util/cancellation';
 import {cancellableFetchOk} from 'neuroglancer/util/http_request';
 import {DVIDToken, responseText} from 'neuroglancer/datasource/dvid/api';
 
-function getAuthToken(
-  authServer: string,
-  cancellationToken = uncancelableToken) {
-  if (!authServer) {
-    return Promise.resolve('');
-  } else {
-    return cancellableFetchOk(
-      authServer,
-      {'method': 'GET', credentials: 'include'},
-      responseText,
-      cancellationToken);
-  }
+async function getAuthToken(authServer: string, cancellationToken = uncancelableToken): Promise<DVIDToken> {
+  const token = await cancellableFetchOk(
+    authServer, {'method': 'GET', credentials: 'include'}, responseText, cancellationToken);
+  return {token};
 }
 
-export class DVIDCredentialsProvider extends CredentialsProvider<DVIDToken> {
-  constructor(public authServer: string) {
+class BaseDVIDCredentialsProvider extends CredentialsProvider<DVIDToken> {
+  constructor(public authServer: string|undefined) {
     super();
   }
 
   get = makeCredentialsGetter(cancellationToken => {
+    if (!this.authServer) return Promise.resolve({token: ''});
     const status = new StatusMessage(/*delay=*/true);
     let cancellationSource: CancellationTokenSource|undefined;
     return new Promise<DVIDToken>((resolve, reject) => {
@@ -101,7 +94,13 @@ export class DVIDCredentialsProvider extends CredentialsProvider<DVIDToken> {
                   }
                 });
       }
-      requestAuth(this.authServer);
+      requestAuth(this.authServer!);
     });
   });
+}
+
+export class DVIDCredentialsProvider extends AnonymousFirstCredentialsProvider<DVIDToken> {
+  constructor(_dvidServer: string, authServer: string|undefined) {
+    super(new BaseDVIDCredentialsProvider(authServer), {});
+  }
 }

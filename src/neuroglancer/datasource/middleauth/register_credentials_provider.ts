@@ -1,10 +1,6 @@
 /**
  * @license
- * This work is a derivative of the Google Neuroglancer project,
- * Copyright 2016 Google Inc.
- * The Derivative Work is covered by
- * Copyright 2019 Howard Hughes Medical Institute
- *
+ * Copyright 2020 Google Inc.
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
@@ -19,10 +15,10 @@
  */
 
 import {defaultCredentialsManager} from 'neuroglancer/credentials_provider/default_manager';
-import {credentialsKey} from 'neuroglancer/datasource/dvid/api';
-import {DVIDCredentialsProvider} from 'neuroglancer/datasource/dvid/credentials_provider';
+import {MiddleAuthCredentialsProvider, MiddleAuthAppCredentialsProvider} from 'neuroglancer/datasource/middleauth/credentials_provider';
+import { CredentialsManager } from 'src/neuroglancer/credentials_provider';
 
-defaultCredentialsManager.register(
-    credentialsKey,
-    (params: {dvidServer: string, authServer: string|undefined}) =>
-        new DVIDCredentialsProvider(params.dvidServer, params.authServer));
+defaultCredentialsManager.register('middleauth', serverUrl => new MiddleAuthCredentialsProvider(serverUrl));
+
+defaultCredentialsManager.register('middleauthapp', (serverUrl: string, credentialsManager: CredentialsManager) => 
+    new MiddleAuthAppCredentialsProvider(serverUrl, credentialsManager));

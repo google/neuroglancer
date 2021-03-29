@@ -23,6 +23,12 @@ export type SpecialProtocolCredentials = OAuth2Credentials|undefined;
 export type SpecialProtocolCredentialsProvider =
   MaybeOptionalCredentialsProvider<SpecialProtocolCredentials>;
 
+function getMiddleAuthCredentialsProvider(
+    credentialsManager: CredentialsManager, url: string): SpecialProtocolCredentialsProvider {
+  return credentialsManager.getCredentialsProvider(
+    'middleauthapp', new URL(url).origin);
+}
+
 function getNgauthCredentialsProvider(
     credentialsManager: CredentialsManager, serverUrl: string,
     path: string): SpecialProtocolCredentialsProvider {
@@ -66,6 +72,12 @@ export function parseSpecialUrl(url: string, credentialsManager: CredentialsMana
       return {
         credentialsProvider: getNgauthCredentialsProvider(credentialsManager, `https://${u.host}`, u.path),
         url: 'gs+xml:/' + u.path,
+      };
+    case 'middleauth+https':
+      url = url.substr('middleauth+'.length);
+      return {
+        credentialsProvider: getMiddleAuthCredentialsProvider(credentialsManager, url),
+        url: url,
       };
     default:
       return {

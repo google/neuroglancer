@@ -159,3 +159,18 @@ export class CachingMapBasedCredentialsManager extends
 
 export type MaybeOptionalCredentialsProvider<T> =
     T extends undefined ? undefined : CredentialsProvider<Exclude<T, undefined>>;
+
+export class AnonymousFirstCredentialsProvider<T> extends CredentialsProvider<T> {
+  private anonymous = true;
+  constructor(private baseProvider: CredentialsProvider<T>, private anonymousCredentials: T) {
+    super();
+  }
+
+  get = makeCachedCredentialsGetter((invalidCredentials?: CredentialsWithGeneration<T>) => {
+    if (this.anonymous && invalidCredentials === undefined) {
+      return Promise.resolve({generation: -10, credentials: this.anonymousCredentials});
+    }
+    this.anonymous = false;
+    return this.baseProvider.get(invalidCredentials);
+  });
+}

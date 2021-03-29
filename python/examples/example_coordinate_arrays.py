@@ -16,9 +16,16 @@ def add_example_layers(state):
 
     b = np.cast[np.uint32](np.floor(np.sqrt((ix - 0.5)**2 + (iy - 0.5)**2 + (iz - 0.5)**2) * 10))
     b = np.pad(b, 1, 'constant')
-    dimensions = neuroglancer.CoordinateSpace(names=['x', 'y', 'z'],
-                                              units='nm',
-                                              scales=[10, 10, 10])
+    dimensions = neuroglancer.CoordinateSpace(
+        names=['x', 'y', 'z', 'c'],
+        units=['nm', 'nm', 'nm', ''],
+        scales=[10, 10, 10, 1],
+        coordinate_arrays=[
+            None,
+            None,
+            None,
+            neuroglancer.CoordinateArray(labels=['red', 'green', 'blue']),
+        ])
 
     state.dimensions = dimensions
     state.layers.append(
@@ -26,29 +33,12 @@ def add_example_layers(state):
         layer=neuroglancer.LocalVolume(
             data=a,
             dimensions=neuroglancer.CoordinateSpace(
-                names=['c^', 'x', 'y', 'z'],
+                names=['c', 'x', 'y', 'z'],
                 units=['', 'nm', 'nm', 'nm'],
                 scales=[1, 10, 10, 10],
-                coordinate_arrays=[
-                    neuroglancer.CoordinateArray(labels=['red', 'green', 'blue']), None, None, None
-                ]),
+            ),
             voxel_offset=(0, 20, 30, 15),
-        ),
-        shader="""
-void main() {
-  emitRGB(vec3(toNormalized(getDataValue(0)),
-               toNormalized(getDataValue(1)),
-               toNormalized(getDataValue(2))));
-}
-""",
-    )
-    state.layers.append(
-        name='b',
-        layer=neuroglancer.LocalVolume(
-            data=b,
-            dimensions=dimensions,
-        ),
-    )
+        ))
     return a, b
 
 
