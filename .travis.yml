@@ -1,65 +1,65 @@
 sudo: required
 language: python
 os:
-  - linux
+- linux
 python:
-  - "3.5"
-  - "3.8"
+- '3.5'
+- '3.8'
 matrix:
   include:
-    - name: "C++"
-      language: cpp
-      install:
-        - cd python
-        - mkdir build
-      script:
-        - cd build
-        - cmake ..
-        - make
-        - ctest
-    - os: osx
-      osx_image: xcode8.3
-      python: "3.6-dev"
-    - name: "Web client"
-      sudo: required
-      addons:
-        chrome: stable
-      language: node_js
-      node_js: node
-      before_install:
-        - node --version
-        - openssl aes-256-cbc -K $encrypted_f46babd475e4_key -iv $encrypted_f46babd475e4_iv -in credentials.tar.gz.enc -out credentials.tar.gz -d
-        - tar -xzf credentials.tar.gz
-        - sudo mv secrets /secrets && sudo chown $USER /secrets
-        - rm credentials.tar.gz
-        - $(python version.py) #sets APPVERSION
-      install:
-        - npm install
-      script:
-        - npm run build
-        - npm run build-min
-        - npm run build-python
-        - npm run build-python-min
-        - npm run test
-        - npm run benchmark
-      after_success:
-        - cp -r ./dist/python-min appengine/frontend/static/
-      deploy:
-      - provider: gae
-        skip_cleanup: true
-        keyfile: "/secrets/google-secret.json"
-        project: neuromancer-seung-import
-        version: "$APPVERSION"
-        on:
-          all_branches: true
-        no_promote: true
-        default: true
-        verbosity: error
-        config: "./appengine/frontend/app.yaml"
-        no_stop_previous_version: false
-      
+  - name: C++
+    language: cpp
+    install:
+    - cd python
+    - mkdir build
+    script:
+    - cd build
+    - cmake ..
+    - make
+    - ctest
+  - os: osx
+    osx_image: xcode8.3
+    python: 3.6-dev
+  - name: Web client
+    sudo: required
+    addons:
+      chrome: stable
+    language: node_js
+    node_js: node
+    before_install:
+    - node --version
+    - openssl aes-256-cbc -K $encrypted_d80a2d296111_key -iv $encrypted_d80a2d296111_iv
+      -in credentials.tar.gz.enc -out credentials.tar.gz -d
+    - tar -xzf credentials.tar.gz
+    - sudo mv secrets /secrets && sudo chown $USER /secrets
+    - rm credentials.tar.gz
+    - "$(python version.py)"
+    install:
+    - npm install
+    script:
+    - npm run build
+    - npm run build-min
+    - npm run build-python
+    - npm run build-python-min
+    - npm run test
+    - npm run benchmark
+    after_success:
+    - cp -r ./dist/python-min appengine/frontend/static/
+    deploy:
+    - provider: gae
+      skip_cleanup: true
+      keyfile: "/secrets/google-secret.json"
+      project: neuromancer-seung-import
+      version: "$APPVERSION"
+      on:
+        all_branches: true
+      no_promote: true
+      default: true
+      verbosity: error
+      config: "./appengine/frontend/app.yaml"
+      no_stop_previous_version: false
 install:
-  - pip install tox-travis
+- pip install tox-travis
 script:
-  - cd python
-  - tox -vvvvvvv
+- cd python
+- tox -vvvvvvv
