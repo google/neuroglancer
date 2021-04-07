@@ -47,7 +47,7 @@ import {Borrowed, Owned, RefCounted} from 'neuroglancer/util/disposable';
 import {removeFromParent} from 'neuroglancer/util/dom';
 import {registerActionListener} from 'neuroglancer/util/event_action_map';
 import {vec3} from 'neuroglancer/util/geom';
-import {parseFixedLengthArray, verifyFinitePositiveFloat, verifyObject, verifyOptionalObjectProperty} from 'neuroglancer/util/json';
+import {parseFixedLengthArray, verifyFinitePositiveFloat, verifyObject, verifyOptionalObjectProperty, verifyString} from 'neuroglancer/util/json';
 import {EventActionMap, KeyboardEventBinder} from 'neuroglancer/util/keyboard_bindings';
 import {NullarySignal, Signal} from 'neuroglancer/util/signal';
 import {CompoundTrackable, optionallyRestoreFromJsonMember} from 'neuroglancer/util/trackable';
@@ -60,6 +60,9 @@ import {NumberInputWidget} from 'neuroglancer/widget/number_input_widget';
 import {MousePositionWidget, PositionWidget} from 'neuroglancer/widget/position_widget';
 import {TrackableScaleBarOptions} from 'neuroglancer/widget/scale_bar';
 import {RPC} from 'neuroglancer/worker_rpc';
+import { SaveDialog } from './save_state/save_state';
+import { responseJson } from './util/http_request';
+import {cancellableFetchSpecialOk, parseSpecialUrl} from 'neuroglancer/util/special_protocol_request';
 
 declare var NEUROGLANCER_OVERRIDE_DEFAULT_VIEWER_OPTIONS: any
 
@@ -227,6 +230,8 @@ class TrackableViewerState extends CompoundTrackable {
     this.add('statistics', viewer.statisticsDisplayState);
     this.add('selection', viewer.selectionDetailsState);
     this.add('partialViewport', viewer.partialViewport);
+
+    this.add('jsonStateServer', viewer.jsonStateServer);
   }
 
   restoreState(obj: any) {
@@ -316,6 +321,8 @@ export class Viewer extends RefCounted implements ViewerState {
       new TrackableDataSelectionState(this.coordinateSpace, this.layerSelectedValues));
 
   resetInitiated = new NullarySignal();
+
+  jsonStateServer = new TrackableValue<string>('', verifyString);
 
   get chunkManager() {
     return this.dataContext.chunkManager;
@@ -524,6 +531,14 @@ export class Viewer extends RefCounted implements ViewerState {
       topRow.appendChild(button);
     }
 
+    {
+      const button = makeIcon({text: 'Share', title: 'Share State'});
+      this.registerEventListener(button, 'click', () => {
+        this.postJsonState();
+      });
+      topRow.appendChild(button);
+    }
+
 
     {
       const button = makeIcon({text: '?', title: 'Help'});
@@ -607,6 +622,36 @@ export class Viewer extends RefCounted implements ViewerState {
     };
     updateVisibility();
     this.registerDisposer(this.visibility.changed.add(updateVisibility));
+  }
+
+  async postJsonState() {
+    let res: string|undefined = undefined;
+    if (this.jsonStateServer.value.length > 0) {
+      const {url: parsedUrl, credentialsProvider} = parseSpecialUrl(this.jsonStateServer.value, defaultCredentialsManager);
+      await StatusMessage.forPromise(
+        cancellableFetchSpecialOk(credentialsProvider, parsedUrl, {
+              method: 'POST',
+              headers: {'Content-Type': 'application/json'},
+              body: JSON.stringify(this.state.toJSON())
+            }, responseJson)
+          .then(stateServerRes => {
+            res = stateServerRes;
+            StatusMessage.showTemporaryMessage(`Successfully saved state.`, 4000);
+          })
+          .catch(() => {
+            StatusMessage.showTemporaryMessage(
+              `Could not access state server.`, 4000);//, {color: 'yellow'});
+          }),
+        {
+          initialMessage: `Posting state to ${this.jsonStateServer.value}.`,
+          delay: true,
+          errorPrefix: ''
+        });
+    } else {
+      StatusMessage.showTemporaryMessage(`No state server found.`, 4000);//, {color: 'yellow'});
+    }
+
+    new SaveDialog(this, res);
   }
 
   /**

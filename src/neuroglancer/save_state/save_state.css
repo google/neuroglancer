@@ -1,0 +1,9 @@
+.shareOverlay .inputAndButton {
+  display: grid;
+  grid-template-columns: min-content min-content;
+  column-gap: 10px;
+}
+
+.shareOverlay.hasStateServer > div:last-child {
+  margin-top: 30px;
+}
