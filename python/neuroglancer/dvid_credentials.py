@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Module implements function for token-based authentication of layers.
+"""Module implements function for authentication of layers based on DVID.
     Here tokens are fetched from local locations like env vars etc."""
 
 from __future__ import absolute_import
@@ -37,8 +37,12 @@ class TokenbasedDefaultCredentialsProvider(credentials_provider.CredentialsProvi
     def get_new(self):
         def func():
             self._credentials = {}
-            self._credentials['token'] = os.environ.get(
-                'DVID_APPLICATION_CREDENTIALS')
+            try:
+                TOKEN = os.environ['DVID_APPLICATION_CREDENTIALS']
+            except KeyError:
+                raise RuntimeError(
+                    "DVID_APPLICATION_CREDENTIALS is not defined in your environment!")
+            self._credentials['token'] = TOKEN
             return dict(tokenType=u'Bearer', accessToken=self._credentials['token'])
 
         return run_on_new_thread(func)
