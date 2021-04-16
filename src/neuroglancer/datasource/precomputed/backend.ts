@@ -43,8 +43,11 @@ import {stableStringify} from 'neuroglancer/util/json';
 import {getObjectId} from 'neuroglancer/util/object_id';
 import {cancellableFetchSpecialOk, SpecialProtocolCredentials, SpecialProtocolCredentialsProvider} from 'neuroglancer/util/special_protocol_request';
 import {Uint64} from 'neuroglancer/util/uint64';
-import {encodeZIndexCompressed} from 'neuroglancer/util/zorder';
+import {encodeZIndexCompressed, zorder3LessThan} from 'neuroglancer/util/zorder';
 import {registerSharedObject} from 'neuroglancer/worker_rpc';
+
+// Set to true to validate the multiscale index.
+const DEBUG_MULTISCALE_INDEX = false;
 
 const shardingHashFunctions: Map<ShardingHashFunction, (out: Uint64) => void> = new Map([
   [
@@ -387,10 +390,30 @@ function decodeMultiscaleManifestChunk(
   const clipLowerBound =
       vec3.fromValues(Number.NEGATIVE_INFINITY, Number.NEGATIVE_INFINITY, Number.NEGATIVE_INFINITY);
   let numLods = Math.max(1, storedLodScales.length);
+  // Compute `clipLowerBound` and `clipUpperBound` and `numLods`.  Note that `numLods` is >=
+  // `storedLodScales.length`; it may contain additional levels since at the highest level the
+  // octree must be a single node.
   {
     let fragmentBase = 0;
     for (let lodIndex = 0; lodIndex < numStoredLods; ++lodIndex) {
       const numFragments = numFragmentsPerLod[lodIndex];
+      if (DEBUG_MULTISCALE_INDEX) {
+        for (let i = 1; i < numFragments; ++i) {
+          let x0 = fragmentInfo[fragmentBase + numFragments * 0 + (i - 1)];
+          let y0 = fragmentInfo[fragmentBase + numFragments * 1 + (i - 1)];
+          let z0 = fragmentInfo[fragmentBase + numFragments * 2 + (i - 1)];
+          let x1 = fragmentInfo[fragmentBase + numFragments * 0 + i];
+          let y1 = fragmentInfo[fragmentBase + numFragments * 1 + i];
+          let z1 = fragmentInfo[fragmentBase + numFragments * 2 + i];
+          if (!zorder3LessThan(x0, y0, z0, x1, y1, z1)) {
+            console.log(
+                `Fragment index violates zorder constraint: ` +
+                `lod=${lodIndex}, ` +
+                `chunk ${i - 1} = [${x0},${y0},${z0}], ` +
+                `chunk ${i} = [${x1},${y1},${z1}]`);
+          }
+        }
+      }
       for (let i = 0; i < 3; ++i) {
         let upperBoundValue = Number.NEGATIVE_INFINITY;
         let lowerBoundValue = Number.POSITIVE_INFINITY;
@@ -416,6 +439,8 @@ function decodeMultiscaleManifestChunk(
     }
   }
 
+  // Compute upper bound on number of nodes that will be in the octree, so that we can allocate a
+  // sufficiently large buffer without having to worry about resizing.
   let maxFragments = 0;
   {
     let prevNumFragments = 0;
