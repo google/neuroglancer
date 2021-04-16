@@ -7,6 +7,10 @@ format arrays, using the following data source URL syntax:
 `zarr://FILE_URL`, where `FILE_URL` is a URL to the directory containing the `.zarray` metadata file
 using any [supported file protocol](../file_protocols.md).
 
+If the zarr array uses `/` rather than the default of `.` as the dimension separator in chunk keys,
+you can either specify the separator as the `dimension_separator` member in the `.zarray` metadata
+file (preferred) or use a data source URL of `zarr://FILE_URL?dimension_separator=/`.
+
 Supported compressors:
 
 - raw

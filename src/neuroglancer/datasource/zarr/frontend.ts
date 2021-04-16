@@ -24,10 +24,11 @@ import {SliceViewSingleResolutionSource} from 'neuroglancer/sliceview/frontend';
 import {DataType, makeDefaultVolumeChunkSpecifications, VolumeSourceOptions, VolumeType} from 'neuroglancer/sliceview/volume/base';
 import {MultiscaleVolumeChunkSource as GenericMultiscaleVolumeChunkSource, VolumeChunkSource} from 'neuroglancer/sliceview/volume/frontend';
 import {transposeNestedArrays} from 'neuroglancer/util/array';
+import {applyCompletionOffset, completeQueryStringParametersFromTable} from 'neuroglancer/util/completion';
 import {Borrowed} from 'neuroglancer/util/disposable';
 import {completeHttpPath} from 'neuroglancer/util/http_path_completion';
 import {isNotFoundError, responseJson} from 'neuroglancer/util/http_request';
-import {parseArray, parseFixedLengthArray, verifyObject, verifyObjectProperty, verifyOptionalObjectProperty, verifyString} from 'neuroglancer/util/json';
+import {parseArray, parseFixedLengthArray, parseQueryStringParameters, verifyObject, verifyObjectProperty, verifyOptionalObjectProperty, verifyString} from 'neuroglancer/util/json';
 import {createIdentity} from 'neuroglancer/util/matrix';
 import {parseNumpyDtype} from 'neuroglancer/util/numpy_dtype';
 import {getObjectId} from 'neuroglancer/util/object_id';
@@ -43,6 +44,16 @@ interface ZarrMetadata {
   rank: number;
   shape: number[];
   chunks: number[];
+  dimensionSeparator: ZarrSeparator|undefined;
+}
+
+function parseDimensionSeparator(obj: unknown): ZarrSeparator|undefined {
+  return verifyOptionalObjectProperty(obj, 'dimension_separator', value => {
+    if (value !== '.' && value !== '/') {
+      throw new Error(`Expected "." or "/", but received: ${JSON.stringify(value)}`);
+    }
+    return value;
+  });
 }
 
 function parseZarrMetadata(obj: unknown): ZarrMetadata {
@@ -75,6 +86,7 @@ function parseZarrMetadata(obj: unknown): ZarrMetadata {
       }
       return order;
     });
+    const dimensionSeparator = parseDimensionSeparator(obj);
     const numpyDtype =
         verifyObjectProperty(obj, 'dtype', dtype => parseNumpyDtype(verifyString(dtype)));
     const compressor = verifyObjectProperty(obj, 'compressor', compressor => {
@@ -99,6 +111,7 @@ function parseZarrMetadata(obj: unknown): ZarrMetadata {
       order,
       dataType: numpyDtype.dataType,
       encoding: {compressor, endianness: numpyDtype.endianness},
+      dimensionSeparator,
     };
   } catch (e) {
     throw new Error(`Error parsing zarr metadata: ${e.message}`);
@@ -213,26 +226,47 @@ function getMetadata(
         return parseZarrMetadata(json);
       });
 }
+const supportedQueryParameters = [
+  {
+    key: {value: 'dimension_separator', description: 'Dimension separator in chunk keys'},
+    values: [
+      {value: '.', description: '(default)'},
+      {value: '/', description: ''},
+    ]
+  },
+];
 
 export class ZarrDataSource extends DataSourceProvider {
   get description() {
     return 'Zarr data source';
   }
   get(options: GetDataSourceOptions): Promise<DataSource> {
-    let {providerUrl} = options;
+    // Pattern is infallible.
+    let [, providerUrl, query] = options.providerUrl.match(/([^?]*)(?:\?(.*))?$/)!;
+    const parameters = parseQueryStringParameters(query || '');
+    verifyObject(parameters);
+    const dimensionSeparator = parseDimensionSeparator(parameters);
     if (providerUrl.endsWith('/')) {
       providerUrl = providerUrl.substring(0, providerUrl.length - 1);
     }
     return options.chunkManager.memoize.getUncounted(
-        {'type': 'zarr:MultiscaleVolumeChunkSource', providerUrl}, async () => {
+        {'type': 'zarr:MultiscaleVolumeChunkSource', providerUrl, dimensionSeparator}, async () => {
           const {url, credentialsProvider} =
               parseSpecialUrl(providerUrl, options.credentialsManager);
           const [metadata, attrs] = await Promise.all([
             getMetadata(options.chunkManager, credentialsProvider, url),
             getAttributes(options.chunkManager, credentialsProvider, url)
           ]);
+          if (metadata.dimensionSeparator !== undefined && dimensionSeparator !== undefined &&
+              metadata.dimensionSeparator !== dimensionSeparator) {
+            throw new Error(
+                `Explicitly specified dimension separator ` +
+                `${JSON.stringify(dimensionSeparator)} does not match value ` +
+                `in .zarray ${JSON.stringify(metadata.dimensionSeparator)}`);
+          }
           const volume = new MultiscaleVolumeChunkSource(
-              options.chunkManager, credentialsProvider, url, '.', metadata, attrs);
+              options.chunkManager, credentialsProvider, url,
+              dimensionSeparator || metadata.dimensionSeparator || '.', metadata, attrs);
           return {
             modelTransform: makeIdentityTransform(volume.modelSpace),
             subsources: [
@@ -256,8 +290,15 @@ export class ZarrDataSource extends DataSourceProvider {
         })
   }
 
-  completeUrl(options: CompleteUrlOptions) {
-    return completeHttpPath(
+  async completeUrl(options: CompleteUrlOptions) {
+    // Pattern is infallible.
+    let [, , query] = options.providerUrl.match(/([^?]*)(?:\?(.*))?$/)!;
+    if (query !== undefined) {
+      return applyCompletionOffset(
+          options.providerUrl.length - query.length,
+          await completeQueryStringParametersFromTable(query, supportedQueryParameters));
+    }
+    return await completeHttpPath(
         options.credentialsManager, options.providerUrl, options.cancellationToken);
   }
 }

@@ -18,7 +18,7 @@ import {ChunkState} from 'neuroglancer/chunk_manager/base';
 import {Chunk, ChunkManager, ChunkSource} from 'neuroglancer/chunk_manager/frontend';
 import {VisibleLayerInfo} from 'neuroglancer/layer';
 import {EncodedMeshData, FRAGMENT_SOURCE_RPC_ID, MESH_LAYER_RPC_ID, MULTISCALE_FRAGMENT_SOURCE_RPC_ID, MULTISCALE_MESH_LAYER_RPC_ID, MultiscaleFragmentFormat, VertexPositionFormat} from 'neuroglancer/mesh/base';
-import {getMultiscaleChunksToDraw, getMultiscaleFragmentKey, MultiscaleMeshManifest} from 'neuroglancer/mesh/multiscale';
+import {getMultiscaleChunksToDraw, getMultiscaleFragmentKey, MultiscaleMeshManifest, validateOctree} from 'neuroglancer/mesh/multiscale';
 import {PerspectivePanel} from 'neuroglancer/perspective_view/panel';
 import {PerspectiveViewReadyRenderContext, PerspectiveViewRenderContext, PerspectiveViewRenderLayer} from 'neuroglancer/perspective_view/render_layer';
 import {ThreeDimensionalRenderLayerAttachmentState, update3dRenderLayerAttachment} from 'neuroglancer/renderlayer';
@@ -596,6 +596,9 @@ export class MultiscaleMeshLayer extends
       ++presentManifestChunks;
       const {manifest} = manifestChunk;
       const {octree, chunkShape, chunkGridSpatialOrigin, vertexOffsets} = manifest;
+      if (DEBUG_MULTISCALE_FRAGMENTS) {
+        validateOctree(octree);
+      }
       if (renderContext.emitColor) {
         meshShaderManager.setColor(gl, shader, color!);
       }

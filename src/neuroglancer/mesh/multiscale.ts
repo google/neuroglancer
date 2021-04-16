@@ -273,6 +273,9 @@ export function validateOctree(octree: Uint32Array) {
   }
   if (numNodes === 0) return;
   exploreNode(numNodes - 1);
+  if (seenNodes.size !== numNodes) {
+    throw new Error('Orphan nodes in octree');
+  }
 }
 
 export function getMultiscaleFragmentKey(objectKey: string, lod: number, chunkIndex: number) {
