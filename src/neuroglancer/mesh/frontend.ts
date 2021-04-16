@@ -36,7 +36,7 @@ import {registerSharedObjectOwner, RPC} from 'neuroglancer/worker_rpc';
 const tempMat4 = mat4.create();
 const tempMat3 = mat3.create();
 
-const DEBUG_MULTISCALE_FRAGMENTS = true;
+const DEBUG_MULTISCALE_FRAGMENTS = false;
 
 function copyMeshDataToGpu(gl: GL, chunk: FragmentChunk|MultiscaleFragmentChunk) {
   chunk.vertexBuffer =
