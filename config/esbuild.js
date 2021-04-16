@@ -113,11 +113,11 @@ class Builder {
   <head>
     <meta charset="UTF-8">
     <title>neuroglancer</title>
-    <link href="/main.bundle.css" rel="stylesheet">
+    <link href="main.bundle.css" rel="stylesheet">
   </head>
   <body>
     <div id="neuroglancer-container"></div>
-    <script src="/main.bundle.js"></script>
+    <script src="main.bundle.js"></script>
   </body>
 </html>
 `);

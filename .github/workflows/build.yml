@@ -47,3 +47,122 @@ jobs:
       run: npm run test -- --browsers ChromeHeadless --define=NEUROGLANCER_SKIP_WEBGL_TESTS
     - name: Run JavaScript benchmarks
       run: npm run benchmark
+
+  # Builds Python package and runs Python tests
+  #
+  # On ubuntu-latest, this also runs browser-based tests.  On Mac OS and
+  # Windows, this only runs tests that do not require a browser, since a working
+  # headless WebGL2 implementation is not available on Github actions.
+  python-tox:
+    strategy:
+      matrix:
+        python-version:
+          - '3.6'
+          - '3.7'
+          - '3.8'
+          - '3.9'
+        node-version:
+          - '14.x'
+        os:
+          - 'ubuntu-latest'
+          - 'windows-latest'
+          - 'macos-latest'
+    runs-on: ${{ matrix.os }}
+    steps:
+    - uses: actions/checkout@v2
+      with:
+        # Need full history to determine version number.
+        fetch-depth: 0
+    - name: Use Node.js ${{ matrix.node-version }}
+      uses: actions/setup-node@v1
+      with:
+        node-version: ${{ matrix.node-version }}
+    - name: Set up Python ${{ matrix.python-version }}
+      uses: actions/setup-python@v2
+      with:
+        python-version: ${{ matrix.python-version }}
+    - uses: actions/cache@v2
+      with:
+        path: "**/node_modules"
+        key: ${{ runner.os }}-${{ matrix.node-version }}-node_modules-${{ hashFiles('**/package-lock.json') }}
+    - name: Get pip cache dir
+      id: pip-cache
+      run: |
+        echo "::set-output name=dir::$(pip cache dir)"          
+    - uses: actions/cache@v2
+      with:
+        path: ${{ steps.pip-cache.outputs.dir }}
+        key: ${{ runner.os }}-${{ matrix.python-version }}-pip-${{ hashFiles('setup.py') }}
+    # Uncomment the action below for an interactive shell
+    # - name: Setup tmate session
+    #   uses: mxschmitt/action-tmate@v3
+    - run: npm install
+    - run: npm run build-python -- --no-typecheck
+    - name: Install Python packaging/test tools
+      run: python -m pip install --upgrade pip tox wheel numpy pytest
+    - run: sudo apt-get install xvfb
+      if: ${{ startsWith(runner.os, 'Linux') }}
+    - name: Test with tox
+      run: tox -e ${{ fromJSON('["skip-browser-tests","firefox-xvfb"]')[runner.os == 'Linux'] }}
+    # Verify that editable install works
+    - name: Install in editable form
+      run: pip install -e .
+    - name: Run tests against editable install
+      working-directory: python/tests
+      run: pytest -vv --skip-browser-tests
+
+  python-build-package:
+    strategy:
+      matrix:
+        node-version:
+          - '14.x'
+        os:
+          - 'ubuntu-latest'
+          - 'windows-latest'
+          - 'macos-latest'
+    runs-on: ${{ matrix.os }}
+    steps:
+    - uses: actions/checkout@v2
+      with:
+        # Need full history to determine version number.
+        fetch-depth: 0
+    - name: Use Node.js ${{ matrix.node-version }}
+      uses: actions/setup-node@v1
+      with:
+        node-version: ${{ matrix.node-version }}
+    - name: Set up Python ${{ matrix.python-version }}
+      uses: actions/setup-python@v2
+      with:
+        python-version: 3.x
+    - uses: actions/cache@v2
+      with:
+        path: "**/node_modules"
+        key: ${{ runner.os }}-${{ matrix.node-version }}-node_modules-${{ hashFiles('**/package-lock.json') }}
+    - name: Get pip cache dir
+      id: pip-cache
+      run: |
+        echo "::set-output name=dir::$(pip cache dir)"          
+    - uses: actions/cache@v2
+      with:
+        path: ${{ steps.pip-cache.outputs.dir }}
+        key: ${{ runner.os }}-buildwheel-${{ hashFiles('setup.py') }}
+    - run: npm install
+    - run: npm run build-python -- --no-typecheck
+    - name: Build Python source distribution (sdist)
+      run: python setup.py sdist --format gztar
+      if: ${{ runner.os == 'Linux' }}
+    - name: Install cibuildwheel
+      run: pip install cibuildwheel
+    - name: Build Python wheels
+      run: bash -xve ./python/build_tools/cibuildwheel.sh
+      env:
+        # On Linux, share pip cache with manylinux docker containers
+        CIBW_ENVIRONMENT_LINUX: PIP_CACHE_DIR=/host${{ steps.pip-cache.outputs.dir }}
+        CIBW_BEFORE_ALL_LINUX: /project/python/build_tools/cibuildwheel_linux_cache_setup.sh /host${{ steps.pip-cache.outputs.dir }}
+    - name: Upload wheels as artifacts
+      uses: actions/upload-artifact@v2
+      with:
+        name: python-wheels-${{ matrix.os }}
+        path: |
+          dist/*.whl
+          dist/*.tar.gz
