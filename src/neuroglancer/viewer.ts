@@ -60,11 +60,16 @@ import {NumberInputWidget} from 'neuroglancer/widget/number_input_widget';
 import {MousePositionWidget, PositionWidget} from 'neuroglancer/widget/position_widget';
 import {TrackableScaleBarOptions} from 'neuroglancer/widget/scale_bar';
 import {RPC} from 'neuroglancer/worker_rpc';
-import { SaveDialog } from './save_state/save_state';
 import { responseJson } from './util/http_request';
 import {cancellableFetchSpecialOk, parseSpecialUrl} from 'neuroglancer/util/special_protocol_request';
 
 declare var NEUROGLANCER_OVERRIDE_DEFAULT_VIEWER_OPTIONS: any
+
+type StateServers = {
+  [key: string]: string
+};
+
+declare const STATE_SERVERS: StateServers|undefined;
 
 export class DataManagementContext extends RefCounted {
   worker: Worker;
@@ -531,11 +536,44 @@ export class Viewer extends RefCounted implements ViewerState {
       topRow.appendChild(button);
     }
 
-    {
+    if (typeof STATE_SERVERS !== 'undefined') {
+      const selectStateServer = document.createElement('select');
+      selectStateServer.style.marginRight = '5px';
+
+      for (let [key, val] of Object.entries(STATE_SERVERS)) {
+        const option = document.createElement('option');
+        option.textContent = key;
+        option.value = val;
+        selectStateServer.appendChild(option);
+      }
+
       const button = makeIcon({text: 'Share', title: 'Share State'});
       this.registerEventListener(button, 'click', () => {
-        this.postJsonState();
-      });
+        const selectedStateServer = selectStateServer.value;
+
+        const {url: parsedUrl, credentialsProvider} = parseSpecialUrl(selectedStateServer, defaultCredentialsManager);
+        StatusMessage.forPromise(
+          cancellableFetchSpecialOk(credentialsProvider, parsedUrl, {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify(this.state.toJSON())
+              }, responseJson)
+            .then((res) => {
+              navigator.clipboard.writeText(res).then(() => {
+                StatusMessage.showTemporaryMessage('Link copied to clipboard');
+              });
+            })
+            .catch(() => {
+              StatusMessage.showTemporaryMessage(
+                `Could not access state server.`, 4000);//, {color: 'yellow'});
+            }),
+          {
+            initialMessage: `Posting state to ${selectedStateServer}.`,
+            delay: true,
+            errorPrefix: ''
+          });
+        });
+      topRow.appendChild(selectStateServer);
       topRow.appendChild(button);
     }
 
@@ -622,36 +660,6 @@ export class Viewer extends RefCounted implements ViewerState {
     };
     updateVisibility();
     this.registerDisposer(this.visibility.changed.add(updateVisibility));
-  }
-
-  async postJsonState() {
-    let res: string|undefined = undefined;
-    if (this.jsonStateServer.value.length > 0) {
-      const {url: parsedUrl, credentialsProvider} = parseSpecialUrl(this.jsonStateServer.value, defaultCredentialsManager);
-      await StatusMessage.forPromise(
-        cancellableFetchSpecialOk(credentialsProvider, parsedUrl, {
-              method: 'POST',
-              headers: {'Content-Type': 'application/json'},
-              body: JSON.stringify(this.state.toJSON())
-            }, responseJson)
-          .then(stateServerRes => {
-            res = stateServerRes;
-            StatusMessage.showTemporaryMessage(`Successfully saved state.`, 4000);
-          })
-          .catch(() => {
-            StatusMessage.showTemporaryMessage(
-              `Could not access state server.`, 4000);//, {color: 'yellow'});
-          }),
-        {
-          initialMessage: `Posting state to ${this.jsonStateServer.value}.`,
-          delay: true,
-          errorPrefix: ''
-        });
-    } else {
-      StatusMessage.showTemporaryMessage(`No state server found.`, 4000);//, {color: 'yellow'});
-    }
-
-    new SaveDialog(this, res);
   }
 
   /**
