@@ -602,3 +602,11 @@ export function verifyBoolean(x: any) {
   }
   return x;
 }
+
+// If `x` is an empty object/array/string, returns undefined.  Otherwise returns `x`.
+export function emptyToUndefined(x: any) {
+  for (const _ in x) {
+    return x;
+  }
+  return undefined;
+}

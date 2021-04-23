@@ -24,12 +24,12 @@ import debounce from 'lodash/debounce';
 import {DataPanelLayoutContainer, InputEventBindings as DataPanelInputEventBindings} from 'neuroglancer/data_panel_layout';
 import {DisplayContext} from 'neuroglancer/display_context';
 import {LayerListSpecification, LayerSubsetSpecification, MouseSelectionState, SelectedLayerState} from 'neuroglancer/layer';
-import {LayerPanel} from 'neuroglancer/layer_panel';
 import {DisplayPose, LinkedDepthRange, LinkedDisplayDimensions, LinkedOrientationState, LinkedPosition, LinkedRelativeDisplayScales, linkedStateLegacyJsonView, LinkedZoomState, NavigationState, TrackableCrossSectionZoom, TrackableNavigationLink, TrackableProjectionZoom, WatchableDisplayDimensionRenderInfo} from 'neuroglancer/navigation_state';
 import {RenderLayerRole} from 'neuroglancer/renderlayer';
 import {TrackableBoolean} from 'neuroglancer/trackable_boolean';
 import {WatchableSet, WatchableValueInterface} from 'neuroglancer/trackable_value';
 import {ContextMenu} from 'neuroglancer/ui/context_menu';
+import {LayerBar} from 'neuroglancer/ui/layer_bar';
 import {endLayerDrag, startLayerDrag} from 'neuroglancer/ui/layer_drag_and_drop';
 import {setupPositionDropHandlers} from 'neuroglancer/ui/position_drag_and_drop';
 import {AutomaticallyFocusedElement} from 'neuroglancer/util/automatic_focus';
@@ -279,7 +279,7 @@ export class LayerGroupViewer extends RefCounted {
   get scaleBarOptions() {
     return this.viewerState.scaleBarOptions;
   }
-  layerPanel: LayerPanel|undefined;
+  layerPanel: LayerBar|undefined;
   layout: DataPanelLayoutContainer;
 
   options: LayerGroupViewerOptions;
@@ -387,7 +387,7 @@ export class LayerGroupViewer extends RefCounted {
       return;
     }
     if (showLayerPanel && this.layerPanel === undefined) {
-      const layerPanel = this.layerPanel = new LayerPanel(
+      const layerPanel = this.layerPanel = new LayerBar(
           this.display, this.layerSpecification, this.viewerNavigationState,
           this.viewerState.selectedLayer.addRef(), () => this.layout.toJSON(),
           this.options.showLayerHoverValues);
@@ -415,6 +415,10 @@ export class LayerGroupViewer extends RefCounted {
         const dragData = this.toJSON();
         delete dragData['layers'];
         event.dataTransfer!.setData(viewerDragType, JSON.stringify(dragData));
+        layerPanel.element.style.backgroundColor = 'black';
+        setTimeout(() => {
+          layerPanel.element.style.backgroundColor = '';
+        }, 0);
       });
       this.registerEventListener(layerPanel.element, 'dragend', (event: DragEvent) => {
         endLayerDrag(event);

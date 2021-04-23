@@ -253,6 +253,7 @@ export class ImageUserLayer extends Base {
   }
 
   static type = 'image';
+  static typeAbbreviation = 'img';
 }
 
 function makeShaderCodeWidget(layer: ImageUserLayer) {
@@ -373,7 +374,7 @@ class ShaderCodeOverlay extends Overlay {
   }
 }
 
-registerLayerType('image', ImageUserLayer);
+registerLayerType(ImageUserLayer);
 registerVolumeLayerType(VolumeType.IMAGE, ImageUserLayer);
 // Use ImageUserLayer as a fallback layer type if there is a `volume` subsource.
 registerLayerTypeDetector(subsource => {

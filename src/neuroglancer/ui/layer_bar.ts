@@ -15,7 +15,7 @@
  */
 
 import 'neuroglancer/noselect.css';
-import './layer_panel.css';
+import './layer_bar.css';
 
 import svg_plus from 'ikonate/icons/plus.svg';
 import {DisplayContext} from 'neuroglancer/display_context';
@@ -42,7 +42,7 @@ function destroyDropLayers(dropLayers: DropLayers, targetLayer?: ManagedUserLaye
 }
 
 function registerDropHandlers(
-    panel: LayerPanel, target: EventTarget, targetLayer: ManagedUserLayer|undefined) {
+    panel: LayerBar, target: EventTarget, targetLayer: ManagedUserLayer|undefined) {
   function update(event: DragEvent, updateDropEffect: boolean): DropLayers|undefined {
     let dropLayers = panel.dropLayers;
     const dropEffect =
@@ -166,7 +166,7 @@ class LayerWidget extends RefCounted {
   maxLength: number = 0;
   prevValueText: string = '';
 
-  constructor(public layer: ManagedUserLayer, public panel: LayerPanel) {
+  constructor(public layer: ManagedUserLayer, public panel: LayerBar) {
     super();
     const {
       element,
@@ -258,7 +258,7 @@ class LayerWidget extends RefCounted {
   }
 }
 
-export class LayerPanel extends RefCounted {
+export class LayerBar extends RefCounted {
   layerWidgets = new Map<ManagedUserLayer, LayerWidget>();
   element = document.createElement('div');
   private layerUpdateNeeded = true;

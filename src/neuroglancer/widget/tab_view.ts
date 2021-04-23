@@ -20,7 +20,7 @@
 
 import 'neuroglancer/widget/tab_view.css';
 
-import {WatchableValueInterface} from 'neuroglancer/trackable_value';
+import {WatchableValueChangeInterface, WatchableValueInterface} from 'neuroglancer/trackable_value';
 import {animationFrameDebounce} from 'neuroglancer/util/animation_frame_debounce';
 import {Owned, RefCounted} from 'neuroglancer/util/disposable';
 import {removeChildren, removeFromParent} from 'neuroglancer/util/dom';
@@ -216,7 +216,7 @@ export class StackView<TabId, TabType extends Tab = Tab> extends RefCounted {
   private updateSelectedTab() {
     const {displayedTab} = this;
     const newTab = this.visible ? this.selected.value : undefined;
-    if (newTab === displayedTab) {
+    if (newTab === displayedTab && (newTab === undefined || this.tabs.has(newTab))) {
       return;
     }
     if (displayedTab !== undefined) {
@@ -232,12 +232,13 @@ export class StackView<TabId, TabType extends Tab = Tab> extends RefCounted {
     this.showTab(newTab);
   }
 
-  invalidateAll() {
+  invalidateAll(predicate: ((id: TabId) => boolean) | undefined = undefined) {
     const {tabs} = this;
-    for (const tab of tabs.values()) {
+    for (const [id, tab] of tabs) {
+      if (predicate !== undefined && predicate(id)) continue;
+      tabs.delete(id);
       tab.dispose();
     }
-    tabs.clear();
     this.debouncedUpdateSelectedTab();
   }
 
@@ -260,9 +261,20 @@ function updateTabLabelVisibilityStyle(labelElement: HTMLElement, visible: boole
   }
 }
 
+export interface TabViewOptions {
+  makeTab: (id: string) => Tab;
+  selectedTab: WatchableValueInterface<string|undefined>;
+  tabs: WatchableValueChangeInterface<{id: string, label: string}[]>;
+  handleTabElement?: (id: string, element: HTMLElement) => void;
+}
+
 export class TabView extends RefCounted {
   element = document.createElement('div');
   tabBar = document.createElement('div');
+
+  tabs: WatchableValueChangeInterface<{id: string, label: string}[]>;
+  selectedTab: WatchableValueInterface<string|undefined>;
+  private handleTabElement: ((id: string, element: HTMLElement) => void)|undefined;
 
   private stack: StackView<string>;
   private tabLabels = new Map<string, HTMLElement>();
@@ -276,32 +288,34 @@ export class TabView extends RefCounted {
       this.registerCancellable(animationFrameDebounce(() => this.updateTabs()));
 
   constructor(
-      public state: TabSpecification,
+      options: TabViewOptions,
       public visibility = new WatchableVisibilityPriority(WatchableVisibilityPriority.VISIBLE)) {
     super();
-
+    this.tabs = options.tabs;
+    this.selectedTab = options.selectedTab;
+    this.handleTabElement = options.handleTabElement;
     const {element, tabBar} = this;
     element.className = 'neuroglancer-tab-view';
     tabBar.className = 'neuroglancer-tab-view-bar';
     element.appendChild(tabBar);
     this.registerDisposer(visibility.changed.add(this.debouncedUpdateView));
     const stack = this.stack = this.registerDisposer(new StackView<string>(
-        id => this.state.options.get(id)!.getter(), this.state, this.visibility));
+        options.makeTab, options.selectedTab, this.visibility));
     element.appendChild(stack.element);
-    this.registerDisposer(this.state.optionsChanged.add(this.debouncedUpdateView));
-    this.registerDisposer(this.state.changed.add(() => this.updateTabLabelStyles()));
+    this.registerDisposer(options.tabs.changed.add(this.debouncedUpdateView));
+    this.registerDisposer(options.selectedTab.changed.add(() => this.updateTabLabelStyles()));
     this.updateTabs();
   }
 
   private updateTabLabelStyles() {
-    const selectedId = this.state.value;
+    const selectedId = this.selectedTab.value;
     for (const [id, element] of this.tabLabels) {
       updateTabLabelVisibilityStyle(element, id === selectedId);
     }
   }
 
   private updateTabs() {
-    if (this.tabsGeneration !== this.state.optionsChanged.count) {
+    if (this.tabsGeneration !== this.tabs.changed.count) {
       this.destroyTabs();
       if (this.visible) {
         this.makeTabs();
@@ -314,30 +328,33 @@ export class TabView extends RefCounted {
       return;
     }
     this.tabLabels.clear();
+    if (!this.visible) {
+      this.stack.invalidateAll();
+    } else {
+      const tabs = this.tabs.value;
+      this.stack.invalidateAll(existingId => tabs.find(({id}) => id === existingId) !== undefined);
+    }
     removeChildren(this.tabBar);
     this.tabsGeneration = -1;
-    this.stack.invalidateAll();
   }
 
   private makeTabs() {
-    const {tabBar, tabLabels} = this;
-    const optionsArray = Array.from(this.state.options);
-    optionsArray.sort(([, {order: aOrder = 0}], [, {order: bOrder = 0}]) => {
-      return aOrder - bOrder;
-    });
-    const selectedId = this.state.value;
-    for (const [id, {label}] of optionsArray) {
+    const {tabBar, tabLabels, handleTabElement} = this;
+    for (const {id, label} of this.tabs.value) {
       const labelElement = document.createElement('div');
       labelElement.classList.add('neuroglancer-tab-label');
       labelElement.textContent = label;
-      updateTabLabelVisibilityStyle(labelElement, id === selectedId);
       labelElement.addEventListener('click', () => {
-        this.state.value = id;
+        this.selectedTab.value = id;
       });
+      if (handleTabElement !== undefined) {
+        handleTabElement(id, labelElement);
+      }
       tabLabels.set(id, labelElement);
       tabBar.appendChild(labelElement);
     }
-    this.tabsGeneration = this.state.optionsChanged.count;
+    this.updateTabLabelStyles();
+    this.tabsGeneration = this.tabs.changed.count;
   }
 
   disposed() {

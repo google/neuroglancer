@@ -71,7 +71,7 @@
     "esbuild": "^0.8.11",
     "gl-matrix": "^3.1.0",
     "glsl-editor": "^1.0.0",
-    "ikonate": "^1.1.1",
+    "ikonate": "mikolajdobrucki/ikonate#a86b4107c6ec717e7877f880a930d1ccf0b59d89",
     "lodash": "^4.17.20",
     "nifti-reader-js": "^0.5.4",
     "numcodecs": "^0.1.1",

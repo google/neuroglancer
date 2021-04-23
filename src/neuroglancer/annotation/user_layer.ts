@@ -545,6 +545,7 @@ export class AnnotationUserLayer extends Base {
   }
 
   static type = 'annotation';
+  static typeAbbreviation = 'ann';
 }
 
 function makeShaderCodeWidget(layer: AnnotationUserLayer) {
@@ -623,8 +624,8 @@ class RenderingOptionsTab extends Tab {
   }
 }
 
-registerLayerType('annotation', AnnotationUserLayer);
-registerLayerType('pointAnnotation', AnnotationUserLayer);
+registerLayerType(AnnotationUserLayer);
+registerLayerType(AnnotationUserLayer, 'pointAnnotation');
 registerLayerTypeDetector(subsource => {
   if (subsource.local === LocalDataSource.annotations) {
     return {layerConstructor: AnnotationUserLayer, priority: 100};
