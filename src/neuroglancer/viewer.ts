@@ -47,7 +47,7 @@ import {Borrowed, Owned, RefCounted} from 'neuroglancer/util/disposable';
 import {removeFromParent} from 'neuroglancer/util/dom';
 import {registerActionListener} from 'neuroglancer/util/event_action_map';
 import {vec3} from 'neuroglancer/util/geom';
-import {parseFixedLengthArray, verifyFinitePositiveFloat, verifyObject, verifyOptionalObjectProperty} from 'neuroglancer/util/json';
+import {parseFixedLengthArray, verifyFinitePositiveFloat, verifyObject, verifyOptionalObjectProperty, verifyString} from 'neuroglancer/util/json';
 import {EventActionMap, KeyboardEventBinder} from 'neuroglancer/util/keyboard_bindings';
 import {NullarySignal, Signal} from 'neuroglancer/util/signal';
 import {CompoundTrackable, optionallyRestoreFromJsonMember} from 'neuroglancer/util/trackable';
@@ -60,6 +60,7 @@ import {NumberInputWidget} from 'neuroglancer/widget/number_input_widget';
 import {MousePositionWidget, PositionWidget} from 'neuroglancer/widget/position_widget';
 import {TrackableScaleBarOptions} from 'neuroglancer/widget/scale_bar';
 import {RPC} from 'neuroglancer/worker_rpc';
+import { StateShare, stateShareEnabled } from './datasource/state_share';
 
 declare var NEUROGLANCER_OVERRIDE_DEFAULT_VIEWER_OPTIONS: any
 
@@ -227,6 +228,7 @@ class TrackableViewerState extends CompoundTrackable {
     this.add('statistics', viewer.statisticsDisplayState);
     this.add('selection', viewer.selectionDetailsState);
     this.add('partialViewport', viewer.partialViewport);
+    this.add('selectedStateServer', viewer.selectedStateServer);
   }
 
   restoreState(obj: any) {
@@ -314,6 +316,7 @@ export class Viewer extends RefCounted implements ViewerState {
       this.registerDisposer(new LayerSelectedValues(this.layerManager, this.mouseState));
   selectionDetailsState = this.registerDisposer(
       new TrackableDataSelectionState(this.coordinateSpace, this.layerSelectedValues));
+  selectedStateServer = new TrackableValue<string>('', verifyString);
 
   resetInitiated = new NullarySignal();
 
@@ -514,6 +517,11 @@ export class Viewer extends RefCounted implements ViewerState {
     this.registerDisposer(new ElementVisibilityFromTrackableBoolean(
         this.uiControlVisibility.showAnnotationToolStatus, annotationToolStatus.element));
 
+    if (stateShareEnabled) {
+      const stateShare = this.registerDisposer(new StateShare(this));
+      topRow.appendChild(stateShare.element);
+    }
+
     {
       const button = makeIcon({text: '{}', title: 'Edit JSON state'});
       this.registerEventListener(button, 'click', () => {
@@ -523,7 +531,6 @@ export class Viewer extends RefCounted implements ViewerState {
           this.uiControlVisibility.showEditStateButton, button));
       topRow.appendChild(button);
     }
-
 
     {
       const button = makeIcon({text: '?', title: 'Help'});
