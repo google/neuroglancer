@@ -81,7 +81,6 @@ const OUTWARDS_SIGN_FOR_SIDE: Record<Side, number> = {
 export class SidePanel extends RefCounted {
   element: HTMLElement = document.createElement('div');
   visibility = new WatchableVisibilityPriority(WatchableVisibilityPriority.VISIBLE);
-
   constructor(
       public sidePanelManager: SidePanelManager,
       public location: TrackableSidePanelLocation = new TrackableSidePanelLocation()) {
@@ -142,6 +141,15 @@ export class SidePanel extends RefCounted {
     titleBar.appendChild(closeButton);
     this.element.appendChild(titleBar);
     return {titleBar, titleElement, closeButton};
+  }
+
+  addBody(body: HTMLElement) {
+    body.draggable = true;
+    body.addEventListener('dragstart', (event: DragEvent) => {
+      event.preventDefault();
+      event.stopPropagation();
+    });
+    this.element.appendChild(body);
   }
 }
 

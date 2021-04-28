@@ -239,10 +239,10 @@ export class StatisticsPanel extends SidePanel {
       public displayState: StatisticsDisplayState) {
     super(sidePanelManager, displayState.location);
 
-    const {element, body} = this;
+    const {body} = this;
     body.classList.add('neuroglancer-statistics-panel-body');
     this.addTitleBar({title: 'Chunk statistics'});
-    element.appendChild(body);
+    this.addBody(body);
     this.requestData();
   }
 

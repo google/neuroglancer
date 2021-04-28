@@ -70,7 +70,7 @@ export class InputEventBindingHelpDialog extends SidePanel {
     let scroll = document.createElement('div');
     scroll.classList.add('neuroglancer-help-scroll-container');
     body.appendChild(scroll);
-    this.element.appendChild(body);
+    this.addBody(body);
     interface BindingList {
       label: string;
       entries: Map<string, string>;

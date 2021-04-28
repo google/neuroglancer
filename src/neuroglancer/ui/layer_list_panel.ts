@@ -196,11 +196,11 @@ export class LayerListPanel extends SidePanel {
       sidePanelManager: SidePanelManager, public manager: TopLevelLayerListSpecification,
       public state: LayerListPanelState) {
     super(sidePanelManager, state.location);
-    const {element, itemContainer, layerDropZone} = this;
+    const {itemContainer, layerDropZone} = this;
     const {titleElement} = this.addTitleBar({title: ''});
     this.titleElement = titleElement!;
     itemContainer.classList.add('neuroglancer-layer-list-panel-items');
-    element.appendChild(itemContainer);
+    this.addBody(itemContainer);
     layerDropZone.style.flex = '1';
     const debouncedUpdateView =
         this.registerCancellable(animationFrameDebounce(() => this.render()));

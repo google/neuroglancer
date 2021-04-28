@@ -46,9 +46,6 @@ export class LayerNameWidget extends RefCounted {
     element.classList.add('neuroglancer-layer-side-panel-name');
     element.spellcheck = false;
     element.autocomplete = 'off';
-    element.addEventListener('focus', () => {
-      element.select();
-    });
     const keyboardHandler =
         this.registerDisposer(new KeyboardEventBinder(element, layerNameInputEventMap));
     keyboardHandler.allShortcutsAreGlobal = true;
@@ -235,7 +232,7 @@ class LayerSidePanel extends SidePanel {
     this.tabView.element.classList.add('neuroglancer-layer-side-panel-tab-view');
     this.tabView.element.style.position = 'relative';
     this.tabView.element.appendChild(this.makeTabDropZone());
-    element.appendChild(this.tabView.element);
+    this.addBody(this.tabView.element);
 
     // Hide panel automatically if there are no tabs to display (because they have all been moved to
     // another panel).

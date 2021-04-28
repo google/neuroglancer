@@ -74,7 +74,7 @@ export class SelectionDetailsPanel extends SidePanel {
             }))
             .element);
     body.classList.add('neuroglancer-selection-details-body');
-    element.appendChild(body);
+    this.addBody(body);
     body.appendChild(
         this.registerDisposer(new DependentViewWidget(state, (stateValue, parent, context) => {
               if (!state.location.visible) return;
