@@ -195,6 +195,11 @@ class LayerSidePanelState(SidePanelLocation):
 
 
 @export
+class LayerListPanelState(SidePanelLocation):
+    pass
+
+
+@export
 class HelpPanelState(SidePanelLocation):
     pass
 
@@ -600,7 +605,16 @@ class ManagedLayer(JsonObjectWrapper):
         object.__setattr__(self, 'layer', layer)
         super(ManagedLayer, self).__init__(json_data, _readonly=_readonly, **kwargs)
 
-    visible = wrapped_property('visible', optional(bool, True))
+    _visible = wrapped_property('visible', optional(bool))
+    archived = wrapped_property('archived', optional(bool, False))
+
+    @property
+    def visible(self):
+        return not self._archived and self._visible is not False
+
+    @visible.setter
+    def visible(self, value):
+        self._visible = value
 
     def __getattr__(self, key):
         return getattr(self.layer, key)
@@ -608,7 +622,7 @@ class ManagedLayer(JsonObjectWrapper):
     def __setattr__(self, key, value):
         if self._readonly:
             raise AttributeError
-        if key in ['name', 'visible', 'layer']:
+        if key in ['name', 'visible', 'archived', 'layer']:
             object.__setattr__(self, key, value)
         else:
             return setattr(self.layer, key, value)
@@ -620,8 +634,13 @@ class ManagedLayer(JsonObjectWrapper):
     def to_json(self):
         r = self.layer.to_json()
         r['name'] = self.name
+        archived = self.archived
+        if not archived:
+            r.pop('archived', None)
+        else:
+            r['archived'] = True
         visible = self.visible
-        if visible:
+        if visible or archived:
             r.pop('visible', None)
         else:
             r['visible'] = False
@@ -1033,6 +1052,7 @@ class ViewerState(JsonObjectWrapper):
     selected_layer = selectedLayer = wrapped_property('selectedLayer', SelectedLayerState)
     statistics = wrapped_property('statistics', StatisticsDisplayState)
     help_panel = helpPanel = wrapped_property('helpPanel', HelpPanelState)
+    layer_list_panel = layerListPanel = wrapped_property('layerListPanel', LayerListPanelState)
     partial_viewport = partialViewport = wrapped_property(
         'partialViewport',
         optional(array_wrapper(np.float64, 4), np.array([0, 0, 1, 1], dtype=np.float64)))

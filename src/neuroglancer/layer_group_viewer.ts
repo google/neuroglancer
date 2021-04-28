@@ -29,8 +29,9 @@ import {RenderLayerRole} from 'neuroglancer/renderlayer';
 import {TrackableBoolean} from 'neuroglancer/trackable_boolean';
 import {WatchableSet, WatchableValueInterface} from 'neuroglancer/trackable_value';
 import {ContextMenu} from 'neuroglancer/ui/context_menu';
+import {popDragStatus, pushDragStatus} from 'neuroglancer/ui/drag_and_drop';
 import {LayerBar} from 'neuroglancer/ui/layer_bar';
-import {endLayerDrag, startLayerDrag} from 'neuroglancer/ui/layer_drag_and_drop';
+import {endLayerDrag, getDropEffectFromModifiers, startLayerDrag} from 'neuroglancer/ui/layer_drag_and_drop';
 import {setupPositionDropHandlers} from 'neuroglancer/ui/position_drag_and_drop';
 import {AutomaticallyFocusedElement} from 'neuroglancer/util/automatic_focus';
 import {TrackableRGB} from 'neuroglancer/util/color';
@@ -84,23 +85,22 @@ export function getCompatibleViewerDragSource(manager: Borrowed<LayerListSpecifi
   }
 }
 
-function getDefaultViewerDropEffect(manager: Borrowed<LayerListSpecification>): 'move'|'copy' {
-  if (getCompatibleViewerDragSource(manager) !== undefined) {
-    return 'move';
+export function getViewerDropEffect(event: DragEvent, manager: Borrowed<LayerListSpecification>):
+    {dropEffect: 'move'|'copy', dropEffectMessage: string} {
+  const source = getCompatibleViewerDragSource(manager);
+  let defaultDropEffect: 'move'|'copy';
+  let moveAllowed = false;
+  if (source === undefined || source.layerSpecification === source.layerSpecification.root) {
+    // Either drag source is from another window, or there is only a single layer group.  If the
+    // drag source is from another window, move is not supported because we cannot reliably
+    // communicate the drop effect back to the source window anyway.  If there is only a single
+    // layer group, move is not supported since it would be a no-op.
+    defaultDropEffect = 'copy';
   } else {
-    return 'copy';
+    moveAllowed = true;
+    defaultDropEffect = 'move';
   }
-}
-
-export function getViewerDropEffect(
-    event: DragEvent, manager: Borrowed<LayerListSpecification>): 'move'|'copy' {
-  if (event.shiftKey) {
-    return 'copy';
-  } else if (event.ctrlKey) {
-    return 'move';
-  } else {
-    return getDefaultViewerDropEffect(manager);
-  }
+  return getDropEffectFromModifiers(event, defaultDropEffect, moveAllowed);
 }
 
 export class LinkedViewerNavigationState extends RefCounted {
@@ -398,7 +398,11 @@ export class LayerGroupViewer extends RefCounted {
         layerPanel.element.title = 'Drag to move/copy layer group.';
       }
       layerPanel.element.draggable = true;
-      this.registerEventListener(layerPanel.element, 'dragstart', (event: DragEvent) => {
+      const layerPanelElement = layerPanel.element;
+      layerPanelElement.addEventListener('dragstart', (event: DragEvent) => {
+        pushDragStatus(
+            layerPanel.element, 'drag',
+            'Drag layer group to the left/top/right/bottom edge of a layer group, or to another layer bar/panel (including in another Neuroglancer window)');
         startLayerDrag(event, {
           manager: this.layerSpecification,
           layers: this.layerManager.managedLayers,
@@ -420,13 +424,14 @@ export class LayerGroupViewer extends RefCounted {
           layerPanel.element.style.backgroundColor = '';
         }, 0);
       });
-      this.registerEventListener(layerPanel.element, 'dragend', (event: DragEvent) => {
-        endLayerDrag(event);
+      layerPanel.element.addEventListener('dragend', () => {
+        popDragStatus(layerPanelElement, 'drag');
+        endLayerDrag();
         if (dragSource !== undefined && dragSource.viewer === this) {
           dragSource.disposer();
         }
       });
-      this.element.insertBefore(layerPanel.element, this.element.firstChild);
+      this.element.insertBefore(layerPanelElement, this.element.firstChild);
     }
   }
 

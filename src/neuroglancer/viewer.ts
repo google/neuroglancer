@@ -18,6 +18,7 @@ import './viewer.css';
 import 'neuroglancer/noselect.css';
 
 import svg_controls_alt from 'ikonate/icons/controls-alt.svg';
+import svg_layers from 'ikonate/icons/layers.svg';
 import svg_list from 'ikonate/icons/list.svg';
 import debounce from 'lodash/debounce';
 import {CapacitySpecification, ChunkManager, ChunkQueueManager, FrameNumberCounter} from 'neuroglancer/chunk_manager/frontend';
@@ -37,6 +38,7 @@ import {StatusMessage} from 'neuroglancer/status';
 import {ElementVisibilityFromTrackableBoolean, TrackableBoolean, TrackableBooleanCheckbox} from 'neuroglancer/trackable_boolean';
 import {makeDerivedWatchableValue, observeWatchable, TrackableValue, WatchableValueInterface} from 'neuroglancer/trackable_value';
 import {ContextMenu} from 'neuroglancer/ui/context_menu';
+import {LayerArchiveCountWidget, LayerListPanel, LayerListPanelState} from 'neuroglancer/ui/layer_list_panel';
 import {LayerSidePanelManager} from 'neuroglancer/ui/layer_side_panel';
 import {setupPositionDropHandlers} from 'neuroglancer/ui/position_drag_and_drop';
 import {SelectionDetailsPanel} from 'neuroglancer/ui/selection_details';
@@ -101,6 +103,7 @@ export class InputEventBindings extends DataPanelInputEventBindings {
 const viewerUiControlOptionKeys: (keyof ViewerUIControlConfiguration)[] = [
   'showHelpButton',
   'showEditStateButton',
+  'showLayerListPanelButton',
   'showSelectionPanelButton',
   'showLayerSidePanelButton',
   'showLayerPanel',
@@ -115,6 +118,7 @@ const viewerOptionKeys: (keyof ViewerUIOptions)[] =
 export class ViewerUIControlConfiguration {
   showHelpButton = new TrackableBoolean(true);
   showEditStateButton = new TrackableBoolean(true);
+  showLayerListPanelButton = new TrackableBoolean(true);
   showSelectionPanelButton = new TrackableBoolean(true);
   showLayerSidePanelButton = new TrackableBoolean(true);
   showLayerPanel = new TrackableBoolean(true);
@@ -145,6 +149,7 @@ interface ViewerUIOptions {
   showUIControls: boolean;
   showHelpButton: boolean;
   showEditStateButton: boolean;
+  showLayerListPanelButton: boolean;
   showSelectionPanelButton: boolean;
   showLayerSidePanelButton: boolean;
   showLayerPanel: boolean;
@@ -237,6 +242,7 @@ class TrackableViewerState extends CompoundTrackable {
     this.add('statistics', viewer.statisticsDisplayState);
     this.add('helpPanel', viewer.helpPanelState);
     this.add('selection', viewer.selectionDetailsState);
+    this.add('layerListPanel', viewer.layerListPanelState);
     this.add('partialViewport', viewer.partialViewport);
     this.add('selectedStateServer', viewer.selectedStateServer);
   }
@@ -328,6 +334,7 @@ export class Viewer extends RefCounted implements ViewerState {
   selectionDetailsState = this.registerDisposer(
       new TrackableDataSelectionState(this.coordinateSpace, this.layerSelectedValues));
   selectedStateServer = new TrackableValue<string>('', verifyString);
+  layerListPanelState = new LayerListPanelState();
 
   resetInitiated = new NullarySignal();
 
@@ -535,6 +542,23 @@ export class Viewer extends RefCounted implements ViewerState {
     }
 
     {
+      const {layerListPanelState} = this;
+      const button =
+          this.registerDisposer(new CheckboxIcon(layerListPanelState.location.watchableVisible, {
+            svg: svg_layers,
+            backgroundScheme: 'dark',
+            enableTitle: 'Show layer list panel',
+            disableTitle: 'Hide layer list panel'
+          }));
+      button.element.insertAdjacentElement(
+          'afterbegin',
+          this.registerDisposer(new LayerArchiveCountWidget(this.layerManager)).element);
+      this.registerDisposer(new ElementVisibilityFromTrackableBoolean(
+          this.uiControlVisibility.showLayerListPanelButton, button.element));
+      topRow.appendChild(button.element);
+    }
+
+    {
       const {selectionDetailsState} = this;
       const button =
           this.registerDisposer(new CheckboxIcon(selectionDetailsState.location.watchableVisible, {
@@ -598,7 +622,8 @@ export class Viewer extends RefCounted implements ViewerState {
     this.registerDisposer(new ElementVisibilityFromTrackableBoolean(
         makeDerivedWatchableValue(
             (...values: boolean[]) => values.reduce((a, b) => a || b, false),
-            this.uiControlVisibility.showHelpButton, this.uiControlVisibility.showSelectionPanelButton,
+            this.uiControlVisibility.showHelpButton,
+            this.uiControlVisibility.showSelectionPanelButton,
             this.uiControlVisibility.showEditStateButton, this.uiControlVisibility.showLocation,
             this.uiControlVisibility.showAnnotationToolStatus),
         topRow));
@@ -608,6 +633,11 @@ export class Viewer extends RefCounted implements ViewerState {
     this.layout = this.registerDisposer(new RootLayoutContainer(this, '4panel'));
     this.sidePanelManager = this.registerDisposer(
         new SidePanelManager(this.display, this.layout.element, this.visibility));
+    this.registerDisposer(this.sidePanelManager.registerPanel({
+      location: this.layerListPanelState.location,
+      makePanel: () =>
+          new LayerListPanel(this.sidePanelManager, this.layerSpecification, this.layerListPanelState),
+    }));
     this.registerDisposer(
         new LayerSidePanelManager(this.sidePanelManager, this.selectedLayer.addRef()));
     this.registerDisposer(this.sidePanelManager.registerPanel({

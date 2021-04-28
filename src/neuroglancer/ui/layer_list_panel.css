@@ -1,0 +1,51 @@
+.neuroglancer-layer-list-panel-items {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  overflow: auto;
+  height: 0px;
+  min-height: 0px;
+  flex-basis: 0px;
+}
+
+.neuroglancer-layer-list-panel-item {
+  display: flex;
+  flex-direction: row;
+  padding: 2px;
+  border: 1px solid #aaa;
+  margin: 2px;
+}
+
+.neuroglancer-layer-list-panel-item[data-selected=true] {
+  border-color: #3c3;
+}
+
+.neuroglancer-layer-list-panel-item[data-archived=true] {
+  border-color: #666;
+}
+
+.neuroglancer-layer-list-panel-item[data-archived=true] .neuroglancer-layer-side-panel-name,
+.neuroglancer-layer-list-panel-item[data-archived=true] .neuroglancer-icon svg {
+  color: #999;
+  stroke: #999;
+}
+
+.neuroglancer-layer-list-panel-item:hover {
+  background-color: #333;
+}
+
+.neuroglancer-layer-list-panel-item-number {
+  font-family: sans-serif;
+  background-color: var(--layer-number-color);
+  color: white;
+  font-weight: bold;
+  display: inline-block;
+}
+
+.neuroglancer-layer-list-panel-item:not(:hover) > .neuroglancer-layer-list-panel-item-delete {
+  display: none;
+}
+
+.neuroglancer-layer-list-panel-item:not(:hover) > .neuroglancer-layer-list-panel-item-controls {
+  display: none;
+}

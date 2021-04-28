@@ -56,14 +56,24 @@ export class TrackableBoolean implements Trackable {
 
 export class TrackableBooleanCheckbox extends RefCounted {
   element = document.createElement('input');
-  constructor(public model: WatchableValueInterface<boolean>) {
+  constructor(public model: WatchableValueInterface<boolean>, options: {
+    enableTitle?: string,
+    disableTitle?: string
+  } = {}) {
     super();
     let {element} = this;
     element.type = 'checkbox';
-    this.registerDisposer(model.changed.add(() => {
-      this.updateCheckbox();
-    }));
-    this.updateCheckbox();
+
+    const updateCheckbox = () => {
+      const value = this.model.value;
+      this.element.checked = value;
+      if (options.enableTitle !== undefined || options.disableTitle !== undefined) {
+        this.element.title = (value ? options.enableTitle : options.disableTitle) ?? '';
+      }
+    };
+
+    this.registerDisposer(model.changed.add(updateCheckbox));
+    updateCheckbox();
     this.registerEventListener(element, 'change', function(this: typeof element, _e: Event) {
       model.value = this.checked;
     });
@@ -72,10 +82,6 @@ export class TrackableBooleanCheckbox extends RefCounted {
     element.addEventListener('mousedown', (event: MouseEvent) => {
       event.preventDefault();
     });
-  }
-
-  updateCheckbox() {
-    this.element.checked = this.model.value;
   }
 
   disposed() {

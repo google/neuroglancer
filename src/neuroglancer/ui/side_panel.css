@@ -30,6 +30,9 @@
 
 .neuroglancer-side-panel-title {
   flex: 1;
+  text-overflow: ellipsis;
+  overflow: hidden;
+  white-space: nowrap;
 }
 
 .neuroglancer-side-panel-drop-zone {

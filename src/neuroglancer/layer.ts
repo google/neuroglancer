@@ -511,6 +511,7 @@ export class ManagedUserLayer extends RefCounted {
   }
 
   visible = true;
+  archived = false;
 
   get supportsPickOption() {
     const userLayer = this.layer;
@@ -546,16 +547,43 @@ export class ManagedUserLayer extends RefCounted {
     let layerSpec = userLayer.toJSON();
     layerSpec.name = this.name;
     if (!this.visible) {
-      layerSpec['visible'] = false;
+      if (this.archived) {
+        layerSpec['archived'] = true;
+      } else {
+        layerSpec['visible'] = false;
+      }
     }
     return layerSpec;
   }
 
   setVisible(value: boolean) {
-    if (value !== this.visible) {
-      this.visible = value;
-      this.layerChanged.dispatch();
+    if (value === this.visible) return;
+    if (value && this.archived) {
+      this.visible = true;
+      this.setArchived(false);
+      return;
     }
+    this.visible = value;
+    this.layerChanged.dispatch();
+  }
+
+  setArchived(value: boolean) {
+    if (this.archived === value) return;
+    if (value === true) {
+      this.visible = false;
+      this.archived = true;
+      for (const {layerManager} of this.manager.root.subsets) {
+        if (!layerManager.has(this)) continue;
+        layerManager.removeManagedLayer(this);
+      }
+    } else {
+      for (const {layerManager} of this.manager.root.subsets) {
+        if (layerManager.has(this)) continue;
+        layerManager.addManagedLayer(this.addRef());
+      }
+      this.archived = false;
+    }
+    this.layerChanged.dispatch();
   }
 
   disposed() {
@@ -621,7 +649,7 @@ export class LayerManager extends RefCounted {
     if (this.numDirectUsers > 0) {
       return;
     }
-    this.filter(layer => layer.refCount !== 1);
+    this.filter(layer => layer.refCount !== 1 || layer.archived);
   }
 
   private updateSignalBindings(
@@ -671,6 +699,9 @@ export class LayerManager extends RefCounted {
   unbindManagedLayer(managedLayer: ManagedUserLayer) {
     this.updateSignalBindings(managedLayer, removeSignalBinding);
     managedLayer.containers.delete(this);
+    // Also notify the root LayerManager, to ensures the layer is removed if this is the last direct
+    // reference.
+    managedLayer.manager.rootLayers.layersChanged.dispatch();
     managedLayer.dispose();
   }
 
@@ -1261,6 +1292,15 @@ export class SelectedLayerState extends RefCounted implements Trackable {
     return this.location.visible;
   }
 
+  toggle(layer: ManagedUserLayer) {
+    if (this.layer === layer && this.visible) {
+      this.visible = false;
+    } else {
+      this.layer = layer;
+      this.visible = true;
+    }
+  }
+
   set visible(value: boolean) {
     let existingLayer = this.layer_;
     if (value === true && existingLayer === undefined) {
@@ -1585,7 +1625,12 @@ export class LinkedLayerGroup extends RefCounted implements Trackable {
 
 function initializeLayerFromSpecNoRestoreState(managedLayer: ManagedUserLayer, spec: any) {
   const layerType = verifyOptionalObjectProperty(spec, 'type', verifyString, 'auto');
-  managedLayer.visible = verifyOptionalObjectProperty(spec, 'visible', verifyBoolean, true);
+  managedLayer.archived = verifyOptionalObjectProperty(spec, 'archived', verifyBoolean, false);
+  if (!managedLayer.archived) {
+    managedLayer.visible = verifyOptionalObjectProperty(spec, 'visible', verifyBoolean, true);
+  } else {
+    managedLayer.visible = false;
+  }
   const layerConstructor = layerTypes.get(layerType) || NewUserLayer;
   managedLayer.layer = new layerConstructor(managedLayer);
   return spec;
@@ -1659,6 +1704,7 @@ export class TopLevelLayerListSpecification extends LayerListSpecification {
   }
 
   coordinateSpaceCombiner = new CoordinateSpaceCombiner(this.coordinateSpace, isGlobalDimension);
+  subsets = new Set<LayerSubsetSpecification>();
 
   layerSelectedValues = this.selectionState.layerSelectedValues;
 
@@ -1784,6 +1830,12 @@ export class LayerSubsetSpecification extends LayerListSpecification {
     const {layerManager} = this;
     this.registerDisposer(layerManager.layersChanged.add(this.changed.dispatch));
     this.registerDisposer(layerManager.specificationChanged.add(this.changed.dispatch));
+    master.subsets.add(this);
+  }
+
+  disposed() {
+    super.disposed();
+    this.master.subsets.delete(this);
   }
 
   reset() {
@@ -1799,6 +1851,7 @@ export class LayerSubsetSpecification extends LayerListSpecification {
         throw new Error(
             `Undefined layer referenced in subset specification: ${JSON.stringify(name)}`);
       }
+      if (layer.archived) continue;
       layers.push(layer);
     }
     this.layerManager.clear();
