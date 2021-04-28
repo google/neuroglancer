@@ -610,7 +610,7 @@ class ManagedLayer(JsonObjectWrapper):
 
     @property
     def visible(self):
-        return not self._archived and self._visible is not False
+        return not self.archived and self._visible is not False
 
     @visible.setter
     def visible(self, value):
@@ -622,7 +622,7 @@ class ManagedLayer(JsonObjectWrapper):
     def __setattr__(self, key, value):
         if self._readonly:
             raise AttributeError
-        if key in ['name', 'visible', 'archived', 'layer']:
+        if key in ['name', '_visible', 'visible', 'archived', 'layer']:
             object.__setattr__(self, key, value)
         else:
             return setattr(self.layer, key, value)
