@@ -134,6 +134,9 @@ window.addEventListener('DOMContentLoaded', () => {
   configState.add('showUIControls', viewer.uiConfiguration.showUIControls);
   configState.add('showLayerPanel', viewer.uiConfiguration.showLayerPanel);
   configState.add('showHelpButton', viewer.uiConfiguration.showHelpButton);
+  configState.add('showSelectionPanelButton', viewer.uiConfiguration.showSelectionPanelButton);
+  configState.add('showLayerSidePanelButton', viewer.uiConfiguration.showLayerSidePanelButton);
+  configState.add('showLayerListPanelButton', viewer.uiConfiguration.showLayerListPanelButton);
   configState.add('showLocation', viewer.uiConfiguration.showLocation);
   configState.add('showPanelBorders', viewer.uiConfiguration.showPanelBorders);
   configState.add('showLayerHoverValues', viewer.uiConfiguration.showLayerHoverValues);
