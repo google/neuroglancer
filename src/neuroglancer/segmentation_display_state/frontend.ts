@@ -432,10 +432,6 @@ export interface SegmentationDisplayState3D extends SegmentationDisplayStateWith
   transform: WatchableRenderLayerTransform;
   renderScaleHistogram: RenderScaleHistogram;
   renderScaleTarget: TrackableValue<number>;
-  // Specifies whether to write to the pick buffer when rendering with transparency.  This prevents
-  // any object behind the transparent object from being picked.  When not rendering with
-  // transparency, the pick buffer is always written (since there is no downside).
-  transparentPickEnabled: WatchableValueInterface<boolean>;
 }
 
 export function registerCallbackWhenSegmentationDisplayStateChanged(
@@ -471,8 +467,6 @@ export function registerRedrawWhenSegmentationDisplayState3DChanged(
       displayState.transform.changed.add(renderLayer.redrawNeeded.dispatch));
   renderLayer.registerDisposer(
       displayState.renderScaleTarget.changed.add(renderLayer.redrawNeeded.dispatch));
-  renderLayer.registerDisposer(
-      displayState.transparentPickEnabled.changed.add(renderLayer.redrawNeeded.dispatch));
 }
 
 /**
