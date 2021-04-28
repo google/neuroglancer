@@ -30,7 +30,7 @@ jobs:
     - name: Build client python bundles
       run: npm run build-python
     - name: Copy python bundle into new folder
-      run: cp -r python/neuroglancer/static python
+      run: cp -r python/neuroglancer/static dist/min/python
     - name: S3 Sync
       uses: jakejarvis/s3-sync-action@v0.5.0
       with:
