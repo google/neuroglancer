@@ -27,6 +27,7 @@
 .neuroglancer-annotation-shader-property-list {
   max-height: 8em;
   overflow: auto;
+  flex-shrink: 0;
 }
 
 .neuroglancer-annotation-shader-property {
