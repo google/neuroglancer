@@ -14,6 +14,10 @@
  * limitations under the License.
  */
 
-.neuroglancer-checkbox-icon[data-checked="true"] {
+.neuroglancer-checkbox-icon.light-background[data-checked="true"] {
   background-color: rgba(0, 0, 0, 0.5);
+}
+
+.neuroglancer-checkbox-icon.dark-background[data-checked="true"] {
+  background-color: rgba(255, 255, 255, 0.2);
 }

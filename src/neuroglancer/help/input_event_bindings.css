@@ -14,32 +14,43 @@
  * limitations under the License.
  */
 
-.describe-key-bindings {
-  overflow-x: hidden;
+.neuroglancer-help-body {
+  flex-basis: 0px;
+  flex: 1;
+  height: 0px;
+  min-height: 0px;
+  font-family: sans-serif;
+  display: flex;
+  flex-direction: column;
 }
 
-.describe-key-bindings-container {
-  display: grid;
-  overflow-y: scroll;
-  max-height: 80vh;
-  overflow-x: hidden;
-  grid-template-columns: [dt-start] 0fr [dt-end] 1em [dd-start] 1fr [dd-end];
-  grid-auto-rows: auto;
+.neuroglancer-help-scroll-container {
+  flex: 1;
+  flex-basis: 0px;
+  position: relative;
+  overflow: auto;
 }
 
-.describe-key-bindings-container h2 {
-  grid-column-start: 1;
-  grid-column-end: -1;
+.neuroglancer-help-scroll-container div + h2 {
+  margin-top: 1em;
 }
 
-.describe-key-bindings .dt {
-  grid-column: dt-start;
+.neuroglancer-help-scroll-container h2 {
+  font-size: 10pt;
+  padding: 4px;
+  position: sticky;
+  top: 0;
+  background-color: #333;
+  margin-top: 0px;
+}
+
+.neuroglancer-help-scroll-container .dt {
   font-family: monospace;
   font-weight: bold;
-  display: inline-block;
+  color: yellow;
 }
 
-.describe-key-bindings .dd {
-  grid-column: dd-start;
-  display: inline-block;
+.neuroglancer-help-scroll-container .dd {
+  font-size: 10pt;
+  margin-left: 4ex;
 }

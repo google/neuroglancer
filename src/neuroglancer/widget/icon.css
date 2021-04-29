@@ -29,6 +29,8 @@
   font: 12px sans-serif;
   cursor: pointer;
   font-weight: 900;
+  margin-left: 1px;
+  margin-right: 1px;
 }
 
 .neuroglancer-icon svg {

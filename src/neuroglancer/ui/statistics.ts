@@ -19,40 +19,42 @@ import 'neuroglancer/ui/statistics.css';
 import debounce from 'lodash/debounce';
 import {ChunkDownloadStatistics, ChunkMemoryStatistics, ChunkPriorityTier, ChunkState, getChunkDownloadStatisticIndex, getChunkStateStatisticIndex, numChunkMemoryStatistics, numChunkStates} from 'neuroglancer/chunk_manager/base';
 import {ChunkQueueManager, ChunkSource, ChunkStatistics} from 'neuroglancer/chunk_manager/frontend';
-import {TrackableBoolean} from 'neuroglancer/trackable_boolean';
-import {TrackableValue, WatchableValueInterface} from 'neuroglancer/trackable_value';
-import {Borrowed, RefCounted} from 'neuroglancer/util/disposable';
-import {removeChildren, removeFromParent} from 'neuroglancer/util/dom';
-import {verifyPositiveInt} from 'neuroglancer/util/json';
-import {CompoundTrackable, Trackable} from 'neuroglancer/util/trackable';
+import {WatchableValueInterface} from 'neuroglancer/trackable_value';
+import {SidePanelLocation, TrackableSidePanelLocation} from 'neuroglancer/ui/side_panel_location';
+import {Borrowed} from 'neuroglancer/util/disposable';
+import {removeChildren} from 'neuroglancer/util/dom';
+import {emptyToUndefined} from 'neuroglancer/util/json';
+import {Trackable} from 'neuroglancer/util/trackable';
+
+import {SidePanel, SidePanelManager} from './side_panel';
+
+const DEFAULT_STATISTICS_PANEL_LOCATION: SidePanelLocation = {
+  side: 'bottom',
+  size: 100,
+  minSize: 50,
+  row: 0,
+  col: 0,
+  flex: 1,
+  visible: false,
+};
 
 export class StatisticsDisplayState implements Trackable {
-  private tracker = new CompoundTrackable();
   get changed() {
-    return this.tracker.changed;
+    return this.location.changed;
   }
-  visible = new TrackableBoolean(false);
-  size = new TrackableValue<number>(100, verifyPositiveInt);
+  location = new TrackableSidePanelLocation(DEFAULT_STATISTICS_PANEL_LOCATION);
   sortBy?: WatchableValueInterface<string>;
-  constructor() {
-    this.tracker.add('visible', this.visible);
-    this.tracker.add('size', this.size);
-  }
 
   restoreState(obj: any) {
-    this.tracker.restoreState(obj);
+    this.location.restoreState(obj);
   }
 
   reset() {
-    this.tracker.reset();
+    this.location.reset();
   }
 
   toJSON() {
-    const obj = this.tracker.toJSON();
-    for (const k of Object.keys(obj)) {
-      if (obj[k as keyof typeof obj] !== undefined) return obj;
-    }
-    return undefined;
+    return emptyToUndefined(this.location.toJSON());
   }
 }
 
@@ -71,7 +73,7 @@ function getProperties(obj: any): Map<string, string> {
   return map;
 }
 
-function getDistinguishingProperties(properties: Map<string,string>[]): string[] {
+function getDistinguishingProperties(properties: Map<string, string>[]): string[] {
   const selected = new Set<string>();
   selected.add('.type');
   const allProps = new Set<string>();
@@ -119,7 +121,7 @@ function getDistinguishingProperties(properties: Map<string,string>[]): string[]
   return Array.from(selected);
 }
 
-function getNameFromProps(properties: Map<string,string>, selected: string[]) {
+function getNameFromProps(properties: Map<string, string>, selected: string[]) {
   const result: any = {};
   for (const prop of selected) {
     const value = properties.get(prop);
@@ -227,32 +229,29 @@ export const columnSpecifications: ChunkStatisticsColumn[] = [
   },
 ];
 
-export class StatisticsPanel extends RefCounted {
-  element = document.createElement('div');
+export class StatisticsPanel extends SidePanel {
   data: ChunkStatistics|undefined = undefined;
   private requestDataTimerId = -1;
   private dataRequested = false;
+  body = document.createElement('div');
   constructor(
-      public chunkQueueManager: Borrowed<ChunkQueueManager>,
+      sidePanelManager: SidePanelManager, public chunkQueueManager: Borrowed<ChunkQueueManager>,
       public displayState: StatisticsDisplayState) {
-    super();
+    super(sidePanelManager, displayState.location);
 
-    const {element} = this;
-    element.className = 'neuroglancer-statistics-panel';
-
-    this.registerDisposer(this.displayState.changed.add(this.debouncedUpdateView));
-    this.registerDisposer(this.displayState.visible.changed.add(() => this.requestData()));
+    const {body} = this;
+    body.classList.add('neuroglancer-statistics-panel-body');
+    this.addTitleBar({title: 'Chunk statistics'});
+    this.addBody(body);
     this.requestData();
   }
 
   disposed() {
     window.clearTimeout(this.requestDataTimerId);
-    removeFromParent(this.element);
     super.disposed();
   }
 
   private requestData() {
-    if (!this.displayState.visible.value) return;
     if (this.dataRequested) return;
     const {chunkQueueManager} = this;
     this.dataRequested = true;
@@ -270,7 +269,6 @@ export class StatisticsPanel extends RefCounted {
   private debouncedUpdateView = this.registerCancellable(debounce(() => this.updateView(), 0));
 
   private updateView() {
-    if (!this.displayState.visible.value) return;
     const {data} = this;
     if (data === undefined) return;
     const table = document.createElement('table');
@@ -322,7 +320,7 @@ export class StatisticsPanel extends RefCounted {
         const sepIndex = column.indexOf('/');
         let suffix = '';
         if (sepIndex !== -1) {
-          suffix = column.substring(sepIndex+1);
+          suffix = column.substring(sepIndex + 1);
         }
         const td = document.createElement('td');
         td.textContent = suffix;
@@ -346,7 +344,7 @@ export class StatisticsPanel extends RefCounted {
       tbody.appendChild(tr);
     }
     table.appendChild(tbody);
-    removeChildren(this.element);
-    this.element.appendChild(table);
+    removeChildren(this.body);
+    this.body.appendChild(table);
   }
 }

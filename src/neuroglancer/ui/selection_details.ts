@@ -20,11 +20,11 @@ import svg_arrowLeft from 'ikonate/icons/arrow-left.svg';
 import svg_arrowRight from 'ikonate/icons/arrow-right.svg';
 import {SelectedLayerState, TopLevelLayerListSpecification, TrackableDataSelectionState} from 'neuroglancer/layer';
 import {getDefaultSelectBindings} from 'neuroglancer/ui/default_input_event_bindings';
+import {SidePanel, SidePanelManager} from 'neuroglancer/ui/side_panel';
 import {setClipboard} from 'neuroglancer/util/clipboard';
-import {Borrowed, RefCounted} from 'neuroglancer/util/disposable';
+import {Borrowed} from 'neuroglancer/util/disposable';
 import {MouseEventBinder} from 'neuroglancer/util/mouse_bindings';
 import {CheckboxIcon} from 'neuroglancer/widget/checkbox_icon';
-import {makeCloseButton} from 'neuroglancer/widget/close_button';
 import {makeCopyButton} from 'neuroglancer/widget/copy_button';
 import {DependentViewWidget} from 'neuroglancer/widget/dependent_view_widget';
 import {makeIcon} from 'neuroglancer/widget/icon';
@@ -34,23 +34,20 @@ export function isWithinSelectionPanel(element: HTMLElement) {
   return element.closest('.neuroglancer-selection-details');
 }
 
-export class SelectionDetailsTab extends RefCounted {
-  element = document.createElement('div');
+export class SelectionDetailsPanel extends SidePanel {
   body = document.createElement('div');
 
   constructor(
+      public sidePanelManager: SidePanelManager,
       public state: Borrowed<TrackableDataSelectionState>,
       public manager: Borrowed<TopLevelLayerListSpecification>,
       public selectedLayer: Borrowed<SelectedLayerState>) {
-    super();
+    super(sidePanelManager, state.location);
     const {element, body} = this;
     element.classList.add('neuroglancer-selection-details');
     this.registerDisposer(new MouseEventBinder(this.element, getDefaultSelectBindings()));
 
-    const titleBar = document.createElement('div');
-
-    const title = document.createElement('div');
-    titleBar.appendChild(title);
+    const {titleBar} = this.addTitleBar({title: 'Selection'});
     const backButton = makeIcon({
       svg: svg_arrowLeft,
       title: 'Previous selection',
@@ -67,29 +64,20 @@ export class SelectionDetailsTab extends RefCounted {
     });
     titleBar.appendChild(backButton);
     titleBar.appendChild(forwardButton);
-    titleBar.classList.add('neuroglancer-selection-details-titlebar');
-    title.classList.add('neuroglancer-selection-details-title');
-    title.textContent = 'Selection';
-    titleBar.appendChild(this.registerDisposer(new CheckboxIcon(state.pin, {
-                               text: '📌',
-                               enableTitle: 'Pin selection',
-                               disableTitle: 'Unpin selection',
-                             }))
-                             .element);
-    titleBar.appendChild(makeCloseButton({
-      title: 'Close selection panel',
-      onClick: () => {
-        this.state.visible.value = false;
-        this.state.value = undefined;
-        this.state.pin.value = true;
-      },
-    }));
+    titleBar.appendChild(
+        this.registerDisposer(new CheckboxIcon(state.pin, {
+              // Note: \ufe0e forces text display, as otherwise the pin icon may as an emoji with
+              // color.
+              text: '📌\ufe0e',
+              enableTitle: 'Pin selection',
+              disableTitle: 'Unpin selection',
+            }))
+            .element);
     body.classList.add('neuroglancer-selection-details-body');
-    element.appendChild(titleBar);
-    element.appendChild(body);
+    this.addBody(body);
     body.appendChild(
         this.registerDisposer(new DependentViewWidget(state, (stateValue, parent, context) => {
-              if (!state.visible.value) return;
+              if (!state.location.visible) return;
               backButton.style.visibility = state.canGoBack() ? 'visible' : 'hidden';
               forwardButton.style.visibility = state.canGoForward() ? 'visible' : 'hidden';
               if (stateValue === undefined) return;
@@ -170,5 +158,11 @@ export class SelectionDetailsTab extends RefCounted {
                         .element);
               }
             })).element);
+  }
+
+  close() {
+    super.close();
+    this.state.value = undefined;
+    this.state.pin.value = true;
   }
 }

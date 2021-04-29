@@ -14,33 +14,12 @@
  * limitations under the License.
  */
 
-.neuroglancer-selection-details {
-  display: flex;
-  flex-direction: column;
-  flex: 1;
-}
-
 .neuroglancer-selection-details-body {
   height: 0px;
   flex: 1;
   overflow-y: auto;
   flex-basis: 0px;
   min-height: 0px;
-}
-
-.neuroglancer-selection-details-titlebar {
-  display: flex;
-  flex-direction: row;
-  align-items: center;
-  font-family: sans-serif;
-  font-size: 10pt;
-  background-color: #03c;
-  padding: 2px;
-  color: white;
-}
-
-.neuroglancer-selection-details-title {
-  flex: 1;
 }
 
 .neuroglancer-selection-details-position {

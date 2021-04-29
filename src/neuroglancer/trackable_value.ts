@@ -124,7 +124,7 @@ export function makeCachedLazyDerivedWatchableValue<U, T extends any[]>(
 }
 
 export class CachedWatchableValue<T> extends RefCounted implements WatchableValueInterface<T> {
-  changed = new NullarySignal();
+  changed = new Signal();
   value: T;
   constructor(
       base: WatchableValueInterface<T>, isEqual: (a: T, b: T) => boolean = (a, b) => a === b) {
@@ -392,6 +392,14 @@ export function observeWatchable<T>(
     callback: (value: T) => void, watchable: WatchableValueInterface<T>) {
   callback(watchable.value);
   return watchable.changed.add(() => callback(watchable.value));
+}
+
+export function linkWatchableValue<T>(
+    source: WatchableValueInterface<T>, target: WatchableValueInterface<T>) {
+  target.value = source.value;
+  return source.changed.add(() => {
+    target.value = source.value;
+  });
 }
 
 export class IndirectWatchableValue<U, T> implements Disposable, WatchableValueInterface<T> {

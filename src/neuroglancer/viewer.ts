@@ -17,6 +17,9 @@
 import './viewer.css';
 import 'neuroglancer/noselect.css';
 
+import svg_controls_alt from 'ikonate/icons/controls-alt.svg';
+import svg_layers from 'ikonate/icons/layers.svg';
+import svg_list from 'ikonate/icons/list.svg';
 import debounce from 'lodash/debounce';
 import {CapacitySpecification, ChunkManager, ChunkQueueManager, FrameNumberCounter} from 'neuroglancer/chunk_manager/frontend';
 import {makeCoordinateSpace, TrackableCoordinateSpace} from 'neuroglancer/coordinate_transform';
@@ -25,7 +28,7 @@ import {InputEventBindings as DataPanelInputEventBindings} from 'neuroglancer/da
 import {DataSourceProviderRegistry} from 'neuroglancer/datasource';
 import {getDefaultDataSourceProvider} from 'neuroglancer/datasource/default_provider';
 import {DisplayContext, TrackableWindowedViewport} from 'neuroglancer/display_context';
-import {InputEventBindingHelpDialog} from 'neuroglancer/help/input_event_bindings';
+import {HelpPanelState, InputEventBindingHelpDialog} from 'neuroglancer/help/input_event_bindings';
 import {addNewLayer, LayerManager, LayerSelectedValues, MouseSelectionState, SelectedLayerState, TopLevelLayerListSpecification, TrackableDataSelectionState} from 'neuroglancer/layer';
 import {RootLayoutContainer} from 'neuroglancer/layer_groups_layout';
 import {DisplayPose, NavigationState, OrientationState, Position, TrackableCrossSectionZoom, TrackableDepthRange, TrackableDisplayDimensions, TrackableProjectionZoom, TrackableRelativeDisplayScales, WatchableDisplayDimensionRenderInfo} from 'neuroglancer/navigation_state';
@@ -35,10 +38,11 @@ import {StatusMessage} from 'neuroglancer/status';
 import {ElementVisibilityFromTrackableBoolean, TrackableBoolean, TrackableBooleanCheckbox} from 'neuroglancer/trackable_boolean';
 import {makeDerivedWatchableValue, observeWatchable, TrackableValue, WatchableValueInterface} from 'neuroglancer/trackable_value';
 import {ContextMenu} from 'neuroglancer/ui/context_menu';
-import {DragResizablePanel} from 'neuroglancer/ui/drag_resize';
-import {LayerInfoPanelContainer} from 'neuroglancer/ui/layer_side_panel';
+import {LayerArchiveCountWidget, LayerListPanel, LayerListPanelState} from 'neuroglancer/ui/layer_list_panel';
+import {LayerSidePanelManager} from 'neuroglancer/ui/layer_side_panel';
 import {setupPositionDropHandlers} from 'neuroglancer/ui/position_drag_and_drop';
-import {SelectionDetailsTab} from 'neuroglancer/ui/selection_details';
+import {SelectionDetailsPanel} from 'neuroglancer/ui/selection_details';
+import {SidePanelManager} from 'neuroglancer/ui/side_panel';
 import {StateEditorDialog} from 'neuroglancer/ui/state_editor';
 import {StatisticsDisplayState, StatisticsPanel} from 'neuroglancer/ui/statistics';
 import {removeParameterFromUrl} from 'neuroglancer/ui/url_hash_binding';
@@ -49,20 +53,22 @@ import {removeFromParent} from 'neuroglancer/util/dom';
 import {registerActionListener} from 'neuroglancer/util/event_action_map';
 import {vec3} from 'neuroglancer/util/geom';
 import {cancellableFetchOk, responseJson} from 'neuroglancer/util/http_request';
-import {parseFixedLengthArray, verifyFinitePositiveFloat, verifyObject, verifyOptionalObjectProperty} from 'neuroglancer/util/json';
+import {parseFixedLengthArray, verifyFinitePositiveFloat, verifyObject, verifyOptionalObjectProperty, verifyString} from 'neuroglancer/util/json';
 import {EventActionMap, KeyboardEventBinder} from 'neuroglancer/util/keyboard_bindings';
-import {NullarySignal, Signal} from 'neuroglancer/util/signal';
+import {NullarySignal} from 'neuroglancer/util/signal';
 import {CompoundTrackable, optionallyRestoreFromJsonMember} from 'neuroglancer/util/trackable';
 import {ViewerState, VisibilityPrioritySpecification} from 'neuroglancer/viewer_state';
 import {WatchableVisibilityPriority} from 'neuroglancer/visibility_priority/frontend';
 import {GL} from 'neuroglancer/webgl/context';
 import {AnnotationToolStatusWidget} from 'neuroglancer/widget/annotation_tool_status';
+import {CheckboxIcon} from 'neuroglancer/widget/checkbox_icon';
 import {makeIcon} from 'neuroglancer/widget/icon';
 import {makeTextIconButton} from 'neuroglancer/widget/text_icon_button';
 import {NumberInputWidget} from 'neuroglancer/widget/number_input_widget';
 import {MousePositionWidget, PositionWidget} from 'neuroglancer/widget/position_widget';
 import {TrackableScaleBarOptions} from 'neuroglancer/widget/scale_bar';
 import {RPC} from 'neuroglancer/worker_rpc';
+import { StateShare, stateShareEnabled } from './datasource/state_share';
 
 declare var NEUROGLANCER_OVERRIDE_DEFAULT_VIEWER_OPTIONS: any
 
@@ -109,6 +115,9 @@ const viewerUiControlOptionKeys: (keyof ViewerUIControlConfiguration)[] = [
   'showJsonPostButton',
   'showHelpButton',
   'showEditStateButton',
+  'showLayerListPanelButton',
+  'showSelectionPanelButton',
+  'showLayerSidePanelButton',
   'showLayerPanel',
   'showLocation',
   'showLayerHoverValues',
@@ -122,6 +131,9 @@ export class ViewerUIControlConfiguration {
   showHelpButton = new TrackableBoolean(true);
   showEditStateButton = new TrackableBoolean(true);
   showJsonPostButton = new TrackableBoolean(true);
+  showLayerListPanelButton = new TrackableBoolean(true);
+  showSelectionPanelButton = new TrackableBoolean(true);
+  showLayerSidePanelButton = new TrackableBoolean(true);
   showLayerPanel = new TrackableBoolean(true);
   showLocation = new TrackableBoolean(true);
   showLayerHoverValues = new TrackableBoolean(true);
@@ -151,6 +163,9 @@ interface ViewerUIOptions {
   showUIControls: boolean;
   showHelpButton: boolean;
   showEditStateButton: boolean;
+  showLayerListPanelButton: boolean;
+  showSelectionPanelButton: boolean;
+  showLayerSidePanelButton: boolean;
   showLayerPanel: boolean;
   showLocation: boolean;
   showLayerHoverValues: boolean;
@@ -191,7 +206,7 @@ function makeViewerContextMenu(viewer: Viewer) {
   addLimitWidget(
       'Concurrent chunk requests', viewer.chunkQueueManager.capacities.download.itemLimit);
 
-  const addCheckbox = (label: string, value: TrackableBoolean) => {
+  const addCheckbox = (label: string, value: WatchableValueInterface<boolean>) => {
     const labelElement = document.createElement('label');
     labelElement.textContent = label;
     const checkbox = menu.registerDisposer(new TrackableBooleanCheckbox(value));
@@ -202,7 +217,7 @@ function makeViewerContextMenu(viewer: Viewer) {
   addCheckbox('Show scale bar', viewer.showScaleBar);
   addCheckbox('Show cross sections in 3-d', viewer.showPerspectiveSliceViews);
   addCheckbox('Show default annotations', viewer.showDefaultAnnotations);
-  addCheckbox('Show chunk statistics', viewer.statisticsDisplayState.visible);
+  addCheckbox('Show chunk statistics', viewer.statisticsDisplayState.location.watchableVisible);
   addCheckbox('Wire frame rendering', viewer.wireFrame);
   addCheckbox('Enable prefetching', viewer.chunkQueueManager.enablePrefetch);
   return menu;
@@ -240,8 +255,11 @@ class TrackableViewerState extends CompoundTrackable {
     this.add('projectionBackgroundColor', viewer.perspectiveViewBackgroundColor);
     this.add('layout', viewer.layout);
     this.add('statistics', viewer.statisticsDisplayState);
+    this.add('helpPanel', viewer.helpPanelState);
     this.add('selection', viewer.selectionDetailsState);
+    this.add('layerListPanel', viewer.layerListPanelState);
     this.add('partialViewport', viewer.partialViewport);
+    this.add('selectedStateServer', viewer.selectedStateServer);
   }
 
   restoreState(obj: any) {
@@ -325,10 +343,13 @@ export class Viewer extends RefCounted implements ViewerState {
   partialViewport = new TrackableWindowedViewport();
   contextMenu: ContextMenu;
   statisticsDisplayState = new StatisticsDisplayState();
+  helpPanelState = new HelpPanelState();
   layerSelectedValues =
       this.registerDisposer(new LayerSelectedValues(this.layerManager, this.mouseState));
   selectionDetailsState = this.registerDisposer(
       new TrackableDataSelectionState(this.coordinateSpace, this.layerSelectedValues));
+  selectedStateServer = new TrackableValue<string>('', verifyString);
+  layerListPanelState = new LayerListPanelState();
 
   resetInitiated = new NullarySignal();
 
@@ -341,6 +362,7 @@ export class Viewer extends RefCounted implements ViewerState {
 
   layerSpecification: TopLevelLayerListSpecification;
   layout: RootLayoutContainer;
+  sidePanelManager: SidePanelManager;
 
   jsonStateServer = new TrackableValue<string>('', validateStateServer);
   state: TrackableViewerState;
@@ -530,6 +552,65 @@ export class Viewer extends RefCounted implements ViewerState {
     this.registerDisposer(new ElementVisibilityFromTrackableBoolean(
         this.uiControlVisibility.showAnnotationToolStatus, annotationToolStatus.element));
 
+    if (stateShareEnabled) {
+      const stateShare = this.registerDisposer(new StateShare(this));
+      topRow.appendChild(stateShare.element);
+    }
+
+    {
+      const {layerListPanelState} = this;
+      const button =
+          this.registerDisposer(new CheckboxIcon(layerListPanelState.location.watchableVisible, {
+            svg: svg_layers,
+            backgroundScheme: 'dark',
+            enableTitle: 'Show layer list panel',
+            disableTitle: 'Hide layer list panel'
+          }));
+      button.element.insertAdjacentElement(
+          'afterbegin',
+          this.registerDisposer(new LayerArchiveCountWidget(this.layerManager)).element);
+      this.registerDisposer(new ElementVisibilityFromTrackableBoolean(
+          this.uiControlVisibility.showLayerListPanelButton, button.element));
+      topRow.appendChild(button.element);
+    }
+
+    {
+      const {selectionDetailsState} = this;
+      const button =
+          this.registerDisposer(new CheckboxIcon(selectionDetailsState.location.watchableVisible, {
+            svg: svg_list,
+            backgroundScheme: 'dark',
+            enableTitle: 'Show selection details panel',
+            disableTitle: 'Hide selection details panel'
+          }));
+      this.registerDisposer(new ElementVisibilityFromTrackableBoolean(
+          this.uiControlVisibility.showSelectionPanelButton, button.element));
+      topRow.appendChild(button.element);
+    }
+
+    {
+      const {selectedLayer} = this;
+      const button = this.registerDisposer(new CheckboxIcon(
+          {
+            get value() {
+              return selectedLayer.visible;
+            },
+            set value(visible: boolean) {
+              selectedLayer.visible = visible;
+            },
+            changed: selectedLayer.location.locationChanged,
+          },
+          {
+            svg: svg_controls_alt,
+            backgroundScheme: 'dark',
+            enableTitle: 'Show layer side panel',
+            disableTitle: 'Hide layer side panel'
+          }));
+      this.registerDisposer(new ElementVisibilityFromTrackableBoolean(
+          this.uiControlVisibility.showLayerSidePanelButton, button.element));
+      topRow.appendChild(button.element);
+    }
+
     {
       const button = makeIcon({text: '{}', title: 'Edit JSON state'});
       this.registerEventListener(button, 'click', () => {
@@ -550,77 +631,69 @@ export class Viewer extends RefCounted implements ViewerState {
     }
 
     {
-      const button = makeIcon({text: '?', title: 'Help'});
-      this.registerEventListener(button, 'click', () => {
-        this.showHelpDialog();
-      });
+      const {helpPanelState} = this;
+      const button =
+          this.registerDisposer(new CheckboxIcon(helpPanelState.location.watchableVisible, {
+            text: '?',
+            backgroundScheme: 'dark',
+            enableTitle: 'Show help panel',
+            disableTitle: 'Hide help panel'
+          }));
       this.registerDisposer(new ElementVisibilityFromTrackableBoolean(
-          this.uiControlVisibility.showHelpButton, button));
-      topRow.appendChild(button);
+          this.uiControlVisibility.showHelpButton, button.element));
+      topRow.appendChild(button.element);
     }
 
     this.registerDisposer(new ElementVisibilityFromTrackableBoolean(
         makeDerivedWatchableValue(
             (...values: boolean[]) => values.reduce((a, b) => a || b, false),
-            this.uiControlVisibility.showHelpButton, this.uiControlVisibility.showEditStateButton,
-            this.uiControlVisibility.showLocation,
+            this.uiControlVisibility.showHelpButton,
+            this.uiControlVisibility.showSelectionPanelButton,
+            this.uiControlVisibility.showEditStateButton, this.uiControlVisibility.showLocation,
             this.uiControlVisibility.showAnnotationToolStatus),
         topRow));
 
     gridContainer.appendChild(topRow);
 
-    const layoutAndSidePanel = document.createElement('div');
-    layoutAndSidePanel.style.display = 'flex';
-    layoutAndSidePanel.style.flex = '1';
-    layoutAndSidePanel.style.flexDirection = 'row';
     this.layout = this.registerDisposer(new RootLayoutContainer(this, '4panel'));
-    layoutAndSidePanel.appendChild(this.layout.element);
-
-    const sidePanel = document.createElement('div');
-    sidePanel.classList.add('neuroglancer-viewer-side-panel');
-    layoutAndSidePanel.appendChild(sidePanel);
-
-    const self = this;
-    // FIXME: don't use selectedLayer.size/visible to control this
-    const sidePanelVisible = {
-      changed: new Signal(),
-      get value() {
-        return self.selectedLayer.visible || self.selectionDetailsState.visible.value;
-      },
-      set value(visible: boolean) {
-        self.selectedLayer.visible = visible;
-        self.selectionDetailsState.visible.value = visible;
-      }
-    };
-    this.registerDisposer(this.selectedLayer.changed.add(sidePanelVisible.changed.dispatch));
+    this.sidePanelManager = this.registerDisposer(
+        new SidePanelManager(this.display, this.layout.element, this.visibility));
+    this.registerDisposer(this.sidePanelManager.registerPanel({
+      location: this.layerListPanelState.location,
+      makePanel: () =>
+          new LayerListPanel(this.sidePanelManager, this.layerSpecification, this.layerListPanelState),
+    }));
     this.registerDisposer(
-        this.selectionDetailsState.changed.add(sidePanelVisible.changed.dispatch));
-    this.registerDisposer(new DragResizablePanel(
-        sidePanel, sidePanelVisible, this.selectedLayer.size, 'horizontal', 290));
-    const layerInfoPanel =
-        this.registerDisposer(new LayerInfoPanelContainer(this.selectedLayer.addRef()));
-    this.registerDisposer(new ElementVisibilityFromTrackableBoolean(
-        {
-          changed: self.selectedLayer.changed,
-          get value() {
-            return self.selectedLayer.visible;
-          },
-        },
-        layerInfoPanel.element));
-    sidePanel.appendChild(layerInfoPanel.element);
-    const selectionDetailsTab = this.registerDisposer(new SelectionDetailsTab(
-        this.selectionDetailsState, this.layerSpecification, this.selectedLayer));
-    sidePanel.appendChild(selectionDetailsTab.element);
-    this.registerDisposer(new ElementVisibilityFromTrackableBoolean(
-        this.selectionDetailsState.visible, selectionDetailsTab.element));
-    gridContainer.appendChild(layoutAndSidePanel);
+        new LayerSidePanelManager(this.sidePanelManager, this.selectedLayer.addRef()));
+    this.registerDisposer(this.sidePanelManager.registerPanel({
+      location: this.selectionDetailsState.location,
+      makePanel: () => new SelectionDetailsPanel(
+          this.sidePanelManager, this.selectionDetailsState, this.layerSpecification,
+          this.selectedLayer),
+    }));
+    gridContainer.appendChild(this.sidePanelManager.element);
 
-    const statisticsPanel = this.registerDisposer(
-        new StatisticsPanel(this.chunkQueueManager, this.statisticsDisplayState));
-    gridContainer.appendChild(statisticsPanel.element);
-    statisticsPanel.registerDisposer(new DragResizablePanel(
-        statisticsPanel.element, this.statisticsDisplayState.visible,
-        this.statisticsDisplayState.size, 'vertical'));
+    this.registerDisposer(this.sidePanelManager.registerPanel({
+      location: this.statisticsDisplayState.location,
+      makePanel: () => new StatisticsPanel(
+          this.sidePanelManager, this.chunkQueueManager, this.statisticsDisplayState),
+    }));
+
+    this.registerDisposer(this.sidePanelManager.registerPanel({
+      location: this.helpPanelState.location,
+      makePanel: () => {
+        const {inputEventBindings} = this;
+        return new InputEventBindingHelpDialog(
+            this.sidePanelManager,
+            this.helpPanelState,
+            [
+              ['Global', inputEventBindings.global],
+              ['Cross section view', inputEventBindings.sliceView],
+              ['3-D projection view', inputEventBindings.perspectiveView]
+            ],
+        );
+      },
+    }));
 
     const updateVisibility = () => {
       const shouldBeVisible = this.visibility.visible;
@@ -663,7 +736,7 @@ export class Viewer extends RefCounted implements ViewerState {
       });
     }
 
-    this.bindAction('help', () => this.showHelpDialog());
+    this.bindAction('help', () => this.toggleHelpPanel());
 
     for (let i = 1; i <= 9; ++i) {
       this.bindAction(`toggle-layer-${i}`, () => {
@@ -715,13 +788,8 @@ export class Viewer extends RefCounted implements ViewerState {
     this.bindAction('toggle-show-statistics', () => this.showStatistics());
   }
 
-  showHelpDialog() {
-    const {inputEventBindings} = this;
-    new InputEventBindingHelpDialog([
-      ['Global', inputEventBindings.global],
-      ['Cross section view', inputEventBindings.sliceView],
-      ['3-D projection view', inputEventBindings.perspectiveView],
-    ]);
+  toggleHelpPanel() {
+    this.helpPanelState.location.visible = !this.helpPanelState.location.visible;
   }
 
   loadFromJsonUrl() {
@@ -787,9 +855,9 @@ export class Viewer extends RefCounted implements ViewerState {
 
   showStatistics(value: boolean|undefined = undefined) {
     if (value === undefined) {
-      value = !this.statisticsDisplayState.visible.value;
+      value = !this.statisticsDisplayState.location.visible;
     }
-    this.statisticsDisplayState.visible.value = value;
+    this.statisticsDisplayState.location.visible = value;
   }
 
   get gl() {

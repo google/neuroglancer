@@ -14,18 +14,30 @@
  * limitations under the License.
  */
 
-.neuroglancer-statistics-panel {
-  overflow-x: auto;
+.neuroglancer-statistics-panel-body {
+  flex: 1;
+  flex-basis: 0px;
+  min-width: 0px;
+  display: flex;
+  flex-direction: column;
   overflow-y: auto;
+  font: 10pt sans-serif;
 }
 
-.neuroglancer-statistics-panel > table > thead td {
+.neuroglancer-statistics-panel-body > table {
+  position: relative;
+  flex: 1;
+  width: 100%;
+}
+
+.neuroglancer-statistics-panel-body > table > thead td {
   position: sticky;
   top: 0px;
-  zIndex: 2;
-  background-color: black;
+  z-index: 2;
+  background-color: #333;
+  font-weight: bold;
 }
 
-.neuroglancer-statistics-panel > table > tbody tr:hover {
-  background-color: #333;
+.neuroglancer-statistics-panel-body > table > tbody tr:hover {
+  background-color: #336;
 }

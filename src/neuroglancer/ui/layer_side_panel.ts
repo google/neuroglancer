@@ -21,133 +21,114 @@
 import 'neuroglancer/ui/layer_side_panel.css';
 
 import svg_cursor from 'ikonate/icons/cursor.svg';
-import {changeLayerName, changeLayerType, deleteLayer, LayerManager, layerTypes, ManagedUserLayer, SelectedLayerState, UserLayer} from 'neuroglancer/layer';
+import {changeLayerName, changeLayerType, deleteLayer, layerTypes, ManagedUserLayer, SelectedLayerState, UserLayer} from 'neuroglancer/layer';
 import {ElementVisibilityFromTrackableBoolean} from 'neuroglancer/trackable_boolean';
-import {animationFrameDebounce} from 'neuroglancer/util/animation_frame_debounce';
-import {Borrowed, RefCounted} from 'neuroglancer/util/disposable';
-import {removeFromParent} from 'neuroglancer/util/dom';
+import {CachedWatchableValue, observeWatchable} from 'neuroglancer/trackable_value';
+import {LAYER_SIDE_PANEL_DEFAULT_LOCATION, UserLayerSidePanelState} from 'neuroglancer/ui//layer_side_panel_state';
+import {popDragStatus, pushDragStatus} from 'neuroglancer/ui/drag_and_drop';
+import {DRAG_OVER_CLASSNAME, DragSource, SidePanel, SidePanelManager} from 'neuroglancer/ui/side_panel';
+import {RefCounted} from 'neuroglancer/util/disposable';
 import {KeyboardEventBinder, registerActionListener} from 'neuroglancer/util/keyboard_bindings';
 import {EventActionMap} from 'neuroglancer/util/mouse_bindings';
-import {WatchableVisibilityPriority} from 'neuroglancer/visibility_priority/frontend';
 import {CheckboxIcon} from 'neuroglancer/widget/checkbox_icon';
-import {makeCloseButton} from 'neuroglancer/widget/close_button';
 import {makeDeleteButton} from 'neuroglancer/widget/delete_button';
-import {StackView, Tab, TabView} from 'neuroglancer/widget/tab_view';
-
-class UserLayerInfoPanel extends Tab {
-  tabView = this.registerDisposer(new TabView(this.layer.tabs.addRef(), this.visibility));
-  constructor(public layer: UserLayer) {
-    super();
-    this.element.appendChild(this.tabView.element);
-    this.element.classList.add('neuroglancer-layer-side-panel-info-panel');
-    this.tabView.element.style.flex = '1';
-  }
-}
+import {TabView} from 'neuroglancer/widget/tab_view';
 
 const layerNameInputEventMap = EventActionMap.fromObject({
   'escape': {action: 'cancel'},
 });
 
-class EmptyUserLayerInfoPanel extends Tab {
-  get layer(): null {
-    return null;
-  }
-
-  constructor() {
+export class LayerNameWidget extends RefCounted {
+  element = document.createElement('input');
+  constructor(public layer: ManagedUserLayer) {
     super();
-    this.element.classList.add('neuroglancer-layer-side-panel-info-panel-empty');
-    this.element.textContent =
-        'Information about this layer will be available once it finishes loading.';
-  }
-}
-
-class ManagedUserLayerInfoPanel extends Tab {
-  element = document.createElement('div');
-  private typeSelect = document.createElement('select');
-  private typeSelectMeasure = document.createElement('div');
-  private title = document.createElement('div');
-  private layerName = document.createElement('input');
-
-  private stack = this.registerDisposer(
-      new StackView<UserLayer|null, UserLayerInfoPanel|EmptyUserLayerInfoPanel>(
-          userLayer => {
-            if (userLayer === null) {
-              return new EmptyUserLayerInfoPanel();
-            } else {
-              return new UserLayerInfoPanel(userLayer);
-            }
-          },
-          (() => {
-            const {layer} = this;
-            return {
-              changed: layer.layerChanged,
-              get value() {
-                return layer.layer;
-              },
-            };
-          })(),
-          this.visibility, /*invalidateByDefault=*/ true));
-
-  constructor(
-      public layer: Borrowed<ManagedUserLayer>, public layerManager: Borrowed<LayerManager>,
-      public collapse: () => void) {
-    super();
-    const {element, title, layerName, stack, typeSelect, typeSelectMeasure} = this;
-    element.className = 'neuroglancer-managed-user-layer-info-panel';
-    title.className = 'neuroglancer-layer-side-panel-title';
-    stack.element.classList.add('neuroglancer-layer-side-panel-content-container');
-    title.appendChild(typeSelect);
-    element.appendChild(title);
-    element.appendChild(stack.element);
-    document.body.appendChild(typeSelectMeasure);
-    typeSelect.classList.add('neuroglancer-layer-side-panel-type');
-    typeSelectMeasure.classList.add('neuroglancer-layer-side-panel-type-measure');
-    typeSelect.title = 'Change layer type';
-
-    for (const [layerType, layerConstructor] of layerTypes) {
-      if (layerConstructor.type !== layerType) continue;
-      const option = document.createElement('option');
-      option.textContent = layerType;
-      option.value = layerType;
-      typeSelect.appendChild(option);
-    }
-    typeSelect.addEventListener('change', () => {
-      const userLayer = this.layer.layer;
-      if (userLayer === null) {
-        this.handleLayerNameModelChanged();
-        return;
-      }
-      const newType = typeSelect.value;
-      const layerConstructor = layerTypes.get(newType)!;
-      changeLayerType(this.layer, layerConstructor);
-    });
-
-    title.appendChild(layerName);
-    layerName.classList.add('neuroglancer-layer-side-panel-name');
-    layerName.spellcheck = false;
-    layerName.autocomplete = 'off';
-    layerName.addEventListener('focus', () => {
-      layerName.select();
-    });
+    const {element} = this;
+    element.classList.add('neuroglancer-layer-side-panel-name');
+    element.spellcheck = false;
+    element.autocomplete = 'off';
     const keyboardHandler =
-        this.registerDisposer(new KeyboardEventBinder(layerName, layerNameInputEventMap));
+        this.registerDisposer(new KeyboardEventBinder(element, layerNameInputEventMap));
     keyboardHandler.allShortcutsAreGlobal = true;
-    registerActionListener(layerName, 'cancel', event => {
-      this.handleLayerNameModelChanged();
-      layerName.blur();
+    registerActionListener(element, 'cancel', event => {
+      this.updateView();
+      element.blur();
       event.stopPropagation();
       event.preventDefault();
     });
-    layerName.title = 'Rename layer';
+    element.title = 'Rename layer';
+    this.registerDisposer(layer.layerChanged.add(() => this.updateView()));
+    element.addEventListener('change', () => this.updateModel());
+    element.addEventListener('blur', () => this.updateModel());
+    this.updateView();
+  }
+
+  private updateView() {
+    this.element.value = this.layer.name;
+  }
+
+  private updateModel() {
+    changeLayerName(this.layer, this.element.value);
+  }
+}
+
+export class LayerTypeWidget extends RefCounted {
+  element = document.createElement('select');
+  private measureElement = document.createElement('div');
+  constructor(public layer: UserLayer) {
+    super();
+    const {element, measureElement} = this;
+    element.classList.add('neuroglancer-layer-side-panel-type');
+    measureElement.classList.add('neuroglancer-layer-side-panel-type-measure');
+    element.title = 'Change layer type';
+    document.body.appendChild(measureElement);
+    for (const [layerType, layerConstructor] of layerTypes) {
+      if (layerConstructor.type !== layerType) continue;
+      const option = document.createElement('option');
+      option.textContent = layerConstructor.typeAbbreviation;
+      option.value = layerType;
+      element.appendChild(option);
+    }
+    element.addEventListener('change', () => {
+      const newType = element.value;
+      const layerConstructor = layerTypes.get(newType)!;
+      changeLayerType(this.layer.managedLayer, layerConstructor);
+    });
+    this.updateView();
+  }
+
+  private updateView() {
+    const selectedName = this.layer.type;
+    const {element, measureElement} = this;
+    measureElement.textContent = (this.layer.constructor as typeof UserLayer).typeAbbreviation;
+    element.value = selectedName;
+    element.style.width = `${measureElement.offsetWidth}px`;
+  }
+
+  disposed() {
+    this.measureElement.remove();
+  }
+}
+
+class LayerSidePanel extends SidePanel {
+  tabView: TabView;
+  layer: UserLayer;
+  constructor(sidePanelManager: SidePanelManager, public panelState: UserLayerSidePanelState) {
+    super(sidePanelManager, panelState.location);
+    const layer = this.layer = panelState.layer;
+    const {element} = this;
+    const {titleBar} = this.addTitleBar({});
+    titleBar.classList.add('neuroglancer-layer-side-panel-title');
+    titleBar.appendChild(this.registerDisposer(new LayerTypeWidget(layer)).element);
+    titleBar.appendChild(this.registerDisposer(new LayerNameWidget(layer.managedLayer)).element);
     const pickButton = this.registerDisposer(new CheckboxIcon(
         {
           get value() {
-            return layer.pickEnabled;
+            return layer.managedLayer.pickEnabled;
           },
           set value(value: boolean) {
-            layer.pickEnabled = value;
+            layer.managedLayer.pickEnabled = value;
           },
-          changed: layer.layerChanged,
+          changed: layer.managedLayer.layerChanged,
         },
         {
           svg: svg_cursor,
@@ -157,102 +138,247 @@ class ManagedUserLayerInfoPanel extends Tab {
     this.registerDisposer(new ElementVisibilityFromTrackableBoolean(
         {
           get value() {
-            return layer.supportsPickOption;
+            return layer.managedLayer.supportsPickOption;
           },
-          changed: layer.layerChanged,
+          changed: layer.managedLayer.layerChanged,
         },
         pickButton.element));
-    title.appendChild(pickButton.element);
-    title.appendChild(makeDeleteButton({
+    titleBar.appendChild(pickButton.element);
+    const pinWatchable = {
+      get value() {
+        return panelState !== layer.panels.panels[0];
+      },
+      set value(value: boolean) {
+        if (value) {
+          panelState.pin();
+        } else {
+          panelState.unpin();
+        }
+      },
+      changed: layer.manager.root.layerManager.layersChanged,
+    };
+    titleBar.appendChild(this.registerDisposer(new CheckboxIcon(pinWatchable, {
+                               // Note: \ufe0e forces text display, as otherwise the pin icon
+                               // may as an emoji with color.
+                               text: '📌\ufe0e',
+                               enableTitle: 'Pin panel to this layer',
+                               disableTitle: 'Unpin panel to this layer',
+                             }))
+                             .element);
+    this.registerDisposer(observeWatchable(pinned => {
+      element.dataset.neuroglancerLayerPanelPinned = pinned.toString();
+    }, pinWatchable));
+    titleBar.appendChild(makeDeleteButton({
       title: 'Delete layer',
       onClick: () => {
-        deleteLayer(this.layer);
+        deleteLayer(this.layer.managedLayer);
       }
     }));
-    title.appendChild(makeCloseButton({
-      title: 'Close side panel',
-      onClick: () => {
-        this.collapse();
+    this.tabView = new TabView(
+        {
+          makeTab: id => layer.tabs.options.get(id)!.getter(),
+          selectedTab: panelState.selectedTab,
+          tabs: this.registerDisposer(new CachedWatchableValue({
+            get value() {
+              return panelState.tabs.map(id => ({
+                                           id,
+                                           label: layer.tabs.options.get(id)!.label,
+                                         }));
+            },
+            changed: panelState.tabsChanged,
+          })),
+          handleTabElement: (id: string, element: HTMLElement) => {
+            element.draggable = true;
+            element.addEventListener('dragstart', (event: DragEvent) => {
+              event.stopPropagation();
+              event.dataTransfer!.setData('neuroglancer-side-panel', '');
+              let message =
+                  'Drag tab to dock as new panel to the left/right/top/bottom of another panel';
+              const hasOtherPanel =
+                  panelState.panels.panels.find(p => p !== panelState && p.location.visible);
+              if (hasOtherPanel) {
+                message +=
+                    `, or move tab to other ${JSON.stringify(layer.managedLayer.name)} panel`;
+              }
+              pushDragStatus(element, 'drag', message);
+              this.sidePanelManager.startDrag(
+                  {
+                    dropAsNewPanel: location => {
+                      this.panelState.splitOffTab(
+                          id, {...LAYER_SIDE_PANEL_DEFAULT_LOCATION, ...location});
+                    },
+                    canDropAsTabs: target => {
+                      if ((target instanceof LayerSidePanel) && target.layer === this.layer &&
+                          target !== this) {
+                        return 1;
+                      }
+                      return 0;
+                    },
+                    dropAsTab: target => {
+                      this.panelState.moveTabTo(id, (target as LayerSidePanel).panelState);
+                    },
+                  },
+                  event);
+            });
+            element.addEventListener('dragend', (event: DragEvent) => {
+              event;
+              popDragStatus(element, 'drag');
+              this.sidePanelManager.endDrag();
+            });
+          },
+        },
+        this.visibility);
+    this.tabView.element.style.flex = '1';
+    this.tabView.element.classList.add('neuroglancer-layer-side-panel-tab-view');
+    this.tabView.element.style.position = 'relative';
+    this.tabView.element.appendChild(this.makeTabDropZone());
+    this.addBody(this.tabView.element);
+
+    // Hide panel automatically if there are no tabs to display (because they have all been moved to
+    // another panel).
+    this.registerDisposer(panelState.tabsChanged.add(() => {
+      if (panelState.tabs.length === 0) {
+        this.location.visible = false;
       }
     }));
-    layerName.addEventListener('change', () => this.handleLayerNameViewChanged());
-    layerName.addEventListener('blur', () => this.handleLayerNameViewChanged());
-    this.registerDisposer(layer.layerChanged.add(() => this.handleLayerNameModelChanged()));
-    this.handleLayerNameModelChanged();
   }
 
-  private handleLayerNameModelChanged() {
-    const userLayer = this.layer.layer;
-    const selectedName = userLayer !== null ? userLayer.type : 'auto';
-    const {typeSelect, typeSelectMeasure} = this;
-    typeSelectMeasure.textContent = selectedName;
-    typeSelect.value = selectedName;
-    typeSelect.style.width = `${typeSelectMeasure.offsetWidth}px`;
-    this.layerName.value = this.layer.name;
+  makeDragSource(): DragSource {
+    return {
+      ...super.makeDragSource(),
+      canDropAsTabs: target => {
+        if ((target instanceof LayerSidePanel) && target.layer === this.layer && target !== this) {
+          return this.panelState.tabs.length;
+        }
+        return 0;
+      },
+      dropAsTab: target => {
+        this.panelState.mergeInto((target as LayerSidePanel).panelState);
+      },
+    };
   }
 
-  private handleLayerNameViewChanged() {
-    changeLayerName(this.layer, this.layerName.value);
+  private makeTabDropZone() {
+    const element = document.createElement('div');
+    element.className = 'neuroglancer-side-panel-drop-zone';
+    element.style.position = 'absolute';
+    element.style.left = '20px';
+    element.style.right = '20px';
+    element.style.bottom = '20px';
+    element.style.top = '20px';
+    element.addEventListener('dragenter', event => {
+      const {dragSource} = this.sidePanelManager;
+      const numTabs = dragSource?.canDropAsTabs?.(this);
+      if (!numTabs) return;
+      element.classList.add(DRAG_OVER_CLASSNAME);
+      pushDragStatus(
+          element, 'drop', `Move ${numTabs} ${numTabs === 1 ? 'tab' : 'tabs'} to this panel`);
+      event.preventDefault();
+    });
+    element.addEventListener('dragleave', () => {
+      popDragStatus(element, 'drop');
+      element.classList.remove(DRAG_OVER_CLASSNAME);
+    });
+    element.addEventListener('dragover', event => {
+      const {dragSource} = this.sidePanelManager;
+      if (!dragSource?.canDropAsTabs?.(this)) return;
+      event.preventDefault();
+    });
+    element.addEventListener('drop', event => {
+      popDragStatus(element, 'drop');
+      const {dragSource} = this.sidePanelManager;
+      if (!dragSource?.canDropAsTabs?.(this)) return;
+      element.classList.remove(DRAG_OVER_CLASSNAME);
+      dragSource.dropAsTab!(this);
+      event.preventDefault();
+      event.stopPropagation();
+    });
+    return element;
   }
 }
 
-export class LayerInfoPanelContainer extends RefCounted {
-  element = document.createElement('div');
-  private stack = this.registerDisposer(new StackView<ManagedUserLayer, ManagedUserLayerInfoPanel>(
-      (layer: ManagedUserLayer) =>
-          new ManagedUserLayerInfoPanel(layer, this.state.layerManager, this.collapse.bind(this)),
-      (() => {
-        const {state} = this;
-        return {
-          changed: state.changed,
-          get value() {
-            return state.layer;
-          },
-        };
-      })()));
-  private debouncedUpdateView =
-      this.registerCancellable(animationFrameDebounce(() => this.handleStateChanged()));
-  private debouncedUpdateLayers =
-      this.registerCancellable(animationFrameDebounce(() => this.handleLayersChanged()));
-  constructor(public state: SelectedLayerState) {
+export class LayerSidePanelManager extends RefCounted {
+  placeholderSelectedLayerPanel: (() => void)|undefined;
+  layerSidePanels =
+      new Map<UserLayerSidePanelState, {generation: number, unregister: (() => void)}>();
+  private generation = 0;
+  private layersNeedUpdate = true;
+  constructor(
+      public sidePanelManager: SidePanelManager, public selectedLayerState: SelectedLayerState) {
     super();
-    const {element, stack} = this;
-    element.className = 'neuroglancer-layer-side-panel';
-    stack.element.classList.add('neuroglancer-layer-info-panel-container');
-    element.appendChild(stack.element);
-    this.registerDisposer(state.changed.add(() => this.handleStateChanged()));
-    this.registerDisposer(state.layerManager.layersChanged.add(this.debouncedUpdateLayers));
-    this.debouncedUpdateView();
+    const handleUpdate = () => {
+      this.layersNeedUpdate = true;
+      this.sidePanelManager.display.scheduleRedraw();
+    };
+    this.registerDisposer(selectedLayerState.changed.add(handleUpdate));
+    this.registerDisposer(selectedLayerState.layerManager.layersChanged.add(handleUpdate));
+    this.registerDisposer(sidePanelManager.beforeRender.add(() => this.update()));
   }
 
-  private handleLayersChanged() {
-    const {layerManager} = this.state;
-    const {stack} = this;
-    for (const layer of stack.tabs.keys()) {
-      if (!layerManager.has(layer)) {
-        stack.invalidate(layer);
+  private getSelectedUserLayer() {
+    return this.selectedLayerState.layer?.layer ?? undefined;
+  }
+
+  private update() {
+    if (!this.layersNeedUpdate) return;
+    const {layerManager} = this.selectedLayerState;
+    let generation = ++this.generation;
+    this.layersNeedUpdate = false;
+    const {layerSidePanels} = this;
+
+    const ensurePanel = (panelState: UserLayerSidePanelState) => {
+      let existing = layerSidePanels.get(panelState);
+      if (existing === undefined) {
+        existing = {
+          generation,
+          unregister: this.sidePanelManager.registerPanel({
+            location: panelState.location,
+            makePanel: () => new LayerSidePanel(this.sidePanelManager, panelState)
+          })
+        };
+        layerSidePanels.set(panelState, existing);
+      } else {
+        existing.generation = generation;
+      }
+    };
+    // Add selected layer panel
+    {
+      const layer = this.getSelectedUserLayer();
+      const {location} = this.selectedLayerState;
+      if (layer === undefined || !location.visible) {
+        if (this.placeholderSelectedLayerPanel === undefined) {
+          this.placeholderSelectedLayerPanel = this.sidePanelManager.registerPanel(
+              {location, makePanel: () => new SidePanel(this.sidePanelManager, location)});
+        }
+      } else {
+        this.placeholderSelectedLayerPanel?.();
+        this.placeholderSelectedLayerPanel = undefined;
+        const panelState = layer.panels.panels[0];
+        panelState.location.value = location.value;
+        ensurePanel(panelState);
       }
     }
-  }
 
-  collapse() {
-    const {state} = this;
-    if (state.visible === true) {
-      this.state.visible = false;
-      this.state.changed.dispatch();
+    // Add extra layer panels
+    for (const layer of layerManager.managedLayers) {
+      const userLayer = layer.layer;
+      if (userLayer === null) continue;
+      const {panels} = userLayer.panels;
+      for (let i = 1, length = panels.length; i < length; ++i) {
+        ensurePanel(panels[i]);
+      }
     }
-  }
-
-  private handleStateChanged() {
-    const {state} = this;
-    const {visible} = state;
-    this.element.style.display = visible ? '' : 'none';
-    this.stack.visibility.value =
-        visible ? WatchableVisibilityPriority.VISIBLE : WatchableVisibilityPriority.IGNORED;
+    for (const [panelState, existing] of layerSidePanels) {
+      if (existing.generation === generation) continue;
+      existing.unregister();
+      layerSidePanels.delete(panelState);
+    }
   }
 
   disposed() {
-    removeFromParent(this.element);
-    super.disposed();
+    this.placeholderSelectedLayerPanel?.();
+    for (const {unregister} of this.layerSidePanels.values()) {
+      unregister();
+    }
   }
 }

@@ -162,14 +162,20 @@ export abstract class AnnotationRenderHelper extends RefCounted {
       shaderError: this.shaderError,
       defineShader: (builder: ShaderBuilder, parameters: ShaderControlsBuilderState) => {
         const {rank, properties} = this;
-        for (const property of properties) {
+        const referencedProperties: number[] = [];
+        const processedCode = parameters.parseResult.code;
+        for (let i = 0, numProperties = properties.length; i < numProperties; ++i) {
+          const property = properties[i];
+          const functionName = `prop_${property.identifier}`;
+          if (!processedCode.match(new RegExp(`\\b${functionName}\\b`))) continue;
+          referencedProperties.push(i);
           const handler = annotationPropertyTypeRenderHandlers[property.type];
           handler.defineShader(builder, property.identifier, rank);
         }
         const {propertyOffsets} = this;
         builder.addInitializer(shader => {
-          const binders = this.properties.map(
-              property => shader.vertexShaderInputBinders[`prop_${property.identifier}`]);
+          const binders = referencedProperties.map(
+              i => shader.vertexShaderInputBinders[`prop_${properties[i].identifier}`]);
           const numProperties = binders.length;
           shader.vertexShaderInputBinders['properties'] = {
             enable(divisor: number) {
@@ -179,7 +185,7 @@ export abstract class AnnotationRenderHelper extends RefCounted {
             },
             bind(stride: number, offset: number) {
               for (let i = 0; i < numProperties; ++i) {
-                binders[i].bind(stride, offset + propertyOffsets[i]);
+                binders[i].bind(stride, offset + propertyOffsets[referencedProperties[i]]);
               }
             },
             disable() {

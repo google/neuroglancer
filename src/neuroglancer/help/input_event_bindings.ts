@@ -14,10 +14,12 @@
  * limitations under the License.
  */
 
-import {Overlay} from 'neuroglancer/overlay';
-import {EventActionMap} from 'neuroglancer/util/event_action_map';
-
 import './input_event_bindings.css';
+
+import {SidePanel, SidePanelManager} from 'neuroglancer/ui/side_panel';
+import {DEFAULT_SIDE_PANEL_LOCATION, SidePanelLocation, TrackableSidePanelLocation} from 'neuroglancer/ui/side_panel_location';
+import {EventActionMap} from 'neuroglancer/util/event_action_map';
+import {emptyToUndefined} from 'neuroglancer/util/json';
 
 export function formatKeyName(name: string) {
   if (name.startsWith('key')) {
@@ -37,19 +39,38 @@ export function formatKeyStroke(stroke: string) {
   return parts.map(formatKeyName).join('+');
 }
 
-export class InputEventBindingHelpDialog extends Overlay {
-  /**
-   * @param keyMap Key map to list.
-   */
-  constructor(bindings: Iterable<[string, EventActionMap]>) {
-    super();
+const DEFAULT_HELP_PANEL_LOCATION: SidePanelLocation = {
+  ...DEFAULT_SIDE_PANEL_LOCATION,
+  side: 'left',
+  row: 1,
+};
 
-    let {content} = this;
-    content.classList.add('describe-key-bindings');
+export class HelpPanelState {
+  location = new TrackableSidePanelLocation(DEFAULT_HELP_PANEL_LOCATION);
+  get changed() { return this.location.changed; }
+  toJSON() {
+    return emptyToUndefined(this.location.toJSON());
+  }
+  reset() {
+    this.location.reset();
+  }
+  restoreState(obj: unknown) {
+    this.location.restoreState(obj);
+  }
+}
+
+export class InputEventBindingHelpDialog extends SidePanel {
+  constructor(sidePanelManager: SidePanelManager, state: HelpPanelState, bindings: Iterable<[string, EventActionMap]>) {
+    super(sidePanelManager, state.location);
+
+    this.addTitleBar({title: 'Help'});
+    const body = document.createElement('div');
+    body.classList.add('neuroglancer-help-body');
 
     let scroll = document.createElement('div');
-    scroll.classList.add('describe-key-bindings-container');
-
+    scroll.classList.add('neuroglancer-help-scroll-container');
+    body.appendChild(scroll);
+    this.addBody(body);
     interface BindingList {
       label: string;
       entries: Map<string, string>;
@@ -102,7 +123,5 @@ export class InputEventBindingHelpDialog extends Overlay {
         scroll.appendChild(dd);
       }
     }
-    content.appendChild(scroll);
   }
 }
-

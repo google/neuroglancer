@@ -241,7 +241,6 @@ class SegmentationUserLayerDisplayState implements SegmentationDisplayState {
   renderScaleHistogram = new RenderScaleHistogram();
   renderScaleTarget = trackableRenderScaleTarget(1);
   selectSegment = this.layer.selectSegment;
-  transparentPickEnabled = this.layer.pick;
 
   filterBySegmentLabel = this.layer.filterBySegmentLabel;
 
@@ -620,6 +619,7 @@ export class SegmentationUserLayer extends Base {
     return displayed;
   }
   static type = 'segmentation';
+  static typeAbbreviation = 'seg';
   static supportsPickOption = true;
 }
 
@@ -1231,7 +1231,7 @@ class ShaderCodeOverlay extends Overlay {
   }
 }
 
-registerLayerType('segmentation', SegmentationUserLayer);
+registerLayerType(SegmentationUserLayer);
 registerVolumeLayerType(VolumeType.SEGMENTATION, SegmentationUserLayer);
 registerLayerTypeDetector(subsource => {
   if (subsource.mesh !== undefined) {
