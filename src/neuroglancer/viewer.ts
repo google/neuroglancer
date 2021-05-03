@@ -621,6 +621,7 @@ export class Viewer extends RefCounted implements ViewerState {
       topRow.appendChild(button);
     }
 
+    
     {
       const {helpPanelState} = this;
       const button =

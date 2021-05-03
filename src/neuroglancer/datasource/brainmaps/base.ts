@@ -14,6 +14,7 @@
  * limitations under the License.
  */
 
+import { mat4 } from 'gl-matrix';
 import {BrainmapsInstance} from 'neuroglancer/datasource/brainmaps/api';
 import {vec3} from 'neuroglancer/util/geom';
 

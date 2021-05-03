@@ -45,6 +45,9 @@ export interface SliceViewRenderLayerOptions {
    */
   localPosition: WatchableValueInterface<Float32Array>;
   dataHistogramSpecifications?: HistogramSpecifications;
+
+  rpcType?: string;
+  rpcTransfer?: {[index: string]: number|string|null};
 }
 
 export interface VisibleSourceInfo<Source extends SliceViewChunkSource> {
@@ -63,6 +66,8 @@ export abstract class SliceViewRenderLayer<
     Source extends SliceViewChunkSource = SliceViewChunkSource, SourceOptions extends
         SliceViewSourceOptions = SliceViewSourceOptions> extends RenderLayer {
   rpcId: RpcId|null = null;
+  rpcType: string = SLICEVIEW_RENDERLAYER_RPC_ID;
+  rpcTransfer: {[index: string]: number|string|null} = {};
 
   localPosition: WatchableValueInterface<Float32Array>;
   channelCoordinateSpace: WatchableValueInterface<CoordinateSpace>;
@@ -146,6 +151,15 @@ export abstract class SliceViewRenderLayer<
     this.renderScaleTarget = renderScaleTarget;
     this.renderScaleHistogram = options.renderScaleHistogram;
     this.transform = options.transform;
+
+    const {
+      rpcType = SLICEVIEW_RENDERLAYER_RPC_ID,
+      rpcTransfer = {},
+    } = options;
+
+    this.rpcType = rpcType;
+    this.rpcTransfer = rpcTransfer;
+
     this.localPosition = options.localPosition;
     this.dataHistogramSpecifications = this.registerDisposer(
         options.dataHistogramSpecifications ??
@@ -168,6 +182,7 @@ export abstract class SliceViewRenderLayer<
       renderScaleTarget:
           this.registerDisposer(SharedWatchableValue.makeFromExisting(rpc, this.renderScaleTarget))
               .rpcId,
+      ...this.rpcTransfer,
     });
     this.rpcId = sharedObject.rpcId;
   }

@@ -20,18 +20,22 @@ import {RefCounted} from 'neuroglancer/util/disposable';
 import {Uint64} from 'neuroglancer/util/uint64';
 
 export interface VisibleSegmentsState {
-  visibleSegments: Uint64Set;
+  rootSegments: Uint64Set;
+  rootSegmentsAfterEdit?: Uint64Set; // new roots generated as result of edit operation
+  hiddenRootSegments?: Uint64Set; // not needed for backend, for segment_set_widget.ts
+  visibleSegments2D?: Uint64Set; // not needed for backend
+  visibleSegments3D: Uint64Set;
   segmentEquivalences: SharedDisjointUint64Sets;
 }
 
 export const VISIBLE_SEGMENTS_STATE_PROPERTIES: (keyof VisibleSegmentsState)[] = [
-  'visibleSegments',
+  'visibleSegments3D',
   'segmentEquivalences',
 ];
 
 export function onVisibleSegmentsStateChanged(
     context: RefCounted, state: VisibleSegmentsState, callback: () => void) {
-  context.registerDisposer(state.visibleSegments.changed.add(callback));
+  context.registerDisposer(state.visibleSegments3D.changed.add(callback));
   context.registerDisposer(state.segmentEquivalences.changed.add(callback));
 }
 
@@ -44,25 +48,27 @@ export function getObjectKey(objectId: Uint64): string {
 }
 
 export function getVisibleSegments(state: VisibleSegmentsState) {
-  return state.visibleSegments;
+  return state.visibleSegments3D;
 }
 
 export function getSegmentEquivalences(state: VisibleSegmentsState) {
   return state.segmentEquivalences;
 }
 
-export function forEachVisibleSegment(
-    state: VisibleSegmentsState, callback: (objectId: Uint64, rootObjectId: Uint64) => void) {
-  const visibleSegments = getVisibleSegments(state);
-  const segmentEquivalences = getSegmentEquivalences(state);
-  for (let rootObjectId of visibleSegments) {
-    // TODO(jbms): Remove this check if logic is added to ensure that it always holds.
-    if (!segmentEquivalences.disjointSets.isMinElement(rootObjectId)) {
-      continue;
-    }
-    for (let objectId of segmentEquivalences.setElements(rootObjectId)) {
-      callback(objectId, rootObjectId);
-    }
+export function forEachRootSegment(
+  state: VisibleSegmentsState, callback: (rootObjectId: Uint64) => void) {
+  let {rootSegments} = state;
+  for (let rootObjectId of rootSegments) {
+    callback(rootObjectId);
+  }
+}
+
+export function forEachVisibleSegment3D(
+  state: VisibleSegmentsState, callback: (objectId: Uint64, rootObjectId: Uint64) => void) {
+  let {visibleSegments3D, segmentEquivalences} = state;
+  for (let objectId of visibleSegments3D) {
+    let rootObjectId = segmentEquivalences.get(objectId);
+    callback(objectId, rootObjectId);
   }
 }
 

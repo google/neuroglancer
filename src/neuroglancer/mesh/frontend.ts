@@ -7,7 +7,7 @@
  *
  *      http://www.apache.org/licenses/LICENSE-2.0
  *
- * Unless required by applicable law or agreed to in writing, software
+ * Unless required by applicable law or agreed to in writing, softwareFragmentId
  * distributed under the License is distributed on an "AS IS" BASIS,
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  * See the License for the specific language governing permissions and
@@ -22,7 +22,7 @@ import {getMultiscaleChunksToDraw, getMultiscaleFragmentKey, MultiscaleMeshManif
 import {PerspectivePanel} from 'neuroglancer/perspective_view/panel';
 import {PerspectiveViewReadyRenderContext, PerspectiveViewRenderContext, PerspectiveViewRenderLayer} from 'neuroglancer/perspective_view/render_layer';
 import {ThreeDimensionalRenderLayerAttachmentState, update3dRenderLayerAttachment} from 'neuroglancer/renderlayer';
-import {forEachVisibleSegment, getObjectKey} from 'neuroglancer/segmentation_display_state/base';
+import {forEachVisibleSegment3D as forEachVisibleSegment, getObjectKey} from 'neuroglancer/segmentation_display_state/base';
 import {forEachVisibleSegmentToDraw, registerRedrawWhenSegmentationDisplayState3DChanged, SegmentationDisplayState3D, SegmentationLayerSharedObject} from 'neuroglancer/segmentation_display_state/frontend';
 import {makeCachedDerivedWatchableValue, WatchableValueInterface} from 'neuroglancer/trackable_value';
 import {Borrowed, RefCounted} from 'neuroglancer/util/disposable';
@@ -34,6 +34,9 @@ import {GL} from 'neuroglancer/webgl/context';
 import {parameterizedEmitterDependentShaderGetter} from 'neuroglancer/webgl/dynamic_shader';
 import {ShaderBuilder, ShaderProgram} from 'neuroglancer/webgl/shader';
 import {registerSharedObjectOwner, RPC} from 'neuroglancer/worker_rpc';
+
+import {GRAPHENE_MANIFEST_SHARDED} from 'neuroglancer/datasource/graphene/base';
+import {FragmentId} from 'neuroglancer/mesh/base';
 
 const tempMat4 = mat4.create();
 const tempMat3 = mat3.create();
@@ -388,7 +391,10 @@ export class MeshLayer extends
           totalChunks += manifestChunk.fragmentIds.length;
 
           for (const fragmentId of manifestChunk.fragmentIds) {
-            const fragment = fragmentChunks.get(`${key}/${fragmentId}`);
+            if (fragmentId.charAt(0) === '~') manifestChunk.manifestType = GRAPHENE_MANIFEST_SHARDED;
+            const key = manifestChunk.extractFragmentKey(fragmentId).key;
+            const fragment = fragmentChunks.get(key);
+            // const fragment = fragmentChunks.get(`${key}/${fragmentId}`);
             if (fragment !== undefined && fragment.state === ChunkState.GPU_MEMORY) {
               meshShaderManager.drawFragment(gl, shader, fragment);
               ++presentChunks;
@@ -418,7 +424,10 @@ export class MeshLayer extends
         return;
       }
       for (const fragmentId of manifestChunk.fragmentIds) {
-        const fragmentChunk = fragmentChunks.get(`${key}/${fragmentId}`);
+        if (fragmentId.charAt(0) === '~') manifestChunk.manifestType = GRAPHENE_MANIFEST_SHARDED;
+        const key = manifestChunk.extractFragmentKey(fragmentId).key;
+        const fragmentChunk = fragmentChunks.get(key);
+        // const fragmentChunk = fragmentChunks.get(`${key}/${fragmentId}`);
         if (fragmentChunk === undefined || fragmentChunk.state !== ChunkState.GPU_MEMORY) {
           ready = false;
           return;
@@ -430,11 +439,30 @@ export class MeshLayer extends
 }
 
 export class ManifestChunk extends Chunk {
+  // TODO objectId gone
   fragmentIds: string[];
+  manifestType: string|undefined;
 
   constructor(source: MeshSource, x: any) {
     super(source);
     this.fragmentIds = x.fragmentIds;
+  }
+
+  extractFragmentKey(fragmentId: FragmentId) {
+    if (this.manifestType === GRAPHENE_MANIFEST_SHARDED) {
+      return this.extractGrapheneFragmentKey(fragmentId);
+    }
+    return {key:fragmentId, id: fragmentId}
+  }
+
+  extractGrapheneFragmentKey(fragmentId: FragmentId) {
+    // extract segment ID from fragment ID
+    // use it as key, the rest is information for reading the fragment
+    // ignores tilde at 0 index
+    let parts = fragmentId.substr(1).split(/:(.+)/);
+    let key = parts[0];
+    fragmentId = parts[1];
+    return {key:key, id: fragmentId}
   }
 }
 
