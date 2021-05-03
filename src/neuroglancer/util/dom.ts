@@ -67,3 +67,10 @@ export function isInputTextTarget(target: EventTarget|null) {
   }
   return false;
 }
+
+export function measureElementClone(element: HTMLElement) {
+  const clone = element.cloneNode(/*deep=*/true) as HTMLElement;
+  clone.style.position = 'absolute';
+  document.body.appendChild(clone);
+  return clone.getBoundingClientRect();
+}

@@ -22,6 +22,7 @@ import {DisplayContext, RenderedPanel} from 'neuroglancer/display_context';
 import {WatchableValueInterface} from 'neuroglancer/trackable_value';
 import {animationFrameDebounce} from 'neuroglancer/util/animation_frame_debounce';
 import {DataType} from 'neuroglancer/util/data_type';
+import {RefCounted} from 'neuroglancer/util/disposable';
 import {updateInputFieldWidth} from 'neuroglancer/util/dom';
 import {EventActionMap, registerActionListener} from 'neuroglancer/util/event_action_map';
 import {MouseEventBinder} from 'neuroglancer/util/mouse_bindings';
@@ -49,11 +50,101 @@ const inputEventMap = EventActionMap.fromObject({
   'wheel': {action: 'zoom-via-wheel'},
 });
 
+export class CdfController<T extends RangeAndWindowIntervals> extends RefCounted {
+  constructor(
+      public element: HTMLElement, public dataType: DataType, public getModel: () => T,
+      public setModel: (value: T) => void) {
+    super();
+    element.title = inputEventMap.describe();
+    this.registerDisposer(new MouseEventBinder(element, inputEventMap));
+    registerActionListener<MouseEvent>(element, 'set', actionEvent => {
+      const mouseEvent = actionEvent.detail;
+      const bounds = this.getModel();
+      const value = this.getTargetValue(mouseEvent);
+      const clampedRange = getClampedInterval(bounds.window, bounds.range);
+      const endpoint = getClosestEndpoint(clampedRange, value);
+      const setEndpoint = (value: number|Uint64) => {
+        const bounds = this.getModel();
+        this.setModel(getUpdatedRangeAndWindowParameters(bounds, 'range', endpoint, value));
+      };
+      setEndpoint(value);
+      startRelativeMouseDrag(mouseEvent, (newEvent: MouseEvent) => {
+        const value = this.getTargetValue(newEvent);
+        setEndpoint(value);
+      });
+    });
+
+    registerActionListener<MouseEvent>(element, 'adjust-window-via-drag', actionEvent => {
+      // If user starts drag on left half, then right bound is fixed, and left bound is adjusted to
+      // keep the value under the mouse fixed.  If user starts drag on right half, the left bound is
+      // fixed and right bound is adjusted.
+      const mouseEvent = actionEvent.detail;
+      const initialRelativeX = this.getTargetFraction(mouseEvent);
+      const initialValue = this.getWindowLerp(initialRelativeX);
+      const endpointIndex = (initialRelativeX < 0.5) ? 0 : 1;
+      const setEndpoint = (value: number|Uint64) => {
+        const bounds = this.getModel();
+        this.setModel(getUpdatedRangeAndWindowParameters(bounds, 'window', endpointIndex, value));
+      };
+      startRelativeMouseDrag(mouseEvent, (newEvent: MouseEvent) => {
+        const window = this.getModel().window;
+        const relativeX = this.getTargetFraction(newEvent);
+        if (endpointIndex === 0) {
+          // Need to find x such that: lerp([x, window[1]], relativeX) == initialValue
+          // Equivalently: lerp([initialValue, window[1]], -relativeX / ( 1 - relativeX))
+          setEndpoint(computeLerp(
+              [initialValue, window[1]] as DataTypeInterval, this.dataType,
+              -relativeX / (1 - relativeX)));
+        } else {
+          // Need to find x such that: lerp([window[0], x], relativeX) == initialValue
+          // Equivalently: lerp([window[0], initialValue], 1 / relativeX)
+          setEndpoint(computeLerp(
+              [window[0], initialValue] as DataTypeInterval, this.dataType, 1 / relativeX));
+        }
+      });
+    });
+
+    registerActionListener<WheelEvent>(element, 'zoom-via-wheel', actionEvent => {
+      const wheelEvent = actionEvent.detail;
+      const zoomAmount = getWheelZoomAmount(wheelEvent);
+      const relativeX = this.getTargetFraction(wheelEvent);
+      const {dataType} = this;
+      const bounds = this.getModel();
+      const newLower = computeLerp(bounds.window, dataType, relativeX * (1 - zoomAmount));
+      const newUpper =
+          computeLerp(bounds.window, dataType, (1 - relativeX) * zoomAmount + relativeX);
+      this.setModel({
+        ...bounds,
+        window: [newLower, newUpper] as DataTypeInterval,
+        range: bounds.range,
+      });
+    });
+  }
+
+  getTargetFraction(event: MouseEvent) {
+    const clientRect = this.element.getBoundingClientRect();
+    return (event.clientX - clientRect.left) / clientRect.width;
+  }
+
+  getWindowLerp(relativeX: number) {
+    return computeLerp(this.getModel().window, this.dataType, relativeX);
+  }
+
+  getTargetValue(event: MouseEvent) {
+    return this.getWindowLerp(this.getTargetFraction(event));
+  }
+}
+
 const histogramSamplerTextureUnit = Symbol('histogramSamplerTexture');
 
-function getUpdatedParameters(
-    existingBounds: InvlerpParameters, boundType: 'range'|'window', endpointIndex: number,
-    newEndpoint: number|Uint64, fitRangeInWindow = false) {
+export interface RangeAndWindowIntervals {
+  range: DataTypeInterval;
+  window: DataTypeInterval;
+}
+
+export function getUpdatedRangeAndWindowParameters<T extends RangeAndWindowIntervals>(
+    existingBounds: T, boundType: 'range'|'window', endpointIndex: number,
+    newEndpoint: number|Uint64, fitRangeInWindow = false): T {
   const newBounds = {...existingBounds};
   const existingInterval = existingBounds[boundType];
   newBounds[boundType] = [existingInterval[0], existingInterval[1]] as DataTypeInterval;
@@ -86,87 +177,15 @@ class CdfPanel extends RenderedPanel {
   get drawOrder() {
     return 100;
   }
+  controller = this.registerDisposer(new CdfController(
+      this.element, this.parent.dataType, () => this.parent.trackable.value,
+      (value: InvlerpParameters) => {
+        this.parent.trackable.value = value;
+      }));
   constructor(public parent: InvlerpWidget) {
     super(parent.display, document.createElement('div'), parent.visibility);
     const {element} = this;
     element.classList.add('neuroglancer-invlerp-cdfpanel');
-    element.title = inputEventMap.describe();
-    this.registerDisposer(new MouseEventBinder(element, inputEventMap));
-    registerActionListener<MouseEvent>(element, 'set', actionEvent => {
-      const mouseEvent = actionEvent.detail;
-      const {trackable: {value: bounds}} = this.parent;
-      const value = this.getTargetValue(mouseEvent);
-      const clampedRange = getClampedInterval(bounds.window, bounds.range);
-      const endpoint = getClosestEndpoint(clampedRange, value);
-      const setEndpoint = (value: number|Uint64) => {
-        const {trackable: {value: bounds}} = this.parent;
-        this.parent.trackable.value = getUpdatedParameters(bounds, 'range', endpoint, value);
-      };
-      setEndpoint(value);
-      startRelativeMouseDrag(mouseEvent, (newEvent: MouseEvent) => {
-        const value = this.getTargetValue(newEvent);
-        setEndpoint(value);
-      });
-    });
-
-    registerActionListener<MouseEvent>(element, 'adjust-window-via-drag', actionEvent => {
-      // If user starts drag on left half, then right bound is fixed, and left bound is adjusted to
-      // keep the value under the mouse fixed.  If user starts drag on right half, the left bound is
-      // fixed and right bound is adjusted.
-      const mouseEvent = actionEvent.detail;
-      const initialRelativeX = this.getTargetFraction(mouseEvent);
-      const initialValue = this.getWindowLerp(initialRelativeX);
-      const endpointIndex = (initialRelativeX < 0.5) ? 0 : 1;
-      const setEndpoint = (value: number|Uint64) => {
-        const {trackable: {value: bounds}} = this.parent;
-        this.parent.trackable.value = getUpdatedParameters(bounds, 'window', endpointIndex, value);
-      };
-      startRelativeMouseDrag(mouseEvent, (newEvent: MouseEvent) => {
-        const {trackable: {value: {window}}} = this.parent;
-        const relativeX = this.getTargetFraction(newEvent);
-        if (endpointIndex === 0) {
-          // Need to find x such that: lerp([x, window[1]], relativeX) == initialValue
-          // Equivalently: lerp([initialValue, window[1]], -relativeX / ( 1 - relativeX))
-          setEndpoint(computeLerp(
-              [initialValue, window[1]] as DataTypeInterval, this.parent.dataType,
-              -relativeX / (1 - relativeX)));
-        } else {
-          // Need to find x such that: lerp([window[0], x], relativeX) == initialValue
-          // Equivalently: lerp([window[0], initialValue], 1 / relativeX)
-          setEndpoint(computeLerp(
-              [window[0], initialValue] as DataTypeInterval, this.parent.dataType, 1 / relativeX));
-        }
-      });
-    });
-
-    registerActionListener<WheelEvent>(element, 'zoom-via-wheel', actionEvent => {
-      const wheelEvent = actionEvent.detail;
-      const zoomAmount = getWheelZoomAmount(wheelEvent);
-      const relativeX = this.getTargetFraction(wheelEvent);
-      const {dataType, trackable: {value: bounds}} = this.parent;
-      const newLower = computeLerp(bounds.window, dataType, relativeX * (1 - zoomAmount));
-      const newUpper =
-          computeLerp(bounds.window, dataType, (1 - relativeX) * zoomAmount + relativeX);
-      this.parent.trackable.value = {
-        window: [newLower, newUpper] as DataTypeInterval,
-        range: bounds.range,
-        channel: bounds.channel,
-      };
-    });
-  }
-
-  getTargetFraction(event: MouseEvent) {
-    const clientRect = this.element.getBoundingClientRect();
-    return (event.clientX - clientRect.left) / clientRect.width;
-  }
-
-  getWindowLerp(relativeX: number) {
-    const {parent} = this;
-    return computeLerp(parent.trackable.value.window, parent.dataType, relativeX);
-  }
-
-  getTargetValue(event: MouseEvent) {
-    return this.getWindowLerp(this.getTargetFraction(event));
   }
 
   private dataValuesBuffer =
@@ -411,7 +430,7 @@ function createRangeBoundInputs(
       const existingInterval = existingBounds[boundType];
       try {
         const value = parseDataTypeValue(dataType, input.value);
-        model.value = getUpdatedParameters(
+        model.value = getUpdatedRangeAndWindowParameters(
             existingBounds, boundType, endpointIndex, value, /*fitRangeInWindow=*/ true);
       } catch {
         updateInputBoundValue(input, existingInterval[endpointIndex]);

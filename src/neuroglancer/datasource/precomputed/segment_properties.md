@@ -1,15 +1,12 @@
 # Segment property representation
 
 A collection of property values may be associated with uint64 segment IDs (usually corresponding to
-a segmentation volume, meshes, and/or skeletons).  Two forms of property mappings are supported:
+a segmentation volume, meshes, and/or skeletons).
 
-1. *inline* properties, where the complete list of segment IDs and associated property values is
-   stored inline within the single `info` JSON file;
-2. *indexed* properties, where properties are stored in a separate file or files that support random
-   access by segment ID.
+Currently only *inline* properties are supported, where the complete list of segment IDs and
+associated property values is stored inline within the single `info` JSON file.
 
-The properties are represented by a directory containing at least a single `info` JSON file, and
-additional files if there are any indexed properties.
+The properties are represented by a directory containing at least a single `info` JSON file.
 
 ## info JSON file format
 
@@ -24,28 +21,23 @@ members:
   - `"properties"`: Specifies the supported inline property types.  Array of objects, each with the following members:
     - `"id"`: Required.  String identifier to display in the UI.  (Not displayed if the `"type"` is
       `"label"` or `"description"`.)
-    - `"description"`: Optional.  String description to display in the UI.
-    - `"type"`: Required.  Must be one of `"label"`, `"description"`, `"string"`.  At most one
-      property may have type `"label"` (which is displayed in the UI next to the segment ID), and at
-      most one property may have type `"description"`.
-    - `"values"`: Required.  Array of strings of length equal to the length of `ids` specifying the
-      property value for each id.
-- `"indexed"`: Optional.  Specifies the indexed property types.
-  - `"sharding"`: Optional.  Optional.  If specified, must be a [sharding
-    specification](./sharding.md#sharding-specification), and indicates that the [sharded uint64
-    index format](./annotations.md#sharded-uint64-index) is used.  Otherwise, the [unsharded uint64 index
-    format](./annotations.md#unsharded-uint64-index) is used.
-  - `"properties"`: Specifies the supported indexed property types.  Array of objects, each with the following members:
-    - `"id"`: Required.  String identifier to display in the UI.
-    - `"description"`: Optional.  String description to display in the UI.
-    - `"type"`: Required.  Must be `"string"`.
-
-## Indexed property format
-
-The indexed properties for a given segment ID are represented by a JSON object, where the member
-names correspond to the `"id"` values in the `"properties"` array of the `"indexed"` object in the
-`info` JSON file.
-
-The JSON object for seach segment ID is serialized as a string and stored in either the [sharded
-    uint64 index format](./annotations.md#sharded-uint64-index) or [unsharded uint64 index
-    format](./annotations.md#unsharded-uint64-index).
+    - `"type"`: Required.  Must be one of `"label"`, `"description"`, `"string"`, `"tags"`,
+      `"number"`.  At most one property may have type `"label"` (which is displayed in the UI next
+      to the segment ID), at most one property may have type `"description"`, and at most one
+      property may have type `"tags"`.
+    - `"description"`: Optional.  String description of the property to display in the UI.  Must not
+      be present if `"type"` is equal to `"tags"`.
+    - `"tags`": Must be present if `"type"` is equal to `"tags"`, otherwise must not be present.  An
+      array of strings specifying the valid tag values.  The strings should *not* include an initial
+      `"#"` character, and should not contain spaces.  Tags are matched case-insensitively.
+    - `"tag_descriptions`": May be present if `"type"` is equal to `"tags"`, otherwise must not be
+      present.  An array of strings, of the same length as the `"tags"` array, specifying a longer
+      description corresponding to each tag value.
+    - `"data_type"`: Must be present if `"type"` is equal to `"number"`.  One of `"uint8"`,
+      `"int8"`, `"uint16"`, `"int16"`, `"uint32"`, `"int32"`, `"float32"`.
+    - `"values"`: Required.  Array of length equal to the length of `ids` specifying the property
+      value for each id.  If `"type"` is equal to `"label"`, `"description"`, or `"string"`, each
+      element must be a string.  If `"type"` is equal to `"number"`, each element must be a number
+      that will be converted to the specified `"data_type"`.  If `"type"` is equal to `"tags"`, each
+      *element* must be an array of integers (in increasing order), where each number specifies an
+      index into the `"tags"` array.

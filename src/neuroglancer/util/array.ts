@@ -57,11 +57,8 @@ export function filterArrayInplace<T>(
   array.length = outIndex;
 }
 
-export interface TypedArrayConstructor<T extends TypedArray = TypedArray> {
-  new(n: number): T;
-  new(buffer: ArrayBuffer, byteOffset: number, length: number): T;
-  BYTES_PER_ELEMENT: number;
-}
+export type TypedArrayConstructor = typeof Int8Array|typeof Uint8Array|typeof Int16Array|
+    typeof Uint16Array|typeof Int32Array|typeof Uint32Array|typeof Float32Array|typeof Float64Array;
 
 export type TypedArray =
     Int8Array|Uint8Array|Int16Array|Uint16Array|Int32Array|Uint32Array|Float32Array|Float64Array;
@@ -345,4 +342,37 @@ export function getMergeSplices<T>(
         {retainCount: 0, deleteCount: oldCount - oldIndex, insertCount: newCount - newIndex});
   }
   return splices;
+}
+
+export function mergeSequences(
+    aCount: number, bCount: number, compare: (a: number, b: number) => number,
+    aCallback: (a: number) => void, bCallback: (b: number) => void,
+    abCallback: (a: number, b: number) => void) {
+  let a = 0;
+  let b = 0;
+  if (aCount !== 0 && bCount !== 0) {
+    while (true) {
+      const x = compare(a, b);
+      if (x < 0) {
+        aCallback(a);
+        if (++a === aCount) break;
+      } else if (x > 0) {
+        bCallback(b);
+        if (++b === bCount) break;
+      } else {
+        abCallback(a, b);
+        ++a;
+        ++b;
+        if (a === aCount || b === bCount) break;
+      }
+    }
+  }
+  while (a < aCount) {
+    aCallback(a);
+    ++a;
+  }
+  while (b < bCount) {
+    bCallback(b);
+    ++b;
+  }
 }

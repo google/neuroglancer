@@ -29,21 +29,21 @@ export function positionDropdown(dropdownElement: HTMLElement, associatedElement
   maxHeight = true,
   maxWidth = true
 } = {}) {
-  let rect = associatedElement.getBoundingClientRect();
+  const rect = associatedElement.getBoundingClientRect();
 
   if (horizontal) {
-    let viewportWidth = dropdownElement.ownerDocument!.documentElement!.clientHeight;
+    const viewportWidth = dropdownElement.ownerDocument!.documentElement!.clientWidth;
     let distanceLeft = rect.right;
     let distanceRight = viewportWidth - rect.left;
     if (distanceLeft > distanceRight) {
       dropdownElement.style.left = '';
-      dropdownElement.style.right = '0';
+      dropdownElement.style.right = `${viewportWidth - rect.right}px`;
       if (maxWidth) {
         dropdownElement.style.maxWidth = (distanceLeft - leftMargin) + 'px';
       }
     } else {
       dropdownElement.style.right = '';
-      dropdownElement.style.left = '0';
+      dropdownElement.style.left = `${rect.left}px`;
       if (maxWidth) {
         dropdownElement.style.maxWidth = (distanceRight - rightMargin) + 'px';
       }
@@ -51,17 +51,19 @@ export function positionDropdown(dropdownElement: HTMLElement, associatedElement
   }
 
   if (vertical) {
-    let viewportHeight = dropdownElement.ownerDocument!.documentElement!.clientHeight;
+    const viewportHeight = dropdownElement.ownerDocument!.documentElement!.clientHeight;
     let distanceToTop = rect.top - topMargin;
     let distanceToBottom = viewportHeight - rect.bottom - bottomMargin;
+    dropdownElement.style.left = `${rect.left}px`;
+    dropdownElement.style.width = `${rect.width}px`;
     if (distanceToTop > distanceToBottom * 3) {
       dropdownElement.style.top = '';
-      dropdownElement.style.bottom = '100%';
+      dropdownElement.style.bottom = `${viewportHeight - rect.top}px`;
       if (maxHeight) {
         dropdownElement.style.maxHeight = distanceToTop + 'px';
       }
     } else {
-      dropdownElement.style.top = '100%';
+      dropdownElement.style.top = `${rect.bottom}px`;
       dropdownElement.style.bottom = '';
       if (maxHeight) {
         dropdownElement.style.maxHeight = distanceToBottom + 'px';

@@ -19,11 +19,11 @@
  */
 
 import {DataType} from 'neuroglancer/util/data_type';
+import {nextAfterFloat64} from 'neuroglancer/util/float';
 import {parseFixedLengthArray} from 'neuroglancer/util/json';
 import {Uint64} from 'neuroglancer/util/uint64';
 import {ShaderBuilder, ShaderCodePart, ShaderProgram} from 'neuroglancer/webgl/shader';
-import {dataTypeShaderDefinition, getShaderType, glsl_addSaturateInt32, glsl_addSaturateUint32, glsl_addSaturateUint64, glsl_equalUint64, glsl_shiftLeftSaturateUint32, glsl_shiftLeftUint64, glsl_shiftRightUint64, glsl_subtractSaturateInt32, glsl_subtractSaturateUint32, glsl_subtractSaturateUint64, glsl_uint64} from 'neuroglancer/webgl/shader_lib';
-import {glsl_compareLessThanUint64, glsl_subtractUint64} from 'neuroglancer/webgl/shader_lib';
+import {dataTypeShaderDefinition, getShaderType, glsl_addSaturateInt32, glsl_addSaturateUint32, glsl_addSaturateUint64, glsl_compareLessThanUint64, glsl_equalUint64, glsl_shiftLeftSaturateUint32, glsl_shiftLeftUint64, glsl_shiftRightUint64, glsl_subtractSaturateInt32, glsl_subtractSaturateUint32, glsl_subtractSaturateUint64, glsl_subtractUint64, glsl_uint64} from 'neuroglancer/webgl/shader_lib';
 
 export const dataTypeShaderLerpParametersType: Record<DataType, string> = {
   [DataType.UINT8]: 'vec2',
@@ -534,5 +534,26 @@ export function dataTypeIntervalToJson(
     return [range[0].toString(), range[1].toString()];
   } else {
     return range;
+  }
+}
+
+export function dataTypeValueNextAfter(
+    dataType: DataType, value: number|Uint64, sign: 1|- 1): number|Uint64 {
+  switch (dataType) {
+    case DataType.FLOAT32:
+      return nextAfterFloat64(value as number, sign * Infinity);
+    case DataType.UINT64:
+      const v = value as Uint64;
+      if (sign === -1) {
+        if (v.low === 0 && v.high === 0) return v;
+        return Uint64.decrement(new Uint64(), v);
+      } else {
+        if (v.low === 0xffffffff && v.high === 0xffffffff) return v;
+        return Uint64.increment(new Uint64(), v);
+      }
+    default: {
+      const range = defaultDataTypeRange[dataType] as [number, number];
+      return Math.max(range[0], Math.min(range[1], (value as number) + sign));
+    }
   }
 }
