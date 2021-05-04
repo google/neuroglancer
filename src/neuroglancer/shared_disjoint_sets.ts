@@ -24,6 +24,10 @@ import {registerRPC, registerSharedObject, RPC, SharedObjectCounterpart} from 'n
 const RPC_TYPE_ID = 'DisjointUint64Sets';
 const ADD_METHOD_ID = 'DisjointUint64Sets.add';
 const CLEAR_METHOD_ID = 'DisjointUint64Sets.clear';
+const DELETE_SET_METHOD_ID = 'DisjointUint64Sets.deleteSet';
+
+const tempA = new Uint64();
+const tempB = new Uint64();
 
 @registerSharedObject(RPC_TYPE_ID)
 export class SharedDisjointUint64Sets extends SharedObjectCounterpart implements
@@ -35,7 +39,7 @@ export class SharedDisjointUint64Sets extends SharedObjectCounterpart implements
    * For compatibility with `WatchableValueInterface`.
    */
   get value() {
-    return this;
+    return this
   }
 
   static makeWithCounterpart(rpc: RPC) {
@@ -50,16 +54,43 @@ export class SharedDisjointUint64Sets extends SharedObjectCounterpart implements
     super.disposed();
   }
 
-  link(a: Uint64, b: Uint64) {
-    if (this.disjointSets.link(a, b)) {
+  link_(a: Uint64, b: Uint64[]) {
+    let changed = false;
+    for (const v of b) {
+      tempB.low = v.low;
+      tempB.high = v.high;
+      changed = this.disjointSets.link(a, tempB) || changed;
+    }
+    return changed;
+  }
+
+  link(a: Uint64, b: Uint64|Uint64[]) {
+    const tmp = Array<Uint64>().concat(b);
+    if (this.link_(a, tmp)) {
       let {rpc} = this;
       if (rpc) {
         rpc.invoke(
             ADD_METHOD_ID,
-            {'id': this.rpcId, 'al': a.low, 'ah': a.high, 'bl': b.low, 'bh': b.high});
+            {'id': this.rpcId, 'al': a.low, 'ah': a.high, 'b': tmp});
       }
       this.changed.dispatch();
     }
+  }
+
+  deleteSet(a: Uint64) {
+    if (this.disjointSets.deleteSet(a)) {
+      let {rpc} = this;
+      if (rpc) {
+        rpc.invoke(
+            DELETE_SET_METHOD_ID,
+            {'id': this.rpcId, 'al': a.low, 'ah': a.high});
+      }
+      this.changed.dispatch();
+    }
+  }
+
+  has(x: Uint64): boolean {
+    return this.disjointSets.has(x);
   }
 
   get(x: Uint64): Uint64 {
@@ -92,6 +123,7 @@ export class SharedDisjointUint64Sets extends SharedObjectCounterpart implements
    * Restores the state from a JSON representation.
    */
   restoreState(obj: any) {
+    this.clear();
     if (obj !== undefined) {
       let ids = [new Uint64(), new Uint64()];
       parseArray(obj, z => {
@@ -111,16 +143,11 @@ export class SharedDisjointUint64Sets extends SharedObjectCounterpart implements
   }
 }
 
-const tempA = new Uint64();
-const tempB = new Uint64();
-
 registerRPC(ADD_METHOD_ID, function(x) {
   let obj = <SharedDisjointUint64Sets>this.get(x['id']);
   tempA.low = x['al'];
   tempA.high = x['ah'];
-  tempB.low = x['bl'];
-  tempB.high = x['bh'];
-  if (obj.disjointSets.link(tempA, tempB)) {
+  if (obj.link_(tempA, x['b'])) {
     obj.changed.dispatch();
   }
 });
@@ -128,6 +155,16 @@ registerRPC(ADD_METHOD_ID, function(x) {
 registerRPC(CLEAR_METHOD_ID, function(x) {
   let obj = <SharedDisjointUint64Sets>this.get(x['id']);
   if (obj.disjointSets.clear()) {
+    obj.changed.dispatch();
+  }
+});
+
+registerRPC(DELETE_SET_METHOD_ID, function(x) {
+  let obj = <SharedDisjointUint64Sets>this.get(x['id']);
+  tempA.low = x['al'];
+  tempA.high = x['ah'];
+
+  if (obj.disjointSets.deleteSet(tempA)) {
     obj.changed.dispatch();
   }
 });

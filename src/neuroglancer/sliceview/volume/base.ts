@@ -33,6 +33,8 @@ export enum VolumeType {
   UNKNOWN,
   IMAGE,
   SEGMENTATION,
+  SEGMENTATION_WITH_GRAPH,
+  CHUNKEDGRAPHLEAVES, // ??? unused?
 }
 
 /**

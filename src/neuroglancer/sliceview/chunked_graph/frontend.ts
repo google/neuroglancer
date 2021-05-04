@@ -337,14 +337,26 @@ export class ChunkedGraphLayer extends SliceViewRenderLayer {
       return Promise.reject(GRAPH_SERVER_NOT_SPECIFIED);
     }
 
-    const promise =
-        authFetch(`${url}/graph/find_path?int64_as_str=1&precision_mode=${Number(precisionMode)}`, {
-          method: 'POST',
-          body: JSON.stringify([
-            [String(first.segmentId), ...first.position.values()],
-            [String(second.segmentId), ...second.position.values()]
-          ])
-        });
+    const url2 = `${url}/graph/find_path?int64_as_str=1&precision_mode=${Number(precisionMode)}`;
+
+    const {url: parsedUrl, credentialsProvider} = parseSpecialUrl(url2, defaultCredentialsManager);
+
+    const promise = cancellableFetchSpecialOk(credentialsProvider, parsedUrl, {
+      method: 'POST',
+      body: JSON.stringify([
+        [String(first.segmentId), ...first.position.values()],
+        [String(second.segmentId), ...second.position.values()]
+      ])
+    }, responseIdentity);
+
+    // const promise =
+    //     authFetch(`${url}/graph/find_path?int64_as_str=1&precision_mode=${Number(precisionMode)}`, {
+    //       method: 'POST',
+    //       body: JSON.stringify([
+    //         [String(first.segmentId), ...first.position.values()],
+    //         [String(second.segmentId), ...second.position.values()]
+    //       ])
+    //     });
 
     const response = await this.withErrorMessage(promise, {
       initialMessage: `Finding path between ${first.segmentId} and ${second.segmentId}`,

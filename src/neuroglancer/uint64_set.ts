@@ -15,14 +15,20 @@
  */
 
 import {HashSetUint64} from 'neuroglancer/gpu_hash/hash_table';
+import {WatchableValueInterface} from 'neuroglancer/trackable_value';
 import {Signal} from 'neuroglancer/util/signal';
 import {Uint64} from 'neuroglancer/util/uint64';
 import {registerRPC, registerSharedObject, RPC, SharedObjectCounterpart} from 'neuroglancer/worker_rpc';
 
 @registerSharedObject('Uint64Set')
-export class Uint64Set extends SharedObjectCounterpart {
+export class Uint64Set extends SharedObjectCounterpart implements
+    WatchableValueInterface<Uint64Set> {
   hashTable = new HashSetUint64();
-  changed = new Signal<(x: Uint64 | Uint64[] | null, add: boolean) => void>();
+  changed = new Signal<(x: Uint64|Uint64[]|null, add: boolean) => void>();
+
+  get value() {
+    return this;
+  }
 
   static makeWithCounterpart(rpc: RPC) {
     let obj = new Uint64Set();
@@ -30,11 +36,19 @@ export class Uint64Set extends SharedObjectCounterpart {
     return obj;
   }
 
-  disposed() {
-    super.disposed();
-    this.hashTable = <any>undefined;
-    this.changed = <any>undefined;
+  set(x: Uint64|Uint64[], value: boolean) {
+    if (!value) {
+      this.delete(x);
+    } else {
+      this.add(x);
+    }
   }
+
+  // disposed() {
+  //   super.disposed();
+  //   this.hashTable = <any>undefined;
+  //   this.changed = <any>undefined;
+  // }
 
   reserve_(x: number) {
     return this.hashTable.reserve(x);
@@ -117,6 +131,13 @@ export class Uint64Set extends SharedObjectCounterpart {
     // Need to sort entries, otherwise serialization changes every time.
     result.sort();
     return result;
+  }
+
+  assignFrom(other: Uint64Set) {
+    this.clear();
+    for (const key of other) {
+      this.add(key);
+    }
   }
 }
 
