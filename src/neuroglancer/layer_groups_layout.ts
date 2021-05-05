@@ -23,8 +23,9 @@ import './layer_groups_layout.css';
 import debounce from 'lodash/debounce';
 import {LayerListSpecification, LayerSubsetSpecification} from 'neuroglancer/layer';
 import {getViewerDropEffect, hasViewerDrag, LayerGroupViewer, viewerDragType} from 'neuroglancer/layer_group_viewer';
-import {endLayerDrag, getDropLayers, getLayerDragInfo, updateLayerDropEffect} from 'neuroglancer/ui/layer_drag_and_drop';
-import {Borrowed, RefCounted, registerEventListener} from 'neuroglancer/util/disposable';
+import {popDragStatus, pushDragStatus} from 'neuroglancer/ui/drag_and_drop';
+import {DropLayers, endLayerDrag, getDropLayers, getLayerDragInfo, updateLayerDropEffect} from 'neuroglancer/ui/layer_drag_and_drop';
+import {Borrowed, RefCounted} from 'neuroglancer/util/disposable';
 import {removeFromParent} from 'neuroglancer/util/dom';
 import {getDropEffect, setDropEffect} from 'neuroglancer/util/drag_and_drop';
 import {parseArray, verifyObject, verifyObjectProperty, verifyString} from 'neuroglancer/util/json';
@@ -90,11 +91,23 @@ export class LayoutComponentContainer extends RefCounted {
           if (this.parent === undefined && childComponent instanceof LayerGroupViewer) {
             spec = childComponent.layout.specification.toJSON();
             childComponent.viewerNavigationState.copyToParent();
-            const layersToKeep = new Set(childComponent.layerManager.managedLayers);
+            const childManagedLayers = childComponent.layerManager.managedLayers;
+            const layersToKeep = new Set(childManagedLayers);
             const {layerSpecification} = childComponent;
-            layerSpecification.rootLayers.filter(layer => layersToKeep.has(layer));
-            layerSpecification.rootLayers.managedLayers =
-                Array.from(childComponent.layerManager.managedLayers);
+            // Retain only layers that are part of the layer group, or are archived.
+            layerSpecification.rootLayers.filter(
+                layer => layersToKeep.has(layer) || layer.archived);
+            // Permute the non-archived layers to match the order in the layer group.
+            const childLayerIndices: number[] = [];
+            const {managedLayers: rootManagedLayers} = layerSpecification.rootLayers;
+            for (let i = 0, count = rootManagedLayers.length; i < count; ++i) {
+              if (layersToKeep.has(rootManagedLayers[i])) {
+                childLayerIndices.push(i);
+              }
+            }
+            for (let i = 0, count = childManagedLayers.length; i < count; ++i) {
+              rootManagedLayers[childLayerIndices[i]] = childManagedLayers[i];
+            }
             layerSpecification.rootLayers.layersChanged.dispatch();
           } else {
             spec = childComponent.toJSON();
@@ -120,22 +133,21 @@ export class LayoutComponentContainer extends RefCounted {
     element.style.flex = '1';
     element.style.position = 'relative';
     element.style.alignItems = 'stretch';
-    (<any>element).foo = 'hello';
     (<any>element)[layoutComponentContainerSymbol] = this;
 
     this.setSpecification(spec);
 
     interface DropZone {
       element: HTMLElement;
-      direction: 'row' | 'column';
-      orientation: 'left' | 'right' | 'top' | 'bottom';
+      direction: 'row'|'column';
+      orientation: 'left'|'right'|'top'|'bottom';
     }
 
     const dropZones: DropZone[] = [];
     const makeDropZone = (name: 'left'|'right'|'top'|'bottom') => {
       const dropZone = document.createElement('div');
       dropZone.className = 'neuroglancer-layout-split-drop-zone';
-      let direction: 'row' | 'column';
+      let direction: 'row'|'column';
       dropZone.style[name] = '0';
       switch (name) {
         case 'left':
@@ -154,9 +166,10 @@ export class LayoutComponentContainer extends RefCounted {
       dropZone.style.display = 'none';
       dropZones.push({element: dropZone, direction: direction!, orientation: name});
       element.appendChild(dropZone);
-      this.registerDisposer(setupDropZone(
+      setupDropZone(
           dropZone, this.viewer.layerSpecification,
-          () => <LayerGroupViewer>(this.split(name).newContainer.component)));
+          () => <LayerGroupViewer>(this.split(name).newContainer.component),
+          direction === 'row' ? 'column' : 'row');
     };
     makeDropZone('left');
     makeDropZone('right');
@@ -164,7 +177,7 @@ export class LayoutComponentContainer extends RefCounted {
     makeDropZone('bottom');
 
     let dropZonesVisible = false;
-    this.registerEventListener(element, 'dragenter', (event: DragEvent) => {
+    element.addEventListener('dragenter', (event: DragEvent) => {
       if (dropZonesVisible) {
         return;
       }
@@ -188,7 +201,7 @@ export class LayoutComponentContainer extends RefCounted {
       }
     }, true);
 
-    this.registerEventListener(element, 'drop', (_event: DragEvent) => {
+    element.addEventListener('drop', (_event: DragEvent) => {
       if (!dropZonesVisible) {
         return;
       }
@@ -197,7 +210,7 @@ export class LayoutComponentContainer extends RefCounted {
         dropZone.style.display = 'none';
       }
     }, /*capture=*/ true);
-    this.registerEventListener(element, 'dragleave', (event: DragEvent) => {
+    element.addEventListener('dragleave', (event: DragEvent) => {
       const {relatedTarget} = event;
       if (!dropZonesVisible) {
         return;
@@ -224,14 +237,14 @@ export class LayoutComponentContainer extends RefCounted {
     return (<any>element)[layoutComponentContainerSymbol];
   }
 
-  disposed () {
+  disposed() {
     this.unsetComponent();
     (<any>this).componentValue = undefined;
     super.disposed();
   }
 
   split(side: 'left'|'top'|'bottom'|'right'):
-  {newContainer: LayoutComponentContainer, existingContainer: LayoutComponentContainer} {
+      {newContainer: LayoutComponentContainer, existingContainer: LayoutComponentContainer} {
     const newComponentSpec: any = {
       type: 'viewer',
     };
@@ -309,8 +322,11 @@ export class SingletonLayerGroupViewer extends RefCounted implements LayoutCompo
           layerSpecification: viewer.layerSpecification.addRef(),
           ...getCommonViewerState(viewer),
         },
-        {showLayerPanel: viewer.uiControlVisibility.showLayerPanel, showViewerMenu: false, 
-          showLayerHoverValues: viewer.uiControlVisibility.showLayerHoverValues}));
+        {
+          showLayerPanel: viewer.uiControlVisibility.showLayerPanel,
+          showViewerMenu: false,
+          showLayerHoverValues: viewer.uiControlVisibility.showLayerHoverValues
+        }));
     this.layerGroupViewer.layout.restoreState(layout);
   }
 
@@ -324,98 +340,96 @@ export class SingletonLayerGroupViewer extends RefCounted implements LayoutCompo
 }
 
 function setupDropZone(
-  dropZone: HTMLElement, manager: Borrowed<LayerListSpecification>, makeLayerGroupViewer: () => Borrowed<LayerGroupViewer>) {
-  const enterDisposer = registerEventListener(dropZone, 'dragenter', (event: DragEvent) => {
-    if (getLayerDragInfo(event) === undefined) {
+    dropZone: HTMLElement, manager: Borrowed<LayerListSpecification>,
+    makeLayerGroupViewer: () => Borrowed<LayerGroupViewer>, direction: 'row'|'column') {
+  dropZone.addEventListener('dragenter', (event: DragEvent) => {
+    const dragInfo = getLayerDragInfo(event);
+    if (dragInfo === undefined) {
       return;
     }
     dropZone.classList.add('neuroglancer-drag-over');
   });
-  const leaveDisposer = registerEventListener(dropZone, 'dragleave', () => {
+  dropZone.addEventListener('dragleave', () => {
+    popDragStatus(dropZone, 'drop');
     dropZone.classList.remove('neuroglancer-drag-over');
   });
-  const overDisposer = registerEventListener(dropZone, 'dragover', (event: DragEvent) => {
-    if (hasViewerDrag(event)) {
-      setDropEffect(event, getViewerDropEffect(event, manager));
+  dropZone.addEventListener('dragover', (event: DragEvent) => {
+    const allowDrag = (info: {dropEffect: string, dropEffectMessage: string}, message: string) => {
+      if (info.dropEffectMessage) message += ` (${info.dropEffectMessage})`;
+      pushDragStatus(dropZone, 'drop', message);
       event.stopPropagation();
       event.preventDefault();
+    };
+    if (hasViewerDrag(event)) {
+      const info = getViewerDropEffect(event, manager);
+      setDropEffect(event, info.dropEffect);
+      allowDrag(info, `Drop to ${info.dropEffect} layer group as new ${direction}`);
       return;
     }
     if (getLayerDragInfo(event) !== undefined) {
-      updateLayerDropEffect(event, manager, /*newTarget=*/true);
-      event.stopPropagation();
-      event.preventDefault();
+      const info = updateLayerDropEffect(
+          event, manager, /*targetIsLayerListPanel=*/ false, /*newTarget=*/ true);
+      allowDrag(info, `Drop to ${info.dropEffect} layer as new ${direction}`);
       return;
     }
   });
-  const dropDisposer = registerEventListener(dropZone, 'drop', (event: DragEvent) => {
+  dropZone.addEventListener('drop', (event: DragEvent) => {
     dropZone.classList.remove('neuroglancer-drag-over');
+    popDragStatus(dropZone, 'drop');
+    let dropLayers: DropLayers|undefined;
+    let layoutSpec: any;
     if (hasViewerDrag(event)) {
       event.stopPropagation();
-      let dropState: any;
       try {
-        dropState = JSON.parse(event.dataTransfer!.getData(viewerDragType));
+        layoutSpec = JSON.parse(event.dataTransfer!.getData(viewerDragType));
       } catch (e) {
         return;
       }
-      const dropLayers = getDropLayers(
-          event, manager, /*forceCopy=*/false, /*allowMove=*/false,
-          /*newTarget=*/true);
-      if (dropLayers !== undefined && dropLayers.finalize(event)) {
-        event.preventDefault();
-        event.dataTransfer!.dropEffect = getDropEffect();
-        endLayerDrag(event);
-        const layerGroupViewer = makeLayerGroupViewer();
-        for (const newLayer of dropLayers.layers.keys()) {
-          layerGroupViewer.layerSpecification.add(newLayer);
-        }
-        try {
-          layerGroupViewer.restoreState(dropState);
-        } catch {
-        }
-      }
+      dropLayers = getDropLayers(event, manager, {forceCopy: false, newTarget: true});
+      if (dropLayers === undefined) return;
     } else {
-      const dropLayers = getDropLayers(
-          event, manager, /*forceCopy=*/getDropEffect() === 'copy',
-          /*allowMove=*/false,
-          /*newTarget=*/true);
-      if (dropLayers !== undefined && dropLayers.finalize(event)) {
-        event.preventDefault();
-        event.dataTransfer!.dropEffect = getDropEffect();
-        endLayerDrag(event);
-        const layerGroupViewer = makeLayerGroupViewer();
-        for (const newLayer of dropLayers.layers.keys()) {
-          layerGroupViewer.layerSpecification.add(newLayer);
+      dropLayers =
+          getDropLayers(event, manager, {forceCopy: getDropEffect() === 'copy', newTarget: true});
+      if (dropLayers === undefined) return;
+      layoutSpec = dropLayers.layoutSpec;
+    }
+
+    if (!dropLayers.initializeExternalLayers(event)) {
+      if (!dropLayers.moveSupported) {
+        for (const layer of dropLayers.layers.keys()) {
+          layer.dispose();
         }
-        try {
-          layerGroupViewer.layout.restoreState(dropLayers.layoutSpec);
-        } catch {
-          layerGroupViewer.layout.reset();
-          // Ignore error restoring layout.
-        }
-        return;
       }
+      return;
+    }
+    event.preventDefault();
+    const dropEffect = event.dataTransfer!.dropEffect = getDropEffect();
+    endLayerDrag(dropEffect);
+    const layerGroupViewer = makeLayerGroupViewer();
+    dropLayers.updateArchiveStates(event);
+    for (const newLayer of dropLayers.layers.keys()) {
+      layerGroupViewer.layerSpecification.add(newLayer);
+    }
+    try {
+      layerGroupViewer.restoreState(layoutSpec);
+    } catch {
+      layerGroupViewer.layout.reset();
+      // Ignore error restoring layout.
     }
   });
-  return () => {
-    dropDisposer();
-    overDisposer();
-    leaveDisposer();
-    enterDisposer();
-  };
 }
 
 export class StackLayoutComponent extends RefCounted implements LayoutComponent {
   changed = new NullarySignal();
 
-  get length () {
+  get length() {
     return (this.element.childElementCount - 1) / 2;
   }
 
-  private makeDropPlaceholder (refCounted: RefCounted) {
+  private makeDropPlaceholder(refCounted: RefCounted) {
     const dropZone = document.createElement('div');
     dropZone.className = 'neuroglancer-stack-layout-drop-placeholder';
-    refCounted.registerDisposer(setupDropZone(dropZone, this.viewer.layerSpecification, () => {
+    setupDropZone(dropZone, this.viewer.layerSpecification, () => {
       const nextElement = dropZone.nextElementSibling;
       let nextChild: LayoutComponentContainer|undefined;
       if (nextElement !== null) {
@@ -423,7 +437,7 @@ export class StackLayoutComponent extends RefCounted implements LayoutComponent 
       }
       const newChild = this.insertChild({type: 'viewer', layers: []}, nextChild);
       return <LayerGroupViewer>newChild.component;
-    }));
+    }, this.direction === 'row' ? 'column' : 'row');
     refCounted.registerDisposer(() => {
       removeFromParent(dropZone);
     });
@@ -479,7 +493,7 @@ export class StackLayoutComponent extends RefCounted implements LayoutComponent 
     }
   }
 
-  * [Symbol.iterator] () {
+  * [Symbol.iterator]() {
     const {length} = this;
     for (let i = 0; i < length; ++i) {
       yield this.get(i);
@@ -527,8 +541,11 @@ function makeComponent(container: LayoutComponentContainer, spec: any) {
             layerSpecification,
             ...getCommonViewerState(viewer),
           },
-          {showLayerPanel: viewer.uiControlVisibility.showLayerPanel, showViewerMenu: true,
-            showLayerHoverValues: viewer.uiControlVisibility.showLayerHoverValues});
+          {
+            showLayerPanel: viewer.uiControlVisibility.showLayerPanel,
+            showViewerMenu: true,
+            showLayerHoverValues: viewer.uiControlVisibility.showLayerHoverValues
+          });
       try {
         layerGroupViewer.restoreState(spec);
       } catch (e) {
@@ -548,7 +565,9 @@ export class RootLayoutContainer extends RefCounted implements Trackable {
   container = this.registerDisposer(
       new LayoutComponentContainer(this.viewer, this.defaultSpecification, undefined));
 
-  get changed () { return this.container.changed; }
+  get changed() {
+    return this.container.changed;
+  }
 
   get element() {
     return this.container.element;

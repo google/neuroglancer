@@ -20,6 +20,16 @@
   overflow-y: auto;
 }
 
+.neuroglancer-annotation-rendering-tab .neuroglancer-shader-code-widget {
+  flex-shrink: 0;
+}
+
+.neuroglancer-annotation-shader-property-list {
+  max-height: 8em;
+  overflow: auto;
+  flex-shrink: 0;
+}
+
 .neuroglancer-annotation-shader-property {
   white-space: pre;
   font-family: monospace;

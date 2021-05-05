@@ -87,6 +87,7 @@ export class SingleMeshUserLayer extends UserLayer {
   }
 
   static type = 'mesh';
+  static typeAbbreviation = 'mesh';
 }
 
 function makeShaderCodeWidget(layer: SingleMeshUserLayer) {
@@ -196,7 +197,7 @@ class ShaderCodeOverlay extends Overlay {
   }
 }
 
-registerLayerType('mesh', SingleMeshUserLayer);
+registerLayerType(SingleMeshUserLayer);
 registerLayerTypeDetector(subsource => {
   if (subsource.singleMesh !== undefined) {
     return {layerConstructor: SingleMeshUserLayer, priority: 2};

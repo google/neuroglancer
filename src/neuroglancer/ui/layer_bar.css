@@ -14,15 +14,20 @@
  * limitations under the License.
  */
 
+:root {
+  --layer-number-color: #9a7518;
+}
+
 .neuroglancer-layer-panel {
   width: 100%;
   display: flex;
   flex-direction: row;
   flex-wrap: wrap;
-  background-color: black;
   align-items: stretch;
   margin-left: -5px;
   margin-top: -1px;
+  z-index: -0.1;
+  overflow: hidden;
 }
 
 .neuroglancer-layer-item {
@@ -70,7 +75,7 @@
 
 .neuroglancer-layer-item-number {
   display: inline-block;
-  background-color: /*#daa520*/ #9a7518;
+  background-color: var(--layer-number-color);
   font-weight: bold;
   padding-left: 1px;
   padding-right: 1px;

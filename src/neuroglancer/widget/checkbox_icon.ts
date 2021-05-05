@@ -23,6 +23,7 @@ import {makeIcon, MakeIconOptions} from 'neuroglancer/widget/icon';
 export interface MakeCheckboxIconOptions extends Omit<MakeIconOptions, 'onClick'|'title'> {
   enableTitle?: string;
   disableTitle?: string;
+  backgroundScheme?: 'light' | 'dark';
 }
 
 export class CheckboxIcon extends RefCounted {
@@ -36,6 +37,8 @@ export class CheckboxIcon extends RefCounted {
       },
     });
     this.element.classList.add('neuroglancer-checkbox-icon');
+    this.element.classList.add(
+        (options.backgroundScheme === 'dark') ? 'dark-background' : 'light-background');
     const updateView = () => {
       const value = model.value;
       this.element.dataset.checked = value ? 'true' : 'false';

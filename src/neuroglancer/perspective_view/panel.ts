@@ -599,12 +599,6 @@ export class PerspectivePanel extends RenderedDataPanel {
     // we've already done one drawing pass.
     gl.enable(WebGL2RenderingContext.POLYGON_OFFSET_FILL);
     gl.polygonOffset(-1, -1);
-    for (const [renderLayer, attachment] of visibleLayers) {
-      if (!renderLayer.isTransparent || !renderLayer.transparentPickEnabled) {
-        continue;
-      }
-      renderLayer.draw(renderContext, attachment);
-    }
 
     gl.stencilFuncSeparate(
         /*face=*/ WebGL2RenderingContext.FRONT_AND_BACK, /*func=*/ WebGL2RenderingContext.GREATER,
@@ -613,7 +607,7 @@ export class PerspectivePanel extends RenderedDataPanel {
         /*face=*/ WebGL2RenderingContext.FRONT_AND_BACK, /*sfail=*/ WebGL2RenderingContext.KEEP,
         /*dpfail=*/ WebGL2RenderingContext.KEEP, /*dppass=*/ WebGL2RenderingContext.KEEP);
     for (const [renderLayer, attachment] of visibleLayers) {
-      if (!renderLayer.isTransparent || renderLayer.transparentPickEnabled) {
+      if (!renderLayer.isTransparent) {
         continue;
       }
       renderLayer.draw(renderContext, attachment);

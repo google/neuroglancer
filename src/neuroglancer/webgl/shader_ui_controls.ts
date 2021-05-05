@@ -67,7 +67,9 @@ export interface ShaderControlParseError {
 }
 
 export interface ShaderControlsParseResult {
+  // Original source code entered by user.
   source: string;
+  // Source code with comments stripped and UI controls replaced by appropriate text.
   code: string;
   controls: Map<string, ShaderUiControl>;
   errors: ShaderControlParseError[];
