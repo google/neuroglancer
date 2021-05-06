@@ -261,25 +261,6 @@ class GrapheneMultiscaleVolumeChunkSource extends MultiscaleVolumeChunkSource {
       this.credentialsProvider, `${this.getChunkedGraphUrl()}/oldest_timestamp`, {}, responseJson);
     return verifyObjectProperty(await response.json(), 'iso', verifyString);
   }
-  
-  /*
-  getChunkedGraphSources(options: ChunkedGraphSourceOptions, rootSegments: Uint64Set) {
-    const spec = ChunkedGraphChunkSpecification.getDefaults({
-      numChannels: 1,
-      voxelSize: this.scales[0].resolution,
-      transform: mat4.fromTranslation(
-          mat4.create(),
-          vec3.multiply(vec3.create(), this.scales[0].resolution, this.scales[0].voxelOffset)),
-      upperVoxelBound: this.scales[0].size,
-      chunkDataSizes: [this.graph.chunkSize],
-      baseVoxelOffset: this.scales[0].voxelOffset,
-      chunkedGraphSourceOptions: options,
-    });
-
-    return [[this.chunkManager.getChunkSource(
-        GrapheneChunkedGraphChunkSource,
-        {spec, rootSegments, parameters: {url: `${this.app.segmentationUrl}/node`}})]];
-  }*/
 
   get dataType() {
     return this.info.dataType;
@@ -298,6 +279,25 @@ class GrapheneMultiscaleVolumeChunkSource extends MultiscaleVolumeChunkSource {
       public url: string, public info: MultiscaleVolumeInfo) {
     super(chunkManager);
   }
+
+  /*
+  getChunkedGraphSources(options: ChunkedGraphSourceOptions, rootSegments: Uint64Set) {
+    const spec = ChunkedGraphChunkSpecification.getDefaults({
+      numChannels: 1,
+      voxelSize: this.scales[0].resolution,
+      transform: mat4.fromTranslation(
+          mat4.create(),
+          vec3.multiply(vec3.create(), this.scales[0].resolution, this.scales[0].voxelOffset)),
+      upperVoxelBound: this.scales[0].size,
+      chunkDataSizes: [this.graph.chunkSize],
+      baseVoxelOffset: this.scales[0].voxelOffset,
+      chunkedGraphSourceOptions: options,
+    });
+
+    return [[this.chunkManager.getChunkSource(
+        GrapheneChunkedGraphChunkSource,
+        {spec, rootSegments, parameters: {url: `${this.app.segmentationUrl}/node`}})]];
+  }*/
 
   getSources(volumeSourceOptions: VolumeSourceOptions) {
     const modelResolution = this.info.scales[0].resolution;
@@ -539,6 +539,7 @@ export function getShardedMeshSource(chunkManager: ChunkManager, parameters: Mes
 async function getMeshSource(
     chunkManager: ChunkManager, credentialsProvider: SpecialProtocolCredentialsProvider,
     url: string) {
+      console.log('getMeshSource');
   const {metadata, segmentPropertyMap} =
       await getMeshMetadata(chunkManager, credentialsProvider, url);
   if (metadata === undefined) {

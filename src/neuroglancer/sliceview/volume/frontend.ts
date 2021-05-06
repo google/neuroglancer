@@ -23,6 +23,9 @@ import {Disposable} from 'neuroglancer/util/disposable';
 import {GL} from 'neuroglancer/webgl/context';
 import {ShaderBuilder, ShaderProgram} from 'neuroglancer/webgl/shader';
 import {getShaderType, glsl_mixLinear} from 'neuroglancer/webgl/shader_lib';
+import { Uint64Set } from 'src/neuroglancer/uint64_set';
+import { ChunkedGraphSourceOptions } from '../chunked_graph/base';
+import { ChunkedGraphChunkSource } from '../chunked_graph/frontend';
 
 export type VolumeChunkKey = string;
 
@@ -243,4 +246,12 @@ export abstract class MultiscaleVolumeChunkSource extends
     MultiscaleSliceViewChunkSource<VolumeChunkSource, VolumeSourceOptions> {
   abstract dataType: DataType;
   abstract volumeType: VolumeType;
+
+  getChunkedGraphUrl?(): string | null;
+  
+  getTimestampLimit?(): Promise<string>;
+  getChunkedGraphSources?(options: ChunkedGraphSourceOptions,
+    rootSegments: Uint64Set): ChunkedGraphChunkSource[][] | null;
+  // getSegmentToVoxelCountMap?: () => Promise<SegmentToVoxelCountMap|null>| null;
+  // getStaticAnnotations?: () => AnnotationSource;
 }

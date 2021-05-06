@@ -42,7 +42,9 @@ export function receiveVisibleSegmentsState(
 export const withSegmentationLayerBackendState =
     <TBase extends AnyConstructor<ChunkRequester>>(Base: TBase) =>
         class SegmentationLayerState extends Base implements VisibleSegmentsState {
-  visibleSegments: Uint64Set;
+  rootSegments: Uint64Set;
+  rootSegmentsAfterEdit?: Uint64Set;
+  visibleSegments3D: Uint64Set;
   segmentEquivalences: SharedDisjointUint64Sets;
   temporaryVisibleSegments: Uint64Set;
   temporarySegmentEquivalences: SharedDisjointUint64Sets;
@@ -54,6 +56,7 @@ export const withSegmentationLayerBackendState =
     const [rpc, options] = args as [RPC, any];
     super(rpc, options);
     receiveVisibleSegmentsState(rpc, options, this);
+    this.rootSegmentsAfterEdit = <Uint64Set>rpc.get(options['rootSegmentsAfterEdit']);
     this.transform = rpc.get(options['transform']);
     this.renderScaleTarget = rpc.get(options['renderScaleTarget']);
 

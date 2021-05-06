@@ -24,7 +24,7 @@ import {get3dModelToDisplaySpaceMatrix} from 'neuroglancer/render_coordinate_tra
 import {RenderLayerBackendAttachment} from 'neuroglancer/render_layer_backend';
 import {withSegmentationLayerBackendState} from 'neuroglancer/segmentation_display_state/backend';
 import {getObjectKey} from 'neuroglancer/segmentation_display_state/base';
-import {forEachVisibleSegment} from 'neuroglancer/segmentation_display_state/base';
+import {forEachVisibleSegment3D as forEachVisibleSegment} from 'neuroglancer/segmentation_display_state/base';
 import {CancellationToken} from 'neuroglancer/util/cancellation';
 import {convertEndian32, Endianness} from 'neuroglancer/util/endian';
 import {getFrustrumPlanes, mat4, vec3} from 'neuroglancer/util/geom';
@@ -316,6 +316,56 @@ export function decodeTriangleVertexPositionsAndIndices(
   return decodeVertexPositionsAndIndices(
       /*verticesPerPrimitive=*/ 3, data, endianness, vertexByteOffset, numVertices, indexByteOffset,
       numTriangles);
+}
+
+export function decodeTriangleVertexPositionsAndIndicesDraco(
+  data: ArrayBuffer, decoderModule: any): RawMeshData {
+  const decoder = new decoderModule.Decoder();
+  const buffer = new decoderModule.DecoderBuffer();
+  buffer.Init(new Int8Array(data), data.byteLength);
+  const mesh = new decoderModule.Mesh();
+  const decodeStatus = decoder.DecodeBufferToMesh(buffer, mesh);
+  if (!decodeStatus.ok()) {
+    // Not a draco mesh
+    throw new TypeError('Draco decoding failed');
+  }
+  const decoderAttr = decoderModule.POSITION;
+  const attrId = decoder.GetAttributeId(mesh, decoderAttr);
+  if (attrId < 0) {
+    // Draco mesh has no position attribute, which we need
+    throw new Error('Invalid Draco mesh');
+  }
+  decoderModule.destroy(buffer);
+  const numFaces = mesh.num_faces();
+  const numIndices = numFaces * 3;
+  const numPoints = mesh.num_points();
+  const indices = new Uint32Array(numIndices);
+
+  // Add Faces to mesh
+  const ia = new decoderModule.DracoInt32Array();
+  for (let i = 0; i < numFaces; ++i) {
+    decoder.GetFaceFromMesh(mesh, i, ia);
+    const index = i * 3;
+    indices[index] = ia.GetValue(0);
+    indices[index + 1] = ia.GetValue(1);
+    indices[index + 2] = ia.GetValue(2);
+  }
+  decoderModule.destroy(ia);
+  const stride = 3;
+  const numValues = numPoints * stride;
+
+  const attribute = decoder.GetAttribute(mesh, attrId);
+  const attributeData = new decoderModule.DracoFloat32Array();
+  decoder.GetAttributeFloatForAllPoints(mesh, attribute, attributeData);
+
+  // Get vertex coordinates from mesh
+  const vertexPositions = new Float32Array(numValues);
+  for (let i = 0; i < numValues; ++i) {
+    vertexPositions[i] = attributeData.GetValue(i);
+  }
+  decoderModule.destroy(attributeData);
+
+  return {vertexPositions, indices};
 }
 
 export interface MeshSource {

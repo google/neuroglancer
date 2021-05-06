@@ -8,6 +8,7 @@ import 'neuroglancer/datasource/dvid/register_default';
 import 'neuroglancer/datasource/brainmaps/register_default';
 import 'neuroglancer/datasource/precomputed/register_default';
 import 'neuroglancer/segmentation_user_layer';
+import 'neuroglancer/segmentation_user_layer_with_graph';
 import 'neuroglancer/image_user_layer';
 
 import {defaultCredentialsManager} from 'neuroglancer/credentials_provider/default_manager';

@@ -31,12 +31,15 @@ export interface VisibleSegmentsState {
 export const VISIBLE_SEGMENTS_STATE_PROPERTIES: (keyof VisibleSegmentsState)[] = [
   'visibleSegments3D',
   'segmentEquivalences',
+  'rootSegments',
 ];
 
 export function onVisibleSegmentsStateChanged(
     context: RefCounted, state: VisibleSegmentsState, callback: () => void) {
   context.registerDisposer(state.visibleSegments3D.changed.add(callback));
   context.registerDisposer(state.segmentEquivalences.changed.add(callback));
+
+  context.registerDisposer(state.rootSegments.changed.add(callback));
 }
 
 /**
