@@ -78,7 +78,7 @@ function getAbsDifference(a: number|Uint64, b: number|Uint64): number {
 function getLerpErrorBound(interval: DataTypeInterval, dataType: DataType) {
   if (dataType === DataType.FLOAT32) {
     // For float, the error bound is independent of the interval.
-    return 1e-4;
+    return 1e-3;
   }
   const size = getAbsDifference(interval[0], interval[1]);
   return Math.max(1e-6, 2 / size);

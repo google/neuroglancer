@@ -71,10 +71,9 @@ function createPreprocessor(config, emitter, logger) {
         outfile: outFileKey,
         bundle: true,
         write: false,
-        metafile: 'meta.json',
+        metafile: true,
       });
-      const metaEntry =
-          JSON.parse(results.outputFiles.find(entry => entry.path.endsWith('meta.json')).text);
+      const metaEntry = results.metafile;
       const dependencies = Object.keys(metaEntry.inputs);
       if (registerDependencies !== undefined) {
         registerDependencies(originalPath, dependencies);

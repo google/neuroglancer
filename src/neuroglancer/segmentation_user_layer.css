@@ -14,17 +14,13 @@
  * limitations under the License.
  */
 
-:root {
-  --neuroglancer-segment-list-width: auto;
-}
-
-.segmentation-dropdown {
+.neuroglancer-segmentation-rendering-tab {
   display: flex;
   flex-direction: column;
   overflow-y: auto;
 }
 
-.segmentation-dropdown .neuroglancer-shader-code-widget {
+.neuroglancer-segmentation-rendering-tab .neuroglancer-shader-code-widget {
   height: 6em;
   width: 60ch;
 }
@@ -40,28 +36,12 @@
   height: 80vh;
 }
 
-.neuroglancer-segment-list {
-  position: relative;
-  overflow-y: auto;
-  overflow-x: auto;
-}
-
-.neuroglancer-segment-display-tab {
-  display: flex;
-  flex-direction: column;
-}
-
 .neuroglancer-segment-list-entry, .neuroglancer-selection-details-segment {
-  display: grid;
-  grid-auto-flow: dense;
-  grid-template-columns:
-    [fringe] 0px
-             [copy] min-content
-             [visible] min-content
-             [delete] min-content
-             [id] var(--neuroglancer-segment-list-width)
-             [filter] min-content
-             [label] min-content;
+  display: flex;
+  flex-direction: row;
+  width: min-content;
+  min-width: 100%;
+  background-color: black;
   align-items: center;
 }
 
@@ -72,7 +52,7 @@
 
 .neuroglancer-segment-list-entry-id,
 .neuroglancer-selection-details-segment-id {
-  grid-column: id;
+  order: 1;
   display: inline-block;
   font-family: monospace;
   font-size: medium;
@@ -84,83 +64,42 @@
   width: var(--neuroglancer-segment-list-width);
 }
 
-.neuroglancer-segment-list-entry:not(.neuroglancer-segment-list-entry-double-line) .neuroglancer-segment-list-entry-unmapped-id:empty + .neuroglancer-segment-list-entry-copy {
-  display: none;
+.neuroglancer-segment-list  .neuroglancer-segment-list-entry-sticky {
+  position: sticky;
+  left: 0;
 }
 
-.neuroglancer-segment-list-entry.neuroglancer-segment-list-entry-double-line .neuroglancer-segment-list-entry-unmapped-id:empty + .neuroglancer-segment-list-entry-copy {
-  visibility: hidden;
-}
-
-.neuroglancer-segment-list-entry-name:empty + .neuroglancer-segment-list-entry-filter {
-  display: none;
-}
-
-.neuroglancer-segment-list-entry-name {
-  grid-column: label;
-  display: inline-block;
-  font-family: monospace;
-  font-size: medium;
-  user-select: text;
+.neuroglancer-segment-list-entry-sticky {
   white-space: nowrap;
-}
-
-.neuroglancer-segment-list-query {
-  background-color: #151515;
-  color: white;
-  font-family: monospace;
-  font-size: medium;
-  border: 2px solid #333;
-  padding: 2px;
-  outline: 0px;
-}
-
-.neuroglancer-segment-list-query::placeholder {
-  color: #aaa;
-}
-
-.neuroglancer-segment-list-status {
-  display: flex;
   flex-direction: row;
   align-items: center;
-  background-color: #333;
+  background-color: inherit;
+  display: flex;
 }
 
-.neuroglancer-segment-list-entry-copy {
-  grid-column: copy;
-  visibility: hidden;
-}
-
-.neuroglancer-segment-list-entry:hover .neuroglancer-segment-list-entry-copy {
-  visibility: visible;
-}
-
-.neuroglancer-segment-list-entry-visible-checkbox {
-  grid-column: visible;
-}
-
-.neuroglancer-segment-list-entry[data-visible-list]::before {
-  content: " ";
-  display: inline-block;
-  width: 2px;
-  /* prevent collapsing if name is too long */
+.neuroglancer-segment-list-entry-extra-property {
+  padding-left: 8px;
   flex-shrink: 0;
-  margin-right: -2px;
-  align-self: stretch;
-  margin-bottom: 2px;
-  background-color: #999;
+  text-align: right;
+  user-select: text;
 }
 
-.neuroglancer-selection-details-segment-description {
+.neuroglancer-selection-details-segment-description, .neuroglancer-selection-details-segment-property {
   font-family: sans-serif;
   font-size: small;
 }
 
-.neuroglancer-segment-list-entry-filter {
-  visibility: hidden;
-  grid-column: filter;
+.neuroglancer-selection-details-segment-property {
+  display: flex;
+  flex-direction: row;
 }
 
-.neuroglancer-segment-list-entry:hover .neuroglancer-segment-list-entry-filter {
-  visibility: visible;
+.neuroglancer-selection-details-segment-property-name {
+  user-select: text;
+  font-style: italic;
+}
+
+.neuroglancer-selection-details-segment-property-value {
+  text-align: right;
+  flex: 1;
 }
