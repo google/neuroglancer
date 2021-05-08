@@ -15,7 +15,7 @@
  */
 
 import {ChunkLayoutOptions, getChunkDataSizes, makeSliceViewChunkSpecification, SliceViewChunkSource, SliceViewChunkSpecification, SliceViewChunkSpecificationBaseOptions, SliceViewChunkSpecificationOptions, SliceViewSourceOptions} from 'neuroglancer/sliceview/base';
-import {getCombinedTransform} from 'neuroglancer/sliceview/base';
+import {getCombinedTransform, DataType} from 'neuroglancer/sliceview/base';
 import {kZeroVec, vec3} from 'neuroglancer/util/geom';
 
 export const CHUNKED_GRAPH_LAYER_RPC_ID = 'ChunkedGraphLayer';
@@ -23,11 +23,11 @@ export const CHUNKED_GRAPH_SOURCE_UPDATE_ROOT_SEGMENTS_RPC_ID =
     'ChunkedGraphSourceUpdateRootSegments';
 export const RENDER_RATIO_LIMIT = 5.0;
 
-export interface ChunkedGraphSourceOptions extends SliceViewSourceOptions {
+export interface ChunkedGraphSourceOptions {// extends SliceViewSourceOptions {
   rootUri: string;
 }
 
-export interface ChunkedGraphChunkSpecificationBaseOptions extends
+export interface ChunkedGraphChunkSpecificationBaseOptions extends // TODO so many similar interfaces here
     SliceViewChunkSpecificationBaseOptions {
   /**
    * Specifies offset for use by backend.ts:GenericVolumeChunkSource.computeChunkBounds in
@@ -37,7 +37,7 @@ export interface ChunkedGraphChunkSpecificationBaseOptions extends
    * Defaults to kZeroVec if not specified.
    */
   baseVoxelOffset?: Float32Array;
-  // dataType: DataType;
+  dataType: DataType;
 
   /**
    * If set, indicates that the chunk is in compressed segmentation format with the specified block
@@ -65,17 +65,17 @@ export interface ChunkedGraphChunkSpecificationGetDefaultsOptions extends
  */
 export interface ChunkedGraphChunkSpecification extends SliceViewChunkSpecification<Uint32Array> {
   baseVoxelOffset: vec3;
-  //dataType: Datatype;
+  dataType: DataType;
 }
 
 export function makeChunkedGraphChunkSpecification(options: ChunkedGraphChunkSpecificationOptions) {
-  const {rank} = options;
+  const {rank, dataType} = options;
   const {baseVoxelOffset = new Float32Array(rank)} = options;
 
   return {
     ...makeSliceViewChunkSpecification(options),
     baseVoxelOffset,
-    // dataType,
+    dataType,
   }
 }
 

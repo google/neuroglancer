@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-import {ChunkManager} from 'neuroglancer/chunk_manager/frontend';
+import {ChunkManager, ChunkSourceConstructor, GettableChunkSource} from 'neuroglancer/chunk_manager/frontend';
 import {VisibleSegmentsState} from 'neuroglancer/segmentation_display_state/base';
 import {CHUNKED_GRAPH_LAYER_RPC_ID, CHUNKED_GRAPH_SOURCE_UPDATE_ROOT_SEGMENTS_RPC_ID, ChunkedGraphChunkSource as ChunkedGraphChunkSourceInterface, ChunkedGraphChunkSpecification, RENDER_RATIO_LIMIT} from 'neuroglancer/sliceview/chunked_graph/base';
 import {SliceViewChunkSource, SliceViewSingleResolutionSource} from 'neuroglancer/sliceview/frontend';
@@ -58,6 +58,54 @@ export function restoreSegmentSelection(x: any): SegmentSelection {
   };
 }
 
+/**
+ * Mixin for adding a rootSegments member to a ChunkSource.
+ */
+ export function WithRootSegments() {
+  return function<
+      TBase extends ChunkSourceConstructor<GettableChunkSource&{chunkManager: ChunkManager}>>(
+      Base: TBase) {
+    type WithRootSegmentsOptions = InstanceType<TBase>['OPTIONS']&
+        {rootSegments: Uint64Set};
+    class C extends Base {
+      rootSegments: Uint64Set;
+      OPTIONS: WithRootSegmentsOptions;
+      constructor(...args: any[]) {
+        console.log('WithRootSegments args', args);
+        super(...args);
+        const options: WithRootSegmentsOptions = args[1];
+        this.rootSegments =
+            options.rootSegments?.addRef();
+      }
+      initializeCounterpart(rpc: RPC, options: any) {
+        options['rootSegments'] = this.rootSegments.rpcId;
+        super.initializeCounterpart(rpc, options);
+        // const {credentialsProvider} = this;
+        // options['credentialsProvider'] =
+        //     getCredentialsProviderCounterpart(this.chunkManager, credentialsProvider);
+        // super.initializeCounterpart(rpc, options);
+      }
+      static encodeOptions(options: WithRootSegmentsOptions) {
+        const encoding = super.encodeOptions(options);
+        console.log('enocde options!');
+        // const {credentialsProvider} = options;
+        // encoding.credentialsProvider =
+        //     credentialsProvider === undefined ? undefined : getObjectId(credentialsProvider);
+        return encoding;
+      }
+
+      updateRootSegments(rpc: RPC, rootSegments: Uint64Set) {
+        this.rootSegments = rootSegments;
+        rpc.invoke(
+            CHUNKED_GRAPH_SOURCE_UPDATE_ROOT_SEGMENTS_RPC_ID,
+            {'id': this.rpcId, 'rootSegments': this.rootSegments.rpcId});
+      }
+    
+    };
+    return C;
+  };
+}
+
 export class ChunkedGraphChunkSource extends SliceViewChunkSource implements
     ChunkedGraphChunkSourceInterface {
   rootSegments: Uint64Set;
@@ -67,6 +115,7 @@ export class ChunkedGraphChunkSource extends SliceViewChunkSource implements
     spec: ChunkedGraphChunkSpecification,
     rootSegments: Uint64Set
   }) {
+    console.log('make ChunkedGraphChunkSource');
     super(chunkManager, options);
     this.rootSegments = options.rootSegments;
   }
@@ -146,7 +195,7 @@ export class ChunkedGraphLayer extends SliceViewRenderLayer {
   constructor(
       // chunkManager: ChunkManager,
       url: string,
-      // public sources: ChunkedGraphChunkSource[][],
+      public sources: SliceViewSingleResolutionSource<ChunkedGraphChunkSource>[][],
       multiscaleSource: MultiscaleVolumeChunkSource,
       displayState: VisibleSegmentsState&SliceViewRenderLayerOptions) {
     super(multiscaleSource.chunkManager, multiscaleSource, {
@@ -165,6 +214,11 @@ export class ChunkedGraphLayer extends SliceViewRenderLayer {
       this.showOrHideMessage(this.leafRequestsActive.value);
     }));
     this.graphurl = url;
+  }
+
+  getSources(options: SliceViewSourceOptions) { // do we need to override this?
+    console.log('options');
+    return this.sources;
   }
 
   get url() {

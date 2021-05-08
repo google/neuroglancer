@@ -41,6 +41,7 @@ import {parseArray, verifyObjectProperty} from 'neuroglancer/util/json';
 import {Uint64} from 'neuroglancer/util/uint64';
 // import { makeCoordinateSpace } from './coordinate_transform';
 import { LayerActionContext } from './layer';
+import { SliceViewSingleResolutionSource } from './sliceview/frontend';
 
 import {NullarySignal} from './util/signal';
 
@@ -60,22 +61,22 @@ const lastSegmentSelection: SegmentSelection = {
   position: vec3.create(),
 };
 
-export class MulticutDisplayInformation extends RefCounted {
-  changed = new NullarySignal();
+// export class MulticutDisplayInformation extends RefCounted {
+//   changed = new NullarySignal();
 
-  constructor(
-      public multicutSegments = new Uint64Set(),
-      public focusMulticutSegments = new TrackableBoolean(false, false),
-      public otherSegmentsAlpha = trackableAlphaValue(0.5)) {
-    super();
-    this.registerDisposer(multicutSegments.changed.add(this.changed.dispatch));
-    this.registerDisposer(focusMulticutSegments.changed.add(this.changed.dispatch));
-    this.registerDisposer(otherSegmentsAlpha.changed.add(this.changed.dispatch));
-  }
-}
+//   constructor(
+//       public multicutSegments = new Uint64Set(),
+//       public focusMulticutSegments = new TrackableBoolean(false, false),
+//       public otherSegmentsAlpha = trackableAlphaValue(0.5)) {
+//     super();
+//     this.registerDisposer(multicutSegments.changed.add(this.changed.dispatch));
+//     this.registerDisposer(focusMulticutSegments.changed.add(this.changed.dispatch));
+//     this.registerDisposer(otherSegmentsAlpha.changed.add(this.changed.dispatch));
+//   }
+// }
 
 export type SegmentationUserLayerWithGraphDisplayState = SegmentationUserLayerDisplayState&{
-  multicutDisplayInformation: MulticutDisplayInformation;
+  // multicutDisplayInformation: MulticutDisplayInformation;
   timestamp: TrackableValue<string>;
   timestampLimit: TrackableValue<string>;
 };
@@ -97,9 +98,10 @@ function helper<TBase extends BaseConstructor>(Base: TBase) {
     private multiscaleVolumeChunkSource: MultiscaleVolumeChunkSource|undefined;
     constructor(...args: any[]) {
       super(...args);
+      console.log('SegmentationUserLayerWithGraph constructor');
       this.displayState = {
         ...this.displayState,
-        multicutDisplayInformation: new MulticutDisplayInformation(),
+        // multicutDisplayInformation: new MulticutDisplayInformation(),
         timestamp: new TrackableValue('', date => ((new Date(date)).valueOf() / 1000).toString()),
         timestampLimit: new TrackableValue(
             '',
@@ -170,92 +172,113 @@ function helper<TBase extends BaseConstructor>(Base: TBase) {
 
 
     restoreState(specification: any) {
+      console.log('with_graph restoreState');
       super.restoreState(specification);
 
       // Ignore user-specified equivalences for graph layer
       this.displayState.segmentationGroupState.value.segmentEquivalences.clear();
 
-      // return; //  TODO
+      const doStuff = (volume: MultiscaleVolumeChunkSource) => {
+        let remaining = 0;
+      // if (multiscaleSource !== undefined) {
+        ++remaining;
+        // multiscaleSource.then(volume => {
+          this.multiscaleVolumeChunkSource = volume;
+          const {displayState} = this;
+          if (!this.wasDisposed) {
+            // if (volume.getTimestampLimit) {
+            //   volume.getTimestampLimit().then((limit) => {
+            //     this.displayState.timestampLimit.restoreState(limit);
+            //   });
+            // }
+            // Chunked Graph Server
+            if (volume.getChunkedGraphUrl) {
+              this.chunkedGraphUrl = volume.getChunkedGraphUrl();
+            }
+            // Chunked Graph Supervoxels
+            if (this.chunkedGraphUrl && volume.getChunkedGraphSources) {
+              let chunkedGraphSources = volume.getChunkedGraphSources(
+                  {rootUri: this.chunkedGraphUrl}, displayState.segmentationGroupState.value.rootSegments);
 
-      // const segmentationRenderLayer = this.someSegmentationRenderLayer();
+              if (chunkedGraphSources) {
+                this.updateChunkSourceRootSegments(chunkedGraphSources);
+                const transform = this.someSegmentationRenderLayer()?.displayState.transform!; //  yuck?
+                this.chunkedGraphLayer = new ChunkedGraphLayer(this.chunkedGraphUrl, chunkedGraphSources, volume, // volume not actually used
+                    {
+                      ...displayState,
+                      ...displayState.segmentationGroupState.value,
+                      localPosition: this.localPosition,
+                      transform,
+                    });
+                this.addRenderLayer(this.chunkedGraphLayer);
 
-      // if (segmentationRenderLayer === undefined) {
-      //   return;
-      // }
+                // Have to wait for graph server initialization to fetch agglomerations
+                displayState.segmentationGroupState.value.segmentEquivalences.clear();
+                if (displayState.segmentationGroupState.value.rootSegmentsAfterEdit !== undefined) {
+                  displayState.segmentationGroupState.value.rootSegmentsAfterEdit.clear();
+                }
+                verifyObjectProperty(specification, ROOT_SEGMENTS_JSON_KEY, y => {
+                  if (y !== undefined) {
+                    let {rootSegments} = displayState.segmentationGroupState.value;
+                    parseArray(y, value => {
+                      rootSegments.add(Uint64.parseString(String(value), 10));
+                    });
+                  }
+                });
+              }
+            }
+            // this.addSupervoxelRenderLayer({
+            //   supervoxelSet:
+            //       this.graphOperationLayerState.value!.annotationToSupervoxelA.supervoxelSet,
+            //   supervoxelColor: new TrackableRGB(vec3.fromValues(1.0, 0.0, 0.0)),
+            //   isActive: this.graphOperationLayerState.value!.annotationToSupervoxelA.isActive,
+            //   performingMulticut: this.graphOperationLayerState.value!.performingMulticut
+            // });
+            // this.addSupervoxelRenderLayer({
+            //   supervoxelSet:
+            //       this.graphOperationLayerState.value!.annotationToSupervoxelB.supervoxelSet,
+            //   supervoxelColor: new TrackableRGB(vec3.fromValues(0.0, 0.0, 1.0)),
+            //   isActive: this.graphOperationLayerState.value!.annotationToSupervoxelB.isActive,
+            //   performingMulticut: this.graphOperationLayerState.value!.performingMulticut
+            // });
+            if (--remaining === 0) {
+              // this.isReady = true; // TODO is this no longer needed?
+            }
+      }
+    }
+
+      let segmentationRenderLayer = this.someSegmentationRenderLayer();
+
+      if (segmentationRenderLayer === undefined) {
+        let started = false;
+        this.has2dLayer.changed.add(() => {
+          segmentationRenderLayer = this.someSegmentationRenderLayer();
+          
+          if (started || !(segmentationRenderLayer = this.someSegmentationRenderLayer())) {
+            return;
+          }
+          started = true;
+
+          console.log('got a segmentationRenderLayer', segmentationRenderLayer);
+
+          doStuff(segmentationRenderLayer.multiscaleSource);
+        });
+        return;
+      }
+
+      doStuff(segmentationRenderLayer.multiscaleSource);
+
+      // this.multiscaleVolumeChunkSource.
 
       // const {multiscaleSource: volume} = segmentationRenderLayer;
-
-      // let remaining = 0;
-      // // if (multiscaleSource !== undefined) {
-      //   ++remaining;
-      //   // multiscaleSource.then(volume => {
-      //     this.multiscaleVolumeChunkSource = volume;
-      //     const {displayState} = this;
-      //     if (!this.wasDisposed) {
-      //       if (volume.getTimestampLimit) {
-      //         volume.getTimestampLimit().then((limit) => {
-      //           this.displayState.timestampLimit.restoreState(limit);
-      //         });
-      //       }
-      //       // Chunked Graph Server
-      //       if (volume.getChunkedGraphUrl) {
-      //         this.chunkedGraphUrl = volume.getChunkedGraphUrl();
-      //       }
-      //       // Chunked Graph Supervoxels
-      //       if (this.chunkedGraphUrl && volume.getChunkedGraphSources) {
-      //         let chunkedGraphSources = volume.getChunkedGraphSources(
-      //             {rootUri: this.chunkedGraphUrl}, displayState.rootSegments);
-
-      //         if (chunkedGraphSources) {
-      //           this.updateChunkSourceRootSegments(chunkedGraphSources);
-      //           this.chunkedGraphLayer = new ChunkedGraphLayer(
-      //               this.manager.chunkManager, this.chunkedGraphUrl, chunkedGraphSources,
-      //               {...displayState, transform: displayState.objectToDataTransform});
-      //           this.addRenderLayer(this.chunkedGraphLayer);
-
-      //           // Have to wait for graph server initialization to fetch agglomerations
-      //           displayState.segmentEquivalences.clear();
-      //           if (displayState.rootSegmentsAfterEdit !== undefined) {
-      //             displayState.rootSegmentsAfterEdit.clear();
-      //           }
-      //           verifyObjectProperty(specification, ROOT_SEGMENTS_JSON_KEY, y => {
-      //             if (y !== undefined) {
-      //               let {rootSegments} = displayState;
-      //               parseArray(y, value => {
-      //                 rootSegments.add(Uint64.parseString(String(value), 10));
-      //               });
-      //             }
-      //           });
-      //         }
-      //       }
-      //       this.addSupervoxelRenderLayer({
-      //         supervoxelSet:
-      //             this.graphOperationLayerState.value!.annotationToSupervoxelA.supervoxelSet,
-      //         supervoxelColor: new TrackableRGB(vec3.fromValues(1.0, 0.0, 0.0)),
-      //         isActive: this.graphOperationLayerState.value!.annotationToSupervoxelA.isActive,
-      //         performingMulticut: this.graphOperationLayerState.value!.performingMulticut
-      //       });
-      //       this.addSupervoxelRenderLayer({
-      //         supervoxelSet:
-      //             this.graphOperationLayerState.value!.annotationToSupervoxelB.supervoxelSet,
-      //         supervoxelColor: new TrackableRGB(vec3.fromValues(0.0, 0.0, 1.0)),
-      //         isActive: this.graphOperationLayerState.value!.annotationToSupervoxelB.isActive,
-      //         performingMulticut: this.graphOperationLayerState.value!.performingMulticut
-      //       });
-      //       if (--remaining === 0) {
-      //         this.isReady = true;
-      //       }
-      //     // }
-      //   // });
-      // }
 
       // if (this.graphOperationLayerState.value && specification[GRAPH_OPERATION_MARKER_JSON_KEY]) {
       //   this.graphOperationLayerState.value.restoreState(
       //       specification[GRAPH_OPERATION_MARKER_JSON_KEY]);
       // }
-      if (this.displayState.timestamp && specification[TIMESTAMP_JSON_KEY]) {
-        this.displayState.timestamp.value = (specification[TIMESTAMP_JSON_KEY]);
-      }
+      // if (this.displayState.timestamp && specification[TIMESTAMP_JSON_KEY]) {
+      //   this.displayState.timestamp.value = (specification[TIMESTAMP_JSON_KEY]);
+      // }
       // if (specification[PATH_FINDER_JSON_KEY] !== undefined) {
       //   this.pathFinderState.restoreState(specification[PATH_FINDER_JSON_KEY]);
       // }
@@ -346,8 +369,8 @@ function helper<TBase extends BaseConstructor>(Base: TBase) {
       const mousePosition = this.manager.layerSelectedValues.mouseState.position;
       const mousePositionVec3 = vec3.fromValues(mousePosition[0], mousePosition[1], mousePosition[2]);
 
-      // const meshLayer = this.someSegmentationRenderLayer()!;
-      // const transform = meshLayer.displayState.transform.value!; //  TODO
+      const meshLayer = this.someSegmentationRenderLayer()!;
+      const transform = meshLayer.displayState.transform.value!; //  TODO
       const inverseTransform = mat4.create();
 
       const currentSegmentSelection: SegmentSelection = {
@@ -571,9 +594,9 @@ function helper<TBase extends BaseConstructor>(Base: TBase) {
       this.specificationChanged.dispatch();
     }
 
-    private updateChunkSourceRootSegments(chunkedGraphChunkSources: ChunkedGraphChunkSource[][]) {
+    private updateChunkSourceRootSegments(chunkedGraphChunkSources: SliceViewSingleResolutionSource<ChunkedGraphChunkSource>[][]) {
       chunkedGraphChunkSources.forEach(chunkedGraphChunkSourceList => {
-        chunkedGraphChunkSourceList.forEach(chunkedGraphChunkSource => {
+        chunkedGraphChunkSourceList.forEach(({chunkSource: chunkedGraphChunkSource}) => {
           if (chunkedGraphChunkSource.rootSegments !== this.displayState.segmentationGroupState.value.rootSegments) {
             chunkedGraphChunkSource.updateRootSegments(
                 this.manager.rpc, this.displayState.segmentationGroupState.value.rootSegments);

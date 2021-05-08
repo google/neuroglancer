@@ -253,6 +253,7 @@ class TrackableViewerState extends CompoundTrackable {
   }
 
   restoreState(obj: any) {
+    console.log('viewer restoreState');
     const {viewer} = this;
     super.restoreState(obj);
     // Handle legacy properties

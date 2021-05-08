@@ -17,7 +17,7 @@
 import {ChunkManager} from 'neuroglancer/chunk_manager/frontend';
 import {ChunkChannelAccessParameters} from 'neuroglancer/render_coordinate_transform';
 import {DataType, SliceViewChunkSpecification} from 'neuroglancer/sliceview/base';
-import {MultiscaleSliceViewChunkSource, SliceViewChunk, SliceViewChunkSource} from 'neuroglancer/sliceview/frontend';
+import {MultiscaleSliceViewChunkSource, SliceViewChunk, SliceViewChunkSource, SliceViewSingleResolutionSource} from 'neuroglancer/sliceview/frontend';
 import {VolumeChunkSource as VolumeChunkSourceInterface, VolumeChunkSpecification, VolumeSourceOptions, VolumeType} from 'neuroglancer/sliceview/volume/base';
 import {Disposable} from 'neuroglancer/util/disposable';
 import {GL} from 'neuroglancer/webgl/context';
@@ -247,11 +247,11 @@ export abstract class MultiscaleVolumeChunkSource extends
   abstract dataType: DataType;
   abstract volumeType: VolumeType;
 
-  getChunkedGraphUrl?(): string | null;
+  getChunkedGraphUrl?(): string | undefined;
   
   getTimestampLimit?(): Promise<string>;
   getChunkedGraphSources?(options: ChunkedGraphSourceOptions,
-    rootSegments: Uint64Set): ChunkedGraphChunkSource[][] | null;
+    rootSegments: Uint64Set): SliceViewSingleResolutionSource<ChunkedGraphChunkSource>[][] | null;
   // getSegmentToVoxelCountMap?: () => Promise<SegmentToVoxelCountMap|null>| null;
   // getStaticAnnotations?: () => AnnotationSource;
 }

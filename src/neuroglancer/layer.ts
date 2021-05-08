@@ -1671,13 +1671,22 @@ export class LinkedLayerGroup extends RefCounted implements Trackable {
 }
 
 function initializeLayerFromSpecNoRestoreState(managedLayer: ManagedUserLayer, spec: any) {
-  const layerType = verifyOptionalObjectProperty(spec, 'type', verifyString, 'auto');
+  let layerType = verifyOptionalObjectProperty(spec, 'type', verifyString, 'auto');
   managedLayer.archived = verifyOptionalObjectProperty(spec, 'archived', verifyBoolean, false);
   if (!managedLayer.archived) {
     managedLayer.visible = verifyOptionalObjectProperty(spec, 'visible', verifyBoolean, true);
   } else {
     managedLayer.visible = false;
   }
+
+  // TEMP HACK
+  if (layerType === 'segmentation') {
+    spec['type'] = layerType = 'segmentation_with_graph';
+
+    StatusMessage.showMessage(`The layer specification for ${
+      'sourceUrl'} is deprecated. Key 'layerType' must be 'segmentation_with_graph'. Please reload this page.`);
+  }
+
   const layerConstructor = layerTypes.get(layerType) || NewUserLayer;
   managedLayer.layer = new layerConstructor(managedLayer);
   return spec;

@@ -45,16 +45,19 @@ import {cancellableFetchSpecialOk, parseSpecialUrl, SpecialProtocolCredentials, 
 
 import {ChunkedGraphSourceParameters, DataEncoding, MeshSourceParameters, MultiscaleMeshMetadata, PYCG_APP_VERSION, ShardingHashFunction, ShardingParameters, SkeletonMetadata, SkeletonSourceParameters, VolumeChunkEncoding, VolumeChunkSourceParameters} from 'neuroglancer/datasource/graphene/base';
 import {IndexedSegmentPropertySourceParameters} from 'neuroglancer/datasource/graphene/base';
-import {ChunkedGraphChunkSource} from 'neuroglancer/sliceview/chunked_graph/frontend';
+import {ChunkedGraphChunkSource, WithRootSegments} from 'neuroglancer/sliceview/chunked_graph/frontend';
 import {StatusMessage} from 'neuroglancer/status';
 
 import {AnnotationSpatialIndexSourceParameters, AnnotationSourceParameters} from 'neuroglancer/datasource/graphene/base';
-import { ChunkedGraphSourceOptions } from 'src/neuroglancer/sliceview/chunked_graph/base';
+import { makeChunkedGraphChunkSpecification, ChunkedGraphSourceOptions } from 'src/neuroglancer/sliceview/chunked_graph/base';
 import { Uint64Set } from 'src/neuroglancer/uint64_set';
-
 
 class GrapheneVolumeChunkSource extends
 (WithParameters(WithCredentialsProvider<SpecialProtocolCredentials>()(VolumeChunkSource), VolumeChunkSourceParameters)) {}
+
+
+// class GrapheneVolumeChunkSource extends
+// (WithParameters(WithCredentialsProvider<SpecialProtocolCredentials>()(VolumeChunkSource), VolumeChunkSourceParameters)) {}
 
 class GrapheneChunkedGraphChunkSource extends
 (WithParameters(WithCredentialsProvider<SpecialProtocolCredentials>()(ChunkedGraphChunkSource), ChunkedGraphSourceParameters)) {}
@@ -197,13 +200,37 @@ interface MultiscaleVolumeInfo {
   segmentPropertyMap: string|undefined;
   scales: ScaleInfo[];
   modelSpace: CoordinateSpace;
+  dataUrl: string;
+  app?: AppInfo;
+  graph?: GraphInfo;
 }
 
-function parseMultiscaleVolumeInfo(obj: unknown): MultiscaleVolumeInfo {
+export function parseSpecialUrl2(url: string): string { // TODO, this is a hack
+  const urlProtocolPattern = /^([^:\/]+):\/\/([^\/]+)(\/.*)?$/;
+  let match = url.match(urlProtocolPattern);
+  if (match === null) {
+    throw new Error(`Invalid URL: ${JSON.stringify(url)}`);
+  }
+  const protocol = match[1];
+  if (protocol === 'gs') {
+    const bucket = match[2];
+    let path = match[3];
+    if (path === undefined) path = '';
+    return `https://storage.googleapis.com/${bucket}${path}`;
+  } else if (protocol === 's3') {
+    const bucket = match[2];
+    let path = match[3];
+    if (path === undefined) path = '';
+    return `https://s3.amazonaws.com/${bucket}${path}`;
+  }
+  return url;
+}
+
+function parseMultiscaleVolumeInfo(obj: unknown, url: string): MultiscaleVolumeInfo {
   verifyObject(obj);
   const dataType = verifyObjectProperty(obj, 'data_type', x => verifyEnumString(x, DataType));
   const numChannels = verifyObjectProperty(obj, 'num_channels', verifyPositiveInt);
-  const volumeType = verifyObjectProperty(obj, 'type', x => verifyEnumString(x, VolumeType));
+  let volumeType = verifyObjectProperty(obj, 'type', x => verifyEnumString(x, VolumeType));
   const mesh = verifyObjectProperty(obj, 'mesh', verifyOptionalString);
   const skeletons = verifyObjectProperty(obj, 'skeletons', verifyOptionalString);
   const segmentPropertyMap = verifyObjectProperty(obj, 'segment_properties', verifyOptionalString);
@@ -237,6 +264,22 @@ function parseMultiscaleVolumeInfo(obj: unknown): MultiscaleVolumeInfo {
     scales,
     boundingBoxes: [makeIdentityTransformedBoundingBox(box)],
   });
+
+  let dataUrl = url;
+  let app = undefined;
+  let graph = undefined;
+
+  if (volumeType !== VolumeType.IMAGE) {
+    volumeType = VolumeType.SEGMENTATION_WITH_GRAPH;
+    dataUrl = verifyObjectProperty(obj, 'data_dir', x => parseSpecialUrl2(x));
+    app = verifyObjectProperty(obj, 'app', x => new AppInfo(url, x));
+    graph = verifyObjectProperty(obj, 'graph', x => new GraphInfo(x));
+  }
+
+  
+
+  
+
   return {
     dataType,
     volumeType,
@@ -244,16 +287,30 @@ function parseMultiscaleVolumeInfo(obj: unknown): MultiscaleVolumeInfo {
     skeletons,
     segmentPropertyMap,
     scales: scaleInfos,
-    modelSpace
+    modelSpace,
+    app,
+    graph,
+    dataUrl,
   };
 }
 
 class GrapheneMultiscaleVolumeChunkSource extends MultiscaleVolumeChunkSource {
-  app: AppInfo;
-  graph: GraphInfo;
+  // app: AppInfo;
+  // graph: GraphInfo;
+
+  // dataUrl: string;
+  // dataType: DataType;
+  // numChannels: number;
+  // volumeType: VolumeType;
+  // mesh: string|undefined;
+  // verifyMesh: boolean|undefined;
+  // skeletons: string|undefined;
+  // app: AppInfo;
+  // graph: GraphInfo;
+  // scales: ScaleInfo[];
 
   getChunkedGraphUrl() {
-    return this.app.segmentationUrl;
+    return this.info.app?.segmentationUrl;
   }
 
   public async getTimestampLimit() {
@@ -280,24 +337,51 @@ class GrapheneMultiscaleVolumeChunkSource extends MultiscaleVolumeChunkSource {
     super(chunkManager);
   }
 
-  /*
+  
+
   getChunkedGraphSources(options: ChunkedGraphSourceOptions, rootSegments: Uint64Set) {
-    const spec = ChunkedGraphChunkSpecification.getDefaults({
-      numChannels: 1,
-      voxelSize: this.scales[0].resolution,
-      transform: mat4.fromTranslation(
-          mat4.create(),
-          vec3.multiply(vec3.create(), this.scales[0].resolution, this.scales[0].voxelOffset)),
-      upperVoxelBound: this.scales[0].size,
-      chunkDataSizes: [this.graph.chunkSize],
-      baseVoxelOffset: this.scales[0].voxelOffset,
-      chunkedGraphSourceOptions: options,
+
+    const {rank} = this;
+
+    const scaleInfo = this.info.scales[0];
+
+    const spec = makeChunkedGraphChunkSpecification({
+      rank,
+      dataType: this.info.dataType,
+      upperVoxelBound: scaleInfo.size,
+      chunkDataSize: Uint32Array.from(this.info.graph!.chunkSize),
+      baseVoxelOffset: scaleInfo.voxelOffset,
+      // chunkedGraphSourceOptions: options,
     });
 
-    return [[this.chunkManager.getChunkSource(
-        GrapheneChunkedGraphChunkSource,
-        {spec, rootSegments, parameters: {url: `${this.app.segmentationUrl}/node`}})]];
-  }*/
+    // const spec = makeChunkedGraphChunkSpecification.getDefaults({
+    //   numChannels: 1,
+    //   voxelSize: this.scales[0].resolution,
+    //   transform: mat4.fromTranslation(
+    //       mat4.create(),
+    //       vec3.multiply(vec3.create(), this.scales[0].resolution, this.scales[0].voxelOffset)),
+    //   upperVoxelBound: this.scales[0].size,
+    //   chunkDataSizes: [this.graph.chunkSize],
+    //   baseVoxelOffset: this.scales[0].voxelOffset,
+    //   chunkedGraphSourceOptions: options,
+    // });
+
+    // let sources: SliceViewSingleResolutionSource<VolumeChunkSource>[][] = [];
+
+    const stride = rank + 1;
+    const chunkToMultiscaleTransform = new Float32Array(stride * stride);
+
+    return [[
+      {
+        chunkSource: this.chunkManager.getChunkSource(GrapheneChunkedGraphChunkSource, {
+          spec,
+          credentialsProvider: this.credentialsProvider,
+          /*rootSegments,*/
+          parameters: {url: `${this.info.app!.segmentationUrl}/node`}}),
+        chunkToMultiscaleTransform
+      }
+    ]];
+  }
 
   getSources(volumeSourceOptions: VolumeSourceOptions) {
     const modelResolution = this.info.scales[0].resolution;
@@ -315,7 +399,7 @@ class GrapheneMultiscaleVolumeChunkSource extends MultiscaleVolumeChunkSource {
       if (rank === 4) {
         chunkToMultiscaleTransform[stride * 3 + 3] = 1;
       }
-      return makeDefaultVolumeChunkSpecifications({
+      const x = makeDefaultVolumeChunkSpecifications({
                rank,
                dataType: this.dataType,
                chunkToMultiscaleTransform,
@@ -338,6 +422,8 @@ class GrapheneMultiscaleVolumeChunkSource extends MultiscaleVolumeChunkSource {
                  }),
                  chunkToMultiscaleTransform,
                }));
+
+      return x;
     }));
   }
 }
@@ -541,7 +627,7 @@ async function getMeshSource(
     url: string) {
       console.log('getMeshSource');
   const {metadata, segmentPropertyMap} =
-      await getMeshMetadata(chunkManager, credentialsProvider, url);
+      await getMeshMetadata(chunkManager, undefined, url);
   if (metadata === undefined) {
     return {
       source: getLegacyMeshSource(chunkManager, credentialsProvider, {
@@ -627,7 +713,8 @@ function getSubsourceToModelSubspaceTransform(info: MultiscaleVolumeInfo) {
 async function getVolumeDataSource(
     options: GetDataSourceOptions, credentialsProvider: SpecialProtocolCredentialsProvider,
     url: string, metadata: any): Promise<DataSource> {
-  const info = parseMultiscaleVolumeInfo(metadata);
+      console.log(url, metadata);
+  const info = parseMultiscaleVolumeInfo(metadata, url);
   const volume = new GrapheneMultiscaleVolumeChunkSource(
       options.chunkManager, credentialsProvider, url, info);
   const {modelSpace} = info;
@@ -657,7 +744,7 @@ async function getVolumeDataSource(
     });
   }
   if (info.mesh !== undefined) {
-    const meshUrl = resolvePath(url, info.mesh);
+    const meshUrl = resolvePath(info.dataUrl, info.mesh);
     const {source: meshSource, transform} =
         await getMeshSource(options.chunkManager, credentialsProvider, meshUrl);
     const subsourceToModelSubspaceTransform = getSubsourceToModelSubspaceTransform(info);

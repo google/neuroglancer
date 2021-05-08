@@ -273,6 +273,7 @@ export class SliceView extends Base {
   }
 
   private updateVisibleLayersNow() {
+    console.log('updateVisibleLayersNow');
     if (this.wasDisposed) {
       return false;
     }
