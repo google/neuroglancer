@@ -17,6 +17,8 @@
 import {isAABBVisible, mat4, vec3} from 'neuroglancer/util/geom';
 import {getOctreeChildIndex} from 'neuroglancer/util/zorder';
 
+const DEBUG_CHUNKS_TO_DRAW = false;
+
 export interface MultiscaleMeshManifest {
   /**
    * Size of finest-resolution (base) chunk in object coordinates.
@@ -180,6 +182,7 @@ export function getMultiscaleChunksToDraw(
   while (maxLod + 1 < lodScales.length && lodScales[maxLod + 1] !== 0) {
     ++maxLod;
   }
+
   const stackEntryStride = 3;
 
   // [row, parentSubChunkIndex, renderScale]
@@ -187,6 +190,11 @@ export function getMultiscaleChunksToDraw(
   let stackDepth = 0;
   let priorSubChunkIndex = 0;
   function emitChunksUpTo(targetStackIndex: number, subChunkIndex: number) {
+    if (DEBUG_CHUNKS_TO_DRAW) {
+      console.log(`emitChunksUpTo: stackDepth=${stackDepth}, targetStackIndex=${
+          targetStackIndex}, subChunkIndex=${subChunkIndex}, priorSubChunkIndex=${
+          priorSubChunkIndex}`);
+    }
     while (true) {
       if (stackDepth === 0) return;
 
@@ -201,6 +209,10 @@ export function getMultiscaleChunksToDraw(
         const endSubChunk = subChunkIndex & (numSubChunks - 1);
 
         if (priorSubChunkIndex !== endSubChunk && entryRow !== -1) {
+          if (DEBUG_CHUNKS_TO_DRAW) {
+            console.log(`  drawing chunk because priorSubChunkIndex (${
+                priorSubChunkIndex}) != endSubChunk (${endSubChunk})`);
+          }
           callback(entryLod, entryRow, priorSubChunkIndex, endSubChunk, entryRenderScale);
         }
         priorSubChunkIndex = endSubChunk + 1;
@@ -215,7 +227,10 @@ export function getMultiscaleChunksToDraw(
   }
 
   let priorMissingLod = 0;
-
+  if (DEBUG_CHUNKS_TO_DRAW) {
+    console.log('');
+    console.log('Starting to draw');
+  }
   const {octree} = manifest;
   getDesiredMultiscaleMeshChunks(
       manifest, modelViewProjection, clippingPlanes, detailCutoff, viewportWidth, viewportHeight,
@@ -224,7 +239,11 @@ export function getMultiscaleChunksToDraw(
           priorMissingLod = Math.max(lod, priorMissingLod);
           return;
         }
-        if (lod < priorMissingLod) return;
+        if (lod < priorMissingLod) {
+          // A parent chunk (containing chunk at coarser level-of-detail) is missing.  We can't draw
+          // chunks at this level-of-detail because we would not be able to fill in gaps.
+          return;
+        }
         priorMissingLod = 0;
         const rowOffset = row * 5;
         const x = octree[rowOffset], y = octree[rowOffset + 1], z = octree[rowOffset + 2];
@@ -235,6 +254,10 @@ export function getMultiscaleChunksToDraw(
         stack[stackOffset] = empty ? -1 : row;
         stack[stackOffset + 1] = subChunkIndex;
         stack[stackOffset + 2] = renderScale;
+        if (DEBUG_CHUNKS_TO_DRAW) {
+          console.log(`Adding to stack: lod=${lod}, row=${stack[stackOffset]}, subChunkIndex=${
+              subChunkIndex}`);
+        }
         priorSubChunkIndex = 0;
         stackDepth = stackIndex + 1;
       });

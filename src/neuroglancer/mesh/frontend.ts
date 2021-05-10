@@ -36,6 +36,9 @@ import {registerSharedObjectOwner, RPC} from 'neuroglancer/worker_rpc';
 const tempMat4 = mat4.create();
 const tempMat3 = mat3.create();
 
+// To validate the octrees and to determine the multiscale fragment responsible for each framebuffer
+// location, set `DEBUG_MULTISCALE_FRAGMENTS=true` and also set `DEBUG_PICKING=true` in
+// `src/neuroglancer/object_picking.ts`.
 const DEBUG_MULTISCALE_FRAGMENTS = false;
 
 function copyMeshDataToGpu(gl: GL, chunk: FragmentChunk|MultiscaleFragmentChunk) {
@@ -580,66 +583,86 @@ export class MultiscaleMeshLayer extends
     let totalManifestChunks = 0;
     let presentManifestChunks = 0;
 
-    forEachVisibleSegmentToDraw(displayState, this, renderContext.emitColor, renderContext.emitPickID ? renderContext.pickIDs : undefined, (objectId, color, pickIndex) => {
-      const key = getObjectKey(objectId);
-      const manifestChunk = chunks.get(key);
-      ++totalManifestChunks;
-      if (manifestChunk === undefined) return;
-      ++presentManifestChunks;
-      const {manifest} = manifestChunk;
-      const {octree, chunkShape, chunkGridSpatialOrigin, vertexOffsets} = manifest;
-      if (DEBUG_MULTISCALE_FRAGMENTS) {
-        validateOctree(octree);
-      }
-      if (renderContext.emitColor) {
-        meshShaderManager.setColor(gl, shader, color!);
-      }
-      if (renderContext.emitPickID) {
-        meshShaderManager.setPickID(gl, shader, pickIndex!);
-      }
-      if (DEBUG_MULTISCALE_FRAGMENTS) {
-        console.log('drawing object, numChunks=', manifest.octree.length / 5, manifest.octree);
-      }
-      getMultiscaleChunksToDraw(
-          manifest, modelViewProjection, clippingPlanes, detailCutoff, projectionParameters.width,
-          projectionParameters.height,
-          (lod, chunkIndex, renderScale) => {
-            const has = hasFragmentChunk(fragmentChunks, key, lod, chunkIndex);
-            if (renderContext.emitColor) {
-              renderScaleHistogram.add(
-                  manifest.lodScales[lod] * scaleMultiplier, renderScale, has ? 1 : 0, has ? 0 : 1);
+    forEachVisibleSegmentToDraw(
+        displayState, this, renderContext.emitColor,
+        renderContext.emitPickID ? renderContext.pickIDs : undefined,
+        (objectId, color, pickIndex) => {
+          const key = getObjectKey(objectId);
+          const manifestChunk = chunks.get(key);
+          ++totalManifestChunks;
+          if (manifestChunk === undefined) return;
+          ++presentManifestChunks;
+          const {manifest} = manifestChunk;
+          const {octree, chunkShape, chunkGridSpatialOrigin, vertexOffsets} = manifest;
+          if (DEBUG_MULTISCALE_FRAGMENTS) {
+            try {
+              validateOctree(octree);
+            } catch (e) {
+              console.log(`invalid octree for object=${objectId}: ${e.message}`)
             }
-            return has;
-          },
-          (lod, chunkIndex, subChunkBegin, subChunkEnd) => {
-            const fragmentKey = getMultiscaleFragmentKey(key, lod, chunkIndex);
-            const fragmentChunk = fragmentChunks.get(fragmentKey)!;
-            const x = octree[5 * chunkIndex], y = octree[5 * chunkIndex + 1],
-                  z = octree[5 * chunkIndex + 2];
-            const scale = 1 << lod;
-            if (fragmentRelativeVertices) {
-              gl.uniform3f(
-                  shader.uniform('uFragmentOrigin'),
-                  chunkGridSpatialOrigin[0] + (x * chunkShape[0]) * scale +
-                      vertexOffsets[lod * 3 + 0],
-                  chunkGridSpatialOrigin[1] + (y * chunkShape[1]) * scale +
-                      vertexOffsets[lod * 3 + 1],
-                  chunkGridSpatialOrigin[2] + (z * chunkShape[2]) * scale +
-                      vertexOffsets[lod * 3 + 2]);
-              gl.uniform3f(
-                  shader.uniform('uFragmentShape'), chunkShape[0] * scale, chunkShape[1] * scale,
-                  chunkShape[2] * scale);
-            }
-
-            meshShaderManager.drawMultiscaleFragment(
-                gl,
-                shader,
-                fragmentChunk,
-                subChunkBegin,
-                subChunkEnd,
-            );
-          });
-    });
+          }
+          if (renderContext.emitColor) {
+            meshShaderManager.setColor(gl, shader, color!);
+          }
+          if (renderContext.emitPickID) {
+            meshShaderManager.setPickID(gl, shader, pickIndex!);
+          }
+          getMultiscaleChunksToDraw(
+              manifest, modelViewProjection, clippingPlanes, detailCutoff,
+              projectionParameters.width, projectionParameters.height,
+              (lod, chunkIndex, renderScale) => {
+                const has = hasFragmentChunk(fragmentChunks, key, lod, chunkIndex);
+                if (renderContext.emitColor) {
+                  renderScaleHistogram.add(
+                      manifest.lodScales[lod] * scaleMultiplier, renderScale, has ? 1 : 0,
+                      has ? 0 : 1);
+                }
+                return has;
+              },
+              (lod, chunkIndex, subChunkBegin, subChunkEnd) => {
+                const fragmentKey = getMultiscaleFragmentKey(key, lod, chunkIndex);
+                const fragmentChunk = fragmentChunks.get(fragmentKey)!;
+                const x = octree[5 * chunkIndex], y = octree[5 * chunkIndex + 1],
+                      z = octree[5 * chunkIndex + 2];
+                const scale = 1 << lod;
+                if (fragmentRelativeVertices) {
+                  gl.uniform3f(
+                      shader.uniform('uFragmentOrigin'),
+                      chunkGridSpatialOrigin[0] + (x * chunkShape[0]) * scale +
+                          vertexOffsets[lod * 3 + 0],
+                      chunkGridSpatialOrigin[1] + (y * chunkShape[1]) * scale +
+                          vertexOffsets[lod * 3 + 1],
+                      chunkGridSpatialOrigin[2] + (z * chunkShape[2]) * scale +
+                          vertexOffsets[lod * 3 + 2]);
+                  gl.uniform3f(
+                      shader.uniform('uFragmentShape'), chunkShape[0] * scale,
+                      chunkShape[1] * scale, chunkShape[2] * scale);
+                }
+                if (DEBUG_MULTISCALE_FRAGMENTS) {
+                  const message = `lod=${lod}, chunkIndex=${chunkIndex}, subChunkBegin=${
+                      subChunkBegin}, subChunkEnd=${subChunkEnd}, uFragmentOrigin=${
+                          [chunkGridSpatialOrigin[0] + (x * chunkShape[0]) * scale +
+                               vertexOffsets[lod * 3 + 0],
+                           chunkGridSpatialOrigin[1] + (y * chunkShape[1]) * scale +
+                               vertexOffsets[lod * 3 + 1],
+                           chunkGridSpatialOrigin[2] + (z * chunkShape[2]) * scale +
+                               vertexOffsets[lod * 3 + 2]]}, uFragmentShape=${
+                          [chunkShape[0] * scale, chunkShape[1] * scale, chunkShape[2] * scale]}`;
+                  const pickIndex =
+                      renderContext.pickIDs.registerUint64(this, objectId, 1, message);
+                  if (renderContext.emitPickID) {
+                    meshShaderManager.setPickID(gl, shader, pickIndex!);
+                  }
+                }
+                meshShaderManager.drawMultiscaleFragment(
+                    gl,
+                    shader,
+                    fragmentChunk,
+                    subChunkBegin,
+                    subChunkEnd,
+                );
+              });
+        });
     renderScaleHistogram.add(
         Number.POSITIVE_INFINITY, Number.POSITIVE_INFINITY, presentManifestChunks,
         totalManifestChunks - presentManifestChunks);
