@@ -70,5 +70,9 @@ exports.getEsbuildConfig = () => {
       '.npy': 'binary',
     },
     define: parseDefines(argv.define),
+    // TODO(jbms): Remove this workaround once evanw/esbuild#1202 is fixed.
+    banner: {
+      js: 'function require(x) { throw new Error(\'Cannot require \' + x) }',
+    },
   };
 };
