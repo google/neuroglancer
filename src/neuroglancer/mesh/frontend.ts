@@ -565,7 +565,7 @@ export class MultiscaleMeshLayer extends
     scaleMat3Output(
         tempMat3, tempMat3,
         renderContext.projectionParameters.displayDimensionRenderInfo.voxelPhysicalScales);
-    const scaleMultiplier = Math.pow(mat3.determinant(tempMat3), 1 / 3);
+    const scaleMultiplier = Math.pow(Math.abs(mat3.determinant(tempMat3)), 1 / 3);
 
     const {chunks} = this.source;
     const fragmentChunks = this.source.fragmentSource.chunks;
