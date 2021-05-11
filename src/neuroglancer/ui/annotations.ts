@@ -49,7 +49,6 @@ import * as matrix from 'neuroglancer/util/matrix';
 import {MouseEventBinder} from 'neuroglancer/util/mouse_bindings';
 import {formatScaleWithUnitAsString} from 'neuroglancer/util/si_units';
 import {NullarySignal, Signal} from 'neuroglancer/util/signal';
-import {formatIntegerBounds, formatIntegerPoint} from 'neuroglancer/util/spatial_units';
 import {Uint64} from 'neuroglancer/util/uint64';
 import * as vector from 'neuroglancer/util/vector';
 import {makeAddButton} from 'neuroglancer/widget/add_button';
@@ -116,58 +115,6 @@ export class MergedAnnotationStates extends RefCounted implements
       this.updateRelationships();
       this.changed.dispatch();
     };
-  }
-}
-
-function makePointLink(
-    chunkPosition: Float32Array, chunkTransform: ChunkTransformParameters,
-    setViewPosition?: (layerPosition: Float32Array) => void) {
-  const layerRank = chunkTransform.layerRank;
-  const layerPosition = new Float32Array(layerRank);
-  const paddedChunkPosition = new Float32Array(layerRank);
-  paddedChunkPosition.set(chunkPosition);
-  matrix.transformPoint(
-      layerPosition, chunkTransform.chunkToLayerTransform, layerRank + 1, paddedChunkPosition,
-      layerRank);
-  const positionText = formatIntegerPoint(layerPosition);
-  if (setViewPosition !== undefined) {
-    const element = document.createElement('span');
-    element.className = 'neuroglancer-voxel-coordinates-link';
-    element.textContent = positionText;
-    element.title = `Center view on coordinates ${positionText}.`;
-    element.addEventListener('click', () => {
-      setViewPosition(layerPosition);
-    });
-    return element;
-  } else {
-    return document.createTextNode(positionText);
-  }
-}
-
-export function getPositionSummary(
-    element: HTMLElement, annotation: Annotation, chunkTransform: ChunkTransformParameters,
-    setViewPosition?: (layerPosition: Float32Array) => void) {
-  const makePointLinkWithTransform = (point: Float32Array) =>
-      makePointLink(point, chunkTransform, setViewPosition);
-
-  switch (annotation.type) {
-    case AnnotationType.AXIS_ALIGNED_BOUNDING_BOX:
-    case AnnotationType.LINE:
-      element.appendChild(makePointLinkWithTransform(annotation.pointA));
-      element.appendChild(document.createTextNode('–'));
-      element.appendChild(makePointLinkWithTransform(annotation.pointB));
-      break;
-    case AnnotationType.POINT:
-      element.appendChild(makePointLinkWithTransform(annotation.point));
-      break;
-    case AnnotationType.ELLIPSOID:
-      element.appendChild(makePointLinkWithTransform(annotation.center));
-      const rank = chunkTransform.layerRank;
-      const layerRadii = new Float32Array(rank);
-      matrix.transformVector(
-          layerRadii, chunkTransform.chunkToLayerTransform, rank + 1, annotation.radii, rank);
-      element.appendChild(document.createTextNode('±' + formatIntegerBounds(layerRadii)));
-      break;
   }
 }
 
