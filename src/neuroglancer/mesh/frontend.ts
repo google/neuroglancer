@@ -27,6 +27,8 @@ import {forEachVisibleSegmentToDraw, registerRedrawWhenSegmentationDisplayState3
 import {makeCachedDerivedWatchableValue, WatchableValueInterface} from 'neuroglancer/trackable_value';
 import {Borrowed, RefCounted} from 'neuroglancer/util/disposable';
 import {getFrustrumPlanes, mat3, mat3FromMat4, mat4, scaleMat3Output, vec3, vec4} from 'neuroglancer/util/geom';
+import * as matrix from 'neuroglancer/util/matrix';
+import {Uint64} from 'neuroglancer/util/uint64';
 import {Buffer} from 'neuroglancer/webgl/buffer';
 import {GL} from 'neuroglancer/webgl/context';
 import {parameterizedEmitterDependentShaderGetter} from 'neuroglancer/webgl/dynamic_shader';
@@ -711,6 +713,25 @@ export class MultiscaleMeshLayer extends
           }, () => {});
     });
     return hasAllChunks;
+  }
+
+  getObjectPosition(id: Uint64): Float32Array|undefined {
+    const transform = this.displayState.transform.value;
+    if (transform.error !== undefined) return undefined;
+    const chunk = this.source.chunks.get(getObjectKey(id));
+    if (chunk === undefined) return undefined;
+    const {manifest} = chunk;
+    const {clipLowerBound, clipUpperBound} = manifest;
+    const {rank} = transform;
+    // Center position, in model coordinates.
+    const modelCenter = new Float32Array(rank);
+    for (let i = 0; i < 3; ++i) {
+      modelCenter[i] = (clipLowerBound[i] + clipUpperBound[i]) / 2;
+    }
+    const layerCenter = new Float32Array(rank);
+    matrix.transformPoint(
+      layerCenter, transform.modelToRenderLayerTransform, rank + 1, modelCenter, rank);
+    return layerCenter;
   }
 }
 

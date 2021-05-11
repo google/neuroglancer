@@ -21,6 +21,7 @@ import {DataSourceSpecification} from 'neuroglancer/datasource';
 import {LayerActionContext, LinkedLayerGroup, ManagedUserLayer, registerLayerType, registerLayerTypeDetector, registerVolumeLayerType, UserLayer} from 'neuroglancer/layer';
 import {layerDataSourceSpecificationFromJson, LoadedDataSubsource} from 'neuroglancer/layer_data_source';
 import {MeshLayer, MeshSource, MultiscaleMeshLayer, MultiscaleMeshSource} from 'neuroglancer/mesh/frontend';
+import {RenderLayerTransform} from 'neuroglancer/render_coordinate_transform';
 import {RenderScaleHistogram, trackableRenderScaleTarget} from 'neuroglancer/render_scale_statistics';
 import {SegmentColorHash} from 'neuroglancer/segment_color';
 import {augmentSegmentId, bindSegmentListWidth, makeSegmentWidget, maybeAugmentSegmentId, registerCallbackWhenSegmentationDisplayStateChanged, SegmentationDisplayState, SegmentationGroupState, SegmentSelectionState, Uint64MapEntry} from 'neuroglancer/segmentation_display_state/frontend';
@@ -30,6 +31,7 @@ import {PerspectiveViewSkeletonLayer, SkeletonLayer, SkeletonRenderingOptions, S
 import {DataType, VolumeType} from 'neuroglancer/sliceview/volume/base';
 import {MultiscaleVolumeChunkSource} from 'neuroglancer/sliceview/volume/frontend';
 import {SegmentationRenderLayer} from 'neuroglancer/sliceview/volume/segmentation_renderlayer';
+import {StatusMessage} from 'neuroglancer/status';
 import {trackableAlphaValue} from 'neuroglancer/trackable_alpha';
 import {TrackableBoolean} from 'neuroglancer/trackable_boolean';
 import {IndirectTrackableValue, IndirectWatchableValue, makeCachedLazyDerivedWatchableValue, registerNestedSync, TrackableValue, TrackableValueInterface, WatchableValue, WatchableValueInterface} from 'neuroglancer/trackable_value';
@@ -216,6 +218,10 @@ class SegmentationUserLayerDisplayState implements SegmentationDisplayState {
   selectSegment = this.layer.selectSegment;
 
   filterBySegmentLabel = this.layer.filterBySegmentLabel;
+
+  moveToSegment = (id: Uint64) => {
+    this.layer.moveToSegment(id);
+  };
 
   linkedSegmentationGroup: LinkedLayerGroup = this.layer.registerDisposer(new LinkedLayerGroup(
       this.layer.manager.rootLayers, this.layer,
@@ -594,6 +600,19 @@ export class SegmentationUserLayer extends Base {
     if (super.displaySelectionState(state, parent, context)) displayed = true;
     return displayed;
   }
+
+  moveToSegment(id: Uint64) {
+    for (const layer of this.renderLayers) {
+      if (!(layer instanceof MultiscaleMeshLayer)) continue;
+      const layerPosition = layer.getObjectPosition(id);
+      if (layerPosition === undefined) continue;
+      this.setLayerPosition(
+          layer.displayState.transform.value as RenderLayerTransform, layerPosition);
+      return;
+    }
+    StatusMessage.showTemporaryMessage(`No position information loaded for segment ${id}`);
+  }
+
   static type = 'segmentation';
   static typeAbbreviation = 'seg';
   static supportsPickOption = true;

@@ -23,8 +23,7 @@ import './annotations.css';
 import {Annotation, AnnotationId, AnnotationReference, AnnotationSource, annotationToJson, AnnotationType, annotationTypeHandlers, AxisAlignedBoundingBox, Ellipsoid, Line} from 'neuroglancer/annotation';
 import {AnnotationDisplayState, AnnotationLayerState} from 'neuroglancer/annotation/annotation_layer_state';
 import {MultiscaleAnnotationSource} from 'neuroglancer/annotation/frontend_source';
-import {AnnotationLayer, PerspectiveViewAnnotationLayer, SliceViewAnnotationLayer} from 'neuroglancer/annotation/renderlayer';
-import {SpatiallyIndexedPerspectiveViewAnnotationLayer, SpatiallyIndexedSliceViewAnnotationLayer} from 'neuroglancer/annotation/renderlayer';
+import {AnnotationLayer, PerspectiveViewAnnotationLayer, SliceViewAnnotationLayer, SpatiallyIndexedPerspectiveViewAnnotationLayer, SpatiallyIndexedSliceViewAnnotationLayer} from 'neuroglancer/annotation/renderlayer';
 import {CoordinateSpace} from 'neuroglancer/coordinate_transform';
 import {MouseSelectionState, UserLayer} from 'neuroglancer/layer';
 import {LoadedDataSubsource} from 'neuroglancer/layer_data_source';
@@ -37,7 +36,7 @@ import {AggregateWatchableValue, makeCachedLazyDerivedWatchableValue, registerNe
 import {getDefaultAnnotationListBindings} from 'neuroglancer/ui/default_input_event_bindings';
 import {registerTool, Tool} from 'neuroglancer/ui/tool';
 import {animationFrameDebounce} from 'neuroglancer/util/animation_frame_debounce';
-import {arraysEqual, ArraySpliceOp, gatherUpdate} from 'neuroglancer/util/array';
+import {arraysEqual, ArraySpliceOp} from 'neuroglancer/util/array';
 import {setClipboard} from 'neuroglancer/util/clipboard';
 import {serializeColor, unpackRGB, unpackRGBA, useWhiteBackground} from 'neuroglancer/util/color';
 import {Borrowed, disposableOnce, RefCounted} from 'neuroglancer/util/disposable';
@@ -139,13 +138,7 @@ function setLayerPosition(
     layer: UserLayer, chunkTransform: ValueOrError<ChunkTransformParameters>,
     layerPosition: Float32Array) {
   if (chunkTransform.error !== undefined) return;
-  const {globalPosition} = layer.manager.root;
-  const {localPosition} = layer;
-  const {modelTransform} = chunkTransform;
-  gatherUpdate(globalPosition.value, layerPosition, modelTransform.globalToRenderLayerDimensions);
-  gatherUpdate(localPosition.value, layerPosition, modelTransform.localToRenderLayerDimensions);
-  localPosition.changed.dispatch();
-  globalPosition.changed.dispatch();
+  layer.setLayerPosition(chunkTransform.modelTransform, layerPosition);
 }
 
 

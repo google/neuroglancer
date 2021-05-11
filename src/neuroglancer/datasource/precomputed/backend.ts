@@ -385,9 +385,9 @@ function decodeMultiscaleManifestChunk(
   }
   const fragmentInfo = new Uint32Array(response, offset);
   convertEndian32(fragmentInfo, Endianness.LITTLE);
-  const clipUpperBound =
-      vec3.fromValues(Number.POSITIVE_INFINITY, Number.POSITIVE_INFINITY, Number.POSITIVE_INFINITY);
   const clipLowerBound =
+      vec3.fromValues(Number.POSITIVE_INFINITY, Number.POSITIVE_INFINITY, Number.POSITIVE_INFINITY);
+  const clipUpperBound =
       vec3.fromValues(Number.NEGATIVE_INFINITY, Number.NEGATIVE_INFINITY, Number.NEGATIVE_INFINITY);
   let numLods = Math.max(1, storedLodScales.length);
   // Compute `clipLowerBound` and `clipUpperBound` and `numLods`.  Note that `numLods` is >=

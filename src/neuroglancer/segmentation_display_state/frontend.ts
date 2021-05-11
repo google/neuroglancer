@@ -147,6 +147,7 @@ export interface SegmentationDisplayState {
 
   selectSegment: (id: Uint64, pin: boolean|'toggle') => void;
   filterBySegmentLabel: (id: Uint64) => void;
+  moveToSegment: (id: Uint64) => void;
 }
 
 /// Converts a segment id to a Uint64MapEntry or Uint64 (if Uint64MapEntry would add no additional
@@ -350,9 +351,21 @@ function makeRegisterSegmentWidgetEventHandlers(displayState: SegmentationDispla
     event.stopPropagation();
   };
 
+  const onMousedown = (event: MouseEvent) => {
+    if (event.button !== 2 || event.ctrlKey || event.altKey || event.metaKey || event.shiftKey) {
+      return;
+    }
+    const entryElement = event.currentTarget as HTMLElement;
+    const idString = entryElement.dataset.id!;
+    const id = tempStatedColor
+    id.tryParseString(idString);
+    displayState.moveToSegment(id);
+  };
+
   return (element: HTMLElement, template: SegmentWidgetTemplate) => {
     const {children} = element;
     const stickyChildren = children[0].children;
+    element.addEventListener('mousedown', onMousedown);
     if (template.unmappedCopyIndex !== -1) {
       children[template.unmappedCopyIndex].addEventListener('click', unmappedCopyHandler);
     }

@@ -19,11 +19,11 @@ import throttle from 'lodash/throttle';
 import {AnnotationLayerState} from 'neuroglancer/annotation/annotation_layer_state';
 import {ChunkManager} from 'neuroglancer/chunk_manager/frontend';
 import {CoordinateSpace, CoordinateSpaceCombiner, CoordinateTransformSpecification, coordinateTransformSpecificationFromLegacyJson, emptyInvalidCoordinateSpace, isGlobalDimension, isLocalDimension, isLocalOrChannelDimension, TrackableCoordinateSpace} from 'neuroglancer/coordinate_transform';
-import {DataSourceSpecification, makeEmptyDataSourceSpecification} from 'neuroglancer/datasource';
-import {DataSourceProviderRegistry, DataSubsource} from 'neuroglancer/datasource';
+import {DataSourceProviderRegistry, DataSourceSpecification, DataSubsource, makeEmptyDataSourceSpecification} from 'neuroglancer/datasource';
 import {DisplayContext, RenderedPanel} from 'neuroglancer/display_context';
 import {LayerDataSource, layerDataSourceSpecificationFromJson, LoadedDataSubsource} from 'neuroglancer/layer_data_source';
 import {DisplayDimensions, Position, WatchableDisplayDimensionRenderInfo} from 'neuroglancer/navigation_state';
+import {RenderLayerTransform} from 'neuroglancer/render_coordinate_transform';
 import {RENDERED_VIEW_ADD_LAYER_RPC_ID, RENDERED_VIEW_REMOVE_LAYER_RPC_ID} from 'neuroglancer/render_layer_common';
 import {RenderLayer, RenderLayerRole, VisibilityTrackedRenderLayer} from 'neuroglancer/renderlayer';
 import {VolumeType} from 'neuroglancer/sliceview/volume/base';
@@ -34,6 +34,7 @@ import {LayerDataSourcesTab} from 'neuroglancer/ui/layer_data_sources_tab';
 import {SELECTED_LAYER_SIDE_PANEL_DEFAULT_LOCATION, UserLayerSidePanelsState} from 'neuroglancer/ui/layer_side_panel_state';
 import {DEFAULT_SIDE_PANEL_LOCATION, TrackableSidePanelLocation} from 'neuroglancer/ui/side_panel_location';
 import {restoreTool, Tool} from 'neuroglancer/ui/tool';
+import {gatherUpdate} from 'neuroglancer/util/array';
 import {Borrowed, invokeDisposers, Owned, RefCounted} from 'neuroglancer/util/disposable';
 import {emptyToUndefined, parseArray, parseFixedLengthArray, verifyBoolean, verifyFiniteFloat, verifyInt, verifyObject, verifyObjectProperty, verifyOptionalObjectProperty, verifyOptionalString, verifyString} from 'neuroglancer/util/json';
 import {MessageList} from 'neuroglancer/util/message_list';
@@ -443,6 +444,15 @@ export class UserLayer extends RefCounted {
 
   selectedValueFromJson(json: any) {
     return json;
+  }
+
+  setLayerPosition(modelTransform: RenderLayerTransform, layerPosition: Float32Array) {
+    const {globalPosition} = this.manager.root;
+    const {localPosition} = this;
+    gatherUpdate(globalPosition.value, layerPosition, modelTransform.globalToRenderLayerDimensions);
+    gatherUpdate(localPosition.value, layerPosition, modelTransform.localToRenderLayerDimensions);
+    localPosition.changed.dispatch();
+    globalPosition.changed.dispatch();
   }
 }
 
