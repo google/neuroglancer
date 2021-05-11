@@ -90,7 +90,7 @@ export class BrainmapsVolumeChunkSource extends
         payload.subvolume_format = 'SINGLE_IMAGE';
         payload.image_format_options = {
           image_format: 'JPEG',
-          jpeg_quality: 70,
+          jpeg_quality: this.parameters.jpegQuality!,
         };
         return;
       case VolumeChunkEncoding.COMPRESSED_SEGMENTATION:
