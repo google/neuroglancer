@@ -460,7 +460,8 @@ registerAnnotationTypeRenderHandler<AxisAlignedBoundingBox>(
       },
       pickIdsPerInstance: PICK_IDS_PER_INSTANCE,
       snapPosition(position, data, offset, partIndex) {
-        const corners = new Float32Array(data, offset, 6);
+        const rank = position.length;
+        const corners = new Float32Array(data, offset, rank * 2);
         if (partIndex >= CORNERS_PICK_OFFSET && partIndex < EDGES_PICK_OFFSET) {
           snapPositionToCorner(position, corners);
         } else if (partIndex >= EDGES_PICK_OFFSET && partIndex < FACES_PICK_OFFSET) {
