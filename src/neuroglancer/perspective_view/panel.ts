@@ -456,16 +456,39 @@ export class PerspectivePanel extends RenderedDataPanel {
     let gl = this.gl;
     this.offscreenFramebuffer.bind(width, height);
 
-    // Stencil buffer bit 0 indicates positions of framebuffer written by either:
-    // - a non-transparent layer;
-    // - a transparent layer with transparent pick enabled.
+    // Stencil buffer bit 0 indicates positions of framebuffer written by an opaque layer.
     //
-    // In the final pick rendering pass for transparent layers with transparent pick enabled, we
-    // only write to positions with the stencil bit unset.
-
+    // Stencil buffer bit 1 indicates positions of framebuffer written by a transparent layer with
+    // transparentPickEnabled=true.
+    //
+    // For a given xy framebuffer position, the pick id is chosen as the front-most position within
+    // the highest *priority* class for which there is a fragment.  The 3 priority classes are:
+    //
+    // 1. Opaque layers
+    // 2. Transparent layers with transparentPickEnabled==true
+    // 3. Transparent layers with transparentPickEnabled==false
+    //
+    // For example, if a given ray passes first through an object from a transparent layer with
+    // transparentPickEnabled=false, then through an object from a transparent layer with
+    // transparentPickEnabled=true, the pick id will be for the object with
+    // transparentPickEnabled=true, even though it is not the front-most object.
+    //
+    // We accomplish this priority scheme by writing to the pick buffer in 3 phases:
+    //
+    // 1. For opaque layers, we write to the pick buffer and depth buffer, and also set bit 0 of the
+    // stencil buffer, at the same time as we render the color buffer.
+    //
+    // 2. For transparent layers, we write to the pick buffer as a separate rendering pass.  First,
+    // we handle transparentPickEnabled=true layers: we write to the pick buffer and depth buffer,
+    // and set the stencil buffer to `3`, but only at positions where the stencil buffer is unset.
+    // Then, for transparentPickEnabled=false layers, we write to the pick buffer and depth buffer,
+    // but only at positions where the stencil buffer is still unset.
     gl.enable(WebGL2RenderingContext.STENCIL_TEST);
     gl.clearStencil(0);
     gl.clear(WebGL2RenderingContext.STENCIL_BUFFER_BIT);
+
+    // Write 1 to the stencil buffer unconditionally.  We set an always-pass stencil test in order
+    // to be able to write to the stencil buffer.
     gl.stencilOpSeparate(
         /*face=*/ WebGL2RenderingContext.FRONT_AND_BACK, /*sfail=*/ WebGL2RenderingContext.KEEP,
         /*dpfail=*/ WebGL2RenderingContext.KEEP, /*dppass=*/ WebGL2RenderingContext.REPLACE);
@@ -587,34 +610,46 @@ export class PerspectivePanel extends RenderedDataPanel {
 
       // Restore framebuffer attachments.
       this.offscreenFramebuffer.bind(width, height);
-    }
 
-    // Do picking only rendering pass.
-    gl.drawBuffers([gl.NONE, gl.COLOR_ATTACHMENT1, gl.COLOR_ATTACHMENT2]);
-    renderContext.emitter = perspectivePanelEmit;
-    renderContext.emitPickID = true;
-    renderContext.emitColor = false;
+      // Do picking only rendering pass for transparent layers.
+      gl.drawBuffers([gl.NONE, gl.COLOR_ATTACHMENT1, gl.COLOR_ATTACHMENT2]);
+      renderContext.emitter = perspectivePanelEmit;
+      renderContext.emitPickID = true;
+      renderContext.emitColor = false;
 
-    // Offset z values forward so that we reliably write pick IDs and depth information even though
-    // we've already done one drawing pass.
-    gl.enable(WebGL2RenderingContext.POLYGON_OFFSET_FILL);
-    gl.polygonOffset(-1, -1);
+      // First, render `transparentPickEnabled=true` layers.
 
-    gl.stencilFuncSeparate(
-        /*face=*/ WebGL2RenderingContext.FRONT_AND_BACK, /*func=*/ WebGL2RenderingContext.GREATER,
-        /*ref=*/ 1, /*mask=*/ 1);
-    gl.stencilOpSeparate(
-        /*face=*/ WebGL2RenderingContext.FRONT_AND_BACK, /*sfail=*/ WebGL2RenderingContext.KEEP,
-        /*dpfail=*/ WebGL2RenderingContext.KEEP, /*dppass=*/ WebGL2RenderingContext.KEEP);
-    for (const [renderLayer, attachment] of visibleLayers) {
-      if (!renderLayer.isTransparent) {
-        continue;
+      // Only write to positions where the stencil buffer is unset (i.e. the ray does not intersect
+      // any opaque object), since opaque objects take precedence.  Set the stencil buffer to 3 to
+      // ensure those positions take precedence over `transparentPickEnabled=false` layers.
+      gl.stencilFuncSeparate(
+          /*face=*/ WebGL2RenderingContext.FRONT_AND_BACK, /*func=*/ WebGL2RenderingContext.GREATER,
+          /*ref=*/ 3, /*mask=*/ 1);
+      gl.stencilOpSeparate(
+          /*face=*/ WebGL2RenderingContext.FRONT_AND_BACK, /*sfail=*/ WebGL2RenderingContext.KEEP,
+          /*dpfail=*/ WebGL2RenderingContext.KEEP, /*dppass=*/ WebGL2RenderingContext.REPLACE);
+      for (const [renderLayer, attachment] of visibleLayers) {
+        if (!renderLayer.isTransparent || !renderLayer.transparentPickEnabled) {
+          continue;
+        }
+        renderLayer.draw(renderContext, attachment);
       }
-      renderLayer.draw(renderContext, attachment);
-    }
-    gl.disable(WebGL2RenderingContext.STENCIL_TEST);
 
-    gl.disable(WebGL2RenderingContext.POLYGON_OFFSET_FILL);
+      gl.stencilFuncSeparate(
+          /*face=*/ WebGL2RenderingContext.FRONT_AND_BACK, /*func=*/ WebGL2RenderingContext.EQUAL,
+          /*ref=*/ 0, /*mask=*/ 3);
+      gl.stencilOpSeparate(
+          /*face=*/ WebGL2RenderingContext.FRONT_AND_BACK, /*sfail=*/ WebGL2RenderingContext.KEEP,
+          /*dpfail=*/ WebGL2RenderingContext.KEEP, /*dppass=*/ WebGL2RenderingContext.KEEP);
+      for (const [renderLayer, attachment] of visibleLayers) {
+        if (!renderLayer.isTransparent || renderLayer.transparentPickEnabled) {
+          continue;
+        }
+        renderLayer.draw(renderContext, attachment);
+      }
+    }
+
+    gl.disable(WebGL2RenderingContext.STENCIL_TEST);
 
     if (this.viewer.showScaleBar.value && this.viewer.orthographicProjection.value) {
       // Only modify color buffer.

@@ -216,6 +216,7 @@ class SegmentationUserLayerDisplayState implements SegmentationDisplayState {
   renderScaleHistogram = new RenderScaleHistogram();
   renderScaleTarget = trackableRenderScaleTarget(1);
   selectSegment = this.layer.selectSegment;
+  transparentPickEnabled = this.layer.pick;
 
   filterBySegmentLabel = this.layer.filterBySegmentLabel;
 

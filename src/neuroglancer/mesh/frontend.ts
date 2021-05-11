@@ -332,6 +332,10 @@ export class MeshLayer extends
     return displayState.objectAlpha.value < 1.0 || displayState.silhouetteRendering.value > 0;
   }
 
+  get transparentPickEnabled() {
+    return this.displayState.transparentPickEnabled.value;
+  }
+
   get gl() {
     return this.chunkManager.chunkQueueManager.gl;
   }
@@ -528,6 +532,10 @@ export class MultiscaleMeshLayer extends
   get isTransparent() {
     const {displayState} = this;
     return displayState.objectAlpha.value < 1.0 || displayState.silhouetteRendering.value > 0;
+  }
+
+  get transparentPickEnabled() {
+    return this.displayState.transparentPickEnabled.value;
   }
 
   get gl() {
