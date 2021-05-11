@@ -3,13 +3,11 @@ rules:
   - base: ndmaster
     upstream: google:master
     mergeMethod: merge
-    reviewers: 
-      - hannahgooden
+    reviewers:
       - j6k4m8
       - sandyhider
       - movestill
-    assignees: 
-      - hannahgooden
+    assignees:
       - j6k4m8
       - sandyhider
       - movestill      
