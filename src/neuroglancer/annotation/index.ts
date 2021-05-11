@@ -702,7 +702,7 @@ export class AnnotationSource extends RefCounted implements AnnotationSourceSign
     return this.rank_;
   }
 
-  readonly annotationPropertySerializer: AnnotationPropertySerializer;
+  annotationPropertySerializer: AnnotationPropertySerializer;
 
   constructor(
       rank: number, public readonly relationships: readonly string[] = [],
@@ -897,7 +897,11 @@ export class LocalAnnotationSource extends AnnotationSource {
           break;
       }
     }
-    this.rank_ = sourceRank;
+    if (this.rank_ !== sourceRank) {
+      this.rank_ = sourceRank;
+      this.annotationPropertySerializer =
+          new AnnotationPropertySerializer(this.rank_, this.properties);
+    }
     this.changed.dispatch();
   }
 }
