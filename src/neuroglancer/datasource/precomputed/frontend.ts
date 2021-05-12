@@ -213,13 +213,21 @@ class PrecomputedMultiscaleVolumeChunkSource extends MultiscaleVolumeChunkSource
       const stride = rank + 1;
       const chunkToMultiscaleTransform = new Float32Array(stride * stride);
       chunkToMultiscaleTransform[chunkToMultiscaleTransform.length - 1] = 1;
+      const {lowerBounds: baseLowerBound, upperBounds: baseUpperBound} =
+          this.info.modelSpace.boundingBoxes[0].box;
+      const lowerClipBound = new Float32Array(rank);
+      const upperClipBound = new Float32Array(rank);
       for (let i = 0; i < 3; ++i) {
         const relativeScale = resolution[i] / modelResolution[i];
         chunkToMultiscaleTransform[stride * i + i] = relativeScale;
         chunkToMultiscaleTransform[stride * rank + i] = scaleInfo.voxelOffset[i] * relativeScale;
+        lowerClipBound[i] = baseLowerBound[i] / relativeScale;
+        upperClipBound[i] = baseUpperBound[i] / relativeScale;
       }
       if (rank === 4) {
         chunkToMultiscaleTransform[stride * 3 + 3] = 1;
+        lowerClipBound[3] = baseLowerBound[3];
+        upperClipBound[3] = baseUpperBound[3];
       }
       return makeDefaultVolumeChunkSpecifications({
                rank,
@@ -243,6 +251,8 @@ class PrecomputedMultiscaleVolumeChunkSource extends MultiscaleVolumeChunkSource
                    }
                  }),
                  chunkToMultiscaleTransform,
+                 lowerClipBound,
+                 upperClipBound,
                }));
     }));
   }
