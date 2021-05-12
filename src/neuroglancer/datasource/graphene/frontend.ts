@@ -62,6 +62,10 @@ class GrapheneVolumeChunkSource extends
 class GrapheneChunkedGraphChunkSource extends
 (WithParameters(WithCredentialsProvider<SpecialProtocolCredentials>()(ChunkedGraphChunkSource), ChunkedGraphSourceParameters)) {}
 
+// class GrapheneChunkedGraphChunkSource extends
+// (WithRootSegments()(WithParameters(WithCredentialsProvider<SpecialProtocolCredentials>()(VolumeChunkSource), ChunkedGraphSourceParameters))) {}
+
+
 class GrapheneMeshSource extends
 (WithParameters(WithCredentialsProvider<SpecialProtocolCredentials>()(MeshSource), MeshSourceParameters)) {}
 
@@ -351,6 +355,7 @@ class GrapheneMultiscaleVolumeChunkSource extends MultiscaleVolumeChunkSource {
       upperVoxelBound: scaleInfo.size,
       chunkDataSize: Uint32Array.from(this.info.graph!.chunkSize),
       baseVoxelOffset: scaleInfo.voxelOffset,
+      // compressedSegmentationBlockSize: scaleInfo.compressedSegmentationBlockSize,
       // chunkedGraphSourceOptions: options,
     });
 
@@ -376,7 +381,7 @@ class GrapheneMultiscaleVolumeChunkSource extends MultiscaleVolumeChunkSource {
         chunkSource: this.chunkManager.getChunkSource(GrapheneChunkedGraphChunkSource, {
           spec,
           credentialsProvider: this.credentialsProvider,
-          /*rootSegments,*/
+          rootSegments,
           parameters: {url: `${this.info.app!.segmentationUrl}/node`}}),
         chunkToMultiscaleTransform
       }

@@ -16,7 +16,7 @@
 
 import {ChunkManager, ChunkSourceConstructor, GettableChunkSource} from 'neuroglancer/chunk_manager/frontend';
 import {VisibleSegmentsState} from 'neuroglancer/segmentation_display_state/base';
-import {CHUNKED_GRAPH_LAYER_RPC_ID, CHUNKED_GRAPH_SOURCE_UPDATE_ROOT_SEGMENTS_RPC_ID, ChunkedGraphChunkSource as ChunkedGraphChunkSourceInterface, ChunkedGraphChunkSpecification, RENDER_RATIO_LIMIT} from 'neuroglancer/sliceview/chunked_graph/base';
+import {CHUNKED_GRAPH_LAYER_RPC_ID, CHUNKED_GRAPH_SOURCE_UPDATE_ROOT_SEGMENTS_RPC_ID, ChunkedGraphChunkSource as ChunkedGraphChunkSourceInterface, ChunkedGraphChunkSpecification, RENDER_RATIO_LIMIT, ChunkedGraphChunkSpecificationOptions} from 'neuroglancer/sliceview/chunked_graph/base';
 import {SliceViewChunkSource, SliceViewSingleResolutionSource} from 'neuroglancer/sliceview/frontend';
 import {SliceViewRenderLayer, SliceViewRenderLayerOptions} from 'neuroglancer/sliceview/renderlayer';
 import {StatusMessage} from 'neuroglancer/status';
@@ -58,58 +58,68 @@ export function restoreSegmentSelection(x: any): SegmentSelection {
   };
 }
 
-/**
- * Mixin for adding a rootSegments member to a ChunkSource.
- */
- export function WithRootSegments() {
-  return function<
-      TBase extends ChunkSourceConstructor<GettableChunkSource&{chunkManager: ChunkManager}>>(
-      Base: TBase) {
-    type WithRootSegmentsOptions = InstanceType<TBase>['OPTIONS']&
-        {rootSegments: Uint64Set};
-    class C extends Base {
-      rootSegments: Uint64Set;
-      OPTIONS: WithRootSegmentsOptions;
-      constructor(...args: any[]) {
-        console.log('WithRootSegments args', args);
-        super(...args);
-        const options: WithRootSegmentsOptions = args[1];
-        this.rootSegments =
-            options.rootSegments?.addRef();
-      }
-      initializeCounterpart(rpc: RPC, options: any) {
-        options['rootSegments'] = this.rootSegments.rpcId;
-        super.initializeCounterpart(rpc, options);
-        // const {credentialsProvider} = this;
-        // options['credentialsProvider'] =
-        //     getCredentialsProviderCounterpart(this.chunkManager, credentialsProvider);
-        // super.initializeCounterpart(rpc, options);
-      }
-      static encodeOptions(options: WithRootSegmentsOptions) {
-        const encoding = super.encodeOptions(options);
-        console.log('enocde options!');
-        // const {credentialsProvider} = options;
-        // encoding.credentialsProvider =
-        //     credentialsProvider === undefined ? undefined : getObjectId(credentialsProvider);
-        return encoding;
-      }
+// /**
+//  * Mixin for adding a rootSegments member to a ChunkSource.
+//  */
+//  export function WithRootSegments() {
+//   return function<
+//       TBase extends ChunkSourceConstructor<GettableChunkSource&{chunkManager: ChunkManager}>>(
+//       Base: TBase) {
+//     type WithRootSegmentsOptions = InstanceType<TBase>['OPTIONS']&
+//         {rootSegments: Uint64Set};
+//     class C extends Base {
+//       rootSegments: Uint64Set;
+//       OPTIONS: WithRootSegmentsOptions;
+//       constructor(...args: any[]) {
+//         console.log('WithRootSegments args', args);
+//         super(...args);
+//         const options: WithRootSegmentsOptions = args[1];
+//         this.rootSegments =
+//             options.rootSegments?.addRef();
+//       }
+//       initializeCounterpart(rpc: RPC, options: any) {
+//         options['rootSegments'] = this.rootSegments.rpcId;
+//         super.initializeCounterpart(rpc, options);
+//         // const {credentialsProvider} = this;
+//         // options['credentialsProvider'] =
+//         //     getCredentialsProviderCounterpart(this.chunkManager, credentialsProvider);
+//         // super.initializeCounterpart(rpc, options);
+//       }
+//       static encodeOptions(options: WithRootSegmentsOptions) {
+//         const encoding = super.encodeOptions(options);
+//         console.log('enocde options!');
+//         // const {credentialsProvider} = options;
+//         // encoding.credentialsProvider =
+//         //     credentialsProvider === undefined ? undefined : getObjectId(credentialsProvider);
+//         return encoding;
+//       }
 
-      updateRootSegments(rpc: RPC, rootSegments: Uint64Set) {
-        this.rootSegments = rootSegments;
-        rpc.invoke(
-            CHUNKED_GRAPH_SOURCE_UPDATE_ROOT_SEGMENTS_RPC_ID,
-            {'id': this.rpcId, 'rootSegments': this.rootSegments.rpcId});
-      }
+//       updateRootSegments(rpc: RPC, rootSegments: Uint64Set) {
+//         this.rootSegments = rootSegments;
+//         rpc.invoke(
+//             CHUNKED_GRAPH_SOURCE_UPDATE_ROOT_SEGMENTS_RPC_ID,
+//             {'id': this.rpcId, 'rootSegments': this.rootSegments.rpcId});
+//       }
     
-    };
-    return C;
-  };
-}
+//     };
+//     return C;
+//   };
+// }
 
 export class ChunkedGraphChunkSource extends SliceViewChunkSource implements
     ChunkedGraphChunkSourceInterface {
   rootSegments: Uint64Set;
   spec: ChunkedGraphChunkSpecification;
+
+  // type foo = {rootSegments: Uint64Set};
+
+  // type WithCredentialsOptions = InstanceType<TBase>['OPTIONS']&
+//   {credentialsProvider: MaybeOptionalCredentialsProvider<Credentials>};
+// class C extends Base {
+// credentialsProvider: MaybeOptionalCredentialsProvider<Credentials>;
+  OPTIONS: {rootSegments: Uint64Set, spec: ChunkedGraphChunkSpecification}; // SliceViewChunkSourceOptions<Spec>;
+  // SliceViewChunkSourceOptions vs  SliceViewChunkSpecificationOptions
+
 
   constructor(chunkManager: ChunkManager, options: {
     spec: ChunkedGraphChunkSpecification,
@@ -121,12 +131,14 @@ export class ChunkedGraphChunkSource extends SliceViewChunkSource implements
   }
 
   initializeCounterpart(rpc: RPC, options: any) {
+    console.log('rpc 4?');
     options['rootSegments'] = this.rootSegments.rpcId;
     super.initializeCounterpart(rpc, options);
   }
 
   updateRootSegments(rpc: RPC, rootSegments: Uint64Set) {
     this.rootSegments = rootSegments;
+    console.log('rpc 5?');
     rpc.invoke(
         CHUNKED_GRAPH_SOURCE_UPDATE_ROOT_SEGMENTS_RPC_ID,
         {'id': this.rpcId, 'rootSegments': this.rootSegments.rpcId});
@@ -210,10 +222,13 @@ export class ChunkedGraphLayer extends SliceViewRenderLayer {
       transform: displayState.transform,
       localPosition: displayState.localPosition,
     });
+    console.log('ChunkedGraphLayer rpc id', this.rpcId);
     this.registerDisposer(this.leafRequestsActive.changed.add(() => {
       this.showOrHideMessage(this.leafRequestsActive.value);
     }));
     this.graphurl = url;
+
+    this.initializeCounterpart();
   }
 
   getSources(options: SliceViewSourceOptions) { // do we need to override this?

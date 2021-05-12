@@ -64,11 +64,11 @@ export interface ChunkedGraphChunkSpecificationGetDefaultsOptions extends
  * Specifies a chunk layout and voxel size.
  */
 export interface ChunkedGraphChunkSpecification extends SliceViewChunkSpecification<Uint32Array> {
-  baseVoxelOffset: vec3;
+  baseVoxelOffset: Float32Array; //vec3;
   dataType: DataType;
 }
 
-export function makeChunkedGraphChunkSpecification(options: ChunkedGraphChunkSpecificationOptions) {
+export function makeChunkedGraphChunkSpecification(options: ChunkedGraphChunkSpecificationOptions): ChunkedGraphChunkSpecification {
   const {rank, dataType} = options;
   const {baseVoxelOffset = new Float32Array(rank)} = options;
 

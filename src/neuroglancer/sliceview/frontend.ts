@@ -322,6 +322,7 @@ export class SliceView extends Base {
         rpcMessage['layerId'] = renderLayer.rpcId;
         rpcMessage['sources'] = serializeAllTransformedSources(layerInfo.allSources);
         this.flushBackendProjectionParameters();
+        console.log('add visible layer', renderLayer, rpcMessage);
         rpc.invoke(SLICEVIEW_ADD_VISIBLE_LAYER_RPC_ID, rpcMessage);
         changed = true;
       }
@@ -451,7 +452,7 @@ export abstract class SliceViewChunkSource<
     SliceViewChunkSourceInterface {
   chunks: Map<string, ChunkType>;
 
-  OPTIONS: SliceViewChunkSourceOptions<Spec>;
+  OPTIONS: SliceViewChunkSourceOptions<Spec>; // TODO, figure out how this works T['OPTIONS]
 
   spec: Spec;
 

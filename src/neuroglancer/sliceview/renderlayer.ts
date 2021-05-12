@@ -171,6 +171,7 @@ export abstract class SliceViewRenderLayer<
   RPC_TYPE_ID: string;
 
   initializeCounterpart() {
+    console.log('SliceViewRenderLayer initializeCounterpart');
     const sharedObject =
         this.registerDisposer(new ChunkRenderLayerFrontend(this.layerChunkProgressInfo));
     const rpc = this.chunkManager.rpc!;

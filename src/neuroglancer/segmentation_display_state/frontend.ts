@@ -729,6 +729,7 @@ export function sendVisibleSegmentsState(state: VisibleSegmentsState, options: a
   for (const property of VISIBLE_SEGMENTS_STATE_PROPERTIES) {
     const value = state[property];
     if (value) {
+      console.log('rpc 2?');
       options[property] = value.rpcId;
     }
   }
@@ -748,6 +749,7 @@ export class SegmentationLayerSharedObject extends Base {
     options['chunkManager'] = this.chunkManager.rpcId;
     sendVisibleSegmentsState(displayState.segmentationGroupState.value, options);
     if (displayState.segmentationGroupState.value.rootSegmentsAfterEdit !== undefined){
+      console.log('rpcid failure 1?');
       options['rootSegmentsAfterEdit'] = displayState.segmentationGroupState.value.rootSegmentsAfterEdit!.rpcId;
     }
     options['transform'] =

@@ -46,9 +46,10 @@ import {Uint64} from 'neuroglancer/util/uint64';
 import {encodeZIndexCompressed} from 'neuroglancer/util/zorder';
 import {registerSharedObject} from 'neuroglancer/worker_rpc';
 
-import {AnnotationSourceParameters, AnnotationSpatialIndexSourceParameters, DataEncoding, GRAPHENE_MANIFEST_SHARDED, IndexedSegmentPropertySourceParameters, MeshSourceParameters, MultiscaleMeshSourceParameters, ShardingHashFunction, ShardingParameters, SkeletonSourceParameters, VolumeChunkEncoding, VolumeChunkSourceParameters} from 'neuroglancer/datasource/graphene/base';
+import {AnnotationSourceParameters, AnnotationSpatialIndexSourceParameters, ChunkedGraphSourceParameters, DataEncoding, GRAPHENE_MANIFEST_SHARDED, IndexedSegmentPropertySourceParameters, MeshSourceParameters, MultiscaleMeshSourceParameters, ShardingHashFunction, ShardingParameters, SkeletonSourceParameters, VolumeChunkEncoding, VolumeChunkSourceParameters} from 'neuroglancer/datasource/graphene/base';
 
 import * as DracoLoader from 'dracoloader';
+import { ChunkedGraphChunk, ChunkedGraphChunkSource, decodeSupervoxelArray } from 'src/neuroglancer/sliceview/chunked_graph/backend';
 
 // const shardingHashFunctions: Map<ShardingHashFunction, (out: Uint64) => void> = new Map([
 //   [
@@ -93,6 +94,7 @@ function getMinishardIndexDataSource(
           {
             download: async function(
                 shardFileAndMiniShard: string, cancellationToken: CancellationToken) {
+                  console.log('download getMinishardIndexDataSource');
               const parts = shardFileAndMiniShard.split(':');
               const shardFile = parts[0];
               const miniShard: Uint64 = Uint64.parseString(parts[1]);
@@ -272,6 +274,8 @@ chunkDecoders.set(VolumeChunkEncoding.COMPRESSED_SEGMENTATION, decodeCompressedS
   async download(chunk: VolumeChunk, cancellationToken: CancellationToken): Promise<void> {
     const {parameters} = this;
 
+    console.log('download chunk')
+
     // const {minishardIndexSource} = this;
     let response: ArrayBuffer;
     // if (minishardIndexSource === undefined) {
@@ -303,6 +307,57 @@ chunkDecoders.set(VolumeChunkEncoding.COMPRESSED_SEGMENTATION, decodeCompressedS
     await this.chunkDecoder(chunk, cancellationToken, response);
   }
 }
+
+export const responseIdentity = async (x: any) => x;
+
+export function decodeChunkedGraphChunk(
+  chunk: ChunkedGraphChunk, rootObjectKey: string, response: Response) {
+return decodeSupervoxelArray(chunk, rootObjectKey, response);
+}
+
+@registerSharedObject() export class GrapheneChunkedGraphChunkSource extends
+(WithParameters(WithSharedCredentialsProviderCounterpart<SpecialProtocolCredentials>()(ChunkedGraphChunkSource), ChunkedGraphSourceParameters)) {
+  async download(chunk: ChunkedGraphChunk, cancellationToken: CancellationToken): Promise<void> {
+    let {parameters} = this;
+    let chunkPosition = this.computeChunkBounds(chunk);
+    let chunkDataSize = chunk.chunkDataSize!;
+    let bounds = `${chunkPosition[0]}-${chunkPosition[0] + chunkDataSize[0]}_` +
+        `${chunkPosition[1]}-${chunkPosition[1] + chunkDataSize[1]}_` +
+        `${chunkPosition[2]}-${chunkPosition[2] + chunkDataSize[2]}`;
+
+    let promises = Array<Promise<any>>();
+    let promise: Promise<any>;
+
+    for (const [key, val] of chunk.mappings!.entries()) {
+      if (val === null) {
+        promise = cancellableFetchSpecialOk(this.credentialsProvider,
+            `${parameters.url}/${key}/leaves?int64_as_str=1&bounds=${bounds}`, {}, responseIdentity,
+            cancellationToken);
+        promises.push(this.withErrorMessage(
+                              promise, `Fetching leaves of segment ${key} in region ${bounds}: `)
+                          .then(res => decodeChunkedGraphChunk(chunk, key, res))
+                          .catch(err => console.error(err)));
+      }
+    }
+    await Promise.all(promises);
+  }
+
+  async withErrorMessage(promise: Promise<Response>, errorPrefix: string): Promise<Response> {
+    const response = await promise;
+    if (response.ok) {
+      return response;
+    } else {
+      let msg: string;
+      try {
+        msg = (await response.json())['message'];
+      } catch {
+        msg = await response.text();
+      }
+      throw new Error(`[${response.status}] ${errorPrefix}${msg}`);
+    }
+  }
+}
+
 
 export function decodeManifestChunk(chunk: ManifestChunk, response: any) {
   return decodeJsonManifestChunk(chunk, response, 'fragments');
@@ -368,6 +423,7 @@ function getFragmentDownloadPromise(
   minishardIndexSources: MinishardIndexSource[],
   cancellationToken: CancellationToken
 ) {
+  console.log('download fragment');
   let fragmentDownloadPromise;
   if (parameters.sharding){
     if (chunk.verifyFragment !== undefined && !chunk.verifyFragment) {
@@ -392,6 +448,7 @@ function getFragmentDownloadPromise(
   protected minishardIndexSources: MinishardIndexSource[];
 
   async download(chunk: ManifestChunk, cancellationToken: CancellationToken) {
+    console.log('download mesh');
     const {parameters} = this;
     let url = `${parameters.manifestUrl}/manifest`;
     let manifestUrl = `${url}/${chunk.objectId}:${parameters.lod}?verify=1&prepend_seg_ids=1`;
@@ -417,6 +474,7 @@ function getFragmentDownloadPromise(
   }
 
   async downloadFragment(chunk: FragmentChunk, cancellationToken: CancellationToken) {
+    console.log('download mesh fragment');
     const {parameters, minishardIndexSources} = this;
     const fragmentDownloadPromise = getFragmentDownloadPromise(
       chunk, parameters, minishardIndexSources, cancellationToken
@@ -469,6 +527,7 @@ export class GrapheneSkeletonSource extends
       this.chunkManager, this.credentialsProvider,
       {url: this.parameters.url, sharding: this.parameters.metadata.sharding, layer: 0});
   async download(chunk: SkeletonChunk, cancellationToken: CancellationToken) {
+    console.log('download skeleton');
     const {parameters} = this;
     const response = getOrNotFoundError(await fetchByUint64(
         this.credentialsProvider, parameters.url, chunk, this.minishardIndexSource, chunk.objectId,

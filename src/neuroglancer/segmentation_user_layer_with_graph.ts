@@ -536,6 +536,7 @@ function helper<TBase extends BaseConstructor>(Base: TBase) {
           const meshLayer = this.someRenderLayer();
           if (meshLayer) {
             const meshSource = meshLayer.source;
+            console.log('rpc 3?');
             const promise = meshSource.rpc!.promiseInvoke<any>(
               GRAPHENE_MANIFEST_REFRESH_PROMISE,
               {'rpcId': meshSource.rpcId!, 'segment': segment.toString()});
