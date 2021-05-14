@@ -24,7 +24,7 @@ import {MeshLayer, MeshSource, MultiscaleMeshLayer, MultiscaleMeshSource} from '
 import {RenderLayerTransform} from 'neuroglancer/render_coordinate_transform';
 import {RenderScaleHistogram, trackableRenderScaleTarget} from 'neuroglancer/render_scale_statistics';
 import {SegmentColorHash} from 'neuroglancer/segment_color';
-import {augmentSegmentId, bindSegmentListWidth, makeSegmentWidget, maybeAugmentSegmentId, registerCallbackWhenSegmentationDisplayStateChanged, SegmentationDisplayState, SegmentationGroupState, SegmentSelectionState, Uint64MapEntry} from 'neuroglancer/segmentation_display_state/frontend';
+import {augmentSegmentId, bindSegmentListWidth, makeSegmentWidget, maybeAugmentSegmentId, registerCallbackWhenSegmentationDisplayStateChanged, SegmentationColorGroupState, SegmentationDisplayState, SegmentationGroupState, SegmentSelectionState, Uint64MapEntry} from 'neuroglancer/segmentation_display_state/frontend';
 import {getPreprocessedSegmentPropertyMap, PreprocessedSegmentPropertyMap, SegmentPropertyMap} from 'neuroglancer/segmentation_display_state/property_map';
 import {SharedDisjointUint64Sets} from 'neuroglancer/shared_disjoint_sets';
 import {PerspectiveViewSkeletonLayer, SkeletonLayer, SkeletonRenderingOptions, SliceViewPanelSkeletonLayer} from 'neuroglancer/skeleton/frontend';
@@ -40,9 +40,10 @@ import {SegmentDisplayTab} from 'neuroglancer/ui/segment_list';
 import {DisplayOptionsTab} from 'neuroglancer/ui/segmentation_display_options_tab';
 import {Uint64Map} from 'neuroglancer/uint64_map';
 import {Uint64Set} from 'neuroglancer/uint64_set';
-import {packColor, parseRGBColorSpecification, serializeColor, unpackRGB} from 'neuroglancer/util/color';
+import {packColor, parseRGBColorSpecification, serializeColor, TrackableOptionalRGB, unpackRGB} from 'neuroglancer/util/color';
 import {Borrowed, Owned, RefCounted} from 'neuroglancer/util/disposable';
-import {parseArray, verifyFiniteNonNegativeFloat, verifyObjectAsMap, verifyObjectProperty, verifyOptionalObjectProperty, verifyString} from 'neuroglancer/util/json';
+import {vec3} from 'neuroglancer/util/geom';
+import {parseArray, verifyFiniteNonNegativeFloat, verifyObjectAsMap, verifyOptionalObjectProperty, verifyString} from 'neuroglancer/util/json';
 import {Signal} from 'neuroglancer/util/signal';
 import {Uint64} from 'neuroglancer/util/uint64';
 import {makeWatchableShaderError} from 'neuroglancer/webgl/dynamic_shader';
@@ -67,14 +68,14 @@ const SKELETON_SHADER_JSON_KEY = 'skeletonShader';
 const SEGMENT_QUERY_JSON_KEY = 'segmentQuery';
 const MESH_SILHOUETTE_RENDERING_JSON_KEY = 'meshSilhouetteRendering';
 const LINKED_SEGMENTATION_GROUP_JSON_KEY = 'linkedSegmentationGroup';
+const LINKED_SEGMENTATION_COLOR_GROUP_JSON_KEY = 'linkedSegmentationColorGroup';
+const SEGMENT_DEFAULT_COLOR_JSON_KEY = 'segmentDefaultColor';
 
 export class SegmentationUserLayerGroupState extends RefCounted implements SegmentationGroupState {
   specificationChanged = new Signal();
   constructor(public layer: SegmentationUserLayer) {
     super();
     const {specificationChanged} = this;
-    this.segmentColorHash.changed.add(specificationChanged.dispatch);
-    this.segmentStatedColors.changed.add(specificationChanged.dispatch);
     this.visibleSegments.changed.add(specificationChanged.dispatch);
     this.segmentEquivalences.changed.add(specificationChanged.dispatch);
     this.hideSegmentZero.changed.add(specificationChanged.dispatch);
@@ -85,8 +86,6 @@ export class SegmentationUserLayerGroupState extends RefCounted implements Segme
     verifyOptionalObjectProperty(
         specification, HIDE_SEGMENT_ZERO_JSON_KEY,
         value => this.hideSegmentZero.restoreState(value));
-    verifyOptionalObjectProperty(
-        specification, COLOR_SEED_JSON_KEY, value => this.segmentColorHash.restoreState(value));
     verifyOptionalObjectProperty(specification, EQUIVALENCES_JSON_KEY, value => {
       this.segmentEquivalences.restoreState(value);
     });
@@ -98,15 +97,6 @@ export class SegmentationUserLayerGroupState extends RefCounted implements Segme
         visibleSegments.add(segmentEquivalences.get(id));
       });
     });
-    verifyOptionalObjectProperty(specification, SEGMENT_STATED_COLORS_JSON_KEY, y => {
-      const {segmentEquivalences} = this;
-      let result = verifyObjectAsMap(y, x => parseRGBColorSpecification(String(x)));
-      for (let [idStr, colorVec] of result) {
-        const id = Uint64.parseString(String(idStr));
-        const color = new Uint64(packColor(colorVec));
-        this.segmentStatedColors.set(segmentEquivalences.get(id), color);
-      }
-    });
     verifyOptionalObjectProperty(
         specification, SEGMENT_QUERY_JSON_KEY, value => this.segmentQuery.restoreState(value));
   }
@@ -114,14 +104,6 @@ export class SegmentationUserLayerGroupState extends RefCounted implements Segme
   toJSON() {
     const x: any = {};
     x[HIDE_SEGMENT_ZERO_JSON_KEY] = this.hideSegmentZero.toJSON();
-    x[COLOR_SEED_JSON_KEY] = this.segmentColorHash.toJSON();
-    const {segmentStatedColors} = this;
-    if (segmentStatedColors.size > 0) {
-      const j: any = x[SEGMENT_STATED_COLORS_JSON_KEY] = {};
-      for (const [key, value] of segmentStatedColors) {
-        j[key.toString()] = serializeColor(unpackRGB(value.low));
-      }
-    }
     let {visibleSegments} = this;
     if (visibleSegments.size > 0) {
       x[SEGMENTS_JSON_KEY] = visibleSegments.toJSON();
@@ -135,16 +117,12 @@ export class SegmentationUserLayerGroupState extends RefCounted implements Segme
   }
 
   assignFrom(other: SegmentationUserLayerGroupState) {
-    this.segmentColorHash.value = other.segmentColorHash.value;
     this.maxIdLength.value = other.maxIdLength.value;
     this.hideSegmentZero.value = other.hideSegmentZero.value;
-    this.segmentStatedColors.assignFrom(other.segmentStatedColors);
     this.visibleSegments.assignFrom(other.visibleSegments);
     this.segmentEquivalences.assignFrom(other.segmentEquivalences);
   }
 
-  segmentColorHash = SegmentColorHash.getDefault();
-  segmentStatedColors = this.registerDisposer(new Uint64Map());
   visibleSegments = this.registerDisposer(Uint64Set.makeWithCounterpart(this.layer.manager.rpc));
   segmentPropertyMap = new WatchableValue<PreprocessedSegmentPropertyMap|undefined>(undefined);
   segmentEquivalences =
@@ -154,10 +132,63 @@ export class SegmentationUserLayerGroupState extends RefCounted implements Segme
   segmentQuery = new TrackableValue<string>('', verifyString);
 }
 
-class LinkedSegmentationGroupState extends RefCounted implements
-    WatchableValueInterface<SegmentationUserLayerGroupState> {
+export class SegmentationUserLayerColorGroupState extends RefCounted implements
+    SegmentationColorGroupState {
+  specificationChanged = new Signal();
+  constructor(public layer: SegmentationUserLayer) {
+    super();
+    const {specificationChanged} = this;
+    this.segmentColorHash.changed.add(specificationChanged.dispatch);
+    this.segmentStatedColors.changed.add(specificationChanged.dispatch);
+    this.segmentDefaultColor.changed.add(specificationChanged.dispatch);
+  }
+
+  restoreState(specification: unknown) {
+    verifyOptionalObjectProperty(
+        specification, COLOR_SEED_JSON_KEY, value => this.segmentColorHash.restoreState(value));
+    verifyOptionalObjectProperty(
+        specification, SEGMENT_DEFAULT_COLOR_JSON_KEY,
+        value => this.segmentDefaultColor.restoreState(value));
+    verifyOptionalObjectProperty(specification, SEGMENT_STATED_COLORS_JSON_KEY, y => {
+      let result = verifyObjectAsMap(y, x => parseRGBColorSpecification(String(x)));
+      for (let [idStr, colorVec] of result) {
+        const id = Uint64.parseString(String(idStr));
+        const color = new Uint64(packColor(colorVec));
+        this.segmentStatedColors.set(id, color);
+      }
+    });
+  }
+
+  toJSON() {
+    const x: any = {};
+    x[COLOR_SEED_JSON_KEY] = this.segmentColorHash.toJSON();
+    x[SEGMENT_DEFAULT_COLOR_JSON_KEY] = this.segmentDefaultColor.toJSON();
+    const {segmentStatedColors} = this;
+    if (segmentStatedColors.size > 0) {
+      const j: any = x[SEGMENT_STATED_COLORS_JSON_KEY] = {};
+      for (const [key, value] of segmentStatedColors) {
+        j[key.toString()] = serializeColor(unpackRGB(value.low));
+      }
+    }
+    return x;
+  }
+
+  assignFrom(other: SegmentationUserLayerColorGroupState) {
+    this.segmentColorHash.value = other.segmentColorHash.value;
+    this.segmentStatedColors.assignFrom(other.segmentStatedColors);
+    this.segmentDefaultColor.value = other.segmentDefaultColor.value;
+  }
+
+  segmentColorHash = SegmentColorHash.getDefault();
+  segmentStatedColors = this.registerDisposer(new Uint64Map());
+  segmentDefaultColor = new TrackableOptionalRGB();
+}
+
+class LinkedSegmentationGroupState<State extends SegmentationUserLayerGroupState|
+                                   SegmentationUserLayerColorGroupState> extends RefCounted
+    implements WatchableValueInterface<State> {
   private curRoot: SegmentationUserLayer|undefined;
-  private curGroupState: Owned<SegmentationUserLayerGroupState>|undefined;
+  private curGroupState: Owned<State>|undefined;
   get changed() {
     return this.linkedGroup.root.changed;
   }
@@ -165,22 +196,24 @@ class LinkedSegmentationGroupState extends RefCounted implements
     const root = this.linkedGroup.root.value as SegmentationUserLayer;
     if (root !== this.curRoot) {
       this.curRoot = root;
-      const groupState = root.displayState.originalSegmentationGroupState;
+      const groupState = root.displayState[this.propertyName] as State;
       if (root === this.linkedGroup.layer) {
         const {curGroupState} = this;
         if (curGroupState !== undefined) {
-          groupState.assignFrom(curGroupState);
+          groupState.assignFrom(curGroupState as any);
           curGroupState.dispose();
         }
       }
-      this.curGroupState = groupState.addRef();
+      this.curGroupState = groupState.addRef() as State;
     }
     return this.curGroupState!;
   }
   disposed() {
     this.curGroupState?.dispose();
   }
-  constructor(public linkedGroup: LinkedLayerGroup) {
+  constructor(public linkedGroup: LinkedLayerGroup,
+              private propertyName: State extends SegmentationUserLayerGroupState?
+              'originalSegmentationGroupState': 'originalSegmentationColorGroupState') {
     super();
     this.value;
   }
@@ -191,13 +224,21 @@ class SegmentationUserLayerDisplayState implements SegmentationDisplayState {
     // Even though `SegmentationUserLayer` assigns this to its `displayState` property, redundantly
     // assign it here first in order to allow it to be accessed by `segmentationGroupState`.
     layer.displayState = this;
-    this.segmentationGroupState =
-        this.layer.registerDisposer(new LinkedSegmentationGroupState(this.linkedSegmentationGroup));
+    this.segmentationGroupState = this.layer.registerDisposer(
+        new LinkedSegmentationGroupState<SegmentationUserLayerGroupState>(
+            this.linkedSegmentationGroup, 'originalSegmentationGroupState'));
+    this.segmentationColorGroupState = this.layer.registerDisposer(
+        new LinkedSegmentationGroupState<SegmentationUserLayerColorGroupState>(
+            this.linkedSegmentationColorGroup, 'originalSegmentationColorGroupState'));
 
     this.hideSegmentZero = this.layer.registerDisposer(
         new IndirectWatchableValue(this.segmentationGroupState, group => group.hideSegmentZero));
-    this.segmentColorHash = this.layer.registerDisposer(
-        new IndirectTrackableValue(this.segmentationGroupState, group => group.segmentColorHash));
+    this.segmentColorHash = this.layer.registerDisposer(new IndirectTrackableValue(
+        this.segmentationColorGroupState, group => group.segmentColorHash));
+    this.segmentStatedColors = this.layer.registerDisposer(new IndirectTrackableValue(
+        this.segmentationColorGroupState, group => group.segmentStatedColors));
+    this.segmentDefaultColor = this.layer.registerDisposer(new IndirectTrackableValue(
+        this.segmentationColorGroupState, group => group.segmentDefaultColor));
     this.segmentQuery = this.layer.registerDisposer(
         new IndirectWatchableValue(this.segmentationGroupState, group => group.segmentQuery));
     this.segmentPropertyMap = this.layer.registerDisposer(
@@ -229,14 +270,25 @@ class SegmentationUserLayerDisplayState implements SegmentationDisplayState {
       userLayer => (userLayer instanceof SegmentationUserLayer),
       (userLayer: SegmentationUserLayer) => userLayer.displayState.linkedSegmentationGroup));
 
+  linkedSegmentationColorGroup: LinkedLayerGroup = this.layer.registerDisposer(new LinkedLayerGroup(
+      this.layer.manager.rootLayers, this.layer,
+      userLayer => (userLayer instanceof SegmentationUserLayer),
+      (userLayer: SegmentationUserLayer) => userLayer.displayState.linkedSegmentationColorGroup));
+
   originalSegmentationGroupState =
       this.layer.registerDisposer(new SegmentationUserLayerGroupState(this.layer));
 
+  originalSegmentationColorGroupState =
+      this.layer.registerDisposer(new SegmentationUserLayerColorGroupState(this.layer));
+
   segmentationGroupState: WatchableValueInterface<SegmentationUserLayerGroupState>;
+  segmentationColorGroupState: WatchableValueInterface<SegmentationUserLayerColorGroupState>;
 
   // Indirect properties
   hideSegmentZero: WatchableValueInterface<boolean>;
   segmentColorHash: TrackableValueInterface<number>;
+  segmentStatedColors: WatchableValueInterface<Uint64Map>;
+  segmentDefaultColor: WatchableValueInterface<vec3|undefined>;
   segmentQuery: WatchableValueInterface<string>;
   segmentPropertyMap: WatchableValueInterface<PreprocessedSegmentPropertyMap|undefined>;
 }
@@ -287,6 +339,10 @@ export class SegmentationUserLayer extends Base {
       context.registerDisposer(group.specificationChanged.add(this.specificationChanged.dispatch));
       this.specificationChanged.dispatch();
     }, this.displayState.segmentationGroupState));
+    this.registerDisposer(registerNestedSync((context, group) => {
+      context.registerDisposer(group.specificationChanged.add(this.specificationChanged.dispatch));
+      this.specificationChanged.dispatch();
+    }, this.displayState.segmentationColorGroupState));
     this.displayState.segmentSelectionState.bindTo(this.manager.layerSelectedValues, this);
     this.displayState.selectedAlpha.changed.add(this.specificationChanged.dispatch);
     this.displayState.saturation.changed.add(this.specificationChanged.dispatch);
@@ -430,10 +486,19 @@ export class SegmentationUserLayer extends Base {
     this.displayState.renderScaleTarget.restoreState(specification[MESH_RENDER_SCALE_JSON_KEY]);
     this.sliceViewRenderScaleTarget.restoreState(
         specification[CROSS_SECTION_RENDER_SCALE_JSON_KEY]);
-    verifyObjectProperty(
-        specification, LINKED_SEGMENTATION_GROUP_JSON_KEY,
-        value => this.displayState.linkedSegmentationGroup.restoreState(value));
+    const linkedSegmentationGroupName = verifyOptionalObjectProperty(
+        specification, LINKED_SEGMENTATION_GROUP_JSON_KEY, verifyString);
+    if (linkedSegmentationGroupName !== undefined) {
+      this.displayState.linkedSegmentationGroup.linkByName(linkedSegmentationGroupName);
+    }
+    const linkedSegmentationColorGroupName = verifyOptionalObjectProperty(
+        specification, LINKED_SEGMENTATION_COLOR_GROUP_JSON_KEY,
+        x => x === null ? undefined : verifyString(x), linkedSegmentationGroupName);
+    if (linkedSegmentationColorGroupName !== undefined) {
+      this.displayState.linkedSegmentationColorGroup.linkByName(linkedSegmentationColorGroupName);
+    }
     this.displayState.segmentationGroupState.value.restoreState(specification);
+    this.displayState.segmentationColorGroupState.value.restoreState(specification);
   }
 
   toJSON() {
@@ -448,10 +513,16 @@ export class SegmentationUserLayer extends Base {
     x[MESH_RENDER_SCALE_JSON_KEY] = this.displayState.renderScaleTarget.toJSON();
     x[CROSS_SECTION_RENDER_SCALE_JSON_KEY] = this.sliceViewRenderScaleTarget.toJSON();
 
-    const {linkedSegmentationGroup} = this.displayState;
+    const {linkedSegmentationGroup, linkedSegmentationColorGroup} = this.displayState;
     x[LINKED_SEGMENTATION_GROUP_JSON_KEY] = linkedSegmentationGroup.toJSON();
+    if (linkedSegmentationColorGroup.root.value !== linkedSegmentationGroup.root.value) {
+      x[LINKED_SEGMENTATION_COLOR_GROUP_JSON_KEY] = linkedSegmentationColorGroup.toJSON() ?? null;
+    }
     if (linkedSegmentationGroup.root.value === this) {
       Object.assign(x, this.displayState.segmentationGroupState.value.toJSON());
+    }
+    if (linkedSegmentationColorGroup.root.value === this) {
+      Object.assign(x, this.displayState.segmentationColorGroupState.value.toJSON());
     }
     return x;
   }
@@ -467,7 +538,7 @@ export class SegmentationUserLayer extends Base {
   handleAction(action: string, context: SegmentationActionContext) {
     switch (action) {
       case 'recolor': {
-        this.displayState.segmentationGroupState.value.segmentColorHash.randomize();
+        this.displayState.segmentationColorGroupState.value.segmentColorHash.randomize();
         break;
       }
       case 'clear-segments': {
@@ -573,8 +644,7 @@ export class SegmentationUserLayer extends Base {
               const value = property.values[index];
               if (property.type === 'number' ? isNaN(value as number) : !value) continue;
               const propertyElement = document.createElement('div');
-              propertyElement.classList.add(
-                'neuroglancer-selection-details-segment-property');
+              propertyElement.classList.add('neuroglancer-selection-details-segment-property');
               const nameElement = document.createElement('div');
               nameElement.classList.add('neuroglancer-selection-details-segment-property-name');
               nameElement.textContent = property.id;

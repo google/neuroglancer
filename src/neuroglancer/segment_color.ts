@@ -58,8 +58,8 @@ vec3 ${this.prefix}(uint64_t x) {
     builder.addFragmentCode(s);
   }
 
-  enable(gl: GL, shader: ShaderProgram, segmentColorHash: SegmentColorHash) {
-    gl.uniform1ui(shader.uniform(this.seedName), segmentColorHash.hashSeed);
+  enable(gl: GL, shader: ShaderProgram, segmentColorHash: number) {
+    gl.uniform1ui(shader.uniform(this.seedName), segmentColorHash);
   }
 }
 

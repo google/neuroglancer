@@ -168,3 +168,28 @@ export class TrackableRGB extends WatchableValue<vec3> {
     }
   }
 }
+
+export class TrackableOptionalRGB extends WatchableValue<vec3|undefined> {
+  constructor() {
+    super(undefined);
+  }
+  toJSON() {
+    const {value} = this;
+    if (value === undefined) return undefined;
+    return serializeColor(value);
+  }
+  reset() {
+    this.value = undefined;
+  }
+  restoreState(x: any) {
+    if (x === undefined) {
+      this.reset();
+      return;
+    }
+    const {value} = this;
+    const newValue = parseRGBColorSpecification(x);
+    if (value === undefined || !vec3.equals(value, newValue)) {
+      this.value = newValue;
+    }
+  }
+}

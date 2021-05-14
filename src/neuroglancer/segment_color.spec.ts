@@ -36,7 +36,7 @@ outB = color.b;
           tester.build();
           const {gl, shader} = tester;
           shader.bind();
-          shaderManager.enable(gl, shader, colorHash);
+          shaderManager.enable(gl, shader, colorHash.value);
 
           function testValue(x: Uint64) {
             tester.execute({inputValue: x});

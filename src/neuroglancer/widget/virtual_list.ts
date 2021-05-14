@@ -400,9 +400,6 @@ export class VirtualList extends RefCounted {
   }
 
   forEachRenderedItem(callback: (element: HTMLElement, index: number) => void) {
-    if (this.element.offsetParent === null) {
-      return;
-    }
     const {startIndex, endIndex} = this.renderParams;
     const {renderedItems} = this;
     for (let i = startIndex; i < endIndex; ++i) {

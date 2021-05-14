@@ -980,8 +980,9 @@ export class SegmentDisplayTab extends Tab {
                   context.registerDisposer(
                       displayState.segmentSelectionState.changed.add(updateListItems));
                   context.registerDisposer(group.visibleSegments.changed.add(updateListItems));
-                  context.registerDisposer(group.segmentColorHash.changed.add(updateListItems));
-                  context.registerDisposer(group.segmentStatedColors.changed.add(updateListItems));
+                  context.registerDisposer(displayState.segmentColorHash.changed.add(updateListItems));
+                  context.registerDisposer(displayState.segmentStatedColors.changed.add(updateListItems));
+                  context.registerDisposer(displayState.segmentDefaultColor.changed.add(updateListItems));
                   list.element.classList.add('neuroglancer-segment-list');
                   context.registerDisposer(layer.bindSegmentListWidth(list.element));
                   context.registerDisposer(

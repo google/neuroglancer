@@ -31,6 +31,9 @@ import {ShaderCodeWidget} from 'neuroglancer/widget/shader_code_widget';
 import {ShaderControls} from 'neuroglancer/widget/shader_controls';
 import {Tab} from 'neuroglancer/widget/tab_view';
 import {TextInputWidget} from 'neuroglancer/widget/text_input';
+import {vec3} from 'neuroglancer/util/geom';
+import {observeWatchable} from 'neuroglancer/trackable_value';
+import {parseRGBColorSpecification, serializeColor} from 'neuroglancer/util/color';
 
 const maxSilhouettePower = 10;
 
@@ -56,24 +59,92 @@ export class DisplayOptionsTab extends Tab {
       element.appendChild(widget.element);
     }
 
+    // Linked segmentation control
+    {
+      const widget = this.registerDisposer(
+          new LinkedLayerGroupWidget(layer.displayState.linkedSegmentationColorGroup));
+      widget.label.textContent = 'Colors linked to: ';
+      element.appendChild(widget.element);
+    }
+
     {
       const label = document.createElement('label');
-      label.textContent = 'Color seed';
+      label.title = 'Use a fixed color for all segments without an explicitly-specified color';
       label.style.display = 'flex';
       label.style.flexDirection = 'row';
-      label.style.justifyContent = 'space-between';
+      const {segmentDefaultColor} = layer.displayState;
+      const checkbox = document.createElement('input');
+      checkbox.type = 'radio';
+      label.appendChild(checkbox);
+      const labelText = document.createElement('span');
+      labelText.textContent = 'Fixed color';
+      labelText.style.marginRight = '1em';
+      label.appendChild(labelText);
+      const colorInput = document.createElement('input');
+      colorInput.type = 'color';
+      label.appendChild(colorInput);
+      const updateFromView = (useDefaultColor: boolean) => {
+        if (!useDefaultColor) {
+          segmentDefaultColor.value = undefined;
+        } else {
+          segmentDefaultColor.value = vec3.fromValues(1, 0, 0);
+          colorInput.click();
+        }
+      };
+      checkbox.addEventListener('change', () => {
+        updateFromView(checkbox.checked);
+      });
+      colorInput.addEventListener('change', () => {
+        segmentDefaultColor.value = parseRGBColorSpecification(colorInput.value);
+      });
+      colorInput.addEventListener('input', () => {
+        segmentDefaultColor.value = parseRGBColorSpecification(colorInput.value);
+      });
+      const seedLabel = document.createElement('label');
+      seedLabel.title = 'Color segments based on a hash of their id';
+      const seedCheckbox = document.createElement('input');
+      seedCheckbox.type = 'radio';
+      seedCheckbox.addEventListener('change', () => {
+        updateFromView(!seedCheckbox.checked);
+      });
+      seedLabel.appendChild(seedCheckbox);
+      const seedLabelText = document.createElement('span');
+      seedLabelText.textContent = 'Color seed';
+      seedLabelText.style.marginRight = '1em';
+      seedLabel.appendChild(seedLabelText);
+      seedLabel.style.display = 'flex';
+      seedLabel.style.flexDirection = 'row';
       const widget =
-          this.registerDisposer(new TextInputWidget(layer.displayState.segmentColorHash));
-      label.appendChild(widget.element);
+        this.registerDisposer(new TextInputWidget(layer.displayState.segmentColorHash));
+      widget.element.style.flex = '1';
+      seedLabel.appendChild(widget.element);
       const randomize = makeIcon({
         svg: svg_rotate,
         title: 'Randomize',
         onClick: () => {
-          layer.displayState.segmentationGroupState.value.segmentColorHash.randomize();
+          layer.displayState.segmentationColorGroupState.value.segmentColorHash.randomize();
         },
       });
-      label.appendChild(randomize);
+      seedLabel.appendChild(randomize);
+      element.appendChild(seedLabel);
       element.appendChild(label);
+
+      this.registerDisposer(observeWatchable(value => {
+        if (value === undefined) {
+          colorInput.style.visibility = 'hidden';
+          checkbox.checked = false;
+          seedCheckbox.checked = true;
+          randomize.style.visibility = '';
+          widget.element.style.visibility = '';
+        } else {
+          colorInput.style.visibility = '';
+          colorInput.value = serializeColor(value);
+          checkbox.checked = true;
+          seedCheckbox.checked = false;
+          randomize.style.visibility = 'hidden';
+          widget.element.style.visibility = 'hidden';
+        }
+      }, segmentDefaultColor));
     }
 
     {

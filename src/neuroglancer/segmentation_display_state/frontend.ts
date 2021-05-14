@@ -27,7 +27,7 @@ import {InlineSegmentNumericalProperty, InlineSegmentProperty, PreprocessedSegme
 import {SegmentationUserLayer} from 'neuroglancer/segmentation_user_layer';
 import {SharedWatchableValue} from 'neuroglancer/shared_watchable_value';
 import {TrackableAlphaValue} from 'neuroglancer/trackable_alpha';
-import {observeWatchable, TrackableValue, WatchableValueInterface} from 'neuroglancer/trackable_value';
+import {observeWatchable, registerNestedSync, TrackableValue, WatchableValueInterface} from 'neuroglancer/trackable_value';
 import {isWithinSelectionPanel} from 'neuroglancer/ui/selection_details';
 import {Uint64Map} from 'neuroglancer/uint64_map';
 import {setClipboard} from 'neuroglancer/util/clipboard';
@@ -131,8 +131,6 @@ export class SegmentSelectionState extends RefCounted {
 }
 
 export interface SegmentationGroupState extends VisibleSegmentsState {
-  segmentColorHash: SegmentColorHash;
-  segmentStatedColors: Uint64Map;
   /**
    * Maximum length of base-10 representation of id seen.
    */
@@ -140,14 +138,27 @@ export interface SegmentationGroupState extends VisibleSegmentsState {
   segmentPropertyMap: WatchableValueInterface<PreprocessedSegmentPropertyMap|undefined>;
 }
 
+export interface SegmentationColorGroupState {
+  segmentColorHash: SegmentColorHash;
+  segmentStatedColors: Uint64Map;
+  segmentDefaultColor: WatchableValueInterface<vec3|undefined>;
+}
+
 export interface SegmentationDisplayState {
   segmentSelectionState: SegmentSelectionState;
   saturation: TrackableAlphaValue;
   segmentationGroupState: WatchableValueInterface<SegmentationGroupState>;
+  segmentationColorGroupState: WatchableValueInterface<SegmentationColorGroupState>;
 
   selectSegment: (id: Uint64, pin: boolean|'toggle') => void;
   filterBySegmentLabel: (id: Uint64) => void;
   moveToSegment: (id: Uint64) => void;
+
+  // Indirect properties
+  hideSegmentZero: WatchableValueInterface<boolean>;
+  segmentColorHash: WatchableValueInterface<number>;
+  segmentStatedColors: WatchableValueInterface<Uint64Map>;
+  segmentDefaultColor: WatchableValueInterface<vec3|undefined>;
 }
 
 /// Converts a segment id to a Uint64MapEntry or Uint64 (if Uint64MapEntry would add no additional
@@ -594,13 +605,15 @@ export interface SegmentationDisplayState3D extends SegmentationDisplayStateWith
 
 export function registerCallbackWhenSegmentationDisplayStateChanged(
     displayState: SegmentationDisplayState, context: RefCounted, callback: () => void) {
-  const groupState = displayState.segmentationGroupState.value;
-  context.registerDisposer(groupState.segmentColorHash.changed.add(callback));
-  context.registerDisposer(groupState.visibleSegments.changed.add(callback));
+  context.registerDisposer(registerNestedSync((c, groupState) => {
+    onVisibleSegmentsStateChanged(c, groupState, callback);
+  }, displayState.segmentationGroupState));
+  context.registerDisposer(registerNestedSync((c, colorGroupState) => {
+    c.registerDisposer(colorGroupState.segmentColorHash.changed.add(callback));
+    c.registerDisposer(colorGroupState.segmentDefaultColor.changed.add(callback));
+  }, displayState.segmentationColorGroupState));
   context.registerDisposer(displayState.saturation.changed.add(callback));
-  context.registerDisposer(groupState.segmentEquivalences.changed.add(callback));
   context.registerDisposer(displayState.segmentSelectionState.changed.add(callback));
-  onVisibleSegmentsStateChanged(context, groupState, callback);
 }
 
 export function registerRedrawWhenSegmentationDisplayStateChanged(
@@ -642,17 +655,24 @@ export function getBaseObjectColor(
     color.fill(1);
     return color;
   };
-  const groupState = displayState.segmentationGroupState.value;
-  const {segmentStatedColors} = groupState;
+  const colorGroupState = displayState.segmentationColorGroupState.value;
+  const {segmentStatedColors} = colorGroupState;
   if (segmentStatedColors.size !== 0 &&
-      groupState.segmentStatedColors.get(objectId, tempStatedColor)) {
+      colorGroupState.segmentStatedColors.get(objectId, tempStatedColor)) {
     // If displayState maps the ID to a color, use it
     color[0] = ((tempStatedColor.low & 0x0000ff)) / 255.0;
     color[1] = ((tempStatedColor.low & 0x00ff00) >>> 8) / 255.0;
     color[2] = ((tempStatedColor.low & 0xff0000) >>> 16) / 255.0;
-  } else {
-    groupState.segmentColorHash.compute(color, objectId);
+    return color;
   }
+  const segmentDefaultColor = colorGroupState.segmentDefaultColor.value;
+  if (segmentDefaultColor !== undefined) {
+    color[0] = segmentDefaultColor[0];
+    color[1] = segmentDefaultColor[1];
+    color[2] = segmentDefaultColor[2];
+    return color;
+  }
+  colorGroupState.segmentColorHash.compute(color, objectId);
   return color;
 }
 

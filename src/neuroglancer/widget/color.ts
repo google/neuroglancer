@@ -27,6 +27,7 @@ export class ColorWidget extends RefCounted {
     element.classList.add('neuroglancer-color-widget');
     element.type = 'color';
     element.addEventListener('change', () => this.updateModel());
+    element.addEventListener('input', () => this.updateModel());
     this.registerDisposer(model.changed.add(() => this.updateView()));
     this.updateView();
   }

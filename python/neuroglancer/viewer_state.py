@@ -385,6 +385,7 @@ class SegmentationLayer(Layer, _AnnotationLayerOptions):
     segment_query = segmentQuery = wrapped_property('segmentQuery', optional(text_type))
     segment_colors = segmentColors = wrapped_property(
         'segmentColors', typed_map(key_type=np.uint64, value_type=text_type))
+    segment_default_color = segmentDefaultColor = wrapped_property('segmentDefaultColor', optional(text_type))
 
     @property
     def segment_html_color_dict(self):
