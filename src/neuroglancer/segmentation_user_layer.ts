@@ -493,7 +493,7 @@ export class SegmentationUserLayer extends Base {
     }
     const linkedSegmentationColorGroupName = verifyOptionalObjectProperty(
         specification, LINKED_SEGMENTATION_COLOR_GROUP_JSON_KEY,
-        x => x === null ? undefined : verifyString(x), linkedSegmentationGroupName);
+        x => x === false ? undefined : verifyString(x), linkedSegmentationGroupName);
     if (linkedSegmentationColorGroupName !== undefined) {
       this.displayState.linkedSegmentationColorGroup.linkByName(linkedSegmentationColorGroupName);
     }
@@ -516,7 +516,7 @@ export class SegmentationUserLayer extends Base {
     const {linkedSegmentationGroup, linkedSegmentationColorGroup} = this.displayState;
     x[LINKED_SEGMENTATION_GROUP_JSON_KEY] = linkedSegmentationGroup.toJSON();
     if (linkedSegmentationColorGroup.root.value !== linkedSegmentationGroup.root.value) {
-      x[LINKED_SEGMENTATION_COLOR_GROUP_JSON_KEY] = linkedSegmentationColorGroup.toJSON() ?? null;
+      x[LINKED_SEGMENTATION_COLOR_GROUP_JSON_KEY] = linkedSegmentationColorGroup.toJSON() ?? false;
     }
     if (linkedSegmentationGroup.root.value === this) {
       Object.assign(x, this.displayState.segmentationGroupState.value.toJSON());

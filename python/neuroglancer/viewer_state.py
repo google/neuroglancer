@@ -334,6 +334,14 @@ def uint64_equivalence_map(obj, _readonly=False):
     return EquivalenceMap(obj, _readonly=_readonly)
 
 
+def _linked_segmentation_color_group_value(x):
+    if isinstance(x, str):
+        return x
+    if x is False:
+        return x
+    raise ValueError('Expected str or False, but received: %r' % (x, ))
+
+
 @export
 class SkeletonRenderingOptions(JsonObjectWrapper):
     __slots__ = ()
@@ -400,8 +408,10 @@ class SegmentationLayer(Layer, _AnnotationLayerOptions):
             d[segment] = hex_string
         return d
 
-    linked_segmentation_layer = linkedSegmentationLayer = wrapped_property(
-        'linkedSegmentationLayer', optional(text_type))
+    linked_segmentation_group = linkedSegmentationGroup = wrapped_property(
+        'linkedSegmentationGroup', optional(text_type))
+    linked_segmentation_color_group = linkedSegmentationColorGroup = wrapped_property(
+        'linkedSegmentationColorGroup', optional(_linked_segmentation_color_group_value))
 
     @staticmethod
     def interpolate(a, b, t):
