@@ -33,8 +33,7 @@ import { SliceViewSourceOptions } from '../base';
 import { MultiscaleVolumeChunkSource } from '../volume/frontend';
 import {VolumeSourceOptions} from 'neuroglancer/sliceview/volume/base';
 import { kEmptyFloat32Vec } from 'src/neuroglancer/util/vector';
-import { cancellableFetchSpecialOk, parseSpecialUrl } from 'src/neuroglancer/util/special_protocol_request';
-import { defaultCredentialsManager } from 'src/neuroglancer/credentials_provider/default_manager';
+import { cancellableFetchSpecialOk, SpecialProtocolCredentialsProvider } from 'src/neuroglancer/util/special_protocol_request';
 
 export const GRAPH_SERVER_NOT_SPECIFIED = Symbol('Graph Server Not Specified.');
 
@@ -125,20 +124,17 @@ export class ChunkedGraphChunkSource extends SliceViewChunkSource implements
     spec: ChunkedGraphChunkSpecification,
     rootSegments: Uint64Set
   }) {
-    console.log('make ChunkedGraphChunkSource');
     super(chunkManager, options);
     this.rootSegments = options.rootSegments;
   }
 
   initializeCounterpart(rpc: RPC, options: any) {
-    console.log('rpc 4?');
     options['rootSegments'] = this.rootSegments.rpcId;
     super.initializeCounterpart(rpc, options);
   }
 
   updateRootSegments(rpc: RPC, rootSegments: Uint64Set) {
     this.rootSegments = rootSegments;
-    console.log('rpc 5?');
     rpc.invoke(
         CHUNKED_GRAPH_SOURCE_UPDATE_ROOT_SEGMENTS_RPC_ID,
         {'id': this.rpcId, 'rootSegments': this.rootSegments.rpcId});
@@ -209,7 +205,8 @@ export class ChunkedGraphLayer extends SliceViewRenderLayer {
       url: string,
       public sources: SliceViewSingleResolutionSource<ChunkedGraphChunkSource>[][],
       multiscaleSource: MultiscaleVolumeChunkSource,
-      displayState: VisibleSegmentsState&SliceViewRenderLayerOptions) {
+      displayState: VisibleSegmentsState&SliceViewRenderLayerOptions,
+      private credentialsProvider: SpecialProtocolCredentialsProvider) {
     super(multiscaleSource.chunkManager, multiscaleSource, {
       rpcTransfer: {
         'chunkManager': multiscaleSource.chunkManager.rpcId,
@@ -222,7 +219,6 @@ export class ChunkedGraphLayer extends SliceViewRenderLayer {
       transform: displayState.transform,
       localPosition: displayState.localPosition,
     });
-    console.log('ChunkedGraphLayer rpc id', this.rpcId);
     this.registerDisposer(this.leafRequestsActive.changed.add(() => {
       this.showOrHideMessage(this.leafRequestsActive.value);
     }));
@@ -231,8 +227,7 @@ export class ChunkedGraphLayer extends SliceViewRenderLayer {
     this.initializeCounterpart();
   }
 
-  getSources(options: SliceViewSourceOptions) { // do we need to override this?
-    console.log('options');
+  getSources(_options: SliceViewSourceOptions) { // do we need to override this?
     return this.sources;
   }
 
@@ -254,9 +249,7 @@ export class ChunkedGraphLayer extends SliceViewRenderLayer {
     const url2 = `${url}/node/${String(selection.segmentId)}/root?int64_as_str=1${
       timestamp ? `&timestamp=${timestamp}` : ``}`
 
-    const {url: parsedUrl, credentialsProvider} = parseSpecialUrl(url2, defaultCredentialsManager);
-
-    const promise = cancellableFetchSpecialOk(credentialsProvider, parsedUrl, {}, responseIdentity);
+    const promise = cancellableFetchSpecialOk(this.credentialsProvider, url2, {}, responseIdentity);
 
     // const promise = authFetch(
     //     `${url}/node/${String(selection.segmentId)}/root?int64_as_str=1${
@@ -279,9 +272,7 @@ export class ChunkedGraphLayer extends SliceViewRenderLayer {
 
     const url2 = `${url}/merge?int64_as_str=1`;
 
-    const {url: parsedUrl, credentialsProvider} = parseSpecialUrl(url2, defaultCredentialsManager);
-
-    const promise = cancellableFetchSpecialOk(credentialsProvider, parsedUrl, {
+    const promise = cancellableFetchSpecialOk(this.credentialsProvider, url2, {
       method: 'POST',
       body: JSON.stringify([
         [String(first.segmentId), ...first.position.values()],
@@ -315,9 +306,7 @@ export class ChunkedGraphLayer extends SliceViewRenderLayer {
 
     const url2 = `${url}/split?int64_as_str=1`;
 
-    const {url: parsedUrl, credentialsProvider} = parseSpecialUrl(url2, defaultCredentialsManager);
-
-    const promise = cancellableFetchSpecialOk(credentialsProvider, parsedUrl, {
+    const promise = cancellableFetchSpecialOk(this.credentialsProvider, url2, {
       method: 'POST',
       body: JSON.stringify({
         'sources': first.map(x => [String(x.segmentId), ...x.position.values()]),
@@ -357,9 +346,7 @@ export class ChunkedGraphLayer extends SliceViewRenderLayer {
 
     const url2 = `${url}/graph/split_preview?int64_as_str=1`;
 
-    const {url: parsedUrl, credentialsProvider} = parseSpecialUrl(url2, defaultCredentialsManager);
-
-    const promise = cancellableFetchSpecialOk(credentialsProvider, parsedUrl, {
+    const promise = cancellableFetchSpecialOk(this.credentialsProvider, url2, {
       method: 'POST',
       body: JSON.stringify({
         'sources': first.map(x => [String(x.segmentId), ...x.position.values()]),
@@ -408,9 +395,7 @@ export class ChunkedGraphLayer extends SliceViewRenderLayer {
 
     const url2 = `${url}/graph/find_path?int64_as_str=1&precision_mode=${Number(precisionMode)}`;
 
-    const {url: parsedUrl, credentialsProvider} = parseSpecialUrl(url2, defaultCredentialsManager);
-
-    const promise = cancellableFetchSpecialOk(credentialsProvider, parsedUrl, {
+    const promise = cancellableFetchSpecialOk(this.credentialsProvider, url2, {
       method: 'POST',
       body: JSON.stringify([
         [String(first.segmentId), ...first.position.values()],
@@ -484,3 +469,5 @@ export class ChunkedGraphLayer extends SliceViewRenderLayer {
     }
   }
 }
+
+ChunkedGraphLayer.prototype.RPC_TYPE_ID = CHUNKED_GRAPH_LAYER_RPC_ID; // confused like SliceViewRenderLayer

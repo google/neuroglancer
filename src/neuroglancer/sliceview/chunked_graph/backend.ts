@@ -187,7 +187,6 @@ const Base = withChunkManager(SharedObjectCounterpart);
 export class ChunkedGraphLayer extends Base implements
     SliceViewRenderLayerInterface, ChunkRenderLayerBackend {
   rpcId: number;
-  sources: ChunkedGraphChunkSource[][]; // TODO is this available?
   // layerChanged = new NullarySignal();
   // transform = new CoordinateTransform();
   // transformedSources: TransformedSource<SliceViewChunkSource>[][];
@@ -218,6 +217,7 @@ export class ChunkedGraphLayer extends Base implements
     this.renderScaleTarget = rpc.get(options.renderScaleTarget);
     this.localPosition = rpc.get(options.localPosition);
 
+    /* TODO maybe this isn't needed?
     this.sources = new Array<ChunkedGraphChunkSource[]>();
     for (const alternativeIds of options['sources']) {
       const alternatives = new Array<ChunkedGraphChunkSource>();
@@ -227,7 +227,8 @@ export class ChunkedGraphLayer extends Base implements
         this.registerDisposer(source.addRef());
         alternatives.push(source);
       }
-    }
+    }*/
+
     // mat4.copy(this.transform.transform, options['transform']);
     // this.transform.changed.add(this.layerChanged.dispatch);
 
@@ -239,6 +240,10 @@ export class ChunkedGraphLayer extends Base implements
       this.debouncedupdateDisplayState();
     }));
 
+    // setInterval(() => { // hack
+    //   this.debouncedupdateDisplayState();
+    // }, 200);
+
     this.numVisibleChunksNeeded = 0;
     this.numVisibleChunksAvailable = 0;
     this.numPrefetchChunksAvailable = 0;
@@ -246,9 +251,20 @@ export class ChunkedGraphLayer extends Base implements
     this.chunkManagerGeneration = -1;
   }
 
+  sources: ChunkedGraphChunkSource[]; // TODO is this available?
+
   filterVisibleSources(sliceView: SliceViewBase, sources: readonly TransformedSource[]):
       Iterable<TransformedSource> {
-    return filterVisibleSources(sliceView, this, sources);
+    const filteredSources = filterVisibleSources(sliceView, this, sources);// as ChunkedGraphChunkSource[];
+    this.sources = [];
+    for (let source of filteredSources) {
+      this.sources.push(source.source as ChunkedGraphChunkSource);
+    }
+
+    // return filteredSources;
+    return filterVisibleSources(sliceView, this, sources); // SO HACKY
+    // using this function as a hack so I can access ChunkedGraphChunkSource in forEachSelectedRootWithLeaves
+    // have to run filterVisibleSources twice because otherwise the generator won't spit out results in the calling function
   }
 
   get url() {
@@ -267,8 +283,8 @@ export class ChunkedGraphLayer extends Base implements
 
   private forEachSelectedRootWithLeaves(
       callback: (rootObjectKey: string, leaves: Uint64[]) => void) {
-    for (const alternative of this.sources) {
-      for (const source of alternative) {
+    // for (const alternative of this.sources) {
+      for (const source of this.sources) {//alternative) {
         for (const chunk of source.chunks.values()) {
           if (chunk.state === ChunkState.SYSTEM_MEMORY_WORKER &&
               chunk.priorityTier < ChunkPriorityTier.RECENT) {
@@ -280,7 +296,7 @@ export class ChunkedGraphLayer extends Base implements
           }
         }
       }
-    }
+    // }
   }
 
   private updateDisplayState() {
@@ -314,7 +330,7 @@ export class ChunkedGraphLayer extends Base implements
         this.segmentEquivalences.delete([...this.segmentEquivalences.setElements(Uint64.parseString(root))].filter(x
       => !leaves.has(x) && !this.visibleSegments3D.has(x)));
       }*/
-
+      
       this.segmentEquivalences.link(
           Uint64.parseString(root), [...leaves].filter(x => !this.segmentEquivalences.has(x)));
     }

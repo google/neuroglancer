@@ -65,9 +65,9 @@ export class SegmentationRenderLayer extends SliceViewVolumeRenderLayer<ShaderPa
   protected segmentStatedColorShaderManager =
       new SegmentStatedColorShaderManager('segmentStatedColor');
   private gpuSegmentStatedColorHashTable: GPUHashTable<HashMapUint64>|undefined;
-  private hashTableManager = new HashSetShaderManager('visibleSegments');
+  private hashTableManager = new HashSetShaderManager('visibleSegments2D');
   private gpuHashTable = this.registerDisposer(
-      GPUHashTable.get(this.gl, this.segmentationGroupState.visibleSegments3D.hashTable));
+      GPUHashTable.get(this.gl, this.segmentationGroupState.visibleSegments2D!.hashTable));
   private equivalencesShaderManager = new HashMapShaderManager('equivalences');
   private equivalencesHashMap =
       new EquivalencesHashMap(this.segmentationGroupState.segmentEquivalences.disjointSets);

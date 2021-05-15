@@ -971,6 +971,13 @@ export class LayerSelectedValues extends RefCounted {
     return selectionState;
   }
 
+  getRaw<T extends UserLayer>(userLayer: T): T['selectionState']|undefined {
+    this.update();
+    const {selectionState} = userLayer;
+    if (selectionState.generation !== this.changed.count) return undefined;
+    return selectionState;
+  }
+
   toJSON() {
     this.update();
     const result: {[key: string]: any} = {};

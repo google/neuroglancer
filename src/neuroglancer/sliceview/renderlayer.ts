@@ -171,7 +171,6 @@ export abstract class SliceViewRenderLayer<
   RPC_TYPE_ID: string;
 
   initializeCounterpart() {
-    console.log('SliceViewRenderLayer initializeCounterpart');
     const sharedObject =
         this.registerDisposer(new ChunkRenderLayerFrontend(this.layerChunkProgressInfo));
     const rpc = this.chunkManager.rpc!;
@@ -210,7 +209,7 @@ export abstract class SliceViewRenderLayer<
   }
 }
 
-SliceViewRenderLayer.prototype.RPC_TYPE_ID = SLICEVIEW_RENDERLAYER_RPC_ID;
+SliceViewRenderLayer.prototype.RPC_TYPE_ID = SLICEVIEW_RENDERLAYER_RPC_ID; // confused, why this vs rpcType
 
 export interface SliceViewPanelReadyRenderContext extends ThreeDimensionalReadyRenderContext {
   sliceView: SliceView;

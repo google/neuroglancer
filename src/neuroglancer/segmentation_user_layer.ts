@@ -477,7 +477,6 @@ export class SegmentationUserLayer extends Base {
 
   constructor(managedLayer: Borrowed<ManagedUserLayer>) {
     super(managedLayer);
-    console.log('make segmentation_user_layer');
     this.registerDisposer(registerNestedSync((context, group) => {
       context.registerDisposer(group.specificationChanged.add(this.specificationChanged.dispatch));
       this.specificationChanged.dispatch();

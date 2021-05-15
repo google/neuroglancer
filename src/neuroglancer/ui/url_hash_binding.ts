@@ -101,7 +101,6 @@ export class UrlHashBinding extends RefCounted {
    * on the URL hash, then this should be called immediately after construction.
    */
   updateFromUrlHash() {
-    console.log('updateFromUrlHash');
     try {
       let s = location.href.replace(/^[^#]+/, '');
       if (s === '' || s === '#' || s === '#!') {

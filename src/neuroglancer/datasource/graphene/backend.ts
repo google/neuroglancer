@@ -274,8 +274,6 @@ chunkDecoders.set(VolumeChunkEncoding.COMPRESSED_SEGMENTATION, decodeCompressedS
   async download(chunk: VolumeChunk, cancellationToken: CancellationToken): Promise<void> {
     const {parameters} = this;
 
-    console.log('download chunk')
-
     // const {minishardIndexSource} = this;
     let response: ArrayBuffer;
     // if (minishardIndexSource === undefined) {
@@ -290,7 +288,7 @@ chunkDecoders.set(VolumeChunkEncoding.COMPRESSED_SEGMENTATION, decodeCompressedS
             `${chunkPosition[2]}-${chunkPosition[2] + chunkDataSize[2]}`;
       // }
       response = await cancellableFetchSpecialOk(
-          this.credentialsProvider, url, {}, responseArrayBuffer, cancellationToken);
+          /*this.credentialsProvider*/undefined, url, {}, responseArrayBuffer, cancellationToken);
     // } else {
       // this.computeChunkBounds(chunk);
       // const {gridShape} = this;
@@ -423,7 +421,6 @@ function getFragmentDownloadPromise(
   minishardIndexSources: MinishardIndexSource[],
   cancellationToken: CancellationToken
 ) {
-  console.log('download fragment');
   let fragmentDownloadPromise;
   if (parameters.sharding){
     if (chunk.verifyFragment !== undefined && !chunk.verifyFragment) {
@@ -448,7 +445,6 @@ function getFragmentDownloadPromise(
   protected minishardIndexSources: MinishardIndexSource[];
 
   async download(chunk: ManifestChunk, cancellationToken: CancellationToken) {
-    console.log('download mesh');
     const {parameters} = this;
     let url = `${parameters.manifestUrl}/manifest`;
     let manifestUrl = `${url}/${chunk.objectId}:${parameters.lod}?verify=1&prepend_seg_ids=1`;
@@ -474,7 +470,6 @@ function getFragmentDownloadPromise(
   }
 
   async downloadFragment(chunk: FragmentChunk, cancellationToken: CancellationToken) {
-    console.log('download mesh fragment');
     const {parameters, minishardIndexSources} = this;
     const fragmentDownloadPromise = getFragmentDownloadPromise(
       chunk, parameters, minishardIndexSources, cancellationToken
@@ -527,7 +522,6 @@ export class GrapheneSkeletonSource extends
       this.chunkManager, this.credentialsProvider,
       {url: this.parameters.url, sharding: this.parameters.metadata.sharding, layer: 0});
   async download(chunk: SkeletonChunk, cancellationToken: CancellationToken) {
-    console.log('download skeleton');
     const {parameters} = this;
     const response = getOrNotFoundError(await fetchByUint64(
         this.credentialsProvider, parameters.url, chunk, this.minishardIndexSource, chunk.objectId,

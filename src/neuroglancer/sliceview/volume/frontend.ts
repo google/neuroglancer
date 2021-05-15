@@ -24,6 +24,7 @@ import {GL} from 'neuroglancer/webgl/context';
 import {ShaderBuilder, ShaderProgram} from 'neuroglancer/webgl/shader';
 import {getShaderType, glsl_mixLinear} from 'neuroglancer/webgl/shader_lib';
 import { Uint64Set } from 'src/neuroglancer/uint64_set';
+import { SpecialProtocolCredentialsProvider } from 'src/neuroglancer/util/special_protocol_request';
 import { ChunkedGraphSourceOptions } from '../chunked_graph/base';
 import { ChunkedGraphChunkSource } from '../chunked_graph/frontend';
 
@@ -247,7 +248,7 @@ export abstract class MultiscaleVolumeChunkSource extends
   abstract dataType: DataType;
   abstract volumeType: VolumeType;
 
-  getChunkedGraphUrl?(): string | undefined;
+  getChunkedGraphUrl?(): [string, SpecialProtocolCredentialsProvider] | undefined;
   
   getTimestampLimit?(): Promise<string>;
   getChunkedGraphSources?(options: ChunkedGraphSourceOptions,

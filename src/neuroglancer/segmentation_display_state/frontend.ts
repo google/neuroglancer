@@ -148,6 +148,8 @@ export class SegmentSelectionState extends RefCounted {
         value = state.value;
       }
       this.set(value, userLayer.displayState.segmentationGroupState.value.hideSegmentZero.value);
+
+      // value = layerSelectedValues.getRaw(userLayer); TODO
     }));
   }
 }
@@ -371,7 +373,7 @@ function makeRegisterSegmentWidgetEventHandlers(displayState: SegmentationDispla
     const idString = entryElement.dataset.id!;
     const id = tempStatedColor;
     id.tryParseString(idString);
-    const {visibleSegments3D: visibleSegments} = displayState.segmentationGroupState.value;
+    const {rootSegments: visibleSegments} = displayState.segmentationGroupState.value; // TODO this seems to work when I  change it from visibleSegments3D to rootSegments
     visibleSegments.set(id, !visibleSegments.has(id));
     event.stopPropagation();
   };
@@ -729,7 +731,6 @@ export function sendVisibleSegmentsState(state: VisibleSegmentsState, options: a
   for (const property of VISIBLE_SEGMENTS_STATE_PROPERTIES) {
     const value = state[property];
     if (value) {
-      console.log('rpc 2?');
       options[property] = value.rpcId;
     }
   }
@@ -749,7 +750,6 @@ export class SegmentationLayerSharedObject extends Base {
     options['chunkManager'] = this.chunkManager.rpcId;
     sendVisibleSegmentsState(displayState.segmentationGroupState.value, options);
     if (displayState.segmentationGroupState.value.rootSegmentsAfterEdit !== undefined){
-      console.log('rpcid failure 1?');
       options['rootSegmentsAfterEdit'] = displayState.segmentationGroupState.value.rootSegmentsAfterEdit!.rpcId;
     }
     options['transform'] =

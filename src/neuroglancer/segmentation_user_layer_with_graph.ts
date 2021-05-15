@@ -44,6 +44,7 @@ import { LayerActionContext } from './layer';
 import { SliceViewSingleResolutionSource } from './sliceview/frontend';
 
 import {NullarySignal} from './util/signal';
+import { SpecialProtocolCredentialsProvider } from './util/special_protocol_request';
 
 // Already defined in segmentation_user_layer.ts
 const EQUIVALENCES_JSON_KEY = 'equivalences';
@@ -96,9 +97,10 @@ function helper<TBase extends BaseConstructor>(Base: TBase) {
     //     new SelectedGraphOperationState(this.graphOperationLayerState.addRef()));
     displayState: SegmentationUserLayerWithGraphDisplayState;
     private multiscaleVolumeChunkSource: MultiscaleVolumeChunkSource|undefined;
+
+    public credentialsProvider: SpecialProtocolCredentialsProvider;
     constructor(...args: any[]) {
       super(...args);
-      console.log('SegmentationUserLayerWithGraph constructor');
       this.displayState = {
         ...this.displayState,
         // multicutDisplayInformation: new MulticutDisplayInformation(),
@@ -172,7 +174,6 @@ function helper<TBase extends BaseConstructor>(Base: TBase) {
 
 
     restoreState(specification: any) {
-      console.log('with_graph restoreState');
       super.restoreState(specification);
 
       // Ignore user-specified equivalences for graph layer
@@ -193,7 +194,10 @@ function helper<TBase extends BaseConstructor>(Base: TBase) {
             // }
             // Chunked Graph Server
             if (volume.getChunkedGraphUrl) {
-              this.chunkedGraphUrl = volume.getChunkedGraphUrl();
+              const res = volume.getChunkedGraphUrl();
+              if (res) {
+                [this.chunkedGraphUrl, this.credentialsProvider] = res;
+              }
             }
             // Chunked Graph Supervoxels
             if (this.chunkedGraphUrl && volume.getChunkedGraphSources) {
@@ -209,7 +213,8 @@ function helper<TBase extends BaseConstructor>(Base: TBase) {
                       ...displayState.segmentationGroupState.value,
                       localPosition: this.localPosition,
                       transform,
-                    });
+                    },
+                    this.credentialsProvider);
                 this.addRenderLayer(this.chunkedGraphLayer);
 
                 // Have to wait for graph server initialization to fetch agglomerations
@@ -258,8 +263,6 @@ function helper<TBase extends BaseConstructor>(Base: TBase) {
             return;
           }
           started = true;
-
-          console.log('got a segmentationRenderLayer', segmentationRenderLayer);
 
           doStuff(segmentationRenderLayer.multiscaleSource);
         });
@@ -370,8 +373,8 @@ function helper<TBase extends BaseConstructor>(Base: TBase) {
       const mousePositionVec3 = vec3.fromValues(mousePosition[0], mousePosition[1], mousePosition[2]);
 
       const meshLayer = this.someSegmentationRenderLayer()!;
-      const transform = meshLayer.displayState.transform.value!; //  TODO
-      const inverseTransform = mat4.create();
+      const transform = meshLayer.displayState.transform.value!; //  TODO not being used
+      const inverseTransform = mat4.create(); // TODO empty transform
 
       const currentSegmentSelection: SegmentSelection = {
         segmentId: segmentSelectionState.selectedSegment.clone(),
@@ -536,7 +539,6 @@ function helper<TBase extends BaseConstructor>(Base: TBase) {
           const meshLayer = this.someRenderLayer();
           if (meshLayer) {
             const meshSource = meshLayer.source;
-            console.log('rpc 3?');
             const promise = meshSource.rpc!.promiseInvoke<any>(
               GRAPHENE_MANIFEST_REFRESH_PROMISE,
               {'rpcId': meshSource.rpcId!, 'segment': segment.toString()});
