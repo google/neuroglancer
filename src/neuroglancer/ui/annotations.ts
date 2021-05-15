@@ -957,6 +957,21 @@ export class PlaceBoundingBoxTool extends PlaceTwoCornerAnnotationTool {
     return `annotate bounding box`;
   }
 
+  getUpdatedAnnotation(
+      oldAnnotation: AxisAlignedBoundingBox, mouseState: MouseSelectionState,
+      annotationLayer: AnnotationLayerState) {
+    const result = super.getUpdatedAnnotation(oldAnnotation, mouseState, annotationLayer) as
+        AxisAlignedBoundingBox;
+    const {pointA, pointB} = result;
+    const rank = pointA.length;
+    for (let i = 0; i < rank; ++i) {
+      if (pointA[i] === pointB[i]) {
+        pointB[i] += 1;
+      }
+    }
+    return result;
+  }
+
   toJSON() {
     return ANNOTATE_BOUNDING_BOX_TOOL_ID;
   }
