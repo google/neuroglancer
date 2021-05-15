@@ -850,7 +850,7 @@ function getMousePositionInAnnotationCoordinates(
   if (chunkTransform.error !== undefined) return undefined;
   const chunkPosition = new Float32Array(chunkTransform.modelTransform.unpaddedRank);
   if (!getChunkPositionFromCombinedGlobalLocalPositions(
-          chunkPosition, mouseState.position, annotationLayer.localPosition.value,
+          chunkPosition, mouseState.unsnappedPosition, annotationLayer.localPosition.value,
           chunkTransform.layerRank, chunkTransform.combinedGlobalLocalToChunkTransform)) {
     return undefined;
   }

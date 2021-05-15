@@ -396,11 +396,14 @@ export class PerspectivePanel extends RenderedDataPanel {
       tempVec3[1] = 2.0 * (glWindowY + relativeY - pickRadius) / pickingData.viewportHeight - 1.0;
       tempVec3[2] = 2.0 * glWindowZ - 1.0;
       vec3.transformMat4(tempVec3, tempVec3, pickingData.invTransform);
-      let {position: mousePosition} = mouseState;
+      let {position: mousePosition, unsnappedPosition} = mouseState;
       const {value: voxelCoordinates} = this.navigationState.position;
       const rank = voxelCoordinates.length;
       if (mousePosition.length !== rank) {
         mousePosition = mouseState.position = new Float32Array(rank);
+      }
+      if (unsnappedPosition.length !== rank) {
+        unsnappedPosition = mouseState.unsnappedPosition = new Float32Array(rank);
       }
       mousePosition.set(voxelCoordinates);
       mouseState.coordinateSpace = this.navigationState.coordinateSpace.value;
@@ -409,6 +412,7 @@ export class PerspectivePanel extends RenderedDataPanel {
       for (let i = 0, spatialRank = displayDimensionIndices.length; i < spatialRank; ++i) {
         mousePosition[displayDimensionIndices[i]] = tempVec3[i];
       }
+      unsnappedPosition.set(mousePosition);
       const pickValue = data[4 * pickDiameter * pickDiameter + 4 * offset];
       pickingData.pickIDs.setMouseState(mouseState, pickValue);
       mouseState.displayDimensions = displayDimensions;

@@ -834,6 +834,7 @@ export class MouseSelectionState implements PickState {
   changed = new NullarySignal();
   coordinateSpace: CoordinateSpace = emptyInvalidCoordinateSpace;
   position: Float32Array = kEmptyFloat32Vec;
+  unsnappedPosition: Float32Array = kEmptyFloat32Vec;
   active = false;
   displayDimensions: DisplayDimensions|undefined = undefined;
   pickedRenderLayer: RenderLayer|null = null;
