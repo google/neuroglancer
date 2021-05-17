@@ -38,11 +38,11 @@ describe('disjoint_sets', () => {
     for (let i = 0; i < 24; ++i) {
       let a = new Uint64(i, 0);
       let b = new Uint64(i + 1, 0);
-      expect(disjointSets.get(a).toString()).toEqual('0');
+      expect(disjointSets.get(a).toString()).toEqual(`${i}`);
       expect(disjointSets.get(b)).toBe(b);
       disjointSets.link(a, b);
-      expect(disjointSets.get(a).toString()).toEqual('0');
-      expect(disjointSets.get(b).toString()).toEqual('0');
+      expect(disjointSets.get(a)).toEqual(b);
+      expect(disjointSets.get(b)).toEqual(b);
       expect(getSortedElementStrings(disjointSets, a))
           .toEqual(getContiguousElementStrings(0, i + 2));
     }
@@ -51,19 +51,19 @@ describe('disjoint_sets', () => {
     for (let i = 25; i < 49; ++i) {
       let a = new Uint64(i, 0);
       let b = new Uint64(i + 1, 0);
-      expect(disjointSets.get(a).toString()).toEqual('25');
+      expect(disjointSets.get(a).toString()).toEqual(`${i}`);
       expect(disjointSets.get(b)).toBe(b);
       disjointSets.link(a, b);
-      expect(disjointSets.get(a).toString()).toEqual('25');
-      expect(disjointSets.get(b).toString()).toEqual('25');
+      expect(disjointSets.get(a)).toEqual(b);
+      expect(disjointSets.get(b)).toEqual(b);
       expect(getSortedElementStrings(disjointSets, a))
           .toEqual(getContiguousElementStrings(25, i + 2));
     }
 
     // Link the two sets of 25 elements each.
     expect(disjointSets.link(new Uint64(15, 0), new Uint64(40, 0))).toBe(true);
-    expect(disjointSets.get(new Uint64(15, 0)).toString()).toEqual('0');
-    expect(disjointSets.get(new Uint64(40, 0)).toString()).toEqual('0');
+    expect(disjointSets.get(new Uint64(15, 0)).toString()).toEqual('49');
+    expect(disjointSets.get(new Uint64(40, 0)).toString()).toEqual('49');
     expect(getSortedElementStrings(disjointSets, new Uint64(15, 0)))
         .toEqual(getContiguousElementStrings(0, 50));
 
@@ -73,7 +73,7 @@ describe('disjoint_sets', () => {
     for (let i = 0; i < 50; ++i) {
       const x = new Uint64(i, 0);
       // Check that the same representative is returned.
-      expect(disjointSets.get(x).toString()).toEqual('0');
+      expect(disjointSets.get(x).toString()).toEqual('49');
       // Check that getSortedElementStrings returns the same list for each member of a set.
       expect(getSortedElementStrings(disjointSets, x)).toEqual(getContiguousElementStrings(0, 50));
     }
