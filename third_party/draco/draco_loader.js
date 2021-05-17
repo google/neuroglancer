@@ -23,7 +23,9 @@ function loadWebAssemblyDecoder() {
       // ArrayBuffer containing the contents of the .wasm file.
       DracoLoader.dracoDecoderType['wasmBinary'] = xhr.response;
       try {
-        DracoLoader.decoderModule = DracoDecoderModule(DracoLoader.dracoDecoderType);
+        DracoDecoderModule(DracoLoader.dracoDecoderType).then((module) => {
+          DracoLoader.decoderModule = module;
+        });
       } catch (err) {
         reject(new Error('Draco webassembly decoder corrupted'));
       }

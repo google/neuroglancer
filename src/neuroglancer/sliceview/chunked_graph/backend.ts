@@ -240,10 +240,6 @@ export class ChunkedGraphLayer extends Base implements
       this.debouncedupdateDisplayState();
     }));
 
-    // setInterval(() => { // hack
-    //   this.debouncedupdateDisplayState();
-    // }, 200);
-
     this.numVisibleChunksNeeded = 0;
     this.numVisibleChunksAvailable = 0;
     this.numPrefetchChunksAvailable = 0;

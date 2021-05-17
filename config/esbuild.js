@@ -155,7 +155,7 @@ j=d.createElement(s),dl=l!='dataLayer'?'&l='+l:'';j.async=true;j.src=
       banner: {
         js: 'function require(x) { throw new Error(\'Cannot require \' + x) }',
       },
-    };
+    };j
   }
 
   getWorkerEntrypoints() {

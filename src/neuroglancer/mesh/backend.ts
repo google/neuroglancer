@@ -321,10 +321,9 @@ export function decodeTriangleVertexPositionsAndIndices(
 export function decodeTriangleVertexPositionsAndIndicesDraco(
   data: ArrayBuffer, decoderModule: any): RawMeshData {
   const decoder = new decoderModule.Decoder();
-  const buffer = new decoderModule.DecoderBuffer();
-  buffer.Init(new Int8Array(data), data.byteLength);
+  const byteArray = new Int8Array(data);
   const mesh = new decoderModule.Mesh();
-  const decodeStatus = decoder.DecodeBufferToMesh(buffer, mesh);
+  const decodeStatus = decoder.DecodeArrayToMesh(byteArray, byteArray.byteLength, mesh);
   if (!decodeStatus.ok()) {
     // Not a draco mesh
     throw new TypeError('Draco decoding failed');
@@ -335,7 +334,6 @@ export function decodeTriangleVertexPositionsAndIndicesDraco(
     // Draco mesh has no position attribute, which we need
     throw new Error('Invalid Draco mesh');
   }
-  decoderModule.destroy(buffer);
   const numFaces = mesh.num_faces();
   const numIndices = numFaces * 3;
   const numPoints = mesh.num_points();
