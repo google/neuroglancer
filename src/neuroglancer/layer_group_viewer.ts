@@ -37,11 +37,13 @@ import {AutomaticallyFocusedElement} from 'neuroglancer/util/automatic_focus';
 import {TrackableRGB} from 'neuroglancer/util/color';
 import {Borrowed, Owned, RefCounted} from 'neuroglancer/util/disposable';
 import {removeChildren} from 'neuroglancer/util/dom';
-import {registerActionListener} from 'neuroglancer/util/event_action_map';
+import {dispatchEventAction, registerActionListener} from 'neuroglancer/util/event_action_map';
 import {CompoundTrackable, optionallyRestoreFromJsonMember} from 'neuroglancer/util/trackable';
 import {WatchableVisibilityPriority} from 'neuroglancer/visibility_priority/frontend';
 import {EnumSelectWidget} from 'neuroglancer/widget/enum_widget';
 import {TrackableScaleBarOptions} from 'neuroglancer/widget/scale_bar';
+
+declare var NEUROGLANCER_SHOW_LAYER_BAR_EXTRA_BUTTONS: boolean|undefined;
 
 export interface LayerGroupViewerState {
   display: Borrowed<DisplayContext>;
@@ -396,6 +398,38 @@ export class LayerGroupViewer extends RefCounted {
         layerPanel.element.title = 'Right click for options, drag to move/copy layer group.';
       } else {
         layerPanel.element.title = 'Drag to move/copy layer group.';
+      }
+
+      if (typeof NEUROGLANCER_SHOW_LAYER_BAR_EXTRA_BUTTONS !== 'undefined' &&
+          NEUROGLANCER_SHOW_LAYER_BAR_EXTRA_BUTTONS === true) {
+        {
+          const button = document.createElement('button');
+          button.textContent = 'Clear segments';
+          button.title = `De-select all objects ("x")`;
+          button.addEventListener('click', (event: MouseEvent) => {
+            dispatchEventAction(event, event, {action: 'clear-segments'});
+          });
+          layerPanel.element.appendChild(button);
+        }
+        for (const layout of ['3d', 'xy', 'xz', 'yz']) {
+          const button = document.createElement('button');
+          button.textContent = layout;
+          button.title = `Switch to ${layout} layout`;
+          button.addEventListener('click', () => {
+            let newLayout: string;
+            if (this.layout.name === layout) {
+              if (layout !== '3d') {
+                newLayout = `${layout}-3d`;
+              } else {
+                newLayout = '4panel';
+              }
+            } else {
+              newLayout = layout;
+            }
+            this.layout.name = newLayout;
+          });
+          layerPanel.element.appendChild(button);
+        }
       }
       layerPanel.element.draggable = true;
       const layerPanelElement = layerPanel.element;

@@ -35,6 +35,8 @@ import {TouchEventBinder, TouchPinchInfo, TouchTranslateInfo} from 'neuroglancer
 import {getWheelZoomAmount} from 'neuroglancer/util/wheel_zoom';
 import {ViewerState} from 'neuroglancer/viewer_state';
 
+declare var NEUROGLANCER_SHOW_OBJECT_SELECTION_TOOLTIP: boolean|undefined;
+
 const tempVec3 = vec3.create();
 
 export interface RenderedDataViewerState extends ViewerState {
@@ -391,6 +393,11 @@ export abstract class RenderedDataPanel extends RenderedPanel {
     element.classList.add('neuroglancer-rendered-data-panel');
     element.classList.add('neuroglancer-panel');
     element.classList.add('neuroglancer-noselect');
+    if (typeof NEUROGLANCER_SHOW_OBJECT_SELECTION_TOOLTIP !== 'undefined' &&
+        NEUROGLANCER_SHOW_OBJECT_SELECTION_TOOLTIP === true) {
+      element.title =
+          'Double click to toggle display of object under mouse pointer.  Control+rightclick to pin/unpin selection.';
+    }
 
     this.registerDisposer(new AutomaticallyFocusedElement(element));
     this.registerDisposer(new KeyboardEventBinder(element, this.inputEventMap));
