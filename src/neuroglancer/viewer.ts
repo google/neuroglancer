@@ -535,7 +535,7 @@ export class Viewer extends RefCounted implements ViewerState {
         this.uiControlVisibility.showLocation, mousePositionWidget.element));
     topRow.appendChild(mousePositionWidget.element);
 
-    if (typeof NEUROGLANCER_CREDIT_LINK !== undefined) {
+    if (typeof NEUROGLANCER_CREDIT_LINK !== 'undefined') {
       const {url, text} = NEUROGLANCER_CREDIT_LINK!;
       const creditLink = document.createElement('a');
       creditLink.href = url;
