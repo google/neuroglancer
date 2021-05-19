@@ -70,6 +70,7 @@ class Builder {
       define = {},
       inject = [],
       minify = true,
+      googleTagManager = undefined,
     } = options;
     this.outDir = outDir;
     this.cacheId = id;
@@ -85,6 +86,7 @@ class Builder {
     this.plugins = getCommonPlugins();
     this.define = define;
     this.inject = inject;
+    this.googleTagManager = googleTagManager;
   }
 
   // Deletes .js/.css/.html files from `this.outDir`.  Can safely be used on
@@ -108,19 +110,35 @@ class Builder {
   }
 
   async writeIndex() {
-    await fs.promises.writeFile(path.resolve(this.outDir, 'index.html'), `<!DOCTYPE html>
+    let indexHtml = `<!DOCTYPE html>
 <html>
   <head>
     <meta charset="UTF-8">
     <title>neuroglancer</title>
     <link href="main.bundle.css" rel="stylesheet">
-  </head>
+`;
+
+    const {googleTagManager} = this;
+    if (googleTagManager) {
+      indexHtml += `<!-- Google Tag Manager -->
+<script>(function(w,d,s,l,i){w[l]=w[l]||[];w[l].push({'gtm.start':
+new Date().getTime(),event:'gtm.js'});var f=d.getElementsByTagName(s)[0],
+j=d.createElement(s),dl=l!='dataLayer'?'&l='+l:'';j.async=true;j.src=
+'https://www.googletagmanager.com/gtm.js?id='+i+dl;f.parentNode.insertBefore(j,f);
+})(window,document,'script','dataLayer',${JSON.stringify(googleTagManager)});</script>
+<!-- End Google Tag Manager -->
+`;
+    }
+
+    indexHtml += `  </head>
   <body>
     <div id="neuroglancer-container"></div>
     <script src="main.bundle.js"></script>
   </body>
 </html>
-`);
+`;
+
+    await fs.promises.writeFile(path.resolve(this.outDir, 'index.html'), indexHtml);
   }
 
   getBaseEsbuildConfig() {

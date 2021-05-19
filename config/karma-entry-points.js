@@ -58,6 +58,7 @@ exports.getEsbuildConfig = () => {
   const {argv} = yargs.options({
     define: {
       type: 'array',
+      coerce: parseDefines,
       default: [],
     },
   });
@@ -69,7 +70,7 @@ exports.getEsbuildConfig = () => {
       '.dat': 'binary',
       '.npy': 'binary',
     },
-    define: parseDefines(argv.define),
+    define: argv.define,
     // TODO(jbms): Remove this workaround once evanw/esbuild#1202 is fixed.
     banner: {
       js: 'function require(x) { throw new Error(\'Cannot require \' + x) }',
