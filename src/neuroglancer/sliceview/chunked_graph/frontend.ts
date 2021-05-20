@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-import {ChunkManager, ChunkSourceConstructor, GettableChunkSource} from 'neuroglancer/chunk_manager/frontend';
+import {ChunkManager} from 'neuroglancer/chunk_manager/frontend';
 import {VisibleSegmentsState} from 'neuroglancer/segmentation_display_state/base';
 import {CHUNKED_GRAPH_LAYER_RPC_ID, CHUNKED_GRAPH_SOURCE_UPDATE_ROOT_SEGMENTS_RPC_ID, ChunkedGraphChunkSource as ChunkedGraphChunkSourceInterface, ChunkedGraphChunkSpecification, RENDER_RATIO_LIMIT, ChunkedGraphChunkSpecificationOptions} from 'neuroglancer/sliceview/chunked_graph/base';
 import {SliceViewChunkSource, SliceViewSingleResolutionSource} from 'neuroglancer/sliceview/frontend';
@@ -26,14 +26,10 @@ import {vec3} from 'neuroglancer/util/geom';
 import {verify3dVec, verifyObjectProperty} from 'neuroglancer/util/json';
 import {Uint64} from 'neuroglancer/util/uint64';
 import {RPC} from 'neuroglancer/worker_rpc';
-import { CredentialsProvider } from 'src/neuroglancer/credentials_provider';
-import { Borrowed } from 'src/neuroglancer/util/disposable';
-import { OAuth2Token } from 'src/neuroglancer/util/google_oauth2';
 import { SliceViewSourceOptions } from '../base';
 import { MultiscaleVolumeChunkSource } from '../volume/frontend';
-import {VolumeSourceOptions} from 'neuroglancer/sliceview/volume/base';
-import { kEmptyFloat32Vec } from 'src/neuroglancer/util/vector';
 import { cancellableFetchSpecialOk, SpecialProtocolCredentialsProvider } from 'src/neuroglancer/util/special_protocol_request';
+import { HttpError } from 'src/neuroglancer/util/http_request';
 
 export const GRAPH_SERVER_NOT_SPECIFIED = Symbol('Graph Server Not Specified.');
 
@@ -57,68 +53,11 @@ export function restoreSegmentSelection(x: any): SegmentSelection {
   };
 }
 
-// /**
-//  * Mixin for adding a rootSegments member to a ChunkSource.
-//  */
-//  export function WithRootSegments() {
-//   return function<
-//       TBase extends ChunkSourceConstructor<GettableChunkSource&{chunkManager: ChunkManager}>>(
-//       Base: TBase) {
-//     type WithRootSegmentsOptions = InstanceType<TBase>['OPTIONS']&
-//         {rootSegments: Uint64Set};
-//     class C extends Base {
-//       rootSegments: Uint64Set;
-//       OPTIONS: WithRootSegmentsOptions;
-//       constructor(...args: any[]) {
-//         console.log('WithRootSegments args', args);
-//         super(...args);
-//         const options: WithRootSegmentsOptions = args[1];
-//         this.rootSegments =
-//             options.rootSegments?.addRef();
-//       }
-//       initializeCounterpart(rpc: RPC, options: any) {
-//         options['rootSegments'] = this.rootSegments.rpcId;
-//         super.initializeCounterpart(rpc, options);
-//         // const {credentialsProvider} = this;
-//         // options['credentialsProvider'] =
-//         //     getCredentialsProviderCounterpart(this.chunkManager, credentialsProvider);
-//         // super.initializeCounterpart(rpc, options);
-//       }
-//       static encodeOptions(options: WithRootSegmentsOptions) {
-//         const encoding = super.encodeOptions(options);
-//         console.log('enocde options!');
-//         // const {credentialsProvider} = options;
-//         // encoding.credentialsProvider =
-//         //     credentialsProvider === undefined ? undefined : getObjectId(credentialsProvider);
-//         return encoding;
-//       }
-
-//       updateRootSegments(rpc: RPC, rootSegments: Uint64Set) {
-//         this.rootSegments = rootSegments;
-//         rpc.invoke(
-//             CHUNKED_GRAPH_SOURCE_UPDATE_ROOT_SEGMENTS_RPC_ID,
-//             {'id': this.rpcId, 'rootSegments': this.rootSegments.rpcId});
-//       }
-    
-//     };
-//     return C;
-//   };
-// }
-
 export class ChunkedGraphChunkSource extends SliceViewChunkSource implements
     ChunkedGraphChunkSourceInterface {
   rootSegments: Uint64Set;
   spec: ChunkedGraphChunkSpecification;
-
-  // type foo = {rootSegments: Uint64Set};
-
-  // type WithCredentialsOptions = InstanceType<TBase>['OPTIONS']&
-//   {credentialsProvider: MaybeOptionalCredentialsProvider<Credentials>};
-// class C extends Base {
-// credentialsProvider: MaybeOptionalCredentialsProvider<Credentials>;
-  OPTIONS: {rootSegments: Uint64Set, spec: ChunkedGraphChunkSpecification}; // SliceViewChunkSourceOptions<Spec>;
-  // SliceViewChunkSourceOptions vs  SliceViewChunkSpecificationOptions
-
+  OPTIONS: {rootSegments: Uint64Set, spec: ChunkedGraphChunkSpecification};
 
   constructor(chunkManager: ChunkManager, options: {
     spec: ChunkedGraphChunkSpecification,
@@ -141,67 +80,12 @@ export class ChunkedGraphChunkSource extends SliceViewChunkSource implements
   }
 }
 
-// export class ChunkedGraphMultiscaleVolumeChunkSource extends MultiscaleVolumeChunkSource {
-//   get dataType() {
-//     // if (this.channelInfo.dataType === DataType.UINT16) {
-//     //   // 16-bit channels automatically rescaled to uint8 by The Boss
-//     //   return DataType.UINT8;
-//     // }
-//     // return this.channelInfo.dataType;
-//   }
-//   get volumeType() {
-//     // return this.channelInfo.volumeType;
-//   }
-
-//   get rank() {
-//     return 3;
-//   }
-
-//   constructor(
-//     chunkManager: ChunkManager,
-//     public baseUrl: string,
-//     public credentialsProvider: CredentialsProvider<OAuth2Token>,
-//     public sources: ChunkedGraphChunkSource[][]) {
-//     super(chunkManager);
-//   }
-
-//   getSources(volumeSourceOptions: VolumeSourceOptions) { // SliceViewSingleResolutionSource<Source>[][];
-//     console.log(volumeSourceOptions);
-//     return this.sources;
-//   }
-
-
-// }
-
-
-// export abstract class MultiscaleSliceViewChunkSource<
-//     Source extends SliceViewChunkSource = SliceViewChunkSource,
-//                    SourceOptions extends SliceViewSourceOptions = SliceViewSourceOptions> {
-//   abstract get rank(): number;
-
-//   /**
-//    * @return Chunk sources for each scale, ordered by increasing minVoxelSize.  Outer array indexes
-//    * over alternative chunk orientations.  The inner array indexes over scale.
-//    *
-//    * Every chunk source must have rank equal to `this.rank`.
-//    */
-//   abstract getSources(options: SourceOptions): SliceViewSingleResolutionSource<Source>[][];
-
-//   constructor(public chunkManager: Borrowed<ChunkManager>) {}
-// }
-
-
-/*
-export abstract class SliceViewVolumeRenderLayer<ShaderParameters = any> extends
-    SliceViewRenderLayer<VolumeChunkSource, VolumeSourceOptions> {*/
-
 export class ChunkedGraphLayer extends SliceViewRenderLayer {
   private graphurl: string;
   private leafRequestsStatusMessage: StatusMessage|undefined;
   leafRequestsActive = new TrackableBoolean(true, true);
 
   constructor(
-      // chunkManager: ChunkManager,
       url: string,
       public sources: SliceViewSingleResolutionSource<ChunkedGraphChunkSource>[][],
       multiscaleSource: MultiscaleVolumeChunkSource,
@@ -239,25 +123,19 @@ export class ChunkedGraphLayer extends SliceViewRenderLayer {
     return RENDER_RATIO_LIMIT;
   }
 
-  async getRoot(selection: SegmentSelection, timestamp?: string): Promise<Uint64> {
+  async getRoot(segmentId: Uint64, timestamp?: string): Promise<Uint64> {
     const {url} = this;
     if (url === '') {
-      return Promise.resolve(selection.segmentId);
+      return Promise.resolve(segmentId);
     }
 
-
-    const url2 = `${url}/node/${String(selection.segmentId)}/root?int64_as_str=1${
+    const url2 = `${url}/node/${String(segmentId)}/root?int64_as_str=1${
       timestamp ? `&timestamp=${timestamp}` : ``}`
 
     const promise = cancellableFetchSpecialOk(this.credentialsProvider, url2, {}, responseIdentity);
 
-    // const promise = authFetch(
-    //     `${url}/node/${String(selection.segmentId)}/root?int64_as_str=1${
-    //         timestamp ? `&timestamp=${timestamp}` : ``}`,
-    //     {}, responseIdentity, undefined, false);
-
     const response = await this.withErrorMessage(promise, {
-      initialMessage: `Retrieving root for segment ${selection.segmentId}`,
+      initialMessage: `Retrieving root for segment ${segmentId}`,
       errorPrefix: `Could not fetch root: `
     });
     const jsonResp = await response.json();
@@ -279,16 +157,6 @@ export class ChunkedGraphLayer extends SliceViewRenderLayer {
         [String(second.segmentId), ...second.position.values()]
       ])
     }, responseIdentity);
-
-    // const promise = authFetch(
-    //     `${url}/merge?int64_as_str=1`, {
-    //       method: 'POST',
-    //       body: JSON.stringify([
-    //         [String(first.segmentId), ...first.position.values()],
-    //         [String(second.segmentId), ...second.position.values()]
-    //       ])
-    //     },
-    //     responseIdentity, undefined, false);
 
     const response = await this.withErrorMessage(promise, {
       initialMessage: `Merging ${first.segmentId} and ${second.segmentId}`,
@@ -313,17 +181,6 @@ export class ChunkedGraphLayer extends SliceViewRenderLayer {
         'sinks': second.map(x => [String(x.segmentId), ...x.position.values()])
       })
     }, responseIdentity);
-
-
-    // const promise = authFetch(
-    //     `${url}/split?int64_as_str=1`, {
-    //       method: 'POST',
-    //       body: JSON.stringify({
-    //         'sources': first.map(x => [String(x.segmentId), ...x.position.values()]),
-    //         'sinks': second.map(x => [String(x.segmentId), ...x.position.values()])
-    //       })
-    //     },
-    //     responseIdentity, undefined, false);
 
     const response = await this.withErrorMessage(promise, {
       initialMessage: `Splitting ${first.length} sources from ${second.length} sinks`,
@@ -353,17 +210,6 @@ export class ChunkedGraphLayer extends SliceViewRenderLayer {
         'sinks': second.map(x => [String(x.segmentId), ...x.position.values()])
       })
     }, responseIdentity);
-
-
-    // const promise = authFetch(
-    //     `${url}/graph/split_preview?int64_as_str=1`, {
-    //       method: 'POST',
-    //       body: JSON.stringify({
-    //         'sources': first.map(x => [String(x.segmentId), ...x.position.values()]),
-    //         'sinks': second.map(x => [String(x.segmentId), ...x.position.values()])
-    //       })
-    //     },
-    //     responseIdentity, undefined, false);
 
     const response = await this.withErrorMessage(promise, {
       initialMessage:
@@ -403,15 +249,6 @@ export class ChunkedGraphLayer extends SliceViewRenderLayer {
       ])
     }, responseIdentity);
 
-    // const promise =
-    //     authFetch(`${url}/graph/find_path?int64_as_str=1&precision_mode=${Number(precisionMode)}`, {
-    //       method: 'POST',
-    //       body: JSON.stringify([
-    //         [String(first.segmentId), ...first.position.values()],
-    //         [String(second.segmentId), ...second.position.values()]
-    //       ])
-    //     });
-
     const response = await this.withErrorMessage(promise, {
       initialMessage: `Finding path between ${first.segmentId} and ${second.segmentId}`,
       errorPrefix: 'Path finding failed: '
@@ -437,24 +274,25 @@ export class ChunkedGraphLayer extends SliceViewRenderLayer {
     const status = new StatusMessage(true);
     status.setText(options.initialMessage);
     const dispose = status.dispose.bind(status);
-    let response = await promise;
-    if (response !== undefined && !(response instanceof Response)) {
-      response = new Response(response);
-    }
-    if (response.ok) {
+    try {
+      const response = await promise;
       dispose();
       return response;
-    } else {
-      let msg: string;
-      try {
-        msg = (await response.json())['message'];
-      } catch {
-        msg = await response.text();
+    } catch (e) {
+      if (e instanceof HttpError && e.response) {
+        let msg: string;
+        if (e.response.headers.get('content-type') === 'application/json') {
+          msg = (await e.response.json())['message'];
+        } else {
+          msg = await e.response.text();
+        }
+
+        const {errorPrefix = ''} = options;
+        status.setErrorMessage(errorPrefix + msg);
+        status.setVisible(true);
+        throw new Error(`[${e.response.status}] ${errorPrefix}${msg}`);
       }
-      const {errorPrefix = ''} = options;
-      status.setErrorMessage(errorPrefix + msg);
-      status.setVisible(true);
-      throw new Error(`[${response.status}] ${errorPrefix}${msg}`);
+      throw e;
     }
   }
 

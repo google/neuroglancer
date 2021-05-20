@@ -41,7 +41,8 @@ import {isNotFoundError, responseJson} from 'neuroglancer/util/http_request';
 import {parseArray, parseFixedLengthArray, parseQueryStringParameters, unparseQueryStringParameters, verifyEnumString, verifyFiniteFloat, verifyFinitePositiveFloat, verifyInt, verifyObject, verifyObjectProperty, verifyOptionalObjectProperty, verifyOptionalString, verifyPositiveInt, verifyString, verifyStringArray, verifyNonnegativeInt} from 'neuroglancer/util/json';
 import * as matrix from 'neuroglancer/util/matrix';
 import {getObjectId} from 'neuroglancer/util/object_id';
-import {cancellableFetchSpecialOk, parseSpecialUrl, SpecialProtocolCredentials, SpecialProtocolCredentialsProvider} from 'neuroglancer/util/special_protocol_request';
+import {parseSpecialUrl, SpecialProtocolCredentials, SpecialProtocolCredentialsProvider} from 'neuroglancer/util/special_protocol_request';
+import {cancellableFetchSpecialOk} from 'neuroglancer/datasource/graphene/base';
 
 import {ChunkedGraphSourceParameters, DataEncoding, MeshSourceParameters, MultiscaleMeshMetadata, PYCG_APP_VERSION, ShardingHashFunction, ShardingParameters, SkeletonMetadata, SkeletonSourceParameters, VolumeChunkEncoding, VolumeChunkSourceParameters} from 'neuroglancer/datasource/graphene/base';
 import {IndexedSegmentPropertySourceParameters} from 'neuroglancer/datasource/graphene/base';
@@ -521,7 +522,15 @@ function parseMeshMetadata(data: any): ParsedMeshMetadata {
   const t = verifyObjectProperty(data, '@type', verifyString);
   let metadata: MultiscaleMeshMetadata|undefined;
   if (t === 'neuroglancer_legacy_mesh') {
-    metadata = undefined;
+    const sharding = verifyObjectProperty(data, 'sharding', parseGrapheneShardingParameters);
+    if (sharding === undefined) {
+      metadata = undefined;
+    } else {
+      const lodScaleMultiplier = 0;
+      const vertexQuantizationBits = 10;
+      const transform = parseTransform(data);
+      metadata = {lodScaleMultiplier, transform, sharding, vertexQuantizationBits};
+    }
   } else if (t !== 'neuroglancer_multilod_draco') {
     throw new Error(`Unsupported mesh type: ${JSON.stringify(t)}`);
   } else {
@@ -617,6 +626,11 @@ function parseSkeletonMetadata(data: any): ParsedSkeletonMetadata {
       vertexAttributes.set(id, {dataType, numComponents});
     });
   });
+
+  if (data.sharding === null) { /* our info file is returning null for this */
+    data.sharding = undefined;
+  }
+
   const sharding = verifyObjectProperty(data, 'sharding', parseShardingParameters);
   const segmentPropertyMap = verifyObjectProperty(data, 'segment_properties', verifyOptionalString);
   return {
@@ -643,16 +657,16 @@ export function getShardedMeshSource(chunkManager: ChunkManager, parameters: Mes
 
 async function getMeshSource(
     chunkManager: ChunkManager, credentialsProvider: SpecialProtocolCredentialsProvider,
-    url: string, fragmentUrl: string) {
+    url: string, fragmentUrl: string, sharding: boolean) {
   const {metadata, segmentPropertyMap} =
-      await getMeshMetadata(chunkManager, undefined, url);
+      await getMeshMetadata(chunkManager, credentialsProvider, fragmentUrl);
   if (metadata === undefined) {
     return {
       source: getLegacyMeshSource(chunkManager, credentialsProvider, {
         manifestUrl: url,//parseSpecialUrl(url, credentialsProvider),
         fragmentUrl: fragmentUrl,//parseSpecialUrl(url, credentialsProvider),
         lod: 0,
-        sharding: undefined,
+        sharding: undefined,//sharding, TODO
         verifyMesh: false,
       }),
       transform: mat4.create(),
@@ -694,7 +708,7 @@ async function getSkeletonSource(
     chunkManager: ChunkManager, credentialsProvider: SpecialProtocolCredentialsProvider,
     url: string) {
   const {metadata, segmentPropertyMap} =
-      await getSkeletonMetadata(chunkManager, credentialsProvider, url);
+      await getSkeletonMetadata(chunkManager, undefined/*credentialsProvider*/, url);
   return {
     source: chunkManager.getChunkSource(GrapheneSkeletonSource, {
       credentialsProvider,
@@ -761,10 +775,12 @@ async function getVolumeDataSource(
     });
   }
   if (info.mesh !== undefined) {
+    console.log('getMeshSource11111111111111111');
     const {source: meshSource, transform} =
         await getMeshSource(options.chunkManager, credentialsProvider,
           info.app!.meshingUrl,
-          resolvePath(info.dataUrl, info.mesh)); // is this right?
+          resolvePath(info.dataUrl, info.mesh),
+          true); // TEMP TODO sharding  = true
     const subsourceToModelSubspaceTransform = getSubsourceToModelSubspaceTransform(info);
     mat4.multiply(subsourceToModelSubspaceTransform, subsourceToModelSubspaceTransform, transform);
     subsources.push({
@@ -774,8 +790,8 @@ async function getVolumeDataSource(
       subsourceToModelSubspaceTransform,
     });
   }
-  if (info.skeletons !== undefined) {
-    const skeletonsUrl = resolvePath(url, info.skeletons);
+  if (info.skeletons !== undefined && false) {/*
+    const skeletonsUrl = resolvePath(info.dataUrl, info.skeletons);
     const {source: skeletonSource, transform} =
         await getSkeletonSource(options.chunkManager, credentialsProvider, skeletonsUrl);
     const subsourceToModelSubspaceTransform = getSubsourceToModelSubspaceTransform(info);
@@ -786,7 +802,7 @@ async function getVolumeDataSource(
       subsource: {mesh: skeletonSource},
       subsourceToModelSubspaceTransform,
     });
-  }
+  */}
   return {modelTransform: makeIdentityTransform(modelSpace), subsources};
 }
 
@@ -953,8 +969,9 @@ async function getAnnotationDataSource(
 async function getMeshDataSource(
     options: GetDataSourceOptions, credentialsProvider: SpecialProtocolCredentialsProvider,
     url: string): Promise<DataSource> {
+      console.log('getMeshDataSourcegetMeshDataSourcegetMeshDataSource')
   const {source: mesh, transform, segmentPropertyMap} =
-      await getMeshSource(options.chunkManager, credentialsProvider, url, url); // this is wrong 'url, url'
+      await getMeshSource(options.chunkManager, credentialsProvider, url, url, false); // this is wrong 'url, url'
   const subsources: DataSubsourceEntry[] = [
     {
       id: 'default',
@@ -1111,6 +1128,7 @@ export class GrapheneDataSource extends DataSourceProvider {
   }
 
   get(options: GetDataSourceOptions): Promise<DataSource> {
+    console.log('GrapheneDataSource get');
     const {url: providerUrl, parameters} = parseProviderUrl(options.providerUrl);
     return options.chunkManager.memoize.getUncounted(
         {'type': 'graphene:get', providerUrl, parameters}, async(): Promise<DataSource> => {

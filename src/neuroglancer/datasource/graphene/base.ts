@@ -119,3 +119,41 @@ export class IndexedSegmentPropertySourceParameters {
   sharding: ShardingParameters|undefined;
   static RPC_ID = 'graphene/IndexedSegmentPropertySource';
 }
+
+
+
+/*
+temporary solution to deal with cors error if the middle auth credential is passed to fetch request to GCS.
+because the authorization header is not in Access-Control-Allow-Headers
+*/
+
+import {cancellableFetchSpecialOk as cancellableFetchSpecialOkOrig, SpecialProtocolCredentials, SpecialProtocolCredentialsProvider} from 'neuroglancer/util/special_protocol_request';
+import { CancellationToken, uncancelableToken } from 'src/neuroglancer/util/cancellation';
+import { ResponseTransform } from 'src/neuroglancer/util/http_request';
+
+const GCS_ORIGIN = 'https://storage.googleapis.com';
+
+export async function cancellableFetchSpecialOk<T>(
+  credentialsProvider: SpecialProtocolCredentialsProvider, url: string, init: RequestInit,
+  transformResponse: ResponseTransform<T>,
+  cancellationToken: CancellationToken = uncancelableToken): Promise<T> {
+    if ((new URL(url)).origin === GCS_ORIGIN) {
+      credentialsProvider = undefined;
+    }
+
+    return cancellableFetchSpecialOkOrig(credentialsProvider, url, init, transformResponse, cancellationToken);
+}
+
+import {fetchSpecialHttpByteRange as fetchSpecialHttpByteRangeOrig} from 'neuroglancer/util/byte_range_http_requests';
+import { Uint64 } from 'src/neuroglancer/util/uint64';
+
+export function fetchSpecialHttpByteRange(
+  credentialsProvider: SpecialProtocolCredentialsProvider, url: string,
+  startOffset: Uint64|number, endOffset: Uint64|number,
+  cancellationToken: CancellationToken): Promise<ArrayBuffer> {
+    if ((new URL(url)).origin === GCS_ORIGIN) {
+      credentialsProvider = undefined;
+    }
+
+    return fetchSpecialHttpByteRangeOrig(credentialsProvider, url, startOffset, endOffset, cancellationToken);
+}

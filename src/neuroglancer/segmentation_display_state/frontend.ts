@@ -119,6 +119,7 @@ export class SegmentSelectionState extends RefCounted {
   }
 
   setRaw(value: Uint64|null|undefined) {
+    console.log('setRaw', value);
     if (value == null) {
       if (this.hasSelectedSegment) {
         this.hasSelectedSegment = false;
@@ -149,7 +150,8 @@ export class SegmentSelectionState extends RefCounted {
       }
       this.set(value, userLayer.displayState.segmentationGroupState.value.hideSegmentZero.value);
 
-      // value = layerSelectedValues.getRaw(userLayer); TODO
+      // value = layerSelectedValues.getRaw(userLayer); // TODO
+      // this.setRaw(toUint64(value));
     }));
   }
 }

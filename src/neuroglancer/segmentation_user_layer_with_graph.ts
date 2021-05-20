@@ -369,22 +369,8 @@ function helper<TBase extends BaseConstructor>(Base: TBase) {
     getRootOfSelectedSupervoxel() {
       let {segmentSelectionState, timestamp} = this.displayState;
       let tsValue = (timestamp.value !== '') ? timestamp.value : void (0);
-      const mousePosition = this.manager.layerSelectedValues.mouseState.position;
-      const mousePositionVec3 = vec3.fromValues(mousePosition[0], mousePosition[1], mousePosition[2]);
 
-      const meshLayer = this.someSegmentationRenderLayer()!;
-      const transform = meshLayer.displayState.transform.value!; //  TODO not being used
-      const inverseTransform = mat4.create(); // TODO empty transform
-
-      const currentSegmentSelection: SegmentSelection = {
-        segmentId: segmentSelectionState.selectedSegment.clone(),
-        rootId: segmentSelectionState.selectedSegment.clone(),
-        position: vec3.transformMat4(
-            vec3.create(), mousePositionVec3,
-            inverseTransform)
-      };
-
-      return this.chunkedGraphLayer!.getRoot(currentSegmentSelection, tsValue);
+      return this.chunkedGraphLayer!.getRoot(segmentSelectionState.selectedSegment.clone(), tsValue);
     }
 
     selectSegment2() {
@@ -423,15 +409,35 @@ function helper<TBase extends BaseConstructor>(Base: TBase) {
       }
       return callback();
     }
-/*
+
+    getMousePositionSpatial() {
+      const mousePosition = this.manager.layerSelectedValues.mouseState.position;
+      const mousePositionVec3 = vec3.fromValues(mousePosition[0], mousePosition[1], mousePosition[2]);
+      const coordinateSpaceScales = this.displayState.layer.managedLayer.manager.root.coordinateSpace.value.scales;
+      const coordinateSpaceScalesVec3 = vec3.fromValues(coordinateSpaceScales[0], coordinateSpaceScales[1], coordinateSpaceScales[2]);
+      vec3.scale(coordinateSpaceScalesVec3, coordinateSpaceScalesVec3, 1e+9); // coordinate space is in meters even though info file provides it in nanometers
+      const mousePositionSpatial = vec3.multiply(vec3.create(), mousePositionVec3, coordinateSpaceScalesVec3);
+      return mousePositionSpatial;
+    }
+
+    getInverseTransform() {
+      const meshLayer = this.someSegmentationRenderLayer()!;
+      const transform = meshLayer.displayState.transform.value!; //  TODO not being used
+      const inverseTransform = mat4.create(); // TODO empty transform
+      return inverseTransform;
+    }
+
     mergeSelectFirst() {
       const {segmentSelectionState} = this.displayState;
       if (segmentSelectionState.hasSelectedSegment) {
-        lastSegmentSelection.segmentId.assign(segmentSelectionState.rawSelectedSegment);
+        lastSegmentSelection.segmentId.assign(segmentSelectionState.selectedSegment);
         lastSegmentSelection.rootId.assign(segmentSelectionState.selectedSegment);
+        // console.log('rawSelectedSegment', segmentSelectionState.rawSelectedSegment);
+        // console.log('selectedSegment', segmentSelectionState.selectedSegment);
+        // console.log('lastSegmentSelection.position', lastSegmentSelection.position);
         vec3.transformMat4(
-            lastSegmentSelection.position, this.manager.layerSelectedValues.mouseState.position,
-            this.transform.inverse);
+            lastSegmentSelection.position, this.getMousePositionSpatial(),
+            this.getInverseTransform());//this.transform.inverse);
 
         StatusMessage.showTemporaryMessage(
             `Selected ${lastSegmentSelection.segmentId} as source for merge. Pick a sink.`, 3000);
@@ -439,14 +445,15 @@ function helper<TBase extends BaseConstructor>(Base: TBase) {
     }
 
     mergeSelectSecond() {
-      const {segmentSelectionState, rootSegments, rootSegmentsAfterEdit} = this.displayState;
+      const {segmentSelectionState} = this.displayState;
+      const {rootSegments, rootSegmentsAfterEdit} = this.displayState.segmentationGroupState.value;
       if (segmentSelectionState.hasSelectedSegment) {
         const currentSegmentSelection: SegmentSelection = {
-          segmentId: segmentSelectionState.rawSelectedSegment.clone(),
+          segmentId: segmentSelectionState.selectedSegment.clone(),
           rootId: segmentSelectionState.selectedSegment.clone(),
           position: vec3.transformMat4(
-              vec3.create(), this.manager.layerSelectedValues.mouseState.position,
-              this.transform.inverse)
+              vec3.create(), this.getMousePositionSpatial(),
+              this.getInverseTransform())
         };
 
         StatusMessage.showTemporaryMessage(
@@ -478,11 +485,11 @@ function helper<TBase extends BaseConstructor>(Base: TBase) {
     splitSelectFirst() {
       const {segmentSelectionState} = this.displayState;
       if (segmentSelectionState.hasSelectedSegment) {
-        lastSegmentSelection.segmentId.assign(segmentSelectionState.rawSelectedSegment);
+        lastSegmentSelection.segmentId.assign(segmentSelectionState.selectedSegment);
         lastSegmentSelection.rootId.assign(segmentSelectionState.selectedSegment);
         vec3.transformMat4(
-            lastSegmentSelection.position, this.manager.layerSelectedValues.mouseState.position,
-            this.transform.inverse);
+            lastSegmentSelection.position, this.getMousePositionSpatial(),
+            this.getInverseTransform());
 
         StatusMessage.showTemporaryMessage(
             `Selected ${lastSegmentSelection.segmentId} as source for split. Pick a sink.`, 3000);
@@ -490,14 +497,15 @@ function helper<TBase extends BaseConstructor>(Base: TBase) {
     }
 
     splitSelectSecond() {
-      const {segmentSelectionState, rootSegments, rootSegmentsAfterEdit} = this.displayState;
+      const {segmentSelectionState} = this.displayState;
+      const {rootSegments, rootSegmentsAfterEdit} = this.displayState.segmentationGroupState.value;
       if (segmentSelectionState.hasSelectedSegment) {
         const currentSegmentSelection: SegmentSelection = {
-          segmentId: segmentSelectionState.rawSelectedSegment.clone(),
+          segmentId: segmentSelectionState.selectedSegment.clone(),
           rootId: segmentSelectionState.selectedSegment.clone(),
           position: vec3.transformMat4(
-              vec3.create(), this.manager.layerSelectedValues.mouseState.position,
-              this.transform.inverse)
+              vec3.create(), this.getMousePositionSpatial(),
+              this.getInverseTransform())
         };
 
         StatusMessage.showTemporaryMessage(
@@ -528,7 +536,7 @@ function helper<TBase extends BaseConstructor>(Base: TBase) {
               `Split unsuccessful - graph layer not initialized.`, 3000);
         }
       }
-    }*/
+    }
 
     reloadManifest() {
       let {segmentSelectionState} = this.displayState;

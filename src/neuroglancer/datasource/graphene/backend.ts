@@ -32,7 +32,7 @@ import {decodeCompressedSegmentationChunk} from 'neuroglancer/sliceview/backend_
 import {decodeJpegChunk} from 'neuroglancer/sliceview/backend_chunk_decoders/jpeg';
 import {decodeRawChunk} from 'neuroglancer/sliceview/backend_chunk_decoders/raw';
 import {VolumeChunk, VolumeChunkSource} from 'neuroglancer/sliceview/volume/backend';
-import {fetchSpecialHttpByteRange} from 'neuroglancer/util/byte_range_http_requests';
+import {fetchSpecialHttpByteRange} from 'neuroglancer/datasource/graphene/base';
 import {CancellationToken} from 'neuroglancer/util/cancellation';
 import {Borrowed} from 'neuroglancer/util/disposable';
 import {convertEndian32, Endianness} from 'neuroglancer/util/endian';
@@ -41,7 +41,8 @@ import {murmurHash3_x86_128Hash64Bits} from 'neuroglancer/util/hash';
 import {cancellableFetchOk, HttpError, isNotFoundError, responseArrayBuffer, responseJson} from 'neuroglancer/util/http_request';
 import {stableStringify} from 'neuroglancer/util/json';
 import {getObjectId} from 'neuroglancer/util/object_id';
-import {cancellableFetchSpecialOk, SpecialProtocolCredentials, SpecialProtocolCredentialsProvider} from 'neuroglancer/util/special_protocol_request';
+import {SpecialProtocolCredentials, SpecialProtocolCredentialsProvider} from 'neuroglancer/util/special_protocol_request';
+import {cancellableFetchSpecialOk} from 'neuroglancer/datasource/graphene/base';
 import {Uint64} from 'neuroglancer/util/uint64';
 import {encodeZIndexCompressed} from 'neuroglancer/util/zorder';
 import {registerSharedObject} from 'neuroglancer/worker_rpc';
@@ -51,15 +52,6 @@ import {AnnotationSourceParameters, AnnotationSpatialIndexSourceParameters, Chun
 import * as DracoLoader from 'dracoloader';
 import { ChunkedGraphChunk, ChunkedGraphChunkSource, decodeSupervoxelArray } from 'src/neuroglancer/sliceview/chunked_graph/backend';
 
-// const shardingHashFunctions: Map<ShardingHashFunction, (out: Uint64) => void> = new Map([
-//   [
-//     ShardingHashFunction.MURMURHASH3_X86_128,
-//     (out) => {
-//       murmurHash3_x86_128Hash64Bits(out, 0, out.low, out.high);
-//     }
-//   ],
-//   [ShardingHashFunction.IDENTITY, (_out) => {}],
-// ]);
 
 interface ShardInfo {
   shardUrl: string;
@@ -273,35 +265,15 @@ chunkDecoders.set(VolumeChunkEncoding.COMPRESSED_SEGMENTATION, decodeCompressedS
 
   async download(chunk: VolumeChunk, cancellationToken: CancellationToken): Promise<void> {
     const {parameters} = this;
-
-    // const {minishardIndexSource} = this;
-    let response: ArrayBuffer;
-    // if (minishardIndexSource === undefined) {
-      let url: string;
-      // {
-        // chunkPosition must not be captured, since it will be invalidated by the next call to
-        // computeChunkBounds.
-        let chunkPosition = this.computeChunkBounds(chunk);
-        let chunkDataSize = chunk.chunkDataSize!;
-        url = `${parameters.url}/${chunkPosition[0]}-${chunkPosition[0] + chunkDataSize[0]}_` +
-            `${chunkPosition[1]}-${chunkPosition[1] + chunkDataSize[1]}_` +
-            `${chunkPosition[2]}-${chunkPosition[2] + chunkDataSize[2]}`;
-      // }
-      response = await cancellableFetchSpecialOk(
-          /*this.credentialsProvider*/undefined, url, {}, responseArrayBuffer, cancellationToken);
-    // } else {
-      // this.computeChunkBounds(chunk);
-      // const {gridShape} = this;
-      // const {chunkGridPosition} = chunk;
-      // const xBits = Math.ceil(Math.log2(gridShape[0])), yBits = Math.ceil(Math.log2(gridShape[1])),
-      //       zBits = Math.ceil(Math.log2(gridShape[2]));
-      // const chunkIndex = encodeZIndexCompressed(
-      //     new Uint64(), xBits, yBits, zBits, chunkGridPosition[0], chunkGridPosition[1],
-      //     chunkGridPosition[2]);
-      // response = (getOrNotFoundError(await getShardedData(
-      //                 minishardIndexSource, chunk, chunkIndex, cancellationToken)))
-      //                .data;
-    // }
+    // chunkPosition must not be captured, since it will be invalidated by the next call to
+    // computeChunkBounds.
+    const chunkPosition = this.computeChunkBounds(chunk);
+    const chunkDataSize = chunk.chunkDataSize!;
+    const url = `${parameters.url}/${chunkPosition[0]}-${chunkPosition[0] + chunkDataSize[0]}_` +
+        `${chunkPosition[1]}-${chunkPosition[1] + chunkDataSize[1]}_` +
+        `${chunkPosition[2]}-${chunkPosition[2] + chunkDataSize[2]}`;
+    const response = await cancellableFetchSpecialOk(
+      this.credentialsProvider, url, {}, responseArrayBuffer, cancellationToken);
     await this.chunkDecoder(chunk, cancellationToken, response);
   }
 }

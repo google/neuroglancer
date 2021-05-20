@@ -22,16 +22,12 @@ import {SliceViewChunk, SliceViewChunkSourceBackend} from 'neuroglancer/slicevie
 import {SliceViewRenderLayer as SliceViewRenderLayerInterface, filterVisibleSources, SliceViewBase, TransformedSource} from 'neuroglancer/sliceview/base';
 import {CHUNKED_GRAPH_LAYER_RPC_ID, CHUNKED_GRAPH_SOURCE_UPDATE_ROOT_SEGMENTS_RPC_ID, ChunkedGraphChunkSource as ChunkedGraphChunkSourceInterface, ChunkedGraphChunkSpecification, RENDER_RATIO_LIMIT} from 'neuroglancer/sliceview/chunked_graph/base';
 import {Uint64Set} from 'neuroglancer/uint64_set';
-import {mat4, vec3, vec3Key} from 'neuroglancer/util/geom';
-import {NullarySignal} from 'neuroglancer/util/signal';
+import {vec3, vec3Key} from 'neuroglancer/util/geom';
 import {Uint64} from 'neuroglancer/util/uint64';
 import {registerRPC, registerSharedObject, RPC, SharedObjectCounterpart} from 'neuroglancer/worker_rpc';
 import {WatchableValueInterface} from 'neuroglancer/trackable_value';
 
 import * as vector from 'neuroglancer/util/vector';
-
-// const tempChunkDataSize = vec3.create();
-// const tempChunkPosition = vec3.create();
 
 export class ChunkedGraphChunk extends SliceViewChunk {
   backendOnly = true;
@@ -184,13 +180,9 @@ ChunkedGraphChunkSource.prototype.chunkConstructor = ChunkedGraphChunk;
 const Base = withChunkManager(SharedObjectCounterpart);
 
 @registerSharedObject(CHUNKED_GRAPH_LAYER_RPC_ID)
-export class ChunkedGraphLayer extends Base implements
+export class ChunkedGraphLayer extends Base implements // based on SliceViewRenderLayerBackend
     SliceViewRenderLayerInterface, ChunkRenderLayerBackend {
   rpcId: number;
-  // layerChanged = new NullarySignal();
-  // transform = new CoordinateTransform();
-  // transformedSources: TransformedSource<SliceViewChunkSource>[][];
-  // transformedSourcesGeneration = -1;
   renderScaleTarget: WatchableValueInterface<number>;
   localPosition: WatchableValueInterface<Float32Array>;
 
@@ -217,21 +209,6 @@ export class ChunkedGraphLayer extends Base implements
     this.renderScaleTarget = rpc.get(options.renderScaleTarget);
     this.localPosition = rpc.get(options.localPosition);
 
-    /* TODO maybe this isn't needed?
-    this.sources = new Array<ChunkedGraphChunkSource[]>();
-    for (const alternativeIds of options['sources']) {
-      const alternatives = new Array<ChunkedGraphChunkSource>();
-      this.sources.push(alternatives);
-      for (const sourceId of alternativeIds) {
-        const source: ChunkedGraphChunkSource = rpc.get(sourceId);
-        this.registerDisposer(source.addRef());
-        alternatives.push(source);
-      }
-    }*/
-
-    // mat4.copy(this.transform.transform, options['transform']);
-    // this.transform.changed.add(this.layerChanged.dispatch);
-
     this.registerDisposer(this.rootSegments.changed.add(() => {
       this.chunkManager.scheduleUpdateChunkPriorities();
     }));
@@ -251,15 +228,15 @@ export class ChunkedGraphLayer extends Base implements
 
   filterVisibleSources(sliceView: SliceViewBase, sources: readonly TransformedSource[]):
       Iterable<TransformedSource> {
-    const filteredSources = filterVisibleSources(sliceView, this, sources);// as ChunkedGraphChunkSource[];
+    const filteredSources = filterVisibleSources(sliceView, this, sources);
     this.sources = [];
     for (let source of filteredSources) {
       this.sources.push(source.source as ChunkedGraphChunkSource);
     }
 
     // return filteredSources;
-    return filterVisibleSources(sliceView, this, sources); // SO HACKY
-    // using this function as a hack so I can access ChunkedGraphChunkSource in forEachSelectedRootWithLeaves
+    return filterVisibleSources(sliceView, this, sources); // SUPER HACKY
+    // using this function so I can access ChunkedGraphChunkSource in forEachSelectedRootWithLeaves
     // have to run filterVisibleSources twice because otherwise the generator won't spit out results in the calling function
   }
 
@@ -278,21 +255,19 @@ export class ChunkedGraphLayer extends Base implements
   }, 100);
 
   private forEachSelectedRootWithLeaves(
-      callback: (rootObjectKey: string, leaves: Uint64[]) => void) {
-    // for (const alternative of this.sources) {
-      for (const source of this.sources) {//alternative) {
-        for (const chunk of source.chunks.values()) {
-          if (chunk.state === ChunkState.SYSTEM_MEMORY_WORKER &&
-              chunk.priorityTier < ChunkPriorityTier.RECENT) {
-            for (const [rootObjectKey, leaves] of chunk.mappings!) {
-              if (this.rootSegments.has(Uint64.parseString(rootObjectKey)) && leaves !== null) {
-                callback(rootObjectKey, leaves);
-              }
+    callback: (rootObjectKey: string, leaves: Uint64[]) => void) {
+    for (const source of this.sources) {
+      for (const chunk of source.chunks.values()) {
+        if (chunk.state === ChunkState.SYSTEM_MEMORY_WORKER &&
+            chunk.priorityTier < ChunkPriorityTier.RECENT) {
+          for (const [rootObjectKey, leaves] of chunk.mappings!) {
+            if (this.rootSegments.has(Uint64.parseString(rootObjectKey)) && leaves !== null) {
+              callback(rootObjectKey, leaves);
             }
           }
         }
       }
-    // }
+    }
   }
 
   private updateDisplayState() {
@@ -319,6 +294,8 @@ export class ChunkedGraphLayer extends Base implements
     });
 
     for (const [root, leaves] of visibleLeaves) {
+      // this is commented out in seunglab's branch
+      
       // TODO: Delete segments not visible anymore from segmentEquivalences - requires a faster data
       // structure, though.
 
