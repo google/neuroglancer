@@ -43,7 +43,7 @@ import {stableStringify} from 'neuroglancer/util/json';
 import {getObjectId} from 'neuroglancer/util/object_id';
 import {cancellableFetchSpecialOk, SpecialProtocolCredentials, SpecialProtocolCredentialsProvider} from 'neuroglancer/util/special_protocol_request';
 import {Uint64} from 'neuroglancer/util/uint64';
-import {encodeZIndexCompressed, zorder3LessThan} from 'neuroglancer/util/zorder';
+import {encodeZIndexCompressed, encodeZIndexCompressed3d, zorder3LessThan} from 'neuroglancer/util/zorder';
 import {registerSharedObject} from 'neuroglancer/worker_rpc';
 
 // Set to true to validate the multiscale index.
@@ -293,7 +293,7 @@ chunkDecoders.set(VolumeChunkEncoding.COMPRESSED_SEGMENTATION, decodeCompressedS
       const {chunkGridPosition} = chunk;
       const xBits = Math.ceil(Math.log2(gridShape[0])), yBits = Math.ceil(Math.log2(gridShape[1])),
             zBits = Math.ceil(Math.log2(gridShape[2]));
-      const chunkIndex = encodeZIndexCompressed(
+      const chunkIndex = encodeZIndexCompressed3d(
           new Uint64(), xBits, yBits, zBits, chunkGridPosition[0], chunkGridPosition[1],
           chunkGridPosition[2]);
       response = (getOrNotFoundError(await getShardedData(
@@ -726,12 +726,7 @@ export class PrecomputedAnnotationSpatialIndexSourceBackend extends (WithParamet
     } else {
       const {upperChunkBound} = this.spec;
       const {chunkGridPosition} = chunk;
-      const xBits = Math.ceil(Math.log2(upperChunkBound[0])),
-            yBits = Math.ceil(Math.log2(upperChunkBound[1])),
-            zBits = Math.ceil(Math.log2(upperChunkBound[2]));
-      const chunkIndex = encodeZIndexCompressed(
-          new Uint64(), xBits, yBits, zBits, chunkGridPosition[0], chunkGridPosition[1],
-          chunkGridPosition[2]);
+      const chunkIndex = encodeZIndexCompressed(new Uint64(), chunkGridPosition, upperChunkBound);
       const result =
           await getShardedData(minishardIndexSource, chunk, chunkIndex, cancellationToken);
       if (result !== undefined) response = result.data;

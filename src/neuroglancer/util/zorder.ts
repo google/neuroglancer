@@ -14,7 +14,8 @@
  * limitations under the License.
  */
 
-import {Uint64} from './uint64';
+import {TypedArray} from 'neuroglancer/util/array';
+import {Uint64} from 'neuroglancer/util/uint64';
 
 export function getOctreeChildIndex(x: number, y: number, z: number) {
   return (x & 1) | ((y << 1) & 2) | ((z << 2) & 4);
@@ -68,7 +69,7 @@ export function decodeZIndexCompressed(
   return Uint32Array.of(x, y, z);
 }
 
-export function encodeZIndexCompressed(
+export function encodeZIndexCompressed3d(
     zindex: Uint64, xBits: number, yBits: number, zBits: number, x: number, y: number,
     z: number): Uint64 {
   const maxBits = Math.max(xBits, yBits, zBits);
@@ -93,6 +94,38 @@ export function encodeZIndexCompressed(
     }
     if (bit < zBits) {
       writeBit((z >> bit) & 1);
+    }
+  }
+  if (isHigh) {
+    zindex.high = outputNum;
+  } else {
+    zindex.high = 0;
+    zindex.low = outputNum;
+  }
+  return zindex;
+}
+
+export function encodeZIndexCompressed(
+    zindex: Uint64, position: TypedArray, shape: TypedArray): Uint64 {
+  let outputBit = 0;
+  const rank = position.length;
+  let outputNum = 0;
+  let isHigh = false;
+  function writeBit(b: number): void {
+    outputNum |= (b & 1) << outputBit;
+    if (++outputBit === 32) {
+      zindex.low = outputNum;
+      outputNum = 0;
+      outputBit = 0;
+      isHigh = true;
+    }
+  }
+
+  for (let bit = 0; bit < 32; ++bit) {
+    for (let dim = 0; dim < rank; ++dim) {
+      if ((shape[dim] - 1) >>> bit) {
+        writeBit(position[dim] >>> bit);
+      }
     }
   }
   if (isHigh) {

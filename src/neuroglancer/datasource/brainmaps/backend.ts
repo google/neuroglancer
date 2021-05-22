@@ -37,7 +37,7 @@ import {parseArray, parseFixedLengthArray, verifyObject, verifyObjectProperty, v
 import {defaultStringCompare} from 'neuroglancer/util/string';
 import {Uint64} from 'neuroglancer/util/uint64';
 import * as vector from 'neuroglancer/util/vector';
-import {decodeZIndexCompressed, encodeZIndexCompressed, getOctreeChildIndex, zorder3LessThan} from 'neuroglancer/util/zorder';
+import {decodeZIndexCompressed, encodeZIndexCompressed3d, getOctreeChildIndex, zorder3LessThan} from 'neuroglancer/util/zorder';
 import {registerSharedObject, SharedObject} from 'neuroglancer/worker_rpc';
 
 const CHUNK_DECODERS = new Map([
@@ -433,7 +433,7 @@ async function makeBatchMeshRequest<T>(
             gridY = Math.floor(octree[chunkIndex * 5 + 1] / relativeBlockShape[1]),
             gridZ = Math.floor(octree[chunkIndex * 5 + 2] / relativeBlockShape[2]);
       const fragmentKey =
-          encodeZIndexCompressed(tempUint64, xBits, yBits, zBits, gridX, gridY, gridZ)
+          encodeZIndexCompressed3d(tempUint64, xBits, yBits, zBits, gridX, gridY, gridZ)
               .toString(16)
               .padStart(16, '0');
       const entry = fragmentSupervoxelIds[chunkIndex];
