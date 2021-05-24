@@ -459,6 +459,7 @@ export class PerspectivePanel extends RenderedDataPanel {
 
     let gl = this.gl;
     this.offscreenFramebuffer.bind(width, height);
+    gl.disable(gl.SCISSOR_TEST);
 
     // Stencil buffer bit 0 indicates positions of framebuffer written by an opaque layer.
     //
@@ -488,18 +489,18 @@ export class PerspectivePanel extends RenderedDataPanel {
     // Then, for transparentPickEnabled=false layers, we write to the pick buffer and depth buffer,
     // but only at positions where the stencil buffer is still unset.
     gl.enable(WebGL2RenderingContext.STENCIL_TEST);
+    gl.stencilMask(0xffffffff);
     gl.clearStencil(0);
     gl.clear(WebGL2RenderingContext.STENCIL_BUFFER_BIT);
 
     // Write 1 to the stencil buffer unconditionally.  We set an always-pass stencil test in order
     // to be able to write to the stencil buffer.
-    gl.stencilOpSeparate(
-        /*face=*/ WebGL2RenderingContext.FRONT_AND_BACK, /*sfail=*/ WebGL2RenderingContext.KEEP,
+    gl.stencilOp(
+        /*sfail=*/ WebGL2RenderingContext.KEEP,
         /*dpfail=*/ WebGL2RenderingContext.KEEP, /*dppass=*/ WebGL2RenderingContext.REPLACE);
-    gl.stencilFuncSeparate(
-        /*face=*/ WebGL2RenderingContext.FRONT_AND_BACK, /*func=*/ WebGL2RenderingContext.ALWAYS,
+    gl.stencilFunc(
+        /*func=*/ WebGL2RenderingContext.ALWAYS,
         /*ref=*/ 1, /*mask=*/ 1);
-    gl.disable(gl.SCISSOR_TEST);
     const backgroundColor = this.viewer.perspectiveViewBackgroundColor.value;
     this.gl.clearColor(backgroundColor[0], backgroundColor[1], backgroundColor[2], 0.0);
     gl.clear(gl.DEPTH_BUFFER_BIT);
@@ -574,6 +575,11 @@ export class PerspectivePanel extends RenderedDataPanel {
       this.drawAxisLines();
     }
 
+    // Disable stencil operations.
+    gl.stencilOp(
+        /*sfail=*/ WebGL2RenderingContext.KEEP,
+        /*dpfail=*/ WebGL2RenderingContext.KEEP, /*dppass=*/ WebGL2RenderingContext.KEEP);
+
     if (hasTransparent) {
       // Draw transparent objects.
       gl.depthMask(false);
@@ -582,9 +588,6 @@ export class PerspectivePanel extends RenderedDataPanel {
       // Compute accumulate and revealage textures.
       const {transparentConfiguration} = this;
       transparentConfiguration.bind(width, height);
-      gl.stencilOpSeparate(
-          /*face=*/ WebGL2RenderingContext.FRONT_AND_BACK, /*sfail=*/ WebGL2RenderingContext.KEEP,
-          /*dpfail=*/ WebGL2RenderingContext.KEEP, /*dppass=*/ WebGL2RenderingContext.KEEP);
       this.gl.clearColor(0.0, 0.0, 0.0, 1.0);
       gl.clear(WebGL2RenderingContext.COLOR_BUFFER_BIT);
       renderContext.emitter = perspectivePanelEmitOIT;
@@ -605,9 +608,6 @@ export class PerspectivePanel extends RenderedDataPanel {
       this.transparencyCopyHelper.draw(
           transparentConfiguration.colorBuffers[0].texture,
           transparentConfiguration.colorBuffers[1].texture);
-      gl.stencilOpSeparate(
-          /*face=*/ WebGL2RenderingContext.FRONT_AND_BACK, /*sfail=*/ WebGL2RenderingContext.KEEP,
-          /*dpfail=*/ WebGL2RenderingContext.KEEP, /*dppass=*/ WebGL2RenderingContext.REPLACE);
       gl.depthMask(true);
       gl.disable(WebGL2RenderingContext.BLEND);
       gl.enable(WebGL2RenderingContext.DEPTH_TEST);
@@ -616,6 +616,7 @@ export class PerspectivePanel extends RenderedDataPanel {
       this.offscreenFramebuffer.bind(width, height);
 
       // Do picking only rendering pass for transparent layers.
+      gl.enable(WebGL2RenderingContext.STENCIL_TEST);
       gl.drawBuffers([gl.NONE, gl.COLOR_ATTACHMENT1, gl.COLOR_ATTACHMENT2]);
       renderContext.emitter = perspectivePanelEmit;
       renderContext.emitPickID = true;
@@ -623,15 +624,16 @@ export class PerspectivePanel extends RenderedDataPanel {
 
       // First, render `transparentPickEnabled=true` layers.
 
-      // Only write to positions where the stencil buffer is unset (i.e. the ray does not intersect
-      // any opaque object), since opaque objects take precedence.  Set the stencil buffer to 3 to
-      // ensure those positions take precedence over `transparentPickEnabled=false` layers.
-      gl.stencilFuncSeparate(
-          /*face=*/ WebGL2RenderingContext.FRONT_AND_BACK, /*func=*/ WebGL2RenderingContext.GREATER,
+      // Only write to positions where the stencil buffer bit 0 is unset (i.e. the ray does not
+      // intersect any opaque object), since opaque objects take precedence.  Set the stencil buffer
+      // bit 1 to ensure those positions take precedence over `transparentPickEnabled=false` layers.
+      gl.stencilFunc(
+          /*func=*/ WebGL2RenderingContext.NOTEQUAL,
           /*ref=*/ 3, /*mask=*/ 1);
-      gl.stencilOpSeparate(
-          /*face=*/ WebGL2RenderingContext.FRONT_AND_BACK, /*sfail=*/ WebGL2RenderingContext.KEEP,
+      gl.stencilOp(
+          /*sfail=*/ WebGL2RenderingContext.KEEP,
           /*dpfail=*/ WebGL2RenderingContext.KEEP, /*dppass=*/ WebGL2RenderingContext.REPLACE);
+      gl.stencilMask(2);
       for (const [renderLayer, attachment] of visibleLayers) {
         if (!renderLayer.isTransparent || !renderLayer.transparentPickEnabled) {
           continue;
@@ -639,12 +641,13 @@ export class PerspectivePanel extends RenderedDataPanel {
         renderLayer.draw(renderContext, attachment);
       }
 
-      gl.stencilFuncSeparate(
-          /*face=*/ WebGL2RenderingContext.FRONT_AND_BACK, /*func=*/ WebGL2RenderingContext.EQUAL,
+      gl.stencilFunc(
+          /*func=*/ WebGL2RenderingContext.EQUAL,
           /*ref=*/ 0, /*mask=*/ 3);
-      gl.stencilOpSeparate(
-          /*face=*/ WebGL2RenderingContext.FRONT_AND_BACK, /*sfail=*/ WebGL2RenderingContext.KEEP,
+      gl.stencilOp(
+          /*sfail=*/ WebGL2RenderingContext.KEEP,
           /*dpfail=*/ WebGL2RenderingContext.KEEP, /*dppass=*/ WebGL2RenderingContext.KEEP);
+      gl.stencilMask(0);
       for (const [renderLayer, attachment] of visibleLayers) {
         if (!renderLayer.isTransparent || renderLayer.transparentPickEnabled) {
           continue;
@@ -652,7 +655,7 @@ export class PerspectivePanel extends RenderedDataPanel {
         renderLayer.draw(renderContext, attachment);
       }
     }
-
+    gl.stencilMask(0xffffffff);
     gl.disable(WebGL2RenderingContext.STENCIL_TEST);
 
     if (this.viewer.showScaleBar.value && this.viewer.orthographicProjection.value) {
