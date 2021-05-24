@@ -242,7 +242,9 @@ export function normalizeInlineSegmentPropertyMap(inlineProperties: InlineSegmen
   const properties = inlineProperties.properties.map(property => {
     const {values} = property;
     const newValues = new (values.constructor as (TypedArrayConstructor | typeof Array))(length);
-    remapArray(values, newValues, permutation);
+    for (let i = 0; i < length; ++i) {
+      newValues[i] = values[permutation[i]];
+    }
     return {...property, values: newValues} as InlineSegmentProperty;
   });
   return {ids: newIds, properties};
