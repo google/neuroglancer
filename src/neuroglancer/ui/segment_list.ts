@@ -305,7 +305,7 @@ function toggleSortOrder(
   const newOrder = (prevOrder === '<') ? '>' : '<';
   const newIncludeColumns = includeColumns.filter(x => x !== id);
   for (const s of sortBy) {
-    if (s.fieldId !== 'id' && s.fieldId !== id) {
+    if (s.fieldId !== 'id' && s.fieldId !== 'label' && s.fieldId !== id) {
       newIncludeColumns.push(s.fieldId);
     }
   }
