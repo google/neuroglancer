@@ -79,7 +79,7 @@ export function encodeZIndexCompressed3d(
   function writeBit(b: number): void {
     outputNum |= (b & 1) << outputBit;
     if (++outputBit === 32) {
-      zindex.low = outputNum;
+      zindex.low = (outputNum >>> 0);
       outputNum = 0;
       outputBit = 0;
       isHigh = true;
@@ -97,10 +97,10 @@ export function encodeZIndexCompressed3d(
     }
   }
   if (isHigh) {
-    zindex.high = outputNum;
+    zindex.high = (outputNum >>> 0);
   } else {
     zindex.high = 0;
-    zindex.low = outputNum;
+    zindex.low = (outputNum >>> 0);
   }
   return zindex;
 }
@@ -114,7 +114,7 @@ export function encodeZIndexCompressed(
   function writeBit(b: number): void {
     outputNum |= (b & 1) << outputBit;
     if (++outputBit === 32) {
-      zindex.low = outputNum;
+      zindex.low = (outputNum >>> 0);
       outputNum = 0;
       outputBit = 0;
       isHigh = true;
@@ -129,10 +129,10 @@ export function encodeZIndexCompressed(
     }
   }
   if (isHigh) {
-    zindex.high = outputNum;
+    zindex.high = (outputNum >>> 0);
   } else {
     zindex.high = 0;
-    zindex.low = outputNum;
+    zindex.low = (outputNum >>> 0);
   }
   return zindex;
 }
