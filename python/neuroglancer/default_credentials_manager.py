@@ -29,4 +29,4 @@ default_credentials_manager.register(
 
 default_credentials_manager.register(
     u'DVID',
-    lambda _parameters: dvid_credentials.get_tokenbased_application_default_credentials_provider())
+    lambda _parameters: dvid_credentials.get_tokenbased_application_default_credentials_provider(_parameters))

@@ -25,23 +25,24 @@ from .futures import run_on_new_thread
 
 
 class TokenbasedDefaultCredentialsProvider(credentials_provider.CredentialsProvider):
-    def __init__(self):
+    def __init__(self, _parameters):
         super(TokenbasedDefaultCredentialsProvider, self).__init__()
 
         # Make sure logging is initialized.
         # Does nothing if logging has already been initialized.
         logging.basicConfig()
-
+        self._parameters = _parameters
         self._credentials = {}
 
     def get_new(self):
         def func():
-            self._credentials = {}
             try:
-                TOKEN = os.environ['DVID_APPLICATION_CREDENTIALS']
+                credentials = os.environ['DVID_CREDENTIALS']
+                credentials = dict(item.split("=") for item in credentials.split(","))
+                TOKEN = credentials[self._parameters['dvidServer']]
             except KeyError:
                 raise RuntimeError(
-                    "DVID_APPLICATION_CREDENTIALS is not defined in your environment!")
+                    "DVID_CREDENTIALS is not defined in your environment!")
             self._credentials['token'] = TOKEN
             return dict(tokenType=u'Bearer', accessToken=self._credentials['token'])
 
@@ -51,9 +52,9 @@ class TokenbasedDefaultCredentialsProvider(credentials_provider.CredentialsProvi
 _global_tokenbased_application_default_credentials_provider = None
 
 
-def get_tokenbased_application_default_credentials_provider():
+def get_tokenbased_application_default_credentials_provider(_parameters):
     global _global_tokenbased_application_default_credentials_provider
     if _global_tokenbased_application_default_credentials_provider is None:
         _global_tokenbased_application_default_credentials_provider =\
-             TokenbasedDefaultCredentialsProvider()
+            TokenbasedDefaultCredentialsProvider(_parameters)
     return _global_tokenbased_application_default_credentials_provider
