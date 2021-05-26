@@ -93,7 +93,7 @@ export class DataManagementContext extends RefCounted {
           gpuMemory: new CapacitySpecification({defaultItemLimit: 1e6, defaultSizeLimit: 1e9}),
           systemMemory: new CapacitySpecification({defaultItemLimit: 1e7, defaultSizeLimit: 2e9}),
           download: new CapacitySpecification(
-              {defaultItemLimit: 32, defaultSizeLimit: Number.POSITIVE_INFINITY}),
+              {defaultItemLimit: 100, defaultSizeLimit: Number.POSITIVE_INFINITY}),
           compute: new CapacitySpecification({defaultItemLimit: 128, defaultSizeLimit: 5e8}),
         }));
     this.chunkQueueManager.registerDisposer(() => this.worker.terminate());
