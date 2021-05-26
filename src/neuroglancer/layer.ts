@@ -468,6 +468,10 @@ export class ManagedUserLayer extends RefCounted {
       new CoordinateSpaceCombiner(this.localCoordinateSpace, isLocalDimension);
   localPosition = this.registerDisposer(new Position(this.localCoordinateSpace));
 
+  // Index of layer within root layer manager, counting only non-archived layers.  This is the layer
+  // number shown in the layer bar and layer list panel.
+  nonArchivedLayerIndex = -1;
+
   readyStateChanged = new NullarySignal();
   layerChanged = new NullarySignal();
   specificationChanged = new NullarySignal();
@@ -610,6 +614,7 @@ export class LayerManager extends RefCounted {
   specificationChanged = new NullarySignal();
   boundPositions = new WeakSet<Position>();
   numDirectUsers = 0;
+  nonArchivedLayerIndexGeneration = -1;
   private renderLayerToManagedLayerMapGeneration = -1;
   private renderLayerToManagedLayerMap_ = new Map<RenderLayer, ManagedUserLayer>();
 
@@ -620,6 +625,31 @@ export class LayerManager extends RefCounted {
 
   private scheduleRemoveLayersWithSingleRef =
       this.registerCancellable(debounce(() => this.removeLayersWithSingleRef(), 0));
+
+  updateNonArchivedLayerIndices() {
+    const generation = this.layersChanged.count;
+    if (generation === this.nonArchivedLayerIndexGeneration) return;
+    this.nonArchivedLayerIndexGeneration = generation;
+    let index = 0;
+    for (const layer of this.managedLayers) {
+      if (layer.archived) {
+        layer.nonArchivedLayerIndex = -1;
+      } else {
+        layer.nonArchivedLayerIndex = index++;
+      }
+    }
+  }
+
+  getLayerByNonArchivedIndex(index: number): ManagedUserLayer|undefined {
+    let i = 0;
+    for (const layer of this.managedLayers) {
+      if (!layer.archived) {
+        if (i === index) return layer;
+        ++i;
+      }
+    }
+    return undefined;
+  }
 
   get renderLayerToManagedLayerMap() {
     const generation = this.layersChanged.count;

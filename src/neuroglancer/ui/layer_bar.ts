@@ -303,11 +303,12 @@ export class LayerBar extends RefCounted {
     let container = this.element;
     let layers = new Set();
     let nextChild = this.layerWidgetInsertionPoint.nextElementSibling;
+    this.manager.rootLayers.updateNonArchivedLayerIndices();
     for (const layer of this.manager.layerManager.managedLayers) {
       if (layer.archived && !this.dropLayers?.layers.has(layer)) continue;
       layers.add(layer);
       let widget = this.layerWidgets.get(layer);
-      const layerIndex = this.manager.rootLayers.managedLayers.indexOf(layer);
+      const layerIndex = layer.nonArchivedLayerIndex;
       if (widget === undefined) {
         widget = new LayerWidget(layer, this);
         this.layerWidgets.set(layer, widget);

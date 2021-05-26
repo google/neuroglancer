@@ -219,9 +219,14 @@ export class LayerListPanel extends SidePanel {
     let numVisible = 0;
     let numHidden = 0;
     let numArchived = 0;
+    this.layerManager.updateNonArchivedLayerIndices();
     function* getItems() {
       const {items} = self;
-      let index = 0;
+      let numNonArchivedLayers = 0;
+      for (const layer of self.layerManager.managedLayers) {
+        if (!layer.archived) ++numNonArchivedLayers;
+      }
+      const numberElementWidth = `${(numNonArchivedLayers + 1).toString().length}ch`;
       for (const layer of self.layerManager.managedLayers) {
         if (layer.visible) {
           ++numVisible;
@@ -230,7 +235,6 @@ export class LayerListPanel extends SidePanel {
         } else {
           ++numArchived;
         }
-        ++index;
         let item = items.get(layer);
         if (item === undefined) {
           item = self.registerDisposer(new LayerListItem(self, layer));
@@ -239,7 +243,14 @@ export class LayerListPanel extends SidePanel {
         } else {
           item.generation = generation;
         }
-        item.numberElement.textContent = `${index}`;
+        const {nonArchivedLayerIndex} = layer;
+        item.numberElement.style.width = numberElementWidth;
+        if (nonArchivedLayerIndex === -1) {
+          item.numberElement.style.visibility = 'hidden';
+        } else {
+          item.numberElement.style.visibility = '';
+          item.numberElement.textContent = `${nonArchivedLayerIndex+1}`;
+        }
         item.element.dataset.selected = (layer === selectedLayer).toString();
         item.element.dataset.archived = (layer.archived).toString();
         yield item.element;
