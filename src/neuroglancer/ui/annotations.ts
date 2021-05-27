@@ -1244,7 +1244,7 @@ function makeRelatedSegmentList(
         listElement.appendChild(headerRow);
 
         const rows: HTMLElement[] = [];
-        const segmentWidgetFactory = new SegmentWidgetFactory(
+        const segmentWidgetFactory = SegmentWidgetFactory.make(
             segmentationDisplayState ?? undefined, /*includeMapped=*/ false);
         for (const id of segments) {
           const row = segmentWidgetFactory.get(id);
@@ -1258,7 +1258,7 @@ function makeRelatedSegmentList(
               },
             });
             deleteButton.classList.add('neuroglancer-segment-list-entry-delete');
-            row.appendChild(deleteButton);
+            row.children[0].appendChild(deleteButton);
           }
           listElement.appendChild(row);
         }

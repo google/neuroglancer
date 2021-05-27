@@ -89,9 +89,12 @@ class SizeEstimates {
    */
   numItemsInTotalKnownSize: number = 0;
 
+  get averageSize() {
+    return this.totalKnownSize / this.numItemsInTotalKnownSize;
+  }
+
   getEstimatedSize(index: number) {
-    const size = this.itemSize[index];
-    return size === undefined ? this.totalKnownSize / this.numItemsInTotalKnownSize : size;
+    return this.itemSize[index] ??this.averageSize;
   }
 
   getEstimatedTotalSize() {
@@ -106,6 +109,15 @@ class SizeEstimates {
       hintOffset -= this.getEstimatedSize(hintIndex - 1);
     }
     return hintOffset;
+  }
+
+  getRangeSize(begin: number, end: number) {
+    let size = 0;
+    const {itemSize, averageSize} = this;
+    for (let i = begin; i < end; ++i) {
+      size += itemSize[i] ?? averageSize;
+    }
+    return size;
   }
 
   splice(splices: readonly Readonly<ArraySpliceOp>[]) {
@@ -213,8 +225,13 @@ function rerenderNeeded(newParams: RenderParameters, prevParams: RenderParameter
 }
 
 export class VirtualList extends RefCounted {
+  // Outer scrollable element
   element = document.createElement('div');
-  private spacer = document.createElement('div');
+  // Inner element (not scrollable) that contains `header` and `body`.
+  scrollContent = document.createElement('div');
+  header = document.createElement('div');
+  // Contains `topItems` and `bottomItems` as children.
+  body = document.createElement('div');
   private topItems = document.createElement('div');
   private bottomItems = document.createElement('div');
   private renderedItems: HTMLElement[] = [];
@@ -233,7 +250,7 @@ export class VirtualList extends RefCounted {
       this.registerCancellable(animationFrameDebounce(() => this.updateView()));
   private resizeObserver = new ResizeObserver(() => this.updateView());
 
-  constructor(options: {source: VirtualListSource, selectedIndex?: number}) {
+  constructor(options: {source: VirtualListSource, selectedIndex?: number, horizontalScroll?: boolean}) {
     super();
     const {selectedIndex} = options;
     if (selectedIndex !== undefined) {
@@ -242,18 +259,38 @@ export class VirtualList extends RefCounted {
     }
     const source = this.source = options.source;
     this.sizes.itemSize.length = source.length;
-    const {element, spacer, topItems, bottomItems} = this;
+    const {element, header, body, scrollContent, topItems, bottomItems} = this;
     this.resizeObserver.observe(element);
     this.registerDisposer(() => this.resizeObserver.disconnect());
-    element.appendChild(spacer);
-    element.appendChild(topItems);
-    topItems.style.position = 'absolute';
-    topItems.style.left = '0px';
-    topItems.style.right = '0px';
-    bottomItems.style.left = '0px';
-    bottomItems.style.right = '0px';
-    bottomItems.style.position = 'absolute';
-    element.appendChild(bottomItems);
+    element.appendChild(scrollContent);
+    // The default scroll anchoring behavior of browsers interacts poorly with this virtual list
+    // mechanism and is unnecessary.
+    element.style.overflowAnchor = 'none';
+    scrollContent.appendChild(header);
+    scrollContent.appendChild(body);
+    header.style.position = 'sticky';
+    header.style.zIndex = '1';
+    header.style.top = '0';
+    if (options.horizontalScroll) {
+      scrollContent.style.width = 'min-content';
+      scrollContent.style.minWidth = '100%';
+      header.style.width = 'min-content';
+      header.style.minWidth = '100%';
+      bottomItems.style.width = 'min-content';
+      bottomItems.style.minWidth = '100%';
+    } else {
+      scrollContent.style.width = '100%';
+      header.style.width = '100%';
+      bottomItems.style.width = '100%';
+    }
+    body.appendChild(topItems);
+    body.appendChild(bottomItems);
+    topItems.style.width = 'min-content';
+    topItems.style.position = 'relative';
+    topItems.style.height = '0';
+    topItems.style.minWidth = '100%';
+    bottomItems.style.height = '0';
+    bottomItems.style.position = 'relative';
     element.addEventListener('scroll', () => {
       const scrollOffset = element.scrollTop;
       this.state.anchorClientOffset = this.renderParams.anchorOffset - scrollOffset;
@@ -275,16 +312,16 @@ export class VirtualList extends RefCounted {
 
   private updateView() {
     const {element} = this;
-    if (element.offsetParent === null) {
-      // Element not visible.
+    if (element.offsetHeight === 0) {
+      // Element not visible
       return;
     }
-    const viewportHeight = element.offsetHeight;
+    const viewportHeight = element.clientHeight - this.header.offsetHeight;
 
     const {source, state, sizes} = this;
     const numItems = source.length;
 
-    const {spacer, topItems, bottomItems} = this;
+    const {body, topItems, bottomItems} = this;
     const {changed, renderChanged} = source;
     let renderParams: RenderParameters;
     while (true) {
@@ -350,8 +387,10 @@ export class VirtualList extends RefCounted {
     normalizeRenderParams(renderParams, sizes);
     state.anchorIndex = renderParams.anchorIndex;
     state.anchorClientOffset = renderParams.anchorOffset - renderParams.scrollOffset;
-    spacer.style.height = `${sizes.getEstimatedTotalSize()}px`;
-    topItems.style.bottom = `calc(100% - ${renderParams.anchorOffset}px)`;
+    const topSize = sizes.getRangeSize(renderParams.startIndex, renderParams.anchorIndex);
+    const totalHeight = sizes.getEstimatedTotalSize();
+    body.style.height = `${totalHeight}px`;
+    topItems.style.top = `${renderParams.anchorOffset - topSize}px`;
     bottomItems.style.top = `${renderParams.anchorOffset}px`;
     element.scrollTop = renderParams.scrollOffset;
   }
@@ -371,6 +410,12 @@ export class VirtualList extends RefCounted {
       if (item === undefined) continue;
       callback(item, i);
     }
+  }
+
+  scrollToTop() {
+    this.state.anchorIndex = 0;
+    this.state.anchorClientOffset = 0;
+    this.debouncedUpdateView();
   }
 
   scrollItemIntoView(index: number) {

@@ -278,7 +278,7 @@ input.neuroglancer-segment-list-entry-id {
 }
 
 .neuroglancer-segment-list-entry-delete {
-  grid-column: delete;
+  order: 0;
 }
 
 .neuroglancer-selection-annotation-status {

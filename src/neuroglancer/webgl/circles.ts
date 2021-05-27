@@ -40,8 +40,13 @@ void emitCircle(vec4 position, float diameter, float borderWidth) {
   vec2 circleCornerOffset = getQuadVertexPosition(vec2(-1.0, -1.0), vec2(1.0, 1.0));
   gl_Position.xy += circleCornerOffset * uCircleParams.xy * gl_Position.w * totalDiameter;
   vCircleCoord.xy = circleCornerOffset;
-  vCircleCoord.z = diameter / totalDiameter;
-  vCircleCoord.w = uCircleParams.z / totalDiameter;
+  if (borderWidth == 0.0) {
+    vCircleCoord.z = totalDiameter;
+    vCircleCoord.w = 1e-6;
+  } else {
+    vCircleCoord.z = diameter / totalDiameter;
+    vCircleCoord.w = uCircleParams.z / totalDiameter;
+  }
 }
 `);
   if (crossSectionFade) {
