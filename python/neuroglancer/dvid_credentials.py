@@ -39,12 +39,13 @@ class TokenbasedDefaultCredentialsProvider(credentials_provider.CredentialsProvi
             try:
                 credentials = os.environ['DVID_CREDENTIALS']
                 credentials = dict(item.split("=") for item in credentials.split(","))
-                TOKEN = credentials[self.parameters['dvidServer']]
+                token = credentials[self.parameters['dvidServer']]
             except KeyError:
                 raise RuntimeError(
                     """DVID_CREDENTIALS is not defined in your environment or does
-                    not contain the token for the specific server !""")
-            self._credentials['token'] = TOKEN
+                    not contain the token for the server: """ +
+                    self.parameters['dvidServer'])
+            self._credentials['token'] = token
             return dict(tokenType=u'Bearer', accessToken=self._credentials['token'])
 
         return run_on_new_thread(func)
