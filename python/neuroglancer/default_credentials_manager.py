@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from . import credentials_provider, google_credentials
+from . import credentials_provider, google_credentials, dvid_credentials
 
 default_credentials_manager = credentials_provider.CredentialsManager()
 default_credentials_manager.register(
@@ -26,3 +26,7 @@ default_credentials_manager.register(
 default_credentials_manager.register(
     u'gcs',
     lambda _parameters: google_credentials.get_google_application_default_credentials_provider())
+
+default_credentials_manager.register(
+    u'DVID',
+    lambda parameters: dvid_credentials.get_tokenbased_application_default_credentials_provider(parameters))
