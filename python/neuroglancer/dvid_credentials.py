@@ -25,13 +25,13 @@ from .futures import run_on_new_thread
 
 
 class TokenbasedDefaultCredentialsProvider(credentials_provider.CredentialsProvider):
-    def __init__(self, _parameters):
+    def __init__(self, parameters):
         super(TokenbasedDefaultCredentialsProvider, self).__init__()
 
         # Make sure logging is initialized.
         # Does nothing if logging has already been initialized.
         logging.basicConfig()
-        self._parameters = _parameters
+        self.parameters = parameters
         self._credentials = {}
 
     def get_new(self):
@@ -39,10 +39,11 @@ class TokenbasedDefaultCredentialsProvider(credentials_provider.CredentialsProvi
             try:
                 credentials = os.environ['DVID_CREDENTIALS']
                 credentials = dict(item.split("=") for item in credentials.split(","))
-                TOKEN = credentials[self._parameters['dvidServer']]
+                TOKEN = credentials[self.parameters['dvidServer']]
             except KeyError:
                 raise RuntimeError(
-                    "DVID_CREDENTIALS is not defined in your environment!")
+                    """DVID_CREDENTIALS is not defined in your environment or does
+                    not contain the token for the specific server !""")
             self._credentials['token'] = TOKEN
             return dict(tokenType=u'Bearer', accessToken=self._credentials['token'])
 
@@ -52,9 +53,9 @@ class TokenbasedDefaultCredentialsProvider(credentials_provider.CredentialsProvi
 _global_tokenbased_application_default_credentials_provider = None
 
 
-def get_tokenbased_application_default_credentials_provider(_parameters):
+def get_tokenbased_application_default_credentials_provider(parameters):
     global _global_tokenbased_application_default_credentials_provider
     if _global_tokenbased_application_default_credentials_provider is None:
         _global_tokenbased_application_default_credentials_provider =\
-            TokenbasedDefaultCredentialsProvider(_parameters)
+            TokenbasedDefaultCredentialsProvider(parameters)
     return _global_tokenbased_application_default_credentials_provider
