@@ -21,12 +21,14 @@
 import {BoundingBox, CoordinateSpaceTransform, WatchableCoordinateSpaceTransform} from 'neuroglancer/coordinate_transform';
 import {arraysEqual} from 'neuroglancer/util/array';
 import {packColor, parseRGBAColorSpecification, parseRGBColorSpecification, serializeColor, unpackRGB, unpackRGBA} from 'neuroglancer/util/color';
+import {DataType} from 'neuroglancer/util/data_type';
 import {Borrowed, RefCounted} from 'neuroglancer/util/disposable';
 import {Endianness, ENDIANNESS} from 'neuroglancer/util/endian';
 import {expectArray, parseArray, parseFixedLengthArray, verifyEnumString, verifyFiniteFloat, verifyFiniteNonNegativeFloat, verifyFloat, verifyInt, verifyObject, verifyObjectProperty, verifyOptionalObjectProperty, verifyOptionalString, verifyString} from 'neuroglancer/util/json';
 import {getRandomHexString} from 'neuroglancer/util/random';
 import {NullarySignal, Signal} from 'neuroglancer/util/signal';
 import {Uint64} from 'neuroglancer/util/uint64';
+import {parseDataTypeValue} from 'neuroglancer/webgl/lerp';
 
 export type AnnotationId = string;
 
@@ -389,7 +391,27 @@ function parseAnnotationPropertySpec(obj: unknown): AnnotationPropertySpec {
   const description = verifyOptionalObjectProperty(obj, 'description', verifyString);
   let defaultValue = verifyOptionalObjectProperty(
       obj, 'default', x => annotationPropertyTypeHandlers[type].deserializeJson(x), 0);
-  return {type, identifier, description, default: defaultValue} as AnnotationPropertySpec;
+  let enumValues: number[]|undefined;
+  let enumLabels: string[]|undefined;
+  switch (type) {
+    case 'rgb':
+    case 'rgba':
+      break;
+    default: {
+      const dataType: DataType = DataType[type.toUpperCase() as any] as any;
+      enumValues = verifyOptionalObjectProperty(
+          obj, 'enum_values',
+          valuesObj => parseArray(valuesObj, x => parseDataTypeValue(dataType, x) as number));
+      if (enumValues !== undefined) {
+        enumLabels = verifyObjectProperty(
+            obj, 'enum_labels',
+            labelsObj => parseFixedLengthArray(
+                new Array<string>(enumValues!.length), labelsObj, verifyString));
+      }
+    }
+  }
+  return {type, identifier, description, default: defaultValue, enumValues, enumLabels} as
+      AnnotationPropertySpec;
 }
 
 function annotationPropertySpecToJson(spec: AnnotationPropertySpec) {

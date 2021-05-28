@@ -518,6 +518,8 @@ class AnnotationPropertySpec(JsonObjectWrapper):
     type = wrapped_property('type', text_type)
     description = wrapped_property('description', optional(text_type))
     default = wrapped_property('default', optional(number_or_string))
+    enum_values = wrapped_property('enum_values', optional(typed_list(number_or_string)))
+    enum_labels = wrapped_property('enum_labels', optional(typed_list(text_type)))
 
 
 @export
