@@ -42,6 +42,7 @@ import * as matrix from 'neuroglancer/util/matrix';
 import {getObjectId} from 'neuroglancer/util/object_id';
 import {cancellableFetchSpecialOk, parseSpecialUrl, SpecialProtocolCredentials, SpecialProtocolCredentialsProvider} from 'neuroglancer/util/special_protocol_request';
 import {Uint64} from 'neuroglancer/util/uint64';
+import {parseDataTypeValue} from 'neuroglancer/webgl/lerp';
 
 class PrecomputedVolumeChunkSource extends
 (WithParameters(WithCredentialsProvider<SpecialProtocolCredentials>()(VolumeChunkSource), VolumeChunkSourceParameters)) {}
@@ -615,7 +616,26 @@ function parseAnnotationPropertySpec(obj: unknown): AnnotationPropertySpec {
   const type = verifyObjectProperty(obj, 'type', parseAnnotationPropertyType);
   const description = verifyOptionalObjectProperty(obj, 'description', verifyString);
   let defaultValue = 0;
-  return {type, identifier, description, default: defaultValue} as AnnotationPropertySpec;
+  let enumValues: number[]|undefined;
+  let enumLabels: string[]|undefined;
+  switch (type) {
+    case 'rgb':
+    case 'rgba': break;
+    default: {
+      const dataType: DataType = DataType[type.toUpperCase() as any] as any;
+      enumValues = verifyOptionalObjectProperty(
+          obj, 'enum_values',
+          valuesObj => parseArray(valuesObj, x => parseDataTypeValue(dataType, x) as number));
+      if (enumValues !== undefined) {
+        enumLabels = verifyObjectProperty(
+            obj, 'enum_labels',
+            labelsObj => parseFixedLengthArray(
+              new Array<string>(enumValues!.length), labelsObj, verifyString));
+      }
+    }
+  }
+  return {type, identifier, description, default: defaultValue, enumValues, enumLabels} as
+      AnnotationPropertySpec;
 }
 
 function parseAnnotationPropertySpecs(obj: unknown) {

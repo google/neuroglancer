@@ -20,7 +20,7 @@
 
 import './annotations.css';
 
-import {Annotation, AnnotationId, AnnotationReference, AnnotationSource, annotationToJson, AnnotationType, annotationTypeHandlers, AxisAlignedBoundingBox, Ellipsoid, Line} from 'neuroglancer/annotation';
+import {Annotation, AnnotationId, AnnotationReference, AnnotationSource, annotationToJson, AnnotationType, annotationTypeHandlers, AxisAlignedBoundingBox, Ellipsoid, formatNumericProperty, Line} from 'neuroglancer/annotation';
 import {AnnotationDisplayState, AnnotationLayerState} from 'neuroglancer/annotation/annotation_layer_state';
 import {MultiscaleAnnotationSource} from 'neuroglancer/annotation/frontend_source';
 import {AnnotationLayer, PerspectiveViewAnnotationLayer, SliceViewAnnotationLayer, SpatiallyIndexedPerspectiveViewAnnotationLayer, SpatiallyIndexedSliceViewAnnotationLayer} from 'neuroglancer/annotation/renderlayer';
@@ -1506,9 +1506,6 @@ export function UserLayerWithAnnotationsMixin<TBase extends {new (...args: any[]
                       const valueElement = document.createElement('span');
                       valueElement.classList.add('neuroglancer-annotation-property-value');
                       switch (property.type) {
-                        case 'float32':
-                          valueElement.textContent = value.toPrecision(6);
-                          break;
                         case 'rgb': {
                           const colorVec = unpackRGB(value);
                           const hex = serializeColor(colorVec);
@@ -1528,7 +1525,7 @@ export function UserLayerWithAnnotationsMixin<TBase extends {new (...args: any[]
                           break;
                         }
                         default:
-                          valueElement.textContent = value.toString();
+                          valueElement.textContent = formatNumericProperty(property, value);
                           break;
                       }
                       label.appendChild(valueElement);

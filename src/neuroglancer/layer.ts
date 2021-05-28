@@ -16,6 +16,7 @@
 
 import debounce from 'lodash/debounce';
 import throttle from 'lodash/throttle';
+import {AnnotationType} from 'neuroglancer/annotation';
 import {AnnotationLayerState} from 'neuroglancer/annotation/annotation_layer_state';
 import {ChunkManager} from 'neuroglancer/chunk_manager/frontend';
 import {CoordinateSpace, CoordinateSpaceCombiner, CoordinateTransformSpecification, coordinateTransformSpecificationFromLegacyJson, emptyInvalidCoordinateSpace, isGlobalDimension, isLocalDimension, isLocalOrChannelDimension, TrackableCoordinateSpace} from 'neuroglancer/coordinate_transform';
@@ -405,8 +406,7 @@ export class UserLayer extends RefCounted {
     let {renderLayers} = this;
     let {pickedRenderLayer} = pickState;
     if (pickedRenderLayer !== null && renderLayers.indexOf(pickedRenderLayer) !== -1) {
-      result =
-          pickedRenderLayer.transformPickedValue(pickState.pickedValue, pickState.pickedOffset);
+      result = pickedRenderLayer.transformPickedValue(pickState);
       result = this.transformPickedValue(result);
       if (result != null) return result;
     }
@@ -858,6 +858,11 @@ export interface PickState {
   pickedRenderLayer: RenderLayer|null;
   pickedValue: Uint64;
   pickedOffset: number;
+  pickedAnnotationLayer: AnnotationLayerState|undefined;
+  pickedAnnotationId: string|undefined;
+  pickedAnnotationBuffer: ArrayBuffer|undefined;
+  pickedAnnotationBufferOffset: number|undefined;
+  pickedAnnotationType: AnnotationType|undefined;
 }
 
 export class MouseSelectionState implements PickState {
@@ -874,6 +879,7 @@ export class MouseSelectionState implements PickState {
   pickedAnnotationId: string|undefined = undefined;
   pickedAnnotationBuffer: ArrayBuffer|undefined = undefined;
   pickedAnnotationBufferOffset: number|undefined = undefined;
+  pickedAnnotationType: AnnotationType|undefined = undefined;
   pageX: number;
   pageY: number;
 

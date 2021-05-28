@@ -71,6 +71,8 @@ export interface AnnotationColorPropertySpec extends AnnotationPropertySpecBase 
 export interface AnnotationNumericPropertySpec extends AnnotationPropertySpecBase {
   type: 'float32'|'uint32'|'int32'|'uint16'|'int16'|'uint8'|'int8';
   default: number;
+  enumValues?: number[];
+  enumLabels?: string[];
   min?: number;
   max?: number;
   step?: number;
@@ -328,6 +330,29 @@ export class AnnotationPropertySerializer {
         new Function('dv', 'offset', 'isLittleEndian', 'properties', serializeCode) as any;
     this.deserialize =
         new Function('dv', 'offset', 'isLittleEndian', 'properties', deserializeCode) as any;
+  }
+}
+
+export function formatNumericProperty(property: AnnotationNumericPropertySpec, value: number): string {
+  const formattedValue = property.type === 'float32' ? value.toPrecision(6) : value.toString();
+  const {enumValues, enumLabels} = property;
+  if (enumValues !== undefined) {
+    const enumIndex = enumValues.indexOf(value);
+    if (enumIndex !== -1) {
+      return `${enumLabels![enumIndex]} (${formattedValue})`;
+    }
+  }
+  return formattedValue;
+}
+
+export function formatAnnotationPropertyValue(property: AnnotationPropertySpec, value: any): string {
+  switch (property.type) {
+    case 'rgb':
+      return serializeColor(unpackRGB(value));
+    case 'rgba':
+      return serializeColor(unpackRGBA(value));
+    default:
+      return formatNumericProperty(property, value);
   }
 }
 

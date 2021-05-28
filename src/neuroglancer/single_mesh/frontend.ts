@@ -18,7 +18,7 @@ import {ChunkState} from 'neuroglancer/chunk_manager/base';
 import {Chunk, ChunkManager, ChunkSource, WithParameters} from 'neuroglancer/chunk_manager/frontend';
 import {CredentialsManager} from 'neuroglancer/credentials_provider';
 import {getCredentialsProviderCounterpart, WithCredentialsProvider} from 'neuroglancer/credentials_provider/chunk_source_frontend';
-import {VisibleLayerInfo} from 'neuroglancer/layer';
+import {PickState, VisibleLayerInfo} from 'neuroglancer/layer';
 import {PerspectivePanel} from 'neuroglancer/perspective_view/panel';
 import {PerspectiveViewRenderContext, PerspectiveViewRenderLayer} from 'neuroglancer/perspective_view/render_layer';
 import {WatchableRenderLayerTransform} from 'neuroglancer/render_coordinate_transform';
@@ -28,7 +28,6 @@ import {WatchableValue} from 'neuroglancer/trackable_value';
 import {DataType} from 'neuroglancer/util/data_type';
 import {mat4, vec3} from 'neuroglancer/util/geom';
 import {parseSpecialUrl, SpecialProtocolCredentials} from 'neuroglancer/util/special_protocol_request';
-import {Uint64} from 'neuroglancer/util/uint64';
 import {withSharedVisibility} from 'neuroglancer/visibility_priority/frontend';
 import {Buffer} from 'neuroglancer/webgl/buffer';
 import {glsl_COLORMAPS} from 'neuroglancer/webgl/colormaps';
@@ -433,7 +432,8 @@ export class SingleMeshLayer extends
     shaderManager.endLayer(gl, shader);
   }
 
-  transformPickedValue(_pickedValue: Uint64, pickedOffset: number) {
+  transformPickedValue(pickState: PickState) {
+    const {pickedOffset} = pickState;
     let chunk = <SingleMeshChunk|undefined>this.source.chunks.get(SINGLE_MESH_CHUNK_KEY);
     if (chunk === undefined) {
       return undefined;
