@@ -25,6 +25,7 @@ import {DataType} from 'neuroglancer/util/data_type';
 import {RefCounted} from 'neuroglancer/util/disposable';
 import {updateInputFieldWidth} from 'neuroglancer/util/dom';
 import {EventActionMap, registerActionListener} from 'neuroglancer/util/event_action_map';
+import {computeInvlerp, computeLerp, dataTypeCompare, DataTypeInterval, getClampedInterval, getClosestEndpoint, getIntervalBoundsEffectiveFraction, getIntervalBoundsEffectiveOffset, parseDataTypeValue} from 'neuroglancer/util/lerp';
 import {MouseEventBinder} from 'neuroglancer/util/mouse_bindings';
 import {startRelativeMouseDrag} from 'neuroglancer/util/mouse_drag';
 import {Uint64} from 'neuroglancer/util/uint64';
@@ -33,7 +34,7 @@ import {WatchableVisibilityPriority} from 'neuroglancer/visibility_priority/fron
 import {getMemoizedBuffer} from 'neuroglancer/webgl/buffer';
 import {ParameterizedEmitterDependentShaderGetter, parameterizedEmitterDependentShaderGetter} from 'neuroglancer/webgl/dynamic_shader';
 import {HistogramSpecifications} from 'neuroglancer/webgl/empirical_cdf';
-import {computeInvlerp, computeLerp, dataTypeCompare, DataTypeInterval, defineLerpShaderFunction, enableLerpShaderFunction, getClampedInterval, getClosestEndpoint, getIntervalBoundsEffectiveFraction, getIntervalBoundsEffectiveOffset, parseDataTypeValue} from 'neuroglancer/webgl/lerp';
+import {defineLerpShaderFunction, enableLerpShaderFunction} from 'neuroglancer/webgl/lerp';
 import {defineLineShader, drawLines, initializeLineShader, VERTICES_PER_LINE} from 'neuroglancer/webgl/lines';
 import {ShaderBuilder} from 'neuroglancer/webgl/shader';
 import {getShaderType} from 'neuroglancer/webgl/shader_lib';
@@ -230,8 +231,8 @@ for (int i = 0; i <= dataValue; ++i) {
   cumSum += getCount(i);
 }
 float total = cumSum + getCount(dataValue + 1);
-float cumSumEnd = dataValue == ${NUM_CDF_LINES-1} ? cumSum : total;
-if (dataValue == ${NUM_CDF_LINES-1}) {
+float cumSumEnd = dataValue == ${NUM_CDF_LINES - 1} ? cumSum : total;
+if (dataValue == ${NUM_CDF_LINES - 1}) {
   cumSum + getCount(dataValue + 1);
 }
 for (int i = dataValue + 2; i < 256; ++i) {

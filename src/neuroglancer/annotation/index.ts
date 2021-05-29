@@ -25,10 +25,10 @@ import {DataType} from 'neuroglancer/util/data_type';
 import {Borrowed, RefCounted} from 'neuroglancer/util/disposable';
 import {Endianness, ENDIANNESS} from 'neuroglancer/util/endian';
 import {expectArray, parseArray, parseFixedLengthArray, verifyEnumString, verifyFiniteFloat, verifyFiniteNonNegativeFloat, verifyFloat, verifyInt, verifyObject, verifyObjectProperty, verifyOptionalObjectProperty, verifyOptionalString, verifyString} from 'neuroglancer/util/json';
+import {parseDataTypeValue} from 'neuroglancer/util/lerp';
 import {getRandomHexString} from 'neuroglancer/util/random';
 import {NullarySignal, Signal} from 'neuroglancer/util/signal';
 import {Uint64} from 'neuroglancer/util/uint64';
-import {parseDataTypeValue} from 'neuroglancer/webgl/lerp';
 
 export type AnnotationId = string;
 

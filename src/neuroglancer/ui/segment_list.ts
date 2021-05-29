@@ -37,7 +37,7 @@ import {makeCopyButton} from 'neuroglancer/widget/copy_button';
 import {DependentViewWidget} from 'neuroglancer/widget/dependent_view_widget';
 import {Tab} from 'neuroglancer/widget/tab_view';
 import {VirtualList, VirtualListSource} from 'neuroglancer/widget/virtual_list';
-import {clampToInterval, computeInvlerp, dataTypeCompare, DataTypeInterval, dataTypeIntervalEqual, getClampedInterval, getIntervalBoundsEffectiveFraction, parseDataTypeValue} from 'neuroglancer/webgl/lerp';
+import {clampToInterval, computeInvlerp, dataTypeCompare, DataTypeInterval, dataTypeIntervalEqual, getClampedInterval, getIntervalBoundsEffectiveFraction, parseDataTypeValue} from 'neuroglancer/util/lerp';
 import {CdfController, getUpdatedRangeAndWindowParameters, RangeAndWindowIntervals} from 'neuroglancer/widget/invlerp';
 
 const tempUint64 = new Uint64();
@@ -980,9 +980,12 @@ export class SegmentDisplayTab extends Tab {
                   context.registerDisposer(
                       displayState.segmentSelectionState.changed.add(updateListItems));
                   context.registerDisposer(group.visibleSegments.changed.add(updateListItems));
-                  context.registerDisposer(displayState.segmentColorHash.changed.add(updateListItems));
-                  context.registerDisposer(displayState.segmentStatedColors.changed.add(updateListItems));
-                  context.registerDisposer(displayState.segmentDefaultColor.changed.add(updateListItems));
+                  context.registerDisposer(
+                      displayState.segmentColorHash.changed.add(updateListItems));
+                  context.registerDisposer(
+                      displayState.segmentStatedColors.changed.add(updateListItems));
+                  context.registerDisposer(
+                      displayState.segmentDefaultColor.changed.add(updateListItems));
                   list.element.classList.add('neuroglancer-segment-list');
                   context.registerDisposer(layer.bindSegmentListWidth(list.element));
                   context.registerDisposer(
