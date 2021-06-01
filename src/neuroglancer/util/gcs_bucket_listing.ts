@@ -24,10 +24,13 @@ import {SpecialProtocolCredentialsProvider} from 'neuroglancer/util/special_prot
 export async function getGcsBucketListing(
     credentialsProvider: SpecialProtocolCredentialsProvider, bucket: string, prefix: string,
     delimiter: string, cancellationToken: CancellationToken): Promise<string[]> {
+  // Include origin as `neuroglancerOrigin` query string parameter.  See comment in
+  // `special_protocol_request.ts` for details.
   const response = await fetchWithOAuth2Credentials(
       credentialsProvider,
-      `https://www.googleapis.com/storage/v1/b/${bucket}/o?delimiter=${
-          encodeURIComponent(delimiter)}&prefix=${encodeURIComponent(prefix)}`,
+      `https://www.googleapis.com/storage/v1/b/${bucket}/o?` +
+          `delimiter=${encodeURIComponent(delimiter)}&prefix=${encodeURIComponent(prefix)}&` +
+          `neuroglancerOrigin=${encodeURIComponent(location.origin)}`,
       {}, responseJson, cancellationToken);
   verifyObject(response);
   const prefixes = verifyOptionalObjectProperty(response, 'prefixes', verifyStringArray, []);
