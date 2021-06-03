@@ -56,22 +56,11 @@ import { Uint64Set } from 'src/neuroglancer/uint64_set';
 class GrapheneVolumeChunkSource extends
 (WithParameters(WithCredentialsProvider<SpecialProtocolCredentials>()(VolumeChunkSource), VolumeChunkSourceParameters)) {}
 
-
-// class GrapheneVolumeChunkSource extends
-// (WithParameters(WithCredentialsProvider<SpecialProtocolCredentials>()(VolumeChunkSource), VolumeChunkSourceParameters)) {}
-
 class GrapheneChunkedGraphChunkSource extends
 (WithParameters(WithCredentialsProvider<SpecialProtocolCredentials>()(ChunkedGraphChunkSource), ChunkedGraphSourceParameters)) {}
 
-// class GrapheneChunkedGraphChunkSource extends
-// (WithRootSegments()(WithParameters(WithCredentialsProvider<SpecialProtocolCredentials>()(VolumeChunkSource), ChunkedGraphSourceParameters))) {}
-
-
 class GrapheneMeshSource extends
 (WithParameters(WithCredentialsProvider<SpecialProtocolCredentials>()(MeshSource), MeshSourceParameters)) {}
-
-// class GrapheneMultiscaleMeshSource extends
-// (WithParameters(WithCredentialsProvider<SpecialProtocolCredentials>()(MultiscaleMeshSource), MultiscaleMeshSourceParameters)) {}
 
 class GrapheneSkeletonSource extends
 (WithParameters(WithCredentialsProvider<SpecialProtocolCredentials>()(SkeletonSource), SkeletonSourceParameters)) {
@@ -210,7 +199,7 @@ interface MultiscaleVolumeInfo {
   graph?: GraphInfo;
 }
 
-export function parseSpecialUrl2(url: string): string { // TODO, this is a hack
+export function parseSpecialUrlOld(url: string): string { // TODO: brought back old parseSpecialUrl
   const urlProtocolPattern = /^([^:\/]+):\/\/([^\/]+)(\/.*)?$/;
   let match = url.match(urlProtocolPattern);
   if (match === null) {
@@ -276,7 +265,7 @@ function parseMultiscaleVolumeInfo(obj: unknown, url: string): MultiscaleVolumeI
 
   if (volumeType !== VolumeType.IMAGE) {
     volumeType = VolumeType.SEGMENTATION_WITH_GRAPH;
-    dataUrl = verifyObjectProperty(obj, 'data_dir', x => parseSpecialUrl2(x));
+    dataUrl = verifyObjectProperty(obj, 'data_dir', x => parseSpecialUrlOld(x));
     app = verifyObjectProperty(obj, 'app', x => new AppInfo(url, x));
     graph = verifyObjectProperty(obj, 'graph', x => new GraphInfo(x));
   }
