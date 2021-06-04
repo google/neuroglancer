@@ -131,5 +131,7 @@ export function parseUrl(url: string): {protocol: string, host: string, path: st
 
 export function isNotFoundError(e: any) {
   if (!(e instanceof HttpError)) return false;
-  return (e.status === 403 || e.status === 404);
+  // Treat CORS errors (0) or 403 as not found.  S3 returns 403 if the file does not exist because
+  // permissions are per-file.
+  return (e.status === 0 || e.status === 403 || e.status === 404);
 }
