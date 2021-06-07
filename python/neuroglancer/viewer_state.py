@@ -318,6 +318,8 @@ def _shader_control_parameters(v, _readonly=False):
         if _UINT64_STR_PATTERN.fullmatch(v):
             return int(v)
         return v
+    if isinstance(v, numbers.Number):
+        return v
     if isinstance(v, dict):
         return InvlerpParameters(v, _readonly=_readonly)
     if isinstance(v, InvlerpParameters):
