@@ -20,6 +20,7 @@ import collections
 import copy
 import math
 import numbers
+import re
 
 try:
     import collections.abc as collections_abc
@@ -301,7 +302,32 @@ class _AnnotationLayerOptions(object):
     annotation_color = annotationColor = wrapped_property('annotationColor', optional(text_type))
 
 
-ShaderControls = typed_string_map((six.text_type, numbers.Number))
+@export
+class InvlerpParameters(JsonObjectWrapper):
+    range = wrapped_property('range', optional(array_wrapper(numbers.Number, 2)))
+    window = wrapped_property('window', optional(array_wrapper(numbers.Number, 2)))
+    channel = wrapped_property('channel', optional(typed_list(int)))
+
+
+_UINT64_STR_PATTERN = re.compile('[0-9]+')
+
+
+def _shader_control_parameters(v, _readonly=False):
+    if isinstance(v, str):
+        # Check if it can be converted to a number
+        if _UINT64_STR_PATTERN.fullmatch(v):
+            return int(v)
+        return v
+    if isinstance(v, dict):
+        return InvlerpParameters(v, _readonly=_readonly)
+    if isinstance(v, InvlerpParameters):
+        return v
+    raise TypeError('Unexpected shader control parameters type: %s' % (type(v), ))
+
+
+_shader_control_parameters.supports_readonly = True
+
+ShaderControls = typed_string_map(_shader_control_parameters)
 
 
 @export
