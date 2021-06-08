@@ -216,6 +216,7 @@ function makeViewerContextMenu(viewer: Viewer) {
 class TrackableViewerState extends CompoundTrackable {
   constructor(public viewer: Borrowed<Viewer>) {
     super();
+    this.add('title', viewer.title);
     this.add('dimensions', viewer.coordinateSpace);
     this.add('relativeDisplayScales', viewer.relativeDisplayScales);
     this.add('displayDimensions', viewer.displayDimensions);
@@ -291,6 +292,7 @@ class TrackableViewerState extends CompoundTrackable {
 }
 
 export class Viewer extends RefCounted implements ViewerState {
+  title = new TrackableValue<string|undefined>(undefined, verifyString);
   coordinateSpace = new TrackableCoordinateSpace();
   position = this.registerDisposer(new Position(this.coordinateSpace));
   relativeDisplayScales =

@@ -18,6 +18,7 @@ import {StatusMessage} from 'neuroglancer/status';
 import {bindDefaultCopyHandler, bindDefaultPasteHandler} from 'neuroglancer/ui/default_clipboard_handling';
 import {setDefaultInputEventBindings} from 'neuroglancer/ui/default_input_event_bindings';
 import {makeDefaultViewer} from 'neuroglancer/ui/default_viewer';
+import {bindTitle} from 'neuroglancer/ui/title';
 import {UrlHashBinding} from 'neuroglancer/ui/url_hash_binding';
 
 declare var NEUROGLANCER_DEFAULT_STATE_FRAGMENT: string|undefined;
@@ -45,6 +46,7 @@ export function setupDefaultViewer() {
     hashBinding.parseError;
   }));
   hashBinding.updateFromUrlHash();
+  viewer.registerDisposer(bindTitle(viewer.title));
 
   bindDefaultCopyHandler(viewer);
   bindDefaultPasteHandler(viewer);

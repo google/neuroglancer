@@ -1060,6 +1060,7 @@ add_data_panel_layout_types()
 @export
 class ViewerState(JsonObjectWrapper):
     __slots__ = ()
+    title = wrapped_property('title', optional(text_type))
     dimensions = wrapped_property('dimensions', CoordinateSpace)
     relative_display_scales = relativeDisplayScales = wrapped_property(
         'relativeDisplayScales', optional(typed_string_map(float)))
