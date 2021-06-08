@@ -213,6 +213,7 @@ class ConfigState(JsonObjectWrapper):
     show_location = showLocation = wrapped_property('showLocation', optional(bool, True))
     show_layer_panel = showLayerPanel = wrapped_property('showLayerPanel', optional(bool, True))
     show_help_button = showHelpButton = wrapped_property('showHelpButton', optional(bool, True))
+    show_settings_button = showSettingsButton = wrapped_property('showSettingsButton', optional(bool, True))
     show_layer_side_panel_button = showLayerSidePanelButton = wrapped_property('showLayerSidePanelButton', optional(bool, True))
     show_layer_list_panel_button = showLayerListPanelButton = wrapped_property('showLayerListPanelButton', optional(bool, True))
     show_selection_panel_button = showSelectionPanelButton = wrapped_property('showSelectionPanelButton', optional(bool, True))

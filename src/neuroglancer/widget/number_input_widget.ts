@@ -42,7 +42,7 @@ export class NumberInputWidget extends RefCounted {
     }
     element.appendChild(inputElement);
     element.className = 'neuroglancer-number-input';
-    inputElement.type = 'input';
+    inputElement.type = 'text';
     this.registerDisposer(this.model.changed.add(() => this.updateView()));
     this.registerEventListener(inputElement, 'change', () => this.updateModel());
     this.updateView();

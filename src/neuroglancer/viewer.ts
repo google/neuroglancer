@@ -18,6 +18,7 @@ import './viewer.css';
 import 'neuroglancer/noselect.css';
 
 import svg_controls_alt from 'ikonate/icons/controls-alt.svg';
+import svg_settings from 'ikonate/icons/settings.svg';
 import svg_layers from 'ikonate/icons/layers.svg';
 import svg_list from 'ikonate/icons/list.svg';
 import debounce from 'lodash/debounce';
@@ -27,6 +28,7 @@ import {defaultCredentialsManager} from 'neuroglancer/credentials_provider/defau
 import {InputEventBindings as DataPanelInputEventBindings} from 'neuroglancer/data_panel_layout';
 import {DataSourceProviderRegistry} from 'neuroglancer/datasource';
 import {getDefaultDataSourceProvider} from 'neuroglancer/datasource/default_provider';
+import {StateShare, stateShareEnabled} from 'neuroglancer/datasource/state_share';
 import {DisplayContext, TrackableWindowedViewport} from 'neuroglancer/display_context';
 import {HelpPanelState, InputEventBindingHelpDialog} from 'neuroglancer/help/input_event_bindings';
 import {addNewLayer, LayerManager, LayerSelectedValues, MouseSelectionState, SelectedLayerState, TopLevelLayerListSpecification, TrackableDataSelectionState} from 'neuroglancer/layer';
@@ -35,9 +37,8 @@ import {DisplayPose, NavigationState, OrientationState, Position, TrackableCross
 import {overlaysOpen} from 'neuroglancer/overlay';
 import {allRenderLayerRoles, RenderLayerRole} from 'neuroglancer/renderlayer';
 import {StatusMessage} from 'neuroglancer/status';
-import {ElementVisibilityFromTrackableBoolean, TrackableBoolean, TrackableBooleanCheckbox} from 'neuroglancer/trackable_boolean';
+import {ElementVisibilityFromTrackableBoolean, TrackableBoolean} from 'neuroglancer/trackable_boolean';
 import {makeDerivedWatchableValue, observeWatchable, TrackableValue, WatchableValueInterface} from 'neuroglancer/trackable_value';
-import {ContextMenu} from 'neuroglancer/ui/context_menu';
 import {LayerArchiveCountWidget, LayerListPanel, LayerListPanelState} from 'neuroglancer/ui/layer_list_panel';
 import {LayerSidePanelManager} from 'neuroglancer/ui/layer_side_panel';
 import {setupPositionDropHandlers} from 'neuroglancer/ui/position_drag_and_drop';
@@ -45,6 +46,7 @@ import {SelectionDetailsPanel} from 'neuroglancer/ui/selection_details';
 import {SidePanelManager} from 'neuroglancer/ui/side_panel';
 import {StateEditorDialog} from 'neuroglancer/ui/state_editor';
 import {StatisticsDisplayState, StatisticsPanel} from 'neuroglancer/ui/statistics';
+import {ViewerSettingsPanel, ViewerSettingsPanelState} from 'neuroglancer/ui/viewer_settings';
 import {AutomaticallyFocusedElement} from 'neuroglancer/util/automatic_focus';
 import {TrackableRGB} from 'neuroglancer/util/color';
 import {Borrowed, Owned, RefCounted} from 'neuroglancer/util/disposable';
@@ -61,11 +63,9 @@ import {GL} from 'neuroglancer/webgl/context';
 import {AnnotationToolStatusWidget} from 'neuroglancer/widget/annotation_tool_status';
 import {CheckboxIcon} from 'neuroglancer/widget/checkbox_icon';
 import {makeIcon} from 'neuroglancer/widget/icon';
-import {NumberInputWidget} from 'neuroglancer/widget/number_input_widget';
 import {MousePositionWidget, PositionWidget} from 'neuroglancer/widget/position_widget';
 import {TrackableScaleBarOptions} from 'neuroglancer/widget/scale_bar';
 import {RPC} from 'neuroglancer/worker_rpc';
-import { StateShare, stateShareEnabled } from './datasource/state_share';
 
 declare var NEUROGLANCER_OVERRIDE_DEFAULT_VIEWER_OPTIONS: any
 
@@ -105,63 +105,50 @@ export class InputEventBindings extends DataPanelInputEventBindings {
   global = new EventActionMap();
 }
 
-const viewerUiControlOptionKeys: (keyof ViewerUIControlConfiguration)[] = [
+export const VIEWER_TOP_ROW_CONFIG_OPTIONS = [
   'showHelpButton',
+  'showSettingsButton',
   'showEditStateButton',
   'showLayerListPanelButton',
   'showSelectionPanelButton',
   'showLayerSidePanelButton',
-  'showLayerPanel',
   'showLocation',
-  'showLayerHoverValues',
   'showAnnotationToolStatus',
-];
+] as const;
 
-const viewerOptionKeys: (keyof ViewerUIOptions)[] =
-    ['showUIControls', 'showPanelBorders', ...viewerUiControlOptionKeys];
+export const VIEWER_UI_CONTROL_CONFIG_OPTIONS = [
+  ...VIEWER_TOP_ROW_CONFIG_OPTIONS,
+  'showLayerPanel',
+  'showLayerHoverValues',
+] as const;
 
-export class ViewerUIControlConfiguration {
-  showHelpButton = new TrackableBoolean(true);
-  showEditStateButton = new TrackableBoolean(true);
-  showLayerListPanelButton = new TrackableBoolean(true);
-  showSelectionPanelButton = new TrackableBoolean(true);
-  showLayerSidePanelButton = new TrackableBoolean(true);
-  showLayerPanel = new TrackableBoolean(true);
-  showLocation = new TrackableBoolean(true);
-  showLayerHoverValues = new TrackableBoolean(true);
-  showAnnotationToolStatus = new TrackableBoolean(true);
-}
+export const VIEWER_UI_CONFIG_OPTIONS = [
+  ...VIEWER_UI_CONTROL_CONFIG_OPTIONS,
+  'showUIControls',
+  'showPanelBorders',
+] as const;
 
-export class ViewerUIConfiguration extends ViewerUIControlConfiguration {
-  /**
-   * If set to false, all UI controls (controlled individually by the options below) are disabled.
-   */
-  showUIControls = new TrackableBoolean(true);
-  showPanelBorders = new TrackableBoolean(true);
+export type ViewerUIOptions = {
+  [Key in (typeof VIEWER_UI_CONFIG_OPTIONS)[number]]: boolean
+};
+
+export type ViewerUIConfiguration = {
+  [Key in (typeof VIEWER_UI_CONFIG_OPTIONS)[number]]: TrackableBoolean;
+};
+
+export function makeViewerUIConfiguration(): ViewerUIConfiguration {
+  return Object.fromEntries(VIEWER_UI_CONFIG_OPTIONS.map(
+             key => [key, new TrackableBoolean(true)])) as ViewerUIConfiguration;
 }
 
 function setViewerUiConfiguration(
     config: ViewerUIConfiguration, options: Partial<ViewerUIOptions>) {
-  for (const key of viewerOptionKeys) {
+  for (const key of VIEWER_UI_CONFIG_OPTIONS) {
     const value = options[key];
     if (value !== undefined) {
       config[key].value = value;
     }
   }
-}
-
-interface ViewerUIOptions {
-  showUIControls: boolean;
-  showHelpButton: boolean;
-  showEditStateButton: boolean;
-  showLayerListPanelButton: boolean;
-  showSelectionPanelButton: boolean;
-  showLayerSidePanelButton: boolean;
-  showLayerPanel: boolean;
-  showLocation: boolean;
-  showLayerHoverValues: boolean;
-  showPanelBorders: boolean;
-  showAnnotationToolStatus: boolean;
 }
 
 export interface ViewerOptions extends ViewerUIOptions, VisibilityPrioritySpecification {
@@ -181,37 +168,6 @@ const defaultViewerOptions = 'undefined' !== typeof NEUROGLANCER_OVERRIDE_DEFAUL
       showLayerDialog: true,
       resetStateWhenEmpty: true,
     };
-
-function makeViewerContextMenu(viewer: Viewer) {
-  const menu = new ContextMenu();
-  const {element} = menu;
-  element.classList.add('neuroglancer-viewer-context-menu');
-  const addLimitWidget = (label: string, limit: TrackableValue<number>) => {
-    const widget = menu.registerDisposer(new NumberInputWidget(limit, {label}));
-    widget.element.classList.add('neuroglancer-viewer-context-menu-limit-widget');
-    element.appendChild(widget.element);
-  };
-  addLimitWidget('GPU memory limit', viewer.chunkQueueManager.capacities.gpuMemory.sizeLimit);
-  addLimitWidget('System memory limit', viewer.chunkQueueManager.capacities.systemMemory.sizeLimit);
-  addLimitWidget(
-      'Concurrent chunk requests', viewer.chunkQueueManager.capacities.download.itemLimit);
-
-  const addCheckbox = (label: string, value: WatchableValueInterface<boolean>) => {
-    const labelElement = document.createElement('label');
-    labelElement.textContent = label;
-    const checkbox = menu.registerDisposer(new TrackableBooleanCheckbox(value));
-    labelElement.appendChild(checkbox.element);
-    element.appendChild(labelElement);
-  };
-  addCheckbox('Show axis lines', viewer.showAxisLines);
-  addCheckbox('Show scale bar', viewer.showScaleBar);
-  addCheckbox('Show cross sections in 3-d', viewer.showPerspectiveSliceViews);
-  addCheckbox('Show default annotations', viewer.showDefaultAnnotations);
-  addCheckbox('Show chunk statistics', viewer.statisticsDisplayState.location.watchableVisible);
-  addCheckbox('Wire frame rendering', viewer.wireFrame);
-  addCheckbox('Enable prefetching', viewer.chunkQueueManager.enablePrefetch);
-  return menu;
-}
 
 class TrackableViewerState extends CompoundTrackable {
   constructor(public viewer: Borrowed<Viewer>) {
@@ -247,6 +203,7 @@ class TrackableViewerState extends CompoundTrackable {
     this.add('layout', viewer.layout);
     this.add('statistics', viewer.statisticsDisplayState);
     this.add('helpPanel', viewer.helpPanelState);
+    this.add('settingsPanel', viewer.settingsPanelState);
     this.add('selection', viewer.selectionDetailsState);
     this.add('layerListPanel', viewer.layerListPanelState);
     this.add('partialViewport', viewer.partialViewport);
@@ -333,9 +290,9 @@ export class Viewer extends RefCounted implements ViewerState {
   perspectiveViewBackgroundColor = new TrackableRGB(vec3.fromValues(0, 0, 0));
   scaleBarOptions = new TrackableScaleBarOptions();
   partialViewport = new TrackableWindowedViewport();
-  contextMenu: ContextMenu;
   statisticsDisplayState = new StatisticsDisplayState();
   helpPanelState = new HelpPanelState();
+  settingsPanelState = new ViewerSettingsPanelState();
   layerSelectedValues =
       this.registerDisposer(new LayerSelectedValues(this.layerManager, this.mouseState));
   selectionDetailsState = this.registerDisposer(
@@ -374,10 +331,11 @@ export class Viewer extends RefCounted implements ViewerState {
   }
 
   /**
-   * Logical and of each of the above values with the value of showUIControls.
+   * Logical and of each `VIEWER_UI_CONTROL_CONFIG_OPTIONS` option with the value of showUIControls.
    */
-  uiControlVisibility:
-      {[key in keyof ViewerUIControlConfiguration]: WatchableValueInterface<boolean>} = <any>{};
+  uiControlVisibility: {
+    [key in(typeof VIEWER_UI_CONTROL_CONFIG_OPTIONS)[number]]: WatchableValueInterface<boolean>
+  } = <any>{};
 
   showLayerDialog: boolean;
   resetStateWhenEmpty: boolean;
@@ -402,7 +360,7 @@ export class Viewer extends RefCounted implements ViewerState {
       element = display.makeCanvasOverlayElement(),
       dataSourceProvider =
           getDefaultDataSourceProvider({credentialsManager: defaultCredentialsManager}),
-      uiConfiguration = new ViewerUIConfiguration(),
+      uiConfiguration = makeViewerUIConfiguration(),
     } = options;
     this.visibility = visibility;
     this.inputEventBindings = inputEventBindings;
@@ -426,7 +384,7 @@ export class Viewer extends RefCounted implements ViewerState {
       showLayerDialog,
     } = optionsWithDefaults;
 
-    for (const key of viewerUiControlOptionKeys) {
+    for (const key of VIEWER_UI_CONTROL_CONFIG_OPTIONS) {
       this.uiControlVisibility[key] = this.makeUiControlVisibilityState(key);
     }
     this.registerDisposer(this.uiConfiguration.showPanelBorders.changed.add(() => {
@@ -515,10 +473,7 @@ export class Viewer extends RefCounted implements ViewerState {
     gridContainer.style.flexDirection = 'column';
 
     const topRow = document.createElement('div');
-    topRow.title = 'Right click for settings';
     topRow.classList.add('neuroglancer-viewer-top-row');
-    const contextMenu = this.contextMenu = this.registerDisposer(makeViewerContextMenu(this));
-    contextMenu.registerParent(topRow);
     topRow.style.display = 'flex';
     topRow.style.flexDirection = 'row';
     topRow.style.alignItems = 'stretch';
@@ -637,13 +592,24 @@ export class Viewer extends RefCounted implements ViewerState {
       topRow.appendChild(button.element);
     }
 
+    {
+      const {settingsPanelState} = this;
+      const button =
+          this.registerDisposer(new CheckboxIcon(settingsPanelState.location.watchableVisible, {
+            svg: svg_settings,
+            backgroundScheme: 'dark',
+            enableTitle: 'Show settings panel',
+            disableTitle: 'Hide settings panel'
+          }));
+      this.registerDisposer(new ElementVisibilityFromTrackableBoolean(
+          this.uiControlVisibility.showSettingsButton, button.element));
+      topRow.appendChild(button.element);
+    }
+
     this.registerDisposer(new ElementVisibilityFromTrackableBoolean(
         makeDerivedWatchableValue(
             (...values: boolean[]) => values.reduce((a, b) => a || b, false),
-            this.uiControlVisibility.showHelpButton,
-            this.uiControlVisibility.showSelectionPanelButton,
-            this.uiControlVisibility.showEditStateButton, this.uiControlVisibility.showLocation,
-            this.uiControlVisibility.showAnnotationToolStatus),
+            ...VIEWER_TOP_ROW_CONFIG_OPTIONS.map(key => this.uiControlVisibility[key])),
         topRow));
 
     gridContainer.appendChild(topRow);
@@ -686,6 +652,12 @@ export class Viewer extends RefCounted implements ViewerState {
             ],
         );
       },
+    }));
+
+    this.registerDisposer(this.sidePanelManager.registerPanel({
+      location: this.settingsPanelState.location,
+      makePanel: () =>
+          new ViewerSettingsPanel(this.sidePanelManager, this.settingsPanelState, this),
     }));
 
     const updateVisibility = () => {
