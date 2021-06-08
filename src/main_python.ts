@@ -34,6 +34,7 @@ import {TrackableValue} from 'neuroglancer/trackable_value';
 import {bindDefaultCopyHandler, bindDefaultPasteHandler} from 'neuroglancer/ui/default_clipboard_handling';
 import {setDefaultInputEventBindings} from 'neuroglancer/ui/default_input_event_bindings';
 import {makeDefaultViewer} from 'neuroglancer/ui/default_viewer';
+import {bindTitle} from 'neuroglancer/ui/title';
 import {UrlHashBinding} from 'neuroglancer/ui/url_hash_binding';
 import {parseFixedLengthArray, verifyInt} from 'neuroglancer/util/json';
 import {CompoundTrackable, Trackable} from 'neuroglancer/util/trackable';
@@ -176,4 +177,5 @@ window.addEventListener('DOMContentLoaded', () => {
 
   bindDefaultCopyHandler(viewer);
   bindDefaultPasteHandler(viewer);
+  viewer.registerDisposer(bindTitle(viewer.title));
 });
