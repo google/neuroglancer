@@ -870,17 +870,13 @@ export interface PickState {
   pickedRenderLayer: RenderLayer|null;
   pickedValue: Uint64;
   pickedOffset: number;
-<<<<<<< HEAD
   pickedAnnotationLayer: AnnotationLayerState|undefined;
   pickedAnnotationId: string|undefined;
   pickedAnnotationBuffer: ArrayBuffer|undefined;
   pickedAnnotationBufferOffset: number|undefined;
   pickedAnnotationType: AnnotationType|undefined;
-=======
-
   actionMode: ActionMode;
   actionState: ActionState;
->>>>>>> 6a0e6f3b (fixed sharded mesh loading and some general cleanup)
 }
 
 export class MouseSelectionState implements PickState {

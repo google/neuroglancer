@@ -680,6 +680,6 @@ export function isSegmentationUserLayerWithGraph(layer: SegmentationUserLayer):
 }
 
 registerLayerType(
-    'segmentation_with_graph', SegmentationUserLayerWithGraphMixin(SegmentationUserLayer));
+    SegmentationUserLayerWithGraphMixin(SegmentationUserLayer), 'segmentation_with_graph');
 registerVolumeLayerType(
     VolumeType.SEGMENTATION_WITH_GRAPH, SegmentationUserLayerWithGraphMixin(SegmentationUserLayer));

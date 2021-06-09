@@ -14,10 +14,9 @@
  * limitations under the License.
  */
 
-import {AnnotationPropertySpec, AnnotationType, ensureUniqueAnnotationPropertyIds, makeDataBoundsBoundingBoxAnnotationSet, parseAnnotationPropertyId, parseAnnotationPropertyType} from 'neuroglancer/annotation';
+import {AnnotationType, makeDataBoundsBoundingBoxAnnotationSet, parseAnnotationPropertySpecs} from 'neuroglancer/annotation';
 import {AnnotationGeometryChunkSpecification} from 'neuroglancer/annotation/base';
-import {MultiscaleAnnotationSource} from 'neuroglancer/annotation/frontend_source';
-import {AnnotationGeometryChunkSource} from 'neuroglancer/annotation/frontend_source';
+import {AnnotationGeometryChunkSource, MultiscaleAnnotationSource} from 'neuroglancer/annotation/frontend_source';
 import {ChunkManager, WithParameters} from 'neuroglancer/chunk_manager/frontend';
 import {BoundingBox, CoordinateSpace, coordinateSpaceFromJson, emptyValidCoordinateSpace, makeCoordinateSpace, makeIdentityTransform, makeIdentityTransformedBoundingBox} from 'neuroglancer/coordinate_transform';
 import {WithCredentialsProvider} from 'neuroglancer/credentials_provider/chunk_source_frontend';
@@ -25,15 +24,15 @@ import {CompleteUrlOptions, ConvertLegacyUrlOptions, DataSource, DataSourceProvi
 // import {AnnotationSourceParameters, AnnotationSpatialIndexSourceParameters, DataEncoding, IndexedSegmentPropertySourceParameters, MeshSourceParameters, MultiscaleMeshMetadata, MultiscaleMeshSourceParameters, ShardingHashFunction, ShardingParameters, SkeletonMetadata, SkeletonSourceParameters, VolumeChunkEncoding, VolumeChunkSourceParameters} from 'neuroglancer/datasource/precomputed/base';
 import {VertexPositionFormat} from 'neuroglancer/mesh/base';
 import {MeshSource, MultiscaleMeshSource} from 'neuroglancer/mesh/frontend';
-import {IndexedSegmentProperty} from 'neuroglancer/segmentation_display_state/base';
-import {IndexedSegmentPropertySource, InlineSegmentProperty, InlineSegmentPropertyMap, SegmentPropertyMap} from 'neuroglancer/segmentation_display_state/property_map';
+import {IndexedSegmentPropertySource, InlineSegmentProperty, InlineSegmentPropertyMap, normalizeInlineSegmentPropertyMap, SegmentPropertyMap} from 'neuroglancer/segmentation_display_state/property_map';
 import {VertexAttributeInfo} from 'neuroglancer/skeleton/base';
 import {SkeletonSource} from 'neuroglancer/skeleton/frontend';
 import {makeSliceViewChunkSpecification} from 'neuroglancer/sliceview/base';
 import {SliceViewSingleResolutionSource} from 'neuroglancer/sliceview/frontend';
-import {DataType, makeDefaultVolumeChunkSpecifications, VolumeSourceOptions, VolumeType} from 'neuroglancer/sliceview/volume/base';
+import {makeDefaultVolumeChunkSpecifications, VolumeSourceOptions, VolumeType} from 'neuroglancer/sliceview/volume/base';
 import {MultiscaleVolumeChunkSource, VolumeChunkSource} from 'neuroglancer/sliceview/volume/frontend';
 import {transposeNestedArrays} from 'neuroglancer/util/array';
+import {DATA_TYPE_ARRAY_CONSTRUCTOR, DataType} from 'neuroglancer/util/data_type';
 import {Borrowed} from 'neuroglancer/util/disposable';
 import {mat4, vec3} from 'neuroglancer/util/geom';
 import {completeHttpPath} from 'neuroglancer/util/http_path_completion';
@@ -42,6 +41,7 @@ import {parseArray, parseFixedLengthArray, parseQueryStringParameters, unparseQu
 import * as matrix from 'neuroglancer/util/matrix';
 import {getObjectId} from 'neuroglancer/util/object_id';
 import {parseSpecialUrl, SpecialProtocolCredentials, SpecialProtocolCredentialsProvider} from 'neuroglancer/util/special_protocol_request';
+import {Uint64} from 'neuroglancer/util/uint64';
 import {cancellableFetchSpecialOk} from 'neuroglancer/datasource/graphene/base';
 
 import {ChunkedGraphSourceParameters, DataEncoding, MeshSourceParameters, MultiscaleMeshMetadata, PYCG_APP_VERSION, ShardingHashFunction, ShardingParameters, SkeletonMetadata, SkeletonSourceParameters, VolumeChunkEncoding, VolumeChunkSourceParameters} from 'neuroglancer/datasource/graphene/base';
@@ -352,34 +352,29 @@ class GrapheneMultiscaleVolumeChunkSource extends MultiscaleVolumeChunkSource {
       // chunkedGraphSourceOptions: options,
     });
 
-    // const spec = makeChunkedGraphChunkSpecification.getDefaults({
-    //   numChannels: 1,
-    //   voxelSize: this.scales[0].resolution,
-    //   transform: mat4.fromTranslation(
-    //       mat4.create(),
-    //       vec3.multiply(vec3.create(), this.scales[0].resolution, this.scales[0].voxelOffset)),
-    //   upperVoxelBound: this.scales[0].size,
-    //   chunkDataSizes: [this.graph.chunkSize],
-    //   baseVoxelOffset: this.scales[0].voxelOffset,
-    //   chunkedGraphSourceOptions: options,
-    // });
-
-    // let sources: SliceViewSingleResolutionSource<VolumeChunkSource>[][] = [];
-
     const {resolution} = scaleInfo;
     const modelResolution = resolution; // ???
+    const modelResolution2 = this.info.scales[0].resolution;
+    console.log('resolution compare', modelResolution, modelResolution2);
     const stride = rank + 1;
     const chunkToMultiscaleTransform = new Float32Array(stride * stride);
     chunkToMultiscaleTransform[chunkToMultiscaleTransform.length - 1] = 1;
+    const {lowerBounds: baseLowerBound, upperBounds: baseUpperBound} =
+          this.info.modelSpace.boundingBoxes[0].box;
+    const lowerClipBound = new Float32Array(rank);
+    const upperClipBound = new Float32Array(rank);
     for (let i = 0; i < 3; ++i) {
       const relativeScale = resolution[i] / modelResolution[i];
       chunkToMultiscaleTransform[stride * i + i] = relativeScale;
       chunkToMultiscaleTransform[stride * rank + i] = scaleInfo.voxelOffset[i] * relativeScale;
+      lowerClipBound[i] = baseLowerBound[i] / relativeScale;
+      upperClipBound[i] = baseUpperBound[i] / relativeScale;
     }
     if (rank === 4) {
       chunkToMultiscaleTransform[stride * 3 + 3] = 1;
+      lowerClipBound[3] = baseLowerBound[3];
+      upperClipBound[3] = baseUpperBound[3];
     }
-
     return [[
       {
         chunkSource: this.chunkManager.getChunkSource(GrapheneChunkedGraphChunkSource, {
@@ -387,7 +382,9 @@ class GrapheneMultiscaleVolumeChunkSource extends MultiscaleVolumeChunkSource {
           credentialsProvider: this.credentialsProvider,
           rootSegments,
           parameters: {url: `${this.info.app!.segmentationUrl}/node`}}),
-        chunkToMultiscaleTransform
+        chunkToMultiscaleTransform,
+        lowerClipBound,
+        upperClipBound,
       }
     ]];
   }
@@ -833,21 +830,6 @@ function parseKeyAndShardingSpec(url: string, obj: any) {
   };
 }
 
-function parseAnnotationPropertySpec(obj: unknown): AnnotationPropertySpec {
-  verifyObject(obj);
-  const identifier = verifyObjectProperty(obj, 'id', parseAnnotationPropertyId);
-  const type = verifyObjectProperty(obj, 'type', parseAnnotationPropertyType);
-  const description = verifyOptionalObjectProperty(obj, 'description', verifyString);
-  let defaultValue = 0;
-  return {type, identifier, description, default: defaultValue} as AnnotationPropertySpec;
-}
-
-function parseAnnotationPropertySpecs(obj: unknown) {
-  const properties = parseArray(obj, parseAnnotationPropertySpec);
-  ensureUniqueAnnotationPropertyIds(properties);
-  return properties;
-}
-
 interface AnnotationSpatialIndexLevelMetadata {
   parameters: AnnotationSpatialIndexSourceParameters;
   limit: number;
@@ -989,7 +971,21 @@ async function getMeshDataSource(
 
 function parseInlinePropertyMap(data: unknown): InlineSegmentPropertyMap {
   verifyObject(data);
-  const ids = verifyObjectProperty(data, 'ids', verifyStringArray);
+  const tempUint64 = new Uint64();
+  const ids = verifyObjectProperty(data, 'ids', idsObj => {
+    idsObj = verifyStringArray(idsObj);
+    const numIds = idsObj.length;
+    const ids = new Uint32Array(numIds * 2);
+    for (let i = 0; i < numIds; ++i) {
+      if (!tempUint64.tryParseString(idsObj[i])) {
+        throw new Error(`Invalid uint64 id: ${JSON.stringify(idsObj[i])}`);
+      }
+      ids[2 * i] = tempUint64.low;
+      ids[2 * i + 1] = tempUint64.high;
+    }
+    return ids;
+  });
+  const numIds = ids.length / 2;
   const properties = verifyObjectProperty(
       data, 'properties',
       propertiesObj => parseArray(propertiesObj, (propertyObj): InlineSegmentProperty => {
@@ -997,64 +993,109 @@ function parseInlinePropertyMap(data: unknown): InlineSegmentPropertyMap {
         const id = verifyObjectProperty(propertyObj, 'id', verifyString);
         const description = verifyOptionalObjectProperty(propertyObj, 'description', verifyString);
         const type = verifyObjectProperty(propertyObj, 'type', type => {
-          if (type !== 'label' && type !== 'description' && type !== 'string') {
+          if (type !== 'label' && type !== 'description' && type !== 'string' && type !== 'tags' &&
+              type !== 'number') {
             throw new Error(`Invalid property type: ${JSON.stringify(type)}`);
           }
           return type;
         });
+        if (type === 'tags') {
+          const tags = verifyObjectProperty(propertyObj, 'tags', verifyStringArray);
+          let tagDescriptions = verifyOptionalObjectProperty(propertyObj, 'tag_descriptions', verifyStringArray);
+          if (tagDescriptions === undefined) {
+            tagDescriptions = new Array(tags.length);
+            tagDescriptions.fill('');
+          } else {
+            if (tagDescriptions.length !== tags.length) {
+              throw new Error(`Expected tag_descriptions to have length: ${tags.length}`);
+            }
+          }
+          const values = verifyObjectProperty(propertyObj, 'values', valuesObj => {
+            if (!Array.isArray(valuesObj) || valuesObj.length !== numIds) {
+              throw new Error(`Expected ${numIds} values, but received: ${valuesObj.length}`);
+            }
+            return valuesObj.map(tagIndices => {
+              return String.fromCharCode(...tagIndices);
+            });
+          });
+          return {id, description, type, tags, tagDescriptions, values};
+        }
+        if (type === 'number') {
+          const dataType = verifyObjectProperty(propertyObj, 'data_type', x => verifyEnumString(x, DataType));
+          if (dataType === DataType.UINT64) {
+            throw new Error('uint64 properties not supported');
+          }
+          const values = verifyObjectProperty(propertyObj, 'values', valuesObj => {
+            if (!Array.isArray(valuesObj) || valuesObj.length !== numIds) {
+              throw new Error(`Expected ${numIds} values, but received: ${valuesObj.length}`);
+            }
+            return DATA_TYPE_ARRAY_CONSTRUCTOR[dataType].from(valuesObj);
+          });
+          let min = Infinity, max = -Infinity;
+          for (let i = values.length - 1; i >= 0; --i) {
+            const v = values[i];
+            if (v < min) min = v;
+            if (v > max) max = v;
+          }
+          return {id, description, type, dataType, values, bounds: [min, max]};
+        }
         const values = verifyObjectProperty(propertyObj, 'values', valuesObj => {
           verifyStringArray(valuesObj);
-          if (valuesObj.length !== ids.length)
-            throw new Error(`Expected ${ids.length} values, but received: ${valuesObj.length}`);
+          if (valuesObj.length !== numIds) {
+            throw new Error(`Expected ${numIds} values, but received: ${valuesObj.length}`);
+          }
           return valuesObj;
         });
         return {id, description, type, values};
       }));
-  return {ids, properties};
+  return normalizeInlineSegmentPropertyMap({ids, properties});
 }
 
 export const GrapheneIndexedSegmentPropertySource = WithParameters(
     WithCredentialsProvider<SpecialProtocolCredentials>()(IndexedSegmentPropertySource),
     IndexedSegmentPropertySourceParameters);
 
-function parseIndexedPropertyMap(data: unknown): {
-  sharding: ShardingParameters|undefined,
-  properties: readonly Readonly<IndexedSegmentProperty>[]
-} {
-  verifyObject(data);
-  const sharding = verifyObjectProperty(data, 'sharding', parseShardingParameters);
-  const properties = verifyObjectProperty(
-      data, 'properties',
-      propertiesObj => parseArray(propertiesObj, (propertyObj): IndexedSegmentProperty => {
-        const id = verifyObjectProperty(propertyObj, 'id', verifyString);
-        const description = verifyOptionalObjectProperty(propertyObj, 'description', verifyString);
-        const type = verifyObjectProperty(propertyObj, 'type', type => {
-          if (type !== 'string') {
-            throw new Error(`Invalid property type: ${JSON.stringify(type)}`);
-          }
-          return type;
-        });
-        return {id, description, type};
-      }));
-  return {sharding, properties};
-}
+// function parseIndexedPropertyMap(data: unknown): {
+//   sharding: ShardingParameters|undefined,
+//   properties: readonly Readonly<IndexedSegmentProperty>[]
+// } {
+//   verifyObject(data);
+//   const sharding = verifyObjectProperty(data, 'sharding', parseShardingParameters);
+//   const properties = verifyObjectProperty(
+//       data, 'properties',
+//       propertiesObj => parseArray(propertiesObj, (propertyObj): IndexedSegmentProperty => {
+//         const id = verifyObjectProperty(propertyObj, 'id', verifyString);
+//         const description = verifyOptionalObjectProperty(propertyObj, 'description', verifyString);
+//         const type = verifyObjectProperty(propertyObj, 'type', type => {
+//           if (type !== 'string') {
+//             throw new Error(`Invalid property type: ${JSON.stringify(type)}`);
+//           }
+//           return type;
+//         });
+//         return {id, description, type};
+//       }));
+//   return {sharding, properties};
+// }
 
 function getSegmentPropertyMap(
     chunkManager: Borrowed<ChunkManager>, credentialsProvider: SpecialProtocolCredentialsProvider,
     data: unknown, url: string): SegmentPropertyMap {
+  chunkManager;
+  credentialsProvider;
+  url;
   try {
     const t = verifyObjectProperty(data, '@type', verifyString);
     if (t !== 'neuroglancer_segment_properties') {
       throw new Error(`Unsupported segment property map type: ${JSON.stringify(t)}`);
     }
     const inlineProperties = verifyOptionalObjectProperty(data, 'inline', parseInlinePropertyMap);
-    const indexedProperties = verifyOptionalObjectProperty(data, 'indexed', indexedObj => {
-      const {sharding, properties} = parseIndexedPropertyMap(indexedObj);
-      return chunkManager.getChunkSource(
-          GrapheneIndexedSegmentPropertySource,
-          {credentialsProvider, properties, parameters: {sharding, url}});
-    });
-    return new SegmentPropertyMap({inlineProperties, indexedProperties});
+    // const indexedProperties = verifyOptionalObjectProperty(data, 'indexed', indexedObj => {
+    //   const {sharding, properties} = parseIndexedPropertyMap(indexedObj);
+    //   return chunkManager.getChunkSource(
+    //       PrecomputedIndexedSegmentPropertySource,
+    //       {credentialsProvider, properties, parameters: {sharding, url}});
+    // });
+    return new SegmentPropertyMap({inlineProperties});
   } catch (e) {
     throw new Error(`Error parsing segment property map: ${e.message}`);
   }

@@ -23,8 +23,8 @@ export interface VisibleSegmentsState {
   rootSegments: Uint64Set;
   rootSegmentsAfterEdit?: Uint64Set; // new roots generated as result of edit operation
   hiddenRootSegments?: Uint64Set; // not needed for backend, for segment_set_widget.ts
-  visibleSegments2D?: Uint64Set; // not needed for backend
-  visibleSegments3D: Uint64Set;
+  visibleSegments2D?: Uint64Set; // not needed for backend, individual supervoxels
+  visibleSegments3D: Uint64Set; // 
   segmentEquivalences: SharedDisjointUint64Sets;
 }
 
