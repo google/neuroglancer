@@ -348,7 +348,10 @@ class NumericalPropertiesSummary extends RefCounted {
     const propertySummaries: NumericalPropertySummary[] = [];
     let listElement: HTMLElement|undefined;
     if (properties !== undefined && properties.length > 0) {
-      listElement = document.createElement('div');
+      listElement = document.createElement('details');
+      const summaryElement = document.createElement('summary');
+      summaryElement.textContent = `${properties.length} numerical propert${properties.length > 1 ? 'ies' : 'y'}`;
+      listElement.appendChild(summaryElement);
       listElement.classList.add('neuroglancer-segment-query-result-numerical-list');
       const windowBounds = this.bounds.window.value;
       for (let i = 0, numProperties = properties.length; i < numProperties; ++i) {
