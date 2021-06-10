@@ -710,10 +710,6 @@ export class SegmentationUserLayer extends Base {
   }
 
   handleAction(action: string, context: SegmentationActionContext) {
-    // if (this.ignoreSegmentInteractions.value) {
-
-      // const disposeUndoRedoAfterEdit = () => {
-
     switch (action) {
       case 'recolor': {
         this.displayState.segmentationColorGroupState.value.segmentColorHash.randomize();
@@ -751,7 +747,6 @@ export class SegmentationUserLayer extends Base {
       }
       case 'merge-select-second': {
         this.mergeSelectSecond();
-        // disposeUndoRedoAfterEdit();
         break;
       }
       case 'split-select-first': {

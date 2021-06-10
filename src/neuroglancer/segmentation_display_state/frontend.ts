@@ -375,7 +375,7 @@ function makeRegisterSegmentWidgetEventHandlers(displayState: SegmentationDispla
     const idString = entryElement.dataset.id!;
     const id = tempStatedColor;
     id.tryParseString(idString);
-    const {rootSegments} = displayState.segmentationGroupState.value; // TODO this seems to work when I  change it from visibleSegments to rootSegments
+    const {rootSegments} = displayState.segmentationGroupState.value;
     rootSegments.set(id, !rootSegments.has(id));
     event.stopPropagation();
   };

@@ -179,76 +179,75 @@ function helper<TBase extends BaseConstructor>(Base: TBase) {
       // Ignore user-specified equivalences for graph layer
       this.displayState.segmentationGroupState.value.segmentEquivalences.clear();
 
-      const doStuff = (volume: MultiscaleVolumeChunkSource) => {
+      const createRenderLayers = (volume: MultiscaleVolumeChunkSource) => {
         let remaining = 0;
-      // if (multiscaleSource !== undefined) {
         ++remaining;
-        // multiscaleSource.then(volume => {
-          this.multiscaleVolumeChunkSource = volume;
-          const {displayState} = this;
-          if (!this.wasDisposed) {
-            // if (volume.getTimestampLimit) {
-            //   volume.getTimestampLimit().then((limit) => {
-            //     this.displayState.timestampLimit.restoreState(limit);
-            //   });
-            // }
-            // Chunked Graph Server
-            if (volume.getChunkedGraphUrl) {
-              const res = volume.getChunkedGraphUrl();
-              if (res) {
-                [this.chunkedGraphUrl, this.credentialsProvider] = res;
-              }
+        this.multiscaleVolumeChunkSource = volume;
+        const {displayState} = this;
+        if (!this.wasDisposed) {
+          // if (volume.getTimestampLimit) {
+          //   volume.getTimestampLimit().then((limit) => {
+          //     this.displayState.timestampLimit.restoreState(limit);
+          //   });
+          // }
+          // Chunked Graph Server
+          if (volume.getChunkedGraphUrl) {
+            const res = volume.getChunkedGraphUrl();
+            if (res) {
+              [this.chunkedGraphUrl, this.credentialsProvider] = res;
             }
-            // Chunked Graph Supervoxels
-            if (this.chunkedGraphUrl && volume.getChunkedGraphSources) {
-              let chunkedGraphSources = volume.getChunkedGraphSources(
-                  {rootUri: this.chunkedGraphUrl}, displayState.segmentationGroupState.value.rootSegments);
+          }
+          // Chunked Graph Supervoxels
+          if (this.chunkedGraphUrl && volume.getChunkedGraphSources) {
+            let chunkedGraphSources = volume.getChunkedGraphSources(
+                {rootUri: this.chunkedGraphUrl}, displayState.segmentationGroupState.value.rootSegments);
 
-              if (chunkedGraphSources) {
-                this.updateChunkSourceRootSegments(chunkedGraphSources);
-                const transform = this.someSegmentationRenderLayer()?.displayState.transform!; //  yuck?
-                this.chunkedGraphLayer = new ChunkedGraphLayer(this.chunkedGraphUrl, chunkedGraphSources, volume, // volume not actually used
-                    {
-                      ...displayState,
-                      ...displayState.segmentationGroupState.value,
-                      localPosition: this.localPosition,
-                      transform,
-                    },
-                    this.credentialsProvider);
-                this.addRenderLayer(this.chunkedGraphLayer);
+            if (chunkedGraphSources) {
+              this.updateChunkSourceRootSegments(chunkedGraphSources);
+              const transform = this.someSegmentationRenderLayer()?.displayState.transform!; //  yuck?
+              this.chunkedGraphLayer = new ChunkedGraphLayer(this.chunkedGraphUrl, chunkedGraphSources, volume, // volume not actually used
+                  {
+                    ...displayState,
+                    ...displayState.segmentationGroupState.value,
+                    localPosition: this.localPosition,
+                    transform,
+                  },
+                  this.credentialsProvider);
+              this.addRenderLayer(this.chunkedGraphLayer);
 
-                // Have to wait for graph server initialization to fetch agglomerations
-                displayState.segmentationGroupState.value.segmentEquivalences.clear();
-                if (displayState.segmentationGroupState.value.rootSegmentsAfterEdit !== undefined) {
-                  displayState.segmentationGroupState.value.rootSegmentsAfterEdit.clear();
+              // Have to wait for graph server initialization to fetch agglomerations
+              displayState.segmentationGroupState.value.segmentEquivalences.clear();
+              if (displayState.segmentationGroupState.value.rootSegmentsAfterEdit !== undefined) {
+                displayState.segmentationGroupState.value.rootSegmentsAfterEdit.clear();
+              }
+              verifyObjectProperty(specification, ROOT_SEGMENTS_JSON_KEY, y => {
+                if (y !== undefined) {
+                  let {rootSegments} = displayState.segmentationGroupState.value;
+                  parseArray(y, value => {
+                    rootSegments.add(Uint64.parseString(String(value), 10));
+                  });
                 }
-                verifyObjectProperty(specification, ROOT_SEGMENTS_JSON_KEY, y => {
-                  if (y !== undefined) {
-                    let {rootSegments} = displayState.segmentationGroupState.value;
-                    parseArray(y, value => {
-                      rootSegments.add(Uint64.parseString(String(value), 10));
-                    });
-                  }
-                });
-              }
+              });
             }
-            // this.addSupervoxelRenderLayer({
-            //   supervoxelSet:
-            //       this.graphOperationLayerState.value!.annotationToSupervoxelA.supervoxelSet,
-            //   supervoxelColor: new TrackableRGB(vec3.fromValues(1.0, 0.0, 0.0)),
-            //   isActive: this.graphOperationLayerState.value!.annotationToSupervoxelA.isActive,
-            //   performingMulticut: this.graphOperationLayerState.value!.performingMulticut
-            // });
-            // this.addSupervoxelRenderLayer({
-            //   supervoxelSet:
-            //       this.graphOperationLayerState.value!.annotationToSupervoxelB.supervoxelSet,
-            //   supervoxelColor: new TrackableRGB(vec3.fromValues(0.0, 0.0, 1.0)),
-            //   isActive: this.graphOperationLayerState.value!.annotationToSupervoxelB.isActive,
-            //   performingMulticut: this.graphOperationLayerState.value!.performingMulticut
-            // });
-            if (--remaining === 0) {
-              // this.isReady = true; // TODO is this no longer needed?
-            }
+          }
+          // TODO: for multicut
+          // this.addSupervoxelRenderLayer({
+          //   supervoxelSet:
+          //       this.graphOperationLayerState.value!.annotationToSupervoxelA.supervoxelSet,
+          //   supervoxelColor: new TrackableRGB(vec3.fromValues(1.0, 0.0, 0.0)),
+          //   isActive: this.graphOperationLayerState.value!.annotationToSupervoxelA.isActive,
+          //   performingMulticut: this.graphOperationLayerState.value!.performingMulticut
+          // });
+          // this.addSupervoxelRenderLayer({
+          //   supervoxelSet:
+          //       this.graphOperationLayerState.value!.annotationToSupervoxelB.supervoxelSet,
+          //   supervoxelColor: new TrackableRGB(vec3.fromValues(0.0, 0.0, 1.0)),
+          //   isActive: this.graphOperationLayerState.value!.annotationToSupervoxelB.isActive,
+          //   performingMulticut: this.graphOperationLayerState.value!.performingMulticut
+          // });
+          if (--remaining === 0) {
+            // this.isReady = true; // TODO is this no longer needed?
+          }
       }
     }
 
@@ -264,12 +263,12 @@ function helper<TBase extends BaseConstructor>(Base: TBase) {
           }
           started = true;
 
-          doStuff(segmentationRenderLayer.multiscaleSource);
+          createRenderLayers(segmentationRenderLayer.multiscaleSource);
         });
         return;
       }
 
-      doStuff(segmentationRenderLayer.multiscaleSource);
+      createRenderLayers(segmentationRenderLayer.multiscaleSource);
 
       // this.multiscaleVolumeChunkSource.
 
@@ -305,17 +304,9 @@ function helper<TBase extends BaseConstructor>(Base: TBase) {
     }
 
     handleAction(action: string) {
-      // if (this.ignoreSegmentInteractions.value) {
-      //   return;
-      // }
       switch (action) {
         case 'clear-segments': {
           this.displayState.segmentationGroupState.value.rootSegments.clear();
-          this.displayState.segmentationGroupState.value.visibleSegments.clear();
-          this.displayState.segmentationGroupState.value.segmentEquivalences.clear();
-          if (this.displayState.segmentationGroupState.value.rootSegmentsAfterEdit !== undefined) {
-            this.displayState.segmentationGroupState.value.rootSegmentsAfterEdit.clear();
-          }
           break;
         }
         case 'merge-selected': {
@@ -581,11 +572,7 @@ function helper<TBase extends BaseConstructor>(Base: TBase) {
         for (const rootSegment of rootSegments) {
           const segments = [...this.displayState.segmentationGroupState.value.segmentEquivalences.setElements(rootSegment)];
           const segmentCount = segments.length;  // Approximation
-          console.log('deselected', rootSegment, rootSegment.toString());
-          console.log('removing', segments);
-          console.log('from', this.displayState.segmentationGroupState.value.visibleSegments.toJSON());
-          this.displayState.segmentationGroupState.value.visibleSegments.delete(segments);
-          console.log('now', this.displayState.segmentationGroupState.value.visibleSegments.toJSON());
+          this.displayState.segmentationGroupState.value.visibleSegments.delete(rootSegment);
           
           this.displayState.segmentationGroupState.value.segmentEquivalences.deleteSet(rootSegment);
           if (this.lastDeselectionMessage && this.lastDeselectionMessageExists) {
