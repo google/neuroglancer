@@ -44,7 +44,7 @@ export const withSegmentationLayerBackendState =
         class SegmentationLayerState extends Base implements VisibleSegmentsState {
   rootSegments: Uint64Set;
   rootSegmentsAfterEdit?: Uint64Set;
-  visibleSegments3D: Uint64Set;
+  visibleSegments: Uint64Set;
   segmentEquivalences: SharedDisjointUint64Sets;
   temporaryVisibleSegments: Uint64Set;
   temporarySegmentEquivalences: SharedDisjointUint64Sets;

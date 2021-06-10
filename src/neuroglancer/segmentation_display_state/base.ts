@@ -23,20 +23,19 @@ export interface VisibleSegmentsState {
   rootSegments: Uint64Set;
   rootSegmentsAfterEdit?: Uint64Set; // new roots generated as result of edit operation
   hiddenRootSegments?: Uint64Set; // not needed for backend, for segment_set_widget.ts
-  visibleSegments2D?: Uint64Set; // not needed for backend, individual supervoxels
-  visibleSegments3D: Uint64Set; // 
+  visibleSegments: Uint64Set;
   segmentEquivalences: SharedDisjointUint64Sets;
 }
 
 export const VISIBLE_SEGMENTS_STATE_PROPERTIES: (keyof VisibleSegmentsState)[] = [
-  'visibleSegments3D',
+  'visibleSegments',
   'segmentEquivalences',
   'rootSegments',
 ];
 
 export function onVisibleSegmentsStateChanged(
     context: RefCounted, state: VisibleSegmentsState, callback: () => void) {
-  context.registerDisposer(state.visibleSegments3D.changed.add(callback));
+  context.registerDisposer(state.visibleSegments.changed.add(callback));
   context.registerDisposer(state.segmentEquivalences.changed.add(callback));
 
   context.registerDisposer(state.rootSegments.changed.add(callback));
@@ -51,7 +50,7 @@ export function getObjectKey(objectId: Uint64): string {
 }
 
 export function getVisibleSegments(state: VisibleSegmentsState) {
-  return state.visibleSegments3D;
+  return state.visibleSegments;
 }
 
 export function getSegmentEquivalences(state: VisibleSegmentsState) {
@@ -68,8 +67,8 @@ export function forEachRootSegment(
 
 export function forEachVisibleSegment3D(
   state: VisibleSegmentsState, callback: (objectId: Uint64, rootObjectId: Uint64) => void) {
-  let {visibleSegments3D, segmentEquivalences} = state;
-  for (let objectId of visibleSegments3D) {
+  let {visibleSegments, segmentEquivalences} = state;
+  for (let objectId of visibleSegments) {
     let rootObjectId = segmentEquivalences.get(objectId);
     callback(objectId, rootObjectId);
   }

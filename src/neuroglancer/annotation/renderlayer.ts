@@ -69,9 +69,9 @@ function segmentationFilter(segmentationStates: readonly OptionalSegmentationDis
     for (let i = 0, count = relatedSegments.length; i < count; ++i) {
       const segmentationState = segmentationStates[i];
       if (segmentationState == null) continue;
-      const {visibleSegments3D, segmentEquivalences} = segmentationState.segmentationGroupState.value;
+      const {visibleSegments, segmentEquivalences} = segmentationState.segmentationGroupState.value;
       for (const segment of relatedSegments[i]) {
-        if (visibleSegments3D.has(segmentEquivalences.get(segment))) {
+        if (visibleSegments.has(segmentEquivalences.get(segment))) {
           return true;
         }
       }
@@ -198,7 +198,7 @@ export class AnnotationLayer extends RefCounted {
         if (segmentationState == null) continue;
         context.registerDisposer(registerNestedSync((context, group) => {
           context.registerDisposer(
-              group.visibleSegments3D.changed.add(() => this.handleChangeAffectingBuffer()));
+              group.visibleSegments.changed.add(() => this.handleChangeAffectingBuffer()));
           context.registerDisposer(
               group.segmentEquivalences.changed.add(() => this.handleChangeAffectingBuffer()));
         }, segmentationState.segmentationGroupState));

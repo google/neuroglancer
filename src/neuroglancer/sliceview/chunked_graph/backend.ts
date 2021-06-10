@@ -188,7 +188,7 @@ export class ChunkedGraphLayer extends Base implements // based on SliceViewRend
 
   graphurl: string;
   rootSegments: Uint64Set;
-  visibleSegments3D: Uint64Set;
+  visibleSegments: Uint64Set;
   segmentEquivalences: SharedDisjointUint64Sets;
 
   numVisibleChunksNeeded: number;
@@ -202,7 +202,7 @@ export class ChunkedGraphLayer extends Base implements // based on SliceViewRend
     super(rpc, options);
     this.graphurl = options['url'];
     this.rootSegments = <Uint64Set>rpc.get(options['rootSegments']);
-    this.visibleSegments3D = <Uint64Set>rpc.get(options['visibleSegments3D']);
+    this.visibleSegments = <Uint64Set>rpc.get(options['visibleSegments']);
     this.segmentEquivalences = <SharedDisjointUint64Sets>rpc.get(options['segmentEquivalences']);
     
     
@@ -301,7 +301,7 @@ export class ChunkedGraphLayer extends Base implements // based on SliceViewRend
 
       /*if (this.segmentEquivalences.has(Uint64.parseString(root))) {
         this.segmentEquivalences.delete([...this.segmentEquivalences.setElements(Uint64.parseString(root))].filter(x
-      => !leaves.has(x) && !this.visibleSegments3D.has(x)));
+      => !leaves.has(x) && !this.visibleSegments.has(x)));
       }*/
       
       this.segmentEquivalences.link(

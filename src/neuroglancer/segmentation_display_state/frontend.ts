@@ -375,8 +375,8 @@ function makeRegisterSegmentWidgetEventHandlers(displayState: SegmentationDispla
     const idString = entryElement.dataset.id!;
     const id = tempStatedColor;
     id.tryParseString(idString);
-    const {rootSegments: visibleSegments} = displayState.segmentationGroupState.value; // TODO this seems to work when I  change it from visibleSegments3D to rootSegments
-    visibleSegments.set(id, !visibleSegments.has(id));
+    const {rootSegments} = displayState.segmentationGroupState.value; // TODO this seems to work when I  change it from visibleSegments to rootSegments
+    rootSegments.set(id, !rootSegments.has(id));
     event.stopPropagation();
   };
 
@@ -493,9 +493,9 @@ export class SegmentWidgetFactory<Template extends SegmentWidgetTemplate> {
     const {template} = this;
     const {displayState} = this;
     const {segmentSelectionState} = displayState!;
-    const {visibleSegments3D} = displayState!.segmentationGroupState.value;
+    const {visibleSegments} = displayState!.segmentationGroupState.value;
     (stickyChildren[template.visibleIndex] as HTMLInputElement).checked =
-        visibleSegments3D.has(mapped);
+        visibleSegments.has(mapped);
     container.dataset.selected = (segmentSelectionState.hasSelectedSegment &&
                                   Uint64.equal(segmentSelectionState.selectedSegment, mapped))
                                      .toString();

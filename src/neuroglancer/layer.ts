@@ -1742,7 +1742,9 @@ function initializeLayerFromSpecNoRestoreState(managedLayer: ManagedUserLayer, s
     managedLayer.visible = false;
   }
 
+  // Compatibility for old graphene links with type: `segmentation`
   // TEMP HACK
+  console.log('managedLayer', managedLayer, 'spec', spec);
   if (layerType === 'segmentation') {
     spec['type'] = layerType = 'segmentation_with_graph';
 

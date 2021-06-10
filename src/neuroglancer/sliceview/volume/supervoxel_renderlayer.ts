@@ -41,8 +41,8 @@ interface ShaderParameters {
 
 export class SupervoxelRenderLayer extends SliceViewVolumeRenderLayer<ShaderParameters> {
   public readonly segmentationGroupState = this.displayState.segmentationGroupState.value;
-  private hashTableManager = new HashSetShaderManager('visibleSegments2D');
-  private gpuHashTable = GPUHashTable.get(this.gl, this.displayState.segmentationGroupState.value.visibleSegments2D!.hashTable);
+  private hashTableManager = new HashSetShaderManager('rootSegments');
+  private gpuHashTable = GPUHashTable.get(this.gl, this.displayState.segmentationGroupState.value.rootSegments.hashTable);
 
   constructor(
       multiscaleSource: MultiscaleVolumeChunkSource,

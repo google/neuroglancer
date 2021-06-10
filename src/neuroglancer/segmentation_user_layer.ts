@@ -83,12 +83,11 @@ export class SegmentationUserLayerGroupState extends RefCounted implements Segme
   constructor(public layer: SegmentationUserLayer) {
     super();
     const {specificationChanged} = this;
-    this.visibleSegments3D.changed.add(specificationChanged.dispatch);
+    this.rootSegments.changed.add(specificationChanged.dispatch);
+    this.visibleSegments.changed.add(specificationChanged.dispatch);
     this.segmentEquivalences.changed.add(specificationChanged.dispatch);
     this.hideSegmentZero.changed.add(specificationChanged.dispatch);
     this.segmentQuery.changed.add(specificationChanged.dispatch);
-
-    this.visibleSegments2D.changed.add(specificationChanged.dispatch);
   }
 
   restoreState(specification: unknown) {
@@ -100,10 +99,10 @@ export class SegmentationUserLayerGroupState extends RefCounted implements Segme
     });
 
     verifyOptionalObjectProperty(specification, SEGMENTS_JSON_KEY, segmentsValue => {
-      const {segmentEquivalences, visibleSegments3D} = this;
+      const {segmentEquivalences, visibleSegments} = this;
       parseArray(segmentsValue, value => {
         let id = Uint64.parseString(String(value), 10);
-        visibleSegments3D.add(segmentEquivalences.get(id));
+        visibleSegments.add(segmentEquivalences.get(id));
       });
     });
     verifyOptionalObjectProperty(
@@ -122,16 +121,16 @@ export class SegmentationUserLayerGroupState extends RefCounted implements Segme
     };
 
     restoreSegmentsList(ROOT_SEGMENTS_JSON_KEY, this.rootSegments);
-    restoreSegmentsList(HIDDEN_ROOT_SEGMENTS_JSON_KEY, this.hiddenRootSegments!);
+    restoreSegmentsList(HIDDEN_ROOT_SEGMENTS_JSON_KEY, this.hiddenRootSegments);
   }
 
   toJSON() {
     const x: any = {};
     x[HIDE_SEGMENT_ZERO_JSON_KEY] = this.hideSegmentZero.toJSON();
-    let {visibleSegments3D: visibleSegments} = this; // TODO should this block be commented out?
-    if (visibleSegments.size > 0) {
-      x[SEGMENTS_JSON_KEY] = visibleSegments.toJSON();
-    }
+    // let {visibleSegments} = this; // TODO should this block be commented out? root segments covers it?
+    // if (visibleSegments.size > 0) {
+    //   x[SEGMENTS_JSON_KEY] = visibleSegments.toJSON();
+    // }
     let {segmentEquivalences} = this;
     if (segmentEquivalences.size > 0) {
       x[EQUIVALENCES_JSON_KEY] = segmentEquivalences.toJSON();
@@ -156,11 +155,11 @@ export class SegmentationUserLayerGroupState extends RefCounted implements Segme
   assignFrom(other: SegmentationUserLayerGroupState) {
     this.maxIdLength.value = other.maxIdLength.value;
     this.hideSegmentZero.value = other.hideSegmentZero.value;
-    this.visibleSegments3D.assignFrom(other.visibleSegments3D);
+    this.visibleSegments.assignFrom(other.visibleSegments);
     this.segmentEquivalences.assignFrom(other.segmentEquivalences);
   }
 
-  visibleSegments3D = this.registerDisposer(Uint64Set.makeWithCounterpart(this.layer.manager.rpc));
+  visibleSegments = this.registerDisposer(Uint64Set.makeWithCounterpart(this.layer.manager.rpc));
   segmentPropertyMap = new WatchableValue<PreprocessedSegmentPropertyMap|undefined>(undefined);
   segmentEquivalences =
       this.registerDisposer(SharedDisjointUint64Sets.makeWithCounterpart(this.layer.manager.rpc));
@@ -168,7 +167,6 @@ export class SegmentationUserLayerGroupState extends RefCounted implements Segme
   hideSegmentZero = new TrackableBoolean(true, true);
   segmentQuery = new TrackableValue<string>('', verifyString);
 
-  visibleSegments2D = new Uint64Set();
   rootSegments = this.registerDisposer(Uint64Set.makeWithCounterpart(this.layer.manager.rpc));
   rootSegmentsAfterEdit = this.registerDisposer(Uint64Set.makeWithCounterpart(this.layer.manager.rpc));
   hiddenRootSegments = new Uint64Set();
@@ -400,7 +398,7 @@ export class SegmentationUserLayer extends Base {
 
   mergeSelectSecond() {
     const {segmentSelectionState} = this.displayState;
-    const {segmentEquivalences, rootSegments, visibleSegments3D} = this.displayState.segmentationGroupState.value;
+    const {segmentEquivalences, rootSegments, visibleSegments} = this.displayState.segmentationGroupState.value;
     if (segmentSelectionState.hasSelectedSegment) {
       // Merge both selected segments
       const segment = segmentSelectionState.rawSelectedSegment.clone();
@@ -414,7 +412,7 @@ export class SegmentationUserLayer extends Base {
 
       // Ensure merged group will be fully visible
       if (rootSegments.has(newRootSegment)) {
-        visibleSegments3D.add(equivalentSegments);
+        visibleSegments.add(equivalentSegments);
       } else {
         rootSegments.add(newRootSegment);
       }
@@ -430,20 +428,18 @@ export class SegmentationUserLayer extends Base {
   }
 
   rootSegmentChange(rootSegments: Uint64[]|null, added: boolean) {
-    const {visibleSegments2D, visibleSegments3D, segmentEquivalences, rootSegments: prevRootSegments} = this.displayState.segmentationGroupState.value;
+    const {visibleSegments, segmentEquivalences, rootSegments: prevRootSegments} = this.displayState.segmentationGroupState.value;
 
     if (rootSegments === null) {
       if (added) {
         return;
       } else {
-        visibleSegments2D!.clear();
-        visibleSegments3D.clear();
+        visibleSegments.clear();
       }
     } else if (added) {
       const segments = rootSegments.flatMap(
           rootSegment => [...segmentEquivalences.setElements(rootSegment)]);
-      visibleSegments2D!.add(rootSegments!);
-      visibleSegments3D.add(segments);
+      visibleSegments.add(segments);
     } else if (!added) {
       for (const rootSegment of rootSegments) {
         const equivalentSegments =
@@ -456,8 +452,7 @@ export class SegmentationUserLayer extends Base {
           }
         }
         if (removeVisibleSegments) {
-          visibleSegments2D!.delete(rootSegment);
-          visibleSegments3D.delete(equivalentSegments);
+          visibleSegments.delete(equivalentSegments);
         }
       }
     }
@@ -727,8 +722,7 @@ export class SegmentationUserLayer extends Base {
       case 'clear-segments': {
         if (!this.pick.value) break;
         this.displayState.segmentationGroupState.value.rootSegments.clear();
-        this.displayState.segmentationGroupState.value.visibleSegments3D.clear();
-        this.displayState.segmentationGroupState.value.visibleSegments2D.clear();
+        this.displayState.segmentationGroupState.value.visibleSegments.clear();
         this.displayState.segmentationGroupState.value.segmentEquivalences.clear();
         break;
       }
@@ -738,14 +732,14 @@ export class SegmentationUserLayer extends Base {
         // const {segmentSelectionState} = this.displayState;
         // if (segmentSelectionState.hasSelectedSegment) {
         //   const segment = segmentSelectionState.selectedSegment;
-        //   const {visibleSegments3D} = this.displayState.segmentationGroupState.value;
-        //   const newVisible = !visibleSegments3D.has(segment);
+        //   const {visibleSegments} = this.displayState.segmentationGroupState.value;
+        //   const newVisible = !visibleSegments.has(segment);
         //   if (newVisible || context.segmentationToggleSegmentState === undefined) {
         //     context.segmentationToggleSegmentState = newVisible;
         //   }
         //   context.defer(() => {
         //     if (context.segmentationToggleSegmentState === newVisible) {
-        //       visibleSegments3D.set(segment, newVisible);
+        //       visibleSegments.set(segment, newVisible);
         //     }
         //   });
         // }

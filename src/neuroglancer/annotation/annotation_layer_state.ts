@@ -53,10 +53,10 @@ export class WatchableAnnotationRelationshipStates extends
         const {segmentationGroupState} = segmentationState;
         nestedContext.registerDisposer(segmentationGroupState.changed.add(this.changed.dispatch));
         nestedContext.registerDisposer(registerNested((groupContext, groupState) => {
-          const {visibleSegments3D} = groupState;
-          let wasEmpty = visibleSegments3D.size === 0;
-          groupContext.registerDisposer(visibleSegments3D.changed.add(() => {
-            const isEmpty = visibleSegments3D.size === 0;
+          const {visibleSegments} = groupState;
+          let wasEmpty = visibleSegments.size === 0;
+          groupContext.registerDisposer(visibleSegments.changed.add(() => {
+            const isEmpty = visibleSegments.size === 0;
             if (isEmpty !== wasEmpty) {
               wasEmpty = isEmpty;
               this.changed.dispatch();
@@ -101,7 +101,7 @@ export class AnnotationDisplayState extends RefCounted {
         if (!ignoreNullSegmentFilter) return false;
         const segmentationState = state.segmentationState.value;
         if (segmentationState != null) {
-          if (segmentationState.segmentationGroupState.value.visibleSegments3D.size > 0) {
+          if (segmentationState.segmentationGroupState.value.visibleSegments.size > 0) {
             return false;
           }
         }

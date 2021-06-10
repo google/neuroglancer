@@ -96,7 +96,7 @@ export class ChunkedGraphLayer extends SliceViewRenderLayer {
         'chunkManager': multiscaleSource.chunkManager.rpcId,
         'url': url,
         'rootSegments': displayState.rootSegments.rpcId,
-        'visibleSegments3D': displayState.visibleSegments3D.rpcId,
+        'visibleSegments': displayState.visibleSegments.rpcId,
         'segmentEquivalences': displayState.segmentEquivalences.rpcId,
       },
       rpcType: CHUNKED_GRAPH_LAYER_RPC_ID,

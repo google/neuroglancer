@@ -79,7 +79,7 @@ class SegmentListSource extends RefCounted implements VirtualListSource {
     const splices: ArraySpliceOp[] = [];
     let changed = false;
     let matchStatusTextPrefix = '';
-    const {visibleSegments3D: visibleSegments} = this.segmentationDisplayState.segmentationGroupState.value;
+    const {visibleSegments} = this.segmentationDisplayState.segmentationGroupState.value;
     const visibleSegmentsGeneration = visibleSegments.changed.count;
     const prevVisibleSegmentsGeneration = this.visibleSegmentsGeneration;
     const unconstrained = isQueryUnconstrained(queryResult.query);
@@ -172,7 +172,7 @@ class SegmentListSource extends RefCounted implements VirtualListSource {
     this.update();
 
     this.registerDisposer(
-        segmentationDisplayState.segmentationGroupState.value.visibleSegments3D.changed.add(
+        segmentationDisplayState.segmentationGroupState.value.visibleSegments.changed.add(
             this.debouncedUpdate));
     this.registerDisposer(query.changed.add(this.debouncedUpdate));
   }
@@ -830,12 +830,12 @@ export class SegmentDisplayTab extends Tab {
                   selectionClearButton.checked = true;
                   selectionClearButton.title = 'Deselect all segment IDs';
                   selectionClearButton.addEventListener('change', () => {
-                    group.visibleSegments3D.clear();
+                    group.visibleSegments.clear();
                   });
                   const selectionCopyButton = makeCopyButton({
                     title: 'Copy visible segment IDs',
                     onClick: () => {
-                      const visibleSegments = Array.from(group.visibleSegments3D, x => x.clone());
+                      const visibleSegments = Array.from(group.visibleSegments, x => x.clone());
                       visibleSegments.sort(Uint64.compare);
                       setClipboard(visibleSegments.join(', '));
                     },
@@ -867,7 +867,7 @@ export class SegmentDisplayTab extends Tab {
                     listSource.debouncedUpdate.flush();
                     const queryResult = listSource.queryResult.value;
                     if (queryResult === undefined) return;
-                    const {visibleSegments3D: visibleSegments} = group;
+                    const {visibleSegments} = group;
                     const {selectedMatches} = listSource;
                     const shouldSelect = (selectedMatches !== queryResult.count);
                     if (shouldSelect &&
@@ -904,7 +904,7 @@ export class SegmentDisplayTab extends Tab {
                   parent.appendChild(selectionStatusContainer);
                   let prevNumSelected = -1;
                   const updateStatus = () => {
-                    const numSelected = group.visibleSegments3D.size;
+                    const numSelected = group.visibleSegments.size;
                     if (prevNumSelected !== numSelected) {
                       prevNumSelected = numSelected;
                       selectionStatusMessage.textContent = `${numSelected} visible in total`;
@@ -933,7 +933,7 @@ export class SegmentDisplayTab extends Tab {
                   };
                   updateStatus();
                   listSource.statusText.changed.add(updateStatus);
-                  context.registerDisposer(group.visibleSegments3D.changed.add(updateStatus));
+                  context.registerDisposer(group.visibleSegments.changed.add(updateStatus));
                   let hasConfirmed = false;
                   context.registerEventListener(queryElement, 'input', () => {
                     debouncedUpdateQueryModel();
@@ -954,13 +954,13 @@ export class SegmentDisplayTab extends Tab {
                   });
                   registerActionListener(queryElement, 'toggle-listed', toggleMatches);
                   registerActionListener(queryElement, 'hide-all', () => {
-                    group.visibleSegments3D.clear();
+                    group.visibleSegments.clear();
                   });
                   registerActionListener(queryElement, 'hide-listed', () => {
                     debouncedUpdateQueryModel();
                     debouncedUpdateQueryModel.flush();
                     listSource.debouncedUpdate.flush();
-                    const {visibleSegments3D: visibleSegments} = group;
+                    const {visibleSegments} = group;
                     if (segmentQuery.value === '') {
                       visibleSegments.clear();
                     } else {
@@ -979,7 +979,7 @@ export class SegmentDisplayTab extends Tab {
                   const {displayState} = this.layer;
                   context.registerDisposer(
                       displayState.segmentSelectionState.changed.add(updateListItems));
-                  context.registerDisposer(group.visibleSegments3D.changed.add(updateListItems));
+                  context.registerDisposer(group.visibleSegments.changed.add(updateListItems));
                   context.registerDisposer(
                       displayState.segmentColorHash.changed.add(updateListItems));
                   context.registerDisposer(

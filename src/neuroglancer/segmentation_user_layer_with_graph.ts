@@ -311,8 +311,7 @@ function helper<TBase extends BaseConstructor>(Base: TBase) {
       switch (action) {
         case 'clear-segments': {
           this.displayState.segmentationGroupState.value.rootSegments.clear();
-          this.displayState.segmentationGroupState.value.visibleSegments2D!.clear();
-          this.displayState.segmentationGroupState.value.visibleSegments3D.clear();
+          this.displayState.segmentationGroupState.value.visibleSegments.clear();
           this.displayState.segmentationGroupState.value.segmentEquivalences.clear();
           if (this.displayState.segmentationGroupState.value.rootSegmentsAfterEdit !== undefined) {
             this.displayState.segmentationGroupState.value.rootSegmentsAfterEdit.clear();
@@ -568,9 +567,8 @@ function helper<TBase extends BaseConstructor>(Base: TBase) {
           return;
         } else {
           // Clear all segment sets
-          let leafSegmentCount = this.displayState.segmentationGroupState.value.visibleSegments2D!.size;
-          this.displayState.segmentationGroupState.value.visibleSegments2D!.clear();
-          this.displayState.segmentationGroupState.value.visibleSegments3D.clear();
+          let leafSegmentCount = this.displayState.segmentationGroupState.value.rootSegments.size;
+          this.displayState.segmentationGroupState.value.visibleSegments.clear();
           this.displayState.segmentationGroupState.value.segmentEquivalences.clear();
           if (this.displayState.segmentationGroupState.value.rootSegmentsAfterEdit !== undefined) {
             this.displayState.segmentationGroupState.value.rootSegmentsAfterEdit.clear();
@@ -578,14 +576,17 @@ function helper<TBase extends BaseConstructor>(Base: TBase) {
           StatusMessage.showTemporaryMessage(`Deselected all ${leafSegmentCount} segments.`, 3000);
         }
       } else if (added) {
-        this.displayState.segmentationGroupState.value.visibleSegments3D.add(rootSegments!);
-        this.displayState.segmentationGroupState.value.visibleSegments2D!.add(rootSegments!);
+        this.displayState.segmentationGroupState.value.visibleSegments.add(rootSegments);
       } else if (!added) {
         for (const rootSegment of rootSegments) {
           const segments = [...this.displayState.segmentationGroupState.value.segmentEquivalences.setElements(rootSegment)];
           const segmentCount = segments.length;  // Approximation
-          this.displayState.segmentationGroupState.value.visibleSegments2D!.delete(rootSegment);
-          this.displayState.segmentationGroupState.value.visibleSegments3D.delete(segments);
+          console.log('deselected', rootSegment, rootSegment.toString());
+          console.log('removing', segments);
+          console.log('from', this.displayState.segmentationGroupState.value.visibleSegments.toJSON());
+          this.displayState.segmentationGroupState.value.visibleSegments.delete(segments);
+          console.log('now', this.displayState.segmentationGroupState.value.visibleSegments.toJSON());
+          
           this.displayState.segmentationGroupState.value.segmentEquivalences.deleteSet(rootSegment);
           if (this.lastDeselectionMessage && this.lastDeselectionMessageExists) {
             this.lastDeselectionMessage.dispose();
@@ -633,7 +634,7 @@ function helper<TBase extends BaseConstructor>(Base: TBase) {
       const supervoxelRenderLayer = new SupervoxelRenderLayer(this.multiscaleVolumeChunkSource, {
         ...this.displayState,
         ...this.displayState.segmentationGroupState.value,
-        visibleSegments2D: supervoxelSet,
+        rootSegments: supervoxelSet,
         supervoxelColor,
         shatterSegmentEquivalences: new TrackableBoolean(true, true),
         transform: transform,//this.displayState.objectToDataTransform,

@@ -1101,10 +1101,10 @@ function makeRelatedSegmentList(
           headerCheckbox = document.createElement('input');
           headerCheckbox.type = 'checkbox';
           headerCheckbox.addEventListener('change', () => {
-            const {visibleSegments3D} = segmentationDisplayState.segmentationGroupState.value;
-            const add = segments.some(id => !visibleSegments3D.has(id));
+            const {visibleSegments} = segmentationDisplayState.segmentationGroupState.value;
+            const add = segments.some(id => !visibleSegments.has(id));
             for (const id of segments) {
-              visibleSegments3D.set(id, add);
+              visibleSegments.set(id, add);
             }
           });
           headerRow.appendChild(headerCheckbox);
@@ -1219,10 +1219,10 @@ function makeRelatedSegmentList(
         }
         if (segmentationDisplayState != null) {
           const updateSegments = context.registerCancellable(animationFrameDebounce(() => {
-            const {visibleSegments3D} = segmentationDisplayState.segmentationGroupState.value;
+            const {visibleSegments} = segmentationDisplayState.segmentationGroupState.value;
             let numVisible = 0;
             for (const id of segments) {
-              if (visibleSegments3D.has(id)) {
+              if (visibleSegments.has(id)) {
                 ++numVisible;
               }
             }
