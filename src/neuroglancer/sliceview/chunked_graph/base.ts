@@ -14,20 +14,15 @@
  * limitations under the License.
  */
 
-import {ChunkLayoutOptions, getChunkDataSizes, makeSliceViewChunkSpecification, SliceViewChunkSource, SliceViewChunkSpecification, SliceViewChunkSpecificationBaseOptions, SliceViewChunkSpecificationOptions, SliceViewSourceOptions} from 'neuroglancer/sliceview/base';
-import {getCombinedTransform, DataType} from 'neuroglancer/sliceview/base';
-import {kZeroVec, vec3} from 'neuroglancer/util/geom';
+import {ChunkLayoutOptions, makeSliceViewChunkSpecification, SliceViewChunkSource, SliceViewChunkSpecification, SliceViewChunkSpecificationBaseOptions, SliceViewChunkSpecificationOptions} from 'neuroglancer/sliceview/base';
+import {DataType} from 'neuroglancer/sliceview/base';
 
 export const CHUNKED_GRAPH_LAYER_RPC_ID = 'ChunkedGraphLayer';
 export const CHUNKED_GRAPH_SOURCE_UPDATE_ROOT_SEGMENTS_RPC_ID =
     'ChunkedGraphSourceUpdateRootSegments';
 export const RENDER_RATIO_LIMIT = 5.0;
 
-export interface ChunkedGraphSourceOptions {// extends SliceViewSourceOptions {
-  rootUri: string;
-}
-
-export interface ChunkedGraphChunkSpecificationBaseOptions extends // TODO so many similar interfaces here
+export interface ChunkedGraphChunkSpecificationBaseOptions extends
     SliceViewChunkSpecificationBaseOptions {
   /**
    * Specifies offset for use by backend.ts:GenericVolumeChunkSource.computeChunkBounds in
@@ -49,16 +44,11 @@ export interface ChunkedGraphChunkSpecificationBaseOptions extends // TODO so ma
 export interface ChunkedGraphChunkSpecificationOptions extends
     ChunkedGraphChunkSpecificationBaseOptions, SliceViewChunkSpecificationOptions<Uint32Array> {}
 
-export interface ChunkedGraphChunkSpecificationSourceOptions {
-  chunkedGraphSourceOptions: ChunkedGraphSourceOptions;
-}
-
 /**
  * Specifies parameters for ChunkedGraphChunkSpecification.getDefaults.
  */
 export interface ChunkedGraphChunkSpecificationGetDefaultsOptions extends
-    ChunkedGraphChunkSpecificationBaseOptions, ChunkLayoutOptions,
-    ChunkedGraphChunkSpecificationSourceOptions {}
+    ChunkedGraphChunkSpecificationBaseOptions, ChunkLayoutOptions {}
 
 /**
  * Specifies a chunk layout and voxel size.

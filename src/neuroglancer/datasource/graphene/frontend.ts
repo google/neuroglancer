@@ -50,7 +50,7 @@ import {ChunkedGraphChunkSource/*, WithRootSegments*/} from 'neuroglancer/slicev
 import {StatusMessage} from 'neuroglancer/status';
 
 import {AnnotationSpatialIndexSourceParameters, AnnotationSourceParameters} from 'neuroglancer/datasource/graphene/base';
-import { makeChunkedGraphChunkSpecification, ChunkedGraphSourceOptions } from 'src/neuroglancer/sliceview/chunked_graph/base';
+import { makeChunkedGraphChunkSpecification } from 'src/neuroglancer/sliceview/chunked_graph/base';
 import { Uint64Set } from 'src/neuroglancer/uint64_set';
 
 class GrapheneVolumeChunkSource extends
@@ -336,10 +336,8 @@ class GrapheneMultiscaleVolumeChunkSource extends MultiscaleVolumeChunkSource {
 
   
 
-  getChunkedGraphSources(options: ChunkedGraphSourceOptions, rootSegments: Uint64Set) {
-
+  getChunkedGraphSources(rootSegments: Uint64Set) {
     const {rank} = this;
-
     const scaleInfo = this.info.scales[0];
 
     const spec = makeChunkedGraphChunkSpecification({
@@ -349,13 +347,8 @@ class GrapheneMultiscaleVolumeChunkSource extends MultiscaleVolumeChunkSource {
       chunkDataSize: Uint32Array.from(this.info.graph!.chunkSize),
       baseVoxelOffset: scaleInfo.voxelOffset,
       // compressedSegmentationBlockSize: scaleInfo.compressedSegmentationBlockSize,
-      // chunkedGraphSourceOptions: options,
     });
 
-    const {resolution} = scaleInfo;
-    const modelResolution = resolution; // ???
-    const modelResolution2 = this.info.scales[0].resolution;
-    console.log('resolution compare', modelResolution, modelResolution2);
     const stride = rank + 1;
     const chunkToMultiscaleTransform = new Float32Array(stride * stride);
     chunkToMultiscaleTransform[chunkToMultiscaleTransform.length - 1] = 1;
@@ -363,17 +356,13 @@ class GrapheneMultiscaleVolumeChunkSource extends MultiscaleVolumeChunkSource {
           this.info.modelSpace.boundingBoxes[0].box;
     const lowerClipBound = new Float32Array(rank);
     const upperClipBound = new Float32Array(rank);
+
     for (let i = 0; i < 3; ++i) {
-      const relativeScale = resolution[i] / modelResolution[i];
+      const relativeScale = 1;
       chunkToMultiscaleTransform[stride * i + i] = relativeScale;
-      chunkToMultiscaleTransform[stride * rank + i] = scaleInfo.voxelOffset[i] * relativeScale;
-      lowerClipBound[i] = baseLowerBound[i] / relativeScale;
-      upperClipBound[i] = baseUpperBound[i] / relativeScale;
-    }
-    if (rank === 4) {
-      chunkToMultiscaleTransform[stride * 3 + 3] = 1;
-      lowerClipBound[3] = baseLowerBound[3];
-      upperClipBound[3] = baseUpperBound[3];
+      chunkToMultiscaleTransform[stride * rank + i] = scaleInfo.voxelOffset[i];
+      lowerClipBound[i] = baseLowerBound[i];
+      upperClipBound[i] = baseUpperBound[i];
     }
     return [[
       {
@@ -690,23 +679,23 @@ async function getMeshSource(
   };
 }
 
-async function getSkeletonSource(
-    chunkManager: ChunkManager, credentialsProvider: SpecialProtocolCredentialsProvider,
-    url: string) {
-  const {metadata, segmentPropertyMap} =
-      await getSkeletonMetadata(chunkManager, undefined/*credentialsProvider*/, url);
-  return {
-    source: chunkManager.getChunkSource(GrapheneSkeletonSource, {
-      credentialsProvider,
-      parameters: {
-        url,
-        metadata,
-      },
-    }),
-    transform: metadata.transform,
-    segmentPropertyMap,
-  };
-}
+// async function getSkeletonSource(
+//     chunkManager: ChunkManager, credentialsProvider: SpecialProtocolCredentialsProvider,
+//     url: string) {
+//   const {metadata, segmentPropertyMap} =
+//       await getSkeletonMetadata(chunkManager, undefined/*credentialsProvider*/, url);
+//   return {
+//     source: chunkManager.getChunkSource(GrapheneSkeletonSource, {
+//       credentialsProvider,
+//       parameters: {
+//         url,
+//         metadata,
+//       },
+//     }),
+//     transform: metadata.transform,
+//     segmentPropertyMap,
+//   };
+// }
 
 function getJsonMetadata(
     chunkManager: ChunkManager, credentialsProvider: SpecialProtocolCredentialsProvider,
@@ -761,7 +750,6 @@ async function getVolumeDataSource(
     });
   }
   if (info.mesh !== undefined) {
-    console.log('getMeshSource11111111111111111');
     const {source: meshSource, transform} =
         await getMeshSource(options.chunkManager, credentialsProvider,
           info.app!.meshingUrl,
@@ -792,35 +780,35 @@ async function getVolumeDataSource(
   return {modelTransform: makeIdentityTransform(modelSpace), subsources};
 }
 
-async function getSkeletonsDataSource(
-    options: GetDataSourceOptions, credentialsProvider: SpecialProtocolCredentialsProvider,
-    url: string): Promise<DataSource> {
-  const {source: skeletons, transform, segmentPropertyMap} =
-      await getSkeletonSource(options.chunkManager, credentialsProvider, url);
-  const subsources: DataSubsourceEntry[] = [
-    {
-      id: 'default',
-      default: true,
-      subsource: {mesh: skeletons},
-      subsourceToModelSubspaceTransform: transform,
-    },
-  ];
-  if (segmentPropertyMap !== undefined) {
-    const mapUrl = resolvePath(url, segmentPropertyMap);
-    const metadata = await getJsonMetadata(options.chunkManager, credentialsProvider, mapUrl);
-    const segmentPropertyMapData =
-        getSegmentPropertyMap(options.chunkManager, credentialsProvider, metadata, mapUrl);
-    subsources.push({
-      id: 'properties',
-      default: true,
-      subsource: {segmentPropertyMap: segmentPropertyMapData},
-    });
-  }
-  return {
-    modelTransform: makeIdentityTransform(getDefaultCoordinateSpace()),
-    subsources,
-  };
-}
+// async function getSkeletonsDataSource(
+//     options: GetDataSourceOptions, credentialsProvider: SpecialProtocolCredentialsProvider,
+//     url: string): Promise<DataSource> {
+//   const {source: skeletons, transform, segmentPropertyMap} =
+//       await getSkeletonSource(options.chunkManager, credentialsProvider, url);
+//   const subsources: DataSubsourceEntry[] = [
+//     {
+//       id: 'default',
+//       default: true,
+//       subsource: {mesh: skeletons},
+//       subsourceToModelSubspaceTransform: transform,
+//     },
+//   ];
+//   if (segmentPropertyMap !== undefined) {
+//     const mapUrl = resolvePath(url, segmentPropertyMap);
+//     const metadata = await getJsonMetadata(options.chunkManager, credentialsProvider, mapUrl);
+//     const segmentPropertyMapData =
+//         getSegmentPropertyMap(options.chunkManager, credentialsProvider, metadata, mapUrl);
+//     subsources.push({
+//       id: 'properties',
+//       default: true,
+//       subsource: {segmentPropertyMap: segmentPropertyMapData},
+//     });
+//   }
+//   return {
+//     modelTransform: makeIdentityTransform(getDefaultCoordinateSpace()),
+//     subsources,
+//   };
+// }
 
 function parseKeyAndShardingSpec(url: string, obj: any) {
   verifyObject(obj);
@@ -914,60 +902,59 @@ class AnnotationMetadata {
   }
 }
 
-async function getAnnotationDataSource(
-    options: GetDataSourceOptions, credentialsProvider: SpecialProtocolCredentialsProvider,
-    url: string, metadata: any): Promise<DataSource> {
-  const info = new AnnotationMetadata(url, metadata);
-  const dataSource: DataSource = {
-    modelTransform: makeIdentityTransform(info.coordinateSpace),
-    subsources: [
-      {
-        id: 'default',
-        default: true,
-        subsource: {
-          annotation: options.chunkManager.getChunkSource(GrapheneAnnotationSource, {
-            credentialsProvider,
-            metadata: info,
-            parameters: info.parameters,
-          }),
-        }
-      },
-    ],
-  };
-  return dataSource;
-}
+// async function getAnnotationDataSource(
+//     options: GetDataSourceOptions, credentialsProvider: SpecialProtocolCredentialsProvider,
+//     url: string, metadata: any): Promise<DataSource> {
+//   const info = new AnnotationMetadata(url, metadata);
+//   const dataSource: DataSource = {
+//     modelTransform: makeIdentityTransform(info.coordinateSpace),
+//     subsources: [
+//       {
+//         id: 'default',
+//         default: true,
+//         subsource: {
+//           annotation: options.chunkManager.getChunkSource(GrapheneAnnotationSource, {
+//             credentialsProvider,
+//             metadata: info,
+//             parameters: info.parameters,
+//           }),
+//         }
+//       },
+//     ],
+//   };
+//   return dataSource;
+// }
 
-async function getMeshDataSource(
-    options: GetDataSourceOptions, credentialsProvider: SpecialProtocolCredentialsProvider,
-    url: string): Promise<DataSource> {
-      console.log('getMeshDataSourcegetMeshDataSourcegetMeshDataSource')
-  const {source: mesh, transform, segmentPropertyMap} =
-      await getMeshSource(options.chunkManager, credentialsProvider, url, url, false); // this is wrong 'url, url'
-  const subsources: DataSubsourceEntry[] = [
-    {
-      id: 'default',
-      default: true,
-      subsource: {mesh},
-      subsourceToModelSubspaceTransform: transform,
-    },
-  ];
-  if (segmentPropertyMap !== undefined) {
-    const mapUrl = resolvePath(url, segmentPropertyMap);
-    const metadata = await getJsonMetadata(options.chunkManager, credentialsProvider, mapUrl);
-    const segmentPropertyMapData =
-        getSegmentPropertyMap(options.chunkManager, credentialsProvider, metadata, mapUrl);
-    subsources.push({
-      id: 'properties',
-      default: true,
-      subsource: {segmentPropertyMap: segmentPropertyMapData},
-    });
-  }
+// async function getMeshDataSource(
+//     options: GetDataSourceOptions, credentialsProvider: SpecialProtocolCredentialsProvider,
+//     url: string): Promise<DataSource> {
+//   const {source: mesh, transform, segmentPropertyMap} =
+//       await getMeshSource(options.chunkManager, credentialsProvider, url, url, false); // this is wrong 'url, url'
+//   const subsources: DataSubsourceEntry[] = [
+//     {
+//       id: 'default',
+//       default: true,
+//       subsource: {mesh},
+//       subsourceToModelSubspaceTransform: transform,
+//     },
+//   ];
+//   if (segmentPropertyMap !== undefined) {
+//     const mapUrl = resolvePath(url, segmentPropertyMap);
+//     const metadata = await getJsonMetadata(options.chunkManager, credentialsProvider, mapUrl);
+//     const segmentPropertyMapData =
+//         getSegmentPropertyMap(options.chunkManager, credentialsProvider, metadata, mapUrl);
+//     subsources.push({
+//       id: 'properties',
+//       default: true,
+//       subsource: {segmentPropertyMap: segmentPropertyMapData},
+//     });
+//   }
 
-  return {
-    modelTransform: makeIdentityTransform(getDefaultCoordinateSpace()),
-    subsources,
-  };
-}
+//   return {
+//     modelTransform: makeIdentityTransform(getDefaultCoordinateSpace()),
+//     subsources,
+//   };
+// }
 
 function parseInlinePropertyMap(data: unknown): InlineSegmentPropertyMap {
   verifyObject(data);
@@ -1101,24 +1088,24 @@ function getSegmentPropertyMap(
   }
 }
 
-async function getSegmentPropertyMapDataSource(
-    options: GetDataSourceOptions, credentialsProvider: SpecialProtocolCredentialsProvider,
-    url: string, metadata: unknown): Promise<DataSource> {
-  options;
-  return {
-    modelTransform: makeIdentityTransform(emptyValidCoordinateSpace),
-    subsources: [
-      {
-        id: 'default',
-        default: true,
-        subsource: {
-          segmentPropertyMap:
-              getSegmentPropertyMap(options.chunkManager, credentialsProvider, metadata, url)
-        },
-      },
-    ],
-  };
-}
+// async function getSegmentPropertyMapDataSource(
+//     options: GetDataSourceOptions, credentialsProvider: SpecialProtocolCredentialsProvider,
+//     url: string, metadata: unknown): Promise<DataSource> {
+//   options;
+//   return {
+//     modelTransform: makeIdentityTransform(emptyValidCoordinateSpace),
+//     subsources: [
+//       {
+//         id: 'default',
+//         default: true,
+//         subsource: {
+//           segmentPropertyMap:
+//               getSegmentPropertyMap(options.chunkManager, credentialsProvider, metadata, url)
+//         },
+//       },
+//     ],
+//   };
+// }
 
 const urlPattern = /^([^#]*)(?:#(.*))?$/;
 
@@ -1170,7 +1157,8 @@ export class GrapheneDataSource extends DataSourceProvider {
           } catch (e) {
             if (isNotFoundError(e)) {
               if (parameters['type'] === 'mesh') {
-                return await getMeshDataSource(options, credentialsProvider, url);
+                console.log('does this happen?');
+                // return await getMeshDataSource(options, credentialsProvider, url);
               }
             }
             throw e;
@@ -1182,17 +1170,18 @@ export class GrapheneDataSource extends DataSourceProvider {
           }
           const t = verifyOptionalObjectProperty(metadata, '@type', verifyString);
           switch (t) {
-            case 'neuroglancer_skeletons':
-              return await getSkeletonsDataSource(options, credentialsProvider, url);
-            case 'neuroglancer_multilod_draco':
-            case 'neuroglancer_legacy_mesh':
-              return await getMeshDataSource(options, credentialsProvider, url);
-            case 'neuroglancer_annotations_v1':
-              return await getAnnotationDataSource(options, credentialsProvider, url, metadata);
-            case 'neuroglancer_segment_properties':
-              return await getSegmentPropertyMapDataSource(
-                  options, credentialsProvider, url, metadata);
-            case 'neuroglancer_multiscale_volume':
+            // TODO: are these used for graphene?
+            // case 'neuroglancer_skeletons':
+            //   return await getSkeletonsDataSource(options, credentialsProvider, url);
+            // case 'neuroglancer_multilod_draco':
+            // case 'neuroglancer_legacy_mesh':
+            //   return await getMeshDataSource(options, credentialsProvider, url);
+            // case 'neuroglancer_annotations_v1':
+            //   return await getAnnotationDataSource(options, credentialsProvider, url, metadata);
+            // case 'neuroglancer_segment_properties':
+            //   return await getSegmentPropertyMapDataSource(
+            //       options, credentialsProvider, url, metadata);
+            // case 'neuroglancer_multiscale_volume':
             case undefined:
               return await getVolumeDataSource(options, credentialsProvider, url, metadata);
             default:

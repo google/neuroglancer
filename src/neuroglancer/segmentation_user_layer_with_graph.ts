@@ -200,7 +200,7 @@ function helper<TBase extends BaseConstructor>(Base: TBase) {
           // Chunked Graph Supervoxels
           if (this.chunkedGraphUrl && volume.getChunkedGraphSources) {
             let chunkedGraphSources = volume.getChunkedGraphSources(
-                {rootUri: this.chunkedGraphUrl}, displayState.segmentationGroupState.value.rootSegments);
+                displayState.segmentationGroupState.value.rootSegments);
 
             if (chunkedGraphSources) {
               this.updateChunkSourceRootSegments(chunkedGraphSources);

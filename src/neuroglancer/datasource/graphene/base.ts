@@ -81,7 +81,6 @@ export class MultiscaleMeshMetadata {
 
 export class MultiscaleMeshSourceParameters {
   metadata: MultiscaleMeshMetadata;
-  url: Error;// TODO, not used in graphene? precomputed is string;
 
   static RPC_ID = 'graphene/MultiscaleMeshSource';
 }
