@@ -123,7 +123,6 @@ export class SharedDisjointUint64Sets extends SharedObjectCounterpart implements
    * Restores the state from a JSON representation.
    */
   restoreState(obj: any) {
-    this.clear();
     if (obj !== undefined) {
       let ids = [new Uint64(), new Uint64()];
       parseArray(obj, z => {

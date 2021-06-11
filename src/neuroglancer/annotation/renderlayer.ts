@@ -33,7 +33,7 @@ import {PerspectiveViewRenderContext, PerspectiveViewRenderLayer} from 'neurogla
 import {ChunkDisplayTransformParameters, ChunkTransformParameters, getChunkDisplayTransformParameters, getChunkPositionFromCombinedGlobalLocalPositions, getLayerDisplayDimensionMapping, RenderLayerTransformOrError} from 'neuroglancer/render_coordinate_transform';
 import {RenderScaleHistogram} from 'neuroglancer/render_scale_statistics';
 import {ThreeDimensionalRenderContext, VisibilityTrackedRenderLayer} from 'neuroglancer/renderlayer';
-import {forEachVisibleSegment3D as forEachVisibleSegment, getObjectKey} from 'neuroglancer/segmentation_display_state/base';
+import {forEachVisibleSegment, getObjectKey} from 'neuroglancer/segmentation_display_state/base';
 import {sendVisibleSegmentsState} from 'neuroglancer/segmentation_display_state/frontend';
 import {SharedWatchableValue} from 'neuroglancer/shared_watchable_value';
 import {SliceViewProjectionParameters} from 'neuroglancer/sliceview/base';

@@ -18,7 +18,7 @@ import {Chunk, ChunkRenderLayerBackend, ChunkSource, withChunkManager} from 'neu
 import {ChunkState} from 'neuroglancer/chunk_manager/base';
 import {decodeVertexPositionsAndIndices} from 'neuroglancer/mesh/backend';
 import {withSegmentationLayerBackendState} from 'neuroglancer/segmentation_display_state/backend';
-import {forEachVisibleSegment3D as forEachVisibleSegment, getObjectKey} from 'neuroglancer/segmentation_display_state/base';
+import {forEachVisibleSegment, getObjectKey} from 'neuroglancer/segmentation_display_state/base';
 import {SKELETON_LAYER_RPC_ID} from 'neuroglancer/skeleton/base';
 import {TypedArray} from 'neuroglancer/util/array';
 import {Endianness} from 'neuroglancer/util/endian';

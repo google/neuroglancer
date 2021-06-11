@@ -24,7 +24,7 @@ import {get3dModelToDisplaySpaceMatrix} from 'neuroglancer/render_coordinate_tra
 import {RenderLayerBackendAttachment} from 'neuroglancer/render_layer_backend';
 import {withSegmentationLayerBackendState} from 'neuroglancer/segmentation_display_state/backend';
 import {getObjectKey} from 'neuroglancer/segmentation_display_state/base';
-import {forEachVisibleSegment3D as forEachVisibleSegment} from 'neuroglancer/segmentation_display_state/base';
+import {forEachVisibleSegment} from 'neuroglancer/segmentation_display_state/base';
 import {CancellationToken} from 'neuroglancer/util/cancellation';
 import {convertEndian32, Endianness} from 'neuroglancer/util/endian';
 import {getFrustrumPlanes, mat4, vec3} from 'neuroglancer/util/geom';

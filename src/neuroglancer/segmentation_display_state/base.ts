@@ -65,7 +65,7 @@ export function forEachRootSegment(
   }
 }
 
-export function forEachVisibleSegment3D(
+export function forEachVisibleSegment(
   state: VisibleSegmentsState, callback: (objectId: Uint64, rootObjectId: Uint64) => void) {
   let {visibleSegments, segmentEquivalences} = state;
   for (let objectId of visibleSegments) {

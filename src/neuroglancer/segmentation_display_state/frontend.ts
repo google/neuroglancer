@@ -22,7 +22,7 @@ import {WatchableRenderLayerTransform} from 'neuroglancer/render_coordinate_tran
 import {RenderScaleHistogram} from 'neuroglancer/render_scale_statistics';
 import {RenderLayer} from 'neuroglancer/renderlayer';
 import {getCssColor, SegmentColorHash} from 'neuroglancer/segment_color';
-import {forEachVisibleSegment3D as forEachVisibleSegment, onVisibleSegmentsStateChanged, VISIBLE_SEGMENTS_STATE_PROPERTIES, VisibleSegmentsState} from 'neuroglancer/segmentation_display_state/base';
+import {forEachVisibleSegment, onVisibleSegmentsStateChanged, VISIBLE_SEGMENTS_STATE_PROPERTIES, VisibleSegmentsState} from 'neuroglancer/segmentation_display_state/base';
 import {InlineSegmentNumericalProperty, InlineSegmentProperty, PreprocessedSegmentPropertyMap} from 'neuroglancer/segmentation_display_state/property_map';
 import {SegmentationUserLayer} from 'neuroglancer/segmentation_user_layer';
 import {SharedWatchableValue} from 'neuroglancer/shared_watchable_value';
