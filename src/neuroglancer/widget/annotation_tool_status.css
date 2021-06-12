@@ -18,6 +18,12 @@
   display: flex;
   flex-direction: row;
   align-items: center;
+  overflow-x: scroll;
+  scrollbar-width: none;
+}
+
+.neuroglancer-annotation-tool-status::-webkit-scrollbar {
+  display: none;
 }
 
 .neuroglancer-annotation-tool-status-widget + .neuroglancer-annotation-tool-status-widget {

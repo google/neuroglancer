@@ -17,7 +17,7 @@
 import './annotation_tool_status.css';
 
 import {SelectedLayerState} from 'neuroglancer/layer';
-import {addToolKeyBindHandlers, Tool, ToolBinder} from 'neuroglancer/ui/tool';
+import {addToolKeyBindHandlers, LegacyTool, Tool, ToolBinder} from 'neuroglancer/ui/tool';
 import {animationFrameDebounce} from 'neuroglancer/util/animation_frame_debounce';
 import {RefCounted} from 'neuroglancer/util/disposable';
 import {removeChildren} from 'neuroglancer/util/dom';
@@ -27,7 +27,7 @@ export class AnnotationToolStatusWidget extends RefCounted {
   element = document.createElement('div');
   private unbindPreviousLayer: (() => void)|undefined;
 
-  get selectedTool(): Tool|undefined {
+  get selectedTool(): LegacyTool|undefined {
     const layer = this.selectedLayer.layer;
     if (layer === undefined) {
       return undefined;
@@ -71,9 +71,12 @@ export class AnnotationToolStatusWidget extends RefCounted {
     this.unbindPreviousLayer = undefined;
   }
 
-  private makeWidget(context: RefCounted, key: string|undefined, tool: Tool): HTMLElement {
+  private makeWidget(context: RefCounted, tool: Tool|LegacyTool): HTMLElement {
     const element = document.createElement('div');
-    element.title = 'click → bind key, dblclick → unbind';
+    element.title = 'dblclick → unbind';
+    if (tool instanceof Tool) {
+      element.title += `, click → bind key`;
+    }
     element.className = 'neuroglancer-annotation-tool-status-widget';
     const layerNumberElement = document.createElement('div');
     layerNumberElement.className = 'neuroglancer-annotation-tool-status-widget-layer-number';
@@ -85,18 +88,19 @@ export class AnnotationToolStatusWidget extends RefCounted {
     descriptionElement.className = 'neuroglancer-annotation-tool-status-widget-description';
     descriptionElement.textContent = tool.description;
     element.addEventListener('dblclick', () => {
-      if (key === undefined) {
+      if (tool instanceof LegacyTool) {
         tool.layer.tool.value = undefined;
       } else {
-        this.toolBinder.set(key, undefined);
+        this.toolBinder.set(tool.keyBinding!, undefined);
       }
     });
-    if (key !== undefined) {
+    if (tool instanceof Tool) {
       const keyElement = document.createElement('div');
       keyElement.className = 'neuroglancer-annotation-tool-status-widget-key';
-      keyElement.textContent = key;
+      keyElement.textContent = tool.keyBinding!;
       element.appendChild(keyElement);
-      addToolKeyBindHandlers(context, element, key => tool.layer.toolBinder.set(key, tool.addRef()));
+      addToolKeyBindHandlers(
+          context, element, key => tool.layer.toolBinder.set(key, tool.addRef()));
     }
     element.appendChild(layerNumberElement);
     element.appendChild(descriptionElement);
@@ -115,12 +119,12 @@ export class AnnotationToolStatusWidget extends RefCounted {
     removeChildren(this.element);
     const {selectedTool} = this;
     if (selectedTool !== undefined) {
-      this.element.appendChild(this.makeWidget(viewContext, undefined, selectedTool));
+      this.element.appendChild(this.makeWidget(viewContext, selectedTool));
     }
     const bindings = Array.from(this.toolBinder.bindings);
     bindings.sort(([a], [b]) => defaultStringCompare(a, b));
-    for (const [key, tool] of bindings) {
-      this.element.appendChild(this.makeWidget(viewContext, key, tool));
+    for (const [, tool] of bindings) {
+      this.element.appendChild(this.makeWidget(viewContext, tool));
     }
   }));
 }

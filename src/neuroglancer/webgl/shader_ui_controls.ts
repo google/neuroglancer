@@ -617,11 +617,13 @@ function getControlTrackable(control: ShaderUiControl):
   }
 }
 
-export type ShaderControlMap = Map<string, {
-  control: ShaderUiControl,
-  trackable: TrackableValueInterface<any>,
-  getBuilderValue: (value: any) => any,
-}>;
+export interface SingleShaderControlState {
+  control: ShaderUiControl;
+  trackable: TrackableValueInterface<any>;
+  getBuilderValue: (value: any) => any;
+}
+
+export type ShaderControlMap = Map<string, SingleShaderControlState>;
 
 export type ShaderBuilderValues = {
   [key: string]: any

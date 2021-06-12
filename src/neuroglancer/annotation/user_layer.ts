@@ -42,7 +42,7 @@ import {LayerReferenceWidget} from 'neuroglancer/widget/layer_reference';
 import {makeMaximizeButton} from 'neuroglancer/widget/maximize_button';
 import {RenderScaleWidget} from 'neuroglancer/widget/render_scale_widget';
 import {ShaderCodeWidget} from 'neuroglancer/widget/shader_code_widget';
-import {ShaderControls} from 'neuroglancer/widget/shader_controls';
+import {registerLayerShaderControlsTool, ShaderControls} from 'neuroglancer/widget/shader_controls';
 import {Tab} from 'neuroglancer/widget/tab_view';
 
 const POINTS_JSON_KEY = 'points';
@@ -619,11 +619,11 @@ class RenderingOptionsTab extends Tab {
     element.appendChild(topRow);
 
     element.appendChild(this.codeWidget.element);
-    element.appendChild(
-        this.registerDisposer(new ShaderControls(
-                                  layer.annotationDisplayState.shaderControls,
-                                  this.layer.manager.root.display, {visibility: this.visibility}))
-            .element);
+    element.appendChild(this.registerDisposer(new ShaderControls(
+                                                  layer.annotationDisplayState.shaderControls,
+                                                  this.layer.manager.root.display, this.layer,
+                                                  {visibility: this.visibility}))
+                            .element);
   }
 }
 
@@ -638,3 +638,8 @@ registerLayerTypeDetector(subsource => {
   }
   return undefined;
 });
+
+registerLayerShaderControlsTool(
+    AnnotationUserLayer, layer => ({
+                           shaderControlState: layer.annotationDisplayState.shaderControls,
+                         }));

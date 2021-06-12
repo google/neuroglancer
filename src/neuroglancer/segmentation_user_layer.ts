@@ -48,6 +48,13 @@ import {Signal} from 'neuroglancer/util/signal';
 import {Uint64} from 'neuroglancer/util/uint64';
 import {makeWatchableShaderError} from 'neuroglancer/webgl/dynamic_shader';
 import {DependentViewContext} from 'neuroglancer/widget/dependent_view_widget';
+import {LayerControlDefinition, registerLayerControl} from 'neuroglancer/widget/layer_control';
+import {checkboxLayerControl} from 'neuroglancer/widget/layer_control_checkbox';
+import {enumLayerControl} from 'neuroglancer/widget/layer_control_enum';
+import {rangeLayerControl} from 'neuroglancer/widget/layer_control_range';
+import {renderScaleLayerControl} from 'neuroglancer/widget/render_scale_widget';
+import {colorSeedLayerControl, fixedColorLayerControl} from 'neuroglancer/widget/segmentation_color_mode';
+import {registerLayerShaderControlsTool} from 'neuroglancer/widget/shader_controls';
 
 const SELECTED_ALPHA_JSON_KEY = 'selectedAlpha';
 const NOT_SELECTED_ALPHA_JSON_KEY = 'notSelectedAlpha';
@@ -70,6 +77,8 @@ const MESH_SILHOUETTE_RENDERING_JSON_KEY = 'meshSilhouetteRendering';
 const LINKED_SEGMENTATION_GROUP_JSON_KEY = 'linkedSegmentationGroup';
 const LINKED_SEGMENTATION_COLOR_GROUP_JSON_KEY = 'linkedSegmentationColorGroup';
 const SEGMENT_DEFAULT_COLOR_JSON_KEY = 'segmentDefaultColor';
+
+export const SKELETON_RENDERING_SHADER_CONTROL_TOOL_ID = 'skeletonShaderControl';
 
 export class SegmentationUserLayerGroupState extends RefCounted implements SegmentationGroupState {
   specificationChanged = new Signal();
@@ -689,6 +698,125 @@ export class SegmentationUserLayer extends Base {
   static supportsPickOption = true;
 }
 
+const maxSilhouettePower = 10;
+
+function getViewSpecificSkeletonRenderingControl(viewName: '2d'|'3d'):
+    LayerControlDefinition<SegmentationUserLayer>[] {
+  return [
+    {
+      label: `Skeleton mode (${viewName})`,
+      toolJson: `${SKELETON_RENDERING_JSON_KEY}.mode${viewName}`,
+      isValid: layer => layer.hasSkeletonsLayer,
+      ...enumLayerControl(
+
+          layer => layer.displayState.skeletonRenderingOptions[`params${viewName}` as const].mode),
+    },
+    {
+      label: `Line width (${viewName})`,
+      toolJson: `${SKELETON_RENDERING_JSON_KEY}.lineWidth${viewName}`,
+      isValid: layer => layer.hasSkeletonsLayer,
+      toolDescription: `Skeleton line width (${viewName})`,
+      title: `Skeleton line width (${viewName})`,
+      ...rangeLayerControl(
+
+          layer => ({
+            value:
+                layer.displayState.skeletonRenderingOptions[`params${viewName}` as const].lineWidth,
+            options: {min: 1, max: 40, step: 1},
+          })),
+    },
+  ];
+}
+
+export const LAYER_CONTROLS: LayerControlDefinition<SegmentationUserLayer>[] = [
+  {
+    label: 'Color seed',
+    title: 'Color segments based on a hash of their id',
+    toolJson: COLOR_SEED_JSON_KEY,
+    ...colorSeedLayerControl(),
+  },
+  {
+    label: 'Fixed color',
+    title: 'Use a fixed color for all segments without an explicitly-specified color',
+    toolJson: SEGMENT_DEFAULT_COLOR_JSON_KEY,
+    ...fixedColorLayerControl(),
+  },
+  {
+    label: 'Saturation',
+    toolJson: SATURATION_JSON_KEY,
+    title: 'Saturation of segment colors',
+    ...rangeLayerControl(layer => ({value: layer.displayState.saturation})),
+  },
+  {
+    label: 'Opacity (on)',
+    toolJson: SELECTED_ALPHA_JSON_KEY,
+    isValid: layer => layer.has2dLayer,
+    title: 'Opacity in cross-section views of segments that are selected',
+    ...rangeLayerControl(layer => ({value: layer.displayState.selectedAlpha})),
+  },
+  {
+    label: 'Opacity (off)',
+    toolJson: NOT_SELECTED_ALPHA_JSON_KEY,
+    isValid: layer => layer.has2dLayer,
+    title: 'Opacity in cross-section views of segments that are not selected',
+    ...rangeLayerControl(layer => ({value: layer.displayState.notSelectedAlpha})),
+  },
+  {
+    label: 'Resolution (slice)',
+    toolJson: CROSS_SECTION_RENDER_SCALE_JSON_KEY,
+    isValid: layer => layer.has2dLayer,
+    ...renderScaleLayerControl(layer => ({
+                                 histogram: layer.sliceViewRenderScaleHistogram,
+                                 target: layer.sliceViewRenderScaleTarget
+                               })),
+  },
+  {
+    label: 'Resolution (mesh)',
+    toolJson: MESH_RENDER_SCALE_JSON_KEY,
+    isValid: layer => layer.has3dLayer,
+    ...renderScaleLayerControl(layer => ({
+                                 histogram: layer.displayState.renderScaleHistogram,
+                                 target: layer.displayState.renderScaleTarget
+                               })),
+  },
+  {
+    label: 'Opacity (3d)',
+    toolJson: OBJECT_ALPHA_JSON_KEY,
+    isValid: layer => layer.has3dLayer,
+    title: 'Opacity of meshes and skeletons',
+    ...rangeLayerControl(layer => ({value: layer.displayState.objectAlpha})),
+  },
+  {
+    label: 'Silhouette (3d)',
+    toolJson: MESH_SILHOUETTE_RENDERING_JSON_KEY,
+    isValid: layer => layer.has3dLayer,
+    title:
+        'Set to a non-zero value to increase transparency of object faces perpendicular to view direction',
+    ...rangeLayerControl(layer => ({
+                           value: layer.displayState.silhouetteRendering,
+                           options: {min: 0, max: maxSilhouettePower, step: 0.1}
+                         })),
+  },
+  {
+    label: 'Hide segment ID 0',
+    toolJson: HIDE_SEGMENT_ZERO_JSON_KEY,
+    title: 'Disallow selection and display of segment id 0',
+    ...checkboxLayerControl(layer => layer.displayState.hideSegmentZero),
+  },
+  {
+    label: 'Show all by default',
+    title: 'Show all segments if none are selected',
+    toolJson: IGNORE_NULL_VISIBLE_SET_JSON_KEY,
+    ...checkboxLayerControl(layer => layer.displayState.ignoreNullVisibleSet),
+  },
+  ...getViewSpecificSkeletonRenderingControl('2d'),
+  ...getViewSpecificSkeletonRenderingControl('3d'),
+];
+
+for (const control of LAYER_CONTROLS) {
+  registerLayerControl(SegmentationUserLayer, control);
+}
+
 registerLayerType(SegmentationUserLayer);
 registerVolumeLayerType(VolumeType.SEGMENTATION, SegmentationUserLayer);
 registerLayerTypeDetector(subsource => {
@@ -697,3 +825,10 @@ registerLayerTypeDetector(subsource => {
   }
   return undefined;
 });
+
+registerLayerShaderControlsTool(
+    SegmentationUserLayer,
+    layer => ({
+      shaderControlState: layer.displayState.skeletonRenderingOptions.shaderControlState,
+    }),
+    SKELETON_RENDERING_SHADER_CONTROL_TOOL_ID);
