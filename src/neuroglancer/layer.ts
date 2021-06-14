@@ -637,9 +637,12 @@ export class LayerManager extends RefCounted {
     this.nonArchivedLayerIndexGeneration = generation;
     let index = 0;
     for (const layer of this.managedLayers) {
+      if (!layer.archived) {
+        layer.nonArchivedLayerIndex = index++;
+      }
+    }
+    for (const layer of this.managedLayers) {
       if (layer.archived) {
-        layer.nonArchivedLayerIndex = -1;
-      } else {
         layer.nonArchivedLayerIndex = index++;
       }
     }
