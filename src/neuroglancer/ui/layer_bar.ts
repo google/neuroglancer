@@ -124,7 +124,8 @@ class LayerWidget extends RefCounted {
     });
 
     element.addEventListener('contextmenu', (event: MouseEvent) => {
-      panel.selectedLayer.toggle(layer);
+      panel.selectedLayer.layer = layer;
+      panel.selectedLayer.visible = true;
       event.stopPropagation();
       event.preventDefault();
     });
