@@ -18,7 +18,7 @@ import './invlerp.css';
 
 import svg_arrowLeft from 'ikonate/icons/arrow-left.svg';
 import svg_arrowRight from 'ikonate/icons/arrow-right.svg';
-import {DisplayContext, RenderedPanel} from 'neuroglancer/display_context';
+import {DisplayContext, IndirectRenderedPanel} from 'neuroglancer/display_context';
 import {WatchableValueInterface} from 'neuroglancer/trackable_value';
 import {animationFrameDebounce} from 'neuroglancer/util/animation_frame_debounce';
 import {DataType} from 'neuroglancer/util/data_type';
@@ -174,7 +174,7 @@ export function getUpdatedRangeAndWindowParameters<T extends RangeAndWindowInter
 const NUM_HISTOGRAM_BINS_IN_RANGE = 254;
 const NUM_CDF_LINES = NUM_HISTOGRAM_BINS_IN_RANGE + 1;
 
-class CdfPanel extends RenderedPanel {
+class CdfPanel extends IndirectRenderedPanel {
   get drawOrder() {
     return 100;
   }
@@ -266,9 +266,11 @@ out_color = uColor;
     return builder.build();
   })());
 
-  draw() {
+  drawIndirect() {
     const {lineShader, gl, regionShader, parent: {dataType, trackable: {value: bounds}}} = this;
     this.setGLLogicalViewport();
+    gl.clearColor(0.0, 0.0, 0.0, 0.0);
+    gl.clear(WebGL2RenderingContext.COLOR_BUFFER_BIT);
     gl.enable(WebGL2RenderingContext.BLEND);
     gl.blendFunc(WebGL2RenderingContext.SRC_ALPHA, WebGL2RenderingContext.ONE_MINUS_SRC_ALPHA);
     gl.disable(WebGL2RenderingContext.DEPTH_TEST);
@@ -320,7 +322,7 @@ out_color = uColor;
 
 function dummyColorLegendShaderModule() {}
 
-class ColorLegendPanel extends RenderedPanel {
+class ColorLegendPanel extends IndirectRenderedPanel {
   private shaderOptions: LegendShaderOptions;
   constructor(public parent: InvlerpWidget) {
     super(parent.display, document.createElement('div'), parent.visibility);
@@ -368,14 +370,16 @@ ${shaderDataType} getInterpolatedDataValue(int dummyChannel) {
 
   private cornersBuffer = getSquareCornersBuffer(this.gl, -1, -1, 1, 1);
 
-  draw() {
+  drawIndirect() {
     const shaderResult = this.shaderGetter(dummyColorLegendShaderModule);
     const {shader} = shaderResult;
     if (shader === null) return;
     this.setGLLogicalViewport();
+    const {gl} = this;
+    gl.clearColor(0.0, 0.0, 0.0, 0.0);
+    gl.clear(WebGL2RenderingContext.COLOR_BUFFER_BIT);
     shader.bind();
     this.shaderOptions.initializeShader(shaderResult);
-    const {gl} = this;
     gl.enable(WebGL2RenderingContext.BLEND);
     const {trackable: {value: {window}}, dataType} = this.parent;
     enableLerpShaderFunction(shader, 'ng_colorLegendLerp', this.parent.dataType, window);

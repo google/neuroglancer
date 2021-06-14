@@ -236,6 +236,38 @@ export abstract class RenderedPanel extends RefCounted {
   }
 }
 
+export abstract class IndirectRenderedPanel extends RenderedPanel {
+  canvas = document.createElement('canvas');
+  canvasRenderingContext = this.canvas.getContext('2d');
+  constructor(
+      context: Borrowed<DisplayContext>, element: HTMLElement,
+    visibility: WatchableVisibilityPriority) {
+    super(context, element, visibility);
+    const {canvas} = this;
+    element.appendChild(canvas);
+    element.style.position = 'relative';
+    canvas.style.position = 'absolute';
+    canvas.style.left = '0';
+    canvas.style.right = '0';
+    canvas.style.top = '0';
+    canvas.style.bottom = '0';
+  }
+
+  abstract drawIndirect(): void;
+
+  draw() {
+    this.drawIndirect();
+    const {renderViewport, canvas} = this;
+    const {logicalWidth, logicalHeight} = renderViewport;
+    canvas.width = logicalWidth;
+    canvas.height = logicalHeight;
+    const {canvasRenderingContext} = this;
+    canvasRenderingContext?.drawImage(
+      this.context.canvas, this.canvasRelativeLogicalLeft, this.canvasRelativeLogicalTop,
+      logicalWidth, logicalHeight, 0, 0, logicalWidth, logicalHeight);
+  }
+}
+
 // Specifies a rectangular sub-region of the full viewer area to actually be rendered on the canvas.
 // This is used by the Python integration to produce large screenshots by tiling multiple
 // screenshots.
