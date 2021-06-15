@@ -496,7 +496,7 @@ async function makeBatchMeshRequest<T>(
         // download slot is available.
         chunk.downloadSlots = Math.max(1, requestsInProgress);
         if (requestsInProgress === 0) {
-          resolve();
+          resolve(undefined);
           return;
         }
       };

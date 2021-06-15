@@ -75,7 +75,7 @@ export function decodeParametersFromDragTypeList(
   return undefined;
 }
 
-let savedDropEffect: string;
+let savedDropEffect: DataTransfer['dropEffect'] | undefined;
 
 /**
  * On Chrome 62, the dataTransfer.dropEffect property is reset to 'none' when the 'drop' event is
@@ -85,7 +85,7 @@ let savedDropEffect: string;
  * different reason: the computation may depend on the modifier key states, and on Firefox 52, these
  * key states are not set in the 'drop' event.
  */
-export function setDropEffect<T extends string>(event: DragEvent, dropEffect: T) {
+export function setDropEffect<T extends DataTransfer['dropEffect']>(event: DragEvent, dropEffect: T) {
   event.dataTransfer!.dropEffect = dropEffect;
   savedDropEffect = dropEffect;
   return dropEffect;

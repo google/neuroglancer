@@ -19,7 +19,6 @@ import {ArraySpliceOp, spliceArray} from 'neuroglancer/util/array';
 import {RefCounted} from 'neuroglancer/util/disposable';
 import {removeFromParent, updateChildren} from 'neuroglancer/util/dom';
 import {Signal} from 'neuroglancer/util/signal';
-import ResizeObserver from 'resize-observer-polyfill';
 
 // Must be a multiple of 2.
 const defaultNumItemsToRender = 10;

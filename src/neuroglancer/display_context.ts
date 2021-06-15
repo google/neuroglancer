@@ -23,7 +23,6 @@ import {parseFixedLengthArray, verifyFloat01} from 'neuroglancer/util/json';
 import {NullarySignal} from 'neuroglancer/util/signal';
 import {WatchableVisibilityPriority} from 'neuroglancer/visibility_priority/frontend';
 import {GL, initializeWebGL} from 'neuroglancer/webgl/context';
-import ResizeObserver from 'resize-observer-polyfill';
 
 export class RenderViewport {
   // Width of visible portion of panel in canvas pixels.

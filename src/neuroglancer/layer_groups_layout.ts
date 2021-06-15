@@ -403,7 +403,7 @@ function setupDropZone(
       return;
     }
     event.preventDefault();
-    const dropEffect = event.dataTransfer!.dropEffect = getDropEffect();
+    const dropEffect = event.dataTransfer!.dropEffect = getDropEffect()!;
     endLayerDrag(dropEffect);
     const layerGroupViewer = makeLayerGroupViewer();
     dropLayers.updateArchiveStates(event);
