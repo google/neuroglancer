@@ -52,7 +52,7 @@ class SegmentListSource extends RefCounted implements VirtualListSource {
   // `segmentPropertyMap` of the matching segments.
   explicitSegments: Uint64[]|undefined;
   explicitSegmentsVisible: boolean = false;
-  visibleSegmentsGeneration = -1;
+  rootSegmentsGeneration = -1;
   prevQuery: string|undefined;
   queryResult = new WatchableValue<QueryResult|undefined>(undefined);
   statusText = new WatchableValue<string>('');
@@ -79,16 +79,16 @@ class SegmentListSource extends RefCounted implements VirtualListSource {
     const splices: ArraySpliceOp[] = [];
     let changed = false;
     let matchStatusTextPrefix = '';
-    const {visibleSegments} = this.segmentationDisplayState.segmentationGroupState.value;
-    const visibleSegmentsGeneration = visibleSegments.changed.count;
-    const prevVisibleSegmentsGeneration = this.visibleSegmentsGeneration;
+    const {rootSegments} = this.segmentationDisplayState.segmentationGroupState.value;
+    const rootSegmentsGeneration = rootSegments.changed.count;
+    const prevRootSegmentsGeneration = this.rootSegmentsGeneration;
     const unconstrained = isQueryUnconstrained(queryResult.query);
     if (unconstrained) {
       // Full list of visible segments is shown only if no query is specified.
-      if (prevVisibleSegmentsGeneration !== visibleSegmentsGeneration ||
+      if (prevRootSegmentsGeneration !== rootSegmentsGeneration ||
           this.explicitSegments === undefined || !this.explicitSegmentsVisible) {
-        this.visibleSegmentsGeneration = visibleSegmentsGeneration;
-        const newSortedVisibleSegments = Array.from(visibleSegments, x => x.clone());
+        this.rootSegmentsGeneration = rootSegmentsGeneration;
+        const newSortedVisibleSegments = Array.from(rootSegments, x => x.clone());
         newSortedVisibleSegments.sort(Uint64.compare);
         const {explicitSegments} = this;
         if (explicitSegments === undefined) {
@@ -106,7 +106,7 @@ class SegmentListSource extends RefCounted implements VirtualListSource {
       }
       this.explicitSegmentsVisible = true;
     } else {
-      this.visibleSegmentsGeneration = visibleSegmentsGeneration;
+      this.rootSegmentsGeneration = rootSegmentsGeneration;
       if (this.explicitSegments !== undefined && this.explicitSegmentsVisible) {
         splices.push({deleteCount: this.explicitSegments.length, retainCount: 0, insertCount: 0});
         this.explicitSegments = undefined;
@@ -141,13 +141,13 @@ class SegmentListSource extends RefCounted implements VirtualListSource {
     }
 
     if (prevQueryResult !== queryResult ||
-        visibleSegmentsGeneration !== prevVisibleSegmentsGeneration) {
+        rootSegmentsGeneration !== prevRootSegmentsGeneration) {
       let statusText = matchStatusTextPrefix;
       let selectedMatches = 0;
       if (segmentPropertyMap !== undefined && queryResult.count > 0) {
         // Recompute selectedMatches.
         selectedMatches =
-            findQueryResultIntersectionSize(segmentPropertyMap, queryResult, visibleSegments);
+            findQueryResultIntersectionSize(segmentPropertyMap, queryResult, rootSegments);
         statusText += ` (${selectedMatches} visible)`;
       }
       this.selectedMatches = selectedMatches;
@@ -172,7 +172,7 @@ class SegmentListSource extends RefCounted implements VirtualListSource {
     this.update();
 
     this.registerDisposer(
-        segmentationDisplayState.segmentationGroupState.value.visibleSegments.changed.add(
+        segmentationDisplayState.segmentationGroupState.value.rootSegments.changed.add(
             this.debouncedUpdate));
     this.registerDisposer(query.changed.add(this.debouncedUpdate));
   }
@@ -830,14 +830,14 @@ export class SegmentDisplayTab extends Tab {
                   selectionClearButton.checked = true;
                   selectionClearButton.title = 'Deselect all segment IDs';
                   selectionClearButton.addEventListener('change', () => {
-                    group.visibleSegments.clear();
+                    group.rootSegments.clear();
                   });
                   const selectionCopyButton = makeCopyButton({
                     title: 'Copy visible segment IDs',
                     onClick: () => {
-                      const visibleSegments = Array.from(group.visibleSegments, x => x.clone());
-                      visibleSegments.sort(Uint64.compare);
-                      setClipboard(visibleSegments.join(', '));
+                      const rootSegments = Array.from(group.rootSegments, x => x.clone());
+                      rootSegments.sort(Uint64.compare);
+                      setClipboard(rootSegments.join(', '));
                     },
                   });
                   const selectionStatusMessage = document.createElement('span');
@@ -867,7 +867,7 @@ export class SegmentDisplayTab extends Tab {
                     listSource.debouncedUpdate.flush();
                     const queryResult = listSource.queryResult.value;
                     if (queryResult === undefined) return;
-                    const {visibleSegments} = group;
+                    const {rootSegments} = group;
                     const {selectedMatches} = listSource;
                     const shouldSelect = (selectedMatches !== queryResult.count);
                     if (shouldSelect &&
@@ -882,7 +882,7 @@ export class SegmentDisplayTab extends Tab {
                       updateStatus();
                     }
                     forEachQueryResultSegmentId(segmentPropertyMap, queryResult, id => {
-                      visibleSegments.set(id, shouldSelect);
+                      rootSegments.set(id, shouldSelect);
                     });
                     return true;
                   };
@@ -904,7 +904,7 @@ export class SegmentDisplayTab extends Tab {
                   parent.appendChild(selectionStatusContainer);
                   let prevNumSelected = -1;
                   const updateStatus = () => {
-                    const numSelected = group.visibleSegments.size;
+                    const numSelected = group.rootSegments.size;
                     if (prevNumSelected !== numSelected) {
                       prevNumSelected = numSelected;
                       selectionStatusMessage.textContent = `${numSelected} visible in total`;
@@ -933,7 +933,7 @@ export class SegmentDisplayTab extends Tab {
                   };
                   updateStatus();
                   listSource.statusText.changed.add(updateStatus);
-                  context.registerDisposer(group.visibleSegments.changed.add(updateStatus));
+                  context.registerDisposer(group.rootSegments.changed.add(updateStatus));
                   let hasConfirmed = false;
                   context.registerEventListener(queryElement, 'input', () => {
                     debouncedUpdateQueryModel();
@@ -954,20 +954,20 @@ export class SegmentDisplayTab extends Tab {
                   });
                   registerActionListener(queryElement, 'toggle-listed', toggleMatches);
                   registerActionListener(queryElement, 'hide-all', () => {
-                    group.visibleSegments.clear();
+                    group.rootSegments.clear();
                   });
                   registerActionListener(queryElement, 'hide-listed', () => {
                     debouncedUpdateQueryModel();
                     debouncedUpdateQueryModel.flush();
                     listSource.debouncedUpdate.flush();
-                    const {visibleSegments} = group;
+                    const {rootSegments} = group;
                     if (segmentQuery.value === '') {
-                      visibleSegments.clear();
+                      rootSegments.clear();
                     } else {
                       const queryResult = listSource.queryResult.value;
                       if (queryResult === undefined) return;
                       forEachQueryResultSegmentId(segmentPropertyMap, queryResult, id => {
-                        visibleSegments.delete(id);
+                        rootSegments.delete(id);
                       });
                     }
                   });
@@ -979,7 +979,7 @@ export class SegmentDisplayTab extends Tab {
                   const {displayState} = this.layer;
                   context.registerDisposer(
                       displayState.segmentSelectionState.changed.add(updateListItems));
-                  context.registerDisposer(group.visibleSegments.changed.add(updateListItems));
+                  context.registerDisposer(group.rootSegments.changed.add(updateListItems));
                   context.registerDisposer(
                       displayState.segmentColorHash.changed.add(updateListItems));
                   context.registerDisposer(
