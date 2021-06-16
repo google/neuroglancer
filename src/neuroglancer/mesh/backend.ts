@@ -35,6 +35,8 @@ import {getBasePriority, getPriorityTier} from 'neuroglancer/visibility_priority
 import {withSharedVisibility} from 'neuroglancer/visibility_priority/backend';
 import {registerSharedObject, RPC} from 'neuroglancer/worker_rpc';
 
+import {GRAPHENE_MANIFEST_SHARDED} from 'neuroglancer/datasource/graphene/base';
+
 const MESH_OBJECT_MANIFEST_CHUNK_PRIORITY = 100;
 const MESH_OBJECT_FRAGMENT_CHUNK_PRIORITY = 50;
 
@@ -46,15 +48,18 @@ export type FragmentId = string;
 export class ManifestChunk extends Chunk {
   objectId = new Uint64();
   fragmentIds: FragmentId[]|null;
+  manifestType: string|undefined;
+  verifyFragments?: boolean|undefined;
 
   constructor() {
     super();
   }
   // We can't save a reference to objectId, because it may be a temporary
   // object.
-  initializeManifestChunk(key: string, objectId: Uint64) {
+  initializeManifestChunk(key: string, objectId: Uint64, verifyFragments?: boolean|undefined) {
     super.initialize(key);
     this.objectId.assign(objectId);
+    this.verifyFragments = verifyFragments;
   }
 
   freeSystemMemory() {
@@ -79,6 +84,23 @@ export class ManifestChunk extends Chunk {
 
   toString() {
     return this.objectId.toString();
+  }
+
+  extractFragmentKey(fragmentId: FragmentId) {
+    if (this.manifestType === GRAPHENE_MANIFEST_SHARDED) {
+      return this.extractGrapheneFragmentKey(fragmentId);
+    }
+    return {key:fragmentId, id: fragmentId}
+  }
+
+  extractGrapheneFragmentKey(fragmentId: FragmentId) {
+    // extract segment ID from fragment ID
+    // use it as key, the rest is information for reading the fragment
+    // ignores tilde at 0 index
+    let parts = fragmentId.substr(1).split(/:(.+)/);
+    let key = parts[0];
+    fragmentId = parts[1];
+    return {key:key, id: fragmentId}
   }
 }
 
@@ -118,13 +140,15 @@ export class FragmentChunk extends Chunk {
   manifestChunk: ManifestChunk|null = null;
   fragmentId: FragmentId|null = null;
   meshData: EncodedMeshData|null = null;
+  verifyFragment?: boolean|undefined;
   constructor() {
     super();
   }
-  initializeFragmentChunk(key: string, manifestChunk: ManifestChunk, fragmentId: FragmentId) {
+  initializeFragmentChunk(key: string, manifestChunk: ManifestChunk, fragmentId: FragmentId, verifyFragment?: boolean|undefined) {
     super.initialize(key);
     this.manifestChunk = manifestChunk;
     this.fragmentId = fragmentId;
+    this.verifyFragment = verifyFragment;
   }
   freeSystemMemory() {
     this.manifestChunk = null;
@@ -294,6 +318,54 @@ export function decodeTriangleVertexPositionsAndIndices(
       numTriangles);
 }
 
+export function decodeTriangleVertexPositionsAndIndicesDraco(
+  data: ArrayBuffer, decoderModule: any): RawMeshData {
+  const decoder = new decoderModule.Decoder();
+  const byteArray = new Int8Array(data);
+  const mesh = new decoderModule.Mesh();
+  const decodeStatus = decoder.DecodeArrayToMesh(byteArray, byteArray.byteLength, mesh);
+  if (!decodeStatus.ok()) {
+    // Not a draco mesh
+    throw new TypeError('Draco decoding failed');
+  }
+  const decoderAttr = decoderModule.POSITION;
+  const attrId = decoder.GetAttributeId(mesh, decoderAttr);
+  if (attrId < 0) {
+    // Draco mesh has no position attribute, which we need
+    throw new Error('Invalid Draco mesh');
+  }
+  const numFaces = mesh.num_faces();
+  const numIndices = numFaces * 3;
+  const numPoints = mesh.num_points();
+  const indices = new Uint32Array(numIndices);
+
+  // Add Faces to mesh
+  const ia = new decoderModule.DracoInt32Array();
+  for (let i = 0; i < numFaces; ++i) {
+    decoder.GetFaceFromMesh(mesh, i, ia);
+    const index = i * 3;
+    indices[index] = ia.GetValue(0);
+    indices[index + 1] = ia.GetValue(1);
+    indices[index + 2] = ia.GetValue(2);
+  }
+  decoderModule.destroy(ia);
+  const stride = 3;
+  const numValues = numPoints * stride;
+
+  const attribute = decoder.GetAttribute(mesh, attrId);
+  const attributeData = new decoderModule.DracoFloat32Array();
+  decoder.GetAttributeFloatForAllPoints(mesh, attribute, attributeData);
+
+  // Get vertex coordinates from mesh
+  const vertexPositions = new Float32Array(numValues);
+  for (let i = 0; i < numValues; ++i) {
+    vertexPositions[i] = attributeData.GetValue(i);
+  }
+  decoderModule.destroy(attributeData);
+
+  return {vertexPositions, indices};
+}
+
 export interface MeshSource {
   // TODO(jbms): Move this declaration to class definition below and declare abstract once
   // TypeScript supports mixins with abstract classes.
@@ -310,24 +382,28 @@ export class MeshSource extends ChunkSource {
     fragmentSource.meshSource = this;
   }
 
-  getChunk(objectId: Uint64) {
+  getChunk(objectId: Uint64, verifyFragments?: boolean|undefined) {
     const key = getObjectKey(objectId);
     let chunk = <ManifestChunk>this.chunks.get(key);
     if (chunk === undefined) {
       chunk = this.getNewChunk_(ManifestChunk);
-      chunk.initializeManifestChunk(key, objectId);
+      chunk.initializeManifestChunk(key, objectId, verifyFragments);
       this.addChunk(chunk);
     }
     return chunk;
   }
 
   getFragmentChunk(manifestChunk: ManifestChunk, fragmentId: FragmentId) {
-    let key = `${manifestChunk.key}/${fragmentId}`;
     let fragmentSource = this.fragmentSource;
+    let extractInfo = manifestChunk.extractFragmentKey(fragmentId);
+    let key = extractInfo.key;
+    fragmentId = extractInfo.id;
     let chunk = <FragmentChunk>fragmentSource.chunks.get(key);
     if (chunk === undefined) {
+      let verifyFragment = manifestChunk.verifyFragments;
+      if (verifyFragment === undefined) verifyFragment = true;
       chunk = fragmentSource.getNewChunk_(FragmentChunk);
-      chunk.initializeFragmentChunk(key, manifestChunk, fragmentId);
+      chunk.initializeFragmentChunk(key, manifestChunk, fragmentId, verifyFragment);
       fragmentSource.addChunk(chunk);
     }
     return chunk;
@@ -374,7 +450,8 @@ export class MeshLayer extends withSegmentationLayerBackendState
     const basePriority = getBasePriority(visibility);
     const {source, chunkManager} = this;
     forEachVisibleSegment(this, objectId => {
-      let manifestChunk = source.getChunk(objectId);
+      // if objectId exists in rootSegmentsAfterEdit, do not verify mesh fragments existence
+      const manifestChunk = source.getChunk(objectId, !this.rootSegmentsAfterEdit!.has(objectId));
       ++this.numVisibleChunksNeeded;
       chunkManager.requestChunk(
           manifestChunk, priorityTier, basePriority + MESH_OBJECT_MANIFEST_CHUNK_PRIORITY);
@@ -393,6 +470,7 @@ export class MeshLayer extends withSegmentationLayerBackendState
         }
       }
     });
+    this.rootSegmentsAfterEdit!.clear();
   }
 }
 

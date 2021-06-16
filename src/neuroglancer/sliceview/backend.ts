@@ -95,6 +95,7 @@ export class SliceViewBackend extends SliceViewIntermediateBase {
 
     const curVisibleChunks: SliceViewChunk[] = [];
     this.velocityEstimator.addSample(this.projectionParameters.value.globalPosition);
+
     for (const [layer, visibleLayerSources] of this.visibleLayers) {
       chunkManager.registerLayer(layer);
       const {visibleSources} = visibleLayerSources;

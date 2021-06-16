@@ -854,6 +854,18 @@ export class LayerManager extends RefCounted {
   }
 }
 
+export enum ActionState {
+  INACTIVE,
+  FIRST,   // Selecting elements for the first group.
+  SECOND,  // Selecting elements for the second group.
+}
+
+export enum ActionMode {
+  NONE,
+  MERGE,
+  SPLIT,
+}
+
 export interface PickState {
   pickedRenderLayer: RenderLayer|null;
   pickedValue: Uint64;
@@ -863,6 +875,8 @@ export interface PickState {
   pickedAnnotationBuffer: ArrayBuffer|undefined;
   pickedAnnotationBufferOffset: number|undefined;
   pickedAnnotationType: AnnotationType|undefined;
+  actionMode: ActionMode;
+  actionState: ActionState;
 }
 
 export class MouseSelectionState implements PickState {
@@ -882,8 +896,50 @@ export class MouseSelectionState implements PickState {
   pickedAnnotationType: AnnotationType|undefined = undefined;
   pageX: number;
   pageY: number;
+  
+  actionMode = ActionMode.NONE;
+  actionState = ActionState.INACTIVE;
 
   private forcerFunction: (() => void)|undefined = undefined;
+
+  setMode(mode: ActionMode) {
+    this.actionMode = mode;
+  }
+
+  toggleAction() {
+    if (this.actionState === ActionState.INACTIVE) {
+      this.actionState = ActionState.FIRST;
+    } else {
+      this.actionState = ActionState.INACTIVE;
+    }
+  }
+
+  updateAction() {
+    switch (this.actionMode) {
+      case ActionMode.MERGE: {
+        if (this.actionState === ActionState.FIRST) {
+          this.actionState = ActionState.SECOND;
+          return ['merge', 'first'];
+        } else {
+          this.actionState = ActionState.INACTIVE;
+          return ['merge', 'second'];
+        }
+      }
+      case ActionMode.SPLIT: {
+        if (this.actionState === ActionState.FIRST) {
+          this.actionState = ActionState.SECOND;
+          return ['split', 'first'];
+        } else {
+          this.actionState = ActionState.INACTIVE;
+          return ['split', 'second'];
+        }
+      }
+      default: {
+        // Should never happen
+        return [];
+      }
+    }
+  }
 
   removeForcer(forcer: (() => void)) {
     if (forcer === this.forcerFunction) {
@@ -965,6 +1021,13 @@ export class LayerSelectedValues extends RefCounted {
   }
 
   get<T extends UserLayer>(userLayer: T): T['selectionState']|undefined {
+    this.update();
+    const {selectionState} = userLayer;
+    if (selectionState.generation !== this.changed.count) return undefined;
+    return selectionState;
+  }
+
+  getRaw<T extends UserLayer>(userLayer: T): T['selectionState']|undefined {
     this.update();
     const {selectionState} = userLayer;
     if (selectionState.generation !== this.changed.count) return undefined;
@@ -1671,13 +1734,24 @@ export class LinkedLayerGroup extends RefCounted implements Trackable {
 }
 
 function initializeLayerFromSpecNoRestoreState(managedLayer: ManagedUserLayer, spec: any) {
-  const layerType = verifyOptionalObjectProperty(spec, 'type', verifyString, 'auto');
+  let layerType = verifyOptionalObjectProperty(spec, 'type', verifyString, 'auto');
   managedLayer.archived = verifyOptionalObjectProperty(spec, 'archived', verifyBoolean, false);
   if (!managedLayer.archived) {
     managedLayer.visible = verifyOptionalObjectProperty(spec, 'visible', verifyBoolean, true);
   } else {
     managedLayer.visible = false;
   }
+
+  // Compatibility for old graphene links with type: `segmentation`
+  // TEMP HACK
+  console.log('managedLayer', managedLayer, 'spec', spec);
+  if (layerType === 'segmentation') {
+    spec['type'] = layerType = 'segmentation_with_graph';
+
+    StatusMessage.showMessage(`The layer specification for ${
+      'sourceUrl'} is deprecated. Key 'layerType' must be 'segmentation_with_graph'. Please reload this page.`);
+  }
+
   const layerConstructor = layerTypes.get(layerType) || NewUserLayer;
   managedLayer.layer = new layerConstructor(managedLayer);
   return spec;

@@ -84,7 +84,7 @@ function initializeElement(v: any) {
   v[nextSymbol] = v[prevSymbol] = v;
 }
 
-const minSymbol = Symbol('disjoint_sets:min');
+const maxSymbol = Symbol('disjoint_sets:max');
 
 function isRootElement(v: any) {
   return v[parentSymbol] === v;
@@ -93,12 +93,18 @@ function isRootElement(v: any) {
 /**
  * Represents a collection of disjoint sets of Uint64 values.
  *
- * Supports merging sets, retrieving the minimum Uint64 value contained in a set (the representative
+ * Supports merging sets, retrieving the maximum Uint64 value contained in a set (the representative
  * value), and iterating over the elements contained in a set.
  */
 export class DisjointUint64Sets {
   private map = new Map<string, Uint64>();
   generation = 0;
+
+  has(x: Uint64): boolean {
+    let key = x.toString();
+    let element = this.map.get(key);
+    return element !== undefined;
+  }
 
   get(x: Uint64): Uint64 {
     let key = x.toString();
@@ -106,10 +112,10 @@ export class DisjointUint64Sets {
     if (element === undefined) {
       return x;
     }
-    return findRepresentative(element)[minSymbol];
+    return findRepresentative(element)[maxSymbol];
   }
 
-  isMinElement(x: Uint64) {
+  isMaxElement(x: Uint64) {
     let y = this.get(x);
     return (y === x || Uint64.equal(y, x));
   }
@@ -121,7 +127,7 @@ export class DisjointUint64Sets {
     if (element === undefined) {
       element = x.clone();
       initializeElement(element);
-      (<any>element)[minSymbol] = element;
+      (<any>element)[maxSymbol] = element;
       map.set(key, element);
       return element;
     }
@@ -137,10 +143,22 @@ export class DisjointUint64Sets {
     this.generation++;
     let newNode = linkUnequalSetRepresentatives(a, b);
     spliceCircularLists(a, b);
-    let aMin = (<any>a)[minSymbol];
-    let bMin = (<any>b)[minSymbol];
-    newNode[minSymbol] = Uint64.less(aMin, bMin) ? aMin : bMin;
+    let aMax = (<any>a)[maxSymbol];
+    let bMax = (<any>b)[maxSymbol];
+    newNode[maxSymbol] = Uint64.less(aMax, bMax) ? bMax : aMax;
     return true;
+  }
+
+  deleteSet(a: Uint64): boolean {
+    const ids = [...this.setElements(a)];
+    if (ids.length > 0) {
+      for (const id of ids) {
+        this.map.delete(id.toString());
+      }
+      ++this.generation;
+      return true;
+    }
+    return false;
   }
 
   * setElements(a: Uint64): IterableIterator<Uint64> {
@@ -170,7 +188,7 @@ export class DisjointUint64Sets {
   * mappings(temp = <[Uint64, Uint64]>new Array<Uint64>(2)) {
     for (let element of this.map.values()) {
       temp[0] = element;
-      temp[1] = findRepresentative(element)[minSymbol];
+      temp[1] = findRepresentative(element)[maxSymbol];
       yield temp;
     }
   }

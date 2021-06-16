@@ -103,11 +103,19 @@ const DEFAULT_DATA_SOURCES = exports.DEFAULT_DATA_SOURCES = [
     register: null,
     registerCredentials: 'neuroglancer/datasource/middleauth/register_credentials_provider',
   },
+  {
+    source: 'neuroglancer/datasource/graphene',
+    asyncComputation: [
+      'neuroglancer/async_computation/decode_jpeg',
+      'neuroglancer/async_computation/decode_gzip',
+    ],
+  },
 ];
 
 const DEFAULT_SUPPORTED_LAYERS = exports.DEFAULT_SUPPORTED_LAYERS = [
   'neuroglancer/image_user_layer',
   'neuroglancer/segmentation_user_layer',
+  'neuroglancer/segmentation_user_layer_with_graph',
   'neuroglancer/single_mesh_user_layer',
   'neuroglancer/annotation/user_layer',
 ];

@@ -34,6 +34,7 @@ import {startRelativeMouseDrag} from 'neuroglancer/util/mouse_drag';
 import {TouchEventBinder, TouchPinchInfo, TouchTranslateInfo} from 'neuroglancer/util/touch_bindings';
 import {getWheelZoomAmount} from 'neuroglancer/util/wheel_zoom';
 import {ViewerState} from 'neuroglancer/viewer_state';
+import { ActionState } from './layer';
 
 declare var NEUROGLANCER_SHOW_OBJECT_SELECTION_TOOLTIP: boolean|undefined;
 
@@ -415,6 +416,8 @@ export abstract class RenderedDataPanel extends RenderedPanel {
       }
     }, /*capture=*/ true);
 
+    this.registerEventListener(element, 'mousedown', this.onMousedown.bind(this));
+
 
     registerActionListener(element, 'select-position', () => {
       this.viewer.selectionDetailsState.select();
@@ -632,6 +635,17 @@ export abstract class RenderedDataPanel extends RenderedPanel {
     }
     const {clientX, clientY} = event.targetTouches[0];
     this.handleMouseMove(clientX, clientY);
+  }
+
+  onMousedown(event: MouseEvent) {
+    this.onMousemove(event);
+    let {mouseState} = this.viewer;
+    if (event.button === 0) {
+      if (mouseState.actionState !== ActionState.INACTIVE) {
+        let [mode, action] = mouseState.updateAction();
+        this.viewer.layerManager.invokeAction(`${mode}-select-${action}`);
+      }
+    }
   }
 
   disposed() {

@@ -40,6 +40,7 @@ import {Uint64} from 'neuroglancer/util/uint64';
 import {withSharedVisibility} from 'neuroglancer/visibility_priority/frontend';
 import {makeCopyButton} from 'neuroglancer/widget/copy_button';
 import {makeFilterButton} from 'neuroglancer/widget/filter_button';
+import { TrackableBoolean } from '../trackable_boolean';
 
 export class Uint64MapEntry {
   constructor(public key: Uint64, public value?: Uint64, public label?: string|undefined) {}
@@ -61,6 +62,7 @@ export class SegmentSelectionState extends RefCounted {
   baseSelectedSegment = new Uint64();
   hasSelectedSegment = false;
   changed = new NullarySignal();
+  rawSelectedSegment = new Uint64();
 
   get value() {
     return this.hasSelectedSegment ? this.selectedSegment : undefined;
@@ -116,6 +118,25 @@ export class SegmentSelectionState extends RefCounted {
     }
   }
 
+  setRaw(value: Uint64|null|undefined) {
+    console.log('setRaw', value);
+    if (value == null) {
+      if (this.hasSelectedSegment) {
+        this.hasSelectedSegment = false;
+        this.changed.dispatch();
+      }
+    } else {
+      let existingRawValue = this.rawSelectedSegment;
+      if (!this.hasSelectedSegment || value.low !== existingRawValue.low ||
+          value.high !== existingRawValue.high) {
+        existingRawValue.low = value.low;
+        existingRawValue.high = value.high;
+        this.hasSelectedSegment = true;
+        this.changed.dispatch();
+      }
+    }
+  }
+
   isSelected(value: Uint64) {
     return this.hasSelectedSegment && Uint64.equal(value, this.selectedSegment);
   }
@@ -128,6 +149,9 @@ export class SegmentSelectionState extends RefCounted {
         value = state.value;
       }
       this.set(value, userLayer.displayState.segmentationGroupState.value.hideSegmentZero.value);
+
+      // value = layerSelectedValues.getRaw(userLayer); // TODO
+      // this.setRaw(toUint64(value));
     }));
   }
 }
@@ -151,6 +175,7 @@ export interface SegmentationDisplayState {
   saturation: TrackableAlphaValue;
   segmentationGroupState: WatchableValueInterface<SegmentationGroupState>;
   segmentationColorGroupState: WatchableValueInterface<SegmentationColorGroupState>;
+  shatterSegmentEquivalences: TrackableBoolean; // TODO does this belong here?
 
   selectSegment: (id: Uint64, pin: boolean|'toggle') => void;
   filterBySegmentLabel: (id: Uint64) => void;
@@ -350,8 +375,8 @@ function makeRegisterSegmentWidgetEventHandlers(displayState: SegmentationDispla
     const idString = entryElement.dataset.id!;
     const id = tempStatedColor;
     id.tryParseString(idString);
-    const {visibleSegments} = displayState.segmentationGroupState.value;
-    visibleSegments.set(id, !visibleSegments.has(id));
+    const {rootSegments} = displayState.segmentationGroupState.value;
+    rootSegments.set(id, !rootSegments.has(id));
     event.stopPropagation();
   };
 
@@ -706,7 +731,10 @@ export function getObjectColor(
 
 export function sendVisibleSegmentsState(state: VisibleSegmentsState, options: any = {}) {
   for (const property of VISIBLE_SEGMENTS_STATE_PROPERTIES) {
-    options[property] = state[property].rpcId;
+    const value = state[property];
+    if (value) {
+      options[property] = value.rpcId;
+    }
   }
   return options;
 }
@@ -723,6 +751,9 @@ export class SegmentationLayerSharedObject extends Base {
     let {displayState} = this;
     options['chunkManager'] = this.chunkManager.rpcId;
     sendVisibleSegmentsState(displayState.segmentationGroupState.value, options);
+    if (displayState.segmentationGroupState.value.rootSegmentsAfterEdit !== undefined){
+      options['rootSegmentsAfterEdit'] = displayState.segmentationGroupState.value.rootSegmentsAfterEdit!.rpcId;
+    }
     options['transform'] =
         this.registerDisposer(SharedWatchableValue.makeFromExisting(
                                   this.chunkManager.rpc!, this.displayState.transform))

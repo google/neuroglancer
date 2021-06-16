@@ -48,3 +48,5 @@ export enum VertexPositionFormat {
   uint10,
   uint16,
 }
+
+export type FragmentId = string;

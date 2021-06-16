@@ -3,8 +3,8 @@
     "noImplicitAny": true,
     "noImplicitReturns": true,
     "noImplicitThis": true,
-    "noUnusedParameters": true,
-    "noUnusedLocals": true,
+    "noUnusedParameters": false, //  temp
+    "noUnusedLocals": false, // temp
     "preserveConstEnums": true,
     "experimentalDecorators": true,
     "strictNullChecks": true,
@@ -20,7 +20,8 @@
       "*": ["*"],
       "neuroglancer/*": ["src/neuroglancer/*"],
       "jpgjs": ["third_party/jpgjs/jpg.js"],
-      "neuroglancer-testdata/*": ["testdata/*"]
+      "neuroglancer-testdata/*": ["testdata/*"],
+      "dracoloader": ["third_party/draco/draco_loader.js"],
     },
     "lib": ["dom", "es2020", "dom.iterable"],
     "typeRoots": [],

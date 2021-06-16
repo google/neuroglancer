@@ -109,6 +109,12 @@ export function getDefaultRenderedDataPanelBindings() {
           'at:touchhold1': 'move-to-mouse-position',
           'at:touchtap1x2': 'select',
           'at:touchtap2x3': 'snap',
+          'keym': 'two-point-merge',
+          'control+keym': 'merge-selected',
+          'keyc': 'two-point-cut',
+          'control+keyc': 'cut-selected',
+          'control+keys': 'shatter-segment-equivalences',
+          'escape': 'cancel',
         },
         {
           label: 'All Data Panels',

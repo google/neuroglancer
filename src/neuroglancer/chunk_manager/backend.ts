@@ -386,7 +386,7 @@ export class ChunkSource extends ChunkSourceBase {
   }
 }
 
-function startChunkDownload(chunk: Chunk) {
+export function startChunkDownload(chunk: Chunk) {
   const downloadCancellationToken = chunk.downloadCancellationToken = new CancellationTokenSource();
   const startTime = Date.now();
   chunk.source!.download(chunk, downloadCancellationToken)
@@ -411,7 +411,7 @@ function startChunkDownload(chunk: Chunk) {
           });
 }
 
-function cancelChunkDownload(chunk: Chunk) {
+export function cancelChunkDownload(chunk: Chunk) {
   const token = chunk.downloadCancellationToken!;
   chunk.downloadCancellationToken = undefined;
   token.cancel();

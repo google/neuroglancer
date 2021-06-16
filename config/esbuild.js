@@ -83,6 +83,7 @@ class Builder {
     this.minify = minify;
     this.python = options.python;
     this.srcDir = path.resolve(__dirname, '..', 'src');
+    this.thirdPartyDir = path.resolve(__dirname, '..', 'third_party');
     this.plugins = getCommonPlugins();
     this.define = define;
     this.inject = inject;
@@ -154,7 +155,7 @@ j=d.createElement(s),dl=l!='dataLayer'?'&l='+l:'';j.async=true;j.src=
       banner: {
         js: 'function require(x) { throw new Error(\'Cannot require \' + x) }',
       },
-    };
+    };j
   }
 
   getWorkerEntrypoints() {
@@ -189,6 +190,9 @@ j=d.createElement(s),dl=l!='dataLayer'?'&l='+l:'';j.async=true;j.src=
       await fs.promises.copyFile(
           path.resolve(this.srcDir, 'neuroglancer/datasource/boss/bossauth.html'),
           path.resolve(this.outDir, 'bossauth.html'));
+      await fs.promises.copyFile(
+        path.resolve(this.thirdPartyDir, 'draco/draco_decoder.wasm'),
+        path.resolve(this.outDir, 'draco_decoder.wasm'));
     }
     await esbuild.build({
       ...this.getBaseEsbuildConfig(),
