@@ -660,6 +660,8 @@ export class Viewer extends RefCounted implements ViewerState {
               ['Cross section view', inputEventBindings.sliceView],
               ['3-D projection view', inputEventBindings.perspectiveView]
             ],
+            this.layerManager,
+            this.toolBinder,
         );
       },
     }));
