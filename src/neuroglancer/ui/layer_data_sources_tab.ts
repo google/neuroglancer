@@ -218,10 +218,13 @@ export class LoadedDataSourceView extends RefCounted {
       element.appendChild(
           this.registerDisposer(new DataSourceSubsourceView(source, subsource)).element);
     }
-    const transformWidget = this.registerDisposer(new CoordinateSpaceTransformWidget(
-        source.transform, source.layer.localCoordinateSpaceCombiner,
-        source.layer.manager.root.coordinateSpaceCombiner));
-    this.element.appendChild(transformWidget.element);
+    const {transform} = source;
+    if (transform.mutableSourceRank || transform.value.sourceRank !== 0) {
+      const transformWidget = this.registerDisposer(new CoordinateSpaceTransformWidget(
+          source.transform, source.layer.localCoordinateSpaceCombiner,
+          source.layer.manager.root.coordinateSpaceCombiner));
+      this.element.appendChild(transformWidget.element);
+    }
     this.registerDisposer(() => removeFromParent(this.element));
   }
 }
