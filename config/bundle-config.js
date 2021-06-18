@@ -103,6 +103,9 @@ const DEFAULT_DATA_SOURCES = exports.DEFAULT_DATA_SOURCES = [
     register: null,
     registerCredentials: 'neuroglancer/datasource/middleauth/register_credentials_provider',
   },
+  {
+    source: 'neuroglancer/datasource/nggraph',
+  },
 ];
 
 const DEFAULT_SUPPORTED_LAYERS = exports.DEFAULT_SUPPORTED_LAYERS = [

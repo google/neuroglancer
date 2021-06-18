@@ -19,7 +19,8 @@ import {CancellationToken, uncancelableToken} from 'neuroglancer/util/cancellati
 import {cancellableFetchOk, HttpError, ResponseTransform} from 'neuroglancer/util/http_request';
 
 export async function fetchWithCredentials<Credentials, T>(
-    credentialsProvider: CredentialsProvider<Credentials>, input: RequestInfo, init: RequestInit,
+    credentialsProvider: CredentialsProvider<Credentials>,
+    input: RequestInfo|((credentials: Credentials) => RequestInfo), init: RequestInit,
     transformResponse: ResponseTransform<T>,
     applyCredentials: (credentials: Credentials, requestInit: RequestInit) => RequestInit,
     errorHandler: (httpError: HttpError, credentials: Credentials) => 'refresh' | 'retry',
@@ -30,8 +31,8 @@ export async function fetchWithCredentials<Credentials, T>(
     requestLoop: while (true) {
       try {
         return await cancellableFetchOk(
-            input, applyCredentials(credentials.credentials, init), transformResponse,
-            cancellationToken);
+            typeof input === 'function' ? input(credentials.credentials) : input,
+            applyCredentials(credentials.credentials, init), transformResponse, cancellationToken);
       } catch (error) {
         if (error instanceof HttpError) {
           if (errorHandler(error, credentials.credentials) === 'refresh') continue credentialsLoop;
