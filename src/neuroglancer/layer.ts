@@ -1469,6 +1469,9 @@ export class SelectedLayerState extends RefCounted implements Trackable {
     this.location.restoreState(obj);
     const layerName = verifyObjectProperty(obj, 'layer', verifyOptionalString);
     const layer = layerName !== undefined ? this.layerManager.getLayerByName(layerName) : undefined;
+    if (layer === undefined) {
+      this.visible = false;
+    }
     this.layer = layer;
   }
 
