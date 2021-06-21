@@ -21,7 +21,6 @@
       "neuroglancer/*": ["src/neuroglancer/*"],
       "jpgjs": ["third_party/jpgjs/jpg.js"],
       "neuroglancer-testdata/*": ["testdata/*"],
-      "dracoloader": ["third_party/draco/draco_loader.js"],
     },
     "lib": ["dom", "es2020", "dom.iterable"],
     "typeRoots": [],

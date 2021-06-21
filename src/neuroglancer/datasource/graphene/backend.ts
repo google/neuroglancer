@@ -342,12 +342,6 @@ export function decodeFragmentChunk(chunk: FragmentChunk, response: ArrayBuffer)
           response, Endianness.LITTLE, /*vertexByteOffset=*/ 4, numVertices));
 }
 
-export function decodeDracoFragmentChunk(
-  chunk: FragmentChunk, response: ArrayBuffer, decoderModule: any) {
-assignMeshFragmentData(
-    chunk, decodeTriangleVertexPositionsAndIndicesDraco(response, decoderModule));
-}
-
 async function getUnverifiedFragmentPromise(
   chunk: FragmentChunk,
   parameters: MeshSourceParameters,
@@ -410,6 +404,13 @@ function getFragmentDownloadPromise(
       cancellationToken);
   }
   return fragmentDownloadPromise;
+}
+
+async function decodeDracoFragmentChunk(
+    chunk: FragmentChunk, response: ArrayBuffer) {
+  const m = await import(/* webpackChunkName: "draco" */ 'neuroglancer/mesh/draco');
+  const rawMesh = await m.decodeDraco(new Uint8Array(response));
+  assignMeshFragmentData(chunk, rawMesh);
 }
 
 @registerSharedObject() export class GrapheneMeshSource extends
