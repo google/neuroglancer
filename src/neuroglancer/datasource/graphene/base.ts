@@ -79,12 +79,6 @@ export class MultiscaleMeshMetadata {
   sharding: Array<ShardingParameters>|undefined;
 }
 
-export class MultiscaleMeshSourceParameters {
-  metadata: MultiscaleMeshMetadata;
-
-  static RPC_ID = 'graphene/MultiscaleMeshSource';
-}
-
 export interface SkeletonMetadata {
   transform: mat4;
   vertexAttributes: Map<string, VertexAttributeInfo>;
