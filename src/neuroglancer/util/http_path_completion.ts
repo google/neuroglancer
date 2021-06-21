@@ -57,8 +57,10 @@ export async function getHtmlPathCompletions(
   const entries = await getHtmlDirectoryListing(m[1], cancellationToken);
   const offset = m[1].length;
   const matches: Completion[] = [];
+  const parsed_url = parseUrl(url)
+  const prefix = `${parsed_url.protocol}://${parsed_url.host}${parsed_url.path}`
   for (const entry of entries) {
-    if (!entry.startsWith(url)) continue;
+    if (!entry.startsWith(prefix)) continue;
     matches.push({value: entry.substring(offset)});
   }
   return {
