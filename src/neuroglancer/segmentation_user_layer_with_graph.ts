@@ -412,9 +412,13 @@ function helper<TBase extends BaseConstructor>(Base: TBase) {
 
     getInverseTransform() {
       const meshLayer = this.someSegmentationRenderLayer()!;
-      const transform = meshLayer.displayState.transform.value!; //  TODO not being used
-      const inverseTransform = mat4.create(); // TODO empty transform
-      return inverseTransform;
+      const transform = meshLayer.displayState.transform.value;
+
+      if (transform.error !== undefined) {
+        throw transform.error;
+      }
+
+      return mat4.invert(mat4.create(), transform.modelToRenderLayerTransform as mat4);
     }
 
     mergeSelectFirst() {
@@ -427,7 +431,7 @@ function helper<TBase extends BaseConstructor>(Base: TBase) {
         // console.log('lastSegmentSelection.position', lastSegmentSelection.position);
         vec3.transformMat4(
             lastSegmentSelection.position, this.getMousePositionSpatial(),
-            this.getInverseTransform());//this.transform.inverse);
+            this.getInverseTransform()!);//this.transform.inverse);
 
         StatusMessage.showTemporaryMessage(
             `Selected ${lastSegmentSelection.segmentId} as source for merge. Pick a sink.`, 3000);
@@ -443,7 +447,7 @@ function helper<TBase extends BaseConstructor>(Base: TBase) {
           rootId: segmentSelectionState.selectedSegment.clone(),
           position: vec3.transformMat4(
               vec3.create(), this.getMousePositionSpatial(),
-              this.getInverseTransform())
+              this.getInverseTransform()!)
         };
 
         StatusMessage.showTemporaryMessage(
@@ -479,7 +483,7 @@ function helper<TBase extends BaseConstructor>(Base: TBase) {
         lastSegmentSelection.rootId.assign(segmentSelectionState.selectedSegment);
         vec3.transformMat4(
             lastSegmentSelection.position, this.getMousePositionSpatial(),
-            this.getInverseTransform());
+            this.getInverseTransform()!);
 
         StatusMessage.showTemporaryMessage(
             `Selected ${lastSegmentSelection.segmentId} as source for split. Pick a sink.`, 3000);
@@ -495,7 +499,7 @@ function helper<TBase extends BaseConstructor>(Base: TBase) {
           rootId: segmentSelectionState.selectedSegment.clone(),
           position: vec3.transformMat4(
               vec3.create(), this.getMousePositionSpatial(),
-              this.getInverseTransform())
+              this.getInverseTransform()!)
         };
 
         StatusMessage.showTemporaryMessage(
