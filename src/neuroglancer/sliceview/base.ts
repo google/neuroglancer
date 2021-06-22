@@ -221,7 +221,7 @@ export interface VisibleLayerSources<
   displayDimensionRenderInfo: DisplayDimensionRenderInfo;
 }
 
-const tempChunkLayout = new ChunkLayout(vec3.create(), new Float32Array(mat4.create()), 0);
+const tempChunkLayout = new ChunkLayout(vec3.create(), mat4.create(), 0);
 
 export class SliceViewProjectionParameters extends ProjectionParameters {
   /**

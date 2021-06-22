@@ -66,7 +66,6 @@ import {AnnotationToolStatusWidget} from 'neuroglancer/widget/annotation_tool_st
 import {CheckboxIcon} from 'neuroglancer/widget/checkbox_icon';
 import {makeIcon} from 'neuroglancer/widget/icon';
 import {makeTextIconButton} from 'neuroglancer/widget/text_icon_button';
-import {NumberInputWidget} from 'neuroglancer/widget/number_input_widget';
 import {MousePositionWidget, PositionWidget} from 'neuroglancer/widget/position_widget';
 import {TrackableScaleBarOptions} from 'neuroglancer/widget/scale_bar';
 import {RPC} from 'neuroglancer/worker_rpc';
@@ -788,24 +787,24 @@ export class Viewer extends RefCounted implements ViewerState {
     this.helpPanelState.location.visible = !this.helpPanelState.location.visible;
   }
 
-  loadFromJsonUrl() {
-    var urlParams = new URLSearchParams(window.location.search);
-    if (urlParams.has('json_url')) {
-      let json_url = urlParams.get('json_url')!;
-      history.replaceState(null, '', removeParameterFromUrl(window.location.href, 'json_url'));
-      StatusMessage
-      .forPromise(
-        cancellableFetchOk(json_url, {}, responseJson)
-          .then(response => {
-            this.state.restoreState(response);
-          }),
-              {
-                initialMessage: `Retrieving state from json_url: ${json_url}.`,
-                delay: true,
-                errorPrefix: `Error retrieving state: `,
-              });
-      }
-  }
+  // loadFromJsonUrl() {
+  //   var urlParams = new URLSearchParams(window.location.search);
+  //   if (urlParams.has('json_url')) {
+  //     let json_url = urlParams.get('json_url')!;
+  //     history.replaceState(null, '', removeParameterFromUrl(window.location.href, 'json_url'));
+  //     StatusMessage
+  //     .forPromise(
+  //       cancellableFetchOk(json_url, {}, responseJson)
+  //         .then(response => {
+  //           this.state.restoreState(response);
+  //         }),
+  //             {
+  //               initialMessage: `Retrieving state from json_url: ${json_url}.`,
+  //               delay: true,
+  //               errorPrefix: `Error retrieving state: `,
+  //             });
+  //     }
+  // }
 
   promptJsonStateServer(message: string): void {
     let json_server_input = prompt(message, 'https://json.neurodata.io/v1');

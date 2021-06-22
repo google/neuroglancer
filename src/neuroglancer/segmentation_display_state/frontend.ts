@@ -695,7 +695,7 @@ export function registerRedrawWhenSegmentationDisplayState3DChanged(
 /**
  * Temporary values used by getObjectColor.
  */
-const tempColor = new Float32Array([0,0,0,0]);
+const tempColor = vec4.create();
 const tempStatedColor = new Uint64();
 
 export function getBaseObjectColor(

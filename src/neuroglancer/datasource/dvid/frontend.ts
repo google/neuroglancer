@@ -154,8 +154,8 @@ export class VolumeDataInstanceInfo extends DataInstanceInfo {
     for (let level = 0; level < this.numLevels; ++level) {
       const downsampleFactor = Math.pow(2, level);
       const invDownsampleFactor = Math.pow(2, -level);
-      let lowerVoxelBound = new Float32Array([0,0,0]);
-      let upperVoxelBound = new Float32Array([0,0,0]);
+      let lowerVoxelBound = vec3.create();
+      let upperVoxelBound = vec3.create();
       for (let i = 0; i < 3; ++i) {
         let lowerVoxelNotAligned = Math.floor(this.lowerVoxelBound[i] * invDownsampleFactor);
         // adjust min to be a multiple of blocksize
@@ -194,7 +194,7 @@ export class VolumeDataInstanceInfo extends DataInstanceInfo {
             dataType: this.dataType,
 
             baseVoxelOffset: lowerVoxelBound,
-            upperVoxelBound: new Float32Array(vec3.subtract(vec3.create(), upperVoxelBound, lowerVoxelBound)),
+            upperVoxelBound: vec3.subtract(vec3.create(), upperVoxelBound, lowerVoxelBound),
             volumeType: this.volumeType,
             volumeSourceOptions,
             compressedSegmentationBlockSize:

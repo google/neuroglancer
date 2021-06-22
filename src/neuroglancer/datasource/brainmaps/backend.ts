@@ -675,8 +675,7 @@ function parseObjectLabels(obj: any): Uint64[][]|undefined {
 }
 
 function parseAnnotation(entry: any, idPrefix: string, expectedId?: string): Annotation {
-  const corner =
-      new Float32Array(verifyObjectProperty(entry, 'corner', x => parseCommaSeparatedPoint(verifyString(x))));
+  const corner = verifyObjectProperty(entry, 'corner', x => parseCommaSeparatedPoint(verifyString(x)));
   const size = verifyObjectProperty(entry, 'size', x => parseCommaSeparatedPoint(verifyString(x)));
   const description = verifyObjectProperty(entry, 'payload', verifyOptionalString);
   const spatialAnnotationType = verifyObjectProperty(entry, 'type', verifyString);
@@ -698,8 +697,8 @@ function parseAnnotation(entry: any, idPrefix: string, expectedId?: string): Ann
           properties: [],
         };
       } else {
-        const radii = new Float32Array(vec3.scale(vec3.create(), size, 0.5));
-        const center = new Float32Array(vec3.add(vec3.create(), corner, radii));
+        const radii = vec3.scale(vec3.create(), size, 0.5);
+        const center = vec3.add(vec3.create(), corner, radii);
         return {
           type: AnnotationType.ELLIPSOID,
           id,
@@ -804,7 +803,7 @@ function annotationToBrainmaps(annotation: Annotation): any {
     }
     case AnnotationType.AXIS_ALIGNED_BOUNDING_BOX: {
       const {pointA, pointB} = annotation;
-      const emptyVec3 = new Float32Array([0,0,0]);
+      const emptyVec3 = vec3.create();
       const minPoint = vector.min(emptyVec3, pointA, pointB);
       const maxPoint = vector.max(emptyVec3, pointA, pointB);
       const size = vec3.subtract(maxPoint, maxPoint, minPoint);

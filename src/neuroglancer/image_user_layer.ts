@@ -53,6 +53,7 @@ import {Tab} from 'neuroglancer/widget/tab_view';
 import {TrackableRGB} from 'neuroglancer/util/color';
 import {ColorWidget} from 'neuroglancer/widget/color';
 import {vec3} from 'neuroglancer/util/geom';
+import {RangeWidget} from './widget/range';
 
 const OPACITY_JSON_KEY = 'opacity';
 const BLEND_JSON_KEY = 'blend';

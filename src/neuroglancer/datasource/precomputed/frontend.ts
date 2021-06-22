@@ -313,7 +313,7 @@ function getLegacyMeshSource(
 
 function parseTransform(data: any): mat4 {
   return verifyObjectProperty(data, 'transform', value => {
-    const transform = new Float32Array(mat4.create());
+    const transform = mat4.create();
     if (value !== undefined) {
       parseFixedLengthArray(transform.subarray(0, 12), value, verifyFiniteFloat);
     }
@@ -548,7 +548,7 @@ async function getVolumeDataSource(
         await getMeshSource(options.chunkManager, credentialsProvider, meshUrl);
     let subsourceToModelSubspaceTransform = getSubsourceToModelSubspaceTransform(info);
     mat4.multiply(subsourceToModelSubspaceTransform, subsourceToModelSubspaceTransform, transform);
-    subsourceToModelSubspaceTransform  = new Float32Array(subsourceToModelSubspaceTransform);
+    subsourceToModelSubspaceTransform  = subsourceToModelSubspaceTransform;
     subsources.push({
       id: 'mesh',
       default: true,
@@ -562,7 +562,7 @@ async function getVolumeDataSource(
         await getSkeletonSource(options.chunkManager, credentialsProvider, skeletonsUrl);
     let subsourceToModelSubspaceTransform = getSubsourceToModelSubspaceTransform(info);
     mat4.multiply(subsourceToModelSubspaceTransform, subsourceToModelSubspaceTransform, transform);
-    subsourceToModelSubspaceTransform  = new Float32Array(subsourceToModelSubspaceTransform);
+    subsourceToModelSubspaceTransform  = subsourceToModelSubspaceTransform;
     subsources.push({
       id: 'skeletons',
       default: true,

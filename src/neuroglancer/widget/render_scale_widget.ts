@@ -171,7 +171,7 @@ export class RenderScaleWidget extends RefCounted {
     const sortedSpatialScales = Array.from(spatialScales.keys());
     sortedSpatialScales.sort();
 
-    const tempColor = new Float32Array(vec3.create());
+    const tempColor = vec3.create();
 
     let maxCount = 1;
     const numRows = spatialScales.size;
