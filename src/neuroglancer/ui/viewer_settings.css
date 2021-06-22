@@ -1,0 +1,69 @@
+/**
+ * @license
+ * Copyright 2016 Google Inc.
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+.neuroglancer-settings-body {
+  flex-basis: 0px;
+  flex: 1;
+  height: 0px;
+  min-height: 0px;
+  font-family: sans-serif;
+  display: flex;
+  flex-direction: column;
+  font-size: 10pt;
+}
+
+.neuroglancer-settings-body input[type="text"], .neuroglancer-settings-body input[type="number"] {
+  background-color: #333;
+  color: #fff;
+  border: 0px;
+}
+
+.neuroglancer-settings-scroll-container {
+  flex: 1;
+  flex-basis: 0px;
+  position: relative;
+  overflow: auto;
+  display: flex;
+  flex-direction: column;
+}
+
+.neuroglancer-settings-scroll-container > * {
+  margin-top: 3px;
+}
+
+.neuroglancer-settings-title {
+  align-self: stretch;
+}
+
+.neuroglancer-settings-scroll-container > label {
+  display: flex;
+  flex-direction: row;
+  justify-content: space-between;
+}
+
+.neuroglancer-settings-scroll-container > label > input::before {
+  flex: 1;
+  content: " ";
+}
+
+.neuroglancer-settings-scroll-container > label > input {
+  margin-left: 5px;
+  width: 11ch;
+}
+
+.neuroglancer-settings-limit-widget > input {
+  width: 11ch;
+}

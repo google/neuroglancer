@@ -18,13 +18,14 @@ import './invlerp.css';
 
 import svg_arrowLeft from 'ikonate/icons/arrow-left.svg';
 import svg_arrowRight from 'ikonate/icons/arrow-right.svg';
-import {DisplayContext, RenderedPanel} from 'neuroglancer/display_context';
+import {DisplayContext, IndirectRenderedPanel} from 'neuroglancer/display_context';
 import {WatchableValueInterface} from 'neuroglancer/trackable_value';
 import {animationFrameDebounce} from 'neuroglancer/util/animation_frame_debounce';
 import {DataType} from 'neuroglancer/util/data_type';
 import {RefCounted} from 'neuroglancer/util/disposable';
 import {updateInputFieldWidth} from 'neuroglancer/util/dom';
 import {EventActionMap, registerActionListener} from 'neuroglancer/util/event_action_map';
+import {computeInvlerp, computeLerp, dataTypeCompare, DataTypeInterval, getClampedInterval, getClosestEndpoint, getIntervalBoundsEffectiveFraction, getIntervalBoundsEffectiveOffset, parseDataTypeValue} from 'neuroglancer/util/lerp';
 import {MouseEventBinder} from 'neuroglancer/util/mouse_bindings';
 import {startRelativeMouseDrag} from 'neuroglancer/util/mouse_drag';
 import {Uint64} from 'neuroglancer/util/uint64';
@@ -33,21 +34,21 @@ import {WatchableVisibilityPriority} from 'neuroglancer/visibility_priority/fron
 import {getMemoizedBuffer} from 'neuroglancer/webgl/buffer';
 import {ParameterizedEmitterDependentShaderGetter, parameterizedEmitterDependentShaderGetter} from 'neuroglancer/webgl/dynamic_shader';
 import {HistogramSpecifications} from 'neuroglancer/webgl/empirical_cdf';
-import {computeInvlerp, computeLerp, dataTypeCompare, DataTypeInterval, defineLerpShaderFunction, enableLerpShaderFunction, getClampedInterval, getClosestEndpoint, getIntervalBoundsEffectiveFraction, getIntervalBoundsEffectiveOffset, parseDataTypeValue} from 'neuroglancer/webgl/lerp';
+import {defineLerpShaderFunction, enableLerpShaderFunction} from 'neuroglancer/webgl/lerp';
 import {defineLineShader, drawLines, initializeLineShader, VERTICES_PER_LINE} from 'neuroglancer/webgl/lines';
 import {ShaderBuilder} from 'neuroglancer/webgl/shader';
 import {getShaderType} from 'neuroglancer/webgl/shader_lib';
-import {InvlerpParameters, ShaderInvlerpControl} from 'neuroglancer/webgl/shader_ui_controls';
+import {InvlerpParameters} from 'neuroglancer/webgl/shader_ui_controls';
 import {getSquareCornersBuffer} from 'neuroglancer/webgl/square_corners_buffer';
 import {setRawTextureParameters} from 'neuroglancer/webgl/texture';
 import {makeIcon} from 'neuroglancer/widget/icon';
-import {LegendShaderOptions, ShaderControlsOptions} from 'neuroglancer/widget/shader_controls';
+import {LegendShaderOptions} from 'neuroglancer/widget/shader_controls';
 import {Tab} from 'neuroglancer/widget/tab_view';
 
 const inputEventMap = EventActionMap.fromObject({
-  'mousedown0': {action: 'set'},
-  'shift+mousedown0': {action: 'adjust-window-via-drag'},
-  'wheel': {action: 'zoom-via-wheel'},
+  'shift?+mousedown0': {action: 'set'},
+  'shift?+alt+mousedown0': {action: 'adjust-window-via-drag'},
+  'shift?+wheel': {action: 'zoom-via-wheel'},
 });
 
 export class CdfController<T extends RangeAndWindowIntervals> extends RefCounted {
@@ -61,6 +62,7 @@ export class CdfController<T extends RangeAndWindowIntervals> extends RefCounted
       const mouseEvent = actionEvent.detail;
       const bounds = this.getModel();
       const value = this.getTargetValue(mouseEvent);
+      if (value === undefined) return;
       const clampedRange = getClampedInterval(bounds.window, bounds.range);
       const endpoint = getClosestEndpoint(clampedRange, value);
       const setEndpoint = (value: number|Uint64) => {
@@ -70,6 +72,7 @@ export class CdfController<T extends RangeAndWindowIntervals> extends RefCounted
       setEndpoint(value);
       startRelativeMouseDrag(mouseEvent, (newEvent: MouseEvent) => {
         const value = this.getTargetValue(newEvent);
+        if (value === undefined) return;
         setEndpoint(value);
       });
     });
@@ -130,8 +133,10 @@ export class CdfController<T extends RangeAndWindowIntervals> extends RefCounted
     return computeLerp(this.getModel().window, this.dataType, relativeX);
   }
 
-  getTargetValue(event: MouseEvent) {
-    return this.getWindowLerp(this.getTargetFraction(event));
+  getTargetValue(event: MouseEvent): number|Uint64|undefined {
+    const targetFraction = this.getTargetFraction(event);
+    if (!Number.isFinite(targetFraction)) return undefined;
+    return this.getWindowLerp(targetFraction);
   }
 }
 
@@ -173,7 +178,7 @@ export function getUpdatedRangeAndWindowParameters<T extends RangeAndWindowInter
 const NUM_HISTOGRAM_BINS_IN_RANGE = 254;
 const NUM_CDF_LINES = NUM_HISTOGRAM_BINS_IN_RANGE + 1;
 
-class CdfPanel extends RenderedPanel {
+class CdfPanel extends IndirectRenderedPanel {
   get drawOrder() {
     return 100;
   }
@@ -230,8 +235,8 @@ for (int i = 0; i <= dataValue; ++i) {
   cumSum += getCount(i);
 }
 float total = cumSum + getCount(dataValue + 1);
-float cumSumEnd = dataValue == ${NUM_CDF_LINES-1} ? cumSum : total;
-if (dataValue == ${NUM_CDF_LINES-1}) {
+float cumSumEnd = dataValue == ${NUM_CDF_LINES - 1} ? cumSum : total;
+if (dataValue == ${NUM_CDF_LINES - 1}) {
   cumSum + getCount(dataValue + 1);
 }
 for (int i = dataValue + 2; i < 256; ++i) {
@@ -265,9 +270,11 @@ out_color = uColor;
     return builder.build();
   })());
 
-  draw() {
+  drawIndirect() {
     const {lineShader, gl, regionShader, parent: {dataType, trackable: {value: bounds}}} = this;
     this.setGLLogicalViewport();
+    gl.clearColor(0.0, 0.0, 0.0, 0.0);
+    gl.clear(WebGL2RenderingContext.COLOR_BUFFER_BIT);
     gl.enable(WebGL2RenderingContext.BLEND);
     gl.blendFunc(WebGL2RenderingContext.SRC_ALPHA, WebGL2RenderingContext.ONE_MINUS_SRC_ALPHA);
     gl.disable(WebGL2RenderingContext.DEPTH_TEST);
@@ -319,13 +326,13 @@ out_color = uColor;
 
 function dummyColorLegendShaderModule() {}
 
-class ColorLegendPanel extends RenderedPanel {
+class ColorLegendPanel extends IndirectRenderedPanel {
   private shaderOptions: LegendShaderOptions;
   constructor(public parent: InvlerpWidget) {
     super(parent.display, document.createElement('div'), parent.visibility);
     const {element} = this;
     element.classList.add('neuroglancer-invlerp-legend-panel');
-    const shaderOptions = this.shaderOptions = parent.shaderControlsOptions.legendShaderOptions!;
+    const shaderOptions = this.shaderOptions = parent.legendShaderOptions!;
     this.shaderGetter = parameterizedEmitterDependentShaderGetter(this, this.gl, {
       ...shaderOptions,
       memoizeKey: {id: `colorLegendShader`, base: shaderOptions.memoizeKey},
@@ -367,14 +374,16 @@ ${shaderDataType} getInterpolatedDataValue(int dummyChannel) {
 
   private cornersBuffer = getSquareCornersBuffer(this.gl, -1, -1, 1, 1);
 
-  draw() {
+  drawIndirect() {
     const shaderResult = this.shaderGetter(dummyColorLegendShaderModule);
     const {shader} = shaderResult;
     if (shader === null) return;
     this.setGLLogicalViewport();
+    const {gl} = this;
+    gl.clearColor(0.0, 0.0, 0.0, 0.0);
+    gl.clear(WebGL2RenderingContext.COLOR_BUFFER_BIT);
     shader.bind();
     this.shaderOptions.initializeShader(shaderResult);
-    const {gl} = this;
     gl.enable(WebGL2RenderingContext.BLEND);
     const {trackable: {value: {window}}, dataType} = this.parent;
     enableLerpShaderFunction(shader, 'ng_colorLegendLerp', this.parent.dataType, window);
@@ -469,6 +478,31 @@ function updateInputBoundValue(inputElement: HTMLInputElement, bound: number|Uin
   updateInputBoundWidth(inputElement);
 }
 
+export function invertInvlerpRange(trackable: WatchableValueInterface<InvlerpParameters>) {
+  const bounds = trackable.value;
+  const {range} = bounds;
+  trackable.value = {...bounds, range: [range[1], range[0]] as DataTypeInterval};
+}
+
+export function adjustInvlerpContrast(
+    dataType: DataType, trackable: WatchableValueInterface<InvlerpParameters>,
+    scaleFactor: number) {
+  const bounds = trackable.value;
+  const newLower = computeLerp(bounds.range, dataType, 0.5 - scaleFactor / 2);
+  const newUpper = computeLerp(bounds.range, dataType, 0.5 + scaleFactor / 2);
+  trackable.value = {...bounds, range: [newLower, newUpper] as DataTypeInterval};
+}
+
+export function adjustInvlerpBrightnessContrast(
+    dataType: DataType, trackable: WatchableValueInterface<InvlerpParameters>,
+    baseRange: DataTypeInterval, brightnessAmount: number, contrastAmount: number) {
+  const scaleFactor = Math.exp(contrastAmount);
+  const bounds = trackable.value;
+  const newLower = computeLerp(baseRange, dataType, 0.5 - scaleFactor / 2 + brightnessAmount);
+  const newUpper = computeLerp(baseRange, dataType, 0.5 + scaleFactor / 2 + brightnessAmount);
+  trackable.value = {...bounds, range: [newLower, newUpper] as DataTypeInterval};
+}
+
 export class InvlerpWidget extends Tab {
   cdfPanel = this.registerDisposer(new CdfPanel(this));
   boundElements = {
@@ -481,26 +515,18 @@ export class InvlerpWidget extends Tab {
         .colorBuffers[0]
         .texture;
   }
-  get dataType() {
-    return this.control.dataType;
-  }
   private invertRange() {
-    const {trackable} = this;
-    const bounds = trackable.value;
-    const {range} = bounds;
-    trackable.value = {...bounds, range: [range[1], range[0]] as DataTypeInterval};
+    invertInvlerpRange(this.trackable);
   }
   constructor(
       visibility: WatchableVisibilityPriority, public display: DisplayContext,
-      public control: ShaderInvlerpControl,
-      public trackable: WatchableValueInterface<InvlerpParameters>,
+      public dataType: DataType, public trackable: WatchableValueInterface<InvlerpParameters>,
       public histogramSpecifications: HistogramSpecifications, public histogramIndex: number,
-      public shaderControlsOptions: ShaderControlsOptions) {
+      public legendShaderOptions: LegendShaderOptions|undefined) {
     super(visibility);
     this.registerDisposer(histogramSpecifications.visibility.add(this.visibility));
     const {element, boundElements} = this;
-    if (control.default.channel.length === 0 &&
-        shaderControlsOptions.legendShaderOptions !== undefined) {
+    if (legendShaderOptions !== undefined) {
       const legendPanel = this.registerDisposer(new ColorLegendPanel(this));
       element.appendChild(legendPanel.element);
     }

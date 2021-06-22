@@ -24,6 +24,7 @@ export class TextInputWidget<T> extends RefCounted {
     super();
     this.registerDisposer(model.changed.add(() => this.updateView()));
     const {element} = this;
+    element.type = 'text';
     this.registerEventListener(element, 'change', () => this.updateModel());
     this.updateView();
   }
@@ -33,7 +34,7 @@ export class TextInputWidget<T> extends RefCounted {
   }
 
   private updateView() {
-    this.element.value = this.model.value + '';
+    this.element.value = (this.model.value ?? '') + '';
   }
 
   private updateModel() {

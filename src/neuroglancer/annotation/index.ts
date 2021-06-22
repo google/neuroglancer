@@ -21,9 +21,11 @@
 import {BoundingBox, CoordinateSpaceTransform, WatchableCoordinateSpaceTransform} from 'neuroglancer/coordinate_transform';
 import {arraysEqual} from 'neuroglancer/util/array';
 import {packColor, parseRGBAColorSpecification, parseRGBColorSpecification, serializeColor, unpackRGB, unpackRGBA} from 'neuroglancer/util/color';
+import {DataType} from 'neuroglancer/util/data_type';
 import {Borrowed, RefCounted} from 'neuroglancer/util/disposable';
 import {Endianness, ENDIANNESS} from 'neuroglancer/util/endian';
 import {expectArray, parseArray, parseFixedLengthArray, verifyEnumString, verifyFiniteFloat, verifyFiniteNonNegativeFloat, verifyFloat, verifyInt, verifyObject, verifyObjectProperty, verifyOptionalObjectProperty, verifyOptionalString, verifyString} from 'neuroglancer/util/json';
+import {parseDataTypeValue} from 'neuroglancer/util/lerp';
 import {getRandomHexString} from 'neuroglancer/util/random';
 import {NullarySignal, Signal} from 'neuroglancer/util/signal';
 import {Uint64} from 'neuroglancer/util/uint64';
@@ -71,6 +73,8 @@ export interface AnnotationColorPropertySpec extends AnnotationPropertySpecBase 
 export interface AnnotationNumericPropertySpec extends AnnotationPropertySpecBase {
   type: 'float32'|'uint32'|'int32'|'uint16'|'int16'|'uint8'|'int8';
   default: number;
+  enumValues?: number[];
+  enumLabels?: string[];
   min?: number;
   max?: number;
   step?: number;
@@ -331,6 +335,29 @@ export class AnnotationPropertySerializer {
   }
 }
 
+export function formatNumericProperty(property: AnnotationNumericPropertySpec, value: number): string {
+  const formattedValue = property.type === 'float32' ? value.toPrecision(6) : value.toString();
+  const {enumValues, enumLabels} = property;
+  if (enumValues !== undefined) {
+    const enumIndex = enumValues.indexOf(value);
+    if (enumIndex !== -1) {
+      return `${enumLabels![enumIndex]} (${formattedValue})`;
+    }
+  }
+  return formattedValue;
+}
+
+export function formatAnnotationPropertyValue(property: AnnotationPropertySpec, value: any): string {
+  switch (property.type) {
+    case 'rgb':
+      return serializeColor(unpackRGB(value));
+    case 'rgba':
+      return serializeColor(unpackRGBA(value));
+    default:
+      return formatNumericProperty(property, value);
+  }
+}
+
 export function parseAnnotationPropertyId(obj: unknown) {
   const s = verifyString(obj);
   if (s.match(/^[a-z][a-zA-Z0-9_]*$/) === null) {
@@ -364,7 +391,27 @@ function parseAnnotationPropertySpec(obj: unknown): AnnotationPropertySpec {
   const description = verifyOptionalObjectProperty(obj, 'description', verifyString);
   let defaultValue = verifyOptionalObjectProperty(
       obj, 'default', x => annotationPropertyTypeHandlers[type].deserializeJson(x), 0);
-  return {type, identifier, description, default: defaultValue} as AnnotationPropertySpec;
+  let enumValues: number[]|undefined;
+  let enumLabels: string[]|undefined;
+  switch (type) {
+    case 'rgb':
+    case 'rgba':
+      break;
+    default: {
+      const dataType: DataType = DataType[type.toUpperCase() as any] as any;
+      enumValues = verifyOptionalObjectProperty(
+          obj, 'enum_values',
+          valuesObj => parseArray(valuesObj, x => parseDataTypeValue(dataType, x) as number));
+      if (enumValues !== undefined) {
+        enumLabels = verifyObjectProperty(
+            obj, 'enum_labels',
+            labelsObj => parseFixedLengthArray(
+                new Array<string>(enumValues!.length), labelsObj, verifyString));
+      }
+    }
+  }
+  return {type, identifier, description, default: defaultValue, enumValues, enumLabels} as
+      AnnotationPropertySpec;
 }
 
 function annotationPropertySpecToJson(spec: AnnotationPropertySpec) {
@@ -702,7 +749,7 @@ export class AnnotationSource extends RefCounted implements AnnotationSourceSign
     return this.rank_;
   }
 
-  readonly annotationPropertySerializer: AnnotationPropertySerializer;
+  annotationPropertySerializer: AnnotationPropertySerializer;
 
   constructor(
       rank: number, public readonly relationships: readonly string[] = [],
@@ -897,7 +944,11 @@ export class LocalAnnotationSource extends AnnotationSource {
           break;
       }
     }
-    this.rank_ = sourceRank;
+    if (this.rank_ !== sourceRank) {
+      this.rank_ = sourceRank;
+      this.annotationPropertySerializer =
+          new AnnotationPropertySerializer(this.rank_, this.properties);
+    }
     this.changed.dispatch();
   }
 }

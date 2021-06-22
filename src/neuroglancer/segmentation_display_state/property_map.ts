@@ -21,10 +21,10 @@ import {mergeSequences, TypedArray, TypedArrayConstructor, WritableArrayLike} fr
 import {DataType} from 'neuroglancer/util/data_type';
 import {Borrowed} from 'neuroglancer/util/disposable';
 import {murmurHash3_x86_32Hash64Bits} from 'neuroglancer/util/hash';
+import {clampToInterval, dataTypeCompare, DataTypeInterval, dataTypeIntervalEqual, dataTypeValueNextAfter, parseDataTypeValue} from 'neuroglancer/util/lerp';
 import {getObjectId} from 'neuroglancer/util/object_id';
 import {defaultStringCompare} from 'neuroglancer/util/string';
 import {Uint64} from 'neuroglancer/util/uint64';
-import {clampToInterval, dataTypeCompare, DataTypeInterval, dataTypeIntervalEqual, dataTypeValueNextAfter, parseDataTypeValue} from 'neuroglancer/webgl/lerp';
 
 export type InlineSegmentProperty =
     InlineSegmentStringProperty|InlineSegmentTagsProperty|InlineSegmentNumericalProperty;
@@ -242,7 +242,9 @@ export function normalizeInlineSegmentPropertyMap(inlineProperties: InlineSegmen
   const properties = inlineProperties.properties.map(property => {
     const {values} = property;
     const newValues = new (values.constructor as (TypedArrayConstructor | typeof Array))(length);
-    remapArray(values, newValues, permutation);
+    for (let i = 0; i < length; ++i) {
+      newValues[i] = values[permutation[i]];
+    }
     return {...property, values: newValues} as InlineSegmentProperty;
   });
   return {ids: newIds, properties};

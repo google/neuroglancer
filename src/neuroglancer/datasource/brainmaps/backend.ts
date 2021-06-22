@@ -37,7 +37,7 @@ import {parseArray, parseFixedLengthArray, verifyObject, verifyObjectProperty, v
 import {defaultStringCompare} from 'neuroglancer/util/string';
 import {Uint64} from 'neuroglancer/util/uint64';
 import * as vector from 'neuroglancer/util/vector';
-import {decodeZIndexCompressed, encodeZIndexCompressed, getOctreeChildIndex, zorder3LessThan} from 'neuroglancer/util/zorder';
+import {decodeZIndexCompressed, encodeZIndexCompressed3d, getOctreeChildIndex, zorder3LessThan} from 'neuroglancer/util/zorder';
 import {registerSharedObject, SharedObject} from 'neuroglancer/worker_rpc';
 
 const CHUNK_DECODERS = new Map([
@@ -90,7 +90,7 @@ export class BrainmapsVolumeChunkSource extends
         payload.subvolume_format = 'SINGLE_IMAGE';
         payload.image_format_options = {
           image_format: 'JPEG',
-          jpeg_quality: 70,
+          jpeg_quality: this.parameters.jpegQuality!,
         };
         return;
       case VolumeChunkEncoding.COMPRESSED_SEGMENTATION:
@@ -433,7 +433,7 @@ async function makeBatchMeshRequest<T>(
             gridY = Math.floor(octree[chunkIndex * 5 + 1] / relativeBlockShape[1]),
             gridZ = Math.floor(octree[chunkIndex * 5 + 2] / relativeBlockShape[2]);
       const fragmentKey =
-          encodeZIndexCompressed(tempUint64, xBits, yBits, zBits, gridX, gridY, gridZ)
+          encodeZIndexCompressed3d(tempUint64, xBits, yBits, zBits, gridX, gridY, gridZ)
               .toString(16)
               .padStart(16, '0');
       const entry = fragmentSupervoxelIds[chunkIndex];
@@ -496,7 +496,7 @@ async function makeBatchMeshRequest<T>(
         // download slot is available.
         chunk.downloadSlots = Math.max(1, requestsInProgress);
         if (requestsInProgress === 0) {
-          resolve();
+          resolve(undefined);
           return;
         }
       };

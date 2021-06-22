@@ -37,8 +37,10 @@ import {makeCopyButton} from 'neuroglancer/widget/copy_button';
 import {DependentViewWidget} from 'neuroglancer/widget/dependent_view_widget';
 import {Tab} from 'neuroglancer/widget/tab_view';
 import {VirtualList, VirtualListSource} from 'neuroglancer/widget/virtual_list';
-import {clampToInterval, computeInvlerp, dataTypeCompare, DataTypeInterval, dataTypeIntervalEqual, getClampedInterval, getIntervalBoundsEffectiveFraction, parseDataTypeValue} from 'neuroglancer/webgl/lerp';
+import {clampToInterval, computeInvlerp, dataTypeCompare, DataTypeInterval, dataTypeIntervalEqual, getClampedInterval, getIntervalBoundsEffectiveFraction, parseDataTypeValue} from 'neuroglancer/util/lerp';
 import {CdfController, getUpdatedRangeAndWindowParameters, RangeAndWindowIntervals} from 'neuroglancer/widget/invlerp';
+import {makeToolButton} from 'neuroglancer/ui/tool';
+import {ANNOTATE_MERGE_SEGMENTS_TOOL_ID, ANNOTATE_SPLIT_SEGMENTS_TOOL_ID} from 'neuroglancer/ui/segment_split_merge_tools';
 
 const tempUint64 = new Uint64();
 
@@ -305,7 +307,7 @@ function toggleSortOrder(
   const newOrder = (prevOrder === '<') ? '>' : '<';
   const newIncludeColumns = includeColumns.filter(x => x !== id);
   for (const s of sortBy) {
-    if (s.fieldId !== 'id' && s.fieldId !== id) {
+    if (s.fieldId !== 'id' && s.fieldId !== 'label' && s.fieldId !== id) {
       newIncludeColumns.push(s.fieldId);
     }
   }
@@ -348,7 +350,10 @@ class NumericalPropertiesSummary extends RefCounted {
     const propertySummaries: NumericalPropertySummary[] = [];
     let listElement: HTMLElement|undefined;
     if (properties !== undefined && properties.length > 0) {
-      listElement = document.createElement('div');
+      listElement = document.createElement('details');
+      const summaryElement = document.createElement('summary');
+      summaryElement.textContent = `${properties.length} numerical propert${properties.length > 1 ? 'ies' : 'y'}`;
+      listElement.appendChild(summaryElement);
       listElement.classList.add('neuroglancer-segment-query-result-numerical-list');
       const windowBounds = this.bounds.window.value;
       for (let i = 0, numProperties = properties.length; i < numProperties; ++i) {
@@ -773,6 +778,26 @@ export class SegmentDisplayTab extends Tab {
     super();
     const {element} = this;
     element.classList.add('neuroglancer-segment-display-tab');
+    element.appendChild(
+        this.registerDisposer(new DependentViewWidget(
+                                  layer.displayState.segmentationGroupState.value.graph,
+                                  (graph, parent, context) => {
+                                    if (graph === undefined) return;
+                                    const toolbox = document.createElement('div');
+                                    toolbox.className = 'neuroglancer-segmentation-toolbox';
+                                    toolbox.appendChild(makeToolButton(context, layer, {
+                                      toolJson: ANNOTATE_MERGE_SEGMENTS_TOOL_ID,
+                                      label: 'Merge',
+                                      title: 'Merge segments'
+                                    }));
+                                    toolbox.appendChild(makeToolButton(context, layer, {
+                                      toolJson: ANNOTATE_SPLIT_SEGMENTS_TOOL_ID,
+                                      label: 'Split',
+                                      title: 'Split segments'
+                                    }));
+                                    parent.appendChild(toolbox);
+                                  }))
+            .element);
     const queryElement = document.createElement('input');
     queryElement.classList.add('neuroglancer-segment-list-query');
     queryElement.addEventListener('focus', () => {
@@ -980,8 +1005,12 @@ export class SegmentDisplayTab extends Tab {
                   context.registerDisposer(
                       displayState.segmentSelectionState.changed.add(updateListItems));
                   context.registerDisposer(group.visibleSegments.changed.add(updateListItems));
-                  context.registerDisposer(group.segmentColorHash.changed.add(updateListItems));
-                  context.registerDisposer(group.segmentStatedColors.changed.add(updateListItems));
+                  context.registerDisposer(
+                      displayState.segmentColorHash.changed.add(updateListItems));
+                  context.registerDisposer(
+                      displayState.segmentStatedColors.changed.add(updateListItems));
+                  context.registerDisposer(
+                      displayState.segmentDefaultColor.changed.add(updateListItems));
                   list.element.classList.add('neuroglancer-segment-list');
                   context.registerDisposer(layer.bindSegmentListWidth(list.element));
                   context.registerDisposer(

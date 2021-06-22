@@ -38,6 +38,7 @@ export class VolumeSourceParameters {
   volumeId: string;
   scaleIndex: number;
   encoding: VolumeChunkEncoding;
+  jpegQuality: number|undefined;
   changeSpec: ChangeSpec|undefined;
 
   static RPC_ID = 'brainmaps/VolumeChunkSource';

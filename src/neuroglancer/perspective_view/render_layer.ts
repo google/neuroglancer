@@ -63,6 +63,10 @@ export class PerspectiveViewRenderLayer<AttachmentState = unknown> extends
     attachment;
     return true;
   }
+
+  get transparentPickEnabled() {
+    return true;
+  }
 }
 
 export interface PerspectiveViewRenderLayer<AttachmentState = unknown> {

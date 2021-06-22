@@ -27,7 +27,7 @@ import {removeChildren, removeFromParent} from 'neuroglancer/util/dom';
 import {makeHelpButton} from 'neuroglancer/widget/help_button';
 import {makeMaximizeButton} from 'neuroglancer/widget/maximize_button';
 import {ShaderCodeWidget} from 'neuroglancer/widget/shader_code_widget';
-import {ShaderControls} from 'neuroglancer/widget/shader_controls';
+import {registerLayerShaderControlsTool, ShaderControls} from 'neuroglancer/widget/shader_controls';
 import {Tab} from 'neuroglancer/widget/tab_view';
 
 const SHADER_JSON_KEY = 'shader';
@@ -177,11 +177,11 @@ class DisplayOptionsTab extends Tab {
     element.appendChild(topRow);
     element.appendChild(this.attributeWidget.element);
     element.appendChild(this.codeWidget.element);
-    element.appendChild(
-        this.registerDisposer(new ShaderControls(
-                                  layer.displayState.shaderControlState,
-                                  this.layer.manager.root.display, {visibility: this.visibility}))
-            .element);
+    element.appendChild(this.registerDisposer(new ShaderControls(
+                                                  layer.displayState.shaderControlState,
+                                                  this.layer.manager.root.display, this.layer,
+                                                  {visibility: this.visibility}))
+                            .element);
   }
 }
 
@@ -204,3 +204,8 @@ registerLayerTypeDetector(subsource => {
   }
   return undefined;
 });
+
+registerLayerShaderControlsTool(
+    SingleMeshUserLayer, layer => ({
+                           shaderControlState: layer.displayState.shaderControlState,
+                         }));

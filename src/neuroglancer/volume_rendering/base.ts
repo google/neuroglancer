@@ -92,7 +92,7 @@ export function forEachVisibleVolumeRenderingChunk<
   // Returns volume of a single voxel of source `scaleIndex` in "view" space.
   const getViewVolume = (scaleIndex: number) => {
     const tsource = transformedSources[scaleIndex];
-    return tsource.chunkLayout.detTransform * viewDet;
+    return Math.abs(tsource.chunkLayout.detTransform * viewDet);
   };
   // Index of source with voxel volume that is closest to `targetViewVolume`.
   let bestScaleIndex = transformedSources.length - 1;

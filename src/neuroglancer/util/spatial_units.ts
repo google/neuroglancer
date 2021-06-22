@@ -65,7 +65,7 @@ export function formatBoundingBoxVolume(pointA: vec3, pointB: vec3, transform: m
   }
 
   const preTransformVolume = Math.abs(prod3(vec3.subtract(vector, pointB, pointA)));
-  const det = mat3.determinant(mat3.fromMat4(mat3.create(), transform));
+  const det = Math.abs(mat3.determinant(mat3.fromMat4(mat3.create(), transform)));
   const postTransformVolume = det * preTransformVolume;
 
   return `${dimensionText}  [${formatVolume(postTransformVolume)}]`;

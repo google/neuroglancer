@@ -94,10 +94,23 @@ export async function cancellableFetchSpecialOk<T>(
   const u = parseUrl(url);
   switch (u.protocol) {
     case 'gs':
+      // Include origin as `neuroglancerOrigin` query string parameter.
+      //
+      // GCS fails to send an updated `Access-Control-Allow-Origin` header in 304 responses to cache
+      // revalidation requests.
+      //
+      // https://bugs.chromium.org/p/chromium/issues/detail?id=1214563#c2
+      //
+      // Consequently, we include this extra query string parameter that is ignored by GCS but
+      // ensures the cache is not shared.
+      //
+      // Note: This workaround is not needed for gs+xml because with the XML API, the
+      // Access-Control-Allow-Origin response header does not vary with the Origin.
       return fetchWithOAuth2Credentials(
           credentialsProvider,
-          `https://www.googleapis.com/storage/v1/b/${u.host}/o/${
-              encodeURIComponent(u.path.substring(1))}?alt=media`,
+          `https://www.googleapis.com/storage/v1/b/${u.host}/o/` +
+              `${encodeURIComponent(u.path.substring(1))}?alt=media&` +
+              `neuroglancerOrigin=${encodeURIComponent(location.origin)}`,
           init, transformResponse, cancellationToken);
     case 'gs+xml':
       return fetchWithOAuth2Credentials(

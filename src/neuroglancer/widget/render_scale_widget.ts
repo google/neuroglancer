@@ -18,17 +18,18 @@ import 'neuroglancer/widget/render_scale_widget.css';
 
 import debounce from 'lodash/debounce';
 import throttle from 'lodash/throttle';
+import {UserLayer} from 'neuroglancer/layer';
 import {getRenderScaleFromHistogramOffset, getRenderScaleHistogramOffset, numRenderScaleHistogramBins, RenderScaleHistogram} from 'neuroglancer/render_scale_statistics';
 import {TrackableValueInterface, WatchableValue} from 'neuroglancer/trackable_value';
 import {serializeColor} from 'neuroglancer/util/color';
 import {hsvToRgb} from 'neuroglancer/util/colorspace';
 import {RefCounted} from 'neuroglancer/util/disposable';
-import {EventActionMap, registerActionListener} from 'neuroglancer/util/event_action_map';
+import {ActionEvent, EventActionMap, registerActionListener} from 'neuroglancer/util/event_action_map';
 import {vec3} from 'neuroglancer/util/geom';
 import {MouseEventBinder} from 'neuroglancer/util/mouse_bindings';
 import {numberToStringFixed} from 'neuroglancer/util/number_to_string';
 import {formatScaleWithUnitAsString} from 'neuroglancer/util/si_units';
-import ResizeObserver from 'resize-observer-polyfill';
+import {LayerControlFactory} from 'neuroglancer/widget/layer_control';
 
 const updateInterval = 200;
 
@@ -48,6 +49,11 @@ function formatPixelNumber(x: number) {
   return Math.round(x) + '';
 }
 
+export interface RenderScaleWidgetOptions {
+  histogram: RenderScaleHistogram;
+  target: TrackableValueInterface<number>;
+}
+
 export class RenderScaleWidget extends RefCounted {
   label = document.createElement('div');
   element = document.createElement('div');
@@ -62,6 +68,15 @@ export class RenderScaleWidget extends RefCounted {
       throttle(() => this.debouncedUpdateView(), updateInterval, {leading: true, trailing: true}));
   private debouncedUpdateView = this.registerCancellable(debounce(() => this.updateView(), 0));
 
+  adjustViaWheel(event: WheelEvent) {
+    const {deltaY} = event;
+    if (deltaY === 0) {
+      return;
+    }
+    this.hoverTarget.value = undefined;
+    this.target.value *= 2 ** Math.sign(deltaY);
+    event.preventDefault();
+  }
 
   constructor(
       public histogram: RenderScaleHistogram, public target: TrackableValueInterface<number>) {
@@ -105,26 +120,23 @@ export class RenderScaleWidget extends RefCounted {
 
     this.registerDisposer(
         registerActionListener<WheelEvent>(canvas, 'adjust-via-wheel', actionEvent => {
-          const event = actionEvent.detail;
-          const {deltaY} = event;
-          if (deltaY === 0) {
-            return;
-          }
-          this.hoverTarget.value = undefined;
-          this.target.value *= 2 ** Math.sign(deltaY);
-          event.preventDefault();
+          this.adjustViaWheel(actionEvent.detail);
         }));
 
 
     this.registerDisposer(registerActionListener(canvas, 'reset', event => {
-      this.hoverTarget.value = undefined;
-      this.target.reset();
+      this.reset();
       event.preventDefault();
     }));
     const resizeObserver = new ResizeObserver(() => this.debouncedUpdateView());
     resizeObserver.observe(canvas);
     this.registerDisposer(() => resizeObserver.disconnect());
     this.updateView();
+  }
+
+  reset() {
+    this.hoverTarget.value = undefined;
+    this.target.reset();
   }
 
   updateView() {
@@ -283,4 +295,34 @@ export class RenderScaleWidget extends RefCounted {
       ctx.fillRect(Math.floor(startOffset), 0, lineWidth, height);
     }
   }
+}
+
+const TOOL_INPUT_EVENT_MAP = EventActionMap.fromObject({
+  'at:shift+wheel': {action: 'adjust-via-wheel'},
+  'at:shift+dblclick0': {action: 'reset'},
+});
+
+export function renderScaleLayerControl<LayerType extends UserLayer>(
+    getter: (layer: LayerType) =>
+        RenderScaleWidgetOptions): LayerControlFactory<LayerType, RenderScaleWidget> {
+  return {
+    makeControl: (layer, context) => {
+      const {histogram, target} = getter(layer);
+      const control = context.registerDisposer(new RenderScaleWidget(histogram, target));
+      return {control, controlElement: control.element};
+    },
+    activateTool: (activation, control) => {
+      activation.bindInputEventMap(TOOL_INPUT_EVENT_MAP);
+      activation.bindAction('adjust-via-wheel', (event: ActionEvent<WheelEvent>) => {
+        event.stopPropagation();
+        event.preventDefault();
+        control.adjustViaWheel(event.detail);
+      });
+      activation.bindAction('reset', (event: ActionEvent<WheelEvent>) => {
+        event.stopPropagation();
+        event.preventDefault();
+        control.reset();
+      });
+    },
+  };
 }

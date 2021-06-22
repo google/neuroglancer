@@ -17,7 +17,7 @@
 import debounce from 'lodash/debounce';
 import {LayerChunkProgressInfo} from 'neuroglancer/chunk_manager/base';
 import {RenderViewport, renderViewportsEqual} from 'neuroglancer/display_context';
-import {LayerView, MouseSelectionState, UserLayer, VisibleLayerInfo} from 'neuroglancer/layer';
+import {LayerView, MouseSelectionState, PickState, UserLayer, VisibleLayerInfo} from 'neuroglancer/layer';
 import {DisplayDimensionRenderInfo, NavigationState} from 'neuroglancer/navigation_state';
 import {PickIDManager} from 'neuroglancer/object_picking';
 import {ProjectionParameters, projectionParametersEqual} from 'neuroglancer/projection_parameters';
@@ -63,8 +63,8 @@ export class RenderLayer extends RefCounted {
    * Transform the stored pickedValue and offset associated with the retrieved pick ID into the
    * actual value.
    */
-  transformPickedValue(pickedValue: Uint64, _pickedOffset: number): any {
-    return pickedValue;
+  transformPickedValue(pickState: PickState): any {
+    return pickState.pickedValue;
   }
 
   /**

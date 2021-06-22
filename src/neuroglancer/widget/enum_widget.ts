@@ -36,18 +36,25 @@ export class EnumSelectWidget<T extends number> extends RefCounted {
     this.registerDisposer(model.changed.add(() => this.updateView()));
     this.registerEventListener(element, 'change', () => this.updateModel());
     this.registerEventListener(element, 'wheel', (event: WheelEvent) => {
-      let {deltaY} = event;
-      if (deltaY > 0) {
-        element.selectedIndex =
-            (element.options.length + element.selectedIndex - 1) % element.options.length;
-        this.updateModel();
-      } else if (deltaY < 0) {
-        element.selectedIndex =
-            (element.options.length + element.selectedIndex + 1) % element.options.length;
-        this.updateModel();
-      }
+      event.preventDefault();
+      event.stopPropagation();
+      this.adjustViaWheel(event);
     });
     this.updateView();
+  }
+
+  adjustViaWheel(event: WheelEvent) {
+    const {element} = this;
+    let {deltaY} = event;
+    if (deltaY > 0) {
+      element.selectedIndex =
+          (element.options.length + element.selectedIndex - 1) % element.options.length;
+      this.updateModel();
+    } else if (deltaY < 0) {
+      element.selectedIndex =
+          (element.options.length + element.selectedIndex + 1) % element.options.length;
+      this.updateModel();
+    }
   }
 
   private updateView() {

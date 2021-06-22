@@ -128,7 +128,7 @@ and the sum of the mesh fragment sizes specified in the manifest.
 
 In addition to the multi-resolution mesh format, an older single-resolution mesh format is also
 supported.  This format is specified by either the absence of an `info` file in the mesh
-subdirectory or an `info` file contanining a JSON object with the following members:
+subdirectory or an `info` file containing a JSON object with the following members:
 - `"@type"`: Must be `"neuroglancer_legacy_mesh"`.
 
 To specify a legacy single-resolution mesh dataset that lacks an `info` file as a Neuroglancer data

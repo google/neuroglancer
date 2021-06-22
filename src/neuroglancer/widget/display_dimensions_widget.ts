@@ -331,8 +331,8 @@ export class DisplayDimensionsWidget extends RefCounted {
         globalDimensionNames,
         displayDimensionIndices,
         displayDimensionUnits,
+        displayDimensionScales,
         canonicalVoxelFactors,
-        canonicalVoxelPhysicalSize,
       } = displayDimensionRenderInfoValue;
       const widgets: DepthWidget[] = [];
 
@@ -401,7 +401,7 @@ export class DisplayDimensionsWidget extends RefCounted {
             dimensionNames: [],
             input,
             label,
-            scale: canonicalVoxelPhysicalSize * canonicalVoxelFactors[i],
+            scale: displayDimensionScales[i] / canonicalVoxelFactors[i],
           };
           widgets.push(widget);
         }

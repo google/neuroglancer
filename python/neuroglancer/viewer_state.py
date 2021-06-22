@@ -20,6 +20,7 @@ import collections
 import copy
 import math
 import numbers
+import re
 
 try:
     import collections.abc as collections_abc
@@ -106,55 +107,180 @@ class Tool(JsonObjectWrapper):
 
     type = wrapped_property('type', text_type)
 
-    def __init__(self, json_data, **kwargs):
-        super(Tool, self).__init__(json_data=json_data, **kwargs)
+    TOOL_TYPE = None
+
+    def __init__(self, *args, **kwargs):
+        tool_type = self.TOOL_TYPE
+        if tool_type is not None:
+            kwargs.update(type=tool_type)
+        super().__init__(*args, **kwargs)
 
 
-@export
+tool_types = {}
+
+
+def export_tool(tool_class):
+    export(tool_class)
+    tool_types[tool_class.TOOL_TYPE] = tool_class
+    return tool_class
+
+
+@export_tool
 class PlacePointTool(Tool):
     __slots__ = ()
-
-    def __init__(self, *args, **kwargs):
-        super(PlacePointTool, self).__init__(*args, type='annotatePoint', **kwargs)
+    TOOL_TYPE = 'annotatePoint'
 
 
-@export
+@export_tool
 class PlaceLineTool(Tool):
     __slots__ = ()
-
-    def __init__(self, *args, **kwargs):
-        super(PlaceLineTool, self).__init__(*args, type='annotateLine', **kwargs)
+    TOOL_TYPE = 'annotateLine'
 
 
-@export
+@export_tool
 class PlaceBoundingBoxTool(Tool):
     __slots__ = ()
-
-    def __init__(self, *args, **kwargs):
-        super(PlaceBoundingBoxTool, self).__init__(*args, type='annotateBoundingBox', **kwargs)
+    TOOL_TYPE = 'annotateBoundingBox'
 
 
-@export
+@export_tool
 class PlaceEllipsoidTool(Tool):
     __slots__ = ()
-
-    def __init__(self, *args, **kwargs):
-        super(PlaceEllipsoidTool, self).__init__(*args, type='annotateSphere', **kwargs)
+    TOOL_TYPE = 'annotateSphere'
 
 
-tool_types = {
-    'annotatePoint': PlacePointTool,
-    'annotateLine': PlaceLineTool,
-    'annotateBoundingBox': PlaceBoundingBoxTool,
-    'annotateSphere': PlaceEllipsoidTool,
-}
+@export_tool
+class BlendTool(Tool):
+    __slots__ = ()
+    TOOL_TYPE = 'blend'
+
+
+@export_tool
+class OpacityTool(Tool):
+    __slots__ = ()
+    TOOL_TYPE = 'opacity'
+
+
+@export_tool
+class CrossSectionRenderScaleTool(Tool):
+    __slots__ = ()
+    TOOL_TYPE = 'crossSectionRenderScale'
+
+
+@export_tool
+class SelectedAlphaTool(Tool):
+    __slots__ = ()
+    TOOL_TYPE = 'selectedAlpha'
+
+
+@export_tool
+class NotSelectedAlphaTool(Tool):
+    __slots__ = ()
+    TOOL_TYPE = 'notSelectedAlpha'
+
+
+@export_tool
+class ObjectAlphaTool(Tool):
+    __slots__ = ()
+    TOOL_TYPE = 'objectAlpha'
+
+
+@export_tool
+class HideSegmentZeroTool(Tool):
+    __slots__ = ()
+    TOOL_TYPE = 'hideSegmentZero'
+
+
+@export_tool
+class BaseSegmentColoringTool(Tool):
+    __slots__ = ()
+    TOOL_TYPE = 'baseSegmentColoring'
+
+
+@export_tool
+class IgnoreNullVisibleSetTool(Tool):
+    __slots__ = ()
+    TOOL_TYPE = 'ignoreNullVisibleSet'
+
+
+@export_tool
+class ColorSeedTool(Tool):
+    __slots__ = ()
+    TOOL_TYPE = 'colorSeed'
+
+
+@export_tool
+class SegmentDefaultColorTool(Tool):
+    __slots__ = ()
+    TOOL_TYPE = 'segmentDefaultColor'
+
+
+@export_tool
+class MeshRenderScaleTool(Tool):
+    __slots__ = ()
+    TOOL_TYPE = 'meshRenderScale'
+
+
+@export_tool
+class MeshSilhouetteRenderingTool(Tool):
+    __slots__ = ()
+    TOOL_TYPE = 'meshSilhouetteRendering'
+
+
+@export_tool
+class SaturationTool(Tool):
+    __slots__ = ()
+    TOOL_TYPE = 'saturation'
+
+
+@export_tool
+class SkeletonRenderingMode2dTool(Tool):
+    __slots__ = ()
+    TOOL_TYPE = 'skeletonRendering.mode2d'
+
+
+@export_tool
+class SkeletonRenderingMode3dTool(Tool):
+    __slots__ = ()
+    TOOL_TYPE = 'skeletonRendering.mode3d'
+
+
+@export_tool
+class SkeletonRenderingLineWidth2dTool(Tool):
+    __slots__ = ()
+    TOOL_TYPE = 'skeletonRendering.lineWidth2d'
+
+
+@export_tool
+class SkeletonRenderingLineWidth3dTool(Tool):
+    __slots__ = ()
+    TOOL_TYPE = 'skeletonRendering.lineWidth3d'
+
+
+@export_tool
+class ShaderControlTool(Tool):
+    __slots__ = ()
+    TOOL_TYPE = 'shaderControl'
+    control = wrapped_property('control', text_type)
+
+
+@export_tool
+class MergeSegmentsTool(Tool):
+    __slots__ = ()
+    TOOL_TYPE = 'mergeSegments'
+
+
+@export_tool
+class SplitSegmentsTool(Tool):
+    __slots__ = ()
+    TOOL_TYPE = 'splitSegments'
 
 
 @export
 def tool(json_data, _readonly=False):
     if isinstance(json_data, Tool):
         return json_data
-    if isinstance(json_data, six.string_types):
+    if isinstance(json_data, str):
         json_data = {'type': json_data}
     if not isinstance(json_data, dict):
         raise TypeError
@@ -214,6 +340,7 @@ class Layer(JsonObjectWrapper):
     tab = wrapped_property('tab', optional(str))
     panels = wrapped_property('panels', typed_list(LayerSidePanelState))
     pick = wrapped_property('pick', optional(bool))
+    tool_bindings = wrapped_property('toolBindings', typed_map(key_type=text_type, value_type=tool))
     tool = wrapped_property('tool', optional(tool))
 
     @staticmethod
@@ -301,7 +428,34 @@ class _AnnotationLayerOptions(object):
     annotation_color = annotationColor = wrapped_property('annotationColor', optional(text_type))
 
 
-ShaderControls = typed_string_map((six.text_type, numbers.Number))
+@export
+class InvlerpParameters(JsonObjectWrapper):
+    range = wrapped_property('range', optional(array_wrapper(numbers.Number, 2)))
+    window = wrapped_property('window', optional(array_wrapper(numbers.Number, 2)))
+    channel = wrapped_property('channel', optional(typed_list(int)))
+
+
+_UINT64_STR_PATTERN = re.compile('[0-9]+')
+
+
+def _shader_control_parameters(v, _readonly=False):
+    if isinstance(v, str):
+        # Check if it can be converted to a number
+        if _UINT64_STR_PATTERN.fullmatch(v):
+            return int(v)
+        return v
+    if isinstance(v, numbers.Number):
+        return v
+    if isinstance(v, dict):
+        return InvlerpParameters(v, _readonly=_readonly)
+    if isinstance(v, InvlerpParameters):
+        return v
+    raise TypeError('Unexpected shader control parameters type: %s' % (type(v), ))
+
+
+_shader_control_parameters.supports_readonly = True
+
+ShaderControls = typed_string_map(_shader_control_parameters)
 
 
 @export
@@ -332,6 +486,14 @@ def uint64_equivalence_map(obj, _readonly=False):
     if obj is not None:
         obj = [[int(v) for v in group] for group in obj]
     return EquivalenceMap(obj, _readonly=_readonly)
+
+
+def _linked_segmentation_color_group_value(x):
+    if isinstance(x, str):
+        return x
+    if x is False:
+        return x
+    raise ValueError('Expected str or False, but received: %r' % (x, ))
 
 
 @export
@@ -385,6 +547,8 @@ class SegmentationLayer(Layer, _AnnotationLayerOptions):
     segment_query = segmentQuery = wrapped_property('segmentQuery', optional(text_type))
     segment_colors = segmentColors = wrapped_property(
         'segmentColors', typed_map(key_type=np.uint64, value_type=text_type))
+    segment_default_color = segmentDefaultColor = wrapped_property('segmentDefaultColor',
+                                                                   optional(text_type))
 
     @property
     def segment_html_color_dict(self):
@@ -399,8 +563,10 @@ class SegmentationLayer(Layer, _AnnotationLayerOptions):
             d[segment] = hex_string
         return d
 
-    linked_segmentation_layer = linkedSegmentationLayer = wrapped_property(
-        'linkedSegmentationLayer', optional(text_type))
+    linked_segmentation_group = linkedSegmentationGroup = wrapped_property(
+        'linkedSegmentationGroup', optional(text_type))
+    linked_segmentation_color_group = linkedSegmentationColorGroup = wrapped_property(
+        'linkedSegmentationColorGroup', optional(_linked_segmentation_color_group_value))
 
     @staticmethod
     def interpolate(a, b, t):
@@ -507,6 +673,8 @@ class AnnotationPropertySpec(JsonObjectWrapper):
     type = wrapped_property('type', text_type)
     description = wrapped_property('description', optional(text_type))
     default = wrapped_property('default', optional(number_or_string))
+    enum_values = wrapped_property('enum_values', optional(typed_list(number_or_string)))
+    enum_labels = wrapped_property('enum_labels', optional(typed_list(text_type)))
 
 
 @export
@@ -1019,6 +1187,7 @@ add_data_panel_layout_types()
 @export
 class ViewerState(JsonObjectWrapper):
     __slots__ = ()
+    title = wrapped_property('title', optional(text_type))
     dimensions = wrapped_property('dimensions', CoordinateSpace)
     relative_display_scales = relativeDisplayScales = wrapped_property(
         'relativeDisplayScales', optional(typed_string_map(float)))
