@@ -17,7 +17,7 @@
 import {TypedArray} from 'neuroglancer/util/array';
 
 // @ts-ignore
-import createCompressoModule from './compresso.js';
+import createCompressoModule from './compresso';
 
 const compressoModulePromise : any = createCompressoModule();
 
