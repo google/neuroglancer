@@ -14,7 +14,6 @@
  * limitations under the License.
  */
 
-import {TypedArray} from 'neuroglancer/util/array'
 import {decompressCompresso} from 'neuroglancer/sliceview/compresso';
 import {decodeCompresso} from 'neuroglancer/async_computation/decode_compresso_request';
 import {registerAsyncComputation} from 'neuroglancer/async_computation/handler';
