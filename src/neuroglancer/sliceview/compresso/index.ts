@@ -46,43 +46,41 @@ function readHeader(buffer: Uint8Array)
   return {sx,sy,sz,dataWidth};
 }
 
-export function decompressCompresso(buffer: Uint8Array) 
+export async function decompressCompresso(buffer: Uint8Array) 
   : Promise<Uint8Array> {
   
-  // @ts-ignore
-  return compressoModulePromise.then((m:any) => {
-    const {sx, sy, sz, dataWidth} = readHeader(buffer);
+  const m = await compressoModulePromise;
+  const {sx, sy, sz, dataWidth} = readHeader(buffer);
 
-    const voxels = sx * sy * sz;
-    const nbytes = voxels * dataWidth;
+  const voxels = sx * sy * sz;
+  const nbytes = voxels * dataWidth;
 
-    if (nbytes < 0) {
-      throw new Error(`Failed to decode compresso image. image size: ${nbytes}`);
+  if (nbytes < 0) {
+    throw new Error(`Failed to decode compresso image. image size: ${nbytes}`);
+  }
+  
+  const bufPtr = m._malloc(buffer.byteLength);
+  m.HEAPU8.set(buffer, bufPtr);
+  const imagePtr = m._malloc(nbytes);
+
+  const code = m._compresso_decompress(
+    bufPtr, buffer.byteLength, imagePtr
+  );
+
+  try {
+    if (code !== 0) {
+      throw new Error(`Failed to decode compresso image. decoder code: ${code}`);
     }
-    
-    const bufPtr = m._malloc(buffer.byteLength);
-    m.HEAPU8.set(buffer, bufPtr);
-    const imagePtr = m._malloc(nbytes);
 
-    const code = m._compresso_decompress(
-      bufPtr, buffer.byteLength, imagePtr
+    const image = new Uint8Array(
+      m.HEAPU8.buffer, imagePtr, voxels * dataWidth
     );
-
-    try {
-      if (code !== 0) {
-        throw new Error(`Failed to decode compresso image. decoder code: ${code}`);
-      }
-
-      const image = new Uint8Array(
-        m.HEAPU8.buffer, imagePtr, voxels * dataWidth
-      );
-      // copy the array so it can be memory managed by JS
-      // and we can free the emscripten buffer
-      return image.slice(0);
-    }
-    finally {
-      m._free(bufPtr);
-      m._free(imagePtr);      
-    }    
-  });
+    // copy the array so it can be memory managed by JS
+    // and we can free the emscripten buffer
+    return image.slice(0);
+  }
+  finally {
+    m._free(bufPtr);
+    m._free(imagePtr);      
+  }
 }
