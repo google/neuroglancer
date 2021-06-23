@@ -52,8 +52,8 @@ function read_header(buffer: Uint8Array) : Map<string, number> {
   return map;
 }
 
-export function decompress_compresso(buffer: Uint8Array) 
-  : Promise<TypedArray> {
+export function decompressCompresso(buffer: Uint8Array) 
+  : Promise<Uint8Array> {
   
   // @ts-ignore
   return compressoModulePromise.then((m:any) => {

@@ -15,14 +15,14 @@
  */
 
 import {TypedArray} from 'neuroglancer/util/array'
-import {decompress_compresso} from 'neuroglancer/sliceview/compresso';
+import {decompressCompresso} from 'neuroglancer/sliceview/compresso';
 import {decodeCompresso} from 'neuroglancer/async_computation/decode_compresso_request';
 import {registerAsyncComputation} from 'neuroglancer/async_computation/handler';
 
 registerAsyncComputation(
     decodeCompresso,
     async function(data: Uint8Array) {      
-      const result: TypedArray = await decompress_compresso(data);
+      const result = await decompressCompresso(data);
       const cast_result = new Uint8Array(result.buffer);
       return { value: cast_result, transfer: [cast_result.buffer] };
     });
