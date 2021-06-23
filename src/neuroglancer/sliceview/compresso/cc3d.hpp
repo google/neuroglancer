@@ -91,11 +91,6 @@ public:
   }
 
   void add(T p) {
-    if (p >= length) {
-      printf("Connected Components Error: Label %d cannot be mapped to union-find array of length %lu.\n", p, length);
-      throw "maximum length exception";
-    }
-
     if (ids[p] == 0) {
       ids[p] = p;
     }
@@ -120,13 +115,6 @@ public:
     }
 
     ids[i] = j;
-  }
-
-  void print() {
-    for (int i = 0; i < 15; i++) {
-      printf("%d, ", ids[i]);
-    }
-    printf("\n");
   }
 
   // would be easy to write remove. 
@@ -387,9 +375,11 @@ OUT* connected_components(
       max_labels, out_labels, N
     );    
   }
-  else {
-    throw std::runtime_error("Only 4 and 6 connectivities are supported.");
-  }
+  // removing these lines drops several kB from the WASM
+  // and should be impossible to hit.
+  // else {
+  //   throw std::runtime_error("Only 4 and 6 connectivities are supported.");
+  // }
 
   return out_labels;
 }
