@@ -20,7 +20,9 @@ import createCompressoModule from './compresso';
 const compressoModulePromise : any = createCompressoModule();
 
 // not a full implementation of read header, just the parts we need
-function readHeader(buffer: Uint8Array) : Map<string, number> {
+function readHeader(buffer: Uint8Array) 
+  : {sx:number,sy:number,sz:number,dataWidth:number} 
+{
   // check for header "cpso"
   const magic = (
        buffer[0] === 'c'.charCodeAt(0) && buffer[1] === 'p'.charCodeAt(0)
@@ -41,13 +43,7 @@ function readHeader(buffer: Uint8Array) : Map<string, number> {
   const sy = bufview.getUint16(8, /*littleEndian=*/true);
   const sz = bufview.getUint16(10, /*littleEndian=*/true);
 
-  let map = new Map<string,number>();
-  map.set("sx", sx);
-  map.set("sy", sy);
-  map.set("sz", sz);
-  map.set("dataWidth", dataWidth);
-
-  return map;
+  return {sx,sy,sz,dataWidth};
 }
 
 export function decompressCompresso(buffer: Uint8Array) 
@@ -55,11 +51,7 @@ export function decompressCompresso(buffer: Uint8Array)
   
   // @ts-ignore
   return compressoModulePromise.then((m:any) => {
-    const header : Map<string,number> = readHeader(buffer);
-    const sx : number = header.get("sx")!;
-    const sy : number = header.get("sy")!;
-    const sz : number = header.get("sz")!;
-    const dataWidth : number = header.get("dataWidth")!;
+    const {sx, sy, sz, dataWidth} = readHeader(buffer);
 
     const voxels = sx * sy * sz;
     const nbytes = voxels * dataWidth;
