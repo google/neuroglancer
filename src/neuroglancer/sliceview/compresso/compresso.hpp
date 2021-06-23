@@ -154,7 +154,7 @@ public:
 		bool valid_dtype = (dwidth == 1 || dwidth == 2 || dwidth == 4 || dwidth == 8);
 		bool valid_connectivity = (connect == 4 || connect == 6);
 
-		return valid_magic;// && (format_version == 0) && valid_dtype && valid_connectivity;
+		return valid_magic && (format_version == 0) && valid_dtype && valid_connectivity;
 	}
 
 	static CompressoHeader fromchars(unsigned char* buf) {
