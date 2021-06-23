@@ -56,25 +56,16 @@ public:
   DisjointSet () {
     length = 65536; // 2^16, some "reasonable" starting size
     ids = new T[length]();
-    if (!ids) { 
-      throw std::runtime_error("Failed to allocate memory for the Union-Find datastructure for connected components.");
-    }
   }
 
   DisjointSet (size_t len) {
     length = len;
     ids = new T[length]();
-    if (!ids) { 
-      throw std::runtime_error("Failed to allocate memory for the Union-Find datastructure for connected components.");
-    }
   }
 
   DisjointSet (const DisjointSet &cpy) {
     length = cpy.length;
     ids = new T[length]();
-    if (!ids) { 
-      throw std::runtime_error("Failed to allocate memory for the Union-Find datastructure for connected components.");
-    }
 
     for (int i = 0; i < length; i++) {
       ids[i] = cpy.ids[i];
