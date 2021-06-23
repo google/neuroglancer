@@ -352,22 +352,25 @@ function makeRegisterSegmentWidgetEventHandlers(displayState: SegmentationDispla
     displayState.segmentSelectionState.set(null);
   };
 
+  const getEntryElement = (event: Event): HTMLElement => {
+    return (event.currentTarget as HTMLElement).closest('.neuroglancer-segment-list-entry') as
+        HTMLElement;
+  };
+
   const copyHandler = (event: Event) => {
-    const entryElement =
-        (event.currentTarget as HTMLElement).parentElement!.parentElement as HTMLElement;
+    const entryElement = getEntryElement(event);
     setClipboard(entryElement.dataset.id!);
     event.stopPropagation();
   };
 
   const unmappedCopyHandler = (event: Event) => {
-    const entryElement = (event.currentTarget as HTMLElement).parentElement as HTMLElement;
+    const entryElement = getEntryElement(event);
     setClipboard(entryElement.dataset.unmappedId!);
     event.stopPropagation();
   };
 
   const visibleCheckboxHandler = (event: Event) => {
-    const entryElement =
-        (event.currentTarget as HTMLElement).parentElement!.parentElement as HTMLElement;
+    const entryElement = getEntryElement(event);
     const idString = entryElement.dataset.id!;
     const id = tempStatedColor;
     id.tryParseString(idString);
@@ -377,7 +380,7 @@ function makeRegisterSegmentWidgetEventHandlers(displayState: SegmentationDispla
   };
 
   const filterHandler = (event: Event) => {
-    const entryElement = (event.currentTarget as HTMLElement).parentElement as HTMLElement;
+    const entryElement = getEntryElement(event);
     const idString = entryElement.dataset.id!;
     const id = tempStatedColor
     id.tryParseString(idString);
