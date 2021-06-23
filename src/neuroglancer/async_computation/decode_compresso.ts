@@ -22,6 +22,5 @@ registerAsyncComputation(
     decodeCompresso,
     async function(data: Uint8Array) {      
       const result = await decompressCompresso(data);
-      const cast_result = new Uint8Array(result.buffer);
-      return { value: cast_result, transfer: [cast_result.buffer] };
+      return { value: result, transfer: [result.buffer] };
     });
