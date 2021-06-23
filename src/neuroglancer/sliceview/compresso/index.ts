@@ -36,12 +36,12 @@ function read_header(buffer: Uint8Array) : Map<string, number> {
     throw new Error("compresso: didn't match format version")
   }
 
-  let u16 = (lower : number, upper: number) => { return (lower|0) + (upper << 8) };
+  const bufview = new DataView(buffer.buffer, 0);
 
   const data_width = buffer[5];
-  const sx = u16(buffer[6], buffer[7]);
-  const sy = u16(buffer[8], buffer[9]);
-  const sz = u16(buffer[10], buffer[11]);
+  const sx = bufview.getUint16(6, /*littleEndian=*/true);
+  const sy = bufview.getUint16(8, /*littleEndian=*/true);
+  const sz = bufview.getUint16(10, /*littleEndian=*/true);
 
   let map = new Map<string,number>();
   map.set("sx", sx);
