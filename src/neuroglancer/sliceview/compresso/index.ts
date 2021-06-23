@@ -52,37 +52,6 @@ function read_header(buffer: Uint8Array) : Map<string, number> {
   return map;
 }
 
-function read_image(
-  m:any, image_ptr:number,  
-  sx:number, sy:number, sz:number, data_width:number
-) : TypedArray {
-
-  const voxels = sx * sy * sz;
-  let image;
-
-  let memory = m.HEAPU8.buffer;
-
-  if (data_width === 1) {
-    image = new Uint8Array(memory, image_ptr, voxels);
-  }
-  else if (data_width === 2) {
-    image = new Uint16Array(memory, image_ptr, voxels);
-  }
-  else if (data_width === 4) {
-    image = new Uint32Array(memory, image_ptr, voxels);
-  }
-  else if (data_width === 8) {
-    image = new Uint32Array(memory, image_ptr, voxels * 2);
-  }
-  else {
-    throw new Error(`data_width must be 1, 2, 4, or 8. Got: ${data_width}`);
-  }
-
-  // copy the array so it can be memory managed by JS
-  // and we can free the emscripten buffer
-  return image.slice(0); 
-}
-
 export function decompress_compresso(buffer: Uint8Array) 
   : Promise<TypedArray> {
   
@@ -92,9 +61,10 @@ export function decompress_compresso(buffer: Uint8Array)
     const sx : number = header.get("sx")!;
     const sy : number = header.get("sy")!;
     const sz : number = header.get("sz")!;
+    const data_width : number = header.get("data_width")!;
 
     const voxels = sx * sy * sz;
-    const nbytes = voxels * header.get("data_width")!;
+    const nbytes = voxels * data_width;
 
     if (nbytes < 0) {
       throw new Error(`Failed to decode compresso image. image size: ${nbytes}`);
@@ -108,22 +78,21 @@ export function decompress_compresso(buffer: Uint8Array)
       buf_ptr, buffer.byteLength, image_ptr
     );
 
-    let image : TypedArray|null;
+    try {
+      if (code !== 0) {
+        throw new Error(`Failed to decode compresso image. decoder code: ${code}`);
+      }
 
-    if (code === 0) {
-      image = read_image(
-        m, image_ptr, 
-        header.get("sx")!, header.get("sy")!, header.get("sz")!,
-        header.get("data_width")!
+      const image = new Uint8Array(
+        m.HEAPU8.buffer, image_ptr, voxels * data_width
       );
+      // copy the array so it can be memory managed by JS
+      // and we can free the emscripten buffer
+      return image.slice(0);
     }
-    
-    m._free(buf_ptr);
-    m._free(image_ptr);
-
-    if (code === 0) {
-      return image!;
-    }
-    throw new Error(`Failed to decode compresso image. decoder code: ${code}`);
+    finally {
+      m._free(buf_ptr);
+      m._free(image_ptr);      
+    }    
   });
 }
