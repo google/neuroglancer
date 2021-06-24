@@ -162,35 +162,6 @@ public:
 	}
 };
 
-
-template <typename T>
-std::vector<T> unique(const std::vector<T> &data) {
-	std::vector<T> values;
-
-	if (data.size() == 0) {
-		return values;
-	}
-
-	std::set<T> hash_map;
-	T last = data[0];
-	hash_map.insert(data[0]);
-	values.push_back(data[0]);
-
-	for (size_t iv = 1; iv < data.size(); iv++) {
-		if (data[iv] == last) {
-			continue;
-		}
-
-		bool inserted = hash_map.insert(data[iv]).second;
-		if (inserted) {
-			values.push_back(data[iv]);
-		}
-		last = data[iv];
-	}
-	sort(values.begin(), values.end());
-	return values;
-}
-
 template <typename WINDOW>
 std::vector<WINDOW> run_length_decode_windows(
 	const std::vector<WINDOW> &rle_windows, const size_t nblocks
