@@ -30,20 +30,18 @@ export async function decodeCompressoChunk(
     decodeCompresso, cancellationToken, [response], new Uint8Array(response)
   );
 
-  const dtype = chunk.source!.spec.dataType;
-
   const spec = chunk.source!.spec;
   const defaultBlockSize = vec3.fromValues(8, 8, 8);
 
   // uint8 is already set correctly
-  if (dtype === DataType.UINT16) {
+  if (spec.dataType === DataType.UINT16) {
     image = new Uint16Array(image.buffer);
   }
-  else if (dtype === DataType.UINT32) {
+  else if (spec.dataType === DataType.UINT32) {
     image = new Uint32Array(image.buffer);
     spec.compressedSegmentationBlockSize = spec.compressedSegmentationBlockSize || defaultBlockSize;
   }
-  else if (dtype === DataType.UINT64) {
+  else if (spec.dataType === DataType.UINT64) {
     image = new Uint32Array(image.buffer);
     spec.compressedSegmentationBlockSize = spec.compressedSegmentationBlockSize || defaultBlockSize;
   }
