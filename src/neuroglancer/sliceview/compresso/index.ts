@@ -15,9 +15,25 @@
  */
 
 // @ts-ignore
-import createCompressoModule from './compresso';
+import compressoWasmDataUrl from './compresso.wasm';
 
-const compressoModulePromise : any = createCompressoModule();
+const libraryEnv = {
+  emscripten_notify_memory_growth: function () {},
+  proc_exit: (code: number) => {
+    throw `proc exit: ${code}`;
+  },
+};
+
+const compressoModulePromise = (async () => {
+  const response = await fetch(compressoWasmDataUrl);
+  const wasmCode = await response.arrayBuffer();
+  const m = await WebAssembly.instantiate(wasmCode, {
+    env: libraryEnv,
+    wasi_snapshot_preview1: libraryEnv,
+  });
+  (m.instance.exports._initialize as Function)();
+  return m;
+})();
 
 // not a full implementation of read header, just the parts we need
 function readHeader(buffer: Uint8Array) 
@@ -46,12 +62,13 @@ function readHeader(buffer: Uint8Array)
   return {sx,sy,sz,dataWidth};
 }
 
+// @ts-ignore
 export async function decompressCompresso(buffer: Uint8Array) 
   : Promise<Uint8Array> {
   
   const m = await compressoModulePromise;
-  const {sx, sy, sz, dataWidth} = readHeader(buffer);
 
+  const {sx, sy, sz, dataWidth} = readHeader(buffer);
   const voxels = sx * sy * sz;
   const nbytes = voxels * dataWidth;
 
@@ -59,11 +76,14 @@ export async function decompressCompresso(buffer: Uint8Array)
     throw new Error(`Failed to decode compresso image. image size: ${nbytes}`);
   }
   
-  const bufPtr = m._malloc(buffer.byteLength);
-  m.HEAPU8.set(buffer, bufPtr);
-  const imagePtr = m._malloc(nbytes);
-
-  const code = m._compresso_decompress(
+  // heap must be referenced after creating bufPtr because
+  // memory growth can detatch the buffer.
+  const imagePtr = (m.instance.exports.malloc as Function)(nbytes);
+  const bufPtr = (m.instance.exports.malloc as Function)(buffer.byteLength);
+  const heap = new Uint8Array((m.instance.exports.memory as WebAssembly.Memory).buffer);
+  heap.set(buffer, bufPtr);
+  
+  const code = (m.instance.exports.compresso_decompress as Function)(
     bufPtr, buffer.byteLength, imagePtr
   );
 
@@ -72,15 +92,19 @@ export async function decompressCompresso(buffer: Uint8Array)
       throw new Error(`Failed to decode compresso image. decoder code: ${code}`);
     }
 
+    // Likewise, we reference memory.buffer instead of heap.buffer
+    // because memory growth during decompress could have detached
+    // the buffer.
     const image = new Uint8Array(
-      m.HEAPU8.buffer, imagePtr, voxels * dataWidth
+      (m.instance.exports.memory as WebAssembly.Memory).buffer,
+      imagePtr, voxels * dataWidth
     );
     // copy the array so it can be memory managed by JS
     // and we can free the emscripten buffer
     return image.slice(0);
   }
   finally {
-    m._free(bufPtr);
-    m._free(imagePtr);      
+    (m.instance.exports.free as Function)(bufPtr);
+    (m.instance.exports.free as Function)(imagePtr);      
   }
 }
