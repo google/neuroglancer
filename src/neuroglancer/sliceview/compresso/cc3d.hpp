@@ -50,22 +50,22 @@ static size_t _dummy_N;
 template <typename T>
 class DisjointSet {
 public:
-  T *ids;
+  std::unique_ptr<T[]> ids;
   size_t length;
 
   DisjointSet () {
     length = 65536; // 2^16, some "reasonable" starting size
-    ids = new T[length]();
+    ids = std::unique_ptr<T[]>(new T[length]());
   }
 
   DisjointSet (size_t len) {
     length = len;
-    ids = new T[length]();
+    ids = std::unique_ptr<T[]>(new T[length]());
   }
 
   DisjointSet (const DisjointSet &cpy) {
     length = cpy.length;
-    ids = new T[length]();
+    ids = std::unique_ptr<T[]>(new T[length]());
 
     for (int i = 0; i < length; i++) {
       ids[i] = cpy.ids[i];
@@ -73,7 +73,7 @@ public:
   }
 
   ~DisjointSet () {
-    delete []ids;
+    ids.reset();
   }
 
   T root (T n) {
