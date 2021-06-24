@@ -256,7 +256,7 @@ std::unique_ptr<bool[]> decode_boundaries(
 
 template <typename LABEL>
 void decode_nonboundary_labels(
-		uint32_t *components, const std::vector<LABEL> &ids, 
+		std::unique_ptr<uint32_t[]> &components, const std::vector<LABEL> &ids, 
 		const size_t sx, const size_t sy, const size_t sz,
 		LABEL* output
 ) {
@@ -426,12 +426,12 @@ int decompress(unsigned char* buffer, size_t num_bytes, LABEL* output) {
 	windows = std::vector<WINDOW>();
 	window_values = std::vector<WINDOW>();
 
-	uint32_t* components = cc3d::connected_components<uint32_t>(
+	std::unique_ptr<uint32_t[]> components = cc3d::connected_components<uint32_t>(
 		boundaries.get(), sx, sy, sz, header.connectivity
 	);
 
 	decode_nonboundary_labels(components, ids, sx, sy, sz, output);
-	delete[] components;
+	components.reset();
 	ids = std::vector<LABEL>();
 
 	int err = decode_indeterminate_locations<LABEL>(

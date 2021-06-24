@@ -342,7 +342,7 @@ OUT* connected_components3d_6(
 }
 
 template <typename OUT = uint64_t>
-OUT* connected_components(
+std::unique_ptr<OUT[]> connected_components(
   bool* in_labels, 
   const int64_t sx, const int64_t sy, const int64_t sz,
   const size_t connectivity = 4, size_t &N = _dummy_N
@@ -352,7 +352,7 @@ OUT* connected_components(
   const int64_t voxels = sxy * sz;
 
   size_t max_labels = voxels;
-  OUT* out_labels = new OUT[voxels]();
+  std::unique_ptr<OUT[]> out_labels(new OUT[voxels]());
   N = 0;
 
   if (connectivity == 4) {
@@ -362,7 +362,7 @@ OUT* connected_components(
       size_t tmp_N = 0;
       connected_components2d_4<OUT>(
         (in_labels + sxy * z), sx, sy, 1, 
-        max_labels, (out_labels + sxy * z), 
+        max_labels, (out_labels.get() + sxy * z), 
         tmp_N, N + 1
       );
       N += tmp_N;
@@ -372,7 +372,7 @@ OUT* connected_components(
     max_labels =  static_cast<size_t>(((sx + 1) * (sy + 1) * (sz + 1)) / 2);
     connected_components3d_6<OUT>(
       in_labels, sx, sy, sz, 
-      max_labels, out_labels, N
+      max_labels, out_labels.get(), N
     );    
   }
   // removing these lines drops several kB from the WASM
