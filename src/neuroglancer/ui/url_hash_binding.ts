@@ -37,15 +37,15 @@ function encodeFragment(fragment: string) {
   });
 }
 
-export function removeParameterFromUrl(url: string, parameter: string) {
-  return url.replace(new RegExp('[?&]' + parameter + '=[^&#]*(#.*)?$'), '$1')
-      .replace(new RegExp('([?&])' + parameter + '=[^&]*&'), '$1');
-}
+// export function removeParameterFromUrl(url: string, parameter: string) {
+//   return url.replace(new RegExp('[?&]' + parameter + '=[^&#]*(#.*)?$'), '$1')
+//       .replace(new RegExp('([?&])' + parameter + '=[^&]*&'), '$1');
+// }
 
-export interface UrlHashBindingOptions {
-  defaultFragment?: string;
-  updateDelayMilliseconds?: number;
-}
+// export interface UrlHashBindingOptions {
+//   defaultFragment?: string;
+//   updateDelayMilliseconds?: number;
+// }
 
 /**
  * An instance of this class manages a binding between a Trackable value and the URL hash state.
@@ -71,10 +71,11 @@ export class UrlHashBinding extends RefCounted {
 
   constructor(
       public root: Trackable, public credentialsManager: CredentialsManager,
-      options: UrlHashBindingOptions = {}) {
+      updateDelayMilliseconds = 200) {
+      // options: UrlHashBindingOptions = {}) {
     super();
     // const {updateDelayMilliseconds = 200, defaultFragment = '{}'} = options;
-    const {updateDelayMilliseconds = 200} = options;
+    // const {updateDelayMilliseconds = 200} = options;
     this.registerEventListener(window, 'hashchange', () => this.updateFromUrlHash());
     const throttledSetUrlHash = debounce(() => this.setUrlHash(), updateDelayMilliseconds);
     this.registerDisposer(root.changed.add(throttledSetUrlHash));
@@ -88,7 +89,7 @@ export class UrlHashBinding extends RefCounted {
   setUrlHash() {
     const cacheState = getCachedJson(this.root);
     const {generation} = cacheState;
-    history.replaceState(null, '', removeParameterFromUrl(window.location.href, 'json_url'));
+    // history.replaceState(null, '', removeParameterFromUrl(window.location.href, 'json_url'));
 
     if (generation !== this.prevStateGeneration) {
       this.prevStateGeneration = cacheState.generation;
@@ -114,15 +115,15 @@ export class UrlHashBinding extends RefCounted {
    * was present.  The second value will contain that fragment with '#'
    * prepended.
    */
-  checkRedirectFragment(): [boolean, string] {
-    const justQuery = location.href.replace(/^.*\?/, '');
-    const params = new URLSearchParams(justQuery);
-    if(!params.has('redirect_fragment')) {
-      return [false, ''];
-    }
+  // checkRedirectFragment(): [boolean, string] {
+  //   const justQuery = location.href.replace(/^.*\?/, '');
+  //   const params = new URLSearchParams(justQuery);
+  //   if(!params.has('redirect_fragment')) {
+  //     return [false, ''];
+  //   }
 
-    return [true, `#${params.get('redirect_fragment')}`];
-  }
+  //   return [true, `#${params.get('redirect_fragment')}`];
+  // }
 
   /**
    * Sets the current state to match the URL hash.  If it is desired to initialize the state based
@@ -131,15 +132,15 @@ export class UrlHashBinding extends RefCounted {
   updateFromUrlHash() {
     try {
       let s: string;
-      const [ found, fragment ] = this.checkRedirectFragment();
-      if(!found) {
+      // const [ found, fragment ] = this.checkRedirectFragment();
+      // if(!found) {
         s = location.href.replace(/^[^#]+/, '');
         if (s === '' || s === '#' || s === '#!') {
           s = '#!{}';
         }
-      } else {
-        s = fragment;
-      }
+      // } else {
+      //   s = fragment;
+      // }
       // Handle remote JSON state
       if (s.match(/^#!([a-z][a-z\d+-.]*):\/\//)) {
         const url = s.substring(2);
@@ -156,10 +157,10 @@ export class UrlHashBinding extends RefCounted {
         s = s.slice(3);
         // Firefox always %-encodes the URL even if it is not typed that way.
         s = decodeURIComponent(s);
-        if(found) {
+        // if(found) {
           // Keycloak make encode multiple times.
           s = decodeURIComponent(s);
-        }
+        // }
         let state = urlSafeParse(s);
         verifyObject(state);
         this.root.restoreState(state);
@@ -167,10 +168,10 @@ export class UrlHashBinding extends RefCounted {
       } else if (s.startsWith('#!')) {
         s = s.slice(2);
         s = decodeURIComponent(s);
-        if(found) {
+        // if(found) {
           // Keycloak make encode multiple times.
           s = decodeURIComponent(s);
-        }
+        // }
         if (s === this.prevStateString) {
           return;
         }

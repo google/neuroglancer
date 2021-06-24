@@ -31,11 +31,7 @@ export function setupDefaultViewer() {
   setDefaultInputEventBindings(viewer.inputEventBindings);
 
   const hashBinding = viewer.registerDisposer(
-      new UrlHashBinding(viewer.state, viewer.dataSourceProvider.credentialsManager, {
-        defaultFragment: typeof NEUROGLANCER_DEFAULT_STATE_FRAGMENT !== 'undefined' ?
-            NEUROGLANCER_DEFAULT_STATE_FRAGMENT :
-            undefined
-      }));
+      new UrlHashBinding(viewer.state, viewer.dataSourceProvider.credentialsManager));
   viewer.registerDisposer(hashBinding.parseError.changed.add(() => {
     const {value} = hashBinding.parseError;
     if (value !== undefined) {
