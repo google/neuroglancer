@@ -216,3 +216,15 @@ jobs:
         key: ${{ runner.os }}-${{ matrix.go-version }}-go-${{ hashFiles('**/go.sum') }}
     - run: go build .
       working-directory: ngauth_server
+  wasm:
+    # Ensures that .wasm files are reproducible.
+    strategy:
+      matrix:
+        os:
+          - ubuntu-latest
+    runs-on: ${{ matrix.os }}
+    steps:
+    - uses: actions/checkout@v2
+    - run: ./src/neuroglancer/mesh/draco/build.sh
+    # Check that there are no differences.
+    - run: git diff --exit-code
