@@ -967,7 +967,7 @@ export class SegmentDisplayTab extends Tab {
                       updateStatus();
                     }
                   });
-                  registerActionListener(queryElement, 'cancel', () => {
+                  context.registerDisposer(registerActionListener(queryElement, 'cancel', () => {
                     queryElement.focus();
                     queryElement.select();
                     document.execCommand('delete');
@@ -976,26 +976,28 @@ export class SegmentDisplayTab extends Tab {
                     segmentQuery.value = '';
                     hasConfirmed = false;
                     updateStatus();
-                  });
-                  registerActionListener(queryElement, 'toggle-listed', toggleMatches);
-                  registerActionListener(queryElement, 'hide-all', () => {
+                  }));
+                  context.registerDisposer(
+                      registerActionListener(queryElement, 'toggle-listed', toggleMatches));
+                  context.registerDisposer(registerActionListener(queryElement, 'hide-all', () => {
                     group.visibleSegments.clear();
-                  });
-                  registerActionListener(queryElement, 'hide-listed', () => {
-                    debouncedUpdateQueryModel();
-                    debouncedUpdateQueryModel.flush();
-                    listSource.debouncedUpdate.flush();
-                    const {visibleSegments} = group;
-                    if (segmentQuery.value === '') {
-                      visibleSegments.clear();
-                    } else {
-                      const queryResult = listSource.queryResult.value;
-                      if (queryResult === undefined) return;
-                      forEachQueryResultSegmentId(segmentPropertyMap, queryResult, id => {
-                        visibleSegments.delete(id);
-                      });
-                    }
-                  });
+                  }));
+                  context.registerDisposer(
+                      registerActionListener(queryElement, 'hide-listed', () => {
+                        debouncedUpdateQueryModel();
+                        debouncedUpdateQueryModel.flush();
+                        listSource.debouncedUpdate.flush();
+                        const {visibleSegments} = group;
+                        if (segmentQuery.value === '') {
+                          visibleSegments.clear();
+                        } else {
+                          const queryResult = listSource.queryResult.value;
+                          if (queryResult === undefined) return;
+                          forEachQueryResultSegmentId(segmentPropertyMap, queryResult, id => {
+                            visibleSegments.delete(id);
+                          });
+                        }
+                      }));
                   const list = context.registerDisposer(
                       new VirtualList({source: listSource, horizontalScroll: true}));
                   const updateListItems = context.registerCancellable(animationFrameDebounce(() => {
