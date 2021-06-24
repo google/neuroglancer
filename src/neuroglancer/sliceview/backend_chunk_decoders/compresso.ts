@@ -14,7 +14,6 @@
  * limitations under the License.
  */
 
-import {vec3} from 'neuroglancer/util/geom';
 import {TypedArray} from 'neuroglancer/util/array';
 import {DataType} from 'neuroglancer/sliceview/base';
 import {postProcessRawData} from 'neuroglancer/sliceview/backend_chunk_decoders/postprocess';
@@ -31,7 +30,6 @@ export async function decodeCompressoChunk(
   );
 
   const spec = chunk.source!.spec;
-  const defaultBlockSize = vec3.fromValues(8, 8, 8);
 
   // uint8 is already set correctly
   if (spec.dataType === DataType.UINT16) {
@@ -39,11 +37,9 @@ export async function decodeCompressoChunk(
   }
   else if (spec.dataType === DataType.UINT32) {
     image = new Uint32Array(image.buffer);
-    spec.compressedSegmentationBlockSize = spec.compressedSegmentationBlockSize || defaultBlockSize;
   }
   else if (spec.dataType === DataType.UINT64) {
     image = new Uint32Array(image.buffer);
-    spec.compressedSegmentationBlockSize = spec.compressedSegmentationBlockSize || defaultBlockSize;
   }
 
   await postProcessRawData(chunk, cancellationToken, image);
