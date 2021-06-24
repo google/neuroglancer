@@ -123,6 +123,7 @@ export const VIEWER_TOP_ROW_CONFIG_OPTIONS = [
   'showLayerSidePanelButton',
   'showLocation',
   'showAnnotationToolStatus',
+  'showJsonPostButton'
 ] as const;
 
 export const VIEWER_UI_CONTROL_CONFIG_OPTIONS = [

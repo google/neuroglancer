@@ -37,6 +37,11 @@ function encodeFragment(fragment: string) {
   });
 }
 
+export function removeParameterFromUrl(url: string, parameter: string) {
+  return url.replace(new RegExp('[?&]' + parameter + '=[^&#]*(#.*)?$'), '$1')
+      .replace(new RegExp('([?&])' + parameter + '=[^&]*&'), '$1');
+}
+
 export interface UrlHashBindingOptions {
   defaultFragment?: string;
   updateDelayMilliseconds?: number;
@@ -62,18 +67,19 @@ export class UrlHashBinding extends RefCounted {
    */
   parseError = new WatchableValue<Error|undefined>(undefined);
 
-  private defaultFragment: string;
+  // private defaultFragment: string;
 
   constructor(
       public root: Trackable, public credentialsManager: CredentialsManager,
       options: UrlHashBindingOptions = {}) {
     super();
-    const {updateDelayMilliseconds = 200, defaultFragment = '{}'} = options;
+    // const {updateDelayMilliseconds = 200, defaultFragment = '{}'} = options;
+    const {updateDelayMilliseconds = 200} = options;
     this.registerEventListener(window, 'hashchange', () => this.updateFromUrlHash());
     const throttledSetUrlHash = debounce(() => this.setUrlHash(), updateDelayMilliseconds);
     this.registerDisposer(root.changed.add(throttledSetUrlHash));
     this.registerDisposer(() => throttledSetUrlHash.cancel());
-    this.defaultFragment = defaultFragment;
+    // this.defaultFragment = defaultFragment;
   }
 
   /**
