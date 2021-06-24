@@ -30,7 +30,7 @@ export async function decodeCompressoChunk(
     decodeCompresso, cancellationToken, [response], new Uint8Array(response)
   );
 
-  const dtype = chunk.source!.spec.dataType || DataType.UINT8;
+  const dtype = chunk.source!.spec.dataType;
 
   const spec = chunk.source!.spec;
   const defaultBlockSize = vec3.fromValues(8, 8, 8);
