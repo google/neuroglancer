@@ -220,9 +220,10 @@ class PrecomputedMultiscaleVolumeChunkSource extends MultiscaleVolumeChunkSource
       for (let i = 0; i < 3; ++i) {
         const relativeScale = resolution[i] / modelResolution[i];
         chunkToMultiscaleTransform[stride * i + i] = relativeScale;
-        chunkToMultiscaleTransform[stride * rank + i] = scaleInfo.voxelOffset[i] * relativeScale;
-        lowerClipBound[i] = baseLowerBound[i] / relativeScale;
-        upperClipBound[i] = baseUpperBound[i] / relativeScale;
+        const voxelOffsetValue = scaleInfo.voxelOffset[i];
+        chunkToMultiscaleTransform[stride * rank + i] = voxelOffsetValue * relativeScale;
+        lowerClipBound[i] = baseLowerBound[i] / relativeScale - voxelOffsetValue;
+        upperClipBound[i] = baseUpperBound[i] / relativeScale - voxelOffsetValue;
       }
       if (rank === 4) {
         chunkToMultiscaleTransform[stride * 3 + 3] = 1;
