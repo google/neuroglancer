@@ -357,13 +357,15 @@ int decode_indeterminate_locations(
 }
 
 template <typename LABEL, typename WINDOW>
-int decompress(unsigned char* buffer, size_t num_bytes, LABEL* output = NULL) {
-
-	if (num_bytes < CompressoHeader::header_size) {
+int decompress(unsigned char* buffer, size_t num_bytes, LABEL* output) {
+	if (output == NULL) {
 		return 8;
 	}
-	else if (!CompressoHeader::valid_header(buffer)) {
+	else if (num_bytes < CompressoHeader::header_size) {
 		return 9;
+	}
+	else if (!CompressoHeader::valid_header(buffer)) {
+		return 10;
 	}
 
 	const CompressoHeader header(buffer);
@@ -377,7 +379,7 @@ int decompress(unsigned char* buffer, size_t num_bytes, LABEL* output = NULL) {
 	const size_t zstep = header.zstep;
 
 	if (sx * sy * sz == 0) {
-		return 10;
+		return 11;
 	}
 
 	const size_t nx = (sx + xstep - 1) / xstep; // round up
@@ -427,10 +429,6 @@ int decompress(unsigned char* buffer, size_t num_bytes, LABEL* output = NULL) {
 	uint32_t* components = cc3d::connected_components<uint32_t>(
 		boundaries.get(), sx, sy, sz, header.connectivity
 	);
-
-	if (output == NULL) {
-		return 11;
-	}
 
 	decode_nonboundary_labels(components, ids, sx, sy, sz, output);
 	delete[] components;
